@@ -88,6 +88,8 @@ static func advance_day(
 	next_spiritual_event_id: Array = [1],
 	bloodspeaker_cells: Array = [],
 	next_cell_id: Array = [1],
+	crafted_items: Array = [],
+	next_item_id: Array = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -125,13 +127,14 @@ static func advance_day(
 	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
 	_assign_magistrate_standing_objectives(characters, objectives_map)
 	_assign_monk_standing_objectives(characters, objectives_map)
+	_assign_artisan_standing_objectives(characters, objectives_map)
 
 	_clear_stale_context_flags(world_states)
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
 	var travel_arrivals: Array = _process_travel(characters)
-	_process_arrival_observation(travel_arrivals, characters_by_id, current_season)
+	_process_arrival_observation(travel_arrivals, characters_by_id, current_season, world_states)
 	_process_witness_testimony_on_arrival(
 		travel_arrivals, characters_by_id, world_states, active_topics, current_season,
 	)
@@ -382,6 +385,12 @@ static func advance_day(
 
 	_capture_witness_travel_intent(
 		day_result.get("results", []), world_states,
+	)
+
+	_process_craft_writebacks(
+		day_result.get("results", []),
+		crafted_items, next_item_id, characters_by_id,
+		character_province_map, active_topics, next_topic_id, ic_day,
 	)
 
 	var current_season_count: int = int(season_meta.get("horde_season_count", 0))
@@ -692,11 +701,11 @@ static func advance_day(
 	)
 
 	_process_introduction_writebacks(
-		day_result.get("results", []), characters_by_id,
+		day_result.get("results", []), characters_by_id, world_states,
 	)
 
 	_process_observe_attendees_writebacks(
-		day_result.get("results", []), characters_by_id, current_season,
+		day_result.get("results", []), characters_by_id, current_season, world_states,
 	)
 
 	_process_blackmail_favor_writebacks(
@@ -1200,6 +1209,15 @@ static func advance_day(
 		_purge_resolved_crime_records(crime_records, ic_day)
 		_purge_delivered_letters(pending_letters, characters_by_id, ic_day)
 		_purge_exposed_secrets(active_secrets, characters_by_id, ic_day)
+		_process_crafted_item_history(crafted_items, characters_by_id, ic_day)
+
+	_process_craft_gift_ownership_transfer(
+		day_result.get("results", []), crafted_items, characters_by_id,
+		world_states, ic_day,
+	)
+	_process_craft_duel_history(
+		day_result.get("results", []), crafted_items, ic_day,
+	)
 
 	var horde_results: Dictionary = _process_horde_rolls(
 		current_season, prev_season,
@@ -1215,6 +1233,7 @@ static func advance_day(
 	if ic_day % TimeSystem.TICKS_PER_REAL_DAY == 0:
 		ooc_tick_results = _process_ooc_day_tick(
 			characters, characters_by_id, settlements, dice_engine, worship_state, ic_day,
+			world_states,
 		)
 
 	return {
@@ -1332,6 +1351,7 @@ static func _process_ooc_day_tick(
 	dice_engine: DiceEngine,
 	worship_state: Dictionary,
 	ic_day: int = 0,
+	world_states: Dictionary = {},
 ) -> Array:
 	## Runs Wind-Down selection and Void Point refresh once per OOC day (every
 	## 4 IC days) per GDD s57.44.2 and s57.32.2.
@@ -4851,6 +4871,7 @@ static func _process_shadow_target_writebacks(
 static func _process_introduction_writebacks(
 	results: Array,
 	characters_by_id: Dictionary,
+	world_states: Dictionary = {},
 ) -> void:
 	for r: Variant in results:
 		if not r is Dictionary:
@@ -4883,6 +4904,7 @@ static func _process_observe_attendees_writebacks(
 	results: Array,
 	characters_by_id: Dictionary,
 	current_season: int,
+	world_states: Dictionary = {},
 ) -> void:
 	for r: Variant in results:
 		if not r is Dictionary:
@@ -6064,6 +6086,40 @@ static func _assign_monk_standing_objectives(
 		var monk_standing: Dictionary = MonkObjectiveSystem.assign_standing_objective(character)
 		if not monk_standing.is_empty():
 			objectives["standing"] = monk_standing
+
+
+static func _assign_artisan_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if not ArtisanSystem.is_artisan_school(character) and not ArtisanSystem.is_smith_school(character):
+			if not ArtisanSystem.has_any_craft_skill(character):
+				continue
+			var best_rank: int = 0
+			for sk: String in character.skills:
+				if (sk.begins_with("Artisan: ") or sk.begins_with("Craft: ")) and character.skills[sk] > best_rank:
+					best_rank = character.skills[sk]
+			if best_rank < 3:
+				continue
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+		if standing.get("artisan_standing", false):
+			continue
+		if not standing.is_empty():
+			continue
+
+		objectives["standing"] = {
+			"artisan_standing": true,
+			"standing_need_type": "CRAFT_ITEM",
+		}
 
 
 static func _process_monk_self_selection(
@@ -7651,6 +7707,7 @@ static func _process_arrival_observation(
 	arrivals: Array,
 	characters_by_id: Dictionary,
 	current_season: int,
+	world_states: Dictionary = {},
 ) -> void:
 	for arrival: Dictionary in arrivals:
 		var char_id: int = arrival.get("character_id", -1)
@@ -19062,3 +19119,201 @@ static func _purge_exposed_secrets(
 			if sd.exposed_publicly:
 				active_secrets.remove_at(i)
 		i -= 1
+
+
+# -- s49 Craft writebacks -----------------------------------------------------
+
+
+static func _process_craft_writebacks(
+	results: Array,
+	crafted_items: Array,
+	next_item_id: Array,
+	characters_by_id: Dictionary,
+	character_province_map: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	for r: Dictionary in results:
+		if r.get("action_id") != "CRAFT":
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		if not effects.get("requires_item_creation", false):
+			continue
+		if effects.get("item_ruined", false):
+			continue
+
+		var char_id: int = r.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null or CharacterStats.is_dead(character):
+			continue
+
+		var quality_tier: GiftGivingSystem.QualityTier = effects.get(
+			"quality_tier", GiftGivingSystem.QualityTier.MUNDANE) as GiftGivingSystem.QualityTier
+		if quality_tier == GiftGivingSystem.QualityTier.MUNDANE:
+			continue
+
+		var item_id: int = next_item_id[0]
+		next_item_id[0] += 1
+
+		var province_id: int = character_province_map.get(char_id, -1)
+
+		var item := ArtisanItemData.new()
+		item.item_id = item_id
+		item.item_name = effects.get("item_name", "Crafted Item")
+		item.category = effects.get("category", Enums.CraftingCategory.EQUIPMENT) as Enums.CraftingCategory
+		item.track = effects.get("track", Enums.CraftingTrack.CRAFT) as Enums.CraftingTrack
+		item.skill_used = effects.get("skill_name", "")
+		item.quality_tier = quality_tier
+		item.creator_id = char_id
+		item.creator_clan = character.clan
+		item.creator_family = character.family
+		item.creator_school = character.school
+		item.creator_insight_rank = CharacterStats.get_insight_rank(character)
+		item.creation_ic_day = ic_day
+		item.creation_province_id = province_id
+		item.material_tier = effects.get("material_tier", Enums.MaterialTier.COMMON) as Enums.MaterialTier
+		item.material_name = effects.get("material_name", "")
+		item.base_cost_koku = effects.get("base_cost", 0.0)
+		item.cost_denomination = effects.get("denomination", "bu")
+		item.current_owner_id = char_id
+		item.is_complete = true
+		item.crafting_roll_total = effects.get("crafting_roll_total", 0)
+		item.is_exceptional_weapon = effects.get("is_exceptional", false)
+		item.is_sacred_weapon = effects.get("is_sacred", false)
+
+		var sq_raw: Variant = effects.get("special_qualities", [])
+		if sq_raw is Array:
+			for sq: Variant in sq_raw:
+				if sq is Enums.WeaponSpecialQuality:
+					item.special_qualities.append(sq as Enums.WeaponSpecialQuality)
+
+		if item.is_sacred_weapon:
+			item.sacred_weapon_clan = character.clan
+
+		crafted_items.append(item)
+
+		if quality_tier >= GiftGivingSystem.QualityTier.MASTERWORK or item.is_sacred_weapon:
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			topic.title = "%s crafts %s %s" % [
+				character.character_name,
+				_quality_tier_name(quality_tier),
+				item.item_name,
+			]
+			if item.is_sacred_weapon:
+				topic.tier = TopicData.Tier.TIER_2
+				topic.category = TopicData.Category.POLITICAL
+			elif quality_tier >= GiftGivingSystem.QualityTier.LEGENDARY:
+				topic.tier = TopicData.Tier.TIER_2
+				topic.category = TopicData.Category.POLITICAL
+			else:
+				topic.tier = TopicData.Tier.TIER_4
+				topic.category = TopicData.Category.PERSONAL
+			topic.subject_character_id = char_id
+			topic.ic_day_created = ic_day
+			topic.slug = "craft_%d" % item_id
+			active_topics.append(topic)
+
+			if not CharacterStats.is_dead(character):
+				character.topic_pool.append(topic.topic_id)
+
+
+static func _quality_tier_name(tier: GiftGivingSystem.QualityTier) -> String:
+	match tier:
+		GiftGivingSystem.QualityTier.MUNDANE:
+			return "mundane"
+		GiftGivingSystem.QualityTier.NORMAL:
+			return "a"
+		GiftGivingSystem.QualityTier.FINE:
+			return "fine"
+		GiftGivingSystem.QualityTier.EXCEPTIONAL:
+			return "exceptional"
+		GiftGivingSystem.QualityTier.MASTERWORK:
+			return "masterwork"
+		GiftGivingSystem.QualityTier.LEGENDARY:
+			return "legendary"
+	return "a"
+
+
+static func _process_crafted_item_history(
+	crafted_items: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	for item: ArtisanItemData in crafted_items:
+		if not item.is_complete:
+			continue
+		var owner: L5RCharacterData = characters_by_id.get(item.current_owner_id)
+		if owner == null or CharacterStats.is_dead(owner):
+			continue
+		var insight_rank: int = CharacterStats.get_insight_rank(owner)
+		if insight_rank >= 3:
+			item.add_history_event(
+				Enums.HistoryEventType.OWNED_RANK_3, ic_day,
+				owner.character_name,
+			)
+		if insight_rank >= 5:
+			item.add_history_event(
+				Enums.HistoryEventType.OWNED_RANK_5, ic_day,
+				owner.character_name,
+			)
+		if owner.status >= 7.0:
+			item.add_history_event(
+				Enums.HistoryEventType.OWNED_CHAMPION, ic_day,
+				owner.character_name,
+			)
+
+
+static func _process_craft_gift_ownership_transfer(
+	results: Array,
+	crafted_items: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	ic_day: int,
+) -> void:
+	for r: Dictionary in results:
+		if r.get("action_id") != "DELIVER_GIFT":
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var consume_id: int = effects.get("consume_item_id", -1)
+		if consume_id < 0:
+			continue
+		var recipient_id: int = r.get("target_npc_id", -1)
+		if recipient_id < 0:
+			continue
+		for item: ArtisanItemData in crafted_items:
+			if item.item_id == consume_id:
+				item.current_owner_id = recipient_id
+				var giver_id: int = r.get("character_id", -1)
+				var giver_ws: Dictionary = world_states.get(giver_id, {})
+				if giver_ws.get("context_flag", "") == "AT_COURT":
+					item.add_history_event(
+						Enums.HistoryEventType.GIFTED_AT_COURT, ic_day,
+						"Gifted at court",
+					)
+				break
+
+
+static func _process_craft_duel_history(
+	results: Array,
+	crafted_items: Array,
+	ic_day: int,
+) -> void:
+	for r: Dictionary in results:
+		if r.get("action_id") != "ISSUE_DUEL_CHALLENGE":
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		if not effects.get("death_occurred", false):
+			continue
+		var char_id: int = r.get("character_id", -1)
+		var target_id: int = r.get("target_npc_id", -1)
+		for item: ArtisanItemData in crafted_items:
+			if item.category != Enums.CraftingCategory.WEAPONS:
+				continue
+			if item.current_owner_id == char_id or item.current_owner_id == target_id:
+				item.add_history_event(
+					Enums.HistoryEventType.USED_IN_BATTLE, ic_day,
+					"Used in duel to the death",
+				)

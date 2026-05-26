@@ -342,6 +342,9 @@ static func execute(
 			"effects": mentor_result,
 		}
 
+	if action_id == "CRAFT":
+		return _execute_craft(action, character, ctx, dice_engine)
+
 	if action_id == "INVOKE_FAVOR":
 		return _execute_invoke_favor(action, character, ctx)
 
@@ -4779,5 +4782,105 @@ static func _execute_apply_tattoo(
 			"subject_type": action.metadata.get("subject_type", Enums.TattooSubjectType.IMAGE),
 			"subject_description": action.metadata.get("subject_description", ""),
 			"topic_id": action.metadata.get("subject_topic_id", -1),
+		},
+	}
+
+
+# -- s49 CRAFT ----------------------------------------------------------------
+
+
+static func _execute_craft(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var skill_name: String = action.metadata.get("skill_name", "")
+	if skill_name.is_empty():
+		skill_name = ArtisanSystem.get_best_craft_skill(character)
+	if skill_name.is_empty() or character.skills.get(skill_name, 0) <= 0:
+		return {
+			"success": false,
+			"action_id": "CRAFT",
+			"character_id": character.character_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {"reason": "no_craft_skill"},
+		}
+
+	var base_tn: int = action.metadata.get("base_tn", 15)
+	var material_tier: Enums.MaterialTier = action.metadata.get(
+		"material_tier", Enums.MaterialTier.COMMON) as Enums.MaterialTier
+	var is_exceptional: bool = action.metadata.get("is_exceptional", false)
+	var category: Enums.CraftingCategory = action.metadata.get(
+		"category", Enums.CraftingCategory.EQUIPMENT) as Enums.CraftingCategory
+	var track: Enums.CraftingTrack = action.metadata.get(
+		"track", Enums.CraftingTrack.CRAFT) as Enums.CraftingTrack
+	var item_name: String = action.metadata.get("item_name", "Crafted Item")
+	var denomination: String = action.metadata.get("denomination", "bu")
+	var base_cost: float = action.metadata.get("base_cost", 5.0)
+	var material_name: String = action.metadata.get("material_name", "Standard materials")
+
+	var craft_result: Dictionary = ArtisanSystem.resolve_crafting(
+		character, dice_engine, skill_name, base_tn,
+		material_tier, is_exceptional, 0,
+	)
+
+	var success: bool = craft_result.get("success", false)
+	var item_ruined: bool = craft_result.get("item_ruined", false)
+
+	var special_qualities: Array[Enums.WeaponSpecialQuality] = []
+	var is_sacred: bool = false
+	if success and category == Enums.CraftingCategory.WEAPONS and is_exceptional:
+		var available_raises: int = craft_result.get("available_raises", 0)
+		var sacred_check: Dictionary = ArtisanSystem.check_sacred_weapon(available_raises, character)
+		if sacred_check.get("can_forge", false):
+			is_sacred = true
+			available_raises -= sacred_check.get("raise_cost", 7)
+
+		if available_raises > 0:
+			var desired: Array[Enums.WeaponSpecialQuality] = [
+				Enums.WeaponSpecialQuality.SIGNATURE,
+				Enums.WeaponSpecialQuality.BALANCED,
+			]
+			var alloc: Dictionary = ArtisanSystem.allocate_special_qualities(available_raises, desired)
+			special_qualities = alloc.get("allocated", [])
+
+	var quality_tier: GiftGivingSystem.QualityTier = craft_result.get(
+		"quality_tier", GiftGivingSystem.QualityTier.MUNDANE)
+	var glory_change: float = 0.0
+	if quality_tier >= GiftGivingSystem.QualityTier.EXCEPTIONAL:
+		glory_change = 0.1
+	if quality_tier >= GiftGivingSystem.QualityTier.MASTERWORK:
+		glory_change = 0.3
+	if quality_tier >= GiftGivingSystem.QualityTier.LEGENDARY:
+		glory_change = 0.5
+	if is_sacred:
+		glory_change = 1.0
+
+	return {
+		"success": success,
+		"action_id": "CRAFT",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_item_creation": true,
+			"item_ruined": item_ruined,
+			"quality_tier": quality_tier,
+			"crafting_roll_total": craft_result.get("total", 0),
+			"effective_total": craft_result.get("effective_total", 0),
+			"material_tier": material_tier,
+			"material_name": material_name,
+			"is_exceptional": is_exceptional,
+			"is_sacred": is_sacred,
+			"special_qualities": special_qualities,
+			"category": category,
+			"track": track,
+			"skill_name": skill_name,
+			"item_name": item_name,
+			"denomination": denomination,
+			"base_cost": base_cost,
+			"glory_change": glory_change,
 		},
 	}

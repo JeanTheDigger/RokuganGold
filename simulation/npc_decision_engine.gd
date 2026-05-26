@@ -1000,6 +1000,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"DELIVER_GIFT", "OFFER_FAVOR", "DISCERN_NEED",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
 				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
+				"CRAFT",
 				"TREAT_WOUND",
 				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
@@ -1645,6 +1646,12 @@ static func _lookup_personality_lean(
 
 
 static func _best_skill_rank(skill_name: String, skill_ranks: Dictionary) -> int:
+	if skill_name == "_craft_skill":
+		var best: int = 0
+		for sk: String in skill_ranks:
+			if (sk.begins_with("Craft:") or sk.begins_with("Artisan:")) and int(skill_ranks[sk]) > best:
+				best = int(skill_ranks[sk])
+		return best
 	if skill_name in ["Lore", "Games", "Perform", "Craft", "Artisan"]:
 		var best: int = 0
 		var prefix: String = skill_name + ":"
@@ -2720,6 +2727,50 @@ static func _populate_action_metadata(
 		option.metadata = {"target_npc_id": need.target_npc_id}
 	elif option.action_id == "MENTOR":
 		option.metadata = _build_mentor_metadata(ctx, need, chars_by_id)
+	elif option.action_id == "CRAFT":
+		option.metadata = _build_craft_metadata(ctx, character)
+
+
+static func _build_craft_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	character: L5RCharacterData = null,
+) -> Dictionary:
+	if character == null:
+		return {}
+	var category: Enums.CraftingCategory = Enums.CraftingCategory.ARTWORK
+	if ArtisanSystem.is_smith_school(character):
+		category = Enums.CraftingCategory.WEAPONS
+	elif not ArtisanSystem.is_artisan_school(character):
+		var best: String = ArtisanSystem.get_best_craft_skill(character)
+		if best.begins_with("Craft: Weaponsmithing") or best.begins_with("Craft: Bowyer"):
+			category = Enums.CraftingCategory.WEAPONS
+		elif best.begins_with("Craft: Armorsmithing"):
+			category = Enums.CraftingCategory.ARMOR
+		elif best.begins_with("Artisan: "):
+			category = Enums.CraftingCategory.ARTWORK
+		else:
+			category = Enums.CraftingCategory.EQUIPMENT
+
+	var settlement_type: Enums.SettlementType = _infer_settlement_type(ctx)
+	var craft_info: Dictionary = ArtisanSystem.npc_select_craft_action(
+		character, settlement_type, category)
+	if not craft_info.get("can_craft", false):
+		return {"can_craft": false}
+	return craft_info
+
+
+static func _infer_settlement_type(ctx: NPCDataStructures.ContextSnapshot) -> Enums.SettlementType:
+	if ctx.is_lord and ctx.lord_rank >= Enums.LordRank.FAMILY_DAIMYO:
+		return Enums.SettlementType.FAMILY_CASTLE
+	if ctx.is_lord:
+		return Enums.SettlementType.CASTLE
+	match ctx.context_flag:
+		Enums.ContextFlag.AT_COURT:
+			return Enums.SettlementType.CITY
+		Enums.ContextFlag.VISITING:
+			return Enums.SettlementType.TOWN
+		_:
+			return Enums.SettlementType.TOWN
 
 
 static func _build_mentor_metadata(

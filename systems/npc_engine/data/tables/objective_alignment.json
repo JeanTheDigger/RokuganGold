@@ -576,6 +576,7 @@
     "ARRANGE_MARRIAGE": 70,
     "CANCEL_HUNT": 30,
     "CHARM": 75,
+    "CRAFT": 45,
     "DELIVER_GIFT": 75,
     "DO_NOTHING": 0,
     "IMPRESS": 70,

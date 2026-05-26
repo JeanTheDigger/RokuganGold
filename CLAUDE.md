@@ -124,6 +124,7 @@ When implementing or auditing a system, go here first:
 | Zone subtypes and flag matrix                 | 57.36                |
 | Character sheet field index                   | 57.35                |
 | Tattoo system                                 | 57.25                |
+| Artisan & crafting system                     | 49                   |
 | Musha Shugyo (warrior's pilgrimage)           | 57.48                |
 | Otomo Seiyaku (alliance suppression)          | 55.22b               |
 | NPC advancement (XP, skill/ring progression)  | 52 Part 3, 48        |
@@ -2722,6 +2723,41 @@ costs, or forward-wiring. Do not treat as bugs.
   Togashi, Agasha, Yogo). Duplicate province names handled with suffixed internal
   names (Sabishii_Dragon, Anshin_Phoenix, Kougen_Phoenix, Garanto_Phoenix,
   Garanto_Unicorn, Kinbou_Scorpion). Deterministic with seed. 22 tests.
+- **s49 Artisan & Crafting System** — `simulation/artisan_system.gd`,
+  `shared/artisan_item_data.gd`. Full crafting pipeline with two tracks
+  (Artisan: fine arts/Awareness, Craft: practical production/Agility).
+  Cost-based TN system: three denomination brackets (zeni 10/15/20, bu
+  15/20/25, koku 20/25/30) with over-bracket escalation (+5 per step).
+  Six quality tiers: Mundane/Normal/Fine/Exceptional/Masterwork/Legendary
+  (TN thresholds 15/25/35/45/55). Material tier system: Common (0 FR),
+  Uncommon (+1 FR), Rare (+2 FR), Legendary (+3 FR). Settlement-type
+  availability gates (Village=Common only, Town=Common+Uncommon,
+  City=up to Rare, Family Castle/Capital=all tiers). Eight clan-specific
+  materials (Kaiu Steel, Kakita Paper, Dragon Jade Dust, Matsu Leather,
+  Phoenix-blessed Paper, Shadow-silk, Gaijin Dyes, Deep-sea Materials).
+  Exceptional weapons: Craft: Weaponsmithing 7+ (5+ for Kaiu/Tsi), cost
+  tripled, failure ruins item. Sacred weapons: 7 Raises (6 for Kaiu),
+  clan-locked, Legendary quality, auto-generates Tier 2 topic. Six weapon
+  special qualities (Balanced/Signature/Swift/True Quality/Radiant/
+  Unbreakable) with Raise costs (2-6). Multi-day crafting: time units
+  (Hours/Days/Weeks) by material type + denomination, AP cost = units ×
+  AP_per_unit. Provenance tracking: creator, creation date, quality,
+  materials, crafting roll total. History points: 7 event types (1-3
+  points each), bonus tiers at 3/6/10 points (+1/+2/+3 Free Raises).
+  NPC standing objectives: artisan/smith school characters and craft
+  skill 3+ get CRAFT_ITEM standing objective. Lord-directed crafting:
+  StrategicReview assigns CRAFT_ITEM to idle artisan vassals. NPC craft
+  selection: `npc_select_craft_action()` picks best skill, material,
+  denomination, checks exceptional eligibility. History point
+  accumulation: seasonal ownership rank check (Rank 3/5/Champion),
+  gift ownership transfer with court gifting detection, duel weapon
+  participation. CRAFT ActionID in AT_OWN_HOLDINGS and VISITING context
+  lists. Executor with early-return handler, full writeback creating
+  ArtisanItemData and Masterwork/Sacred/Legendary topics. personality_lean
+  entries for all 14 virtues (Rei +10, Meiyo +8, Seigyo +8, no blocks).
+  objective_alignment: CRAFT_ITEM (100), RAISE_DISPOSITION (45),
+  SEEK_GLORY (70). WorldStateSaver persistence for crafted_items and
+  next_item_id. 72 tests.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
@@ -2774,7 +2810,8 @@ Do not re-audit this; the list is settled. Ask the user before investigating any
 - s2.4 — `DECLARE_WALL_EMERGENCY` ActionID: s2.4.14 Decision 6 has no LOCKED spec
   (AP cost, agenda topic format, compliance enforcement all unspecified)
 - s43 — Maho spell cast roll TN: GDD s43 does not specify it
-- s49 — Artisan progression beyond gift/tattoo quality tiers: GDD s49 not LOCKED
+- s49 — Artisan progression beyond core crafting: bonsai/garden actions (4 ActionIDs),
+  theater composition actions (3 ActionIDs) remain forward-scored but no executor
 - s57.40.8 — Commerce rank 5 mastery (price ±20%): GDD section not yet unlocked
 - s57.40.9 — Appraisal skill emphasis modifier: GDD section not yet unlocked
 
@@ -3172,7 +3209,7 @@ These need GDD sections to be written or unlocked before implementation.
 | s40 | Individual combat — REFERENCE section (beyond map dependency) |
 | s43 | Maho spell cast roll TN — GDD does not specify it. Blocks: CAST_MAHO NPC ActionID |
 | s48 | Sensei/training system — blocks MENTOR executor and ACCEPT_TRAINING reactive chain |
-| s49 | Artisan progression beyond gift/tattoo quality tiers — not LOCKED |
+| s49 | Artisan: bonsai/garden (4 ActionIDs), theater composition (3 ActionIDs) — forward-scored, no executor. Core crafting pipeline DONE. |
 | s54.7 | Kolat system — blocks 23 Kolat spy network ActionIDs and BRIBE_GARRISON_COMMANDER |
 | s56.14 | Full Bloodspeaker cult encounters — trigger layer done, ASCII map encounters blocked |
 | s57.40.8 | Commerce rank 5 mastery (price ±20%) — section not unlocked |
