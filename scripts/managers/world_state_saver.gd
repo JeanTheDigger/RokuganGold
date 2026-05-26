@@ -629,6 +629,9 @@ func _ensure_dirs(base: String) -> void:
 		base + DIR_FAVORS,
 		base + DIR_TATTOOS,
 		base + DIR_TRADE_ROUTES,
+		base + DIR_SPIRITUAL_EVENTS,
+		base + DIR_BLOODSPEAKER_CELLS,
+		base + DIR_CRAFTED_ITEMS,
 	]
 	for d: String in dirs:
 		DirAccess.make_dir_recursive_absolute(d)

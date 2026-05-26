@@ -4836,6 +4836,10 @@ static func _execute_craft(
 	var material_type: Enums.MaterialType = action.metadata.get(
 		"material_type", Enums.MaterialType.OTHER) as Enums.MaterialType
 
+	var koku_cost: float = ArtisanSystem.cost_in_koku(base_cost, denomination)
+	if is_exceptional:
+		koku_cost *= ArtisanSystem.EXCEPTIONAL_COST_MULTIPLIER
+
 	var ap_cost: int = ArtisanSystem.get_ap_cost(base_cost, denomination, material_type)
 	if ap_cost > 2:
 		return {
@@ -4858,6 +4862,7 @@ static func _execute_craft(
 				"base_cost": base_cost,
 				"material_type": material_type,
 				"ap_cost": ap_cost,
+				"koku_cost": koku_cost,
 			},
 		}
 
@@ -4922,5 +4927,6 @@ static func _execute_craft(
 			"denomination": denomination,
 			"base_cost": base_cost,
 			"glory_change": glory_change,
+			"koku_cost": koku_cost,
 		},
 	}

@@ -203,6 +203,17 @@ static func get_ap_cost(cost: float, denomination: String, material_type: Enums.
 	return maxi(units * ap_per_unit, 1)
 
 
+static func cost_in_koku(base_cost: float, denomination: String) -> float:
+	match denomination:
+		"koku":
+			return base_cost
+		"bu":
+			return base_cost / 5.0
+		"zeni":
+			return base_cost / 50.0
+	return base_cost
+
+
 static func determine_quality_tier(roll_total: int) -> GiftGivingSystem.QualityTier:
 	if roll_total >= QUALITY_TN_THRESHOLDS[GiftGivingSystem.QualityTier.LEGENDARY]:
 		return GiftGivingSystem.QualityTier.LEGENDARY

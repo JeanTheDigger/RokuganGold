@@ -487,6 +487,600 @@ func _make_character(clan: String, family: String) -> L5RCharacterData:
 	c.honor = 5.0
 	c.glory = 3.0
 	c.status = 3.0
+	c.koku = 50.0
 	c.physical_location = ""
 	c.wounds_taken = 0
 	return c
+
+
+func _make_rank3_char() -> L5RCharacterData:
+	var c := _make_character("Crane", "Kakita")
+	c.character_id = 10
+	c.stamina = 4
+	c.willpower = 4
+	c.strength = 4
+	c.perception = 4
+	c.agility = 4
+	c.intelligence = 4
+	c.reflexes = 4
+	c.awareness = 4
+	c.void_ring = 3
+	c.character_name = "Kakita Artisan"
+	return c
+
+
+func _make_rank5_char() -> L5RCharacterData:
+	var c := _make_character("Crane", "Kakita")
+	c.character_id = 11
+	c.stamina = 5
+	c.willpower = 5
+	c.strength = 5
+	c.perception = 5
+	c.agility = 5
+	c.intelligence = 5
+	c.reflexes = 5
+	c.awareness = 5
+	c.void_ring = 3
+	c.character_name = "Kakita Master"
+	return c
+
+
+# -- Cost in koku conversion ---------------------------------------------------
+
+
+func test_cost_in_koku_koku() -> void:
+	assert_eq(ArtisanSystem.cost_in_koku(25.0, "koku"), 25.0)
+
+
+func test_cost_in_koku_bu() -> void:
+	assert_eq(ArtisanSystem.cost_in_koku(5.0, "bu"), 1.0)
+
+
+func test_cost_in_koku_zeni() -> void:
+	assert_eq(ArtisanSystem.cost_in_koku(50.0, "zeni"), 1.0)
+
+
+# -- Inventory bridge tests ---------------------------------------------------
+
+
+func test_create_inventory_item_artwork() -> void:
+	var item := ArtisanItemData.new()
+	item.item_id = 400
+	item.item_name = "Painted Screen"
+	item.category = Enums.CraftingCategory.ARTWORK
+	item.quality_tier = GiftGivingSystem.QualityTier.FINE
+	item.is_complete = true
+	var inv: Dictionary = ArtisanSystem.create_inventory_item(item)
+	assert_eq(inv.get("item_id"), 400)
+	assert_eq(inv.get("category"), InventorySystem.ItemCategory.GIFT)
+	assert_eq(inv.get("gift_subtype"), GiftGivingSystem.GiftCategory.ART)
+	assert_eq(inv.get("crafted_item_id"), 400)
+	assert_eq(inv.get("quality_tier"), GiftGivingSystem.QualityTier.FINE)
+	assert_eq(inv.get("size"), InventorySystem.ItemSize.SMALL)
+
+
+func test_create_inventory_item_weapon() -> void:
+	var item := ArtisanItemData.new()
+	item.item_id = 401
+	item.item_name = "Kakita Blade"
+	item.category = Enums.CraftingCategory.WEAPONS
+	item.quality_tier = GiftGivingSystem.QualityTier.EXCEPTIONAL
+	item.is_complete = true
+	var inv: Dictionary = ArtisanSystem.create_inventory_item(item)
+	assert_eq(inv.get("category"), InventorySystem.ItemCategory.WEAPON)
+	assert_eq(inv.get("gift_subtype"), GiftGivingSystem.GiftCategory.WEAPON)
+	assert_eq(inv.get("size"), InventorySystem.ItemSize.MEDIUM)
+
+
+func test_find_crafted_item() -> void:
+	var a := ArtisanItemData.new()
+	a.item_id = 800
+	var b := ArtisanItemData.new()
+	b.item_id = 801
+	assert_eq(ArtisanSystem.find_crafted_item([a, b], 801), b)
+	assert_null(ArtisanSystem.find_crafted_item([a, b], 999))
+
+
+func test_craft_writeback_adds_inventory_item() -> void:
+	var c := _make_character("Crane", "Kakita")
+	c.character_id = 60
+	c.skills = {"Artisan: Painting": 5}
+	c.items = []
+	var results: Array = [{
+		"action_id": "CRAFT",
+		"character_id": 60,
+		"effects": {
+			"success": true,
+			"requires_item_creation": true,
+			"quality_tier": GiftGivingSystem.QualityTier.NORMAL,
+			"item_name": "Landscape",
+			"category": Enums.CraftingCategory.ARTWORK,
+			"skill_name": "Artisan: Painting",
+			"material_tier": Enums.MaterialTier.COMMON,
+		},
+	}]
+	DayOrchestrator._process_craft_writebacks(
+		results, [], [500], {60: c}, {60: 1}, [], [100], 10,
+	)
+	assert_eq(c.items.size(), 1)
+	assert_eq(c.items[0].get("crafted_item_id"), 500)
+
+
+func test_gift_transfer_adds_inventory_to_recipient() -> void:
+	var item := ArtisanItemData.new()
+	item.item_id = 600
+	item.is_complete = true
+	item.item_name = "Fine Vase"
+	item.category = Enums.CraftingCategory.ARTWORK
+	item.quality_tier = GiftGivingSystem.QualityTier.FINE
+	item.current_owner_id = 1
+	var giver := _make_character("Crane", "Doji")
+	giver.character_id = 1
+	giver.items = [ArtisanSystem.create_inventory_item(item)]
+	var recip := _make_character("Lion", "Matsu")
+	recip.character_id = 2
+	recip.items = []
+	var results: Array = [{
+		"action_id": "DELIVER_GIFT",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"effects": {"consume_item_id": 600},
+	}]
+	DayOrchestrator._process_craft_gift_ownership_transfer(
+		results, [item], {1: giver, 2: recip}, {}, 50,
+	)
+	assert_eq(recip.items.size(), 1)
+	assert_eq(recip.items[0].get("crafted_item_id"), 600)
+
+
+func test_history_bonus_syncs_to_inventory() -> void:
+	var item := ArtisanItemData.new()
+	item.item_id = 700
+	item.is_complete = true
+	item.item_name = "Legacy Blade"
+	item.category = Enums.CraftingCategory.WEAPONS
+	item.quality_tier = GiftGivingSystem.QualityTier.FINE
+	item.current_owner_id = 10
+	var c := _make_rank3_char()
+	c.items = [ArtisanSystem.create_inventory_item(item)]
+	var initial_bonus: int = c.items[0].get("history_point_bonus", 0)
+	DayOrchestrator._process_crafted_item_history([item], {10: c}, 50)
+	var updated_bonus: int = c.items[0].get("history_point_bonus", 0)
+	assert_true(updated_bonus >= initial_bonus)
+	assert_eq(item.get_history_tier_bonus(), updated_bonus)
+
+
+# -- History orchestrator tests ------------------------------------------------
+
+
+func test_history_rank3_owner() -> void:
+	var c := _make_rank3_char()
+	var item := ArtisanItemData.new()
+	item.item_id = 100
+	item.is_complete = true
+	item.current_owner_id = c.character_id
+	DayOrchestrator._process_crafted_item_history([item], {c.character_id: c}, 50)
+	assert_true(item.history_points >= 1)
+
+
+func test_history_rank5_owner() -> void:
+	var c := _make_rank5_char()
+	var item := ArtisanItemData.new()
+	item.item_id = 101
+	item.is_complete = true
+	item.current_owner_id = c.character_id
+	DayOrchestrator._process_crafted_item_history([item], {c.character_id: c}, 50)
+	var has_rank5: bool = false
+	for evt: Dictionary in item.history_events:
+		if evt.get("type") == Enums.HistoryEventType.OWNED_RANK_5:
+			has_rank5 = true
+	assert_true(has_rank5)
+
+
+func test_history_champion_owner() -> void:
+	var c := _make_rank5_char()
+	c.status = 7.5
+	var item := ArtisanItemData.new()
+	item.item_id = 102
+	item.is_complete = true
+	item.current_owner_id = c.character_id
+	DayOrchestrator._process_crafted_item_history([item], {c.character_id: c}, 50)
+	var has_champ: bool = false
+	for evt: Dictionary in item.history_events:
+		if evt.get("type") == Enums.HistoryEventType.OWNED_CHAMPION:
+			has_champ = true
+	assert_true(has_champ)
+
+
+func test_history_gift_at_court() -> void:
+	var item := ArtisanItemData.new()
+	item.item_id = 201
+	item.is_complete = true
+	item.current_owner_id = 1
+	var c_giver := _make_character("Crane", "Doji")
+	c_giver.character_id = 1
+	var c_recip := _make_character("Lion", "Matsu")
+	c_recip.character_id = 2
+	var results: Array = [{
+		"action_id": "DELIVER_GIFT",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"effects": {"consume_item_id": 201},
+	}]
+	DayOrchestrator._process_craft_gift_ownership_transfer(
+		results, [item], {1: c_giver, 2: c_recip},
+		{1: {"context_flag": "AT_COURT"}}, 50,
+	)
+	var has_court: bool = false
+	for evt: Dictionary in item.history_events:
+		if evt.get("type") == Enums.HistoryEventType.GIFTED_AT_COURT:
+			has_court = true
+	assert_true(has_court)
+
+
+func test_history_duel_weapon() -> void:
+	var item := ArtisanItemData.new()
+	item.item_id = 300
+	item.is_complete = true
+	item.category = Enums.CraftingCategory.WEAPONS
+	item.current_owner_id = 1
+	var results: Array = [{
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"effects": {"death_occurred": true},
+	}]
+	DayOrchestrator._process_craft_duel_history(results, [item], 50)
+	var has_battle: bool = false
+	for evt: Dictionary in item.history_events:
+		if evt.get("type") == Enums.HistoryEventType.USED_IN_BATTLE:
+			has_battle = true
+	assert_true(has_battle)
+
+
+func test_lord_directed_craft_objective() -> void:
+	var lord := _make_character("Crane", "Doji")
+	lord.character_id = 50
+	lord.status = 6.0
+	var vassal := _make_character("Crane", "Kakita")
+	vassal.character_id = 51
+	vassal.school = "Kakita Artisan"
+	vassal.lord_id = lord.character_id
+	var result: Dictionary = StrategicReview._select_objective_for_vassal(
+		lord, vassal, [], {},
+	)
+	assert_eq(result.get("need_type"), "CRAFT_ITEM")
+
+
+# -- Executor koku cost tests --------------------------------------------------
+
+
+func test_executor_immediate_sets_koku_cost() -> void:
+	var c := _make_character("Crane", "Kakita")
+	c.character_id = 72
+	c.skills = {"Artisan: Painting": 5}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "CRAFT"
+	action.metadata = {
+		"can_craft": true,
+		"skill_name": "Artisan: Painting",
+		"base_tn": 15,
+		"material_tier": Enums.MaterialTier.COMMON,
+		"material_name": "",
+		"is_exceptional": false,
+		"item_name": "Quick Sketch",
+		"category": Enums.CraftingCategory.ARTWORK,
+		"track": Enums.CraftingTrack.ARTISAN,
+		"denomination": "zeni",
+		"base_cost": 3.0,
+		"material_type": Enums.MaterialType.OTHER,
+	}
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.ic_day = 10
+	var result: Dictionary = ActionExecutor._execute_craft(action, c, ctx, _dice)
+	var eff: Dictionary = result.get("effects", {})
+	assert_true(eff.has("koku_cost"))
+	assert_true(eff.get("koku_cost", 0.0) > 0.0)
+
+
+func test_executor_wip_sets_koku_cost() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 70
+	c.skills = {"Craft: Weaponsmithing": 5}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "CRAFT"
+	action.metadata = {
+		"can_craft": true,
+		"skill_name": "Craft: Weaponsmithing",
+		"base_tn": 25,
+		"material_tier": Enums.MaterialTier.COMMON,
+		"material_name": "Standard steel",
+		"is_exceptional": false,
+		"item_name": "WIP Katana",
+		"category": Enums.CraftingCategory.WEAPONS,
+		"track": Enums.CraftingTrack.CRAFT,
+		"denomination": "koku",
+		"base_cost": 25.0,
+		"material_type": Enums.MaterialType.STEEL,
+	}
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.ic_day = 10
+	var result: Dictionary = ActionExecutor._execute_craft(action, c, ctx, _dice)
+	var eff: Dictionary = result.get("effects", {})
+	assert_true(eff.get("creates_wip", false))
+	assert_eq(eff.get("koku_cost", 0.0), 25.0)
+
+
+func test_executor_exceptional_koku_cost_tripled() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 70
+	c.skills = {"Craft: Weaponsmithing": 7}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "CRAFT"
+	action.metadata = {
+		"can_craft": true,
+		"skill_name": "Craft: Weaponsmithing",
+		"base_tn": 30,
+		"material_tier": Enums.MaterialTier.COMMON,
+		"material_name": "Standard steel",
+		"is_exceptional": true,
+		"item_name": "Exceptional Katana",
+		"category": Enums.CraftingCategory.WEAPONS,
+		"track": Enums.CraftingTrack.CRAFT,
+		"denomination": "koku",
+		"base_cost": 25.0,
+		"material_type": Enums.MaterialType.STEEL,
+	}
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.ic_day = 10
+	var result: Dictionary = ActionExecutor._execute_craft(action, c, ctx, _dice)
+	assert_eq(result.get("effects", {}).get("koku_cost", 0.0), 75.0)
+
+
+func test_executor_continue_wip_no_koku_cost() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 71
+	c.skills = {"Craft: Weaponsmithing": 5}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "CRAFT"
+	action.metadata = {"wip_item_id": 999, "can_craft": true}
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.ic_day = 11
+	ctx.active_wip_item_id = 999
+	var result: Dictionary = ActionExecutor._execute_craft(action, c, ctx, _dice)
+	var eff: Dictionary = result.get("effects", {})
+	assert_true(eff.get("continues_wip", false))
+	assert_false(eff.has("koku_cost"))
+
+
+# -- WIP pipeline tests -------------------------------------------------------
+
+
+func test_executor_creates_wip_for_multi_day() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 70
+	c.skills = {"Craft: Weaponsmithing": 5}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "CRAFT"
+	action.metadata = {
+		"can_craft": true,
+		"skill_name": "Craft: Weaponsmithing",
+		"base_tn": 25,
+		"material_tier": Enums.MaterialTier.COMMON,
+		"material_name": "Standard steel",
+		"is_exceptional": false,
+		"item_name": "WIP Katana",
+		"category": Enums.CraftingCategory.WEAPONS,
+		"track": Enums.CraftingTrack.CRAFT,
+		"denomination": "koku",
+		"base_cost": 25.0,
+		"material_type": Enums.MaterialType.STEEL,
+	}
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.ic_day = 10
+	ctx.season = 0
+	var result: Dictionary = ActionExecutor._execute_craft(action, c, ctx, _dice)
+	assert_true(result.get("effects", {}).get("creates_wip", false))
+
+
+func test_executor_continues_wip() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 71
+	c.skills = {"Craft: Weaponsmithing": 5}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "CRAFT"
+	action.metadata = {"wip_item_id": 999, "can_craft": true}
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.ic_day = 11
+	ctx.active_wip_item_id = 999
+	var result: Dictionary = ActionExecutor._execute_craft(action, c, ctx, _dice)
+	assert_true(result.get("effects", {}).get("continues_wip", false))
+	assert_eq(result.get("effects", {}).get("wip_item_id", -1), 999)
+
+
+func test_executor_resolves_single_day_immediately() -> void:
+	var c := _make_character("Crane", "Kakita")
+	c.character_id = 72
+	c.skills = {"Artisan: Painting": 5}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "CRAFT"
+	action.metadata = {
+		"can_craft": true,
+		"skill_name": "Artisan: Painting",
+		"base_tn": 15,
+		"material_tier": Enums.MaterialTier.COMMON,
+		"material_name": "",
+		"is_exceptional": false,
+		"item_name": "Quick Sketch",
+		"category": Enums.CraftingCategory.ARTWORK,
+		"track": Enums.CraftingTrack.ARTISAN,
+		"denomination": "zeni",
+		"base_cost": 3.0,
+		"material_type": Enums.MaterialType.OTHER,
+	}
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.ic_day = 10
+	var result: Dictionary = ActionExecutor._execute_craft(action, c, ctx, _dice)
+	var eff: Dictionary = result.get("effects", {})
+	assert_true(eff.get("requires_item_creation", false))
+	assert_false(eff.get("creates_wip", false))
+
+
+func test_wip_writeback_creates_item() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 73
+	c.skills = {"Craft: Weaponsmithing": 5}
+	var crafted: Array = []
+	var next_topic: Array[int] = [200]
+	var next_item: Array[int] = [900]
+	var results: Array = [{
+		"action_id": "CRAFT",
+		"character_id": 73,
+		"effects": {
+			"creates_wip": true,
+			"skill_name": "Craft: Weaponsmithing",
+			"base_tn": 25,
+			"material_tier": Enums.MaterialTier.COMMON,
+			"material_name": "Standard steel",
+			"is_exceptional": false,
+			"item_name": "WIP Katana",
+			"category": Enums.CraftingCategory.WEAPONS,
+			"track": Enums.CraftingTrack.CRAFT,
+			"denomination": "koku",
+			"base_cost": 25.0,
+			"material_type": Enums.MaterialType.STEEL,
+			"ap_cost": 126,
+		},
+	}]
+	DayOrchestrator._process_craft_wip_writebacks(
+		results, crafted, next_item, {73: c}, {73: 1},
+		[], next_topic, _dice, 10,
+	)
+	assert_eq(crafted.size(), 1)
+	assert_false(crafted[0].is_complete)
+	assert_eq(crafted[0].crafting_ap_invested, 1)
+	assert_eq(crafted[0].item_id, 900)
+
+
+func test_wip_continue_writeback_invests_ap() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 74
+	var wip := ArtisanItemData.new()
+	wip.item_id = 910
+	wip.is_complete = false
+	wip.crafting_ap_required = 100
+	wip.crafting_ap_invested = 5
+	wip.skill_used = "Craft: Weaponsmithing"
+	wip.creator_id = 74
+	var results: Array = [{
+		"action_id": "CRAFT",
+		"character_id": 74,
+		"effects": {"continues_wip": true, "wip_item_id": 910},
+	}]
+	DayOrchestrator._process_craft_wip_writebacks(
+		results, [wip], [920], {74: c}, {},
+		[], [200], _dice, 11,
+	)
+	assert_eq(wip.crafting_ap_invested, 6)
+	assert_false(wip.is_complete)
+
+
+func test_wip_completion_creates_inventory_item() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 75
+	c.skills = {"Craft: Weaponsmithing": 7}
+	c.items = []
+	var wip := ArtisanItemData.new()
+	wip.item_id = 930
+	wip.is_complete = false
+	wip.crafting_ap_required = 6
+	wip.crafting_ap_invested = 5
+	wip.skill_used = "Craft: Weaponsmithing"
+	wip.creator_id = 75
+	wip.item_name = "Master Katana"
+	wip.category = Enums.CraftingCategory.WEAPONS
+	wip.material_tier = Enums.MaterialTier.COMMON
+	wip.base_cost_koku = 5.0
+	wip.cost_denomination = "bu"
+	var results: Array = [{
+		"action_id": "CRAFT",
+		"character_id": 75,
+		"effects": {"continues_wip": true, "wip_item_id": 930},
+	}]
+	DayOrchestrator._process_craft_wip_writebacks(
+		results, [wip], [940], {75: c}, {},
+		[], [300], _dice, 20,
+	)
+	assert_true(wip.is_complete)
+
+
+func test_wip_context_injection() -> void:
+	var wip := ArtisanItemData.new()
+	wip.item_id = 950
+	wip.is_complete = false
+	wip.creator_id = 80
+	var complete_item := ArtisanItemData.new()
+	complete_item.item_id = 951
+	complete_item.is_complete = true
+	complete_item.creator_id = 81
+	var ws: Dictionary = {80: {}, 81: {}}
+	DayOrchestrator._inject_wip_context([wip, complete_item], ws)
+	assert_eq(ws[80].get("active_wip_item_id", -1), 950)
+	assert_eq(ws[81].get("active_wip_item_id", -1), -1)
+
+
+func test_npc_metadata_detects_wip() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.active_wip_item_id = 960
+	var c := _make_character("Crab", "Kaiu")
+	c.skills = {"Craft: Weaponsmithing": 5}
+	var meta: Dictionary = NPCDecisionEngine._build_craft_metadata(ctx, c)
+	assert_eq(meta.get("wip_item_id", -1), 960)
+	assert_true(meta.get("can_craft", false))
+
+
+# -- WIP abandonment tests ----------------------------------------------------
+
+
+func test_wip_abandoned_on_crafter_death() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 90
+	c.wounds_taken = 999
+	var wip := ArtisanItemData.new()
+	wip.item_id = 990
+	wip.is_complete = false
+	wip.creator_id = 90
+	DayOrchestrator._cleanup_dead_character_references(
+		[c], {90: c}, [], [], [], [], [], [], [wip],
+	)
+	assert_true(wip.is_complete)
+
+
+func test_wip_abandoned_on_crafter_travel() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 91
+	c.travel_destination = "some_settlement"
+	c.travel_days_remaining = 5
+	var wip := ArtisanItemData.new()
+	wip.item_id = 991
+	wip.is_complete = false
+	wip.creator_id = 91
+	var ws: Dictionary = {91: {}}
+	DayOrchestrator._inject_wip_context([wip], ws, {91: c})
+	assert_true(wip.is_complete)
+	assert_eq(ws[91].get("active_wip_item_id", -1), -1)
+
+
+func test_wip_not_abandoned_if_crafter_stationary() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 92
+	c.travel_destination = ""
+	c.travel_days_remaining = 0
+	var wip := ArtisanItemData.new()
+	wip.item_id = 992
+	wip.is_complete = false
+	wip.creator_id = 92
+	var ws: Dictionary = {92: {}}
+	DayOrchestrator._inject_wip_context([wip], ws, {92: c})
+	assert_false(wip.is_complete)
+	assert_eq(ws[92].get("active_wip_item_id", -1), 992)

@@ -234,7 +234,7 @@ static func advance_day(
 		provinces, settlements, clans, active_wars, characters_by_id,
 		active_armies, insurgencies,
 	)
-	_inject_wip_context(crafted_items, world_states)
+	_inject_wip_context(crafted_items, world_states, characters_by_id)
 
 	world_states["_crime_records"] = crime_records
 
@@ -820,6 +820,7 @@ static func advance_day(
 	_cleanup_dead_character_references(
 		characters, characters_by_id, active_courts, entanglements,
 		active_hunts, favors, bloodspeaker_cells, active_secrets,
+		crafted_items,
 	)
 
 	var succession_results: Array = _process_successions(
@@ -1197,6 +1198,7 @@ static func advance_day(
 			_cleanup_dead_character_references(
 				characters, characters_by_id, active_courts, entanglements,
 				active_hunts, favors, bloodspeaker_cells, active_secrets,
+				crafted_items,
 			)
 
 	var koku_flow_results: Dictionary = {}
@@ -6517,6 +6519,7 @@ static func _cleanup_dead_character_references(
 	favors: Array,
 	bloodspeaker_cells: Array = [],
 	active_secrets: Array = [],
+	crafted_items: Array = [],
 ) -> void:
 	var dead_ids: Array = []
 	for c: L5RCharacterData in characters:
@@ -6572,6 +6575,12 @@ static func _cleanup_dead_character_references(
 		var sd: SecretData = secret as SecretData
 		for did: int in dead_ids:
 			sd.known_by_ids.erase(did)
+
+	for item: ArtisanItemData in crafted_items:
+		if item.is_complete:
+			continue
+		if item.creator_id in dead_ids:
+			item.is_complete = true
 
 
 static func _process_successions(
@@ -19132,12 +19141,17 @@ static func _purge_exposed_secrets(
 static func _inject_wip_context(
 	crafted_items: Array,
 	world_states: Dictionary,
+	characters_by_id: Dictionary = {},
 ) -> void:
 	for item: ArtisanItemData in crafted_items:
 		if item.is_complete:
 			continue
 		var creator_id: int = item.creator_id
 		if creator_id < 0:
+			continue
+		var creator: L5RCharacterData = characters_by_id.get(creator_id)
+		if creator != null and TravelSystem.is_traveling(creator):
+			item.is_complete = true
 			continue
 		if not world_states.has(creator_id):
 			continue
