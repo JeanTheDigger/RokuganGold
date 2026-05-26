@@ -263,6 +263,8 @@ static func build_context(
 			if off is Dictionary:
 				ctx.self_offenses.append(off as Dictionary)
 
+	ctx.active_wip_item_id = world_state.get("active_wip_item_id", -1)
+
 	return ctx
 
 
@@ -2737,6 +2739,10 @@ static func _build_craft_metadata(
 ) -> Dictionary:
 	if character == null:
 		return {}
+
+	if ctx.active_wip_item_id >= 0:
+		return {"wip_item_id": ctx.active_wip_item_id, "can_craft": true}
+
 	var category: Enums.CraftingCategory = Enums.CraftingCategory.ARTWORK
 	if ArtisanSystem.is_smith_school(character):
 		category = Enums.CraftingCategory.WEAPONS

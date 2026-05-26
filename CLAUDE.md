@@ -2766,7 +2766,17 @@ costs, or forward-wiring. Do not treat as bugs.
   factors in history_point_bonus for crafted item preference.
   `find_crafted_item()` lookup helper. Category mapping: ARTWORK→GIFT
   (SMALL), WEAPONS/ARMOR→WEAPON (MEDIUM), EQUIPMENT/ENGINEERING→GIFT
-  (MEDIUM). 89 tests.
+  (MEDIUM). Multi-day WIP pipeline: items costing >2 AP create WIP
+  ArtisanItemData (incomplete, AP tracking). NPC engine detects active
+  WIP via `active_wip_item_id` context injection and routes CRAFT to
+  continue investing AP. On final AP investment (`ready_for_roll`),
+  `_complete_wip_item()` fires the crafting roll, resolves quality,
+  exceptional/sacred weapons, special qualities, creates inventory item,
+  applies glory, and generates topic. Single-day items (≤2 AP) resolve
+  immediately in executor (existing path). `_inject_wip_context()` scans
+  crafted_items for incomplete items and sets per-character world_state
+  key. `_process_craft_wip_writebacks()` handles both `creates_wip` and
+  `continues_wip` effect paths. 106 tests.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into

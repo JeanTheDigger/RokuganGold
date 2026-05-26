@@ -4797,6 +4797,17 @@ static func _execute_craft(
 	ctx: NPCDataStructures.ContextSnapshot,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	var wip_item_id: int = action.metadata.get("wip_item_id", -1)
+	if wip_item_id >= 0:
+		return {
+			"success": true,
+			"action_id": "CRAFT",
+			"character_id": character.character_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {"continues_wip": true, "wip_item_id": wip_item_id},
+		}
+
 	var skill_name: String = action.metadata.get("skill_name", "")
 	if skill_name.is_empty():
 		skill_name = ArtisanSystem.get_best_craft_skill(character)
@@ -4822,6 +4833,33 @@ static func _execute_craft(
 	var denomination: String = action.metadata.get("denomination", "bu")
 	var base_cost: float = action.metadata.get("base_cost", 5.0)
 	var material_name: String = action.metadata.get("material_name", "Standard materials")
+	var material_type: Enums.MaterialType = action.metadata.get(
+		"material_type", Enums.MaterialType.OTHER) as Enums.MaterialType
+
+	var ap_cost: int = ArtisanSystem.get_ap_cost(base_cost, denomination, material_type)
+	if ap_cost > 2:
+		return {
+			"success": true,
+			"action_id": "CRAFT",
+			"character_id": character.character_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {
+				"creates_wip": true,
+				"skill_name": skill_name,
+				"base_tn": base_tn,
+				"material_tier": material_tier,
+				"material_name": material_name,
+				"is_exceptional": is_exceptional,
+				"category": category,
+				"track": track,
+				"item_name": item_name,
+				"denomination": denomination,
+				"base_cost": base_cost,
+				"material_type": material_type,
+				"ap_cost": ap_cost,
+			},
+		}
 
 	var craft_result: Dictionary = ArtisanSystem.resolve_crafting(
 		character, dice_engine, skill_name, base_tn,

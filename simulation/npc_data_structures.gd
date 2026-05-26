@@ -198,6 +198,9 @@ class ContextSnapshot:
 	# Atonement (s4.6)
 	var self_offenses: Array = []
 
+	# Crafting WIP (s49)
+	var active_wip_item_id: int = -1
+
 	# State
 	var pending_events: Array = []
 	var ap_remaining: int = 0

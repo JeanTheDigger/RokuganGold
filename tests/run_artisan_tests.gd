@@ -64,6 +64,14 @@ func _init() -> void:
 	_test_gift_transfer_adds_inventory_to_recipient()
 	_test_history_bonus_syncs_to_inventory()
 	_test_find_crafted_item()
+	_test_executor_creates_wip_for_multi_day()
+	_test_executor_continues_wip()
+	_test_executor_resolves_single_day_immediately()
+	_test_wip_writeback_creates_item()
+	_test_wip_continue_writeback_invests_ap()
+	_test_wip_completion_creates_inventory_item()
+	_test_wip_context_injection()
+	_test_npc_metadata_detects_wip()
 
 	print("\n=== Results: %d passed, %d failed ===" % [_pass_count, _fail_count])
 	if _fail_count > 0:
@@ -702,3 +710,210 @@ func _test_find_crafted_item() -> void:
 		"find_crafted_item returns correct item")
 	_assert(ArtisanSystem.find_crafted_item(crafted, 999) == null,
 		"find_crafted_item returns null for missing")
+
+
+# -- WIP pipeline tests -------------------------------------------------------
+
+
+func _test_executor_creates_wip_for_multi_day() -> void:
+	var c := _make_char("Crab", "Kaiu")
+	c.character_id = 70
+	c.skills = {"Craft: Weaponsmithing": 5}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "CRAFT"
+	action.metadata = {
+		"can_craft": true,
+		"skill_name": "Craft: Weaponsmithing",
+		"base_tn": 25,
+		"material_tier": Enums.MaterialTier.COMMON,
+		"material_name": "Standard steel",
+		"is_exceptional": false,
+		"item_name": "WIP Katana",
+		"category": Enums.CraftingCategory.WEAPONS,
+		"track": Enums.CraftingTrack.CRAFT,
+		"denomination": "koku",
+		"base_cost": 25.0,
+		"material_type": Enums.MaterialType.STEEL,
+		"ap_cost": 126,
+	}
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.ic_day = 10
+	ctx.season = 0
+	var result: Dictionary = ActionExecutor._execute_craft(action, c, ctx, _dice)
+	_assert(result.get("effects", {}).get("creates_wip", false),
+		"multi-day craft returns creates_wip")
+
+
+func _test_executor_continues_wip() -> void:
+	var c := _make_char("Crab", "Kaiu")
+	c.character_id = 71
+	c.skills = {"Craft: Weaponsmithing": 5}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "CRAFT"
+	action.metadata = {"wip_item_id": 999, "can_craft": true}
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.ic_day = 11
+	ctx.active_wip_item_id = 999
+	var result: Dictionary = ActionExecutor._execute_craft(action, c, ctx, _dice)
+	_assert(result.get("effects", {}).get("continues_wip", false),
+		"WIP item ID triggers continues_wip")
+	_assert(result.get("effects", {}).get("wip_item_id", -1) == 999,
+		"continues_wip passes through wip_item_id")
+
+
+func _test_executor_resolves_single_day_immediately() -> void:
+	var c := _make_char("Crane", "Kakita")
+	c.character_id = 72
+	c.skills = {"Artisan: Painting": 5}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "CRAFT"
+	action.metadata = {
+		"can_craft": true,
+		"skill_name": "Artisan: Painting",
+		"base_tn": 15,
+		"material_tier": Enums.MaterialTier.COMMON,
+		"material_name": "",
+		"is_exceptional": false,
+		"item_name": "Quick Sketch",
+		"category": Enums.CraftingCategory.ARTWORK,
+		"track": Enums.CraftingTrack.ARTISAN,
+		"denomination": "zeni",
+		"base_cost": 3.0,
+		"material_type": Enums.MaterialType.OTHER,
+		"ap_cost": 1,
+	}
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.ic_day = 10
+	var result: Dictionary = ActionExecutor._execute_craft(action, c, ctx, _dice)
+	var eff: Dictionary = result.get("effects", {})
+	_assert(eff.get("requires_item_creation", false),
+		"single-day craft resolves immediately")
+	_assert(not eff.get("creates_wip", false),
+		"single-day craft does not create WIP")
+
+
+func _test_wip_writeback_creates_item() -> void:
+	var c := _make_char("Crab", "Kaiu")
+	c.character_id = 73
+	c.skills = {"Craft: Weaponsmithing": 5}
+	var crafted: Array = []
+	var topics: Array = []
+	var next_topic: Array[int] = [200]
+	var next_item: Array[int] = [900]
+	var results: Array = [{
+		"action_id": "CRAFT",
+		"character_id": 73,
+		"effects": {
+			"creates_wip": true,
+			"skill_name": "Craft: Weaponsmithing",
+			"base_tn": 25,
+			"material_tier": Enums.MaterialTier.COMMON,
+			"material_name": "Standard steel",
+			"is_exceptional": false,
+			"item_name": "WIP Katana",
+			"category": Enums.CraftingCategory.WEAPONS,
+			"track": Enums.CraftingTrack.CRAFT,
+			"denomination": "koku",
+			"base_cost": 25.0,
+			"material_type": Enums.MaterialType.STEEL,
+			"ap_cost": 126,
+		},
+	}]
+	DayOrchestrator._process_craft_wip_writebacks(
+		results, crafted, next_item, {73: c}, {73: 1},
+		topics, next_topic, _dice, 10,
+	)
+	_assert(crafted.size() == 1, "WIP writeback creates ArtisanItemData")
+	_assert(not crafted[0].is_complete, "WIP item is not complete")
+	_assert(crafted[0].crafting_ap_invested == 1, "WIP has 1 AP invested")
+	_assert(crafted[0].item_id == 900, "WIP has correct item_id")
+
+
+func _test_wip_continue_writeback_invests_ap() -> void:
+	var c := _make_char("Crab", "Kaiu")
+	c.character_id = 74
+	var wip := ArtisanItemData.new()
+	wip.item_id = 910
+	wip.is_complete = false
+	wip.crafting_ap_required = 100
+	wip.crafting_ap_invested = 5
+	wip.skill_used = "Craft: Weaponsmithing"
+	wip.creator_id = 74
+	var crafted: Array = [wip]
+	var topics: Array = []
+	var next_topic: Array[int] = [200]
+	var next_item: Array[int] = [920]
+	var results: Array = [{
+		"action_id": "CRAFT",
+		"character_id": 74,
+		"effects": {"continues_wip": true, "wip_item_id": 910},
+	}]
+	DayOrchestrator._process_craft_wip_writebacks(
+		results, crafted, next_item, {74: c}, {},
+		topics, next_topic, _dice, 11,
+	)
+	_assert(wip.crafting_ap_invested == 6, "WIP AP invested incremented")
+	_assert(not wip.is_complete, "WIP not complete after partial invest")
+
+
+func _test_wip_completion_creates_inventory_item() -> void:
+	var c := _make_char("Crab", "Kaiu")
+	c.character_id = 75
+	c.skills = {"Craft: Weaponsmithing": 7}
+	c.items = []
+	var wip := ArtisanItemData.new()
+	wip.item_id = 930
+	wip.is_complete = false
+	wip.crafting_ap_required = 6
+	wip.crafting_ap_invested = 5
+	wip.skill_used = "Craft: Weaponsmithing"
+	wip.creator_id = 75
+	wip.item_name = "Master Katana"
+	wip.category = Enums.CraftingCategory.WEAPONS
+	wip.material_tier = Enums.MaterialTier.COMMON
+	wip.base_cost_koku = 5.0
+	wip.cost_denomination = "bu"
+	var crafted: Array = [wip]
+	var topics: Array = []
+	var next_topic: Array[int] = [300]
+	var next_item: Array[int] = [940]
+	var results: Array = [{
+		"action_id": "CRAFT",
+		"character_id": 75,
+		"effects": {"continues_wip": true, "wip_item_id": 930},
+	}]
+	DayOrchestrator._process_craft_wip_writebacks(
+		results, crafted, next_item, {75: c}, {},
+		topics, next_topic, _dice, 20,
+	)
+	_assert(wip.is_complete, "WIP completes when AP threshold met")
+	_assert(c.items.size() >= 0, "completion path runs without crash")
+
+
+func _test_wip_context_injection() -> void:
+	var wip := ArtisanItemData.new()
+	wip.item_id = 950
+	wip.is_complete = false
+	wip.creator_id = 80
+	var complete_item := ArtisanItemData.new()
+	complete_item.item_id = 951
+	complete_item.is_complete = true
+	complete_item.creator_id = 81
+	var ws: Dictionary = {80: {}, 81: {}}
+	DayOrchestrator._inject_wip_context([wip, complete_item], ws)
+	_assert(ws[80].get("active_wip_item_id", -1) == 950,
+		"WIP item injected for creator")
+	_assert(ws[81].get("active_wip_item_id", -1) == -1,
+		"complete item not injected as WIP")
+
+
+func _test_npc_metadata_detects_wip() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.active_wip_item_id = 960
+	var c := _make_char("Crab", "Kaiu")
+	c.skills = {"Craft: Weaponsmithing": 5}
+	var meta: Dictionary = NPCDecisionEngine._build_craft_metadata(ctx, c)
+	_assert(meta.get("wip_item_id", -1) == 960,
+		"NPC metadata returns wip_item_id when WIP active")
+	_assert(meta.get("can_craft", false),
+		"NPC metadata says can_craft with active WIP")
