@@ -521,7 +521,7 @@ static func advance_day(
 
 	var hunt_resolution_results: Array = _resolve_scheduled_hunts(
 		active_hunts, characters_by_id, provinces, dice_engine, ic_day,
-		death_events, active_topics, next_topic_id,
+		death_events, active_topics, next_topic_id, world_states,
 	)
 
 	_process_voluntary_declarations(
@@ -1442,8 +1442,10 @@ static func _process_ooc_day_tick(
 				var met_char: L5RCharacterData = characters_by_id[met_id] as L5RCharacterData
 				if CharacterStats.is_dead(met_char):
 					continue
-				InformationSystem.add_contact(c, met_id, met_char.clan, met_char)
-				InformationSystem.add_contact(met_char, c.character_id, c.clan, c)
+				var _cb: Dictionary = world_states.get("clan_baselines", {})
+				var _fb: Dictionary = world_states.get("family_baselines", {})
+				InformationSystem.add_contact(c, met_id, met_char.clan, met_char, _cb, _fb)
+				InformationSystem.add_contact(met_char, c.character_id, c.clan, c, _cb, _fb)
 
 		# Topic leak — copy topic to target character's pool.
 		var leaked_topic: int = wind_result["topic_leaked"]
@@ -4866,7 +4868,8 @@ static func _process_introduction_writebacks(
 			continue
 		if CharacterStats.is_dead(actor) or CharacterStats.is_dead(contact):
 			continue
-		InformationSystem.add_contact(actor, contact_id, contact.clan)
+		InformationSystem.add_contact(actor, contact_id, contact.clan, contact,
+			world_states.get("clan_baselines", {}), world_states.get("family_baselines", {}))
 		var disp_gain: int = effects.get("disposition_gain", 0)
 		if disp_gain != 0:
 			var old_val: int = contact.disposition_values.get(actor_id, 0)
@@ -4903,7 +4906,8 @@ static func _process_observe_attendees_writebacks(
 				continue
 			var npc: L5RCharacterData = characters_by_id.get(npc_id)
 			if npc != null and npc_id not in observer.met_characters:
-				InformationSystem.add_contact(observer, npc_id, npc.clan)
+				InformationSystem.add_contact(observer, npc_id, npc.clan, npc,
+					world_states.get("clan_baselines", {}), world_states.get("family_baselines", {}))
 			InformationSystem.add_knowledge(observer, InformationSystem.make_entry(
 				Enums.KnowledgeSource.INTELLIGENCE,
 				"court_observation",
@@ -7660,13 +7664,13 @@ static func _process_arrival_observation(
 				continue
 			if other.physical_location != dest:
 				continue
-			# Arriving character observes residents
-			InformationSystem.add_contact(character, other_id, other.clan, other)
+			var _cb2: Dictionary = world_states.get("clan_baselines", {})
+			var _fb2: Dictionary = world_states.get("family_baselines", {})
+			InformationSystem.add_contact(character, other_id, other.clan, other, _cb2, _fb2)
 			InformationSystem.record_location_observation(
 				character, other_id, dest, current_season
 			)
-			# Residents observe the arriving character
-			InformationSystem.add_contact(other, char_id, character.clan, character)
+			InformationSystem.add_contact(other, char_id, character.clan, character, _cb2, _fb2)
 			InformationSystem.record_location_observation(
 				other, char_id, dest, current_season
 			)
@@ -18664,6 +18668,7 @@ static func _resolve_scheduled_hunts(
 	death_events: Array,
 	active_topics: Array,
 	next_topic_id: Array,
+	world_states: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 	for hunt: Dictionary in active_hunts:
@@ -18722,7 +18727,9 @@ static func _resolve_scheduled_hunts(
 			if c != null:
 				HonorGlorySystem.apply_glory_change(c, glory_map[cid])
 
-		_apply_hunt_disposition(participants)
+		var _hcb: Dictionary = world_states.get("clan_baselines", {})
+		var _hfb: Dictionary = world_states.get("family_baselines", {})
+		_apply_hunt_disposition(participants, _hcb, _hfb)
 
 		if killed_id >= 0:
 			var killed: L5RCharacterData = characters_by_id.get(killed_id)
@@ -18778,7 +18785,7 @@ static func _resolve_scheduled_hunts(
 	return results
 
 
-static func _apply_hunt_disposition(participants: Array) -> void:
+static func _apply_hunt_disposition(participants: Array, clan_baselines: Dictionary = {}, family_baselines: Dictionary = {}) -> void:
 	for i: int in range(participants.size()):
 		for j: int in range(i + 1, participants.size()):
 			var a: L5RCharacterData = participants[i]
@@ -18786,8 +18793,8 @@ static func _apply_hunt_disposition(participants: Array) -> void:
 			var disp_ab: int = a.disposition_values.get(b.character_id, 0)
 			var disp_ba: int = b.disposition_values.get(a.character_id, 0)
 			if a.character_id not in b.met_characters:
-				InformationSystem.add_contact(b, a.character_id, a.clan)
-				InformationSystem.add_contact(a, b.character_id, b.clan)
+				InformationSystem.add_contact(b, a.character_id, a.clan, a, clan_baselines, family_baselines)
+				InformationSystem.add_contact(a, b.character_id, b.clan, b, clan_baselines, family_baselines)
 				a.disposition_values[b.character_id] = clampi(disp_ab + HuntSystem.DISP_NEW_RELATIONSHIP, -100, 100)
 				b.disposition_values[a.character_id] = clampi(disp_ba + HuntSystem.DISP_NEW_RELATIONSHIP, -100, 100)
 			else:
