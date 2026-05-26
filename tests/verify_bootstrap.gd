@@ -187,5 +187,53 @@ func _init() -> void:
 	var mantis_champ: bool = result.get("clan_champions", {}).has("Mantis")
 	assert(mantis_champ, "Mantis should have a clan champion")
 
+	# Province terrain distribution
+	var terrain_dist: Dictionary = {}
+	for pid2: Variant in provinces:
+		var p2: ProvinceData = provinces[pid2]
+		terrain_dist[p2.terrain_type] = terrain_dist.get(p2.terrain_type, 0) + 1
+	print("Province terrain distribution: %s" % str(terrain_dist))
+
+	# Settlement population
+	var with_pop: int = 0
+	var total_pop: int = 0
+	for s2: SettlementData in settlements:
+		if s2.population_pu > 0:
+			with_pop += 1
+		total_pop += s2.population_pu
+	print("Settlements with population: %d / %d (total PU: %d)" % [with_pop, settlements.size(), total_pop])
+	assert(with_pop > 0, "At least some settlements should have population")
+
+	# Character skills
+	var with_skills: int = 0
+	for c3: L5RCharacterData in characters:
+		if not c3.skills.is_empty():
+			with_skills += 1
+	print("Characters with skills: %d / %d" % [with_skills, characters.size()])
+	assert(with_skills == characters.size(), "All characters should have skills")
+
+	# Province stability
+	var stability_dist: Dictionary = {}
+	for pid3: Variant in provinces:
+		var p3: ProvinceData = provinces[pid3]
+		stability_dist[int(p3.stability)] = stability_dist.get(int(p3.stability), 0) + 1
+	print("Province stability distribution: %s" % str(stability_dist))
+
+	# known_contacts_by_clan populated
+	var with_clan_contacts: int = 0
+	for c4: L5RCharacterData in characters:
+		if not c4.known_contacts_by_clan.is_empty():
+			with_clan_contacts += 1
+	print("Characters with known_contacts_by_clan: %d / %d" % [with_clan_contacts, characters.size()])
+	assert(with_clan_contacts == characters.size(), "All characters should have clan contacts indexed")
+
+	# Disposition entries (should be ~500K not 14M)
+	var total_disp: int = 0
+	for c5: L5RCharacterData in characters:
+		total_disp += c5.disposition_values.size()
+	print("Total disposition entries: %d (expect ~500K, not 14M)" % total_disp)
+	assert(total_disp < 1000000, "Disposition entries should be co-located only, not all-pairs")
+	assert(total_disp > 100000, "Should have substantial co-located dispositions")
+
 	print("\n--- ALL CHECKS PASSED ---")
 	quit()
