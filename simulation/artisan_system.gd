@@ -491,8 +491,8 @@ static func npc_select_craft_action(
 	var material_tier: Enums.MaterialTier = mat.get("tier", Enums.MaterialTier.COMMON)
 
 	var is_exceptional: bool = false
-	if category == Enums.CraftingCategory.WEAPONS:
-		is_exceptional = can_attempt_exceptional_weapon(character) and skill_rank >= 5
+	if category == Enums.CraftingCategory.WEAPONS and skill_name == "Craft: Weaponsmithing":
+		is_exceptional = can_attempt_exceptional_weapon(character)
 
 	var item_name: String = _pick_item_name(category, character)
 	var denomination: String = _pick_denomination(category)

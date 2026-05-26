@@ -1180,3 +1180,49 @@ func test_settlement_type_flows_to_craft_metadata() -> void:
 	ctx.character_id = 105
 	var meta: Dictionary = NPCDecisionEngine._build_craft_metadata(ctx, c)
 	assert_true(meta.get("can_craft", false))
+
+
+func test_kaiu_armorsmith_selects_armor_category() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 106
+	c.school = "Kaiu Engineer"
+	c.skills = {"Craft: Armorsmithing": 6, "Craft: Weaponsmithing": 3}
+	c.koku = 100.0
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.settlement_type = Enums.SettlementType.CASTLE
+	ctx.character_id = 106
+	var meta: Dictionary = NPCDecisionEngine._build_craft_metadata(ctx, c)
+	assert_true(meta.get("can_craft", false))
+	assert_eq(meta.get("category"), Enums.CraftingCategory.ARMOR)
+
+
+func test_bowyer_cannot_craft_exceptional() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 107
+	c.skills = {"Craft: Bowyer": 8, "Craft: Weaponsmithing": 4}
+	c.koku = 100.0
+	var result: Dictionary = ArtisanSystem.npc_select_craft_action(
+		c, Enums.SettlementType.CASTLE, Enums.CraftingCategory.WEAPONS)
+	assert_true(result.get("can_craft", false))
+	assert_false(result.get("is_exceptional", false))
+
+
+func test_weaponsmith_can_craft_exceptional() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 108
+	c.skills = {"Craft: Weaponsmithing": 7, "Craft: Bowyer": 3}
+	c.koku = 200.0
+	var result: Dictionary = ArtisanSystem.npc_select_craft_action(
+		c, Enums.SettlementType.CASTLE, Enums.CraftingCategory.WEAPONS)
+	assert_true(result.get("can_craft", false))
+	assert_true(result.get("is_exceptional", false))
+
+
+func test_category_selection_by_best_skill() -> void:
+	var c := _make_character("Crane", "Kakita")
+	c.skills = {"Artisan: Painting": 5, "Craft: Weaponsmithing": 3}
+	assert_eq(NPCDecisionEngine._pick_craft_category(c), Enums.CraftingCategory.ARTWORK)
+	c.skills = {"Craft: Weaponsmithing": 5, "Artisan: Painting": 3}
+	assert_eq(NPCDecisionEngine._pick_craft_category(c), Enums.CraftingCategory.WEAPONS)
+	c.skills = {"Craft: Armorsmithing": 5}
+	assert_eq(NPCDecisionEngine._pick_craft_category(c), Enums.CraftingCategory.ARMOR)

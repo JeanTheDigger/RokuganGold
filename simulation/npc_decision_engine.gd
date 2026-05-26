@@ -2746,19 +2746,7 @@ static func _build_craft_metadata(
 	if ctx.active_wip_item_id >= 0:
 		return {"wip_item_id": ctx.active_wip_item_id, "can_craft": true}
 
-	var category: Enums.CraftingCategory = Enums.CraftingCategory.ARTWORK
-	if ArtisanSystem.is_smith_school(character):
-		category = Enums.CraftingCategory.WEAPONS
-	elif not ArtisanSystem.is_artisan_school(character):
-		var best: String = ArtisanSystem.get_best_craft_skill(character)
-		if best.begins_with("Craft: Weaponsmithing") or best.begins_with("Craft: Bowyer"):
-			category = Enums.CraftingCategory.WEAPONS
-		elif best.begins_with("Craft: Armorsmithing"):
-			category = Enums.CraftingCategory.ARMOR
-		elif best.begins_with("Artisan: "):
-			category = Enums.CraftingCategory.ARTWORK
-		else:
-			category = Enums.CraftingCategory.EQUIPMENT
+	var category: Enums.CraftingCategory = _pick_craft_category(character)
 
 	var settlement_type: Enums.SettlementType = ctx.settlement_type if ctx.settlement_type >= 0 else _infer_settlement_type(ctx)
 	var craft_info: Dictionary = ArtisanSystem.npc_select_craft_action(
@@ -2772,6 +2760,21 @@ static func _build_craft_metadata(
 	if koku_cost > 0.0 and character.koku < koku_cost:
 		return {"can_craft": false, "reason": "insufficient_koku"}
 	return craft_info
+
+
+static func _pick_craft_category(character: L5RCharacterData) -> Enums.CraftingCategory:
+	var best: String = ArtisanSystem.get_best_craft_skill(character)
+	if best.is_empty():
+		if ArtisanSystem.is_artisan_school(character):
+			return Enums.CraftingCategory.ARTWORK
+		return Enums.CraftingCategory.EQUIPMENT
+	if best.begins_with("Craft: Weaponsmithing") or best.begins_with("Craft: Bowyer"):
+		return Enums.CraftingCategory.WEAPONS
+	if best.begins_with("Craft: Armorsmithing"):
+		return Enums.CraftingCategory.ARMOR
+	if best.begins_with("Artisan: "):
+		return Enums.CraftingCategory.ARTWORK
+	return Enums.CraftingCategory.EQUIPMENT
 
 
 static func _infer_settlement_type(ctx: NPCDataStructures.ContextSnapshot) -> Enums.SettlementType:
