@@ -132,6 +132,7 @@ func _save_world_state() -> void:
 
 func _load_world_state() -> void:
 	if _world_saver.load_world(WorldState):
+		WorldState.rebuild_characters_by_id()
 		print("[SimulationScheduler] World state loaded (%d characters, %d provinces)." % [
 			WorldState.characters.size(),
 			WorldState.provinces.size(),
