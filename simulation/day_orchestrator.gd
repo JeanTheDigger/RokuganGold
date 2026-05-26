@@ -19193,6 +19193,9 @@ static func _process_craft_writebacks(
 
 		crafted_items.append(item)
 
+		var inv_item: Dictionary = ArtisanSystem.create_inventory_item(item)
+		character.items.append(inv_item)
+
 		if quality_tier >= GiftGivingSystem.QualityTier.MASTERWORK or item.is_sacred_weapon:
 			var topic := TopicData.new()
 			topic.topic_id = next_topic_id[0]
@@ -19264,6 +19267,18 @@ static func _process_crafted_item_history(
 				Enums.HistoryEventType.OWNED_CHAMPION, ic_day,
 				owner.character_name,
 			)
+		_sync_inventory_history_bonus(owner, item)
+
+
+static func _sync_inventory_history_bonus(
+	owner: L5RCharacterData,
+	item: ArtisanItemData,
+) -> void:
+	var bonus: int = item.get_history_tier_bonus()
+	for inv_item: Dictionary in owner.items:
+		if inv_item.get("crafted_item_id", -1) == item.item_id:
+			inv_item["history_point_bonus"] = bonus
+			return
 
 
 static func _process_craft_gift_ownership_transfer(
@@ -19286,6 +19301,10 @@ static func _process_craft_gift_ownership_transfer(
 		for item: ArtisanItemData in crafted_items:
 			if item.item_id == consume_id:
 				item.current_owner_id = recipient_id
+				var recipient: L5RCharacterData = characters_by_id.get(recipient_id)
+				if recipient != null and not CharacterStats.is_dead(recipient):
+					var inv_item: Dictionary = ArtisanSystem.create_inventory_item(item)
+					recipient.items.append(inv_item)
 				var giver_id: int = r.get("character_id", -1)
 				var giver_ws: Dictionary = world_states.get(giver_id, {})
 				if giver_ws.get("context_flag", "") == "AT_COURT":

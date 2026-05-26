@@ -351,8 +351,8 @@ static func select_best_gift(
 			continue
 		if is_forbidden(subtype, tier):
 			continue
-		var fr: int = compute_effective_free_raises(tier, subtype, archetype)
-		# Score: weight effective FR strongly, break ties on raw quality.
+		var hpb: int = item.get("history_point_bonus", 0)
+		var fr: int = compute_effective_free_raises(tier, subtype, archetype, hpb)
 		var score: int = (fr * 100) + tier
 		if score > best_score:
 			best_score = score

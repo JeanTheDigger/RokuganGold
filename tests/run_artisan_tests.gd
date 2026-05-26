@@ -58,6 +58,12 @@ func _init() -> void:
 	_test_history_gift_at_court()
 	_test_history_duel_weapon()
 	_test_lord_directed_craft_objective()
+	_test_create_inventory_item_artwork()
+	_test_create_inventory_item_weapon()
+	_test_craft_writeback_adds_inventory_item()
+	_test_gift_transfer_adds_inventory_to_recipient()
+	_test_history_bonus_syncs_to_inventory()
+	_test_find_crafted_item()
 
 	print("\n=== Results: %d passed, %d failed ===" % [_pass_count, _fail_count])
 	if _fail_count > 0:
@@ -562,3 +568,137 @@ func _test_lord_directed_craft_objective() -> void:
 	)
 	_assert(result.get("need_type") == "CRAFT_ITEM",
 		"idle artisan vassal gets CRAFT_ITEM from lord")
+
+
+func _test_create_inventory_item_artwork() -> void:
+	var item := ArtisanItemData.new()
+	item.item_id = 400
+	item.item_name = "Painted Screen"
+	item.category = Enums.CraftingCategory.ARTWORK
+	item.quality_tier = GiftGivingSystem.QualityTier.FINE
+	item.is_complete = true
+	var inv: Dictionary = ArtisanSystem.create_inventory_item(item)
+	_assert(inv.get("item_id") == 400, "inventory item_id matches crafted item")
+	_assert(inv.get("category") == InventorySystem.ItemCategory.GIFT,
+		"artwork maps to GIFT category")
+	_assert(inv.get("gift_subtype") == GiftGivingSystem.GiftCategory.ART,
+		"artwork maps to ART gift subtype")
+	_assert(inv.get("crafted_item_id") == 400,
+		"crafted_item_id links back to ArtisanItemData")
+	_assert(inv.get("quality_tier") == GiftGivingSystem.QualityTier.FINE,
+		"quality tier preserved")
+	_assert(inv.get("size") == InventorySystem.ItemSize.SMALL,
+		"artwork defaults to SMALL size")
+
+
+func _test_create_inventory_item_weapon() -> void:
+	var item := ArtisanItemData.new()
+	item.item_id = 401
+	item.item_name = "Kakita Blade"
+	item.category = Enums.CraftingCategory.WEAPONS
+	item.quality_tier = GiftGivingSystem.QualityTier.EXCEPTIONAL
+	item.is_complete = true
+	var inv: Dictionary = ArtisanSystem.create_inventory_item(item)
+	_assert(inv.get("category") == InventorySystem.ItemCategory.WEAPON,
+		"weapon maps to WEAPON category")
+	_assert(inv.get("gift_subtype") == GiftGivingSystem.GiftCategory.WEAPON,
+		"weapon maps to WEAPON gift subtype")
+	_assert(inv.get("size") == InventorySystem.ItemSize.MEDIUM,
+		"non-artwork defaults to MEDIUM size")
+
+
+func _test_craft_writeback_adds_inventory_item() -> void:
+	var c := _make_char("Crane", "Kakita")
+	c.character_id = 60
+	c.skills = {"Artisan: Painting": 5}
+	c.items = []
+	var crafted: Array = []
+	var topics: Array = []
+	var next_topic: Array[int] = [100]
+	var next_item: Array[int] = [500]
+	var result: Dictionary = {
+		"action_id": "CRAFT",
+		"character_id": 60,
+		"effects": {
+			"success": true,
+			"requires_item_creation": true,
+			"quality_tier": GiftGivingSystem.QualityTier.NORMAL,
+			"item_name": "Landscape",
+			"category": Enums.CraftingCategory.ARTWORK,
+			"skill_name": "Artisan: Painting",
+			"material_tier": Enums.MaterialTier.COMMON,
+		},
+	}
+	var results: Array = [result]
+	var chars: Dictionary = {60: c}
+	var prov_map: Dictionary = {60: 1}
+	DayOrchestrator._process_craft_writebacks(
+		results, crafted, next_item, chars, prov_map, topics, next_topic, 10,
+	)
+	_assert(c.items.size() == 1, "crafted item added to character inventory")
+	_assert(c.items[0].get("crafted_item_id") == 500,
+		"inventory item links to crafted_item_id")
+
+
+func _test_gift_transfer_adds_inventory_to_recipient() -> void:
+	var item := ArtisanItemData.new()
+	item.item_id = 600
+	item.is_complete = true
+	item.item_name = "Fine Vase"
+	item.category = Enums.CraftingCategory.ARTWORK
+	item.quality_tier = GiftGivingSystem.QualityTier.FINE
+	item.current_owner_id = 1
+	var giver := _make_char("Crane", "Doji")
+	giver.character_id = 1
+	giver.items = [ArtisanSystem.create_inventory_item(item)]
+	var recip := _make_char("Lion", "Matsu")
+	recip.character_id = 2
+	recip.items = []
+	var results: Array = [{
+		"action_id": "DELIVER_GIFT",
+		"character_id": 1,
+		"target_npc_id": 2,
+		"effects": {"consume_item_id": 600},
+	}]
+	var crafted: Array = [item]
+	var chars_by_id: Dictionary = {1: giver, 2: recip}
+	DayOrchestrator._process_craft_gift_ownership_transfer(
+		results, crafted, chars_by_id, {}, 50,
+	)
+	_assert(recip.items.size() == 1,
+		"recipient gets inventory item on gift transfer")
+	_assert(recip.items[0].get("crafted_item_id") == 600,
+		"recipient inventory links to crafted_item_id")
+
+
+func _test_history_bonus_syncs_to_inventory() -> void:
+	var item := ArtisanItemData.new()
+	item.item_id = 700
+	item.is_complete = true
+	item.item_name = "Legacy Blade"
+	item.category = Enums.CraftingCategory.WEAPONS
+	item.quality_tier = GiftGivingSystem.QualityTier.FINE
+	item.current_owner_id = 10
+	var c := _make_rank3_char()
+	c.items = [ArtisanSystem.create_inventory_item(item)]
+	var initial_bonus: int = c.items[0].get("history_point_bonus", 0)
+	var crafted: Array = [item]
+	var chars: Dictionary = {10: c}
+	DayOrchestrator._process_crafted_item_history(crafted, chars, 50)
+	var updated_bonus: int = c.items[0].get("history_point_bonus", 0)
+	_assert(updated_bonus >= initial_bonus,
+		"inventory history_point_bonus synced after history accumulation")
+	_assert(item.get_history_tier_bonus() == updated_bonus,
+		"inventory bonus matches ArtisanItemData live bonus")
+
+
+func _test_find_crafted_item() -> void:
+	var a := ArtisanItemData.new()
+	a.item_id = 800
+	var b := ArtisanItemData.new()
+	b.item_id = 801
+	var crafted: Array = [a, b]
+	_assert(ArtisanSystem.find_crafted_item(crafted, 801) == b,
+		"find_crafted_item returns correct item")
+	_assert(ArtisanSystem.find_crafted_item(crafted, 999) == null,
+		"find_crafted_item returns null for missing")

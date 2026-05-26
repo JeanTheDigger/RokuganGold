@@ -460,9 +460,11 @@ static func _try_execute_deliver_gift(
 
 	var tier: int = gift_item.get("quality_tier", 0)
 	var subtype: int = gift_item.get("gift_subtype", -1)
+	var history_bonus: int = gift_item.get("history_point_bonus", 0)
 
 	var gift_result: Dictionary = GiftGivingSystem.resolve_deliver_gift(
-		character, recipient, tier, subtype, archetype, dice_engine, ctx.ic_day
+		character, recipient, tier, subtype, archetype, dice_engine, ctx.ic_day,
+		history_bonus,
 	)
 
 	var outcome: String = gift_result.get("outcome", "")

@@ -2757,7 +2757,16 @@ costs, or forward-wiring. Do not treat as bugs.
   entries for all 14 virtues (Rei +10, Meiyo +8, Seigyo +8, no blocks).
   objective_alignment: CRAFT_ITEM (100), RAISE_DISPOSITION (45),
   SEEK_GLORY (70). WorldStateSaver persistence for crafted_items and
-  next_item_id. 72 tests.
+  next_item_id. Inventory bridge: `create_inventory_item()` converts
+  ArtisanItemData to inventory Dictionary with `crafted_item_id` and
+  `history_point_bonus` keys. Crafted items auto-added to
+  `character.items` on completion. Gift transfer adds inventory item to
+  recipient. `_sync_inventory_history_bonus()` keeps inventory item bonus
+  current after seasonal history accumulation. `select_best_gift()`
+  factors in history_point_bonus for crafted item preference.
+  `find_crafted_item()` lookup helper. Category mapping: ARTWORK→GIFT
+  (SMALL), WEAPONS/ARMOR→WEAPON (MEDIUM), EQUIPMENT/ENGINEERING→GIFT
+  (MEDIUM). 89 tests.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into

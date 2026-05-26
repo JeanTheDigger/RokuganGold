@@ -548,6 +548,48 @@ static func get_best_craft_skill(character: L5RCharacterData) -> String:
 	return best_skill
 
 
+static func create_inventory_item(item: ArtisanItemData) -> Dictionary:
+	var gift_subtype: int = _crafting_category_to_gift_subtype(item.category)
+	var inv_category: int = InventorySystem.ItemCategory.GIFT
+	if item.category == Enums.CraftingCategory.WEAPONS:
+		inv_category = InventorySystem.ItemCategory.WEAPON
+	elif item.category == Enums.CraftingCategory.ARMOR:
+		inv_category = InventorySystem.ItemCategory.WEAPON
+	var inv_item: Dictionary = InventorySystem.create_item(
+		item.item_id,
+		item.item_name,
+		inv_category,
+		InventorySystem.ItemSize.SMALL if item.category == Enums.CraftingCategory.ARTWORK else InventorySystem.ItemSize.MEDIUM,
+		item.quality_tier,
+	)
+	inv_item["gift_subtype"] = gift_subtype
+	inv_item["crafted_item_id"] = item.item_id
+	inv_item["history_point_bonus"] = item.get_history_tier_bonus()
+	return inv_item
+
+
+static func _crafting_category_to_gift_subtype(category: Enums.CraftingCategory) -> int:
+	match category:
+		Enums.CraftingCategory.ARTWORK:
+			return GiftGivingSystem.GiftCategory.ART
+		Enums.CraftingCategory.WEAPONS:
+			return GiftGivingSystem.GiftCategory.WEAPON
+		Enums.CraftingCategory.ARMOR:
+			return GiftGivingSystem.GiftCategory.ARMOR
+		Enums.CraftingCategory.EQUIPMENT:
+			return GiftGivingSystem.GiftCategory.ACCESSORIES
+		Enums.CraftingCategory.ENGINEERING:
+			return GiftGivingSystem.GiftCategory.ACCESSORIES
+	return GiftGivingSystem.GiftCategory.ART
+
+
+static func find_crafted_item(crafted_items: Array, item_id: int) -> ArtisanItemData:
+	for item: ArtisanItemData in crafted_items:
+		if item.item_id == item_id:
+			return item
+	return null
+
+
 # == PRIVATE HELPERS ===========================================================
 
 
