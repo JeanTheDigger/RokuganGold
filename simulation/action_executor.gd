@@ -4883,25 +4883,8 @@ static func _execute_craft(
 			is_sacred = true
 			available_raises -= sacred_check.get("raise_cost", 7)
 
-		if available_raises > 0:
-			var desired: Array[Enums.WeaponSpecialQuality] = [
-				Enums.WeaponSpecialQuality.SIGNATURE,
-				Enums.WeaponSpecialQuality.BALANCED,
-			]
-			var alloc: Dictionary = ArtisanSystem.allocate_special_qualities(available_raises, desired)
-			special_qualities = alloc.get("allocated", [])
-
 	var quality_tier: GiftGivingSystem.QualityTier = craft_result.get(
 		"quality_tier", GiftGivingSystem.QualityTier.MUNDANE)
-	var glory_change: float = 0.0
-	if quality_tier >= GiftGivingSystem.QualityTier.EXCEPTIONAL:
-		glory_change = 0.1
-	if quality_tier >= GiftGivingSystem.QualityTier.MASTERWORK:
-		glory_change = 0.3
-	if quality_tier >= GiftGivingSystem.QualityTier.LEGENDARY:
-		glory_change = 0.5
-	if is_sacred:
-		glory_change = 1.0
 
 	return {
 		"success": success,
@@ -4919,14 +4902,12 @@ static func _execute_craft(
 			"material_name": material_name,
 			"is_exceptional": is_exceptional,
 			"is_sacred": is_sacred,
-			"special_qualities": special_qualities,
 			"category": category,
 			"track": track,
 			"skill_name": skill_name,
 			"item_name": item_name,
 			"denomination": denomination,
 			"base_cost": base_cost,
-			"glory_change": glory_change,
 			"koku_cost": koku_cost,
 		},
 	}

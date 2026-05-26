@@ -304,14 +304,6 @@ static func _select_objective_for_vassal(
 			"target_province_id": low_stability[0] if low_stability[0] is int else -1,
 		}
 
-	if vassal != null and _is_craft_capable(vassal):
-		return {
-			"need_type": "CRAFT_ITEM",
-			"objective_type": "CRAFT_ITEM",
-			"assigning_lord_id": lord.character_id,
-			"status": "ACTIVE",
-		}
-
 	return {
 		"need_type": "MAINTAIN_PEACE",
 		"objective_type": "MAINTAIN_PEACE",
@@ -319,13 +311,6 @@ static func _select_objective_for_vassal(
 		"status": "ACTIVE",
 	}
 
-
-static func _is_craft_capable(character: L5RCharacterData) -> bool:
-	if ArtisanSystem.is_artisan_school(character):
-		return true
-	if ArtisanSystem.is_smith_school(character):
-		return true
-	return ArtisanSystem.has_any_craft_skill(character)
 
 
 static func _evaluate_tax_adjustment(

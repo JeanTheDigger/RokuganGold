@@ -55,29 +55,22 @@ const MATERIAL_AVAILABILITY: Dictionary = {
 	Enums.SettlementType.VILLAGE: [Enums.MaterialTier.COMMON],
 	Enums.SettlementType.TOWN: [Enums.MaterialTier.COMMON, Enums.MaterialTier.UNCOMMON],
 	Enums.SettlementType.CITY: [Enums.MaterialTier.COMMON, Enums.MaterialTier.UNCOMMON, Enums.MaterialTier.RARE],
-	Enums.SettlementType.IMPERIAL_CAPITAL: [Enums.MaterialTier.COMMON, Enums.MaterialTier.UNCOMMON, Enums.MaterialTier.RARE, Enums.MaterialTier.LEGENDARY],
-	Enums.SettlementType.CASTLE: [Enums.MaterialTier.COMMON, Enums.MaterialTier.UNCOMMON],
 	Enums.SettlementType.FAMILY_CASTLE: [Enums.MaterialTier.COMMON, Enums.MaterialTier.UNCOMMON, Enums.MaterialTier.RARE, Enums.MaterialTier.LEGENDARY],
-	Enums.SettlementType.FORTIFICATION: [Enums.MaterialTier.COMMON, Enums.MaterialTier.UNCOMMON],
-	Enums.SettlementType.KEEP: [Enums.MaterialTier.COMMON, Enums.MaterialTier.UNCOMMON],
-	Enums.SettlementType.WALL_TOWER: [Enums.MaterialTier.COMMON],
-	Enums.SettlementType.TEMPLE: [Enums.MaterialTier.COMMON],
-	Enums.SettlementType.SHINDEN: [Enums.MaterialTier.COMMON, Enums.MaterialTier.UNCOMMON],
-	Enums.SettlementType.MONASTERY: [Enums.MaterialTier.COMMON],
+	Enums.SettlementType.IMPERIAL_CAPITAL: [Enums.MaterialTier.COMMON, Enums.MaterialTier.UNCOMMON, Enums.MaterialTier.RARE, Enums.MaterialTier.LEGENDARY],
 }
 
 
 # -- Clan-specific materials (s49) --------------------------------------------
 
 const CLAN_MATERIALS: Dictionary = {
-	"Crab": {"name": "Kaiu Steel", "tier": Enums.MaterialTier.RARE, "categories": [Enums.CraftingCategory.WEAPONS, Enums.CraftingCategory.ARMOR]},
-	"Crane": {"name": "Kakita Paper", "tier": Enums.MaterialTier.UNCOMMON, "categories": [Enums.CraftingCategory.ARTWORK]},
-	"Dragon": {"name": "Dragon Jade Dust", "tier": Enums.MaterialTier.RARE, "categories": [Enums.CraftingCategory.EQUIPMENT]},
-	"Lion": {"name": "Matsu Leather", "tier": Enums.MaterialTier.UNCOMMON, "categories": [Enums.CraftingCategory.ARMOR]},
-	"Phoenix": {"name": "Phoenix-blessed Paper", "tier": Enums.MaterialTier.RARE, "categories": [Enums.CraftingCategory.ARTWORK]},
-	"Scorpion": {"name": "Shadow-silk", "tier": Enums.MaterialTier.RARE, "categories": [Enums.CraftingCategory.EQUIPMENT, Enums.CraftingCategory.ARMOR]},
-	"Unicorn": {"name": "Gaijin Dyes", "tier": Enums.MaterialTier.UNCOMMON, "categories": [Enums.CraftingCategory.ARTWORK]},
-	"Mantis": {"name": "Deep-sea Materials", "tier": Enums.MaterialTier.RARE, "categories": [Enums.CraftingCategory.EQUIPMENT]},
+	"Crab": {"name": "Kaiu Steel", "tier": Enums.MaterialTier.RARE},
+	"Crane": {"name": "Kakita Paper", "tier": Enums.MaterialTier.UNCOMMON},
+	"Dragon": {"name": "Dragon Jade Dust", "tier": Enums.MaterialTier.RARE},
+	"Lion": {"name": "Matsu Leather", "tier": Enums.MaterialTier.UNCOMMON},
+	"Phoenix": {"name": "Phoenix-blessed Paper", "tier": Enums.MaterialTier.RARE},
+	"Scorpion": {"name": "Shadow-silk", "tier": Enums.MaterialTier.RARE},
+	"Unicorn": {"name": "Gaijin Dyes", "tier": Enums.MaterialTier.UNCOMMON},
+	"Mantis": {"name": "Deep-sea Materials", "tier": Enums.MaterialTier.RARE},
 }
 
 
@@ -107,12 +100,6 @@ const KAIU_TSI_FAMILIES: Array[String] = ["Kaiu", "Tsi"]
 const SACRED_WEAPON_CLANS: Dictionary = {
 	"Crab": "Kaiu Blade",
 	"Crane": "Kakita Blade",
-	"Dragon": "Tamori Blade",
-	"Lion": "Akodo Blade",
-	"Mantis": "Yoritomo Blade",
-	"Phoenix": "Isawa Blade",
-	"Scorpion": "Shosuro Blade",
-	"Unicorn": "Utaku Blade",
 }
 
 
@@ -123,17 +110,6 @@ enum TimeUnit { HOURS, DAYS, WEEKS }
 const AP_PER_HOUR: int = 1
 const AP_PER_DAY: int = 2
 const AP_PER_WEEK: int = 14
-
-
-# -- Artisan school families (for standing objective assignment) ---------------
-
-const ARTISAN_SCHOOL_KEYWORDS: Array[String] = [
-	"Kakita Artisan", "Shiba Artisan", "Doji Magistrate",
-]
-
-const SMITH_SCHOOL_KEYWORDS: Array[String] = [
-	"Kaiu Engineer", "Tsi Smith",
-]
 
 
 # == PUBLIC API ================================================================
@@ -444,101 +420,6 @@ static func invest_ap(item: ArtisanItemData, ap_spent: int) -> Dictionary:
 	}
 
 
-static func select_best_material_for_npc(
-	character: L5RCharacterData,
-	settlement_type: Enums.SettlementType,
-	category: Enums.CraftingCategory,
-) -> Dictionary:
-	var available: Array = get_material_availability(settlement_type)
-	var clan_mat: Dictionary = get_clan_material(character.clan)
-
-	if not clan_mat.is_empty():
-		var clan_tier: Enums.MaterialTier = clan_mat.get("tier", Enums.MaterialTier.COMMON)
-		var clan_cats: Array = clan_mat.get("categories", [])
-		if clan_tier in available and (category in clan_cats or category == Enums.CraftingCategory.EQUIPMENT):
-			return {
-				"tier": clan_tier,
-				"name": clan_mat.get("name", ""),
-			}
-
-	var best_tier: Enums.MaterialTier = Enums.MaterialTier.COMMON
-	for tier: Enums.MaterialTier in available:
-		if tier > best_tier:
-			best_tier = tier
-	var name_map: Dictionary = {
-		Enums.MaterialTier.COMMON: "Standard materials",
-		Enums.MaterialTier.UNCOMMON: "Fine materials",
-		Enums.MaterialTier.RARE: "Rare materials",
-		Enums.MaterialTier.LEGENDARY: "Legendary materials",
-	}
-	return {
-		"tier": best_tier,
-		"name": name_map.get(best_tier, "Standard materials"),
-	}
-
-
-static func npc_select_craft_action(
-	character: L5RCharacterData,
-	settlement_type: Enums.SettlementType,
-	category: Enums.CraftingCategory,
-) -> Dictionary:
-	var skill_name: String = _get_craft_skill_for_category(character, category)
-	var skill_rank: int = character.skills.get(skill_name, 0)
-	if skill_rank <= 0:
-		return {"can_craft": false, "reason": "no_skill"}
-
-	var mat: Dictionary = select_best_material_for_npc(character, settlement_type, category)
-	var material_tier: Enums.MaterialTier = mat.get("tier", Enums.MaterialTier.COMMON)
-
-	var is_exceptional: bool = false
-	if category == Enums.CraftingCategory.WEAPONS and skill_name == "Craft: Weaponsmithing":
-		is_exceptional = can_attempt_exceptional_weapon(character)
-
-	var item_name: String = _pick_item_name(category, character)
-	var denomination: String = _pick_denomination(category)
-	var base_cost: float = _pick_base_cost(category, denomination)
-	var material_type: Enums.MaterialType = _infer_material_type(category)
-
-	var base_tn: int = get_base_tn(base_cost, denomination)
-	if is_exceptional:
-		base_tn = get_exceptional_tn(base_cost)
-
-	var ap_cost: int = get_ap_cost(base_cost, denomination, material_type)
-	var track: Enums.CraftingTrack = Enums.CraftingTrack.CRAFT
-	if category == Enums.CraftingCategory.ARTWORK:
-		track = Enums.CraftingTrack.ARTISAN
-
-	return {
-		"can_craft": true,
-		"skill_name": skill_name,
-		"base_tn": base_tn,
-		"material_tier": material_tier,
-		"material_name": mat.get("name", ""),
-		"is_exceptional": is_exceptional,
-		"item_name": item_name,
-		"category": category,
-		"track": track,
-		"denomination": denomination,
-		"base_cost": base_cost,
-		"material_type": material_type,
-		"ap_cost": ap_cost,
-	}
-
-
-static func is_artisan_school(character: L5RCharacterData) -> bool:
-	for keyword: String in ARTISAN_SCHOOL_KEYWORDS:
-		if character.school.find(keyword) >= 0:
-			return true
-	return false
-
-
-static func is_smith_school(character: L5RCharacterData) -> bool:
-	for keyword: String in SMITH_SCHOOL_KEYWORDS:
-		if character.school.find(keyword) >= 0:
-			return true
-	return false
-
-
 static func has_any_craft_skill(character: L5RCharacterData) -> bool:
 	for skill_name: String in character.skills:
 		if skill_name.begins_with("Artisan: ") or skill_name.begins_with("Craft: "):
@@ -559,41 +440,6 @@ static func get_best_craft_skill(character: L5RCharacterData) -> String:
 	return best_skill
 
 
-static func create_inventory_item(item: ArtisanItemData) -> Dictionary:
-	var gift_subtype: int = _crafting_category_to_gift_subtype(item.category)
-	var inv_category: int = InventorySystem.ItemCategory.GIFT
-	if item.category == Enums.CraftingCategory.WEAPONS:
-		inv_category = InventorySystem.ItemCategory.WEAPON
-	elif item.category == Enums.CraftingCategory.ARMOR:
-		inv_category = InventorySystem.ItemCategory.WEAPON
-	var inv_item: Dictionary = InventorySystem.create_item(
-		item.item_id,
-		item.item_name,
-		inv_category,
-		InventorySystem.ItemSize.SMALL if item.category == Enums.CraftingCategory.ARTWORK else InventorySystem.ItemSize.MEDIUM,
-		item.quality_tier,
-	)
-	inv_item["gift_subtype"] = gift_subtype
-	inv_item["crafted_item_id"] = item.item_id
-	inv_item["history_point_bonus"] = item.get_history_tier_bonus()
-	return inv_item
-
-
-static func _crafting_category_to_gift_subtype(category: Enums.CraftingCategory) -> int:
-	match category:
-		Enums.CraftingCategory.ARTWORK:
-			return GiftGivingSystem.GiftCategory.ART
-		Enums.CraftingCategory.WEAPONS:
-			return GiftGivingSystem.GiftCategory.WEAPON
-		Enums.CraftingCategory.ARMOR:
-			return GiftGivingSystem.GiftCategory.ARMOR
-		Enums.CraftingCategory.EQUIPMENT:
-			return GiftGivingSystem.GiftCategory.ACCESSORIES
-		Enums.CraftingCategory.ENGINEERING:
-			return GiftGivingSystem.GiftCategory.ACCESSORIES
-	return GiftGivingSystem.GiftCategory.ART
-
-
 static func find_crafted_item(crafted_items: Array, item_id: int) -> ArtisanItemData:
 	for item: ArtisanItemData in crafted_items:
 		if item.item_id == item_id:
@@ -612,100 +458,3 @@ static func _get_insight_rank(character: L5RCharacterData) -> int:
 	return character.skills.get("_insight_rank", 1)
 
 
-static func _get_craft_skill_for_category(
-	character: L5RCharacterData,
-	category: Enums.CraftingCategory,
-) -> String:
-	match category:
-		Enums.CraftingCategory.WEAPONS:
-			var bow_rank: int = character.skills.get("Craft: Bowyer", 0)
-			var ws_rank: int = character.skills.get("Craft: Weaponsmithing", 0)
-			if bow_rank > ws_rank:
-				return "Craft: Bowyer"
-			return "Craft: Weaponsmithing"
-		Enums.CraftingCategory.ARMOR:
-			return "Craft: Armorsmithing"
-		Enums.CraftingCategory.ARTWORK:
-			var best: String = "Artisan: Painting"
-			var best_rank: int = 0
-			for skill_name: String in character.skills:
-				if skill_name.begins_with("Artisan: "):
-					var rank: int = character.skills[skill_name]
-					if rank > best_rank:
-						best_rank = rank
-						best = skill_name
-			return best
-		Enums.CraftingCategory.ENGINEERING:
-			return "Engineering"
-		_:
-			for skill_name: String in character.skills:
-				if skill_name.begins_with("Craft: "):
-					return skill_name
-			return "Craft: Weaponsmithing"
-
-
-static func _pick_item_name(category: Enums.CraftingCategory, character: L5RCharacterData) -> String:
-	match category:
-		Enums.CraftingCategory.WEAPONS:
-			return "Katana"
-		Enums.CraftingCategory.ARMOR:
-			return "Light Armor"
-		Enums.CraftingCategory.ARTWORK:
-			var skill: String = _get_craft_skill_for_category(character, category)
-			match skill:
-				"Artisan: Painting":
-					return "Small Painting"
-				"Artisan: Poetry":
-					return "Poetry Scroll"
-				"Artisan: Origami":
-					return "Origami Figure"
-				"Artisan: Ikebana":
-					return "Ikebana Arrangement"
-				"Artisan: Sculpture":
-					return "Small Sculpture"
-				"Artisan: Tattooing":
-					return "Tattoo Design"
-				"Artisan: Gardening":
-					return "Bonkei"
-				_:
-					return "Artwork"
-		_:
-			return "Crafted Item"
-
-
-static func _pick_denomination(category: Enums.CraftingCategory) -> String:
-	match category:
-		Enums.CraftingCategory.WEAPONS:
-			return "koku"
-		Enums.CraftingCategory.ARMOR:
-			return "koku"
-		Enums.CraftingCategory.ARTWORK:
-			return "bu"
-		_:
-			return "bu"
-
-
-static func _pick_base_cost(category: Enums.CraftingCategory, denomination: String) -> float:
-	match category:
-		Enums.CraftingCategory.WEAPONS:
-			return 25.0
-		Enums.CraftingCategory.ARMOR:
-			return 15.0
-		Enums.CraftingCategory.ARTWORK:
-			return 3.0
-		_:
-			if denomination == "koku":
-				return 5.0
-			return 5.0
-
-
-static func _infer_material_type(category: Enums.CraftingCategory) -> Enums.MaterialType:
-	match category:
-		Enums.CraftingCategory.WEAPONS:
-			return Enums.MaterialType.STEEL
-		Enums.CraftingCategory.ARMOR:
-			return Enums.MaterialType.STEEL
-		Enums.CraftingCategory.ARTWORK:
-			return Enums.MaterialType.OTHER
-		_:
-			return Enums.MaterialType.OTHER

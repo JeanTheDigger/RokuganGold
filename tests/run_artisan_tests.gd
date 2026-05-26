@@ -43,35 +43,9 @@ func _init() -> void:
 	_test_history_points_accumulate()
 	_test_history_dedup()
 	_test_history_tier_bonus()
-	_test_npc_select_artwork()
-	_test_npc_select_no_skill()
-	_test_npc_material_clan_specific()
-	_test_npc_material_fallback()
-	_test_is_artisan_school()
-	_test_is_smith_school()
 	_test_has_any_craft_skill()
 	_test_material_free_raises()
-	_test_history_rank3_check()
-	_test_history_rank5_check()
-	_test_history_champion_check()
-	_test_history_gift_ownership_transfer()
-	_test_history_gift_at_court()
-	_test_history_duel_weapon()
-	_test_lord_directed_craft_objective()
-	_test_create_inventory_item_artwork()
-	_test_create_inventory_item_weapon()
-	_test_craft_writeback_adds_inventory_item()
-	_test_gift_transfer_adds_inventory_to_recipient()
-	_test_history_bonus_syncs_to_inventory()
 	_test_find_crafted_item()
-	_test_executor_creates_wip_for_multi_day()
-	_test_executor_continues_wip()
-	_test_executor_resolves_single_day_immediately()
-	_test_wip_writeback_creates_item()
-	_test_wip_continue_writeback_invests_ap()
-	_test_wip_completion_creates_inventory_item()
-	_test_wip_context_injection()
-	_test_npc_metadata_detects_wip()
 
 	print("\n=== Results: %d passed, %d failed ===" % [_pass_count, _fail_count])
 	if _fail_count > 0:
@@ -114,58 +88,58 @@ func _make_char(clan: String = "Crab", family: String = "Kaiu") -> L5RCharacterD
 # -- TN tests ------------------------------------------------------------------
 
 func _test_base_tn_zeni_low() -> void:
-	_assert(ArtisanSystem.get_base_tn(3.0, "zeni") == 10, "3 zeni → TN 10")
+	_assert(ArtisanSystem.get_base_tn(3.0, "zeni") == 10, "3 zeni -> TN 10")
 
 func _test_base_tn_bu_mid() -> void:
-	_assert(ArtisanSystem.get_base_tn(5.0, "bu") == 15, "5 bu → TN 15")
+	_assert(ArtisanSystem.get_base_tn(5.0, "bu") == 15, "5 bu -> TN 15")
 
 func _test_base_tn_koku_high() -> void:
-	_assert(ArtisanSystem.get_base_tn(25.0, "koku") == 30, "25 koku → TN 30")
+	_assert(ArtisanSystem.get_base_tn(25.0, "koku") == 30, "25 koku -> TN 30")
 
 func _test_base_tn_over_bracket() -> void:
 	var tn: int = ArtisanSystem.get_base_tn(30.0, "koku")
-	_assert(tn == 40, "30 koku → TN 40 (5 over top bracket → +5)")
+	_assert(tn == 40, "30 koku -> TN 40 (5 over top bracket -> +5)")
 
 # -- Quality tier tests --------------------------------------------------------
 
 func _test_quality_tier_mundane() -> void:
 	var tier := ArtisanSystem.determine_quality_tier(10)
-	_assert(tier == GiftGivingSystem.QualityTier.MUNDANE, "roll 10 → mundane")
+	_assert(tier == GiftGivingSystem.QualityTier.MUNDANE, "roll 10 -> mundane")
 
 func _test_quality_tier_fine() -> void:
 	var tier := ArtisanSystem.determine_quality_tier(30)
-	_assert(tier == GiftGivingSystem.QualityTier.FINE, "roll 30 → fine")
+	_assert(tier == GiftGivingSystem.QualityTier.FINE, "roll 30 -> fine")
 
 func _test_quality_tier_exceptional() -> void:
 	var tier := ArtisanSystem.determine_quality_tier(40)
-	_assert(tier == GiftGivingSystem.QualityTier.EXCEPTIONAL, "roll 40 → exceptional")
+	_assert(tier == GiftGivingSystem.QualityTier.EXCEPTIONAL, "roll 40 -> exceptional")
 
 func _test_quality_tier_masterwork() -> void:
 	var tier := ArtisanSystem.determine_quality_tier(50)
-	_assert(tier == GiftGivingSystem.QualityTier.MASTERWORK, "roll 50 → masterwork")
+	_assert(tier == GiftGivingSystem.QualityTier.MASTERWORK, "roll 50 -> masterwork")
 
 func _test_quality_tier_legendary() -> void:
 	var tier := ArtisanSystem.determine_quality_tier(60)
-	_assert(tier == GiftGivingSystem.QualityTier.LEGENDARY, "roll 60 → legendary")
+	_assert(tier == GiftGivingSystem.QualityTier.LEGENDARY, "roll 60 -> legendary")
 
 # -- Crafting time tests -------------------------------------------------------
 
 func _test_crafting_time_metal_zeni() -> void:
 	_assert(
 		ArtisanSystem.get_crafting_time_unit(Enums.MaterialType.STEEL, "zeni") == ArtisanSystem.TimeUnit.DAYS,
-		"steel+zeni → days",
+		"steel+zeni -> days",
 	)
 
 func _test_crafting_time_glass_bu() -> void:
 	_assert(
 		ArtisanSystem.get_crafting_time_unit(Enums.MaterialType.METAL_GLASS, "bu") == ArtisanSystem.TimeUnit.DAYS,
-		"glass+bu → days",
+		"glass+bu -> days",
 	)
 
 func _test_crafting_time_other_koku() -> void:
 	_assert(
 		ArtisanSystem.get_crafting_time_unit(Enums.MaterialType.OTHER, "koku") == ArtisanSystem.TimeUnit.DAYS,
-		"other+koku → days",
+		"other+koku -> days",
 	)
 
 # -- AP cost tests -------------------------------------------------------------
@@ -206,33 +180,33 @@ func _test_clan_material_crab() -> void:
 func _test_exceptional_weapon_rank_7() -> void:
 	var c := _make_char("Crane", "Kakita")
 	c.skills["Craft: Weaponsmithing"] = 7
-	_assert(ArtisanSystem.can_attempt_exceptional_weapon(c), "rank 7 → exceptional eligible")
+	_assert(ArtisanSystem.can_attempt_exceptional_weapon(c), "rank 7 -> exceptional eligible")
 
 func _test_exceptional_weapon_rank_6_fails() -> void:
 	var c := _make_char("Crane", "Kakita")
 	c.skills["Craft: Weaponsmithing"] = 6
-	_assert(not ArtisanSystem.can_attempt_exceptional_weapon(c), "rank 6 → not eligible")
+	_assert(not ArtisanSystem.can_attempt_exceptional_weapon(c), "rank 6 -> not eligible")
 
 func _test_kaiu_exceptional_at_rank_5() -> void:
 	var c := _make_char("Crab", "Kaiu")
 	c.skills["Craft: Weaponsmithing"] = 5
-	_assert(ArtisanSystem.can_attempt_exceptional_weapon(c), "Kaiu rank 5 → eligible")
+	_assert(ArtisanSystem.can_attempt_exceptional_weapon(c), "Kaiu rank 5 -> eligible")
 
 func _test_sacred_weapon_eligible() -> void:
 	var c := _make_char("Crab", "Kaiu")
 	c.skills["Craft: Weaponsmithing"] = 7
-	_assert(ArtisanSystem.can_attempt_sacred_weapon(c), "Crab rank 7 → sacred eligible")
+	_assert(ArtisanSystem.can_attempt_sacred_weapon(c), "Crab rank 7 -> sacred eligible")
 
 func _test_sacred_weapon_wrong_clan() -> void:
 	var c := _make_char("Spider", "Daigotsu")
 	c.skills["Craft: Weaponsmithing"] = 7
-	_assert(not ArtisanSystem.can_attempt_sacred_weapon(c), "Spider → not sacred eligible")
+	_assert(not ArtisanSystem.can_attempt_sacred_weapon(c), "Spider -> not sacred eligible")
 
 # -- Special quality allocation ------------------------------------------------
 
 func _test_special_quality_allocation() -> void:
 	var result: Dictionary = ArtisanSystem.allocate_special_qualities(
-		6, [Enums.WeaponSpecialQuality.BALANCED, Enums.WeaponSpecialQuality.SIGNATURE],
+		6, [Enums.WeaponSpecialQuality.BALANCED, Enums.WeaponSpecialQuality.SIGNATURE] as Array[Enums.WeaponSpecialQuality],
 	)
 	_assert(result.get("allocated", []).size() == 2, "2 qualities allocated (4+2=6 raises)")
 	_assert(result.get("raises_remaining", -1) == 0, "0 raises remaining")
@@ -242,9 +216,9 @@ func _test_special_quality_allocation() -> void:
 func _test_sacred_weapon_check() -> void:
 	var c := _make_char("Crab", "Kaiu")
 	var result: Dictionary = ArtisanSystem.check_sacred_weapon(6, c)
-	_assert(result.get("can_forge", false), "Kaiu 6 raises → can forge sacred")
+	_assert(result.get("can_forge", false), "Kaiu 6 raises -> can forge sacred")
 	var result2: Dictionary = ArtisanSystem.check_sacred_weapon(5, c)
-	_assert(not result2.get("can_forge", true), "Kaiu 5 raises → cannot forge sacred")
+	_assert(not result2.get("can_forge", true), "Kaiu 5 raises -> cannot forge sacred")
 
 # -- Crafting resolution -------------------------------------------------------
 
@@ -256,16 +230,16 @@ func _test_resolve_normal_artwork() -> void:
 	)
 	_assert(result.has("total"), "resolve returns total")
 	_assert(result.has("quality_tier"), "resolve returns quality_tier")
-	_assert(not result.get("item_ruined", true), "normal craft → not ruined")
+	_assert(not result.get("item_ruined", true), "normal craft -> not ruined")
 
 func _test_resolve_exceptional_failure() -> void:
 	var c := _make_char("Crab", "Kaiu")
 	c.skills["Craft: Weaponsmithing"] = 5
-	c.traits[Enums.Trait.AGILITY] = 1
+	c.agility = 1
 	var result: Dictionary = ArtisanSystem.resolve_crafting(
 		c, _dice, "Craft: Weaponsmithing", 99, Enums.MaterialTier.COMMON, true,
 	)
-	_assert(result.get("item_ruined", false), "exceptional failure → item ruined")
+	_assert(result.get("item_ruined", false), "exceptional failure -> item ruined")
 
 # -- Item creation -------------------------------------------------------------
 
@@ -324,596 +298,34 @@ func _test_history_dedup() -> void:
 	var item := ArtisanItemData.new()
 	item.add_history_event(Enums.HistoryEventType.OWNED_RANK_3, 100, "Same lord")
 	item.add_history_event(Enums.HistoryEventType.OWNED_RANK_3, 200, "Same lord")
-	_assert(item.history_points == 1, "dedup: same type+description → 1 point")
+	_assert(item.history_points == 1, "dedup: same type+description -> 1 point")
 
 func _test_history_tier_bonus() -> void:
 	var item := ArtisanItemData.new()
-	_assert(item.get_history_tier_bonus() == 0, "0 history → 0 bonus")
+	_assert(item.get_history_tier_bonus() == 0, "0 history -> 0 bonus")
 	for i: int in range(3):
 		item.add_history_event(Enums.HistoryEventType.USED_IN_BATTLE, i * 100, "Battle %d" % i)
-	_assert(item.get_history_tier_bonus() == 1, "3 points → tier 1 bonus (+1 FR)")
+	_assert(item.get_history_tier_bonus() == 1, "3 points -> tier 1 bonus (+1 FR)")
 
-# -- NPC craft selection -------------------------------------------------------
-
-func _test_npc_select_artwork() -> void:
-	var c := _make_char("Crane", "Kakita")
-	c.school = "Kakita Artisan"
-	c.skills["Artisan: Painting"] = 5
-	var meta: Dictionary = ArtisanSystem.npc_select_craft_action(
-		c, Enums.SettlementType.CITY, Enums.CraftingCategory.ARTWORK,
-	)
-	_assert(meta.get("can_craft", false), "artisan can craft")
-	_assert(meta.get("skill_name", "") == "Artisan: Painting", "selects painting skill")
-
-func _test_npc_select_no_skill() -> void:
-	var c := _make_char("Crane", "Kakita")
-	var meta: Dictionary = ArtisanSystem.npc_select_craft_action(
-		c, Enums.SettlementType.CITY, Enums.CraftingCategory.ARTWORK,
-	)
-	_assert(not meta.get("can_craft", true), "no skill → cannot craft")
-
-# -- NPC material selection ----------------------------------------------------
-
-func _test_npc_material_clan_specific() -> void:
-	var c := _make_char("Crab", "Kaiu")
-	var mat: Dictionary = ArtisanSystem.select_best_material_for_npc(
-		c, Enums.SettlementType.CITY, Enums.CraftingCategory.WEAPONS,
-	)
-	_assert(mat.get("name", "") == "Kaiu Steel", "Crab at city → Kaiu Steel")
-	_assert(mat.get("tier") == Enums.MaterialTier.RARE, "Kaiu Steel is Rare")
-
-func _test_npc_material_fallback() -> void:
-	var c := _make_char("Crab", "Kaiu")
-	var mat: Dictionary = ArtisanSystem.select_best_material_for_npc(
-		c, Enums.SettlementType.VILLAGE, Enums.CraftingCategory.WEAPONS,
-	)
-	_assert(mat.get("tier") == Enums.MaterialTier.COMMON, "village → common (Kaiu Steel not available)")
-
-# -- Utility functions ---------------------------------------------------------
-
-func _test_is_artisan_school() -> void:
-	var c := _make_char()
-	c.school = "Kakita Artisan"
-	_assert(ArtisanSystem.is_artisan_school(c), "Kakita Artisan is artisan")
-	c.school = "Bayushi Bushi"
-	_assert(not ArtisanSystem.is_artisan_school(c), "Bayushi Bushi is not artisan")
-
-func _test_is_smith_school() -> void:
-	var c := _make_char()
-	c.school = "Kaiu Engineer"
-	_assert(ArtisanSystem.is_smith_school(c), "Kaiu Engineer is smith")
-	c.school = "Doji Courtier"
-	_assert(not ArtisanSystem.is_smith_school(c), "Doji Courtier is not smith")
+# -- Utility tests -------------------------------------------------------------
 
 func _test_has_any_craft_skill() -> void:
-	var c := _make_char()
-	c.skills["Craft: Weaponsmithing"] = 3
-	_assert(ArtisanSystem.has_any_craft_skill(c), "has craft skill")
-	c.skills.clear()
-	_assert(not ArtisanSystem.has_any_craft_skill(c), "no craft skill")
+	var c := _make_char("Crane", "Kakita")
+	c.skills["Artisan: Painting"] = 3
+	_assert(ArtisanSystem.has_any_craft_skill(c), "has Artisan: Painting -> true")
+	var c2 := _make_char("Lion", "Matsu")
+	_assert(not ArtisanSystem.has_any_craft_skill(c2), "no craft skill -> false")
 
 func _test_material_free_raises() -> void:
-	_assert(ArtisanSystem.MATERIAL_FREE_RAISES[Enums.MaterialTier.COMMON] == 0, "common → 0 FR")
-	_assert(ArtisanSystem.MATERIAL_FREE_RAISES[Enums.MaterialTier.UNCOMMON] == 1, "uncommon → 1 FR")
-	_assert(ArtisanSystem.MATERIAL_FREE_RAISES[Enums.MaterialTier.RARE] == 2, "rare → 2 FR")
-	_assert(ArtisanSystem.MATERIAL_FREE_RAISES[Enums.MaterialTier.LEGENDARY] == 3, "legendary → 3 FR")
-
-
-func _make_rank3_char() -> L5RCharacterData:
-	var c := L5RCharacterData.new()
-	c.character_id = 10
-	c.clan = "Crane"
-	c.family = "Kakita"
-	c.school = ""
-	c.skills = {}
-	c.stamina = 4
-	c.willpower = 4
-	c.strength = 4
-	c.perception = 4
-	c.agility = 4
-	c.intelligence = 4
-	c.reflexes = 4
-	c.awareness = 4
-	c.void_ring = 3
-	c.honor = 5.0
-	c.glory = 3.0
-	c.status = 3.0
-	c.character_name = "Kakita Artisan"
-	return c
-
-
-func _make_rank5_char() -> L5RCharacterData:
-	var c := L5RCharacterData.new()
-	c.character_id = 11
-	c.clan = "Crane"
-	c.family = "Kakita"
-	c.school = ""
-	c.skills = {}
-	c.stamina = 5
-	c.willpower = 5
-	c.strength = 5
-	c.perception = 5
-	c.agility = 5
-	c.intelligence = 5
-	c.reflexes = 5
-	c.awareness = 5
-	c.void_ring = 3
-	c.honor = 5.0
-	c.glory = 3.0
-	c.status = 3.0
-	c.character_name = "Kakita Master"
-	return c
-
-
-func _test_history_rank3_check() -> void:
-	var c := _make_rank3_char()
-	var item := ArtisanItemData.new()
-	item.item_id = 100
-	item.is_complete = true
-	item.current_owner_id = c.character_id
-	var crafted: Array = [item]
-	var chars_by_id: Dictionary = {c.character_id: c}
-	DayOrchestrator._process_crafted_item_history(crafted, chars_by_id, 50)
-	_assert(item.history_points >= 1, "rank 3 owner adds OWNED_RANK_3 history")
-
-
-func _test_history_rank5_check() -> void:
-	var c := _make_rank5_char()
-	var item := ArtisanItemData.new()
-	item.item_id = 101
-	item.is_complete = true
-	item.current_owner_id = c.character_id
-	var crafted: Array = [item]
-	var chars_by_id: Dictionary = {c.character_id: c}
-	DayOrchestrator._process_crafted_item_history(crafted, chars_by_id, 50)
-	var has_rank5: bool = false
-	for evt: Dictionary in item.history_events:
-		if evt.get("type") == Enums.HistoryEventType.OWNED_RANK_5:
-			has_rank5 = true
-	_assert(has_rank5, "rank 5 owner adds OWNED_RANK_5 history")
-
-
-func _test_history_champion_check() -> void:
-	var c := _make_rank5_char()
-	c.status = 7.5
-	var item := ArtisanItemData.new()
-	item.item_id = 102
-	item.is_complete = true
-	item.current_owner_id = c.character_id
-	var crafted: Array = [item]
-	var chars_by_id: Dictionary = {c.character_id: c}
-	DayOrchestrator._process_crafted_item_history(crafted, chars_by_id, 50)
-	var has_champ: bool = false
-	for evt: Dictionary in item.history_events:
-		if evt.get("type") == Enums.HistoryEventType.OWNED_CHAMPION:
-			has_champ = true
-	_assert(has_champ, "champion owner adds OWNED_CHAMPION history")
-
-
-func _test_history_gift_ownership_transfer() -> void:
-	var item := ArtisanItemData.new()
-	item.item_id = 200
-	item.is_complete = true
-	item.current_owner_id = 1
-	var c_giver := _make_char("Crane", "Doji")
-	c_giver.character_id = 1
-	var c_recip := _make_char("Lion", "Matsu")
-	c_recip.character_id = 2
-	var results: Array = [{
-		"action_id": "DELIVER_GIFT",
-		"character_id": 1,
-		"target_npc_id": 2,
-		"effects": {"consume_item_id": 200},
-	}]
-	var crafted: Array = [item]
-	var chars_by_id: Dictionary = {1: c_giver, 2: c_recip}
-	var ws: Dictionary = {}
-	DayOrchestrator._process_craft_gift_ownership_transfer(
-		results, crafted, chars_by_id, ws, 50,
-	)
-	_assert(item.current_owner_id == 2, "gift transfers crafted item ownership")
-
-
-func _test_history_gift_at_court() -> void:
-	var item := ArtisanItemData.new()
-	item.item_id = 201
-	item.is_complete = true
-	item.current_owner_id = 1
-	var c_giver := _make_char("Crane", "Doji")
-	c_giver.character_id = 1
-	var c_recip := _make_char("Lion", "Matsu")
-	c_recip.character_id = 2
-	var results: Array = [{
-		"action_id": "DELIVER_GIFT",
-		"character_id": 1,
-		"target_npc_id": 2,
-		"effects": {"consume_item_id": 201},
-	}]
-	var crafted: Array = [item]
-	var chars_by_id: Dictionary = {1: c_giver, 2: c_recip}
-	var ws: Dictionary = {1: {"context_flag": "AT_COURT"}}
-	DayOrchestrator._process_craft_gift_ownership_transfer(
-		results, crafted, chars_by_id, ws, 50,
-	)
-	var has_court: bool = false
-	for evt: Dictionary in item.history_events:
-		if evt.get("type") == Enums.HistoryEventType.GIFTED_AT_COURT:
-			has_court = true
-	_assert(has_court, "gift at court adds GIFTED_AT_COURT history")
-
-
-func _test_history_duel_weapon() -> void:
-	var item := ArtisanItemData.new()
-	item.item_id = 300
-	item.is_complete = true
-	item.category = Enums.CraftingCategory.WEAPONS
-	item.current_owner_id = 1
-	var results: Array = [{
-		"action_id": "ISSUE_DUEL_CHALLENGE",
-		"character_id": 1,
-		"target_npc_id": 2,
-		"effects": {"death_occurred": true},
-	}]
-	var crafted: Array = [item]
-	DayOrchestrator._process_craft_duel_history(results, crafted, 50)
-	var has_battle: bool = false
-	for evt: Dictionary in item.history_events:
-		if evt.get("type") == Enums.HistoryEventType.USED_IN_BATTLE:
-			has_battle = true
-	_assert(has_battle, "duel to death adds USED_IN_BATTLE to weapon")
-
-
-func _test_lord_directed_craft_objective() -> void:
-	var lord := _make_char("Crane", "Doji")
-	lord.character_id = 50
-	lord.status = 6.0
-	var vassal := _make_char("Crane", "Kakita")
-	vassal.character_id = 51
-	vassal.school = "Kakita Artisan"
-	vassal.lord_id = lord.character_id
-	var result: Dictionary = StrategicReview._select_objective_for_vassal(
-		lord, vassal, [], {},
-	)
-	_assert(result.get("need_type") == "CRAFT_ITEM",
-		"idle artisan vassal gets CRAFT_ITEM from lord")
-
-
-func _test_create_inventory_item_artwork() -> void:
-	var item := ArtisanItemData.new()
-	item.item_id = 400
-	item.item_name = "Painted Screen"
-	item.category = Enums.CraftingCategory.ARTWORK
-	item.quality_tier = GiftGivingSystem.QualityTier.FINE
-	item.is_complete = true
-	var inv: Dictionary = ArtisanSystem.create_inventory_item(item)
-	_assert(inv.get("item_id") == 400, "inventory item_id matches crafted item")
-	_assert(inv.get("category") == InventorySystem.ItemCategory.GIFT,
-		"artwork maps to GIFT category")
-	_assert(inv.get("gift_subtype") == GiftGivingSystem.GiftCategory.ART,
-		"artwork maps to ART gift subtype")
-	_assert(inv.get("crafted_item_id") == 400,
-		"crafted_item_id links back to ArtisanItemData")
-	_assert(inv.get("quality_tier") == GiftGivingSystem.QualityTier.FINE,
-		"quality tier preserved")
-	_assert(inv.get("size") == InventorySystem.ItemSize.SMALL,
-		"artwork defaults to SMALL size")
-
-
-func _test_create_inventory_item_weapon() -> void:
-	var item := ArtisanItemData.new()
-	item.item_id = 401
-	item.item_name = "Kakita Blade"
-	item.category = Enums.CraftingCategory.WEAPONS
-	item.quality_tier = GiftGivingSystem.QualityTier.EXCEPTIONAL
-	item.is_complete = true
-	var inv: Dictionary = ArtisanSystem.create_inventory_item(item)
-	_assert(inv.get("category") == InventorySystem.ItemCategory.WEAPON,
-		"weapon maps to WEAPON category")
-	_assert(inv.get("gift_subtype") == GiftGivingSystem.GiftCategory.WEAPON,
-		"weapon maps to WEAPON gift subtype")
-	_assert(inv.get("size") == InventorySystem.ItemSize.MEDIUM,
-		"non-artwork defaults to MEDIUM size")
-
-
-func _test_craft_writeback_adds_inventory_item() -> void:
-	var c := _make_char("Crane", "Kakita")
-	c.character_id = 60
-	c.skills = {"Artisan: Painting": 5}
-	c.items = []
-	var crafted: Array = []
-	var topics: Array = []
-	var next_topic: Array[int] = [100]
-	var next_item: Array[int] = [500]
-	var result: Dictionary = {
-		"action_id": "CRAFT",
-		"character_id": 60,
-		"effects": {
-			"success": true,
-			"requires_item_creation": true,
-			"quality_tier": GiftGivingSystem.QualityTier.NORMAL,
-			"item_name": "Landscape",
-			"category": Enums.CraftingCategory.ARTWORK,
-			"skill_name": "Artisan: Painting",
-			"material_tier": Enums.MaterialTier.COMMON,
-		},
-	}
-	var results: Array = [result]
-	var chars: Dictionary = {60: c}
-	var prov_map: Dictionary = {60: 1}
-	DayOrchestrator._process_craft_writebacks(
-		results, crafted, next_item, chars, prov_map, topics, next_topic, 10,
-	)
-	_assert(c.items.size() == 1, "crafted item added to character inventory")
-	_assert(c.items[0].get("crafted_item_id") == 500,
-		"inventory item links to crafted_item_id")
-
-
-func _test_gift_transfer_adds_inventory_to_recipient() -> void:
-	var item := ArtisanItemData.new()
-	item.item_id = 600
-	item.is_complete = true
-	item.item_name = "Fine Vase"
-	item.category = Enums.CraftingCategory.ARTWORK
-	item.quality_tier = GiftGivingSystem.QualityTier.FINE
-	item.current_owner_id = 1
-	var giver := _make_char("Crane", "Doji")
-	giver.character_id = 1
-	giver.items = [ArtisanSystem.create_inventory_item(item)]
-	var recip := _make_char("Lion", "Matsu")
-	recip.character_id = 2
-	recip.items = []
-	var results: Array = [{
-		"action_id": "DELIVER_GIFT",
-		"character_id": 1,
-		"target_npc_id": 2,
-		"effects": {"consume_item_id": 600},
-	}]
-	var crafted: Array = [item]
-	var chars_by_id: Dictionary = {1: giver, 2: recip}
-	DayOrchestrator._process_craft_gift_ownership_transfer(
-		results, crafted, chars_by_id, {}, 50,
-	)
-	_assert(recip.items.size() == 1,
-		"recipient gets inventory item on gift transfer")
-	_assert(recip.items[0].get("crafted_item_id") == 600,
-		"recipient inventory links to crafted_item_id")
-
-
-func _test_history_bonus_syncs_to_inventory() -> void:
-	var item := ArtisanItemData.new()
-	item.item_id = 700
-	item.is_complete = true
-	item.item_name = "Legacy Blade"
-	item.category = Enums.CraftingCategory.WEAPONS
-	item.quality_tier = GiftGivingSystem.QualityTier.FINE
-	item.current_owner_id = 10
-	var c := _make_rank3_char()
-	c.items = [ArtisanSystem.create_inventory_item(item)]
-	var initial_bonus: int = c.items[0].get("history_point_bonus", 0)
-	var crafted: Array = [item]
-	var chars: Dictionary = {10: c}
-	DayOrchestrator._process_crafted_item_history(crafted, chars, 50)
-	var updated_bonus: int = c.items[0].get("history_point_bonus", 0)
-	_assert(updated_bonus >= initial_bonus,
-		"inventory history_point_bonus synced after history accumulation")
-	_assert(item.get_history_tier_bonus() == updated_bonus,
-		"inventory bonus matches ArtisanItemData live bonus")
-
+	_assert(ArtisanSystem.MATERIAL_FREE_RAISES[Enums.MaterialTier.COMMON] == 0, "Common -> 0 FR")
+	_assert(ArtisanSystem.MATERIAL_FREE_RAISES[Enums.MaterialTier.UNCOMMON] == 1, "Uncommon -> 1 FR")
+	_assert(ArtisanSystem.MATERIAL_FREE_RAISES[Enums.MaterialTier.RARE] == 2, "Rare -> 2 FR")
+	_assert(ArtisanSystem.MATERIAL_FREE_RAISES[Enums.MaterialTier.LEGENDARY] == 3, "Legendary -> 3 FR")
 
 func _test_find_crafted_item() -> void:
 	var a := ArtisanItemData.new()
 	a.item_id = 800
 	var b := ArtisanItemData.new()
 	b.item_id = 801
-	var crafted: Array = [a, b]
-	_assert(ArtisanSystem.find_crafted_item(crafted, 801) == b,
-		"find_crafted_item returns correct item")
-	_assert(ArtisanSystem.find_crafted_item(crafted, 999) == null,
-		"find_crafted_item returns null for missing")
-
-
-# -- WIP pipeline tests -------------------------------------------------------
-
-
-func _test_executor_creates_wip_for_multi_day() -> void:
-	var c := _make_char("Crab", "Kaiu")
-	c.character_id = 70
-	c.skills = {"Craft: Weaponsmithing": 5}
-	var action := NPCDataStructures.ScoredAction.new()
-	action.action_id = "CRAFT"
-	action.metadata = {
-		"can_craft": true,
-		"skill_name": "Craft: Weaponsmithing",
-		"base_tn": 25,
-		"material_tier": Enums.MaterialTier.COMMON,
-		"material_name": "Standard steel",
-		"is_exceptional": false,
-		"item_name": "WIP Katana",
-		"category": Enums.CraftingCategory.WEAPONS,
-		"track": Enums.CraftingTrack.CRAFT,
-		"denomination": "koku",
-		"base_cost": 25.0,
-		"material_type": Enums.MaterialType.STEEL,
-		"ap_cost": 126,
-	}
-	var ctx := NPCDataStructures.ContextSnapshot.new()
-	ctx.ic_day = 10
-	ctx.season = 0
-	var result: Dictionary = ActionExecutor._execute_craft(action, c, ctx, _dice)
-	_assert(result.get("effects", {}).get("creates_wip", false),
-		"multi-day craft returns creates_wip")
-
-
-func _test_executor_continues_wip() -> void:
-	var c := _make_char("Crab", "Kaiu")
-	c.character_id = 71
-	c.skills = {"Craft: Weaponsmithing": 5}
-	var action := NPCDataStructures.ScoredAction.new()
-	action.action_id = "CRAFT"
-	action.metadata = {"wip_item_id": 999, "can_craft": true}
-	var ctx := NPCDataStructures.ContextSnapshot.new()
-	ctx.ic_day = 11
-	ctx.active_wip_item_id = 999
-	var result: Dictionary = ActionExecutor._execute_craft(action, c, ctx, _dice)
-	_assert(result.get("effects", {}).get("continues_wip", false),
-		"WIP item ID triggers continues_wip")
-	_assert(result.get("effects", {}).get("wip_item_id", -1) == 999,
-		"continues_wip passes through wip_item_id")
-
-
-func _test_executor_resolves_single_day_immediately() -> void:
-	var c := _make_char("Crane", "Kakita")
-	c.character_id = 72
-	c.skills = {"Artisan: Painting": 5}
-	var action := NPCDataStructures.ScoredAction.new()
-	action.action_id = "CRAFT"
-	action.metadata = {
-		"can_craft": true,
-		"skill_name": "Artisan: Painting",
-		"base_tn": 15,
-		"material_tier": Enums.MaterialTier.COMMON,
-		"material_name": "",
-		"is_exceptional": false,
-		"item_name": "Quick Sketch",
-		"category": Enums.CraftingCategory.ARTWORK,
-		"track": Enums.CraftingTrack.ARTISAN,
-		"denomination": "zeni",
-		"base_cost": 3.0,
-		"material_type": Enums.MaterialType.OTHER,
-		"ap_cost": 1,
-	}
-	var ctx := NPCDataStructures.ContextSnapshot.new()
-	ctx.ic_day = 10
-	var result: Dictionary = ActionExecutor._execute_craft(action, c, ctx, _dice)
-	var eff: Dictionary = result.get("effects", {})
-	_assert(eff.get("requires_item_creation", false),
-		"single-day craft resolves immediately")
-	_assert(not eff.get("creates_wip", false),
-		"single-day craft does not create WIP")
-
-
-func _test_wip_writeback_creates_item() -> void:
-	var c := _make_char("Crab", "Kaiu")
-	c.character_id = 73
-	c.skills = {"Craft: Weaponsmithing": 5}
-	var crafted: Array = []
-	var topics: Array = []
-	var next_topic: Array[int] = [200]
-	var next_item: Array[int] = [900]
-	var results: Array = [{
-		"action_id": "CRAFT",
-		"character_id": 73,
-		"effects": {
-			"creates_wip": true,
-			"skill_name": "Craft: Weaponsmithing",
-			"base_tn": 25,
-			"material_tier": Enums.MaterialTier.COMMON,
-			"material_name": "Standard steel",
-			"is_exceptional": false,
-			"item_name": "WIP Katana",
-			"category": Enums.CraftingCategory.WEAPONS,
-			"track": Enums.CraftingTrack.CRAFT,
-			"denomination": "koku",
-			"base_cost": 25.0,
-			"material_type": Enums.MaterialType.STEEL,
-			"ap_cost": 126,
-		},
-	}]
-	DayOrchestrator._process_craft_wip_writebacks(
-		results, crafted, next_item, {73: c}, {73: 1},
-		topics, next_topic, _dice, 10,
-	)
-	_assert(crafted.size() == 1, "WIP writeback creates ArtisanItemData")
-	_assert(not crafted[0].is_complete, "WIP item is not complete")
-	_assert(crafted[0].crafting_ap_invested == 1, "WIP has 1 AP invested")
-	_assert(crafted[0].item_id == 900, "WIP has correct item_id")
-
-
-func _test_wip_continue_writeback_invests_ap() -> void:
-	var c := _make_char("Crab", "Kaiu")
-	c.character_id = 74
-	var wip := ArtisanItemData.new()
-	wip.item_id = 910
-	wip.is_complete = false
-	wip.crafting_ap_required = 100
-	wip.crafting_ap_invested = 5
-	wip.skill_used = "Craft: Weaponsmithing"
-	wip.creator_id = 74
-	var crafted: Array = [wip]
-	var topics: Array = []
-	var next_topic: Array[int] = [200]
-	var next_item: Array[int] = [920]
-	var results: Array = [{
-		"action_id": "CRAFT",
-		"character_id": 74,
-		"effects": {"continues_wip": true, "wip_item_id": 910},
-	}]
-	DayOrchestrator._process_craft_wip_writebacks(
-		results, crafted, next_item, {74: c}, {},
-		topics, next_topic, _dice, 11,
-	)
-	_assert(wip.crafting_ap_invested == 6, "WIP AP invested incremented")
-	_assert(not wip.is_complete, "WIP not complete after partial invest")
-
-
-func _test_wip_completion_creates_inventory_item() -> void:
-	var c := _make_char("Crab", "Kaiu")
-	c.character_id = 75
-	c.skills = {"Craft: Weaponsmithing": 7}
-	c.items = []
-	var wip := ArtisanItemData.new()
-	wip.item_id = 930
-	wip.is_complete = false
-	wip.crafting_ap_required = 6
-	wip.crafting_ap_invested = 5
-	wip.skill_used = "Craft: Weaponsmithing"
-	wip.creator_id = 75
-	wip.item_name = "Master Katana"
-	wip.category = Enums.CraftingCategory.WEAPONS
-	wip.material_tier = Enums.MaterialTier.COMMON
-	wip.base_cost_koku = 5.0
-	wip.cost_denomination = "bu"
-	var crafted: Array = [wip]
-	var topics: Array = []
-	var next_topic: Array[int] = [300]
-	var next_item: Array[int] = [940]
-	var results: Array = [{
-		"action_id": "CRAFT",
-		"character_id": 75,
-		"effects": {"continues_wip": true, "wip_item_id": 930},
-	}]
-	DayOrchestrator._process_craft_wip_writebacks(
-		results, crafted, next_item, {75: c}, {},
-		topics, next_topic, _dice, 20,
-	)
-	_assert(wip.is_complete, "WIP completes when AP threshold met")
-	_assert(c.items.size() >= 0, "completion path runs without crash")
-
-
-func _test_wip_context_injection() -> void:
-	var wip := ArtisanItemData.new()
-	wip.item_id = 950
-	wip.is_complete = false
-	wip.creator_id = 80
-	var complete_item := ArtisanItemData.new()
-	complete_item.item_id = 951
-	complete_item.is_complete = true
-	complete_item.creator_id = 81
-	var ws: Dictionary = {80: {}, 81: {}}
-	DayOrchestrator._inject_wip_context([wip, complete_item], ws)
-	_assert(ws[80].get("active_wip_item_id", -1) == 950,
-		"WIP item injected for creator")
-	_assert(ws[81].get("active_wip_item_id", -1) == -1,
-		"complete item not injected as WIP")
-
-
-func _test_npc_metadata_detects_wip() -> void:
-	var ctx := NPCDataStructures.ContextSnapshot.new()
-	ctx.active_wip_item_id = 960
-	var c := _make_char("Crab", "Kaiu")
-	c.skills = {"Craft: Weaponsmithing": 5}
-	var meta: Dictionary = NPCDecisionEngine._build_craft_metadata(ctx, c)
-	_assert(meta.get("wip_item_id", -1) == 960,
-		"NPC metadata returns wip_item_id when WIP active")
-	_assert(meta.get("can_craft", false),
-		"NPC metadata says can_craft with active WIP")
+	_assert(ArtisanSystem.find_crafted_item([a, b], 801) == b, "finds item 801")
+	_assert(ArtisanSystem.find_crafted_item([a, b], 999) == null, "returns null for missing")

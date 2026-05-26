@@ -119,10 +119,6 @@
     "primary": "Tea Ceremony",
     "secondary": null
   },
-  "CRAFT": {
-    "primary": "_craft_skill",
-    "secondary": null
-  },
   "CULTIVATE_GARDEN": {
     "primary": "Artisan: Gardening",
     "secondary": "Awareness"

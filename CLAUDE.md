@@ -2724,8 +2724,7 @@ costs, or forward-wiring. Do not treat as bugs.
   names (Sabishii_Dragon, Anshin_Phoenix, Kougen_Phoenix, Garanto_Phoenix,
   Garanto_Unicorn, Kinbou_Scorpion). Deterministic with seed. 22 tests.
 - **s49 Artisan & Crafting System** — `simulation/artisan_system.gd`,
-  `shared/artisan_item_data.gd`. Full crafting pipeline with two tracks
-  (Artisan: fine arts/Awareness, Craft: practical production/Agility).
+  `shared/artisan_item_data.gd`. Core GDD-sourced crafting mechanics only.
   Cost-based TN system: three denomination brackets (zeni 10/15/20, bu
   15/20/25, koku 20/25/30) with over-bracket escalation (+5 per step).
   Six quality tiers: Mundane/Normal/Fine/Exceptional/Masterwork/Legendary
@@ -2737,81 +2736,28 @@ costs, or forward-wiring. Do not treat as bugs.
   Phoenix-blessed Paper, Shadow-silk, Gaijin Dyes, Deep-sea Materials).
   Exceptional weapons: Craft: Weaponsmithing 7+ (5+ for Kaiu/Tsi), cost
   tripled, failure ruins item. Sacred weapons: 7 Raises (6 for Kaiu),
-  clan-locked, Legendary quality, auto-generates Tier 2 topic. Six weapon
-  special qualities (Balanced/Signature/Swift/True Quality/Radiant/
-  Unbreakable) with Raise costs (2-6). Multi-day crafting: time units
-  (Hours/Days/Weeks) by material type + denomination, AP cost = units ×
-  AP_per_unit. Provenance tracking: creator, creation date, quality,
-  materials, crafting roll total. History points: 7 event types (1-3
-  points each), bonus tiers at 3/6/10 points (+1/+2/+3 Free Raises).
-  NPC standing objectives: artisan/smith school characters and craft
-  skill 3+ get CRAFT_ITEM standing objective. Lord-directed crafting:
-  StrategicReview assigns CRAFT_ITEM to idle artisan vassals. NPC craft
-  selection: `npc_select_craft_action()` picks best skill, material,
-  denomination, checks exceptional eligibility. History point
-  accumulation: seasonal ownership rank check (Rank 3/5/Champion),
-  gift ownership transfer with court gifting detection, duel weapon
-  participation. CRAFT ActionID in AT_OWN_HOLDINGS and VISITING context
-  lists. Executor with early-return handler, full writeback creating
-  ArtisanItemData and Masterwork/Sacred/Legendary topics. personality_lean
-  entries for all 14 virtues (Rei +10, Meiyo +8, Seigyo +8, no blocks).
-  objective_alignment: CRAFT_ITEM (100), RAISE_DISPOSITION (45),
-  SEEK_GLORY (70). WorldStateSaver persistence for crafted_items and
-  next_item_id. Inventory bridge: `create_inventory_item()` converts
-  ArtisanItemData to inventory Dictionary with `crafted_item_id` and
-  `history_point_bonus` keys. Crafted items auto-added to
-  `character.items` on completion. Gift transfer adds inventory item to
-  recipient. `_sync_inventory_history_bonus()` keeps inventory item bonus
-  current after seasonal history accumulation. `select_best_gift()`
-  factors in history_point_bonus for crafted item preference.
-  `find_crafted_item()` lookup helper. Category mapping: ARTWORK→GIFT
-  (SMALL), WEAPONS/ARMOR→WEAPON (MEDIUM), EQUIPMENT/ENGINEERING→GIFT
-  (MEDIUM). Multi-day WIP pipeline: items costing >2 AP create WIP
-  ArtisanItemData (incomplete, AP tracking). NPC engine detects active
-  WIP via `active_wip_item_id` context injection and routes CRAFT to
-  continue investing AP. On final AP investment (`ready_for_roll`),
-  `_complete_wip_item()` fires the crafting roll, resolves quality,
-  exceptional/sacred weapons, special qualities, creates inventory item,
-  applies glory, and generates topic. Single-day items (≤2 AP) resolve
-  immediately in executor (existing path). `_inject_wip_context()` scans
-  crafted_items for incomplete items and sets per-character world_state
-  key. `_process_craft_wip_writebacks()` handles both `creates_wip` and
-  `continues_wip` effect paths. Koku cost deduction: `cost_in_koku()`
-  converts denomination to koku (1 koku = 5 bu = 50 zeni), added to
-  effects dict for EffectApplicator._apply_koku_cost(). Exceptional
-  items tripled via EXCEPTIONAL_COST_MULTIPLIER. continues_wip path
-  intentionally omits koku_cost (materials paid upfront). WIP
-  abandonment: dead crafters' WIP marked complete in
-  `_cleanup_dead_character_references()` (crafted_items parameter).
-  Traveling crafters' WIP marked complete in `_inject_wip_context()`
-  (characters_by_id parameter + TravelSystem.is_traveling check).
-  WorldStateSaver fix: DIR_CRAFTED_ITEMS, DIR_SPIRITUAL_EVENTS,
-  DIR_BLOODSPEAKER_CELLS added to `_ensure_dirs()` — were declared as
-  constants and used in save/load but never created on fresh directories.
-  NPC selection audit fixes: (1) CRAFT with can_craft=false now filtered
-  out in generate_options() — prevented AP waste on unskilled NPCs.
-  (2) Koku affordability check in `_build_craft_metadata()` — NPCs
-  without sufficient koku get can_craft=false instead of crafting for
-  free. (3) settlement_type field added to ContextSnapshot (int, -1
-  sentinel), injected from SettlementData via `_inject_settlement_type()`
-  in DayOrchestrator — material availability now uses actual settlement
-  type instead of inference from lord rank / context flag. Falls back to
-  `_infer_settlement_type()` when unavailable. Deep NPC craft audit:
-  (4) Exceptional weapon gate now requires skill_name ==
-  "Craft: Weaponsmithing" — Bowyer skill no longer triggers exceptional
-  weapon path. Redundant `skill_rank >= 5` check removed. (5) Smith
-  school (Kaiu Engineer, Tsi Smith) category selection refactored from
-  hardcoded WEAPONS to `_pick_craft_category()` using best craft skill
-  — Kaiu with higher Armorsmithing rank now correctly selects ARMOR
-  category. (6) ENGINEERING category is unreachable through NPC
-  selection (Engineering skill doesn't match "Artisan: " or "Craft: "
-  prefix in get_best_craft_skill) — documented, not a priority fix.
-  (7) CLAN_MATERIALS migrated from single `category` to `categories`
-  Array for multi-category materials. Kaiu Steel now matches WEAPONS +
-  ARMOR (was WEAPONS only — Crab armorsmiths didn't get their signature
-  steel). Shadow-silk now matches EQUIPMENT + ARMOR (Scorpion light
-  armor). `select_best_material_for_npc()` updated to check `category
-  in clan_cats`. 122 tests.
+  clan-locked, Legendary quality. Six weapon special qualities
+  (Balanced/Signature/Swift/True Quality/Radiant/Unbreakable) with Raise
+  costs (2-6). Multi-day crafting: time units (Hours/Days/Weeks) by
+  material type + denomination, AP cost = units × AP_per_unit. Provenance
+  tracking: creator, creation date, quality, materials, crafting roll
+  total. History points: 7 event types (1-3 points each), bonus tiers at
+  3/6/10 points (+1/+2/+3 Free Raises). Koku cost: `cost_in_koku()`
+  converts denomination to koku (1 koku = 5 bu = 50 zeni). Executor
+  `_execute_craft()` resolves crafting rolls and WIP creation. WorldState
+  persistence for crafted_items and next_item_id.
+  **NPC crafting pipeline removed (2026-05-26):** All NPC-facing wiring
+  was invented content not specified in GDD s49. Removed: CRAFT from
+  context lists and AP cost dict, CRAFT_ITEM NeedType from
+  objective_alignment.json, CRAFT from personality_lean.json and
+  action_skill_map.json, NPC selection functions (npc_select_craft_action,
+  select_best_material_for_npc, is_artisan_school, is_smith_school),
+  inventory bridge (create_inventory_item), history accumulation
+  orchestrator functions, WIP context injection and abandonment, standing
+  objective assignment, lord-directed crafting, ContextSnapshot fields
+  (settlement_type, active_wip_item_id), CLAN_MATERIALS category
+  assignments. NPC crafting is non-functional until GDD specifies the
+  NPC decision pipeline for crafting. 55 tests (down from 122).
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into

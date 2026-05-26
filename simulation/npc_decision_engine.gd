@@ -40,7 +40,6 @@ static func build_context(
 		ctx.zone_flags = ZoneFlagMatrix.get_flags(ctx.zone_subtype)
 	else:
 		ctx.zone_flags = {}
-	ctx.settlement_type = world_state.get("settlement_type", -1)
 
 	# Lord & court (s55.34)
 	ctx.lord_id = character.lord_id
@@ -264,8 +263,6 @@ static func build_context(
 			if off is Dictionary:
 				ctx.self_offenses.append(off as Dictionary)
 
-	ctx.active_wip_item_id = world_state.get("active_wip_item_id", -1)
-
 	return ctx
 
 
@@ -365,8 +362,6 @@ static func generate_options(
 				if not CivilianOrderBudget.draws_from_military_pool(action_id, has_mil_rank):
 					continue
 		_populate_action_metadata(option, need, ctx, character, chars_by_id)
-		if action_id == "CRAFT" and not option.metadata.get("can_craft", false):
-			continue
 		options.append(option)
 
 	return options
@@ -940,7 +935,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"RESTORE_COUNCIL_COMPACT",
 				"SHARE_SUPPLIES", "TRANSFER_KOKU",
 				"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID",
-				"CRAFT", "MENTOR",
+				"MENTOR",
 				"TREAT_WOUND",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
 				"EXAMINE_CRIME_SCENE",
@@ -1005,7 +1000,6 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"DELIVER_GIFT", "OFFER_FAVOR", "DISCERN_NEED",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
 				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
-				"CRAFT",
 				"TREAT_WOUND",
 				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
@@ -1125,7 +1119,6 @@ static func _get_ap_cost(action_id: String) -> int:
 		"MENTOR": 1,
 		"MEDITATE": 1,
 		"CONDUCT_TEA_CEREMONY": 1,
-		"CRAFT": 1,
 		"DRILL_TROOPS": 1,
 		"EVALUATE_WAR_READINESS": 1,
 		"BRIBE_FOR_INFO": 1,
@@ -1651,12 +1644,6 @@ static func _lookup_personality_lean(
 
 
 static func _best_skill_rank(skill_name: String, skill_ranks: Dictionary) -> int:
-	if skill_name == "_craft_skill":
-		var best: int = 0
-		for sk: String in skill_ranks:
-			if (sk.begins_with("Craft:") or sk.begins_with("Artisan:")) and int(skill_ranks[sk]) > best:
-				best = int(skill_ranks[sk])
-		return best
 	if skill_name in ["Lore", "Games", "Perform", "Craft", "Artisan"]:
 		var best: int = 0
 		var prefix: String = skill_name + ":"
@@ -2732,63 +2719,6 @@ static func _populate_action_metadata(
 		option.metadata = {"target_npc_id": need.target_npc_id}
 	elif option.action_id == "MENTOR":
 		option.metadata = _build_mentor_metadata(ctx, need, chars_by_id)
-	elif option.action_id == "CRAFT":
-		option.metadata = _build_craft_metadata(ctx, character)
-
-
-static func _build_craft_metadata(
-	ctx: NPCDataStructures.ContextSnapshot,
-	character: L5RCharacterData = null,
-) -> Dictionary:
-	if character == null:
-		return {}
-
-	if ctx.active_wip_item_id >= 0:
-		return {"wip_item_id": ctx.active_wip_item_id, "can_craft": true}
-
-	var category: Enums.CraftingCategory = _pick_craft_category(character)
-
-	var settlement_type: Enums.SettlementType = ctx.settlement_type if ctx.settlement_type >= 0 else _infer_settlement_type(ctx)
-	var craft_info: Dictionary = ArtisanSystem.npc_select_craft_action(
-		character, settlement_type, category)
-	if not craft_info.get("can_craft", false):
-		return {"can_craft": false}
-	var koku_cost: float = ArtisanSystem.cost_in_koku(
-		craft_info.get("base_cost", 0.0), craft_info.get("denomination", "bu"))
-	if craft_info.get("is_exceptional", false):
-		koku_cost *= ArtisanSystem.EXCEPTIONAL_COST_MULTIPLIER
-	if koku_cost > 0.0 and character.koku < koku_cost:
-		return {"can_craft": false, "reason": "insufficient_koku"}
-	return craft_info
-
-
-static func _pick_craft_category(character: L5RCharacterData) -> Enums.CraftingCategory:
-	var best: String = ArtisanSystem.get_best_craft_skill(character)
-	if best.is_empty():
-		if ArtisanSystem.is_artisan_school(character):
-			return Enums.CraftingCategory.ARTWORK
-		return Enums.CraftingCategory.EQUIPMENT
-	if best.begins_with("Craft: Weaponsmithing") or best.begins_with("Craft: Bowyer"):
-		return Enums.CraftingCategory.WEAPONS
-	if best.begins_with("Craft: Armorsmithing"):
-		return Enums.CraftingCategory.ARMOR
-	if best.begins_with("Artisan: "):
-		return Enums.CraftingCategory.ARTWORK
-	return Enums.CraftingCategory.EQUIPMENT
-
-
-static func _infer_settlement_type(ctx: NPCDataStructures.ContextSnapshot) -> Enums.SettlementType:
-	if ctx.is_lord and ctx.lord_rank >= Enums.LordRank.FAMILY_DAIMYO:
-		return Enums.SettlementType.FAMILY_CASTLE
-	if ctx.is_lord:
-		return Enums.SettlementType.CASTLE
-	match ctx.context_flag:
-		Enums.ContextFlag.AT_COURT:
-			return Enums.SettlementType.CITY
-		Enums.ContextFlag.VISITING:
-			return Enums.SettlementType.TOWN
-		_:
-			return Enums.SettlementType.TOWN
 
 
 static func _build_mentor_metadata(

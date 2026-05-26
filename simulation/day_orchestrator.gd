@@ -127,7 +127,6 @@ static func advance_day(
 	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
 	_assign_magistrate_standing_objectives(characters, objectives_map)
 	_assign_monk_standing_objectives(characters, objectives_map)
-	_assign_artisan_standing_objectives(characters, objectives_map)
 
 	_clear_stale_context_flags(world_states)
 
@@ -235,8 +234,6 @@ static func advance_day(
 		provinces, settlements, clans, active_wars, characters_by_id,
 		active_armies, insurgencies,
 	)
-	_inject_wip_context(crafted_items, world_states, characters_by_id)
-
 	world_states["_crime_records"] = crime_records
 
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
@@ -387,18 +384,6 @@ static func advance_day(
 
 	_capture_witness_travel_intent(
 		day_result.get("results", []), world_states,
-	)
-
-	_process_craft_writebacks(
-		day_result.get("results", []),
-		crafted_items, next_item_id, characters_by_id,
-		character_province_map, active_topics, next_topic_id, ic_day,
-	)
-	_process_craft_wip_writebacks(
-		day_result.get("results", []),
-		crafted_items, next_item_id, characters_by_id,
-		character_province_map, active_topics, next_topic_id,
-		dice_engine, ic_day,
 	)
 
 	var current_season_count: int = int(season_meta.get("horde_season_count", 0))
@@ -821,7 +806,6 @@ static func advance_day(
 	_cleanup_dead_character_references(
 		characters, characters_by_id, active_courts, entanglements,
 		active_hunts, favors, bloodspeaker_cells, active_secrets,
-		crafted_items,
 	)
 
 	var succession_results: Array = _process_successions(
@@ -1199,7 +1183,6 @@ static func advance_day(
 			_cleanup_dead_character_references(
 				characters, characters_by_id, active_courts, entanglements,
 				active_hunts, favors, bloodspeaker_cells, active_secrets,
-				crafted_items,
 			)
 
 	var koku_flow_results: Dictionary = {}
@@ -1219,15 +1202,6 @@ static func advance_day(
 		_purge_resolved_crime_records(crime_records, ic_day)
 		_purge_delivered_letters(pending_letters, characters_by_id, ic_day)
 		_purge_exposed_secrets(active_secrets, characters_by_id, ic_day)
-		_process_crafted_item_history(crafted_items, characters_by_id, ic_day)
-
-	_process_craft_gift_ownership_transfer(
-		day_result.get("results", []), crafted_items, characters_by_id,
-		world_states, ic_day,
-	)
-	_process_craft_duel_history(
-		day_result.get("results", []), crafted_items, ic_day,
-	)
 
 	var horde_results: Dictionary = _process_horde_rolls(
 		current_season, prev_season,
@@ -6098,39 +6072,6 @@ static func _assign_monk_standing_objectives(
 			objectives["standing"] = monk_standing
 
 
-static func _assign_artisan_standing_objectives(
-	characters: Array,
-	objectives_map: Dictionary,
-) -> void:
-	for character: L5RCharacterData in characters:
-		if CharacterStats.is_dead(character):
-			continue
-		if not ArtisanSystem.is_artisan_school(character) and not ArtisanSystem.is_smith_school(character):
-			if not ArtisanSystem.has_any_craft_skill(character):
-				continue
-			var best_rank: int = 0
-			for sk: String in character.skills:
-				if (sk.begins_with("Artisan: ") or sk.begins_with("Craft: ")) and character.skills[sk] > best_rank:
-					best_rank = character.skills[sk]
-			if best_rank < 3:
-				continue
-
-		var char_id: int = character.character_id
-		if not objectives_map.has(char_id):
-			objectives_map[char_id] = {}
-
-		var objectives: Dictionary = objectives_map[char_id]
-		var standing: Dictionary = objectives.get("standing", {})
-		if standing.get("artisan_standing", false):
-			continue
-		if not standing.is_empty():
-			continue
-
-		objectives["standing"] = {
-			"artisan_standing": true,
-			"standing_need_type": "CRAFT_ITEM",
-		}
-
 
 static func _process_monk_self_selection(
 	characters: Array,
@@ -6520,7 +6461,6 @@ static func _cleanup_dead_character_references(
 	favors: Array,
 	bloodspeaker_cells: Array = [],
 	active_secrets: Array = [],
-	crafted_items: Array = [],
 ) -> void:
 	var dead_ids: Array = []
 	for c: L5RCharacterData in characters:
@@ -6576,12 +6516,6 @@ static func _cleanup_dead_character_references(
 		var sd: SecretData = secret as SecretData
 		for did: int in dead_ids:
 			sd.known_by_ids.erase(did)
-
-	for item: ArtisanItemData in crafted_items:
-		if item.is_complete:
-			continue
-		if item.creator_id in dead_ids:
-			item.is_complete = true
 
 
 static func _process_successions(
@@ -12066,7 +12000,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"zone_subtype", "active_insurgency_id", "action_log",
 		"self_offenses", "wall_statuses", "criminal_recall",
 		"is_patrolled", "phoenix_champion_authority",
-		"active_wip_item_id", "settlement_type",
+		"settlement_type",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -19165,397 +19099,13 @@ static func _purge_exposed_secrets(
 		i -= 1
 
 
-static func _inject_wip_context(
-	crafted_items: Array,
-	world_states: Dictionary,
-	characters_by_id: Dictionary = {},
-) -> void:
-	for item: ArtisanItemData in crafted_items:
-		if item.is_complete:
-			continue
-		var creator_id: int = item.creator_id
-		if creator_id < 0:
-			continue
-		var creator: L5RCharacterData = characters_by_id.get(creator_id)
-		if creator != null and TravelSystem.is_traveling(creator):
-			item.is_complete = true
-			continue
-		if not world_states.has(creator_id):
-			continue
-		var ws: Dictionary = world_states[creator_id]
-		ws["active_wip_item_id"] = item.item_id
 
 
-# -- s49 Craft writebacks -----------------------------------------------------
 
 
-static func _process_craft_writebacks(
-	results: Array,
-	crafted_items: Array,
-	next_item_id: Array,
-	characters_by_id: Dictionary,
-	character_province_map: Dictionary,
-	active_topics: Array,
-	next_topic_id: Array,
-	ic_day: int,
-) -> void:
-	for r: Dictionary in results:
-		if r.get("action_id") != "CRAFT":
-			continue
-		var effects: Dictionary = r.get("effects", {})
-		if not effects.get("requires_item_creation", false):
-			continue
-		if effects.get("item_ruined", false):
-			continue
-
-		var char_id: int = r.get("character_id", -1)
-		var character: L5RCharacterData = characters_by_id.get(char_id)
-		if character == null or CharacterStats.is_dead(character):
-			continue
-
-		var quality_tier: GiftGivingSystem.QualityTier = effects.get(
-			"quality_tier", GiftGivingSystem.QualityTier.MUNDANE) as GiftGivingSystem.QualityTier
-		if quality_tier == GiftGivingSystem.QualityTier.MUNDANE:
-			continue
-
-		var item_id: int = next_item_id[0]
-		next_item_id[0] += 1
-
-		var province_id: int = character_province_map.get(char_id, -1)
-
-		var item := ArtisanItemData.new()
-		item.item_id = item_id
-		item.item_name = effects.get("item_name", "Crafted Item")
-		item.category = effects.get("category", Enums.CraftingCategory.EQUIPMENT) as Enums.CraftingCategory
-		item.track = effects.get("track", Enums.CraftingTrack.CRAFT) as Enums.CraftingTrack
-		item.skill_used = effects.get("skill_name", "")
-		item.quality_tier = quality_tier
-		item.creator_id = char_id
-		item.creator_clan = character.clan
-		item.creator_family = character.family
-		item.creator_school = character.school
-		item.creator_insight_rank = CharacterStats.get_insight_rank(character)
-		item.creation_ic_day = ic_day
-		item.creation_province_id = province_id
-		item.material_tier = effects.get("material_tier", Enums.MaterialTier.COMMON) as Enums.MaterialTier
-		item.material_name = effects.get("material_name", "")
-		item.base_cost_koku = effects.get("base_cost", 0.0)
-		item.cost_denomination = effects.get("denomination", "bu")
-		item.current_owner_id = char_id
-		item.is_complete = true
-		item.crafting_roll_total = effects.get("crafting_roll_total", 0)
-		item.is_exceptional_weapon = effects.get("is_exceptional", false)
-		item.is_sacred_weapon = effects.get("is_sacred", false)
-
-		var sq_raw: Variant = effects.get("special_qualities", [])
-		if sq_raw is Array:
-			for sq: Variant in sq_raw:
-				if sq is Enums.WeaponSpecialQuality:
-					item.special_qualities.append(sq as Enums.WeaponSpecialQuality)
-
-		if item.is_sacred_weapon:
-			item.sacred_weapon_clan = character.clan
-
-		crafted_items.append(item)
-
-		var inv_item: Dictionary = ArtisanSystem.create_inventory_item(item)
-		character.items.append(inv_item)
-
-		if quality_tier >= GiftGivingSystem.QualityTier.MASTERWORK or item.is_sacred_weapon:
-			var topic := TopicData.new()
-			topic.topic_id = next_topic_id[0]
-			next_topic_id[0] += 1
-			topic.title = "%s crafts %s %s" % [
-				character.character_name,
-				_quality_tier_name(quality_tier),
-				item.item_name,
-			]
-			if item.is_sacred_weapon:
-				topic.tier = TopicData.Tier.TIER_2
-				topic.category = TopicData.Category.POLITICAL
-			elif quality_tier >= GiftGivingSystem.QualityTier.LEGENDARY:
-				topic.tier = TopicData.Tier.TIER_2
-				topic.category = TopicData.Category.POLITICAL
-			else:
-				topic.tier = TopicData.Tier.TIER_4
-				topic.category = TopicData.Category.PERSONAL
-			topic.subject_character_id = char_id
-			topic.ic_day_created = ic_day
-			topic.slug = "craft_%d" % item_id
-			active_topics.append(topic)
-
-			if not CharacterStats.is_dead(character):
-				character.topic_pool.append(topic.topic_id)
 
 
-static func _quality_tier_name(tier: GiftGivingSystem.QualityTier) -> String:
-	match tier:
-		GiftGivingSystem.QualityTier.MUNDANE:
-			return "mundane"
-		GiftGivingSystem.QualityTier.NORMAL:
-			return "a"
-		GiftGivingSystem.QualityTier.FINE:
-			return "fine"
-		GiftGivingSystem.QualityTier.EXCEPTIONAL:
-			return "exceptional"
-		GiftGivingSystem.QualityTier.MASTERWORK:
-			return "masterwork"
-		GiftGivingSystem.QualityTier.LEGENDARY:
-			return "legendary"
-	return "a"
 
 
-static func _process_craft_wip_writebacks(
-	results: Array,
-	crafted_items: Array,
-	next_item_id: Array,
-	characters_by_id: Dictionary,
-	character_province_map: Dictionary,
-	active_topics: Array,
-	next_topic_id: Array,
-	dice_engine: DiceEngine,
-	ic_day: int,
-) -> void:
-	for r: Dictionary in results:
-		if r.get("action_id") != "CRAFT":
-			continue
-		var effects: Dictionary = r.get("effects", {})
-		var char_id: int = r.get("character_id", -1)
-		var character: L5RCharacterData = characters_by_id.get(char_id)
-		if character == null or CharacterStats.is_dead(character):
-			continue
-
-		if effects.get("creates_wip", false):
-			var item_id: int = next_item_id[0]
-			next_item_id[0] += 1
-			var item: ArtisanItemData = ArtisanSystem.create_work_in_progress(
-				character, item_id,
-				effects.get("item_name", "Crafted Item"),
-				effects.get("category", Enums.CraftingCategory.EQUIPMENT) as Enums.CraftingCategory,
-				effects.get("track", Enums.CraftingTrack.CRAFT) as Enums.CraftingTrack,
-				effects.get("skill_name", ""),
-				effects.get("material_tier", Enums.MaterialTier.COMMON) as Enums.MaterialTier,
-				effects.get("material_name", ""),
-				effects.get("base_cost", 5.0),
-				effects.get("denomination", "bu"),
-				effects.get("material_type", Enums.MaterialType.OTHER) as Enums.MaterialType,
-			)
-			item.creation_ic_day = ic_day
-			item.creation_province_id = character_province_map.get(char_id, -1)
-			item.is_exceptional_weapon = effects.get("is_exceptional", false)
-			ArtisanSystem.invest_ap(item, 1)
-			crafted_items.append(item)
-			continue
-
-		if effects.get("continues_wip", false):
-			var wip_id: int = effects.get("wip_item_id", -1)
-			var wip: ArtisanItemData = ArtisanSystem.find_crafted_item(crafted_items, wip_id)
-			if wip == null or wip.is_complete:
-				continue
-			var invest_result: Dictionary = ArtisanSystem.invest_ap(wip, 1)
-			if not invest_result.get("ready_for_roll", false):
-				continue
-			_complete_wip_item(
-				wip, character, characters_by_id, character_province_map,
-				crafted_items, active_topics, next_topic_id,
-				dice_engine, ic_day,
-			)
 
 
-static func _complete_wip_item(
-	wip: ArtisanItemData,
-	character: L5RCharacterData,
-	characters_by_id: Dictionary,
-	character_province_map: Dictionary,
-	crafted_items: Array,
-	active_topics: Array,
-	next_topic_id: Array,
-	dice_engine: DiceEngine,
-	ic_day: int,
-) -> void:
-	var skill_name: String = wip.skill_used
-	var base_tn: int = ArtisanSystem.get_base_tn(wip.base_cost_koku, wip.cost_denomination)
-	var is_exceptional: bool = wip.is_exceptional_weapon
-
-	if is_exceptional:
-		base_tn = ArtisanSystem.get_exceptional_tn(wip.base_cost_koku)
-
-	var craft_result: Dictionary = ArtisanSystem.resolve_crafting(
-		character, dice_engine, skill_name, base_tn,
-		wip.material_tier, is_exceptional, 0,
-	)
-
-	var success: bool = craft_result.get("success", false)
-	if craft_result.get("item_ruined", false):
-		wip.is_complete = true
-		return
-
-	if not success:
-		wip.is_complete = true
-		wip.quality_tier = GiftGivingSystem.QualityTier.MUNDANE
-		return
-
-	var quality_tier: GiftGivingSystem.QualityTier = craft_result.get(
-		"quality_tier", GiftGivingSystem.QualityTier.MUNDANE)
-	if quality_tier == GiftGivingSystem.QualityTier.MUNDANE:
-		wip.is_complete = true
-		wip.quality_tier = quality_tier
-		return
-
-	wip.is_complete = true
-	wip.quality_tier = quality_tier
-	wip.crafting_roll_total = craft_result.get("total", 0)
-
-	if is_exceptional and wip.category == Enums.CraftingCategory.WEAPONS:
-		var available_raises: int = craft_result.get("available_raises", 0)
-		var sacred_check: Dictionary = ArtisanSystem.check_sacred_weapon(available_raises, character)
-		if sacred_check.get("can_forge", false):
-			wip.is_sacred_weapon = true
-			wip.sacred_weapon_clan = character.clan
-			available_raises -= sacred_check.get("raise_cost", 7)
-		if available_raises > 0:
-			var desired: Array[Enums.WeaponSpecialQuality] = [
-				Enums.WeaponSpecialQuality.SIGNATURE,
-				Enums.WeaponSpecialQuality.BALANCED,
-			]
-			var alloc: Dictionary = ArtisanSystem.allocate_special_qualities(available_raises, desired)
-			var allocated: Variant = alloc.get("allocated", [])
-			if allocated is Array:
-				for sq: Variant in allocated:
-					if sq is Enums.WeaponSpecialQuality:
-						wip.special_qualities.append(sq as Enums.WeaponSpecialQuality)
-
-	var inv_item: Dictionary = ArtisanSystem.create_inventory_item(wip)
-	character.items.append(inv_item)
-
-	var glory_change: float = 0.0
-	if quality_tier >= GiftGivingSystem.QualityTier.EXCEPTIONAL:
-		glory_change = 0.1
-	if quality_tier >= GiftGivingSystem.QualityTier.MASTERWORK:
-		glory_change = 0.3
-	if quality_tier >= GiftGivingSystem.QualityTier.LEGENDARY:
-		glory_change = 0.5
-	if wip.is_sacred_weapon:
-		glory_change = 1.0
-	if glory_change > 0.0:
-		HonorGlorySystem.apply_glory_change(character, glory_change)
-
-	if quality_tier >= GiftGivingSystem.QualityTier.MASTERWORK or wip.is_sacred_weapon:
-		var topic := TopicData.new()
-		topic.topic_id = next_topic_id[0]
-		next_topic_id[0] += 1
-		topic.title = "%s completes %s %s" % [
-			character.character_name,
-			_quality_tier_name(quality_tier),
-			wip.item_name,
-		]
-		if wip.is_sacred_weapon:
-			topic.tier = TopicData.Tier.TIER_2
-		elif quality_tier == GiftGivingSystem.QualityTier.LEGENDARY:
-			topic.tier = TopicData.Tier.TIER_2
-		else:
-			topic.tier = TopicData.Tier.TIER_3
-		topic.category = TopicData.Category.PERSONAL
-		topic.ic_day_created = ic_day
-		topic.subject_character_id = character.character_id
-		active_topics.append(topic)
-		if not CharacterStats.is_dead(character):
-			character.topic_pool.append(topic.topic_id)
-
-
-static func _process_crafted_item_history(
-	crafted_items: Array,
-	characters_by_id: Dictionary,
-	ic_day: int,
-) -> void:
-	for item: ArtisanItemData in crafted_items:
-		if not item.is_complete:
-			continue
-		var owner: L5RCharacterData = characters_by_id.get(item.current_owner_id)
-		if owner == null or CharacterStats.is_dead(owner):
-			continue
-		var insight_rank: int = CharacterStats.get_insight_rank(owner)
-		if insight_rank >= 3:
-			item.add_history_event(
-				Enums.HistoryEventType.OWNED_RANK_3, ic_day,
-				owner.character_name,
-			)
-		if insight_rank >= 5:
-			item.add_history_event(
-				Enums.HistoryEventType.OWNED_RANK_5, ic_day,
-				owner.character_name,
-			)
-		if owner.status >= 7.0:
-			item.add_history_event(
-				Enums.HistoryEventType.OWNED_CHAMPION, ic_day,
-				owner.character_name,
-			)
-		_sync_inventory_history_bonus(owner, item)
-
-
-static func _sync_inventory_history_bonus(
-	owner: L5RCharacterData,
-	item: ArtisanItemData,
-) -> void:
-	var bonus: int = item.get_history_tier_bonus()
-	for inv_item: Dictionary in owner.items:
-		if inv_item.get("crafted_item_id", -1) == item.item_id:
-			inv_item["history_point_bonus"] = bonus
-			return
-
-
-static func _process_craft_gift_ownership_transfer(
-	results: Array,
-	crafted_items: Array,
-	characters_by_id: Dictionary,
-	world_states: Dictionary,
-	ic_day: int,
-) -> void:
-	for r: Dictionary in results:
-		if r.get("action_id") != "DELIVER_GIFT":
-			continue
-		var effects: Dictionary = r.get("effects", {})
-		var consume_id: int = effects.get("consume_item_id", -1)
-		if consume_id < 0:
-			continue
-		var recipient_id: int = r.get("target_npc_id", -1)
-		if recipient_id < 0:
-			continue
-		for item: ArtisanItemData in crafted_items:
-			if item.item_id == consume_id:
-				item.current_owner_id = recipient_id
-				var recipient: L5RCharacterData = characters_by_id.get(recipient_id)
-				if recipient != null and not CharacterStats.is_dead(recipient):
-					var inv_item: Dictionary = ArtisanSystem.create_inventory_item(item)
-					recipient.items.append(inv_item)
-				var giver_id: int = r.get("character_id", -1)
-				var giver_ws: Dictionary = world_states.get(giver_id, {})
-				if giver_ws.get("context_flag", "") == "AT_COURT":
-					item.add_history_event(
-						Enums.HistoryEventType.GIFTED_AT_COURT, ic_day,
-						"Gifted at court",
-					)
-				break
-
-
-static func _process_craft_duel_history(
-	results: Array,
-	crafted_items: Array,
-	ic_day: int,
-) -> void:
-	for r: Dictionary in results:
-		if r.get("action_id") != "ISSUE_DUEL_CHALLENGE":
-			continue
-		var effects: Dictionary = r.get("effects", {})
-		if not effects.get("death_occurred", false):
-			continue
-		var char_id: int = r.get("character_id", -1)
-		var target_id: int = r.get("target_npc_id", -1)
-		for item: ArtisanItemData in crafted_items:
-			if item.category != Enums.CraftingCategory.WEAPONS:
-				continue
-			if item.current_owner_id == char_id or item.current_owner_id == target_id:
-				item.add_history_event(
-					Enums.HistoryEventType.USED_IN_BATTLE, ic_day,
-					"Used in duel to the death",
-				)

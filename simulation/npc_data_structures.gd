@@ -93,7 +93,6 @@ class ContextSnapshot:
 	var zone_subtype: Enums.ZoneSubtype = Enums.ZoneSubtype.OHIROMA
 	var zone_flags: Dictionary = {}
 	var sublocation: Enums.Sublocation = Enums.Sublocation.PUBLIC
-	var settlement_type: int = -1
 
 	# Lord & court (s55.34)
 	var lord_id: int = -1
@@ -198,9 +197,6 @@ class ContextSnapshot:
 
 	# Atonement (s4.6)
 	var self_offenses: Array = []
-
-	# Crafting WIP (s49)
-	var active_wip_item_id: int = -1
 
 	# State
 	var pending_events: Array = []
