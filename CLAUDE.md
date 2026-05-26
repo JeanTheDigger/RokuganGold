@@ -2806,7 +2806,12 @@ costs, or forward-wiring. Do not treat as bugs.
   category. (6) ENGINEERING category is unreachable through NPC
   selection (Engineering skill doesn't match "Artisan: " or "Craft: "
   prefix in get_best_craft_skill) — documented, not a priority fix.
-  117 tests.
+  (7) CLAN_MATERIALS migrated from single `category` to `categories`
+  Array for multi-category materials. Kaiu Steel now matches WEAPONS +
+  ARMOR (was WEAPONS only — Crab armorsmiths didn't get their signature
+  steel). Shadow-silk now matches EQUIPMENT + ARMOR (Scorpion light
+  armor). `select_best_material_for_npc()` updated to check `category
+  in clan_cats`. 122 tests.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
