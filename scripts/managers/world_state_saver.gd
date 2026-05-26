@@ -530,6 +530,8 @@ func _load_json_state(ws: Node, base: String) -> void:
 	ws.togashi_state = state.get("togashi_state", {})
 	ws.phoenix_council_state = state.get("phoenix_council_state", {})
 	ws.worship_state = state.get("worship_state", {})
+	if ws.worship_state.is_empty() or not ws.worship_state.has("empire_tiers"):
+		ws.worship_state = WorshipSystem.make_initial_worship_state()
 
 	# Disposition snapshots
 	ws.disposition_snapshots = state.get("disposition_snapshots", {})

@@ -1085,13 +1085,10 @@ static func advance_day(
 		# Refresh vacancy intelligence after construction completions and organic villages
 		# so newly created settlements (temples, monasteries, forts) trigger vacancy detection
 		_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
-		var _sett_prov_map: Dictionary = {}
-		for s: SettlementData in settlements:
-			_sett_prov_map[s.settlement_id] = s.province_id
 		gempukku_results = _process_gempukku(
 			children, characters, characters_by_id, next_character_id,
 			dice_engine, ic_day, active_topics, next_topic_id, objectives_map,
-			worship_maluses, _sett_prov_map, death_events,
+			worship_maluses, world_states.get("_settlement_province_map", {}), death_events,
 		)
 		advancement_results = _process_npc_advancement(
 			characters, active_courts, active_sieges, active_armies,
