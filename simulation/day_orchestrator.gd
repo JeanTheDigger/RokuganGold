@@ -175,6 +175,7 @@ static func advance_day(
 	_inject_hunt_context(active_hunts, world_states, active_topics)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_set_temple_context_flags(characters, settlements, world_states)
+	_set_visiting_context_flags(characters, settlements, provinces, world_states)
 	_inject_insurgency_context(characters, provinces, _spm, insurgencies, world_states)
 	_populate_court_availability_data(
 		active_courts, characters, characters_by_id, world_states, favors,
@@ -12122,6 +12123,39 @@ static func _set_temple_context_flags(
 		if ws.get("context_flag", -1) == Enums.ContextFlag.AT_WALL_TOWER:
 			continue
 		ws["context_flag"] = Enums.ContextFlag.AT_TEMPLE
+
+
+static func _set_visiting_context_flags(
+	characters: Array,
+	settlements: Array,
+	provinces: Dictionary,
+	world_states: Dictionary,
+) -> void:
+	var settlement_clan: Dictionary = {}
+	for s: SettlementData in settlements:
+		var prov: ProvinceData = provinces.get(s.province_id)
+		if prov != null:
+			settlement_clan[str(s.settlement_id)] = prov.clan
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if TravelSystem.is_traveling(character):
+			continue
+		var loc: String = character.physical_location
+		if loc.is_empty():
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.has("context_flag"):
+			continue
+		var loc_clan: String = settlement_clan.get(loc, "")
+		if loc_clan.is_empty():
+			continue
+		if loc_clan != character.clan:
+			if ws.is_empty():
+				ws = {}
+				world_states[character.character_id] = ws
+			ws["context_flag"] = Enums.ContextFlag.VISITING
 
 
 static func _inject_insurgency_context(

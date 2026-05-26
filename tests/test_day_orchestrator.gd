@@ -14867,3 +14867,60 @@ func test_commitment_renege_no_topic_when_tier_negative_one() -> void:
 			topics.append(topic)
 	assert_eq(topics.size(), 0, "No topic should be created when topic_tier is -1")
 	assert_eq(next_tid[0], 5000, "Topic ID counter should not increment")
+
+
+# -- VISITING context flag tests -----------------------------------------------
+
+
+func test_visiting_context_flag_set_for_foreign_settlement() -> void:
+	var p1 := _make_province(100, "Crane")
+	var s1 := _make_settlement_for(10, 100, 0.0, 0.0, 5)
+	var provinces: Dictionary = {100: p1}
+	var settlements: Array = [s1]
+
+	var visitor := L5RCharacterData.new()
+	visitor.character_id = 1
+	visitor.clan = "Lion"
+	visitor.physical_location = "10"
+	visitor.wounds_taken = 0
+
+	var ws: Dictionary = {1: {}}
+	DayOrchestrator._set_visiting_context_flags([visitor], settlements, provinces, ws)
+	assert_eq(ws[1].get("context_flag", -1), Enums.ContextFlag.VISITING,
+		"Lion character at Crane settlement should be VISITING")
+
+
+func test_visiting_context_flag_not_set_for_own_clan_settlement() -> void:
+	var p1 := _make_province(100, "Lion")
+	var s1 := _make_settlement_for(10, 100, 0.0, 0.0, 5)
+	var provinces: Dictionary = {100: p1}
+	var settlements: Array = [s1]
+
+	var resident := L5RCharacterData.new()
+	resident.character_id = 2
+	resident.clan = "Lion"
+	resident.physical_location = "10"
+	resident.wounds_taken = 0
+
+	var ws: Dictionary = {2: {}}
+	DayOrchestrator._set_visiting_context_flags([resident], settlements, provinces, ws)
+	assert_false(ws[2].has("context_flag"),
+		"Lion character at Lion settlement should not have VISITING flag")
+
+
+func test_visiting_context_flag_skips_court_attendees() -> void:
+	var p1 := _make_province(100, "Crane")
+	var s1 := _make_settlement_for(10, 100, 0.0, 0.0, 5)
+	var provinces: Dictionary = {100: p1}
+	var settlements: Array = [s1]
+
+	var courtier := L5RCharacterData.new()
+	courtier.character_id = 3
+	courtier.clan = "Lion"
+	courtier.physical_location = "10"
+	courtier.wounds_taken = 0
+
+	var ws: Dictionary = {3: {"context_flag": Enums.ContextFlag.AT_COURT}}
+	DayOrchestrator._set_visiting_context_flags([courtier], settlements, provinces, ws)
+	assert_eq(ws[3].get("context_flag", -1), Enums.ContextFlag.AT_COURT,
+		"Court attendee should keep AT_COURT even at foreign settlement")
