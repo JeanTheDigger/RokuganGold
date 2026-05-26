@@ -88,6 +88,28 @@ const GREAT_CLANS: Array[String] = [
 ]
 
 
+static func derive_emperor_archetype(emperor: L5RCharacterData) -> int:
+	var bv: int = emperor.bushido_virtue
+	var sv: int = emperor.shourido_virtue
+	# Tyrant: Ishi shourido with no strong bushido counterbalance (s55.10)
+	if sv == Enums.ShouridoVirtue.ISHI:
+		if bv == Enums.BushidoVirtue.NONE or bv == Enums.BushidoVirtue.MEIYO:
+			return EmperorArchetype.TYRANT
+	# Bushido-dominant archetypes
+	if bv == Enums.BushidoVirtue.JIN:
+		return EmperorArchetype.BENEVOLENT
+	if bv == Enums.BushidoVirtue.CHUGI or bv == Enums.BushidoVirtue.MEIYO:
+		return EmperorArchetype.IRON
+	if bv == Enums.BushidoVirtue.YU:
+		return EmperorArchetype.WARLIKE
+	# Shourido-dominant archetypes (bushido is NONE or weak)
+	if sv == Enums.ShouridoVirtue.KYORYOKU:
+		return EmperorArchetype.WARLIKE
+	if sv == Enums.ShouridoVirtue.SEIGYO or sv == Enums.ShouridoVirtue.DOSATSU:
+		return EmperorArchetype.CUNNING
+	return EmperorArchetype.IRON
+
+
 static func run_seasonal_review(
 	lord: L5RCharacterData,
 	vassals: Array,

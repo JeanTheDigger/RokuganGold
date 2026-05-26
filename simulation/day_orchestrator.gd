@@ -810,6 +810,10 @@ static func advance_day(
 		active_successions, characters_by_id
 	)
 
+	var succession_applied: Array = _apply_confirmed_successions(
+		active_successions, characters, characters_by_id, world_states, clans,
+	)
+
 	_remove_resolved_successions(active_successions)
 
 	var conversation_results: Array = _process_daily_conversations(
@@ -1251,6 +1255,7 @@ static func advance_day(
 		"spiritual_insurgency_results": spiritual_insurgency_results,
 		"bloodspeaker_results": bloodspeaker_results,
 		"succession_results": succession_results,
+		"succession_applied": succession_applied,
 		"entanglement_results": entanglement_results,
 		"bound_escape_results": bound_escape_results,
 		"hostage_escape_results": hostage_escape_results,
@@ -18849,6 +18854,67 @@ static func _remove_resolved_wars(active_wars: Array) -> void:
 		if war is WarData and not (war as WarData).is_active:
 			active_wars.remove_at(i)
 		i -= 1
+
+
+static func _apply_confirmed_successions(
+	active_successions: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	clans: Dictionary,
+) -> Array:
+	var results: Array = []
+	for succ: SuccessionData in active_successions:
+		if succ.state != SuccessionData.SuccessionState.CONFIRMED:
+			continue
+		if succ.successor_id < 0:
+			continue
+
+		var successor: L5RCharacterData = characters_by_id.get(succ.successor_id)
+		if successor == null or CharacterStats.is_dead(successor):
+			continue
+		var deceased: L5RCharacterData = characters_by_id.get(succ.deceased_id)
+		if deceased == null:
+			continue
+
+		# Transfer role_position and status from deceased
+		var old_role: String = deceased.role_position
+		var old_status: float = deceased.status
+		if old_role.is_empty():
+			succ.state = SuccessionData.SuccessionState.RESOLVED
+			continue
+
+		successor.role_position = old_role
+		if old_status > successor.status:
+			successor.status = old_status
+
+		# Transfer lord_id: vassals of deceased now serve successor
+		for c: L5RCharacterData in characters:
+			if CharacterStats.is_dead(c):
+				continue
+			if c.lord_id == succ.deceased_id:
+				c.lord_id = succ.successor_id
+
+		# Update clan champion if applicable
+		if succ.position_tier == Enums.LordRank.CLAN_CHAMPION:
+			var cd: ClanData = clans.get(succ.clan)
+			if cd != null:
+				cd.champion_id = succ.successor_id
+
+		# Update emperor_id and archetype if emperor succession
+		if old_role == "Emperor":
+			world_states["emperor_id"] = succ.successor_id
+			world_states["emperor_archetype"] = StrategicReview.derive_emperor_archetype(successor)
+
+		succ.state = SuccessionData.SuccessionState.RESOLVED
+		results.append({
+			"succession_id": succ.succession_id,
+			"successor_id": succ.successor_id,
+			"deceased_id": succ.deceased_id,
+			"role": old_role,
+			"is_emperor": old_role == "Emperor",
+		})
+	return results
 
 
 static func _remove_resolved_successions(active_successions: Array) -> void:

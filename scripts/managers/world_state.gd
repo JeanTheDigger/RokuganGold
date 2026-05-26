@@ -226,7 +226,7 @@ func _sync_wars_to_world_states() -> void:
 
 func advance_one_day() -> Dictionary:
 	_sync_wars_to_world_states()
-	return DayOrchestrator.advance_day(
+	var result: Dictionary = DayOrchestrator.advance_day(
 		time_system,
 		characters,
 		characters_by_id,
@@ -306,6 +306,21 @@ func advance_one_day() -> Dictionary:
 		bloodspeaker_cells,
 		next_cell_id,
 	)
+	_apply_succession_updates(result)
+	return result
+
+
+func _apply_succession_updates(result: Dictionary) -> void:
+	var applied: Array = result.get("succession_applied", [])
+	for entry: Dictionary in applied:
+		if entry.get("is_emperor", false):
+			emperor_id = entry.get("successor_id", -1)
+			emperor_archetype = world_states.get(
+				"emperor_archetype", StrategicReview.EmperorArchetype.IRON
+			)
+			var new_emp: L5RCharacterData = characters_by_id.get(emperor_id)
+			if new_emp != null and not new_emp.physical_location.is_empty():
+				emperor_settlement_id = new_emp.physical_location.to_int()
 
 
 func _build_miya_inputs() -> Dictionary:

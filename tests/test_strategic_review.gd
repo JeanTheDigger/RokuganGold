@@ -2062,3 +2062,106 @@ func test_build_emperor_tax_config_warlike_no_dispositions() -> void:
 	var config: Dictionary = DayOrchestrator._build_emperor_tax_config(world_states, {})
 	assert_eq(config["archetype"], StrategicReview.EmperorArchetype.WARLIKE)
 	assert_false(config.has("clan_dispositions"))
+
+
+# -- derive_emperor_archetype -------------------------------------------------
+
+func test_derive_emperor_archetype_jin_is_benevolent() -> void:
+	var c := L5RCharacterData.new()
+	c.bushido_virtue = Enums.BushidoVirtue.JIN
+	c.shourido_virtue = Enums.ShouridoVirtue.NONE
+	assert_eq(
+		StrategicReview.derive_emperor_archetype(c),
+		StrategicReview.EmperorArchetype.BENEVOLENT,
+	)
+
+
+func test_derive_emperor_archetype_chugi_is_iron() -> void:
+	var c := L5RCharacterData.new()
+	c.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	c.shourido_virtue = Enums.ShouridoVirtue.NONE
+	assert_eq(
+		StrategicReview.derive_emperor_archetype(c),
+		StrategicReview.EmperorArchetype.IRON,
+	)
+
+
+func test_derive_emperor_archetype_meiyo_is_iron() -> void:
+	var c := L5RCharacterData.new()
+	c.bushido_virtue = Enums.BushidoVirtue.MEIYO
+	c.shourido_virtue = Enums.ShouridoVirtue.NONE
+	assert_eq(
+		StrategicReview.derive_emperor_archetype(c),
+		StrategicReview.EmperorArchetype.IRON,
+	)
+
+
+func test_derive_emperor_archetype_yu_is_warlike() -> void:
+	var c := L5RCharacterData.new()
+	c.bushido_virtue = Enums.BushidoVirtue.YU
+	c.shourido_virtue = Enums.ShouridoVirtue.NONE
+	assert_eq(
+		StrategicReview.derive_emperor_archetype(c),
+		StrategicReview.EmperorArchetype.WARLIKE,
+	)
+
+
+func test_derive_emperor_archetype_kyoryoku_is_warlike() -> void:
+	var c := L5RCharacterData.new()
+	c.bushido_virtue = Enums.BushidoVirtue.NONE
+	c.shourido_virtue = Enums.ShouridoVirtue.KYORYOKU
+	assert_eq(
+		StrategicReview.derive_emperor_archetype(c),
+		StrategicReview.EmperorArchetype.WARLIKE,
+	)
+
+
+func test_derive_emperor_archetype_seigyo_is_cunning() -> void:
+	var c := L5RCharacterData.new()
+	c.bushido_virtue = Enums.BushidoVirtue.NONE
+	c.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	assert_eq(
+		StrategicReview.derive_emperor_archetype(c),
+		StrategicReview.EmperorArchetype.CUNNING,
+	)
+
+
+func test_derive_emperor_archetype_dosatsu_is_cunning() -> void:
+	var c := L5RCharacterData.new()
+	c.bushido_virtue = Enums.BushidoVirtue.NONE
+	c.shourido_virtue = Enums.ShouridoVirtue.DOSATSU
+	assert_eq(
+		StrategicReview.derive_emperor_archetype(c),
+		StrategicReview.EmperorArchetype.CUNNING,
+	)
+
+
+func test_derive_emperor_archetype_ishi_none_is_tyrant() -> void:
+	var c := L5RCharacterData.new()
+	c.bushido_virtue = Enums.BushidoVirtue.NONE
+	c.shourido_virtue = Enums.ShouridoVirtue.ISHI
+	assert_eq(
+		StrategicReview.derive_emperor_archetype(c),
+		StrategicReview.EmperorArchetype.TYRANT,
+	)
+
+
+func test_derive_emperor_archetype_ishi_meiyo_is_tyrant() -> void:
+	var c := L5RCharacterData.new()
+	c.bushido_virtue = Enums.BushidoVirtue.MEIYO
+	c.shourido_virtue = Enums.ShouridoVirtue.ISHI
+	assert_eq(
+		StrategicReview.derive_emperor_archetype(c),
+		StrategicReview.EmperorArchetype.TYRANT,
+	)
+
+
+func test_derive_emperor_archetype_ishi_jin_not_tyrant() -> void:
+	var c := L5RCharacterData.new()
+	c.bushido_virtue = Enums.BushidoVirtue.JIN
+	c.shourido_virtue = Enums.ShouridoVirtue.ISHI
+	assert_eq(
+		StrategicReview.derive_emperor_archetype(c),
+		StrategicReview.EmperorArchetype.BENEVOLENT,
+		"Jin bushido counterbalances Ishi shourido",
+	)

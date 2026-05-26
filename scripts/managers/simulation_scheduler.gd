@@ -133,6 +133,8 @@ func _save_world_state() -> void:
 func _load_world_state() -> void:
 	if _world_saver.load_world(WorldState):
 		WorldState.rebuild_characters_by_id()
+		WorldState.world_states.clear()
+		WorldState.character_province_map.clear()
 		print("[SimulationScheduler] World state loaded (%d characters, %d provinces)." % [
 			WorldState.characters.size(),
 			WorldState.provinces.size(),
@@ -169,8 +171,10 @@ func _bootstrap_fresh_world() -> void:
 
 	WorldState.emperor_id = result.get("emperor_id", -1)
 	var emperor: L5RCharacterData = WorldState.characters_by_id.get(WorldState.emperor_id)
-	if emperor != null and not emperor.physical_location.is_empty():
-		WorldState.emperor_settlement_id = emperor.physical_location.to_int()
+	if emperor != null:
+		if not emperor.physical_location.is_empty():
+			WorldState.emperor_settlement_id = emperor.physical_location.to_int()
+		WorldState.emperor_archetype = StrategicReview.derive_emperor_archetype(emperor)
 	WorldState.miya_representative_id = result.get("herald_id", -1)
 
 	WorldState.next_character_id[0] = result.get("next_character_id", 10000)

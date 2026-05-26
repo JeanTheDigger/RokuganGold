@@ -14498,6 +14498,74 @@ func test_remove_resolved_successions() -> void:
 	assert_eq(succs[1].state, SuccessionData.SuccessionState.DISPUTED)
 
 
+func test_apply_confirmed_succession_transfers_role() -> void:
+	var deceased := L5RCharacterData.new()
+	deceased.character_id = 100
+	deceased.role_position = "Clan Champion"
+	deceased.status = 8.0
+	deceased.clan = "Crane"
+	deceased.wounds_taken = 999
+	var successor := L5RCharacterData.new()
+	successor.character_id = 200
+	successor.status = 4.0
+	successor.clan = "Crane"
+	successor.lord_id = 100
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 300
+	vassal.lord_id = 100
+	vassal.clan = "Crane"
+	var succ := SuccessionData.new()
+	succ.succession_id = 1
+	succ.deceased_id = 100
+	succ.successor_id = 200
+	succ.clan = "Crane"
+	succ.position_tier = Enums.LordRank.CLAN_CHAMPION
+	succ.state = SuccessionData.SuccessionState.CONFIRMED
+	var chars: Array = [deceased, successor, vassal]
+	var by_id: Dictionary = {100: deceased, 200: successor, 300: vassal}
+	var clans_dict: Dictionary = {"Crane": ClanData.new()}
+	clans_dict["Crane"].champion_id = 100
+	var results: Array = DayOrchestrator._apply_confirmed_successions(
+		[succ], chars, by_id, {}, clans_dict)
+	assert_eq(results.size(), 1)
+	assert_eq(successor.role_position, "Clan Champion")
+	assert_eq(successor.status, 8.0)
+	assert_eq(vassal.lord_id, 200, "Vassals should transfer to successor")
+	assert_eq(clans_dict["Crane"].champion_id, 200)
+	assert_eq(succ.state, SuccessionData.SuccessionState.RESOLVED)
+
+
+func test_apply_confirmed_succession_emperor_updates_world_states() -> void:
+	var emperor := L5RCharacterData.new()
+	emperor.character_id = 1
+	emperor.role_position = "Emperor"
+	emperor.status = 10.0
+	emperor.wounds_taken = 999
+	var heir := L5RCharacterData.new()
+	heir.character_id = 2
+	heir.status = 8.0
+	heir.bushido_virtue = Enums.BushidoVirtue.JIN
+	heir.shourido_virtue = Enums.ShouridoVirtue.NONE
+	heir.physical_location = "500"
+	var succ := SuccessionData.new()
+	succ.succession_id = 1
+	succ.deceased_id = 1
+	succ.successor_id = 2
+	succ.position_tier = Enums.LordRank.IMPERIAL
+	succ.state = SuccessionData.SuccessionState.CONFIRMED
+	var ws: Dictionary = {}
+	var results: Array = DayOrchestrator._apply_confirmed_successions(
+		[succ], [emperor, heir], {1: emperor, 2: heir}, ws, {})
+	assert_eq(results.size(), 1)
+	assert_true(results[0].get("is_emperor", false))
+	assert_eq(ws.get("emperor_id", -1), 2)
+	assert_eq(ws.get("emperor_archetype", -1),
+		StrategicReview.EmperorArchetype.BENEVOLENT,
+		"Jin virtue emperor should be Benevolent")
+	assert_eq(heir.role_position, "Emperor")
+	assert_eq(heir.status, 10.0)
+
+
 func test_remove_resolved_civil_wars() -> void:
 	var active_cw: Dictionary = {"active": true, "clan": "Crane"}
 	var inactive_cw: Dictionary = {"active": false, "clan": "Lion"}
