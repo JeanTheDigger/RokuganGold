@@ -171,18 +171,44 @@ const POSITION_STATUS: Dictionary = {
 
 
 const POSITION_ROLE_NAMES: Dictionary = {
-	PositionType.CLAN_MAGISTRATE: "Clan Magistrate",
-	PositionType.EMERALD_MAGISTRATE: "Emerald Magistrate",
-	PositionType.GARRISON_COMMANDER: "Garrison Commander",
-	PositionType.SCHOOL_MASTER: "School Master",
-	PositionType.TEMPLE_HEAD: "Temple Head",
-	PositionType.MONASTERY_ABBOT: "Monastery Abbot",
+	PositionType.EMPEROR: "Emperor",
+	PositionType.IMPERIAL_HEIR: "Imperial Heir",
+	PositionType.IMPERIAL_ADVISOR: "Imperial Advisor",
+	PositionType.IMPERIAL_CHANCELLOR: "Imperial Chancellor",
+	PositionType.IMPERIAL_HERALD: "Imperial Herald",
+	PositionType.IMPERIAL_TREASURER: "Imperial Treasurer",
+	PositionType.VOICE_OF_EMPEROR: "Voice of the Emperor",
+	PositionType.EMERALD_CHAMPION: "Emerald Champion",
+	PositionType.JADE_CHAMPION: "Jade Champion",
+	PositionType.AMETHYST_CHAMPION: "Amethyst Champion",
+	PositionType.TURQUOISE_CHAMPION: "Turquoise Champion",
+	PositionType.TOPAZ_CHAMPION: "Topaz Champion",
+	PositionType.RUBY_CHAMPION: "Ruby Champion",
+	PositionType.IMPERIAL_FAMILY_DAIMYO: "Imperial Family Daimyo",
+	PositionType.CLAN_CHAMPION: "Clan Champion",
+	PositionType.FAMILY_DAIMYO: "Family Daimyo",
+	PositionType.RIKUGUNSHOKAN: "Rikugunshokan",
 	PositionType.SENIOR_COURTIER: "Senior Courtier",
+	PositionType.CLAN_MAGISTRATE_COMMANDER: "Clan Magistrate Commander",
+	PositionType.SCHOOL_MASTER: "School Master",
+	PositionType.PROVINCIAL_DAIMYO: "Provincial Daimyo",
+	PositionType.LOCAL_DAIMYO: "Local Daimyo",
+	PositionType.CLAN_MAGISTRATE: "Clan Magistrate",
+	PositionType.GARRISON_COMMANDER: "Garrison Commander",
 	PositionType.TAISA: "Taisa",
 	PositionType.CHUI: "Chui",
-	PositionType.RIKUGUNSHOKAN: "Rikugunshokan",
+	PositionType.TEMPLE_HEAD: "Temple Head",
+	PositionType.MONASTERY_ABBOT: "Monastery Abbot",
+	PositionType.EMERALD_MAGISTRATE: "Emerald Magistrate",
+	PositionType.JADE_MAGISTRATE: "Jade Magistrate",
+	PositionType.INQUISITOR_LEADER: "Inquisitor Leader",
+	PositionType.WITCH_HUNTER_LEADER: "Witch Hunter Leader",
+	PositionType.KUROIBAN_LEADER: "Kuroiban Leader",
+	PositionType.YORIKI: "Yoriki",
+	PositionType.MINOR_CLAN_CHAMPION: "Minor Clan Champion",
+	PositionType.MINOR_CLAN_SENIOR: "Minor Clan Senior",
 	PositionType.WALL_SEGMENT_COMMANDER: "Wall Segment Commander",
-	PositionType.CLAN_MAGISTRATE_COMMANDER: "Clan Magistrate Commander",
+	PositionType.HIRUMA_SCOUT_COMMANDER: "Hiruma Scout Commander",
 }
 
 const POSITION_MILITARY_RANK: Dictionary = {
@@ -366,7 +392,7 @@ static func _pick_family(clan: String, dice: DiceEngine) -> String:
 static func _generate_imperial_positions(
 	next_id: Array,
 	dice: DiceEngine,
-) -> Array:
+) -> Dictionary:
 	var chars: Array = []
 
 	var emperor: L5RCharacterData = _generate_positioned_character(
@@ -387,10 +413,14 @@ static func _generate_imperial_positions(
 		[PositionType.IMPERIAL_TREASURER, "Otomo"],
 		[PositionType.VOICE_OF_EMPEROR, "Seppun"],
 	]
+	var herald_id: int = -1
 	for pos: Array in imp_positions:
-		chars.append(_generate_positioned_character(
+		var imp_char: L5RCharacterData = _generate_positioned_character(
 			next_id, pos[0], "Imperial", pos[1], dice, emperor_id,
-		))
+		)
+		chars.append(imp_char)
+		if pos[0] == PositionType.IMPERIAL_HERALD:
+			herald_id = imp_char.character_id
 
 	var champion_clans: Array = [
 		[PositionType.EMERALD_CHAMPION, "Crane", "Kakita"],
@@ -412,7 +442,7 @@ static func _generate_imperial_positions(
 			"Imperial", fam, dice, emperor_id,
 		))
 
-	return chars
+	return {"characters": chars, "emperor_id": emperor_id, "herald_id": herald_id}
 
 
 # -- Step 2: Per-Clan Fixed Positions (s22.8) ----------------------------------
@@ -468,6 +498,17 @@ static func _generate_clan_leadership(
 		chars.append(_generate_positioned_character(
 			next_id, PositionType.SCHOOL_MASTER, clan, fam, dice, champ_id,
 		))
+
+	if clan == "Phoenix":
+		var master_elements: Array = ["Fire", "Water", "Air", "Earth", "Void"]
+		for element: String in master_elements:
+			var master: L5RCharacterData = _generate_positioned_character(
+				next_id, PositionType.SENIOR_COURTIER, "Phoenix", "Isawa", dice, champ_id,
+			)
+			master.role_position = "Master of " + element
+			master.school_type = Enums.SchoolType.SHUGENJA
+			master.status = 7.0
+			chars.append(master)
 
 	return chars
 
@@ -880,10 +921,12 @@ static func generate_world_population(
 ) -> Dictionary:
 	var all_characters: Array = []
 
-	var imperial_chars: Array = _generate_imperial_positions(next_id, dice)
+	var imperial_result: Dictionary = _generate_imperial_positions(next_id, dice)
+	var imperial_chars: Array = imperial_result["characters"]
 	all_characters.append_array(imperial_chars)
 
-	var emperor_id: int = imperial_chars[0].character_id
+	var emperor_id: int = imperial_result["emperor_id"]
+	var herald_id: int = imperial_result["herald_id"]
 
 	var clan_champions: Dictionary = {}
 	var clan_rikugunshokans: Dictionary = {}
@@ -977,6 +1020,7 @@ static func generate_world_population(
 	return {
 		"characters": all_characters,
 		"emperor_id": emperor_id,
+		"herald_id": herald_id,
 		"clan_champions": clan_champions,
 		"total_count": all_characters.size(),
 		"next_character_id": next_id[0],

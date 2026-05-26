@@ -400,6 +400,7 @@ static func bootstrap_world(
 		"characters": characters,
 		"clans": clans,
 		"emperor_id": pop_result.get("emperor_id", -1),
+		"herald_id": pop_result.get("herald_id", -1),
 		"clan_champions": pop_result.get("clan_champions", {}),
 		"military_data": military_data,
 		"next_character_id": pop_result.get("next_character_id", pop_result.get("total_count", 0) + 1),

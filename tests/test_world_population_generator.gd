@@ -197,34 +197,38 @@ func test_positioned_character_has_name():
 
 func test_imperial_positions_count():
 	var next_id: Array = [1]
-	var chars: Array = WorldPopulationGenerator._generate_imperial_positions(
+	var imp_result: Dictionary = WorldPopulationGenerator._generate_imperial_positions(
 		next_id, dice,
 	)
+	var chars: Array = imp_result["characters"]
 	assert_true(chars.size() >= 15, "Expected at least 15 imperial characters, got %d" % chars.size())
 
 
 func test_emperor_is_first():
 	var next_id: Array = [1]
-	var chars: Array = WorldPopulationGenerator._generate_imperial_positions(
+	var imp_result: Dictionary = WorldPopulationGenerator._generate_imperial_positions(
 		next_id, dice,
 	)
+	var chars: Array = imp_result["characters"]
 	assert_eq(chars[0].status, 10.0)
 
 
 func test_imperial_heir_has_emperor_lord():
 	var next_id: Array = [1]
-	var chars: Array = WorldPopulationGenerator._generate_imperial_positions(
+	var imp_result: Dictionary = WorldPopulationGenerator._generate_imperial_positions(
 		next_id, dice,
 	)
+	var chars: Array = imp_result["characters"]
 	var emperor_id: int = chars[0].character_id
 	assert_eq(chars[1].lord_id, emperor_id)
 
 
 func test_imperial_family_daimyo_count():
 	var next_id: Array = [1]
-	var chars: Array = WorldPopulationGenerator._generate_imperial_positions(
+	var imp_result: Dictionary = WorldPopulationGenerator._generate_imperial_positions(
 		next_id, dice,
 	)
+	var chars: Array = imp_result["characters"]
 	var fd_count: int = 0
 	for c: L5RCharacterData in chars:
 		if c.status == 6.0 and c.clan == "Imperial":

@@ -460,3 +460,88 @@ func test_extinct_clans_not_in_population() -> void:
 	for c: L5RCharacterData in result["characters"]:
 		assert_ne(c.clan, "Boar", "Boar clan is extinct — should not create characters")
 		assert_ne(c.clan, "Snake", "Snake clan is extinct — should not create characters")
+
+
+# -- Role Position Assignment --------------------------------------------------
+
+func test_emperor_has_role_position() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var emperor_id: int = result["emperor_id"]
+	for c: L5RCharacterData in result["characters"]:
+		if c.character_id == emperor_id:
+			assert_eq(c.role_position, "Emperor", "Emperor should have role_position 'Emperor'")
+			return
+	assert_true(false, "Should find emperor character")
+
+
+func test_clan_champions_have_role_position() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var champions: Dictionary = result["clan_champions"]
+	for clan: String in champions:
+		var champ_id: int = champions[clan]
+		for c: L5RCharacterData in result["characters"]:
+			if c.character_id == champ_id:
+				assert_eq(
+					c.role_position, "Clan Champion",
+					"%s clan champion should have role_position 'Clan Champion'" % clan,
+				)
+				break
+
+
+func test_positioned_characters_have_nonempty_role_position() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var high_status_empty: Array[String] = []
+	for c: L5RCharacterData in result["characters"]:
+		if c.status >= 4.0 and c.role_position.is_empty():
+			high_status_empty.append("id=%d clan=%s status=%.1f" % [c.character_id, c.clan, c.status])
+	assert_eq(
+		high_status_empty.size(), 0,
+		"Characters with status >= 4.0 should have role_position set: %s" % str(high_status_empty),
+	)
+
+
+# -- Herald / Miya Representative -----------------------------------------------
+
+func test_bootstrap_returns_herald_id() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	assert_true(result["herald_id"] >= 0, "Herald ID should be non-negative")
+
+
+func test_herald_is_imperial_miya() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var herald_id: int = result["herald_id"]
+	for c: L5RCharacterData in result["characters"]:
+		if c.character_id == herald_id:
+			assert_eq(c.clan, "Imperial", "Herald should be Imperial clan")
+			assert_eq(c.family, "Miya", "Herald should be Miya family")
+			assert_eq(c.role_position, "Imperial Herald", "Herald should have 'Imperial Herald' role")
+			return
+	assert_true(false, "Should find herald character")
+
+
+# -- Phoenix Elemental Masters --------------------------------------------------
+
+func test_phoenix_has_five_elemental_masters() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var master_elements: Dictionary = {}
+	for c: L5RCharacterData in result["characters"]:
+		if c.role_position.begins_with("Master of "):
+			var element: String = c.role_position.replace("Master of ", "")
+			master_elements[element] = c.character_id
+	for element: String in ["Fire", "Water", "Air", "Earth", "Void"]:
+		assert_true(
+			master_elements.has(element),
+			"Should create Master of %s" % element,
+		)
+
+
+func test_elemental_masters_are_phoenix_isawa_shugenja() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	for c: L5RCharacterData in result["characters"]:
+		if c.role_position.begins_with("Master of "):
+			assert_eq(c.clan, "Phoenix", "Elemental Master should be Phoenix")
+			assert_eq(c.family, "Isawa", "Elemental Master should be Isawa")
+			assert_eq(
+				c.school_type, Enums.SchoolType.SHUGENJA,
+				"Elemental Master %s should be shugenja" % c.role_position,
+			)

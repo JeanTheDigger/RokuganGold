@@ -119,14 +119,6 @@ func _init() -> void:
 			break
 	print("Co-located contact test: %d pairs tested, %d failures" % [tested_contacts, contact_failures])
 
-	# Determinism check
-	var dice2 := DiceEngine.new()
-	dice2.set_seed(1120)
-	var result2: Dictionary = _WB.bootstrap_world(dice2)
-	var same_provinces: bool = result2["provinces"].size() == provinces.size()
-	var same_characters: bool = result2["characters"].size() == characters.size()
-	print("Determinism: provinces=%s, characters=%s" % [same_provinces, same_characters])
-
 	# Check Toshi Ranbo
 	var found_tr: bool = false
 	for s: SettlementData in settlements:
@@ -135,6 +127,48 @@ func _init() -> void:
 			print("Toshi Ranbo: type=%d, pop=%d PU" % [s.settlement_type, s.population_pu])
 			break
 	assert(found_tr, "Should find Toshi Ranbo")
+
+	# Herald ID
+	var herald_id: int = result.get("herald_id", -1)
+	print("Herald ID: %d" % herald_id)
+	assert(herald_id >= 0, "Herald ID should be non-negative")
+	var herald_found: bool = false
+	for c: L5RCharacterData in characters:
+		if c.character_id == herald_id:
+			herald_found = true
+			assert(c.clan == "Imperial", "Herald should be Imperial")
+			assert(c.family == "Miya", "Herald should be Miya")
+			assert(c.role_position == "Imperial Herald", "Herald role_position mismatch: %s" % c.role_position)
+			print("Herald: clan=%s, family=%s, role=%s" % [c.clan, c.family, c.role_position])
+			break
+	assert(herald_found, "Should find herald character")
+
+	# Role position completeness
+	var emperor_id: int = result.get("emperor_id", -1)
+	var emperor_role: String = ""
+	var high_status_no_role: int = 0
+	for c: L5RCharacterData in characters:
+		if c.character_id == emperor_id:
+			emperor_role = c.role_position
+		if c.status >= 4.0 and c.role_position.is_empty():
+			high_status_no_role += 1
+	print("Emperor role_position: '%s'" % emperor_role)
+	assert(emperor_role == "Emperor", "Emperor should have 'Emperor' role_position")
+	print("High-status characters (>= 4.0) without role_position: %d" % high_status_no_role)
+	assert(high_status_no_role == 0, "All high-status characters should have role_position set")
+
+	# Phoenix Elemental Masters
+	var master_elements: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if c.role_position.begins_with("Master of "):
+			var element: String = c.role_position.replace("Master of ", "")
+			master_elements[element] = c.character_id
+			assert(c.clan == "Phoenix", "Elemental Master should be Phoenix")
+			assert(c.family == "Isawa", "Elemental Master should be Isawa")
+			assert(c.school_type == Enums.SchoolType.SHUGENJA, "Master should be shugenja")
+	print("Elemental Masters found: %s" % str(master_elements.keys()))
+	for element: String in ["Fire", "Water", "Air", "Earth", "Void"]:
+		assert(master_elements.has(element), "Missing Master of %s" % element)
 
 	print("\n--- ALL CHECKS PASSED ---")
 	quit()

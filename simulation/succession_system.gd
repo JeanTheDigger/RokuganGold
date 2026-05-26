@@ -206,7 +206,7 @@ static func find_confirming_authority(
 		if _is_dead(c):
 			continue
 		if target_tier == Enums.LordRank.IMPERIAL:
-			if c.status >= 8.0 and (c.role_position == "emperor" or c.clan == "Imperial"):
+			if c.status >= 8.0 and (c.role_position == "Emperor" or c.clan == "Imperial"):
 				if c.status > best_status:
 					best_status = c.status
 					best_id = c.character_id

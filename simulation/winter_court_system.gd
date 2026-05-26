@@ -510,7 +510,7 @@ static func record_emperors_peace_violation(
 		var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
 		if c == null or CharacterStats.is_dead(c):
 			continue
-		if c.family == offender.family and c.role_position == "family_daimyo":
+		if c.family == offender.family and c.role_position == "Family Daimyo":
 			family_daimyo_glory_applied = HonorGlorySystem.apply_glory_change(
 				c, PEACE_VIOLATION_FAMILY_DAIMYO_GLORY
 			)

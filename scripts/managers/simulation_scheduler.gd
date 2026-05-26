@@ -170,6 +170,7 @@ func _bootstrap_fresh_world() -> void:
 	var emperor: L5RCharacterData = WorldState.characters_by_id.get(WorldState.emperor_id)
 	if emperor != null and not emperor.physical_location.is_empty():
 		WorldState.emperor_settlement_id = emperor.physical_location.to_int()
+	WorldState.miya_representative_id = result.get("herald_id", -1)
 
 	WorldState.next_character_id[0] = result.get("next_character_id", 10000)
 	WorldState.next_settlement_id[0] = result.get("next_settlement_id", 5000)
