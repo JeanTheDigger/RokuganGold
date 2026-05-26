@@ -82,6 +82,10 @@ const FAMILY_DEFAULT_SCHOOL: Dictionary = {
 	"Yoritomo": "Yoritomo Bushi",
 	"Moshi": "Moshi Shugenja",
 	"Tsuruchi": "Tsuruchi Archer",
+	"Toritaka": "Toritaka Bushi",
+	"Togashi": "Togashi Tattooed Order",
+	"Agasha": "Agasha Shugenja",
+	"Yogo": "Yogo Wardmaster",
 }
 
 const GENDER_RESTRICTED_SCHOOLS: Dictionary = {

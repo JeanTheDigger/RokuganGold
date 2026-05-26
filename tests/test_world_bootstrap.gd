@@ -11,10 +11,10 @@ func before_each() -> void:
 
 # -- Province Table Integrity --------------------------------------------------
 
-func test_province_table_has_138_entries() -> void:
+func test_province_table_has_142_entries() -> void:
 	assert_eq(
-		WorldBootstrap.PROVINCE_TABLE.size(), 138,
-		"GDD s2.3.90 specifies 138 provinces",
+		WorldBootstrap.PROVINCE_TABLE.size(), 142,
+		"GDD s2.3 specifies 142 provinces (Great+Minor+Imperial+Boar)",
 	)
 
 
@@ -112,9 +112,9 @@ func test_bootstrap_returns_military_data() -> void:
 
 # -- Province Creation ---------------------------------------------------------
 
-func test_bootstrap_creates_138_provinces() -> void:
+func test_bootstrap_creates_142_provinces() -> void:
 	var result: Dictionary = WorldBootstrap.bootstrap_world(_dice)
-	assert_eq(result["provinces"].size(), 138, "Should create 138 provinces")
+	assert_eq(result["provinces"].size(), 142, "Should create 142 provinces")
 
 
 func test_ungovernable_provinces_have_taint() -> void:

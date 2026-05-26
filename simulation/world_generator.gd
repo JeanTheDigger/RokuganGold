@@ -170,6 +170,15 @@ const SCHOOL_DATA: Dictionary = {
 		"skill_rank_2": [],
 		"affinity": Enums.Ring.EARTH, "deficiency": Enums.Ring.AIR,
 	},
+	"Togashi Tattooed Order": {
+		"clan": "Dragon", "family": "Togashi",
+		"type": Enums.SchoolType.MONK,
+		"benefit": "reflexes", "honor": 4.5,
+		"skills": ["Athletics", "Defense", "Jiujutsu", "Lore: Theology", "Meditation"],
+		"wildcards": ["High", "Bugei"],
+		"focus_rings": [Enums.Ring.VOID, Enums.Ring.FIRE],
+		"skill_rank_2": [],
+	},
 	# -- Lion --
 	"Akodo Bushi": {
 		"clan": "Lion", "family": "Akodo",
@@ -350,6 +359,35 @@ const SCHOOL_DATA: Dictionary = {
 		"wildcards": ["Skill"],
 		"focus_rings": [Enums.Ring.AIR, Enums.Ring.FIRE],
 		"skill_rank_2": ["Kyujutsu"],
+	},
+	"Toritaka Bushi": {
+		"clan": "Crab", "family": "Toritaka",
+		"type": Enums.SchoolType.BUSHI,
+		"benefit": "awareness", "honor": 2.5,
+		"skills": ["Athletics", "Defense", "Hunting", "Intimidation", "Kenjutsu", "Lore: Spirit Realms"],
+		"wildcards": ["Bugei"],
+		"focus_rings": [Enums.Ring.WATER, Enums.Ring.EARTH],
+		"skill_rank_2": [],
+	},
+	"Agasha Shugenja": {
+		"clan": "Phoenix", "family": "Agasha",
+		"type": Enums.SchoolType.SHUGENJA,
+		"benefit": "intelligence", "honor": 2.5,
+		"skills": ["Calligraphy", "Defense", "Craft: Alchemy", "Lore: Theology", "Meditation", "Spellcraft"],
+		"wildcards": ["High"],
+		"focus_rings": [Enums.Ring.FIRE, Enums.Ring.EARTH],
+		"skill_rank_2": [],
+		"affinity": Enums.Ring.FIRE, "deficiency": Enums.Ring.AIR,
+	},
+	"Yogo Wardmaster": {
+		"clan": "Scorpion", "family": "Yogo",
+		"type": Enums.SchoolType.SHUGENJA,
+		"benefit": "willpower", "honor": 1.5,
+		"skills": ["Calligraphy", "Defense", "Lore: Theology", "Meditation", "Spellcraft", "Stealth"],
+		"wildcards": ["Low"],
+		"focus_rings": [Enums.Ring.EARTH, Enums.Ring.FIRE],
+		"skill_rank_2": [],
+		"affinity": Enums.Ring.EARTH, "deficiency": Enums.Ring.AIR,
 	},
 }
 
