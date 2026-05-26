@@ -215,15 +215,14 @@ func test_adjacencies_wired_to_province_ids() -> void:
 
 # -- Physical Locations --------------------------------------------------------
 
-func test_characters_have_physical_locations() -> void:
+func test_all_characters_have_physical_locations() -> void:
 	var result: Dictionary = _WB.bootstrap_world(_dice)
 	var chars: Array = result["characters"]
-	var with_location: int = 0
+	var without_location: int = 0
 	for c: L5RCharacterData in chars:
-		if not c.physical_location.is_empty():
-			with_location += 1
-	var pct: float = float(with_location) / float(chars.size()) * 100.0
-	assert_true(pct > 90.0, "Over 90%% of characters should have locations (got %.1f%%)" % pct)
+		if c.physical_location.is_empty():
+			without_location += 1
+	assert_eq(without_location, 0, "All characters should have physical_location set")
 
 
 # -- Clan Data -----------------------------------------------------------------
@@ -570,3 +569,89 @@ func test_all_samurai_have_lord_id() -> void:
 		if c.lord_id < 0 and c.role_position.is_empty():
 			lordless += 1
 	assert_eq(lordless, 0, "All rank-filling samurai should have lord_id assigned")
+
+
+# -- Initial Koku (s22.4 Step 6) -----------------------------------------------
+
+func test_koku_includes_stipend_component() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	for c: L5RCharacterData in result["characters"]:
+		if c.role_position.is_empty() and c.lord_id >= 0:
+			assert_true(c.koku >= 2.0, "Rank-filling samurai should have koku >= 2.0 (stipend base)")
+			return
+	assert_true(false, "Should find at least one rank-filling samurai")
+
+
+func test_koku_scales_with_rank() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var r1_total: float = 0.0
+	var r1_count: int = 0
+	var r5_total: float = 0.0
+	var r5_count: int = 0
+	for c: L5RCharacterData in result["characters"]:
+		var rank: int = CharacterStats.get_insight_rank(c)
+		if rank == 1:
+			r1_total += c.koku
+			r1_count += 1
+		elif rank == 5:
+			r5_total += c.koku
+			r5_count += 1
+	if r1_count > 0 and r5_count > 0:
+		var r1_avg: float = r1_total / float(r1_count)
+		var r5_avg: float = r5_total / float(r5_count)
+		assert_true(r5_avg > r1_avg, "Rank 5 avg koku (%.1f) should exceed rank 1 (%.1f)" % [r5_avg, r1_avg])
+
+
+# -- Military Company Integration -------------------------------------------------
+
+func test_military_companies_have_source_province_id() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var mil: Dictionary = result["military_data"]
+	var companies: Array = mil["companies"]
+	var with_source: int = 0
+	for co: Dictionary in companies:
+		if co.get("source_province_id", -1) >= 0:
+			with_source += 1
+	assert_true(
+		with_source > companies.size() * 0.9,
+		"Over 90%% of companies should have source_province_id (got %d/%d)" % [with_source, companies.size()],
+	)
+
+
+func test_military_companies_have_army_id_key() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var mil: Dictionary = result["military_data"]
+	var companies: Array = mil["companies"]
+	assert_true(companies.size() > 0, "Should have companies")
+	assert_true(companies[0].has("army_id"), "Company should have 'army_id' key")
+	assert_false(companies[0].has("parent_army_id"), "Company should NOT have 'parent_army_id' key")
+
+
+# -- Known Contacts By Clan ----------------------------------------------------
+
+func test_co_located_contacts_populate_known_contacts_by_clan() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var chars: Array = result["characters"]
+	var tested: int = 0
+	for c: L5RCharacterData in chars:
+		if c.met_characters.size() > 0 and not c.known_contacts_by_clan.is_empty():
+			assert_true(
+				c.known_contacts_by_clan.size() > 0,
+				"Character %d with met_characters should have known_contacts_by_clan" % c.character_id,
+			)
+			tested += 1
+			if tested >= 5:
+				break
+	assert_true(tested > 0, "Should find characters with populated known_contacts_by_clan")
+
+
+# -- Hiruma Fallback Placement --------------------------------------------------
+
+func test_hiruma_characters_placed_in_crab_settlements() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	for c: L5RCharacterData in result["characters"]:
+		if c.family == "Hiruma":
+			assert_false(
+				c.physical_location.is_empty(),
+				"Hiruma character %d should have location (fallback to Crab settlements)" % c.character_id,
+			)

@@ -747,6 +747,46 @@ static func _assign_lord_ids(
 			prov_idx[c.clan] = idx + 1
 
 
+# -- Step 3c: Initial Koku (s22.4 Step 6) --------------------------------------
+# GDD: "Koku on hand = (1 month's stipend for their role) + 1d10 × Rank"
+
+const _STIPEND_BY_ROLE: Dictionary = {
+	"Clan Champion": 5.0,
+	"Minor Clan Champion": 5.0,
+	"Family Daimyo": 5.0,
+	"Provincial Daimyo": 3.0,
+	"Local Daimyo": 2.0,
+}
+
+
+static func _assign_initial_koku(
+	characters: Array,
+	dice: DiceEngine,
+) -> void:
+	var chars_by_id: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		chars_by_id[c.character_id] = c
+
+	for c: L5RCharacterData in characters:
+		var stipend: float = _get_monthly_stipend(c, chars_by_id)
+		var rank: int = CharacterStats.get_insight_rank(c)
+		c.koku = stipend + float(dice.rand_int_range(1, 10)) * float(rank)
+
+
+static func _get_monthly_stipend(
+	c: L5RCharacterData,
+	chars_by_id: Dictionary,
+) -> float:
+	if c.lord_id < 0:
+		return 5.0
+	var lord: L5RCharacterData = chars_by_id.get(c.lord_id)
+	if lord == null:
+		return 1.0
+	if _STIPEND_BY_ROLE.has(lord.role_position):
+		return _STIPEND_BY_ROLE[lord.role_position]
+	return 0.6
+
+
 # -- Step 4: Family Web Construction (s52, s22.6) -----------------------------
 
 static func _build_family_web(
@@ -938,10 +978,8 @@ static func _seed_co_located_contacts(characters: Array) -> void:
 			var a: L5RCharacterData = group[i]
 			for j: int in range(i + 1, group.size()):
 				var b: L5RCharacterData = group[j]
-				if not a.met_characters.has(b.character_id):
-					a.met_characters.append(b.character_id)
-				if not b.met_characters.has(a.character_id):
-					b.met_characters.append(a.character_id)
+				InformationSystem.add_contact(a, b.character_id, b.clan)
+				InformationSystem.add_contact(b, a.character_id, a.clan)
 
 
 # -- Count Helpers -------------------------------------------------------------
@@ -1073,6 +1111,7 @@ static func generate_world_population(
 	all_characters.append_array(mantis_fill)
 
 	_assign_lord_ids(all_characters, clan_champions)
+	_assign_initial_koku(all_characters, dice)
 
 	_build_family_web(all_characters, dice)
 	_generate_ancestor_records(all_characters, dice)

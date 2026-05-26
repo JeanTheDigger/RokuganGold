@@ -379,10 +379,11 @@ static func bootstrap_world(
 
 	var clans: Dictionary = _create_clan_data(provinces)
 
+	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
 	var pop_result: Dictionary = WorldPopulationGenerator.generate_world_population(
 		provinces, settlements, dice, [1],
-		CollectiveDisposition.make_starting_baselines().get("clan", {}),
-		CollectiveDisposition.make_starting_baselines().get("family", {}),
+		baselines.get("clan", {}),
+		baselines.get("family", {}),
 	)
 
 	var characters: Array = pop_result.get("characters", [])
@@ -391,7 +392,7 @@ static func bootstrap_world(
 	WorldPopulationGenerator._seed_co_located_contacts(characters)
 
 	var military_data: Dictionary = _create_initial_military(
-		characters, clans, provinces, dice,
+		characters, clans, provinces, dice, settlements,
 	)
 
 	return {
@@ -610,11 +611,19 @@ static func _assign_physical_locations(
 		if prov_ids.is_empty():
 			continue
 
-		var target_pid: int = prov_ids[0]
-		var target_settlements: Array = settlement_by_province.get(target_pid, [])
+		var target_settlements: Array = []
+		for try_pid: Variant in prov_ids:
+			target_settlements = settlement_by_province.get(try_pid, [])
+			if not target_settlements.is_empty():
+				break
+
 		if target_settlements.is_empty():
-			for alt_pid: Variant in prov_ids:
-				target_settlements = settlement_by_province.get(alt_pid, [])
+			for k: String in clan_family_to_province:
+				if k.begins_with(c.clan + "_"):
+					for fallback_pid: Variant in clan_family_to_province[k]:
+						target_settlements = settlement_by_province.get(fallback_pid, [])
+						if not target_settlements.is_empty():
+							break
 				if not target_settlements.is_empty():
 					break
 
@@ -627,7 +636,12 @@ static func _create_initial_military(
 	clans: Dictionary,
 	_provinces: Dictionary,
 	_dice: DiceEngine,
+	settlements: Array = [],
 ) -> Dictionary:
+	var settlement_to_province: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlement_to_province[str(s.settlement_id)] = s.province_id
+
 	var companies: Array[Dictionary] = []
 	var next_company_id: int = 1
 
@@ -644,22 +658,24 @@ static func _create_initial_military(
 
 		for c: L5RCharacterData in mil_ranked:
 			if c.military_rank >= 2:
+				var src_province: int = settlement_to_province.get(c.physical_location, -1)
 				var company: Dictionary = {
 					"company_id": next_company_id,
 					"clan_name": clan_name,
 					"commander_id": c.character_id,
 					"lord_id": c.lord_id,
-					"current_health": 100.0,
-					"current_morale": 80.0,
+					"current_health": 100,
+					"current_morale": 80,
 					"arms_deprivation_tick": 0,
 					"unit_type": Enums.CompanyUnitType.ASHIGARU_SPEARMEN,
 					"training_level": 2,
 					"training_points": 0,
 					"destroyed": false,
 					"levy_raised_season": 0,
+					"source_province_id": src_province,
 					"parent_legion_id": -1,
 					"parent_section_id": -1,
-					"parent_army_id": -1,
+					"army_id": -1,
 				}
 				c.commanded_unit_id = next_company_id
 				companies.append(company)

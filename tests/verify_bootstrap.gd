@@ -68,6 +68,7 @@ func _init() -> void:
 		with_location, characters.size(),
 		float(with_location) / float(characters.size()) * 100.0
 	])
+	assert(without_location == 0, "All characters should have physical_location")
 
 	# Settlement worship locations
 	var setts_with_worship: int = 0
