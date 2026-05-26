@@ -1226,3 +1226,43 @@ func test_category_selection_by_best_skill() -> void:
 	assert_eq(NPCDecisionEngine._pick_craft_category(c), Enums.CraftingCategory.WEAPONS)
 	c.skills = {"Craft: Armorsmithing": 5}
 	assert_eq(NPCDecisionEngine._pick_craft_category(c), Enums.CraftingCategory.ARMOR)
+
+
+func test_kaiu_steel_matches_weapons() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.skills = {"Craft: Weaponsmithing": 5}
+	var mat: Dictionary = ArtisanSystem.select_best_material_for_npc(
+		c, Enums.SettlementType.CITY, Enums.CraftingCategory.WEAPONS)
+	assert_eq(mat.get("name", ""), "Kaiu Steel")
+
+
+func test_kaiu_steel_matches_armor() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.skills = {"Craft: Armorsmithing": 5}
+	var mat: Dictionary = ArtisanSystem.select_best_material_for_npc(
+		c, Enums.SettlementType.CITY, Enums.CraftingCategory.ARMOR)
+	assert_eq(mat.get("name", ""), "Kaiu Steel")
+
+
+func test_kaiu_steel_no_match_artwork() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.skills = {"Artisan: Painting": 5}
+	var mat: Dictionary = ArtisanSystem.select_best_material_for_npc(
+		c, Enums.SettlementType.CITY, Enums.CraftingCategory.ARTWORK)
+	assert_ne(mat.get("name", ""), "Kaiu Steel")
+
+
+func test_shadow_silk_matches_armor() -> void:
+	var c := _make_character("Scorpion", "Shosuro")
+	c.skills = {"Craft: Armorsmithing": 3}
+	var mat: Dictionary = ArtisanSystem.select_best_material_for_npc(
+		c, Enums.SettlementType.CITY, Enums.CraftingCategory.ARMOR)
+	assert_eq(mat.get("name", ""), "Shadow-silk")
+
+
+func test_matsu_leather_no_match_weapons() -> void:
+	var c := _make_character("Lion", "Matsu")
+	c.skills = {"Craft: Weaponsmithing": 5}
+	var mat: Dictionary = ArtisanSystem.select_best_material_for_npc(
+		c, Enums.SettlementType.CITY, Enums.CraftingCategory.WEAPONS)
+	assert_ne(mat.get("name", ""), "Matsu Leather")

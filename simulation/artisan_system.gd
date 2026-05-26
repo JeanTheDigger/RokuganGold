@@ -70,14 +70,14 @@ const MATERIAL_AVAILABILITY: Dictionary = {
 # -- Clan-specific materials (s49) --------------------------------------------
 
 const CLAN_MATERIALS: Dictionary = {
-	"Crab": {"name": "Kaiu Steel", "tier": Enums.MaterialTier.RARE, "category": Enums.CraftingCategory.WEAPONS},
-	"Crane": {"name": "Kakita Paper", "tier": Enums.MaterialTier.UNCOMMON, "category": Enums.CraftingCategory.ARTWORK},
-	"Dragon": {"name": "Dragon Jade Dust", "tier": Enums.MaterialTier.RARE, "category": Enums.CraftingCategory.EQUIPMENT},
-	"Lion": {"name": "Matsu Leather", "tier": Enums.MaterialTier.UNCOMMON, "category": Enums.CraftingCategory.ARMOR},
-	"Phoenix": {"name": "Phoenix-blessed Paper", "tier": Enums.MaterialTier.RARE, "category": Enums.CraftingCategory.ARTWORK},
-	"Scorpion": {"name": "Shadow-silk", "tier": Enums.MaterialTier.RARE, "category": Enums.CraftingCategory.EQUIPMENT},
-	"Unicorn": {"name": "Gaijin Dyes", "tier": Enums.MaterialTier.UNCOMMON, "category": Enums.CraftingCategory.ARTWORK},
-	"Mantis": {"name": "Deep-sea Materials", "tier": Enums.MaterialTier.RARE, "category": Enums.CraftingCategory.EQUIPMENT},
+	"Crab": {"name": "Kaiu Steel", "tier": Enums.MaterialTier.RARE, "categories": [Enums.CraftingCategory.WEAPONS, Enums.CraftingCategory.ARMOR]},
+	"Crane": {"name": "Kakita Paper", "tier": Enums.MaterialTier.UNCOMMON, "categories": [Enums.CraftingCategory.ARTWORK]},
+	"Dragon": {"name": "Dragon Jade Dust", "tier": Enums.MaterialTier.RARE, "categories": [Enums.CraftingCategory.EQUIPMENT]},
+	"Lion": {"name": "Matsu Leather", "tier": Enums.MaterialTier.UNCOMMON, "categories": [Enums.CraftingCategory.ARMOR]},
+	"Phoenix": {"name": "Phoenix-blessed Paper", "tier": Enums.MaterialTier.RARE, "categories": [Enums.CraftingCategory.ARTWORK]},
+	"Scorpion": {"name": "Shadow-silk", "tier": Enums.MaterialTier.RARE, "categories": [Enums.CraftingCategory.EQUIPMENT, Enums.CraftingCategory.ARMOR]},
+	"Unicorn": {"name": "Gaijin Dyes", "tier": Enums.MaterialTier.UNCOMMON, "categories": [Enums.CraftingCategory.ARTWORK]},
+	"Mantis": {"name": "Deep-sea Materials", "tier": Enums.MaterialTier.RARE, "categories": [Enums.CraftingCategory.EQUIPMENT]},
 }
 
 
@@ -454,8 +454,8 @@ static func select_best_material_for_npc(
 
 	if not clan_mat.is_empty():
 		var clan_tier: Enums.MaterialTier = clan_mat.get("tier", Enums.MaterialTier.COMMON)
-		var clan_cat: Enums.CraftingCategory = clan_mat.get("category", Enums.CraftingCategory.EQUIPMENT)
-		if clan_tier in available and (clan_cat == category or category == Enums.CraftingCategory.EQUIPMENT):
+		var clan_cats: Array = clan_mat.get("categories", [])
+		if clan_tier in available and (category in clan_cats or category == Enums.CraftingCategory.EQUIPMENT):
 			return {
 				"tier": clan_tier,
 				"name": clan_mat.get("name", ""),
