@@ -2796,7 +2796,17 @@ costs, or forward-wiring. Do not treat as bugs.
   sentinel), injected from SettlementData via `_inject_settlement_type()`
   in DayOrchestrator — material availability now uses actual settlement
   type instead of inference from lord rank / context flag. Falls back to
-  `_infer_settlement_type()` when unavailable. 113 tests.
+  `_infer_settlement_type()` when unavailable. Deep NPC craft audit:
+  (4) Exceptional weapon gate now requires skill_name ==
+  "Craft: Weaponsmithing" — Bowyer skill no longer triggers exceptional
+  weapon path. Redundant `skill_rank >= 5` check removed. (5) Smith
+  school (Kaiu Engineer, Tsi Smith) category selection refactored from
+  hardcoded WEAPONS to `_pick_craft_category()` using best craft skill
+  — Kaiu with higher Armorsmithing rank now correctly selects ARMOR
+  category. (6) ENGINEERING category is unreachable through NPC
+  selection (Engineering skill doesn't match "Artisan: " or "Craft: "
+  prefix in get_best_craft_skill) — documented, not a priority fix.
+  117 tests.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
