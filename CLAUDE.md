@@ -2417,6 +2417,30 @@ costs, or forward-wiring. Do not treat as bugs.
   dict. Now appends seasonal results to the daily `orphan_results` and
   `hierarchy_cascade_results` arrays.
 
+### Known Architectural Gaps — Deferred
+- **military_data Dictionary permanently empty.** `WorldState.military_data`
+  is declared as `{}` and passed to `advance_day()` but never populated by
+  any system. The actual military data lives in `military_companies` (array
+  of Dictionaries), `active_armies`, `active_sieges`, etc. ActionExecutor
+  reads `military_data` for validation but silently allows all military
+  orders when it's empty (fallback behavior). Not causing crashes because
+  military order validation has other guards (commanded_unit_id checks,
+  lord carve-out). Proper fix would either: (a) populate military_data
+  from military_companies at start of advance_day(), or (b) refactor
+  military validation to read from military_companies directly. Low
+  priority — military orders still function correctly via other guards.
+- **AT_DOJO context flag never assigned.** No DOJO settlement type exists
+  in SettlementData. Dojos exist only as ZoneSubtype.DOJO (sub-settlement
+  level), and the zone system data is not yet available. Monk objective
+  decomposition routes through AT_DOJO but characters never receive this
+  context, so dojo-specific action paths are unreachable. Blocked on zone
+  system implementation.
+- **ON_CAMPAIGN, UNDER_SIEGE, IN_EXILE context flags never assigned.**
+  These require the sub-tile army movement system (s11.7a) and map data
+  that don't exist yet. Characters in these states fall through to
+  AT_OWN_HOLDINGS or VISITING context. Blocked on world map / adjacency
+  data.
+
 ### Known Performance Concerns — Deferred
 - **Unbounded array growth in advance_day().** `crime_records`,
   `pending_letters`, `active_secrets`, and `action_log` grow
