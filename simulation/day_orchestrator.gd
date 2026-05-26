@@ -19301,6 +19301,7 @@ static func _process_craft_wip_writebacks(
 			)
 			item.creation_ic_day = ic_day
 			item.creation_province_id = character_province_map.get(char_id, -1)
+			item.is_exceptional_weapon = effects.get("is_exceptional", false)
 			ArtisanSystem.invest_ap(item, 1)
 			crafted_items.append(item)
 			continue
