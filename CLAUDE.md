@@ -2776,7 +2776,19 @@ costs, or forward-wiring. Do not treat as bugs.
   immediately in executor (existing path). `_inject_wip_context()` scans
   crafted_items for incomplete items and sets per-character world_state
   key. `_process_craft_wip_writebacks()` handles both `creates_wip` and
-  `continues_wip` effect paths. 106 tests.
+  `continues_wip` effect paths. Koku cost deduction: `cost_in_koku()`
+  converts denomination to koku (1 koku = 5 bu = 50 zeni), added to
+  effects dict for EffectApplicator._apply_koku_cost(). Exceptional
+  items tripled via EXCEPTIONAL_COST_MULTIPLIER. continues_wip path
+  intentionally omits koku_cost (materials paid upfront). WIP
+  abandonment: dead crafters' WIP marked complete in
+  `_cleanup_dead_character_references()` (crafted_items parameter).
+  Traveling crafters' WIP marked complete in `_inject_wip_context()`
+  (characters_by_id parameter + TravelSystem.is_traveling check).
+  WorldStateSaver fix: DIR_CRAFTED_ITEMS, DIR_SPIRITUAL_EVENTS,
+  DIR_BLOODSPEAKER_CELLS added to `_ensure_dirs()` — were declared as
+  constants and used in save/load but never created on fresh directories.
+  107 tests.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
