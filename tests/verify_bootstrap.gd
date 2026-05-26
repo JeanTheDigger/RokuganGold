@@ -235,5 +235,22 @@ func _init() -> void:
 	assert(total_disp < 1000000, "Disposition entries should be co-located only, not all-pairs")
 	assert(total_disp > 100000, "Should have substantial co-located dispositions")
 
+	# Bloodspeaker cells
+	var bs_cells: Array = result.get("bloodspeaker_cells", [])
+	var bs_ins: Array = result.get("bloodspeaker_insurgencies", [])
+	var dormant_count: int = 0
+	var active_count: int = 0
+	for cell: BloodspeakerCellData in bs_cells:
+		if cell.state == Enums.BloodspeakerCellState.DORMANT:
+			dormant_count += 1
+		elif cell.state == Enums.BloodspeakerCellState.ACTIVE:
+			active_count += 1
+	print("Bloodspeaker cells: %d total (%d dormant, %d active)" % [bs_cells.size(), dormant_count, active_count])
+	print("Bloodspeaker insurgencies: %d" % bs_ins.size())
+	assert(bs_cells.size() >= 25, "Should have at least 25 initial cells")
+	assert(bs_cells.size() <= 35, "Should have at most 35 initial cells")
+	assert(dormant_count > active_count, "Majority of cells should be dormant")
+	assert(bs_ins.size() == active_count, "Each active cell should have an insurgency")
+
 	print("\n--- ALL CHECKS PASSED ---")
 	quit()

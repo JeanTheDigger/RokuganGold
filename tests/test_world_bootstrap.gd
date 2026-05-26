@@ -655,3 +655,35 @@ func test_hiruma_characters_placed_in_crab_settlements() -> void:
 				c.physical_location.is_empty(),
 				"Hiruma character %d should have location (fallback to Crab settlements)" % c.character_id,
 			)
+
+
+# -- Bloodspeaker Cells -------------------------------------------------------
+
+func test_bloodspeaker_cells_generated_at_bootstrap() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var cells: Array = result.get("bloodspeaker_cells", [])
+	assert_gte(cells.size(), 25, "Should have at least 25 initial cells")
+	assert_lte(cells.size(), 35, "Should have at most 35 initial cells")
+
+
+func test_bloodspeaker_cells_mostly_dormant() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var cells: Array = result.get("bloodspeaker_cells", [])
+	var dormant: int = 0
+	for cell: BloodspeakerCellData in cells:
+		if cell.state == Enums.BloodspeakerCellState.DORMANT:
+			dormant += 1
+	var fraction: float = float(dormant) / float(cells.size())
+	assert_gte(fraction, 0.70, "At least 70%% of initial cells should be dormant")
+
+
+func test_bloodspeaker_active_cells_have_insurgencies() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var cells: Array = result.get("bloodspeaker_cells", [])
+	var insurgencies: Array = result.get("bloodspeaker_insurgencies", [])
+	var active: int = 0
+	for cell: BloodspeakerCellData in cells:
+		if cell.state == Enums.BloodspeakerCellState.ACTIVE:
+			active += 1
+			assert_gt(cell.insurgency_id, 0, "Active cell should have insurgency_id")
+	assert_eq(insurgencies.size(), active, "Each active cell should have an insurgency")

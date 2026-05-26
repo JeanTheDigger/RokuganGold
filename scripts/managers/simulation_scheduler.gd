@@ -181,11 +181,23 @@ func _bootstrap_fresh_world() -> void:
 		if cd != null:
 			cd.champion_id = clan_champions[clan_name]
 
+	var bs_cells: Array = result.get("bloodspeaker_cells", [])
+	WorldState.bloodspeaker_cells.clear()
+	for cell: BloodspeakerCellData in bs_cells:
+		WorldState.bloodspeaker_cells.append(cell)
+	WorldState.next_cell_id[0] = result.get("next_cell_id", 1)
+
+	var bs_insurgencies: Array = result.get("bloodspeaker_insurgencies", [])
+	for ins: InsurgencyData in bs_insurgencies:
+		WorldState.insurgencies.append(ins)
+	WorldState.next_insurgency_id[0] = result.get("next_insurgency_id", 1)
+
 	_save_world_state()
-	print("[SimulationScheduler] World bootstrapped: %d characters, %d provinces, %d settlements." % [
+	print("[SimulationScheduler] World bootstrapped: %d characters, %d provinces, %d settlements, %d cells." % [
 		WorldState.characters.size(),
 		WorldState.provinces.size(),
 		WorldState.settlements.size(),
+		WorldState.bloodspeaker_cells.size(),
 	])
 
 
