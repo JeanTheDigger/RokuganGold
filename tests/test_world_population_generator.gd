@@ -638,21 +638,25 @@ func test_generate_world_population_unique_ids():
 		ids[c.character_id] = true
 
 
-func test_generate_world_population_with_dispositions():
+func test_seed_co_located_contacts_populates_dispositions():
 	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
 	var world: Dictionary = _make_minimal_world()
 	var next_id: Array = [1]
 	var result: Dictionary = WorldPopulationGenerator.generate_world_population(
 		world["provinces"], world["settlements"], dice, next_id,
-		baselines["clan"], baselines["family"],
 	)
 	var chars: Array = result["characters"]
+	for c: L5RCharacterData in chars:
+		c.physical_location = "100"
+	WorldPopulationGenerator._seed_co_located_contacts(
+		chars, baselines["clan"], baselines["family"],
+	)
 	var found_disp: bool = false
 	for c: L5RCharacterData in chars:
 		if not c.disposition_values.is_empty():
 			found_disp = true
 			break
-	assert_true(found_disp, "At least some characters should have disposition values set")
+	assert_true(found_disp, "Co-located contacts should seed dispositions")
 
 
 # -- Rank Distribution --------------------------------------------------------

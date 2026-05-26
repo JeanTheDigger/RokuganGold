@@ -941,27 +941,6 @@ static func _generate_ancestor_records(
 			c.grandparent_records.append(record)
 
 
-# -- Step 5: Starting Dispositions (s12.2b) ------------------------------------
-
-static func _apply_starting_dispositions(
-	characters: Array,
-	clan_baselines: Dictionary,
-	family_baselines: Dictionary,
-) -> void:
-	for i: int in range(characters.size()):
-		var a: L5RCharacterData = characters[i]
-		for j: int in range(i + 1, characters.size()):
-			var b: L5RCharacterData = characters[j]
-			if a.clan == b.clan and a.family == b.family:
-				continue
-			CollectiveDisposition.seed_first_meeting(
-				a, b, clan_baselines, family_baselines,
-			)
-			CollectiveDisposition.seed_first_meeting(
-				b, a, clan_baselines, family_baselines,
-			)
-
-
 static func _seed_co_located_contacts(
 	characters: Array,
 	clan_baselines: Dictionary = {},
@@ -1011,8 +990,6 @@ static func generate_world_population(
 	settlements: Array,
 	dice: DiceEngine,
 	next_id: Array,
-	clan_baselines: Dictionary = {},
-	family_baselines: Dictionary = {},
 ) -> Dictionary:
 	var all_characters: Array = []
 

@@ -382,8 +382,6 @@ static func bootstrap_world(
 	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
 	var pop_result: Dictionary = WorldPopulationGenerator.generate_world_population(
 		provinces, settlements, dice, [1],
-		baselines.get("clan", {}),
-		baselines.get("family", {}),
 	)
 
 	var characters: Array = pop_result.get("characters", [])
