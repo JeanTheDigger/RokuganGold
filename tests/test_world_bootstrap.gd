@@ -239,6 +239,9 @@ func test_minor_clans_have_clan_data() -> void:
 	var result: Dictionary = _WB.bootstrap_world(_dice)
 	assert_true(result["clans"].has("Mantis"), "Should have Mantis clan data")
 	assert_true(result["clans"].has("Fox"), "Should have Fox clan data")
+	assert_true(result["clans"].has("Bat"), "Should have Bat clan data")
+	assert_true(result["clans"].has("Oriole"), "Should have Oriole clan data")
+	assert_true(result["clans"].has("Tortoise"), "Should have Tortoise clan data")
 
 
 # -- Military Company Fields ---------------------------------------------------
@@ -393,3 +396,67 @@ func test_bootstrap_is_deterministic() -> void:
 		result2["characters"].size(),
 		"Same seed should produce same number of characters",
 	)
+
+
+# -- Minor Clan Data Gaps (Bat, Oriole, Tortoise) ----------------------------
+
+func test_bat_clan_characters_created() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var bat_count: int = 0
+	for c: L5RCharacterData in result["characters"]:
+		if c.clan == "Bat":
+			bat_count += 1
+	assert_true(bat_count > 0, "Should create Bat clan characters")
+
+
+func test_oriole_clan_characters_created() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var oriole_count: int = 0
+	for c: L5RCharacterData in result["characters"]:
+		if c.clan == "Oriole":
+			oriole_count += 1
+	assert_true(oriole_count > 0, "Should create Oriole clan characters")
+
+
+func test_bat_characters_have_physical_locations() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	for c: L5RCharacterData in result["characters"]:
+		if c.clan == "Bat":
+			assert_false(
+				c.physical_location.is_empty(),
+				"Bat character %d should have a physical location" % c.character_id,
+			)
+			return
+	assert_true(false, "Should find at least one Bat character")
+
+
+func test_oriole_characters_have_physical_locations() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	for c: L5RCharacterData in result["characters"]:
+		if c.clan == "Oriole":
+			assert_false(
+				c.physical_location.is_empty(),
+				"Oriole character %d should have a physical location" % c.character_id,
+			)
+			return
+	assert_true(false, "Should find at least one Oriole character")
+
+
+func test_tortoise_has_adjacencies() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	for pid: Variant in result["provinces"]:
+		var prov: ProvinceData = result["provinces"][pid]
+		if prov.province_name == "Tortoise Clan Lands":
+			assert_true(
+				prov.adjacent_province_ids.size() > 0,
+				"Tortoise Clan Lands should have adjacencies",
+			)
+			return
+	assert_true(false, "Should find Tortoise Clan Lands province")
+
+
+func test_extinct_clans_not_in_population() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	for c: L5RCharacterData in result["characters"]:
+		assert_ne(c.clan, "Boar", "Boar clan is extinct — should not create characters")
+		assert_ne(c.clan, "Snake", "Snake clan is extinct — should not create characters")

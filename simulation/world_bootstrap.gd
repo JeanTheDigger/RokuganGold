@@ -548,8 +548,8 @@ static func _create_clan_data(provinces: Dictionary) -> Dictionary:
 		clans[clan_name] = cd
 
 	for minor: String in ["Mantis", "Fox", "Wasp", "Centipede", "Badger",
-			"Boar", "Dragonfly", "Hare", "Monkey", "Ox", "Sparrow", "Tortoise",
-			"Imperial"]:
+			"Bat", "Boar", "Dragonfly", "Hare", "Monkey", "Oriole", "Ox",
+			"Sparrow", "Tortoise", "Imperial"]:
 		var cd := ClanData.new()
 		cd.clan_name = minor
 		cd.iron_stockpile = 10.0
@@ -558,8 +558,7 @@ static func _create_clan_data(provinces: Dictionary) -> Dictionary:
 			var prov: ProvinceData = provinces[pid]
 			if prov.clan == minor:
 				cd.province_ids.append(pid)
-		if not cd.province_ids.is_empty():
-			clans[minor] = cd
+		clans[minor] = cd
 
 	return clans
 
