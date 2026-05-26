@@ -700,6 +700,53 @@ static func _generate_rank_filling(
 	return chars
 
 
+# -- Step 3b: Lord ID Assignment ------------------------------------------------
+
+static func _assign_lord_ids(
+	characters: Array,
+	clan_champions: Dictionary,
+) -> void:
+	var family_daimyos: Dictionary = {}
+	var provincial_daimyos_by_clan: Dictionary = {}
+
+	for c: L5RCharacterData in characters:
+		if c.role_position == "Family Daimyo":
+			var key: String = "%s_%s" % [c.clan, c.family]
+			family_daimyos[key] = c.character_id
+		elif c.role_position == "Provincial Daimyo":
+			if not provincial_daimyos_by_clan.has(c.clan):
+				provincial_daimyos_by_clan[c.clan] = []
+			provincial_daimyos_by_clan[c.clan].append(c.character_id)
+
+	var prov_idx: Dictionary = {}
+
+	for c: L5RCharacterData in characters:
+		if c.lord_id >= 0:
+			continue
+		if not c.role_position.is_empty():
+			continue
+
+		var fd_key: String = "%s_%s" % [c.clan, c.family]
+		var fd_id: int = family_daimyos.get(fd_key, -1)
+		if fd_id < 0:
+			for k: String in family_daimyos:
+				if k.begins_with(c.clan + "_"):
+					fd_id = family_daimyos[k]
+					break
+		if fd_id < 0:
+			fd_id = clan_champions.get(c.clan, -1)
+		if fd_id < 0:
+			continue
+
+		var prov_daimyos: Array = provincial_daimyos_by_clan.get(c.clan, [])
+		if prov_daimyos.is_empty():
+			c.lord_id = fd_id
+		else:
+			var idx: int = prov_idx.get(c.clan, 0)
+			c.lord_id = prov_daimyos[idx % prov_daimyos.size()]
+			prov_idx[c.clan] = idx + 1
+
+
 # -- Step 4: Family Web Construction (s52, s22.6) -----------------------------
 
 static func _build_family_web(
@@ -950,6 +997,20 @@ static func generate_world_population(
 		)
 		all_characters.append_array(mil_chars)
 
+	var mantis_leadership: Array = _generate_clan_leadership("Mantis", next_id, dice)
+	all_characters.append_array(mantis_leadership)
+	for c: L5RCharacterData in mantis_leadership:
+		if c.status >= 8.0:
+			clan_champions["Mantis"] = c.character_id
+		if c.role_position == "Rikugunshokan":
+			clan_rikugunshokans["Mantis"] = c.character_id
+
+	var mantis_rik_id: int = clan_rikugunshokans.get("Mantis", -1)
+	var mantis_mil_chars: Array = _generate_military_commanders(
+		"Mantis", mantis_rik_id, next_id, dice,
+	)
+	all_characters.append_array(mantis_mil_chars)
+
 	var minor_chars: Array = _generate_minor_clan_characters(
 		next_id, dice,
 	)
@@ -1010,6 +1071,8 @@ static func generate_world_population(
 		"Mantis", mantis_counts, next_id, dice,
 	)
 	all_characters.append_array(mantis_fill)
+
+	_assign_lord_ids(all_characters, clan_champions)
 
 	_build_family_web(all_characters, dice)
 	_generate_ancestor_records(all_characters, dice)

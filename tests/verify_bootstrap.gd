@@ -170,5 +170,21 @@ func _init() -> void:
 	for element: String in ["Fire", "Water", "Air", "Earth", "Void"]:
 		assert(master_elements.has(element), "Missing Master of %s" % element)
 
+	# Lord ID assignment
+	var lordless_count: int = 0
+	var lordless_by_clan: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if c.lord_id < 0 and c.role_position.is_empty():
+			lordless_count += 1
+			lordless_by_clan[c.clan] = lordless_by_clan.get(c.clan, 0) + 1
+	print("Lordless samurai (no role, lord_id=-1): %d" % lordless_count)
+	if not lordless_by_clan.is_empty():
+		print("  By clan: %s" % str(lordless_by_clan))
+	assert(lordless_count == 0, "All rank-filling samurai should have lord_id assigned")
+
+	# Mantis has full leadership
+	var mantis_champ: bool = result.get("clan_champions", {}).has("Mantis")
+	assert(mantis_champ, "Mantis should have a clan champion")
+
 	print("\n--- ALL CHECKS PASSED ---")
 	quit()

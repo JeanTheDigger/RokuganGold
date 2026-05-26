@@ -545,3 +545,28 @@ func test_elemental_masters_are_phoenix_isawa_shugenja() -> void:
 				c.school_type, Enums.SchoolType.SHUGENJA,
 				"Elemental Master %s should be shugenja" % c.role_position,
 			)
+
+
+func test_mantis_has_clan_champion() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var champs: Dictionary = result.get("clan_champions", {})
+	assert_true(champs.has("Mantis"), "Mantis should have a clan champion")
+	assert_gt(champs["Mantis"], 0, "Mantis champion ID should be positive")
+
+
+func test_mantis_has_family_daimyos() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var fd_count: int = 0
+	for c: L5RCharacterData in result["characters"]:
+		if c.clan == "Mantis" and c.role_position == "Family Daimyo":
+			fd_count += 1
+	assert_eq(fd_count, 3, "Mantis should have 3 Family Daimyos (Yoritomo, Moshi, Tsuruchi)")
+
+
+func test_all_samurai_have_lord_id() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var lordless: int = 0
+	for c: L5RCharacterData in result["characters"]:
+		if c.lord_id < 0 and c.role_position.is_empty():
+			lordless += 1
+	assert_eq(lordless, 0, "All rank-filling samurai should have lord_id assigned")
