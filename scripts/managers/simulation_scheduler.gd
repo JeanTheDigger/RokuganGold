@@ -192,6 +192,9 @@ func _bootstrap_fresh_world() -> void:
 		WorldState.insurgencies.append(ins)
 	WorldState.next_insurgency_id[0] = result.get("next_insurgency_id", 1)
 
+	var togashi_ws: Dictionary = _build_togashi_bootstrap_state(result)
+	TogashiOversight.initialize_from_world_state(WorldState.togashi_state, togashi_ws)
+
 	_save_world_state()
 	print("[SimulationScheduler] World bootstrapped: %d characters, %d provinces, %d settlements, %d cells." % [
 		WorldState.characters.size(),
@@ -199,6 +202,34 @@ func _bootstrap_fresh_world() -> void:
 		WorldState.settlements.size(),
 		WorldState.bloodspeaker_cells.size(),
 	])
+
+
+func _build_togashi_bootstrap_state(result: Dictionary) -> Dictionary:
+	var companies: Array = result.get("military_data", {}).get("companies", [])
+	var clan_strengths: Dictionary = {}
+	for comp: Dictionary in companies:
+		var clan: String = comp.get("clan", "")
+		if not clan.is_empty():
+			clan_strengths[clan] = clan_strengths.get(clan, 0.0) + float(comp.get("current_health", 100))
+	var provinces: Dictionary = result.get("provinces", {})
+	var max_ptl: float = 0.0
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid]
+		if prov.family != "Hiruma" and prov.province_taint_level > max_ptl:
+			max_ptl = prov.province_taint_level
+	return {
+		"clan_strengths": clan_strengths,
+		"active_inter_clan_wars": 0,
+		"emperor_vacant": result.get("emperor_id", -1) < 0,
+		"provinces_in_rebellion": 0,
+		"failing_worship_provinces": 0,
+		"realm_overlaps_empire_wide": 0,
+		"realm_overlap_in_dragon_territory": false,
+		"max_non_shadowlands_ptl": max_ptl,
+		"wall_breach_active": false,
+		"shadowlands_incursion_tier": 0,
+		"crab_military_readiness": 1.0,
+	}
 
 
 # -- DST / Calendar Helpers ----------------------------------------------------
