@@ -115,6 +115,7 @@ func load_world(ws: Node) -> bool:
 	ws.trade_routes.assign(_load_resource_array(base + DIR_TRADE_ROUTES))
 
 	_load_json_state(ws, base)
+	_reconcile_id_counters(ws)
 
 	return true
 
@@ -167,6 +168,8 @@ func _load_resource_array(dir_path: String) -> Array:
 			var res: Resource = ResourceLoader.load(dir_path + fname)
 			if res != null:
 				result.append(res)
+			else:
+				push_warning("WorldStateSaver: Failed to load resource: %s%s" % [dir_path, fname])
 		fname = dir.get_next()
 	dir.list_dir_end()
 	return result
@@ -544,6 +547,43 @@ func _load_json_state(ws: Node, base: String) -> void:
 func _restore_counter(counter_arr: Array[int], state: Dictionary, key: String) -> void:
 	if state.has(key):
 		counter_arr[0] = int(state[key])
+
+
+func _reconcile_id_counters(ws: Node) -> void:
+	_ensure_counter_above(ws.next_character_id, ws.characters, "character_id")
+	_ensure_counter_above(ws.next_topic_id, ws.active_topics, "topic_id")
+	_ensure_counter_above(ws.next_secret_id, ws.active_secrets, "secret_id")
+	_ensure_counter_above(ws.next_tattoo_id, ws.tattoos, "tattoo_id")
+	_ensure_counter_above(ws.next_cell_id, ws.bloodspeaker_cells, "cell_id")
+	_ensure_counter_above(ws.next_settlement_id, ws.settlements, "settlement_id")
+	_ensure_counter_above(ws.next_construction_id, ws.constructions, "construction_id")
+	_ensure_counter_above(ws.next_court_id, ws.active_courts, "court_id")
+	_ensure_counter_above(ws.next_edict_id, ws.active_edicts, "edict_id")
+	_ensure_counter_above(ws.next_war_id, ws.active_wars, "war_id")
+	_ensure_counter_above(ws.next_succession_id, ws.active_successions, "succession_id")
+	_ensure_counter_above(ws.next_commitment_id, ws.commitments, "commitment_id")
+	_ensure_counter_above(ws.next_hunt_id, ws.active_hunts, "hunt_id")
+	_ensure_counter_above(ws.next_case_id, ws.crime_records, "case_id")
+	_ensure_counter_above(ws.next_insurgency_id, ws.insurgencies, "insurgency_id")
+	_ensure_counter_above(ws.next_company_id, ws.military_companies, "company_id")
+
+
+func _ensure_counter_above(counter: Array[int], collection: Variant, id_field: String) -> void:
+	var max_id: int = counter[0] - 1
+	if collection is Array:
+		for item: Variant in collection:
+			var item_id: int = -1
+			if item is Resource and id_field in item:
+				item_id = int(item.get(id_field))
+			elif item is Dictionary:
+				item_id = int(item.get(id_field, -1))
+			if item_id >= max_id:
+				max_id = item_id
+	if max_id >= counter[0]:
+		push_warning("WorldStateSaver: Counter '%s' was %d but found ID %d — advancing to %d." % [
+			id_field, counter[0], max_id, max_id + 1,
+		])
+		counter[0] = max_id + 1
 
 
 func _purge_directory(dir_path: String) -> void:

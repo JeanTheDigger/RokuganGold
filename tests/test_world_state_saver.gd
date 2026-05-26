@@ -496,3 +496,40 @@ func test_settlements_round_trip() -> void:
 	assert_eq(loaded.rice_stockpile, 120.5)
 
 	ws2.free()
+
+
+# -- ID Counter Reconciliation -------------------------------------------------
+
+func test_reconcile_advances_counter_when_item_id_exceeds_counter() -> void:
+	var t := TopicData.new()
+	t.topic_id = 500
+	t.slug = "test_topic"
+	t.title = "Test"
+	t.tier = TopicData.Tier.TIER_4
+	t.category = TopicData.Category.PERSONAL
+	_ws.active_topics = [t]
+	_ws.next_topic_id[0] = 100
+
+	_saver.save_world(_ws)
+
+	var ws2 := _make_world_state()
+	_saver.load_world(ws2)
+
+	assert_true(
+		ws2.next_topic_id[0] > 500,
+		"Counter should advance past highest loaded ID (got %d)" % ws2.next_topic_id[0],
+	)
+	ws2.free()
+
+
+func test_reconcile_does_not_regress_valid_counter() -> void:
+	var c := _make_character(5, "Test")
+	_ws.characters = [c]
+	_ws.next_character_id[0] = 100
+
+	_saver.save_world(_ws)
+
+	var ws2 := _make_world_state()
+	_saver.load_world(ws2)
+
+	assert_eq(ws2.next_character_id[0], 100, "Counter should not regress when already valid")
