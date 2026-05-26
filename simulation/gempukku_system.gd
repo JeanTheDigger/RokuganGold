@@ -94,6 +94,8 @@ const FAMILY_DEFAULT_SCHOOL: Dictionary = {
 	"Morito": "Morito Bushi",
 	"Suzume": "Suzume Bushi",
 	"Kasuga": "Kasuga Smuggler",
+	"Komori": "Komori Shugenja",
+	"Tsi": "Tsi Smith",
 	"Otomo": "Otomo Courtier",
 	"Seppun": "Seppun Guardsman",
 	"Miya": "Miya Herald",

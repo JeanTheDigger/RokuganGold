@@ -261,6 +261,8 @@ const FAMILY_SEAT_PROVINCES: Dictionary = {
 	"Morito": "Ox Clan Lands",
 	"Suzume": "Sparrow Clan Lands",
 	"Kasuga": "Tortoise Clan Lands",
+	"Komori": "Maigosera",
+	"Tsi": "Hub Villages",
 	# Imperial
 	"Otomo": "Toshi Ranbo",
 	"Seppun": "Seppun Province",
@@ -311,6 +313,8 @@ const TERRAIN_HINTS: Dictionary = {
 	"Morito": Enums.TerrainType.MOUNTAINS,
 	"Suzume": Enums.TerrainType.PLAINS,
 	"Kasuga": Enums.TerrainType.COASTAL,
+	"Komori": Enums.TerrainType.COASTAL,
+	"Tsi": Enums.TerrainType.PLAINS,
 	"Otomo": Enums.TerrainType.PLAINS,
 	"Heichi": Enums.TerrainType.MOUNTAINS,
 	"Seppun": Enums.TerrainType.PLAINS,
@@ -580,6 +584,11 @@ static func _assign_physical_locations(
 			clan_family_to_province[key] = []
 		clan_family_to_province[key].append(pid)
 
+	var seat_name_to_pid: Dictionary = {}
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid]
+		seat_name_to_pid[prov.province_name] = pid
+
 	for c: L5RCharacterData in characters:
 		if not c.physical_location.is_empty():
 			continue
@@ -592,6 +601,11 @@ static func _assign_physical_locations(
 				if k.begins_with(c.clan + "_"):
 					clan_provs.append_array(clan_family_to_province[k])
 			prov_ids = clan_provs
+
+		if prov_ids.is_empty():
+			var seat_prov: String = FAMILY_SEAT_PROVINCES.get(c.family, "")
+			if not seat_prov.is_empty() and seat_name_to_pid.has(seat_prov):
+				prov_ids = [seat_name_to_pid[seat_prov]]
 
 		if prov_ids.is_empty():
 			continue
@@ -817,12 +831,12 @@ const ADJACENCY_TABLE: Dictionary = {
 	"Monkey Clan Lands": ["Gakka", "Heigen", "Azuma", "Yama"],
 	"Ox Clan Lands": ["Toshibu", "En-Ju", "Ki-Rin", "Yosomono"],
 	"Sparrow Clan Lands": ["Kakusu", "Ishibei", "Juuin"],
-	"Tortoise Clan Lands": [],
+	"Tortoise Clan Lands": ["Hub Villages", "Seppun Province"],
 
 	# --- Imperial ---
 	"Toshi Ranbo": ["Enjaku", "Kokoro", "Oiku", "Hub Villages"],
-	"Hub Villages": ["Toshi Ranbo", "Seppun Province", "Yogasha Heigen"],
-	"Seppun Province": ["Hub Villages", "Yogasha Heigen", "Valley of the Centipede"],
+	"Hub Villages": ["Toshi Ranbo", "Seppun Province", "Yogasha Heigen", "Tortoise Clan Lands"],
+	"Seppun Province": ["Hub Villages", "Yogasha Heigen", "Valley of the Centipede", "Tortoise Clan Lands"],
 	"Yogasha Heigen": ["Hub Villages", "Seppun Province"],
 	"Miya Province": ["Eijitsu", "Kaihi"],
 }

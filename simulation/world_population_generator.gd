@@ -30,12 +30,14 @@ const CLAN_FAMILIES: Dictionary = {
 	"Tortoise": ["Kasuga"],
 	"Wasp": ["Tsuruchi"],
 	"Centipede": ["Moshi"],
+	"Bat": ["Komori"],
+	"Oriole": ["Tsi"],
 }
 
 const MINOR_CLANS: Array[String] = [
-	"Badger", "Bat", "Boar", "Centipede", "Dragonfly",
+	"Badger", "Bat", "Centipede", "Dragonfly",
 	"Fox", "Hare", "Monkey", "Oriole", "Ox",
-	"Snake", "Sparrow", "Tortoise", "Wasp",
+	"Sparrow", "Tortoise", "Wasp",
 ]
 
 

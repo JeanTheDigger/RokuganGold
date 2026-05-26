@@ -500,6 +500,27 @@ const SCHOOL_DATA: Dictionary = {
 		"focus_rings": [Enums.Ring.AIR, Enums.Ring.WATER],
 		"skill_rank_2": [],
 	},
+	# --- Bat Clan ---
+	"Komori Shugenja": {
+		"clan": "Bat", "family": "Komori",
+		"type": Enums.SchoolType.SHUGENJA,
+		"benefit": "willpower", "honor": 2.5,
+		"skills": ["Animal Handling", "Calligraphy", "Hunting", "Lore: Spirit Realms", "Meditation", "Spellcraft"],
+		"wildcards": ["High"],
+		"focus_rings": [Enums.Ring.WATER, Enums.Ring.EARTH],
+		"skill_rank_2": [],
+		"affinity": Enums.Ring.WATER, "deficiency": Enums.Ring.FIRE,
+	},
+	# --- Oriole Clan ---
+	"Tsi Smith": {
+		"clan": "Oriole", "family": "Tsi",
+		"type": Enums.SchoolType.BUSHI,
+		"benefit": "intelligence", "honor": 3.5,
+		"skills": ["Commerce", "Craft: Weaponsmithing", "Etiquette", "Lore: History", "Sincerity", "War Fan"],
+		"wildcards": ["Merchant"],
+		"focus_rings": [Enums.Ring.FIRE, Enums.Ring.EARTH],
+		"skill_rank_2": [],
+	},
 }
 
 
