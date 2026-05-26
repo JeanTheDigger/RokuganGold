@@ -853,7 +853,7 @@ func test_concede_at_assessment_ends_duel() -> void:
 	assert_eq(result["glory_change"], 0.0)
 
 
-func test_concede_death_duel_costs_glory() -> void:
+func test_concede_death_duel_no_glory_cost() -> void:
 	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(
 		_char_a.character_id, _char_b.character_id, true
 	)
@@ -861,7 +861,7 @@ func test_concede_death_duel_costs_glory() -> void:
 		_char_b.character_id, duel
 	)
 	assert_true(result["conceded"])
-	assert_eq(result["glory_change"], IndividualCombat.GLORY_DECLINE_DEATH_DUEL)
+	assert_eq(result["glory_change"], 0.0, "Glory cost blocked — GDD Table 2.3 not yet specified")
 	assert_eq(result["honor_change"], 0.0)
 
 
@@ -923,5 +923,5 @@ func test_strike_after_first_blood_returns_honor_penalty() -> void:
 		second, second_p, first, first_p, duel, _dice
 	)
 	assert_true(result["struck_after_first_blood"])
-	assert_eq(result["honor_change"], IndividualCombat.HONOR_STRIKING_AFTER_FIRST_BLOOD)
+	assert_eq(result["honor_change"], 0.0, "Honor cost blocked — GDD Table 2.3 not yet specified")
 	assert_true(duel.struck_after_first_blood)

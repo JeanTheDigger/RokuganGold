@@ -93,8 +93,10 @@ const CONDITION_MOUNTED:   String = "mounted"
 const CONDITION_PRONE:     String = "prone"
 const CONDITION_STUNNED:   String = "stunned"
 
-const HONOR_STRIKING_AFTER_FIRST_BLOOD: float = -1.0
-const GLORY_DECLINE_DEATH_DUEL: float = -0.5
+# GDD s40 describes striking after first blood as dishonorable and conceding
+# a death duel as shameful, but specifies no numeric honor/glory values.
+# Removed invented values (-1.0 honor, -0.5 glory). These are blocked on
+# Table 2.3 gaining explicit entries for these situations.
 
 
 # =============================================================================
@@ -760,13 +762,12 @@ static func concede_at_assessment(
 	else:
 		duel.winner_id = duel.challenger_id
 		duel.loser_id = duel.defender_id
-	var glory_change: float = GLORY_DECLINE_DEATH_DUEL if duel.duel_to_death else 0.0
 	return {
 		"conceded": true,
 		"conceder_id": conceder_id,
 		"winner_id": duel.winner_id,
 		"honor_change": 0.0,
-		"glory_change": glory_change,
+		"glory_change": 0.0,
 	}
 
 
@@ -967,7 +968,7 @@ static func resolve_strike_after_first_blood(
 		"attack": attack,
 		"damage": damage,
 		"wounds": wounds,
-		"honor_change": HONOR_STRIKING_AFTER_FIRST_BLOOD,
+		"honor_change": 0.0,
 	}
 
 

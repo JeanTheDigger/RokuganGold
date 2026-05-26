@@ -399,17 +399,10 @@ static func bootstrap_world(
 	for _c: L5RCharacterData in characters:
 		chars_by_id[_c.character_id] = _c
 
-	var shadowlands_pids: Array = []
-	for _pid: Variant in provinces:
-		var _p: ProvinceData = provinces[_pid]
-		if _p.province_taint_level >= 3.0:
-			shadowlands_pids.append(_pid)
-
 	var next_cell_id: Array = [1]
 	var next_insurgency_id: Array = [1]
 	var bloodspeaker_result: Dictionary = BloodspeakerNetworkSystem.generate_initial_cells(
-		provinces, settlements, characters, chars_by_id, dice,
-		next_cell_id, 0, shadowlands_pids, next_insurgency_id,
+		provinces, dice, next_cell_id, 0, next_insurgency_id,
 	)
 
 	return {

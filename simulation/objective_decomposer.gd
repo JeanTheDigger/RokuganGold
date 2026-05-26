@@ -73,8 +73,6 @@ static func decompose(
 		return PrimaryObjectiveDecomposer.decompose(objective, ctx)
 	if MushaShugyo.is_seek_experience(need_type):
 		return MushaShugyo.decompose(objective, ctx, ctx.school_type)
-	if MonkObjectiveSystem.is_monk_objective(need_type):
-		return MonkObjectiveSystem.decompose(need_type, objective, ctx)
 	if need_type in POLITICAL_OBJECTIVES:
 		return _decompose_political(need_type, objective, ctx)
 	if need_type in ECONOMIC_OBJECTIVES:

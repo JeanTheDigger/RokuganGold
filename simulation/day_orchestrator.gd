@@ -126,7 +126,6 @@ static func advance_day(
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
 	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
 	_assign_magistrate_standing_objectives(characters, objectives_map)
-	_assign_monk_standing_objectives(characters, objectives_map)
 
 	_clear_stale_context_flags(world_states)
 
@@ -1060,18 +1059,17 @@ static func advance_day(
 			next_insurgency_id, world_states, worship_maluses,
 			season_meta, next_crisis_id,
 		)
-		var _si_spm: Dictionary = world_states.get("_settlement_province_map", {})
 		spiritual_insurgency_results = _process_spiritual_insurgency(
-			worship_state, provinces, spiritual_insurgency_events,
+			worship_state, spiritual_insurgency_events,
 			next_spiritual_event_id, current_season, dice_engine,
-			characters, characters_by_id, active_topics,
-			next_topic_id, ic_day, season_meta, _si_spm,
+			active_topics, next_topic_id, ic_day,
 		)
+		var _si_spm: Dictionary = world_states.get("_settlement_province_map", {})
 		bloodspeaker_results = _process_bloodspeaker_network(
-			bloodspeaker_cells, provinces, settlements, insurgencies,
+			bloodspeaker_cells, provinces, insurgencies,
 			next_insurgency_id, dice_engine, current_season, next_cell_id,
 			characters, characters_by_id, _si_spm,
-			season_meta, active_topics, next_topic_id, ic_day, next_crisis_id,
+			active_topics, next_topic_id, ic_day, next_crisis_id,
 		)
 		_process_doshin_seasonal_recovery(world_states)
 		_tick_kuni_wards(season_meta)
@@ -1139,9 +1137,6 @@ static func advance_day(
 		)
 		_process_vassal_reassignments(
 			strategic_results, objectives_map, characters_by_id,
-		)
-		_process_monk_self_selection(
-			characters, objectives_map, provinces, settlements, insurgencies,
 		)
 		_process_tyrant_directives(
 			strategic_results, active_topics, next_topic_id, ic_day,
@@ -6044,117 +6039,6 @@ static func _assign_phoenix_champion_restore_objective(
 	}
 
 
-static func _assign_monk_standing_objectives(
-	characters: Array,
-	objectives_map: Dictionary,
-) -> void:
-	for character: L5RCharacterData in characters:
-		if CharacterStats.is_dead(character):
-			continue
-		if not MonkObjectiveSystem.is_monk(character):
-			continue
-
-		var char_id: int = character.character_id
-		if not objectives_map.has(char_id):
-			objectives_map[char_id] = {}
-
-		var objectives: Dictionary = objectives_map[char_id]
-		var standing: Dictionary = objectives.get("standing", {})
-
-		if standing.get("monk_standing", false):
-			continue
-
-		if not standing.is_empty():
-			continue
-
-		var monk_standing: Dictionary = MonkObjectiveSystem.assign_standing_objective(character)
-		if not monk_standing.is_empty():
-			objectives["standing"] = monk_standing
-
-
-
-static func _process_monk_self_selection(
-	characters: Array,
-	objectives_map: Dictionary,
-	provinces: Dictionary,
-	settlements: Array,
-	insurgencies: Array,
-) -> void:
-	var monk_ws: Dictionary = _build_monk_world_state(provinces, settlements, insurgencies)
-
-	for character: L5RCharacterData in characters:
-		if CharacterStats.is_dead(character):
-			continue
-		if not MonkObjectiveSystem.is_monk(character):
-			continue
-
-		var char_id: int = character.character_id
-		var objectives: Dictionary = objectives_map.get(char_id, {})
-		var primary: Dictionary = objectives.get("primary", {})
-
-		if not primary.is_empty() and primary.get("status", "") == "ACTIVE":
-			continue
-
-		var standing: Dictionary = objectives.get("standing", {})
-		var standing_type: String = standing.get("need_type", "")
-		if standing_type.is_empty():
-			continue
-
-		var selected: Dictionary = MonkObjectiveSystem.select_primary_from_standing(
-			character, standing_type, monk_ws
-		)
-		if selected.is_empty():
-			continue
-
-		if not objectives_map.has(char_id):
-			objectives_map[char_id] = {}
-
-		objectives_map[char_id]["primary"] = {
-			"need_type": selected["objective_type"],
-			"objective_type": selected["objective_type"],
-			"target_fields": selected.get("target_fields", {}),
-			"assigning_lord_id": char_id,
-			"status": "ACTIVE",
-			"source": "MONK_SELF_SELECTED",
-		}
-
-
-static func _build_monk_world_state(
-	provinces: Dictionary,
-	settlements: Array,
-	insurgencies: Array,
-) -> Dictionary:
-	var famine_provinces: Array = []
-	var tainted_provinces: Array = []
-	var insurgent_provinces: Array = []
-	var known_temples: Array = []
-
-	for pid: int in provinces:
-		var prov: ProvinceData = provinces[pid]
-		if prov.stability < 30.0:
-			famine_provinces.append({"province_id": pid})
-		if prov.province_taint_level >= 3.0:
-			tainted_provinces.append({"province_id": pid, "taint_level": prov.province_taint_level})
-
-	for ins: InsurgencyData in insurgencies:
-		var urgency: float = 60.0 + ins.strength * 5.0
-		insurgent_provinces.append({
-			"province_id": ins.province_id,
-			"urgency": urgency,
-		})
-
-	for s: SettlementData in settlements:
-		if s.settlement_type in Enums.RELIGIOUS_SETTLEMENT_TYPES:
-			known_temples.append({"settlement_id": s.settlement_id, "province_id": s.province_id})
-
-	return {
-		"famine_provinces": famine_provinces,
-		"tainted_provinces": tainted_provinces,
-		"insurgent_provinces": insurgent_provinces,
-		"known_temples": known_temples,
-	}
-
-
 # -- UPHOLD_LAW Magistrate Scan (s57.16.9) ------------------------------------
 
 static func _process_uphold_law_scan(
@@ -7863,23 +7747,18 @@ static func _process_insurgencies(
 
 static func _process_spiritual_insurgency(
 	worship_state: Dictionary,
-	provinces: Dictionary,
 	events: Array,
 	next_event_id: Array,
 	current_season: int,
 	dice_engine: DiceEngine,
-	characters: Array,
-	characters_by_id: Dictionary,
 	active_topics: Array,
 	next_topic_id: Array,
 	ic_day: int,
-	season_meta: Dictionary = {},
-	settlement_province_map: Dictionary = {},
 ) -> Dictionary:
 	SpiritualInsurgencySystem.increment_seasons(events)
 	var new_events: Array = SpiritualInsurgencySystem.process_seasonal_check(
-		worship_state, provinces, events, next_event_id,
-		current_season, dice_engine, season_meta,
+		worship_state, events, next_event_id,
+		current_season, dice_engine,
 	)
 	var new_topics: Array = []
 	for event: SpiritualInsurgencyData in new_events:
@@ -7887,11 +7766,15 @@ static func _process_spiritual_insurgency(
 		var topic_dict: Dictionary = SpiritualInsurgencySystem.create_event_topic(
 			event, next_topic_id, ic_day,
 		)
+		var topic_tier: int = topic_dict.get("tier", -1)
+		if topic_tier < 0:
+			new_topics.append(topic_dict)
+			continue
 		var topic := TopicData.new()
 		topic.topic_id = topic_dict.get("topic_id", -1)
 		topic.title = topic_dict.get("title", "")
 		topic.slug = "spiritual_insurgency_%d_p%d" % [event.event_id, event.province_id]
-		topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
+		topic.tier = topic_tier
 		topic.category = topic_dict.get("category", TopicData.Category.SUPERNATURAL)
 		topic.subject_character_id = topic_dict.get("subject_character_id", -1)
 		topic.ic_day_created = topic_dict.get("ic_day_created", ic_day)
@@ -7899,11 +7782,6 @@ static func _process_spiritual_insurgency(
 		topic.topic_type = "spiritual_insurgency"
 		active_topics.append(topic)
 		new_topics.append(topic_dict)
-
-	var resolution_results: Array = _resolve_spiritual_events(
-		events, characters, characters_by_id, dice_engine,
-		settlement_province_map,
-	)
 
 	var resolved_events: Array = []
 	for event: SpiritualInsurgencyData in events:
@@ -7915,66 +7793,9 @@ static func _process_spiritual_insurgency(
 	return {
 		"new_events": new_events,
 		"new_topics": new_topics,
-		"resolution_results": resolution_results,
 		"resolved_count": resolved_events.size(),
 		"active_count": events.size(),
 	}
-
-
-static func _resolve_spiritual_events(
-	events: Array,
-	characters: Array,
-	characters_by_id: Dictionary,
-	dice_engine: DiceEngine,
-	settlement_province_map: Dictionary = {},
-) -> Array:
-	var results: Array = []
-	for event: SpiritualInsurgencyData in events:
-		if not event is SpiritualInsurgencyData:
-			continue
-		if event.resolved or event.npc_resolution_attempted:
-			continue
-
-		var shugenja: L5RCharacterData = _find_province_shugenja(
-			event.province_id, characters, settlement_province_map,
-		)
-		if shugenja == null:
-			continue
-
-		var result: Dictionary = SpiritualInsurgencySystem.resolve_npc_event(
-			event, shugenja, dice_engine,
-		)
-		var effects: Dictionary = SpiritualInsurgencySystem.get_resolution_effects(result)
-		if result.get("success", false):
-			HonorGlorySystem.apply_honor_change(shugenja, effects.get("honor_gain", 0.0))
-			HonorGlorySystem.apply_glory_change(shugenja, effects.get("glory_gain", 0.0))
-		results.append(result)
-	return results
-
-
-static func _find_province_shugenja(
-	province_id: int,
-	characters: Array,
-	settlement_province_map: Dictionary = {},
-) -> L5RCharacterData:
-	var best: L5RCharacterData = null
-	var best_rank: int = -1
-	for c: L5RCharacterData in characters:
-		if CharacterStats.is_dead(c):
-			continue
-		if c.school_type != Enums.SchoolType.SHUGENJA:
-			continue
-		if not c.physical_location.is_valid_int():
-			continue
-		var settlement_id: int = int(c.physical_location)
-		var char_prov: int = settlement_province_map.get(settlement_id, -1)
-		if char_prov != province_id:
-			continue
-		var theology: int = c.skills.get("Lore: Theology", 0)
-		if theology > best_rank:
-			best_rank = theology
-			best = c
-	return best
 
 
 # -- Bloodspeaker Cult Network (s56.14) ----------------------------------------
@@ -7982,7 +7803,6 @@ static func _find_province_shugenja(
 static func _process_bloodspeaker_network(
 	cells: Array,
 	provinces: Dictionary,
-	settlements: Array,
 	insurgencies: Array,
 	next_insurgency_id: Array,
 	dice_engine: DiceEngine,
@@ -7991,7 +7811,6 @@ static func _process_bloodspeaker_network(
 	characters: Array,
 	characters_by_id: Dictionary,
 	settlement_province_map: Dictionary,
-	season_meta: Dictionary = {},
 	active_topics: Array = [],
 	next_topic_id: Array = [1000],
 	ic_day: int = 0,
@@ -7999,12 +7818,10 @@ static func _process_bloodspeaker_network(
 ) -> Dictionary:
 	var maho_provinces: Array = _detect_maho_provinces(characters, characters_by_id, settlement_province_map)
 
-	var shadowlands_ids: Array = season_meta.get("shadowlands_province_ids", [])
-
 	var result: Dictionary = BloodspeakerNetworkSystem.process_season(
-		cells, provinces, settlements, insurgencies,
+		cells, provinces, insurgencies,
 		next_insurgency_id, dice_engine, current_season, next_cell_id,
-		characters, characters_by_id, shadowlands_ids, maho_provinces,
+		maho_provinces,
 	)
 
 	for new_cell: BloodspeakerCellData in result.get("new_cells", []):
@@ -8041,8 +7858,8 @@ static func _process_bloodspeaker_network(
 		if active_ins_ids.has(cell.insurgency_id):
 			continue
 		var sup_result: Dictionary = BloodspeakerNetworkSystem.on_cell_suppressed(
-			cell, provinces, cells, settlements,
-			dice_engine, next_cell_id, current_season, shadowlands_ids,
+			cell, provinces, cells,
+			dice_engine, next_cell_id, current_season,
 		)
 		if sup_result.get("hydra_spawned", false):
 			var hydra_cell: BloodspeakerCellData = sup_result.get("hydra_cell")
@@ -18869,11 +18686,11 @@ static func _apply_hunt_disposition(participants: Array, clan_baselines: Diction
 			if a.character_id not in b.met_characters:
 				InformationSystem.add_contact(b, a.character_id, a.clan, a, clan_baselines, family_baselines)
 				InformationSystem.add_contact(a, b.character_id, b.clan, b, clan_baselines, family_baselines)
-				a.disposition_values[b.character_id] = clampi(disp_ab + HuntSystem.DISP_NEW_RELATIONSHIP, -100, 100)
-				b.disposition_values[a.character_id] = clampi(disp_ba + HuntSystem.DISP_NEW_RELATIONSHIP, -100, 100)
+				a.disposition_values[b.character_id] = clampi(disp_ab + 3, -100, 100)
+				b.disposition_values[a.character_id] = clampi(disp_ba + 3, -100, 100)
 			else:
-				a.disposition_values[b.character_id] = clampi(disp_ab + HuntSystem.DISP_EXISTING_ACQUAINTANCE, -100, 100)
-				b.disposition_values[a.character_id] = clampi(disp_ba + HuntSystem.DISP_EXISTING_ACQUAINTANCE, -100, 100)
+				a.disposition_values[b.character_id] = clampi(disp_ab + 1, -100, 100)
+				b.disposition_values[a.character_id] = clampi(disp_ba + 1, -100, 100)
 
 
 # -- Resolved Item Cleanup ----------------------------------------------------

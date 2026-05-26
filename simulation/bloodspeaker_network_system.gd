@@ -17,25 +17,6 @@ const ACTIVE_STRENGTH_MIN: int = 2
 const ACTIVE_STRENGTH_MAX: int = 4
 const MAHO_CULT_BASE_CONCEALMENT: int = 8
 
-# Placement weights (s56.14.2)
-const WEIGHT_BASE: float = 1.0
-const WEIGHT_HIGH_POPULATION: float = 3.0
-const WEIGHT_ETA_COMMUNITY: float = 2.0
-const WEIGHT_SHADOWLANDS_ADJACENT: float = 2.0
-const WEIGHT_URBAN_CENTER: float = 2.0
-const WEIGHT_LOW_GARRISON: float = 1.5
-
-const HIGH_POPULATION_THRESHOLD: int = 50
-
-# Urban settlement types (provincial capitals and castle towns)
-const URBAN_SETTLEMENT_TYPES: Array[int] = [
-	Enums.SettlementType.TOWN,
-	Enums.SettlementType.CITY,
-	Enums.SettlementType.IMPERIAL_CAPITAL,
-	Enums.SettlementType.CASTLE,
-	Enums.SettlementType.FAMILY_CASTLE,
-]
-
 
 # =============================================================================
 # Constants — Activation Triggers (s56.14.5)
@@ -70,13 +51,11 @@ const HYDRA_LATE_CHANCE: float = 0.90
 
 
 # =============================================================================
-# Constants — Leader Selection (s56.14.2)
+# Constants — Sleeper Aftermath (s56.14.4)
 # =============================================================================
 
-const LEADER_SUSCEPTIBILITY_THRESHOLD: int = 3
-const LEADER_TIER1_WEIGHT: int = 5
-const LEADER_TIER2_WEIGHT: int = 2
-const LEADER_TIER3_WEIGHT: int = 1
+const SLEEPER_AFTERMATH_EARLY_BONUS: float = 0.15
+const SLEEPER_AFTERMATH_LATE_BONUS: float = 0.30
 
 
 # =============================================================================
@@ -85,22 +64,20 @@ const LEADER_TIER3_WEIGHT: int = 1
 
 static func generate_initial_cells(
 	provinces: Dictionary,
-	settlements: Array,
-	characters: Array,
-	characters_by_id: Dictionary,
 	dice: DiceEngine,
 	next_cell_id: Array,
 	current_season: int,
-	shadowlands_province_ids: Array = [],
 	next_insurgency_id: Array = [1],
 ) -> Dictionary:
 	var cell_count: int = dice.rand_int_range(CELL_COUNT_MIN, CELL_COUNT_MAX)
 	var dormant_fraction: float = DORMANT_FRACTION_MIN + dice.randf() * (DORMANT_FRACTION_MAX - DORMANT_FRACTION_MIN)
 	var dormant_count: int = int(cell_count * dormant_fraction)
 
-	var province_weights: Dictionary = _compute_province_weights(provinces, settlements, shadowlands_province_ids)
+	var province_ids: Array = provinces.keys()
+	if province_ids.is_empty():
+		return {"cells": [], "insurgencies": []}
 
-	var selected_provinces: Array = _weighted_select_provinces(province_weights, cell_count, dice)
+	var selected_provinces: Array = _random_select_provinces(province_ids, cell_count, dice)
 
 	var cells: Array = []
 	var insurgencies: Array = []
@@ -112,6 +89,7 @@ static func generate_initial_cells(
 		cell.province_id = pid
 		cell.season_created = current_season
 		cell.concealment = MAHO_CULT_BASE_CONCEALMENT
+		cell.leader_id = -1
 
 		if i < dormant_count:
 			cell.state = Enums.BloodspeakerCellState.DORMANT
@@ -126,162 +104,23 @@ static func generate_initial_cells(
 			cell.insurgency_id = ins.insurgency_id
 			insurgencies.append(ins)
 
-		cell.leader_id = _select_cell_leader(pid, characters, characters_by_id, cells, dice)
-		if cell.leader_id >= 0:
-			var leader: L5RCharacterData = characters_by_id.get(cell.leader_id)
-			if leader != null:
-				leader.cult_affiliation = true
-
 		cells.append(cell)
 
 	return {"cells": cells, "insurgencies": insurgencies}
 
 
-static func _compute_province_weights(
-	provinces: Dictionary,
-	settlements: Array,
-	shadowlands_province_ids: Array,
-) -> Dictionary:
-	var settlement_by_province: Dictionary = {}
-	for s: SettlementData in settlements:
-		if not settlement_by_province.has(s.province_id):
-			settlement_by_province[s.province_id] = []
-		settlement_by_province[s.province_id].append(s)
-
-	var weights: Dictionary = {}
-	for pid: int in provinces:
-		var province: ProvinceData = provinces[pid]
-		var w: float = WEIGHT_BASE
-
-		var province_settlements: Array = settlement_by_province.get(pid, [])
-		var total_pop: int = 0
-		var total_garrison: int = 0
-		var has_urban: bool = false
-		for s: SettlementData in province_settlements:
-			total_pop += s.population_pu
-			total_garrison += s.garrison_pu
-			if s.settlement_type in URBAN_SETTLEMENT_TYPES:
-				has_urban = true
-
-		if total_pop >= HIGH_POPULATION_THRESHOLD:
-			w += WEIGHT_HIGH_POPULATION
-
-		if has_urban:
-			w += WEIGHT_URBAN_CENTER
-
-		if pid in shadowlands_province_ids:
-			w += WEIGHT_SHADOWLANDS_ADJACENT
-
-		if total_pop > 0 and total_garrison < total_pop * 0.05:
-			w += WEIGHT_LOW_GARRISON
-
-		weights[pid] = w
-
-	return weights
-
-
-static func _weighted_select_provinces(
-	weights: Dictionary,
+static func _random_select_provinces(
+	province_ids: Array,
 	count: int,
 	dice: DiceEngine,
 ) -> Array:
-	if weights.is_empty():
-		return []
-
-	var province_ids: Array = weights.keys()
 	var selected: Array = []
-
+	if province_ids.is_empty():
+		return selected
 	for _i: int in range(count):
-		var total_weight: float = 0.0
-		for pid: int in province_ids:
-			total_weight += weights.get(pid, 0.0)
-		if total_weight <= 0.0:
-			break
-
-		var roll: float = dice.randf() * total_weight
-		var cumulative: float = 0.0
-		var chosen_pid: int = province_ids[0]
-		for pid: int in province_ids:
-			cumulative += weights.get(pid, 0.0)
-			if roll <= cumulative:
-				chosen_pid = pid
-				break
-		selected.append(chosen_pid)
-
+		var idx: int = dice.rand_int_range(0, province_ids.size() - 1)
+		selected.append(province_ids[idx])
 	return selected
-
-
-static func _select_cell_leader(
-	_province_id: int,
-	characters: Array,
-	characters_by_id: Dictionary,
-	existing_cells: Array,
-	dice: DiceEngine,
-) -> int:
-	var already_leaders: Array = []
-	for cell: BloodspeakerCellData in existing_cells:
-		if cell.leader_id >= 0:
-			already_leaders.append(cell.leader_id)
-
-	var candidates: Array = []
-	for c: L5RCharacterData in characters:
-		if CharacterStats.is_dead(c):
-			continue
-		if c.cult_affiliation:
-			continue
-		if c.character_id in already_leaders:
-			continue
-		if c.physical_location.is_empty():
-			continue
-
-		var susceptibility: int = InsurgencySystem.compute_susceptibility_maho(c, _get_lord_disposition(c, characters_by_id))
-		if susceptibility < LEADER_SUSCEPTIBILITY_THRESHOLD:
-			continue
-		if InsurgencySystem.is_immune_to_corruption(c):
-			continue
-
-		candidates.append({"character": c, "susceptibility": susceptibility})
-
-	if candidates.is_empty():
-		return -1
-
-	var tier1: Array = []
-	var tier2: Array = []
-	var tier3: Array = []
-	for entry: Dictionary in candidates:
-		var s: int = entry["susceptibility"]
-		if s >= 6:
-			tier1.append(entry)
-		elif s >= 4:
-			tier2.append(entry)
-		else:
-			tier3.append(entry)
-
-	var weighted_pool: Array = []
-	for entry: Dictionary in tier1:
-		for _w: int in range(LEADER_TIER1_WEIGHT):
-			weighted_pool.append(entry["character"].character_id)
-	for entry: Dictionary in tier2:
-		for _w: int in range(LEADER_TIER2_WEIGHT):
-			weighted_pool.append(entry["character"].character_id)
-	for entry: Dictionary in tier3:
-		for _w: int in range(LEADER_TIER3_WEIGHT):
-			weighted_pool.append(entry["character"].character_id)
-
-	if weighted_pool.is_empty():
-		return -1
-
-	var idx: int = dice.rand_int_range(0, weighted_pool.size() - 1)
-	return weighted_pool[idx]
-
-
-static func _get_lord_disposition(c: L5RCharacterData, characters_by_id: Dictionary) -> int:
-	if c.lord_id < 0:
-		return 0
-	var lord: L5RCharacterData = characters_by_id.get(c.lord_id)
-	if lord == null:
-		return 0
-	return c.disposition_values.get(c.lord_id, 0)
 
 
 # =============================================================================
@@ -291,15 +130,11 @@ static func _get_lord_disposition(c: L5RCharacterData, characters_by_id: Diction
 static func process_season(
 	cells: Array,
 	provinces: Dictionary,
-	settlements: Array,
 	insurgencies: Array,
 	next_insurgency_id: Array,
 	dice: DiceEngine,
 	current_season: int,
 	next_cell_id: Array,
-	characters: Array = [],
-	characters_by_id: Dictionary = {},
-	shadowlands_province_ids: Array = [],
 	maho_provinces: Array = [],
 ) -> Dictionary:
 	var new_cells: Array = []
@@ -363,8 +198,7 @@ static func process_season(
 						})
 					else:
 						var target_pid: int = _select_propagation_target(
-							cell, provinces, cells, new_cells, settlements,
-							shadowlands_province_ids, dice,
+							cell, provinces, cells, new_cells, dice,
 						)
 						if target_pid >= 0:
 							cell.state = Enums.BloodspeakerCellState.PROPAGATING
@@ -467,8 +301,6 @@ static func _select_propagation_target(
 	provinces: Dictionary,
 	existing_cells: Array,
 	new_cells: Array,
-	settlements: Array,
-	shadowlands_province_ids: Array,
 	dice: DiceEngine,
 ) -> int:
 	var source_province: ProvinceData = provinces.get(cell.province_id)
@@ -482,6 +314,7 @@ static func _select_propagation_target(
 	for c: BloodspeakerCellData in new_cells:
 		occupied_provinces[c.province_id] = true
 
+	# First pass: prefer different clan territory (GDD s56.14.3)
 	var candidates: Array = []
 	for pid: int in provinces:
 		if pid == cell.province_id:
@@ -497,9 +330,9 @@ static func _select_propagation_target(
 		if target.clan == source_province.clan:
 			continue
 
-		var weight: float = _compute_single_province_weight(pid, provinces, settlements, shadowlands_province_ids)
-		candidates.append({"province_id": pid, "weight": weight})
+		candidates.append(pid)
 
+	# Fallback: allow same clan if no cross-clan targets
 	if candidates.is_empty():
 		for pid: int in provinces:
 			if pid == cell.province_id:
@@ -509,55 +342,14 @@ static func _select_propagation_target(
 			var distance: int = _estimate_province_distance(cell.province_id, pid, provinces)
 			if distance < PROPAGATION_MIN_DISTANCE:
 				continue
-			var weight: float = _compute_single_province_weight(pid, provinces, settlements, shadowlands_province_ids)
-			candidates.append({"province_id": pid, "weight": weight})
+			candidates.append(pid)
 
 	if candidates.is_empty():
 		return -1
 
-	var total_weight: float = 0.0
-	for c: Dictionary in candidates:
-		total_weight += c["weight"]
-	if total_weight <= 0.0:
-		return candidates[0]["province_id"]
-
-	var roll: float = dice.randf() * total_weight
-	var cumulative: float = 0.0
-	for c: Dictionary in candidates:
-		cumulative += c["weight"]
-		if roll <= cumulative:
-			return c["province_id"]
-
-	return candidates[candidates.size() - 1]["province_id"]
-
-
-static func _compute_single_province_weight(
-	pid: int,
-	provinces: Dictionary,
-	settlements: Array,
-	shadowlands_province_ids: Array,
-) -> float:
-	var w: float = WEIGHT_BASE
-	var total_pop: int = 0
-	var total_garrison: int = 0
-	var has_urban: bool = false
-	for s: SettlementData in settlements:
-		if s.province_id != pid:
-			continue
-		total_pop += s.population_pu
-		total_garrison += s.garrison_pu
-		if s.settlement_type in URBAN_SETTLEMENT_TYPES:
-			has_urban = true
-
-	if total_pop >= HIGH_POPULATION_THRESHOLD:
-		w += WEIGHT_HIGH_POPULATION
-	if has_urban:
-		w += WEIGHT_URBAN_CENTER
-	if pid in shadowlands_province_ids:
-		w += WEIGHT_SHADOWLANDS_ADJACENT
-	if total_pop > 0 and total_garrison < total_pop * 0.05:
-		w += WEIGHT_LOW_GARRISON
-	return w
+	# Uniform random selection — equal probability for all valid candidates
+	var idx: int = dice.rand_int_range(0, candidates.size() - 1)
+	return candidates[idx]
 
 
 static func _estimate_province_distance(
@@ -595,11 +387,9 @@ static func check_hydra_rule(
 	cell: BloodspeakerCellData,
 	provinces: Dictionary,
 	existing_cells: Array,
-	settlements: Array,
 	dice: DiceEngine,
 	next_cell_id: Array,
 	current_season: int,
-	shadowlands_province_ids: Array = [],
 ) -> Dictionary:
 	if cell.state != Enums.BloodspeakerCellState.ACTIVE and cell.state != Enums.BloodspeakerCellState.PROPAGATING:
 		return {"spawned": false}
@@ -617,8 +407,7 @@ static func check_hydra_rule(
 		return {"spawned": false}
 
 	var target_pid: int = _select_propagation_target(
-		cell, provinces, existing_cells, [], settlements,
-		shadowlands_province_ids, dice,
+		cell, provinces, existing_cells, [], dice,
 	)
 	if target_pid < 0:
 		return {"spawned": false}
@@ -649,15 +438,13 @@ static func on_cell_suppressed(
 	cell: BloodspeakerCellData,
 	provinces: Dictionary,
 	existing_cells: Array,
-	settlements: Array,
 	dice: DiceEngine,
 	next_cell_id: Array,
 	current_season: int,
-	shadowlands_province_ids: Array = [],
 ) -> Dictionary:
 	var hydra_result: Dictionary = check_hydra_rule(
-		cell, provinces, existing_cells, settlements,
-		dice, next_cell_id, current_season, shadowlands_province_ids,
+		cell, provinces, existing_cells,
+		dice, next_cell_id, current_season,
 	)
 
 	cell.state = Enums.BloodspeakerCellState.DESTROYED
@@ -672,25 +459,17 @@ static func on_cell_suppressed(
 
 
 # =============================================================================
-# Sleeper Aftermath Integration (s56.14.4)
+# Sleeper Aftermath (s56.14.4)
+# GDD: "+15% Maho Cult spawn chance" after 4 seasons since suppression,
+# "+30% Maho Cult spawn chance" after 8 seasons since suppression.
 # =============================================================================
 
-static func get_sleeper_spawn_bonus(
-	province_id: int,
-	characters: Array,
-	settlement_province_map: Dictionary,
-) -> float:
-	var bonus: float = 0.0
-	for c: L5RCharacterData in characters:
-		if CharacterStats.is_dead(c):
-			continue
-		if not c.cult_affiliation:
-			continue
-		var char_province: int = _get_character_province(c, settlement_province_map)
-		if char_province != province_id:
-			continue
-		bonus += 0.15
-	return minf(bonus, 0.30)
+static func get_sleeper_aftermath_bonus(seasons_since_suppression: int) -> float:
+	if seasons_since_suppression >= HYDRA_LATE_SEASONS:
+		return SLEEPER_AFTERMATH_LATE_BONUS
+	elif seasons_since_suppression >= HYDRA_EARLY_SEASONS:
+		return SLEEPER_AFTERMATH_EARLY_BONUS
+	return 0.0
 
 
 static func _get_character_province(c: L5RCharacterData, settlement_province_map: Dictionary) -> int:

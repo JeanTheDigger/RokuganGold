@@ -13151,9 +13151,9 @@ func test_hunt_disposition_new_relationship() -> void:
 	var b: L5RCharacterData = _make_hunter(20)
 	var participants: Array = [a, b]
 	DayOrchestrator._apply_hunt_disposition(participants)
-	assert_eq(a.disposition_values.get(20, 0), HuntSystem.DISP_NEW_RELATIONSHIP,
+	assert_eq(a.disposition_values.get(20, 0), 3,
 		"New relationship disposition for first meeting")
-	assert_eq(b.disposition_values.get(10, 0), HuntSystem.DISP_NEW_RELATIONSHIP,
+	assert_eq(b.disposition_values.get(10, 0), 3,
 		"Reciprocal new relationship disposition")
 	assert_true(20 in a.met_characters, "Should add to met_characters")
 	assert_true(10 in b.met_characters, "Should add to met_characters")
@@ -13168,7 +13168,7 @@ func test_hunt_disposition_existing_acquaintance() -> void:
 	b.disposition_values = {10: 15}
 	var participants: Array = [a, b]
 	DayOrchestrator._apply_hunt_disposition(participants)
-	assert_eq(a.disposition_values.get(20, 0), 15 + HuntSystem.DISP_EXISTING_ACQUAINTANCE,
+	assert_eq(a.disposition_values.get(20, 0), 15 + 1,
 		"Existing acquaintance gets smaller disposition bump")
 
 

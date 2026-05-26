@@ -98,13 +98,10 @@ func test_generate_initial_cells_count():
 		var p := _make_province(i, 100.0, 0.0, "Crab" if i < 5 else "Crane")
 		p.adjacent_province_ids = [(i + 1) % 20, (i + 19) % 20]
 		provinces[i] = p
-	var settlements: Array = []
-	for i: int in range(20):
-		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	var next_id: Array = [1]
 	var gen_result: Dictionary = BloodspeakerNetworkSystem.generate_initial_cells(
-		provinces, settlements, [], {}, _dice, next_id, 0,
+		provinces, _dice, next_id, 0,
 	)
 	var cells: Array = gen_result["cells"]
 	assert_true(cells.size() >= BloodspeakerNetworkSystem.CELL_COUNT_MIN)
@@ -115,13 +112,10 @@ func test_generate_initial_cells_dormant_fraction():
 	var provinces: Dictionary = {}
 	for i: int in range(40):
 		provinces[i] = _make_province(i)
-	var settlements: Array = []
-	for i: int in range(40):
-		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	var next_id: Array = [1]
 	var gen_result: Dictionary = BloodspeakerNetworkSystem.generate_initial_cells(
-		provinces, settlements, [], {}, _dice, next_id, 0,
+		provinces, _dice, next_id, 0,
 	)
 	var cells: Array = gen_result["cells"]
 	var dormant_count: int = 0
@@ -141,13 +135,10 @@ func test_active_cells_have_strength_2_to_4():
 	var provinces: Dictionary = {}
 	for i: int in range(40):
 		provinces[i] = _make_province(i)
-	var settlements: Array = []
-	for i: int in range(40):
-		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	var next_id: Array = [1]
 	var gen_result: Dictionary = BloodspeakerNetworkSystem.generate_initial_cells(
-		provinces, settlements, [], {}, _dice, next_id, 0,
+		provinces, _dice, next_id, 0,
 	)
 	var cells: Array = gen_result["cells"]
 	for cell: BloodspeakerCellData in cells:
@@ -160,67 +151,16 @@ func test_unique_cell_ids():
 	var provinces: Dictionary = {}
 	for i: int in range(40):
 		provinces[i] = _make_province(i)
-	var settlements: Array = []
-	for i: int in range(40):
-		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	var next_id: Array = [1]
 	var gen_result: Dictionary = BloodspeakerNetworkSystem.generate_initial_cells(
-		provinces, settlements, [], {}, _dice, next_id, 0,
+		provinces, _dice, next_id, 0,
 	)
 	var cells: Array = gen_result["cells"]
 	var ids: Dictionary = {}
 	for cell: BloodspeakerCellData in cells:
 		assert_false(ids.has(cell.cell_id), "Duplicate cell ID: %d" % cell.cell_id)
 		ids[cell.cell_id] = true
-
-
-# =============================================================================
-# Province Weight Tests
-# =============================================================================
-
-func test_high_population_increases_weight():
-	var p1 := _make_province(1)
-	var p2 := _make_province(2)
-	var s1 := _make_settlement(10, 1, 10, 1)
-	var s2 := _make_settlement(20, 2, 60, 3)
-	var weights: Dictionary = BloodspeakerNetworkSystem._compute_province_weights(
-		{1: p1, 2: p2}, [s1, s2], [],
-	)
-	assert_true(weights[2] > weights[1], "High pop province should have higher weight")
-
-
-func test_urban_center_increases_weight():
-	var p1 := _make_province(1)
-	var p2 := _make_province(2)
-	var s1 := _make_settlement(10, 1, 20, 1, Enums.SettlementType.VILLAGE)
-	var s2 := _make_settlement(20, 2, 20, 1, Enums.SettlementType.CITY)
-	var weights: Dictionary = BloodspeakerNetworkSystem._compute_province_weights(
-		{1: p1, 2: p2}, [s1, s2], [],
-	)
-	assert_true(weights[2] > weights[1], "Urban province should have higher weight")
-
-
-func test_shadowlands_increases_weight():
-	var p1 := _make_province(1)
-	var p2 := _make_province(2)
-	var s1 := _make_settlement(10, 1, 20, 1)
-	var s2 := _make_settlement(20, 2, 20, 1)
-	var weights: Dictionary = BloodspeakerNetworkSystem._compute_province_weights(
-		{1: p1, 2: p2}, [s1, s2], [2],
-	)
-	assert_true(weights[2] > weights[1], "Shadowlands-adjacent province should have higher weight")
-
-
-func test_low_garrison_increases_weight():
-	var p1 := _make_province(1)
-	var p2 := _make_province(2)
-	var s1 := _make_settlement(10, 1, 100, 10)
-	var s2 := _make_settlement(20, 2, 100, 1)
-	var weights: Dictionary = BloodspeakerNetworkSystem._compute_province_weights(
-		{1: p1, 2: p2}, [s1, s2], [],
-	)
-	assert_true(weights[2] > weights[1], "Low garrison province should have higher weight")
 
 
 # =============================================================================
@@ -319,9 +259,6 @@ func test_propagation_activates_dormant_cell_first():
 		var p := _make_province(i, 100.0, 0.0, "Crab" if i < 5 else "Crane")
 		p.adjacent_province_ids = [(i + 1) % 10, (i + 9) % 10]
 		provinces[i] = p
-	var settlements: Array = []
-	for i: int in range(10):
-		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	for seed_val: int in range(500):
 		var dice := DiceEngine.new(seed_val)
@@ -330,7 +267,7 @@ func test_propagation_activates_dormant_cell_first():
 		var next_cell_id: Array = [10]
 		var next_ins_id: Array = [100]
 		var result: Dictionary = BloodspeakerNetworkSystem.process_season(
-			[active_cell, dormant_cell], provinces, settlements, [],
+			[active_cell, dormant_cell], provinces, [],
 			next_ins_id, dice, 1, next_cell_id,
 		)
 		for e: Dictionary in result.get("events", []):
@@ -349,15 +286,12 @@ func test_propagation_requires_strength_4():
 		var p := _make_province(i, 100.0, 0.0, "Crab" if i < 5 else "Crane")
 		p.adjacent_province_ids = [(i + 1) % 10, (i + 9) % 10]
 		provinces[i] = p
-	var settlements: Array = []
-	for i: int in range(10):
-		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	var cell := _make_cell(1, 0, Enums.BloodspeakerCellState.ACTIVE, 3)
 	var next_cell_id: Array = [10]
 	var next_ins_id: Array = [100]
 	var result: Dictionary = BloodspeakerNetworkSystem.process_season(
-		[cell], provinces, settlements, [], next_ins_id, _dice, 1, next_cell_id,
+		[cell], provinces, [], next_ins_id, _dice, 1, next_cell_id,
 	)
 	var propagation_events: Array = []
 	for e: Dictionary in result.get("events", []):
@@ -375,15 +309,12 @@ func test_propagation_at_strength_4_is_possible():
 			var p := _make_province(i, 100.0, 0.0, "Crab" if i < 5 else "Crane")
 			p.adjacent_province_ids = [(i + 1) % 10, (i + 9) % 10]
 			provinces[i] = p
-		var settlements: Array = []
-		for i: int in range(10):
-			settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 		var cell := _make_cell(1, 0, Enums.BloodspeakerCellState.ACTIVE, 5)
 		var next_cell_id: Array = [10]
 		var next_ins_id: Array = [100]
 		var result: Dictionary = BloodspeakerNetworkSystem.process_season(
-			[cell], provinces, settlements, [], next_ins_id, dice, 1, next_cell_id,
+			[cell], provinces, [], next_ins_id, dice, 1, next_cell_id,
 		)
 		for e: Dictionary in result.get("events", []):
 			if e.get("event") == "cell_propagated":
@@ -400,9 +331,6 @@ func test_propagation_creates_dormant_cell():
 		var p := _make_province(i, 100.0, 0.0, "Crab" if i < 5 else "Crane")
 		p.adjacent_province_ids = [(i + 1) % 10, (i + 9) % 10]
 		provinces[i] = p
-	var settlements: Array = []
-	for i: int in range(10):
-		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	for seed_val: int in range(500):
 		var dice := DiceEngine.new(seed_val)
@@ -410,7 +338,7 @@ func test_propagation_creates_dormant_cell():
 		var next_cell_id: Array = [10]
 		var next_ins_id: Array = [100]
 		var result: Dictionary = BloodspeakerNetworkSystem.process_season(
-			[cell], provinces, settlements, [], next_ins_id, dice, 1, next_cell_id,
+			[cell], provinces, [], next_ins_id, dice, 1, next_cell_id,
 		)
 		if result.get("new_cells", []).size() > 0:
 			var new_cell: BloodspeakerCellData = result["new_cells"][0]
@@ -429,9 +357,6 @@ func test_propagation_reduces_parent_strength():
 		var p := _make_province(i, 100.0, 0.0, "Crab" if i < 5 else "Crane")
 		p.adjacent_province_ids = [(i + 1) % 10, (i + 9) % 10]
 		provinces[i] = p
-	var settlements: Array = []
-	for i: int in range(10):
-		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	for seed_val: int in range(500):
 		var dice := DiceEngine.new(seed_val)
@@ -440,7 +365,7 @@ func test_propagation_reduces_parent_strength():
 		var next_cell_id: Array = [10]
 		var next_ins_id: Array = [100]
 		var result: Dictionary = BloodspeakerNetworkSystem.process_season(
-			[cell], provinces, settlements, [], next_ins_id, dice, 1, next_cell_id,
+			[cell], provinces, [], next_ins_id, dice, 1, next_cell_id,
 		)
 		if result.get("new_cells", []).size() > 0:
 			assert_eq(cell.strength, original_strength - 1)
@@ -490,8 +415,7 @@ func test_hydra_rule_no_spawn_under_4_seasons():
 	provinces[1].adjacent_province_ids = [2]
 	provinces[2].adjacent_province_ids = [1]
 	var result: Dictionary = BloodspeakerNetworkSystem.check_hydra_rule(
-		cell, provinces, [], [_make_settlement(10, 1), _make_settlement(20, 2)],
-		_dice, [10], 5,
+		cell, provinces, [], _dice, [10], 5,
 	)
 	assert_false(result["spawned"])
 
@@ -507,12 +431,9 @@ func test_hydra_rule_60_percent_at_4_to_7_seasons():
 			var p := _make_province(i, 100.0, 0.0, "Crab" if i < 4 else "Crane")
 			p.adjacent_province_ids = [(i + 1) % 8, (i + 7) % 8]
 			provinces[i] = p
-		var settlements: Array = []
-		for i: int in range(8):
-			settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 		var result: Dictionary = BloodspeakerNetworkSystem.check_hydra_rule(
-			cell, provinces, [], settlements, dice, [10], 5,
+			cell, provinces, [], dice, [10], 5,
 		)
 		if result["spawned"]:
 			spawned_count += 1
@@ -531,12 +452,9 @@ func test_hydra_rule_90_percent_at_8_plus_seasons():
 			var p := _make_province(i, 100.0, 0.0, "Crab" if i < 4 else "Crane")
 			p.adjacent_province_ids = [(i + 1) % 8, (i + 7) % 8]
 			provinces[i] = p
-		var settlements: Array = []
-		for i: int in range(8):
-			settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 		var result: Dictionary = BloodspeakerNetworkSystem.check_hydra_rule(
-			cell, provinces, [], settlements, dice, [10], 5,
+			cell, provinces, [], dice, [10], 5,
 		)
 		if result["spawned"]:
 			spawned_count += 1
@@ -550,9 +468,6 @@ func test_hydra_spawns_dormant_cell():
 		var p := _make_province(i, 100.0, 0.0, "Crab" if i < 4 else "Crane")
 		p.adjacent_province_ids = [(i + 1) % 8, (i + 7) % 8]
 		provinces[i] = p
-	var settlements: Array = []
-	for i: int in range(8):
-		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	for seed_val: int in range(100):
 		var dice := DiceEngine.new(seed_val)
@@ -560,7 +475,7 @@ func test_hydra_spawns_dormant_cell():
 		cell.seasons_active = 10
 		var next_id: Array = [50]
 		var result: Dictionary = BloodspeakerNetworkSystem.check_hydra_rule(
-			cell, provinces, [], settlements, dice, next_id, 5,
+			cell, provinces, [], dice, next_id, 5,
 		)
 		if result["spawned"]:
 			var new_cell: BloodspeakerCellData = result["new_cell"]
@@ -580,7 +495,7 @@ func test_on_cell_suppressed_destroys_cell():
 	cell.seasons_active = 2
 	var provinces: Dictionary = {1: _make_province(1)}
 	var result: Dictionary = BloodspeakerNetworkSystem.on_cell_suppressed(
-		cell, provinces, [], [], _dice, [10], 5,
+		cell, provinces, [], _dice, [10], 5,
 	)
 	assert_true(result["destroyed"])
 	assert_eq(cell.state, Enums.BloodspeakerCellState.DESTROYED)
@@ -591,7 +506,7 @@ func test_on_cell_suppressed_returns_leader_id():
 	cell.leader_id = 42
 	cell.seasons_active = 1
 	var result: Dictionary = BloodspeakerNetworkSystem.on_cell_suppressed(
-		cell, {1: _make_province(1)}, [], [], _dice, [10], 5,
+		cell, {1: _make_province(1)}, [], _dice, [10], 5,
 	)
 	assert_eq(result["leader_id"], 42)
 
@@ -602,9 +517,6 @@ func test_suppressed_cell_triggers_hydra_when_old_enough():
 		var p := _make_province(i, 100.0, 0.0, "Crab" if i < 4 else "Crane")
 		p.adjacent_province_ids = [(i + 1) % 8, (i + 7) % 8]
 		provinces[i] = p
-	var settlements: Array = []
-	for i: int in range(8):
-		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	var hydra_fired: bool = false
 	for seed_val: int in range(100):
@@ -612,7 +524,7 @@ func test_suppressed_cell_triggers_hydra_when_old_enough():
 		var cell := _make_cell(1, 0, Enums.BloodspeakerCellState.ACTIVE, 5)
 		cell.seasons_active = 10
 		var result: Dictionary = BloodspeakerNetworkSystem.on_cell_suppressed(
-			cell, provinces, [], settlements, dice, [10], 5,
+			cell, provinces, [], dice, [10], 5,
 		)
 		if result.get("hydra_spawned", false):
 			hydra_fired = true
@@ -624,44 +536,29 @@ func test_suppressed_cell_triggers_hydra_when_old_enough():
 # Sleeper Aftermath Tests (s56.14.4)
 # =============================================================================
 
-func test_sleeper_bonus_increases_spawn_chance():
-	var c := _make_character(1, "10", 1.0, 0.0)
-	c.cult_affiliation = true
-	var bonus: float = BloodspeakerNetworkSystem.get_sleeper_spawn_bonus(
-		1, [c], {10: 1},
-	)
+func test_sleeper_aftermath_bonus_at_4_seasons():
+	var bonus: float = BloodspeakerNetworkSystem.get_sleeper_aftermath_bonus(4)
 	assert_almost_eq(bonus, 0.15, 0.001)
 
 
-func test_sleeper_bonus_caps_at_30_percent():
-	var chars: Array = []
-	for i: int in range(5):
-		var c := _make_character(i, "10", 1.0, 0.0)
-		c.cult_affiliation = true
-		chars.append(c)
-	var bonus: float = BloodspeakerNetworkSystem.get_sleeper_spawn_bonus(
-		1, chars, {10: 1},
-	)
+func test_sleeper_aftermath_bonus_at_8_seasons():
+	var bonus: float = BloodspeakerNetworkSystem.get_sleeper_aftermath_bonus(8)
 	assert_almost_eq(bonus, 0.30, 0.001)
 
 
-func test_sleeper_bonus_zero_without_affiliation():
-	var c := _make_character(1, "10", 1.0, 0.0)
-	c.cult_affiliation = false
-	var bonus: float = BloodspeakerNetworkSystem.get_sleeper_spawn_bonus(
-		1, [c], {10: 1},
-	)
+func test_sleeper_aftermath_bonus_zero_under_4_seasons():
+	var bonus: float = BloodspeakerNetworkSystem.get_sleeper_aftermath_bonus(3)
 	assert_almost_eq(bonus, 0.0, 0.001)
 
 
-func test_sleeper_bonus_ignores_dead_characters():
-	var c := _make_character(1, "10", 1.0, 0.0)
-	c.cult_affiliation = true
-	c.wounds_taken = 1000
-	var bonus: float = BloodspeakerNetworkSystem.get_sleeper_spawn_bonus(
-		1, [c], {10: 1},
-	)
-	assert_almost_eq(bonus, 0.0, 0.001)
+func test_sleeper_aftermath_bonus_at_6_seasons():
+	var bonus: float = BloodspeakerNetworkSystem.get_sleeper_aftermath_bonus(6)
+	assert_almost_eq(bonus, 0.15, 0.001)
+
+
+func test_sleeper_aftermath_bonus_at_12_seasons():
+	var bonus: float = BloodspeakerNetworkSystem.get_sleeper_aftermath_bonus(12)
+	assert_almost_eq(bonus, 0.30, 0.001)
 
 
 # =============================================================================
@@ -672,7 +569,7 @@ func test_dormant_cell_contributes_ptl():
 	var cell := _make_cell(1, 1)
 	var provinces: Dictionary = {1: _make_province(1)}
 	var result: Dictionary = BloodspeakerNetworkSystem.process_season(
-		[cell], provinces, [], [], [100], _dice, 1, [10],
+		[cell], provinces, [], [100], _dice, 1, [10],
 	)
 	var ptl: float = result.get("ptl_contributions", {}).get(1, 0.0)
 	assert_almost_eq(ptl, BloodspeakerNetworkSystem.DORMANT_PTL_PER_SEASON, 0.001)
@@ -683,7 +580,7 @@ func test_multiple_dormant_cells_stack_ptl():
 	var cell2 := _make_cell(2, 1)
 	var provinces: Dictionary = {1: _make_province(1)}
 	var result: Dictionary = BloodspeakerNetworkSystem.process_season(
-		[cell1, cell2], provinces, [], [], [100], _dice, 1, [10],
+		[cell1, cell2], provinces, [], [100], _dice, 1, [10],
 	)
 	var ptl: float = result.get("ptl_contributions", {}).get(1, 0.0)
 	assert_almost_eq(ptl, BloodspeakerNetworkSystem.DORMANT_PTL_PER_SEASON * 2, 0.001)
@@ -698,7 +595,7 @@ func test_dormant_cell_increments_seasons():
 	assert_eq(cell.seasons_dormant, 0)
 	var provinces: Dictionary = {1: _make_province(1)}
 	BloodspeakerNetworkSystem.process_season(
-		[cell], provinces, [], [], [100], _dice, 1, [10],
+		[cell], provinces, [], [100], _dice, 1, [10],
 	)
 	assert_eq(cell.seasons_dormant, 1)
 
@@ -708,7 +605,7 @@ func test_active_cell_increments_seasons():
 	assert_eq(cell.seasons_active, 0)
 	var provinces: Dictionary = {1: _make_province(1)}
 	BloodspeakerNetworkSystem.process_season(
-		[cell], provinces, [], [], [100], _dice, 1, [10],
+		[cell], provinces, [], [100], _dice, 1, [10],
 	)
 	assert_eq(cell.seasons_active, 1)
 
@@ -717,14 +614,13 @@ func test_destroyed_cells_are_skipped():
 	var cell := _make_cell(1, 1, Enums.BloodspeakerCellState.DESTROYED)
 	var provinces: Dictionary = {1: _make_province(1)}
 	var result: Dictionary = BloodspeakerNetworkSystem.process_season(
-		[cell], provinces, [], [], [100], _dice, 1, [10],
+		[cell], provinces, [], [100], _dice, 1, [10],
 	)
 	assert_eq(result.get("events", []).size(), 0)
 	assert_eq(result.get("ptl_contributions", {}).size(), 0)
 
 
 func test_activation_creates_insurgency():
-	var cell := _make_cell(1, 1)
 	var provinces: Dictionary = {1: _make_province(1, 100.0, 0.0)}
 	var next_ins_id: Array = [100]
 
@@ -732,7 +628,7 @@ func test_activation_creates_insurgency():
 		var dice := DiceEngine.new(seed_val)
 		var test_cell := _make_cell(1, 1)
 		var result: Dictionary = BloodspeakerNetworkSystem.process_season(
-			[test_cell], provinces, [], [], next_ins_id, dice, 1, [10],
+			[test_cell], provinces, [], next_ins_id, dice, 1, [10],
 		)
 		if result.get("new_insurgencies", []).size() > 0:
 			var ins: InsurgencyData = result["new_insurgencies"][0]
@@ -808,96 +704,18 @@ func test_count_living_cells():
 
 
 # =============================================================================
-# Leader Selection Tests
-# =============================================================================
-
-func test_leader_selection_prefers_high_susceptibility():
-	var chars: Array = []
-	var chars_by_id: Dictionary = {}
-	var low_sus := _make_character(1, "10", 8.0, 5.0)
-	low_sus.shourido_virtue = Enums.ShouridoVirtue.NONE
-	chars.append(low_sus)
-	chars_by_id[1] = low_sus
-
-	var high_sus := _make_character(2, "10", 0.5, 0.0, 3.0)
-	high_sus.shourido_virtue = Enums.ShouridoVirtue.KETSUI
-	high_sus.lord_id = 99
-	high_sus.disposition_values = {"99": -40}
-	chars.append(high_sus)
-	chars_by_id[2] = high_sus
-
-	var selections: Dictionary = {1: 0, 2: 0}
-	for seed_val: int in range(100):
-		var dice := DiceEngine.new(seed_val)
-		var leader: int = BloodspeakerNetworkSystem._select_cell_leader(
-			1, chars, chars_by_id, [], dice,
-		)
-		if leader >= 0:
-			selections[leader] = selections.get(leader, 0) + 1
-
-	assert_true(selections.get(2, 0) > selections.get(1, 0),
-		"High susceptibility should be selected more often: t1=%d t2=%d" % [selections.get(1, 0), selections.get(2, 0)])
-
-
-func test_leader_skips_dead_characters():
-	var c := _make_character(1, "10", 0.5, 0.0, 3.0)
-	c.shourido_virtue = Enums.ShouridoVirtue.KETSUI
-	c.wounds_taken = 1000
-	var leader: int = BloodspeakerNetworkSystem._select_cell_leader(
-		1, [c], {1: c}, [], _dice,
-	)
-	assert_eq(leader, -1)
-
-
-func test_leader_skips_already_affiliated():
-	var c := _make_character(1, "10", 0.5, 0.0, 3.0)
-	c.shourido_virtue = Enums.ShouridoVirtue.KETSUI
-	c.cult_affiliation = true
-	var leader: int = BloodspeakerNetworkSystem._select_cell_leader(
-		1, [c], {1: c}, [], _dice,
-	)
-	assert_eq(leader, -1)
-
-
-func test_leader_sets_cult_affiliation():
-	var provinces: Dictionary = {}
-	for i: int in range(5):
-		provinces[i] = _make_province(i)
-	var settlements: Array = []
-	for i: int in range(5):
-		settlements.append(_make_settlement(i * 10, i, 30, 2))
-
-	var c := _make_character(1, "10", 0.5, 0.0, 3.0)
-	c.shourido_virtue = Enums.ShouridoVirtue.KETSUI
-	c.lord_id = 99
-	c.disposition_values = {"99": -40}
-	var chars: Array = [c]
-	var chars_by_id: Dictionary = {1: c}
-
-	var next_id: Array = [1]
-	BloodspeakerNetworkSystem.generate_initial_cells(
-		provinces, settlements, chars, chars_by_id, _dice, next_id, 0,
-	)
-	if c.cult_affiliation:
-		assert_true(c.cult_affiliation)
-	else:
-		pass_test("Leader selection is weighted — may not pick this NPC every time")
-
-
-# =============================================================================
 # DayOrchestrator Integration Tests
 # =============================================================================
 
 func test_orchestrator_processes_bloodspeaker_cells():
 	var cell := _make_cell(1, 1)
 	var provinces: Dictionary = {1: _make_province(1)}
-	var settlements: Array = [_make_settlement(10, 1, 30, 2)]
 	var insurgencies: Array = []
 	var next_ins_id: Array = [100]
 	var next_cell_id: Array = [10]
 
 	var result: Dictionary = DayOrchestrator._process_bloodspeaker_network(
-		[cell], provinces, settlements, insurgencies,
+		[cell], provinces, insurgencies,
 		next_ins_id, _dice, 1, next_cell_id,
 		[], {}, {10: 1},
 	)
@@ -912,7 +730,7 @@ func test_orchestrator_applies_ptl_contributions():
 	assert_almost_eq(province.province_taint_level, 0.0, 0.001)
 
 	DayOrchestrator._process_bloodspeaker_network(
-		[cell], provinces, [], [],
+		[cell], provinces, [],
 		[100], _dice, 1, [10],
 		[], {}, {},
 	)
@@ -925,9 +743,6 @@ func test_orchestrator_appends_new_cells():
 		var p := _make_province(i, 100.0, 0.0, "Crab" if i < 5 else "Crane")
 		p.adjacent_province_ids = [(i + 1) % 10, (i + 9) % 10]
 		provinces[i] = p
-	var settlements: Array = []
-	for i: int in range(10):
-		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	for seed_val: int in range(500):
 		var dice := DiceEngine.new(seed_val)
@@ -935,7 +750,7 @@ func test_orchestrator_appends_new_cells():
 		var cells: Array = [cell]
 		var next_cell_id: Array = [10]
 		DayOrchestrator._process_bloodspeaker_network(
-			cells, provinces, settlements, [],
+			cells, provinces, [],
 			[100], dice, 1, next_cell_id,
 			[], {}, {},
 		)
@@ -951,9 +766,6 @@ func test_orchestrator_suppression_triggers_hydra():
 		var p := _make_province(i, 100.0, 0.0, "Crab" if i < 4 else "Crane")
 		p.adjacent_province_ids = [(i + 1) % 8, (i + 7) % 8]
 		provinces[i] = p
-	var settlements: Array = []
-	for i: int in range(8):
-		settlements.append(_make_settlement(i * 10, i, 30, 2))
 
 	for seed_val: int in range(100):
 		var dice := DiceEngine.new(seed_val)
@@ -966,7 +778,7 @@ func test_orchestrator_suppression_triggers_hydra():
 		# by _process_insurgencies (suppressed, strength 0). The bloodspeaker
 		# processor detects this missing insurgency and triggers suppression.
 		DayOrchestrator._process_bloodspeaker_network(
-			cells, provinces, settlements, [],
+			cells, provinces, [],
 			[101], dice, 5, [10],
 			[], {}, {},
 		)
@@ -1017,13 +829,10 @@ func test_generate_initial_active_cells_have_insurgencies():
 	var provinces: Dictionary = {}
 	for i: int in range(40):
 		provinces[i] = _make_province(i)
-	var settlements: Array = []
-	for i: int in range(40):
-		settlements.append(_make_settlement(i * 10, i, 30, 2))
 	var next_cid: Array = [1]
 	var next_iid: Array = [100]
 	var gen_result: Dictionary = BloodspeakerNetworkSystem.generate_initial_cells(
-		provinces, settlements, [], {}, _dice, next_cid, 0, [], next_iid,
+		provinces, _dice, next_cid, 0, next_iid,
 	)
 	var cells: Array = gen_result["cells"]
 	var insurgencies: Array = gen_result["insurgencies"]
@@ -1052,8 +861,8 @@ func test_bloodspeaker_activation_topic_has_momentum():
 	var topics: Array = []
 	var next_tid: Array = [500]
 	var result: Dictionary = DayOrchestrator._process_bloodspeaker_network(
-		[cell], {1: prov}, [], [ins], [2], _dice, 0, [2],
-		[], {}, {}, {}, topics, next_tid, 10,
+		[cell], {1: prov}, [ins], [2], _dice, 0, [2],
+		[], {}, {}, topics, next_tid, 10,
 	)
 	if topics.size() > 0:
 		var t: TopicData = topics[0]

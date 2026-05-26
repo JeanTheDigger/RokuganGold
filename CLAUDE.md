@@ -2759,6 +2759,43 @@ costs, or forward-wiring. Do not treat as bugs.
   assignments. NPC crafting is non-functional until GDD specifies the
   NPC decision pipeline for crafting. 55 tests (down from 122).
 
+### Invented Content Removal (2026-05-26)
+- **s56.16 Spiritual Insurgency — NPC resolution and supporting functions removed.**
+  `resolve_npc_event()`, `get_resolution_effects()`, `generate_battle_triggered_event()`
+  removed (invented TNs 15/20/25/30, invented honor/glory values 0.3/0.5/0.1/0.2,
+  invented battle casualty thresholds 50/100/200 PU, invented 60/40 Gaki-do/Toshigoku
+  split). `NPC_RESOLUTION_BASE_TN` dictionary removed. `BASE_REALM_WEIGHTS` and 7
+  condition bonus constants removed — select_realm() now uses equal-probability random.
+  `_build_province_conditions()` and `_weighted_select()` removed (only existed for
+  weighted realm selection). EVENTS_PER_SEASON for MODERATE/SEVERE/CATASTROPHIC removed
+  (GDD says "one or two"/"multiple"/"near-permanent" but no counts beyond MILD=1).
+  Severity-to-topic-tier mapping removed (GDD does not specify). DayOrchestrator:
+  `_resolve_spiritual_events()` and `_find_province_shugenja()` removed.
+  `_process_spiritual_insurgency()` simplified to trigger-only (no NPC resolution).
+  Topic creation now skips when tier is -1 (sentinel). Tests reduced from 73 to ~45.
+- **s56.14 Bloodspeaker Network — placement weights and leader selection removed.**
+  All WEIGHT_* constants (BASE, HIGH_POPULATION, ETA_COMMUNITY, SHADOWLANDS_ADJACENT,
+  URBAN_CENTER, LOW_GARRISON), URBAN_SETTLEMENT_TYPES, and HIGH_POPULATION_THRESHOLD
+  removed. `_compute_province_weights()`, `_weighted_select_provinces()`,
+  `_compute_single_province_weight()` replaced with uniform random province selection.
+  Leader selection removed entirely: LEADER_SUSCEPTIBILITY_THRESHOLD and LEADER_TIER*
+  weights removed, `_select_cell_leader()` removed, `leader_id` set to -1 for all cells.
+  `get_sleeper_aftermath_bonus()` rewritten: now uses flat +15%/+30% based on seasons
+  since suppression (4/8 season thresholds per GDD), replacing per-character 0.15 capped
+  at 0.30. `generate_initial_cells()` and `process_season()` signatures simplified
+  (removed characters, characters_by_id, settlements parameters). Tests reduced from
+  ~63 to 55.
+- **s57.38 Hunt System — 8 interpolated beast stat blocks removed.**
+  BEAST_STATS reduced to 2 GDD-confirmed species (bear, ozaru). 8 interpolated
+  species removed (wolf, boar, stag, fox, ox, goat, cliff_predator, ozutsu_serpent).
+  TERRAIN_BEAST_POOLS reduced to FOREST and MOUNTAINS (only pools with available
+  beasts). PLAINS, HILLS, COASTAL pools commented out (blocked on s54.1 bestiary).
+  generate_beast() fallback changed from "boar" to "bear".
+- **s4.8 Individual Combat — 2 invented honor/glory constants removed.**
+  HONOR_STRIKING_AFTER_FIRST_BLOOD (-1.0) and GLORY_DECLINE_DEATH_DUEL (-0.5)
+  removed. GDD Table 2.3 does not specify these values. concede_at_assessment()
+  and resolve_strike_after_first_blood() now return 0.0 for honor/glory changes.
+
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
   SkillResolver and ActionExecutor. Doji Courtier R1a (honor-gated Free Raise on

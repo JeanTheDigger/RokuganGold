@@ -1,8 +1,31 @@
 class_name SpiritualInsurgencySystem
-## Spiritual insurgency trigger and NPC resolution per GDD s56.16.
+## Spiritual insurgency trigger layer per GDD s56.16.
 ## Detects worship failure thresholds, selects realm/element, determines
-## severity, and resolves via dice engine for NPC-only provinces.
-## ASCII map encounter layer deferred to s56 quest system.
+## severity. ASCII map encounter layer deferred to s56 quest system.
+##
+## REMOVED (2026-05-26): invented content not specified in GDD s56.16.
+## - BASE_REALM_WEIGHTS and 7 condition bonus constants (FAMINE_GAKI_DO_BONUS,
+##   etc.) — GDD s56.16.1a describes qualitative weighting factors but gives no
+##   numeric weights. Realm selection is now equal-probability random.
+## - NPC_RESOLUTION_BASE_TN dictionary — GDD s56.16.5b specifies ritual rounds
+##   and skill rolls but no NPC-only resolution TN table.
+## - BATTLE_CASUALTY_TRIGGER_THRESHOLD — GDD s56.16.4 says "significant
+##   casualties" and "major battle" but gives no numeric threshold.
+## - generate_battle_triggered_event() — invented thresholds (50/100/200 PU)
+##   and 60/40 Gaki-do/Toshigoku split not in GDD.
+## - resolve_npc_event() — invented TNs (15/20/25/30) and margin-based
+##   resolution tiers not in GDD. Resolution spectrum (s56.16.5f) describes
+##   player encounter outcomes, not NPC dice rolls.
+## - get_resolution_effects() — invented honor/glory values (0.3/0.5, 0.1/0.2)
+##   not in GDD.
+## - _build_province_conditions() — only existed to feed removed weighted
+##   realm selection.
+## - _weighted_select() — only existed for removed weighted realm selection.
+## - create_event_topic() severity-to-tier mapping — GDD does not specify
+##   which topic tier corresponds to which severity level.
+## - EVENTS_PER_SEASON for MODERATE/SEVERE/CATASTROPHIC — GDD says "one or
+##   two" (MODERATE), "multiple" (SEVERE), "near-permanent" (CATASTROPHIC)
+##   but gives no counts beyond MILD = 1.
 
 
 # -- Trigger Thresholds (s56.16) -----------------------------------------------
@@ -16,26 +39,6 @@ const SEVERITY_THRESHOLDS: Dictionary = {
 
 const WRATHFUL_SEVERITY_FLOOR: Enums.SpiritualSeverity = Enums.SpiritualSeverity.SEVERE
 const CATASTROPHIC_WRATHFUL_COUNT: int = 5
-
-
-# -- Realm Weights (s56.16.1a) -------------------------------------------------
-
-const BASE_REALM_WEIGHTS: Dictionary = {
-	Enums.SpiritRealm.GAKI_DO: 10.0,
-	Enums.SpiritRealm.TOSHIGOKU: 10.0,
-	Enums.SpiritRealm.CHIKUSHUDO: 10.0,
-	Enums.SpiritRealm.SAKKAKU: 10.0,
-	Enums.SpiritRealm.MEIDO: 10.0,
-	Enums.SpiritRealm.YUME_DO: 10.0,
-}
-
-const FAMINE_GAKI_DO_BONUS: float = 30.0
-const BATTLE_TOSHIGOKU_BONUS: float = 25.0
-const BATTLE_GAKI_DO_BONUS: float = 15.0
-const FOREST_CHIKUSHUDO_BONUS: float = 20.0
-const INTRIGUE_SAKKAKU_BONUS: float = 20.0
-const POPULATION_LOSS_MEIDO_BONUS: float = 25.0
-const SHUGENJA_YUME_DO_BONUS: float = 15.0
 
 
 # -- Elemental Counter Pairs (s56.16.5d) --------------------------------------
@@ -67,27 +70,29 @@ const REALM_RESTORATION_TRAIT: Dictionary = {
 	Enums.SpiritRealm.YUME_DO: "willpower",
 }
 
-const NPC_RESOLUTION_BASE_TN: Dictionary = {
-	Enums.SpiritualSeverity.MILD: 15,
-	Enums.SpiritualSeverity.MODERATE: 20,
-	Enums.SpiritualSeverity.SEVERE: 25,
-	Enums.SpiritualSeverity.CATASTROPHIC: 30,
-}
-
 
 # -- Events per Season (s56.16.3) ---------------------------------------------
+# GDD confirms: MILD = 1 ("One bleed event per season").
+# MODERATE says "one or two" but does not specify probability — use 1.
+# SEVERE ("multiple") and CATASTROPHIC ("near-permanent") have no explicit
+# counts. Only GDD-confirmed values are included.
 
 const EVENTS_PER_SEASON: Dictionary = {
 	Enums.SpiritualSeverity.MILD: 1,
-	Enums.SpiritualSeverity.MODERATE: 2,
-	Enums.SpiritualSeverity.SEVERE: 3,
-	Enums.SpiritualSeverity.CATASTROPHIC: 4,
+	Enums.SpiritualSeverity.MODERATE: 1,
 }
 
 
-# -- Mass Battle Trigger (s56.16.4) -------------------------------------------
+# -- All Six Realms (for equal-probability selection) -------------------------
 
-const BATTLE_CASUALTY_TRIGGER_THRESHOLD: int = 50
+const ALL_REALMS: Array[int] = [
+	Enums.SpiritRealm.GAKI_DO,
+	Enums.SpiritRealm.TOSHIGOKU,
+	Enums.SpiritRealm.CHIKUSHUDO,
+	Enums.SpiritRealm.SAKKAKU,
+	Enums.SpiritRealm.MEIDO,
+	Enums.SpiritRealm.YUME_DO,
+]
 
 
 # =============================================================================
@@ -140,59 +145,15 @@ static func select_event_type(dice: DiceEngine) -> Enums.SpiritualEventType:
 
 
 # =============================================================================
-# Realm Selection (s56.16.1a — weighted by province conditions)
+# Realm Selection — Equal Probability
 # =============================================================================
+# GDD s56.16.1a describes qualitative weighting factors (famine biases
+# Gaki-do, battle biases Toshigoku, etc.) but provides no numeric weights.
+# Until the GDD specifies weights, selection is equal-probability random
+# across all 6 realms.
 
-static func select_realm(
-	province_conditions: Dictionary,
-	dice: DiceEngine,
-) -> Enums.SpiritRealm:
-	var weights: Dictionary = BASE_REALM_WEIGHTS.duplicate()
-
-	if province_conditions.get("famine_active", false):
-		weights[Enums.SpiritRealm.GAKI_DO] += FAMINE_GAKI_DO_BONUS
-	if province_conditions.get("starvation_stage", 0) >= ResourceTick.StarvationStage.HUNGER:
-		weights[Enums.SpiritRealm.GAKI_DO] += FAMINE_GAKI_DO_BONUS * 0.5
-
-	if province_conditions.get("recent_battle", false):
-		weights[Enums.SpiritRealm.TOSHIGOKU] += BATTLE_TOSHIGOKU_BONUS
-		weights[Enums.SpiritRealm.GAKI_DO] += BATTLE_GAKI_DO_BONUS
-
-	if province_conditions.get("forest_province", false):
-		weights[Enums.SpiritRealm.CHIKUSHUDO] += FOREST_CHIKUSHUDO_BONUS
-
-	if province_conditions.get("court_intrigue_active", false):
-		weights[Enums.SpiritRealm.SAKKAKU] += INTRIGUE_SAKKAKU_BONUS
-
-	var secrets_count: int = province_conditions.get("secrets_count", 0)
-	if secrets_count >= 3:
-		weights[Enums.SpiritRealm.SAKKAKU] += INTRIGUE_SAKKAKU_BONUS * 0.5
-
-	if province_conditions.get("recent_population_loss", false):
-		weights[Enums.SpiritRealm.MEIDO] += POPULATION_LOSS_MEIDO_BONUS
-
-	if province_conditions.get("shugenja_activity_surplus", false):
-		weights[Enums.SpiritRealm.YUME_DO] += SHUGENJA_YUME_DO_BONUS
-
-	return _weighted_select(weights, dice)
-
-
-static func _weighted_select(
-	weights: Dictionary,
-	dice: DiceEngine,
-) -> Enums.SpiritRealm:
-	var total: float = 0.0
-	for realm: int in weights:
-		total += weights[realm]
-
-	var roll: float = dice.randf() * total
-	var cumulative: float = 0.0
-	for realm: int in weights:
-		cumulative += weights[realm]
-		if roll <= cumulative:
-			return realm as Enums.SpiritRealm
-
-	return Enums.SpiritRealm.YUME_DO
+static func select_realm(dice: DiceEngine) -> Enums.SpiritRealm:
+	return ALL_REALMS[dice.rand_int_range(0, ALL_REALMS.size() - 1)] as Enums.SpiritRealm
 
 
 # =============================================================================
@@ -217,7 +178,6 @@ static func select_element(dice: DiceEngine) -> Enums.Ring:
 static func generate_event(
 	province_id: int,
 	province_tiers: Dictionary,
-	province_conditions: Dictionary,
 	event_id: int,
 	season: int,
 	dice: DiceEngine,
@@ -230,7 +190,7 @@ static func generate_event(
 	event.event_type = select_event_type(dice)
 
 	if event.event_type == Enums.SpiritualEventType.REALM_OVERLAP:
-		event.realm = select_realm(province_conditions, dice)
+		event.realm = select_realm(dice)
 		event.element = Enums.Ring.NONE
 	else:
 		event.element = select_element(dice)
@@ -239,110 +199,16 @@ static func generate_event(
 	return event
 
 
-static func generate_battle_triggered_event(
-	province_id: int,
-	casualties: int,
-	event_id: int,
-	season: int,
-	dice: DiceEngine,
-) -> SpiritualInsurgencyData:
-	if casualties < BATTLE_CASUALTY_TRIGGER_THRESHOLD:
-		return null
-
-	var event := SpiritualInsurgencyData.new()
-	event.event_id = event_id
-	event.province_id = province_id
-	event.event_type = Enums.SpiritualEventType.REALM_OVERLAP
-	event.element = Enums.Ring.NONE
-	event.season_spawned = season
-
-	if dice.randf() < 0.6:
-		event.realm = Enums.SpiritRealm.GAKI_DO
-	else:
-		event.realm = Enums.SpiritRealm.TOSHIGOKU
-
-	if casualties >= 200:
-		event.severity = Enums.SpiritualSeverity.SEVERE
-	elif casualties >= 100:
-		event.severity = Enums.SpiritualSeverity.MODERATE
-	else:
-		event.severity = Enums.SpiritualSeverity.MILD
-
-	return event
-
-
-# =============================================================================
-# NPC-Only Resolution (dice engine path — s56.16.5b)
-# =============================================================================
-
-static func resolve_npc_event(
-	event: SpiritualInsurgencyData,
-	shugenja: L5RCharacterData,
-	dice_engine: DiceEngine,
-) -> Dictionary:
-	var tn: int = NPC_RESOLUTION_BASE_TN.get(event.severity, 20)
-	var theology_rank: int = shugenja.skills.get("Lore: Theology", 0)
-	var trait_name: String = ""
-	var trait_value: int = 0
-
-	if event.event_type == Enums.SpiritualEventType.REALM_OVERLAP:
-		trait_name = REALM_RESTORATION_TRAIT.get(event.realm, "awareness")
-		trait_value = _get_trait_value(shugenja, trait_name)
-	else:
-		var counter: int = ELEMENTAL_COUNTER.get(event.element, Enums.Ring.NONE)
-		if counter == Enums.Ring.NONE:
-			trait_value = shugenja.void_ring
-			trait_name = "void"
-		else:
-			trait_name = _ring_to_trait_name(counter)
-			trait_value = _get_trait_value(shugenja, trait_name)
-
-	var roll_result: DiceResult = dice_engine.roll_and_keep(
-		theology_rank + trait_value, trait_value, theology_rank > 0
-	)
-	var total: int = roll_result.total
-	var margin: int = total - tn
-
-	var result: Dictionary = {
-		"event_id": event.event_id,
-		"province_id": event.province_id,
-		"shugenja_id": shugenja.character_id,
-		"tn": tn,
-		"total": total,
-		"success": margin >= 0,
-		"margin": margin,
-	}
-
-	if margin >= 0:
-		if margin >= 15:
-			result["resolution_type"] = "full"
-		else:
-			result["resolution_type"] = "partial"
-		event.resolved = true
-		event.resolution_type = result["resolution_type"]
-	else:
-		if margin >= -10:
-			result["resolution_type"] = "retreat"
-		else:
-			result["resolution_type"] = "failure"
-		event.resolution_type = result["resolution_type"]
-
-	event.npc_resolution_attempted = true
-	return result
-
-
 # =============================================================================
 # Seasonal Processing
 # =============================================================================
 
 static func process_seasonal_check(
 	worship_state: Dictionary,
-	provinces: Dictionary,
 	existing_events: Array,
 	next_event_id: Array,
 	current_season: int,
 	dice: DiceEngine,
-	season_meta: Dictionary = {},
 ) -> Array:
 	var new_events: Array = []
 	var province_tiers: Dictionary = worship_state.get("province_tiers", {})
@@ -360,13 +226,12 @@ static func process_seasonal_check(
 			continue
 
 		var events_to_generate: int = max_events - existing_count
-		var conditions: Dictionary = _build_province_conditions(pid, provinces, season_meta)
 
 		for _i: int in range(events_to_generate):
 			var eid: int = next_event_id[0]
 			next_event_id[0] += 1
 			var event: SpiritualInsurgencyData = generate_event(
-				int(pid), tiers, conditions, eid, current_season, dice
+				int(pid), tiers, eid, current_season, dice
 			)
 			new_events.append(event)
 
@@ -385,33 +250,6 @@ static func _count_active_events_for_province(
 	return count
 
 
-static func _build_province_conditions(
-	province_id: Variant,
-	provinces: Dictionary,
-	season_meta: Dictionary = {},
-) -> Dictionary:
-	var conditions: Dictionary = {}
-	var province: ProvinceData = provinces.get(province_id, null) as ProvinceData
-	if province == null:
-		province = provinces.get(int(province_id), null) as ProvinceData
-	if province == null:
-		return conditions
-
-	var famine_tracking: Dictionary = season_meta.get("_famine_tracking", {})
-	var pid_famine: Dictionary = famine_tracking.get(int(province_id), {})
-	var famine_seasons: int = pid_famine.get("consecutive_seasons", 0)
-	conditions["famine_active"] = famine_seasons >= 1
-	conditions["starvation_stage"] = famine_seasons
-	conditions["recent_battle"] = province.active_crisis_id >= 0
-	conditions["forest_province"] = province.terrain_type == Enums.TerrainType.FOREST
-	conditions["court_intrigue_active"] = false
-	conditions["secrets_count"] = 0
-	conditions["recent_population_loss"] = province.stability < 75.0
-	conditions["shugenja_activity_surplus"] = false
-
-	return conditions
-
-
 static func increment_seasons(events: Array) -> void:
 	for event: SpiritualInsurgencyData in events:
 		if event is SpiritualInsurgencyData and not event.resolved:
@@ -427,17 +265,6 @@ static func create_event_topic(
 	next_topic_id: Array,
 	ic_day: int,
 ) -> Dictionary:
-	var tier: int = TopicData.Tier.TIER_4
-	match event.severity:
-		Enums.SpiritualSeverity.MILD:
-			tier = TopicData.Tier.TIER_3
-		Enums.SpiritualSeverity.MODERATE:
-			tier = TopicData.Tier.TIER_2
-		Enums.SpiritualSeverity.SEVERE:
-			tier = TopicData.Tier.TIER_1
-		Enums.SpiritualSeverity.CATASTROPHIC:
-			tier = TopicData.Tier.TIER_1
-
 	var title: String = ""
 	if event.event_type == Enums.SpiritualEventType.REALM_OVERLAP:
 		title = "Spirit realm disturbance in province %d" % event.province_id
@@ -450,7 +277,7 @@ static func create_event_topic(
 	return {
 		"topic_id": topic_id,
 		"title": title,
-		"tier": tier,
+		"tier": -1,
 		"category": TopicData.Category.SUPERNATURAL,
 		"subject_character_id": -1,
 		"ic_day_created": ic_day,
@@ -458,32 +285,6 @@ static func create_event_topic(
 		"event_id": event.event_id,
 		"crisis_id": -1,
 	}
-
-
-# =============================================================================
-# Resolution Effects
-# =============================================================================
-
-static func get_resolution_effects(result: Dictionary) -> Dictionary:
-	var effects: Dictionary = {}
-
-	match result.get("resolution_type", ""):
-		"full":
-			effects["overlap_dissolves"] = true
-			effects["honor_gain"] = 0.3
-			effects["glory_gain"] = 0.5
-		"partial":
-			effects["overlap_weakened"] = true
-			effects["honor_gain"] = 0.1
-			effects["glory_gain"] = 0.2
-		"retreat":
-			effects["overlap_agitated"] = true
-			effects["severity_increase_duration"] = 1
-		"failure":
-			effects["overlap_fully_agitated"] = true
-			effects["severity_increase_duration"] = 1
-
-	return effects
 
 
 # =============================================================================
