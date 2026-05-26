@@ -183,6 +183,14 @@ const POSITION_ROLE_NAMES: Dictionary = {
 	PositionType.CLAN_MAGISTRATE_COMMANDER: "Clan Magistrate Commander",
 }
 
+const POSITION_MILITARY_RANK: Dictionary = {
+	PositionType.RIKUGUNSHOKAN: Enums.MilitaryRank.RIKUGUNSHOKAN,
+	PositionType.TAISA: Enums.MilitaryRank.TAISA,
+	PositionType.CHUI: Enums.MilitaryRank.CHUI,
+	PositionType.GARRISON_COMMANDER: Enums.MilitaryRank.GUNSO,
+	PositionType.WALL_SEGMENT_COMMANDER: Enums.MilitaryRank.CHUI,
+}
+
 
 # -- Position School Type Preferences -----------------------------------------
 
@@ -340,6 +348,7 @@ static func _generate_positioned_character(
 	c.lord_id = lord_id
 	c.orientation = GempukkuSystem.roll_orientation(dice)
 	c.role_position = POSITION_ROLE_NAMES.get(position_type, "")
+	c.military_rank = POSITION_MILITARY_RANK.get(position_type, Enums.MilitaryRank.NONE)
 	return c
 
 

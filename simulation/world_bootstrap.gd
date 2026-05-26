@@ -631,11 +631,17 @@ static func _create_initial_military(
 			if c.military_rank >= 2:
 				var company: Dictionary = {
 					"company_id": next_company_id,
-					"clan": clan_name,
+					"clan_name": clan_name,
 					"commander_id": c.character_id,
+					"lord_id": c.lord_id,
 					"current_health": 100.0,
 					"current_morale": 80.0,
 					"arms_deprivation_tick": 0,
+					"unit_type": Enums.CompanyUnitType.ASHIGARU_SPEARMEN,
+					"training_level": 2,
+					"training_points": 0,
+					"destroyed": false,
+					"levy_raised_season": 0,
 					"parent_legion_id": -1,
 					"parent_section_id": -1,
 					"parent_army_id": -1,
