@@ -2788,7 +2788,15 @@ costs, or forward-wiring. Do not treat as bugs.
   WorldStateSaver fix: DIR_CRAFTED_ITEMS, DIR_SPIRITUAL_EVENTS,
   DIR_BLOODSPEAKER_CELLS added to `_ensure_dirs()` — were declared as
   constants and used in save/load but never created on fresh directories.
-  107 tests.
+  NPC selection audit fixes: (1) CRAFT with can_craft=false now filtered
+  out in generate_options() — prevented AP waste on unskilled NPCs.
+  (2) Koku affordability check in `_build_craft_metadata()` — NPCs
+  without sufficient koku get can_craft=false instead of crafting for
+  free. (3) settlement_type field added to ContextSnapshot (int, -1
+  sentinel), injected from SettlementData via `_inject_settlement_type()`
+  in DayOrchestrator — material availability now uses actual settlement
+  type instead of inference from lord rank / context flag. Falls back to
+  `_infer_settlement_type()` when unavailable. 113 tests.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
