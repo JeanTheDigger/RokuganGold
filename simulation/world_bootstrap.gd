@@ -384,6 +384,7 @@ static func bootstrap_world(
 	var characters: Array = pop_result.get("characters", [])
 
 	_assign_physical_locations(characters, provinces, settlements, dice)
+	WorldPopulationGenerator._seed_co_located_contacts(characters)
 
 	var military_data: Dictionary = _create_initial_military(
 		characters, clans, provinces, dice,
@@ -397,7 +398,7 @@ static func bootstrap_world(
 		"emperor_id": pop_result.get("emperor_id", -1),
 		"clan_champions": pop_result.get("clan_champions", {}),
 		"military_data": military_data,
-		"next_character_id": pop_result.get("total_count", 0) + 1,
+		"next_character_id": pop_result.get("next_character_id", pop_result.get("total_count", 0) + 1),
 		"next_settlement_id": next_settlement_id,
 	}
 

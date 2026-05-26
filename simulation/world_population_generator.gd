@@ -832,6 +832,28 @@ static func _apply_starting_dispositions(
 			)
 
 
+static func _seed_co_located_contacts(characters: Array) -> void:
+	var by_location: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		var loc: String = c.physical_location
+		if loc.is_empty():
+			continue
+		if not by_location.has(loc):
+			by_location[loc] = []
+		by_location[loc].append(c)
+
+	for loc: String in by_location:
+		var group: Array = by_location[loc]
+		for i: int in range(group.size()):
+			var a: L5RCharacterData = group[i]
+			for j: int in range(i + 1, group.size()):
+				var b: L5RCharacterData = group[j]
+				if not a.met_characters.has(b.character_id):
+					a.met_characters.append(b.character_id)
+				if not b.met_characters.has(a.character_id):
+					b.met_characters.append(a.character_id)
+
+
 # -- Count Helpers -------------------------------------------------------------
 
 static func _count_by_rank(characters: Array, clan: String) -> Dictionary:
@@ -955,4 +977,5 @@ static func generate_world_population(
 		"emperor_id": emperor_id,
 		"clan_champions": clan_champions,
 		"total_count": all_characters.size(),
+		"next_character_id": next_id[0],
 	}

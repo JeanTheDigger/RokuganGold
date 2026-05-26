@@ -961,7 +961,8 @@ static func advance_day(
 	var phoenix_council_results: Dictionary = {}
 	var spiritual_insurgency_results: Dictionary = {}
 	var bloodspeaker_results: Dictionary = {}
-	if current_season != prev_season:
+	var is_season_boundary: bool = current_season != prev_season or ic_day <= 1
+	if is_season_boundary:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
 		# stays consistent. Year is computed from the time system's tick count.
 		var spring_inputs: Dictionary = miya_inputs.duplicate()
@@ -1193,7 +1194,7 @@ static func advance_day(
 			stipends, characters_by_id, active_topics, next_topic_id, ic_day,
 		)
 
-	if current_season != prev_season:
+	if is_season_boundary:
 		_purge_resolved_crime_records(crime_records, ic_day)
 		_purge_delivered_letters(pending_letters, characters_by_id, ic_day)
 		_purge_exposed_secrets(active_secrets, characters_by_id, ic_day)
@@ -1217,7 +1218,7 @@ static func advance_day(
 	return {
 		"ic_day": ic_day,
 		"season": current_season,
-		"season_changed": current_season != prev_season,
+		"season_changed": is_season_boundary,
 		"day_results": day_result.get("results", []),
 		"applied": day_result.get("applied", []),
 		"conversation_results": conversation_results,
@@ -2526,7 +2527,7 @@ static func _process_horde_rolls(
 	active_topics: Array,
 	next_topic_id: Array,
 ) -> Dictionary:
-	if current_season == prev_season:
+	if current_season == prev_season and ic_day > 1:
 		return {}
 
 	# Increment season counter.
