@@ -389,7 +389,9 @@ static func bootstrap_world(
 	var characters: Array = pop_result.get("characters", [])
 
 	_assign_physical_locations(characters, provinces, settlements, dice)
-	WorldPopulationGenerator._seed_co_located_contacts(characters)
+	WorldPopulationGenerator._seed_co_located_contacts(
+		characters, baselines.get("clan", {}), baselines.get("family", {}),
+	)
 
 	var military_data: Dictionary = _create_initial_military(
 		characters, clans, provinces, dice, settlements,

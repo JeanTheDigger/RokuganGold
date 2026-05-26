@@ -962,7 +962,11 @@ static func _apply_starting_dispositions(
 			)
 
 
-static func _seed_co_located_contacts(characters: Array) -> void:
+static func _seed_co_located_contacts(
+	characters: Array,
+	clan_baselines: Dictionary = {},
+	family_baselines: Dictionary = {},
+) -> void:
 	var by_location: Dictionary = {}
 	for c: L5RCharacterData in characters:
 		var loc: String = c.physical_location
@@ -978,8 +982,14 @@ static func _seed_co_located_contacts(characters: Array) -> void:
 			var a: L5RCharacterData = group[i]
 			for j: int in range(i + 1, group.size()):
 				var b: L5RCharacterData = group[j]
-				InformationSystem.add_contact(a, b.character_id, b.clan)
-				InformationSystem.add_contact(b, a.character_id, a.clan)
+				InformationSystem.add_contact(
+					a, b.character_id, b.clan, b,
+					clan_baselines, family_baselines,
+				)
+				InformationSystem.add_contact(
+					b, a.character_id, a.clan, a,
+					clan_baselines, family_baselines,
+				)
 
 
 # -- Count Helpers -------------------------------------------------------------
@@ -1115,9 +1125,6 @@ static func generate_world_population(
 
 	_build_family_web(all_characters, dice)
 	_generate_ancestor_records(all_characters, dice)
-
-	if not clan_baselines.is_empty():
-		_apply_starting_dispositions(all_characters, clan_baselines, family_baselines)
 
 	return {
 		"characters": all_characters,
