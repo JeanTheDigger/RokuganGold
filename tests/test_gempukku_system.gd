@@ -122,12 +122,12 @@ func test_unknown_family_returns_empty() -> void:
 
 func test_all_families_have_schools() -> void:
 	var families: Array = [
-		"Hida", "Hiruma", "Kaiu", "Kuni", "Yasuki",
+		"Hida", "Hiruma", "Kaiu", "Kuni", "Yasuki", "Toritaka",
 		"Kakita", "Daidoji", "Doji", "Asahina",
-		"Mirumoto", "Kitsuki", "Tamori",
+		"Mirumoto", "Kitsuki", "Tamori", "Togashi",
 		"Akodo", "Matsu", "Ikoma", "Kitsu",
-		"Shiba", "Isawa", "Asako",
-		"Bayushi", "Soshi", "Shosuro",
+		"Shiba", "Isawa", "Asako", "Agasha",
+		"Bayushi", "Soshi", "Shosuro", "Yogo",
 		"Shinjo", "Moto", "Ide", "Iuchi", "Utaku",
 		"Yoritomo", "Moshi", "Tsuruchi",
 	]
