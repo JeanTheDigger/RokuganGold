@@ -135,7 +135,55 @@ func _load_world_state() -> void:
 			WorldState.provinces.size(),
 		])
 	else:
-		print("[SimulationScheduler] No saved world state found — starting fresh.")
+		print("[SimulationScheduler] No saved world state found — bootstrapping world.")
+		_bootstrap_fresh_world()
+
+
+func _bootstrap_fresh_world() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1120)
+
+	var result: Dictionary = WorldBootstrap.bootstrap_world(dice)
+
+	var chars: Array = result.get("characters", [])
+	WorldState.characters.clear()
+	for c: L5RCharacterData in chars:
+		WorldState.characters.append(c)
+	WorldState.rebuild_characters_by_id()
+
+	WorldState.provinces = result.get("provinces", {})
+
+	var settlements: Array = result.get("settlements", [])
+	WorldState.settlements.clear()
+	for s: SettlementData in settlements:
+		WorldState.settlements.append(s)
+
+	WorldState.clans = result.get("clans", {})
+
+	var mil: Dictionary = result.get("military_data", {})
+	WorldState.military_companies.assign(mil.get("companies", []))
+	WorldState.next_company_id[0] = mil.get("next_company_id", 1)
+
+	WorldState.emperor_id = result.get("emperor_id", -1)
+	var emperor: L5RCharacterData = WorldState.characters_by_id.get(WorldState.emperor_id)
+	if emperor != null and not emperor.physical_location.is_empty():
+		WorldState.emperor_settlement_id = emperor.physical_location.to_int()
+
+	WorldState.next_character_id[0] = result.get("next_character_id", 10000)
+	WorldState.next_settlement_id[0] = result.get("next_settlement_id", 5000)
+
+	var clan_champions: Dictionary = result.get("clan_champions", {})
+	for clan_name: String in clan_champions:
+		var cd: ClanData = WorldState.clans.get(clan_name)
+		if cd != null:
+			cd.champion_id = clan_champions[clan_name]
+
+	_save_world_state()
+	print("[SimulationScheduler] World bootstrapped: %d characters, %d provinces, %d settlements." % [
+		WorldState.characters.size(),
+		WorldState.provinces.size(),
+		WorldState.settlements.size(),
+	])
 
 
 # -- DST / Calendar Helpers ----------------------------------------------------

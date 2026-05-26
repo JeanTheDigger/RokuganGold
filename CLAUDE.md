@@ -2680,6 +2680,25 @@ costs, or forward-wiring. Do not treat as bugs.
   tests updated from synchronous `_execute_duel_challenge` to
   `resolve_accepted_duel()`. 3 wiring tests + 8 executor tests updated.
 
+### Systems Added 2026-05-26
+- **World Bootstrap System (s2.3, s52)** — `simulation/world_bootstrap.gd`. One-time
+  world initialization from GDD s2.3.90 province data. Creates all 138 provinces,
+  default settlements, and population on first run. PROVINCE_TABLE encodes all
+  provinces from the Adjacency Index: name, clan, family, is_coastal, is_island,
+  is_ungovernable. ADJACENCY_TABLE maps province names to adjacent province names
+  (bidirectional). FAMILY_SEAT_PROVINCES maps each family to its seat province for
+  castle placement. TERRAIN_HINTS maps families to TerrainType for PU scaling.
+  `bootstrap_world(dice)` creates provinces with terrain-scaled PU, settlements
+  (family seats get FAMILY_CASTLE/CASTLE, Toshi Ranbo gets CITY, islands get ports,
+  ungovernable Hiruma provinces get no settlements), wires adjacencies, creates
+  ClanData, generates population via WorldPopulationGenerator, assigns physical
+  locations, and creates initial military companies. Wired into
+  SimulationScheduler._bootstrap_fresh_world() which fires when no saved world
+  state exists on startup. Fixed missing families in CLAN_FAMILIES (Toritaka,
+  Togashi, Agasha, Yogo). Duplicate province names handled with suffixed internal
+  names (Sabishii_Dragon, Anshin_Phoenix, Kougen_Phoenix, Garanto_Phoenix,
+  Garanto_Unicorn, Kinbou_Scorpion). Deterministic with seed. 22 tests.
+
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
   SkillResolver and ActionExecutor. Doji Courtier R1a (honor-gated Free Raise on

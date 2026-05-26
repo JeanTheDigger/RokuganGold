@@ -11,12 +11,12 @@ const GREAT_CLANS: Array[String] = [
 ]
 
 const CLAN_FAMILIES: Dictionary = {
-	"Crab": ["Hida", "Hiruma", "Kaiu", "Kuni", "Yasuki"],
+	"Crab": ["Hida", "Hiruma", "Kaiu", "Kuni", "Yasuki", "Toritaka"],
 	"Crane": ["Kakita", "Daidoji", "Doji", "Asahina"],
-	"Dragon": ["Mirumoto", "Kitsuki", "Tamori"],
+	"Dragon": ["Mirumoto", "Kitsuki", "Tamori", "Togashi"],
 	"Lion": ["Akodo", "Matsu", "Ikoma", "Kitsu"],
-	"Phoenix": ["Shiba", "Isawa", "Asako"],
-	"Scorpion": ["Bayushi", "Soshi", "Shosuro"],
+	"Phoenix": ["Shiba", "Isawa", "Asako", "Agasha"],
+	"Scorpion": ["Bayushi", "Soshi", "Shosuro", "Yogo"],
 	"Unicorn": ["Shinjo", "Moto", "Ide", "Iuchi", "Utaku"],
 	"Mantis": ["Yoritomo", "Moshi", "Tsuruchi"],
 	"Imperial": ["Otomo", "Seppun", "Miya"],
