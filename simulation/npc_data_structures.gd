@@ -93,6 +93,7 @@ class ContextSnapshot:
 	var zone_subtype: Enums.ZoneSubtype = Enums.ZoneSubtype.OHIROMA
 	var zone_flags: Dictionary = {}
 	var sublocation: Enums.Sublocation = Enums.Sublocation.PUBLIC
+	var settlement_type: int = -1
 
 	# Lord & court (s55.34)
 	var lord_id: int = -1

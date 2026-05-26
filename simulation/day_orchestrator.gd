@@ -179,6 +179,7 @@ static func advance_day(
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_set_temple_context_flags(characters, settlements, world_states)
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
+	_inject_settlement_type(characters, settlements, world_states)
 	_inject_insurgency_context(characters, provinces, _spm, insurgencies, world_states)
 	_populate_court_availability_data(
 		active_courts, characters, characters_by_id, world_states, favors,
@@ -12065,7 +12066,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"zone_subtype", "active_insurgency_id", "action_log",
 		"self_offenses", "wall_statuses", "criminal_recall",
 		"is_patrolled", "phoenix_champion_authority",
-		"active_wip_item_id",
+		"active_wip_item_id", "settlement_type",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -12232,6 +12233,32 @@ static func _set_visiting_context_flags(
 				ws = {}
 				world_states[character.character_id] = ws
 			ws["context_flag"] = Enums.ContextFlag.VISITING
+
+
+static func _inject_settlement_type(
+	characters: Array,
+	settlements: Array,
+	world_states: Dictionary,
+) -> void:
+	var settlement_types: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlement_types[str(s.settlement_id)] = s.settlement_type
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if TravelSystem.is_traveling(character):
+			continue
+		var loc: String = character.physical_location
+		if loc.is_empty():
+			continue
+		var st: int = settlement_types.get(loc, -1)
+		if st < 0:
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			ws = {}
+			world_states[character.character_id] = ws
+		ws["settlement_type"] = st
 
 
 static func _inject_insurgency_context(

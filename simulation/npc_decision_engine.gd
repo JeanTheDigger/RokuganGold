@@ -40,6 +40,7 @@ static func build_context(
 		ctx.zone_flags = ZoneFlagMatrix.get_flags(ctx.zone_subtype)
 	else:
 		ctx.zone_flags = {}
+	ctx.settlement_type = world_state.get("settlement_type", -1)
 
 	# Lord & court (s55.34)
 	ctx.lord_id = character.lord_id
@@ -364,6 +365,8 @@ static func generate_options(
 				if not CivilianOrderBudget.draws_from_military_pool(action_id, has_mil_rank):
 					continue
 		_populate_action_metadata(option, need, ctx, character, chars_by_id)
+		if action_id == "CRAFT" and not option.metadata.get("can_craft", false):
+			continue
 		options.append(option)
 
 	return options
@@ -2757,11 +2760,17 @@ static func _build_craft_metadata(
 		else:
 			category = Enums.CraftingCategory.EQUIPMENT
 
-	var settlement_type: Enums.SettlementType = _infer_settlement_type(ctx)
+	var settlement_type: Enums.SettlementType = ctx.settlement_type if ctx.settlement_type >= 0 else _infer_settlement_type(ctx)
 	var craft_info: Dictionary = ArtisanSystem.npc_select_craft_action(
 		character, settlement_type, category)
 	if not craft_info.get("can_craft", false):
 		return {"can_craft": false}
+	var koku_cost: float = ArtisanSystem.cost_in_koku(
+		craft_info.get("base_cost", 0.0), craft_info.get("denomination", "bu"))
+	if craft_info.get("is_exceptional", false):
+		koku_cost *= ArtisanSystem.EXCEPTIONAL_COST_MULTIPLIER
+	if koku_cost > 0.0 and character.koku < koku_cost:
+		return {"can_craft": false, "reason": "insufficient_koku"}
 	return craft_info
 
 

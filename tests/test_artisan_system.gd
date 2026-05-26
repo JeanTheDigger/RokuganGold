@@ -1084,3 +1084,99 @@ func test_wip_not_abandoned_if_crafter_stationary() -> void:
 	DayOrchestrator._inject_wip_context([wip], ws, {92: c})
 	assert_false(wip.is_complete)
 	assert_eq(ws[92].get("active_wip_item_id", -1), 992)
+
+
+# -- NPC selection audit tests -------------------------------------------------
+
+
+func test_craft_filtered_when_no_skill() -> void:
+	var c := _make_character("Lion", "Matsu")
+	c.character_id = 100
+	c.skills = {"Kenjutsu": 5}
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.character_id = 100
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "CRAFT_ITEM"
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need, c)
+	var has_craft: bool = false
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "CRAFT":
+			has_craft = true
+	assert_false(has_craft)
+
+
+func test_craft_filtered_when_insufficient_koku() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 101
+	c.skills = {"Craft: Weaponsmithing": 5}
+	c.koku = 0.5
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.character_id = 101
+	ctx.settlement_type = Enums.SettlementType.CASTLE
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "CRAFT_ITEM"
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need, c)
+	var has_craft: bool = false
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "CRAFT":
+			has_craft = true
+	assert_false(has_craft)
+
+
+func test_craft_allowed_when_affordable() -> void:
+	var c := _make_character("Crane", "Kakita")
+	c.character_id = 102
+	c.skills = {"Artisan: Painting": 5}
+	c.koku = 50.0
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	ctx.character_id = 102
+	ctx.settlement_type = Enums.SettlementType.TOWN
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "CRAFT_ITEM"
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need, c)
+	var has_craft: bool = false
+	for opt: NPCDataStructures.ScoredAction in options:
+		if opt.action_id == "CRAFT":
+			has_craft = true
+	assert_true(has_craft)
+
+
+func test_settlement_type_injection() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 103
+	c.physical_location = "5"
+	var s := SettlementData.new()
+	s.settlement_id = 5
+	s.settlement_type = Enums.SettlementType.FAMILY_CASTLE
+	var ws: Dictionary = {103: {}}
+	DayOrchestrator._inject_settlement_type([c], [s], ws)
+	assert_eq(ws[103].get("settlement_type", -1), Enums.SettlementType.FAMILY_CASTLE)
+
+
+func test_settlement_type_skips_traveling() -> void:
+	var c := _make_character("Crane", "Kakita")
+	c.character_id = 104
+	c.physical_location = "6"
+	c.travel_destination = "somewhere"
+	c.travel_days_remaining = 3
+	var s := SettlementData.new()
+	s.settlement_id = 6
+	s.settlement_type = Enums.SettlementType.CITY
+	var ws: Dictionary = {104: {}}
+	DayOrchestrator._inject_settlement_type([c], [s], ws)
+	assert_eq(ws[104].get("settlement_type", -1), -1)
+
+
+func test_settlement_type_flows_to_craft_metadata() -> void:
+	var c := _make_character("Crab", "Kaiu")
+	c.character_id = 105
+	c.skills = {"Craft: Weaponsmithing": 5}
+	c.koku = 100.0
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.settlement_type = Enums.SettlementType.FAMILY_CASTLE
+	ctx.character_id = 105
+	var meta: Dictionary = NPCDecisionEngine._build_craft_metadata(ctx, c)
+	assert_true(meta.get("can_craft", false))
