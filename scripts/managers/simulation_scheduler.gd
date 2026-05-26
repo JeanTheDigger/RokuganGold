@@ -145,6 +145,8 @@ func _load_world_state() -> void:
 
 
 func _bootstrap_fresh_world() -> void:
+	WorldState.time_system.current_tick = 0
+	_last_processed_tick_key = ""
 	var dice := DiceEngine.new()
 	dice.set_seed(1120)
 
