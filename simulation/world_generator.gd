@@ -574,6 +574,9 @@ const TERRAIN_RICE_MULTIPLIER: Dictionary = {
 	Enums.TerrainType.FOREST: 0.75,
 	Enums.TerrainType.HILLS: 0.75,
 	Enums.TerrainType.MOUNTAINS: 0.5,
+	Enums.TerrainType.SWAMP: 0.6,
+	Enums.TerrainType.WASTELAND: 0.2,
+	Enums.TerrainType.COASTAL: 1.0,
 }
 
 const TERRAIN_PU_DISTRIBUTION: Dictionary = {
@@ -582,6 +585,9 @@ const TERRAIN_PU_DISTRIBUTION: Dictionary = {
 	Enums.TerrainType.FOREST:      {"farming": 45, "town": 25, "mining": 15, "military": 15},
 	Enums.TerrainType.HILLS:       {"farming": 40, "town": 25, "mining": 25, "military": 10},
 	Enums.TerrainType.MOUNTAINS:   {"farming": 25, "town": 20, "mining": 40, "military": 15},
+	Enums.TerrainType.SWAMP:       {"farming": 50, "town": 20, "mining": 5, "military": 25},
+	Enums.TerrainType.WASTELAND:   {"farming": 15, "town": 15, "mining": 10, "military": 60},
+	Enums.TerrainType.COASTAL:     {"farming": 50, "town": 30, "mining": 5, "military": 15},
 }
 
 const KOKU_LOCATION_MODIFIERS: Dictionary = {

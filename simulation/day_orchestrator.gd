@@ -8654,6 +8654,9 @@ const _TERRAIN_TO_BATTLE_TERRAIN: Dictionary = {
 	Enums.TerrainType.FOREST: Enums.BattleTerrainType.FOREST,
 	Enums.TerrainType.HILLS: Enums.BattleTerrainType.HILLS,
 	Enums.TerrainType.MOUNTAINS: Enums.BattleTerrainType.MOUNTAIN,
+	Enums.TerrainType.SWAMP: Enums.BattleTerrainType.PLAINS,
+	Enums.TerrainType.WASTELAND: Enums.BattleTerrainType.PLAINS,
+	Enums.TerrainType.COASTAL: Enums.BattleTerrainType.COASTAL_BEACH,
 }
 
 const FORTIFICATION_DEFENSE_BONUS: int = 5
@@ -15991,7 +15994,7 @@ static func _populate_resource_stockpiles(
 
 	var clan_military_upkeep: Dictionary = {}
 	for comp: Dictionary in companies:
-		var comp_clan: String = comp.get("clan", "")
+		var comp_clan: String = comp.get("clan_name", "")
 		if comp_clan.is_empty():
 			continue
 		var rice_cost: float = comp.get("rice_upkeep", 0.35)
@@ -16031,7 +16034,7 @@ static func _populate_resource_stockpiles(
 
 		var arms_upkeep: float = 0.0
 		for comp: Dictionary in companies:
-			if comp.get("clan", "") == c.clan:
+			if comp.get("clan_name", "") == c.clan:
 				arms_upkeep += comp.get("iron_upkeep", 0.1)
 
 		ws["resource_stockpiles"] = {
@@ -16091,7 +16094,7 @@ static func _inject_base_character_context(
 	var unit_counts: Dictionary = {}
 	var g_clan_strengths: Dictionary = {}
 	for comp: Dictionary in companies:
-		var comp_clan: String = comp.get("clan", "")
+		var comp_clan: String = comp.get("clan_name", "")
 		if comp_clan.is_empty():
 			continue
 		if not unit_counts.has(comp_clan):

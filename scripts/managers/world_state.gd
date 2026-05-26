@@ -220,6 +220,8 @@ func _sync_wars_to_world_states() -> void:
 	world_states["settlements"] = settlements
 	world_states["clan_baselines"] = clan_baselines
 	world_states["family_baselines"] = family_baselines
+	world_states["emperor_id"] = emperor_id
+	world_states["emperor_archetype"] = emperor_archetype
 
 
 func advance_one_day() -> Dictionary:

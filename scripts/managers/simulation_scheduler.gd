@@ -9,6 +9,8 @@ signal tick_completed(result: Dictionary)
 const SAVE_PATH: String = "user://simulation/scheduler_state.txt"
 const TICK_HOURS: Array[int] = [0, 6, 12, 18]
 
+const _WorldBootstrap := preload("res://simulation/world_bootstrap.gd")
+
 var _last_processed_tick_key: String = ""
 var _processing: bool = false
 var _world_saver: WorldStateSaver = WorldStateSaver.new()
@@ -143,7 +145,7 @@ func _bootstrap_fresh_world() -> void:
 	var dice := DiceEngine.new()
 	dice.set_seed(1120)
 
-	var result: Dictionary = WorldBootstrap.bootstrap_world(dice)
+	var result: Dictionary = _WorldBootstrap.bootstrap_world(dice)
 
 	var chars: Array = result.get("characters", [])
 	WorldState.characters.clear()

@@ -101,6 +101,9 @@ enum TerrainType {
 	FOREST,
 	HILLS,
 	MOUNTAINS,
+	SWAMP,
+	WASTELAND,
+	COASTAL,
 }
 
 enum SettlementType {
@@ -136,6 +139,9 @@ const TERRAIN_RICE_MULTIPLIER: Dictionary = {
 	TerrainType.FOREST: 0.75,
 	TerrainType.HILLS: 0.75,
 	TerrainType.MOUNTAINS: 0.5,
+	TerrainType.SWAMP: 0.6,
+	TerrainType.WASTELAND: 0.2,
+	TerrainType.COASTAL: 1.0,
 }
 
 const MILITARY_SETTLEMENT_TYPES: Array[SettlementType] = [

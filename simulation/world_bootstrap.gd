@@ -270,19 +270,19 @@ const FAMILY_SEAT_PROVINCES: Dictionary = {
 
 # Terrain type assignment by clan+family patterns (GDD s2.3 descriptions).
 const TERRAIN_HINTS: Dictionary = {
-	"Hida": Enums.TerrainType.MOUNTAIN,
+	"Hida": Enums.TerrainType.MOUNTAINS,
 	"Hiruma": Enums.TerrainType.WASTELAND,
-	"Kaiu": Enums.TerrainType.MOUNTAIN,
-	"Kuni": Enums.TerrainType.MOUNTAIN,
+	"Kaiu": Enums.TerrainType.MOUNTAINS,
+	"Kuni": Enums.TerrainType.MOUNTAINS,
 	"Toritaka": Enums.TerrainType.FOREST,
 	"Doji": Enums.TerrainType.PLAINS,
 	"Daidoji": Enums.TerrainType.PLAINS,
 	"Kakita": Enums.TerrainType.PLAINS,
 	"Asahina": Enums.TerrainType.PLAINS,
-	"Mirumoto": Enums.TerrainType.MOUNTAIN,
-	"Kitsuki": Enums.TerrainType.MOUNTAIN,
-	"Tamori": Enums.TerrainType.MOUNTAIN,
-	"Togashi": Enums.TerrainType.MOUNTAIN,
+	"Mirumoto": Enums.TerrainType.MOUNTAINS,
+	"Kitsuki": Enums.TerrainType.MOUNTAINS,
+	"Tamori": Enums.TerrainType.MOUNTAINS,
+	"Togashi": Enums.TerrainType.MOUNTAINS,
 	"Akodo": Enums.TerrainType.PLAINS,
 	"Matsu": Enums.TerrainType.PLAINS,
 	"Ikoma": Enums.TerrainType.PLAINS,
@@ -304,15 +304,15 @@ const TERRAIN_HINTS: Dictionary = {
 	"Kitsune": Enums.TerrainType.FOREST,
 	"Tsuruchi": Enums.TerrainType.PLAINS,
 	"Moshi": Enums.TerrainType.PLAINS,
-	"Ichiro": Enums.TerrainType.MOUNTAIN,
-	"Tonbo": Enums.TerrainType.MOUNTAIN,
+	"Ichiro": Enums.TerrainType.MOUNTAINS,
+	"Tonbo": Enums.TerrainType.MOUNTAINS,
 	"Usagi": Enums.TerrainType.PLAINS,
 	"Toku": Enums.TerrainType.PLAINS,
-	"Morito": Enums.TerrainType.MOUNTAIN,
+	"Morito": Enums.TerrainType.MOUNTAINS,
 	"Suzume": Enums.TerrainType.PLAINS,
 	"Kasuga": Enums.TerrainType.COASTAL,
 	"Otomo": Enums.TerrainType.PLAINS,
-	"Heichi": Enums.TerrainType.MOUNTAIN,
+	"Heichi": Enums.TerrainType.MOUNTAINS,
 	"Seppun": Enums.TerrainType.PLAINS,
 	"Miya": Enums.TerrainType.PLAINS,
 }
@@ -429,7 +429,7 @@ static func _scale_pu_by_terrain(
 			multiplier = 1.2
 		Enums.TerrainType.FOREST:
 			multiplier = 0.9
-		Enums.TerrainType.MOUNTAIN:
+		Enums.TerrainType.MOUNTAINS:
 			multiplier = 0.7
 		Enums.TerrainType.SWAMP:
 			multiplier = 0.6
