@@ -738,6 +738,7 @@ static func generate_settlement(
 	s.koku_stockpile = float(s.town_pu) * 0.5
 
 	s.infrastructure = _default_infrastructure(settlement_type, has_castle_town)
+	s.worship_locations = _default_worship_locations(settlement_type)
 
 	return s
 
@@ -800,6 +801,32 @@ static func _default_infrastructure(
 		Enums.SettlementType.WALL_TOWER:
 			return ["garrison", "sake_house"]
 
+	return []
+
+
+static func _default_worship_locations(
+	settlement_type: Enums.SettlementType,
+) -> Array:
+	match settlement_type:
+		Enums.SettlementType.VILLAGE:
+			return [{"type": "village_shrine", "dedicated": false, "fortune": -1}]
+		Enums.SettlementType.TOWN:
+			return [{"type": "local_shrine", "dedicated": false, "fortune": -1}]
+		Enums.SettlementType.CITY:
+			return [
+				{"type": "local_shrine", "dedicated": false, "fortune": -1},
+				{"type": "temple", "dedicated": false, "fortune": -1},
+			]
+		Enums.SettlementType.CASTLE, Enums.SettlementType.FAMILY_CASTLE:
+			return [{"type": "local_shrine", "dedicated": false, "fortune": -1}]
+		Enums.SettlementType.KEEP:
+			return [{"type": "village_shrine", "dedicated": false, "fortune": -1}]
+		Enums.SettlementType.TEMPLE, Enums.SettlementType.SHINDEN:
+			return [{"type": "temple", "dedicated": false, "fortune": -1}]
+		Enums.SettlementType.MONASTERY:
+			return [{"type": "temple", "dedicated": false, "fortune": -1}]
+		Enums.SettlementType.WALL_TOWER:
+			return [{"type": "roadside_shrine", "dedicated": false, "fortune": -1}]
 	return []
 
 
