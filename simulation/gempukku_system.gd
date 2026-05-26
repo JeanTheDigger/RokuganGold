@@ -86,6 +86,17 @@ const FAMILY_DEFAULT_SCHOOL: Dictionary = {
 	"Togashi": "Togashi Tattooed Order",
 	"Agasha": "Agasha Shugenja",
 	"Yogo": "Yogo Wardmaster",
+	"Ichiro": "Ichiro Bushi",
+	"Tonbo": "Tonbo Shugenja",
+	"Kitsune": "Kitsune Shugenja",
+	"Usagi": "Usagi Bushi",
+	"Toku": "Toku Bushi",
+	"Morito": "Morito Bushi",
+	"Suzume": "Suzume Bushi",
+	"Kasuga": "Kasuga Smuggler",
+	"Otomo": "Otomo Courtier",
+	"Seppun": "Seppun Guardsman",
+	"Miya": "Miya Herald",
 }
 
 const GENDER_RESTRICTED_SCHOOLS: Dictionary = {
@@ -386,21 +397,39 @@ static func generate_replenishment_character(
 static func _get_clan_families(clan: String) -> Array:
 	match clan:
 		"Crab":
-			return ["Hida", "Hiruma", "Kaiu", "Kuni", "Yasuki"]
+			return ["Hida", "Hiruma", "Kaiu", "Kuni", "Yasuki", "Toritaka"]
 		"Crane":
 			return ["Kakita", "Daidoji", "Doji", "Asahina"]
 		"Dragon":
-			return ["Mirumoto", "Kitsuki", "Tamori"]
+			return ["Mirumoto", "Kitsuki", "Tamori", "Togashi"]
 		"Lion":
 			return ["Akodo", "Matsu", "Ikoma", "Kitsu"]
 		"Phoenix":
-			return ["Shiba", "Isawa", "Asako"]
+			return ["Shiba", "Isawa", "Asako", "Agasha"]
 		"Scorpion":
-			return ["Bayushi", "Soshi", "Shosuro"]
+			return ["Bayushi", "Soshi", "Shosuro", "Yogo"]
 		"Unicorn":
 			return ["Shinjo", "Moto", "Ide", "Iuchi", "Utaku"]
 		"Mantis":
 			return ["Yoritomo", "Moshi", "Tsuruchi"]
+		"Badger":
+			return ["Ichiro"]
+		"Dragonfly":
+			return ["Tonbo"]
+		"Fox":
+			return ["Kitsune"]
+		"Hare":
+			return ["Usagi"]
+		"Monkey":
+			return ["Toku"]
+		"Ox":
+			return ["Morito"]
+		"Sparrow":
+			return ["Suzume"]
+		"Tortoise":
+			return ["Kasuga"]
+		"Imperial":
+			return ["Otomo", "Seppun", "Miya"]
 	return []
 
 

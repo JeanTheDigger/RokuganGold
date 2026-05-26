@@ -20,6 +20,16 @@ const CLAN_FAMILIES: Dictionary = {
 	"Unicorn": ["Shinjo", "Moto", "Ide", "Iuchi", "Utaku"],
 	"Mantis": ["Yoritomo", "Moshi", "Tsuruchi"],
 	"Imperial": ["Otomo", "Seppun", "Miya"],
+	"Badger": ["Ichiro"],
+	"Dragonfly": ["Tonbo"],
+	"Fox": ["Kitsune"],
+	"Hare": ["Usagi"],
+	"Monkey": ["Toku"],
+	"Ox": ["Morito"],
+	"Sparrow": ["Suzume"],
+	"Tortoise": ["Kasuga"],
+	"Wasp": ["Tsuruchi"],
+	"Centipede": ["Moshi"],
 }
 
 const MINOR_CLANS: Array[String] = [
@@ -566,13 +576,17 @@ static func _generate_minor_clan_characters(
 ) -> Array:
 	var chars: Array = []
 	for mc: String in MINOR_CLANS:
+		var families: Array = CLAN_FAMILIES.get(mc, [])
+		if families.is_empty():
+			continue
+		var primary_family: String = families[0]
 		var champ: L5RCharacterData = _generate_positioned_character(
-			next_id, PositionType.MINOR_CLAN_CHAMPION, mc, mc, dice,
+			next_id, PositionType.MINOR_CLAN_CHAMPION, mc, primary_family, dice,
 		)
 		champ.lord_id = -1
 		chars.append(champ)
 		chars.append(_generate_positioned_character(
-			next_id, PositionType.MINOR_CLAN_SENIOR, mc, mc, dice, champ.character_id,
+			next_id, PositionType.MINOR_CLAN_SENIOR, mc, primary_family, dice, champ.character_id,
 		))
 	return chars
 
@@ -860,6 +874,14 @@ static func generate_world_population(
 		)
 		all_characters.append_array(mil_chars)
 
+	var minor_chars: Array = _generate_minor_clan_characters(
+		next_id, dice,
+	)
+	all_characters.append_array(minor_chars)
+	for mc: L5RCharacterData in minor_chars:
+		if mc.lord_id < 0:
+			clan_champions[mc.clan] = mc.character_id
+
 	var province_settlement_map: Dictionary = {}
 	for s: SettlementData in settlements:
 		if not province_settlement_map.has(s.province_id):
@@ -894,11 +916,6 @@ static func generate_world_population(
 		next_id, dice, emperor_id,
 	)
 	all_characters.append_array(magistrate_chars)
-
-	var minor_chars: Array = _generate_minor_clan_characters(
-		next_id, dice,
-	)
-	all_characters.append_array(minor_chars)
 
 	var crab_rik_id: int = clan_rikugunshokans.get("Crab", -1)
 	var wall_chars: Array = _generate_wall_characters(

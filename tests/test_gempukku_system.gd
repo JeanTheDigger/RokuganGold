@@ -130,6 +130,9 @@ func test_all_families_have_schools() -> void:
 		"Bayushi", "Soshi", "Shosuro", "Yogo",
 		"Shinjo", "Moto", "Ide", "Iuchi", "Utaku",
 		"Yoritomo", "Moshi", "Tsuruchi",
+		"Ichiro", "Tonbo", "Kitsune", "Usagi", "Toku",
+		"Morito", "Suzume", "Kasuga",
+		"Otomo", "Seppun", "Miya",
 	]
 	for f: String in families:
 		var school: String = GempukkuSystem.assign_school(f, "female")
