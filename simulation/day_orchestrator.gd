@@ -15030,6 +15030,9 @@ static func _populate_infrastructure_intelligence(
 		if total_pu > threshold:
 			surplus_pu[int(pid)] = prov.clan
 
+		if prov.is_coastal:
+			coastal = true
+
 	# Coastal / naval detection
 	for s: ShipData in ships:
 		if not s.is_destroyed:
