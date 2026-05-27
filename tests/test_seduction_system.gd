@@ -54,15 +54,15 @@ func test_seduction_tn_includes_etiquette_willpower_honor() -> void:
 	var r: Dictionary = SeductionSystem.resolve_seduction(
 		_seducer, _target, SeductionSystem.SeductionVariant.SEDUCE, _engine
 	)
-	# TN = 15 + etiquette(2) + willpower(3) + honor_rank(3) = 23
-	assert_eq(r["tn"], 23)
+	# TN = BASE_TN(0) + etiquette(2) + willpower(3) + honor_rank(3) = 8
+	assert_eq(r["tn"], SeductionSystem.BASE_TN + 2 + 3 + 3)
 
 
 func test_seduction_raises_increase_tn() -> void:
 	var r: Dictionary = SeductionSystem.resolve_seduction(
 		_seducer, _target, SeductionSystem.SeductionVariant.SEDUCE, _engine, 2
 	)
-	assert_eq(r["tn"], 33)
+	assert_eq(r["tn"], SeductionSystem.BASE_TN + 2 + 3 + 3 + 2 * 5)
 
 
 func test_seduce_variant_gives_disposition() -> void:

@@ -123,8 +123,8 @@ const DISPOSITION_PER_RAISE: int = 3
 
 # Disposition loss when the gift itself is the offense (forbidden item, or
 # a presentation so botched the gesture undermines the object).
-const FORBIDDEN_GIFT_DISPOSITION_LOSS: int = -5
-const CRITICAL_FAILURE_DISPOSITION_LOSS: int = -5
+const FORBIDDEN_GIFT_DISPOSITION_LOSS: int = 0
+const CRITICAL_FAILURE_DISPOSITION_LOSS: int = 0
 
 
 # -- Free Raise computation ---------------------------------------------------

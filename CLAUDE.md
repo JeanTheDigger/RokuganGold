@@ -2918,6 +2918,32 @@ costs, or forward-wiring. Do not treat as bugs.
   `get_dispute_witness_disposition()` creditor_won return value (2→0) — GDD
   says witnesses gain disposition but specifies no numeric amount. All other
   15 constants confirmed from GDD s12.10.
+- **s11.3.12 Violence System — 1 invented value zeroed.**
+  `INFAMY_PER_REPEATED_OFFENSE` (0.5→0.0) — GDD s11.3.12e says "Each
+  additional offense adds Infamy" but provides no numeric value. All other
+  constants confirmed: HONOR_LOSS (-0.2), GLORY_LOSS (-0.1), topic tiers
+  (TIER_4 first, TIER_3 on third), repeat window (4 seasons), repeat
+  threshold (3). Bribery system (s12.9) audited — fully compliant.
+- **s12.9 Intimidation System — 1 invented value zeroed.**
+  `PUBLIC_TN_INCREASE_BASE` (10→0) — GDD s12.9 says public intimidation
+  "raises the effective TN" on success but gives no base number (only
+  "+5 per Raise"). `PRIVATE_TN_INCREASE_BASE` (10) confirmed GDD-sourced
+  (s12.9 explicitly says "+10"). `friend_threshold` (31) confirmed —
+  matches GDD s12.2 Friend range (+31 to +60). All other constants
+  confirmed: blackmail honor/infamy, private honor/infamy, public
+  honor/infamy/witness disposition, letter TN, pushback TN base (15),
+  disposition friend/enemy bonuses.
+- **s12.3 Gift Giving System — 2 invented values zeroed.**
+  `CRITICAL_FAILURE_DISPOSITION_LOSS` (-5→0) — GDD says "small disposition
+  loss" but no number. `FORBIDDEN_GIFT_DISPOSITION_LOSS` (-5→0) — GDD says
+  gifting a weapon is "an insult" but no numeric value. `DISPOSITION_PER_RAISE`
+  (3) confirmed GDD-sourced (s12.2: "+3 per Raise on Awareness + Etiquette
+  roll"). `free_raises * 5` conversion confirmed (core L5R 4e: 1 Raise = +5
+  TN). All other constants confirmed: quality Free Raises (s49), TN 15,
+  critical failure margin (-10), appropriateness matrix (structural).
+- **s12.8 Seduction System — test fix for BASE_TN zeroing.**
+  TN-dependent test assertions updated to use `SeductionSystem.BASE_TN`
+  constant reference instead of hardcoded 23/33 (which assumed BASE_TN=15).
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
