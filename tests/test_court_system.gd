@@ -274,26 +274,21 @@ func test_should_call_court_momentum_exceeds_threshold():
 	assert_eq(result["trigger_topic_id"], 1)
 
 
-func test_should_call_court_momentum_below_threshold():
-	var topics: Array = [_make_topic(1, 20.0)]
+func test_should_call_court_no_topics_returns_empty():
+	var topics: Array = []
 	var result := CourtSystem.should_call_court(
 		Enums.LordRank.PROVINCIAL_DAIMYO, topics, []
 	)
 	assert_true(result.is_empty())
 
 
-func test_should_call_court_higher_rank_higher_threshold():
-	var topics: Array = [_make_topic(1, 40.0)]
-	var result_provincial := CourtSystem.should_call_court(
-		Enums.LordRank.PROVINCIAL_DAIMYO, topics, []
-	)
-	var result_champion := CourtSystem.should_call_court(
+func test_should_call_court_all_resolved_returns_empty():
+	var topics: Array = [_make_topic(1, 40.0, true)]
+	var result := CourtSystem.should_call_court(
 		Enums.LordRank.CLAN_CHAMPION, topics, []
 	)
-	assert_true(result_provincial.get("should_call", false),
-		"Provincial daimyo threshold 25 met by 40")
-	assert_true(result_champion.is_empty(),
-		"Clan champion threshold 50 not met by 40")
+	assert_true(result.is_empty(),
+		"Resolved topics do not trigger court calls")
 
 
 func test_should_call_court_blocked_by_existing():
@@ -453,7 +448,7 @@ func test_close_topic_no_resolution():
 	var topic := CourtSystem.generate_court_close_topic(c)
 	assert_eq(topic["variant"], "no_resolution")
 	assert_eq(topic["tier"], TopicData.Tier.TIER_4)
-	assert_eq(topic["momentum"], 5.0)
+	assert_eq(topic["momentum"], 0.0)
 
 
 func test_close_topic_with_commitments():
@@ -464,7 +459,7 @@ func test_close_topic_with_commitments():
 	var topic := CourtSystem.generate_court_close_topic(c)
 	assert_eq(topic["variant"], "concluded")
 	assert_eq(topic["tier"], TopicData.Tier.TIER_4)
-	assert_true(topic["momentum"] >= 11.0)
+	assert_eq(topic["momentum"], 0.0)
 
 
 func test_close_topic_clan_court():
@@ -477,7 +472,7 @@ func test_close_topic_clan_court():
 	CourtSystem.close_court(c)
 	var topic := CourtSystem.generate_court_close_topic(c)
 	assert_eq(topic["tier"], TopicData.Tier.TIER_3)
-	assert_eq(topic["momentum"], 25.0)
+	assert_eq(topic["momentum"], 0.0)
 
 
 func test_close_topic_winter_court():
@@ -490,7 +485,7 @@ func test_close_topic_winter_court():
 	CourtSystem.close_court(c)
 	var topic := CourtSystem.generate_court_close_topic(c)
 	assert_eq(topic["tier"], TopicData.Tier.TIER_2)
-	assert_eq(topic["momentum"], 50.0)
+	assert_eq(topic["momentum"], 0.0)
 
 
 func test_close_topic_war_resolved_upgrades_tier():
@@ -501,7 +496,7 @@ func test_close_topic_war_resolved_upgrades_tier():
 	var topic := CourtSystem.generate_court_close_topic(c)
 	assert_eq(topic["tier"], TopicData.Tier.TIER_2,
 		"War resolution upgrades topic tier")
-	assert_true(topic["momentum"] >= 40.0)
+	assert_eq(topic["momentum"], 0.0)
 
 
 # =============================================================================
@@ -858,9 +853,9 @@ func test_crisis_topic_triggers_court_call():
 	assert_eq(courts[0].crisis_trigger_topic_id, 1)
 
 
-func test_crisis_court_not_triggered_below_threshold():
+func test_crisis_court_not_triggered_for_resolved_topics():
 	var lord := _make_lord(100, "10", "Lion", 6.0)
-	var topic := _make_topic(1, 10.0)
+	var topic := _make_topic(1, 10.0, true)
 	var characters: Array = [lord]
 	var courts: Array = []
 	var topics: Array = [topic]
@@ -871,7 +866,7 @@ func test_crisis_court_not_triggered_below_threshold():
 		characters, courts, topics, world_states, next_id, 50,
 	)
 
-	assert_eq(results.size(), 0, "Low momentum should not trigger court")
+	assert_eq(results.size(), 0, "Resolved topics should not trigger court")
 	assert_eq(courts.size(), 0)
 
 
