@@ -25,8 +25,8 @@ const CRITICAL_FAILURE_DISPOSITION: int = -2
 const CRITICAL_FAILURE_GLORY: float = -0.3
 const CRITICAL_FAILURE_MARGIN: int = -10
 
-const PERFORM_FOR_SUCCESS_DISPOSITION: int = 3
-const PERFORM_FOR_FAILURE_DISPOSITION: int = -1
+const PERFORM_FOR_SUCCESS_DISPOSITION: int = 0
+const PERFORM_FOR_FAILURE_DISPOSITION: int = 0
 
 const FATIGUE_FULL: float = 1.0
 const FATIGUE_HALF: float = 0.5
@@ -71,7 +71,7 @@ static func resolve_public_performance(
 		outcome = PerformanceOutcome.FAILURE
 	else:
 		raises = int(margin / 5)
-		outcome = PerformanceOutcome.MASTERFUL if raises >= 3 else PerformanceOutcome.SUCCESS
+		outcome = PerformanceOutcome.MASTERFUL if raises >= 2 else PerformanceOutcome.SUCCESS
 
 	var fatigue_mult: float = get_fatigue_multiplier(fatigue_count)
 
@@ -137,7 +137,7 @@ static func resolve_perform_for(
 		outcome = PerformanceOutcome.FAILURE
 	else:
 		raises = int(margin / 5)
-		outcome = PerformanceOutcome.MASTERFUL if raises >= 3 else PerformanceOutcome.SUCCESS
+		outcome = PerformanceOutcome.MASTERFUL if raises >= 2 else PerformanceOutcome.SUCCESS
 
 	var disp_change: int = 0
 	var glory_change: float = 0.0

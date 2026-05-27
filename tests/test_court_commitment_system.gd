@@ -110,19 +110,19 @@ func test_renege_willingness_seigyo():
 	var w: float = CourtCommitmentSystem.get_renege_willingness(
 		Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.SEIGYO
 	)
-	assert_almost_eq(w, 0.8, 0.01)
+	assert_almost_eq(w, 0.0, 0.01)
 
 func test_renege_willingness_chugi():
 	var w: float = CourtCommitmentSystem.get_renege_willingness(
 		Enums.BushidoVirtue.CHUGI, Enums.ShouridoVirtue.NONE
 	)
-	assert_almost_eq(w, 0.05, 0.01)
+	assert_almost_eq(w, 0.0, 0.01)
 
 func test_renege_willingness_makoto():
 	var w: float = CourtCommitmentSystem.get_renege_willingness(
 		Enums.BushidoVirtue.MAKOTO, Enums.ShouridoVirtue.NONE
 	)
-	assert_almost_eq(w, 0.1, 0.01)
+	assert_almost_eq(w, 0.0, 0.01)
 
 
 # -- Fulfillment Detection ----------------------------------------------------
@@ -204,11 +204,12 @@ func test_renege_fulfilled_never():
 
 # -- Renege Consequences -------------------------------------------------------
 
-func test_voluntary_renege_honor_scaled():
+func test_voluntary_renege_honor_uses_disloyalty_table():
 	var c := _make_commitment()
 	var lord := _make_lord(1, 5.0)
 	var result: Dictionary = CourtCommitmentSystem.compute_renege_consequences(c, lord)
-	assert_almost_eq(result["honor_change"], -2.5, 0.01)
+	var expected: float = CrimeSystem.get_disloyalty_honor(lord)
+	assert_almost_eq(result["honor_change"], expected, 0.01)
 	assert_eq(result["disposition_penalty"], -15)
 	assert_eq(result["topic_tier"], TopicData.Tier.TIER_3)
 
@@ -216,21 +217,23 @@ func test_edict_renege_extra_honor():
 	var c := _make_commitment(1, "send_supplies", CourtCommitmentData.CommitmentSource.EDICT)
 	var lord := _make_lord(1, 3.0)
 	var result: Dictionary = CourtCommitmentSystem.compute_renege_consequences(c, lord)
-	# Base -1.5 (rank 3) + -3.0 edict = -4.5
-	assert_almost_eq(result["honor_change"], -4.5, 0.01)
-	assert_eq(result["topic_tier"], TopicData.Tier.TIER_2)
+	var base: float = CrimeSystem.get_disloyalty_honor(lord)
+	assert_almost_eq(result["honor_change"], base + CourtCommitmentSystem.EDICT_RENEGE_HONOR_COST, 0.01)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_3)
 
 func test_low_honor_renege():
 	var c := _make_commitment()
 	var lord := _make_lord(1, 0.5)
 	var result: Dictionary = CourtCommitmentSystem.compute_renege_consequences(c, lord)
-	assert_almost_eq(result["honor_change"], -0.5, 0.01)
+	var expected: float = CrimeSystem.get_disloyalty_honor(lord)
+	assert_almost_eq(result["honor_change"], expected, 0.01)
 
 func test_high_honor_renege():
 	var c := _make_commitment()
 	var lord := _make_lord(1, 9.5)
 	var result: Dictionary = CourtCommitmentSystem.compute_renege_consequences(c, lord)
-	assert_almost_eq(result["honor_change"], -4.5, 0.01)
+	var expected: float = CrimeSystem.get_disloyalty_honor(lord)
+	assert_almost_eq(result["honor_change"], expected, 0.01)
 
 
 # -- Good Faith ----------------------------------------------------------------

@@ -9,19 +9,6 @@ const HONOR_COMMITMENT_CHUGI_PRIORITY: int = 100
 const EDICT_RENEGE_HONOR_COST: float = -3.0
 const RENEGE_DISPOSITION_PENALTY: int = -15
 
-const VOLUNTARY_RENEGE_HONOR_BY_RANK: Dictionary = {
-	0: -0.5,
-	1: -0.5,
-	2: -1.0,
-	3: -1.5,
-	4: -2.0,
-	5: -2.5,
-	6: -3.0,
-	7: -3.5,
-	8: -4.0,
-	9: -4.5,
-	10: -5.0,
-}
 
 const COMMITMENT_TYPE_TO_ACTION: Dictionary = {
 	"send_military_aid": "ORDER_DEPLOY",
@@ -114,12 +101,12 @@ static func get_renege_willingness(
 	shourido_virtue: Enums.ShouridoVirtue,
 ) -> float:
 	if shourido_virtue == Enums.ShouridoVirtue.SEIGYO:
-		return 0.8
+		return 0.0
 	if virtue == Enums.BushidoVirtue.MAKOTO:
-		return 0.1
+		return 0.0
 	if virtue == Enums.BushidoVirtue.CHUGI:
-		return 0.05
-	return 0.3
+		return 0.0
+	return 0.0
 
 
 # -- Fulfillment Detection (Seasonal) -----------------------------------------
@@ -191,10 +178,7 @@ static func compute_renege_consequences(
 	commitment: CourtCommitmentData,
 	lord: L5RCharacterData,
 ) -> Dictionary:
-	var honor_rank: int = HonorGlorySystem.get_honor_rank(lord)
-	var base_honor: float = VOLUNTARY_RENEGE_HONOR_BY_RANK.get(
-		clampi(honor_rank, 0, 10), -1.0
-	)
+	var base_honor: float = CrimeSystem.get_disloyalty_honor(lord)
 
 	var result: Dictionary = {
 		"honor_change": base_honor,
@@ -206,7 +190,7 @@ static func compute_renege_consequences(
 
 	if commitment.source == CourtCommitmentData.CommitmentSource.EDICT:
 		result["honor_change"] = base_honor + EDICT_RENEGE_HONOR_COST
-		result["topic_tier"] = TopicData.Tier.TIER_2
+		result["topic_tier"] = TopicData.Tier.TIER_3
 
 	return result
 

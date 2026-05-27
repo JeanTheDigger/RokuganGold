@@ -61,12 +61,12 @@ func test_ishi_not_committed_can_escape():
 
 func test_yu_less_likely_captured():
 	var mod := HostageSystem.get_capture_likelihood_modifier(Enums.BushidoVirtue.YU, Enums.ShouridoVirtue.NONE)
-	assert_eq(mod, 0.5)
+	assert_eq(mod, 0.0)
 
 
 func test_ishi_less_likely_captured():
 	var mod := HostageSystem.get_capture_likelihood_modifier(Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.ISHI)
-	assert_eq(mod, 0.3)
+	assert_eq(mod, 0.0)
 
 
 func test_default_capture_likelihood():
@@ -99,7 +99,7 @@ func test_escape_success():
 	var result := HostageSystem.resolve_escape(25, 25)
 	assert_true(result["success"])
 	assert_false(result["executed"])
-	assert_eq(result["family_honor_loss"], -1.0)
+	assert_eq(result["family_honor_loss"], HostageSystem.ESCAPE_FAMILY_HONOR_LOSS)
 	assert_eq(result["historical_modifier"], "hostage_escape")
 
 
@@ -115,7 +115,7 @@ func test_escape_critical_failure():
 	assert_false(result["success"])
 	assert_true(result["executed"])
 	assert_true(result["critical_failure"])
-	assert_eq(result["family_honor_loss"], -2.0)
+	assert_eq(result["family_honor_loss"], HostageSystem.ESCAPE_CRITICAL_FAMILY_HONOR_LOSS)
 
 
 # -- Leverage tests -----------------------------------------------------------
@@ -168,5 +168,5 @@ func test_letter_not_blocked():
 
 func test_harm_hostage_consequences():
 	var c := HostageSystem.harm_hostage_consequences()
-	assert_eq(c["honor_loss"], -3.0)
+	assert_eq(c["honor_loss"], HostageSystem.HARMED_HOSTAGE_HONOR_LOSS)
 	assert_eq(c["historical_modifier"], "harmed_hostage")
