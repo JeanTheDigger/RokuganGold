@@ -77,8 +77,8 @@ static func get_purchase_priority(disposition: int) -> int:
 	return PRIORITY_RIVAL
 
 
-static func can_sell_to(seller_disposition_to_buyer: int) -> bool:
-	return seller_disposition_to_buyer > -60
+static func can_sell_to(_seller_disposition_to_buyer: int) -> bool:
+	return true
 
 
 # =============================================================================

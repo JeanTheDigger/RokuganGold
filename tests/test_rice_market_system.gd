@@ -126,9 +126,10 @@ func test_priority_rival():
 	assert_eq(RiceMarketSystem.get_purchase_priority(-50), RiceMarketSystem.PRIORITY_RIVAL)
 
 
-func test_cannot_sell_to_blood_enemy():
-	assert_false(RiceMarketSystem.can_sell_to(-60))
-	assert_true(RiceMarketSystem.can_sell_to(-59))
+func test_can_sell_to_any_disposition():
+	assert_true(RiceMarketSystem.can_sell_to(-100))
+	assert_true(RiceMarketSystem.can_sell_to(0))
+	assert_true(RiceMarketSystem.can_sell_to(100))
 
 
 # -- Purchase Resolution -------------------------------------------------------
