@@ -2796,6 +2796,57 @@ costs, or forward-wiring. Do not treat as bugs.
   removed. GDD Table 2.3 does not specify these values. concede_at_assessment()
   and resolve_strike_after_first_blood() now return 0.0 for honor/glory changes.
 
+### Invented Content Removal (2026-05-27)
+- **s55.29 Travel System — 3 invented values removed/corrected.**
+  Hills terrain cost 3→2 (GDD s11.7a says 2). `DEFAULT_TERRAIN_COST` constant
+  removed; `_default_travel_time()` returns 1 (was 3). `FORCED_MARCH_MORALE_COST`
+  removed and `morale_cost` return key removed from `apply_forced_march()`.
+- **s53 War System — 5 invented values removed.**
+  `condemn_clan` and `authorize_war` SCORE_SHIFTS entries removed (not in GDD).
+  `compute_peace_willingness()` changed from numeric score to qualitative
+  Dictionary with `war_score_tier`, `increases`, `decreases` arrays.
+  `WAR_DISPOSITION_PENALTY_PER_SEASON` removed; penalty function returns 0.
+  Default `get_refusal_honor_cost` changed from -1.0 to 0.0.
+- **s53 War Termination — 6 invented values removed.**
+  `PEACE_ACCEPTANCE_THRESHOLD` removed. `CEDE_TERRITORY_DISPOSITION`,
+  `SURRENDER_HONOR_COST`, `PEACE_NEGOTIATION_HONOR`, `PEACE_STABILITY_BONUS`
+  all zeroed. `evaluate_peace_acceptance()` returns qualitative factor comparison.
+  Topic momentum values removed from `generate_war_end_topic()`.
+- **s55.32 Resource Availability — 3 invented costs corrected.**
+  DELIVER_GIFT changed from `inventory_item/1` to `koku/1`. PURCHASE_MARKET
+  cost 3→1. OFFER_FAVOR cost 2→1.
+- **s55.31 Commitment Registry — invented forgiveness rates removed.**
+  FORGIVENESS_RATES_BUSHIDO reduced to 6 entries (removed MAKOTO, NONE).
+  FORGIVENESS_RATES_SHOURIDO reduced to 3 entries (removed KETSUI, CHISHIKI,
+  KANPEKI, ISHI, NONE). DEFAULT_FORGIVENESS_RATE=0.5 handles missing entries.
+- **s57.21 Operational Hierarchy — 2 invented values removed.**
+  Removed MEIYO→DAIMYO_BELIEVES_SUBORDINATE (GDD only specifies GI and MAKOTO).
+  Removed `daimyo_disposition_loss: -5` and `superior_disposition_loss: -5` from
+  DAIMYO_DISMISSES.
+- **s11.3.19 Crime Suppression — invented scoring removed.**
+  PERSONALITY_PRIORITY reduced to 4 GDD-sourced entries; SHOURIDO_PRIORITY to 1.
+  `get_patrol_detection_chances()` returns qualitative Dict instead of numeric
+  detection_chance.
+- **s57.16 Investigation Decomposer — 3 invented constants removed.**
+  `SCENE_REEXAMINE_EVIDENCE_CAP`, `SCENE_MAX_REEXAMINATIONS`,
+  `DAYS_SCENE_STILL_USEFUL` removed. Reexamine-scene scoring block disabled
+  (references removed constants). Entire `_select_best_next_action()` scoring
+  system uses invented base values (65/55/50) — noted for future GDD spec.
+- **s55.12 Information System — invented probe logic gutted.**
+  `process_probe_result()` returns `[]` always (action log scanning was invented).
+  Stub kept for backward compatibility.
+- **s43 Maho System — invented concealment floor removed.**
+  Removed `maxi(5, ...)` floor on blood concealment TN; uses raw roll total.
+- **s11.11 Insurgency System — 3 invented behaviors removed.**
+  Removed `is_patrolled` halving spawn chance. Removed concealment cap of 10 on
+  failed detection. `get_crisis_tier()` TAINT_MANIFESTATION uses PTL thresholds
+  (9.0→tier 1, 6.0→tier 2) instead of invented strength thresholds.
+- **s4.3.17 Feasibility Ledger — 2 invented values corrected.**
+  `ALLIED_AID_SIGNIFICANT_FRACTION` 0.30→0.20 (GDD says "more than 20%").
+  `SCALE_DOWN_FACTOR` and `SCALE_DOWN_EQUIP_RATIO` zeroed.
+- **s55.33 Orphaned Objectives — 1 invented value removed.**
+  REPORT_TO_NEW_LORD priority 2→0.
+
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
   SkillResolver and ActionExecutor. Doji Courtier R1a (honor-gated Free Raise on
