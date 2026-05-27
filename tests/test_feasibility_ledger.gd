@@ -1590,59 +1590,50 @@ func test_supply_cut_retreat_after_hold() -> void:
 	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.RETREAT)
 
 
-func test_supply_cut_ketsui_holds_longer() -> void:
+func test_supply_cut_ketsui_same_as_default() -> void:
+	# TETHER_HOLD_SEASONS_KETSUI = 1 (same as default — GDD specifies no extension)
 	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
 		FeasibilityLedger.HomeFrontStatus.CLEAR,
 		FeasibilityLedger.ArmySupplyStatus.UNSUPPLIED,
-		"Ketsui", 50, 1,
+		"Ketsui", 50, 0,
 	)
 	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.RESTORE_TETHER)
 	assert_eq(d["hold_seasons_remaining"], 1)
 
 
-func test_supply_cut_ketsui_retreats_after_2() -> void:
+func test_supply_cut_ketsui_retreats_after_1() -> void:
 	var d: Dictionary = FeasibilityLedger.determine_campaign_decision(
 		FeasibilityLedger.HomeFrontStatus.CLEAR,
 		FeasibilityLedger.ArmySupplyStatus.UNSUPPLIED,
-		"Ketsui", 50, 2,
+		"Ketsui", 50, 1,
 	)
 	assert_eq(d["decision"], FeasibilityLedger.CampaignDecision.RETREAT)
 
 
 # -- Retreat Target Selection --------------------------------------------------
 
-func test_retreat_finds_rich_province() -> void:
+func test_retreat_finds_nearest_province() -> void:
 	var provinces: Array = [
-		{"province_id": 1, "distance": 1, "rice_per_pu": 2.0, "has_forge": false},
-		{"province_id": 2, "distance": 2, "rice_per_pu": 0.5, "has_forge": true},
+		{"province_id": 1, "distance": 2},
+		{"province_id": 2, "distance": 1},
 	]
 	var result: Dictionary = FeasibilityLedger.find_retreat_target(10, provinces)
 	assert_true(result["found"])
 	assert_false(result["should_disband"])
+	assert_eq(result["province_id"], 2)
 
 
 func test_retreat_disbands_when_no_target() -> void:
-	var provinces: Array = [
-		{"province_id": 1, "distance": 3, "rice_per_pu": 2.0, "has_forge": false},
-	]
-	var result: Dictionary = FeasibilityLedger.find_retreat_target(10, provinces)
+	var result: Dictionary = FeasibilityLedger.find_retreat_target(10, [])
 	assert_false(result["found"])
 	assert_true(result["should_disband"])
 
 
-func test_retreat_skips_poor_provinces() -> void:
+func test_retreat_selects_closest_of_multiple() -> void:
 	var provinces: Array = [
-		{"province_id": 1, "distance": 1, "rice_per_pu": 0.5, "has_forge": false},
-	]
-	var result: Dictionary = FeasibilityLedger.find_retreat_target(10, provinces)
-	assert_false(result["found"])
-	assert_true(result["should_disband"])
-
-
-func test_retreat_prefers_forge_province() -> void:
-	var provinces: Array = [
-		{"province_id": 1, "distance": 1, "rice_per_pu": 1.5, "has_forge": false},
-		{"province_id": 2, "distance": 1, "rice_per_pu": 0.8, "has_forge": true},
+		{"province_id": 1, "distance": 3},
+		{"province_id": 2, "distance": 1},
+		{"province_id": 3, "distance": 2},
 	]
 	var result: Dictionary = FeasibilityLedger.find_retreat_target(10, provinces)
 	assert_true(result["found"])

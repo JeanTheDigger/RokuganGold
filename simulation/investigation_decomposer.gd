@@ -53,14 +53,15 @@ static func decompose(
 	return _make_close_case_need()
 
 
-# -- Evidence-Aware Action Selection -------------------------------------------
-# Scores all available investigative leads and picks the highest-value one.
+# -- Priority-Ordered Action Selection -----------------------------------------
+# GDD s57.16 specifies phase ordering: witnesses → suspects → alibis → leads.
+# Within each category, co-located targets are preferred (no travel delay).
 
 static func _select_best_next_action(
 	objective: Dictionary,
 	ctx: NPCDataStructures.ContextSnapshot,
 	crime_location: String,
-	evidence_total: int,
+	_evidence_total: int,
 	known_suspects: Array,
 	witness_pool: Array,
 	interviewed_witnesses: Array,
@@ -68,84 +69,63 @@ static func _select_best_next_action(
 	checked_alibis: Array,
 	unresolved_leads: Array,
 ) -> NPCDataStructures.ImmediateNeed:
-	var candidates: Array = []
-	var evidence_gap: int = ACCUSATION_THRESHOLD - evidence_total
-	var days_elapsed: int = ctx.ic_day - objective.get("ic_day_committed", ctx.ic_day)
-
-	# Candidate: Interview uninterviewed witnesses (high value — direct testimony)
+	# Priority 1: Interview uninterviewed witnesses
 	var uninterviewed: Array = _get_uninterviewed(witness_pool, interviewed_witnesses)
-	for witness_id: Variant in uninterviewed:
-		if not witness_id is int:
-			continue
-		var wid: int = witness_id as int
-		var is_present: bool = wid in ctx.characters_present
-		var score: int = 80
-		if is_present:
-			score += 15
-		if evidence_gap <= 20:
-			score += 10
-		candidates.append({
-			"score": score, "type": "witness", "target_id": wid,
-		})
+	var best_witness: int = _pick_present_first(uninterviewed, ctx)
+	if best_witness >= 0:
+		return _action_from_candidate(
+			{"type": "witness", "target_id": best_witness},
+			objective, ctx, crime_location, unresolved_leads,
+		)
 
-	# Candidate: Interview suspects (moderate value — may reveal alibis or confess)
+	# Priority 2: Interview suspects
+	var uninterviewed_suspects: Array = []
 	for suspect_id: Variant in known_suspects:
-		if not suspect_id is int:
-			continue
-		var sid: int = suspect_id as int
-		if sid in interviewed_suspects:
-			continue
-		var is_present: bool = sid in ctx.characters_present
-		var score: int = 65
-		if is_present:
-			score += 15
-		if evidence_gap <= 15:
-			score += 10
-		candidates.append({
-			"score": score, "type": "suspect", "target_id": sid,
-		})
+		if suspect_id is int and suspect_id not in interviewed_suspects:
+			uninterviewed_suspects.append(suspect_id)
+	var best_suspect: int = _pick_present_first(uninterviewed_suspects, ctx)
+	if best_suspect >= 0:
+		return _action_from_candidate(
+			{"type": "suspect", "target_id": best_suspect},
+			objective, ctx, crime_location, unresolved_leads,
+		)
 
-	# Candidate: Re-examine scene — disabled (invented caps removed).
-	# Reexamination scoring requires GDD spec for thresholds.
-
-	# Candidate: Check alibis
+	# Priority 3: Check alibis
 	var unchecked: Array = _get_unchecked_alibis(objective, checked_alibis)
 	for alibi: Variant in unchecked:
 		if not alibi is Dictionary:
 			continue
 		var a: Dictionary = alibi as Dictionary
 		var alibi_witness_id: int = a.get("claimed_with", -1)
-		if alibi_witness_id <= 0:
+		if alibi_witness_id > 0:
+			return _action_from_candidate(
+				{"type": "alibi", "target_id": alibi_witness_id},
+				objective, ctx, crime_location, unresolved_leads,
+			)
+
+	# Priority 4: Follow unresolved leads
+	if not unresolved_leads.is_empty():
+		for lead_idx: int in range(unresolved_leads.size()):
+			if unresolved_leads[lead_idx] is Dictionary:
+				return _action_from_candidate(
+					{"type": "lead", "lead_index": lead_idx},
+					objective, ctx, crime_location, unresolved_leads,
+				)
+
+	return null
+
+
+static func _pick_present_first(ids: Array, ctx: NPCDataStructures.ContextSnapshot) -> int:
+	var first_absent: int = -1
+	for npc_id: Variant in ids:
+		if not npc_id is int:
 			continue
-		var is_present: bool = alibi_witness_id in ctx.characters_present
-		var score: int = 55
-		if is_present:
-			score += 15
-		candidates.append({
-			"score": score, "type": "alibi", "target_id": alibi_witness_id,
-		})
-
-	# Candidate: Follow unresolved leads
-	for lead_idx: int in range(unresolved_leads.size()):
-		var lead: Variant = unresolved_leads[lead_idx]
-		if not lead is Dictionary:
-			continue
-		var l: Dictionary = lead as Dictionary
-		var score: int = 60 + l.get("priority", 0) * 5
-		candidates.append({
-			"score": score, "type": "lead", "lead_index": lead_idx,
-		})
-
-	if candidates.is_empty():
-		return null
-
-	# Sort by score descending
-	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return a["score"] > b["score"]
-	)
-
-	var best: Dictionary = candidates[0]
-	return _action_from_candidate(best, objective, ctx, crime_location, unresolved_leads)
+		var nid: int = npc_id as int
+		if nid in ctx.characters_present:
+			return nid
+		if first_absent < 0:
+			first_absent = nid
+	return first_absent
 
 
 static func _action_from_candidate(

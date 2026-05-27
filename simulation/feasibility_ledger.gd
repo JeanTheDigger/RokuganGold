@@ -150,7 +150,8 @@ static func calculate_arms_budget(
 	)
 
 	var net_iron: float = total_iron_available - iron_upkeep_total
-	var projected_production: float = minf(net_iron, iron_per_season * campaign_seasons) * 0.5
+	# GDD s4.3.17 line 479: "1.00 Iron → 1.00 Arms. No loss in conversion."
+	var projected_production: float = minf(net_iron, iron_per_season * campaign_seasons) * 1.0
 
 	var net: float = clan_arms_stockpile + projected_production - equip_cost
 
@@ -447,7 +448,8 @@ static func try_market_purchase(
 	var modified: Dictionary = inputs.duplicate(true)
 	var available_koku: float = modified.get("current_koku", 0.0)
 	var rice_price: float = 1.0
-	var purchasable_rice: float = available_koku * 0.5 / rice_price
+	# GDD s4.3.17 does not specify a fraction limit on market purchases.
+	var purchasable_rice: float = available_koku / rice_price
 
 	var bonus_rice: float = purchasable_rice
 	modified["market_rice_bonus"] = bonus_rice
@@ -458,7 +460,7 @@ static func try_market_purchase(
 		"applied": true,
 		"ledger": ledger,
 		"modified_inputs": modified,
-		"koku_spent": available_koku * 0.5,
+		"koku_spent": available_koku,
 		"rice_purchased": bonus_rice,
 	}
 
@@ -893,6 +895,9 @@ enum CampaignDecision {
 }
 
 
+# GDD s4.3.17 references starvation stages from s4.3.6 (consecutive-season based).
+# Per-PU thresholds are structural proxy — starvation_stage not available on SettlementData
+# at this query point.
 const SHORTAGE_RICE_PER_PU: float = 1.00
 const HUNGER_RICE_PER_PU: float = 0.50
 const FAMINE_RICE_PER_PU: float = 0.0
@@ -905,7 +910,8 @@ const FAMINE_CONTINUE_VIRTUES: Array[String] = ["ISHI"]
 
 const TETHER_HOLD_EXTRA_VIRTUES: Array[String] = ["KETSUI"]
 const TETHER_HOLD_SEASONS_DEFAULT: int = 1
-const TETHER_HOLD_SEASONS_KETSUI: int = 2
+# GDD s4.3.17: "within 1 IC season" — no personality extension specified.
+const TETHER_HOLD_SEASONS_KETSUI: int = 1
 
 
 # -- Check 1: Home Front Status -----------------------------------------------
@@ -1046,28 +1052,22 @@ static func determine_campaign_decision(
 
 # -- Retreat Target Selection --------------------------------------------------
 
+# GDD s4.3.17 specifies retreat to friendly territory but no scoring formula.
+# Structural wiring: selects nearest friendly province.
 static func find_retreat_target(
 	_army_province_id: int,
 	friendly_provinces: Array,
-	max_distance: int = 2,
 ) -> Dictionary:
 	var best_id: int = -1
-	var best_score: float = -1.0
+	var best_dist: int = 999
 
 	for fp: Variant in friendly_provinces:
 		if not (fp is Dictionary):
 			continue
 		var fpd: Dictionary = fp
 		var dist: int = fpd.get("distance", 99)
-		if dist > max_distance:
-			continue
-		var rice_per_pu: float = fpd.get("rice_per_pu", 0.0)
-		var has_forge: bool = fpd.get("has_forge", false)
-		if rice_per_pu < 1.0 and not has_forge:
-			continue
-		var score: float = rice_per_pu + (5.0 if has_forge else 0.0) - float(dist)
-		if score > best_score:
-			best_score = score
+		if dist < best_dist:
+			best_dist = dist
 			best_id = fpd.get("province_id", -1)
 
 	if best_id < 0:

@@ -6,7 +6,6 @@ class_name CivilianOrderBudget
 
 
 # -- Budget by Rank (s57.34.2) -------------------------------------------------
-# Values PROVISIONAL per GDD — pending playtesting.
 
 const BUDGET_BY_RANK: Dictionary = {
 	Enums.LordRank.VILLAGE_HEADMAN: 0,
@@ -55,6 +54,8 @@ const WRITE_LETTER: String = "WRITE_LETTER"
 
 
 # -- Rank Derivation -----------------------------------------------------------
+# GDD s57.34 specifies budgets per lord rank but not status-to-rank thresholds.
+# Thresholds are structural wiring based on L5R Status Range conventions.
 
 static func lord_rank_from_status(status: float) -> Enums.LordRank:
 	if status >= 9.0:
