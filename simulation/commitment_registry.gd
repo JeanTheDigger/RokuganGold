@@ -80,19 +80,12 @@ const FORGIVENESS_RATES_BUSHIDO: Dictionary = {
 	Enums.BushidoVirtue.REI: 0.5,
 	Enums.BushidoVirtue.MEIYO: 0.5,
 	Enums.BushidoVirtue.YU: 0.5,
-	Enums.BushidoVirtue.MAKOTO: 0.5,
-	Enums.BushidoVirtue.NONE: 0.5,
 }
 
 const FORGIVENESS_RATES_SHOURIDO: Dictionary = {
 	Enums.ShouridoVirtue.DOSATSU: 0.5,
 	Enums.ShouridoVirtue.SEIGYO: 0.25,
 	Enums.ShouridoVirtue.KYORYOKU: 0.25,
-	Enums.ShouridoVirtue.KETSUI: 0.5,
-	Enums.ShouridoVirtue.CHISHIKI: 0.5,
-	Enums.ShouridoVirtue.KANPEKI: 0.5,
-	Enums.ShouridoVirtue.ISHI: 0.5,
-	Enums.ShouridoVirtue.NONE: 0.5,
 }
 
 const CHUGI_EXTERNAL_FORGIVENESS: float = 0.25

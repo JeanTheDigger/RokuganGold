@@ -230,7 +230,7 @@ func test_generate_report_need_with_successor() -> void:
 	var result: Dictionary = OrphanedObjectives.generate_report_need(vassal, 20)
 	assert_eq(result["need_type"], "REPORT_TO_NEW_LORD")
 	assert_eq(result["target_npc_id"], 20)
-	assert_eq(result["priority"], 2)
+	assert_eq(result["priority"], 0)
 
 
 func test_generate_report_need_no_successor_uses_superior() -> void:

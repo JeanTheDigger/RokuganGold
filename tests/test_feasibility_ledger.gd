@@ -686,9 +686,9 @@ func test_allied_aid_significant_contribution_tier2_favor() -> void:
 		inputs, "", allies,
 	)
 	assert_true(result["applied"])
-	# contribution_rice = 10 * 0.25 = 2.5, threshold = 10 * 0.30 = 3.0
-	# 2.5 > 3.0 is false, so favor_tier stays at default 3
-	assert_eq(result["favor_tier"], 3)
+	# contribution_rice = 10 * 0.25 = 2.5, threshold = 10 * 0.20 = 2.0
+	# 2.5 > 2.0 is true, so favor_tier upgrades to 2
+	assert_eq(result["favor_tier"], 2)
 
 
 func test_allied_aid_tracks_contributing_ally_ids() -> void:

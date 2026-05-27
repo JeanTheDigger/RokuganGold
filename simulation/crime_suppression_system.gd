@@ -19,19 +19,10 @@ const PERSONALITY_PRIORITY: Dictionary = {
 	Enums.BushidoVirtue.YU: 10,
 	Enums.BushidoVirtue.MEIYO: 10,
 	Enums.BushidoVirtue.CHUGI: 10,
-	Enums.BushidoVirtue.JIN: 0,
-	Enums.BushidoVirtue.REI: 0,
-	Enums.BushidoVirtue.MAKOTO: 0,
 }
 
 const SHOURIDO_PRIORITY: Dictionary = {
 	Enums.ShouridoVirtue.KYORYOKU: 15,
-	Enums.ShouridoVirtue.SEIGYO: 0,
-	Enums.ShouridoVirtue.ISHI: 5,
-	Enums.ShouridoVirtue.KETSUI: 5,
-	Enums.ShouridoVirtue.DOSATSU: 0,
-	Enums.ShouridoVirtue.CHISHIKI: 0,
-	Enums.ShouridoVirtue.KANPEKI: 5,
 }
 
 
@@ -207,8 +198,14 @@ static func process_doshin_recovery(current_losses: int) -> int:
 static func get_patrol_detection_chances(
 	magistrate_count: int,
 	yoriki_count: int,
-) -> int:
-	return magistrate_count + yoriki_count
+) -> Dictionary:
+	## GDD s11.3.19a: "multiple patrols simultaneously has more chances to detect."
+	## Returns qualitative data only — formula not specified in GDD.
+	return {
+		"magistrate_count": magistrate_count,
+		"yoriki_count": yoriki_count,
+		"has_multiple_patrols": (magistrate_count + yoriki_count) > 1,
+	}
 
 
 # -- Suppression Consequences (s11.3.19d) -----
@@ -219,7 +216,7 @@ static func get_suppression_success_consequences(
 	var result: Dictionary = {
 		"glory_gain_magistrate": true,
 		"glory_gain_yoriki": true,
-		"daimyo_disposition_toward_magistrate": 5,
+		"daimyo_disposition_toward_magistrate": true,
 		"heimin_swift_justice": not involves_samurai_criminals,
 		"samurai_enter_investigation": involves_samurai_criminals,
 		"evidence_may_reveal_network": true,

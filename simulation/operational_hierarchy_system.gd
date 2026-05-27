@@ -216,8 +216,6 @@ static func get_escalation_outcome(
 			return EscalationOutcome.DAIMYO_BELIEVES_SUBORDINATE
 		Enums.BushidoVirtue.MAKOTO:
 			return EscalationOutcome.DAIMYO_BELIEVES_SUBORDINATE
-		Enums.BushidoVirtue.MEIYO:
-			return EscalationOutcome.DAIMYO_BELIEVES_SUBORDINATE
 		_:
 			return EscalationOutcome.DAIMYO_SIDES_WITH_SUPERIOR
 
@@ -245,8 +243,6 @@ static func get_escalation_consequences(
 		EscalationOutcome.DAIMYO_DISMISSES:
 			return {
 				"complaint_dismissed": true,
-				"daimyo_disposition_loss": -5,
-				"superior_disposition_loss": -5,
 				"subordinate_exposed": true,
 			}
 	return {}

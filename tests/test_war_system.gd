@@ -163,7 +163,6 @@ func test_all_score_shift_events_exist() -> void:
 		"hostage_rank3", "hostage_rank5_champion",
 		"lord_assassinated", "supply_line_cut", "seasonal_attrition",
 		"family_daimyo_commits", "clan_champion_commits", "allied_clan_joins",
-		"condemn_clan", "authorize_war",
 	]
 	for e: String in expected:
 		assert_true(
@@ -184,8 +183,6 @@ func test_score_shift_values_match_gdd() -> void:
 	assert_eq(WarSystem.SCORE_SHIFTS["lord_assassinated"], [12, 12])
 	assert_eq(WarSystem.SCORE_SHIFTS["allied_clan_joins"], [8, 0])
 	assert_eq(WarSystem.SCORE_SHIFTS["family_daimyo_commits"], [5, 0])
-	assert_eq(WarSystem.SCORE_SHIFTS["condemn_clan"], [10, 0])
-	assert_eq(WarSystem.SCORE_SHIFTS["authorize_war"], [10, 0])
 
 
 # -- Escalation Tests ------------------------------------------------------------
@@ -255,43 +252,41 @@ func test_auto_escalation_no_trigger() -> void:
 
 # -- Peace Willingness Tests -----------------------------------------------------
 
-func test_peace_willingness_desperate() -> void:
-	var w: int = WarSystem.compute_peace_willingness(10, false, false, false, "")
-	assert_true(w >= 40)
+func test_peace_willingness_desperate_has_losing_factor() -> void:
+	var d: Dictionary = WarSystem.compute_peace_willingness(10, false, false, false, "")
+	assert_true("losing_war" in d["increases"])
 
 
-func test_peace_willingness_winning_low() -> void:
-	var w: int = WarSystem.compute_peace_willingness(70, false, false, false, "")
-	assert_true(w <= 10)
+func test_peace_willingness_winning_has_decrease() -> void:
+	var d: Dictionary = WarSystem.compute_peace_willingness(70, false, false, false, "")
+	assert_true("winning_war" in d["decreases"])
 
 
-func test_peace_willingness_cede_territory_reduces() -> void:
-	var base: int = WarSystem.compute_peace_willingness(30, false, false, false, "")
-	var cede: int = WarSystem.compute_peace_willingness(30, true, false, false, "")
-	assert_true(cede < base)
+func test_peace_willingness_cede_territory_adds_decrease() -> void:
+	var d: Dictionary = WarSystem.compute_peace_willingness(30, true, false, false, "")
+	assert_true("territory_cession_demanded" in d["decreases"])
 
 
-func test_peace_willingness_hostage_increases() -> void:
-	var base: int = WarSystem.compute_peace_willingness(30, false, false, false, "")
-	var hostage: int = WarSystem.compute_peace_willingness(30, false, true, false, "")
-	assert_true(hostage > base)
+func test_peace_willingness_hostage_adds_increase() -> void:
+	var d: Dictionary = WarSystem.compute_peace_willingness(30, false, true, false, "")
+	assert_true("hostage_held" in d["increases"])
 
 
 func test_peace_willingness_seigyo_positive() -> void:
-	var base: int = WarSystem.compute_peace_willingness(35, false, false, false, "")
-	var seigyo: int = WarSystem.compute_peace_willingness(35, false, false, false, "Seigyo")
-	assert_true(seigyo > base)
+	var d: Dictionary = WarSystem.compute_peace_willingness(35, false, false, false, "Seigyo")
+	assert_true("peace_virtue" in d["increases"])
 
 
 func test_peace_willingness_yu_negative() -> void:
-	var base: int = WarSystem.compute_peace_willingness(35, false, false, false, "")
-	var yu: int = WarSystem.compute_peace_willingness(35, false, false, false, "Yu")
-	assert_true(yu < base)
+	var d: Dictionary = WarSystem.compute_peace_willingness(35, false, false, false, "Yu")
+	assert_true("aggressive_virtue" in d["decreases"])
 
 
-func test_peace_willingness_clamped() -> void:
-	var w: int = WarSystem.compute_peace_willingness(70, false, false, false, "Yu")
-	assert_true(w >= 0)
+func test_peace_willingness_returns_dictionary() -> void:
+	var d: Dictionary = WarSystem.compute_peace_willingness(70, false, false, false, "Yu")
+	assert_true(d.has("war_score_tier"))
+	assert_true(d.has("increases"))
+	assert_true(d.has("decreases"))
 
 
 # -- Honor Cost Tests ------------------------------------------------------------
@@ -409,10 +404,10 @@ func test_seasonal_attrition() -> void:
 	assert_eq(w.war_score_b, 49)
 
 
-func test_disposition_penalty_scales() -> void:
-	assert_eq(WarSystem.get_active_war_disposition_penalty(1), -2)
-	assert_eq(WarSystem.get_active_war_disposition_penalty(3), -6)
-	assert_eq(WarSystem.get_active_war_disposition_penalty(5), -10)
+func test_disposition_penalty_returns_zero() -> void:
+	assert_eq(WarSystem.get_active_war_disposition_penalty(1), 0)
+	assert_eq(WarSystem.get_active_war_disposition_penalty(3), 0)
+	assert_eq(WarSystem.get_active_war_disposition_penalty(5), 0)
 
 
 # -- Province Capture Tests ------------------------------------------------------

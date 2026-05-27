@@ -16,14 +16,13 @@ const TERRAIN_COST: Dictionary = {
 	"coastal": 1,
 	"forest": 2,
 	"light_hills": 2,
-	"hills": 3,
+	"hills": 2,
 	"mountains": 3,
 }
 
 const RIVER_CROSSING_COST: int = 1
 const SPRING_RIVER_CROSSING_COST: int = 2
 
-const DEFAULT_TERRAIN_COST: int = 2
 const MINIMUM_TRAVEL_DAYS: int = 1
 
 
@@ -51,7 +50,7 @@ static func get_travel_time(origin: String, destination: String) -> int:
 
 
 static func _default_travel_time() -> int:
-	return 3
+	return 1
 
 
 static func clear_distances() -> void:
@@ -185,13 +184,10 @@ static func get_context_flag(character: L5RCharacterData) -> Enums.ContextFlag:
 
 
 # -- Forced March (army movement) ---------------------------------------------
-
-const FORCED_MARCH_MORALE_COST: int = 5
+# Blocked on sub-tile army movement system (s11.7a).
 
 static func apply_forced_march(base_days: int) -> Dictionary:
 	var reduced: int = maxi(base_days - 1, MINIMUM_TRAVEL_DAYS)
-	var days_saved: int = base_days - reduced
 	return {
 		"travel_days": reduced,
-		"morale_cost": days_saved * FORCED_MARCH_MORALE_COST,
 	}

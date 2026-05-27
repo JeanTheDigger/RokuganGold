@@ -100,68 +100,20 @@ func test_add_contact_multiple_clans() -> void:
 	assert_eq(_char_a.known_contacts_by_clan.keys().size(), 2)
 
 
-# -- Probe Visibility ----------------------------------------------------------
+# -- Probe Visibility (s15.4) --------------------------------------------------
+# process_probe_result() is now a stub returning empty array.
+# Action log scanning was an invented mechanic (GDD s15.4 Probe only reveals
+# topic positions and court objectives via _process_intelligence_info_writebacks).
 
-func test_probe_discovers_target_actions() -> void:
+func test_probe_returns_empty_array() -> void:
 	var action_log: Array = [
 		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
-		{"character_id": 2, "action_id": "GOSSIP", "target_npc_id": 1, "ic_day": 6, "success": true},
 	]
-	var discovered: Array = InformationSystem.process_probe_result(
-		_char_a, 2, action_log, 1, 3
-	)
-	assert_eq(discovered.size(), 2)
-	assert_eq(_char_a.knowledge_pool.size(), 2)
-
-
-func test_probe_quality_limits_entries() -> void:
-	var action_log: Array = [
-		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
-		{"character_id": 2, "action_id": "GOSSIP", "target_npc_id": 1, "ic_day": 6, "success": true},
-		{"character_id": 2, "action_id": "TRAIN", "target_npc_id": -1, "ic_day": 7, "success": true},
-	]
-	var discovered: Array = InformationSystem.process_probe_result(
-		_char_a, 2, action_log, 1, 1
-	)
-	assert_eq(discovered.size(), 1)
-
-
-func test_probe_returns_most_recent_first() -> void:
-	var action_log: Array = [
-		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
-		{"character_id": 2, "action_id": "GOSSIP", "target_npc_id": 1, "ic_day": 6, "success": true},
-	]
-	var discovered: Array = InformationSystem.process_probe_result(
-		_char_a, 2, action_log, 1, 1
-	)
-	assert_eq(discovered[0].data["action_id"], "GOSSIP")
-
-
-func test_probe_ignores_other_characters() -> void:
-	var action_log: Array = [
-		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
-		{"character_id": 3, "action_id": "TRAIN", "target_npc_id": -1, "ic_day": 6, "success": true},
-	]
-	var discovered: Array = InformationSystem.process_probe_result(
-		_char_a, 2, action_log, 1, 5
-	)
-	assert_eq(discovered.size(), 1)
-
-
-func test_probe_empty_log_returns_nothing() -> void:
-	var action_log: Array = []
 	var discovered: Array = InformationSystem.process_probe_result(
 		_char_a, 2, action_log, 1, 3
 	)
 	assert_eq(discovered.size(), 0)
-
-
-func test_probe_entries_are_intelligence_source() -> void:
-	var action_log: Array = [
-		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
-	]
-	InformationSystem.process_probe_result(_char_a, 2, action_log, 1, 3)
-	assert_eq(_char_a.knowledge_pool[0].source, Enums.KnowledgeSource.INTELLIGENCE)
+	assert_eq(_char_a.knowledge_pool.size(), 0)
 
 
 # -- Observe Court Attendees ---------------------------------------------------

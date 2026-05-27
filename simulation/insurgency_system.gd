@@ -225,9 +225,6 @@ static func get_spawn_chance(
 			if province.clan == "Mantis":
 				base -= 0.10
 
-	if world_state.get("is_patrolled", false):
-		base *= 0.5
-
 	return maxf(base, 0.0)
 
 
@@ -299,7 +296,7 @@ static func attempt_detection(
 		ins.detected = true
 		return {"result": "partial", "type_revealed": true, "strength_estimate": -1}
 	else:
-		ins.concealment = mini(ins.concealment + 1, 10)
+		ins.concealment += 1
 		return {"result": "failure", "type_revealed": false}
 
 
@@ -592,7 +589,7 @@ static func get_taint_resistance_tn(ptl: float) -> int:
 # Crisis Tiers per Type (s11.11)
 # =============================================================================
 
-static func get_crisis_tier(ins: InsurgencyData) -> int:
+static func get_crisis_tier(ins: InsurgencyData, ptl: float = 0.0) -> int:
 	match ins.insurgency_type:
 		Enums.InsurgencyType.MAHO_CULT:
 			return 1
@@ -603,9 +600,9 @@ static func get_crisis_tier(ins: InsurgencyData) -> int:
 		Enums.InsurgencyType.RONIN_BANDIT:
 			return 3
 		Enums.InsurgencyType.TAINT_MANIFESTATION:
-			if ins.strength >= 8:
+			if ptl >= 9.0:
 				return 1
-			if ins.strength >= 5:
+			if ptl >= 6.0:
 				return 2
 			return 3
 		Enums.InsurgencyType.NEZUMI_INFESTATION:

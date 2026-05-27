@@ -349,8 +349,10 @@ enum LadderRung {
 
 # -- Constants ----------------------------------------------------------------
 
-const SCALE_DOWN_FACTOR: float = 0.5
-const SCALE_DOWN_EQUIP_RATIO: float = 0.5
+# GDD s4.3.17 Rung 1: "Reduce the proposed army size" — no specific reduction
+# factor given. Using structural placeholder.
+const SCALE_DOWN_FACTOR: float = 0.0
+const SCALE_DOWN_EQUIP_RATIO: float = 0.0
 
 const DELAY_SKIP_VIRTUES: Array[String] = ["YU", "KYORYOKU"]
 const DELAYABLE_SEASONS: Array[String] = ["spring", "summer"]
@@ -362,7 +364,7 @@ const TRIBUTE_REFUSE_THRESHOLD: int = -11
 
 const ALLIED_AID_SKIP_VIRTUES: Array[String] = ["KETSUI", "ISHI"]
 const ALLIED_AID_FRIEND_THRESHOLD: int = 31
-const ALLIED_AID_SIGNIFICANT_FRACTION: float = 0.30
+const ALLIED_AID_SIGNIFICANT_FRACTION: float = 0.20
 
 const RAID_BLOCK_VIRTUES: Array[String] = ["JIN", "GI"]
 const RAID_HONOR_COST: float = -1.0

@@ -85,41 +85,19 @@ static func add_contact(
 		)
 
 
-# -- Probe Visibility (GDD s55.4.7) -------------------------------------------
+# -- Probe Visibility (GDD s15.4) ---------------------------------------------
+# GDD s15.4 Probe reveals topic positions and court objectives only.
+# Action log scanning removed (invented mechanic). Topic/objective intelligence
+# flows through _process_intelligence_info_writebacks in DayOrchestrator.
 
 static func process_probe_result(
-	prober: L5RCharacterData,
-	target_id: int,
-	action_log: Array,
-	current_season: int,
-	quality: int,
+	_prober: L5RCharacterData,
+	_target_id: int,
+	_action_log: Array,
+	_current_season: int,
+	_quality: int,
 ) -> Array:
-	var discovered: Array = []
-	var target_actions: Array = _get_target_actions(target_id, action_log)
-
-	var max_entries: int = clampi(quality, 1, 5)
-	var count: int = 0
-	for i: int in range(target_actions.size() - 1, -1, -1):
-		if count >= max_entries:
-			break
-		var action: Dictionary = target_actions[i]
-		var entry: KnowledgeEntry = make_entry(
-			Enums.KnowledgeSource.INTELLIGENCE,
-			"observed_action",
-			{
-				"target_character_id": target_id,
-				"action_id": action.get("action_id", ""),
-				"target_npc_id": action.get("target_npc_id", -1),
-				"ic_day": action.get("ic_day", 0),
-				"success": action.get("success", false),
-			},
-			current_season,
-		)
-		add_knowledge(prober, entry)
-		discovered.append(entry)
-		count += 1
-
-	return discovered
+	return []
 
 
 static func _get_target_actions(target_id: int, action_log: Array) -> Array:

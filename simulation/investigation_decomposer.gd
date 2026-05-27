@@ -10,9 +10,6 @@ class_name InvestigationDecomposer
 
 const ACCUSATION_THRESHOLD: int = 40
 const BRIBERY_EVAL_THRESHOLD: int = 25
-const SCENE_REEXAMINE_EVIDENCE_CAP: int = 15
-const SCENE_MAX_REEXAMINATIONS: int = 1
-const DAYS_SCENE_STILL_USEFUL: int = 30
 
 
 # -- Main Decomposition Entry --------------------------------------------------
