@@ -4,7 +4,6 @@ class_name MushaShugyo
 ## objective. School-type destination weighting. Return-to-service pipeline.
 
 const PILGRIMAGE_DURATION_DAYS: int = 360
-const PILGRIMAGE_RONIN_CHANCE: float = 0.03
 
 const BASE_CHANCE: float = 0.10
 
@@ -91,25 +90,6 @@ static func end_pilgrimage(character: L5RCharacterData) -> Dictionary:
 	result["lord_restored"] = true
 
 	return result
-
-
-static func check_ronin_conversion(character: L5RCharacterData, dice_engine: DiceEngine) -> bool:
-	var roll: int = (dice_engine.roll_and_keep(1, 1, false).total % 100) + 1
-	return roll <= int(PILGRIMAGE_RONIN_CHANCE * 100.0)
-
-
-static func end_pilgrimage_as_ronin(character: L5RCharacterData) -> Dictionary:
-	character.musha_shugyo = false
-	character.musha_shugyo_end_ic_day = -1
-	character.original_lord_id = -1
-	character.current_objective = ""
-	character.permanent_ronin = true
-	var ronin_report: Dictionary = RoninSystem.make_ronin(character, RoninSystem.RoninCause.VOLUNTARY_DEPARTURE)
-	return {
-		"character_id": character.character_id,
-		"became_ronin": true,
-		"ronin_report": ronin_report,
-	}
 
 
 static func is_on_pilgrimage(character: L5RCharacterData) -> bool:

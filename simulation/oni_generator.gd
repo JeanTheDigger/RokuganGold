@@ -5,21 +5,13 @@ class_name OniGenerator
 
 # -- Step 1: Size (s2.4.8 — LOCKED) -------------------------------------------
 
-## Size probabilities: rolled uniformly 1d10. Adjust thresholds for lore rarity.
-## GDD gives no explicit size probability — using equal-weight d4 roll.
-## Small=1-3, Medium=4-6, Large=7-9, Massive=10 (approximate; GDD defers to GM).
-const SIZE_TABLE: Dictionary = {
-	1: Enums.OniSize.SMALL,
-	2: Enums.OniSize.SMALL,
-	3: Enums.OniSize.SMALL,
-	4: Enums.OniSize.MEDIUM,
-	5: Enums.OniSize.MEDIUM,
-	6: Enums.OniSize.MEDIUM,
-	7: Enums.OniSize.LARGE,
-	8: Enums.OniSize.LARGE,
-	9: Enums.OniSize.LARGE,
-	10: Enums.OniSize.MASSIVE,
-}
+## GDD lists 4 sizes but no probability distribution. Using uniform random.
+const SIZE_OPTIONS: Array[int] = [
+	Enums.OniSize.SMALL,
+	Enums.OniSize.MEDIUM,
+	Enums.OniSize.LARGE,
+	Enums.OniSize.MASSIVE,
+]
 
 ## Ring budgets per size (s2.4.8 Step 1 — LOCKED).
 const RING_BUDGET: Dictionary = {
@@ -57,7 +49,7 @@ const FEAR_RATING: Dictionary = {
 # -- Step 2: Body Form (s2.4.8 — LOCKED) --------------------------------------
 
 ## 7 base forms (WINGED is a secondary flag — see generate()).
-## Probability spread: 6 base forms equally likely, WINGED is a 20% additive flag.
+## 6 base forms equally likely.
 const BODY_FORM_COUNT: int = 6  # HUMANOID through INSECTOID
 
 
@@ -90,15 +82,15 @@ const POOL_2_OPTIONS: Array[int] = [
 	Enums.OniInvulnerability.POISON_IMMUNITY,
 ]
 
-## Pool 3 — Special Attack (rarity weighted: Common=40%, Uncommon=20%, Rare=7%).
-## 6 entries with cumulative d100 thresholds.
-const POOL_3_THRESHOLDS: Array[Dictionary] = [
-	{"max": 40, "ability": Enums.OniSpecialAttack.BREATH_WEAPON},    # Common 40%
-	{"max": 80, "ability": Enums.OniSpecialAttack.CRUSHING_GRIP},    # Common 40%
-	{"max": 90, "ability": Enums.OniSpecialAttack.TAINT_SPIT},       # Uncommon 10%
-	{"max": 94, "ability": Enums.OniSpecialAttack.REGENERATION},     # Uncommon 4%
-	{"max": 97, "ability": Enums.OniSpecialAttack.SPAWN},            # Rare 3%
-	{"max": 100, "ability": Enums.OniSpecialAttack.TAINT_AURA},      # Rare 3%
+## Pool 3 — Special Attack.
+# DISABLED: GDD rarity weights (Common/Uncommon/Rare) not quantified. Using equal probability.
+const POOL_3_OPTIONS: Array[int] = [
+	Enums.OniSpecialAttack.BREATH_WEAPON,
+	Enums.OniSpecialAttack.CRUSHING_GRIP,
+	Enums.OniSpecialAttack.TAINT_SPIT,
+	Enums.OniSpecialAttack.REGENERATION,
+	Enums.OniSpecialAttack.SPAWN,
+	Enums.OniSpecialAttack.TAINT_AURA,
 ]
 
 
@@ -107,9 +99,9 @@ const POOL_3_THRESHOLDS: Array[Dictionary] = [
 ## 7 weaknesses, equally weighted (d7).
 const WEAKNESS_COUNT: int = 7
 
-## Weapon types for SPECIFIC_WEAPON_TYPE weakness.
+## Weapon types for SPECIFIC_WEAPON_TYPE weakness (GDD-stated only).
 const WEAPON_TYPES: Array[String] = [
-	"spears", "bows", "no-dachi", "katana", "kama", "naginata",
+	"spears", "bows", "no-dachi",
 ]
 
 ## Spell schools for SPECIFIC_SPELL_SCHOOL weakness.
@@ -117,10 +109,9 @@ const SPELL_SCHOOLS: Array[String] = [
 	"Water", "Fire", "Air", "Earth", "Void",
 ]
 
-## Named individual types for NAMED_INDIVIDUAL weakness.
+## Named individual types for NAMED_INDIVIDUAL weakness (GDD-stated only).
 const NAMED_INDIVIDUAL_TYPES: Array[String] = [
-	"Kuni Witch Hunter", "Hida Bushi", "Kaiu Engineer",
-	"Hiruma Scout", "Crab Clan Champion",
+	"Kuni Witch Hunter", "Hida Bushi",
 ]
 
 
@@ -130,15 +121,15 @@ static func generate(dice: DiceEngine, ic_day: int) -> OniData:
 	var oni := OniData.new()
 	oni.ic_day_generated = ic_day
 
-	# Step 1 — Size.
-	var size_roll: int = clampi(dice.roll_and_keep(1, 1, 0).total % 10 + 1, 1, 10)
-	oni.size = SIZE_TABLE.get(size_roll, Enums.OniSize.SMALL)
+	# Step 1 — Size (uniform random across 4 sizes).
+	var size_idx: int = dice.roll_and_keep(1, 1, 0).total % SIZE_OPTIONS.size()
+	oni.size = SIZE_OPTIONS[size_idx]
 
 	# Step 2 — Body Form.
 	var form_roll: int = dice.roll_and_keep(1, 1, 0).total % BODY_FORM_COUNT
 	oni.body_form = form_roll  # Maps directly to OniBodyForm enum values 0–5.
-	# Winged: 20% additive flag on any base form.
-	oni.is_winged = (dice.roll_and_keep(1, 1, 0).total % 5) == 0
+	# DISABLED: GDD s2.4.8 does not specify winged probability.
+	oni.is_winged = false
 
 	# Step 3 — Dominant Ring.
 	var dom_idx: int = dice.roll_and_keep(1, 1, 0).total % DOMINANT_RINGS.size()
@@ -205,12 +196,9 @@ static func generate(dice: DiceEngine, ic_day: int) -> OniData:
 		# 1d3 spells immune (1–3).
 		oni.spell_immunity_count = (dice.roll_and_keep(1, 1, 0).total % 3) + 1
 
-	# Step 5 — Pool 3: Special Attack (rarity weighted d100).
-	var p3_roll: int = (dice.roll_and_keep(1, 1, 0).total % 100) + 1
-	for entry: Dictionary in POOL_3_THRESHOLDS:
-		if p3_roll <= int(entry["max"]):
-			oni.special_attack = int(entry["ability"])
-			break
+	# Step 5 — Pool 3: Special Attack (equal probability — rarity weights not quantified).
+	var p3_idx: int = dice.roll_and_keep(1, 1, 0).total % POOL_3_OPTIONS.size()
+	oni.special_attack = POOL_3_OPTIONS[p3_idx]
 
 	# Step 6 — Weakness (specific, procedurally generated — LOCKED).
 	# Jade/crystal/obsidian immunity halving is universal and not stored (always applies).

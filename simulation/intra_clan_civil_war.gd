@@ -63,7 +63,6 @@ const STABILITY_PENALTY_BASE: int = -3       # 0–7 seasons
 const STABILITY_PENALTY_LONG: int = -5       # 8–11 seasons
 const STABILITY_PENALTY_GRINDING: int = -7   # 12+ seasons
 
-const HONOR_HEMORRHAGE_REBEL_PER_SEASON: float = -0.3
 const COLLECTIVE_DIPLOMATIC_PENALTY: int = -10
 
 
@@ -90,7 +89,6 @@ const WS_FOREIGN_INTERVENTION: int = 8
 
 const DEFECTION_WAR_SCORE_DESPERATE: int = 25
 const DEFECTION_DISPOSITION_ENEMY: int = -20
-const DEFECTION_HONOR_PENALTY: float = -0.5
 const DEFECTOR_DISPOSITION_PENALTY: int = -15
 
 

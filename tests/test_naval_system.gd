@@ -72,7 +72,6 @@ func test_koutetsukan_stats() -> void:
 	assert_eq(stats["morale"], 20)
 	assert_eq(stats["morale_defense"], 8)
 	assert_eq(stats["cargo"], 0.0)
-	assert_true(stats["is_military"])
 	assert_eq(stats["movement_per_subtile"], 2)
 
 
@@ -83,7 +82,6 @@ func test_atakebune_stats() -> void:
 	assert_eq(stats["defense"], 6)
 	assert_eq(stats["morale"], 18)
 	assert_eq(stats["morale_defense"], 7)
-	assert_true(stats["is_military"])
 	assert_true(stats["can_ocean"])
 
 

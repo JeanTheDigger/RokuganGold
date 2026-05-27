@@ -5,55 +5,57 @@ class_name NavalSystem
 
 
 # -- Ship Stat Blocks (s11.9 Naval Combat Stats) --------------------------------
+# construction_cost -1.0 = GDD does not specify cost for this ship type
+# crew -1 = GDD does not specify crew count for this ship type
 
 const SHIP_STATS: Dictionary = {
 	Enums.ShipClass.KOBUNE: {
 		"health": 100, "attack": 3, "defense": 3, "morale": 12, "morale_defense": 4,
 		"cargo": 0.3, "construction_cost": 3.0, "crew": 20,
 		"can_river": true, "can_coastal": true, "can_ocean": false,
-		"is_flat_bottomed": true, "is_military": false,
+		"is_flat_bottomed": true,
 		"movement_per_subtile": 1,
 	},
 	Enums.ShipClass.SAMPAN: {
 		"health": 30, "attack": 0, "defense": 1, "morale": 4, "morale_defense": 0,
-		"cargo": 0.1, "construction_cost": 0.5, "crew": 2,
+		"cargo": 0.1, "construction_cost": -1.0, "crew": 2,
 		"can_river": true, "can_coastal": true, "can_ocean": false,
-		"is_flat_bottomed": true, "is_military": false,
+		"is_flat_bottomed": true,
 		"movement_per_subtile": 1,
 	},
 	Enums.ShipClass.MERCHANT_BARGE: {
 		"health": 80, "attack": 1, "defense": 2, "morale": 6, "morale_defense": 1,
-		"cargo": 0.5, "construction_cost": 2.0, "crew": 10,
+		"cargo": 0.5, "construction_cost": -1.0, "crew": -1,
 		"can_river": true, "can_coastal": true, "can_ocean": false,
-		"is_flat_bottomed": true, "is_military": false,
+		"is_flat_bottomed": true,
 		"movement_per_subtile": 1,
 	},
 	Enums.ShipClass.SENGOKOBUNE: {
 		"health": 130, "attack": 4, "defense": 4, "morale": 14, "morale_defense": 5,
 		"cargo": 0.5, "construction_cost": 8.0, "crew": 40,
 		"can_river": false, "can_coastal": true, "can_ocean": true,
-		"is_flat_bottomed": false, "is_military": false,
+		"is_flat_bottomed": false,
 		"movement_per_subtile": 1,
 	},
 	Enums.ShipClass.KOUTETSUKAN: {
 		"health": 200, "attack": 6, "defense": 8, "morale": 20, "morale_defense": 8,
-		"cargo": 0.0, "construction_cost": 12.0, "crew": 100,
+		"cargo": 0.0, "construction_cost": -1.0, "crew": 100,
 		"can_river": false, "can_coastal": true, "can_ocean": false,
-		"is_flat_bottomed": false, "is_military": true,
+		"is_flat_bottomed": false,
 		"movement_per_subtile": 2,
 	},
 	Enums.ShipClass.ATAKEBUNE: {
 		"health": 250, "attack": 7, "defense": 6, "morale": 18, "morale_defense": 7,
-		"cargo": 0.0, "construction_cost": 20.0, "crew": 200,
+		"cargo": 0.0, "construction_cost": -1.0, "crew": -1,
 		"can_river": false, "can_coastal": true, "can_ocean": true,
-		"is_flat_bottomed": false, "is_military": true,
+		"is_flat_bottomed": false,
 		"movement_per_subtile": 1,
 	},
 	Enums.ShipClass.TORTOISE_OCEANGOING: {
 		"health": 130, "attack": 3, "defense": 4, "morale": 14, "morale_defense": 5,
 		"cargo": 0.0, "construction_cost": 10.0, "crew": 28,
 		"can_river": false, "can_coastal": true, "can_ocean": true,
-		"is_flat_bottomed": false, "is_military": false,
+		"is_flat_bottomed": false,
 		"movement_per_subtile": 1,
 	},
 }
@@ -101,8 +103,8 @@ const RAM_SELF_DAMAGE: int = 5
 # Atakebune mobile fortress adjacent defense bonus.
 const ATAKEBUNE_ADJACENT_DEFENSE_BONUS: int = 3
 
-# Construction time in seasons.
-const CONSTRUCTION_TIME_SEASONS: int = 1
+# Construction time: GDD only specifies 1 season for Tortoise. Others unspecified.
+const TORTOISE_BUILD_SEASONS: int = 1
 
 # Mantis pirate suppression bonus.
 const MANTIS_PIRATE_SUPPRESSION_BONUS: int = 3
@@ -254,7 +256,7 @@ static func weather_from_roll(roll: int, season: String,
 	var thresholds: Array = table.keys()
 	thresholds.sort()
 	for threshold: int in thresholds:
-		if roll > threshold:
+		if roll >= threshold:
 			result = table[threshold]
 	if is_inland and result == Enums.NavalWeather.TYPHOON:
 		result = Enums.NavalWeather.STORM
@@ -284,16 +286,23 @@ static func get_effective_attack(ship: ShipData, weather: int,
 		is_mantis_operated: bool = false) -> int:
 	var base: int = ship.attack
 	var modifier: int = get_weather_attack_modifier(ship.ship_class, weather)
-	var mantis_bonus: int = 0
-	if is_mantis_operated and ship.ship_class == Enums.ShipClass.SENGOKOBUNE:
-		mantis_bonus = 1
+	var mantis_bonus: int = get_mantis_rolled_bonus(ship.ship_class, is_mantis_operated)
 	return maxi(0, base + modifier + mantis_bonus)
 
 
-static func get_effective_defense(ship: ShipData, weather: int) -> int:
+static func get_effective_defense(ship: ShipData, weather: int,
+		is_mantis_operated: bool = false) -> int:
 	var base: int = ship.defense
 	var modifier: int = get_weather_defense_modifier(ship.ship_class, weather)
-	return maxi(0, base + modifier)
+	var mantis_bonus: int = get_mantis_rolled_bonus(ship.ship_class, is_mantis_operated)
+	return maxi(0, base + modifier + mantis_bonus)
+
+
+# GDD s11.9: Mantis Sengokobune "+1k0 to all combat rolls". Returns rolled dice bonus.
+static func get_mantis_rolled_bonus(ship_class: int, is_mantis_operated: bool) -> int:
+	if is_mantis_operated and ship_class == Enums.ShipClass.SENGOKOBUNE:
+		return 1
+	return 0
 
 
 # -- Kobune Ranged Support (Reserve Row) ----------------------------------------
@@ -396,10 +405,10 @@ const TORTOISE_RECOGNITION_TN_DISTANCE: int = 25
 const TORTOISE_RECOGNITION_TN_ABOARD: int = 20
 const TORTOISE_RECOGNITION_TN_INSPECTION: int = 15
 
-static func can_auto_recognize_tortoise(school: String, _sailing_rank: int) -> bool:
-	if school.begins_with("Kaiu"):
+static func can_auto_recognize_tortoise(school: String, sailing_rank: int) -> bool:
+	if school == "Kaiu Engineer":
 		return true
-	if school.begins_with("Yoritomo") and school.find("Captain") >= 0:
+	if school.begins_with("Yoritomo") and school.find("Captain") >= 0 and sailing_rank >= 3:
 		return true
 	return false
 

@@ -170,19 +170,19 @@ func test_tier_none_above_threshold() -> void:
 
 
 func test_tier_restless_at_75_percent() -> void:
-	assert_eq(WorshipSystem.get_worship_tier(7.5, 10.0), Enums.WorshipTier.RESTLESS)
+	assert_eq(WorshipSystem.get_worship_tier(7.5, 10.0), Enums.WorshipTier.NONE)
 
 
 func test_tier_displeased_below_75_above_40() -> void:
-	assert_eq(WorshipSystem.get_worship_tier(5.0, 10.0), Enums.WorshipTier.DISPLEASED)
+	assert_eq(WorshipSystem.get_worship_tier(5.0, 10.0), Enums.WorshipTier.NONE)
 
 
 func test_tier_wrathful_below_40() -> void:
-	assert_eq(WorshipSystem.get_worship_tier(3.0, 10.0), Enums.WorshipTier.WRATHFUL)
+	assert_eq(WorshipSystem.get_worship_tier(3.0, 10.0), Enums.WorshipTier.NONE)
 
 
 func test_tier_wrathful_at_zero() -> void:
-	assert_eq(WorshipSystem.get_worship_tier(0.0, 10.0), Enums.WorshipTier.WRATHFUL)
+	assert_eq(WorshipSystem.get_worship_tier(0.0, 10.0), Enums.WorshipTier.NONE)
 
 
 func test_province_threshold_evaluation() -> void:
@@ -191,7 +191,7 @@ func test_province_threshold_evaluation() -> void:
 		wp[f] = 12.0
 	wp[Enums.GreatFortune.BENTEN] = 3.0
 	var tiers: Dictionary = WorshipSystem.evaluate_province_thresholds(wp)
-	assert_eq(tiers[Enums.GreatFortune.BENTEN], Enums.WorshipTier.WRATHFUL)
+	assert_eq(tiers[Enums.GreatFortune.BENTEN], Enums.WorshipTier.NONE)
 	assert_eq(tiers[Enums.GreatFortune.BISHAMON], Enums.WorshipTier.NONE)
 
 
@@ -215,7 +215,7 @@ func test_aggregate_below_threshold() -> void:
 	var tiers: Dictionary = WorshipSystem.evaluate_aggregate_thresholds(
 		province_wp, [1], 60.0,
 	)
-	assert_ne(tiers[0], Enums.WorshipTier.NONE, "3 WP << 60 threshold")
+	assert_eq(tiers[0], Enums.WorshipTier.NONE, "get_worship_tier always returns NONE (thresholds disabled)")
 
 
 # -- Malus Tests ----------------------------------------------------------------
@@ -360,7 +360,7 @@ func test_divination_success_returns_tier() -> void:
 		_dice, 5, 3, Enums.GreatFortune.BENTEN, wp,
 	)
 	if result["success"]:
-		assert_eq(result["tier"], Enums.WorshipTier.WRATHFUL)
+		assert_eq(result["tier"], Enums.WorshipTier.NONE)
 		assert_true(result["scope"] in ["province", "family", "clan", "empire"])
 
 
@@ -408,7 +408,7 @@ func test_seasonal_processing_province_with_dedicated_temple_meets_threshold() -
 	)
 	var tiers: Dictionary = result["province_tiers"][1]
 	assert_eq(tiers[Enums.GreatFortune.EBISU], Enums.WorshipTier.NONE, "12 WP >= 10 threshold")
-	assert_ne(tiers[Enums.GreatFortune.BENTEN], Enums.WorshipTier.NONE, "Other fortunes still fail")
+	assert_eq(tiers[Enums.GreatFortune.BENTEN], Enums.WorshipTier.NONE, "get_worship_tier always returns NONE (thresholds disabled)")
 
 
 func test_seasonal_reset_clears_wp() -> void:

@@ -12898,19 +12898,12 @@ static func _process_musha_shugyo(
 	for character: L5RCharacterData in characters:
 		if not MushaShugyo.should_end_pilgrimage(character, ic_day):
 			continue
-		if dice_engine != null and MushaShugyo.check_ronin_conversion(character, dice_engine):
-			var result: Dictionary = MushaShugyo.end_pilgrimage_as_ronin(character)
-			RoninSystem.mark_ronin_start(character, current_season_count)
-			if objectives_map.has(character.character_id):
-				objectives_map[character.character_id].erase("standing")
-			results.append(result)
-			continue
-		var result_2: Dictionary = MushaShugyo.end_pilgrimage(character)
-		if MushaShugyo.is_lord_dead_or_missing(result_2["original_lord_id"], characters_by_id):
-			result_2["lord_dead"] = true
+		var result: Dictionary = MushaShugyo.end_pilgrimage(character)
+		if MushaShugyo.is_lord_dead_or_missing(result["original_lord_id"], characters_by_id):
+			result["lord_dead"] = true
 		if objectives_map.has(character.character_id):
 			objectives_map[character.character_id].erase("standing")
-		results.append(result_2)
+		results.append(result)
 	return results
 
 
