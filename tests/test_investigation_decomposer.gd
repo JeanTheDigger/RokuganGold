@@ -384,7 +384,8 @@ func test_scoring_suspect_chosen_when_no_witnesses():
 	assert_eq(need.target_npc_id, 300)
 
 
-func test_scoring_reexamine_scene_low_evidence():
+func test_scoring_reexamine_scene_disabled():
+	# Reexamination scoring removed (invented caps). Falls through to close.
 	var ctx := _make_ctx("zone_a")
 	var obj := _make_objective({
 		"scene_examined": true,
@@ -394,8 +395,8 @@ func test_scoring_reexamine_scene_low_evidence():
 	})
 	ctx.ic_day = 10
 	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
-	assert_eq(need.need_type, "INVESTIGATE_THREAT")
-	assert_eq(need.target_intent, "zone_a")
+	assert_eq(need.need_type, "REST")
+	assert_eq(need.source, "INVESTIGATE_CRIME_CLOSED")
 
 
 func test_scoring_no_reexamine_at_max_count():

@@ -374,8 +374,8 @@ func test_blood_concealment_tn_uses_raw_roll() -> void:
 	var result: Dictionary = MahoSystem.resolve_cast(
 		_caster, _blood_source, _province, 1, 0, _dice, 710, 10, "Province_99"
 	)
-	assert_true(result["blood_concealment_tn"] >= 0,
-		"blood_concealment_tn should be the raw Stealth/Agility roll total")
+	assert_true(result.has("blood_concealment_tn"),
+		"blood_concealment_tn should be the raw Stealth/Agility roll total (no floor)")
 
 
 func test_blood_concealment_tn_stored_on_crime_record() -> void:

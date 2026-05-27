@@ -105,20 +105,8 @@ static func _select_best_next_action(
 			"score": score, "type": "suspect", "target_id": sid,
 		})
 
-	# Candidate: Re-examine scene (only if scene still useful and low evidence)
-	var reexam_count: int = objective.get("scene_exam_count", 1)
-	if reexam_count < SCENE_MAX_REEXAMINATIONS \
-			and evidence_total < SCENE_REEXAMINE_EVIDENCE_CAP \
-			and days_elapsed < DAYS_SCENE_STILL_USEFUL:
-		var at_scene: bool = ctx.location_id == crime_location
-		var score: int = 50
-		if at_scene:
-			score += 20
-		if evidence_total < 10:
-			score += 15
-		candidates.append({
-			"score": score, "type": "reexamine_scene",
-		})
+	# Candidate: Re-examine scene — disabled (invented caps removed).
+	# Reexamination scoring requires GDD spec for thresholds.
 
 	# Candidate: Check alibis
 	var unchecked: Array = _get_unchecked_alibis(objective, checked_alibis)

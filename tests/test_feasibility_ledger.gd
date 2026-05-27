@@ -477,17 +477,19 @@ func _make_infeasible_inputs() -> Dictionary:
 
 # -- Rung 1: Scale Down -------------------------------------------------------
 
-func test_scale_down_halves_levy() -> void:
+func test_scale_down_zeroed_levy() -> void:
+	# SCALE_DOWN_FACTOR = 0.0 — scaling disabled (invented value removed)
 	var inputs := _make_infeasible_inputs()
 	var result: Dictionary = FeasibilityLedger.try_scale_down(inputs)
 	assert_true(result["applied"])
-	assert_eq(result["reduced_levy_pu"], 5.0)
+	assert_eq(result["reduced_levy_pu"], 0.0)
 
 
-func test_scale_down_halves_equip_cost() -> void:
+func test_scale_down_zeroed_equip_cost() -> void:
+	# SCALE_DOWN_EQUIP_RATIO = 0.0 — scaling disabled (invented value removed)
 	var inputs := _make_infeasible_inputs()
 	var result: Dictionary = FeasibilityLedger.try_scale_down(inputs)
-	assert_eq(result["modified_inputs"]["equip_cost"], 2.5)
+	assert_eq(result["modified_inputs"]["equip_cost"], 0.0)
 
 
 # -- Rung 2: Delay to Harvest -------------------------------------------------
