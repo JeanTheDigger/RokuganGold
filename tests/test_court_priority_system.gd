@@ -67,16 +67,16 @@ func test_higher_status_court_wins_when_equal():
 
 # -- Early departure tests ----------------------------------------------------
 
-func test_host_leaving_severe():
+func test_host_leaving():
 	var cost := CourtPrioritySystem.get_early_departure_cost(true, false)
-	assert_eq(cost["honor_loss"], -1.0)
-	assert_eq(cost["glory_loss"], -0.5)
+	assert_eq(cost["honor_loss"], 0.0)
+	assert_eq(cost["glory_loss"], 0.0)
 	assert_false(cost["mandate_violation"])
 
 
-func test_guest_leaving_mild():
+func test_guest_leaving():
 	var cost := CourtPrioritySystem.get_early_departure_cost(false, false)
-	assert_eq(cost["disposition_cost"], -3)
+	assert_eq(cost["disposition_cost"], 0)
 	assert_eq(cost["honor_loss"], 0.0)
 	assert_false(cost["mandate_violation"])
 
@@ -84,7 +84,7 @@ func test_guest_leaving_mild():
 func test_proxy_leaving_mandate_violation():
 	var cost := CourtPrioritySystem.get_early_departure_cost(false, true)
 	assert_true(cost["mandate_violation"])
-	assert_eq(cost["disposition_cost"], -3)
+	assert_eq(cost["disposition_cost"], 0)
 
 
 # -- Negligence tests ---------------------------------------------------------

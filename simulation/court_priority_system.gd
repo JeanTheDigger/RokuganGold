@@ -65,9 +65,9 @@ static func _court_serves_standing(court: Dictionary, standing_objective: String
 
 # -- Early Departure Costs ---------------------------------------------------
 
-const HOST_LEAVING_HONOR_LOSS: float = -1.0
-const HOST_LEAVING_GLORY_LOSS: float = -0.5
-const GUEST_LEAVING_DISPOSITION_COST: int = -3
+const HOST_LEAVING_HONOR_LOSS: float = 0.0
+const HOST_LEAVING_GLORY_LOSS: float = 0.0
+const GUEST_LEAVING_DISPOSITION_COST: int = 0
 
 static func get_early_departure_cost(is_host: bool, is_proxy: bool, character: L5RCharacterData = null) -> Dictionary:
 	if is_host:

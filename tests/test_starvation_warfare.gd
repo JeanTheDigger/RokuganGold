@@ -72,13 +72,13 @@ func test_gi_never_destroys_harvest() -> void:
 	assert_eq(r["reason"], "personality_block")
 
 
-func test_rei_blocked_without_prior_demand() -> void:
+func test_rei_never_destroys_harvest() -> void:
 	var without: Dictionary = StarvationWarfare.can_destroy_harvest("Rei", "autumn", true, false)
 	assert_false(without["allowed"])
-	assert_eq(without["reason"], "condition_not_met")
-	assert_eq(without["condition"], "prior_formal_demand")
+	assert_eq(without["reason"], "personality_block")
 	var with_demand: Dictionary = StarvationWarfare.can_destroy_harvest("Rei", "autumn", true, true)
-	assert_true(with_demand["allowed"])
+	assert_false(with_demand["allowed"])
+	assert_eq(with_demand["reason"], "personality_block")
 
 
 func test_yu_only_if_no_other_path() -> void:
