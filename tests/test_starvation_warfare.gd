@@ -348,18 +348,10 @@ func test_orchestrator_harvest_applies_disposition() -> void:
 		applied, chars_by_id, [], topics, next_topic_id, 50, season_meta, [], [1],
 	)
 
-	assert_true(target_char.historical_modifiers.has("Lion"), "Targeted clan gets modifier")
-	var mods: Array = target_char.historical_modifiers["Lion"]
-	assert_eq(mods.size(), 1)
-	assert_eq(mods[0]["event_type"], "destroyed_harvest")
-	assert_eq(mods[0]["current_value"], -20)
-	assert_false(mods[0]["decays"])
-
-	assert_true(other_char.historical_modifiers.has("Lion"), "Other clan gets modifier")
-	var other_mods: Array = other_char.historical_modifiers["Lion"]
-	assert_eq(other_mods[0]["event_type"], "witnessed_harvest_destruction")
-	assert_eq(other_mods[0]["current_value"], -10)
-
+	# Harvest disposition modifiers removed — not in GDD s12.2 historical modifier table.
+	# create_historical_modifier returns {} for unknown event types; no modifiers appended.
+	assert_false(target_char.historical_modifiers.has("Lion"), "No modifier — event type not in GDD")
+	assert_false(other_char.historical_modifiers.has("Lion"), "No modifier — event type not in GDD")
 	assert_false(attacker.historical_modifiers.has("Lion"), "Attacker doesn't get self-modifier")
 
 
@@ -421,18 +413,14 @@ func test_orchestrator_blockade_no_duplicate_war() -> void:
 	assert_false(results[0]["war_created"])
 
 
-func test_disposition_system_has_harvest_events() -> void:
+func test_disposition_system_harvest_events_removed() -> void:
+	# Harvest disposition modifiers removed — not in GDD s12.2 historical modifier table.
 	var mod: Dictionary = DispositionSystem.create_historical_modifier("destroyed_harvest", 100)
-	assert_false(mod.is_empty())
-	assert_eq(mod["current_value"], -20)
-	assert_false(mod["decays"])
-
+	assert_true(mod.is_empty())
 	var witness_mod: Dictionary = DispositionSystem.create_historical_modifier(
 		"witnessed_harvest_destruction", 100,
 	)
-	assert_false(witness_mod.is_empty())
-	assert_eq(witness_mod["current_value"], -10)
-	assert_true(witness_mod["decays"])
+	assert_true(witness_mod.is_empty())
 
 
 func test_imperial_edict_consequence() -> void:

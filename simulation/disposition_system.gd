@@ -208,8 +208,6 @@ const HISTORICAL_EVENTS: Dictionary = {
 	"took_hostage": {"start": -5, "floor": -3, "decay": true},
 	"taken_hostage": {"start": -5, "floor": -3, "decay": true},
 	"hostage_escape": {"start": -15, "floor": -15, "decay": false},
-	"destroyed_harvest": {"start": -20, "floor": -20, "decay": false},
-	"witnessed_harvest_destruction": {"start": -10, "floor": -5, "decay": true},
 }
 
 const FAMILY_BONDS: Dictionary = {

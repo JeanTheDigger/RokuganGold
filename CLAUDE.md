@@ -2855,6 +2855,49 @@ costs, or forward-wiring. Do not treat as bugs.
   available on SettlementData at query point).
 - **s55.33 Orphaned Objectives — 1 invented value removed.**
   REPORT_TO_NEW_LORD priority 2→0.
+- **s12.2 Disposition System — 2 invented historical modifiers removed.**
+  `destroyed_harvest` (start:-20, floor:-20, no decay) and
+  `witnessed_harvest_destruction` (start:-10, floor:-5, decay) removed from
+  HISTORICAL_EVENTS. Neither appears in GDD s12.2 historical modifier table.
+  Day orchestrator harvest destruction path now creates empty modifiers (no-op).
+- **s12.7 Letter System — 5 invented reply constants zeroed.**
+  `BASE_REPLY_CHANCE` 0.20→0.0, `DISPOSITION_REPLY_BONUS` 0.008→0.0,
+  `COURTESY_REPLY_BONUS` 0.15→0.0, `HOSTILE_REPLY_THRESHOLD` -30→0,
+  `MEETING_ACCEPT_DISPOSITION` unchanged at 0. GDD s12.7 describes reply
+  mechanics qualitatively ("disposition toward sender", "personality profile",
+  "high Courtesy") but specifies no numeric values. Reply generation is
+  structurally intact but produces zero reply chance pending GDD specification.
+- **s15.4 Court Action System — 22 invented constants zeroed.**
+  GDD s15.4 specifies only 4 numeric values: Charm ceiling (40), Play a Game
+  base disposition (+3), winner bonus (+1), duration (2 months). All other
+  court action constants used qualitative GDD descriptions ("Moderate
+  disposition gain", "Strong disposition gain", "slight TN reduction",
+  "position moves slightly", "more significantly and durably") without
+  numeric values. Zeroed: CHARM_FULL_GAIN (8→0), CHARM_RAISE_BONUS (3→0),
+  NEGOTIATE_BASE_DISP (9→0), NEGOTIATE_RAISE_BONUS (3→0),
+  NEGOTIATE_POSITION_SHIFT (8.0→0.0), NEGOTIATE_RAISE_POSITION_BONUS (4.0→0.0),
+  NEGOTIATE_SESSION_TN_REDUCTION (5→0), PERSUADE_BASE_DISP (11→0),
+  PERSUADE_RAISE_BONUS (3→0), PERSUADE_POSITION_SHIFT (12.0→0.0),
+  PERSUADE_RAISE_POSITION_BONUS (5.0→0.0), IMPRESS_BASE_DISP (9→0),
+  IMPRESS_RAISE_BONUS (3→0), IMPRESS_POSITION_SHIFT (5.0→0.0),
+  IMPRESS_SESSION_TN_REDUCTION (5→0), LISTEN_REFLECT_BASE_DISP (11→0),
+  LISTEN_REFLECT_RAISE_BONUS (3→0), LISTEN_REFLECT_POSITION_SHIFT (10.0→0.0),
+  LISTEN_REFLECT_RAISE_POSITION_BONUS (4.0→0.0),
+  LISTEN_REFLECT_SESSION_TN_REDUCTION (5→0). CHARM_DIMINISHING_HALF (2) and
+  CHARM_DIMINISHING_MINIMAL (3) retained as structural thresholds (inert with
+  gain=0). Hardcoded diminishing floor changed from 1 to max(gain/4, 0).
+  Confirmed GDD-sourced: CHARM_CEILING (40), PLAY_GAME_BASE_DISP (3),
+  PLAY_GAME_WINNER_BONUS (1), PLAY_GAME_DURATION_MONTHS (2), PROVOKE_*
+  constants, GOSSIP_* constants, DEBATE_* constants.
+  NOTE: Failure-path inline penalties (-5/-6/-7 disposition on critical failure)
+  are also not GDD-specified but were left as-is for this pass — flagged for
+  future audit.
+- **s4.3 Resource Tick — audited, no changes needed.**
+  GARRISON_STABILITY_PENALTY_PER_SEASON (2.0) confirmed GDD-sourced (s4.3.11:
+  "-2 Stability/season"). UPPER_TIER_PASSTHROUGH (0.42) correctly derived from
+  GDD per-tier rates: (1-0.30)×(1-0.25)×(1-0.20) = 0.42. EMPEROR_TAKE_FROM_PASSED_UP
+  (0.063) is unused legacy constant.
+- **s57.31 Medicine System — audited, fully compliant.** All 21 constants match GDD.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
