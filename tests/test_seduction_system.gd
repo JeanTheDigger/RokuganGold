@@ -47,7 +47,7 @@ func test_seduction_applies_infamy() -> void:
 	SeductionSystem.resolve_seduction(
 		_seducer, _target, SeductionSystem.SeductionVariant.SEDUCE, _engine
 	)
-	assert_almost_eq(_seducer.infamy, 0.1, 0.01)
+	assert_almost_eq(_seducer.infamy, SeductionSystem.INFAMY_GAIN, 0.01)
 
 
 func test_seduction_tn_includes_etiquette_willpower_honor() -> void:

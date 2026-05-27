@@ -2898,6 +2898,26 @@ costs, or forward-wiring. Do not treat as bugs.
   GDD per-tier rates: (1-0.30)×(1-0.25)×(1-0.20) = 0.42. EMPEROR_TAKE_FROM_PASSED_UP
   (0.063) is unused legacy constant.
 - **s57.31 Medicine System — audited, fully compliant.** All 21 constants match GDD.
+- **s11.7 Siege System — audited, fully compliant.** All constants (14 constants,
+  12 event definitions, 3 formulas) match GDD s11.7 exactly. Zero invented values.
+- **s12.8 Secret System — 3 invented values zeroed + 2 bug fixes.**
+  CLAN_RELUCTANCE numeric values (0-5) zeroed — GDD s12.8 describes clan reluctance
+  qualitatively but assigns no numbers. INTERCEPT_GEOGRAPHIC_BONUS (5→0) zeroed —
+  GDD mentions geographic modifier but no value. BUG FIX: FABRICATION_TN had inverted
+  tier→TN mapping (TIER_1 was 30, should be 15 per GDD s12.8 lines 163-169).
+  FABRICATION_HONOR_COST had same inversion (TIER_1 was -1.5, should be -0.3 per
+  GDD lines 173-181). Both dictionaries corrected. All other 37 constants confirmed.
+- **s12.8 Seduction System — 3 invented values zeroed.**
+  BASE_TN (15→0) — GDD specifies contested roll formula but no base TN addend.
+  INFAMY_GAIN (0.1→0.0) — GDD does not specify infamy for seduction.
+  `raises_for_detail` removed from SEDUCE_FOR_INFO effects — not in GDD.
+  HONOR_COST retained as dead metadata (superseded by CrimeSystem rank-scaled
+  honor at line 69). All other values confirmed (disposition +5, maintenance
+  16 days, 3 missed windows, affair severities, breakup disposition).
+- **s12.10 Favor System — 1 invented value zeroed.**
+  `get_dispute_witness_disposition()` creditor_won return value (2→0) — GDD
+  says witnesses gain disposition but specifies no numeric amount. All other
+  15 constants confirmed from GDD s12.10.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into

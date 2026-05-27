@@ -258,19 +258,19 @@ func test_expose_publicly_skips_missing_witness() -> void:
 # ==============================================================================
 
 func test_fabrication_tn_tier_1() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_1), 30)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_1), 15)
 
 
 func test_fabrication_tn_tier_2() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_2), 25)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_2), 20)
 
 
 func test_fabrication_tn_tier_3() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_3), 20)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_3), 25)
 
 
 func test_fabrication_tn_tier_4() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_4), 15)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_4), 30)
 
 
 # ==============================================================================
@@ -582,12 +582,9 @@ func test_scorpion_zero_reluctance() -> void:
 	assert_eq(SecretSystem.CLAN_RELUCTANCE["Scorpion"], 0)
 
 
-func test_lion_highest_reluctance() -> void:
-	assert_eq(SecretSystem.CLAN_RELUCTANCE["Lion"], 5)
-
-
-func test_dragon_mid_reluctance() -> void:
-	assert_eq(SecretSystem.CLAN_RELUCTANCE["Dragon"], 3)
+func test_all_clans_zeroed_pending_gdd_spec() -> void:
+	for clan: String in SecretSystem.CLAN_RELUCTANCE:
+		assert_eq(SecretSystem.CLAN_RELUCTANCE[clan], 0)
 
 
 # ==============================================================================

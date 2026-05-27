@@ -44,18 +44,20 @@ const RECENCY_SEASONS: int = 4
 
 # -- Fabrication TNs -----------------------------------------------------------
 
+# GDD s12.8 lines 163-169: Tier 1→TN 15, Tier 2→TN 20, Tier 3→TN 25, Tier 4→TN 30.
 const FABRICATION_TN: Dictionary = {
-	SecretData.Severity.TIER_4: 15,
-	SecretData.Severity.TIER_3: 20,
-	SecretData.Severity.TIER_2: 25,
-	SecretData.Severity.TIER_1: 30,
+	SecretData.Severity.TIER_1: 15,
+	SecretData.Severity.TIER_2: 20,
+	SecretData.Severity.TIER_3: 25,
+	SecretData.Severity.TIER_4: 30,
 }
 
+# GDD s12.8 lines 173-181: Tier 1→-0.3, Tier 2→-0.5, Tier 3→-0.8, Tier 4→-1.5.
 const FABRICATION_HONOR_COST: Dictionary = {
-	SecretData.Severity.TIER_4: -0.3,
-	SecretData.Severity.TIER_3: -0.5,
-	SecretData.Severity.TIER_2: -0.8,
-	SecretData.Severity.TIER_1: -1.5,
+	SecretData.Severity.TIER_1: -0.3,
+	SecretData.Severity.TIER_2: -0.5,
+	SecretData.Severity.TIER_3: -0.8,
+	SecretData.Severity.TIER_4: -1.5,
 }
 
 const FABRICATION_INFAMY: float = 0.2
@@ -372,18 +374,23 @@ static func should_generate_reputation_topic(
 # NPC Covert Method Filters
 # ==============================================================================
 
+# GDD s12.8 lines 449-465 describes clan reluctance qualitatively
+# ("No reluctance", "Low", "Moderate", "High", "Very high", "Near-total")
+# but does not assign numeric values. Zeroed pending GDD specification.
 const CLAN_RELUCTANCE: Dictionary = {
 	"Scorpion": 0,
-	"Unicorn": 1,
-	"Crab": 2,
-	"Mantis": 2,
-	"Dragon": 3,
-	"Crane": 4,
-	"Phoenix": 4,
-	"Lion": 5,
+	"Unicorn": 0,
+	"Crab": 0,
+	"Mantis": 0,
+	"Dragon": 0,
+	"Crane": 0,
+	"Phoenix": 0,
+	"Lion": 0,
 }
 
+# GDD s12.8 line 471: "characters with starting Honor above 3.5"
 const HONOR_THRESHOLD_NEVER: float = 3.5
+# GDD s12.8 line 470: "Honor 2.0–3.5 will consider them only under significant pressure"
 const HONOR_THRESHOLD_PRESSURE: float = 2.0
 
 static func passes_covert_filters(
@@ -458,7 +465,8 @@ static func resolve_eavesdrop(
 
 const INTERCEPT_STEALTH_TN: int = 15
 const INTERCEPT_FORGERY_TN: int = 15
-const INTERCEPT_GEOGRAPHIC_BONUS: int = 5
+# GDD s12.8 line 125 mentions geographic distance modifier but no numeric value.
+const INTERCEPT_GEOGRAPHIC_BONUS: int = 0
 
 static func resolve_intercept_letter(
 	interceptor: L5RCharacterData,
