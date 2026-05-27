@@ -2827,11 +2827,13 @@ costs, or forward-wiring. Do not treat as bugs.
   PERSONALITY_PRIORITY reduced to 4 GDD-sourced entries; SHOURIDO_PRIORITY to 1.
   `get_patrol_detection_chances()` returns qualitative Dict instead of numeric
   detection_chance.
-- **s57.16 Investigation Decomposer — 3 invented constants removed.**
+- **s57.16 Investigation Decomposer — scoring system replaced with priority ordering.**
   `SCENE_REEXAMINE_EVIDENCE_CAP`, `SCENE_MAX_REEXAMINATIONS`,
-  `DAYS_SCENE_STILL_USEFUL` removed. Reexamine-scene scoring block disabled
-  (references removed constants). Entire `_select_best_next_action()` scoring
-  system uses invented base values (65/55/50) — noted for future GDD spec.
+  `DAYS_SCENE_STILL_USEFUL` removed. `_select_best_next_action()` numeric scoring
+  system replaced with GDD-specified priority ordering: witnesses → suspects →
+  alibis → leads. Invented base scores (80/65/55/60), bonuses (+15/+10), and dead
+  variables (`evidence_gap`, `days_elapsed`) removed. Co-located targets preferred
+  within each category via `_pick_present_first()` helper.
 - **s55.12 Information System — invented probe logic gutted.**
   `process_probe_result()` returns `[]` always (action log scanning was invented).
   Stub kept for backward compatibility.
@@ -2841,9 +2843,16 @@ costs, or forward-wiring. Do not treat as bugs.
   Removed `is_patrolled` halving spawn chance. Removed concealment cap of 10 on
   failed detection. `get_crisis_tier()` TAINT_MANIFESTATION uses PTL thresholds
   (9.0→tier 1, 6.0→tier 2) instead of invented strength thresholds.
-- **s4.3.17 Feasibility Ledger — 2 invented values corrected.**
+- **s4.3.17 Feasibility Ledger — 7 invented values corrected.**
   `ALLIED_AID_SIGNIFICANT_FRACTION` 0.30→0.20 (GDD says "more than 20%").
-  `SCALE_DOWN_FACTOR` and `SCALE_DOWN_EQUIP_RATIO` zeroed.
+  `SCALE_DOWN_FACTOR` and `SCALE_DOWN_EQUIP_RATIO` zeroed. Iron-to-arms
+  conversion `* 0.5` → `* 1.0` (GDD line 479: "1.00 Iron → 1.00 Arms").
+  Market purchase 50% fraction removed (GDD does not specify limit).
+  `TETHER_HOLD_SEASONS_KETSUI` 2→1 (GDD specifies no personality extension).
+  Retreat target scoring formula (rice_per_pu + forge bonus - distance) replaced
+  with nearest-province selection. `max_distance` parameter removed. Home Front
+  per-PU thresholds documented as structural proxy (starvation_stage not
+  available on SettlementData at query point).
 - **s55.33 Orphaned Objectives — 1 invented value removed.**
   REPORT_TO_NEW_LORD priority 2→0.
 
