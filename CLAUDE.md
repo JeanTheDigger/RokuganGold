@@ -2944,6 +2944,53 @@ costs, or forward-wiring. Do not treat as bugs.
 - **s12.8 Seduction System — test fix for BASE_TN zeroing.**
   TN-dependent test assertions updated to use `SeductionSystem.BASE_TN`
   constant reference instead of hardcoded 23/33 (which assumed BASE_TN=15).
+- **s12.8 Bound Escape System — 2 invented values fixed.**
+  Dead `LOW_SKILL_HONOR_COST` constant removed (never used; CrimeSystem
+  handles correctly). Guard detection TN formula `15 + (distance_tiles * 2)`
+  replaced with GDD s56.6.3 fixed TNs: Quiet=20, Moderate=15 at listener's
+  position (no distance scaling). KEEP: material TNs (GDD-sourced), rebind
+  +5, quiet noise range 3, break chains TN 25, all escape mechanics.
+- **s17 Personal Visit System — 5 invented values zeroed.**
+  DECLINE_INVITATION_DISPOSITION (-3→0), REFUSE_AFTER_INVITATION_DISPOSITION
+  (-10→0), REFUSE_AFTER_INVITATION_HONOR (-0.3→0.0),
+  REFUSE_LETTER_ARRIVAL_DISPOSITION (-2→0), RECEIVE_UNINVITED_DISPOSITION
+  (5→0). GDD s17 says "small disposition cost"/"significant" without numbers.
+  KEEP: INTIMATE_SETTING_BONUS (3, s17.2), DAILY_AP_DURING_VISIT (2, s14.1).
+- **s22.9 Hostage System — 5 invented values zeroed.**
+  HARMED_HOSTAGE_HONOR_LOSS (-3.0→0.0), ESCAPE_FAMILY_HONOR_LOSS (-1.0→0.0),
+  ESCAPE_CRITICAL_FAMILY_HONOR_LOSS (-2.0→0.0). GDD says "catastrophic"/
+  "significant" without numbers. Yu capture modifier (0.5→0.0), Ishi modifier
+  (0.3→0.0). KEEP: all escape TNs, garrison scaling, leverage values.
+- **s16.4 Court Commitment System — invented honor table replaced + 4 values zeroed.**
+  VOLUNTARY_RENEGE_HONOR_BY_RANK dictionary (invented linear -0.5 to -5.0)
+  replaced with CrimeSystem.get_disloyalty_honor() (Table 2.3: [0,-2,-6,-10,
+  -14,-18]). All get_renege_willingness() values zeroed (Seigyo 0.8→0, Makoto
+  0.1→0, Chugi 0.05→0, default 0.3→0). Edict renege topic_tier TIER_2→TIER_3
+  (GDD doesn't specify different tier for edict renege). KEEP: priority values,
+  EDICT_RENEGE_HONOR_COST, RENEGE_DISPOSITION_PENALTY, VOLUNTARY_POSITION_THRESHOLD.
+- **s12.4 Performative Arts System — 2 values zeroed + 1 bug fix.**
+  PERFORM_FOR_SUCCESS_DISPOSITION (3→0), PERFORM_FOR_FAILURE_DISPOSITION (-1→0).
+  GDD says "strong disposition gain"/"small loss" without numbers. BUG FIX:
+  masterful threshold `raises >= 3` → `raises >= 2` per GDD s4.6 line 49:
+  "2 or more Raises (masterful)" and s57.33 line 57. KEEP: PERFORMANCE_TN (15),
+  SUCCESS_DISPOSITION (2), SUCCESS_GLORY (0.3), all other GDD-confirmed values.
+- **s22.7 Marriage System — 3 invented values zeroed.**
+  evaluate_proposal() favor_tier multiplier (10→0), military_objective bonus
+  (15→0), BENTEN_FESTIVAL_BONUS (20→0). GDD lists factors qualitatively without
+  numeric weights. KEEP: all 24 GDD-confirmed values (boosts, pregnancy, decay).
+- **Tea Ceremony scoring — CONDUCT_TEA_CEREMONY alignment 85→100.**
+  Under RECOVER_VOID_POINTS NeedType in objective_alignment.json. GDD says tea
+  ceremony recovers void "identically to MEDITATE" which scores 100.
+- **Daily Conversation — audited, no changes needed.**
+  All numeric values confirmed: MAX_CONVERSATIONS_PER_DAY=5,
+  DISPOSITION_BONUS=1, MIN_DISPOSITION_THRESHOLD=11, all probability brackets.
+  is_topic_sensitive() MILITARY-only interpretation and weight floor maxf(1.0)
+  are borderline structural — KEEP.
+- **Tea Ceremony System — audited, no changes needed.**
+  L5R_DIE_AVG (5.7) is structural engineering implementing GDD's "50% success
+  chance" cap — KEEP. All other values confirmed: BASE_TN=15,
+  TN_PER_EXTRA_PARTICIPANT=5, VP recovery values, PARTICIPANT_CAP=5,
+  MIN_DISPOSITION=11.
 
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
