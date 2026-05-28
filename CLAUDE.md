@@ -3053,6 +3053,18 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   assassination_system (s12.8).
 - **No remaining unaudited simulation files.**
 
+### GDD Sections Written 2026-05-28
+
+- **s57.49 Marriage Dissolution** — New GDD file `gdd/s57.49_marriage_dissolution_locked.md`.
+  Formalizes the 4-pathway dissolution system already implemented in code (marriage_system.gd,
+  day_orchestrator.gd). Four pathways: (1) Lord's Command (DISSOLVE_MARRIAGE ActionID, Family
+  Daimyo+, −1.0 Honor lord, −1.0 Glory each spouse, family/clan baseline penalties PROVISIONAL),
+  (2) Criminal Conviction (TREASON/MAHO auto-dissolve, no penalties), (3) Monastic Retirement
+  (is_retired_monastic flag, no penalties, RETIRE_TO_MONASTERY ActionID deferred), (4) Imperial
+  Decree (war-marriages between belligerents, no penalties). Children remain with samurai parent.
+  TIER_4 POLITICAL topic on all pathways. 3 PROVISIONAL values added to A-table (A34/A35/A36).
+  Index updated. CLAUDE.md updated.
+
 ### Systems Added 2026-05-28 (continued)
 - **s57.54 Clan Champion Strategic Evaluation System** — `shared/strategic_conclusion_data.gd`,
   extended `simulation/strategic_review.gd`. Quarterly evaluation producing 2–4 clan-wide
@@ -3410,6 +3422,9 @@ pending playtesting.
 | A31 | World gen cross-clan marriage rate | 15% of marriages | world_population_generator.gd | GDD does not specify cross-clan frequency | s22.7 |
 | A32 | LEGIONS_PER_ARMY | 3 | world_population_generator.gd | GDD does not specify legions per army count | s57.21 |
 | A33 | Minor Clan Champion stipend | 5.0 koku | world_population_generator.gd | Analogy to Clan Champion (GDD says 5); no explicit Minor Clan entry | s4.3 |
+| A34 | Dissolution family baseline penalty | −25 | marriage_system.gd | "Family relations are damaged" — no numeric value | s57.49 |
+| A35 | Dissolution spouse Glory loss | −1.0 | marriage_system.gd | "Glory penalty" for being dissolved from — no numeric value | s57.49 |
+| A36 | Dissolution clan baseline penalty (cross-clan) | −10 | marriage_system.gd | Clan-to-clan consequence of a politically coercive dissolution — no numeric value | s57.49 |
 
 ---
 
