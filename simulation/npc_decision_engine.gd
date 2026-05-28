@@ -2926,9 +2926,13 @@ static func _build_compose_theater_metadata(
 			"is_new": false,
 			"raises": 0,
 		}
-	# Declare a new piece: magnitude from Poetry rank (capped 1-3 for NPCs per GDD s57.22)
 	var poetry_rank: int = ctx.skill_ranks.get("Poetry", 0)
 	var target_magnitude: int = clampi(poetry_rank, 1, 3)
+
+	if need.need_type == "ARTISTIC_EXPRESSION":
+		return _build_artistic_expression_compose_metadata(ctx, target_magnitude)
+
+	# Declare a new piece: magnitude from Poetry rank (capped 1-3 for NPCs per GDD s57.22)
 	# Negative framing if DAMAGE_RELATIONSHIP need
 	var framing: bool = need.need_type != "DAMAGE_RELATIONSHIP"
 	var subject_type: int = TheaterSystem.SubjectType.CLAN
@@ -2946,6 +2950,129 @@ static func _build_compose_theater_metadata(
 		"raises": 0,
 		"political_need_type": need.need_type if need.need_type in ["DAMAGE_RELATIONSHIP", "MOVE_TOPIC_POSITION"] else "",
 	}
+
+
+static func _build_artistic_expression_compose_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	target_magnitude: int,
+) -> Dictionary:
+	## §57.22.11 — new piece declaration for ARTISTIC_EXPRESSION need type.
+	## Subject: strongest disposition target. Style: school/personality weighted.
+	## Role count: 1 by default; 2 if Ambition-equivalent conditions met.
+
+	# Subject selection: scan disposition map for strongest opinion.
+	var strongest_disp: float = 0.0
+	var strongest_target: int = -1
+	var second_disp: float = 0.0
+	var second_target: int = -1
+	for cid: Variant in ctx.disposition_values:
+		var disp: float = float(ctx.disposition_values[cid])
+		if absf(disp) > absf(strongest_disp):
+			second_disp = strongest_disp
+			second_target = strongest_target
+			strongest_disp = disp
+			strongest_target = int(cid)
+		elif absf(disp) > absf(second_disp) and int(cid) != strongest_target:
+			second_disp = disp
+			second_target = int(cid)
+
+	var subject: String = str(strongest_target) if strongest_target >= 0 else ctx.clan
+	var subject_type: int = TheaterSystem.SubjectType.CHARACTER if strongest_target >= 0 else TheaterSystem.SubjectType.CLAN
+	var framing: bool = strongest_disp >= 0.0
+
+	# Prefer active-topic subject when two subjects score equally (GDD §57.22.11).
+	if strongest_target >= 0 and second_target >= 0 \
+			and absf(strongest_disp) == absf(second_disp):
+		var strongest_has_topic: bool = false
+		var second_has_topic: bool = false
+		for tid: int in ctx.known_topics:
+			var topic_subject: int = ctx.known_objectives.get("_topic_subject_%d" % tid, -1)
+			if topic_subject == strongest_target:
+				strongest_has_topic = true
+			elif topic_subject == second_target:
+				second_has_topic = true
+		if second_has_topic and not strongest_has_topic:
+			strongest_target = second_target
+			strongest_disp = second_disp
+			subject = str(second_target)
+			framing = second_disp >= 0.0
+
+	# Style selection: weighted by school type and personality (GDD §57.22.11).
+	var style: int = _pick_artistic_expression_style(ctx, framing)
+
+	# Kyogen requires negative framing; reject and default to NOH if framing is positive.
+	if style == TheaterSystem.Style.KYOGEN and framing:
+		style = TheaterSystem.Style.NOH
+
+	# Role count: default 1; choose 2 if personality-equivalent conditions met.
+	# GDD §57.22.11: personality Ambition weight ≥ +10, Acting rank ≥ 3,
+	# and at least one met_character has Acting rank ≥ target magnitude.
+	var num_roles: int = 1
+	var acting_rank: int = ctx.skill_ranks.get("Acting", 0)
+	# "Ambition" has no explicit Shourido enum mapping; proxy via ISHI or KETSUI
+	# (determination/drive), the closest Shourido equivalents to ambition.
+	var has_ambition: bool = ctx.shourido_virtue in [
+		Enums.ShouridoVirtue.ISHI, Enums.ShouridoVirtue.KETSUI,
+	]
+	# Kyogen cannot have more than 2 roles; NPC already capped at 2.
+	if has_ambition and acting_rank >= 3 and second_target >= 0 \
+			and absf(second_disp) >= 11.0 and second_target != strongest_target:
+		num_roles = 2
+
+	var meta: Dictionary = {
+		"piece_id": -1,
+		"is_new": true,
+		"target_magnitude": target_magnitude,
+		"target_topic_weight": 1,
+		"num_roles": num_roles,
+		"framing": framing,
+		"subject": subject,
+		"subject_type": subject_type,
+		"topic_id": -1,
+		"raises": 0,
+		"style": style,
+		"political_need_type": "",
+	}
+
+	# Second role: if 2 roles, add second strongest disposition subject.
+	if num_roles == 2 and second_target >= 0:
+		meta["subject_2"] = str(second_target)
+		meta["subject_type_2"] = TheaterSystem.SubjectType.CHARACTER
+		meta["framing_2"] = second_disp >= 0.0
+
+	return meta
+
+
+static func _pick_artistic_expression_style(
+	ctx: NPCDataStructures.ContextSnapshot,
+	framing: bool,
+) -> int:
+	## §57.22.11 style selection: school type and personality weighted.
+	var manipulation: int = ctx.skill_ranks.get("Manipulation", 0)
+	var deceit: int = ctx.skill_ranks.get("Deceit", 0)
+	var satirical: bool = manipulation >= 3 or deceit >= 3
+
+	# Kyogen: strong negative disposition AND satirical personality profile.
+	if not framing and satirical:
+		return TheaterSystem.Style.KYOGEN
+
+	# Personality overrides (applied before school defaults).
+	if ctx.shourido_virtue == Enums.ShouridoVirtue.SEIGYO:
+		return TheaterSystem.Style.KABUKI
+	if ctx.bushido_virtue == Enums.BushidoVirtue.JIN:
+		return TheaterSystem.Style.NOH
+
+	# School type defaults.
+	match ctx.school_type:
+		Enums.SchoolType.BUSHI:
+			return TheaterSystem.Style.NOH
+		Enums.SchoolType.SHUGENJA:
+			return TheaterSystem.Style.NOH
+		Enums.SchoolType.COURTIER:
+			# Equally weighted Noh / Kabuki — deterministic via character_id parity.
+			return TheaterSystem.Style.NOH if (ctx.character_id % 2 == 0) else TheaterSystem.Style.KABUKI
+
+	return TheaterSystem.Style.NOH
 
 
 static func _build_learn_theater_metadata(

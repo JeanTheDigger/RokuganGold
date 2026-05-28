@@ -1330,3 +1330,140 @@ func test_piece_selection_best_scoring_piece_wins() -> void:
 
 	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
 	assert_eq(result["piece_id"], 161)
+
+
+# ============================================================================
+# §57.22.11 ARTISTIC_EXPRESSION — compose metadata
+# ============================================================================
+
+func _make_art_ctx(
+	char_id: int = 1,
+	bushido: Enums.BushidoVirtue = Enums.BushidoVirtue.JIN,
+	shourido: Enums.ShouridoVirtue = Enums.ShouridoVirtue.NONE,
+	school: Enums.SchoolType = Enums.SchoolType.COURTIER,
+	poetry: int = 3,
+	acting: int = 2,
+) -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = char_id
+	ctx.clan = "Crane"
+	ctx.location_id = "loc_a"
+	ctx.bushido_virtue = bushido
+	ctx.shourido_virtue = shourido
+	ctx.school_type = school
+	ctx.skill_ranks = {"Poetry": poetry, "Acting": acting}
+	ctx.disposition_values = {}
+	ctx.known_topics = []
+	ctx.known_objectives = {}
+	ctx.action_log = []
+	return ctx
+
+
+func test_artistic_expression_metadata_framing_positive_from_disposition() -> void:
+	# Strongest disposition positive → framing = true, subject = str(target_id).
+	var ctx := _make_art_ctx()
+	ctx.disposition_values = {42: 15.0, 43: -5.0}
+
+	var result: Dictionary = NPCDecisionEngine._build_artistic_expression_compose_metadata(ctx, 2)
+	assert_true(result["framing"])
+	assert_eq(result["subject"], "42")
+	assert_eq(result["subject_type"], TheaterSystem.SubjectType.CHARACTER)
+	assert_eq(result["piece_id"], -1)
+	assert_true(result["is_new"])
+
+
+func test_artistic_expression_metadata_framing_negative_from_disposition() -> void:
+	# Strongest disposition negative → framing = false.
+	var ctx := _make_art_ctx()
+	ctx.disposition_values = {42: -20.0, 43: 5.0}
+
+	var result: Dictionary = NPCDecisionEngine._build_artistic_expression_compose_metadata(ctx, 2)
+	assert_false(result["framing"])
+	assert_eq(result["subject"], "42")
+
+
+func test_artistic_expression_metadata_no_dispositions_falls_back_to_clan() -> void:
+	# No disposition values → subject falls back to clan, subject_type = CLAN.
+	var ctx := _make_art_ctx()
+	ctx.disposition_values = {}
+
+	var result: Dictionary = NPCDecisionEngine._build_artistic_expression_compose_metadata(ctx, 1)
+	assert_eq(result["subject"], "Crane")
+	assert_eq(result["subject_type"], TheaterSystem.SubjectType.CLAN)
+	assert_true(result["framing"])  # neutral/positive default
+
+
+func test_artistic_expression_style_jin_selects_noh() -> void:
+	# JIN virtue → NOH style.
+	var ctx := _make_art_ctx(1, Enums.BushidoVirtue.JIN, Enums.ShouridoVirtue.NONE, Enums.SchoolType.COURTIER)
+	ctx.disposition_values = {42: 15.0}
+
+	var result: Dictionary = NPCDecisionEngine._build_artistic_expression_compose_metadata(ctx, 2)
+	assert_eq(result["style"], TheaterSystem.Style.NOH)
+
+
+func test_artistic_expression_style_seigyo_selects_kabuki() -> void:
+	# SEIGYO virtue → KABUKI style.
+	var ctx := _make_art_ctx(1, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.SEIGYO, Enums.SchoolType.COURTIER)
+	ctx.disposition_values = {42: 15.0}
+
+	var result: Dictionary = NPCDecisionEngine._build_artistic_expression_compose_metadata(ctx, 2)
+	assert_eq(result["style"], TheaterSystem.Style.KABUKI)
+
+
+func test_artistic_expression_style_satirical_negative_selects_kyogen() -> void:
+	# Manipulation >= 3 + negative framing (strongest disp < 0) → KYOGEN.
+	var ctx := _make_art_ctx(1, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE, Enums.SchoolType.COURTIER)
+	ctx.skill_ranks["Manipulation"] = 3
+	ctx.disposition_values = {42: -20.0}
+
+	var result: Dictionary = NPCDecisionEngine._build_artistic_expression_compose_metadata(ctx, 2)
+	assert_eq(result["style"], TheaterSystem.Style.KYOGEN)
+	assert_false(result["framing"])
+
+
+func test_artistic_expression_style_satirical_positive_rejects_kyogen() -> void:
+	# Deceit >= 3 but framing is positive → KYOGEN rejected, falls through to NOH.
+	var ctx := _make_art_ctx(1, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE, Enums.SchoolType.BUSHI)
+	ctx.skill_ranks["Deceit"] = 3
+	ctx.disposition_values = {42: 15.0}
+
+	var result: Dictionary = NPCDecisionEngine._build_artistic_expression_compose_metadata(ctx, 2)
+	# KYOGEN rejected because framing=true; BUSHI school default = NOH.
+	assert_eq(result["style"], TheaterSystem.Style.NOH)
+	assert_true(result["framing"])
+
+
+func test_artistic_expression_two_roles_when_conditions_met() -> void:
+	# ISHI + Acting >= 3 + second distinct strong disposition → num_roles = 2.
+	var ctx := _make_art_ctx(1, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.ISHI, Enums.SchoolType.COURTIER, 3, 3)
+	ctx.disposition_values = {42: 20.0, 43: 15.0}
+
+	var result: Dictionary = NPCDecisionEngine._build_artistic_expression_compose_metadata(ctx, 2)
+	assert_eq(result["num_roles"], 2)
+	assert_true(result.has("subject_2"))
+
+
+func test_artistic_expression_one_role_when_acting_too_low() -> void:
+	# ISHI but Acting < 3 → num_roles = 1.
+	var ctx := _make_art_ctx(1, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.ISHI, Enums.SchoolType.COURTIER, 3, 2)
+	ctx.disposition_values = {42: 20.0, 43: 15.0}
+
+	var result: Dictionary = NPCDecisionEngine._build_artistic_expression_compose_metadata(ctx, 2)
+	assert_eq(result["num_roles"], 1)
+	assert_false(result.has("subject_2"))
+
+
+func test_artistic_expression_routing_via_build_compose_metadata() -> void:
+	# ARTISTIC_EXPRESSION need_type routes through to _build_artistic_expression_compose_metadata.
+	var ctx := _make_art_ctx()
+	ctx.disposition_values = {42: 20.0}
+	ctx.known_objectives["wip_piece_ids"] = []
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "ARTISTIC_EXPRESSION"
+
+	var result: Dictionary = NPCDecisionEngine._build_compose_theater_metadata(ctx, need)
+	assert_true(result["is_new"])
+	assert_eq(result["piece_id"], -1)
+	assert_true(result.has("style"))  # only set by _build_artistic_expression_compose_metadata

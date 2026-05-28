@@ -610,3 +610,161 @@ func test_scan_personal_trainable_vassal_creates_mentor_opportunity() -> void:
 			assert_eq(opp.standing_alignment, 60.0)
 			assert_eq(opp.feasibility, 85.0)
 	assert_true(mentor_found, "Should create MENTOR_CHARACTER opportunity from trainable vassal")
+
+
+# =============================================================================
+# §57.22.11 ARTISTIC_EXPRESSION Self-Selection
+# =============================================================================
+
+func _make_art_character(
+	id: int = 1,
+	poetry: int = 3,
+	bushido: Enums.BushidoVirtue = Enums.BushidoVirtue.REI,
+	shourido: Enums.ShouridoVirtue = Enums.ShouridoVirtue.NONE,
+) -> L5RCharacterData:
+	var c := _make_character(id, "Crane", bushido)
+	c.shourido_virtue = shourido
+	c.skills = {"Poetry": poetry}
+	c.disposition_values = {42: 20.0}  # strong positive disposition by default
+	c.objectives_map = {}
+	return c
+
+
+func _art_world_state(clan_at_war: String = "") -> Dictionary:
+	var wars: Array = []
+	if not clan_at_war.is_empty():
+		wars.append({"clan_a": clan_at_war, "clan_b": "Lion"})
+	return {"active_wars": wars}
+
+
+func test_artistic_expression_blocked_no_poetry() -> void:
+	# Condition 1: Poetry rank 0 → no ARTISTIC_EXPRESSION opportunity.
+	var c := _make_art_character(1, 0)
+	var opps: Array = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_PERSONAL, "PERSONAL_EXCELLENCE", _art_world_state()
+	)
+	for opp: OpportunityScanner.Opportunity in opps:
+		assert_ne(opp.objective_type, "ARTISTIC_EXPRESSION")
+
+
+func test_artistic_expression_blocked_active_objective() -> void:
+	# Condition 2: Already has ARTISTIC_EXPRESSION as primary objective → blocked.
+	var c := _make_art_character()
+	c.objectives_map = {"primary": {"need_type": "ARTISTIC_EXPRESSION"}}
+	var opps: Array = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_PERSONAL, "PERSONAL_EXCELLENCE", _art_world_state()
+	)
+	for opp: OpportunityScanner.Opportunity in opps:
+		assert_ne(opp.objective_type, "ARTISTIC_EXPRESSION")
+
+
+func test_artistic_expression_blocked_active_war() -> void:
+	# Condition 3: Character's clan is in an active war → blocked.
+	var c := _make_art_character()
+	var opps: Array = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_PERSONAL, "PERSONAL_EXCELLENCE", _art_world_state("Crane")
+	)
+	for opp: OpportunityScanner.Opportunity in opps:
+		assert_ne(opp.objective_type, "ARTISTIC_EXPRESSION")
+
+
+func test_artistic_expression_blocked_no_strong_disposition() -> void:
+	# Condition 4: No disposition >= ±11 → blocked (no subject to write about).
+	var c := _make_art_character()
+	c.disposition_values = {42: 5.0, 43: -3.0}  # all weak
+	var opps: Array = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_PERSONAL, "PERSONAL_EXCELLENCE", _art_world_state()
+	)
+	for opp: OpportunityScanner.Opportunity in opps:
+		assert_ne(opp.objective_type, "ARTISTIC_EXPRESSION")
+
+
+func test_artistic_expression_returns_opportunity_on_success() -> void:
+	# All conditions met → ARTISTIC_EXPRESSION opportunity returned.
+	var c := _make_art_character()
+	var opps: Array = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_PERSONAL, "PERSONAL_EXCELLENCE", _art_world_state()
+	)
+	var found: bool = false
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "ARTISTIC_EXPRESSION":
+			found = true
+			assert_almost_eq(opp.urgency, 20.0, 0.01)
+	assert_true(found, "Should return ARTISTIC_EXPRESSION opportunity when all conditions met")
+
+
+func test_artistic_expression_feasibility_formula() -> void:
+	# feasibility = min(50 + Poetry * 10, 90). Poetry=3 → 80.
+	var c := _make_art_character(1, 3)
+	var opps: Array = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_PERSONAL, "PERSONAL_EXCELLENCE", _art_world_state()
+	)
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "ARTISTIC_EXPRESSION":
+			assert_almost_eq(opp.feasibility, 80.0, 0.01)
+
+
+func test_artistic_expression_feasibility_capped_at_90() -> void:
+	# Poetry=5 → min(100, 90) = 90.
+	var c := _make_art_character(1, 5)
+	var opps: Array = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_PERSONAL, "PERSONAL_EXCELLENCE", _art_world_state()
+	)
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "ARTISTIC_EXPRESSION":
+			assert_almost_eq(opp.feasibility, 90.0, 0.01)
+
+
+func test_artistic_expression_personality_jin() -> void:
+	# JIN → personality_fit = 90.
+	var c := _make_art_character(1, 3, Enums.BushidoVirtue.JIN)
+	var opps: Array = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_PERSONAL, "PERSONAL_EXCELLENCE", _art_world_state()
+	)
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "ARTISTIC_EXPRESSION":
+			assert_almost_eq(opp.personality_fit, 90.0, 0.01)
+
+
+func test_artistic_expression_personality_rei() -> void:
+	# REI → personality_fit = 85.
+	var c := _make_art_character(1, 3, Enums.BushidoVirtue.REI)
+	var opps: Array = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_PERSONAL, "PERSONAL_EXCELLENCE", _art_world_state()
+	)
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "ARTISTIC_EXPRESSION":
+			assert_almost_eq(opp.personality_fit, 85.0, 0.01)
+
+
+func test_artistic_expression_personality_gi_domain_match() -> void:
+	# GI prefers DOMAIN_PERSONAL → personality_fit = 80 (domain match short-circuits).
+	var c := _make_art_character(1, 3, Enums.BushidoVirtue.GI)
+	var opps: Array = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_PERSONAL, "PERSONAL_EXCELLENCE", _art_world_state()
+	)
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "ARTISTIC_EXPRESSION":
+			assert_almost_eq(opp.personality_fit, 80.0, 0.01)
+
+
+func test_artistic_expression_personality_seigyo() -> void:
+	# SEIGYO → personality_fit = 20.
+	var c := _make_art_character(1, 3, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.SEIGYO)
+	var opps: Array = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_PERSONAL, "PERSONAL_EXCELLENCE", _art_world_state()
+	)
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "ARTISTIC_EXPRESSION":
+			assert_almost_eq(opp.personality_fit, 20.0, 0.01)
+
+
+func test_artistic_expression_personality_ketsui() -> void:
+	# KETSUI → personality_fit = 30.
+	var c := _make_art_character(1, 3, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.KETSUI)
+	var opps: Array = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_PERSONAL, "PERSONAL_EXCELLENCE", _art_world_state()
+	)
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "ARTISTIC_EXPRESSION":
+			assert_almost_eq(opp.personality_fit, 30.0, 0.01)

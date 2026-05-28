@@ -64,6 +64,7 @@ const STANDING_OBJECTIVE_DOMAIN: Dictionary = {
 	"INVESTIGATE_CRIME": DOMAIN_POLITICAL,
 	"BUILD_INFRASTRUCTURE": DOMAIN_ECONOMIC,
 	"FILL_VACANCY": DOMAIN_POLITICAL,
+	"ARTISTIC_EXPRESSION": DOMAIN_PERSONAL,
 }
 
 const SELF_SELECTION_DELAY_BUSHIDO: Dictionary = {
@@ -446,6 +447,57 @@ static func _scan_personal(
 		opp.urgency = rival.get("urgency", 50.0)
 		results.append(opp)
 
+	results.append_array(_scan_artistic_expression(character, standing_type, world_state))
+
+	return results
+
+
+static func _scan_artistic_expression(
+	character: L5RCharacterData,
+	_standing_type: String,
+	world_state: Dictionary,
+) -> Array:
+	## §57.22.11 — trigger conditions for ARTISTIC_EXPRESSION self-selection.
+	var results: Array = []
+
+	# Condition 1: Poetry rank ≥ 1.
+	if character.skills.get("Poetry", 0) < 1:
+		return results
+
+	# Condition 2: No active ARTISTIC_EXPRESSION objective already in progress.
+	if character.objectives_map.get("primary", {}).get("need_type", "") == "ARTISTIC_EXPRESSION":
+		return results
+
+	# Condition 3: No active military/siege/survival NeedType at urgency > 60.
+	# Proxy: character's clan is in an active war (active wars always produce urgency > 60).
+	var active_wars: Array = world_state.get("active_wars", [])
+	for war: Variant in active_wars:
+		var wd: Dictionary = war if war is Dictionary else {}
+		if wd.get("clan_a", "") == character.clan or wd.get("clan_b", "") == character.clan:
+			return results
+
+	# Condition 4: character holds strong opinion on at least one subject (≥ +11 or ≤ −11).
+	var strongest_disp: float = 0.0
+	var strongest_target: int = -1
+	for cid: Variant in character.disposition_values:
+		var disp: float = float(character.disposition_values[cid])
+		if absf(disp) >= 11.0 and absf(disp) > absf(strongest_disp):
+			strongest_disp = disp
+			strongest_target = int(cid)
+
+	if strongest_target < 0:
+		return results
+
+	var opp := Opportunity.new()
+	opp.objective_type = "ARTISTIC_EXPRESSION"
+	opp.target_fields = {
+		"target_npc_id": strongest_target,
+		"framing": strongest_disp >= 0.0,
+	}
+	opp.standing_alignment = 50.0
+	opp.feasibility = minf(50.0 + character.skills.get("Poetry", 0) * 10.0, 90.0)
+	opp.urgency = 20.0  # low by default per GDD §57.22.11
+	results.append(opp)
 	return results
 
 
@@ -491,6 +543,17 @@ static func _compute_personality_fit(
 		"ACQUIRE_RESOURCE", "SECURE_TRADE_ROUTE":
 			if character.bushido_virtue == Enums.BushidoVirtue.JIN:
 				return 75.0
+		"ARTISTIC_EXPRESSION":
+			# §57.22.11 personality weights: Jin +20, Rei +15, Meiyo +10, Seigyo −15, Ketsui −10.
+			# GI/MEIYO already return 80.0 from the domain preference check above.
+			if character.bushido_virtue == Enums.BushidoVirtue.JIN:
+				return 90.0
+			if character.bushido_virtue == Enums.BushidoVirtue.REI:
+				return 85.0
+			if character.shourido_virtue == Enums.ShouridoVirtue.SEIGYO:
+				return 20.0
+			if character.shourido_virtue == Enums.ShouridoVirtue.KETSUI:
+				return 30.0
 
 	return 50.0
 
