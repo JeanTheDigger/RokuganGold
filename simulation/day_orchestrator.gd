@@ -1130,6 +1130,7 @@ static func advance_day(
 				next_topic_id, ic_day, active_civil_wars,
 				objectives_map, cw_season_count,
 				provinces, emperor_id_for_phoenix,
+				active_successions, next_succession_id,
 			)
 		_evaluate_heir_designations(
 			characters, characters_by_id, active_topics
@@ -13263,6 +13264,8 @@ static func _process_phoenix_council_gating(
 	current_season: int = 0,
 	provinces: Dictionary = {},
 	emperor_id: int = -1,
+	active_successions: Array = [],
+	next_succession_id: Array = [],
 ) -> Dictionary:
 	var shiba_champion: L5RCharacterData = _find_shiba_champion(characters)
 	if shiba_champion == null:
@@ -13459,21 +13462,51 @@ static func _process_phoenix_council_gating(
 			)
 			result_dict["civil_war_triggered"] = cw_result
 
-	# Champion Defiance Path schism: Champion refuses Stage 4 removal (s55.10.3.5, s55.10.3.7).
-	# Rebel = Champion (defied Council 4 times), Authority = Senior Master (Council representative).
-	# Standard −0.3 Honor/season hemorrhage applies to the Champion (suppress_hemorrhage = false).
+	# Champion Defiance Path — Stage 4 removal (s55.10.3.5, s55.10.3.7).
+	# Champion's virtue determines whether they accept removal or refuse and trigger schism.
+	# PROVISIONAL personality rule (user-approved): Meiyo/Chugi/Rei → accept (retire);
+	# Ketsui/Ishi/Seigyo or unset → refuse (civil war).
 	if PhoenixCouncil.is_unfit_declaration_active(phoenix_state):
-		var senior_master_id_2: int = _find_senior_elemental_master_id(living_masters, characters_by_id)
-		if senior_master_id_2 >= 0:
-			var cw_result_2: Dictionary = _trigger_civil_war(
-				shiba_champion.character_id, senior_master_id_2,
-				"Phoenix", "champion defiance",
-				characters, characters_by_id, objectives_map,
-				active_civil_wars, active_topics, next_topic_id,
-				ic_day, current_season,
-				false, "defiance",
-			)
-			result_dict["champion_defiance_civil_war_triggered"] = cw_result_2
+		var accepting_virtues: Array = [
+			Enums.BushidoVirtue.MEIYO,
+			Enums.BushidoVirtue.CHUGI,
+			Enums.BushidoVirtue.REI,
+		]
+		var champion_accepts: bool = shiba_champion.bushido_virtue in accepting_virtues
+		if champion_accepts:
+			# Accept removal: retire monastically, create succession vacancy, reset defiance.
+			shiba_champion.is_retired_monastic = true
+			if next_succession_id.size() > 0:
+				var succession := SuccessionSystem.trigger_succession(
+					shiba_champion, SuccessionData.VacancyCause.RETIREMENT,
+					Enums.LordRank.CLAN_CHAMPION, ic_day,
+				)
+				succession.succession_id = next_succession_id[0]
+				next_succession_id[0] += 1
+				var candidates := SuccessionSystem.get_candidates(shiba_champion, characters_by_id)
+				for cand: Dictionary in candidates:
+					succession.candidate_ids.append(cand["id"])
+				succession.confirming_authority_id = SuccessionSystem.find_confirming_authority(
+					Enums.LordRank.CLAN_CHAMPION, "Phoenix", characters_by_id
+				)
+				active_successions.append(succession)
+			phoenix_state["defiance_stage"] = 0
+			result_dict["champion_accepted_removal"] = true
+		else:
+			# Refuse removal: schism / civil war.
+			# Rebel = Champion (defied Council 4 times), Authority = Senior Master.
+			# Standard −0.3 Honor/season hemorrhage applies to the Champion (suppress_hemorrhage = false).
+			var senior_master_id_2: int = _find_senior_elemental_master_id(living_masters, characters_by_id)
+			if senior_master_id_2 >= 0:
+				var cw_result_2: Dictionary = _trigger_civil_war(
+					shiba_champion.character_id, senior_master_id_2,
+					"Phoenix", "champion defiance",
+					characters, characters_by_id, objectives_map,
+					active_civil_wars, active_topics, next_topic_id,
+					ic_day, current_season,
+					false, "defiance",
+				)
+				result_dict["champion_defiance_civil_war_triggered"] = cw_result_2
 
 	return result_dict
 

@@ -573,3 +573,171 @@ func test_evaluate_war_marriages_non_belligerent_clans_not_dissolved():
 		emperor, marriages, wars, chars,
 	)
 	assert_eq(result.size(), 0)
+
+
+# -- Phoenix Champion Stage 4 accept/refuse (s55.10.3.5) ----------------------
+
+func _make_phoenix_champion(id: int, virtue: Enums.BushidoVirtue) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.character_name = "ShibaChampion"
+	c.clan = "Phoenix"
+	c.family = "Shiba"
+	c.lord_id = -1  # Champion has no lord.
+	c.honor = 5.0
+	c.glory = 5.0
+	c.status = 7.0
+	c.bushido_virtue = virtue
+	return c
+
+
+func _make_elemental_master(id: int) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.character_name = "ElementalMaster"
+	c.clan = "Phoenix"
+	c.family = "Isawa"
+	c.lord_id = -1
+	c.honor = 5.0
+	c.glory = 5.0
+	c.status = 6.0
+	c.role_position = "Master of Fire"
+	return c
+
+
+func _make_phoenix_state_stage4() -> Dictionary:
+	return {"defiance_stage": 4}
+
+
+func test_phoenix_champion_meiyo_accepts_removal():
+	var champion: L5RCharacterData = _make_phoenix_champion(200, Enums.BushidoVirtue.MEIYO)
+	var master: L5RCharacterData = _make_elemental_master(201)
+	var chars: Array = [champion, master]
+	var chars_by_id: Dictionary = {200: champion, 201: master}
+	var phoenix_state: Dictionary = _make_phoenix_state_stage4()
+	var active_successions: Array = []
+	var next_succession_id: Array = [1]
+	var dice := DiceEngine.new(42)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		phoenix_state, [], chars, chars_by_id, dice,
+		[], [100], 360,
+		[], {}, 0, {}, -1,
+		active_successions, next_succession_id,
+	)
+	assert_true(result.get("champion_accepted_removal", false))
+	assert_false(result.has("champion_defiance_civil_war_triggered"))
+	assert_true(champion.is_retired_monastic)
+	assert_eq(int(phoenix_state.get("defiance_stage", -1)), 0)
+
+
+func test_phoenix_champion_chugi_accepts_removal():
+	var champion: L5RCharacterData = _make_phoenix_champion(202, Enums.BushidoVirtue.CHUGI)
+	var chars: Array = [champion]
+	var chars_by_id: Dictionary = {202: champion}
+	var phoenix_state: Dictionary = _make_phoenix_state_stage4()
+	var active_successions: Array = []
+	var next_succession_id: Array = [1]
+	var dice := DiceEngine.new(42)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		phoenix_state, [], chars, chars_by_id, dice,
+		[], [100], 360,
+		[], {}, 0, {}, -1,
+		active_successions, next_succession_id,
+	)
+	assert_true(result.get("champion_accepted_removal", false))
+	assert_true(champion.is_retired_monastic)
+	assert_eq(int(phoenix_state.get("defiance_stage", -1)), 0)
+
+
+func test_phoenix_champion_rei_accepts_removal():
+	var champion: L5RCharacterData = _make_phoenix_champion(203, Enums.BushidoVirtue.REI)
+	var chars: Array = [champion]
+	var chars_by_id: Dictionary = {203: champion}
+	var phoenix_state: Dictionary = _make_phoenix_state_stage4()
+	var active_successions: Array = []
+	var next_succession_id: Array = [1]
+	var dice := DiceEngine.new(42)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		phoenix_state, [], chars, chars_by_id, dice,
+		[], [100], 360,
+		[], {}, 0, {}, -1,
+		active_successions, next_succession_id,
+	)
+	assert_true(result.get("champion_accepted_removal", false))
+	assert_true(champion.is_retired_monastic)
+
+
+func test_phoenix_champion_acceptance_creates_succession():
+	var champion: L5RCharacterData = _make_phoenix_champion(204, Enums.BushidoVirtue.MEIYO)
+	var chars: Array = [champion]
+	var chars_by_id: Dictionary = {204: champion}
+	var phoenix_state: Dictionary = _make_phoenix_state_stage4()
+	var active_successions: Array = []
+	var next_succession_id: Array = [5]
+	var dice := DiceEngine.new(42)
+	DayOrchestrator._process_phoenix_council_gating(
+		phoenix_state, [], chars, chars_by_id, dice,
+		[], [100], 360,
+		[], {}, 0, {}, -1,
+		active_successions, next_succession_id,
+	)
+	assert_eq(active_successions.size(), 1)
+	var succ: SuccessionData = active_successions[0] as SuccessionData
+	assert_not_null(succ)
+	assert_eq(succ.cause, SuccessionData.VacancyCause.RETIREMENT)
+	assert_eq(succ.succession_id, 5)
+	assert_eq(next_succession_id[0], 6)
+
+
+func test_phoenix_champion_ketsui_refuses_removal():
+	var champion: L5RCharacterData = _make_phoenix_champion(205, Enums.BushidoVirtue.KETSUI)
+	var master: L5RCharacterData = _make_elemental_master(206)
+	var chars: Array = [champion, master]
+	var chars_by_id: Dictionary = {205: champion, 206: master}
+	var phoenix_state: Dictionary = _make_phoenix_state_stage4()
+	var active_successions: Array = []
+	var next_succession_id: Array = [1]
+	var dice := DiceEngine.new(42)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		phoenix_state, [], chars, chars_by_id, dice,
+		[], [100], 360,
+		[], {}, 0, {}, -1,
+		active_successions, next_succession_id,
+	)
+	assert_false(result.get("champion_accepted_removal", false))
+	assert_false(champion.is_retired_monastic)
+	# defiance_stage NOT reset.
+	assert_eq(int(phoenix_state.get("defiance_stage", -1)), 4)
+	assert_true(result.has("champion_defiance_civil_war_triggered"))
+
+
+func test_phoenix_champion_ishi_refuses_removal():
+	var champion: L5RCharacterData = _make_phoenix_champion(207, Enums.BushidoVirtue.ISHI)
+	var master: L5RCharacterData = _make_elemental_master(208)
+	var chars: Array = [champion, master]
+	var chars_by_id: Dictionary = {207: champion, 208: master}
+	var phoenix_state: Dictionary = _make_phoenix_state_stage4()
+	var dice := DiceEngine.new(42)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		phoenix_state, [], chars, chars_by_id, dice,
+		[], [100], 360,
+	)
+	assert_false(champion.is_retired_monastic)
+	assert_eq(int(phoenix_state.get("defiance_stage", -1)), 4)
+	assert_true(result.has("champion_defiance_civil_war_triggered"))
+
+
+func test_phoenix_champion_no_master_accepts_gracefully():
+	# When no senior master exists on the refusal path, no civil war fires.
+	var champion: L5RCharacterData = _make_phoenix_champion(209, Enums.BushidoVirtue.KETSUI)
+	var chars: Array = [champion]
+	var chars_by_id: Dictionary = {209: champion}
+	var phoenix_state: Dictionary = _make_phoenix_state_stage4()
+	var dice := DiceEngine.new(42)
+	var result: Dictionary = DayOrchestrator._process_phoenix_council_gating(
+		phoenix_state, [], chars, chars_by_id, dice,
+		[], [100], 360,
+	)
+	# No crash; civil war silently skipped (no master to be authority).
+	assert_false(result.get("champion_accepted_removal", false))
+	assert_false(result.has("champion_defiance_civil_war_triggered"))
