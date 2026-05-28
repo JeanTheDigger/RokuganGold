@@ -262,6 +262,11 @@ extends Resource
 # -- Bodyguard / Yojimbo Assignment -------------------------------------------
 @export var assigned_protection_target_id: int = -1
 
+# -- Champion Strategic Evaluation Log (s57.54.4) ------------------------------
+# Full scored candidate list from the last Champion evaluation. Not read by any
+# game system — debugging and audit only.
+@export var strategic_evaluation_log: Array = []
+
 
 # -- Trait Access Helpers (used by CharacterStats) -----------------------------
 

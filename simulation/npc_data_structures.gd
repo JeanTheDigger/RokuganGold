@@ -210,6 +210,15 @@ class ContextSnapshot:
 	# Phoenix-specific governance (s55.10.3.7)
 	var phoenix_champion_authority: bool = false
 
+	# Champion conclusion candidates for lord-tier Phase 2 combined pool (s57.54.10b).
+	# Populated by day_orchestrator for Family Daimyo and higher.
+	# Format: [{"need_type": String, "score": int, "source": String,
+	#            "conclusion_type": int, "target_clan_id": int, "is_forced": bool}, ...]
+	var champion_conclusion_candidates: Array = []
+	# Local Tier 3+ need candidates from known_topics converted to NeedType candidates.
+	# Populated by day_orchestrator alongside champion_conclusion_candidates.
+	var local_tier3_candidates: Array = []
+
 
 class ProvinceStatus:
 	const CONFIDENCE_STALE: int = 0

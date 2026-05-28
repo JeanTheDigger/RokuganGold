@@ -136,6 +136,11 @@ static func build_context(
 			and character.children_ids.is_empty()
 		)
 
+	# Champion conclusion combined pool (s57.54.10b) — Family Daimyo+.
+	if ctx.is_lord and ctx.lord_rank >= Enums.LordRank.FAMILY_DAIMYO:
+		ctx.champion_conclusion_candidates = world_state.get("champion_conclusion_candidates", [])
+		ctx.local_tier3_candidates = world_state.get("local_tier3_candidates", [])
+
 	# Military
 	ctx.military_rank = character.military_rank
 	ctx.commanded_unit_id = character.commanded_unit_id
@@ -267,8 +272,11 @@ static func build_context(
 
 
 # -- Phase 2: Resolve Goal & Decompose ----------------------------------------
-# Priority cascade: Reactive Event > Crisis Override > Primary Objective >
-# Standing Objective. Winner decomposes into an ImmediateNeed.
+# Standard cascade: Reactive Event > Crisis Override > Primary Objective >
+# Standing Objective.
+# For lord-tier characters, amended cascade per GDD s57.54.10b:
+# Reactive Event > Crisis Override > Combined Pool (Champion conclusions +
+# local Tier 3 needs) > Opportunity Scanner > Standing Objective.
 
 static func resolve_goal(
 	character: L5RCharacterData,
@@ -286,12 +294,31 @@ static func resolve_goal(
 	if crisis_need != null:
 		return crisis_need
 
-	# Primary objective
-	var primary: Dictionary = objectives.get("primary", {})
-	if primary.size() > 0:
-		var primary_need := _decompose_objective(primary, ctx)
-		if primary_need != null:
-			return primary_need
+	# Lord-tier: Combined Pool (Champion conclusions + local Tier 3 needs)
+	# replaces the Primary Objective step for self-directing lord-tier characters.
+	# A specific primary objective (from direct ASSIGN_VASSAL_OBJECTIVE by their
+	# own lord) still takes precedence over the combined pool.
+	if ctx.is_lord and ctx.lord_rank >= Enums.LordRank.FAMILY_DAIMYO:
+		var primary: Dictionary = objectives.get("primary", {})
+		var has_lord_assigned_primary: bool = (
+			primary.size() > 0
+			and primary.get("assigned_by", -1) >= 0
+			and primary.get("assigned_by", -1) != character.character_id
+		)
+		if has_lord_assigned_primary:
+			var primary_need := _decompose_objective(primary, ctx)
+			if primary_need != null:
+				return primary_need
+		var combined_need := _check_combined_pool(ctx, objectives)
+		if combined_need != null:
+			return combined_need
+	else:
+		# Non-lord-tier: standard primary objective step.
+		var primary: Dictionary = objectives.get("primary", {})
+		if primary.size() > 0:
+			var primary_need := _decompose_objective(primary, ctx)
+			if primary_need != null:
+				return primary_need
 
 	# Standing objective fallback
 	var standing: Dictionary = objectives.get("standing", {})
@@ -312,6 +339,44 @@ static func resolve_goal(
 	fallback.need_type = "REST"
 	fallback.priority = 3
 	return fallback
+
+
+## Combined pool for lord-tier characters (s57.54.10b).
+## Champion conclusions and local Tier 3 needs compete for the highest score.
+## Returns the winning ImmediateNeed, or null if no viable candidate.
+static func _check_combined_pool(
+	ctx: NPCDataStructures.ContextSnapshot,
+	objectives: Dictionary,
+) -> NPCDataStructures.ImmediateNeed:
+	var champion_candidates: Array = ctx.champion_conclusion_candidates
+	var local_candidates: Array = ctx.local_tier3_candidates
+
+	# Merge and find highest-scoring candidate.
+	var all_candidates: Array = []
+	for c: Dictionary in champion_candidates:
+		all_candidates.append(c)
+	for c: Dictionary in local_candidates:
+		all_candidates.append(c)
+	if all_candidates.is_empty():
+		return null
+
+	var best: Dictionary = {}
+	var best_score: int = -1
+	for c: Dictionary in all_candidates:
+		var s: int = c.get("score", 0)
+		if s > best_score:
+			best_score = s
+			best = c
+
+	if best.is_empty() or best_score <= 0:
+		return null
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = best.get("need_type", "")
+	need.priority = 2
+	need.source = best.get("source", "combined_pool")
+	need.target_clan_id = best.get("target_clan_id", "")
+	return need
 
 
 # -- Phase 3: Generate Options -------------------------------------------------

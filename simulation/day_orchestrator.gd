@@ -1113,6 +1113,7 @@ static func advance_day(
 		strategic_results = _run_strategic_reviews(
 			characters, objectives_map, world_states,
 			characters_by_id, marriages, active_wars,
+			active_topics, active_edicts, clans, current_season, dice_engine,
 		)
 		_assign_phoenix_champion_restore_objective(
 			characters, objectives_map, phoenix_council_state,
@@ -1151,6 +1152,9 @@ static func advance_day(
 		)
 		_process_vassal_reassignments(
 			strategic_results, objectives_map, characters_by_id,
+		)
+		_process_champion_letter_dispatches(
+			strategic_results, pending_letters, next_letter_id, ic_day, characters_by_id,
 		)
 		_process_tyrant_directives(
 			strategic_results, active_topics, next_topic_id, ic_day,
@@ -7151,6 +7155,11 @@ static func _run_strategic_reviews(
 	characters_by_id: Dictionary = {},
 	marriages: Array = [],
 	active_wars: Array = [],
+	active_topics: Array = [],
+	active_edicts: Array = [],
+	clans: Dictionary = {},
+	current_season: int = 0,
+	dice_engine: DiceEngine = null,
 ) -> Array:
 	var results: Array = []
 	var emperor_id: int = int(world_states.get("emperor_id", -1))
@@ -7187,6 +7196,29 @@ static func _run_strategic_reviews(
 	world_states.erase("trainable_vassals")
 	world_states.erase("vengeance_targets")
 	world_states.erase("bitter_rivals")
+
+	# Champion Strategic Evaluation (s57.54) — runs quarterly for each Clan Champion.
+	if dice_engine != null and not clans.is_empty():
+		var topics_by_id: Dictionary = {}
+		for t: Variant in active_topics:
+			if t is TopicData:
+				topics_by_id[(t as TopicData).topic_id] = t
+		for champion: L5RCharacterData in characters:
+			if CharacterStats.is_dead(champion):
+				continue
+			if champion.status < 7.0 or champion.lord_id != -1:
+				continue
+			var clan_data: ClanData = clans.get(champion.clan)
+			if clan_data == null:
+				continue
+			var fd_ids: Array = _get_family_daimyo_ids(champion.clan, characters)
+			var dispatches: Array = StrategicReview.run_clan_champion_evaluation(
+				champion, clan_data, topics_by_id, active_wars, active_edicts,
+				characters_by_id, objectives_map, current_season, dice_engine, fd_ids,
+			)
+			for d: Dictionary in dispatches:
+				results.append(d)
+
 	return results
 
 
@@ -7200,6 +7232,16 @@ static func _get_clan_champions(
 		if c.status >= 7.0 and c.lord_id == -1:
 			champions.append(c)
 	return champions
+
+
+static func _get_family_daimyo_ids(clan_name: String, characters: Array) -> Array:
+	var ids: Array = []
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.clan == clan_name and c.status >= 6.0 and c.status < 7.0:
+			ids.append(c.character_id)
+	return ids
 
 
 static func _is_lord_tier(character: L5RCharacterData) -> bool:
@@ -11841,6 +11883,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"self_offenses", "wall_statuses", "criminal_recall",
 		"is_patrolled", "phoenix_champion_authority",
 		"settlement_type",
+		"champion_conclusion_candidates", "local_tier3_candidates",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -14286,6 +14329,37 @@ static func _process_pregnancy_checks(
 
 # -- Vassal Reassignment (Strategic Review Directives) -------------------------
 
+# Creates LetterData for absent Family Daimyo notified of Champion conclusions (s57.54.5).
+static func _process_champion_letter_dispatches(
+	strategic_results: Array,
+	pending_letters: Array,
+	next_letter_id: Array,
+	ic_day: int,
+	characters_by_id: Dictionary,
+) -> void:
+	for result: Dictionary in strategic_results:
+		if result.get("type", "") != "strategic_conclusion_letter":
+			continue
+		var sender_id: int = result.get("sender_id", -1)
+		var recipient_id: int = result.get("recipient_id", -1)
+		if sender_id < 0 or recipient_id < 0:
+			continue
+		var sender: L5RCharacterData = characters_by_id.get(sender_id)
+		if sender == null or CharacterStats.is_dead(sender):
+			continue
+		var recipient: L5RCharacterData = characters_by_id.get(recipient_id)
+		if recipient == null or CharacterStats.is_dead(recipient):
+			continue
+		var letter := LetterData.new()
+		letter.letter_id = next_letter_id[0]
+		next_letter_id[0] += 1
+		letter.sender_id = sender_id
+		letter.recipient_id = recipient_id
+		letter.ic_day_sent = ic_day
+		letter.ic_day_arrival = ic_day + 3  # PROVISIONAL: no adjacency data
+		pending_letters.append(letter)
+
+
 static func _process_vassal_reassignments(
 	strategic_results: Array,
 	objectives_map: Dictionary,
@@ -16270,6 +16344,12 @@ static func _inject_base_character_context(
 	var clan_values: Array = clans.values()
 	var season_name: String = _season_to_name(current_season)
 
+	# Pre-build topics_by_id for champion conclusion injection (s57.54.10b).
+	var g_topics_by_id: Dictionary = {}
+	for _t: Variant in active_topics:
+		if _t is TopicData:
+			g_topics_by_id[(_t as TopicData).topic_id] = _t
+
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
 			continue
@@ -16315,6 +16395,59 @@ static func _inject_base_character_context(
 
 		if has_champion_authority and c.character_id == phoenix_champion_id:
 			ws["phoenix_champion_authority"] = true
+
+		# Family Daimyo+ receive champion conclusions for Phase 2 combined pool (s57.54.10b).
+		var lord_rank: Enums.LordRank = CivilianOrderBudget.lord_rank_from_status(c.status)
+		if char_is_lord and lord_rank >= Enums.LordRank.FAMILY_DAIMYO \
+				and lord_rank < Enums.LordRank.CLAN_CHAMPION:
+			var char_clan: ClanData = clans.get(c.clan)
+			if char_clan != null:
+				ws["champion_conclusion_candidates"] = StrategicReview.get_champion_conclusion_needtypes(c, char_clan)
+			ws["local_tier3_candidates"] = _build_local_tier3_candidates(c, g_topics_by_id)
+
+
+# -- Local Tier 3 Candidates (s57.54.10b) -------------------------------------
+
+static func _build_local_tier3_candidates(
+	character: L5RCharacterData,
+	topics_by_id: Dictionary,
+) -> Array:
+	var candidates: Array = []
+	var seen_needtypes: Dictionary = {}
+	for tid: int in character.topic_pool:
+		var topic: TopicData = topics_by_id.get(tid)
+		if topic == null or topic.resolved:
+			continue
+		if topic.tier != TopicData.Tier.TIER_3 and topic.tier != TopicData.Tier.TIER_2 \
+				and topic.tier != TopicData.Tier.TIER_1:
+			continue
+		var score: int = 25 if topic.tier == TopicData.Tier.TIER_3 else 35
+		var need_type: String
+		match topic.category:
+			TopicData.Category.MILITARY:
+				need_type = "DEFEND_PROVINCE"
+			TopicData.Category.POLITICAL:
+				need_type = "INVESTIGATE_THREAT"
+			TopicData.Category.ECONOMIC:
+				need_type = "ACQUIRE_RESOURCE"
+			TopicData.Category.SUPERNATURAL:
+				need_type = "RESTORE_WORSHIP"
+			TopicData.Category.LEGAL:
+				need_type = "INVESTIGATE_THREAT"
+			_:
+				need_type = "RAISE_DISPOSITION"
+		if seen_needtypes.has(need_type):
+			continue
+		seen_needtypes[need_type] = true
+		candidates.append({
+			"need_type": need_type,
+			"score": score,
+			"source": "local_tier3",
+			"topic_id": tid,
+			"target_clan_id": -1,
+			"is_forced": topic.tier <= TopicData.Tier.TIER_2,
+		})
+	return candidates
 
 
 # -- Escalating Conflicts (s55.23) ---------------------------------------------
