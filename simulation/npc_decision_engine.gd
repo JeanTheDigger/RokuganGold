@@ -2906,7 +2906,7 @@ static func _populate_action_metadata(
 	elif option.action_id == "COMPOSE_THEATER_PIECE":
 		option.metadata = _build_compose_theater_metadata(ctx, need)
 	elif option.action_id == "LEARN_THEATER_PIECE":
-		option.metadata = _build_learn_theater_metadata(ctx, need)
+		option.metadata = _build_learn_theater_metadata(ctx, need, chars_by_id)
 	elif option.action_id == "PERFORM_THEATER_PIECE":
 		option.metadata = _build_perform_theater_metadata(ctx, need, chars_by_id)
 	elif option.action_id == "DEDICATE_PIECE":
@@ -3078,12 +3078,55 @@ static func _pick_artistic_expression_style(
 static func _build_learn_theater_metadata(
 	ctx: NPCDataStructures.ContextSnapshot,
 	_need: NPCDataStructures.ImmediateNeed,
+	chars_by_id: Dictionary = {},
 ) -> Dictionary:
-	## Learn: pick best available piece to learn from theater_pieces_to_perform.
-	var performable: Array = ctx.known_objectives.get("theater_pieces_to_perform", [])
-	for pid: Variant in performable:
-		return {"piece_id": int(pid)}
-	return {"piece_id": -1}
+	## §57.22.6 — Select the best learnable piece for LEARN_THEATER_PIECE.
+	## Pieces scored by: political relevance (active topic momentum > 30) and
+	## personal disposition toward piece subject (§57.22.6 post-learning rationale).
+	var learnable_ids: Array = ctx.known_objectives.get("learnable_piece_ids", [])
+	var pieces_by_id: Dictionary = ctx.known_objectives.get("_theater_pieces_by_id", {})
+
+	if learnable_ids.is_empty():
+		return {"piece_id": -1}
+
+	var best_id: int = -1
+	var best_score: int = -1
+
+	for pid: Variant in learnable_ids:
+		var piece_id: int = int(pid)
+		var piece: TheaterPieceData = pieces_by_id.get(piece_id) as TheaterPieceData
+		if piece == null:
+			continue
+
+		# For private pieces validate teacher still available (chars_by_id may have changed).
+		if not piece.canonized and not chars_by_id.is_empty():
+			var teacher_id: int = TheaterSystem.find_willing_teacher(
+				ctx.character_id, piece, chars_by_id
+			)
+			if teacher_id < 0:
+				continue
+
+		var score: int = 50  # base
+
+		# +30 if any linked topic is still politically live (momentum > 30).
+		for tid: int in piece.topic_ids:
+			if (tid in ctx.known_topics) and ctx.known_topic_momentums.get(tid, 0) > 30:
+				score += 30
+				break
+
+		# +20 if NPC holds a strong personal disposition toward the piece's subject character.
+		if piece.subject != "":
+			var subject_as_id: int = piece.subject.to_int()
+			if subject_as_id > 0:
+				var disp: float = float(ctx.disposition_values.get(subject_as_id, 0.0))
+				if absf(disp) >= 11.0:
+					score += 20
+
+		if score > best_score:
+			best_score = score
+			best_id = piece_id
+
+	return {"piece_id": best_id}
 
 
 static func _build_perform_theater_metadata(

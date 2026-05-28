@@ -15009,3 +15009,112 @@ func test_visiting_context_flag_skips_court_attendees() -> void:
 	DayOrchestrator._set_visiting_context_flags([courtier], settlements, provinces, ws)
 	assert_eq(ws[3].get("context_flag", -1), Enums.ContextFlag.AT_COURT,
 		"Court attendee should keep AT_COURT even at foreign settlement")
+
+
+# -- _inject_theater_context learnable_piece_ids tests ------------------------
+
+
+func _make_theater_char(char_id: int, acting: int, met: Array = []) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = char_id
+	c.wounds_taken = 0
+	c.skills = {"Acting": acting}
+	c.met_characters = met
+	return c
+
+
+func _make_theater_piece_do(pid: int, magnitude: int, is_canonized: bool,
+		author_id: int = -1) -> TheaterPieceData:
+	var p := TheaterPieceData.new()
+	p.piece_id = pid
+	p.title = "Piece %d" % pid
+	p.style = TheaterSystem.Style.NOH
+	p.author_id = author_id
+	p.subject = "Lion"
+	p.subject_type = TheaterSystem.SubjectType.CLAN
+	p.framing = true
+	p.disposition_magnitude = magnitude
+	p.target_magnitude = magnitude
+	p.topic_weight = 1
+	p.target_topic_weight = 1
+	p.num_roles_declared = 1
+	p.craft_progress = -1
+	p.canonized = is_canonized
+	p.known_by = []
+	p.topic_ids = []
+	return p
+
+
+func test_inject_theater_context_adds_learnable_canonized() -> void:
+	# Canonized piece not in known_by + Acting >= magnitude → appears in learnable_piece_ids.
+	var learner := _make_theater_char(1, 3)
+	var piece := _make_theater_piece_do(10, 2, true)
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+
+	DayOrchestrator._inject_theater_context([piece], [learner], ws)
+
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	var learnable: Array = known_objs.get("learnable_piece_ids", [])
+	assert_true(10 in learnable, "Canonized piece should appear in learnable_piece_ids")
+
+
+func test_inject_theater_context_blocks_if_already_known() -> void:
+	# Character already in known_by → NOT in learnable.
+	var learner := _make_theater_char(1, 3)
+	var piece := _make_theater_piece_do(10, 2, true)
+	piece.known_by = [1]  # learner already knows it
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+
+	DayOrchestrator._inject_theater_context([piece], [learner], ws)
+
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	var learnable: Array = known_objs.get("learnable_piece_ids", [])
+	assert_false(10 in learnable, "Already-known piece should not be in learnable_piece_ids")
+
+
+func test_inject_theater_context_blocks_if_skill_gate_fails() -> void:
+	# Acting rank 1 < magnitude 3 → NOT learnable.
+	var learner := _make_theater_char(1, 1)
+	var piece := _make_theater_piece_do(10, 3, true)
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+
+	DayOrchestrator._inject_theater_context([piece], [learner], ws)
+
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	var learnable: Array = known_objs.get("learnable_piece_ids", [])
+	assert_false(10 in learnable, "Piece should not be learnable when Acting < magnitude")
+
+
+func test_inject_theater_context_private_piece_needs_teacher() -> void:
+	# Private piece: author is in met_characters but no co-located teacher → NOT learnable.
+	var learner := _make_theater_char(1, 3, [99])  # met author 99
+	learner.physical_location = "castle_a"
+	var piece := _make_theater_piece_do(10, 2, false, 99)
+	piece.known_by = [99]
+	# Only learner is in characters array; author 99 is absent → no teacher.
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+
+	DayOrchestrator._inject_theater_context([piece], [learner], ws)
+
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	var learnable: Array = known_objs.get("learnable_piece_ids", [])
+	assert_false(10 in learnable, "Private piece with no co-located teacher should not be learnable")
+
+
+func test_inject_theater_context_private_piece_with_teacher() -> void:
+	# Private piece: author is met + co-located in characters array + willing → learnable.
+	var learner := _make_theater_char(1, 3, [99])
+	learner.physical_location = "castle_a"
+	var teacher := _make_theater_char(99, 4)
+	teacher.character_id = 99
+	teacher.physical_location = "castle_a"  # same location → co-located
+	# Default disposition_values is empty → 0 satisfies the >= 0 check.
+	var piece := _make_theater_piece_do(10, 2, false, 99)
+	piece.known_by = [99]
+	var ws: Dictionary = {1: {"known_objectives": {}}, 99: {"known_objectives": {}}}
+
+	DayOrchestrator._inject_theater_context([piece], [learner, teacher], ws)
+
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	var learnable: Array = known_objs.get("learnable_piece_ids", [])
+	assert_true(10 in learnable, "Private piece with willing co-located teacher should be learnable")

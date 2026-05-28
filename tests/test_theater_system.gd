@@ -1467,3 +1467,170 @@ func test_artistic_expression_routing_via_build_compose_metadata() -> void:
 	assert_true(result["is_new"])
 	assert_eq(result["piece_id"], -1)
 	assert_true(result.has("style"))  # only set by _build_artistic_expression_compose_metadata
+
+
+# ============================================================================
+# §57.22.6 LEARN_THEATER_PIECE metadata scoring
+# ============================================================================
+
+func _make_canonized_piece(pid: int, magnitude: int, topic_ids: Array[int] = []) -> TheaterPieceData:
+	var p := _make_piece(pid, magnitude)
+	p.canonized = true
+	p.known_by = []
+	p.topic_ids = topic_ids
+	return p
+
+
+func _make_private_piece(pid: int, magnitude: int, author_id: int) -> TheaterPieceData:
+	var p := _make_piece(pid, magnitude)
+	p.canonized = false
+	p.author_id = author_id
+	p.known_by = [author_id]
+	p.topic_ids = []
+	return p
+
+
+func _make_learn_ctx(
+	char_id: int = 10,
+	learnable_ids: Array = [],
+	pieces_by_id: Dictionary = {},
+	topic_momentums: Dictionary = {},
+	dispositions: Dictionary = {},
+	known_topics: Array = [],
+) -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = char_id
+	ctx.clan = "Lion"
+	ctx.disposition_values = dispositions
+	ctx.known_topics = known_topics
+	ctx.known_topic_momentums = topic_momentums
+	ctx.known_objectives = {
+		"learnable_piece_ids": learnable_ids,
+		"_theater_pieces_by_id": pieces_by_id,
+	}
+	ctx.skill_ranks = {}
+	ctx.action_log = []
+	return ctx
+
+
+func test_learn_theater_no_learnable_pieces_returns_minus_one() -> void:
+	var ctx := _make_learn_ctx(10, [], {})
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var result: Dictionary = NPCDecisionEngine._build_learn_theater_metadata(ctx, need)
+	assert_eq(result["piece_id"], -1)
+
+
+func test_learn_theater_selects_only_piece_when_one_available() -> void:
+	var piece: TheaterPieceData = _make_canonized_piece(5, 2)
+	var ctx := _make_learn_ctx(10, [5], {5: piece})
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var result: Dictionary = NPCDecisionEngine._build_learn_theater_metadata(ctx, need)
+	assert_eq(result["piece_id"], 5)
+
+
+func test_learn_theater_selects_piece_with_active_topic() -> void:
+	# Two pieces: piece 5 has a linked topic with momentum > 30, piece 6 does not.
+	var piece_a: TheaterPieceData = _make_canonized_piece(5, 2, [101])
+	var piece_b: TheaterPieceData = _make_canonized_piece(6, 2, [])
+	var ctx := _make_learn_ctx(
+		10, [5, 6], {5: piece_a, 6: piece_b},
+		{101: 35},  # topic 101 has momentum 35 > 30
+		{},
+		[101],
+	)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var result: Dictionary = NPCDecisionEngine._build_learn_theater_metadata(ctx, need)
+	assert_eq(result["piece_id"], 5, "Piece with live topic should score higher")
+
+
+func test_learn_theater_topic_below_threshold_not_bonus() -> void:
+	# Topic momentum 25 < 30 → no bonus; pieces tie at 50, first wins.
+	var piece_a: TheaterPieceData = _make_canonized_piece(5, 2, [101])
+	var piece_b: TheaterPieceData = _make_canonized_piece(6, 2, [])
+	var ctx := _make_learn_ctx(
+		10, [5, 6], {5: piece_a, 6: piece_b},
+		{101: 25},
+		{},
+		[101],
+	)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var result: Dictionary = NPCDecisionEngine._build_learn_theater_metadata(ctx, need)
+	# Both score 50; piece 5 is first → selected (no topic bonus when momentum <= 30).
+	assert_eq(result["piece_id"], 5)
+
+
+func test_learn_theater_selects_piece_with_strong_disposition_subject() -> void:
+	# piece 5 → subject "42" with disposition +20 → +20 bonus; piece 6 no subject.
+	var piece_a: TheaterPieceData = _make_canonized_piece(5, 2)
+	piece_a.subject = "42"
+	piece_a.subject_type = TheaterSystem.SubjectType.CHARACTER
+	var piece_b: TheaterPieceData = _make_canonized_piece(6, 2)
+	piece_b.subject = "Crane"
+	piece_b.subject_type = TheaterSystem.SubjectType.CLAN
+	var ctx := _make_learn_ctx(10, [5, 6], {5: piece_a, 6: piece_b}, {}, {42: 20.0})
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var result: Dictionary = NPCDecisionEngine._build_learn_theater_metadata(ctx, need)
+	assert_eq(result["piece_id"], 5, "Piece with strong-disp subject should score higher")
+
+
+func test_learn_theater_negative_strong_disposition_also_triggers_bonus() -> void:
+	# absf(-15) >= 11 → +20 bonus applies regardless of sign.
+	var piece_a: TheaterPieceData = _make_canonized_piece(5, 2)
+	piece_a.subject = "42"
+	piece_a.subject_type = TheaterSystem.SubjectType.CHARACTER
+	var piece_b: TheaterPieceData = _make_canonized_piece(6, 2)
+	var ctx := _make_learn_ctx(10, [5, 6], {5: piece_a, 6: piece_b}, {}, {42: -15.0})
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var result: Dictionary = NPCDecisionEngine._build_learn_theater_metadata(ctx, need)
+	assert_eq(result["piece_id"], 5)
+
+
+func test_learn_theater_weak_disposition_no_bonus() -> void:
+	# Disposition +5 < 11 → no bonus; piece 6 ties and wins (same score as piece 5,
+	# but piece 6 comes after; first encountered at equal score wins since > not >=).
+	var piece_a: TheaterPieceData = _make_canonized_piece(5, 2)
+	piece_a.subject = "42"
+	piece_a.subject_type = TheaterSystem.SubjectType.CHARACTER
+	var piece_b: TheaterPieceData = _make_canonized_piece(6, 2)
+	var ctx := _make_learn_ctx(10, [5, 6], {5: piece_a, 6: piece_b}, {}, {42: 5.0})
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var result: Dictionary = NPCDecisionEngine._build_learn_theater_metadata(ctx, need)
+	# Both score 50; 5 is first in loop → selected (> not >=).
+	assert_eq(result["piece_id"], 5)
+
+
+func test_learn_theater_private_piece_requires_teacher() -> void:
+	# Private piece: chars_by_id is empty → find_willing_teacher returns -1 → skipped.
+	var piece: TheaterPieceData = _make_private_piece(7, 2, 99)
+	var ctx := _make_learn_ctx(10, [7], {7: piece})
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var result: Dictionary = NPCDecisionEngine._build_learn_theater_metadata(ctx, need, {})
+	assert_eq(result["piece_id"], -1, "Private piece with no teacher should be skipped")
+
+
+func test_learn_theater_canonized_piece_no_teacher_required() -> void:
+	# Canonized pieces don't need a teacher → selected even with empty chars_by_id.
+	var piece: TheaterPieceData = _make_canonized_piece(8, 2)
+	var ctx := _make_learn_ctx(10, [8], {8: piece})
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var result: Dictionary = NPCDecisionEngine._build_learn_theater_metadata(ctx, need, {})
+	assert_eq(result["piece_id"], 8)
+
+
+func test_learn_theater_highest_score_wins() -> void:
+	# Piece A: topic bonus +30 (score 80). Piece B: disp bonus +20 (score 70).
+	# Piece A should win.
+	var piece_a: TheaterPieceData = _make_canonized_piece(5, 2, [101])
+	piece_a.subject = ""
+	var piece_b: TheaterPieceData = _make_canonized_piece(6, 2)
+	piece_b.subject = "42"
+	piece_b.subject_type = TheaterSystem.SubjectType.CHARACTER
+	var ctx := _make_learn_ctx(
+		10, [5, 6], {5: piece_a, 6: piece_b},
+		{101: 40},
+		{42: 20.0},
+		[101],
+	)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var result: Dictionary = NPCDecisionEngine._build_learn_theater_metadata(ctx, need)
+	assert_eq(result["piece_id"], 5, "Topic bonus (80) beats disp bonus (70)")

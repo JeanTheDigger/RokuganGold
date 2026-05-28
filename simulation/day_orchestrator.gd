@@ -11978,7 +11978,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"is_patrolled", "phoenix_champion_authority",
 		"settlement_type",
 		"champion_conclusion_candidates", "local_tier3_candidates",
-		"theater_pieces_to_perform", "wip_piece_ids",
+		"theater_pieces_to_perform", "wip_piece_ids", "learnable_piece_ids",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -19740,7 +19740,14 @@ static func _inject_theater_context(
 	## Inject per-character theater context into known_objectives (matching hunt pattern).
 	## theater_pieces_to_perform: Array of piece_ids the character can perform.
 	## wip_piece_ids: Array of piece_ids the character is composing.
-	## _theater_pieces_by_id: Dict[piece_id → TheaterPieceData] for §57.22.13 scoring.
+	## learnable_piece_ids: Array of piece_ids the character can learn via LEARN_THEATER_PIECE.
+	## _theater_pieces_by_id: Dict[piece_id → TheaterPieceData] for §57.22 scoring.
+
+	# Build chars_by_id once for teacher-availability checks on private pieces (§57.22.6).
+	var chars_by_id: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		chars_by_id[c.character_id] = c
+
 	for character: L5RCharacterData in characters:
 		if CharacterStats.is_dead(character):
 			continue
@@ -19751,23 +19758,47 @@ static func _inject_theater_context(
 
 		var performable: Array[int] = []
 		var wip_ids: Array[int] = []
+		var learnable: Array[int] = []
 		var pieces_by_id: Dictionary = {}
+		var acting_rank: int = character.skills.get("Acting", 0)
+
 		for piece: TheaterPieceData in theater_pieces:
 			if piece.lost or piece.abandoned_incomplete:
 				continue
 			if piece.craft_progress >= 0:
 				if piece.author_id == char_id:
 					wip_ids.append(piece.piece_id)
-			else:
-				if char_id in piece.known_by or piece.canonized:
-					performable.append(piece.piece_id)
-					pieces_by_id[piece.piece_id] = piece
+				continue
+
+			# Completed piece.
+			var already_knows: bool = char_id in piece.known_by
+
+			if already_knows or piece.canonized:
+				performable.append(piece.piece_id)
+				pieces_by_id[piece.piece_id] = piece
+
+			# Learnable if: skill gate passes, character does not already know it.
+			if not already_knows and acting_rank >= piece.disposition_magnitude:
+				if piece.canonized:
+					# Canonized: no teacher required (§57.22.6).
+					learnable.append(piece.piece_id)
+					# pieces_by_id already populated above
+				elif piece.author_id >= 0 and piece.author_id in character.met_characters:
+					# Private: author is a known contact; check for co-located willing teacher.
+					var teacher_id: int = TheaterSystem.find_willing_teacher(
+						char_id, piece, chars_by_id
+					)
+					if teacher_id >= 0:
+						learnable.append(piece.piece_id)
+						pieces_by_id[piece.piece_id] = piece
 
 		var known_objs: Dictionary = ws.get("known_objectives", {})
 		if not performable.is_empty():
 			known_objs["theater_pieces_to_perform"] = performable
 		if not wip_ids.is_empty():
 			known_objs["wip_piece_ids"] = wip_ids
+		if not learnable.is_empty():
+			known_objs["learnable_piece_ids"] = learnable
 		# Always write the dict (even empty) so stale data from yesterday never persists.
 		known_objs["_theater_pieces_by_id"] = pieces_by_id
 		ws["known_objectives"] = known_objs
