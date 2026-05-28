@@ -3650,7 +3650,6 @@ func test_training_acceptance_writeback_applies_progress() -> void:
 	sensei.character_name = "Sensei"
 	sensei.skills = {"Kenjutsu": 5}
 	sensei.wounds_taken = 0
-	sensei.earth_ring = 3
 	sensei.stamina = 3
 	sensei.skill_progress = {}
 	var student: L5RCharacterData = L5RCharacterData.new()
@@ -3658,7 +3657,6 @@ func test_training_acceptance_writeback_applies_progress() -> void:
 	student.character_name = "Student"
 	student.skills = {"Kenjutsu": 2}
 	student.wounds_taken = 0
-	student.earth_ring = 3
 	student.stamina = 3
 	student.action_points_current = 2
 	student.skill_progress = {}
@@ -3682,14 +3680,12 @@ func test_training_acceptance_skips_dead_student() -> void:
 	sensei.character_name = "Sensei"
 	sensei.skills = {"Kenjutsu": 5}
 	sensei.wounds_taken = 0
-	sensei.earth_ring = 3
 	sensei.stamina = 3
 	var student: L5RCharacterData = L5RCharacterData.new()
 	student.character_id = 2
 	student.character_name = "Student"
 	student.skills = {"Kenjutsu": 2}
 	student.wounds_taken = 200
-	student.earth_ring = 3
 	student.stamina = 3
 	student.action_points_current = 2
 	student.skill_progress = {}
@@ -3713,7 +3709,6 @@ func test_reactive_type_events_route_through_reactive_decisions() -> void:
 	c.family = "Hida"
 	c.skills = {"Kenjutsu": 2}
 	c.wounds_taken = 0
-	c.earth_ring = 3
 	c.stamina = 3
 	c.action_points_current = 2
 	c.bushido_virtue = Enums.BushidoVirtue.GI
@@ -3763,7 +3758,6 @@ func test_mentor_metadata_selects_best_student() -> void:
 	student_a.skills = {"Kenjutsu": 2}
 	student_a.physical_location = "100"
 	student_a.wounds_taken = 0
-	student_a.earth_ring = 3
 	student_a.stamina = 3
 	var student_b: L5RCharacterData = L5RCharacterData.new()
 	student_b.character_id = 3
@@ -3771,7 +3765,6 @@ func test_mentor_metadata_selects_best_student() -> void:
 	student_b.skills = {"Kenjutsu": 4}
 	student_b.physical_location = "100"
 	student_b.wounds_taken = 0
-	student_b.earth_ring = 3
 	student_b.stamina = 3
 	var chars: Dictionary = {1: L5RCharacterData.new(), 2: student_a, 3: student_b}
 	var meta: Dictionary = NPCDecisionEngine._build_mentor_metadata(ctx, need, chars)
@@ -3785,21 +3778,18 @@ func test_build_trainable_vassals_finds_trainable() -> void:
 	lord.character_name = "Lord"
 	lord.skills = {"Kenjutsu": 5, "Etiquette": 3}
 	lord.wounds_taken = 0
-	lord.earth_ring = 3
 	lord.stamina = 3
 	var vassal_a: L5RCharacterData = L5RCharacterData.new()
 	vassal_a.character_id = 2
 	vassal_a.character_name = "VassalA"
 	vassal_a.skills = {"Kenjutsu": 2, "Etiquette": 3}
 	vassal_a.wounds_taken = 0
-	vassal_a.earth_ring = 3
 	vassal_a.stamina = 3
 	var vassal_b: L5RCharacterData = L5RCharacterData.new()
 	vassal_b.character_id = 3
 	vassal_b.character_name = "VassalB"
 	vassal_b.skills = {"Kenjutsu": 5, "Etiquette": 5}
 	vassal_b.wounds_taken = 0
-	vassal_b.earth_ring = 3
 	vassal_b.stamina = 3
 	var vassals: Array = [vassal_a, vassal_b]
 	var result: Array = DayOrchestrator._build_trainable_vassals(lord, vassals)
@@ -3813,14 +3803,12 @@ func test_build_trainable_vassals_skips_dead() -> void:
 	lord.character_name = "Lord"
 	lord.skills = {"Kenjutsu": 5}
 	lord.wounds_taken = 0
-	lord.earth_ring = 3
 	lord.stamina = 3
 	var dead_vassal: L5RCharacterData = L5RCharacterData.new()
 	dead_vassal.character_id = 2
 	dead_vassal.character_name = "Dead"
 	dead_vassal.skills = {"Kenjutsu": 1}
 	dead_vassal.wounds_taken = 200
-	dead_vassal.earth_ring = 3
 	dead_vassal.stamina = 3
 	var result: Array = DayOrchestrator._build_trainable_vassals(lord, [dead_vassal])
 	assert_eq(result.size(), 0, "Dead vassal should not be trainable")
@@ -3838,7 +3826,6 @@ func test_favor_response_honor_applies_honor_and_resolves() -> void:
 	debtor.character_name = "Debtor"
 	debtor.honor = 5.0
 	debtor.wounds_taken = 0
-	debtor.earth_ring = 3
 	debtor.stamina = 3
 	var chars: Dictionary = {1: debtor}
 	var results: Array = [{
@@ -3865,14 +3852,12 @@ func test_favor_response_decline_breaks_favor() -> void:
 	debtor.honor = 5.0
 	debtor.glory = 3.0
 	debtor.wounds_taken = 0
-	debtor.earth_ring = 3
 	debtor.stamina = 3
 	debtor.physical_location = "castle_doji"
 	var creditor := L5RCharacterData.new()
 	creditor.character_id = 10
 	creditor.character_name = "Creditor"
 	creditor.wounds_taken = 0
-	creditor.earth_ring = 3
 	creditor.stamina = 3
 	creditor.disposition_values = {1: 20}
 	var chars: Dictionary = {1: debtor, 10: creditor}
@@ -3900,7 +3885,6 @@ func test_favor_response_skips_dead_debtor() -> void:
 	debtor.character_name = "Dead Debtor"
 	debtor.honor = 5.0
 	debtor.wounds_taken = 200
-	debtor.earth_ring = 3
 	debtor.stamina = 3
 	var chars: Dictionary = {1: debtor}
 	var results: Array = [{
@@ -3927,7 +3911,6 @@ func test_favor_response_skips_already_resolved() -> void:
 	debtor.character_name = "Debtor"
 	debtor.honor = 5.0
 	debtor.wounds_taken = 0
-	debtor.earth_ring = 3
 	debtor.stamina = 3
 	var chars: Dictionary = {1: debtor}
 	var results: Array = [{
@@ -4010,13 +3993,11 @@ func test_build_vengeance_targets_from_avenge_death_string() -> void:
 	lord.character_id = 1
 	lord.character_name = "Lord"
 	lord.wounds_taken = 0
-	lord.earth_ring = 3
 	lord.stamina = 3
 	var target := L5RCharacterData.new()
 	target.character_id = 99
 	target.character_name = "Killer"
 	target.wounds_taken = 0
-	target.earth_ring = 3
 	target.stamina = 3
 	var objectives_map: Dictionary = {
 		1: {"primary": "AVENGE_DEATH", "avenge_target_id": 99},
@@ -4032,7 +4013,6 @@ func test_build_vengeance_targets_from_historical_modifiers() -> void:
 	lord.character_id = 1
 	lord.character_name = "Lord"
 	lord.wounds_taken = 0
-	lord.earth_ring = 3
 	lord.stamina = 3
 	lord.historical_modifiers = {
 		"vengeance_42": {
@@ -4046,7 +4026,6 @@ func test_build_vengeance_targets_from_historical_modifiers() -> void:
 	target.character_id = 42
 	target.character_name = "Commissioner"
 	target.wounds_taken = 0
-	target.earth_ring = 3
 	target.stamina = 3
 	var chars: Dictionary = {1: lord, 42: target}
 	var result: Array = DayOrchestrator._build_vengeance_targets(lord, {}, chars)
@@ -4059,7 +4038,6 @@ func test_build_vengeance_targets_skips_dead_target() -> void:
 	lord.character_id = 1
 	lord.character_name = "Lord"
 	lord.wounds_taken = 0
-	lord.earth_ring = 3
 	lord.stamina = 3
 	lord.historical_modifiers = {
 		"vengeance_42": {
@@ -4073,7 +4051,6 @@ func test_build_vengeance_targets_skips_dead_target() -> void:
 	dead_target.character_id = 42
 	dead_target.character_name = "Dead Commissioner"
 	dead_target.wounds_taken = 200
-	dead_target.earth_ring = 3
 	dead_target.stamina = 3
 	var chars: Dictionary = {1: lord, 42: dead_target}
 	var result: Array = DayOrchestrator._build_vengeance_targets(lord, {}, chars)
@@ -4085,32 +4062,27 @@ func test_build_bitter_rivals_from_disposition() -> void:
 	lord.character_id = 1
 	lord.character_name = "Lord"
 	lord.wounds_taken = 0
-	lord.earth_ring = 3
 	lord.stamina = 3
 	lord.disposition_values = {50: -40, 51: -70, 52: -10, 53: -31}
 	var c50 := L5RCharacterData.new()
 	c50.character_id = 50
 	c50.character_name = "Enemy"
 	c50.wounds_taken = 0
-	c50.earth_ring = 3
 	c50.stamina = 3
 	var c51 := L5RCharacterData.new()
 	c51.character_id = 51
 	c51.character_name = "Blood Enemy"
 	c51.wounds_taken = 0
-	c51.earth_ring = 3
 	c51.stamina = 3
 	var c52 := L5RCharacterData.new()
 	c52.character_id = 52
 	c52.character_name = "Neutral"
 	c52.wounds_taken = 0
-	c52.earth_ring = 3
 	c52.stamina = 3
 	var c53 := L5RCharacterData.new()
 	c53.character_id = 53
 	c53.character_name = "Rival"
 	c53.wounds_taken = 0
-	c53.earth_ring = 3
 	c53.stamina = 3
 	var chars: Dictionary = {1: lord, 50: c50, 51: c51, 52: c52, 53: c53}
 	var result: Array = DayOrchestrator._build_bitter_rivals(lord, chars)
@@ -4130,14 +4102,12 @@ func test_build_bitter_rivals_skips_dead() -> void:
 	lord.character_id = 1
 	lord.character_name = "Lord"
 	lord.wounds_taken = 0
-	lord.earth_ring = 3
 	lord.stamina = 3
 	lord.disposition_values = {50: -50}
 	var dead := L5RCharacterData.new()
 	dead.character_id = 50
 	dead.character_name = "Dead Rival"
 	dead.wounds_taken = 200
-	dead.earth_ring = 3
 	dead.stamina = 3
 	var chars: Dictionary = {1: lord, 50: dead}
 	var result: Array = DayOrchestrator._build_bitter_rivals(lord, chars)
@@ -4175,13 +4145,11 @@ func test_duel_response_decline_applies_glory_loss() -> void:
 	defender.character_name = "Defender"
 	defender.glory = 5.0
 	defender.wounds_taken = 0
-	defender.earth_ring = 3
 	defender.stamina = 3
 	var challenger := L5RCharacterData.new()
 	challenger.character_id = 1
 	challenger.character_name = "Challenger"
 	challenger.wounds_taken = 0
-	challenger.earth_ring = 3
 	challenger.stamina = 3
 	var chars: Dictionary = {1: challenger, 2: defender}
 	var results: Array = [{
@@ -4201,7 +4169,6 @@ func test_duel_response_accept_resolves_duel() -> void:
 	defender.glory = 5.0
 	defender.honor = 5.0
 	defender.wounds_taken = 0
-	defender.earth_ring = 3
 	defender.stamina = 3
 	defender.reflexes = 3
 	defender.agility = 3
@@ -4219,7 +4186,6 @@ func test_duel_response_accept_resolves_duel() -> void:
 	challenger.glory = 5.0
 	challenger.honor = 5.0
 	challenger.wounds_taken = 0
-	challenger.earth_ring = 3
 	challenger.stamina = 3
 	challenger.reflexes = 3
 	challenger.agility = 3
@@ -4391,7 +4357,7 @@ func test_dead_charmer_skipped_false_courtesy() -> void:
 	dead.wounds_taken = 200
 	dead.earth = 2
 	dead.honor = 5.0
-	dead.bushido_virtue = Enums.BushidoVirtue.KETSUI
+	dead.bushido_virtue = Enums.BushidoVirtue.YU
 	dead.disposition_values = {20: -40}
 	var target := L5RCharacterData.new()
 	target.character_id = 20
@@ -4432,7 +4398,7 @@ func test_dead_favor_breach_debtor_skipped() -> void:
 		"glory_loss": -0.5,
 		"disposition_floor": -30,
 	}
-	DayOrchestrator._apply_favor_breach(breach, chars_by_id, [])
+	DayOrchestrator._apply_favor_breach(breach, chars_by_id)
 	assert_eq(dead.honor, 5.0, "Dead debtor should not receive honor loss from favor breach")
 
 

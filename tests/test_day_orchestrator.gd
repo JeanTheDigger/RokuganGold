@@ -13216,7 +13216,7 @@ func test_death_events_cleared_after_lord_death_processing() -> void:
 	var lord := L5RCharacterData.new()
 	lord.character_id = 1
 	lord.role_position = "Family Daimyo"
-	lord.earth_ring = 0
+	lord.stamina = 0
 	var heir := L5RCharacterData.new()
 	heir.character_id = 2
 	heir.clan = "Crane"
@@ -13295,7 +13295,7 @@ func test_garrison_courtier_refusal_critical_wall_honor_loss() -> void:
 func _make_dead_character(id: int) -> L5RCharacterData:
 	var c := L5RCharacterData.new()
 	c.character_id = id
-	c.earth_ring = 0
+	c.stamina = 0
 	return c
 
 
@@ -13395,7 +13395,7 @@ func test_dead_character_dissolves_favors() -> void:
 	DayOrchestrator._cleanup_dead_character_references(
 		characters, characters_by_id, [], [], [], favors,
 	)
-	var dissolved: Array = FavorSystem.process_creditor_death(favors, 2, -1)
+	var dissolved: Dictionary = FavorSystem.process_creditor_death(favors, 2, -1)
 	assert_true(favor.favor_id in dissolved.get("dissolved", []),
 		"Favor with dead creditor (minor tier) should be dissolved")
 
@@ -13446,9 +13446,9 @@ func test_construction_temple_validation_uses_correct_key() -> void:
 	var constructions: Array = []
 	var next_sid: Array = [5000]
 	var next_cid: Array = [1]
-	var result: Dictionary = DayOrchestrator._apply_construction_effect(
-		{"character_id": 1, "action_id": "FOUND_TEMPLE", "effects": {"province_id": 10}},
-		{1: c}, provinces, settlements, constructions, next_sid, next_cid, 1, [], _dice,
+	var result: Dictionary = DayOrchestrator._apply_construction_order(
+		"FOUND_TEMPLE", c, 10, 100, false, -1, -1, "",
+		provinces, settlements, constructions, next_sid, next_cid, 1, [], _dice,
 	)
 	assert_true(result.get("applied", false) or result.get("reason", "") != "invalid",
 		"FOUND_TEMPLE should not fail with reason 'invalid' due to wrong key lookup")
@@ -14655,7 +14655,7 @@ func test_witness_testimony_skips_dead_magistrate() -> void:
 	magistrate.character_id = 100
 	magistrate.physical_location = "crane_city"
 	magistrate.topic_pool = []
-	magistrate.wounds_taken = CharacterStats.LETHAL_WOUND_THRESHOLD
+	magistrate.wounds_taken = 999
 
 	var crime_topic := TopicData.new()
 	crime_topic.topic_id = 900
@@ -14678,7 +14678,7 @@ func test_witness_testimony_skips_dead_witness() -> void:
 	var witness := L5RCharacterData.new()
 	witness.character_id = 50
 	witness.topic_pool = [900]
-	witness.wounds_taken = CharacterStats.LETHAL_WOUND_THRESHOLD
+	witness.wounds_taken = 999
 
 	var magistrate := L5RCharacterData.new()
 	magistrate.character_id = 100
@@ -14709,7 +14709,7 @@ func test_intimidation_consequences_skip_dead_witness() -> void:
 
 	var witness := L5RCharacterData.new()
 	witness.character_id = 20
-	witness.wounds_taken = CharacterStats.LETHAL_WOUND_THRESHOLD
+	witness.wounds_taken = 999
 	witness.disposition_values = {10: 0}
 
 	var characters_by_id: Dictionary = {10: criminal, 20: witness}
@@ -14909,7 +14909,10 @@ func test_character_province_map_skips_dead_and_empty() -> void:
 
 
 func test_commitment_renege_no_topic_when_tier_negative_one() -> void:
-	var lord := _make_char(1, "Crane", "Doji")
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.clan = "Crane"
+	lord.family = "Doji"
 	lord.status = 6.0
 	var chars_by_id: Dictionary = {1: lord}
 	var topics: Array = []

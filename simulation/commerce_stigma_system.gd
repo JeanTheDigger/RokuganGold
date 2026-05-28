@@ -31,6 +31,10 @@ const LEAN_MINUS_10: Array[String] = [
 ]
 const LEAN_MINUS_5: Array[String] = ["Miya Herald"]
 
+# Honor-based self-regulation per s57.40.7: NPC scoring lean for high-honor characters.
+const HONOR_SELF_REG_7_PLUS: int = -5
+const HONOR_SELF_REG_5_6: int = -3
+
 
 static func is_public_commerce(
 	action_id: String,

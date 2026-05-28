@@ -3023,6 +3023,16 @@ costs, or forward-wiring. Do not treat as bugs.
   These are world initialization parameters that cannot be zeroed without
   breaking world creation; GDD does not specify exact values.
 
+### Known Code Issues (found and fixed 2026-05-28, post-audit)
+- **CommerceStigmaSystem.HONOR_SELF_REG_7_PLUS / HONOR_SELF_REG_5_6 — removed in error. FIXED.**
+  The invented-content audit removed these constants from commerce_stigma_system.gd
+  but they are GDD-sourced (s57.40 line 59: "Honor 5–6 characters receive −3 lean,
+  Honor 7+ characters receive −5 lean"). NPCDecisionEngine referenced them at lines
+  624/626, causing a cascade compile failure: npc_decision_engine.gd failed to parse,
+  then npc_wave_resolver.gd, day_orchestrator.gd, and world_state.gd all failed as
+  dependents. The entire NPC decision pipeline was non-functional. Restored both
+  constants with GDD citation.
+
 ### Comprehensive Simulation File Audit Complete (2026-05-28)
 All 135 files in `/simulation/` audited against GDD. Summary:
 - **8 files modified** (action_executor, day_orchestrator, npc_decision_engine,

@@ -478,9 +478,9 @@ func test_resolve_settlement_conversations_skips_dead_characters():
 	_set_mutual_disposition(alive_a, dead_b, 50)
 	_set_mutual_disposition(alive_a, alive_c, 50)
 	_set_mutual_disposition(dead_b, alive_c, 50)
-	alive_a.met_characters = {2: true, 3: true}
-	dead_b.met_characters = {1: true, 3: true}
-	alive_c.met_characters = {1: true, 2: true}
+	alive_a.met_characters = [2, 3]
+	dead_b.met_characters = [1, 3]
+	alive_c.met_characters = [1, 2]
 	var rng: Array = [1, 5, 5, 1, 5, 5, 1, 5, 5]
 	var results: Array = DailyConversation.resolve_settlement_conversations(
 		[alive_a, dead_b, alive_c], rng, 5,

@@ -375,7 +375,7 @@ func test_seed_disposition_clamped_to_range() -> void:
 	extreme_clan[CollectiveDisposition.make_pair_key("Crab", "Crane")] = -100
 	var extreme_family: Dictionary = {}
 	extreme_family[CollectiveDisposition.make_pair_key("Hida", "Doji")] = -100
-	var result: int = CollectiveDisposition.seed_disposition_if_missing(
+	var result: int = CollectiveDisposition.seed_first_meeting(
 		a, b, extreme_clan, extreme_family,
 	)
 	assert_true(result >= -100 and result <= 100,

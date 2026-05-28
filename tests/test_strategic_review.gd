@@ -1314,7 +1314,9 @@ func test_vassal_objective_has_need_type_key() -> void:
 	lord.character_id = 1
 	lord.status = 7.0
 	lord.lord_id = -1
-	var obj: Dictionary = StrategicReview._select_objective_for_vassal(lord, 2, [], {})
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 2
+	var obj: Dictionary = StrategicReview._select_objective_for_vassal(lord, vassal, [], {})
 	assert_true(obj.has("need_type"), "Objective must have need_type key")
 	assert_eq(obj["need_type"], obj["objective_type"], "need_type should match objective_type")
 
@@ -1322,8 +1324,10 @@ func test_vassal_objective_has_need_type_key() -> void:
 func test_vassal_objective_threat_has_need_type() -> void:
 	var lord := L5RCharacterData.new()
 	lord.character_id = 1
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 2
 	var threats: Array = [{"type": "shadowlands", "target": "Crab"}]
-	var obj: Dictionary = StrategicReview._select_objective_for_vassal(lord, 2, threats, {})
+	var obj: Dictionary = StrategicReview._select_objective_for_vassal(lord, vassal, threats, {})
 	assert_true(obj.has("need_type"))
 	assert_eq(obj["need_type"], "ELIMINATE_SHADOWLANDS")
 
@@ -1331,8 +1335,10 @@ func test_vassal_objective_threat_has_need_type() -> void:
 func test_vassal_objective_low_stability_has_need_type() -> void:
 	var lord := L5RCharacterData.new()
 	lord.character_id = 1
+	var vassal := L5RCharacterData.new()
+	vassal.character_id = 2
 	var ws: Dictionary = {"low_stability_provinces": [100]}
-	var obj: Dictionary = StrategicReview._select_objective_for_vassal(lord, 2, [], ws)
+	var obj: Dictionary = StrategicReview._select_objective_for_vassal(lord, vassal, [], ws)
 	assert_true(obj.has("need_type"))
 	assert_eq(obj["need_type"], "MAXIMIZE_PROSPERITY")
 

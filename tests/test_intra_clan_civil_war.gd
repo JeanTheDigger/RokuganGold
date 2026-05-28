@@ -650,7 +650,7 @@ func test_defector_disposition_skips_dead_faction_members() -> void:
 	dead_member.willpower = 2
 	dead_member.wounds_taken = 999
 	dead_member.disposition_values = {1: 10}
-	IntraClanCivilWar.apply_defector_consequences(defector, [dead_member])
+	IntraClanCivilWar.apply_defection_consequences(defector, [dead_member])
 	assert_eq(dead_member.disposition_values.get(1, 0), 10,
 		"Dead faction member disposition should not change")
 
@@ -661,8 +661,8 @@ func test_scar_application_skips_dead_characters() -> void:
 	dead.willpower = 2
 	dead.wounds_taken = 999
 	var state: Dictionary = {"faction_assignments": {1: 1, 2: 2}}
-	var result: Dictionary = IntraClanCivilWar.apply_post_war_scars(
-		[alive, dead], state, {}
+	var result: Dictionary = IntraClanCivilWar.apply_post_resolution_scars(
+		state, [alive, dead], {}
 	)
 	assert_eq(result.get("scars", []).size(), 0,
 		"Dead characters should not participate in scar application")

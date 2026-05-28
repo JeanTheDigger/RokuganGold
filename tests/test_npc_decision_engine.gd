@@ -3753,7 +3753,6 @@ func test_dead_contact_excluded_from_garrison_scores() -> void:
 	dead_contact.character_name = "Dead Contact"
 	dead_contact.bushido_virtue = Enums.BushidoVirtue.YU
 	dead_contact.wounds_taken = 999
-	dead_contact.earth_ring = 2
 	dead_contact.stamina = 2
 	dead_contact.skills = {}
 	dead_contact.emphases = {}

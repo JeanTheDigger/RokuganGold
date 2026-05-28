@@ -624,6 +624,7 @@ func test_stipend_skips_dead_retainers() -> void:
 	dead_retainer.wounds_taken = 999
 	dead_retainer.koku = 0.0
 	var chars: Array = [lord, dead_retainer]
-	KokuCascadeSystem.distribute_individual_stipends(chars, {1: {"passed_down": 50.0}})
+	var chars_by_id: Dictionary = {1: lord, 2: dead_retainer}
+	KokuCascadeSystem._pay_individual_stipends({1: {"passed_down": 50.0}}, chars, chars_by_id)
 	assert_eq(dead_retainer.koku, 0.0,
 		"Dead retainer should not receive stipend")

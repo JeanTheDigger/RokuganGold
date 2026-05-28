@@ -487,7 +487,6 @@ func test_dead_character_with_ap_excluded_from_active() -> void:
 	c.character_name = "Dead Mid-Day"
 	c.action_points_current = 2
 	c.wounds_taken = 999
-	c.earth_ring = 2
 	c.stamina = 2
 	c.skills = {}
 	c.emphases = {}

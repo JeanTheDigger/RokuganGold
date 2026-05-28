@@ -103,7 +103,7 @@ func test_get_remaining() -> void:
 # -- Dead character handling ---------------------------------------------------
 
 func test_reset_dead_character_gets_zero_ap() -> void:
-	_char.earth_ring = 0
+	_char.stamina = 0
 	assert_true(CharacterStats.is_dead(_char), "Character with earth 0 is dead")
 	ActionPointSystem.reset_daily_ap(_char)
 	assert_eq(_char.action_points_current, 0, "Dead character gets 0 AP")
@@ -113,6 +113,6 @@ func test_reset_dead_character_gets_zero_ap() -> void:
 func test_reset_alive_then_dead_clears_ap() -> void:
 	ActionPointSystem.reset_daily_ap(_char)
 	assert_eq(_char.action_points_current, 2, "Alive character gets normal AP")
-	_char.earth_ring = 0
+	_char.stamina = 0
 	ActionPointSystem.reset_daily_ap(_char)
 	assert_eq(_char.action_points_current, 0, "Dead character AP cleared on next reset")

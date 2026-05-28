@@ -572,7 +572,7 @@ func test_build_context_skips_dead_siblings_in_family_bonds() -> void:
 	var sibling: L5RCharacterData = _make(4)
 	actor.sibling_ids = [4]
 	sibling.sibling_ids = [3]
-	sibling.wounds_taken = CharacterStats.LETHAL_WOUND_THRESHOLD
+	sibling.wounds_taken = 999
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(actor, {}, _chars)
 	assert_eq(ctx.dispositions.get(4, 0), 0, "Dead sibling should not contribute family bond")
 
@@ -582,7 +582,7 @@ func test_compute_all_family_bonds_skips_dead_half_siblings() -> void:
 	actor.mother_id = 2
 	var half_sib: L5RCharacterData = _make(7)
 	half_sib.mother_id = 2
-	half_sib.wounds_taken = CharacterStats.LETHAL_WOUND_THRESHOLD
+	half_sib.wounds_taken = 999
 	var bonds: Dictionary = BiologicalFamily.compute_all_family_bonds(actor, _chars)
 	assert_false(bonds.has(7), "Dead half-sibling should not appear in bonds")
 
@@ -595,6 +595,6 @@ func test_compute_all_family_bonds_skips_dead_cross_clan_relatives() -> void:
 	var in_law: L5RCharacterData = _make(61, "Crane")
 	spouse.sibling_ids = [61]
 	in_law.sibling_ids = [60]
-	in_law.wounds_taken = CharacterStats.LETHAL_WOUND_THRESHOLD
+	in_law.wounds_taken = 999
 	var bonds: Dictionary = BiologicalFamily.compute_all_family_bonds(actor, _chars)
 	assert_false(bonds.has(61), "Dead cross-clan relative should not appear in bonds")
