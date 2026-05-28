@@ -3123,8 +3123,13 @@ static func _execute_dissolve_marriage(
 		base["effects"] = {}
 		return base
 
-	# Pathway 1 — Lord's Command. Honor cost pre-applied (Pattern B, s57.49.7).
-	HonorGlorySystem.apply_honor_change(character, MarriageSystem.DISSOLUTION_HONOR_LOSS_LORD)
+	# Pathway 4 — Imperial Decree (s57.49.7): no Honor cost, no penalties.
+	# Pathway 1 — Lord's Command: Honor cost pre-applied (Pattern B, s57.49.7).
+	var pathway: int = 1
+	if ctx.lord_rank == Enums.LordRank.IMPERIAL:
+		pathway = 4
+	else:
+		HonorGlorySystem.apply_honor_change(character, MarriageSystem.DISSOLUTION_HONOR_LOSS_LORD)
 
 	base["success"] = true
 	base["effects"] = {
@@ -3132,7 +3137,7 @@ static func _execute_dissolve_marriage(
 		"spouse_a_id": spouse_a_id,
 		"spouse_b_id": spouse_b_id,
 		"ordering_lord_id": ctx.character_id,
-		"pathway": 1,
+		"pathway": pathway,
 	}
 	return base
 

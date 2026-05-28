@@ -170,6 +170,8 @@ static func get_dissolution_topic_variant(pathway: int) -> String:
 			return "criminal_conviction"
 		3:
 			return "monastic_retirement"
+		4:
+			return "imperial_decree"
 	return "lord_command"
 
 

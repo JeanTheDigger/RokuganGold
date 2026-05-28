@@ -118,6 +118,7 @@ extends Resource
 @export var cohabitation_days: Dictionary = {}
 @export var fear_rating: int = 0
 @export var captive_status: String = ""
+@export var is_retired_monastic: bool = false
 @export var topic_pool: Array = []
 @export var topic_positions: Dictionary = {}
 @export var active_quest: String = ""

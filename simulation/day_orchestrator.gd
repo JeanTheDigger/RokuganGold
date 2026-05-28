@@ -888,6 +888,10 @@ static func advance_day(
 		ic_day, active_topics, next_topic_id,
 	)
 
+	_auto_dissolve_on_monastic_retirement(
+		characters_by_id, marriages, ic_day, active_topics, next_topic_id,
+	)
+
 	_apply_assassination_vengeance(
 		conviction_results, crime_records, characters_by_id,
 		objectives_map, active_topics, next_topic_id, ic_day,
@@ -14018,6 +14022,7 @@ static func _apply_dissolution(
 	spouse_b.spouse_id = -1
 
 	# Pathway 1 — Lord's Command: Glory −1.0 to both spouses, disposition penalties.
+	# Pathways 2/3/4 have no Glory, Honor, or disposition penalties (s57.49.7).
 	if resolved_pathway == 1:
 		HonorGlorySystem.apply_glory_change(spouse_a, MarriageSystem.DISSOLUTION_GLORY_LOSS_SPOUSE)
 		HonorGlorySystem.apply_glory_change(spouse_b, MarriageSystem.DISSOLUTION_GLORY_LOSS_SPOUSE)
@@ -14115,6 +14120,38 @@ static func _auto_dissolve_marriage_on_conviction(
 			"ordering_lord_id": -1,
 			"convicted_id": accused_id,
 			"pathway": 2,
+		}
+		var dr: Dictionary = _apply_dissolution(
+			effects, characters_by_id, marriages, ic_day,
+			active_topics, next_topic_id, {}, {},
+		)
+		results.append(dr)
+	return results
+
+
+static func _auto_dissolve_on_monastic_retirement(
+	characters_by_id: Dictionary,
+	marriages: Array,
+	ic_day: int,
+	active_topics: Array,
+	next_topic_id: Array,
+) -> Array:
+	# Pathway 3 — Monastic Retirement: auto-dissolve when a married character
+	# sets is_retired_monastic = true. No Honor/Glory/disposition penalties (s57.49.7).
+	var results: Array = []
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if not c.is_retired_monastic:
+			continue
+		if c.spouse_id < 0:
+			continue
+		var effects: Dictionary = {
+			"spouse_a_id": c.character_id,
+			"spouse_b_id": c.spouse_id,
+			"ordering_lord_id": -1,
+			"pathway": 3,
 		}
 		var dr: Dictionary = _apply_dissolution(
 			effects, characters_by_id, marriages, ic_day,

@@ -328,3 +328,166 @@ func test_auto_dissolve_skips_unmarried():
 		conviction_results, chars, marriages, 200, [], [1000],
 	)
 	assert_eq(results.size(), 0)
+
+
+# -- Pathway 3: Monastic Retirement -------------------------------------------
+
+func test_get_dissolution_topic_variant_pathway_3():
+	assert_eq(MarriageSystem.get_dissolution_topic_variant(3), "monastic_retirement")
+
+
+func test_auto_dissolve_monastic_retirement_marks_inactive():
+	var retiree: L5RCharacterData = _make_char(20, 21)
+	var spouse: L5RCharacterData = _make_char(21, 20)
+	retiree.is_retired_monastic = true
+	var chars: Dictionary = {20: retiree, 21: spouse}
+	var marriages: Array = [_make_marriage(20, 21)]
+	var results: Array = DayOrchestrator._auto_dissolve_on_monastic_retirement(
+		chars, marriages, 300, [], [1100],
+	)
+	assert_eq(results.size(), 1)
+	assert_true(results[0]["applied"])
+	assert_false(marriages[0]["active"])
+
+
+func test_auto_dissolve_monastic_retirement_clears_spouse_ids():
+	var retiree: L5RCharacterData = _make_char(22, 23)
+	var spouse: L5RCharacterData = _make_char(23, 22)
+	retiree.is_retired_monastic = true
+	var chars: Dictionary = {22: retiree, 23: spouse}
+	var marriages: Array = [_make_marriage(22, 23)]
+	DayOrchestrator._auto_dissolve_on_monastic_retirement(
+		chars, marriages, 300, [], [1100],
+	)
+	assert_eq(retiree.spouse_id, -1)
+	assert_eq(spouse.spouse_id, -1)
+
+
+func test_auto_dissolve_monastic_retirement_no_glory_loss():
+	var retiree: L5RCharacterData = _make_char(24, 25)
+	var spouse: L5RCharacterData = _make_char(25, 24)
+	retiree.glory = 5.0
+	spouse.glory = 5.0
+	retiree.is_retired_monastic = true
+	var chars: Dictionary = {24: retiree, 25: spouse}
+	var marriages: Array = [_make_marriage(24, 25)]
+	DayOrchestrator._auto_dissolve_on_monastic_retirement(
+		chars, marriages, 300, [], [1100],
+	)
+	assert_eq(retiree.glory, 5.0)
+	assert_eq(spouse.glory, 5.0)
+
+
+func test_auto_dissolve_monastic_retirement_topic_variant():
+	var retiree: L5RCharacterData = _make_char(26, 27)
+	var spouse: L5RCharacterData = _make_char(27, 26)
+	retiree.is_retired_monastic = true
+	var chars: Dictionary = {26: retiree, 27: spouse}
+	var marriages: Array = [_make_marriage(26, 27)]
+	var active_topics: Array = []
+	DayOrchestrator._auto_dissolve_on_monastic_retirement(
+		chars, marriages, 300, active_topics, [1200],
+	)
+	assert_eq(active_topics.size(), 1)
+	var topic: TopicData = active_topics[0]
+	assert_eq(topic.variant, "monastic_retirement")
+
+
+func test_auto_dissolve_monastic_skips_unmarried():
+	var retiree: L5RCharacterData = _make_char(28)  # No spouse.
+	retiree.is_retired_monastic = true
+	var chars: Dictionary = {28: retiree}
+	var results: Array = DayOrchestrator._auto_dissolve_on_monastic_retirement(
+		chars, [], 300, [], [1100],
+	)
+	assert_eq(results.size(), 0)
+
+
+func test_auto_dissolve_monastic_skips_non_retired():
+	var char_a: L5RCharacterData = _make_char(29, 30)
+	var char_b: L5RCharacterData = _make_char(30, 29)
+	# is_retired_monastic stays false (default)
+	var chars: Dictionary = {29: char_a, 30: char_b}
+	var marriages: Array = [_make_marriage(29, 30)]
+	var results: Array = DayOrchestrator._auto_dissolve_on_monastic_retirement(
+		chars, marriages, 300, [], [1100],
+	)
+	assert_eq(results.size(), 0)
+	assert_eq(char_a.spouse_id, 30)  # Unchanged.
+
+
+# -- Pathway 4: Imperial Decree -----------------------------------------------
+
+func test_get_dissolution_topic_variant_pathway_4():
+	assert_eq(MarriageSystem.get_dissolution_topic_variant(4), "imperial_decree")
+
+
+func test_apply_dissolution_pathway4_marks_inactive():
+	var char_a: L5RCharacterData = _make_char(40, 41)
+	var char_b: L5RCharacterData = _make_char(41, 40)
+	var chars: Dictionary = {40: char_a, 41: char_b}
+	var marriages: Array = [_make_marriage(40, 41)]
+	var effects: Dictionary = {
+		"spouse_a_id": 40, "spouse_b_id": 41,
+		"ordering_lord_id": 99, "pathway": 4,
+	}
+	var result: Dictionary = DayOrchestrator._apply_dissolution(
+		effects, chars, marriages, 400, [], [2000],
+	)
+	assert_true(result["applied"])
+	assert_false(marriages[0]["active"])
+
+
+func test_apply_dissolution_pathway4_no_glory_loss():
+	var char_a: L5RCharacterData = _make_char(42, 43)
+	var char_b: L5RCharacterData = _make_char(43, 42)
+	char_a.glory = 5.0
+	char_b.glory = 5.0
+	var chars: Dictionary = {42: char_a, 43: char_b}
+	var marriages: Array = [_make_marriage(42, 43)]
+	var effects: Dictionary = {
+		"spouse_a_id": 42, "spouse_b_id": 43,
+		"ordering_lord_id": 99, "pathway": 4,
+	}
+	DayOrchestrator._apply_dissolution(
+		effects, chars, marriages, 400, [], [2000],
+	)
+	assert_eq(char_a.glory, 5.0)
+	assert_eq(char_b.glory, 5.0)
+
+
+func test_apply_dissolution_pathway4_topic_variant():
+	var char_a: L5RCharacterData = _make_char(44, 45)
+	var char_b: L5RCharacterData = _make_char(45, 44)
+	var chars: Dictionary = {44: char_a, 45: char_b}
+	var marriages: Array = [_make_marriage(44, 45)]
+	var active_topics: Array = []
+	var effects: Dictionary = {
+		"spouse_a_id": 44, "spouse_b_id": 45,
+		"ordering_lord_id": 99, "pathway": 4,
+	}
+	DayOrchestrator._apply_dissolution(
+		effects, chars, marriages, 400, active_topics, [2100],
+	)
+	var topic: TopicData = active_topics[0]
+	assert_eq(topic.variant, "imperial_decree")
+
+
+func test_apply_dissolution_pathway4_no_clan_penalty():
+	var char_a: L5RCharacterData = _make_cross_clan_char(46, "Crane", "Doji", 47)
+	var char_b: L5RCharacterData = _make_cross_clan_char(47, "Lion", "Matsu", 46)
+	var chars: Dictionary = {46: char_a, 47: char_b}
+	var marriages: Array = [_make_marriage(46, 47)]
+	var clan_baselines: Dictionary = {
+		"Crane": {"Lion": 0},
+		"Lion": {"Crane": 0},
+	}
+	var effects: Dictionary = {
+		"spouse_a_id": 46, "spouse_b_id": 47,
+		"ordering_lord_id": 99, "pathway": 4,
+	}
+	DayOrchestrator._apply_dissolution(
+		effects, chars, marriages, 400, [], [2000], clan_baselines, {},
+	)
+	assert_eq(clan_baselines["Crane"]["Lion"], 0)
+	assert_eq(clan_baselines["Lion"]["Crane"], 0)
