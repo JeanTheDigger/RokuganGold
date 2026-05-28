@@ -467,7 +467,7 @@ func test_generate_replenishment_character() -> void:
 
 func test_replenishment_unknown_clan_returns_null() -> void:
 	var rc: L5RCharacterData = GempukkuSystem.generate_replenishment_character(
-		800, "Badger", _dice,
+		800, "NonexistentClan", _dice,
 	)
 	assert_null(rc)
 
@@ -646,7 +646,7 @@ func test_get_clan_families_all_clans() -> void:
 
 
 func test_get_clan_families_unknown_empty() -> void:
-	assert_eq(GempukkuSystem._get_clan_families("Badger").size(), 0)
+	assert_eq(GempukkuSystem._get_clan_families("NonexistentClan").size(), 0)
 
 
 # =============================================================================

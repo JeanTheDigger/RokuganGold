@@ -713,8 +713,8 @@ func test_vacancy_school_master_has_family_field() -> void:
 		if v.get("position_type", "") == "School Master":
 			assert_true(v.has("family"), "School Master vacancy should include family field")
 			families_found.append(v.get("family", ""))
-	# Dragon has 3 families: Mirumoto, Kitsuki, Tamori
-	assert_eq(families_found.size(), 3, "Should detect vacancies for all 3 Dragon families")
+	# Dragon has 4 families: Mirumoto, Kitsuki, Tamori, Togashi
+	assert_eq(families_found.size(), 4, "Should detect vacancies for all 4 Dragon families")
 
 
 func test_vacancy_school_master_only_for_clans_with_lords() -> void:
@@ -1426,17 +1426,18 @@ func _make_worship_state_with_province(
 
 
 func test_worship_failure_detected_when_below_threshold() -> void:
-	# Province with some WP below the 10.0 threshold → should be flagged
+	# get_worship_tier() is DISABLED (GDD s4.3.21 does not specify WP ratio thresholds)
+	# — always returns NONE regardless of WP level. Province is NOT flagged.
 	var prov := _make_province(10, "Crane")
 	var fortune_wp: Dictionary = {}
 	for f: int in range(7):
-		fortune_wp[f] = 5.0  # 50% of threshold → DISPLEASED
+		fortune_wp[f] = 5.0  # 50% of threshold → would be DISPLEASED if tier evaluation were active
 	var worship_state: Dictionary = _make_worship_state_with_province(10, fortune_wp)
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
 	var failing: Dictionary = ws.get("_worship_failing_province_ids", {})
-	assert_true(failing.has(10), "Province below threshold should be flagged as failing")
+	assert_false(failing.has(10), "Worship tier evaluation disabled — province not flagged")
 
 
 func test_worship_not_failing_when_at_threshold() -> void:
@@ -1454,7 +1455,7 @@ func test_worship_not_failing_when_at_threshold() -> void:
 
 
 func test_worship_failure_wrathful_when_zero_wp() -> void:
-	# Province in wp_data but with zero WP → WRATHFUL for all fortunes
+	# get_worship_tier() is DISABLED — always returns NONE even at zero WP.
 	var prov := _make_province(10, "Crane")
 	var fortune_wp: Dictionary = WorshipSystem.make_initial_province_worship()
 	var worship_state: Dictionary = _make_worship_state_with_province(10, fortune_wp)
@@ -1462,7 +1463,7 @@ func test_worship_failure_wrathful_when_zero_wp() -> void:
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
 	var failing: Dictionary = ws.get("_worship_failing_province_ids", {})
-	assert_true(failing.has(10), "Zero WP province should be flagged as failing")
+	assert_false(failing.has(10), "Worship tier evaluation disabled — province not flagged")
 
 
 func test_worship_failure_empty_worship_state_no_flag() -> void:
@@ -1475,41 +1476,42 @@ func test_worship_failure_empty_worship_state_no_flag() -> void:
 
 
 func test_worship_failure_one_fortune_below() -> void:
-	# 6 fortunes at threshold, 1 below → should still flag
+	# get_worship_tier() is DISABLED — even one fortune below threshold returns NONE.
 	var prov := _make_province(10, "Crane")
 	var fortune_wp: Dictionary = {}
 	for f: int in range(7):
 		fortune_wp[f] = 10.0
-	fortune_wp[3] = 2.0  # Fortune 3 (Ebisu) at 20% → WRATHFUL
+	fortune_wp[3] = 2.0  # Fortune 3 (Ebisu) at 20% → would be WRATHFUL if tier evaluation were active
 	var worship_state: Dictionary = _make_worship_state_with_province(10, fortune_wp)
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
 	var failing: Dictionary = ws.get("_worship_failing_province_ids", {})
-	assert_true(failing.has(10), "One fortune below threshold should flag province")
+	assert_false(failing.has(10), "Worship tier evaluation disabled — province not flagged")
 
 
 func test_worship_failure_restless_tier_flagged() -> void:
-	# Province at 75-99% of threshold → RESTLESS (still failing)
+	# get_worship_tier() is DISABLED — RESTLESS tier never triggers.
 	var prov := _make_province(10, "Crane")
 	var fortune_wp: Dictionary = {}
 	for f: int in range(7):
 		fortune_wp[f] = 10.0
-	fortune_wp[0] = 8.0  # 80% of 10.0 → RESTLESS
+	fortune_wp[0] = 8.0  # 80% of 10.0 → would be RESTLESS if tier evaluation were active
 	var worship_state: Dictionary = _make_worship_state_with_province(10, fortune_wp)
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
 	var failing: Dictionary = ws.get("_worship_failing_province_ids", {})
-	assert_true(failing.has(10), "RESTLESS tier should still count as failing")
+	assert_false(failing.has(10), "Worship tier evaluation disabled — province not flagged")
 
 
 func test_worship_failure_province_not_in_wp_data() -> void:
-	# Province exists but has no entry in wp_data → flagged (genuinely no worship)
+	# get_worship_tier() is DISABLED — province absent from wp_data gets empty dict,
+	# evaluate_province_thresholds returns all NONE. Not flagged.
 	var prov := _make_province(10, "Crane")
 	var worship_state: Dictionary = {"province_wp": {20: {}}}  # Different province
 
 	var ws: Dictionary = {}
 	DayOrchestrator._populate_infrastructure_intelligence(ws, {10: prov}, [], [], worship_state)
 	var failing: Dictionary = ws.get("_worship_failing_province_ids", {})
-	assert_true(failing.has(10), "Province absent from wp_data should be flagged")
+	assert_false(failing.has(10), "Worship tier evaluation disabled — province not flagged")

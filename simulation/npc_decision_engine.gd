@@ -2810,7 +2810,7 @@ static func _build_forge_order_metadata(
 	if target_char != null and target_char.lord_id >= 0:
 		var lord_char: L5RCharacterData = chars_by_id.get(target_char.lord_id) as L5RCharacterData
 		if lord_char != null:
-			impersonated_rank = lord_char.lord_rank
+			impersonated_rank = CivilianOrderBudget.lord_rank_from_status(lord_char.status)
 	var authority: String = _forge_authority_from_lord_rank(impersonated_rank)
 	var order_info: Dictionary = _pick_forged_order_type(need)
 	return {
@@ -2861,7 +2861,7 @@ static func _get_target_lord_rank(
 	var target: L5RCharacterData = chars_by_id.get(target_id) as L5RCharacterData
 	if target == null:
 		return fallback
-	return target.lord_rank
+	return CivilianOrderBudget.lord_rank_from_status(target.status)
 
 
 static func _forge_authority_from_lord_rank(

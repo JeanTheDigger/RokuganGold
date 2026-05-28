@@ -495,7 +495,7 @@ func test_score_disposition_cooperative_action_against_enemy() -> void:
 
 
 func test_score_urgency_war_score_below_25() -> void:
-	_world_state["active_wars"] = [{"clan_a": "Crane", "clan_b": "Lion", "war_score": 20}]
+	_world_state["active_wars"] = [{"clan_a": "Crane", "clan_b": "Lion", "war_score_a": 20, "war_score_b": 80}]
 	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
 	var need := NPCDataStructures.ImmediateNeed.new()
 	need.need_type = "RAISE_DISPOSITION"
@@ -516,7 +516,7 @@ func test_score_urgency_no_matching_condition() -> void:
 
 
 func test_score_urgency_action_not_in_applies_to() -> void:
-	_world_state["active_wars"] = [{"clan_a": "Crane", "clan_b": "Lion", "war_score": 20}]
+	_world_state["active_wars"] = [{"clan_a": "Crane", "clan_b": "Lion", "war_score_a": 20, "war_score_b": 80}]
 	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
 	var need := NPCDataStructures.ImmediateNeed.new()
 	need.need_type = "RAISE_DISPOSITION"
@@ -551,7 +551,7 @@ func test_score_urgency_crisis_stacking() -> void:
 
 func test_score_urgency_clamped_at_30() -> void:
 	_world_state["is_lord"] = true
-	_world_state["active_wars"] = [{"clan_a": "Crane", "clan_b": "Lion", "war_score": 20}]
+	_world_state["active_wars"] = [{"clan_a": "Crane", "clan_b": "Lion", "war_score_a": 20, "war_score_b": 80}]
 	var ps1 := NPCDataStructures.ProvinceStatus.new()
 	ps1.province_id = 10
 	ps1.active_crisis_id = 1
@@ -611,7 +611,9 @@ func test_urgency_favor_expiring() -> void:
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "HONOR_FAVOR"
 	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
-	assert_eq(option.urgency_bonus, 20.0)
+	# favor_expiring_within_7_ooc_days urgency rule was removed — favor honoring
+	# runs through the reactive decision path, not the AP scoring loop
+	assert_eq(option.urgency_bonus, 0.0)
 
 
 func test_urgency_objective_stalled() -> void:
@@ -1668,10 +1670,12 @@ func test_competence_modifier_games_picks_best_sub_skill() -> void:
 		},
 		"competence_table": {"0": -20, "1": -10, "2": -5, "3": 0, "4": 5, "5": 10, "6": 15, "7": 20},
 	}
-	var skills: Dictionary = {"Games: Go": 3, "Games: Shogi": 6}
+	# Awareness at rank 3 (modifier 0) so secondary contributes 0 * 0.5 = 0
+	var skills: Dictionary = {"Games: Go": 3, "Games: Shogi": 6, "Awareness": 3}
 	var result: float = NPCDecisionEngine._compute_competence_modifier(
 		"PLAY_GAME", skills, tables,
 	)
+	# Primary: Shogi rank 6 = +15, Secondary: Awareness rank 3 = 0 * 0.5 = 0, total = 15
 	assert_almost_eq(result, 15.0, 0.01, "Should use best Games sub-skill (Shogi rank 6 = +15)")
 
 
@@ -1791,7 +1795,8 @@ func test_conditional_yu_blocks_seek_peace_when_war_score_high() -> void:
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.bushido_virtue = Enums.BushidoVirtue.YU
 	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
-	ctx.active_wars = [{"war_score": 30}]
+	ctx.clan = "Crane"
+	ctx.active_wars = [{"clan_a": "Crane", "clan_b": "Lion", "war_score_a": 30, "war_score_b": 70}]
 	var filter: Dictionary = {
 		"bushido": {
 			"YU": {
@@ -1819,7 +1824,8 @@ func test_conditional_yu_allows_seek_peace_when_war_score_low() -> void:
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.bushido_virtue = Enums.BushidoVirtue.YU
 	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
-	ctx.active_wars = [{"war_score": 20}]
+	ctx.clan = "Crane"
+	ctx.active_wars = [{"clan_a": "Crane", "clan_b": "Lion", "war_score_a": 20, "war_score_b": 80}]
 	var filter: Dictionary = {
 		"bushido": {
 			"YU": {
@@ -3521,7 +3527,7 @@ func test_forge_letter_authority_uses_target_lord_rank() -> void:
 	need.target_npc_id_secondary = 55
 	var target := L5RCharacterData.new()
 	target.character_id = 42
-	target.lord_rank = Enums.LordRank.CLAN_CHAMPION
+	target.status = 7.0
 	var chars: Dictionary = {42: target}
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "FORGE_IMPERSONATION_LETTER"
@@ -3540,7 +3546,7 @@ func test_forge_order_authority_uses_target_lord_rank() -> void:
 	target.lord_id = 99
 	var lord := L5RCharacterData.new()
 	lord.character_id = 99
-	lord.lord_rank = Enums.LordRank.IMPERIAL
+	lord.status = 9.0
 	var chars: Dictionary = {50: target, 99: lord}
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "FORGE_ORDER"

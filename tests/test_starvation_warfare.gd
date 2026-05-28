@@ -452,14 +452,14 @@ func _make_ctx_for_harvest(virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.NON
 
 func test_harvest_conditions_no_other_path_when_desperate() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest()
-	ctx.active_wars = [{"war_score": 20}]
+	ctx.active_wars = [{"clan_a": "Lion", "war_score_a": 20}]
 	var conditions: Dictionary = NPCDecisionEngine._evaluate_harvest_conditions(ctx)
 	assert_true(conditions["no_other_path"])
 
 
 func test_harvest_conditions_no_other_path_false_when_ahead() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest()
-	ctx.active_wars = [{"war_score": 60}]
+	ctx.active_wars = [{"clan_a": "Lion", "war_score_a": 60}]
 	var conditions: Dictionary = NPCDecisionEngine._evaluate_harvest_conditions(ctx)
 	assert_false(conditions["no_other_path"])
 
@@ -509,13 +509,13 @@ func test_harvest_blocked_rei_always() -> void:
 
 func test_harvest_not_blocked_yu_when_desperate() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest(Enums.BushidoVirtue.YU)
-	ctx.active_wars = [{"war_score": 15}]
+	ctx.active_wars = [{"clan_a": "Lion", "war_score_a": 15}]
 	assert_false(NPCDecisionEngine._is_harvest_blocked_by_virtue(ctx))
 
 
 func test_harvest_blocked_yu_when_not_desperate() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest(Enums.BushidoVirtue.YU)
-	ctx.active_wars = [{"war_score": 60}]
+	ctx.active_wars = [{"clan_a": "Lion", "war_score_a": 60}]
 	assert_true(NPCDecisionEngine._is_harvest_blocked_by_virtue(ctx))
 
 

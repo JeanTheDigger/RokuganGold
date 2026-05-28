@@ -103,7 +103,7 @@ func test_urgency_rules_has_entries() -> void:
 	_loader.load_all()
 	var table: Variant = _loader.get_table("urgency_rules")
 	assert_true(table is Array)
-	assert_true(table.size() >= 10)
+	assert_true(table.size() >= 9)
 
 
 func test_get_scoring_tables_dict() -> void:

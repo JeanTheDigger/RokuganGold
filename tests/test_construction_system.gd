@@ -884,9 +884,7 @@ func test_integration_shrine_queue_to_completion() -> void:
 # -- Temple queue → new SettlementData -----------------------------------------
 
 func test_integration_temple_queue_entry() -> void:
-	# Note: _apply_construction_order has a key typo (valid_4.get("valid_4",...))
-	# that causes the FOUND_TEMPLE branch to always fail validation.
-	# The construction is not queued — the result is {applied: false, reason: "invalid"}.
+	# Key typo in orchestrator validation check is FIXED — temple now queues successfully.
 	var c := _make_char(1, 5.0)
 	var p := _make_province(1)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 100.0)
@@ -903,11 +901,11 @@ func test_integration_temple_queue_entry() -> void:
 		[100], [1], 50, [], _make_dice(),
 	)
 
-	# Construction fails due to key typo in orchestrator validation check.
-	assert_eq(constructions.size(), 0)
+	# Construction succeeds: temple queued, koku deducted (80.0 for non-dedicated).
+	assert_eq(constructions.size(), 1)
 	assert_eq(results.size(), 1)
-	assert_false(results[0].get("applied", true))
-	assert_eq(s.koku_stockpile, 100.0)
+	assert_true(results[0].get("applied", false))
+	assert_eq(s.koku_stockpile, 20.0)
 
 
 func test_integration_temple_completion_creates_settlement() -> void:
@@ -976,8 +974,7 @@ func test_integration_monastery_completion_creates_settlement() -> void:
 # -- Ship commission → queue → ShipData creation -------------------------------
 
 func test_integration_ship_commission_queues() -> void:
-	# Note: _apply_construction_order has a key typo (valid_6.get("valid_6",...))
-	# that causes the COMMISSION_SHIP branch to always fail validation.
+	# Key typo in orchestrator validation check is FIXED — ship now queues successfully.
 	var c := _make_char(1, 3.0)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 20.0)
 	s.infrastructure = ["shipyard"]
@@ -993,11 +990,11 @@ func test_integration_ship_commission_queues() -> void:
 		[100], [1], 50, [], _make_dice(),
 	)
 
-	# Construction fails due to key typo in orchestrator validation check.
-	assert_eq(constructions.size(), 0)
+	# Construction succeeds: ship queued, koku deducted (3.0 for KOBUNE).
+	assert_eq(constructions.size(), 1)
 	assert_eq(results.size(), 1)
-	assert_false(results[0].get("applied", true))
-	assert_eq(s.koku_stockpile, 20.0)
+	assert_true(results[0].get("applied", false))
+	assert_eq(s.koku_stockpile, 17.0)
 
 
 func test_integration_ship_completion_creates_ship_data() -> void:
@@ -1098,7 +1095,7 @@ func test_integration_shinden_topic_tier_2() -> void:
 
 	assert_eq(topics.size(), 1)
 	assert_eq(topics[0].tier, TopicData.Tier.TIER_2)
-	assert_eq(topics[0].momentum, 40.0)
+	assert_eq(topics[0].momentum, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_2))
 	assert_eq(topics[0].variant, "shinden_completed")
 	assert_eq(settlements[0].settlement_type, Enums.SettlementType.SHINDEN)
 

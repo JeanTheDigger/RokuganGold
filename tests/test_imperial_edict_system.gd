@@ -341,7 +341,8 @@ func test_apply_authorize_war_with_active_war():
 	assert_eq(result["authorized_clan"], "Lion")
 	assert_eq(result["war_id"], 10)
 	assert_eq(result["score_shift"], ImperialEdictSystem.CONDEMN_WAR_SCORE_SHIFT)
-	assert_true(war.war_score_a > 50)
+	# authorize_war removed from SCORE_SHIFTS — no actual war score change applied
+	assert_eq(war.war_score_a, 50)
 
 
 func test_apply_authorize_war_no_active_war():
@@ -1684,8 +1685,8 @@ func test_commitment_seasonal_edict_renege_tier_2_topic():
 	DayOrchestrator._process_commitment_seasonal(
 		commitments, log, 250, chars_by_id, topics, next_id,
 	)
-	assert_eq(topics[0].tier, 2, "Edict renege should produce Tier 2 topic")
-	assert_eq(topics[0].momentum, 30.0, "Tier 2 topic gets higher momentum")
+	assert_eq(topics[0].tier, TopicData.Tier.TIER_3, "Edict renege should produce Tier 3 topic")
+	assert_eq(topics[0].momentum, TopicMomentumSystem.MOMENTUM_MINOR_FLOOR, "Tier 3 topic gets minor momentum")
 
 func test_commitment_seasonal_next_topic_id_increments():
 	var lord := _make_attendee(10, "Crane", 5.0)

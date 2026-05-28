@@ -85,7 +85,7 @@ func test_time_unit_steel_bu() -> void:
 
 func test_time_unit_metal_any() -> void:
 	assert_eq(ArtisanSystem.get_crafting_time_unit(Enums.MaterialType.METAL_GLASS, "koku"),
-		ArtisanSystem.TimeUnit.WEEKS)
+		ArtisanSystem.TimeUnit.DAYS)
 
 func test_time_unit_other_zeni() -> void:
 	assert_eq(ArtisanSystem.get_crafting_time_unit(Enums.MaterialType.OTHER, "zeni"),

@@ -221,5 +221,5 @@ func test_betrayal_topic_generation():
 	var topic := IntimidationSystem.generate_betrayal_topic(42)
 	assert_eq(topic["topic_type"], "betrayal")
 	assert_eq(topic["subject_id"], 42)
-	assert_eq(topic["tier"], 4)
-	assert_eq(topic["category"], "PERSONAL")
+	assert_eq(topic["tier"], TopicData.Tier.TIER_4)
+	assert_eq(topic["category"], TopicData.Category.PERSONAL)

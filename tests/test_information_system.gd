@@ -291,10 +291,23 @@ func test_transfer_sets_fresh_confidence() -> void:
 
 
 func test_transfer_copies_clan_contacts() -> void:
+	var contact_5 := L5RCharacterData.new()
+	contact_5.character_id = 5
+	contact_5.clan = "Crab"
+	contact_5.stamina = 2
+	contact_5.willpower = 2
+	var contact_6 := L5RCharacterData.new()
+	contact_6.character_id = 6
+	contact_6.clan = "Crab"
+	contact_6.stamina = 2
+	contact_6.willpower = 2
+	var chars_by_id: Dictionary = {5: contact_5, 6: contact_6}
 	InformationSystem.add_contact(_char_a, 5, "Crab")
 	InformationSystem.add_contact(_char_a, 6, "Crab")
 	var objective: Dictionary = {"target_clan": "Crab"}
-	InformationSystem.transfer_objective_knowledge(_char_a, _char_b, objective, 1)
+	InformationSystem.transfer_objective_knowledge(
+		_char_a, _char_b, objective, 1, [], chars_by_id,
+	)
 	assert_true(5 in _char_b.met_characters)
 	assert_true(6 in _char_b.met_characters)
 

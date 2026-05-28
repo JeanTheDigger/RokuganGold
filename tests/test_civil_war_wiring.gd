@@ -139,6 +139,8 @@ func test_empty_civil_wars_returns_empty_per_war() -> void:
 # -- No processing outside season boundary ------------------------------------
 
 func test_no_civil_war_processing_on_non_season_day() -> void:
+	# Start at tick 2 so that ic_day > 1, avoiding the ic_day <= 1 season boundary guard.
+	_time = TimeSystem.new(1120, 2)
 	var c := _make_char(1)
 	var state: Dictionary = IntraClanCivilWar.make_initial_state(100, 1, "Lion", 5000, 0)
 	state["faction_assignments"] = {1: IntraClanCivilWar.Faction.LEGITIMACY}

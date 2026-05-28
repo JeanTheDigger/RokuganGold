@@ -4614,6 +4614,8 @@ static func _apply_evidence_decay(
 	ic_day: int,
 ) -> Array:
 	var cold_cases: Array = []
+	if EVIDENCE_DECAY_INTERVAL_DAYS <= 0:
+		return cold_cases
 
 	for record: CrimeRecord in crime_records:
 		if record.legal_status != Enums.LegalStatus.UNDER_INVESTIGATION \

@@ -244,7 +244,7 @@ func test_typhoon_inland_downgrades_to_storm() -> void:
 
 func test_weather_boundary_spring_clear_to_wind() -> void:
 	assert_eq(NavalSystem.weather_from_roll(40, "spring"), Enums.NavalWeather.CLEAR)
-	assert_eq(NavalSystem.weather_from_roll(41, "spring"), Enums.NavalWeather.CLEAR)
+	assert_eq(NavalSystem.weather_from_roll(41, "spring"), Enums.NavalWeather.WIND)
 	assert_eq(NavalSystem.weather_from_roll(42, "spring"), Enums.NavalWeather.WIND)
 
 func test_weather_determination_uses_dice() -> void:

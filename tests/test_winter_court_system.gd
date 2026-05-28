@@ -1351,7 +1351,7 @@ func test_peace_violation_emperor_disposition_hit() -> void:
 func test_peace_violation_family_daimyo_glory_loss() -> void:
 	var offender := _make_character(10, "Akodo Toturi", "Lion", "Akodo", 6.0)
 	var daimyo := _make_character(40, "Akodo Arasou", "Lion", "Akodo", 7.0)
-	daimyo.role_position = "family_daimyo"
+	daimyo.role_position = "Family Daimyo"
 	daimyo.glory = 5.0
 	var chars: Dictionary = {10: offender, 40: daimyo}
 	var court := _make_active_winter_court(100)

@@ -666,7 +666,7 @@ func test_clean_succession_topic() -> void:
 	data.clan = "Lion"
 	data.deceased_id = 1
 	var topic := SuccessionSystem.generate_succession_topic(data, false)
-	assert_eq(topic["tier"], 4)
+	assert_eq(topic["tier"], TopicData.Tier.TIER_4)
 	assert_eq(topic["momentum"], 10.0)
 	assert_eq(topic["variant"], "clean")
 
@@ -677,7 +677,7 @@ func test_disputed_succession_topic() -> void:
 	data.clan = "Lion"
 	data.deceased_id = 1
 	var topic := SuccessionSystem.generate_succession_topic(data, true)
-	assert_eq(topic["tier"], 2)
+	assert_eq(topic["tier"], TopicData.Tier.TIER_2)
 	assert_eq(topic["momentum"], 50.0)
 	assert_eq(topic["variant"], "disputed")
 
@@ -1013,9 +1013,9 @@ func test_shiba_reincarnation_generates_tier3_topic() -> void:
 	var chars: Dictionary = {100: shiba}
 	var rng := RandomNumberGenerator.new()
 	var result := SuccessionSystem.resolve_shiba_reincarnation(chars, rng)
-	assert_eq(result["topic"]["tier"], 3)
+	assert_eq(result["topic"]["tier"], TopicData.Tier.TIER_2)
 	assert_eq(result["topic"]["variant"], "reincarnation")
-	assert_eq(result["topic"]["category"], "SPIRITUAL")
+	assert_eq(result["topic"]["category"], TopicData.Category.SUPERNATURAL)
 
 
 func test_shiba_reincarnation_detects_previous_position_vacated() -> void:

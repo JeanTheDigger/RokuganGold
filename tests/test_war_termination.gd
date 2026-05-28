@@ -769,7 +769,7 @@ func test_get_required_proxy_rank_provincial_raid() -> void:
 func test_is_valid_peace_proxy_champion_for_clan_war() -> void:
 	_war.authority_level = WarData.AuthorityLevel.CLAN_WAR
 	var c: L5RCharacterData = L5RCharacterData.new()
-	c.status = 6.5  # Clan Champion tier
+	c.status = 7.0  # Clan Champion tier (>= 7.0 per lord_rank_from_status)
 	assert_true(WarTermination.is_valid_peace_proxy(c, _war))
 
 
@@ -783,7 +783,7 @@ func test_is_valid_peace_proxy_low_rank_fails_clan_war() -> void:
 func test_is_valid_peace_proxy_family_daimyo_for_family_war() -> void:
 	_war.authority_level = WarData.AuthorityLevel.FAMILY_WAR
 	var c: L5RCharacterData = L5RCharacterData.new()
-	c.status = 4.5  # Family Daimyo tier
+	c.status = 6.0  # Family Daimyo tier (>= 6.0 per lord_rank_from_status)
 	assert_true(WarTermination.is_valid_peace_proxy(c, _war))
 
 

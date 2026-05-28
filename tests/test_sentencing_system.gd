@@ -213,7 +213,7 @@ func test_harsh_daimyo_enemy_high_pressure_skimming():
 	d.disposition_values[99] = -40
 	var r := _make_record(Enums.CrimeType.SKIMMING)
 	# MEIYO(-10) + Enemy(-20) + Tier3(-10) + cross_clan(-10) = -50
-	var result := SentencingSystem.select_punishment(d, r, 3, true, false)
+	var result := SentencingSystem.select_punishment(d, r, TopicData.Tier.TIER_3, true, false)
 	assert_eq(result["leniency_score"], -50)
 	assert_eq(result["punishment_level"], SentencingSystem.PunishmentLevel.HARSHEST)
 	assert_eq(result["punishment"], SentencingSystem.Punishment.SEPPUKU_OFFERED,
