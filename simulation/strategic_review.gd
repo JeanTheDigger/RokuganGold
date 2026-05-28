@@ -416,6 +416,9 @@ static func run_emperor_review(
 	clan_champions: Array,
 	world_state: Dictionary,
 	objectives_map: Dictionary,
+	marriages: Array = [],
+	active_wars: Array = [],
+	characters_by_id: Dictionary = {},
 ) -> Array:
 	_seed_archetype_champion_baselines(emperor, archetype, clan_champions)
 
@@ -456,6 +459,62 @@ static func run_emperor_review(
 	if not breaking_point.is_empty():
 		directives.append(breaking_point)
 
+	# Pathway 4 — Imperial Decree: dissolve marriages between warring clans (s57.49.7).
+	var war_marriage_directives: Array = _evaluate_war_marriages(
+		emperor, marriages, active_wars, characters_by_id,
+	)
+	directives.append_array(war_marriage_directives)
+
+	return directives
+
+
+static func _evaluate_war_marriages(
+	emperor: L5RCharacterData,
+	marriages: Array,
+	active_wars: Array,
+	characters_by_id: Dictionary,
+) -> Array:
+	# Find cross-clan marriages where both clans are currently at war with each other.
+	# Returns IMPERIAL_DISSOLVE_MARRIAGE directives per s57.49.7 Pathway 4.
+	var belligerent_pairs: Array = []
+	for war: Variant in active_wars:
+		if not war is WarData:
+			continue
+		if not (war as WarData).is_active:
+			continue
+		belligerent_pairs.append([war.clan_a, war.clan_b])
+
+	if belligerent_pairs.is_empty():
+		return []
+
+	var directives: Array = []
+	for m: Variant in marriages:
+		if not (m is Dictionary):
+			continue
+		if not m.get("active", false):
+			continue
+		var a_id: int = m.get("character_a_id", -1)
+		var b_id: int = m.get("character_b_id", -1)
+		var char_a: L5RCharacterData = characters_by_id.get(a_id) as L5RCharacterData
+		var char_b: L5RCharacterData = characters_by_id.get(b_id) as L5RCharacterData
+		if char_a == null or char_b == null:
+			continue
+		if CharacterStats.is_dead(char_a) or CharacterStats.is_dead(char_b):
+			continue
+		var a_clan: String = char_a.clan
+		var b_clan: String = char_b.clan
+		if a_clan.is_empty() or b_clan.is_empty() or a_clan == b_clan:
+			continue
+		for pair: Array in belligerent_pairs:
+			if (pair[0] == a_clan and pair[1] == b_clan) or \
+			   (pair[0] == b_clan and pair[1] == a_clan):
+				directives.append({
+					"directive": "IMPERIAL_DISSOLVE_MARRIAGE",
+					"lord_id": emperor.character_id,
+					"spouse_a_id": a_id,
+					"spouse_b_id": b_id,
+				})
+				break  # One directive per marriage.
 	return directives
 
 

@@ -491,3 +491,85 @@ func test_apply_dissolution_pathway4_no_clan_penalty():
 	)
 	assert_eq(clan_baselines["Crane"]["Lion"], 0)
 	assert_eq(clan_baselines["Lion"]["Crane"], 0)
+
+
+# -- Pathway 4: Imperial war-marriage detection --------------------------------
+
+func _make_war(clan_a: String, clan_b: String, active: bool = true) -> WarData:
+	var w := WarData.new()
+	w.clan_a = clan_a
+	w.clan_b = clan_b
+	w.is_active = active
+	return w
+
+
+func test_evaluate_war_marriages_produces_directive():
+	var emperor: L5RCharacterData = _make_char(1)
+	emperor.character_id = 1
+	var char_a: L5RCharacterData = _make_cross_clan_char(50, "Crane", "Doji", 51)
+	var char_b: L5RCharacterData = _make_cross_clan_char(51, "Lion", "Matsu", 50)
+	var chars: Dictionary = {50: char_a, 51: char_b}
+	var marriages: Array = [_make_marriage(50, 51)]
+	var wars: Array = [_make_war("Crane", "Lion")]
+	var result: Array = StrategicReview._evaluate_war_marriages(
+		emperor, marriages, wars, chars,
+	)
+	assert_eq(result.size(), 1)
+	assert_eq(result[0]["directive"], "IMPERIAL_DISSOLVE_MARRIAGE")
+	assert_eq(result[0]["spouse_a_id"], 50)
+	assert_eq(result[0]["spouse_b_id"], 51)
+
+
+func test_evaluate_war_marriages_skips_same_clan():
+	var emperor: L5RCharacterData = _make_char(1)
+	var char_a: L5RCharacterData = _make_char(52, 53)
+	var char_b: L5RCharacterData = _make_char(53, 52)
+	# Both Crane — no cross-clan war-marriage.
+	var chars: Dictionary = {52: char_a, 53: char_b}
+	var marriages: Array = [_make_marriage(52, 53)]
+	var wars: Array = [_make_war("Crane", "Lion")]
+	var result: Array = StrategicReview._evaluate_war_marriages(
+		emperor, marriages, wars, chars,
+	)
+	assert_eq(result.size(), 0)
+
+
+func test_evaluate_war_marriages_skips_no_active_war():
+	var emperor: L5RCharacterData = _make_char(1)
+	var char_a: L5RCharacterData = _make_cross_clan_char(54, "Crane", "Doji", 55)
+	var char_b: L5RCharacterData = _make_cross_clan_char(55, "Lion", "Matsu", 54)
+	var chars: Dictionary = {54: char_a, 55: char_b}
+	var marriages: Array = [_make_marriage(54, 55)]
+	var wars: Array = [_make_war("Crane", "Lion", false)]  # Inactive war.
+	var result: Array = StrategicReview._evaluate_war_marriages(
+		emperor, marriages, wars, chars,
+	)
+	assert_eq(result.size(), 0)
+
+
+func test_evaluate_war_marriages_skips_inactive_marriage():
+	var emperor: L5RCharacterData = _make_char(1)
+	var char_a: L5RCharacterData = _make_cross_clan_char(56, "Crane", "Doji", 57)
+	var char_b: L5RCharacterData = _make_cross_clan_char(57, "Lion", "Matsu", 56)
+	var chars: Dictionary = {56: char_a, 57: char_b}
+	var m: Dictionary = _make_marriage(56, 57)
+	MarriageSystem.dissolve_marriage(m)  # Mark inactive.
+	var marriages: Array = [m]
+	var wars: Array = [_make_war("Crane", "Lion")]
+	var result: Array = StrategicReview._evaluate_war_marriages(
+		emperor, marriages, wars, chars,
+	)
+	assert_eq(result.size(), 0)
+
+
+func test_evaluate_war_marriages_non_belligerent_clans_not_dissolved():
+	var emperor: L5RCharacterData = _make_char(1)
+	var char_a: L5RCharacterData = _make_cross_clan_char(58, "Crane", "Doji", 59)
+	var char_b: L5RCharacterData = _make_cross_clan_char(59, "Scorpion", "Bayushi", 58)
+	var chars: Dictionary = {58: char_a, 59: char_b}
+	var marriages: Array = [_make_marriage(58, 59)]
+	var wars: Array = [_make_war("Crane", "Lion")]  # Scorpion not at war here.
+	var result: Array = StrategicReview._evaluate_war_marriages(
+		emperor, marriages, wars, chars,
+	)
+	assert_eq(result.size(), 0)

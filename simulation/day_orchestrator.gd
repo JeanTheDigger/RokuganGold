@@ -1108,7 +1108,7 @@ static func advance_day(
 		)
 		strategic_results = _run_strategic_reviews(
 			characters, objectives_map, world_states,
-			characters_by_id,
+			characters_by_id, marriages, active_wars,
 		)
 		_assign_phoenix_champion_restore_objective(
 			characters, objectives_map, phoenix_council_state,
@@ -1149,7 +1149,7 @@ static func advance_day(
 		)
 		_process_tyrant_directives(
 			strategic_results, active_topics, next_topic_id, ic_day,
-			characters_by_id,
+			characters_by_id, marriages,
 		)
 		if not seiyaku_state.is_empty():
 			seiyaku_results = _process_seiyaku_review(
@@ -7141,6 +7141,8 @@ static func _run_strategic_reviews(
 	objectives_map: Dictionary,
 	world_states: Dictionary,
 	characters_by_id: Dictionary = {},
+	marriages: Array = [],
+	active_wars: Array = [],
 ) -> Array:
 	var results: Array = []
 	var emperor_id: int = int(world_states.get("emperor_id", -1))
@@ -7154,7 +7156,8 @@ static func _run_strategic_reviews(
 		if lord.character_id == emperor_id and emperor_id >= 0:
 			var clan_champions: Array = _get_clan_champions(characters)
 			var directives: Array = StrategicReview.run_emperor_review(
-				lord, emperor_archetype, clan_champions, world_states, objectives_map
+				lord, emperor_archetype, clan_champions, world_states, objectives_map,
+				marriages, active_wars, characters_by_id,
 			)
 			for d: Dictionary in directives:
 				results.append(d)
@@ -14283,6 +14286,7 @@ static func _process_tyrant_directives(
 	next_topic_id: Array,
 	ic_day: int,
 	characters_by_id: Dictionary,
+	marriages: Array = [],
 ) -> void:
 	for directive: Dictionary in strategic_results:
 		var dtype: String = str(directive.get("directive", ""))
@@ -14293,6 +14297,18 @@ static func _process_tyrant_directives(
 		elif dtype == "IMPERIAL_CIVIL_WAR":
 			_create_imperial_civil_war_topic(
 				directive, active_topics, next_topic_id, ic_day
+			)
+		elif dtype == "IMPERIAL_DISSOLVE_MARRIAGE":
+			# Pathway 4 — Imperial Decree (s57.49.7): no penalties for either spouse.
+			var effects: Dictionary = {
+				"spouse_a_id": directive.get("spouse_a_id", -1),
+				"spouse_b_id": directive.get("spouse_b_id", -1),
+				"ordering_lord_id": directive.get("lord_id", -1),
+				"pathway": 4,
+			}
+			_apply_dissolution(
+				effects, characters_by_id, marriages, ic_day,
+				active_topics, next_topic_id, {}, {},
 			)
 
 
