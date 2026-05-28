@@ -2992,6 +2992,57 @@ costs, or forward-wiring. Do not treat as bugs.
   TN_PER_EXTRA_PARTICIPANT=5, VP recovery values, PARTICIPANT_CAP=5,
   MIN_DISPOSITION=11.
 
+### Invented Content Removal (2026-05-28)
+- **action_executor — 4 invented base TNs zeroed.**
+  SOCIAL_BASE_TN (15→0), COVERT_BASE_TN (20→0), MILITARY_BASE_TN (15→0),
+  ADMIN_BASE_TN (10→0). GDD does not specify universal base TNs for action
+  categories — each action has its own TN formula. PURCHASE_KOKU_COST 3.0→1.0
+  per CLAUDE.md s55.32 resolution. BRIBE_KOKU_COST 5.0 confirmed (s55.32).
+- **day_orchestrator — 13 invented constants zeroed.**
+  _COMBAT_EVENT_MOMENTUM (30→0), _CIVIL_WAR_MOMENTUM (60→0),
+  _CONSTRUCTION_TIER2_MOMENTUM (40→0), _FAMINE_RECOVERY_THRESHOLD (10→0),
+  _FAMINE_HUNGER_MOMENTUM (25→0), _FAMINE_FAMINE_MOMENTUM (50→0),
+  INTIMIDATION_DISPOSITION_PENALTY (-30→0), EVIDENCE_DECAY_START_DAYS (30→0),
+  EVIDENCE_DECAY_INTERVAL_DAYS (10→0), COLD_CASE_THRESHOLD (5→0),
+  DUEL_DECLINE_GLORY_LOSS (-0.3→0), TAINT_DETECTION_PLACEHOLDER_TN (20→0,
+  blocked on s31), _RETREAT_DEFAULT_DAYS (3→0).
+- **npc_decision_engine — 2 invented rokuyo constants zeroed.**
+  INAUSPICIOUS_PENALTY (-10→0), TAIAN_BONUS (5→0). GDD says rokuyo is "not
+  a mechanical modifier" for NPC scoring; +1 disposition is the only effect.
+- **winter_court_system — school type scoring zeroed.**
+  Delegation scoring and _score_school_type_for_invitation() all returns
+  set to 0.0. GDD says archetype preferences are "personality-driven" without
+  numeric scoring weights for school types.
+- **world_population_generator — _STIPEND_BY_ROLE fixed per GDD s4.3.**
+  Family Daimyo 5.0→3.0, Provincial Daimyo 3.0→2.0, Local Daimyo 2.0→1.0.
+  Values were shifted one tier too high. GDD s4.3 lines 417-423 specify exact
+  koku amounts per lord rank.
+- **world_bootstrap/world_generator — PROVISIONAL annotations added.**
+  BASE_PU constants, _scale_pu_by_terrain multipliers, TERRAIN_PU_DISTRIBUTION,
+  POINTS_PER_RANK, POSITION_RANK, POSITION_STATUS all marked PROVISIONAL.
+  These are world initialization parameters that cannot be zeroed without
+  breaking world creation; GDD does not specify exact values.
+
+### Comprehensive Simulation File Audit Complete (2026-05-28)
+All 135 files in `/simulation/` audited against GDD. Summary:
+- **8 files modified** (action_executor, day_orchestrator, npc_decision_engine,
+  reactive_decisions, winter_court_system, world_bootstrap, world_generator,
+  world_population_generator) — 34 invented constants zeroed, 3 stipend values
+  fixed, ~15 PROVISIONAL annotations added.
+- **127 files verified clean** — all numeric constants confirmed against their
+  respective LOCKED GDD sections. No modifications needed.
+- **Key verified systems** (this pass): artisan_system (s49), war_justification
+  (s53.1), magistrate_allocation (s11.3.17), information_system (s55.12),
+  gempukku_system (s52), topic_system (s16), worship_system (s4.3.21),
+  void_system (s4.5/s25.5), wound_system (s4.5), wind_down_system (s57.44),
+  ritsuyo_system (s11.3.10), request_performance_system (s57.33),
+  inventory_system (s12.11), event_durations (s11.7b), time_system (s13),
+  civilian_order_budget (s57.34), investigation_loop_system (s11.3.13),
+  treason_system (s11.3.8), unsanctioned_killing_system (s11.3.9),
+  objective_progress (s55.29.3), travel_commitment (s55.29),
+  assassination_system (s12.8).
+- **No remaining unaudited simulation files.**
+
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
   SkillResolver and ActionExecutor. Doji Courtier R1a (honor-gated Free Raise on
@@ -3298,6 +3349,17 @@ pending playtesting.
 | A20 | Forge authority level | Target's lord_rank via chars_by_id | npc_decision_engine.gd | RESOLVED (B11) | s12.8 |
 | A21 | Hunt beast stat blocks (8 of 10 species) | Derived from s54.1 | hunt_system.gd | Bear and ozaru GDD-confirmed; 8 others interpolated | s57.38 |
 | A22 | PERFORM_RITUAL alignment score under PERFORM_RITUAL NeedType | 90 (below PERFORM_WORSHIP at 100) | objective_alignment.json | No explicit scoring hierarchy for rituals | — |
+| A23 | World gen POSITION_RANK by role | Champion 7.0, Family Daimyo 6.0, Provincial 5.0, Local 4.0 | world_population_generator.gd | GDD s22.4 gives ring ranges per rank but not a positional rank mapping | s52 |
+| A24 | World gen POSITION_STATUS by role | Champion 7.0, Family Daimyo 6.0, etc. | world_population_generator.gd | GDD does not specify exact Status values per lord position | s52 |
+| A25 | World gen BASE_PU per province tier | Family seat 60, regular 40 | world_bootstrap.gd | GDD does not specify base PU per province | s2.3 |
+| A26 | World gen _scale_pu_by_terrain multipliers | Plains 1.2, Hills 0.8, Mountains 0.6, etc. | world_bootstrap.gd | Distinct from Rice production modifiers in s4.3; no PU scaling in GDD | s2.3 |
+| A27 | World gen TERRAIN_PU_DISTRIBUTION | Type allocation percentages by terrain | world_generator.gd | GDD does not specify PU type allocation by terrain | s4.3 |
+| A28 | World gen POINTS_PER_RANK for character creation | 10 per insight rank | world_generator.gd | GDD s22.4 gives ring ranges per rank, not point budgets | s52 |
+| A29 | World gen parent age thresholds | Min 16, max 40 for children | world_population_generator.gd | GDD does not specify exact parent age constraints | s22.4 |
+| A30 | World gen marriage rate | 40% per generation | world_population_generator.gd | GDD does not specify marriage probability | s22.7 |
+| A31 | World gen cross-clan marriage rate | 15% of marriages | world_population_generator.gd | GDD does not specify cross-clan frequency | s22.7 |
+| A32 | LEGIONS_PER_ARMY | 3 | world_population_generator.gd | GDD does not specify legions per army count | s57.21 |
+| A33 | Minor Clan Champion stipend | 5.0 koku | world_population_generator.gd | Analogy to Clan Champion (GDD says 5); no explicit Minor Clan entry | s4.3 |
 
 ---
 
