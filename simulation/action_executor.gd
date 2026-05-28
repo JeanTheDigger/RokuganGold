@@ -348,6 +348,10 @@ static func execute(
 	if action_id == "CRAFT":
 		return _execute_craft(action, character, ctx, dice_engine)
 
+	if action_id in ["COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
+			"PERFORM_THEATER_PIECE", "DEDICATE_PIECE"]:
+		return _execute_theater_action(action_id, action, character, ctx, dice_engine)
+
 	if action_id == "INVOKE_FAVOR":
 		return _execute_invoke_favor(action, character, ctx)
 
@@ -4973,5 +4977,224 @@ static func _execute_craft(
 			"denomination": denomination,
 			"base_cost": base_cost,
 			"koku_cost": koku_cost,
+		},
+	}
+
+
+# -- s57.22 THEATER PIECE ACTIONS -----------------------------------------------
+
+static func _execute_theater_action(
+	action_id: String,
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	match action_id:
+		"COMPOSE_THEATER_PIECE":
+			return _execute_compose_theater(action, character, ctx, dice_engine)
+		"LEARN_THEATER_PIECE":
+			return _execute_learn_theater(action, character, ctx, dice_engine)
+		"PERFORM_THEATER_PIECE":
+			return _execute_perform_theater(action, character, ctx, dice_engine)
+		"DEDICATE_PIECE":
+			return _execute_dedicate_piece(action, character, ctx, dice_engine)
+	return {"success": false, "action_id": action_id, "character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season, "effects": {}}
+
+
+static func _execute_compose_theater(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var meta: Dictionary = action.metadata
+	var piece_id: int = meta.get("piece_id", -1)
+	var is_new: bool = meta.get("is_new", false)
+	var raises: int = meta.get("raises", 0)
+
+	if is_new:
+		# Declare composition intent — actual piece created in writeback
+		var target_magnitude: int = meta.get("target_magnitude", 1)
+		if not TheaterSystem.check_composition_skill_gate(character, target_magnitude):
+			return {
+				"success": false, "action_id": "COMPOSE_THEATER_PIECE",
+				"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+				"effects": {"blocked_reason": "poetry_rank_insufficient"},
+			}
+		return {
+			"success": true, "action_id": "COMPOSE_THEATER_PIECE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {
+				"is_new_piece": true,
+				"target_magnitude": target_magnitude,
+				"target_topic_weight": meta.get("target_topic_weight", 1),
+				"num_roles": meta.get("num_roles", 1),
+				"framing": meta.get("framing", true),
+				"subject": meta.get("subject", character.clan),
+				"subject_type": meta.get("subject_type", TheaterSystem.SubjectType.CLAN),
+				"topic_id": meta.get("topic_id", -1),
+			},
+		}
+
+	if piece_id < 0:
+		return {
+			"success": false, "action_id": "COMPOSE_THEATER_PIECE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"blocked_reason": "no_wip_piece"},
+		}
+
+	var tn: int = TheaterSystem.COMPOSITION_BASE_TN + raises * 5
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Poetry", tn,
+		raises, "", Enums.Trait.INTELLIGENCE, 0, 0, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+	var progress: int = TheaterSystem.compose_progress_per_ap(total, raises)
+
+	return {
+		"success": total >= TheaterSystem.COMPOSITION_BASE_TN,
+		"action_id": "COMPOSE_THEATER_PIECE",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"piece_id": piece_id,
+			"roll_total": total,
+			"progress_earned": progress,
+			"raises": raises,
+			"ic_day": ctx.ic_day,
+		},
+	}
+
+
+static func _execute_learn_theater(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var meta: Dictionary = action.metadata
+	var piece_id: int = meta.get("piece_id", -1)
+
+	if piece_id < 0:
+		return {
+			"success": false, "action_id": "LEARN_THEATER_PIECE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"blocked_reason": "no_piece_available"},
+		}
+
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Acting", TheaterSystem.LEARNING_BASE_TN,
+		0, "", Enums.Trait.INTELLIGENCE, 0, 0, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+	var progress: int = TheaterSystem.learning_progress_per_ap(total)
+
+	return {
+		"success": total >= TheaterSystem.LEARNING_BASE_TN,
+		"action_id": "LEARN_THEATER_PIECE",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"piece_id": piece_id,
+			"roll_total": total,
+			"progress_earned": progress,
+			"ic_day": ctx.ic_day,
+		},
+	}
+
+
+static func _execute_perform_theater(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var meta: Dictionary = action.metadata
+	var piece_id: int = meta.get("piece_id", -1)
+	var is_bunraku: bool = meta.get("is_bunraku_performance", false)
+	var raises: int = meta.get("raises", 0)
+
+	if piece_id < 0:
+		return {
+			"success": false, "action_id": "PERFORM_THEATER_PIECE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"blocked_reason": "no_piece_to_perform"},
+		}
+
+	var tn: int = TheaterSystem.PERFORMANCE_BASE_TN + raises * 5
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Acting", tn,
+		raises, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+	var success: bool = total >= tn
+	var margin: int = total - TheaterSystem.PERFORMANCE_BASE_TN
+	var is_critical: bool = success and margin >= TheaterSystem.CRITICAL_SUCCESS_MARGIN
+	var raises_succeeded: int = raises if success else 0
+
+	var ap_cost_override: int = 2 if is_bunraku else 1
+
+	return {
+		"success": success,
+		"action_id": "PERFORM_THEATER_PIECE",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"piece_id": piece_id,
+			"roll_total": total,
+			"raises_succeeded": raises_succeeded,
+			"is_critical": is_critical,
+			"is_bunraku_performance": is_bunraku,
+			"location_id": ctx.location_id,
+			"ap_cost_override": ap_cost_override,
+			"ic_day": ctx.ic_day,
+		},
+	}
+
+
+static func _execute_dedicate_piece(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var meta: Dictionary = action.metadata
+	var piece_id: int = meta.get("piece_id", -1)
+	var topic_id: int = meta.get("topic_id", -1)
+	var raises: int = meta.get("raises", 0)
+
+	if piece_id < 0:
+		return {
+			"success": false, "action_id": "DEDICATE_PIECE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"blocked_reason": "no_piece_to_dedicate"},
+		}
+	if topic_id < 0 or topic_id not in ctx.known_topics:
+		return {
+			"success": false, "action_id": "DEDICATE_PIECE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"blocked_reason": "no_known_topic"},
+		}
+
+	# Courtier / Awareness roll vs TN 10 + magnitude * 2 (resolved in writeback since we lack piece here)
+	var tn: int = TheaterSystem.DEDICATION_BASE_TN + raises * 5
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Courtier", tn,
+		raises, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+
+	return {
+		"success": total >= tn,
+		"action_id": "DEDICATE_PIECE",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"piece_id": piece_id,
+			"topic_id": topic_id,
+			"roll_total": total,
+			"raises": raises,
 		},
 	}

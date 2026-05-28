@@ -202,6 +202,14 @@ func _bootstrap_fresh_world() -> void:
 	var togashi_ws: Dictionary = _build_togashi_bootstrap_state(result)
 	TogashiOversight.initialize_from_world_state(WorldState.togashi_state, togashi_ws)
 
+	# Generate world-start canonized theater pieces per GDD s57.22.9-10
+	var canon_pieces: Array[TheaterPieceData] = TheaterSystem.generate_canonized_pieces(
+		dice, WorldState.next_piece_id, WorldState.time_system.current_tick,
+	)
+	WorldState.theater_pieces.clear()
+	for piece: TheaterPieceData in canon_pieces:
+		WorldState.theater_pieces.append(piece)
+
 	_save_world_state()
 	print("[SimulationScheduler] World bootstrapped: %d characters, %d provinces, %d settlements, %d cells." % [
 		WorldState.characters.size(),

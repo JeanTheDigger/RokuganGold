@@ -95,6 +95,11 @@
     "primary": "Courtier",
     "secondary": "Sincerity"
   },
+  "COMPOSE_THEATER_PIECE": {
+    "primary": "Poetry",
+    "secondary": "Poetry",
+    "trait": "Intelligence"
+  },
   "CONCEAL_ITEM": {
     "primary": "Sleight of Hand",
     "secondary": "Agility"
@@ -127,6 +132,11 @@
     "primary": "Courtier",
     "secondary": "Awareness"
   },
+  "DEDICATE_PIECE": {
+    "primary": "Courtier",
+    "secondary": "Courtier",
+    "trait": "Awareness"
+  },
   "DEFY_EDICT": {
     "primary": "Courtier",
     "secondary": "Awareness"
@@ -147,10 +157,6 @@
     "primary": "Sincerity",
     "secondary": "Perception"
   },
-  "DISSOLVE_MARRIAGE": {
-    "primary": "Courtier",
-    "secondary": "Awareness"
-  },
   "DISPATCH_COURTIER": {
     "primary": "Courtier",
     "secondary": "Battle"
@@ -158,6 +164,10 @@
   "DISPLAY_BONSAI": {
     "primary": null,
     "secondary": null
+  },
+  "DISSOLVE_MARRIAGE": {
+    "primary": "Courtier",
+    "secondary": "Awareness"
   },
   "DO_NOTHING": {
     "primary": null,
@@ -207,6 +217,10 @@
     "primary": "Forgery",
     "secondary": "Intelligence"
   },
+  "FORCE_MARCH": {
+    "primary": "Battle",
+    "secondary": null
+  },
   "FORGE_IMPERSONATION_LETTER": {
     "primary": "Forgery",
     "secondary": "Agility"
@@ -214,10 +228,6 @@
   "FORGE_ORDER": {
     "primary": "Forgery",
     "secondary": "Agility"
-  },
-  "FORCE_MARCH": {
-    "primary": "Battle",
-    "secondary": null
   },
   "FORTIFY_WALL_SECTION": {
     "primary": "Engineering",
@@ -270,6 +280,11 @@
   "KILL_WITNESS": {
     "primary": "Stealth",
     "secondary": "Agility"
+  },
+  "LEARN_THEATER_PIECE": {
+    "primary": "Acting",
+    "secondary": "Acting",
+    "trait": "Intelligence"
   },
   "LISTEN_REFLECT": {
     "primary": "Investigation",
@@ -342,6 +357,11 @@
   "PERFORM_RITUAL": {
     "primary": "Lore: Theology",
     "secondary": null
+  },
+  "PERFORM_THEATER_PIECE": {
+    "primary": "Acting",
+    "secondary": "Acting",
+    "trait": "Awareness"
   },
   "PERFORM_WORSHIP": {
     "primary": "Lore: Theology",
@@ -487,6 +507,10 @@
     "primary": "Animal Handling",
     "secondary": "Awareness"
   },
+  "TRANSFER_KOKU": {
+    "primary": "Commerce",
+    "secondary": null
+  },
   "TREAT_WOUND": {
     "primary": "Medicine",
     "secondary": null
@@ -494,9 +518,5 @@
   "WRITE_LETTER": {
     "primary": "Calligraphy",
     "secondary": "Courtier"
-  },
-  "TRANSFER_KOKU": {
-    "primary": "Commerce",
-    "secondary": null
   }
 }

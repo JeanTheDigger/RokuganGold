@@ -90,6 +90,8 @@ static func advance_day(
 	next_cell_id: Array = [1],
 	crafted_items: Array = [],
 	next_item_id: Array = [1],
+	theater_pieces: Array = [],
+	next_piece_id: Array = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -174,6 +176,7 @@ static func advance_day(
 	)
 	_set_court_context_flags(active_courts, world_states)
 	_inject_hunt_context(active_hunts, world_states, active_topics)
+	_inject_theater_context(theater_pieces, characters, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_set_temple_context_flags(characters, settlements, world_states)
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
@@ -751,6 +754,26 @@ static func advance_day(
 
 	_remove_resolved_hunts(active_hunts)
 
+	_process_compose_theater_writebacks(
+		day_result.get("results", []),
+		theater_pieces, next_piece_id, characters_by_id, ic_day,
+	)
+
+	_process_learn_theater_writebacks(
+		day_result.get("results", []),
+		theater_pieces, characters_by_id,
+	)
+
+	_process_perform_theater_writebacks(
+		day_result.get("results", []),
+		theater_pieces, characters_by_id, active_topics, next_topic_id, ic_day,
+	)
+
+	_process_dedicate_piece_writebacks(
+		day_result.get("results", []),
+		theater_pieces,
+	)
+
 	_process_travel_redirect_writebacks(
 		day_result.get("results", []), objectives_map,
 	)
@@ -805,6 +828,7 @@ static func advance_day(
 	_cleanup_dead_character_references(
 		characters, characters_by_id, active_courts, entanglements,
 		active_hunts, favors, bloodspeaker_cells, active_secrets,
+		theater_pieces,
 	)
 
 	var succession_results: Array = _process_successions(
@@ -1084,6 +1108,7 @@ static func advance_day(
 			characters, characters_by_id, _si_spm,
 			active_topics, next_topic_id, ic_day, next_crisis_id,
 		)
+		TheaterSystem.process_degradation(theater_pieces, ic_day)
 		_process_doshin_seasonal_recovery(world_states)
 		_tick_kuni_wards(season_meta)
 		season_meta.erase("patrolled_provinces")
@@ -1196,6 +1221,7 @@ static func advance_day(
 			_cleanup_dead_character_references(
 				characters, characters_by_id, active_courts, entanglements,
 				active_hunts, favors, bloodspeaker_cells, active_secrets,
+				theater_pieces,
 			)
 
 	var koku_flow_results: Dictionary = {}
@@ -6367,6 +6393,7 @@ static func _cleanup_dead_character_references(
 	favors: Array,
 	bloodspeaker_cells: Array = [],
 	active_secrets: Array = [],
+	theater_pieces: Array = [],
 ) -> void:
 	var dead_ids: Array = []
 	for c: L5RCharacterData in characters:
@@ -6415,6 +6442,10 @@ static func _cleanup_dead_character_references(
 	for cell: BloodspeakerCellData in bloodspeaker_cells:
 		if cell.leader_id in dead_ids:
 			cell.leader_id = -1
+
+	if not theater_pieces.is_empty():
+		for did: int in dead_ids:
+			TheaterSystem.handle_character_death(did, theater_pieces)
 
 	for secret: Variant in active_secrets:
 		if not secret is SecretData:
@@ -11884,6 +11915,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"is_patrolled", "phoenix_champion_authority",
 		"settlement_type",
 		"champion_conclusion_candidates", "local_tier3_candidates",
+		"theater_pieces_to_perform", "wip_piece_ids",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -19297,6 +19329,301 @@ static func _purge_delivered_letters(
 						continue
 			pending_letters.remove_at(i)
 		i -= 1
+
+
+static func _process_compose_theater_writebacks(
+	results: Array,
+	theater_pieces: Array,
+	next_piece_id: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "COMPOSE_THEATER_PIECE":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var char_id: int = result.get("character_id", -1)
+		if char_id < 0:
+			continue
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null or CharacterStats.is_dead(character):
+			continue
+
+		if effects.get("is_new_piece", false):
+			# Declare a new WIP piece
+			var piece_id: int = next_piece_id[0]
+			next_piece_id[0] = piece_id + 1
+			var magnitude: int = effects.get("target_magnitude", 1)
+			var num_roles: int = effects.get("num_roles", 1)
+			var p := TheaterPieceData.new()
+			p.piece_id = piece_id
+			p.title = "Untitled Work"
+			p.style = TheaterSystem.Style.NOH
+			p.author_id = char_id
+			p.subject = effects.get("subject", character.clan)
+			p.subject_type = effects.get("subject_type", TheaterSystem.SubjectType.CLAN)
+			p.framing = effects.get("framing", true)
+			p.disposition_magnitude = 1
+			p.target_magnitude = magnitude
+			p.topic_weight = 1
+			p.target_topic_weight = effects.get("target_topic_weight", 1)
+			p.num_roles_declared = num_roles
+			p.craft_progress = 0
+			p.ic_day_created = ic_day
+			p.ic_day_last_composition_ap = ic_day
+			var role := TheaterSystem.make_role(
+				0, p.subject, p.subject_type, p.framing,
+			)
+			p.roles = [role]
+			var initial_topic: int = effects.get("topic_id", -1)
+			if initial_topic >= 0:
+				p.topic_ids.append(initial_topic)
+			theater_pieces.append(p)
+			continue
+
+		# Advancing existing WIP
+		if not result.get("success", false):
+			continue
+		var piece_id: int = effects.get("piece_id", -1)
+		if piece_id < 0:
+			continue
+		var piece: TheaterPieceData = null
+		for tp: TheaterPieceData in theater_pieces:
+			if tp.piece_id == piece_id:
+				piece = tp
+				break
+		if piece == null or piece.craft_progress < 0:
+			continue
+
+		var progress: int = effects.get("progress_earned", 0)
+		if progress <= 0:
+			continue
+
+		piece.craft_progress += progress
+		piece.ic_day_last_composition_ap = ic_day
+
+		var threshold: int = TheaterSystem.get_composition_threshold(
+			piece.target_magnitude, piece.num_roles_declared,
+		)
+		if piece.craft_progress >= threshold:
+			# Check skill gate before completing
+			if TheaterSystem.check_composition_skill_gate(character, piece.target_magnitude):
+				var raises: int = effects.get("raises", 0)
+				TheaterSystem.apply_completion_raises(piece, raises)
+				TheaterSystem.complete_piece(piece, char_id)
+
+
+static func _process_learn_theater_writebacks(
+	results: Array,
+	theater_pieces: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "LEARN_THEATER_PIECE":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var char_id: int = result.get("character_id", -1)
+		var piece_id: int = effects.get("piece_id", -1)
+		if char_id < 0 or piece_id < 0:
+			continue
+
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null or CharacterStats.is_dead(character):
+			continue
+
+		var piece: TheaterPieceData = null
+		for tp: TheaterPieceData in theater_pieces:
+			if tp.piece_id == piece_id:
+				piece = tp
+				break
+		if piece == null or piece.craft_progress >= 0:
+			# piece must be complete (craft_progress == -1) to learn
+			continue
+
+		if TheaterSystem.is_already_known(char_id, piece):
+			continue
+
+		var progress: int = effects.get("progress_earned", 0)
+		if progress <= 0:
+			continue
+
+		var current: int = character.learning_progress.get(piece_id, 0)
+		var new_total: int = current + progress
+		character.learning_progress[piece_id] = new_total
+
+		var threshold: int = TheaterSystem.get_learning_threshold(piece.disposition_magnitude)
+		if new_total >= threshold:
+			if TheaterSystem.check_learning_skill_gate(character, piece):
+				piece.known_by.append(char_id)
+				character.learning_progress.erase(piece_id)
+
+
+static func _process_perform_theater_writebacks(
+	results: Array,
+	theater_pieces: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "PERFORM_THEATER_PIECE":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var char_id: int = result.get("character_id", -1)
+		var piece_id: int = effects.get("piece_id", -1)
+		if char_id < 0 or piece_id < 0:
+			continue
+
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null or CharacterStats.is_dead(character):
+			continue
+
+		var piece: TheaterPieceData = null
+		for tp: TheaterPieceData in theater_pieces:
+			if tp.piece_id == piece_id:
+				piece = tp
+				break
+		if piece == null or piece.craft_progress >= 0:
+			continue
+
+		var is_bunraku: bool = effects.get("is_bunraku_performance", false)
+		var raises_succeeded: int = effects.get("raises_succeeded", 0)
+		var is_critical: bool = effects.get("is_critical", false)
+		var location_id: String = effects.get("location_id", "")
+
+		var effective_magnitude: int = TheaterSystem.get_effective_magnitude(
+			piece, is_bunraku, raises_succeeded, is_critical,
+		)
+
+		# Gather co-located witnesses (characters at same settlement)
+		var witness_ids: Array[int] = []
+		for other: L5RCharacterData in characters_by_id.values():
+			if CharacterStats.is_dead(other):
+				continue
+			if other.character_id == char_id:
+				continue
+			if other.physical_location == location_id and not location_id.is_empty():
+				witness_ids.append(other.character_id)
+
+		var perf_effects: Dictionary = TheaterSystem.compute_performance_effects(
+			piece, witness_ids, characters_by_id, ic_day,
+			effective_magnitude, is_critical, active_topics,
+		)
+
+		# Apply disposition shifts to witnesses
+		var witness_effects_arr: Array = perf_effects.get("witness_effects", [])
+		for we: Dictionary in witness_effects_arr:
+			var wid: int = we.get("character_id", -1)
+			var witness: L5RCharacterData = characters_by_id.get(wid)
+			if witness == null or CharacterStats.is_dead(witness):
+				continue
+			var role_effects: Array = we.get("role_effects", [])
+			for re: Dictionary in role_effects:
+				var sub_type: int = re.get("subject_type", TheaterSystem.SubjectType.ABSTRACT)
+				var subject: String = re.get("subject", "")
+				var delta: int = re.get("delta", 0)
+				if delta == 0 or subject.is_empty():
+					continue
+				if sub_type == TheaterSystem.SubjectType.CHARACTER and subject.is_valid_int():
+					var target_id: int = int(subject)
+					var old_disp: int = witness.disposition_values.get(target_id, 0)
+					witness.disposition_values[target_id] = clampi(old_disp + delta, -100, 100)
+
+		# Apply topic amplifications
+		var amplifications: Array = perf_effects.get("topic_amplifications", [])
+		for amp: Dictionary in amplifications:
+			var tid: int = amp.get("topic_id", -1)
+			var gain: int = amp.get("momentum_gain", 0)
+			if tid < 0 or gain <= 0:
+				continue
+			for topic: TopicData in active_topics:
+				if topic.topic_id == tid and not topic.resolved:
+					topic.momentum += gain
+					break
+
+		# Generate performance topic on critical success
+		if is_critical:
+			var topic_id: int = next_topic_id[0]
+			next_topic_id[0] = topic_id + 1
+			var t := TopicData.new()
+			t.topic_id = topic_id
+			t.slug = "theater_perf_%d_day%d" % [piece_id, ic_day]
+			t.title = piece.title
+			t.topic_type = "theater_performance"
+			t.tier = TopicData.Tier.TIER_4
+			t.momentum = TopicMomentumSystem.initial_momentum_for_tier(t.tier)
+			t.category = TopicData.Category.PERSONAL
+			t.subject_character_id = char_id
+			t.ic_day_created = ic_day
+			active_topics.append(t)
+
+		piece.times_performed += 1
+
+
+static func _process_dedicate_piece_writebacks(
+	results: Array,
+	theater_pieces: Array,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "DEDICATE_PIECE":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var piece_id: int = effects.get("piece_id", -1)
+		var topic_id: int = effects.get("topic_id", -1)
+		if piece_id < 0 or topic_id < 0:
+			continue
+
+		for piece: TheaterPieceData in theater_pieces:
+			if piece.piece_id != piece_id:
+				continue
+			if piece.topic_ids.size() >= 2:
+				break
+			if topic_id not in piece.topic_ids:
+				piece.topic_ids.append(topic_id)
+			break
+
+
+static func _inject_theater_context(
+	theater_pieces: Array,
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	## Inject per-character theater context into known_objectives (matching hunt pattern).
+	## theater_pieces_to_perform: Array of piece_ids the character can perform.
+	## wip_piece_ids: Array of piece_ids the character is composing.
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var char_id: int = character.character_id
+		var ws: Dictionary = world_states.get(char_id, {})
+		if ws.is_empty():
+			continue
+
+		var performable: Array[int] = []
+		var wip_ids: Array[int] = []
+		for piece: TheaterPieceData in theater_pieces:
+			if piece.lost or piece.abandoned_incomplete:
+				continue
+			if piece.craft_progress >= 0:
+				if piece.author_id == char_id:
+					wip_ids.append(piece.piece_id)
+			else:
+				if char_id in piece.known_by or piece.canonized:
+					performable.append(piece.piece_id)
+
+		var known_objs: Dictionary = ws.get("known_objectives", {})
+		if not performable.is_empty():
+			known_objs["theater_pieces_to_perform"] = performable
+		if not wip_ids.is_empty():
+			known_objs["wip_piece_ids"] = wip_ids
+		ws["known_objectives"] = known_objs
 
 
 static func _purge_exposed_secrets(

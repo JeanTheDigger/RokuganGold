@@ -1025,6 +1025,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"FORGE_IMPERSONATION_LETTER", "FORGE_ORDER",
 				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
+				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
+				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
@@ -1059,6 +1061,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"TRANSFER_KOKU",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
+				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
+				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
@@ -1082,6 +1086,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"EXAMINE_CRIME_SCENE",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
+				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
+				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
@@ -1228,6 +1234,10 @@ static func _get_ap_cost(action_id: String) -> int:
 		"CANCEL_HUNT": 0,
 		"TRAIN_ANIMAL": 1,
 		"APPLY_TATTOO": 2,
+		"COMPOSE_THEATER_PIECE": 1,
+		"LEARN_THEATER_PIECE": 1,
+		"PERFORM_THEATER_PIECE": 1,
+		"DEDICATE_PIECE": 1,
 	}
 	return costs.get(action_id, 1)
 
@@ -2790,6 +2800,103 @@ static func _populate_action_metadata(
 		option.metadata = {"target_npc_id": need.target_npc_id}
 	elif option.action_id == "MENTOR":
 		option.metadata = _build_mentor_metadata(ctx, need, chars_by_id)
+	elif option.action_id == "COMPOSE_THEATER_PIECE":
+		option.metadata = _build_compose_theater_metadata(ctx, need)
+	elif option.action_id == "LEARN_THEATER_PIECE":
+		option.metadata = _build_learn_theater_metadata(ctx, need)
+	elif option.action_id == "PERFORM_THEATER_PIECE":
+		option.metadata = _build_perform_theater_metadata(ctx, need)
+	elif option.action_id == "DEDICATE_PIECE":
+		option.metadata = _build_dedicate_piece_metadata(ctx, need)
+
+
+static func _build_compose_theater_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+) -> Dictionary:
+	## Compose: select WIP piece to advance or declare a new composition.
+	## wip_piece_ids injected by _inject_theater_context.
+	var wip_ids: Array = ctx.known_objectives.get("wip_piece_ids", [])
+	if not wip_ids.is_empty():
+		return {
+			"piece_id": int(wip_ids[0]),
+			"is_new": false,
+			"raises": 0,
+		}
+	# Declare a new piece: magnitude from Poetry rank (capped 1-3 for NPCs per GDD s57.22)
+	var poetry_rank: int = ctx.skill_ranks.get("Poetry", 0)
+	var target_magnitude: int = clampi(poetry_rank, 1, 3)
+	# Negative framing if DAMAGE_RELATIONSHIP need
+	var framing: bool = need.need_type != "DAMAGE_RELATIONSHIP"
+	var subject_type: int = TheaterSystem.SubjectType.CLAN
+	var subject: String = need.target_intent if not need.target_intent.is_empty() else ctx.clan
+	return {
+		"piece_id": -1,
+		"is_new": true,
+		"target_magnitude": target_magnitude,
+		"target_topic_weight": 1,
+		"num_roles": 1,
+		"framing": framing,
+		"subject": subject,
+		"subject_type": subject_type,
+		"topic_id": need.target_province_id if need.target_province_id >= 0 else -1,
+		"raises": 0,
+	}
+
+
+static func _build_learn_theater_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	_need: NPCDataStructures.ImmediateNeed,
+) -> Dictionary:
+	## Learn: pick best available piece to learn from theater_pieces_to_perform.
+	var performable: Array = ctx.known_objectives.get("theater_pieces_to_perform", [])
+	for pid: Variant in performable:
+		return {"piece_id": int(pid)}
+	return {"piece_id": -1}
+
+
+static func _build_perform_theater_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+) -> Dictionary:
+	## Perform: pick a known piece aligned to current NeedType.
+	var performable: Array = ctx.known_objectives.get("theater_pieces_to_perform", [])
+	# Prefer a piece matching the NeedType's direction (damage = negative framing)
+	var best_id: int = -1
+	for pid: Variant in performable:
+		# Just pick the first one; full scoring handled by objective_alignment
+		best_id = int(pid)
+		break
+	var is_bunraku: bool = false
+	var raises: int = 0
+	if need.need_type == "SEEK_GLORY":
+		raises = 1
+	return {
+		"piece_id": best_id,
+		"is_bunraku_performance": is_bunraku,
+		"raises": raises,
+	}
+
+
+static func _build_dedicate_piece_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+) -> Dictionary:
+	## Dedicate: pick known completed piece + most relevant topic to link.
+	var performable: Array = ctx.known_objectives.get("theater_pieces_to_perform", [])
+	var piece_id: int = -1
+	for pid: Variant in performable:
+		piece_id = int(pid)
+		break
+	# Best topic: pick first known topic related to the need's target
+	var topic_id: int = -1
+	if not ctx.known_topics.is_empty():
+		topic_id = int(ctx.known_topics[0])
+	return {
+		"piece_id": piece_id,
+		"topic_id": topic_id,
+		"raises": 0,
+	}
 
 
 static func _build_mentor_metadata(

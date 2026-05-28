@@ -3066,6 +3066,42 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   Index updated. CLAUDE.md updated.
 
 ### Systems Added 2026-05-28 (continued)
+- **s57.22 Theater Piece System** — `simulation/theater_system.gd`,
+  `shared/theater_piece_data.gd`. Four ActionIDs fully wired into the NPC pipeline:
+  COMPOSE_THEATER_PIECE (Poetry/Intelligence progress track; Poetry rank ≥ target_magnitude
+  skill gate; seasonal degradation halves WIP progress after 90 idle days; completion
+  Raises upgrade magnitude/topic_weight/topic linkage; new pieces declared in writeback
+  via is_new_piece flag), LEARN_THEATER_PIECE (Acting/Intelligence progress track;
+  Acting rank ≥ piece.disposition_magnitude gate; adds author_id to known_by on threshold
+  completion; private pieces require co-located willing teacher via find_willing_teacher()),
+  PERFORM_THEATER_PIECE (Acting/Awareness; polarization disposition rule — witnesses
+  pushed AWAY from neutral regardless of framing direction; neutral witnesses receive
+  flat DISP_NEUTRAL_FLAT=2 seed push; 30-day immunity window per witness per piece;
+  known_by members permanently immune; Bunraku style +1 effective magnitude, 2 AP cost;
+  critical success +2 magnitude bonus + Tier 4 performance topic; topic amplification
+  via topic_weight × 2 × shifted_witness_count per linked topic), DEDICATE_PIECE
+  (Courtier/Awareness; links topic to piece.topic_ids up to 2 slots; TN=10+magnitude×2).
+  `TheaterPieceData` Resource: piece_id, title, style (NOH/KABUKI/KYOGEN/BUNRAKU),
+  author_id, subject, subject_type (CLAN/FAMILY/CHARACTER/ARCHETYPE/ABSTRACT), framing
+  (bool), roles (Array), topic_ids (Array[int] max 2), topic_weight (1–3),
+  disposition_magnitude (1–5), known_by (Array[int]), canonized, times_performed,
+  craft_progress (-1=complete, ≥0=WIP), target_magnitude, target_topic_weight,
+  num_roles_declared, ic_day_last_composition_ap, lost, abandoned_incomplete, ic_day_created.
+  World-start canonized pieces generated via `TheaterSystem.generate_canonized_pieces()`
+  in `_bootstrap_fresh_world()` (Crane 12–15, Phoenix 10–12, Lion 7–9, Scorpion 6–8,
+  Dragon 5–7, Unicorn 4–6, Crab 2–4, etc.). Casting TN modifiers: same-clan −5,
+  enemy-clan +5, feature mismatch +5 per unmatched role requirement (Noh mask negates
+  clan/gender). Death cleanup via `handle_character_death()` — removes from known_by,
+  marks private pieces lost if known_by empties, marks WIP abandoned. Context injection
+  via `_inject_theater_context()` → `known_objectives["theater_pieces_to_perform"]`
+  and `known_objectives["wip_piece_ids"]`. Context keys cleared by stale flag clearing.
+  `theater_pieces` and `next_piece_id` persist via WorldStateSaver Resource array
+  pattern (one .tres per item in `theater_pieces/`). JSON scoring tables updated:
+  action_skill_map.json (all 4 ActionIDs), objective_alignment.json
+  (PERFORM_THEATER_PIECE → SEEK_GLORY 80 / DAMAGE_RELATIONSHIP 50 / MOVE_TOPIC_POSITION
+  60 / PATRONIZE_ARTS 85; LEARN_THEATER_PIECE → ARTISTIC_EXPRESSION 70 / PATRONIZE_ARTS
+  60; existing entries COMPOSE_THEATER_PIECE → ARTISTIC_EXPRESSION 100 / DAMAGE_RELATIONSHIP
+  60 / MOVE_TOPIC_POSITION 60 and DEDICATE_PIECE → MOVE_TOPIC_POSITION 55 retained). 45 tests.
 - **s57.54 Clan Champion Strategic Evaluation System** — `shared/strategic_conclusion_data.gd`,
   extended `simulation/strategic_review.gd`. Quarterly evaluation producing 2–4 clan-wide
   strategic conclusions that broadcast to Family Daimyo.
