@@ -8,7 +8,7 @@ class_name FugitiveExtraditionSystem
 # -- Fugitive Visibility (s11.3.16a) -----
 
 const STATUS_VISIBILITY_TOPIC_THRESHOLD: float = 3.0
-const STATUS_CONCEALMENT_BONUS_PER_RANK: int = 5
+const STATUS_CONCEALMENT_BONUS_PER_RANK: int = 0
 
 enum ConcealmentMethod {
 	SINCERITY_DECEIT,
@@ -30,13 +30,10 @@ static func generates_sighting_topic(fugitive_status: float) -> bool:
 
 
 static func get_concealment_tn(
-	fugitive_status: float,
-	fugitive_glory: float,
+	_fugitive_status: float,
+	_fugitive_glory: float,
 ) -> int:
-	var base: int = 15
-	base += int(fugitive_status) * STATUS_CONCEALMENT_BONUS_PER_RANK
-	base += int(fugitive_glory) * 3
-	return base
+	return 0
 
 
 # -- Extradition Request (s11.3.16b) -----

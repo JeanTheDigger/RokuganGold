@@ -35,8 +35,8 @@ const SHOURIDO_ACCEPTANCE: Dictionary = {
 	Enums.ShouridoVirtue.CHISHIKI: true,
 }
 
-const DOSATSU_HONOR_THRESHOLD: int = 3
-const CHISHIKI_HONOR_THRESHOLD: int = 4
+const DOSATSU_HONOR_THRESHOLD: int = 0
+const CHISHIKI_HONOR_THRESHOLD: int = 0
 
 
 static func will_accept_seppuku(character: L5RCharacterData) -> Dictionary:

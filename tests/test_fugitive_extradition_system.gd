@@ -33,10 +33,11 @@ func test_visibility_tier_scaling():
 	assert_eq(FugitiveExtraditionSystem.get_visibility_tier(6.0), 3)
 
 
-func test_concealment_tn_scales_with_status_and_glory():
-	var low := FugitiveExtraditionSystem.get_concealment_tn(1.0, 1.0)
-	var high := FugitiveExtraditionSystem.get_concealment_tn(5.0, 5.0)
-	assert_lt(low, high)
+func test_concealment_tn_returns_zero_pending_gdd():
+	var result := FugitiveExtraditionSystem.get_concealment_tn(1.0, 1.0)
+	assert_eq(result, 0)
+	var result_high := FugitiveExtraditionSystem.get_concealment_tn(5.0, 5.0)
+	assert_eq(result_high, 0)
 
 
 # -- Extradition Request (s11.3.16b) ----
