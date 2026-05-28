@@ -24,8 +24,6 @@ const GLORY_DISASTROUS_NONCOMBATANT_HOST: float = -0.4
 const GLORY_WINTER_COURT_BONUS: float = 0.1
 
 # -- Disposition changes (s57.38.8) --------------------------------------------
-const DISP_NEW_RELATIONSHIP: int = 3
-const DISP_EXISTING_ACQUAINTANCE: int = 1
 const DISP_CANCEL_PER_INVITEE: int = -1
 const DISP_ACQUAINTANCE: int = 11
 const DISP_FRIEND: int = 31
@@ -54,6 +52,7 @@ const HUNT_TYPE_SOLO: String = "solo"
 # -- School lean lists (Annex C, s57.38.2) ------------------------------------
 const HUNT_POSITIVE_SCHOOL_PREFIXES: Array[String] = [
 	"Hiruma", "Shinjo", "Matsu", "Usagi", "Hida", "Toritaka",
+	"Kitsune", "Moto", "Yoritomo",
 ]
 const HUNT_NEGATIVE_SCHOOL_PREFIXES: Array[String] = [
 	"Doji", "Otomo", "Soshi", "Miya",
@@ -61,50 +60,45 @@ const HUNT_NEGATIVE_SCHOOL_PREFIXES: Array[String] = [
 const HUNT_SCHOOL_LEAN: int = 15
 
 
-# -- Beast stat blocks (derived from s54.1 bestiary, values PROVISIONAL) -------
+# -- Beast stat blocks ---------------------------------------------------------
 # wound_threshold is a hunt-specific abstraction per s57.38: "a rough proxy for
-# how hard it is to land a mortal blow." GDD specifies bear=10, ozaru=20.
+# how hard it is to land a mortal blow."
+# GDD s54.1 confirms only bear and ozaru stats. Other 8 species (wolf, boar,
+# stag, fox, ox, mountain_bear, goat, tiger) had interpolated stats that have
+# been removed. They are blocked on s54 bestiary becoming LOCKED.
+# GDD also specifies a "coastal" terrain pool (boar, wild goat, rare cliff
+# predator) that is not yet implemented — blocked on coastal beast stat blocks.
 
 const BEAST_STATS: Dictionary = {
-	"wolf": {"armor_tn": 20, "wound_threshold": 6, "initiative": 3, "attack_skill": 3},
-	"boar": {"armor_tn": 20, "wound_threshold": 10, "initiative": 3, "attack_skill": 3},
-	"stag": {"armor_tn": 30, "wound_threshold": 6, "initiative": 5, "attack_skill": 3},
-	"fox": {"armor_tn": 25, "wound_threshold": 3, "initiative": 4, "attack_skill": 3},
-	"ox": {"armor_tn": 10, "wound_threshold": 8, "initiative": 2, "attack_skill": 3},
 	"bear": {"armor_tn": 20, "wound_threshold": 10, "initiative": 3, "attack_skill": 4},
-	"mountain_bear": {"armor_tn": 25, "wound_threshold": 15, "initiative": 3, "attack_skill": 4},
-	"goat": {"armor_tn": 15, "wound_threshold": 4, "initiative": 2, "attack_skill": 3},
-	"tiger": {"armor_tn": 25, "wound_threshold": 8, "initiative": 4, "attack_skill": 4},
 	"ozaru": {"armor_tn": 30, "wound_threshold": 20, "initiative": 3, "attack_skill": 4},
 }
 
-# Terrain → beast pool (s57.38 "Beast generation — terrain pools")
+# Terrain → beast pool (s57.38.6 "Beast generation — terrain pools")
 # Last entry is the rare beast (lower probability).
+# GDD specifies 5 terrain pools: plains, forest, hills, mountain, coastal.
+# Only beasts with GDD-confirmed stat blocks (bear, ozaru) are usable.
+# Terrain pools referencing unconfirmed beasts are commented out — blocked
+# on s54 bestiary. Coastal pool also blocked on coastal beast stats.
 const TERRAIN_BEAST_POOLS: Dictionary = {
-	Enums.TerrainType.PLAINS: ["wolf", "boar", "stag", "fox", "ox"],
-	Enums.TerrainType.RIVER_DELTA: ["wolf", "boar", "stag", "fox"],
-	Enums.TerrainType.FOREST: ["bear", "boar", "stag", "wolf", "tiger"],
-	Enums.TerrainType.HILLS: ["boar", "wolf", "stag", "fox", "bear"],
-	Enums.TerrainType.MOUNTAINS: ["mountain_bear", "wolf", "goat", "ozaru"],
+	# Enums.TerrainType.PLAINS: ["wolf", "boar", "stag", "fox", "ox"],  # blocked on s54
+	Enums.TerrainType.FOREST: ["bear"],
+	# Enums.TerrainType.HILLS: ["boar", "wolf", "stag", "fox", "bear"],  # blocked on s54
+	Enums.TerrainType.MOUNTAINS: ["bear", "ozaru"],
+	# Enums.TerrainType.COASTAL: ["boar", "goat", "cliff_predator"],  # blocked on s54
 }
-
-const RARE_BEAST_CHANCE: float = 0.1
 
 
 static func generate_beast(terrain: Enums.TerrainType, dice_engine: DiceEngine) -> Dictionary:
-	var pool: Array = TERRAIN_BEAST_POOLS.get(terrain, TERRAIN_BEAST_POOLS[Enums.TerrainType.PLAINS])
+	var pool: Array = TERRAIN_BEAST_POOLS.get(terrain, [])
 	if pool.is_empty():
-		return BEAST_STATS["boar"].duplicate()
-	var beast_name: String
-	var rare_roll: DiceResult = dice_engine.roll_and_keep(1, 1, false, false)
-	if pool.size() > 1 and rare_roll.total <= int(RARE_BEAST_CHANCE * 10):
-		beast_name = pool[pool.size() - 1]
-	else:
-		var common_pool: Array = pool.slice(0, pool.size() - 1) if pool.size() > 1 else pool
-		var pick_roll: DiceResult = dice_engine.roll_and_keep(1, 1, false, false)
-		var idx: int = (pick_roll.total - 1) % common_pool.size()
-		beast_name = common_pool[idx]
-	var stats: Dictionary = BEAST_STATS.get(beast_name, BEAST_STATS["boar"]).duplicate()
+		var fallback: Dictionary = BEAST_STATS["bear"].duplicate()
+		fallback["beast_name"] = "bear"
+		return fallback
+	var pick_roll: DiceResult = dice_engine.roll_and_keep(1, 1, false, false)
+	var idx: int = (pick_roll.total - 1) % pool.size()
+	var beast_name: String = pool[idx]
+	var stats: Dictionary = BEAST_STATS.get(beast_name, BEAST_STATS["bear"]).duplicate()
 	stats["beast_name"] = beast_name
 	return stats
 

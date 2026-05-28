@@ -44,18 +44,20 @@ const RECENCY_SEASONS: int = 4
 
 # -- Fabrication TNs -----------------------------------------------------------
 
+# GDD s12.8 lines 163-169: Tier 1→TN 15, Tier 2→TN 20, Tier 3→TN 25, Tier 4→TN 30.
 const FABRICATION_TN: Dictionary = {
-	SecretData.Severity.TIER_4: 15,
-	SecretData.Severity.TIER_3: 20,
-	SecretData.Severity.TIER_2: 25,
-	SecretData.Severity.TIER_1: 30,
+	SecretData.Severity.TIER_1: 15,
+	SecretData.Severity.TIER_2: 20,
+	SecretData.Severity.TIER_3: 25,
+	SecretData.Severity.TIER_4: 30,
 }
 
+# GDD s12.8 lines 173-181: Tier 1→-0.3, Tier 2→-0.5, Tier 3→-0.8, Tier 4→-1.5.
 const FABRICATION_HONOR_COST: Dictionary = {
-	SecretData.Severity.TIER_4: -0.3,
-	SecretData.Severity.TIER_3: -0.5,
-	SecretData.Severity.TIER_2: -0.8,
-	SecretData.Severity.TIER_1: -1.5,
+	SecretData.Severity.TIER_1: -0.3,
+	SecretData.Severity.TIER_2: -0.5,
+	SecretData.Severity.TIER_3: -0.8,
+	SecretData.Severity.TIER_4: -1.5,
 }
 
 const FABRICATION_INFAMY: float = 0.2
@@ -151,7 +153,7 @@ static func reveal_privately(
 ) -> Dictionary:
 	var sev: SecretData.Severity = secret.severity
 	var disp_change: int = PRIVATE_EXPOSURE_DISP.get(sev, -8)
-	var honor_loss: float = SUBJECT_HONOR_LOSS.get(sev, 0.0)
+	var honor_loss: float = CrimeSystem.scale_honor_by_rank(SUBJECT_HONOR_LOSS.get(sev, 0.0), subject)
 	var glory_loss: float = SUBJECT_GLORY_LOSS.get(sev, 0.0)
 	var infamy_gain: float = SUBJECT_INFAMY_GAIN.get(sev, 0.0)
 
@@ -195,7 +197,7 @@ static func expose_publicly(
 ) -> Dictionary:
 	var sev: SecretData.Severity = secret.severity
 	var disp_per_witness: int = PUBLIC_EXPOSURE_DISP_PER_WITNESS.get(sev, -5)
-	var honor_loss: float = SUBJECT_HONOR_LOSS.get(sev, 0.0)
+	var honor_loss: float = CrimeSystem.scale_honor_by_rank(SUBJECT_HONOR_LOSS.get(sev, 0.0), subject)
 	var glory_loss: float = SUBJECT_GLORY_LOSS.get(sev, 0.0)
 	var infamy_gain: float = SUBJECT_INFAMY_GAIN.get(sev, 0.0)
 
@@ -211,7 +213,7 @@ static func expose_publicly(
 	var witness_effects: Array = []
 	for wid: int in witness_ids:
 		var w: L5RCharacterData = characters_by_id.get(wid)
-		if w != null:
+		if w != null and not CharacterStats.is_dead(w):
 			var current: int = w.disposition_values.get(subject.character_id, 0)
 			w.disposition_values[subject.character_id] = clampi(
 				current + disp_per_witness, -100, 100
@@ -264,7 +266,8 @@ static func fabricate_secret(
 	var total: int = roll.get("total", 0)
 	var success: bool = roll.get("success", false)
 
-	var honor_cost: float = FABRICATION_HONOR_COST.get(severity, -0.5)
+	var base_cost: float = FABRICATION_HONOR_COST.get(severity, -0.5)
+	var honor_cost: float = CrimeSystem.scale_honor_by_rank(base_cost, fabricator)
 	HonorGlorySystem.apply_honor_change(fabricator, honor_cost)
 	HonorGlorySystem.apply_infamy_change(fabricator, FABRICATION_INFAMY)
 
@@ -371,18 +374,23 @@ static func should_generate_reputation_topic(
 # NPC Covert Method Filters
 # ==============================================================================
 
+# GDD s12.8 lines 449-465 describes clan reluctance qualitatively
+# ("No reluctance", "Low", "Moderate", "High", "Very high", "Near-total")
+# but does not assign numeric values. Zeroed pending GDD specification.
 const CLAN_RELUCTANCE: Dictionary = {
 	"Scorpion": 0,
-	"Unicorn": 1,
-	"Crab": 2,
-	"Mantis": 2,
-	"Dragon": 3,
-	"Crane": 4,
-	"Phoenix": 4,
-	"Lion": 5,
+	"Unicorn": 0,
+	"Crab": 0,
+	"Mantis": 0,
+	"Dragon": 0,
+	"Crane": 0,
+	"Phoenix": 0,
+	"Lion": 0,
 }
 
+# GDD s12.8 line 471: "characters with starting Honor above 3.5"
 const HONOR_THRESHOLD_NEVER: float = 3.5
+# GDD s12.8 line 470: "Honor 2.0–3.5 will consider them only under significant pressure"
 const HONOR_THRESHOLD_PRESSURE: float = 2.0
 
 static func passes_covert_filters(
@@ -457,7 +465,8 @@ static func resolve_eavesdrop(
 
 const INTERCEPT_STEALTH_TN: int = 15
 const INTERCEPT_FORGERY_TN: int = 15
-const INTERCEPT_GEOGRAPHIC_BONUS: int = 5
+# GDD s12.8 line 125 mentions geographic distance modifier but no numeric value.
+const INTERCEPT_GEOGRAPHIC_BONUS: int = 0
 
 static func resolve_intercept_letter(
 	interceptor: L5RCharacterData,
@@ -676,7 +685,7 @@ static func resolve_forge_impersonation_letter(
 	var success: bool = result.get("success", false)
 	var detection_tn: int = needed if success else 0
 
-	HonorGlorySystem.apply_honor_change(forger, -0.3)
+	HonorGlorySystem.apply_honor_change(forger, CrimeSystem.scale_honor_by_rank(-0.3, forger))
 	HonorGlorySystem.apply_infamy_change(forger, 0.1)
 
 	return {
@@ -717,7 +726,7 @@ static func resolve_forge_order(
 	var success: bool = result.get("success", false)
 	var detection_tn: int = needed if success else 0
 
-	HonorGlorySystem.apply_honor_change(forger, -0.3)
+	HonorGlorySystem.apply_honor_change(forger, CrimeSystem.scale_honor_by_rank(-0.3, forger))
 	HonorGlorySystem.apply_infamy_change(forger, 0.1)
 
 	return {

@@ -41,7 +41,7 @@ func test_first_offense_tier_4_topic():
 	var attacker := _make_character(3.0)
 	var victim := _make_character(3.0)
 	var result := ViolenceSystem.evaluate_violence(attacker, victim, 0, false)
-	assert_eq(result["topic_tier"], 4)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_4)
 
 
 func test_auto_detected():
@@ -86,18 +86,18 @@ func test_violence_equal_standard():
 
 # -- Repeated Offenses (s11.3.12e) ----
 
-func test_second_offense_gains_infamy():
+func test_second_offense_infamy_zeroed_pending_gdd_spec():
 	var attacker := _make_character(3.0)
 	var victim := _make_character(3.0)
 	var result := ViolenceSystem.evaluate_violence(attacker, victim, 1, false)
-	assert_almost_eq(result["infamy_gain"], 0.5, 0.01)
+	assert_almost_eq(result["infamy_gain"], ViolenceSystem.INFAMY_PER_REPEATED_OFFENSE, 0.01)
 
 
 func test_third_offense_escalates_topic():
 	var attacker := _make_character(3.0)
 	var victim := _make_character(3.0)
 	var result := ViolenceSystem.evaluate_violence(attacker, victim, 3, false)
-	assert_eq(result["topic_tier"], 3)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_3)
 
 
 func test_third_offense_escalates_punishment():
@@ -114,11 +114,11 @@ func test_upward_violence_with_repeats_max_punishment():
 	assert_eq(result["punishment"], ViolenceSystem.PunishmentLevel.FORMAL_CENSURE)
 
 
-func test_brutal_first_offense_gains_infamy():
+func test_brutal_first_offense_infamy_zeroed_pending_gdd_spec():
 	var attacker := _make_character(3.0)
 	var victim := _make_character(3.0)
 	var result := ViolenceSystem.evaluate_violence(attacker, victim, 0, true)
-	assert_almost_eq(result["infamy_gain"], 0.5, 0.01)
+	assert_almost_eq(result["infamy_gain"], ViolenceSystem.INFAMY_PER_REPEATED_OFFENSE, 0.01)
 
 
 # -- Offense Window Counting ----
@@ -149,7 +149,7 @@ func test_apply_consequences_modifies_character():
 	ViolenceSystem.apply_consequences(attacker, eval_result)
 	assert_almost_eq(attacker.honor, initial_honor - 0.2, 0.01)
 	assert_almost_eq(attacker.glory, initial_glory - 0.1, 0.01)
-	assert_almost_eq(attacker.infamy, 0.5, 0.01)
+	assert_almost_eq(attacker.infamy, ViolenceSystem.INFAMY_PER_REPEATED_OFFENSE, 0.01)
 
 
 # -- Duel Pretext (s11.3.12d) ----

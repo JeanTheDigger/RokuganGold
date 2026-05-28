@@ -90,7 +90,7 @@ static func generate_report_need(
 	return {
 		"need_type": "REPORT_TO_NEW_LORD",
 		"target_npc_id": target_id,
-		"priority": 2,
+		"priority": 0,
 	}
 
 

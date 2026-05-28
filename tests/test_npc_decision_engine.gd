@@ -85,7 +85,6 @@ func before_each() -> void:
 			{"condition": "war_score_below_25", "bonus": 25, "applies_to": ["CHARM", "ORDER_BATTLE"], "stacks_per_crisis": false},
 			{"condition": "active_crisis_in_relevance_range", "bonus": 15, "applies_to": "actions_addressing_crisis", "stacks_per_crisis": true, "weight_by_relevance": true},
 			{"condition": "court_ending_within_2_ic_days", "bonus": 10, "applies_to": "court_actions", "stacks_per_crisis": false},
-			{"condition": "favor_expiring_within_7_ooc_days", "bonus": 20, "applies_to": ["HONOR_FAVOR", "BREAK_FAVOR"], "stacks_per_crisis": false},
 			{"condition": "objective_stalled_2_plus_seasons", "bonus": 10, "applies_to": "actions_addressing_primary_objective", "stacks_per_crisis": false},
 		],
 		"topic_position_alignment": {},
@@ -496,7 +495,7 @@ func test_score_disposition_cooperative_action_against_enemy() -> void:
 
 
 func test_score_urgency_war_score_below_25() -> void:
-	_world_state["active_wars"] = [{"clan_a": "Crane", "clan_b": "Lion", "war_score": 20}]
+	_world_state["active_wars"] = [{"clan_a": "Crane", "clan_b": "Lion", "war_score_a": 20, "war_score_b": 80}]
 	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
 	var need := NPCDataStructures.ImmediateNeed.new()
 	need.need_type = "RAISE_DISPOSITION"
@@ -517,7 +516,7 @@ func test_score_urgency_no_matching_condition() -> void:
 
 
 func test_score_urgency_action_not_in_applies_to() -> void:
-	_world_state["active_wars"] = [{"clan_a": "Crane", "clan_b": "Lion", "war_score": 20}]
+	_world_state["active_wars"] = [{"clan_a": "Crane", "clan_b": "Lion", "war_score_a": 20, "war_score_b": 80}]
 	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
 	var need := NPCDataStructures.ImmediateNeed.new()
 	need.need_type = "RAISE_DISPOSITION"
@@ -552,7 +551,7 @@ func test_score_urgency_crisis_stacking() -> void:
 
 func test_score_urgency_clamped_at_30() -> void:
 	_world_state["is_lord"] = true
-	_world_state["active_wars"] = [{"clan_a": "Crane", "clan_b": "Lion", "war_score": 20}]
+	_world_state["active_wars"] = [{"clan_a": "Crane", "clan_b": "Lion", "war_score_a": 20, "war_score_b": 80}]
 	var ps1 := NPCDataStructures.ProvinceStatus.new()
 	ps1.province_id = 10
 	ps1.active_crisis_id = 1
@@ -612,7 +611,9 @@ func test_urgency_favor_expiring() -> void:
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "HONOR_FAVOR"
 	NPCDecisionEngine.score_all([option], need, ctx, _scoring_tables)
-	assert_eq(option.urgency_bonus, 20.0)
+	# favor_expiring_within_7_ooc_days urgency rule was removed — favor honoring
+	# runs through the reactive decision path, not the AP scoring loop
+	assert_eq(option.urgency_bonus, 0.0)
 
 
 func test_urgency_objective_stalled() -> void:
@@ -1634,6 +1635,60 @@ func test_competence_modifier_unknown_action() -> void:
 	assert_eq(result, 0.0, "Unknown action should return 0")
 
 
+func test_competence_modifier_lore_picks_best_sub_skill() -> void:
+	var tables: Dictionary = {
+		"action_skill_map": {
+			"IMPRESS": {"primary": "Lore", "secondary": "Etiquette"},
+		},
+		"competence_table": {"0": -20, "1": -10, "2": -5, "3": 0, "4": 5, "5": 10, "6": 15, "7": 20},
+	}
+	var skills: Dictionary = {"Lore: Heraldry": 2, "Lore: Theology": 5, "Etiquette": 3}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"IMPRESS", skills, tables,
+	)
+	assert_almost_eq(result, 10.0, 0.01, "Should use best Lore sub-skill (Theology rank 5 = +10)")
+
+
+func test_competence_modifier_lore_no_sub_skills() -> void:
+	var tables: Dictionary = {
+		"action_skill_map": {
+			"IMPRESS": {"primary": "Lore", "secondary": "Etiquette"},
+		},
+		"competence_table": {"0": -20, "1": -10, "2": -5, "3": 0, "4": 5, "5": 10, "6": 15, "7": 20},
+	}
+	var skills: Dictionary = {"Etiquette": 3}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"IMPRESS", skills, tables,
+	)
+	assert_almost_eq(result, -20.0, 0.01, "No Lore sub-skills means rank 0 = -20")
+
+
+func test_competence_modifier_games_picks_best_sub_skill() -> void:
+	var tables: Dictionary = {
+		"action_skill_map": {
+			"PLAY_GAME": {"primary": "Games", "secondary": "Awareness"},
+		},
+		"competence_table": {"0": -20, "1": -10, "2": -5, "3": 0, "4": 5, "5": 10, "6": 15, "7": 20},
+	}
+	# Awareness at rank 3 (modifier 0) so secondary contributes 0 * 0.5 = 0
+	var skills: Dictionary = {"Games: Go": 3, "Games: Shogi": 6, "Awareness": 3}
+	var result: float = NPCDecisionEngine._compute_competence_modifier(
+		"PLAY_GAME", skills, tables,
+	)
+	# Primary: Shogi rank 6 = +15, Secondary: Awareness rank 3 = 0 * 0.5 = 0, total = 15
+	assert_almost_eq(result, 15.0, 0.01, "Should use best Games sub-skill (Shogi rank 6 = +15)")
+
+
+func test_best_skill_rank_exact_match() -> void:
+	var skills: Dictionary = {"Kenjutsu": 4}
+	assert_eq(NPCDecisionEngine._best_skill_rank("Kenjutsu", skills), 4)
+
+
+func test_best_skill_rank_category_match() -> void:
+	var skills: Dictionary = {"Craft: Weaponsmithing": 5, "Craft: Armorsmithing": 3}
+	assert_eq(NPCDecisionEngine._best_skill_rank("Craft", skills), 5)
+
+
 # -- Province status rice stockpile population ---------------------------------
 
 func test_province_status_rice_stockpile_from_settlements() -> void:
@@ -1740,7 +1795,8 @@ func test_conditional_yu_blocks_seek_peace_when_war_score_high() -> void:
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.bushido_virtue = Enums.BushidoVirtue.YU
 	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
-	ctx.active_wars = [{"war_score": 30}]
+	ctx.clan = "Crane"
+	ctx.active_wars = [{"clan_a": "Crane", "clan_b": "Lion", "war_score_a": 30, "war_score_b": 70}]
 	var filter: Dictionary = {
 		"bushido": {
 			"YU": {
@@ -1768,7 +1824,8 @@ func test_conditional_yu_allows_seek_peace_when_war_score_low() -> void:
 	var ctx := NPCDataStructures.ContextSnapshot.new()
 	ctx.bushido_virtue = Enums.BushidoVirtue.YU
 	ctx.shourido_virtue = Enums.ShouridoVirtue.NONE
-	ctx.active_wars = [{"war_score": 20}]
+	ctx.clan = "Crane"
+	ctx.active_wars = [{"clan_a": "Crane", "clan_b": "Lion", "war_score_a": 20, "war_score_b": 80}]
 	var filter: Dictionary = {
 		"bushido": {
 			"YU": {
@@ -2442,7 +2499,7 @@ func test_existential_threat_starvation() -> void:
 	_world_state["resource_stockpiles"] = {"rice": 0}
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = 1
-	ps.starvation_stage = 2
+	ps.starvation_stage = ResourceTick.StarvationStage.HUNGER
 	_world_state["province_statuses"] = [ps]
 	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
 	var has_threat: bool = NPCDecisionEngine._has_existential_threat(ctx)
@@ -3459,3 +3516,340 @@ func test_forge_objective_alignment_entries() -> void:
 	assert_true(data["ACQUIRE_LEVERAGE"].has("FORGE_ORDER"))
 	assert_true(data["SUPPRESS_INVESTIGATION"].has("FORGE_IMPERSONATION_LETTER"))
 	assert_true(data["SUPPRESS_INVESTIGATION"].has("FORGE_ORDER"))
+
+
+func test_forge_letter_authority_uses_target_lord_rank() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	ctx.known_topics = [10]
+	var need := _make_metadata_need()
+	need.target_npc_id = 42
+	need.target_npc_id_secondary = 55
+	var target := L5RCharacterData.new()
+	target.character_id = 42
+	target.status = 7.0
+	var chars: Dictionary = {42: target}
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_IMPERSONATION_LETTER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx, null, chars)
+	assert_eq(option.metadata.get("authority_level", ""), "moderate",
+		"Should use target's CLAN_CHAMPION rank (moderate), not forger's PROVINCIAL_DAIMYO (minor)")
+
+
+func test_forge_order_authority_uses_target_lord_rank() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var need := _make_metadata_need()
+	need.target_npc_id = 50
+	var target := L5RCharacterData.new()
+	target.character_id = 50
+	target.lord_id = 99
+	var lord := L5RCharacterData.new()
+	lord.character_id = 99
+	lord.status = 9.0
+	var chars: Dictionary = {50: target, 99: lord}
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_ORDER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx, null, chars)
+	assert_eq(option.metadata.get("authority_level", ""), "major",
+		"Should use target's lord's IMPERIAL rank (major), not forger's PROVINCIAL_DAIMYO (minor)")
+
+
+func test_forge_authority_fallback_without_chars_by_id() -> void:
+	var ctx := _make_metadata_ctx()
+	ctx.lord_rank = Enums.LordRank.CLAN_CHAMPION
+	ctx.known_topics = [5]
+	var need := _make_metadata_need()
+	need.target_npc_id = 42
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "FORGE_IMPERSONATION_LETTER"
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_eq(option.metadata.get("authority_level", ""), "moderate",
+		"Without chars_by_id, should fall back to forger's own lord_rank")
+
+
+# -- Audit: knowledge_pool aliasing -------------------------------------------
+
+func test_build_context_knowledge_pool_is_independent_copy() -> void:
+	var entry := KnowledgeEntry.new()
+	entry.entry_type = "personality_insight"
+	entry.data = {"virtue": "REI"}
+	_char.knowledge_pool.append(entry)
+	var ctx := NPCDecisionEngine.build_context(_char, _world_state)
+	ctx.knowledge_pool.clear()
+	assert_eq(_char.knowledge_pool.size(), 1,
+		"Clearing ctx.knowledge_pool must not affect character.knowledge_pool")
+
+
+# -- Audit: dead character guards in stockpile collectors --------------------
+
+func _make_dead_char(id: int, clan: String, lord_id: int) -> L5RCharacterData:
+	var ch := L5RCharacterData.new()
+	ch.character_id = id
+	ch.clan = clan
+	ch.lord_id = lord_id
+	ch.stamina = 2
+	ch.willpower = 2
+	ch.wounds_taken = 999
+	return ch
+
+
+func test_collect_vassal_stockpiles_skips_dead_vassals() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.clan = "Crane"
+	var alive_vassal := L5RCharacterData.new()
+	alive_vassal.character_id = 20
+	alive_vassal.clan = "Crane"
+	alive_vassal.lord_id = 10
+	alive_vassal.stamina = 2
+	alive_vassal.willpower = 2
+	var dead_vassal := _make_dead_char(30, "Crane", 10)
+	var province := ProvinceData.new()
+	province.province_id = 1
+	province.clan = "Crane"
+	var settlement := SettlementData.new()
+	settlement.province_id = 1
+	settlement.rice_stockpile = 50.0
+	settlement.population_pu = 10
+	var ws: Dictionary = {
+		"characters_by_id": {20: alive_vassal, 30: dead_vassal},
+	}
+	var result: Array = NPCDecisionEngine._collect_vassal_stockpiles(
+		lord, ws, [settlement], [province])
+	var found_ids: Array = []
+	for entry: Variant in result:
+		found_ids.append(entry["character_id"])
+	assert_true(20 in found_ids, "Alive vassal should appear")
+	assert_false(30 in found_ids, "Dead vassal should be skipped")
+
+
+func test_collect_allied_surplus_skips_dead_allies() -> void:
+	var me := L5RCharacterData.new()
+	me.character_id = 1
+	me.clan = "Crane"
+	me.stamina = 2
+	me.willpower = 2
+	var alive_ally := L5RCharacterData.new()
+	alive_ally.character_id = 2
+	alive_ally.clan = "Lion"
+	alive_ally.lord_id = -1
+	alive_ally.status = 6.0
+	alive_ally.stamina = 2
+	alive_ally.willpower = 2
+	me.disposition_values[2] = 40
+	var dead_ally := _make_dead_char(3, "Phoenix", -1)
+	dead_ally.status = 6.0
+	me.disposition_values[3] = 40
+	var province_lion := ProvinceData.new()
+	province_lion.province_id = 1
+	province_lion.clan = "Lion"
+	var province_phoenix := ProvinceData.new()
+	province_phoenix.province_id = 2
+	province_phoenix.clan = "Phoenix"
+	var settlement_lion := SettlementData.new()
+	settlement_lion.province_id = 1
+	settlement_lion.rice_stockpile = 200.0
+	settlement_lion.farming_pu = 10
+	var settlement_phoenix := SettlementData.new()
+	settlement_phoenix.province_id = 2
+	settlement_phoenix.rice_stockpile = 200.0
+	settlement_phoenix.farming_pu = 10
+	var ws: Dictionary = {
+		"characters_by_id": {2: alive_ally, 3: dead_ally},
+	}
+	var result: Array = NPCDecisionEngine._collect_allied_surplus(
+		me, ws, [settlement_lion, settlement_phoenix],
+		[province_lion, province_phoenix])
+	var found_ids: Array = []
+	for entry: Variant in result:
+		found_ids.append(entry["character_id"])
+	assert_true(2 in found_ids, "Alive ally should appear")
+	assert_false(3 in found_ids, "Dead ally should be skipped")
+
+
+# -- Audit: _pick_levy_province type guard ------------------------------------
+
+func test_pick_levy_province_skips_non_province_status_entries() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	var ps := NPCDataStructures.ProvinceStatus.new()
+	ps.province_id = 5
+	ps.total_settlement_pu = 100
+	ctx.province_statuses = [ps, "garbage_string", 42]
+	var result: int = NPCDecisionEngine._pick_levy_province(ctx)
+	assert_eq(result, 5, "Should pick the valid ProvinceStatus and skip non-typed entries")
+
+
+func test_pick_levy_province_empty_returns_negative_one() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.province_statuses = []
+	var result: int = NPCDecisionEngine._pick_levy_province(ctx)
+	assert_eq(result, -1, "Empty province_statuses should return -1")
+
+
+# -- Audit: _pick_gossip_subject self-selection guard -------------------------
+
+func test_pick_gossip_subject_excludes_self() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.disposition_values = {1: -50, 2: -10, 3: 5}
+	var result: int = NPCDecisionEngine._pick_gossip_subject(ctx)
+	assert_ne(result, 1, "NPC should never select themselves as gossip subject")
+	assert_eq(result, 2, "Should pick character 2 (worst non-self disposition)")
+
+
+func test_pick_gossip_subject_self_is_only_negative_returns_negative_one() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.disposition_values = {1: -50, 2: 10, 3: 20}
+	var result: int = NPCDecisionEngine._pick_gossip_subject(ctx)
+	assert_eq(result, -1, "Only negative is self, so no valid gossip target")
+
+
+# -- Audit: CHANGE_DESTINATION reachability (was missing from objective_alignment)
+
+func test_change_destination_passes_allowlist_for_travel_to() -> void:
+	var tables: Dictionary = _load_real_scoring_tables()
+	var options: Array = []
+	for aid: String in ["CHANGE_DESTINATION", "TRAIN", "MEDITATE", "DO_NOTHING", "REST"]:
+		var opt := NPCDataStructures.ScoredAction.new()
+		opt.action_id = aid
+		options.append(opt)
+	var filtered: Array = NPCDecisionEngine.apply_allowlist_filter(
+		options, "TRAVEL_TO", tables
+	)
+	var action_ids: Array = []
+	for o: NPCDataStructures.ScoredAction in filtered:
+		action_ids.append(o.action_id)
+	assert_true(action_ids.has("CHANGE_DESTINATION"),
+		"CHANGE_DESTINATION must pass allowlist for TRAVEL_TO")
+	assert_true(action_ids.has("DO_NOTHING"),
+		"DO_NOTHING must pass allowlist for TRAVEL_TO")
+
+
+func test_perform_ritual_passes_allowlist_for_perform_ritual_need() -> void:
+	var tables: Dictionary = _load_real_scoring_tables()
+	var options: Array = []
+	for aid: String in ["PERFORM_RITUAL", "PERFORM_WORSHIP", "MEDITATE", "DO_NOTHING"]:
+		var opt := NPCDataStructures.ScoredAction.new()
+		opt.action_id = aid
+		options.append(opt)
+	var filtered: Array = NPCDecisionEngine.apply_allowlist_filter(
+		options, "PERFORM_RITUAL", tables
+	)
+	var action_ids: Array = []
+	for o: NPCDataStructures.ScoredAction in filtered:
+		action_ids.append(o.action_id)
+	assert_true(action_ids.has("PERFORM_RITUAL"),
+		"PERFORM_RITUAL ActionID must pass allowlist for PERFORM_RITUAL NeedType")
+	assert_true(action_ids.has("PERFORM_WORSHIP"),
+		"PERFORM_WORSHIP must pass allowlist for PERFORM_RITUAL NeedType")
+
+
+func test_dead_contact_excluded_from_garrison_scores() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 1
+	lord.character_name = "Lord"
+	lord.skills = {}
+	lord.emphases = {}
+	lord.bushido_virtue = Enums.BushidoVirtue.REI
+	lord.known_contacts_by_clan = {"Crab": [2]}
+	var dead_contact := L5RCharacterData.new()
+	dead_contact.character_id = 2
+	dead_contact.character_name = "Dead Contact"
+	dead_contact.bushido_virtue = Enums.BushidoVirtue.YU
+	dead_contact.wounds_taken = 999
+	dead_contact.stamina = 2
+	dead_contact.skills = {}
+	dead_contact.emphases = {}
+	var ws: Dictionary = {
+		"is_lord": true,
+		"wall_statuses": [{"tower_id": 1, "ss": 5}],
+	}
+	var chars: Dictionary = {1: lord, 2: dead_contact}
+	var ctx := NPCDecisionEngine.build_context(lord, ws, chars)
+	assert_false(ctx.contact_garrison_scores.has(2),
+		"Dead contact should not have garrison personality score")
+
+
+func _load_real_scoring_tables() -> Dictionary:
+	var tables: Dictionary = {}
+	var alignment_file := FileAccess.open(
+		"res://systems/npc_engine/data/tables/objective_alignment.json", FileAccess.READ
+	)
+	if alignment_file != null:
+		var json := JSON.new()
+		var err: Error = json.parse(alignment_file.get_as_text())
+		if err == OK:
+			tables["objective_alignment"] = json.data
+	return tables
+
+
+# -- build_province_statuses_from_data tests -----------------------------------
+
+func test_build_province_statuses_wall_province() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 1
+	pd.clan = "Crab"
+	pd.shadowlands_strength = 5
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data([pd])
+	assert_eq(result.size(), 1)
+	var ps: NPCDataStructures.ProvinceStatus = result[0]
+	assert_true(ps.is_wall_province,
+		"Province with shadowlands_strength > 0 should be marked as wall province")
+
+func test_build_province_statuses_non_wall_province() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 2
+	pd.clan = "Crane"
+	pd.shadowlands_strength = 0
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data([pd])
+	var ps: NPCDataStructures.ProvinceStatus = result[0]
+	assert_false(ps.is_wall_province,
+		"Province with shadowlands_strength 0 should not be wall province")
+
+func test_build_province_statuses_famine_starvation() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 3
+	pd.clan = "Lion"
+	pd.crisis_type = "famine"
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data([pd])
+	var ps: NPCDataStructures.ProvinceStatus = result[0]
+	assert_true(ps.starvation_stage > ResourceTick.StarvationStage.CLEAR,
+		"Province with famine crisis should have non-zero starvation_stage")
+
+func test_build_province_statuses_no_famine() -> void:
+	var pd := ProvinceData.new()
+	pd.province_id = 4
+	pd.clan = "Scorpion"
+	pd.crisis_type = ""
+	var result: Array = NPCDecisionEngine.build_province_statuses_from_data([pd])
+	var ps: NPCDataStructures.ProvinceStatus = result[0]
+	assert_eq(ps.starvation_stage, 0,
+		"Province without famine should have 0 starvation_stage")
+
+func test_build_province_statuses_can_sustain_iron() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.status = 6.0
+	c.lord_id = -1
+	c.clan = "Crab"
+	var ws: Dictionary = {}
+	DayOrchestrator._populate_resource_stockpiles(ws, [c], {}, [], {"Crab": ClanData.new()}, [])
+	assert_true(ws[1].has("can_sustain_iron_upkeep"),
+		"can_sustain_iron_upkeep should be set by _populate_resource_stockpiles")
+
+
+func test_get_own_war_score_extracts_correct_clan_score() -> void:
+	var war_dict: Dictionary = {
+		"clan_a": "Lion",
+		"clan_b": "Crane",
+		"war_score_a": 35,
+		"war_score_b": 65,
+	}
+	assert_eq(NPCDecisionEngine._get_own_war_score(war_dict, "Lion"), 35,
+		"Should return clan_a score for Lion")
+	assert_eq(NPCDecisionEngine._get_own_war_score(war_dict, "Crane"), 65,
+		"Should return clan_b score for Crane")
+	assert_eq(NPCDecisionEngine._get_own_war_score(war_dict, "Phoenix"), 50,
+		"Should return default 50 for uninvolved clan")

@@ -106,7 +106,7 @@ func test_conviction_cascade_magistrate():
 	assert_true(r["replacement_required"])
 	assert_true(r["replacement_re_examines_evidence"])
 	assert_eq(r["stability_hit"], 0)
-	assert_eq(r["topic_tier"], 4)
+	assert_eq(r["topic_tier"], TopicData.Tier.TIER_4)
 
 
 func test_conviction_cascade_governor():
@@ -117,7 +117,7 @@ func test_conviction_cascade_governor():
 	assert_true(r["succession_fires"])
 	assert_eq(r["stability_hit"], -5)
 	assert_eq(r["stability_scope"], "province")
-	assert_eq(r["topic_tier"], 3)
+	assert_eq(r["topic_tier"], TopicData.Tier.TIER_3)
 
 
 func test_conviction_cascade_family_daimyo():
@@ -128,7 +128,7 @@ func test_conviction_cascade_family_daimyo():
 	assert_true(r["succession_fires"])
 	assert_eq(r["stability_hit"], -5)
 	assert_eq(r["stability_scope"], "family_provinces")
-	assert_eq(r["topic_tier"], 2)
+	assert_eq(r["topic_tier"], TopicData.Tier.TIER_2)
 	assert_eq(r["scope"], "clan")
 
 
@@ -140,7 +140,7 @@ func test_conviction_cascade_clan_champion():
 	assert_true(r["succession_fires"])
 	assert_eq(r["stability_hit"], -5)
 	assert_eq(r["stability_scope"], "all_clan_provinces")
-	assert_eq(r["topic_tier"], 2)
+	assert_eq(r["topic_tier"], TopicData.Tier.TIER_2)
 	assert_eq(r["scope"], "empire")
 
 
@@ -264,4 +264,4 @@ func test_emerald_can_override_clan():
 
 
 func test_emerald_assignment_topic_tier():
-	assert_eq(MagistrateAllocationSystem.get_emerald_assignment_topic_tier(), 3)
+	assert_eq(MagistrateAllocationSystem.get_emerald_assignment_topic_tier(), TopicData.Tier.TIER_3)

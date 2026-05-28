@@ -390,3 +390,44 @@ static func process_seasonal_advancement(characters: Array, world_state: Diction
 			results.append(entry)
 
 	return {"results": results, "total_rank_advancements": total_rank_advancements}
+
+
+# === SENSEI TRAINING SESSION (s48) ===
+
+const TRAINING_PROGRESS_SOLO: int = 50
+const TRAINING_PROGRESS_SENSEI_1_ABOVE: int = 75
+const TRAINING_PROGRESS_SENSEI_2_ABOVE: int = 100
+const TRAINING_PROGRESS_SENSEI_SELF: int = 25
+
+
+static func resolve_training_session(
+	sensei: L5RCharacterData,
+	student: L5RCharacterData,
+	skill_name: String,
+) -> Dictionary:
+	var sensei_rank: int = sensei.skills.get(skill_name, 0)
+	var student_rank: int = student.skills.get(skill_name, 0)
+
+	if sensei_rank <= student_rank:
+		return {"success": false, "reason": "sensei_rank_not_higher"}
+	if student_rank >= MAX_SKILL_RANK:
+		return {"success": false, "reason": "student_at_max"}
+
+	var rank_gap: int = sensei_rank - student_rank
+	var student_progress: int = TRAINING_PROGRESS_SENSEI_2_ABOVE if rank_gap >= 2 else TRAINING_PROGRESS_SENSEI_1_ABOVE
+	var sensei_progress: int = TRAINING_PROGRESS_SENSEI_SELF
+
+	var student_result: Dictionary = _try_spend_on_skill(student, skill_name, student_progress)
+	var sensei_result: Dictionary = {}
+	if sensei_rank < MAX_SKILL_RANK:
+		sensei_result = _try_spend_on_skill(sensei, skill_name, sensei_progress)
+
+	return {
+		"success": true,
+		"skill_name": skill_name,
+		"student_progress": student_progress,
+		"student_advanced": student_result.get("advanced", false),
+		"sensei_progress": sensei_progress,
+		"sensei_advanced": sensei_result.get("advanced", false),
+		"rank_gap": rank_gap,
+	}

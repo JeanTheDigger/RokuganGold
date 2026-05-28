@@ -273,7 +273,7 @@ func test_flee_from_investigation():
 	assert_true(result["success"])
 	assert_false(result["was_accused"])
 	assert_eq(entry.state, Enums.LegalStatus.FUGITIVE)
-	assert_eq(result["topic_tier"], 3)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_3)
 
 
 func test_flee_from_accused():
@@ -310,7 +310,7 @@ func test_pardon_guilty():
 	var result := LegalStatusSystem.pardon(entry, 80)
 	assert_true(result["success"])
 	assert_eq(entry.state, Enums.LegalStatus.PARDONED)
-	assert_eq(result["topic_tier"], 3)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_3)
 
 
 func test_pardon_non_guilty_fails():

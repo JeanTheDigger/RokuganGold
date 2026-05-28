@@ -101,6 +101,9 @@ enum TerrainType {
 	FOREST,
 	HILLS,
 	MOUNTAINS,
+	SWAMP,
+	WASTELAND,
+	COASTAL,
 }
 
 enum SettlementType {
@@ -136,6 +139,9 @@ const TERRAIN_RICE_MULTIPLIER: Dictionary = {
 	TerrainType.FOREST: 0.75,
 	TerrainType.HILLS: 0.75,
 	TerrainType.MOUNTAINS: 0.5,
+	TerrainType.SWAMP: 0.6,
+	TerrainType.WASTELAND: 0.2,
+	TerrainType.COASTAL: 1.0,
 }
 
 const MILITARY_SETTLEMENT_TYPES: Array[SettlementType] = [
@@ -361,6 +367,20 @@ enum KolatSect {
 	LOTUS,
 	SILK,
 	TIGER,
+}
+
+enum BloodspeakerCellState {
+	DORMANT,
+	ACTIVE,
+	PROPAGATING,
+	DESTROYED,
+}
+
+enum CellEstablishmentPath {
+	AGENT_INFILTRATION,
+	PTL_CORRUPTION,
+	NAMED_NPC_FALL,
+	ARTIFACT_DISCOVERY,
 }
 
 enum KnowledgeSource {
@@ -642,4 +662,77 @@ enum CompanionSpecies {
 	WAR_DOG,
 	WARHORSE,
 	WARCAT,
+}
+
+
+# -- Spiritual Insurgency (s56.16 — LOCKED) ------------------------------------
+enum SpiritRealm {
+	GAKI_DO,
+	TOSHIGOKU,
+	CHIKUSHUDO,
+	SAKKAKU,
+	MEIDO,
+	YUME_DO,
+}
+
+
+enum SpiritualEventType {
+	REALM_OVERLAP,
+	ELEMENTAL_IMBALANCE,
+}
+
+
+enum SpiritualSeverity {
+	MILD,
+	MODERATE,
+	SEVERE,
+	CATASTROPHIC,
+}
+
+
+# -- Artisan & Crafting (s49 — LOCKED) -----------------------------------------
+
+enum CraftingCategory {
+	ARMOR,
+	ARTWORK,
+	ENGINEERING,
+	EQUIPMENT,
+	WEAPONS,
+}
+
+enum MaterialTier {
+	COMMON,      # 0 Free Raises
+	UNCOMMON,    # +1 Free Raise
+	RARE,        # +2 Free Raises
+	LEGENDARY,   # +3 Free Raises
+}
+
+enum MaterialType {
+	STEEL,
+	METAL_GLASS,
+	OTHER,       # wood, cloth, paper, bone, clay, etc.
+}
+
+enum WeaponSpecialQuality {
+	BALANCED,     # +1k0 attack rolls — 4 Raises
+	SIGNATURE,    # creator embedded in provenance — 2 Raises
+	SWIFT,        # +5 Initiative — 4 Raises
+	TRUE_QUALITY, # Reduces target Reduction by wielder Strength — 6 Raises
+	RADIANT,      # Counts as Jade vs Invulnerable — 6 Raises
+	UNBREAKABLE,  # Cannot be broken — 5 Raises
+}
+
+enum CraftingTrack {
+	ARTISAN,  # Fine arts — Artisan (Awareness)
+	CRAFT,    # Practical production — Craft (varies)
+}
+
+enum HistoryEventType {
+	OWNED_RANK_3,        # +1 HP — owner Insight Rank 3+
+	OWNED_RANK_5,        # +2 HP — owner Insight Rank 5+
+	OWNED_CHAMPION,      # +3 HP — owner is Clan Champion or Imperial
+	USED_IN_BATTLE,      # +1 HP — used in significant battle or duel
+	GIFTED_AT_COURT,     # +1 HP — gifted at Winter Court or major ceremony
+	SUBJECT_OF_ART,      # +1 HP — made subject of poem, performance, story
+	PRESENT_AT_EVENT,    # +2 HP — present at historically significant event
 }

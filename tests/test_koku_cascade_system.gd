@@ -613,3 +613,18 @@ func test_no_champion_no_cascade() -> void:
 	# Pool goes up but nobody to distribute it
 	assert_almost_eq(result["upward"]["Crane"], 4.0, 0.001)
 	assert_eq(result["downward"].size(), 0)
+
+
+# -- Audit: Dead character guards (2026-05-23) ---------------------------------
+
+func test_stipend_skips_dead_retainers() -> void:
+	var lord := _make_character(1, "Crane", 7.0)
+	lord.koku = 100.0
+	var dead_retainer := _make_character(2, "Crane", 3.0, 1)
+	dead_retainer.wounds_taken = 999
+	dead_retainer.koku = 0.0
+	var chars: Array = [lord, dead_retainer]
+	var chars_by_id: Dictionary = {1: lord, 2: dead_retainer}
+	KokuCascadeSystem._pay_individual_stipends({1: {"passed_down": 50.0}}, chars, chars_by_id)
+	assert_eq(dead_retainer.koku, 0.0,
+		"Dead retainer should not receive stipend")

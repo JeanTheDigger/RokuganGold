@@ -287,7 +287,7 @@ func test_success_obligation_modifier_uses_correct_event_key() -> void:
 		assert_true(event_keys.has("gift_fine"))
 
 
-func test_critical_failure_loses_disposition() -> void:
+func test_critical_failure_disposition_zeroed_pending_gdd_spec() -> void:
 	# Untrained giver, no quality bonus, against TN 15. With seed 42 most
 	# rolls land somewhere in between — drive a guaranteed critical failure
 	# by removing the skill entirely and using a brittle character.

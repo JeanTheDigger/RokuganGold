@@ -251,8 +251,13 @@ func test_doshin_recovery_no_losses():
 # -- Detection Advantage (s11.3.19a) ----
 
 func test_patrol_detection_chances():
-	assert_eq(CrimeSuppressionSystem.get_patrol_detection_chances(1, 2), 3)
-	assert_eq(CrimeSuppressionSystem.get_patrol_detection_chances(1, 0), 1)
+	var r: Dictionary = CrimeSuppressionSystem.get_patrol_detection_chances(1, 2)
+	assert_eq(r["magistrate_count"], 1)
+	assert_eq(r["yoriki_count"], 2)
+	assert_true(r["has_multiple_patrols"])
+	var r2: Dictionary = CrimeSuppressionSystem.get_patrol_detection_chances(1, 0)
+	assert_eq(r2["magistrate_count"], 1)
+	assert_false(r2["has_multiple_patrols"])
 
 
 # -- Suppression Consequences (s11.3.19d) ----

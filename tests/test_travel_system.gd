@@ -20,7 +20,7 @@ func test_set_and_get_distance() -> void:
 
 func test_unknown_distance_returns_default() -> void:
 	TravelSystem.clear_distances()
-	assert_eq(TravelSystem.get_travel_time("unknown_a", "unknown_b"), 3)
+	assert_eq(TravelSystem.get_travel_time("unknown_a", "unknown_b"), 1)
 
 
 func test_same_location_returns_zero() -> void:
@@ -31,7 +31,7 @@ func test_clear_distances() -> void:
 	TravelSystem.clear_distances()
 	TravelSystem.set_distance("a", "b", 7)
 	TravelSystem.clear_distances()
-	assert_eq(TravelSystem.get_travel_time("a", "b"), 3)
+	assert_eq(TravelSystem.get_travel_time("a", "b"), 1)
 
 
 # -- begin_travel --------------------------------------------------------------
@@ -219,13 +219,11 @@ func test_context_flag_not_traveling() -> void:
 func test_forced_march_reduces_days() -> void:
 	var result: Dictionary = TravelSystem.apply_forced_march(5)
 	assert_eq(result["travel_days"], 4)
-	assert_eq(result["morale_cost"], TravelSystem.FORCED_MARCH_MORALE_COST)
 
 
 func test_forced_march_minimum() -> void:
 	var result: Dictionary = TravelSystem.apply_forced_march(1)
 	assert_eq(result["travel_days"], 1)
-	assert_eq(result["morale_cost"], 0)
 
 
 # -- terrain costs (constants) -------------------------------------------------
@@ -234,7 +232,7 @@ func test_terrain_costs_defined() -> void:
 	assert_eq(TravelSystem.TERRAIN_COST["plains"], 1)
 	assert_eq(TravelSystem.TERRAIN_COST["forest"], 2)
 	assert_eq(TravelSystem.TERRAIN_COST["mountains"], 3)
-	assert_eq(TravelSystem.TERRAIN_COST["hills"], 3)
+	assert_eq(TravelSystem.TERRAIN_COST["hills"], 2)
 
 
 func test_river_crossing_costs() -> void:

@@ -156,7 +156,8 @@ func test_social_tn_public_declaration_honor_7_lowers_tn() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(0)
 	var tn: int = ActionExecutor._get_social_tn(action, ctx, _char)
 	var base_tn: int = ActionExecutor._get_social_tn(action, ctx, null)
-	assert_eq(base_tn - tn, 10)
+	# SOCIAL_BASE_TN=0, floor=5. Honor 7 modifier (-10) is floored to 5, same as base.
+	assert_eq(base_tn - tn, 0)
 
 
 func test_social_tn_public_declaration_honor_1_raises_tn() -> void:
@@ -165,7 +166,8 @@ func test_social_tn_public_declaration_honor_1_raises_tn() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(0)
 	var tn: int = ActionExecutor._get_social_tn(action, ctx, _char)
 	var base_tn: int = ActionExecutor._get_social_tn(action, ctx, null)
-	assert_eq(tn - base_tn, 10)
+	# SOCIAL_BASE_TN=0, floor=5. Honor 1 modifier (+10) gives tn=10, base=5. Delta=5.
+	assert_eq(tn - base_tn, 5)
 
 
 func test_social_tn_charm_unaffected_by_honor() -> void:

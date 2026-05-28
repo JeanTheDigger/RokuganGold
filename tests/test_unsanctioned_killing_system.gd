@@ -60,7 +60,7 @@ func test_tier_1_consequences():
 	assert_almost_eq(result["honor_loss"], -0.3, 0.01)
 	assert_almost_eq(result["glory_loss"], 0.0, 0.01)
 	assert_almost_eq(result["infamy_gain"], 0.0, 0.01)
-	assert_eq(result["topic_tier"], 4)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_4)
 	assert_false(result["seppuku_offered"])
 
 
@@ -70,7 +70,7 @@ func test_tier_2_consequences_public():
 	assert_almost_eq(result["honor_loss"], -1.0, 0.01)
 	assert_almost_eq(result["glory_loss"], -0.5, 0.01)
 	assert_almost_eq(result["infamy_gain"], 1.0, 0.01)
-	assert_eq(result["topic_tier"], 3)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_3)
 	assert_true(result["seppuku_offered"])
 	assert_true(result["leniency_possible"])
 
@@ -94,7 +94,7 @@ func test_tier_3_consequences():
 func test_tier_3_high_status_victim_tier_2_topic():
 	var result := UnsanctionedKillingSystem.get_consequences(
 		UnsanctionedKillingSystem.KillingTier.COVERT_KILLING, 6.0, false)
-	assert_eq(result["topic_tier"], 2)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_2)
 
 
 # -- Punishment Ranges ----

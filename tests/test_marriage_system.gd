@@ -108,14 +108,14 @@ func test_gempuku_not_eligible():
 
 func test_evaluate_proposal_friendly():
 	var score := MarriageSystem.evaluate_proposal(40, 10, 2, false)
-	# 40 + 10 + 20 = 70
-	assert_eq(score, 70)
+	# 40 + 10 + 0 = 50 (favor_tier and military_objective zeroed)
+	assert_eq(score, 50)
 
 
 func test_evaluate_proposal_with_military_objective():
 	var score := MarriageSystem.evaluate_proposal(30, 5, 1, true)
-	# 30 + 5 + 10 + 15 = 60
-	assert_eq(score, 60)
+	# 30 + 5 + 0 + 0 = 35
+	assert_eq(score, 35)
 
 
 # -- Benten festival tests ----------------------------------------------------

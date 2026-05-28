@@ -72,13 +72,13 @@ func test_gi_never_destroys_harvest() -> void:
 	assert_eq(r["reason"], "personality_block")
 
 
-func test_rei_blocked_without_prior_demand() -> void:
+func test_rei_never_destroys_harvest() -> void:
 	var without: Dictionary = StarvationWarfare.can_destroy_harvest("Rei", "autumn", true, false)
 	assert_false(without["allowed"])
-	assert_eq(without["reason"], "condition_not_met")
-	assert_eq(without["condition"], "prior_formal_demand")
+	assert_eq(without["reason"], "personality_block")
 	var with_demand: Dictionary = StarvationWarfare.can_destroy_harvest("Rei", "autumn", true, true)
-	assert_true(with_demand["allowed"])
+	assert_false(with_demand["allowed"])
+	assert_eq(with_demand["reason"], "personality_block")
 
 
 func test_yu_only_if_no_other_path() -> void:
@@ -127,7 +127,7 @@ func test_execute_harvest_destruction_returns_correct_effects() -> void:
 	assert_eq(result["targeted_clan_disposition"], -20)
 	assert_eq(result["other_clans_disposition"], -10)
 	assert_true(result["generates_topic"])
-	assert_eq(result["topic_tier"], 2)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_2)
 
 
 func test_apply_harvest_destruction_sets_flag() -> void:
@@ -348,18 +348,10 @@ func test_orchestrator_harvest_applies_disposition() -> void:
 		applied, chars_by_id, [], topics, next_topic_id, 50, season_meta, [], [1],
 	)
 
-	assert_true(target_char.historical_modifiers.has("Lion"), "Targeted clan gets modifier")
-	var mods: Array = target_char.historical_modifiers["Lion"]
-	assert_eq(mods.size(), 1)
-	assert_eq(mods[0]["event_type"], "destroyed_harvest")
-	assert_eq(mods[0]["current_value"], -20)
-	assert_false(mods[0]["decays"])
-
-	assert_true(other_char.historical_modifiers.has("Lion"), "Other clan gets modifier")
-	var other_mods: Array = other_char.historical_modifiers["Lion"]
-	assert_eq(other_mods[0]["event_type"], "witnessed_harvest_destruction")
-	assert_eq(other_mods[0]["current_value"], -10)
-
+	# Harvest disposition modifiers removed — not in GDD s12.2 historical modifier table.
+	# create_historical_modifier returns {} for unknown event types; no modifiers appended.
+	assert_false(target_char.historical_modifiers.has("Lion"), "No modifier — event type not in GDD")
+	assert_false(other_char.historical_modifiers.has("Lion"), "No modifier — event type not in GDD")
 	assert_false(attacker.historical_modifiers.has("Lion"), "Attacker doesn't get self-modifier")
 
 
@@ -421,18 +413,14 @@ func test_orchestrator_blockade_no_duplicate_war() -> void:
 	assert_false(results[0]["war_created"])
 
 
-func test_disposition_system_has_harvest_events() -> void:
+func test_disposition_system_harvest_events_removed() -> void:
+	# Harvest disposition modifiers removed — not in GDD s12.2 historical modifier table.
 	var mod: Dictionary = DispositionSystem.create_historical_modifier("destroyed_harvest", 100)
-	assert_false(mod.is_empty())
-	assert_eq(mod["current_value"], -20)
-	assert_false(mod["decays"])
-
+	assert_true(mod.is_empty())
 	var witness_mod: Dictionary = DispositionSystem.create_historical_modifier(
 		"witnessed_harvest_destruction", 100,
 	)
-	assert_false(witness_mod.is_empty())
-	assert_eq(witness_mod["current_value"], -10)
-	assert_true(witness_mod["decays"])
+	assert_true(witness_mod.is_empty())
 
 
 func test_imperial_edict_consequence() -> void:
@@ -464,14 +452,14 @@ func _make_ctx_for_harvest(virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.NON
 
 func test_harvest_conditions_no_other_path_when_desperate() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest()
-	ctx.active_wars = [{"war_score": 20}]
+	ctx.active_wars = [{"clan_a": "Lion", "war_score_a": 20}]
 	var conditions: Dictionary = NPCDecisionEngine._evaluate_harvest_conditions(ctx)
 	assert_true(conditions["no_other_path"])
 
 
 func test_harvest_conditions_no_other_path_false_when_ahead() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest()
-	ctx.active_wars = [{"war_score": 60}]
+	ctx.active_wars = [{"clan_a": "Lion", "war_score_a": 60}]
 	var conditions: Dictionary = NPCDecisionEngine._evaluate_harvest_conditions(ctx)
 	assert_false(conditions["no_other_path"])
 
@@ -521,13 +509,13 @@ func test_harvest_blocked_rei_always() -> void:
 
 func test_harvest_not_blocked_yu_when_desperate() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest(Enums.BushidoVirtue.YU)
-	ctx.active_wars = [{"war_score": 15}]
+	ctx.active_wars = [{"clan_a": "Lion", "war_score_a": 15}]
 	assert_false(NPCDecisionEngine._is_harvest_blocked_by_virtue(ctx))
 
 
 func test_harvest_blocked_yu_when_not_desperate() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_harvest(Enums.BushidoVirtue.YU)
-	ctx.active_wars = [{"war_score": 60}]
+	ctx.active_wars = [{"clan_a": "Lion", "war_score_a": 60}]
 	assert_true(NPCDecisionEngine._is_harvest_blocked_by_virtue(ctx))
 
 
@@ -595,3 +583,18 @@ func test_blockade_metadata_populates() -> void:
 	var meta: Dictionary = NPCDecisionEngine._build_blockade_metadata(need, ctx)
 	assert_eq(meta["blocking_clan"], "Lion")
 	assert_eq(meta["target_clan"], "Crane")
+
+
+func test_find_clan_lord_skips_dead_characters() -> void:
+	var alive := L5RCharacterData.new()
+	alive.character_id = 10
+	alive.clan = "Crane"
+	alive.status = 6.0
+	var dead := L5RCharacterData.new()
+	dead.character_id = 11
+	dead.clan = "Crane"
+	dead.status = 8.0
+	dead.wounds_taken = 999
+	var chars: Dictionary = {10: alive, 11: dead}
+	var result: int = StarvationWarfare._find_clan_lord("Crane", chars)
+	assert_eq(result, 10, "Should pick living character, not dead one with higher status")

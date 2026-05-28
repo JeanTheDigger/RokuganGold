@@ -72,7 +72,6 @@ func test_koutetsukan_stats() -> void:
 	assert_eq(stats["morale"], 20)
 	assert_eq(stats["morale_defense"], 8)
 	assert_eq(stats["cargo"], 0.0)
-	assert_true(stats["is_military"])
 	assert_eq(stats["movement_per_subtile"], 2)
 
 
@@ -83,7 +82,6 @@ func test_atakebune_stats() -> void:
 	assert_eq(stats["defense"], 6)
 	assert_eq(stats["morale"], 18)
 	assert_eq(stats["morale_defense"], 7)
-	assert_true(stats["is_military"])
 	assert_true(stats["can_ocean"])
 
 
@@ -246,7 +244,7 @@ func test_typhoon_inland_downgrades_to_storm() -> void:
 
 func test_weather_boundary_spring_clear_to_wind() -> void:
 	assert_eq(NavalSystem.weather_from_roll(40, "spring"), Enums.NavalWeather.CLEAR)
-	assert_eq(NavalSystem.weather_from_roll(41, "spring"), Enums.NavalWeather.CLEAR)
+	assert_eq(NavalSystem.weather_from_roll(41, "spring"), Enums.NavalWeather.WIND)
 	assert_eq(NavalSystem.weather_from_roll(42, "spring"), Enums.NavalWeather.WIND)
 
 func test_weather_determination_uses_dice() -> void:

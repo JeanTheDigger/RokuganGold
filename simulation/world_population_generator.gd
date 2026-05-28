@@ -11,21 +11,33 @@ const GREAT_CLANS: Array[String] = [
 ]
 
 const CLAN_FAMILIES: Dictionary = {
-	"Crab": ["Hida", "Hiruma", "Kaiu", "Kuni", "Yasuki"],
+	"Crab": ["Hida", "Hiruma", "Kaiu", "Kuni", "Yasuki", "Toritaka"],
 	"Crane": ["Kakita", "Daidoji", "Doji", "Asahina"],
-	"Dragon": ["Mirumoto", "Kitsuki", "Tamori"],
+	"Dragon": ["Mirumoto", "Kitsuki", "Tamori", "Togashi"],
 	"Lion": ["Akodo", "Matsu", "Ikoma", "Kitsu"],
-	"Phoenix": ["Shiba", "Isawa", "Asako"],
-	"Scorpion": ["Bayushi", "Soshi", "Shosuro"],
+	"Phoenix": ["Shiba", "Isawa", "Asako", "Agasha"],
+	"Scorpion": ["Bayushi", "Soshi", "Shosuro", "Yogo"],
 	"Unicorn": ["Shinjo", "Moto", "Ide", "Iuchi", "Utaku"],
 	"Mantis": ["Yoritomo", "Moshi", "Tsuruchi"],
 	"Imperial": ["Otomo", "Seppun", "Miya"],
+	"Badger": ["Ichiro"],
+	"Dragonfly": ["Tonbo"],
+	"Fox": ["Kitsune"],
+	"Hare": ["Usagi"],
+	"Monkey": ["Toku"],
+	"Ox": ["Morito"],
+	"Sparrow": ["Suzume"],
+	"Tortoise": ["Kasuga"],
+	"Wasp": ["Tsuruchi"],
+	"Centipede": ["Moshi"],
+	"Bat": ["Komori"],
+	"Oriole": ["Tsi"],
 }
 
 const MINOR_CLANS: Array[String] = [
-	"Badger", "Bat", "Boar", "Centipede", "Dragonfly",
+	"Badger", "Bat", "Centipede", "Dragonfly",
 	"Fox", "Hare", "Monkey", "Oriole", "Ox",
-	"Snake", "Sparrow", "Tortoise", "Wasp",
+	"Sparrow", "Tortoise", "Wasp",
 ]
 
 
@@ -73,6 +85,7 @@ enum PositionType {
 	SAMURAI,
 }
 
+# PROVISIONAL — GDD s22.8 lists positions but not insight rank mapping.
 const POSITION_RANK: Dictionary = {
 	PositionType.EMPEROR: 6,
 	PositionType.IMPERIAL_HEIR: 5,
@@ -115,6 +128,7 @@ const POSITION_RANK: Dictionary = {
 	PositionType.SAMURAI: 1,
 }
 
+# PROVISIONAL — GDD s22.4 gives 2 examples (Local Daimyo 3.0, samurai 1.0).
 const POSITION_STATUS: Dictionary = {
 	PositionType.EMPEROR: 10.0,
 	PositionType.IMPERIAL_HEIR: 8.0,
@@ -159,18 +173,52 @@ const POSITION_STATUS: Dictionary = {
 
 
 const POSITION_ROLE_NAMES: Dictionary = {
-	PositionType.CLAN_MAGISTRATE: "Clan Magistrate",
-	PositionType.EMERALD_MAGISTRATE: "Emerald Magistrate",
-	PositionType.GARRISON_COMMANDER: "Garrison Commander",
-	PositionType.SCHOOL_MASTER: "School Master",
-	PositionType.TEMPLE_HEAD: "Temple Head",
-	PositionType.MONASTERY_ABBOT: "Monastery Abbot",
+	PositionType.EMPEROR: "Emperor",
+	PositionType.IMPERIAL_HEIR: "Imperial Heir",
+	PositionType.IMPERIAL_ADVISOR: "Imperial Advisor",
+	PositionType.IMPERIAL_CHANCELLOR: "Imperial Chancellor",
+	PositionType.IMPERIAL_HERALD: "Imperial Herald",
+	PositionType.IMPERIAL_TREASURER: "Imperial Treasurer",
+	PositionType.VOICE_OF_EMPEROR: "Voice of the Emperor",
+	PositionType.EMERALD_CHAMPION: "Emerald Champion",
+	PositionType.JADE_CHAMPION: "Jade Champion",
+	PositionType.AMETHYST_CHAMPION: "Amethyst Champion",
+	PositionType.TURQUOISE_CHAMPION: "Turquoise Champion",
+	PositionType.TOPAZ_CHAMPION: "Topaz Champion",
+	PositionType.RUBY_CHAMPION: "Ruby Champion",
+	PositionType.IMPERIAL_FAMILY_DAIMYO: "Imperial Family Daimyo",
+	PositionType.CLAN_CHAMPION: "Clan Champion",
+	PositionType.FAMILY_DAIMYO: "Family Daimyo",
+	PositionType.RIKUGUNSHOKAN: "Rikugunshokan",
 	PositionType.SENIOR_COURTIER: "Senior Courtier",
+	PositionType.CLAN_MAGISTRATE_COMMANDER: "Clan Magistrate Commander",
+	PositionType.SCHOOL_MASTER: "School Master",
+	PositionType.PROVINCIAL_DAIMYO: "Provincial Daimyo",
+	PositionType.LOCAL_DAIMYO: "Local Daimyo",
+	PositionType.CLAN_MAGISTRATE: "Clan Magistrate",
+	PositionType.GARRISON_COMMANDER: "Garrison Commander",
 	PositionType.TAISA: "Taisa",
 	PositionType.CHUI: "Chui",
-	PositionType.RIKUGUNSHOKAN: "Rikugunshokan",
+	PositionType.TEMPLE_HEAD: "Temple Head",
+	PositionType.MONASTERY_ABBOT: "Monastery Abbot",
+	PositionType.EMERALD_MAGISTRATE: "Emerald Magistrate",
+	PositionType.JADE_MAGISTRATE: "Jade Magistrate",
+	PositionType.INQUISITOR_LEADER: "Inquisitor Leader",
+	PositionType.WITCH_HUNTER_LEADER: "Witch Hunter Leader",
+	PositionType.KUROIBAN_LEADER: "Kuroiban Leader",
+	PositionType.YORIKI: "Yoriki",
+	PositionType.MINOR_CLAN_CHAMPION: "Minor Clan Champion",
+	PositionType.MINOR_CLAN_SENIOR: "Minor Clan Senior",
 	PositionType.WALL_SEGMENT_COMMANDER: "Wall Segment Commander",
-	PositionType.CLAN_MAGISTRATE_COMMANDER: "Clan Magistrate Commander",
+	PositionType.HIRUMA_SCOUT_COMMANDER: "Hiruma Scout Commander",
+}
+
+const POSITION_MILITARY_RANK: Dictionary = {
+	PositionType.RIKUGUNSHOKAN: Enums.MilitaryRank.RIKUGUNSHOKAN,
+	PositionType.TAISA: Enums.MilitaryRank.TAISA,
+	PositionType.CHUI: Enums.MilitaryRank.CHUI,
+	PositionType.GARRISON_COMMANDER: Enums.MilitaryRank.GUNSO,
+	PositionType.WALL_SEGMENT_COMMANDER: Enums.MilitaryRank.CHUI,
 }
 
 
@@ -229,6 +277,7 @@ const CLAN_ARMY_COUNT: Dictionary = {
 	"Imperial": 1,
 }
 
+# PROVISIONAL — GDD s57.21 specifies sections of 4-12 legions, not flat per-army.
 const LEGIONS_PER_ARMY: int = 3
 const COMPANIES_PER_LEGION: int = 7
 
@@ -330,6 +379,7 @@ static func _generate_positioned_character(
 	c.lord_id = lord_id
 	c.orientation = GempukkuSystem.roll_orientation(dice)
 	c.role_position = POSITION_ROLE_NAMES.get(position_type, "")
+	c.military_rank = POSITION_MILITARY_RANK.get(position_type, Enums.MilitaryRank.NONE)
 	return c
 
 
@@ -345,7 +395,7 @@ static func _pick_family(clan: String, dice: DiceEngine) -> String:
 static func _generate_imperial_positions(
 	next_id: Array,
 	dice: DiceEngine,
-) -> Array:
+) -> Dictionary:
 	var chars: Array = []
 
 	var emperor: L5RCharacterData = _generate_positioned_character(
@@ -366,10 +416,14 @@ static func _generate_imperial_positions(
 		[PositionType.IMPERIAL_TREASURER, "Otomo"],
 		[PositionType.VOICE_OF_EMPEROR, "Seppun"],
 	]
+	var herald_id: int = -1
 	for pos: Array in imp_positions:
-		chars.append(_generate_positioned_character(
+		var imp_char: L5RCharacterData = _generate_positioned_character(
 			next_id, pos[0], "Imperial", pos[1], dice, emperor_id,
-		))
+		)
+		chars.append(imp_char)
+		if pos[0] == PositionType.IMPERIAL_HERALD:
+			herald_id = imp_char.character_id
 
 	var champion_clans: Array = [
 		[PositionType.EMERALD_CHAMPION, "Crane", "Kakita"],
@@ -391,7 +445,7 @@ static func _generate_imperial_positions(
 			"Imperial", fam, dice, emperor_id,
 		))
 
-	return chars
+	return {"characters": chars, "emperor_id": emperor_id, "herald_id": herald_id}
 
 
 # -- Step 2: Per-Clan Fixed Positions (s22.8) ----------------------------------
@@ -447,6 +501,17 @@ static func _generate_clan_leadership(
 		chars.append(_generate_positioned_character(
 			next_id, PositionType.SCHOOL_MASTER, clan, fam, dice, champ_id,
 		))
+
+	if clan == "Phoenix":
+		var master_elements: Array = ["Fire", "Water", "Air", "Earth", "Void"]
+		for element: String in master_elements:
+			var master: L5RCharacterData = _generate_positioned_character(
+				next_id, PositionType.SENIOR_COURTIER, "Phoenix", "Isawa", dice, champ_id,
+			)
+			master.role_position = "Master of " + element
+			master.school_type = Enums.SchoolType.SHUGENJA
+			master.status = 7.0
+			chars.append(master)
 
 	return chars
 
@@ -566,13 +631,17 @@ static func _generate_minor_clan_characters(
 ) -> Array:
 	var chars: Array = []
 	for mc: String in MINOR_CLANS:
+		var families: Array = CLAN_FAMILIES.get(mc, [])
+		if families.is_empty():
+			continue
+		var primary_family: String = families[0]
 		var champ: L5RCharacterData = _generate_positioned_character(
-			next_id, PositionType.MINOR_CLAN_CHAMPION, mc, mc, dice,
+			next_id, PositionType.MINOR_CLAN_CHAMPION, mc, primary_family, dice,
 		)
 		champ.lord_id = -1
 		chars.append(champ)
 		chars.append(_generate_positioned_character(
-			next_id, PositionType.MINOR_CLAN_SENIOR, mc, mc, dice, champ.character_id,
+			next_id, PositionType.MINOR_CLAN_SENIOR, mc, primary_family, dice, champ.character_id,
 		))
 	return chars
 
@@ -634,6 +703,94 @@ static func _generate_rank_filling(
 	return chars
 
 
+# -- Step 3b: Lord ID Assignment ------------------------------------------------
+
+static func _assign_lord_ids(
+	characters: Array,
+	clan_champions: Dictionary,
+) -> void:
+	var family_daimyos: Dictionary = {}
+	var provincial_daimyos_by_clan: Dictionary = {}
+
+	for c: L5RCharacterData in characters:
+		if c.role_position == "Family Daimyo":
+			var key: String = "%s_%s" % [c.clan, c.family]
+			family_daimyos[key] = c.character_id
+		elif c.role_position == "Provincial Daimyo":
+			if not provincial_daimyos_by_clan.has(c.clan):
+				provincial_daimyos_by_clan[c.clan] = []
+			provincial_daimyos_by_clan[c.clan].append(c.character_id)
+
+	var prov_idx: Dictionary = {}
+
+	for c: L5RCharacterData in characters:
+		if c.lord_id >= 0:
+			continue
+		if not c.role_position.is_empty():
+			continue
+
+		var fd_key: String = "%s_%s" % [c.clan, c.family]
+		var fd_id: int = family_daimyos.get(fd_key, -1)
+		if fd_id < 0:
+			for k: String in family_daimyos:
+				if k.begins_with(c.clan + "_"):
+					fd_id = family_daimyos[k]
+					break
+		if fd_id < 0:
+			fd_id = clan_champions.get(c.clan, -1)
+		if fd_id < 0:
+			continue
+
+		var prov_daimyos: Array = provincial_daimyos_by_clan.get(c.clan, [])
+		if prov_daimyos.is_empty():
+			c.lord_id = fd_id
+		else:
+			var idx: int = prov_idx.get(c.clan, 0)
+			c.lord_id = prov_daimyos[idx % prov_daimyos.size()]
+			prov_idx[c.clan] = idx + 1
+
+
+# -- Step 3c: Initial Koku (s22.4 Step 6) --------------------------------------
+# GDD: "Koku on hand = (1 month's stipend for their role) + 1d10 × Rank"
+
+const _STIPEND_BY_ROLE: Dictionary = {
+	# GDD s4.3: "Direct retainer of the Clan Champion: 5 koku per month" etc.
+	"Clan Champion": 5.0,
+	"Minor Clan Champion": 5.0,  # PROVISIONAL — analogy to Clan Champion
+	"Family Daimyo": 3.0,
+	"Provincial Daimyo": 2.0,
+	"Local Daimyo": 1.0,
+}
+
+
+static func _assign_initial_koku(
+	characters: Array,
+	dice: DiceEngine,
+) -> void:
+	var chars_by_id: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		chars_by_id[c.character_id] = c
+
+	for c: L5RCharacterData in characters:
+		var stipend: float = _get_monthly_stipend(c, chars_by_id)
+		var rank: int = CharacterStats.get_insight_rank(c)
+		c.koku = stipend + float(dice.rand_int_range(1, 10)) * float(rank)
+
+
+static func _get_monthly_stipend(
+	c: L5RCharacterData,
+	chars_by_id: Dictionary,
+) -> float:
+	if c.lord_id < 0:
+		return 5.0
+	var lord: L5RCharacterData = chars_by_id.get(c.lord_id)
+	if lord == null:
+		return 1.0
+	if _STIPEND_BY_ROLE.has(lord.role_position):
+		return _STIPEND_BY_ROLE[lord.role_position]
+	return 0.6
+
+
 # -- Step 4: Family Web Construction (s52, s22.6) -----------------------------
 
 static func _build_family_web(
@@ -669,9 +826,9 @@ static func _assign_parents(
 
 		for j: int in range(i):
 			var potential_parent: L5RCharacterData = sorted_by_age[j]
-			if potential_parent.age < child.age + 16:
+			if potential_parent.age < child.age + 16:  # PROVISIONAL
 				continue
-			if potential_parent.age > child.age + 40:
+			if potential_parent.age > child.age + 40:  # PROVISIONAL
 				continue
 			if potential_parent.family != child.family:
 				continue
@@ -699,14 +856,14 @@ static func _assign_marriages(
 		if c.spouse_id < 0 and c.age >= 18:
 			unmarried.append(c)
 
-	var marriage_rate: int = 40
+	var marriage_rate: int = 40  # PROVISIONAL
 	for c: L5RCharacterData in unmarried:
 		if c.spouse_id >= 0:
 			continue
 		if dice.rand_int_range(1, 100) > marriage_rate:
 			continue
 
-		var cross_clan: bool = dice.rand_int_range(1, 100) <= 15
+		var cross_clan: bool = dice.rand_int_range(1, 100) <= 15  # PROVISIONAL
 		var pool: Array = clan_chars if not cross_clan else _get_cross_clan_pool(c.clan, all_by_clan)
 
 		for candidate: Variant in pool:
@@ -788,25 +945,34 @@ static func _generate_ancestor_records(
 			c.grandparent_records.append(record)
 
 
-# -- Step 5: Starting Dispositions (s12.2b) ------------------------------------
-
-static func _apply_starting_dispositions(
+static func _seed_co_located_contacts(
 	characters: Array,
-	clan_baselines: Dictionary,
-	family_baselines: Dictionary,
+	clan_baselines: Dictionary = {},
+	family_baselines: Dictionary = {},
 ) -> void:
-	for i: int in range(characters.size()):
-		var a: L5RCharacterData = characters[i]
-		for j: int in range(i + 1, characters.size()):
-			var b: L5RCharacterData = characters[j]
-			if a.clan == b.clan and a.family == b.family:
-				continue
-			CollectiveDisposition.seed_first_meeting(
-				a, b, clan_baselines, family_baselines,
-			)
-			CollectiveDisposition.seed_first_meeting(
-				b, a, clan_baselines, family_baselines,
-			)
+	var by_location: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		var loc: String = c.physical_location
+		if loc.is_empty():
+			continue
+		if not by_location.has(loc):
+			by_location[loc] = []
+		by_location[loc].append(c)
+
+	for loc: String in by_location:
+		var group: Array = by_location[loc]
+		for i: int in range(group.size()):
+			var a: L5RCharacterData = group[i]
+			for j: int in range(i + 1, group.size()):
+				var b: L5RCharacterData = group[j]
+				InformationSystem.add_contact(
+					a, b.character_id, b.clan, b,
+					clan_baselines, family_baselines,
+				)
+				InformationSystem.add_contact(
+					b, a.character_id, a.clan, a,
+					clan_baselines, family_baselines,
+				)
 
 
 # -- Count Helpers -------------------------------------------------------------
@@ -828,15 +994,15 @@ static func generate_world_population(
 	settlements: Array,
 	dice: DiceEngine,
 	next_id: Array,
-	clan_baselines: Dictionary = {},
-	family_baselines: Dictionary = {},
 ) -> Dictionary:
 	var all_characters: Array = []
 
-	var imperial_chars: Array = _generate_imperial_positions(next_id, dice)
+	var imperial_result: Dictionary = _generate_imperial_positions(next_id, dice)
+	var imperial_chars: Array = imperial_result["characters"]
 	all_characters.append_array(imperial_chars)
 
-	var emperor_id: int = imperial_chars[0].character_id
+	var emperor_id: int = imperial_result["emperor_id"]
+	var herald_id: int = imperial_result["herald_id"]
 
 	var clan_champions: Dictionary = {}
 	var clan_rikugunshokans: Dictionary = {}
@@ -859,6 +1025,28 @@ static func generate_world_population(
 			clan, rik_id, next_id, dice,
 		)
 		all_characters.append_array(mil_chars)
+
+	var mantis_leadership: Array = _generate_clan_leadership("Mantis", next_id, dice)
+	all_characters.append_array(mantis_leadership)
+	for c: L5RCharacterData in mantis_leadership:
+		if c.status >= 8.0:
+			clan_champions["Mantis"] = c.character_id
+		if c.role_position == "Rikugunshokan":
+			clan_rikugunshokans["Mantis"] = c.character_id
+
+	var mantis_rik_id: int = clan_rikugunshokans.get("Mantis", -1)
+	var mantis_mil_chars: Array = _generate_military_commanders(
+		"Mantis", mantis_rik_id, next_id, dice,
+	)
+	all_characters.append_array(mantis_mil_chars)
+
+	var minor_chars: Array = _generate_minor_clan_characters(
+		next_id, dice,
+	)
+	all_characters.append_array(minor_chars)
+	for mc: L5RCharacterData in minor_chars:
+		if mc.lord_id < 0:
+			clan_champions[mc.clan] = mc.character_id
 
 	var province_settlement_map: Dictionary = {}
 	for s: SettlementData in settlements:
@@ -895,11 +1083,6 @@ static func generate_world_population(
 	)
 	all_characters.append_array(magistrate_chars)
 
-	var minor_chars: Array = _generate_minor_clan_characters(
-		next_id, dice,
-	)
-	all_characters.append_array(minor_chars)
-
 	var crab_rik_id: int = clan_rikugunshokans.get("Crab", -1)
 	var wall_chars: Array = _generate_wall_characters(
 		next_id, dice, crab_rik_id,
@@ -918,15 +1101,17 @@ static func generate_world_population(
 	)
 	all_characters.append_array(mantis_fill)
 
+	_assign_lord_ids(all_characters, clan_champions)
+	_assign_initial_koku(all_characters, dice)
+
 	_build_family_web(all_characters, dice)
 	_generate_ancestor_records(all_characters, dice)
-
-	if not clan_baselines.is_empty():
-		_apply_starting_dispositions(all_characters, clan_baselines, family_baselines)
 
 	return {
 		"characters": all_characters,
 		"emperor_id": emperor_id,
+		"herald_id": herald_id,
 		"clan_champions": clan_champions,
 		"total_count": all_characters.size(),
+		"next_character_id": next_id[0],
 	}

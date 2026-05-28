@@ -31,6 +31,8 @@ enum OrderType {
 	DELIVER_LETTER,
 }
 
+# GDD s11.7a specifies SCOUT and STANDING_PATROL cost 1 order each.
+# Other order types default to 1 (GDD does not specify individual costs).
 const ORDER_COST: Dictionary = {
 	OrderType.SCOUT: 1,
 	OrderType.HOLD_POSITION: 1,

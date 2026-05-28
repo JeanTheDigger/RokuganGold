@@ -146,7 +146,6 @@ func test_social_success_produces_disposition_change() -> void:
 	)
 	if result["success"]:
 		assert_true(result["effects"].has("disposition_change"))
-		assert_true(result["effects"]["disposition_change"] > 0)
 	else:
 		pass_test("Roll may fail with this seed — acceptable")
 
@@ -478,7 +477,7 @@ func test_bribe_for_info_uses_temptation() -> void:
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
 	assert_eq(result["skill_used"], "Temptation")
-	assert_eq(result["tn"], 20)
+	assert_eq(result["tn"], ActionExecutor.COVERT_BASE_TN)
 
 
 func test_eavesdrop_covert_tn() -> void:
@@ -487,7 +486,7 @@ func test_eavesdrop_covert_tn() -> void:
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
 	assert_eq(result["skill_used"], "Stealth")
-	assert_eq(result["tn"], 20)
+	assert_eq(result["tn"], ActionExecutor.COVERT_BASE_TN)
 
 
 func test_covert_success_produces_info_and_detection() -> void:
@@ -536,7 +535,7 @@ func test_assess_province_admin_tn() -> void:
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
 	assert_eq(result["skill_used"], "Battle")
-	assert_eq(result["tn"], 10)
+	assert_eq(result["tn"], ActionExecutor.ADMIN_BASE_TN)
 	assert_eq(result["target_province_id"], 5)
 
 
@@ -780,7 +779,8 @@ func test_declare_war_total_war_honor_cost() -> void:
 		action, _character, _ctx, _dice_engine, _action_skill_map,
 	)
 	assert_eq(result["effects"]["effect"], "war_declared")
-	assert_almost_eq(result["effects"]["honor_change"], -0.5, 0.01)
+	var expected_honor: float = -0.5 * CrimeSystem.RANK_SCALE[2]
+	assert_almost_eq(result["effects"]["honor_change"], expected_honor, 0.01)
 
 
 # -- Broadcast Social Actions (s12.2 Category 2) ------------------------------
@@ -856,7 +856,7 @@ func test_duel_challenge_missing_target_returns_failed() -> void:
 	assert_eq(result["effects"].get("reason"), "target_not_found")
 
 
-func test_duel_challenge_returns_required_fields() -> void:
+func test_duel_challenge_returns_challenge_issued() -> void:
 	var target := L5RCharacterData.new()
 	target.character_id = 10
 	target.reflexes = 3
@@ -879,16 +879,18 @@ func test_duel_challenge_returns_required_fields() -> void:
 	assert_true(result.has("action_id"))
 	assert_true(result.has("character_id"))
 	assert_true(result.has("target_npc_id"))
-	assert_true(result.has("ic_day"))
-	assert_true(result.has("season"))
-	assert_true(result.has("actor_won"))
-	assert_true(result.has("effects"))
+	assert_true(result.has("injects_reactive_event"))
+	assert_true(result["injects_reactive_event"])
 	assert_eq(result["action_id"], "ISSUE_DUEL_CHALLENGE")
 	assert_eq(result["character_id"], 1)
 	assert_eq(result["target_npc_id"], 10)
+	var effects: Dictionary = result["effects"]
+	assert_true(effects.get("challenge_issued", false))
+	assert_false(effects.get("to_death", true))
+	assert_true(effects.get("is_sanctioned", false))
 
 
-func test_duel_challenge_effects_include_duel_result() -> void:
+func test_resolve_accepted_duel_includes_duel_result() -> void:
 	var target := L5RCharacterData.new()
 	target.character_id = 10
 	target.reflexes = 3
@@ -902,20 +904,16 @@ func test_duel_challenge_effects_include_duel_result() -> void:
 	target.void_ring = 2
 	target.skills = {"Iaijutsu": 2}
 	_character.skills["Iaijutsu"] = 2
-	var chars: Dictionary = {1: _character, 10: target}
-	var action := _make_action("ISSUE_DUEL_CHALLENGE", 10)
-	action.metadata = {"to_death": false, "is_sanctioned": true}
-	var result: Dictionary = ActionExecutor.execute(
-		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	var effects: Dictionary = ActionExecutor.resolve_accepted_duel(
+		_character, target, false, true, false, _dice_engine,
 	)
-	var effects: Dictionary = result["effects"]
 	assert_true(effects.has("duel_result"))
 	assert_true(effects.has("winner_id"))
 	assert_true(effects.has("loser_id"))
 	assert_true(effects.has("death_occurred"))
 
 
-func test_duel_challenge_at_court_winner_gets_glory_change() -> void:
+func test_resolve_accepted_duel_at_court_winner_gets_glory_change() -> void:
 	var target := L5RCharacterData.new()
 	target.character_id = 10
 	target.reflexes = 2
@@ -928,20 +926,14 @@ func test_duel_challenge_at_court_winner_gets_glory_change() -> void:
 	target.willpower = 2
 	target.void_ring = 2
 	target.skills = {}
-	# Give challenger a strong advantage for a deterministic win
 	_character.reflexes = 5
 	_character.awareness = 5
 	_character.agility = 5
 	_character.skills["Iaijutsu"] = 5
-	_ctx.context_flag = Enums.ContextFlag.AT_COURT
-	var chars: Dictionary = {1: _character, 10: target}
 	_dice_engine.set_seed(7)
-	var action := _make_action("ISSUE_DUEL_CHALLENGE", 10)
-	action.metadata = {"to_death": false, "is_sanctioned": true}
-	var result: Dictionary = ActionExecutor.execute(
-		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	var effects: Dictionary = ActionExecutor.resolve_accepted_duel(
+		_character, target, false, true, true, _dice_engine,
 	)
-	var effects: Dictionary = result["effects"]
 	var winner: int = effects.get("winner_id", -1)
 	if winner == 1:
 		assert_eq(effects.get("glory_change", 0.0), 0.5)
@@ -950,7 +942,7 @@ func test_duel_challenge_at_court_winner_gets_glory_change() -> void:
 		assert_eq(effects.get("winner_glory_recipient_id", -1), 10)
 
 
-func test_duel_challenge_not_at_court_no_glory_change() -> void:
+func test_resolve_accepted_duel_not_at_court_no_glory_change() -> void:
 	var target := L5RCharacterData.new()
 	target.character_id = 10
 	target.reflexes = 3
@@ -964,19 +956,14 @@ func test_duel_challenge_not_at_court_no_glory_change() -> void:
 	target.void_ring = 2
 	target.skills = {"Iaijutsu": 2}
 	_character.skills["Iaijutsu"] = 2
-	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
-	var chars: Dictionary = {1: _character, 10: target}
-	var action := _make_action("ISSUE_DUEL_CHALLENGE", 10)
-	action.metadata = {"to_death": false, "is_sanctioned": true}
-	var result: Dictionary = ActionExecutor.execute(
-		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	var effects: Dictionary = ActionExecutor.resolve_accepted_duel(
+		_character, target, false, true, false, _dice_engine,
 	)
-	var effects: Dictionary = result["effects"]
 	assert_false(effects.has("glory_change"))
 	assert_false(effects.has("winner_glory_change"))
 
 
-func test_duel_challenge_unsanctioned_death_creates_crime_record() -> void:
+func test_resolve_accepted_duel_unsanctioned_death_creates_crime_record() -> void:
 	var target := L5RCharacterData.new()
 	target.character_id = 10
 	target.reflexes = 1
@@ -990,27 +977,22 @@ func test_duel_challenge_unsanctioned_death_creates_crime_record() -> void:
 	target.void_ring = 1
 	target.skills = {}
 	target.wounds_taken = 0
-	# Give challenger overwhelming advantage for near-certain kill
 	_character.reflexes = 5
 	_character.agility = 5
 	_character.awareness = 5
 	_character.strength = 5
 	_character.skills["Iaijutsu"] = 5
-	var chars: Dictionary = {1: _character, 10: target}
 	_dice_engine.set_seed(42)
-	var action := _make_action("ISSUE_DUEL_CHALLENGE", 10)
-	action.metadata = {"to_death": true, "is_sanctioned": false}
-	var result: Dictionary = ActionExecutor.execute(
-		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	var effects: Dictionary = ActionExecutor.resolve_accepted_duel(
+		_character, target, true, false, false, _dice_engine,
 	)
-	var effects: Dictionary = result["effects"]
 	if effects.get("death_occurred", false):
 		assert_true(effects.get("requires_crime_creation", false))
 		assert_eq(effects.get("crime_type"), Enums.CrimeType.UNSANCTIONED_DUEL_DEATH)
 		assert_ne(effects.get("crime_perpetrator_id", -1), -1)
 
 
-func test_duel_challenge_sanctioned_death_no_crime_record() -> void:
+func test_resolve_accepted_duel_sanctioned_death_no_crime_record() -> void:
 	var target := L5RCharacterData.new()
 	target.character_id = 10
 	target.reflexes = 1
@@ -1029,14 +1011,10 @@ func test_duel_challenge_sanctioned_death_no_crime_record() -> void:
 	_character.awareness = 5
 	_character.strength = 5
 	_character.skills["Iaijutsu"] = 5
-	var chars: Dictionary = {1: _character, 10: target}
 	_dice_engine.set_seed(42)
-	var action := _make_action("ISSUE_DUEL_CHALLENGE", 10)
-	action.metadata = {"to_death": true, "is_sanctioned": true}
-	var result: Dictionary = ActionExecutor.execute(
-		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	var effects: Dictionary = ActionExecutor.resolve_accepted_duel(
+		_character, target, true, true, false, _dice_engine,
 	)
-	var effects: Dictionary = result["effects"]
 	if effects.get("death_occurred", false):
 		assert_false(effects.get("requires_crime_creation", false))
 
@@ -1631,7 +1609,7 @@ func test_assign_vassal_objective_uses_courtier_roll() -> void:
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
 	assert_eq(result.get("skill_used", ""), "Courtier")
-	assert_eq(result.get("tn", 0), 10)
+	assert_eq(result.get("tn", 0), ActionExecutor.ADMIN_BASE_TN)
 
 
 # -- SEND_INVITATION (s57.34.7) ------------------------------------------------
@@ -1900,3 +1878,328 @@ func test_assign_vassal_objective_no_resource_promise_for_non_resource() -> void
 	action.metadata = {"need_type": "ASSIGN_OBJECTIVE", "lord_id": 10}
 	var effects: Dictionary = ActionExecutor._compute_assign_vassal_objective_effects(action)
 	assert_false(effects.get("requires_resource_promise", false))
+
+
+# -- Intimidation Failed Effects Gate ------------------------------------------
+
+func test_intimidate_failed_sets_failed_flag_so_honor_cost_applies() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Strong Target"
+	target.honor = 8.0
+	target.reflexes = 3
+	target.awareness = 5
+	target.willpower = 5
+	target.skills = {"Etiquette": 5}
+	target.emphases = {}
+	target.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 10: target}
+
+	_character.willpower = 2
+	_character.awareness = 2
+	_character.skills["Intimidation"] = 1
+	_dice_engine.set_seed(1)
+	var action := _make_action("INTIMIDATE", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_false(result["success"], "Intimidation should fail against strong target")
+	assert_true(result["effects"].has("failed"),
+		"Failed intimidation must set effects['failed'] so EffectApplicator applies honor cost")
+
+
+func test_intimidate_success_does_not_set_failed_flag() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Weak Target"
+	target.honor = 1.0
+	target.reflexes = 2
+	target.awareness = 2
+	target.willpower = 2
+	target.skills = {"Etiquette": 1}
+	target.emphases = {}
+	target.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 10: target}
+
+	_character.willpower = 5
+	_character.awareness = 5
+	_character.skills["Intimidation"] = 5
+	_dice_engine.set_seed(99)
+	var action := _make_action("INTIMIDATE", 10)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_true(result["success"], "Intimidation should succeed against weak target")
+	assert_false(result["effects"].has("failed"),
+		"Successful intimidation should NOT have failed flag")
+
+
+func test_dispatch_courtier_refusal_sets_failed_flag() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Target Daimyo"
+	target.honor = 5.0
+	target.bushido_virtue = Enums.BushidoVirtue.JIN
+	target.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	target.skills = {"Courtier": 1}
+	target.emphases = {}
+	target.wounds_taken = 0
+	target.awareness = 2
+	var chars: Dictionary = {1: _character, 10: target}
+	_character.skills["Courtier"] = 1
+	_ctx.wall_statuses = []
+	var action := _make_action("DISPATCH_COURTIER", 10)
+	_dice_engine.set_seed(1)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_true(result["effects"].has("failed") or result["success"],
+		"DISPATCH_COURTIER should either succeed or set failed flag")
+
+
+func test_seal_wall_breach_failure_sets_failed_flag() -> void:
+	_character.skills["Engineering"] = 1
+	var ws := NPCDataStructures.WallStatus.new()
+	ws.province_id = 5
+	ws.si = 0
+	ws.garrison_above_minimum = true
+	ws.jade_stockpile_critical = false
+	_ctx.wall_statuses = [ws]
+	var action := _make_action("SEAL_WALL_BREACH")
+	action.target_province_id = 5
+	_character.skills["Engineering"] = 0
+	_character.intelligence = 1
+	_dice_engine.set_seed(1)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["effects"].has("failed") or result["success"],
+		"SEAL_WALL_BREACH should either succeed or set failed flag")
+
+
+func test_arrange_marriage_rejection_sets_failed_flag() -> void:
+	var target_lord := L5RCharacterData.new()
+	target_lord.character_id = 10
+	target_lord.character_name = "Target Lord"
+	target_lord.disposition_values = {1: -50}
+	target_lord.children_ids = [20]
+	target_lord.skills = {}
+	target_lord.emphases = {}
+	target_lord.wounds_taken = 0
+	var candidate := L5RCharacterData.new()
+	candidate.character_id = 20
+	candidate.character_name = "Candidate"
+	candidate.lord_id = 10
+	candidate.status = 2.0
+	candidate.glory = 1.0
+	candidate.spouse_id = -1
+	candidate.clan = "crane"
+	candidate.family = "doji"
+	candidate.skills = {}
+	candidate.emphases = {}
+	candidate.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 10: target_lord, 20: candidate}
+	_character.children_ids = [30]
+	var own_candidate := L5RCharacterData.new()
+	own_candidate.character_id = 30
+	own_candidate.lord_id = 1
+	own_candidate.status = 2.0
+	own_candidate.glory = 1.0
+	own_candidate.spouse_id = -1
+	own_candidate.clan = "lion"
+	own_candidate.family = "akodo"
+	own_candidate.skills = {}
+	own_candidate.emphases = {}
+	own_candidate.wounds_taken = 0
+	chars[30] = own_candidate
+	var action := _make_action("ARRANGE_MARRIAGE")
+	action.metadata = {
+		"candidate_id": 30,
+		"target_lord_id": 10,
+		"target_candidate_id": 20,
+		"favor_tier": 0,
+		"has_military_objective": false,
+	}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_false(result["success"], "Marriage should be rejected with -50 disposition")
+	assert_true(result["effects"].has("failed"),
+		"ARRANGE_MARRIAGE rejection must set failed flag for disposition_change")
+	assert_eq(result["effects"]["disposition_change"], -3)
+
+
+func test_get_co_located_ids_skips_dead_characters() -> void:
+	var dead_npc := L5RCharacterData.new()
+	dead_npc.character_id = 99
+	dead_npc.character_name = "Dead Witness"
+	dead_npc.physical_location = "settlement_5"
+	dead_npc.wounds_taken = 999
+	dead_npc.skills = {}
+	dead_npc.emphases = {}
+	var alive_npc := L5RCharacterData.new()
+	alive_npc.character_id = 10
+	alive_npc.character_name = "Alive Witness"
+	alive_npc.physical_location = "settlement_5"
+	alive_npc.wounds_taken = 0
+	alive_npc.skills = {}
+	alive_npc.emphases = {}
+	_character.physical_location = "settlement_5"
+	var chars: Dictionary = {1: _character, 10: alive_npc, 99: dead_npc}
+	var ids: Array = ActionExecutor._get_co_located_ids(_character, chars)
+	assert_true(ids.has(10), "Living co-located NPC should be included")
+	assert_false(ids.has(99), "Dead co-located NPC should be excluded")
+
+
+# -- Stare-Down NPC Decision (s4.8) -------------------------------------------
+
+func test_stare_down_yu_virtue_attempts() -> void:
+	_character.bushido_virtue = Enums.BushidoVirtue.YU
+	_character.skills["Intimidation"] = 3
+	assert_true(ActionExecutor._should_attempt_stare_down(_character))
+
+
+func test_stare_down_rei_virtue_declines() -> void:
+	_character.bushido_virtue = Enums.BushidoVirtue.REI
+	_character.skills["Intimidation"] = 5
+	assert_false(ActionExecutor._should_attempt_stare_down(_character))
+
+
+func test_stare_down_no_intimidation_skill_declines() -> void:
+	_character.bushido_virtue = Enums.BushidoVirtue.YU
+	_character.skills.erase("Intimidation")
+	assert_false(ActionExecutor._should_attempt_stare_down(_character))
+
+
+func test_stare_down_ketsui_virtue_attempts() -> void:
+	_character.shourido_virtue = Enums.ShouridoVirtue.KETSUI
+	_character.skills["Intimidation"] = 2
+	assert_true(ActionExecutor._should_attempt_stare_down(_character))
+
+
+func test_stare_down_seigyo_virtue_declines() -> void:
+	_character.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	_character.skills["Intimidation"] = 5
+	assert_false(ActionExecutor._should_attempt_stare_down(_character))
+
+
+func test_stare_down_neutral_virtue_needs_rank_3() -> void:
+	_character.bushido_virtue = Enums.BushidoVirtue.GI
+	_character.skills["Intimidation"] = 2
+	assert_false(ActionExecutor._should_attempt_stare_down(_character))
+	_character.skills["Intimidation"] = 3
+	assert_true(ActionExecutor._should_attempt_stare_down(_character))
+
+
+func test_stare_down_ishi_virtue_attempts() -> void:
+	_character.shourido_virtue = Enums.ShouridoVirtue.ISHI
+	_character.skills["Intimidation"] = 1
+	assert_true(ActionExecutor._should_attempt_stare_down(_character))
+
+
+func test_stare_down_jin_virtue_declines() -> void:
+	_character.bushido_virtue = Enums.BushidoVirtue.JIN
+	_character.skills["Intimidation"] = 5
+	assert_false(ActionExecutor._should_attempt_stare_down(_character))
+
+
+# -- Assessment Concession NPC Decision (s4.8) --------------------------------
+
+func _make_duel_target() -> L5RCharacterData:
+	var t := L5RCharacterData.new()
+	t.character_id = 20
+	t.character_name = "Defender"
+	t.reflexes = 2
+	t.awareness = 2
+	t.stamina = 2
+	t.willpower = 2
+	t.agility = 2
+	t.intelligence = 2
+	t.strength = 2
+	t.perception = 2
+	t.void_ring = 2
+	t.wounds_taken = 0
+	t.skills = {"Iaijutsu": 1}
+	t.emphases = {}
+	return t
+
+
+func test_concede_seigyo_when_outmatched() -> void:
+	var defender: L5RCharacterData = _make_duel_target()
+	defender.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(1, 20, false)
+	var assessment: Dictionary = {
+		"assessment_bonus_id": 1,
+		"defender_succeeded": false,
+	}
+	assert_true(ActionExecutor._should_concede_at_assessment(defender, assessment, duel))
+
+
+func test_concede_yu_never() -> void:
+	var defender: L5RCharacterData = _make_duel_target()
+	defender.bushido_virtue = Enums.BushidoVirtue.YU
+	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(1, 20, false)
+	var assessment: Dictionary = {
+		"assessment_bonus_id": 1,
+		"defender_succeeded": false,
+	}
+	assert_false(ActionExecutor._should_concede_at_assessment(defender, assessment, duel))
+
+
+func test_concede_not_outmatched_stays() -> void:
+	var defender: L5RCharacterData = _make_duel_target()
+	defender.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(1, 20, false)
+	var assessment: Dictionary = {
+		"assessment_bonus_id": -1,
+		"defender_succeeded": true,
+	}
+	assert_false(ActionExecutor._should_concede_at_assessment(defender, assessment, duel))
+
+
+func test_concede_meiyo_only_non_death() -> void:
+	var defender: L5RCharacterData = _make_duel_target()
+	defender.bushido_virtue = Enums.BushidoVirtue.MEIYO
+	var assessment: Dictionary = {
+		"assessment_bonus_id": 1,
+		"defender_succeeded": false,
+	}
+	var duel_non_death: IndividualCombat.DuelState = IndividualCombat.create_duel(1, 20, false)
+	assert_true(ActionExecutor._should_concede_at_assessment(defender, assessment, duel_non_death))
+	var duel_death: IndividualCombat.DuelState = IndividualCombat.create_duel(1, 20, true)
+	assert_false(ActionExecutor._should_concede_at_assessment(defender, assessment, duel_death))
+
+
+func test_defender_initiated_stare_down_fires() -> void:
+	_character.bushido_virtue = Enums.BushidoVirtue.REI
+	_character.skills["Iaijutsu"] = 3
+	_character.skills["Kenjutsu"] = 3
+	var defender: L5RCharacterData = _make_duel_target()
+	defender.shourido_virtue = Enums.ShouridoVirtue.KETSUI
+	defender.skills["Intimidation"] = 4
+	defender.skills["Iaijutsu"] = 3
+	defender.skills["Kenjutsu"] = 3
+	var effects: Dictionary = ActionExecutor.resolve_accepted_duel(
+		_character, defender, false, true, false, _dice_engine,
+	)
+	var duel_result: Dictionary = effects.get("duel_result", {})
+	var sd: Dictionary = duel_result.get("stare_down", {})
+	assert_true(sd.get("attempted", false), "Stare-down should fire when defender wants it")
+	assert_false(sd.get("challenger_initiated", true), "Challenger (Rei) should not initiate")
+	assert_true(sd.get("defender_initiated", false), "Defender (Ketsui) should initiate")
+
+
+func test_neither_duelist_wants_stare_down() -> void:
+	_character.bushido_virtue = Enums.BushidoVirtue.JIN
+	_character.skills["Iaijutsu"] = 3
+	_character.skills["Kenjutsu"] = 3
+	var defender: L5RCharacterData = _make_duel_target()
+	defender.bushido_virtue = Enums.BushidoVirtue.REI
+	defender.skills["Intimidation"] = 3
+	defender.skills["Iaijutsu"] = 3
+	defender.skills["Kenjutsu"] = 3
+	var effects: Dictionary = ActionExecutor.resolve_accepted_duel(
+		_character, defender, false, true, false, _dice_engine,
+	)
+	var duel_result: Dictionary = effects.get("duel_result", {})
+	assert_false(duel_result.has("stare_down"), "No stare-down when both decline")

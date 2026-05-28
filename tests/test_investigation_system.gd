@@ -398,7 +398,7 @@ func test_conviction_topic_created() -> void:
 	convicted.family = "Bayushi"
 	var next_id: Array = [1]
 	var topic: TopicData = InvestigationSystem.generate_conviction_topic(
-		cr, convicted, 3, next_id, 10
+		cr, convicted, TopicData.Tier.TIER_3, next_id, 10
 	)
 	assert_not_null(topic)
 	assert_eq(topic.topic_id, 1)
@@ -421,7 +421,7 @@ func test_conviction_topic_tier_1_maho() -> void:
 	convicted.character_name = "Tsukai"
 	var next_id: Array = [10]
 	var topic: TopicData = InvestigationSystem.generate_conviction_topic(
-		cr, convicted, 1, next_id, 20
+		cr, convicted, TopicData.Tier.TIER_1, next_id, 20
 	)
 	assert_not_null(topic)
 	assert_eq(topic.tier, TopicData.Tier.TIER_1)
@@ -438,7 +438,7 @@ func test_conviction_topic_tier_2_treason() -> void:
 	convicted.character_name = "Traitor"
 	var next_id: Array = [20]
 	var topic: TopicData = InvestigationSystem.generate_conviction_topic(
-		cr, convicted, 2, next_id, 30
+		cr, convicted, TopicData.Tier.TIER_2, next_id, 30
 	)
 	assert_not_null(topic)
 	assert_eq(topic.tier, TopicData.Tier.TIER_2)
@@ -446,14 +446,14 @@ func test_conviction_topic_tier_2_treason() -> void:
 	assert_true(topic.momentum >= 50.0)
 
 
-func test_conviction_topic_zero_tier_returns_null() -> void:
+func test_conviction_topic_invalid_tier_returns_null() -> void:
 	var cr := _make_crime_record()
 	cr.crime_type = Enums.CrimeType.DISHONORABLE_CONDUCT
 	var convicted := L5RCharacterData.new()
 	convicted.character_id = 9
 	var next_id: Array = [30]
 	var topic: TopicData = InvestigationSystem.generate_conviction_topic(
-		cr, convicted, 0, next_id, 40
+		cr, convicted, -1, next_id, 40
 	)
 	assert_null(topic)
 	assert_eq(next_id[0], 30)

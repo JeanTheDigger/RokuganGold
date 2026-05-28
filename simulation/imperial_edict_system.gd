@@ -112,6 +112,8 @@ static func compute_topic_aggregate(
 	var positions: Array = []
 	var weights: Array = []
 	for c: L5RCharacterData in attendees:
+		if CharacterStats.is_dead(c):
+			continue
 		var pos: float = c.topic_positions.get(topic.topic_id, 0.0)
 		var relevance: float = TopicMomentumSystem.calculate_personal_relevance(
 			topic,
@@ -269,6 +271,8 @@ static func generate_edict_commitments(
 		return []
 	var commitments: Array = []
 	for lord: L5RCharacterData in lords:
+		if CharacterStats.is_dead(lord):
+			continue
 		var c := CourtCommitmentSystem.create_edict_commitment(
 			lord.character_id, topic.topic_id, commitment_type,
 			ic_day, deadline_ic_day,
@@ -625,6 +629,8 @@ static func _apply_defiance_to_characters(
 	var disp_others: int = consequence.get("disposition_from_others", 0)
 
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if c.clan != defiant_clan:
 			continue
 		if c.status < 5.0:
@@ -634,6 +640,8 @@ static func _apply_defiance_to_characters(
 			var cur_emp: int = int(c.disposition_values.get(emperor_id, 0))
 			c.disposition_values[emperor_id] = clampi(cur_emp + disp_emperor, -100, 100)
 		for other: L5RCharacterData in characters:
+			if CharacterStats.is_dead(other):
+				continue
 			if other.clan == defiant_clan or other.character_id == emperor_id:
 				continue
 			if other.status < 3.0:
@@ -717,6 +725,8 @@ static func apply_appoint_position(
 	if edict.edict_type != EdictData.EdictType.APPOINT_POSITION:
 		return {"applied": false, "reason": "wrong_type"}
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if c.character_id == edict.target_character_id:
 			var old_status: float = c.status
 			HonorGlorySystem.apply_status_change(c, APPOINTMENT_STATUS_GAIN)
@@ -750,6 +760,8 @@ static func apply_strip_autonomy(
 	var champion: L5RCharacterData = null
 	var stripped_members: Array = []
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if c.clan != edict.target_clan:
 			continue
 		if champion == null or c.status > champion.status:

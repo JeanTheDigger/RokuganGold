@@ -403,8 +403,7 @@ static func apply_wind_down(
 			# Dishonorable Conduct risk scaled by Willpower — PROVISIONAL base chance.
 			if PROV_SAKE_DISHONORABLE_CHANCE > 0.0:
 				var roll_100: int = dice.rand_int_range(1, 100)
-				var threshold: int = maxi(1, int(PROV_SAKE_DISHONORABLE_CHANCE) - character.willpower * 5)
-				if roll_100 <= threshold:
+				if roll_100 <= int(PROV_SAKE_DISHONORABLE_CHANCE):
 					result["dishonorable_conduct"] = true
 					result["glory_change"] = -0.2
 
@@ -454,8 +453,8 @@ static func apply_wind_down(
 				var char_games: int = SkillResolver.get_skill_rank(character, "Games: Go")
 				if char_games == 0:
 					char_games = SkillResolver.get_skill_rank(character, "Games")
-				var opp_intel: int = go_parlor_opponent.get("intelligence", 2)
-				var opp_games: int = go_parlor_opponent.get("games_rank", 1)
+				var opp_intel: int = go_parlor_opponent.get("intelligence", 0)
+				var opp_games: int = go_parlor_opponent.get("games_rank", 0)
 				var rolled_char: int = char_intel + char_games
 				var kept_char: int = char_intel
 				var rolled_opp: int = opp_intel + opp_games

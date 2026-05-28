@@ -72,6 +72,9 @@ static func build_context(
 			character, chars_by_id
 		)
 		for other_id: int in bonds:
+			var other_char: L5RCharacterData = chars_by_id.get(other_id)
+			if other_char == null or CharacterStats.is_dead(other_char):
+				continue
 			var bond: int = bonds[other_id]
 			var current: int = ctx.dispositions.get(other_id, 0)
 			var combined: int = clampi(current + bond, -100, 100)
@@ -94,7 +97,7 @@ static func build_context(
 	ctx.known_contacts = flat_contacts
 	ctx.contact_clans = clan_lookup
 	ctx.met_characters = character.met_characters.duplicate()
-	ctx.knowledge_pool = character.knowledge_pool
+	ctx.knowledge_pool = character.knowledge_pool.duplicate()
 	ctx.known_secrets = world_state.get("known_secrets", [])
 
 	# Lord-tier fields
@@ -145,7 +148,7 @@ static func build_context(
 	if not ctx.wall_statuses.is_empty() and not chars_by_id.is_empty():
 		for cid: int in ctx.known_contacts:
 			var contact: L5RCharacterData = chars_by_id.get(cid)
-			if contact != null:
+			if contact != null and not CharacterStats.is_dead(contact):
 				ctx.contact_garrison_scores[cid] = \
 					WallSystem.compute_garrison_shortage_personality_modifier(
 						contact.bushido_virtue, contact.shourido_virtue
@@ -157,6 +160,7 @@ static func build_context(
 	ctx.active_wars = world_state.get("active_wars", [])
 	ctx.escalating_conflicts = world_state.get("escalating_conflicts", [])
 	ctx.taint_topic_province_ids = world_state.get("taint_topic_province_ids", [])
+	ctx.active_insurgency_id = world_state.get("active_insurgency_id", -1)
 	ctx.famine_crisis_province_ids = _extract_famine_province_ids(
 		character, world_state.get("active_topics", [])
 	)
@@ -317,6 +321,7 @@ static func generate_options(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
 	character: L5RCharacterData = null,
+	chars_by_id: Dictionary = {},
 ) -> Array:
 	var options: Array = []
 	var available_actions: Array = _get_actions_for_context(ctx.context_flag)
@@ -356,7 +361,7 @@ static func generate_options(
 			if ctx.civilian_orders_remaining <= 0:
 				if not CivilianOrderBudget.draws_from_military_pool(action_id, has_mil_rank):
 					continue
-		_populate_action_metadata(option, need, ctx, character)
+		_populate_action_metadata(option, need, ctx, character, chars_by_id)
 		options.append(option)
 
 	return options
@@ -718,7 +723,7 @@ static func run(
 	var need := resolve_goal(character, ctx, objectives)
 
 	# Phase 3
-	var options := generate_options(ctx, need, character)
+	var options := generate_options(ctx, need, character, chars_by_id)
 
 	# Phase 4
 	options = apply_personality_filter(options, ctx, filter_data)
@@ -928,9 +933,9 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"DECLARE_WAR", "NEGOTIATE_SURRENDER",
 				"COMPLY_WITH_EDICT", "DEFY_EDICT",
 				"RESTORE_COUNCIL_COMPACT",
-				"SHARE_SUPPLIES",
+				"SHARE_SUPPLIES", "TRANSFER_KOKU",
 				"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID",
-				"CRAFT", "MENTOR",
+				"MENTOR",
 				"TREAT_WOUND",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
 				"EXAMINE_CRIME_SCENE",
@@ -945,6 +950,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"ORDER_DEPLOY", "ORDER_FORTIFY",
 				"SEND_INVITATION", "CALL_COURT",
 				"COMMISSION_ASSASSINATION",
+				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
 				"SHADOW_TARGET", "SEARCH_PERSON", "CONCEAL_ITEM",
 				"FABRICATE_SECRET", "EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
@@ -982,6 +988,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"SEND_INVITATION",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
 				"REQUEST_ALLIED_AID",
+				"TRANSFER_KOKU",
+				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
 				"DO_NOTHING", "REST",
 			]
@@ -1004,6 +1012,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
 				"EXAMINE_CRIME_SCENE",
+				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
 				"DO_NOTHING", "REST",
 			]
@@ -1110,7 +1119,6 @@ static func _get_ap_cost(action_id: String) -> int:
 		"MENTOR": 1,
 		"MEDITATE": 1,
 		"CONDUCT_TEA_CEREMONY": 1,
-		"CRAFT": 1,
 		"DRILL_TROOPS": 1,
 		"EVALUATE_WAR_READINESS": 1,
 		"BRIBE_FOR_INFO": 1,
@@ -1127,6 +1135,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"FORGE_IMPERSONATION_LETTER": 1,
 		"FORGE_ORDER": 1,
 		"SHARE_SUPPLIES": 1,
+	"TRANSFER_KOKU": 1,
 		"PURIFY_TAINTED_GROUND": 1,
 		"FORTIFY_WALL_SECTION": 1,
 		"SEAL_WALL_BREACH": 2,
@@ -1142,6 +1151,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"FOUND_MONASTERY": 1,
 		"COMMISSION_SHIP": 1,
 		"RESTORE_COUNCIL_COMPACT": 1,
+		"INVOKE_FAVOR": 1,
 		"TREAT_WOUND": 1,
 		"REQUEST_PERFORMANCE": 0,
 		"ANNOUNCE_HUNT": 0,
@@ -1250,8 +1260,10 @@ static func _evaluate_condition(
 	match condition:
 		"war_score_above_25_and_army_capable":
 			for w: Variant in ctx.active_wars:
-				if w is Dictionary and w.get("war_score", 50) > 25:
-					return true
+				if w is Dictionary:
+					var s: int = _get_own_war_score(w, ctx.clan)
+					if s > 25:
+						return true
 			return false
 
 		"any_vassal_at_shortage_or_worse":
@@ -1446,7 +1458,7 @@ static func _evaluate_harvest_conditions(ctx: NPCDataStructures.ContextSnapshot)
 	var no_other_path: bool = false
 	for w: Variant in ctx.active_wars:
 		if w is Dictionary:
-			var score: int = w.get("war_score", 50)
+			var score: int = _get_own_war_score(w, ctx.clan)
 			if score < 25:
 				no_other_path = true
 				break
@@ -1631,6 +1643,17 @@ static func _lookup_personality_lean(
 	return clampf(total, -15.0, 15.0)
 
 
+static func _best_skill_rank(skill_name: String, skill_ranks: Dictionary) -> int:
+	if skill_name in ["Lore", "Games", "Perform", "Craft", "Artisan"]:
+		var best: int = 0
+		var prefix: String = skill_name + ":"
+		for sk: String in skill_ranks:
+			if sk.begins_with(prefix) and int(skill_ranks[sk]) > best:
+				best = int(skill_ranks[sk])
+		return best
+	return int(skill_ranks.get(skill_name, 0))
+
+
 static func _compute_competence_modifier(
 	action_id: String,
 	skill_ranks: Dictionary,
@@ -1645,7 +1668,7 @@ static func _compute_competence_modifier(
 		return 0.0
 
 	var competence_table: Dictionary = scoring_tables.get("competence_table", {})
-	var rank: int = int(skill_ranks.get(primary_skill, 0))
+	var rank: int = _best_skill_rank(primary_skill, skill_ranks)
 	var modifier: float = float(competence_table.get(str(rank), competence_table.get(rank, -20)))
 
 	var secondary_raw: Variant = action_skills.get("secondary", "")
@@ -1709,7 +1732,7 @@ static func _evaluate_urgency_condition(
 		"war_score_below_25":
 			for war: Variant in ctx.active_wars:
 				if war is Dictionary:
-					var score: int = war.get("war_score", 50)
+					var score: int = _get_own_war_score(war, ctx.clan)
 					if score < 25:
 						return [{"relevance": 1.0}]
 			return []
@@ -1726,11 +1749,6 @@ static func _evaluate_urgency_condition(
 				var disp: int = ctx.disposition_values[cid]
 				if disp <= -11:
 					instances.append({"relevance": 1.0, "npc_id": cid})
-			return instances
-		"favor_expiring_within_7_ooc_days":
-			var instances: Array = []
-			for fid: int in ctx.expiring_favor_ids:
-				instances.append({"relevance": 1.0, "favor_id": fid})
 			return instances
 		"court_ending_within_2_ic_days":
 			var court: Dictionary = ctx.active_court_at_location
@@ -1767,7 +1785,7 @@ static func _evaluate_urgency_condition(
 # NeedType(s). Per GDD s55.G schema definition.
 const URGENCY_CATEGORY_NEED_TYPES: Dictionary = {
 	"actions_addressing_crisis": ["DEFEND_PROVINCE", "PATROL_PROVINCE", "INVESTIGATE_THREAT"],
-	"actions_addressing_war": ["LEVY_TROOPS", "DEPLOY_ARMY", "CONDUCT_SIEGE", "ORDER_BATTLE"],
+	"actions_addressing_war": ["LEVY_TROOPS", "DEPLOY_ARMY", "CONDUCT_SIEGE"],
 	"actions_addressing_food_crisis": ["ACQUIRE_RESOURCE", "CONDUCT_COMMERCE"],
 	"actions_addressing_primary_objective": [],
 }
@@ -2034,6 +2052,7 @@ const LORD_ONLY_ACTIONS: Array[String] = [
 	"SEND_INVITATION", "CALL_COURT",
 	"COMMISSION_ASSASSINATION",
 	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID",
+	"TRANSFER_KOKU", "SHARE_SUPPLIES",
 ]
 
 
@@ -2084,8 +2103,8 @@ const SOCIAL_ACTIONS: Array[String] = [
 	"GOSSIP", "DISCLOSE", "OFFER_FAVOR",
 ]
 
-const INAUSPICIOUS_PENALTY: float = -10.0
-const TAIAN_BONUS: float = 5.0
+const INAUSPICIOUS_PENALTY: float = 0.0
+const TAIAN_BONUS: float = 0.0
 
 static func _is_ceasefire_blocked(action_id: String) -> bool:
 	return action_id in CEASEFIRE_BLOCKED_ACTIONS
@@ -2325,6 +2344,7 @@ static func build_province_statuses_from_data(
 		ps.clan = pd.clan
 		ps.stability = pd.stability
 		ps.active_crisis_id = pd.active_crisis_id
+		ps.crisis_type = pd.crisis_type
 		ps.active_insurgency_id = pd.active_insurgency_id
 		for ins: Variant in active_insurgencies:
 			if ins is InsurgencyData and ins.province_id == pd.province_id:
@@ -2332,10 +2352,13 @@ static func build_province_statuses_from_data(
 				break
 		ps.last_report_ic_day = pd.last_report_ic_day
 		ps.province_taint_level = pd.province_taint_level
+		ps.is_wall_province = pd.shadowlands_strength > 0
+		if pd.crisis_type == "famine":
+			ps.starvation_stage = ResourceTick.StarvationStage.SHORTAGE
 		ps.garrison_pu = settlement_garrison.get(pd.province_id, 0)
 		ps.total_settlement_pu = settlement_total_pu.get(pd.province_id, 0)
 		ps.rice_stockpile = settlement_rice.get(pd.province_id, 0.0)
-		ps.confidence = 2
+		ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_FRESH
 		var army_clans: Array = armies_by_province.get(pd.province_id, [])
 		for ac: Variant in army_clans:
 			if ac is String and ac != pd.clan:
@@ -2355,6 +2378,7 @@ static func _populate_action_metadata(
 	need: NPCDataStructures.ImmediateNeed,
 	ctx: NPCDataStructures.ContextSnapshot,
 	character: L5RCharacterData = null,
+	chars_by_id: Dictionary = {},
 ) -> void:
 	if option.action_id == "DECLARE_WAR":
 		option.metadata = _build_declare_war_metadata(need, ctx)
@@ -2412,11 +2436,19 @@ static func _populate_action_metadata(
 			insult_type = "ancestors"
 		elif need.need_type == "DAMAGE_RELATIONSHIP":
 			insult_type = "clan"
+		else:
+			var roll: int = (ctx.character_id * 7 + option.target_npc_id * 13) % 100
+			if roll >= 90:
+				insult_type = "ancestors"
+			elif roll >= 70:
+				insult_type = "clan"
 		option.metadata = {"insult_type": insult_type}
 	elif option.action_id == "INTIMIDATE":
 		var target_id: int = need.target_npc_id if need.target_npc_id >= 0 else option.target_npc_id
 		var secret_meta: Dictionary = _pick_secret_about_target(ctx, target_id)
 		option.metadata = secret_meta
+	elif option.action_id == "INVOKE_FAVOR":
+		option.metadata = _pick_best_favor_to_invoke(ctx)
 	elif option.action_id == "PLAY_GAME":
 		option.metadata = {"game_skill": _pick_best_game_skill(ctx)}
 	elif option.action_id in ["NEGOTIATE", "PERSUADE", "PUBLIC_DEBATE",
@@ -2505,7 +2537,7 @@ static func _populate_action_metadata(
 		}
 	elif option.action_id in ["CONDUCT_STORM_ASSAULT", "MAINTAIN_SIEGE"]:
 		option.metadata = {
-			"siege_settlement_id": ctx.location_id,
+			"siege_settlement_id": ctx.location_id.to_int() if not ctx.location_id.is_empty() else -1,
 		}
 	elif option.action_id == "CONDUCT_TEA_CEREMONY":
 		# Select up to (max_viable_count - 1) guests with disp >= Acquaintance.
@@ -2680,18 +2712,78 @@ static func _populate_action_metadata(
 	elif option.action_id == "TREAT_WOUND":
 		option.metadata = {"raises": _pick_medicine_raises(ctx)}
 	elif option.action_id == "FORGE_IMPERSONATION_LETTER":
-		option.metadata = _build_forge_letter_metadata(ctx, need)
+		option.metadata = _build_forge_letter_metadata(ctx, need, chars_by_id)
 	elif option.action_id == "FORGE_ORDER":
-		option.metadata = _build_forge_order_metadata(ctx, need)
+		option.metadata = _build_forge_order_metadata(ctx, need, chars_by_id)
+	elif option.action_id == "TRANSFER_KOKU":
+		option.metadata = {"target_npc_id": need.target_npc_id}
+	elif option.action_id == "MENTOR":
+		option.metadata = _build_mentor_metadata(ctx, need, chars_by_id)
+
+
+static func _build_mentor_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+	chars_by_id: Dictionary = {},
+) -> Dictionary:
+	var best_student_id: int = -1
+	var best_skill: String = ""
+	var best_gap: int = 0
+	var target_id: int = need.target_npc_id
+	if target_id >= 0:
+		var target: L5RCharacterData = chars_by_id.get(target_id) as L5RCharacterData
+		if target != null and not CharacterStats.is_dead(target):
+			if target.physical_location == ctx.location_id:
+				var pair: Dictionary = _pick_mentor_skill(ctx, target)
+				if pair.get("gap", 0) > 0:
+					best_student_id = target_id
+					best_skill = pair["skill"]
+					best_gap = pair["gap"]
+	if best_student_id < 0:
+		for cid: Variant in ctx.disposition_values:
+			var cid_int: int = int(cid)
+			if cid_int == ctx.character_id:
+				continue
+			var disp: int = int(ctx.disposition_values[cid])
+			if disp < 0:
+				continue
+			var candidate: L5RCharacterData = chars_by_id.get(cid_int) as L5RCharacterData
+			if candidate == null or CharacterStats.is_dead(candidate):
+				continue
+			if candidate.physical_location != ctx.location_id:
+				continue
+			var pair: Dictionary = _pick_mentor_skill(ctx, candidate)
+			var gap: int = pair.get("gap", 0)
+			if gap > best_gap:
+				best_gap = gap
+				best_student_id = cid_int
+				best_skill = pair["skill"]
+	return {"student_id": best_student_id, "skill_name": best_skill}
+
+
+static func _pick_mentor_skill(
+	ctx: NPCDataStructures.ContextSnapshot,
+	student: L5RCharacterData,
+) -> Dictionary:
+	var best_skill: String = ""
+	var best_gap: int = 0
+	for skill_name: String in ctx.skill_ranks:
+		var sensei_rank: int = int(ctx.skill_ranks[skill_name])
+		var student_rank: int = student.skills.get(skill_name, 0)
+		if sensei_rank > student_rank and (sensei_rank - student_rank) > best_gap:
+			best_gap = sensei_rank - student_rank
+			best_skill = skill_name
+	return {"skill": best_skill, "gap": best_gap}
 
 
 static func _build_forge_letter_metadata(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
+	chars_by_id: Dictionary = {},
 ) -> Dictionary:
-	var forgery_rank: int = ctx.skill_ranks.get("Forgery", 0)
-	var authority: String = _forge_authority_from_lord_rank(ctx.lord_rank)
 	var impersonated_id: int = need.target_npc_id
+	var target_rank: Enums.LordRank = _get_target_lord_rank(impersonated_id, chars_by_id, ctx.lord_rank)
+	var authority: String = _forge_authority_from_lord_rank(target_rank)
 	var recipient_id: int = -1
 	if need.target_npc_id_secondary >= 0:
 		recipient_id = need.target_npc_id_secondary
@@ -2710,13 +2802,20 @@ static func _build_forge_letter_metadata(
 static func _build_forge_order_metadata(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
+	chars_by_id: Dictionary = {},
 ) -> Dictionary:
-	var forgery_rank: int = ctx.skill_ranks.get("Forgery", 0)
-	var authority: String = _forge_authority_from_lord_rank(ctx.lord_rank)
+	var target_id: int = need.target_npc_id
+	var target_char: L5RCharacterData = chars_by_id.get(target_id) as L5RCharacterData
+	var impersonated_rank: Enums.LordRank = ctx.lord_rank
+	if target_char != null and target_char.lord_id >= 0:
+		var lord_char: L5RCharacterData = chars_by_id.get(target_char.lord_id) as L5RCharacterData
+		if lord_char != null:
+			impersonated_rank = CivilianOrderBudget.lord_rank_from_status(lord_char.status)
+	var authority: String = _forge_authority_from_lord_rank(impersonated_rank)
 	var order_info: Dictionary = _pick_forged_order_type(need)
 	return {
 		"authority_level": authority,
-		"target_npc_id": need.target_npc_id,
+		"target_npc_id": target_id,
 		"order_need_type": order_info.get("need_type", "TRAVEL_TO"),
 		"order_target_province_id": order_info.get("target_province_id", -1),
 		"order_target_npc_id": order_info.get("target_npc_id", -1),
@@ -2754,10 +2853,17 @@ static func _pick_forged_order_type(
 			return {"need_type": "TRAVEL_TO"}
 
 
-# GDD s12.8: authority level = who is being impersonated.
-# PROVISIONAL: uses forger's own lord_rank as proxy (the authority
-# level the forger is familiar with). Proper derivation requires
-# the impersonated person's rank, blocked on target character lookup.
+static func _get_target_lord_rank(
+	target_id: int, chars_by_id: Dictionary, fallback: Enums.LordRank,
+) -> Enums.LordRank:
+	if target_id < 0 or chars_by_id.is_empty():
+		return fallback
+	var target: L5RCharacterData = chars_by_id.get(target_id) as L5RCharacterData
+	if target == null:
+		return fallback
+	return CivilianOrderBudget.lord_rank_from_status(target.status)
+
+
 static func _forge_authority_from_lord_rank(
 	lord_rank: Enums.LordRank,
 ) -> String:
@@ -2897,6 +3003,28 @@ static func _get_favor_tier_held_against(
 	return best_tier
 
 
+static func _pick_best_favor_to_invoke(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var best_favor_id: int = -1
+	var best_debtor_id: int = -1
+	var best_tier: int = 0
+	for lev: Variant in ctx.held_leverage:
+		if not lev is Dictionary:
+			continue
+		var d: Dictionary = lev as Dictionary
+		if d.get("invoked", false):
+			continue
+		if d.get("resolved", false):
+			continue
+		var tier: int = d.get("tier", 0)
+		if tier > best_tier:
+			best_tier = tier
+			best_favor_id = d.get("favor_id", -1)
+			best_debtor_id = d.get("debtor_id", -1)
+	return {"favor_id": best_favor_id, "debtor_id": best_debtor_id}
+
+
 static func _pick_secret_about_target(
 	ctx: NPCDataStructures.ContextSnapshot,
 	target_id: int,
@@ -2963,6 +3091,8 @@ static func _pick_gossip_subject(ctx: NPCDataStructures.ContextSnapshot) -> int:
 	var worst_id: int = -1
 	var worst_disp: int = 0
 	for cid: Variant in ctx.disposition_values:
+		if int(cid) == ctx.character_id:
+			continue
 		var disp: int = ctx.disposition_values[cid]
 		if disp < worst_disp:
 			worst_disp = disp
@@ -3201,6 +3331,8 @@ static func _collect_vassal_stockpiles(
 		if not (c is L5RCharacterData):
 			continue
 		var ch: L5RCharacterData = c
+		if CharacterStats.is_dead(ch):
+			continue
 		if ch.lord_id != lord.character_id:
 			continue
 		var disp: int = ch.disposition_values.get(lord.character_id, 0)
@@ -3294,6 +3426,8 @@ static func _collect_allied_surplus(
 		if not (c is L5RCharacterData):
 			continue
 		var ch: L5RCharacterData = c
+		if CharacterStats.is_dead(ch):
+			continue
 		if ch.clan == character.clan:
 			continue
 		if ch.character_id == character.character_id:
@@ -3371,6 +3505,14 @@ static func _get_war_context(
 	return {"war_score": worst_score, "is_defending": is_defending}
 
 
+static func _get_own_war_score(war: Dictionary, clan: String) -> int:
+	if war.get("clan_a", "") == clan:
+		return war.get("war_score_a", 50)
+	if war.get("clan_b", "") == clan:
+		return war.get("war_score_b", 50)
+	return 50
+
+
 static func _has_grievance_against_neighbors(
 	character: L5RCharacterData,
 	_raidable_provinces: Array,
@@ -3424,6 +3566,8 @@ static func _pick_levy_province(ctx: NPCDataStructures.ContextSnapshot) -> int:
 	var best_id: int = -1
 	var best_pu: int = -1
 	for ps: Variant in ctx.province_statuses:
+		if not ps is NPCDataStructures.ProvinceStatus:
+			continue
 		var pid: int = (ps as NPCDataStructures.ProvinceStatus).province_id
 		var pu: int = (ps as NPCDataStructures.ProvinceStatus).total_settlement_pu
 		if pu > best_pu:
@@ -3498,7 +3642,7 @@ static func _extract_expiring_favor_ids(
 		if not (f is FavorData):
 			continue
 		var favor: FavorData = f as FavorData
-		if favor.debtor_id != character_id:
+		if favor.resolved or favor.debtor_id != character_id:
 			continue
 		if favor.invoked:
 			var deadline: int = favor.response_deadline_ic_day
@@ -3514,7 +3658,7 @@ static func _extract_starvation_province_ids(
 	for ps: Variant in province_statuses:
 		if ps is NPCDataStructures.ProvinceStatus:
 			var status: NPCDataStructures.ProvinceStatus = ps
-			if status.starvation_stage > 0:
+			if status.starvation_stage > ResourceTick.StarvationStage.CLEAR:
 				result.append(status.province_id)
 	return result
 
@@ -3526,7 +3670,7 @@ static func _extract_cut_supply_army_ids(
 	var tethers: Array = world_state.get("active_tethers", [])
 	for t: Variant in tethers:
 		if t is Dictionary:
-			if t.get("overall_state", 0) == 2:
+			if t.get("overall_state", 0) == SupplyTetherSystem.TetherState.BROKEN:
 				var aid: int = t.get("army_id", -1)
 				if aid >= 0:
 					result.append(aid)

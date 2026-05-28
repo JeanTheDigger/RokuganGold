@@ -25,8 +25,8 @@ const CRITICAL_FAILURE_DISPOSITION: int = -2
 const CRITICAL_FAILURE_GLORY: float = -0.3
 const CRITICAL_FAILURE_MARGIN: int = -10
 
-const PERFORM_FOR_SUCCESS_DISPOSITION: int = 3
-const PERFORM_FOR_FAILURE_DISPOSITION: int = -1
+const PERFORM_FOR_SUCCESS_DISPOSITION: int = 0
+const PERFORM_FOR_FAILURE_DISPOSITION: int = 0
 
 const FATIGUE_FULL: float = 1.0
 const FATIGUE_HALF: float = 0.5
@@ -71,7 +71,7 @@ static func resolve_public_performance(
 		outcome = PerformanceOutcome.FAILURE
 	else:
 		raises = int(margin / 5)
-		outcome = PerformanceOutcome.MASTERFUL if raises >= 3 else PerformanceOutcome.SUCCESS
+		outcome = PerformanceOutcome.MASTERFUL if raises >= 2 else PerformanceOutcome.SUCCESS
 
 	var fatigue_mult: float = get_fatigue_multiplier(fatigue_count)
 
@@ -137,7 +137,7 @@ static func resolve_perform_for(
 		outcome = PerformanceOutcome.FAILURE
 	else:
 		raises = int(margin / 5)
-		outcome = PerformanceOutcome.MASTERFUL if raises >= 3 else PerformanceOutcome.SUCCESS
+		outcome = PerformanceOutcome.MASTERFUL if raises >= 2 else PerformanceOutcome.SUCCESS
 
 	var disp_change: int = 0
 	var glory_change: float = 0.0
@@ -200,7 +200,7 @@ static func apply_performance_effects(
 			var disp_delta: int = effect.get("disposition_change", 0)
 			if wid >= 0 and disp_delta != 0:
 				var witness: L5RCharacterData = characters_by_id.get(wid)
-				if witness != null:
+				if witness != null and not CharacterStats.is_dead(witness):
 					var current: int = witness.disposition_values.get(performer.character_id, 0)
 					witness.disposition_values[performer.character_id] = clampi(current + disp_delta, -100, 100)
 
@@ -208,6 +208,6 @@ static func apply_performance_effects(
 		var rid: int = result["recipient_id"]
 		var disp_delta: int = result["disposition_change"]
 		var recipient: L5RCharacterData = characters_by_id.get(rid)
-		if recipient != null:
+		if recipient != null and not CharacterStats.is_dead(recipient):
 			var current: int = recipient.disposition_values.get(performer.character_id, 0)
 			recipient.disposition_values[performer.character_id] = clampi(current + disp_delta, -100, 100)

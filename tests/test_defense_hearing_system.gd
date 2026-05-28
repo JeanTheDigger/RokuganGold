@@ -89,7 +89,7 @@ func test_pardon_cost():
 		DefenseHearingSystem.InterventionType.PARDON
 	)
 	assert_eq(r["honor_cost"], -0.3)
-	assert_eq(r["topic_tier"], 3)
+	assert_eq(r["topic_tier"], TopicData.Tier.TIER_3)
 	assert_true(r["undermines_authority"])
 
 
@@ -98,7 +98,7 @@ func test_commute_cost():
 		DefenseHearingSystem.InterventionType.COMMUTE
 	)
 	assert_eq(r["honor_cost"], -0.1)
-	assert_eq(r["topic_tier"], 4)
+	assert_eq(r["topic_tier"], TopicData.Tier.TIER_4)
 	assert_false(r["undermines_authority"])
 
 
@@ -107,7 +107,7 @@ func test_dismiss_cost():
 		DefenseHearingSystem.InterventionType.DISMISS_CHARGES
 	)
 	assert_eq(r["honor_cost"], -0.5)
-	assert_eq(r["topic_tier"], 2)
+	assert_eq(r["topic_tier"], TopicData.Tier.TIER_2)
 	assert_true(r["undermines_authority"])
 
 

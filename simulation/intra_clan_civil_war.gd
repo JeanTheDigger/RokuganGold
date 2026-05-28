@@ -63,7 +63,6 @@ const STABILITY_PENALTY_BASE: int = -3       # 0–7 seasons
 const STABILITY_PENALTY_LONG: int = -5       # 8–11 seasons
 const STABILITY_PENALTY_GRINDING: int = -7   # 12+ seasons
 
-const HONOR_HEMORRHAGE_REBEL_PER_SEASON: float = -0.3
 const COLLECTIVE_DIPLOMATIC_PENALTY: int = -10
 
 
@@ -90,7 +89,6 @@ const WS_FOREIGN_INTERVENTION: int = 8
 
 const DEFECTION_WAR_SCORE_DESPERATE: int = 25
 const DEFECTION_DISPOSITION_ENEMY: int = -20
-const DEFECTION_HONOR_PENALTY: float = -0.5
 const DEFECTOR_DISPOSITION_PENALTY: int = -15
 
 
@@ -487,7 +485,7 @@ static func apply_defection_consequences(
 		return
 	HonorGlorySystem.apply_honor_change(defector, CrimeSystem.get_disloyalty_honor(defector))
 	for c: L5RCharacterData in former_faction_members:
-		if c == null or c == defector:
+		if c == null or c == defector or CharacterStats.is_dead(c):
 			continue
 		var current: int = int(c.disposition_values.get(defector.character_id, 0))
 		c.disposition_values[defector.character_id] = clampi(
@@ -562,14 +560,14 @@ static func apply_post_resolution_scars(
 	var assignments: Dictionary = state.get("faction_assignments", {})
 	for i: int in all_characters.size():
 		var a: L5RCharacterData = all_characters[i]
-		if a == null:
+		if a == null or CharacterStats.is_dead(a):
 			continue
 		var fa: int = int(assignments.get(a.character_id, Faction.NONE))
 		if fa == Faction.NONE or fa == Faction.RONIN:
 			continue
 		for j: int in range(i + 1, all_characters.size()):
 			var b: L5RCharacterData = all_characters[j]
-			if b == null:
+			if b == null or CharacterStats.is_dead(b):
 				continue
 			var fb: int = int(assignments.get(b.character_id, Faction.NONE))
 			if fb == Faction.NONE or fb == Faction.RONIN:
@@ -612,7 +610,7 @@ static func decay_post_war_scars(
 		var a_id: int = int(entry.get("a_id", -1))
 		var b_id: int = int(entry.get("b_id", -1))
 		for c: L5RCharacterData in characters:
-			if c == null:
+			if c == null or CharacterStats.is_dead(c):
 				continue
 			if c.character_id == a_id and b_id >= 0:
 				var cur: int = int(c.disposition_values.get(b_id, 0))
@@ -631,7 +629,7 @@ static func apply_rebel_consequences_on_legitimacy_victory(
 	## no penalty (following orders is duty). Returns report for logging.
 	var results: Array = []
 	for c: L5RCharacterData in rebels:
-		if c == null:
+		if c == null or CharacterStats.is_dead(c):
 			continue
 		if c.character_id in family_daimyo_ids:
 			HonorGlorySystem.apply_honor_change(c, REBEL_FAMILY_DAIMYO_HONOR_PENALTY)

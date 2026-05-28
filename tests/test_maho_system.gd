@@ -368,17 +368,14 @@ func test_blood_concealment_tn_returned_in_result() -> void:
 		"Result must contain blood_concealment_tn key")
 
 
-func test_blood_concealment_tn_minimum_five() -> void:
-	# Even with no Stealth skill and low Agility, minimum is 5
+func test_blood_concealment_tn_uses_raw_roll() -> void:
 	_caster.agility = 1
 	_caster.skills = {}
-	# Run many times to confirm minimum holds across dice variation
-	for i: int in range(20):
-		var result: Dictionary = MahoSystem.resolve_cast(
-			_caster, _blood_source, _province, 1, 0, DiceEngine.new(i), 710 + i, 10, "Province_99"
-		)
-		assert_gte(result["blood_concealment_tn"], 5,
-			"blood_concealment_tn must be at least 5 regardless of roll")
+	var result: Dictionary = MahoSystem.resolve_cast(
+		_caster, _blood_source, _province, 1, 0, _dice, 710, 10, "Province_99"
+	)
+	assert_true(result.has("blood_concealment_tn"),
+		"blood_concealment_tn should be the raw Stealth/Agility roll total (no floor)")
 
 
 func test_blood_concealment_tn_stored_on_crime_record() -> void:

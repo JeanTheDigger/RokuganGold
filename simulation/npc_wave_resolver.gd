@@ -113,12 +113,29 @@ static func _resolve_reactive_events(
 
 	for c: L5RCharacterData in reactive_npcs:
 		var ws: Dictionary = world_states.get(c.character_id, {})
+		var events: Array = ws.get("pending_events", [])
+		var first_event: Dictionary = events[0] if events.size() > 0 else {}
+		if first_event.get("reactive_type", "").length() > 0:
+			var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+				c, ws
+			)
+			var reactive_result: Dictionary = ReactiveDecisions.evaluate_reactive_event(
+				first_event, c, ctx
+			)
+			reactive_result["character_id"] = c.character_id
+			reactive_result["reactive_type"] = first_event.get("reactive_type", "")
+			reactive_result["event_data"] = first_event
+			if events.size() > 0:
+				events.remove_at(0)
+			results.append(reactive_result)
+			continue
 		var objs: Dictionary = objectives_map.get(c.character_id, {})
 		var redirects: int = _get_travel_redirects(objs)
 		var result: Dictionary = NPCDecisionEngine.run(
 			c, ws, objs, scoring_tables, filter_data,
 			approach_penalties, commitments, redirects
 		)
+		_consume_reactive_event(result, ws)
 		results.append(result)
 
 	return results
@@ -147,6 +164,22 @@ static func _resolve_reactive_events_full(
 	for c: L5RCharacterData in reactive_npcs:
 		var ws: Dictionary = world_states.get(c.character_id, {})
 		var objs: Dictionary = objectives_map.get(c.character_id, {})
+		var events: Array = ws.get("pending_events", [])
+		var first_event: Dictionary = events[0] if events.size() > 0 else {}
+		if first_event.get("reactive_type", "").length() > 0:
+			var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(
+				c, ws, characters_by_id
+			)
+			var reactive_result: Dictionary = ReactiveDecisions.evaluate_reactive_event(
+				first_event, c, ctx
+			)
+			reactive_result["character_id"] = c.character_id
+			reactive_result["reactive_type"] = first_event.get("reactive_type", "")
+			reactive_result["event_data"] = first_event
+			if events.size() > 0:
+				events.remove_at(0)
+			results.append(reactive_result)
+			continue
 		var redirects: int = _get_travel_redirects(objs)
 		var decision: Dictionary = NPCDecisionEngine.run(
 			c, ws, objs, scoring_tables, filter_data,
@@ -160,6 +193,8 @@ static func _resolve_reactive_events_full(
 				characters_by_id, c_doshin, cr
 			)
 			decision.merge(exec_result, true)
+		_consume_reactive_event(decision, ws)
+		_append_to_action_log(ws, decision)
 		results.append(decision)
 
 	return results
@@ -243,8 +278,8 @@ static func _run_wave(
 	var non_court: Array = []
 	_partition_by_court(sorted, world_states, court_groups, non_court)
 
-	for court_id: String in court_groups:
-		for c: L5RCharacterData in court_groups[court_id]:
+	for court_group_id: int in court_groups:
+		for c: L5RCharacterData in court_groups[court_group_id]:
 			var wave_results: Array = _resolve_character_wave(
 				c, world_states, objectives_map, scoring_tables, filter_data,
 				approach_penalties, commitments
@@ -280,8 +315,8 @@ static func _run_wave_full(
 	var non_court: Array = []
 	_partition_by_court(sorted, world_states, court_groups, non_court)
 
-	for court_id: String in court_groups:
-		for c: L5RCharacterData in court_groups[court_id]:
+	for court_group_id: int in court_groups:
+		for c: L5RCharacterData in court_groups[court_group_id]:
 			var wave_results: Array = _resolve_character_wave_full(
 				c, world_states, objectives_map, scoring_tables, filter_data,
 				dice_engine, action_skill_map, approach_penalties, commitments,
@@ -374,12 +409,13 @@ static func _resolve_character_wave_full(
 			)
 			decision.merge(exec_result, true)
 		_consume_reactive_event(decision, ws)
+		_append_to_action_log(ws, decision)
 		results.append(decision)
 
 	if is_lord and character.civilian_orders_remaining > 0:
 		var order_decision: Dictionary = _resolve_civilian_order(
 			character, ws, objs, scoring_tables, filter_data,
-			approach_penalties, commitments, redirects
+			approach_penalties, commitments, redirects, characters_by_id
 		)
 		if not order_decision.is_empty():
 			var exec_result: Dictionary = _execute_decision(
@@ -387,6 +423,7 @@ static func _resolve_character_wave_full(
 				military_data, characters_by_id, doshin_bonus, cr
 			)
 			order_decision.merge(exec_result, true)
+			_append_to_action_log(ws, order_decision)
 			results.append(order_decision)
 
 	return results
@@ -403,10 +440,11 @@ static func _resolve_civilian_order(
 	approach_penalties: Array = [],
 	commitments: Array = [],
 	travel_redirects: int = 0,
+	characters_by_id: Dictionary = {},
 ) -> Dictionary:
-	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(character, world_state)
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDecisionEngine.build_context(character, world_state, characters_by_id)
 	var need: NPCDataStructures.ImmediateNeed = NPCDecisionEngine.resolve_goal(character, ctx, objectives)
-	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need, character, characters_by_id)
 
 	var order_options: Array = []
 	for opt: NPCDataStructures.ScoredAction in options:
@@ -423,8 +461,12 @@ static func _resolve_civilian_order(
 	if order_options.is_empty():
 		return {}
 
+	order_options = NPCDecisionEngine.apply_allowlist_filter(order_options, need.need_type, scoring_tables)
+	if order_options.is_empty():
+		return {}
+
 	NPCDecisionEngine.score_all(order_options, need, ctx, scoring_tables,
-		approach_penalties, commitments, character, travel_redirects)
+		approach_penalties, commitments, character, travel_redirects, characters_by_id)
 	var chosen: NPCDataStructures.ScoredAction = NPCDecisionEngine.select_action(order_options, ctx)
 
 	character.civilian_orders_remaining -= 1
@@ -432,7 +474,7 @@ static func _resolve_civilian_order(
 	if chosen.action_id in CivilianOrderBudget.DUAL_COST_ACTIONS:
 		ap_for_order = 1
 		character.action_points_current = maxi(character.action_points_current - 1, 0)
-	return {
+	var result: Dictionary = {
 		"success": true,
 		"action_id": chosen.action_id,
 		"target_npc_id": chosen.target_npc_id,
@@ -446,6 +488,9 @@ static func _resolve_civilian_order(
 		"ic_day": ctx.ic_day,
 		"is_order": true,
 	}
+	if not chosen.metadata.is_empty():
+		result["metadata"] = chosen.metadata
+	return result
 
 
 # -- Executor Bridge -----------------------------------------------------------
@@ -506,7 +551,9 @@ static func _consume_reactive_event(
 		if decision.get("success", false):
 			events.remove_at(0)
 		return
-	# Decompose returned null — discard unprocessable event to prevent infinite loop
+	var first: Variant = events[0]
+	if first is Dictionary and (first as Dictionary).get("reactive_type", "").length() > 0:
+		return
 	events.remove_at(0)
 
 
@@ -537,7 +584,7 @@ static func _sort_by_resolution_order(
 static func _get_max_ap(characters: Array) -> int:
 	var max_val: int = 0
 	for c: L5RCharacterData in characters:
-		if c.action_points_current > max_val:
+		if not CharacterStats.is_dead(c) and c.action_points_current > max_val:
 			max_val = c.action_points_current
 	return max_val
 
@@ -545,7 +592,7 @@ static func _get_max_ap(characters: Array) -> int:
 static func _get_active_characters(characters: Array) -> Array:
 	var active: Array = []
 	for c: L5RCharacterData in characters:
-		if c.action_points_current > 0:
+		if c.action_points_current > 0 and not CharacterStats.is_dead(c):
 			active.append(c)
 	return active
 
@@ -556,6 +603,8 @@ static func _gather_reactive_npcs(
 ) -> Array:
 	var reactive_npcs: Array = []
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		var ws: Dictionary = world_states.get(c.character_id, {})
 		var events: Array = ws.get("pending_events", [])
 		if events.size() > 0:
@@ -580,11 +629,11 @@ static func _partition_by_court(
 	for c: L5RCharacterData in sorted:
 		var ws: Dictionary = world_states.get(c.character_id, {})
 		var cf: int = ws.get("context_flag", Enums.ContextFlag.AT_OWN_HOLDINGS)
-		var court_id: String = ws.get("court_id", "")
-		if cf == Enums.ContextFlag.AT_COURT and court_id != "":
-			if not court_groups.has(court_id):
-				court_groups[court_id] = []
-			court_groups[court_id].append(c)
+		var cid: int = ws.get("court_id", -1)
+		if cf == Enums.ContextFlag.AT_COURT and cid >= 0:
+			if not court_groups.has(cid):
+				court_groups[cid] = []
+			court_groups[cid].append(c)
 		else:
 			non_court.append(c)
 
@@ -592,3 +641,15 @@ static func _partition_by_court(
 static func _get_travel_redirects(objectives: Dictionary) -> int:
 	var primary: Dictionary = objectives.get("primary", {})
 	return primary.get("travel_redirects", 0)
+
+
+static func _append_to_action_log(ws: Dictionary, decision: Dictionary) -> void:
+	var aid: String = decision.get("action_id", "")
+	if aid.is_empty():
+		return
+	if not ws.has("action_log"):
+		ws["action_log"] = []
+	ws["action_log"].append({
+		"action_id": aid,
+		"success": decision.get("success", false),
+	})

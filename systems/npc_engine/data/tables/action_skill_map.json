@@ -51,12 +51,16 @@
     "primary": "Temptation",
     "secondary": "Awareness"
   },
+  "BRIBE_WITNESS": {
+    "primary": "Temptation",
+    "secondary": "Awareness"
+  },
   "BUILD_FORTIFICATION": {
     "primary": "Engineering",
     "secondary": "Intelligence"
   },
   "BUILD_SHRINE": {
-    "primary": "Theology",
+    "primary": "Lore: Theology",
     "secondary": "Awareness"
   },
   "CALL_COURT": {
@@ -92,7 +96,7 @@
     "secondary": "Sincerity"
   },
   "CONCEAL_ITEM": {
-    "primary": "Sleight_of_Hand",
+    "primary": "Sleight of Hand",
     "secondary": "Agility"
   },
   "CONDUCT_COMMERCE": {
@@ -113,10 +117,6 @@
   },
   "CONDUCT_TEA_CEREMONY": {
     "primary": "Tea Ceremony",
-    "secondary": null
-  },
-  "CRAFT": {
-    "primary": "_craft_skill",
     "secondary": null
   },
   "CULTIVATE_GARDEN": {
@@ -195,6 +195,10 @@
     "primary": "Courtier",
     "secondary": "Awareness"
   },
+  "EXTORT_ACCUSED": {
+    "primary": "Intimidation",
+    "secondary": "Etiquette"
+  },
   "FABRICATE_SECRET": {
     "primary": "Forgery",
     "secondary": "Intelligence"
@@ -216,11 +220,11 @@
     "secondary": "Intelligence"
   },
   "FOUND_MONASTERY": {
-    "primary": "Theology",
+    "primary": "Lore: Theology",
     "secondary": "Awareness"
   },
   "FOUND_TEMPLE": {
-    "primary": "Theology",
+    "primary": "Lore: Theology",
     "secondary": "Awareness"
   },
   "FOUND_VILLAGE": {
@@ -243,6 +247,10 @@
     "primary": "Intimidation",
     "secondary": null
   },
+  "INTIMIDATE_WITNESS": {
+    "primary": "Intimidation",
+    "secondary": "Willpower"
+  },
   "INVESTIGATE_PROVINCE": {
     "primary": "Investigation",
     "secondary": "Lore: Shadowlands"
@@ -254,6 +262,10 @@
   "ISSUE_DUEL_CHALLENGE": {
     "primary": "Iaijutsu",
     "secondary": "Awareness"
+  },
+  "KILL_WITNESS": {
+    "primary": "Stealth",
+    "secondary": "Agility"
   },
   "LISTEN_REFLECT": {
     "primary": "Investigation",
@@ -324,11 +336,11 @@
     "secondary": null
   },
   "PERFORM_RITUAL": {
-    "primary": "Theology",
+    "primary": "Lore: Theology",
     "secondary": null
   },
   "PERFORM_WORSHIP": {
-    "primary": "Theology",
+    "primary": "Lore: Theology",
     "secondary": null
   },
   "PERSUADE": {
@@ -478,5 +490,9 @@
   "WRITE_LETTER": {
     "primary": "Calligraphy",
     "secondary": "Courtier"
+  },
+  "TRANSFER_KOKU": {
+    "primary": "Commerce",
+    "secondary": null
   }
 }

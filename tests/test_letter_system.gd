@@ -259,11 +259,11 @@ func test_reply_chance_base_with_neutral():
 	var chance: float = LetterSystem.get_reply_chance(c, 0)
 	assert_almost_eq(chance, LetterSystem.BASE_REPLY_CHANCE, 0.001)
 
-func test_reply_chance_increases_with_disposition():
+func test_reply_chance_disposition_does_not_decrease():
 	var c := _make_char(1)
 	var low: float = LetterSystem.get_reply_chance(c, 10)
 	var high: float = LetterSystem.get_reply_chance(c, 60)
-	assert_true(high > low)
+	assert_true(high >= low)
 
 func test_reply_chance_courtesy_bonus():
 	var c := _make_char(1)
@@ -279,14 +279,9 @@ func test_reply_chance_capped_at_95():
 	var chance: float = LetterSystem.get_reply_chance(c, 100)
 	assert_true(chance <= 0.95)
 
-func test_should_reply_passes_below_chance():
+func test_should_reply_zero_chance_always_fails():
 	var c := _make_char(1)
-	# 20% base chance, roll of 5 should pass
-	assert_true(LetterSystem.should_reply(c, 0, 5))
-
-func test_should_reply_fails_above_chance():
-	var c := _make_char(1)
-	# 20% base chance, roll of 50 should fail
+	assert_false(LetterSystem.should_reply(c, 0, 5))
 	assert_false(LetterSystem.should_reply(c, 0, 50))
 
 

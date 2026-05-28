@@ -106,19 +106,19 @@ static func get_intervention_cost(
 		InterventionType.PARDON:
 			return {
 				"honor_cost": -0.3,
-				"topic_tier": 3,
+				"topic_tier": TopicData.Tier.TIER_3,
 				"undermines_authority": true,
 			}
 		InterventionType.COMMUTE:
 			return {
 				"honor_cost": -0.1,
-				"topic_tier": 4,
+				"topic_tier": TopicData.Tier.TIER_4,
 				"undermines_authority": false,
 			}
 		InterventionType.DISMISS_CHARGES:
 			return {
 				"honor_cost": -0.5,
-				"topic_tier": 2,
+				"topic_tier": TopicData.Tier.TIER_2,
 				"undermines_authority": true,
 			}
 		_:

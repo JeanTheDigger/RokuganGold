@@ -12,11 +12,11 @@ enum PunishmentLevel {
 
 const HONOR_LOSS: float = -0.2
 const GLORY_LOSS: float = -0.1
-const BASE_TOPIC_TIER: int = 4
-const REPEATED_OFFENSE_TIER: int = 3
+const BASE_TOPIC_TIER: int = TopicData.Tier.TIER_4
+const REPEATED_OFFENSE_TIER: int = TopicData.Tier.TIER_3
 const REPEAT_WINDOW_SEASONS: int = 4
 const REPEAT_THRESHOLD_FOR_ESCALATION: int = 3
-const INFAMY_PER_REPEATED_OFFENSE: float = 0.5
+const INFAMY_PER_REPEATED_OFFENSE: float = 0.0
 
 
 static func evaluate_violence(
@@ -88,7 +88,7 @@ static func apply_consequences(
 	HonorGlorySystem.apply_honor_change(attacker, evaluation["honor_loss"])
 	HonorGlorySystem.apply_glory_change(attacker, evaluation["glory_loss"])
 	if evaluation["infamy_gain"] > 0.0:
-		attacker.infamy += evaluation["infamy_gain"]
+		HonorGlorySystem.apply_infamy_change(attacker, evaluation["infamy_gain"])
 
 	return {
 		"honor_change": evaluation["honor_loss"],

@@ -85,41 +85,19 @@ static func add_contact(
 		)
 
 
-# -- Probe Visibility (GDD s55.4.7) -------------------------------------------
+# -- Probe Visibility (GDD s15.4) ---------------------------------------------
+# GDD s15.4 Probe reveals topic positions and court objectives only.
+# Action log scanning removed (invented mechanic). Topic/objective intelligence
+# flows through _process_intelligence_info_writebacks in DayOrchestrator.
 
 static func process_probe_result(
-	prober: L5RCharacterData,
-	target_id: int,
-	action_log: Array,
-	current_season: int,
-	quality: int,
+	_prober: L5RCharacterData,
+	_target_id: int,
+	_action_log: Array,
+	_current_season: int,
+	_quality: int,
 ) -> Array:
-	var discovered: Array = []
-	var target_actions: Array = _get_target_actions(target_id, action_log)
-
-	var max_entries: int = clampi(quality, 1, 5)
-	var count: int = 0
-	for i: int in range(target_actions.size() - 1, -1, -1):
-		if count >= max_entries:
-			break
-		var action: Dictionary = target_actions[i]
-		var entry: KnowledgeEntry = make_entry(
-			Enums.KnowledgeSource.INTELLIGENCE,
-			"observed_action",
-			{
-				"target_character_id": target_id,
-				"action_id": action.get("action_id", ""),
-				"target_npc_id": action.get("target_npc_id", -1),
-				"ic_day": action.get("ic_day", 0),
-				"success": action.get("success", false),
-			},
-			current_season,
-		)
-		add_knowledge(prober, entry)
-		discovered.append(entry)
-		count += 1
-
-	return discovered
+	return []
 
 
 static func _get_target_actions(target_id: int, action_log: Array) -> Array:
@@ -143,6 +121,8 @@ static func process_observe_court(
 	var discovered: Array = []
 	var unknown: Array = []
 	for a: L5RCharacterData in attendees:
+		if CharacterStats.is_dead(a):
+			continue
 		if a.character_id != observer.character_id and a.character_id not in observer.met_characters:
 			unknown.append(a)
 
@@ -238,6 +218,8 @@ static func transfer_objective_knowledge(
 	if target_clan != "" and assigner.known_contacts_by_clan.has(target_clan):
 		for contact_id: int in assigner.known_contacts_by_clan[target_clan]:
 			var contact: L5RCharacterData = chars_by_id.get(contact_id)
+			if contact == null or CharacterStats.is_dead(contact):
+				continue
 			add_contact(
 				recipient, contact_id, target_clan,
 				contact, clan_baselines, family_baselines,

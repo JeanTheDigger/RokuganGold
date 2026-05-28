@@ -422,10 +422,10 @@ func test_naval_rout_dissolution_threshold() -> void:
 # =============================================================================
 
 func test_captured_ships_collected() -> void:
-	var barge := _make_defender(2, Enums.ShipClass.MERCHANT_BARGE, 0)
-	barge["is_captured"] = true
+	var ship := _make_defender(2, Enums.ShipClass.SENGOKOBUNE, 0)
+	ship["is_captured"] = true
 	var atk: Array = _to_typed_array([])
-	var def: Array = _to_typed_array([barge])
+	var def: Array = _to_typed_array([ship])
 	var captured: Array = NavalCombatSystem._collect_captured_ships(atk, def)
 	assert_true(captured.size() >= 1)
 	assert_eq(captured[0]["captured_by"], "attacker")

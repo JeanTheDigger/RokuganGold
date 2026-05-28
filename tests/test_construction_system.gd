@@ -372,68 +372,73 @@ func test_deduct_koku_from_province() -> void:
 
 # -- Organic Village Formation -------------------------------------------------
 
-func test_organic_check_eligible() -> void:
+func test_organic_check_disabled_pending_gdd_spec() -> void:
+	# All organic formation thresholds are -1 (GDD doesn't specify values),
+	# so check_organic_formation always returns disabled_pending_gdd_spec.
 	var p := _make_province(1, Enums.TerrainType.PLAINS)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 10, 20.0, 10.0)
 	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s])
-	assert_true(result.get("eligible", false))
+	assert_false(result.get("eligible", false))
+	assert_eq(result.get("reason", ""), "disabled_pending_gdd_spec")
 
 
-func test_organic_check_low_stability() -> void:
+func test_organic_check_low_stability_also_disabled() -> void:
+	# With thresholds at -1, disabled_pending_gdd_spec fires before stability check.
 	var p := _make_province(1, Enums.TerrainType.PLAINS)
 	p.stability = 30.0
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 10, 20.0, 10.0)
 	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s])
 	assert_false(result.get("eligible", false))
-	assert_eq(result.get("reason", ""), "low_stability")
+	assert_eq(result.get("reason", ""), "disabled_pending_gdd_spec")
 
 
-func test_organic_check_insufficient_surplus() -> void:
+func test_organic_check_insufficient_surplus_also_disabled() -> void:
+	# With thresholds at -1, disabled_pending_gdd_spec fires before surplus check.
 	var p := _make_province(1, Enums.TerrainType.PLAINS)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 2, 20.0, 10.0)
 	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s])
 	assert_false(result.get("eligible", false))
-	assert_eq(result.get("reason", ""), "insufficient_surplus")
+	assert_eq(result.get("reason", ""), "disabled_pending_gdd_spec")
 
 
-func test_organic_check_starving_blocks() -> void:
+func test_organic_check_starving_also_disabled() -> void:
+	# With thresholds at -1, disabled_pending_gdd_spec fires before starvation check.
 	var p := _make_province(1, Enums.TerrainType.PLAINS)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 10, 0.0, 10.0)
 	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s])
 	assert_false(result.get("eligible", false))
-	assert_eq(result.get("reason", ""), "settlements_starving")
+	assert_eq(result.get("reason", ""), "disabled_pending_gdd_spec")
 
 
-func test_organic_check_tainted_blocks() -> void:
+func test_organic_check_tainted_also_disabled() -> void:
+	# With thresholds at -1, disabled_pending_gdd_spec fires before taint check.
 	var p := _make_province(1, Enums.TerrainType.PLAINS)
 	p.province_taint_level = 5.0
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 10, 20.0, 10.0)
 	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s])
 	assert_false(result.get("eligible", false))
-	assert_eq(result.get("reason", ""), "tainted")
+	assert_eq(result.get("reason", ""), "disabled_pending_gdd_spec")
 
 
-func test_organic_mountains_higher_threshold() -> void:
+func test_organic_mountains_also_disabled() -> void:
+	# With thresholds at -1, disabled_pending_gdd_spec fires regardless of terrain.
 	var p := _make_province(1, Enums.TerrainType.MOUNTAINS)
-	# Mountains threshold = 10.0 PU. 8 PU is below threshold.
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 8, 20.0, 10.0)
 	var result: Dictionary = ConstructionSystem.check_organic_formation(p, [s])
 	assert_false(result.get("eligible", false))
+	assert_eq(result.get("reason", ""), "disabled_pending_gdd_spec")
 
 
-func test_organic_formation_creates_village() -> void:
+func test_organic_formation_disabled_returns_not_formed() -> void:
+	# With thresholds at -1, process_organic_formation always returns formed: false.
 	var p := _make_province(1, Enums.TerrainType.PLAINS)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 10, 20.0, 10.0)
 	var result: Dictionary = ConstructionSystem.process_organic_formation(
 		p, [s], 200,
 	)
-	assert_true(result.get("formed", false))
-	var village: SettlementData = result.get("settlement")
-	assert_not_null(village)
-	assert_eq(village.settlement_type, Enums.SettlementType.VILLAGE)
-	assert_eq(village.settlement_id, 200)
-	# Source should lose PU
-	assert_eq(s.population_pu, 9)
+	assert_false(result.get("formed", false))
+	# Source PU unchanged
+	assert_eq(s.population_pu, 10)
 
 
 # -- Authority Checks ----------------------------------------------------------
@@ -879,9 +884,7 @@ func test_integration_shrine_queue_to_completion() -> void:
 # -- Temple queue → new SettlementData -----------------------------------------
 
 func test_integration_temple_queue_entry() -> void:
-	# Note: _apply_construction_order has a key typo (valid_4.get("valid_4",...))
-	# that causes the FOUND_TEMPLE branch to always fail validation.
-	# The construction is not queued — the result is {applied: false, reason: "invalid"}.
+	# Key typo in orchestrator validation check is FIXED — temple now queues successfully.
 	var c := _make_char(1, 5.0)
 	var p := _make_province(1)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 100.0)
@@ -898,11 +901,11 @@ func test_integration_temple_queue_entry() -> void:
 		[100], [1], 50, [], _make_dice(),
 	)
 
-	# Construction fails due to key typo in orchestrator validation check.
-	assert_eq(constructions.size(), 0)
+	# Construction succeeds: temple queued, koku deducted (80.0 for non-dedicated).
+	assert_eq(constructions.size(), 1)
 	assert_eq(results.size(), 1)
-	assert_false(results[0].get("applied", true))
-	assert_eq(s.koku_stockpile, 100.0)
+	assert_true(results[0].get("applied", false))
+	assert_eq(s.koku_stockpile, 20.0)
 
 
 func test_integration_temple_completion_creates_settlement() -> void:
@@ -971,8 +974,7 @@ func test_integration_monastery_completion_creates_settlement() -> void:
 # -- Ship commission → queue → ShipData creation -------------------------------
 
 func test_integration_ship_commission_queues() -> void:
-	# Note: _apply_construction_order has a key typo (valid_6.get("valid_6",...))
-	# that causes the COMMISSION_SHIP branch to always fail validation.
+	# Key typo in orchestrator validation check is FIXED — ship now queues successfully.
 	var c := _make_char(1, 3.0)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 5, 10.0, 20.0)
 	s.infrastructure = ["shipyard"]
@@ -988,11 +990,11 @@ func test_integration_ship_commission_queues() -> void:
 		[100], [1], 50, [], _make_dice(),
 	)
 
-	# Construction fails due to key typo in orchestrator validation check.
-	assert_eq(constructions.size(), 0)
+	# Construction succeeds: ship queued, koku deducted (3.0 for KOBUNE).
+	assert_eq(constructions.size(), 1)
 	assert_eq(results.size(), 1)
-	assert_false(results[0].get("applied", true))
-	assert_eq(s.koku_stockpile, 20.0)
+	assert_true(results[0].get("applied", false))
+	assert_eq(s.koku_stockpile, 17.0)
 
 
 func test_integration_ship_completion_creates_ship_data() -> void:
@@ -1031,7 +1033,8 @@ func test_integration_ship_completion_creates_ship_data() -> void:
 
 # -- Organic village formation on season boundary ------------------------------
 
-func test_integration_organic_village_formation() -> void:
+func test_integration_organic_village_formation_disabled() -> void:
+	# Organic formation is disabled (thresholds are -1). No village created.
 	var p := _make_province(1, Enums.TerrainType.PLAINS)
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 10, 20.0, 10.0)
 	var provinces: Dictionary = {1: p}
@@ -1044,17 +1047,15 @@ func test_integration_organic_village_formation() -> void:
 		provinces, settlements, next_sid, topics, next_tid, 100,
 	)
 
-	assert_eq(settlements.size(), 2)
-	assert_eq(settlements[1].settlement_type, Enums.SettlementType.VILLAGE)
-	assert_eq(settlements[1].settlement_id, 200)
-	assert_eq(next_sid[0], 201)
-	assert_eq(topics.size(), 1)
-	assert_eq(topics[0].topic_type, "settlement")
-	assert_eq(topics[0].variant, "organic_formation")
-	assert_eq(s.population_pu, 9)
+	assert_eq(settlements.size(), 1)
+	assert_eq(next_sid[0], 200)
+	assert_eq(topics.size(), 0)
+	assert_eq(s.population_pu, 10)
 
 
-func test_integration_organic_village_low_stability_blocked() -> void:
+func test_integration_organic_village_low_stability_also_disabled() -> void:
+	# Organic formation is disabled (thresholds are -1), so low stability
+	# is moot — disabled_pending_gdd_spec fires first.
 	var p := _make_province(1, Enums.TerrainType.PLAINS)
 	p.stability = 30.0
 	var s := _make_settlement(10, 1, Enums.SettlementType.VILLAGE, 10, 20.0, 10.0)
@@ -1094,7 +1095,7 @@ func test_integration_shinden_topic_tier_2() -> void:
 
 	assert_eq(topics.size(), 1)
 	assert_eq(topics[0].tier, TopicData.Tier.TIER_2)
-	assert_eq(topics[0].momentum, 40.0)
+	assert_eq(topics[0].momentum, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_2))
 	assert_eq(topics[0].variant, "shinden_completed")
 	assert_eq(settlements[0].settlement_type, Enums.SettlementType.SHINDEN)
 
@@ -1204,7 +1205,8 @@ func test_forge_koku_cost_constant() -> void:
 
 
 func test_forge_build_seasons_constant() -> void:
-	assert_eq(ConstructionSystem.FORGE_BUILD_SEASONS, 2)
+	# GDD s4.3.10 does not specify forge build time; sentinel -1
+	assert_eq(ConstructionSystem.FORGE_BUILD_SEASONS, -1)
 
 
 func test_validate_forge_sufficient_koku() -> void:
@@ -1234,12 +1236,9 @@ func test_validate_forge_insufficient_authority() -> void:
 
 
 func test_forge_get_build_seasons() -> void:
-	var cd_data := ConstructionData.new()
-	cd_data.construction_type = ConstructionData.ConstructionType.FORGE
-	cd_data.seasons_remaining = 2
-	# Verify the enum is wired into _get_build_seasons via create_construction
+	# GDD s4.3.10 does not specify forge build time; sentinel -1
 	var cd_out: ConstructionData = ConstructionSystem.create_construction(
 		99, ConstructionData.ConstructionType.FORGE, 1, 1, 0, 35.0,
 	)
-	assert_eq(cd_out.seasons_remaining, 2)
-	assert_eq(cd_out.seasons_total, 2)
+	assert_eq(cd_out.seasons_remaining, -1)
+	assert_eq(cd_out.seasons_total, -1)

@@ -257,6 +257,8 @@ static func select_clan_delegation(
 
 	var scored: Array = []
 	for vassal: L5RCharacterData in vassals:
+		if CharacterStats.is_dead(vassal):
+			continue
 		var score: float = _score_delegate_candidate(vassal, champion, agenda_topic_ids, topic_pool_map)
 		scored.append({"id": vassal.character_id, "score": score, "char": vassal})
 
@@ -302,13 +304,13 @@ static func _score_delegate_candidate(
 	var school_score: float = 0.0
 	match candidate.school_type:
 		Enums.SchoolType.COURTIER:
-			school_score = 10.0
+			school_score = 0.0
 		Enums.SchoolType.SHUGENJA:
-			school_score = 6.0
+			school_score = 0.0
 		Enums.SchoolType.BUSHI:
-			school_score = 3.0
+			school_score = 0.0
 		_:
-			school_score = 5.0
+			school_score = 0.0
 	school_score = school_score * 5.0 / 10.0
 
 	return court_skill_score + prestige_score + disp_score + agenda_score + school_score
@@ -321,6 +323,8 @@ static func _apply_yojimbo_pull_in(
 	var result: Array = selected_ids.duplicate()
 	var vassal_map: Dictionary = {}
 	for v: L5RCharacterData in all_vassals:
+		if CharacterStats.is_dead(v):
+			continue
 		vassal_map[v.character_id] = v
 
 	for sel_id: int in selected_ids:
@@ -330,6 +334,8 @@ static func _apply_yojimbo_pull_in(
 		if sel.school_type != Enums.SchoolType.COURTIER:
 			continue
 		for v: L5RCharacterData in all_vassals:
+			if CharacterStats.is_dead(v):
+				continue
 			if v.operational_superior_id == sel_id and v.school_type == Enums.SchoolType.BUSHI:
 				if v.character_id not in result:
 					result.append(v.character_id)
@@ -356,6 +362,8 @@ static func select_personal_invitations(
 
 	var scored: Array = []
 	for candidate: L5RCharacterData in candidates:
+		if CharacterStats.is_dead(candidate):
+			continue
 		if candidate.character_id in already_invited:
 			continue
 		if candidate.character_id == emperor.character_id:
@@ -399,19 +407,18 @@ static func select_personal_invitations(
 	return result
 
 
-static func _score_school_type_for_invitation(school_type: int, archetype: int) -> float:
-	var is_warlike: bool = archetype == StrategicReview.EmperorArchetype.WARLIKE
+static func _score_school_type_for_invitation(school_type: int, _archetype: int) -> float:
 	match school_type:
 		Enums.SchoolType.COURTIER:
-			return 10.0 if not is_warlike else 3.0
+			return 0.0
 		Enums.SchoolType.SHUGENJA:
-			return 6.0
+			return 0.0
 		Enums.SchoolType.BUSHI:
-			return 3.0 if not is_warlike else 10.0
+			return 0.0
 		Enums.SchoolType.MONK:
-			return 4.0
+			return 0.0
 		_:
-			return 5.0
+			return 0.0
 
 
 # -- Emperor's Peace -----------------------------------------------------------
@@ -454,8 +461,12 @@ static func record_emperors_peace_violation(
 ) -> Dictionary:
 	var witnesses: Array = []
 	for aid: int in court.attendee_ids:
-		if aid != offender.character_id:
-			witnesses.append(aid)
+		if aid == offender.character_id:
+			continue
+		var att: L5RCharacterData = characters_by_id.get(aid) as L5RCharacterData
+		if att == null or CharacterStats.is_dead(att):
+			continue
+		witnesses.append(aid)
 
 	var case_id: int = next_case_id[0]
 	next_case_id[0] = case_id + 1
@@ -496,9 +507,9 @@ static func record_emperors_peace_violation(
 	var family_daimyo_glory_applied: float = 0.0
 	for cid: int in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
-		if c == null:
+		if c == null or CharacterStats.is_dead(c):
 			continue
-		if c.family == offender.family and c.role_position == "family_daimyo":
+		if c.family == offender.family and c.role_position == "Family Daimyo":
 			family_daimyo_glory_applied = HonorGlorySystem.apply_glory_change(
 				c, PEACE_VIOLATION_FAMILY_DAIMYO_GLORY
 			)
@@ -527,10 +538,12 @@ static func compute_glory_rewards(
 
 	var host_daimyo_id: int = court.host_lord_id
 	if host_daimyo_id >= 0:
-		rewards.append({"character_id": host_daimyo_id, "glory_change": GLORY_HOST_FAMILY_DAIMYO})
+		var host_daimyo: L5RCharacterData = characters_by_id.get(host_daimyo_id) as L5RCharacterData
+		if host_daimyo != null and not CharacterStats.is_dead(host_daimyo):
+			rewards.append({"character_id": host_daimyo_id, "glory_change": GLORY_HOST_FAMILY_DAIMYO})
 
 	var host_champion: L5RCharacterData = _find_clan_champion(court.host_clan, characters_by_id)
-	if host_champion != null and host_champion.character_id != host_daimyo_id:
+	if host_champion != null and not CharacterStats.is_dead(host_champion) and host_champion.character_id != host_daimyo_id:
 		rewards.append({"character_id": host_champion.character_id, "glory_change": GLORY_HOST_CLAN_CHAMPION})
 
 	for attendee_id: int in court.attendee_ids:
@@ -539,7 +552,7 @@ static func compute_glory_rewards(
 		if host_champion != null and attendee_id == host_champion.character_id:
 			continue
 		var attendee: L5RCharacterData = characters_by_id.get(attendee_id) as L5RCharacterData
-		if attendee != null and attendee.clan == court.host_clan:
+		if attendee != null and not CharacterStats.is_dead(attendee) and attendee.clan == court.host_clan:
 			rewards.append({"character_id": attendee_id, "glory_change": GLORY_HOST_CLAN_DELEGATE})
 
 	return rewards
@@ -765,7 +778,7 @@ static func run_invitation_pipeline(
 				continue
 			if c.character_id in all_invited:
 				continue
-			if c.character_id in emperor.met_characters or emperor.knowledge_pool.size() > 0:
+			if c.character_id in emperor.met_characters:
 				personal_candidates.append(c)
 
 	var personal_invites: Array = []
@@ -861,7 +874,7 @@ static func _build_topic_pool_map(characters_by_id: Dictionary) -> Dictionary:
 	var result: Dictionary = {}
 	for char_id: int in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[char_id] as L5RCharacterData
-		if c == null:
+		if c == null or CharacterStats.is_dead(c):
 			continue
 		result[char_id] = c.topic_pool.duplicate()
 	return result

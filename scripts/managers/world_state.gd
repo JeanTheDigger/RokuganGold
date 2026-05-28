@@ -109,6 +109,39 @@ var active_assassination_ops: Array[Dictionary] = []
 # -- Approach Evaluation Snapshots (s55.30.3) ---------------------------------
 var disposition_snapshots: Dictionary = {}
 
+# -- Secrets (s12.8) ----------------------------------------------------------
+var active_secrets: Array[SecretData] = []
+var next_secret_id: Array[int] = [1]
+
+# -- Hostages (s22.9) ---------------------------------------------------------
+var active_hostages: Array[Dictionary] = []
+
+# -- Tattoos (s57.25) ---------------------------------------------------------
+var tattoos: Array[TattooData] = []
+var next_tattoo_id: Array[int] = [1]
+
+# -- Hunts (s57.38) -----------------------------------------------------------
+var active_hunts: Array[Dictionary] = []
+var next_hunt_id: Array[int] = [1]
+
+# -- Spiritual Insurgency (s56.16) -------------------------------------------
+var spiritual_insurgency_events: Array = []
+var next_spiritual_event_id: Array[int] = [1]
+
+# -- Bloodspeaker Cult Network (s56.14) --------------------------------------
+var bloodspeaker_cells: Array[BloodspeakerCellData] = []
+var next_cell_id: Array[int] = [1]
+
+# -- Artisan & Crafting (s49) -------------------------------------------------
+var crafted_items: Array[ArtisanItemData] = []
+var next_item_id: Array[int] = [1]
+
+# -- Commitments ID Counter (s55.31) ------------------------------------------
+var next_commitment_id: Array[int] = [1]
+
+# -- Crisis ID Counter ---------------------------------------------------------
+var next_crisis_id: Array[int] = [1]
+
 # -- Intra-Clan Civil War (s53.2) ---------------------------------------------
 var active_civil_wars: Array[Dictionary] = []
 var precedent_modifiers: Dictionary = {}
@@ -140,7 +173,43 @@ func _ready() -> void:
 	var fresh: Dictionary = CollectiveDisposition.make_starting_baselines()
 	clan_baselines = fresh["clan"]
 	family_baselines = fresh["family"]
+	_load_npc_scoring_tables()
 	print("[WorldState] Initialized.")
+
+
+func _load_npc_scoring_tables() -> void:
+	var base: String = "res://systems/npc_engine/data/tables/"
+	scoring_tables = {
+		"objective_alignment": _load_json(base + "objective_alignment.json"),
+		"personality_lean": _load_json(base + "personality_lean.json"),
+		"competence_table": _load_json(base + "competence_table.json"),
+		"disposition_tiers": _load_json(base + "disposition_tiers.json"),
+		"urgency_rules": _load_json(base + "urgency_rules.json"),
+		"topic_position_alignment": _load_json(base + "topic_position_alignment.json"),
+		"action_skill_map": _load_json(base + "action_skill_map.json"),
+	}
+	filter_data = {
+		"personality_filter": _load_json(base + "personality_filter.json"),
+	}
+	action_skill_map = scoring_tables.get("action_skill_map", {})
+
+
+static func _load_json(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		push_warning("WorldState: JSON file not found: %s" % path)
+		return {}
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		push_warning("WorldState: Failed to open JSON file: %s" % path)
+		return {}
+	var text: String = file.get_as_text()
+	file.close()
+	var json := JSON.new()
+	var err: int = json.parse(text)
+	if err != OK:
+		push_error("WorldState: JSON parse error in %s: %s" % [path, json.get_error_message()])
+		return {}
+	return json.data
 
 
 func rebuild_characters_by_id() -> void:
@@ -155,11 +224,13 @@ func _sync_wars_to_world_states() -> void:
 	world_states["settlements"] = settlements
 	world_states["clan_baselines"] = clan_baselines
 	world_states["family_baselines"] = family_baselines
+	world_states["emperor_id"] = emperor_id
+	world_states["emperor_archetype"] = emperor_archetype
 
 
 func advance_one_day() -> Dictionary:
 	_sync_wars_to_world_states()
-	return DayOrchestrator.advance_day(
+	var result: Dictionary = DayOrchestrator.advance_day(
 		time_system,
 		characters,
 		characters_by_id,
@@ -223,18 +294,39 @@ func advance_one_day() -> Dictionary:
 		active_civil_wars,
 		precedent_modifiers,
 		next_company_id,
-		[],  # active_secrets
-		[1],  # next_secret_id
-		[],  # active_hostages
+		active_secrets,
+		next_secret_id,
+		active_hostages,
 		active_assassination_ops,
-		[1],  # next_commitment_id
-		[1],  # next_crisis_id
+		next_commitment_id,
+		next_crisis_id,
 		disposition_snapshots,
-		[],  # tattoos
-		[1],  # next_tattoo_id
-		[],  # active_hunts
-		[1],  # next_hunt_id
+		tattoos,
+		next_tattoo_id,
+		active_hunts,
+		next_hunt_id,
+		spiritual_insurgency_events,
+		next_spiritual_event_id,
+		bloodspeaker_cells,
+		next_cell_id,
+		crafted_items,
+		next_item_id,
 	)
+	_apply_succession_updates(result)
+	return result
+
+
+func _apply_succession_updates(result: Dictionary) -> void:
+	var applied: Array = result.get("succession_applied", [])
+	for entry: Dictionary in applied:
+		if entry.get("is_emperor", false):
+			emperor_id = entry.get("successor_id", -1)
+			emperor_archetype = world_states.get(
+				"emperor_archetype", StrategicReview.EmperorArchetype.IRON
+			)
+			var new_emp: L5RCharacterData = characters_by_id.get(emperor_id)
+			if new_emp != null and not new_emp.physical_location.is_empty():
+				emperor_settlement_id = new_emp.physical_location.to_int()
 
 
 func _build_miya_inputs() -> Dictionary:

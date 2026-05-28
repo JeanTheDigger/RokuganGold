@@ -302,6 +302,8 @@ static func broadcast_public_knowledge(
 		)
 
 		for c: L5RCharacterData in target_chars:
+			if CharacterStats.is_dead(c):
+				continue
 			if topic.topic_id in c.topic_pool:
 				continue
 			c.topic_pool.append(topic.topic_id)
@@ -330,7 +332,10 @@ static func _get_broadcast_targets(
 	var targets: Array = []
 
 	if topic.momentum >= BROADCAST_UNAVOIDABLE:
-		targets.assign(characters)
+		for c_all: L5RCharacterData in characters:
+			if CharacterStats.is_dead(c_all):
+				continue
+			targets.append(c_all)
 		return targets
 
 	var affected_provinces: Array = topic.provinces_affected
@@ -344,6 +349,8 @@ static func _get_broadcast_targets(
 			affected_clans.append(topic.clan_involved)
 
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		var char_province: int = character_province_map.get(c.character_id, -1)
 
 		if topic.momentum >= BROADCAST_MAJOR and not affected_clans.is_empty():

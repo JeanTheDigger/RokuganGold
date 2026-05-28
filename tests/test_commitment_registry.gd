@@ -192,7 +192,7 @@ func test_no_notice_tier1_all():
 	assert_almost_eq(conseq["honor"], -0.5, 0.001)
 	assert_eq(conseq["creditor_disp"], -10)
 	assert_eq(conseq["witness_disp"], -5)
-	assert_eq(conseq["topic_tier"], 2)
+	assert_eq(conseq["topic_tier"], TopicData.Tier.TIER_2)
 
 
 # =============================================================================
@@ -666,3 +666,39 @@ func test_process_deadlines_skips_future():
 		all, 5, checker, chars, chars
 	)
 	assert_eq(results.size(), 0)
+
+
+# -- Audit: Dead character guards (2026-05-22) ---------------------------------
+
+func test_apply_consequences_skips_dead_creditor() -> void:
+	var debtor := _make_char(1)
+	var creditor := _make_char(2)
+	creditor.stamina = 2
+	creditor.willpower = 2
+	creditor.wounds_taken = 999
+	creditor.disposition_values[1] = 10
+	var commitment := _make_commitment({"debtor": 1, "creditor": 2, "tier": 1})
+	commitment.status = Enums.CommitmentStatus.BROKEN_NO_NOTICE
+	var chars: Dictionary = {1: debtor, 2: creditor}
+	CommitmentRegistry.apply_consequences(commitment, debtor, chars)
+	assert_eq(creditor.disposition_values.get(1, 0), 10,
+		"Dead creditor disposition should not change")
+
+
+func test_apply_consequences_skips_dead_witness() -> void:
+	var debtor := _make_char(1)
+	var creditor := _make_char(2)
+	creditor.stamina = 2
+	creditor.willpower = 2
+	var dead_witness := _make_char(3)
+	dead_witness.stamina = 2
+	dead_witness.willpower = 2
+	dead_witness.wounds_taken = 999
+	dead_witness.disposition_values[1] = 10
+	var commitment := _make_commitment({"debtor": 1, "creditor": 2, "tier": 1,
+		"witnesses": [3]})
+	commitment.status = Enums.CommitmentStatus.BROKEN_NO_NOTICE
+	var chars: Dictionary = {1: debtor, 2: creditor, 3: dead_witness}
+	CommitmentRegistry.apply_consequences(commitment, debtor, chars)
+	assert_eq(dead_witness.disposition_values.get(1, 0), 10,
+		"Dead witness disposition should not change")

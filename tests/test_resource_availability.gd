@@ -115,19 +115,19 @@ func test_exactly_1_5x_is_tight() -> void:
 
 
 # =============================================================================
-# Inventory-based Actions
+# Gift Actions (koku-based, GDD says variable)
 # =============================================================================
 
-func test_deliver_gift_no_items_broke() -> void:
-	_char.items = []
+func test_deliver_gift_no_koku_broke() -> void:
+	_char.koku = 0.0
 	var mod: float = ResourceAvailability.compute_resource_modifier(
 		"DELIVER_GIFT", _char
 	)
 	assert_eq(mod, -40.0)
 
 
-func test_deliver_gift_with_items() -> void:
-	_char.items = [{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}]
+func test_deliver_gift_with_koku() -> void:
+	_char.koku = 10.0
 	var mod: float = ResourceAvailability.compute_resource_modifier(
 		"DELIVER_GIFT", _char
 	)
@@ -198,11 +198,11 @@ func test_get_resource_cost_missing() -> void:
 # =============================================================================
 
 func test_purchase_market_cost() -> void:
-	_char.koku = 9.0
+	_char.koku = 3.0
 	var mod: float = ResourceAvailability.compute_resource_modifier(
 		"PURCHASE_MARKET", _char
 	)
-	# 9/3 = 3.0 → -5
+	# 3/1 = 3.0 → -5
 	assert_eq(mod, -5.0)
 
 
@@ -211,8 +211,8 @@ func test_offer_favor_cost() -> void:
 	var mod: float = ResourceAvailability.compute_resource_modifier(
 		"OFFER_FAVOR", _char
 	)
-	# 2/2 = 1.0 → -15
-	assert_eq(mod, -15.0)
+	# 2/1 = 2.0 → -10
+	assert_eq(mod, -10.0)
 
 
 # =============================================================================
@@ -234,13 +234,13 @@ func test_cannot_afford_insufficient_koku() -> void:
 	assert_false(ResourceAvailability.can_afford("BRIBE_FOR_INFO", _char))
 
 
-func test_can_afford_with_inventory() -> void:
-	_char.items = [{"id": 1}]
+func test_can_afford_deliver_gift_with_koku() -> void:
+	_char.koku = 1.0
 	assert_true(ResourceAvailability.can_afford("DELIVER_GIFT", _char))
 
 
-func test_cannot_afford_empty_inventory() -> void:
-	_char.items = []
+func test_cannot_afford_deliver_gift_no_koku() -> void:
+	_char.koku = 0.0
 	assert_false(ResourceAvailability.can_afford("DELIVER_GIFT", _char))
 
 

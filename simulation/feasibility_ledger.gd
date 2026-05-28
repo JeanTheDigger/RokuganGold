@@ -150,7 +150,8 @@ static func calculate_arms_budget(
 	)
 
 	var net_iron: float = total_iron_available - iron_upkeep_total
-	var projected_production: float = minf(net_iron, iron_per_season * campaign_seasons) * 0.5
+	# GDD s4.3.17 line 479: "1.00 Iron → 1.00 Arms. No loss in conversion."
+	var projected_production: float = minf(net_iron, iron_per_season * campaign_seasons) * 1.0
 
 	var net: float = clan_arms_stockpile + projected_production - equip_cost
 
@@ -349,8 +350,10 @@ enum LadderRung {
 
 # -- Constants ----------------------------------------------------------------
 
-const SCALE_DOWN_FACTOR: float = 0.5
-const SCALE_DOWN_EQUIP_RATIO: float = 0.5
+# GDD s4.3.17 Rung 1: "Reduce the proposed army size" — no specific reduction
+# factor given. Using structural placeholder.
+const SCALE_DOWN_FACTOR: float = 0.0
+const SCALE_DOWN_EQUIP_RATIO: float = 0.0
 
 const DELAY_SKIP_VIRTUES: Array[String] = ["YU", "KYORYOKU"]
 const DELAYABLE_SEASONS: Array[String] = ["spring", "summer"]
@@ -362,7 +365,7 @@ const TRIBUTE_REFUSE_THRESHOLD: int = -11
 
 const ALLIED_AID_SKIP_VIRTUES: Array[String] = ["KETSUI", "ISHI"]
 const ALLIED_AID_FRIEND_THRESHOLD: int = 31
-const ALLIED_AID_SIGNIFICANT_FRACTION: float = 0.30
+const ALLIED_AID_SIGNIFICANT_FRACTION: float = 0.20
 
 const RAID_BLOCK_VIRTUES: Array[String] = ["JIN", "GI"]
 const RAID_HONOR_COST: float = -1.0
@@ -445,7 +448,8 @@ static func try_market_purchase(
 	var modified: Dictionary = inputs.duplicate(true)
 	var available_koku: float = modified.get("current_koku", 0.0)
 	var rice_price: float = 1.0
-	var purchasable_rice: float = available_koku * 0.5 / rice_price
+	# GDD s4.3.17 does not specify a fraction limit on market purchases.
+	var purchasable_rice: float = available_koku / rice_price
 
 	var bonus_rice: float = purchasable_rice
 	modified["market_rice_bonus"] = bonus_rice
@@ -456,7 +460,7 @@ static func try_market_purchase(
 		"applied": true,
 		"ledger": ledger,
 		"modified_inputs": modified,
-		"koku_spent": available_koku * 0.5,
+		"koku_spent": available_koku,
 		"rice_purchased": bonus_rice,
 	}
 
@@ -516,7 +520,7 @@ static func try_demand_tribute(
 		"refusing_vassals": refusing_vassals,
 		"disposition_cost": TRIBUTE_DISPOSITION_COST,
 		"generates_topic": true,
-		"topic_tier": 4,
+		"topic_tier": TopicData.Tier.TIER_4,
 	}
 
 
@@ -639,7 +643,7 @@ static func try_raid_neighbor(
 		"other_disposition_cost": RAID_OTHER_DISPOSITION_COST,
 		"triggers_war_status": not best_target.get("already_at_war", false),
 		"generates_topic": true,
-		"topic_tier": 3,
+		"topic_tier": TopicData.Tier.TIER_3,
 	}
 
 
@@ -682,7 +686,7 @@ static func try_desperation_override(
 		"desperation_levy": true,
 		"honor_cost": honor_cost,
 		"generates_topic": true,
-		"topic_tier": 3,
+		"topic_tier": TopicData.Tier.TIER_3,
 	}
 
 
@@ -832,7 +836,7 @@ static func _extract_side_effects(rung_result: Dictionary) -> Dictionary:
 	effects["rung"] = rung_result.get("rung", -1)
 	if rung_result.get("generates_topic", false):
 		effects["generates_topic"] = true
-		effects["topic_tier"] = rung_result.get("topic_tier", 4)
+		effects["topic_tier"] = rung_result.get("topic_tier", TopicData.Tier.TIER_4)
 	if rung_result.has("honor_cost"):
 		effects["honor_cost"] = rung_result["honor_cost"]
 	if rung_result.has("glory_cost"):
@@ -891,6 +895,9 @@ enum CampaignDecision {
 }
 
 
+# GDD s4.3.17 references starvation stages from s4.3.6 (consecutive-season based).
+# Per-PU thresholds are structural proxy — starvation_stage not available on SettlementData
+# at this query point.
 const SHORTAGE_RICE_PER_PU: float = 1.00
 const HUNGER_RICE_PER_PU: float = 0.50
 const FAMINE_RICE_PER_PU: float = 0.0
@@ -903,7 +910,8 @@ const FAMINE_CONTINUE_VIRTUES: Array[String] = ["ISHI"]
 
 const TETHER_HOLD_EXTRA_VIRTUES: Array[String] = ["KETSUI"]
 const TETHER_HOLD_SEASONS_DEFAULT: int = 1
-const TETHER_HOLD_SEASONS_KETSUI: int = 2
+# GDD s4.3.17: "within 1 IC season" — no personality extension specified.
+const TETHER_HOLD_SEASONS_KETSUI: int = 1
 
 
 # -- Check 1: Home Front Status -----------------------------------------------
@@ -945,10 +953,10 @@ static func assess_army_supply(
 	tether_state: int,
 	source_has_rice: bool,
 ) -> Dictionary:
-	var supplied: bool = tether_state == 0 and source_has_rice
+	var supplied: bool = tether_state == SupplyTetherSystem.TetherState.SOLID and source_has_rice
 	return {
 		"status": ArmySupplyStatus.SUPPLIED if supplied else ArmySupplyStatus.UNSUPPLIED,
-		"tether_intact": tether_state == 0,
+		"tether_intact": tether_state == SupplyTetherSystem.TetherState.SOLID,
 		"source_has_rice": source_has_rice,
 	}
 
@@ -1044,28 +1052,22 @@ static func determine_campaign_decision(
 
 # -- Retreat Target Selection --------------------------------------------------
 
+# GDD s4.3.17 specifies retreat to friendly territory but no scoring formula.
+# Structural wiring: selects nearest friendly province.
 static func find_retreat_target(
 	_army_province_id: int,
 	friendly_provinces: Array,
-	max_distance: int = 2,
 ) -> Dictionary:
 	var best_id: int = -1
-	var best_score: float = -1.0
+	var best_dist: int = 999
 
 	for fp: Variant in friendly_provinces:
 		if not (fp is Dictionary):
 			continue
 		var fpd: Dictionary = fp
 		var dist: int = fpd.get("distance", 99)
-		if dist > max_distance:
-			continue
-		var rice_per_pu: float = fpd.get("rice_per_pu", 0.0)
-		var has_forge: bool = fpd.get("has_forge", false)
-		if rice_per_pu < 1.0 and not has_forge:
-			continue
-		var score: float = rice_per_pu + (5.0 if has_forge else 0.0) - float(dist)
-		if score > best_score:
-			best_score = score
+		if dist < best_dist:
+			best_dist = dist
 			best_id = fpd.get("province_id", -1)
 
 	if best_id < 0:

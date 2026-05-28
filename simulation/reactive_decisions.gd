@@ -22,6 +22,8 @@ static func evaluate_reactive_event(
 		"DUEL_CHALLENGE_RECEIVED":
 			return _evaluate_duel_response(event, character, ctx)
 		"FAVOR_REQUESTED":
+			if event.get("resolved", false):
+				return {"action": "PASS", "need_type": ""}
 			return _evaluate_favor_response(event, character)
 		"COURT_INVITATION":
 			return _evaluate_court_invitation(event, character)
@@ -111,6 +113,7 @@ static func _passes_capability_check(
 		return true
 
 	var iaijutsu_rank: int = character.skills.get("Iaijutsu", 0)
+	# PROVISIONAL — GDD s55.11 says "high-Iaijutsu character" without numeric threshold
 	if iaijutsu_rank >= 3:
 		return true
 

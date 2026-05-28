@@ -6,20 +6,17 @@ class_name CommerceStigmaSystem
 const PUBLIC_ALWAYS: Array[String] = ["PURCHASE_MARKET"]
 const PUBLIC_IN_COURT_OR_VISITING: Array[String] = ["CONDUCT_COMMERCE"]
 
-const HONOR_THRESHOLD_HIGH: float = 7.0
-const HONOR_THRESHOLD_MID: float = 5.0
-const HONOR_THRESHOLD_LOW: float = 3.0
+# Honor penalties per s57.40.3 (4-tier, commerce-specific).
 const HONOR_PENALTY_HIGH: float = -0.3
 const HONOR_PENALTY_MID: float = -0.2
 const HONOR_PENALTY_LOW: float = -0.1
-const GLORY_PENALTY: float = CrimeSystem.LOW_SKILL_DISCOVERY_GLORY
+# Glory penalty per s57.40.4: flat -0.1, once per IC day.
+const GLORY_PENALTY: float = -0.1
 
 const LEAN_PLUS_10_SCORE: int = 10
 const LEAN_PLUS_5_SCORE: int = 5
 const LEAN_MINUS_10_SCORE: int = -10
 const LEAN_MINUS_5_SCORE: int = -5
-const HONOR_SELF_REG_5_6: int = -3
-const HONOR_SELF_REG_7_PLUS: int = -5
 
 const LEAN_PLUS_10: Array[String] = ["Ide Trader"]
 const LEAN_PLUS_5: Array[String] = [
@@ -33,6 +30,10 @@ const LEAN_MINUS_10: Array[String] = [
 	"Kitsu Sodan Senzo",
 ]
 const LEAN_MINUS_5: Array[String] = ["Miya Herald"]
+
+# Honor-based self-regulation per s57.40.7: NPC scoring lean for high-honor characters.
+const HONOR_SELF_REG_7_PLUS: int = -5
+const HONOR_SELF_REG_5_6: int = -3
 
 
 static func is_public_commerce(
@@ -54,7 +55,17 @@ static func has_ide_trader_exception(character: L5RCharacterData) -> bool:
 
 
 static func compute_honor_penalty(character: L5RCharacterData) -> float:
-	return CrimeSystem.get_low_skill_honor_cost(character, "Commerce")
+	## s57.40.3: 4-tier table keyed by Honor Rank at time of roll.
+	if has_ide_trader_exception(character):
+		return 0.0
+	var rank: int = HonorGlorySystem.get_honor_rank(character)
+	if rank >= 7:
+		return HONOR_PENALTY_HIGH
+	elif rank >= 5:
+		return HONOR_PENALTY_MID
+	elif rank >= 3:
+		return HONOR_PENALTY_LOW
+	return 0.0
 
 
 static func apply_stigma(

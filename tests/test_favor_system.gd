@@ -103,7 +103,7 @@ func test_break_minor_favor():
 	assert_eq(result["disposition_floor"], -15)
 	assert_eq(result["honor_loss"], -0.5)
 	assert_eq(result["glory_loss"], 0.0)
-	assert_eq(result["topic_tier"], 4)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_4)
 
 
 func test_break_moderate_favor():
@@ -114,7 +114,7 @@ func test_break_moderate_favor():
 	assert_eq(result["honor_loss"], -1.0)
 	assert_eq(result["witness_disposition_loss"], -5)
 	assert_eq(result["witnesses"], [3, 4, 5])
-	assert_eq(result["topic_tier"], 4)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_4)
 
 
 func test_break_major_favor():
@@ -125,7 +125,7 @@ func test_break_major_favor():
 	assert_eq(result["honor_loss"], -2.0)
 	assert_eq(result["glory_loss"], -0.5)
 	assert_eq(result["witness_disposition_loss"], -10)
-	assert_eq(result["topic_tier"], 2)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_2)
 
 
 # -- Dispute tests ------------------------------------------------------------
@@ -352,7 +352,7 @@ func test_normal_favor_no_exposure_risk():
 # -- Dispute witness disposition tests ----------------------------------------
 
 func test_dispute_witness_creditor_wins():
-	assert_eq(FavorSystem.get_dispute_witness_disposition(true), 2)
+	assert_eq(FavorSystem.get_dispute_witness_disposition(true), 0)
 
 
 func test_dispute_witness_debtor_wins():

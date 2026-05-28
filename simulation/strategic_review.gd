@@ -88,6 +88,28 @@ const GREAT_CLANS: Array[String] = [
 ]
 
 
+static func derive_emperor_archetype(emperor: L5RCharacterData) -> int:
+	var bv: int = emperor.bushido_virtue
+	var sv: int = emperor.shourido_virtue
+	# Tyrant: Ishi shourido with no strong bushido counterbalance (s55.10)
+	if sv == Enums.ShouridoVirtue.ISHI:
+		if bv == Enums.BushidoVirtue.NONE or bv == Enums.BushidoVirtue.MEIYO:
+			return EmperorArchetype.TYRANT
+	# Bushido-dominant archetypes
+	if bv == Enums.BushidoVirtue.JIN:
+		return EmperorArchetype.BENEVOLENT
+	if bv == Enums.BushidoVirtue.CHUGI or bv == Enums.BushidoVirtue.MEIYO:
+		return EmperorArchetype.IRON
+	if bv == Enums.BushidoVirtue.YU:
+		return EmperorArchetype.WARLIKE
+	# Shourido-dominant archetypes (bushido is NONE or weak)
+	if sv == Enums.ShouridoVirtue.KYORYOKU:
+		return EmperorArchetype.WARLIKE
+	if sv == Enums.ShouridoVirtue.SEIGYO or sv == Enums.ShouridoVirtue.DOSATSU:
+		return EmperorArchetype.CUNNING
+	return EmperorArchetype.IRON
+
+
 static func run_seasonal_review(
 	lord: L5RCharacterData,
 	vassals: Array,
@@ -232,9 +254,14 @@ static func _evaluate_vassal_objectives(
 		if primary.is_empty() or primary.get("status", "") == "COMPLETED":
 			idle_vassals.append(vassal.character_id)
 
+	var vassals_by_id: Dictionary = {}
+	for v: L5RCharacterData in vassals:
+		vassals_by_id[v.character_id] = v
+
 	for vassal_id: int in idle_vassals:
+		var vassal_char: L5RCharacterData = vassals_by_id.get(vassal_id)
 		var new_objective: Dictionary = _select_objective_for_vassal(
-			lord, vassal_id, threats, world_state
+			lord, vassal_char, threats, world_state
 		)
 		if new_objective.is_empty():
 			continue
@@ -251,7 +278,7 @@ static func _evaluate_vassal_objectives(
 
 static func _select_objective_for_vassal(
 	lord: L5RCharacterData,
-	_vassal_id: int,
+	vassal: L5RCharacterData,
 	threats: Array,
 	world_state: Dictionary,
 ) -> Dictionary:
@@ -283,6 +310,7 @@ static func _select_objective_for_vassal(
 		"assigning_lord_id": lord.character_id,
 		"status": "ACTIVE",
 	}
+
 
 
 static func _evaluate_tax_adjustment(
@@ -448,6 +476,8 @@ static func _evaluate_winter_court_host(
 	var crisis_by_clan: Dictionary = world_state.get("crisis_momentum_by_clan", {})
 
 	for champion: L5RCharacterData in clan_champions:
+		if CharacterStats.is_dead(champion):
+			continue
 		var clan: String = champion.clan
 		var score: float = 0.0
 
@@ -601,6 +631,8 @@ static func _evaluate_disgrace_fabrication(
 
 	var results: Array = []
 	for champion: L5RCharacterData in clan_champions:
+		if CharacterStats.is_dead(champion):
+			continue
 		var disp: int = emperor.disposition_values.get(champion.character_id, 0)
 		var tier: int = DispositionSystem.get_tier(disp)
 		if tier <= DispositionSystem.Tier.RIVAL:
@@ -624,6 +656,8 @@ static func _evaluate_breaking_point(
 
 	var hostile_clan_count: int = 0
 	for champion: L5RCharacterData in clan_champions:
+		if CharacterStats.is_dead(champion):
+			continue
 		if champion.clan not in GREAT_CLANS:
 			continue
 		var disp: int = champion.disposition_values.get(emperor.character_id, 0)
@@ -645,11 +679,13 @@ static func _seed_archetype_champion_baselines(
 	clan_champions: Array,
 ) -> void:
 	for champion: L5RCharacterData in clan_champions:
+		if CharacterStats.is_dead(champion):
+			continue
 		if emperor.disposition_values.has(champion.character_id):
 			continue
 		var baseline: int = get_archetype_champion_baseline(archetype, champion.school_type)
 		if baseline != 0:
-			emperor.disposition_values[champion.character_id] = baseline
+			emperor.disposition_values[champion.character_id] = clampi(baseline, -100, 100)
 
 
 static func get_archetype_champion_baseline(

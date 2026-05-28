@@ -144,11 +144,11 @@ func test_capped_above_ceiling():
 	)
 	assert_eq(tag, ApproachEvaluation.AssessmentTag.APPROACH_CAPPED)
 
-func test_ineffective_no_movement():
+func test_small_progress_is_effective():
 	var tag: ApproachEvaluation.AssessmentTag = ApproachEvaluation.evaluate_approach(
 		"CHARM", 2, 9, 8
 	)
-	assert_eq(tag, ApproachEvaluation.AssessmentTag.APPROACH_INEFFECTIVE)
+	assert_eq(tag, ApproachEvaluation.AssessmentTag.APPROACH_EFFECTIVE)
 
 func test_ineffective_regression():
 	var tag: ApproachEvaluation.AssessmentTag = ApproachEvaluation.evaluate_approach(
@@ -162,11 +162,11 @@ func test_intimidate_not_capped():
 	)
 	assert_eq(tag, ApproachEvaluation.AssessmentTag.APPROACH_EFFECTIVE)
 
-func test_deliver_gift_capped():
+func test_deliver_gift_not_capped():
 	var tag: ApproachEvaluation.AssessmentTag = ApproachEvaluation.evaluate_approach(
 		"DELIVER_GIFT", 2, 42, 38
 	)
-	assert_eq(tag, ApproachEvaluation.AssessmentTag.APPROACH_CAPPED)
+	assert_eq(tag, ApproachEvaluation.AssessmentTag.APPROACH_EFFECTIVE)
 
 
 # =============================================================================

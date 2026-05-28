@@ -33,3 +33,4 @@ enum InvocationMethod {
 @export var invocation_method: InvocationMethod = InvocationMethod.LETTER
 @export var response_deadline_ic_day: int = -1
 @export var heir_id: int = -1
+@export var resolved: bool = false

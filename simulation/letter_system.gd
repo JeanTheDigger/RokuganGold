@@ -10,12 +10,14 @@ const RAISE_TN: int = 5
 # Disposition bonuses by quality tier
 const QUALITY_BONUS: Array[int] = [0, 1, 2, 3]
 
-# Reply modifiers
-const BASE_REPLY_CHANCE: float = 0.20
-const DISPOSITION_REPLY_BONUS: float = 0.008   # per disposition point above 0
-const COURTESY_REPLY_BONUS: float = 0.15       # for Courtesy bushido virtue
-const HOSTILE_REPLY_THRESHOLD: int = -30       # won't reply below this
-const MEETING_ACCEPT_DISPOSITION: int = 0      # PROVISIONAL: non-hostile disposition needed
+# Reply modifiers — GDD s12.7 describes reply chance qualitatively
+# ("disposition toward sender", "personality profile", "high Courtesy")
+# but specifies no numeric values. Zeroed pending GDD specification.
+const BASE_REPLY_CHANCE: float = 0.0
+const DISPOSITION_REPLY_BONUS: float = 0.0
+const COURTESY_REPLY_BONUS: float = 0.0
+const HOSTILE_REPLY_THRESHOLD: int = 0
+const MEETING_ACCEPT_DISPOSITION: int = 0
 
 # Delivery rate: provinces per IC day
 const PROVINCES_PER_DAY: int = 3
@@ -394,7 +396,7 @@ static func process_pending_letters(
 						delivery["forgery_detected"] = false
 					if item.is_reply:
 						var sender_char: L5RCharacterData = characters_by_id.get(item.sender_id)
-						if sender_char != null:
+						if sender_char != null and not CharacterStats.is_dead(sender_char):
 							apply_exchange_bonus(sender_char, recipient)
 							delivery["exchange_bonus_applied"] = true
 					results.append(delivery)

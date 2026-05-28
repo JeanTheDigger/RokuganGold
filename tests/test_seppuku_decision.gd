@@ -99,28 +99,28 @@ func test_ishi_refuses():
 	assert_false(r["accepts"])
 
 
-# -- Shourido: Dosatsu and Chishiki are honor-dependent ----
+# -- Shourido: Dosatsu and Chishiki accept (no GDD honor gate) ----
 
-func test_dosatsu_accepts_high_honor():
+func test_dosatsu_accepts():
 	var c := _make_char(Enums.BushidoVirtue.GI, 3.5, Enums.ShouridoVirtue.DOSATSU)
 	var r := SeppukuDecision.will_accept_seppuku(c)
 	assert_true(r["accepts"])
 	assert_eq(r["reason"], "shourido_calculated_acceptance")
 
 
-func test_dosatsu_refuses_low_honor():
+func test_dosatsu_accepts_low_honor():
 	var c := _make_char(Enums.BushidoVirtue.GI, 2.0, Enums.ShouridoVirtue.DOSATSU)
 	var r := SeppukuDecision.will_accept_seppuku(c)
-	assert_false(r["accepts"])
+	assert_true(r["accepts"])
 
 
-func test_chishiki_accepts_high_honor():
+func test_chishiki_accepts():
 	var c := _make_char(Enums.BushidoVirtue.GI, 4.5, Enums.ShouridoVirtue.CHISHIKI)
 	var r := SeppukuDecision.will_accept_seppuku(c)
 	assert_true(r["accepts"])
 
 
-func test_chishiki_refuses_low_honor():
+func test_chishiki_accepts_low_honor():
 	var c := _make_char(Enums.BushidoVirtue.GI, 3.0, Enums.ShouridoVirtue.CHISHIKI)
 	var r := SeppukuDecision.will_accept_seppuku(c)
-	assert_false(r["accepts"])
+	assert_true(r["accepts"])

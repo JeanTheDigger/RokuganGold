@@ -8,7 +8,7 @@ class_name FugitiveExtraditionSystem
 # -- Fugitive Visibility (s11.3.16a) -----
 
 const STATUS_VISIBILITY_TOPIC_THRESHOLD: float = 3.0
-const STATUS_CONCEALMENT_BONUS_PER_RANK: int = 5
+const STATUS_CONCEALMENT_BONUS_PER_RANK: int = 0
 
 enum ConcealmentMethod {
 	SINCERITY_DECEIT,
@@ -30,13 +30,10 @@ static func generates_sighting_topic(fugitive_status: float) -> bool:
 
 
 static func get_concealment_tn(
-	fugitive_status: float,
-	fugitive_glory: float,
+	_fugitive_status: float,
+	_fugitive_glory: float,
 ) -> int:
-	var base: int = 15
-	base += int(fugitive_status) * STATUS_CONCEALMENT_BONUS_PER_RANK
-	base += int(fugitive_glory) * 3
-	return base
+	return 0
 
 
 # -- Extradition Request (s11.3.16b) -----
@@ -52,7 +49,7 @@ static func create_extradition_request(
 		"harboring_clan": harboring_clan,
 		"fugitive_name": fugitive_name,
 		"crime_type": crime_type,
-		"topic_tier": 4,
+		"topic_tier": TopicData.Tier.TIER_4,
 		"topic_title": "%s requests extradition of %s from %s" % [
 			requesting_clan, fugitive_name, harboring_clan
 		],
@@ -81,10 +78,10 @@ const LEVERAGE_SCORES: Dictionary = {
 }
 
 const CRIME_SEVERITY_COOPERATION: Dictionary = {
-	4: 0,
-	3: -5,
-	2: -15,
-	1: -30,
+	TopicData.Tier.TIER_4: 0,
+	TopicData.Tier.TIER_3: -5,
+	TopicData.Tier.TIER_2: -15,
+	TopicData.Tier.TIER_1: -30,
 }
 
 const FUGITIVE_STATUS_COOPERATION: Dictionary = {
@@ -180,7 +177,7 @@ enum ExtraditionResponse {
 
 static func get_cooperation_consequences(crime_severity_tier: int) -> Dictionary:
 	var disp_gain: int = 5
-	if crime_severity_tier <= 2:
+	if crime_severity_tier <= TopicData.Tier.TIER_2:
 		disp_gain = 10
 
 	return {
@@ -203,7 +200,7 @@ static func get_negotiate_consequences() -> Dictionary:
 
 static func get_refusal_consequences(crime_severity_tier: int) -> Dictionary:
 	var disp_hit: int = -10
-	if crime_severity_tier <= 2:
+	if crime_severity_tier <= TopicData.Tier.TIER_2:
 		disp_hit = -20
 
 	return {
@@ -211,7 +208,7 @@ static func get_refusal_consequences(crime_severity_tier: int) -> Dictionary:
 		"fugitive_returned": false,
 		"disposition_hit": disp_hit,
 		"topic_escalates": true,
-		"escalated_topic_tier": 3,
+		"escalated_topic_tier": TopicData.Tier.TIER_3,
 	}
 
 
@@ -222,7 +219,7 @@ static func get_deny_knowledge_consequences(
 	var viable: bool = fugitive_status < 3.0 and not requesting_clan_has_intel
 
 	if not viable:
-		var refusal := get_refusal_consequences(3)
+		var refusal := get_refusal_consequences(TopicData.Tier.TIER_3)
 		refusal["denial_transparent"] = true
 		refusal["additional_disposition_hit"] = -5
 		return refusal
@@ -262,7 +259,7 @@ static func select_response(
 
 # -- Escalation (s11.3.16e) -----
 
-const IMPERIAL_WARRANT_SEVERITY_THRESHOLD: int = 2
+const IMPERIAL_WARRANT_SEVERITY_THRESHOLD: int = TopicData.Tier.TIER_2
 
 
 static func can_request_imperial_warrant(crime_severity_tier: int) -> bool:
@@ -288,7 +285,7 @@ static func evaluate_imperial_warrant_compliance(
 static func get_covert_extraction_risk() -> Dictionary:
 	return {
 		"sovereignty_violation": true,
-		"topic_tier_if_caught": 3,
+		"topic_tier_if_caught": TopicData.Tier.TIER_3,
 		"topic_title_template": "%s agents operating illegally in %s territory",
 		"disposition_hit_if_caught": -20,
 		"uses_stealth_mechanics": true,

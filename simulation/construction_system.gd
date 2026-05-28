@@ -10,7 +10,8 @@ const VILLAGE_RICE_PER_PU: float = 1.0
 const VILLAGE_BUILD_SEASONS: int = 1
 
 const FORTIFICATION_KOKU_COST: float = 5.0
-const FORTIFICATION_BUILD_SEASONS: int = 1
+# GDD s4.3.22 does not specify fortification build time
+const FORTIFICATION_BUILD_SEASONS: int = -1
 const FORTIFICATION_MAX_RICE: float = 0.5
 const FORTIFICATION_MIN_GARRISON: float = 0.5
 const FORTIFICATION_DEFENSE_BONUS: int = 2
@@ -42,7 +43,8 @@ const SHIP_COSTS: Dictionary = {
 const SHIP_BUILD_SEASONS: int = 1
 
 const FORGE_KOKU_COST: float = 35.0
-const FORGE_BUILD_SEASONS: int = 2
+# GDD s4.3.10 does not specify forge build time
+const FORGE_BUILD_SEASONS: int = -1
 
 # -- Terrain Difficulty (GDD s4.3.22) -----------------------------------------
 
@@ -54,17 +56,19 @@ const TERRAIN_FOUNDING_DIFFICULTY: Dictionary = {
 	Enums.TerrainType.MOUNTAINS: 3,
 }
 
-# -- Organic Formation Thresholds (GDD s4.3.22) --------------------------------
+# -- Organic Formation Thresholds -----------------------------------------------
+# DISABLED: GDD s4.3.22 does not specify surplus PU thresholds, stability minimum,
+# or migrating PU amount for organic village formation.
 
 const ORGANIC_SURPLUS_PU_THRESHOLD: Dictionary = {
-	Enums.TerrainType.PLAINS: 3.0,
-	Enums.TerrainType.RIVER_DELTA: 3.0,
-	Enums.TerrainType.FOREST: 5.0,
-	Enums.TerrainType.HILLS: 7.0,
-	Enums.TerrainType.MOUNTAINS: 10.0,
+	Enums.TerrainType.PLAINS: -1.0,
+	Enums.TerrainType.RIVER_DELTA: -1.0,
+	Enums.TerrainType.FOREST: -1.0,
+	Enums.TerrainType.HILLS: -1.0,
+	Enums.TerrainType.MOUNTAINS: -1.0,
 }
-const ORGANIC_MIN_STABILITY: float = 50.0
-const ORGANIC_MIGRATING_PU: float = 1.0
+const ORGANIC_MIN_STABILITY: float = -1.0
+const ORGANIC_MIGRATING_PU: float = -1.0
 const ORGANIC_RICE_PER_PU: float = 1.0
 
 # -- Authority Tiers -----------------------------------------------------------
@@ -167,7 +171,8 @@ static func validate_village_founding(
 		if not has_valley:
 			return {"valid": false, "reason": "no_suitable_terrain"}
 
-	if province.province_taint_level >= 3.0:
+	# GDD says "effectively impossible" for tainted terrain; using PTL > 0
+	if province.province_taint_level > 0.0:
 		return {"valid": false, "reason": "tainted_terrain"}
 
 	return {"valid": true}
@@ -534,13 +539,20 @@ static func check_organic_formation(
 	province: ProvinceData,
 	settlements: Array,
 ) -> Dictionary:
+	# DISABLED: GDD s4.3.22 does not specify numeric thresholds for organic formation
+	if ORGANIC_MIN_STABILITY < 0.0 or ORGANIC_MIGRATING_PU < 0.0:
+		return {"eligible": false, "reason": "disabled_pending_gdd_spec"}
+
 	if province.stability < ORGANIC_MIN_STABILITY:
 		return {"eligible": false, "reason": "low_stability"}
 
-	if province.province_taint_level >= 3.0:
+	# GDD says "effectively impossible" for tainted terrain; using PTL > 0
+	if province.province_taint_level > 0.0:
 		return {"eligible": false, "reason": "tainted"}
 
-	var threshold: float = ORGANIC_SURPLUS_PU_THRESHOLD.get(province.terrain_type, 10.0)
+	var threshold: float = ORGANIC_SURPLUS_PU_THRESHOLD.get(province.terrain_type, -1.0)
+	if threshold < 0.0:
+		return {"eligible": false, "reason": "disabled_pending_gdd_spec"}
 
 	var total_pu: float = 0.0
 	var healthy: bool = true

@@ -46,6 +46,14 @@ const FAMILY_TRAIT_BONUS: Dictionary = {
 	"Otomo": "awareness",
 	"Seppun": "reflexes",
 	"Miya": "intelligence",
+	"Ichiro": "stamina",
+	"Tonbo": "awareness",
+	"Kitsune": "willpower",
+	"Usagi": "agility",
+	"Toku": "stamina",
+	"Morito": "strength",
+	"Suzume": "awareness",
+	"Kasuga": "awareness",
 }
 
 
@@ -170,6 +178,15 @@ const SCHOOL_DATA: Dictionary = {
 		"skill_rank_2": [],
 		"affinity": Enums.Ring.EARTH, "deficiency": Enums.Ring.AIR,
 	},
+	"Togashi Tattooed Order": {
+		"clan": "Dragon", "family": "Togashi",
+		"type": Enums.SchoolType.MONK,
+		"benefit": "reflexes", "honor": 4.5,
+		"skills": ["Athletics", "Defense", "Jiujutsu", "Lore: Theology", "Meditation"],
+		"wildcards": ["High", "Bugei"],
+		"focus_rings": [Enums.Ring.VOID, Enums.Ring.FIRE],
+		"skill_rank_2": [],
+	},
 	# -- Lion --
 	"Akodo Bushi": {
 		"clan": "Lion", "family": "Akodo",
@@ -213,7 +230,7 @@ const SCHOOL_DATA: Dictionary = {
 		"clan": "Phoenix", "family": "Shiba",
 		"type": Enums.SchoolType.BUSHI,
 		"benefit": "perception", "honor": 5.5,
-		"skills": ["Defense", "Kenjutsu", "Kyujutsu", "Meditation", "Spears", "Theology"],
+		"skills": ["Defense", "Kenjutsu", "Kyujutsu", "Meditation", "Spears", "Lore: Theology"],
 		"wildcards": ["Bugei"],
 		"focus_rings": [Enums.Ring.WATER, Enums.Ring.EARTH],
 		"skill_rank_2": [],
@@ -351,6 +368,159 @@ const SCHOOL_DATA: Dictionary = {
 		"focus_rings": [Enums.Ring.AIR, Enums.Ring.FIRE],
 		"skill_rank_2": ["Kyujutsu"],
 	},
+	"Toritaka Bushi": {
+		"clan": "Crab", "family": "Toritaka",
+		"type": Enums.SchoolType.BUSHI,
+		"benefit": "awareness", "honor": 2.5,
+		"skills": ["Athletics", "Defense", "Hunting", "Intimidation", "Kenjutsu", "Lore: Spirit Realms"],
+		"wildcards": ["Bugei"],
+		"focus_rings": [Enums.Ring.WATER, Enums.Ring.EARTH],
+		"skill_rank_2": [],
+	},
+	"Agasha Shugenja": {
+		"clan": "Phoenix", "family": "Agasha",
+		"type": Enums.SchoolType.SHUGENJA,
+		"benefit": "intelligence", "honor": 2.5,
+		"skills": ["Calligraphy", "Defense", "Craft: Alchemy", "Lore: Theology", "Meditation", "Spellcraft"],
+		"wildcards": ["High"],
+		"focus_rings": [Enums.Ring.FIRE, Enums.Ring.EARTH],
+		"skill_rank_2": [],
+		"affinity": Enums.Ring.FIRE, "deficiency": Enums.Ring.AIR,
+	},
+	"Yogo Wardmaster": {
+		"clan": "Scorpion", "family": "Yogo",
+		"type": Enums.SchoolType.SHUGENJA,
+		"benefit": "willpower", "honor": 1.5,
+		"skills": ["Calligraphy", "Defense", "Lore: Theology", "Meditation", "Spellcraft", "Stealth"],
+		"wildcards": ["Low"],
+		"focus_rings": [Enums.Ring.EARTH, Enums.Ring.FIRE],
+		"skill_rank_2": [],
+		"affinity": Enums.Ring.EARTH, "deficiency": Enums.Ring.AIR,
+	},
+	# --- Minor Clan Schools ---
+	"Ichiro Bushi": {
+		"clan": "Badger", "family": "Ichiro",
+		"type": Enums.SchoolType.BUSHI,
+		"benefit": "stamina", "honor": 3.5,
+		"skills": ["Athletics", "Defense", "Heavy Weapons", "Hunting", "Intimidation", "Jiujutsu"],
+		"wildcards": ["Bugei"],
+		"focus_rings": [Enums.Ring.EARTH, Enums.Ring.WATER],
+		"skill_rank_2": [],
+	},
+	"Tonbo Shugenja": {
+		"clan": "Dragonfly", "family": "Tonbo",
+		"type": Enums.SchoolType.SHUGENJA,
+		"benefit": "awareness", "honor": 3.5,
+		"skills": ["Calligraphy", "Etiquette", "Lore: Theology", "Meditation", "Spellcraft"],
+		"wildcards": ["High"],
+		"focus_rings": [Enums.Ring.VOID, Enums.Ring.AIR],
+		"skill_rank_2": [],
+		"affinity": Enums.Ring.VOID, "deficiency": Enums.Ring.FIRE,
+	},
+	"Kitsune Shugenja": {
+		"clan": "Fox", "family": "Kitsune",
+		"type": Enums.SchoolType.SHUGENJA,
+		"benefit": "willpower", "honor": 2.5,
+		"skills": ["Athletics", "Calligraphy", "Hunting", "Lore: Spirit Realms", "Meditation", "Spellcraft"],
+		"wildcards": ["High"],
+		"focus_rings": [Enums.Ring.EARTH, Enums.Ring.WATER],
+		"skill_rank_2": [],
+		"affinity": Enums.Ring.EARTH, "deficiency": Enums.Ring.AIR,
+	},
+	"Usagi Bushi": {
+		"clan": "Hare", "family": "Usagi",
+		"type": Enums.SchoolType.BUSHI,
+		"benefit": "agility", "honor": 3.5,
+		"skills": ["Athletics", "Defense", "Hunting", "Kenjutsu", "Stealth"],
+		"wildcards": ["Bugei"],
+		"focus_rings": [Enums.Ring.WATER, Enums.Ring.FIRE],
+		"skill_rank_2": [],
+	},
+	"Toku Bushi": {
+		"clan": "Monkey", "family": "Toku",
+		"type": Enums.SchoolType.BUSHI,
+		"benefit": "stamina", "honor": 4.5,
+		"skills": ["Athletics", "Defense", "Jiujutsu", "Kenjutsu", "Lore: Theology"],
+		"wildcards": ["Skill"],
+		"focus_rings": [Enums.Ring.EARTH, Enums.Ring.WATER],
+		"skill_rank_2": [],
+	},
+	"Morito Bushi": {
+		"clan": "Ox", "family": "Morito",
+		"type": Enums.SchoolType.BUSHI,
+		"benefit": "strength", "honor": 2.5,
+		"skills": ["Athletics", "Battle", "Defense", "Horsemanship", "Kenjutsu"],
+		"wildcards": ["Bugei"],
+		"focus_rings": [Enums.Ring.EARTH, Enums.Ring.WATER],
+		"skill_rank_2": [],
+	},
+	"Suzume Bushi": {
+		"clan": "Sparrow", "family": "Suzume",
+		"type": Enums.SchoolType.BUSHI,
+		"benefit": "awareness", "honor": 4.5,
+		"skills": ["Athletics", "Defense", "Kenjutsu", "Lore: History", "Storytelling"],
+		"wildcards": ["Bugei", "High"],
+		"focus_rings": [Enums.Ring.EARTH, Enums.Ring.AIR],
+		"skill_rank_2": [],
+	},
+	"Kasuga Smuggler": {
+		"clan": "Tortoise", "family": "Kasuga",
+		"type": Enums.SchoolType.COURTIER,
+		"benefit": "awareness", "honor": 1.5,
+		"skills": ["Commerce", "Etiquette", "Investigation", "Sincerity", "Sleight of Hand", "Stealth"],
+		"wildcards": ["Low"],
+		"focus_rings": [Enums.Ring.AIR, Enums.Ring.WATER],
+		"skill_rank_2": [],
+	},
+	# --- Imperial Schools ---
+	"Otomo Courtier": {
+		"clan": "Imperial", "family": "Otomo",
+		"type": Enums.SchoolType.COURTIER,
+		"benefit": "awareness", "honor": 3.5,
+		"skills": ["Calligraphy", "Courtier", "Etiquette", "Investigation", "Sincerity", "Temptation"],
+		"wildcards": ["High"],
+		"focus_rings": [Enums.Ring.AIR, Enums.Ring.FIRE],
+		"skill_rank_2": [],
+	},
+	"Seppun Guardsman": {
+		"clan": "Imperial", "family": "Seppun",
+		"type": Enums.SchoolType.BUSHI,
+		"benefit": "reflexes", "honor": 4.5,
+		"skills": ["Battle", "Defense", "Iaijutsu", "Kenjutsu", "Kyujutsu", "Spellcraft"],
+		"wildcards": ["High", "Bugei"],
+		"focus_rings": [Enums.Ring.EARTH, Enums.Ring.WATER],
+		"skill_rank_2": [],
+	},
+	"Miya Herald": {
+		"clan": "Imperial", "family": "Miya",
+		"type": Enums.SchoolType.COURTIER,
+		"benefit": "intelligence", "honor": 4.5,
+		"skills": ["Calligraphy", "Courtier", "Etiquette", "Horsemanship", "Lore: History", "Sincerity"],
+		"wildcards": ["High"],
+		"focus_rings": [Enums.Ring.AIR, Enums.Ring.WATER],
+		"skill_rank_2": [],
+	},
+	# --- Bat Clan ---
+	"Komori Shugenja": {
+		"clan": "Bat", "family": "Komori",
+		"type": Enums.SchoolType.SHUGENJA,
+		"benefit": "willpower", "honor": 2.5,
+		"skills": ["Animal Handling", "Calligraphy", "Hunting", "Lore: Spirit Realms", "Meditation", "Spellcraft"],
+		"wildcards": ["High"],
+		"focus_rings": [Enums.Ring.WATER, Enums.Ring.EARTH],
+		"skill_rank_2": [],
+		"affinity": Enums.Ring.WATER, "deficiency": Enums.Ring.FIRE,
+	},
+	# --- Oriole Clan ---
+	"Tsi Smith": {
+		"clan": "Oriole", "family": "Tsi",
+		"type": Enums.SchoolType.BUSHI,
+		"benefit": "intelligence", "honor": 3.5,
+		"skills": ["Commerce", "Craft: Weaponsmithing", "Etiquette", "Lore: History", "Sincerity", "War Fan"],
+		"wildcards": ["Merchant"],
+		"focus_rings": [Enums.Ring.FIRE, Enums.Ring.EARTH],
+		"skill_rank_2": [],
+	},
 }
 
 
@@ -391,7 +561,7 @@ const BUGEI_POOL: Array[String] = [
 
 const HIGH_POOL: Array[String] = [
 	"Acting", "Calligraphy", "Courtier", "Divination", "Etiquette",
-	"Games", "Investigation", "Lore: History", "Lore: Theology",
+	"Games: Go", "Investigation", "Lore: History", "Lore: Theology",
 	"Medicine", "Meditation", "Perform: Storytelling", "Sincerity",
 	"Spellcraft", "Tea Ceremony",
 ]
@@ -410,7 +580,7 @@ const ALL_SKILL_POOL: Array[String] = [
 	"Iaijutsu", "Jiujutsu", "Kenjutsu", "Kyujutsu", "Spears",
 	"Polearms", "Heavy Weapons", "Knives", "War Fan", "Staves",
 	"Acting", "Calligraphy", "Courtier", "Divination", "Etiquette",
-	"Games", "Investigation", "Lore: History", "Lore: Theology",
+	"Games: Go", "Investigation", "Lore: History", "Lore: Theology",
 	"Medicine", "Meditation", "Perform: Storytelling", "Sincerity",
 	"Tea Ceremony", "Commerce", "Animal Handling", "Intimidation",
 	"Stealth",
@@ -425,16 +595,24 @@ const TERRAIN_RICE_MULTIPLIER: Dictionary = {
 	Enums.TerrainType.FOREST: 0.75,
 	Enums.TerrainType.HILLS: 0.75,
 	Enums.TerrainType.MOUNTAINS: 0.5,
+	Enums.TerrainType.SWAMP: 0.6,
+	Enums.TerrainType.WASTELAND: 0.2,
+	Enums.TerrainType.COASTAL: 1.0,
 }
 
+# PROVISIONAL — GDD does not specify PU type allocation percentages by terrain.
 const TERRAIN_PU_DISTRIBUTION: Dictionary = {
 	Enums.TerrainType.PLAINS:      {"farming": 60, "town": 25, "mining": 5, "military": 10},
 	Enums.TerrainType.RIVER_DELTA: {"farming": 65, "town": 25, "mining": 0, "military": 10},
 	Enums.TerrainType.FOREST:      {"farming": 45, "town": 25, "mining": 15, "military": 15},
 	Enums.TerrainType.HILLS:       {"farming": 40, "town": 25, "mining": 25, "military": 10},
 	Enums.TerrainType.MOUNTAINS:   {"farming": 25, "town": 20, "mining": 40, "military": 15},
+	Enums.TerrainType.SWAMP:       {"farming": 50, "town": 20, "mining": 5, "military": 25},
+	Enums.TerrainType.WASTELAND:   {"farming": 15, "town": 15, "mining": 10, "military": 60},
+	Enums.TerrainType.COASTAL:     {"farming": 50, "town": 30, "mining": 5, "military": 15},
 }
 
+# GDD s4.3 lines 355-367, 659.
 const KOKU_LOCATION_MODIFIERS: Dictionary = {
 	"standard": 1.0,
 	"castle_town": 1.2,
@@ -469,6 +647,7 @@ const RING_TO_TRAITS: Dictionary = {
 	Enums.Ring.WATER: ["strength", "perception"],
 }
 
+# PROVISIONAL — GDD s22.4 gives ring ranges per rank, not a point budget.
 const POINTS_PER_RANK: int = 4
 
 
@@ -513,7 +692,7 @@ static func generate_character(
 
 	c.honor = sd["honor"] + (insight_rank - 1) * 0.25 + _float_variance(dice_engine, 0.5)
 	c.honor = clampf(c.honor, 0.0, 10.0)
-	c.glory = 1.0 + (insight_rank - 1) * 0.5
+	c.glory = clampf(1.0 + (insight_rank - 1) * 0.5, 0.0, 10.0)
 	c.status = 1.0
 
 	_assign_personality(c, clan, dice_engine)
@@ -589,6 +768,7 @@ static func generate_settlement(
 	s.koku_stockpile = float(s.town_pu) * 0.5
 
 	s.infrastructure = _default_infrastructure(settlement_type, has_castle_town)
+	s.worship_locations = _default_worship_locations(settlement_type)
 
 	return s
 
@@ -651,6 +831,32 @@ static func _default_infrastructure(
 		Enums.SettlementType.WALL_TOWER:
 			return ["garrison", "sake_house"]
 
+	return []
+
+
+static func _default_worship_locations(
+	settlement_type: Enums.SettlementType,
+) -> Array:
+	match settlement_type:
+		Enums.SettlementType.VILLAGE:
+			return [{"type": "village_shrine", "dedicated": false, "fortune": -1}]
+		Enums.SettlementType.TOWN:
+			return [{"type": "local_shrine", "dedicated": false, "fortune": -1}]
+		Enums.SettlementType.CITY:
+			return [
+				{"type": "local_shrine", "dedicated": false, "fortune": -1},
+				{"type": "temple", "dedicated": false, "fortune": -1},
+			]
+		Enums.SettlementType.CASTLE, Enums.SettlementType.FAMILY_CASTLE:
+			return [{"type": "local_shrine", "dedicated": false, "fortune": -1}]
+		Enums.SettlementType.KEEP:
+			return [{"type": "village_shrine", "dedicated": false, "fortune": -1}]
+		Enums.SettlementType.TEMPLE, Enums.SettlementType.SHINDEN:
+			return [{"type": "temple", "dedicated": false, "fortune": -1}]
+		Enums.SettlementType.MONASTERY:
+			return [{"type": "temple", "dedicated": false, "fortune": -1}]
+		Enums.SettlementType.WALL_TOWER:
+			return [{"type": "roadside_shrine", "dedicated": false, "fortune": -1}]
 	return []
 
 

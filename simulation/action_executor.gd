@@ -45,7 +45,7 @@ const MILITARY_ORDERS: Array[String] = [
 
 const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"SET_TAX_RATE", "SET_STIPEND_RATE", "PURCHASE_MARKET",
-	"SHARE_SUPPLIES", "ASSESS_PROVINCE_STATUS", "EVALUATE_WAR_READINESS",
+	"SHARE_SUPPLIES", "TRANSFER_KOKU", "ASSESS_PROVINCE_STATUS", "EVALUATE_WAR_READINESS",
 	"ASSIGN_VASSAL_OBJECTIVE", "CALL_COURT", "SEND_INVITATION",
 	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID", "INVESTIGATE_PROVINCE",
 	"INVESTIGATE_RUMOR", "NEGOTIATE_SURRENDER", "CONDUCT_COMMERCE",
@@ -84,13 +84,13 @@ const BASE_TN: Dictionary = {
 	"heroic": 30,
 }
 
-const SOCIAL_BASE_TN: int = 15
-const COVERT_BASE_TN: int = 20
-const MILITARY_BASE_TN: int = 15
-const ADMIN_BASE_TN: int = 10
+const SOCIAL_BASE_TN: int = 0
+const COVERT_BASE_TN: int = 0
+const MILITARY_BASE_TN: int = 0
+const ADMIN_BASE_TN: int = 0
 
 const BRIBE_KOKU_COST: float = 5.0
-const PURCHASE_KOKU_COST: float = 3.0
+const PURCHASE_KOKU_COST: float = 1.0
 
 
 # -- Main Entry Point ---------------------------------------------------------
@@ -316,6 +316,38 @@ static func execute(
 	if action_id == "APPLY_TATTOO":
 		return _execute_apply_tattoo(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "TRANSFER_KOKU":
+		var koku_result: Dictionary = _execute_transfer_koku(action, character, characters_by_id)
+		return {
+			"success": koku_result.get("success", false),
+			"action_id": action_id,
+			"character_id": character.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": koku_result,
+		}
+
+	if action_id == "MENTOR":
+		var mentor_result: Dictionary = _execute_mentor(action, ctx, characters_by_id)
+		return {
+			"success": mentor_result.get("success", false),
+			"action_id": action_id,
+			"character_id": character.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": mentor_result,
+		}
+
+	if action_id == "CRAFT":
+		return _execute_craft(action, character, ctx, dice_engine)
+
+	if action_id == "INVOKE_FAVOR":
+		return _execute_invoke_favor(action, character, ctx)
+
 	if action_id == "ANNOUNCE_HUNT":
 		return _execute_announce_hunt(action, character, ctx)
 
@@ -428,9 +460,11 @@ static func _try_execute_deliver_gift(
 
 	var tier: int = gift_item.get("quality_tier", 0)
 	var subtype: int = gift_item.get("gift_subtype", -1)
+	var history_bonus: int = gift_item.get("history_point_bonus", 0)
 
 	var gift_result: Dictionary = GiftGivingSystem.resolve_deliver_gift(
-		character, recipient, tier, subtype, archetype, dice_engine, ctx.ic_day
+		character, recipient, tier, subtype, archetype, dice_engine, ctx.ic_day,
+		history_bonus,
 	)
 
 	var outcome: String = gift_result.get("outcome", "")
@@ -657,6 +691,9 @@ static func _execute_intimidation(
 		"infamy_gain": r.get("infamy_gain", 0.0),
 		"compliance_active": r.get("compliance_active", false),
 	}
+
+	if not r["success"]:
+		effects["failed"] = true
 
 	if r.has("witnesses"):
 		effects["witnesses"] = r["witnesses"]
@@ -948,7 +985,7 @@ static func _execute_public_debate(
 	var witness_disp_b: Dictionary = {}
 	for wid: int in witness_ids:
 		var w: L5RCharacterData = characters_by_id.get(wid)
-		if w != null:
+		if w != null and not CharacterStats.is_dead(w):
 			var w_disp_a: int = w.disposition_values.get(character.character_id, 0)
 			var w_disp_b: int = w.disposition_values.get(target_id, 0)
 			witness_disp_a[wid] = CourtActionSystem.get_debate_disposition_tier(w_disp_a)
@@ -1332,7 +1369,8 @@ static func _get_co_located_ids(
 		return ids
 	for cid: int in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[cid]
-		if c.character_id != character.character_id and c.physical_location == loc:
+		if c.character_id != character.character_id and c.physical_location == loc \
+				and not CharacterStats.is_dead(c):
 			ids.append(c.character_id)
 	return ids
 
@@ -1403,7 +1441,7 @@ static func _apply_effects(
 	var action_id: String = action.action_id
 
 	if action_id == "PUBLIC_ATONEMENT":
-		effects = _compute_atonement_effects(action, result)
+		effects = _compute_atonement_effects(action, result, _character)
 		var offense_key: String = action.metadata.get("offense_key", "")
 		if not offense_key.is_empty():
 			HonorGlorySystem.record_atonement(_character, offense_key)
@@ -1420,6 +1458,7 @@ static func _apply_effects(
 					effects["promise_debtor_id"] = action.target_npc_id
 					effects["promise_tier"] = _resource_tier_from_metadata(action.metadata)
 					effects["source_action_id"] = "NEGOTIATE"
+					effects["is_crisis_request"] = nt in CRISIS_NEED_TYPES
 		elif action_id in COVERT_ACTIONS:
 			effects = _compute_covert_effects(action_id, result["margin"])
 		elif action_id in MILITARY_ORDERS:
@@ -1568,6 +1607,10 @@ const RESOURCE_PROMISE_NEED_TYPES: Array[String] = [
 	"ACQUIRE_RESOURCE", "REQUEST_AID", "CONDUCT_COMMERCE",
 ]
 
+const CRISIS_NEED_TYPES: Array[String] = [
+	"DEFEND_PROVINCE", "REQUEST_AID",
+]
+
 const RESOURCE_TIER_KOKU_THRESHOLDS: Array[int] = [10, 50]
 const RESOURCE_TIER_PU_THRESHOLDS: Array[int] = [5, 20]
 
@@ -1602,6 +1645,7 @@ static func _compute_allied_aid_effects(
 		"requires_resource_promise": true,
 		"promise_creditor_id": ctx.character_id,
 		"promise_debtor_id": target_id,
+		"is_crisis_request": true,
 	}
 
 
@@ -1616,6 +1660,8 @@ static func _compute_admin_effects(action_id: String, action: NPCDataStructures.
 				"effect": "supplies_shared",
 				"requires_supply_sharing": true,
 			}
+		"TRANSFER_KOKU":
+			return {"effect": "koku_transferred"}
 		"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE", "INVESTIGATE_RUMOR":
 			return {"effect": "intelligence_gathered", "info_gained": true}
 		"EVALUATE_WAR_READINESS":
@@ -1685,6 +1731,7 @@ static func _compute_assign_vassal_objective_effects(
 				result["promise_debtor_id"] = vassal_id
 				result["promise_tier"] = _resource_tier_from_metadata(action.metadata)
 				result["source_action_id"] = "ASSIGN_VASSAL_OBJECTIVE"
+				result["is_crisis_request"] = need_type in CRISIS_NEED_TYPES
 	return result
 
 
@@ -1804,7 +1851,7 @@ static func _execute_dispatch_courtier(
 				"target_npc_id": target_id,
 				"target_province_id": target_province_id,
 				"honor_gain_recipient": 0.1,
-				"recipient_disposition_change": 2.0,
+				"recipient_disposition_change": 2,
 			},
 		}
 	else:
@@ -1824,11 +1871,12 @@ static func _execute_dispatch_courtier(
 			"margin": margin,
 			"effects": {
 				"effect": "courtier_refused",
+				"failed": true,
 				"garrison_refused": true,
 				"target_npc_id": target_id,
 				"target_province_id": target_province_id,
 				"honor_change_recipient": honor_loss,
-				"recipient_disposition_change": -2.0,
+				"recipient_disposition_change": -2,
 			},
 		}
 
@@ -1853,7 +1901,7 @@ static func _execute_perform_worship(
 	if directed_fortune >= 0:
 		ring_id = WorshipSystem.FORTUNE_RING.get(directed_fortune, Enums.Ring.VOID)
 	var ring_value: int = CharacterStats.get_ring_value(character, ring_id)
-	var theology_rank: int = character.skills.get("Theology", 0)
+	var theology_rank: int = character.skills.get("Lore: Theology", 0)
 
 	var location_type: String = action.metadata.get("location_type", "roadside_shrine")
 
@@ -2167,6 +2215,15 @@ static func _execute_seal_wall_breach(
 	var success: bool = roll_result.get("success", false)
 	var margin: int = roll_result.get("margin", 0)
 
+	var seal_effects: Dictionary = {
+		"effect": "breach_sealed" if success else "breach_seal_failed",
+		"requires_breach_seal": success,
+		"koku_cost": SEAL_KOKU_COST,
+		"target_province_id": target_province_id,
+	}
+	if not success:
+		seal_effects["failed"] = true
+
 	return {
 		"success": success,
 		"action_id": "SEAL_WALL_BREACH",
@@ -2179,12 +2236,7 @@ static func _execute_seal_wall_breach(
 		"roll_total": roll_result.get("total", 0),
 		"tn": SEAL_TN,
 		"margin": margin,
-		"effects": {
-			"effect": "breach_sealed" if success else "breach_seal_failed",
-			"requires_breach_seal": success,
-			"koku_cost": SEAL_KOKU_COST,
-			"target_province_id": target_province_id,
-		},
+		"effects": seal_effects,
 	}
 
 
@@ -2271,7 +2323,7 @@ static func _compute_self_effects(action_id: String) -> Dictionary:
 		"PERFORM_RITUAL", "PERFORM_WORSHIP":
 			return {"effect": "ritual_completed", "honor_change": 0.1}
 		"MENTOR":
-			return {"effect": "student_trained"}
+			return {"effect": "mentor_offered"}
 		"OBSERVE_COURT_ATTENDEES":
 			return {"effect": "court_observed", "info_gained": true}  # fallback — should not reach here
 	return {"effect": "self_action_completed"}
@@ -2280,6 +2332,7 @@ static func _compute_self_effects(action_id: String) -> Dictionary:
 static func _compute_atonement_effects(
 	action: NPCDataStructures.ScoredAction,
 	result: Dictionary,
+	character: L5RCharacterData = null,
 ) -> Dictionary:
 	var tier: int = action.metadata.get("offense_tier", 3)
 	var margin: int = result.get("margin", 0)
@@ -2295,10 +2348,11 @@ static func _compute_atonement_effects(
 			"offense_tier": tier,
 		}
 	if margin <= -10:
+		var crit_honor: float = CrimeSystem.scale_honor_by_rank(HonorGlorySystem.ATONEMENT_CRITICAL_FAIL_HONOR_LOSS, character) if character != null else HonorGlorySystem.ATONEMENT_CRITICAL_FAIL_HONOR_LOSS
 		return {
 			"effect": "atonement_critical_failure",
 			"failed": true,
-			"honor_change": HonorGlorySystem.ATONEMENT_CRITICAL_FAIL_HONOR_LOSS,
+			"honor_change": crit_honor,
 			"glory_change": HonorGlorySystem.ATONEMENT_CRITICAL_FAIL_GLORY_LOSS,
 			"offense_tier": tier,
 		}
@@ -2811,10 +2865,10 @@ static func _execute_declare_war(
 		"authority_level", WarData.AuthorityLevel.PROVINCIAL_RAID,
 	)
 
-	var honor: float = -0.5 if intended_tier == WarJustification.MilitaryTier.TOTAL_WAR else 0.0
+	var honor: float = CrimeSystem.scale_honor_by_rank(-0.5, character) if intended_tier == WarJustification.MilitaryTier.TOTAL_WAR else 0.0
 	var ladder_effects: Dictionary = justification.get("ladder_side_effects", {})
 	if ladder_effects.has("honor_cost"):
-		honor += ladder_effects["honor_cost"]
+		honor += CrimeSystem.scale_honor_by_rank(ladder_effects["honor_cost"], character)
 
 	var result: Dictionary = {
 		"effect": "war_declared",
@@ -2988,6 +3042,7 @@ static func _execute_arrange_marriage(
 			"ic_day": ctx.ic_day,
 			"season": ctx.season,
 			"effects": {
+				"failed": true,
 				"marriage_rejected": true,
 				"proposing_lord_id": ctx.character_id,
 				"target_lord_id": target_lord_id,
@@ -3155,7 +3210,14 @@ static func _execute_contested_court_action(
 	var skill_entry: Dictionary = action_skill_map.get(action_id, {})
 	var a_skill: String = _CONTESTED_ATTACKER_SKILL.get(action_id, skill_entry.get("primary", "Courtier"))
 	var a_trait_name: String = _CONTESTED_ATTACKER_TRAIT.get(action_id, skill_entry.get("secondary", "Awareness"))
-	var a_skill_rank: int = character.skills.get(a_skill, 0)
+	var a_skill_rank: int = 0
+	if a_skill == "Lore":
+		for sk: String in character.skills:
+			if sk.begins_with("Lore:") and character.skills[sk] > a_skill_rank:
+				a_skill_rank = character.skills[sk]
+				a_skill = sk
+	else:
+		a_skill_rank = character.skills.get(a_skill, 0)
 	var a_trait_val: int = _get_trait_value_by_name(character, a_trait_name)
 	var wc_bonus: int = _get_winter_court_skill_bonus(character, a_skill, ctx)
 	var attacker_roll: int = dice_engine.roll_skill_check(
@@ -3635,7 +3697,7 @@ static func _execute_duel_challenge(
 	action: NPCDataStructures.ScoredAction,
 	character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
-	dice_engine: DiceEngine,
+	_dice_engine: DiceEngine,
 	characters_by_id: Dictionary,
 ) -> Dictionary:
 	var target_id: int = action.target_npc_id
@@ -3654,17 +3716,132 @@ static func _execute_duel_challenge(
 
 	var to_death: bool = action.metadata.get("to_death", false)
 	var is_sanctioned: bool = action.metadata.get("is_sanctioned", true)
+	var is_public: bool = ctx.context_flag == Enums.ContextFlag.AT_COURT
 
-	var duel_result: Dictionary = IndividualCombat.resolve_full_duel(
-		character, target, to_death, dice_engine
+	return {
+		"success": true,
+		"action_id": "ISSUE_DUEL_CHALLENGE",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"injects_reactive_event": true,
+		"reactive_event_type": "DUEL_CHALLENGE_RECEIVED",
+		"reactive_event_target_id": target_id,
+		"effects": {
+			"challenge_issued": true,
+			"to_death": to_death,
+			"is_sanctioned": is_sanctioned,
+			"is_public": is_public,
+		},
+	}
+
+
+static func resolve_accepted_duel(
+	challenger: L5RCharacterData,
+	defender: L5RCharacterData,
+	to_death: bool,
+	is_sanctioned: bool,
+	is_at_court: bool,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(
+		challenger.character_id, defender.character_id, to_death
 	)
+
+	var challenger_wants_stare_down: bool = _should_attempt_stare_down(challenger)
+	var defender_wants_stare_down: bool = _should_attempt_stare_down(defender)
+	var stare_down_result: Dictionary = {}
+	if challenger_wants_stare_down or defender_wants_stare_down:
+		stare_down_result = IndividualCombat.resolve_iaijutsu_stare_down(
+			challenger, defender, duel, dice_engine
+		)
+		stare_down_result["challenger_initiated"] = challenger_wants_stare_down
+		stare_down_result["defender_initiated"] = defender_wants_stare_down
+
+	var ch_p := IndividualCombat.Participant.new()
+	ch_p.character_id = challenger.character_id
+	ch_p.stance = Enums.Stance.CENTER
+	var def_p := IndividualCombat.Participant.new()
+	def_p.character_id = defender.character_id
+	def_p.stance = Enums.Stance.CENTER
+
+	var assessment: Dictionary = IndividualCombat.resolve_duel_assessment(
+		challenger, defender, duel, dice_engine
+	)
+
+	if _should_concede_at_assessment(defender, assessment, duel):
+		var concession: Dictionary = IndividualCombat.concede_at_assessment(
+			defender.character_id, duel
+		)
+		if concession["glory_change"] != 0.0:
+			HonorGlorySystem.apply_glory_change(defender, concession["glory_change"])
+		var effects: Dictionary = {
+			"duel_result": {"assessment": assessment, "concession": concession},
+			"winner_id": duel.winner_id,
+			"loser_id": duel.loser_id,
+			"simultaneous": false,
+			"death_occurred": false,
+			"challenger_dead": false,
+			"defender_dead": false,
+			"conceded": true,
+			"conceder_id": defender.character_id,
+		}
+		if stare_down_result.size() > 0:
+			effects["stare_down"] = stare_down_result
+		if duel.winner_id == challenger.character_id and is_at_court:
+			effects["glory_change"] = 0.5
+		effects["is_sanctioned"] = is_sanctioned
+		effects["challenger_id"] = challenger.character_id
+		effects["defender_id"] = defender.character_id
+		return effects
+
+	var focus: Dictionary = IndividualCombat.resolve_duel_focus(
+		challenger, defender, duel, dice_engine
+	)
+
+	var first_char: L5RCharacterData
+	var second_char: L5RCharacterData
+	var first_p: IndividualCombat.Participant
+	var second_p: IndividualCombat.Participant
+	if duel.simultaneous or duel.first_striker_id == duel.challenger_id:
+		first_char = challenger
+		first_p = ch_p
+		second_char = defender
+		second_p = def_p
+	else:
+		first_char = defender
+		first_p = def_p
+		second_char = challenger
+		second_p = ch_p
+
+	ch_p.void_ring_bonus = challenger.void_ring
+	def_p.void_ring_bonus = defender.void_ring
+
+	var strike: Dictionary = IndividualCombat.resolve_duel_strike(
+		first_char, first_p, second_char, second_p, duel, dice_engine
+	)
+
+	var duel_result: Dictionary = {
+		"assessment": assessment,
+		"focus": focus,
+		"strike": strike,
+		"winner_id": duel.winner_id,
+		"loser_id": duel.loser_id,
+		"simultaneous": duel.simultaneous,
+		"challenger_id": challenger.character_id,
+		"defender_id": defender.character_id,
+	}
+	if stare_down_result.size() > 0:
+		duel_result["stare_down"] = stare_down_result
 
 	var winner_id: int = duel_result.get("winner_id", -1)
 	var loser_id: int = duel_result.get("loser_id", -1)
 	var simultaneous: bool = duel_result.get("simultaneous", false)
 
-	var challenger_dead: bool = CharacterStats.is_dead(character)
-	var defender_dead: bool = CharacterStats.is_dead(target)
+	var challenger_dead: bool = CharacterStats.is_dead(challenger)
+	var defender_dead: bool = CharacterStats.is_dead(defender)
 	var death_occurred: bool = challenger_dead or defender_dead
 
 	var effects: Dictionary = {
@@ -3675,40 +3852,79 @@ static func _execute_duel_challenge(
 		"death_occurred": death_occurred,
 		"challenger_dead": challenger_dead,
 		"defender_dead": defender_dead,
+		"is_sanctioned": is_sanctioned,
+		"challenger_id": challenger.character_id,
+		"defender_id": defender.character_id,
 	}
 
-	# Glory bonus for winning a witnessed duel at court (s40 / s4.6)
-	if winner_id != -1 and ctx.context_flag == Enums.ContextFlag.AT_COURT:
-		if winner_id == character.character_id:
+	if winner_id != -1 and is_at_court:
+		if winner_id == challenger.character_id:
 			effects["glory_change"] = 0.5
 		else:
 			effects["winner_glory_change"] = 0.5
 			effects["winner_glory_recipient_id"] = winner_id
 
-	# Crime record if an unsanctioned duel caused a death (s40 / s2.8.11)
 	if death_occurred and not is_sanctioned:
 		var killer_id: int = -1
 		if challenger_dead:
-			killer_id = target.character_id
+			killer_id = defender.character_id
 		elif defender_dead:
-			killer_id = character.character_id
+			killer_id = challenger.character_id
 		effects["requires_crime_creation"] = true
 		effects["crime_type"] = Enums.CrimeType.UNSANCTIONED_DUEL_DEATH
 		effects["crime_perpetrator_id"] = killer_id
 		effects["crime_victim_id"] = loser_id
 
-	var actor_is_winner: bool = winner_id == character.character_id
-	return {
-		"success": not simultaneous and winner_id != -1,
-		"action_id": "ISSUE_DUEL_CHALLENGE",
-		"character_id": ctx.character_id,
-		"target_npc_id": target_id,
-		"target_province_id": action.target_province_id,
-		"ic_day": ctx.ic_day,
-		"season": ctx.season,
-		"actor_won": actor_is_winner,
-		"effects": effects,
-	}
+	return effects
+
+
+static func _should_attempt_stare_down(character: L5RCharacterData) -> bool:
+	var intim: int = character.skills.get("Intimidation", 0)
+	if intim == 0:
+		return false
+	match character.bushido_virtue:
+		Enums.BushidoVirtue.YU:
+			return true
+		Enums.BushidoVirtue.REI:
+			return false
+		Enums.BushidoVirtue.JIN:
+			return false
+	match character.shourido_virtue:
+		Enums.ShouridoVirtue.KETSUI:
+			return true
+		Enums.ShouridoVirtue.ISHI:
+			return true
+		Enums.ShouridoVirtue.SEIGYO:
+			return false
+	return intim >= 3
+
+
+static func _should_concede_at_assessment(
+	defender: L5RCharacterData,
+	assessment: Dictionary,
+	duel: IndividualCombat.DuelState,
+) -> bool:
+	var outmatched: bool = (
+		assessment.get("assessment_bonus_id", -1) == duel.challenger_id
+		and not assessment.get("defender_succeeded", true)
+	)
+	if not outmatched:
+		return false
+	match defender.bushido_virtue:
+		Enums.BushidoVirtue.YU:
+			return false
+		Enums.BushidoVirtue.MEIYO:
+			return not duel.duel_to_death
+	match defender.shourido_virtue:
+		Enums.ShouridoVirtue.KETSUI:
+			return false
+		Enums.ShouridoVirtue.ISHI:
+			return false
+		Enums.ShouridoVirtue.SEIGYO:
+			return true
+		Enums.ShouridoVirtue.CHISHIKI:
+			return true
+	return not duel.duel_to_death
 
 
 # -- ASK_FOR_INTRODUCTION (s55.7.3 — LOCKED) ----------------------------------
@@ -3837,6 +4053,111 @@ static func _execute_observe_court_attendees(
 		"tn": CourtActionSystem.OBSERVE_COURT_TN,
 		"margin": roll_total - CourtActionSystem.OBSERVE_COURT_TN,
 		"effects": effects,
+	}
+
+
+# -- INVOKE_FAVOR --------------------------------------------------------------
+
+static func _execute_invoke_favor(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var favor_id: int = action.metadata.get("favor_id", -1)
+	var debtor_id: int = action.metadata.get("debtor_id", -1)
+	if favor_id < 0 or debtor_id < 0:
+		return {
+			"success": false,
+			"action_id": "INVOKE_FAVOR",
+			"character_id": character.character_id,
+			"reason": "no_favor_available",
+		}
+	var method: int = FavorData.InvocationMethod.PERSONAL_VISIT
+	if ctx.context_flag == Enums.ContextFlag.AT_COURT:
+		method = FavorData.InvocationMethod.COURT
+	return {
+		"success": true,
+		"action_id": "INVOKE_FAVOR",
+		"character_id": character.character_id,
+		"target_npc_id": debtor_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_favor_invocation": true,
+			"favor_id": favor_id,
+			"debtor_id": debtor_id,
+			"invocation_method": method,
+		},
+	}
+
+
+# -- TRANSFER_KOKU -------------------------------------------------------------
+
+static func _execute_mentor(
+	action: NPCDataStructures.ScoredAction,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var skill_name: String = action.metadata.get("skill_name", "")
+	var student_id: int = action.metadata.get("student_id", action.target_npc_id)
+	if skill_name.is_empty() or student_id < 0:
+		return {"effect": "mentor_failed", "reason": "no_target_or_skill"}
+	var student: L5RCharacterData = characters_by_id.get(student_id) as L5RCharacterData
+	if student == null or CharacterStats.is_dead(student):
+		return {"effect": "mentor_failed", "reason": "student_unavailable"}
+	var sensei_char: L5RCharacterData = characters_by_id.get(ctx.character_id) as L5RCharacterData
+	if sensei_char == null:
+		return {"effect": "mentor_failed", "reason": "sensei_unavailable"}
+	if student.physical_location != sensei_char.physical_location:
+		return {"effect": "mentor_failed", "reason": "not_co_located"}
+	var sensei_rank: int = sensei_char.skills.get(skill_name, 0)
+	var student_rank: int = student.skills.get(skill_name, 0)
+	if sensei_rank <= student_rank:
+		return {"effect": "mentor_failed", "reason": "rank_not_higher"}
+	return {
+		"effect": "mentor_offered",
+		"success": true,
+		"student_id": student_id,
+		"sensei_id": ctx.character_id,
+		"skill_name": skill_name,
+		"sensei_skill_rank": sensei_rank,
+		"rank_gap": sensei_rank - student_rank,
+		"injects_reactive_event": true,
+		"reactive_event_type": "ACCEPT_TRAINING",
+		"reactive_event_target_id": student_id,
+	}
+
+
+const TRANSFER_KOKU_BASE_AMOUNT: float = 5.0
+const TRANSFER_KOKU_WEALTHY_THRESHOLD: float = 20.0
+const TRANSFER_KOKU_WEALTHY_AMOUNT: float = 10.0
+
+static func _execute_transfer_koku(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	characters_by_id: Dictionary = {},
+) -> Dictionary:
+	var recipient_id: int = action.metadata.get("target_npc_id", action.target_npc_id)
+	if recipient_id < 0:
+		return {"success": false, "blocked_reason": "no_recipient"}
+	var recipient: L5RCharacterData = characters_by_id.get(recipient_id) as L5RCharacterData
+	if recipient == null or CharacterStats.is_dead(recipient):
+		return {"success": false, "blocked_reason": "recipient_unavailable"}
+	var amount: float = TRANSFER_KOKU_BASE_AMOUNT
+	if character.koku >= TRANSFER_KOKU_WEALTHY_THRESHOLD:
+		amount = TRANSFER_KOKU_WEALTHY_AMOUNT
+	amount = minf(amount, character.koku)
+	if amount <= 0.0:
+		return {"success": false, "blocked_reason": "insufficient_koku"}
+	character.koku -= amount
+	recipient.koku += amount
+	return {
+		"success": true,
+		"effect": "koku_transferred",
+		"koku_amount": amount,
+		"recipient_id": recipient_id,
+		"requires_koku_transfer_fulfillment": true,
+		"disposition_change": 3,
 	}
 
 
@@ -4045,7 +4366,7 @@ static func _execute_announce_hunt(
 		"effects": {
 			"hunt_date_ic_day": hunt_date_ic_day,
 			"priority_invitee_id": priority_invitee_id,
-			"topic_tier": 4,
+			"topic_tier": TopicData.Tier.TIER_4,
 			"topic_type": "hunt_announcement",
 		},
 	}
@@ -4155,8 +4476,8 @@ static func _execute_commission_assassination(
 		}
 
 	var method: int = _select_assassination_method(assassin)
-	var honor_cost: float = SecretSystem.get_assassination_order_honor_cost(target.status)
-	character.honor = maxf(character.honor + honor_cost, 0.0)
+	var honor_cost: float = CrimeSystem.scale_honor_by_rank(SecretSystem.get_assassination_order_honor_cost(target.status), character)
+	HonorGlorySystem.apply_honor_change(character, honor_cost)
 
 	return {
 		"success": true,
@@ -4463,5 +4784,130 @@ static func _execute_apply_tattoo(
 			"subject_type": action.metadata.get("subject_type", Enums.TattooSubjectType.IMAGE),
 			"subject_description": action.metadata.get("subject_description", ""),
 			"topic_id": action.metadata.get("subject_topic_id", -1),
+		},
+	}
+
+
+# -- s49 CRAFT ----------------------------------------------------------------
+
+
+static func _execute_craft(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var wip_item_id: int = action.metadata.get("wip_item_id", -1)
+	if wip_item_id >= 0:
+		return {
+			"success": true,
+			"action_id": "CRAFT",
+			"character_id": character.character_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {"continues_wip": true, "wip_item_id": wip_item_id},
+		}
+
+	var skill_name: String = action.metadata.get("skill_name", "")
+	if skill_name.is_empty():
+		skill_name = ArtisanSystem.get_best_craft_skill(character)
+	if skill_name.is_empty() or character.skills.get(skill_name, 0) <= 0:
+		return {
+			"success": false,
+			"action_id": "CRAFT",
+			"character_id": character.character_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {"reason": "no_craft_skill"},
+		}
+
+	var base_tn: int = action.metadata.get("base_tn", 15)
+	var material_tier: Enums.MaterialTier = action.metadata.get(
+		"material_tier", Enums.MaterialTier.COMMON) as Enums.MaterialTier
+	var is_exceptional: bool = action.metadata.get("is_exceptional", false)
+	var category: Enums.CraftingCategory = action.metadata.get(
+		"category", Enums.CraftingCategory.EQUIPMENT) as Enums.CraftingCategory
+	var track: Enums.CraftingTrack = action.metadata.get(
+		"track", Enums.CraftingTrack.CRAFT) as Enums.CraftingTrack
+	var item_name: String = action.metadata.get("item_name", "Crafted Item")
+	var denomination: String = action.metadata.get("denomination", "bu")
+	var base_cost: float = action.metadata.get("base_cost", 5.0)
+	var material_name: String = action.metadata.get("material_name", "Standard materials")
+	var material_type: Enums.MaterialType = action.metadata.get(
+		"material_type", Enums.MaterialType.OTHER) as Enums.MaterialType
+
+	var koku_cost: float = ArtisanSystem.cost_in_koku(base_cost, denomination)
+	if is_exceptional:
+		koku_cost *= ArtisanSystem.EXCEPTIONAL_COST_MULTIPLIER
+
+	var ap_cost: int = ArtisanSystem.get_ap_cost(base_cost, denomination, material_type)
+	if ap_cost > 2:
+		return {
+			"success": true,
+			"action_id": "CRAFT",
+			"character_id": character.character_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {
+				"creates_wip": true,
+				"skill_name": skill_name,
+				"base_tn": base_tn,
+				"material_tier": material_tier,
+				"material_name": material_name,
+				"is_exceptional": is_exceptional,
+				"category": category,
+				"track": track,
+				"item_name": item_name,
+				"denomination": denomination,
+				"base_cost": base_cost,
+				"material_type": material_type,
+				"ap_cost": ap_cost,
+				"koku_cost": koku_cost,
+			},
+		}
+
+	var craft_result: Dictionary = ArtisanSystem.resolve_crafting(
+		character, dice_engine, skill_name, base_tn,
+		material_tier, is_exceptional, 0,
+	)
+
+	var success: bool = craft_result.get("success", false)
+	var item_ruined: bool = craft_result.get("item_ruined", false)
+
+	var special_qualities: Array[Enums.WeaponSpecialQuality] = []
+	var is_sacred: bool = false
+	if success and category == Enums.CraftingCategory.WEAPONS and is_exceptional:
+		var available_raises: int = craft_result.get("available_raises", 0)
+		var sacred_check: Dictionary = ArtisanSystem.check_sacred_weapon(available_raises, character)
+		if sacred_check.get("can_forge", false):
+			is_sacred = true
+			available_raises -= sacred_check.get("raise_cost", 7)
+
+	var quality_tier: GiftGivingSystem.QualityTier = craft_result.get(
+		"quality_tier", GiftGivingSystem.QualityTier.MUNDANE)
+
+	return {
+		"success": success,
+		"action_id": "CRAFT",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_item_creation": true,
+			"item_ruined": item_ruined,
+			"quality_tier": quality_tier,
+			"crafting_roll_total": craft_result.get("total", 0),
+			"effective_total": craft_result.get("effective_total", 0),
+			"material_tier": material_tier,
+			"material_name": material_name,
+			"is_exceptional": is_exceptional,
+			"is_sacred": is_sacred,
+			"category": category,
+			"track": track,
+			"skill_name": skill_name,
+			"item_name": item_name,
+			"denomination": denomination,
+			"base_cost": base_cost,
+			"koku_cost": koku_cost,
 		},
 	}

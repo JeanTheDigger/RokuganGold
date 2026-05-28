@@ -639,3 +639,30 @@ func test_phoenix_path_default_is_no_info():
 	var standard_result: Dictionary = IntraClanCivilWar.evaluate_loyalty(n, 101, 0.5, false, false, false)
 	# With no visibility in standard, both use GRIEVANCE_PTS_NO_INFO (5) → scores should match.
 	assert_eq(phoenix_result.get("rebel_score", -1), standard_result.get("rebel_score", -2))
+
+
+# -- Audit: Dead character guards (2026-05-23) ---------------------------------
+
+func test_defector_disposition_skips_dead_faction_members() -> void:
+	var defector := _make_npc(1)
+	var dead_member := _make_npc(2)
+	dead_member.stamina = 2
+	dead_member.willpower = 2
+	dead_member.wounds_taken = 999
+	dead_member.disposition_values = {1: 10}
+	IntraClanCivilWar.apply_defection_consequences(defector, [dead_member])
+	assert_eq(dead_member.disposition_values.get(1, 0), 10,
+		"Dead faction member disposition should not change")
+
+func test_scar_application_skips_dead_characters() -> void:
+	var alive := _make_npc(1)
+	var dead := _make_npc(2)
+	dead.stamina = 2
+	dead.willpower = 2
+	dead.wounds_taken = 999
+	var state: Dictionary = {"faction_assignments": {1: 1, 2: 2}}
+	var result: Dictionary = IntraClanCivilWar.apply_post_resolution_scars(
+		state, [alive, dead], {}
+	)
+	assert_eq(result.get("scars", []).size(), 0,
+		"Dead characters should not participate in scar application")

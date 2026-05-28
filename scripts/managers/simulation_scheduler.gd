@@ -9,12 +9,16 @@ signal tick_completed(result: Dictionary)
 const SAVE_PATH: String = "user://simulation/scheduler_state.txt"
 const TICK_HOURS: Array[int] = [0, 6, 12, 18]
 
+const _WorldBootstrap := preload("res://simulation/world_bootstrap.gd")
+
 var _last_processed_tick_key: String = ""
 var _processing: bool = false
+var _world_saver: WorldStateSaver = WorldStateSaver.new()
 
 
 func _ready() -> void:
 	_load_state()
+	_load_world_state()
 	set_process(true)
 	print("[SimulationScheduler] Ready. Last tick: %s" % _last_processed_tick_key)
 
@@ -101,6 +105,7 @@ func _save_state() -> void:
 		file.store_line(_last_processed_tick_key)
 		file.store_line(str(WorldState.time_system.current_tick))
 		file.close()
+	_save_world_state()
 
 
 func _load_state() -> void:
@@ -116,6 +121,122 @@ func _load_state() -> void:
 		print("[SimulationScheduler] Restored tick %d from %s" % [
 			WorldState.time_system.current_tick, _last_processed_tick_key
 		])
+
+
+func _save_world_state() -> void:
+	if _world_saver.save_world(WorldState):
+		print("[SimulationScheduler] World state saved.")
+	else:
+		push_error("[SimulationScheduler] World state save failed.")
+
+
+func _load_world_state() -> void:
+	if _world_saver.load_world(WorldState):
+		WorldState.rebuild_characters_by_id()
+		WorldState.world_states.clear()
+		WorldState.character_province_map.clear()
+		print("[SimulationScheduler] World state loaded (%d characters, %d provinces)." % [
+			WorldState.characters.size(),
+			WorldState.provinces.size(),
+		])
+	else:
+		print("[SimulationScheduler] No saved world state found — bootstrapping world.")
+		_bootstrap_fresh_world()
+
+
+func _bootstrap_fresh_world() -> void:
+	WorldState.time_system.current_tick = 0
+	_last_processed_tick_key = ""
+	var dice := DiceEngine.new()
+	dice.set_seed(1120)
+
+	var result: Dictionary = _WorldBootstrap.bootstrap_world(dice)
+
+	var chars: Array = result.get("characters", [])
+	WorldState.characters.clear()
+	for c: L5RCharacterData in chars:
+		WorldState.characters.append(c)
+	WorldState.rebuild_characters_by_id()
+
+	WorldState.provinces = result.get("provinces", {})
+
+	var settlements: Array = result.get("settlements", [])
+	WorldState.settlements.clear()
+	for s: SettlementData in settlements:
+		WorldState.settlements.append(s)
+
+	WorldState.clans = result.get("clans", {})
+
+	var mil: Dictionary = result.get("military_data", {})
+	WorldState.military_companies.assign(mil.get("companies", []))
+	WorldState.next_company_id[0] = mil.get("next_company_id", 1)
+
+	WorldState.emperor_id = result.get("emperor_id", -1)
+	var emperor: L5RCharacterData = WorldState.characters_by_id.get(WorldState.emperor_id)
+	if emperor != null:
+		if not emperor.physical_location.is_empty():
+			WorldState.emperor_settlement_id = emperor.physical_location.to_int()
+		WorldState.emperor_archetype = StrategicReview.derive_emperor_archetype(emperor)
+	WorldState.miya_representative_id = result.get("herald_id", -1)
+
+	WorldState.next_character_id[0] = result.get("next_character_id", 10000)
+	WorldState.next_settlement_id[0] = result.get("next_settlement_id", 5000)
+
+	var clan_champions: Dictionary = result.get("clan_champions", {})
+	for clan_name: String in clan_champions:
+		var cd: ClanData = WorldState.clans.get(clan_name)
+		if cd != null:
+			cd.champion_id = clan_champions[clan_name]
+
+	var bs_cells: Array = result.get("bloodspeaker_cells", [])
+	WorldState.bloodspeaker_cells.clear()
+	for cell: BloodspeakerCellData in bs_cells:
+		WorldState.bloodspeaker_cells.append(cell)
+	WorldState.next_cell_id[0] = result.get("next_cell_id", 1)
+
+	var bs_insurgencies: Array = result.get("bloodspeaker_insurgencies", [])
+	for ins: InsurgencyData in bs_insurgencies:
+		WorldState.insurgencies.append(ins)
+	WorldState.next_insurgency_id[0] = result.get("next_insurgency_id", 1)
+
+	var togashi_ws: Dictionary = _build_togashi_bootstrap_state(result)
+	TogashiOversight.initialize_from_world_state(WorldState.togashi_state, togashi_ws)
+
+	_save_world_state()
+	print("[SimulationScheduler] World bootstrapped: %d characters, %d provinces, %d settlements, %d cells." % [
+		WorldState.characters.size(),
+		WorldState.provinces.size(),
+		WorldState.settlements.size(),
+		WorldState.bloodspeaker_cells.size(),
+	])
+
+
+func _build_togashi_bootstrap_state(result: Dictionary) -> Dictionary:
+	var companies: Array = result.get("military_data", {}).get("companies", [])
+	var clan_strengths: Dictionary = {}
+	for comp: Dictionary in companies:
+		var clan: String = comp.get("clan", "")
+		if not clan.is_empty():
+			clan_strengths[clan] = clan_strengths.get(clan, 0.0) + float(comp.get("current_health", 100))
+	var provinces: Dictionary = result.get("provinces", {})
+	var max_ptl: float = 0.0
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid]
+		if prov.family != "Hiruma" and prov.province_taint_level > max_ptl:
+			max_ptl = prov.province_taint_level
+	return {
+		"clan_strengths": clan_strengths,
+		"active_inter_clan_wars": 0,
+		"emperor_vacant": result.get("emperor_id", -1) < 0,
+		"provinces_in_rebellion": 0,
+		"failing_worship_provinces": 0,
+		"realm_overlaps_empire_wide": 0,
+		"realm_overlap_in_dragon_territory": false,
+		"max_non_shadowlands_ptl": max_ptl,
+		"wall_breach_active": false,
+		"shadowlands_incursion_tier": 0,
+		"crab_military_readiness": 1.0,
+	}
 
 
 # -- DST / Calendar Helpers ----------------------------------------------------

@@ -59,19 +59,19 @@ func test_negotiate_success_base() -> void:
 func test_negotiate_success_with_raises() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_negotiate(30, 15, 3, false, 0)
 	assert_true(r["success"])
-	assert_eq(r["disposition_change"], 9 + 3 * 3)
+	assert_eq(r["disposition_change"], CourtActionSystem.NEGOTIATE_BASE_DISP + 3 * CourtActionSystem.NEGOTIATE_RAISE_BONUS)
 
 
 func test_negotiate_success_topic_position_shift() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_negotiate(25, 15, 2, true, 0)
 	assert_true(r["success"])
 	assert_true(r.has("target_position_shift"))
-	assert_eq(r["target_position_shift"], 8.0 + 2 * 4.0)
+	assert_eq(r["target_position_shift"], CourtActionSystem.NEGOTIATE_POSITION_SHIFT + 2 * CourtActionSystem.NEGOTIATE_RAISE_POSITION_BONUS)
 
 
 func test_negotiate_session_tn_reduction() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_negotiate(20, 15, 0, false, 0)
-	assert_eq(r["session_tn_reduction"], 5)
+	assert_eq(r["session_tn_reduction"], CourtActionSystem.NEGOTIATE_SESSION_TN_REDUCTION)
 
 
 func test_negotiate_failure_no_topic() -> void:
@@ -99,14 +99,14 @@ func test_negotiate_critical_failure() -> void:
 func test_persuade_success_base() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_persuade(20, 15, 0, false)
 	assert_true(r["success"])
-	assert_eq(r["disposition_change"], 11)
+	assert_eq(r["disposition_change"], CourtActionSystem.PERSUADE_BASE_DISP)
 
 
 func test_persuade_success_topic_durable() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_persuade(25, 15, 2, true)
 	assert_true(r["success"])
 	assert_true(r.get("position_durable", false))
-	assert_eq(r["target_position_shift"], 12.0 + 2 * 5.0)
+	assert_eq(r["target_position_shift"], CourtActionSystem.PERSUADE_POSITION_SHIFT + 2 * CourtActionSystem.PERSUADE_RAISE_POSITION_BONUS)
 
 
 func test_persuade_failure() -> void:
@@ -127,13 +127,14 @@ func test_persuade_critical_failure() -> void:
 func test_charm_success_base() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_charm(20, 15, 0, 0, 0)
 	assert_true(r["success"])
-	assert_eq(r["disposition_change"], 8)
+	assert_eq(r["disposition_change"], CourtActionSystem.CHARM_FULL_GAIN)
 
 
 func test_charm_ceiling_caps_at_40() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_charm(20, 15, 0, 38, 0)
 	assert_true(r["success"])
-	assert_eq(r["disposition_change"], 2)
+	var expected: int = mini(CourtActionSystem.CHARM_FULL_GAIN, CourtActionSystem.CHARM_CEILING - 38)
+	assert_eq(r["disposition_change"], maxi(expected, 0))
 
 
 func test_charm_ceiling_already_at_cap() -> void:
@@ -146,13 +147,13 @@ func test_charm_ceiling_already_at_cap() -> void:
 func test_charm_diminishing_half() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_charm(20, 15, 0, 0, 2)
 	assert_true(r["success"])
-	assert_eq(r["disposition_change"], 4)
+	assert_eq(r["disposition_change"], CourtActionSystem.CHARM_FULL_GAIN / 2)
 
 
 func test_charm_diminishing_minimal() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_charm(20, 15, 0, 0, 3)
 	assert_true(r["success"])
-	assert_eq(r["disposition_change"], 1)
+	assert_eq(r["disposition_change"], maxi(CourtActionSystem.CHARM_FULL_GAIN / 4, 0))
 
 
 func test_charm_failure() -> void:
@@ -172,15 +173,15 @@ func test_charm_critical_failure() -> void:
 func test_impress_success() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_impress(20, 15, 1)
 	assert_true(r["success"])
-	assert_eq(r["disposition_change"], 9 + 3)
-	assert_eq(r["session_tn_reduction"], 5)
+	assert_eq(r["disposition_change"], CourtActionSystem.IMPRESS_BASE_DISP + 1 * CourtActionSystem.IMPRESS_RAISE_BONUS)
+	assert_eq(r["session_tn_reduction"], CourtActionSystem.IMPRESS_SESSION_TN_REDUCTION)
 	assert_false(r.has("target_position_shift"))
 
 
 func test_impress_success_with_topic() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_impress(20, 15, 1, true)
 	assert_true(r["success"])
-	assert_eq(r["target_position_shift"], 5.0)
+	assert_eq(r["target_position_shift"], CourtActionSystem.IMPRESS_POSITION_SHIFT)
 
 
 func test_impress_critical_failure() -> void:
@@ -194,15 +195,15 @@ func test_impress_critical_failure() -> void:
 func test_listen_reflect_success() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_listen_reflect(20, 15, 0)
 	assert_true(r["success"])
-	assert_eq(r["disposition_change"], 11)
-	assert_eq(r["persuade_negotiate_tn_reduction"], 5)
+	assert_eq(r["disposition_change"], CourtActionSystem.LISTEN_REFLECT_BASE_DISP)
+	assert_eq(r["persuade_negotiate_tn_reduction"], CourtActionSystem.LISTEN_REFLECT_SESSION_TN_REDUCTION)
 	assert_false(r.has("target_position_shift"))
 
 
 func test_listen_reflect_success_with_topic() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_listen_reflect(20, 15, 2, true)
 	assert_true(r["success"])
-	assert_eq(r["target_position_shift"], 10.0 + 2 * 4.0)
+	assert_eq(r["target_position_shift"], CourtActionSystem.LISTEN_REFLECT_POSITION_SHIFT + 2 * CourtActionSystem.LISTEN_REFLECT_RAISE_POSITION_BONUS)
 
 
 func test_listen_reflect_critical_failure() -> void:

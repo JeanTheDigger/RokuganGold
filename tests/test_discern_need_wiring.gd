@@ -349,8 +349,8 @@ func test_probe_info_event_still_uses_action_log_path() -> void:
 		applied_list, characters_by_id, action_log, 1,
 	)
 
-	assert_gt(_char.knowledge_pool.size(), 0,
-		"PROBE should still write observed_action entries via action log path")
+	assert_eq(_char.knowledge_pool.size(), 0,
+		"PROBE action log scanning was removed (invented content)")
 
 
 # -- Primary Objective Self-Selection Write-Back --------------------------------

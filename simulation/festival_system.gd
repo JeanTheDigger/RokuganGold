@@ -59,28 +59,30 @@ static func get_season(ic_day: int) -> int:
 
 # -- Empire-Wide Canonical Festivals ------------------------------------------
 
+# DISABLED: GDD s11.5 does not specify day-of-month for all festivals. Day = -1 until specified.
+# Festivals with GDD-sourced days retain their values. Invented days replaced with -1.
 const CANONICAL_FESTIVALS: Array[Dictionary] = [
 	{"name": "New Year's Festival", "month": 1, "day": 1, "effects": ["stability_bonus"]},
-	{"name": "Cherry Blossom Festival", "month": 1, "day": 15, "effects": ["planting_blessing"]},
-	{"name": "Festival of Leaves", "month": 1, "day": 10, "effects": ["poetry_exchange"]},
-	{"name": "Festival of Akodo", "month": 1, "day": 20, "effects": ["lion_honor"]},
-	{"name": "Holi", "month": 2, "day": 15, "effects": ["informal_court"]},
-	{"name": "Devil Chase", "month": 1, "day": 5, "effects": ["taint_assessment"]},
+	{"name": "Cherry Blossom Festival", "month": 1, "day": -1, "effects": ["planting_blessing"]},
+	{"name": "Festival of Leaves", "month": 1, "day": -1, "effects": ["poetry_exchange"]},
+	{"name": "Festival of Akodo", "month": 1, "day": -1, "effects": ["lion_honor"]},
+	{"name": "Holi", "month": 2, "day": -1, "effects": ["informal_court"]},
+	{"name": "Devil Chase", "month": 1, "day": -1, "effects": ["taint_assessment"]},
 	{"name": "Iris Festival", "month": 3, "day": 25, "effects": ["gift_giving", "morale_bonus"]},
-	{"name": "Spring Patrols", "month": 1, "day": 25, "effects": ["military_activation"]},
-	{"name": "Tilling of the Fields", "month": 1, "day": 28, "effects": ["planting_tick"]},
-	{"name": "Festival of the Sea Dragon", "month": 3, "day": 10, "effects": ["trade_bonus"]},
+	{"name": "Spring Patrols", "month": 1, "day": -1, "effects": ["military_activation"]},
+	{"name": "Tilling of the Fields", "month": 1, "day": -1, "effects": ["planting_tick"]},
+	{"name": "Festival of the Sea Dragon", "month": 3, "day": -1, "effects": ["trade_bonus"]},
 	{"name": "Chrysanthemum Festival", "month": 4, "day": 6, "effects": ["labor_halt"]},
-	{"name": "Lotus Blossoms", "month": 4, "day": 1, "effects": ["poetry_exchange"]},
-	{"name": "Ning Panchiman", "month": 4, "day": 15, "effects": ["duel_honor", "martial_glory"]},
-	{"name": "Day of Remembrance", "month": 5, "day": 10, "effects": ["crab_honor"]},
-	{"name": "Baisakh", "month": 5, "day": 20, "effects": ["stability_bonus"]},
+	{"name": "Lotus Blossoms", "month": 4, "day": -1, "effects": ["poetry_exchange"]},
+	{"name": "Ning Panchiman", "month": 4, "day": -1, "effects": ["duel_honor", "martial_glory"]},
+	{"name": "Day of Remembrance", "month": 5, "day": -1, "effects": ["crab_honor"]},
+	{"name": "Baisakh", "month": 5, "day": -1, "effects": ["stability_bonus"]},
 	{"name": "Kanto Festival", "month": 7, "day": 2, "effects": ["production_bonus"]},
 	{"name": "Setsuban Festival", "month": 6, "day": 8, "effects": ["ceasefire"]},
 	{"name": "Bon Festival", "month": 8, "day": 28, "effects": ["ancestor_worship", "honor_gain"]},
-	{"name": "Pearl Harvest", "month": 8, "day": 15, "effects": ["trade_bonus"]},
-	{"name": "Bayushi's Tears", "month": 7, "day": 15, "effects": ["scorpion_disposition"]},
-	{"name": "Viper Festival", "month": 3, "day": 20, "effects": ["scorpion_event"]},
+	{"name": "Pearl Harvest", "month": 8, "day": -1, "effects": ["trade_bonus"]},
+	{"name": "Bayushi's Tears", "month": 7, "day": -1, "effects": ["scorpion_disposition"]},
+	{"name": "Viper Festival", "month": 3, "day": -1, "effects": ["scorpion_event"]},
 	{"name": "Festival of the River of Stars", "month": 11, "day": 9, "effects": ["marriage_bonus"]},
 	{"name": "New Year's Eve", "month": 12, "day": 28, "effects": ["wp_reset"]},
 ]
@@ -130,7 +132,8 @@ static func get_glory_gain_festivals(ic_day: int) -> float:
 	var gain: float = 0.0
 	for fest: Dictionary in get_active_festivals(ic_day):
 		if "martial_glory" in fest.get("effects", []) or "poetry_exchange" in fest.get("effects", []):
-			gain += 0.1
+			# DISABLED: GDD s11.5 does not specify martial glory value
+			gain += 0.0
 	return gain
 
 
@@ -210,10 +213,11 @@ static func resolve_championship(
 		var total: int = 0
 		for stage: Dictionary in stages:
 			var skill_rank: int = candidate.get("skill_ranks", {}).get(stage["skill"], 0)
-			var trait_val: int = candidate.get("traits", {}).get(stage["trait"], 2)
-			var roll_k: int = mini(skill_rank + trait_val, 10)
-			var keep: int = trait_val
-			total += roll_k * 5 + keep * 3
+			var trait_val: int = candidate.get("traits", {}).get(stage["trait"], 0)
+			# DISABLED: GDD s11.5 says actual dice rolls, not derived formula
+			var _roll_k: int = mini(skill_rank + trait_val, 10)
+			var _keep: int = trait_val
+			total += 0
 
 		candidate["total_score"] = total
 		var honor: float = candidate.get("honor", 0.0)
@@ -227,7 +231,7 @@ static func resolve_championship(
 		"winner_id": best_id,
 		"winning_score": best_total,
 		"championship": championship_type,
-		"topic_tier": 4,
+		"topic_tier": TopicData.Tier.TIER_4,
 	}
 
 

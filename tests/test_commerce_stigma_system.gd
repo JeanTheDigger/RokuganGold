@@ -68,56 +68,56 @@ func test_empty_school_paths_no_exception() -> void:
 func test_honor_penalty_rank7_plus() -> void:
 	_character.honor = 7.0
 	assert_almost_eq(
-		CommerceStigmaSystem.compute_honor_penalty(_character), -0.6, 0.001
+		CommerceStigmaSystem.compute_honor_penalty(_character), -0.3, 0.001
 	)
 
 
 func test_honor_penalty_rank7_high() -> void:
 	_character.honor = 9.8
 	assert_almost_eq(
-		CommerceStigmaSystem.compute_honor_penalty(_character), -0.9, 0.001
+		CommerceStigmaSystem.compute_honor_penalty(_character), -0.3, 0.001
 	)
 
 
 func test_honor_penalty_rank5_to_6() -> void:
 	_character.honor = 5.0
 	assert_almost_eq(
-		CommerceStigmaSystem.compute_honor_penalty(_character), -0.3, 0.001
+		CommerceStigmaSystem.compute_honor_penalty(_character), -0.2, 0.001
 	)
 
 
 func test_honor_penalty_rank6_9() -> void:
 	_character.honor = 6.9
 	assert_almost_eq(
-		CommerceStigmaSystem.compute_honor_penalty(_character), -0.3, 0.001
+		CommerceStigmaSystem.compute_honor_penalty(_character), -0.2, 0.001
 	)
 
 
 func test_honor_penalty_rank3_to_4() -> void:
 	_character.honor = 3.0
 	assert_almost_eq(
-		CommerceStigmaSystem.compute_honor_penalty(_character), -0.2, 0.001
+		CommerceStigmaSystem.compute_honor_penalty(_character), -0.1, 0.001
 	)
 
 
 func test_honor_penalty_rank4_9() -> void:
 	_character.honor = 4.9
 	assert_almost_eq(
-		CommerceStigmaSystem.compute_honor_penalty(_character), -0.2, 0.001
+		CommerceStigmaSystem.compute_honor_penalty(_character), -0.1, 0.001
 	)
 
 
 func test_honor_penalty_rank2_is_zero() -> void:
 	_character.honor = 2.5
 	assert_almost_eq(
-		CommerceStigmaSystem.compute_honor_penalty(_character), -0.1, 0.001
+		CommerceStigmaSystem.compute_honor_penalty(_character), 0.0, 0.001
 	)
 
 
 func test_honor_penalty_rank1_is_zero() -> void:
 	_character.honor = 1.0
 	assert_almost_eq(
-		CommerceStigmaSystem.compute_honor_penalty(_character), -0.1, 0.001
+		CommerceStigmaSystem.compute_honor_penalty(_character), 0.0, 0.001
 	)
 
 
@@ -126,8 +126,8 @@ func test_honor_penalty_rank1_is_zero() -> void:
 func test_stigma_fires_first_time() -> void:
 	var result: Dictionary = CommerceStigmaSystem.apply_stigma(_character, _ctx)
 	assert_true(result.get("stigma_fired", false))
-	assert_almost_eq(result.get("stigma_honor_change", 0.0), -0.3, 0.001)
-	assert_almost_eq(result.get("stigma_glory_change", 0.0), -0.3, 0.001)
+	assert_almost_eq(result.get("stigma_honor_change", 0.0), -0.2, 0.001)
+	assert_almost_eq(result.get("stigma_glory_change", 0.0), -0.1, 0.001)
 	assert_true(result.get("public_commerce_topic", false))
 
 
@@ -169,15 +169,15 @@ func test_ide_trader_flag_not_set() -> void:
 func test_high_honor_takes_full_penalty() -> void:
 	_character.honor = 8.0
 	var result: Dictionary = CommerceStigmaSystem.apply_stigma(_character, _ctx)
-	assert_almost_eq(result.get("stigma_honor_change", 0.0), -0.6, 0.001)
+	assert_almost_eq(result.get("stigma_honor_change", 0.0), -0.3, 0.001)
 
 
 func test_low_honor_no_honor_penalty_but_glory_still_applies() -> void:
 	_character.honor = 2.0
 	var result: Dictionary = CommerceStigmaSystem.apply_stigma(_character, _ctx)
 	assert_true(result.get("stigma_fired", false))
-	assert_almost_eq(result.get("stigma_honor_change", 0.0), -0.1, 0.001)
-	assert_almost_eq(result.get("stigma_glory_change", 0.0), -0.3, 0.001)
+	assert_almost_eq(result.get("stigma_honor_change", 0.0), 0.0, 0.001)
+	assert_almost_eq(result.get("stigma_glory_change", 0.0), -0.1, 0.001)
 
 
 # -- get_school_lean -----------------------------------------------------------

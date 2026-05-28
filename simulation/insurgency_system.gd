@@ -78,7 +78,7 @@ static func compute_stability_change(
 			insurgency_count += 1
 	delta -= insurgency_count
 
-	var has_starvation: bool = starvation_stage > 0
+	var has_starvation: bool = starvation_stage > ResourceTick.StarvationStage.CLEAR
 	var has_insurgency: bool = insurgency_count > 0
 	if not has_starvation and garrison_pu >= garrison_min and not has_insurgency and not war_status_active:
 		delta += 2.0
@@ -188,7 +188,7 @@ static func get_spawn_chance(
 		Enums.InsurgencyType.PEASANT_REVOLT:
 			if tier == Enums.StabilityTier.STABLE or tier == Enums.StabilityTier.RESTLESS:
 				return 0.0
-			if world_state.get("starvation_stage", 0) >= 2:
+			if world_state.get("starvation_stage", 0) >= ResourceTick.StarvationStage.HUNGER:
 				base += 0.10
 			if world_state.get("under_garrisoned", false):
 				base += 0.10
@@ -224,9 +224,6 @@ static func get_spawn_chance(
 				base += world_state.get("adjacent_pirate_count", 0) * 0.05
 			if province.clan == "Mantis":
 				base -= 0.10
-
-	if world_state.get("is_patrolled", false):
-		base *= 0.5
 
 	return maxf(base, 0.0)
 
@@ -299,7 +296,7 @@ static func attempt_detection(
 		ins.detected = true
 		return {"result": "partial", "type_revealed": true, "strength_estimate": -1}
 	else:
-		ins.concealment = mini(ins.concealment + 1, 10)
+		ins.concealment += 1
 		return {"result": "failure", "type_revealed": false}
 
 
@@ -592,7 +589,7 @@ static func get_taint_resistance_tn(ptl: float) -> int:
 # Crisis Tiers per Type (s11.11)
 # =============================================================================
 
-static func get_crisis_tier(ins: InsurgencyData) -> int:
+static func get_crisis_tier(ins: InsurgencyData, ptl: float = 0.0) -> int:
 	match ins.insurgency_type:
 		Enums.InsurgencyType.MAHO_CULT:
 			return 1
@@ -603,9 +600,9 @@ static func get_crisis_tier(ins: InsurgencyData) -> int:
 		Enums.InsurgencyType.RONIN_BANDIT:
 			return 3
 		Enums.InsurgencyType.TAINT_MANIFESTATION:
-			if ins.strength >= 8:
+			if ptl >= 9.0:
 				return 1
-			if ins.strength >= 5:
+			if ptl >= 6.0:
 				return 2
 			return 3
 		Enums.InsurgencyType.NEZUMI_INFESTATION:

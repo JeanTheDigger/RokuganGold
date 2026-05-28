@@ -51,9 +51,9 @@ const BREAK_GLORY_LOSS: Dictionary = {
 }
 
 const BREAK_TOPIC_TIER: Dictionary = {
-	FavorData.FavorTier.MINOR: 4,
-	FavorData.FavorTier.MODERATE: 4,
-	FavorData.FavorTier.MAJOR: 2,
+	FavorData.FavorTier.MINOR: TopicData.Tier.TIER_4,
+	FavorData.FavorTier.MODERATE: TopicData.Tier.TIER_4,
+	FavorData.FavorTier.MAJOR: TopicData.Tier.TIER_2,
 }
 
 const HONOR_ON_FULFILL: float = 0.1
@@ -139,6 +139,7 @@ static func _get_response_window(method: FavorData.InvocationMethod) -> int:
 # -- Honoring -----------------------------------------------------------------
 
 static func honor_favor(favor: FavorData) -> Dictionary:
+	favor.resolved = true
 	return {
 		"favor_id": favor.favor_id,
 		"debtor_id": favor.debtor_id,
@@ -150,6 +151,7 @@ static func honor_favor(favor: FavorData) -> Dictionary:
 # -- Breaking -----------------------------------------------------------------
 
 static func break_favor(favor: FavorData, witnesses: Array = []) -> Dictionary:
+	favor.resolved = true
 	var tier: FavorData.FavorTier = favor.tier
 	var result: Dictionary = {
 		"favor_id": favor.favor_id,
@@ -161,9 +163,9 @@ static func break_favor(favor: FavorData, witnesses: Array = []) -> Dictionary:
 		"glory_loss": BREAK_GLORY_LOSS.get(tier, 0.0),
 		"witness_disposition_loss": BREAK_WITNESS_DISPOSITION.get(tier, 0),
 		"witnesses": witnesses,
-		"topic_tier": BREAK_TOPIC_TIER.get(tier, 4),
-		"topic_type": "POLITICAL",
-		"topic_category": "BETRAYAL",
+		"topic_tier": BREAK_TOPIC_TIER.get(tier, TopicData.Tier.TIER_4),
+		"topic_type": "favor_breach",
+		"topic_category": TopicData.Category.POLITICAL,
 		"resolved": true,
 	}
 	return result
@@ -196,7 +198,8 @@ static func check_expiration(favor: FavorData, current_ic_day: int) -> bool:
 static func process_expirations(favors: Array, current_ic_day: int) -> Array:
 	var expired_ids: Array = []
 	for favor: FavorData in favors:
-		if favor is FavorData and check_expiration(favor, current_ic_day):
+		if favor is FavorData and not favor.resolved and check_expiration(favor, current_ic_day):
+			favor.resolved = true
 			expired_ids.append(favor.favor_id)
 	return expired_ids
 
@@ -214,7 +217,7 @@ static func check_deadline_breach(favor: FavorData, current_ic_day: int) -> bool
 static func process_deadline_breaches(favors: Array, current_ic_day: int) -> Array:
 	var breaches: Array = []
 	for favor: FavorData in favors:
-		if favor is FavorData and check_deadline_breach(favor, current_ic_day):
+		if favor is FavorData and not favor.resolved and check_deadline_breach(favor, current_ic_day):
 			breaches.append(break_favor(favor))
 	return breaches
 
@@ -228,13 +231,14 @@ static func process_creditor_death(favors: Array, dead_creditor_id: int, heir_id
 	for favor: FavorData in favors:
 		if not (favor is FavorData):
 			continue
-		if favor.creditor_id != dead_creditor_id:
+		if favor.resolved or favor.creditor_id != dead_creditor_id:
 			continue
 		if favor.tier == FavorData.FavorTier.MAJOR and heir_id >= 0:
 			favor.creditor_id = heir_id
 			favor.heir_id = heir_id
 			inherited.append(favor.favor_id)
 		else:
+			favor.resolved = true
 			dissolved.append(favor.favor_id)
 
 	return {"inherited": inherited, "dissolved": dissolved}
@@ -243,7 +247,8 @@ static func process_creditor_death(favors: Array, dead_creditor_id: int, heir_id
 static func process_debtor_death(favors: Array, dead_debtor_id: int) -> Array:
 	var dissolved: Array = []
 	for favor: FavorData in favors:
-		if favor is FavorData and favor.debtor_id == dead_debtor_id:
+		if favor is FavorData and not favor.resolved and favor.debtor_id == dead_debtor_id:
+			favor.resolved = true
 			dissolved.append(favor.favor_id)
 	return dissolved
 
@@ -316,7 +321,8 @@ static func is_blackmail_exposure_risk(favor: FavorData, invocation_is_public: b
 
 # -- Witness disposition on dispute win ---------------------------------------
 
+# GDD s12.10 line 47: "Witnesses gain disposition toward the creditor" — no numeric value.
 static func get_dispute_witness_disposition(creditor_won: bool) -> int:
 	if creditor_won:
-		return 2
+		return 0
 	return 0

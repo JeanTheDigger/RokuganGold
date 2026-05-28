@@ -11,17 +11,17 @@ const PROVINCIAL_COURT_MAX_DURATION: int = 5
 const PEACE_COURT_MIN_DURATION: int = 7
 const PEACE_COURT_MAX_DURATION: int = 21
 
-const PRESTIGE_IMPERIAL: int = 3
-const PRESTIGE_CLAN: int = 2
-const PRESTIGE_PROVINCIAL: int = 1
+const PRESTIGE_IMPERIAL: int = 0
+const PRESTIGE_CLAN: int = 0
+const PRESTIGE_PROVINCIAL: int = 0
 
 const CRISIS_MOMENTUM_THRESHOLD: Dictionary = {
-	Enums.LordRank.VILLAGE_HEADMAN: 15,
-	Enums.LordRank.CITY_DAIMYO: 20,
-	Enums.LordRank.PROVINCIAL_DAIMYO: 25,
-	Enums.LordRank.FAMILY_DAIMYO: 35,
-	Enums.LordRank.CLAN_CHAMPION: 50,
-	Enums.LordRank.IMPERIAL: 60,
+	Enums.LordRank.VILLAGE_HEADMAN: 0,
+	Enums.LordRank.CITY_DAIMYO: 0,
+	Enums.LordRank.PROVINCIAL_DAIMYO: 0,
+	Enums.LordRank.FAMILY_DAIMYO: 0,
+	Enums.LordRank.CLAN_CHAMPION: 0,
+	Enums.LordRank.IMPERIAL: 0,
 }
 
 const MAX_AGENDA_TOPICS: int = 3
@@ -213,7 +213,7 @@ static func should_call_court(
 		if c.phase != CourtSessionData.CourtPhase.CLOSED:
 			return {}
 
-	var threshold: int = CRISIS_MOMENTUM_THRESHOLD.get(lord_rank, 30)
+	var threshold: int = CRISIS_MOMENTUM_THRESHOLD.get(lord_rank, 0)
 
 	for t: TopicData in topics:
 		if t.resolved:
@@ -332,22 +332,19 @@ static func generate_court_close_topic(court: CourtSessionData) -> Dictionary:
 			"slug": "court_%d_no_resolution" % court.court_id,
 			"tier": TopicData.Tier.TIER_4,
 			"category": TopicData.Category.POLITICAL,
-			"momentum": 5.0,
+			"momentum": 0.0,
 			"clan_involved": court.host_clan,
 		}
 
 	var tier: TopicData.Tier = TopicData.Tier.TIER_4
-	var momentum: float = 11.0
+	var momentum: float = 0.0
 	if court.court_type == CourtSessionData.CourtType.IMPERIAL_WINTER_COURT:
 		tier = TopicData.Tier.TIER_2
-		momentum = 50.0
 	elif court.court_type == CourtSessionData.CourtType.CLAN_CHAMPION_COURT:
 		tier = TopicData.Tier.TIER_3
-		momentum = 25.0
 
 	if not court.wars_resolved_during.is_empty():
 		tier = TopicData.Tier.TIER_2
-		momentum = maxf(momentum, 40.0)
 
 	return {
 		"topic_type": "court_session",

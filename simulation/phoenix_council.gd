@@ -75,92 +75,33 @@ const COUNCIL_TOTAL_SEATS: int = 5
 const SOLE_CHAMPION_AUTHORITY_THRESHOLD: int = 3 # Below this, Champion appoints replacements
 
 
-# -- Personality-driven vote lean ---------------------------------------------
+# -- Element-driven vote lean (s55.10.3.3) ------------------------------------
 #
-# A Master's vote is driven by their personal bushido/shourido virtue, not
-# their element. The element they hold is an office, not a personality trait.
-# Positive favors YES, negative favors NO. Void is excluded — uses the
-# omen-based random model below.
+# GDD specifies each Master's vote is driven primarily by their element's
+# temperament, not their personal virtue. Positive favors YES, negative
+# favors NO. Void is excluded — uses the omen-based random model below.
 
-const BUSHIDO_VOTE_LEAN: Dictionary = {
-	Enums.BushidoVirtue.YU: {
+const ELEMENT_VOTE_LEAN: Dictionary = {
+	Master.FIRE: {
 		DecisionType.DECLARE_WAR: 10,
-		DecisionType.DEPLOY_GO_HATAMOTO: 5,
-		DecisionType.GRAND_RITUAL: 5,
-		DecisionType.COMMIT_SHUGENJA: 5,
-		DecisionType.SIGN_TREATY: -5,
-	},
-	Enums.BushidoVirtue.JIN: {
-		DecisionType.DECLARE_WAR: -10,
-		DecisionType.DEPLOY_GO_HATAMOTO: -5,
-		DecisionType.GRAND_RITUAL: -5,
-		DecisionType.SIGN_TREATY: 10,
-	},
-	Enums.BushidoVirtue.REI: {
-		DecisionType.DECLARE_WAR: -10,
-		DecisionType.DEPLOY_GO_HATAMOTO: -5,
-		DecisionType.GRAND_RITUAL: -5,
-		DecisionType.COMMIT_SHUGENJA: -5,
-		DecisionType.SIGN_TREATY: 10,
-	},
-	Enums.BushidoVirtue.CHUGI: {
-		DecisionType.DECLARE_WAR: -5,
-		DecisionType.DEPLOY_GO_HATAMOTO: 5,
-		DecisionType.COMMIT_SHUGENJA: 5,
-		DecisionType.SIGN_TREATY: 5,
-	},
-	Enums.BushidoVirtue.MEIYO: {
-		DecisionType.DECLARE_WAR: 5,
-		DecisionType.DEPLOY_GO_HATAMOTO: 5,
-		DecisionType.GRAND_RITUAL: 5,
-	},
-	Enums.BushidoVirtue.GI: {
-		DecisionType.SIGN_TREATY: 5,
-	},
-	Enums.BushidoVirtue.MAKOTO: {
-		DecisionType.SIGN_TREATY: 5,
-	},
-}
-
-const SHOURIDO_VOTE_LEAN: Dictionary = {
-	Enums.ShouridoVirtue.ISHI: {
-		DecisionType.DECLARE_WAR: 10,
-		DecisionType.DEPLOY_GO_HATAMOTO: 5,
-		DecisionType.GRAND_RITUAL: 5,
-		DecisionType.COMMIT_SHUGENJA: 5,
-		DecisionType.SIGN_TREATY: -10,
-		DecisionType.MAJOR_RESOURCE_SPEND: 5,
-	},
-	Enums.ShouridoVirtue.KYORYOKU: {
-		DecisionType.DECLARE_WAR: 15,
 		DecisionType.DEPLOY_GO_HATAMOTO: 10,
 		DecisionType.GRAND_RITUAL: 10,
-		DecisionType.COMMIT_SHUGENJA: 5,
 		DecisionType.SIGN_TREATY: -10,
 	},
-	Enums.ShouridoVirtue.KANPEKI: {
-		DecisionType.GRAND_RITUAL: 10,
-		DecisionType.MAJOR_RESOURCE_SPEND: -5,
+	Master.WATER: {
+		DecisionType.SIGN_TREATY: 10,
+		DecisionType.MAJOR_RESOURCE_SPEND: 10,
+		DecisionType.DECLARE_WAR: -10,
 	},
-	Enums.ShouridoVirtue.SEIGYO: {
-		DecisionType.DECLARE_WAR: 5,
-		DecisionType.DEPLOY_GO_HATAMOTO: 5,
-		DecisionType.COMMIT_SHUGENJA: 5,
-		DecisionType.MAJOR_RESOURCE_SPEND: 5,
-		DecisionType.GRAND_RITUAL: -5,
+	Master.AIR: {
+		DecisionType.SIGN_TREATY: 10,
+		DecisionType.DECLARE_WAR: -10,
+		DecisionType.DEPLOY_GO_HATAMOTO: -10,
 	},
-	Enums.ShouridoVirtue.KETSUI: {
-		DecisionType.DECLARE_WAR: 5,
-		DecisionType.DEPLOY_GO_HATAMOTO: 5,
-		DecisionType.GRAND_RITUAL: 5,
-	},
-	Enums.ShouridoVirtue.DOSATSU: {
-		DecisionType.SIGN_TREATY: 5,
-		DecisionType.GRAND_RITUAL: -5,
-	},
-	Enums.ShouridoVirtue.CHISHIKI: {
-		DecisionType.GRAND_RITUAL: 10,
-		DecisionType.MAJOR_RESOURCE_SPEND: 5,
+	Master.EARTH: {
+		DecisionType.DECLARE_WAR: -10,
+		DecisionType.DEPLOY_GO_HATAMOTO: -10,
+		DecisionType.COMMIT_SHUGENJA: -10,
 	},
 }
 
@@ -199,36 +140,34 @@ static func is_major_decision(decision_type: DecisionType) -> bool:
 #     "spiritual_dimension": bool,       # for Void Master only
 #   }
 # `disposition_to_champion` is the master's disposition value (-100..100).
-# `bushido_virtue` / `shourido_virtue` drive the vote lean per decision type.
 # `dice_engine` is required for the Void Master's omen roll.
+# `bushido_virtue` / `shourido_virtue` are accepted for backward compatibility
+# but not consumed — GDD s55.10.3.3 specifies elemental alignment, not
+# personality, as the dominant vote factor.
 static func evaluate_master_vote(
 	master: Master,
 	proposal: Dictionary,
 	disposition_to_champion: int,
 	dice_engine: DiceEngine,
-	bushido_virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE,
-	shourido_virtue: Enums.ShouridoVirtue = Enums.ShouridoVirtue.NONE,
+	_bushido_virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.NONE,
+	_shourido_virtue: Enums.ShouridoVirtue = Enums.ShouridoVirtue.NONE,
 ) -> Dictionary:
 	if master == Master.VOID:
 		return _evaluate_void_vote(proposal, dice_engine)
-	return _evaluate_personality_vote(
-		master, proposal, disposition_to_champion, bushido_virtue, shourido_virtue
+	return _evaluate_element_vote(
+		master, proposal, disposition_to_champion
 	)
 
 
-static func _evaluate_personality_vote(
+static func _evaluate_element_vote(
 	master: Master,
 	proposal: Dictionary,
 	disposition_to_champion: int,
-	bushido_virtue: Enums.BushidoVirtue,
-	shourido_virtue: Enums.ShouridoVirtue,
 ) -> Dictionary:
 	var decision_type: DecisionType = proposal.get("decision_type", DecisionType.DECLARE_WAR)
 	var score: int = 0
-	var b_lean: Dictionary = BUSHIDO_VOTE_LEAN.get(bushido_virtue, {})
-	score += int(b_lean.get(decision_type, 0))
-	var s_lean: Dictionary = SHOURIDO_VOTE_LEAN.get(shourido_virtue, {})
-	score += int(s_lean.get(decision_type, 0))
+	var e_lean: Dictionary = ELEMENT_VOTE_LEAN.get(master, {})
+	score += int(e_lean.get(decision_type, 0))
 
 	# Disposition modifier (s55.10.3.3 additional).
 	if disposition_to_champion >= FRIEND_DISPOSITION_THRESHOLD:
@@ -411,7 +350,7 @@ static func get_defiance_consequences(state: Dictionary) -> Dictionary:
 	return {
 		"stage": stage,
 		"honor_penalty": DEFIANCE_STAGE_1_HONOR_PENALTY if stage >= 1 else 0.0,
-		"topic_tier": 4,
+		"topic_tier": TopicData.Tier.TIER_4,
 		"topic_slug": "phoenix_champion_defiance_stage_%d" % stage,
 		"diplomatic_suspended": stage >= 2,
 		"shugenja_withdrawn": stage >= 3,
@@ -425,7 +364,7 @@ static func get_overreach_consequences(state: Dictionary) -> Dictionary:
 		return {}
 	return {
 		"stage": stage,
-		"topic_tier": 4 if stage <= 1 else 3,
+		"topic_tier": TopicData.Tier.TIER_4 if stage <= 1 else TopicData.Tier.TIER_3,
 		"topic_slug": "phoenix_council_overreach_stage_%d" % stage,
 		"emperor_appeal_available": stage >= 2,
 		"compact_violated": stage >= 3,
@@ -645,6 +584,8 @@ static func apply_grand_ritual_devastation(
 	var rep_ids: Array = []
 	if emperor_id >= 0:
 		for rep: L5RCharacterData in all_clan_representatives:
+			if CharacterStats.is_dead(rep):
+				continue
 			if rep.clan == "Phoenix":
 				continue
 			var cur: int = rep.disposition_values.get(emperor_id, 0)

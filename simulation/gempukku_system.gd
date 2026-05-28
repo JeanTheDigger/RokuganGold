@@ -82,6 +82,23 @@ const FAMILY_DEFAULT_SCHOOL: Dictionary = {
 	"Yoritomo": "Yoritomo Bushi",
 	"Moshi": "Moshi Shugenja",
 	"Tsuruchi": "Tsuruchi Archer",
+	"Toritaka": "Toritaka Bushi",
+	"Togashi": "Togashi Tattooed Order",
+	"Agasha": "Agasha Shugenja",
+	"Yogo": "Yogo Wardmaster",
+	"Ichiro": "Ichiro Bushi",
+	"Tonbo": "Tonbo Shugenja",
+	"Kitsune": "Kitsune Shugenja",
+	"Usagi": "Usagi Bushi",
+	"Toku": "Toku Bushi",
+	"Morito": "Morito Bushi",
+	"Suzume": "Suzume Bushi",
+	"Kasuga": "Kasuga Smuggler",
+	"Komori": "Komori Shugenja",
+	"Tsi": "Tsi Smith",
+	"Otomo": "Otomo Courtier",
+	"Seppun": "Seppun Guardsman",
+	"Miya": "Miya Herald",
 }
 
 const GENDER_RESTRICTED_SCHOOLS: Dictionary = {
@@ -219,11 +236,10 @@ static func count_clan_population(
 ) -> Dictionary:
 	var counts: Dictionary = {"rank_5": 0, "rank_4": 0, "rank_3": 0, "rank_2": 0, "rank_1": 0}
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if c.clan != clan:
 			continue
-		if c.wounds_taken > 0:
-			if CharacterStats.is_dead(c):
-				continue
 		var rank: int = CharacterStats.get_insight_rank(c)
 		if rank >= 5:
 			counts["rank_5"] += 1
@@ -383,21 +399,39 @@ static func generate_replenishment_character(
 static func _get_clan_families(clan: String) -> Array:
 	match clan:
 		"Crab":
-			return ["Hida", "Hiruma", "Kaiu", "Kuni", "Yasuki"]
+			return ["Hida", "Hiruma", "Kaiu", "Kuni", "Yasuki", "Toritaka"]
 		"Crane":
 			return ["Kakita", "Daidoji", "Doji", "Asahina"]
 		"Dragon":
-			return ["Mirumoto", "Kitsuki", "Tamori"]
+			return ["Mirumoto", "Kitsuki", "Tamori", "Togashi"]
 		"Lion":
 			return ["Akodo", "Matsu", "Ikoma", "Kitsu"]
 		"Phoenix":
-			return ["Shiba", "Isawa", "Asako"]
+			return ["Shiba", "Isawa", "Asako", "Agasha"]
 		"Scorpion":
-			return ["Bayushi", "Soshi", "Shosuro"]
+			return ["Bayushi", "Soshi", "Shosuro", "Yogo"]
 		"Unicorn":
 			return ["Shinjo", "Moto", "Ide", "Iuchi", "Utaku"]
 		"Mantis":
 			return ["Yoritomo", "Moshi", "Tsuruchi"]
+		"Badger":
+			return ["Ichiro"]
+		"Dragonfly":
+			return ["Tonbo"]
+		"Fox":
+			return ["Kitsune"]
+		"Hare":
+			return ["Usagi"]
+		"Monkey":
+			return ["Toku"]
+		"Ox":
+			return ["Morito"]
+		"Sparrow":
+			return ["Suzume"]
+		"Tortoise":
+			return ["Kasuga"]
+		"Imperial":
+			return ["Otomo", "Seppun", "Miya"]
 	return []
 
 
@@ -453,6 +487,8 @@ static func process_seasonal_gempukku(
 			all_characters.append(rc)
 
 	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
 		var char_province: int = settlement_province_map.get(
 			int(character.physical_location) if character.physical_location.is_valid_int() else -1, -1,
 		)

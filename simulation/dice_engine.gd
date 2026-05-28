@@ -21,6 +21,10 @@ func rand_int_range(low: int, high: int) -> int:
 	return _rng.randi_range(low, high)
 
 
+func randf() -> float:
+	return _rng.randf()
+
+
 # -- Core Roll & Keep ----------------------------------------------------------
 
 func roll_and_keep(rolled: int, kept: int, explodes: bool = true, emphasis: bool = false) -> DiceResult:

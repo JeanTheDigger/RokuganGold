@@ -220,15 +220,11 @@ static func resolve_active_worship(
 
 # -- Threshold Evaluation -----------------------------------------------------
 
+# DISABLED: GDD s4.3.21 does not specify WP ratio thresholds for tier transitions
 static func get_worship_tier(wp: float, threshold: float) -> Enums.WorshipTier:
 	if wp >= threshold:
 		return Enums.WorshipTier.NONE
-	var ratio: float = wp / max(threshold, 0.01)
-	if ratio >= 0.75:
-		return Enums.WorshipTier.RESTLESS
-	elif ratio >= 0.40:
-		return Enums.WorshipTier.DISPLEASED
-	return Enums.WorshipTier.WRATHFUL
+	return Enums.WorshipTier.NONE
 
 
 static func evaluate_province_thresholds(province_wp: Dictionary) -> Dictionary:
@@ -344,7 +340,7 @@ static func resolve_divination(
 		scope = "family"
 
 	var above_threshold: bool = wp >= PROVINCE_THRESHOLD
-	var surplus_comfort: String = "barely" if wp < PROVINCE_THRESHOLD * 1.25 else "comfortably"
+	var surplus_comfort: String = "unknown"
 
 	return {
 		"success": true,
@@ -446,10 +442,10 @@ static func compute_all_province_maluses(
 
 		var combined: Dictionary = {}
 		for f: int in range(GREAT_FORTUNE_COUNT):
-			var pt: Enums.WorshipTier = p_tiers.get(f, Enums.WorshipTier.WRATHFUL) as Enums.WorshipTier
-			var ft: Enums.WorshipTier = f_tiers.get(f, Enums.WorshipTier.WRATHFUL) as Enums.WorshipTier
-			var ct: Enums.WorshipTier = c_tiers.get(f, Enums.WorshipTier.WRATHFUL) as Enums.WorshipTier
-			var et: Enums.WorshipTier = empire_tiers.get(f, Enums.WorshipTier.WRATHFUL) as Enums.WorshipTier
+			var pt: Enums.WorshipTier = p_tiers.get(f, Enums.WorshipTier.NONE) as Enums.WorshipTier
+			var ft: Enums.WorshipTier = f_tiers.get(f, Enums.WorshipTier.NONE) as Enums.WorshipTier
+			var ct: Enums.WorshipTier = c_tiers.get(f, Enums.WorshipTier.NONE) as Enums.WorshipTier
+			var et: Enums.WorshipTier = empire_tiers.get(f, Enums.WorshipTier.NONE) as Enums.WorshipTier
 			var worst: Enums.WorshipTier = get_worst_tier(pt, ft, ct, et)
 			if worst == Enums.WorshipTier.NONE:
 				continue

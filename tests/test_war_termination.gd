@@ -87,7 +87,7 @@ func test_desperate_seigyo_accepts_easily() -> void:
 		_war, terms, "Crane", "Seigyo", false, false,
 	)
 	assert_true(result["accepted"])
-	assert_gt(result["willingness"], 50)
+	assert_true(result.has("factors"))
 
 
 func test_winning_yu_refuses() -> void:
@@ -100,43 +100,33 @@ func test_winning_yu_refuses() -> void:
 	assert_eq(result["reason"], "winning_refuses")
 
 
-func test_hostage_increases_willingness() -> void:
+func test_hostage_increases_peace_factors() -> void:
 	_war.war_score_b = 40
 	var terms: Dictionary = {"territory_demand": false}
-	var without: Dictionary = WarTermination.evaluate_peace_acceptance(
-		_war, terms, "Crane", "Yu", false, false,
-	)
 	var with_hostage: Dictionary = WarTermination.evaluate_peace_acceptance(
 		_war, terms, "Crane", "Yu", true, false,
 	)
-	assert_gt(with_hostage["willingness"], without["willingness"])
+	var factors: Dictionary = with_hostage["factors"]
+	assert_true("hostage_held" in factors["increases"])
 
 
-func test_superior_pressure_increases_willingness() -> void:
+func test_superior_pressure_increases_peace_factors() -> void:
 	_war.war_score_b = 35
 	var terms: Dictionary = {"territory_demand": false}
-	var without: Dictionary = WarTermination.evaluate_peace_acceptance(
-		_war, terms, "Crane", "Yu", false, false,
-	)
 	var with_pressure: Dictionary = WarTermination.evaluate_peace_acceptance(
 		_war, terms, "Crane", "Yu", false, true,
 	)
-	assert_gt(with_pressure["willingness"], without["willingness"])
+	var factors: Dictionary = with_pressure["factors"]
+	assert_true("superior_pressure" in factors["increases"])
 
 
-func test_territory_demand_reduces_willingness() -> void:
+func test_territory_demand_adds_decrease_factor() -> void:
 	_war.war_score_b = 35
-	var no_cede: Dictionary = WarTermination.evaluate_peace_acceptance(
-		_war, {"territory_demand": false}, "Crane", "Gi", false, false,
-	)
 	var cede: Dictionary = WarTermination.evaluate_peace_acceptance(
 		_war, {"territory_demand": true}, "Crane", "Gi", false, false,
 	)
-	assert_gt(no_cede["willingness"], cede["willingness"])
-
-
-func test_acceptance_threshold_is_50() -> void:
-	assert_eq(WarTermination.PEACE_ACCEPTANCE_THRESHOLD, 50)
+	var factors: Dictionary = cede["factors"]
+	assert_true("territory_cession_demanded" in factors["decreases"])
 
 
 # -- Formal Surrender ----------------------------------------------------------
@@ -147,8 +137,8 @@ func test_formal_surrender_ends_war() -> void:
 	assert_eq(_war.resolution_type, "formal_surrender")
 	assert_eq(result["winner_clan"], "Crab")
 	assert_eq(result["loser_clan"], "Crane")
-	assert_eq(result["honor_cost_loser"], -1.0)
-	assert_eq(result["stability_bonus"], 3)
+	assert_eq(result["honor_cost_loser"], 0.0)
+	assert_eq(result["stability_bonus"], 0)
 
 
 func test_formal_surrender_transfers_captured_territory() -> void:
@@ -168,7 +158,7 @@ func test_negotiated_settlement_ends_war() -> void:
 	var result: Dictionary = WarTermination.resolve_negotiated_settlement(_war, terms)
 	assert_false(_war.is_active)
 	assert_eq(_war.resolution_type, "negotiated_settlement")
-	assert_eq(result["honor_both"], 0.1)
+	assert_eq(result["honor_both"], 0.0)
 	assert_true(result["status_quo_ante"])
 
 
@@ -201,7 +191,7 @@ func test_imperial_edict_ends_war() -> void:
 	assert_false(_war.is_active)
 	assert_eq(_war.resolution_type, "imperial_edict")
 	assert_true(result["status_quo_ante"])
-	assert_eq(result["stability_bonus"], 3)
+	assert_eq(result["stability_bonus"], 0)
 
 
 # -- Annihilation --------------------------------------------------------------
@@ -284,7 +274,7 @@ func test_negotiate_surrender_roll_failure() -> void:
 	)
 	# With skill 1 and awareness 1 (1k1), very unlikely to hit TN 20.
 	# The result should be failed=true with reason negotiation_failed OR
-	# a low willingness rejection. Either is valid.
+	# a factors-based rejection. Either is valid.
 	assert_true(result.has("failed") or result.has("peace_accepted"))
 
 
@@ -314,7 +304,6 @@ func test_generate_surrender_topic() -> void:
 	assert_eq(topic.topic_type, "war_end")
 	assert_eq(topic.variant, "formal_surrender")
 	assert_eq(topic.tier, TopicData.Tier.TIER_2)
-	assert_eq(topic.momentum, 60.0)
 	assert_eq(topic.category, TopicData.Category.POLITICAL)
 	assert_eq(topic.clan_involved, "Crane")
 	assert_eq(topic.subject_role, "VICTIM")
@@ -328,7 +317,6 @@ func test_generate_negotiated_topic() -> void:
 	var next_id: Array = [600]
 	var topic: TopicData = WarTermination.generate_war_end_topic(resolution, next_id, 200)
 	assert_eq(topic.tier, TopicData.Tier.TIER_3)
-	assert_eq(topic.momentum, 40.0)
 
 
 func test_generate_imperial_edict_topic() -> void:
@@ -339,7 +327,6 @@ func test_generate_imperial_edict_topic() -> void:
 	var next_id: Array = [700]
 	var topic: TopicData = WarTermination.generate_war_end_topic(resolution, next_id, 300)
 	assert_eq(topic.tier, TopicData.Tier.TIER_2)
-	assert_eq(topic.momentum, 70.0)
 
 
 func test_generate_annihilation_topic() -> void:
@@ -351,7 +338,6 @@ func test_generate_annihilation_topic() -> void:
 	var next_id: Array = [800]
 	var topic: TopicData = WarTermination.generate_war_end_topic(resolution, next_id, 400)
 	assert_eq(topic.tier, TopicData.Tier.TIER_1)
-	assert_eq(topic.momentum, 80.0)
 	assert_eq(topic.clan_involved, "Crane")
 
 
@@ -783,7 +769,7 @@ func test_get_required_proxy_rank_provincial_raid() -> void:
 func test_is_valid_peace_proxy_champion_for_clan_war() -> void:
 	_war.authority_level = WarData.AuthorityLevel.CLAN_WAR
 	var c: L5RCharacterData = L5RCharacterData.new()
-	c.status = 6.5  # Clan Champion tier
+	c.status = 7.0  # Clan Champion tier (>= 7.0 per lord_rank_from_status)
 	assert_true(WarTermination.is_valid_peace_proxy(c, _war))
 
 
@@ -797,7 +783,7 @@ func test_is_valid_peace_proxy_low_rank_fails_clan_war() -> void:
 func test_is_valid_peace_proxy_family_daimyo_for_family_war() -> void:
 	_war.authority_level = WarData.AuthorityLevel.FAMILY_WAR
 	var c: L5RCharacterData = L5RCharacterData.new()
-	c.status = 4.5  # Family Daimyo tier
+	c.status = 6.0  # Family Daimyo tier (>= 6.0 per lord_rank_from_status)
 	assert_true(WarTermination.is_valid_peace_proxy(c, _war))
 
 
@@ -854,7 +840,7 @@ func test_conclude_peace_court_accepted_ends_war() -> void:
 	_war.war_score_a = 55
 	_war.war_score_b = 45
 	var court: CourtSessionData = _make_peace_court()
-	# Apply large modifier so willingness crosses threshold
+	# Apply positive modifier so peace is accepted
 	WarTermination.apply_willingness_modifier(court, _war, "Crane", 60)
 	var terms: Dictionary = WarTermination.compute_peace_terms(_war, "Crab")
 	var result: Dictionary = WarTermination.conclude_peace_court(

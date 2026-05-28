@@ -465,6 +465,7 @@ static func assault_high_house(
 	var topic := TopicData.new()
 	topic.topic_id = next_topic_id
 	topic.slug = "togashi_vanished_y%d" % ic_day
+	topic.title = "Togashi Daimyo Vanishes from the Empire"
 	topic.tier = TopicData.Tier.TIER_1
 	topic.momentum = 100.0
 	topic.category = TopicData.Category.SUPERNATURAL

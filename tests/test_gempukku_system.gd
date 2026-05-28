@@ -122,14 +122,17 @@ func test_unknown_family_returns_empty() -> void:
 
 func test_all_families_have_schools() -> void:
 	var families: Array = [
-		"Hida", "Hiruma", "Kaiu", "Kuni", "Yasuki",
+		"Hida", "Hiruma", "Kaiu", "Kuni", "Yasuki", "Toritaka",
 		"Kakita", "Daidoji", "Doji", "Asahina",
-		"Mirumoto", "Kitsuki", "Tamori",
+		"Mirumoto", "Kitsuki", "Tamori", "Togashi",
 		"Akodo", "Matsu", "Ikoma", "Kitsu",
-		"Shiba", "Isawa", "Asako",
-		"Bayushi", "Soshi", "Shosuro",
+		"Shiba", "Isawa", "Asako", "Agasha",
+		"Bayushi", "Soshi", "Shosuro", "Yogo",
 		"Shinjo", "Moto", "Ide", "Iuchi", "Utaku",
 		"Yoritomo", "Moshi", "Tsuruchi",
+		"Ichiro", "Tonbo", "Kitsune", "Usagi", "Toku",
+		"Morito", "Suzume", "Kasuga",
+		"Otomo", "Seppun", "Miya",
 	]
 	for f: String in families:
 		var school: String = GempukkuSystem.assign_school(f, "female")
@@ -464,7 +467,7 @@ func test_generate_replenishment_character() -> void:
 
 func test_replenishment_unknown_clan_returns_null() -> void:
 	var rc: L5RCharacterData = GempukkuSystem.generate_replenishment_character(
-		800, "Badger", _dice,
+		800, "NonexistentClan", _dice,
 	)
 	assert_null(rc)
 
@@ -643,7 +646,7 @@ func test_get_clan_families_all_clans() -> void:
 
 
 func test_get_clan_families_unknown_empty() -> void:
-	assert_eq(GempukkuSystem._get_clan_families("Badger").size(), 0)
+	assert_eq(GempukkuSystem._get_clan_families("NonexistentClan").size(), 0)
 
 
 # =============================================================================
@@ -676,3 +679,62 @@ func test_orientation_field_on_character_data() -> void:
 	assert_eq(c.orientation, "straight")
 	c.orientation = "bisexual"
 	assert_eq(c.orientation, "bisexual")
+
+
+# -- Dead character guards (2026-05-23) ----------------------------------------
+
+func test_natural_death_roll_skips_already_dead_characters() -> void:
+	var dead_char := L5RCharacterData.new()
+	dead_char.character_id = 50
+	dead_char.stamina = 2
+	dead_char.willpower = 2
+	dead_char.wounds_taken = 999
+	dead_char.age = 80  # high age guarantees natural death roll would succeed
+	dead_char.physical_location = "100"
+
+	var alive_char := L5RCharacterData.new()
+	alive_char.character_id = 51
+	alive_char.stamina = 2
+	alive_char.willpower = 2
+	alive_char.wounds_taken = 0
+	alive_char.age = 20  # young age = 0% chance of natural death
+	alive_char.physical_location = "100"
+
+	var children: Array = []
+	var characters: Array = [dead_char, alive_char]
+	var next_id: Array = [200]
+	var result: Dictionary = GempukkuSystem.process_seasonal_gempukku(
+		children, characters, next_id, _dice, 6480,
+	)
+	assert_false(50 in result["natural_deaths"],
+		"Already dead character should not appear in natural_deaths")
+
+
+func test_count_clan_population_skips_dead_characters() -> void:
+	var alive := L5RCharacterData.new()
+	alive.character_id = 60
+	alive.clan = "Lion"
+	alive.wounds_taken = 0
+	alive.stamina = 2
+	alive.willpower = 2
+	alive.intelligence = 2
+	alive.awareness = 2
+	alive.reflexes = 2
+	alive.void_ring = 2
+	alive.perception = 2
+
+	var dead := L5RCharacterData.new()
+	dead.character_id = 61
+	dead.clan = "Lion"
+	dead.wounds_taken = 999
+	dead.stamina = 2
+	dead.willpower = 2
+	dead.intelligence = 2
+	dead.awareness = 2
+	dead.reflexes = 2
+	dead.void_ring = 2
+	dead.perception = 2
+
+	var counts: Dictionary = GempukkuSystem.count_clan_population([alive, dead], "Lion")
+	var total: int = counts["rank_1"] + counts["rank_2"] + counts["rank_3"] + counts["rank_4"] + counts["rank_5"]
+	assert_eq(total, 1, "Dead character should not be counted in population")

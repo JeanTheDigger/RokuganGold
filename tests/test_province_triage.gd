@@ -7,7 +7,7 @@ func _make_province(
 	garrison: int = 5,
 	crisis_id: int = -1,
 	insurgency_id: int = -1,
-	confidence: int = 2,
+	confidence: int = NPCDataStructures.ProvinceStatus.CONFIDENCE_FRESH,
 ) -> NPCDataStructures.ProvinceStatus:
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = id

@@ -7,33 +7,44 @@ class_name CourtActionSystem
 
 # -- Constants ----------------------------------------------------------------
 
+# GDD s15.4: "Charm cannot push disposition above +40 (Friend tier)"
 const CHARM_CEILING: int = 40
-const CHARM_FULL_GAIN: int = 8
-const CHARM_RAISE_BONUS: int = 3
+# GDD s15.4 describes Charm gain qualitatively but specifies no numbers.
+# Diminishing returns thresholds also unspecified. Zeroed pending GDD spec.
+const CHARM_FULL_GAIN: int = 0
+const CHARM_RAISE_BONUS: int = 0
 const CHARM_DIMINISHING_HALF: int = 2
 const CHARM_DIMINISHING_MINIMAL: int = 3
 
-const NEGOTIATE_BASE_DISP: int = 9
-const NEGOTIATE_RAISE_BONUS: int = 3
-const NEGOTIATE_POSITION_SHIFT: float = 8.0
-const NEGOTIATE_RAISE_POSITION_BONUS: float = 4.0
-const NEGOTIATE_SESSION_TN_REDUCTION: int = 5
+# GDD s15.4: "Moderate disposition gain", "position moves slightly",
+# "slightly lower TN". No numeric values specified. Zeroed pending GDD spec.
+const NEGOTIATE_BASE_DISP: int = 0
+const NEGOTIATE_RAISE_BONUS: int = 0
+const NEGOTIATE_POSITION_SHIFT: float = 0.0
+const NEGOTIATE_RAISE_POSITION_BONUS: float = 0.0
+const NEGOTIATE_SESSION_TN_REDUCTION: int = 0
 
-const PERSUADE_BASE_DISP: int = 11
-const PERSUADE_RAISE_BONUS: int = 3
-const PERSUADE_POSITION_SHIFT: float = 12.0
-const PERSUADE_RAISE_POSITION_BONUS: float = 5.0
+# GDD s15.4: "position moves more significantly and durably than Negotiate".
+# No numeric values specified. Zeroed pending GDD spec.
+const PERSUADE_BASE_DISP: int = 0
+const PERSUADE_RAISE_BONUS: int = 0
+const PERSUADE_POSITION_SHIFT: float = 0.0
+const PERSUADE_RAISE_POSITION_BONUS: float = 0.0
 
-const IMPRESS_BASE_DISP: int = 9
-const IMPRESS_RAISE_BONUS: int = 3
-const IMPRESS_POSITION_SHIFT: float = 5.0
-const IMPRESS_SESSION_TN_REDUCTION: int = 5
+# GDD s15.4: "Moderate disposition gain", "slight TN reduction".
+# No numeric values specified. Zeroed pending GDD spec.
+const IMPRESS_BASE_DISP: int = 0
+const IMPRESS_RAISE_BONUS: int = 0
+const IMPRESS_POSITION_SHIFT: float = 0.0
+const IMPRESS_SESSION_TN_REDUCTION: int = 0
 
-const LISTEN_REFLECT_BASE_DISP: int = 11
-const LISTEN_REFLECT_RAISE_BONUS: int = 3
-const LISTEN_REFLECT_POSITION_SHIFT: float = 10.0
-const LISTEN_REFLECT_RAISE_POSITION_BONUS: float = 4.0
-const LISTEN_REFLECT_SESSION_TN_REDUCTION: int = 5
+# GDD s15.4: "Strong disposition gain", "TN reduction this session".
+# No numeric values specified. Zeroed pending GDD spec.
+const LISTEN_REFLECT_BASE_DISP: int = 0
+const LISTEN_REFLECT_RAISE_BONUS: int = 0
+const LISTEN_REFLECT_POSITION_SHIFT: float = 0.0
+const LISTEN_REFLECT_RAISE_POSITION_BONUS: float = 0.0
+const LISTEN_REFLECT_SESSION_TN_REDUCTION: int = 0
 
 const PROVOKE_HONOR_LOSS: float = -0.2
 const PROVOKE_GLORY_LOSS: float = -0.1
@@ -159,7 +170,7 @@ static func resolve_charm(
 
 	var base_disp: int = CHARM_FULL_GAIN + raises * CHARM_RAISE_BONUS
 	if session_charm_count >= CHARM_DIMINISHING_MINIMAL:
-		base_disp = 1
+		base_disp = maxi(base_disp / 4, 0)
 	elif session_charm_count >= CHARM_DIMINISHING_HALF:
 		base_disp = base_disp / 2
 

@@ -35,7 +35,7 @@ static func score_province(ps: NPCDataStructures.ProvinceStatus) -> float:
 		score += SCORE_RESTLESS_STABILITY
 	if ps.garrison_pu < 1:
 		score += SCORE_GARRISON_DEFICIT
-	if ps.confidence == 0:
+	if ps.confidence == NPCDataStructures.ProvinceStatus.CONFIDENCE_STALE:
 		score += SCORE_STALE_INFORMATION
 
 	return score
@@ -88,7 +88,7 @@ static func get_top_provinces(
 static func _determine_need(ps: NPCDataStructures.ProvinceStatus) -> String:
 	if ps.active_crisis_id >= 0:
 		return "DEFEND_PROVINCE"
-	if ps.confidence == 0:
+	if ps.confidence == NPCDataStructures.ProvinceStatus.CONFIDENCE_STALE:
 		return "INVESTIGATE_THREAT"
 	if ps.stability <= 50.0:
 		return "PATROL_PROVINCE"
@@ -102,7 +102,7 @@ static func _determine_priority(ps: NPCDataStructures.ProvinceStatus) -> int:
 		return 3
 	if ps.stability <= 25.0:
 		return 3
-	if ps.confidence == 0:
+	if ps.confidence == NPCDataStructures.ProvinceStatus.CONFIDENCE_STALE:
 		return 2
 	if ps.stability <= 50.0:
 		return 2

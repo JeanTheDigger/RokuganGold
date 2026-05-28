@@ -596,6 +596,8 @@ static func evaluate_all_objectives(
 	var results: Array = []
 
 	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
 		var objectives: Dictionary = objectives_map.get(character.character_id, {})
 		var primary: Dictionary = objectives.get("primary", {})
 		if primary.is_empty():

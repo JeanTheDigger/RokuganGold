@@ -116,13 +116,14 @@ func test_new_year_festival_on_day_1():
 	assert_true(names.has("New Year's Festival"))
 
 
-func test_cherry_blossom_on_month1_day15():
-	# Month 1, day 15 → IC day 15
-	var fests := FestivalSystem.get_active_festivals(15)
-	var names: Array = []
-	for f in fests:
-		names.append(f["name"])
-	assert_true(names.has("Cherry Blossom Festival"))
+func test_cherry_blossom_day_disabled():
+	# Cherry Blossom day set to -1 (GDD gives month but not day)
+	var fest: Dictionary = {}
+	for f: Dictionary in FestivalSystem.CANONICAL_FESTIVALS:
+		if f["name"] == "Cherry Blossom Festival":
+			fest = f
+			break
+	assert_eq(fest["day"], -1)
 
 
 func test_no_festival_on_random_day():
@@ -187,28 +188,48 @@ func test_honor_gain_no_festival():
 	assert_eq(gain, 0.0)
 
 
-func test_lion_honor_effect_present_on_akodo_festival():
-	# Festival of Akodo: month 1, day 20 → IC day 20
-	var effects := FestivalSystem.get_festival_effects(20)
-	assert_true("lion_honor" in effects)
+func test_akodo_festival_day_disabled():
+	# Festival of Akodo day set to -1 (GDD gives month but not day)
+	var fest: Dictionary = {}
+	for f: Dictionary in FestivalSystem.CANONICAL_FESTIVALS:
+		if f["name"] == "Festival of Akodo":
+			fest = f
+			break
+	assert_eq(fest["day"], -1)
 
 
 func test_lion_honor_not_counted_as_generic_honor_gain():
-	# lion_honor is clan-gated; get_honor_gain_festivals must not count it
+	# Festival of Akodo has day=-1, so no active festival on any specific day.
+	# Verify honor gain is 0.0 on what was formerly day 20.
 	var gain := FestivalSystem.get_honor_gain_festivals(20)
 	assert_eq(gain, 0.0)
 
 
-func test_glory_gain_ning_panchiman():
-	# Ning Panchiman: month 4, day 15 → IC day (3*30)+15 = 105
+func test_glory_gain_ning_panchiman_disabled():
+	# Ning Panchiman day set to -1 (GDD gives month but not day).
+	# martial_glory gain also disabled (0.0). No glory on any day.
+	var fest: Dictionary = {}
+	for f: Dictionary in FestivalSystem.CANONICAL_FESTIVALS:
+		if f["name"] == "Ning Panchiman":
+			fest = f
+			break
+	assert_eq(fest["day"], -1)
+	# Even if a festival were active, martial_glory yields 0.0
 	var gain := FestivalSystem.get_glory_gain_festivals(105)
-	assert_eq(gain, 0.1)
+	assert_eq(gain, 0.0)
 
 
-func test_glory_gain_poetry_exchange():
-	# Festival of Leaves: month 1, day 10 → IC day 10
+func test_glory_gain_poetry_exchange_disabled():
+	# Festival of Leaves day set to -1 (GDD gives month but not day).
+	# poetry_exchange glory gain also yields 0.0 (disabled formula).
+	var fest: Dictionary = {}
+	for f: Dictionary in FestivalSystem.CANONICAL_FESTIVALS:
+		if f["name"] == "Festival of Leaves":
+			fest = f
+			break
+	assert_eq(fest["day"], -1)
 	var gain := FestivalSystem.get_glory_gain_festivals(10)
-	assert_eq(gain, 0.1)
+	assert_eq(gain, 0.0)
 
 
 func test_glory_gain_no_festival():
@@ -264,10 +285,13 @@ func test_resolve_championship_single_candidate():
 	]
 	var result := FestivalSystem.resolve_championship(candidates, null)
 	assert_eq(result["winner_id"], 1)
-	assert_true(result["winning_score"] > 0)
+	# Scoring formula disabled (GDD says actual dice rolls, not derived formula)
+	assert_eq(result["winning_score"], 0)
 
 
-func test_resolve_championship_higher_skill_wins():
+func test_resolve_championship_scoring_disabled_honor_tiebreak():
+	# Scoring formula disabled — both candidates score 0.
+	# Winner determined by honor tiebreak (candidate 1 has default 3.0).
 	var candidates: Array = [
 		_make_candidate(1, {"Athletics": 5, "Kenjutsu": 5, "Etiquette": 5},
 			{"strength": 4, "agility": 4, "intelligence": 4}),
@@ -275,10 +299,13 @@ func test_resolve_championship_higher_skill_wins():
 			{"strength": 2, "agility": 2, "intelligence": 2}),
 	]
 	var result := FestivalSystem.resolve_championship(candidates, null)
+	# Both score 0; candidate 1 wins because it's first with equal honor (both 3.0)
 	assert_eq(result["winner_id"], 1)
+	assert_eq(result["winning_score"], 0)
 
 
 func test_resolve_championship_honor_tiebreak():
+	# Scoring disabled — both score 0. Honor tiebreak picks candidate 2 (7.0 > 5.0).
 	var candidates: Array = [
 		_make_candidate(1, {"Athletics": 3, "Kenjutsu": 3, "Etiquette": 3},
 			{"strength": 3, "agility": 3, "intelligence": 3}, 5.0),
@@ -287,6 +314,7 @@ func test_resolve_championship_honor_tiebreak():
 	]
 	var result := FestivalSystem.resolve_championship(candidates, null)
 	assert_eq(result["winner_id"], 2)
+	assert_eq(result["winning_score"], 0)
 
 
 func test_resolve_championship_returns_topic_tier_4():
@@ -294,7 +322,7 @@ func test_resolve_championship_returns_topic_tier_4():
 		_make_candidate(1, {"Athletics": 3}, {"strength": 3, "agility": 3, "intelligence": 3}),
 	]
 	var result := FestivalSystem.resolve_championship(candidates, null)
-	assert_eq(result["topic_tier"], 4)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_4)
 
 
 # -- Emperor's Chosen tests ---------------------------------------------------

@@ -708,7 +708,7 @@ func test_naval_battle_generates_topic() -> void:
 	assert_eq(topics[0].variant, "naval_battle")
 	assert_eq(topics[0].tier, TopicData.Tier.TIER_3)
 	assert_eq(topics[0].category, TopicData.Category.MILITARY)
-	assert_eq(topics[0].momentum, 30.0)
+	assert_eq(topics[0].momentum, DayOrchestrator._COMBAT_EVENT_MOMENTUM)
 	assert_eq(next_topic_id[0], 101)
 
 
@@ -915,7 +915,7 @@ func _make_ctx_with_naval(
 		ps.active_insurgency_id = 1
 		ps.insurgency_type = "PIRATE_FLEET"
 		ps.garrison_pu = 2
-		ps.confidence = 1
+		ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_RECENT
 		ctx.province_statuses.append(ps)
 
 	return ctx
@@ -990,7 +990,7 @@ func test_s57_18_1_no_pirate_fleet_gives_patrol_province() -> void:
 	ps.active_insurgency_id = -1
 	ps.insurgency_type = ""
 	ps.garrison_pu = 2
-	ps.confidence = 1
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_RECENT
 	ctx.province_statuses.append(ps)
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer._decompose_protect_dependents(
 		{}, ctx,

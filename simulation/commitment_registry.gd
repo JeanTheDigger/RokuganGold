@@ -10,15 +10,15 @@ class_name CommitmentRegistry
 # =============================================================================
 
 const BROKEN_NO_NOTICE: Dictionary = {
-	3: {"honor": -0.1, "creditor_disp": -3, "witness_disp": 0, "topic_tier": 4},
-	2: {"honor": -0.2, "creditor_disp": -6, "witness_disp": -2, "topic_tier": 3},
-	1: {"honor": -0.5, "creditor_disp": -10, "witness_disp": -5, "topic_tier": 2},
+	3: {"honor": -0.1, "creditor_disp": -3, "witness_disp": 0, "topic_tier": TopicData.Tier.TIER_4},
+	2: {"honor": -0.2, "creditor_disp": -6, "witness_disp": -2, "topic_tier": TopicData.Tier.TIER_3},
+	1: {"honor": -0.5, "creditor_disp": -10, "witness_disp": -5, "topic_tier": TopicData.Tier.TIER_2},
 }
 
 const BROKEN_WITH_NOTICE: Dictionary = {
 	3: {"honor": 0.0, "creditor_disp": -1, "witness_disp": 0, "topic_tier": -1},
 	2: {"honor": -0.1, "creditor_disp": -3, "witness_disp": 0, "topic_tier": -1},
-	1: {"honor": -0.2, "creditor_disp": -5, "witness_disp": -2, "topic_tier": 3},
+	1: {"honor": -0.2, "creditor_disp": -5, "witness_disp": -2, "topic_tier": TopicData.Tier.TIER_3},
 }
 
 const BROKEN_WITH_PROXY: Dictionary = {
@@ -30,7 +30,7 @@ const BROKEN_WITH_PROXY: Dictionary = {
 const BROKEN_FORCE_MAJEURE: Dictionary = {
 	3: {"honor": 0.0, "creditor_disp": -1, "witness_disp": 0, "topic_tier": -1},
 	2: {"honor": -0.1, "creditor_disp": -3, "witness_disp": 0, "topic_tier": -1},
-	1: {"honor": -0.2, "creditor_disp": -5, "witness_disp": -2, "topic_tier": 3},
+	1: {"honor": -0.2, "creditor_disp": -5, "witness_disp": -2, "topic_tier": TopicData.Tier.TIER_3},
 }
 
 
@@ -80,19 +80,12 @@ const FORGIVENESS_RATES_BUSHIDO: Dictionary = {
 	Enums.BushidoVirtue.REI: 0.5,
 	Enums.BushidoVirtue.MEIYO: 0.5,
 	Enums.BushidoVirtue.YU: 0.5,
-	Enums.BushidoVirtue.MAKOTO: 0.5,
-	Enums.BushidoVirtue.NONE: 0.5,
 }
 
 const FORGIVENESS_RATES_SHOURIDO: Dictionary = {
 	Enums.ShouridoVirtue.DOSATSU: 0.5,
 	Enums.ShouridoVirtue.SEIGYO: 0.25,
 	Enums.ShouridoVirtue.KYORYOKU: 0.25,
-	Enums.ShouridoVirtue.KETSUI: 0.5,
-	Enums.ShouridoVirtue.CHISHIKI: 0.5,
-	Enums.ShouridoVirtue.KANPEKI: 0.5,
-	Enums.ShouridoVirtue.ISHI: 0.5,
-	Enums.ShouridoVirtue.NONE: 0.5,
 }
 
 const CHUGI_EXTERNAL_FORGIVENESS: float = 0.25
@@ -254,7 +247,7 @@ static func apply_consequences(
 	var creditor_disp: int = conseq.get("creditor_disp", 0)
 	if creditor_disp != 0:
 		var creditor: L5RCharacterData = characters_by_id.get(commitment.creditor_npc_id)
-		if creditor != null:
+		if creditor != null and not CharacterStats.is_dead(creditor):
 			var old_val: int = creditor.disposition_values.get(debtor.character_id, 0)
 			var new_val: int = clampi(old_val + creditor_disp, -100, 100)
 			creditor.disposition_values[debtor.character_id] = new_val
@@ -276,7 +269,7 @@ static func apply_consequences(
 			if w_id == commitment.creditor_npc_id or w_id == commitment.debtor_npc_id:
 				continue
 			var witness: L5RCharacterData = characters_by_id.get(w_id)
-			if witness == null:
+			if witness == null or CharacterStats.is_dead(witness):
 				continue
 			var old_val: int = witness.disposition_values.get(debtor.character_id, 0)
 			var new_val: int = clampi(old_val + witness_disp, -100, 100)
@@ -326,7 +319,7 @@ static func process_deadlines(
 			continue
 
 		var debtor: L5RCharacterData = debtor_lookup.get(c.debtor_npc_id)
-		if debtor == null:
+		if debtor == null or CharacterStats.is_dead(debtor):
 			continue
 		var conseq: Dictionary = apply_consequences(c, debtor, characters_by_id)
 		results.append({

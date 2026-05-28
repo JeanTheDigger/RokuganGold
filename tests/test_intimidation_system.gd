@@ -108,7 +108,7 @@ func test_public_intimidation_success():
 	var result := IntimidationSystem.resolve_public_intimidation(30, 15, 3.0, 1, [10, 11, 12])
 	# defender_total = 18, tn = 18 + 5 = 23
 	assert_true(result["success"])
-	assert_eq(result["tn_increase"], 15)  # 10 + 5*1
+	assert_eq(result["tn_increase"], IntimidationSystem.PUBLIC_TN_INCREASE_BASE + 5 * 1)
 	assert_eq(result["witnesses"], [10, 11, 12])
 	assert_eq(result["witness_disposition_loss"], -2)
 
@@ -221,5 +221,5 @@ func test_betrayal_topic_generation():
 	var topic := IntimidationSystem.generate_betrayal_topic(42)
 	assert_eq(topic["topic_type"], "betrayal")
 	assert_eq(topic["subject_id"], 42)
-	assert_eq(topic["tier"], 4)
-	assert_eq(topic["category"], "PERSONAL")
+	assert_eq(topic["tier"], TopicData.Tier.TIER_4)
+	assert_eq(topic["category"], TopicData.Category.PERSONAL)

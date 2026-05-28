@@ -208,8 +208,6 @@ const HISTORICAL_EVENTS: Dictionary = {
 	"took_hostage": {"start": -5, "floor": -3, "decay": true},
 	"taken_hostage": {"start": -5, "floor": -3, "decay": true},
 	"hostage_escape": {"start": -15, "floor": -15, "decay": false},
-	"destroyed_harvest": {"start": -20, "floor": -20, "decay": false},
-	"witnessed_harvest_destruction": {"start": -10, "floor": -5, "decay": true},
 }
 
 const FAMILY_BONDS: Dictionary = {
@@ -286,7 +284,10 @@ static func is_temporary_expired(modifier: Dictionary, current_ic_day: int) -> b
 	var duration: int = modifier.get("duration", -1)
 	if duration < 0:
 		return false
-	return (current_ic_day - modifier.get("created_ic_day", 0)) >= duration
+	var created: int = modifier.get("created_ic_day", -1)
+	if created < 0:
+		return false
+	return (current_ic_day - created) >= duration
 
 
 # -- Death of Mutual Friend (Category 2 — dynamic) ---------------------------

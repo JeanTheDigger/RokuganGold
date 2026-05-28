@@ -87,3 +87,20 @@ func get_ic_date_string() -> String:
 
 func get_real_days_elapsed() -> float:
 	return float(current_tick) / float(TICKS_PER_REAL_DAY)
+
+
+const SEASON_BOUNDARIES: Array[int] = [0, 90, 180, 240, 360]
+
+
+static func get_next_season_start(ic_day: int) -> int:
+	var day_of_year: int = ic_day % IC_DAYS_PER_YEAR
+	var year_base: int = ic_day - day_of_year
+	for boundary: int in SEASON_BOUNDARIES:
+		if boundary > day_of_year:
+			return year_base + boundary
+	return year_base + IC_DAYS_PER_YEAR
+
+
+static func get_season_after_next_start(ic_day: int) -> int:
+	var next: int = get_next_season_start(ic_day)
+	return get_next_season_start(next)

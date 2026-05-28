@@ -106,7 +106,7 @@ static func _apply_recipient_effects(
 	if target_id < 0:
 		return
 	var recipient: L5RCharacterData = characters.get(target_id)
-	if recipient == null:
+	if recipient == null or CharacterStats.is_dead(recipient):
 		return
 
 	var disp_change: int = effects.get("recipient_disposition_change", 0)
@@ -163,7 +163,7 @@ static func _apply_witness_effects(
 
 	for wid: int in witness_ids:
 		var witness: L5RCharacterData = characters.get(wid)
-		if witness == null or witness.character_id == actor.character_id:
+		if witness == null or witness.character_id == actor.character_id or CharacterStats.is_dead(witness):
 			continue
 		var old_val: int = witness.disposition_values.get(actor.character_id, 0)
 		var new_val: int = clampi(old_val + disp_loss, -100, 100)
@@ -194,7 +194,7 @@ static func _apply_witness_gain(
 
 	for wid: int in witness_ids:
 		var witness: L5RCharacterData = characters.get(wid)
-		if witness == null or witness.character_id == actor.character_id:
+		if witness == null or witness.character_id == actor.character_id or CharacterStats.is_dead(witness):
 			continue
 		var old_val: int = witness.disposition_values.get(actor.character_id, 0)
 		var new_val: int = clampi(old_val + disp_gain, -100, 100)
@@ -223,7 +223,7 @@ static func _apply_gossip_effects(
 	if subject_id < 0 or disp_change == 0 or listener_id < 0:
 		return
 	var listener: L5RCharacterData = characters.get(listener_id)
-	if listener == null:
+	if listener == null or CharacterStats.is_dead(listener):
 		return
 	var old_val: int = listener.disposition_values.get(subject_id, 0)
 	var new_val: int = clampi(old_val + disp_change, -100, 100)
@@ -261,7 +261,7 @@ static func _apply_target_witness_effects(
 		return
 	for wid: int in witness_ids:
 		var witness: L5RCharacterData = characters.get(wid)
-		if witness == null or witness.character_id == target_id:
+		if witness == null or witness.character_id == target_id or CharacterStats.is_dead(witness):
 			continue
 		var old_val: int = witness.disposition_values.get(target_id, 0)
 		var new_val: int = clampi(old_val + disp_change, -100, 100)
@@ -304,6 +304,8 @@ static func _apply_disposition_ripple(
 		if cid == actor.character_id or cid == target_id:
 			continue
 		var c: L5RCharacterData = characters[cid]
+		if CharacterStats.is_dead(c):
+			continue
 		if c.clan != target_clan:
 			continue
 
@@ -380,7 +382,7 @@ static func _apply_winner_glory(
 		return
 	var winner_id: int = effects.get("winner_glory_recipient_id", -1)
 	var winner: L5RCharacterData = characters.get(winner_id)
-	if winner == null:
+	if winner == null or CharacterStats.is_dead(winner):
 		return
 	var actual: float = HonorGlorySystem.apply_glory_change(winner, winner_glory)
 	applied["glory_changes"].append({

@@ -15,8 +15,7 @@ const COVERT_MEASUREMENT_THRESHOLD: int = 3
 
 const SOCIAL_ACTIONS: Array[String] = [
 	"CHARM", "PERSUADE", "INTIMIDATE", "PUBLIC_INSULT",
-	"DELIVER_GIFT", "GOSSIP", "IMPRESS", "LISTEN_REFLECT",
-	"OFFER_FAVOR", "PERFORM_FOR", "DISCLOSE",
+	"DELIVER_GIFT",
 ]
 
 const COVERT_ACTIONS: Array[String] = [
@@ -106,13 +105,9 @@ enum AssessmentTag {
 
 const ACTION_CEILINGS: Dictionary = {
 	"CHARM": 40,
-	"DELIVER_GIFT": 40,
-	"LISTEN_REFLECT": 40,
-	"OFFER_FAVOR": 40,
-	"PERFORM_FOR": 40,
 }
 
-const MEANINGFUL_PROGRESS_THRESHOLD: int = 3
+const MEANINGFUL_PROGRESS_THRESHOLD: int = 0
 
 
 static func evaluate_approach(

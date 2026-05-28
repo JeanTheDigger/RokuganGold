@@ -40,9 +40,6 @@ const SUSPICION_MINIMUM_RESTORE_TICKS: int = 14
 # Household response thresholds (s12.8):
 # 0-9: no response. 10-19: watchful (+5 passive Investigation).
 # 20-29: bodyguard assigned. 30+: target warned, +10 all Phase 1 TNs.
-# Daily passive detection suspicion (PROVISIONAL — GDD specifies household
-# members detect activity each day but does not give a suspicion increment).
-const SUSPICION_DAILY_DETECTION: int = 3
 
 const SUSPICION_WATCHFUL_THRESHOLD: float = 10.0
 const SUSPICION_BODYGUARD_THRESHOLD: float = 20.0
@@ -53,21 +50,6 @@ const SUSPICION_WATCHFUL_INVESTIGATION_BONUS: int = 5
 # -- Access Phase Constants ----------------------------------------------------
 
 const ACCESS_MIN_DAYS: int = 3
-const ACCESS_FORGE_CREDENTIALS_TN: int = 20
-const ACCESS_BRIBE_TN: int = 15
-const ACCESS_STEALTH_INFILTRATE_TN: int = 20
-const ACCESS_SEDUCTION_TN: int = 15
-
-# Non-shinobi TN increase — characters without shinobi school training
-# get a flat TN increase on all Phase 1 rolls (s12.8 NON-SCORPION ASSASSINS).
-# Value PROVISIONAL pending playtest — GDD specifies "severe disadvantage" and
-# "significantly higher suspicion" but does not give a numeric value.
-const NON_SHINOBI_ACCESS_TN_INCREASE: int = 10
-
-# Non-shinobi detection ease — observers get a bonus when detecting non-shinobi
-# assassins (GDD: "chance of generating detectable suspicion each day is
-# significantly higher"). Reduces the detection TN for observers. PROVISIONAL.
-const NON_SHINOBI_DETECTION_BONUS: int = 5
 
 const _SHINOBI_SCHOOLS: Array[String] = [
 	"Shosuro Infiltrator",
@@ -98,8 +80,7 @@ const EQUIPMENT_BLADE_RANK_REQUIREMENT: int = 5
 # Each failed access roll permanently increases subsequent Phase 1 TNs.
 # Cannot be reduced except by aborting and restarting Phase 1 from scratch.
 # Stacks with lockdown +10 and all other TN modifiers.
-# Values PROVISIONAL — GDD specifies the mechanic exists but does not give
-# numeric penalty amounts. Using suspicion scale pending playtest.
+# Values match GDD s12.8 suspicion accumulation tiers (+5/+10/+15).
 const ACCESS_PENALTY_STANDARD: int = 5
 const ACCESS_PENALTY_NOTABLE: int = 10
 const ACCESS_PENALTY_CRITICAL: int = 15
@@ -110,24 +91,12 @@ const _CONCEAL_SCHOOL_LEAN: Array[String] = [
 ]
 
 # -- Execution Phase Constants -------------------------------------------------
-
-const POISON_STEALTH_TN: int = 15
-const POISON_SLEIGHT_TN: int = 20
-const BLADE_STEALTH_TN: int = 20
-const BLADE_ATTACK_BONUS: int = 10
-const ACCIDENT_ENGINEERING_TN: int = 25
-const ACCIDENT_STEALTH_TN: int = 15
+# REMOVED: All execution phase TNs were invented (not in GDD s12.8).
+# Awaiting GDD specification for Phase 2 TNs.
 
 # -- Concealment Phase Constants -----------------------------------------------
-
-const CONCEAL_POISON_TN: int = 15
-const CONCEAL_BLADE_TN: int = 25
-const CONCEAL_ACCIDENT_TN: int = 20
-
-# Concealment outcome thresholds — PROVISIONAL.
-# Full: beat TN. Partial: missed by < 10 (suspicious but no evidence).
-# Failure: missed by 10+.
-const CONCEALMENT_PARTIAL_THRESHOLD: int = -10
+# REMOVED: All concealment phase TNs were invented (not in GDD s12.8).
+# Awaiting GDD specification for Phase 3 TNs.
 
 # -- PC Safeguard Windows (real days for offline players) ----------------------
 
@@ -142,30 +111,33 @@ const ORDER_HONOR_LOSS_STATUS_MID: float = -3.0
 const ORDER_HONOR_LOSS_STATUS_HIGH: float = -4.0
 const ORDER_HONOR_LOSS_STATUS_ELITE: float = -5.0
 
-# Executing: PROVISIONAL — GDD specifies "Scorpion pay almost nothing,
-# other clans pay steeply" without numeric values.
-const EXECUTE_HONOR_LOSS_SCORPION: float = -0.5
-const EXECUTE_HONOR_LOSS_DEFAULT: float = -3.0
+# REMOVED: Execution honor costs were invented (not in GDD s12.8).
+# GDD says "Scorpion pay almost nothing, other clans pay steeply" but
+# gives no numeric values. Awaiting GDD specification.
 
 
 # ==============================================================================
 # Honor / Infamy Consequences
 # ==============================================================================
 
-static func get_ordering_honor_loss(target_status: float) -> float:
+static func get_ordering_honor_loss(target_status: float, commissioner: L5RCharacterData = null) -> float:
+	var base: float
 	if target_status >= 8.0:
-		return ORDER_HONOR_LOSS_STATUS_ELITE
-	if target_status >= 6.0:
-		return ORDER_HONOR_LOSS_STATUS_HIGH
-	if target_status >= 3.0:
-		return ORDER_HONOR_LOSS_STATUS_MID
-	return ORDER_HONOR_LOSS_STATUS_LOW
+		base = ORDER_HONOR_LOSS_STATUS_ELITE
+	elif target_status >= 6.0:
+		base = ORDER_HONOR_LOSS_STATUS_HIGH
+	elif target_status >= 3.0:
+		base = ORDER_HONOR_LOSS_STATUS_MID
+	else:
+		base = ORDER_HONOR_LOSS_STATUS_LOW
+	if commissioner != null:
+		return CrimeSystem.scale_honor_by_rank(base, commissioner)
+	return base
 
 
-static func get_execution_honor_loss(assassin: L5RCharacterData) -> float:
-	if assassin.clan == "Scorpion":
-		return EXECUTE_HONOR_LOSS_SCORPION
-	return EXECUTE_HONOR_LOSS_DEFAULT
+static func get_execution_honor_loss(_assassin: L5RCharacterData) -> float:
+	# BLOCKED: awaiting GDD TN values for execution honor costs.
+	return 0.0
 
 
 # ==============================================================================
@@ -316,6 +288,8 @@ static func find_best_searcher(
 		if char_id == assassin_id or char_id == target.character_id:
 			continue
 		var c: L5RCharacterData = characters_by_id[char_id]
+		if CharacterStats.is_dead(c):
+			continue
 		if c.physical_location != target.physical_location:
 			continue
 		if c.physical_location == "":
@@ -379,28 +353,13 @@ static func resolve_suspicion_search(
 
 
 static func resolve_daily_detection(
-	observer: L5RCharacterData,
-	assassin_roll_total: int,
-	state: Dictionary,
-	dice_engine: DiceEngine,
-	assassin: L5RCharacterData = null,
+	_observer: L5RCharacterData,
+	_assassin_roll_total: int,
+	_state: Dictionary,
+	_dice_engine: DiceEngine,
+	_assassin: L5RCharacterData = null,
 ) -> Dictionary:
-	var inv_bonus: int = get_household_investigation_bonus(state)
-	if assassin != null and not has_shinobi_training(assassin):
-		inv_bonus += NON_SHINOBI_DETECTION_BONUS
-	var result: Dictionary = SkillResolver.resolve_skill_check(
-		observer, dice_engine, "Investigation", assassin_roll_total,
-		0, "", Enums.Trait.PERCEPTION, inv_bonus,
-	)
-	var noticed: bool = result.get("success", false)
-	if noticed:
-		add_suspicion(state, SUSPICION_DAILY_DETECTION)
-	return {
-		"noticed": noticed,
-		"observer_id": observer.character_id,
-		"roll_total": result.get("total", 0),
-		"detection_tn": assassin_roll_total,
-	}
+	return {"blocked": true, "reason": "awaiting_gdd_tn_values"}
 
 
 static func has_shinobi_training(character: L5RCharacterData) -> bool:
@@ -414,10 +373,9 @@ static func has_shinobi_training(character: L5RCharacterData) -> bool:
 	return false
 
 
-static func get_non_shinobi_tn_modifier(character: L5RCharacterData) -> int:
-	if has_shinobi_training(character):
-		return 0
-	return NON_SHINOBI_ACCESS_TN_INCREASE
+static func get_non_shinobi_tn_modifier(_character: L5RCharacterData) -> int:
+	# BLOCKED: awaiting GDD TN values for non-shinobi access penalty.
+	return 0
 
 
 # PROVISIONAL — GDD s12.8 specifies "target's Status (higher Status = higher
@@ -438,6 +396,8 @@ static func has_seppun_guard_present(
 		return false
 	for char_id: int in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[char_id]
+		if CharacterStats.is_dead(c):
+			continue
 		if c.character_id == target.character_id:
 			continue
 		if c.family == "Seppun" and c.physical_location == target.physical_location:
@@ -536,64 +496,14 @@ static func resolve_equipment_preparation(
 # ==============================================================================
 
 static func resolve_access_day(
-	assassin: L5RCharacterData,
-	state: Dictionary,
-	access_method: String,
-	dice_engine: DiceEngine,
-	target: L5RCharacterData = null,
-	characters_by_id: Dictionary = {},
+	_assassin: L5RCharacterData,
+	_state: Dictionary,
+	_access_method: String,
+	_dice_engine: DiceEngine,
+	_target: L5RCharacterData = null,
+	_characters_by_id: Dictionary = {},
 ) -> Dictionary:
-	state["days_in_access"] = state.get("days_in_access", 0) + 1
-	var susp_mod: int = get_suspicion_tn_modifier(state)
-	var shinobi_mod: int = get_non_shinobi_tn_modifier(assassin)
-	var penalty: int = int(state.get("access_tn_penalty", 0))
-	var seppun_mod: int = 0
-	var status_mod: int = 0
-	if target != null:
-		seppun_mod = get_seppun_tn_modifier(target, AssassinationPhase.ACCESS, characters_by_id)
-		status_mod = get_target_status_tn_modifier(target)
-
-	var extra: int = susp_mod + shinobi_mod + seppun_mod + status_mod + penalty
-	var tn: int = 0
-	var skill: String = ""
-	var trait_override: Enums.Trait = Enums.Trait.NONE
-	match access_method:
-		"forge_credentials":
-			tn = ACCESS_FORGE_CREDENTIALS_TN + extra
-			skill = "Forgery"
-			trait_override = Enums.Trait.INTELLIGENCE
-		"bribe":
-			tn = ACCESS_BRIBE_TN + extra
-			skill = "Courtier"
-		"stealth":
-			tn = ACCESS_STEALTH_INFILTRATE_TN + extra
-			skill = "Stealth"
-		"seduction":
-			tn = ACCESS_SEDUCTION_TN + extra
-			skill = "Temptation"
-		_:
-			return {"success": false, "reason": "invalid_method"}
-
-	var result: Dictionary = SkillResolver.resolve_skill_check(
-		assassin, dice_engine, skill, tn, 0, "", trait_override,
-	)
-	var success: bool = result.get("success", false)
-	var margin: int = result.get("margin", 0)
-
-	if not success:
-		add_suspicion(state, get_suspicion_from_failure(margin))
-		state["access_tn_penalty"] = penalty + get_access_penalty_from_failure(margin)
-
-	return {
-		"success": success,
-		"roll_total": result.get("total", 0),
-		"tn": tn,
-		"margin": margin,
-		"skill": skill,
-		"days_in_access": state["days_in_access"],
-		"suspicion": state["suspicion"],
-		"access_tn_penalty": state["access_tn_penalty"],
-	}
+	return {"blocked": true, "reason": "awaiting_gdd_tn_values"}
 
 
 static func can_advance_to_execution(state: Dictionary) -> bool:
@@ -660,7 +570,7 @@ static func resolve_execution(
 
 	if result.get("success", false):
 		var honor_cost: float = get_execution_honor_loss(assassin)
-		assassin.honor += honor_cost
+		HonorGlorySystem.apply_honor_change(assassin, honor_cost)
 		result["honor_cost"] = honor_cost
 		state["phase"] = AssassinationPhase.CONCEALMENT
 	else:
@@ -671,190 +581,50 @@ static func resolve_execution(
 
 
 static func _execute_poison(
-	assassin: L5RCharacterData,
-	state: Dictionary,
-	susp_mod: int,
-	dice_engine: DiceEngine,
+	_assassin: L5RCharacterData,
+	_state: Dictionary,
+	_susp_mod: int,
+	_dice_engine: DiceEngine,
 ) -> Dictionary:
-	var stealth_tn: int = POISON_STEALTH_TN + susp_mod
-	var stealth_check: Dictionary = SkillResolver.resolve_skill_check(
-		assassin, dice_engine, "Stealth", stealth_tn,
-	)
-	if not stealth_check.get("success", false):
-		return {
-			"success": false,
-			"phase_failed": "stealth",
-			"roll_total": stealth_check.get("total", 0),
-			"tn": stealth_tn,
-			"margin": stealth_check.get("margin", 0),
-			"method": ExecutionMethod.POISON,
-		}
-
-	var soh_tn: int = POISON_SLEIGHT_TN + susp_mod
-	var soh_check: Dictionary = SkillResolver.resolve_skill_check(
-		assassin, dice_engine, "Sleight of Hand", soh_tn,
-	)
-	var success: bool = soh_check.get("success", false)
-
-	return {
-		"success": success,
-		"phase_failed": "" if success else "sleight_of_hand",
-		"stealth_total": stealth_check.get("total", 0),
-		"sleight_total": soh_check.get("total", 0),
-		"tn": soh_tn,
-		"margin": soh_check.get("margin", 0),
-		"method": ExecutionMethod.POISON,
-	}
+	return {"blocked": true, "reason": "awaiting_gdd_tn_values"}
 
 
 static func _execute_blade(
-	assassin: L5RCharacterData,
-	target: L5RCharacterData,
-	state: Dictionary,
-	susp_mod: int,
-	dice_engine: DiceEngine,
+	_assassin: L5RCharacterData,
+	_target: L5RCharacterData,
+	_state: Dictionary,
+	_susp_mod: int,
+	_dice_engine: DiceEngine,
 ) -> Dictionary:
-	var stealth_tn: int = BLADE_STEALTH_TN + susp_mod
-	var stealth_check: Dictionary = SkillResolver.resolve_skill_check(
-		assassin, dice_engine, "Stealth", stealth_tn,
-	)
-	if not stealth_check.get("success", false):
-		return {
-			"success": false,
-			"phase_failed": "stealth",
-			"roll_total": stealth_check.get("total", 0),
-			"tn": stealth_tn,
-			"margin": stealth_check.get("margin", 0),
-			"method": ExecutionMethod.BLADE,
-		}
-
-	var attack_skill: String = "Kenjutsu"
-	if assassin.skills.get("Ninjutsu", 0) > assassin.skills.get("Kenjutsu", 0):
-		attack_skill = "Ninjutsu"
-	var target_tn: int = (target.reflexes * 5 + 5) + target.armor_tn_bonus
-	var attack_check: Dictionary = SkillResolver.resolve_skill_check(
-		assassin, dice_engine, attack_skill, target_tn, 0, "",
-		Enums.Trait.NONE, 0, 0, BLADE_ATTACK_BONUS,
-	)
-	var success: bool = attack_check.get("success", false)
-
-	return {
-		"success": success,
-		"phase_failed": "" if success else "attack",
-		"stealth_total": stealth_check.get("total", 0),
-		"attack_total": attack_check.get("total", 0),
-		"target_tn": target_tn,
-		"margin": attack_check.get("margin", 0),
-		"method": ExecutionMethod.BLADE,
-	}
+	return {"blocked": true, "reason": "awaiting_gdd_tn_values"}
 
 
 static func _execute_accident(
-	assassin: L5RCharacterData,
-	state: Dictionary,
-	susp_mod: int,
-	dice_engine: DiceEngine,
+	_assassin: L5RCharacterData,
+	_state: Dictionary,
+	_susp_mod: int,
+	_dice_engine: DiceEngine,
 ) -> Dictionary:
-	var eng_tn: int = ACCIDENT_ENGINEERING_TN + susp_mod
-	var eng_check: Dictionary = SkillResolver.resolve_skill_check(
-		assassin, dice_engine, "Engineering", eng_tn,
-		0, "", Enums.Trait.INTELLIGENCE,
-	)
-	if not eng_check.get("success", false):
-		return {
-			"success": false,
-			"phase_failed": "engineering",
-			"roll_total": eng_check.get("total", 0),
-			"tn": eng_tn,
-			"margin": eng_check.get("margin", 0),
-			"method": ExecutionMethod.ARRANGED_ACCIDENT,
-		}
-
-	var stealth_tn: int = ACCIDENT_STEALTH_TN + susp_mod
-	var stealth_check: Dictionary = SkillResolver.resolve_skill_check(
-		assassin, dice_engine, "Stealth", stealth_tn,
-	)
-	var success: bool = stealth_check.get("success", false)
-
-	return {
-		"success": success,
-		"phase_failed": "" if success else "stealth",
-		"engineering_total": eng_check.get("total", 0),
-		"stealth_total": stealth_check.get("total", 0),
-		"tn": stealth_tn,
-		"margin": stealth_check.get("margin", 0),
-		"method": ExecutionMethod.ARRANGED_ACCIDENT,
-	}
+	return {"blocked": true, "reason": "awaiting_gdd_tn_values"}
 
 
 # ==============================================================================
 # Phase 3 — Concealment
 # ==============================================================================
 
-static func get_concealment_tn(method: ExecutionMethod) -> int:
-	match method:
-		ExecutionMethod.POISON:
-			return CONCEAL_POISON_TN
-		ExecutionMethod.BLADE:
-			return CONCEAL_BLADE_TN
-		ExecutionMethod.ARRANGED_ACCIDENT:
-			return CONCEAL_ACCIDENT_TN
-		_:
-			return CONCEAL_BLADE_TN
+static func get_concealment_tn(_method: ExecutionMethod) -> int:
+	# BLOCKED: awaiting GDD TN values for concealment phase.
+	return 0
 
 
 static func resolve_concealment(
-	assassin: L5RCharacterData,
-	state: Dictionary,
-	dice_engine: DiceEngine,
-	target: L5RCharacterData = null,
-	characters_by_id: Dictionary = {},
+	_assassin: L5RCharacterData,
+	_state: Dictionary,
+	_dice_engine: DiceEngine,
+	_target: L5RCharacterData = null,
+	_characters_by_id: Dictionary = {},
 ) -> Dictionary:
-	var method: ExecutionMethod = state.get("method", ExecutionMethod.POISON)
-	var tn: int = get_concealment_tn(method)
-	if target != null:
-		tn += get_seppun_tn_modifier(target, AssassinationPhase.CONCEALMENT, characters_by_id)
-
-	var skill: String = ""
-	var trait_override: Enums.Trait = Enums.Trait.NONE
-	match method:
-		ExecutionMethod.POISON:
-			skill = "Medicine"
-			trait_override = Enums.Trait.INTELLIGENCE
-		ExecutionMethod.BLADE:
-			skill = "Stealth"
-		ExecutionMethod.ARRANGED_ACCIDENT:
-			skill = "Engineering"
-			trait_override = Enums.Trait.INTELLIGENCE
-
-	var result: Dictionary = SkillResolver.resolve_skill_check(
-		assassin, dice_engine, skill, tn, 0, "", trait_override,
-	)
-	var success: bool = result.get("success", false)
-	var roll_total: int = result.get("total", 0)
-	var margin: int = result.get("margin", 0)
-
-	var outcome: String = "full"
-	if not success:
-		outcome = "partial" if margin >= CONCEALMENT_PARTIAL_THRESHOLD else "failure"
-
-	var concealment_tn_for_investigators: int = roll_total if outcome != "failure" else 0
-
-	state["concealment_result"] = {
-		"success": success,
-		"concealed": outcome == "full",
-		"outcome": outcome,
-		"roll_total": roll_total,
-		"tn": tn,
-		"margin": margin,
-		"skill": skill,
-		"concealment_tn": concealment_tn_for_investigators,
-		"method": method,
-	}
-
-	state["phase"] = AssassinationPhase.COMPLETE
-
-	return state["concealment_result"]
+	return {"blocked": true, "reason": "awaiting_gdd_tn_values"}
 
 
 # ==============================================================================
@@ -1042,8 +812,10 @@ static func apply_vengeance_consequences(
 		topic.topic_id = next_topic_id[0]
 		next_topic_id[0] += 1
 		topic.topic_type = "betrayal"
+		topic.title = "Betrayal — Assassination Traced to Commissioner"
 		topic.tier = TopicData.Tier.TIER_2
 		topic.category = TopicData.Category.POLITICAL
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.subject_character_id = commissioner_id
 		topic.subject_role = "NEUTRAL"
 		topic.ic_day_created = ic_day

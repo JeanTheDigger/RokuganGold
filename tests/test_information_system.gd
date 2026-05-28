@@ -100,68 +100,20 @@ func test_add_contact_multiple_clans() -> void:
 	assert_eq(_char_a.known_contacts_by_clan.keys().size(), 2)
 
 
-# -- Probe Visibility ----------------------------------------------------------
+# -- Probe Visibility (s15.4) --------------------------------------------------
+# process_probe_result() is now a stub returning empty array.
+# Action log scanning was an invented mechanic (GDD s15.4 Probe only reveals
+# topic positions and court objectives via _process_intelligence_info_writebacks).
 
-func test_probe_discovers_target_actions() -> void:
+func test_probe_returns_empty_array() -> void:
 	var action_log: Array = [
 		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
-		{"character_id": 2, "action_id": "GOSSIP", "target_npc_id": 1, "ic_day": 6, "success": true},
 	]
-	var discovered: Array = InformationSystem.process_probe_result(
-		_char_a, 2, action_log, 1, 3
-	)
-	assert_eq(discovered.size(), 2)
-	assert_eq(_char_a.knowledge_pool.size(), 2)
-
-
-func test_probe_quality_limits_entries() -> void:
-	var action_log: Array = [
-		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
-		{"character_id": 2, "action_id": "GOSSIP", "target_npc_id": 1, "ic_day": 6, "success": true},
-		{"character_id": 2, "action_id": "TRAIN", "target_npc_id": -1, "ic_day": 7, "success": true},
-	]
-	var discovered: Array = InformationSystem.process_probe_result(
-		_char_a, 2, action_log, 1, 1
-	)
-	assert_eq(discovered.size(), 1)
-
-
-func test_probe_returns_most_recent_first() -> void:
-	var action_log: Array = [
-		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
-		{"character_id": 2, "action_id": "GOSSIP", "target_npc_id": 1, "ic_day": 6, "success": true},
-	]
-	var discovered: Array = InformationSystem.process_probe_result(
-		_char_a, 2, action_log, 1, 1
-	)
-	assert_eq(discovered[0].data["action_id"], "GOSSIP")
-
-
-func test_probe_ignores_other_characters() -> void:
-	var action_log: Array = [
-		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
-		{"character_id": 3, "action_id": "TRAIN", "target_npc_id": -1, "ic_day": 6, "success": true},
-	]
-	var discovered: Array = InformationSystem.process_probe_result(
-		_char_a, 2, action_log, 1, 5
-	)
-	assert_eq(discovered.size(), 1)
-
-
-func test_probe_empty_log_returns_nothing() -> void:
-	var action_log: Array = []
 	var discovered: Array = InformationSystem.process_probe_result(
 		_char_a, 2, action_log, 1, 3
 	)
 	assert_eq(discovered.size(), 0)
-
-
-func test_probe_entries_are_intelligence_source() -> void:
-	var action_log: Array = [
-		{"character_id": 2, "action_id": "CHARM", "target_npc_id": 3, "ic_day": 5, "success": true},
-	]
-	InformationSystem.process_probe_result(_char_a, 2, action_log, 1, 3)
-	assert_eq(_char_a.knowledge_pool[0].source, Enums.KnowledgeSource.INTELLIGENCE)
+	assert_eq(_char_a.knowledge_pool.size(), 0)
 
 
 # -- Observe Court Attendees ---------------------------------------------------
@@ -339,10 +291,23 @@ func test_transfer_sets_fresh_confidence() -> void:
 
 
 func test_transfer_copies_clan_contacts() -> void:
+	var contact_5 := L5RCharacterData.new()
+	contact_5.character_id = 5
+	contact_5.clan = "Crab"
+	contact_5.stamina = 2
+	contact_5.willpower = 2
+	var contact_6 := L5RCharacterData.new()
+	contact_6.character_id = 6
+	contact_6.clan = "Crab"
+	contact_6.stamina = 2
+	contact_6.willpower = 2
+	var chars_by_id: Dictionary = {5: contact_5, 6: contact_6}
 	InformationSystem.add_contact(_char_a, 5, "Crab")
 	InformationSystem.add_contact(_char_a, 6, "Crab")
 	var objective: Dictionary = {"target_clan": "Crab"}
-	InformationSystem.transfer_objective_knowledge(_char_a, _char_b, objective, 1)
+	InformationSystem.transfer_objective_knowledge(
+		_char_a, _char_b, objective, 1, [], chars_by_id,
+	)
 	assert_true(5 in _char_b.met_characters)
 	assert_true(6 in _char_b.met_characters)
 
@@ -876,3 +841,71 @@ func test_false_info_replaces_true_info() -> void:
 		"False info should replace true info for same target")
 	assert_true(actor.knowledge_pool[0].data.get("is_false", false),
 		"Entry should now be the false version")
+
+
+# -- Dead character guards (2026-05-23) ----------------------------------------
+
+func test_process_observe_court_skips_dead_attendees() -> void:
+	var observer := L5RCharacterData.new()
+	observer.character_id = 10
+	observer.character_name = "Observer"
+	observer.clan = "Lion"
+	observer.family = "Akodo"
+	observer.met_characters = []
+	observer.knowledge_pool = []
+	observer.known_contacts_by_clan = {}
+	observer.disposition_values = {}
+
+	var alive_attendee := L5RCharacterData.new()
+	alive_attendee.character_id = 20
+	alive_attendee.character_name = "Alive Courtier"
+	alive_attendee.clan = "Crane"
+	alive_attendee.family = "Doji"
+	alive_attendee.status = 4.0
+	alive_attendee.stamina = 2
+	alive_attendee.willpower = 2
+
+	var dead_attendee := L5RCharacterData.new()
+	dead_attendee.character_id = 30
+	dead_attendee.character_name = "Dead Courtier"
+	dead_attendee.clan = "Scorpion"
+	dead_attendee.family = "Bayushi"
+	dead_attendee.status = 5.0
+	dead_attendee.stamina = 2
+	dead_attendee.willpower = 2
+	dead_attendee.wounds_taken = 999
+
+	var attendees: Array = [alive_attendee, dead_attendee]
+	var discovered: Array = InformationSystem.process_observe_court(
+		observer, attendees, 3, 1,
+	)
+	# Only the alive attendee should be discovered
+	var discovered_ids: Array = []
+	for entry: KnowledgeEntry in discovered:
+		discovered_ids.append(entry.data.get("character_id", -1))
+	assert_true(20 in discovered_ids,
+		"Alive attendee should be discovered")
+	assert_false(30 in discovered_ids,
+		"Dead attendee should not be discovered")
+
+
+func test_transfer_objective_knowledge_skips_dead_contacts() -> void:
+	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
+	var dead_contact := L5RCharacterData.new()
+	dead_contact.character_id = 50
+	dead_contact.clan = "Crab"
+	dead_contact.family = "Hida"
+	dead_contact.wounds_taken = 999
+	_char_a.known_contacts_by_clan = {"Crab": [50]}
+	_char_b.met_characters = []
+	_char_b.known_contacts_by_clan = {}
+	_char_b.knowledge_pool = []
+	_char_b.disposition_values = {}
+	var chars_by_id: Dictionary = {50: dead_contact}
+	var objective: Dictionary = {"target_clan": "Crab"}
+	InformationSystem.transfer_objective_knowledge(
+		_char_a, _char_b, objective, 0,
+		[], chars_by_id, baselines["clan"], baselines["family"],
+	)
+	var crab_contacts: Array = _char_b.known_contacts_by_clan.get("Crab", [])
+	assert_false(50 in crab_contacts, "Dead contact should not be transferred")

@@ -206,7 +206,7 @@ static func find_confirming_authority(
 		if _is_dead(c):
 			continue
 		if target_tier == Enums.LordRank.IMPERIAL:
-			if c.status >= 8.0 and (c.role_position == "emperor" or c.clan == "Imperial"):
+			if c.status >= 8.0 and (c.role_position == "Emperor" or c.clan == "Imperial"):
 				if c.status > best_status:
 					best_status = c.status
 					best_id = c.character_id
@@ -532,16 +532,21 @@ static func generate_succession_topic(
 	succession: SuccessionData,
 	is_disputed: bool,
 ) -> Dictionary:
-	var tier: int = 4 if not is_disputed else 2
+	var tier: TopicData.Tier = TopicData.Tier.TIER_4 if not is_disputed else TopicData.Tier.TIER_2
 	var momentum: float = 10.0 if not is_disputed else 50.0
-	var category: String = "POLITICAL"
+	var category: TopicData.Category = TopicData.Category.POLITICAL
 	var slug: String = "succession_%s_%s" % [succession.clan, str(succession.succession_id)]
+
+	var title: String = "%s Succession in %s" % [
+		"Disputed" if is_disputed else "Orderly", succession.clan,
+	]
 
 	return {
 		"tier": tier,
 		"momentum": momentum,
 		"category": category,
 		"slug": slug,
+		"title": title,
 		"subject_ids": [succession.deceased_id],
 		"variant": "disputed" if is_disputed else "clean",
 	}
@@ -655,9 +660,9 @@ static func resolve_shiba_reincarnation(
 		"previous_position_vacated":     had_position,
 		"previous_position_tier":        prev_tier,
 		"topic": {
-			"tier":        3,
+			"tier":        TopicData.Tier.TIER_2,
 			"momentum":    40.0,
-			"category":    "SPIRITUAL",
+			"category":    TopicData.Category.SUPERNATURAL,
 			"slug":        "shiba_reincarnation_%d" % selected.character_id,
 			"subject_ids": [selected.character_id],
 			"variant":     "reincarnation",

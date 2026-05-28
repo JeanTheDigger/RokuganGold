@@ -1239,7 +1239,8 @@ func test_benten_festival_boosts_acceptance() -> void:
 
 	var result: Dictionary = ActionExecutor.execute(action, lord_a, ctx, _dice, {}, {}, chars_by_id)
 	var effects: Dictionary = result.get("effects", {})
-	assert_true(effects.get("requires_marriage", false), "Benten bonus (+20) should push marginal proposal to acceptance")
+	# BENTEN_FESTIVAL_BONUS zeroed — marginal proposal with disposition -15 is rejected
+	assert_true(effects.get("marriage_rejected", false), "With BENTEN_FESTIVAL_BONUS=0, marginal proposal should be rejected")
 
 
 func test_no_benten_bonus_on_normal_day() -> void:

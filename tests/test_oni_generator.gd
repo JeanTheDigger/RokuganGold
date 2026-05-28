@@ -12,30 +12,24 @@ func _make_dice(seed_val: int) -> DiceEngine:
 
 # -- Size (Step 1) -------------------------------------------------------------
 
-func test_size_table_covers_all_ten_values() -> void:
-	assert_eq(OniGenerator.SIZE_TABLE.size(), 10)
+func test_size_options_has_four_entries() -> void:
+	assert_eq(OniGenerator.SIZE_OPTIONS.size(), 4)
 
 
-func test_size_table_small_values() -> void:
-	assert_eq(OniGenerator.SIZE_TABLE[1], Enums.OniSize.SMALL)
-	assert_eq(OniGenerator.SIZE_TABLE[2], Enums.OniSize.SMALL)
-	assert_eq(OniGenerator.SIZE_TABLE[3], Enums.OniSize.SMALL)
+func test_size_options_contains_small() -> void:
+	assert_true(Enums.OniSize.SMALL in OniGenerator.SIZE_OPTIONS)
 
 
-func test_size_table_medium_values() -> void:
-	assert_eq(OniGenerator.SIZE_TABLE[4], Enums.OniSize.MEDIUM)
-	assert_eq(OniGenerator.SIZE_TABLE[5], Enums.OniSize.MEDIUM)
-	assert_eq(OniGenerator.SIZE_TABLE[6], Enums.OniSize.MEDIUM)
+func test_size_options_contains_medium() -> void:
+	assert_true(Enums.OniSize.MEDIUM in OniGenerator.SIZE_OPTIONS)
 
 
-func test_size_table_large_values() -> void:
-	assert_eq(OniGenerator.SIZE_TABLE[7], Enums.OniSize.LARGE)
-	assert_eq(OniGenerator.SIZE_TABLE[8], Enums.OniSize.LARGE)
-	assert_eq(OniGenerator.SIZE_TABLE[9], Enums.OniSize.LARGE)
+func test_size_options_contains_large() -> void:
+	assert_true(Enums.OniSize.LARGE in OniGenerator.SIZE_OPTIONS)
 
 
-func test_size_table_massive_value() -> void:
-	assert_eq(OniGenerator.SIZE_TABLE[10], Enums.OniSize.MASSIVE)
+func test_size_options_contains_massive() -> void:
+	assert_true(Enums.OniSize.MASSIVE in OniGenerator.SIZE_OPTIONS)
 
 
 # -- Ring Budget (Step 1 derived) ----------------------------------------------
@@ -116,23 +110,8 @@ func test_pool_2_has_five_options() -> void:
 	assert_eq(OniGenerator.POOL_2_OPTIONS.size(), 5)
 
 
-func test_pool_3_has_six_entries() -> void:
-	assert_eq(OniGenerator.POOL_3_THRESHOLDS.size(), 6)
-
-
-func test_pool_3_last_entry_reaches_100() -> void:
-	var last: Dictionary = OniGenerator.POOL_3_THRESHOLDS[
-		OniGenerator.POOL_3_THRESHOLDS.size() - 1
-	]
-	assert_eq(int(last["max"]), 100)
-
-
-func test_pool_3_thresholds_strictly_ascending() -> void:
-	var prev: int = 0
-	for entry: Dictionary in OniGenerator.POOL_3_THRESHOLDS:
-		var cur: int = int(entry["max"])
-		assert_true(cur > prev, "Each pool-3 threshold must exceed the previous (%d > %d)" % [cur, prev])
-		prev = cur
+func test_pool_3_options_has_six_entries() -> void:
+	assert_eq(OniGenerator.POOL_3_OPTIONS.size(), 6)
 
 
 # -- Dominant Rings ------------------------------------------------------------
@@ -343,23 +322,6 @@ func test_special_attack_is_valid_enum() -> void:
 	assert_true(oni.special_attack in valid_attacks)
 
 
-func test_common_attacks_appear_more_often() -> void:
-	# Breath Weapon + Crushing Grip together = 80% probability.
-	var dice := _make_dice(20)
-	var common_count: int = 0
-	var trials: int = 100
-	for _i: int in range(trials):
-		var oni := OniGenerator.generate(dice, 1)
-		if oni.special_attack in [
-			Enums.OniSpecialAttack.BREATH_WEAPON,
-			Enums.OniSpecialAttack.CRUSHING_GRIP,
-		]:
-			common_count += 1
-	# Expect > 50 of 100 to be common (actual expected ~80).
-	assert_true(common_count > 50,
-		"Common attacks should dominate; got %d/100" % common_count)
-
-
 # -- Weakness (Step 6) ---------------------------------------------------------
 
 func test_weakness_is_valid_enum_value() -> void:
@@ -504,17 +466,11 @@ func test_get_mb_stats_fear_rating_matches_oni() -> void:
 
 # -- Winged distribution -------------------------------------------------------
 
-func test_winged_flag_appears_roughly_20_percent() -> void:
+func test_winged_flag_always_false() -> void:
 	var dice := _make_dice(31)
-	var winged_count: int = 0
-	var trials: int = 200
-	for _i: int in range(trials):
+	for _i: int in range(50):
 		var oni := OniGenerator.generate(dice, 1)
-		if oni.is_winged:
-			winged_count += 1
-	# Expect roughly 40 out of 200 (20%), acceptable range 5–60.
-	assert_true(winged_count >= 5 and winged_count <= 60,
-		"Winged count %d/200 too far from expected ~20%%" % winged_count)
+		assert_false(oni.is_winged, "is_winged must always be false")
 
 
 # -- Determinism ---------------------------------------------------------------

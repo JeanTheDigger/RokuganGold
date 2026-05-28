@@ -594,3 +594,38 @@ func test_doji_courtier_gains_cadence_on_rank_up_to_r2() -> void:
 	var new_rank: int = CharacterStats.get_insight_rank(c)
 	if new_rank >= 2:
 		assert_true(c.cadence_trained, "Doji Courtier should get cadence_trained on reaching R2")
+
+
+# -- Training Session (s48) ---------------------------------------------------
+
+func test_resolve_training_session_applies_progress() -> void:
+	var sensei: L5RCharacterData = _make_character(1)
+	sensei.skills["Kenjutsu"] = 5
+	var student: L5RCharacterData = _make_character(2)
+	student.skills["Kenjutsu"] = 2
+	var result: Dictionary = NPCAdvancement.resolve_training_session(sensei, student, "Kenjutsu")
+	assert_true(result.get("success", false), "Training should succeed")
+	assert_eq(result.get("student_progress", 0), NPCAdvancement.TRAINING_PROGRESS_SENSEI_2_ABOVE)
+	assert_eq(result.get("sensei_progress", 0), NPCAdvancement.TRAINING_PROGRESS_SENSEI_SELF)
+	assert_eq(result.get("rank_gap", 0), 3)
+
+
+func test_resolve_training_session_1_rank_gap() -> void:
+	var sensei: L5RCharacterData = _make_character(1)
+	sensei.skills["Kenjutsu"] = 3
+	var student: L5RCharacterData = _make_character(2)
+	student.skills["Kenjutsu"] = 2
+	var result: Dictionary = NPCAdvancement.resolve_training_session(sensei, student, "Kenjutsu")
+	assert_true(result.get("success", false))
+	assert_eq(result.get("student_progress", 0), NPCAdvancement.TRAINING_PROGRESS_SENSEI_1_ABOVE)
+	assert_eq(result.get("rank_gap", 0), 1)
+
+
+func test_resolve_training_session_fails_when_sensei_not_higher() -> void:
+	var sensei: L5RCharacterData = _make_character(1)
+	sensei.skills["Kenjutsu"] = 2
+	var student: L5RCharacterData = _make_character(2)
+	student.skills["Kenjutsu"] = 2
+	var result: Dictionary = NPCAdvancement.resolve_training_session(sensei, student, "Kenjutsu")
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "sensei_rank_not_higher")

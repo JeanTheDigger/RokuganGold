@@ -406,3 +406,168 @@ func test_consume_non_reactive_source_no_events_is_noop() -> void:
 	}
 	NPCWaveResolver._consume_reactive_event(decision, ws)
 	assert_eq(ws["pending_events"].size(), 0)
+
+
+# -- Dead Character Filtering --------------------------------------------------
+
+func test_gather_reactive_npcs_skips_dead_characters() -> void:
+	var c1 := _make_char(1, 3.0, 2)
+	var c2 := _make_char(2, 5.0, 2)
+	c2.wounds_taken = 999
+	var ws: Dictionary = {
+		1: {"pending_events": [{"type": "provocation", "source_id": 5}]},
+		2: {"pending_events": [{"type": "provocation", "source_id": 6}]},
+	}
+	var result: Array = NPCWaveResolver._gather_reactive_npcs([c1, c2], ws)
+	assert_eq(result.size(), 1)
+	assert_eq(result[0].character_id, 1)
+
+
+# -- Reactive Event Consumption in Full Execution Path -------------------------
+
+func test_reactive_events_consumed_after_reactive_resolution() -> void:
+	var c := _make_char(1, 3.0, 2)
+	c.action_points_current = 2
+	var ws_inner: Dictionary = _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS)
+	ws_inner["pending_events"] = [{"type": "provocation", "source_id": 5}]
+	var world_states: Dictionary = {1: ws_inner}
+	var objs: Dictionary = {1: {"standing": {"need_type": "REST"}}}
+	var results: Array = NPCWaveResolver._resolve_reactive_events(
+		[c], world_states, objs, _scoring_tables, _filter_data
+	)
+	assert_eq(results.size(), 1)
+	assert_eq(ws_inner["pending_events"].size(), 0,
+		"Reactive event should be consumed after reactive resolution")
+
+
+# -- Civilian Order Metadata ---------------------------------------------------
+
+func test_civilian_order_includes_metadata() -> void:
+	var c := _make_char(1, 6.0, 3)
+	c.civilian_orders_remaining = 5
+	c.civilian_order_budget_max = 5
+	c.action_points_current = 2
+	var ws: Dictionary = _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS, true)
+	ws["province_statuses"] = []
+	var scoring: Dictionary = _scoring_tables.duplicate(true)
+	scoring["objective_alignment"]["REST"]["ASSIGN_VASSAL_OBJECTIVE"] = 90
+	scoring["objective_alignment"]["REST"]["SET_TAX_RATE"] = 70
+	var objs: Dictionary = {"standing": {"need_type": "REST"}}
+	var result: Dictionary = NPCWaveResolver._resolve_civilian_order(
+		c, ws, objs, scoring, _filter_data
+	)
+	if result.get("success", false) and result.get("action_id", "") == "ASSIGN_VASSAL_OBJECTIVE":
+		assert_true(result.has("metadata"),
+			"Civilian order result should include metadata when action has it")
+
+
+# -- Civilian Order with chars_by_id -------------------------------------------
+
+func test_civilian_order_accepts_characters_by_id() -> void:
+	var c := _make_char(1, 6.0, 3)
+	c.civilian_orders_remaining = 5
+	c.civilian_order_budget_max = 5
+	c.action_points_current = 2
+	c.clan = "Crane"
+	var ws: Dictionary = _make_world_state(Enums.ContextFlag.AT_OWN_HOLDINGS, true)
+	ws["province_statuses"] = []
+	var chars_by_id: Dictionary = {1: c}
+	var objs: Dictionary = {"standing": {"need_type": "REST"}}
+	var result: Dictionary = NPCWaveResolver._resolve_civilian_order(
+		c, ws, objs, _scoring_tables, _filter_data,
+		[], [], 0, chars_by_id
+	)
+	assert_true(result.is_empty() or result.has("success"),
+		"Civilian order should accept chars_by_id without error")
+
+
+func test_dead_character_with_ap_excluded_from_active() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.character_name = "Dead Mid-Day"
+	c.action_points_current = 2
+	c.wounds_taken = 999
+	c.stamina = 2
+	c.skills = {}
+	c.emphases = {}
+	var active: Array = NPCWaveResolver._get_active_characters([c])
+	assert_true(active.is_empty(), "Dead character with AP should be excluded")
+	var max_ap: int = NPCWaveResolver._get_max_ap([c])
+	assert_eq(max_ap, 0, "Dead character should not inflate max AP")
+
+
+func test_append_to_action_log_populates_ws() -> void:
+	var ws: Dictionary = {}
+	var decision: Dictionary = {"action_id": "CHARM", "success": true}
+	NPCWaveResolver._append_to_action_log(ws, decision)
+	assert_true(ws.has("action_log"), "Should create action_log key")
+	assert_eq(ws["action_log"].size(), 1, "Should have one entry")
+	assert_eq(ws["action_log"][0]["action_id"], "CHARM")
+
+
+func test_append_to_action_log_accumulates() -> void:
+	var ws: Dictionary = {"action_log": [{"action_id": "GOSSIP", "success": true}]}
+	var decision: Dictionary = {"action_id": "CHARM", "success": true}
+	NPCWaveResolver._append_to_action_log(ws, decision)
+	assert_eq(ws["action_log"].size(), 2, "Should accumulate entries")
+
+
+func test_append_to_action_log_skips_empty_action_id() -> void:
+	var ws: Dictionary = {}
+	var decision: Dictionary = {"success": false}
+	NPCWaveResolver._append_to_action_log(ws, decision)
+	assert_false(ws.has("action_log"), "Should not create log for empty action_id")
+
+
+# -- Court batching tests (wave resolver audit 2026-05-25) -------------------
+
+func test_court_partitioning_groups_by_court_id() -> void:
+	var c1 := _make_char(1, 5.0, 3)
+	var c2 := _make_char(2, 4.0, 3)
+	var c3 := _make_char(3, 3.0, 3)
+	var world_states: Dictionary = {
+		1: {"context_flag": Enums.ContextFlag.AT_COURT, "court_id": 10},
+		2: {"context_flag": Enums.ContextFlag.AT_COURT, "court_id": 10},
+		3: {"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS},
+	}
+	var sorted: Array = [c1, c2, c3]
+	var court_groups: Dictionary = {}
+	var non_court: Array = []
+	NPCWaveResolver._partition_by_court(sorted, world_states, court_groups, non_court)
+	assert_eq(court_groups.size(), 1, "Should have one court group")
+	assert_true(court_groups.has(10), "Group keyed by int court_id")
+	assert_eq(court_groups[10].size(), 2, "Two NPCs in court group")
+	assert_eq(non_court.size(), 1, "One NPC not at court")
+
+
+func test_court_partitioning_no_court_id_goes_to_non_court() -> void:
+	var c1 := _make_char(1, 5.0, 3)
+	var world_states: Dictionary = {
+		1: {"context_flag": Enums.ContextFlag.AT_COURT},
+	}
+	var sorted: Array = [c1]
+	var court_groups: Dictionary = {}
+	var non_court: Array = []
+	NPCWaveResolver._partition_by_court(sorted, world_states, court_groups, non_court)
+	assert_eq(court_groups.size(), 0, "No court group without court_id")
+	assert_eq(non_court.size(), 1, "NPC goes to non_court without court_id")
+
+
+# -- Reactive_type event consumption tests ------------------------------------
+
+func test_consume_reactive_event_preserves_reactive_type_events() -> void:
+	var ws: Dictionary = {
+		"pending_events": [{"reactive_type": "DUEL_CHALLENGE_RECEIVED", "challenger_id": 5}],
+	}
+	var decision: Dictionary = {"action_id": "CHARM", "success": true, "need_source": "primary_objective"}
+	NPCWaveResolver._consume_reactive_event(decision, ws)
+	assert_eq(ws["pending_events"].size(), 1, "reactive_type event should not be discarded by AP wave")
+
+
+func test_consume_reactive_event_discards_unprocessable_non_reactive() -> void:
+	var ws: Dictionary = {
+		"pending_events": [{"type": "unknown_event"}],
+	}
+	var decision: Dictionary = {"action_id": "CHARM", "success": true, "need_source": "primary_objective"}
+	NPCWaveResolver._consume_reactive_event(decision, ws)
+	assert_eq(ws["pending_events"].size(), 0, "Non-reactive unknown event should be discarded")

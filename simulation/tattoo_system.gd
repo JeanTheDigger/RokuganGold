@@ -501,7 +501,6 @@ static func is_commission_expired(window_start_day: int, current_day: int, days_
 # 57.25.8 — World Generation Helpers
 # =============================================================================
 
-const CRAB_MANTIS_TATTOO_CHANCE_MIN: float = 0.4
 const CRAB_MANTIS_TATTOO_CHANCE_MAX: float = 0.6
 const DAIDOJI_WRIST_TATTOO_CHANCE: float = 0.5
 

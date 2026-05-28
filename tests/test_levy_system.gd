@@ -136,21 +136,21 @@ func test_no_suspicion_under_threshold() -> void:
 func test_suspicion_at_threshold() -> void:
 	var r: Dictionary = LevySystem.check_suspicion(1, false)
 	assert_true(r["suspicion"])
-	assert_eq(r["topic_tier"], 4)
+	assert_eq(r["topic_tier"], TopicData.Tier.TIER_4)
 	assert_false(r["escalated"])
 
 
 func test_suspicion_two_seasons() -> void:
 	var r: Dictionary = LevySystem.check_suspicion(2, false)
 	assert_true(r["suspicion"])
-	assert_eq(r["topic_tier"], 4)
+	assert_eq(r["topic_tier"], TopicData.Tier.TIER_4)
 	assert_eq(r["disposition_loss_lord"], -10)
 
 
 func test_suspicion_escalates_at_three() -> void:
 	var r: Dictionary = LevySystem.check_suspicion(3, false)
 	assert_true(r["suspicion"])
-	assert_eq(r["topic_tier"], 3)
+	assert_eq(r["topic_tier"], TopicData.Tier.TIER_3)
 	assert_true(r["escalated"])
 	assert_eq(r["disposition_loss_lord"], -15)
 

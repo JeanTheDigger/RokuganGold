@@ -18,20 +18,15 @@ const RESOLUTION_NAMES: Dictionary = {
 	ResolutionType.ANNIHILATION: "annihilation",
 }
 
-# Peace willingness threshold — at or above this value the lord accepts terms.
-const PEACE_ACCEPTANCE_THRESHOLD: int = 50
+# GDD s53: "There is no score at which peace is automatic."
+# No invented numeric thresholds — peace willingness is qualitative.
 
-# Disposition penalty toward the enemy when war ends with ceded territory.
-const CEDE_TERRITORY_DISPOSITION: int = -15
-
-# Honor cost for the surrendering side's lord.
-const SURRENDER_HONOR_COST: float = -1.0
-
-# Honor gain for negotiating peace (both sides, negotiated settlement only).
-const PEACE_NEGOTIATION_HONOR: float = 0.1
-
-# Stability bonus to all involved provinces when war ends.
-const PEACE_STABILITY_BONUS: int = 3
+# Disposition, honor, and stability constants below are structural placeholders
+# returning 0 until GDD specifies numeric values.
+const CEDE_TERRITORY_DISPOSITION: int = 0
+const SURRENDER_HONOR_COST: float = 0.0
+const PEACE_NEGOTIATION_HONOR: float = 0.0
+const PEACE_STABILITY_BONUS: int = 0
 
 # War score thresholds for term severity.
 const DOMINANT_THRESHOLD: int = 80
@@ -104,14 +99,14 @@ static func evaluate_peace_acceptance(
 	superior_pressuring: bool,
 ) -> Dictionary:
 	## Evaluate whether the receiving clan's lord would accept the proposed
-	## peace terms. Uses WarSystem.compute_peace_willingness() internally.
-	## Returns {accepted, willingness, threshold, reason}.
+	## peace terms. Uses qualitative factors per GDD s53.
+	## Returns {accepted, factors, reason}.
 	var side: String = WarSystem.get_clan_side(war, receiving_clan)
 	var score: int = _get_score_for_side(war, side)
 
 	var cede_territory: bool = terms.get("territory_demand", false)
 
-	var willingness: int = WarSystem.compute_peace_willingness(
+	var factors: Dictionary = WarSystem.compute_peace_willingness(
 		score,
 		cede_territory,
 		hostage_held,
@@ -119,21 +114,20 @@ static func evaluate_peace_acceptance(
 		receiving_virtue,
 	)
 
-	var accepted: bool = willingness >= PEACE_ACCEPTANCE_THRESHOLD
+	var increases: Array = factors.get("increases", [])
+	var decreases: Array = factors.get("decreases", [])
+	var accepted: bool = increases.size() > decreases.size()
 	var reason: String = ""
 	if accepted:
-		reason = "willingness_met"
-	elif willingness >= 40:
-		reason = "close_but_rejected"
+		reason = "factors_favor_peace"
 	elif score >= WINNING_THRESHOLD:
 		reason = "winning_refuses"
 	else:
-		reason = "insufficient_willingness"
+		reason = "factors_oppose_peace"
 
 	return {
 		"accepted": accepted,
-		"willingness": willingness,
-		"threshold": PEACE_ACCEPTANCE_THRESHOLD,
+		"factors": factors,
 		"reason": reason,
 		"war_score": score,
 	}
@@ -432,8 +426,8 @@ static func conclude_peace_court(
 		false,
 	)
 
-	var boosted_willingness: int = acceptance.get("willingness", 0) + receiving_modifier
-	var accepted: bool = boosted_willingness >= PEACE_ACCEPTANCE_THRESHOLD
+	var base_accepted: bool = acceptance.get("accepted", false)
+	var accepted: bool = base_accepted or receiving_modifier > 0
 
 	var close_result: Dictionary = CourtSystem.close_court(court)
 
@@ -441,15 +435,13 @@ static func conclude_peace_court(
 		return {
 			"concluded": true,
 			"accepted_by_both": false,
-			"willingness": boosted_willingness,
-			"threshold": PEACE_ACCEPTANCE_THRESHOLD,
+			"factors": acceptance.get("factors", {}),
 			"war_id": war.war_id,
 			"close_result": close_result,
 		}
 
 	var resolution: Dictionary = resolve_negotiated_settlement(war, terms)
 	resolution["peace_court_id"] = court.court_id
-	resolution["willingness"] = boosted_willingness
 
 	return {
 		"concluded": true,
@@ -461,15 +453,7 @@ static func conclude_peace_court(
 
 
 static func _estimate_lord_rank(status: float) -> Enums.LordRank:
-	if status >= 6.0:
-		return Enums.LordRank.CLAN_CHAMPION
-	elif status >= 4.0:
-		return Enums.LordRank.FAMILY_DAIMYO
-	elif status >= 2.0:
-		return Enums.LordRank.PROVINCIAL_DAIMYO
-	elif status >= 1.0:
-		return Enums.LordRank.CITY_DAIMYO
-	return Enums.LordRank.VILLAGE_HEADMAN
+	return CivilianOrderBudget.lord_rank_from_status(status)
 
 
 # -- Generate War End Topic ----------------------------------------------------
@@ -492,18 +476,18 @@ static func generate_war_end_topic(
 
 	match res_type:
 		"formal_surrender":
-			topic.momentum = 60.0
+			topic.title = "War Ends — %s Surrenders" % resolution.get("loser_clan", "Unknown")
 			topic.tier = TopicData.Tier.TIER_2
 			topic.clan_involved = resolution.get("loser_clan", "")
 			topic.subject_role = "VICTIM"
 		"negotiated_settlement":
-			topic.momentum = 40.0
+			topic.title = "War Ends — Negotiated Settlement"
 			topic.tier = TopicData.Tier.TIER_3
 		"imperial_edict":
-			topic.momentum = 70.0
+			topic.title = "War Ends — Imperial Edict"
 			topic.tier = TopicData.Tier.TIER_2
 		"annihilation":
-			topic.momentum = 80.0
+			topic.title = "War Ends — %s Annihilated" % resolution.get("annihilated_clan", "Unknown")
 			topic.tier = TopicData.Tier.TIER_1
 			topic.clan_involved = resolution.get("annihilated_clan", "")
 			topic.subject_role = "VICTIM"

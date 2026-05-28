@@ -258,7 +258,7 @@ static func seed_first_meeting(
 	if actor.disposition_values.has(target.character_id):
 		return actor.disposition_values[target.character_id]
 	var seed_val: int = compute_seed_disposition(actor, target, clan_baselines, family_baselines)
-	actor.disposition_values[target.character_id] = seed_val
+	actor.disposition_values[target.character_id] = clampi(seed_val, -100, 100)
 	return seed_val
 
 

@@ -188,7 +188,7 @@ func test_perform_for_success_strong_disposition() -> void:
 
 	if result["outcome"] == PerformativeArtsSystem.PerformanceOutcome.SUCCESS or \
 	   result["outcome"] == PerformativeArtsSystem.PerformanceOutcome.MASTERFUL:
-		assert_gte(result["disposition_change"], 3)
+		assert_gte(result["disposition_change"], PerformativeArtsSystem.PERFORM_FOR_SUCCESS_DISPOSITION)
 		assert_eq(result["recipient_id"], 10)
 
 
@@ -202,7 +202,7 @@ func test_perform_for_failure_small_loss() -> void:
 		performer, recipient, PerformativeArtsSystem.ArtForm.POETRY, dice)
 
 	if result["outcome"] == PerformativeArtsSystem.PerformanceOutcome.FAILURE:
-		assert_eq(result["disposition_change"], -1)
+		assert_eq(result["disposition_change"], PerformativeArtsSystem.PERFORM_FOR_FAILURE_DISPOSITION)
 
 
 func test_perform_for_no_critical_failure() -> void:
@@ -352,12 +352,12 @@ func test_critical_failure_margin_is_minus_10() -> void:
 	assert_eq(PerformativeArtsSystem.CRITICAL_FAILURE_MARGIN, -10)
 
 
-func test_perform_for_success_disp_is_3() -> void:
-	assert_eq(PerformativeArtsSystem.PERFORM_FOR_SUCCESS_DISPOSITION, 3)
+func test_perform_for_success_disp_zeroed() -> void:
+	assert_eq(PerformativeArtsSystem.PERFORM_FOR_SUCCESS_DISPOSITION, 0)
 
 
-func test_perform_for_failure_disp_is_minus_1() -> void:
-	assert_eq(PerformativeArtsSystem.PERFORM_FOR_FAILURE_DISPOSITION, -1)
+func test_perform_for_failure_disp_zeroed() -> void:
+	assert_eq(PerformativeArtsSystem.PERFORM_FOR_FAILURE_DISPOSITION, 0)
 
 
 # ==============================================================================

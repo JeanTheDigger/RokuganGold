@@ -345,7 +345,7 @@ func test_uphold_law_idle_investigates_after_interval():
 	assert_eq(need.need_type, "INVESTIGATE_THREAT")
 
 
-# -- Evidence-Aware Scoring Tests ----------------------------------------------
+# -- Priority-Ordered Selection Tests ------------------------------------------
 
 func test_scoring_witness_prioritized_over_suspect():
 	var ctx := _make_ctx("zone_a", [200, 300])
@@ -384,7 +384,8 @@ func test_scoring_suspect_chosen_when_no_witnesses():
 	assert_eq(need.target_npc_id, 300)
 
 
-func test_scoring_reexamine_scene_low_evidence():
+func test_scoring_reexamine_scene_disabled():
+	# Reexamination scoring removed (invented caps). Falls through to close.
 	var ctx := _make_ctx("zone_a")
 	var obj := _make_objective({
 		"scene_examined": true,
@@ -394,8 +395,8 @@ func test_scoring_reexamine_scene_low_evidence():
 	})
 	ctx.ic_day = 10
 	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
-	assert_eq(need.need_type, "INVESTIGATE_THREAT")
-	assert_eq(need.target_intent, "zone_a")
+	assert_eq(need.need_type, "REST")
+	assert_eq(need.source, "INVESTIGATE_CRIME_CLOSED")
 
 
 func test_scoring_no_reexamine_at_max_count():
@@ -440,19 +441,20 @@ func test_scoring_no_reexamine_scene_too_old():
 	assert_eq(need.source, "INVESTIGATE_CRIME_CLOSED")
 
 
-func test_scoring_lead_with_high_priority_beats_alibi():
+func test_alibi_prioritized_over_lead():
+	# GDD s57.16 phase ordering: alibis (Phase 5) before leads (Phase 6)
 	var ctx := _make_ctx("zone_a")
 	var obj := _make_objective({
 		"scene_examined": true,
 		"known_suspects": [300],
 		"interviewed_suspects": [300],
 		"alibis": [{"id": 1, "claimed_with": 400}],
-		"unresolved_leads": [{"type": "witness", "target_npc_id": 500, "priority": 5}],
-		"npc_locations": {400: "zone_b", 500: "zone_a"},
+		"unresolved_leads": [{"type": "witness", "target_npc_id": 500}],
+		"npc_locations": {400: "zone_a", 500: "zone_a"},
 	})
 	var need: NPCDataStructures.ImmediateNeed = InvestigationDecomposer.decompose(obj, ctx)
 	assert_eq(need.need_type, "GATHER_INTELLIGENCE")
-	assert_eq(need.target_npc_id, 500)
+	assert_eq(need.target_npc_id, 400)
 
 
 func test_scoring_evidence_gap_bonus_for_witnesses():

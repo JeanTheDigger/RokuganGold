@@ -772,3 +772,156 @@ func test_sumai_unskilled_no_explode() -> void:
 	assert_true(result.has("wrestler1_roll"))
 	assert_true(result.has("wrestler2_roll"))
 	assert_true(result.has("bout_over"))
+
+
+# -- Iaijutsu Stare-Down (s4.8) -----------------------------------------------
+
+func test_iaijutsu_stare_down_sets_penalty_id() -> void:
+	_char_a.skills = {"Intimidation": 5, "Iaijutsu": 3}
+	_char_b.skills = {"Intimidation": 0, "Iaijutsu": 3}
+	_char_a.willpower = 5
+	_char_b.willpower = 1
+	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(
+		_char_a.character_id, _char_b.character_id
+	)
+	_dice.set_seed(42)
+	var result: Dictionary = IndividualCombat.resolve_iaijutsu_stare_down(
+		_char_a, _char_b, duel, _dice
+	)
+	assert_true(result["attempted"])
+	if result["resolved"]:
+		assert_true(duel.stare_down_penalty_id >= 0)
+
+
+func test_stare_down_penalty_reduces_assessment_dice() -> void:
+	_char_a.skills = {"Intimidation": 0, "Iaijutsu": 3}
+	_char_b.skills = {"Intimidation": 0, "Iaijutsu": 3}
+	_char_a.awareness = 3
+	_char_b.awareness = 3
+	_char_a.willpower = 3
+	_char_b.willpower = 3
+	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(
+		_char_a.character_id, _char_b.character_id
+	)
+	duel.stare_down_penalty_id = _char_b.character_id
+	var totals_with_penalty: Array = []
+	var totals_without_penalty: Array = []
+	for seed_val: int in range(100):
+		_dice.set_seed(seed_val)
+		var duel_pen: IndividualCombat.DuelState = IndividualCombat.create_duel(
+			_char_a.character_id, _char_b.character_id
+		)
+		duel_pen.stare_down_penalty_id = _char_b.character_id
+		var r_pen: Dictionary = IndividualCombat.resolve_duel_assessment(
+			_char_a, _char_b, duel_pen, _dice
+		)
+		totals_with_penalty.append(r_pen["defender_roll"])
+
+		_dice.set_seed(seed_val)
+		var duel_no: IndividualCombat.DuelState = IndividualCombat.create_duel(
+			_char_a.character_id, _char_b.character_id
+		)
+		var r_no: Dictionary = IndividualCombat.resolve_duel_assessment(
+			_char_a, _char_b, duel_no, _dice
+		)
+		totals_without_penalty.append(r_no["defender_roll"])
+	var avg_pen: float = 0.0
+	var avg_no: float = 0.0
+	for i: int in range(100):
+		avg_pen += totals_with_penalty[i]
+		avg_no += totals_without_penalty[i]
+	avg_pen /= 100.0
+	avg_no /= 100.0
+	assert_true(avg_pen < avg_no, "Stare-down penalty should reduce average Assessment roll")
+
+
+# -- Assessment Concession (s4.8) ----------------------------------------------
+
+func test_concede_at_assessment_ends_duel() -> void:
+	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(
+		_char_a.character_id, _char_b.character_id, false
+	)
+	var result: Dictionary = IndividualCombat.concede_at_assessment(
+		_char_b.character_id, duel
+	)
+	assert_true(result["conceded"])
+	assert_eq(result["conceder_id"], _char_b.character_id)
+	assert_eq(duel.winner_id, _char_a.character_id)
+	assert_eq(duel.loser_id, _char_b.character_id)
+	assert_true(duel.is_over)
+	assert_eq(result["honor_change"], 0.0)
+	assert_eq(result["glory_change"], 0.0)
+
+
+func test_concede_death_duel_no_glory_cost() -> void:
+	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(
+		_char_a.character_id, _char_b.character_id, true
+	)
+	var result: Dictionary = IndividualCombat.concede_at_assessment(
+		_char_b.character_id, duel
+	)
+	assert_true(result["conceded"])
+	assert_eq(result["glory_change"], 0.0, "Glory cost blocked — GDD Table 2.3 not yet specified")
+	assert_eq(result["honor_change"], 0.0)
+
+
+# -- First Blood / Striking After First Blood (s4.8) --------------------------
+
+func test_first_blood_duel_stops_second_attack() -> void:
+	var first: L5RCharacterData = _make_char(10, 2, 2, 2, 2, 5, 2, 4, 2)
+	var second: L5RCharacterData = _make_char(11, 2, 2, 2, 2, 2, 2, 2, 2)
+	first.skills = {"Iaijutsu": 5}
+	second.skills = {"Iaijutsu": 3}
+	first.void_ring = 3
+	second.void_ring = 2
+	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(10, 11, false)
+	duel.simultaneous = false
+	duel.first_striker_id = 10
+	duel.free_raises_first = 2
+	var first_p := IndividualCombat.Participant.new()
+	first_p.character_id = 10
+	first_p.stance = Enums.Stance.CENTER
+	var second_p := IndividualCombat.Participant.new()
+	second_p.character_id = 11
+	second_p.stance = Enums.Stance.CENTER
+	var any_first_blood_stopped: bool = false
+	for seed_val: int in range(50):
+		second.wounds_taken = 0
+		first.wounds_taken = 0
+		duel.is_over = false
+		duel.winner_id = -1
+		duel.loser_id = -1
+		duel.simultaneous = false
+		duel.first_striker_id = 10
+		duel.free_raises_first = 2
+		_dice.set_seed(seed_val)
+		var strike: Dictionary = IndividualCombat.resolve_duel_strike(
+			first, first_p, second, second_p, duel, _dice
+		)
+		if strike.get("first_blood_drawn", false):
+			assert_true(strike["second_attack"].is_empty(),
+				"Second attack should not resolve after first blood")
+			any_first_blood_stopped = true
+	assert_true(any_first_blood_stopped, "At least one seed should produce first blood")
+
+
+func test_strike_after_first_blood_returns_honor_penalty() -> void:
+	var first: L5RCharacterData = _make_char(10, 2, 2, 2, 2, 5, 2, 4, 2)
+	var second: L5RCharacterData = _make_char(11, 2, 2, 2, 2, 2, 2, 2, 2)
+	first.skills = {"Iaijutsu": 3}
+	second.skills = {"Iaijutsu": 3}
+	first.void_ring = 3
+	second.void_ring = 2
+	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(10, 11, false)
+	var first_p := IndividualCombat.Participant.new()
+	first_p.character_id = 10
+	first_p.stance = Enums.Stance.CENTER
+	var second_p := IndividualCombat.Participant.new()
+	second_p.character_id = 11
+	second_p.stance = Enums.Stance.CENTER
+	var result: Dictionary = IndividualCombat.resolve_strike_after_first_blood(
+		second, second_p, first, first_p, duel, _dice
+	)
+	assert_true(result["struck_after_first_blood"])
+	assert_eq(result["honor_change"], 0.0, "Honor cost blocked — GDD Table 2.3 not yet specified")
+	assert_true(duel.struck_after_first_blood)

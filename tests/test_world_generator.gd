@@ -524,15 +524,21 @@ func test_same_seed_produces_same_province() -> void:
 func test_all_schools_generate_valid_characters() -> void:
 	var schools: Array = [
 		"Hida Bushi", "Hiruma Bushi", "Kaiu Engineer", "Kuni Shugenja",
-		"Yasuki Courtier", "Kakita Bushi", "Daidoji Iron Warrior",
+		"Yasuki Courtier", "Toritaka Bushi",
+		"Kakita Bushi", "Daidoji Iron Warrior",
 		"Doji Courtier", "Asahina Shugenja", "Mirumoto Bushi",
-		"Kitsuki Investigator", "Tamori Shugenja", "Akodo Bushi",
-		"Matsu Berserker", "Ikoma Bard", "Kitsu Shugenja", "Shiba Bushi",
-		"Isawa Shugenja", "Asako Loremaster", "Bayushi Bushi",
-		"Bayushi Courtier", "Soshi Shugenja", "Shosuro Infiltrator",
+		"Kitsuki Investigator", "Tamori Shugenja", "Togashi Tattooed Order",
+		"Akodo Bushi", "Matsu Berserker", "Ikoma Bard", "Kitsu Shugenja",
+		"Shiba Bushi", "Isawa Shugenja", "Asako Loremaster", "Agasha Shugenja",
+		"Bayushi Bushi", "Bayushi Courtier", "Soshi Shugenja",
+		"Shosuro Infiltrator", "Yogo Wardmaster",
 		"Shinjo Bushi", "Moto Bushi", "Ide Emissary",
 		"Iuchi Shugenja", "Utaku Battle Maiden",
 		"Yoritomo Bushi", "Moshi Shugenja", "Tsuruchi Archer",
+		"Ichiro Bushi", "Tonbo Shugenja", "Kitsune Shugenja",
+		"Usagi Bushi", "Toku Bushi", "Morito Bushi",
+		"Suzume Bushi", "Kasuga Smuggler",
+		"Otomo Courtier", "Seppun Guardsman", "Miya Herald",
 	]
 	for i: int in range(schools.size()):
 		_dice.set_seed(i)
@@ -639,6 +645,30 @@ func test_mantis_schools_in_school_data() -> void:
 	assert_eq(WorldGenerator.SCHOOL_DATA["Yoritomo Bushi"]["clan"], "Mantis")
 	assert_eq(WorldGenerator.SCHOOL_DATA["Moshi Shugenja"]["type"], Enums.SchoolType.SHUGENJA)
 	assert_eq(WorldGenerator.SCHOOL_DATA["Tsuruchi Archer"]["type"], Enums.SchoolType.BUSHI)
+
+
+func test_minor_clan_schools_in_school_data() -> void:
+	assert_true(WorldGenerator.SCHOOL_DATA.has("Ichiro Bushi"))
+	assert_true(WorldGenerator.SCHOOL_DATA.has("Tonbo Shugenja"))
+	assert_true(WorldGenerator.SCHOOL_DATA.has("Kitsune Shugenja"))
+	assert_true(WorldGenerator.SCHOOL_DATA.has("Usagi Bushi"))
+	assert_true(WorldGenerator.SCHOOL_DATA.has("Toku Bushi"))
+	assert_true(WorldGenerator.SCHOOL_DATA.has("Morito Bushi"))
+	assert_true(WorldGenerator.SCHOOL_DATA.has("Suzume Bushi"))
+	assert_true(WorldGenerator.SCHOOL_DATA.has("Kasuga Smuggler"))
+	assert_eq(WorldGenerator.SCHOOL_DATA["Ichiro Bushi"]["clan"], "Badger")
+	assert_eq(WorldGenerator.SCHOOL_DATA["Tonbo Shugenja"]["clan"], "Dragonfly")
+	assert_eq(WorldGenerator.SCHOOL_DATA["Kitsune Shugenja"]["type"], Enums.SchoolType.SHUGENJA)
+	assert_eq(WorldGenerator.SCHOOL_DATA["Kasuga Smuggler"]["type"], Enums.SchoolType.COURTIER)
+
+
+func test_imperial_schools_in_school_data() -> void:
+	assert_true(WorldGenerator.SCHOOL_DATA.has("Otomo Courtier"))
+	assert_true(WorldGenerator.SCHOOL_DATA.has("Seppun Guardsman"))
+	assert_true(WorldGenerator.SCHOOL_DATA.has("Miya Herald"))
+	assert_eq(WorldGenerator.SCHOOL_DATA["Otomo Courtier"]["clan"], "Imperial")
+	assert_eq(WorldGenerator.SCHOOL_DATA["Seppun Guardsman"]["type"], Enums.SchoolType.BUSHI)
+	assert_eq(WorldGenerator.SCHOOL_DATA["Miya Herald"]["type"], Enums.SchoolType.COURTIER)
 
 
 # =============================================================================

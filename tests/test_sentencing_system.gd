@@ -21,25 +21,25 @@ func _make_record(crime_type: Enums.CrimeType = Enums.CrimeType.VIOLENCE) -> Cri
 
 func test_jin_gives_positive_30():
 	var d := _make_daimyo(Enums.BushidoVirtue.JIN)
-	var leniency := SentencingSystem.calculate_leniency(d, 99, 0, false, false)
+	var leniency := SentencingSystem.calculate_leniency(d, 99, -1, false, false)
 	assert_eq(leniency, 30, "JIN personality base should be +30")
 
 
 func test_kanpeki_gives_negative_20():
 	var d := _make_daimyo(Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.KANPEKI)
-	var leniency := SentencingSystem.calculate_leniency(d, 99, 0, false, false)
+	var leniency := SentencingSystem.calculate_leniency(d, 99, -1, false, false)
 	assert_eq(leniency, -20, "KANPEKI personality base should be -20")
 
 
 func test_yu_gives_negative_10():
 	var d := _make_daimyo(Enums.BushidoVirtue.YU)
-	var leniency := SentencingSystem.calculate_leniency(d, 99, 0, false, false)
+	var leniency := SentencingSystem.calculate_leniency(d, 99, -1, false, false)
 	assert_eq(leniency, -10, "YU personality base should be -10")
 
 
 func test_makoto_gives_positive_10():
 	var d := _make_daimyo(Enums.BushidoVirtue.MAKOTO)
-	var leniency := SentencingSystem.calculate_leniency(d, 99, 0, false, false)
+	var leniency := SentencingSystem.calculate_leniency(d, 99, -1, false, false)
 	assert_eq(leniency, 10, "MAKOTO personality base should be +10")
 
 
@@ -48,7 +48,7 @@ func test_makoto_gives_positive_10():
 func test_gi_override_ignores_all_modifiers():
 	var d := _make_daimyo(Enums.BushidoVirtue.GI)
 	d.disposition_values[99] = 80
-	var leniency := SentencingSystem.calculate_leniency(d, 99, 1, true, true)
+	var leniency := SentencingSystem.calculate_leniency(d, 99, TopicData.Tier.TIER_1, true, true)
 	assert_eq(leniency, 0, "GI daimyo always returns 0 leniency regardless of context")
 
 
@@ -64,21 +64,21 @@ func test_gi_override_flagged_in_result():
 func test_disposition_friend_gives_plus_20():
 	var d := _make_daimyo(Enums.BushidoVirtue.CHUGI)
 	d.disposition_values[99] = 60
-	var leniency := SentencingSystem.calculate_leniency(d, 99, 0, false, false)
+	var leniency := SentencingSystem.calculate_leniency(d, 99, -1, false, false)
 	assert_eq(leniency, 20, "CHUGI(0) + Friend disposition(+20) = 20")
 
 
 func test_disposition_enemy_gives_minus_20():
 	var d := _make_daimyo(Enums.BushidoVirtue.CHUGI)
 	d.disposition_values[99] = -50
-	var leniency := SentencingSystem.calculate_leniency(d, 99, 0, false, false)
+	var leniency := SentencingSystem.calculate_leniency(d, 99, -1, false, false)
 	assert_eq(leniency, -20, "CHUGI(0) + Enemy disposition(-20) = -20")
 
 
 func test_disposition_neutral_gives_zero():
 	var d := _make_daimyo(Enums.BushidoVirtue.CHUGI)
 	d.disposition_values[99] = 5
-	var leniency := SentencingSystem.calculate_leniency(d, 99, 0, false, false)
+	var leniency := SentencingSystem.calculate_leniency(d, 99, -1, false, false)
 	assert_eq(leniency, 0, "CHUGI(0) + Neutral disposition(0) = 0")
 
 
@@ -86,20 +86,20 @@ func test_disposition_neutral_gives_zero():
 
 func test_tier_2_topic_gives_minus_20():
 	var d := _make_daimyo(Enums.BushidoVirtue.CHUGI)
-	var leniency := SentencingSystem.calculate_leniency(d, 99, 2, false, false)
+	var leniency := SentencingSystem.calculate_leniency(d, 99, TopicData.Tier.TIER_2, false, false)
 	assert_eq(leniency, -20, "Tier 2 topic pressure = -20")
 
 
 func test_tier_1_cross_clan_pushing_gives_max_pressure():
 	var d := _make_daimyo(Enums.BushidoVirtue.CHUGI)
-	var leniency := SentencingSystem.calculate_leniency(d, 99, 1, true, true)
+	var leniency := SentencingSystem.calculate_leniency(d, 99, TopicData.Tier.TIER_1, true, true)
 	# -30 (tier 1) + -10 (cross clan) + -15 (pushing) = -55
 	assert_eq(leniency, -55, "Max pressure: tier 1 + cross clan + pushing = -55")
 
 
 func test_no_topic_no_pressure():
 	var d := _make_daimyo(Enums.BushidoVirtue.CHUGI)
-	var leniency := SentencingSystem.calculate_leniency(d, 99, 0, false, false)
+	var leniency := SentencingSystem.calculate_leniency(d, 99, -1, false, false)
 	assert_eq(leniency, 0, "No topic = no pressure")
 
 
@@ -107,19 +107,19 @@ func test_no_topic_no_pressure():
 
 func test_seigyo_useful_convicted_gives_plus_20():
 	var d := _make_daimyo(Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.SEIGYO)
-	var leniency := SentencingSystem.calculate_leniency(d, 99, 0, false, false, 20)
+	var leniency := SentencingSystem.calculate_leniency(d, 99, -1, false, false, 20)
 	assert_eq(leniency, 20, "SEIGYO with useful convicted = +20")
 
 
 func test_seigyo_liability_gives_minus_20():
 	var d := _make_daimyo(Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.SEIGYO)
-	var leniency := SentencingSystem.calculate_leniency(d, 99, 0, false, false, -20)
+	var leniency := SentencingSystem.calculate_leniency(d, 99, -1, false, false, -20)
 	assert_eq(leniency, -20, "SEIGYO with liability convicted = -20")
 
 
 func test_seigyo_clamped_to_bounds():
 	var d := _make_daimyo(Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.SEIGYO)
-	var leniency := SentencingSystem.calculate_leniency(d, 99, 0, false, false, 50)
+	var leniency := SentencingSystem.calculate_leniency(d, 99, -1, false, false, 50)
 	assert_eq(leniency, 20, "SEIGYO clamped at +20 max")
 
 
@@ -213,7 +213,7 @@ func test_harsh_daimyo_enemy_high_pressure_skimming():
 	d.disposition_values[99] = -40
 	var r := _make_record(Enums.CrimeType.SKIMMING)
 	# MEIYO(-10) + Enemy(-20) + Tier3(-10) + cross_clan(-10) = -50
-	var result := SentencingSystem.select_punishment(d, r, 3, true, false)
+	var result := SentencingSystem.select_punishment(d, r, TopicData.Tier.TIER_3, true, false)
 	assert_eq(result["leniency_score"], -50)
 	assert_eq(result["punishment_level"], SentencingSystem.PunishmentLevel.HARSHEST)
 	assert_eq(result["punishment"], SentencingSystem.Punishment.SEPPUKU_OFFERED,

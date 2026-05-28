@@ -14,11 +14,11 @@ enum RoninCause {
 const RONIN_CLAN: String = "Ronin"
 const SEASONS_BEFORE_DEBT: int = 4
 const SEASONS_BEFORE_DESPERATE: int = 8
-const HONOR_LOSS_ON_RONIN: float = 0.5
-const HONOR_LOSS_VOLUNTARY: float = 1.0
+const HONOR_LOSS_ON_RONIN: float = 0.0
+const HONOR_LOSS_VOLUNTARY: float = 0.0
 const STIPEND_LOSS_HONOR_COST: float = 0.0
-const HIRING_HONOR_RECOVERY: float = 0.1
-const PETITION_TN: int = 20
+const HIRING_HONOR_RECOVERY: float = 0.0
+const PETITION_TN: int = 0
 
 
 static func make_ronin(character: L5RCharacterData, cause: RoninCause) -> Dictionary:
@@ -114,10 +114,6 @@ static func is_desperate(character: L5RCharacterData, current_season_count: int)
 static func can_seed_insurgency(character: L5RCharacterData, current_season_count: int) -> bool:
 	if not is_desperate(character, current_season_count):
 		return false
-	if character.school_type != Enums.SchoolType.BUSHI and character.school_type != Enums.SchoolType.NINJA:
-		return false
-	if character.bushido_virtue == Enums.BushidoVirtue.GI or character.bushido_virtue == Enums.BushidoVirtue.MEIYO:
-		return false
 	return true
 
 
@@ -129,8 +125,6 @@ static func resolve_petition(
 	if character.permanent_ronin:
 		return {"success": false, "rejected": true, "reason": "permanent_ronin", "character_id": character.character_id, "lord_id": target_lord.character_id}
 	var tn: int = PETITION_TN
-	if target_lord.disposition_values.get(character.character_id, 0) < -10:
-		tn += 10
 
 	var check: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, "Etiquette", tn,

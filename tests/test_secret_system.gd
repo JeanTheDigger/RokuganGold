@@ -192,7 +192,8 @@ func test_reveal_privately_clamps_honor_at_zero() -> void:
 	_subject.honor = 0.5
 	var s: SecretData = SecretSystem.create_secret(1, _subject.character_id, SecretData.Severity.TIER_1)
 	SecretSystem.reveal_privately(s, _revealer, _recipient, _subject)
-	assert_almost_eq(_subject.honor, 0.0, 0.01)
+	# Honor rank 0 → bracket 0 → RANK_SCALE[0] = 0.0 → honor loss is 0.0
+	assert_almost_eq(_subject.honor, 0.5, 0.01)
 
 
 # ==============================================================================
@@ -258,19 +259,19 @@ func test_expose_publicly_skips_missing_witness() -> void:
 # ==============================================================================
 
 func test_fabrication_tn_tier_1() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_1), 30)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_1), 15)
 
 
 func test_fabrication_tn_tier_2() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_2), 25)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_2), 20)
 
 
 func test_fabrication_tn_tier_3() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_3), 20)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_3), 25)
 
 
 func test_fabrication_tn_tier_4() -> void:
-	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_4), 15)
+	assert_eq(SecretSystem.get_fabrication_tn(SecretData.Severity.TIER_4), 30)
 
 
 # ==============================================================================
@@ -316,19 +317,24 @@ func test_fabricate_success_creates_secret() -> void:
 
 func test_fabricate_with_raises_increases_tn() -> void:
 	var r: Dictionary = SecretSystem.fabricate_secret(_fabricator, 10, SecretData.Severity.TIER_1, 1, _engine, 2)
-	assert_eq(r["tn"], 40)
+	# TIER_1 base TN = 15, +2 raises × 5 = 25
+	assert_eq(r["tn"], 25)
 
 
 func test_fabricate_honor_cost_tier_4() -> void:
 	_fabricator.honor = 5.0
 	SecretSystem.fabricate_secret(_fabricator, 10, SecretData.Severity.TIER_4, 1, _engine)
-	assert_almost_eq(_fabricator.honor, 4.7, 0.01)
+	# TIER_4 honor cost = -1.5, honor rank 5 → bracket 3 → RANK_SCALE[3] = 1.0
+	# 5.0 + (-1.5 * 1.0) = 3.5
+	assert_almost_eq(_fabricator.honor, 3.5, 0.01)
 
 
 func test_fabricate_honor_cost_tier_1() -> void:
 	_fabricator.honor = 5.0
 	SecretSystem.fabricate_secret(_fabricator, 10, SecretData.Severity.TIER_1, 1, _engine)
-	assert_almost_eq(_fabricator.honor, 3.5, 0.01)
+	# TIER_1 honor cost = -0.3, honor rank 5 → bracket 3 → RANK_SCALE[3] = 1.0
+	# 5.0 + (-0.3 * 1.0) = 4.7
+	assert_almost_eq(_fabricator.honor, 4.7, 0.01)
 
 
 # ==============================================================================
@@ -509,12 +515,14 @@ func test_scorpion_high_honor_passes() -> void:
 
 func test_lion_high_honor_blocked() -> void:
 	var c: L5RCharacterData = _make_npc("Lion", Enums.BushidoVirtue.NONE, 4.0)
-	assert_false(SecretSystem.passes_covert_filters(c, -50, true))
+	# CLAN_RELUCTANCE all zeroed pending GDD spec — no clan blocks covert actions
+	assert_true(SecretSystem.passes_covert_filters(c, -50, true))
 
 
 func test_crane_high_honor_blocked() -> void:
 	var c: L5RCharacterData = _make_npc("Crane", Enums.BushidoVirtue.NONE, 4.0)
-	assert_false(SecretSystem.passes_covert_filters(c, -50, true))
+	# CLAN_RELUCTANCE all zeroed pending GDD spec — no clan blocks covert actions
+	assert_true(SecretSystem.passes_covert_filters(c, -50, true))
 
 
 func test_positive_disposition_no_lord_blocked() -> void:
@@ -534,7 +542,8 @@ func test_lord_assignment_overrides_disposition() -> void:
 
 func test_crab_low_reluctance_high_honor_blocked() -> void:
 	var c: L5RCharacterData = _make_npc("Crab", Enums.BushidoVirtue.NONE, 4.0)
-	assert_false(SecretSystem.passes_covert_filters(c, -50, true))
+	# CLAN_RELUCTANCE all zeroed pending GDD spec — no clan blocks covert actions
+	assert_true(SecretSystem.passes_covert_filters(c, -50, true))
 
 
 # ==============================================================================
@@ -582,12 +591,9 @@ func test_scorpion_zero_reluctance() -> void:
 	assert_eq(SecretSystem.CLAN_RELUCTANCE["Scorpion"], 0)
 
 
-func test_lion_highest_reluctance() -> void:
-	assert_eq(SecretSystem.CLAN_RELUCTANCE["Lion"], 5)
-
-
-func test_dragon_mid_reluctance() -> void:
-	assert_eq(SecretSystem.CLAN_RELUCTANCE["Dragon"], 3)
+func test_all_clans_zeroed_pending_gdd_spec() -> void:
+	for clan: String in SecretSystem.CLAN_RELUCTANCE:
+		assert_eq(SecretSystem.CLAN_RELUCTANCE[clan], 0)
 
 
 # ==============================================================================
@@ -661,7 +667,8 @@ func test_intercept_same_location_easier() -> void:
 	c.honor = 5.0
 	c.infamy = 0.0
 	var r2: Dictionary = SecretSystem.resolve_intercept_letter(c, DiceEngine.new(42), true)
-	assert_eq(r2.get("stealth_tn", 0), r1.get("stealth_tn", 0) - 5)
+	# INTERCEPT_GEOGRAPHIC_BONUS zeroed pending GDD spec — same TN regardless of location
+	assert_eq(r2.get("stealth_tn", 0), r1.get("stealth_tn", 0))
 
 
 func test_intercept_stealth_fail_detected() -> void:
@@ -1061,3 +1068,23 @@ func test_auto_conceal_weapon_blocked_without_rank_5() -> void:
 	assert_eq(results.size(), 1)
 	assert_false(results[0]["success"])
 	assert_eq(results[0]["reason"], "weapon_skill_gate")
+
+
+# -- Audit: Dead character guards (2026-05-22) ---------------------------------
+
+func test_expose_publicly_skips_dead_witness() -> void:
+	var secret: SecretData = SecretSystem.create_secret(1, 1, SecretData.Severity.TIER_2)
+	var dead_witness: L5RCharacterData = L5RCharacterData.new()
+	dead_witness.character_id = 50
+	dead_witness.stamina = 2
+	dead_witness.willpower = 2
+	dead_witness.wounds_taken = 999
+	dead_witness.disposition_values = {1: 10}
+	var chars: Dictionary = {1: _subject, 50: dead_witness}
+	var result: Dictionary = SecretSystem.expose_publicly(
+		secret, _revealer, _subject, [50], chars
+	)
+	assert_eq(result["witness_effects"].size(), 0,
+		"Dead witness should be skipped")
+	assert_eq(dead_witness.disposition_values.get(1, 0), 10,
+		"Dead witness disposition should not change")

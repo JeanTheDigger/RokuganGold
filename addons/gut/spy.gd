@@ -23,7 +23,6 @@ func _find_parameters(call_params, params_to_find):
 			idx += 1
 	return found
 
-
 func _get_params_as_string(params):
 	var to_return = ''
 	if(params == null):
@@ -41,7 +40,6 @@ func _get_params_as_string(params):
 			to_return += ', '
 	return to_return
 
-
 func add_call(variant, method_name, parameters=null):
 	if(!_calls.has(variant)):
 		_calls[variant] = {}
@@ -51,7 +49,6 @@ func add_call(variant, method_name, parameters=null):
 
 	_calls[variant][method_name].append(parameters)
 
-
 func was_called(variant, method_name, parameters=null):
 	var to_return = false
 	if(_calls.has(variant) and _calls[variant].has(method_name)):
@@ -60,7 +57,6 @@ func was_called(variant, method_name, parameters=null):
 		else:
 			to_return = true
 	return to_return
-
 
 func get_call_parameters(variant, method_name, index=-1):
 	var to_return = null
@@ -81,7 +77,6 @@ func get_call_parameters(variant, method_name, index=-1):
 
 	return to_return
 
-
 func call_count(instance, method_name, parameters=null):
 	var to_return = 0
 
@@ -94,10 +89,8 @@ func call_count(instance, method_name, parameters=null):
 			to_return = _calls[instance][method_name].size()
 	return to_return
 
-
 func clear():
 	_calls = {}
-
 
 func get_call_list_as_string(instance):
 	var to_return = ''
@@ -107,10 +100,8 @@ func get_call_list_as_string(instance):
 				to_return += str(method, '(', _get_params_as_string(_calls[instance][method][i]), ")\n")
 	return to_return
 
-
 func get_logger():
 	return _lgr
-
 
 func set_logger(logger):
 	_lgr = logger

@@ -24,8 +24,8 @@ func test_refuse_after_invitation_severe_consequences():
 	var visit := PersonalVisitSystem.initiate_visit(1, 2, PersonalVisitSystem.VisitType.INVITATION_SENT, 50)
 	var effects := PersonalVisitSystem.resolve_host_response(visit, PersonalVisitSystem.HostResponse.REFUSE)
 	assert_false(effects["accepted"])
-	assert_eq(effects["disposition_change_to_host"], -10)
-	assert_eq(effects["honor_change_host"], -0.3)
+	assert_eq(effects["disposition_change_to_host"], PersonalVisitSystem.REFUSE_AFTER_INVITATION_DISPOSITION)
+	assert_eq(effects["honor_change_host"], PersonalVisitSystem.REFUSE_AFTER_INVITATION_HONOR)
 
 
 func test_accept_invitation_no_special_bonus():
@@ -41,7 +41,7 @@ func test_accept_invitation_no_special_bonus():
 func test_refuse_letter_arrival_mild_consequences():
 	var visit := PersonalVisitSystem.initiate_visit(1, 2, PersonalVisitSystem.VisitType.LETTER_ANNOUNCING_ARRIVAL, 50)
 	var effects := PersonalVisitSystem.resolve_host_response(visit, PersonalVisitSystem.HostResponse.REFUSE)
-	assert_eq(effects["disposition_change_to_host"], -2)
+	assert_eq(effects["disposition_change_to_host"], PersonalVisitSystem.REFUSE_LETTER_ARRIVAL_DISPOSITION)
 	assert_eq(effects["honor_change_host"], 0.0)
 
 
@@ -57,14 +57,14 @@ func test_accept_uninvited_goodwill_bonus():
 	var visit := PersonalVisitSystem.initiate_visit(1, 2, PersonalVisitSystem.VisitType.UNINVITED, 50)
 	var effects := PersonalVisitSystem.resolve_host_response(visit, PersonalVisitSystem.HostResponse.ACCEPT)
 	assert_true(effects["accepted"])
-	assert_eq(effects["disposition_change_to_visitor"], 5)
+	assert_eq(effects["disposition_change_to_visitor"], PersonalVisitSystem.RECEIVE_UNINVITED_DISPOSITION)
 
 
 # -- Decline invitation (recipient side) -------------------------------------
 
 func test_decline_invitation_small_disposition_cost():
 	var effects := PersonalVisitSystem.decline_invitation_effects()
-	assert_eq(effects["disposition_change"], -3)
+	assert_eq(effects["disposition_change"], PersonalVisitSystem.DECLINE_INVITATION_DISPOSITION)
 
 
 # -- Action filtering --------------------------------------------------------

@@ -29,9 +29,9 @@ func test_tax_adjustment_is_not_major() -> void:
 	assert_false(PhoenixCouncil.is_major_decision(PhoenixCouncil.DecisionType.TAX_ADJUSTMENT))
 
 
-# -- Per-master vote evaluation (personality-driven) -------------------------
+# -- Per-master vote evaluation (element-driven) ----------------------------
 
-func test_yu_master_votes_yes_on_declare_war() -> void:
+func test_fire_master_votes_yes_on_declare_war() -> void:
 	var prop: Dictionary = {"decision_type": PhoenixCouncil.DecisionType.DECLARE_WAR}
 	var ev: Dictionary = PhoenixCouncil.evaluate_master_vote(
 		PhoenixCouncil.Master.FIRE, prop, 0, _dice,
@@ -40,7 +40,7 @@ func test_yu_master_votes_yes_on_declare_war() -> void:
 	assert_eq(ev["vote"], "yes")
 
 
-func test_yu_master_votes_no_on_sign_treaty() -> void:
+func test_fire_master_votes_no_on_sign_treaty() -> void:
 	var prop: Dictionary = {"decision_type": PhoenixCouncil.DecisionType.SIGN_TREATY}
 	var ev: Dictionary = PhoenixCouncil.evaluate_master_vote(
 		PhoenixCouncil.Master.FIRE, prop, 0, _dice,
@@ -49,7 +49,7 @@ func test_yu_master_votes_no_on_sign_treaty() -> void:
 	assert_eq(ev["vote"], "no")
 
 
-func test_jin_master_votes_yes_on_sign_treaty() -> void:
+func test_water_master_votes_yes_on_sign_treaty() -> void:
 	var prop: Dictionary = {"decision_type": PhoenixCouncil.DecisionType.SIGN_TREATY}
 	var ev: Dictionary = PhoenixCouncil.evaluate_master_vote(
 		PhoenixCouncil.Master.WATER, prop, 0, _dice,
@@ -58,7 +58,7 @@ func test_jin_master_votes_yes_on_sign_treaty() -> void:
 	assert_eq(ev["vote"], "yes")
 
 
-func test_rei_master_votes_yes_on_sign_treaty() -> void:
+func test_air_master_votes_yes_on_sign_treaty() -> void:
 	var prop: Dictionary = {"decision_type": PhoenixCouncil.DecisionType.SIGN_TREATY}
 	var ev: Dictionary = PhoenixCouncil.evaluate_master_vote(
 		PhoenixCouncil.Master.AIR, prop, 0, _dice,
@@ -67,7 +67,7 @@ func test_rei_master_votes_yes_on_sign_treaty() -> void:
 	assert_eq(ev["vote"], "yes")
 
 
-func test_rei_master_votes_no_on_declare_war() -> void:
+func test_air_master_votes_no_on_declare_war() -> void:
 	var prop: Dictionary = {"decision_type": PhoenixCouncil.DecisionType.DECLARE_WAR}
 	var ev: Dictionary = PhoenixCouncil.evaluate_master_vote(
 		PhoenixCouncil.Master.AIR, prop, 0, _dice,
@@ -76,7 +76,7 @@ func test_rei_master_votes_no_on_declare_war() -> void:
 	assert_eq(ev["vote"], "no")
 
 
-func test_jin_master_votes_no_on_declare_war() -> void:
+func test_earth_master_votes_no_on_declare_war() -> void:
 	var prop: Dictionary = {"decision_type": PhoenixCouncil.DecisionType.DECLARE_WAR}
 	var ev: Dictionary = PhoenixCouncil.evaluate_master_vote(
 		PhoenixCouncil.Master.EARTH, prop, 0, _dice,
@@ -85,7 +85,7 @@ func test_jin_master_votes_no_on_declare_war() -> void:
 	assert_eq(ev["vote"], "no")
 
 
-func test_no_virtue_master_votes_no_by_default() -> void:
+func test_no_element_lean_votes_no_by_default() -> void:
 	var prop: Dictionary = {"decision_type": PhoenixCouncil.DecisionType.GRAND_RITUAL}
 	var ev: Dictionary = PhoenixCouncil.evaluate_master_vote(
 		PhoenixCouncil.Master.EARTH, prop, 0, _dice
@@ -113,7 +113,7 @@ func test_rival_disposition_tilts_vote_to_no() -> void:
 		PhoenixCouncil.Master.EARTH, prop, -30, _dice,
 		Enums.BushidoVirtue.GI
 	)
-	# Gi gives +5 on treaty, rival -5 → net 0 → NO.
+	# Earth has no SIGN_TREATY lean (0), rival disposition -5 → net -5 → NO.
 	assert_eq(ev["vote"], "no")
 
 
@@ -128,7 +128,7 @@ func test_tier_1_crisis_overrides_temperament() -> void:
 		PhoenixCouncil.Master.EARTH, prop, 0, _dice,
 		Enums.BushidoVirtue.REI
 	)
-	# Rei -10 + crisis +15 = +5 → YES.
+	# Earth -10 + crisis +15 = +5 → YES.
 	assert_eq(ev["vote"], "yes")
 
 
@@ -141,7 +141,7 @@ func test_element_threatened_locks_in_yes_for_that_master() -> void:
 		PhoenixCouncil.Master.AIR, prop, 0, _dice,
 		Enums.BushidoVirtue.REI
 	)
-	# Rei -10 + element threatened +20 = +10 → YES.
+	# Air -10 + element threatened +20 = +10 → YES.
 	assert_eq(ev["vote"], "yes")
 
 
@@ -193,7 +193,7 @@ func test_void_master_abstains_some_of_the_time_across_seeds() -> void:
 # -- Tally -------------------------------------------------------------------
 
 func test_tally_passes_with_3_yes() -> void:
-	# Sign-treaty proposal: 3 Jin/Rei Masters lean YES, 1 Yu leans NO.
+	# Sign-treaty: Water +10 YES, Air +10 YES, Earth 0 + friend disp +5 = YES, Fire -10 NO.
 	var prop: Dictionary = {"decision_type": PhoenixCouncil.DecisionType.SIGN_TREATY}
 	var living: Array = [
 		PhoenixCouncil.Master.FIRE,
@@ -201,20 +201,17 @@ func test_tally_passes_with_3_yes() -> void:
 		PhoenixCouncil.Master.AIR,
 		PhoenixCouncil.Master.EARTH,
 	]
-	var virtues: Dictionary = {
-		PhoenixCouncil.Master.FIRE: {"bushido": Enums.BushidoVirtue.YU},
-		PhoenixCouncil.Master.WATER: {"bushido": Enums.BushidoVirtue.JIN},
-		PhoenixCouncil.Master.AIR: {"bushido": Enums.BushidoVirtue.REI},
-		PhoenixCouncil.Master.EARTH: {"bushido": Enums.BushidoVirtue.CHUGI},
+	var dispositions: Dictionary = {
+		PhoenixCouncil.Master.EARTH: 50,
 	}
-	var result: Dictionary = PhoenixCouncil.tally_vote(living, prop, {}, _dice, virtues)
+	var result: Dictionary = PhoenixCouncil.tally_vote(living, prop, dispositions, _dice)
 	assert_eq(result["yes"], 3)
 	assert_eq(result["no"], 1)
 	assert_true(result["passed"])
 
 
 func test_tally_fails_with_only_one_yes_on_war() -> void:
-	# Declare-war: 1 Yu YES, 3 peaceful Masters NO.
+	# Declare-war: Fire +10 YES, Water -10 NO, Air -10 NO, Earth -10 NO.
 	var prop: Dictionary = {"decision_type": PhoenixCouncil.DecisionType.DECLARE_WAR}
 	var living: Array = [
 		PhoenixCouncil.Master.FIRE,
@@ -222,13 +219,7 @@ func test_tally_fails_with_only_one_yes_on_war() -> void:
 		PhoenixCouncil.Master.AIR,
 		PhoenixCouncil.Master.EARTH,
 	]
-	var virtues: Dictionary = {
-		PhoenixCouncil.Master.FIRE: {"bushido": Enums.BushidoVirtue.YU},
-		PhoenixCouncil.Master.WATER: {"bushido": Enums.BushidoVirtue.JIN},
-		PhoenixCouncil.Master.AIR: {"bushido": Enums.BushidoVirtue.REI},
-		PhoenixCouncil.Master.EARTH: {"bushido": Enums.BushidoVirtue.JIN},
-	}
-	var result: Dictionary = PhoenixCouncil.tally_vote(living, prop, {}, _dice, virtues)
+	var result: Dictionary = PhoenixCouncil.tally_vote(living, prop, {}, _dice)
 	assert_false(result["passed"])
 	assert_eq(result["yes"], 1)
 
@@ -543,7 +534,7 @@ func test_defiance_stage_2_consequences_include_diplomatic() -> void:
 func test_overreach_returns_consequences() -> void:
 	var result: Dictionary = PhoenixCouncil.handle_overreach_trigger(_state)
 	assert_eq(result["stage"], 1)
-	assert_eq(result["topic_tier"], 4)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_4)
 	assert_false(_state["phoenix_champion_authority"])
 
 
@@ -944,3 +935,24 @@ func test_grand_ritual_returns_crisis_topic_dict():
 func test_grand_ritual_null_province_returns_not_applied():
 	var result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(null, [], [], -1)
 	assert_false(result.get("applied", true))
+
+
+# -- Audit: Dead character guards (2026-05-23) ---------------------------------
+
+func test_grand_ritual_skips_dead_representatives() -> void:
+	var province := _make_province(1)
+	var dead_rep := L5RCharacterData.new()
+	dead_rep.character_id = 50
+	dead_rep.clan = "Crane"
+	dead_rep.status = 7.0
+	dead_rep.stamina = 2
+	dead_rep.willpower = 2
+	dead_rep.wounds_taken = 999
+	dead_rep.disposition_values = {99: 10}
+	var result: Dictionary = PhoenixCouncil.apply_grand_ritual_devastation(
+		province, [], [dead_rep], 99
+	)
+	assert_eq(dead_rep.disposition_values.get(99, 0), 10,
+		"Dead representative disposition should not change")
+	assert_eq(result.get("reps_affected", []).size(), 0,
+		"Dead reps should not appear in affected list")

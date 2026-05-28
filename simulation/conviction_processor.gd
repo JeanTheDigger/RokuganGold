@@ -33,12 +33,12 @@ static func process_accused_cases(
 			continue
 
 		var accused: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
-		if accused == null:
+		if accused == null or CharacterStats.is_dead(accused):
 			continue
 
 		var lord_id: int = lord_map.get(record.perpetrator_id, -1)
 		var lord: L5RCharacterData = characters_by_id.get(lord_id)
-		if lord == null:
+		if lord == null or CharacterStats.is_dead(lord):
 			continue
 
 		var case_entry: LegalCaseEntry = LegalStatusSystem.get_case(
@@ -106,8 +106,12 @@ static func _process_single_case(
 	var victim_clan: String = victim.clan if victim != null else ""
 	var is_cross_clan: bool = not victim_clan.is_empty() and victim_clan != accused.clan
 
+	var crime_consequences: Array = CrimeSystem.CONVICTION_CONSEQUENCES.get(
+		record.crime_type, [-0.1, 0.0, 0.0, TopicData.Tier.TIER_4]
+	)
+	var crime_tier: int = int(crime_consequences[3])
 	var sentencing := SentencingSystem.select_punishment(
-		lord, record, 0, is_cross_clan, false
+		lord, record, crime_tier, is_cross_clan, false
 	)
 
 	var conviction := CrimeSystem.apply_at_conviction_consequences(
@@ -123,7 +127,7 @@ static func _process_single_case(
 		)
 
 	var conviction_topic: TopicData = InvestigationSystem.generate_conviction_topic(
-		record, accused, conviction.get("topic_tier", 4), next_topic_id, ic_day
+		record, accused, conviction.get("topic_tier", TopicData.Tier.TIER_4), next_topic_id, ic_day
 	)
 	if conviction_topic != null:
 		active_topics.append(conviction_topic)
@@ -144,7 +148,7 @@ static func _process_single_case(
 		"glory_delta": conviction.get("glory_delta", 0.0),
 		"infamy_delta": conviction.get("infamy_delta", 0.0),
 		"status_delta": conviction.get("status_delta", 0.0),
-		"topic_tier": conviction.get("topic_tier", 4),
+		"topic_tier": conviction.get("topic_tier", TopicData.Tier.TIER_4),
 		"topic_id": conviction_topic.topic_id if conviction_topic != null else -1,
 		"seppuku_offered": seppuku_offered,
 		"is_cross_clan": is_cross_clan,
@@ -235,7 +239,7 @@ static func _apply_acquittal(
 	record.evidence_total = record.evidence_total / 2
 
 	HonorGlorySystem.apply_honor_change(
-		lord, TreasonSystem.FALSE_ACCUSATION_HONOR_LOSS
+		lord, CrimeSystem.scale_honor_by_rank(TreasonSystem.FALSE_ACCUSATION_HONOR_LOSS, lord)
 	)
 
 
@@ -275,8 +279,9 @@ static func resolve_seppuku(
 		"accepted": false,
 		"honor_delta": result.get("honor_delta", 0.0),
 		"infamy_delta": result.get("infamy_delta", 0.0),
-		"refusal_topic_tier": result.get("topic_tier", 4),
+		"refusal_topic_tier": result.get("topic_tier", TopicData.Tier.TIER_4),
 		"refusal_topic_id": refusal_topic.topic_id if refusal_topic != null else -1,
+		"refusal_topic": refusal_topic,
 		"exile": record.crime_type == Enums.CrimeType.TREASON,
 		"treason_exile": treason_exile,
 	}

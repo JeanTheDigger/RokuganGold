@@ -203,6 +203,10 @@ extends Resource
 @export var kolat_superior_id: int = -1
 @export var kolat_sect: Enums.KolatSect = Enums.KolatSect.NONE
 
+# -- Bloodspeaker Cult (Section 56.14) ----------------------------------------
+
+@export var cult_affiliation: bool = false
+
 # -- Hunting (Section 57.38) ---------------------------------------------------
 
 @export var hunt_trophies: Array = []

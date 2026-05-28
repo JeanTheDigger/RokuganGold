@@ -132,9 +132,9 @@ static func evaluate_proposal(
 ) -> int:
 	var score: int = proposing_clan_disposition
 	score += character_value
-	score += favor_tier * 10
+	score += favor_tier * 0
 	if has_military_objective:
-		score += 15
+		score += 0
 	return score
 
 
@@ -143,7 +143,7 @@ static func evaluate_proposal(
 const BENTEN_FESTIVAL_DAY: int = 9
 const BENTEN_FESTIVAL_MONTH: int = 11
 
-const BENTEN_FESTIVAL_BONUS: int = 20
+const BENTEN_FESTIVAL_BONUS: int = 0
 
 static func is_benten_festival(ic_day: int) -> bool:
 	var day_of_year: int = ic_day % 360

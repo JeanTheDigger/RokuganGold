@@ -202,14 +202,19 @@ func test_guard_moderate_out_of_range() -> void:
 	assert_false(r["detected"])
 
 
-func test_guard_tn_increases_with_distance() -> void:
+func test_guard_tn_fixed_by_noise_level() -> void:
 	var r1: Dictionary = BoundEscapeSystem.resolve_guard_detection(
 		_guard, BoundEscapeSystem.NoiseLevel.QUIET, 1, DiceEngine.new(42)
 	)
 	var r2: Dictionary = BoundEscapeSystem.resolve_guard_detection(
-		_guard, BoundEscapeSystem.NoiseLevel.QUIET, 3, DiceEngine.new(42)
+		_guard, BoundEscapeSystem.NoiseLevel.QUIET, 2, DiceEngine.new(42)
 	)
-	assert_true(r2["tn"] > r1["tn"])
+	assert_eq(r1["tn"], 20, "Quiet noise TN should be fixed at 20")
+	assert_eq(r2["tn"], 20, "Quiet noise TN should be fixed at 20 regardless of distance")
+	var r3: Dictionary = BoundEscapeSystem.resolve_guard_detection(
+		_guard, BoundEscapeSystem.NoiseLevel.MODERATE, 1, DiceEngine.new(42)
+	)
+	assert_eq(r3["tn"], 15, "Moderate noise TN should be fixed at 15")
 
 
 # ==============================================================================
@@ -325,6 +330,17 @@ func test_free_ally_chains_not_chains() -> void:
 	var r: Dictionary = BoundEscapeSystem.free_ally_chains(_rescuer, s, false, true, _engine)
 	assert_false(r["success"])
 	assert_eq(r["reason"], "not_chains")
+
+
+func test_free_ally_chains_force_failure_quiet_noise() -> void:
+	var weak_rescuer := L5RCharacterData.new()
+	weak_rescuer.character_id = 99
+	weak_rescuer.strength = 1
+	var s: Dictionary = BoundEscapeSystem.create_bound_state(1, 3, BoundEscapeSystem.BindingMaterial.CHAINS, 100)
+	var r: Dictionary = BoundEscapeSystem.free_ally_chains(weak_rescuer, s, false, true, _engine)
+	if not r["success"]:
+		assert_eq(r["noise_level"], BoundEscapeSystem.NoiseLevel.QUIET, "Failed force attempt should be QUIET noise")
+		assert_eq(r["noise_range"], BoundEscapeSystem.QUIET_NOISE_RANGE, "Failed force attempt should use quiet noise range")
 
 
 func test_free_ally_high_grade_chains() -> void:

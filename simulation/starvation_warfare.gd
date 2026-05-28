@@ -10,16 +10,15 @@ const HARVEST_HONOR_COST: float = -2.0
 const HARVEST_GLORY_COST: float = -0.5
 const HARVEST_DISP_TARGETED_CLAN: int = -20
 const HARVEST_DISP_OTHER_CLANS: int = -10
-const HARVEST_TOPIC_TIER: int = 2
-const HARVEST_TOPIC_MOMENTUM: float = 60.0
+const HARVEST_TOPIC_TIER: int = TopicData.Tier.TIER_2
+const HARVEST_TOPIC_MOMENTUM: float = 0.0
 
-const HARVEST_NEVER_VIRTUES: Array[String] = ["Jin", "Gi"]
+const HARVEST_NEVER_VIRTUES: Array[String] = ["Jin", "Gi", "Rei"]
 const HARVEST_CONDITIONAL_VIRTUES: Dictionary = {
 	"Yu": "no_other_path",
 	"Meiyo": "hated_enemy",
 	"Chugi": "lord_commands",
 	"Makoto": "publicly_declared",
-	"Rei": "prior_formal_demand",
 }
 
 const EDICT_HONOR_COST: float = -3.0
@@ -194,7 +193,7 @@ static func _find_clan_lord(
 	var best_status: float = -1.0
 	for id: Variant in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[id] as L5RCharacterData
-		if c == null:
+		if c == null or CharacterStats.is_dead(c):
 			continue
 		if c.clan != clan:
 			continue
@@ -272,7 +271,5 @@ static func evaluate_ai_harvest_decision(
 		condition_met = lord_commands
 	elif virtue == "Makoto":
 		condition_met = publicly_declared
-	elif virtue == "Rei":
-		condition_met = prior_formal_demand
 
 	return can_destroy_harvest(virtue, season, has_army, condition_met)

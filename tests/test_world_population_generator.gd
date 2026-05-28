@@ -197,34 +197,38 @@ func test_positioned_character_has_name():
 
 func test_imperial_positions_count():
 	var next_id: Array = [1]
-	var chars: Array = WorldPopulationGenerator._generate_imperial_positions(
+	var imp_result: Dictionary = WorldPopulationGenerator._generate_imperial_positions(
 		next_id, dice,
 	)
+	var chars: Array = imp_result["characters"]
 	assert_true(chars.size() >= 15, "Expected at least 15 imperial characters, got %d" % chars.size())
 
 
 func test_emperor_is_first():
 	var next_id: Array = [1]
-	var chars: Array = WorldPopulationGenerator._generate_imperial_positions(
+	var imp_result: Dictionary = WorldPopulationGenerator._generate_imperial_positions(
 		next_id, dice,
 	)
+	var chars: Array = imp_result["characters"]
 	assert_eq(chars[0].status, 10.0)
 
 
 func test_imperial_heir_has_emperor_lord():
 	var next_id: Array = [1]
-	var chars: Array = WorldPopulationGenerator._generate_imperial_positions(
+	var imp_result: Dictionary = WorldPopulationGenerator._generate_imperial_positions(
 		next_id, dice,
 	)
+	var chars: Array = imp_result["characters"]
 	var emperor_id: int = chars[0].character_id
 	assert_eq(chars[1].lord_id, emperor_id)
 
 
 func test_imperial_family_daimyo_count():
 	var next_id: Array = [1]
-	var chars: Array = WorldPopulationGenerator._generate_imperial_positions(
+	var imp_result: Dictionary = WorldPopulationGenerator._generate_imperial_positions(
 		next_id, dice,
 	)
+	var chars: Array = imp_result["characters"]
 	var fd_count: int = 0
 	for c: L5RCharacterData in chars:
 		if c.status == 6.0 and c.clan == "Imperial":
@@ -634,21 +638,25 @@ func test_generate_world_population_unique_ids():
 		ids[c.character_id] = true
 
 
-func test_generate_world_population_with_dispositions():
+func test_seed_co_located_contacts_populates_dispositions():
 	var baselines: Dictionary = CollectiveDisposition.make_starting_baselines()
 	var world: Dictionary = _make_minimal_world()
 	var next_id: Array = [1]
 	var result: Dictionary = WorldPopulationGenerator.generate_world_population(
 		world["provinces"], world["settlements"], dice, next_id,
-		baselines["clan"], baselines["family"],
 	)
 	var chars: Array = result["characters"]
+	for c: L5RCharacterData in chars:
+		c.physical_location = "100"
+	WorldPopulationGenerator._seed_co_located_contacts(
+		chars, baselines["clan"], baselines["family"],
+	)
 	var found_disp: bool = false
 	for c: L5RCharacterData in chars:
 		if not c.disposition_values.is_empty():
 			found_disp = true
 			break
-	assert_true(found_disp, "At least some characters should have disposition values set")
+	assert_true(found_disp, "Co-located contacts should seed dispositions")
 
 
 # -- Rank Distribution --------------------------------------------------------

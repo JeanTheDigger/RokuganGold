@@ -91,6 +91,8 @@ static func get_operational_subordinates(
 ) -> Array:
 	var result: Array = []
 	for c: L5RCharacterData in all_characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if c.operational_superior_id == superior_id:
 			result.append(c)
 	return result
@@ -214,8 +216,6 @@ static func get_escalation_outcome(
 			return EscalationOutcome.DAIMYO_BELIEVES_SUBORDINATE
 		Enums.BushidoVirtue.MAKOTO:
 			return EscalationOutcome.DAIMYO_BELIEVES_SUBORDINATE
-		Enums.BushidoVirtue.MEIYO:
-			return EscalationOutcome.DAIMYO_BELIEVES_SUBORDINATE
 		_:
 			return EscalationOutcome.DAIMYO_SIDES_WITH_SUPERIOR
 
@@ -243,8 +243,6 @@ static func get_escalation_consequences(
 		EscalationOutcome.DAIMYO_DISMISSES:
 			return {
 				"complaint_dismissed": true,
-				"daimyo_disposition_loss": -5,
-				"superior_disposition_loss": -5,
 				"subordinate_exposed": true,
 			}
 	return {}
@@ -258,6 +256,8 @@ static func clear_subordinates_on_death(
 ) -> Array:
 	var cleared_ids: Array = []
 	for c: L5RCharacterData in all_characters:
+		if CharacterStats.is_dead(c):
+			continue
 		if c.operational_superior_id == dead_superior_id:
 			c.operational_superior_id = -1
 			c.operational_hierarchy_type = Enums.OperationalHierarchyType.NONE

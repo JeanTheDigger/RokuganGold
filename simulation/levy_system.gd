@@ -20,8 +20,8 @@ const SUSPICION_ESCALATION_SEASONS: int = 3
 const SUSPICION_DISPOSITION_LOSS_PER_SEASON: int = -5
 const SUSPICION_NEIGHBOR_DISPOSITION_LOSS: int = -3
 
-const TOPIC_TIER_INITIAL: int = 4
-const TOPIC_TIER_ESCALATED: int = 3
+const TOPIC_TIER_INITIAL: int = TopicData.Tier.TIER_4
+const TOPIC_TIER_ESCALATED: int = TopicData.Tier.TIER_3
 
 
 # -- Commitment Protection Scores -----------------------------------------------

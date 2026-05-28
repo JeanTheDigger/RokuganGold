@@ -31,7 +31,7 @@ const PUBLIC_WITNESS_DISPOSITION_LOSS: int = -2
 const PRIVATE_TN_INCREASE_BASE: int = 10
 const PRIVATE_TN_INCREASE_PER_RAISE: int = 5
 const LETTER_TN_INCREASE: int = 5
-const PUBLIC_TN_INCREASE_BASE: int = 10
+const PUBLIC_TN_INCREASE_BASE: int = 0
 const PUBLIC_TN_INCREASE_PER_RAISE: int = 5
 
 const PUSHBACK_TN_BASE: int = 15
@@ -192,8 +192,8 @@ static func generate_betrayal_topic(actor_id: int) -> Dictionary:
 	return {
 		"topic_type": "betrayal",
 		"subject_id": actor_id,
-		"tier": 4,
-		"category": "PERSONAL",
+		"tier": TopicData.Tier.TIER_4,
+		"category": TopicData.Category.PERSONAL,
 		"slug": "intimidation_bluff_failure_%d" % actor_id,
 	}
 

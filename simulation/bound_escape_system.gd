@@ -39,7 +39,6 @@ const ESCAPE_ATTEMPTS_PER_DAY: int = 1
 const REBIND_TN_INCREASE: int = 5
 const QUIET_NOISE_RANGE: int = 3
 const BREAK_CHAINS_TN: int = 25
-const LOW_SKILL_HONOR_COST: float = -0.1
 
 # -- Allowed actions while bound -----------------------------------------------
 
@@ -193,7 +192,7 @@ static func resolve_guard_detection(
 	if distance_tiles > noise_range:
 		return {"detected": false, "reason": "out_of_range"}
 
-	var tn: int = 15 + (distance_tiles * 2)
+	var tn: int = 20 if noise == NoiseLevel.QUIET else 15
 	var result: Dictionary = SkillResolver.resolve_skill_check(
 		guard, dice_engine, "Investigation", tn,
 	)
@@ -299,8 +298,8 @@ static func free_ally_chains(
 		"roll_total": result.total,
 		"tn": BREAK_CHAINS_TN,
 		"method": "force",
-		"noise_level": NoiseLevel.MODERATE if success else NoiseLevel.MODERATE,
-		"noise_range": 6,
+		"noise_level": NoiseLevel.MODERATE if success else NoiseLevel.QUIET,
+		"noise_range": 6 if success else QUIET_NOISE_RANGE,
 	}
 
 

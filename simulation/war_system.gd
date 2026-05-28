@@ -25,8 +25,6 @@ const SCORE_SHIFTS: Dictionary = {
 	"family_daimyo_commits": [5, 0],
 	"clan_champion_commits": [10, 0],
 	"allied_clan_joins": [8, 0],
-	"condemn_clan": [10, 0],
-	"authorize_war": [10, 0],
 }
 
 
@@ -175,38 +173,36 @@ static func compute_peace_willingness(
 	hostage_held: bool,
 	superior_pressuring: bool,
 	primary_virtue: String,
-) -> int:
-	var willingness: int = 0
-
+) -> Dictionary:
+	## GDD s53: "Peace willingness is not determined by a single threshold."
+	## Returns qualitative factors only — no numeric willingness score.
 	var tier: WarData.WarScoreTier = get_war_score_tier(war_score)
-	match tier:
-		WarData.WarScoreTier.DESPERATE:
-			willingness += 40
-		WarData.WarScoreTier.LOSING:
-			willingness += 25
-		WarData.WarScoreTier.BEHIND:
-			willingness += 10
+	var increases: Array[String] = []
+	var decreases: Array[String] = []
 
+	if tier == WarData.WarScoreTier.DESPERATE or tier == WarData.WarScoreTier.LOSING:
+		increases.append("losing_war")
 	if not terms_cede_territory:
-		willingness += 10
-	else:
-		willingness -= 15
-
+		increases.append("no_territory_cession")
 	if hostage_held:
-		willingness += 10
-
+		increases.append("hostage_held")
 	if superior_pressuring:
-		willingness += 15
-
+		increases.append("superior_pressure")
 	if primary_virtue.to_upper() in PEACE_POSITIVE_VIRTUES:
-		willingness += 10
-	elif primary_virtue.to_upper() in PEACE_NEGATIVE_VIRTUES:
-		willingness -= 15
+		increases.append("peace_virtue")
 
+	if terms_cede_territory:
+		decreases.append("territory_cession_demanded")
 	if tier == WarData.WarScoreTier.WINNING or tier == WarData.WarScoreTier.DOMINANT:
-		willingness -= 20
+		decreases.append("winning_war")
+	if primary_virtue.to_upper() in PEACE_NEGATIVE_VIRTUES:
+		decreases.append("aggressive_virtue")
 
-	return clampi(willingness, 0, 100)
+	return {
+		"war_score_tier": tier,
+		"increases": increases,
+		"decreases": decreases,
+	}
 
 
 # -- Honor Cost of Asking for Aid ------------------------------------------------
@@ -227,7 +223,7 @@ static func get_refusal_honor_cost(
 			return -2.0
 		WarData.AuthorityLevel.CLAN_WAR:
 			return -3.0
-	return -1.0
+	return 0.0
 
 
 static func get_refusal_disposition_effects() -> Dictionary:
@@ -317,11 +313,11 @@ static func process_seasonal_attrition(war: WarData) -> void:
 	apply_score_shift(war, "seasonal_attrition", war.initiator_clan)
 
 
-# GDD s53 specifies this penalty exists but does not give a value. -2/season is a placeholder.
-const WAR_DISPOSITION_PENALTY_PER_SEASON: int = -2
+# GDD s53 specifies a passive negative disposition modifier per season but gives no value.
+# Returning 0 until GDD provides numeric spec.
 
-static func get_active_war_disposition_penalty(seasons_active: int) -> int:
-	return WAR_DISPOSITION_PENALTY_PER_SEASON * seasons_active
+static func get_active_war_disposition_penalty(_seasons_active: int) -> int:
+	return 0
 
 
 # -- Province Capture Tracking ---------------------------------------------------

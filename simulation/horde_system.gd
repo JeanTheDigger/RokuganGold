@@ -22,9 +22,8 @@ const INVASION_TYPE_WEIGHTS: Dictionary = {
 	100: Enums.InvasionType.ONI_LED,
 }
 
-## Probability that an Oni-Led horde has the Spawn variant (Pool 3 weighted Rare).
-## The GDD labels Spawn as Rare in Pool 3. Using 15% as the "Rare" weight.
-const ONI_SPAWN_PROBABILITY: float = 0.15
+## DISABLED: GDD s2.4.6 Spawn variant probability not specified.
+## ONI_SPAWN_PROBABILITY removed — has_spawn always false until GDD quantifies.
 
 
 # -- Shadowlands Unit Stat Blocks (s2.4.7 — LOCKED) ---------------------------
@@ -117,19 +116,14 @@ static func roll_horde_fires(dice: DiceEngine) -> bool:
 # -- Invasion Type (s2.4.6 — LOCKED) ------------------------------------------
 
 ## Returns an InvasionType enum value based on weighted d100 roll.
+## DISABLED: GDD s2.4.6 Spawn variant probability not specified — has_spawn always false.
 static func roll_invasion_type(dice: DiceEngine) -> int:
 	var roll: int = (dice.roll_and_keep(1, 1, 0).total % 100) + 1
 	var sorted_keys: Array = INVASION_TYPE_WEIGHTS.keys()
 	sorted_keys.sort()
 	for threshold: int in sorted_keys:
 		if roll <= threshold:
-			var invasion_type: int = INVASION_TYPE_WEIGHTS[threshold]
-			# Check for Spawn variant on Oni-Led (s2.4.8 Pool 3 Spawn = Rare ≈ 15%).
-			if invasion_type == Enums.InvasionType.ONI_LED:
-				var spawn_roll: float = float(dice.roll_and_keep(1, 1, 0).total) / 10.0
-				if spawn_roll <= ONI_SPAWN_PROBABILITY:
-					return Enums.InvasionType.ONI_LED_SPAWN
-			return invasion_type
+			return INVASION_TYPE_WEIGHTS[threshold]
 	return Enums.InvasionType.JIGOKU_HORDE
 
 
@@ -148,12 +142,12 @@ static func select_target_tower(
 	if tower_province_ids.size() == 1:
 		return tower_province_ids[0]
 
-	# Build weighted list: last-targeted appears twice.
+	# DISABLED: GDD s2.4.4 says "higher probability" for repeat targeting
+	# but does not specify the weight factor. Using uniform random until
+	# GDD specifies the weighting.
 	var pool: Array = []
 	for pid: int in tower_province_ids:
 		pool.append(pid)
-		if pid == last_targeted:
-			pool.append(pid)
 
 	var idx: int = dice.roll_and_keep(1, 1, 0).total % pool.size()
 	return pool[idx]
@@ -172,52 +166,21 @@ static func get_unit_stats(unit_type: int) -> Dictionary:
 
 
 ## Generate horde companies for a JIGOKU_HORDE assault.
-## Base composition: 4 Bakemono + 2 Bakemono Warrior + 1 Ogre Warrior.
-## Each strength point adds 1 random Bakemono or Ogre Warrior company.
+## DISABLED: GDD s2.4.6 describes unit types (Bakemono, Ogres) but not counts.
+## Base composition and strength bonus counts pending GDD spec.
 static func _generate_jigoku_companies(
-	strength: int, dice: DiceEngine
+	_strength: int, _dice: DiceEngine
 ) -> Array:
-	var companies: Array = []
-	# Base composition.
-	for _i: int in range(4):
-		companies.append(get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO))
-	for _i: int in range(2):
-		companies.append(get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO_WARRIOR))
-	companies.append(get_unit_stats(Enums.ShadowlandsUnitType.OGRE_WARRIOR))
-
-	# Strength bonus: each point adds 1 Bakemono or Ogre Warrior (50/50).
-	for _i: int in range(strength):
-		var roll: int = dice.roll_and_keep(1, 1, 0).total % 2
-		if roll == 0:
-			companies.append(get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO))
-		else:
-			companies.append(get_unit_stats(Enums.ShadowlandsUnitType.OGRE_WARRIOR))
-
-	return companies
+	return []
 
 
 ## Generate horde companies for an UNDEAD_LEGION assault.
-## Base composition: 3 Zombie + 2 Skeleton Warrior + 1 Undead Revenant + 1 Maho-tsukai.
-## Each strength point adds 1 Zombie or Skeleton Warrior.
+## DISABLED: GDD s2.4.6 describes unit types (Zombie, Skeleton, Revenant, Maho-tsukai)
+## but not counts. Base composition and strength bonus counts pending GDD spec.
 static func _generate_undead_companies(
-	strength: int, dice: DiceEngine
+	_strength: int, _dice: DiceEngine
 ) -> Array:
-	var companies: Array = []
-	for _i: int in range(3):
-		companies.append(get_unit_stats(Enums.ShadowlandsUnitType.ZOMBIE))
-	for _i: int in range(2):
-		companies.append(get_unit_stats(Enums.ShadowlandsUnitType.SKELETON_WARRIOR))
-	companies.append(get_unit_stats(Enums.ShadowlandsUnitType.UNDEAD_REVENANT))
-	companies.append(get_unit_stats(Enums.ShadowlandsUnitType.MAHO_TSUKAI))
-
-	for _i: int in range(strength):
-		var roll: int = dice.roll_and_keep(1, 1, 0).total % 2
-		if roll == 0:
-			companies.append(get_unit_stats(Enums.ShadowlandsUnitType.ZOMBIE))
-		else:
-			companies.append(get_unit_stats(Enums.ShadowlandsUnitType.SKELETON_WARRIOR))
-
-	return companies
+	return []
 
 
 ## Generate horde companies for an ONI_LED or ONI_LED_SPAWN assault.
@@ -437,12 +400,12 @@ static func horde_companies_to_battle_states(
 
 ## Map an ArmyCombatSystem victor string + round data to HordeBattleOutcome.
 ## Per s2.4.5: outcome determines SI hit applied after the battle.
-static func _map_battle_outcome(battle_result: Dictionary, rounds: int) -> int:
+## DISABLED: GDD says "routed quickly" for decisive but does not specify a
+## round threshold. All defender victories map to CONTESTED_BATTLE until
+## GDD specifies the "quickly" criterion.
+static func _map_battle_outcome(battle_result: Dictionary, _rounds: int) -> int:
 	var victor: String = battle_result.get("victor", "draw")
 	if victor == "defender":
-		# Decisive if horde routed quickly (<=2 rounds), else Contested.
-		if rounds <= 2:
-			return Enums.HordeBattleOutcome.DECISIVE_DEFENDER_VICTORY
 		return Enums.HordeBattleOutcome.CONTESTED_BATTLE
 	elif victor == "attacker":
 		return Enums.HordeBattleOutcome.DEFENDER_OVERRUN
@@ -498,30 +461,13 @@ static func resolve_horde_assault(
 # -- Sortie Combat (s2.4.10) ---------------------------------------------------
 
 ## Generate a Jigoku Horde scaled to the current SS for a sortie engagement.
-## Per s2.4.10: "the game generates a Jigoku Horde proportional to current SS."
-## Uses SS tier to determine company count: Low→2, Medium→4, High→6.
+## DISABLED: GDD s2.4.10 says "proportional to current SS" but does not
+## specify company counts or composition per SS tier. Pending GDD spec.
 static func _generate_sortie_horde_companies(
-	ss: int,
-	dice: DiceEngine,
+	_ss: int,
+	_dice: DiceEngine,
 ) -> Array:
-	var count: int
-	if ss >= 9:
-		count = 6
-	elif ss >= 5:
-		count = 4
-	else:
-		count = 2
-
-	var companies: Array = []
-	for i: int in range(count):
-		# Alternate Bakemono / Bakemono Warrior with a single Ogre Warrior at end.
-		if i == count - 1:
-			companies.append(get_unit_stats(Enums.ShadowlandsUnitType.OGRE_WARRIOR))
-		elif i % 2 == 0:
-			companies.append(get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO))
-		else:
-			companies.append(get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO_WARRIOR))
-	return companies
+	return []
 
 
 ## Resolve a sortie's combat against a scaled Jigoku Horde (s2.4.10).

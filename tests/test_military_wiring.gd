@@ -1079,7 +1079,7 @@ func test_build_tether_result_by_army_skips_invalid() -> void:
 func test_generate_battle_topic_from_movement() -> void:
 	var military_daily: Dictionary = {
 		"movement_results": [
-			{"army_id": 1, "battle_triggered": true, "arrived_province_id": 5},
+			{"army_id": 1, "battle_check": {"battle_triggered": true}, "arrived_province_id": 5},
 		],
 		"siege_results": [],
 	}
@@ -1092,7 +1092,8 @@ func test_generate_battle_topic_from_movement() -> void:
 	assert_eq(topics.size(), 1)
 	assert_eq(topics[0].topic_type, "battle_outcome")
 	assert_eq(topics[0].category, TopicData.Category.MILITARY)
-	assert_true(topics[0].momentum > 0.0)
+	# _COMBAT_EVENT_MOMENTUM was zeroed (invented value removed).
+	assert_true(topics[0].momentum >= 0.0)
 	assert_eq(next_id[0], 101)
 	assert_eq(active_topics.size(), 1)
 
@@ -1200,7 +1201,7 @@ func test_generate_siege_event_skips_empty_type() -> void:
 func test_generate_multiple_topics_in_one_day() -> void:
 	var military_daily: Dictionary = {
 		"movement_results": [
-			{"army_id": 1, "battle_triggered": true, "arrived_province_id": 3},
+			{"army_id": 1, "battle_check": {"battle_triggered": true}, "arrived_province_id": 3},
 		],
 		"siege_results": [
 			{
@@ -1229,7 +1230,7 @@ func test_generate_multiple_topics_in_one_day() -> void:
 func test_battle_topic_has_province_affected() -> void:
 	var military_daily: Dictionary = {
 		"movement_results": [
-			{"army_id": 1, "battle_triggered": true, "arrived_province_id": 7},
+			{"army_id": 1, "battle_check": {"battle_triggered": true}, "arrived_province_id": 7},
 		],
 		"siege_results": [],
 	}
@@ -1270,7 +1271,7 @@ func test_war_score_shift_on_battle_trigger() -> void:
 	]
 	var military_daily: Dictionary = {
 		"movement_results": [
-			{"army_id": 1, "battle_triggered": true, "arrived_province_id": 5},
+			{"army_id": 1, "battle_check": {"battle_triggered": true}, "arrived_province_id": 5},
 		],
 	}
 	var wars: Array = [war]
@@ -1300,7 +1301,7 @@ func test_war_score_no_shift_without_battle() -> void:
 func test_war_score_no_shift_without_wars() -> void:
 	var military_daily: Dictionary = {
 		"movement_results": [
-			{"army_id": 1, "battle_triggered": true},
+			{"army_id": 1, "battle_check": {"battle_triggered": true}},
 		],
 	}
 	var wars: Array = []
@@ -1327,11 +1328,14 @@ func test_war_seasonal_disposition_penalty() -> void:
 	crane_char.disposition_values[1] = 0
 	var chars: Array = [crab_char, crane_char]
 	DayOrchestrator._process_war_seasonal([war], chars)
+	# WAR_DISPOSITION_PENALTY_PER_SEASON was zeroed (invented value — GDD does
+	# not specify a numeric per-season disposition penalty for warring clans).
 	var penalty: int = WarSystem.get_active_war_disposition_penalty(
 		war.seasons_active,
 	)
-	assert_true(crab_char.disposition_values[2] < 0)
-	assert_true(crane_char.disposition_values[1] < 0)
+	assert_eq(penalty, 0, "Penalty is 0 (zeroed invented value)")
+	assert_eq(crab_char.disposition_values[2], 0, "No penalty applied when zeroed")
+	assert_eq(crane_char.disposition_values[1], 0, "No penalty applied when zeroed")
 
 
 func test_war_seasonal_skips_same_side() -> void:
@@ -1435,7 +1439,7 @@ func test_battle_size_affects_war_score() -> void:
 	]
 	var military_daily: Dictionary = {
 		"movement_results": [
-			{"army_id": 1, "battle_triggered": true, "company_count": 5},
+			{"army_id": 1, "battle_check": {"battle_triggered": true}, "company_count": 5},
 		],
 	}
 	var results: Array = DayOrchestrator._process_war_score_shifts(
@@ -1453,7 +1457,7 @@ func test_decisive_battle_from_company_count() -> void:
 	]
 	var military_daily: Dictionary = {
 		"movement_results": [
-			{"army_id": 1, "battle_triggered": true, "company_count": 10},
+			{"army_id": 1, "battle_check": {"battle_triggered": true}, "company_count": 10},
 		],
 	}
 	var results: Array = DayOrchestrator._process_war_score_shifts(
@@ -1729,7 +1733,7 @@ func test_multiple_events_combine() -> void:
 	dead_cmd.military_rank = Enums.MilitaryRank.CHUI
 	var military_daily: Dictionary = {
 		"movement_results": [
-			{"army_id": 1, "battle_triggered": true, "company_count": 2},
+			{"army_id": 1, "battle_check": {"battle_triggered": true}, "company_count": 2},
 		],
 		"battle_results": [
 			{
@@ -1761,7 +1765,7 @@ func test_inactive_war_skipped_for_battle_scores() -> void:
 	]
 	var military_daily: Dictionary = {
 		"movement_results": [
-			{"army_id": 1, "battle_triggered": true, "company_count": 5},
+			{"army_id": 1, "battle_check": {"battle_triggered": true}, "company_count": 5},
 		],
 	}
 	var results: Array = DayOrchestrator._process_war_score_shifts(
@@ -2769,7 +2773,7 @@ func _make_strong_ps(
 	var ps := NPCDataStructures.ProvinceStatus.new()
 	ps.province_id = prov_id
 	ps.clan = clan_name
-	ps.confidence = 2
+	ps.confidence = NPCDataStructures.ProvinceStatus.CONFIDENCE_FRESH
 	ps.garrison_pu = 5
 	ps.total_settlement_pu = 20
 	return ps
@@ -3179,7 +3183,7 @@ func test_ladder_side_effects_generates_topic() -> void:
 	var chars_by_id: Dictionary = {1: lord}
 	var side: Dictionary = {
 		"generates_topic": true,
-		"topic_tier": 4,
+		"topic_tier": TopicData.Tier.TIER_4,
 		"rung": FeasibilityLedger.LadderRung.DEMAND_TRIBUTE,
 	}
 	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
@@ -3202,7 +3206,7 @@ func test_ladder_side_effects_tier_3_topic() -> void:
 	var chars_by_id: Dictionary = {1: lord}
 	var side: Dictionary = {
 		"generates_topic": true,
-		"topic_tier": 3,
+		"topic_tier": TopicData.Tier.TIER_3,
 		"rung": FeasibilityLedger.LadderRung.RAID_NEIGHBOR,
 	}
 	var applied: Array = [_make_applied_with_ladder(1, "Crab", "Crane", side)]
@@ -3639,8 +3643,15 @@ func test_movement_processes_retreat_then_ticks() -> void:
 	army["retreat_target_province"] = 5
 	var results: Array = DayOrchestrator._process_army_movements([army])
 	assert_eq(results.size(), 1, "Retreat initiated and immediately ticked")
-	assert_true(army["is_moving"])
-	assert_eq(army["days_remaining"], DayOrchestrator._RETREAT_DEFAULT_DAYS - 1)
+	# _RETREAT_DEFAULT_DAYS was zeroed (invented value — GDD does not specify
+	# retreat duration). With days=0, army immediately arrives after one tick.
+	if DayOrchestrator._RETREAT_DEFAULT_DAYS == 0:
+		# Army arrives immediately: is_moving becomes false after the tick.
+		assert_false(army["is_moving"], "Army arrived immediately with 0-day retreat")
+		assert_true(results[0].get("arrived", false), "Army should have arrived")
+	else:
+		assert_true(army["is_moving"])
+		assert_eq(army["days_remaining"], DayOrchestrator._RETREAT_DEFAULT_DAYS - 1)
 
 
 # -- Retreat arrival cleanup -----------------------------------------------------
@@ -4700,7 +4711,7 @@ func test_levy_suspicion_fires_after_threshold() -> void:
 	)
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["lord_id"], 5)
-	assert_eq(results[0]["topic_tier"], 4)
+	assert_eq(results[0]["topic_tier"], TopicData.Tier.TIER_4)
 	assert_eq(topics.size(), 1)
 
 
@@ -4741,7 +4752,7 @@ func test_levy_suspicion_escalates_at_3_seasons() -> void:
 		[company], [], chars_by_id, topics, next_tid, 90, 3,
 	)
 	assert_eq(results.size(), 1)
-	assert_eq(results[0]["topic_tier"], 3)
+	assert_eq(results[0]["topic_tier"], TopicData.Tier.TIER_3)
 	assert_true(results[0]["escalated"])
 
 
@@ -5163,7 +5174,8 @@ func test_storm_assault_metadata_sets_settlement_id() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.location_id = "42"
 	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
-	assert_eq(option.metadata.get("siege_settlement_id", ""), "42")
+	# Metadata now stores int via ctx.location_id.to_int() (String→int mismatch fixed).
+	assert_eq(option.metadata.get("siege_settlement_id", -1), 42)
 
 
 # -- Battle Integration Tests: Terrain + Fort + War Score End-to-End --------
@@ -5327,12 +5339,12 @@ func test_integration_war_score_shift_from_battle() -> void:
 	var war_score_results: Array = DayOrchestrator._process_war_score_shifts(
 		military_daily, [], s["wars"], s["companies"],
 	)
-	# battle_triggered is nested under battle_check in movement_results,
-	# so _process_battle_war_scores does not find it at top level.
-	# With no commander deaths and no PU reconciliation effects, results are empty.
-	assert_true(war_score_results.is_empty())
+	# battle_check nesting is now correct — _process_battle_war_scores reads
+	# md.get("battle_check", {}).get("battle_triggered", false) which matches
+	# the movement_results produced by _process_army_movements.
+	assert_true(war_score_results.size() >= 1, "Battle should produce war score shift")
 	var shifted: bool = (war.war_score_a != score_a_before or war.war_score_b != score_b_before)
-	assert_false(shifted)
+	assert_true(shifted, "War score should shift after battle")
 
 
 func test_integration_battle_writes_results_to_companies() -> void:
@@ -5481,11 +5493,8 @@ func test_e2e_metadata_to_executor_to_orchestrator() -> void:
 	ctx.ic_day = 10
 	ctx.season = 0  # SPRING
 	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
-	# Metadata population stores ctx.location_id (String)
-	assert_eq(option.metadata["siege_settlement_id"], "10")
-
-	# Executor expects int siege_settlement_id — convert to int for type safety
-	option.metadata["siege_settlement_id"] = 10
+	# Metadata now stores int via ctx.location_id.to_int() (String→int mismatch fixed).
+	assert_eq(option.metadata["siege_settlement_id"], 10)
 
 	var char: L5RCharacterData = L5RCharacterData.new()
 	char.physical_location = "10"
@@ -5654,8 +5663,8 @@ func test_maintain_siege_metadata_population() -> void:
 	option.action_id = "MAINTAIN_SIEGE"
 	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
 	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
-	# Metadata stores ctx.location_id which is a String
-	assert_eq(option.metadata.get("siege_settlement_id", ""), "10")
+	# Metadata now stores int via ctx.location_id.to_int() (String→int mismatch fixed).
+	assert_eq(option.metadata.get("siege_settlement_id", -1), 10)
 
 
 # -- ORDER_PATROL wiring tests ------------------------------------------------
@@ -5725,8 +5734,10 @@ func test_patrol_reduces_insurgency_spawn_chance() -> void:
 	var patrolled_chance: float = InsurgencySystem.get_spawn_chance(
 		Enums.InsurgencyType.PEASANT_REVOLT, Enums.StabilityTier.VOLATILE, province, ws_patrolled,
 	)
-	assert_true(patrolled_chance < base_chance)
-	assert_almost_eq(patrolled_chance, base_chance * 0.5, 0.001)
+	# is_patrolled halving was intentionally removed (invented behavior — GDD
+	# s11.11 does not specify that patrol reduces insurgency spawn chance).
+	# Patrol affects concealment reduction, not spawn chance.
+	assert_almost_eq(patrolled_chance, base_chance, 0.001, "Patrol does not affect spawn chance")
 
 
 func test_patrol_concealment_reduction_on_hidden_insurgency() -> void:

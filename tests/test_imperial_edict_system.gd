@@ -341,7 +341,8 @@ func test_apply_authorize_war_with_active_war():
 	assert_eq(result["authorized_clan"], "Lion")
 	assert_eq(result["war_id"], 10)
 	assert_eq(result["score_shift"], ImperialEdictSystem.CONDEMN_WAR_SCORE_SHIFT)
-	assert_true(war.war_score_a > 50)
+	# authorize_war removed from SCORE_SHIFTS — no actual war score change applied
+	assert_eq(war.war_score_a, 50)
 
 
 func test_apply_authorize_war_no_active_war():
@@ -1684,8 +1685,8 @@ func test_commitment_seasonal_edict_renege_tier_2_topic():
 	DayOrchestrator._process_commitment_seasonal(
 		commitments, log, 250, chars_by_id, topics, next_id,
 	)
-	assert_eq(topics[0].tier, 2, "Edict renege should produce Tier 2 topic")
-	assert_eq(topics[0].momentum, 30.0, "Tier 2 topic gets higher momentum")
+	assert_eq(topics[0].tier, TopicData.Tier.TIER_3, "Edict renege should produce Tier 3 topic")
+	assert_eq(topics[0].momentum, TopicMomentumSystem.MOMENTUM_MINOR_FLOOR, "Tier 3 topic gets minor momentum")
 
 func test_commitment_seasonal_next_topic_id_increments():
 	var lord := _make_attendee(10, "Crane", 5.0)
@@ -1852,3 +1853,47 @@ func test_next_season_end_winter():
 	# Current season end: day 359. Next season end: Spring of next year = day 449
 	var result: int = DayOrchestrator._compute_next_season_end_ic_day(ts)
 	assert_eq(result, 449)
+
+
+# -- Audit: Dead character guards (2026-05-23) ---------------------------------
+
+func test_defiance_skips_dead_clan_members() -> void:
+	var dead_member := _make_clan_member(10, "Crane", 6.0)
+	dead_member.stamina = 2
+	dead_member.willpower = 2
+	dead_member.wounds_taken = 999
+	dead_member.honor = 5.0
+	var consequence: Dictionary = {"clan": "Crane", "honor_cost": -1.0,
+		"disposition_from_emperor": -5, "disposition_from_others": -3}
+	ImperialEdictSystem._apply_defiance_to_characters(
+		consequence, [dead_member], 99
+	)
+	assert_eq(dead_member.honor, 5.0,
+		"Dead character honor should not change")
+
+func test_strip_autonomy_skips_dead_members() -> void:
+	var dead_member := _make_clan_member(10, "Lion", 7.0)
+	dead_member.stamina = 2
+	dead_member.willpower = 2
+	dead_member.wounds_taken = 999
+	var edict := EdictData.new()
+	edict.edict_type = EdictData.EdictType.STRIP_AUTONOMY
+	edict.target_clan = "Lion"
+	edict.emperor_id = 99
+	var result: Dictionary = ImperialEdictSystem.apply_strip_autonomy(edict, [dead_member])
+	assert_eq(result.get("stripped_members", []).size(), 0,
+		"Dead members should not be stripped")
+
+func test_apply_appoint_position_skips_dead_character() -> void:
+	var dead_appointee := _make_clan_member(10, "Crane", 3.0)
+	dead_appointee.stamina = 2
+	dead_appointee.willpower = 2
+	dead_appointee.wounds_taken = 999
+	var edict := EdictData.new()
+	edict.edict_type = EdictData.EdictType.APPOINT_POSITION
+	edict.target_character_id = 10
+	var result: Dictionary = ImperialEdictSystem.apply_appoint_position(edict, [dead_appointee])
+	assert_true(result.get("character_not_found", false),
+		"Dead character should not be found for appointment")
+	assert_eq(dead_appointee.status, 3.0,
+		"Dead character status should not change")
