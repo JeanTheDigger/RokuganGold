@@ -3053,6 +3053,46 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   assassination_system (s12.8).
 - **No remaining unaudited simulation files.**
 
+### Systems Added 2026-05-28 (continued)
+- **s57.54 Clan Champion Strategic Evaluation System** — `shared/strategic_conclusion_data.gd`,
+  extended `simulation/strategic_review.gd`. Quarterly evaluation producing 2–4 clan-wide
+  strategic conclusions that broadcast to Family Daimyo.
+  `StrategicConclusionData` Resource: 16 `ConclusionType` values across 5 domains
+  (MILITARY, DIPLOMATIC, ECONOMIC, SPIRITUAL, SOCIAL), `WarObjective` enum,
+  `target_clan_id` (int via `clan_name.hash()`), `score`, `is_forced`,
+  `is_continuation`, `source_topic_ids`, `season_originated`.
+  `ClanData` gains `clan_strategic_priorities: Array[StrategicConclusionData]` and
+  `next_conclusion_id`. `L5RCharacterData` gains `strategic_evaluation_log` (audit only).
+  `ContextSnapshot` gains `champion_conclusion_candidates` and `local_tier3_candidates`.
+  Six-step evaluation process: (1) Threat Scan — forced conclusions from Tier 1/2 topics
+  and active wars/edicts; (2) Opportunity Scan — candidate pool from Tier 3/4 topics;
+  (3) Scoring — standing objective match (+0/+30), topic urgency (Tier3=+25, Tier4=+10,
+  momentum ±10), convergent topics (+5/extra), personality preference (+25/+15/0/−15,
+  HARD_BLOCK removes from pool), continuation bonus (+10 base, Makoto +20, Ketsui +15,
+  Ishi locks); (4) Selection — slot count from personality; (5) Write conclusions to
+  `clan.clan_strategic_priorities`; (6) Dispatch notification letters to absent Family
+  Daimyo via `_process_champion_letter_dispatches()`. Three trigger points:
+  `run_clan_champion_evaluation` (quarterly, seasonal block), `run_midseason_crisis_update`
+  (new Tier 1/2 topic forces partial reevaluation), `run_priority_resolved` (conclusion
+  achieved or impossible — Ketsui immediately refills via full reevaluation).
+  Family Daimyo Phase 2 combined pool (s57.54.10b): `get_champion_conclusion_needtypes()`
+  translates Champion conclusions to NeedType candidates re-weighted by FD's own
+  personality preference matrix. `_build_local_tier3_candidates()` converts Tier 1–3
+  topics in character's topic_pool to NeedType candidates by topic category
+  (MILITARY→DEFEND_PROVINCE, POLITICAL→INVESTIGATE_THREAT, ECONOMIC→ACQUIRE_RESOURCE,
+  SUPERNATURAL→RESTORE_WORSHIP, LEGAL/other→INVESTIGATE_THREAT/RAISE_DISPOSITION).
+  NPC engine `_check_combined_pool()` merges both arrays and selects highest-scoring
+  need for Family Daimyo+ characters in Phase 2. Operational superior CO budget:
+  `get_operational_superior_co_budget()` returns 2/day for 1–3 subordinates, 3/day
+  for 4+ (s57.54.10d). PATRONIZE_ARTS added as 82nd NeedType in
+  `objective_alignment.json` with REQUEST_PERFORMANCE (90), DELIVER_GIFT (70),
+  RAISE_DISPOSITION (40), WRITE_LETTER (35). Wired into DayOrchestrator:
+  `_run_strategic_reviews()` gains `active_topics, active_edicts, clans, current_season,
+  dice_engine` parameters; champion loop runs seasonally after standard lord reviews;
+  `_inject_base_character_context()` populates champion_conclusion_candidates and
+  local_tier3_candidates for Family Daimyo characters (status 6.0–6.99); both keys
+  cleared by stale flag clearing between days. 22 tests.
+
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
   SkillResolver and ActionExecutor. Doji Courtier R1a (honor-gated Free Raise on
