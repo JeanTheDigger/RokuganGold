@@ -454,3 +454,123 @@ func test_priority_resolved_removes_conclusion() -> void:
 
 	for remaining: StrategicConclusionData in clan.clan_strategic_priorities:
 		assert_ne(remaining.conclusion_id, 42, "Resolved conclusion_id=42 should be removed")
+
+
+# -- _process_midseason_champion_updates (DayOrchestrator wiring) ---------------
+
+func _make_champion_with_topic(topic_id: int) -> L5RCharacterData:
+	var c := _make_champion()
+	c.topic_pool.append(topic_id)
+	return c
+
+
+func test_midseason_updates_fires_for_unaddressed_tier1_topic() -> void:
+	var champion := _make_champion_with_topic(77)
+	var clan := _make_clan()
+	var crisis_topic := _make_topic(77, TopicData.Tier.TIER_1)
+	crisis_topic.topic_type = "war_declaration"
+	crisis_topic.clan_involved = "Dragon"
+	var active_topics: Array = [crisis_topic]
+	var clans: Dictionary = {"Crane": clan}
+
+	DayOrchestrator._process_midseason_champion_updates(
+		[champion], {champion.character_id: champion}, clans,
+		active_topics, 0, [], [1], 0,
+	)
+
+	var has_forced: bool = false
+	for sc: StrategicConclusionData in clan.clan_strategic_priorities:
+		if sc.is_forced:
+			has_forced = true
+			break
+	assert_true(has_forced, "Unaddressed Tier 1 topic should create a forced conclusion")
+
+
+func test_midseason_updates_skips_already_addressed_topic() -> void:
+	var champion := _make_champion_with_topic(88)
+	var clan := _make_clan()
+	# Pre-populate a forced conclusion that already covers topic 88.
+	var existing_forced := StrategicConclusionData.new()
+	existing_forced.is_forced = true
+	existing_forced.source_topic_ids = [88]
+	existing_forced.conclusion_type = StrategicConclusionData.ConclusionType.DEFEND_TERRITORY
+	existing_forced.score = 150
+	existing_forced.season_originated = 0
+	clan.clan_strategic_priorities.append(existing_forced)
+
+	var crisis_topic := _make_topic(88, TopicData.Tier.TIER_1)
+	crisis_topic.topic_type = "war_declaration"
+	var active_topics: Array = [crisis_topic]
+	var clans: Dictionary = {"Crane": clan}
+	var initial_count: int = clan.clan_strategic_priorities.size()
+
+	DayOrchestrator._process_midseason_champion_updates(
+		[champion], {champion.character_id: champion}, clans,
+		active_topics, 0, [], [1], 0,
+	)
+
+	assert_eq(
+		clan.clan_strategic_priorities.size(), initial_count,
+		"Already-addressed topic should not add another forced conclusion",
+	)
+
+
+func test_midseason_updates_skips_tier3_topic() -> void:
+	var champion := _make_champion_with_topic(99)
+	var clan := _make_clan()
+	var tier3_topic := _make_topic(99, TopicData.Tier.TIER_3)
+	tier3_topic.topic_type = "insurgency"
+	var active_topics: Array = [tier3_topic]
+	var clans: Dictionary = {"Crane": clan}
+
+	DayOrchestrator._process_midseason_champion_updates(
+		[champion], {champion.character_id: champion}, clans,
+		active_topics, 0, [], [1], 0,
+	)
+
+	assert_eq(clan.clan_strategic_priorities.size(), 0, "Tier 3 topic must not trigger midseason update")
+
+
+func test_midseason_updates_skips_dead_champion() -> void:
+	var champion := _make_champion_with_topic(55)
+	champion.wounds_taken = 999  # lethal
+	var clan := _make_clan()
+	var crisis_topic := _make_topic(55, TopicData.Tier.TIER_2)
+	crisis_topic.topic_type = "famine"
+	var active_topics: Array = [crisis_topic]
+	var clans: Dictionary = {"Crane": clan}
+
+	DayOrchestrator._process_midseason_champion_updates(
+		[champion], {champion.character_id: champion}, clans,
+		active_topics, 0, [], [1], 0,
+	)
+
+	assert_eq(clan.clan_strategic_priorities.size(), 0, "Dead champion should be skipped")
+
+
+func test_midseason_updates_dispatches_letter_for_absent_fd() -> void:
+	var champion := _make_champion_with_topic(66)
+	champion.physical_location = "100"
+	var fd := _make_family_daimyo()
+	fd.physical_location = "200"  # different settlement — not co-located
+
+	var clan := _make_clan()
+	var crisis_topic := _make_topic(66, TopicData.Tier.TIER_1)
+	crisis_topic.topic_type = "war_declaration"
+	crisis_topic.clan_involved = "Lion"
+	var active_topics: Array = [crisis_topic]
+	var clans: Dictionary = {"Crane": clan}
+	var chars_by_id: Dictionary = {
+		champion.character_id: champion,
+		fd.character_id: fd,
+	}
+	var chars: Array = [champion, fd]
+	var pending_letters: Array = []
+	var next_letter_id: Array = [1]
+
+	DayOrchestrator._process_midseason_champion_updates(
+		chars, chars_by_id, clans, active_topics, 0,
+		pending_letters, next_letter_id, 0,
+	)
+
+	assert_gt(pending_letters.size(), 0, "Absent FD should receive a dispatch letter")

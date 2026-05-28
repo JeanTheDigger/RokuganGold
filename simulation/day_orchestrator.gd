@@ -1242,6 +1242,14 @@ static func advance_day(
 		_purge_delivered_letters(pending_letters, characters_by_id, ic_day)
 		_purge_exposed_secrets(active_secrets, characters_by_id, ic_day)
 
+	# s57.54 §9 — mid-season crisis update fires on non-seasonal days when a
+	# champion has Tier 1/2 topics not yet addressed as forced conclusions.
+	if not is_season_boundary and not clans.is_empty():
+		_process_midseason_champion_updates(
+			characters, characters_by_id, clans, active_topics, current_season,
+			pending_letters, next_letter_id, ic_day,
+		)
+
 	var horde_results: Dictionary = _process_horde_rolls(
 		current_season, prev_season,
 		active_hordes, horde_strength_counters, last_targeted_province_id,
@@ -7277,6 +7285,60 @@ static func _get_family_daimyo_ids(clan_name: String, characters: Array) -> Arra
 
 static func _is_lord_tier(character: L5RCharacterData) -> bool:
 	return character.status >= 5.0 or character.lord_id == -1
+
+
+## s57.54 §9 — fires on non-seasonal days when a champion has Tier 1/2 topics
+## not yet represented as forced conclusions in clan_strategic_priorities.
+## Dedup guard: skips any topic already listed in an existing forced conclusion's
+## source_topic_ids, so the same crisis topic is never processed twice.
+static func _process_midseason_champion_updates(
+	characters: Array,
+	characters_by_id: Dictionary,
+	clans: Dictionary,
+	active_topics: Array,
+	current_season: int,
+	pending_letters: Array,
+	next_letter_id: Array,
+	ic_day: int,
+) -> void:
+	var topics_by_id: Dictionary = {}
+	for t: Variant in active_topics:
+		if t is TopicData:
+			var td: TopicData = t as TopicData
+			if not td.resolved:
+				topics_by_id[td.topic_id] = td
+
+	for champion: L5RCharacterData in characters:
+		if CharacterStats.is_dead(champion):
+			continue
+		if champion.status < 7.0 or champion.lord_id != -1:
+			continue
+		var clan_data: ClanData = clans.get(champion.clan)
+		if clan_data == null:
+			continue
+		var fd_ids: Array = _get_family_daimyo_ids(champion.clan, characters)
+
+		for tid: int in champion.topic_pool:
+			var topic: TopicData = topics_by_id.get(tid)
+			if topic == null:
+				continue
+			if topic.tier != TopicData.Tier.TIER_1 and topic.tier != TopicData.Tier.TIER_2:
+				continue
+			# Skip if a forced conclusion already addresses this exact topic.
+			var already_addressed: bool = false
+			for sc: StrategicConclusionData in clan_data.clan_strategic_priorities:
+				if sc.is_forced and tid in sc.source_topic_ids:
+					already_addressed = true
+					break
+			if already_addressed:
+				continue
+			var dispatches: Array = StrategicReview.run_midseason_crisis_update(
+				champion, clan_data, topic, topics_by_id, current_season,
+				characters_by_id, fd_ids,
+			)
+			_process_champion_letter_dispatches(
+				dispatches, pending_letters, next_letter_id, ic_day, characters_by_id,
+			)
 
 
 static func _get_vassals(
