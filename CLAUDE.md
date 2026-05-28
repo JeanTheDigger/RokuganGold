@@ -126,6 +126,7 @@ When implementing or auditing a system, go here first:
 | Tattoo system                                 | 57.25                |
 | Artisan & crafting system                     | 49                   |
 | Musha Shugyo (warrior's pilgrimage)           | 57.48                |
+| Clan Champion strategic evaluation           | 57.54                |
 | Otomo Seiyaku (alliance suppression)          | 55.22b               |
 | NPC advancement (XP, skill/ring progression)  | 52 Part 3, 48        |
 | World population generator (game start pass)  | 52 Part 1, 22.4, 22.8|
@@ -3198,7 +3199,7 @@ Do not re-audit this; the list is settled. Ask the user before investigating any
 - s57.40.9 — Appraisal skill emphasis modifier: GDD section not yet unlocked
 
 **REFERENCE sections** (source material only, design not started): s31–s37, s38,
-s44, s45, s54.7, s57.22–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57.46.
+s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57.46.
 
 ### Pending Redesign
 (None currently pending.)
@@ -3613,7 +3614,7 @@ These need GDD sections to be written or unlocked before implementation.
 | s11.3.5 | Kuni/Asako/Kuroiban Named Characters with UPHOLD_LAW standing objectives — PARTIALLY DESIGNED |
 
 **REFERENCE sections** (source material only, design not started): s31–s37,
-s38, s44, s45, s54.7, s57.22–s57.24, s57.26–s57.30, s57.41–s57.43,
+s38, s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43,
 s57.45–s57.46.
 
 ---
