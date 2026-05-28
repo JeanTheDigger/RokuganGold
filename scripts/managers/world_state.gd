@@ -158,6 +158,11 @@ var worship_state: Dictionary = WorshipSystem.make_initial_worship_state()
 var clan_baselines: Dictionary = {}
 var family_baselines: Dictionary = {}
 
+# Decaying marriage boosts (s22.7) tracked separately from permanent baselines.
+# Each entry: {"value": int, "seasons_acc": int} keyed by CollectiveDisposition.make_pair_key().
+var marriage_clan_boosts: Dictionary = {}
+var marriage_family_boosts: Dictionary = {}
+
 # -- Imperial Capital (s11.5b) -------------------------------------------------
 # Identifies the Emperor character and the settlement holding the Imperial
 # rice stockpile. -1 sentinels mean "not yet assigned" — Miya's Blessing
@@ -224,6 +229,8 @@ func _sync_wars_to_world_states() -> void:
 	world_states["settlements"] = settlements
 	world_states["clan_baselines"] = clan_baselines
 	world_states["family_baselines"] = family_baselines
+	world_states["marriage_clan_boosts"] = marriage_clan_boosts
+	world_states["marriage_family_boosts"] = marriage_family_boosts
 	world_states["emperor_id"] = emperor_id
 	world_states["emperor_archetype"] = emperor_archetype
 

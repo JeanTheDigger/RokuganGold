@@ -433,6 +433,8 @@ func _save_json_state(ws: Node, base: String) -> bool:
 		# Collective disposition
 		"clan_baselines": ws.clan_baselines,
 		"family_baselines": ws.family_baselines,
+		"marriage_clan_boosts": ws.marriage_clan_boosts,
+		"marriage_family_boosts": ws.marriage_family_boosts,
 
 		# Governance states
 		"seiyaku_state": ws.seiyaku_state,
@@ -532,6 +534,8 @@ func _load_json_state(ws: Node, base: String) -> void:
 	# Collective disposition
 	ws.clan_baselines = state.get("clan_baselines", {})
 	ws.family_baselines = state.get("family_baselines", {})
+	ws.marriage_clan_boosts = state.get("marriage_clan_boosts", {})
+	ws.marriage_family_boosts = state.get("marriage_family_boosts", {})
 
 	# Governance
 	ws.seiyaku_state = state.get("seiyaku_state", {})

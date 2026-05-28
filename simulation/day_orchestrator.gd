@@ -1020,6 +1020,10 @@ static func advance_day(
 			next_topic_id, ic_day, season_meta, next_crisis_id,
 		)
 		_decay_all_historical_modifiers(characters, ic_day)
+		CollectiveDisposition.decay_marriage_boosts(
+			world_states.get("marriage_clan_boosts", {}),
+			world_states.get("marriage_family_boosts", {}),
+		)
 		military_seasonal_result = _process_military_seasonal(
 			companies, settlements, clans, characters_by_id,
 			dice_engine, _season_to_name(current_season),
@@ -1456,8 +1460,10 @@ static func _process_ooc_day_tick(
 					continue
 				var _cb: Dictionary = world_states.get("clan_baselines", {})
 				var _fb: Dictionary = world_states.get("family_baselines", {})
-				InformationSystem.add_contact(c, met_id, met_char.clan, met_char, _cb, _fb)
-				InformationSystem.add_contact(met_char, c.character_id, c.clan, c, _cb, _fb)
+				var _mcb: Dictionary = world_states.get("marriage_clan_boosts", {})
+				var _mfb: Dictionary = world_states.get("marriage_family_boosts", {})
+				InformationSystem.add_contact(c, met_id, met_char.clan, met_char, _cb, _fb, _mcb, _mfb)
+				InformationSystem.add_contact(met_char, c.character_id, c.clan, c, _cb, _fb, _mcb, _mfb)
 
 		# Topic leak — copy topic to target character's pool.
 		var leaked_topic: int = wind_result["topic_leaked"]
@@ -4884,7 +4890,8 @@ static func _process_introduction_writebacks(
 		if CharacterStats.is_dead(actor) or CharacterStats.is_dead(contact):
 			continue
 		InformationSystem.add_contact(actor, contact_id, contact.clan, contact,
-			world_states.get("clan_baselines", {}), world_states.get("family_baselines", {}))
+			world_states.get("clan_baselines", {}), world_states.get("family_baselines", {}),
+			world_states.get("marriage_clan_boosts", {}), world_states.get("marriage_family_boosts", {}))
 		var disp_gain: int = effects.get("disposition_gain", 0)
 		if disp_gain != 0:
 			var old_val: int = contact.disposition_values.get(actor_id, 0)
@@ -7575,11 +7582,13 @@ static func _process_arrival_observation(
 				continue
 			var _cb2: Dictionary = world_states.get("clan_baselines", {})
 			var _fb2: Dictionary = world_states.get("family_baselines", {})
-			InformationSystem.add_contact(character, other_id, other.clan, other, _cb2, _fb2)
+			var _mcb2: Dictionary = world_states.get("marriage_clan_boosts", {})
+			var _mfb2: Dictionary = world_states.get("marriage_family_boosts", {})
+			InformationSystem.add_contact(character, other_id, other.clan, other, _cb2, _fb2, _mcb2, _mfb2)
 			InformationSystem.record_location_observation(
 				character, other_id, dest, current_season
 			)
-			InformationSystem.add_contact(other, char_id, character.clan, character, _cb2, _fb2)
+			InformationSystem.add_contact(other, char_id, character.clan, character, _cb2, _fb2, _mcb2, _mfb2)
 			InformationSystem.record_location_observation(
 				other, char_id, dest, current_season
 			)
@@ -13789,6 +13798,8 @@ static func _process_governance_effects(
 
 	var clan_baselines: Dictionary = world_states.get("clan_baselines", {})
 	var family_baselines: Dictionary = world_states.get("family_baselines", {})
+	var marriage_clan_boosts: Dictionary = world_states.get("marriage_clan_boosts", {})
+	var marriage_family_boosts: Dictionary = world_states.get("marriage_family_boosts", {})
 
 	for result: Variant in results:
 		if not (result is Dictionary):
@@ -13812,6 +13823,7 @@ static func _process_governance_effects(
 					effects, characters_by_id, marriages, ic_day,
 					clan_baselines, family_baselines, favors,
 					active_topics, next_topic_id,
+					marriage_clan_boosts, marriage_family_boosts,
 				)
 				marriage_results.append(mr)
 
@@ -13866,6 +13878,8 @@ static func _apply_marriage(
 	favors: Array = [],
 	active_topics: Array = [],
 	next_topic_id: Array = [1000],
+	marriage_clan_boosts: Dictionary = {},
+	marriage_family_boosts: Dictionary = {},
 ) -> Dictionary:
 	var a_id: int = effects.get("candidate_a_id", -1)
 	var b_id: int = effects.get("candidate_b_id", -1)
@@ -13906,21 +13920,16 @@ static func _apply_marriage(
 
 	var boosts: Dictionary = MarriageSystem.get_marriage_boosts(marriage_type)
 
-	if not clan_baselines.is_empty():
-		# Champion-level marriage (s12.2b): proposing lord is Clan Champion → +8 clan, +5 family.
-		# Regular marriage: +1 clan, +5 family.
-		var proposing_lord_id: int = effects.get("proposing_lord_id", -1)
-		var proposing_lord: L5RCharacterData = characters_by_id.get(proposing_lord_id) as L5RCharacterData
-		var is_champion_marriage: bool = (
-			proposing_lord != null
-			and proposing_lord.lord_rank == Enums.LordRank.CLAN_CHAMPION
-		)
-		CollectiveDisposition.apply_marriage(
-			original_clan_a, original_clan_b,
-			original_family_a, original_family_b,
-			clan_baselines, family_baselines,
-			is_champion_marriage,
-		)
+	# s22.7: marriages add boosts to the decaying marriage_*_boosts layer.
+	# Cross-clan: +8 clan boost + +5 family boost. Between-families: +5 family only.
+	# CollectiveDisposition.apply_marriage guards clan_a != clan_b / family_a != family_b.
+	CollectiveDisposition.apply_marriage(
+		original_clan_a, original_clan_b,
+		original_family_a, original_family_b,
+		clan_baselines, family_baselines,
+		false,
+		marriage_clan_boosts, marriage_family_boosts,
+	)
 
 	var favor_created: bool = false
 	if boosts.get("favor_owed", false):
@@ -18868,7 +18877,9 @@ static func _resolve_scheduled_hunts(
 
 		var _hcb: Dictionary = world_states.get("clan_baselines", {})
 		var _hfb: Dictionary = world_states.get("family_baselines", {})
-		_apply_hunt_disposition(participants, _hcb, _hfb)
+		var _hmcb: Dictionary = world_states.get("marriage_clan_boosts", {})
+		var _hmfb: Dictionary = world_states.get("marriage_family_boosts", {})
+		_apply_hunt_disposition(participants, _hcb, _hfb, _hmcb, _hmfb)
 
 		if killed_id >= 0:
 			var killed: L5RCharacterData = characters_by_id.get(killed_id)
@@ -18924,7 +18935,13 @@ static func _resolve_scheduled_hunts(
 	return results
 
 
-static func _apply_hunt_disposition(participants: Array, clan_baselines: Dictionary = {}, family_baselines: Dictionary = {}) -> void:
+static func _apply_hunt_disposition(
+	participants: Array,
+	clan_baselines: Dictionary = {},
+	family_baselines: Dictionary = {},
+	marriage_clan_boosts: Dictionary = {},
+	marriage_family_boosts: Dictionary = {},
+) -> void:
 	for i: int in range(participants.size()):
 		for j: int in range(i + 1, participants.size()):
 			var a: L5RCharacterData = participants[i]
@@ -18932,8 +18949,8 @@ static func _apply_hunt_disposition(participants: Array, clan_baselines: Diction
 			var disp_ab: int = a.disposition_values.get(b.character_id, 0)
 			var disp_ba: int = b.disposition_values.get(a.character_id, 0)
 			if a.character_id not in b.met_characters:
-				InformationSystem.add_contact(b, a.character_id, a.clan, a, clan_baselines, family_baselines)
-				InformationSystem.add_contact(a, b.character_id, b.clan, b, clan_baselines, family_baselines)
+				InformationSystem.add_contact(b, a.character_id, a.clan, a, clan_baselines, family_baselines, marriage_clan_boosts, marriage_family_boosts)
+				InformationSystem.add_contact(a, b.character_id, b.clan, b, clan_baselines, family_baselines, marriage_clan_boosts, marriage_family_boosts)
 				a.disposition_values[b.character_id] = clampi(disp_ab + 3, -100, 100)
 				b.disposition_values[a.character_id] = clampi(disp_ba + 3, -100, 100)
 			else:

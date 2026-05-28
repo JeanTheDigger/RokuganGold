@@ -67,6 +67,8 @@ static func add_contact(
 	contact: L5RCharacterData = null,
 	clan_baselines: Dictionary = {},
 	family_baselines: Dictionary = {},
+	marriage_clan_boosts: Dictionary = {},
+	marriage_family_boosts: Dictionary = {},
 ) -> void:
 	if contact_id in character.met_characters:
 		return
@@ -77,11 +79,11 @@ static func add_contact(
 		character.known_contacts_by_clan[clan_id].append(contact_id)
 
 	# Seed starting personal disposition from clan + family baselines (s12.2b)
-	# on first meeting. No-op if the caller didn't supply baselines or the
-	# contact char itself.
+	# and decaying marriage boosts (s22.7) on first meeting.
 	if contact != null and (not clan_baselines.is_empty() or not family_baselines.is_empty()):
 		CollectiveDisposition.seed_first_meeting(
-			character, contact, clan_baselines, family_baselines
+			character, contact, clan_baselines, family_baselines,
+			marriage_clan_boosts, marriage_family_boosts,
 		)
 
 
