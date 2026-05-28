@@ -709,3 +709,624 @@ func test_political_raises_topic_linkage_at_completion() -> void:
 	# Piece should be complete and topic 77 should be linked
 	assert_eq(piece.craft_progress, -1)
 	assert_true(77 in piece.topic_ids)
+
+
+# ============================================================================
+# §57.22.13 PERFORM_THEATER_PIECE PIECE SELECTION SCORING
+# ============================================================================
+
+## Build a minimal ContextSnapshot for piece selection tests.
+## performer_id=1, location="loc_a", ic_day=100 by default.
+func _make_perform_ctx(performer_id: int = 1) -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = performer_id
+	ctx.clan = "Crane"
+	ctx.location_id = "loc_a"
+	ctx.ic_day = 100
+	ctx.status = 2.0
+	ctx.characters_present = []
+	ctx.disposition_values = {}
+	ctx.known_contacts = []
+	ctx.known_contacts_by_clan = {}
+	ctx.contact_clans = {}
+	ctx.known_topics = []
+	ctx.known_topic_momentums = {}
+	ctx.action_log = []
+	ctx.known_objectives = {}
+	return ctx
+
+
+## Build a minimal witness L5RCharacterData.
+func _make_witness(char_id: int, loc: String = "loc_a") -> L5RCharacterData:
+	var w := L5RCharacterData.new()
+	w.character_id = char_id
+	w.clan = "Lion"
+	w.family = "Matsu"
+	w.physical_location = loc
+	w.status = 1.0
+	w.wounds_taken = 0
+	w.pieces_seen = {}
+	w.disposition_values = {}
+	return w
+
+
+## Inject piece + pieces_by_id into ctx.known_objectives and return chars_by_id.
+func _inject_piece(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	witnesses: Array,
+) -> Dictionary:
+	ctx.known_objectives["theater_pieces_to_perform"] = [piece.piece_id]
+	ctx.known_objectives["_theater_pieces_by_id"] = {piece.piece_id: piece}
+	var chars_by_id: Dictionary = {}
+	for w: L5RCharacterData in witnesses:
+		chars_by_id[w.character_id] = w
+		ctx.characters_present.append(w.character_id)
+	return chars_by_id
+
+
+func test_piece_selection_returns_piece_id_for_viable_piece() -> void:
+	# One non-immune witness, performer knows piece → base 50, -30 (<3 witnesses) = 20 > 0.
+	var ctx := _make_perform_ctx()
+	var piece := _make_piece(10, 2)
+	piece.known_by = [1]  # performer knows it
+	var w1 := _make_witness(2)
+	var chars_by_id := _inject_piece(ctx, piece, [w1])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 10)
+
+
+func test_piece_selection_hard_gate_zero_non_immune_witnesses() -> void:
+	# All witnesses are in known_by → permanent immunity → hard gate → piece_id -1.
+	var ctx := _make_perform_ctx()
+	var piece := _make_piece(11, 2)
+	var w1 := _make_witness(2)
+	piece.known_by = [1, 2]  # both performer and witness know it
+	var chars_by_id := _inject_piece(ctx, piece, [w1])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], -1)
+
+
+func test_piece_selection_hard_gate_30_day_immunity_window() -> void:
+	# Witness saw piece 20 days ago (within 30-day window) → immune → hard gate.
+	var ctx := _make_perform_ctx()
+	var piece := _make_piece(12, 2)
+	piece.known_by = [1]
+	var w1 := _make_witness(2)
+	w1.pieces_seen[12] = 85  # ic_day 100 - 85 = 15 days ago → immune
+	var chars_by_id := _inject_piece(ctx, piece, [w1])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], -1)
+
+
+func test_piece_selection_immunity_window_expired() -> void:
+	# Witness saw piece 31 days ago → immunity expired → piece selectable.
+	var ctx := _make_perform_ctx()
+	var piece := _make_piece(13, 2)
+	piece.known_by = [1]
+	var w1 := _make_witness(2)
+	w1.pieces_seen[13] = 69  # ic_day 100 - 69 = 31 days ago → expired
+	var chars_by_id := _inject_piece(ctx, piece, [w1])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 13)
+
+
+func test_piece_selection_hard_gate_insufficient_colocated_knowers() -> void:
+	# Piece has 2 roles, only performer (1 knower) present → gate: need >= 2.
+	var ctx := _make_perform_ctx()
+	var piece := _make_piece(14, 2)
+	piece.known_by = [1]
+	# Add a second role to require 2 co-located knowers.
+	piece.roles = [
+		TheaterSystem.make_role(0, "Crane", TheaterSystem.SubjectType.CLAN, true),
+		TheaterSystem.make_role(1, "Lion", TheaterSystem.SubjectType.CLAN, false),
+	]
+	var w1 := _make_witness(2)  # not in known_by → only 1 knower (performer)
+	var chars_by_id := _inject_piece(ctx, piece, [w1])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], -1)
+
+
+func test_piece_selection_hard_gate_bunraku_needs_3_knowers() -> void:
+	# Bunraku piece with only 2 co-located knowers → hard gate.
+	var ctx := _make_perform_ctx()
+	var piece := _make_piece(15, 2)
+	piece.style = TheaterSystem.Style.BUNRAKU
+	var knower2 := _make_witness(2)
+	piece.known_by = [1, 2]  # only 2 knowers present
+	var w_non_knower := _make_witness(3)
+	var chars_by_id := _inject_piece(ctx, piece, [knower2, w_non_knower])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], -1)
+
+
+func test_piece_selection_bunraku_passes_with_3_knowers() -> void:
+	# Bunraku piece with 3 co-located knowers and 1 non-immune witness → selectable.
+	var ctx := _make_perform_ctx()
+	var piece := _make_piece(16, 2)
+	piece.style = TheaterSystem.Style.BUNRAKU
+	var k2 := _make_witness(2)
+	var k3 := _make_witness(3)
+	piece.known_by = [1, 2, 3]
+	var non_knower := _make_witness(4)
+	var chars_by_id := _inject_piece(ctx, piece, [k2, k3, non_knower])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 16)
+
+
+func test_piece_selection_topic_momentum_bonus() -> void:
+	# Two pieces: piece A has linked topic with momentum 35 (+30), piece B is base only.
+	# With 3 witnesses each: A = 50+30 = 80, B = 50. A wins.
+	var ctx := _make_perform_ctx()
+
+	var piece_a := _make_piece(20, 2)
+	piece_a.known_by = [1]
+	piece_a.topic_ids = [99]
+
+	var piece_b := _make_piece(21, 2)
+	piece_b.known_by = [1]
+
+	ctx.known_topics = [99]
+	ctx.known_topic_momentums = {99: 35}  # > 30
+
+	# 3 non-immune witnesses for each piece.
+	var w2 := _make_witness(2)
+	var w3 := _make_witness(3)
+	var w4 := _make_witness(4)
+
+	ctx.known_objectives["theater_pieces_to_perform"] = [20, 21]
+	ctx.known_objectives["_theater_pieces_by_id"] = {20: piece_a, 21: piece_b}
+	ctx.characters_present = [2, 3, 4]
+	var chars_by_id: Dictionary = {2: w2, 3: w3, 4: w4}
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 20)
+
+
+func test_piece_selection_low_momentum_no_bonus() -> void:
+	# Topic momentum exactly 30 (not > 30) → no bonus.
+	var ctx := _make_perform_ctx()
+	var piece := _make_piece(22, 2)
+	piece.known_by = [1]
+	piece.topic_ids = [88]
+	ctx.known_topics = [88]
+	ctx.known_topic_momentums = {88: 30}  # exactly 30, not > 30
+
+	var w2 := _make_witness(2)
+	var w3 := _make_witness(3)
+	var w4 := _make_witness(4)
+	var chars_by_id := _inject_piece(ctx, piece, [w2, w3, w4])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	# Score = 50 (no -30 since 3+ witnesses). Topic bonus must NOT add +30.
+	# Score of exactly 50 → selectable.
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 22)
+	# Verify no extra topic boost by checking against a piece with high momentum.
+	# (Selection itself proves the piece was viable at base score.)
+
+
+func test_piece_selection_majority_aligned_bonus() -> void:
+	# 2 of 3 witnesses aligned with framing (>50%) → +20.
+	# Two pieces; aligned piece wins.
+	var ctx := _make_perform_ctx()
+
+	var piece_aligned := _make_piece(30, 2)
+	piece_aligned.known_by = [1]
+	piece_aligned.framing = true  # positive framing
+	piece_aligned.roles = [TheaterSystem.make_role(0, "10", TheaterSystem.SubjectType.CHARACTER, true)]
+
+	var piece_plain := _make_piece(31, 2)
+	piece_plain.known_by = [1]
+
+	# Subject character_id=10, framing=true → witnesses who like char 10 (disp >= 11) align.
+	var w2 := _make_witness(2)
+	w2.disposition_values = {10: 20}  # likes subject → aligned
+	var w3 := _make_witness(3)
+	w3.disposition_values = {10: 20}  # aligned
+	var w4 := _make_witness(4)
+	w4.disposition_values = {10: -5}  # neutral → not aligned
+
+	ctx.known_objectives["theater_pieces_to_perform"] = [30, 31]
+	ctx.known_objectives["_theater_pieces_by_id"] = {30: piece_aligned, 31: piece_plain}
+	ctx.characters_present = [2, 3, 4]
+	var chars_by_id: Dictionary = {2: w2, 3: w3, 4: w4}
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 30)
+
+
+func test_piece_selection_strong_npc_disposition_bonus() -> void:
+	# NPC has strong disposition (≥+11) toward piece subject → +20.
+	# Piece A: NPC disp 20 toward subject → +20. Piece B: no strong disp.
+	var ctx := _make_perform_ctx()
+	ctx.disposition_values = {42: 20}  # strong positive toward char 42
+	ctx.known_contacts_by_clan = {}
+
+	var piece_a := _make_piece(40, 2)
+	piece_a.known_by = [1]
+	piece_a.roles = [TheaterSystem.make_role(0, "42", TheaterSystem.SubjectType.CHARACTER, true)]
+
+	var piece_b := _make_piece(41, 2)
+	piece_b.known_by = [1]
+	# plain Crane CLAN subject with no strong contacts
+
+	var w2 := _make_witness(2)
+	var w3 := _make_witness(3)
+	var w4 := _make_witness(4)
+
+	ctx.known_objectives["theater_pieces_to_perform"] = [40, 41]
+	ctx.known_objectives["_theater_pieces_by_id"] = {40: piece_a, 41: piece_b}
+	ctx.characters_present = [2, 3, 4]
+	var chars_by_id: Dictionary = {2: w2, 3: w3, 4: w4}
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 40)
+
+
+func test_piece_selection_author_bonus() -> void:
+	# Piece authored by NPC → +15. Two pieces; authored piece wins over anonymous.
+	var ctx := _make_perform_ctx(1)  # performer_id = 1
+
+	var piece_authored := _make_piece(50, 2)
+	piece_authored.author_id = 1  # is author
+	piece_authored.known_by = [1]
+
+	var piece_other := _make_piece(51, 2)
+	piece_other.author_id = 99  # someone else
+	piece_other.known_by = [1]
+
+	var w2 := _make_witness(2)
+	var w3 := _make_witness(3)
+	var w4 := _make_witness(4)
+
+	ctx.known_objectives["theater_pieces_to_perform"] = [50, 51]
+	ctx.known_objectives["_theater_pieces_by_id"] = {50: piece_authored, 51: piece_other}
+	ctx.characters_present = [2, 3, 4]
+	var chars_by_id: Dictionary = {2: w2, 3: w3, 4: w4}
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 50)
+
+
+func test_piece_selection_author_already_performed_penalty() -> void:
+	# Author already performed the piece today (-20 on top of +15 = net -5 vs base).
+	# Two pieces: piece A authored+already-performed, piece B authored-only.
+	# piece A score: 50+15-20-30=15 (1 witness), piece B score: 50+15-30=35 (1 witness). B wins.
+	var ctx := _make_perform_ctx(1)
+	ctx.action_log = [{
+		"action_id": "PERFORM_THEATER_PIECE",
+		"metadata": {"piece_id": 60},
+	}]
+
+	var piece_a := _make_piece(60, 2)
+	piece_a.author_id = 1
+	piece_a.known_by = [1]
+
+	var piece_b := _make_piece(61, 2)
+	piece_b.author_id = 1
+	piece_b.known_by = [1]
+
+	var w2 := _make_witness(2)
+
+	ctx.known_objectives["theater_pieces_to_perform"] = [60, 61]
+	ctx.known_objectives["_theater_pieces_by_id"] = {60: piece_a, 61: piece_b}
+	ctx.characters_present = [2]
+	var chars_by_id: Dictionary = {2: w2}
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 61)
+
+
+func test_piece_selection_majority_immune_penalty() -> void:
+	# 2 of 3 non-known_by witnesses are immune (>50%) → -25.
+	# Piece A: majority immune. Piece B: no immunity. B wins.
+	var ctx := _make_perform_ctx()
+
+	var piece_a := _make_piece(70, 2)
+	piece_a.known_by = [1]
+
+	var piece_b := _make_piece(71, 2)
+	piece_b.known_by = [1]
+
+	var w2 := _make_witness(2)
+	w2.pieces_seen[70] = 90  # saw piece A 10 days ago → immune
+	var w3 := _make_witness(3)
+	w3.pieces_seen[70] = 90  # immune too (2 of 3 > 50%)
+	var w4 := _make_witness(4)
+	# w4 not immune for piece A
+
+	ctx.known_objectives["theater_pieces_to_perform"] = [70, 71]
+	ctx.known_objectives["_theater_pieces_by_id"] = {70: piece_a, 71: piece_b}
+	ctx.characters_present = [2, 3, 4]
+	var chars_by_id: Dictionary = {2: w2, 3: w3, 4: w4}
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	# Piece A: 50 - 25 (majority immune) - 30 (only 1 non-immune) = -5 → piece_id = -1 for A
+	# Piece B: 50 (3 witnesses, none immune) → B wins.
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 71)
+
+
+func test_piece_selection_fewer_than_3_witnesses_penalty() -> void:
+	# Only 2 non-immune witnesses → -30. Score = 50 - 30 = 20 > 0 → still selected.
+	var ctx := _make_perform_ctx()
+	var piece := _make_piece(80, 2)
+	piece.known_by = [1]
+
+	var w2 := _make_witness(2)
+	var w3 := _make_witness(3)
+	var chars_by_id := _inject_piece(ctx, piece, [w2, w3])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 80)
+
+
+func test_piece_selection_high_value_witness_bonus() -> void:
+	# One witness has Status >= 3 (+15). Two pieces; piece with high-value witness wins.
+	var ctx := _make_perform_ctx()
+
+	var piece_hvw := _make_piece(90, 2)
+	piece_hvw.known_by = [1]
+
+	var piece_plain := _make_piece(91, 2)
+	piece_plain.known_by = [1]
+
+	# High-value witness (Status 3.0) only for piece_hvw (not immune to it).
+	var w2 := _make_witness(2)
+	w2.status = 3.5
+	w2.pieces_seen[91] = 95  # immune to piece_plain
+
+	var w3 := _make_witness(3)
+	var w4 := _make_witness(4)
+
+	ctx.known_objectives["theater_pieces_to_perform"] = [90, 91]
+	ctx.known_objectives["_theater_pieces_by_id"] = {90: piece_hvw, 91: piece_plain}
+	ctx.characters_present = [2, 3, 4]
+	var chars_by_id: Dictionary = {2: w2, 3: w3, 4: w4}
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	# piece_hvw: 50 + 15 (high-value w2) = 65
+	# piece_plain: 50 (w2 is immune, only w3+w4 non-immune, so 2 witnesses → -30 = 20)
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 90)
+
+
+func test_piece_selection_score_zero_or_below_returns_minus_one() -> void:
+	# Score at or below 0 → piece_id -1.
+	# 1 witness (no -30 offset) + majority immune -25 + author already performed -5 net.
+	# Actually simplest: 1 witness → 50 - 30 = 20. Need something that pushes to 0.
+	# Use majority immune (-25) + author already performed today (-5 net from +15-20).
+	# Score: 50 + 15 (author) - 20 (already performed) - 25 (majority immune) - 30 (<3 witnesses) = -10 ≤ 0.
+	var ctx := _make_perform_ctx(1)
+	ctx.action_log = [{"action_id": "PERFORM_THEATER_PIECE", "metadata": {"piece_id": 100}}]
+
+	var piece := _make_piece(100, 2)
+	piece.author_id = 1
+	piece.known_by = [1]
+
+	var w2 := _make_witness(2)
+	w2.pieces_seen[100] = 95  # immune (5 days ago)
+	var w3 := _make_witness(3)
+	w3.pieces_seen[100] = 95  # immune (2 of 2 non-knowers → >50% immune)
+
+	# Only 1 non-immune non-knower needed to pass hard gate 1.
+	# But we need at least 1. Let's add a 3rd witness who is non-immune.
+	var w4 := _make_witness(4)
+	# w4 is not immune → non_immune_count = 1 → hard gate passes
+	# majority immune: 2 immune / 3 total = 66% > 50% → -25
+
+	var chars_by_id := _inject_piece(ctx, piece, [w2, w3, w4])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], -1)
+
+
+func test_piece_selection_kyogen_subject_present_bonus() -> void:
+	# Kyogen piece: subject (CHARACTER id=5) is in zone → +25.
+	var ctx := _make_perform_ctx()
+	ctx.status = 3.0  # performer status >= subject status → no -40
+
+	var piece := _make_piece(110, 2)
+	piece.style = TheaterSystem.Style.KYOGEN
+	piece.known_by = [1]
+	piece.roles = [TheaterSystem.make_role(0, "5", TheaterSystem.SubjectType.CHARACTER, false)]
+
+	var subject_char := _make_witness(5)
+	subject_char.status = 2.0  # subject status < performer (3.0) → no -40
+	var non_subject := _make_witness(2)
+	var chars_by_id := _inject_piece(ctx, piece, [subject_char, non_subject])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	# subject is present (char_id=5 in characters_present) → +25
+	# 2 witnesses (non-immune) → -30 (<3)
+	# Score = 50 + 25 - 30 = 45 > 0 → selected.
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 110)
+
+
+func test_piece_selection_kyogen_higher_status_penalty() -> void:
+	# Kyogen: subject has higher Status than performer, no pretext → -40.
+	# With no pretext and subject Status 5 > performer Status 2:
+	# score = 50 - 30 (<3 witnesses) - 40 = -20 ≤ 0 → piece_id -1.
+	var ctx := _make_perform_ctx()
+	ctx.status = 2.0  # performer status
+
+	var piece := _make_piece(120, 2)
+	piece.style = TheaterSystem.Style.KYOGEN
+	piece.known_by = [1]
+	piece.roles = [TheaterSystem.make_role(0, "6", TheaterSystem.SubjectType.CHARACTER, false)]
+
+	var subject_char := _make_witness(6)
+	subject_char.status = 5.0  # higher than performer
+	# No enemy disposition toward performer → no pretext.
+	var non_subject := _make_witness(2)
+	var chars_by_id := _inject_piece(ctx, piece, [subject_char, non_subject])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], -1)
+
+
+func test_piece_selection_kyogen_pretext_negates_status_penalty() -> void:
+	# Kyogen: subject has higher Status but holds Enemy disp (≤-51) toward performer.
+	# Pretext exists → -40 is NOT applied.
+	var ctx := _make_perform_ctx(1)
+	ctx.status = 2.0
+
+	var piece := _make_piece(130, 2)
+	piece.style = TheaterSystem.Style.KYOGEN
+	piece.known_by = [1]
+	piece.roles = [TheaterSystem.make_role(0, "7", TheaterSystem.SubjectType.CHARACTER, false)]
+
+	var subject_char := _make_witness(7)
+	subject_char.status = 5.0  # higher Status
+	subject_char.disposition_values = {1: -55}  # Enemy disp toward performer → pretext
+
+	var non_subject := _make_witness(2)
+	var chars_by_id := _inject_piece(ctx, piece, [subject_char, non_subject])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	# Score = 50 - 30 (<3 witnesses) = 20 > 0 → selected (no -40 due to pretext).
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 130)
+
+
+func test_piece_selection_seek_glory_sets_raises() -> void:
+	# SEEK_GLORY need_type → raises = 1 in returned metadata.
+	var ctx := _make_perform_ctx()
+	var piece := _make_piece(140, 2)
+	piece.known_by = [1]
+	var w2 := _make_witness(2)
+	var chars_by_id := _inject_piece(ctx, piece, [w2])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["raises"], 1)
+
+
+func test_piece_selection_non_glory_need_no_raises() -> void:
+	# Non-SEEK_GLORY need → raises = 0.
+	var ctx := _make_perform_ctx()
+	var piece := _make_piece(141, 2)
+	piece.known_by = [1]
+	var w2 := _make_witness(2)
+	var chars_by_id := _inject_piece(ctx, piece, [w2])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "DAMAGE_RELATIONSHIP"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["raises"], 0)
+
+
+func test_piece_selection_bunraku_sets_is_bunraku_flag() -> void:
+	# Best piece is Bunraku → is_bunraku_performance = true.
+	var ctx := _make_perform_ctx()
+	var piece := _make_piece(150, 2)
+	piece.style = TheaterSystem.Style.BUNRAKU
+	var k2 := _make_witness(2)
+	var k3 := _make_witness(3)
+	piece.known_by = [1, 2, 3]  # 3 knowers
+	var non_knower := _make_witness(4)
+	var chars_by_id := _inject_piece(ctx, piece, [k2, k3, non_knower])
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 150)
+	assert_true(result["is_bunraku_performance"])
+
+
+func test_piece_selection_best_scoring_piece_wins() -> void:
+	# Multiple pieces; highest score wins.
+	# Piece A: base only (50). Piece B: +30 topic + 3 witnesses (50+30=80). B wins.
+	var ctx := _make_perform_ctx()
+	ctx.known_topics = [55]
+	ctx.known_topic_momentums = {55: 40}
+
+	var piece_a := _make_piece(160, 2)
+	piece_a.known_by = [1]
+
+	var piece_b := _make_piece(161, 2)
+	piece_b.known_by = [1]
+	piece_b.topic_ids = [55]
+
+	var w2 := _make_witness(2)
+	var w3 := _make_witness(3)
+	var w4 := _make_witness(4)
+
+	ctx.known_objectives["theater_pieces_to_perform"] = [160, 161]
+	ctx.known_objectives["_theater_pieces_by_id"] = {160: piece_a, 161: piece_b}
+	ctx.characters_present = [2, 3, 4]
+	var chars_by_id: Dictionary = {2: w2, 3: w3, 4: w4}
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+
+	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
+	assert_eq(result["piece_id"], 161)

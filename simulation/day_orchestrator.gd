@@ -19740,6 +19740,7 @@ static func _inject_theater_context(
 	## Inject per-character theater context into known_objectives (matching hunt pattern).
 	## theater_pieces_to_perform: Array of piece_ids the character can perform.
 	## wip_piece_ids: Array of piece_ids the character is composing.
+	## _theater_pieces_by_id: Dict[piece_id → TheaterPieceData] for §57.22.13 scoring.
 	for character: L5RCharacterData in characters:
 		if CharacterStats.is_dead(character):
 			continue
@@ -19750,6 +19751,7 @@ static func _inject_theater_context(
 
 		var performable: Array[int] = []
 		var wip_ids: Array[int] = []
+		var pieces_by_id: Dictionary = {}
 		for piece: TheaterPieceData in theater_pieces:
 			if piece.lost or piece.abandoned_incomplete:
 				continue
@@ -19759,12 +19761,15 @@ static func _inject_theater_context(
 			else:
 				if char_id in piece.known_by or piece.canonized:
 					performable.append(piece.piece_id)
+					pieces_by_id[piece.piece_id] = piece
 
 		var known_objs: Dictionary = ws.get("known_objectives", {})
 		if not performable.is_empty():
 			known_objs["theater_pieces_to_perform"] = performable
 		if not wip_ids.is_empty():
 			known_objs["wip_piece_ids"] = wip_ids
+		# Always write the dict (even empty) so stale data from yesterday never persists.
+		known_objs["_theater_pieces_by_id"] = pieces_by_id
 		ws["known_objectives"] = known_objs
 
 

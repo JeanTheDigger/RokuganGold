@@ -2908,7 +2908,7 @@ static func _populate_action_metadata(
 	elif option.action_id == "LEARN_THEATER_PIECE":
 		option.metadata = _build_learn_theater_metadata(ctx, need)
 	elif option.action_id == "PERFORM_THEATER_PIECE":
-		option.metadata = _build_perform_theater_metadata(ctx, need)
+		option.metadata = _build_perform_theater_metadata(ctx, need, chars_by_id)
 	elif option.action_id == "DEDICATE_PIECE":
 		option.metadata = _build_dedicate_piece_metadata(ctx, need)
 
@@ -2962,24 +2962,440 @@ static func _build_learn_theater_metadata(
 static func _build_perform_theater_metadata(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
+	chars_by_id: Dictionary = {},
 ) -> Dictionary:
-	## Perform: pick a known piece aligned to current NeedType.
+	## §57.22.13 — Score each performable piece and select the best.
+	var pieces_by_id: Dictionary = ctx.known_objectives.get("_theater_pieces_by_id", {})
 	var performable: Array = ctx.known_objectives.get("theater_pieces_to_perform", [])
-	# Prefer a piece matching the NeedType's direction (damage = negative framing)
+
 	var best_id: int = -1
+	var best_score: int = -1
+	var best_is_bunraku: bool = false
+
 	for pid: Variant in performable:
-		# Just pick the first one; full scoring handled by objective_alignment
-		best_id = int(pid)
-		break
-	var is_bunraku: bool = false
+		var piece_id: int = int(pid)
+		var piece: TheaterPieceData = pieces_by_id.get(piece_id) as TheaterPieceData
+		if piece == null:
+			continue
+
+		# Hard gate 1: need at least 1 non-immune non-known_by witness.
+		var non_immune_count: int = _count_non_immune_theater_witnesses(ctx, piece, chars_by_id)
+		if non_immune_count == 0:
+			continue
+
+		# Hard gate 2: co-located known_by members must cover all named roles.
+		var num_named_roles: int = maxi(1, piece.roles.size())
+		var colocated_knowers: int = _count_colocated_theater_knowers(ctx, piece, chars_by_id)
+		if colocated_knowers < num_named_roles:
+			continue
+
+		# Bunraku needs at least 3 co-located known_by members (§57.22.3).
+		if piece.style == TheaterSystem.Style.BUNRAKU and colocated_knowers < 3:
+			continue
+
+		var score: int = 50  # base
+
+		# +30 if any topic_id is in known_topics with momentum > 30 (§57.22.13).
+		for tid: int in piece.topic_ids:
+			if (tid in ctx.known_topics) and (ctx.known_topic_momentums.get(tid, 0) > 30):
+				score += 30
+				break
+
+		# +20 if >50% non-immune non-known_by witnesses aligned with piece framing.
+		if _theater_majority_aligned(ctx, piece, chars_by_id, non_immune_count):
+			score += 20
+
+		# +20 if NPC holds strong personal disposition toward any role's subject.
+		if _npc_strong_theater_disposition(ctx, piece):
+			score += 20
+
+		# +15 if NPC is author; -20 if already performed this piece today.
+		if piece.author_id == ctx.character_id:
+			score += 15
+			if _theater_author_performed_today(ctx, piece_id):
+				score -= 20
+
+		# -25 if >50% of non-known_by witnesses have active immunity.
+		if _theater_majority_immune(ctx, piece, chars_by_id):
+			score -= 25
+
+		# -30 if fewer than 3 non-immune named witnesses.
+		if non_immune_count < 3:
+			score -= 30
+
+		# +15 if at least one non-immune non-known_by witness has Status >= 3.
+		if _theater_has_high_value_witness(ctx, piece, chars_by_id):
+			score += 15
+
+		# Kyogen additional modifiers (§57.22.13).
+		if piece.style == TheaterSystem.Style.KYOGEN:
+			if _kyogen_subject_present(ctx, piece, chars_by_id):
+				score += 25
+			if not _kyogen_has_provocation_pretext(ctx, piece, chars_by_id):
+				var subj_status: float = _kyogen_subject_max_status(ctx, piece, chars_by_id)
+				if subj_status > ctx.status:
+					score -= 40
+
+		if score > best_score:
+			best_score = score
+			best_id = piece_id
+			best_is_bunraku = (piece.style == TheaterSystem.Style.BUNRAKU)
+
+	# If no piece scores above 0, do not fire.
+	if best_score <= 0:
+		best_id = -1
+
 	var raises: int = 0
 	if need.need_type == "SEEK_GLORY":
 		raises = 1
 	return {
 		"piece_id": best_id,
-		"is_bunraku_performance": is_bunraku,
+		"is_bunraku_performance": best_is_bunraku,
 		"raises": raises,
 	}
+
+
+static func _count_non_immune_theater_witnesses(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+) -> int:
+	## Count non-immune non-known_by named witnesses per §57.22.8.
+	var count: int = 0
+	for cid_v: Variant in ctx.characters_present:
+		var wid: int = int(cid_v)
+		if wid == ctx.character_id:
+			continue
+		if wid in piece.known_by:
+			continue  # permanent immunity
+		var witness: L5RCharacterData = chars_by_id.get(wid) as L5RCharacterData
+		if witness == null or CharacterStats.is_dead(witness):
+			continue
+		var last_seen: int = witness.pieces_seen.get(piece.piece_id, -1)
+		if last_seen >= 0 and (ctx.ic_day - last_seen) <= 30:
+			continue  # 30-day immunity window
+		count += 1
+	return count
+
+
+static func _count_colocated_theater_knowers(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+) -> int:
+	## Count co-located known_by members (including the acting NPC).
+	var count: int = 0
+	for kid: int in piece.known_by:
+		if kid == ctx.character_id:
+			count += 1
+			continue
+		var knower: L5RCharacterData = chars_by_id.get(kid) as L5RCharacterData
+		if knower == null or CharacterStats.is_dead(knower):
+			continue
+		if knower.physical_location == ctx.location_id:
+			count += 1
+	return count
+
+
+static func _theater_majority_aligned(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+	non_immune_count: int,
+) -> bool:
+	## +20: >50% non-immune non-known_by witnesses aligned with framing for any role.
+	if non_immune_count == 0:
+		return false
+	var roles_to_check: Array = piece.roles if not piece.roles.is_empty() else [
+		{"subject_character": piece.subject, "subject_type": piece.subject_type, "framing": piece.framing}
+	]
+	for role: Dictionary in roles_to_check:
+		var role_subj: String = str(role.get("subject_character", piece.subject))
+		var role_stype: int = int(role.get("subject_type", piece.subject_type))
+		var role_framing: bool = bool(role.get("framing", piece.framing))
+		var aligned: int = 0
+		for cid_v: Variant in ctx.characters_present:
+			var wid: int = int(cid_v)
+			if wid == ctx.character_id:
+				continue
+			if wid in piece.known_by:
+				continue
+			var witness: L5RCharacterData = chars_by_id.get(wid) as L5RCharacterData
+			if witness == null or CharacterStats.is_dead(witness):
+				continue
+			var last_seen: int = witness.pieces_seen.get(piece.piece_id, -1)
+			if last_seen >= 0 and (ctx.ic_day - last_seen) <= 30:
+				continue
+			var disp: int = _theater_witness_disp_toward(witness, role_subj, role_stype, chars_by_id)
+			if role_framing and disp >= 11:
+				aligned += 1
+			elif not role_framing and disp <= -11:
+				aligned += 1
+		if aligned * 2 > non_immune_count:  # strictly more than 50%
+			return true
+	return false
+
+
+static func _theater_witness_disp_toward(
+	witness: L5RCharacterData,
+	subject: String,
+	subject_type: int,
+	chars_by_id: Dictionary,
+) -> int:
+	## Get witness disposition toward a theater piece subject.
+	match subject_type:
+		TheaterSystem.SubjectType.CHARACTER:
+			if subject.is_valid_int():
+				return witness.disposition_values.get(int(subject), 0)
+		TheaterSystem.SubjectType.CLAN:
+			# Use strongest disposition toward any character of that clan as proxy.
+			var best: int = 0
+			for cid_v: Variant in witness.disposition_values:
+				var cid_int: int = int(cid_v)
+				var c: L5RCharacterData = chars_by_id.get(cid_int) as L5RCharacterData
+				if c == null:
+					continue
+				if c.clan == subject:
+					var d: int = int(witness.disposition_values.get(cid_v, 0))
+					if absf(float(d)) > absf(float(best)):
+						best = d
+			return best
+		TheaterSystem.SubjectType.FAMILY:
+			var best: int = 0
+			for cid_v: Variant in witness.disposition_values:
+				var cid_int: int = int(cid_v)
+				var c: L5RCharacterData = chars_by_id.get(cid_int) as L5RCharacterData
+				if c == null:
+					continue
+				if c.family == subject:
+					var d: int = int(witness.disposition_values.get(cid_v, 0))
+					if absf(float(d)) > absf(float(best)):
+						best = d
+			return best
+	return 0
+
+
+static func _npc_strong_theater_disposition(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+) -> bool:
+	## +20: NPC holds strong disposition (≥+11 or ≤-11) toward any role's subject.
+	var roles_to_check: Array = piece.roles if not piece.roles.is_empty() else [
+		{"subject_character": piece.subject, "subject_type": piece.subject_type}
+	]
+	for role: Dictionary in roles_to_check:
+		var subj: String = str(role.get("subject_character", piece.subject))
+		var stype: int = int(role.get("subject_type", piece.subject_type))
+		var disp: int = _theater_npc_disp_toward(ctx, subj, stype)
+		if disp >= 11 or disp <= -11:
+			return true
+	return false
+
+
+static func _theater_npc_disp_toward(
+	ctx: NPCDataStructures.ContextSnapshot,
+	subject: String,
+	subject_type: int,
+) -> int:
+	## Get NPC's own disposition toward a theater piece subject.
+	match subject_type:
+		TheaterSystem.SubjectType.CHARACTER:
+			if subject.is_valid_int():
+				return int(ctx.disposition_values.get(int(subject), 0))
+		TheaterSystem.SubjectType.CLAN:
+			# Use strongest disposition toward any known contact of that clan.
+			var contacts: Array = ctx.known_contacts_by_clan.get(subject, [])
+			var best: int = 0
+			for cid_v: Variant in contacts:
+				var d: int = int(ctx.disposition_values.get(int(cid_v), 0))
+				if absf(float(d)) > absf(float(best)):
+					best = d
+			return best
+		TheaterSystem.SubjectType.FAMILY:
+			var best: int = 0
+			for cid_v: Variant in ctx.known_contacts:
+				var cid_int: int = int(cid_v)
+				var d: int = int(ctx.disposition_values.get(cid_int, 0))
+				var clan: String = ctx.contact_clans.get(cid_int, "")
+				# Use family from the contact if available (contact_clans stores clan; family
+				# not separately tracked — use clan as proxy for family-clan match).
+				if clan == subject:
+					if absf(float(d)) > absf(float(best)):
+						best = d
+			return best
+	return 0
+
+
+static func _theater_author_performed_today(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece_id: int,
+) -> bool:
+	## -20: check action_log for PERFORM_THEATER_PIECE with this piece_id today.
+	for entry: Variant in ctx.action_log:
+		if not entry is Dictionary:
+			continue
+		if entry.get("action_id", "") != "PERFORM_THEATER_PIECE":
+			continue
+		var meta: Dictionary = entry.get("metadata", {})
+		if meta.get("piece_id", -1) == piece_id:
+			return true
+	return false
+
+
+static func _theater_majority_immune(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+) -> bool:
+	## -25: >50% of non-known_by named witnesses have active immunity.
+	var total: int = 0
+	var immune: int = 0
+	for cid_v: Variant in ctx.characters_present:
+		var wid: int = int(cid_v)
+		if wid == ctx.character_id:
+			continue
+		if wid in piece.known_by:
+			continue  # excluded from this count
+		var witness: L5RCharacterData = chars_by_id.get(wid) as L5RCharacterData
+		if witness == null or CharacterStats.is_dead(witness):
+			continue
+		total += 1
+		var last_seen: int = witness.pieces_seen.get(piece.piece_id, -1)
+		if last_seen >= 0 and (ctx.ic_day - last_seen) <= 30:
+			immune += 1
+	if total == 0:
+		return false
+	return immune * 2 > total  # strictly more than 50%
+
+
+static func _theater_has_high_value_witness(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+) -> bool:
+	## +15: at least one non-immune non-known_by witness has Status >= 3.
+	for cid_v: Variant in ctx.characters_present:
+		var wid: int = int(cid_v)
+		if wid == ctx.character_id:
+			continue
+		if wid in piece.known_by:
+			continue
+		var witness: L5RCharacterData = chars_by_id.get(wid) as L5RCharacterData
+		if witness == null or CharacterStats.is_dead(witness):
+			continue
+		var last_seen: int = witness.pieces_seen.get(piece.piece_id, -1)
+		if last_seen >= 0 and (ctx.ic_day - last_seen) <= 30:
+			continue
+		if witness.status >= 3.0:
+			return true
+	return false
+
+
+static func _kyogen_subject_present(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+) -> bool:
+	## +25 for Kyogen: subject is physically present in zone.
+	var lead_role: Dictionary = piece.roles[0] if not piece.roles.is_empty() else {}
+	var subj: String = str(lead_role.get("subject_character", piece.subject))
+	var stype: int = int(lead_role.get("subject_type", piece.subject_type))
+	match stype:
+		TheaterSystem.SubjectType.CHARACTER:
+			if subj.is_valid_int():
+				return int(subj) in ctx.characters_present
+		TheaterSystem.SubjectType.CLAN:
+			for cid_v: Variant in ctx.characters_present:
+				var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+				if c != null and not CharacterStats.is_dead(c) and c.clan == subj:
+					return true
+		TheaterSystem.SubjectType.FAMILY:
+			for cid_v: Variant in ctx.characters_present:
+				var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+				if c != null and not CharacterStats.is_dead(c) and c.family == subj:
+					return true
+		TheaterSystem.SubjectType.ARCHETYPE:
+			# For archetype, check if any character matching the clan component is present.
+			var clan_req: String = lead_role.get("clan_requirement", "")
+			if not clan_req.is_empty():
+				for cid_v: Variant in ctx.characters_present:
+					var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+					if c != null and not CharacterStats.is_dead(c) and c.clan == clan_req:
+						return true
+	return false
+
+
+static func _kyogen_subject_max_status(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+) -> float:
+	## Returns highest Status for Kyogen subject present in zone (§57.22.13).
+	var lead_role: Dictionary = piece.roles[0] if not piece.roles.is_empty() else {}
+	var subj: String = str(lead_role.get("subject_character", piece.subject))
+	var stype: int = int(lead_role.get("subject_type", piece.subject_type))
+	match stype:
+		TheaterSystem.SubjectType.CHARACTER:
+			if subj.is_valid_int():
+				var c: L5RCharacterData = chars_by_id.get(int(subj)) as L5RCharacterData
+				if c != null:
+					return c.status
+		TheaterSystem.SubjectType.CLAN:
+			var max_status: float = 0.0
+			for cid_v: Variant in ctx.characters_present:
+				var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+				if c != null and not CharacterStats.is_dead(c) and c.clan == subj:
+					max_status = maxf(max_status, c.status)
+			return max_status
+		TheaterSystem.SubjectType.FAMILY:
+			var max_status: float = 0.0
+			for cid_v: Variant in ctx.characters_present:
+				var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+				if c != null and not CharacterStats.is_dead(c) and c.family == subj:
+					max_status = maxf(max_status, c.status)
+			return max_status
+		TheaterSystem.SubjectType.ARCHETYPE:
+			var clan_req: String = lead_role.get("clan_requirement", "")
+			var max_status: float = 0.0
+			for cid_v: Variant in ctx.characters_present:
+				var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+				if c != null and not CharacterStats.is_dead(c) and c.clan == clan_req:
+					max_status = maxf(max_status, c.status)
+			return max_status
+	return 0.0
+
+
+static func _kyogen_has_provocation_pretext(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+) -> bool:
+	## -40 guard: pretext exists if subject holds Enemy disposition toward performer.
+	## Implements GDD condition (4): subject Enemy disp toward performer.
+	## Conditions (1)(zone_event_log) and (3)(court session) deferred.
+	var lead_role: Dictionary = piece.roles[0] if not piece.roles.is_empty() else {}
+	var subj: String = str(lead_role.get("subject_character", piece.subject))
+	var stype: int = int(lead_role.get("subject_type", piece.subject_type))
+	var npc_id_str: String = str(ctx.character_id)
+	match stype:
+		TheaterSystem.SubjectType.CHARACTER:
+			if subj.is_valid_int():
+				var subject: L5RCharacterData = chars_by_id.get(int(subj)) as L5RCharacterData
+				if subject != null:
+					return int(subject.disposition_values.get(ctx.character_id, 0)) <= -51
+		TheaterSystem.SubjectType.CLAN:
+			for cid_v: Variant in ctx.characters_present:
+				var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+				if c != null and not CharacterStats.is_dead(c) and c.clan == subj:
+					if int(c.disposition_values.get(ctx.character_id, 0)) <= -51:
+						return true
+		TheaterSystem.SubjectType.FAMILY:
+			for cid_v: Variant in ctx.characters_present:
+				var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+				if c != null and not CharacterStats.is_dead(c) and c.family == subj:
+					if int(c.disposition_values.get(ctx.character_id, 0)) <= -51:
+						return true
+	return false
 
 
 static func _build_dedicate_piece_metadata(
