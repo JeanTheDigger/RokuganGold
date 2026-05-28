@@ -1335,3 +1335,94 @@ func test_cross_clan_preferred_over_between_families() -> void:
 	)
 	assert_eq(need.need_type, "ARRANGE_MARRIAGE")
 	assert_eq(need.target_npc_id_secondary, 20, "Cross-clan preferred when available")
+
+
+# -- Champion-level marriage (s12.2b) -----------------------------------------
+
+func _make_champion_lord(id: int, clan: String, family: String) -> L5RCharacterData:
+	var c := _make_char(id, clan, family, 7.0)
+	c.lord_rank = Enums.LordRank.CLAN_CHAMPION
+	return c
+
+
+func _make_effects(a_id: int, b_id: int, lord_id: int) -> Dictionary:
+	return {
+		"requires_marriage": true,
+		"candidate_a_id": a_id,
+		"candidate_b_id": b_id,
+		"marriage_type": MarriageSystem.MarriageType.CROSS_CLAN,
+		"proposing_lord_id": lord_id,
+		"target_lord_id": lord_id + 100,
+	}
+
+
+func test_champion_lord_triggers_champion_marriage_clan_delta() -> void:
+	var lord: L5RCharacterData = _make_champion_lord(1, "Crane", "Doji")
+	var char_a := _make_char(10, "Crane", "Doji")
+	var char_b := _make_char(11, "Lion", "Akodo")
+	var chars_by_id: Dictionary = {1: lord, 10: char_a, 11: char_b}
+	var clan_baselines: Dictionary = {}
+	var family_baselines: Dictionary = {}
+	var effects: Dictionary = _make_effects(10, 11, 1)
+
+	DayOrchestrator._apply_marriage(
+		effects, chars_by_id, [], 100,
+		clan_baselines, family_baselines,
+	)
+
+	var key: String = CollectiveDisposition.make_pair_key("Crane", "Lion")
+	assert_eq(
+		int(clan_baselines.get(key, 0)),
+		CollectiveDisposition.CHAMPION_MARRIAGE_CLAN_DELTA,
+		"Champion lord produces +8 clan delta",
+	)
+
+
+func test_non_champion_lord_triggers_regular_marriage_clan_delta() -> void:
+	var lord: L5RCharacterData = _make_char(2, "Crane", "Doji")
+	lord.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var char_a := _make_char(10, "Crane", "Doji")
+	var char_b := _make_char(11, "Lion", "Akodo")
+	var chars_by_id: Dictionary = {2: lord, 10: char_a, 11: char_b}
+	var clan_baselines: Dictionary = {}
+	var family_baselines: Dictionary = {}
+	var effects: Dictionary = _make_effects(10, 11, 2)
+
+	DayOrchestrator._apply_marriage(
+		effects, chars_by_id, [], 100,
+		clan_baselines, family_baselines,
+	)
+
+	var key: String = CollectiveDisposition.make_pair_key("Crane", "Lion")
+	assert_eq(
+		int(clan_baselines.get(key, 0)),
+		CollectiveDisposition.MARRIAGE_CLAN_DELTA,
+		"Non-champion lord produces +1 clan delta",
+	)
+
+
+func test_missing_lord_defaults_to_regular_marriage_clan_delta() -> void:
+	var char_a := _make_char(10, "Crane", "Doji")
+	var char_b := _make_char(11, "Lion", "Akodo")
+	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
+	var clan_baselines: Dictionary = {}
+	var family_baselines: Dictionary = {}
+	var effects: Dictionary = {
+		"requires_marriage": true,
+		"candidate_a_id": 10,
+		"candidate_b_id": 11,
+		"marriage_type": MarriageSystem.MarriageType.CROSS_CLAN,
+		"proposing_lord_id": -1,  # Missing lord.
+	}
+
+	DayOrchestrator._apply_marriage(
+		effects, chars_by_id, [], 100,
+		clan_baselines, family_baselines,
+	)
+
+	var key: String = CollectiveDisposition.make_pair_key("Crane", "Lion")
+	assert_eq(
+		int(clan_baselines.get(key, 0)),
+		CollectiveDisposition.MARRIAGE_CLAN_DELTA,
+		"Missing lord defaults to +1 clan delta",
+	)

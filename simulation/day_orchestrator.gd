@@ -13907,10 +13907,19 @@ static func _apply_marriage(
 	var boosts: Dictionary = MarriageSystem.get_marriage_boosts(marriage_type)
 
 	if not clan_baselines.is_empty():
+		# Champion-level marriage (s12.2b): proposing lord is Clan Champion → +8 clan, +5 family.
+		# Regular marriage: +1 clan, +5 family.
+		var proposing_lord_id: int = effects.get("proposing_lord_id", -1)
+		var proposing_lord: L5RCharacterData = characters_by_id.get(proposing_lord_id) as L5RCharacterData
+		var is_champion_marriage: bool = (
+			proposing_lord != null
+			and proposing_lord.lord_rank == Enums.LordRank.CLAN_CHAMPION
+		)
 		CollectiveDisposition.apply_marriage(
 			original_clan_a, original_clan_b,
 			original_family_a, original_family_b,
 			clan_baselines, family_baselines,
+			is_champion_marriage,
 		)
 
 	var favor_created: bool = false
