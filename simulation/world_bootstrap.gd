@@ -321,7 +321,7 @@ const TERRAIN_HINTS: Dictionary = {
 	"Miya": Enums.TerrainType.PLAINS,
 }
 
-# Base PU per province tier (scaled by terrain).
+# PROVISIONAL — GDD does not specify base PU per province tier.
 const BASE_PU_FAMILY_SEAT: int = 20
 const BASE_PU_GREAT_CLAN: int = 10
 const BASE_PU_MINOR_CLAN: int = 5
@@ -440,6 +440,7 @@ static func _get_base_pu(
 	return BASE_PU_MINOR_CLAN
 
 
+# PROVISIONAL — PU scaling multipliers not in GDD (distinct from Rice production modifiers in s4.3).
 static func _scale_pu_by_terrain(
 	base_pu: int, terrain: Enums.TerrainType, dice: DiceEngine,
 ) -> int:

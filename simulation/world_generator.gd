@@ -600,6 +600,7 @@ const TERRAIN_RICE_MULTIPLIER: Dictionary = {
 	Enums.TerrainType.COASTAL: 1.0,
 }
 
+# PROVISIONAL — GDD does not specify PU type allocation percentages by terrain.
 const TERRAIN_PU_DISTRIBUTION: Dictionary = {
 	Enums.TerrainType.PLAINS:      {"farming": 60, "town": 25, "mining": 5, "military": 10},
 	Enums.TerrainType.RIVER_DELTA: {"farming": 65, "town": 25, "mining": 0, "military": 10},
@@ -611,6 +612,7 @@ const TERRAIN_PU_DISTRIBUTION: Dictionary = {
 	Enums.TerrainType.COASTAL:     {"farming": 50, "town": 30, "mining": 5, "military": 15},
 }
 
+# GDD s4.3 lines 355-367, 659.
 const KOKU_LOCATION_MODIFIERS: Dictionary = {
 	"standard": 1.0,
 	"castle_town": 1.2,
@@ -645,6 +647,7 @@ const RING_TO_TRAITS: Dictionary = {
 	Enums.Ring.WATER: ["strength", "perception"],
 }
 
+# PROVISIONAL — GDD s22.4 gives ring ranges per rank, not a point budget.
 const POINTS_PER_RANK: int = 4
 
 

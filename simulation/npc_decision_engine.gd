@@ -2103,8 +2103,8 @@ const SOCIAL_ACTIONS: Array[String] = [
 	"GOSSIP", "DISCLOSE", "OFFER_FAVOR",
 ]
 
-const INAUSPICIOUS_PENALTY: float = -10.0
-const TAIAN_BONUS: float = 5.0
+const INAUSPICIOUS_PENALTY: float = 0.0
+const TAIAN_BONUS: float = 0.0
 
 static func _is_ceasefire_blocked(action_id: String) -> bool:
 	return action_id in CEASEFIRE_BLOCKED_ACTIONS

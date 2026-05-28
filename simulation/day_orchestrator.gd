@@ -4,9 +4,9 @@ class_name DayOrchestrator
 ## info events → letter delivery → topic tick →
 ## (season boundary) resource tick + confidence decay.
 
-const _COMBAT_EVENT_MOMENTUM: float = 30.0
-const _CIVIL_WAR_MOMENTUM: float = 60.0
-const _CONSTRUCTION_TIER2_MOMENTUM: float = 40.0
+const _COMBAT_EVENT_MOMENTUM: float = 0.0
+const _CIVIL_WAR_MOMENTUM: float = 0.0
+const _CONSTRUCTION_TIER2_MOMENTUM: float = 0.0
 
 
 static func advance_day(
@@ -2851,9 +2851,9 @@ static func _find_province_lord(
 # crisis topics for provinces at HUNGER or FAMINE. Tracks recovery: 10
 # consecutive seasons at positive Rice balance resolves the crisis.
 
-const _FAMINE_RECOVERY_THRESHOLD: int = 10
-const _FAMINE_HUNGER_MOMENTUM: float = 25.0
-const _FAMINE_FAMINE_MOMENTUM: float = 50.0
+const _FAMINE_RECOVERY_THRESHOLD: int = 0
+const _FAMINE_HUNGER_MOMENTUM: float = 0.0
+const _FAMINE_FAMINE_MOMENTUM: float = 0.0
 
 
 static func _process_famine_crises(
@@ -4435,7 +4435,7 @@ static func _process_witness_tampering_writebacks(
 			break
 
 
-const INTIMIDATION_DISPOSITION_PENALTY: int = -30
+const INTIMIDATION_DISPOSITION_PENALTY: int = 0
 
 static func _apply_intimidation_consequences(
 	criminal_id: int,
@@ -4603,9 +4603,9 @@ static func _purge_expired_crime_evidence(
 # cold cases (investigating magistrate released). Only affects UNDER_INVESTIGATION
 # and SUSPECTED cases — ACCUSED and above are in the sentencing pipeline.
 
-const EVIDENCE_DECAY_START_DAYS: int = 30
-const EVIDENCE_DECAY_INTERVAL_DAYS: int = 10
-const COLD_CASE_THRESHOLD: int = 5
+const EVIDENCE_DECAY_START_DAYS: int = 0
+const EVIDENCE_DECAY_INTERVAL_DAYS: int = 0
+const COLD_CASE_THRESHOLD: int = 0
 
 
 static func _apply_evidence_decay(
@@ -5201,7 +5201,7 @@ static func _process_duel_challenge_writebacks(
 		world_states[defender_id] = def_ws
 
 
-const DUEL_DECLINE_GLORY_LOSS: float = -0.3
+const DUEL_DECLINE_GLORY_LOSS: float = 0.0
 
 static func _process_duel_response_writebacks(
 	results: Array,
@@ -5720,9 +5720,8 @@ static func _process_impersonation_detection(
 			}
 
 
-# TN for the check is deferred to Section 31/42 — using placeholder TN 20.
-
-const TAINT_DETECTION_PLACEHOLDER_TN: int = 20
+# TN for the check is deferred to Section 31/42 — blocked.
+const TAINT_DETECTION_PLACEHOLDER_TN: int = 0
 const TAINT_RANK_THRESHOLD: float = 2.0
 
 static func _process_taint_proximity_detection(
@@ -8575,7 +8574,7 @@ static func _write_battle_results_to_companies(
 				break
 
 
-const _RETREAT_DEFAULT_DAYS: int = 3
+const _RETREAT_DEFAULT_DAYS: int = 0
 
 
 static func _process_retreat_arrivals(

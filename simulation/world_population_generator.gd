@@ -85,6 +85,7 @@ enum PositionType {
 	SAMURAI,
 }
 
+# PROVISIONAL — GDD s22.8 lists positions but not insight rank mapping.
 const POSITION_RANK: Dictionary = {
 	PositionType.EMPEROR: 6,
 	PositionType.IMPERIAL_HEIR: 5,
@@ -127,6 +128,7 @@ const POSITION_RANK: Dictionary = {
 	PositionType.SAMURAI: 1,
 }
 
+# PROVISIONAL — GDD s22.4 gives 2 examples (Local Daimyo 3.0, samurai 1.0).
 const POSITION_STATUS: Dictionary = {
 	PositionType.EMPEROR: 10.0,
 	PositionType.IMPERIAL_HEIR: 8.0,
@@ -275,6 +277,7 @@ const CLAN_ARMY_COUNT: Dictionary = {
 	"Imperial": 1,
 }
 
+# PROVISIONAL — GDD s57.21 specifies sections of 4-12 legions, not flat per-army.
 const LEGIONS_PER_ARMY: int = 3
 const COMPANIES_PER_LEGION: int = 7
 
@@ -751,11 +754,12 @@ static func _assign_lord_ids(
 # GDD: "Koku on hand = (1 month's stipend for their role) + 1d10 × Rank"
 
 const _STIPEND_BY_ROLE: Dictionary = {
+	# GDD s4.3: "Direct retainer of the Clan Champion: 5 koku per month" etc.
 	"Clan Champion": 5.0,
-	"Minor Clan Champion": 5.0,
-	"Family Daimyo": 5.0,
-	"Provincial Daimyo": 3.0,
-	"Local Daimyo": 2.0,
+	"Minor Clan Champion": 5.0,  # PROVISIONAL — analogy to Clan Champion
+	"Family Daimyo": 3.0,
+	"Provincial Daimyo": 2.0,
+	"Local Daimyo": 1.0,
 }
 
 
@@ -822,9 +826,9 @@ static func _assign_parents(
 
 		for j: int in range(i):
 			var potential_parent: L5RCharacterData = sorted_by_age[j]
-			if potential_parent.age < child.age + 16:
+			if potential_parent.age < child.age + 16:  # PROVISIONAL
 				continue
-			if potential_parent.age > child.age + 40:
+			if potential_parent.age > child.age + 40:  # PROVISIONAL
 				continue
 			if potential_parent.family != child.family:
 				continue
@@ -852,14 +856,14 @@ static func _assign_marriages(
 		if c.spouse_id < 0 and c.age >= 18:
 			unmarried.append(c)
 
-	var marriage_rate: int = 40
+	var marriage_rate: int = 40  # PROVISIONAL
 	for c: L5RCharacterData in unmarried:
 		if c.spouse_id >= 0:
 			continue
 		if dice.rand_int_range(1, 100) > marriage_rate:
 			continue
 
-		var cross_clan: bool = dice.rand_int_range(1, 100) <= 15
+		var cross_clan: bool = dice.rand_int_range(1, 100) <= 15  # PROVISIONAL
 		var pool: Array = clan_chars if not cross_clan else _get_cross_clan_pool(c.clan, all_by_clan)
 
 		for candidate: Variant in pool:

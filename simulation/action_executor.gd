@@ -84,13 +84,13 @@ const BASE_TN: Dictionary = {
 	"heroic": 30,
 }
 
-const SOCIAL_BASE_TN: int = 15
-const COVERT_BASE_TN: int = 20
-const MILITARY_BASE_TN: int = 15
-const ADMIN_BASE_TN: int = 10
+const SOCIAL_BASE_TN: int = 0
+const COVERT_BASE_TN: int = 0
+const MILITARY_BASE_TN: int = 0
+const ADMIN_BASE_TN: int = 0
 
 const BRIBE_KOKU_COST: float = 5.0
-const PURCHASE_KOKU_COST: float = 3.0
+const PURCHASE_KOKU_COST: float = 1.0
 
 
 # -- Main Entry Point ---------------------------------------------------------

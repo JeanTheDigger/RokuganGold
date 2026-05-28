@@ -304,13 +304,13 @@ static func _score_delegate_candidate(
 	var school_score: float = 0.0
 	match candidate.school_type:
 		Enums.SchoolType.COURTIER:
-			school_score = 10.0
+			school_score = 0.0
 		Enums.SchoolType.SHUGENJA:
-			school_score = 6.0
+			school_score = 0.0
 		Enums.SchoolType.BUSHI:
-			school_score = 3.0
+			school_score = 0.0
 		_:
-			school_score = 5.0
+			school_score = 0.0
 	school_score = school_score * 5.0 / 10.0
 
 	return court_skill_score + prestige_score + disp_score + agenda_score + school_score
@@ -407,19 +407,18 @@ static func select_personal_invitations(
 	return result
 
 
-static func _score_school_type_for_invitation(school_type: int, archetype: int) -> float:
-	var is_warlike: bool = archetype == StrategicReview.EmperorArchetype.WARLIKE
+static func _score_school_type_for_invitation(school_type: int, _archetype: int) -> float:
 	match school_type:
 		Enums.SchoolType.COURTIER:
-			return 10.0 if not is_warlike else 3.0
+			return 0.0
 		Enums.SchoolType.SHUGENJA:
-			return 6.0
+			return 0.0
 		Enums.SchoolType.BUSHI:
-			return 3.0 if not is_warlike else 10.0
+			return 0.0
 		Enums.SchoolType.MONK:
-			return 4.0
+			return 0.0
 		_:
-			return 5.0
+			return 0.0
 
 
 # -- Emperor's Peace -----------------------------------------------------------

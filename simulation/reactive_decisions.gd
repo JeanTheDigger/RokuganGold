@@ -113,6 +113,7 @@ static func _passes_capability_check(
 		return true
 
 	var iaijutsu_rank: int = character.skills.get("Iaijutsu", 0)
+	# PROVISIONAL — GDD s55.11 says "high-Iaijutsu character" without numeric threshold
 	if iaijutsu_rank >= 3:
 		return true
 
