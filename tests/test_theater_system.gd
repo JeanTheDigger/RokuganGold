@@ -484,3 +484,228 @@ func _make_wip(piece_id: int, magnitude: int) -> TheaterPieceData:
 	p.craft_progress = 0
 	p.canonized = false
 	return p
+
+
+# ============================================================================
+# AUTHORSHIP GLORY (s57.22.2)
+# ============================================================================
+
+func test_authorship_glory_constant_value() -> void:
+	assert_eq(TheaterSystem.AUTHORSHIP_GLORY, 0.1)
+
+
+func test_authorship_glory_wired_in_perform_writeback() -> void:
+	# A piece by author_id=1; performer is char_id=2.
+	# After perform writeback, author should gain +0.1 Glory.
+	var piece: TheaterPieceData = _make_piece(10, 1)
+	piece.known_by = [1, 2]
+	piece.author_id = 1
+
+	var author: L5RCharacterData = L5RCharacterData.new()
+	author.character_id = 1
+	author.glory = 3.0
+	author.clan = "Crane"
+
+	var performer: L5RCharacterData = L5RCharacterData.new()
+	performer.character_id = 2
+	performer.clan = "Lion"
+	performer.skills = {"Acting": 3}
+	performer.awareness = 3
+	performer.agility = 2
+	performer.physical_location = "crane_castle"
+
+	var chars: Dictionary = {1: author, 2: performer}
+	var topics: Array = []
+	var next_tid: Array[int] = [1]
+	var pieces: Array = [piece]
+
+	var results: Array = [{
+		"action_id": "PERFORM_THEATER_PIECE",
+		"character_id": 2,
+		"success": true,
+		"effects": {
+			"piece_id": 10,
+			"is_bunraku_performance": false,
+			"raises_succeeded": 0,
+			"is_critical": false,
+			"location_id": "crane_castle",
+		},
+	}]
+
+	DayOrchestrator._process_perform_theater_writebacks(
+		results, pieces, chars, topics, next_tid, 1,
+	)
+	assert_almost_eq(author.glory, 3.1, 0.001)
+
+
+# ============================================================================
+# TOPIC ID PURGE (s57.22.2)
+# ============================================================================
+
+func test_purge_stale_removes_resolved_topic() -> void:
+	var piece: TheaterPieceData = _make_piece(1, 2)
+	piece.topic_ids = [5, 6]
+
+	# topic 5 is resolved, topic 6 is active
+	var resolved_t: TopicData = TopicData.new()
+	resolved_t.topic_id = 5
+	resolved_t.resolved = true
+
+	var active_t: TopicData = TopicData.new()
+	active_t.topic_id = 6
+	active_t.resolved = false
+
+	var active_topics: Array = [resolved_t, active_t]
+	TheaterSystem.purge_stale_topic_ids([piece], active_topics)
+	assert_false(5 in piece.topic_ids)
+	assert_true(6 in piece.topic_ids)
+
+
+func test_purge_stale_removes_absent_topic() -> void:
+	# topic_id 99 never existed in active_topics
+	var piece: TheaterPieceData = _make_piece(2, 2)
+	piece.topic_ids = [99]
+	TheaterSystem.purge_stale_topic_ids([piece], [])
+	assert_true(piece.topic_ids.is_empty())
+
+
+# ============================================================================
+# §57.22.12 COMPOSE_THEATER_PIECE SCORING MODIFIERS
+# ============================================================================
+
+func test_compose_not_at_court_bonus() -> void:
+	# When context_flag is not AT_COURT, COMPOSE_THEATER_PIECE should receive +20
+	var engine: NPCDecisionEngine = NPCDecisionEngine.new()
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.clan = "Crane"
+	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.skill_ranks = {"Poetry": 2}
+	ctx.characters_present = [2]  # one other character for audience
+	ctx.known_topic_momentums = {}
+	ctx.known_topic_subjects = {}
+	ctx.known_objectives = {}
+
+	var option: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	option.action_id = "COMPOSE_THEATER_PIECE"
+	option.objective_alignment = 60.0
+	option.disposition_modifier = 0.0
+	option.metadata = {"subject": "Crane", "subject_type": TheaterSystem.SubjectType.CLAN, "is_new": true}
+
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "DAMAGE_RELATIONSHIP"
+	need.target_npc_id = -1
+	need.target_intent = ""
+
+	NPCDecisionEngine.score_all([option], need, ctx, {})
+	# +20 for not AT_COURT should be in disposition_modifier
+	assert_almost_eq(option.disposition_modifier, 20.0, 0.001)
+
+
+func test_compose_at_court_no_pieces_score_40() -> void:
+	# When AT_COURT and no viable pieces, objective_alignment overrides to 40
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.clan = "Crane"
+	ctx.context_flag = "AT_COURT"
+	ctx.skill_ranks = {"Poetry": 2}
+	ctx.characters_present = [2]
+	ctx.known_topic_momentums = {}
+	ctx.known_topic_subjects = {}
+	ctx.known_objectives = {"theater_pieces_to_perform": []}
+
+	var option: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	option.action_id = "COMPOSE_THEATER_PIECE"
+	option.objective_alignment = 60.0
+	option.disposition_modifier = 0.0
+	option.metadata = {"subject": "Crane", "subject_type": TheaterSystem.SubjectType.CLAN, "is_new": true}
+
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "DAMAGE_RELATIONSHIP"
+	need.target_npc_id = -1
+	need.target_intent = ""
+
+	NPCDecisionEngine.score_all([option], need, ctx, {})
+	assert_almost_eq(option.objective_alignment, 40.0, 0.001)
+
+
+func test_compose_no_audience_penalty() -> void:
+	# No co-located characters → -20 disposition_modifier
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.clan = "Crane"
+	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.skill_ranks = {"Poetry": 2}
+	ctx.characters_present = []  # no audience
+	ctx.known_topic_momentums = {}
+	ctx.known_topic_subjects = {}
+	ctx.known_objectives = {}
+
+	var option: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	option.action_id = "COMPOSE_THEATER_PIECE"
+	option.objective_alignment = 60.0
+	option.disposition_modifier = 0.0
+	option.metadata = {"subject": "Crane", "subject_type": TheaterSystem.SubjectType.CLAN, "is_new": true}
+
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "DAMAGE_RELATIONSHIP"
+	need.target_npc_id = -1
+	need.target_intent = ""
+
+	NPCDecisionEngine.score_all([option], need, ctx, {})
+	# +20 not AT_COURT, -20 no audience → net 0
+	assert_almost_eq(option.disposition_modifier, 0.0, 0.001)
+
+
+# ============================================================================
+# §57.22.13 POLITICAL RAISES AT COMPLETION
+# ============================================================================
+
+func test_political_need_type_stored_on_new_piece() -> void:
+	var piece: TheaterPieceData = TheaterPieceData.new()
+	piece.political_need_type = "DAMAGE_RELATIONSHIP"
+	assert_eq(piece.political_need_type, "DAMAGE_RELATIONSHIP")
+
+
+func test_political_raises_topic_linkage_at_completion() -> void:
+	# Piece completes with 2 raises, political_need_type set, matching topic exists.
+	# Expect the matching topic to be linked.
+	var piece: TheaterPieceData = _make_wip(20, 1)
+	piece.political_need_type = "DAMAGE_RELATIONSHIP"
+	piece.craft_progress = 9  # one point from threshold of 10
+
+	var author: L5RCharacterData = L5RCharacterData.new()
+	author.character_id = 1
+	author.clan = "Crane"
+	author.skills = {"Poetry": 2}
+	author.topic_pool = [77]
+
+	var active_topic: TopicData = TopicData.new()
+	active_topic.topic_id = 77
+	active_topic.momentum = 50  # > 40
+	active_topic.clan_involved = "Crane"
+	active_topic.resolved = false
+
+	var chars: Dictionary = {1: author}
+	var pieces: Array = [piece]
+	var next_id: Array[int] = [100]
+
+	# Progress of 1 enough to complete (total = 10 >= threshold 10)
+	var results: Array = [{
+		"action_id": "COMPOSE_THEATER_PIECE",
+		"character_id": 1,
+		"success": true,
+		"effects": {
+			"piece_id": piece.piece_id,
+			"progress_earned": 1,
+			"raises": 2,
+		},
+	}]
+
+	DayOrchestrator._process_compose_theater_writebacks(
+		results, pieces, next_id, chars, 10, [active_topic],
+	)
+
+	# Piece should be complete and topic 77 should be linked
+	assert_eq(piece.craft_progress, -1)
+	assert_true(77 in piece.topic_ids)

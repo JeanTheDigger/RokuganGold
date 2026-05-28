@@ -85,6 +85,12 @@ static func build_context(
 	ctx.known_topic_types = _build_known_topic_types(
 		character.topic_pool, world_state.get("active_topics", []),
 	)
+	ctx.known_topic_momentums = _build_known_topic_momentums(
+		character.topic_pool, world_state.get("active_topics", []),
+	)
+	ctx.known_topic_subjects = _build_known_topic_subjects(
+		character.topic_pool, world_state.get("active_topics", []),
+	)
 	ctx.known_objectives = world_state.get("known_objectives", {})
 	ctx.known_contacts_by_clan = character.known_contacts_by_clan.duplicate()
 	var flat_contacts: Array = []
@@ -692,6 +698,57 @@ static func score_all(
 			option.disposition_modifier += float(CommerceStigmaSystem.HONOR_SELF_REG_7_PLUS)
 		elif ctx.honor >= 5.0:
 			option.disposition_modifier += float(CommerceStigmaSystem.HONOR_SELF_REG_5_6)
+
+	# §57.22.12/13 COMPOSE_THEATER_PIECE political scoring modifiers.
+	# Base alignment score 60 comes from objective_alignment.json for DAMAGE_RELATIONSHIP
+	# and MOVE_TOPIC_POSITION. These post-loop modifiers adjust based on context.
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id != "COMPOSE_THEATER_PIECE":
+			continue
+		var political_need: bool = need.need_type in ["DAMAGE_RELATIONSHIP", "MOVE_TOPIC_POSITION"]
+		if not political_need:
+			continue
+		var poetry_rank: int = ctx.skill_ranks.get("Poetry", 0)
+		if poetry_rank < 1:
+			continue
+
+		# §57.22.13: AT_COURT with no viable pieces → override alignment to 40 (fallback trigger).
+		# This is intentionally lower than the standard 60 to reflect that composition at court
+		# competes against immediate social options.
+		var has_viable_pieces: bool = not ctx.known_objectives.get(
+			"theater_pieces_to_perform", []
+		).is_empty()
+		if ctx.context_flag == "AT_COURT" and not has_viable_pieces:
+			option.objective_alignment = 40.0
+
+		# §57.22.12: +20 if not AT_COURT (writing is available regardless of location)
+		if ctx.context_flag != "AT_COURT":
+			option.disposition_modifier += 20.0
+
+		# §57.22.12: +15 if active topic matching intended subject has momentum > 40
+		var intended_subject: String = option.metadata.get("subject", ctx.clan)
+		var subject_type: int = option.metadata.get("subject_type", TheaterSystem.SubjectType.CLAN)
+		for tid: int in ctx.known_topic_momentums:
+			var momentum: int = ctx.known_topic_momentums.get(tid, 0)
+			if momentum <= 40:
+				continue
+			var subj_data: Dictionary = ctx.known_topic_subjects.get(tid, {})
+			var match_found: bool = false
+			match subject_type:
+				TheaterSystem.SubjectType.CLAN:
+					match_found = (subj_data.get("clan", "") == intended_subject)
+				TheaterSystem.SubjectType.FAMILY:
+					match_found = (subj_data.get("family", "") == intended_subject)
+				TheaterSystem.SubjectType.CHARACTER:
+					if intended_subject.is_valid_int():
+						match_found = (subj_data.get("char_id", -1) == int(intended_subject))
+			if match_found:
+				option.disposition_modifier += 15.0
+				break  # one matching topic is sufficient
+
+		# §57.22.12: -20 if no audience (no co-located named characters in zone)
+		if ctx.characters_present.is_empty():
+			option.disposition_modifier -= 20.0
 
 
 # -- Phase 6: Selection -------------------------------------------------------
@@ -1955,6 +2012,52 @@ static func _build_known_topic_types(
 	return result
 
 
+static func _build_known_topic_momentums(
+	topic_pool: Array,
+	active_topics: Array,
+) -> Dictionary:
+	## Map topic_id → momentum for topics the character knows.
+	var result: Dictionary = {}
+	for topic: Variant in active_topics:
+		var tid: int = -1
+		var momentum: int = 0
+		if topic is Dictionary:
+			tid = int(topic.get("topic_id", -1))
+			momentum = int(topic.get("momentum", 0))
+		elif topic is Resource:
+			tid = topic.topic_id
+			momentum = topic.momentum
+		if tid >= 0 and tid in topic_pool:
+			result[tid] = momentum
+	return result
+
+
+static func _build_known_topic_subjects(
+	topic_pool: Array,
+	active_topics: Array,
+) -> Dictionary:
+	## Map topic_id → {clan, family, char_id} for subject matching in scoring.
+	var result: Dictionary = {}
+	for topic: Variant in active_topics:
+		var tid: int = -1
+		var clan_inv: String = ""
+		var family_inv: String = ""
+		var char_id_inv: int = -1
+		if topic is Dictionary:
+			tid = int(topic.get("topic_id", -1))
+			clan_inv = topic.get("clan_involved", "")
+			family_inv = topic.get("family_involved", "")
+			char_id_inv = int(topic.get("subject_character_id", -1))
+		elif topic is Resource:
+			tid = topic.topic_id
+			clan_inv = topic.clan_involved
+			family_inv = topic.family_involved
+			char_id_inv = topic.subject_character_id
+		if tid >= 0 and tid in topic_pool:
+			result[tid] = {"clan": clan_inv, "family": family_inv, "char_id": char_id_inv}
+	return result
+
+
 static func _compute_topic_position_modifier(
 	_action_id: String,
 	need: NPCDataStructures.ImmediateNeed,
@@ -2841,6 +2944,7 @@ static func _build_compose_theater_metadata(
 		"subject_type": subject_type,
 		"topic_id": need.target_province_id if need.target_province_id >= 0 else -1,
 		"raises": 0,
+		"political_need_type": need.need_type if need.need_type in ["DAMAGE_RELATIONSHIP", "MOVE_TOPIC_POSITION"] else "",
 	}
 
 

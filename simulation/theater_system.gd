@@ -90,6 +90,10 @@ const IMMUNITY_WINDOW_DAYS: int = 30
 
 const KYOGEN_MIN_ACTING_RANK: int = 3
 
+# -- Authorship glory (per GDD s57.22.2) -------------------------------------
+
+const AUTHORSHIP_GLORY: float = 0.1  # +0.1 Glory to living author each time another character performs their piece
+
 
 # ============================================================================
 # DATA CONSTRUCTORS
@@ -721,6 +725,41 @@ static func handle_character_death(
 		if piece.author_id == dead_id and piece.craft_progress >= 0 and not piece.abandoned_incomplete:
 			piece.craft_progress = -1
 			piece.abandoned_incomplete = true
+
+
+# ============================================================================
+# TOPIC ID MAINTENANCE
+# ============================================================================
+
+static func purge_stale_topic_ids(
+	theater_pieces: Array,
+	active_topics: Array,
+) -> void:
+	## Remove resolved or absent topic_ids from all pieces per GDD s57.22.2.
+	## "When a referenced topic's momentum reaches zero and the topic is purged,
+	## that entry is removed from the list automatically on the next engine pass."
+	var active_ids: Dictionary = {}
+	for t: Variant in active_topics:
+		var tid: int = -1
+		var is_resolved: bool = false
+		if t is TopicData:
+			tid = (t as TopicData).topic_id
+			is_resolved = (t as TopicData).resolved
+		elif t is Dictionary:
+			tid = int(t.get("topic_id", -1))
+			is_resolved = bool(t.get("resolved", false))
+		if tid >= 0 and not is_resolved:
+			active_ids[tid] = true
+
+	for piece: TheaterPieceData in theater_pieces:
+		if piece.topic_ids.is_empty():
+			continue
+		var i: int = piece.topic_ids.size() - 1
+		while i >= 0:
+			var tid: int = piece.topic_ids[i]
+			if not active_ids.has(tid):
+				piece.topic_ids.remove_at(i)
+			i -= 1
 
 
 # ============================================================================

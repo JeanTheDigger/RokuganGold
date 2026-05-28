@@ -117,6 +117,10 @@ class ContextSnapshot:
 	var known_topics: Array = []
 	var known_positions: Dictionary = {}
 	var known_topic_types: Dictionary = {}
+	# topic_id → current momentum int (for scoring checks like momentum > 40)
+	var known_topic_momentums: Dictionary = {}
+	# topic_id → {clan: String, family: String, char_id: int} for subject matching
+	var known_topic_subjects: Dictionary = {}
 	var known_objectives: Dictionary = {}
 	var known_contacts: Array = []
 	var contact_clans: Dictionary = {}

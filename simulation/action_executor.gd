@@ -5035,6 +5035,7 @@ static func _execute_compose_theater(
 				"subject": meta.get("subject", character.clan),
 				"subject_type": meta.get("subject_type", TheaterSystem.SubjectType.CLAN),
 				"topic_id": meta.get("topic_id", -1),
+				"political_need_type": meta.get("political_need_type", ""),
 			},
 		}
 

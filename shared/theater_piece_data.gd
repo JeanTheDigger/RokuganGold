@@ -26,3 +26,4 @@ extends Resource
 @export var lost: bool = false
 @export var abandoned_incomplete: bool = false
 @export var ic_day_created: int = -1
+@export var political_need_type: String = ""  # DAMAGE_RELATIONSHIP or MOVE_TOPIC_POSITION when politically motivated

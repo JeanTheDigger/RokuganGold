@@ -756,7 +756,7 @@ static func advance_day(
 
 	_process_compose_theater_writebacks(
 		day_result.get("results", []),
-		theater_pieces, next_piece_id, characters_by_id, ic_day,
+		theater_pieces, next_piece_id, characters_by_id, ic_day, active_topics,
 	)
 
 	_process_learn_theater_writebacks(
@@ -865,6 +865,7 @@ static func advance_day(
 	var topic_results: Dictionary = TopicMomentumSystem.process_daily_tick(active_topics)
 
 	_remove_resolved_topics(active_topics)
+	TheaterSystem.purge_stale_topic_ids(theater_pieces, active_topics)
 
 	var province_clan_map: Dictionary = _build_province_clan_map(provinces)
 	var broadcast_results: Array = TopicMomentumSystem.broadcast_public_knowledge(
@@ -19399,6 +19400,7 @@ static func _process_compose_theater_writebacks(
 	next_piece_id: Array,
 	characters_by_id: Dictionary,
 	ic_day: int,
+	active_topics: Array = [],
 ) -> void:
 	for result: Dictionary in results:
 		if result.get("action_id", "") != "COMPOSE_THEATER_PIECE":
@@ -19433,6 +19435,7 @@ static func _process_compose_theater_writebacks(
 			p.craft_progress = 0
 			p.ic_day_created = ic_day
 			p.ic_day_last_composition_ap = ic_day
+			p.political_need_type = effects.get("political_need_type", "")
 			var role := TheaterSystem.make_role(
 				0, p.subject, p.subject_type, p.framing,
 			)
@@ -19471,7 +19474,78 @@ static func _process_compose_theater_writebacks(
 			# Check skill gate before completing
 			if TheaterSystem.check_composition_skill_gate(character, piece.target_magnitude):
 				var raises: int = effects.get("raises", 0)
-				TheaterSystem.apply_completion_raises(piece, raises)
+				# §57.22.13: political raises-at-completion — topic linkage and magnitude upgrade
+				if not piece.political_need_type.is_empty() and raises > 0 and not active_topics.is_empty():
+					var link_t1: int = -1
+					var link_t2: int = -1
+					var best_momentum: int = 0
+					var second_momentum: int = 0
+					for t: Variant in active_topics:
+						var tid: int = -1
+						var momentum: int = 0
+						var t_clan: String = ""
+						var t_family: String = ""
+						var t_char_id: int = -1
+						if t is TopicData:
+							tid = (t as TopicData).topic_id
+							momentum = (t as TopicData).momentum
+							t_clan = (t as TopicData).clan_involved
+							t_family = (t as TopicData).family_involved
+							t_char_id = (t as TopicData).subject_character_id
+						elif t is Dictionary:
+							tid = int(t.get("topic_id", -1))
+							momentum = int(t.get("momentum", 0))
+							t_clan = t.get("clan_involved", "")
+							t_family = t.get("family_involved", "")
+							t_char_id = int(t.get("subject_character_id", -1))
+						if tid < 0 or tid in piece.topic_ids:
+							continue
+						if tid not in character.topic_pool:
+							continue
+						if momentum <= 40:
+							continue
+						# Match against any role's subject per GDD s57.22.13
+						var matches: bool = false
+						for role: Dictionary in piece.roles:
+							var sub: String = role.get("subject_character", "")
+							var sub_type: int = role.get("subject_type", TheaterSystem.SubjectType.ABSTRACT)
+							match sub_type:
+								TheaterSystem.SubjectType.CLAN:
+									if t_clan == sub:
+										matches = true
+								TheaterSystem.SubjectType.FAMILY:
+									if t_family == sub:
+										matches = true
+								TheaterSystem.SubjectType.CHARACTER:
+									if sub.is_valid_int() and t_char_id == int(sub):
+										matches = true
+							if matches:
+								break
+						if not matches:
+							continue
+						if momentum > best_momentum:
+							# Demote current best to second if it's better than current second
+							if link_t1 >= 0 and best_momentum > second_momentum:
+								link_t2 = link_t1
+								second_momentum = best_momentum
+							link_t1 = tid
+							best_momentum = momentum
+						elif momentum > second_momentum:
+							link_t2 = tid
+							second_momentum = momentum
+					# Magnitude upgrade: if Poetry rank > target_magnitude and raises remain after topic costs
+					var remaining_after_topics: int = raises
+					if link_t1 >= 0:
+						remaining_after_topics -= 2
+					if link_t2 >= 0:
+						remaining_after_topics -= 2
+					var poetry_rank: int = character.skills.get("Poetry", 0)
+					var add_mag: int = 1 if (remaining_after_topics >= 1 and poetry_rank > piece.target_magnitude) else 0
+					TheaterSystem.apply_completion_raises(
+						piece, raises, link_t1, link_t2, add_mag, 0,
+					)
+				else:
+					TheaterSystem.apply_completion_raises(piece, raises)
 				TheaterSystem.complete_piece(piece, char_id)
 
 
@@ -19625,6 +19699,12 @@ static func _process_perform_theater_writebacks(
 			active_topics.append(t)
 
 		piece.times_performed += 1
+
+		# §57.22.2: +0.1 Glory to living author each time someone else performs their piece
+		if piece.author_id >= 0 and piece.author_id != char_id:
+			var author: L5RCharacterData = characters_by_id.get(piece.author_id)
+			if author != null and not CharacterStats.is_dead(author):
+				HonorGlorySystem.apply_glory_change(author, TheaterSystem.AUTHORSHIP_GLORY)
 
 
 static func _process_dedicate_piece_writebacks(
