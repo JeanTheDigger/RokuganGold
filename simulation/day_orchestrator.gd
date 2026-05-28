@@ -883,6 +883,11 @@ static func advance_day(
 		conviction_results, crime_records, characters_by_id,
 	)
 
+	_auto_dissolve_marriage_on_conviction(
+		conviction_results, characters_by_id, marriages,
+		ic_day, active_topics, next_topic_id,
+	)
+
 	_apply_assassination_vengeance(
 		conviction_results, crime_records, characters_by_id,
 		objectives_map, active_topics, next_topic_id, ic_day,
@@ -13740,6 +13745,7 @@ static func _process_governance_effects(
 ) -> Dictionary:
 	var appointment_results: Array = []
 	var marriage_results: Array = []
+	var dissolution_results: Array = []
 
 	var clan_baselines: Dictionary = world_states.get("clan_baselines", {})
 	var family_baselines: Dictionary = world_states.get("family_baselines", {})
@@ -13773,9 +13779,17 @@ static func _process_governance_effects(
 			var rr: Dictionary = _apply_marriage_rejection(effects, characters_by_id)
 			marriage_results.append(rr)
 
+		if effects.get("requires_dissolution", false):
+			var dr: Dictionary = _apply_dissolution(
+				effects, characters_by_id, marriages, ic_day,
+				active_topics, next_topic_id, clan_baselines, family_baselines,
+			)
+			dissolution_results.append(dr)
+
 	return {
 		"appointments": appointment_results,
 		"marriages": marriage_results,
+		"dissolutions": dissolution_results,
 	}
 
 
@@ -13963,6 +13977,151 @@ static func _apply_marriage_rejection(
 		"proposing_lord_id": proposing_lord_id,
 		"disposition_change": disp_change,
 	}
+
+
+# -- Dissolution (s57.49.7) -------------------------------------------------------
+
+static func _apply_dissolution(
+	effects: Dictionary,
+	characters_by_id: Dictionary,
+	marriages: Array,
+	ic_day: int,
+	active_topics: Array,
+	next_topic_id: Array,
+	clan_baselines: Dictionary = {},
+	family_baselines: Dictionary = {},
+	pathway: int = 1,
+) -> Dictionary:
+	var resolved_pathway: int = effects.get("pathway", pathway)
+	var spouse_a_id: int = effects.get("spouse_a_id", -1)
+	var spouse_b_id: int = effects.get("spouse_b_id", -1)
+
+	if spouse_a_id < 0 or spouse_b_id < 0:
+		return {"applied": false, "reason": "missing_spouse_ids"}
+
+	var spouse_a: L5RCharacterData = characters_by_id.get(spouse_a_id) as L5RCharacterData
+	var spouse_b: L5RCharacterData = characters_by_id.get(spouse_b_id) as L5RCharacterData
+
+	if spouse_a == null or CharacterStats.is_dead(spouse_a):
+		return {"applied": false, "reason": "spouse_a_not_found"}
+	if spouse_b == null or CharacterStats.is_dead(spouse_b):
+		return {"applied": false, "reason": "spouse_b_not_found"}
+
+	var marriage: Dictionary = MarriageSystem.find_active_marriage_for_character(
+		spouse_a_id, marriages,
+	)
+	if marriage.is_empty():
+		return {"applied": false, "reason": "no_active_marriage"}
+
+	MarriageSystem.dissolve_marriage(marriage)
+	spouse_a.spouse_id = -1
+	spouse_b.spouse_id = -1
+
+	# Pathway 1 — Lord's Command: Glory −1.0 to both spouses, disposition penalties.
+	if resolved_pathway == 1:
+		HonorGlorySystem.apply_glory_change(spouse_a, MarriageSystem.DISSOLUTION_GLORY_LOSS_SPOUSE)
+		HonorGlorySystem.apply_glory_change(spouse_b, MarriageSystem.DISSOLUTION_GLORY_LOSS_SPOUSE)
+
+		# Family-level disposition penalty (PROVISIONAL).
+		if not family_baselines.is_empty():
+			var fa: String = spouse_a.family
+			var fb: String = spouse_b.family
+			if fa in family_baselines and fb in family_baselines[fa]:
+				family_baselines[fa][fb] = clampi(
+					family_baselines[fa][fb] + MarriageSystem.DISSOLUTION_FAMILY_DISP_PENALTY,
+					-100, 100,
+				)
+			if fb in family_baselines and fa in family_baselines[fb]:
+				family_baselines[fb][fa] = clampi(
+					family_baselines[fb][fa] + MarriageSystem.DISSOLUTION_FAMILY_DISP_PENALTY,
+					-100, 100,
+				)
+
+		# Clan-level penalty if cross-clan (PROVISIONAL).
+		if spouse_a.clan != spouse_b.clan and not clan_baselines.is_empty():
+			var ca: String = spouse_a.clan
+			var cb: String = spouse_b.clan
+			if ca in clan_baselines and cb in clan_baselines[ca]:
+				clan_baselines[ca][cb] = clampi(
+					clan_baselines[ca][cb] + MarriageSystem.DISSOLUTION_CLAN_DISP_PENALTY,
+					-100, 100,
+				)
+			if cb in clan_baselines and ca in clan_baselines[cb]:
+				clan_baselines[cb][ca] = clampi(
+					clan_baselines[cb][ca] + MarriageSystem.DISSOLUTION_CLAN_DISP_PENALTY,
+					-100, 100,
+				)
+
+	# T4-83 MARRIAGE_DISSOLVED topic (all pathways).
+	var topic_id: int = -1
+	if not next_topic_id.is_empty():
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "dissolution_%d_%d_d%d" % [spouse_a_id, spouse_b_id, ic_day]
+		topic.title = "Dissolution of Marriage of %s and %s" % [
+			spouse_a.character_name, spouse_b.character_name,
+		]
+		topic.topic_type = "marriage_dissolved"
+		topic.variant = MarriageSystem.get_dissolution_topic_variant(resolved_pathway)
+		topic.category = TopicData.Category.POLITICAL
+		topic.tier = TopicData.Tier.TIER_4
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		topic.ic_day_created = ic_day
+		if spouse_a.clan != spouse_b.clan:
+			topic.clan_involved = spouse_a.clan + "," + spouse_b.clan
+		else:
+			topic.clan_involved = spouse_a.clan
+		active_topics.append(topic)
+		topic_id = topic.topic_id
+
+	return {
+		"applied": true,
+		"spouse_a_id": spouse_a_id,
+		"spouse_b_id": spouse_b_id,
+		"pathway": resolved_pathway,
+		"topic_id": topic_id,
+	}
+
+
+static func _auto_dissolve_marriage_on_conviction(
+	conviction_results: Array,
+	characters_by_id: Dictionary,
+	marriages: Array,
+	ic_day: int,
+	active_topics: Array,
+	next_topic_id: Array,
+) -> Array:
+	# Pathway 2 — Criminal Conviction: auto-dissolve when convicted of a Tier 1 crime.
+	# No Honor/Glory/disposition cost to the dissolving family (s57.49.7).
+	const TIER_1_CRIME_TYPES: Array = [Enums.CrimeType.TREASON, Enums.CrimeType.MAHO]
+	var results: Array = []
+	for conv: Variant in conviction_results:
+		if not (conv is Dictionary):
+			continue
+		if conv.get("outcome", "") != "convicted":
+			continue
+		if not (conv.get("crime_type", -1) in TIER_1_CRIME_TYPES):
+			continue
+		var accused_id: int = conv.get("accused_id", -1)
+		if accused_id < 0:
+			continue
+		var accused: L5RCharacterData = characters_by_id.get(accused_id) as L5RCharacterData
+		if accused == null or CharacterStats.is_dead(accused) or accused.spouse_id < 0:
+			continue
+		var effects: Dictionary = {
+			"spouse_a_id": accused_id,
+			"spouse_b_id": accused.spouse_id,
+			"ordering_lord_id": -1,
+			"convicted_id": accused_id,
+			"pathway": 2,
+		}
+		var dr: Dictionary = _apply_dissolution(
+			effects, characters_by_id, marriages, ic_day,
+			active_topics, next_topic_id, {}, {},
+		)
+		results.append(dr)
+	return results
 
 
 # -- Pregnancy Processing (s22.7) -----------------------------------------------

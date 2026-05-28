@@ -52,7 +52,7 @@ const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"DISPATCH_COURTIER",
 	"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 	"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
-	"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
+	"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION", "DISSOLVE_MARRIAGE",
 	"PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
 	"DECLARE_WAR",
 	"COMPLY_WITH_EDICT", "DEFY_EDICT",
@@ -246,6 +246,9 @@ static func execute(
 
 	if action_id == "ARRANGE_MARRIAGE":
 		return _execute_arrange_marriage(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "DISSOLVE_MARRIAGE":
+		return _execute_dissolve_marriage(action, character, ctx, characters_by_id)
 
 	if action_id == "PERFORM_WORSHIP":
 		return _execute_perform_worship(action, character, ctx, dice_engine)
@@ -3076,6 +3079,62 @@ static func _execute_arrange_marriage(
 			"acceptance_score": acceptance_score,
 		},
 	}
+
+
+static func _execute_dissolve_marriage(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var base: Dictionary = {
+		"action_id": "DISSOLVE_MARRIAGE",
+		"character_id": ctx.character_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+	}
+	if ctx.lord_rank < Enums.LordRank.FAMILY_DAIMYO:
+		base["success"] = false
+		base["reason"] = "insufficient_rank"
+		base["effects"] = {}
+		return base
+
+	var spouse_a_id: int = action.metadata.get("spouse_a_id", -1)
+	var spouse_b_id: int = action.metadata.get("spouse_b_id", -1)
+
+	if spouse_a_id < 0 or spouse_b_id < 0:
+		base["success"] = false
+		base["reason"] = "missing_metadata"
+		base["effects"] = {}
+		return base
+
+	var spouse_a: L5RCharacterData = characters_by_id.get(spouse_a_id) as L5RCharacterData
+	var spouse_b: L5RCharacterData = characters_by_id.get(spouse_b_id) as L5RCharacterData
+
+	if spouse_a == null or CharacterStats.is_dead(spouse_a):
+		base["success"] = false
+		base["reason"] = "spouse_a_not_found"
+		base["effects"] = {}
+		return base
+
+	if spouse_b == null or CharacterStats.is_dead(spouse_b):
+		base["success"] = false
+		base["reason"] = "spouse_b_not_found"
+		base["effects"] = {}
+		return base
+
+	# Pathway 1 — Lord's Command. Honor cost pre-applied (Pattern B, s57.49.7).
+	HonorGlorySystem.apply_honor_change(character, MarriageSystem.DISSOLUTION_HONOR_LOSS_LORD)
+
+	base["success"] = true
+	base["effects"] = {
+		"requires_dissolution": true,
+		"spouse_a_id": spouse_a_id,
+		"spouse_b_id": spouse_b_id,
+		"ordering_lord_id": ctx.character_id,
+		"pathway": 1,
+	}
+	return base
 
 
 static func _find_best_marriage_candidate(

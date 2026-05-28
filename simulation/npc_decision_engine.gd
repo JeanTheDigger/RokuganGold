@@ -345,6 +345,9 @@ static func generate_options(
 		# autonomous rule (s55.10.3.7 — only the Champion can give back the authority).
 		if action_id == "RESTORE_COUNCIL_COMPACT" and not ctx.phoenix_champion_authority:
 			continue
+		# DISSOLVE_MARRIAGE requires Family Daimyo or higher (s57.49.7).
+		if action_id == "DISSOLVE_MARRIAGE" and ctx.lord_rank < Enums.LordRank.FAMILY_DAIMYO:
+			continue
 		var option := NPCDataStructures.ScoredAction.new()
 		option.action_id = action_id
 		option.target_npc_id = need.target_npc_id
@@ -927,7 +930,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"SCOUT_ENEMY",
 				"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 				"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
-				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
+				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION", "DISSOLVE_MARRIAGE",
 				"PURIFY_TAINTED_GROUND",
 				"DISPATCH_COURTIER",
 				"DECLARE_WAR", "NEGOTIATE_SURRENDER",
@@ -968,7 +971,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"PERFORM_FOR", "DISCLOSE",
 				"PROVOKE_EMOTION", "PLAY_GAME", "DISCERN_NEED",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
-				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
+				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION", "DISSOLVE_MARRIAGE",
 				"COMPLY_WITH_EDICT", "DEFY_EDICT",
 				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"BRIBE_FOR_INFO", "EAVESDROP",
@@ -1144,6 +1147,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"DEFY_EDICT": 1,
 		"APPOINT_TO_POSITION": 1,
 		"ARRANGE_MARRIAGE": 1,
+		"DISSOLVE_MARRIAGE": 1,
 		"FOUND_VILLAGE": 1,
 		"BUILD_FORTIFICATION": 1,
 		"BUILD_SHRINE": 1,
@@ -2044,7 +2048,7 @@ const COMMANDER_RANK_ACTIONS: Dictionary = {
 const LORD_ONLY_ACTIONS: Array[String] = [
 	"APPOINT_TO_POSITION", "DECLARE_WAR", "FOUND_VILLAGE",
 	"BUILD_FORTIFICATION", "BUILD_SHRINE", "FOUND_TEMPLE",
-	"FOUND_MONASTERY", "COMMISSION_SHIP", "ARRANGE_MARRIAGE",
+	"FOUND_MONASTERY", "COMMISSION_SHIP", "ARRANGE_MARRIAGE", "DISSOLVE_MARRIAGE",
 	# Reclassified from AP to Civilian Order per s57.34.4 — lord-only
 	"SET_TAX_RATE", "SET_STIPEND_RATE",
 	"REQUEST_ART", "REQUEST_PERFORMANCE",
@@ -2403,6 +2407,8 @@ static func _populate_action_metadata(
 			"favor_tier": favor,
 			"has_military_objective": mil_need,
 		}
+	elif option.action_id == "DISSOLVE_MARRIAGE":
+		option.metadata = _build_dissolve_marriage_metadata(need, ctx, chars_by_id)
 	elif option.action_id == "APPOINT_TO_POSITION":
 		option.metadata = {
 			"target_npc_id": need.target_npc_id,
@@ -2983,6 +2989,36 @@ static func _pick_best_game_skill(
 			best_rank = rank
 			best_skill = gs
 	return best_skill
+
+
+static func _build_dissolve_marriage_metadata(
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	# Find a vassal's marriage that meets the dissolution prerequisite gate (s57.49.7):
+	# enemy clan disp <= -31 toward the other spouse.
+	for cid: int in chars_by_id:
+		var c: L5RCharacterData = chars_by_id[cid] as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.lord_id != ctx.character_id:
+			continue
+		if c.spouse_id < 0:
+			continue
+		var spouse: L5RCharacterData = chars_by_id.get(c.spouse_id) as L5RCharacterData
+		if spouse == null or CharacterStats.is_dead(spouse):
+			continue
+		var disp_toward_spouse: int = ctx.disposition_values.get(c.spouse_id, 0)
+		if disp_toward_spouse <= -31:
+			return {"spouse_a_id": c.character_id, "spouse_b_id": c.spouse_id}
+	# Fallback: use need.target_npc_id as the vassal to dissolve from.
+	var fallback_a: int = need.target_npc_id
+	if fallback_a >= 0:
+		var fa: L5RCharacterData = chars_by_id.get(fallback_a) as L5RCharacterData
+		if fa != null and not CharacterStats.is_dead(fa) and fa.spouse_id >= 0:
+			return {"spouse_a_id": fallback_a, "spouse_b_id": fa.spouse_id}
+	return {"spouse_a_id": -1, "spouse_b_id": -1}
 
 
 static func _get_favor_tier_held_against(

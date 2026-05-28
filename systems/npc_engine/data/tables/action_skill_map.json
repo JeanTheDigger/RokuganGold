@@ -147,6 +147,10 @@
     "primary": "Sincerity",
     "secondary": "Perception"
   },
+  "DISSOLVE_MARRIAGE": {
+    "primary": "Courtier",
+    "secondary": "Awareness"
+  },
   "DISPATCH_COURTIER": {
     "primary": "Courtier",
     "secondary": "Battle"

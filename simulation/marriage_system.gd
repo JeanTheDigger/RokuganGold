@@ -138,6 +138,41 @@ static func evaluate_proposal(
 	return score
 
 
+# -- Dissolution Constants (s57.49.7) -----------------------------------------
+
+# Honor / Glory losses per GDD s57.49.7 Pathway 1.
+const DISSOLUTION_HONOR_LOSS_LORD: float = -1.0
+const DISSOLUTION_GLORY_LOSS_SPOUSE: float = -1.0
+# Disposition penalties — PROVISIONAL (GDD labels both as PROVISIONAL).
+const DISSOLUTION_FAMILY_DISP_PENALTY: int = -25
+const DISSOLUTION_CLAN_DISP_PENALTY: int = -10  # cross-clan only
+
+
+static func dissolve_marriage(marriage: Dictionary) -> void:
+	marriage["active"] = false
+
+
+static func find_active_marriage_for_character(
+	char_id: int,
+	marriages: Array,
+) -> Dictionary:
+	for m: Dictionary in marriages:
+		if not m.get("active", false):
+			continue
+		if m.get("character_a_id", -1) == char_id or m.get("character_b_id", -1) == char_id:
+			return m
+	return {}
+
+
+static func get_dissolution_topic_variant(pathway: int) -> String:
+	match pathway:
+		2:
+			return "criminal_conviction"
+		3:
+			return "monastic_retirement"
+	return "lord_command"
+
+
 # -- Benten Festival Bonus ----------------------------------------------------
 
 const BENTEN_FESTIVAL_DAY: int = 9
