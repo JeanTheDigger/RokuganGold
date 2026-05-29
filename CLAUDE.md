@@ -3063,6 +3063,12 @@ All 135 files in `/simulation/` audited against GDD. Summary:
 - **No remaining unaudited simulation files.**
 
 ### Known Code Issues (found and fixed 2026-05-29, marriage dissolution audit)
+- **_build_dissolve_marriage_metadata() — spouse's lord gate missing. FIXED.**
+  s57.49.7 specifies the targeting gate passes when the ordering lord has
+  disposition ≤ −31 toward "the other spouse or that spouse's immediate lord."
+  Code only checked disposition toward the spouse; disposition toward the
+  spouse's lord was not evaluated. Added `spouse.lord_id` lookup and combined
+  gate check. 3 tests added.
 - **test_marriage_dissolution.gd — glory assertion off by 0.5. FIXED.**
   `test_apply_dissolution_pathway1_glory_loss()` asserted glory 5.0 → 4.0 (−1.0 change).
   The constant `DISSOLUTION_GLORY_LOSS_SPOUSE = -0.5` per s57.49b. §57.49.1's consequence

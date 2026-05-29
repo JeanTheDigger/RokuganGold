@@ -3859,7 +3859,7 @@ static func _build_dissolve_marriage_metadata(
 	chars_by_id: Dictionary,
 ) -> Dictionary:
 	# Find a vassal's marriage that meets the dissolution prerequisite gate (s57.49.7):
-	# enemy clan disp <= -31 toward the other spouse.
+	# disp <= -31 (Enemy tier) toward the other spouse OR that spouse's immediate lord.
 	for cid: int in chars_by_id:
 		var c: L5RCharacterData = chars_by_id[cid] as L5RCharacterData
 		if c == null or CharacterStats.is_dead(c):
@@ -3872,7 +3872,11 @@ static func _build_dissolve_marriage_metadata(
 		if spouse == null or CharacterStats.is_dead(spouse):
 			continue
 		var disp_toward_spouse: int = ctx.disposition_values.get(c.spouse_id, 0)
-		if disp_toward_spouse <= -31:
+		# Also gate on disp toward spouse's immediate lord (s57.49.7).
+		var disp_toward_spouse_lord: int = 0
+		if spouse.lord_id >= 0:
+			disp_toward_spouse_lord = ctx.disposition_values.get(spouse.lord_id, 0)
+		if disp_toward_spouse <= -31 or disp_toward_spouse_lord <= -31:
 			return {"spouse_a_id": c.character_id, "spouse_b_id": c.spouse_id}
 	# Fallback: use need.target_npc_id as the vassal to dissolve from.
 	var fallback_a: int = need.target_npc_id

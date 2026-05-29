@@ -741,3 +741,73 @@ func test_phoenix_champion_no_master_accepts_gracefully():
 	# No crash; civil war silently skipped (no master to be authority).
 	assert_false(result.get("champion_accepted_removal", false))
 	assert_false(result.has("champion_defiance_civil_war_triggered"))
+
+
+# -- _build_dissolve_marriage_metadata targeting gate (s57.49.7) --------------
+
+func _make_dissolve_ctx(lord_id: int, disp: Dictionary = {}) -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = lord_id
+	ctx.character_name = "Lord%d" % lord_id
+	ctx.clan = "Crane"
+	ctx.lord_rank = Enums.LordRank.FAMILY_DAIMYO
+	ctx.disposition_values = disp
+	return ctx
+
+
+func _make_dissolve_need() -> NPCDataStructures.ImmediateNeed:
+	var n := NPCDataStructures.ImmediateNeed.new()
+	n.need_type = "DAMAGE_RELATIONSHIP"
+	n.target_npc_id = -1
+	return n
+
+
+func test_dissolve_metadata_gate_passes_on_enemy_spouse_disp():
+	# Lord has Enemy-tier disp toward spouse directly → gate passes.
+	var vassal: L5RCharacterData = _make_cross_clan_char(10, "Lion", "Matsu", -1, 1)
+	var spouse: L5RCharacterData = _make_cross_clan_char(20, "Lion", "Matsu", -1, 99)
+	vassal.spouse_id = 20
+	var ctx := _make_dissolve_ctx(1, {20: -35, 99: 0})
+	var chars_by_id: Dictionary = {1: _make_char(1, -1, -1), 10: vassal, 20: spouse}
+	chars_by_id[1].lord_id = -1
+	vassal.lord_id = 1
+	var meta: Dictionary = NPCDecisionEngine._build_dissolve_marriage_metadata(
+		_make_dissolve_need(), ctx, chars_by_id,
+	)
+	assert_eq(meta.get("spouse_a_id", -1), 10)
+	assert_eq(meta.get("spouse_b_id", -1), 20)
+
+
+func test_dissolve_metadata_gate_passes_on_enemy_spouse_lord_disp():
+	# Lord has neutral disp toward spouse but Enemy-tier toward spouse's lord → gate passes (s57.49.7).
+	var vassal: L5RCharacterData = _make_cross_clan_char(11, "Lion", "Matsu", -1, 1)
+	var spouse: L5RCharacterData = _make_cross_clan_char(21, "Lion", "Matsu", -1, 50)
+	var spouse_lord: L5RCharacterData = _make_cross_clan_char(50, "Lion", "Akodo", -1, -1)
+	vassal.spouse_id = 21
+	var ctx := _make_dissolve_ctx(1, {21: 0, 50: -40})
+	var chars_by_id: Dictionary = {
+		1: _make_char(1, -1, -1), 11: vassal, 21: spouse, 50: spouse_lord
+	}
+	vassal.lord_id = 1
+	var meta: Dictionary = NPCDecisionEngine._build_dissolve_marriage_metadata(
+		_make_dissolve_need(), ctx, chars_by_id,
+	)
+	assert_eq(meta.get("spouse_a_id", -1), 11)
+	assert_eq(meta.get("spouse_b_id", -1), 21)
+
+
+func test_dissolve_metadata_gate_blocked_when_both_neutral():
+	# Lord has neutral disp toward both spouse and spouse's lord → gate does not pass, fallback returns -1.
+	var vassal: L5RCharacterData = _make_cross_clan_char(12, "Lion", "Matsu", -1, 1)
+	var spouse: L5RCharacterData = _make_cross_clan_char(22, "Lion", "Matsu", -1, 50)
+	var spouse_lord: L5RCharacterData = _make_cross_clan_char(50, "Lion", "Akodo", -1, -1)
+	vassal.spouse_id = 22
+	var ctx := _make_dissolve_ctx(1, {22: -10, 50: 5})
+	var chars_by_id: Dictionary = {
+		1: _make_char(1, -1, -1), 12: vassal, 22: spouse, 50: spouse_lord
+	}
+	vassal.lord_id = 1
+	var meta: Dictionary = NPCDecisionEngine._build_dissolve_marriage_metadata(
+		_make_dissolve_need(), ctx, chars_by_id,
+	)
+	assert_eq(meta.get("spouse_a_id", -1), -1)
