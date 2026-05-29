@@ -9,42 +9,49 @@ class_name CourtActionSystem
 
 # GDD s15.4: "Charm cannot push disposition above +40 (Friend tier)"
 const CHARM_CEILING: int = 40
-# GDD s15.4 describes Charm gain qualitatively but specifies no numbers.
-# Diminishing returns thresholds also unspecified. Zeroed pending GDD spec.
-const CHARM_FULL_GAIN: int = 0
-const CHARM_RAISE_BONUS: int = 0
+# GDD s15.4a: Charm base gain and raise bonus. Calibrated against GDD-known values
+# (Play a Game +3, Gossip -5). Intentionally weaker than Negotiate to reflect
+# shallowness and ceiling limitation.
+const CHARM_FULL_GAIN: int = 5
+const CHARM_RAISE_BONUS: int = 2
 const CHARM_DIMINISHING_HALF: int = 2
 const CHARM_DIMINISHING_MINIMAL: int = 3
 
-# GDD s15.4: "Moderate disposition gain", "position moves slightly",
-# "slightly lower TN". No numeric values specified. Zeroed pending GDD spec.
-const NEGOTIATE_BASE_DISP: int = 0
-const NEGOTIATE_RAISE_BONUS: int = 0
-const NEGOTIATE_POSITION_SHIFT: float = 0.0
-const NEGOTIATE_RAISE_POSITION_BONUS: float = 0.0
-const NEGOTIATE_SESSION_TN_REDUCTION: int = 0
+# GDD s15.4a: Negotiate values. Position shift +8 is GDD-confirmed — s15.4 Public
+# Debate text specifies "targeted actions (Negotiate: +8, Persuade: +12)".
+# Disposition +6 ("Moderate" targeted), raise bonuses and TN reduction calibrated
+# per s15.4a design rationale.
+const NEGOTIATE_BASE_DISP: int = 6
+const NEGOTIATE_RAISE_BONUS: int = 2
+const NEGOTIATE_POSITION_SHIFT: float = 8.0
+const NEGOTIATE_RAISE_POSITION_BONUS: float = 4.0
+const NEGOTIATE_SESSION_TN_REDUCTION: int = 5
 
-# GDD s15.4: "position moves more significantly and durably than Negotiate".
-# No numeric values specified. Zeroed pending GDD spec.
-const PERSUADE_BASE_DISP: int = 0
-const PERSUADE_RAISE_BONUS: int = 0
-const PERSUADE_POSITION_SHIFT: float = 0.0
-const PERSUADE_RAISE_POSITION_BONUS: float = 0.0
+# GDD s15.4a: Persuade values. Position shift +12 is GDD-confirmed — s15.4 Public
+# Debate text specifies "targeted actions (Negotiate: +8, Persuade: +12)".
+# Disposition +9 ("Strong" targeted), raise bonuses calibrated per s15.4a.
+# Position marked durable on success per GDD s15.4.
+const PERSUADE_BASE_DISP: int = 9
+const PERSUADE_RAISE_BONUS: int = 3
+const PERSUADE_POSITION_SHIFT: float = 12.0
+const PERSUADE_RAISE_POSITION_BONUS: float = 5.0
 
-# GDD s15.4: "Moderate disposition gain", "slight TN reduction".
-# No numeric values specified. Zeroed pending GDD spec.
-const IMPRESS_BASE_DISP: int = 0
-const IMPRESS_RAISE_BONUS: int = 0
+# GDD s15.4a: Impress values. Disposition +6 ("Moderate" targeted), raise bonus +2,
+# TN reduction -5 ("slight" per s15.4). No position movement (GDD s15.4 does not
+# mention position for Impress).
+const IMPRESS_BASE_DISP: int = 6
+const IMPRESS_RAISE_BONUS: int = 2
 const IMPRESS_POSITION_SHIFT: float = 0.0
-const IMPRESS_SESSION_TN_REDUCTION: int = 0
+const IMPRESS_SESSION_TN_REDUCTION: int = 5
 
-# GDD s15.4: "Strong disposition gain", "TN reduction this session".
-# No numeric values specified. Zeroed pending GDD spec.
-const LISTEN_REFLECT_BASE_DISP: int = 0
-const LISTEN_REFLECT_RAISE_BONUS: int = 0
+# GDD s15.4a: Listen/Reflect values. Disposition +9 ("Strong" targeted), raise bonus +3,
+# TN reduction -10 (more significant than "slight" per s15.4's "opens them to future
+# Persuade or Negotiate"). No position movement (GDD s15.4 does not mention position).
+const LISTEN_REFLECT_BASE_DISP: int = 9
+const LISTEN_REFLECT_RAISE_BONUS: int = 3
 const LISTEN_REFLECT_POSITION_SHIFT: float = 0.0
 const LISTEN_REFLECT_RAISE_POSITION_BONUS: float = 0.0
-const LISTEN_REFLECT_SESSION_TN_REDUCTION: int = 0
+const LISTEN_REFLECT_SESSION_TN_REDUCTION: int = 10
 
 const PROVOKE_HONOR_LOSS: float = -0.2
 const PROVOKE_GLORY_LOSS: float = -0.1

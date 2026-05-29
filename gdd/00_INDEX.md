@@ -150,6 +150,7 @@ Content has not been modified — only split at section boundaries.
 | `s15.2_court_resolution_commitment_system_locked.md` | ## 15.2 Court Resolution & Commitment System — LOCKED | 2K | FULLY LOCKED (4) |
 | `s15.3_court_as_multi_party_persuasion_locked.md` | ## 15.3 Court as Multi-Party Persuasion — LOCKED | 2K | FULLY LOCKED (1) |
 | `s15.4_court_action_menu_locked.md` | ## 15.4 Court Action Menu — LOCKED | 33K | FULLY LOCKED (5). v622: 3 TBD already resolved in prior edits — index corrected. |
+| `s15.4a_court_action_numeric_values_locked.md` | ## 15.4a Court Action Numeric Values — LOCKED | 6K | FULLY LOCKED. Addendum formalizing canonical numeric values for all 5 contested Direct Conversation actions. Negotiate pos +8 and Persuade pos +12 GDD-confirmed from s15.4 Public Debate comparison text. All other values calibrated against known GDD anchors (Play a Game +3, Gossip -5, Public Debate per-witness tiers). |
 | `s15.5_topic_position_system_locked.md` | ## 15.5 Topic Position System — LOCKED | 8K | FULLY LOCKED (8) |
 | `s15.6_virtue_to_topic_personality_modifier_table_locked.md` | ## 15.6 Virtue-to-Topic Personality Modifier Table — LOCKED | 8K | FULLY LOCKED (1) |
 | `s15.7_topic_variant_flag_specification_locked.md` | ## 15.7 Topic Variant Flag Specification — LOCKED | 5K | FULLY LOCKED (1) |
