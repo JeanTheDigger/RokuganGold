@@ -789,3 +789,53 @@ func test_combined_pool_empty_returns_null() -> void:
 	ctx.local_tier3_candidates = []
 	var need: NPCDataStructures.ImmediateNeed = NPCDecisionEngine._check_combined_pool(ctx, {})
 	assert_null(need, "Empty combined pool should return null")
+
+
+# -- resolve_goal() routing: Champion vs Family Daimyo (s57.54.10b) -----------
+
+func test_champion_bypasses_combined_pool_falls_to_rest() -> void:
+	# Clan Champions do not use the combined pool. Their strategy is expressed via
+	# seasonal conclusions and civilian orders — they use the standard primary path
+	# like non-lord characters (s57.54.10b).
+	# With no primary, standing, or void need, resolve_goal() should return REST.
+	var champion := _make_champion(1, "Crane", Enums.BushidoVirtue.CHUGI)
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.is_lord = true
+	ctx.lord_rank = Enums.LordRank.CLAN_CHAMPION
+	ctx.province_statuses = []
+	ctx.pending_events = []
+	ctx.champion_conclusion_candidates = [
+		{"need_type": "PATRONIZE_ARTS", "score": 120, "source": "champion_conclusion",
+		 "conclusion_type": StrategicConclusionData.ConclusionType.BUILD_CULTURAL_PRESTIGE,
+		 "target_clan_id": -1, "is_forced": false},
+	]
+	ctx.local_tier3_candidates = [
+		{"need_type": "DEFEND_PROVINCE", "score": 35, "source": "local_tier3",
+		 "topic_id": 42, "target_clan_id": -1, "is_forced": false},
+	]
+	var need: NPCDataStructures.ImmediateNeed = NPCDecisionEngine.resolve_goal(champion, ctx, {})
+	assert_not_null(need)
+	assert_eq(need.need_type, "REST",
+		"Champion with no primary should fall to REST, not combined pool candidate")
+
+
+func test_family_daimyo_uses_combined_pool_without_lord_assigned_primary() -> void:
+	# Family Daimyo uses the combined pool when no lord-assigned primary is present
+	# (s57.54.10b). Self-selected or absent primary is bypassed in favour of the pool.
+	var fd := _make_family_daimyo(10, "Crane", Enums.BushidoVirtue.CHUGI)
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.is_lord = true
+	ctx.lord_rank = Enums.LordRank.FAMILY_DAIMYO
+	ctx.province_statuses = []
+	ctx.pending_events = []
+	ctx.champion_conclusion_candidates = [
+		{"need_type": "PATRONIZE_ARTS", "score": 120, "source": "champion_conclusion",
+		 "conclusion_type": StrategicConclusionData.ConclusionType.BUILD_CULTURAL_PRESTIGE,
+		 "target_clan_id": -1, "is_forced": false},
+	]
+	ctx.local_tier3_candidates = []
+	# objectives has no primary (no lord-assigned directive overrides the pool).
+	var need: NPCDataStructures.ImmediateNeed = NPCDecisionEngine.resolve_goal(fd, ctx, {})
+	assert_not_null(need)
+	assert_eq(need.need_type, "PATRONIZE_ARTS",
+		"Family Daimyo with no lord-assigned primary should use combined pool, not REST")

@@ -3310,6 +3310,14 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   skipped, dedup prevents reassignment.
 
 ### Known Code Issues (found and fixed 2026-05-29, combined pool audit)
+- **resolve_goal() combined pool condition too broad — Champions entered combined pool path. FIXED.**
+  `if ctx.is_lord and ctx.lord_rank >= Enums.LordRank.FAMILY_DAIMYO` matched CLAN_CHAMPION and
+  IMPERIAL characters. Neither gets `champion_conclusion_candidates` or `local_tier3_candidates`
+  injected (orchestrator injects only for `lord_rank < CLAN_CHAMPION`). A Champion with no
+  lord-assigned primary would find an empty combined pool and fall to REST, silently losing their
+  self-selected primary objectives. Fixed to `== Enums.LordRank.FAMILY_DAIMYO`. Champions and
+  Imperial now fall to the `else` branch and use the standard primary path (the same path as
+  non-lord characters). 2 tests.
 - **RESTORE_WORSHIP missing from objective_alignment.json — FDs never respond to supernatural crises. FIXED.**
   `_build_local_tier3_candidates()` maps SUPERNATURAL topic category → `RESTORE_WORSHIP` NeedType
   per GDD §57.54.10b line 361. But `RESTORE_WORSHIP` had no entries in `objective_alignment.json`,

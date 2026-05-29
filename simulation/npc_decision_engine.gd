@@ -300,11 +300,11 @@ static func resolve_goal(
 	if crisis_need != null:
 		return crisis_need
 
-	# Lord-tier: Combined Pool (Champion conclusions + local Tier 3 needs)
-	# replaces the Primary Objective step for self-directing lord-tier characters.
-	# A specific primary objective (from direct ASSIGN_VASSAL_OBJECTIVE by their
-	# own lord) still takes precedence over the combined pool.
-	if ctx.is_lord and ctx.lord_rank >= Enums.LordRank.FAMILY_DAIMYO:
+	# Family Daimyo tier: Combined Pool (Champion conclusions + local Tier 3 needs)
+	# replaces the Primary Objective step per s57.54.10b. Only FAMILY_DAIMYO uses
+	# this pool — Champion/Imperial have no conclusions injected and use the
+	# standard primary path. An externally assigned primary still takes precedence.
+	if ctx.is_lord and ctx.lord_rank == Enums.LordRank.FAMILY_DAIMYO:
 		var primary: Dictionary = objectives.get("primary", {})
 		var has_lord_assigned_primary: bool = (
 			primary.size() > 0
@@ -319,7 +319,7 @@ static func resolve_goal(
 		if combined_need != null:
 			return combined_need
 	else:
-		# Non-lord-tier: standard primary objective step.
+		# Standard primary objective step (non-lord-tier, Champion, and Imperial).
 		var primary: Dictionary = objectives.get("primary", {})
 		if primary.size() > 0:
 			var primary_need := _decompose_objective(primary, ctx)
