@@ -25,8 +25,8 @@ const CRITICAL_FAILURE_DISPOSITION: int = -2
 const CRITICAL_FAILURE_GLORY: float = -0.3
 const CRITICAL_FAILURE_MARGIN: int = -10
 
-const PERFORM_FOR_SUCCESS_DISPOSITION: int = 0
-const PERFORM_FOR_FAILURE_DISPOSITION: int = 0
+const PERFORM_FOR_SUCCESS_DISPOSITION: int = 8  # "strong disposition gain" — locked s12.4a
+const PERFORM_FOR_FAILURE_DISPOSITION: int = -3  # "small disposition loss" — locked s12.4a
 
 const FATIGUE_FULL: float = 1.0
 const FATIGUE_HALF: float = 0.5

@@ -2964,10 +2964,11 @@ costs, or forward-wiring. Do not treat as bugs.
   0.1→0, Chugi 0.05→0, default 0.3→0). Edict renege topic_tier TIER_2→TIER_3
   (GDD doesn't specify different tier for edict renege). KEEP: priority values,
   EDICT_RENEGE_HONOR_COST, RENEGE_DISPOSITION_PENALTY, VOLUNTARY_POSITION_THRESHOLD.
-- **s12.4 Performative Arts System — 2 values zeroed + 1 bug fix.**
-  PERFORM_FOR_SUCCESS_DISPOSITION (3→0), PERFORM_FOR_FAILURE_DISPOSITION (-1→0).
-  GDD says "strong disposition gain"/"small loss" without numbers. BUG FIX:
-  masterful threshold `raises >= 3` → `raises >= 2` per GDD s4.6 line 49:
+- **s12.4 Performative Arts System — 2 values locked in s12.4a + 1 bug fix.**
+  PERFORM_FOR_SUCCESS_DISPOSITION +8 ("strong disposition gain" — above moderate
+  actions at +6, approaching Persuade base at +9). PERFORM_FOR_FAILURE_DISPOSITION
+  −3 ("small disposition loss" — consistent with small-loss language across system).
+  BUG FIX: masterful threshold `raises >= 3` → `raises >= 2` per GDD s4.6 line 49:
   "2 or more Raises (masterful)" and s57.33 line 57. KEEP: PERFORMANCE_TN (15),
   SUCCESS_DISPOSITION (2), SUCCESS_GLORY (0.3), all other GDD-confirmed values.
 - **s22.7 Marriage System — 3 invented values zeroed.**
