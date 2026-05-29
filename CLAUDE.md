@@ -3267,6 +3267,19 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   `get_patrol_detection_chances()` already returns qualitative dict (correct per GDD s11.3.19
   "more chances to detect" — no numeric formula).
 
+### Known Code Issues (found and fixed 2026-05-29, RESTORE_COUNCIL_COMPACT)
+- **`_assign_phoenix_champion_restore_objective()` — two key bugs. FIXED.**
+  (1) Checked `phoenix_council_state.get("champion_authority_active", false)` — this key
+  is never set. The actual state key is `"phoenix_champion_authority"` (set by
+  `PhoenixCouncil.grant_champion_authority()`). Function always returned early without
+  assigning objectives. Fixed to use `"phoenix_champion_authority"`.
+  (2) Read `"champion_id"` from state — this key also doesn't exist. The actual lookup
+  is `"known_champion_id"`, but the cleanest fix is to delegate to `_find_shiba_champion()`
+  which is already in the same class and handles dead/non-champion cases correctly.
+  5 tests added to test_governance_exceptions_wiring.gd: Chugi champion gets objective,
+  non-Chugi (Ishi/Shourido) champion skipped, no-authority champion skipped, dead champion
+  skipped, dedup prevents reassignment.
+
 ### Systems Added 2026-05-29
 - **s11.3.12a Violence System — INFAMY_PER_REPEATED_OFFENSE locked.** `INFAMY_PER_REPEATED_OFFENSE`
   set to 0.1 (was 0.0). Locked in `gdd/s11.3.12a_violence_repeated_offense_infamy_locked.md`.

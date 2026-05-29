@@ -516,3 +516,79 @@ func test_phoenix_generates_topic_on_veto() -> void:
 	if topics.size() > 0:
 		assert_eq(topics[0].variant, "phoenix_council_veto")
 		assert_eq(topics[0].category, TopicData.Category.POLITICAL)
+
+
+# =============================================================================
+# _assign_phoenix_champion_restore_objective — s55.10.3.7
+# =============================================================================
+
+func test_chugi_champion_with_authority_gets_restore_objective() -> void:
+	var champion := _make_shiba_champion()
+	champion.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	var state := PhoenixCouncil.make_initial_state()
+	PhoenixCouncil.grant_champion_authority(state)
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_phoenix_champion_restore_objective(
+		[champion], objectives_map, state,
+	)
+	assert_eq(objectives_map[champion.character_id]["primary"]["need_type"], "RESTORE_GOVERNANCE")
+
+
+func test_non_chugi_champion_with_authority_skips_restore() -> void:
+	# Ishi is ShouridoVirtue — such champions have BushidoVirtue.NONE.
+	# The function gates on BushidoVirtue.CHUGI; all others are skipped.
+	var champion := _make_shiba_champion()
+	champion.bushido_virtue = Enums.BushidoVirtue.NONE
+	champion.shourido_virtue = Enums.ShouridoVirtue.ISHI
+	var state := PhoenixCouncil.make_initial_state()
+	PhoenixCouncil.grant_champion_authority(state)
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_phoenix_champion_restore_objective(
+		[champion], objectives_map, state,
+	)
+	assert_false(objectives_map.has(champion.character_id))
+
+
+func test_no_authority_skips_restore() -> void:
+	var champion := _make_shiba_champion()
+	champion.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	var state := PhoenixCouncil.make_initial_state()
+	# authority NOT granted
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_phoenix_champion_restore_objective(
+		[champion], objectives_map, state,
+	)
+	assert_false(objectives_map.has(champion.character_id))
+
+
+func test_restore_objective_not_duplicated() -> void:
+	var champion := _make_shiba_champion()
+	champion.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	var state := PhoenixCouncil.make_initial_state()
+	PhoenixCouncil.grant_champion_authority(state)
+	var objectives_map: Dictionary = {
+		champion.character_id: {
+			"primary": {"need_type": "RESTORE_GOVERNANCE", "priority": 5, "assigned_by": -1},
+		},
+	}
+	DayOrchestrator._assign_phoenix_champion_restore_objective(
+		[champion], objectives_map, state,
+	)
+	# no second assignment — objective unchanged
+	assert_eq(objectives_map[champion.character_id]["primary"]["need_type"], "RESTORE_GOVERNANCE")
+	assert_eq(objectives_map.size(), 1)
+
+
+func test_dead_champion_skips_restore() -> void:
+	var champion := _make_shiba_champion()
+	champion.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	champion.wounds_taken = 200
+	champion.stamina = 2
+	champion.willpower = 2
+	var state := PhoenixCouncil.make_initial_state()
+	PhoenixCouncil.grant_champion_authority(state)
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_phoenix_champion_restore_objective(
+		[champion], objectives_map, state,
+	)
+	assert_false(objectives_map.has(champion.character_id))

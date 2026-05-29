@@ -6125,20 +6125,14 @@ static func _assign_phoenix_champion_restore_objective(
 ) -> void:
 	if phoenix_council_state.is_empty():
 		return
-	if not phoenix_council_state.get("champion_authority_active", false):
+	if not phoenix_council_state.get("phoenix_champion_authority", false):
 		return
-	var champion_id: int = int(phoenix_council_state.get("champion_id", -1))
-	if champion_id < 0:
-		return
-	var champion: L5RCharacterData = null
-	for c: L5RCharacterData in characters:
-		if c.character_id == champion_id:
-			champion = c
-			break
-	if champion == null or CharacterStats.is_dead(champion):
+	var champion: L5RCharacterData = _find_shiba_champion(characters)
+	if champion == null:
 		return
 	if champion.bushido_virtue != Enums.BushidoVirtue.CHUGI:
 		return
+	var champion_id: int = champion.character_id
 	if not objectives_map.has(champion_id):
 		objectives_map[champion_id] = {}
 	var objectives: Dictionary = objectives_map[champion_id]
