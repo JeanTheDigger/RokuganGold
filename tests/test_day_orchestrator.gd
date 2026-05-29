@@ -15774,7 +15774,7 @@ func test_purge_crime_records_keeps_under_investigation():
 	assert_eq(records.size(), 1, "UNDER_INVESTIGATION record should not be purged")
 
 
-func _make_delivered_letter(
+func _make_purge_letter(
 	ic_day_arrival: int,
 	recipient_id: int = 1,
 ) -> LetterData:
@@ -15792,19 +15792,19 @@ func _make_delivered_letter(
 
 
 func test_purge_delivered_letters_removes_old():
-	var letters: Array = [_make_delivered_letter(0)]
+	var letters: Array = [_make_purge_letter(0)]
 	DayOrchestrator._purge_delivered_letters(letters, {}, 181)
 	assert_eq(letters.size(), 0, "Letter delivered 181 days ago should be purged")
 
 
 func test_purge_delivered_letters_keeps_recent():
-	var letters: Array = [_make_delivered_letter(0)]
+	var letters: Array = [_make_purge_letter(0)]
 	DayOrchestrator._purge_delivered_letters(letters, {}, 179)
 	assert_eq(letters.size(), 1, "Letter delivered 179 days ago should be kept")
 
 
 func test_purge_delivered_letters_keeps_undelivered():
-	var ld := _make_delivered_letter(0)
+	var ld := _make_purge_letter(0)
 	ld.delivered = false
 	var letters: Array = [ld]
 	DayOrchestrator._purge_delivered_letters(letters, {}, 9999)
@@ -15818,7 +15818,7 @@ func test_purge_delivered_letters_retains_undetected_forged_order():
 	victim.wounds_taken = 0
 	victim.knowledge_pool = []
 
-	var ld := _make_delivered_letter(0, 5)
+	var ld := _make_purge_letter(0, 5)
 	ld.is_forged = true
 	ld.is_order = true
 	ld.order_applied = true
@@ -15840,7 +15840,7 @@ func test_purge_delivered_letters_purges_detected_forged_order():
 	ke.data = {"forger_id": 99}
 	victim.knowledge_pool = [ke]
 
-	var ld := _make_delivered_letter(0, 5)
+	var ld := _make_purge_letter(0, 5)
 	ld.is_forged = true
 	ld.is_order = true
 	ld.order_applied = true
@@ -15859,7 +15859,7 @@ func test_purge_delivered_letters_purges_forged_order_dead_victim():
 	victim.wounds_taken = 50  # dead (default stamina=2 → threshold=4, wounds 50 >> DEAD)
 	victim.knowledge_pool = []
 
-	var ld := _make_delivered_letter(0, 5)
+	var ld := _make_purge_letter(0, 5)
 	ld.is_forged = true
 	ld.is_order = true
 	ld.order_applied = true
