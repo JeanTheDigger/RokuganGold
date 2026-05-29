@@ -1406,7 +1406,7 @@ func test_famine_crisis_tier_2_at_famine_stage() -> void:
 
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["tier"], TopicData.Tier.TIER_2)
-	assert_eq(topics[0].momentum, DayOrchestrator._FAMINE_FAMINE_MOMENTUM)
+	assert_eq(topics[0].momentum, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_2))
 
 
 func test_famine_crisis_no_duplicate_topic() -> void:

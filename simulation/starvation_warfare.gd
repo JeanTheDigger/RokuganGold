@@ -11,7 +11,7 @@ const HARVEST_GLORY_COST: float = -0.5
 const HARVEST_DISP_TARGETED_CLAN: int = -20
 const HARVEST_DISP_OTHER_CLANS: int = -10
 const HARVEST_TOPIC_TIER: int = TopicData.Tier.TIER_2
-const HARVEST_TOPIC_MOMENTUM: float = 0.0
+# Momentum uses tier-floor from TopicSystem.TIER_INITIAL_MOMENTUM (locked s16.1).
 
 const HARVEST_NEVER_VIRTUES: Array[String] = ["Jin", "Gi", "Rei"]
 const HARVEST_CONDITIONAL_VIRTUES: Dictionary = {
@@ -219,7 +219,7 @@ static func generate_harvest_topic(
 	topic.topic_type = "military"
 	topic.variant = "harvest_destroyed"
 	topic.tier = TopicData.Tier.TIER_2
-	topic.momentum = HARVEST_TOPIC_MOMENTUM
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	topic.category = TopicData.Category.POLITICAL
 	topic.clan_involved = ordering_clan
 	topic.ic_day_created = ic_day

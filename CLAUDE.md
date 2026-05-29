@@ -3242,6 +3242,31 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   implemented (_process_court_attendance, 2 tests).
 
 
+### Known Code Issues (found and fixed 2026-05-29, zeroed constant audit)
+- **6 topic momentum constants zeroed → replaced with tier-floor values. FIXED.**
+  `_COMBAT_EVENT_MOMENTUM`, `_CIVIL_WAR_MOMENTUM`, `_CONSTRUCTION_TIER2_MOMENTUM`,
+  `_FAMINE_HUNGER_MOMENTUM`, `_FAMINE_FAMINE_MOMENTUM` in `day_orchestrator.gd` and
+  `HARVEST_TOPIC_MOMENTUM` in `starvation_warfare.gd` were all `0.0` (invented values
+  removed during audit). Replaced with `TopicMomentumSystem.initial_momentum_for_tier(tier)`
+  at each call site — using the already-locked `TIER_INITIAL_MOMENTUM` table from s16.1
+  (TIER_3 floor = 26.0, TIER_2 floor = 51.0). Constants deleted. 4 test files updated.
+- **`_FAMINE_RECOVERY_THRESHOLD` locked at 4 seasons. FIXED.** Was `0` (invented value
+  removed). Set to `4` per GDD s4.3.6 "four seasons of uninterrupted adequate food."
+  Locked in `gdd/s04.3a_famine_recovery_threshold_locked.md`. Tests already handled
+  both zero and non-zero cases via guard; assertions remain correct with threshold=4.
+- **Remaining zeroed constants confirmed correct at 0 per GDD or blocked.** `DUEL_DECLINE_GLORY_LOSS`
+  stays 0 (GDD Table 2.4 has no duel-decline glory entry). `EVIDENCE_DECAY_INTERVAL_DAYS`
+  stays 0 (GDD s11.3.13 "Recorded evidence is permanent" — decay is intentionally disabled).
+  `COLD_CASE_THRESHOLD` stays 0 (decay disabled, never fires). `INTIMIDATION_DISPOSITION_PENALTY`
+  stays 0 (GDD s11.3 specifies provocation flag only, not a disposition value). `INAUSPICIOUS_PENALTY`
+  and `TAIAN_BONUS` stay 0 (GDD says rokuyo is not a mechanical modifier for NPC scoring).
+  `_RETREAT_DEFAULT_DAYS` stays 0 (blocked on sub-tile army movement s11.7a). `TAINT_DETECTION_PLACEHOLDER_TN`
+  stays 0 (blocked on s31 Sense spell). `get_renege_willingness()` values stay 0 (function
+  never called; GDD says "All renege values PROVISIONAL"). `compute_peace_willingness()`
+  already returns qualitative dict (correct per GDD s53 "not determined by a single threshold").
+  `get_patrol_detection_chances()` already returns qualitative dict (correct per GDD s11.3.19
+  "more chances to detect" — no numeric formula).
+
 ### Systems Added 2026-05-29
 - **s11.3.12a Violence System — INFAMY_PER_REPEATED_OFFENSE locked.** `INFAMY_PER_REPEATED_OFFENSE`
   set to 0.1 (was 0.0). Locked in `gdd/s11.3.12a_violence_repeated_offense_infamy_locked.md`.

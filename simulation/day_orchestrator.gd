@@ -4,9 +4,8 @@ class_name DayOrchestrator
 ## info events → letter delivery → topic tick →
 ## (season boundary) resource tick + confidence decay.
 
-const _COMBAT_EVENT_MOMENTUM: float = 0.0
-const _CIVIL_WAR_MOMENTUM: float = 0.0
-const _CONSTRUCTION_TIER2_MOMENTUM: float = 0.0
+# Topic initial momentum uses tier-floor values from TopicSystem.TIER_INITIAL_MOMENTUM
+# (locked s16.1). TIER_3 floor = 26.0, TIER_2 floor = 51.0.
 
 
 static func advance_day(
@@ -2641,7 +2640,7 @@ static func _process_horde_rolls(
 		topic.topic_type = "military"
 		topic.category = TopicData.Category.POLITICAL
 		topic.tier = TopicData.Tier.TIER_3
-		topic.momentum = _COMBAT_EVENT_MOMENTUM
+		topic.momentum = TopicSystem.initial_momentum_for_tier(topic.tier)
 		topic.ic_day_created = ic_day
 		var province: Variant = provinces.get(horde.target_province_id, null)
 		if province is ProvinceData:
@@ -2919,9 +2918,7 @@ static func _find_province_lord(
 # crisis topics for provinces at HUNGER or FAMINE. Tracks recovery: 10
 # consecutive seasons at positive Rice balance resolves the crisis.
 
-const _FAMINE_RECOVERY_THRESHOLD: int = 0
-const _FAMINE_HUNGER_MOMENTUM: float = 0.0
-const _FAMINE_FAMINE_MOMENTUM: float = 0.0
+const _FAMINE_RECOVERY_THRESHOLD: int = 4  # 4 seasons per GDD s4.3.6 — locked s04.3a
 
 
 static func _process_famine_crises(
@@ -3011,10 +3008,9 @@ static func _process_famine_crises(
 			var stage_2: int = int(entry["stage"])
 			if not _has_active_famine_topic(province_id_2, active_topics):
 				var tier: int = TopicData.Tier.TIER_3
-				var momentum: float = _FAMINE_HUNGER_MOMENTUM
 				if stage_2 >= ResourceTick.StarvationStage.FAMINE:
 					tier = TopicData.Tier.TIER_2
-					momentum = _FAMINE_FAMINE_MOMENTUM
+				var momentum: float = TopicSystem.initial_momentum_for_tier(tier)
 				var single_cid: int = -1
 				var single_prov: Variant = provinces.get(province_id_2, null)
 				if single_prov is ProvinceData:
@@ -3154,7 +3150,7 @@ static func _create_famine_topic_multi(
 	topic.clan_involved = clan
 	topic.provinces_affected = province_ids.duplicate()
 	topic.ic_day_created = ic_day
-	topic.momentum = _FAMINE_FAMINE_MOMENTUM
+	topic.momentum = TopicSystem.initial_momentum_for_tier(topic.tier)
 	topic.crisis_id = p_crisis_id
 	return topic
 
@@ -10681,7 +10677,7 @@ static func _create_battle_topic(
 
 	var variant: String = "victory_clean"
 	var tier: TopicData.Tier = TopicData.Tier.TIER_3
-	var momentum: float = _COMBAT_EVENT_MOMENTUM
+	var momentum: float = TopicSystem.initial_momentum_for_tier(tier)
 
 	var title: String = "Battle at province %d" % province_id
 
@@ -13094,7 +13090,7 @@ static func _generate_naval_battle_topics(
 		topic.slug = "naval_battle_%s_vs_%s_d%d" % [atk_clan.to_lower(), def_clan.to_lower(), ic_day]
 		topic.title = "Naval Battle — %s vs %s" % [atk_clan, def_clan]
 		topic.tier = TopicData.Tier.TIER_3
-		topic.momentum = _COMBAT_EVENT_MOMENTUM
+		topic.momentum = TopicSystem.initial_momentum_for_tier(topic.tier)
 		topic.category = TopicData.Category.MILITARY
 		topic.ic_day_created = ic_day
 		topic.resolved = false
@@ -15261,7 +15257,6 @@ static func _generate_construction_topic(
 			topic.title = "Grand Shinden Construction Completed"
 			topic.variant = "shinden_completed"
 			topic.tier = TopicData.Tier.TIER_2
-			topic.momentum = _CONSTRUCTION_TIER2_MOMENTUM
 		ConstructionData.ConstructionType.MONASTERY:
 			topic.slug = "monastery_completed_%d" % cd.construction_id
 			topic.title = "Monastery Construction Completed"
@@ -15944,7 +15939,7 @@ static func _process_commitment_seasonal(
 			topic.tier = topic_tier
 			topic.topic_type = topic_type
 			topic.variant = topic_variant
-			topic.momentum = TopicMomentumSystem.MOMENTUM_MINOR_FLOOR if topic_tier >= TopicData.Tier.TIER_3 else _COMBAT_EVENT_MOMENTUM
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic_tier)
 			topic.category = TopicData.Category.POLITICAL
 			topic.ic_day_created = ic_day
 			active_topics.append(topic)
@@ -17054,7 +17049,7 @@ static func _resolve_civil_war(
 	topic.tier = TopicData.Tier.TIER_2
 	topic.topic_type = "civil_war"
 	topic.variant = "legitimacy_victory" if legitimacy_won else ("championship_seizure" if from_seizure else "rebel_victory")
-	topic.momentum = _CIVIL_WAR_MOMENTUM
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	topic.category = TopicData.Category.POLITICAL
 	topic.ic_day_created = ic_day
 	active_topics.append(topic)
@@ -17404,7 +17399,7 @@ static func _trigger_civil_war(
 	topic.tier = TopicData.Tier.TIER_2
 	topic.topic_type = "civil_war"
 	topic.variant = "civil_war_triggered"
-	topic.momentum = _CIVIL_WAR_MOMENTUM
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	topic.category = TopicData.Category.POLITICAL
 	topic.ic_day_created = ic_day
 	active_topics.append(topic)
