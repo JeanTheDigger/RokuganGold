@@ -657,6 +657,158 @@ func test_compose_no_audience_penalty() -> void:
 	assert_almost_eq(option.disposition_modifier, 0.0, 0.001)
 
 
+func test_compose_active_topic_subject_clan_match_bonus() -> void:
+	# Active topic with clan subject matching compose subject + momentum > 40 → +15 bonus.
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.clan = "Crane"
+	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.skill_ranks = {"Poetry": 2}
+	ctx.characters_present = [2]
+	ctx.known_topic_momentums = {77: 45}  # topic 77 momentum 45 > 40
+	ctx.known_topic_subjects = {77: {"clan": "Lion"}}  # subject is Lion
+	ctx.known_objectives = {}
+
+	var option: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	option.action_id = "COMPOSE_THEATER_PIECE"
+	option.objective_alignment = 60.0
+	option.disposition_modifier = 0.0
+	option.metadata = {
+		"subject": "Lion",
+		"subject_type": TheaterSystem.SubjectType.CLAN,
+		"is_new": true,
+	}
+
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "DAMAGE_RELATIONSHIP"
+	need.target_npc_id = -1
+	need.target_intent = ""
+
+	NPCDecisionEngine.score_all([option], need, ctx, {})
+	# +20 not AT_COURT, +15 matching live topic → net 35
+	assert_almost_eq(option.disposition_modifier, 35.0, 0.001)
+
+
+func test_compose_active_topic_below_threshold_no_bonus() -> void:
+	# Topic exists but momentum 38 <= 40 → no +15 bonus.
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.clan = "Crane"
+	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.skill_ranks = {"Poetry": 2}
+	ctx.characters_present = [2]
+	ctx.known_topic_momentums = {77: 38}  # below threshold
+	ctx.known_topic_subjects = {77: {"clan": "Lion"}}
+	ctx.known_objectives = {}
+
+	var option: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	option.action_id = "COMPOSE_THEATER_PIECE"
+	option.objective_alignment = 60.0
+	option.disposition_modifier = 0.0
+	option.metadata = {
+		"subject": "Lion",
+		"subject_type": TheaterSystem.SubjectType.CLAN,
+		"is_new": true,
+	}
+
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "DAMAGE_RELATIONSHIP"
+	need.target_npc_id = -1
+	need.target_intent = ""
+
+	NPCDecisionEngine.score_all([option], need, ctx, {})
+	# +20 not AT_COURT, no topic bonus → net 20
+	assert_almost_eq(option.disposition_modifier, 20.0, 0.001)
+
+
+func test_compose_active_topic_subject_mismatch_no_bonus() -> void:
+	# Topic clan is "Crane" but piece subject is "Lion" → no match → no +15 bonus.
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.clan = "Crane"
+	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.skill_ranks = {"Poetry": 2}
+	ctx.characters_present = [2]
+	ctx.known_topic_momentums = {77: 50}
+	ctx.known_topic_subjects = {77: {"clan": "Crane"}}  # different clan
+	ctx.known_objectives = {}
+
+	var option: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	option.action_id = "COMPOSE_THEATER_PIECE"
+	option.objective_alignment = 60.0
+	option.disposition_modifier = 0.0
+	option.metadata = {
+		"subject": "Lion",
+		"subject_type": TheaterSystem.SubjectType.CLAN,
+		"is_new": true,
+	}
+
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "DAMAGE_RELATIONSHIP"
+	need.target_npc_id = -1
+	need.target_intent = ""
+
+	NPCDecisionEngine.score_all([option], need, ctx, {})
+	# +20 not AT_COURT, no topic bonus (mismatch) → net 20
+	assert_almost_eq(option.disposition_modifier, 20.0, 0.001)
+
+
+func test_compose_skipped_when_poetry_zero() -> void:
+	# Poetry rank 0 → entire modifier block skipped; disposition_modifier stays 0.
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.clan = "Crane"
+	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.skill_ranks = {"Poetry": 0}
+	ctx.characters_present = [2]
+	ctx.known_topic_momentums = {}
+	ctx.known_topic_subjects = {}
+	ctx.known_objectives = {}
+
+	var option: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	option.action_id = "COMPOSE_THEATER_PIECE"
+	option.objective_alignment = 60.0
+	option.disposition_modifier = 0.0
+	option.metadata = {"subject": "Lion", "subject_type": TheaterSystem.SubjectType.CLAN, "is_new": true}
+
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "DAMAGE_RELATIONSHIP"
+	need.target_npc_id = -1
+	need.target_intent = ""
+
+	NPCDecisionEngine.score_all([option], need, ctx, {})
+	# Poetry 0 → no modifiers → stays 0
+	assert_almost_eq(option.disposition_modifier, 0.0, 0.001)
+
+
+func test_compose_skipped_for_non_political_need_type() -> void:
+	# NeedType SEEK_GLORY is not political → modifier block skipped entirely.
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.clan = "Crane"
+	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.skill_ranks = {"Poetry": 3}
+	ctx.characters_present = [2]
+	ctx.known_topic_momentums = {}
+	ctx.known_topic_subjects = {}
+	ctx.known_objectives = {}
+
+	var option: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	option.action_id = "COMPOSE_THEATER_PIECE"
+	option.objective_alignment = 60.0
+	option.disposition_modifier = 0.0
+	option.metadata = {"subject": "Lion", "subject_type": TheaterSystem.SubjectType.CLAN, "is_new": true}
+
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "SEEK_GLORY"
+	need.target_npc_id = -1
+	need.target_intent = ""
+
+	NPCDecisionEngine.score_all([option], need, ctx, {})
+	# SEEK_GLORY → not political_need → no modifiers → stays 0
+	assert_almost_eq(option.disposition_modifier, 0.0, 0.001)
+
+
 # ============================================================================
 # §57.22.13 POLITICAL RAISES AT COMPLETION
 # ============================================================================
