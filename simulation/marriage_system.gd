@@ -124,6 +124,9 @@ static func is_gempuku_eligible(birth_season: int, current_season: int) -> bool:
 
 # -- Proposal Evaluation (NPC lord decision) ----------------------------------
 
+const PROPOSAL_FAVOR_TIER_MULTIPLIER: int = 10  # MINOR=0, MODERATE=10, MAJOR=20 — locked s22.7a
+const PROPOSAL_MILITARY_BONUS: int = 10          # pressing military need — locked s22.7a
+
 static func evaluate_proposal(
 	proposing_clan_disposition: int,
 	character_value: int,
@@ -132,9 +135,9 @@ static func evaluate_proposal(
 ) -> int:
 	var score: int = proposing_clan_disposition
 	score += character_value
-	score += favor_tier * 0
+	score += favor_tier * PROPOSAL_FAVOR_TIER_MULTIPLIER
 	if has_military_objective:
-		score += 0
+		score += PROPOSAL_MILITARY_BONUS
 	return score
 
 
@@ -186,7 +189,7 @@ static func get_dissolution_topic_variant(pathway: int) -> String:
 const BENTEN_FESTIVAL_DAY: int = 9
 const BENTEN_FESTIVAL_MONTH: int = 11
 
-const BENTEN_FESTIVAL_BONUS: int = 0
+const BENTEN_FESTIVAL_BONUS: int = 15  # most auspicious marriage day — locked s22.7a
 
 static func is_benten_festival(ic_day: int) -> bool:
 	var day_of_year: int = ic_day % 360

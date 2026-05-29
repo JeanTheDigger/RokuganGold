@@ -2959,11 +2959,13 @@ costs, or forward-wiring. Do not treat as bugs.
   critical failure (−3), and Minor Favor break (−0.5 Honor). REFUSE_UNINVITED
   stays 0 (GDD silent — no host penalty for turning away uninvited guest).
   KEEP: INTIMATE_SETTING_BONUS (3, s17.2), DAILY_AP_DURING_VISIT (2, s14.1).
-- **s22.9 Hostage System — 5 invented values zeroed.**
-  HARMED_HOSTAGE_HONOR_LOSS (-3.0→0.0), ESCAPE_FAMILY_HONOR_LOSS (-1.0→0.0),
-  ESCAPE_CRITICAL_FAMILY_HONOR_LOSS (-2.0→0.0). GDD says "catastrophic"/
-  "significant" without numbers. Yu capture modifier (0.5→0.0), Ishi modifier
-  (0.3→0.0). KEEP: all escape TNs, garrison scaling, leverage values.
+- **s22.9 Hostage System — 5 values locked in s22.9a.**
+  HARMED_HOSTAGE_HONOR_LOSS −3.0 ("catastrophic" — matches assassination execution),
+  ESCAPE_FAMILY_HONOR_LOSS −1.0 ("significant" — Moderate Favor break),
+  ESCAPE_CRITICAL_FAMILY_HONOR_LOSS −2.0 (clean escape — Major Favor break).
+  YU_CAPTURE_LIKELIHOOD 0.5 (50% captured vs die fighting),
+  ISHI_CAPTURE_LIKELIHOOD 0.3 (30% captured, 70% die rather than submit).
+  KEEP: all escape TNs, garrison scaling, leverage values.
 - **s16.4 Court Commitment System — invented honor table replaced + 4 values zeroed.**
   VOLUNTARY_RENEGE_HONOR_BY_RANK dictionary (invented linear -0.5 to -5.0)
   replaced with CrimeSystem.get_disloyalty_honor() (Table 2.3: [0,-2,-6,-10,
@@ -2978,10 +2980,11 @@ costs, or forward-wiring. Do not treat as bugs.
   BUG FIX: masterful threshold `raises >= 3` → `raises >= 2` per GDD s4.6 line 49:
   "2 or more Raises (masterful)" and s57.33 line 57. KEEP: PERFORMANCE_TN (15),
   SUCCESS_DISPOSITION (2), SUCCESS_GLORY (0.3), all other GDD-confirmed values.
-- **s22.7 Marriage System — 3 invented values zeroed.**
-  evaluate_proposal() favor_tier multiplier (10→0), military_objective bonus
-  (15→0), BENTEN_FESTIVAL_BONUS (20→0). GDD lists factors qualitatively without
-  numeric weights. KEEP: all 24 GDD-confirmed values (boosts, pregnancy, decay).
+- **s22.7 Marriage System — 3 values locked in s22.7a.**
+  PROPOSAL_FAVOR_TIER_MULTIPLIER 10 (MINOR=0, MODERATE=+10, MAJOR=+20),
+  PROPOSAL_MILITARY_BONUS 10 (pressing military need equals MODERATE favor weight),
+  BENTEN_FESTIVAL_BONUS 15 (most auspicious day — above military urgency, below
+  Major obligation). KEEP: all 24 GDD-confirmed values (boosts, pregnancy, decay).
 - **Tea Ceremony scoring — CONDUCT_TEA_CEREMONY alignment 85→100.**
   Under RECOVER_VOID_POINTS NeedType in objective_alignment.json. GDD says tea
   ceremony recovers void "identically to MEDITATE" which scores 100.
