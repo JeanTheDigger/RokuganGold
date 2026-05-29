@@ -279,5 +279,5 @@ static func _has_mentor_objective(
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> bool:
 	var primary: Dictionary = ctx.known_objectives.get("primary", {})
-	return primary.get("objective_type", "") == "MENTOR_CHARACTER" and \
+	return primary.get("need_type", "") == "MENTOR_CHARACTER" and \
 		primary.get("target_npc_id", -1) == sensei_id

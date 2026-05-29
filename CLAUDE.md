@@ -3330,6 +3330,14 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   (70), etc. Added "RESTORE_WORSHIP" as the first entry in the mapping. 1 test.
 
 ### Known Code Issues (found and fixed 2026-05-29, combined pool audit)
+- **ReactiveDecisions._has_mentor_objective() — key mismatch, KETSUI always declines training. FIXED.**
+  `_has_mentor_objective()` checked `primary.get("objective_type", "") == "MENTOR_CHARACTER"` but
+  lord-assigned objectives from `_apply_vassal_objective_assignment()` only set `"need_type"` (no
+  `"objective_type"` field). KETSUI-virtue students always received `has_mentor_objective = false`
+  regardless of their lord's directive, causing them to always decline training via `self_reliance`.
+  Fixed to `primary.get("need_type", "") == "MENTOR_CHARACTER"`. Test
+  `test_ketsui_accepts_with_mentor_objective` also updated from `"objective_type"` to `"need_type"`.
+  1 test updated.
 - **resolve_goal() combined pool condition too broad — Champions entered combined pool path. FIXED.**
   `if ctx.is_lord and ctx.lord_rank >= Enums.LordRank.FAMILY_DAIMYO` matched CLAN_CHAMPION and
   IMPERIAL characters. Neither gets `champion_conclusion_candidates` or `local_tier3_candidates`
