@@ -2861,13 +2861,16 @@ costs, or forward-wiring. Do not treat as bugs.
   `witnessed_harvest_destruction` (start:-10, floor:-5, decay) removed from
   HISTORICAL_EVENTS. Neither appears in GDD s12.2 historical modifier table.
   Day orchestrator harvest destruction path now creates empty modifiers (no-op).
-- **s12.7 Letter System — 5 invented reply constants zeroed.**
-  `BASE_REPLY_CHANCE` 0.20→0.0, `DISPOSITION_REPLY_BONUS` 0.008→0.0,
-  `COURTESY_REPLY_BONUS` 0.15→0.0, `HOSTILE_REPLY_THRESHOLD` -30→0,
-  `MEETING_ACCEPT_DISPOSITION` unchanged at 0. GDD s12.7 describes reply
-  mechanics qualitatively ("disposition toward sender", "personality profile",
-  "high Courtesy") but specifies no numeric values. Reply generation is
-  structurally intact but produces zero reply chance pending GDD specification.
+- **s12.7 Letter System — reply constants locked in s12.7a.**
+  Previously zeroed during invented-content audit. Now formally locked in
+  `gdd/s12.7a_letter_reply_values_locked.md`. Calibrated against GDD-confirmed
+  factors (disposition toward sender, Rei virtue, hostile threshold) with
+  samurai etiquette baseline and topic-propagation requirements.
+  Final values: BASE_REPLY_CHANCE=0.35 (35% at neutral), DISPOSITION_REPLY_BONUS=0.005
+  (+0.5%/point), COURTESY_REPLY_BONUS=0.15 (+15% for Rei), HOSTILE_REPLY_THRESHOLD=−10
+  (Rival tier onset is −11; below this = no reply), MEETING_ACCEPT_DISPOSITION=0
+  (neutral or positive accepts meeting proposals). GAME_OF_LETTERS_REPLY_BONUS=0.02
+  PROVISIONAL (no GDD numeric spec for Games: Letters skill modifier).
 - **s15.4 Court Action System — 22 constants locked in s15.4a.**
   Previously zeroed during invented-content audit. Now formally locked in
   `gdd/s15.4a_court_action_numeric_values_locked.md`. Calibrated against
