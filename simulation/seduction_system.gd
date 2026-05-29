@@ -22,8 +22,8 @@ enum EntanglementState {
 
 # -- Constants -----------------------------------------------------------------
 
-# GDD s12.8 specifies contested roll (Temptation/Awareness vs Etiquette/Willpower + Honor Rank)
-# but no base TN addend. Zeroed pending GDD specification.
+# Defense TN = etiquette_rank + willpower + honor_rank. No base addend — the formula is
+# complete as stated. Confirmed 0 in s12.8c.
 const BASE_TN: int = 0
 const SEDUCE_DISPOSITION_BONUS: int = 5
 const MAINTENANCE_WINDOW_IC_DAYS: int = 16
@@ -41,7 +41,8 @@ const BREAKUP_DISPOSITION_LOSS: Dictionary = {
 # Flat honor cost superseded by CrimeSystem.get_low_skill_honor_cost (line 69).
 # Retained as metadata key only (Pattern B: "honor_cost" not consumed by EffectApplicator).
 const HONOR_COST: float = -0.3
-# GDD s12.8 does not specify Infamy gain for seduction. Zeroed pending GDD specification.
+# GDD specifies honor cost only. Infamy accrues via scandal topic on exposure, not at use.
+# Confirmed 0 in s12.8c.
 const INFAMY_GAIN: float = 0.0
 
 

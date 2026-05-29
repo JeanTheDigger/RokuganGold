@@ -2902,10 +2902,12 @@ costs, or forward-wiring. Do not treat as bugs.
   tier→TN mapping (TIER_1 was 30, should be 15 per GDD s12.8 lines 163-169).
   FABRICATION_HONOR_COST had same inversion (TIER_1 was -1.5, should be -0.3 per
   GDD lines 173-181). Both dictionaries corrected. All other 37 constants confirmed.
-- **s12.8 Seduction System — 3 invented values zeroed.**
-  BASE_TN (15→0) — GDD specifies contested roll formula but no base TN addend.
-  INFAMY_GAIN (0.1→0.0) — GDD does not specify infamy for seduction.
-  `raises_for_detail` removed from SEDUCE_FOR_INFO effects — not in GDD.
+- **s12.8 Seduction System — 2 values confirmed at 0 (s12.8c) + 1 removed.**
+  BASE_TN = 0 confirmed: GDD formula `etiquette_rank + willpower + honor_rank` is
+  complete, no base addend implied. Low TNs for average characters are intentional —
+  Honor Rank scaling is the primary counterbalance. INFAMY_GAIN = 0.0 confirmed:
+  GDD specifies honor cost only; infamy accrues via scandal topic on exposure, not
+  at use. `raises_for_detail` removed from SEDUCE_FOR_INFO effects — not in GDD.
   HONOR_COST retained as dead metadata (superseded by CrimeSystem rank-scaled
   honor at line 69). All other values confirmed (disposition +5, maintenance
   16 days, 3 missed windows, affair severities, breakup disposition).
