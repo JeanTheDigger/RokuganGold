@@ -3511,7 +3511,9 @@ The flags remain emitted (harmless metadata) but will never be consumed.
 `_process_following_orders_honor_writebacks()` fires once per day per NPC
 whose primary objective has `assigned_by >= 0` (lord-assigned). Applies
 `get_following_orders_honor()` (positive at low rank, negative at high rank).
-Deduped per character per day.
+Deduped per character per day. Numeric values locked in s46a:
+HONOR_TABLE_FOLLOWING_ORDERS = [6, 4, 0, 0, -2, -4] (÷10 → +0.6/+0.4/0/0/−0.2/−0.4).
+Positive at honor ranks 0–2, neutral at 3–6, gentle negative at 7–10.
 
 **B6. Three Table 2.3 rows — RESOLVED: mechanical triggers wired.**
 LYING fires on successful FABRICATE_SECRET when fabricator has positive

@@ -383,6 +383,7 @@ Content has not been modified — only split at section boundaries.
 | File | Section | Size | Status |
 |------|---------|------|--------|
 | `s46_fear_honor_glory_status.md` | # 46. Fear, Honor, Glory & Status | 18K | Reference / No tags |
+| `s46a_following_orders_honor_locked.md` | ## 46a Following Orders Honor Table — LOCKED | 2K | FULLY LOCKED. Formalizes HONOR_TABLE_FOLLOWING_ORDERS = [6, 4, 0, 0, -2, -4] (÷10). Positive at low honor (dutiful compliance), neutral at middle ranks, gentle negative at very high honor (ethical compromise under lord directive). Daily dedup. Source: GDD s55.25. |
 
 ### Section 47
 
