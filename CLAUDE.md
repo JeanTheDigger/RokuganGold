@@ -3447,7 +3447,7 @@ pending playtesting.
 | A19 | INVESTIGATE_THREAT priority (from impersonation) | 6 | day_orchestrator.gd | RESOLVED — s12.8b: metadata only (NPC engine does not read priority field). Value documents intent: above UPHOLD_LAW (4) and court attendance (5), below forged orders (8). | s12.8b |
 | A20 | Forge authority level | Target's lord_rank via chars_by_id | npc_decision_engine.gd | RESOLVED (B11) | s12.8 |
 | A21 | Hunt beast stat blocks (8 of 10 species) | Derived from s54.1 | hunt_system.gd | Bear and ozaru GDD-confirmed; 8 others interpolated | s57.38 |
-| A22 | PERFORM_RITUAL alignment score under PERFORM_RITUAL NeedType | 90 (below PERFORM_WORSHIP at 100) | objective_alignment.json | No explicit scoring hierarchy for rituals | — |
+| A22 | PERFORM_RITUAL alignment score under PERFORM_RITUAL NeedType | PERFORM_RITUAL=100, PERFORM_WORSHIP=90 | objective_alignment.json | RESOLVED — direct action wins its own NeedType (100); worship is valid fallback (90) when ritual conditions not met. | — |
 | A23 | World gen POSITION_RANK by role | Champion 7.0, Family Daimyo 6.0, Provincial 5.0, Local 4.0 | world_population_generator.gd | GDD s22.4 gives ring ranges per rank but not a positional rank mapping | s52 |
 | A24 | World gen POSITION_STATUS by role | Champion 7.0, Family Daimyo 6.0, etc. | world_population_generator.gd | GDD does not specify exact Status values per lord position | s52 |
 | A25 | World gen BASE_PU per province tier | Family seat 60, regular 40 | world_bootstrap.gd | GDD does not specify base PU per province | s2.3 |
