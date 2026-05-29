@@ -244,22 +244,39 @@ func test_ripple_zero_personal_change_no_op() -> void:
 # -- Specific events ---------------------------------------------------------
 
 func test_marriage_applies_standard_deltas() -> void:
+	# s22.7 wins over s12.2b: marriage goes into the decaying boost layer,
+	# NOT permanent baselines. Both standard and champion-level get the same
+	# clan boost (8) because the decaying layer doesn't differentiate.
+	var marriage_clan_boosts: Dictionary = {}
+	var marriage_family_boosts: Dictionary = {}
 	var ret: Dictionary = CollectiveDisposition.apply_marriage(
 		"Crab", "Crane", "Hida", "Doji",
 		_clan_baselines, _family_baselines, false,
+		marriage_clan_boosts, marriage_family_boosts,
 	)
-	assert_eq(ret["clan_change"], 1)
-	assert_eq(ret["family_change"], 5)
-	assert_eq(_family_baselines[CollectiveDisposition.make_pair_key("Hida", "Doji")], 5)
+	# Decaying layer is updated.
+	var fkey: String = CollectiveDisposition.make_pair_key("Hida", "Doji")
+	var ckey: String = CollectiveDisposition.make_pair_key("Crab", "Crane")
+	assert_eq(marriage_family_boosts[fkey]["value"], CollectiveDisposition.MARRIAGE_FAMILY_BOOST)
+	assert_eq(marriage_clan_boosts[ckey]["value"], CollectiveDisposition.MARRIAGE_CLAN_BOOST)
+	assert_eq(ret["family_boost"], CollectiveDisposition.MARRIAGE_FAMILY_BOOST)
+	assert_eq(ret["clan_boost"], CollectiveDisposition.MARRIAGE_CLAN_BOOST)
+	# Permanent baselines are NOT modified (s22.7 won over s12.2b line 303).
+	assert_false(_family_baselines.has(fkey), "apply_marriage must not touch permanent family baselines")
 
 
 func test_champion_marriage_applies_higher_deltas() -> void:
+	# champion_level flag has no effect in the s22.7 decaying layer; both
+	# tiers give the same boost values. s12.2b champion distinction is superseded.
+	var marriage_clan_boosts: Dictionary = {}
+	var marriage_family_boosts: Dictionary = {}
 	var ret: Dictionary = CollectiveDisposition.apply_marriage(
 		"Crab", "Crane", "Hida", "Doji",
 		_clan_baselines, _family_baselines, true,
+		marriage_clan_boosts, marriage_family_boosts,
 	)
-	assert_eq(ret["clan_change"], 8)
-	assert_eq(ret["family_change"], 5)
+	assert_eq(ret.get("clan_boost", -1), CollectiveDisposition.MARRIAGE_CLAN_BOOST)
+	assert_eq(ret.get("family_boost", -1), CollectiveDisposition.MARRIAGE_FAMILY_BOOST)
 
 
 func test_clan_war_declared_minus_10_clan_only() -> void:

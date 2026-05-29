@@ -3416,6 +3416,20 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   1 test added: `test_artistic_expression_no_crash_without_objectives_map` verifies scan runs
   without crash and returns ARTISTIC_EXPRESSION on a character without the dynamic property set.
 
+### Known Code Issues (found and fixed 2026-05-29, collective disposition audit)
+- **test_marriage_applies_standard_deltas / test_champion_marriage_applies_higher_deltas —
+  tests coded to old s12.2b permanent-baseline design; implementation uses s22.7 decaying
+  layer. FIXED.** The implementation (`apply_marriage()`) deliberately chose s22.7's
+  separate decaying boost layer over s12.2b's permanent baseline modification (comment:
+  "s22.7 wins"). The two tests were written before this redesign and still expected
+  `clan_change`/`family_change` return keys and direct mutation of `_family_baselines`.
+  Both tests updated to verify the actual s22.7 behavior: `marriage_family_boosts` and
+  `marriage_clan_boosts` are populated with the correct values, return dict has
+  `family_boost`/`clan_boost` keys, and `_family_baselines` is NOT modified.
+  `test_champion_marriage_applies_higher_deltas` now verifies that the `_champion_level`
+  flag has no effect on the decaying layer (s22.7 does not differentiate tiers).
+  2 tests updated.
+
 ### Known Code Issues (found and fixed 2026-05-29, writeback audit)
 - **LYING honor trigger always returned 0 — string/int key mismatch. FIXED.**
   `_process_lying_honor_writebacks()` called `disposition_values.get(str(subject_id), 0)`
