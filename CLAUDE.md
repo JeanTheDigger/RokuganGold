@@ -2921,10 +2921,12 @@ costs, or forward-wiring. Do not treat as bugs.
   constants confirmed: HONOR_LOSS (-0.2), GLORY_LOSS (-0.1), topic tiers
   (TIER_4 first, TIER_3 on third), repeat window (4 seasons), repeat
   threshold (3). Bribery system (s12.9) audited — fully compliant.
-- **s12.9 Intimidation System — 1 invented value zeroed.**
-  `PUBLIC_TN_INCREASE_BASE` (10→0) — GDD s12.9 says public intimidation
-  "raises the effective TN" on success but gives no base number (only
-  "+5 per Raise"). `PRIVATE_TN_INCREASE_BASE` (10) confirmed GDD-sourced
+- **s12.9 Intimidation System — 1 value locked in s12.9a.**
+  `PUBLIC_TN_INCREASE_BASE` (10→0→10) — GDD says "raises the effective TN"
+  with "+5 per Raise" but no explicit base. Locked at 10 (same as private)
+  per s12.9a: both are in-person contested rolls; public power differential
+  is social consequences (witnesses, Honor/Infamy), not a different base.
+  `PRIVATE_TN_INCREASE_BASE` (10) confirmed GDD-sourced
   (s12.9 explicitly says "+10"). `friend_threshold` (31) confirmed —
   matches GDD s12.2 Friend range (+31 to +60). All other constants
   confirmed: blackmail honor/infamy, private honor/infamy, public
