@@ -56,6 +56,12 @@ const _SHINOBI_SCHOOLS: Array[String] = [
 	"Shosuro Actor",
 ]
 
+# Non-shinobi Phase 1 TN increase (s12.8a A1).
+# GDD: "severe disadvantage, All Phase 1 TNs are increased."
+# Calibrated equal to the lockdown response (+10) — operating without training
+# is like operating under permanent lockdown conditions.
+const NON_SHINOBI_ACCESS_TN_INCREASE: int = 10
+
 # -- Seppun Protection Constants (s12.8 Imperial Assassination) ----------------
 # Full protection: target under direct Seppun guard (co-located Seppun present).
 # Half protection: Imperial dynasty target without co-located Seppun guard.
@@ -76,11 +82,11 @@ const EQUIPMENT_POISON_TN: int = 10
 const EQUIPMENT_BLADE_TN: int = 20
 const EQUIPMENT_BLADE_RANK_REQUIREMENT: int = 5
 
-# -- Per-Roll Permanent TN Penalty (s12.8) ------------------------------------
+# -- Per-Roll Permanent TN Penalty (s12.8, s12.8a A2) --------------------------
 # Each failed access roll permanently increases subsequent Phase 1 TNs.
 # Cannot be reduced except by aborting and restarting Phase 1 from scratch.
 # Stacks with lockdown +10 and all other TN modifiers.
-# Values match GDD s12.8 suspicion accumulation tiers (+5/+10/+15).
+# Mirror of GDD-confirmed suspicion accumulation tiers (+5/+10/+15 per s12.8).
 const ACCESS_PENALTY_STANDARD: int = 5
 const ACCESS_PENALTY_NOTABLE: int = 10
 const ACCESS_PENALTY_CRITICAL: int = 15
@@ -91,12 +97,28 @@ const _CONCEAL_SCHOOL_LEAN: Array[String] = [
 ]
 
 # -- Execution Phase Constants -------------------------------------------------
-# REMOVED: All execution phase TNs were invented (not in GDD s12.8).
-# Awaiting GDD specification for Phase 2 TNs.
+# Phase 2 TNs not yet specified in GDD s12.8. Awaiting specification.
 
-# -- Concealment Phase Constants -----------------------------------------------
-# REMOVED: All concealment phase TNs were invented (not in GDD s12.8).
-# Awaiting GDD specification for Phase 3 TNs.
+# Execution honor: Table 2.3 Low Skill cost for Stealth (s12.8a A4).
+# GDD: "Scorpion pay almost nothing. Other clans pay steeply."
+# Shosuro Infiltrator = 0 (full exempt), Scorpion = half, others = rank-scaled.
+# Uses CrimeSystem.get_low_skill_honor_cost(character, "Stealth").
+const EXECUTION_HONOR_SKILL: String = "Stealth"
+
+# -- Concealment Phase Constants (s12.8a A5) ------------------------------------
+# Phase 3 TNs not yet specified in GDD s12.8. Awaiting specification.
+# Partial failure threshold: margin < 10 (miss TN by 1–9).
+# Standard L5R 4e near-miss convention. Full failure = miss by 10+.
+const CONCEALMENT_PARTIAL_FAILURE_MARGIN: int = 10
+
+# -- Daily Detection Constants (s12.8a A6, A8) ---------------------------------
+# Suspicion gain when household observer succeeds on daily detection check.
+# Calibrated: ~3–4 detections to watchful, ~7 to bodyguard, ~10 to lockdown.
+const DAILY_DETECTION_SUSPICION_GAIN: int = 3
+
+# Investigation bonus for observers when assassin lacks shinobi training.
+# GDD: non-shinobi "easier to detect." Matches watchful-household bonus (+5).
+const NON_SHINOBI_DETECTION_BONUS: int = 5
 
 # -- PC Safeguard Windows (real days for offline players) ----------------------
 
@@ -110,10 +132,6 @@ const ORDER_HONOR_LOSS_STATUS_LOW: float = -2.0
 const ORDER_HONOR_LOSS_STATUS_MID: float = -3.0
 const ORDER_HONOR_LOSS_STATUS_HIGH: float = -4.0
 const ORDER_HONOR_LOSS_STATUS_ELITE: float = -5.0
-
-# REMOVED: Execution honor costs were invented (not in GDD s12.8).
-# GDD says "Scorpion pay almost nothing, other clans pay steeply" but
-# gives no numeric values. Awaiting GDD specification.
 
 
 # ==============================================================================
@@ -135,9 +153,10 @@ static func get_ordering_honor_loss(target_status: float, commissioner: L5RChara
 	return base
 
 
-static func get_execution_honor_loss(_assassin: L5RCharacterData) -> float:
-	# BLOCKED: awaiting GDD TN values for execution honor costs.
-	return 0.0
+static func get_execution_honor_loss(assassin: L5RCharacterData) -> float:
+	# Table 2.3 Low Skill cost for Stealth (s12.8a A4).
+	# Shosuro Infiltrator = 0, Scorpion = half, others = full rank-scaled.
+	return CrimeSystem.get_low_skill_honor_cost(assassin, EXECUTION_HONOR_SKILL)
 
 
 # ==============================================================================
@@ -373,13 +392,15 @@ static func has_shinobi_training(character: L5RCharacterData) -> bool:
 	return false
 
 
-static func get_non_shinobi_tn_modifier(_character: L5RCharacterData) -> int:
-	# BLOCKED: awaiting GDD TN values for non-shinobi access penalty.
-	return 0
+static func get_non_shinobi_tn_modifier(character: L5RCharacterData) -> int:
+	# +10 TN for non-shinobi assassins on Phase 1 access rolls (s12.8a A1).
+	if has_shinobi_training(character):
+		return 0
+	return NON_SHINOBI_ACCESS_TN_INCREASE
 
 
-# PROVISIONAL — GDD s12.8 specifies "target's Status (higher Status = higher
-# base TN)" without giving a formula. Using int(status) as a direct TN adder.
+# Phase 1 status TN adder: int(target.status) (s12.8a A7).
+# GDD: "target's Status (higher Status = higher base TN)." Direct linear mapping.
 static func get_target_status_tn_modifier(target: L5RCharacterData) -> int:
 	return int(target.status)
 

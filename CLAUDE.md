@@ -3426,14 +3426,14 @@ pending playtesting.
 
 | # | Value | Current | Where Used | GDD Says | Code Location |
 |---|-------|---------|------------|----------|---------------|
-| A1 | Non-shinobi TN penalty on Phase 1 access rolls | +10 | assassination_system.gd | "severe disadvantage" — no number | s12.8 |
-| A2 | Per-failed-access permanent TN penalty tiers | +5/+10/+15 | assassination_system.gd | GDD-sourced: matches suspicion accumulation tiers | s12.8 |
-| A3 | Critical failure detection TN (assassin's roll total) | roll total | assassination_system.gd | No explicit detection TN formula | s12.8 |
-| A4 | Execution honor cost (non-Scorpion) | -3.0 | assassination_system.gd | "significant" — no number | s12.8 |
-| A5 | Concealment partial failure threshold | missed by <10 | assassination_system.gd | "near miss" — no number | s12.8 |
-| A6 | Daily detection suspicion gain on observer success | +3 | assassination_system.gd | No explicit amount per observation | s12.8 |
-| A7 | Target Status as direct TN adder on Phase 1 access | int(status) | assassination_system.gd | "higher Status = higher base TN" — no formula | s12.8 |
-| A8 | Non-shinobi detection bonus for observers | +5 Investigation | assassination_system.gd | "easier to detect" — no number | s12.8 |
+| A1 | Non-shinobi TN penalty on Phase 1 access rolls | +10 | assassination_system.gd | RESOLVED — s12.8a: equal to lockdown response; between Seppun half (+8) and full (+15) protection. | s12.8a |
+| A2 | Per-failed-access permanent TN penalty tiers | +5/+10/+15 | assassination_system.gd | RESOLVED — s12.8a: mirrors GDD-confirmed suspicion accumulation tiers (+5/+10/+15 per s12.8). | s12.8a |
+| A3 | Critical failure detection TN (assassin's roll total) | roll total | assassination_system.gd | RESOLVED — s12.8a: detection difficulty scales with assassin quality; better assassins leave less detectable traces. | s12.8a |
+| A4 | Execution honor cost | Low Skill/Stealth | assassination_system.gd | RESOLVED — s12.8a: Table 2.3 Low Skill cost for Stealth. Shosuro=0, Scorpion=half, others rank-scaled. GDD: "Scorpion pay almost nothing, others pay steeply." | s12.8a |
+| A5 | Concealment partial failure threshold | missed by <10 | assassination_system.gd | RESOLVED — s12.8a: standard L5R 4e near-miss convention. Miss by 1–9 = partial; 10+ = clear failure. | s12.8a |
+| A6 | Daily detection suspicion gain on observer success | +3 | assassination_system.gd | RESOLVED — s12.8a: calibrated for 10–15 day natural windows before lockdown. ~3–4 detections to watchful threshold. | s12.8a |
+| A7 | Target Status as direct TN adder on Phase 1 access | int(status) | assassination_system.gd | RESOLVED — s12.8a: direct linear mapping of GDD "higher Status = higher base TN." Status 1–10 maps to +1–10. | s12.8a |
+| A8 | Non-shinobi detection bonus for observers | +5 Investigation | assassination_system.gd | RESOLVED — s12.8a: matches watchful-household bonus (+5). Untrained assassin = as detectable as alert household. | s12.8a |
 | A9 | VISIT_PROMISE deadline | Next season start (min 30d) | day_orchestrator.gd | "the season stated in the letter" — RESOLVED | s55.31 |
 | A10 | MEETING_ARRANGEMENT deadline | Season after next (min 30d) | day_orchestrator.gd | "the arranged meeting date" — RESOLVED | s55.31 |
 | A11 | MEETING_ARRANGEMENT reply disposition gate | >= 0 | letter_system.gd | RESOLVED — s12.7a LOCKED specifies MEETING_ACCEPT_DISPOSITION = 0 ("neutral or positive disposition"). | s12.7a |
