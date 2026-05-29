@@ -3459,8 +3459,8 @@ pending playtesting.
 | A31 | World gen cross-clan marriage rate | 15% of marriages | world_population_generator.gd | GDD does not specify cross-clan frequency | s22.7 |
 | A32 | LEGIONS_PER_ARMY | 3 | world_population_generator.gd | GDD does not specify legions per army count | s57.21 |
 | A33 | Minor Clan Champion stipend | 5.0 koku | world_population_generator.gd | Analogy to Clan Champion (GDD says 5); no explicit Minor Clan entry | s4.3 |
-| A34 | Dissolution family baseline penalty | −25 | marriage_system.gd | RESOLVED — s57.49b: must be within Rival tier (−11 to −30, s12.2). High-end Rival reflects coercive political act. | s57.49b |
-| A35 | Dissolution spouse Glory loss | −1.0 | marriage_system.gd | RESOLVED — s57.49b: s46 Table 2.4 "Family Dishonor = −1 Glory Rank." Forced dissolution equals Family Dishonor magnitude. | s57.49b |
+| A34 | Dissolution family baseline penalty | −20 | marriage_system.gd | RESOLVED — s57.49b: within Rival tier (−11 to −30, s12.2). Mid-Rival; distinguished from high-end provocations like assassination vengeance (−50). | s57.49b |
+| A35 | Dissolution spouse Glory loss | −0.5 | marriage_system.gd | RESOLVED — s57.49b: half of s46 Table 2.4 "Family Dishonor = −1 Glory Rank." Comparable visibility, lesser cause (no personal dishonour by the spouse). | s57.49b |
 | A36 | Dissolution clan baseline penalty (cross-clan) | −10 | marriage_system.gd | RESOLVED — s57.49b: s12.2 Stranger/Rival boundary = −10/−11. Clan penalty caps at boundary without forcing structural Rival status. | s57.49b |
 
 ---
