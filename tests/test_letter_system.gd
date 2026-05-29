@@ -273,6 +273,20 @@ func test_reply_chance_courtesy_bonus():
 	var without: float = LetterSystem.get_reply_chance(base_c, 30)
 	assert_almost_eq(with_rei - without, LetterSystem.COURTESY_REPLY_BONUS, 0.001)
 
+func test_reply_chance_game_of_letters_bonus():
+	# Games: Letters skill adds GAME_OF_LETTERS_REPLY_BONUS per rank.
+	var base_c := _make_char(1)
+	var skilled_c := _make_char(2)
+	skilled_c.skills["Games: Letters"] = 5
+	var base_chance: float = LetterSystem.get_reply_chance(base_c, 0)
+	var skilled_chance: float = LetterSystem.get_reply_chance(skilled_c, 0)
+	assert_almost_eq(
+		skilled_chance - base_chance,
+		5 * LetterSystem.GAME_OF_LETTERS_REPLY_BONUS,
+		0.001,
+	)
+
+
 func test_reply_chance_capped_at_95():
 	var c := _make_char(1)
 	c.bushido_virtue = Enums.BushidoVirtue.REI

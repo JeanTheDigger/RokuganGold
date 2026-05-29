@@ -17,9 +17,12 @@ const QUALITY_BONUS: Array[int] = [0, 1, 2, 3]
 # COURTESY_BONUS = +15% for Rei virtue (correspondence as moral obligation).
 # HOSTILE_THRESHOLD = -10: Rivals (-11 and below) never reply (below Rival onset).
 # MEETING_ACCEPT at 0: neutral or positive disposition accepts meeting proposals.
+# GAME_OF_LETTERS_BONUS = +2%/rank for Games: Letters skill (s12.7 Design Notes,
+#   s24 forward-ref; PROVISIONAL pending s24 being LOCKED).
 const BASE_REPLY_CHANCE: float = 0.35
 const DISPOSITION_REPLY_BONUS: float = 0.005
 const COURTESY_REPLY_BONUS: float = 0.15
+const GAME_OF_LETTERS_REPLY_BONUS: float = 0.02
 const HOSTILE_REPLY_THRESHOLD: int = -10
 const MEETING_ACCEPT_DISPOSITION: int = 0
 
@@ -219,6 +222,10 @@ static func get_reply_chance(
 
 	if recipient.bushido_virtue == Enums.BushidoVirtue.REI:
 		chance += COURTESY_REPLY_BONUS
+
+	var letters_rank: int = recipient.skills.get("Games: Letters", 0)
+	if letters_rank > 0:
+		chance += letters_rank * GAME_OF_LETTERS_REPLY_BONUS
 
 	return clampf(chance, 0.0, 0.95)
 
