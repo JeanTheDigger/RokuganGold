@@ -3309,6 +3309,26 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   non-Chugi (Ishi/Shourido) champion skipped, no-authority champion skipped, dead champion
   skipped, dedup prevents reassignment.
 
+### Known Code Issues (found and fixed 2026-05-29, strategic_review.gd audit)
+- **run_priority_resolved() Ketsui refill — dispatches silently discarded. FIXED.**
+  `run_priority_resolved()` called `run_clan_champion_evaluation()` for Ketsui champions
+  but discarded the return value and returned `[]`. `run_clan_champion_evaluation()` returns
+  letter dispatch Dictionaries for absent Family Daimyo — they were never reaching the
+  orchestrator, so FDs were never notified after a Ketsui priority refill. Changed
+  `run_clan_champion_evaluation(...); return []` to `return run_clan_champion_evaluation(...)`.
+  1 test.
+- **_CONCLUSION_TO_NEEDTYPES DEFEND_TERRITORY — ASSIGN_GARRISON invalid NeedType. FIXED.**
+  "ASSIGN_GARRISON" is an ActionID, not a NeedType. It had no entry in objective_alignment.json
+  so any FD that received it as a combined pool candidate would score all actions at 0 and
+  silently fall to REST. DEFEND_PROVINCE (already in the list) covers garrison-level defensive
+  needs. Removed ASSIGN_GARRISON from the DEFEND_TERRITORY NeedType array. 1 test.
+- **_CONCLUSION_TO_NEEDTYPES RESTORE_WORSHIP — RESTORE_WORSHIP NeedType missing. FIXED.**
+  ConclusionType.RESTORE_WORSHIP mapped to ["PERFORM_RITUAL", "BUILD_INFRASTRUCTURE",
+  "GATHER_INTELLIGENCE"]. The "RESTORE_WORSHIP" NeedType (locked in s57.54a A37) was not
+  included, so FDs responding to a Champion's worship-restoration priority never received
+  the dedicated NeedType that maps to PERFORM_WORSHIP (90), PERFORM_RITUAL (80), BUILD_SHRINE
+  (70), etc. Added "RESTORE_WORSHIP" as the first entry in the mapping. 1 test.
+
 ### Known Code Issues (found and fixed 2026-05-29, combined pool audit)
 - **resolve_goal() combined pool condition too broad — Champions entered combined pool path. FIXED.**
   `if ctx.is_lord and ctx.lord_rank >= Enums.LordRank.FAMILY_DAIMYO` matched CLAN_CHAMPION and

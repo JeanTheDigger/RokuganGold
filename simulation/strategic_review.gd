@@ -1050,12 +1050,11 @@ static func run_priority_resolved(
 	# Ketsui immediately refills (s57.54.1 Trigger 3).
 	var virtue_key = _get_virtue_key(champion)
 	if virtue_key == Enums.ShouridoVirtue.KETSUI:
-		run_clan_champion_evaluation(
+		return run_clan_champion_evaluation(
 			champion, clan, active_topics_by_id, active_wars, active_edicts,
 			characters_by_id, objectives_map, current_season, dice_engine,
 			family_daimyo_ids,
 		)
-		return []  # Full evaluation already sent dispatches.
 
 	return _build_family_daimyo_dispatches(
 		champion, priorities, family_daimyo_ids, characters_by_id,
@@ -1542,7 +1541,7 @@ const _CONCLUSION_TO_NEEDTYPES: Dictionary = {
 	StrategicConclusionData.ConclusionType.SUPPORT_SHADOWLANDS:
 		["DEFEND_PROVINCE", "ACQUIRE_RESOURCE", "MANAGE_TAINT", "PERFORM_RITUAL"],
 	StrategicConclusionData.ConclusionType.DEFEND_TERRITORY:
-		["DEFEND_PROVINCE", "BUILD_INFRASTRUCTURE", "ASSIGN_GARRISON", "TRAIN_TROOPS"],
+		["DEFEND_PROVINCE", "BUILD_INFRASTRUCTURE", "TRAIN_TROOPS"],
 	StrategicConclusionData.ConclusionType.PURSUE_ALLIANCE:
 		["RAISE_DISPOSITION", "ARRANGE_MARRIAGE", "SEEK_PEACE", "GATHER_INTELLIGENCE"],
 	StrategicConclusionData.ConclusionType.SEEK_PEACE:
@@ -1560,7 +1559,7 @@ const _CONCLUSION_TO_NEEDTYPES: Dictionary = {
 	StrategicConclusionData.ConclusionType.RECOVER_DAMAGE:
 		["ACQUIRE_RESOURCE", "BUILD_INFRASTRUCTURE", "EVALUATE_PROVINCES"],
 	StrategicConclusionData.ConclusionType.RESTORE_WORSHIP:
-		["PERFORM_RITUAL", "BUILD_INFRASTRUCTURE", "GATHER_INTELLIGENCE"],
+		["RESTORE_WORSHIP", "PERFORM_RITUAL", "BUILD_INFRASTRUCTURE", "GATHER_INTELLIGENCE"],
 	StrategicConclusionData.ConclusionType.RESPOND_SPIRITUAL_CRISIS:
 		["INVESTIGATE_THREAT", "PERFORM_RITUAL", "DEFEND_PROVINCE"],
 	StrategicConclusionData.ConclusionType.BUILD_CULTURAL_PRESTIGE:

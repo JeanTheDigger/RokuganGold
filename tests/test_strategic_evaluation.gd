@@ -839,3 +839,66 @@ func test_family_daimyo_uses_combined_pool_without_lord_assigned_primary() -> vo
 	assert_not_null(need)
 	assert_eq(need.need_type, "PATRONIZE_ARTS",
 		"Family Daimyo with no lord-assigned primary should use combined pool, not REST")
+
+
+# -- Ketsui refill dispatch (s57.54.1 Trigger 3) --------------------------------
+
+func test_ketsui_refill_returns_dispatches_for_absent_fd() -> void:
+	# Bug: run_priority_resolved() called run_clan_champion_evaluation() but
+	# discarded its return value (dispatches) and returned []. Absent Family
+	# Daimyo never received notification letters after a Ketsui refill.
+	var champion := _make_champion(1, "Crane", Enums.BushidoVirtue.CHUGI,
+		Enums.ShouridoVirtue.KETSUI)
+	champion.physical_location = "Crane_Castle"
+
+	var fd := _make_family_daimyo(10, "Crane", Enums.BushidoVirtue.CHUGI)
+	fd.physical_location = "Doji_Palace"  # Different location — dispatch required.
+
+	var clan := _make_clan()
+	var sc := _make_conclusion_of_type(clan,
+		StrategicConclusionData.ConclusionType.SECURE_RESOURCE, 80)
+	clan.clan_strategic_priorities.append(sc)
+
+	var chars_by_id: Dictionary = {10: fd}
+	var result: Array = StrategicReview.run_priority_resolved(
+		champion, clan, sc.conclusion_id,
+		{}, [], [],
+		chars_by_id, {}, 1, _make_dice(), [10],
+	)
+	assert_true(result.size() > 0,
+		"Ketsui refill should return FD dispatch letters, not empty array")
+
+
+# -- _CONCLUSION_TO_NEEDTYPES validity (s57.54.10a) ------------------------------
+
+func test_defend_territory_needtypes_exclude_assign_garrison() -> void:
+	# ASSIGN_GARRISON is an ActionID, not a NeedType. It had no entry in
+	# objective_alignment.json and was silently unreachable in the combined pool.
+	var fd := _make_family_daimyo(10, "Crane", Enums.BushidoVirtue.CHUGI)
+	var clan := _make_clan()
+	var sc := _make_conclusion_of_type(clan,
+		StrategicConclusionData.ConclusionType.DEFEND_TERRITORY, 80)
+	clan.clan_strategic_priorities.append(sc)
+	var candidates: Array = StrategicReview.get_champion_conclusion_needtypes(fd, clan)
+	for c: Dictionary in candidates:
+		assert_ne(c.get("need_type", ""), "ASSIGN_GARRISON",
+			"ASSIGN_GARRISON is an ActionID — should not appear as a NeedType candidate")
+
+
+func test_restore_worship_conclusion_produces_restore_worship_needtype() -> void:
+	# ConclusionType.RESTORE_WORSHIP was mapping to PERFORM_RITUAL only.
+	# RESTORE_WORSHIP NeedType was locked in s57.54a and should be the primary
+	# NeedType FDs receive when the Champion prioritises worship restoration.
+	var fd := _make_family_daimyo(10, "Crane", Enums.BushidoVirtue.CHUGI)
+	var clan := _make_clan()
+	var sc := _make_conclusion_of_type(clan,
+		StrategicConclusionData.ConclusionType.RESTORE_WORSHIP, 80)
+	clan.clan_strategic_priorities.append(sc)
+	var candidates: Array = StrategicReview.get_champion_conclusion_needtypes(fd, clan)
+	var found := false
+	for c: Dictionary in candidates:
+		if c.get("need_type", "") == "RESTORE_WORSHIP":
+			found = true
+			break
+	assert_true(found,
+		"RESTORE_WORSHIP conclusion should produce RESTORE_WORSHIP NeedType candidate for FD")
