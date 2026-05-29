@@ -465,7 +465,7 @@ static func _scan_artistic_expression(
 		return results
 
 	# Condition 2: No active ARTISTIC_EXPRESSION objective already in progress.
-	if character.objectives_map.get("primary", {}).get("need_type", "") == "ARTISTIC_EXPRESSION":
+	if character.get("objectives_map", {}).get("primary", {}).get("need_type", "") == "ARTISTIC_EXPRESSION":
 		return results
 
 	# Condition 3: No active military/siege/survival NeedType at urgency > 60.

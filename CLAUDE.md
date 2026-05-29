@@ -3404,6 +3404,18 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   undetected forged order, purges detected forged order, purges forged order with dead victim),
   `_purge_exposed_secrets` (3 tests — removes public, keeps private, mixed). 14 tests.
 
+### Known Code Issues (found and fixed 2026-05-29, OpportunityScanner audit)
+- **`character.objectives_map` — undeclared property, null crash on fresh characters. FIXED.**
+  `_scan_artistic_expression()` line 468 accessed `character.objectives_map.get(...)` but
+  `objectives_map` is a world-level Dictionary (keyed by character_id on WorldState), not a
+  field declared on `L5RCharacterData`. In production, `character.objectives_map` returns null
+  on a fresh character and `null.get("primary", {})` crashes at runtime. The strategic_review
+  caller filters active primary objectives before calling OpportunityScanner, so this is benign
+  on the nominal path, but reachable when a primary exists with status != "ACTIVE". Changed to
+  `character.get("objectives_map", {}).get(...)` which returns `{}` gracefully when unset.
+  1 test added: `test_artistic_expression_no_crash_without_objectives_map` verifies scan runs
+  without crash and returns ARTISTIC_EXPRESSION on a character without the dynamic property set.
+
 ### Known Code Issues (found and fixed 2026-05-29, writeback audit)
 - **LYING honor trigger always returned 0 — string/int key mismatch. FIXED.**
   `_process_lying_honor_writebacks()` called `disposition_values.get(str(subject_id), 0)`

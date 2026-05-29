@@ -768,3 +768,27 @@ func test_artistic_expression_personality_ketsui() -> void:
 	for opp: OpportunityScanner.Opportunity in opps:
 		if opp.objective_type == "ARTISTIC_EXPRESSION":
 			assert_almost_eq(opp.personality_fit, 30.0, 0.01)
+
+
+func test_artistic_expression_no_crash_without_objectives_map() -> void:
+	# character.objectives_map is not a declared field; must not crash when unset.
+	# Uses character.get("objectives_map", {}) instead of character.objectives_map.
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.clan = "Crane"
+	c.bushido_virtue = Enums.BushidoVirtue.REI
+	c.shourido_virtue = Enums.ShouridoVirtue.NONE
+	c.honor = 5.0
+	c.glory = 4.0
+	c.status = 5.0
+	c.skills = {"Poetry": 3}
+	c.disposition_values = {42: 20.0}
+	# Deliberately do NOT set c.objectives_map — verify no crash
+	var opps: Array = OpportunityScanner.scan_opportunities(
+		c, OpportunityScanner.DOMAIN_PERSONAL, "PERSONAL_EXCELLENCE", {"active_wars": []}
+	)
+	var found: bool = false
+	for opp: OpportunityScanner.Opportunity in opps:
+		if opp.objective_type == "ARTISTIC_EXPRESSION":
+			found = true
+	assert_true(found, "Should find ARTISTIC_EXPRESSION without objectives_map set")
