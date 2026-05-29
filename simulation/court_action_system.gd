@@ -53,6 +53,24 @@ const LISTEN_REFLECT_POSITION_SHIFT: float = 0.0
 const LISTEN_REFLECT_RAISE_POSITION_BONUS: float = 0.0
 const LISTEN_REFLECT_SESSION_TN_REDUCTION: int = 10
 
+# Critical failure disposition losses and Negotiate position hardening.
+# GDD s15.4 describes outcomes qualitatively. Values calibrated in s15.4a:
+# "Small disposition loss" (Charm/Negotiate/Impress/Listen/Reflect) = -3.
+#   Anchor: Play a Game = ±3 (GDD-confirmed pleasant recreation magnitude).
+#   Must be less than Gossip base damage (-5); -3 fits cleanly.
+# "Disposition loss" (Persuade, no "small" qualifier) = -5.
+#   Anchor: Gossip base damage (-5); a backfired Persuade that offends the
+#   target warrants the same magnitude as a targeted social attack.
+# Negotiate position hardening derived from Public Debate per-witness scale:
+#   "hardens slightly" = ±1 (Public Debate "slight"); "significantly" = ±3 ("strong").
+const CHARM_CRITICAL_FAILURE_DISP: int = -3
+const NEGOTIATE_CRITICAL_FAILURE_DISP: int = -3
+const NEGOTIATE_FAILURE_POSITION_HARDEN: float = -1.0
+const NEGOTIATE_CRITICAL_POSITION_HARDEN: float = -3.0
+const PERSUADE_CRITICAL_FAILURE_DISP: int = -5
+const IMPRESS_CRITICAL_FAILURE_DISP: int = -3
+const LISTEN_REFLECT_CRITICAL_FAILURE_DISP: int = -3
+
 const PROVOKE_HONOR_LOSS: float = -0.2
 const PROVOKE_GLORY_LOSS: float = -0.1
 const PROVOKE_WITNESS_DISP: int = -3
@@ -103,13 +121,13 @@ static func resolve_negotiate(
 	if not success:
 		var result: Dictionary = {"success": false, "disposition_change": 0}
 		if margin <= -10:
-			result["disposition_change"] = -6
+			result["disposition_change"] = NEGOTIATE_CRITICAL_FAILURE_DISP
 			if has_topic:
 				result["position_hardened"] = true
-				result["target_position_shift"] = -3.0
+				result["target_position_shift"] = NEGOTIATE_CRITICAL_POSITION_HARDEN
 		elif has_topic:
 			result["position_hardened"] = true
-			result["target_position_shift"] = -1.0
+			result["target_position_shift"] = NEGOTIATE_FAILURE_POSITION_HARDEN
 		return result
 
 	var disp: int = NEGOTIATE_BASE_DISP + raises * NEGOTIATE_RAISE_BONUS
@@ -139,7 +157,7 @@ static func resolve_persuade(
 	if not success:
 		var result: Dictionary = {"success": false, "disposition_change": 0}
 		if margin <= -10:
-			result["disposition_change"] = -7
+			result["disposition_change"] = PERSUADE_CRITICAL_FAILURE_DISP
 			if has_topic:
 				result["position_hardened"] = true
 		return result
@@ -172,7 +190,7 @@ static func resolve_charm(
 	if not success:
 		var result: Dictionary = {"success": false, "disposition_change": 0}
 		if margin <= -10:
-			result["disposition_change"] = -5
+			result["disposition_change"] = CHARM_CRITICAL_FAILURE_DISP
 		return result
 
 	var base_disp: int = CHARM_FULL_GAIN + raises * CHARM_RAISE_BONUS
@@ -206,7 +224,7 @@ static func resolve_impress(
 	if not success:
 		var result: Dictionary = {"success": false, "disposition_change": 0}
 		if margin <= -10:
-			result["disposition_change"] = -6
+			result["disposition_change"] = IMPRESS_CRITICAL_FAILURE_DISP
 		return result
 
 	var result: Dictionary = {
@@ -235,7 +253,7 @@ static func resolve_listen_reflect(
 	if not success:
 		var result: Dictionary = {"success": false, "disposition_change": 0}
 		if margin <= -10:
-			result["disposition_change"] = -7
+			result["disposition_change"] = LISTEN_REFLECT_CRITICAL_FAILURE_DISP
 		return result
 
 	var result: Dictionary = {
