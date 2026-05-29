@@ -2781,7 +2781,7 @@ static func _populate_action_metadata(
 		}
 	elif option.action_id == "CANCEL_HUNT":
 		option.metadata = {
-			"accepted_invitee_ids": [],
+			"accepted_invitee_ids": ctx.known_objectives.get("hunt_accepted_invitee_ids", []),
 		}
 	elif option.action_id == "TRAIN_ANIMAL":
 		# Prefer a companion already in progress; otherwise first session with DOG default

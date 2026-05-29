@@ -13006,7 +13006,7 @@ func test_inject_hunt_context_sets_known_objectives() -> void:
 		"host_id": 10,
 		"hunt_date_ic_day": 15,
 		"topic_id": 500,
-		"accepted_invitee_ids": [],
+		"accepted_invitee_ids": [20, 30],
 		"status": "active",
 	}]
 	var topic := TopicData.new()
@@ -13022,6 +13022,8 @@ func test_inject_hunt_context_sets_known_objectives() -> void:
 		"Host should see their active hunt ID")
 	assert_eq(host_objs.get("hunt_date_ic_day", -1), 15,
 		"Host should see hunt date")
+	assert_eq(host_objs.get("hunt_accepted_invitee_ids", []), [20, 30],
+		"Host should see accepted invitee IDs for cancel metadata")
 	var other_objs: Dictionary = world_states[20]["known_objectives"]
 	assert_eq(other_objs.get("hunt_topic_id", -1), 500,
 		"Other NPCs should see hunt topic ID for invitation requests")

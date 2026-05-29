@@ -19009,6 +19009,7 @@ static func _inject_hunt_context(
 			if hunt.get("host_id", -1) == int(char_id):
 				known_objs["active_hunt_id"] = hunt.get("hunt_id", -1)
 				known_objs["hunt_date_ic_day"] = hunt.get("hunt_date_ic_day", -1)
+				known_objs["hunt_accepted_invitee_ids"] = hunt.get("accepted_invitee_ids", [])
 				break
 
 		for topic: TopicData in active_topics:

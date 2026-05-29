@@ -3380,6 +3380,13 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   but `disposition_values` uses int keys throughout. Lookup always returned 0 so LYING
   honor (Table 2.3) never fired for any fabricator. Fixed to use int key directly.
   5 test setups updated from string keys to int keys. 1 test.
+- **CANCEL_HUNT disposition penalties never applied — accepted_invitee_ids always empty. FIXED.**
+  `_populate_action_metadata()` set `"accepted_invitee_ids": []` (hardcoded empty array) for
+  CANCEL_HUNT. The executor reads this from `action.metadata`, so `effects["accepted_invitee_ids"]`
+  was always empty, and `_process_cancel_hunt_writebacks()` never penalized invitees.
+  Fixed: `_inject_hunt_context()` now also injects `hunt_accepted_invitee_ids` from the active
+  hunt dict for host characters. `_populate_action_metadata()` reads from
+  `ctx.known_objectives.get("hunt_accepted_invitee_ids", [])` instead of hardcoding `[]`. 1 test.
 - **Dead character guards missing from 8 writeback/apply functions. FIXED.**
   `_apply_promise_fulfillment_honor()` debtor, `_process_duel_honor_writebacks()` actor/target,
   `_process_kindness_honor_writebacks()` actor/target, `_process_truthful_report_honor_writebacks()`
