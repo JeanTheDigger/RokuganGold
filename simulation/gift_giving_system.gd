@@ -123,8 +123,9 @@ const DISPOSITION_PER_RAISE: int = 3
 
 # Disposition loss when the gift itself is the offense (forbidden item, or
 # a presentation so botched the gesture undermines the object).
-const FORBIDDEN_GIFT_DISPOSITION_LOSS: int = 0
-const CRITICAL_FAILURE_DISPOSITION_LOSS: int = 0
+# Locked in s12.3a.
+const FORBIDDEN_GIFT_DISPOSITION_LOSS: int = -5  # "an insult" — implies recipient lacks a sword
+const CRITICAL_FAILURE_DISPOSITION_LOSS: int = -3  # "small disposition loss" — clumsiness, not aggression
 
 
 # -- Free Raise computation ---------------------------------------------------

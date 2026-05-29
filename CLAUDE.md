@@ -2928,10 +2928,11 @@ costs, or forward-wiring. Do not treat as bugs.
   confirmed: blackmail honor/infamy, private honor/infamy, public
   honor/infamy/witness disposition, letter TN, pushback TN base (15),
   disposition friend/enemy bonuses.
-- **s12.3 Gift Giving System — 2 invented values zeroed.**
-  `CRITICAL_FAILURE_DISPOSITION_LOSS` (-5→0) — GDD says "small disposition
-  loss" but no number. `FORBIDDEN_GIFT_DISPOSITION_LOSS` (-5→0) — GDD says
-  gifting a weapon is "an insult" but no numeric value. `DISPOSITION_PER_RAISE`
+- **s12.3 Gift Giving System — 2 values locked in s12.3a.**
+  `CRITICAL_FAILURE_DISPOSITION_LOSS` −3 ("small disposition loss" — matches
+  Charm critical failure, s15.4a). `FORBIDDEN_GIFT_DISPOSITION_LOSS` −5
+  ("an insult" — matches private_insult magnitude and Gossip base damage;
+  clumsiness vs actively implying recipient lacks a sword). `DISPOSITION_PER_RAISE`
   (3) confirmed GDD-sourced (s12.2: "+3 per Raise on Awareness + Etiquette
   roll"). `free_raises * 5` conversion confirmed (core L5R 4e: 1 Raise = +5
   TN). All other constants confirmed: quality Free Raises (s49), TN 15,
