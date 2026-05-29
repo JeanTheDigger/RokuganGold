@@ -3062,6 +3062,17 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   assassination_system (s12.8).
 - **No remaining unaudited simulation files.**
 
+### Known Code Issues (found and fixed 2026-05-29, marriage dissolution audit)
+- **test_marriage_dissolution.gd — glory assertion off by 0.5. FIXED.**
+  `test_apply_dissolution_pathway1_glory_loss()` asserted glory 5.0 → 4.0 (−1.0 change).
+  The constant `DISSOLUTION_GLORY_LOSS_SPOUSE = -0.5` per s57.49b. §57.49.1's consequence
+  table shows −1.0 but §57.49.6 (same locked file) and s57.49b both say −0.5. The
+  §57.49.1 summary table was never updated when s57.49b formally locked the value at
+  half the magnitude. Test corrected to assert 4.5. NOTE: §57.49.1's summary table
+  (−1.0 Glory, −25 family baseline) remains stale relative to §57.49.6 and s57.49b
+  (−0.5 Glory, −20 family baseline). GDD files are read-only — this is a known GDD
+  internal inconsistency. §57.49.6 and s57.49b are authoritative.
+
 ### GDD Sections Written 2026-05-28
 
 - **s57.49 Marriage Dissolution** — New GDD file `gdd/s57.49_marriage_dissolution_locked.md`.

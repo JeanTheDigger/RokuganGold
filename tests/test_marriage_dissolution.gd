@@ -125,8 +125,8 @@ func test_apply_dissolution_pathway1_glory_loss():
 	DayOrchestrator._apply_dissolution(
 		effects, chars, marriages, 100, [], [500],
 	)
-	assert_eq(char_a.glory, 4.0)
-	assert_eq(char_b.glory, 4.0)
+	assert_eq(char_a.glory, 4.5)  # s57.49b: DISSOLUTION_GLORY_LOSS_SPOUSE = -0.5
+	assert_eq(char_b.glory, 4.5)
 
 
 func test_apply_dissolution_pathway2_no_glory_loss():
