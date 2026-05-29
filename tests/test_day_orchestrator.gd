@@ -15571,3 +15571,142 @@ func test_ketsui_bypass_when_teacher_initiated() -> void:
 
 	var result: Dictionary = ReactiveDecisions._evaluate_training_response(event, student, ctx)
 	assert_eq(result.get("action", ""), "ACCEPT_TRAINING", "KETSUI should not block teacher_initiated offers")
+
+
+# ============================================================================
+# §57.50 Public Record Seeding — inherently public killing crimes
+# ============================================================================
+
+func _make_settlement_for_record(id: int, str_id: String) -> SettlementData:
+	var s := SettlementData.new()
+	s.settlement_id = id
+	s.settlement_name = "Test Settlement"
+	return s
+
+
+func test_seed_public_records_duel_death_seeded():
+	# UNSANCTIONED_DUEL_DEATH is inherently public — should seed without auto_detected
+	var settlement := _make_settlement_for_record(1, "1")
+	var settlements: Array = [settlement]
+
+	var killer := L5RCharacterData.new()
+	killer.character_id = 10
+	killer.physical_location = "1"
+	var chars_by_id: Dictionary = {10: killer}
+
+	var crime_results: Array = [{
+		"character_id": 10,
+		"crime_type": Enums.CrimeType.UNSANCTIONED_DUEL_DEATH,
+		"topic_id": 77,
+		"no_crime": false,
+	}]
+
+	DayOrchestrator._seed_public_records_from_crime_results(
+		crime_results, [], settlements, chars_by_id, 100
+	)
+
+	assert_eq(settlement.public_record.size(), 1)
+	assert_eq(settlement.public_record[0].get("topic_id", -1), 77)
+	assert_eq(settlement.public_record[0].get("tier", -1), TopicData.Tier.TIER_3)
+
+
+func test_seed_public_records_open_killing_seeded():
+	# UNSANCTIONED_OPEN_KILLING is inherently public — should seed without auto_detected
+	var settlement := _make_settlement_for_record(2, "2")
+	var settlements: Array = [settlement]
+
+	var killer := L5RCharacterData.new()
+	killer.character_id = 11
+	killer.physical_location = "2"
+	var chars_by_id: Dictionary = {11: killer}
+
+	var crime_results: Array = [{
+		"character_id": 11,
+		"crime_type": Enums.CrimeType.UNSANCTIONED_OPEN_KILLING,
+		"topic_id": 88,
+		"no_crime": false,
+	}]
+
+	DayOrchestrator._seed_public_records_from_crime_results(
+		crime_results, [], settlements, chars_by_id, 100
+	)
+
+	assert_eq(settlement.public_record.size(), 1)
+	assert_eq(settlement.public_record[0].get("tier", -1), TopicData.Tier.TIER_3)
+
+
+func test_seed_public_records_covert_killing_not_seeded_without_auto_detected():
+	# UNSANCTIONED_COVERT_KILLING is not inherently public — requires auto_detected
+	var settlement := _make_settlement_for_record(3, "3")
+	var settlements: Array = [settlement]
+
+	var killer := L5RCharacterData.new()
+	killer.character_id = 12
+	killer.physical_location = "3"
+	var chars_by_id: Dictionary = {12: killer}
+
+	var crime_results: Array = [{
+		"character_id": 12,
+		"crime_type": Enums.CrimeType.UNSANCTIONED_COVERT_KILLING,
+		"topic_id": 99,
+		"no_crime": false,
+	}]
+
+	DayOrchestrator._seed_public_records_from_crime_results(
+		crime_results, [], settlements, chars_by_id, 100
+	)
+
+	assert_eq(settlement.public_record.size(), 0, "Covert killing should not auto-seed")
+
+
+func test_seed_public_records_no_crime_skipped():
+	# Entries with no_crime: true should be skipped
+	var settlement := _make_settlement_for_record(4, "4")
+	var settlements: Array = [settlement]
+
+	var killer := L5RCharacterData.new()
+	killer.character_id = 13
+	killer.physical_location = "4"
+	var chars_by_id: Dictionary = {13: killer}
+
+	var crime_results: Array = [{
+		"character_id": 13,
+		"crime_type": Enums.CrimeType.UNSANCTIONED_DUEL_DEATH,
+		"no_crime": true,
+	}]
+
+	DayOrchestrator._seed_public_records_from_crime_results(
+		crime_results, [], settlements, chars_by_id, 100
+	)
+
+	assert_eq(settlement.public_record.size(), 0)
+
+
+func test_seed_public_records_auto_detected_seeds_violence():
+	# auto_detected: true in wave results seeds any crime including VIOLENCE
+	var settlement := _make_settlement_for_record(5, "5")
+	var settlements: Array = [settlement]
+
+	var attacker := L5RCharacterData.new()
+	attacker.character_id = 14
+	attacker.physical_location = "5"
+	var chars_by_id: Dictionary = {14: attacker}
+
+	var wave_results: Array = [{
+		"character_id": 14,
+		"action_id": "SOME_VIOLENCE_ACTION",
+		"effects": {"auto_detected": true},
+	}]
+	var crime_results: Array = [{
+		"character_id": 14,
+		"crime_type": Enums.CrimeType.VIOLENCE,
+		"topic_id": 55,
+		"no_crime": false,
+	}]
+
+	DayOrchestrator._seed_public_records_from_crime_results(
+		crime_results, wave_results, settlements, chars_by_id, 100
+	)
+
+	assert_eq(settlement.public_record.size(), 1)
+	assert_eq(settlement.public_record[0].get("tier", -1), TopicData.Tier.TIER_4)

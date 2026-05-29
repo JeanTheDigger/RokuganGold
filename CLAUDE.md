@@ -3374,6 +3374,25 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   8 additional orchestrator tests added covering all three B6 trigger conditions (LYING disposition
   gate, DUPED_FOOLISH NPC/settlement/province targets, DUPED_CRIMINAL deadline ordering).
 
+### Known Code Issues (found and fixed 2026-05-29, public record seeding audit)
+- **Duel deaths and open killings never seeded into settlement public record. FIXED.**
+  `_seed_public_records_from_crime_results()` required `auto_detected: true` in wave results
+  for any crime to be seeded. UNSANCTIONED_DUEL_DEATH and UNSANCTIONED_OPEN_KILLING are
+  inherently public (they happen in front of witnesses by definition) but only set
+  `requires_crime_creation: true`, not `auto_detected: true`. The early-return guard
+  (`if auto_detected_locations.is_empty(): return`) caused the function to exit before
+  processing any crime_results when no violence executor had fired. Restructured:
+  settlements_by_str_id is built before the early-return check; INHERENTLY_PUBLIC array
+  gates a second location-lookup path for UNSANCTIONED_DUEL_DEATH and
+  UNSANCTIONED_OPEN_KILLING; other crime types still require `auto_detected: true`.
+  Early-return changed to `if crime_results.is_empty(): return` (the only truly cheap
+  skip). 5 tests.
+- **Dead investigator guard missing in EXAMINE_CRIME_SCENE public record query. FIXED.**
+  Line 3264 checked `investigator != null` but not `CharacterStats.is_dead(investigator)`.
+  Dead characters who completed EXAMINE_CRIME_SCENE before dying mid-day could have
+  their `topic_pool` updated from the public record. Added dead guard. 1 implicit (guard
+  tested through existing patterns).
+
 ### Known Code Issues (found and fixed 2026-05-29, writeback audit)
 - **LYING honor trigger always returned 0 — string/int key mismatch. FIXED.**
   `_process_lying_honor_writebacks()` called `disposition_values.get(str(subject_id), 0)`

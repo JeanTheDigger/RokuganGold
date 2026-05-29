@@ -3262,7 +3262,8 @@ static func _process_scene_examination_writebacks(
 		# Public record investigation — query settlement for older entries (s57.50)
 		if not settlements.is_empty():
 			var investigator: L5RCharacterData = characters_by_id.get(char_id)
-			if investigator != null and not investigator.physical_location.is_empty():
+			if investigator != null and not CharacterStats.is_dead(investigator) \
+					and not investigator.physical_location.is_empty():
 				var roll_total_exam: int = effects.get("roll_total", 0)
 				var found: Array = _query_public_record_for_investigation(
 					investigator.physical_location, settlements, roll_total_exam, ic_day
@@ -20071,10 +20072,14 @@ static func _seed_public_records_from_crime_results(
 	characters_by_id: Dictionary,
 	ic_day: int,
 ) -> void:
-	if settlements.is_empty():
+	if settlements.is_empty() or crime_results.is_empty():
 		return
 
-	# Build location → effects map from wave results for auto_detected lookup
+	var settlements_by_str_id: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlements_by_str_id[str(s.settlement_id)] = s
+
+	# Path 1: auto_detected crimes (e.g. ViolenceSystem always sets auto_detected: true)
 	var auto_detected_locations: Dictionary = {}
 	for r: Variant in wave_results:
 		if not r is Dictionary:
@@ -20086,12 +20091,12 @@ static func _seed_public_records_from_crime_results(
 			if c != null and not c.physical_location.is_empty():
 				auto_detected_locations[char_id] = c.physical_location
 
-	if auto_detected_locations.is_empty():
-		return
-
-	var settlements_by_str_id: Dictionary = {}
-	for s: SettlementData in settlements:
-		settlements_by_str_id[str(s.settlement_id)] = s
+	# Path 2: inherently public killing crimes — always witnessed, no auto_detected needed.
+	# Duel deaths and open killings happen in front of witnesses by definition.
+	const INHERENTLY_PUBLIC: Array = [
+		Enums.CrimeType.UNSANCTIONED_DUEL_DEATH,
+		Enums.CrimeType.UNSANCTIONED_OPEN_KILLING,
+	]
 
 	for cr: Variant in crime_results:
 		if not cr is Dictionary:
@@ -20101,7 +20106,15 @@ static func _seed_public_records_from_crime_results(
 			continue
 
 		var char_id: int = result.get("character_id", -1)
+		var crime_type: int = result.get("crime_type", -1)
+
+		# Resolve location from auto_detected path first, then inherently public path
 		var location: String = auto_detected_locations.get(char_id, "")
+		if location.is_empty() and crime_type in INHERENTLY_PUBLIC:
+			var perp: L5RCharacterData = characters_by_id.get(char_id)
+			if perp != null and not perp.physical_location.is_empty():
+				location = perp.physical_location
+
 		if location.is_empty():
 			continue
 
@@ -20109,7 +20122,6 @@ static func _seed_public_records_from_crime_results(
 		if settlement == null:
 			continue
 
-		var crime_type: int = result.get("crime_type", -1)
 		var event_type: String = _crime_type_to_string(crime_type)
 		var topic_id: int = result.get("topic_id", -1)
 		var tier: int = _crime_tier_for_public_record(crime_type)
