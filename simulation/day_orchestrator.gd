@@ -14263,13 +14263,13 @@ static func _apply_dissolution(
 	spouse_a.spouse_id = -1
 	spouse_b.spouse_id = -1
 
-	# Pathway 1 — Lord's Command: Glory −1.0 to both spouses, disposition penalties.
+	# Pathway 1 — Lord's Command: Glory −0.5 to both spouses, disposition penalties.
 	# Pathways 2/3/4 have no Glory, Honor, or disposition penalties (s57.49.7).
 	if resolved_pathway == 1:
 		HonorGlorySystem.apply_glory_change(spouse_a, MarriageSystem.DISSOLUTION_GLORY_LOSS_SPOUSE)
 		HonorGlorySystem.apply_glory_change(spouse_b, MarriageSystem.DISSOLUTION_GLORY_LOSS_SPOUSE)
 
-		# Family-level disposition penalty (PROVISIONAL).
+		# Family-level disposition penalty — locked s57.49b A34.
 		if not family_baselines.is_empty():
 			var fa: String = spouse_a.family
 			var fb: String = spouse_b.family
@@ -14284,7 +14284,7 @@ static func _apply_dissolution(
 					-100, 100,
 				)
 
-		# Clan-level penalty if cross-clan (PROVISIONAL).
+		# Clan-level penalty if cross-clan — locked s57.49b A36.
 		if spouse_a.clan != spouse_b.clan and not clan_baselines.is_empty():
 			var ca: String = spouse_a.clan
 			var cb: String = spouse_b.clan
