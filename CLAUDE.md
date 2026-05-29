@@ -2911,10 +2911,12 @@ costs, or forward-wiring. Do not treat as bugs.
   HONOR_COST retained as dead metadata (superseded by CrimeSystem rank-scaled
   honor at line 69). All other values confirmed (disposition +5, maintenance
   16 days, 3 missed windows, affair severities, breakup disposition).
-- **s12.10 Favor System — 1 invented value zeroed.**
-  `get_dispute_witness_disposition()` creditor_won return value (2→0) — GDD
-  says witnesses gain disposition but specifies no numeric amount. All other
-  15 constants confirmed from GDD s12.10.
+- **s12.10 Favor System — 1 value locked in s12.10a.**
+  `get_dispute_witness_disposition()` creditor_won return value (2→0→2) —
+  GDD says "witnesses gain disposition toward the creditor" without a number.
+  Locked at +2: secondary social vindication, matches PUBLIC_PERFORMANCE
+  per-witness gain. Debtor win stays 0 (GDD silent). All other 15 constants
+  confirmed from GDD s12.10.
 - **s11.3.12 Violence System — 1 invented value zeroed.**
   `INFAMY_PER_REPEATED_OFFENSE` (0.5→0.0) — GDD s11.3.12e says "Each
   additional offense adds Infamy" but provides no numeric value. All other
