@@ -3170,6 +3170,16 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   local_tier3_candidates for Family Daimyo characters (status 6.0–6.99); both keys
   cleared by stale flag clearing between days. 22 tests.
 
+### Known Code Issues (found and fixed 2026-05-29, theater system audit)
+- **Bunraku extra AP not deducted — Bunraku always cost 1 AP instead of 2. FIXED.**
+  `_execute_perform_theater()` returns `ap_cost_override: 2` for Bunraku performances
+  (GDD s57.22.3 specifies 2 AP for Bunraku). The NPC engine deducts 1 AP before
+  execution (from the `_get_ap_cost()` table). `_process_perform_theater_writebacks()`
+  was supposed to deduct the extra 1 AP from `ap_cost_override`, matching the pattern
+  used by APPLY_TATTOO, but did not. Added `ap_override = effects.get("ap_cost_override", 1)`
+  check; when `ap_override > 1`, deducts `ap_override - 1` extra AP from performer.
+  2 tests added.
+
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
   SkillResolver and ActionExecutor. Doji Courtier R1a (honor-gated Free Raise on

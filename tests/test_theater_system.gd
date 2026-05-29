@@ -2059,3 +2059,78 @@ func test_proactive_teaching_excludes_low_skill_candidates() -> void:
 	)
 
 	assert_eq(pending.size(), 0, "No letter when candidate Acting < disposition_magnitude")
+
+
+# ============================================================================
+# §57.22.7 BUNRAKU AP DEDUCTION
+# ============================================================================
+
+func test_bunraku_performance_deducts_extra_ap() -> void:
+	# NPC engine already deducted 1 AP before execution.
+	# Bunraku ap_cost_override=2 means the writeback must deduct 1 more.
+	var piece: TheaterPieceData = _make_piece(5, 1)
+	piece.craft_progress = -1  # completed
+	piece.known_by = [1]
+
+	var performer: L5RCharacterData = L5RCharacterData.new()
+	performer.character_id = 1
+	performer.clan = "Crane"
+	performer.skills = {"Acting": 4}
+	performer.awareness = 3
+	performer.action_points_current = 1  # 1 AP left after NPC engine's deduction
+
+	var chars: Dictionary = {1: performer}
+	var result: Dictionary = {
+		"action_id": "PERFORM_THEATER_PIECE",
+		"success": true,
+		"character_id": 1,
+		"effects": {
+			"piece_id": 5,
+			"is_bunraku_performance": true,
+			"raises_succeeded": 0,
+			"is_critical": false,
+			"location_id": "crane_castle",
+			"ap_cost_override": 2,
+		},
+	}
+
+	DayOrchestrator._process_perform_theater_writebacks(
+		[result], [piece], chars, [], [1], 1,
+	)
+	assert_eq(performer.action_points_current, 0,
+		"Bunraku extra AP (override - 1) deducted from performer")
+
+
+func test_non_bunraku_performance_no_extra_ap_deduction() -> void:
+	# Standard performance: ap_cost_override=1, no extra deduction.
+	var piece: TheaterPieceData = _make_piece(6, 1)
+	piece.craft_progress = -1
+	piece.known_by = [1]
+
+	var performer: L5RCharacterData = L5RCharacterData.new()
+	performer.character_id = 1
+	performer.clan = "Crane"
+	performer.skills = {"Acting": 3}
+	performer.awareness = 3
+	performer.action_points_current = 1
+
+	var chars: Dictionary = {1: performer}
+	var result: Dictionary = {
+		"action_id": "PERFORM_THEATER_PIECE",
+		"success": true,
+		"character_id": 1,
+		"effects": {
+			"piece_id": 6,
+			"is_bunraku_performance": false,
+			"raises_succeeded": 0,
+			"is_critical": false,
+			"location_id": "crane_castle",
+			"ap_cost_override": 1,
+		},
+	}
+
+	DayOrchestrator._process_perform_theater_writebacks(
+		[result], [piece], chars, [], [1], 1,
+	)
+	assert_eq(performer.action_points_current, 1,
+		"Standard performance does not deduct extra AP")

@@ -19755,6 +19755,13 @@ static func _process_perform_theater_writebacks(
 		var is_critical: bool = effects.get("is_critical", false)
 		var location_id: String = effects.get("location_id", "")
 
+		# Bunraku costs 2 AP; NPC engine only deducts 1. Deduct the extra AP here.
+		var ap_override: int = effects.get("ap_cost_override", 1)
+		if ap_override > 1:
+			character.action_points_current = maxi(
+				character.action_points_current - (ap_override - 1), 0
+			)
+
 		var effective_magnitude: int = TheaterSystem.get_effective_magnitude(
 			piece, is_bunraku, raises_succeeded, is_critical,
 		)
