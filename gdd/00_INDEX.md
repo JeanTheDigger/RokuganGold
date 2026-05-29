@@ -419,6 +419,7 @@ Content has not been modified — only split at section boundaries.
 | File | Section | Size | Status |
 |------|---------|------|--------|
 | `s52_world_population_system.md` | # 52. World Population System | 22K | Reference / No tags |
+| `s52a_world_generation_parameters_locked.md` | ## 52a World Generation Parameters — LOCKED | 6K | FULLY LOCKED. Formalizes PROVISIONAL values A23–A33: POSITION_RANK table (role-based, 39 entries), POSITION_STATUS corrections (Local Daimyo 4.0, Provincial Daimyo 5.0), BASE_PU constants, terrain multipliers, PU sub-type distribution, POINTS_PER_RANK=4, demographic parameters, LEGIONS_PER_ARMY=3, Minor Clan Champion stipend=3.0. |
 
 ### Section 53
 
