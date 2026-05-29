@@ -3440,11 +3440,11 @@ pending playtesting.
 | A12 | REQUEST_ALLIED_AID acceptance disposition gate | 31 | action_executor.gd | RESOLVED — s12.2 LOCKED: Friend tier = +31 to +60. Lords accept allied aid from Friend-tier or above. | s12.2 |
 | A13 | RESOURCE_PROMISE deadline | Next/after-next season (urgency) | day_orchestrator.gd | "the agreed delivery season" — RESOLVED | s55.31 |
 | A14 | TREAT_WOUND raises by Medicine rank | 0-2→0, 3-4→1, 5+→3 | npc_decision_engine.gd | RESOLVED — s57.31a. GDD anchor: s57.31 "At Rank 5 with 3 Raises: 5k1." No 2-Raise tier. | s57.31a |
-| A15 | FORGE letter/order NeedType alignment scores | 40–70 | objective_alignment.json | GDD says what forges do but not how to score them vs other actions | s12.8 |
+| A15 | FORGE letter/order NeedType alignment scores | DAMAGE_REL: FIL=70/FO=55; ACQUIRE_LEV: FIL=50/FO=30; SUPPRESS_INV: FO=60/FIL=45 | objective_alignment.json | RESOLVED — s12.8b: calibrated against comparable covert actions. FORGE_ORDER ACQUIRE_LEVERAGE 40→30 (orders compel action, don't produce leverage material). | s12.8b |
 | A16 | Forged letter delivery distance | 3 provinces | day_orchestrator.gd | Blocked on map/adjacency data | s12.7 |
-| A17 | Forged objective priority | 8 | day_orchestrator.gd | No GDD spec for objective priority values | — |
-| A18 | Impersonation detection topic tier | TIER_3 | day_orchestrator.gd | No explicit tier in GDD | — |
-| A19 | INVESTIGATE_THREAT priority (from impersonation) | 6 | day_orchestrator.gd | No GDD spec for objective priority values | — |
+| A17 | Forged objective priority | 8 | day_orchestrator.gd | RESOLVED — s12.8b: metadata only (NPC engine does not read priority field). Value documents intent: above normal objectives (5), below crisis override. | s12.8b |
+| A18 | Impersonation detection topic tier | TIER_3 | day_orchestrator.gd | RESOLVED — s12.8b: TIER_3. Above Spy Uncovered (TIER_4, identity unknown); below lord assassination (TIER_2). Political scandal at family level. | s12.8b |
+| A19 | INVESTIGATE_THREAT priority (from impersonation) | 6 | day_orchestrator.gd | RESOLVED — s12.8b: metadata only (NPC engine does not read priority field). Value documents intent: above UPHOLD_LAW (4) and court attendance (5), below forged orders (8). | s12.8b |
 | A20 | Forge authority level | Target's lord_rank via chars_by_id | npc_decision_engine.gd | RESOLVED (B11) | s12.8 |
 | A21 | Hunt beast stat blocks (8 of 10 species) | Derived from s54.1 | hunt_system.gd | Bear and ozaru GDD-confirmed; 8 others interpolated | s57.38 |
 | A22 | PERFORM_RITUAL alignment score under PERFORM_RITUAL NeedType | 90 (below PERFORM_WORSHIP at 100) | objective_alignment.json | No explicit scoring hierarchy for rituals | — |
