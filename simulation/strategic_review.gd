@@ -1671,6 +1671,64 @@ static func _prev_conclusion_types(clan: ClanData) -> Dictionary:
 	return types
 
 
+## Returns true when a conclusion is no longer relevant and should be removed.
+## Called by _process_stale_champion_priorities() in DayOrchestrator after
+## war and topic cleanup to trigger mid-quarter slot reclamation, especially
+## for Ketsui champions (Trigger 3 — s57.54.1).
+##
+## Stale conditions:
+##  - War-targeted types with no active war involving champion_clan vs target.
+##  - COMPLY_EDICT when the edict is gone from active_edicts.
+##  - Topic-sourced when all source topics are resolved or absent.
+static func is_conclusion_stale(
+	sc: StrategicConclusionData,
+	champion_clan: String,
+	active_wars: Array,
+	active_edicts: Array,
+	active_topics_by_id: Dictionary,
+) -> bool:
+	var war_targeted: Array = [
+		StrategicConclusionData.ConclusionType.AGGRESSIVE_POSTURE,
+		StrategicConclusionData.ConclusionType.LAUNCH_OFFENSIVE,
+		StrategicConclusionData.ConclusionType.DEFEND_TERRITORY,
+		StrategicConclusionData.ConclusionType.SEEK_PEACE,
+		StrategicConclusionData.ConclusionType.UNDERMINE_POSITION,
+	]
+	if sc.conclusion_type in war_targeted and sc.target_clan_id >= 0:
+		for war: Variant in active_wars:
+			if war == null:
+				continue
+			var is_active: bool = war.is_active if war is WarData else bool((war as Dictionary).get("is_active", false))
+			if not is_active:
+				continue
+			var ca: String = war.clan_a if war is WarData else String((war as Dictionary).get("clan_a", ""))
+			var cb: String = war.clan_b if war is WarData else String((war as Dictionary).get("clan_b", ""))
+			var is_a: bool = (ca == champion_clan)
+			var is_b: bool = (cb == champion_clan)
+			if not is_a and not is_b:
+				continue
+			var enemy: String = cb if is_a else ca
+			if not enemy.is_empty() and enemy.hash() == sc.target_clan_id:
+				return false  # War still active with this clan.
+		return true  # No active war with the target clan.
+
+	if sc.conclusion_type == StrategicConclusionData.ConclusionType.COMPLY_EDICT and sc.edict_id >= 0:
+		for edict: Variant in active_edicts:
+			var eid: int = edict.get("edict_id", -1) if edict is Dictionary else -1
+			if eid == sc.edict_id:
+				return false  # Edict still active.
+		return true  # Edict no longer in active list.
+
+	if sc.source_topic_ids.size() > 0:
+		for tid: Variant in sc.source_topic_ids:
+			var topic: TopicData = active_topics_by_id.get(int(tid))
+			if topic != null and not topic.resolved:
+				return false  # At least one source topic still active.
+		return true  # All source topics resolved or removed.
+
+	return false  # Standing-objective conclusions are never stale.
+
+
 ## Maps a clan name string to an integer ID.
 ## In this system, target_clan_id is used as an index for the clan in the
 ## active_wars / topic pipeline. We store -1 when unknown.

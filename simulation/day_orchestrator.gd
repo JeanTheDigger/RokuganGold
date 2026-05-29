@@ -874,6 +874,12 @@ static func advance_day(
 	_remove_resolved_topics(active_topics)
 	TheaterSystem.purge_stale_topic_ids(theater_pieces, active_topics)
 
+	_process_stale_champion_priorities(
+		characters, characters_by_id, clans, active_wars, active_edicts,
+		active_topics, objectives_map, current_season, dice_engine,
+		pending_letters, next_letter_id, ic_day,
+	)
+
 	var province_clan_map: Dictionary = _build_province_clan_map(provinces)
 	var broadcast_results: Array = TopicMomentumSystem.broadcast_public_knowledge(
 		active_topics, characters, character_province_map, province_clan_map, provinces,
@@ -7386,6 +7392,60 @@ static func _process_midseason_champion_updates(
 			var dispatches: Array = StrategicReview.run_midseason_crisis_update(
 				champion, clan_data, topic, topics_by_id, current_season,
 				characters_by_id, fd_ids,
+			)
+			_process_champion_letter_dispatches(
+				dispatches, pending_letters, next_letter_id, ic_day, characters_by_id,
+			)
+
+
+## Scans all clan champions for stale strategic conclusions and removes them.
+## Fires daily after _remove_resolved_topics() so both war and topic cleanup
+## have already run. Ketsui champions get an immediate full re-evaluation when
+## a priority slot is freed (Trigger 3 — s57.54.1).
+## Dispatches notification letters to absent Family Daimyo via the standard
+## _process_champion_letter_dispatches() path.
+static func _process_stale_champion_priorities(
+	characters: Array,
+	characters_by_id: Dictionary,
+	clans: Dictionary,
+	active_wars: Array,
+	active_edicts: Array,
+	active_topics: Array,
+	objectives_map: Dictionary,
+	current_season: int,
+	dice_engine: DiceEngine,
+	pending_letters: Array,
+	next_letter_id: Array,
+	ic_day: int,
+) -> void:
+	if clans.is_empty() or dice_engine == null:
+		return
+	var topics_by_id: Dictionary = {}
+	for t: Variant in active_topics:
+		if t is TopicData:
+			topics_by_id[(t as TopicData).topic_id] = t
+
+	for champion: L5RCharacterData in characters:
+		if CharacterStats.is_dead(champion):
+			continue
+		if champion.status < 7.0 or champion.lord_id != -1:
+			continue
+		var clan_data: ClanData = clans.get(champion.clan)
+		if clan_data == null:
+			continue
+		var stale_ids: Array[int] = []
+		for sc: StrategicConclusionData in clan_data.clan_strategic_priorities:
+			if StrategicReview.is_conclusion_stale(
+				sc, champion.clan, active_wars, active_edicts, topics_by_id,
+			):
+				stale_ids.append(sc.conclusion_id)
+		if stale_ids.is_empty():
+			continue
+		var fd_ids: Array = _get_family_daimyo_ids(champion.clan, characters)
+		for cid: int in stale_ids:
+			var dispatches: Array = StrategicReview.run_priority_resolved(
+				champion, clan_data, cid, topics_by_id, active_wars, active_edicts,
+				characters_by_id, objectives_map, current_season, dice_engine, fd_ids,
 			)
 			_process_champion_letter_dispatches(
 				dispatches, pending_letters, next_letter_id, ic_day, characters_by_id,

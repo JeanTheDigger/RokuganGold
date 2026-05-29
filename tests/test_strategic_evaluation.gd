@@ -574,3 +574,113 @@ func test_midseason_updates_dispatches_letter_for_absent_fd() -> void:
 	)
 
 	assert_gt(pending_letters.size(), 0, "Absent FD should receive a dispatch letter")
+
+
+# -- is_conclusion_stale -------------------------------------------------------
+
+func _make_war(clan_a: String, clan_b: String, active: bool = true) -> WarData:
+	var w := WarData.new()
+	w.clan_a = clan_a
+	w.clan_b = clan_b
+	w.is_active = active
+	return w
+
+
+func _make_seek_peace_conclusion(target_clan: String) -> StrategicConclusionData:
+	var sc := StrategicConclusionData.new()
+	sc.conclusion_id = 99
+	sc.conclusion_type = StrategicConclusionData.ConclusionType.SEEK_PEACE
+	sc.target_clan_id = target_clan.hash()
+	return sc
+
+
+func test_is_conclusion_stale_war_type_no_war_is_stale() -> void:
+	var sc := _make_seek_peace_conclusion("Lion")
+	var result: bool = StrategicReview.is_conclusion_stale(
+		sc, "Crane", [], [], {}
+	)
+	assert_true(result, "SEEK_PEACE with no active wars should be stale")
+
+
+func test_is_conclusion_stale_war_type_active_war_not_stale() -> void:
+	var sc := _make_seek_peace_conclusion("Lion")
+	var war := _make_war("Crane", "Lion")
+	var result: bool = StrategicReview.is_conclusion_stale(
+		sc, "Crane", [war], [], {}
+	)
+	assert_false(result, "SEEK_PEACE with active war vs target clan should not be stale")
+
+
+func test_is_conclusion_stale_war_ended_is_stale() -> void:
+	var sc := _make_seek_peace_conclusion("Lion")
+	var war := _make_war("Crane", "Lion", false)  # war ended
+	var result: bool = StrategicReview.is_conclusion_stale(
+		sc, "Crane", [war], [], {}
+	)
+	assert_true(result, "SEEK_PEACE with ended war should be stale")
+
+
+func test_is_conclusion_stale_topic_sourced_resolved_is_stale() -> void:
+	var sc := StrategicConclusionData.new()
+	sc.conclusion_id = 50
+	sc.conclusion_type = StrategicConclusionData.ConclusionType.DEFEND_TERRITORY
+	sc.source_topic_ids = [10, 11]
+	var t10 := _make_topic(10, TopicData.Tier.TIER_2)
+	t10.resolved = true
+	var t11 := _make_topic(11, TopicData.Tier.TIER_3)
+	t11.resolved = true
+	var tmap: Dictionary = {10: t10, 11: t11}
+	var result: bool = StrategicReview.is_conclusion_stale(sc, "Crab", [], [], tmap)
+	assert_true(result, "Conclusion with all resolved source topics should be stale")
+
+
+func test_is_conclusion_stale_topic_sourced_one_active_not_stale() -> void:
+	var sc := StrategicConclusionData.new()
+	sc.conclusion_id = 51
+	sc.conclusion_type = StrategicConclusionData.ConclusionType.DEFEND_TERRITORY
+	sc.source_topic_ids = [20, 21]
+	var t20 := _make_topic(20, TopicData.Tier.TIER_2)
+	t20.resolved = true
+	var t21 := _make_topic(21, TopicData.Tier.TIER_3)
+	t21.resolved = false
+	var tmap: Dictionary = {20: t20, 21: t21}
+	var result: bool = StrategicReview.is_conclusion_stale(sc, "Crab", [], [], tmap)
+	assert_false(result, "Conclusion with at least one active source topic should not be stale")
+
+
+func test_is_conclusion_stale_standing_obj_never_stale() -> void:
+	var sc := StrategicConclusionData.new()
+	sc.conclusion_id = 60
+	sc.conclusion_type = StrategicConclusionData.ConclusionType.SUPPRESS_INSTABILITY
+	sc.source_topic_ids = []  # No topics — standing-objective driven
+	var result: bool = StrategicReview.is_conclusion_stale(sc, "Dragon", [], [], {})
+	assert_false(result, "Standing-objective conclusion with no source topics should never be stale")
+
+
+# -- _process_stale_champion_priorities ----------------------------------------
+
+func test_stale_priorities_ketsui_champion_gets_refill() -> void:
+	var champion := _make_champion(1, "Crane",
+		Enums.BushidoVirtue.CHUGI,
+		Enums.ShouridoVirtue.KETSUI)
+	var clan := _make_clan()
+	clan.next_conclusion_id = 10
+	# Seed a now-stale SEEK_PEACE conclusion for a war that no longer exists.
+	var sc := _make_seek_peace_conclusion("Lion")
+	clan.clan_strategic_priorities.append(sc)
+	var chars: Array = [champion]
+	var chars_by_id: Dictionary = {champion.character_id: champion}
+	var clans: Dictionary = {"Crane": clan}
+	var dice := _make_dice()
+
+	DayOrchestrator._process_stale_champion_priorities(
+		chars, chars_by_id, clans,
+		[], [], [], {}, 0, dice,
+		[], [1], 0,
+	)
+
+	# Ketsui immediately refills — full evaluation fires.
+	# With no active topics or wars, the array gets rebuilt from standing objectives only.
+	for remaining: StrategicConclusionData in clan.clan_strategic_priorities:
+		assert_ne(remaining.conclusion_id, sc.conclusion_id,
+			"Stale SEEK_PEACE conclusion should have been removed by Ketsui refill")
