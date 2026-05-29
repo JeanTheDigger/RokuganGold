@@ -2868,31 +2868,23 @@ costs, or forward-wiring. Do not treat as bugs.
   mechanics qualitatively ("disposition toward sender", "personality profile",
   "high Courtesy") but specifies no numeric values. Reply generation is
   structurally intact but produces zero reply chance pending GDD specification.
-- **s15.4 Court Action System — 22 invented constants zeroed.**
-  GDD s15.4 specifies only 4 numeric values: Charm ceiling (40), Play a Game
-  base disposition (+3), winner bonus (+1), duration (2 months). All other
-  court action constants used qualitative GDD descriptions ("Moderate
-  disposition gain", "Strong disposition gain", "slight TN reduction",
-  "position moves slightly", "more significantly and durably") without
-  numeric values. Zeroed: CHARM_FULL_GAIN (8→0), CHARM_RAISE_BONUS (3→0),
-  NEGOTIATE_BASE_DISP (9→0), NEGOTIATE_RAISE_BONUS (3→0),
-  NEGOTIATE_POSITION_SHIFT (8.0→0.0), NEGOTIATE_RAISE_POSITION_BONUS (4.0→0.0),
-  NEGOTIATE_SESSION_TN_REDUCTION (5→0), PERSUADE_BASE_DISP (11→0),
-  PERSUADE_RAISE_BONUS (3→0), PERSUADE_POSITION_SHIFT (12.0→0.0),
-  PERSUADE_RAISE_POSITION_BONUS (5.0→0.0), IMPRESS_BASE_DISP (9→0),
-  IMPRESS_RAISE_BONUS (3→0), IMPRESS_POSITION_SHIFT (5.0→0.0),
-  IMPRESS_SESSION_TN_REDUCTION (5→0), LISTEN_REFLECT_BASE_DISP (11→0),
-  LISTEN_REFLECT_RAISE_BONUS (3→0), LISTEN_REFLECT_POSITION_SHIFT (10.0→0.0),
-  LISTEN_REFLECT_RAISE_POSITION_BONUS (4.0→0.0),
-  LISTEN_REFLECT_SESSION_TN_REDUCTION (5→0). CHARM_DIMINISHING_HALF (2) and
-  CHARM_DIMINISHING_MINIMAL (3) retained as structural thresholds (inert with
-  gain=0). Hardcoded diminishing floor changed from 1 to max(gain/4, 0).
-  Confirmed GDD-sourced: CHARM_CEILING (40), PLAY_GAME_BASE_DISP (3),
-  PLAY_GAME_WINNER_BONUS (1), PLAY_GAME_DURATION_MONTHS (2), PROVOKE_*
-  constants, GOSSIP_* constants, DEBATE_* constants.
-  NOTE: Failure-path inline penalties (-5/-6/-7 disposition on critical failure)
-  are also not GDD-specified but were left as-is for this pass — flagged for
-  future audit.
+- **s15.4 Court Action System — 22 constants locked in s15.4a.**
+  Previously zeroed during invented-content audit. Now formally locked in
+  `gdd/s15.4a_court_action_numeric_values_locked.md`. Calibrated against
+  GDD-confirmed anchors: Play a Game (+3), Gossip (−5), Public Debate
+  per-witness tiers (±1/±2/±3/±4). NEGOTIATE_POSITION_SHIFT=8.0 and
+  PERSUADE_POSITION_SHIFT=12.0 are GDD-confirmed from s15.4 Public Debate
+  text ("targeted actions (Negotiate: +8, Persuade: +12)"). Final values:
+  CHARM_FULL_GAIN=5, CHARM_RAISE_BONUS=2; NEGOTIATE_BASE_DISP=6,
+  NEGOTIATE_RAISE_BONUS=2, NEGOTIATE_POSITION_SHIFT=8.0,
+  NEGOTIATE_RAISE_POSITION_BONUS=4.0, NEGOTIATE_SESSION_TN_REDUCTION=5;
+  PERSUADE_BASE_DISP=9, PERSUADE_RAISE_BONUS=3, PERSUADE_POSITION_SHIFT=12.0,
+  PERSUADE_RAISE_POSITION_BONUS=5.0; IMPRESS_BASE_DISP=6, IMPRESS_RAISE_BONUS=2,
+  IMPRESS_SESSION_TN_REDUCTION=5; LISTEN_REFLECT_BASE_DISP=9,
+  LISTEN_REFLECT_RAISE_BONUS=3, LISTEN_REFLECT_SESSION_TN_REDUCTION=10;
+  CHARM_CRITICAL_FAILURE_DISP=−3 (all "small" losses), PERSUADE_CRITICAL_FAILURE_DISP=−5
+  (unqualified "disposition loss"), NEGOTIATE_FAILURE_POSITION_HARDEN=−1.0,
+  NEGOTIATE_CRITICAL_POSITION_HARDEN=−3.0 (from Public Debate slight/strong scale).
 - **s4.3 Resource Tick — audited, no changes needed.**
   GARRISON_STABILITY_PENALTY_PER_SEASON (2.0) confirmed GDD-sourced (s4.3.11:
   "-2 Stability/season"). UPPER_TIER_PASSTHROUGH (0.42) correctly derived from
