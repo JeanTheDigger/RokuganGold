@@ -10908,7 +10908,7 @@ static func _apply_service_assignment_effect(
 		return {}
 
 	var target: L5RCharacterData = characters_by_id.get(target_id)
-	if target == null:
+	if target == null or CharacterStats.is_dead(target):
 		return {}
 
 	var commander_id: int = effects.get("military_commander_id", -1)
@@ -10954,7 +10954,7 @@ static func _apply_vassal_objective_assignment(
 
 	var lord: L5RCharacterData = characters_by_id.get(lord_id)
 	var vassal: L5RCharacterData = characters_by_id.get(vassal_id)
-	if vassal == null:
+	if vassal == null or CharacterStats.is_dead(vassal):
 		return {}
 	if vassal.lord_id != lord_id:
 		return {"type": "assignment_failed", "reason": "not_vassal"}
@@ -11003,7 +11003,7 @@ static func _apply_court_invitation(
 		return {}
 
 	var invitee: L5RCharacterData = characters_by_id.get(invitee_id)
-	if invitee == null:
+	if invitee == null or CharacterStats.is_dead(invitee):
 		return {}
 
 	var target_court: CourtSessionData = null
@@ -14112,7 +14112,7 @@ static func _apply_appointment(
 	var lord_id: int = effects.get("appointing_lord_id", -1)
 
 	var appointee: L5RCharacterData = characters_by_id.get(appointee_id) as L5RCharacterData
-	if appointee == null:
+	if appointee == null or CharacterStats.is_dead(appointee):
 		return {"applied": false, "reason": "no_appointee", "appointee_id": appointee_id}
 
 	appointee.role_position = position
@@ -14150,6 +14150,8 @@ static func _apply_marriage(
 
 	if char_a == null or char_b == null:
 		return {"applied": false, "reason": "missing_character", "a_id": a_id, "b_id": b_id}
+	if CharacterStats.is_dead(char_a) or CharacterStats.is_dead(char_b):
+		return {"applied": false, "reason": "character_dead", "a_id": a_id, "b_id": b_id}
 
 	if char_a.spouse_id >= 0 or char_b.spouse_id >= 0:
 		return {"applied": false, "reason": "already_married", "a_id": a_id, "b_id": b_id}
@@ -18022,7 +18024,7 @@ static func _apply_promise_fulfillment_honor(
 		if commitment.crisis_id < 0:
 			continue
 		var debtor: L5RCharacterData = characters_by_id.get(commitment.debtor_npc_id)
-		if debtor == null:
+		if debtor == null or CharacterStats.is_dead(debtor):
 			continue
 		HonorGlorySystem.apply_honor_change(
 			debtor, CrimeSystem.get_fulfilling_promise_honor(debtor)
@@ -18043,6 +18045,8 @@ static func _process_duel_honor_writebacks(
 		var actor: L5RCharacterData = characters_by_id.get(actor_id)
 		var target: L5RCharacterData = characters_by_id.get(target_id)
 		if actor == null or target == null:
+			continue
+		if CharacterStats.is_dead(actor) or CharacterStats.is_dead(target):
 			continue
 		if target.status > actor.status:
 			HonorGlorySystem.apply_honor_change(
@@ -18125,6 +18129,8 @@ static func _process_kindness_honor_writebacks(
 		var target: L5RCharacterData = characters_by_id.get(target_id)
 		if actor == null or target == null:
 			continue
+		if CharacterStats.is_dead(actor) or CharacterStats.is_dead(target):
+			continue
 		if actor.status > target.status:
 			HonorGlorySystem.apply_honor_change(
 				actor, CrimeSystem.get_kindness_below_station_honor(actor)
@@ -18148,7 +18154,7 @@ static func _process_truthful_report_honor_writebacks(
 			continue
 		var actor_id: int = result.get("character_id", -1)
 		var actor: L5RCharacterData = characters_by_id.get(actor_id)
-		if actor == null:
+		if actor == null or CharacterStats.is_dead(actor):
 			continue
 		for s: SecretData in active_secrets:
 			if s.secret_id == secret_id:
@@ -18181,7 +18187,7 @@ static func _process_protecting_clan_honor_writebacks(
 			continue
 		var actor_id: int = result.get("character_id", -1)
 		var actor: L5RCharacterData = characters_by_id.get(actor_id)
-		if actor == null:
+		if actor == null or CharacterStats.is_dead(actor):
 			continue
 		HonorGlorySystem.apply_honor_change(
 			actor, CrimeSystem.get_protecting_clan_honor(actor)

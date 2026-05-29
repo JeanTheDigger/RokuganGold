@@ -3374,6 +3374,24 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   8 additional orchestrator tests added covering all three B6 trigger conditions (LYING disposition
   gate, DUPED_FOOLISH NPC/settlement/province targets, DUPED_CRIMINAL deadline ordering).
 
+### Known Code Issues (found and fixed 2026-05-29, writeback audit)
+- **LYING honor trigger always returned 0 — string/int key mismatch. FIXED.**
+  `_process_lying_honor_writebacks()` called `disposition_values.get(str(subject_id), 0)`
+  but `disposition_values` uses int keys throughout. Lookup always returned 0 so LYING
+  honor (Table 2.3) never fired for any fabricator. Fixed to use int key directly.
+  5 test setups updated from string keys to int keys. 1 test.
+- **Dead character guards missing from 8 writeback/apply functions. FIXED.**
+  `_apply_promise_fulfillment_honor()` debtor, `_process_duel_honor_writebacks()` actor/target,
+  `_process_kindness_honor_writebacks()` actor/target, `_process_truthful_report_honor_writebacks()`
+  actor, `_process_protecting_clan_honor_writebacks()` actor — all checked null but not dead.
+  Dead characters received honor changes from promise fulfillment, duel outcomes, gift-giving,
+  secret exposure, and sortie actions.
+  `_apply_appointment()` appointee, `_apply_service_assignment_effect()` target,
+  `_apply_vassal_objective_assignment()` vassal, `_apply_court_invitation()` invitee,
+  `_apply_marriage()` both parties — dead characters could be appointed to positions,
+  assigned to military service, receive lord objectives, added to court invitation lists,
+  and married. Added `CharacterStats.is_dead()` guards at all 9 sites.
+
 ### Systems Added 2026-05-29
 - **s11.3.12a Violence System — INFAMY_PER_REPEATED_OFFENSE locked.** `INFAMY_PER_REPEATED_OFFENSE`
   set to 0.1 (was 0.0). Locked in `gdd/s11.3.12a_violence_repeated_offense_infamy_locked.md`.
