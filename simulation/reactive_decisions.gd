@@ -72,7 +72,6 @@ static func _evaluate_duel_response(
 		"need_type": "DECLINE_DUEL",
 		"target_npc_id": challenger_id,
 		"priority": 2,
-		"glory_loss": -0.3,
 	}
 
 

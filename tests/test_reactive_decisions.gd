@@ -86,13 +86,13 @@ func test_no_virtue_declines_duel() -> void:
 	assert_eq(result["action"], "DECLINE_DUEL")
 
 
-func test_decline_duel_includes_glory_loss() -> void:
+func test_decline_duel_returns_decline_action() -> void:
 	var c := _make_character(1, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE)
 	c.disposition_values = {5: 10.0}
 	var ctx := _make_ctx()
 	var event: Dictionary = {"reactive_type": "DUEL_CHALLENGE_RECEIVED", "challenger_id": 5, "is_public": false}
 	var result: Dictionary = ReactiveDecisions.evaluate_reactive_event(event, c, ctx)
-	assert_eq(result["glory_loss"], -0.3)
+	assert_eq(result.get("action", ""), "DECLINE_DUEL")
 
 
 # =============================================================================
