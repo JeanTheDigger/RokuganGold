@@ -2952,11 +2952,12 @@ costs, or forward-wiring. Do not treat as bugs.
   replaced with GDD s56.6.3 fixed TNs: Quiet=20, Moderate=15 at listener's
   position (no distance scaling). KEEP: material TNs (GDD-sourced), rebind
   +5, quiet noise range 3, break chains TN 25, all escape mechanics.
-- **s17 Personal Visit System — 5 invented values zeroed.**
-  DECLINE_INVITATION_DISPOSITION (-3→0), REFUSE_AFTER_INVITATION_DISPOSITION
-  (-10→0), REFUSE_AFTER_INVITATION_HONOR (-0.3→0.0),
-  REFUSE_LETTER_ARRIVAL_DISPOSITION (-2→0), RECEIVE_UNINVITED_DISPOSITION
-  (5→0). GDD s17 says "small disposition cost"/"significant" without numbers.
+- **s17 Personal Visit System — 5 values locked in s17a.**
+  DECLINE_INVITATION_DISPOSITION −2, REFUSE_AFTER_INVITATION_DISPOSITION −5,
+  REFUSE_AFTER_INVITATION_HONOR −0.5, REFUSE_LETTER_ARRIVAL_DISPOSITION −3,
+  RECEIVE_UNINVITED_DISPOSITION +5. Calibrated against gossip (−5), Charm
+  critical failure (−3), and Minor Favor break (−0.5 Honor). REFUSE_UNINVITED
+  stays 0 (GDD silent — no host penalty for turning away uninvited guest).
   KEEP: INTIMATE_SETTING_BONUS (3, s17.2), DAILY_AP_DURING_VISIT (2, s14.1).
 - **s22.9 Hostage System — 5 invented values zeroed.**
   HARMED_HOSTAGE_HONOR_LOSS (-3.0→0.0), ESCAPE_FAMILY_HONOR_LOSS (-1.0→0.0),
