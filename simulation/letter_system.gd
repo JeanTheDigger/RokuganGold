@@ -10,13 +10,17 @@ const RAISE_TN: int = 5
 # Disposition bonuses by quality tier
 const QUALITY_BONUS: Array[int] = [0, 1, 2, 3]
 
-# Reply modifiers — GDD s12.7 describes reply chance qualitatively
-# ("disposition toward sender", "personality profile", "high Courtesy")
-# but specifies no numeric values. Zeroed pending GDD specification.
-const BASE_REPLY_CHANCE: float = 0.0
-const DISPOSITION_REPLY_BONUS: float = 0.0
-const COURTESY_REPLY_BONUS: float = 0.0
-const HOSTILE_REPLY_THRESHOLD: int = 0
+# Reply values — GDD s12.7a formalizes these per s12.7's qualitative factors
+# ("disposition toward sender", "personality profile", "high Courtesy").
+# BASE = 35% at neutral disposition (samurai etiquette creates reply obligation).
+# DISP_BONUS = 0.5%/point (Friend +31 → ~50%; Devoted +61 → ~65%).
+# COURTESY_BONUS = +15% for Rei virtue (correspondence as moral obligation).
+# HOSTILE_THRESHOLD = -10: Rivals (-11 and below) never reply (below Rival onset).
+# MEETING_ACCEPT at 0: neutral or positive disposition accepts meeting proposals.
+const BASE_REPLY_CHANCE: float = 0.35
+const DISPOSITION_REPLY_BONUS: float = 0.005
+const COURTESY_REPLY_BONUS: float = 0.15
+const HOSTILE_REPLY_THRESHOLD: int = -10
 const MEETING_ACCEPT_DISPOSITION: int = 0
 
 # Delivery rate: provinces per IC day

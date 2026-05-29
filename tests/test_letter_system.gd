@@ -279,10 +279,19 @@ func test_reply_chance_capped_at_95():
 	var chance: float = LetterSystem.get_reply_chance(c, 100)
 	assert_true(chance <= 0.95)
 
-func test_should_reply_zero_chance_always_fails():
+func test_should_reply_hostile_always_false():
 	var c := _make_char(1)
-	assert_false(LetterSystem.should_reply(c, 0, 5))
-	assert_false(LetterSystem.should_reply(c, 0, 50))
+	# Below hostile threshold (Rival tier -11 and worse): never replies
+	assert_false(LetterSystem.should_reply(c, -11, 0))
+	assert_false(LetterSystem.should_reply(c, -50, 0))
+
+
+func test_should_reply_rng_threshold():
+	var c := _make_char(1)
+	# rng_roll must be < int(chance * 100) to trigger reply
+	var threshold: int = int(LetterSystem.get_reply_chance(c, 0) * 100.0)
+	assert_true(LetterSystem.should_reply(c, 0, threshold - 1))
+	assert_false(LetterSystem.should_reply(c, 0, threshold))
 
 
 # -- Exchange Bonus ------------------------------------------------------------
