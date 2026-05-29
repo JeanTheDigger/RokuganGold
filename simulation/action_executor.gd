@@ -1607,7 +1607,8 @@ static func _compute_military_effects(action_id: String, action: NPCDataStructur
 	return {"effect": "military_order_issued"}
 
 
-# PROVISIONAL: Disposition threshold reuses feasibility ledger constant (31).
+# GDD s12.2 LOCKED: Friend tier = +31 to +60. Lords accept allied aid from characters
+# at Friend tier or above — the threshold where genuine mutual trust exists.
 const ALLIED_AID_ACCEPT_THRESHOLD: int = 31
 
 const RESOURCE_PROMISE_NEED_TYPES: Array[String] = [

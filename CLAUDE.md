@@ -3436,8 +3436,8 @@ pending playtesting.
 | A8 | Non-shinobi detection bonus for observers | +5 Investigation | assassination_system.gd | "easier to detect" — no number | s12.8 |
 | A9 | VISIT_PROMISE deadline | Next season start (min 30d) | day_orchestrator.gd | "the season stated in the letter" — RESOLVED | s55.31 |
 | A10 | MEETING_ARRANGEMENT deadline | Season after next (min 30d) | day_orchestrator.gd | "the arranged meeting date" — RESOLVED | s55.31 |
-| A11 | MEETING_ARRANGEMENT reply disposition gate | >= 0 | letter_system.gd | No explicit threshold in GDD | s55.31 |
-| A12 | REQUEST_ALLIED_AID acceptance disposition gate | 31 | npc_decision_engine.gd | No explicit threshold in GDD | s55.31 |
+| A11 | MEETING_ARRANGEMENT reply disposition gate | >= 0 | letter_system.gd | RESOLVED — s12.7a LOCKED specifies MEETING_ACCEPT_DISPOSITION = 0 ("neutral or positive disposition"). | s12.7a |
+| A12 | REQUEST_ALLIED_AID acceptance disposition gate | 31 | action_executor.gd | RESOLVED — s12.2 LOCKED: Friend tier = +31 to +60. Lords accept allied aid from Friend-tier or above. | s12.2 |
 | A13 | RESOURCE_PROMISE deadline | Next/after-next season (urgency) | day_orchestrator.gd | "the agreed delivery season" — RESOLVED | s55.31 |
 | A14 | TREAT_WOUND raises by Medicine rank | 0-2→0, 3-4→1, 5+→3 | npc_decision_engine.gd | RESOLVED — s57.31a. GDD anchor: s57.31 "At Rank 5 with 3 Raises: 5k1." No 2-Raise tier. | s57.31a |
 | A15 | FORGE letter/order NeedType alignment scores | 40–70 | objective_alignment.json | GDD says what forges do but not how to score them vs other actions | s12.8 |
