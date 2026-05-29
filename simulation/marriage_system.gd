@@ -141,9 +141,13 @@ static func evaluate_proposal(
 # -- Dissolution Constants (s57.49.7) -----------------------------------------
 
 # Honor / Glory losses per GDD s57.49.7 Pathway 1.
+# DISSOLUTION_HONOR_LOSS_LORD: Table 2.3 Lord-Commanded Dissolution (s57.49.1, confirmed).
 const DISSOLUTION_HONOR_LOSS_LORD: float = -1.0
+# DISSOLUTION_GLORY_LOSS_SPOUSE: s46 Table 2.4 "Family Dishonor = −1 Glory Rank" (s57.49b).
 const DISSOLUTION_GLORY_LOSS_SPOUSE: float = -1.0
-# Disposition penalties — PROVISIONAL (GDD labels both as PROVISIONAL).
+# Disposition penalties — derived in s57.49b from s12.2 tier boundaries.
+# FAMILY: deep Rival tier (−25, within −11 to −30 bounds). CLAN: Stranger/Rival
+# boundary (−10, keeps clan-level cooling in Stranger without forcing Rival).
 const DISSOLUTION_FAMILY_DISP_PENALTY: int = -25
 const DISSOLUTION_CLAN_DISP_PENALTY: int = -10  # cross-clan only
 
