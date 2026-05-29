@@ -6375,6 +6375,105 @@ func test_impersonation_detection_no_duped_when_order_not_applied() -> void:
 		"Victim should not lose honor if forged order was never applied")
 
 
+func test_impersonation_detection_applies_duped_criminal_when_commitment_broken() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 92
+	victim.character_name = "Commitment Breaker"
+	victim.honor = 5.0
+	victim.school = "Hida Bushi"
+	victim.clan = "Crab"
+	victim.wounds_taken = 0
+	victim.knowledge_pool = []
+	var characters_by_id: Dictionary = {92: victim}
+
+	var forged_order := LetterData.new()
+	forged_order.recipient_id = 92
+	forged_order.delivered = true
+	forged_order.is_forged = true
+	forged_order.forged_sender_id = 60
+	forged_order.is_order = true
+	forged_order.order_applied = true
+	forged_order.ic_day_arrival = 10
+
+	var reply := LetterData.new()
+	reply.recipient_id = 92
+	reply.sender_id = 99
+	reply.delivered = true
+	reply.is_reply = true
+	reply.reply_to_forged = true
+	reply.original_forger_id = 60
+
+	var broken_commitment := CommitmentData.new()
+	broken_commitment.debtor_npc_id = 92
+	broken_commitment.status = Enums.CommitmentStatus.BROKEN_NO_NOTICE
+	broken_commitment.deadline_ic_day = 20
+
+	var pending_letters: Array = [forged_order, reply]
+	var active_topics: Array = []
+	var next_topic_id: Array = [500]
+	var objectives_map: Dictionary = {}
+	var initial_honor: float = victim.honor
+
+	DayOrchestrator._process_impersonation_detection(
+		pending_letters, characters_by_id, active_topics,
+		next_topic_id, 15, objectives_map, [broken_commitment],
+	)
+
+	assert_true(victim.honor < initial_honor,
+		"Victim should lose extra honor for breaking a commitment due to forged order")
+
+
+func test_impersonation_detection_no_duped_criminal_when_deadline_before_order() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 93
+	victim.character_name = "Pre-Commitment Breaker"
+	victim.honor = 5.0
+	victim.school = "Hida Bushi"
+	victim.clan = "Crab"
+	victim.wounds_taken = 0
+	victim.knowledge_pool = []
+	var characters_by_id: Dictionary = {93: victim}
+
+	var forged_order := LetterData.new()
+	forged_order.recipient_id = 93
+	forged_order.delivered = true
+	forged_order.is_forged = true
+	forged_order.forged_sender_id = 60
+	forged_order.is_order = true
+	forged_order.order_applied = true
+	forged_order.ic_day_arrival = 20
+
+	var reply := LetterData.new()
+	reply.recipient_id = 93
+	reply.sender_id = 99
+	reply.delivered = true
+	reply.is_reply = true
+	reply.reply_to_forged = true
+	reply.original_forger_id = 60
+
+	var broken_commitment := CommitmentData.new()
+	broken_commitment.debtor_npc_id = 93
+	broken_commitment.status = Enums.CommitmentStatus.BROKEN_NO_NOTICE
+	broken_commitment.deadline_ic_day = 10
+
+	var pending_letters: Array = [forged_order, reply]
+	var active_topics: Array = []
+	var next_topic_id: Array = [500]
+	var objectives_map: Dictionary = {}
+	var initial_honor: float = victim.honor
+
+	DayOrchestrator._process_impersonation_detection(
+		pending_letters, characters_by_id, active_topics,
+		next_topic_id, 25, objectives_map, [broken_commitment],
+	)
+
+	# DUPED_DISLOYAL fires (order was applied), but not DUPED_CRIMINAL
+	# because commitment deadline (10) is before forged order arrival (20)
+	var disloyal_cost: float = CrimeSystem.get_duped_disloyal_honor(victim)
+	assert_almost_eq(victim.honor, initial_honor + disloyal_cost, 0.01,
+		"Only DUPED_DISLOYAL should fire — commitment pre-dates the order")
+
+
 # CONVICTION CONSEQUENCES — TRIAL BY COMBAT LOSS
 # ==============================================================================
 
@@ -10205,6 +10304,170 @@ func test_fabricate_secret_writeback_no_duplicate_fabricator() -> void:
 		if kid == 1:
 			count += 1
 	assert_eq(count, 1, "Should not duplicate fabricator in known_by_ids")
+
+
+# -- _process_lying_honor_writebacks ------------------------------------------
+
+
+func test_lying_honor_fires_when_positive_disposition_toward_subject() -> void:
+	var fabricator := L5RCharacterData.new()
+	fabricator.character_id = 1
+	fabricator.honor = 8.0
+	fabricator.clan = "Crane"
+	fabricator.school = "Doji Courtier"
+	fabricator.disposition_values = {"5": 20}
+	var secret := SecretData.new()
+	secret.subject_id = 5
+	var chars: Dictionary = {1: fabricator}
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"success": true,
+		"character_id": 1,
+		"effects": {"secret": secret, "success": true},
+	}]
+	var honor_before: float = fabricator.honor
+	DayOrchestrator._process_lying_honor_writebacks(results, chars)
+	assert_lt(fabricator.honor, honor_before, "Positive disposition toward subject triggers lying honor loss")
+
+
+func test_lying_honor_skips_when_zero_disposition() -> void:
+	var fabricator := L5RCharacterData.new()
+	fabricator.character_id = 1
+	fabricator.honor = 8.0
+	fabricator.clan = "Crane"
+	fabricator.school = "Doji Courtier"
+	fabricator.disposition_values = {"5": 0}
+	var secret := SecretData.new()
+	secret.subject_id = 5
+	var chars: Dictionary = {1: fabricator}
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"success": true,
+		"character_id": 1,
+		"effects": {"secret": secret, "success": true},
+	}]
+	DayOrchestrator._process_lying_honor_writebacks(results, chars)
+	assert_almost_eq(fabricator.honor, 8.0, 0.001, "Neutral disposition toward subject — no lying honor loss")
+
+
+func test_lying_honor_skips_when_negative_disposition() -> void:
+	var fabricator := L5RCharacterData.new()
+	fabricator.character_id = 1
+	fabricator.honor = 8.0
+	fabricator.clan = "Crane"
+	fabricator.school = "Doji Courtier"
+	fabricator.disposition_values = {"5": -15}
+	var secret := SecretData.new()
+	secret.subject_id = 5
+	var chars: Dictionary = {1: fabricator}
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"success": true,
+		"character_id": 1,
+		"effects": {"secret": secret, "success": true},
+	}]
+	DayOrchestrator._process_lying_honor_writebacks(results, chars)
+	assert_almost_eq(fabricator.honor, 8.0, 0.001, "Negative disposition toward subject — no lying honor loss")
+
+
+# -- _process_duped_foolish_on_arrival ----------------------------------------
+
+
+func test_duped_foolish_fires_when_npc_target_absent() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	victim.honor = 7.0
+	victim.clan = "Lion"
+	victim.school = "Akodo Bushi"
+	victim.physical_location = "settlement_5"
+	var target_npc := L5RCharacterData.new()
+	target_npc.character_id = 20
+	target_npc.physical_location = "settlement_9"
+	var chars: Dictionary = {10: victim, 20: target_npc}
+	var objectives_map: Dictionary = {
+		10: {"primary": {"source": "forged_order", "target_npc_id": 20}}
+	}
+	var arrivals: Array = [{"character_id": 10}]
+	var honor_before: float = victim.honor
+	DayOrchestrator._process_duped_foolish_on_arrival(arrivals, chars, objectives_map)
+	assert_lt(victim.honor, honor_before, "Target NPC absent — DUPED_FOOLISH fires")
+
+
+func test_duped_foolish_skips_when_npc_target_present() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	victim.honor = 7.0
+	victim.clan = "Lion"
+	victim.school = "Akodo Bushi"
+	victim.physical_location = "settlement_5"
+	var target_npc := L5RCharacterData.new()
+	target_npc.character_id = 20
+	target_npc.physical_location = "settlement_5"
+	var chars: Dictionary = {10: victim, 20: target_npc}
+	var objectives_map: Dictionary = {
+		10: {"primary": {"source": "forged_order", "target_npc_id": 20}}
+	}
+	var arrivals: Array = [{"character_id": 10}]
+	DayOrchestrator._process_duped_foolish_on_arrival(arrivals, chars, objectives_map)
+	assert_almost_eq(victim.honor, 7.0, 0.001, "Target NPC present — no DUPED_FOOLISH")
+
+
+func test_duped_foolish_skips_when_settlement_matches() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	victim.honor = 7.0
+	victim.clan = "Lion"
+	victim.school = "Akodo Bushi"
+	victim.physical_location = "42"
+	var chars: Dictionary = {10: victim}
+	var objectives_map: Dictionary = {
+		10: {"primary": {"source": "forged_order", "target_settlement_id": 42}}
+	}
+	var arrivals: Array = [{"character_id": 10}]
+	DayOrchestrator._process_duped_foolish_on_arrival(arrivals, chars, objectives_map)
+	assert_almost_eq(victim.honor, 7.0, 0.001, "Arrived at target settlement — no DUPED_FOOLISH")
+
+
+func test_duped_foolish_skips_when_province_matches() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	victim.honor = 7.0
+	victim.clan = "Lion"
+	victim.school = "Akodo Bushi"
+	victim.physical_location = "42"
+	var settlement := SettlementData.new()
+	settlement.settlement_id = 42
+	settlement.province_id = 7
+	var chars: Dictionary = {10: victim}
+	var objectives_map: Dictionary = {
+		10: {"primary": {"source": "forged_order", "target_province_id": 7}}
+	}
+	var arrivals: Array = [{"character_id": 10}]
+	DayOrchestrator._process_duped_foolish_on_arrival(
+		arrivals, chars, objectives_map, [settlement],
+	)
+	assert_almost_eq(victim.honor, 7.0, 0.001, "Arrived at settlement in target province — no DUPED_FOOLISH")
+
+
+func test_duped_foolish_fires_when_province_mismatch() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	victim.honor = 7.0
+	victim.clan = "Lion"
+	victim.school = "Akodo Bushi"
+	victim.physical_location = "42"
+	var settlement := SettlementData.new()
+	settlement.settlement_id = 42
+	settlement.province_id = 99
+	var chars: Dictionary = {10: victim}
+	var objectives_map: Dictionary = {
+		10: {"primary": {"source": "forged_order", "target_province_id": 7}}
+	}
+	var arrivals: Array = [{"character_id": 10}]
+	DayOrchestrator._process_duped_foolish_on_arrival(
+		arrivals, chars, objectives_map, [settlement],
+	)
+	assert_lt(victim.honor, 7.0, "Arrived in wrong province — DUPED_FOOLISH fires")
 
 
 # -- Letter Delivery Topic Momentum -------------------------------------------

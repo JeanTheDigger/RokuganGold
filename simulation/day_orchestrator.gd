@@ -141,7 +141,7 @@ static func advance_day(
 		travel_arrivals, characters_by_id, dice_engine,
 	)
 	_process_duped_foolish_on_arrival(
-		travel_arrivals, characters_by_id, objectives_map,
+		travel_arrivals, characters_by_id, objectives_map, settlements,
 	)
 
 	var musha_season_count: int = int(season_meta.get("horde_season_count", 0))
@@ -7681,7 +7681,12 @@ static func _process_duped_foolish_on_arrival(
 	arrivals: Array,
 	characters_by_id: Dictionary,
 	objectives_map: Dictionary,
+	settlements: Array = [],
 ) -> void:
+	var settlement_province: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlement_province[str(s.settlement_id)] = s.province_id
+
 	for arrival: Dictionary in arrivals:
 		var char_id: int = arrival.get("character_id", -1)
 		var character: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
@@ -7704,6 +7709,11 @@ static func _process_duped_foolish_on_arrival(
 		var target_settlement_id: int = primary.get("target_settlement_id", -1)
 		if target_settlement_id >= 0 and destination == str(target_settlement_id):
 			has_target_here = true
+		var target_province_id: int = primary.get("target_province_id", -1)
+		if target_province_id >= 0:
+			var arrived_province: int = settlement_province.get(destination, -1)
+			if arrived_province == target_province_id:
+				has_target_here = true
 		if not has_target_here:
 			HonorGlorySystem.apply_honor_change(
 				character, CrimeSystem.get_duped_foolish_honor(character)
