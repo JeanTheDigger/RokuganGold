@@ -19507,7 +19507,7 @@ static func _purge_delivered_letters(
 				continue
 			if ld.is_forged and ld.is_order and ld.order_applied:
 				var victim: L5RCharacterData = characters_by_id.get(ld.recipient_id) as L5RCharacterData
-				if victim != null:
+				if victim != null and not CharacterStats.is_dead(victim):
 					var aware: bool = false
 					for entry: KnowledgeEntry in victim.knowledge_pool:
 						if entry.entry_type == "impersonation_detected" \

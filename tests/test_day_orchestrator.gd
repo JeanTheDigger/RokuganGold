@@ -15710,3 +15710,187 @@ func test_seed_public_records_auto_detected_seeds_violence():
 
 	assert_eq(settlement.public_record.size(), 1)
 	assert_eq(settlement.public_record[0].get("tier", -1), TopicData.Tier.TIER_4)
+
+
+# ============================================================================
+# §B10 Data Retention Purge Functions
+# ============================================================================
+
+func _make_crime_record_with_status(
+	status: Enums.LegalStatus,
+	ic_day_committed: int,
+) -> CrimeRecord:
+	var r := CrimeRecord.new()
+	r.legal_status = status
+	r.ic_day_committed = ic_day_committed
+	r.case_id = 1
+	r.crime_type = Enums.CrimeType.VIOLENCE
+	return r
+
+
+func test_purge_crime_records_removes_terminal_old():
+	var records: Array = [
+		_make_crime_record_with_status(Enums.LegalStatus.DECREED_GUILTY, 0),
+	]
+	DayOrchestrator._purge_resolved_crime_records(records, 361)
+	assert_eq(records.size(), 0, "DECREED_GUILTY record older than 360 days should be purged")
+
+
+func test_purge_crime_records_keeps_terminal_recent():
+	var records: Array = [
+		_make_crime_record_with_status(Enums.LegalStatus.DECREED_GUILTY, 0),
+	]
+	DayOrchestrator._purge_resolved_crime_records(records, 359)
+	assert_eq(records.size(), 1, "DECREED_GUILTY record younger than 360 days should be kept")
+
+
+func test_purge_crime_records_all_terminal_statuses():
+	var terminal := [
+		Enums.LegalStatus.DECREED_GUILTY,
+		Enums.LegalStatus.CLEAR,
+		Enums.LegalStatus.PARDONED,
+		Enums.LegalStatus.ACQUITTED,
+	]
+	for status: Enums.LegalStatus in terminal:
+		var records: Array = [_make_crime_record_with_status(status, 0)]
+		DayOrchestrator._purge_resolved_crime_records(records, 400)
+		assert_eq(records.size(), 0, "Terminal status %d should be purged" % status)
+
+
+func test_purge_crime_records_keeps_fugitive():
+	# FUGITIVE is an active status — never purged
+	var records: Array = [
+		_make_crime_record_with_status(Enums.LegalStatus.FUGITIVE, 0),
+	]
+	DayOrchestrator._purge_resolved_crime_records(records, 9999)
+	assert_eq(records.size(), 1, "FUGITIVE record should never be purged")
+
+
+func test_purge_crime_records_keeps_under_investigation():
+	var records: Array = [
+		_make_crime_record_with_status(Enums.LegalStatus.UNDER_INVESTIGATION, 0),
+	]
+	DayOrchestrator._purge_resolved_crime_records(records, 9999)
+	assert_eq(records.size(), 1, "UNDER_INVESTIGATION record should not be purged")
+
+
+func _make_delivered_letter(
+	ic_day_arrival: int,
+	recipient_id: int = 1,
+) -> LetterData:
+	var ld := LetterData.new()
+	ld.letter_id = 1
+	ld.sender_id = 10
+	ld.recipient_id = recipient_id
+	ld.delivered = true
+	ld.ic_day_sent = ic_day_arrival - 3
+	ld.ic_day_arrival = ic_day_arrival
+	ld.is_forged = false
+	ld.is_order = false
+	ld.order_applied = false
+	return ld
+
+
+func test_purge_delivered_letters_removes_old():
+	var letters: Array = [_make_delivered_letter(0)]
+	DayOrchestrator._purge_delivered_letters(letters, {}, 181)
+	assert_eq(letters.size(), 0, "Letter delivered 181 days ago should be purged")
+
+
+func test_purge_delivered_letters_keeps_recent():
+	var letters: Array = [_make_delivered_letter(0)]
+	DayOrchestrator._purge_delivered_letters(letters, {}, 179)
+	assert_eq(letters.size(), 1, "Letter delivered 179 days ago should be kept")
+
+
+func test_purge_delivered_letters_keeps_undelivered():
+	var ld := _make_delivered_letter(0)
+	ld.delivered = false
+	var letters: Array = [ld]
+	DayOrchestrator._purge_delivered_letters(letters, {}, 9999)
+	assert_eq(letters.size(), 1, "Undelivered letter should never be purged")
+
+
+func test_purge_delivered_letters_retains_undetected_forged_order():
+	# Forged order whose victim hasn't detected it yet should be retained
+	var victim := L5RCharacterData.new()
+	victim.character_id = 5
+	victim.wounds_taken = 0
+	victim.knowledge_pool = []
+
+	var ld := _make_delivered_letter(0, 5)
+	ld.is_forged = true
+	ld.is_order = true
+	ld.order_applied = true
+	ld.forged_sender_id = 99
+
+	var letters: Array = [ld]
+	var chars: Dictionary = {5: victim}
+	DayOrchestrator._purge_delivered_letters(letters, chars, 9999)
+	assert_eq(letters.size(), 1, "Undetected forged order letter should be retained")
+
+
+func test_purge_delivered_letters_purges_detected_forged_order():
+	# Forged order where victim HAS an impersonation_detected entry — can be purged
+	var victim := L5RCharacterData.new()
+	victim.character_id = 5
+	victim.wounds_taken = 0
+	var ke := KnowledgeEntry.new()
+	ke.entry_type = "impersonation_detected"
+	ke.data = {"forger_id": 99}
+	victim.knowledge_pool = [ke]
+
+	var ld := _make_delivered_letter(0, 5)
+	ld.is_forged = true
+	ld.is_order = true
+	ld.order_applied = true
+	ld.forged_sender_id = 99
+
+	var letters: Array = [ld]
+	var chars: Dictionary = {5: victim}
+	DayOrchestrator._purge_delivered_letters(letters, chars, 9999)
+	assert_eq(letters.size(), 0, "Detected forged order letter should be purged after 180 days")
+
+
+func test_purge_delivered_letters_purges_forged_order_dead_victim():
+	# Dead victim cannot discover impersonation — letter should be purgeable
+	var victim := L5RCharacterData.new()
+	victim.character_id = 5
+	victim.wounds_taken = 50  # dead (default stamina=2 → threshold=4, wounds 50 >> DEAD)
+	victim.knowledge_pool = []
+
+	var ld := _make_delivered_letter(0, 5)
+	ld.is_forged = true
+	ld.is_order = true
+	ld.order_applied = true
+	ld.forged_sender_id = 99
+
+	var letters: Array = [ld]
+	var chars: Dictionary = {5: victim}
+	DayOrchestrator._purge_delivered_letters(letters, chars, 9999)
+	assert_eq(letters.size(), 0, "Dead victim cannot discover impersonation; letter should be purged")
+
+
+func _make_secret(exposed_publicly: bool) -> SecretData:
+	var sd := SecretData.new()
+	sd.secret_id = 1
+	sd.exposed_publicly = exposed_publicly
+	return sd
+
+
+func test_purge_exposed_secrets_removes_public():
+	var secrets: Array = [_make_secret(true)]
+	DayOrchestrator._purge_exposed_secrets(secrets, {}, 100)
+	assert_eq(secrets.size(), 0, "Publicly exposed secret should be purged")
+
+
+func test_purge_exposed_secrets_keeps_private():
+	var secrets: Array = [_make_secret(false)]
+	DayOrchestrator._purge_exposed_secrets(secrets, {}, 100)
+	assert_eq(secrets.size(), 1, "Non-exposed secret should be kept")
+
+
+func test_purge_exposed_secrets_mixed():
+	var secrets: Array = [_make_secret(true), _make_secret(false), _make_secret(true)]
+	DayOrchestrator._purge_exposed_secrets(secrets, {}, 100)
+	assert_eq(secrets.size(), 1, "Only non-exposed secret should remain")

@@ -3392,6 +3392,17 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   Dead characters who completed EXAMINE_CRIME_SCENE before dying mid-day could have
   their `topic_pool` updated from the public record. Added dead guard. 1 implicit (guard
   tested through existing patterns).
+- **`_purge_delivered_letters` — dead victim allowed forged order letter to be retained forever. FIXED.**
+  The forged-order retention guard (`if victim != null:`) kept letters when the victim was dead.
+  Dead victims cannot discover impersonation (they never enter the decision loop), so forged
+  order letters targeting dead victims should be purgeable on the normal 180-day schedule.
+  Added `not CharacterStats.is_dead(victim)` to the retention check: dead victims fail the
+  guard, letter is pruned as a normal old letter. Also added 14 tests covering all B10 purge
+  functions: `_purge_resolved_crime_records` (5 tests — removes terminal old, keeps terminal
+  recent, all 4 terminal statuses, keeps FUGITIVE, keeps UNDER_INVESTIGATION),
+  `_purge_delivered_letters` (6 tests — removes old, keeps recent, keeps undelivered, retains
+  undetected forged order, purges detected forged order, purges forged order with dead victim),
+  `_purge_exposed_secrets` (3 tests — removes public, keeps private, mixed). 14 tests.
 
 ### Known Code Issues (found and fixed 2026-05-29, writeback audit)
 - **LYING honor trigger always returned 0 — string/int key mismatch. FIXED.**
