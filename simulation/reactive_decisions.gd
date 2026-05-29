@@ -260,9 +260,10 @@ static func _evaluate_training_response(
 			return {"action": "DECLINE_TRAINING", "reason": "perfectionist_gate"}
 
 	if character.shourido_virtue == Enums.ShouridoVirtue.KETSUI:
-		var has_mentor_objective: bool = _has_mentor_objective(character, sensei_id, ctx)
-		if not has_mentor_objective:
-			return {"action": "DECLINE_TRAINING", "reason": "self_reliance"}
+		if not event.get("teacher_initiated", false):
+			var has_mentor_objective: bool = _has_mentor_objective(character, sensei_id, ctx)
+			if not has_mentor_objective:
+				return {"action": "DECLINE_TRAINING", "reason": "self_reliance"}
 
 	return {
 		"action": "ACCEPT_TRAINING",

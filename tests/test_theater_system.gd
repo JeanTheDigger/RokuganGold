@@ -1786,3 +1786,276 @@ func test_learn_theater_highest_score_wins() -> void:
 	var need := NPCDataStructures.ImmediateNeed.new()
 	var result: Dictionary = NPCDecisionEngine._build_learn_theater_metadata(ctx, need)
 	assert_eq(result["piece_id"], 5, "Topic bonus (80) beats disp bonus (70)")
+
+
+# ============================================================================
+# §57.22.12 PROACTIVE TEACHING TRIGGER — _has_teaching_lean
+# ============================================================================
+
+func _make_lean_table() -> Dictionary:
+	return {
+		"JIN": {"LEARN_THEATER_PIECE": 15},
+		"REI": {"LEARN_THEATER_PIECE": 10},
+		"GI": {"LEARN_THEATER_PIECE": 0},
+	}
+
+
+func test_has_teaching_lean_jin_returns_true() -> void:
+	var author := L5RCharacterData.new()
+	author.bushido_virtue = Enums.BushidoVirtue.JIN
+	assert_true(DayOrchestrator._has_teaching_lean(author, _make_lean_table()))
+
+
+func test_has_teaching_lean_rei_returns_true() -> void:
+	var author := L5RCharacterData.new()
+	author.bushido_virtue = Enums.BushidoVirtue.REI
+	assert_true(DayOrchestrator._has_teaching_lean(author, _make_lean_table()))
+
+
+func test_has_teaching_lean_gi_returns_false() -> void:
+	var author := L5RCharacterData.new()
+	author.bushido_virtue = Enums.BushidoVirtue.GI
+	assert_false(DayOrchestrator._has_teaching_lean(author, _make_lean_table()))
+
+
+func test_has_teaching_lean_shourido_returns_false() -> void:
+	var author := L5RCharacterData.new()
+	author.bushido_virtue = Enums.BushidoVirtue.NONE
+	author.shourido_virtue = Enums.ShouridoVirtue.KETSUI
+	assert_false(DayOrchestrator._has_teaching_lean(author, _make_lean_table()))
+
+
+# ============================================================================
+# §57.22.12 PROACTIVE TEACHING TRIGGER — _process_perform_theater_writebacks
+# ============================================================================
+
+func _make_perform_result(char_id: int, piece_id: int, location: String = "castle_a") -> Dictionary:
+	return {
+		"action_id": "PERFORM_THEATER_PIECE",
+		"success": true,
+		"character_id": char_id,
+		"effects": {
+			"piece_id": piece_id,
+			"roll_total": 20,
+			"raises_succeeded": 0,
+			"is_critical": false,
+			"is_bunraku_performance": false,
+			"location_id": location,
+			"ic_day": 100,
+		},
+	}
+
+
+func _make_author_char(char_id: int, virtue: Enums.BushidoVirtue = Enums.BushidoVirtue.JIN) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = char_id
+	c.clan = "Crane"
+	c.bushido_virtue = virtue
+	c.skills = {"Poetry": 4, "Acting": 5, "Calligraphy": 3}
+	c.agility = 3
+	c.awareness = 3
+	c.intelligence = 3
+	c.physical_location = "castle_a"
+	return c
+
+
+func test_proactive_teaching_sends_letters_to_eligible_candidates() -> void:
+	# Author (JIN, 1st performance, known_by < 3) → should write letters.
+	var author := _make_author_char(1)
+	var cand1 := L5RCharacterData.new()
+	cand1.character_id = 10
+	cand1.skills = {"Acting": 3}
+	var cand2 := L5RCharacterData.new()
+	cand2.character_id = 11
+	cand2.skills = {"Acting": 3}
+	author.met_characters = [10, 11]
+
+	var piece := TheaterPieceData.new()
+	piece.piece_id = 5
+	piece.author_id = 1
+	piece.craft_progress = -1
+	piece.canonized = false
+	piece.disposition_magnitude = 2
+	piece.times_performed = 0  # will be incremented to 1 during writeback
+	piece.known_by = [1]  # only author knows it
+
+	var pending: Array = []
+	var nid: Array = [100]
+	var lean_table: Dictionary = _make_lean_table()
+	var scoring_tables: Dictionary = {"personality_lean": lean_table}
+	var chars_by_id: Dictionary = {1: author, 10: cand1, 11: cand2}
+	var next_topic: Array = [1000]
+
+	DayOrchestrator._process_perform_theater_writebacks(
+		[_make_perform_result(1, 5)],
+		[piece], chars_by_id, [], next_topic, 100,
+		pending, nid, _dice, scoring_tables,
+	)
+
+	assert_eq(pending.size(), 2, "Should send teaching offer to both eligible candidates")
+	var l1: LetterData = pending[0] as LetterData
+	assert_true(l1.teacher_initiated)
+	assert_eq(l1.learn_piece_id, 5)
+	assert_eq(l1.sender_id, 1)
+
+
+func test_proactive_teaching_not_triggered_at_third_performance() -> void:
+	var author := _make_author_char(1)
+	var cand := L5RCharacterData.new()
+	cand.character_id = 10
+	cand.skills = {"Acting": 3}
+	author.met_characters = [10]
+
+	var piece := TheaterPieceData.new()
+	piece.piece_id = 5
+	piece.author_id = 1
+	piece.craft_progress = -1
+	piece.canonized = false
+	piece.disposition_magnitude = 2
+	piece.times_performed = 2  # will be incremented to 3 → above threshold
+	piece.known_by = [1]
+
+	var pending: Array = []
+	var nid: Array = [100]
+	var scoring_tables: Dictionary = {"personality_lean": _make_lean_table()}
+	var chars_by_id: Dictionary = {1: author, 10: cand}
+	var next_topic: Array = [1000]
+
+	DayOrchestrator._process_perform_theater_writebacks(
+		[_make_perform_result(1, 5)],
+		[piece], chars_by_id, [], next_topic, 100,
+		pending, nid, _dice, scoring_tables,
+	)
+
+	assert_eq(pending.size(), 0, "No teaching letters when times_performed >= 3 after increment")
+
+
+func test_proactive_teaching_not_triggered_when_widely_known() -> void:
+	var author := _make_author_char(1)
+	var cand := L5RCharacterData.new()
+	cand.character_id = 10
+	cand.skills = {"Acting": 3}
+	author.met_characters = [10]
+
+	var piece := TheaterPieceData.new()
+	piece.piece_id = 5
+	piece.author_id = 1
+	piece.craft_progress = -1
+	piece.canonized = false
+	piece.disposition_magnitude = 2
+	piece.times_performed = 0
+	piece.known_by = [1, 2, 3]  # already 3 people know it
+
+	var pending: Array = []
+	var nid: Array = [100]
+	var scoring_tables: Dictionary = {"personality_lean": _make_lean_table()}
+	var chars_by_id: Dictionary = {1: author, 10: cand}
+	var next_topic: Array = [1000]
+
+	DayOrchestrator._process_perform_theater_writebacks(
+		[_make_perform_result(1, 5)],
+		[piece], chars_by_id, [], next_topic, 100,
+		pending, nid, _dice, scoring_tables,
+	)
+
+	assert_eq(pending.size(), 0, "No teaching letters when known_by.size() >= 3")
+
+
+func test_proactive_teaching_not_triggered_for_non_author() -> void:
+	# Performer is not the author → no trigger.
+	var performer := _make_author_char(1)
+	var cand := L5RCharacterData.new()
+	cand.character_id = 10
+	cand.skills = {"Acting": 3}
+	performer.met_characters = [10]
+
+	var piece := TheaterPieceData.new()
+	piece.piece_id = 5
+	piece.author_id = 99  # different from performer
+	piece.craft_progress = -1
+	piece.canonized = true
+	piece.disposition_magnitude = 2
+	piece.times_performed = 0
+	piece.known_by = [99]
+
+	var pending: Array = []
+	var nid: Array = [100]
+	var scoring_tables: Dictionary = {"personality_lean": _make_lean_table()}
+	var chars_by_id: Dictionary = {1: performer, 10: cand}
+	var next_topic: Array = [1000]
+
+	DayOrchestrator._process_perform_theater_writebacks(
+		[_make_perform_result(1, 5)],
+		[piece], chars_by_id, [], next_topic, 100,
+		pending, nid, _dice, scoring_tables,
+	)
+
+	assert_eq(pending.size(), 0, "No teaching letters when performer is not the author")
+
+
+func test_proactive_teaching_excludes_already_knowing_candidates() -> void:
+	# cand1 already knows piece (in known_by) → excluded.
+	var author := _make_author_char(1)
+	var cand1 := L5RCharacterData.new()
+	cand1.character_id = 10
+	cand1.skills = {"Acting": 3}
+	var cand2 := L5RCharacterData.new()
+	cand2.character_id = 11
+	cand2.skills = {"Acting": 3}
+	author.met_characters = [10, 11]
+
+	var piece := TheaterPieceData.new()
+	piece.piece_id = 5
+	piece.author_id = 1
+	piece.craft_progress = -1
+	piece.canonized = false
+	piece.disposition_magnitude = 2
+	piece.times_performed = 0
+	piece.known_by = [1, 10]  # cand1 already knows it
+
+	var pending: Array = []
+	var nid: Array = [100]
+	var scoring_tables: Dictionary = {"personality_lean": _make_lean_table()}
+	var chars_by_id: Dictionary = {1: author, 10: cand1, 11: cand2}
+	var next_topic: Array = [1000]
+
+	DayOrchestrator._process_perform_theater_writebacks(
+		[_make_perform_result(1, 5)],
+		[piece], chars_by_id, [], next_topic, 100,
+		pending, nid, _dice, scoring_tables,
+	)
+
+	assert_eq(pending.size(), 1, "Should only send to cand2; cand1 already knows the piece")
+	assert_eq((pending[0] as LetterData).recipient_id, 11)
+
+
+func test_proactive_teaching_excludes_low_skill_candidates() -> void:
+	# Candidate has Acting 1 < disposition_magnitude 3 → excluded.
+	var author := _make_author_char(1)
+	var cand := L5RCharacterData.new()
+	cand.character_id = 10
+	cand.skills = {"Acting": 1}  # below magnitude 3
+	author.met_characters = [10]
+
+	var piece := TheaterPieceData.new()
+	piece.piece_id = 5
+	piece.author_id = 1
+	piece.craft_progress = -1
+	piece.canonized = false
+	piece.disposition_magnitude = 3
+	piece.times_performed = 0
+	piece.known_by = [1]
+
+	var pending: Array = []
+	var nid: Array = [100]
+	var scoring_tables: Dictionary = {"personality_lean": _make_lean_table()}
+	var chars_by_id: Dictionary = {1: author, 10: cand}
+	var next_topic: Array = [1000]
+
+	DayOrchestrator._process_perform_theater_writebacks(
+		[_make_perform_result(1, 5)],
+		[piece], chars_by_id, [], next_topic, 100,
+		pending, nid, _dice, scoring_tables,
+	)
+
+	assert_eq(pending.size(), 0, "No letter when candidate Acting < disposition_magnitude")

@@ -533,3 +533,40 @@ func test_reconcile_does_not_regress_valid_counter() -> void:
 	_saver.load_world(ws2)
 
 	assert_eq(ws2.next_character_id[0], 100, "Counter should not regress when already valid")
+
+
+# -- Theater Pieces ------------------------------------------------------------
+
+func test_theater_pieces_round_trip() -> void:
+	var p := TheaterPieceData.new()
+	p.piece_id = 7
+	p.title = "The Fallen Crane"
+	p.author_id = 1
+	p.canonized = false
+	p.craft_progress = -1
+	p.disposition_magnitude = 3
+	p.topic_weight = 2
+	p.topic_ids = [42, 43]
+	p.known_by = [1, 2, 5]
+	p.times_performed = 4
+	_ws.theater_pieces = [p]
+	_ws.next_piece_id[0] = 10
+
+	_saver.save_world(_ws)
+
+	var ws2 := _make_world_state()
+	_saver.load_world(ws2)
+
+	assert_eq(ws2.theater_pieces.size(), 1, "Should restore 1 theater piece")
+	var loaded: TheaterPieceData = ws2.theater_pieces[0]
+	assert_eq(loaded.piece_id, 7)
+	assert_eq(loaded.title, "The Fallen Crane")
+	assert_eq(loaded.author_id, 1)
+	assert_eq(loaded.disposition_magnitude, 3)
+	assert_eq(loaded.topic_weight, 2)
+	assert_eq(loaded.topic_ids.size(), 2)
+	assert_eq(loaded.known_by.size(), 3)
+	assert_eq(loaded.times_performed, 4)
+	assert_gte(ws2.next_piece_id[0], 7, "next_piece_id counter should survive round-trip")
+
+	ws2.free()

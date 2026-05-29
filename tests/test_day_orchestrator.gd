@@ -15118,3 +15118,191 @@ func test_inject_theater_context_private_piece_with_teacher() -> void:
 	var known_objs: Dictionary = ws[1].get("known_objectives", {})
 	var learnable: Array = known_objs.get("learnable_piece_ids", [])
 	assert_true(10 in learnable, "Private piece with willing co-located teacher should be learnable")
+
+
+# ============================================================================
+# §57.22.12 _process_teaching_offer_letter_delivery
+# ============================================================================
+
+func _make_teaching_letter(lid: int, sender_id: int, recipient_id: int, piece_id: int, delivered: bool = true) -> LetterData:
+	var l := LetterData.new()
+	l.letter_id = lid
+	l.sender_id = sender_id
+	l.recipient_id = recipient_id
+	l.learn_piece_id = piece_id
+	l.teacher_initiated = true
+	l.delivered = delivered
+	return l
+
+
+func _make_theater_piece_for_delivery(pid: int, author_id: int, magnitude: int = 2) -> TheaterPieceData:
+	var p := TheaterPieceData.new()
+	p.piece_id = pid
+	p.author_id = author_id
+	p.craft_progress = -1
+	p.canonized = false
+	p.disposition_magnitude = magnitude
+	p.known_by = [author_id]
+	p.lost = false
+	p.abandoned_incomplete = false
+	return p
+
+
+func test_teaching_offer_delivery_injects_accept_training_event() -> void:
+	# Delivered teacher_initiated letter → ACCEPT_TRAINING event injected into recipient.
+	var author := _make_theater_char(1, 5)
+	author.skills = {"Acting": 5}
+	var recipient := _make_theater_char(2, 3)
+	var piece := _make_theater_piece_for_delivery(10, 1)
+	var letter := _make_teaching_letter(100, 1, 2, 10)
+	var chars_by_id: Dictionary = {1: author, 2: recipient}
+
+	DayOrchestrator._process_teaching_offer_letter_delivery(
+		[letter], chars_by_id, [piece],
+	)
+
+	assert_eq(recipient.pending_events.size(), 1, "Should inject one event")
+	var ev: Dictionary = recipient.pending_events[0]
+	assert_eq(ev.get("reactive_type", ""), "ACCEPT_TRAINING")
+	assert_eq(ev.get("teacher_initiated", false), true)
+	assert_eq(ev.get("learn_piece_id", -1), 10)
+	assert_eq(ev.get("sensei_id", -1), 1)
+	assert_eq(ev.get("skill", ""), "Acting")
+
+
+func test_teaching_offer_delivery_skips_undelivered_letter() -> void:
+	var recipient := _make_theater_char(2, 3)
+	var piece := _make_theater_piece_for_delivery(10, 1)
+	var letter := _make_teaching_letter(100, 1, 2, 10, false)  # not delivered
+	var chars_by_id: Dictionary = {1: _make_theater_char(1, 5), 2: recipient}
+
+	DayOrchestrator._process_teaching_offer_letter_delivery(
+		[letter], chars_by_id, [piece],
+	)
+
+	assert_eq(recipient.pending_events.size(), 0, "Undelivered letter should not inject event")
+
+
+func test_teaching_offer_delivery_skips_when_recipient_already_knows() -> void:
+	var author := _make_theater_char(1, 5)
+	var recipient := _make_theater_char(2, 3)
+	var piece := _make_theater_piece_for_delivery(10, 1)
+	piece.known_by = [1, 2]  # recipient already knows it
+	var letter := _make_teaching_letter(100, 1, 2, 10)
+	var chars_by_id: Dictionary = {1: author, 2: recipient}
+
+	DayOrchestrator._process_teaching_offer_letter_delivery(
+		[letter], chars_by_id, [piece],
+	)
+
+	assert_eq(recipient.pending_events.size(), 0, "Should skip if recipient already knows piece")
+
+
+func test_teaching_offer_delivery_skips_dead_author() -> void:
+	var author := _make_theater_char(1, 5)
+	author.wounds_taken = 100  # dead: earth ring 2, threshold 4, clamped to DEAD level
+	var recipient := _make_theater_char(2, 3)
+	var piece := _make_theater_piece_for_delivery(10, 1)
+	var letter := _make_teaching_letter(100, 1, 2, 10)
+	var chars_by_id: Dictionary = {1: author, 2: recipient}
+
+	DayOrchestrator._process_teaching_offer_letter_delivery(
+		[letter], chars_by_id, [piece],
+	)
+
+	assert_eq(recipient.pending_events.size(), 0, "Should skip if author is dead")
+
+
+# ============================================================================
+# §57.22.12 _process_training_acceptance_writebacks — teacher_initiated path
+# ============================================================================
+
+func test_training_acceptance_teacher_initiated_creates_learn_objective() -> void:
+	# ACCEPT_TRAINING with teacher_initiated=true → LEARN_THEATER_PIECE objective created.
+	var student := _make_theater_char(2, 3)
+	var sensei := _make_theater_char(1, 5)
+	var chars_by_id: Dictionary = {1: sensei, 2: student}
+	var objectives_map: Dictionary = {}
+	var result: Dictionary = {
+		"action": "ACCEPT_TRAINING",
+		"character_id": 2,
+		"skill": "Acting",
+		"event_data": {
+			"teacher_initiated": true,
+			"learn_piece_id": 10,
+			"sensei_id": 1,
+			"skill": "Acting",
+			"sensei_rank": 5,
+		},
+	}
+
+	DayOrchestrator._process_training_acceptance_writebacks(
+		[result], chars_by_id, objectives_map,
+	)
+
+	assert_true(objectives_map.has(2), "Should create objectives entry for student")
+	var primary: Dictionary = objectives_map[2].get("primary", {})
+	assert_eq(primary.get("need_type", ""), "ARTISTIC_EXPRESSION")
+	assert_eq(primary.get("objective_type", ""), "LEARN_THEATER_PIECE")
+	assert_eq(primary.get("learn_piece_id", -1), 10)
+	assert_eq(primary.get("target_npc_id", -1), 1)
+
+
+func test_training_acceptance_teacher_initiated_does_not_advance_skill() -> void:
+	# teacher_initiated path skips NPCAdvancement.resolve_training_session.
+	var student := _make_theater_char(2, 3)
+	var sensei := _make_theater_char(1, 5)
+	var initial_acting: int = student.skills.get("Acting", 0)
+	var chars_by_id: Dictionary = {1: sensei, 2: student}
+	var objectives_map: Dictionary = {}
+	var result: Dictionary = {
+		"action": "ACCEPT_TRAINING",
+		"character_id": 2,
+		"skill": "Acting",
+		"event_data": {
+			"teacher_initiated": true,
+			"learn_piece_id": 10,
+			"sensei_id": 1,
+			"skill": "Acting",
+			"sensei_rank": 5,
+		},
+	}
+
+	DayOrchestrator._process_training_acceptance_writebacks(
+		[result], chars_by_id, objectives_map,
+	)
+
+	# Skill progress should not have been modified (NPCAdvancement not called)
+	assert_eq(student.skills.get("Acting", 0), initial_acting, "Acting rank should not change via teaching offer path")
+
+
+# ============================================================================
+# §57.22.12 ReactiveDecisions KETSUI bypass
+# ============================================================================
+
+func test_ketsui_bypass_when_teacher_initiated() -> void:
+	# KETSUI character without mentor objective normally declines.
+	# With teacher_initiated=true, should accept.
+	var student := _make_theater_char(2, 3)
+	student.shourido_virtue = Enums.ShouridoVirtue.KETSUI
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 2
+	ctx.known_objectives = {"primary": {}}  # no mentor objective
+	ctx.clan = "Crane"
+	ctx.disposition_values = {}
+	ctx.skill_ranks = {"Acting": 3}
+	ctx.known_topics = []
+	ctx.known_topic_momentums = {}
+	ctx.action_log = []
+
+	var event: Dictionary = {
+		"reactive_type": "ACCEPT_TRAINING",
+		"teacher_initiated": true,
+		"learn_piece_id": 10,
+		"sensei_id": 1,
+		"skill": "Acting",
+		"sensei_rank": 5,
+	}
+
+	var result: Dictionary = ReactiveDecisions._evaluate_training_response(event, student, ctx)
+	assert_eq(result.get("action", ""), "ACCEPT_TRAINING", "KETSUI should not block teacher_initiated offers")

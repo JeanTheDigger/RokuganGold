@@ -51,6 +51,10 @@ extends Resource
 # Blockade state
 @export var blocked_by_blockade: bool = false
 
+# Teaching offer flags (populated by §57.22.12 proactive teaching trigger)
+@export var learn_piece_id: int = -1
+@export var teacher_initiated: bool = false
+
 # Route info used for delivery time
 @export var province_distance: int = 0
 @export var mountain_provinces: int = 0

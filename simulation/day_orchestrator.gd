@@ -716,7 +716,7 @@ static func advance_day(
 	)
 
 	_process_training_acceptance_writebacks(
-		day_result.get("results", []), characters_by_id,
+		day_result.get("results", []), characters_by_id, objectives_map,
 	)
 
 	_process_favor_response_writebacks(
@@ -767,6 +767,7 @@ static func advance_day(
 	_process_perform_theater_writebacks(
 		day_result.get("results", []),
 		theater_pieces, characters_by_id, active_topics, next_topic_id, ic_day,
+		pending_letters, next_letter_id, dice_engine, scoring_tables,
 	)
 
 	_process_dedicate_piece_writebacks(
@@ -969,6 +970,10 @@ static func advance_day(
 
 	_process_forged_order_delivery(
 		pending_letters, objectives_map, characters_by_id,
+	)
+
+	_process_teaching_offer_letter_delivery(
+		pending_letters, characters_by_id, theater_pieces,
 	)
 
 	var reply_letters: Array = []
@@ -5099,6 +5104,7 @@ static func _process_mentor_writebacks(
 static func _process_training_acceptance_writebacks(
 	results: Array,
 	characters_by_id: Dictionary,
+	objectives_map: Dictionary = {},
 ) -> void:
 	for r: Variant in results:
 		if not r is Dictionary:
@@ -5117,6 +5123,24 @@ static func _process_training_acceptance_writebacks(
 		if student == null or sensei == null:
 			continue
 		if CharacterStats.is_dead(student) or CharacterStats.is_dead(sensei):
+			continue
+		# Teaching offer letters create a LEARN_THEATER_PIECE objective, not a training session
+		var teacher_initiated: bool = event_data.get("teacher_initiated", false)
+		var learn_piece_id: int = event_data.get("learn_piece_id", -1)
+		if teacher_initiated and learn_piece_id >= 0:
+			if not objectives_map.is_empty():
+				if student_id not in objectives_map:
+					objectives_map[student_id] = {}
+				var existing_primary: Dictionary = objectives_map[student_id].get("primary", {})
+				if existing_primary.get("need_type", "") != "ARTISTIC_EXPRESSION":
+					objectives_map[student_id]["primary"] = {
+						"need_type": "ARTISTIC_EXPRESSION",
+						"objective_type": "LEARN_THEATER_PIECE",
+						"target_npc_id": sensei_id,
+						"learn_piece_id": learn_piece_id,
+						"source": "teaching_offer_letter",
+						"priority": 3,
+					}
 			continue
 		NPCAdvancement.resolve_training_session(sensei, student, skill_name)
 		if student.action_points_current > 0:
@@ -19603,6 +19627,10 @@ static func _process_perform_theater_writebacks(
 	active_topics: Array,
 	next_topic_id: Array,
 	ic_day: int,
+	pending_letters: Array = [],
+	next_letter_id: Array = [1],
+	dice_engine: DiceEngine = null,
+	scoring_tables: Dictionary = {},
 ) -> void:
 	for result: Dictionary in results:
 		if result.get("action_id", "") != "PERFORM_THEATER_PIECE":
@@ -19700,11 +19728,117 @@ static func _process_perform_theater_writebacks(
 
 		piece.times_performed += 1
 
+		# §57.22.12 proactive teaching trigger
+		_trigger_proactive_teaching(
+			piece, character, characters_by_id,
+			pending_letters, next_letter_id, ic_day, dice_engine, scoring_tables,
+		)
+
 		# §57.22.2: +0.1 Glory to living author each time someone else performs their piece
 		if piece.author_id >= 0 and piece.author_id != char_id:
 			var author: L5RCharacterData = characters_by_id.get(piece.author_id)
 			if author != null and not CharacterStats.is_dead(author):
 				HonorGlorySystem.apply_glory_change(author, TheaterSystem.AUTHORSHIP_GLORY)
+
+
+static func _trigger_proactive_teaching(
+	piece: TheaterPieceData,
+	performer: L5RCharacterData,
+	characters_by_id: Dictionary,
+	pending_letters: Array,
+	next_letter_id: Array,
+	ic_day: int,
+	dice_engine: DiceEngine,
+	scoring_tables: Dictionary,
+) -> void:
+	# Conditions: 1–2 performances, piece underexposed, performer is author
+	if piece.times_performed < 1 or piece.times_performed >= 3:
+		return
+	if piece.known_by.size() >= 3:
+		return
+	if piece.author_id < 0 or piece.author_id != performer.character_id:
+		return
+	if dice_engine == null:
+		return
+	# Personality gate: JIN lean >= 15 or REI lean >= 10 for LEARN_THEATER_PIECE
+	var lean_table: Dictionary = scoring_tables.get("personality_lean", {})
+	if not _has_teaching_lean(performer, lean_table):
+		return
+	# Find candidates: met characters, don't already know the piece, Acting >= magnitude
+	var sent: int = 0
+	for mid: Variant in performer.met_characters:
+		if sent >= 2:
+			break
+		var met_id: int = int(mid)
+		if met_id in piece.known_by:
+			continue
+		var cand: L5RCharacterData = characters_by_id.get(met_id) as L5RCharacterData
+		if cand == null or CharacterStats.is_dead(cand):
+			continue
+		if cand.skills.get("Acting", 0) < piece.disposition_magnitude:
+			continue
+		var lid: int = next_letter_id[0]
+		next_letter_id[0] = lid + 1
+		var letter: LetterData = LetterSystem.write_letter(
+			lid, performer, met_id, -1, ic_day, dice_engine, 3,
+		)
+		letter.learn_piece_id = piece.piece_id
+		letter.teacher_initiated = true
+		pending_letters.append(letter)
+		sent += 1
+
+
+static func _has_teaching_lean(
+	author: L5RCharacterData,
+	lean_table: Dictionary,
+) -> bool:
+	if author.bushido_virtue == Enums.BushidoVirtue.JIN:
+		var jin_leans: Dictionary = lean_table.get("JIN", {})
+		return jin_leans.get("LEARN_THEATER_PIECE", 0) >= 15
+	if author.bushido_virtue == Enums.BushidoVirtue.REI:
+		var rei_leans: Dictionary = lean_table.get("REI", {})
+		return rei_leans.get("LEARN_THEATER_PIECE", 0) >= 10
+	return false
+
+
+static func _process_teaching_offer_letter_delivery(
+	pending_letters: Array,
+	characters_by_id: Dictionary,
+	theater_pieces: Array,
+) -> void:
+	for letter: Variant in pending_letters:
+		var l: LetterData = letter as LetterData
+		if l == null:
+			continue
+		if not l.delivered:
+			continue
+		if not l.teacher_initiated:
+			continue
+		if l.learn_piece_id < 0:
+			continue
+		var recipient: L5RCharacterData = characters_by_id.get(l.recipient_id) as L5RCharacterData
+		if recipient == null or CharacterStats.is_dead(recipient):
+			continue
+		var piece: TheaterPieceData = null
+		for tp: TheaterPieceData in theater_pieces:
+			if (tp as TheaterPieceData).piece_id == l.learn_piece_id:
+				piece = tp as TheaterPieceData
+				break
+		if piece == null or piece.lost or piece.abandoned_incomplete:
+			continue
+		if l.recipient_id in piece.known_by:
+			continue
+		var author: L5RCharacterData = characters_by_id.get(piece.author_id) as L5RCharacterData
+		if author == null or CharacterStats.is_dead(author):
+			continue
+		recipient.pending_events.append({
+			"reactive_type": "ACCEPT_TRAINING",
+			"teacher_initiated": true,
+			"learn_piece_id": piece.piece_id,
+			"sensei_id": author.character_id,
+			"skill": "Acting",
+			"sensei_rank": author.skills.get("Acting", 0),
+		})
 
 
 static func _process_dedicate_piece_writebacks(
