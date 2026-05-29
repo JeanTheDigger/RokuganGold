@@ -862,7 +862,8 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 - **TREAT_WOUND — raises not populated. FIXED.**
   Executor reads `raises` (default 0). NPCs never declared raises on
   Medicine rolls. Now set by `_pick_medicine_raises()` scaled by Medicine
-  skill rank: 0-2→0, 3-4→1, 5-6→2, 7+→3. Values PROVISIONAL. 4 tests.
+  skill rank: 0-2→0, 3-4→1, 5+→3. Locked in s57.31a (GDD anchor: "At Rank 5
+  with 3 Raises: 5k1" — no 2-Raise tier). 4 tests.
 - **FORGE_IMPERSONATION_LETTER / FORGE_ORDER — full NPC pipeline wired. FIXED.**
   Both had working executors (SecretSystem.resolve_forge_impersonation_letter,
   resolve_forge_order), TN tables, and tests, but were unreachable (no context
@@ -871,10 +872,9 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   (GDD s12.8). action_skill_map.json: Forgery/Agility for both (GDD-specified).
   personality_filter.json: blocked by JIN, REI, GI, MAKOTO (same as
   FABRICATE_SECRET — Category 6 Covert forgery actions). objective_alignment.json:
-  DAMAGE_RELATIONSHIP (70/55), ACQUIRE_LEVERAGE (50/40),
-  SUPPRESS_INVESTIGATION (45/60). Scores PROVISIONAL — GDD specifies action
-  purpose but not NeedType scoring weights. Metadata: authority_level from
-  Forgery skill rank (1-3→minor, 4-6→moderate, 7+→major); target_npc_id from
+  DAMAGE_RELATIONSHIP (70/55), ACQUIRE_LEVERAGE (50/30),
+  SUPPRESS_INVESTIGATION (45/60). Scores locked in s12.8b. Metadata:
+  authority_level from target's lord_rank (locked B11); target_npc_id from
   need. 8 tests.
 - **FORGE_IMPERSONATION_LETTER writeback — letter creation wired. FIXED.**
   `_process_forge_letter_writebacks()` creates LetterData on successful
@@ -933,9 +933,8 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   TN 20, Family Daimyo/Champion TN 25, Emperor TN 30. Replaced with
   `_forge_authority_from_lord_rank(lord_rank)` mapping LordRank enum:
   IMPERIAL→major, FAMILY_DAIMYO/CLAN_CHAMPION→moderate, else→minor.
-  PROVISIONAL: uses forger's own lord_rank as proxy. Proper derivation
-  requires target character's lord rank lookup, blocked on adding
-  target_npc_status to ContextSnapshot or ImmediateNeed.
+  Uses target's lord_rank via chars_by_id lookup; falls back to forger's
+  own lord_rank when target not found. Locked in B11.
 
 ### Forge Pipeline PROVISIONAL Values Audit (2026-05-20)
 Values confirmed against GDD s12.8:
@@ -947,10 +946,10 @@ Values confirmed against GDD s12.8:
   Table 2.3, scaled by Honor Rank" — rank-scaling not yet implemented
   (systemic gap across all crime types, not forge-specific).
 - Personality filter blocks (JIN, REI, GI, MAKOTO) — matches GDD virtues.
-- Delivery distance 3 provinces — PROVISIONAL (blocked on map/adjacency data).
-- Forged objective priority 8 — PROVISIONAL (no GDD spec for objective priority).
-- Impersonation detection topic TIER_3 — PROVISIONAL (no explicit GDD tier).
-- INVESTIGATE_THREAT priority 6 — PROVISIONAL.
+- Delivery distance 3 provinces — PROVISIONAL (blocked on map/adjacency data; A16).
+- Forged objective priority 8 — LOCKED in s12.8b (A17: metadata only, inert).
+- Impersonation detection topic TIER_3 — LOCKED in s12.8b (A18: TIER_3).
+- INVESTIGATE_THREAT priority 6 — LOCKED in s12.8b (A19: metadata only, inert).
 
 ### Known Code Issues (found and fixed 2026-05-20, covert action audit)
 - **COVERT_ACTION_IDS missing 4 Category 6 actions. FIXED.**
@@ -1828,8 +1827,8 @@ costs, or forward-wiring. Do not treat as bugs.
   Name collision: PERFORM_RITUAL exists as both a NeedType (outer key) and
   ActionID. The ActionID was not listed under its own NeedType. Shugenja at
   temples with PERFORM_RITUAL need could never select the PERFORM_RITUAL
-  action. Added PERFORM_RITUAL: 90 (PROVISIONAL — below PERFORM_WORSHIP at
-  100). 1 test.
+  action. Added PERFORM_RITUAL: 90. Score locked in A22: direct action wins
+  its own NeedType (100); worship is valid fallback (90). 1 test.
 - **RESTORE_COUNCIL_COMPACT missing from objective_alignment — unreachable. DEFERRED.**
   Phoenix Champion voluntary action (s55.10.3.7) in AT_OWN_HOLDINGS context
   but has no scoring entry. Requires a NeedType that Phoenix Champions with
@@ -3054,11 +3053,12 @@ All 135 files in `/simulation/` audited against GDD. Summary:
 - **s57.49 Marriage Dissolution** — New GDD file `gdd/s57.49_marriage_dissolution_locked.md`.
   Formalizes the 4-pathway dissolution system already implemented in code (marriage_system.gd,
   day_orchestrator.gd). Four pathways: (1) Lord's Command (DISSOLVE_MARRIAGE ActionID, Family
-  Daimyo+, −1.0 Honor lord, −1.0 Glory each spouse, family/clan baseline penalties PROVISIONAL),
+  Daimyo+, −1.0 Honor lord, −0.5 Glory each spouse, family penalty −20,
+  clan penalty −10 — all locked in s57.49b A34-A36),
   (2) Criminal Conviction (TREASON/MAHO auto-dissolve, no penalties), (3) Monastic Retirement
   (is_retired_monastic flag, no penalties, RETIRE_TO_MONASTERY ActionID deferred), (4) Imperial
   Decree (war-marriages between belligerents, no penalties). Children remain with samurai parent.
-  TIER_4 POLITICAL topic on all pathways. 3 PROVISIONAL values added to A-table (A34/A35/A36).
+  TIER_4 POLITICAL topic on all pathways. A34-A36 locked in s57.49b.
   Index updated. CLAUDE.md updated.
 
 ### Systems Added 2026-05-28 (continued)
