@@ -3309,6 +3309,18 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   FOUND_TEMPLE (60), PURIFY_TAINTED_GROUND (55), ASSIGN_VASSAL_OBJECTIVE (45), MEDITATE (35),
   FOUND_MONASTERY (30). Locked in `gdd/s57.54a_restore_worship_needtype_locked.md`.
 
+### Known Code Issues (found and fixed 2026-05-29, B6 Table 2.3 trigger audit)
+- **DUPED_FOOLISH `target_province_id` not checked — PATROL_PROVINCE victims always penalised. FIXED.**
+  `_process_duped_foolish_on_arrival()` only checked `target_npc_id` and `target_settlement_id`.
+  FORGE_ORDER → PATROL_PROVINCE sets only `target_province_id` (no settlement or NPC target).
+  Victims arriving at any settlement in the target province had `has_target_here = false` and
+  incorrectly received DUPED_FOOLISH honor loss even when they arrived exactly where the forged
+  order directed. Added `settlements: Array = []` parameter, built settlement→province lookup dict
+  via `SettlementData.province_id`, and added `target_province_id` check as third target-match
+  branch. Call site updated to pass `settlements`. 2 new tests (province_match skips, province_mismatch fires).
+  8 additional orchestrator tests added covering all three B6 trigger conditions (LYING disposition
+  gate, DUPED_FOOLISH NPC/settlement/province targets, DUPED_CRIMINAL deadline ordering).
+
 ### Systems Added 2026-05-29
 - **s11.3.12a Violence System — INFAMY_PER_REPEATED_OFFENSE locked.** `INFAMY_PER_REPEATED_OFFENSE`
   set to 0.1 (was 0.0). Locked in `gdd/s11.3.12a_violence_repeated_offense_infamy_locked.md`.
@@ -3626,6 +3638,13 @@ the forged order's arrival (tricked into breaking social obligations).
 DUPED_FOOLISH fires on travel arrival when the character's primary
 objective has `source == "forged_order"` and the destination has no
 matching target (sent to a useless location by a fake order).
+BUG FIX (2026-05-29): DUPED_FOOLISH previously did not check
+`target_province_id`. PATROL_PROVINCE forged orders set only province
+target; victims correctly arriving in the target province always had
+`has_target_here=false` and incorrectly received the honor penalty.
+Fixed by passing `settlements` array to `_process_duped_foolish_on_arrival()`
+and building a settlement→province lookup. 10 orchestrator-level tests
+added covering all three trigger conditions.
 
 **B7. Koku transfer ActionID — RESOLVED: TRANSFER_KOKU.**
 Added TRANSFER_KOKU to AT_OWN_HOLDINGS, AT_COURT context lists and
