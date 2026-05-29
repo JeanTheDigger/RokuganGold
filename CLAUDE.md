@@ -2917,12 +2917,14 @@ costs, or forward-wiring. Do not treat as bugs.
   Locked at +2: secondary social vindication, matches PUBLIC_PERFORMANCE
   per-witness gain. Debtor win stays 0 (GDD silent). All other 15 constants
   confirmed from GDD s12.10.
-- **s11.3.12 Violence System — 1 invented value zeroed.**
-  `INFAMY_PER_REPEATED_OFFENSE` (0.5→0.0) — GDD s11.3.12e says "Each
-  additional offense adds Infamy" but provides no numeric value. All other
-  constants confirmed: HONOR_LOSS (-0.2), GLORY_LOSS (-0.1), topic tiers
-  (TIER_4 first, TIER_3 on third), repeat window (4 seasons), repeat
-  threshold (3). Bribery system (s12.9) audited — fully compliant.
+- **s11.3.12 Violence System — 1 value locked in s11.3.12a.**
+  `INFAMY_PER_REPEATED_OFFENSE` (0.5→0.0→0.1) — locked at +0.1 per s11.3.12a.
+  Calibrated against floor of infamy accrual for hostile social acts: public
+  intimidation +0.1, blackmail +0.1 (both s12.9 LOCKED). Applies to repeat
+  offenses (prior_offenses >= 1) and brutal first offense. All other constants
+  confirmed: HONOR_LOSS (-0.2), GLORY_LOSS (-0.1), topic tiers (TIER_4 first,
+  TIER_3 on third), repeat window (4 seasons), repeat threshold (3).
+  Bribery system (s12.9) audited — fully compliant.
 - **s12.9 Intimidation System — 1 value locked in s12.9a.**
   `PUBLIC_TN_INCREASE_BASE` (10→0→10) — GDD says "raises the effective TN"
   with "+5 per Raise" but no explicit base. Locked at 10 (same as private)
@@ -3239,6 +3241,32 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   (_dispatch_winter_court_summons, 7 tests). Late arrival handling already
   implemented (_process_court_attendance, 2 tests).
 
+
+### Systems Added 2026-05-29
+- **s11.3.12a Violence System — INFAMY_PER_REPEATED_OFFENSE locked.** `INFAMY_PER_REPEATED_OFFENSE`
+  set to 0.1 (was 0.0). Locked in `gdd/s11.3.12a_violence_repeated_offense_infamy_locked.md`.
+  Calibrated at floor of infamy accrual: public intimidation +0.1, blackmail +0.1 (both s12.9).
+  Two existing test names updated to reflect the lock (were `*_zeroed_pending_gdd_spec`,
+  now `*_locked_s11_3_12a`).
+- **s57.50 Settlement Public Record** — `simulation/public_record_system.gd`,
+  `shared/settlement_data.gd` (add `public_record: Array`). Settlement-level buffer of public
+  events to bridge commoner memory into the information system. Design confirmed: settlement-level
+  locality (optional `zone_subtype` forward field for future zone narrowing), two retrieval paths
+  (ambient free within tier-scaled window + investigation roll for older entries), tier-scaled
+  retention (TIER_4=90d, TIER_3=360d, TIER_2=1080d, TIER_1=permanent). Ambient windows: TIER_4=14d,
+  TIER_3=90d, TIER_2=360d, TIER_1=always. Investigation TN: 10 + floor(days_past_window/10),
+  capped 30. DayOrchestrator wiring: `_seed_public_records_from_crime_results()` fires after
+  `_process_crime_detection()` for any result whose executor effects had `auto_detected: true`;
+  `_pickup_ambient_public_records()` runs daily before NPC wave to seed topics to living present
+  non-traveling characters; `_purge_settlement_public_records()` fires at season boundary.
+  EXAMINE_CRIME_SCENE investigation now also queries settlement public record for older entries
+  using the investigation roll total (added `roll_total` to `InvestigationSystem.examine_scene()`
+  and `ActionExecutor._execute_examine_crime_scene()`). `_process_scene_examination_writebacks()`
+  gains optional `settlements` parameter. `_crime_tier_for_public_record()` maps crime types:
+  VIOLENCE→TIER_4, open/duel killings→TIER_3, TREASON/EMPERORS_PEACE→TIER_2. 20 tests.
+  LIMITATION: ViolenceSystem.evaluate_violence() itself is not yet called from any ActionID
+  executor — the seeding path is wired and tested but requires a violence ActionID to be
+  implemented before it fires in actual gameplay.
 
 ## Resolved Design Decisions
 

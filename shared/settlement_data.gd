@@ -52,6 +52,12 @@ extends Resource
 @export var garrison_shortage_courtier_refused: bool = false
 
 
+# -- Public Record (per GDD s57.50) -------------------------------------------
+# Each entry: {"event_type": String, "ic_day": int, "tier": int,
+#              "topic_id": int, "subject_id": int, "zone_subtype": String}
+@export var public_record: Array = []
+
+
 func has_infrastructure(feature: String) -> bool:
 	return feature in infrastructure
 

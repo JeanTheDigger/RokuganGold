@@ -86,7 +86,7 @@ func test_violence_equal_standard():
 
 # -- Repeated Offenses (s11.3.12e) ----
 
-func test_second_offense_infamy_zeroed_pending_gdd_spec():
+func test_second_offense_infamy_locked_s11_3_12a():
 	var attacker := _make_character(3.0)
 	var victim := _make_character(3.0)
 	var result := ViolenceSystem.evaluate_violence(attacker, victim, 1, false)
@@ -114,7 +114,7 @@ func test_upward_violence_with_repeats_max_punishment():
 	assert_eq(result["punishment"], ViolenceSystem.PunishmentLevel.FORMAL_CENSURE)
 
 
-func test_brutal_first_offense_infamy_zeroed_pending_gdd_spec():
+func test_brutal_first_offense_infamy_locked_s11_3_12a():
 	var attacker := _make_character(3.0)
 	var victim := _make_character(3.0)
 	var result := ViolenceSystem.evaluate_violence(attacker, victim, 0, true)

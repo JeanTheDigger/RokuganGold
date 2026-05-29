@@ -181,6 +181,8 @@ static func advance_day(
 	_set_temple_context_flags(characters, settlements, world_states)
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
 	_inject_settlement_type(characters, settlements, world_states)
+	_pickup_ambient_public_records(characters, settlements, ic_day)
+
 	_inject_insurgency_context(characters, provinces, _spm, insurgencies, world_states)
 	_populate_court_availability_data(
 		active_courts, characters, characters_by_id, world_states, favors,
@@ -282,6 +284,11 @@ static func advance_day(
 		dice_engine,
 	)
 
+	_seed_public_records_from_crime_results(
+		crime_results, day_result.get("results", []),
+		settlements, characters_by_id, ic_day,
+	)
+
 	_process_scout_detection_topics(
 		day_result.get("results", []), characters_by_id,
 		active_topics, next_topic_id, ic_day,
@@ -289,7 +296,7 @@ static func advance_day(
 
 	_process_scene_examination_writebacks(
 		day_result.get("results", []), objectives_map, world_states,
-		characters_by_id, active_topics, next_topic_id, ic_day,
+		characters_by_id, active_topics, next_topic_id, ic_day, settlements,
 	)
 
 	_update_patrol_tracking(
@@ -1247,6 +1254,7 @@ static func advance_day(
 		_purge_resolved_crime_records(crime_records, ic_day)
 		_purge_delivered_letters(pending_letters, characters_by_id, ic_day)
 		_purge_exposed_secrets(active_secrets, characters_by_id, ic_day)
+		_purge_settlement_public_records(settlements, ic_day)
 
 	# s57.54 §9 — mid-season crisis update fires on non-seasonal days when a
 	# champion has Tier 1/2 topics not yet addressed as forced conclusions.
@@ -3192,6 +3200,7 @@ static func _process_scene_examination_writebacks(
 	active_topics: Array = [],
 	next_topic_id: Array = [1000],
 	ic_day: int = 0,
+	settlements: Array = [],
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
@@ -3247,6 +3256,33 @@ static func _process_scene_examination_writebacks(
 				case_id, world_states, characters_by_id,
 				active_topics, next_topic_id, ic_day
 			)
+
+		# Public record investigation — query settlement for older entries (s57.50)
+		if not settlements.is_empty():
+			var investigator: L5RCharacterData = characters_by_id.get(char_id)
+			if investigator != null and not investigator.physical_location.is_empty():
+				var roll_total_exam: int = effects.get("roll_total", 0)
+				var found: Array = _query_public_record_for_investigation(
+					investigator.physical_location, settlements, roll_total_exam, ic_day
+				)
+				for entry: Dictionary in found:
+					var pr_topic_id: int = entry.get("topic_id", -1)
+					if pr_topic_id >= 0 and pr_topic_id not in investigator.topic_pool:
+						investigator.topic_pool.append(pr_topic_id)
+
+
+static func _query_public_record_for_investigation(
+	location: String,
+	settlements: Array,
+	roll_total: int,
+	ic_day: int,
+) -> Array:
+	for s: Variant in settlements:
+		if s is SettlementData:
+			var settlement: SettlementData = s as SettlementData
+			if str(settlement.settlement_id) == location:
+				return PublicRecordSystem.query_by_investigation(settlement, roll_total, ic_day)
+	return []
 
 
 static func _update_patrol_tracking(
@@ -19953,8 +19989,119 @@ static func _purge_exposed_secrets(
 		i -= 1
 
 
+# -- Settlement Public Record (per GDD s57.50) ---------------------------------
+
+static func _seed_public_records_from_crime_results(
+	crime_results: Array,
+	wave_results: Array,
+	settlements: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	if settlements.is_empty():
+		return
+
+	# Build location → effects map from wave results for auto_detected lookup
+	var auto_detected_locations: Dictionary = {}
+	for r: Variant in wave_results:
+		if not r is Dictionary:
+			continue
+		var rd: Dictionary = r as Dictionary
+		if rd.get("effects", {}).get("auto_detected", false):
+			var char_id: int = rd.get("character_id", -1)
+			var c: L5RCharacterData = characters_by_id.get(char_id)
+			if c != null and not c.physical_location.is_empty():
+				auto_detected_locations[char_id] = c.physical_location
+
+	if auto_detected_locations.is_empty():
+		return
+
+	var settlements_by_str_id: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlements_by_str_id[str(s.settlement_id)] = s
+
+	for cr: Variant in crime_results:
+		if not cr is Dictionary:
+			continue
+		var result: Dictionary = cr as Dictionary
+		if result.get("no_crime", false):
+			continue
+
+		var char_id: int = result.get("character_id", -1)
+		var location: String = auto_detected_locations.get(char_id, "")
+		if location.is_empty():
+			continue
+
+		var settlement: SettlementData = settlements_by_str_id.get(location)
+		if settlement == null:
+			continue
+
+		var crime_type: int = result.get("crime_type", -1)
+		var event_type: String = _crime_type_to_string(crime_type)
+		var topic_id: int = result.get("topic_id", -1)
+		var tier: int = _crime_tier_for_public_record(crime_type)
+
+		PublicRecordSystem.seed_event(
+			settlement, event_type, tier, ic_day, topic_id, char_id,
+		)
 
 
+static func _crime_tier_for_public_record(crime_type: int) -> int:
+	match crime_type:
+		Enums.CrimeType.VIOLENCE:
+			return TopicData.Tier.TIER_4
+		Enums.CrimeType.UNSANCTIONED_OPEN_KILLING, Enums.CrimeType.UNSANCTIONED_DUEL_DEATH:
+			return TopicData.Tier.TIER_3
+		Enums.CrimeType.TREASON, Enums.CrimeType.VIOLATION_EMPERORS_PEACE:
+			return TopicData.Tier.TIER_2
+		_:
+			return TopicData.Tier.TIER_4
+
+
+static func _pickup_ambient_public_records(
+	characters: Array,
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	if settlements.is_empty():
+		return
+
+	var settlements_by_str_id: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlements_by_str_id[str(s.settlement_id)] = s
+
+	for c: Variant in characters:
+		if not c is L5RCharacterData:
+			continue
+		var character: L5RCharacterData = c as L5RCharacterData
+		if CharacterStats.is_dead(character):
+			continue
+		if TravelSystem.is_traveling(character):
+			continue
+		var loc: String = character.physical_location
+		if loc.is_empty():
+			continue
+
+		var settlement: SettlementData = settlements_by_str_id.get(loc)
+		if settlement == null or settlement.public_record.is_empty():
+			continue
+
+		var ambient: Array = PublicRecordSystem.get_ambient_events(settlement, ic_day)
+		for entry: Variant in ambient:
+			if not entry is Dictionary:
+				continue
+			var topic_id: int = (entry as Dictionary).get("topic_id", -1)
+			if topic_id >= 0 and topic_id not in character.topic_pool:
+				character.topic_pool.append(topic_id)
+
+
+static func _purge_settlement_public_records(
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	for s: Variant in settlements:
+		if s is SettlementData:
+			PublicRecordSystem.purge_expired(s as SettlementData, ic_day)
 
 
 

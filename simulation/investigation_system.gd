@@ -63,11 +63,13 @@ static func examine_scene(
 		}
 
 	var margin: int = 0
+	var roll_total: int = 0
 	if concealment_tn <= 0:
 		var roll_result: Dictionary = SkillResolver.resolve_skill_check(
 			magistrate, dice_engine, "Investigation", 0
 		)
 		margin = roll_result.get("margin", 10)
+		roll_total = margin  # TN=0, so total == margin
 	else:
 		var time_penalty: int = get_scene_time_penalty(days_elapsed)
 		var effective_tn: int = concealment_tn + time_penalty
@@ -81,8 +83,10 @@ static func examine_scene(
 				"success": false,
 				"evidence_gained": 0,
 				"suspect_found": -1,
+				"roll_total": result.get("roll_total", 0),
 			}
 		margin = result["margin"]
+		roll_total = margin + effective_tn
 	var base_evidence: int = _scene_evidence_by_margin(margin)
 	var raises: int = maxi(0, int(margin / RAISE_MARGIN))
 	var raise_evidence: int = raises * SCENE_EVIDENCE_PER_RAISE
@@ -105,6 +109,7 @@ static func examine_scene(
 		"margin": margin,
 		"raises": raises,
 		"threshold_crossed": threshold_crossed,
+		"roll_total": roll_total,
 	}
 
 

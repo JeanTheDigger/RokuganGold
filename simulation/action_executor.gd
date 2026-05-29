@@ -2506,6 +2506,7 @@ static func _execute_examine_crime_scene(
 			"suspect_found": exam_result.get("suspect_found", -1),
 			"raises": exam_result.get("raises", 0),
 			"threshold_crossed": exam_result.get("threshold_crossed", ""),
+			"roll_total": exam_result.get("roll_total", 0),
 		},
 	}
 

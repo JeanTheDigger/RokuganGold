@@ -16,7 +16,7 @@ const BASE_TOPIC_TIER: int = TopicData.Tier.TIER_4
 const REPEATED_OFFENSE_TIER: int = TopicData.Tier.TIER_3
 const REPEAT_WINDOW_SEASONS: int = 4
 const REPEAT_THRESHOLD_FOR_ESCALATION: int = 3
-const INFAMY_PER_REPEATED_OFFENSE: float = 0.0
+const INFAMY_PER_REPEATED_OFFENSE: float = 0.1  # repeat/brutal offense floor — locked s11.3.12a
 
 
 static func evaluate_violence(
