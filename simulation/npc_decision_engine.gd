@@ -3758,11 +3758,11 @@ static func _pick_fabrication_severity(
 static func _pick_medicine_raises(
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> int:
+	# GDD s57.31a: 0-2→0 raises (TN 15), 3-4→1 raise (TN 20), 5+→3 raises (TN 30).
+	# GDD s57.31 explicitly uses "At Rank 5 with 3 Raises: 5k1" as canonical expert case.
 	var rank: int = ctx.skill_ranks.get("Medicine", 0)
-	if rank >= 7:
+	if rank >= 5:
 		return 3
-	elif rank >= 5:
-		return 2
 	elif rank >= 3:
 		return 1
 	return 0

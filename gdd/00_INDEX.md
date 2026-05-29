@@ -558,6 +558,7 @@ Content has not been modified — only split at section boundaries.
 | `s57.29_ikebana_system.md` | ## 57.29 Ikebana System | 25K | Reference / No tags |
 | `s57.30_calligraphy_system.md` | ## 57.30 Calligraphy System | 18K | Reference / No tags |
 | `s57.31_medicine_system.md` | ## 57.31 Medicine System | 39K | Reference / No tags |
+| `s57.31a_medicine_npc_raises_locked.md` | ## 57.31a Medicine NPC Raise Declaration — LOCKED | 3K | FULLY LOCKED. NPC Raise table: Medicine 0–2 → 0 Raises (TN 15), 3–4 → 1 Raise (TN 20), 5+ → 3 Raises (TN 30). GDD anchor: s57.31 "At Rank 5 with 3 Raises: 5k1" is the canonical expert-healer case. No 2-Raise tier. |
 | `s57.32_meditation_system.md` | ## 57.32 Meditation System | 22K | Reference / No tags |
 | `s57.33_request_performance_system.md` | ## 57.33 REQUEST_PERFORMANCE System — LOCKED | 17K | FULLY LOCKED |
 | `s57.34_civilian_order_budget_system.md` | ## 57.34 Civilian Order Budget System | 19K | Reference / No tags |

@@ -3349,6 +3349,7 @@ func test_treat_wound_high_medicine_three_raises() -> void:
 
 
 func test_pick_medicine_raises_tiers() -> void:
+	# GDD s57.31a: 0-2→0, 3-4→1, 5+→3. No 2-Raise tier.
 	var ctx := _make_metadata_ctx()
 	ctx.skill_ranks = {"Medicine": 0}
 	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 0)
@@ -3359,9 +3360,9 @@ func test_pick_medicine_raises_tiers() -> void:
 	ctx.skill_ranks = {"Medicine": 4}
 	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 1)
 	ctx.skill_ranks = {"Medicine": 5}
-	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 2)
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 3)
 	ctx.skill_ranks = {"Medicine": 6}
-	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 2)
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 3)
 	ctx.skill_ranks = {"Medicine": 7}
 	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 3)
 	ctx.skill_ranks = {"Medicine": 10}
