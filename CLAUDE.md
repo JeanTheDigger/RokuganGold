@@ -3330,6 +3330,13 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   (70), etc. Added "RESTORE_WORSHIP" as the first entry in the mapping. 1 test.
 
 ### Known Code Issues (found and fixed 2026-05-29, combined pool audit)
+- **_process_lying_honor_writebacks() — string key in int-keyed dictionary, LYING honor never fires. FIXED.**
+  `fabricator.disposition_values.get(str(subject_id), 0)` used `str(subject_id)` (string) but
+  `disposition_values` uses int character IDs as keys throughout the codebase. The lookup always
+  returned 0, so `disp > 0` never fired — fabricators who liked their target never received the
+  LYING honor penalty. Fixed to `fabricator.disposition_values.get(subject_id, 0)`. Five test
+  setups in test_day_orchestrator.gd and test_system_wiring.gd also updated from `{"5": 20}` to
+  `{5: 20}` int keys. 5 tests updated.
 - **ReactiveDecisions._has_mentor_objective() — key mismatch, KETSUI always declines training. FIXED.**
   `_has_mentor_objective()` checked `primary.get("objective_type", "") == "MENTOR_CHARACTER"` but
   lord-assigned objectives from `_apply_vassal_objective_assignment()` only set `"need_type"` (no

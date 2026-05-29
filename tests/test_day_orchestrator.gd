@@ -10315,7 +10315,7 @@ func test_lying_honor_fires_when_positive_disposition_toward_subject() -> void:
 	fabricator.honor = 8.0
 	fabricator.clan = "Crane"
 	fabricator.school = "Doji Courtier"
-	fabricator.disposition_values = {"5": 20}
+	fabricator.disposition_values = {5: 20}
 	var secret := SecretData.new()
 	secret.subject_id = 5
 	var chars: Dictionary = {1: fabricator}
@@ -10336,7 +10336,7 @@ func test_lying_honor_skips_when_zero_disposition() -> void:
 	fabricator.honor = 8.0
 	fabricator.clan = "Crane"
 	fabricator.school = "Doji Courtier"
-	fabricator.disposition_values = {"5": 0}
+	fabricator.disposition_values = {5: 0}
 	var secret := SecretData.new()
 	secret.subject_id = 5
 	var chars: Dictionary = {1: fabricator}
@@ -10356,7 +10356,7 @@ func test_lying_honor_skips_when_negative_disposition() -> void:
 	fabricator.honor = 8.0
 	fabricator.clan = "Crane"
 	fabricator.school = "Doji Courtier"
-	fabricator.disposition_values = {"5": -15}
+	fabricator.disposition_values = {5: -15}
 	var secret := SecretData.new()
 	secret.subject_id = 5
 	var chars: Dictionary = {1: fabricator}

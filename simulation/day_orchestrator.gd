@@ -5518,7 +5518,7 @@ static func _process_lying_honor_writebacks(
 		var subject_id: int = (secret as SecretData).subject_id
 		if subject_id < 0:
 			continue
-		var disp: int = fabricator.disposition_values.get(str(subject_id), 0)
+		var disp: int = fabricator.disposition_values.get(subject_id, 0)
 		if disp > 0:
 			HonorGlorySystem.apply_honor_change(fabricator, CrimeSystem.get_lying_honor(fabricator))
 

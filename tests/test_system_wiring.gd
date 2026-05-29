@@ -3358,7 +3358,7 @@ func test_lying_honor_fires_on_fabricate_with_positive_disposition() -> void:
 	fabricator.honor = 5.0
 	fabricator.stamina = 2
 	fabricator.willpower = 2
-	fabricator.disposition_values = {"42": 15}
+	fabricator.disposition_values = {42: 15}
 	var secret := SecretData.new()
 	secret.subject_id = 42
 	var results: Array = [{
@@ -3378,7 +3378,7 @@ func test_lying_honor_skips_negative_disposition() -> void:
 	fabricator.honor = 5.0
 	fabricator.stamina = 2
 	fabricator.willpower = 2
-	fabricator.disposition_values = {"42": -10}
+	fabricator.disposition_values = {42: -10}
 	var secret := SecretData.new()
 	secret.subject_id = 42
 	var results: Array = [{
