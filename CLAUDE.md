@@ -3160,8 +3160,10 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   need for Family Daimyo+ characters in Phase 2. Operational superior CO budget:
   `get_operational_superior_co_budget()` returns 2/day for 1–3 subordinates, 3/day
   for 4+ (s57.54.10d). PATRONIZE_ARTS added as 82nd NeedType in
-  `objective_alignment.json` with REQUEST_PERFORMANCE (90), DELIVER_GIFT (70),
-  RAISE_DISPOSITION (40), WRITE_LETTER (35). Wired into DayOrchestrator:
+  `objective_alignment.json` with REQUEST_PERFORMANCE (90), PERFORM_THEATER_PIECE (85),
+  DELIVER_GIFT (70), LEARN_THEATER_PIECE (60), RAISE_DISPOSITION (40), WRITE_LETTER (35)
+  (LEARN_THEATER_PIECE and PERFORM_THEATER_PIECE added when Theater System was implemented).
+  Wired into DayOrchestrator:
   `_run_strategic_reviews()` gains `active_topics, active_edicts, clans, current_season,
   dice_engine` parameters; champion loop runs seasonally after standard lord reviews;
   `_inject_base_character_context()` populates champion_conclusion_candidates and
@@ -3296,6 +3298,16 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   5 tests added to test_governance_exceptions_wiring.gd: Chugi champion gets objective,
   non-Chugi (Ishi/Shourido) champion skipped, no-authority champion skipped, dead champion
   skipped, dedup prevents reassignment.
+
+### Known Code Issues (found and fixed 2026-05-29, combined pool audit)
+- **RESTORE_WORSHIP missing from objective_alignment.json — FDs never respond to supernatural crises. FIXED.**
+  `_build_local_tier3_candidates()` maps SUPERNATURAL topic category → `RESTORE_WORSHIP` NeedType
+  per GDD §57.54.10b line 361. But `RESTORE_WORSHIP` had no entries in `objective_alignment.json`,
+  so all actions scored 0 → allowlist filter stripped everything → FDs did nothing in response to
+  spirit realm overlaps, fortune displeasure, or elemental imbalance crises. Added 8 action entries
+  per s57.54a A37a–A37h: PERFORM_WORSHIP (90), PERFORM_RITUAL (80), BUILD_SHRINE (70),
+  FOUND_TEMPLE (60), PURIFY_TAINTED_GROUND (55), ASSIGN_VASSAL_OBJECTIVE (45), MEDITATE (35),
+  FOUND_MONASTERY (30). Locked in `gdd/s57.54a_restore_worship_needtype_locked.md`.
 
 ### Systems Added 2026-05-29
 - **s11.3.12a Violence System — INFAMY_PER_REPEATED_OFFENSE locked.** `INFAMY_PER_REPEATED_OFFENSE`

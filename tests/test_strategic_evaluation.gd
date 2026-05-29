@@ -684,3 +684,108 @@ func test_stale_priorities_ketsui_champion_gets_refill() -> void:
 	for remaining: StrategicConclusionData in clan.clan_strategic_priorities:
 		assert_ne(remaining.conclusion_id, sc.conclusion_id,
 			"Stale SEEK_PEACE conclusion should have been removed by Ketsui refill")
+
+
+# -- Phase 2 combined pool (s57.54.10b) -----------------------------------------
+
+func _make_conclusion_of_type(
+	clan: ClanData,
+	ct: StrategicConclusionData.ConclusionType,
+	score: int,
+	is_forced: bool = false,
+) -> StrategicConclusionData:
+	var sc := StrategicConclusionData.new()
+	sc.conclusion_id = clan.next_conclusion_id
+	clan.next_conclusion_id += 1
+	sc.conclusion_type = ct
+	sc.score = score
+	sc.is_forced = is_forced
+	sc.target_clan_id = -1
+	return sc
+
+
+func test_fd_combined_pool_selects_patronize_arts() -> void:
+	# FD with Chugi (0 pref for BUILD_CULTURAL_PRESTIGE) receives champion conclusion.
+	# PATRONIZE_ARTS is the first NeedType mapped from BUILD_CULTURAL_PRESTIGE.
+	var fd := _make_family_daimyo(10, "Crane", Enums.BushidoVirtue.CHUGI)
+	var clan := _make_clan()
+	var sc := _make_conclusion_of_type(
+		clan,
+		StrategicConclusionData.ConclusionType.BUILD_CULTURAL_PRESTIGE,
+		120,
+	)
+	clan.clan_strategic_priorities.append(sc)
+
+	var candidates: Array = StrategicReview.get_champion_conclusion_needtypes(fd, clan)
+	var arts_candidate: Dictionary = {}
+	for c: Dictionary in candidates:
+		if c.get("need_type", "") == "PATRONIZE_ARTS":
+			arts_candidate = c
+			break
+	assert_false(arts_candidate.is_empty(), "PATRONIZE_ARTS should be in candidate list")
+	assert_eq(arts_candidate.get("score", -1), 120,
+		"CHUGI preference for BUILD_CULTURAL_PRESTIGE is 0 — score unchanged")
+	assert_eq(arts_candidate.get("source", ""), "champion_conclusion")
+
+	# Wire into ContextSnapshot and verify _check_combined_pool selects it.
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.champion_conclusion_candidates = candidates
+	ctx.local_tier3_candidates = []
+	var need: NPCDataStructures.ImmediateNeed = NPCDecisionEngine._check_combined_pool(ctx, {})
+	assert_not_null(need, "Combined pool should return a need")
+	assert_eq(need.need_type, "PATRONIZE_ARTS",
+		"Highest-scoring candidate from BUILD_CULTURAL_PRESTIGE should be PATRONIZE_ARTS")
+
+
+func test_combined_pool_champion_conclusion_beats_local_tier3() -> void:
+	# Champion conclusion score 120 vs local Tier 3 topic score 25 — champion wins.
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.champion_conclusion_candidates = [
+		{"need_type": "PATRONIZE_ARTS", "score": 120, "source": "champion_conclusion",
+		 "conclusion_type": StrategicConclusionData.ConclusionType.BUILD_CULTURAL_PRESTIGE,
+		 "target_clan_id": -1, "is_forced": false},
+	]
+	ctx.local_tier3_candidates = [
+		{"need_type": "DEFEND_PROVINCE", "score": 25, "source": "local_tier3",
+		 "topic_id": 99, "target_clan_id": -1, "is_forced": false},
+	]
+	var need: NPCDataStructures.ImmediateNeed = NPCDecisionEngine._check_combined_pool(ctx, {})
+	assert_not_null(need)
+	assert_eq(need.need_type, "PATRONIZE_ARTS")
+
+
+func test_combined_pool_local_tier1_beats_low_score_conclusion() -> void:
+	# Forced local Tier 1 topic (score 35) beats champion conclusion with personality penalty.
+	# YU virtue gives -15 to BUILD_CULTURAL_PRESTIGE (index 15) -> net score = 10.
+	var fd := _make_family_daimyo(11, "Crane", Enums.BushidoVirtue.YU)
+	var clan := _make_clan()
+	var sc := _make_conclusion_of_type(
+		clan,
+		StrategicConclusionData.ConclusionType.BUILD_CULTURAL_PRESTIGE,
+		25,
+	)
+	clan.clan_strategic_priorities.append(sc)
+
+	var champion_candidates: Array = StrategicReview.get_champion_conclusion_needtypes(fd, clan)
+	for c: Dictionary in champion_candidates:
+		assert_true(c.get("score", 999) <= 10,
+			"YU -15 penalty on BUILD_CULTURAL_PRESTIGE brings all scores to <=10")
+
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.champion_conclusion_candidates = champion_candidates
+	ctx.local_tier3_candidates = [
+		{"need_type": "DEFEND_PROVINCE", "score": 35, "source": "local_tier3",
+		 "topic_id": 42, "target_clan_id": -1, "is_forced": true},
+	]
+	var need: NPCDataStructures.ImmediateNeed = NPCDecisionEngine._check_combined_pool(ctx, {})
+	assert_not_null(need)
+	assert_eq(need.need_type, "DEFEND_PROVINCE",
+		"Local Tier 1 topic (score 35) beats penalised champion conclusion (score <=10)")
+
+
+func test_combined_pool_empty_returns_null() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.champion_conclusion_candidates = []
+	ctx.local_tier3_candidates = []
+	var need: NPCDataStructures.ImmediateNeed = NPCDecisionEngine._check_combined_pool(ctx, {})
+	assert_null(need, "Empty combined pool should return null")
