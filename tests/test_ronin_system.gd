@@ -222,9 +222,9 @@ func test_accept_honor_unchanged():
 func test_accept_clears_petition_cooldown():
 	var c := _make_samurai()
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
-	c.supply_ledger["petition_refused_until"] = 500
+	c.supply_ledger["petition_refused_until_200"] = 500
 	RoninSystem.accept_into_service(c, 200, "Retainer")
-	assert_false(c.supply_ledger.has("petition_refused_until"))
+	assert_false(c.supply_ledger.has("petition_refused_until_200"))
 
 func test_no_longer_ronin_after_service():
 	var c := _make_samurai()
@@ -530,6 +530,7 @@ func test_non_permanent_ronin_accepts_service():
 
 func _make_ronin_char(id: int = 10) -> L5RCharacterData:
 	var c := _make_samurai(id)
+	c.status = 1.0  # make_ronin() subtracts 1.0 → 0.0, which passes is_ronin() status < 1.0 check
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
 	return c
 
@@ -818,6 +819,7 @@ func test_writeback_failure_writes_cooldown():
 	var results: Array = [{
 		"action_id": "PETITION_RONIN",
 		"character_id": 10,
+		"target_npc_id": 200,
 		"success": false,
 		"effects": {
 			"failed": true,
@@ -826,7 +828,7 @@ func test_writeback_failure_writes_cooldown():
 		},
 	}]
 	DayOrchestrator._process_petition_writebacks(results, chars, objectives_map, 5)
-	assert_eq(ronin.supply_ledger.get("petition_refused_until", -1), refused_day)
+	assert_eq(ronin.supply_ledger.get("petition_refused_until_200", -1), refused_day)
 
 
 # =============================================================================

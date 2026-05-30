@@ -131,7 +131,7 @@ static func accept_into_service(
 	if character.status < 1.0:
 		HonorGlorySystem.apply_status_change(character, 1.0 - character.status)
 	HonorGlorySystem.apply_glory_change(character, HIRING_GLORY_RECOVERY)
-	character.supply_ledger.erase("petition_refused_until")
+	character.supply_ledger.erase("petition_refused_until_%d" % new_lord_id)
 
 	return {
 		"character_id": character.character_id,
