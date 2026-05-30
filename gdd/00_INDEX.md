@@ -396,6 +396,7 @@ Content has not been modified — only split at section boundaries.
 | File | Section | Size | Status |
 |------|---------|------|--------|
 | `s48_insight_rank_advancement_progression.md` | # 48. Insight, Rank Advancement & Progression | 11K | Reference / No tags |
+| `s48a_npc_rank_advancement_locked.md` | # s48a — NPC Rank Advancement: Locked Values | 3K | LOCKED |
 
 ### Section 49
 

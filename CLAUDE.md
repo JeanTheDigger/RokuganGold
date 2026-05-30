@@ -128,7 +128,7 @@ When implementing or auditing a system, go here first:
 | Musha Shugyo (warrior's pilgrimage)           | 57.48                |
 | Clan Champion strategic evaluation           | 57.54                |
 | Otomo Seiyaku (alliance suppression)          | 55.22b               |
-| NPC advancement (XP, skill/ring progression)  | 52 Part 3, 48        |
+| NPC advancement (XP, skill/ring progression)  | 52 Part 3, 48, 48a   |
 | World population generator (game start pass)  | 52 Part 1, 22.4, 22.8|
 | Gempukku / NPC spawning / natural death       | 52, 22.4, 22.7       |
 | Ronin system (status transitions, petition)   | 52 Part 5, 52.5      |
@@ -3862,7 +3862,7 @@ These need GDD sections to be written or unlocked before implementation.
 | s38 | Kiho system — REFERENCE section |
 | s40 | Individual combat — REFERENCE section (beyond map dependency) |
 | s43 | Maho spell cast roll TN — GDD does not specify it. Blocks: CAST_MAHO NPC ActionID |
-| s48 | Sensei/training system — blocks MENTOR executor and ACCEPT_TRAINING reactive chain |
+| s48/s48a | LOCKED. Sensei/training and rank advancement values locked. school_rank sync and rank-up topics implemented. PC dojo-visit gate deferred (PC system not yet designed). |
 | s49 | Artisan: bonsai/garden (4 ActionIDs), theater composition (3 ActionIDs) — forward-scored, no executor. Core crafting pipeline DONE. |
 | s54.7 | Kolat system — blocks 23 Kolat spy network ActionIDs and BRIBE_GARRISON_COMMANDER |
 | s56.14 | Full Bloodspeaker cult encounters — trigger layer done, ASCII map encounters blocked |

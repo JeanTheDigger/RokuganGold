@@ -1150,6 +1150,7 @@ static func advance_day(
 		advancement_results = _process_npc_advancement(
 			characters, active_courts, active_sieges, active_armies,
 			insurgencies, current_season,
+			active_topics, next_topic_id, ic_day,
 		)
 		progress_results = _evaluate_objective_progress(
 			characters, objectives_map, world_states
@@ -14395,6 +14396,9 @@ static func _process_npc_advancement(
 	active_armies: Array,
 	insurgencies: Array,
 	current_season: int,
+	active_topics: Array = [],
+	next_topic_id: Array = [1000],
+	ic_day: int = 0,
 ) -> Dictionary:
 	var days_in_season: int = _get_season_days(current_season)
 
@@ -14402,7 +14406,32 @@ static func _process_npc_advancement(
 		characters, active_courts, active_sieges, active_armies, insurgencies
 	)
 
-	return NPCAdvancement.process_seasonal_advancement(characters, adv_world_state, days_in_season)
+	var adv_result: Dictionary = NPCAdvancement.process_seasonal_advancement(
+		characters, adv_world_state, days_in_season
+	)
+
+	# Generate Tier 4 Personal topic for each NPC that ranked up. Locked in s48a A48a-2.
+	for entry: Dictionary in adv_result.get("results", []):
+		if not entry.get("ranked_up", false):
+			continue
+		var rut: Dictionary = entry.get("rank_up_topic", {})
+		if rut.is_empty():
+			continue
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "rank_advancement_%d" % rut["character_id"]
+		topic.title = "%s achieves Rank %d" % [rut["character_name"], rut["new_rank"]]
+		topic.topic_type = "rank_advancement"
+		topic.tier = TopicData.Tier.TIER_4
+		topic.category = TopicData.Category.PERSONAL
+		topic.subject_character_id = rut["character_id"]
+		topic.subject_role = "NEUTRAL"
+		topic.ic_day_created = ic_day
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		active_topics.append(topic)
+
+	return adv_result
 
 
 static func _build_advancement_world_state(

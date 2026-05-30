@@ -385,8 +385,18 @@ static func process_seasonal_advancement(characters: Array, world_state: Diction
 			if ranked_up:
 				entry["old_rank"] = old_rank
 				entry["new_rank"] = new_rank
+				# s52 Part 3: NPCs advance school_rank automatically (no dojo visit required).
+				# Locked in s48a A48a-3.
+				character.school_rank = new_rank
 				total_rank_advancements += 1
 				SkillResolver.apply_technique_flags(character)
+				# Rank-up generates a Tier 4 Personal topic. Locked in s48a A48a-2.
+				entry["rank_up_topic"] = {
+					"character_name": character.character_name,
+					"character_id": character.character_id,
+					"clan": character.clan,
+					"new_rank": new_rank,
+				}
 			results.append(entry)
 
 	return {"results": results, "total_rank_advancements": total_rank_advancements}

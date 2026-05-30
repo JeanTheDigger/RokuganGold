@@ -629,3 +629,58 @@ func test_resolve_training_session_fails_when_sensei_not_higher() -> void:
 	var result: Dictionary = NPCAdvancement.resolve_training_session(sensei, student, "Kenjutsu")
 	assert_false(result.get("success", true))
 	assert_eq(result.get("reason", ""), "sensei_rank_not_higher")
+
+
+# -- school_rank sync on rank-up (s48a A48a-3) ---------------------------------
+
+func test_school_rank_synced_on_rank_up() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	c.school_rank = 1
+	# Give enough XP to rank up (insight 107, need 150 for rank 2 — need 43 more).
+	# 4 ring advances (+40 insight) + 3 skill advances (+3 insight) = +43.
+	# Ring 2->3 = 60 XP, skills 3 XP each. 60 + 9 = 69 XP should be more than enough.
+	c.xp_total = 500
+	c.xp_spent = 0
+	var result: Dictionary = NPCAdvancement.process_seasonal_advancement([c], {}, 1)
+	var new_rank: int = CharacterStats.get_insight_rank(c)
+	if new_rank >= 2:
+		assert_eq(c.school_rank, new_rank, "school_rank must match computed insight rank after rank-up")
+
+
+func test_school_rank_not_mutated_without_rank_up() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	c.school_rank = 1
+	# Give small XP — enough for progress but not a rank-up.
+	c.xp_total = 3
+	c.xp_spent = 0
+	NPCAdvancement.process_seasonal_advancement([c], {}, 1)
+	assert_eq(c.school_rank, 1, "school_rank must not change when no rank-up occurred")
+
+
+func test_rank_up_entry_contains_topic_data() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	c.character_name = "Hida Taro"
+	c.school_rank = 1
+	c.xp_total = 500
+	c.xp_spent = 0
+	var result: Dictionary = NPCAdvancement.process_seasonal_advancement([c], {}, 1)
+	var new_rank: int = CharacterStats.get_insight_rank(c)
+	if new_rank >= 2:
+		var found_topic_data: bool = false
+		for entry: Dictionary in result["results"]:
+			if entry.get("ranked_up", false) and entry.has("rank_up_topic"):
+				var rut: Dictionary = entry["rank_up_topic"]
+				assert_eq(rut["character_id"], c.character_id)
+				assert_eq(rut["character_name"], "Hida Taro")
+				assert_true(rut["new_rank"] >= 2)
+				found_topic_data = true
+		assert_true(found_topic_data, "rank-up entry should include rank_up_topic dict")
+
+
+func test_no_rank_up_topic_when_no_rank_up() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	c.xp_total = 3
+	c.xp_spent = 0
+	var result: Dictionary = NPCAdvancement.process_seasonal_advancement([c], {}, 1)
+	for entry: Dictionary in result["results"]:
+		assert_false(entry.has("rank_up_topic"), "no rank_up_topic should be present without rank-up")
