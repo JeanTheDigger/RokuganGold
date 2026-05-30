@@ -3514,22 +3514,27 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   abandoned→CONTRACT_ABANDONED_DISPOSITION (−5) to lord. TERMINATE_CONTRACT (0 AP, 1 civilian order):
   half-koku refund, CONTRACT_EARLY_TERMINATION_DISPOSITION (−3) to lord disposition. Constants A51–A59
   locked. 44 tests.
-- **s52.7 Clan Induction** — GDD `gdd/s52.7_clan_induction_locked.md`. Deed credit system tracks
-  per-family service record in `supply_ledger["contract_deeds_for_family"]` (Dictionary keyed by
-  family name). GRANT_DEED_CREDIT (0 AP, 1 civilian order): manual lord recognition, deduped via
-  `deed_grant_cooldowns` key `"%d_%d" % [lord_id, current_season]`. PERFORM_CLAN_INDUCTION (2 AP,
-  AT_OWN_HOLDINGS, Courtier/Awareness TN 20, 10 koku Pattern B): can_be_inducted() gate
-  (disposition≥51, deeds≥3, different clan, no TREASON/MAHO/COVERT_KILLING crimes), ceremony
-  failure→TIER_4 PERSONAL topic. Induction writeback: perform_induction() mutates clan/family/
-  lord_id/role_position, status raised to 1.0 minimum, permanent_ronin cleared, deed credits
-  erased for that family, +1.0 glory inductee, +0.3 glory daimyo, +15 disposition from all
-  co-family members toward inductee, TIER_3 POLITICAL topic distributed to co-located characters.
-  FIND_NEW_LORD standing cleared on induction. objective_alignment.json: FILL_VACANCY NeedType
-  gains PERFORM_CLAN_INDUCTION (20), GRANT_DEED_CREDIT (30), HIRE_RONIN (60). action_skill_map.json:
-  HIRE_RONIN and PERFORM_CLAN_INDUCTION both Courtier/Awareness. Bug fix: `.family_name` property
-  access corrected to `.family` across all new code (ronin_system.gd, day_orchestrator.gd,
-  action_executor.gd, npc_decision_engine.gd). `TimeSystem.DAYS_PER_SEASON` (non-existent) replaced
-  with `InvestigationSystem.DAYS_PER_SEASON` (= 90). Constants A60–A72 locked. 26 tests.
+- **s52.7 Clan Induction** — GDD `gdd/s52.7_clan_induction_locked.md` (redesigned).
+  Three-stage process: (1) 8 deed credits from contract completions, (2) 1 extraordinary
+  deed (contract completed while lord's clan at war AND province in crisis AND 3+ season
+  service), (3) Family Daimyo approval then Provincial Daimyo ceremony.
+  GRANT_DEED_CREDIT removed entirely — lords cannot fast-track via manual grants.
+  APPROVE_CLAN_INDUCTION (0 AP, 1 civilian order, AT_OWN_HOLDINGS+AT_COURT): Family Daimyo
+  only, validates 8 deeds + 1 extraordinary deed + disposition≥51, stores approval in
+  `supply_ledger["family_daimyo_approval"]`. Approval can be granted remotely.
+  PERFORM_CLAN_INDUCTION (2 AP, AT_OWN_HOLDINGS, Courtier/Awareness TN 20, 10 koku Pattern B):
+  Provincial Daimyo+ only; can_be_inducted() gate (rank, disposition≥51, deeds≥8,
+  extraordinary≥1, FD approval set, different clan, no TREASON/MAHO/COVERT_KILLING crimes);
+  ceremony failure→TIER_4 PERSONAL topic (FD approval not revoked).
+  Extraordinary deed detection in `_is_extraordinary_contract_deed()` at expiry time
+  checks active_wars, province active_crisis_id, and contract_duration_seasons≥3.
+  Induction writeback: perform_induction() mutates clan/family/lord_id/role_position,
+  status raised to 1.0 minimum, permanent_ronin cleared, deed credits + extraordinary
+  deeds + FD approval erased, +1.0 glory inductee, +0.3 glory sponsor, +15 disposition
+  from all co-family members toward inductee, TIER_3 POLITICAL topic distributed.
+  FIND_NEW_LORD standing cleared on induction. objective_alignment.json: FILL_VACANCY
+  NeedType: PERFORM_CLAN_INDUCTION (20), APPROVE_CLAN_INDUCTION (50), HIRE_RONIN (60).
+  Constants A60–A76 locked. ~55 tests.
 
 ## Resolved Design Decisions
 

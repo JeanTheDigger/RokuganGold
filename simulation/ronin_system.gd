@@ -46,8 +46,10 @@ const CONTRACT_DECLINE_DISPOSITION: int = -1
 const CONTRACT_EARLY_TERMINATION_DISPOSITION: int = -3
 const CONTRACT_ABANDONED_DISPOSITION: int = -5
 
-# Clan induction thresholds — locked in s52.7 A60-A65.
-const INDUCTION_MIN_DEEDS: int = 3
+# Clan induction thresholds — locked in s52.7 A60-A66.
+const INDUCTION_DEED_THRESHOLD: int = 8          # A60 — 8 deeds required
+const INDUCTION_EXTRAORDINARY_DEED_REQUIRED: int = 1  # A66 — 1 extraordinary deed required
+const INDUCTION_MIN_CONTINUOUS_SEASONS: int = 3  # A65 — 3+ seasons continuous service
 const INDUCTION_MIN_DISPOSITION: int = 51
 const INDUCTION_KOKU_COST: float = 10.0
 const INDUCTION_INDUCTEE_GLORY_GAIN: float = 1.0
@@ -285,10 +287,12 @@ static func get_contract_payment(contract_type: String, duration_seasons: int) -
 
 ## Resolve a clean contract completion (s52.6 Part F).
 ## Calls make_ronin with DISMISSAL, applies completion bonus, increments deed credits.
+## is_extraordinary: true when the contract qualifies as an extraordinary deed (s52.7 Part B).
 static func complete_contract(
 	character: L5RCharacterData,
 	lord_family: String,
 	current_season: int,
+	is_extraordinary: bool = false,
 ) -> Dictionary:
 	# Apply completion bonus before the dismissal glory loss.
 	HonorGlorySystem.apply_glory_change(character, GLORY_CONTRACT_COMPLETION_BONUS)
@@ -300,11 +304,18 @@ static func complete_contract(
 	deeds[lord_family] = deeds.get(lord_family, 0) + 1
 	character.supply_ledger["contract_deeds_for_family"] = deeds
 	character.supply_ledger.erase("contract_end_ic_day")
+	character.supply_ledger.erase("contract_duration_seasons")
+
+	if is_extraordinary:
+		var extra: Dictionary = character.supply_ledger.get("extraordinary_deeds_for_family", {})
+		extra[lord_family] = extra.get(lord_family, 0) + 1
+		character.supply_ledger["extraordinary_deeds_for_family"] = extra
 
 	return {
 		"character_id": character.character_id,
 		"lord_family": lord_family,
 		"deed_count": deeds[lord_family],
+		"is_extraordinary": is_extraordinary,
 		"ronin_result": ronin_result,
 	}
 
@@ -344,53 +355,46 @@ static func terminate_contract_early(
 	}
 
 
-## Returns current deed count for a specific family (s52.7 Part B).
+## Returns total deed count for a specific family (s52.7 Part B).
 static func get_deed_count(character: L5RCharacterData, family_name: String) -> int:
 	var deeds: Dictionary = character.supply_ledger.get("contract_deeds_for_family", {})
 	return int(deeds.get(family_name, 0))
 
 
-## Grant one manual deed credit (lord's recognition, s52.7 Part B).
-## Returns false if the ronin already received a grant this season from this lord.
-static func grant_deed_credit(
-	character: L5RCharacterData,
-	lord_family: String,
-	lord_id: int,
-	current_season: int,
-) -> Dictionary:
-	# Dedup: one manual grant per ronin per season per lord.
-	var cooldowns: Dictionary = character.supply_ledger.get("deed_grant_cooldowns", {})
-	var key: String = "%d_%d" % [lord_id, current_season]
-	if cooldowns.has(key):
-		return {"character_id": character.character_id, "skipped": true, "reason": "already_granted_this_season"}
-	cooldowns[key] = current_season
-	character.supply_ledger["deed_grant_cooldowns"] = cooldowns
+## Returns extraordinary deed count for a specific family (s52.7 Part B).
+static func get_extraordinary_deed_count(character: L5RCharacterData, family_name: String) -> int:
+	var extra: Dictionary = character.supply_ledger.get("extraordinary_deeds_for_family", {})
+	return int(extra.get(family_name, 0))
 
-	var deeds: Dictionary = character.supply_ledger.get("contract_deeds_for_family", {})
-	deeds[lord_family] = deeds.get(lord_family, 0) + 1
-	character.supply_ledger["contract_deeds_for_family"] = deeds
 
-	return {
-		"character_id": character.character_id,
-		"lord_family": lord_family,
-		"deed_count": deeds[lord_family],
-	}
+## Set the Family Daimyo approval flag on a ronin (s52.7 Part A).
+static func approve_induction(character: L5RCharacterData, family_daimyo_id: int) -> void:
+	character.supply_ledger["family_daimyo_approval"] = family_daimyo_id
 
 
 ## Check all induction prerequisites without modifying state (s52.7 Part C).
+## sponsoring_lord: the Provincial Daimyo who would perform the ceremony.
 static func can_be_inducted(
 	inductee: L5RCharacterData,
-	daimyo: L5RCharacterData,
-	daimyo_disposition_toward_inductee: int,
+	sponsoring_lord: L5RCharacterData,
+	sponsoring_lord_disposition: int,
 	lords_known_crime_types: Array,
 ) -> Dictionary:
 	if inductee.permanent_ronin:
 		return {"eligible": false, "reason": "permanent_ronin"}
-	if daimyo_disposition_toward_inductee < INDUCTION_MIN_DISPOSITION:
-		return {"eligible": false, "reason": "disposition_too_low", "current": daimyo_disposition_toward_inductee}
-	if get_deed_count(inductee, daimyo.family) < INDUCTION_MIN_DEEDS:
-		return {"eligible": false, "reason": "insufficient_deeds", "current": get_deed_count(inductee, daimyo.family)}
-	if inductee.clan == daimyo.clan:
+	if sponsoring_lord.lord_rank < Enums.LordRank.PROVINCIAL_DAIMYO:
+		return {"eligible": false, "reason": "sponsoring_lord_rank_too_low"}
+	if sponsoring_lord_disposition < INDUCTION_MIN_DISPOSITION:
+		return {"eligible": false, "reason": "disposition_too_low", "current": sponsoring_lord_disposition}
+	if get_deed_count(inductee, sponsoring_lord.family) < INDUCTION_DEED_THRESHOLD:
+		return {"eligible": false, "reason": "insufficient_deeds",
+			"current": get_deed_count(inductee, sponsoring_lord.family)}
+	if get_extraordinary_deed_count(inductee, sponsoring_lord.family) < INDUCTION_EXTRAORDINARY_DEED_REQUIRED:
+		return {"eligible": false, "reason": "no_extraordinary_deed"}
+	var approval_id: int = int(inductee.supply_ledger.get("family_daimyo_approval", -1))
+	if approval_id < 0:
+		return {"eligible": false, "reason": "no_family_daimyo_approval"}
+	if inductee.clan == sponsoring_lord.clan:
 		return {"eligible": false, "reason": "already_same_clan"}
 	for ct: int in lords_known_crime_types:
 		if ct == Enums.CrimeType.TREASON or ct == Enums.CrimeType.MAHO_USE \
@@ -419,12 +423,17 @@ static func perform_induction(
 	HonorGlorySystem.apply_glory_change(inductee, INDUCTION_INDUCTEE_GLORY_GAIN)
 	HonorGlorySystem.apply_glory_change(daimyo, INDUCTION_DAIMYO_GLORY_GAIN)
 
-	# Clear deed credits redeemed for this family.
+	# Clear deed credits and approval flag redeemed for this family.
 	var deeds: Dictionary = inductee.supply_ledger.get("contract_deeds_for_family", {})
 	deeds.erase(daimyo.family)
 	inductee.supply_ledger["contract_deeds_for_family"] = deeds
+	var extra: Dictionary = inductee.supply_ledger.get("extraordinary_deeds_for_family", {})
+	extra.erase(daimyo.family)
+	inductee.supply_ledger["extraordinary_deeds_for_family"] = extra
+	inductee.supply_ledger.erase("family_daimyo_approval")
 	inductee.supply_ledger.erase("contract_end_ic_day")
 	inductee.supply_ledger.erase("contract_type")
+	inductee.supply_ledger.erase("contract_duration_seasons")
 	inductee.supply_ledger["former_ronin_inducted_by"] = daimyo.character_id
 
 	return {

@@ -1049,7 +1049,7 @@ func test_contract_expiry_clean_increments_deed_count():
 	var objectives_map: Dictionary = {
 		10: {"primary": {"need_type": "DEFEND_PROVINCE", "source": "contract", "assigned_by": 200}},
 	}
-	DayOrchestrator._process_contract_expiry(chars, objectives_map, 2, 100)
+	DayOrchestrator._process_contract_expiry(chars, objectives_map, 2, 100, [], {}, {})
 	assert_eq(RoninSystem.get_deed_count(ronin, "Doji"), 1)
 
 
@@ -1065,7 +1065,7 @@ func test_contract_expiry_abandoned_applies_disposition_penalty():
 	var objectives_map: Dictionary = {
 		10: {"primary": {"need_type": "SEEK_GLORY", "source": "self", "assigned_by": -1}},
 	}
-	DayOrchestrator._process_contract_expiry(chars, objectives_map, 2, 100)
+	DayOrchestrator._process_contract_expiry(chars, objectives_map, 2, 100, [], {}, {})
 	assert_eq(int(lord.disposition_values.get(10, 0)), 5 + RoninSystem.CONTRACT_ABANDONED_DISPOSITION)
 
 
@@ -1078,52 +1078,177 @@ func test_contract_expiry_clears_contract_objective():
 	var objectives_map: Dictionary = {
 		10: {"primary": {"need_type": "DEFEND_PROVINCE", "source": "contract", "assigned_by": 200}},
 	}
-	DayOrchestrator._process_contract_expiry(chars, objectives_map, 2, 100)
+	DayOrchestrator._process_contract_expiry(chars, objectives_map, 2, 100, [], {}, {})
 	assert_false(objectives_map.get(10, {}).has("primary"))
 
 
-# -- GRANT_DEED_CREDIT --
-
-func test_grant_deed_credit_increments_count():
-	var ronin := _make_ronin_char(10)
-	var result: Dictionary = RoninSystem.grant_deed_credit(ronin, "Doji", 200, 3)
-	assert_false(result.get("skipped", false))
-	assert_eq(result.get("deed_count", 0), 1)
-	assert_eq(RoninSystem.get_deed_count(ronin, "Doji"), 1)
-
-
-func test_grant_deed_credit_deduplicates_same_season():
-	var ronin := _make_ronin_char(10)
-	RoninSystem.grant_deed_credit(ronin, "Doji", 200, 3)
-	var result2: Dictionary = RoninSystem.grant_deed_credit(ronin, "Doji", 200, 3)
-	assert_true(result2.get("skipped", false))
-	assert_eq(RoninSystem.get_deed_count(ronin, "Doji"), 1)
-
-
-func test_grant_deed_credit_allows_different_season():
-	var ronin := _make_ronin_char(10)
-	RoninSystem.grant_deed_credit(ronin, "Doji", 200, 3)
-	RoninSystem.grant_deed_credit(ronin, "Doji", 200, 4)  # different season
-	assert_eq(RoninSystem.get_deed_count(ronin, "Doji"), 2)
-
-
-func test_writeback_deed_credit_calls_grant():
+func test_contract_expiry_extraordinary_deed_when_all_conditions_met():
+	# All three extraordinary deed conditions: at war, crisis, 3+ seasons.
 	var lord := _make_lord_with_family(200, "Crane", "Doji")
+	lord.clan = "Crane"
 	var ronin := _make_ronin_char(10)
-	var chars: Dictionary = {200: lord, 10: ronin}
+	ronin.lord_id = 200
+	ronin.supply_ledger["contract_end_ic_day"] = 100
+	ronin.supply_ledger["contract_type"] = "PROVINCE_DEFENSE"
+	ronin.supply_ledger["contract_lord_family"] = "Doji"
+	ronin.supply_ledger["contract_duration_seasons"] = 3
+	var chars: Dictionary = {10: ronin, 200: lord}
+	var objectives_map: Dictionary = {
+		10: {"primary": {"need_type": "DEFEND_PROVINCE", "source": "contract", "assigned_by": 200}},
+	}
+	var war := WarData.new()
+	war.is_active = true
+	war.clan_a = "Crane"
+	war.clan_b = "Lion"
+	var prov := ProvinceData.new()
+	prov.province_id = 5
+	prov.active_crisis_id = 1  # active crisis
+	var provinces: Dictionary = {5: prov}
+	var char_province_map: Dictionary = {200: 5}
+	DayOrchestrator._process_contract_expiry(
+		chars, objectives_map, 2, 100, [war], provinces, char_province_map,
+	)
+	assert_eq(RoninSystem.get_extraordinary_deed_count(ronin, "Doji"), 1)
+
+
+func test_contract_expiry_no_extraordinary_deed_when_no_war():
+	var lord := _make_lord_with_family(200, "Crane", "Doji")
+	lord.clan = "Crane"
+	var ronin := _make_ronin_char(10)
+	ronin.lord_id = 200
+	ronin.supply_ledger["contract_end_ic_day"] = 100
+	ronin.supply_ledger["contract_type"] = "PROVINCE_DEFENSE"
+	ronin.supply_ledger["contract_lord_family"] = "Doji"
+	ronin.supply_ledger["contract_duration_seasons"] = 3
+	var chars: Dictionary = {10: ronin, 200: lord}
+	var objectives_map: Dictionary = {
+		10: {"primary": {"need_type": "DEFEND_PROVINCE", "source": "contract", "assigned_by": 200}},
+	}
+	var prov := ProvinceData.new()
+	prov.province_id = 5
+	prov.active_crisis_id = 1
+	var provinces: Dictionary = {5: prov}
+	var char_province_map: Dictionary = {200: 5}
+	# No active wars → not extraordinary
+	DayOrchestrator._process_contract_expiry(
+		chars, objectives_map, 2, 100, [], provinces, char_province_map,
+	)
+	assert_eq(RoninSystem.get_extraordinary_deed_count(ronin, "Doji"), 0)
+	assert_eq(RoninSystem.get_deed_count(ronin, "Doji"), 1)  # still gets normal deed
+
+
+# -- APPROVE_CLAN_INDUCTION --
+
+func test_approve_induction_sets_approval_flag():
+	var ronin := _make_ronin_char(10)
+	RoninSystem.approve_induction(ronin, 200)
+	assert_eq(int(ronin.supply_ledger.get("family_daimyo_approval", -1)), 200)
+
+
+func test_approve_induction_overwrites_previous():
+	var ronin := _make_ronin_char(10)
+	RoninSystem.approve_induction(ronin, 200)
+	RoninSystem.approve_induction(ronin, 300)
+	assert_eq(int(ronin.supply_ledger.get("family_daimyo_approval", -1)), 300)
+
+
+func test_writeback_approve_induction_sets_flag():
+	var fd := _make_lord_with_family(200, "Crane", "Doji")
+	fd.lord_rank = Enums.LordRank.FAMILY_DAIMYO
+	var ronin := _make_ronin_char(10)
+	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 8}
+	ronin.supply_ledger["extraordinary_deeds_for_family"] = {"Doji": 1}
+	var chars: Dictionary = {200: fd, 10: ronin}
 	var results: Array = [{
-		"action_id": "GRANT_DEED_CREDIT",
+		"action_id": "APPROVE_CLAN_INDUCTION",
 		"success": true,
 		"character_id": 200,
 		"effects": {
-			"grant_ronin_id": 10,
-			"lord_family": "Doji",
-			"lord_id": 200,
-			"current_season": 5,
+			"approve_ronin_id": 10,
+			"family_daimyo_id": 200,
 		},
 	}]
-	DayOrchestrator._process_deed_credit_writebacks(results, chars)
-	assert_eq(RoninSystem.get_deed_count(ronin, "Doji"), 1)
+	DayOrchestrator._process_approve_induction_writebacks(results, chars)
+	assert_eq(int(ronin.supply_ledger.get("family_daimyo_approval", -1)), 200)
+
+
+func test_writeback_approve_induction_skips_dead_ronin():
+	var fd := _make_lord_with_family(200, "Crane", "Doji")
+	var ronin := _make_ronin_char(10)
+	ronin.wounds_taken = 999  # dead
+	var chars: Dictionary = {200: fd, 10: ronin}
+	var results: Array = [{
+		"action_id": "APPROVE_CLAN_INDUCTION",
+		"success": true,
+		"character_id": 200,
+		"effects": {"approve_ronin_id": 10, "family_daimyo_id": 200},
+	}]
+	DayOrchestrator._process_approve_induction_writebacks(results, chars)
+	assert_eq(int(ronin.supply_ledger.get("family_daimyo_approval", -1)), -1)
+
+
+func test_executor_approve_induction_rank_gate():
+	var pd := _make_lord_with_family(200, "Crane", "Doji")
+	pd.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO  # too low — needs FAMILY_DAIMYO
+	var ronin := _make_ronin_char(10)
+	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 8}
+	ronin.supply_ledger["extraordinary_deeds_for_family"] = {"Doji": 1}
+	var chars: Dictionary = {200: pd, 10: ronin}
+	var ctx := _make_ctx_for_induction(200, 10)
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "APPROVE_CLAN_INDUCTION"
+	action.metadata = {"target_ronin_id": 10}
+	var result: Dictionary = ActionExecutor.execute(action, pd, ctx, DiceEngine.new(1), {}, {}, chars)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "approver_rank_too_low")
+
+
+func test_executor_approve_induction_insufficient_deeds():
+	var fd := _make_lord_with_family(200, "Crane", "Doji")
+	fd.lord_rank = Enums.LordRank.FAMILY_DAIMYO
+	var ronin := _make_ronin_char(10)
+	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 5}  # below 8
+	var chars: Dictionary = {200: fd, 10: ronin}
+	var ctx := _make_ctx_for_induction(200, 10)
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "APPROVE_CLAN_INDUCTION"
+	action.metadata = {"target_ronin_id": 10}
+	var result: Dictionary = ActionExecutor.execute(action, fd, ctx, DiceEngine.new(1), {}, {}, chars)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "insufficient_deeds")
+
+
+func test_executor_approve_induction_no_extraordinary_deed():
+	var fd := _make_lord_with_family(200, "Crane", "Doji")
+	fd.lord_rank = Enums.LordRank.FAMILY_DAIMYO
+	var ronin := _make_ronin_char(10)
+	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 8}
+	# No extraordinary_deeds_for_family set
+	var chars: Dictionary = {200: fd, 10: ronin}
+	var ctx := _make_ctx_for_induction(200, 10)
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "APPROVE_CLAN_INDUCTION"
+	action.metadata = {"target_ronin_id": 10}
+	var result: Dictionary = ActionExecutor.execute(action, fd, ctx, DiceEngine.new(1), {}, {}, chars)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "no_extraordinary_deed")
+
+
+func test_executor_approve_induction_success():
+	var fd := _make_lord_with_family(200, "Crane", "Doji")
+	fd.lord_rank = Enums.LordRank.FAMILY_DAIMYO
+	var ronin := _make_ronin_char(10)
+	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 8}
+	ronin.supply_ledger["extraordinary_deeds_for_family"] = {"Doji": 1}
+	var chars: Dictionary = {200: fd, 10: ronin}
+	var ctx := _make_ctx_for_induction(200, 10)
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "APPROVE_CLAN_INDUCTION"
+	action.metadata = {"target_ronin_id": 10}
+	var result: Dictionary = ActionExecutor.execute(action, fd, ctx, DiceEngine.new(42), {}, {}, chars)
+	assert_true(result.get("success", false))
+	assert_eq(result.get("effects", {}).get("approve_ronin_id", -1), 10)
+	assert_eq(result.get("effects", {}).get("family_daimyo_id", -1), 200)
 
 
 # =============================================================================
@@ -1133,58 +1258,102 @@ func test_writeback_deed_credit_calls_grant():
 
 # -- can_be_inducted --
 
+func _make_inducted_ronin(id: int = 10) -> L5RCharacterData:
+	var ronin := _make_ronin_char(id)
+	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 8}
+	ronin.supply_ledger["extraordinary_deeds_for_family"] = {"Doji": 1}
+	ronin.supply_ledger["family_daimyo_approval"] = 200
+	return ronin
+
+
 func test_can_be_inducted_all_gates_pass():
-	var ronin := _make_ronin_char(10)
-	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 3}
-	var daimyo := _make_lord_with_family(200, "Crane", "Doji")
-	var result: Dictionary = RoninSystem.can_be_inducted(ronin, daimyo, 55, [])
+	var ronin := _make_inducted_ronin(10)
+	var sponsor := _make_lord_with_family(201, "Crane", "Doji")
+	sponsor.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var result: Dictionary = RoninSystem.can_be_inducted(ronin, sponsor, 55, [])
 	assert_true(result.get("eligible", false))
 
 
 func test_can_be_inducted_permanent_ronin_blocked():
-	var ronin := _make_ronin_char(10)
+	var ronin := _make_inducted_ronin(10)
 	ronin.permanent_ronin = true
-	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 5}
-	var daimyo := _make_lord_with_family(200, "Crane", "Doji")
-	var result: Dictionary = RoninSystem.can_be_inducted(ronin, daimyo, 60, [])
+	var sponsor := _make_lord_with_family(201, "Crane", "Doji")
+	sponsor.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var result: Dictionary = RoninSystem.can_be_inducted(ronin, sponsor, 60, [])
 	assert_false(result.get("eligible", false))
 	assert_eq(result.get("reason", ""), "permanent_ronin")
 
 
+func test_can_be_inducted_sponsor_rank_too_low():
+	var ronin := _make_inducted_ronin(10)
+	var local_lord := _make_lord_with_family(201, "Crane", "Doji")
+	local_lord.lord_rank = Enums.LordRank.LOCAL_DAIMYO  # too low
+	var result: Dictionary = RoninSystem.can_be_inducted(ronin, local_lord, 55, [])
+	assert_false(result.get("eligible", false))
+	assert_eq(result.get("reason", ""), "sponsoring_lord_rank_too_low")
+
+
 func test_can_be_inducted_low_disposition_blocked():
-	var ronin := _make_ronin_char(10)
-	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 3}
-	var daimyo := _make_lord_with_family(200, "Crane", "Doji")
-	var result: Dictionary = RoninSystem.can_be_inducted(ronin, daimyo, 30, [])
+	var ronin := _make_inducted_ronin(10)
+	var sponsor := _make_lord_with_family(201, "Crane", "Doji")
+	sponsor.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var result: Dictionary = RoninSystem.can_be_inducted(ronin, sponsor, 30, [])
 	assert_false(result.get("eligible", false))
 	assert_eq(result.get("reason", ""), "disposition_too_low")
 
 
 func test_can_be_inducted_insufficient_deeds_blocked():
 	var ronin := _make_ronin_char(10)
-	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 2}
-	var daimyo := _make_lord_with_family(200, "Crane", "Doji")
-	var result: Dictionary = RoninSystem.can_be_inducted(ronin, daimyo, 55, [])
+	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 5}  # below 8
+	ronin.supply_ledger["extraordinary_deeds_for_family"] = {"Doji": 1}
+	ronin.supply_ledger["family_daimyo_approval"] = 200
+	var sponsor := _make_lord_with_family(201, "Crane", "Doji")
+	sponsor.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var result: Dictionary = RoninSystem.can_be_inducted(ronin, sponsor, 55, [])
 	assert_false(result.get("eligible", false))
 	assert_eq(result.get("reason", ""), "insufficient_deeds")
 
 
-func test_can_be_inducted_same_clan_blocked():
+func test_can_be_inducted_no_extraordinary_deed_blocked():
 	var ronin := _make_ronin_char(10)
-	ronin.clan = "Crane"  # same as daimyo
-	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 5}
-	var daimyo := _make_lord_with_family(200, "Crane", "Doji")
-	var result: Dictionary = RoninSystem.can_be_inducted(ronin, daimyo, 55, [])
+	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 8}
+	# No extraordinary deed
+	ronin.supply_ledger["family_daimyo_approval"] = 200
+	var sponsor := _make_lord_with_family(201, "Crane", "Doji")
+	sponsor.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var result: Dictionary = RoninSystem.can_be_inducted(ronin, sponsor, 55, [])
+	assert_false(result.get("eligible", false))
+	assert_eq(result.get("reason", ""), "no_extraordinary_deed")
+
+
+func test_can_be_inducted_no_fd_approval_blocked():
+	var ronin := _make_ronin_char(10)
+	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 8}
+	ronin.supply_ledger["extraordinary_deeds_for_family"] = {"Doji": 1}
+	# No family_daimyo_approval
+	var sponsor := _make_lord_with_family(201, "Crane", "Doji")
+	sponsor.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var result: Dictionary = RoninSystem.can_be_inducted(ronin, sponsor, 55, [])
+	assert_false(result.get("eligible", false))
+	assert_eq(result.get("reason", ""), "no_family_daimyo_approval")
+
+
+func test_can_be_inducted_same_clan_blocked():
+	var ronin := _make_inducted_ronin(10)
+	ronin.clan = "Crane"  # same as sponsor
+	var sponsor := _make_lord_with_family(201, "Crane", "Doji")
+	sponsor.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var result: Dictionary = RoninSystem.can_be_inducted(ronin, sponsor, 55, [])
 	assert_false(result.get("eligible", false))
 	assert_eq(result.get("reason", ""), "already_same_clan")
 
 
 func test_can_be_inducted_serious_crime_blocked():
-	var ronin := _make_ronin_char(10)
-	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 5}
-	var daimyo := _make_lord_with_family(200, "Crane", "Doji")
+	var ronin := _make_inducted_ronin(10)
+	var sponsor := _make_lord_with_family(201, "Crane", "Doji")
+	sponsor.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
 	var known_crimes: Array = [Enums.CrimeType.TREASON]
-	var result: Dictionary = RoninSystem.can_be_inducted(ronin, daimyo, 55, known_crimes)
+	var result: Dictionary = RoninSystem.can_be_inducted(ronin, sponsor, 55, known_crimes)
 	assert_false(result.get("eligible", false))
 	assert_eq(result.get("reason", ""), "known_serious_crime")
 
@@ -1240,49 +1409,67 @@ func test_perform_induction_glory_gains():
 
 # -- executor: PERFORM_CLAN_INDUCTION --
 
-func _make_ctx_for_induction(daimyo_id: int, ronin_id: int) -> NPCDataStructures.ContextSnapshot:
+func _make_ctx_for_induction(sponsor_id: int, ronin_id: int) -> NPCDataStructures.ContextSnapshot:
 	var ctx := NPCDataStructures.ContextSnapshot.new()
-	ctx.character_id = daimyo_id
+	ctx.character_id = sponsor_id
 	ctx.ic_day = 100
 	ctx.season = 1
 	ctx.location_id = "1"
 	ctx.characters_present = [ronin_id]
+	ctx.is_lord = true
+	ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
 	return ctx
 
 
+func test_executor_induction_sponsoring_lord_rank_too_low():
+	var local_lord := _make_lord_with_family(200, "Crane", "Doji")
+	local_lord.lord_rank = Enums.LordRank.LOCAL_DAIMYO
+	local_lord.koku = 20.0
+	var ronin := _make_inducted_ronin(10)
+	var chars: Dictionary = {200: local_lord, 10: ronin}
+	var ctx := _make_ctx_for_induction(200, 10)
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "PERFORM_CLAN_INDUCTION"
+	action.metadata = {"target_ronin_id": 10}
+	var result: Dictionary = ActionExecutor.execute(action, local_lord, ctx, DiceEngine.new(42), {}, {}, chars)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "sponsoring_lord_rank_too_low")
+	assert_eq(local_lord.koku, 20.0)  # koku not deducted — gated before koku check
+
+
 func test_executor_induction_ceremony_failure_returns_failure_topic():
-	var daimyo := _make_lord_with_family(200, "Crane", "Doji")
-	daimyo.skills = {"Courtier": 1}
-	daimyo.awareness = 1
-	daimyo.koku = 20.0
-	daimyo.disposition_values = {10: 60}
-	var ronin := _make_ronin_char(10)
-	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 3}
-	var chars: Dictionary = {200: daimyo, 10: ronin}
+	var sponsor := _make_lord_with_family(200, "Crane", "Doji")
+	sponsor.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	sponsor.skills = {"Courtier": 1}
+	sponsor.awareness = 1
+	sponsor.koku = 20.0
+	sponsor.disposition_values = {10: 60}
+	var ronin := _make_inducted_ronin(10)
+	var chars: Dictionary = {200: sponsor, 10: ronin}
 	var ctx := _make_ctx_for_induction(200, 10)
 	var action := NPCDataStructures.ScoredAction.new()
 	action.action_id = "PERFORM_CLAN_INDUCTION"
 	action.metadata = {"target_ronin_id": 10}
 	# Seed 1 produces low rolls (TN 20 unlikely with Courtier 1).
-	var result: Dictionary = ActionExecutor.execute(action, daimyo, ctx, DiceEngine.new(1), {}, {}, chars)
+	var result: Dictionary = ActionExecutor.execute(action, sponsor, ctx, DiceEngine.new(1), {}, {}, chars)
 	# Koku always deducted (Pattern B).
-	assert_eq(daimyo.koku, 10.0)
+	assert_eq(sponsor.koku, 10.0)
 	if not result.get("success", false):
 		assert_true(result.get("effects", {}).get("ceremony_failure_topic", false))
 
 
 func test_executor_induction_insufficient_koku_blocked():
-	var daimyo := _make_lord_with_family(200, "Crane", "Doji")
-	daimyo.koku = 5.0  # less than 10 required
-	daimyo.disposition_values = {10: 60}
-	var ronin := _make_ronin_char(10)
-	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 3}
-	var chars: Dictionary = {200: daimyo, 10: ronin}
+	var sponsor := _make_lord_with_family(200, "Crane", "Doji")
+	sponsor.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	sponsor.koku = 5.0  # less than 10 required
+	sponsor.disposition_values = {10: 60}
+	var ronin := _make_inducted_ronin(10)
+	var chars: Dictionary = {200: sponsor, 10: ronin}
 	var ctx := _make_ctx_for_induction(200, 10)
 	var action := NPCDataStructures.ScoredAction.new()
 	action.action_id = "PERFORM_CLAN_INDUCTION"
 	action.metadata = {"target_ronin_id": 10}
-	var result: Dictionary = ActionExecutor.execute(action, daimyo, ctx, DiceEngine.new(42), {}, {}, chars)
+	var result: Dictionary = ActionExecutor.execute(action, sponsor, ctx, DiceEngine.new(42), {}, {}, chars)
 	assert_false(result.get("success", true))
 	assert_eq(result.get("reason", ""), "insufficient_koku")
 
@@ -1290,10 +1477,10 @@ func test_executor_induction_insufficient_koku_blocked():
 # -- induction writeback --
 
 func test_writeback_induction_success_changes_clan():
-	var daimyo := _make_lord_with_family(200, "Crane", "Doji")
-	var ronin := _make_ronin_char(10)
-	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 3}
-	var chars: Dictionary = {200: daimyo, 10: ronin}
+	var sponsor := _make_lord_with_family(200, "Crane", "Doji")
+	sponsor.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var ronin := _make_inducted_ronin(10)
+	var chars: Dictionary = {200: sponsor, 10: ronin}
 	var objectives_map: Dictionary = {}
 	var active_topics: Array = []
 	var next_id: Array[int] = [1]
@@ -1312,10 +1499,10 @@ func test_writeback_induction_success_changes_clan():
 
 
 func test_writeback_induction_creates_tier3_political_topic():
-	var daimyo := _make_lord_with_family(200, "Crane", "Doji")
-	var ronin := _make_ronin_char(10)
-	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 3}
-	var chars: Dictionary = {200: daimyo, 10: ronin}
+	var sponsor := _make_lord_with_family(200, "Crane", "Doji")
+	sponsor.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var ronin := _make_inducted_ronin(10)
+	var chars: Dictionary = {200: sponsor, 10: ronin}
 	var active_topics: Array = []
 	var next_id: Array[int] = [1]
 	var results: Array = [{
@@ -1335,13 +1522,13 @@ func test_writeback_induction_creates_tier3_political_topic():
 
 
 func test_writeback_induction_applies_family_disposition():
-	var daimyo := _make_lord_with_family(200, "Crane", "Doji")
+	var sponsor := _make_lord_with_family(200, "Crane", "Doji")
+	sponsor.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
 	var family_member := _make_lord_with_family(201, "Crane", "Doji")
-	family_member.physical_location = daimyo.physical_location
+	family_member.physical_location = sponsor.physical_location
 	family_member.disposition_values = {10: 0}
-	var ronin := _make_ronin_char(10)
-	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 3}
-	var chars: Dictionary = {200: daimyo, 201: family_member, 10: ronin}
+	var ronin := _make_inducted_ronin(10)
+	var chars: Dictionary = {200: sponsor, 201: family_member, 10: ronin}
 	var active_topics: Array = []
 	var next_id: Array[int] = [1]
 	var results: Array = [{
@@ -1359,9 +1546,9 @@ func test_writeback_induction_applies_family_disposition():
 
 
 func test_writeback_induction_ceremony_failure_creates_tier4_topic():
-	var daimyo := _make_lord_with_family(200, "Crane", "Doji")
+	var sponsor := _make_lord_with_family(200, "Crane", "Doji")
 	var ronin := _make_ronin_char(10)
-	var chars: Dictionary = {200: daimyo, 10: ronin}
+	var chars: Dictionary = {200: sponsor, 10: ronin}
 	var active_topics: Array = []
 	var next_id: Array[int] = [5]
 	var results: Array = [{
@@ -1377,6 +1564,24 @@ func test_writeback_induction_ceremony_failure_creates_tier4_topic():
 	assert_eq(active_topics.size(), 1)
 	var topic: TopicData = active_topics[0]
 	assert_eq(topic.tier, TopicData.Tier.TIER_4)
+
+
+func test_writeback_induction_clears_fd_approval_flag():
+	var sponsor := _make_lord_with_family(200, "Crane", "Doji")
+	sponsor.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	var ronin := _make_inducted_ronin(10)
+	var chars: Dictionary = {200: sponsor, 10: ronin}
+	var results: Array = [{
+		"action_id": "PERFORM_CLAN_INDUCTION",
+		"success": true,
+		"character_id": 200,
+		"target_npc_id": 10,
+		"effects": {"inductee_id": 10, "daimyo_id": 200},
+	}]
+	DayOrchestrator._process_clan_induction_writebacks(
+		results, chars, {}, [], [1], 100,
+	)
+	assert_eq(int(ronin.supply_ledger.get("family_daimyo_approval", -1)), -1)
 
 
 # -- TERMINATE_CONTRACT writeback --

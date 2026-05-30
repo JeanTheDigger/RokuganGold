@@ -781,7 +781,7 @@ static func advance_day(
 		characters_by_id, objectives_map, current_season, ic_day,
 	)
 
-	_process_deed_credit_writebacks(
+	_process_approve_induction_writebacks(
 		day_result.get("results", []),
 		characters_by_id,
 	)
@@ -798,6 +798,7 @@ static func advance_day(
 
 	_process_contract_expiry(
 		characters_by_id, objectives_map, current_season, ic_day,
+		active_wars, provinces, character_province_map,
 	)
 
 	_process_compose_theater_writebacks(
@@ -6791,6 +6792,7 @@ static func _process_contract_acceptance_writebacks(
 		ronin.supply_ledger["contract_end_ic_day"] = ic_day + duration_seasons * season_days
 		ronin.supply_ledger["contract_type"] = contract_type
 		ronin.supply_ledger["contract_lord_family"] = lord.family
+		ronin.supply_ledger["contract_duration_seasons"] = duration_seasons
 
 		# Assign the contract NeedType as primary objective.
 		var need_type: String = RoninSystem.CONTRACT_TYPE_NEED.get(contract_type, "DEFEND_PROVINCE")
@@ -6837,6 +6839,9 @@ static func _process_contract_expiry(
 	objectives_map: Dictionary,
 	current_season: int,
 	ic_day: int,
+	active_wars: Array,
+	provinces: Dictionary,
+	character_province_map: Dictionary,
 ) -> void:
 	for cid: int in characters_by_id:
 		var character: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
@@ -6853,7 +6858,10 @@ static func _process_contract_expiry(
 			primary.get("need_type", "") in RoninSystem.CONTRACT_TYPE_NEED.values()
 
 		if is_clean:
-			RoninSystem.complete_contract(character, lord_family, current_season)
+			var is_extraordinary: bool = _is_extraordinary_contract_deed(
+				character, characters_by_id, active_wars, provinces, character_province_map,
+			)
+			RoninSystem.complete_contract(character, lord_family, current_season, is_extraordinary)
 		else:
 			var lord_id: int = character.lord_id
 			var lord: L5RCharacterData = characters_by_id.get(lord_id) as L5RCharacterData
@@ -6871,29 +6879,68 @@ static func _process_contract_expiry(
 				objectives_map[cid].erase("primary")
 
 
-# -- Deed Credit Writebacks (s52.7 Part B) ------------------------------------
+# Evaluates all three extraordinary deed conditions (s52.7 A63–A65).
+# Returns true if ALL three conditions are met at contract expiry time.
+static func _is_extraordinary_contract_deed(
+	ronin: L5RCharacterData,
+	characters_by_id: Dictionary,
+	active_wars: Array,
+	provinces: Dictionary,
+	character_province_map: Dictionary,
+) -> bool:
+	var lord_id: int = ronin.lord_id
+	var lord: L5RCharacterData = characters_by_id.get(lord_id) as L5RCharacterData
+	if lord == null or CharacterStats.is_dead(lord):
+		return false
+
+	# A63 — Active war condition: lord's clan is currently at war.
+	var at_war: bool = false
+	for war: WarData in active_wars:
+		if not war.is_active:
+			continue
+		if war.clan_a == lord.clan or war.clan_b == lord.clan:
+			at_war = true
+			break
+
+	# A64 — Active crisis condition: lord's province has an active crisis.
+	var lord_province_id: int = character_province_map.get(lord_id, -1)
+	var in_crisis: bool = false
+	if lord_province_id >= 0:
+		var prov: ProvinceData = provinces.get(lord_province_id) as ProvinceData
+		if prov != null:
+			in_crisis = prov.active_crisis_id >= 0
+
+	# A65 — Continuous service condition: contract lasted 3+ seasons.
+	var duration_seasons: int = int(ronin.supply_ledger.get("contract_duration_seasons", 0))
+	var long_service: bool = duration_seasons >= RoninSystem.INDUCTION_MIN_CONTINUOUS_SEASONS
+
+	return at_war and in_crisis and long_service
 
 
-static func _process_deed_credit_writebacks(
+# -- Approve Induction Writebacks (s52.7 Part C) ------------------------------
+
+
+static func _process_approve_induction_writebacks(
 	results: Array,
 	characters_by_id: Dictionary,
 ) -> void:
 	for result: Dictionary in results:
-		if result.get("action_id", "") != "GRANT_DEED_CREDIT":
+		if result.get("action_id", "") != "APPROVE_CLAN_INDUCTION":
 			continue
 		if not result.get("success", false):
 			continue
 		var effects: Dictionary = result.get("effects", {})
-		var ronin_id: int = effects.get("grant_ronin_id", -1)
-		var lord_family: String = effects.get("lord_family", "")
-		var lord_id: int = effects.get("lord_id", -1)
-		var season: int = effects.get("current_season", 0)
-		if ronin_id < 0 or lord_family.is_empty():
+		var ronin_id: int = effects.get("approve_ronin_id", -1)
+		var family_daimyo_id: int = effects.get("family_daimyo_id", -1)
+		if ronin_id < 0 or family_daimyo_id < 0:
 			continue
 		var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+		var fd: L5RCharacterData = characters_by_id.get(family_daimyo_id) as L5RCharacterData
 		if ronin == null or CharacterStats.is_dead(ronin):
 			continue
-		RoninSystem.grant_deed_credit(ronin, lord_family, lord_id, season)
+		if fd == null or CharacterStats.is_dead(fd):
+			continue
+		RoninSystem.approve_induction(ronin, family_daimyo_id)
 
 
 # -- Early Termination Writebacks (s52.6 Part G) ------------------------------

@@ -1083,6 +1083,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"ACCEPT_RONIN_PETITION",
 				"HIRE_RONIN",
 				"PERFORM_CLAN_INDUCTION",
+				"APPROVE_CLAN_INDUCTION",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
@@ -1119,6 +1120,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"ISSUE_DUEL_CHALLENGE",
 				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
 				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
+				"APPROVE_CLAN_INDUCTION",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
@@ -1279,6 +1281,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"PETITION_RONIN": 1,
 		"HIRE_RONIN": 1,
 		"PERFORM_CLAN_INDUCTION": 2,
+		"APPROVE_CLAN_INDUCTION": 0,
 		"ARRANGE_MARRIAGE": 1,
 		"DISSOLVE_MARRIAGE": 1,
 		"FOUND_VILLAGE": 1,
@@ -2243,7 +2246,7 @@ const LORD_ONLY_ACTIONS: Array[String] = [
 	"ACCEPT_RONIN_PETITION",
 	"HIRE_RONIN",
 	"PERFORM_CLAN_INDUCTION",
-	"GRANT_DEED_CREDIT",
+	"APPROVE_CLAN_INDUCTION",
 ]
 
 
@@ -2928,9 +2931,10 @@ static func _populate_action_metadata(
 		var ind_meta: Dictionary = _build_induction_metadata(ctx, chars_by_id)
 		option.metadata = ind_meta
 		option.target_npc_id = ind_meta.get("target_ronin_id", -1)
-	elif option.action_id == "GRANT_DEED_CREDIT":
-		option.metadata = {"target_ronin_id": _pick_ronin_for_deed_credit(ctx, chars_by_id)}
-		option.target_npc_id = option.metadata.get("target_ronin_id", -1)
+	elif option.action_id == "APPROVE_CLAN_INDUCTION":
+		var appr_meta: Dictionary = _build_approve_induction_metadata(ctx, chars_by_id)
+		option.metadata = appr_meta
+		option.target_npc_id = appr_meta.get("target_ronin_id", -1)
 
 
 static func _build_compose_theater_metadata(
@@ -4687,9 +4691,13 @@ static func _build_induction_metadata(
 	ctx: NPCDataStructures.ContextSnapshot,
 	chars_by_id: Dictionary,
 ) -> Dictionary:
-	## Select the best co-located ronin eligible for clan induction (s52.7 Part C).
-	var daimyo: L5RCharacterData = chars_by_id.get(ctx.character_id) as L5RCharacterData
-	if daimyo == null:
+	## Select the best co-located ronin eligible for induction ceremony (s52.7 Part D).
+	## Sponsoring lord must be Provincial Daimyo+; ronin needs 8 deeds, 1 extraordinary
+	## deed, and prior Family Daimyo approval. Prefer highest deed count.
+	var sponsor: L5RCharacterData = chars_by_id.get(ctx.character_id) as L5RCharacterData
+	if sponsor == null:
+		return {"target_ronin_id": -1}
+	if sponsor.lord_rank < Enums.LordRank.PROVINCIAL_DAIMYO:
 		return {"target_ronin_id": -1}
 	var best_id: int = -1
 	var best_deeds: int = -1
@@ -4699,13 +4707,17 @@ static func _build_induction_metadata(
 			continue
 		if c.permanent_ronin:
 			continue
-		if c.clan == daimyo.clan:
+		if c.clan == sponsor.clan:
 			continue
 		var disp: float = ctx.disposition_values.get(present_id, 0.0)
 		if disp < RoninSystem.INDUCTION_MIN_DISPOSITION:
 			continue
-		var deeds: int = RoninSystem.get_deed_count(c, daimyo.family)
-		if deeds < RoninSystem.INDUCTION_MIN_DEEDS:
+		var deeds: int = RoninSystem.get_deed_count(c, sponsor.family)
+		if deeds < RoninSystem.INDUCTION_DEED_THRESHOLD:
+			continue
+		if RoninSystem.get_extraordinary_deed_count(c, sponsor.family) < RoninSystem.INDUCTION_EXTRAORDINARY_DEED_REQUIRED:
+			continue
+		if int(c.supply_ledger.get("family_daimyo_approval", -1)) < 0:
 			continue
 		if deeds > best_deeds:
 			best_deeds = deeds
@@ -4713,32 +4725,43 @@ static func _build_induction_metadata(
 	return {"target_ronin_id": best_id}
 
 
-static func _pick_ronin_for_deed_credit(
+static func _build_approve_induction_metadata(
 	ctx: NPCDataStructures.ContextSnapshot,
 	chars_by_id: Dictionary,
-) -> int:
-	## Find the best co-located ronin for a lord to grant deed credit (s52.7 Part B).
-	## Prefers ronin with high lord disposition who are working toward induction threshold.
-	var lord: L5RCharacterData = chars_by_id.get(ctx.character_id) as L5RCharacterData
-	if lord == null:
-		return -1
+) -> Dictionary:
+	## Family Daimyo selects the best known ronin to grant induction approval (s52.7 Part C).
+	## Requires 8 deeds + 1 extraordinary deed for the FD's family.
+	## Ronin does not need to be co-located — approval can be granted remotely.
+	var fd: L5RCharacterData = chars_by_id.get(ctx.character_id) as L5RCharacterData
+	if fd == null:
+		return {"target_ronin_id": -1}
+	if fd.lord_rank < Enums.LordRank.FAMILY_DAIMYO:
+		return {"target_ronin_id": -1}
 	var best_id: int = -1
-	var best_disp: float = 29.0  # minimum to consider (below Friend tier)
-	for present_id: int in ctx.characters_present:
-		var c: L5RCharacterData = chars_by_id.get(present_id) as L5RCharacterData
+	var best_deeds: int = -1
+	# Check all known characters for ronins who qualify but lack FD approval.
+	for known_id: int in ctx.met_characters:
+		var c: L5RCharacterData = chars_by_id.get(known_id) as L5RCharacterData
 		if c == null or CharacterStats.is_dead(c):
 			continue
 		if c.permanent_ronin:
 			continue
-		if c.clan == lord.clan:
-			continue  # already same clan
-		if c.supply_ledger.get("contract_end_ic_day", -1) < 0:
-			continue  # not under contract (deed credits only for active service)
-		var disp: float = ctx.disposition_values.get(present_id, 0.0)
-		if disp > best_disp:
-			best_disp = disp
-			best_id = present_id
-	return best_id
+		if c.clan == fd.clan:
+			continue
+		if c.supply_ledger.get("family_daimyo_approval", -1) >= 0:
+			continue  # already has approval
+		var deeds: int = RoninSystem.get_deed_count(c, fd.family)
+		if deeds < RoninSystem.INDUCTION_DEED_THRESHOLD:
+			continue
+		if RoninSystem.get_extraordinary_deed_count(c, fd.family) < RoninSystem.INDUCTION_EXTRAORDINARY_DEED_REQUIRED:
+			continue
+		var disp: float = ctx.disposition_values.get(known_id, 0.0)
+		if disp < RoninSystem.INDUCTION_MIN_DISPOSITION:
+			continue
+		if deeds > best_deeds:
+			best_deeds = deeds
+			best_id = known_id
+	return {"target_ronin_id": best_id}
 
 
 static func _find_marriageable_vassals(

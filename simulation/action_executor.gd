@@ -357,8 +357,8 @@ static func execute(
 	if action_id == "PERFORM_CLAN_INDUCTION":
 		return _execute_perform_clan_induction(action, character, ctx, dice_engine, characters_by_id)
 
-	if action_id == "GRANT_DEED_CREDIT":
-		return _execute_grant_deed_credit(action, character, ctx, characters_by_id)
+	if action_id == "APPROVE_CLAN_INDUCTION":
+		return _execute_approve_clan_induction(action, character, ctx, characters_by_id)
 
 	if action_id == "TERMINATE_CONTRACT":
 		return _execute_terminate_contract(action, character, ctx, characters_by_id)
@@ -3260,6 +3260,14 @@ static func _execute_perform_clan_induction(
 	var ic_day: int = ctx.ic_day
 	var ronin_id: int = action.metadata.get("target_ronin_id", -1)
 
+	# Only Provincial Daimyo or higher may sponsor induction (s52.7 Part A).
+	if character.lord_rank < Enums.LordRank.PROVINCIAL_DAIMYO:
+		return {
+			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "sponsoring_lord_rank_too_low", "effects": {},
+		}
+
 	if ronin_id < 0:
 		return {
 			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
@@ -3285,8 +3293,8 @@ static func _execute_perform_clan_induction(
 		}
 	character.koku -= RoninSystem.INDUCTION_KOKU_COST
 
-	var daimyo_disp: int = int(character.disposition_values.get(ronin_id, 0))
-	var eligibility: Dictionary = RoninSystem.can_be_inducted(inductee, character, daimyo_disp, [])
+	var lord_disp: int = int(character.disposition_values.get(ronin_id, 0))
+	var eligibility: Dictionary = RoninSystem.can_be_inducted(inductee, character, lord_disp, [])
 	if not eligibility.get("eligible", false):
 		return {
 			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
@@ -3319,7 +3327,9 @@ static func _execute_perform_clan_induction(
 	}
 
 
-static func _execute_grant_deed_credit(
+## Family Daimyo issues formal approval for a specific ronin's induction (s52.7 Part A).
+## No skill roll — this is an executive decision, not a social contest.
+static func _execute_approve_clan_induction(
 	action: NPCDataStructures.ScoredAction,
 	character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
@@ -3327,28 +3337,53 @@ static func _execute_grant_deed_credit(
 ) -> Dictionary:
 	var ic_day: int = ctx.ic_day
 	var ronin_id: int = action.metadata.get("target_ronin_id", -1)
+
+	if character.lord_rank < Enums.LordRank.FAMILY_DAIMYO:
+		return {
+			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "approver_rank_too_low", "effects": {},
+		}
+
 	if ronin_id < 0:
 		return {
-			"success": false, "action_id": "GRANT_DEED_CREDIT",
+			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
 			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
-			"reason": "no_ronin_present", "effects": {},
+			"reason": "no_ronin_identified", "effects": {},
 		}
+
 	var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
 	if ronin == null or CharacterStats.is_dead(ronin):
 		return {
-			"success": false, "action_id": "GRANT_DEED_CREDIT",
+			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
 			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
 			"reason": "ronin_unavailable", "effects": {},
 		}
+
+	# Verify the ronin has earned sufficient deeds for this family.
+	if RoninSystem.get_deed_count(ronin, character.family) < RoninSystem.INDUCTION_DEED_THRESHOLD:
+		return {
+			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": "insufficient_deeds", "effects": {},
+		}
+
+	if RoninSystem.get_extraordinary_deed_count(ronin, character.family) < RoninSystem.INDUCTION_EXTRAORDINARY_DEED_REQUIRED:
+		return {
+			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": "no_extraordinary_deed", "effects": {},
+		}
+
 	return {
-		"success": true, "action_id": "GRANT_DEED_CREDIT",
+		"success": true, "action_id": "APPROVE_CLAN_INDUCTION",
 		"character_id": character.character_id, "target_npc_id": ronin_id,
 		"ic_day": ic_day, "season": ctx.season,
 		"effects": {
-			"grant_ronin_id": ronin_id,
-			"lord_family": character.family,
-			"current_season": ctx.season,
-			"lord_id": character.character_id,
+			"approve_ronin_id": ronin_id,
+			"family_daimyo_id": character.character_id,
 		},
 	}
 
