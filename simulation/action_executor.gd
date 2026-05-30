@@ -3284,7 +3284,7 @@ static func _execute_perform_clan_induction(
 			"reason": "inductee_unavailable", "effects": {},
 		}
 
-	# Koku deducted at roll time (Pattern B — always paid).
+	# Koku check — must have enough before the ceremony begins.
 	if character.koku < RoninSystem.INDUCTION_KOKU_COST:
 		return {
 			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
@@ -3292,7 +3292,6 @@ static func _execute_perform_clan_induction(
 			"ic_day": ic_day, "season": ctx.season,
 			"reason": "insufficient_koku", "effects": {},
 		}
-	character.koku -= RoninSystem.INDUCTION_KOKU_COST
 
 	var lord_disp: int = int(character.disposition_values.get(ronin_id, 0))
 	var eligibility: Dictionary = RoninSystem.can_be_inducted(inductee, character, lord_disp, [])
@@ -3303,6 +3302,9 @@ static func _execute_perform_clan_induction(
 			"ic_day": ic_day, "season": ctx.season,
 			"reason": eligibility.get("reason", "ineligible"), "effects": {},
 		}
+
+	# Koku deducted after eligibility confirmed (Pattern B — paid before the roll).
+	character.koku -= RoninSystem.INDUCTION_KOKU_COST
 
 	# Courtier/Awareness vs TN 20 — ceremony must be performed with proper rites.
 	var check: Dictionary = SkillResolver.resolve_skill_check(
@@ -3376,6 +3378,24 @@ static func _execute_approve_clan_induction(
 			"character_id": character.character_id, "target_npc_id": ronin_id,
 			"ic_day": ic_day, "season": ctx.season,
 			"reason": "no_extraordinary_deed", "effects": {},
+		}
+
+	# Disposition must be at Friend tier or above (s52.7 Part D).
+	if int(character.disposition_values.get(ronin_id, 0)) < RoninSystem.INDUCTION_MIN_DISPOSITION:
+		return {
+			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": "disposition_too_low", "effects": {},
+		}
+
+	# Prevent duplicate approvals (s52.7 Part D).
+	if int(ronin.supply_ledger.get("family_daimyo_approval", -1)) >= 0:
+		return {
+			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": "already_approved", "effects": {},
 		}
 
 	return {

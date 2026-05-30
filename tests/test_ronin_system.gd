@@ -1415,6 +1415,7 @@ func test_executor_approve_induction_no_extraordinary_deed():
 func test_executor_approve_induction_success():
 	var fd := _make_lord_with_family(200, "Crane", "Doji")
 	fd.lord_rank = Enums.LordRank.FAMILY_DAIMYO
+	fd.disposition_values = {10: 60}  # Friend tier — required by s52.7 Part D
 	var ronin := _make_ronin_char(10)
 	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 8}
 	ronin.supply_ledger["extraordinary_deeds_for_family"] = {"Doji": 1}
@@ -1760,6 +1761,63 @@ func test_writeback_induction_clears_fd_approval_flag():
 		results, chars, {}, [], [1], 100,
 	)
 	assert_eq(int(ronin.supply_ledger.get("family_daimyo_approval", -1)), -1)
+
+
+func test_executor_induction_koku_not_deducted_on_eligibility_failure():
+	# Ronin has no FD approval — can_be_inducted() fails.
+	# Koku must NOT be deducted because the ceremony was never started.
+	var sponsor := _make_lord_with_family(200, "Crane", "Doji")
+	sponsor.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	sponsor.koku = 20.0
+	sponsor.disposition_values = {10: 60}
+	var ronin := _make_ronin_char(10)
+	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 8}
+	ronin.supply_ledger["extraordinary_deeds_for_family"] = {"Doji": 1}
+	# No "family_daimyo_approval" set — eligibility check must fail.
+	var chars: Dictionary = {200: sponsor, 10: ronin}
+	var ctx := _make_ctx_for_induction(200, 10)
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "PERFORM_CLAN_INDUCTION"
+	action.metadata = {"target_ronin_id": 10}
+	var result: Dictionary = ActionExecutor.execute(action, sponsor, ctx, DiceEngine.new(42), {}, {}, chars)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "no_family_daimyo_approval")
+	assert_eq(sponsor.koku, 20.0)  # koku must not be deducted before eligibility passes
+
+
+func test_executor_approve_induction_low_disposition_blocked():
+	var fd := _make_lord_with_family(200, "Crane", "Doji")
+	fd.lord_rank = Enums.LordRank.FAMILY_DAIMYO
+	fd.disposition_values = {10: 30}  # below INDUCTION_MIN_DISPOSITION (51)
+	var ronin := _make_ronin_char(10)
+	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 8}
+	ronin.supply_ledger["extraordinary_deeds_for_family"] = {"Doji": 1}
+	var chars: Dictionary = {200: fd, 10: ronin}
+	var ctx := _make_ctx_for_induction(200, 10)
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "APPROVE_CLAN_INDUCTION"
+	action.metadata = {"target_ronin_id": 10}
+	var result: Dictionary = ActionExecutor.execute(action, fd, ctx, DiceEngine.new(42), {}, {}, chars)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "disposition_too_low")
+
+
+func test_executor_approve_induction_already_approved_blocked():
+	var fd := _make_lord_with_family(200, "Crane", "Doji")
+	fd.lord_rank = Enums.LordRank.FAMILY_DAIMYO
+	fd.disposition_values = {10: 60}
+	var ronin := _make_ronin_char(10)
+	ronin.supply_ledger["contract_deeds_for_family"] = {"Doji": 8}
+	ronin.supply_ledger["extraordinary_deeds_for_family"] = {"Doji": 1}
+	ronin.supply_ledger["family_daimyo_approval"] = 200  # already approved
+	var chars: Dictionary = {200: fd, 10: ronin}
+	var ctx := _make_ctx_for_induction(200, 10)
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "APPROVE_CLAN_INDUCTION"
+	action.metadata = {"target_ronin_id": 10}
+	var result: Dictionary = ActionExecutor.execute(action, fd, ctx, DiceEngine.new(42), {}, {}, chars)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "already_approved")
 
 
 # -- TERMINATE_CONTRACT writeback --
