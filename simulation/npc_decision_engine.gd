@@ -2882,6 +2882,17 @@ static func _populate_action_metadata(
 		option.metadata = {"target_npc_id": need.target_npc_id}
 	elif option.action_id == "MENTOR":
 		option.metadata = _build_mentor_metadata(ctx, need, chars_by_id)
+	elif option.action_id == "TRAIN":
+		# Surface the training target skill name for competence scoring.
+		# The executor calls NPCAdvancement.apply_solo_training_progress() directly.
+		if character != null:
+			var target: Dictionary = NPCAdvancement.get_best_training_target(character)
+			option.metadata = {
+				"training_skill": target.get("skill", ""),
+				"training_ring": int(target.get("ring", Enums.Ring.EARTH)),
+			}
+		else:
+			option.metadata = {"training_skill": "", "training_ring": int(Enums.Ring.EARTH)}
 	elif option.action_id == "COMPOSE_THEATER_PIECE":
 		option.metadata = _build_compose_theater_metadata(ctx, need)
 	elif option.action_id == "LEARN_THEATER_PIECE":

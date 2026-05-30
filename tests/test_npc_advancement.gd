@@ -716,3 +716,121 @@ func test_rank_up_topic_not_seeded_without_rank_up() -> void:
 		[c], [], [], [], [], 0, active_topics, next_topic_id, 10
 	)
 	assert_eq(c.topic_pool.size(), 0, "no topic should be seeded when no rank-up occurred")
+
+
+# -- Solo TRAIN ActionID (s48) ------------------------------------------------
+
+func test_get_best_training_target_returns_primary_ring() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	# Hida Bushi focus rings: Earth, Water. Earth ring at rank 3 (stamina + willpower).
+	# With stamina=3, willpower=2 -> Earth at 2 (min of pair), not yet at max (5).
+	var target: Dictionary = NPCAdvancement.get_best_training_target(c)
+	assert_false(target.is_empty(), "Should find a training target")
+	assert_eq(target.get("type", ""), "ring", "First priority is primary ring")
+
+
+func test_apply_solo_training_progress_adds_progress() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	# Force progress bars to empty state so we can see them fill
+	c.progress_bars = {}
+	var result: Dictionary = NPCAdvancement.apply_solo_training_progress(c)
+	assert_false(result.get("reason", "") == "nothing_to_train", "Should find something to train")
+	# Progress should have been added to some bar
+	var total_progress: int = 0
+	for key: String in c.progress_bars:
+		total_progress += c.progress_bars[key]
+	assert_gt(total_progress, 0, "Progress bars should have non-zero total after solo training")
+
+
+func test_apply_solo_training_progress_amount_is_50() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	c.progress_bars = {}
+	var result: Dictionary = NPCAdvancement.apply_solo_training_progress(c)
+	assert_eq(result.get("progress_added", 0), NPCAdvancement.TRAINING_PROGRESS_SOLO,
+		"Solo training should add exactly TRAINING_PROGRESS_SOLO progress")
+
+
+func test_apply_solo_training_nothing_when_maxed() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	# Max out all rings and skills
+	c.stamina = 5; c.willpower = 5; c.strength = 5; c.perception = 5
+	c.agility = 5; c.intelligence = 5; c.reflexes = 5; c.awareness = 5
+	c.void_ring = 5
+	for key: String in c.skills:
+		c.skills[key] = 5
+	var result: Dictionary = NPCAdvancement.apply_solo_training_progress(c)
+	assert_eq(result.get("reason", ""), "nothing_to_train", "Should return nothing_to_train when all maxed")
+
+
+func test_solo_training_writeback_rank_up_creates_topic() -> void:
+	# Character whose computed insight rank (2) exceeds stored school_rank (1).
+	# Default rings give insight=100; add 50+ skill ranks to push past 150 (Rank 2 threshold).
+	var c: L5RCharacterData = _make_character(1)
+	c.character_name = "Hida Taro"
+	c.school_rank = 1
+	c.skills["Kenjutsu"] = 5
+	c.skills["Athletics"] = 5
+	c.skills["Defense"] = 5
+	c.skills["Heavy Weapons"] = 5
+	c.skills["Intimidation"] = 5
+	c.skills["Lore: Shadowlands"] = 5
+	c.skills["Battle"] = 5
+	c.skills["Hunting"] = 5
+	c.skills["Horsemanship"] = 5
+	c.skills["Jiujutsu"] = 5
+	# Insight = ring(100) + skills(50) = 150 -> Rank 2
+	assert_eq(CharacterStats.get_insight_rank(c), 2, "Sanity: should be at Rank 2 now")
+	# Writeback receives a TRAIN result with advanced=true
+	var train_result: Dictionary = {"advanced": true, "type": "skill", "skill": "Kenjutsu", "progress_added": 50}
+	var active_topics: Array = []
+	var next_topic_id: Array = [300]
+	var chars_by_id: Dictionary = {c.character_id: c}
+	var fake_result: Dictionary = {
+		"action_id": "TRAIN",
+		"character_id": c.character_id,
+		"effects": {"training_result": train_result},
+	}
+	DayOrchestrator._process_solo_training_writebacks(
+		[fake_result], chars_by_id, active_topics, next_topic_id, 1
+	)
+	assert_eq(active_topics.size(), 1, "Rank-up from TRAIN should create a topic")
+	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_4)
+	assert_true(c.topic_pool.has(active_topics[0].topic_id),
+		"Character's topic_pool must contain their solo-training rank-up topic")
+
+
+func test_solo_training_writeback_no_topic_without_rank_up() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	c.school_rank = 2
+	# Pretend a skill advanced but insight didn't cross threshold
+	var train_result: Dictionary = {"advanced": true, "type": "skill", "skill": "Kenjutsu", "progress_added": 50}
+	var active_topics: Array = []
+	var next_topic_id: Array = [300]
+	var chars_by_id: Dictionary = {c.character_id: c}
+	var fake_result: Dictionary = {
+		"action_id": "TRAIN",
+		"character_id": c.character_id,
+		"effects": {"training_result": train_result},
+	}
+	DayOrchestrator._process_solo_training_writebacks(
+		[fake_result], chars_by_id, active_topics, next_topic_id, 1
+	)
+	assert_eq(active_topics.size(), 0, "No topic when insight rank did not increase")
+
+
+func test_solo_training_writeback_ignores_non_train_actions() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	c.school_rank = 1
+	var active_topics: Array = []
+	var next_topic_id: Array = [300]
+	var chars_by_id: Dictionary = {c.character_id: c}
+	# MEDITATE result should be ignored
+	var fake_result: Dictionary = {
+		"action_id": "MEDITATE",
+		"character_id": c.character_id,
+		"effects": {"training_result": {"advanced": true}},
+	}
+	DayOrchestrator._process_solo_training_writebacks(
+		[fake_result], chars_by_id, active_topics, next_topic_id, 1
+	)
+	assert_eq(active_topics.size(), 0, "Non-TRAIN actions should be ignored")

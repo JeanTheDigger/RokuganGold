@@ -523,8 +523,14 @@ static func _execute_no_roll(
 ) -> Dictionary:
 	var effects: Dictionary = _get_no_roll_effects(action.action_id)
 
-	if action.action_id == "TRAIN" and ctx.festival_glory_martial > 0.001:
-		effects["glory_change"] = ctx.festival_glory_martial
+	if action.action_id == "TRAIN":
+		# s48: solo training applies 50 progress per AP to the character's
+		# highest-priority training target. Locked in s48a A48a-4.
+		var train_result: Dictionary = NPCAdvancement.apply_solo_training_progress(character)
+		effects["training_result"] = train_result
+		effects["effect"] = "trained" if not train_result.get("reason", "") == "nothing_to_train" else "nothing_to_train"
+		if ctx.festival_glory_martial > 0.001:
+			effects["glory_change"] = ctx.festival_glory_martial
 
 	if action.action_id == "BEGIN_TRAVEL":
 		var destination: String = _resolve_travel_destination(action)

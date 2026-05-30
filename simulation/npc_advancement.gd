@@ -345,6 +345,77 @@ static func _sort_skills_by_rank_desc(character: L5RCharacterData, skill_list: A
 	return result
 
 
+# === SOLO TRAINING (s48) ===
+
+# Returns the next skill or ring to train using the same priority order as spend_accumulated_xp.
+# Result dict: {"type": "skill"|"ring", "skill": String, "ring": Enums.Ring}
+# Returns {} when the character has nothing left to train.
+static func get_best_training_target(character: L5RCharacterData) -> Dictionary:
+	var focus_rings: Array = get_focus_rings(character)
+	var school_skills: Array = get_school_skills(character)
+	var is_shugenja: bool = character.school_type == Enums.SchoolType.SHUGENJA
+
+	# Priority 1: Primary Ring
+	if focus_rings.size() > 0:
+		if _get_ring_rank(character, focus_rings[0]) < MAX_RING_RANK:
+			return {"type": "ring", "ring": focus_rings[0], "skill": ""}
+
+	# Priority 2: Highest-ranked school skill
+	if school_skills.size() > 0:
+		var best: String = _get_highest_ranked_skill(character, school_skills)
+		if best != "" and character.skills.get(best, 0) < MAX_SKILL_RANK:
+			return {"type": "skill", "skill": best, "ring": Enums.Ring.EARTH}
+
+	# Priority 3: Other school skills in descending rank order
+	if school_skills.size() > 1:
+		var best: String = _get_highest_ranked_skill(character, school_skills)
+		for skill: String in _sort_skills_by_rank_desc(character, school_skills):
+			if skill == best:
+				continue
+			if character.skills.get(skill, 0) < MAX_SKILL_RANK:
+				return {"type": "skill", "skill": skill, "ring": Enums.Ring.EARTH}
+
+	# Priority 4: Secondary Ring
+	if focus_rings.size() > 1:
+		if _get_ring_rank(character, focus_rings[1]) < MAX_RING_RANK:
+			return {"type": "ring", "ring": focus_rings[1], "skill": ""}
+
+	# Priority 4b: Void Ring (shugenja only)
+	if is_shugenja and _get_ring_rank(character, Enums.Ring.VOID) < MAX_RING_RANK:
+		return {"type": "ring", "ring": Enums.Ring.VOID, "skill": ""}
+
+	return {}
+
+
+# Apply solo training progress (s48: 50 progress per AP) to the character's
+# highest-priority training target.  Called by the TRAIN executor.
+# Returns: {"advanced": bool, "type": "skill"|"ring", "skill": String, "ring": Enums.Ring}
+# or {"advanced": false, "reason": "nothing_to_train"} when nothing is left.
+static func apply_solo_training_progress(character: L5RCharacterData) -> Dictionary:
+	var target: Dictionary = get_best_training_target(character)
+	if target.is_empty():
+		return {"advanced": false, "reason": "nothing_to_train"}
+
+	if target["type"] == "skill":
+		var result: Dictionary = _try_spend_on_skill(character, target["skill"], TRAINING_PROGRESS_SOLO)
+		return {
+			"advanced": result["advanced"],
+			"type": "skill",
+			"skill": target["skill"],
+			"ring": Enums.Ring.EARTH,
+			"progress_added": result["spent"],
+		}
+	else:
+		var result: Dictionary = _try_spend_on_ring(character, target["ring"], TRAINING_PROGRESS_SOLO)
+		return {
+			"advanced": result["advanced"],
+			"type": "ring",
+			"ring": target["ring"],
+			"skill": "",
+			"progress_added": result["spent"],
+		}
+
+
 # === SEASONAL BATCH PROCESSING ===
 
 static func process_seasonal_advancement(characters: Array, world_state: Dictionary, days_in_season: int) -> Dictionary:

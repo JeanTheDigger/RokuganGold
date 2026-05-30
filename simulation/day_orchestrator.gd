@@ -721,6 +721,11 @@ static func advance_day(
 		day_result.get("results", []), world_states,
 	)
 
+	_process_solo_training_writebacks(
+		day_result.get("results", []), characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+
 	_process_training_acceptance_writebacks(
 		day_result.get("results", []), characters_by_id, objectives_map,
 	)
@@ -5550,6 +5555,54 @@ static func _process_mentor_writebacks(
 		})
 		student_ws["pending_events"] = pending
 		world_states[student_id] = student_ws
+
+
+static func _process_solo_training_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "TRAIN":
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		var train_result: Dictionary = effects.get("training_result", {})
+		if train_result.is_empty() or not train_result.get("advanced", false):
+			continue
+		var char_id: int = d.get("character_id", -1)
+		if char_id < 0:
+			continue
+		var character: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		var old_rank: int = character.school_rank
+		var new_rank: int = CharacterStats.get_insight_rank(character)
+		if new_rank <= old_rank:
+			continue
+		# Rank-up occurred from solo training — sync stored field and flags (s48a A48a-3)
+		character.school_rank = new_rank
+		SkillResolver.apply_technique_flags(character)
+		# Generate Tier 4 Personal topic (s48a A48a-2) and seed into character's own pool
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "rank_advancement_%d" % char_id
+		topic.title = "%s achieves Rank %d" % [character.name, new_rank]
+		topic.topic_type = "rank_advancement"
+		topic.tier = TopicData.Tier.TIER_4
+		topic.category = TopicData.Category.PERSONAL
+		topic.subject_character_id = char_id
+		topic.subject_role = "NEUTRAL"
+		topic.ic_day_created = ic_day
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		active_topics.append(topic)
+		if not character.topic_pool.has(topic.topic_id):
+			character.topic_pool.append(topic.topic_id)
 
 
 static func _process_training_acceptance_writebacks(
