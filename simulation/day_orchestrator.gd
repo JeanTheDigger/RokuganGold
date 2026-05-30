@@ -6679,12 +6679,14 @@ static func _process_petition_writebacks(
 		var effects: Dictionary = result.get("effects", {})
 		var ronin_actor_id: int = result.get("character_id", -1)
 
-		# On failure: write cooldown to petitioner's supply_ledger.
+		# On roll failure: write per-lord cooldown to petitioner's supply_ledger (s52.5 A46).
+		# Key is "petition_refused_until_<lord_id>" so only that lord is blocked (not others).
 		var refused_until: int = effects.get("petition_refused_until", -1)
 		if refused_until >= 0:
+			var refused_lord_id: int = result.get("target_npc_id", -1)
 			var petitioner: L5RCharacterData = characters_by_id.get(ronin_actor_id) as L5RCharacterData
-			if petitioner != null and not CharacterStats.is_dead(petitioner):
-				petitioner.supply_ledger["petition_refused_until"] = refused_until
+			if petitioner != null and not CharacterStats.is_dead(petitioner) and refused_lord_id >= 0:
+				petitioner.supply_ledger["petition_refused_until_%d" % refused_lord_id] = refused_until
 			continue
 
 		if not effects.get("requires_ronin_acceptance", false):

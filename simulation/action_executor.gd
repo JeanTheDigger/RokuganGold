@@ -3001,8 +3001,9 @@ static func _execute_petition_ronin(
 			"effects": {},
 		}
 
-	# Cooldown check: petition_refused_until set on previous rejection.
-	var refused_until: int = character.supply_ledger.get("petition_refused_until", -1)
+	# Per-lord cooldown check: failed rolls set a per-lord key (s52.5 A46).
+	var cooldown_key: String = "petition_refused_until_%d" % lord_id
+	var refused_until: int = character.supply_ledger.get(cooldown_key, -1)
 	if refused_until >= 0 and ic_day < refused_until:
 		return {
 			"success": false,
@@ -3031,6 +3032,8 @@ static func _execute_petition_ronin(
 	var lord_disp: int = int(ctx.disposition_values.get(lord_id, 0))
 	var known_crimes: Array = []  # TODO: wire via ctx when crime-knowledge system exposes this
 	if RoninSystem.lord_auto_rejects(target_lord, character, lord_disp, known_crimes):
+		# Auto-rejection: lord refuses to grant an audience. No roll was made,
+		# so no roll-failure consequences apply (s52.5 Part B — penalties are for failed rolls).
 		return {
 			"success": false,
 			"action_id": "PETITION_RONIN",
@@ -3039,12 +3042,7 @@ static func _execute_petition_ronin(
 			"ic_day": ic_day,
 			"season": ctx.season,
 			"reason": "auto_rejected",
-			"effects": {
-				"failed": true,
-				"petition_refused_until": ic_day + RoninSystem.PETITION_COOLDOWN_DAYS,
-				"recipient_disposition_change": RoninSystem.PETITION_FAILURE_DISPOSITION_PENALTY,
-				"recipient_id": lord_id,
-			},
+			"effects": {},
 		}
 
 	var petition_result: Dictionary = RoninSystem.resolve_petition(
@@ -3071,6 +3069,7 @@ static func _execute_petition_ronin(
 			},
 		}
 	else:
+		# Failed roll: -3 disposition on lord, 90-day per-lord cooldown (s52.5 Part B, A45–A46).
 		return {
 			"success": false,
 			"action_id": "PETITION_RONIN",

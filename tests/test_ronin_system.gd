@@ -602,7 +602,8 @@ func test_executor_petition_ronin_no_lord_present():
 
 func test_executor_petition_ronin_cooldown_blocks():
 	var ronin := _make_ronin_char()
-	ronin.supply_ledger["petition_refused_until"] = 200
+	# Per-lord cooldown key format: "petition_refused_until_<lord_id>" (s52.5 A50c).
+	ronin.supply_ledger["petition_refused_until_200"] = 200
 	var lord := _make_lord(200)
 	var ctx := _make_ctx_for_petition(ronin.character_id, 200)
 	var chars: Dictionary = {200: lord}
@@ -616,6 +617,8 @@ func test_executor_petition_ronin_cooldown_blocks():
 
 
 func test_executor_petition_ronin_auto_rejected_low_disposition():
+	# Auto-rejection (lord refuses audience) has no consequences — no roll was made,
+	# so the roll-failure penalties (-3 disp, 90-day cooldown) do not apply (s52.5 Part G).
 	var ronin := _make_ronin_char()
 	var lord := _make_lord(200)
 	var ctx := _make_ctx_for_petition(ronin.character_id, 200)
@@ -628,8 +631,44 @@ func test_executor_petition_ronin_auto_rejected_low_disposition():
 	var result: Dictionary = ActionExecutor.execute(action, ronin, ctx, DiceEngine.new(42), {}, {}, chars)
 	assert_false(result.get("success", true))
 	assert_eq(result.get("reason", ""), "auto_rejected")
-	assert_eq(result.get("effects", {}).get("petition_refused_until", -1),
-		100 + RoninSystem.PETITION_COOLDOWN_DAYS)
+	assert_true(result.get("effects", {}).is_empty())
+
+
+func test_executor_petition_ronin_per_lord_cooldown_does_not_block_other_lord():
+	# A failed petition against lord 200 must not block petitioning lord 201 (s52.5 A50c).
+	var ronin := _make_ronin_char()
+	ronin.supply_ledger["petition_refused_until_200"] = 9999
+	var lord201 := _make_lord(201)
+	lord201.character_id = 201
+	var ctx := _make_ctx_for_petition(ronin.character_id, 201)
+	ctx.ic_day = 100
+	var chars: Dictionary = {201: lord201}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "PETITION_RONIN"
+	action.target_npc_id = 201
+	action.metadata = {"target_lord_id": 201}
+	var result: Dictionary = ActionExecutor.execute(action, ronin, ctx, DiceEngine.new(42), {}, {}, chars)
+	# Must not return petition_cooldown — the cooldown is per-lord 200, not lord 201.
+	assert_ne(result.get("reason", ""), "petition_cooldown")
+
+
+func test_executor_petition_ronin_auto_reject_no_disposition_change():
+	# Auto-rejection must not apply recipient_disposition_change (s52.5 Part G).
+	var ronin := _make_ronin_char()
+	ronin.permanent_ronin = true
+	var lord := _make_lord(200)
+	var ctx := _make_ctx_for_petition(ronin.character_id, 200)
+	ctx.disposition_values = {200: 15}
+	var chars: Dictionary = {200: lord}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "PETITION_RONIN"
+	action.target_npc_id = 200
+	action.metadata = {"target_lord_id": 200}
+	var result: Dictionary = ActionExecutor.execute(action, ronin, ctx, DiceEngine.new(42), {}, {}, chars)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "auto_rejected")
+	assert_false(result.get("effects", {}).has("recipient_disposition_change"))
+	assert_false(result.get("effects", {}).has("petition_refused_until"))
 
 
 func test_executor_petition_ronin_success_returns_acceptance_flag():
@@ -653,6 +692,25 @@ func test_executor_petition_ronin_success_returns_acceptance_flag():
 		assert_true(result.get("effects", {}).get("requires_ronin_acceptance", false))
 		assert_eq(result.get("effects", {}).get("accepting_lord_id", -1), 200)
 		assert_eq(result.get("effects", {}).get("ronin_id", -1), ronin.character_id)
+
+
+func test_pick_lord_skips_negative_disposition_lords():
+	# NPC engine must not target lords with disposition <= -1; they always auto-reject
+	# and would waste 1 AP per day in a permanent loop (s52.5 Part B Step 1).
+	# When _pick_lord_for_petition finds no eligible lord, target_lord_id=-1
+	# and the executor returns no_lord_present instead of auto_rejected.
+	var ronin := _make_ronin_char()
+	var lord := _make_lord(200)
+	var ctx := _make_ctx_for_petition(ronin.character_id, 200)
+	ctx.disposition_values = {200: -5}
+	var chars: Dictionary = {200: lord}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "PETITION_RONIN"
+	action.target_npc_id = -1
+	action.metadata = {"target_lord_id": -1}  # as if NPC engine found no eligible lord
+	var result: Dictionary = ActionExecutor.execute(action, ronin, ctx, DiceEngine.new(42), {}, {}, chars)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "no_lord_present")
 
 
 # === EXECUTOR: ACCEPT_RONIN_PETITION ===

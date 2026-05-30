@@ -4608,7 +4608,9 @@ static func _pick_lord_for_petition(
 	chars_by_id: Dictionary,
 ) -> int:
 	## Find the best co-located lord for a ronin to petition (s52.5 Part B).
-	## Prefers lords with higher disposition toward the petitioner.
+	## Only considers lords with disposition >= 0; negative-disposition lords
+	## auto-reject and would waste an AP attempting (s52.5 Part B Step 1).
+	## Prefers lords with higher disposition among eligible candidates.
 	var best_id: int = -1
 	var best_disp: int = -999
 	for present_id: int in ctx.characters_present:
@@ -4618,6 +4620,8 @@ static func _pick_lord_for_petition(
 		if candidate.role_position.is_empty():
 			continue
 		var disp: int = int(ctx.disposition_values.get(present_id, 0))
+		if disp < 0:
+			continue
 		if disp > best_disp:
 			best_disp = disp
 			best_id = present_id
