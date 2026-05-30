@@ -256,6 +256,7 @@ static func advance_day(
 	var letter_pass_results: Array = _process_daily_letter_pass(
 		characters, characters_by_id, objectives_map, scoring_tables, world_states,
 		pending_letters, ic_day, dice_engine, next_letter_id,
+		active_topics, settlements,
 	)
 
 	_apply_garrison_shortage_letter_writebacks(
@@ -8732,7 +8733,19 @@ static func _process_daily_letter_pass(
 	ic_day: int = 0,
 	dice_engine: DiceEngine = null,
 	next_letter_id: Array = [1],
+	active_topics: Array = [],
+	settlements_arr: Array = [],
 ) -> Array:
+	var topics_by_id: Dictionary = {}
+	for _t: Variant in active_topics:
+		if _t is TopicData:
+			topics_by_id[(_t as TopicData).topic_id] = _t
+
+	var settlements_by_id: Dictionary = {}
+	for _s: Variant in settlements_arr:
+		if _s is SettlementData:
+			settlements_by_id[str((_s as SettlementData).settlement_id)] = _s
+
 	var results: Array = []
 	for character: L5RCharacterData in characters:
 		if CharacterStats.is_dead(character):
@@ -8754,7 +8767,11 @@ static func _process_daily_letter_pass(
 					lid, character,
 					letter_result["target_npc_id"],
 					topic_id, ic_day, dice_engine,
-					3,
+					3, 0, 0, 0, false, Enums.Trait.AWARENESS, false,
+					letter_result.get("need_type", ""),
+					topics_by_id,
+					settlements_by_id,
+					characters_by_id,
 				)
 				if letter_result.get("meeting_proposal", false):
 					letter.meeting_proposal = true

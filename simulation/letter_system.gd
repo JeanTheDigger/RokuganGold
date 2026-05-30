@@ -42,6 +42,17 @@ const BATCH_SIZE: int = 4
 # Forgery Rank 5 mastery bonus
 const FORGERY_RANK5_DETECT_BONUS: int = 1
 
+# Calligraphy (Cipher) emphasis — s57.30 LOCKED
+const CIPHER_DECEPTION_DISPOSITION_PENALTY: int = -3
+const CIPHER_INSIGHT_BONUS_DICE: int = 1  # +1k0 on future PROBE/READ_CHARACTER
+const CIPHER_RANK5_EXTRACTION_BONUS: int = 10  # flat bonus to Cipher roll at rank 5
+
+# Calligraphy (High Rokugani) emphasis — s57.30 LOCKED
+const HIGH_ROKUGANI_TN_INNER_CITY: int = 15
+const HIGH_ROKUGANI_TN_IMPERIAL_FAMILY: int = 20
+const HIGH_ROKUGANI_TN_EMPERORS_CHOSEN: int = 25
+const HIGH_ROKUGANI_TN_EMPEROR: int = 30
+
 
 # -- Delivery Time Formula (GDD s12.7) -----------------------------------------
 
@@ -120,6 +131,10 @@ static func write_letter(
 	has_miya_route: bool = false,
 	trait_override: Enums.Trait = Enums.Trait.AWARENESS,
 	is_reply: bool = false,
+	writer_needtype: String = "",
+	topics_by_id: Dictionary = {},
+	settlements: Dictionary = {},
+	chars_by_id: Dictionary = {},
 ) -> LetterData:
 	var letter := LetterData.new()
 	letter.letter_id = letter_id
@@ -143,7 +158,54 @@ static func write_letter(
 	)
 	letter.ic_day_arrival = ic_day_sent + transit
 
+	# -- Calligraphy (Cipher) writer-side fields (A1, s57.30 LOCKED) -----------
+	var concealment_result: Dictionary = SkillResolver.resolve_skill_check(
+		sender, dice_engine, "Sincerity", 0, 0, "", Enums.Trait.AWARENESS
+	)
+	letter.concealment_tn = concealment_result.get("total", 0)
+
+	letter.writer_disposition_tier = DispositionSystem.get_tier(
+		sender.disposition_values.get(recipient_id, 0)
+	)
+	letter.writer_needtype = writer_needtype
+
+	if topic >= 0 and topics_by_id.has(topic):
+		var topic_data: TopicData = topics_by_id[topic]
+		var subject_id: int = topic_data.subject_character_id
+		if subject_id >= 0:
+			var disp_toward_subject: int = sender.disposition_values.get(subject_id, 0)
+			if disp_toward_subject >= 11:
+				letter.writer_topic_stance = "supports"
+			elif disp_toward_subject <= -11:
+				letter.writer_topic_stance = "opposes"
+			else:
+				letter.writer_topic_stance = "indifferent"
+
+	# -- Calligraphy (High Rokugani) writer-side roll (B1-B3, s57.30 LOCKED) ---
+	if SkillResolver.has_emphasis(sender, "Calligraphy", "High Rokugani"):
+		var recipient_char: L5RCharacterData = chars_by_id.get(recipient_id) as L5RCharacterData
+		if recipient_char != null and not CharacterStats.is_dead(recipient_char):
+			var settlement: SettlementData = settlements.get(recipient_char.physical_location) as SettlementData
+			if settlement != null and settlement.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+				letter.high_rokugani_attempted = true
+				var hr_tn: int = _get_high_rokugani_tn(recipient_char)
+				var hr_result: Dictionary = SkillResolver.resolve_skill_check(
+					sender, dice_engine, "Calligraphy", hr_tn, 0, "High Rokugani"
+				)
+				if hr_result.get("success", false):
+					var hr_margin: int = hr_result.get("margin", 0)
+					var hr_raises: int = mini(hr_margin / RAISE_TN, 3)
+					letter.high_rokugani_bonus = 1 + hr_raises
+
 	return letter
+
+
+static func _get_high_rokugani_tn(recipient: L5RCharacterData) -> int:
+	if recipient.lord_rank == Enums.LordRank.IMPERIAL:
+		return HIGH_ROKUGANI_TN_IMPERIAL_FAMILY
+	# Imperial office holders (Chancellor, Advisor, Herald, Treasurer, Jeweled Champions)
+	# deferred to Imperial office tracking system
+	return HIGH_ROKUGANI_TN_INNER_CITY
 
 
 # -- Deliver Letter ------------------------------------------------------------
@@ -154,6 +216,7 @@ static func deliver_letter(
 	current_season: int,
 	action_log: Array,
 	topics_by_id: Dictionary = {},
+	dice_engine: DiceEngine = null,
 ) -> Dictionary:
 	if letter.delivered:
 		return {}
@@ -183,6 +246,16 @@ static func deliver_letter(
 		var current: int = recipient.disposition_values.get(letter.sender_id, 0)
 		recipient.disposition_values[letter.sender_id] = clampi(current + letter.disposition_bonus, -100, 100)
 
+	# Apply High Rokugani bonus on top of base quality bonus (B3, s57.30 LOCKED)
+	if letter.high_rokugani_bonus > 0:
+		var current_hr: int = recipient.disposition_values.get(letter.sender_id, 0)
+		recipient.disposition_values[letter.sender_id] = clampi(current_hr + letter.high_rokugani_bonus, -100, 100)
+
+	# Calligraphy (Cipher) extraction (A2-A4, s57.30 LOCKED)
+	var cipher_result: Dictionary = {}
+	if dice_engine != null and letter.concealment_tn > 0:
+		cipher_result = _cipher_extract(letter, recipient, dice_engine, current_season)
+
 	action_log.append({
 		"character_id": letter.sender_id,
 		"action_id": "WRITE_LETTER",
@@ -199,12 +272,116 @@ static func deliver_letter(
 		"topic": letter.topic,
 		"topic_transferred": topic_transferred,
 		"disposition_bonus": letter.disposition_bonus,
+		"high_rokugani_bonus": letter.high_rokugani_bonus,
 	})
 
-	return {
+	var result: Dictionary = {
 		"topic_transferred": topic_transferred,
 		"disposition_bonus": letter.disposition_bonus,
+		"high_rokugani_bonus": letter.high_rokugani_bonus,
 	}
+	if not cipher_result.is_empty():
+		result.merge(cipher_result)
+	return result
+
+
+# -- Calligraphy (Cipher) Extraction (A2-A4, s57.30 LOCKED) -------------------
+
+static func _cipher_extract(
+	letter: LetterData,
+	recipient: L5RCharacterData,
+	dice_engine: DiceEngine,
+	current_season: int,
+) -> Dictionary:
+	if not SkillResolver.has_emphasis(recipient, "Calligraphy", "Cipher"):
+		return {}
+
+	var calligraphy_rank: int = SkillResolver.get_skill_rank(recipient, "Calligraphy")
+	var rank5_bonus: int = CIPHER_RANK5_EXTRACTION_BONUS if calligraphy_rank >= 5 else 0
+
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		recipient, dice_engine, "Calligraphy", letter.concealment_tn,
+		0, "Cipher", Enums.Trait.INTELLIGENCE, 0, 0, rank5_bonus
+	)
+
+	if not roll.get("success", false):
+		return {"cipher_attempted": true, "cipher_success": false}
+
+	var margin: int = roll.get("margin", 0)
+	var raises: int = margin / RAISE_TN
+
+	# 0 Raises: disposition tier + topic stance (A2)
+	InformationSystem.add_knowledge(recipient, InformationSystem.make_entry(
+		Enums.KnowledgeSource.LETTER,
+		"writer_disposition_tier",
+		{"writer_id": letter.sender_id, "tier": letter.writer_disposition_tier, "letter_id": letter.letter_id},
+		current_season,
+	))
+	if not letter.writer_topic_stance.is_empty() and letter.topic >= 0:
+		InformationSystem.add_knowledge(recipient, InformationSystem.make_entry(
+			Enums.KnowledgeSource.LETTER,
+			"writer_topic_stance",
+			{"writer_id": letter.sender_id, "stance": letter.writer_topic_stance,
+			 "topic": letter.topic, "letter_id": letter.letter_id},
+			current_season,
+		))
+
+	var out: Dictionary = {
+		"cipher_attempted": true,
+		"cipher_success": true,
+		"cipher_raises": raises,
+		"disposition_tier_learned": letter.writer_disposition_tier,
+		"topic_stance_learned": letter.writer_topic_stance,
+	}
+
+	# 1 Raise: intensity within tier — forward-wired, no additional mechanics specified
+	if raises >= 1:
+		out["cipher_intensity_known"] = true
+
+	# 2 Raises: deception detection (A3)
+	if raises >= 2:
+		var deception: bool = _check_deception_present(letter)
+		if deception:
+			out["deception_detected"] = true
+			var cur_disp: int = recipient.disposition_values.get(letter.sender_id, 0)
+			recipient.disposition_values[letter.sender_id] = clampi(
+				cur_disp + CIPHER_DECEPTION_DISPOSITION_PENALTY, -100, 100
+			)
+			out["deception_disposition_change"] = CIPHER_DECEPTION_DISPOSITION_PENALTY
+			if recipient.school.begins_with("Kitsuki Investigator"):
+				out["kitsuki_written_deception"] = {
+					"settlement_id": recipient.physical_location,
+					"sender_id": letter.sender_id,
+					"letter_id": letter.letter_id,
+				}
+
+	# 3 Raises: motivation inference (A4)
+	if raises >= 3 and not letter.writer_needtype.is_empty():
+		out["motivation_inferred"] = true
+		out["writer_needtype"] = letter.writer_needtype
+		InformationSystem.add_knowledge(recipient, InformationSystem.make_entry(
+			Enums.KnowledgeSource.LETTER,
+			"writer_motivation",
+			{"writer_id": letter.sender_id, "needtype": letter.writer_needtype,
+			 "letter_id": letter.letter_id},
+			current_season,
+		))
+		out["cipher_insight_bonus_active"] = true
+
+	return out
+
+
+static func _check_deception_present(letter: LetterData) -> bool:
+	# Hostile disposition tier presenting warmth
+	if letter.writer_disposition_tier <= DispositionSystem.Tier.RIVAL \
+			and letter.disposition_bonus > 0:
+		return true
+	# Opposes topic's subject but letter is warm
+	if letter.writer_topic_stance == "opposes" \
+			and letter.topic >= 0 \
+			and letter.disposition_bonus > 0:
+		return true
+	return false
 
 
 # -- Reply Generation ----------------------------------------------------------
@@ -394,7 +571,7 @@ static func process_pending_letters(
 						})
 						continue
 				var delivery: Dictionary = deliver_letter(
-					item, recipient, current_season, action_log, topics_by_id
+					item, recipient, current_season, action_log, topics_by_id, dice_engine
 				)
 				if not delivery.is_empty():
 					delivery["letter_id"] = item.letter_id
