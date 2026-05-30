@@ -531,18 +531,17 @@ static func process_seasonal_advancement(characters: Array, world_state: Diction
 			character.xp_total += whole
 			character.xp_fractional -= float(whole)
 
-		# Spend accumulated XP on progress bars
-		var spend_result: Dictionary = spend_accumulated_xp(character)
-
-		# Bushi learn the best kata they can afford with remaining XP (s30a).
-		# Kata XP draws from the same pool as progress bars; learned after to
-		# keep skill/ring advancement at higher priority.
+		# Bushi claim kata XP before progress bars (s30a).
+		# Progress bars vacuum all remaining XP, so kata spending must come first.
 		var kata_learned: String = ""
 		if character.school_type == Enums.SchoolType.BUSHI and not character.school_name.is_empty():
 			var kata_name: String = KataSystem.select_kata_for_npc(character)
 			if not kata_name.is_empty():
 				if KataSystem.learn_kata(character, kata_name):
 					kata_learned = kata_name
+
+		# Spend remaining accumulated XP on skill/ring progress bars.
+		var spend_result: Dictionary = spend_accumulated_xp(character)
 
 		var new_rank: int = CharacterStats.get_insight_rank(character)
 		var ranked_up: bool = new_rank > old_rank
