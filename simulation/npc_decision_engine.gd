@@ -558,6 +558,36 @@ static func _remove_action(
 	return filtered
 
 
+# -- Phase 4c: Origami Precondition Filter (s57.26) ----------------------------
+# Removes CRAFT when character lacks Artisan: Origami.
+# Removes DECLARE_SENBAZURU when an active senbazuru already exists.
+# Removes PRESENT_SENBAZURU when no complete senbazuru is ready.
+
+static func _apply_origami_precondition_filter(
+	options: Array,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	# CRAFT: remove if the character has no Artisan: Origami skill.
+	# (Other CRAFT uses via s49 are non-functional for NPCs; origami is the only path.)
+	var origami_rank: int = character.skills.get("Artisan: Origami", 0)
+	if origami_rank < 1:
+		options = _remove_action(options, "CRAFT")
+
+	var active_id: int = ctx.known_objectives.get("active_senbazuru_id", -1)
+	var is_complete: bool = ctx.known_objectives.get("senbazuru_is_complete", false)
+
+	# DECLARE_SENBAZURU: blocked while an active senbazuru already exists.
+	if active_id >= 0:
+		options = _remove_action(options, "DECLARE_SENBAZURU")
+
+	# PRESENT_SENBAZURU: blocked unless active senbazuru is complete.
+	if not is_complete:
+		options = _remove_action(options, "PRESENT_SENBAZURU")
+
+	return options
+
+
 # -- Phase 4c: TERMINATE_CONTRACT Precondition Filter (s52.8 A79) -------------
 # Removes TERMINATE_CONTRACT when the lord has no active contracts.
 
@@ -870,6 +900,7 @@ static func run(
 	options = apply_allowlist_filter(options, need.need_type, scoring_tables)
 	options = _apply_tattoo_precondition_filter(options, character, ctx, chars_by_id, world_state)
 	options = _apply_terminate_contract_precondition_filter(options, world_state)
+	options = _apply_origami_precondition_filter(options, character, ctx)
 
 	# Phase 5
 	score_all(options, need, ctx, scoring_tables,
@@ -1105,6 +1136,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"PERFORM_CLAN_INDUCTION",
 				"APPROVE_CLAN_INDUCTION",
 				"TERMINATE_CONTRACT",
+				"CRAFT",
+				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
@@ -1142,6 +1175,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
 				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
 				"APPROVE_CLAN_INDUCTION",
+				"CRAFT",
+				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
@@ -1170,6 +1205,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"PETITION_RONIN",
 				"HIRE_RONIN",
 				"TERMINATE_CONTRACT",
+				"CRAFT",
+				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
@@ -1326,6 +1363,9 @@ static func _get_ap_cost(action_id: String) -> int:
 		"LEARN_THEATER_PIECE": 1,
 		"PERFORM_THEATER_PIECE": 1,
 		"DEDICATE_PIECE": 1,
+		"CRAFT": 1,
+		"DECLARE_SENBAZURU": 0,
+		"PRESENT_SENBAZURU": 1,
 	}
 	return costs.get(action_id, 1)
 
@@ -2963,6 +3003,15 @@ static func _populate_action_metadata(
 		var term_meta: Dictionary = _build_terminate_contract_metadata(ctx, chars_by_id)
 		option.metadata = term_meta
 		option.target_npc_id = term_meta.get("target_ronin_id", -1)
+	elif option.action_id == "CRAFT":
+		var orig_rank: int = ctx.skill_ranks.get("Artisan: Origami", 0)
+		if orig_rank > 0:
+			option.metadata = _build_craft_origami_metadata(ctx, need, orig_rank)
+	elif option.action_id == "DECLARE_SENBAZURU":
+		option.metadata = _build_declare_senbazuru_metadata(ctx, need, chars_by_id)
+	elif option.action_id == "PRESENT_SENBAZURU":
+		var sb_id: int = ctx.known_objectives.get("active_senbazuru_id", -1)
+		option.metadata = {"senbazuru_id": sb_id}
 
 
 static func _build_compose_theater_metadata(
@@ -4834,3 +4883,90 @@ static func _find_marriageable_vassals(
 			continue
 		result.append(c.character_id)
 	return result
+
+
+# -- s57.26 Origami Metadata Builders ------------------------------------------
+
+
+static func _build_craft_origami_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+	origami_rank: int,
+) -> Dictionary:
+	## Select origami sub-type and raises based on NeedType and context.
+	var raises: int = _pick_origami_raises(origami_rank)
+	var active_id: int = ctx.known_objectives.get("active_senbazuru_id", -1)
+
+	match need.need_type:
+		"RESTORE_WORSHIP":
+			# Gohei supports worship (s57.26.12-13).
+			return {"origami_type": "gohei", "raises": raises}
+		"RAISE_DISPOSITION":
+			# Noshi wraps a gift for the disposition target (s57.26.6-8).
+			return {
+				"origami_type": "noshi",
+				"raises": raises,
+				"target_npc_id": need.target_npc_id,
+			}
+		_:
+			# Advance active senbazuru if present; else gohei; else noshi.
+			if active_id >= 0:
+				return {
+					"origami_type": "senbazuru_progress",
+					"raises": raises,
+					"senbazuru_id": active_id,
+				}
+			return {"origami_type": "gohei", "raises": raises}
+
+
+static func _pick_origami_raises(origami_rank: int) -> int:
+	## NPC raise selection for origami rolls (0-2 based on skill rank).
+	if origami_rank <= 2:
+		return 0
+	elif origami_rank <= 4:
+		return 1
+	return 2
+
+
+static func _build_declare_senbazuru_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	## Select dedication type and recipient. Defaults to Atonement.
+	if need.need_type == "SEEK_GLORY":
+		# Remembrance: find a deceased known character.
+		var deceased_id: int = _pick_deceased_known_character(ctx, chars_by_id)
+		if deceased_id >= 0:
+			return {"dedication_type": "Remembrance", "recipient_id": deceased_id}
+
+	if need.target_npc_id >= 0:
+		var target: L5RCharacterData = chars_by_id.get(need.target_npc_id)
+		if target != null and not CharacterStats.is_dead(target):
+			# Healing if recipient is wounded or tainted; Protection otherwise.
+			if CharacterStats.is_wounded(target) or target.taint_rank > 0:
+				return {
+					"dedication_type": "Healing",
+					"recipient_id": need.target_npc_id,
+				}
+			return {
+				"dedication_type": "Protection",
+				"recipient_id": need.target_npc_id,
+			}
+
+	return {"dedication_type": "Atonement", "recipient_id": -1}
+
+
+static func _pick_deceased_known_character(
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> int:
+	## Find any deceased character with whom this NPC has a disposition relationship.
+	## Simplified: any dead known character (GDD requires "within last IC season"
+	## but no death timestamp exists on L5RCharacterData).
+	for cid_v: Variant in ctx.disposition_values.keys():
+		var cid: int = int(cid_v)
+		var known: L5RCharacterData = chars_by_id.get(cid)
+		if known != null and CharacterStats.is_dead(known):
+			return cid
+	return -1

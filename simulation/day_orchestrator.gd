@@ -91,6 +91,8 @@ static func advance_day(
 	next_item_id: Array = [1],
 	theater_pieces: Array = [],
 	next_piece_id: Array = [1],
+	active_senbazurus: Array = [],
+	next_senbazuru_id: Array = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -178,6 +180,7 @@ static func advance_day(
 	_set_court_context_flags(active_courts, world_states)
 	_inject_hunt_context(active_hunts, world_states, active_topics)
 	_inject_theater_context(theater_pieces, characters, world_states)
+	_inject_senbazuru_context(active_senbazurus, characters, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_set_temple_context_flags(characters, settlements, world_states)
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
@@ -822,6 +825,34 @@ static func advance_day(
 	_process_dedicate_piece_writebacks(
 		day_result.get("results", []),
 		theater_pieces,
+	)
+
+	_process_craft_origami_writebacks(
+		day_result.get("results", []),
+		characters_by_id, next_item_id, active_topics, next_topic_id, ic_day,
+	)
+	_process_declare_senbazuru_writebacks(
+		day_result.get("results", []),
+		active_senbazurus, next_senbazuru_id, characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+	_process_senbazuru_progress_writebacks(
+		day_result.get("results", []),
+		active_senbazurus, characters_by_id, active_topics, next_topic_id, ic_day,
+	)
+	_process_present_senbazuru_writebacks(
+		day_result.get("results", []),
+		active_senbazurus, characters_by_id, active_topics, next_topic_id, ic_day,
+	)
+	_process_senbazuru_lifecycle_events(
+		death_events, active_senbazurus, characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+	_process_noshi_consumption_writebacks(
+		day_result.get("results", []), characters_by_id,
+	)
+	_process_gohei_usage_writebacks(
+		day_result.get("results", []), characters_by_id,
 	)
 
 	_process_travel_redirect_writebacks(
@@ -13125,6 +13156,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"champion_conclusion_candidates", "local_tier3_candidates",
 		"theater_pieces_to_perform", "wip_piece_ids", "learnable_piece_ids",
 		"has_active_contracts",
+		"active_senbazuru_id", "senbazuru_is_complete",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -21261,6 +21293,449 @@ static func _purge_settlement_public_records(
 	for s: Variant in settlements:
 		if s is SettlementData:
 			PublicRecordSystem.purge_expired(s as SettlementData, ic_day)
+
+
+# -- s57.26 Origami Writebacks --------------------------------------------------
+
+
+static func _inject_senbazuru_context(
+	active_senbazurus: Array,
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	## Inject per-character senbazuru state into known_objectives.
+	## active_senbazuru_id: ID of the active senbazuru (-1 if none).
+	## senbazuru_is_complete: true when crane_count >= 1000 and state == "active".
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var char_id: int = character.character_id
+		var ws: Dictionary = world_states.get(char_id, {})
+		if ws.is_empty():
+			continue
+		for sb: Variant in active_senbazurus:
+			if not sb is SenbazuruData:
+				continue
+			var senbazuru: SenbazuruData = sb as SenbazuruData
+			if senbazuru.folder_id != char_id:
+				continue
+			if senbazuru.state != "active":
+				continue
+			if not ws.has("known_objectives"):
+				ws["known_objectives"] = {}
+			ws["known_objectives"]["active_senbazuru_id"] = senbazuru.senbazuru_id
+			ws["known_objectives"]["senbazuru_is_complete"] = senbazuru.is_complete
+			ws["known_objectives"]["senbazuru_dedication_type"] = senbazuru.dedication_type
+			ws["known_objectives"]["senbazuru_recipient_id"] = senbazuru.recipient_id
+			break
+
+
+static func _process_craft_origami_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	next_item_id: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Handle CRAFT results with origami_type set.
+	## noshi: add item to character.items; apply wrapper bonus if crafted for another.
+	## gohei: add item to character.items.
+	## senbazuru_progress: delegated to _process_senbazuru_progress_writebacks().
+	for result: Variant in results:
+		if result.get("action_id", "") != "CRAFT":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var origami_type: String = effects.get("origami_type", "")
+		if origami_type not in ["noshi", "gohei"]:
+			continue
+		var char_id: int = result.get("character_id", -1)
+		var crafter: L5RCharacterData = characters_by_id.get(char_id)
+		if crafter == null or CharacterStats.is_dead(crafter):
+			continue
+
+		match origami_type:
+			"noshi":
+				if not effects.get("requires_noshi_creation", false):
+					continue
+				var quality_tier: int = effects.get("quality_tier",
+					GiftGivingSystem.QualityTier.MUNDANE)
+				var is_mundane: bool = effects.get("noshi_is_mundane", false)
+				var wrapper_target_id: int = effects.get("wrapper_target_id", -1)
+				var item: Dictionary = {
+					"item_type": "noshi",
+					"item_id": next_item_id[0],
+					"quality_tier": quality_tier,
+					"is_mundane": is_mundane,
+					"wrapper_id": char_id,
+					"wrapper_target_id": wrapper_target_id,
+				}
+				next_item_id[0] += 1
+				crafter.items.append(item)
+				# Wrapper disposition bonus fires at CRAFT time for non-self wrapping (A1).
+				if quality_tier >= GiftGivingSystem.QualityTier.NORMAL and \
+						wrapper_target_id >= 0 and wrapper_target_id != char_id:
+					var target: L5RCharacterData = characters_by_id.get(wrapper_target_id)
+					if target != null and not CharacterStats.is_dead(target):
+						var bonus: int = OrigamiSystem.NOSHI_WRAPPER_BONUS.get(
+							quality_tier, 0)
+						var duration: int = OrigamiSystem.NOSHI_WRAPPER_DURATION.get(
+							quality_tier, 0)
+						if bonus > 0:
+							var bucket_noshi: Array = target.temporary_modifiers.get(
+								char_id, [])
+							bucket_noshi.append({
+								"event_type": "noshi_wrapper_bonus",
+								"value": bonus,
+								"created_ic_day": ic_day,
+								"duration": duration,
+							})
+							target.temporary_modifiers[char_id] = bucket_noshi
+			"gohei":
+				if not effects.get("requires_gohei_creation", false):
+					continue
+				var quality_tier: int = effects.get("quality_tier",
+					GiftGivingSystem.QualityTier.NORMAL)
+				var uses: int = effects.get("uses_remaining",
+					OrigamiSystem.GOHEI_USES.get(
+						GiftGivingSystem.QualityTier.NORMAL,
+						OrigamiSystem.GOHEI_USES[GiftGivingSystem.QualityTier.NORMAL]))
+				var item: Dictionary = {
+					"item_type": "gohei",
+					"item_id": next_item_id[0],
+					"quality_tier": quality_tier,
+					"uses_remaining": uses,
+				}
+				next_item_id[0] += 1
+				crafter.items.append(item)
+
+
+static func _process_declare_senbazuru_writebacks(
+	results: Array,
+	active_senbazurus: Array,
+	next_senbazuru_id: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Create SenbazuruData and Tier 4 declaration topic (s57.26.14).
+	for result: Variant in results:
+		if result.get("action_id", "") != "DECLARE_SENBAZURU":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("requires_senbazuru_creation", false):
+			continue
+		var char_id: int = result.get("character_id", -1)
+		var folder: L5RCharacterData = characters_by_id.get(char_id)
+		if folder == null or CharacterStats.is_dead(folder):
+			continue
+		# Dedup: only one active senbazuru per folder.
+		var already_active: bool = false
+		for sb: Variant in active_senbazurus:
+			if sb is SenbazuruData:
+				var s: SenbazuruData = sb as SenbazuruData
+				if s.folder_id == char_id and s.state == "active":
+					already_active = true
+					break
+		if already_active:
+			continue
+		var sb := SenbazuruData.new()
+		sb.senbazuru_id = next_senbazuru_id[0]
+		next_senbazuru_id[0] += 1
+		sb.folder_id = char_id
+		sb.dedication_type = effects.get("dedication_type", "Atonement")
+		sb.recipient_id = effects.get("recipient_id", -1)
+		sb.declaration_date = ic_day
+		active_senbazurus.append(sb)
+		# Tier 4 declaration topic (s57.26.14).
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.tier = OrigamiSystem.DECLARATION_TOPIC_TIER
+		topic.category = TopicData.Category.PERSONAL
+		topic.topic_type = "senbazuru_declaration"
+		topic.subject_character_id = char_id
+		topic.subject_role = "ACTIVE"
+		topic.ic_day_created = ic_day
+		topic.title = "Senbazuru Declaration"
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		active_topics.append(topic)
+		folder.topic_pool.append(topic.topic_id)
+
+
+static func _process_senbazuru_progress_writebacks(
+	results: Array,
+	active_senbazurus: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Apply crane progress from successful CRAFT (origami_type=senbazuru_progress).
+	## Checks for completion (crane_count >= 1000) and generates completion topic.
+	for result: Variant in results:
+		if result.get("action_id", "") != "CRAFT":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		if effects.get("origami_type", "") != "senbazuru_progress":
+			continue
+		var senbazuru_id: int = effects.get("senbazuru_id", -1)
+		if senbazuru_id < 0:
+			continue
+		var cranes_added: int = effects.get("cranes_added", 0)
+		var raises_declared: int = effects.get("raises_declared", 0)
+		var session_success: bool = effects.get("session_success", false)
+		# Find the SenbazuruData.
+		var sb: SenbazuruData = null
+		for entry: Variant in active_senbazurus:
+			if entry is SenbazuruData and (entry as SenbazuruData).senbazuru_id == senbazuru_id:
+				sb = entry as SenbazuruData
+				break
+		if sb == null or sb.state != "active" or sb.is_complete:
+			continue
+		sb.crane_count += cranes_added
+		if session_success:
+			sb.total_raises += raises_declared
+			sb.successful_session_count += 1
+		# Check for completion.
+		if sb.crane_count >= 1000 and not sb.is_complete:
+			sb.is_complete = true
+			sb.crane_count = 1000
+			sb.completion_date = ic_day
+			sb.quality_tier = SenbazuruData.compute_quality(
+				sb.total_raises, sb.successful_session_count)
+			# Completion topic (s57.26.16: TIER_3 for Exceptional+, TIER_4 otherwise).
+			var tier: int = OrigamiSystem.completion_topic_tier(sb.quality_tier)
+			var folder: L5RCharacterData = characters_by_id.get(sb.folder_id)
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			topic.tier = tier
+			topic.category = TopicData.Category.PERSONAL
+			topic.topic_type = "senbazuru_complete"
+			topic.subject_character_id = sb.folder_id
+			topic.subject_role = "ACTIVE"
+			topic.ic_day_created = ic_day
+			topic.title = "Senbazuru Completed"
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(tier)
+			active_topics.append(topic)
+			if folder != null and not CharacterStats.is_dead(folder):
+				folder.topic_pool.append(topic.topic_id)
+
+
+static func _process_present_senbazuru_writebacks(
+	results: Array,
+	active_senbazurus: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Apply full presentation effects by dedication type (s57.26.17).
+	## Healing: disposition to folder from recipient + Free Raises on next qualifying roll.
+	## Protection: disposition to folder + Void recovery.
+	## Remembrance: witness disposition to folder + folder glory.
+	## Atonement: folder honor recovery.
+	for result: Variant in results:
+		if result.get("action_id", "") != "PRESENT_SENBAZURU":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("requires_senbazuru_presentation", false):
+			continue
+		var senbazuru_id: int = effects.get("senbazuru_id", -1)
+		var folder_id: int = result.get("character_id", -1)
+		var folder: L5RCharacterData = characters_by_id.get(folder_id)
+		if folder == null or CharacterStats.is_dead(folder):
+			continue
+		# Find the SenbazuruData.
+		var sb: SenbazuruData = null
+		for entry: Variant in active_senbazurus:
+			if entry is SenbazuruData and (entry as SenbazuruData).senbazuru_id == senbazuru_id:
+				sb = entry as SenbazuruData
+				break
+		if sb == null or not sb.is_complete or sb.state != "active":
+			continue
+		var tier: int = sb.quality_tier
+		# Mark presented.
+		sb.state = "presented"
+		sb.presentation_date = ic_day
+
+		match sb.dedication_type:
+			"Healing", "Protection":
+				var recipient: L5RCharacterData = characters_by_id.get(sb.recipient_id)
+				if recipient != null and not CharacterStats.is_dead(recipient):
+					# First effect: recipient disposition toward folder.
+					var disp: int = OrigamiSystem.SENBAZURU_HEAL_PROT_DISP.get(tier, 0)
+					var dur: int = OrigamiSystem.SENBAZURU_HEAL_PROT_DURATION.get(tier, 0)
+					if disp > 0:
+						var bucket_sb: Array = recipient.temporary_modifiers.get(
+							folder_id, [])
+						bucket_sb.append({
+							"event_type": "senbazuru_presentation",
+							"value": disp,
+							"created_ic_day": ic_day,
+							"duration": dur,
+						})
+						recipient.temporary_modifiers[folder_id] = bucket_sb
+					if sb.dedication_type == "Protection":
+						# Second effect: recover all spent Void Points.
+						var max_void: int = recipient.void_ring
+						recipient.current_void_points = max_void
+					# Healing Free Raises on next qualifying roll: deferred until
+					# roll-intercept system exists (s57.26.17 second effect).
+			"Remembrance":
+				# Effect 1: all present witnesses gain disposition toward folder.
+				var witness_disp: int = OrigamiSystem.SENBAZURU_REMEMBRANCE_WITNESS_DISP.get(
+					tier, 0)
+				var dur: int = OrigamiSystem.SENBAZURU_HEAL_PROT_DURATION.get(tier, 0)
+				if witness_disp > 0:
+					for char_v: Variant in characters_by_id.values():
+						var witness: L5RCharacterData = char_v as L5RCharacterData
+						if witness == null or CharacterStats.is_dead(witness):
+							continue
+						if witness.character_id == folder_id:
+							continue
+						if witness.physical_location != folder.physical_location:
+							continue
+						var bucket_rem: Array = witness.temporary_modifiers.get(
+							folder_id, [])
+						bucket_rem.append({
+							"event_type": "senbazuru_remembrance_witness",
+							"value": witness_disp,
+							"created_ic_day": ic_day,
+							"duration": dur,
+						})
+						witness.temporary_modifiers[folder_id] = bucket_rem
+				# Effect 2: folder gains Glory.
+				var glory_gain: float = OrigamiSystem.SENBAZURU_REMEMBRANCE_GLORY.get(
+					tier, 0.0)
+				if glory_gain > 0.0:
+					HonorGlorySystem.apply_glory_change(folder, glory_gain)
+			"Atonement":
+				# Honor recovery.
+				var honor_gain: float = OrigamiSystem.SENBAZURU_ATONEMENT_HONOR.get(tier, 0.0)
+				if honor_gain > 0.0:
+					HonorGlorySystem.apply_honor_change(folder, honor_gain)
+
+
+static func _process_senbazuru_lifecycle_events(
+	death_events: Array,
+	active_senbazurus: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Handle dedication shifts (s57.26 Dedication shift) and creator death.
+	## Healing/Protection → Remembrance when recipient dies.
+	## state → "creator_deceased" when folder dies.
+	for death_event: Variant in death_events:
+		var deceased_id: int = death_event.get("character_id", -1)
+		if deceased_id < 0:
+			continue
+		for entry: Variant in active_senbazurus:
+			if not entry is SenbazuruData:
+				continue
+			var sb: SenbazuruData = entry as SenbazuruData
+			if sb.state != "active":
+				continue
+			# Creator death.
+			if sb.folder_id == deceased_id:
+				sb.state = "creator_deceased"
+				var topic := TopicData.new()
+				topic.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				topic.tier = OrigamiSystem.CREATOR_DECEASED_TOPIC_TIER
+				topic.category = TopicData.Category.PERSONAL
+				topic.topic_type = "senbazuru_creator_deceased"
+				topic.subject_character_id = deceased_id
+				topic.subject_role = "NEUTRAL"
+				topic.ic_day_created = ic_day
+				topic.title = "Senbazuru — Creator Deceased"
+				topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+				active_topics.append(topic)
+				continue
+			# Dedication shift: Healing or Protection recipient dies → Remembrance.
+			if sb.recipient_id == deceased_id and \
+					sb.dedication_type in ["Healing", "Protection"]:
+				sb.dedication_type = "Remembrance"
+				var topic := TopicData.new()
+				topic.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				topic.tier = OrigamiSystem.DEDICATION_SHIFT_TOPIC_TIER
+				topic.category = TopicData.Category.PERSONAL
+				topic.topic_type = "senbazuru_dedication_shift"
+				topic.subject_character_id = sb.folder_id
+				topic.subject_role = "ACTIVE"
+				topic.ic_day_created = ic_day
+				topic.title = "Senbazuru — Dedication Shifted to Remembrance"
+				topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+				active_topics.append(topic)
+				var folder: L5RCharacterData = characters_by_id.get(sb.folder_id)
+				if folder != null and not CharacterStats.is_dead(folder):
+					folder.topic_pool.append(topic.topic_id)
+
+
+static func _process_noshi_consumption_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	## Remove consumed noshi from character.items after DELIVER_GIFT (s57.26.6).
+	## The executor returns noshi_item_id in effects when a noshi is used.
+	for result: Variant in results:
+		if result.get("action_id", "") != "DELIVER_GIFT":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var noshi_item_id: int = effects.get("noshi_item_id", -1)
+		if noshi_item_id < 0:
+			continue
+		var char_id: int = result.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		var new_items: Array = []
+		for item: Variant in character.items:
+			if item.get("item_type", "") == "noshi" and \
+					item.get("item_id", -1) == noshi_item_id:
+				continue  # consumed
+			new_items.append(item)
+		character.items = new_items
+
+
+static func _process_gohei_usage_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	## Decrement uses_remaining on gohei used in PERFORM_WORSHIP (s57.26.13).
+	## Remove gohei when uses_remaining reaches 0.
+	for result: Variant in results:
+		if result.get("action_id", "") != "PERFORM_WORSHIP":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var gohei_item_id: int = effects.get("gohei_item_id", -1)
+		if gohei_item_id < 0:
+			continue
+		var char_id: int = result.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		var new_items: Array = []
+		for item: Variant in character.items:
+			if item.get("item_type", "") == "gohei" and \
+					item.get("item_id", -1) == gohei_item_id:
+				var remaining: int = item.get("uses_remaining", 1) - 1
+				if remaining > 0:
+					item["uses_remaining"] = remaining
+					new_items.append(item)
+				# else: destroyed when uses_remaining reaches 0 (s57.26.12)
+				continue
+			new_items.append(item)
+		character.items = new_items
 
 
 

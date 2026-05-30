@@ -366,6 +366,12 @@ static func execute(
 	if action_id == "CRAFT":
 		return _execute_craft(action, character, ctx, dice_engine)
 
+	if action_id == "DECLARE_SENBAZURU":
+		return _execute_declare_senbazuru(action, character, ctx)
+
+	if action_id == "PRESENT_SENBAZURU":
+		return _execute_present_senbazuru(action, character, ctx)
+
 	if action_id in ["COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
 			"PERFORM_THEATER_PIECE", "DEDICATE_PIECE"]:
 		return _execute_theater_action(action_id, action, character, ctx, dice_engine)
@@ -487,6 +493,18 @@ static func _try_execute_deliver_gift(
 	var subtype: int = gift_item.get("gift_subtype", -1)
 	var history_bonus: int = gift_item.get("history_point_bonus", 0)
 
+	# Noshi wrapping bonus (s57.26.6–57.26.8): scan for best noshi in inventory.
+	var noshi_item_id: int = -1
+	var noshi_is_mundane: bool = false
+	for _noshi: Dictionary in character.items:
+		if _noshi.get("item_type", "") == "noshi":
+			var _nt: int = _noshi.get("quality_tier", 0)
+			if not noshi_is_mundane or _nt > 0:
+				history_bonus += maxi(0, _nt - 1)  # FR = quality_tier - 1 (0 for Mundane)
+				noshi_is_mundane = _noshi.get("is_mundane", false)
+				noshi_item_id = _noshi.get("item_id", -1)
+			break
+
 	var gift_result: Dictionary = GiftGivingSystem.resolve_deliver_gift(
 		character, recipient, tier, subtype, archetype, dice_engine, ctx.ic_day,
 		history_bonus,
@@ -505,6 +523,8 @@ static func _try_execute_deliver_gift(
 		"gift_tier": tier,
 		"gift_subtype": subtype,
 		"gift_free_raises": gift_result.get("free_raises_applied", 0),
+		"noshi_item_id": noshi_item_id,
+		"noshi_is_mundane": noshi_is_mundane,
 		# Preserve generic-social effect keys so downstream consumers that read
 		# disposition_change uniformly still see something — but for gifts the
 		# value lives on the recipient side.
@@ -1937,6 +1957,19 @@ static func _execute_perform_worship(
 
 	var location_type: String = action.metadata.get("location_type", "roadside_shrine")
 
+	# Gohei Free Raises (s57.26.12–57.26.13): scan for highest-quality gohei.
+	var gohei_item_id: int = -1
+	var gohei_fr: int = 0
+	var best_gohei_tier: int = -1
+	for _g: Dictionary in character.items:
+		if _g.get("item_type", "") == "gohei" and _g.get("uses_remaining", 0) > 0:
+			var _gt: int = _g.get("quality_tier", 0)
+			if _gt > best_gohei_tier:
+				best_gohei_tier = _gt
+				gohei_item_id = _g.get("item_id", -1)
+	if gohei_item_id >= 0:
+		gohei_fr = maxi(0, best_gohei_tier - 1)
+
 	var worship_result: Dictionary = WorshipSystem.resolve_active_worship(
 		char_type, is_shugenja, dice_engine, ring_value, theology_rank,
 		location_type, directed_fortune,
@@ -1961,6 +1994,8 @@ static func _execute_perform_worship(
 			"province_id": province_id,
 			"wp_distribution": worship_result.get("wp_distribution", {}),
 			"total_wp": worship_result.get("total_wp", 0.0),
+			"gohei_item_id": gohei_item_id,
+			"gohei_fr": gohei_fr,
 			"bonus_wp": worship_result.get("bonus_wp", 0.0),
 			"directed": worship_result.get("directed", false),
 			"honor_change": honor_bonus,
@@ -5373,6 +5408,11 @@ static func _execute_craft(
 	ctx: NPCDataStructures.ContextSnapshot,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	# Route origami sub-types (s57.26) before s49 artisan path.
+	var origami_type: String = action.metadata.get("origami_type", "")
+	if origami_type in ["noshi", "gohei", "senbazuru_progress"]:
+		return _execute_craft_origami(action, character, ctx, dice_engine, origami_type)
+
 	var wip_item_id: int = action.metadata.get("wip_item_id", -1)
 	if wip_item_id >= 0:
 		return {
@@ -5485,6 +5525,149 @@ static func _execute_craft(
 			"denomination": denomination,
 			"base_cost": base_cost,
 			"koku_cost": koku_cost,
+		},
+	}
+
+
+# -- s57.26 ORIGAMI ACTIONS -------------------------------------------------------
+
+
+static func _execute_craft_origami(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	origami_type: String,
+) -> Dictionary:
+	## Resolve a single origami craft session (noshi, gohei, or senbazuru progress).
+	var raises_declared: int = action.metadata.get("raises", 0)
+	var tn: int
+	match origami_type:
+		"noshi":
+			tn = OrigamiSystem.NOSHI_TN
+		"gohei":
+			tn = OrigamiSystem.GOHEI_TN
+		"senbazuru_progress":
+			tn = OrigamiSystem.SENBAZURU_SESSION_TN
+		_:
+			return {
+				"success": false, "action_id": "CRAFT",
+				"character_id": character.character_id,
+				"ic_day": ctx.ic_day, "season": ctx.season,
+				"effects": {"reason": "unknown_origami_type"},
+			}
+
+	var roll_tn: int = tn + raises_declared * 5
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Origami", roll_tn,
+		raises_declared, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+	var success: bool = total >= roll_tn
+	var quality_tier: int = OrigamiSystem.compute_quality_from_raises(raises_declared, success)
+
+	var effects: Dictionary = {
+		"origami_type": origami_type,
+		"quality_tier": quality_tier,
+		"roll_total": total,
+		"raises_declared": raises_declared,
+	}
+
+	match origami_type:
+		"noshi":
+			# GDD s57.26.6: failure produces mundane noshi. Item always stored.
+			if not success:
+				quality_tier = GiftGivingSystem.QualityTier.MUNDANE
+				effects["quality_tier"] = quality_tier
+			effects["requires_noshi_creation"] = true
+			effects["noshi_is_mundane"] = quality_tier == GiftGivingSystem.QualityTier.MUNDANE
+			effects["wrapper_target_id"] = action.metadata.get(
+				"target_npc_id", action.target_npc_id)
+		"gohei":
+			effects["requires_gohei_creation"] = success
+			if success:
+				effects["uses_remaining"] = OrigamiSystem.GOHEI_USES.get(
+					quality_tier,
+					OrigamiSystem.GOHEI_USES[GiftGivingSystem.QualityTier.NORMAL])
+		"senbazuru_progress":
+			var senbazuru_id: int = action.metadata.get("senbazuru_id", -1)
+			var cranes_added: int = 0
+			if success:
+				cranes_added = (OrigamiSystem.CRANES_BASE
+					+ raises_declared * OrigamiSystem.CRANES_PER_RAISE)
+			effects["senbazuru_id"] = senbazuru_id
+			effects["cranes_added"] = cranes_added
+			effects["session_success"] = success
+
+	return {
+		"success": success,
+		"action_id": "CRAFT",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": effects,
+	}
+
+
+static func _execute_declare_senbazuru(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	## 0 AP declaration that creates a new SenbazuruData (s57.26.14).
+	## Gate: one active senbazuru per folder; cleared on presentation.
+	var active_id: int = ctx.known_objectives.get("active_senbazuru_id", -1)
+	if active_id >= 0:
+		return {
+			"success": false, "action_id": "DECLARE_SENBAZURU",
+			"character_id": character.character_id,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"reason": "already_has_active_senbazuru"},
+		}
+	var dedication_type: String = action.metadata.get("dedication_type", "Atonement")
+	var recipient_id: int = action.metadata.get("recipient_id", -1)
+	if dedication_type == "Atonement":
+		recipient_id = -1
+	return {
+		"success": true, "action_id": "DECLARE_SENBAZURU",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"requires_senbazuru_creation": true,
+			"dedication_type": dedication_type,
+			"recipient_id": recipient_id,
+		},
+	}
+
+
+static func _execute_present_senbazuru(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	## 1 AP presentation; requires is_complete = true (s57.26.17).
+	var senbazuru_id: int = ctx.known_objectives.get("active_senbazuru_id", -1)
+	if senbazuru_id < 0:
+		return {
+			"success": false, "action_id": "PRESENT_SENBAZURU",
+			"character_id": character.character_id,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"reason": "no_active_senbazuru"},
+		}
+	if not ctx.known_objectives.get("senbazuru_is_complete", false):
+		return {
+			"success": false, "action_id": "PRESENT_SENBAZURU",
+			"character_id": character.character_id,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"reason": "senbazuru_not_complete"},
+		}
+	return {
+		"success": true, "action_id": "PRESENT_SENBAZURU",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"requires_senbazuru_presentation": true,
+			"senbazuru_id": senbazuru_id,
 		},
 	}
 

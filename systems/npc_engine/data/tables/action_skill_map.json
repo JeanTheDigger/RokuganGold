@@ -112,6 +112,11 @@
     "primary": "Commerce",
     "secondary": "Investigation"
   },
+  "CRAFT": {
+    "primary": "Artisan: Origami",
+    "secondary": "Artisan: Origami",
+    "trait": "Awareness"
+  },
   "CONDUCT_RAID": {
     "primary": "Battle",
     "secondary": null
@@ -135,6 +140,9 @@
   "DECLARE_WAR": {
     "primary": "Courtier",
     "secondary": "Awareness"
+  },
+  "DECLARE_SENBAZURU": {
+    "primary": "_none"
   },
   "DEDICATE_PIECE": {
     "primary": "Courtier",
@@ -390,6 +398,9 @@
   "PLAY_GAME": {
     "primary": "Games",
     "secondary": "Awareness"
+  },
+  "PRESENT_SENBAZURU": {
+    "primary": "_none"
   },
   "PROBE": {
     "primary": "Courtier",
