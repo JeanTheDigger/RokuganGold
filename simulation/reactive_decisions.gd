@@ -9,6 +9,7 @@ enum ReactiveType {
 	FAVOR_REQUESTED,
 	COURT_INVITATION,
 	ACCEPT_TRAINING,
+	CONTRACT_OFFERED,
 }
 
 
@@ -29,6 +30,8 @@ static func evaluate_reactive_event(
 			return _evaluate_court_invitation(event, character)
 		"ACCEPT_TRAINING":
 			return _evaluate_training_response(event, character, ctx)
+		"CONTRACT_OFFERED":
+			return _evaluate_contract_offer(event, character)
 	return {"action": "PASS", "need_type": event.get("need_type", "")}
 
 
@@ -281,3 +284,58 @@ static func _has_mentor_objective(
 	var primary: Dictionary = ctx.known_objectives.get("primary", {})
 	return primary.get("need_type", "") == "MENTOR_CHARACTER" and \
 		primary.get("target_npc_id", -1) == sensei_id
+
+
+# -- Contract Offer Response (s52.6 Part D) ------------------------------------
+
+static func _evaluate_contract_offer(
+	event: Dictionary,
+	character: L5RCharacterData,
+) -> Dictionary:
+	var lord_id: int = event.get("lord_id", -1)
+	var contract_type: String = event.get("contract_type", "PROVINCE_DEFENSE")
+	var disposition: float = character.disposition_values.get(lord_id, 0.0)
+
+	var accept: bool = false
+
+	# Auto-accept conditions per s52.6 Part D.
+	var season_start: int = event.get("season_start", 0)
+	var current_season: int = event.get("current_season", season_start)
+	var is_desperate: bool = RoninSystem.is_desperate(character, current_season)
+
+	if is_desperate:
+		accept = true
+	elif disposition >= 31.0:
+		accept = true
+	elif character.bushido_virtue == Enums.BushidoVirtue.CHUGI:
+		if contract_type == "PROVINCE_DEFENSE" or contract_type == "MAGISTRATE_AIDE":
+			accept = true
+	elif character.bushido_virtue == Enums.BushidoVirtue.MEIYO:
+		# Only accept if lord has sufficient status (tracked via disposition proxy)
+		accept = disposition >= 0.0
+	elif character.shourido_virtue == Enums.ShouridoVirtue.KETSUI:
+		accept = true
+	elif character.shourido_virtue == Enums.ShouridoVirtue.SEIGYO:
+		accept = disposition >= 0.0
+	elif character.shourido_virtue == Enums.ShouridoVirtue.ISHI:
+		# Self-reliant: only accepts when truly desperate (already handled above)
+		accept = false
+	else:
+		accept = disposition >= 0.0
+
+	if accept:
+		return {
+			"action": "ACCEPT_CONTRACT",
+			"need_type": "FIND_NEW_LORD",
+			"target_npc_id": lord_id,
+			"priority": 3,
+			"contract_type": contract_type,
+			"lord_id": lord_id,
+		}
+	return {
+		"action": "DECLINE_CONTRACT",
+		"need_type": "FIND_NEW_LORD",
+		"target_npc_id": lord_id,
+		"priority": 1,
+		"lord_id": lord_id,
+	}

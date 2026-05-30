@@ -3,6 +3,10 @@
     "primary": "Stealth",
     "secondary": null
   },
+  "ACCEPT_RONIN_PETITION": {
+    "primary": "Etiquette",
+    "secondary": "Awareness"
+  },
   "ANNOUNCE_HUNT": {
     "primary": "Hunting",
     "secondary": null
@@ -10,10 +14,6 @@
   "APPLY_TATTOO": {
     "primary": "Artisan: Tattooing",
     "secondary": "Agility"
-  },
-  "ACCEPT_RONIN_PETITION": {
-    "primary": "Etiquette",
-    "secondary": "Awareness"
   },
   "APPOINT_TO_POSITION": {
     "primary": "Courtier",
@@ -253,6 +253,10 @@
     "primary": "Courtier",
     "secondary": "Awareness"
   },
+  "HIRE_RONIN": {
+    "primary": "Courtier",
+    "secondary": "Awareness"
+  },
   "IMPRESS": {
     "primary": "Lore",
     "secondary": "Etiquette"
@@ -354,6 +358,10 @@
     "primary": "Battle",
     "secondary": null
   },
+  "PERFORM_CLAN_INDUCTION": {
+    "primary": "Courtier",
+    "secondary": "Awareness"
+  },
   "PERFORM_FOR": {
     "primary": "_performance_skill",
     "secondary": null
@@ -374,6 +382,10 @@
   "PERSUADE": {
     "primary": "Sincerity",
     "secondary": "Courtier"
+  },
+  "PETITION_RONIN": {
+    "primary": "Courtier",
+    "secondary": "Awareness"
   },
   "PLAY_GAME": {
     "primary": "Games",
@@ -405,10 +417,6 @@
   },
   "PUBLIC_PERFORMANCE": {
     "primary": "_performance_skill",
-    "secondary": "Awareness"
-  },
-  "PETITION_RONIN": {
-    "primary": "Courtier",
     "secondary": "Awareness"
   },
   "PURCHASE_MARKET": {

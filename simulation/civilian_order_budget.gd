@@ -29,6 +29,8 @@ const PURE_ORDER_ACTIONS: Array[String] = [
 	"ASSIGN_VASSAL_OBJECTIVE",
 	"ASSIGN_TO_MILITARY_SERVICE",
 	"ASSESS_PROVINCE_STATUS",
+	"GRANT_DEED_CREDIT",    # s52.7 Part B — recognise ronin service
+	"TERMINATE_CONTRACT",   # s52.6 Part G — early contract termination
 ]
 
 # Military-or-civilian: draw from Military Orders if lord holds military rank,

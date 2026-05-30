@@ -351,6 +351,18 @@ static func execute(
 	if action_id == "ACCEPT_RONIN_PETITION":
 		return _execute_accept_ronin_petition(action, character, ctx, characters_by_id)
 
+	if action_id == "HIRE_RONIN":
+		return _execute_hire_ronin(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "PERFORM_CLAN_INDUCTION":
+		return _execute_perform_clan_induction(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "GRANT_DEED_CREDIT":
+		return _execute_grant_deed_credit(action, character, ctx, characters_by_id)
+
+	if action_id == "TERMINATE_CONTRACT":
+		return _execute_terminate_contract(action, character, ctx, characters_by_id)
+
 	if action_id == "CRAFT":
 		return _execute_craft(action, character, ctx, dice_engine)
 
@@ -3151,6 +3163,240 @@ static func _execute_accept_ronin_petition(
 			"requires_ronin_acceptance": true,
 			"accepting_lord_id": character.character_id,
 			"ronin_id": ronin_id,
+		},
+	}
+
+
+static func _execute_hire_ronin(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var ic_day: int = ctx.ic_day
+	var ronin_id: int = action.metadata.get("target_ronin_id", -1)
+	var contract_type: String = action.metadata.get("contract_type", "PROVINCE_DEFENSE")
+	var duration_seasons: int = int(action.metadata.get("duration_seasons", 1))
+
+	if ronin_id < 0:
+		return {
+			"success": false, "action_id": "HIRE_RONIN",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "no_ronin_present", "effects": {},
+		}
+
+	var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+	if ronin == null or CharacterStats.is_dead(ronin):
+		return {
+			"success": false, "action_id": "HIRE_RONIN",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "ronin_unavailable", "effects": {},
+		}
+	if not RoninSystem.is_ronin(ronin) or ronin.permanent_ronin:
+		return {
+			"success": false, "action_id": "HIRE_RONIN",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "not_eligible", "effects": {},
+		}
+	if ronin.supply_ledger.get("contract_end_ic_day", -1) >= 0:
+		return {
+			"success": false, "action_id": "HIRE_RONIN",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "already_contracted", "effects": {},
+		}
+
+	var lord_disp: int = int(ronin.disposition_values.get(character.character_id, 0))
+	if lord_disp <= -1:
+		return {
+			"success": false, "action_id": "HIRE_RONIN",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "ronin_dislikes_lord", "effects": {},
+		}
+
+	var payment: float = RoninSystem.get_contract_payment(contract_type, duration_seasons)
+	if character.koku < payment:
+		return {
+			"success": false, "action_id": "HIRE_RONIN",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "insufficient_koku", "effects": {},
+		}
+
+	# Courtier/Awareness vs TN 10 — confirming the lord can articulate contract terms.
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Courtier", 10, ic_day,
+	)
+	if not check.get("success", false):
+		return {
+			"success": false, "action_id": "HIRE_RONIN",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": "offer_fumbled", "effects": {},
+		}
+
+	return {
+		"success": true, "action_id": "HIRE_RONIN",
+		"character_id": character.character_id, "target_npc_id": ronin_id,
+		"ic_day": ic_day, "season": ctx.season,
+		"effects": {
+			"injects_reactive_event": true,
+			"reactive_type": "CONTRACT_OFFERED",
+			"lord_id": character.character_id,
+			"ronin_id": ronin_id,
+			"contract_type": contract_type,
+			"duration_seasons": duration_seasons,
+			"payment": payment,
+		},
+	}
+
+
+static func _execute_perform_clan_induction(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var ic_day: int = ctx.ic_day
+	var ronin_id: int = action.metadata.get("target_ronin_id", -1)
+
+	if ronin_id < 0:
+		return {
+			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "no_ronin_present", "effects": {},
+		}
+
+	var inductee: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+	if inductee == null or CharacterStats.is_dead(inductee):
+		return {
+			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "inductee_unavailable", "effects": {},
+		}
+
+	# Koku deducted at roll time (Pattern B — always paid).
+	if character.koku < RoninSystem.INDUCTION_KOKU_COST:
+		return {
+			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": "insufficient_koku", "effects": {},
+		}
+	character.koku -= RoninSystem.INDUCTION_KOKU_COST
+
+	var daimyo_disp: int = int(character.disposition_values.get(ronin_id, 0))
+	var eligibility: Dictionary = RoninSystem.can_be_inducted(inductee, character, daimyo_disp, [])
+	if not eligibility.get("eligible", false):
+		return {
+			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": eligibility.get("reason", "ineligible"), "effects": {},
+		}
+
+	# Courtier/Awareness vs TN 20 — ceremony must be performed with proper rites.
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Courtier", 20, ic_day,
+	)
+	if not check.get("success", false):
+		return {
+			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": "ceremony_failed",
+			"effects": {"ceremony_failure_topic": true},
+		}
+
+	return {
+		"success": true, "action_id": "PERFORM_CLAN_INDUCTION",
+		"character_id": character.character_id, "target_npc_id": ronin_id,
+		"ic_day": ic_day, "season": ctx.season,
+		"effects": {
+			"inductee_id": ronin_id,
+			"daimyo_id": character.character_id,
+		},
+	}
+
+
+static func _execute_grant_deed_credit(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var ic_day: int = ctx.ic_day
+	var ronin_id: int = action.metadata.get("target_ronin_id", -1)
+	if ronin_id < 0:
+		return {
+			"success": false, "action_id": "GRANT_DEED_CREDIT",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "no_ronin_present", "effects": {},
+		}
+	var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+	if ronin == null or CharacterStats.is_dead(ronin):
+		return {
+			"success": false, "action_id": "GRANT_DEED_CREDIT",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "ronin_unavailable", "effects": {},
+		}
+	return {
+		"success": true, "action_id": "GRANT_DEED_CREDIT",
+		"character_id": character.character_id, "target_npc_id": ronin_id,
+		"ic_day": ic_day, "season": ctx.season,
+		"effects": {
+			"grant_ronin_id": ronin_id,
+			"lord_family": character.family,
+			"current_season": ctx.season,
+			"lord_id": character.character_id,
+		},
+	}
+
+
+static func _execute_terminate_contract(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var ic_day: int = ctx.ic_day
+	var ronin_id: int = action.metadata.get("target_ronin_id", -1)
+	if ronin_id < 0:
+		return {
+			"success": false, "action_id": "TERMINATE_CONTRACT",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "no_target", "effects": {},
+		}
+	var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+	if ronin == null or CharacterStats.is_dead(ronin):
+		return {
+			"success": false, "action_id": "TERMINATE_CONTRACT",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "target_unavailable", "effects": {},
+		}
+	var contract_end: int = ronin.supply_ledger.get("contract_end_ic_day", -1)
+	if contract_end < 0:
+		return {
+			"success": false, "action_id": "TERMINATE_CONTRACT",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "no_active_contract", "effects": {},
+		}
+	# Compute remaining seasons for refund calculation.
+	var days_remaining: int = max(0, contract_end - ic_day)
+	var season_days: int = InvestigationSystem.DAYS_PER_SEASON
+	var remaining_seasons: int = (days_remaining + season_days - 1) / season_days
+	var contract_type: String = ronin.supply_ledger.get("contract_type", "PROVINCE_DEFENSE")
+
+	return {
+		"success": true, "action_id": "TERMINATE_CONTRACT",
+		"character_id": character.character_id, "target_npc_id": ronin_id,
+		"ic_day": ic_day, "season": ctx.season,
+		"effects": {
+			"terminate_ronin_id": ronin_id,
+			"contract_type": contract_type,
+			"remaining_seasons": remaining_seasons,
+			"current_season": ctx.season,
+			"disposition_change": RoninSystem.CONTRACT_EARLY_TERMINATION_DISPOSITION,
 		},
 	}
 

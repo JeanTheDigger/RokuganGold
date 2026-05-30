@@ -35,6 +35,32 @@ const PETITION_MARGIN_SCALE: int = 5  # +1 effective disposition per 5 margin
 # Permanent ronin disgrace-count threshold — locked in s52.5 A48.
 const PERMANENT_RONIN_DISGRACE_COUNT: int = 5
 
+# Contract payment rates (koku/season) — locked in s52.6 A51-A53.
+const CONTRACT_PAYMENT_PROVINCE_DEFENSE_PER_SEASON: int = 3
+const CONTRACT_PAYMENT_MAGISTRATE_AIDE_PER_SEASON: int = 2
+const CONTRACT_PAYMENT_MILITARY_SERVICE_PER_SEASON: int = 2
+
+# Contract outcome constants — locked in s52.6 A54-A57.
+const GLORY_CONTRACT_COMPLETION_BONUS: float = 0.5
+const CONTRACT_DECLINE_DISPOSITION: int = -1
+const CONTRACT_EARLY_TERMINATION_DISPOSITION: int = -3
+const CONTRACT_ABANDONED_DISPOSITION: int = -5
+
+# Clan induction thresholds — locked in s52.7 A60-A65.
+const INDUCTION_MIN_DEEDS: int = 3
+const INDUCTION_MIN_DISPOSITION: int = 51
+const INDUCTION_KOKU_COST: float = 10.0
+const INDUCTION_INDUCTEE_GLORY_GAIN: float = 1.0
+const INDUCTION_DAIMYO_GLORY_GAIN: float = 0.3
+const INDUCTION_FAMILY_BASELINE_SHIFT: int = 15
+
+# Contract type → NeedType mapping for assigned objectives.
+const CONTRACT_TYPE_NEED: Dictionary = {
+	"PROVINCE_DEFENSE": "DEFEND_PROVINCE",
+	"MAGISTRATE_AIDE": "UPHOLD_LAW",
+	"MILITARY_SERVICE": "LEVY_TROOPS",
+}
+
 # Legacy aliases.
 const BASE_PETITION_TN: int = PETITION_MIN_TN
 
@@ -241,6 +267,175 @@ static func hire_as_mercenary(
 		"character_id": character.character_id,
 		"employer_id": employer_id,
 		"payment": koku_payment,
+	}
+
+
+## Returns the upfront koku cost for a contract (rate × duration_seasons).
+static func get_contract_payment(contract_type: String, duration_seasons: int) -> float:
+	var rate: int = 0
+	match contract_type:
+		"PROVINCE_DEFENSE":
+			rate = CONTRACT_PAYMENT_PROVINCE_DEFENSE_PER_SEASON
+		"MAGISTRATE_AIDE":
+			rate = CONTRACT_PAYMENT_MAGISTRATE_AIDE_PER_SEASON
+		"MILITARY_SERVICE":
+			rate = CONTRACT_PAYMENT_MILITARY_SERVICE_PER_SEASON
+	return float(rate * clampi(duration_seasons, 1, 3))
+
+
+## Resolve a clean contract completion (s52.6 Part F).
+## Calls make_ronin with DISMISSAL, applies completion bonus, increments deed credits.
+static func complete_contract(
+	character: L5RCharacterData,
+	lord_family: String,
+	current_season: int,
+) -> Dictionary:
+	# Apply completion bonus before the dismissal glory loss.
+	HonorGlorySystem.apply_glory_change(character, GLORY_CONTRACT_COMPLETION_BONUS)
+	var ronin_result: Dictionary = make_ronin(character, RoninCause.DISMISSAL)
+	mark_ronin_start(character, current_season)
+
+	# Increment deed credits for the lord's family.
+	var deeds: Dictionary = character.supply_ledger.get("contract_deeds_for_family", {})
+	deeds[lord_family] = deeds.get(lord_family, 0) + 1
+	character.supply_ledger["contract_deeds_for_family"] = deeds
+	character.supply_ledger.erase("contract_end_ic_day")
+
+	return {
+		"character_id": character.character_id,
+		"lord_family": lord_family,
+		"deed_count": deeds[lord_family],
+		"ronin_result": ronin_result,
+	}
+
+
+## Resolve an abandoned contract (ronin failed to fulfil objective, s52.6 Part F).
+static func abandon_contract(
+	character: L5RCharacterData,
+	current_season: int,
+) -> Dictionary:
+	var ronin_result: Dictionary = make_ronin(character, RoninCause.DISMISSAL)
+	mark_ronin_start(character, current_season)
+	character.supply_ledger.erase("contract_end_ic_day")
+	return {
+		"character_id": character.character_id,
+		"abandoned": true,
+		"ronin_result": ronin_result,
+	}
+
+
+## Resolve early termination by the lord (s52.6 Part G).
+## Returns koku_refund = half of remaining value rounded down.
+static func terminate_contract_early(
+	character: L5RCharacterData,
+	remaining_seasons: int,
+	contract_type: String,
+	current_season: int,
+) -> Dictionary:
+	var refund: float = floorf(get_contract_payment(contract_type, remaining_seasons) * 0.5)
+	var ronin_result: Dictionary = make_ronin(character, RoninCause.DISMISSAL)
+	mark_ronin_start(character, current_season)
+	character.supply_ledger.erase("contract_end_ic_day")
+	character.supply_ledger.erase("contract_type")
+	return {
+		"character_id": character.character_id,
+		"koku_refund": refund,
+		"ronin_result": ronin_result,
+	}
+
+
+## Returns current deed count for a specific family (s52.7 Part B).
+static func get_deed_count(character: L5RCharacterData, family_name: String) -> int:
+	var deeds: Dictionary = character.supply_ledger.get("contract_deeds_for_family", {})
+	return int(deeds.get(family_name, 0))
+
+
+## Grant one manual deed credit (lord's recognition, s52.7 Part B).
+## Returns false if the ronin already received a grant this season from this lord.
+static func grant_deed_credit(
+	character: L5RCharacterData,
+	lord_family: String,
+	lord_id: int,
+	current_season: int,
+) -> Dictionary:
+	# Dedup: one manual grant per ronin per season per lord.
+	var cooldowns: Dictionary = character.supply_ledger.get("deed_grant_cooldowns", {})
+	var key: String = "%d_%d" % [lord_id, current_season]
+	if cooldowns.has(key):
+		return {"character_id": character.character_id, "skipped": true, "reason": "already_granted_this_season"}
+	cooldowns[key] = current_season
+	character.supply_ledger["deed_grant_cooldowns"] = cooldowns
+
+	var deeds: Dictionary = character.supply_ledger.get("contract_deeds_for_family", {})
+	deeds[lord_family] = deeds.get(lord_family, 0) + 1
+	character.supply_ledger["contract_deeds_for_family"] = deeds
+
+	return {
+		"character_id": character.character_id,
+		"lord_family": lord_family,
+		"deed_count": deeds[lord_family],
+	}
+
+
+## Check all induction prerequisites without modifying state (s52.7 Part C).
+static func can_be_inducted(
+	inductee: L5RCharacterData,
+	daimyo: L5RCharacterData,
+	daimyo_disposition_toward_inductee: int,
+	lords_known_crime_types: Array,
+) -> Dictionary:
+	if inductee.permanent_ronin:
+		return {"eligible": false, "reason": "permanent_ronin"}
+	if daimyo_disposition_toward_inductee < INDUCTION_MIN_DISPOSITION:
+		return {"eligible": false, "reason": "disposition_too_low", "current": daimyo_disposition_toward_inductee}
+	if get_deed_count(inductee, daimyo.family) < INDUCTION_MIN_DEEDS:
+		return {"eligible": false, "reason": "insufficient_deeds", "current": get_deed_count(inductee, daimyo.family)}
+	if inductee.clan == daimyo.clan:
+		return {"eligible": false, "reason": "already_same_clan"}
+	for ct: int in lords_known_crime_types:
+		if ct == Enums.CrimeType.TREASON or ct == Enums.CrimeType.MAHO_USE \
+				or ct == Enums.CrimeType.UNSANCTIONED_COVERT_KILLING:
+			return {"eligible": false, "reason": "known_serious_crime"}
+	return {"eligible": true}
+
+
+## Perform the formal clan induction (s52.7 Part D).
+## Caller is responsible for koku deduction, topic creation, and collective disposition.
+static func perform_induction(
+	inductee: L5RCharacterData,
+	daimyo: L5RCharacterData,
+) -> Dictionary:
+	var old_clan: String = inductee.clan
+	var old_family: String = inductee.family
+
+	inductee.clan = daimyo.clan
+	inductee.family = daimyo.family
+	inductee.lord_id = daimyo.character_id
+	inductee.role_position = "Samurai"
+	if inductee.status < 1.0:
+		HonorGlorySystem.apply_status_change(inductee, 1.0 - inductee.status)
+	inductee.permanent_ronin = false
+
+	HonorGlorySystem.apply_glory_change(inductee, INDUCTION_INDUCTEE_GLORY_GAIN)
+	HonorGlorySystem.apply_glory_change(daimyo, INDUCTION_DAIMYO_GLORY_GAIN)
+
+	# Clear deed credits redeemed for this family.
+	var deeds: Dictionary = inductee.supply_ledger.get("contract_deeds_for_family", {})
+	deeds.erase(daimyo.family)
+	inductee.supply_ledger["contract_deeds_for_family"] = deeds
+	inductee.supply_ledger.erase("contract_end_ic_day")
+	inductee.supply_ledger.erase("contract_type")
+	inductee.supply_ledger["former_ronin_inducted_by"] = daimyo.character_id
+
+	return {
+		"character_id": inductee.character_id,
+		"daimyo_id": daimyo.character_id,
+		"new_clan": inductee.clan,
+		"new_family": inductee.family,
+		"old_clan": old_clan,
+		"old_family": old_family,
+		"inductee_glory_gain": INDUCTION_INDUCTEE_GLORY_GAIN,
+		"daimyo_glory_gain": INDUCTION_DAIMYO_GLORY_GAIN,
 	}
 
 

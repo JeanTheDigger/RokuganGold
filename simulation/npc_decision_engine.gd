@@ -1081,6 +1081,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
 				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
 				"ACCEPT_RONIN_PETITION",
+				"HIRE_RONIN",
+				"PERFORM_CLAN_INDUCTION",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
@@ -1143,6 +1145,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
 				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
 				"PETITION_RONIN",
+				"HIRE_RONIN",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
@@ -1274,6 +1277,8 @@ static func _get_ap_cost(action_id: String) -> int:
 		"APPOINT_TO_POSITION": 1,
 		"ACCEPT_RONIN_PETITION": 1,
 		"PETITION_RONIN": 1,
+		"HIRE_RONIN": 1,
+		"PERFORM_CLAN_INDUCTION": 2,
 		"ARRANGE_MARRIAGE": 1,
 		"DISSOLVE_MARRIAGE": 1,
 		"FOUND_VILLAGE": 1,
@@ -2236,6 +2241,9 @@ const LORD_ONLY_ACTIONS: Array[String] = [
 	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID",
 	"TRANSFER_KOKU", "SHARE_SUPPLIES",
 	"ACCEPT_RONIN_PETITION",
+	"HIRE_RONIN",
+	"PERFORM_CLAN_INDUCTION",
+	"GRANT_DEED_CREDIT",
 ]
 
 
@@ -2911,6 +2919,17 @@ static func _populate_action_metadata(
 		option.target_npc_id = option.metadata.get("target_lord_id", -1)
 	elif option.action_id == "ACCEPT_RONIN_PETITION":
 		option.metadata = {"target_ronin_id": _pick_ronin_for_acceptance(ctx, chars_by_id)}
+		option.target_npc_id = option.metadata.get("target_ronin_id", -1)
+	elif option.action_id == "HIRE_RONIN":
+		var hire_meta: Dictionary = _build_hire_ronin_metadata(ctx, chars_by_id)
+		option.metadata = hire_meta
+		option.target_npc_id = hire_meta.get("target_ronin_id", -1)
+	elif option.action_id == "PERFORM_CLAN_INDUCTION":
+		var ind_meta: Dictionary = _build_induction_metadata(ctx, chars_by_id)
+		option.metadata = ind_meta
+		option.target_npc_id = ind_meta.get("target_ronin_id", -1)
+	elif option.action_id == "GRANT_DEED_CREDIT":
+		option.metadata = {"target_ronin_id": _pick_ronin_for_deed_credit(ctx, chars_by_id)}
 		option.target_npc_id = option.metadata.get("target_ronin_id", -1)
 
 
@@ -4619,6 +4638,105 @@ static func _pick_ronin_for_acceptance(
 			continue
 		if candidate.status > best_status:
 			best_status = candidate.status
+			best_id = present_id
+	return best_id
+
+
+static func _build_hire_ronin_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	## Select the best co-located ronin and appropriate contract type (s52.6 Part B).
+	## Prefers desperate ronin (higher urgency for lord filling vacancy).
+	var best_id: int = -1
+	var best_score: float = -1.0
+	for present_id: int in ctx.characters_present:
+		var c: L5RCharacterData = chars_by_id.get(present_id) as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if not RoninSystem.is_ronin(c):
+			continue
+		if c.permanent_ronin:
+			continue
+		if c.supply_ledger.get("contract_end_ic_day", -1) >= 0:
+			continue  # already under contract
+		var disp: float = ctx.disposition_values.get(present_id, 0.0)
+		if disp <= -1.0:
+			continue  # auto-reject gate
+		var score: float = disp + c.status * 2.0
+		if score > best_score:
+			best_score = score
+			best_id = present_id
+
+	# Pick contract type from need context: military need → MILITARY_SERVICE, etc.
+	var contract_type: String = "PROVINCE_DEFENSE"
+	var need_type: String = ctx.known_objectives.get("primary", {}).get("need_type", "")
+	if need_type == "LEVY_TROOPS" or need_type == "RAISE_ARMY":
+		contract_type = "MILITARY_SERVICE"
+	elif need_type == "UPHOLD_LAW" or need_type == "INVESTIGATE_THREAT":
+		contract_type = "MAGISTRATE_AIDE"
+
+	return {
+		"target_ronin_id": best_id,
+		"contract_type": contract_type,
+		"duration_seasons": 1,
+	}
+
+
+static func _build_induction_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	## Select the best co-located ronin eligible for clan induction (s52.7 Part C).
+	var daimyo: L5RCharacterData = chars_by_id.get(ctx.character_id) as L5RCharacterData
+	if daimyo == null:
+		return {"target_ronin_id": -1}
+	var best_id: int = -1
+	var best_deeds: int = -1
+	for present_id: int in ctx.characters_present:
+		var c: L5RCharacterData = chars_by_id.get(present_id) as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.permanent_ronin:
+			continue
+		if c.clan == daimyo.clan:
+			continue
+		var disp: float = ctx.disposition_values.get(present_id, 0.0)
+		if disp < RoninSystem.INDUCTION_MIN_DISPOSITION:
+			continue
+		var deeds: int = RoninSystem.get_deed_count(c, daimyo.family)
+		if deeds < RoninSystem.INDUCTION_MIN_DEEDS:
+			continue
+		if deeds > best_deeds:
+			best_deeds = deeds
+			best_id = present_id
+	return {"target_ronin_id": best_id}
+
+
+static func _pick_ronin_for_deed_credit(
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> int:
+	## Find the best co-located ronin for a lord to grant deed credit (s52.7 Part B).
+	## Prefers ronin with high lord disposition who are working toward induction threshold.
+	var lord: L5RCharacterData = chars_by_id.get(ctx.character_id) as L5RCharacterData
+	if lord == null:
+		return -1
+	var best_id: int = -1
+	var best_disp: float = 29.0  # minimum to consider (below Friend tier)
+	for present_id: int in ctx.characters_present:
+		var c: L5RCharacterData = chars_by_id.get(present_id) as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.permanent_ronin:
+			continue
+		if c.clan == lord.clan:
+			continue  # already same clan
+		if c.supply_ledger.get("contract_end_ic_day", -1) < 0:
+			continue  # not under contract (deed credits only for active service)
+		var disp: float = ctx.disposition_values.get(present_id, 0.0)
+		if disp > best_disp:
+			best_disp = disp
 			best_id = present_id
 	return best_id
 

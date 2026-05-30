@@ -3498,6 +3498,39 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   executor — the seeding path is wired and tested but requires a violence ActionID to be
   implemented before it fires in actual gameplay.
 
+### Systems Added 2026-05-30
+- **s52.6 Ronin Contract Hire** — GDD `gdd/s52.6_ronin_contracts_locked.md`. Three contract types
+  (PROVINCE_DEFENSE=3 koku/season, MAGISTRATE_AIDE=2 koku/season, MILITARY_SERVICE=2 koku/season).
+  HIRE_RONIN ActionID (1 AP, lord-only, AT_OWN_HOLDINGS+VISITING, Courtier/Awareness TN 10):
+  validates ronin present/alive/non-permanent/uncontracted, lord koku sufficient, ronin's disposition
+  toward lord ≥ 0, rolls Courtier TN 10, injects CONTRACT_OFFERED reactive event on success.
+  ReactiveDecisions._evaluate_contract_offer(): desperate→auto-accept, disposition≥31→auto-accept,
+  Chugi accepts PROVINCE_DEFENSE/MAGISTRATE_AIDE, Meiyo accepts at disp≥0, Ketsui always accepts,
+  Ishi refuses unless desperate, Seigyo/default accept at disp≥0. Contract acceptance writeback:
+  koku deducted from lord, paid to ronin, accept_into_service(), contract_end_ic_day/type/lord_family
+  stored in supply_ledger, NeedType primary objective assigned (DEFEND_PROVINCE/UPHOLD_LAW/LEVY_TROOPS),
+  FIND_NEW_LORD standing cleared. Contract decline: CONTRACT_DECLINE_DISPOSITION (−1) both directions.
+  Contract expiry (daily check): clean (primary source==contract)→complete_contract (+0.5 glory, deed++),
+  abandoned→CONTRACT_ABANDONED_DISPOSITION (−5) to lord. TERMINATE_CONTRACT (0 AP, 1 civilian order):
+  half-koku refund, CONTRACT_EARLY_TERMINATION_DISPOSITION (−3) to lord disposition. Constants A51–A59
+  locked. 44 tests.
+- **s52.7 Clan Induction** — GDD `gdd/s52.7_clan_induction_locked.md`. Deed credit system tracks
+  per-family service record in `supply_ledger["contract_deeds_for_family"]` (Dictionary keyed by
+  family name). GRANT_DEED_CREDIT (0 AP, 1 civilian order): manual lord recognition, deduped via
+  `deed_grant_cooldowns` key `"%d_%d" % [lord_id, current_season]`. PERFORM_CLAN_INDUCTION (2 AP,
+  AT_OWN_HOLDINGS, Courtier/Awareness TN 20, 10 koku Pattern B): can_be_inducted() gate
+  (disposition≥51, deeds≥3, different clan, no TREASON/MAHO/COVERT_KILLING crimes), ceremony
+  failure→TIER_4 PERSONAL topic. Induction writeback: perform_induction() mutates clan/family/
+  lord_id/role_position, status raised to 1.0 minimum, permanent_ronin cleared, deed credits
+  erased for that family, +1.0 glory inductee, +0.3 glory daimyo, +15 disposition from all
+  co-family members toward inductee, TIER_3 POLITICAL topic distributed to co-located characters.
+  FIND_NEW_LORD standing cleared on induction. objective_alignment.json: FILL_VACANCY NeedType
+  gains PERFORM_CLAN_INDUCTION (20), GRANT_DEED_CREDIT (30), HIRE_RONIN (60). action_skill_map.json:
+  HIRE_RONIN and PERFORM_CLAN_INDUCTION both Courtier/Awareness. Bug fix: `.family_name` property
+  access corrected to `.family` across all new code (ronin_system.gd, day_orchestrator.gd,
+  action_executor.gd, npc_decision_engine.gd). `TimeSystem.DAYS_PER_SEASON` (non-existent) replaced
+  with `InvestigationSystem.DAYS_PER_SEASON` (= 90). Constants A60–A72 locked. 26 tests.
+
 ## Resolved Design Decisions
 
 ### 1. Topic Identity — RESOLVED: int IDs

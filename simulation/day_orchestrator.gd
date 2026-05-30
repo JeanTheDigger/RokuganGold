@@ -771,6 +771,35 @@ static func advance_day(
 		characters_by_id, objectives_map, current_season,
 	)
 
+	_process_hire_ronin_writebacks(
+		day_result.get("results", []),
+		characters_by_id,
+	)
+
+	_process_contract_acceptance_writebacks(
+		day_result.get("results", []),
+		characters_by_id, objectives_map, current_season, ic_day,
+	)
+
+	_process_deed_credit_writebacks(
+		day_result.get("results", []),
+		characters_by_id,
+	)
+
+	_process_terminate_contract_writebacks(
+		day_result.get("results", []),
+		characters_by_id, current_season,
+	)
+
+	_process_clan_induction_writebacks(
+		day_result.get("results", []),
+		characters_by_id, objectives_map, active_topics, next_topic_id, ic_day,
+	)
+
+	_process_contract_expiry(
+		characters_by_id, objectives_map, current_season, ic_day,
+	)
+
 	_process_compose_theater_writebacks(
 		day_result.get("results", []),
 		theater_pieces, next_piece_id, characters_by_id, ic_day, active_topics,
@@ -6681,6 +6710,315 @@ static func _process_petition_writebacks(
 			var standing: Dictionary = objs.get("standing", {})
 			if standing.get("need_type", "") == "FIND_NEW_LORD":
 				objs.erase("standing")
+
+
+# -- Hire Ronin Writebacks (s52.6 Part B) -------------------------------------
+
+
+static func _process_hire_ronin_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "HIRE_RONIN":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("injects_reactive_event", false):
+			continue
+
+		var ronin_id: int = effects.get("ronin_id", -1)
+		var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+		if ronin == null or CharacterStats.is_dead(ronin):
+			continue
+		if not RoninSystem.is_ronin(ronin):
+			continue
+
+		# Inject CONTRACT_OFFERED reactive event into ronin's pending_events.
+		ronin.pending_events.append({
+			"reactive_type": "CONTRACT_OFFERED",
+			"lord_id": effects.get("lord_id", -1),
+			"ronin_id": ronin_id,
+			"contract_type": effects.get("contract_type", "PROVINCE_DEFENSE"),
+			"duration_seasons": effects.get("duration_seasons", 1),
+			"payment": effects.get("payment", 0.0),
+		})
+
+
+# -- Contract Acceptance Writebacks (s52.6 Part E) ----------------------------
+
+
+static func _process_contract_acceptance_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	current_season: int,
+	ic_day: int,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action", "") != "ACCEPT_CONTRACT":
+			continue
+
+		var ronin_id: int = result.get("character_id", -1)
+		var lord_id: int = result.get("target_npc_id", -1)
+		if ronin_id < 0 or lord_id < 0:
+			continue
+
+		var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+		var lord: L5RCharacterData = characters_by_id.get(lord_id) as L5RCharacterData
+		if ronin == null or CharacterStats.is_dead(ronin):
+			continue
+		if lord == null or CharacterStats.is_dead(lord):
+			continue
+		if not RoninSystem.is_ronin(ronin):
+			continue
+
+		var contract_type: String = result.get("contract_type", "PROVINCE_DEFENSE")
+		var duration_seasons: int = int(result.get("duration_seasons", 1))
+		var payment: float = RoninSystem.get_contract_payment(contract_type, duration_seasons)
+
+		# Deduct koku from lord on acceptance.
+		lord.koku = maxf(0.0, lord.koku - payment)
+		ronin.koku += payment
+
+		# Accept into retainer service (sets lord_id, role, status, glory recovery).
+		RoninSystem.accept_into_service(ronin, lord_id, "Samurai")
+		RoninSystem.record_income(ronin, current_season)
+
+		# Store contract metadata for expiry checking.
+		var season_days: int = InvestigationSystem.DAYS_PER_SEASON
+		ronin.supply_ledger["contract_end_ic_day"] = ic_day + duration_seasons * season_days
+		ronin.supply_ledger["contract_type"] = contract_type
+		ronin.supply_ledger["contract_lord_family"] = lord.family
+
+		# Assign the contract NeedType as primary objective.
+		var need_type: String = RoninSystem.CONTRACT_TYPE_NEED.get(contract_type, "DEFEND_PROVINCE")
+		if not objectives_map.has(ronin_id):
+			objectives_map[ronin_id] = {}
+		objectives_map[ronin_id]["primary"] = {
+			"need_type": need_type,
+			"assigned_by": lord_id,
+			"source": "contract",
+			"priority": 5,
+		}
+
+		# Clear FIND_NEW_LORD standing objective.
+		if objectives_map.has(ronin_id):
+			var standing: Dictionary = objectives_map[ronin_id].get("standing", {})
+			if standing.get("need_type", "") == "FIND_NEW_LORD":
+				objectives_map[ronin_id].erase("standing")
+
+	# DECLINE path: apply disposition penalty.
+	for result: Dictionary in results:
+		if result.get("action", "") != "DECLINE_CONTRACT":
+			continue
+		var ronin_id: int = result.get("character_id", -1)
+		var lord_id: int = result.get("target_npc_id", -1)
+		var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+		var lord: L5RCharacterData = characters_by_id.get(lord_id) as L5RCharacterData
+		if ronin != null and not CharacterStats.is_dead(ronin) and lord_id >= 0:
+			var cur: int = int(ronin.disposition_values.get(lord_id, 0))
+			ronin.disposition_values[lord_id] = clampi(
+				cur + RoninSystem.CONTRACT_DECLINE_DISPOSITION, -100, 100,
+			)
+		if lord != null and not CharacterStats.is_dead(lord) and ronin_id >= 0:
+			var cur: int = int(lord.disposition_values.get(ronin_id, 0))
+			lord.disposition_values[ronin_id] = clampi(
+				cur + RoninSystem.CONTRACT_DECLINE_DISPOSITION, -100, 100,
+			)
+
+
+# -- Contract Expiry (s52.6 Part F) -------------------------------------------
+
+
+static func _process_contract_expiry(
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	current_season: int,
+	ic_day: int,
+) -> void:
+	for cid: int in characters_by_id:
+		var character: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		var contract_end: int = character.supply_ledger.get("contract_end_ic_day", -1)
+		if contract_end < 0 or ic_day < contract_end:
+			continue
+
+		# Contract has expired — determine clean vs abandoned outcome.
+		var lord_family: String = character.supply_ledger.get("contract_lord_family", "")
+		var primary: Dictionary = objectives_map.get(cid, {}).get("primary", {})
+		var is_clean: bool = primary.get("source", "") == "contract" and \
+			primary.get("need_type", "") in RoninSystem.CONTRACT_TYPE_NEED.values()
+
+		if is_clean:
+			RoninSystem.complete_contract(character, lord_family, current_season)
+		else:
+			var lord_id: int = character.lord_id
+			var lord: L5RCharacterData = characters_by_id.get(lord_id) as L5RCharacterData
+			if lord != null and not CharacterStats.is_dead(lord):
+				var cur: int = int(lord.disposition_values.get(cid, 0))
+				lord.disposition_values[cid] = clampi(
+					cur + RoninSystem.CONTRACT_ABANDONED_DISPOSITION, -100, 100,
+				)
+			RoninSystem.abandon_contract(character, current_season)
+
+		# Clear contract primary objective — ronin is now free.
+		if objectives_map.has(cid):
+			var primary_obj: Dictionary = objectives_map[cid].get("primary", {})
+			if primary_obj.get("source", "") == "contract":
+				objectives_map[cid].erase("primary")
+
+
+# -- Deed Credit Writebacks (s52.7 Part B) ------------------------------------
+
+
+static func _process_deed_credit_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "GRANT_DEED_CREDIT":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var ronin_id: int = effects.get("grant_ronin_id", -1)
+		var lord_family: String = effects.get("lord_family", "")
+		var lord_id: int = effects.get("lord_id", -1)
+		var season: int = effects.get("current_season", 0)
+		if ronin_id < 0 or lord_family.is_empty():
+			continue
+		var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+		if ronin == null or CharacterStats.is_dead(ronin):
+			continue
+		RoninSystem.grant_deed_credit(ronin, lord_family, lord_id, season)
+
+
+# -- Early Termination Writebacks (s52.6 Part G) ------------------------------
+
+
+static func _process_terminate_contract_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	current_season: int,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "TERMINATE_CONTRACT":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var ronin_id: int = effects.get("terminate_ronin_id", -1)
+		var lord_id: int = result.get("character_id", -1)
+		if ronin_id < 0:
+			continue
+		var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+		var lord: L5RCharacterData = characters_by_id.get(lord_id) as L5RCharacterData
+		if ronin == null or CharacterStats.is_dead(ronin):
+			continue
+
+		var remaining_seasons: int = effects.get("remaining_seasons", 0)
+		var contract_type: String = effects.get("contract_type", "PROVINCE_DEFENSE")
+		var term_result: Dictionary = RoninSystem.terminate_contract_early(
+			ronin, remaining_seasons, contract_type, current_season,
+		)
+
+		# Refund koku to lord.
+		if lord != null and not CharacterStats.is_dead(lord):
+			lord.koku += term_result.get("koku_refund", 0.0)
+			var disp: int = int(lord.disposition_values.get(ronin_id, 0))
+			lord.disposition_values[ronin_id] = clampi(
+				disp + RoninSystem.CONTRACT_EARLY_TERMINATION_DISPOSITION, -100, 100,
+			)
+
+
+# -- Clan Induction Writebacks (s52.7 Part D) ----------------------------------
+
+
+static func _process_clan_induction_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "PERFORM_CLAN_INDUCTION":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+
+		# Ceremony failure: generate TIER_4 topic and skip.
+		if effects.get("ceremony_failure_topic", false):
+			var fail_topic: TopicData = TopicData.new()
+			fail_topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			fail_topic.title = "Botched Induction Ceremony"
+			fail_topic.tier = TopicData.Tier.TIER_4
+			fail_topic.category = TopicData.Category.PERSONAL
+			fail_topic.subject_character_id = result.get("target_npc_id", -1)
+			fail_topic.ic_day_created = ic_day
+			active_topics.append(fail_topic)
+			continue
+
+		if not result.get("success", false):
+			continue
+
+		var inductee_id: int = effects.get("inductee_id", -1)
+		var daimyo_id: int = effects.get("daimyo_id", -1)
+		if inductee_id < 0 or daimyo_id < 0:
+			continue
+
+		var inductee: L5RCharacterData = characters_by_id.get(inductee_id) as L5RCharacterData
+		var daimyo: L5RCharacterData = characters_by_id.get(daimyo_id) as L5RCharacterData
+		if inductee == null or CharacterStats.is_dead(inductee):
+			continue
+		if daimyo == null or CharacterStats.is_dead(daimyo):
+			continue
+
+		var induction_result: Dictionary = RoninSystem.perform_induction(inductee, daimyo)
+
+		# Clear FIND_NEW_LORD standing objective.
+		if objectives_map.has(inductee_id):
+			var standing: Dictionary = objectives_map[inductee_id].get("standing", {})
+			if standing.get("need_type", "") == "FIND_NEW_LORD":
+				objectives_map[inductee_id].erase("standing")
+
+		# Apply family collective disposition shift (s52.7 Part D step 8).
+		for cid: int in characters_by_id:
+			var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
+			if c == null or CharacterStats.is_dead(c) or c.character_id == inductee_id:
+				continue
+			if c.family != daimyo.family:
+				continue
+			var cur: int = int(c.disposition_values.get(inductee_id, 0))
+			c.disposition_values[inductee_id] = clampi(
+				cur + RoninSystem.INDUCTION_FAMILY_BASELINE_SHIFT, -100, 100,
+			)
+
+		# TIER_3 POLITICAL topic (s52.7 Part D, A71).
+		var topic: TopicData = TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.title = "%s Inducted into %s Family" % [inductee.character_name, daimyo.family]
+		topic.tier = TopicData.Tier.TIER_3
+		topic.category = TopicData.Category.POLITICAL
+		topic.subject_character_id = inductee_id
+		topic.ic_day_created = ic_day
+		active_topics.append(topic)
+
+		# Distribute topic to nearby characters.
+		for cid: int in characters_by_id:
+			var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
+			if c == null or CharacterStats.is_dead(c):
+				continue
+			if c.physical_location == daimyo.physical_location:
+				if not c.topic_pool.has(topic.topic_id):
+					c.topic_pool.append(topic.topic_id)
+
+		_ = induction_result  # result used for side-effects; data available for callers
 
 
 static func _assign_phoenix_champion_restore_objective(
