@@ -131,7 +131,7 @@ When implementing or auditing a system, go here first:
 | NPC advancement (XP, skill/ring progression)  | 52 Part 3, 48        |
 | World population generator (game start pass)  | 52 Part 1, 22.4, 22.8|
 | Gempukku / NPC spawning / natural death       | 52, 22.4, 22.7       |
-| Ronin system (status transitions)             | 52 Part 5            |
+| Ronin system (status transitions, petition)   | 52 Part 5, 52.5      |
 
 ## Directory Structure
 ```
