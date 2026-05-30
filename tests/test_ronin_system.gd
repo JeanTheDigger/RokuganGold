@@ -1935,3 +1935,61 @@ func test_terminate_contract_applies_disposition_penalty():
 	DayOrchestrator._process_terminate_contract_writebacks(results, chars, 2)
 	assert_eq(int(lord.disposition_values.get(10, 0)),
 		20 + RoninSystem.CONTRACT_EARLY_TERMINATION_DISPOSITION)
+
+
+# === TERMINATE_CONTRACT METADATA ===
+
+func _make_ctx_for_terminate(lord_id: int, ronin_id: int) -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = lord_id
+	ctx.is_lord = true
+	ctx.lord_rank = Enums.LordRank.PROVINCIAL_DAIMYO
+	ctx.characters_present = [ronin_id]
+	ctx.disposition_values = {ronin_id: 15}
+	return ctx
+
+
+func test_terminate_metadata_finds_co_located_contracted_ronin():
+	var lord := _make_lord(200)
+	var ronin := _make_ronin_char(10)
+	ronin.lord_id = 200
+	ronin.supply_ledger["contract_end_ic_day"] = 500
+	var ctx := _make_ctx_for_terminate(200, 10)
+	var chars: Dictionary = {200: lord, 10: ronin}
+	var meta: Dictionary = NPCDecisionEngine._build_terminate_contract_metadata(ctx, chars)
+	assert_eq(meta.get("target_ronin_id", -1), 10)
+
+
+func test_terminate_metadata_ignores_non_contracted_ronin():
+	# Ronin serving lord but no contract_end_ic_day set.
+	var lord := _make_lord(200)
+	var ronin := _make_ronin_char(10)
+	ronin.lord_id = 200
+	var ctx := _make_ctx_for_terminate(200, 10)
+	var chars: Dictionary = {200: lord, 10: ronin}
+	var meta: Dictionary = NPCDecisionEngine._build_terminate_contract_metadata(ctx, chars)
+	assert_eq(meta.get("target_ronin_id", -1), -1)
+
+
+func test_terminate_metadata_ignores_different_lord():
+	# Contracted to a different lord.
+	var lord := _make_lord(200)
+	var ronin := _make_ronin_char(10)
+	ronin.lord_id = 999
+	ronin.supply_ledger["contract_end_ic_day"] = 500
+	var ctx := _make_ctx_for_terminate(200, 10)
+	var chars: Dictionary = {200: lord, 10: ronin}
+	var meta: Dictionary = NPCDecisionEngine._build_terminate_contract_metadata(ctx, chars)
+	assert_eq(meta.get("target_ronin_id", -1), -1)
+
+
+func test_terminate_metadata_ignores_dead_ronin():
+	var lord := _make_lord(200)
+	var ronin := _make_ronin_char(10)
+	ronin.lord_id = 200
+	ronin.supply_ledger["contract_end_ic_day"] = 500
+	ronin.wounds_taken = 100  # lethal wounds
+	var ctx := _make_ctx_for_terminate(200, 10)
+	var chars: Dictionary = {200: lord, 10: ronin}
+	var meta: Dictionary = NPCDecisionEngine._build_terminate_contract_metadata(ctx, chars)
+	assert_eq(meta.get("target_ronin_id", -1), -1)

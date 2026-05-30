@@ -1084,6 +1084,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"HIRE_RONIN",
 				"PERFORM_CLAN_INDUCTION",
 				"APPROVE_CLAN_INDUCTION",
+				"TERMINATE_CONTRACT",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
@@ -1148,6 +1149,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
 				"PETITION_RONIN",
 				"HIRE_RONIN",
+				"TERMINATE_CONTRACT",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
@@ -1282,6 +1284,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"HIRE_RONIN": 1,
 		"PERFORM_CLAN_INDUCTION": 2,
 		"APPROVE_CLAN_INDUCTION": 0,
+		"TERMINATE_CONTRACT": 0,
 		"ARRANGE_MARRIAGE": 1,
 		"DISSOLVE_MARRIAGE": 1,
 		"FOUND_VILLAGE": 1,
@@ -2247,6 +2250,7 @@ const LORD_ONLY_ACTIONS: Array[String] = [
 	"HIRE_RONIN",
 	"PERFORM_CLAN_INDUCTION",
 	"APPROVE_CLAN_INDUCTION",
+	"TERMINATE_CONTRACT",
 ]
 
 
@@ -2935,6 +2939,10 @@ static func _populate_action_metadata(
 		var appr_meta: Dictionary = _build_approve_induction_metadata(ctx, chars_by_id)
 		option.metadata = appr_meta
 		option.target_npc_id = appr_meta.get("target_ronin_id", -1)
+	elif option.action_id == "TERMINATE_CONTRACT":
+		var term_meta: Dictionary = _build_terminate_contract_metadata(ctx, chars_by_id)
+		option.metadata = term_meta
+		option.target_npc_id = term_meta.get("target_ronin_id", -1)
 
 
 static func _build_compose_theater_metadata(
@@ -4766,6 +4774,23 @@ static func _build_approve_induction_metadata(
 			best_deeds = deeds
 			best_id = known_id
 	return {"target_ronin_id": best_id}
+
+
+static func _build_terminate_contract_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	## Find a co-located contracted ronin serving under this lord (s52.6 Part G).
+	for present_id: int in ctx.characters_present:
+		var c: L5RCharacterData = chars_by_id.get(present_id) as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.lord_id != ctx.character_id:
+			continue
+		if c.supply_ledger.get("contract_end_ic_day", -1) < 0:
+			continue
+		return {"target_ronin_id": present_id}
+	return {"target_ronin_id": -1}
 
 
 static func _find_marriageable_vassals(
