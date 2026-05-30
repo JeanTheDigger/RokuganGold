@@ -3242,6 +3242,15 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
 ### Pending Redesign
 (None currently pending.)
 
+### Tuning Review Needed After First Live Run
+- **School-less ring progression rate.** School-less characters (born ronin, unschooled)
+  advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
+  skills may spend 4–6 seasons on skills before touching rings. At peacetime XP rates,
+  raising a ring from rank 2 to 3 takes ~8 OOC years. If playtest reveals rings growing
+  too slowly relative to skills, consider interleaving (raise one ring after every N skill
+  advances) or adjusting the priority order. Do not change the order without playtesting
+  first — the current design is principled and matches "Strengths + spread rings" intent.
+
 ### Resolved Redesigns
 - **Winter Court lifecycle — RESOLVED v624.** Full Winter Court system designed
   and written into GDD Section 55.10. Replaces the placeholder
