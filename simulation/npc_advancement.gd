@@ -258,53 +258,69 @@ static func spend_accumulated_xp(character: L5RCharacterData) -> Dictionary:
 
 	var focus_rings: Array = get_focus_rings(character)
 	var school_skills: Array = get_school_skills(character)
-	# Without a known school there are no spending targets; hold XP in reserve.
-	if school_skills.is_empty() and focus_rings.is_empty():
-		return {"xp_spent": 0, "advancements": []}
-
 	var available_progress: int = available_xp * XP_TO_PROGRESS
 	var total_spent_progress: int = 0
 	var advancements: Array = []
 
-	var eligible_skills: Array = get_eligible_skills(character)
-	var sorted_skills: Array = _sort_eligible_skills_by_priority(character, eligible_skills, school_skills)
+	if school_skills.is_empty() and focus_rings.is_empty():
+		# School-less path (s52 Part 3): deepen existing strengths, spread all five rings evenly.
+		# Priority 1: All skills sorted by rank desc (alpha tie-break). Rank 0 eligible.
+		for skill: String in _get_schoolless_sorted_skills(character):
+			if total_spent_progress >= available_progress:
+				break
+			if character.skills.get(skill, 0) < MAX_SKILL_RANK:
+				var result: Dictionary = _try_spend_on_skill(character, skill, available_progress - total_spent_progress)
+				total_spent_progress += result["spent"]
+				if result["advanced"]:
+					advancements.append({"type": "skill", "skill": skill, "priority": 1})
+		# Priority 2: All five rings sorted by current rank asc (lowest first = spread evenly).
+		for ring: Enums.Ring in _get_rings_sorted_by_rank_asc(character):
+			if total_spent_progress >= available_progress:
+				break
+			if _get_ring_rank(character, ring) < MAX_RING_RANK:
+				var result: Dictionary = _try_spend_on_ring(character, ring, available_progress - total_spent_progress)
+				total_spent_progress += result["spent"]
+				if result["advanced"]:
+					advancements.append({"type": "ring", "ring": ring, "priority": 2})
+	else:
+		# Schooled path: specialize into focus rings and school skills.
+		var eligible_skills: Array = get_eligible_skills(character)
+		var sorted_skills: Array = _sort_eligible_skills_by_priority(character, eligible_skills, school_skills)
 
-	# Priority 1: Primary Ring (first focus ring)
-	if focus_rings.size() > 0:
-		var result: Dictionary = _try_spend_on_ring(character, focus_rings[0], available_progress - total_spent_progress)
-		total_spent_progress += result["spent"]
-		if result["advanced"]:
-			advancements.append({"type": "ring", "ring": focus_rings[0], "priority": 1})
-
-	# Priority 2: All eligible skills sorted by rank desc (school skills first within same rank)
-	for skill: String in sorted_skills:
-		if total_spent_progress >= available_progress:
-			break
-		if character.skills.get(skill, 0) < MAX_SKILL_RANK:
-			var result: Dictionary = _try_spend_on_skill(character, skill, available_progress - total_spent_progress)
+		# Priority 1: Primary Ring (first focus ring)
+		if focus_rings.size() > 0:
+			var result: Dictionary = _try_spend_on_ring(character, focus_rings[0], available_progress - total_spent_progress)
 			total_spent_progress += result["spent"]
 			if result["advanced"]:
-				advancements.append({"type": "skill", "skill": skill, "priority": 2})
+				advancements.append({"type": "ring", "ring": focus_rings[0], "priority": 1})
 
-	# Priority 3: Secondary Ring (second focus ring)
-	if total_spent_progress < available_progress and focus_rings.size() > 1:
-		var result: Dictionary = _try_spend_on_ring(character, focus_rings[1], available_progress - total_spent_progress)
-		total_spent_progress += result["spent"]
-		if result["advanced"]:
-			advancements.append({"type": "ring", "ring": focus_rings[1], "priority": 3})
+		# Priority 2: All eligible skills sorted by rank desc (school skills first within same rank)
+		for skill: String in sorted_skills:
+			if total_spent_progress >= available_progress:
+				break
+			if character.skills.get(skill, 0) < MAX_SKILL_RANK:
+				var result: Dictionary = _try_spend_on_skill(character, skill, available_progress - total_spent_progress)
+				total_spent_progress += result["spent"]
+				if result["advanced"]:
+					advancements.append({"type": "skill", "skill": skill, "priority": 2})
 
-	# Priority 4: Void Ring (all school types)
-	if total_spent_progress < available_progress:
-		var void_is_focus: bool = focus_rings.has(Enums.Ring.VOID)
-		if not void_is_focus and _get_ring_rank(character, Enums.Ring.VOID) < MAX_RING_RANK:
-			var result: Dictionary = _try_spend_on_ring(character, Enums.Ring.VOID, available_progress - total_spent_progress)
+		# Priority 3: Secondary Ring (second focus ring)
+		if total_spent_progress < available_progress and focus_rings.size() > 1:
+			var result: Dictionary = _try_spend_on_ring(character, focus_rings[1], available_progress - total_spent_progress)
 			total_spent_progress += result["spent"]
 			if result["advanced"]:
-				advancements.append({"type": "ring", "ring": Enums.Ring.VOID, "priority": 4})
+				advancements.append({"type": "ring", "ring": focus_rings[1], "priority": 3})
 
-	# Priority 5: Remaining XP held in reserve (not spent)
+		# Priority 4: Void Ring (all school types)
+		if total_spent_progress < available_progress:
+			var void_is_focus: bool = focus_rings.has(Enums.Ring.VOID)
+			if not void_is_focus and _get_ring_rank(character, Enums.Ring.VOID) < MAX_RING_RANK:
+				var result: Dictionary = _try_spend_on_ring(character, Enums.Ring.VOID, available_progress - total_spent_progress)
+				total_spent_progress += result["spent"]
+				if result["advanced"]:
+					advancements.append({"type": "ring", "ring": Enums.Ring.VOID, "priority": 4})
 
-	# Convert progress spent back to XP consumed (ceiling division)
+	# Convert progress spent back to XP consumed (ceiling division). Shared by both paths.
 	@warning_ignore("integer_division")
 	var xp_consumed: int = total_spent_progress / XP_TO_PROGRESS
 	if total_spent_progress % XP_TO_PROGRESS > 0:
@@ -364,6 +380,35 @@ static func _sort_eligible_skills_by_priority(
 	return result
 
 
+# === SCHOOL-LESS HELPERS ===
+
+# All skills in character.skills sorted by rank desc (alpha tie-break for determinism).
+# Includes rank-0 skills so school-less characters can develop latent disciplines.
+static func _get_schoolless_sorted_skills(character: L5RCharacterData) -> Array:
+	var pairs: Array = []
+	for skill: String in character.skills.keys():
+		pairs.append({"skill": skill, "rank": character.skills.get(skill, 0)})
+	pairs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a["rank"] != b["rank"]:
+			return a["rank"] > b["rank"]
+		return a["skill"] < b["skill"]
+	)
+	var result: Array = []
+	for p: Dictionary in pairs:
+		result.append(p["skill"])
+	return result
+
+
+# All five rings sorted by current rank ascending (lowest first = spread evenly).
+# Ties broken by stable enum order: AIR, EARTH, FIRE, WATER, VOID.
+static func _get_rings_sorted_by_rank_asc(character: L5RCharacterData) -> Array:
+	var rings: Array = [Enums.Ring.AIR, Enums.Ring.EARTH, Enums.Ring.FIRE, Enums.Ring.WATER, Enums.Ring.VOID]
+	rings.sort_custom(func(a: Enums.Ring, b: Enums.Ring) -> bool:
+		return _get_ring_rank(character, a) < _get_ring_rank(character, b)
+	)
+	return rings
+
+
 # === SKILL SORTING HELPERS ===
 
 static func _get_highest_ranked_skill(character: L5RCharacterData, skill_list: Array) -> String:
@@ -396,8 +441,18 @@ static func _sort_skills_by_rank_desc(character: L5RCharacterData, skill_list: A
 static func get_best_training_target(character: L5RCharacterData) -> Dictionary:
 	var focus_rings: Array = get_focus_rings(character)
 	var school_skills: Array = get_school_skills(character)
+
 	if school_skills.is_empty() and focus_rings.is_empty():
+		# School-less path: highest-ranked skill first, then lowest-ranked ring.
+		for skill: String in _get_schoolless_sorted_skills(character):
+			if character.skills.get(skill, 0) < MAX_SKILL_RANK:
+				return {"type": "skill", "skill": skill, "ring": Enums.Ring.EARTH}
+		for ring: Enums.Ring in _get_rings_sorted_by_rank_asc(character):
+			if _get_ring_rank(character, ring) < MAX_RING_RANK:
+				return {"type": "ring", "ring": ring, "skill": ""}
 		return {}
+
+	# Schooled path
 	var eligible_skills: Array = get_eligible_skills(character)
 	var sorted_skills: Array = _sort_eligible_skills_by_priority(character, eligible_skills, school_skills)
 

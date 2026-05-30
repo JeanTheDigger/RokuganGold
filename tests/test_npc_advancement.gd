@@ -507,14 +507,19 @@ func test_worked_example_chui_campaign():
 
 # === EDGE CASES ===
 
-func test_unknown_school_no_crash():
+func test_unknown_school_uses_schoolless_path():
+	# s52 Part 3: characters without a known school use the school-less path.
+	# They advance their highest-ranked skill rather than holding XP in reserve.
 	var c := _make_character()
 	c.school = "Unknown School"
 	c.xp_total = 10
 	c.xp_spent = 0
 	var result: Dictionary = NPCAdvancement.spend_accumulated_xp(c)
-	# No school data = no spending targets = XP stays in reserve
-	assert_eq(result["xp_spent"], 0)
+	# 10 XP = 2000 progress. Highest skill is Heavy Weapons (rank 2). Cost 2->3 = 3000.
+	# All 2000 progress goes to Heavy Weapons bar; XP is spent, not held in reserve.
+	assert_eq(result["xp_spent"], 10)
+	var hw_progress: int = c.progress_bars.get("skill_Heavy Weapons", 0)
+	assert_eq(hw_progress, 2000)
 
 func test_no_xp_available():
 	var c := _make_character()
@@ -920,3 +925,123 @@ func test_get_best_training_target_returns_void_for_bushi_when_else_maxed() -> v
 	assert_false(target.is_empty(), "Should find Void as next target")
 	assert_eq(target.get("type", ""), "ring")
 	assert_eq(target.get("ring", -1), Enums.Ring.VOID, "Bushi should target Void ring last")
+
+
+# -- School-less advancement path (s52 Part 3) ----------------------------------
+
+func _make_schoolless(id: int = 10) -> L5RCharacterData:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = id
+	c.character_name = "Born Ronin"
+	c.school = ""
+	c.clan = ""
+	c.stamina = 2
+	c.willpower = 2
+	c.strength = 2
+	c.perception = 2
+	c.agility = 2
+	c.intelligence = 2
+	c.reflexes = 2
+	c.awareness = 2
+	c.void_ring = 2
+	# Rings: AIR=2, EARTH=2, FIRE=2, WATER=2, VOID=2 (all equal)
+	c.skills = {"Kenjutsu": 3, "Athletics": 2, "Hunting": 1}
+	return c
+
+
+func test_schoolless_spends_on_highest_skill_first() -> void:
+	var c: L5RCharacterData = _make_schoolless()
+	# Kenjutsu rank 3 is highest; cost 3->4 = 4000 progress = 20 XP.
+	c.xp_total = 5
+	c.xp_spent = 0
+	NPCAdvancement.spend_accumulated_xp(c)
+	# 5 XP = 1000 progress; should go to Kenjutsu (highest skill)
+	var kenjutsu_progress: int = c.progress_bars.get("skill_Kenjutsu", 0)
+	assert_eq(kenjutsu_progress, 1000, "School-less: highest-ranked skill gets XP first")
+	var athletics_progress: int = c.progress_bars.get("skill_Athletics", 0)
+	assert_eq(athletics_progress, 0, "Lower-ranked skill gets no progress yet")
+
+
+func test_schoolless_advances_through_all_skills_then_rings() -> void:
+	var c: L5RCharacterData = _make_schoolless()
+	# Make all three skills maxed so spending falls through to rings.
+	c.skills = {"Kenjutsu": 5, "Athletics": 5, "Hunting": 5}
+	# All rings at rank 2. Lowest is a three-way tie: AIR, EARTH, FIRE, WATER, VOID all 2.
+	# Stable sort: AIR comes first. AIR 2->3 = 12000 progress = 60 XP.
+	c.xp_total = 10
+	c.xp_spent = 0
+	NPCAdvancement.spend_accumulated_xp(c)
+	# 10 XP = 2000 progress; should go to AIR (lowest ring, alpha-first in tie)
+	var air_progress: int = c.progress_bars.get("ring_air", 0)
+	assert_eq(air_progress, 2000, "School-less: after skills maxed, lowest ring gets XP")
+
+
+func test_schoolless_lowest_ring_raised_when_uneven() -> void:
+	var c: L5RCharacterData = _make_schoolless()
+	c.skills = {}  # no skills — all XP goes to rings
+	# Set Water ring lower than all others (Water = min(strength, perception))
+	c.strength = 1
+	c.perception = 1  # Water ring = 1; others at 2
+	# AIR 2->3 = 60 XP; EARTH 2->3 = 60 XP; FIRE 2->3 = 60 XP; WATER 1->2 = 8000 progress = 40 XP.
+	c.xp_total = 40
+	c.xp_spent = 0
+	NPCAdvancement.spend_accumulated_xp(c)
+	# Water is lowest; it should be raised from 1 to 2.
+	var water_rank: int = NPCAdvancement._get_ring_rank(c, Enums.Ring.WATER)
+	assert_eq(water_rank, 2, "School-less: lowest ring (Water) raised first to spread evenly")
+	var air_progress: int = c.progress_bars.get("ring_air", 0)
+	assert_eq(air_progress, 0, "Higher rings untouched while lower ring still needs raising")
+
+
+func test_schoolless_can_advance_rank0_skill() -> void:
+	# School-less characters may raise skills they have at rank 0 (latent disciplines).
+	var c: L5RCharacterData = _make_schoolless()
+	c.skills = {"Kenjutsu": 0}  # only skill; rank 0 is eligible
+	# rank 0->1 = SKILL_PROGRESS_COST[0] = 1000 progress = 5 XP
+	c.xp_total = 5
+	c.xp_spent = 0
+	var result: Dictionary = NPCAdvancement.spend_accumulated_xp(c)
+	assert_eq(c.skills.get("Kenjutsu", 0), 1, "Rank-0 skill should advance to rank 1")
+	assert_eq(result["advancements"].size(), 1)
+
+
+func test_schoolless_training_target_returns_highest_skill() -> void:
+	var c: L5RCharacterData = _make_schoolless()
+	# Kenjutsu rank 3 is highest
+	var target: Dictionary = NPCAdvancement.get_best_training_target(c)
+	assert_eq(target.get("type", ""), "skill")
+	assert_eq(target.get("skill", ""), "Kenjutsu",
+		"School-less: training target is highest-ranked skill")
+
+
+func test_schoolless_training_target_lowest_ring_when_skills_maxed() -> void:
+	var c: L5RCharacterData = _make_schoolless()
+	c.skills = {"Kenjutsu": 5, "Athletics": 5, "Hunting": 5}
+	# All rings at 2 (equal); stable sort: AIR first
+	var target: Dictionary = NPCAdvancement.get_best_training_target(c)
+	assert_eq(target.get("type", ""), "ring",
+		"School-less: falls to rings when skills maxed")
+	assert_eq(target.get("ring", -1), Enums.Ring.AIR,
+		"School-less: raises lowest ring (alpha-stable tie: AIR first)")
+
+
+func test_schoolless_training_target_empty_when_all_maxed() -> void:
+	var c: L5RCharacterData = _make_schoolless()
+	c.skills = {}
+	c.stamina = 5; c.willpower = 5   # Earth
+	c.agility = 5; c.intelligence = 5  # Fire
+	c.reflexes = 5; c.awareness = 5   # Air
+	c.strength = 5; c.perception = 5  # Water
+	c.void_ring = 5
+	var target: Dictionary = NPCAdvancement.get_best_training_target(c)
+	assert_true(target.is_empty(), "School-less: nothing to train when all maxed")
+
+
+func test_schoolless_alpha_tiebreak_in_skill_sort() -> void:
+	# Within same rank, skills sort alphabetically for determinism.
+	var c: L5RCharacterData = _make_schoolless()
+	c.skills = {"Kenjutsu": 2, "Athletics": 2, "Defense": 2}
+	# All rank 2; alpha order: Athletics < Defense < Kenjutsu
+	var target: Dictionary = NPCAdvancement.get_best_training_target(c)
+	assert_eq(target.get("skill", ""), "Athletics",
+		"Alpha tie-break: Athletics comes before Defense and Kenjutsu")
