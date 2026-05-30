@@ -1984,6 +1984,12 @@ static func _evaluate_urgency_condition(
 			if ctx.objective_stalled_seasons >= 2:
 				return [{"relevance": 1.0}]
 			return []
+		"ikebana_slot_empty":
+			if ctx.skill_ranks.get("Artisan: Ikebana", 0) < 1:
+				return []
+			if ctx.known_objectives.get("ikebana_slot_empty", false):
+				return [{"relevance": 1.0}]
+			return []
 		_:
 			return []
 
@@ -2655,6 +2661,7 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"directed_fortune": need.target_npc_id if need.target_npc_id >= 0 else -1,
 			"location_type": _zone_to_worship_location(ctx.zone_subtype),
+			"ikebana_worship_fr": ctx.known_objectives.get("ikebana_worship_fr", 0),
 		}
 	elif option.action_id in ["FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 			"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP"]:

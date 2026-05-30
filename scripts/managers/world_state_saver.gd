@@ -34,6 +34,7 @@ const DIR_BLOODSPEAKER_CELLS := "bloodspeaker_cells/"
 const DIR_CRAFTED_ITEMS := "crafted_items/"
 const DIR_THEATER_PIECES := "theater_pieces/"
 const DIR_SENBAZURUS := "senbazurus/"
+const DIR_ARRANGEMENTS := "arrangements/"
 
 
 # ============================================================================
@@ -66,6 +67,7 @@ func save_world(ws: Node) -> bool:
 	ok = _save_resource_array(ws.crafted_items, base + DIR_CRAFTED_ITEMS, "item_id") and ok
 	ok = _save_resource_array(ws.theater_pieces, base + DIR_THEATER_PIECES, "piece_id") and ok
 	ok = _save_resource_array(ws.active_senbazurus, base + DIR_SENBAZURUS, "senbazuru_id") and ok
+	ok = _save_resource_array(ws.active_arrangements, base + DIR_ARRANGEMENTS, "arrangement_id") and ok
 
 	# Provinces and settlements use their own ID fields
 	ok = _save_resource_array(ws.settlements, base + DIR_SETTLEMENTS, "settlement_id") and ok
@@ -116,6 +118,7 @@ func load_world(ws: Node) -> bool:
 	ws.crafted_items.assign(_load_resource_array(base + DIR_CRAFTED_ITEMS))
 	ws.theater_pieces.assign(_load_resource_array(base + DIR_THEATER_PIECES))
 	ws.active_senbazurus.assign(_load_resource_array(base + DIR_SENBAZURUS))
+	ws.active_arrangements.assign(_load_resource_array(base + DIR_ARRANGEMENTS))
 	ws.settlements.assign(_load_resource_array(base + DIR_SETTLEMENTS))
 	ws.provinces = _load_province_dict(base + DIR_PROVINCES)
 	ws.favors = _load_favors(base + DIR_FAVORS)
@@ -405,6 +408,7 @@ func _save_json_state(ws: Node, base: String) -> bool:
 		"next_item_id": ws.next_item_id[0],
 		"next_piece_id": ws.next_piece_id[0],
 		"next_senbazuru_id": ws.next_senbazuru_id[0],
+		"next_arrangement_id": ws.next_arrangement_id[0],
 		"last_targeted_province_id": ws.last_targeted_province_id[0],
 
 		# Emperor
@@ -508,6 +512,7 @@ func _load_json_state(ws: Node, base: String) -> void:
 	_restore_counter(ws.next_item_id, state, "next_item_id")
 	_restore_counter(ws.next_piece_id, state, "next_piece_id")
 	_restore_counter(ws.next_senbazuru_id, state, "next_senbazuru_id")
+	_restore_counter(ws.next_arrangement_id, state, "next_arrangement_id")
 	_restore_counter(ws.last_targeted_province_id, state, "last_targeted_province_id")
 
 	# Emperor
@@ -588,6 +593,7 @@ func _reconcile_id_counters(ws: Node) -> void:
 	_ensure_counter_above(ws.next_item_id, ws.crafted_items, "item_id")
 	_ensure_counter_above(ws.next_piece_id, ws.theater_pieces, "piece_id")
 	_ensure_counter_above(ws.next_senbazuru_id, ws.active_senbazurus, "senbazuru_id")
+	_ensure_counter_above(ws.next_arrangement_id, ws.active_arrangements, "arrangement_id")
 
 
 func _ensure_counter_above(counter: Array[int], collection: Variant, id_field: String) -> void:
@@ -650,6 +656,7 @@ func _ensure_dirs(base: String) -> void:
 		base + DIR_CRAFTED_ITEMS,
 		base + DIR_THEATER_PIECES,
 		base + DIR_SENBAZURUS,
+		base + DIR_ARRANGEMENTS,
 	]
 	for d: String in dirs:
 		DirAccess.make_dir_recursive_absolute(d)

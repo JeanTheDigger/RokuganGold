@@ -93,6 +93,8 @@ static func advance_day(
 	next_piece_id: Array = [1],
 	active_senbazurus: Array = [],
 	next_senbazuru_id: Array = [1],
+	active_arrangements: Array = [],
+	next_arrangement_id: Array = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -181,6 +183,7 @@ static func advance_day(
 	_inject_hunt_context(active_hunts, world_states, active_topics)
 	_inject_theater_context(theater_pieces, characters, world_states)
 	_inject_senbazuru_context(active_senbazurus, characters, world_states)
+	_inject_ikebana_context(active_arrangements, settlements, characters, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_set_temple_context_flags(characters, settlements, world_states)
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
@@ -854,6 +857,19 @@ static func advance_day(
 	_process_gohei_usage_writebacks(
 		day_result.get("results", []), characters_by_id,
 	)
+	_process_ikebana_performance_writebacks(
+		day_result.get("results", []),
+		active_arrangements, next_arrangement_id, characters_by_id,
+		settlements, ic_day, current_season, active_topics, next_topic_id, dice_engine,
+	)
+	_process_ikebana_daily_decay(active_arrangements)
+	_process_ikebana_visitor_effects(
+		active_arrangements, characters, characters_by_id, settlements, ic_day,
+	)
+	_process_ikebana_creator_deceased_topics(
+		active_arrangements, characters_by_id, active_topics, next_topic_id, ic_day,
+	)
+	_remove_expired_arrangements(active_arrangements)
 
 	_process_travel_redirect_writebacks(
 		day_result.get("results", []), objectives_map,
@@ -21736,6 +21752,300 @@ static func _process_gohei_usage_writebacks(
 				continue
 			new_items.append(item)
 		character.items = new_items
+
+
+# -- Ikebana system (s57.29) ---------------------------------------------------
+
+static func _inject_ikebana_context(
+	active_arrangements: Array,
+	settlements: Array,
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	## Inject per-character ikebana slot state into known_objectives.
+	## ikebana_slot_empty: true if no unexpired displayed arrangement at character's
+	##   settlement and character has Artisan: Ikebana rank ≥ 1.
+	## ikebana_worship_fr: FR bonus for PERFORM_WORSHIP at this settlement.
+
+	# Build settlement_id → arrangement lookup (only displayed, non-expired)
+	var slot_filled: Dictionary = {}   # str(settlement_id) → true
+	var worship_fr_map: Dictionary = {}  # str(settlement_id) → int FR
+
+	for arr_v: Variant in active_arrangements:
+		if not arr_v is IkebanaArrangementData:
+			continue
+		var arr: IkebanaArrangementData = arr_v as IkebanaArrangementData
+		if arr.expired:
+			continue
+		if arr.display_settlement_id.is_empty():
+			continue
+		slot_filled[arr.display_settlement_id] = true
+		# Worship FR for religious settlements
+		var fr: int = IkebanaSystem.worship_fr_for_quality(arr.quality_tier)
+		if fr > 0:
+			var existing: int = worship_fr_map.get(arr.display_settlement_id, 0)
+			worship_fr_map[arr.display_settlement_id] = maxi(existing, fr)
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			continue
+		if not ws.has("known_objectives"):
+			ws["known_objectives"] = {}
+
+		var loc: String = character.physical_location
+		var slot_empty: bool = not slot_filled.get(loc, false)
+		ws["known_objectives"]["ikebana_slot_empty"] = slot_empty
+		ws["known_objectives"]["ikebana_worship_fr"] = worship_fr_map.get(loc, 0)
+
+
+static func _process_ikebana_performance_writebacks(
+	results: Array,
+	active_arrangements: Array,
+	next_arrangement_id: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	ic_day: int,
+	current_season: int,
+	active_topics: Array,
+	next_topic_id: Array,
+	dice_engine: DiceEngine,
+) -> void:
+	## Create IkebanaArrangementData when a PUBLIC_PERFORMANCE or PERFORM_FOR
+	## uses Artisan: Ikebana (s57.29.3). Replaces any prior arrangement at the
+	## same settlement (one slot per settlement as zone proxy).
+
+	# Build settlement lookup
+	var settlements_by_str_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_str_id[str(s.settlement_id)] = s
+
+	for result: Variant in results:
+		var action_id: String = result.get("action_id", "")
+		if action_id not in ["PUBLIC_PERFORMANCE", "PERFORM_FOR"]:
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var art_form: int = effects.get("art_form", -1)
+		if art_form != PerformativeArtsSystem.ArtForm.IKEBANA:
+			continue
+
+		var char_id: int = result.get("character_id", -1)
+		var creator: L5RCharacterData = characters_by_id.get(char_id)
+		if creator == null or CharacterStats.is_dead(creator):
+			continue
+
+		var loc: String = creator.physical_location
+		if loc.is_empty():
+			continue
+
+		var settlement: SettlementData = settlements_by_str_id.get(loc)
+		if settlement == null:
+			continue
+		if not IkebanaSystem.is_eligible_display_settlement(settlement):
+			continue
+
+		var raises: int = effects.get("raises", 0)
+		var quality: int = IkebanaSystem.quality_from_raises(raises)
+		var lifespan: int = IkebanaSystem.default_lifespan(quality)
+		var materials: Array[String] = IkebanaSystem.select_season_materials(
+			current_season, creator, quality, dice_engine,
+		)
+		var description: String = IkebanaSystem.generate_composition_description(
+			materials, quality, current_season, creator.clan,
+		)
+
+		# Replace any prior arrangement at this settlement (one slot per settlement)
+		for i: int in range(active_arrangements.size() - 1, -1, -1):
+			var prior: Variant = active_arrangements[i]
+			if prior is IkebanaArrangementData:
+				var p: IkebanaArrangementData = prior as IkebanaArrangementData
+				if p.display_settlement_id == loc and not p.expired:
+					p.expired = true  # Retired by the new arrangement
+
+		var arr: IkebanaArrangementData = IkebanaArrangementData.new()
+		arr.arrangement_id = next_arrangement_id[0]
+		next_arrangement_id[0] += 1
+		arr.creator_id = char_id
+		arr.quality_tier = quality
+		arr.season_created = current_season
+		arr.date_created = ic_day
+		arr.lifespan_remaining = lifespan
+		arr.display_settlement_id = loc
+		arr.owner_id = char_id
+		arr.is_shrine_offering = IkebanaSystem.is_shrine_eligible(settlement)
+		arr.composition_materials = materials
+		arr.composition_description = description
+		active_arrangements.append(arr)
+
+
+static func _process_ikebana_daily_decay(
+	active_arrangements: Array,
+) -> void:
+	## Decrement lifespan_remaining on all displayed arrangements (s57.29.7).
+	## Arrangements in inventory (display_settlement_id empty) do not decay.
+	for arr_v: Variant in active_arrangements:
+		if not arr_v is IkebanaArrangementData:
+			continue
+		var arr: IkebanaArrangementData = arr_v as IkebanaArrangementData
+		if arr.expired:
+			continue
+		if arr.display_settlement_id.is_empty():
+			continue
+		arr.lifespan_remaining -= 1
+		if arr.lifespan_remaining <= 0:
+			arr.expired = true
+
+
+static func _process_ikebana_visitor_effects(
+	active_arrangements: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	## Apply visitor disposition bonus and track glory ticks (s57.29.8).
+	## Each non-expired displayed arrangement gives a temporary_modifier to any
+	## living co-located character who has not already received it.
+
+	if active_arrangements.is_empty():
+		return
+
+	# Build settlement lord lookup
+	var settlement_lord: Dictionary = {}  # str(settlement_id) → lord character_id
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s == null:
+			continue
+		settlement_lord[str(s.settlement_id)] = s.lord_character_id
+
+	# Build location → character list
+	var chars_at: Dictionary = {}
+	for char_v: Variant in characters:
+		var c: L5RCharacterData = char_v as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var loc: String = c.physical_location
+		if loc.is_empty():
+			continue
+		if not chars_at.has(loc):
+			chars_at[loc] = []
+		chars_at[loc].append(c)
+
+	for arr_v: Variant in active_arrangements:
+		if not arr_v is IkebanaArrangementData:
+			continue
+		var arr: IkebanaArrangementData = arr_v as IkebanaArrangementData
+		if arr.expired:
+			continue
+		if arr.display_settlement_id.is_empty():
+			continue
+
+		var bonus: int = IkebanaSystem.visitor_bonus_for_quality(arr.quality_tier)
+		var present: Array = chars_at.get(arr.display_settlement_id, [])
+		var new_visitors: int = 0
+
+		for char_v: Variant in present:
+			var c: L5RCharacterData = char_v as L5RCharacterData
+			if c.character_id in arr.visitors_who_received_bonus:
+				continue
+			# Apply temporary disposition modifier toward creator.
+			# temporary_modifiers is keyed by source_character_id → Array of entries.
+			var bucket: Array = c.temporary_modifiers.get(arr.creator_id, [])
+			bucket.append({
+				"event_type": "ikebana_visitor",
+				"value": bonus,
+				"created_ic_day": ic_day,
+				"duration": IkebanaSystem.VISITOR_BONUS_DURATION,
+			})
+			c.temporary_modifiers[arr.creator_id] = bucket
+			arr.visitors_who_received_bonus.append(c.character_id)
+			new_visitors += 1
+
+		# Glory ticks: every 5 unique visitors (s57.29.8)
+		var total_visitors: int = arr.visitors_who_received_bonus.size()
+		var ticks_deserved: int = total_visitors / IkebanaSystem.VISITORS_PER_GLORY_TICK
+		var ticks_to_apply: int = ticks_deserved - arr.glory_ticks_applied
+		if ticks_to_apply > 0:
+			var creator: L5RCharacterData = characters_by_id.get(arr.creator_id)
+			if creator != null and not CharacterStats.is_dead(creator):
+				HonorGlorySystem.apply_glory_change(
+					creator,
+					IkebanaSystem.CREATOR_GLORY_PER_TICK * ticks_to_apply,
+				)
+			# Zone lord bonus
+			var lord_id: int = settlement_lord.get(arr.display_settlement_id, -1)
+			if lord_id >= 0 and lord_id != arr.creator_id:
+				var lord: L5RCharacterData = characters_by_id.get(lord_id)
+				if lord != null and not CharacterStats.is_dead(lord):
+					HonorGlorySystem.apply_glory_change(
+						lord,
+						IkebanaSystem.ZONE_LORD_GLORY_PER_TICK * ticks_to_apply,
+					)
+			arr.glory_ticks_applied += ticks_to_apply
+
+
+static func _process_ikebana_creator_deceased_topics(
+	active_arrangements: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## When an arrangement's creator has died, fire a TIER_4 topic once (s57.29.12).
+	## GDD says "Tier 5" but TopicData.Tier only goes to TIER_4 (least significant).
+	for arr_v: Variant in active_arrangements:
+		if not arr_v is IkebanaArrangementData:
+			continue
+		var arr: IkebanaArrangementData = arr_v as IkebanaArrangementData
+		if arr.expired:
+			continue
+		if arr.creator_deceased_topic_fired:
+			continue
+		if arr.display_settlement_id.is_empty():
+			continue
+		var creator: L5RCharacterData = characters_by_id.get(arr.creator_id)
+		if creator == null or not CharacterStats.is_dead(creator):
+			continue
+		# Creator just died — fire the topic once
+		arr.creator_deceased_topic_fired = true
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.tier = TopicData.Tier.TIER_4
+		topic.category = TopicData.Category.PERSONAL
+		topic.topic_type = "ikebana_creator_deceased"
+		topic.subject_character_id = arr.creator_id
+		topic.subject_role = "NEUTRAL"  # Dead characters always NEUTRAL (s CLAUDE.md)
+		topic.ic_day_created = ic_day
+		topic.title = "Last Arrangement of the Deceased"
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		active_topics.append(topic)
+		# Seed to living characters at display settlement
+		# (actual seeding would happen via ambient pickup; we seed creator's
+		#  immediate known contacts as a courtesy)
+		if creator != null:
+			for contact_id: int in creator.met_characters:
+				var contact: L5RCharacterData = characters_by_id.get(contact_id)
+				if contact != null and not CharacterStats.is_dead(contact):
+					if topic.topic_id not in contact.topic_pool:
+						contact.topic_pool.append(topic.topic_id)
+
+
+static func _remove_expired_arrangements(
+	active_arrangements: Array,
+) -> void:
+	## Remove all expired arrangements from the active array.
+	for i: int in range(active_arrangements.size() - 1, -1, -1):
+		var arr_v: Variant = active_arrangements[i]
+		if arr_v is IkebanaArrangementData:
+			if (arr_v as IkebanaArrangementData).expired:
+				active_arrangements.remove_at(i)
 
 
 

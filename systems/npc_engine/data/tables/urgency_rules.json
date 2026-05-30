@@ -57,5 +57,11 @@
     "bonus": 10,
     "applies_to": "actions_addressing_primary_objective",
     "stacks_per_crisis": false
+  },
+  {
+    "condition": "ikebana_slot_empty",
+    "bonus": 10,
+    "applies_to": ["PUBLIC_PERFORMANCE", "PERFORM_FOR"],
+    "stacks_per_crisis": false
   }
 ]

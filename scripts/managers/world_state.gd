@@ -144,6 +144,10 @@ var next_piece_id: Array[int] = [1]
 var active_senbazurus: Array[SenbazuruData] = []
 var next_senbazuru_id: Array[int] = [1]
 
+# -- Ikebana Arrangements (s57.29) -------------------------------------------
+var active_arrangements: Array[IkebanaArrangementData] = []
+var next_arrangement_id: Array[int] = [1]
+
 # -- Commitments ID Counter (s55.31) ------------------------------------------
 var next_commitment_id: Array[int] = [1]
 
@@ -330,6 +334,8 @@ func advance_one_day() -> Dictionary:
 		next_piece_id,
 		active_senbazurus,
 		next_senbazuru_id,
+		active_arrangements,
+		next_arrangement_id,
 	)
 	_apply_succession_updates(result)
 	return result

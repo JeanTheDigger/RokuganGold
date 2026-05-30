@@ -6,6 +6,7 @@ enum ArtForm {
 	THEATER,
 	MUSIC,
 	TEA_CEREMONY,
+	IKEBANA,  # s57.29 — uses Artisan: Ikebana as _performance_skill
 }
 
 enum PerformanceOutcome {
@@ -38,6 +39,7 @@ const ART_FORM_SKILLS: Dictionary = {
 	ArtForm.THEATER: "Acting",
 	ArtForm.MUSIC: "Perform",
 	ArtForm.TEA_CEREMONY: "Tea Ceremony",
+	ArtForm.IKEBANA: "Artisan: Ikebana",
 }
 
 

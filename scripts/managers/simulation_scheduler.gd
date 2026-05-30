@@ -210,6 +210,18 @@ func _bootstrap_fresh_world() -> void:
 	for piece: TheaterPieceData in canon_pieces:
 		WorldState.theater_pieces.append(piece)
 
+	# Seed world-start ikebana arrangements per GDD s57.29.11
+	var initial_arrangements: Array[IkebanaArrangementData] = IkebanaSystem.generate_initial_arrangements(
+		WorldState.characters,
+		WorldState.settlements,
+		dice,
+		WorldState.next_arrangement_id,
+		WorldState.time_system.current_tick,
+	)
+	WorldState.active_arrangements.clear()
+	for arr: IkebanaArrangementData in initial_arrangements:
+		WorldState.active_arrangements.append(arr)
+
 	_save_world_state()
 	print("[SimulationScheduler] World bootstrapped: %d characters, %d provinces, %d settlements, %d cells." % [
 		WorldState.characters.size(),
