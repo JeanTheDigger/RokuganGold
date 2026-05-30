@@ -30,12 +30,8 @@ static func get_rokuyo(ic_day: int) -> Rokuyo:
 static func get_rokuyo_name(ic_day: int) -> String:
 	return ROKUYO_NAMES.get(get_rokuyo(ic_day), "Unknown")
 
-static func get_taian_bonus(ic_day: int) -> int:
-	return 1 if get_rokuyo(ic_day) == Rokuyo.TAIAN else 0
-
-static func is_inauspicious_for_social(ic_day: int) -> bool:
-	var r: Rokuyo = get_rokuyo(ic_day)
-	return r == Rokuyo.BUTSUMETSU or r == Rokuyo.TOMOBIKI
+static func is_taian(ic_day: int) -> bool:
+	return get_rokuyo(ic_day) == Rokuyo.TAIAN
 
 
 # -- Calendar Helpers ---------------------------------------------------------

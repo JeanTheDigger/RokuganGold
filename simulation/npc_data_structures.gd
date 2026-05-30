@@ -46,7 +46,6 @@ class ScoredAction:
 	var travel_redirect_penalty: float = 0.0
 	var confidence_penalty: float = 0.0
 	var stale_intel_bonus: float = 0.0
-	var festival_modifier: float = 0.0
 	var deception_defense_penalty: float = 0.0
 	var honor_covert_penalty: float = 0.0
 	var virtue_covert_modifier: float = 0.0
@@ -66,7 +65,6 @@ class ScoredAction:
 			+ travel_redirect_penalty
 			+ confidence_penalty
 			+ stale_intel_bonus
-			+ festival_modifier
 			+ deception_defense_penalty
 			+ honor_covert_penalty
 			+ virtue_covert_modifier
@@ -184,8 +182,6 @@ class ContextSnapshot:
 	# Festival state (s11.5)
 	var is_ceasefire_day: bool = false
 	var is_labor_halt_day: bool = false
-	var is_taian: bool = false
-	var is_inauspicious_for_social: bool = false
 	var festival_honor_gain: float = 0.0
 	var festival_has_lion_honor: bool = false
 	var festival_glory_poetry: float = 0.0

@@ -36,28 +36,12 @@ func test_rokuyo_name_taian():
 	assert_eq(FestivalSystem.get_rokuyo_name(5), "Taian")
 
 
-func test_taian_bonus_on_taian_day():
-	assert_eq(FestivalSystem.get_taian_bonus(5), 1)
+func test_is_taian_on_taian_day():
+	assert_true(FestivalSystem.is_taian(5))
 
 
-func test_taian_bonus_on_non_taian_day():
-	assert_eq(FestivalSystem.get_taian_bonus(1), 0)
-
-
-func test_butsumetsu_inauspicious():
-	assert_true(FestivalSystem.is_inauspicious_for_social(4))
-
-
-func test_tomobiki_inauspicious():
-	assert_true(FestivalSystem.is_inauspicious_for_social(2))
-
-
-func test_taian_not_inauspicious():
-	assert_false(FestivalSystem.is_inauspicious_for_social(5))
-
-
-func test_sensho_not_inauspicious():
-	assert_false(FestivalSystem.is_inauspicious_for_social(1))
+func test_is_taian_on_non_taian_day():
+	assert_false(FestivalSystem.is_taian(1))
 
 
 # -- Calendar helper tests ----------------------------------------------------

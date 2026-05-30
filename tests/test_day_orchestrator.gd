@@ -1141,7 +1141,6 @@ func test_festival_sets_world_state_flags() -> void:
 	assert_true(char_ws.has("is_ceasefire_day"))
 	assert_true(char_ws.has("is_labor_halt_day"))
 	assert_true(char_ws.has("is_taian"))
-	assert_true(char_ws.has("is_inauspicious_for_social"))
 	assert_true(char_ws.has("rokuyo"))
 
 

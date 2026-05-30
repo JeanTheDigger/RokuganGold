@@ -193,8 +193,6 @@ static func build_context(
 	# Festival state (s11.5)
 	ctx.is_ceasefire_day = world_state.get("is_ceasefire_day", false)
 	ctx.is_labor_halt_day = world_state.get("is_labor_halt_day", false)
-	ctx.is_taian = world_state.get("is_taian", false)
-	ctx.is_inauspicious_for_social = world_state.get("is_inauspicious_for_social", false)
 	ctx.festival_honor_gain = world_state.get("festival_honor_gain", 0.0)
 	ctx.festival_has_lion_honor = world_state.get("festival_has_lion_honor", false)
 	ctx.festival_glory_poetry = world_state.get("festival_glory_poetry", 0.0)
@@ -632,8 +630,6 @@ static func score_all(
 			var target: L5RCharacterData = chars_by_id.get(option.target_npc_id)
 			if target != null:
 				option.deception_defense_penalty = float(-SkillResolver.get_deception_defense_bonus(target))
-
-		option.festival_modifier = _compute_festival_modifier(option.action_id, ctx)
 
 		if option.action_id in COVERT_ACTION_IDS:
 			option.honor_covert_penalty = _compute_honor_covert_penalty(
@@ -2285,29 +2281,12 @@ const SOCIAL_ACTIONS: Array[String] = [
 	"GOSSIP", "DISCLOSE", "OFFER_FAVOR",
 ]
 
-const INAUSPICIOUS_PENALTY: float = 0.0
-const TAIAN_BONUS: float = 0.0
-
 static func _is_ceasefire_blocked(action_id: String) -> bool:
 	return action_id in CEASEFIRE_BLOCKED_ACTIONS
 
 
 static func _is_labor_halt_blocked(action_id: String) -> bool:
 	return action_id in LABOR_HALT_BLOCKED_ACTIONS
-
-
-static func _compute_festival_modifier(
-	action_id: String,
-	ctx: NPCDataStructures.ContextSnapshot,
-) -> float:
-	if action_id not in SOCIAL_ACTIONS:
-		return 0.0
-	var modifier: float = 0.0
-	if ctx.is_inauspicious_for_social:
-		modifier += INAUSPICIOUS_PENALTY
-	if ctx.is_taian:
-		modifier += TAIAN_BONUS
-	return modifier
 
 
 # -- Daily Letter Pass (s57.5) ------------------------------------------------

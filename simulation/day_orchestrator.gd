@@ -7960,8 +7960,7 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 	var active_festivals: Array = FestivalSystem.get_active_festivals(ic_day)
 	var effects: Array = FestivalSystem.get_festival_effects(ic_day)
 	var rokuyo_name: String = FestivalSystem.get_rokuyo_name(ic_day)
-	var is_taian: bool = FestivalSystem.get_taian_bonus(ic_day) > 0
-	var is_inauspicious: bool = FestivalSystem.is_inauspicious_for_social(ic_day)
+	var is_taian: bool = FestivalSystem.is_taian(ic_day)
 	var is_ceasefire: bool = FestivalSystem.is_ceasefire_day(ic_day)
 	var is_labor_halt: bool = FestivalSystem.is_labor_halt_day(ic_day)
 	var festival_honor: float = FestivalSystem.get_honor_gain_festivals(ic_day)
@@ -7973,7 +7972,6 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 		"is_ceasefire_day": is_ceasefire,
 		"is_labor_halt_day": is_labor_halt,
 		"is_taian": is_taian,
-		"is_inauspicious_for_social": is_inauspicious,
 		"rokuyo": rokuyo_name,
 		"festival_honor_gain": festival_honor,
 		"festival_has_lion_honor": festival_has_lion_honor,
@@ -7986,7 +7984,6 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 		"effects": effects,
 		"rokuyo": rokuyo_name,
 		"is_taian": is_taian,
-		"is_inauspicious": is_inauspicious,
 		"is_ceasefire": is_ceasefire,
 		"is_labor_halt": is_labor_halt,
 		"honor_gain": festival_honor,
