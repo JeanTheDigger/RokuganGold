@@ -1045,3 +1045,112 @@ func test_schoolless_alpha_tiebreak_in_skill_sort() -> void:
 	var target: Dictionary = NPCAdvancement.get_best_training_target(c)
 	assert_eq(target.get("skill", ""), "Athletics",
 		"Alpha tie-break: Athletics comes before Defense and Kenjutsu")
+
+
+# === KATA SEASONAL WIRING ===
+
+func _make_bushi_with_school(school: String, clan: String,
+		air: int = 3, earth: int = 3, fire: int = 3, water: int = 3,
+		void_r: int = 3, xp_total: int = 10) -> L5RCharacterData:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = 50
+	c.character_name = "Bushi"
+	c.school = school
+	c.school_name = school
+	c.school_type = Enums.SchoolType.BUSHI
+	c.clan = clan
+	c.school_paths = []
+	c.reflexes = air; c.awareness = air
+	c.stamina = earth; c.willpower = earth
+	c.agility = fire; c.intelligence = fire
+	c.strength = water; c.perception = water
+	c.void_ring = void_r
+	c.xp_total = xp_total
+	c.xp_spent = 0
+	c.katas = []
+	c.skills = {"Kenjutsu": 2, "Heavy Weapons": 2, "Defense": 1}
+	c.progress_bars = {}
+	c.xp_fractional = 0.0
+	return c
+
+
+func test_seasonal_bushi_learns_kata_with_leftover_xp() -> void:
+	# Hida Bushi, Earth 3 — eligible for Striking as Earth (ML 3, cost 3)
+	# Give enough XP that after spending on progress bars there is still >= 3 XP
+	# Use large xp_total with spent already zeroed; spend_accumulated_xp consumes
+	# very little of the total when progress costs are in the thousands.
+	var c: L5RCharacterData = _make_bushi_with_school("Hida Bushi", "Crab",
+		3, 3, 3, 3, 3, 20)
+	var result: Dictionary = NPCAdvancement.process_seasonal_advancement(
+		[c], {}, 90)
+	var results_arr: Array = result.get("results", [])
+	# Find this character's entry
+	var entry: Dictionary = {}
+	for r in results_arr:
+		if r.get("character_id") == 50:
+			entry = r
+			break
+	assert_true(entry.has("kata_learned"),
+		"Hida Bushi with leftover XP should learn a kata")
+	assert_ne(entry.get("kata_learned", ""), "",
+		"Learned kata name should not be empty")
+	assert_true(c.katas.size() >= 1,
+		"Kata must be appended to character.katas")
+
+
+func test_seasonal_courtier_does_not_learn_kata() -> void:
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = 51
+	c.character_name = "Courtier"
+	c.school = "Doji Courtier"
+	c.school_name = "Doji Courtier"
+	c.school_type = Enums.SchoolType.COURTIER
+	c.clan = "Crane"
+	c.school_paths = []
+	c.reflexes = 3; c.awareness = 3; c.stamina = 3; c.willpower = 3
+	c.agility = 3; c.intelligence = 3; c.strength = 3; c.perception = 3
+	c.void_ring = 3
+	c.xp_total = 20; c.xp_spent = 0; c.xp_fractional = 0.0
+	c.katas = []
+	c.skills = {"Etiquette": 2, "Sincerity": 1}
+	c.progress_bars = {}
+	var result: Dictionary = NPCAdvancement.process_seasonal_advancement(
+		[c], {}, 90)
+	assert_true(c.katas.is_empty(), "Courtier must not learn any kata")
+
+
+func test_seasonal_schoolless_does_not_learn_kata() -> void:
+	var c: L5RCharacterData = _make_schoolless(60)
+	c.xp_total = 20; c.xp_spent = 0; c.xp_fractional = 0.0
+	c.progress_bars = {}
+	var result: Dictionary = NPCAdvancement.process_seasonal_advancement(
+		[c], {}, 90)
+	assert_true(c.katas.is_empty(),
+		"School-less character (no school_name) must not learn any kata")
+
+
+func test_seasonal_kata_deducts_xp() -> void:
+	var c: L5RCharacterData = _make_bushi_with_school("Hida Bushi", "Crab",
+		3, 3, 3, 3, 3, 20)
+	NPCAdvancement.process_seasonal_advancement([c], {}, 90)
+	# xp_spent must have increased (kata cost >= 3)
+	assert_gt(c.xp_spent, 0,
+		"xp_spent must increase after kata learning")
+
+
+func test_seasonal_kata_not_learned_twice_same_season() -> void:
+	var c: L5RCharacterData = _make_bushi_with_school("Hida Bushi", "Crab",
+		3, 3, 3, 3, 3, 20)
+	NPCAdvancement.process_seasonal_advancement([c], {}, 90)
+	var kata_count_after_first: int = c.katas.size()
+	# Re-run: character already knows the kata, should not re-learn same one
+	NPCAdvancement.process_seasonal_advancement([c], {}, 90)
+	assert_eq(c.katas.size(), kata_count_after_first + 0,
+		"Should not re-learn an already-known kata (may learn a second kata)")
+	# Specifically: the first kata must not appear twice
+	var known_first: String = c.katas[0] if c.katas.size() > 0 else ""
+	var count: int = 0
+	for k: String in c.katas:
+		if k == known_first:
+			count += 1
+	assert_eq(count, 1, "Same kata must not appear twice in katas array")

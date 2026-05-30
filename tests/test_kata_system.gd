@@ -22,7 +22,8 @@ func _make_bushi(school_name: String, clan: String, air: int = 3, earth: int = 3
 	# WATER = min(strength, perception)
 	c.strength = water; c.perception = water
 	c.void_ring = void_r
-	c.xp_accumulated = xp
+	c.xp_total = xp
+	c.xp_spent = 0
 	c.katas = []
 	return c
 
@@ -40,7 +41,8 @@ func _make_courtier(school_name: String, clan: String) -> L5RCharacterData:
 	c.agility = 3; c.intelligence = 3
 	c.strength = 3; c.perception = 3
 	c.void_ring = 3
-	c.xp_accumulated = 10
+	c.xp_total = 10
+	c.xp_spent = 0
 	c.katas = []
 	return c
 
@@ -282,7 +284,7 @@ func test_learn_kata_success_adds_to_katas() -> void:
 func test_learn_kata_deducts_xp() -> void:
 	var c: L5RCharacterData = _make_bushi("Kakita Bushi", "Crane", 3, 3, 3, 3, 3, 10)
 	KataSystem.learn_kata(c, "Striking as Air")
-	assert_eq(c.xp_accumulated, 7)  # 10 − 3
+	assert_eq(c.xp_spent, 3)  # cost = 3; available was 10 − 0
 
 
 func test_learn_kata_fails_when_ineligible() -> void:

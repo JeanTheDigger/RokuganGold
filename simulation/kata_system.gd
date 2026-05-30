@@ -407,10 +407,12 @@ static func can_learn_kata(character: L5RCharacterData, kata_name: String) -> bo
 
 
 ## Returns true if the character can afford the XP cost of `kata_name`.
+## Available XP = xp_total − xp_spent (the same pool used by progress bars).
 static func can_afford_kata(character: L5RCharacterData, kata_name: String) -> bool:
 	if not KATA_DATA.has(kata_name):
 		return false
-	return character.xp_accumulated >= KATA_DATA[kata_name]["xp_cost"]
+	var available: int = character.xp_total - character.xp_spent
+	return available >= KATA_DATA[kata_name]["xp_cost"]
 
 
 ## Returns the list of kata names the character is eligible to learn (ring + school).
@@ -453,7 +455,7 @@ static func learn_kata(character: L5RCharacterData, kata_name: String) -> bool:
 	if not can_afford_kata(character, kata_name):
 		return false
 	var xp_cost: int = KATA_DATA[kata_name]["xp_cost"]
-	character.xp_accumulated -= xp_cost
+	character.xp_spent += xp_cost
 	character.katas.append(kata_name)
 	return true
 

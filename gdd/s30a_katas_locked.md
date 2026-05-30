@@ -94,16 +94,18 @@ The `school_name` check for reduction uses exact match: "Mirumoto Bushi" and
 
 ## A4 — XP Deduction vs. Progress System
 
-The progress bar system (s48/s52) tracks skill and ring advancement in units.
-Kata learning uses **XP directly**, not progress units:
+The progress bar system (s48/s52) tracks skill and ring advancement in units
+(1 XP = 200 progress). Kata learning uses **XP directly**, not progress units:
 
 ```
-learn cost = kata.mastery_level  (in XP)
-character.xp_accumulated -= kata.mastery_level
+available_xp = character.xp_total - character.xp_spent
+learn cost   = kata.mastery_level  (in XP)
+character.xp_spent += kata.mastery_level   # shares the same pool as progress bars
 ```
 
-XP is always non-negative — eligibility check must verify `character.xp_accumulated
->= mastery_level` before deducting.
+Katas are learned **after** progress bars in the seasonal pass so that skill/ring
+advancement retains priority. XP is always non-negative — eligibility check must
+verify `available_xp >= mastery_level` before deducting.
 
 ---
 
@@ -200,10 +202,12 @@ Effect stub format:
 
 ## A7 — NPC Kata Selection
 
-NPCs select the highest Mastery Level kata they are eligible for when:
-- They have sufficient XP accumulated (`xp_accumulated >= mastery_level`)
-- No kata of equal or higher mastery is already known
-- Their school_type == BUSHI
+NPCs attempt to learn the highest Mastery Level kata they can afford once per
+season, at the end of the seasonal XP spending pass (after skill and ring progress
+bars are resolved). Conditions:
+- `school_type == BUSHI` and `school_name` is not empty (school-less characters ineligible)
+- Ring requirement met and character does not already know the kata
+- `xp_total - xp_spent >= mastery_level` at the time of selection
 
 Selection preference: highest mastery level, then alphabetical tie-break
 for determinism. Katas for which the character lacks the required ring are
