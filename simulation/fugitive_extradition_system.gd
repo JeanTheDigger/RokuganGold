@@ -7,7 +7,7 @@ class_name FugitiveExtraditionSystem
 
 # -- Fugitive Visibility (s11.3.16a) -----
 
-const STATUS_VISIBILITY_TOPIC_THRESHOLD: float = 3.0
+const STATUS_VISIBILITY_TOPIC_THRESHOLD: float = 5.0  # s57.57 §57.57.1 Path C
 const STATUS_CONCEALMENT_BONUS_PER_RANK: int = 0
 
 enum ConcealmentMethod {

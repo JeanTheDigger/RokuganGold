@@ -238,6 +238,12 @@ extends Resource
 @export var active_tattoo_ability: Enums.TattooAbility = Enums.TattooAbility.NONE
 @export var is_bald: bool = false
 
+# -- Topic Detection (Section 57.57) ------------------------------------------
+# Updated on: daily conversation participation, letter send, letter receipt.
+# Sentinel −1 = never interacted socially.
+
+@export var last_social_ic_day: int = -1
+
 # -- Musha Shugyo (Section 57.48) ---------------------------------------------
 
 @export var musha_shugyo: bool = false

@@ -851,6 +851,7 @@ static func advance_day(
 	var conversation_results: Array = _process_daily_conversations(
 		characters, dice_engine, current_season, active_topics
 	)
+	_update_social_ic_day_from_conversations(conversation_results, characters_by_id, ic_day)
 
 	_process_eavesdrop_writebacks(
 		day_result.get("results", []),
@@ -998,6 +999,7 @@ static func advance_day(
 		for reply: LetterData in reply_letters:
 			pending_letters.append(reply)
 		next_letter_id[0] = reply_next_id[0]
+	_update_social_ic_day_from_letters(letter_results, characters_by_id, ic_day)
 
 	var seasonal_result: Dictionary = {}
 	var strategic_results: Array = []
@@ -1219,7 +1221,7 @@ static func advance_day(
 		_process_seasonal_stipend_disposition(characters, characters_by_id)
 		extradition_results = _process_fugitive_extradition_seasonal(
 			crime_records, characters, characters_by_id, provinces, settlements,
-			active_topics, next_topic_id, ic_day,
+			active_topics, next_topic_id, ic_day, season_meta,
 		)
 		pregnancy_results = _process_pregnancy_checks(
 			marriages, characters_by_id, children, dice_engine, ic_day,
@@ -1260,6 +1262,25 @@ static func advance_day(
 		_purge_delivered_letters(pending_letters, characters_by_id, ic_day)
 		_purge_exposed_secrets(active_secrets, characters_by_id, ic_day)
 		_purge_settlement_public_records(settlements, ic_day)
+		# s57.57 seasonal detection triggers
+		_process_disappearance_check(
+			characters, characters_by_id, pending_letters, crime_records,
+			active_topics, next_topic_id, ic_day,
+		)
+		_process_justice_refusal_check(
+			crime_records, characters_by_id, active_topics, next_topic_id, ic_day,
+			settlements,
+		)
+		_process_behavioral_anomaly_check(
+			characters, characters_by_id, pending_letters, active_topics,
+			next_topic_id, ic_day,
+		)
+
+	# s57.57 Path A: daily fugitive sighting via co-location
+	_process_fugitive_sighting_colocation(
+		crime_records, characters, characters_by_id, active_topics, next_topic_id, ic_day,
+		settlements,
+	)
 
 	# s57.54 §9 — mid-season crisis update fires on non-seasonal days when a
 	# champion has Tier 1/2 topics not yet addressed as forced conclusions.
@@ -3737,12 +3758,21 @@ static func _process_fugitive_extradition_seasonal(
 	active_topics: Array,
 	next_topic_id: Array,
 	ic_day: int,
+	season_meta: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 
 	var sett_prov_map: Dictionary = {}
 	for s: SettlementData in settlements:
 		sett_prov_map[s.settlement_id] = s.province_id
+
+	# Collect existing sighting slugs for dedup (one per fugitive per season)
+	var existing_sighting_subjects: Dictionary = {}
+	for t: TopicData in active_topics:
+		if t.topic_type == "fugitive_sighting" and not t.resolved:
+			existing_sighting_subjects[t.subject_character_id] = true
+
+	var patrolled_provinces: Dictionary = season_meta.get("patrolled_provinces", {})
 
 	for record: CrimeRecord in crime_records:
 		if record.legal_status != Enums.LegalStatus.FUGITIVE:
@@ -3768,21 +3798,36 @@ static func _process_fugitive_extradition_seasonal(
 		if fugitive.clan.is_empty() or fugitive.clan == crime_clan:
 			continue
 
-		# Sighting topic for notable fugitives (s11.3.16a)
-		if FugitiveExtraditionSystem.generates_sighting_topic(fugitive.status):
-			var sighting: TopicData = TopicData.new()
-			sighting.topic_id = next_topic_id[0]
-			next_topic_id[0] += 1
-			sighting.slug = "fugitive_sighting_%d_d%d" % [fugitive.character_id, ic_day]
-			sighting.title = "A stranger matching %s was seen in foreign territory" % fugitive.character_name
-			sighting.topic_type = "fugitive_sighting"
-			sighting.tier = TopicData.Tier.TIER_4
-			sighting.category = TopicData.Category.POLITICAL
-			sighting.momentum = TopicMomentumSystem.initial_momentum_for_tier(sighting.tier)
-			sighting.subject_character_id = fugitive.character_id
-			sighting.clan_involved = fugitive.clan
-			sighting.ic_day_created = ic_day
-			active_topics.append(sighting)
+		# s57.57 §57.57.1: Sighting topic via Path B (patrol) or Path C (Status ≥ 5.0).
+		# Path A (co-location) is handled daily in _process_fugitive_sighting_colocation().
+		# Dedup: one sighting topic per fugitive per season.
+		if not existing_sighting_subjects.has(fugitive.character_id):
+			var fugitive_settlement_id: int = -1
+			if fugitive.physical_location.is_valid_int():
+				fugitive_settlement_id = int(fugitive.physical_location)
+			var fugitive_province_id: int = sett_prov_map.get(fugitive_settlement_id, -1)
+
+			var path_b_trigger: bool = (
+				fugitive_province_id >= 0
+				and patrolled_provinces.has(fugitive_province_id)
+			)
+			var path_c_trigger: bool = FugitiveExtraditionSystem.generates_sighting_topic(fugitive.status)
+
+			if path_b_trigger or path_c_trigger:
+				var sighting: TopicData = TopicData.new()
+				sighting.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				sighting.slug = "fugitive_sighting_%d_d%d" % [fugitive.character_id, ic_day]
+				sighting.title = "A stranger matching %s was seen in foreign territory" % fugitive.character_name
+				sighting.topic_type = "fugitive_sighting"
+				sighting.tier = TopicData.Tier.TIER_4
+				sighting.category = TopicData.Category.POLITICAL
+				sighting.momentum = TopicMomentumSystem.initial_momentum_for_tier(sighting.tier)
+				sighting.subject_character_id = fugitive.character_id
+				sighting.clan_involved = fugitive.clan
+				sighting.ic_day_created = ic_day
+				active_topics.append(sighting)
+				existing_sighting_subjects[fugitive.character_id] = true
 
 		# Harboring lord: fugitive's direct lord (still in fugitive.lord_id after flee)
 		var harboring_lord: L5RCharacterData = _extrad_find_harboring_lord(
@@ -3914,6 +3959,371 @@ static func _extrad_crime_tier(crime_type: Enums.CrimeType) -> int:
 		crime_type, [-0.1, 0.0, 0.0, TopicData.Tier.TIER_4]
 	)
 	return int(consequences[3])
+
+
+# -- s57.57 Topic Detection Mechanics -----------------------------------------
+
+# T4-48 Path A — daily co-location fugitive sighting (s57.57 §57.57.1 Path A).
+# Fires when a living non-lord observer is co-located with a FUGITIVE character.
+static func _process_fugitive_sighting_colocation(
+	crime_records: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	settlements: Array = [],
+) -> void:
+	var sett_prov_map: Dictionary = {}
+	for s: SettlementData in settlements:
+		sett_prov_map[s.settlement_id] = s.province_id
+
+	# Collect existing sighting subjects (dedup per fugitive per season)
+	var existing_sighting_subjects: Dictionary = {}
+	for t: TopicData in active_topics:
+		if t.topic_type == "fugitive_sighting" and not t.resolved:
+			existing_sighting_subjects[t.subject_character_id] = true
+
+	for record: CrimeRecord in crime_records:
+		if record.legal_status != Enums.LegalStatus.FUGITIVE:
+			continue
+		var fugitive: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
+		if fugitive == null or CharacterStats.is_dead(fugitive):
+			continue
+		if TravelSystem.is_traveling(fugitive) or fugitive.physical_location.is_empty():
+			continue
+		if existing_sighting_subjects.has(fugitive.character_id):
+			continue
+
+		for observer: L5RCharacterData in characters:
+			if CharacterStats.is_dead(observer):
+				continue
+			if observer.character_id == fugitive.character_id:
+				continue
+			if TravelSystem.is_traveling(observer):
+				continue
+			if observer.physical_location != fugitive.physical_location:
+				continue
+			if observer.lord_id == fugitive.character_id or observer.character_id == fugitive.lord_id:
+				continue
+			# Observer is co-located non-lord — fire sighting topic
+			var sighting: TopicData = TopicData.new()
+			sighting.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			sighting.slug = "fugitive_sighting_%d_d%d" % [fugitive.character_id, ic_day]
+			sighting.title = "A stranger matching %s was seen" % fugitive.character_name
+			sighting.topic_type = "fugitive_sighting"
+			sighting.tier = TopicData.Tier.TIER_4
+			sighting.category = TopicData.Category.POLITICAL
+			sighting.momentum = TopicMomentumSystem.initial_momentum_for_tier(sighting.tier)
+			sighting.subject_character_id = fugitive.character_id
+			sighting.clan_involved = fugitive.clan
+			sighting.ic_day_created = ic_day
+			active_topics.append(sighting)
+			existing_sighting_subjects[fugitive.character_id] = true
+			break
+
+
+# T4-13 DISAPPEARANCE — seasonal tick (s57.57 §57.57.2).
+static func _process_disappearance_check(
+	characters: Array,
+	characters_by_id: Dictionary,
+	pending_letters: Array,
+	crime_records: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	const SOCIAL_ABSENCE_THRESHOLD: int = 90  # 1 IC season per s57.57
+
+	# Build existing disappearance subjects (dedup)
+	var existing_disappearance_subjects: Dictionary = {}
+	for t: TopicData in active_topics:
+		if t.topic_type == "disappearance" and not t.resolved:
+			existing_disappearance_subjects[t.subject_character_id] = true
+
+	# Build perpetrator IDs from active investigations (exclusion rule)
+	var perpetrator_ids: Dictionary = {}
+	for rec: CrimeRecord in crime_records:
+		if rec.legal_status == Enums.LegalStatus.UNDER_INVESTIGATION:
+			perpetrator_ids[rec.perpetrator_id] = true
+
+	# Build fugitive set from crime records (legal_status is on CrimeRecord, not character)
+	var fugitive_character_ids: Dictionary = {}
+	for rec: CrimeRecord in crime_records:
+		if rec.legal_status == Enums.LegalStatus.FUGITIVE:
+			fugitive_character_ids[rec.perpetrator_id] = true
+
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if existing_disappearance_subjects.has(c.character_id):
+			continue
+
+		# Condition 1: social absence ≥ 1 IC season
+		if c.last_social_ic_day < 0:
+			continue
+		if (ic_day - c.last_social_ic_day) < SOCIAL_ABSENCE_THRESHOLD:
+			continue
+
+		# Condition 2: no outgoing letter in the same window
+		var sent_recently: bool = false
+		for letter: LetterData in pending_letters:
+			if letter.sender_id == c.character_id and letter.ic_day_sent >= ic_day - SOCIAL_ABSENCE_THRESHOLD:
+				sent_recently = true
+				break
+		if sent_recently:
+			continue
+
+		# Condition 3: not a fugitive
+		if fugitive_character_ids.has(c.character_id):
+			continue
+
+		# Condition 4: not legitimately traveling
+		if TravelSystem.is_traveling(c):
+			continue
+
+		# All conditions met — create disappearance topic
+		var topic: TopicData = TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "disappearance_%d_d%d" % [c.character_id, ic_day]
+		topic.title = "%s has not been seen or heard from for a season" % c.character_name
+		topic.topic_type = "disappearance"
+		topic.tier = TopicData.Tier.TIER_4
+		topic.category = TopicData.Category.PERSONAL
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		topic.subject_character_id = c.character_id
+		topic.clan_involved = c.clan
+		topic.ic_day_created = ic_day
+		active_topics.append(topic)
+		existing_disappearance_subjects[c.character_id] = true
+
+		# Notify lord (always)
+		if c.lord_id >= 0:
+			var lord: L5RCharacterData = characters_by_id.get(c.lord_id)
+			if lord != null and not CharacterStats.is_dead(lord):
+				lord.topic_pool.append(topic.topic_id)
+
+		# Notify close associates at last-seen settlement (Friend tier, exclusion rule)
+		for other: L5RCharacterData in characters:
+			if CharacterStats.is_dead(other):
+				continue
+			if other.character_id == c.character_id:
+				continue
+			if other.physical_location != c.physical_location or c.physical_location.is_empty():
+				continue
+			# Exclusion rule: perpetrator holding active CrimeRecord against missing char
+			if perpetrator_ids.has(other.character_id):
+				var is_perpetrator_vs_missing: bool = false
+				for rec: CrimeRecord in crime_records:
+					if rec.perpetrator_id == other.character_id and rec.victim_id == c.character_id:
+						is_perpetrator_vs_missing = true
+						break
+				if is_perpetrator_vs_missing:
+					continue
+			var disp: int = other.disposition_values.get(c.character_id, 0)
+			if disp >= 31:
+				other.topic_pool.append(topic.topic_id)
+
+
+# T3-39 JUSTICE_REFUSAL — seasonal tick (s57.57 §57.57.3).
+static func _process_justice_refusal_check(
+	crime_records: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	settlements: Array = [],
+) -> void:
+	const EXTRAD_WINDOW_DAYS: int = 90  # 1 IC season per s57.57
+
+	var sett_prov_map: Dictionary = {}
+	for s: SettlementData in settlements:
+		sett_prov_map[s.settlement_id] = s.province_id
+
+	# Build existing justice_refusal subjects (dedup)
+	var existing_refusal_subjects: Dictionary = {}
+	for t: TopicData in active_topics:
+		if t.topic_type == "justice_refusal" and not t.resolved:
+			existing_refusal_subjects[t.subject_character_id] = true
+
+	# Index extradition_request topics by subject_character_id for fast lookup
+	var extrad_topics_by_subject: Dictionary = {}
+	for t: TopicData in active_topics:
+		if t.topic_type == "extradition_request" and not t.resolved:
+			extrad_topics_by_subject[t.subject_character_id] = t
+
+	for record: CrimeRecord in crime_records:
+		# Condition 1: FUGITIVE status
+		if record.legal_status != Enums.LegalStatus.FUGITIVE:
+			continue
+
+		var fugitive: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
+		if fugitive == null or CharacterStats.is_dead(fugitive):
+			continue
+
+		# Condition 2: cross-clan (crime province clan vs fugitive's current province clan)
+		if not record.location.is_valid_int():
+			continue
+		var crime_prov_id: int = sett_prov_map.get(int(record.location), -1)
+		var fugitive_prov_id: int = -1
+		if fugitive.physical_location.is_valid_int():
+			fugitive_prov_id = sett_prov_map.get(int(fugitive.physical_location), -1)
+		# No clan lookup needed — fugitive.clan vs crime province clan is sufficient
+		# (fugitive remaining in their own clan territory = not cross-clan sheltering)
+		if fugitive.clan.is_empty():
+			continue
+
+		# Condition 3: T4-78 extradition_request exists for this fugitive
+		if not extrad_topics_by_subject.has(fugitive.character_id):
+			continue
+
+		# Condition 4: dedup — no existing justice_refusal for this fugitive
+		if existing_refusal_subjects.has(fugitive.character_id):
+			continue
+
+		# Condition 5: 90-day window elapsed since extradition_request was created
+		var extrad_topic: TopicData = extrad_topics_by_subject[fugitive.character_id]
+		if (ic_day - extrad_topic.ic_day_created) < EXTRAD_WINDOW_DAYS:
+			continue
+
+		var topic: TopicData = TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "justice_refusal_%d_d%d" % [fugitive.character_id, ic_day]
+		topic.title = "%s's clan has refused to extradite a fugitive" % fugitive.clan
+		topic.topic_type = "justice_refusal"
+		topic.tier = TopicData.Tier.TIER_3
+		topic.category = TopicData.Category.POLITICAL
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		topic.subject_character_id = fugitive.character_id
+		topic.clan_involved = fugitive.clan
+		topic.ic_day_created = ic_day
+		active_topics.append(topic)
+		existing_refusal_subjects[fugitive.character_id] = true
+
+
+# T4-90 Path B — correspondence gap (s57.57 §57.57.4 Path B).
+static func _process_behavioral_anomaly_check(
+	characters: Array,
+	characters_by_id: Dictionary,
+	pending_letters: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	const PRIOR_LETTER_MIN: int = 3     # minimum prior letters to establish a pattern
+	const SILENCE_THRESHOLD_DAYS: int = 90  # 1 IC season per s57.57
+
+	# Build existing behavioral_anomaly subjects (dedup)
+	var existing_anomaly_subjects: Dictionary = {}
+	for t: TopicData in active_topics:
+		if t.topic_type == "behavioral_anomaly" and not t.resolved:
+			existing_anomaly_subjects[t.subject_character_id] = true
+
+	# Pre-count total and recent letters per sender
+	var total_sent: Dictionary = {}
+	var recent_sent: Dictionary = {}
+	for letter: LetterData in pending_letters:
+		var sid: int = letter.sender_id
+		if sid < 0:
+			continue
+		total_sent[sid] = total_sent.get(sid, 0) + 1
+		if letter.ic_day_sent >= ic_day - SILENCE_THRESHOLD_DAYS:
+			recent_sent[sid] = recent_sent.get(sid, 0) + 1
+
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if existing_anomaly_subjects.has(c.character_id):
+			continue
+
+		var total: int = total_sent.get(c.character_id, 0)
+		if total < PRIOR_LETTER_MIN:
+			continue
+
+		var recent: int = recent_sent.get(c.character_id, 0)
+		if recent > 0:
+			continue
+
+		# Pattern established and now silent — generate topic
+		var topic: TopicData = TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "behavioral_anomaly_%d_d%d" % [c.character_id, ic_day]
+		topic.title = "%s has gone uncharacteristically silent" % c.character_name
+		topic.topic_type = "behavioral_anomaly"
+		topic.tier = TopicData.Tier.TIER_4
+		topic.category = TopicData.Category.PERSONAL
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		topic.subject_character_id = c.character_id
+		topic.clan_involved = c.clan
+		topic.ic_day_created = ic_day
+		active_topics.append(topic)
+		existing_anomaly_subjects[c.character_id] = true
+
+		# Notify lord
+		if c.lord_id >= 0:
+			var lord: L5RCharacterData = characters_by_id.get(c.lord_id)
+			if lord != null and not CharacterStats.is_dead(lord):
+				lord.topic_pool.append(topic.topic_id)
+
+		# Notify close associates at last-known settlement
+		for other: L5RCharacterData in characters:
+			if CharacterStats.is_dead(other):
+				continue
+			if other.character_id == c.character_id:
+				continue
+			if other.physical_location != c.physical_location or c.physical_location.is_empty():
+				continue
+			var disp: int = other.disposition_values.get(c.character_id, 0)
+			if disp >= 31:
+				other.topic_pool.append(topic.topic_id)
+
+
+# Update last_social_ic_day for all conversation participants (s57.57 §57.57.5).
+static func _update_social_ic_day_from_conversations(
+	conversation_results: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	for result: Variant in conversation_results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		for key: String in ["char_a_id", "char_b_id"]:
+			var cid: int = r.get(key, -1)
+			if cid < 0:
+				continue
+			var c: L5RCharacterData = characters_by_id.get(cid)
+			if c == null or CharacterStats.is_dead(c):
+				continue
+			c.last_social_ic_day = ic_day
+
+
+# Update last_social_ic_day for letter senders and recipients on delivery (s57.57 §57.57.5).
+static func _update_social_ic_day_from_letters(
+	letter_results: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	for result: Variant in letter_results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if r.get("undeliverable", false):
+			continue
+		if not r.has("sender_id") or not r.has("recipient_id"):
+			continue
+		for key: String in ["sender_id", "recipient_id"]:
+			var cid: int = r.get(key, -1)
+			if cid < 0:
+				continue
+			var c: L5RCharacterData = characters_by_id.get(cid)
+			if c == null or CharacterStats.is_dead(c):
+				continue
+			c.last_social_ic_day = ic_day
 
 
 static func _process_successful_bribe_writebacks(
