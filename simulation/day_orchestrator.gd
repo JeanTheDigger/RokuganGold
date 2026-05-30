@@ -128,6 +128,7 @@ static func advance_day(
 	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
 	_assign_magistrate_standing_objectives(characters, objectives_map)
 	_assign_ronin_standing_objectives(characters, objectives_map)
+	_assign_kaiu_engineer_standing_objectives(characters, objectives_map, settlements)
 
 	_clear_stale_context_flags(world_states)
 
@@ -6662,6 +6663,59 @@ static func _assign_ronin_standing_objectives(
 			"priority": 5,
 			"auto_assigned": true,
 		}
+
+
+# -- Kaiu Engineer Standing Need (s57.41.2) ------------------------------------
+# Kaiu Engineers auto-receive MAINTAIN_FORTIFICATION or SEAL_WALL_BREACH
+# when Wall Tower SI thresholds are breached, without requiring a lord directive.
+
+
+static func _assign_kaiu_engineer_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+	settlements: Array,
+) -> void:
+	# Determine the lowest Wall Tower SI across all towers.
+	var min_si: int = 999
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			if s.wall_si < min_si:
+				min_si = s.wall_si
+
+	# No wall towers exist, or all towers are healthy.
+	if min_si >= 7:
+		return
+
+	var breach: bool = (min_si == 0)
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.school != "Kaiu Engineer":
+			continue
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+
+		if not standing.is_empty():
+			continue
+
+		if breach:
+			objectives["standing"] = {
+				"need_type": "SEAL_WALL_BREACH",
+				"priority": 1,
+				"auto_assigned": true,
+			}
+		else:
+			objectives["standing"] = {
+				"need_type": "MAINTAIN_FORTIFICATION",
+				"priority": 2,
+				"auto_assigned": true,
+			}
 
 
 # -- Petition Writeback (s52.5 Parts B–D) -------------------------------------

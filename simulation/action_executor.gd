@@ -2169,8 +2169,12 @@ static func _execute_fortify_wall_section(
 		}
 
 	var tn: int = WallSystem.get_fortify_tn(si)
+	# s57.41.1: Engineering Rank 5 mastery grants +5 flat bonus on cumulative rolls.
+	var eng_rank: int = character.skills.get("Engineering", 0)
+	var mastery_bonus: int = 5 if eng_rank >= 5 else 0
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
-		character, dice_engine, "Engineering", tn
+		character, dice_engine, "Engineering", tn,
+		0, "", Enums.Trait.NONE, 0, 0, mastery_bonus
 	)
 	var success: bool = roll_result.get("success", false)
 	var margin: int = roll_result.get("margin", 0)
