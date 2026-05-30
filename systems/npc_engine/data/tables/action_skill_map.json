@@ -11,6 +11,10 @@
     "primary": "Artisan: Tattooing",
     "secondary": "Agility"
   },
+  "ACCEPT_RONIN_PETITION": {
+    "primary": "Etiquette",
+    "secondary": "Awareness"
+  },
   "APPOINT_TO_POSITION": {
     "primary": "Courtier",
     "secondary": "Awareness"
@@ -401,6 +405,10 @@
   },
   "PUBLIC_PERFORMANCE": {
     "primary": "_performance_skill",
+    "secondary": "Awareness"
+  },
+  "PETITION_RONIN": {
+    "primary": "Courtier",
     "secondary": "Awareness"
   },
   "PURCHASE_MARKET": {

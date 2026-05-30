@@ -345,6 +345,12 @@ static func execute(
 			"effects": mentor_result,
 		}
 
+	if action_id == "PETITION_RONIN":
+		return _execute_petition_ronin(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "ACCEPT_RONIN_PETITION":
+		return _execute_accept_ronin_petition(action, character, ctx, characters_by_id)
+
 	if action_id == "CRAFT":
 		return _execute_craft(action, character, ctx, dice_engine)
 
@@ -2960,6 +2966,194 @@ static func _compute_blockade_effects(action: NPCDataStructures.ScoredAction) ->
 
 
 # -- Governance Actions --------------------------------------------------------
+
+static func _execute_petition_ronin(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var lord_id: int = action.metadata.get("target_lord_id", action.target_npc_id)
+	var ic_day: int = ctx.ic_day
+
+	if lord_id < 0:
+		return {
+			"success": false,
+			"action_id": "PETITION_RONIN",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "no_lord_present",
+			"effects": {},
+		}
+
+	# Cooldown check: petition_refused_until set on previous rejection.
+	var refused_until: int = character.supply_ledger.get("petition_refused_until", -1)
+	if refused_until >= 0 and ic_day < refused_until:
+		return {
+			"success": false,
+			"action_id": "PETITION_RONIN",
+			"character_id": character.character_id,
+			"target_npc_id": lord_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "petition_cooldown",
+			"effects": {},
+		}
+
+	var target_lord: L5RCharacterData = characters_by_id.get(lord_id) as L5RCharacterData
+	if target_lord == null or CharacterStats.is_dead(target_lord):
+		return {
+			"success": false,
+			"action_id": "PETITION_RONIN",
+			"character_id": character.character_id,
+			"target_npc_id": lord_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "lord_unavailable",
+			"effects": {},
+		}
+
+	var lord_disp: int = int(ctx.disposition_values.get(lord_id, 0))
+	var known_crimes: Array = []  # TODO: wire via ctx when crime-knowledge system exposes this
+	if RoninSystem.lord_auto_rejects(target_lord, character, lord_disp, known_crimes):
+		return {
+			"success": false,
+			"action_id": "PETITION_RONIN",
+			"character_id": character.character_id,
+			"target_npc_id": lord_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "auto_rejected",
+			"effects": {
+				"failed": true,
+				"petition_refused_until": ic_day + RoninSystem.PETITION_COOLDOWN_DAYS,
+				"recipient_disposition_change": RoninSystem.PETITION_FAILURE_DISPOSITION_PENALTY,
+				"recipient_id": lord_id,
+			},
+		}
+
+	var petition_result: Dictionary = RoninSystem.resolve_petition(
+		character, target_lord, dice_engine, lord_disp
+	)
+	var margin: int = petition_result.get("margin", 0)
+	var presentation_modifier: int = petition_result.get("presentation_modifier", 0)
+	var effective_disp: int = lord_disp + presentation_modifier
+	var accepted: bool = petition_result.get("success", false) and effective_disp >= 0
+
+	if accepted:
+		return {
+			"success": true,
+			"action_id": "PETITION_RONIN",
+			"character_id": character.character_id,
+			"target_npc_id": lord_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"effects": {
+				"requires_ronin_acceptance": true,
+				"accepting_lord_id": lord_id,
+				"ronin_id": character.character_id,
+				"margin": margin,
+			},
+		}
+	else:
+		return {
+			"success": false,
+			"action_id": "PETITION_RONIN",
+			"character_id": character.character_id,
+			"target_npc_id": lord_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "petition_refused",
+			"effects": {
+				"failed": true,
+				"petition_refused_until": ic_day + RoninSystem.PETITION_COOLDOWN_DAYS,
+				"recipient_disposition_change": RoninSystem.PETITION_FAILURE_DISPOSITION_PENALTY,
+				"recipient_id": lord_id,
+			},
+		}
+
+
+static func _execute_accept_ronin_petition(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var ronin_id: int = action.metadata.get("target_ronin_id", action.target_npc_id)
+	var ic_day: int = ctx.ic_day
+
+	if ronin_id < 0:
+		return {
+			"success": false,
+			"action_id": "ACCEPT_RONIN_PETITION",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "no_ronin_present",
+			"effects": {},
+		}
+
+	var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+	if ronin == null or CharacterStats.is_dead(ronin):
+		return {
+			"success": false,
+			"action_id": "ACCEPT_RONIN_PETITION",
+			"character_id": character.character_id,
+			"target_npc_id": ronin_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "ronin_unavailable",
+			"effects": {},
+		}
+
+	if not RoninSystem.is_ronin(ronin) or ronin.permanent_ronin:
+		return {
+			"success": false,
+			"action_id": "ACCEPT_RONIN_PETITION",
+			"character_id": character.character_id,
+			"target_npc_id": ronin_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "not_eligible",
+			"effects": {},
+		}
+
+	# Lord must have positive or neutral disposition toward the ronin.
+	var lord_disp: int = 0
+	for disp_key: Variant in character.disposition_values:
+		if int(disp_key) == ronin_id:
+			lord_disp = int(character.disposition_values[disp_key])
+			break
+	if lord_disp < 0:
+		return {
+			"success": false,
+			"action_id": "ACCEPT_RONIN_PETITION",
+			"character_id": character.character_id,
+			"target_npc_id": ronin_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "disposition_too_low",
+			"effects": {},
+		}
+
+	return {
+		"success": true,
+		"action_id": "ACCEPT_RONIN_PETITION",
+		"character_id": character.character_id,
+		"target_npc_id": ronin_id,
+		"ic_day": ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_ronin_acceptance": true,
+			"accepting_lord_id": character.character_id,
+			"ronin_id": ronin_id,
+		},
+	}
+
 
 static func _execute_appoint_to_position(
 	action: NPCDataStructures.ScoredAction,

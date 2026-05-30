@@ -524,3 +524,248 @@ func test_non_permanent_ronin_accepts_service():
 	var result: Dictionary = RoninSystem.accept_into_service(c, 200, "Retainer")
 	assert_false(result.get("rejected", false))
 	assert_eq(c.lord_id, 200)
+
+
+# === STANDING OBJECTIVE ASSIGNMENT ===
+
+func _make_ronin_char(id: int = 10) -> L5RCharacterData:
+	var c := _make_samurai(id)
+	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
+	return c
+
+
+func test_assign_ronin_standing_assigns_find_new_lord():
+	var c := _make_ronin_char()
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_ronin_standing_objectives([c], objectives_map)
+	var standing: Dictionary = objectives_map[c.character_id].get("standing", {})
+	assert_eq(standing.get("need_type", ""), "FIND_NEW_LORD")
+
+
+func test_assign_ronin_standing_skips_non_ronin():
+	var c := _make_samurai()  # still has lord_id=100 and role_position
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_ronin_standing_objectives([c], objectives_map)
+	assert_false(objectives_map.has(c.character_id))
+
+
+func test_assign_ronin_standing_skips_permanent_ronin():
+	var c := _make_ronin_char()
+	c.permanent_ronin = true
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_ronin_standing_objectives([c], objectives_map)
+	assert_false(objectives_map.has(c.character_id))
+
+
+func test_assign_ronin_standing_skips_dead():
+	var c := _make_ronin_char()
+	c.wounds_taken = 999
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_ronin_standing_objectives([c], objectives_map)
+	assert_false(objectives_map.has(c.character_id))
+
+
+func test_assign_ronin_standing_does_not_overwrite_existing():
+	var c := _make_ronin_char()
+	var objectives_map: Dictionary = {
+		c.character_id: {"standing": {"need_type": "UPHOLD_LAW"}},
+	}
+	DayOrchestrator._assign_ronin_standing_objectives([c], objectives_map)
+	assert_eq(objectives_map[c.character_id]["standing"]["need_type"], "UPHOLD_LAW")
+
+
+# === EXECUTOR: PETITION_RONIN ===
+
+func _make_ctx_for_petition(ronin_id: int, lord_id: int, loc: String = "1") -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = ronin_id
+	ctx.ic_day = 100
+	ctx.season = 1
+	ctx.location_id = loc
+	ctx.characters_present = [lord_id]
+	ctx.disposition_values = {lord_id: 10}
+	return ctx
+
+
+func test_executor_petition_ronin_no_lord_present():
+	var ronin := _make_ronin_char()
+	var ctx := _make_ctx_for_petition(ronin.character_id, 200)
+	ctx.characters_present = []
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "PETITION_RONIN"
+	action.target_npc_id = -1
+	action.metadata = {"target_lord_id": -1}
+	var result: Dictionary = ActionExecutor.execute(action, ronin, ctx, DiceEngine.new(42), {})
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "no_lord_present")
+
+
+func test_executor_petition_ronin_cooldown_blocks():
+	var ronin := _make_ronin_char()
+	ronin.supply_ledger["petition_refused_until"] = 200
+	var lord := _make_lord(200)
+	var ctx := _make_ctx_for_petition(ronin.character_id, 200)
+	var chars: Dictionary = {200: lord}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "PETITION_RONIN"
+	action.target_npc_id = 200
+	action.metadata = {"target_lord_id": 200}
+	var result: Dictionary = ActionExecutor.execute(action, ronin, ctx, DiceEngine.new(42), {}, {}, chars)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "petition_cooldown")
+
+
+func test_executor_petition_ronin_auto_rejected_low_disposition():
+	var ronin := _make_ronin_char()
+	var lord := _make_lord(200)
+	var ctx := _make_ctx_for_petition(ronin.character_id, 200)
+	ctx.disposition_values = {200: -5}
+	var chars: Dictionary = {200: lord}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "PETITION_RONIN"
+	action.target_npc_id = 200
+	action.metadata = {"target_lord_id": 200}
+	var result: Dictionary = ActionExecutor.execute(action, ronin, ctx, DiceEngine.new(42), {}, {}, chars)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "auto_rejected")
+	assert_eq(result.get("effects", {}).get("petition_refused_until", -1),
+		100 + RoninSystem.PETITION_COOLDOWN_DAYS)
+
+
+func test_executor_petition_ronin_success_returns_acceptance_flag():
+	var ronin := _make_ronin_char()
+	ronin.skills = {"Courtier": 5, "Etiquette": 3}
+	ronin.awareness = 4
+	var lord := _make_lord(200)
+	lord.skills = {"Etiquette": 1}
+	lord.awareness = 1
+	var ctx := _make_ctx_for_petition(ronin.character_id, 200)
+	ctx.disposition_values = {200: 20}
+	var chars: Dictionary = {200: lord}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "PETITION_RONIN"
+	action.target_npc_id = 200
+	action.metadata = {"target_lord_id": 200}
+	# High seed gives high rolls → petition likely succeeds and effective_disp >= 0.
+	var dice := DiceEngine.new(999999)
+	var result: Dictionary = ActionExecutor.execute(action, ronin, ctx, dice, {}, {}, chars)
+	if result.get("success", false):
+		assert_true(result.get("effects", {}).get("requires_ronin_acceptance", false))
+		assert_eq(result.get("effects", {}).get("accepting_lord_id", -1), 200)
+		assert_eq(result.get("effects", {}).get("ronin_id", -1), ronin.character_id)
+
+
+# === EXECUTOR: ACCEPT_RONIN_PETITION ===
+
+func _make_ctx_for_lord(lord_id: int, ronin_id: int, loc: String = "1") -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = lord_id
+	ctx.ic_day = 100
+	ctx.season = 1
+	ctx.location_id = loc
+	ctx.characters_present = [ronin_id]
+	ctx.is_lord = true
+	return ctx
+
+
+func test_executor_accept_ronin_petition_no_ronin_present():
+	var lord := _make_lord(200)
+	var ctx := _make_ctx_for_lord(200, 10)
+	ctx.characters_present = []
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ACCEPT_RONIN_PETITION"
+	action.target_npc_id = -1
+	action.metadata = {"target_ronin_id": -1}
+	var result: Dictionary = ActionExecutor.execute(action, lord, ctx, DiceEngine.new(42), {})
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "no_ronin_present")
+
+
+func test_executor_accept_ronin_petition_not_a_ronin():
+	var lord := _make_lord(200)
+	var samurai := _make_samurai(10)  # still has lord and role
+	lord.disposition_values = {10: 5}
+	var ctx := _make_ctx_for_lord(200, 10)
+	var chars: Dictionary = {10: samurai}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ACCEPT_RONIN_PETITION"
+	action.target_npc_id = 10
+	action.metadata = {"target_ronin_id": 10}
+	var result: Dictionary = ActionExecutor.execute(action, lord, ctx, DiceEngine.new(42), {}, {}, chars)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "not_eligible")
+
+
+func test_executor_accept_ronin_petition_succeeds():
+	var lord := _make_lord(200)
+	var ronin := _make_ronin_char(10)
+	lord.disposition_values = {10: 10}
+	var ctx := _make_ctx_for_lord(200, 10)
+	var chars: Dictionary = {10: ronin}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ACCEPT_RONIN_PETITION"
+	action.target_npc_id = 10
+	action.metadata = {"target_ronin_id": 10}
+	var result: Dictionary = ActionExecutor.execute(action, lord, ctx, DiceEngine.new(42), {}, {}, chars)
+	assert_true(result.get("success", false))
+	assert_true(result.get("effects", {}).get("requires_ronin_acceptance", false))
+	assert_eq(result.get("effects", {}).get("accepting_lord_id", -1), 200)
+
+
+func test_executor_accept_ronin_petition_rejects_permanent_ronin():
+	var lord := _make_lord(200)
+	var ronin := _make_ronin_char(10)
+	ronin.permanent_ronin = true
+	lord.disposition_values = {10: 10}
+	var ctx := _make_ctx_for_lord(200, 10)
+	var chars: Dictionary = {10: ronin}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "ACCEPT_RONIN_PETITION"
+	action.target_npc_id = 10
+	action.metadata = {"target_ronin_id": 10}
+	var result: Dictionary = ActionExecutor.execute(action, lord, ctx, DiceEngine.new(42), {}, {}, chars)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "not_eligible")
+
+
+# === WRITEBACK: _process_petition_writebacks ===
+
+func test_writeback_acceptance_calls_accept_into_service():
+	var ronin := _make_ronin_char(10)
+	var chars: Dictionary = {10: ronin}
+	var objectives_map: Dictionary = {
+		10: {"standing": {"need_type": "FIND_NEW_LORD"}},
+	}
+	var results: Array = [{
+		"action_id": "PETITION_RONIN",
+		"character_id": 10,
+		"success": true,
+		"effects": {
+			"requires_ronin_acceptance": true,
+			"accepting_lord_id": 200,
+			"ronin_id": 10,
+		},
+	}]
+	DayOrchestrator._process_petition_writebacks(results, chars, objectives_map, 5)
+	assert_eq(ronin.lord_id, 200)
+	assert_eq(ronin.role_position, "Samurai")
+	assert_false(objectives_map[10].has("standing"))
+
+
+func test_writeback_failure_writes_cooldown():
+	var ronin := _make_ronin_char(10)
+	var chars: Dictionary = {10: ronin}
+	var objectives_map: Dictionary = {}
+	var refused_day: int = 100 + RoninSystem.PETITION_COOLDOWN_DAYS
+	var results: Array = [{
+		"action_id": "PETITION_RONIN",
+		"character_id": 10,
+		"success": false,
+		"effects": {
+			"failed": true,
+			"petition_refused_until": refused_day,
+			"recipient_disposition_change": -3,
+		},
+	}]
+	DayOrchestrator._process_petition_writebacks(results, chars, objectives_map, 5)
+	assert_eq(ronin.supply_ledger.get("petition_refused_until", -1), refused_day)

@@ -127,6 +127,7 @@ static func advance_day(
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
 	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
 	_assign_magistrate_standing_objectives(characters, objectives_map)
+	_assign_ronin_standing_objectives(characters, objectives_map)
 
 	_clear_stale_context_flags(world_states)
 
@@ -764,6 +765,11 @@ static func advance_day(
 	)
 
 	_remove_resolved_hunts(active_hunts)
+
+	_process_petition_writebacks(
+		day_result.get("results", []),
+		characters_by_id, objectives_map, current_season,
+	)
 
 	_process_compose_theater_writebacks(
 		day_result.get("results", []),
@@ -6588,6 +6594,93 @@ static func _assign_magistrate_standing_objectives(
 			"priority": 4,
 			"auto_assigned": true,
 		}
+
+
+# -- FIND_NEW_LORD Standing Objective Assignment (s52.5 Part F) ----------------
+# Ronin NPCs automatically receive FIND_NEW_LORD as their standing objective
+# so they participate in the petition pipeline without requiring lord directives.
+
+
+static func _assign_ronin_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if not RoninSystem.is_ronin(character):
+			continue
+		if character.permanent_ronin:
+			continue
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+
+		if standing.get("need_type", "") == "FIND_NEW_LORD":
+			continue
+
+		if not standing.is_empty():
+			continue
+
+		objectives["standing"] = {
+			"need_type": "FIND_NEW_LORD",
+			"priority": 5,
+			"auto_assigned": true,
+		}
+
+
+# -- Petition Writeback (s52.5 Parts B–D) -------------------------------------
+
+
+static func _process_petition_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	current_season: int,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") not in ["PETITION_RONIN", "ACCEPT_RONIN_PETITION"]:
+			continue
+
+		var effects: Dictionary = result.get("effects", {})
+		var ronin_actor_id: int = result.get("character_id", -1)
+
+		# On failure: write cooldown to petitioner's supply_ledger.
+		var refused_until: int = effects.get("petition_refused_until", -1)
+		if refused_until >= 0:
+			var petitioner: L5RCharacterData = characters_by_id.get(ronin_actor_id) as L5RCharacterData
+			if petitioner != null and not CharacterStats.is_dead(petitioner):
+				petitioner.supply_ledger["petition_refused_until"] = refused_until
+			continue
+
+		if not effects.get("requires_ronin_acceptance", false):
+			continue
+
+		var lord_id: int = effects.get("accepting_lord_id", -1)
+		var ronin_id: int = effects.get("ronin_id", -1)
+		if lord_id < 0 or ronin_id < 0:
+			continue
+
+		var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+		if ronin == null or CharacterStats.is_dead(ronin):
+			continue
+		if not RoninSystem.is_ronin(ronin):
+			continue
+
+		# Accept into service: set lord, restore status, apply glory recovery.
+		RoninSystem.accept_into_service(ronin, lord_id, "Samurai")
+		RoninSystem.record_income(ronin, current_season)
+
+		# Clear the FIND_NEW_LORD standing objective now that the ronin has a lord.
+		if objectives_map.has(ronin_id):
+			var objs: Dictionary = objectives_map[ronin_id]
+			var standing: Dictionary = objs.get("standing", {})
+			if standing.get("need_type", "") == "FIND_NEW_LORD":
+				objs.erase("standing")
 
 
 static func _assign_phoenix_champion_restore_objective(

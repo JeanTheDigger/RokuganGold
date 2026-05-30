@@ -1080,6 +1080,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
 				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
+				"ACCEPT_RONIN_PETITION",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
@@ -1141,6 +1142,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"ISSUE_DUEL_CHALLENGE",
 				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
 				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
+				"PETITION_RONIN",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
@@ -1270,6 +1272,8 @@ static func _get_ap_cost(action_id: String) -> int:
 		"COMPLY_WITH_EDICT": 1,
 		"DEFY_EDICT": 1,
 		"APPOINT_TO_POSITION": 1,
+		"ACCEPT_RONIN_PETITION": 1,
+		"PETITION_RONIN": 1,
 		"ARRANGE_MARRIAGE": 1,
 		"DISSOLVE_MARRIAGE": 1,
 		"FOUND_VILLAGE": 1,
@@ -2231,6 +2235,7 @@ const LORD_ONLY_ACTIONS: Array[String] = [
 	"COMMISSION_ASSASSINATION",
 	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID",
 	"TRANSFER_KOKU", "SHARE_SUPPLIES",
+	"ACCEPT_RONIN_PETITION",
 ]
 
 
@@ -2901,6 +2906,12 @@ static func _populate_action_metadata(
 		option.metadata = _build_perform_theater_metadata(ctx, need, chars_by_id)
 	elif option.action_id == "DEDICATE_PIECE":
 		option.metadata = _build_dedicate_piece_metadata(ctx, need)
+	elif option.action_id == "PETITION_RONIN":
+		option.metadata = {"target_lord_id": _pick_lord_for_petition(ctx, chars_by_id)}
+		option.target_npc_id = option.metadata.get("target_lord_id", -1)
+	elif option.action_id == "ACCEPT_RONIN_PETITION":
+		option.metadata = {"target_ronin_id": _pick_ronin_for_acceptance(ctx, chars_by_id)}
+		option.target_npc_id = option.metadata.get("target_ronin_id", -1)
 
 
 static func _build_compose_theater_metadata(
@@ -4567,6 +4578,49 @@ static func _extract_cut_supply_army_ids(
 				if aid >= 0:
 					result.append(aid)
 	return result
+
+
+static func _pick_lord_for_petition(
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> int:
+	## Find the best co-located lord for a ronin to petition (s52.5 Part B).
+	## Prefers lords with higher disposition toward the petitioner.
+	var best_id: int = -1
+	var best_disp: int = -999
+	for present_id: int in ctx.characters_present:
+		var candidate: L5RCharacterData = chars_by_id.get(present_id) as L5RCharacterData
+		if candidate == null or CharacterStats.is_dead(candidate):
+			continue
+		if candidate.role_position.is_empty():
+			continue
+		var disp: int = int(ctx.disposition_values.get(present_id, 0))
+		if disp > best_disp:
+			best_disp = disp
+			best_id = present_id
+	return best_id
+
+
+static func _pick_ronin_for_acceptance(
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> int:
+	## Find the best co-located ronin for a lord to accept into service (s52.5 Part D).
+	## Prefers non-permanent-ronin candidates with highest status.
+	var best_id: int = -1
+	var best_status: float = -1.0
+	for present_id: int in ctx.characters_present:
+		var candidate: L5RCharacterData = chars_by_id.get(present_id) as L5RCharacterData
+		if candidate == null or CharacterStats.is_dead(candidate):
+			continue
+		if not RoninSystem.is_ronin(candidate):
+			continue
+		if candidate.permanent_ronin:
+			continue
+		if candidate.status > best_status:
+			best_status = candidate.status
+			best_id = present_id
+	return best_id
 
 
 static func _find_marriageable_vassals(
