@@ -305,6 +305,8 @@ static func complete_contract(
 	character.supply_ledger["contract_deeds_for_family"] = deeds
 	character.supply_ledger.erase("contract_end_ic_day")
 	character.supply_ledger.erase("contract_duration_seasons")
+	character.supply_ledger.erase("contract_type")
+	character.supply_ledger.erase("contract_lord_family")
 
 	if is_extraordinary:
 		var extra: Dictionary = character.supply_ledger.get("extraordinary_deeds_for_family", {})
@@ -328,6 +330,9 @@ static func abandon_contract(
 	var ronin_result: Dictionary = make_ronin(character, RoninCause.DISMISSAL)
 	mark_ronin_start(character, current_season)
 	character.supply_ledger.erase("contract_end_ic_day")
+	character.supply_ledger.erase("contract_duration_seasons")
+	character.supply_ledger.erase("contract_type")
+	character.supply_ledger.erase("contract_lord_family")
 	return {
 		"character_id": character.character_id,
 		"abandoned": true,
@@ -348,6 +353,8 @@ static func terminate_contract_early(
 	mark_ronin_start(character, current_season)
 	character.supply_ledger.erase("contract_end_ic_day")
 	character.supply_ledger.erase("contract_type")
+	character.supply_ledger.erase("contract_lord_family")
+	character.supply_ledger.erase("contract_duration_seasons")
 	return {
 		"character_id": character.character_id,
 		"koku_refund": refund,

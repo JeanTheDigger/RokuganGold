@@ -1315,6 +1315,68 @@ func test_contract_expiry_no_extraordinary_deed_when_no_war():
 	assert_eq(RoninSystem.get_deed_count(ronin, "Doji"), 1)  # still gets normal deed
 
 
+func test_contract_expiry_abandoned_status_treated_as_abandoned():
+	# GDD s52.6 Part F: "ACTIVE or COMPLETED" state required for clean completion.
+	# An objective with source="contract" but status="ABANDONED" must be abandoned, not clean.
+	var lord := _make_lord_with_family(200, "Crane", "Doji")
+	lord.disposition_values = {10: 5}
+	var ronin := _make_ronin_char(10)
+	ronin.lord_id = 200
+	ronin.supply_ledger["contract_end_ic_day"] = 100
+	ronin.supply_ledger["contract_type"] = "PROVINCE_DEFENSE"
+	ronin.supply_ledger["contract_lord_family"] = "Doji"
+	var chars: Dictionary = {10: ronin, 200: lord}
+	var objectives_map: Dictionary = {
+		10: {"primary": {
+			"need_type": "DEFEND_PROVINCE", "source": "contract",
+			"assigned_by": 200, "status": "ABANDONED",
+		}},
+	}
+	DayOrchestrator._process_contract_expiry(chars, objectives_map, 2, 100, [], {}, {})
+	# Must be treated as abandoned: no deed credit, disposition penalty applied.
+	assert_eq(RoninSystem.get_deed_count(ronin, "Doji"), 0)
+	assert_eq(int(lord.disposition_values.get(10, 0)), 5 + RoninSystem.CONTRACT_ABANDONED_DISPOSITION)
+
+
+func test_complete_contract_clears_all_supply_ledger_keys():
+	var ronin := _make_ronin_char(10)
+	ronin.supply_ledger["contract_end_ic_day"] = 100
+	ronin.supply_ledger["contract_duration_seasons"] = 2
+	ronin.supply_ledger["contract_type"] = "PROVINCE_DEFENSE"
+	ronin.supply_ledger["contract_lord_family"] = "Doji"
+	RoninSystem.complete_contract(ronin, "Doji", 2, false)
+	assert_false(ronin.supply_ledger.has("contract_end_ic_day"))
+	assert_false(ronin.supply_ledger.has("contract_duration_seasons"))
+	assert_false(ronin.supply_ledger.has("contract_type"))
+	assert_false(ronin.supply_ledger.has("contract_lord_family"))
+
+
+func test_abandon_contract_clears_all_supply_ledger_keys():
+	var ronin := _make_ronin_char(10)
+	ronin.supply_ledger["contract_end_ic_day"] = 100
+	ronin.supply_ledger["contract_duration_seasons"] = 3
+	ronin.supply_ledger["contract_type"] = "MAGISTRATE_AIDE"
+	ronin.supply_ledger["contract_lord_family"] = "Doji"
+	RoninSystem.abandon_contract(ronin, 2)
+	assert_false(ronin.supply_ledger.has("contract_end_ic_day"))
+	assert_false(ronin.supply_ledger.has("contract_duration_seasons"))
+	assert_false(ronin.supply_ledger.has("contract_type"))
+	assert_false(ronin.supply_ledger.has("contract_lord_family"))
+
+
+func test_terminate_contract_clears_all_supply_ledger_keys():
+	var ronin := _make_ronin_char(10)
+	ronin.supply_ledger["contract_end_ic_day"] = 280
+	ronin.supply_ledger["contract_duration_seasons"] = 2
+	ronin.supply_ledger["contract_type"] = "PROVINCE_DEFENSE"
+	ronin.supply_ledger["contract_lord_family"] = "Doji"
+	RoninSystem.terminate_contract_early(ronin, 2, "PROVINCE_DEFENSE", 2)
+	assert_false(ronin.supply_ledger.has("contract_end_ic_day"))
+	assert_false(ronin.supply_ledger.has("contract_duration_seasons"))
+	assert_false(ronin.supply_ledger.has("contract_type"))
+	assert_false(ronin.supply_ledger.has("contract_lord_family"))
+
+
 # -- APPROVE_CLAN_INDUCTION --
 
 func test_approve_induction_sets_approval_flag():

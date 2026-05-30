@@ -6865,8 +6865,10 @@ static func _process_contract_expiry(
 		# Contract has expired — determine clean vs abandoned outcome.
 		var lord_family: String = character.supply_ledger.get("contract_lord_family", "")
 		var primary: Dictionary = objectives_map.get(cid, {}).get("primary", {})
+		# GDD s52.6 Part F: clean = source=="contract" AND status is ACTIVE or COMPLETED.
 		var is_clean: bool = primary.get("source", "") == "contract" and \
-			primary.get("need_type", "") in RoninSystem.CONTRACT_TYPE_NEED.values()
+			primary.get("need_type", "") in RoninSystem.CONTRACT_TYPE_NEED.values() and \
+			primary.get("status", "ACTIVE") in ["ACTIVE", "COMPLETED"]
 
 		if is_clean:
 			var is_extraordinary: bool = _is_extraordinary_contract_deed(
