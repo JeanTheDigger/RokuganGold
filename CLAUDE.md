@@ -124,6 +124,7 @@ When implementing or auditing a system, go here first:
 | Zone subtypes and flag matrix                 | 57.36                |
 | Character sheet field index                   | 57.35                |
 | Tattoo system                                 | 57.25                |
+| Kata eligibility, acquisition, effect stubs   | 30, 30a              |
 | Artisan & crafting system                     | 49                   |
 | Musha Shugyo (warrior's pilgrimage)           | 57.48                |
 | Clan Champion strategic evaluation           | 57.54                |
@@ -3238,6 +3239,13 @@ Do not re-audit this; the list is settled. Ask the user before investigating any
 
 **REFERENCE sections** (source material only, design not started): s31–s37, s38,
 s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57.46.
+
+**PARTIAL — eligibility/data done, effects blocked on s40:**
+- s30 / s30a — Katas: `simulation/kata_system.gd` contains all 43 katas, eligibility
+  (ring/school/clan checks), XP deduction, NPC selection logic, and stub effect registry.
+  All combat effects (Armor TN, attack bonuses, Initiative, stances, maneuver modifiers)
+  are registered as stubs with `blocked_on: "s40"` — no mechanical change is applied
+  until s40 (individual combat) is implemented.
 
 ### Pending Redesign
 (None currently pending.)

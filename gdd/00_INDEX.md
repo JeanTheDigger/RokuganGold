@@ -286,7 +286,8 @@ Content has not been modified — only split at section boundaries.
 
 | File | Section | Size | Status |
 |------|---------|------|--------|
-| `s30_katas.md` | # 30. Katas | 10K | Reference / No tags |
+| `s30_katas.md` | # 30. Katas | 10K | Reference / No tags (source material) |
+| `s30a_katas_locked.md` | # 30a. Katas — Eligibility & Effect Registry | 8K | FULLY LOCKED. 2026-05-30: Eligibility rules, XP cost formula, all 43 katas tabulated, school/clan/ring interpretation, multi-ring chain (Mirumoto/Kakita reduction). Combat effects (Armor TN, attack bonuses, stances) blocked on s40. Code: `simulation/kata_system.gd`. |
 
 ### Section 31
 
