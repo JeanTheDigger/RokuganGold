@@ -14411,6 +14411,13 @@ static func _process_npc_advancement(
 	)
 
 	# Generate Tier 4 Personal topic for each NPC that ranked up. Locked in s48a A48a-2.
+	# Build a quick lookup so we can seed the topic into the character's own topic_pool.
+	var chars_by_id_local: Dictionary = {}
+	for c_v: Variant in characters:
+		var c_l: L5RCharacterData = c_v as L5RCharacterData
+		if c_l != null:
+			chars_by_id_local[c_l.character_id] = c_l
+
 	for entry: Dictionary in adv_result.get("results", []):
 		if not entry.get("ranked_up", false):
 			continue
@@ -14430,6 +14437,11 @@ static func _process_npc_advancement(
 		topic.ic_day_created = ic_day
 		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		active_topics.append(topic)
+		# The character always knows their own rank advancement — seed directly into their pool
+		# so the ID persists even after the topic decays out of active_topics.
+		var ranked_char: L5RCharacterData = chars_by_id_local.get(rut["character_id"]) as L5RCharacterData
+		if ranked_char != null and not ranked_char.topic_pool.has(topic.topic_id):
+			ranked_char.topic_pool.append(topic.topic_id)
 
 	return adv_result
 

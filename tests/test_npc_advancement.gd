@@ -684,3 +684,35 @@ func test_no_rank_up_topic_when_no_rank_up() -> void:
 	var result: Dictionary = NPCAdvancement.process_seasonal_advancement([c], {}, 1)
 	for entry: Dictionary in result["results"]:
 		assert_false(entry.has("rank_up_topic"), "no rank_up_topic should be present without rank-up")
+
+
+# -- Topic seeded into character's topic_pool on rank-up (s48a A48a-2) ---------
+
+func test_rank_up_topic_seeded_into_character_pool() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	c.character_name = "Hida Taro"
+	c.school_rank = 1
+	c.xp_total = 500
+	c.xp_spent = 0
+	var active_topics: Array = []
+	var next_topic_id: Array = [200]
+	DayOrchestrator._process_npc_advancement(
+		[c], [], [], [], [], 0, active_topics, next_topic_id, 10
+	)
+	var new_rank: int = CharacterStats.get_insight_rank(c)
+	if new_rank >= 2:
+		assert_true(active_topics.size() >= 1, "rank-up topic should be in active_topics")
+		var topic_id: int = active_topics[0].topic_id
+		assert_true(c.topic_pool.has(topic_id), "character's own topic_pool must contain their rank-up topic")
+
+
+func test_rank_up_topic_not_seeded_without_rank_up() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	c.xp_total = 3
+	c.xp_spent = 0
+	var active_topics: Array = []
+	var next_topic_id: Array = [200]
+	DayOrchestrator._process_npc_advancement(
+		[c], [], [], [], [], 0, active_topics, next_topic_id, 10
+	)
+	assert_eq(c.topic_pool.size(), 0, "no topic should be seeded when no rank-up occurred")
