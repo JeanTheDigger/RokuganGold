@@ -377,19 +377,21 @@ func test_shugenja_void_ring_advancement():
 	assert_eq(c.void_ring, 3)
 	assert_eq(c.max_void_points, 3)
 
-func test_non_shugenja_no_void_advancement():
+func test_bushi_can_advance_void_ring():
+	# s52 Part 3 update: all school types may raise Void after focus rings and skills
 	var c := _make_character()
-	# Max everything except Void
+	# Max focus rings and all school skills so Void is next in priority
 	c.stamina = 5
 	c.willpower = 5
 	c.agility = 5
 	c.intelligence = 5
 	for skill: String in NPCAdvancement.get_school_skills(c):
 		c.skills[skill] = 5
+	# Void ring 2->3 costs 12000 progress = 60 XP
 	c.xp_total = 60
 	c.xp_spent = 0
 	NPCAdvancement.spend_accumulated_xp(c)
-	assert_eq(c.void_ring, 2)
+	assert_eq(c.void_ring, 3)
 
 func test_reserve_xp_when_all_maxed():
 	var c := _make_character()
@@ -834,3 +836,87 @@ func test_solo_training_writeback_ignores_non_train_actions() -> void:
 		[fake_result], chars_by_id, active_topics, next_topic_id, 1
 	)
 	assert_eq(active_topics.size(), 0, "Non-TRAIN actions should be ignored")
+
+
+# -- Expanded advancement priority (s52 Part 3 update) -------------------------
+
+func test_get_eligible_skills_includes_school_skills() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	var eligible: Array = NPCAdvancement.get_eligible_skills(c)
+	for sk: String in NPCAdvancement.get_school_skills(c):
+		assert_true(eligible.has(sk), "School skill %s should be eligible" % sk)
+
+
+func test_get_eligible_skills_includes_nonschool_at_rank1() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	c.skills["Horsemanship"] = 1  # not a Hida Bushi school skill
+	var eligible: Array = NPCAdvancement.get_eligible_skills(c)
+	assert_true(eligible.has("Horsemanship"), "Non-school skill at rank 1 should be eligible")
+
+
+func test_get_eligible_skills_excludes_nonschool_at_rank0() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	# Calligraphy is not in Hida Bushi school skills; character doesn't have it
+	assert_false(c.skills.has("Calligraphy"), "Sanity: Calligraphy not yet in skills dict")
+	var eligible: Array = NPCAdvancement.get_eligible_skills(c)
+	assert_false(eligible.has("Calligraphy"), "Non-school skill at rank 0 must not be eligible")
+
+
+func test_nonschool_skill_interleaved_by_rank() -> void:
+	# A non-school skill at rank 3 should be trained before a school skill at rank 1
+	var c: L5RCharacterData = _make_character(1)
+	# Max Earth ring so skills become the first target
+	c.stamina = 5
+	c.willpower = 5
+	# All school skills at rank 1 except Heavy Weapons (2)
+	c.skills = {"Athletics": 1, "Defense": 1, "Heavy Weapons": 2,
+		"Intimidation": 1, "Kenjutsu": 1, "Lore: Shadowlands": 1}
+	# Add non-school skill at rank 3 (higher than all school skills)
+	c.skills["Battle"] = 3
+	var target: Dictionary = NPCAdvancement.get_best_training_target(c)
+	assert_eq(target.get("type", ""), "skill")
+	assert_eq(target.get("skill", ""), "Battle",
+		"Non-school skill at rank 3 should beat school skills at rank 1-2")
+
+
+func test_school_skill_beats_nonschool_at_same_rank() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	c.stamina = 5
+	c.willpower = 5  # primary ring maxed
+	# All school skills at rank 2, non-school skill also at rank 2
+	for sk: String in NPCAdvancement.get_school_skills(c):
+		c.skills[sk] = 2
+	c.skills["Hunting"] = 2  # non-school at same rank
+	var target: Dictionary = NPCAdvancement.get_best_training_target(c)
+	assert_eq(target.get("type", ""), "skill")
+	var school_skills: Array = NPCAdvancement.get_school_skills(c)
+	assert_true(school_skills.has(target.get("skill", "")),
+		"School skill should be preferred over non-school skill at same rank")
+
+
+func test_void_ring_available_to_courtier() -> void:
+	# s52 Part 3: Void Ring is available to all school types after focus rings and skills
+	var c: L5RCharacterData = _make_courtier()
+	# Max focus rings (Air, Water) and all school skills
+	c.reflexes = 5; c.awareness = 5  # Air ring maxed
+	c.stamina = 5; c.perception = 5  # Water ring maxed
+	for sk: String in NPCAdvancement.get_school_skills(c):
+		c.skills[sk] = 5
+	# Void ring 2->3 = 12000 progress = 60 XP
+	c.xp_total = 60
+	c.xp_spent = 0
+	NPCAdvancement.spend_accumulated_xp(c)
+	assert_eq(c.void_ring, 3, "Courtier should be able to advance Void Ring")
+
+
+func test_get_best_training_target_returns_void_for_bushi_when_else_maxed() -> void:
+	var c: L5RCharacterData = _make_character(1)
+	# Max focus rings and all school skills
+	c.stamina = 5; c.willpower = 5  # Earth ring maxed
+	c.agility = 5; c.intelligence = 5  # Fire ring maxed
+	for sk: String in NPCAdvancement.get_school_skills(c):
+		c.skills[sk] = 5
+	var target: Dictionary = NPCAdvancement.get_best_training_target(c)
+	assert_false(target.is_empty(), "Should find Void as next target")
+	assert_eq(target.get("type", ""), "ring")
+	assert_eq(target.get("ring", -1), Enums.Ring.VOID, "Bushi should target Void ring last")

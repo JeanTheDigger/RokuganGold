@@ -204,19 +204,19 @@ The base rate is multiplied by the NPC's current activity level. Multipliers app
 
 **XP Spending Priority**
 
-When the engine spends accumulated NPC XP on progress bars, it follows a fixed priority order. NPCs do not make conscious choices — the engine optimizes toward their school's strengths:
+When the engine spends accumulated NPC XP on progress bars, it follows a fixed priority order. NPCs do not make conscious choices — the engine optimizes toward their school's strengths while reflecting how real skill deepens over time:
 
 - First: Primary Ring for the school (Earth for Hida Bushi, Air for Doji Courtier, Fire for Isawa Shugenja). The most important attribute for their school's function.
 
-- Second: The school's highest-ranked skill — the specialty skill that defines the character's role.
+- Second: All eligible skills, sorted by current rank descending (highest-ranked first). Eligible skills are: (a) all school skills, plus (b) any non-school skill the character already has at rank 1 or higher. Non-school skills at rank 0 are not eligible — NPCs deepen existing knowledge rather than beginning entirely new disciplines. Within the same current rank, school skills are prioritized over non-school skills.
 
-- Third: Other school skills in descending order of current rank. Raises existing strengths before developing new ones.
+- Third: Secondary Ring associated with the school's focus.
 
-- Fourth: Secondary Ring associated with the school's focus.
+- Fourth: Void Ring (all school types — bushi, courtier, monk, and shugenja alike). Every samurai may cultivate inner stillness. Void training is available after school skills and focus rings are addressed.
 
 - Fifth: Any remaining XP is held in reserve until a threshold is reached.
 
-- Never: Non-school skills, Void Ring (unless shugenja), or Rings unrelated to school function. NPCs do not develop broadly — they deepen their specialization.
+- Never: Rings unrelated to school function (beyond the two focus rings and Void), or non-school skills at rank 0. NPCs do not begin disciplines they have never touched.
 
 **Worked Examples**
 

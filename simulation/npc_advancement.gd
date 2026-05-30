@@ -256,13 +256,18 @@ static func spend_accumulated_xp(character: L5RCharacterData) -> Dictionary:
 	if available_xp <= 0:
 		return {"xp_spent": 0, "advancements": []}
 
+	var focus_rings: Array = get_focus_rings(character)
+	var school_skills: Array = get_school_skills(character)
+	# Without a known school there are no spending targets; hold XP in reserve.
+	if school_skills.is_empty() and focus_rings.is_empty():
+		return {"xp_spent": 0, "advancements": []}
+
 	var available_progress: int = available_xp * XP_TO_PROGRESS
 	var total_spent_progress: int = 0
 	var advancements: Array = []
 
-	var focus_rings: Array = get_focus_rings(character)
-	var school_skills: Array = get_school_skills(character)
-	var is_shugenja: bool = character.school_type == Enums.SchoolType.SHUGENJA
+	var eligible_skills: Array = get_eligible_skills(character)
+	var sorted_skills: Array = _sort_eligible_skills_by_priority(character, eligible_skills, school_skills)
 
 	# Priority 1: Primary Ring (first focus ring)
 	if focus_rings.size() > 0:
@@ -271,42 +276,33 @@ static func spend_accumulated_xp(character: L5RCharacterData) -> Dictionary:
 		if result["advanced"]:
 			advancements.append({"type": "ring", "ring": focus_rings[0], "priority": 1})
 
-	# Priority 2: Highest-ranked school skill (the specialty)
-	if total_spent_progress < available_progress and school_skills.size() > 0:
-		var best_skill: String = _get_highest_ranked_skill(character, school_skills)
-		if best_skill != "":
-			var result: Dictionary = _try_spend_on_skill(character, best_skill, available_progress - total_spent_progress)
-			total_spent_progress += result["spent"]
-			if result["advanced"]:
-				advancements.append({"type": "skill", "skill": best_skill, "priority": 2})
-
-	# Priority 3: Other school skills in descending rank order
-	if total_spent_progress < available_progress and school_skills.size() > 1:
-		var best_skill: String = _get_highest_ranked_skill(character, school_skills)
-		var sorted_skills: Array = _sort_skills_by_rank_desc(character, school_skills)
-		for skill: String in sorted_skills:
-			if skill == best_skill:
-				continue
-			if total_spent_progress >= available_progress:
-				break
+	# Priority 2: All eligible skills sorted by rank desc (school skills first within same rank)
+	for skill: String in sorted_skills:
+		if total_spent_progress >= available_progress:
+			break
+		if character.skills.get(skill, 0) < MAX_SKILL_RANK:
 			var result: Dictionary = _try_spend_on_skill(character, skill, available_progress - total_spent_progress)
 			total_spent_progress += result["spent"]
 			if result["advanced"]:
-				advancements.append({"type": "skill", "skill": skill, "priority": 3})
+				advancements.append({"type": "skill", "skill": skill, "priority": 2})
 
-	# Priority 4: Secondary Ring (second focus ring)
+	# Priority 3: Secondary Ring (second focus ring)
 	if total_spent_progress < available_progress and focus_rings.size() > 1:
 		var result: Dictionary = _try_spend_on_ring(character, focus_rings[1], available_progress - total_spent_progress)
 		total_spent_progress += result["spent"]
 		if result["advanced"]:
-			advancements.append({"type": "ring", "ring": focus_rings[1], "priority": 4})
+			advancements.append({"type": "ring", "ring": focus_rings[1], "priority": 3})
 
-	# Priority 4b: Void Ring for shugenja only
-	if total_spent_progress < available_progress and is_shugenja:
-		var result: Dictionary = _try_spend_on_ring(character, Enums.Ring.VOID, available_progress - total_spent_progress)
-		total_spent_progress += result["spent"]
-		if result["advanced"]:
-			advancements.append({"type": "ring", "ring": Enums.Ring.VOID, "priority": 4})
+	# Priority 4: Void Ring (all school types)
+	if total_spent_progress < available_progress:
+		var void_is_focus: bool = focus_rings.has(Enums.Ring.VOID)
+		if not void_is_focus and _get_ring_rank(character, Enums.Ring.VOID) < MAX_RING_RANK:
+			var result: Dictionary = _try_spend_on_ring(character, Enums.Ring.VOID, available_progress - total_spent_progress)
+			total_spent_progress += result["spent"]
+			if result["advanced"]:
+				advancements.append({"type": "ring", "ring": Enums.Ring.VOID, "priority": 4})
+
+	# Priority 5: Remaining XP held in reserve (not spent)
 
 	# Convert progress spent back to XP consumed (ceiling division)
 	@warning_ignore("integer_division")
@@ -316,9 +312,56 @@ static func spend_accumulated_xp(character: L5RCharacterData) -> Dictionary:
 
 	character.xp_spent += xp_consumed
 
-	# Priority 5: Remaining XP held in reserve (not spent)
-
 	return {"xp_spent": xp_consumed, "advancements": advancements}
+
+
+# === SKILL ELIGIBILITY (s52 Part 3) ===
+
+# Returns all skills eligible for XP spending:
+# - All school skills (any rank, including 0)
+# - Non-school skills the character already knows at rank 1+
+static func get_eligible_skills(character: L5RCharacterData) -> Array:
+	var school_skills: Array = get_school_skills(character)
+	var school_set: Dictionary = {}
+	for s: String in school_skills:
+		school_set[s] = true
+	var eligible: Array = school_skills.duplicate()
+	for skill: String in character.skills.keys():
+		if school_set.has(skill):
+			continue
+		if character.skills.get(skill, 0) >= 1:
+			eligible.append(skill)
+	return eligible
+
+
+# Sorts eligible skills by rank desc, with school skills ranked above
+# non-school skills at the same current rank.
+static func _sort_eligible_skills_by_priority(
+		character: L5RCharacterData,
+		eligible: Array,
+		school_skills: Array,
+) -> Array:
+	var school_set: Dictionary = {}
+	for s: String in school_skills:
+		school_set[s] = true
+	var pairs: Array = []
+	for skill: String in eligible:
+		pairs.append({
+			"skill": skill,
+			"rank": character.skills.get(skill, 0),
+			"is_school": school_set.has(skill),
+		})
+	pairs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a["rank"] != b["rank"]:
+			return a["rank"] > b["rank"]
+		if a["is_school"] != b["is_school"]:
+			return a["is_school"]
+		return false
+	)
+	var result: Array = []
+	for p: Dictionary in pairs:
+		result.append(p["skill"])
+	return result
 
 
 # === SKILL SORTING HELPERS ===
@@ -353,35 +396,29 @@ static func _sort_skills_by_rank_desc(character: L5RCharacterData, skill_list: A
 static func get_best_training_target(character: L5RCharacterData) -> Dictionary:
 	var focus_rings: Array = get_focus_rings(character)
 	var school_skills: Array = get_school_skills(character)
-	var is_shugenja: bool = character.school_type == Enums.SchoolType.SHUGENJA
+	if school_skills.is_empty() and focus_rings.is_empty():
+		return {}
+	var eligible_skills: Array = get_eligible_skills(character)
+	var sorted_skills: Array = _sort_eligible_skills_by_priority(character, eligible_skills, school_skills)
 
 	# Priority 1: Primary Ring
 	if focus_rings.size() > 0:
 		if _get_ring_rank(character, focus_rings[0]) < MAX_RING_RANK:
 			return {"type": "ring", "ring": focus_rings[0], "skill": ""}
 
-	# Priority 2: Highest-ranked school skill
-	if school_skills.size() > 0:
-		var best: String = _get_highest_ranked_skill(character, school_skills)
-		if best != "" and character.skills.get(best, 0) < MAX_SKILL_RANK:
-			return {"type": "skill", "skill": best, "ring": Enums.Ring.EARTH}
+	# Priority 2: All eligible skills sorted by rank desc (school first within same rank)
+	for skill: String in sorted_skills:
+		if character.skills.get(skill, 0) < MAX_SKILL_RANK:
+			return {"type": "skill", "skill": skill, "ring": Enums.Ring.EARTH}
 
-	# Priority 3: Other school skills in descending rank order
-	if school_skills.size() > 1:
-		var best: String = _get_highest_ranked_skill(character, school_skills)
-		for skill: String in _sort_skills_by_rank_desc(character, school_skills):
-			if skill == best:
-				continue
-			if character.skills.get(skill, 0) < MAX_SKILL_RANK:
-				return {"type": "skill", "skill": skill, "ring": Enums.Ring.EARTH}
-
-	# Priority 4: Secondary Ring
+	# Priority 3: Secondary Ring
 	if focus_rings.size() > 1:
 		if _get_ring_rank(character, focus_rings[1]) < MAX_RING_RANK:
 			return {"type": "ring", "ring": focus_rings[1], "skill": ""}
 
-	# Priority 4b: Void Ring (shugenja only)
-	if is_shugenja and _get_ring_rank(character, Enums.Ring.VOID) < MAX_RING_RANK:
+	# Priority 4: Void Ring (all school types)
+	var void_is_focus: bool = focus_rings.has(Enums.Ring.VOID)
+	if not void_is_focus and _get_ring_rank(character, Enums.Ring.VOID) < MAX_RING_RANK:
 		return {"type": "ring", "ring": Enums.Ring.VOID, "skill": ""}
 
 	return {}
