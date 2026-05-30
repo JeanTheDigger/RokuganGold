@@ -14,7 +14,7 @@ func _make_samurai(id: int = 1) -> L5RCharacterData:
 	c.role_position = "Samurai"
 	c.status = 2.0
 	c.honor = 5.0
-	c.glory = 2.0
+	c.glory = 3.0
 	c.stamina = 3
 	c.willpower = 2
 	c.strength = 2
@@ -24,7 +24,7 @@ func _make_samurai(id: int = 1) -> L5RCharacterData:
 	c.reflexes = 2
 	c.awareness = 3
 	c.void_ring = 2
-	c.skills = {"Kenjutsu": 3, "Battle": 2, "Etiquette": 2}
+	c.skills = {"Kenjutsu": 3, "Battle": 2, "Etiquette": 2, "Courtier": 3}
 	c.koku = 10.0
 	c.bushido_virtue = Enums.BushidoVirtue.YU
 	return c
@@ -38,6 +38,7 @@ func _make_lord(id: int = 100) -> L5RCharacterData:
 	c.lord_id = -1
 	c.status = 5.0
 	c.awareness = 3
+	c.skills = {"Etiquette": 3}
 	c.disposition_values = {}
 	return c
 
@@ -76,45 +77,61 @@ func test_make_ronin_status_floor_zero():
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.LORD_DEATH_NO_HEIR)
 	assert_almost_eq(c.status, 0.0, 0.01)
 
-func test_make_ronin_honor_loss_involuntary():
+func test_make_ronin_all_causes_status_drop_same():
+	# All causes drop Status by 1.0 — no cause gets extra Status loss (s52.5).
+	for cause in [
+		RoninSystem.RoninCause.LORD_DEATH_NO_HEIR,
+		RoninSystem.RoninCause.CLAN_DESTROYED,
+		RoninSystem.RoninCause.VOLUNTARY_DEPARTURE,
+		RoninSystem.RoninCause.DISMISSAL,
+		RoninSystem.RoninCause.DISMISSAL_DISGRACE,
+	]:
+		var c := _make_samurai()
+		c.status = 3.0
+		RoninSystem.make_ronin(c, cause)
+		assert_almost_eq(c.status, 2.0, 0.01, "cause %d should drop status by 1.0" % cause)
+
+func test_make_ronin_honor_unaffected():
+	# Honor is NOT changed on becoming ronin — Glory only (s52.5).
 	var c := _make_samurai()
 	c.honor = 5.0
+	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL_DISGRACE)
+	assert_almost_eq(c.honor, 5.0, 0.01)
+
+func test_make_ronin_glory_loss_lord_death_no_heir():
+	var c := _make_samurai()
+	c.glory = 3.0
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.LORD_DEATH_NO_HEIR)
-	assert_almost_eq(c.honor, 5.0, 0.01)
+	assert_almost_eq(c.glory, 3.0 - RoninSystem.GLORY_LOSS_LORD_DEATH_NO_HEIR, 0.01)
 
-func test_make_ronin_honor_loss_clan_destroyed():
+func test_make_ronin_glory_loss_clan_destroyed():
 	var c := _make_samurai()
-	c.honor = 5.0
+	c.glory = 3.0
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.CLAN_DESTROYED)
-	assert_almost_eq(c.honor, 5.0, 0.01)
+	assert_almost_eq(c.glory, 3.0 - RoninSystem.GLORY_LOSS_CLAN_DESTROYED, 0.01)
 
-func test_make_ronin_honor_loss_voluntary():
-	# s52.5 A39: VOLUNTARY_DEPARTURE costs HONOR_LOSS_VOLUNTARY = 0.5
+func test_make_ronin_glory_loss_dismissal():
 	var c := _make_samurai()
-	c.honor = 5.0
-	RoninSystem.make_ronin(c, RoninSystem.RoninCause.VOLUNTARY_DEPARTURE)
-	assert_almost_eq(c.honor, 4.5, 0.01)
-
-func test_make_ronin_honor_loss_dismissal():
-	# s52.5 A40: DISMISSAL (formal) costs HONOR_LOSS_DISMISSAL = 0.3
-	var c := _make_samurai()
-	c.honor = 5.0
+	c.glory = 3.0
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
-	assert_almost_eq(c.honor, 4.7, 0.01)
+	assert_almost_eq(c.glory, 3.0 - RoninSystem.GLORY_LOSS_DISMISSAL, 0.01)
 
-func test_make_ronin_honor_loss_dismissal_disgrace():
-	# s52.5 A41: DISMISSAL_DISGRACE costs HONOR_LOSS_DISMISSAL_DISGRACE = 1.0
+func test_make_ronin_glory_loss_dismissal_disgrace():
 	var c := _make_samurai()
-	c.honor = 5.0
+	c.glory = 3.0
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL_DISGRACE)
-	assert_almost_eq(c.honor, 4.0, 0.01)
+	assert_almost_eq(c.glory, 3.0 - RoninSystem.GLORY_LOSS_DISMISSAL_DISGRACE, 0.01)
 
-func test_make_ronin_dismissal_disgrace_extra_status_loss():
-	# DISMISSAL_DISGRACE reduces status by 2.0 instead of 1.0
+func test_make_ronin_glory_loss_voluntary_uses_disloyalty_scale():
+	# VOLUNTARY_DEPARTURE uses rank-scaled disloyalty Glory (s52.5 A40).
 	var c := _make_samurai()
-	c.status = 4.0
-	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL_DISGRACE)
-	assert_almost_eq(c.status, 2.0, 0.01)
+	c.honor = 5.0  # honor rank 5 → HONOR_TABLE_DISLOYALTY index 5 → -14 → -1.4
+	c.glory = 5.0
+	RoninSystem.make_ronin(c, RoninSystem.RoninCause.VOLUNTARY_DEPARTURE)
+	var expected_loss: float = absf(CrimeSystem.get_disloyalty_honor(c))
+	# Glory loss equals |disloyalty cost| at this honor rank; Glory went down.
+	assert_true(c.glory < 5.0)
+	assert_almost_eq(c.glory, 5.0 - expected_loss, 0.01)
 
 func test_make_ronin_preserves_original_lord():
 	var c := _make_samurai()
@@ -169,59 +186,56 @@ func test_is_ronin_false_lord_tier():
 
 # === ACCEPT INTO SERVICE ===
 
-func test_accept_into_service():
+func test_accept_into_service_sets_lord_and_role():
 	var c := _make_samurai()
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
-	RoninSystem.accept_into_service(c, 200, "Retainer", "Crane")
+	RoninSystem.accept_into_service(c, 200, "Retainer")
 	assert_eq(c.lord_id, 200)
 	assert_eq(c.role_position, "Retainer")
-	assert_eq(c.clan, "Crane")
 	assert_true(c.status >= 1.0)
 
-func test_accept_restores_honor():
-	# s52.5 A42: HIRING_HONOR_RECOVERY = 0.3
+func test_accept_into_service_clan_unchanged():
+	# Hiring as retainer does NOT change clan — formal induction is a separate step (s52.5 D).
 	var c := _make_samurai()
-	c.honor = 4.5
+	c.clan = "Lion"
+	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
+	RoninSystem.accept_into_service(c, 200, "Retainer", "Crane")
+	assert_eq(c.clan, "Lion")
+
+func test_accept_restores_glory():
+	# s52.5 A43: HIRING_GLORY_RECOVERY = 0.3
+	var c := _make_samurai()
 	c.status = 0.8
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
-	var honor_before: float = c.honor
-	RoninSystem.accept_into_service(c, 200, "Retainer", "Crane")
-	assert_almost_eq(c.honor, honor_before + RoninSystem.HIRING_HONOR_RECOVERY, 0.01)
+	var glory_before: float = c.glory
+	RoninSystem.accept_into_service(c, 200, "Retainer")
+	assert_almost_eq(c.glory, glory_before + RoninSystem.HIRING_GLORY_RECOVERY, 0.01)
+
+func test_accept_honor_unchanged():
+	# Honor is not modified on acceptance (s52.5 D).
+	var c := _make_samurai()
+	c.honor = 5.0
+	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
+	RoninSystem.accept_into_service(c, 200, "Retainer")
+	assert_almost_eq(c.honor, 5.0, 0.01)
 
 func test_accept_clears_petition_cooldown():
 	var c := _make_samurai()
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
 	c.supply_ledger["petition_refused_until"] = 500
-	RoninSystem.accept_into_service(c, 200, "Retainer", "Crane")
+	RoninSystem.accept_into_service(c, 200, "Retainer")
 	assert_false(c.supply_ledger.has("petition_refused_until"))
 
 func test_no_longer_ronin_after_service():
 	var c := _make_samurai()
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.LORD_DEATH_NO_HEIR)
-	RoninSystem.accept_into_service(c, 200, "Retainer", "Crane")
+	RoninSystem.accept_into_service(c, 200, "Retainer")
 	assert_false(RoninSystem.is_ronin(c))
 
 
-# === PETITION TN ===
-
-func test_compute_petition_tn_acquaintance():
-	# Disposition +1 to +30 → TN modifier 0 → TN = BASE_PETITION_TN
-	assert_eq(RoninSystem.compute_petition_tn(15), RoninSystem.BASE_PETITION_TN)
-
-func test_compute_petition_tn_stranger_cold():
-	# Disposition == 0 → +5 modifier
-	assert_eq(RoninSystem.compute_petition_tn(0), RoninSystem.BASE_PETITION_TN + 5)
-
-func test_compute_petition_tn_friend():
-	# Disposition +31 to +60 → -5 modifier
-	assert_eq(RoninSystem.compute_petition_tn(40), RoninSystem.BASE_PETITION_TN - 5)
-
-func test_compute_petition_tn_ally():
-	# Disposition +61+ → -10 modifier
-	assert_eq(RoninSystem.compute_petition_tn(70), RoninSystem.BASE_PETITION_TN - 10)
+# === PETITION ===
 
 func test_petition_negative_disposition_auto_rejects():
-	# Disposition ≤ -1 → auto-rejected before roll
 	var c := _make_samurai()
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
 	var lord := _make_lord()
@@ -231,51 +245,89 @@ func test_petition_negative_disposition_auto_rejects():
 	assert_true(result.get("rejected", false))
 	assert_eq(result.get("reason", ""), "disposition_too_low")
 
-func test_petition_passes_correct_tn():
-	# Disposition == 15 (Acquaintance) → TN = BASE_PETITION_TN = 20
+func test_petition_permanent_ronin_auto_rejects():
+	var c := _make_samurai()
+	RoninSystem.make_ronin(c, RoninSystem.RoninCause.VOLUNTARY_DEPARTURE)
+	c.permanent_ronin = true
+	var lord := _make_lord()
+	var dice := DiceEngine.new(42)
+	var result: Dictionary = RoninSystem.resolve_petition(c, lord, dice, 20)
+	assert_false(result["success"])
+	assert_true(result.get("rejected", false))
+	assert_eq(result.get("reason", ""), "permanent_ronin")
+
+func test_petition_returns_roll_totals():
 	var c := _make_samurai()
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
 	var lord := _make_lord()
-	var dice := DiceEngine.new(42)
-	var result: Dictionary = RoninSystem.resolve_petition(c, lord, dice, 15)
-	assert_eq(result["tn"], RoninSystem.BASE_PETITION_TN)
+	var dice := DiceEngine.new(12345)
+	var result: Dictionary = RoninSystem.resolve_petition(c, lord, dice, 0)
+	assert_true(result.has("ronin_total"))
+	assert_true(result.has("lord_total"))
+	assert_true(result.has("margin"))
+	assert_true(result.has("presentation_modifier"))
 
-func test_petition_friend_gets_lower_tn():
+func test_petition_presentation_modifier_from_margin():
+	# presentation_modifier = margin / PETITION_MARGIN_SCALE (integer division).
 	var c := _make_samurai()
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
 	var lord := _make_lord()
-	var dice := DiceEngine.new(42)
-	var result: Dictionary = RoninSystem.resolve_petition(c, lord, dice, 40)
-	assert_eq(result["tn"], RoninSystem.BASE_PETITION_TN - 5)
+	var dice := DiceEngine.new(99999)
+	var result: Dictionary = RoninSystem.resolve_petition(c, lord, dice, 0)
+	var expected_modifier: int = result["margin"] / RoninSystem.PETITION_MARGIN_SCALE
+	assert_eq(result["presentation_modifier"], expected_modifier)
 
-
-# === PERMANENT RONIN: CONVICTION ===
-
-func test_treason_conviction_sets_permanent_ronin():
+func test_petition_success_requires_min_tn():
+	# Even if ronin wins the contested roll, must beat PETITION_MIN_TN = 20.
 	var c := _make_samurai()
-	RoninSystem.check_permanent_ronin_on_conviction(c, Enums.CrimeType.TREASON)
-	assert_true(c.permanent_ronin)
-
-func test_maho_conviction_sets_permanent_ronin():
-	var c := _make_samurai()
-	RoninSystem.check_permanent_ronin_on_conviction(c, Enums.CrimeType.MAHO_USE)
-	assert_true(c.permanent_ronin)
-
-func test_minor_crime_does_not_set_permanent_ronin():
-	var c := _make_samurai()
-	RoninSystem.check_permanent_ronin_on_conviction(c, Enums.CrimeType.DISHONORABLE_CONDUCT)
-	assert_false(c.permanent_ronin)
-
-func test_treason_returns_true():
-	var c := _make_samurai()
-	assert_true(RoninSystem.check_permanent_ronin_on_conviction(c, Enums.CrimeType.TREASON))
-
-func test_minor_crime_returns_false():
-	var c := _make_samurai()
-	assert_false(RoninSystem.check_permanent_ronin_on_conviction(c, Enums.CrimeType.DISHONORABLE_CONDUCT))
+	# Zero all skills so roll total is likely below 20.
+	c.skills = {}
+	c.awareness = 1
+	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
+	var lord := _make_lord()
+	lord.skills = {}
+	lord.awareness = 1
+	var dice := DiceEngine.new(1)  # Low seed → low rolls
+	var result: Dictionary = RoninSystem.resolve_petition(c, lord, dice, 0)
+	# success == (ronin_total >= 20)
+	assert_eq(result["success"], result["ronin_total"] >= RoninSystem.PETITION_MIN_TN)
 
 
-# === PERMANENT RONIN: TRIPLE DISGRACE ===
+# === LORD AUTO-REJECTS ===
+
+func test_lord_auto_rejects_permanent_ronin():
+	var lord := _make_lord()
+	var petitioner := _make_samurai()
+	petitioner.permanent_ronin = true
+	assert_true(RoninSystem.lord_auto_rejects(lord, petitioner, 10, []))
+
+func test_lord_auto_rejects_negative_disposition():
+	var lord := _make_lord()
+	var petitioner := _make_samurai()
+	assert_true(RoninSystem.lord_auto_rejects(lord, petitioner, -1, []))
+
+func test_lord_auto_rejects_treason():
+	var lord := _make_lord()
+	var petitioner := _make_samurai()
+	assert_true(RoninSystem.lord_auto_rejects(lord, petitioner, 5, [Enums.CrimeType.TREASON]))
+
+func test_lord_auto_rejects_maho():
+	var lord := _make_lord()
+	var petitioner := _make_samurai()
+	assert_true(RoninSystem.lord_auto_rejects(lord, petitioner, 5, [Enums.CrimeType.MAHO_USE]))
+
+func test_lord_auto_rejects_murder():
+	var lord := _make_lord()
+	var petitioner := _make_samurai()
+	assert_true(RoninSystem.lord_auto_rejects(lord, petitioner, 5, [Enums.CrimeType.UNSANCTIONED_COVERT_KILLING]))
+
+func test_lord_does_not_auto_reject_neutral_no_crimes():
+	var lord := _make_lord()
+	var petitioner := _make_samurai()
+	assert_false(RoninSystem.lord_auto_rejects(lord, petitioner, 0, []))
+
+
+# === PERMANENT RONIN: FIVE DISGRACES ===
 
 func _make_disgrace_record(perpetrator_id: int) -> CrimeRecord:
 	var rec := CrimeRecord.new()
@@ -283,19 +335,19 @@ func _make_disgrace_record(perpetrator_id: int) -> CrimeRecord:
 	rec.source_action = "dismissal_disgrace"
 	return rec
 
-func test_triple_disgrace_sets_permanent_ronin():
+func test_five_disgraces_sets_permanent_ronin():
 	var c := _make_samurai()
-	var recs: Array = [
-		_make_disgrace_record(c.character_id),
-		_make_disgrace_record(c.character_id),
-		_make_disgrace_record(c.character_id),
-	]
+	var recs: Array = []
+	for i in range(RoninSystem.PERMANENT_RONIN_DISGRACE_COUNT):
+		recs.append(_make_disgrace_record(c.character_id))
 	RoninSystem.check_permanent_ronin_on_disgrace(c, recs)
 	assert_true(c.permanent_ronin)
 
-func test_double_disgrace_does_not_set_permanent_ronin():
+func test_four_disgraces_does_not_set_permanent_ronin():
 	var c := _make_samurai()
 	var recs: Array = [
+		_make_disgrace_record(c.character_id),
+		_make_disgrace_record(c.character_id),
 		_make_disgrace_record(c.character_id),
 		_make_disgrace_record(c.character_id),
 	]
@@ -304,19 +356,15 @@ func test_double_disgrace_does_not_set_permanent_ronin():
 
 func test_disgrace_only_counts_own_records():
 	var c := _make_samurai(1)
-	# Three disgraces belonging to character 2, not character 1
-	var recs: Array = [
-		_make_disgrace_record(2),
-		_make_disgrace_record(2),
-		_make_disgrace_record(2),
-	]
+	var recs: Array = []
+	for i in range(RoninSystem.PERMANENT_RONIN_DISGRACE_COUNT):
+		recs.append(_make_disgrace_record(2))
 	RoninSystem.check_permanent_ronin_on_disgrace(c, recs)
 	assert_false(c.permanent_ronin)
 
 func test_already_permanent_returns_true_immediately():
 	var c := _make_samurai()
 	c.permanent_ronin = true
-	# No records needed — already permanent
 	assert_true(RoninSystem.check_permanent_ronin_on_disgrace(c, []))
 
 
@@ -368,27 +416,8 @@ func test_is_desperate():
 
 # === INSURGENCY SEEDING ===
 
-func test_can_seed_insurgency_bushi():
+func test_can_seed_insurgency_when_desperate():
 	var c := _make_samurai()
-	c.bushido_virtue = Enums.BushidoVirtue.YU
-	RoninSystem.mark_ronin_start(c, 0)
-	assert_true(RoninSystem.can_seed_insurgency(c, 10))
-
-func test_courtier_can_seed_insurgency_when_desperate():
-	var c := _make_samurai()
-	c.school_type = Enums.SchoolType.COURTIER
-	RoninSystem.mark_ronin_start(c, 0)
-	assert_true(RoninSystem.can_seed_insurgency(c, 10))
-
-func test_gi_virtue_can_seed_insurgency_when_desperate():
-	var c := _make_samurai()
-	c.bushido_virtue = Enums.BushidoVirtue.GI
-	RoninSystem.mark_ronin_start(c, 0)
-	assert_true(RoninSystem.can_seed_insurgency(c, 10))
-
-func test_meiyo_virtue_can_seed_insurgency_when_desperate():
-	var c := _make_samurai()
-	c.bushido_virtue = Enums.BushidoVirtue.MEIYO
 	RoninSystem.mark_ronin_start(c, 0)
 	assert_true(RoninSystem.can_seed_insurgency(c, 10))
 
@@ -396,13 +425,6 @@ func test_cannot_seed_insurgency_not_desperate():
 	var c := _make_samurai()
 	RoninSystem.mark_ronin_start(c, 10)
 	assert_false(RoninSystem.can_seed_insurgency(c, 14))
-
-func test_ninja_can_seed_insurgency():
-	var c := _make_samurai()
-	c.school_type = Enums.SchoolType.NINJA
-	c.bushido_virtue = Enums.BushidoVirtue.YU
-	RoninSystem.mark_ronin_start(c, 0)
-	assert_true(RoninSystem.can_seed_insurgency(c, 10))
 
 
 # === MERCENARY HIRING ===
@@ -453,16 +475,6 @@ func test_process_seasonal_detects_desperate():
 func test_process_seasonal_insurgency_seeds():
 	var c := _make_samurai()
 	c.status = 0.5
-	c.bushido_virtue = Enums.BushidoVirtue.YU
-	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
-	RoninSystem.mark_ronin_start(c, 10)
-	var result: Dictionary = RoninSystem.process_seasonal_ronin([c], 18)
-	assert_true(result["insurgency_seeds"].has(c.character_id))
-
-func test_process_seasonal_insurgency_seed_gi():
-	var c := _make_samurai()
-	c.status = 0.5
-	c.bushido_virtue = Enums.BushidoVirtue.GI
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
 	RoninSystem.mark_ronin_start(c, 10)
 	var result: Dictionary = RoninSystem.process_seasonal_ronin([c], 18)
@@ -474,8 +486,6 @@ func test_process_seasonal_multiple_characters():
 	c2.character_id = 2
 	c1.status = 0.5
 	c2.status = 0.5
-	c1.bushido_virtue = Enums.BushidoVirtue.YU
-	c2.bushido_virtue = Enums.BushidoVirtue.CHUGI
 	RoninSystem.make_ronin(c1, RoninSystem.RoninCause.DISMISSAL)
 	RoninSystem.make_ronin(c2, RoninSystem.RoninCause.DISMISSAL)
 	RoninSystem.mark_ronin_start(c1, 0)
@@ -487,7 +497,7 @@ func test_process_seasonal_multiple_characters():
 	assert_eq(result["debt_results"].size(), 1)
 
 
-# === RONIN CAUSE ENUM (s52.5: DISMISSAL_DISGRACE added) ===
+# === RONIN CAUSE ENUM ===
 
 func test_all_causes_exist():
 	assert_eq(RoninSystem.RoninCause.LORD_DEATH_NO_HEIR, 0)
@@ -503,24 +513,14 @@ func test_permanent_ronin_rejects_accept_into_service():
 	var c := _make_samurai()
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.VOLUNTARY_DEPARTURE)
 	c.permanent_ronin = true
-	var result: Dictionary = RoninSystem.accept_into_service(c, 200, "Retainer", "Crane")
+	var result: Dictionary = RoninSystem.accept_into_service(c, 200, "Retainer")
 	assert_true(result.get("rejected", false))
 	assert_eq(c.lord_id, -1)
-
-func test_permanent_ronin_rejects_petition():
-	var c := _make_samurai()
-	RoninSystem.make_ronin(c, RoninSystem.RoninCause.VOLUNTARY_DEPARTURE)
-	c.permanent_ronin = true
-	var lord := _make_lord()
-	var dice := DiceEngine.new(42)
-	var result: Dictionary = RoninSystem.resolve_petition(c, lord, dice, 20)
-	assert_false(result["success"])
-	assert_true(result.get("rejected", false))
 
 func test_non_permanent_ronin_accepts_service():
 	var c := _make_samurai()
 	RoninSystem.make_ronin(c, RoninSystem.RoninCause.DISMISSAL)
 	assert_false(c.permanent_ronin)
-	var result: Dictionary = RoninSystem.accept_into_service(c, 200, "Retainer", "Crane")
+	var result: Dictionary = RoninSystem.accept_into_service(c, 200, "Retainer")
 	assert_false(result.get("rejected", false))
 	assert_eq(c.lord_id, 200)

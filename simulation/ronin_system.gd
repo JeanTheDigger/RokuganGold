@@ -16,32 +16,27 @@ const RONIN_CLAN: String = "Ronin"
 const SEASONS_BEFORE_DEBT: int = 4
 const SEASONS_BEFORE_DESPERATE: int = 8
 
-# Honor transitions on becoming ronin — locked in s52.5 A38-A41.
-const HONOR_LOSS_ON_RONIN: float = 0.0           # LORD_DEATH_NO_HEIR, CLAN_DESTROYED
-const HONOR_LOSS_VOLUNTARY: float = 0.5           # VOLUNTARY_DEPARTURE (s52.5 A39)
-const HONOR_LOSS_DISMISSAL: float = 0.3           # DISMISSAL formal release (s52.5 A40)
-const HONOR_LOSS_DISMISSAL_DISGRACE: float = 1.0  # DISMISSAL_DISGRACE (s52.5 A41)
+# Glory transitions on becoming ronin — locked in s52.5 A38-A42.
+const GLORY_LOSS_LORD_DEATH_NO_HEIR: float = 0.3    # LORD_DEATH_NO_HEIR (s52.5 A38)
+const GLORY_LOSS_CLAN_DESTROYED: float = 1.0         # CLAN_DESTROYED (s52.5 A39)
+# VOLUNTARY_DEPARTURE uses CrimeSystem.get_disloyalty_honor() rank-scaled (s52.5 A40)
+const GLORY_LOSS_DISMISSAL: float = 0.3              # DISMISSAL formal release (s52.5 A41)
+const GLORY_LOSS_DISMISSAL_DISGRACE: float = 2.0     # DISMISSAL_DISGRACE (s52.5 A42)
 
-# Honor recovery on acceptance into service — locked in s52.5 A42.
-const HIRING_HONOR_RECOVERY: float = 0.3
+# Glory recovery on acceptance as retainer — locked in s52.5 A43.
+const HIRING_GLORY_RECOVERY: float = 0.3
 
-# Petition mechanics — locked in s52.5 A43-A45.
-const BASE_PETITION_TN: int = 20
+# Petition mechanics — locked in s52.5 A44-A47.
+const PETITION_MIN_TN: int = 20
 const PETITION_FAILURE_DISPOSITION_PENALTY: int = -3
 const PETITION_COOLDOWN_DAYS: int = 90
+const PETITION_MARGIN_SCALE: int = 5  # +1 effective disposition per 5 margin
 
-# Disposition TN modifiers for petition (Part B table, s52.5).
-const PETITION_DISP_COLD_MODIFIER: int = 5       # disposition == 0 (pure Stranger)
-const PETITION_DISP_FRIEND_MODIFIER: int = -5    # disposition +31 to +60
-const PETITION_DISP_ALLY_MODIFIER: int = -10     # disposition +61+
+# Permanent ronin disgrace-count threshold — locked in s52.5 A48.
+const PERMANENT_RONIN_DISGRACE_COUNT: int = 5
 
-# Permanent ronin disgrace-count threshold.
-const PERMANENT_RONIN_DISGRACE_COUNT: int = 3
-
-# Kept for external callers (no mechanic — stipend loss handled by ResourceTick).
-const STIPEND_LOSS_HONOR_COST: float = 0.0
-# Legacy alias kept for any callers that used the old zero constant name.
-const PETITION_TN: int = BASE_PETITION_TN
+# Legacy aliases.
+const BASE_PETITION_TN: int = PETITION_MIN_TN
 
 
 static func make_ronin(character: L5RCharacterData, cause: RoninCause) -> Dictionary:
@@ -58,11 +53,10 @@ static func make_ronin(character: L5RCharacterData, cause: RoninCause) -> Dictio
 	character.commanded_unit_id = -1
 	character.military_rank = Enums.MilitaryRank.NONE
 
-	var status_loss: float = 2.0 if cause == RoninCause.DISMISSAL_DISGRACE else 1.0
-	HonorGlorySystem.apply_status_change(character, -status_loss)
+	HonorGlorySystem.apply_status_change(character, -1.0)
 
-	var honor_loss: float = _honor_loss_for_cause(cause)
-	HonorGlorySystem.apply_honor_change(character, -honor_loss)
+	var glory_loss: float = _glory_loss_for_cause(cause, character)
+	HonorGlorySystem.apply_glory_change(character, -glory_loss)
 
 	return {
 		"character_id": character.character_id,
@@ -70,20 +64,25 @@ static func make_ronin(character: L5RCharacterData, cause: RoninCause) -> Dictio
 		"old_clan": old_clan,
 		"old_role": old_role,
 		"old_lord_id": old_lord,
-		"honor_loss": honor_loss,
+		"glory_loss": glory_loss,
 	}
 
 
-static func _honor_loss_for_cause(cause: RoninCause) -> float:
+static func _glory_loss_for_cause(cause: RoninCause, character: L5RCharacterData) -> float:
 	match cause:
+		RoninCause.LORD_DEATH_NO_HEIR:
+			return GLORY_LOSS_LORD_DEATH_NO_HEIR
+		RoninCause.CLAN_DESTROYED:
+			return GLORY_LOSS_CLAN_DESTROYED
 		RoninCause.VOLUNTARY_DEPARTURE:
-			return HONOR_LOSS_VOLUNTARY
+			# Rank-scaled disloyalty per Table 2.3 — applied as Glory (s52.5 A40).
+			return absf(CrimeSystem.get_disloyalty_honor(character))
 		RoninCause.DISMISSAL:
-			return HONOR_LOSS_DISMISSAL
+			return GLORY_LOSS_DISMISSAL
 		RoninCause.DISMISSAL_DISGRACE:
-			return HONOR_LOSS_DISMISSAL_DISGRACE
+			return GLORY_LOSS_DISMISSAL_DISGRACE
 		_:
-			return HONOR_LOSS_ON_RONIN
+			return 0.0
 
 
 static func is_ronin(character: L5RCharacterData) -> bool:
@@ -94,24 +93,23 @@ static func accept_into_service(
 	character: L5RCharacterData,
 	new_lord_id: int,
 	new_role: String,
-	new_clan: String,
+	_new_clan: String = "",
 ) -> Dictionary:
 	if character.permanent_ronin:
 		return {"character_id": character.character_id, "rejected": true, "reason": "permanent_ronin"}
 	character.lord_id = new_lord_id
 	character.role_position = new_role
-	character.clan = new_clan
+	# Clan is NOT changed here — acceptance is hiring as retainer, not formal clan induction.
 	if character.status < 1.0:
 		HonorGlorySystem.apply_status_change(character, 1.0 - character.status)
-	HonorGlorySystem.apply_honor_change(character, HIRING_HONOR_RECOVERY)
+	HonorGlorySystem.apply_glory_change(character, HIRING_GLORY_RECOVERY)
 	character.supply_ledger.erase("petition_refused_until")
 
 	return {
 		"character_id": character.character_id,
 		"new_lord_id": new_lord_id,
 		"new_role": new_role,
-		"new_clan": new_clan,
-		"honor_recovery": HIRING_HONOR_RECOVERY,
+		"glory_recovery": HIRING_GLORY_RECOVERY,
 	}
 
 
@@ -155,47 +153,8 @@ static func can_seed_insurgency(character: L5RCharacterData, current_season_coun
 	return true
 
 
-## Compute the petition TN from the lord's disposition toward the petitioner (s52.5 Part B).
-static func compute_petition_tn(lord_disposition: int) -> int:
-	if lord_disposition >= 61:
-		return BASE_PETITION_TN + PETITION_DISP_ALLY_MODIFIER
-	if lord_disposition >= 31:
-		return BASE_PETITION_TN + PETITION_DISP_FRIEND_MODIFIER
-	if lord_disposition >= 1:
-		return BASE_PETITION_TN
-	if lord_disposition == 0:
-		return BASE_PETITION_TN + PETITION_DISP_COLD_MODIFIER
-	# Negative disposition — petition should not proceed (caller should gate on >= 0)
-	return BASE_PETITION_TN + PETITION_DISP_COLD_MODIFIER
-
-
-## Returns true if the lord should auto-reject the petition before the roll (s52.5 Part C).
-static func lord_auto_rejects(
-	lord: L5RCharacterData,
-	petitioner: L5RCharacterData,
-	lord_disposition: int,
-	lords_known_crime_types: Array,
-) -> bool:
-	if petitioner.permanent_ronin:
-		return true
-	if lord_disposition <= -1:
-		return true
-	# Known TREASON or MAHO_USE conviction is a hard disqualifier
-	for ct: int in lords_known_crime_types:
-		if ct == Enums.CrimeType.TREASON or ct == Enums.CrimeType.MAHO_USE:
-			return true
-	# Former enemy-clan voluntary departure
-	if petitioner.supply_ledger.get("ronin_cause", -1) == RoninCause.VOLUNTARY_DEPARTURE:
-		if lord.clan != petitioner.clan:
-			for w: Dictionary in lord.known_contacts:
-				if w.is_empty():
-					continue
-			# Check if lord's clan is at war with petitioner's original clan — caller passes this
-			if lords_known_crime_types.has(-999):  # sentinel passed by caller when at_war
-				return true
-	return false
-
-
+## Resolve the petition roll: Ronin Courtier/Awareness vs Lord Etiquette/Awareness (s52.5 Part B).
+## Returns success (ronin beat PETITION_MIN_TN), the roll totals, and the presentation_modifier.
 static func resolve_petition(
 	character: L5RCharacterData,
 	target_lord: L5RCharacterData,
@@ -207,28 +166,41 @@ static func resolve_petition(
 	if lord_disposition <= -1:
 		return {"success": false, "rejected": true, "reason": "disposition_too_low", "character_id": character.character_id, "lord_id": target_lord.character_id}
 
-	var tn: int = compute_petition_tn(lord_disposition)
-
-	var check: Dictionary = SkillResolver.resolve_skill_check(
-		character, dice_engine, "Etiquette", tn,
+	var check: Dictionary = SkillResolver.resolve_contested_check(
+		character, target_lord, dice_engine, "Courtier", "Etiquette",
 	)
+	var ronin_total: int = check.get("total_a", 0)
+	var lord_total: int = check.get("total_b", 0)
+	var margin: int = ronin_total - lord_total
+	var presentation_modifier: int = margin / PETITION_MARGIN_SCALE
+	var success: bool = ronin_total >= PETITION_MIN_TN
+
 	return {
-		"success": check.get("success", false),
-		"rolled": check.get("total", 0),
-		"tn": tn,
+		"success": success,
+		"ronin_total": ronin_total,
+		"lord_total": lord_total,
+		"margin": margin,
+		"presentation_modifier": presentation_modifier,
 		"character_id": character.character_id,
 		"lord_id": target_lord.character_id,
 	}
 
 
-## Set permanent_ronin on TREASON or MAHO_USE conviction (s52.5 Part E).
-static func check_permanent_ronin_on_conviction(
-	character: L5RCharacterData,
-	crime_type: int,
+## Returns true if the lord should auto-reject the petition (s52.5 Part B).
+static func lord_auto_rejects(
+	_lord: L5RCharacterData,
+	petitioner: L5RCharacterData,
+	lord_disposition: int,
+	lords_known_crime_types: Array,
 ) -> bool:
-	if crime_type == Enums.CrimeType.TREASON or crime_type == Enums.CrimeType.MAHO_USE:
-		character.permanent_ronin = true
+	if petitioner.permanent_ronin:
 		return true
+	if lord_disposition <= -1:
+		return true
+	for ct: int in lords_known_crime_types:
+		if ct == Enums.CrimeType.TREASON or ct == Enums.CrimeType.MAHO_USE \
+				or ct == Enums.CrimeType.UNSANCTIONED_COVERT_KILLING:
+			return true
 	return false
 
 
