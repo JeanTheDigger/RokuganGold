@@ -311,12 +311,14 @@ static func _evaluate_contract_offer(
 		if contract_type == "PROVINCE_DEFENSE" or contract_type == "MAGISTRATE_AIDE":
 			accept = true
 	elif character.bushido_virtue == Enums.BushidoVirtue.MEIYO:
-		# Only accept if lord has sufficient status (tracked via disposition proxy)
-		accept = disposition >= 0.0
+		# Accepts only if the lord is of sufficient status (s52.6 Part D).
+		accept = event.get("lord_status", 0.0) >= 4.0
 	elif character.shourido_virtue == Enums.ShouridoVirtue.KETSUI:
 		accept = true
 	elif character.shourido_virtue == Enums.ShouridoVirtue.SEIGYO:
-		accept = disposition >= 0.0
+		# Accepts if FIND_NEW_LORD is their active standing objective — the contract
+		# fulfills that goal rather than conflicting with it (s52.6 Part D).
+		accept = event.get("has_find_new_lord_standing", false)
 	elif character.shourido_virtue == Enums.ShouridoVirtue.ISHI:
 		# Self-reliant: only accepts when truly desperate (already handled above)
 		accept = false
@@ -330,6 +332,7 @@ static func _evaluate_contract_offer(
 			"target_npc_id": lord_id,
 			"priority": 3,
 			"contract_type": contract_type,
+			"duration_seasons": event.get("duration_seasons", 1),
 			"lord_id": lord_id,
 		}
 	return {

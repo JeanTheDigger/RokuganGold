@@ -773,7 +773,7 @@ static func advance_day(
 
 	_process_hire_ronin_writebacks(
 		day_result.get("results", []),
-		characters_by_id,
+		characters_by_id, objectives_map,
 	)
 
 	_process_contract_acceptance_writebacks(
@@ -6721,6 +6721,7 @@ static func _process_petition_writebacks(
 static func _process_hire_ronin_writebacks(
 	results: Array,
 	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
 ) -> void:
 	for result: Dictionary in results:
 		if result.get("action_id", "") != "HIRE_RONIN":
@@ -6738,14 +6739,22 @@ static func _process_hire_ronin_writebacks(
 		if not RoninSystem.is_ronin(ronin):
 			continue
 
+		# Seigyo evaluation needs to know whether FIND_NEW_LORD is the ronin's
+		# standing objective — it accepts contracts that resolve their current goal.
+		var standing: Dictionary = objectives_map.get(ronin_id, {}).get("standing", {})
+		var has_find_new_lord_standing: bool = standing.get("need_type", "") == "FIND_NEW_LORD"
+
 		# Inject CONTRACT_OFFERED reactive event into ronin's pending_events.
 		ronin.pending_events.append({
 			"reactive_type": "CONTRACT_OFFERED",
 			"lord_id": effects.get("lord_id", -1),
+			"lord_status": effects.get("lord_status", 0.0),
 			"ronin_id": ronin_id,
 			"contract_type": effects.get("contract_type", "PROVINCE_DEFENSE"),
 			"duration_seasons": effects.get("duration_seasons", 1),
 			"payment": effects.get("payment", 0.0),
+			"current_season": effects.get("current_season", 0),
+			"has_find_new_lord_standing": has_find_new_lord_standing,
 		})
 
 

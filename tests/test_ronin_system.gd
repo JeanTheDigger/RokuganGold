@@ -1013,6 +1013,126 @@ func test_reactive_contract_high_disposition_accepts():
 	assert_eq(result.get("action", ""), "ACCEPT_CONTRACT")
 
 
+func test_reactive_contract_meiyo_accepts_high_status_lord():
+	# Meiyo: accepts if lord's status >= 4.0 (s52.6 Part D). NOT a disposition check.
+	var ronin := _make_ronin_char(10)
+	ronin.bushido_virtue = Enums.BushidoVirtue.MEIYO
+	ronin.disposition_values = {200: 0}  # neutral disposition — not the deciding factor
+	var event: Dictionary = {
+		"reactive_type": "CONTRACT_OFFERED",
+		"lord_id": 200,
+		"lord_status": 5.0,
+		"contract_type": "PROVINCE_DEFENSE",
+		"duration_seasons": 2,
+		"payment": 6.0,
+		"current_season": 1,
+		"has_find_new_lord_standing": true,
+	}
+	var result: Dictionary = ReactiveDecisions._evaluate_contract_offer(event, ronin)
+	assert_eq(result.get("action", ""), "ACCEPT_CONTRACT")
+
+
+func test_reactive_contract_meiyo_refuses_low_status_lord():
+	# Meiyo: refuses lord with status < 4.0 even with positive disposition.
+	var ronin := _make_ronin_char(10)
+	ronin.bushido_virtue = Enums.BushidoVirtue.MEIYO
+	ronin.disposition_values = {200: 25}  # positive, but status too low
+	var event: Dictionary = {
+		"reactive_type": "CONTRACT_OFFERED",
+		"lord_id": 200,
+		"lord_status": 3.0,
+		"contract_type": "PROVINCE_DEFENSE",
+		"duration_seasons": 1,
+		"payment": 3.0,
+		"current_season": 1,
+		"has_find_new_lord_standing": true,
+	}
+	var result: Dictionary = ReactiveDecisions._evaluate_contract_offer(event, ronin)
+	assert_eq(result.get("action", ""), "DECLINE_CONTRACT")
+
+
+func test_reactive_contract_seigyo_accepts_with_find_new_lord_standing():
+	# Seigyo: accepts if FIND_NEW_LORD is their standing objective (contract fulfills it).
+	var ronin := _make_ronin_char(10)
+	ronin.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	ronin.disposition_values = {200: -5}  # negative disposition — not the deciding factor
+	var event: Dictionary = {
+		"reactive_type": "CONTRACT_OFFERED",
+		"lord_id": 200,
+		"lord_status": 3.0,
+		"contract_type": "PROVINCE_DEFENSE",
+		"duration_seasons": 1,
+		"payment": 3.0,
+		"current_season": 1,
+		"has_find_new_lord_standing": true,
+	}
+	var result: Dictionary = ReactiveDecisions._evaluate_contract_offer(event, ronin)
+	assert_eq(result.get("action", ""), "ACCEPT_CONTRACT")
+
+
+func test_reactive_contract_seigyo_refuses_without_find_new_lord_standing():
+	# Seigyo: refuses if FIND_NEW_LORD is not their standing — contract conflicts with goals.
+	var ronin := _make_ronin_char(10)
+	ronin.shourido_virtue = Enums.ShouridoVirtue.SEIGYO
+	ronin.disposition_values = {200: 20}  # positive, but no FIND_NEW_LORD standing
+	var event: Dictionary = {
+		"reactive_type": "CONTRACT_OFFERED",
+		"lord_id": 200,
+		"lord_status": 5.0,
+		"contract_type": "PROVINCE_DEFENSE",
+		"duration_seasons": 1,
+		"payment": 3.0,
+		"current_season": 1,
+		"has_find_new_lord_standing": false,
+	}
+	var result: Dictionary = ReactiveDecisions._evaluate_contract_offer(event, ronin)
+	assert_eq(result.get("action", ""), "DECLINE_CONTRACT")
+
+
+func test_reactive_contract_accept_propagates_duration_seasons():
+	# ACCEPT_CONTRACT result must include duration_seasons so the writeback can store
+	# the correct contract_end_ic_day — without it the contract always defaults to 1 season.
+	var ronin := _make_ronin_char(10)
+	ronin.disposition_values = {200: 35}
+	var event: Dictionary = {
+		"reactive_type": "CONTRACT_OFFERED",
+		"lord_id": 200,
+		"lord_status": 5.0,
+		"contract_type": "PROVINCE_DEFENSE",
+		"duration_seasons": 3,
+		"payment": 9.0,
+		"current_season": 1,
+		"has_find_new_lord_standing": true,
+	}
+	var result: Dictionary = ReactiveDecisions._evaluate_contract_offer(event, ronin)
+	assert_eq(result.get("action", ""), "ACCEPT_CONTRACT")
+	assert_eq(result.get("duration_seasons", -1), 3)
+
+
+func test_executor_hire_ronin_effects_include_lord_status_and_season():
+	# Executor effects must include lord_status (for Meiyo check) and current_season
+	# (for is_desperate check) so the reactive event carries both fields.
+	var lord := _make_lord(200)
+	lord.koku = 30.0
+	lord.status = 5.0
+	var ronin := _make_ronin_char(10)
+	ronin.skills = {"Courtier": 5}
+	ronin.awareness = 4
+	var ctx := _make_ctx_for_lord(200, 10)
+	ctx.season = 3
+	ctx.disposition_values = {}
+	var chars: Dictionary = {200: lord, 10: ronin}
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "HIRE_RONIN"
+	action.target_npc_id = 10
+	action.metadata = {"target_ronin_id": 10, "contract_type": "PROVINCE_DEFENSE", "duration_seasons": 2}
+	var result: Dictionary = ActionExecutor.execute(action, lord, ctx, DiceEngine.new(999999), {}, {}, chars)
+	if result.get("success", false):
+		var eff: Dictionary = result.get("effects", {})
+		assert_eq(eff.get("lord_status", -1.0), 5.0)
+		assert_eq(eff.get("current_season", -1), 3)
+
+
 # -- contract acceptance writeback --
 
 func test_writeback_contract_acceptance_sets_contract_fields():

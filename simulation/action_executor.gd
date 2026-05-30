@@ -3241,10 +3241,12 @@ static func _execute_hire_ronin(
 			"injects_reactive_event": true,
 			"reactive_type": "CONTRACT_OFFERED",
 			"lord_id": character.character_id,
+			"lord_status": character.status,
 			"ronin_id": ronin_id,
 			"contract_type": contract_type,
 			"duration_seasons": duration_seasons,
 			"payment": payment,
+			"current_season": ctx.season,
 		},
 	}
 
