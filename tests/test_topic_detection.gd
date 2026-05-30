@@ -159,12 +159,54 @@ func test_path_a_no_sighting_when_topic_already_exists():
 # ---------------------------------------------------------------------------
 
 func test_path_b_patrol_in_province_fires_sighting():
+	# Fugitive (Scorpion) is at settlement 200 in province 50 (Crane territory).
+	# Crime was committed in province 99 (Crane). ORDER_PATROL covers province 50.
 	var fugitive := _make_char(1, "Fugitive", "Scorpion")
 	fugitive.physical_location = "200"  # settlement 200 → province 50
 	fugitive.clan = "Scorpion"
 
+	var settlement_200 := _make_settlement(200, 50)  # fugitive's location
+	var settlement_101 := _make_settlement(101, 99)  # crime location
+
+	var crime_province := ProvinceData.new()
+	crime_province.province_id = 99
+	crime_province.clan = "Crane"  # different from "Scorpion" → cross-clan
+
+	var crime := _make_crime(1)
+	crime.location = "101"  # maps to province 99 via settlement_101
+
+	var topics: Array = []
+	var next_id: Array = [10]
+	var chars_by_id: Dictionary = {1: fugitive}
+	var provinces: Dictionary = {99: crime_province}
+	var season_meta: Dictionary = {"patrolled_provinces": {50: true}}
+
+	DayOrchestrator._process_fugitive_extradition_seasonal(
+		[crime], [fugitive], chars_by_id, provinces,
+		[settlement_200, settlement_101],
+		topics, next_id, 100, season_meta
+	)
+
+	var sighting_count: int = 0
+	for t: TopicData in topics:
+		if t.topic_type == "fugitive_sighting":
+			sighting_count += 1
+	assert_eq(sighting_count, 1, "Path B patrol in fugitive's province fires sighting")
+
+
+func test_path_b_no_patrol_no_sighting():
+	# Same setup as Path B test but province 50 is NOT in patrolled_provinces.
+	# No Path C trigger (low status). Expect no sighting topic.
+	var fugitive := _make_char(1, "Fugitive", "Scorpion")
+	fugitive.physical_location = "200"
+	fugitive.status = 2.0  # below 5.0 threshold
+
 	var settlement_200 := _make_settlement(200, 50)
 	var settlement_101 := _make_settlement(101, 99)
+
+	var crime_province := ProvinceData.new()
+	crime_province.province_id = 99
+	crime_province.clan = "Crane"
 
 	var crime := _make_crime(1)
 	crime.location = "101"
@@ -172,20 +214,20 @@ func test_path_b_patrol_in_province_fires_sighting():
 	var topics: Array = []
 	var next_id: Array = [10]
 	var chars_by_id: Dictionary = {1: fugitive}
-	var season_meta: Dictionary = {"patrolled_provinces": {50: true}}
+	var provinces: Dictionary = {99: crime_province}
+	var season_meta: Dictionary = {}  # no patrolled_provinces
 
 	DayOrchestrator._process_fugitive_extradition_seasonal(
-		[crime], [fugitive], chars_by_id,
-		{},  # provinces (empty — cross-clan check will fail, but Path B should still fire before that guard)
+		[crime], [fugitive], chars_by_id, provinces,
 		[settlement_200, settlement_101],
 		topics, next_id, 100, season_meta
 	)
 
-	# Cross-clan guard may prevent topic depending on crime_province lookup.
-	# Test specifically the path B flag by checking slug matches
-	# (If clan check blocks it, 0 topics. The important assertion is no crash.)
-	# Verify the function runs without error:
-	assert_true(true)
+	var sighting_count: int = 0
+	for t: TopicData in topics:
+		if t.topic_type == "fugitive_sighting":
+			sighting_count += 1
+	assert_eq(sighting_count, 0, "No patrol and low status produces no sighting")
 
 
 # ---------------------------------------------------------------------------

@@ -1131,7 +1131,6 @@ static func advance_day(
 		TheaterSystem.process_degradation(theater_pieces, ic_day)
 		_process_doshin_seasonal_recovery(world_states)
 		_tick_kuni_wards(season_meta)
-		season_meta.erase("patrolled_provinces")
 		_process_construction_completions(
 			constructions, settlements, provinces, ships, dice_engine,
 			next_settlement_id, active_topics, next_topic_id, ic_day,
@@ -1223,6 +1222,8 @@ static func advance_day(
 			crime_records, characters, characters_by_id, provinces, settlements,
 			active_topics, next_topic_id, ic_day, season_meta,
 		)
+		# Erase patrolled_provinces AFTER extradition pass reads it for Path B sighting.
+		season_meta.erase("patrolled_provinces")
 		pregnancy_results = _process_pregnancy_checks(
 			marriages, characters_by_id, children, dice_engine, ic_day,
 			next_character_id,
