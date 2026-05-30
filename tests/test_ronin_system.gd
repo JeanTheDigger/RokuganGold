@@ -1993,3 +1993,84 @@ func test_terminate_metadata_ignores_dead_ronin():
 	var chars: Dictionary = {200: lord, 10: ronin}
 	var meta: Dictionary = NPCDecisionEngine._build_terminate_contract_metadata(ctx, chars)
 	assert_eq(meta.get("target_ronin_id", -1), -1)
+
+
+# === s52.8 TERMINATE_CONTRACT NEEDTYPE — Phase 4c Precondition Filter ===
+
+func _make_terminate_option() -> NPCDataStructures.ScoredAction:
+	var opt := NPCDataStructures.ScoredAction.new()
+	opt.action_id = "TERMINATE_CONTRACT"
+	opt.score = 35
+	return opt
+
+
+func test_precondition_filter_removes_terminate_when_no_contracts():
+	# has_active_contracts absent → filter removes TERMINATE_CONTRACT.
+	var options: Array = [_make_terminate_option()]
+	var world_state: Dictionary = {}
+	var result: Array = NPCDecisionEngine._apply_terminate_contract_precondition_filter(
+		options, world_state
+	)
+	assert_eq(result.size(), 0)
+
+
+func test_precondition_filter_removes_terminate_when_flag_false():
+	# has_active_contracts explicitly false → filter removes.
+	var options: Array = [_make_terminate_option()]
+	var world_state: Dictionary = {"has_active_contracts": false}
+	var result: Array = NPCDecisionEngine._apply_terminate_contract_precondition_filter(
+		options, world_state
+	)
+	assert_eq(result.size(), 0)
+
+
+func test_precondition_filter_keeps_terminate_when_flag_true():
+	# has_active_contracts true → filter keeps TERMINATE_CONTRACT.
+	var options: Array = [_make_terminate_option()]
+	var world_state: Dictionary = {"has_active_contracts": true}
+	var result: Array = NPCDecisionEngine._apply_terminate_contract_precondition_filter(
+		options, world_state
+	)
+	assert_eq(result.size(), 1)
+	assert_eq((result[0] as NPCDataStructures.ScoredAction).action_id, "TERMINATE_CONTRACT")
+
+
+func test_precondition_filter_passes_through_non_terminate_actions():
+	# Other actions are never removed by this filter.
+	var opt := NPCDataStructures.ScoredAction.new()
+	opt.action_id = "SET_TAX_RATE"
+	opt.score = 100
+	var options: Array = [opt]
+	var world_state: Dictionary = {}
+	var result: Array = NPCDecisionEngine._apply_terminate_contract_precondition_filter(
+		options, world_state
+	)
+	assert_eq(result.size(), 1)
+
+
+func test_precondition_filter_no_op_when_terminate_not_in_list():
+	# Fast-path: terminate not in options → no iteration needed.
+	var options: Array = []
+	var world_state: Dictionary = {"has_active_contracts": true}
+	var result: Array = NPCDecisionEngine._apply_terminate_contract_precondition_filter(
+		options, world_state
+	)
+	assert_eq(result.size(), 0)
+
+
+func test_objective_alignment_adjust_tax_contains_terminate_contract():
+	# Verifies s52.8 A77 is wired into the JSON table.
+	var tables: Dictionary = {}
+	var file := FileAccess.open(
+		"res://systems/npc_engine/data/tables/objective_alignment.json",
+		FileAccess.READ,
+	)
+	assert_not_null(file, "objective_alignment.json must be readable")
+	tables = JSON.parse_string(file.get_as_text())
+	file.close()
+	var adjust_tax: Dictionary = tables.get("ADJUST_TAX", {})
+	assert_true(
+		adjust_tax.has("TERMINATE_CONTRACT"),
+		"ADJUST_TAX must have TERMINATE_CONTRACT entry",
+	)
+	assert_eq(adjust_tax.get("TERMINATE_CONTRACT", 0), 35)

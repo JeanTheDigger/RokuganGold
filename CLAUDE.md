@@ -3514,6 +3514,12 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   abandoned→CONTRACT_ABANDONED_DISPOSITION (−5) to lord. TERMINATE_CONTRACT (0 AP, 1 civilian order):
   half-koku refund, CONTRACT_EARLY_TERMINATION_DISPOSITION (−3) to lord disposition. Constants A51–A59
   locked. 44 tests.
+- **s52.8 TERMINATE_CONTRACT NeedType** — GDD `gdd/s52.8_terminate_contract_needtype_locked.md`.
+  TERMINATE_CONTRACT wired under ADJUST_TAX NeedType at score 35 (below SET_STIPEND_RATE=60 for
+  social-cost penalty, above WRITE_LETTER=30). Phase 4c precondition filter removes it when
+  `has_active_contracts=false`. `has_active_contracts` injected per lord via pre-built set of
+  contract holders scanned before wave resolution; cleared by stale-flag pass. Constants A77–A79
+  locked. 6 tests.
 - **s52.7 Clan Induction** — GDD `gdd/s52.7_clan_induction_locked.md` (redesigned).
   Three-stage process: (1) 8 deed credits from contract completions, (2) 1 extraordinary
   deed (contract completed while lord's clan at war AND province in crisis AND 3+ season

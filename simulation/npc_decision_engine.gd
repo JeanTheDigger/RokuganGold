@@ -558,6 +558,25 @@ static func _remove_action(
 	return filtered
 
 
+# -- Phase 4c: TERMINATE_CONTRACT Precondition Filter (s52.8 A79) -------------
+# Removes TERMINATE_CONTRACT when the lord has no active contracts.
+
+static func _apply_terminate_contract_precondition_filter(
+	options: Array,
+	world_state: Dictionary,
+) -> Array:
+	var has_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "TERMINATE_CONTRACT":
+			has_action = true
+			break
+	if not has_action:
+		return options
+	if world_state.get("has_active_contracts", false):
+		return options
+	return _remove_action(options, "TERMINATE_CONTRACT")
+
+
 # -- Phase 5: Score All Options ------------------------------------------------
 # Eight components per s55.4.5 / s55.3.3.
 
@@ -850,6 +869,7 @@ static func run(
 	options = apply_personality_filter(options, ctx, filter_data)
 	options = apply_allowlist_filter(options, need.need_type, scoring_tables)
 	options = _apply_tattoo_precondition_filter(options, character, ctx, chars_by_id, world_state)
+	options = _apply_terminate_contract_precondition_filter(options, world_state)
 
 	# Phase 5
 	score_all(options, need, ctx, scoring_tables,

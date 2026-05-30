@@ -13053,6 +13053,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"settlement_type",
 		"champion_conclusion_candidates", "local_tier3_candidates",
 		"theater_pieces_to_perform", "wip_piece_ids", "learnable_piece_ids",
+		"has_active_contracts",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -17560,6 +17561,14 @@ static func _inject_base_character_context(
 		if _t is TopicData:
 			g_topics_by_id[(_t as TopicData).topic_id] = _t
 
+	# Pre-build set of lord IDs that have at least one active contract (s52.8 A78).
+	var g_lords_with_contracts: Dictionary = {}
+	for _cv: L5RCharacterData in characters:
+		if CharacterStats.is_dead(_cv):
+			continue
+		if _cv.lord_id >= 0 and _cv.supply_ledger.get("contract_end_ic_day", -1) >= 0:
+			g_lords_with_contracts[_cv.lord_id] = true
+
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
 			continue
@@ -17602,6 +17611,7 @@ static func _inject_base_character_context(
 			ws["characters_by_id"] = characters_by_id
 			ws["active_armies"] = active_armies
 			ws["active_insurgencies"] = insurgencies
+			ws["has_active_contracts"] = g_lords_with_contracts.get(c.character_id, false)
 
 		if has_champion_authority and c.character_id == phoenix_champion_id:
 			ws["phoenix_champion_authority"] = true
