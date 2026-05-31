@@ -702,3 +702,153 @@ func test_shrine_offering_flag_set_for_temple() -> void:
 	assert_eq(active_arrangements.size(), 1)
 	var arr: IkebanaArrangementData = active_arrangements[0] as IkebanaArrangementData
 	assert_true(arr.is_shrine_offering)
+
+
+# --------------------------------------------------------------------------
+# Garden synergy — _inject_ikebana_context (s57.29.6)
+# --------------------------------------------------------------------------
+
+func _make_garden(gid: int, sid: int, tier: int, destroyed: bool = false) -> GardenData:
+	var g: GardenData = GardenData.new()
+	g.garden_id = gid
+	g.settlement_id = sid
+	g.current_tier = tier
+	g.destroyed = destroyed
+	return g
+
+
+func test_inject_ikebana_context_injects_garden_fr_for_ikebana_artisan() -> void:
+	## Artisan: Ikebana at same settlement as a Fine (tier 2) garden gets +1 FR.
+	var world_states: Dictionary = {
+		_artisan.character_id: {"known_objectives": {}}
+	}
+	var garden: GardenData = _make_garden(99, 10, 2)  # Fine tier at settlement "10"
+	DayOrchestrator._inject_ikebana_context(
+		[], [_settlement_castle], [_artisan], world_states, [garden]
+	)
+	var obj: Dictionary = world_states[_artisan.character_id]["known_objectives"]
+	assert_eq(obj.get("ikebana_garden_fr", -99), 1, "Fine garden gives +1 FR")
+	assert_eq(obj.get("ikebana_garden_id", -99), 99, "garden_id recorded")
+
+
+func test_inject_ikebana_context_no_fr_without_garden() -> void:
+	## No garden present → FR = 0, garden_id = -1.
+	var world_states: Dictionary = {
+		_artisan.character_id: {"known_objectives": {}}
+	}
+	DayOrchestrator._inject_ikebana_context(
+		[], [_settlement_castle], [_artisan], world_states, []
+	)
+	var obj: Dictionary = world_states[_artisan.character_id]["known_objectives"]
+	assert_eq(obj.get("ikebana_garden_fr", -99), 0)
+	assert_eq(obj.get("ikebana_garden_id", -99), -1)
+
+
+func test_inject_ikebana_context_destroyed_garden_ignored() -> void:
+	## Destroyed garden contributes no FR bonus.
+	var world_states: Dictionary = {
+		_artisan.character_id: {"known_objectives": {}}
+	}
+	var garden: GardenData = _make_garden(99, 10, 5, true)  # destroyed Legendary
+	DayOrchestrator._inject_ikebana_context(
+		[], [_settlement_castle], [_artisan], world_states, [garden]
+	)
+	var obj: Dictionary = world_states[_artisan.character_id]["known_objectives"]
+	assert_eq(obj.get("ikebana_garden_fr", -99), 0)
+	assert_eq(obj.get("ikebana_garden_id", -99), -1)
+
+
+func test_inject_ikebana_context_no_fr_without_ikebana_skill() -> void:
+	## Character at same settlement but lacking Artisan: Ikebana gets no garden FR.
+	var non_artisan: L5RCharacterData = L5RCharacterData.new()
+	non_artisan.character_id = 99
+	non_artisan.skills = {}
+	non_artisan.physical_location = "10"
+	var world_states: Dictionary = {
+		non_artisan.character_id: {"known_objectives": {}}
+	}
+	var garden: GardenData = _make_garden(99, 10, 4)  # Masterwork
+	DayOrchestrator._inject_ikebana_context(
+		[], [_settlement_castle], [non_artisan], world_states, [garden]
+	)
+	var obj: Dictionary = world_states[non_artisan.character_id]["known_objectives"]
+	assert_eq(obj.get("ikebana_garden_fr", -99), 0)
+	assert_eq(obj.get("ikebana_garden_id", -99), -1)
+
+
+func test_inject_ikebana_context_masterwork_gives_2_fr() -> void:
+	## Masterwork garden (tier 4) gives +2 FR to ikebana artisan.
+	var world_states: Dictionary = {
+		_artisan.character_id: {"known_objectives": {}}
+	}
+	var garden: GardenData = _make_garden(7, 10, 4)
+	DayOrchestrator._inject_ikebana_context(
+		[], [_settlement_castle], [_artisan], world_states, [garden]
+	)
+	var obj: Dictionary = world_states[_artisan.character_id]["known_objectives"]
+	assert_eq(obj.get("ikebana_garden_fr", -99), 2)
+
+
+# --------------------------------------------------------------------------
+# Garden synergy — _process_ikebana_performance_writebacks sets materials_source
+# --------------------------------------------------------------------------
+
+func test_writeback_sets_materials_source_when_garden_id_present() -> void:
+	## When effects contain garden_id >= 0, arr.materials_source is set to it.
+	var chars_by_id: Dictionary = {_artisan.character_id: _artisan}
+	var settlements: Array = [_settlement_castle]
+	var active_arrangements: Array = []
+	var next_id: Array = [1]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1]
+
+	var result: Dictionary = {
+		"action_id": "PUBLIC_PERFORMANCE",
+		"success": true,
+		"character_id": _artisan.character_id,
+		"effects": {
+			"art_form": PerformativeArtsSystem.ArtForm.IKEBANA,
+			"raises": 0,
+			"garden_id": 42,
+		},
+	}
+
+	DayOrchestrator._process_ikebana_performance_writebacks(
+		[result], active_arrangements, next_id, chars_by_id,
+		settlements, 1, TimeSystem.Season.SPRING,
+		active_topics, next_topic_id, _dice
+	)
+
+	assert_eq(active_arrangements.size(), 1)
+	var arr: IkebanaArrangementData = active_arrangements[0] as IkebanaArrangementData
+	assert_eq(arr.materials_source, 42)
+
+
+func test_writeback_materials_source_minus1_when_no_garden() -> void:
+	## When garden_id is absent from effects, materials_source stays at default -1.
+	var chars_by_id: Dictionary = {_artisan.character_id: _artisan}
+	var settlements: Array = [_settlement_castle]
+	var active_arrangements: Array = []
+	var next_id: Array = [1]
+	var active_topics: Array = []
+	var next_topic_id: Array = [1]
+
+	var result: Dictionary = {
+		"action_id": "PUBLIC_PERFORMANCE",
+		"success": true,
+		"character_id": _artisan.character_id,
+		"effects": {
+			"art_form": PerformativeArtsSystem.ArtForm.IKEBANA,
+			"raises": 0,
+		},
+	}
+
+	DayOrchestrator._process_ikebana_performance_writebacks(
+		[result], active_arrangements, next_id, chars_by_id,
+		settlements, 1, TimeSystem.Season.SPRING,
+		active_topics, next_topic_id, _dice
+	)
+
+	assert_eq(active_arrangements.size(), 1)
+	var arr: IkebanaArrangementData = active_arrangements[0] as IkebanaArrangementData
+	assert_eq(arr.materials_source, -1)

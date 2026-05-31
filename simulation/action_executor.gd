@@ -631,8 +631,15 @@ static func _execute_public_performance(
 	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 	var fatigue_count: int = character.pieces_seen.get("_performance_count_today", 0)
 
+	# Garden synergy (s57.29.6): ikebana artisans gain Free Raises from a local garden.
+	var garden_fr: int = 0
+	var garden_id: int = -1
+	if art_form == PerformativeArtsSystem.ArtForm.IKEBANA:
+		garden_fr = ctx.known_objectives.get("ikebana_garden_fr", 0)
+		garden_id = ctx.known_objectives.get("ikebana_garden_id", -1)
+
 	var perf_result: Dictionary = PerformativeArtsSystem.resolve_public_performance(
-		character, art_form, witness_ids, dice_engine, fatigue_count
+		character, art_form, witness_ids, dice_engine, fatigue_count, garden_fr,
 	)
 
 	PerformativeArtsSystem.apply_performance_effects(character, perf_result, characters_by_id)
@@ -661,6 +668,7 @@ static func _execute_public_performance(
 			"art_form": art_form,
 			"raises": perf_result.get("raises", 0),
 			"performance_applied": true,
+			"garden_id": garden_id,
 		},
 	}
 

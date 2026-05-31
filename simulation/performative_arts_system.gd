@@ -53,6 +53,7 @@ static func resolve_public_performance(
 	witness_ids: Array,
 	dice_engine: DiceEngine,
 	fatigue_count: int = 0,
+	free_raises: int = 0,
 ) -> Dictionary:
 	var skill_name: String = get_performance_skill(art_form)
 	var skill_rank: int = performer.skills.get(skill_name, 0)
@@ -60,7 +61,7 @@ static func resolve_public_performance(
 
 	var check: Dictionary = SkillResolver.resolve_skill_check(
 		performer, dice_engine, skill_name, PERFORMANCE_TN,
-		0, "", Enums.Trait.AWARENESS, unskilled_bonus,
+		free_raises, "", Enums.Trait.AWARENESS, unskilled_bonus,
 	)
 	var total: int = check.get("total", 0)
 	var margin: int = total - PERFORMANCE_TN

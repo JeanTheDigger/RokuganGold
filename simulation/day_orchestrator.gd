@@ -191,7 +191,7 @@ static func advance_day(
 	_inject_hunt_context(active_hunts, world_states, active_topics)
 	_inject_theater_context(theater_pieces, characters, world_states)
 	_inject_senbazuru_context(active_senbazurus, characters, world_states)
-	_inject_ikebana_context(active_arrangements, settlements, characters, world_states)
+	_inject_ikebana_context(active_arrangements, settlements, characters, world_states, active_gardens)
 	_inject_garden_context(active_gardens, active_bonsai, commission_records, settlements, characters, world_states)
 	_inject_painting_context(active_paintings, settlements, characters, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
@@ -13237,6 +13237,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"champion_conclusion_candidates", "local_tier3_candidates",
 		"theater_pieces_to_perform", "wip_piece_ids", "learnable_piece_ids",
 		"has_active_contracts",
+		"ikebana_garden_fr", "ikebana_garden_id",
 		"active_senbazuru_id", "senbazuru_is_complete",
 		"active_commission_id", "commission_quality_tier",
 		"local_garden_id", "local_garden_tier",
@@ -21834,11 +21835,15 @@ static func _inject_ikebana_context(
 	settlements: Array,
 	characters: Array,
 	world_states: Dictionary,
+	active_gardens: Array = [],
 ) -> void:
 	## Inject per-character ikebana slot state into known_objectives.
 	## ikebana_slot_empty: true if no unexpired displayed arrangement at character's
 	##   settlement and character has Artisan: Ikebana rank ≥ 1.
 	## ikebana_worship_fr: FR bonus for PERFORM_WORSHIP at this settlement.
+	## ikebana_garden_fr: FR bonus from garden synergy (s57.29.6) when a non-destroyed
+	##   garden exists at the character's settlement.
+	## ikebana_garden_id: garden_id of the synergy garden, or -1 if none.
 
 	# Build settlement_id → arrangement lookup (only displayed, non-expired)
 	var slot_filled: Dictionary = {}   # str(settlement_id) → true
@@ -21859,6 +21864,19 @@ static func _inject_ikebana_context(
 			var existing: int = worship_fr_map.get(arr.display_settlement_id, 0)
 			worship_fr_map[arr.display_settlement_id] = maxi(existing, fr)
 
+	# Build settlement_id → best garden lookup for ikebana synergy (s57.29.6)
+	var garden_by_settlement: Dictionary = {}  # str(settlement_id) → GardenData
+	for g_v: Variant in active_gardens:
+		if not g_v is GardenData:
+			continue
+		var g: GardenData = g_v as GardenData
+		if g.destroyed:
+			continue
+		var sid: String = str(g.settlement_id)
+		var existing_g: Variant = garden_by_settlement.get(sid)
+		if existing_g == null or (existing_g as GardenData).current_tier < g.current_tier:
+			garden_by_settlement[sid] = g
+
 	for character: L5RCharacterData in characters:
 		if CharacterStats.is_dead(character):
 			continue
@@ -21872,6 +21890,16 @@ static func _inject_ikebana_context(
 		var slot_empty: bool = not slot_filled.get(loc, false)
 		ws["known_objectives"]["ikebana_slot_empty"] = slot_empty
 		ws["known_objectives"]["ikebana_worship_fr"] = worship_fr_map.get(loc, 0)
+
+		# Garden synergy (s57.29.6): inject FR bonus for ikebana artisans
+		var garden: Variant = garden_by_settlement.get(loc)
+		if garden != null and character.skills.get("Artisan: Ikebana", 0) >= 1:
+			var gd: GardenData = garden as GardenData
+			ws["known_objectives"]["ikebana_garden_fr"] = IkebanaSystem.garden_fr_for_quality(gd.current_tier)
+			ws["known_objectives"]["ikebana_garden_id"] = gd.garden_id
+		else:
+			ws["known_objectives"]["ikebana_garden_fr"] = 0
+			ws["known_objectives"]["ikebana_garden_id"] = -1
 
 
 static func _process_ikebana_performance_writebacks(
@@ -21954,6 +21982,10 @@ static func _process_ikebana_performance_writebacks(
 		arr.is_shrine_offering = IkebanaSystem.is_shrine_eligible(settlement)
 		arr.composition_materials = materials
 		arr.composition_description = description
+		# Garden synergy (s57.29.6): record which garden supplied the materials.
+		var src_garden_id: int = effects.get("garden_id", -1)
+		if src_garden_id >= 0:
+			arr.materials_source = src_garden_id
 		active_arrangements.append(arr)
 
 
