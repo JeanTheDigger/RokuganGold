@@ -352,12 +352,12 @@ func test_critical_failure_margin_is_minus_10() -> void:
 	assert_eq(PerformativeArtsSystem.CRITICAL_FAILURE_MARGIN, -10)
 
 
-func test_perform_for_success_disp_zeroed() -> void:
-	assert_eq(PerformativeArtsSystem.PERFORM_FOR_SUCCESS_DISPOSITION, 0)
+func test_perform_for_success_disp_is_8() -> void:
+	assert_eq(PerformativeArtsSystem.PERFORM_FOR_SUCCESS_DISPOSITION, 8)  # locked s12.4a
 
 
-func test_perform_for_failure_disp_zeroed() -> void:
-	assert_eq(PerformativeArtsSystem.PERFORM_FOR_FAILURE_DISPOSITION, 0)
+func test_perform_for_failure_disp_is_minus3() -> void:
+	assert_eq(PerformativeArtsSystem.PERFORM_FOR_FAILURE_DISPOSITION, -3)  # locked s12.4a
 
 
 # ==============================================================================
@@ -390,3 +390,101 @@ func test_tea_ceremony_uses_awareness_not_void() -> void:
 
 	assert_eq(result["skill_used"], "Tea Ceremony")
 	assert_true(result["roll_total"] > 0)
+
+
+# ==============================================================================
+# IKEBANA art form (s57.29)
+# ==============================================================================
+
+func test_ikebana_uses_artisan_ikebana_skill() -> void:
+	assert_eq(PerformativeArtsSystem.get_performance_skill(
+		PerformativeArtsSystem.ArtForm.IKEBANA), "Artisan: Ikebana")
+
+
+func test_get_best_art_form_picks_ikebana_when_highest() -> void:
+	var performer := _make_performer()
+	performer.skills = {"Artisan: Ikebana": 5, "Artisan": 2}
+	performer.awareness = 3
+	var best := PerformativeArtsSystem.get_best_art_form(performer)
+	assert_eq(best, PerformativeArtsSystem.ArtForm.IKEBANA)
+
+
+# ==============================================================================
+# free_raises parameter (s57.29.6 garden synergy)
+# ==============================================================================
+
+func test_free_raises_appear_in_result_dict() -> void:
+	## The result dict must have the standard keys regardless of free_raises value.
+	var performer := _make_performer("Artisan: Ikebana", 3)
+	performer.awareness = 3
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var result := PerformativeArtsSystem.resolve_public_performance(
+		performer, PerformativeArtsSystem.ArtForm.IKEBANA, [], dice, 0, 2)
+	assert_has(result, "outcome")
+	assert_has(result, "raises")
+	assert_has(result, "roll_total")
+	assert_has(result, "disposition_per_witness")
+
+
+func test_free_raises_improve_outcome_vs_zero_same_seed() -> void:
+	## With the same seed, adding free_raises can only keep or improve the roll total.
+	## We verify this by checking the higher-raises run produces >= roll total.
+	var performer := _make_performer("Artisan: Ikebana", 2)
+	performer.awareness = 2
+
+	var dice_a := DiceEngine.new()
+	dice_a.set_seed(77)
+	var result_base := PerformativeArtsSystem.resolve_public_performance(
+		performer, PerformativeArtsSystem.ArtForm.IKEBANA, [], dice_a, 0, 0)
+
+	var dice_b := DiceEngine.new()
+	dice_b.set_seed(77)
+	var result_raised := PerformativeArtsSystem.resolve_public_performance(
+		performer, PerformativeArtsSystem.ArtForm.IKEBANA, [], dice_b, 0, 2)
+
+	assert_gte(result_raised["roll_total"], result_base["roll_total"])
+
+
+# ==============================================================================
+# Masterful threshold (s12.4a)
+# ==============================================================================
+
+func test_masterful_extra_glory_vs_success() -> void:
+	## MASTERFUL (raises >= 2) gives SUCCESS_GLORY + MASTERFUL_GLORY.
+	## SUCCESS gives only SUCCESS_GLORY. Verify the constants support the distinction.
+	assert_gt(
+		PerformativeArtsSystem.SUCCESS_GLORY + PerformativeArtsSystem.MASTERFUL_GLORY,
+		PerformativeArtsSystem.SUCCESS_GLORY,
+	)
+
+
+func test_fatigue_3_produces_zero_effects() -> void:
+	## fatigue_count >= 2 → multiplier 0.0 → no disp change regardless of outcome.
+	var performer := _make_performer("Artisan", 5)
+	performer.awareness = 4
+	var dice := _make_high_roller()
+	var result := PerformativeArtsSystem.resolve_public_performance(
+		performer, PerformativeArtsSystem.ArtForm.POETRY, [10], dice, 3)
+	assert_eq(result["disposition_per_witness"], 0, "fatigue_count=3 → mult=0 → no disp")
+	assert_eq(result["glory_change"], 0.0, "fatigue_count=3 → mult=0 → no glory")
+
+
+# ==============================================================================
+# Dead witness guard
+# ==============================================================================
+
+func test_apply_effects_skips_dead_witness() -> void:
+	var performer := _make_performer()
+	var dead_witness := _make_recipient(10)
+	dead_witness.wounds_taken = 999  # well above lethal threshold
+	var chars_by_id := {10: dead_witness}
+
+	var result := {
+		"glory_change": 0.0,
+		"witness_effects": [{"character_id": 10, "disposition_change": 5}],
+	}
+
+	PerformativeArtsSystem.apply_performance_effects(performer, result, chars_by_id)
+
+	assert_eq(dead_witness.disposition_values.get(1, 0), 0, "dead witness unchanged")
