@@ -210,6 +210,14 @@ func _bootstrap_fresh_world() -> void:
 	for piece: TheaterPieceData in canon_pieces:
 		WorldState.theater_pieces.append(piece)
 
+	# Seed world-start paintings per GDD s57.27
+	var initial_paintings: Array = PaintingSystem.generate_world_start_paintings(
+		WorldState.settlements, WorldState.next_painting_id, dice,
+	)
+	WorldState.active_paintings.clear()
+	for painting: PaintingData in initial_paintings:
+		WorldState.active_paintings.append(painting)
+
 	# Seed world-start ikebana arrangements per GDD s57.29.11
 	var initial_arrangements: Array[IkebanaArrangementData] = IkebanaSystem.generate_initial_arrangements(
 		WorldState.characters,

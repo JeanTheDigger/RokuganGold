@@ -625,6 +625,21 @@ static func _apply_garden_precondition_filter(
 	if gardening_rank < 1:
 		options = _remove_action(options, "COLLECT_BONSAI_SPECIMEN")
 
+	# COMPOSE_PAINTING: requires Artisan: Painting rank ≥ 1.
+	var painting_rank: int = character.skills.get("Artisan: Painting", 0)
+	if painting_rank < 1:
+		options = _remove_action(options, "COMPOSE_PAINTING")
+
+	# DISPLAY_PAINTING: requires a displayable painting in inventory.
+	var displayable: Array = ctx.known_objectives.get("displayable_paintings", [])
+	if displayable.is_empty():
+		options = _remove_action(options, "DISPLAY_PAINTING")
+
+	# PRESENT_EMAKIMONO: requires a completed emakimono.
+	var presentable: Array = ctx.known_objectives.get("presentable_emakimono", [])
+	if presentable.is_empty():
+		options = _remove_action(options, "PRESENT_EMAKIMONO")
+
 	return options
 
 
@@ -1226,6 +1241,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"CULTIVATE_GARDEN", "MAINTAIN_GARDEN",
 				"COLLECT_BONSAI_SPECIMEN", "TEND_BONSAI", "DISPLAY_BONSAI",
 				"OFFER_ART_COMMISSION",
+				"COMPOSE_PAINTING", "DISPLAY_PAINTING", "PRESENT_EMAKIMONO",
 				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
 				"DO_NOTHING", "REST",
 			]
@@ -1266,6 +1282,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"APPROVE_CLAN_INDUCTION",
 				"CRAFT",
 				"OFFER_ART_COMMISSION", "TEND_BONSAI", "DISPLAY_BONSAI",
+				"DISPLAY_PAINTING", "PRESENT_EMAKIMONO",
 				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
 				"DO_NOTHING", "REST",
 			]
@@ -1297,6 +1314,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"TERMINATE_CONTRACT",
 				"CRAFT",
 				"CULTIVATE_GARDEN", "TEND_BONSAI", "DISPLAY_BONSAI",
+				"COMPOSE_PAINTING", "DISPLAY_PAINTING", "PRESENT_EMAKIMONO",
 				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
 				"DO_NOTHING", "REST",
 			]
@@ -1464,6 +1482,9 @@ static func _get_ap_cost(action_id: String) -> int:
 		"DISPLAY_BONSAI": 1,
 		"DECLARE_SENBAZURU": 0,
 		"PRESENT_SENBAZURU": 1,
+		"COMPOSE_PAINTING": 1,
+		"DISPLAY_PAINTING": 1,
+		"PRESENT_EMAKIMONO": 1,
 	}
 	return costs.get(action_id, 1)
 
@@ -3137,6 +3158,32 @@ static func _populate_action_metadata(
 		var bonsai_id_meta: int = ctx.known_objectives.get("owned_bonsai_id", -1)
 		option.metadata = {
 			"bonsai_id": bonsai_id_meta,
+			"settlement_id": int(ctx.location_id) if ctx.location_id.is_valid_int() else -1,
+		}
+	elif option.action_id == "COMPOSE_PAINTING":
+		var wip_pid: int = ctx.known_objectives.get("active_painting_wip_id", -1)
+		var painting_rank: int = ctx.skill_ranks.get("Artisan: Painting", 0)
+		option.metadata = {
+			"painting_id": wip_pid,
+			"target_quality_tier": clampi(painting_rank, 1, 5),
+			"format": PaintingSystem.Format.KAKEMONO,  # default format
+			"subject_type": PaintingSystem.SubjectType.NATURE,
+			"framing": true,
+		}
+	elif option.action_id == "DISPLAY_PAINTING":
+		var dp_list: Array = ctx.known_objectives.get("displayable_paintings", [])
+		var dp_id: int = dp_list[0] if not dp_list.is_empty() else -1
+		var loc_sid: int = int(ctx.location_id) if ctx.location_id.is_valid_int() else -1
+		option.metadata = {
+			"painting_id": dp_id,
+			"settlement_id": loc_sid,
+			"slot": PaintingSystem.DisplaySlot.WALL_ART,
+		}
+	elif option.action_id == "PRESENT_EMAKIMONO":
+		var em_list: Array = ctx.known_objectives.get("presentable_emakimono", [])
+		var em_id: int = em_list[0] if not em_list.is_empty() else -1
+		option.metadata = {
+			"painting_id": em_id,
 			"settlement_id": int(ctx.location_id) if ctx.location_id.is_valid_int() else -1,
 		}
 

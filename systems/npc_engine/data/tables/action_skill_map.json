@@ -99,6 +99,11 @@
     "primary": "Courtier",
     "secondary": "Sincerity"
   },
+  "COMPOSE_PAINTING": {
+    "primary": "Artisan: Painting",
+    "secondary": "Awareness",
+    "trait": "Awareness"
+  },
   "COMPOSE_THEATER_PIECE": {
     "primary": "Poetry",
     "secondary": "Poetry",
@@ -164,6 +169,9 @@
   "DISCERN_NEED": {
     "primary": "Investigation",
     "secondary": "Awareness"
+  },
+  "DISPLAY_PAINTING": {
+    "primary": "_none"
   },
   "DISCLOSE": {
     "primary": "Sincerity",
@@ -398,6 +406,9 @@
   "PLAY_GAME": {
     "primary": "Games",
     "secondary": "Awareness"
+  },
+  "PRESENT_EMAKIMONO": {
+    "primary": "_none"
   },
   "PRESENT_SENBAZURU": {
     "primary": "_none"

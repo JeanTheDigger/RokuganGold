@@ -101,6 +101,8 @@ static func advance_day(
 	next_bonsai_id: Array = [1],
 	commission_records: Array = [],
 	next_commission_id: Array = [1],
+	active_paintings: Array = [],
+	next_painting_id: Array = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -191,6 +193,7 @@ static func advance_day(
 	_inject_senbazuru_context(active_senbazurus, characters, world_states)
 	_inject_ikebana_context(active_arrangements, settlements, characters, world_states)
 	_inject_garden_context(active_gardens, active_bonsai, commission_records, settlements, characters, world_states)
+	_inject_painting_context(active_paintings, settlements, characters, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_set_temple_context_flags(characters, settlements, world_states)
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
@@ -903,6 +906,22 @@ static func advance_day(
 		active_gardens, characters, characters_by_id, settlements, ic_day,
 	)
 
+	_process_compose_painting_writebacks(
+		day_result.get("results", []),
+		active_paintings, next_painting_id, ic_day,
+	)
+	_process_display_painting_writebacks(
+		day_result.get("results", []),
+		active_paintings, characters_by_id, settlements, active_topics, next_topic_id, ic_day,
+	)
+	_process_present_emakimono_writebacks(
+		day_result.get("results", []),
+		active_paintings, characters_by_id, active_topics, next_topic_id, ic_day,
+	)
+	_process_painting_visitor_effects(
+		active_paintings, characters, characters_by_id, settlements, ic_day, current_season,
+	)
+
 	_process_travel_redirect_writebacks(
 		day_result.get("results", []), objectives_map,
 	)
@@ -957,7 +976,7 @@ static func advance_day(
 	_cleanup_dead_character_references(
 		characters, characters_by_id, active_courts, entanglements,
 		active_hunts, favors, bloodspeaker_cells, active_secrets,
-		theater_pieces,
+		theater_pieces, active_paintings,
 	)
 
 	var succession_results: Array = _process_successions(
@@ -1345,6 +1364,10 @@ static func advance_day(
 			active_gardens, commission_records, characters_by_id, settlements,
 			active_topics, next_topic_id, ic_day, current_season,
 		)
+		_process_painting_seasonal_maintenance(
+			active_paintings, characters_by_id, settlements, active_topics, next_topic_id,
+			ic_day, current_season,
+		)
 		extradition_results = _process_fugitive_extradition_seasonal(
 			crime_records, characters, characters_by_id, provinces, settlements,
 			active_topics, next_topic_id, ic_day, season_meta,
@@ -1369,7 +1392,7 @@ static func advance_day(
 			_cleanup_dead_character_references(
 				characters, characters_by_id, active_courts, entanglements,
 				active_hunts, favors, bloodspeaker_cells, active_secrets,
-				theater_pieces,
+				theater_pieces, active_paintings,
 			)
 
 	var koku_flow_results: Dictionary = {}
@@ -7555,6 +7578,7 @@ static func _cleanup_dead_character_references(
 	bloodspeaker_cells: Array = [],
 	active_secrets: Array = [],
 	theater_pieces: Array = [],
+	active_paintings: Array = [],
 ) -> void:
 	var dead_ids: Array = []
 	for c: L5RCharacterData in characters:
@@ -7607,6 +7631,10 @@ static func _cleanup_dead_character_references(
 	if not theater_pieces.is_empty():
 		for did: int in dead_ids:
 			TheaterSystem.handle_character_death(did, theater_pieces)
+
+	if not active_paintings.is_empty():
+		for did: int in dead_ids:
+			PaintingSystem.handle_character_death(did, active_paintings)
 
 	for secret: Variant in active_secrets:
 		if not secret is SecretData:
@@ -13215,6 +13243,9 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"owned_bonsai_id", "bonsai_display_eligible",
 		"garden_zone_available", "available_garden_zone",
 		"character_province_id",
+		"active_painting_wip_id", "displayable_paintings", "presentable_emakimono",
+		"wall_art_slot_empty", "displayed_art_slot_empty", "fusuma_slot_empty",
+		"has_wall_art_permission",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -22739,6 +22770,432 @@ static func _process_bonsai_monthly_neglect(
 
 		# Simulate a neglect tick (failure, no raises) — apply_tend_result handles all state.
 		GardenSystem.apply_tend_result(bonsai, false, 0, ic_month)
+
+
+# ---------------------------------------------------------------------------
+# Painting orchestrator functions (s57.27)
+# ---------------------------------------------------------------------------
+
+static func _inject_painting_context(
+	active_paintings: Array,
+	settlements: Array,
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	## Inject per-character painting state into known_objectives.
+	## Sets: active_painting_wip_id, displayable_paintings, presentable_emakimono,
+	##       wall_art_slot_empty, displayed_art_slot_empty, fusuma_slot_empty,
+	##       has_wall_art_permission.
+
+	# Build settlement lookup
+	var settlements_by_str_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_str_id[str(s.settlement_id)] = s
+
+	# Build creator_id → WIP painting lookup (first incomplete painting per creator)
+	var wip_by_creator: Dictionary = {}
+	# Build creator_id → completed paintings list
+	var completed_by_creator: Dictionary = {}
+
+	for p_v: Variant in active_paintings:
+		if not p_v is PaintingData:
+			continue
+		var p: PaintingData = p_v as PaintingData
+		if p.creator_id < 0:
+			continue
+		if p.craft_progress >= 0:
+			# WIP
+			if not wip_by_creator.has(p.creator_id):
+				wip_by_creator[p.creator_id] = p
+		else:
+			# Complete
+			if not completed_by_creator.has(p.creator_id):
+				completed_by_creator[p.creator_id] = []
+			completed_by_creator[p.creator_id].append(p)
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			continue
+		if not ws.has("known_objectives"):
+			ws["known_objectives"] = {}
+
+		var loc: String = character.physical_location
+		var settlement: SettlementData = settlements_by_str_id.get(loc)
+		var loc_int: int = int(loc) if loc.is_valid_int() else -1
+
+		# WIP painting for this creator
+		var wip: PaintingData = wip_by_creator.get(character.character_id)
+		ws["known_objectives"]["active_painting_wip_id"] = wip.painting_id if wip != null else -1
+
+		# Completed paintings owned by this character that can be displayed
+		var displayable: Array = []
+		var presentable: Array = []
+		var owned: Array = completed_by_creator.get(character.character_id, [])
+		for p: PaintingData in owned:
+			if p.display_settlement_id >= 0:
+				continue  # Already on display somewhere
+			if p.format in [PaintingSystem.Format.KAKEMONO, PaintingSystem.Format.BYOBU,
+					PaintingSystem.Format.FUSUMA]:
+				displayable.append(p.painting_id)
+			elif p.format == PaintingSystem.Format.EMAKIMONO:
+				presentable.append(p.painting_id)
+		ws["known_objectives"]["displayable_paintings"] = displayable
+		ws["known_objectives"]["presentable_emakimono"] = presentable
+
+		# Slot availability at current settlement
+		if settlement != null:
+			ws["known_objectives"]["wall_art_slot_empty"] = settlement.wall_art_slot < 0
+			ws["known_objectives"]["displayed_art_slot_empty"] = settlement.displayed_art_slot < 0
+			ws["known_objectives"]["fusuma_slot_empty"] = settlement.fusuma_slot < 0
+			ws["known_objectives"]["has_wall_art_permission"] = PaintingSystem._is_zone_lord(
+				character.character_id, settlement) or PaintingSystem._has_slot_permission(
+				character.character_id, settlement, PaintingSystem.DisplaySlot.WALL_ART)
+		else:
+			ws["known_objectives"]["wall_art_slot_empty"] = false
+			ws["known_objectives"]["displayed_art_slot_empty"] = false
+			ws["known_objectives"]["fusuma_slot_empty"] = false
+			ws["known_objectives"]["has_wall_art_permission"] = false
+
+
+static func _process_compose_painting_writebacks(
+	results: Array,
+	active_paintings: Array,
+	next_painting_id: Array,
+	ic_day: int,
+) -> void:
+	## Handle COMPOSE_PAINTING results.
+	## is_new_painting=true → declare new WIP via PaintingSystem.declare_composition().
+	## Otherwise → advance WIP via PaintingSystem.resolve_compose_painting().
+	var paintings_by_id: Dictionary = {}
+	for p_v: Variant in active_paintings:
+		if p_v is PaintingData:
+			paintings_by_id[(p_v as PaintingData).painting_id] = p_v
+
+	for r: Dictionary in results:
+		if r.get("action_id", "") != "COMPOSE_PAINTING":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var char_id: int = r.get("character_id", -1)
+
+		if effects.get("is_new_painting", false):
+			# Create a new WIP PaintingData
+			var pid: int = next_painting_id[0]
+			next_painting_id[0] += 1
+			var painting: PaintingData = PaintingSystem.declare_composition(
+				effects.get("format", PaintingSystem.Format.KAKEMONO),
+				effects.get("target_quality_tier", 1),
+				effects.get("subject_type", PaintingSystem.SubjectType.NATURE),
+				effects.get("framing", true),
+				char_id,
+				pid,
+				effects.get("ic_day", ic_day),
+				effects.get("style", PaintingSystem.Style.NONE),
+				effects.get("subject_id", -1),
+				effects.get("subject_description", ""),
+				effects.get("season_affinity", -1),
+				effects.get("target_topic_ids", []),
+			)
+			active_paintings.append(painting)
+		else:
+			# Advance existing WIP
+			var painting_id: int = effects.get("painting_id", -1)
+			var painting: PaintingData = paintings_by_id.get(painting_id)
+			if painting == null:
+				continue
+			# painter_rank is stored in effects; skill gate was already passed at executor stage.
+			var painter_rank: int = effects.get("painter_rank", 99)
+			PaintingSystem.resolve_compose_painting(
+				painter_rank,
+				painting,
+				effects.get("roll_total", 0),
+				effects.get("raises_declared", 0),
+				effects.get("ic_day", ic_day),
+			)
+
+
+static func _process_display_painting_writebacks(
+	results: Array,
+	active_paintings: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Handle DISPLAY_PAINTING results. Calls PaintingSystem.resolve_display_painting().
+	var paintings_by_id: Dictionary = {}
+	for p_v: Variant in active_paintings:
+		if p_v is PaintingData:
+			paintings_by_id[(p_v as PaintingData).painting_id] = p_v
+
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		if s_v is SettlementData:
+			settlements_by_id[(s_v as SettlementData).settlement_id] = s_v
+
+	for r: Dictionary in results:
+		if r.get("action_id", "") != "DISPLAY_PAINTING":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var char_id: int = r.get("character_id", -1)
+		var char_data: L5RCharacterData = characters_by_id.get(char_id)
+		if char_data == null or CharacterStats.is_dead(char_data):
+			continue
+
+		var painting_id: int = effects.get("painting_id", -1)
+		var painting: PaintingData = paintings_by_id.get(painting_id)
+		if painting == null:
+			continue
+		var settlement_id: int = effects.get("settlement_id", -1)
+		var settlement: SettlementData = settlements_by_id.get(settlement_id)
+		if settlement == null:
+			continue
+		var slot: int = effects.get("slot", PaintingSystem.DisplaySlot.WALL_ART)
+
+		var lord_id: int = char_data.lord_id if char_data.lord_id >= 0 else char_id
+		var disp_result: Dictionary = PaintingSystem.resolve_display_painting(
+			char_id, lord_id, painting, settlement, slot, ic_day,
+		)
+		if not disp_result.get("success", false):
+			continue
+
+		# Generate placement topic for quality tier 3+
+		var topic_dict: Dictionary = PaintingSystem.generate_lifecycle_topic(
+			painting, "placement", "", settlement.settlement_type, ic_day,
+		)
+		if not topic_dict.is_empty() and topic_dict.get("tier", TopicData.Tier.TIER_4) <= TopicData.Tier.TIER_3:
+			_topic_from_dict(topic_dict, active_topics, next_topic_id, ic_day)
+
+
+static func _process_present_emakimono_writebacks(
+	results: Array,
+	active_paintings: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Handle PRESENT_EMAKIMONO results. Applies disposition shifts and topic delivery.
+	var paintings_by_id: Dictionary = {}
+	for p_v: Variant in active_paintings:
+		if p_v is PaintingData:
+			paintings_by_id[(p_v as PaintingData).painting_id] = p_v
+
+	for r: Dictionary in results:
+		if r.get("action_id", "") != "PRESENT_EMAKIMONO":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var painting_id: int = effects.get("painting_id", -1)
+		var painting: PaintingData = paintings_by_id.get(painting_id)
+		if painting == null:
+			continue
+		var recipient_ids: Array = effects.get("recipient_ids", [])
+		if recipient_ids.is_empty():
+			continue
+
+		var present_results: Array = PaintingSystem.resolve_present_emakimono(
+			painting, recipient_ids, characters_by_id, ic_day,
+		)
+		for pr: Dictionary in present_results:
+			if pr.get("immune", true):
+				continue
+			var recipient_id: int = pr.get("recipient_id", -1)
+			var recipient: L5RCharacterData = characters_by_id.get(recipient_id)
+			if recipient == null or CharacterStats.is_dead(recipient):
+				continue
+			# Polarization: push away from neutral regardless of framing
+			var shift: int = pr.get("disposition_shift", 0)
+			var subject_id: int = painting.subject_id
+			if subject_id >= 0:
+				var current_disp: int = DispositionSystem.get_disposition(recipient, subject_id)
+				# Positive framing → push positive (add shift if positive, subtract if negative)
+				# Negative framing → push negative (inverse)
+				var applied: int = shift if current_disp >= 0 else -shift
+				DispositionSystem.apply_disposition_change(recipient, subject_id, applied)
+			# Deliver linked topics
+			for tid: int in pr.get("topic_ids_delivered", []):
+				if tid not in recipient.topic_pool:
+					recipient.topic_pool.append(tid)
+
+
+static func _process_painting_visitor_effects(
+	active_paintings: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	ic_day: int,
+	current_ic_season: int,
+) -> void:
+	## Apply visitor disposition bonus and glory ticks for displayed paintings.
+	if active_paintings.is_empty():
+		return
+
+	# Build location → character list
+	var chars_at: Dictionary = {}
+	for char_v: Variant in characters:
+		var c: L5RCharacterData = char_v as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var loc: String = c.physical_location
+		if loc.is_empty():
+			continue
+		if not chars_at.has(loc):
+			chars_at[loc] = []
+		chars_at[loc].append(c)
+
+	# Build settlement_id → lord lookup
+	var settlement_lord: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlement_lord[s.settlement_id] = s.lord_character_id
+
+	for p_v: Variant in active_paintings:
+		if not p_v is PaintingData:
+			continue
+		var painting: PaintingData = p_v as PaintingData
+		if painting.display_settlement_id < 0:
+			continue  # Not on display
+		if painting.craft_progress >= 0:
+			continue  # Still WIP
+
+		var loc_str: String = str(painting.display_settlement_id)
+		var present: Array = chars_at.get(loc_str, [])
+		if present.is_empty():
+			continue
+
+		var creator: L5RCharacterData = characters_by_id.get(painting.creator_id)
+		var daimyo_id: int = settlement_lord.get(painting.display_settlement_id, -1)
+
+		for char_v: Variant in present:
+			var visitor: L5RCharacterData = char_v as L5RCharacterData
+			if visitor.character_id == painting.creator_id:
+				continue  # Creator excluded
+
+			var visit_result: Dictionary = PaintingSystem.apply_visitor_effect(
+				visitor.character_id, painting, current_ic_season, ic_day,
+			)
+			if visit_result.is_empty():
+				continue
+
+			# Disposition toward creator
+			if creator != null and not CharacterStats.is_dead(creator):
+				var disp: int = visit_result.get("disposition_change", 0)
+				if disp != 0:
+					var bucket: Array = visitor.temporary_modifiers.get(painting.creator_id, [])
+					bucket.append({
+						"event_type": "painting_visitor",
+						"value": disp,
+						"created_ic_day": ic_day,
+						"duration": PaintingSystem.VISITOR_BONUS_DURATION_DAYS,
+					})
+					visitor.temporary_modifiers[painting.creator_id] = bucket
+
+			# Glory tick
+			if visit_result.get("glory_tick", false):
+				if creator != null and not CharacterStats.is_dead(creator):
+					HonorGlorySystem.apply_glory_change(creator,
+						visit_result.get("creator_glory_gain", 0.0))
+				var daimyo: L5RCharacterData = characters_by_id.get(daimyo_id)
+				if daimyo != null and not CharacterStats.is_dead(daimyo):
+					HonorGlorySystem.apply_glory_change(daimyo,
+						visit_result.get("daimyo_glory_gain", 0.0))
+
+			# Negative framing: if visitor is subject of negatively framed painting
+			var neg_result: Dictionary = PaintingSystem.apply_negative_framing_on_subject_visit(
+				painting, visitor.character_id,
+			)
+			if not neg_result.is_empty():
+				var disp_loss: int = neg_result.get("disposition_change", 0)
+				if disp_loss != 0 and daimyo_id >= 0:
+					DispositionSystem.apply_disposition_change(visitor, daimyo_id, disp_loss)
+
+
+static func _process_painting_seasonal_maintenance(
+	active_paintings: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	current_ic_season: int,
+) -> void:
+	## Seasonal painting maintenance: apply WIP degradation, seasonal kakemono rotation.
+
+	# Build settlement lookup
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		if s_v is SettlementData:
+			settlements_by_id[(s_v as SettlementData).settlement_id] = s_v
+
+	# Build painting_id → painting for rotation lookup
+	var paintings_by_id: Dictionary = {}
+	for p_v: Variant in active_paintings:
+		if p_v is PaintingData:
+			paintings_by_id[(p_v as PaintingData).painting_id] = p_v
+
+	for p_v: Variant in active_paintings:
+		if not p_v is PaintingData:
+			continue
+		var painting: PaintingData = p_v as PaintingData
+
+		# WIP degradation for byōbu and emakimono
+		if painting.craft_progress >= 0:
+			PaintingSystem.apply_composition_degradation(painting, ic_day)
+			continue
+
+	# Seasonal kakemono rotation: check each settlement's wall_art_slot
+	for s_v: Variant in settlements:
+		if not s_v is SettlementData:
+			continue
+		var settlement: SettlementData = s_v as SettlementData
+		if settlement.wall_art_slot < 0:
+			continue
+
+		# Collect paintings owned by the settlement lord for rotation pool
+		var daimyo_id: int = settlement.lord_character_id
+		var daimyo: L5RCharacterData = characters_by_id.get(daimyo_id)
+		if daimyo == null or CharacterStats.is_dead(daimyo):
+			continue
+		# Build inventory: paintings owned by daimyo not displayed elsewhere
+		var inventory_ids: Array = []
+		for p_v2: Variant in active_paintings:
+			if not p_v2 is PaintingData:
+				continue
+			var p2: PaintingData = p_v2 as PaintingData
+			if p2.creator_id == daimyo_id and p2.craft_progress < 0:
+				if p2.display_settlement_id < 0 or p2.display_settlement_id == settlement.settlement_id:
+					inventory_ids.append(p2.painting_id)
+
+		var rotation: Dictionary = PaintingSystem.evaluate_seasonal_rotation(
+			settlement, paintings_by_id, inventory_ids, current_ic_season,
+		)
+		if rotation.get("needs_rotation", false) and rotation.get("has_replacement", false):
+			var replacement_id: int = rotation.get("replacement_painting_id", -1)
+			var replacement: PaintingData = paintings_by_id.get(replacement_id)
+			var old_painting: PaintingData = paintings_by_id.get(settlement.wall_art_slot)
+			if replacement != null and replacement_id != settlement.wall_art_slot:
+				# Swap: remove old, display new
+				if old_painting != null:
+					old_painting.display_settlement_id = -1
+					old_painting.display_slot = -1
+					old_painting.continuous_display_start_ic_day = -1
+				PaintingSystem.resolve_display_painting(
+					daimyo_id, daimyo.lord_id,
+					replacement, settlement,
+					PaintingSystem.DisplaySlot.WALL_ART, ic_day,
+				)
 
 
 

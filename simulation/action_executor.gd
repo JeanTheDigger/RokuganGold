@@ -446,6 +446,9 @@ static func execute(
 	if action_id == "DISPLAY_BONSAI":
 		return _execute_display_bonsai(action, character, ctx)
 
+	if action_id in ["COMPOSE_PAINTING", "DISPLAY_PAINTING", "PRESENT_EMAKIMONO"]:
+		return _execute_painting_action(action_id, action, character, ctx, dice_engine, characters_by_id)
+
 	if action_id in NO_ROLL_ACTIONS:
 		return _execute_no_roll(action, character, ctx)
 
@@ -6143,5 +6146,165 @@ static func _execute_display_bonsai(
 		"effects": {
 			"bonsai_id": bonsai_id,
 			"settlement_id": settlement_id,
+		},
+	}
+
+
+# ---------------------------------------------------------------------------
+# Painting executors (s57.27)
+# ---------------------------------------------------------------------------
+
+static func _execute_painting_action(
+	action_id: String,
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	match action_id:
+		"COMPOSE_PAINTING":
+			return _execute_compose_painting(action, character, ctx, dice_engine)
+		"DISPLAY_PAINTING":
+			return _execute_display_painting(action, character, ctx)
+		"PRESENT_EMAKIMONO":
+			return _execute_present_emakimono(action, character, ctx, characters_by_id)
+	return {"success": false, "action_id": action_id, "character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season, "effects": {}}
+
+
+static func _execute_compose_painting(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	## Advance WIP painting or declare new composition.
+	## painting_id < 0 in metadata → declare new composition (writeback creates PaintingData).
+	var meta: Dictionary = action.metadata
+	var painting_id: int = meta.get("painting_id", ctx.known_objectives.get("active_painting_wip_id", -1))
+	var painting_rank: int = character.skills.get("Artisan: Painting", 0)
+
+	if painting_id < 0:
+		# Declare new composition — actual PaintingData created in writeback.
+		var target_quality: int = meta.get("target_quality_tier", clampi(painting_rank, 1, 5))
+		if painting_rank < PaintingSystem.QUALITY_SKILL_GATE.get(target_quality, 1):
+			return {
+				"success": false, "action_id": "COMPOSE_PAINTING",
+				"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+				"effects": {"blocked_reason": "insufficient_skill_rank"},
+			}
+		return {
+			"success": true, "action_id": "COMPOSE_PAINTING",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {
+				"is_new_painting": true,
+				"format": meta.get("format", PaintingSystem.Format.KAKEMONO),
+				"target_quality_tier": target_quality,
+				"subject_type": meta.get("subject_type", PaintingSystem.SubjectType.NATURE),
+				"framing": meta.get("framing", true),
+				"style": meta.get("style", PaintingSystem.Style.NONE),
+				"subject_id": meta.get("subject_id", -1),
+				"season_affinity": meta.get("season_affinity", -1),
+				"target_topic_ids": meta.get("target_topic_ids", []),
+				"ic_day": ctx.ic_day,
+			},
+		}
+
+	# Advance existing WIP.
+	var raises_declared: int = meta.get("raises", 0)
+	var tn: int = PaintingSystem.COMPOSE_TN + raises_declared * 5
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Painting", tn,
+		raises_declared, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+
+	return {
+		"success": roll.get("success", false),
+		"action_id": "COMPOSE_PAINTING",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"painting_id": painting_id,
+			"roll_total": total,
+			"raises_declared": raises_declared,
+			"painter_rank": painting_rank,
+			"ic_day": ctx.ic_day,
+		},
+	}
+
+
+static func _execute_display_painting(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	## No roll. Sets display_settlement_id on painting — slot mutation in writeback.
+	var meta: Dictionary = action.metadata
+	var painting_id: int = meta.get("painting_id", -1)
+	var loc_int: int = int(ctx.location_id) if ctx.location_id.is_valid_int() else -1
+	var settlement_id: int = meta.get("settlement_id", loc_int)
+	var slot: int = meta.get("slot", PaintingSystem.DisplaySlot.WALL_ART)
+
+	return {
+		"success": painting_id >= 0 and settlement_id >= 0,
+		"action_id": "DISPLAY_PAINTING",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"painting_id": painting_id,
+			"settlement_id": settlement_id,
+			"slot": slot,
+		},
+	}
+
+
+static func _execute_present_emakimono(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	## No roll. Collect co-located living characters as recipients.
+	## PaintingSystem.resolve_present_emakimono() applied in writeback.
+	var meta: Dictionary = action.metadata
+	var painting_id: int = meta.get("painting_id", -1)
+
+	if painting_id < 0:
+		return {
+			"success": false, "action_id": "PRESENT_EMAKIMONO",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"blocked_reason": "no_emakimono_selected"},
+		}
+
+	# Gather co-located living recipients (excluding presenter).
+	var recipient_ids: Array = []
+	var presenter_loc: String = character.physical_location
+	for cid: int in characters_by_id:
+		if cid == character.character_id:
+			continue
+		var other = characters_by_id.get(cid)
+		if not other:
+			continue
+		if CharacterStats.is_dead(other):
+			continue
+		if other.physical_location != presenter_loc:
+			continue
+		recipient_ids.append(cid)
+
+	return {
+		"success": painting_id >= 0,
+		"action_id": "PRESENT_EMAKIMONO",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"painting_id": painting_id,
+			"recipient_ids": recipient_ids,
+			"ic_day": ctx.ic_day,
 		},
 	}

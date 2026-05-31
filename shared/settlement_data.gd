@@ -57,6 +57,10 @@ extends Resource
 #              "topic_id": int, "subject_id": int, "zone_subtype": String}
 @export var public_record: Array = []
 
+# -- Lord (for permission checks across art/garden systems) -------------------
+# Populated by DayOrchestrator from province lord data each day.
+@export var lord_character_id: int = -1
+
 # -- Garden Slots (per GDD s57.23a — settlement-level zone proxy) -------------
 # Keys: "CASTLE_OUTER_COURTYARD", "TSUBONIWA". Values: garden_id (int) or -1 (empty).
 # Only populated for eligible settlement types (FAMILY_CASTLE, CASTLE, CITY).
@@ -67,6 +71,18 @@ extends Resource
 # Bonsai display slot. -1 = empty, otherwise bonsai_id.
 # Eligible types: FAMILY_CASTLE, CASTLE, CITY, KEEP, TEMPLE, SHINDEN, MONASTERY.
 @export var bonsai_display_slot: int = -1
+
+# -- Painting Slots (per GDD s57.27.4 — settlement-level zone proxy) ----------
+# wall_art_slot: kakemono on the wall (tokonoma). -1 = empty, otherwise painting_id.
+@export var wall_art_slot: int = -1
+# displayed_art_slot: byōbu or prominent display piece. -1 = empty, otherwise painting_id.
+@export var displayed_art_slot: int = -1
+# fusuma_slot: fusuma sliding door painting. -1 = empty, otherwise painting_id.
+@export var fusuma_slot: int = -1
+# Permission holders for each painting slot (character_id → true).
+@export var wall_art_permissions: Dictionary = {}
+@export var displayed_art_permissions: Dictionary = {}
+@export var fusuma_permissions: Dictionary = {}
 
 
 func has_infrastructure(feature: String) -> bool:

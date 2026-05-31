@@ -160,6 +160,10 @@ var next_bonsai_id: Array[int] = [1]
 var commission_records: Array[CommissionRecordData] = []
 var next_commission_id: Array[int] = [1]
 
+# -- Paintings (s57.27) -------------------------------------------------------
+var active_paintings: Array[PaintingData] = []
+var next_painting_id: Array[int] = [1]
+
 # -- Commitments ID Counter (s55.31) ------------------------------------------
 var next_commitment_id: Array[int] = [1]
 
@@ -354,6 +358,8 @@ func advance_one_day() -> Dictionary:
 		next_bonsai_id,
 		commission_records,
 		next_commission_id,
+		active_paintings,
+		next_painting_id,
 	)
 	_apply_succession_updates(result)
 	return result
