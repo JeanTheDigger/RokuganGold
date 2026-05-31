@@ -7,6 +7,10 @@ class_name LetterSystem
 const BASE_TN: int = 15
 const RAISE_TN: int = 5
 
+# Poetry-in-letter disposition formula — s57.30.6 LOCKED
+# Base +2, +1 per Raise achieved on original CRAFT roll.
+const POEM_BASE_DISPOSITION: int = 2
+
 # Disposition bonuses by quality tier
 const QUALITY_BONUS: Array[int] = [0, 1, 2, 3]
 
@@ -251,6 +255,14 @@ static func deliver_letter(
 		var current_hr: int = recipient.disposition_values.get(letter.sender_id, 0)
 		recipient.disposition_values[letter.sender_id] = clampi(current_hr + letter.high_rokugani_bonus, -100, 100)
 
+	# Poetry-in-letter disposition effect — s57.30.6 LOCKED
+	# +2 base + 1 per Raise on the original CRAFT roll.
+	var poem_bonus: int = 0
+	if letter.attached_poem_id >= 0:
+		poem_bonus = POEM_BASE_DISPOSITION + letter.attached_poem_raises
+		var current_pm: int = recipient.disposition_values.get(letter.sender_id, 0)
+		recipient.disposition_values[letter.sender_id] = clampi(current_pm + poem_bonus, -100, 100)
+
 	# Calligraphy (Cipher) extraction (A2-A4, s57.30 LOCKED)
 	var cipher_result: Dictionary = {}
 	if dice_engine != null and letter.concealment_tn > 0:
@@ -279,6 +291,7 @@ static func deliver_letter(
 		"topic_transferred": topic_transferred,
 		"disposition_bonus": letter.disposition_bonus,
 		"high_rokugani_bonus": letter.high_rokugani_bonus,
+		"poem_bonus": poem_bonus,
 	}
 	if not cipher_result.is_empty():
 		result.merge(cipher_result)

@@ -67,6 +67,12 @@ extends Resource
 @export var high_rokugani_attempted: bool = false
 @export var high_rokugani_bonus: int = 0
 
+# Poetry-in-letter fields — s57.30.6 LOCKED
+# attached_poem_id: item_id of the poetry scroll from sender's items (-1 = none).
+# attached_poem_raises: raises from the original CRAFT roll; drives +2+(raises) disposition.
+@export var attached_poem_id: int = -1
+@export var attached_poem_raises: int = 0
+
 # Route info used for delivery time
 @export var province_distance: int = 0
 @export var mountain_provinces: int = 0

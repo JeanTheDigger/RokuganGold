@@ -710,3 +710,83 @@ func test_high_rokugani_bonus_applied_on_delivery():
 			assert_eq(final_disp - initial_disp, total_bonus,
 				"Both base Calligraphy and HR bonus should stack on delivery")
 			break
+
+
+# -- Part C: Poetry-in-Letter (s57.30.6) -----------------------------------------
+
+func test_poem_base_disposition_constant() -> void:
+	assert_eq(LetterSystem.POEM_BASE_DISPOSITION, 2)
+
+
+func test_deliver_letter_with_poem_applies_base_bonus() -> void:
+	# attached_poem_id >= 0, raises = 0 → +2 disposition to recipient toward sender.
+	var recipient := _make_char(2)
+	recipient.disposition_values[1] = 0
+	var letter := LetterData.new()
+	letter.sender_id = 1
+	letter.recipient_id = 2
+	letter.attached_poem_id = 10
+	letter.attached_poem_raises = 0
+	var log: Array = []
+	var result: Dictionary = LetterSystem.deliver_letter(letter, recipient, 1, log)
+	assert_eq(result.get("poem_bonus", 0), 2)
+	assert_eq(recipient.disposition_values.get(1, 0), 2)
+
+
+func test_deliver_letter_with_poem_and_raises_adds_per_raise() -> void:
+	# attached_poem_raises = 2 → +2 base + 2 raises = +4 total.
+	var recipient := _make_char(2)
+	recipient.disposition_values[1] = 0
+	var letter := LetterData.new()
+	letter.sender_id = 1
+	letter.recipient_id = 2
+	letter.attached_poem_id = 10
+	letter.attached_poem_raises = 2
+	var log: Array = []
+	var result: Dictionary = LetterSystem.deliver_letter(letter, recipient, 1, log)
+	assert_eq(result.get("poem_bonus", 0), 4)
+	assert_eq(recipient.disposition_values.get(1, 0), 4)
+
+
+func test_deliver_letter_without_poem_no_bonus() -> void:
+	# attached_poem_id = -1 (default) → no poem bonus applied.
+	var recipient := _make_char(2)
+	recipient.disposition_values[1] = 0
+	var letter := LetterData.new()
+	letter.sender_id = 1
+	letter.recipient_id = 2
+	# attached_poem_id defaults to -1
+	var log: Array = []
+	var result: Dictionary = LetterSystem.deliver_letter(letter, recipient, 1, log)
+	assert_eq(result.get("poem_bonus", 0), 0)
+	assert_eq(recipient.disposition_values.get(1, 0), 0)
+
+
+func test_deliver_letter_poem_stacks_with_calligraphy_bonus() -> void:
+	# Poem bonus stacks additively with the Calligraphy quality disposition_bonus.
+	var recipient := _make_char(2)
+	recipient.disposition_values[1] = 0
+	var letter := LetterData.new()
+	letter.sender_id = 1
+	letter.recipient_id = 2
+	letter.disposition_bonus = 2   # Calligraphy success bonus
+	letter.attached_poem_id = 10
+	letter.attached_poem_raises = 1  # +3 poem bonus
+	var log: Array = []
+	LetterSystem.deliver_letter(letter, recipient, 1, log)
+	# Calligraphy +2 + poem +3 = +5
+	assert_eq(recipient.disposition_values.get(1, 0), 5)
+
+
+func test_deliver_letter_poem_bonus_clamped_to_100() -> void:
+	# Poem bonus does not push disposition above 100.
+	var recipient := _make_char(2)
+	recipient.disposition_values[1] = 99
+	var letter := LetterData.new()
+	letter.sender_id = 1
+	letter.recipient_id = 2
+	letter.attached_poem_id = 10
+	letter.attached_poem_raises = 3  # +5 would exceed 100
+	var log: Array = []
+	LetterSystem.deliver_letter(letter, recipient, 1, log)
+	assert_eq(recipient.disposition_values.get(1, 0), 100)

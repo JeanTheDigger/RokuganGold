@@ -1400,7 +1400,22 @@ func test_train_no_festival_no_glory() -> void:
 	assert_false(result["effects"].has("glory_change"))
 
 
-func test_write_letter_on_poetry_festival_adds_glory() -> void:
+func test_write_letter_on_poetry_festival_adds_glory_with_poem() -> void:
+	# Poetry festival glory only fires when a poem scroll is attached — s57.30.6.
+	_ctx.festival_glory_poetry = 0.1
+	_character.skills["Calligraphy"] = 3
+	_character.items.append({"item_type": "poetry_scroll", "item_id": 7, "raises": 1})
+	var action := _make_action("WRITE_LETTER")
+	action.metadata["attach_poem_item_id"] = 7
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map
+	)
+	assert_true(result["success"])
+	assert_almost_eq(result["effects"].get("glory_change", 0.0), 0.1, 0.001)
+
+
+func test_write_letter_on_poetry_festival_no_glory_without_poem() -> void:
+	# Without an attached poem, no festival glory even on a poetry exchange day.
 	_ctx.festival_glory_poetry = 0.1
 	_character.skills["Calligraphy"] = 3
 	var action := _make_action("WRITE_LETTER")
@@ -1408,7 +1423,7 @@ func test_write_letter_on_poetry_festival_adds_glory() -> void:
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
 	assert_true(result["success"])
-	assert_almost_eq(result["effects"].get("glory_change", 0.0), 0.1, 0.001)
+	assert_almost_eq(result["effects"].get("glory_change", 0.0), 0.0, 0.001)
 
 
 func test_write_letter_no_festival_no_glory() -> void:
@@ -2203,3 +2218,59 @@ func test_neither_duelist_wants_stare_down() -> void:
 	)
 	var duel_result: Dictionary = effects.get("duel_result", {})
 	assert_false(duel_result.has("stare_down"), "No stare-down when both decline")
+
+
+# =============================================================================
+# CRAFT — poetry_scroll (s57.30.6)
+# =============================================================================
+
+func test_craft_poetry_scroll_success_flags() -> void:
+	# With high Artisan: Poetry, executor should succeed and flag creation.
+	_character.skills["Artisan: Poetry"] = 5
+	_character.awareness = 5
+	var action := _make_action("CRAFT")
+	action.metadata["origami_type"] = "poetry_scroll"
+	action.metadata["raises"] = 0
+	var _dice_high := DiceEngine.new()
+	_dice_high.set_seed(99)  # high-seed for good rolls
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_high, _action_skill_map
+	)
+	# We can only test the result structure; success depends on dice.
+	var effects: Dictionary = result.get("effects", {})
+	assert_eq(effects.get("origami_type", ""), "poetry_scroll")
+	assert_true(effects.has("requires_poetry_scroll_creation"))
+	assert_true(effects.has("poetry_scroll_raises"))
+
+
+func test_craft_poetry_scroll_failure_sets_no_creation() -> void:
+	# With rank 0, failure is likely; executor should not flag creation.
+	_character.skills["Artisan: Poetry"] = 0
+	_character.awareness = 1
+	var action := _make_action("CRAFT")
+	action.metadata["origami_type"] = "poetry_scroll"
+	action.metadata["raises"] = 0
+	var _dice_low := DiceEngine.new()
+	_dice_low.set_seed(3)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_low, _action_skill_map
+	)
+	if not result.get("success", false):
+		assert_false(result["effects"].get("requires_poetry_scroll_creation", false),
+			"Failed CRAFT should not flag poetry_scroll creation")
+
+
+func test_craft_poetry_scroll_raises_stored_on_success() -> void:
+	# Raises declared on the action are stored in poetry_scroll_raises.
+	_character.skills["Artisan: Poetry"] = 5
+	_character.awareness = 5
+	var action := _make_action("CRAFT")
+	action.metadata["origami_type"] = "poetry_scroll"
+	action.metadata["raises"] = 2
+	var _dice_h := DiceEngine.new()
+	_dice_h.set_seed(77)
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_h, _action_skill_map
+	)
+	if result.get("success", false):
+		assert_eq(result["effects"].get("poetry_scroll_raises", -1), 2)

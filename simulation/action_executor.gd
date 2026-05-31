@@ -1555,7 +1555,10 @@ static func _apply_effects(
 	else:
 		effects = _compute_failure_effects(action_id, result.get("margin", 0))
 
-	if action_id == "WRITE_LETTER" and result.get("success", false) and ctx.festival_glory_poetry > 0.001:
+	# Poetry festival glory — s57.30.6: only for poem-letters (attached_poem_item_id set).
+	if action_id == "WRITE_LETTER" and result.get("success", false) \
+			and ctx.festival_glory_poetry > 0.001 \
+			and action.metadata.get("attach_poem_item_id", -1) >= 0:
 		effects["glory_change"] = effects.get("glory_change", 0.0) + ctx.festival_glory_poetry
 
 	# Commerce stigma (s57.40): fires on public Commerce rolls regardless of success
@@ -5449,10 +5452,12 @@ static func _execute_craft(
 	ctx: NPCDataStructures.ContextSnapshot,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	# Route origami sub-types (s57.26) before s49 artisan path.
+	# Route origami sub-types (s57.26) and poetry scroll (s57.30.6) before s49 artisan path.
 	var origami_type: String = action.metadata.get("origami_type", "")
 	if origami_type in ["noshi", "gohei", "senbazuru_progress"]:
 		return _execute_craft_origami(action, character, ctx, dice_engine, origami_type)
+	if origami_type == "poetry_scroll":
+		return _execute_craft_poetry_scroll(action, character, ctx, dice_engine)
 
 	var wip_item_id: int = action.metadata.get("wip_item_id", -1)
 	if wip_item_id >= 0:
@@ -5647,6 +5652,39 @@ static func _execute_craft_origami(
 		"ic_day": ctx.ic_day,
 		"season": ctx.season,
 		"effects": effects,
+	}
+
+
+static func _execute_craft_poetry_scroll(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	## CRAFT a poetry scroll (s57.30.6). Uses Artisan: Poetry / Awareness, TN 15.
+	## On success: creates a poetry_scroll item in writeback.
+	## On failure: no item created (a ruined scroll has no value as a gift).
+	var raises_declared: int = action.metadata.get("raises", 0)
+	var tn: int = OrigamiSystem.NOSHI_TN + raises_declared * 5  # TN 15 base, same as noshi
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Poetry", tn,
+		raises_declared, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+	var success: bool = total >= tn
+	return {
+		"success": success,
+		"action_id": "CRAFT",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"origami_type": "poetry_scroll",
+			"requires_poetry_scroll_creation": success,
+			"poetry_scroll_raises": raises_declared if success else 0,
+			"roll_total": total,
+			"raises_declared": raises_declared,
+		},
 	}
 
 

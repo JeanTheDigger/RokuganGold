@@ -15893,3 +15893,111 @@ func test_purge_exposed_secrets_mixed():
 	var secrets: Array = [_make_secret(true), _make_secret(false), _make_secret(true)]
 	DayOrchestrator._purge_exposed_secrets(secrets, {}, 100)
 	assert_eq(secrets.size(), 1, "Only non-exposed secret should remain")
+
+
+# -- Poetry-in-Letter context injection (s57.30.6) ----------------------------
+
+func _make_char_with_poem(char_id: int, poem_id: int, poem_raises: int) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = char_id
+	c.status = 3.0
+	c.wounds_taken = 0
+	c.items = [{"item_type": "poetry_scroll", "item_id": poem_id, "raises": poem_raises}]
+	c.physical_location = "100"
+	return c
+
+
+func test_inject_poem_context_sets_item_id() -> void:
+	var c := _make_char_with_poem(1, 42, 2)
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+	DayOrchestrator._inject_poem_context([c], ws)
+	assert_eq(ws[1]["known_objectives"].get("available_poem_item_id", -1), 42)
+
+
+func test_inject_poem_context_sets_raises() -> void:
+	var c := _make_char_with_poem(1, 7, 3)
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+	DayOrchestrator._inject_poem_context([c], ws)
+	assert_eq(ws[1]["known_objectives"].get("available_poem_raises", -1), 3)
+
+
+func test_inject_poem_context_no_item_leaves_key_absent() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.wounds_taken = 0
+	c.items = []
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+	DayOrchestrator._inject_poem_context([c], ws)
+	assert_false(ws[1]["known_objectives"].has("available_poem_item_id"),
+		"No poem scroll = no context key injected")
+
+
+func test_inject_poem_context_skips_dead_characters() -> void:
+	var c := _make_char_with_poem(1, 5, 1)
+	c.wounds_taken = 999  # lethal wounds
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+	DayOrchestrator._inject_poem_context([c], ws)
+	assert_false(ws[1]["known_objectives"].has("available_poem_item_id"),
+		"Dead character should not get poem context injected")
+
+
+# -- Festival of Leaves Glory Penalty (s57.30.6) ------------------------------
+
+func test_festival_leaves_penalty_no_effect_on_non_poetry_day() -> void:
+	# IC day 1 has no poetry_exchange effect — no penalty applied.
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.wounds_taken = 0
+	c.status = 5.0
+	c.glory = 3.0
+	DayOrchestrator._process_festival_leaves_penalty([], [c], 1)
+	assert_almost_eq(c.glory, 3.0, 0.001, "No glory change on non-poetry day")
+
+
+func test_festival_leaves_penalty_status3_not_penalised() -> void:
+	# Status 3 characters are below the Status 4+ threshold — no penalty.
+	# Use IC day 120 (Lotus Blossoms, poetry_exchange).
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.wounds_taken = 0
+	c.status = 3.0
+	c.glory = 5.0
+	DayOrchestrator._process_festival_leaves_penalty([], [c], 120)
+	assert_almost_eq(c.glory, 5.0, 0.001, "Status 3 should not lose glory for missing poem")
+
+
+func test_festival_leaves_penalty_status4_penalised_when_no_poem() -> void:
+	# Status 4+ with no poem sent on poetry exchange day → -0.1 Glory.
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.wounds_taken = 0
+	c.status = 4.0
+	c.glory = 5.0
+	DayOrchestrator._process_festival_leaves_penalty([], [c], 120)
+	assert_almost_eq(c.glory, 4.9, 0.001, "Status 4+ should lose 0.1 Glory for missing poem")
+
+
+func test_festival_leaves_penalty_skips_poem_senders() -> void:
+	# Character who sent a poem-letter today is exempted from the penalty.
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.wounds_taken = 0
+	c.status = 5.0
+	c.glory = 5.0
+	var letter_result: Dictionary = {
+		"character_id": 1,
+		"action_id": "WRITE_LETTER",
+		"attach_poem_item_id": 10,
+	}
+	DayOrchestrator._process_festival_leaves_penalty([letter_result], [c], 120)
+	assert_almost_eq(c.glory, 5.0, 0.001, "Poem sender should not lose glory")
+
+
+func test_festival_leaves_penalty_skips_dead_characters() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.wounds_taken = 999
+	c.status = 5.0
+	c.glory = 5.0
+	DayOrchestrator._process_festival_leaves_penalty([], [c], 120)
+	assert_almost_eq(c.glory, 5.0, 0.001, "Dead character should not receive penalty")

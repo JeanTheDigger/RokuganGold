@@ -197,6 +197,7 @@ static func advance_day(
 	_inject_garden_context(active_gardens, active_bonsai, commission_records, settlements, characters, world_states)
 	_inject_painting_context(active_paintings, settlements, characters, world_states)
 	_inject_sculpture_context(active_sculptures, settlements, characters, world_states)
+	_inject_poem_context(characters, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_set_temple_context_flags(characters, settlements, world_states)
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
@@ -281,6 +282,10 @@ static func advance_day(
 
 	_apply_garrison_shortage_letter_writebacks(
 		letter_pass_results, characters_by_id, settlements, current_season
+	)
+
+	_process_festival_leaves_penalty(
+		letter_pass_results, characters, ic_day,
 	)
 
 	_process_duel_challenge_writebacks(
@@ -8967,6 +8972,19 @@ static func _process_daily_letter_pass(
 				elif letter_result.get("visit_intent", false):
 					letter.visit_intent = true
 					letter.visit_deadline_ic_day = _compute_visit_deadline(ic_day)
+				# Attach poem scroll if specified — s57.30.6.
+				var poem_item_id: int = letter_result.get("attach_poem_item_id", -1)
+				if poem_item_id >= 0:
+					letter.attached_poem_id = poem_item_id
+					letter.attached_poem_raises = letter_result.get("attach_poem_raises", 0)
+					# Consume the scroll from sender's items.
+					for i: int in range(character.items.size() - 1, -1, -1):
+						var it: Variant = character.items[i]
+						if it is Dictionary and \
+								(it as Dictionary).get("item_type", "") == "poetry_scroll" and \
+								(it as Dictionary).get("item_id", -1) == poem_item_id:
+							character.items.remove_at(i)
+							break
 				pending_letters.append(letter)
 	return results
 
@@ -13272,6 +13290,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"statue_slot_empty", "guardian_slot_empty",
 		"is_religious_settlement", "has_statue_permission", "has_guardian_permission",
 		"statuary_worship_fr", "statuary_subject_id", "guardian_worship_fr",
+		"available_poem_item_id", "available_poem_raises",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -21445,6 +21464,61 @@ static func _inject_senbazuru_context(
 			break
 
 
+static func _inject_poem_context(
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	## Inject poetry scroll availability into known_objectives — s57.30.6.
+	## available_poem_item_id: item_id of first unconsumed poetry_scroll (-1 if none).
+	## available_poem_raises: raises from that scroll's CRAFT roll.
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			continue
+		for item: Variant in character.items:
+			if item is Dictionary and \
+					(item as Dictionary).get("item_type", "") == "poetry_scroll":
+				if not ws.has("known_objectives"):
+					ws["known_objectives"] = {}
+				ws["known_objectives"]["available_poem_item_id"] = \
+					(item as Dictionary).get("item_id", -1)
+				ws["known_objectives"]["available_poem_raises"] = \
+					(item as Dictionary).get("raises", 0)
+				break
+
+
+static func _process_festival_leaves_penalty(
+	letter_pass_results: Array,
+	characters: Array,
+	ic_day: int,
+) -> void:
+	## On poetry-exchange festival days: living Status 4+ characters who did NOT send a
+	## poem-letter today lose -0.1 Glory — s57.30.6 (PROVISIONAL: Festival of Leaves).
+	## Poem-letter senders are identified by a poem attachment in their letter result.
+	var festival_effects: Array = FestivalSystem.get_festival_effects(ic_day)
+	if not "poetry_exchange" in festival_effects:
+		return
+	# Collect sender IDs who attached a poem today.
+	var poem_senders: Dictionary = {}
+	for lr: Variant in letter_pass_results:
+		if lr is Dictionary and \
+				(lr as Dictionary).get("attach_poem_item_id", -1) >= 0:
+			var sid: int = (lr as Dictionary).get("character_id", -1)
+			if sid >= 0:
+				poem_senders[sid] = true
+	# Apply penalty to Status 4+ characters who did not send a poem.
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.status < 4.0:
+			continue
+		if poem_senders.has(character.character_id):
+			continue
+		HonorGlorySystem.apply_glory_change(character, -0.1)
+
+
 static func _process_craft_origami_writebacks(
 	results: Array,
 	characters_by_id: Dictionary,
@@ -21456,13 +21530,14 @@ static func _process_craft_origami_writebacks(
 	## Handle CRAFT results with origami_type set.
 	## noshi: add item to character.items; apply wrapper bonus if crafted for another.
 	## gohei: add item to character.items.
+	## poetry_scroll: add scroll to crafter's items (s57.30.6).
 	## senbazuru_progress: delegated to _process_senbazuru_progress_writebacks().
 	for result: Variant in results:
 		if result.get("action_id", "") != "CRAFT":
 			continue
 		var effects: Dictionary = result.get("effects", {})
 		var origami_type: String = effects.get("origami_type", "")
-		if origami_type not in ["noshi", "gohei"]:
+		if origami_type not in ["noshi", "gohei", "poetry_scroll"]:
 			continue
 		var char_id: int = result.get("character_id", -1)
 		var crafter: L5RCharacterData = characters_by_id.get(char_id)
@@ -21523,6 +21598,18 @@ static func _process_craft_origami_writebacks(
 				}
 				next_item_id[0] += 1
 				crafter.items.append(item)
+			"poetry_scroll":
+				if not effects.get("requires_poetry_scroll_creation", false):
+					continue
+				var poem_raises: int = effects.get("poetry_scroll_raises", 0)
+				var poem_item: Dictionary = {
+					"item_type": "poetry_scroll",
+					"item_id": next_item_id[0],
+					"raises": poem_raises,
+					"crafter_id": char_id,
+				}
+				next_item_id[0] += 1
+				crafter.items.append(poem_item)
 
 
 static func _process_declare_senbazuru_writebacks(

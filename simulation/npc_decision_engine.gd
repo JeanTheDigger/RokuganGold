@@ -2567,6 +2567,13 @@ static func resolve_daily_letter(
 		result["meeting_settlement_id"] = meeting["settlement_id"]
 	elif visit:
 		result["visit_intent"] = true
+
+	# Attach poem scroll if available (s57.30.6): when NeedType supports it.
+	var poem_item_id: int = ctx.known_objectives.get("available_poem_item_id", -1)
+	if poem_item_id >= 0 and need_type in POEM_LETTER_NEED_TYPES:
+		result["attach_poem_item_id"] = poem_item_id
+		result["attach_poem_raises"] = ctx.known_objectives.get("available_poem_raises", 0)
+
 	return result
 
 
@@ -2578,6 +2585,13 @@ static func _get_letter_need_type(objectives: Dictionary) -> String:
 	if not standing.is_empty():
 		return standing.get("need_type", "")
 	return ""
+
+
+# NeedTypes where attaching a poem scroll to a letter is appropriate (s57.30.6).
+const POEM_LETTER_NEED_TYPES: Array[String] = [
+	"RAISE_DISPOSITION", "SEEK_GLORY", "ARTISTIC_EXPRESSION",
+	"SECURE_ALLIANCE", "PATRONIZE_ARTS",
+]
 
 
 const VISIT_INTENT_NEED_TYPES: Array[String] = [
@@ -5132,6 +5146,19 @@ static func _build_craft_origami_metadata(
 				"raises": raises,
 				"target_npc_id": need.target_npc_id,
 			}
+		"ARTISTIC_EXPRESSION":
+			# Poetry scroll when NPC has Artisan: Poetry skill (s57.30.6).
+			# Falls back to senbazuru/gohei if no poetry skill.
+			var poetry_rank: int = ctx.skill_ranks.get("Artisan: Poetry", 0)
+			if poetry_rank > 0 and ctx.known_objectives.get("available_poem_item_id", -1) < 0:
+				return {"origami_type": "poetry_scroll", "raises": _pick_origami_raises(poetry_rank)}
+			if active_id >= 0:
+				return {
+					"origami_type": "senbazuru_progress",
+					"raises": raises,
+					"senbazuru_id": active_id,
+				}
+			return {"origami_type": "gohei", "raises": raises}
 		_:
 			# Advance active senbazuru if present; else gohei; else noshi.
 			if active_id >= 0:
