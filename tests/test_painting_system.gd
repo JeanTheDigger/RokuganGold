@@ -728,3 +728,155 @@ func test_world_start_painting_has_minus1_creator() -> void:
 	assert_true(paintings.size() > 0, "temple seeded")
 	assert_eq(paintings[0].creator_id, -1, "historical artisan — creator_id = -1")
 	assert_eq(paintings[0].craft_progress, -1, "world-start paintings are complete")
+
+
+# ---------------------------------------------------------------------------
+# 19. resolve_remove_painting — slot cleared on removal
+# ---------------------------------------------------------------------------
+
+func test_resolve_remove_painting_lord_success() -> void:
+	var s: SettlementData = _make_settlement(Enums.SettlementType.CASTLE, 100, 1)
+	var painting: PaintingData = _make_kakemono(5, 2, 10)
+	painting.display_settlement_id = 100
+	painting.display_slot = PaintingSystem.DisplaySlot.WALL_ART
+	s.wall_art_slot = 5
+	var r: Dictionary = PaintingSystem.resolve_remove_painting(1, painting, s)
+	assert_true(r.get("success", false), "lord removes their own painting successfully")
+	assert_eq(painting.display_settlement_id, -1, "display_settlement_id cleared")
+	assert_eq(painting.display_slot, -1, "display_slot cleared")
+	assert_eq(s.wall_art_slot, -1, "settlement slot cleared")
+
+
+func test_resolve_remove_painting_wrong_settlement_blocked() -> void:
+	var s: SettlementData = _make_settlement(Enums.SettlementType.CASTLE, 100, 1)
+	var painting: PaintingData = _make_kakemono(5, 2, 10)
+	painting.display_settlement_id = 999
+	painting.display_slot = PaintingSystem.DisplaySlot.WALL_ART
+	var r: Dictionary = PaintingSystem.resolve_remove_painting(1, painting, s)
+	assert_false(r.get("success", true), "painting at different settlement — blocked")
+	assert_eq(r.get("blocked_reason", ""), "not_displayed_here")
+
+
+func test_resolve_remove_painting_non_lord_no_permission_blocked() -> void:
+	var s: SettlementData = _make_settlement(Enums.SettlementType.CASTLE, 100, 1)
+	var painting: PaintingData = _make_kakemono(5, 2, 10)
+	painting.display_settlement_id = 100
+	painting.display_slot = PaintingSystem.DisplaySlot.WALL_ART
+	s.wall_art_slot = 5
+	var r: Dictionary = PaintingSystem.resolve_remove_painting(42, painting, s)
+	assert_false(r.get("success", true), "non-lord without permission — blocked")
+	assert_eq(r.get("blocked_reason", ""), "no_permission")
+
+
+# ---------------------------------------------------------------------------
+# 20. declare_copy — copy WIP fields set correctly
+# ---------------------------------------------------------------------------
+
+func test_declare_copy_provenance_fields() -> void:
+	var original: PaintingData = _make_emakimono(7, 3, 10)
+	var copy: PaintingData = PaintingSystem.declare_copy(original, 20, 100, 50)
+	assert_false(copy.is_original, "copy is not an original")
+	assert_eq(copy.copy_of, 7, "copy_of = original painting_id")
+
+
+func test_declare_copy_generation_incremented() -> void:
+	var original: PaintingData = _make_emakimono(7, 3, 10)
+	original.generation = 1
+	var copy: PaintingData = PaintingSystem.declare_copy(original, 20, 100, 50)
+	assert_eq(copy.generation, 2, "generation = original.generation + 1")
+
+
+func test_declare_copy_wip_state() -> void:
+	var original: PaintingData = _make_emakimono(7, 3, 10)
+	var copy: PaintingData = PaintingSystem.declare_copy(original, 20, 100, 50)
+	assert_eq(copy.format, PaintingSystem.Format.EMAKIMONO, "copy is always emakimono")
+	assert_eq(copy.craft_progress, 0, "copy starts as WIP")
+	assert_eq(copy.quality_tier, 1, "copy starts at quality tier 1")
+	assert_eq(copy.target_quality_tier, 3, "target_quality_tier = original quality")
+	assert_eq(copy.creator_id, 20, "creator_id = copier_id")
+	assert_eq(copy.painting_id, 100, "painting_id assigned correctly")
+
+
+# ---------------------------------------------------------------------------
+# 21. apply_negative_framing_on_subject_visit — subject disposition loss
+# ---------------------------------------------------------------------------
+
+func test_negative_framing_positive_painting_returns_empty() -> void:
+	var painting: PaintingData = _make_emakimono(1, 3, 10, true)  # positive framing
+	painting.display_settlement_id = 100
+	var r: Dictionary = PaintingSystem.apply_negative_framing_on_subject_visit(painting, 99)
+	assert_true(r.is_empty(), "positive framing produces no effect")
+
+
+func test_negative_framing_portrait_subject_returns_loss() -> void:
+	var painting: PaintingData = _make_emakimono(1, 3, 10, false)  # negative framing
+	painting.subject_type = PaintingSystem.SubjectType.PORTRAIT
+	painting.subject_id = 99
+	painting.display_settlement_id = 100
+	var r: Dictionary = PaintingSystem.apply_negative_framing_on_subject_visit(painting, 99)
+	assert_false(r.is_empty(), "portrait subject visit triggers disposition loss")
+	assert_eq(r.get("disposition_change", 0),
+		PaintingSystem.NEGATIVE_FRAMING_DISP_BY_TIER[3], "tier 3 → −3 disposition loss")
+
+
+func test_negative_framing_not_displayed_returns_empty() -> void:
+	var painting: PaintingData = _make_emakimono(1, 2, 10, false)
+	painting.subject_type = PaintingSystem.SubjectType.PORTRAIT
+	painting.subject_id = 99
+	painting.display_settlement_id = -1  # not currently displayed
+	var r: Dictionary = PaintingSystem.apply_negative_framing_on_subject_visit(painting, 99)
+	assert_true(r.is_empty(), "painting not displayed — no effect fires")
+
+
+# ---------------------------------------------------------------------------
+# 22. revoke_slot_permission — actor removed from permission dict
+# ---------------------------------------------------------------------------
+
+func test_revoke_slot_permission_wall_art_removed() -> void:
+	var s: SettlementData = _make_settlement()
+	PaintingSystem.grant_slot_permission(5, s, PaintingSystem.DisplaySlot.WALL_ART)
+	PaintingSystem.revoke_slot_permission(5, s, PaintingSystem.DisplaySlot.WALL_ART)
+	assert_false(5 in s.wall_art_permissions, "actor removed from wall_art_permissions")
+
+
+func test_revoke_slot_permission_displayed_art_removed() -> void:
+	var s: SettlementData = _make_settlement()
+	PaintingSystem.grant_slot_permission(5, s, PaintingSystem.DisplaySlot.DISPLAYED_ART)
+	PaintingSystem.revoke_slot_permission(5, s, PaintingSystem.DisplaySlot.DISPLAYED_ART)
+	assert_false(5 in s.displayed_art_permissions, "actor removed from displayed_art_permissions")
+
+
+func test_revoke_slot_permission_fusuma_removed() -> void:
+	var s: SettlementData = _make_settlement()
+	PaintingSystem.grant_slot_permission(5, s, PaintingSystem.DisplaySlot.FUSUMA)
+	PaintingSystem.revoke_slot_permission(5, s, PaintingSystem.DisplaySlot.FUSUMA)
+	assert_false(5 in s.fusuma_permissions, "actor removed from fusuma_permissions")
+
+
+# ---------------------------------------------------------------------------
+# 23. lapse_permissions_on_lordship_change — all dicts cleared
+# ---------------------------------------------------------------------------
+
+func test_lapse_permissions_clears_all_three_dicts() -> void:
+	var s: SettlementData = _make_settlement()
+	PaintingSystem.grant_slot_permission(1, s, PaintingSystem.DisplaySlot.WALL_ART)
+	PaintingSystem.grant_slot_permission(2, s, PaintingSystem.DisplaySlot.DISPLAYED_ART)
+	PaintingSystem.grant_slot_permission(3, s, PaintingSystem.DisplaySlot.FUSUMA)
+	PaintingSystem.lapse_permissions_on_lordship_change(s)
+	assert_true(s.wall_art_permissions.is_empty(), "wall_art_permissions cleared")
+	assert_true(s.displayed_art_permissions.is_empty(), "displayed_art_permissions cleared")
+	assert_true(s.fusuma_permissions.is_empty(), "fusuma_permissions cleared")
+
+
+func test_lapse_permissions_idempotent_when_empty() -> void:
+	var s: SettlementData = _make_settlement()
+	PaintingSystem.lapse_permissions_on_lordship_change(s)  # no crash
+	assert_true(s.wall_art_permissions.is_empty(), "idempotent on empty dicts")
+
+
+func test_lapse_permissions_multiple_actors_all_cleared() -> void:
+	var s: SettlementData = _make_settlement()
+	PaintingSystem.grant_slot_permission(10, s, PaintingSystem.DisplaySlot.WALL_ART)
+	PaintingSystem.grant_slot_permission(20, s, PaintingSystem.DisplaySlot.WALL_ART)
+	PaintingSystem.lapse_permissions_on_lordship_change(s)
+	assert_eq(s.wall_art_permissions.size(), 0, "all actors cleared from wall_art_permissions")
