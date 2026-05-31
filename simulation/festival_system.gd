@@ -63,19 +63,20 @@ const CANONICAL_FESTIVALS: Array[Dictionary] = [
 	{"name": "Festival of Leaves", "month": 1, "day": -1, "effects": ["poetry_exchange"]},
 	{"name": "Festival of Akodo", "month": 1, "day": -1, "effects": ["lion_honor"]},
 	{"name": "Holi", "month": 2, "day": -1, "effects": ["informal_court"]},
-	{"name": "Devil Chase", "month": 1, "day": -1, "effects": ["taint_assessment"]},
+	{"name": "Devil Chase", "month": 12, "day": 30, "effects": ["taint_assessment"]},
 	{"name": "Iris Festival", "month": 3, "day": 25, "effects": ["gift_giving", "morale_bonus"]},
 	{"name": "Spring Patrols", "month": 1, "day": -1, "effects": ["military_activation"]},
 	{"name": "Tilling of the Fields", "month": 1, "day": -1, "effects": ["planting_tick"]},
 	{"name": "Festival of the Sea Dragon", "month": 3, "day": -1, "effects": ["trade_bonus"]},
 	{"name": "Chrysanthemum Festival", "month": 4, "day": 6, "effects": ["labor_halt"]},
-	{"name": "Lotus Blossoms", "month": 4, "day": -1, "effects": ["poetry_exchange"]},
+	{"name": "Lotus Blossoms", "month": 4, "day": 30, "effects": ["poetry_exchange"]},
 	{"name": "Ning Panchiman", "month": 4, "day": -1, "effects": ["duel_honor", "martial_glory"]},
 	{"name": "Day of Remembrance", "month": 5, "day": -1, "effects": ["crab_honor"]},
 	{"name": "Baisakh", "month": 5, "day": -1, "effects": ["stability_bonus"]},
 	{"name": "Kanto Festival", "month": 7, "day": 2, "effects": ["production_bonus"]},
 	{"name": "Setsuban Festival", "month": 6, "day": 8, "effects": ["ceasefire"]},
 	{"name": "Bon Festival", "month": 8, "day": 28, "effects": ["ancestor_worship", "honor_gain"]},
+	{"name": "Kumitae Tournament", "month": 8, "day": 30, "effects": ["martial_glory"]},
 	{"name": "Pearl Harvest", "month": 8, "day": -1, "effects": ["trade_bonus"]},
 	{"name": "Bayushi's Tears", "month": 7, "day": -1, "effects": ["scorpion_disposition"]},
 	{"name": "Viper Festival", "month": 3, "day": -1, "effects": ["scorpion_event"]},
@@ -128,8 +129,7 @@ static func get_glory_gain_festivals(ic_day: int) -> float:
 	var gain: float = 0.0
 	for fest: Dictionary in get_active_festivals(ic_day):
 		if "martial_glory" in fest.get("effects", []) or "poetry_exchange" in fest.get("effects", []):
-			# DISABLED: GDD s11.5 does not specify martial glory value
-			gain += 0.0
+			gain += 0.1
 	return gain
 
 
@@ -158,7 +158,7 @@ const CHAMPIONSHIP_STAGES: Dictionary = {
 	ChampionshipType.AMETHYST: [
 		{"skill": "Courtier", "trait": "awareness"},
 		{"skill": "Etiquette", "trait": "awareness"},
-		{"skill": "Lore: History", "trait": "intelligence"},
+		{"skill": ["Lore: History", "Poetry"], "trait": "intelligence"},
 	],
 	ChampionshipType.RUBY: [
 		{"skill": "Kenjutsu", "trait": "agility"},
@@ -172,8 +172,8 @@ const CHAMPIONSHIP_STAGES: Dictionary = {
 	],
 	ChampionshipType.TOPAZ: [
 		{"skill": "Athletics", "trait": "strength"},
-		{"skill": "Kenjutsu", "trait": "agility"},
-		{"skill": "Etiquette", "trait": "intelligence"},
+		{"skill": ["Kenjutsu", "Iaijutsu"], "trait": "agility"},
+		{"skill": ["Etiquette", "Lore: History"], "trait": "intelligence"},
 	],
 }
 
@@ -189,9 +189,36 @@ const ANNUAL_CHAMPIONSHIPS: Array[ChampionshipType] = [ChampionshipType.TOPAZ]
 static func is_vacancy_triggered(championship: ChampionshipType) -> bool:
 	return championship not in ANNUAL_CHAMPIONSHIPS
 
+
+## Returns the best skill rank a candidate has for a stage.
+## Handles Array skill options (GDD "X or Y" alternatives), "Artisan" category
+## (picks highest "Artisan: *" sub-skill), and "Performance" category (picks
+## highest "Perform: *" sub-skill).
+static func _pick_best_skill_rank(skill: Variant, skill_ranks: Dictionary) -> int:
+	if skill is Array:
+		var best: int = 0
+		for s: String in skill:
+			best = maxi(best, skill_ranks.get(s, 0))
+		return best
+	var sk: String = str(skill)
+	if sk == "Artisan":
+		var best: int = 0
+		for k: String in skill_ranks.keys():
+			if k.begins_with("Artisan:"):
+				best = maxi(best, skill_ranks.get(k, 0))
+		return best
+	if sk == "Performance":
+		var best: int = 0
+		for k: String in skill_ranks.keys():
+			if k.begins_with("Perform:"):
+				best = maxi(best, skill_ranks.get(k, 0))
+		return best
+	return skill_ranks.get(sk, 0)
+
+
 static func resolve_championship(
 	candidates: Array,
-	_dice: Object,
+	dice: Object,
 ) -> Dictionary:
 	if candidates.is_empty():
 		return {}
@@ -208,12 +235,29 @@ static func resolve_championship(
 	for candidate: Dictionary in candidates:
 		var total: int = 0
 		for stage: Dictionary in stages:
-			var skill_rank: int = candidate.get("skill_ranks", {}).get(stage["skill"], 0)
-			var trait_val: int = candidate.get("traits", {}).get(stage["trait"], 0)
-			# DISABLED: GDD s11.5 says actual dice rolls, not derived formula
-			var _roll_k: int = mini(skill_rank + trait_val, 10)
-			var _keep: int = trait_val
-			total += 0
+			var skill_rank: int
+			var trait_val: int
+
+			if stage["skill"] == "elemental_ring":
+				# Jade stage 3: each candidate demonstrates with their highest ring.
+				# Ring = min(trait1, trait2) per GDD s4.5.2.
+				var tr: Dictionary = candidate.get("traits", {})
+				var air: int = mini(tr.get("reflexes", 0), tr.get("awareness", 0))
+				var fire: int = mini(tr.get("agility", 0), tr.get("intelligence", 0))
+				var water: int = mini(tr.get("strength", 0), tr.get("perception", 0))
+				var earth: int = mini(tr.get("stamina", 0), tr.get("willpower", 0))
+				var vd: int = tr.get("void_ring", 0)
+				var highest: int = maxi(air, maxi(fire, maxi(water, maxi(earth, vd))))
+				skill_rank = highest
+				trait_val = highest
+			else:
+				skill_rank = _pick_best_skill_rank(stage["skill"], candidate.get("skill_ranks", {}))
+				trait_val = candidate.get("traits", {}).get(stage.get("trait", ""), 0)
+
+			if dice != null:
+				var roll_k: int = mini(skill_rank + trait_val, 10)
+				var keep: int = maxi(trait_val, 1)
+				total += dice.roll_and_keep(roll_k, keep).total
 
 		candidate["total_score"] = total
 		var honor: float = candidate.get("honor", 0.0)
