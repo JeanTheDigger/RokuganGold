@@ -148,6 +148,18 @@ var next_senbazuru_id: Array[int] = [1]
 var active_arrangements: Array[IkebanaArrangementData] = []
 var next_arrangement_id: Array[int] = [1]
 
+# -- Gardens (s57.23) --------------------------------------------------------
+var active_gardens: Array[GardenData] = []
+var next_garden_id: Array[int] = [1]
+
+# -- Bonsai Specimens (s57.24) -----------------------------------------------
+var active_bonsai: Array[BonsaiData] = []
+var next_bonsai_id: Array[int] = [1]
+
+# -- Garden Commissions (s57.23.5) -------------------------------------------
+var commission_records: Array[CommissionRecordData] = []
+var next_commission_id: Array[int] = [1]
+
 # -- Commitments ID Counter (s55.31) ------------------------------------------
 var next_commitment_id: Array[int] = [1]
 
@@ -336,6 +348,12 @@ func advance_one_day() -> Dictionary:
 		next_senbazuru_id,
 		active_arrangements,
 		next_arrangement_id,
+		active_gardens,
+		next_garden_id,
+		active_bonsai,
+		next_bonsai_id,
+		commission_records,
+		next_commission_id,
 	)
 	_apply_succession_updates(result)
 	return result

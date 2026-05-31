@@ -588,6 +588,91 @@ static func _apply_origami_precondition_filter(
 	return options
 
 
+# -- Phase 4c: Garden / Bonsai Precondition Filter (s57.23a) ------------------
+# Removes garden and bonsai actions when required state is absent.
+
+static func _apply_garden_precondition_filter(
+	options: Array,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	# CULTIVATE_GARDEN: requires an active commission and Artisan: Gardening rank ≥ 1.
+	var commission_id: int = ctx.known_objectives.get("active_commission_id", -1)
+	var gardening_rank: int = character.skills.get("Artisan: Gardening", 0)
+	if commission_id < 0 or gardening_rank < 1:
+		options = _remove_action(options, "CULTIVATE_GARDEN")
+
+	# MAINTAIN_GARDEN: requires a local garden and Artisan: Gardening rank ≥ 1.
+	var local_garden_id: int = ctx.known_objectives.get("local_garden_id", -1)
+	if local_garden_id < 0 or gardening_rank < 1:
+		options = _remove_action(options, "MAINTAIN_GARDEN")
+
+	# OFFER_ART_COMMISSION: requires a garden zone available at this settlement.
+	if not ctx.known_objectives.get("garden_zone_available", false):
+		options = _remove_action(options, "OFFER_ART_COMMISSION")
+
+	# TEND_BONSAI / DISPLAY_BONSAI: requires an owned bonsai.
+	var owned_bonsai_id: int = ctx.known_objectives.get("owned_bonsai_id", -1)
+	if owned_bonsai_id < 0:
+		options = _remove_action(options, "TEND_BONSAI")
+		options = _remove_action(options, "DISPLAY_BONSAI")
+
+	# DISPLAY_BONSAI: also requires bonsai_display_eligible flag.
+	if not ctx.known_objectives.get("bonsai_display_eligible", false):
+		options = _remove_action(options, "DISPLAY_BONSAI")
+
+	# COLLECT_BONSAI_SPECIMEN: requires Artisan: Gardening rank ≥ 1.
+	if gardening_rank < 1:
+		options = _remove_action(options, "COLLECT_BONSAI_SPECIMEN")
+
+	return options
+
+
+static func _build_garden_commission_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+	chars_by_id: Dictionary,
+	is_request: bool,
+) -> Dictionary:
+	## REQUEST_ART: select available artisan with Artisan: Gardening, pick open zone.
+	## OFFER_ART_COMMISSION: pick the settlement lord as daimyo target, pick open zone.
+	var loc_int: int = int(ctx.location_id) if ctx.location_id.is_valid_int() else -1
+	var zone_type: String = ctx.known_objectives.get("available_garden_zone", "")
+	var quality_tier: int = clampi(
+		ctx.skill_ranks.get("Artisan: Gardening", 1), 1, 5
+	)
+
+	if is_request:
+		# Daimyo picks an artisan — prefer the need target if available.
+		var artisan_id: int = need.target_npc_id if need.target_npc_id >= 0 else -1
+		if artisan_id < 0:
+			for cid: Variant in ctx.disposition_values:
+				var c_int: int = int(cid)
+				var c_char: L5RCharacterData = chars_by_id.get(c_int)
+				if c_char == null or CharacterStats.is_dead(c_char):
+					continue
+				if c_char.skills.get("Artisan: Gardening", 0) >= 1:
+					artisan_id = c_int
+					break
+		return {
+			"artisan_id": artisan_id,
+			"daimyo_id": ctx.character_id,
+			"settlement_id": loc_int,
+			"zone_type": zone_type,
+			"target_quality_tier": quality_tier,
+		}
+	else:
+		# Artisan offers: pick the lord of the current settlement as daimyo.
+		var daimyo_id: int = need.target_npc_id if need.target_npc_id >= 0 else -1
+		return {
+			"artisan_id": ctx.character_id,
+			"daimyo_id": daimyo_id,
+			"settlement_id": loc_int,
+			"zone_type": zone_type,
+			"target_quality_tier": quality_tier,
+		}
+
+
 # -- Phase 4c: TERMINATE_CONTRACT Precondition Filter (s52.8 A79) -------------
 # Removes TERMINATE_CONTRACT when the lord has no active contracts.
 
@@ -901,6 +986,7 @@ static func run(
 	options = _apply_tattoo_precondition_filter(options, character, ctx, chars_by_id, world_state)
 	options = _apply_terminate_contract_precondition_filter(options, world_state)
 	options = _apply_origami_precondition_filter(options, character, ctx)
+	options = _apply_garden_precondition_filter(options, character, ctx)
 
 	# Phase 5
 	score_all(options, need, ctx, scoring_tables,
@@ -1137,6 +1223,9 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"APPROVE_CLAN_INDUCTION",
 				"TERMINATE_CONTRACT",
 				"CRAFT",
+				"CULTIVATE_GARDEN", "MAINTAIN_GARDEN",
+				"COLLECT_BONSAI_SPECIMEN", "TEND_BONSAI", "DISPLAY_BONSAI",
+				"OFFER_ART_COMMISSION",
 				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
 				"DO_NOTHING", "REST",
 			]
@@ -1176,6 +1265,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
 				"APPROVE_CLAN_INDUCTION",
 				"CRAFT",
+				"OFFER_ART_COMMISSION", "TEND_BONSAI", "DISPLAY_BONSAI",
 				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
 				"DO_NOTHING", "REST",
 			]
@@ -1206,6 +1296,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"HIRE_RONIN",
 				"TERMINATE_CONTRACT",
 				"CRAFT",
+				"CULTIVATE_GARDEN", "TEND_BONSAI", "DISPLAY_BONSAI",
 				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
 				"DO_NOTHING", "REST",
 			]
@@ -1364,6 +1455,13 @@ static func _get_ap_cost(action_id: String) -> int:
 		"PERFORM_THEATER_PIECE": 1,
 		"DEDICATE_PIECE": 1,
 		"CRAFT": 1,
+		"REQUEST_ART": 1,
+		"OFFER_ART_COMMISSION": 1,
+		"CULTIVATE_GARDEN": 1,
+		"MAINTAIN_GARDEN": 1,
+		"COLLECT_BONSAI_SPECIMEN": 1,
+		"TEND_BONSAI": 1,
+		"DISPLAY_BONSAI": 1,
 		"DECLARE_SENBAZURU": 0,
 		"PRESENT_SENBAZURU": 1,
 	}
@@ -3019,6 +3117,28 @@ static func _populate_action_metadata(
 	elif option.action_id == "PRESENT_SENBAZURU":
 		var sb_id: int = ctx.known_objectives.get("active_senbazuru_id", -1)
 		option.metadata = {"senbazuru_id": sb_id}
+	elif option.action_id in ["REQUEST_ART", "OFFER_ART_COMMISSION"]:
+		option.metadata = _build_garden_commission_metadata(ctx, need, chars_by_id, option.action_id == "REQUEST_ART")
+		option.target_npc_id = option.metadata.get("artisan_id", -1) if option.action_id == "REQUEST_ART" else option.metadata.get("daimyo_id", -1)
+	elif option.action_id == "CULTIVATE_GARDEN":
+		option.metadata = {
+			"commission_id": ctx.known_objectives.get("active_commission_id", -1),
+			"target_quality_tier": ctx.known_objectives.get("commission_quality_tier", 1),
+		}
+	elif option.action_id == "MAINTAIN_GARDEN":
+		option.metadata = {
+			"garden_id": ctx.known_objectives.get("local_garden_id", -1),
+			"garden_tier": ctx.known_objectives.get("local_garden_tier", 1),
+		}
+	elif option.action_id == "COLLECT_BONSAI_SPECIMEN":
+		option.target_province_id = ctx.known_objectives.get("character_province_id", -1)
+		option.metadata = {"province_id": option.target_province_id}
+	elif option.action_id in ["TEND_BONSAI", "DISPLAY_BONSAI"]:
+		var bonsai_id_meta: int = ctx.known_objectives.get("owned_bonsai_id", -1)
+		option.metadata = {
+			"bonsai_id": bonsai_id_meta,
+			"settlement_id": int(ctx.location_id) if ctx.location_id.is_valid_int() else -1,
+		}
 
 
 static func _build_compose_theater_metadata(

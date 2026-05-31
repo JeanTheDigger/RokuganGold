@@ -57,6 +57,17 @@ extends Resource
 #              "topic_id": int, "subject_id": int, "zone_subtype": String}
 @export var public_record: Array = []
 
+# -- Garden Slots (per GDD s57.23a — settlement-level zone proxy) -------------
+# Keys: "CASTLE_OUTER_COURTYARD", "TSUBONIWA". Values: garden_id (int) or -1 (empty).
+# Only populated for eligible settlement types (FAMILY_CASTLE, CASTLE, CITY).
+@export var garden_slots: Dictionary = {}
+# Artisan currently holding permission for each zone type slot.
+# Keys: "CASTLE_OUTER_COURTYARD", "TSUBONIWA". Values: artisan_id (int) or -1.
+@export var garden_permissions: Dictionary = {}
+# Bonsai display slot. -1 = empty, otherwise bonsai_id.
+# Eligible types: FAMILY_CASTLE, CASTLE, CITY, KEEP, TEMPLE, SHINDEN, MONASTERY.
+@export var bonsai_display_slot: int = -1
+
 
 func has_infrastructure(feature: String) -> bool:
 	return feature in infrastructure

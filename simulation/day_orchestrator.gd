@@ -95,6 +95,12 @@ static func advance_day(
 	next_senbazuru_id: Array = [1],
 	active_arrangements: Array = [],
 	next_arrangement_id: Array = [1],
+	active_gardens: Array = [],
+	next_garden_id: Array = [1],
+	active_bonsai: Array = [],
+	next_bonsai_id: Array = [1],
+	commission_records: Array = [],
+	next_commission_id: Array = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -184,6 +190,7 @@ static func advance_day(
 	_inject_theater_context(theater_pieces, characters, world_states)
 	_inject_senbazuru_context(active_senbazurus, characters, world_states)
 	_inject_ikebana_context(active_arrangements, settlements, characters, world_states)
+	_inject_garden_context(active_gardens, active_bonsai, commission_records, settlements, characters, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_set_temple_context_flags(characters, settlements, world_states)
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
@@ -871,6 +878,31 @@ static func advance_day(
 	)
 	_remove_expired_arrangements(active_arrangements)
 
+	_process_garden_commission_writebacks(
+		day_result.get("results", []),
+		commission_records, next_commission_id, active_gardens, next_garden_id,
+		characters_by_id, settlements, active_topics, next_topic_id, ic_day, current_season,
+	)
+	_process_maintain_garden_writebacks(
+		day_result.get("results", []),
+		active_gardens, characters_by_id, settlements, active_topics, next_topic_id, ic_day, current_season,
+	)
+	_process_bonsai_collect_writebacks(
+		day_result.get("results", []),
+		active_bonsai, next_bonsai_id, characters_by_id, ic_day,
+	)
+	_process_bonsai_tend_writebacks(
+		day_result.get("results", []),
+		active_bonsai, characters_by_id, ic_day,
+	)
+	_process_bonsai_display_writebacks(
+		day_result.get("results", []),
+		active_bonsai, characters_by_id, settlements,
+	)
+	_process_garden_visitor_effects(
+		active_gardens, characters, characters_by_id, settlements, ic_day,
+	)
+
 	_process_travel_redirect_writebacks(
 		day_result.get("results", []), objectives_map,
 	)
@@ -1309,6 +1341,10 @@ static func advance_day(
 		)
 		_increment_vacancy_seasons(season_meta)
 		_process_seasonal_stipend_disposition(characters, characters_by_id)
+		_process_garden_seasonal_maintenance(
+			active_gardens, commission_records, characters_by_id, settlements,
+			active_topics, next_topic_id, ic_day, current_season,
+		)
 		extradition_results = _process_fugitive_extradition_seasonal(
 			crime_records, characters, characters_by_id, provinces, settlements,
 			active_topics, next_topic_id, ic_day, season_meta,
@@ -1348,6 +1384,7 @@ static func advance_day(
 		stipend_topic_results = _create_stipend_failure_topics(
 			stipends, characters_by_id, active_topics, next_topic_id, ic_day,
 		)
+		_process_bonsai_monthly_neglect(active_bonsai, characters_by_id, ic_day / 30)
 
 	if is_season_boundary:
 		_purge_resolved_crime_records(crime_records, ic_day)
@@ -13173,6 +13210,11 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"theater_pieces_to_perform", "wip_piece_ids", "learnable_piece_ids",
 		"has_active_contracts",
 		"active_senbazuru_id", "senbazuru_is_complete",
+		"active_commission_id", "commission_quality_tier",
+		"local_garden_id", "local_garden_tier",
+		"owned_bonsai_id", "bonsai_display_eligible",
+		"garden_zone_available", "available_garden_zone",
+		"character_province_id",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -22046,6 +22088,657 @@ static func _remove_expired_arrangements(
 		if arr_v is IkebanaArrangementData:
 			if (arr_v as IkebanaArrangementData).expired:
 				active_arrangements.remove_at(i)
+
+
+# ---------------------------------------------------------------------------
+# Garden & Bonsai system (s57.23, s57.24)
+# ---------------------------------------------------------------------------
+
+static func _inject_garden_context(
+	active_gardens: Array,
+	active_bonsai: Array,
+	commission_records: Array,
+	settlements: Array,
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	## Inject per-character garden/bonsai state into known_objectives.
+
+	# Build settlement lookup
+	var settlements_by_str_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_str_id[str(s.settlement_id)] = s
+
+	# Build location → active garden (non-destroyed) lookup
+	var garden_at_loc: Dictionary = {}  # str(settlement_id) → GardenData
+	for g_v: Variant in active_gardens:
+		if not g_v is GardenData:
+			continue
+		var g: GardenData = g_v as GardenData
+		if g.destroyed:
+			continue
+		var key: String = str(g.settlement_id)
+		if not garden_at_loc.has(key):
+			garden_at_loc[key] = g
+
+	# Build creator_id → active commission lookup
+	var commission_by_creator: Dictionary = {}  # creator_id → CommissionRecordData
+	for r_v: Variant in commission_records:
+		if not r_v is CommissionRecordData:
+			continue
+		var r: CommissionRecordData = r_v as CommissionRecordData
+		if r.status != "ACTIVE":
+			continue
+		if not commission_by_creator.has(r.artisan_id):
+			commission_by_creator[r.artisan_id] = r
+
+	# Build owner_id → bonsai lookup (pick first alive non-dead bonsai)
+	var bonsai_by_owner: Dictionary = {}  # owner_id → BonsaiData
+	for b_v: Variant in active_bonsai:
+		if not b_v is BonsaiData:
+			continue
+		var b: BonsaiData = b_v as BonsaiData
+		if b.is_dead:
+			continue
+		if not bonsai_by_owner.has(b.owner_id):
+			bonsai_by_owner[b.owner_id] = b
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			continue
+		if not ws.has("known_objectives"):
+			ws["known_objectives"] = {}
+
+		var loc: String = character.physical_location
+		var settlement: SettlementData = settlements_by_str_id.get(loc)
+		var loc_int: int = int(loc) if loc.is_valid_int() else -1
+
+		# Active commission for this character as artisan
+		var commission: CommissionRecordData = commission_by_creator.get(character.character_id)
+		ws["known_objectives"]["active_commission_id"] = commission.commission_id if commission != null else -1
+		ws["known_objectives"]["commission_quality_tier"] = commission.target_quality_tier if commission != null else 1
+
+		# Garden at character's current location (for MAINTAIN_GARDEN)
+		var local_garden: GardenData = garden_at_loc.get(loc) if not loc.is_empty() else null
+		ws["known_objectives"]["local_garden_id"] = local_garden.garden_id if local_garden != null else -1
+		ws["known_objectives"]["local_garden_tier"] = local_garden.current_tier if local_garden != null else 1
+
+		# Owned bonsai
+		var bonsai: BonsaiData = bonsai_by_owner.get(character.character_id)
+		ws["known_objectives"]["owned_bonsai_id"] = bonsai.bonsai_id if bonsai != null else -1
+
+		# Province id for COLLECT_BONSAI_SPECIMEN
+		ws["known_objectives"]["character_province_id"] = loc_int
+
+		# Bonsai display eligibility at current settlement
+		var display_eligible: bool = false
+		if bonsai != null and settlement != null:
+			display_eligible = GardenSystem.get_bonsai_display_eligible(int(settlement.settlement_type))
+		ws["known_objectives"]["bonsai_display_eligible"] = display_eligible
+
+		# Garden zone availability at current settlement (for OFFER_ART_COMMISSION)
+		var zone_available: bool = false
+		var available_zone: String = ""
+		if settlement != null:
+			var eligible_zones: Array = GardenSystem.get_garden_eligible_zones(settlement.settlement_type)
+			for zone_type: String in eligible_zones:
+				if not GardenSystem.is_zone_committed(settlement, zone_type):
+					zone_available = true
+					available_zone = zone_type
+					break
+		ws["known_objectives"]["garden_zone_available"] = zone_available
+		ws["known_objectives"]["available_garden_zone"] = available_zone
+
+
+static func _process_garden_commission_writebacks(
+	results: Array,
+	commission_records: Array,
+	next_commission_id: Array,
+	active_gardens: Array,
+	next_garden_id: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	current_season: int,
+) -> void:
+	## Handle REQUEST_ART / OFFER_ART_COMMISSION (commission creation)
+	## and CULTIVATE_GARDEN progress (including garden completion).
+
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_id[s.settlement_id] = s
+
+	for result: Variant in results:
+		var action_id: String = result.get("action_id", "")
+		var effects: Dictionary = result.get("effects", {})
+
+		# --- Commission creation ---
+		if action_id in ["REQUEST_ART", "OFFER_ART_COMMISSION"]:
+			if not result.get("success", false):
+				continue
+			if not effects.get("requires_commission_creation", false):
+				continue
+			var artisan_id: int = effects.get("artisan_id", -1)
+			var daimyo_id: int = effects.get("daimyo_id", -1)
+			var settlement_id: int = effects.get("settlement_id", -1)
+			var zone_type: String = effects.get("zone_type", "")
+			var quality_tier: int = effects.get("target_quality_tier", 1)
+			if artisan_id < 0 or daimyo_id < 0 or zone_type.is_empty():
+				continue
+
+			var settlement: SettlementData = settlements_by_id.get(settlement_id)
+			if settlement == null:
+				continue
+			if GardenSystem.is_zone_committed(settlement, zone_type):
+				continue  # Zone already taken
+
+			var artisan: L5RCharacterData = characters_by_id.get(artisan_id)
+			if artisan == null or CharacterStats.is_dead(artisan):
+				continue
+
+			# Check artisan has not declined this commission
+			var already_declined: bool = false
+			for dec: Variant in artisan.declined_commissions:
+				var d: Dictionary = dec as Dictionary
+				if d.get("daimyo_id", -1) == daimyo_id and d.get("art_form", "") == "garden":
+					if d.get("expires_ic_day", 0) > ic_day:
+						already_declined = true
+						break
+			if already_declined:
+				continue
+
+			var record: CommissionRecordData = GardenSystem.create_commission_record(
+				next_commission_id[0],
+				artisan_id, daimyo_id, settlement_id, zone_type,
+				action_id, quality_tier, ic_day,
+			)
+			next_commission_id[0] += 1
+			commission_records.append(record)
+			GardenSystem.grant_permission(settlement, zone_type, artisan_id)
+
+		# --- Cultivate progress ---
+		elif action_id == "CULTIVATE_GARDEN":
+			if effects.is_empty():
+				continue
+			var commission_id: int = effects.get("commission_id", -1)
+			if commission_id < 0:
+				continue
+
+			var record: CommissionRecordData = null
+			for r_v: Variant in commission_records:
+				if r_v is CommissionRecordData:
+					var r: CommissionRecordData = r_v as CommissionRecordData
+					if r.commission_id == commission_id:
+						record = r
+						break
+			if record == null or record.status != "ACTIVE":
+				continue
+
+			var roll_total: int = effects.get("roll_total", 0)
+			var tn: int = effects.get("tn", 15)
+			var raises: int = effects.get("raises", 0)
+			var cultivate_result: Dictionary = GardenSystem.apply_cultivate_progress(
+				record, roll_total, tn, raises, ic_day,
+			)
+
+			if cultivate_result.get("completed", false):
+				var completion_raises: int = cultivate_result.get("completion_raises", 0)
+				var settlement: SettlementData = settlements_by_id.get(record.settlement_id)
+				var artisan: L5RCharacterData = characters_by_id.get(record.artisan_id)
+				var daimyo: L5RCharacterData = characters_by_id.get(record.daimyo_id)
+				if settlement == null or artisan == null:
+					continue
+
+				# Create garden
+				var garden: GardenData = GardenSystem.create_garden(
+					next_garden_id[0],
+					record.artisan_id,
+					record.settlement_id,
+					record.zone_type,
+					record.target_quality_tier,
+					completion_raises,
+					record.commission_id,
+					ic_day,
+				)
+				next_garden_id[0] += 1
+				active_gardens.append(garden)
+				settlement.garden_slots[record.zone_type] = garden.garden_id
+
+				# Disposition bonus to daimyo
+				if daimyo != null and not CharacterStats.is_dead(daimyo):
+					var bonus: int = GardenSystem.compute_completion_bonus(completion_raises)
+					var disp: int = clampi(
+						daimyo.disposition_values.get(artisan.character_id, 0) + bonus,
+						-100, 100,
+					)
+					daimyo.disposition_values[artisan.character_id] = disp
+
+				# Excess-raise glory for Legendary
+				var excess_glory: float = GardenSystem.apply_excess_raises_glory(
+					record.target_quality_tier, completion_raises,
+				)
+				if excess_glory > 0.0:
+					HonorGlorySystem.apply_glory_change(artisan, excess_glory)
+
+				# Completion topic
+				var topic_dict: Dictionary = GardenSystem.make_completion_topic(
+					garden,
+					artisan.character_name,
+					record.zone_type,
+					daimyo.character_name if daimyo != null else "the Daimyo",
+				)
+				if not topic_dict.is_empty():
+					var topic: TopicData = TopicData.new()
+					topic.topic_id = next_topic_id[0]
+					next_topic_id[0] += 1
+					topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4) as TopicData.Tier
+					topic.category = TopicData.Category.SOCIAL
+					topic.topic_type = topic_dict.get("topic_type", "garden_completed")
+					topic.title = topic_dict.get("title", "")
+					topic.subject_character_id = record.artisan_id
+					topic.ic_day_created = ic_day
+					topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+					active_topics.append(topic)
+					if artisan != null:
+						artisan.topic_pool.append(topic.topic_id)
+					if daimyo != null and not CharacterStats.is_dead(daimyo):
+						daimyo.topic_pool.append(topic.topic_id)
+
+
+static func _process_maintain_garden_writebacks(
+	results: Array,
+	active_gardens: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	current_season: int,
+) -> void:
+	## Apply MAINTAIN_GARDEN roll outcomes to garden state.
+
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_id[s.settlement_id] = s
+
+	for result: Variant in results:
+		if result.get("action_id", "") != "MAINTAIN_GARDEN":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var garden_id: int = effects.get("garden_id", -1)
+		if garden_id < 0:
+			continue
+
+		var garden: GardenData = null
+		for g_v: Variant in active_gardens:
+			if g_v is GardenData and (g_v as GardenData).garden_id == garden_id:
+				garden = g_v as GardenData
+				break
+		if garden == null or garden.destroyed:
+			continue
+
+		var from_tier: int = garden.current_tier
+		var maintain_result: Dictionary = GardenSystem.apply_maintain_result(
+			garden, result.get("success", false), current_season,
+		)
+
+		if maintain_result.get("degraded", false):
+			var creator: L5RCharacterData = characters_by_id.get(garden.creator_id)
+			var topic_dict: Dictionary = GardenSystem.make_degradation_topic(
+				garden,
+				creator.character_name if creator != null else "",
+				creator != null and not CharacterStats.is_dead(creator),
+				creator.glory if creator != null else 0.0,
+				garden.zone_type,
+				from_tier,
+			)
+			if not topic_dict.is_empty():
+				var topic: TopicData = TopicData.new()
+				topic.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4) as TopicData.Tier
+				topic.category = TopicData.Category.SOCIAL
+				topic.topic_type = topic_dict.get("topic_type", "garden_degraded")
+				topic.title = topic_dict.get("title", "")
+				topic.subject_character_id = garden.creator_id
+				topic.subject_role = "NEUTRAL" if creator == null else ""
+				topic.ic_day_created = ic_day
+				topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+				active_topics.append(topic)
+				if creator != null and not CharacterStats.is_dead(creator):
+					creator.topic_pool.append(topic.topic_id)
+
+		if maintain_result.get("destroyed", false):
+			var settlement: SettlementData = settlements_by_id.get(garden.settlement_id)
+			if settlement != null:
+				settlement.garden_slots[garden.zone_type] = -1
+				settlement.garden_permissions[garden.zone_type] = -1
+
+
+static func _process_bonsai_collect_writebacks(
+	results: Array,
+	active_bonsai: Array,
+	next_bonsai_id: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	## Create a new BonsaiData on successful COLLECT_BONSAI_SPECIMEN.
+	for result: Variant in results:
+		if result.get("action_id", "") != "COLLECT_BONSAI_SPECIMEN":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var collector_id: int = effects.get("collector_id", result.get("character_id", -1))
+		var province_id: int = effects.get("province_id", -1)
+		if collector_id < 0:
+			continue
+		var collector: L5RCharacterData = characters_by_id.get(collector_id)
+		if collector == null or CharacterStats.is_dead(collector):
+			continue
+
+		var bonsai: BonsaiData = GardenSystem.create_bonsai(
+			next_bonsai_id[0], collector_id, province_id, ic_day, false,
+		)
+		next_bonsai_id[0] += 1
+		active_bonsai.append(bonsai)
+
+
+static func _process_bonsai_tend_writebacks(
+	results: Array,
+	active_bonsai: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	## Apply TEND_BONSAI roll outcomes to bonsai quality progression.
+	for result: Variant in results:
+		if result.get("action_id", "") != "TEND_BONSAI":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var bonsai_id: int = effects.get("bonsai_id", -1)
+		if bonsai_id < 0:
+			continue
+
+		var bonsai: BonsaiData = null
+		for b_v: Variant in active_bonsai:
+			if b_v is BonsaiData and (b_v as BonsaiData).bonsai_id == bonsai_id:
+				bonsai = b_v as BonsaiData
+				break
+		if bonsai == null or bonsai.is_dead:
+			continue
+
+		var ic_month: int = effects.get("ic_month", ic_day / 30)
+		var raises: int = effects.get("raises", 0)
+		var tend_result: Dictionary = GardenSystem.apply_tend_result(
+			bonsai, result.get("success", false), raises, ic_month,
+		)
+
+		if tend_result.get("quality_advanced", false):
+			var owner: L5RCharacterData = characters_by_id.get(bonsai.owner_id)
+			var excess_glory: float = tend_result.get("excess_glory", 0.0)
+			if excess_glory > 0.0 and owner != null and not CharacterStats.is_dead(owner):
+				HonorGlorySystem.apply_glory_change(owner, excess_glory)
+
+
+static func _process_bonsai_display_writebacks(
+	results: Array,
+	active_bonsai: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+) -> void:
+	## Set display_settlement_id on the bonsai when DISPLAY_BONSAI succeeds.
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_id[s.settlement_id] = s
+
+	for result: Variant in results:
+		if result.get("action_id", "") != "DISPLAY_BONSAI":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var bonsai_id: int = effects.get("bonsai_id", -1)
+		var settlement_id: int = effects.get("settlement_id", -1)
+		if bonsai_id < 0 or settlement_id < 0:
+			continue
+
+		var settlement: SettlementData = settlements_by_id.get(settlement_id)
+		if settlement == null:
+			continue
+		if not GardenSystem.get_bonsai_display_eligible(int(settlement.settlement_type)):
+			continue
+
+		var bonsai: BonsaiData = null
+		for b_v: Variant in active_bonsai:
+			if b_v is BonsaiData and (b_v as BonsaiData).bonsai_id == bonsai_id:
+				bonsai = b_v as BonsaiData
+				break
+		if bonsai == null or bonsai.is_dead:
+			continue
+
+		# Remove from previous display if any
+		if settlement.bonsai_display_slot >= 0 and settlement.bonsai_display_slot != bonsai_id:
+			for b_v: Variant in active_bonsai:
+				if b_v is BonsaiData and (b_v as BonsaiData).bonsai_id == settlement.bonsai_display_slot:
+					(b_v as BonsaiData).display_settlement_id = -1
+					break
+
+		bonsai.display_settlement_id = settlement_id
+		settlement.bonsai_display_slot = bonsai_id
+
+
+static func _process_garden_visitor_effects(
+	active_gardens: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	## Apply visitor disposition bonuses and glory ticks for co-located living characters.
+
+	if active_gardens.is_empty():
+		return
+
+	# Build location → character list
+	var chars_at: Dictionary = {}
+	for char_v: Variant in characters:
+		var c: L5RCharacterData = char_v as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var loc: String = c.physical_location
+		if loc.is_empty():
+			continue
+		if not chars_at.has(loc):
+			chars_at[loc] = []
+		chars_at[loc].append(c)
+
+	# Build settlement_id → lord lookup
+	var settlement_lord: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlement_lord[s.settlement_id] = s.lord_character_id
+
+	for g_v: Variant in active_gardens:
+		if not g_v is GardenData:
+			continue
+		var garden: GardenData = g_v as GardenData
+		if garden.destroyed:
+			continue
+
+		var loc_str: String = str(garden.settlement_id)
+		var present: Array = chars_at.get(loc_str, [])
+		var creator: L5RCharacterData = characters_by_id.get(garden.creator_id)
+		var daimyo_id: int = settlement_lord.get(garden.settlement_id, -1)
+
+		for char_v: Variant in present:
+			var visitor: L5RCharacterData = char_v as L5RCharacterData
+			if GardenSystem.has_active_bonus(visitor, garden.garden_id, ic_day):
+				continue
+
+			var visit_result: Dictionary = GardenSystem.apply_visitor(
+				garden, visitor.character_id, garden.creator_id, ic_day,
+			)
+			if visit_result.get("bonus", 0) <= 0:
+				continue
+
+			# Add temporary disposition modifier toward creator
+			var bucket: Array = visitor.temporary_modifiers.get(garden.creator_id, [])
+			bucket.append({
+				"event_type": "garden_visitor",
+				"value": visit_result["bonus"],
+				"created_ic_day": ic_day,
+				"duration": GardenSystem.VISITOR_BONUS_DURATION_DAYS,
+			})
+			visitor.temporary_modifiers[garden.creator_id] = bucket
+
+			# Track in active_garden_bonuses to prevent re-granting
+			visitor.active_garden_bonuses.append({
+				"garden_id": garden.garden_id,
+				"creator_id": garden.creator_id,
+				"expires_ic_day": ic_day + GardenSystem.VISITOR_BONUS_DURATION_DAYS,
+			})
+
+			# Glory tick
+			if visit_result.get("glory_tick", false):
+				if creator != null and not CharacterStats.is_dead(creator):
+					HonorGlorySystem.apply_glory_change(creator, visit_result.get("creator_glory", 0.0))
+				var daimyo: L5RCharacterData = characters_by_id.get(daimyo_id)
+				if daimyo != null and not CharacterStats.is_dead(daimyo):
+					HonorGlorySystem.apply_glory_change(daimyo, visit_result.get("daimyo_glory", 0.0))
+
+
+static func _process_garden_seasonal_maintenance(
+	active_gardens: Array,
+	commission_records: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	current_season: int,
+) -> void:
+	## Seasonal pass: auto-degrade gardens with no MAINTAIN_GARDEN this season,
+	## tick neglect counters on obligated commissions, check for abandonment.
+
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_id[s.settlement_id] = s
+
+	# Build set of garden_ids whose creator spent at least 1 CULTIVATE_GARDEN AP this season.
+	# (We track through commission_records: window_start_date changing = artisan worked)
+	# For gardens: we use last_maintained_season as proxy — if updated this season, maintained.
+
+	for g_v: Variant in active_gardens:
+		if not g_v is GardenData:
+			continue
+		var garden: GardenData = g_v as GardenData
+		if garden.destroyed:
+			continue
+
+		if garden.last_maintained_season == current_season:
+			continue  # Was maintained this season
+
+		# No maintenance this season — auto-degrade
+		var from_tier: int = garden.current_tier
+		var degrade_result: Dictionary = GardenSystem.apply_seasonal_auto_degradation(garden, current_season)
+
+		if degrade_result.get("degraded", false):
+			var creator: L5RCharacterData = characters_by_id.get(garden.creator_id)
+			var topic_dict: Dictionary = GardenSystem.make_degradation_topic(
+				garden,
+				creator.character_name if creator != null else "",
+				creator != null and not CharacterStats.is_dead(creator),
+				creator.glory if creator != null else 0.0,
+				garden.zone_type,
+				from_tier,
+			)
+			if not topic_dict.is_empty():
+				var topic: TopicData = TopicData.new()
+				topic.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4) as TopicData.Tier
+				topic.category = TopicData.Category.SOCIAL
+				topic.topic_type = topic_dict.get("topic_type", "garden_degraded")
+				topic.title = topic_dict.get("title", "")
+				topic.subject_character_id = garden.creator_id
+				topic.ic_day_created = ic_day
+				topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+				active_topics.append(topic)
+				if creator != null and not CharacterStats.is_dead(creator):
+					creator.topic_pool.append(topic.topic_id)
+
+			if degrade_result.get("destroyed", false):
+				var settlement: SettlementData = settlements_by_id.get(garden.settlement_id)
+				if settlement != null:
+					settlement.garden_slots[garden.zone_type] = -1
+					settlement.garden_permissions[garden.zone_type] = -1
+
+	# Tick neglect counters on obligated commissions
+	for r_v: Variant in commission_records:
+		if not r_v is CommissionRecordData:
+			continue
+		var record: CommissionRecordData = r_v as CommissionRecordData
+		if record.status != "ACTIVE" or record.completion_window <= 0:
+			continue
+		var artisan: L5RCharacterData = characters_by_id.get(record.artisan_id)
+		if artisan == null:
+			continue
+		# Check if artisan worked this season (window_start_date updated to recent ic_day)
+		var worked_this_season: bool = (
+			record.window_start_date >= 0 and
+			record.window_start_date > ic_day - 90  # approximate season length
+		)
+		GardenSystem.evaluate_neglect_tick(record, worked_this_season)
+
+		if GardenSystem.check_abandonment(record):
+			record.status = "ABANDONED"
+			record.progress_at_abandonment = record.cultivation_progress
+			var daimyo: L5RCharacterData = characters_by_id.get(record.daimyo_id)
+			if artisan != null and not CharacterStats.is_dead(artisan):
+				HonorGlorySystem.apply_honor_change(artisan, -GardenSystem.ABANDONMENT_HONOR_LOSS)
+				if daimyo != null and not CharacterStats.is_dead(daimyo):
+					var disp: int = clampi(
+						artisan.disposition_values.get(daimyo.character_id, 0) - GardenSystem.ABANDONMENT_DISPOSITION_LOSS,
+						-100, 100,
+					)
+					artisan.disposition_values[daimyo.character_id] = disp
+
+
+static func _process_bonsai_monthly_neglect(
+	active_bonsai: Array,
+	characters_by_id: Dictionary,
+	ic_month: int,
+) -> void:
+	## Check each living bonsai for missed tending this month.
+	## Bonsai not tended receive a failure tick via apply_tend_result(success=false),
+	## which handles consecutive_missed_months accumulation and degradation/death (B4).
+	for b_v: Variant in active_bonsai:
+		if not b_v is BonsaiData:
+			continue
+		var bonsai: BonsaiData = b_v as BonsaiData
+		if bonsai.is_dead:
+			continue
+		if bonsai.last_tended_month == ic_month:
+			continue  # Already tended this month; apply_tend_result reset counter
+
+		# Simulate a neglect tick (failure, no raises) — apply_tend_result handles all state.
+		GardenSystem.apply_tend_result(bonsai, false, 0, ic_month)
 
 
 

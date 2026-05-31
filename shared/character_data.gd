@@ -273,6 +273,17 @@ extends Resource
 # game system — debugging and audit only.
 @export var strategic_evaluation_log: Array = []
 
+# -- Garden & Bonsai (Section 57.23a) -----------------------------------------
+# Zones the character has declined to permit or fill; prevents re-offering the same slot.
+# Each entry: {"settlement_id": int, "zone_type": String, "declined_date": int}
+@export var declined_garden_zones: Array = []
+# Commissions declined by this character as artisan (prevents NPC re-offering same commission).
+# Each entry: {"daimyo_id": int, "art_form": String, "declined_date": int, "expires_ic_day": int}
+@export var declined_commissions: Array = []
+# Active garden/bonsai visitor disposition bonuses received. Prevents duplicate bonuses.
+# Each entry: {"garden_id": int, "creator_id": int, "expires_ic_day": int}
+@export var active_garden_bonuses: Array = []
+
 
 # -- Trait Access Helpers (used by CharacterStats) -----------------------------
 

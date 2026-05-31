@@ -35,6 +35,9 @@ const DIR_CRAFTED_ITEMS := "crafted_items/"
 const DIR_THEATER_PIECES := "theater_pieces/"
 const DIR_SENBAZURUS := "senbazurus/"
 const DIR_ARRANGEMENTS := "arrangements/"
+const DIR_GARDENS := "gardens/"
+const DIR_BONSAI := "bonsai/"
+const DIR_COMMISSIONS := "commissions/"
 
 
 # ============================================================================
@@ -68,6 +71,9 @@ func save_world(ws: Node) -> bool:
 	ok = _save_resource_array(ws.theater_pieces, base + DIR_THEATER_PIECES, "piece_id") and ok
 	ok = _save_resource_array(ws.active_senbazurus, base + DIR_SENBAZURUS, "senbazuru_id") and ok
 	ok = _save_resource_array(ws.active_arrangements, base + DIR_ARRANGEMENTS, "arrangement_id") and ok
+	ok = _save_resource_array(ws.active_gardens, base + DIR_GARDENS, "garden_id") and ok
+	ok = _save_resource_array(ws.active_bonsai, base + DIR_BONSAI, "bonsai_id") and ok
+	ok = _save_resource_array(ws.commission_records, base + DIR_COMMISSIONS, "commission_id") and ok
 
 	# Provinces and settlements use their own ID fields
 	ok = _save_resource_array(ws.settlements, base + DIR_SETTLEMENTS, "settlement_id") and ok
@@ -119,6 +125,9 @@ func load_world(ws: Node) -> bool:
 	ws.theater_pieces.assign(_load_resource_array(base + DIR_THEATER_PIECES))
 	ws.active_senbazurus.assign(_load_resource_array(base + DIR_SENBAZURUS))
 	ws.active_arrangements.assign(_load_resource_array(base + DIR_ARRANGEMENTS))
+	ws.active_gardens.assign(_load_resource_array(base + DIR_GARDENS))
+	ws.active_bonsai.assign(_load_resource_array(base + DIR_BONSAI))
+	ws.commission_records.assign(_load_resource_array(base + DIR_COMMISSIONS))
 	ws.settlements.assign(_load_resource_array(base + DIR_SETTLEMENTS))
 	ws.provinces = _load_province_dict(base + DIR_PROVINCES)
 	ws.favors = _load_favors(base + DIR_FAVORS)
@@ -594,6 +603,9 @@ func _reconcile_id_counters(ws: Node) -> void:
 	_ensure_counter_above(ws.next_piece_id, ws.theater_pieces, "piece_id")
 	_ensure_counter_above(ws.next_senbazuru_id, ws.active_senbazurus, "senbazuru_id")
 	_ensure_counter_above(ws.next_arrangement_id, ws.active_arrangements, "arrangement_id")
+	_ensure_counter_above(ws.next_garden_id, ws.active_gardens, "garden_id")
+	_ensure_counter_above(ws.next_bonsai_id, ws.active_bonsai, "bonsai_id")
+	_ensure_counter_above(ws.next_commission_id, ws.commission_records, "commission_id")
 
 
 func _ensure_counter_above(counter: Array[int], collection: Variant, id_field: String) -> void:

@@ -3542,6 +3542,78 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   NeedType: PERFORM_CLAN_INDUCTION (20), APPROVE_CLAN_INDUCTION (50), HIRE_RONIN (60).
   Constants A60–A76 locked. ~55 tests.
 
+### Systems Added 2026-05-31
+- **s57.23 Garden System & s57.24 Bonsai System** — `simulation/garden_system.gd` (811 lines),
+  `shared/garden_data.gd`, `shared/bonsai_data.gd`, `shared/commission_record_data.gd`.
+  Locked spec in `gdd/s57.23a_garden_bonsai_locked.md`. 58 tests in `tests/test_garden_system.gd`.
+
+  **Garden system (s57.23):**
+  Seven ActionIDs fully wired into the NPC pipeline: REQUEST_ART (lord requests artisan via
+  Courtier/Awareness, no roll), OFFER_ART_COMMISSION (artisan offers via Artisan: Gardening/
+  Awareness, no roll), CULTIVATE_GARDEN (Artisan: Gardening + free raise at rank≥3 vs
+  QUALITY_TN[tier]; skill gate per QUALITY_SKILL_GATE[tier]; progress bar advances per
+  apply_cultivate_progress; on completion creates GardenData, computes COMPLETION_BONUS_BY_RAISES
+  disposition effect to daimyo, awards EXCESS_RAISE_GLORY 0.2 per raise, Tier 3/4 topic),
+  MAINTAIN_GARDEN (Artisan: Gardening vs QUALITY_TN[garden_tier] + free raise; apply_maintain_result
+  prevents auto-degradation for the season; degradation/destruction topics generated),
+  COLLECT_BONSAI_SPECIMEN (Artisan: Gardening or Perception vs TN 10; creates BonsaiData),
+  TEND_BONSAI (Artisan: Gardening vs TN 10 + free raise; raises improve quality tier via
+  BONSAI_QUALITY_THRESHOLDS; excess raise glory 0.05/raise),
+  DISPLAY_BONSAI (no roll; sets display_settlement_id on bonsai, updates settlement slot).
+
+  Context injection (`_inject_garden_context()`): per-character world_state keys: `active_commission_id`,
+  `commission_quality_tier`, `local_garden_id`, `local_garden_tier`, `owned_bonsai_id`,
+  `bonsai_display_eligible`, `garden_zone_available`, `available_garden_zone`,
+  `character_province_id`. All keys cleared daily by stale-flag pass.
+
+  Visitor effects (`_process_garden_visitor_effects()`): living non-traveling characters co-located
+  with a garden settlement receive disposition temp_modifier via apply_visitor(); GLORY_TICK_THRESHOLD=5
+  unique visitors triggers CREATOR_GLORY_PER_TICK=0.1 glory (creator) and DAIMYO_GLORY_PER_TICK=0.01
+  (settlement daimyo). Duplicate guard via `active_garden_bonuses` Array on L5RCharacterData
+  (entries: `{garden_id, creator_id, expires_ic_day}`). VISITOR_BONUS_DURATION_DAYS=120.
+  VISITOR_MEMORY_CAP=200; purge after VISITOR_MEMORY_PURGE_DAYS=1800.
+
+  Seasonal maintenance (`_process_garden_seasonal_maintenance()`): gardens with no maintenance
+  this season auto-degrade via apply_seasonal_auto_degradation(); neglect ticks on obligated
+  commissions via evaluate_neglect_tick(); abandoned commissions (check_abandonment()) apply
+  ABANDONMENT_HONOR_LOSS=0.5, ABANDONMENT_DISPOSITION_LOSS=8 to artisan toward daimyo.
+
+  Settlement-level zone proxy: `garden_slots: Dictionary` and `garden_permissions: Dictionary`
+  on SettlementData bypass the unavailable s4.4 zone system. `get_garden_eligible_zones()`
+  returns zone type strings by settlement type (CITY/CASTLE get more zones). `is_zone_committed()`
+  and `grant_permission()` manage slot exclusivity.
+
+  Phase 4c precondition filter (`_apply_garden_precondition_filter()`): removes CULTIVATE_GARDEN
+  when no active commission or rank<1, MAINTAIN_GARDEN when no local garden or rank<1, OFFER_ART_COMMISSION
+  when no available zone, TEND_BONSAI/DISPLAY_BONSAI when no owned bonsai, DISPLAY_BONSAI when
+  settlement ineligible, COLLECT_BONSAI_SPECIMEN when rank<1.
+
+  **Bonsai system (s57.24):**
+  Monthly neglect (`_process_bonsai_monthly_neglect()`): fires at `ic_day / 30` boundary;
+  calls `GardenSystem.apply_tend_result(bonsai, false, 0, ic_month)` for bonsai whose
+  `last_tended_month != ic_month`. Internally increments `consecutive_missed_months`,
+  applies tier degradation, marks dead at cap. CULTURAL_INTEREST_THRESHOLD=2 months.
+  ARTISAN_SCHOOL_CULTURAL_INTEREST=10. BONSAI_MUNDANE=0 tier floor.
+
+  Context lists: CULTIVATE_GARDEN, MAINTAIN_GARDEN, COLLECT_BONSAI_SPECIMEN, TEND_BONSAI,
+  DISPLAY_BONSAI, OFFER_ART_COMMISSION in AT_OWN_HOLDINGS; OFFER_ART_COMMISSION, TEND_BONSAI,
+  DISPLAY_BONSAI in AT_COURT; CULTIVATE_GARDEN, TEND_BONSAI, DISPLAY_BONSAI in VISITING.
+  AP cost 1 for all 7 ActionIDs. action_skill_map.json and objective_alignment.json updated:
+  ARTISTIC_EXPRESSION (CULTIVATE_GARDEN:100, TEND_BONSAI:95, MAINTAIN_GARDEN:90, OFFER_ART_COMMISSION:80,
+  DISPLAY_BONSAI:70, COLLECT_BONSAI_SPECIMEN:60), PATRONIZE_ARTS (REQUEST_ART:85,
+  CULTIVATE_GARDEN:70, MAINTAIN_GARDEN:60, DISPLAY_BONSAI:50), SEEK_GLORY (CULTIVATE_GARDEN:70,
+  DISPLAY_BONSAI:60, OFFER_ART_COMMISSION:60, REQUEST_ART:55, TEND_BONSAI:40,
+  COLLECT_BONSAI_SPECIMEN:30).
+
+  **WorldState persistence:** `active_gardens: Array[GardenData]`, `next_garden_id: Array[int]`,
+  `active_bonsai: Array[BonsaiData]`, `next_bonsai_id: Array[int]`, `commission_records:
+  Array[CommissionRecordData]`, `next_commission_id: Array[int]` on WorldState. Saved/loaded
+  via WorldStateSaver Resource array pattern (DIR_GARDENS, DIR_BONSAI, DIR_COMMISSIONS).
+
+  **SettlementData additions:** `garden_slots: Dictionary`, `garden_permissions: Dictionary`,
+  `bonsai_display_slot: int = -1`. **L5RCharacterData additions:** `declined_garden_zones: Array`,
+  `declined_commissions: Array`, `active_garden_bonuses: Array`.
+
 ## Resolved Design Decisions
 
 ### 1. Topic Identity — RESOLVED: int IDs

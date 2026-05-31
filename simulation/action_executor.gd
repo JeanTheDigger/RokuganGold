@@ -428,6 +428,24 @@ static func execute(
 				"effects": {},
 			}
 
+	if action_id in ["REQUEST_ART", "OFFER_ART_COMMISSION"]:
+		return _execute_garden_commission_action(action, character, ctx)
+
+	if action_id == "CULTIVATE_GARDEN":
+		return _execute_cultivate_garden(action, character, ctx, dice_engine)
+
+	if action_id == "MAINTAIN_GARDEN":
+		return _execute_maintain_garden(action, character, ctx, dice_engine)
+
+	if action_id == "COLLECT_BONSAI_SPECIMEN":
+		return _execute_collect_bonsai_specimen(action, character, ctx, dice_engine)
+
+	if action_id == "TEND_BONSAI":
+		return _execute_tend_bonsai(action, character, ctx, dice_engine)
+
+	if action_id == "DISPLAY_BONSAI":
+		return _execute_display_bonsai(action, character, ctx)
+
 	if action_id in NO_ROLL_ACTIONS:
 		return _execute_no_roll(action, character, ctx)
 
@@ -5888,5 +5906,242 @@ static func _execute_dedicate_piece(
 			"topic_id": topic_id,
 			"roll_total": total,
 			"raises": raises,
+		},
+	}
+
+
+# ---------------------------------------------------------------------------
+# Garden and Bonsai executors (s57.23, s57.24)
+# ---------------------------------------------------------------------------
+
+static func _execute_garden_commission_action(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	## REQUEST_ART: daimyo requests a garden commission from a specific artisan.
+	## OFFER_ART_COMMISSION: artisan self-initiates a commission offer to a daimyo.
+	## Both create a commission record via orchestrator writeback.
+	var is_request: bool = action.action_id == "REQUEST_ART"
+	var meta: Dictionary = action.metadata
+	var zone_type: String = meta.get("zone_type", "")
+	var target_quality_tier: int = clampi(meta.get("target_quality_tier", 1), 1, 5)
+	var loc_int: int = int(ctx.location_id) if ctx.location_id.is_valid_int() else -1
+	var settlement_id: int = meta.get("settlement_id", loc_int)
+	var artisan_id: int
+	var daimyo_id: int
+	if is_request:
+		artisan_id = meta.get("artisan_id", action.target_npc_id)
+		daimyo_id = character.character_id
+	else:
+		artisan_id = character.character_id
+		daimyo_id = meta.get("daimyo_id", action.target_npc_id)
+
+	if zone_type.is_empty():
+		return {
+			"success": false,
+			"action_id": action.action_id,
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": "no_zone_type",
+			"effects": {"blocked_reason": "no_zone_type"},
+		}
+
+	return {
+		"success": true,
+		"action_id": action.action_id,
+		"character_id": character.character_id,
+		"target_npc_id": artisan_id if is_request else daimyo_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"requires_commission_creation": true,
+			"artisan_id": artisan_id,
+			"daimyo_id": daimyo_id,
+			"settlement_id": settlement_id,
+			"zone_type": zone_type,
+			"target_quality_tier": target_quality_tier,
+			"is_obligated": is_request,
+		},
+	}
+
+
+static func _execute_cultivate_garden(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	## Spend 1 AP to advance progress on an active commission.
+	## Skill gate: Artisan: Gardening rank ≥ target_quality_tier.
+	var meta: Dictionary = action.metadata
+	var commission_id: int = meta.get("commission_id", -1)
+	var quality_tier: int = clampi(meta.get("target_quality_tier", 1), 1, 5)
+	var gardening_rank: int = character.skills.get("Artisan: Gardening", 0)
+
+	if gardening_rank < GardenSystem.QUALITY_SKILL_GATE.get(quality_tier, 1):
+		return {
+			"success": false,
+			"action_id": "CULTIVATE_GARDEN",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": "skill_gate_failed",
+			"effects": {"blocked_reason": "skill_gate_failed"},
+		}
+
+	var tn: int = GardenSystem.QUALITY_TN.get(quality_tier, 15)
+	var free_raise: int = GardenSystem.apply_gardening_free_raise(gardening_rank)
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Gardening", tn, free_raise,
+		"", Enums.Trait.NONE, 0, 0, 0, ctx.ic_day
+	)
+	var total: int = roll.get("total", 0)
+	var margin: int = total - tn
+	var raises: int = maxi(int(margin / 5.0), 0)
+
+	return {
+		"success": roll.get("success", false),
+		"action_id": "CULTIVATE_GARDEN",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"commission_id": commission_id,
+			"roll_total": total,
+			"tn": tn,
+			"raises": raises,
+		},
+	}
+
+
+static func _execute_maintain_garden(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	## Spend 1 AP to maintain an existing garden against tier degradation.
+	var meta: Dictionary = action.metadata
+	var garden_id: int = meta.get("garden_id", -1)
+	var garden_tier: int = clampi(meta.get("garden_tier", 1), 1, 5)
+	var gardening_rank: int = character.skills.get("Artisan: Gardening", 0)
+
+	var tn: int = GardenSystem.QUALITY_TN.get(garden_tier, 15)
+	var free_raise: int = GardenSystem.apply_gardening_free_raise(gardening_rank)
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Gardening", tn, free_raise,
+		"", Enums.Trait.NONE, 0, 0, 0, ctx.ic_day
+	)
+
+	return {
+		"success": roll.get("success", false),
+		"action_id": "MAINTAIN_GARDEN",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"garden_id": garden_id,
+			"roll_total": roll.get("total", 0),
+			"tn": tn,
+			"ic_season": ctx.season,
+		},
+	}
+
+
+static func _execute_collect_bonsai_specimen(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	## Roll Artisan: Gardening / Perception vs TN 10 to collect a wild bonsai specimen.
+	var province_id: int = action.target_province_id
+	if province_id < 0:
+		province_id = ctx.known_objectives.get("character_province_id", -1)
+
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Gardening", GardenSystem.BONSAI_COLLECT_TN, 0,
+		"", Enums.Trait.PERCEPTION, 0, 0, 0, ctx.ic_day
+	)
+
+	return {
+		"success": roll.get("success", false),
+		"action_id": "COLLECT_BONSAI_SPECIMEN",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": province_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"collector_id": character.character_id,
+			"province_id": province_id,
+			"roll_total": roll.get("total", 0),
+		},
+	}
+
+
+static func _execute_tend_bonsai(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	## Roll Artisan: Gardening / Awareness vs TN 10 to tend owned bonsai.
+	var meta: Dictionary = action.metadata
+	var bonsai_id: int = meta.get("bonsai_id", ctx.known_objectives.get("owned_bonsai_id", -1))
+	var ic_month: int = ctx.ic_day / 30
+
+	var gardening_rank: int = character.skills.get("Artisan: Gardening", 0)
+	var free_raise: int = GardenSystem.apply_gardening_free_raise(gardening_rank)
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Gardening", GardenSystem.BONSAI_TEND_TN, free_raise,
+		"", Enums.Trait.NONE, 0, 0, 0, ctx.ic_day
+	)
+	var total: int = roll.get("total", 0)
+	var margin: int = total - GardenSystem.BONSAI_TEND_TN
+	var raises: int = maxi(int(margin / 5.0), 0)
+
+	return {
+		"success": roll.get("success", false),
+		"action_id": "TEND_BONSAI",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"bonsai_id": bonsai_id,
+			"roll_total": total,
+			"raises": raises,
+			"ic_month": ic_month,
+		},
+	}
+
+
+static func _execute_display_bonsai(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	## No roll required. Sets the display_settlement_id on the bonsai.
+	var meta: Dictionary = action.metadata
+	var bonsai_id: int = meta.get("bonsai_id", ctx.known_objectives.get("owned_bonsai_id", -1))
+	var loc_int: int = int(ctx.location_id) if ctx.location_id.is_valid_int() else -1
+	var settlement_id: int = meta.get("settlement_id", loc_int)
+
+	return {
+		"success": bonsai_id >= 0 and settlement_id >= 0,
+		"action_id": "DISPLAY_BONSAI",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"bonsai_id": bonsai_id,
+			"settlement_id": settlement_id,
 		},
 	}

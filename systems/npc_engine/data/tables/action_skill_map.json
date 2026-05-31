@@ -335,8 +335,8 @@
     "secondary": "Lore: Heraldry"
   },
   "OFFER_ART_COMMISSION": {
-    "primary": null,
-    "secondary": null
+    "primary": "Courtier",
+    "secondary": "Awareness"
   },
   "OFFER_FAVOR": {
     "primary": "Sincerity",
@@ -451,8 +451,8 @@
     "secondary": "Sincerity"
   },
   "REQUEST_ART": {
-    "primary": null,
-    "secondary": null
+    "primary": "Courtier",
+    "secondary": "Awareness"
   },
   "REQUEST_HUNT_INVITATION": {
     "primary": "Etiquette",
