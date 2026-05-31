@@ -622,3 +622,138 @@ func test_death_cleanup_ignores_other_creators() -> void:
 	var sculptures: Array = [sc]
 	SculptureSystem.handle_character_death(10, sculptures)
 	assert_false(sc.abandoned_incomplete)
+
+
+# ---------------------------------------------------------------------------
+# 15. Visitor glory gain keys
+# ---------------------------------------------------------------------------
+
+func test_visitor_effect_includes_creator_glory_gain() -> void:
+	var sc: SculptureData = _make_statuary_wip()
+	_complete_sculpture(sc)
+	sc.quality_tier = 3
+	for i: int in range(SculptureSystem.GLORY_TICK_THRESHOLD):
+		var r: Dictionary = SculptureSystem.apply_visitor_effect(i + 100, sc, 1, i * 200)
+		if r.get("glory_tick", false):
+			assert_true(r.has("creator_glory_gain"))
+			assert_true(r.has("daimyo_glory_gain"))
+			assert_gt(r.get("creator_glory_gain", 0.0), 0.0)
+			assert_gt(r.get("daimyo_glory_gain", 0.0), 0.0)
+			return
+	fail_test("glory tick never fired")
+
+
+func test_visitor_effect_glory_zero_when_no_tick() -> void:
+	var sc: SculptureData = _make_statuary_wip()
+	_complete_sculpture(sc)
+	sc.quality_tier = 2
+	var r: Dictionary = SculptureSystem.apply_visitor_effect(42, sc, 1, 500)
+	assert_eq(r.get("creator_glory_gain", 0.0), 0.0)
+	assert_eq(r.get("daimyo_glory_gain", 0.0), 0.0)
+
+
+# ---------------------------------------------------------------------------
+# 16. Replacement pair threshold
+# ---------------------------------------------------------------------------
+
+func test_replacement_threshold_is_half_guardian() -> void:
+	# Normal guardian threshold is 25; half is 12 (integer div).
+	assert_eq(SculptureSystem.replacement_threshold(1), 12)
+
+
+func test_replacement_threshold_exceptional() -> void:
+	# Exceptional guardian threshold is 80; half is 40.
+	assert_eq(SculptureSystem.replacement_threshold(3), 40)
+
+
+func test_replacement_threshold_legendary() -> void:
+	# Legendary guardian threshold is 150; half is 75.
+	assert_eq(SculptureSystem.replacement_threshold(5), 75)
+
+
+# ---------------------------------------------------------------------------
+# 17. Yoritomo Sculptor technique
+# ---------------------------------------------------------------------------
+
+func test_has_yoritomo_figurine_bonus_true_for_school() -> void:
+	assert_true(SculptureSystem.has_yoritomo_figurine_bonus("Yoritomo Sculptor"))
+
+
+func test_has_yoritomo_figurine_bonus_false_for_other() -> void:
+	assert_false(SculptureSystem.has_yoritomo_figurine_bonus("Doji Courtier"))
+	assert_false(SculptureSystem.has_yoritomo_figurine_bonus(""))
+
+
+# ---------------------------------------------------------------------------
+# 18. Figurine collection topics
+# ---------------------------------------------------------------------------
+
+func _make_complete_figurine(sid: int, creator: int, theme: int) -> SculptureData:
+	var sc: SculptureData = SculptureData.new()
+	sc.sculpture_id = sid
+	sc.format = SculptureSystem.Format.FIGURINE
+	sc.creator_id = creator
+	sc.quality_tier = 2
+	sc.theme = theme
+	sc.craft_progress = -1
+	sc.date_completed = 1
+	return sc
+
+
+func test_collect_figurine_topics_no_topic_below_threshold() -> void:
+	# 2 figurines — below the 3 required.
+	var sculptures: Array = [
+		_make_complete_figurine(1, 10, SculptureSystem.FigurineTheme.SEA_ANIMAL),
+		_make_complete_figurine(2, 10, SculptureSystem.FigurineTheme.SEA_ANIMAL),
+	]
+	var topics: Array = SculptureSystem.collect_figurine_topics(sculptures, 100)
+	assert_eq(topics.size(), 0)
+
+
+func test_collect_figurine_topics_creator_cluster_fires() -> void:
+	# 3 figurines by same creator → 1 topic.
+	var sculptures: Array = [
+		_make_complete_figurine(1, 10, SculptureSystem.FigurineTheme.SEA_ANIMAL),
+		_make_complete_figurine(2, 10, SculptureSystem.FigurineTheme.SAILING),
+		_make_complete_figurine(3, 10, SculptureSystem.FigurineTheme.OTHER),
+	]
+	var topics: Array = SculptureSystem.collect_figurine_topics(sculptures, 100)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].get("tier"), 3)  # TIER_4
+	assert_eq(topics[0].get("topic_type"), "figurine_collection")
+
+
+func test_collect_figurine_topics_theme_cluster_fires_for_different_creators() -> void:
+	# 3 figurines, same theme, different creators → 1 topic (theme-based).
+	var sculptures: Array = [
+		_make_complete_figurine(1, 10, SculptureSystem.FigurineTheme.SEA_FORTUNE),
+		_make_complete_figurine(2, 11, SculptureSystem.FigurineTheme.SEA_FORTUNE),
+		_make_complete_figurine(3, 12, SculptureSystem.FigurineTheme.SEA_FORTUNE),
+	]
+	var topics: Array = SculptureSystem.collect_figurine_topics(sculptures, 100)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].get("topic_type"), "figurine_collection")
+
+
+func test_collect_figurine_topics_wip_ignored() -> void:
+	# WIP figurine should not count toward threshold.
+	var sc_wip: SculptureData = _make_figurine_wip()
+	sc_wip.craft_progress = 5  # Still in progress
+	var sculptures: Array = [
+		sc_wip,
+		_make_complete_figurine(2, 10, SculptureSystem.FigurineTheme.SEA_ANIMAL),
+		_make_complete_figurine(3, 10, SculptureSystem.FigurineTheme.SEA_ANIMAL),
+	]
+	var topics: Array = SculptureSystem.collect_figurine_topics(sculptures, 100)
+	assert_eq(topics.size(), 0)  # Only 2 complete figurines by creator 10
+
+
+func test_collect_figurine_topics_same_creator_no_duplicate() -> void:
+	# 3 figurines same creator AND same theme — should generate only 1 topic, not 2.
+	var sculptures: Array = [
+		_make_complete_figurine(1, 10, SculptureSystem.FigurineTheme.SEA_ANIMAL),
+		_make_complete_figurine(2, 10, SculptureSystem.FigurineTheme.SEA_ANIMAL),
+		_make_complete_figurine(3, 10, SculptureSystem.FigurineTheme.SEA_ANIMAL),
+	]
+	var topics: Array = SculptureSystem.collect_figurine_topics(sculptures, 100)
+	assert_eq(topics.size(), 1)

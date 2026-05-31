@@ -23690,10 +23690,9 @@ static func _process_sculpture_seasonal_maintenance(
 
 		# --- 3. Wood guardian outdoor degradation (per GDD section G) ---
 		if sculpture.format == SculptureSystem.Format.GUARDIAN:
-			var degrade_result: Dictionary = SculptureSystem.apply_outdoor_degradation(
-				sculpture, ic_day,
-			)
-			if degrade_result.get("degraded", false):
+			var tier_before: int = sculpture.quality_tier
+			SculptureSystem.apply_outdoor_degradation(sculpture, ic_day)
+			if sculpture.quality_tier < tier_before:
 				# Pair quality reduced; check if pair should be marked damaged.
 				if sculpture.quality_tier < SculptureSystem.GUARDIAN_DAMAGE_TIER_THRESHOLD:
 					var topic_dict: Dictionary = SculptureSystem.generate_lifecycle_topic(
@@ -23703,6 +23702,16 @@ static func _process_sculpture_seasonal_maintenance(
 						var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
 						if t != null:
 							active_topics.append(t)
+
+	# --- 4. Mantis figurine collection topics (GDD section H) ---
+	# Fires once per season per qualifying cluster (3+ figurines, same creator or theme).
+	var collection_topics: Array = SculptureSystem.collect_figurine_topics(active_sculptures, ic_day)
+	for td: Variant in collection_topics:
+		if not td is Dictionary:
+			continue
+		var t: TopicData = _topic_from_dict(td as Dictionary, next_topic_id, ic_day)
+		if t != null:
+			active_topics.append(t)
 
 
 

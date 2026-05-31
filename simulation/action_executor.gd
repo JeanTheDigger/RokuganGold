@@ -529,6 +529,10 @@ static func _try_execute_deliver_gift(
 				noshi_item_id = _noshi.get("item_id", -1)
 			break
 
+	# Mantis figurine bonus: +3 FR when recipient is Mantis Clan (GDD s57.28 section H).
+	if recipient.clan == "Mantis" and gift_item.get("item_type", "") == "figurine":
+		history_bonus += SculptureSystem.MANTIS_FIGURINE_FR_BONUS
+
 	var gift_result: Dictionary = GiftGivingSystem.resolve_deliver_gift(
 		character, recipient, tier, subtype, archetype, dice_engine, ctx.ic_day,
 		history_bonus,
@@ -6407,12 +6411,21 @@ static func _execute_compose_sculpture(
 	# Advance existing WIP.
 	var raises_declared: int = meta.get("raises", 0)
 	var material: int = meta.get("material", SculptureSystem.Material.WOOD)
+	var sc_format: int = meta.get("format", SculptureSystem.Format.STATUARY)
 	var stone_penalty: int = SculptureSystem.STONE_TN_PENALTY if material == SculptureSystem.Material.STONE else 0
 	var bronze_fr: int = 1 if material == SculptureSystem.Material.BRONZE else 0
+	# Yoritomo Sculptor: +1k1 on figurine rolls (GDD section N).
+	var yoritomo_bonus_dice: int = 0
+	var yoritomo_bonus_keep: int = 0
+	if sc_format == SculptureSystem.Format.FIGURINE and \
+			SculptureSystem.has_yoritomo_figurine_bonus(character.school):
+		yoritomo_bonus_dice = 1
+		yoritomo_bonus_keep = 1
 	var tn: int = SculptureSystem.COMPOSE_TN + stone_penalty + raises_declared * 5
 	var roll: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, "Artisan: Sculpture", tn,
-		raises_declared + bronze_fr, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+		raises_declared + bronze_fr, "", Enums.Trait.AWARENESS,
+		yoritomo_bonus_dice, yoritomo_bonus_keep, 0, ctx.ic_day,
 	)
 	var total: int = roll.get("total", 0)
 

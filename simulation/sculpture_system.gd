@@ -412,6 +412,8 @@ static func apply_visitor_effect(
 	return {
 		"disposition_change": disp,
 		"glory_tick": glory_tick,
+		"creator_glory_gain": CREATOR_GLORY_PER_TICK if glory_tick else 0.0,
+		"daimyo_glory_gain": DAIMYO_GLORY_PER_TICK if glory_tick else 0.0,
 	}
 
 
@@ -642,6 +644,91 @@ static func _material_name(mat: int) -> String:
 		Material.STONE: return "stone"
 		Material.BRONZE: return "bronze"
 	return "unknown"
+
+
+## Replacement pair threshold: half the original pair threshold when one guardian is destroyed.
+## Quality of restored pair = min(surviving_tier, replacement_tier). (GDD section P.)
+static func replacement_threshold(original_quality_tier: int) -> int:
+	var full: int = PROGRESS_THRESHOLDS.get(Format.GUARDIAN, {}).get(original_quality_tier, 25)
+	return full / 2
+
+
+## True when the sculptor's school grants +1k1 on figurine COMPOSE_SCULPTURE rolls.
+## Yoritomo Sculptor technique (GDD section N).
+static func has_yoritomo_figurine_bonus(school: String) -> bool:
+	return school == "Yoritomo Sculptor"
+
+
+## Scan active_sculptures for figurine collection clusters (same creator_id OR same theme).
+## Returns Array of topic dicts (TIER_4) for qualifying clusters.
+## Fires once per season per qualifying cluster; topic_type = "figurine_collection".
+static func collect_figurine_topics(
+		active_sculptures: Array,
+		ic_day: int,
+) -> Array:
+	# Group by creator_id (primary) and theme (secondary).
+	var by_creator: Dictionary = {}  # creator_id → Array[SculptureData]
+	var by_theme: Dictionary = {}    # theme → Array[SculptureData]
+
+	for sc_v: Variant in active_sculptures:
+		if not sc_v is SculptureData:
+			continue
+		var sc: SculptureData = sc_v as SculptureData
+		if sc.format != Format.FIGURINE or sc.craft_progress >= 0:
+			continue  # Incomplete figurines don't count.
+		if sc.creator_id >= 0:
+			if not by_creator.has(sc.creator_id):
+				by_creator[sc.creator_id] = []
+			by_creator[sc.creator_id].append(sc)
+		if not by_theme.has(sc.theme):
+			by_theme[sc.theme] = []
+		by_theme[sc.theme].append(sc)
+
+	var results: Array = []
+
+	# Creator-based clusters.
+	for cid: Variant in by_creator:
+		var cluster: Array = by_creator[cid]
+		if cluster.size() < MANTIS_COLLECTION_THRESHOLD:
+			continue
+		var avg_q: float = 0.0
+		for sc_v: Variant in cluster:
+			avg_q += (sc_v as SculptureData).quality_tier
+		avg_q /= cluster.size()
+		results.append({
+			"tier": 3,  # TIER_4
+			"category": "SOCIAL",
+			"topic_type": "figurine_collection",
+			"title": "A collection of figurines by the same sculptor draws admirers.",
+			"subject_character_id": int(cid),
+			"ic_day_created": ic_day,
+		})
+
+	# Theme-based clusters (only if not already reported via creator path).
+	for theme_key: Variant in by_theme:
+		var cluster: Array = by_theme[theme_key]
+		if cluster.size() < MANTIS_COLLECTION_THRESHOLD:
+			continue
+		# Check if already covered by a creator cluster (all share same creator).
+		var first_creator: int = (cluster[0] as SculptureData).creator_id
+		var all_same_creator: bool = first_creator >= 0
+		for sc_v: Variant in cluster:
+			if (sc_v as SculptureData).creator_id != first_creator:
+				all_same_creator = false
+				break
+		if all_same_creator and by_creator.has(first_creator) and \
+				by_creator[first_creator].size() >= MANTIS_COLLECTION_THRESHOLD:
+			continue  # Already reported under creator cluster.
+		results.append({
+			"tier": 3,  # TIER_4
+			"category": "SOCIAL",
+			"topic_type": "figurine_collection",
+			"title": "A collection of thematically linked figurines draws admirers.",
+			"subject_character_id": -1,
+			"ic_day_created": ic_day,
+		})
+
+	return results
 
 
 ## Clean up sculpture references when a character dies.
