@@ -30,9 +30,9 @@ enum DisplaySlot { WALL_ART = 0, DISPLAYED_ART = 1, FUSUMA = 2 }
 # ---------------------------------------------------------------------------
 
 const PROGRESS_THRESHOLDS: Dictionary = {
-	Format.KAKEMONO:  {1: 5,  2: 10, 3: 18, 4: 28,  5: 40},
-	Format.BYOBU:     {1: 15, 2: 30, 3: 50, 4: 75,  5: 100},
-	Format.EMAKIMONO: {1: 20, 2: 40, 3: 65, 4: 95,  5: 130},
+	Format.KAKEMONO:  {1: 5,  2: 10, 3: 20, 4: 35,  5: 55},
+	Format.BYOBU:     {1: 10, 2: 20, 3: 35, 4: 55,  5: 80},
+	Format.EMAKIMONO: {1: 8,  2: 15, 3: 30, 4: 45,  5: 65},
 	Format.FUSUMA:    {1: 15, 2: 30, 3: 50, 4: 75,  5: 100},
 }
 
@@ -49,8 +49,8 @@ const COMPOSITION_DEGRADATION_DAYS: int = 90
 # Visitor effect constants (s57.27.10)
 # ---------------------------------------------------------------------------
 
-## Visitor disposition toward creator by quality tier (s57.27.10).
-const VISITOR_DISPOSITION_BY_TIER: Dictionary = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
+## Visitor disposition toward creator by quality tier (s57.27.10, P4).
+const VISITOR_DISPOSITION_BY_TIER: Dictionary = {1: 1, 2: 2, 3: 3, 4: 5, 5: 7}
 
 ## Duration of the visitor disposition bonus in IC days (4 IC months × 30 days).
 const VISITOR_BONUS_DURATION_DAYS: int = 120
@@ -86,8 +86,8 @@ const AMBIENT_TOPIC_CAP: int = 20
 ## Polarization magnitude = quality tier value (Normal=1 … Legendary=5) (s57.27.8).
 const EMAKIMONO_MAGNITUDE_BY_TIER: Dictionary = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
 
-## Immunity window in IC days before a character can be affected by the same painting again.
-const IMMUNITY_WINDOW_DAYS: int = 30
+## Immunity window in IC days before a character can be affected by the same painting again (P13).
+const IMMUNITY_WINDOW_DAYS: int = 14
 
 ## Raises needed to add a topic_id to an emakimono at completion (s57.27.5).
 const EMAKIMONO_TOPIC_RAISES: int = 2

@@ -330,13 +330,13 @@ func test_present_emakimono_immunity_within_window() -> void:
 	c.pieces_seen[3] = 90  # viewed 10 days ago
 	var chars: Dictionary = {20: c}
 	var results: Array = PaintingSystem.resolve_present_emakimono(p, [20], chars, 100)
-	assert_true(results[0].get("immune", false), "within 30-day window = immune")
+	assert_true(results[0].get("immune", false), "within 14-day window = immune")
 
 
 func test_present_emakimono_immunity_expired() -> void:
 	var p: PaintingData = _make_emakimono(3, 2, 10)
 	var c: L5RCharacterData = _make_character(20)
-	c.pieces_seen[3] = 50  # viewed 50 days ago — beyond 30-day window
+	c.pieces_seen[3] = 50  # viewed 50 days ago — beyond 14-day window
 	var chars: Dictionary = {20: c}
 	var results: Array = PaintingSystem.resolve_present_emakimono(p, [20], chars, 100)
 	assert_false(results[0].get("immune", true), "window expired — not immune")
@@ -396,9 +396,9 @@ func test_can_copy_non_emakimono_blocked() -> void:
 
 func test_copy_threshold_halves_original() -> void:
 	var original: PaintingData = _make_emakimono(1, 2, 10)  # Fine
-	# PROGRESS_THRESHOLDS[EMAKIMONO][2] = 40; half = 20
+	# PROGRESS_THRESHOLDS[EMAKIMONO][2] = 15; half = 7
 	var thresh: int = PaintingSystem.copy_threshold(original)
-	assert_eq(thresh, 20, "copy threshold is half of Fine emakimono (40÷2=20)")
+	assert_eq(thresh, 7, "copy threshold is half of Fine emakimono (15÷2=7)")
 
 
 # ---------------------------------------------------------------------------
@@ -784,6 +784,63 @@ func test_declare_copy_generation_incremented() -> void:
 	original.generation = 1
 	var copy: PaintingData = PaintingSystem.declare_copy(original, 20, 100, 50)
 	assert_eq(copy.generation, 2, "generation = original.generation + 1")
+
+
+# ---------------------------------------------------------------------------
+# 21. Locked constant value verification (s57.27.3 / s57.27.4 P-anchors)
+# ---------------------------------------------------------------------------
+
+func test_immunity_window_days_is_14() -> void:
+	assert_eq(PaintingSystem.IMMUNITY_WINDOW_DAYS, 14, "P13: IMMUNITY_WINDOW_DAYS = 14")
+
+
+func test_visitor_disposition_tier4_is_5() -> void:
+	assert_eq(PaintingSystem.VISITOR_DISPOSITION_BY_TIER[4], 5,
+		"P4: Masterwork visitor disposition = +5")
+
+
+func test_visitor_disposition_tier5_is_7() -> void:
+	assert_eq(PaintingSystem.VISITOR_DISPOSITION_BY_TIER[5], 7,
+		"P4: Legendary visitor disposition = +7")
+
+
+func test_progress_thresholds_kakemono_locked() -> void:
+	var k: Dictionary = PaintingSystem.PROGRESS_THRESHOLDS[PaintingSystem.Format.KAKEMONO]
+	assert_eq(k[3], 20, "P3: kakemono Exceptional threshold = 20")
+	assert_eq(k[4], 35, "P3: kakemono Masterwork threshold = 35")
+	assert_eq(k[5], 55, "P3: kakemono Legendary threshold = 55")
+
+
+func test_progress_thresholds_byobu_locked() -> void:
+	var b: Dictionary = PaintingSystem.PROGRESS_THRESHOLDS[PaintingSystem.Format.BYOBU]
+	assert_eq(b[1], 10, "P3: byobu Normal threshold = 10")
+	assert_eq(b[2], 20, "P3: byobu Fine threshold = 20")
+	assert_eq(b[3], 35, "P3: byobu Exceptional threshold = 35")
+	assert_eq(b[4], 55, "P3: byobu Masterwork threshold = 55")
+	assert_eq(b[5], 80, "P3: byobu Legendary threshold = 80")
+
+
+func test_progress_thresholds_emakimono_locked() -> void:
+	var e: Dictionary = PaintingSystem.PROGRESS_THRESHOLDS[PaintingSystem.Format.EMAKIMONO]
+	assert_eq(e[1], 8,  "P3: emakimono Normal threshold = 8")
+	assert_eq(e[2], 15, "P3: emakimono Fine threshold = 15")
+	assert_eq(e[3], 30, "P3: emakimono Exceptional threshold = 30")
+	assert_eq(e[4], 45, "P3: emakimono Masterwork threshold = 45")
+	assert_eq(e[5], 65, "P3: emakimono Legendary threshold = 65")
+
+
+func test_visitor_effect_masterwork_disposition_is_5() -> void:
+	var p: PaintingData = _make_kakemono(1, 4, 10)  # Masterwork
+	p.display_settlement_id = 100
+	var r: Dictionary = PaintingSystem.apply_visitor_effect(20, p, 1, 50)
+	assert_eq(r["disposition_change"], 5, "P4: Masterwork visitor +5 disposition")
+
+
+func test_visitor_effect_legendary_disposition_is_7() -> void:
+	var p: PaintingData = _make_kakemono(1, 5, 10)  # Legendary
+	p.display_settlement_id = 100
+	var r: Dictionary = PaintingSystem.apply_visitor_effect(20, p, 1, 50)
+	assert_eq(r["disposition_change"], 7, "P4: Legendary visitor +7 disposition")
 
 
 func test_declare_copy_wip_state() -> void:
