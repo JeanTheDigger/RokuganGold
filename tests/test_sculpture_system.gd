@@ -191,6 +191,25 @@ func test_resolve_compose_stone_success_above_20() -> void:
 	assert_true(r["success"])
 
 
+func test_resolve_compose_stone_progress_uses_base_tn_not_effective() -> void:
+	# GDD A2: progress = max(1, roll_total - 15). Stone adds +5 TN to check for success
+	# but does NOT reduce progress on a successful roll.
+	# Roll 30 on a stone sculpture (effective TN = 20): base = max(1, 30-15) = 15, not max(1, 30-20) = 10.
+	var sc: SculptureData = _make_statuary_wip(1, 1, 0, SculptureSystem.Material.STONE, 1)
+	var r: Dictionary = SculptureSystem.resolve_compose_sculpture(1, sc, 30, 0, 5)
+	assert_true(r["success"])
+	assert_eq(r["progress_gained"], 15)  # max(1, 30-15) = 15; not 10 (max(1, 30-20))
+
+
+func test_resolve_compose_stone_progress_with_raises_uses_base_tn() -> void:
+	# Roll 35 on stone with 2 raises: effective_tn = 20+10=30, success.
+	# Progress = max(1, 35-15) + 2*5 = 20 + 10 = 30. Not max(1, 35-30)+10 = 1+10 = 11.
+	var sc: SculptureData = _make_statuary_wip(2, 2, 0, SculptureSystem.Material.STONE, 1)
+	var r: Dictionary = SculptureSystem.resolve_compose_sculpture(2, sc, 35, 2, 5)
+	assert_true(r["success"])
+	assert_eq(r["progress_gained"], 30)
+
+
 func test_resolve_compose_skill_gate_blocks_below_rank() -> void:
 	var sc: SculptureData = _make_statuary_wip(1, 3, 10, SculptureSystem.Material.WOOD, 1)
 	# quality tier 3 requires rank 3; sculptor rank 2

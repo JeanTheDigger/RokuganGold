@@ -13290,7 +13290,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"active_sculpture_wip_id", "active_sculpture_material", "active_sculpture_format",
 		"statue_slot_empty", "guardian_slot_empty",
 		"is_religious_settlement", "has_statue_permission", "has_guardian_permission",
-		"statuary_worship_fr", "statuary_subject_id", "guardian_worship_fr",
+		"statuary_worship_fr", "statuary_subject_id", "guardian_worship_fr", "foundry_in_province",
 		"available_poem_item_id", "available_poem_raises",
 	]
 	for char_id: Variant in world_states:
@@ -23465,6 +23465,8 @@ static func _inject_sculpture_context(
 			ws["known_objectives"]["statue_slot_empty"] = settlement.statue_slot < 0
 			ws["known_objectives"]["guardian_slot_empty"] = settlement.guardian_slot < 0
 			ws["known_objectives"]["is_religious_settlement"] = settlement.is_religious()
+			# Foundry: always false until SettlementData gains a foundry field (GDD A5 prerequisite).
+			ws["known_objectives"]["foundry_in_province"] = false
 			ws["known_objectives"]["has_statue_permission"] = (
 				SculptureSystem.has_statue_permission(character.character_id, settlement)
 			)
@@ -23494,6 +23496,7 @@ static func _inject_sculpture_context(
 			ws["known_objectives"]["is_religious_settlement"] = false
 			ws["known_objectives"]["has_statue_permission"] = false
 			ws["known_objectives"]["has_guardian_permission"] = false
+			ws["known_objectives"]["foundry_in_province"] = false
 			ws["known_objectives"]["statuary_worship_fr"] = 0
 			ws["known_objectives"]["statuary_subject_id"] = -1
 			ws["known_objectives"]["guardian_worship_fr"] = 0

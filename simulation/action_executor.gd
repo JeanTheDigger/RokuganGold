@@ -6446,7 +6446,9 @@ static func _execute_compose_sculpture(
 	var material: int = meta.get("material", SculptureSystem.Material.WOOD)
 	var sc_format: int = meta.get("format", SculptureSystem.Format.STATUARY)
 	var stone_penalty: int = SculptureSystem.STONE_TN_PENALTY if material == SculptureSystem.Material.STONE else 0
-	var bronze_fr: int = 1 if material == SculptureSystem.Material.BRONZE else 0
+	# GDD A5: bronze +1 FR requires a foundry in the province. Defaults false until foundry data modeled.
+	var has_foundry: bool = ctx.known_objectives.get("foundry_in_province", false)
+	var bronze_fr: int = 1 if (material == SculptureSystem.Material.BRONZE and has_foundry) else 0
 	# Yoritomo Sculptor: +1k1 on figurine rolls (GDD section N).
 	var yoritomo_bonus_dice: int = 0
 	var yoritomo_bonus_keep: int = 0

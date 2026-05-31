@@ -212,10 +212,9 @@ static func resolve_compose_sculpture(
 	var success: bool = die_result >= tn_with_raises
 	var progress_gained: int = 0
 	if success:
-		var base_progress: int = maxi(1, die_result - tn_with_raises + raises_declared * 5)
-		# Note: progress = max(1, roll_total - base_TN); raises cost TN but add progress.
-		# Re-derive: effective_total vs base_TN = effective progress base.
-		base_progress = maxi(1, die_result - effective_tn)
+		# GDD A2: progress = max(1, roll_total − 15). Stone penalty raises the TN needed
+		# to succeed but does NOT reduce progress if you succeed — always subtract base TN.
+		var base_progress: int = maxi(1, die_result - COMPOSE_TN)
 		var raise_bonus: int = raises_declared * 5
 		progress_gained = base_progress + raise_bonus
 		sculpture.craft_progress += progress_gained
