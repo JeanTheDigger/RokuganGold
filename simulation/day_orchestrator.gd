@@ -586,6 +586,12 @@ static func advance_day(
 		ic_day,
 	)
 
+	_process_patron_glory_writebacks(
+		day_result.get("results", []),
+		active_courts,
+		characters_by_id,
+	)
+
 	_process_commitment_creation_writebacks(
 		day_result.get("results", []),
 		commitments,
@@ -14374,10 +14380,31 @@ static func _process_musha_shugyo(
 		if not MushaShugyo.should_end_pilgrimage(character, ic_day):
 			continue
 		var result: Dictionary = MushaShugyo.end_pilgrimage(character)
-		if MushaShugyo.is_lord_dead_or_missing(result["original_lord_id"], characters_by_id):
-			result["lord_dead"] = true
+		var lord_dead: bool = MushaShugyo.is_lord_dead_or_missing(result["original_lord_id"], characters_by_id)
+		result["lord_dead"] = lord_dead
 		if objectives_map.has(character.character_id):
 			objectives_map[character.character_id].erase("standing")
+
+		# GDD s57.48.4 step 5: Fire a BEGIN_TRAVEL need toward the lord's primary holding.
+		# Dead lord: clear lord_id so orphan/vacancy pipeline handles reassignment (s22.5).
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+		if lord_dead:
+			character.lord_id = -1
+		else:
+			var lord: L5RCharacterData = characters_by_id.get(character.lord_id)
+			if lord != null and not CharacterStats.is_dead(lord):
+				var lord_loc: String = lord.physical_location
+				if lord_loc.is_valid_int():
+					objectives_map[char_id]["primary"] = {
+						"need_type": "TRAVEL_TO",
+						"target_settlement_id": int(lord_loc),
+						"source": "musha_shugyo_return",
+						"status": "ACTIVE",
+					}
+					result["travel_target"] = lord_loc
+
 		results.append(result)
 	return results
 
@@ -17582,6 +17609,65 @@ static func _process_performance_request_writebacks(
 			ic_day,
 		)
 		court.pending_performance_requests.append(request)
+
+
+# -- Patron Glory Writebacks ---------------------------------------------------
+
+
+static func _process_patron_glory_writebacks(
+	day_results: Array,
+	active_courts: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for entry: Variant in day_results:
+		if not entry is Dictionary:
+			continue
+		var d: Dictionary = entry as Dictionary
+		var action_id: String = d.get("action_id", "")
+		if action_id not in ["PUBLIC_PERFORMANCE", "PERFORM_FOR"]:
+			continue
+		if not d.get("success", false):
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		var request_id: int = effects.get("fulfills_request_id", -1)
+		if request_id < 0:
+			continue
+		var lord_id: int = effects.get("requesting_lord_id", -1)
+		if lord_id < 0:
+			continue
+		var lord: L5RCharacterData = characters_by_id.get(lord_id)
+		if lord == null or CharacterStats.is_dead(lord):
+			continue
+
+		# Find and remove the matching request from the court.
+		var request: Dictionary = {}
+		for c_v: Variant in active_courts:
+			if not c_v is CourtSessionData:
+				continue
+			var c: CourtSessionData = c_v as CourtSessionData
+			if not CourtSystem.is_active(c):
+				continue
+			for i: int in range(c.pending_performance_requests.size()):
+				var req: Dictionary = c.pending_performance_requests[i]
+				if req.get("request_id", -1) == request_id:
+					request = req
+					c.pending_performance_requests.remove_at(i)
+					break
+			if not request.is_empty():
+				break
+
+		if request.is_empty():
+			continue
+
+		var outcome: int = effects.get("performance_outcome",
+			PerformativeArtsSystem.PerformanceOutcome.FAILURE)
+		var venue_mode: String = effects.get("venue_mode",
+			request.get("venue_mode", "public"))
+		var fatigue_mult: float = effects.get("fatigue_multiplier", 1.0)
+		var patron_glory: float = RequestPerformanceSystem.compute_patron_glory(
+			outcome, venue_mode, fatigue_mult)
+		if patron_glory != 0.0:
+			HonorGlorySystem.apply_glory_change(lord, patron_glory)
 
 
 # -- Court Availability Data Population ----------------------------------------

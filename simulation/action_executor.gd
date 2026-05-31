@@ -678,6 +678,10 @@ static func _execute_public_performance(
 			"raises": perf_result.get("raises", 0),
 			"performance_applied": true,
 			"garden_id": garden_id,
+			"fulfills_request_id": action.metadata.get("fulfills_request_id", -1),
+			"requesting_lord_id": action.metadata.get("requesting_lord_id", -1),
+			"venue_mode": action.metadata.get("venue_mode", "public"),
+			"fatigue_multiplier": PerformativeArtsSystem.get_fatigue_multiplier(fatigue_count),
 		},
 	}
 
@@ -695,6 +699,7 @@ static func _execute_perform_for(
 	if recipient == null:
 		return _execute_no_roll(action, character, ctx)
 
+	var fatigue_count: int = character.pieces_seen.get("_performance_count_today", 0)
 	var perf_result: Dictionary = PerformativeArtsSystem.resolve_perform_for(
 		character, recipient, art_form, dice_engine
 	)
@@ -723,6 +728,10 @@ static func _execute_perform_for(
 			"art_form": art_form,
 			"raises": perf_result.get("raises", 0),
 			"performance_applied": true,
+			"fulfills_request_id": action.metadata.get("fulfills_request_id", -1),
+			"requesting_lord_id": action.metadata.get("requesting_lord_id", -1),
+			"venue_mode": action.metadata.get("venue_mode", "private"),
+			"fatigue_multiplier": PerformativeArtsSystem.get_fatigue_multiplier(fatigue_count),
 		},
 	}
 

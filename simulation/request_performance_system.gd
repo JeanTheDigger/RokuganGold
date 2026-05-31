@@ -89,13 +89,14 @@ static func score_acceptance(
 	var disp: int = performer.disposition_values.get(lord_id, 0)
 	var score: int = 0
 
-	if disp >= 50:
+	# Thresholds from s12.2 disposition tier boundaries.
+	if disp >= 51:
 		score += DISP_STRONG_ALLY
-	elif disp >= 25:
+	elif disp >= 31:
 		score += DISP_FRIEND
-	elif disp >= 10:
+	elif disp >= 11:
 		score += DISP_ACQUAINTANCE
-	elif disp >= 0:
+	elif disp >= -10:
 		score += DISP_NEUTRAL
 	else:
 		score += DISP_RIVAL
@@ -107,8 +108,6 @@ static func score_acceptance(
 	var rank: int = SkillResolver.get_skill_rank(performer, skill_name)
 	if rank >= 5:
 		score += SKILL_RANK5_BONUS
-	elif rank >= 3:
-		score += 8
 
 	if requesting_lord.status >= 8.0:
 		score += LORD_CHAMPION_BONUS

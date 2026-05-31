@@ -931,6 +931,17 @@ static func score_all(
 			"Dragon":
 				option.disposition_modifier += 5.0
 
+	# REQUEST_PERFORMANCE season modifier (GDD s57.33.6): Winter court season
+	# (+15) or summer heat (-10). Spring and autumn are neutral.
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id != "REQUEST_PERFORMANCE":
+			continue
+		var season: int = ctx.season
+		if season == TimeSystem.Season.WINTER:
+			option.disposition_modifier += 15.0
+		elif season == TimeSystem.Season.SUMMER:
+			option.disposition_modifier -= 10.0
+
 
 # -- Phase 6: Selection -------------------------------------------------------
 # Highest total wins. Tiebreakers: ObjAlign > disposition > lower AP > seed.

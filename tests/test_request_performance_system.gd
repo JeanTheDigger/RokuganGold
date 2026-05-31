@@ -197,3 +197,163 @@ func test_compute_patron_glory_fatigue_halved() -> void:
 		PerformativeArtsSystem.PerformanceOutcome.SUCCESS, "public", 0.5
 	)
 	assert_almost_eq(glory_half, glory_full * 0.5, 0.0001)
+
+
+# -- Disposition threshold tests (s12.2 tier boundaries) ----------------------
+
+func test_score_acceptance_strong_ally_threshold_at_51() -> void:
+	_performer.disposition_values[1] = 51
+	var req: Dictionary = RequestPerformanceSystem.create_request(0, 1, "song", -1, "public", 5)
+	var score_at: int = RequestPerformanceSystem.score_acceptance(_performer, req, _lord, 0)
+	_performer.disposition_values[1] = 50
+	var score_below: int = RequestPerformanceSystem.score_acceptance(_performer, req, _lord, 0)
+	assert_eq(score_at - score_below, RequestPerformanceSystem.DISP_STRONG_ALLY - RequestPerformanceSystem.DISP_FRIEND)
+
+
+func test_score_acceptance_friend_threshold_at_31() -> void:
+	_performer.disposition_values[1] = 31
+	var req: Dictionary = RequestPerformanceSystem.create_request(0, 1, "song", -1, "public", 5)
+	var score_at: int = RequestPerformanceSystem.score_acceptance(_performer, req, _lord, 0)
+	_performer.disposition_values[1] = 30
+	var score_below: int = RequestPerformanceSystem.score_acceptance(_performer, req, _lord, 0)
+	assert_eq(score_at - score_below, RequestPerformanceSystem.DISP_FRIEND - RequestPerformanceSystem.DISP_ACQUAINTANCE)
+
+
+func test_score_acceptance_acquaintance_threshold_at_11() -> void:
+	_performer.disposition_values[1] = 11
+	var req: Dictionary = RequestPerformanceSystem.create_request(0, 1, "song", -1, "public", 5)
+	var score_at: int = RequestPerformanceSystem.score_acceptance(_performer, req, _lord, 0)
+	_performer.disposition_values[1] = 10
+	var score_below: int = RequestPerformanceSystem.score_acceptance(_performer, req, _lord, 0)
+	assert_eq(score_at - score_below, RequestPerformanceSystem.DISP_ACQUAINTANCE - RequestPerformanceSystem.DISP_NEUTRAL)
+
+
+func test_score_acceptance_rival_threshold_at_minus10() -> void:
+	_performer.disposition_values[1] = -10
+	var req: Dictionary = RequestPerformanceSystem.create_request(0, 1, "song", -1, "public", 5)
+	var score_neutral: int = RequestPerformanceSystem.score_acceptance(_performer, req, _lord, 0)
+	_performer.disposition_values[1] = -11
+	var score_rival: int = RequestPerformanceSystem.score_acceptance(_performer, req, _lord, 0)
+	assert_eq(score_neutral - score_rival, RequestPerformanceSystem.DISP_NEUTRAL - RequestPerformanceSystem.DISP_RIVAL)
+
+
+func test_score_acceptance_no_rank3_bonus() -> void:
+	_performer.skills = {"Perform: Song": 3}
+	var req: Dictionary = RequestPerformanceSystem.create_request(0, 1, "song", -1, "public", 5)
+	var score_rank3: int = RequestPerformanceSystem.score_acceptance(_performer, req, _lord, 0)
+	_performer.skills = {"Perform: Song": 4}
+	var score_rank4: int = RequestPerformanceSystem.score_acceptance(_performer, req, _lord, 0)
+	# Rank 3 and 4 should be identical — no intermediate bonus between unranked and rank 5.
+	assert_eq(score_rank3, score_rank4)
+
+
+# -- Patron glory writeback (DayOrchestrator._process_patron_glory_writebacks) -
+
+func test_patron_glory_writeback_applies_glory_on_success() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.glory = 3.0
+	var chars_by_id: Dictionary = {10: lord}
+
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	var req: Dictionary = RequestPerformanceSystem.create_request(5, 10, "song", -1, "public", 0)
+	court.pending_performance_requests = [req]
+
+	var results: Array = [{
+		"action_id": "PUBLIC_PERFORMANCE",
+		"success": true,
+		"character_id": 2,
+		"effects": {
+			"fulfills_request_id": 5,
+			"requesting_lord_id": 10,
+			"venue_mode": "public",
+			"fatigue_multiplier": 1.0,
+			"performance_outcome": PerformativeArtsSystem.PerformanceOutcome.SUCCESS,
+		},
+	}]
+
+	DayOrchestrator._process_patron_glory_writebacks(results, [court], chars_by_id)
+	assert_almost_eq(lord.glory, 3.0 + RequestPerformanceSystem.PATRON_GLORY_PUBLIC_SUCCESS, 0.001)
+
+
+func test_patron_glory_writeback_removes_request_from_court() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.glory = 2.0
+	var chars_by_id: Dictionary = {10: lord}
+
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	var req: Dictionary = RequestPerformanceSystem.create_request(7, 10, "dance", -1, "public", 0)
+	court.pending_performance_requests = [req]
+
+	var results: Array = [{
+		"action_id": "PUBLIC_PERFORMANCE",
+		"success": true,
+		"effects": {
+			"fulfills_request_id": 7,
+			"requesting_lord_id": 10,
+			"venue_mode": "public",
+			"fatigue_multiplier": 1.0,
+			"performance_outcome": PerformativeArtsSystem.PerformanceOutcome.SUCCESS,
+		},
+	}]
+
+	DayOrchestrator._process_patron_glory_writebacks(results, [court], chars_by_id)
+	assert_eq(court.pending_performance_requests.size(), 0)
+
+
+func test_patron_glory_writeback_no_effect_without_matching_request() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.glory = 2.0
+	var chars_by_id: Dictionary = {10: lord}
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	court.pending_performance_requests = []
+
+	var results: Array = [{
+		"action_id": "PUBLIC_PERFORMANCE",
+		"success": true,
+		"effects": {
+			"fulfills_request_id": 99,
+			"requesting_lord_id": 10,
+			"venue_mode": "public",
+			"fatigue_multiplier": 1.0,
+			"performance_outcome": PerformativeArtsSystem.PerformanceOutcome.SUCCESS,
+		},
+	}]
+
+	DayOrchestrator._process_patron_glory_writebacks(results, [court], chars_by_id)
+	assert_almost_eq(lord.glory, 2.0, 0.001)
+
+
+func test_patron_glory_writeback_skips_failed_performance() -> void:
+	var lord := L5RCharacterData.new()
+	lord.character_id = 10
+	lord.glory = 2.0
+	var chars_by_id: Dictionary = {10: lord}
+	var court := CourtSessionData.new()
+	court.court_id = 1
+	court.phase = CourtSessionData.CourtPhase.ACTIVE
+	var req: Dictionary = RequestPerformanceSystem.create_request(3, 10, "song", -1, "public", 0)
+	court.pending_performance_requests = [req]
+
+	var results: Array = [{
+		"action_id": "PUBLIC_PERFORMANCE",
+		"success": false,
+		"effects": {
+			"fulfills_request_id": 3,
+			"requesting_lord_id": 10,
+			"venue_mode": "public",
+			"fatigue_multiplier": 1.0,
+			"performance_outcome": PerformativeArtsSystem.PerformanceOutcome.FAILURE,
+		},
+	}]
+
+	DayOrchestrator._process_patron_glory_writebacks(results, [court], chars_by_id)
+	assert_almost_eq(lord.glory, 2.0, 0.001)
