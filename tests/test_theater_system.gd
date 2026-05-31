@@ -2134,3 +2134,146 @@ func test_non_bunraku_performance_no_extra_ap_deduction() -> void:
 	)
 	assert_eq(performer.action_points_current, 1,
 		"Standard performance does not deduct extra AP")
+
+
+# ============================================================================
+# make_single_role_piece — factory helper
+# ============================================================================
+
+func test_make_single_role_piece_fields() -> void:
+	var piece: TheaterPieceData = TheaterSystem.make_single_role_piece(
+		7, "Test Piece", TheaterSystem.Style.NOH, 1,
+		"Crane", TheaterSystem.SubjectType.CLAN, true,
+		3, 2, 100,
+	)
+	assert_eq(piece.piece_id, 7, "piece_id assigned")
+	assert_eq(piece.title, "Test Piece", "title assigned")
+	assert_eq(piece.author_id, 1, "author_id assigned")
+	assert_eq(piece.disposition_magnitude, 3, "magnitude assigned")
+	assert_eq(piece.topic_weight, 2, "topic_weight assigned")
+	assert_eq(piece.ic_day_created, 100, "ic_day_created assigned")
+
+
+func test_make_single_role_piece_creates_one_role() -> void:
+	var piece: TheaterPieceData = TheaterSystem.make_single_role_piece(
+		1, "Title", TheaterSystem.Style.KABUKI, 1,
+		"Lion", TheaterSystem.SubjectType.CLAN, false, 2, 1, 0,
+	)
+	assert_eq(piece.roles.size(), 1, "exactly one role created")
+	assert_eq(piece.num_roles_declared, 1, "num_roles_declared = 1")
+
+
+func test_make_single_role_piece_role_fields_match() -> void:
+	var piece: TheaterPieceData = TheaterSystem.make_single_role_piece(
+		5, "Clan Piece", TheaterSystem.Style.KYOGEN, 1,
+		"Scorpion", TheaterSystem.SubjectType.CLAN, false,
+		2, 1, 50, "Scorpion", "Male",
+	)
+	var role: Dictionary = piece.roles[0]
+	assert_eq(role["subject_character"], "Scorpion", "role subject_character from subject arg")
+	assert_eq(role["subject_type"], TheaterSystem.SubjectType.CLAN, "role subject_type from subject_type arg")
+	assert_eq(role["framing"], false, "role framing from framing arg")
+	assert_eq(role["clan_requirement"], "Scorpion", "clan_requirement from clan_req arg")
+
+
+# ============================================================================
+# find_willing_teacher — private piece learning gate
+# ============================================================================
+
+func test_find_willing_teacher_student_not_in_chars_returns_minus1() -> void:
+	var piece: TheaterPieceData = TheaterSystem.make_single_role_piece(
+		1, "T", TheaterSystem.Style.NOH, 1, "Crane", TheaterSystem.SubjectType.CLAN, true, 2, 1, 0,
+	)
+	piece.known_by = [10]
+	# chars_by_id is empty — student not found
+	var teacher_id: int = TheaterSystem.find_willing_teacher(99, piece, {})
+	assert_eq(teacher_id, -1, "student not in chars_by_id → -1")
+
+
+func test_find_willing_teacher_co_located_willing_teacher_found() -> void:
+	var student: L5RCharacterData = L5RCharacterData.new()
+	student.character_id = 5
+	student.physical_location = "castle_a"
+	student.wounds_taken = 0
+	student.earth = 2
+
+	var teacher: L5RCharacterData = L5RCharacterData.new()
+	teacher.character_id = 10
+	teacher.physical_location = "castle_a"
+	teacher.wounds_taken = 0
+	teacher.earth = 2
+	teacher.disposition_values = {5: 5}  # positive toward student
+
+	var piece: TheaterPieceData = TheaterSystem.make_single_role_piece(
+		1, "T", TheaterSystem.Style.NOH, 1, "Crane", TheaterSystem.SubjectType.CLAN, true, 2, 1, 0,
+	)
+	piece.known_by = [10]
+
+	var chars: Dictionary = {5: student, 10: teacher}
+	var teacher_id: int = TheaterSystem.find_willing_teacher(5, piece, chars)
+	assert_eq(teacher_id, 10, "co-located willing teacher found")
+
+
+func test_find_willing_teacher_negative_disposition_returns_minus1() -> void:
+	var student: L5RCharacterData = L5RCharacterData.new()
+	student.character_id = 5
+	student.physical_location = "castle_a"
+	student.wounds_taken = 0
+	student.earth = 2
+
+	var teacher: L5RCharacterData = L5RCharacterData.new()
+	teacher.character_id = 10
+	teacher.physical_location = "castle_a"
+	teacher.wounds_taken = 0
+	teacher.earth = 2
+	teacher.disposition_values = {5: -5}  # negative toward student
+
+	var piece: TheaterPieceData = TheaterSystem.make_single_role_piece(
+		1, "T", TheaterSystem.Style.NOH, 1, "Crane", TheaterSystem.SubjectType.CLAN, true, 2, 1, 0,
+	)
+	piece.known_by = [10]
+
+	var chars: Dictionary = {5: student, 10: teacher}
+	var teacher_id: int = TheaterSystem.find_willing_teacher(5, piece, chars)
+	assert_eq(teacher_id, -1, "teacher with negative disposition not willing → -1")
+
+
+# ============================================================================
+# get_casting_tn_modifier — role-casting TN modifiers
+# ============================================================================
+
+func test_casting_tn_modifier_abstract_returns_zero() -> void:
+	var performer: L5RCharacterData = L5RCharacterData.new()
+	performer.clan = "Crane"
+	performer.school_type = Enums.SchoolType.COURTIER
+	var role: Dictionary = TheaterSystem.make_role(
+		0, "Fortune", TheaterSystem.SubjectType.ABSTRACT, true,
+	)
+	var mod: int = TheaterSystem.get_casting_tn_modifier(performer, role, TheaterSystem.Style.KABUKI)
+	assert_eq(mod, 0, "ABSTRACT subject type — no casting requirements")
+
+
+func test_casting_tn_modifier_same_clan_bonus() -> void:
+	var performer: L5RCharacterData = L5RCharacterData.new()
+	performer.clan = "Crane"
+	performer.school_type = Enums.SchoolType.COURTIER
+	var role: Dictionary = TheaterSystem.make_role(
+		0, "Crane", TheaterSystem.SubjectType.CLAN, true,
+	)
+	var mod: int = TheaterSystem.get_casting_tn_modifier(performer, role, TheaterSystem.Style.KABUKI)
+	assert_eq(mod, TheaterSystem.CASTING_SAME_CLAN_BONUS, "same-clan CLAN subject → TN reduction")
+
+
+func test_casting_tn_modifier_clan_mismatch_no_noh_penalty() -> void:
+	var performer: L5RCharacterData = L5RCharacterData.new()
+	performer.clan = "Crane"
+	performer.family = "Doji"
+	performer.gender = "Male"
+	performer.school_type = Enums.SchoolType.BUSHI
+	performer.skills = {}
+	var role: Dictionary = TheaterSystem.make_role(
+		0, "99", TheaterSystem.SubjectType.CHARACTER, true, "Lion",
+	)
+	var mod: int = TheaterSystem.get_casting_tn_modifier(performer, role, TheaterSystem.Style.KABUKI)
+	assert_eq(mod, TheaterSystem.CASTING_MISMATCH_PENALTY,
+		"CHARACTER subject clan_req mismatch without NOH → penalty")
