@@ -3498,6 +3498,30 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   executor — the seeding path is wired and tested but requires a violence ActionID to be
   implemented before it fires in actual gameplay.
 
+### Systems Added 2026-06-01
+- **s52.5 Ronin Petition** — GDD `gdd/s52.5_ronin_petition_locked.md`. Full petition pipeline
+  confirmed implemented (was previously wired but undocumented as a standalone system entry).
+  `make_ronin()`: lord_id/role/military/hierarchy cleared, status −1.0 (floor 0), Glory loss by
+  cause (LORD_DEATH_NO_HEIR=0.3, CLAN_DESTROYED=1.0, DISMISSAL=0.3, DISMISSAL_DISGRACE=2.0,
+  VOLUNTARY_DEPARTURE=rank-scaled disloyalty via CrimeSystem.get_disloyalty_honor()).
+  `lord_auto_rejects()`: hard-rejects permanent ronin, negative disposition, TREASON/MAHO_USE/
+  UNSANCTIONED_COVERT_KILLING crimes. `resolve_petition()`: contested Courtier+Awareness vs
+  Etiquette+Awareness, PETITION_MIN_TN=20, presentation_modifier=margin/PETITION_MARGIN_SCALE(5),
+  failure=−3 disposition + 90-day per-lord cooldown keyed as
+  `supply_ledger["petition_refused_until_<lord_id>"]` (A50c — scoped so refused-lord 200 does not
+  block petitioning lord 201). `accept_into_service()`: lord/role assignment, status floor 1.0,
+  HIRING_GLORY_RECOVERY=+0.3, clan unchanged (formal induction is s52.7). Permanent ronin: 5
+  DISMISSAL_DISGRACE CrimeRecords → permanent_ronin flag. PETITION_RONIN executor (VISITING
+  context, 1 AP): per-lord cooldown check, auto-reject path (no roll-failure penalties applied),
+  contested roll, `requires_ronin_acceptance` flag on success. ACCEPT_RONIN_PETITION executor
+  (AT_OWN_HOLDINGS, 1 AP): lord-side initiation path. `_process_petition_writebacks()`: cooldown
+  write on roll failure, `accept_into_service()` on success, FIND_NEW_LORD standing cleared.
+  `_assign_ronin_standing_objectives()`: daily assignment for living non-permanent ronin without
+  existing standing. FIND_NEW_LORD NeedType: PETITION_RONIN=90, BEGIN_TRAVEL=80, WRITE_LETTER=60.
+  FILL_VACANCY: ACCEPT_RONIN_PETITION=40. Income tracking, desperation/insurgency seeding,
+  mercenary hire, `process_seasonal_ronin()` also in `simulation/ronin_system.gd`. Constants
+  A38–A50c locked. ~75 tests in `tests/test_ronin_system.gd`.
+
 ### Systems Added 2026-05-30
 - **s52.6 Ronin Contract Hire** — GDD `gdd/s52.6_ronin_contracts_locked.md`. Three contract types
   (PROVINCE_DEFENSE=3 koku/season, MAGISTRATE_AIDE=2 koku/season, MILITARY_SERVICE=2 koku/season).
