@@ -640,6 +640,27 @@ static func _apply_garden_precondition_filter(
 	if presentable.is_empty():
 		options = _remove_action(options, "PRESENT_EMAKIMONO")
 
+	# COMPOSE_SCULPTURE: requires Artisan: Sculpture rank ≥ 1.
+	# Also requires: either an active WIP, or a slot + permission at a religious settlement.
+	var sculpture_rank: int = character.skills.get("Artisan: Sculpture", 0)
+	if sculpture_rank < 1:
+		options = _remove_action(options, "COMPOSE_SCULPTURE")
+	else:
+		var has_wip: bool = ctx.known_objectives.get("active_sculpture_wip_id", -1) >= 0
+		var is_religious: bool = ctx.known_objectives.get("is_religious_settlement", false)
+		var statue_empty: bool = ctx.known_objectives.get("statue_slot_empty", false)
+		var guardian_empty: bool = ctx.known_objectives.get("guardian_slot_empty", false)
+		var has_statue_perm: bool = ctx.known_objectives.get("has_statue_permission", false)
+		var has_guardian_perm: bool = ctx.known_objectives.get("has_guardian_permission", false)
+		var can_start_new: bool = is_religious and (
+			(statue_empty and has_statue_perm) or (guardian_empty and has_guardian_perm) or true)
+		# Figurines can be started anywhere; statuary/guardian need a slot.
+		# Simplify: allow if WIP exists OR at a religious settlement (will declare format in metadata).
+		if not has_wip and not is_religious:
+			# Figurines allowed anywhere for artisans: keep the action if no slot needed.
+			# Only block if neither condition is true AND the artisan has no ongoing work.
+			pass  # Allow figurine composition anywhere
+
 	return options
 
 
@@ -1242,6 +1263,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"COLLECT_BONSAI_SPECIMEN", "TEND_BONSAI", "DISPLAY_BONSAI",
 				"OFFER_ART_COMMISSION",
 				"COMPOSE_PAINTING", "DISPLAY_PAINTING", "PRESENT_EMAKIMONO",
+				"COMPOSE_SCULPTURE",
 				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
 				"DO_NOTHING", "REST",
 			]
@@ -1315,6 +1337,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"CRAFT",
 				"CULTIVATE_GARDEN", "TEND_BONSAI", "DISPLAY_BONSAI",
 				"COMPOSE_PAINTING", "DISPLAY_PAINTING", "PRESENT_EMAKIMONO",
+				"COMPOSE_SCULPTURE",
 				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
 				"DO_NOTHING", "REST",
 			]
@@ -1485,6 +1508,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"COMPOSE_PAINTING": 1,
 		"DISPLAY_PAINTING": 1,
 		"PRESENT_EMAKIMONO": 1,
+		"COMPOSE_SCULPTURE": 1,
 	}
 	return costs.get(action_id, 1)
 
@@ -2781,6 +2805,9 @@ static func _populate_action_metadata(
 			"directed_fortune": need.target_npc_id if need.target_npc_id >= 0 else -1,
 			"location_type": _zone_to_worship_location(ctx.zone_subtype),
 			"ikebana_worship_fr": ctx.known_objectives.get("ikebana_worship_fr", 0),
+			"statuary_worship_fr": ctx.known_objectives.get("statuary_worship_fr", 0),
+			"guardian_worship_fr": ctx.known_objectives.get("guardian_worship_fr", 0),
+			"painting_fortune_fr": ctx.known_objectives.get("painting_fortune_fr", 0),
 		}
 	elif option.action_id in ["FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 			"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP"]:
@@ -3185,6 +3212,29 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"painting_id": em_id,
 			"settlement_id": int(ctx.location_id) if ctx.location_id.is_valid_int() else -1,
+		}
+	elif option.action_id == "COMPOSE_SCULPTURE":
+		var wip_sc_id: int = ctx.known_objectives.get("active_sculpture_wip_id", -1)
+		var sculpture_rank: int = ctx.skill_ranks.get("Artisan: Sculpture", 0)
+		var is_religious: bool = ctx.known_objectives.get("is_religious_settlement", false)
+		# Select format: statuary/guardian at religious sites, figurine anywhere.
+		var sc_format: int = SculptureSystem.Format.FIGURINE
+		if is_religious:
+			var statue_empty: bool = ctx.known_objectives.get("statue_slot_empty", true)
+			sc_format = SculptureSystem.Format.STATUARY if statue_empty else SculptureSystem.Format.GUARDIAN
+		# Carry-forward existing WIP if one is active.
+		var target_quality: int = clampi(sculpture_rank, 1, 5)
+		var loc_sid: int = int(ctx.location_id) if ctx.location_id.is_valid_int() else -1
+		# Subject selection: RAISE_DISPOSITION targets an NPC, otherwise Buddha/fortune.
+		var sc_subject_id: int = need.target_npc_id if need.need_type == "RAISE_DISPOSITION" else -1
+		option.metadata = {
+			"sculpture_id": wip_sc_id,
+			"format": sc_format,
+			"material": SculptureSystem.Material.WOOD,
+			"target_quality_tier": target_quality,
+			"subject_id": sc_subject_id,
+			"display_settlement_id": loc_sid,
+			"raises": 0,
 		}
 
 

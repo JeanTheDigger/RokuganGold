@@ -39,6 +39,7 @@ const DIR_GARDENS := "gardens/"
 const DIR_BONSAI := "bonsai/"
 const DIR_COMMISSIONS := "commissions/"
 const DIR_PAINTINGS := "paintings/"
+const DIR_SCULPTURES := "sculptures/"
 
 
 # ============================================================================
@@ -76,6 +77,7 @@ func save_world(ws: Node) -> bool:
 	ok = _save_resource_array(ws.active_bonsai, base + DIR_BONSAI, "bonsai_id") and ok
 	ok = _save_resource_array(ws.commission_records, base + DIR_COMMISSIONS, "commission_id") and ok
 	ok = _save_resource_array(ws.active_paintings, base + DIR_PAINTINGS, "painting_id") and ok
+	ok = _save_resource_array(ws.active_sculptures, base + DIR_SCULPTURES, "sculpture_id") and ok
 
 	# Provinces and settlements use their own ID fields
 	ok = _save_resource_array(ws.settlements, base + DIR_SETTLEMENTS, "settlement_id") and ok
@@ -131,6 +133,7 @@ func load_world(ws: Node) -> bool:
 	ws.active_bonsai.assign(_load_resource_array(base + DIR_BONSAI))
 	ws.commission_records.assign(_load_resource_array(base + DIR_COMMISSIONS))
 	ws.active_paintings.assign(_load_resource_array(base + DIR_PAINTINGS))
+	ws.active_sculptures.assign(_load_resource_array(base + DIR_SCULPTURES))
 	ws.settlements.assign(_load_resource_array(base + DIR_SETTLEMENTS))
 	ws.provinces = _load_province_dict(base + DIR_PROVINCES)
 	ws.favors = _load_favors(base + DIR_FAVORS)

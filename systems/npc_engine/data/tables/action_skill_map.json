@@ -104,6 +104,11 @@
     "secondary": "Awareness",
     "trait": "Awareness"
   },
+  "COMPOSE_SCULPTURE": {
+    "primary": "Artisan: Sculpture",
+    "secondary": "Awareness",
+    "trait": "Awareness"
+  },
   "COMPOSE_THEATER_PIECE": {
     "primary": "Poetry",
     "secondary": "Poetry",

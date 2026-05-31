@@ -103,6 +103,8 @@ static func advance_day(
 	next_commission_id: Array = [1],
 	active_paintings: Array = [],
 	next_painting_id: Array = [1],
+	active_sculptures: Array = [],
+	next_sculpture_id: Array = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -194,6 +196,7 @@ static func advance_day(
 	_inject_ikebana_context(active_arrangements, settlements, characters, world_states, active_gardens)
 	_inject_garden_context(active_gardens, active_bonsai, commission_records, settlements, characters, world_states)
 	_inject_painting_context(active_paintings, settlements, characters, world_states)
+	_inject_sculpture_context(active_sculptures, settlements, characters, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_set_temple_context_flags(characters, settlements, world_states)
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
@@ -922,6 +925,15 @@ static func advance_day(
 		active_paintings, characters, characters_by_id, settlements, ic_day, current_season,
 	)
 
+	_process_compose_sculpture_writebacks(
+		day_result.get("results", []),
+		active_sculptures, next_sculpture_id, ic_day,
+		settlements, active_topics, next_topic_id,
+	)
+	_process_sculpture_visitor_effects(
+		active_sculptures, characters, characters_by_id, settlements, ic_day, current_season,
+	)
+
 	_process_travel_redirect_writebacks(
 		day_result.get("results", []), objectives_map,
 	)
@@ -976,7 +988,7 @@ static func advance_day(
 	_cleanup_dead_character_references(
 		characters, characters_by_id, active_courts, entanglements,
 		active_hunts, favors, bloodspeaker_cells, active_secrets,
-		theater_pieces, active_paintings,
+		theater_pieces, active_paintings, active_sculptures,
 	)
 
 	var succession_results: Array = _process_successions(
@@ -1366,6 +1378,10 @@ static func advance_day(
 		)
 		_process_painting_seasonal_maintenance(
 			active_paintings, characters_by_id, settlements, active_topics, next_topic_id,
+			ic_day, current_season,
+		)
+		_process_sculpture_seasonal_maintenance(
+			active_sculptures, characters_by_id, settlements, active_topics, next_topic_id,
 			ic_day, current_season,
 		)
 		extradition_results = _process_fugitive_extradition_seasonal(
@@ -7579,6 +7595,7 @@ static func _cleanup_dead_character_references(
 	active_secrets: Array = [],
 	theater_pieces: Array = [],
 	active_paintings: Array = [],
+	active_sculptures: Array = [],
 ) -> void:
 	var dead_ids: Array = []
 	for c: L5RCharacterData in characters:
@@ -7635,6 +7652,10 @@ static func _cleanup_dead_character_references(
 	if not active_paintings.is_empty():
 		for did: int in dead_ids:
 			PaintingSystem.handle_character_death(did, active_paintings)
+
+	if not active_sculptures.is_empty():
+		for did: int in dead_ids:
+			SculptureSystem.handle_character_death(did, active_sculptures)
 
 	for secret: Variant in active_secrets:
 		if not secret is SecretData:
@@ -13246,7 +13267,11 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"character_province_id",
 		"active_painting_wip_id", "displayable_paintings", "presentable_emakimono",
 		"wall_art_slot_empty", "displayed_art_slot_empty", "fusuma_slot_empty",
-		"has_wall_art_permission",
+		"has_wall_art_permission", "painting_fortune_fr",
+		"active_sculpture_wip_id", "active_sculpture_material", "active_sculpture_format",
+		"statue_slot_empty", "guardian_slot_empty",
+		"is_religious_settlement", "has_statue_permission", "has_guardian_permission",
+		"statuary_worship_fr", "statuary_subject_id", "guardian_worship_fr",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -22892,6 +22917,10 @@ static func _inject_painting_context(
 			ws["known_objectives"]["displayed_art_slot_empty"] = false
 			ws["known_objectives"]["fusuma_slot_empty"] = false
 			ws["known_objectives"]["has_wall_art_permission"] = false
+		# Painting fortune focus FR for PERFORM_WORSHIP (s57.27.11 PROVISIONAL=0).
+		# When s57.27.11 is formally specified: check for RELIGIOUS subject painting
+		# displayed at this settlement and grant +1 FR.
+		ws["known_objectives"]["painting_fortune_fr"] = 0
 
 
 static func _process_compose_painting_writebacks(
@@ -23228,6 +23257,365 @@ static func _process_painting_seasonal_maintenance(
 					replacement, settlement,
 					PaintingSystem.DisplaySlot.WALL_ART, ic_day,
 				)
+
+
+# ---------------------------------------------------------------------------
+# Sculpture orchestrator functions (s57.28)
+# ---------------------------------------------------------------------------
+
+static func _inject_sculpture_context(
+	active_sculptures: Array,
+	settlements: Array,
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	## Inject per-character sculpture state into known_objectives.
+	## Sets: active_sculpture_wip_id, statue_slot_empty, guardian_slot_empty,
+	##       has_statue_permission, has_guardian_permission,
+	##       statuary_worship_fr, guardian_worship_fr.
+
+	# Build settlement lookup
+	var settlements_by_str_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_str_id[str(s.settlement_id)] = s
+
+	# Build creator_id → WIP sculpture lookup (statuary/guardian only; figurines never degrade)
+	var wip_by_creator: Dictionary = {}
+	# Settlement str_id → placed statuary (complete, format==STATUARY)
+	var statuary_by_settlement: Dictionary = {}
+	# Settlement str_id → placed guardian (complete, format==GUARDIAN)
+	var guardian_by_settlement: Dictionary = {}
+
+	for sc_v: Variant in active_sculptures:
+		if not sc_v is SculptureData:
+			continue
+		var sc: SculptureData = sc_v as SculptureData
+		if sc.craft_progress >= 0:
+			# WIP — track first WIP per creator
+			if not wip_by_creator.has(sc.creator_id):
+				wip_by_creator[sc.creator_id] = sc
+		else:
+			# Complete — track displayed pieces
+			if sc.display_settlement_id >= 0:
+				var sid: String = str(sc.display_settlement_id)
+				if sc.format == SculptureSystem.Format.STATUARY:
+					if not statuary_by_settlement.has(sid):
+						statuary_by_settlement[sid] = sc
+				elif sc.format == SculptureSystem.Format.GUARDIAN:
+					if not guardian_by_settlement.has(sid):
+						guardian_by_settlement[sid] = sc
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			continue
+		if not ws.has("known_objectives"):
+			ws["known_objectives"] = {}
+
+		var loc: String = character.physical_location
+		var settlement: SettlementData = settlements_by_str_id.get(loc)
+
+		# WIP sculpture for this creator
+		var wip: SculptureData = wip_by_creator.get(character.character_id)
+		ws["known_objectives"]["active_sculpture_wip_id"] = wip.sculpture_id if wip != null else -1
+		ws["known_objectives"]["active_sculpture_material"] = wip.material if wip != null else SculptureSystem.Material.WOOD
+		ws["known_objectives"]["active_sculpture_format"] = wip.format if wip != null else SculptureSystem.Format.STATUARY
+
+		# Slot availability and worship FRs at current settlement
+		if settlement != null:
+			ws["known_objectives"]["statue_slot_empty"] = settlement.statue_slot < 0
+			ws["known_objectives"]["guardian_slot_empty"] = settlement.guardian_slot < 0
+			ws["known_objectives"]["is_religious_settlement"] = settlement.is_religious()
+			ws["known_objectives"]["has_statue_permission"] = (
+				SculptureSystem.has_statue_permission(character.character_id, settlement)
+			)
+			ws["known_objectives"]["has_guardian_permission"] = (
+				SculptureSystem.has_guardian_permission(character.character_id, settlement)
+			)
+			# Statuary worship FRs: only if statue present, subject matches directed fortune.
+			# Inject the FR value; fortune matching is done at metadata population time.
+			var statuary_sc: SculptureData = statuary_by_settlement.get(loc)
+			if statuary_sc != null:
+				ws["known_objectives"]["statuary_worship_fr"] = SculptureSystem.statuary_worship_fr(
+					statuary_sc.quality_tier)
+				ws["known_objectives"]["statuary_subject_id"] = statuary_sc.subject_id
+			else:
+				ws["known_objectives"]["statuary_worship_fr"] = 0
+				ws["known_objectives"]["statuary_subject_id"] = -1
+			# Guardian worship FRs: only if pair_intact.
+			var guardian_sc: SculptureData = guardian_by_settlement.get(loc)
+			if guardian_sc != null and guardian_sc.pair_intact:
+				ws["known_objectives"]["guardian_worship_fr"] = SculptureSystem.guardian_worship_fr(
+					guardian_sc.quality_tier)
+			else:
+				ws["known_objectives"]["guardian_worship_fr"] = 0
+		else:
+			ws["known_objectives"]["statue_slot_empty"] = false
+			ws["known_objectives"]["guardian_slot_empty"] = false
+			ws["known_objectives"]["is_religious_settlement"] = false
+			ws["known_objectives"]["has_statue_permission"] = false
+			ws["known_objectives"]["has_guardian_permission"] = false
+			ws["known_objectives"]["statuary_worship_fr"] = 0
+			ws["known_objectives"]["statuary_subject_id"] = -1
+			ws["known_objectives"]["guardian_worship_fr"] = 0
+
+
+static func _process_compose_sculpture_writebacks(
+	results: Array,
+	active_sculptures: Array,
+	next_sculpture_id: Array,
+	ic_day: int,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+) -> void:
+	## Handle COMPOSE_SCULPTURE results.
+	## is_new_sculpture=true → declare new WIP via SculptureSystem.declare_composition().
+	## Otherwise → advance WIP via SculptureSystem.resolve_compose_sculpture().
+	var sculptures_by_id: Dictionary = {}
+	for sc_v: Variant in active_sculptures:
+		if sc_v is SculptureData:
+			sculptures_by_id[(sc_v as SculptureData).sculpture_id] = sc_v
+
+	# Build settlement lookup for auto-placement on completion
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		if s_v is SettlementData:
+			settlements_by_id[(s_v as SettlementData).settlement_id] = s_v
+
+	for r: Dictionary in results:
+		if r.get("action_id", "") != "COMPOSE_SCULPTURE":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var char_id: int = r.get("character_id", -1)
+
+		if effects.get("is_new_sculpture", false):
+			# Create a new WIP SculptureData
+			var sid: int = next_sculpture_id[0]
+			next_sculpture_id[0] += 1
+			var sculpture: SculptureData = SculptureSystem.declare_composition(
+				effects.get("format", SculptureSystem.Format.STATUARY),
+				effects.get("material", SculptureSystem.Material.WOOD),
+				effects.get("target_quality_tier", 1),
+				effects.get("subject_type", SculptureSystem.SubjectType.FORTUNE),
+				char_id,
+				sid,
+				effects.get("ic_day", ic_day),
+				effects.get("subject_id", -1),
+				effects.get("theme", SculptureSystem.FigurineTheme.OTHER),
+			)
+			active_sculptures.append(sculpture)
+		else:
+			# Advance existing WIP
+			var sculpture_id: int = effects.get("sculpture_id", -1)
+			var sculpture: SculptureData = sculptures_by_id.get(sculpture_id)
+			if sculpture == null:
+				continue
+			var sculptor_rank: int = effects.get("sculptor_rank", 99)
+			var compose_result: Dictionary = SculptureSystem.resolve_compose_sculpture(
+				sculptor_rank,
+				sculpture,
+				effects.get("roll_total", 0),
+				effects.get("raises_declared", 0),
+				effects.get("ic_day", ic_day),
+			)
+			# On completion: auto-place if a slot is available at sculptor's last location.
+			if compose_result.get("completed", false):
+				_auto_place_completed_sculpture(sculpture, settlements_by_id)
+				# Generate lifecycle topic
+				var topic_dict: Dictionary = SculptureSystem.generate_lifecycle_topic(
+					sculpture, "completion", "", ic_day,
+				)
+				if not topic_dict.is_empty():
+					var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
+					if t != null:
+						active_topics.append(t)
+
+
+static func _auto_place_completed_sculpture(
+	sculpture: SculptureData,
+	settlements_by_id: Dictionary,
+) -> void:
+	## Auto-place completed statuary/guardian into available slot at their settlement.
+	## Figurines skip (they go into inventory for DELIVER_GIFT).
+	if sculpture.format == SculptureSystem.Format.FIGURINE:
+		return
+
+	# Sculptor's current settlement: we use the WIP's commission_record_id as proxy.
+	# Without a zone system, we can't determine exact location; slot assignment is deferred
+	# to when DISPLAY_SCULPTURE is added. For now, auto-place only if a slot target is
+	# recorded on the sculpture via display_settlement_id set at commission time.
+	if sculpture.display_settlement_id < 0:
+		return
+
+	var settlement: SettlementData = settlements_by_id.get(sculpture.display_settlement_id)
+	if settlement == null:
+		return
+	if not SculptureSystem.is_statue_eligible(settlement):
+		return
+
+	if sculpture.format == SculptureSystem.Format.STATUARY:
+		if settlement.statue_slot < 0 and SculptureSystem.has_statue_permission(
+				sculpture.creator_id, settlement):
+			settlement.statue_slot = sculpture.sculpture_id
+			sculpture.display_slot = SculptureSystem.DisplaySlot.STATUE_SLOT
+	elif sculpture.format == SculptureSystem.Format.GUARDIAN:
+		if settlement.guardian_slot < 0 and SculptureSystem.has_guardian_permission(
+				sculpture.creator_id, settlement):
+			settlement.guardian_slot = sculpture.sculpture_id
+			sculpture.display_slot = SculptureSystem.DisplaySlot.GUARDIAN_SLOT
+			# Mark guardian pair intact if this sculpture is the completing piece.
+			if sculpture.paired:
+				sculpture.pair_intact = true
+
+
+static func _process_sculpture_visitor_effects(
+	active_sculptures: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	ic_day: int,
+	current_ic_season: int,
+) -> void:
+	## Apply visitor disposition bonus and glory ticks for displayed sculptures.
+	if active_sculptures.is_empty():
+		return
+
+	# Build location → character list
+	var chars_at: Dictionary = {}
+	for char_v: Variant in characters:
+		var c: L5RCharacterData = char_v as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var loc: String = c.physical_location
+		if loc.is_empty():
+			continue
+		if not chars_at.has(loc):
+			chars_at[loc] = []
+		chars_at[loc].append(c)
+
+	# Build settlement_id → lord lookup
+	var settlement_lord: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlement_lord[s.settlement_id] = s.lord_character_id
+
+	for sc_v: Variant in active_sculptures:
+		if not sc_v is SculptureData:
+			continue
+		var sculpture: SculptureData = sc_v as SculptureData
+		if sculpture.display_settlement_id < 0:
+			continue  # Not on display
+		if sculpture.craft_progress >= 0:
+			continue  # Still WIP
+
+		var loc_str: String = str(sculpture.display_settlement_id)
+		var present: Array = chars_at.get(loc_str, [])
+		if present.is_empty():
+			continue
+
+		var creator: L5RCharacterData = characters_by_id.get(sculpture.creator_id)
+		var daimyo_id: int = settlement_lord.get(sculpture.display_settlement_id, -1)
+
+		for char_v: Variant in present:
+			var visitor: L5RCharacterData = char_v as L5RCharacterData
+			if visitor.character_id == sculpture.creator_id:
+				continue  # Creator excluded
+
+			var visit_result: Dictionary = SculptureSystem.apply_visitor_effect(
+				visitor.character_id, sculpture, current_ic_season, ic_day,
+			)
+			if visit_result.is_empty():
+				continue
+
+			# Disposition toward creator
+			if creator != null and not CharacterStats.is_dead(creator):
+				var disp: int = visit_result.get("disposition_change", 0)
+				if disp != 0:
+					var bucket: Array = visitor.temporary_modifiers.get(sculpture.creator_id, [])
+					bucket.append({
+						"event_type": "sculpture_visitor",
+						"value": disp,
+						"created_ic_day": ic_day,
+						"duration": SculptureSystem.VISITOR_BONUS_DURATION_DAYS,
+					})
+					visitor.temporary_modifiers[sculpture.creator_id] = bucket
+
+			# Glory tick
+			if visit_result.get("glory_tick", false):
+				if creator != null and not CharacterStats.is_dead(creator):
+					HonorGlorySystem.apply_glory_change(creator,
+						visit_result.get("creator_glory_gain", 0.0))
+				var daimyo: L5RCharacterData = characters_by_id.get(daimyo_id)
+				if daimyo != null and not CharacterStats.is_dead(daimyo):
+					HonorGlorySystem.apply_glory_change(daimyo,
+						visit_result.get("daimyo_glory_gain", 0.0))
+
+
+static func _process_sculpture_seasonal_maintenance(
+	active_sculptures: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	_current_ic_season: int,
+) -> void:
+	## Seasonal sculpture maintenance.
+	## 1. Apply WIP composition degradation (statuary/guardian only).
+	## 2. Apply passive WP accumulation from placed statuary.
+	## 3. Apply wood guardian outdoor degradation.
+
+	# Build settlement lookup
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		if s_v is SettlementData:
+			settlements_by_id[(s_v as SettlementData).settlement_id] = s_v
+
+	for sc_v: Variant in active_sculptures:
+		if not sc_v is SculptureData:
+			continue
+		var sculpture: SculptureData = sc_v as SculptureData
+
+		# --- 1. WIP degradation (statuary + guardian only; figurine excluded per GDD A6) ---
+		if sculpture.craft_progress >= 0:
+			if sculpture.format in [SculptureSystem.Format.STATUARY, SculptureSystem.Format.GUARDIAN]:
+				SculptureSystem.apply_composition_degradation(sculpture, ic_day)
+			continue
+
+		# --- 2. Passive WP accumulation (statuary only, per GDD section D) ---
+		if sculpture.format == SculptureSystem.Format.STATUARY and sculpture.display_settlement_id >= 0:
+			var passive_wp: float = SculptureSystem.passive_wp_per_season(sculpture.quality_tier)
+			if passive_wp > 0.0 and sculpture.subject_id >= 0:
+				# WP accumulation is applied via worship_state — delegate to the worship system.
+				# passive_wp is credited to the sculpture's subject fortune.
+				# The worship system handles distribution; we just report the intent.
+				# (Actual worship_state mutation happens in _process_worship_accumulation_result
+				# which reads this from a result dict — for now store intent as metadata.)
+				pass  # PROVISIONAL: passive WP wiring to worship_state pending worship tick design.
+
+		# --- 3. Wood guardian outdoor degradation (per GDD section G) ---
+		if sculpture.format == SculptureSystem.Format.GUARDIAN:
+			var degrade_result: Dictionary = SculptureSystem.apply_outdoor_degradation(
+				sculpture, ic_day,
+			)
+			if degrade_result.get("degraded", false):
+				# Pair quality reduced; check if pair should be marked damaged.
+				if sculpture.quality_tier < SculptureSystem.GUARDIAN_DAMAGE_TIER_THRESHOLD:
+					var topic_dict: Dictionary = SculptureSystem.generate_lifecycle_topic(
+						sculpture, "guardian_damage", "", ic_day,
+					)
+					if not topic_dict.is_empty():
+						var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
+						if t != null:
+							active_topics.append(t)
 
 
 

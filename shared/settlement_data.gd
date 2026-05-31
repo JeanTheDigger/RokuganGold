@@ -84,6 +84,18 @@ extends Resource
 @export var displayed_art_permissions: Dictionary = {}
 @export var fusuma_permissions: Dictionary = {}
 
+# -- Sculpture Slots (per GDD s57.28.3 — settlement-level zone proxy) ----------
+# statue_slot: religious statuary inside shrine/temple. -1 = empty, otherwise sculpture_id.
+# Only eligible at TEMPLE, SHINDEN, MONASTERY settlement types (s57.28 section J).
+@export var statue_slot: int = -1
+# guardian_slot: guardian pair (komainu) at entrance. -1 = empty, otherwise sculpture_id.
+# Only eligible at TEMPLE, SHINDEN, MONASTERY settlement types (s57.28 section J).
+@export var guardian_slot: int = -1
+# Permission holders for statue placement (sculptor_id → true).
+@export var statue_permissions: Dictionary = {}
+# Permission holders for guardian pair placement (sculptor_id → true).
+@export var guardian_permissions: Dictionary = {}
+
 
 func has_infrastructure(feature: String) -> bool:
 	return feature in infrastructure

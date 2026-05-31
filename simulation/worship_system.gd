@@ -175,6 +175,7 @@ static func resolve_active_worship(
 	theology_rank: int,
 	location_type: String,
 	directed_fortune: int,
+	artisan_free_raises: int = 0,
 ) -> Dictionary:
 	var base_wp: float = NORMAL_WORSHIP_WP
 	if character_type == "monk":
@@ -186,7 +187,8 @@ static func resolve_active_worship(
 
 	if is_shugenja:
 		base_wp = SHUGENJA_BASE_WP
-		var free_raises: int = SHUGENJA_LOCATION_FREE_RAISES.get(location_type, 0)
+		var location_fr: int = SHUGENJA_LOCATION_FREE_RAISES.get(location_type, 0)
+		var free_raises: int = location_fr + artisan_free_raises
 		var kept: int = max(1, ring_value)
 		var rolled: int = max(1, theology_rank + ring_value)
 		# Ring+Skill roll (spellcasting pattern) — not routable through SkillResolver

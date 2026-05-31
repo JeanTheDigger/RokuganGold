@@ -449,6 +449,9 @@ static func execute(
 	if action_id in ["COMPOSE_PAINTING", "DISPLAY_PAINTING", "PRESENT_EMAKIMONO"]:
 		return _execute_painting_action(action_id, action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "COMPOSE_SCULPTURE":
+		return _execute_compose_sculpture(action, character, ctx, dice_engine)
+
 	if action_id in NO_ROLL_ACTIONS:
 		return _execute_no_roll(action, character, ctx)
 
@@ -1999,9 +2002,18 @@ static func _execute_perform_worship(
 	if gohei_item_id >= 0:
 		gohei_fr = maxi(0, best_gohei_tier - 1)
 
+	# Aggregate all external artisan worship FRs with cap of 5 (s57.28 section C / s57.27.11 / s57.26.10,13 / s57.29.9).
+	# Only effective for shugenja (non-shugenja don't roll); injected per character by context builder.
+	var statuary_fr: int = action.metadata.get("statuary_worship_fr", 0)
+	var guardian_fr: int = action.metadata.get("guardian_worship_fr", 0)
+	var ikebana_fr: int = action.metadata.get("ikebana_worship_fr", 0)
+	var painting_fortune_fr: int = action.metadata.get("painting_fortune_fr", 0)
+	const WORSHIP_FR_CAP: int = 5
+	var total_artisan_fr: int = mini(gohei_fr + statuary_fr + guardian_fr + ikebana_fr + painting_fortune_fr, WORSHIP_FR_CAP)
+
 	var worship_result: Dictionary = WorshipSystem.resolve_active_worship(
 		char_type, is_shugenja, dice_engine, ring_value, theology_rank,
-		location_type, directed_fortune,
+		location_type, directed_fortune, total_artisan_fr,
 	)
 
 	var province_id: int = action.target_province_id
@@ -6313,6 +6325,70 @@ static func _execute_present_emakimono(
 		"effects": {
 			"painting_id": painting_id,
 			"recipient_ids": recipient_ids,
+			"ic_day": ctx.ic_day,
+		},
+	}
+
+
+static func _execute_compose_sculpture(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	## Advance WIP sculpture or declare new composition.
+	## sculpture_id < 0 in metadata → declare new composition (writeback creates SculptureData).
+	var meta: Dictionary = action.metadata
+	var sculpture_id: int = meta.get("sculpture_id", ctx.known_objectives.get("active_sculpture_wip_id", -1))
+	var sculpture_rank: int = character.skills.get("Artisan: Sculpture", 0)
+
+	if sculpture_id < 0:
+		# Declare new composition — actual SculptureData created in writeback.
+		var target_quality: int = meta.get("target_quality_tier", clampi(sculpture_rank, 1, 5))
+		if sculpture_rank < SculptureSystem.QUALITY_SKILL_GATE.get(target_quality, 1):
+			return {
+				"success": false, "action_id": "COMPOSE_SCULPTURE",
+				"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+				"effects": {"blocked_reason": "insufficient_skill_rank"},
+			}
+		return {
+			"success": true, "action_id": "COMPOSE_SCULPTURE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {
+				"is_new_sculpture": true,
+				"format": meta.get("format", SculptureSystem.Format.STATUARY),
+				"material": meta.get("material", SculptureSystem.Material.WOOD),
+				"target_quality_tier": target_quality,
+				"subject_type": meta.get("subject_type", SculptureSystem.SubjectType.FORTUNE),
+				"subject_id": meta.get("subject_id", -1),
+				"theme": meta.get("theme", SculptureSystem.FigurineTheme.OTHER),
+				"ic_day": ctx.ic_day,
+			},
+		}
+
+	# Advance existing WIP.
+	var raises_declared: int = meta.get("raises", 0)
+	var material: int = meta.get("material", SculptureSystem.Material.WOOD)
+	var stone_penalty: int = SculptureSystem.STONE_TN_PENALTY if material == SculptureSystem.Material.STONE else 0
+	var bronze_fr: int = 1 if material == SculptureSystem.Material.BRONZE else 0
+	var tn: int = SculptureSystem.COMPOSE_TN + stone_penalty + raises_declared * 5
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Sculpture", tn,
+		raises_declared + bronze_fr, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+
+	return {
+		"success": roll.get("success", false),
+		"action_id": "COMPOSE_SCULPTURE",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"sculpture_id": sculpture_id,
+			"roll_total": total,
+			"raises_declared": raises_declared,
+			"sculptor_rank": sculpture_rank,
+			"material": material,
 			"ic_day": ctx.ic_day,
 		},
 	}
