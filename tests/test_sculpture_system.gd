@@ -827,7 +827,7 @@ func _make_ctx_for_clan(clan_name: String) -> NPCDataStructures.ContextSnapshot:
 func test_maintain_shrine_request_art_phoenix_bonus() -> void:
 	# Phoenix gets +20 on REQUEST_ART under MAINTAIN_SHRINE (section M).
 	var options: Array = [_make_scored_action("REQUEST_ART")]
-	var need: NPCDataStructures.NeedState = _make_need_for_shrine()
+	var need: NPCDataStructures.ImmediateNeed = _make_need_for_shrine()
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_clan("Phoenix")
 	var tables: Dictionary = {"objective_alignment": {}, "personality_lean": {},
 		"competence_table": {}, "disposition_tiers": {}, "urgency_rules": {},
@@ -839,7 +839,7 @@ func test_maintain_shrine_request_art_phoenix_bonus() -> void:
 func test_maintain_shrine_request_art_crab_bonus() -> void:
 	# Crab gets +10 on REQUEST_ART under MAINTAIN_SHRINE (section M).
 	var options: Array = [_make_scored_action("REQUEST_ART")]
-	var need: NPCDataStructures.NeedState = _make_need_for_shrine()
+	var need: NPCDataStructures.ImmediateNeed = _make_need_for_shrine()
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_clan("Crab")
 	var tables: Dictionary = {"objective_alignment": {}, "personality_lean": {},
 		"competence_table": {}, "disposition_tiers": {}, "urgency_rules": {},
@@ -851,7 +851,7 @@ func test_maintain_shrine_request_art_crab_bonus() -> void:
 func test_maintain_shrine_request_art_lion_bonus() -> void:
 	# Lion gets +10 on REQUEST_ART under MAINTAIN_SHRINE (section M).
 	var options: Array = [_make_scored_action("REQUEST_ART")]
-	var need: NPCDataStructures.NeedState = _make_need_for_shrine()
+	var need: NPCDataStructures.ImmediateNeed = _make_need_for_shrine()
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_clan("Lion")
 	var tables: Dictionary = {"objective_alignment": {}, "personality_lean": {},
 		"competence_table": {}, "disposition_tiers": {}, "urgency_rules": {},
@@ -863,7 +863,7 @@ func test_maintain_shrine_request_art_lion_bonus() -> void:
 func test_maintain_shrine_request_art_dragon_bonus() -> void:
 	# Dragon gets +5 on REQUEST_ART under MAINTAIN_SHRINE (section M).
 	var options: Array = [_make_scored_action("REQUEST_ART")]
-	var need: NPCDataStructures.NeedState = _make_need_for_shrine()
+	var need: NPCDataStructures.ImmediateNeed = _make_need_for_shrine()
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_clan("Dragon")
 	var tables: Dictionary = {"objective_alignment": {}, "personality_lean": {},
 		"competence_table": {}, "disposition_tiers": {}, "urgency_rules": {},
@@ -876,7 +876,7 @@ func test_maintain_shrine_request_art_other_clan_no_bonus() -> void:
 	# Crane, Scorpion, Unicorn get no bonus on REQUEST_ART under MAINTAIN_SHRINE (section M).
 	for clan_name: String in ["Crane", "Scorpion", "Unicorn"]:
 		var options: Array = [_make_scored_action("REQUEST_ART")]
-		var need: NPCDataStructures.NeedState = _make_need_for_shrine()
+		var need: NPCDataStructures.ImmediateNeed = _make_need_for_shrine()
 		var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_clan(clan_name)
 		var tables: Dictionary = {"objective_alignment": {}, "personality_lean": {},
 			"competence_table": {}, "disposition_tiers": {}, "urgency_rules": {},
@@ -889,7 +889,7 @@ func test_maintain_shrine_request_art_other_clan_no_bonus() -> void:
 func test_maintain_shrine_cultural_bonus_only_for_request_art() -> void:
 	# Cultural bonus does NOT apply to other actions under MAINTAIN_SHRINE.
 	var options: Array = [_make_scored_action("COMPOSE_SCULPTURE")]
-	var need: NPCDataStructures.NeedState = _make_need_for_shrine()
+	var need: NPCDataStructures.ImmediateNeed = _make_need_for_shrine()
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_clan("Phoenix")
 	var tables: Dictionary = {"objective_alignment": {}, "personality_lean": {},
 		"competence_table": {}, "disposition_tiers": {}, "urgency_rules": {},

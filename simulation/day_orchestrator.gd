@@ -23537,12 +23537,12 @@ static func _process_compose_sculpture_writebacks(
 			var sculpture: SculptureData = SculptureSystem.declare_composition(
 				effects.get("format", SculptureSystem.Format.STATUARY),
 				effects.get("material", SculptureSystem.Material.WOOD),
-				effects.get("target_quality_tier", 1),
 				effects.get("subject_type", SculptureSystem.SubjectType.FORTUNE),
+				effects.get("subject_id", -1),
+				effects.get("target_quality_tier", 1),
 				char_id,
 				sid,
 				effects.get("ic_day", ic_day),
-				effects.get("subject_id", -1),
 				effects.get("theme", SculptureSystem.FigurineTheme.OTHER),
 			)
 			active_sculptures.append(sculpture)
