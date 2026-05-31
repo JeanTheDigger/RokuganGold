@@ -911,3 +911,114 @@ func test_present_succeeds_when_complete() -> void:
 	var result: Dictionary = ActionExecutor._execute_present_senbazuru(action, _folder, ctx)
 	assert_true(result["success"])
 	assert_eq(result["effects"]["senbazuru_id"], 5)
+
+
+# --------------------------------------------------------------------------
+# _process_present_senbazuru_writebacks — Healing Free Raises (s57.26.17)
+# --------------------------------------------------------------------------
+
+func _make_sb(
+	sid: int, dedication: String, recipient_id: int, tier: int
+) -> SenbazuruData:
+	var sb: SenbazuruData = SenbazuruData.new()
+	sb.senbazuru_id = sid
+	sb.dedication_type = dedication
+	sb.recipient_id = recipient_id
+	sb.quality_tier = tier
+	sb.is_complete = true
+	sb.state = "active"
+	return sb
+
+
+func _make_present_result(folder_id: int, senbazuru_id: int) -> Dictionary:
+	return {
+		"action_id": "PRESENT_SENBAZURU",
+		"character_id": folder_id,
+		"success": true,
+		"effects": {"senbazuru_id": senbazuru_id},
+	}
+
+
+func test_healing_writeback_sets_pending_fr_when_recipient_wounded() -> void:
+	# FINE tier Healing senbazuru (1 FR) presented to a wounded recipient.
+	_recipient.wounds_taken = 10
+	_recipient.pending_healing_fr = 0
+	var sb: SenbazuruData = _make_sb(
+		7, "Healing", _recipient.character_id, GiftGivingSystem.QualityTier.FINE)
+	var results: Array = [_make_present_result(_folder.character_id, 7)]
+	var chars: Dictionary = {
+		_folder.character_id: _folder,
+		_recipient.character_id: _recipient,
+	}
+	var senbazurus: Array = [sb]
+	var topics: Array = []
+	var next_id: Array = [1]
+	DayOrchestrator._process_present_senbazuru_writebacks(
+		results, senbazurus, chars, topics, next_id, 100)
+	# SENBAZURU_HEAL_FREE_RAISES[FINE] = 1
+	assert_eq(_recipient.pending_healing_fr, 1)
+
+
+func test_healing_writeback_sets_pending_fr_when_recipient_tainted() -> void:
+	_recipient.wounds_taken = 0
+	_recipient.taint = 2.5
+	_recipient.pending_healing_fr = 0
+	var sb: SenbazuruData = _make_sb(
+		8, "Healing", _recipient.character_id, GiftGivingSystem.QualityTier.EXCEPTIONAL)
+	var results: Array = [_make_present_result(_folder.character_id, 8)]
+	var chars: Dictionary = {
+		_folder.character_id: _folder,
+		_recipient.character_id: _recipient,
+	}
+	var senbazurus: Array = [sb]
+	var topics: Array = []
+	var next_id: Array = [1]
+	DayOrchestrator._process_present_senbazuru_writebacks(
+		results, senbazurus, chars, topics, next_id, 100)
+	# SENBAZURU_HEAL_FREE_RAISES[EXCEPTIONAL] = 2
+	assert_eq(_recipient.pending_healing_fr, 2)
+
+
+func test_healing_writeback_no_fr_when_recipient_healthy() -> void:
+	# Recipient has no wounds and no taint — no FRs should be granted.
+	_recipient.wounds_taken = 0
+	_recipient.taint = 0.0
+	_recipient.pending_healing_fr = 0
+	var sb: SenbazuruData = _make_sb(
+		9, "Healing", _recipient.character_id, GiftGivingSystem.QualityTier.FINE)
+	var results: Array = [_make_present_result(_folder.character_id, 9)]
+	var chars: Dictionary = {
+		_folder.character_id: _folder,
+		_recipient.character_id: _recipient,
+	}
+	var senbazurus: Array = [sb]
+	var topics: Array = []
+	var next_id: Array = [1]
+	DayOrchestrator._process_present_senbazuru_writebacks(
+		results, senbazurus, chars, topics, next_id, 100)
+	assert_eq(_recipient.pending_healing_fr, 0)
+
+
+func test_healing_writeback_takes_max_fr_not_additive() -> void:
+	# Two Healing senbazurus: FINE (1 FR) then EXCEPTIONAL (2 FR).
+	# pending_healing_fr should be max(1, 2) = 2, not 1+2=3.
+	_recipient.wounds_taken = 5
+	_recipient.pending_healing_fr = 0
+	var sb1: SenbazuruData = _make_sb(
+		10, "Healing", _recipient.character_id, GiftGivingSystem.QualityTier.FINE)
+	var sb2: SenbazuruData = _make_sb(
+		11, "Healing", _recipient.character_id, GiftGivingSystem.QualityTier.EXCEPTIONAL)
+	var results: Array = [
+		_make_present_result(_folder.character_id, 10),
+		_make_present_result(_folder.character_id, 11),
+	]
+	var chars: Dictionary = {
+		_folder.character_id: _folder,
+		_recipient.character_id: _recipient,
+	}
+	var senbazurus: Array = [sb1, sb2]
+	var topics: Array = []
+	var next_id: Array = [1]
+	DayOrchestrator._process_present_senbazuru_writebacks(
+		results, senbazurus, chars, topics, next_id, 100)
+	assert_eq(_recipient.pending_healing_fr, 2)

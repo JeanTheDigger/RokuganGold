@@ -300,3 +300,35 @@ func test_chugi_virtue_bonus_only_for_lord() -> void:
 func test_no_virtue_no_bonus() -> void:
 	_healer.bushido_virtue = Enums.BushidoVirtue.NONE
 	assert_eq(MedicineSystem.compute_tend_personality_bonus(_healer, _target, false), 0)
+
+
+# =============================================================================
+# Senbazuru Healing Free Raises — pending_healing_fr consumption (s57.26.17)
+# =============================================================================
+
+func test_treat_wound_consumes_pending_healing_fr() -> void:
+	# 2 pending FRs = +10 flat bonus on the Medicine roll.
+	# Verify pending_healing_fr is 0 after treat_wound fires.
+	_target.pending_healing_fr = 2
+	MedicineSystem.treat_wound(_healer, _target, _dice, 5)
+	assert_eq(_target.pending_healing_fr, 0)
+
+
+func test_treat_wound_clears_fr_even_on_failure() -> void:
+	# FRs are one-shot regardless of roll success.
+	var weak_healer: L5RCharacterData = L5RCharacterData.new()
+	weak_healer.character_id = 10
+	weak_healer.intelligence = 1
+	weak_healer.willpower = 1
+	weak_healer.skills = {"Medicine": 1}
+	weak_healer.items = [{"item_type": "medicine_kit", "remaining_uses": 5, "acquired_ic_day": 1}]
+	_target.pending_healing_fr = 1
+	MedicineSystem.treat_wound(weak_healer, _target, DiceEngine.new(999), 5)
+	assert_eq(_target.pending_healing_fr, 0)
+
+
+func test_treat_wound_no_fr_when_zero() -> void:
+	# No pending FRs — verify field remains 0 after call (no negative mutation).
+	_target.pending_healing_fr = 0
+	MedicineSystem.treat_wound(_healer, _target, _dice, 5)
+	assert_eq(_target.pending_healing_fr, 0)

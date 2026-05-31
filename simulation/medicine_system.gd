@@ -220,14 +220,22 @@ static func treat_wound(
 
 	var tn: int = BASE_TN + tn_bonus
 
+	# Senbazuru Healing Free Raises (s57.26.17 second effect): consume pending FRs
+	# granted at presentation. Cleared after the roll fires (one-shot per senbazuru).
+	var healing_fr_flat: int = target.pending_healing_fr * 5
+
 	# Medicine / Intelligence skill check.
 	var check: Dictionary = SkillResolver.resolve_skill_check(
 		healer, dice, "Medicine", tn, raises, emphasis,
 		Enums.Trait.INTELLIGENCE,
+		0,             # bonus_rolled
+		0,             # bonus_kept
+		healing_fr_flat,
 	)
 
 	# Daily limit and kit charge apply regardless of success.
 	target.last_medicine_treatment_ic_day = ic_day
+	target.pending_healing_fr = 0
 	consume_kit_charge(healer)
 
 	var result: Dictionary = {

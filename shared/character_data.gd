@@ -72,6 +72,9 @@ extends Resource
 # Total wounds taken. Wound levels derived from Earth ring at query time.
 
 @export var wounds_taken: int = 0
+# Senbazuru Healing Free Raises pending consumption (s57.26.17). Cleared after
+# the next Medicine/treat_wound roll fires against this character.
+@export var pending_healing_fr: int = 0
 
 # -- Shadowlands Taint ---------------------------------------------------------
 

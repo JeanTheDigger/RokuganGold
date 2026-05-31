@@ -21836,8 +21836,15 @@ static func _process_present_senbazuru_writebacks(
 						# Second effect: recover all spent Void Points.
 						var max_void: int = recipient.void_ring
 						recipient.current_void_points = max_void
-					# Healing Free Raises on next qualifying roll: deferred until
-					# roll-intercept system exists (s57.26.17 second effect).
+					else:
+						# Healing second effect (s57.26.17): Free Raises on next
+						# qualifying Medicine roll, when recipient still wounded or Tainted.
+						if recipient.wounds_taken > 0 or recipient.taint > 0.0:
+							var fr: int = OrigamiSystem.SENBAZURU_HEAL_FREE_RAISES.get(
+								tier, 0)
+							if fr > 0:
+								recipient.pending_healing_fr = maxi(
+									recipient.pending_healing_fr, fr)
 			"Remembrance":
 				# Effect 1: all present witnesses gain disposition toward folder.
 				var witness_disp: int = OrigamiSystem.SENBAZURU_REMEMBRANCE_WITNESS_DISP.get(

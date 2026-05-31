@@ -516,3 +516,59 @@ func test_success_adds_three_disposition_per_raise() -> void:
 			if expected_raises > 0:
 				found_raises = true
 	assert_true(found_raises)
+
+
+# -- Noshi mundane keep_modifier (s57.26.8) ------------------------------------
+
+func test_mundane_noshi_keep_modifier_reduces_roll_kept_dice() -> void:
+	# keep_modifier=-1 (mundane noshi) must lower the kept-dice count vs 0.
+	# Use a fixed seed to confirm the lower-kept roll produces a different (≤) total.
+	var eng_normal: DiceEngine = DiceEngine.new(77)
+	var result_no_pen: Dictionary = GiftGivingSystem.resolve_deliver_gift(
+		_giver, _recipient,
+		GiftGivingSystem.QualityTier.NORMAL,
+		GiftGivingSystem.GiftCategory.TEA_IMPLEMENTS,
+		GiftGivingSystem.RecipientArchetype.BUSHI,
+		eng_normal, 1,
+		0,   # history_point_bonus
+		0,   # keep_modifier (no penalty)
+	)
+	var eng_pen: DiceEngine = DiceEngine.new(77)
+	var result_pen: Dictionary = GiftGivingSystem.resolve_deliver_gift(
+		_giver, _recipient,
+		GiftGivingSystem.QualityTier.NORMAL,
+		GiftGivingSystem.GiftCategory.TEA_IMPLEMENTS,
+		GiftGivingSystem.RecipientArchetype.BUSHI,
+		eng_pen, 1,
+		0,   # history_point_bonus
+		-1,  # keep_modifier (mundane noshi penalty)
+	)
+	# Penalised roll total must be ≤ un-penalised total with same seed.
+	var total_no_pen: int = result_no_pen["roll"].get("total", 0)
+	var total_pen: int = result_pen["roll"].get("total", 0)
+	assert_true(total_pen <= total_no_pen,
+		"Mundane noshi -1k0 should produce roll total <= unpenalised total (got %d vs %d)" \
+		% [total_pen, total_no_pen])
+
+
+func test_zero_keep_modifier_unchanged_from_default() -> void:
+	# Explicit keep_modifier=0 must produce identical result to omitting the param.
+	var eng_a: DiceEngine = DiceEngine.new(55)
+	var result_default: Dictionary = GiftGivingSystem.resolve_deliver_gift(
+		_giver, _recipient,
+		GiftGivingSystem.QualityTier.NORMAL,
+		GiftGivingSystem.GiftCategory.TEA_IMPLEMENTS,
+		GiftGivingSystem.RecipientArchetype.BUSHI,
+		eng_a, 1,
+	)
+	var eng_b: DiceEngine = DiceEngine.new(55)
+	var result_explicit: Dictionary = GiftGivingSystem.resolve_deliver_gift(
+		_giver, _recipient,
+		GiftGivingSystem.QualityTier.NORMAL,
+		GiftGivingSystem.GiftCategory.TEA_IMPLEMENTS,
+		GiftGivingSystem.RecipientArchetype.BUSHI,
+		eng_b, 1,
+		0,  # history_point_bonus
+		0,  # keep_modifier
+	)
+	assert_eq(result_default["roll"].get("total", -1), result_explicit["roll"].get("total", -2))

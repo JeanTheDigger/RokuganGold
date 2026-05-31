@@ -533,9 +533,11 @@ static func _try_execute_deliver_gift(
 	if recipient.clan == "Mantis" and gift_item.get("item_type", "") == "figurine":
 		history_bonus += SculptureSystem.MANTIS_FIGURINE_FR_BONUS
 
+	# Noshi mundane penalty (s57.26.8): -1k0 on the gift delivery roll.
+	var noshi_keep_mod: int = -1 if noshi_is_mundane else 0
 	var gift_result: Dictionary = GiftGivingSystem.resolve_deliver_gift(
 		character, recipient, tier, subtype, archetype, dice_engine, ctx.ic_day,
-		history_bonus,
+		history_bonus, noshi_keep_mod,
 	)
 
 	var outcome: String = gift_result.get("outcome", "")
