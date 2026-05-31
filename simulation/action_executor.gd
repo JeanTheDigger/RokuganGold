@@ -3796,6 +3796,21 @@ const _DOSHIN_ELIGIBLE_ACTIONS: Array[String] = [
 ]
 
 
+# Cipher Gap 2 (s57.30 A4): returns +1 extra rolled die if the actor holds a
+# writer_motivation KnowledgeEntry for the given target (CIPHER_INSIGHT_BONUS_DICE).
+# Applied to READ_CHARACTER and PROBE rolls so the Kitsuki insight genuinely
+# improves the attacker's dice pool.
+static func _get_cipher_insight_bonus(character: L5RCharacterData, target_id: int) -> int:
+	for entry: Variant in character.knowledge_pool:
+		if not entry is KnowledgeEntry:
+			continue
+		var ke: KnowledgeEntry = entry as KnowledgeEntry
+		if ke.entry_type == "writer_motivation" \
+				and ke.data.get("writer_id", -1) == target_id:
+			return LetterSystem.CIPHER_INSIGHT_BONUS_DICE
+	return 0
+
+
 # -- Construction Intercepts ---------------------------------------------------
 
 const _CONSTRUCTION_ACTIONS: Array[String] = [
@@ -4243,9 +4258,18 @@ static func _execute_read_character(
 
 	var a_skill_rank: int = character.skills.get("Investigation", 0)
 	var a_trait_val: int = character.perception
-	var attacker_roll: int = dice_engine.roll_skill_check(
-		a_trait_val, a_skill_rank, 0
-	).get("total", 0)
+	var cipher_bonus: int = _get_cipher_insight_bonus(character, target_id)
+	var attacker_roll: int
+	if cipher_bonus > 0:
+		# +1k0: one extra rolled die, same kept count (s57.30 A4)
+		attacker_roll = dice_engine.roll_check(
+			a_trait_val + a_skill_rank + cipher_bonus, a_trait_val,
+			0, 0, 0, a_skill_rank > 0
+		).get("total", 0)
+	else:
+		attacker_roll = dice_engine.roll_skill_check(
+			a_trait_val, a_skill_rank, 0
+		).get("total", 0)
 
 	var defender_roll: int = 0
 	if target != null:
@@ -4300,9 +4324,18 @@ static func _execute_probe(
 	var a_skill_rank: int = character.skills.get("Courtier", 0)
 	var a_trait_val: int = character.perception
 	var probe_wc: int = _get_winter_court_skill_bonus(character, "Courtier", ctx)
-	var attacker_roll: int = dice_engine.roll_skill_check(
-		a_trait_val, a_skill_rank, 0
-	).get("total", 0) + probe_wc
+	var cipher_bonus: int = _get_cipher_insight_bonus(character, target_id)
+	var attacker_roll: int
+	if cipher_bonus > 0:
+		# +1k0: one extra rolled die, same kept count (s57.30 A4)
+		attacker_roll = dice_engine.roll_check(
+			a_trait_val + a_skill_rank + cipher_bonus, a_trait_val,
+			0, 0, 0, a_skill_rank > 0
+		).get("total", 0) + probe_wc
+	else:
+		attacker_roll = dice_engine.roll_skill_check(
+			a_trait_val, a_skill_rank, 0
+		).get("total", 0) + probe_wc
 
 	var defender_roll: int = 0
 	if target != null:

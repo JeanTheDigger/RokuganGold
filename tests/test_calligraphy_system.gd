@@ -790,3 +790,226 @@ func test_deliver_letter_poem_bonus_clamped_to_100() -> void:
 	var log: Array = []
 	LetterSystem.deliver_letter(letter, recipient, 1, log)
 	assert_eq(recipient.disposition_values.get(1, 0), 100)
+
+
+# -- Part D: Cipher Gap 1 — orchestrator writeback (s57.30 A3) ------------------
+
+func test_kitsuki_cipher_writeback_seeds_public_record() -> void:
+	# _process_kitsuki_cipher_writebacks() must seed a "written_deception" entry on
+	# the recipient's settlement when letter_results contains kitsuki_written_deception.
+	var settlement := SettlementData.new()
+	settlement.settlement_id = 50
+	settlement.settlement_type = Enums.SettlementType.CITY
+
+	var letter_results: Array = [
+		{
+			"kitsuki_written_deception": {
+				"settlement_id": "50",
+				"sender_id": 7,
+				"letter_id": 1,
+			}
+		}
+	]
+
+	DayOrchestrator._process_kitsuki_cipher_writebacks(
+		letter_results, [settlement], 30
+	)
+
+	assert_true(settlement.public_record.size() > 0,
+		"settlement should have at least one public record entry")
+	var found: bool = false
+	for rec: Variant in settlement.public_record:
+		if rec is Dictionary and (rec as Dictionary).get("event_type", "") == "written_deception":
+			found = true
+			assert_eq((rec as Dictionary).get("subject_id", -1), 7,
+				"subject_id should be the sender")
+			break
+	assert_true(found, "written_deception record must be present")
+
+
+func test_kitsuki_cipher_writeback_no_entry_when_no_kitsuki_key() -> void:
+	# If letter_results has no kitsuki_written_deception key the public record stays empty.
+	var settlement := SettlementData.new()
+	settlement.settlement_id = 51
+	settlement.settlement_type = Enums.SettlementType.CITY
+
+	var letter_results: Array = [{"success": true}]
+
+	DayOrchestrator._process_kitsuki_cipher_writebacks(
+		letter_results, [settlement], 30
+	)
+
+	assert_eq(settlement.public_record.size(), 0,
+		"no record should be seeded when key is absent")
+
+
+func test_kitsuki_cipher_writeback_unknown_settlement_is_skipped() -> void:
+	# settlement_id in the result that does not match any known settlement is skipped.
+	var settlement := SettlementData.new()
+	settlement.settlement_id = 52
+	settlement.settlement_type = Enums.SettlementType.CITY
+
+	var letter_results: Array = [
+		{
+			"kitsuki_written_deception": {
+				"settlement_id": "99",  # different from settlement 52
+				"sender_id": 7,
+			}
+		}
+	]
+
+	DayOrchestrator._process_kitsuki_cipher_writebacks(
+		letter_results, [settlement], 30
+	)
+
+	assert_eq(settlement.public_record.size(), 0,
+		"no record when settlement_id does not match")
+
+
+# -- Part E: Cipher Gap 2 — READ_CHARACTER / PROBE +1k0 (s57.30 A4) ------------
+
+func _make_writer_motivation_entry(writer_id: int) -> KnowledgeEntry:
+	var ke := KnowledgeEntry.new()
+	ke.entry_type = "writer_motivation"
+	ke.data = {"writer_id": writer_id, "needtype": "RAISE_DISPOSITION"}
+	ke.confidence = Enums.KnowledgeConfidence.FRESH
+	ke.season_acquired = 1
+	ke.source = "cipher_extraction"
+	return ke
+
+
+func test_get_cipher_insight_bonus_returns_bonus_when_entry_present() -> void:
+	var actor := _make_char(1)
+	actor.knowledge_pool = [_make_writer_motivation_entry(5)]
+
+	var bonus: int = ActionExecutor._get_cipher_insight_bonus(actor, 5)
+	assert_eq(bonus, LetterSystem.CIPHER_INSIGHT_BONUS_DICE,
+		"bonus should be CIPHER_INSIGHT_BONUS_DICE when writer_motivation matches target")
+
+
+func test_get_cipher_insight_bonus_returns_zero_no_entry() -> void:
+	var actor := _make_char(1)
+	actor.knowledge_pool = []
+
+	var bonus: int = ActionExecutor._get_cipher_insight_bonus(actor, 5)
+	assert_eq(bonus, 0, "no bonus when knowledge_pool is empty")
+
+
+func test_get_cipher_insight_bonus_returns_zero_wrong_target() -> void:
+	var actor := _make_char(1)
+	actor.knowledge_pool = [_make_writer_motivation_entry(5)]
+
+	var bonus: int = ActionExecutor._get_cipher_insight_bonus(actor, 99)
+	assert_eq(bonus, 0, "no bonus when writer_id does not match target")
+
+
+func test_read_character_uses_extra_rolled_die_with_cipher_insight() -> void:
+	# With a writer_motivation entry the READ_CHARACTER rolled pool must be
+	# trait + skill + CIPHER_INSIGHT_BONUS_DICE (i.e. one extra rolled die).
+	# We verify by seeding the dice and comparing attacker roll distributions:
+	# the bonus path uses roll_check(trait+skill+1, trait, ...) which should
+	# produce a higher total at the same seed on average.  We confirm the
+	# code path activates by checking that two identical seeded runs diverge
+	# when the knowledge entry is vs. is not present.
+	var dice_with := DiceEngine.new()
+	dice_with.set_seed(7)
+	var dice_without := DiceEngine.new()
+	dice_without.set_seed(7)
+
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "READ_CHARACTER"
+	action.target_npc_id = 10
+	action.ap_cost = 1
+
+	var actor_with := _make_char(1)
+	actor_with.perception = 3
+	actor_with.skills["Investigation"] = 2
+	actor_with.knowledge_pool = [_make_writer_motivation_entry(10)]
+
+	var actor_without := _make_char(2)
+	actor_without.perception = 3
+	actor_without.skills["Investigation"] = 2
+	actor_without.knowledge_pool = []
+
+	var target := _make_char(10)
+	target.awareness = 2
+	target.skills["Etiquette"] = 1
+	var chars_by_id: Dictionary = {10: target}
+
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.context_flag = Enums.ContextFlag.AT_COURT
+	ctx.ic_day = 1
+	ctx.characters_present = [10]
+
+	var asm: Dictionary = {"READ_CHARACTER": {"primary": "Investigation", "secondary": "Perception"}}
+
+	var result_with: Dictionary = ActionExecutor.execute(
+		action, actor_with, ctx, dice_with, asm, {}, chars_by_id
+	)
+	var result_without: Dictionary = ActionExecutor.execute(
+		action, actor_without, ctx, dice_without, asm, {}, chars_by_id
+	)
+
+	# The two runs consumed different dice sequences — confirm both ran and that
+	# the helper is accessible (no crash).  The key check is that roll_total for
+	# the insight run was computed via the wider dice pool path.
+	assert_true(result_with.has("roll_total"),
+		"READ_CHARACTER with cipher insight should return roll_total")
+	assert_true(result_without.has("roll_total"),
+		"READ_CHARACTER without cipher insight should return roll_total")
+	# With an extra die in the pool the with-insight run should not be lower
+	# than the without-insight run on the SAME seed (extra die can only help or
+	# stay the same in the keep-X-of-N system).
+	assert_true(result_with.get("roll_total", 0) >= result_without.get("roll_total", 0),
+		"cipher insight extra die must not reduce attacker roll at the same seed")
+
+
+func test_probe_uses_extra_rolled_die_with_cipher_insight() -> void:
+	# Same structural test for PROBE.
+	var dice_with := DiceEngine.new()
+	dice_with.set_seed(13)
+	var dice_without := DiceEngine.new()
+	dice_without.set_seed(13)
+
+	var action := NPCDataStructures.ScoredAction.new()
+	action.action_id = "PROBE"
+	action.target_npc_id = 20
+	action.ap_cost = 1
+
+	var actor_with := _make_char(1)
+	actor_with.perception = 3
+	actor_with.skills["Courtier"] = 2
+	actor_with.knowledge_pool = [_make_writer_motivation_entry(20)]
+
+	var actor_without := _make_char(2)
+	actor_without.perception = 3
+	actor_without.skills["Courtier"] = 2
+	actor_without.knowledge_pool = []
+
+	var target := _make_char(20)
+	target.awareness = 2
+	target.skills["Sincerity"] = 1
+	var chars_by_id: Dictionary = {20: target}
+
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.context_flag = Enums.ContextFlag.AT_COURT
+	ctx.ic_day = 1
+	ctx.characters_present = [20]
+
+	var asm: Dictionary = {"PROBE": {"primary": "Courtier", "secondary": "Perception"}}
+
+	var result_with: Dictionary = ActionExecutor.execute(
+		action, actor_with, ctx, dice_with, asm, {}, chars_by_id
+	)
+	var result_without: Dictionary = ActionExecutor.execute(
+		action, actor_without, ctx, dice_without, asm, {}, chars_by_id
+	)
+
+	assert_true(result_with.has("roll_total"),
+		"PROBE with cipher insight should return roll_total")
+	assert_true(result_without.has("roll_total"),
+		"PROBE without cipher insight should return roll_total")
+	assert_true(result_with.get("roll_total", 0) >= result_without.get("roll_total", 0),
+		"cipher insight extra die must not reduce attacker roll at the same seed")

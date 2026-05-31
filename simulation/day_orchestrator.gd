@@ -1128,6 +1128,7 @@ static func advance_day(
 		active_wars if active_wars != null else [], dice_engine, letter_topics_by_id,
 	)
 	_compute_positions_from_letters(letter_results, active_topics, characters_by_id)
+	_process_kitsuki_cipher_writebacks(letter_results, settlements, ic_day)
 	_process_impersonation_detection(
 		pending_letters, characters_by_id, active_topics,
 		next_topic_id, ic_day, objectives_map, commitments,
@@ -21381,6 +21382,53 @@ static func _crime_tier_for_public_record(crime_type: int) -> int:
 			return TopicData.Tier.TIER_2
 		_:
 			return TopicData.Tier.TIER_4
+
+
+# Cipher Gap 1 (s57.30 A3): Kitsuki written_deception → settlement public record.
+# letter_results entries with "kitsuki_written_deception" are returned by deliver_letter()
+# but were never consumed. Seeds a "written_deception" public record entry for the
+# recipient's settlement so EXAMINE_CRIME_SCENE can query it as investigation evidence.
+static func _process_kitsuki_cipher_writebacks(
+	letter_results: Array,
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	if settlements.is_empty():
+		return
+
+	var has_kitsuki: bool = false
+	for r: Variant in letter_results:
+		if r is Dictionary and (r as Dictionary).has("kitsuki_written_deception"):
+			has_kitsuki = true
+			break
+	if not has_kitsuki:
+		return
+
+	var settlements_by_str_id: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlements_by_str_id[str(s.settlement_id)] = s
+
+	for r: Variant in letter_results:
+		if not r is Dictionary:
+			continue
+		var rd: Dictionary = r as Dictionary
+		if not rd.has("kitsuki_written_deception"):
+			continue
+		var entry: Dictionary = rd["kitsuki_written_deception"]
+		var settlement_id_str: String = entry.get("settlement_id", "")
+		if settlement_id_str.is_empty():
+			continue
+		var settlement: SettlementData = settlements_by_str_id.get(settlement_id_str)
+		if settlement == null:
+			continue
+		PublicRecordSystem.seed_event(
+			settlement,
+			"written_deception",
+			TopicData.Tier.TIER_4,
+			ic_day,
+			-1,
+			entry.get("sender_id", -1),
+		)
 
 
 static func _pickup_ambient_public_records(
