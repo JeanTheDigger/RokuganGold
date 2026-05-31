@@ -6835,7 +6835,7 @@ static func _assign_kaiu_engineer_standing_objectives(
 
 		if breach:
 			objectives["standing"] = {
-				"need_type": "SEAL_WALL_BREACH",
+				"need_type": "MAINTAIN_FORTIFICATION",
 				"priority": 1,
 				"auto_assigned": true,
 			}
