@@ -779,3 +779,136 @@ func test_apply_gardening_free_raise() -> void:
 	assert_eq(GardenSystem.apply_gardening_free_raise(5), 1)
 	assert_eq(GardenSystem.apply_gardening_free_raise(2), 0, "Rank 2 = 0 FR")
 	assert_eq(GardenSystem.apply_gardening_free_raise(0), 0)
+
+
+# ---------------------------------------------------------------------------
+# 56. clear_permission — slot becomes open after clearing
+# ---------------------------------------------------------------------------
+
+func test_clear_permission_opens_slot() -> void:
+	var s: SettlementData = SettlementData.new()
+	GardenSystem.grant_permission(s, "CASTLE_OUTER_COURTYARD", 42)
+	GardenSystem.clear_permission(s, "CASTLE_OUTER_COURTYARD")
+	assert_false(GardenSystem.is_zone_committed(s, "CASTLE_OUTER_COURTYARD"))
+
+
+func test_clear_permission_permission_no_longer_held() -> void:
+	var s: SettlementData = SettlementData.new()
+	GardenSystem.grant_permission(s, "CASTLE_OUTER_COURTYARD", 42)
+	GardenSystem.clear_permission(s, "CASTLE_OUTER_COURTYARD")
+	assert_false(GardenSystem.has_garden_permission(s, "CASTLE_OUTER_COURTYARD", 42))
+
+
+func test_clear_permission_idempotent_on_empty_slot() -> void:
+	# Clearing an already-clear slot must not crash.
+	var s: SettlementData = SettlementData.new()
+	GardenSystem.clear_permission(s, "CASTLE_OUTER_COURTYARD")
+	assert_false(GardenSystem.is_zone_committed(s, "CASTLE_OUTER_COURTYARD"))
+
+
+# ---------------------------------------------------------------------------
+# 57. has_garden — true only when a completed garden occupies the slot
+# ---------------------------------------------------------------------------
+
+func test_has_garden_false_when_empty() -> void:
+	var s: SettlementData = SettlementData.new()
+	assert_false(GardenSystem.has_garden(s, "CASTLE_OUTER_COURTYARD"))
+
+
+func test_has_garden_true_after_assign() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.garden_slots["CASTLE_OUTER_COURTYARD"] = 1  # garden_id = 1
+	assert_true(GardenSystem.has_garden(s, "CASTLE_OUTER_COURTYARD"))
+
+
+func test_has_garden_false_for_different_zone() -> void:
+	var s: SettlementData = SettlementData.new()
+	s.garden_slots["CASTLE_OUTER_COURTYARD"] = 1
+	assert_false(GardenSystem.has_garden(s, "CASTLE_POND"))
+
+
+# ---------------------------------------------------------------------------
+# 58. apply_seasonal_auto_degradation — delegates to failed maintain_result (A5)
+# ---------------------------------------------------------------------------
+
+func test_seasonal_auto_degradation_degrades_garden() -> void:
+	# A garden that was not maintained auto-degrades just like a maintain failure.
+	var garden: GardenData = _make_garden(3)  # tier 3 Exceptional
+	var result: Dictionary = GardenSystem.apply_seasonal_auto_degradation(garden, 2)
+	assert_true(result.get("degraded", false), "auto-degradation must reduce tier")
+	assert_eq(garden.current_tier, 2, "tier should drop from 3 to 2")
+
+
+func test_seasonal_auto_degradation_destroys_at_mundane() -> void:
+	# Mundane (tier 1) garden that auto-degrades is destroyed.
+	var garden: GardenData = _make_garden(1)  # tier 1 Normal
+	var result: Dictionary = GardenSystem.apply_seasonal_auto_degradation(garden, 2)
+	assert_true(result.get("destroyed", false), "mundane auto-degradation must destroy")
+	assert_true(garden.destroyed)
+
+
+func test_seasonal_auto_degradation_updates_maintained_season() -> void:
+	# Even on auto-degradation the last_maintained_season is updated (tracks the season
+	# this function was called, preventing double-degradation in the same season).
+	var garden: GardenData = _make_garden(3)
+	garden.last_maintained_season = -1
+	GardenSystem.apply_seasonal_auto_degradation(garden, 5)
+	assert_eq(garden.last_maintained_season, 5)
+
+
+# ---------------------------------------------------------------------------
+# 59. apply_bonsai_visitor — returns tier-scaled bonus, excludes owner (B5)
+# ---------------------------------------------------------------------------
+
+func test_bonsai_visitor_returns_bonus() -> void:
+	var bonsai: BonsaiData = BonsaiData.new()
+	bonsai.quality_tier = 3  # Exceptional → bonus 3
+	var result: Dictionary = GardenSystem.apply_bonsai_visitor(bonsai, 99, 1, 100)
+	assert_eq(result.get("bonus", 0), 3)
+
+
+func test_bonsai_visitor_owner_excluded() -> void:
+	var bonsai: BonsaiData = BonsaiData.new()
+	bonsai.quality_tier = 5
+	# visitor_id == owner_id → no bonus
+	var result: Dictionary = GardenSystem.apply_bonsai_visitor(bonsai, 7, 7, 100)
+	assert_eq(result.get("bonus", -1), 0)
+
+
+func test_bonsai_visitor_different_tiers() -> void:
+	var bonsai: BonsaiData = BonsaiData.new()
+	for tier in [1, 2, 3, 4, 5]:
+		bonsai.quality_tier = tier
+		var result: Dictionary = GardenSystem.apply_bonsai_visitor(bonsai, 99, 1, 100)
+		var expected: int = GardenSystem.VISITOR_DISPOSITION_BY_TIER.get(tier, 1)
+		assert_eq(result.get("bonus", 0), expected, "tier %d bonus" % tier)
+
+
+# ---------------------------------------------------------------------------
+# 60. make_daimyo_removal_topic — Tier 3 SOCIAL topic dict (A11 / A12)
+# ---------------------------------------------------------------------------
+
+func test_make_daimyo_removal_topic_tier() -> void:
+	var garden: GardenData = _make_garden(3)
+	garden.creator_id = 42
+	var t: Dictionary = GardenSystem.make_daimyo_removal_topic(
+		garden, "Lord Doji", "Artisan Taro", "Western Courtyard"
+	)
+	assert_eq(t.get("tier", -1), 3)
+
+
+func test_make_daimyo_removal_topic_type() -> void:
+	var garden: GardenData = _make_garden(2)
+	var t: Dictionary = GardenSystem.make_daimyo_removal_topic(
+		garden, "Lord Doji", "Artisan Taro", "Western Courtyard"
+	)
+	assert_eq(t.get("topic_type", ""), "garden_forced_removed")
+
+
+func test_make_daimyo_removal_topic_includes_creator_id() -> void:
+	var garden: GardenData = _make_garden(4)
+	garden.creator_id = 77
+	var t: Dictionary = GardenSystem.make_daimyo_removal_topic(
+		garden, "Lord Doji", "Artisan Taro", "Western Courtyard"
+	)
+	assert_eq(t.get("subject_creator_id", -1), 77)
