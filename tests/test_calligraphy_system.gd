@@ -874,7 +874,7 @@ func _make_writer_motivation_entry(writer_id: int) -> KnowledgeEntry:
 	ke.data = {"writer_id": writer_id, "needtype": "RAISE_DISPOSITION"}
 	ke.confidence = Enums.KnowledgeConfidence.FRESH
 	ke.season_acquired = 1
-	ke.source = "cipher_extraction"
+	ke.source = Enums.KnowledgeSource.LETTER
 	return ke
 
 
