@@ -757,3 +757,156 @@ func test_collect_figurine_topics_same_creator_no_duplicate() -> void:
 	]
 	var topics: Array = SculptureSystem.collect_figurine_topics(sculptures, 100)
 	assert_eq(topics.size(), 1)
+
+
+# ---------------------------------------------------------------------------
+# Provenance investigation (locked section O)
+# ---------------------------------------------------------------------------
+
+func test_provenance_identification_tn_reduction_constant() -> void:
+	# Section O: sculpture identification TNs are 5 lower than paintings.
+	assert_eq(SculptureSystem.IDENTIFICATION_TN_REDUCTION, 5)
+
+
+func test_provenance_identification_fr_rank_threshold() -> void:
+	# Section O: Free Raise granted at Artisan: Sculpture rank 2+.
+	assert_eq(SculptureSystem.IDENTIFICATION_FR_RANK, 2)
+
+
+func test_provenance_identification_fr_bonus_value() -> void:
+	# Section O: the Free Raise bonus is +1.
+	assert_eq(SculptureSystem.IDENTIFICATION_FR_BONUS, 1)
+
+
+func test_get_provenance_identification_fr_below_rank() -> void:
+	# Rank 0 and rank 1 grant no Free Raise.
+	assert_eq(SculptureSystem.get_provenance_identification_fr(0), 0)
+	assert_eq(SculptureSystem.get_provenance_identification_fr(1), 0)
+
+
+func test_get_provenance_identification_fr_at_rank_threshold() -> void:
+	# Rank 2 is exactly the threshold — grants +1 FR.
+	assert_eq(SculptureSystem.get_provenance_identification_fr(2), 1)
+
+
+func test_get_provenance_identification_fr_above_rank() -> void:
+	# Rank 3, 4, 5 all grant +1 FR (no stacking above threshold).
+	assert_eq(SculptureSystem.get_provenance_identification_fr(3), 1)
+	assert_eq(SculptureSystem.get_provenance_identification_fr(5), 1)
+
+
+# ---------------------------------------------------------------------------
+# MAINTAIN_SHRINE cultural motivation weights (locked section M)
+# ---------------------------------------------------------------------------
+
+func _make_scored_action(action_id: String) -> NPCDataStructures.ScoredAction:
+	var sa: NPCDataStructures.ScoredAction = NPCDataStructures.ScoredAction.new()
+	sa.action_id = action_id
+	sa.disposition_modifier = 0.0
+	sa.objective_alignment = 55.0
+	sa.ap_cost = 1
+	return sa
+
+
+func _make_need_for_shrine() -> NPCDataStructures.ImmediateNeed:
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "MAINTAIN_SHRINE"
+	need.priority = 3
+	return need
+
+
+func _make_ctx_for_clan(clan_name: String) -> NPCDataStructures.ContextSnapshot:
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.clan = clan_name
+	ctx.character_id = 1
+	ctx.honor = 5.0
+	ctx.school = "Generic Shugenja"
+	return ctx
+
+
+func test_maintain_shrine_request_art_phoenix_bonus() -> void:
+	# Phoenix gets +20 on REQUEST_ART under MAINTAIN_SHRINE (section M).
+	var options: Array = [_make_scored_action("REQUEST_ART")]
+	var need: NPCDataStructures.NeedState = _make_need_for_shrine()
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_clan("Phoenix")
+	var tables: Dictionary = {"objective_alignment": {}, "personality_lean": {},
+		"competence_table": {}, "disposition_tiers": {}, "urgency_rules": {},
+		"topic_position_alignment": {}, "personality_filter": {"bushido": {}, "shourido": {}}}
+	NPCDecisionEngine.score_all(options, need, ctx, tables)
+	assert_eq(options[0].disposition_modifier, 20.0)
+
+
+func test_maintain_shrine_request_art_crab_bonus() -> void:
+	# Crab gets +10 on REQUEST_ART under MAINTAIN_SHRINE (section M).
+	var options: Array = [_make_scored_action("REQUEST_ART")]
+	var need: NPCDataStructures.NeedState = _make_need_for_shrine()
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_clan("Crab")
+	var tables: Dictionary = {"objective_alignment": {}, "personality_lean": {},
+		"competence_table": {}, "disposition_tiers": {}, "urgency_rules": {},
+		"topic_position_alignment": {}, "personality_filter": {"bushido": {}, "shourido": {}}}
+	NPCDecisionEngine.score_all(options, need, ctx, tables)
+	assert_eq(options[0].disposition_modifier, 10.0)
+
+
+func test_maintain_shrine_request_art_lion_bonus() -> void:
+	# Lion gets +10 on REQUEST_ART under MAINTAIN_SHRINE (section M).
+	var options: Array = [_make_scored_action("REQUEST_ART")]
+	var need: NPCDataStructures.NeedState = _make_need_for_shrine()
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_clan("Lion")
+	var tables: Dictionary = {"objective_alignment": {}, "personality_lean": {},
+		"competence_table": {}, "disposition_tiers": {}, "urgency_rules": {},
+		"topic_position_alignment": {}, "personality_filter": {"bushido": {}, "shourido": {}}}
+	NPCDecisionEngine.score_all(options, need, ctx, tables)
+	assert_eq(options[0].disposition_modifier, 10.0)
+
+
+func test_maintain_shrine_request_art_dragon_bonus() -> void:
+	# Dragon gets +5 on REQUEST_ART under MAINTAIN_SHRINE (section M).
+	var options: Array = [_make_scored_action("REQUEST_ART")]
+	var need: NPCDataStructures.NeedState = _make_need_for_shrine()
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_clan("Dragon")
+	var tables: Dictionary = {"objective_alignment": {}, "personality_lean": {},
+		"competence_table": {}, "disposition_tiers": {}, "urgency_rules": {},
+		"topic_position_alignment": {}, "personality_filter": {"bushido": {}, "shourido": {}}}
+	NPCDecisionEngine.score_all(options, need, ctx, tables)
+	assert_eq(options[0].disposition_modifier, 5.0)
+
+
+func test_maintain_shrine_request_art_other_clan_no_bonus() -> void:
+	# Crane, Scorpion, Unicorn get no bonus on REQUEST_ART under MAINTAIN_SHRINE (section M).
+	for clan_name: String in ["Crane", "Scorpion", "Unicorn"]:
+		var options: Array = [_make_scored_action("REQUEST_ART")]
+		var need: NPCDataStructures.NeedState = _make_need_for_shrine()
+		var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_clan(clan_name)
+		var tables: Dictionary = {"objective_alignment": {}, "personality_lean": {},
+			"competence_table": {}, "disposition_tiers": {}, "urgency_rules": {},
+			"topic_position_alignment": {}, "personality_filter": {"bushido": {}, "shourido": {}}}
+		NPCDecisionEngine.score_all(options, need, ctx, tables)
+		assert_eq(options[0].disposition_modifier, 0.0,
+			"Expected no bonus for %s" % clan_name)
+
+
+func test_maintain_shrine_cultural_bonus_only_for_request_art() -> void:
+	# Cultural bonus does NOT apply to other actions under MAINTAIN_SHRINE.
+	var options: Array = [_make_scored_action("COMPOSE_SCULPTURE")]
+	var need: NPCDataStructures.NeedState = _make_need_for_shrine()
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_clan("Phoenix")
+	var tables: Dictionary = {"objective_alignment": {}, "personality_lean": {},
+		"competence_table": {}, "disposition_tiers": {}, "urgency_rules": {},
+		"topic_position_alignment": {}, "personality_filter": {"bushido": {}, "shourido": {}}}
+	NPCDecisionEngine.score_all(options, need, ctx, tables)
+	assert_eq(options[0].disposition_modifier, 0.0)
+
+
+func test_maintain_shrine_cultural_bonus_only_for_maintain_shrine_needtype() -> void:
+	# Cultural bonus does NOT fire for REQUEST_ART under a different NeedType.
+	var options: Array = [_make_scored_action("REQUEST_ART")]
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "ARTISTIC_EXPRESSION"
+	need.priority = 3
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_clan("Phoenix")
+	var tables: Dictionary = {"objective_alignment": {}, "personality_lean": {},
+		"competence_table": {}, "disposition_tiers": {}, "urgency_rules": {},
+		"topic_position_alignment": {}, "personality_filter": {"bushido": {}, "shourido": {}}}
+	NPCDecisionEngine.score_all(options, need, ctx, tables)
+	assert_eq(options[0].disposition_modifier, 0.0)

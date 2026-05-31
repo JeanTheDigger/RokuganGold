@@ -916,6 +916,21 @@ static func score_all(
 		if ctx.characters_present.is_empty():
 			option.disposition_modifier -= 20.0
 
+	# REQUEST_ART cultural motivation weights under MAINTAIN_SHRINE (s57.28 M):
+	# Phoenix +20, Crab (guardian commissions) +10, Lion (ancestral shrines) +10, Dragon +5.
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id != "REQUEST_ART":
+			continue
+		if need.need_type != "MAINTAIN_SHRINE":
+			continue
+		match ctx.clan:
+			"Phoenix":
+				option.disposition_modifier += 20.0
+			"Crab", "Lion":
+				option.disposition_modifier += 10.0
+			"Dragon":
+				option.disposition_modifier += 5.0
+
 
 # -- Phase 6: Selection -------------------------------------------------------
 # Highest total wins. Tiebreakers: ObjAlign > disposition > lower AP > seed.

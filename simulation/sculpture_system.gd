@@ -137,6 +137,19 @@ const DESTRUCTION_SURVIVAL_STONE: float = 0.50
 const DESTRUCTION_SURVIVAL_BRONZE: float = 0.70
 
 # ---------------------------------------------------------------------------
+# Provenance investigation (locked section O)
+# ---------------------------------------------------------------------------
+
+## Creator identification TNs are reduced by this amount compared to paintings.
+const IDENTIFICATION_TN_REDUCTION: int = 5
+
+## Minimum Artisan: Sculpture rank to receive a Free Raise on identification rolls.
+const IDENTIFICATION_FR_RANK: int = 2
+
+## Free Raise bonus granted at or above IDENTIFICATION_FR_RANK (locked section O).
+const IDENTIFICATION_FR_BONUS: int = 1
+
+# ---------------------------------------------------------------------------
 # Core composition functions
 # ---------------------------------------------------------------------------
 
@@ -657,6 +670,12 @@ static func replacement_threshold(original_quality_tier: int) -> int:
 ## Yoritomo Sculptor technique (GDD section N).
 static func has_yoritomo_figurine_bonus(school: String) -> bool:
 	return school == "Yoritomo Sculptor"
+
+
+## Free Raises granted on creator identification rolls for sculptures (locked section O).
+## Returns 1 when sculptor_rank >= IDENTIFICATION_FR_RANK, else 0.
+static func get_provenance_identification_fr(sculptor_rank: int) -> int:
+	return IDENTIFICATION_FR_BONUS if sculptor_rank >= IDENTIFICATION_FR_RANK else 0
 
 
 ## Scan active_sculptures for figurine collection clusters (same creator_id OR same theme).
