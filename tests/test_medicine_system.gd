@@ -139,6 +139,13 @@ func test_refusal_non_human_accepts_at_neutral() -> void:
 	assert_false(MedicineSystem.evaluate_refusal(_target, _healer, 0))
 
 
+func test_refusal_non_human_refuses_at_rival_boundary() -> void:
+	# GDD s57.31.3b: "Rival or worse (disposition −10 or lower)" — −10 is the Rival boundary.
+	_target.clan = "Nezumi"
+	_target.disposition_values[1] = -10  # Exactly Rival boundary.
+	assert_true(MedicineSystem.evaluate_refusal(_target, _healer, 0))
+
+
 func test_refusal_non_human_refuses_at_rival() -> void:
 	_target.clan = "Nezumi"
 	_target.disposition_values[1] = -15  # Rival.
@@ -173,6 +180,25 @@ func test_refusal_chugi_dominant_virtue_reduces_pressure() -> void:
 	_target.wounds_taken = 13  # Hurt for Earth 3.
 	_target.disposition_values[1] = 25  # Friend.
 	assert_false(MedicineSystem.evaluate_refusal(_target, _healer, 0))
+
+
+func test_refusal_pressure_enemy_at_boundary() -> void:
+	# GDD s57.31.3b: Enemy = −25 to −49 (+20 pressure modifier).
+	# Verify that disposition −25 uses Enemy modifier (+20), not Rival (+10).
+	# character: willpower 2 (Yū 2), honor 3.0, NONE virtue, Nicked wound (0 severity), 0 witnesses
+	# pressure = (2×5) + (3×2) + 0 - (2×4) + 0 + 20 (Enemy) = 10+6+0-8+0+20 = 28 → refuses
+	_target.disposition_values[1] = -25  # Exactly Enemy boundary.
+	_target.wounds_taken = 3  # Nicked for Earth 3.
+	assert_true(MedicineSystem.evaluate_refusal(_target, _healer, 0))
+
+
+func test_refusal_pressure_rival_at_boundary() -> void:
+	# GDD s57.31.3b: Rival = −10 to −24 (+10 pressure modifier).
+	# At disposition −24 (top of Rival range), should get +10 modifier.
+	# pressure = (2×5) + (3×2) + 0 - (2×4) + 0 + 10 (Rival) = 10+6+0-8+0+10 = 18 → refuses
+	_target.disposition_values[1] = -24  # Top of Rival range.
+	_target.wounds_taken = 3  # Nicked.
+	assert_true(MedicineSystem.evaluate_refusal(_target, _healer, 0))
 
 
 # =============================================================================

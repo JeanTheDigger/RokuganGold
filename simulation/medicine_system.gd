@@ -125,9 +125,9 @@ static func evaluate_refusal(
 	if disp <= -50:
 		return true
 
-	# Non-humans: simplified rule — refuse only at Rival or worse disposition.
+	# Non-humans: simplified rule — refuse at Rival or worse (disp <= −10 per s57.31.3b).
 	if _is_non_human(target):
-		return disp < -10
+		return disp <= -10
 
 	var wound_level: Enums.WoundLevel = CharacterStats.get_wound_level(target)
 
@@ -177,9 +177,9 @@ static func _disposition_modifier(target: L5RCharacterData, healer_id: int) -> i
 		return -5
 	if disp >= 0:
 		return 0
-	if disp >= -25:
+	if disp >= -24:   # Rival: −10 to −24 (GDD s57.31.3b)
 		return 10
-	if disp >= -50:
+	if disp >= -50:   # Enemy: −25 to −49
 		return 20
 	return STRONG_ENEMY_PRESSURE  # already handled above, but safe fallback
 
