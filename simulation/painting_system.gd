@@ -119,8 +119,8 @@ const NEGATIVE_PLACEMENT_TIER_THRESHOLD: int = 3  # Exceptional = quality tier 3
 # Lifecycle topic constants (s57.27.21)
 # ---------------------------------------------------------------------------
 
-## Completion topic tier: Normal/Fine = TIER_4, Exceptional/Masterwork = TIER_3, Legendary = TIER_2.
-const COMPLETION_TOPIC_TIER: Dictionary = {1: 3, 2: 3, 3: 2, 4: 2, 5: 1}  # TopicData.Tier enum
+## Completion topic tier: quality ≤ 3 → TIER_4, quality ≥ 4 → TIER_3 (s57.27.21 table).
+const COMPLETION_TOPIC_TIER: Dictionary = {1: 3, 2: 3, 3: 3, 4: 2, 5: 2}  # TopicData.Tier enum
 
 ## Placement topic tier: Tier 4. Removal of Fine+ = Tier 4.
 const PLACEMENT_TOPIC_TIER: int = 3  # TIER_4
@@ -132,7 +132,8 @@ const FUSUMA_REPAINT_TIER_THRESHOLD: int = 3
 # Artist grief (s57.27.25)
 # ---------------------------------------------------------------------------
 
-const ARTIST_GRIEF_BY_TIER: Dictionary = {1: -2, 2: -5, 3: -10, 4: -15, 5: -25}
+## Admirer disposition loss on creator death: -(quality_tier / 2), ceiling (s57.27.25).
+const ARTIST_GRIEF_BY_TIER: Dictionary = {1: -1, 2: -1, 3: -2, 4: -2, 5: -3}
 
 # ---------------------------------------------------------------------------
 # Siege/sacking survival (s57.27.25)
@@ -265,12 +266,12 @@ static func resolve_compose_painting(
 		# Each raise upgrades one step (capped at Legendary = 5).
 		completion_raises = raises_declared if success else 0
 		var final_quality: int = mini(5, painting.target_quality_tier + completion_raises)
-		# For emakimono: 2 Raises on completing roll can add a topic_id.
+		# For emakimono: 2 Raises on the completing roll links target_topic_ids (s57.27.3).
+		# Without 2+ raises, topic link is not established.
 		if painting.format == Format.EMAKIMONO and success and raises_declared >= EMAKIMONO_TOPIC_RAISES:
-			# topic_ids inheriting from target_topic_ids already declared.
 			painting.topic_ids = painting.target_topic_ids.duplicate()
 		else:
-			painting.topic_ids = painting.target_topic_ids.duplicate()
+			painting.topic_ids = []
 		painting.quality_tier = final_quality
 		painting.craft_progress = -1
 		painting.date_completed = ic_day
@@ -640,7 +641,8 @@ static func generate_lifecycle_topic(
 	return {
 		"title": title,
 		"tier": tier,
-		"category": "POLITICAL" if painting.subject_type in [SubjectType.PORTRAIT, SubjectType.BATTLE, SubjectType.CLAN] else "PERSONAL",
+		# GDD s57.27.21: all topics PERSONAL except negative_placement, loot, destruction.
+		"category": "POLITICAL" if event_type in ["negative_placement", "loot", "destruction"] else "PERSONAL",
 		"ic_day_created": ic_day,
 		"subject_character_id": painting.subject_id if painting.subject_type == SubjectType.PORTRAIT else -1,
 		"painting_id": painting.painting_id,
@@ -762,6 +764,38 @@ static func handle_character_death(dead_char_id: int, active_paintings: Array) -
 			"event_type": "creator_deceased",
 		})
 	return events
+
+
+## Collect grief events for admirers of a deceased creator's completed works (s57.27.25).
+## Returns Array of {admirer_id, disposition_change, display_settlement_id} dicts.
+## Caller resolves display_settlement_id to zone lord and applies the disposition.
+static func collect_admirer_grief(
+		dead_char_id: int,
+		active_paintings: Array,
+		ic_day: int,
+) -> Array:
+	var grief_events: Array = []
+	for painting: PaintingData in active_paintings:
+		if painting.creator_id != dead_char_id:
+			continue
+		if painting.craft_progress >= 0:
+			continue  # WIP — handle_character_death marks it abandoned
+		if painting.display_settlement_id < 0:
+			continue  # Not displayed — no admirers to grieve
+		var disp_loss: int = ARTIST_GRIEF_BY_TIER.get(painting.quality_tier, -1)
+		for entry: Dictionary in painting.visitor_memory:
+			var admirer_id: int = entry.get("char_id", -1)
+			if admirer_id < 0 or admirer_id == dead_char_id:
+				continue
+			var last_visit: int = entry.get("last_visit_ic_day", -1)
+			if last_visit < 0 or ic_day - last_visit >= VISITOR_BONUS_DURATION_DAYS:
+				continue  # Visitor bonus has lapsed — no active admiration
+			grief_events.append({
+				"admirer_id": admirer_id,
+				"disposition_change": disp_loss,
+				"display_settlement_id": painting.display_settlement_id,
+			})
+	return grief_events
 
 
 # ---------------------------------------------------------------------------

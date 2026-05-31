@@ -995,6 +995,7 @@ static func advance_day(
 		active_hunts, favors, bloodspeaker_cells, active_secrets,
 		theater_pieces, active_paintings, active_sculptures,
 	)
+	_apply_artist_grief_on_death(characters, characters_by_id, active_paintings, settlements, ic_day)
 
 	var succession_results: Array = _process_successions(
 		active_successions, characters_by_id
@@ -23399,6 +23400,53 @@ static func _process_painting_seasonal_maintenance(
 					replacement, settlement,
 					PaintingSystem.DisplaySlot.WALL_ART, ic_day,
 				)
+
+
+# ---------------------------------------------------------------------------
+# Artist grief on creator death (s57.27.25)
+# ---------------------------------------------------------------------------
+
+static func _apply_artist_grief_on_death(
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_paintings: Array,
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	## Apply disposition loss to admirers of displayed paintings when the creator dies.
+	## Called after _cleanup_dead_character_references so dead characters are identifiable.
+	if active_paintings.is_empty():
+		return
+
+	# Build settlement → lord lookup.
+	var settlement_lord_map: Dictionary = {}  # str(settlement_id) → lord_character_id
+	for sv: Variant in settlements:
+		var s: SettlementData = sv as SettlementData
+		if s == null:
+			continue
+		settlement_lord_map[str(s.settlement_id)] = s.lord_character_id
+
+	for c: L5RCharacterData in characters:
+		if not CharacterStats.is_dead(c):
+			continue
+		var grief_events: Array = PaintingSystem.collect_admirer_grief(
+			c.character_id, active_paintings, ic_day)
+		for ev: Dictionary in grief_events:
+			var admirer_id: int = ev.get("admirer_id", -1)
+			var admirer: L5RCharacterData = characters_by_id.get(admirer_id)
+			if admirer == null or CharacterStats.is_dead(admirer):
+				continue
+			var disp_loss: int = ev.get("disposition_change", 0)
+			if disp_loss >= 0:
+				continue
+			# Resolve zone lord from display_settlement_id.
+			var sid: int = ev.get("display_settlement_id", -1)
+			var lord_id: int = settlement_lord_map.get(str(sid), -1)
+			if lord_id < 0:
+				continue
+			var current_disp: int = admirer.disposition_values.get(lord_id, 0)
+			admirer.disposition_values[lord_id] = clampi(
+				current_disp + disp_loss, -100, 100)
 
 
 # ---------------------------------------------------------------------------
