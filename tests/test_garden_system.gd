@@ -912,3 +912,53 @@ func test_make_daimyo_removal_topic_includes_creator_id() -> void:
 		garden, "Lord Doji", "Artisan Taro", "Western Courtyard"
 	)
 	assert_eq(t.get("subject_creator_id", -1), 77)
+
+
+# ---------------------------------------------------------------------------
+# 24. create_garden — fields populated correctly
+# ---------------------------------------------------------------------------
+
+func test_create_garden_identity_fields() -> void:
+	var g: GardenData = GardenSystem.create_garden(7, 42, 100, "CASTLE_OUTER_COURTYARD", 3, 2, 5, 200)
+	assert_eq(g.garden_id, 7)
+	assert_eq(g.creator_id, 42)
+	assert_eq(g.settlement_id, 100)
+	assert_eq(g.zone_type, "CASTLE_OUTER_COURTYARD")
+	assert_eq(g.quality_tier, 3)
+	assert_eq(g.current_tier, 3, "current_tier initialised equal to quality_tier")
+
+
+func test_create_garden_sentinel_fields() -> void:
+	var g: GardenData = GardenSystem.create_garden(1, 1, 1, "ZONE", 2, 0, -1, 100)
+	assert_eq(g.last_maintained_season, -1, "never maintained yet")
+	assert_false(g.destroyed, "not destroyed at creation")
+	assert_eq(g.destruction_date, -1)
+	assert_eq(g.destruction_cause, "")
+	assert_eq(g.visitor_memory.size(), 0, "visitor memory empty at creation")
+
+
+func test_create_garden_progress_fields() -> void:
+	var g: GardenData = GardenSystem.create_garden(2, 10, 50, "ZONE", 4, 3, 9, 50)
+	assert_eq(g.completion_raises, 3)
+	assert_eq(g.commission_record_id, 9)
+	assert_eq(g.installation_date, 50)
+	assert_eq(g.visitor_count_since_last_tick, 0)
+
+
+# ---------------------------------------------------------------------------
+# 25. get_maintain_tn — tier-to-TN lookup
+# ---------------------------------------------------------------------------
+
+func test_get_maintain_tn_tier_1() -> void:
+	var g: GardenData = _make_garden(1)
+	assert_eq(GardenSystem.get_maintain_tn(g), 15)
+
+
+func test_get_maintain_tn_tier_3() -> void:
+	var g: GardenData = _make_garden(3)
+	assert_eq(GardenSystem.get_maintain_tn(g), 25)
+
+
+func test_get_maintain_tn_tier_5() -> void:
+	var g: GardenData = _make_garden(5)
+	assert_eq(GardenSystem.get_maintain_tn(g), 35)
