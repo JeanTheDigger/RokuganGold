@@ -453,7 +453,8 @@ func test_intimidate_blackmail_uses_secret_tier() -> void:
 		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
 	)
 	assert_eq(result["action_id"], "INTIMIDATE")
-	assert_almost_eq(result["effects"]["honor_change"], -0.2, 0.01)
+	# GDD s12.9 line 27: blackmail honor loss = -0.3 regardless of success (fixed, not rank-scaled).
+	assert_almost_eq(result["effects"]["honor_change"], -0.3, 0.01)
 	assert_almost_eq(result["effects"]["infamy_gain"], 0.1, 0.01)
 	if result["success"]:
 		assert_true(result["effects"].has("favors_extracted"))
@@ -1947,6 +1948,38 @@ func test_intimidate_success_does_not_set_failed_flag() -> void:
 	assert_true(result["success"], "Intimidation should succeed against weak target")
 	assert_false(result["effects"].has("failed"),
 		"Successful intimidation should NOT have failed flag")
+
+
+func test_blackmail_failure_still_costs_honor_and_infamy() -> void:
+	# GDD s12.9 line 27: "Blackmailer Honor loss: −0.3 regardless of success."
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.character_name = "Strong Target"
+	target.honor = 8.0
+	target.reflexes = 5
+	target.awareness = 5
+	target.willpower = 5
+	target.skills = {"Etiquette": 5}
+	target.emphases = {}
+	target.wounds_taken = 0
+	var chars: Dictionary = {1: _character, 10: target}
+
+	_character.willpower = 2
+	_character.awareness = 2
+	_character.skills["Intimidation"] = 1
+	_ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
+	_dice_engine.set_seed(1)
+	var action := _make_action("INTIMIDATE", 10)
+	action.metadata = {"secret_ref": true, "secret_tier": 4}
+	var result: Dictionary = ActionExecutor.execute(
+		action, _character, _ctx, _dice_engine, _action_skill_map, {}, chars
+	)
+	assert_false(result["success"], "Blackmail should fail against strong target")
+	assert_true(result["effects"].has("failed"), "Failed blackmail must set effects['failed']")
+	assert_almost_eq(result["effects"]["honor_change"], -0.3, 0.01,
+		"Blackmail honor cost -0.3 applies regardless of success (GDD s12.9 line 27)")
+	assert_almost_eq(result["effects"]["infamy_gain"], 0.1, 0.01,
+		"Blackmail infamy gain applies regardless of success")
 
 
 func test_dispatch_courtier_refusal_sets_failed_flag() -> void:
