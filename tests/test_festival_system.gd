@@ -146,12 +146,27 @@ func test_labor_halt_after_chrysanthemum():
 
 
 func test_marriage_bonus_day():
-	# Month 11, day 9 → IC day (10*30)+9 = 309
-	assert_true(FestivalSystem.is_marriage_bonus_day(309))
+	# Month 9 (Boar), day 9 → IC day (8*30)+9 = 249
+	assert_true(FestivalSystem.is_marriage_bonus_day(249))
 
 
 func test_not_marriage_bonus_day():
 	assert_false(FestivalSystem.is_marriage_bonus_day(100))
+
+
+func test_river_of_stars_fires_on_month9_day9():
+	# GDD s11.5: "9th day of the Boar, Winter" — Boar = month 9
+	# IC day (8*30)+9 = 249
+	var active: Array = FestivalSystem.get_active_festivals(249)
+	var names: Array = active.map(func(f): return f["name"])
+	assert_true("Festival of the River of Stars" in names)
+
+
+func test_river_of_stars_does_not_fire_on_old_month11_day9():
+	# Confirm old incorrect date (month 11, day 9 = IC day 309) no longer triggers it
+	var active: Array = FestivalSystem.get_active_festivals(309)
+	var names: Array = active.map(func(f): return f["name"])
+	assert_false("Festival of the River of Stars" in names)
 
 
 # -- Festival effects tests ---------------------------------------------------

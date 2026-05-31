@@ -187,12 +187,12 @@ static func get_dissolution_topic_variant(pathway: int) -> String:
 # -- Benten Festival Bonus ----------------------------------------------------
 
 const BENTEN_FESTIVAL_DAY: int = 9
-const BENTEN_FESTIVAL_MONTH: int = 11
+const BENTEN_FESTIVAL_MONTH: int = 9  # Boar month per GDD s11.5 "9th day of the Boar"
 
 const BENTEN_FESTIVAL_BONUS: int = 15  # most auspicious marriage day — locked s22.7a
 
 static func is_benten_festival(ic_day: int) -> bool:
-	var day_of_year: int = ic_day % 360
+	var day_of_year: int = (ic_day - 1) % 360
 	var month: int = int(day_of_year / 30) + 1
 	var day_of_month: int = (day_of_year % 30) + 1
 	return month == BENTEN_FESTIVAL_MONTH and day_of_month == BENTEN_FESTIVAL_DAY

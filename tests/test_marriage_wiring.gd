@@ -1225,10 +1225,9 @@ func test_benten_festival_boosts_acceptance() -> void:
 	target_candidate.glory = 2.0
 	var chars_by_id: Dictionary = {1: lord_a, 2: candidate, 10: lord_b, 11: target_candidate}
 
-	# BENTEN_FESTIVAL_MONTH=11, BENTEN_FESTIVAL_DAY=9.
-	# is_benten_festival computes month = int(day_of_year/30)+1, day = (day_of_year%30)+1.
-	# For month=11, day=9: day_of_year = (11-1)*30 + (9-1) = 308.
-	var benten_ic_day: int = (11 - 1) * 30 + (9 - 1)
+	# BENTEN_FESTIVAL_MONTH=9 (Boar), BENTEN_FESTIVAL_DAY=9.
+	# is_benten_festival uses (ic_day-1)%360; IC day for month 9, day 9 = (8*30)+9 = 249.
+	var benten_ic_day: int = (9 - 1) * 30 + 9
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord_a)
 	ctx.ic_day = benten_ic_day
 	var action: NPCDataStructures.ScoredAction = _make_action("ARRANGE_MARRIAGE", {
@@ -1239,8 +1238,8 @@ func test_benten_festival_boosts_acceptance() -> void:
 
 	var result: Dictionary = ActionExecutor.execute(action, lord_a, ctx, _dice, {}, {}, chars_by_id)
 	var effects: Dictionary = result.get("effects", {})
-	# BENTEN_FESTIVAL_BONUS zeroed — marginal proposal with disposition -15 is rejected
-	assert_true(effects.get("marriage_rejected", false), "With BENTEN_FESTIVAL_BONUS=0, marginal proposal should be rejected")
+	# BENTEN_FESTIVAL_BONUS=15 (locked s22.7a) boosts marginal score from -7 to +8 → accepted
+	assert_true(effects.get("requires_marriage", false), "Festival bonus of +15 should push marginal proposal to acceptance")
 
 
 func test_no_benten_bonus_on_normal_day() -> void:

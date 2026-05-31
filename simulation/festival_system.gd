@@ -80,7 +80,7 @@ const CANONICAL_FESTIVALS: Array[Dictionary] = [
 	{"name": "Pearl Harvest", "month": 8, "day": -1, "effects": ["trade_bonus"]},
 	{"name": "Bayushi's Tears", "month": 7, "day": -1, "effects": ["scorpion_disposition"]},
 	{"name": "Viper Festival", "month": 3, "day": -1, "effects": ["scorpion_event"]},
-	{"name": "Festival of the River of Stars", "month": 11, "day": 9, "effects": ["marriage_bonus"]},
+	{"name": "Festival of the River of Stars", "month": 9, "day": 9, "effects": ["marriage_bonus"]},
 	{"name": "New Year's Eve", "month": 12, "day": 28, "effects": ["wp_reset"]},
 ]
 
@@ -105,7 +105,7 @@ static func is_labor_halt_day(ic_day: int) -> bool:
 	return month == 4 and day >= 6 and day <= 12
 
 static func is_marriage_bonus_day(ic_day: int) -> bool:
-	return get_month(ic_day) == 11 and get_day_of_month(ic_day) == 9
+	return get_month(ic_day) == 9 and get_day_of_month(ic_day) == 9
 
 
 # -- Festival Effects ---------------------------------------------------------
@@ -452,6 +452,8 @@ static var _canonical_days_cache: Array = []
 static func _get_canonical_days() -> Array:
 	if _canonical_days_cache.is_empty():
 		for fest: Dictionary in CANONICAL_FESTIVALS:
+			if fest["day"] == -1:
+				continue
 			var day_of_year: int = (fest["month"] - 1) * 30 + (fest["day"] - 1)
 			if day_of_year not in _canonical_days_cache:
 				_canonical_days_cache.append(day_of_year)
