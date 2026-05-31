@@ -174,3 +174,45 @@ func test_purge_selective_mixed_tiers():
 	assert_eq(s.public_record.size(), 2)
 	for entry: Variant in s.public_record:
 		assert_ne((entry as Dictionary).get("tier", -1), TopicData.Tier.TIER_4)
+
+
+# -- TIER_2 coverage (ambient window = 360d, retention = 1080d) ---------------
+
+func test_tier2_ambient_within_360_days():
+	var s := _make_settlement()
+	_seed(s, TopicData.Tier.TIER_2, 100)
+	var ambient := PublicRecordSystem.get_ambient_events(s, 459)  # 359 days later
+	assert_eq(ambient.size(), 1, "TIER_2 entry is ambient within 360-day window")
+
+
+func test_tier2_not_ambient_after_360_days():
+	var s := _make_settlement()
+	_seed(s, TopicData.Tier.TIER_2, 100)
+	var ambient := PublicRecordSystem.get_ambient_events(s, 461)  # 361 days later
+	assert_eq(ambient.size(), 0, "TIER_2 entry falls out of ambient window after 360 days")
+
+
+func test_purge_keeps_tier2_within_1080_days():
+	var s := _make_settlement()
+	_seed(s, TopicData.Tier.TIER_2, 100)
+	PublicRecordSystem.purge_expired(s, 100 + 1079)  # 1 day before retention window closes
+	assert_eq(s.public_record.size(), 1, "TIER_2 entry kept within 1080-day retention")
+
+
+func test_purge_removes_tier2_after_1080_days():
+	var s := _make_settlement()
+	_seed(s, TopicData.Tier.TIER_2, 100)
+	PublicRecordSystem.purge_expired(s, 100 + 1081)  # 1 day past retention
+	assert_eq(s.public_record.size(), 0, "TIER_2 entry purged after 1080-day retention")
+
+
+# -- get_ambient_events filters correctly in mixed record ---------------------
+
+func test_get_ambient_events_returns_only_ambient_subset():
+	var s := _make_settlement()
+	_seed(s, TopicData.Tier.TIER_4, 100)  # ambient until day 114
+	_seed(s, TopicData.Tier.TIER_3, 100)  # ambient until day 190
+	# Query at day 120: TIER_4 is stale (20 days past), TIER_3 is still ambient (20 days in)
+	var ambient := PublicRecordSystem.get_ambient_events(s, 120)
+	assert_eq(ambient.size(), 1, "only the TIER_3 entry is still ambient")
+	assert_eq((ambient[0] as Dictionary).get("tier", -1), TopicData.Tier.TIER_3)
