@@ -13417,7 +13417,6 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"statue_slot_empty", "guardian_slot_empty",
 		"is_religious_settlement", "has_statue_permission", "has_guardian_permission",
 		"statuary_worship_fr", "statuary_subject_id", "guardian_worship_fr", "foundry_in_province",
-		"available_poem_item_id", "available_poem_raises",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -21791,11 +21790,13 @@ static func _inject_poem_context(
 		var ws: Dictionary = world_states.get(character.character_id, {})
 		if ws.is_empty():
 			continue
+		if not ws.has("known_objectives"):
+			ws["known_objectives"] = {}
+		ws["known_objectives"]["available_poem_item_id"] = -1
+		ws["known_objectives"]["available_poem_raises"] = 0
 		for item: Variant in character.items:
 			if item is Dictionary and \
 					(item as Dictionary).get("item_type", "") == "poetry_scroll":
-				if not ws.has("known_objectives"):
-					ws["known_objectives"] = {}
 				ws["known_objectives"]["available_poem_item_id"] = \
 					(item as Dictionary).get("item_id", -1)
 				ws["known_objectives"]["available_poem_raises"] = \
