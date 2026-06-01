@@ -365,3 +365,80 @@ func test_inject_shide_context_worship_fr_value() -> void:
 	DayOrchestrator._inject_shide_context([s], [c], world_states)
 	var expected: int = OrigamiSystem.shide_worship_fr(s)
 	assert_eq(ws.get("known_objectives", {}).get("shide_worship_fr", -1), expected)
+
+
+# ---------------------------------------------------------------------------
+# Urgency boost evaluators — shrine_needs_shide / shrine_shide_at_normal
+# (s57.26b A22, A24)
+# ---------------------------------------------------------------------------
+
+func _make_ctx_for_urgency(origami_rank: int, needs_shide: bool, at_normal: bool) -> NPCDataStructures.ContextSnapshot:
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	ctx.skill_ranks = {"Artisan: Origami": origami_rank}
+	ctx.known_objectives = {
+		"shrine_needs_shide": needs_shide,
+		"shrine_shide_at_normal": at_normal,
+	}
+	ctx.province_statuses = []
+	ctx.active_wars = []
+	ctx.escalating_conflicts = []
+	ctx.starvation_province_ids = []
+	ctx.cut_supply_army_ids = []
+	ctx.besieged_settlement_health_pct = 1.0
+	ctx.objective_stalled_seasons = 0
+	return ctx
+
+
+func test_urgency_shrine_needs_shide_boosts_craft() -> void:
+	## s57.26b A22: CRAFT gets +5 urgency bonus when shrine has no shide and
+	## the character has Artisan: Origami rank >= 1.
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_urgency(2, true, false)
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "ARTISTIC_EXPRESSION"
+	var bonus: float = NPCDecisionEngine._compute_urgency_bonus(
+		"CRAFT", need, ctx, WorldState.scoring_tables)
+	assert_eq(bonus, 5.0, "CRAFT should get +5 urgency bonus when shrine needs shide")
+
+
+func test_urgency_shrine_needs_shide_no_boost_without_origami() -> void:
+	## Gate: Artisan: Origami rank 0 gets no boost even if shrine needs shide.
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_urgency(0, true, false)
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "ARTISTIC_EXPRESSION"
+	var bonus: float = NPCDecisionEngine._compute_urgency_bonus(
+		"CRAFT", need, ctx, WorldState.scoring_tables)
+	assert_eq(bonus, 0.0, "No boost for Artisan: Origami rank 0")
+
+
+func test_urgency_shrine_shide_at_normal_boosts_craft() -> void:
+	## s57.26b A24: CRAFT gets +15 urgency bonus when shrine has a Normal-tier shide.
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_urgency(3, false, true)
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "ARTISTIC_EXPRESSION"
+	var bonus: float = NPCDecisionEngine._compute_urgency_bonus(
+		"CRAFT", need, ctx, WorldState.scoring_tables)
+	assert_eq(bonus, 15.0, "CRAFT should get +15 urgency bonus when shide is at Normal tier")
+
+
+func test_urgency_shrine_shide_at_normal_boosts_place_shide() -> void:
+	## s57.26b A24: PLACE_SHIDE gets +5 urgency bonus when shrine has a Normal-tier shide
+	## (motivates replacing the worn shide with a higher quality one).
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_urgency(2, false, true)
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "ARTISTIC_EXPRESSION"
+	var bonus: float = NPCDecisionEngine._compute_urgency_bonus(
+		"PLACE_SHIDE", need, ctx, WorldState.scoring_tables)
+	assert_eq(bonus, 5.0, "PLACE_SHIDE should get +5 urgency bonus when shide is at Normal tier")
+
+
+func test_urgency_no_shide_context_no_boost() -> void:
+	## No boost when shrine neither needs shide nor has Normal-tier shide.
+	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_for_urgency(3, false, false)
+	var need: NPCDataStructures.ImmediateNeed = NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "ARTISTIC_EXPRESSION"
+	var craft_bonus: float = NPCDecisionEngine._compute_urgency_bonus(
+		"CRAFT", need, ctx, WorldState.scoring_tables)
+	var place_bonus: float = NPCDecisionEngine._compute_urgency_bonus(
+		"PLACE_SHIDE", need, ctx, WorldState.scoring_tables)
+	assert_eq(craft_bonus, 0.0, "No CRAFT boost when shide is Fine+ or absent context")
+	assert_eq(place_bonus, 0.0, "No PLACE_SHIDE boost when shide is Fine+ or absent context")

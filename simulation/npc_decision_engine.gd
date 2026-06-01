@@ -2180,6 +2180,28 @@ static func _evaluate_urgency_condition(
 			if ctx.known_objectives.get("ikebana_slot_empty", false):
 				return [{"relevance": 1.0}]
 			return []
+		"shrine_needs_shide":
+			# s57.26b A22: +5 to CRAFT when co-located shrine has no shide.
+			# Gated on Artisan: Origami rank ≥ 1 (only origami crafters benefit).
+			if ctx.skill_ranks.get("Artisan: Origami", 0) < 1:
+				return []
+			if ctx.known_objectives.get("shrine_needs_shide", false):
+				return [{"relevance": 1.0}]
+			return []
+		"shrine_shide_at_normal_craft":
+			# s57.26b A24: +15 to CRAFT when co-located shrine has a Normal-tier shide.
+			# Motivates upgrading the shide to a finer quality.
+			if ctx.skill_ranks.get("Artisan: Origami", 0) < 1:
+				return []
+			if ctx.known_objectives.get("shrine_shide_at_normal", false):
+				return [{"relevance": 1.0}]
+			return []
+		"shrine_shide_at_normal_place":
+			# s57.26b A24: +5 to PLACE_SHIDE when co-located shrine has a Normal-tier shide.
+			# Reflects urgency to replace the worn shide with a better one.
+			if ctx.known_objectives.get("shrine_shide_at_normal", false):
+				return [{"relevance": 1.0}]
+			return []
 		_:
 			return []
 
