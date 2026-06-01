@@ -223,6 +223,11 @@ static func build_context(
 			if ctx.disposition_values.get(present_id, 0) < 0:
 				continue
 			var pri: int = MedicineSystem.compute_tend_priority(character, candidate)
+			var is_superior: bool = (
+				candidate.character_id == character.lord_id
+				or candidate.character_id == character.operational_superior_id
+			)
+			pri += MedicineSystem.compute_tend_personality_bonus(character, candidate, is_superior)
 			if pri > best_priority:
 				best_priority = pri
 				best_target_id = present_id
