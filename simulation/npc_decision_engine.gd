@@ -85,6 +85,12 @@ static func build_context(
 	ctx.known_topic_types = _build_known_topic_types(
 		character.topic_pool, world_state.get("active_topics", []),
 	)
+	ctx.known_topic_momentums = _build_known_topic_momentums(
+		character.topic_pool, world_state.get("active_topics", []),
+	)
+	ctx.known_topic_subjects = _build_known_topic_subjects(
+		character.topic_pool, world_state.get("active_topics", []),
+	)
 	ctx.known_objectives = world_state.get("known_objectives", {})
 	ctx.known_contacts_by_clan = character.known_contacts_by_clan.duplicate()
 	var flat_contacts: Array = []
@@ -136,6 +142,11 @@ static func build_context(
 			and character.children_ids.is_empty()
 		)
 
+	# Champion conclusion combined pool (s57.54.10b) — Family Daimyo+.
+	if ctx.is_lord and ctx.lord_rank >= Enums.LordRank.FAMILY_DAIMYO:
+		ctx.champion_conclusion_candidates = world_state.get("champion_conclusion_candidates", [])
+		ctx.local_tier3_candidates = world_state.get("local_tier3_candidates", [])
+
 	# Military
 	ctx.military_rank = character.military_rank
 	ctx.commanded_unit_id = character.commanded_unit_id
@@ -182,8 +193,6 @@ static func build_context(
 	# Festival state (s11.5)
 	ctx.is_ceasefire_day = world_state.get("is_ceasefire_day", false)
 	ctx.is_labor_halt_day = world_state.get("is_labor_halt_day", false)
-	ctx.is_taian = world_state.get("is_taian", false)
-	ctx.is_inauspicious_for_social = world_state.get("is_inauspicious_for_social", false)
 	ctx.festival_honor_gain = world_state.get("festival_honor_gain", 0.0)
 	ctx.festival_has_lion_honor = world_state.get("festival_has_lion_honor", false)
 	ctx.festival_glory_poetry = world_state.get("festival_glory_poetry", 0.0)
@@ -214,6 +223,11 @@ static func build_context(
 			if ctx.disposition_values.get(present_id, 0) < 0:
 				continue
 			var pri: int = MedicineSystem.compute_tend_priority(character, candidate)
+			var is_superior: bool = (
+				candidate.character_id == character.lord_id
+				or candidate.character_id == character.operational_superior_id
+			)
+			pri += MedicineSystem.compute_tend_personality_bonus(character, candidate, is_superior)
 			if pri > best_priority:
 				best_priority = pri
 				best_target_id = present_id
@@ -267,8 +281,11 @@ static func build_context(
 
 
 # -- Phase 2: Resolve Goal & Decompose ----------------------------------------
-# Priority cascade: Reactive Event > Crisis Override > Primary Objective >
-# Standing Objective. Winner decomposes into an ImmediateNeed.
+# Standard cascade: Reactive Event > Crisis Override > Primary Objective >
+# Standing Objective.
+# For lord-tier characters, amended cascade per GDD s57.54.10b:
+# Reactive Event > Crisis Override > Combined Pool (Champion conclusions +
+# local Tier 3 needs) > Opportunity Scanner > Standing Objective.
 
 static func resolve_goal(
 	character: L5RCharacterData,
@@ -286,12 +303,31 @@ static func resolve_goal(
 	if crisis_need != null:
 		return crisis_need
 
-	# Primary objective
-	var primary: Dictionary = objectives.get("primary", {})
-	if primary.size() > 0:
-		var primary_need := _decompose_objective(primary, ctx)
-		if primary_need != null:
-			return primary_need
+	# Family Daimyo tier: Combined Pool (Champion conclusions + local Tier 3 needs)
+	# replaces the Primary Objective step per s57.54.10b. Only FAMILY_DAIMYO uses
+	# this pool — Champion/Imperial have no conclusions injected and use the
+	# standard primary path. An externally assigned primary still takes precedence.
+	if ctx.is_lord and ctx.lord_rank == Enums.LordRank.FAMILY_DAIMYO:
+		var primary: Dictionary = objectives.get("primary", {})
+		var has_lord_assigned_primary: bool = (
+			primary.size() > 0
+			and primary.get("assigned_by", -1) >= 0
+			and primary.get("assigned_by", -1) != character.character_id
+		)
+		if has_lord_assigned_primary:
+			var primary_need := _decompose_objective(primary, ctx)
+			if primary_need != null:
+				return primary_need
+		var combined_need := _check_combined_pool(ctx, objectives)
+		if combined_need != null:
+			return combined_need
+	else:
+		# Standard primary objective step (non-lord-tier, Champion, and Imperial).
+		var primary: Dictionary = objectives.get("primary", {})
+		if primary.size() > 0:
+			var primary_need := _decompose_objective(primary, ctx)
+			if primary_need != null:
+				return primary_need
 
 	# Standing objective fallback
 	var standing: Dictionary = objectives.get("standing", {})
@@ -312,6 +348,44 @@ static func resolve_goal(
 	fallback.need_type = "REST"
 	fallback.priority = 3
 	return fallback
+
+
+## Combined pool for lord-tier characters (s57.54.10b).
+## Champion conclusions and local Tier 3 needs compete for the highest score.
+## Returns the winning ImmediateNeed, or null if no viable candidate.
+static func _check_combined_pool(
+	ctx: NPCDataStructures.ContextSnapshot,
+	objectives: Dictionary,
+) -> NPCDataStructures.ImmediateNeed:
+	var champion_candidates: Array = ctx.champion_conclusion_candidates
+	var local_candidates: Array = ctx.local_tier3_candidates
+
+	# Merge and find highest-scoring candidate.
+	var all_candidates: Array = []
+	for c: Dictionary in champion_candidates:
+		all_candidates.append(c)
+	for c: Dictionary in local_candidates:
+		all_candidates.append(c)
+	if all_candidates.is_empty():
+		return null
+
+	var best: Dictionary = {}
+	var best_score: int = -1
+	for c: Dictionary in all_candidates:
+		var s: int = c.get("score", 0)
+		if s > best_score:
+			best_score = s
+			best = c
+
+	if best.is_empty() or best_score <= 0:
+		return null
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = best.get("need_type", "")
+	need.priority = 2
+	need.source = best.get("source", "combined_pool")
+	need.target_clan_id = best.get("target_clan_id", "")
+	return need
 
 
 # -- Phase 3: Generate Options -------------------------------------------------
@@ -344,6 +418,9 @@ static func generate_options(
 		# RESTORE_COUNCIL_COMPACT is only available to Phoenix Champions holding
 		# autonomous rule (s55.10.3.7 — only the Champion can give back the authority).
 		if action_id == "RESTORE_COUNCIL_COMPACT" and not ctx.phoenix_champion_authority:
+			continue
+		# DISSOLVE_MARRIAGE requires Family Daimyo or higher (s57.49.7).
+		if action_id == "DISSOLVE_MARRIAGE" and ctx.lord_rank < Enums.LordRank.FAMILY_DAIMYO:
 			continue
 		var option := NPCDataStructures.ScoredAction.new()
 		option.action_id = action_id
@@ -486,6 +563,185 @@ static func _remove_action(
 	return filtered
 
 
+# -- Phase 4c: Origami Precondition Filter (s57.26) ----------------------------
+# Removes CRAFT when character lacks Artisan: Origami.
+# Removes DECLARE_SENBAZURU when an active senbazuru already exists.
+# Removes PRESENT_SENBAZURU when no complete senbazuru is ready.
+
+static func _apply_origami_precondition_filter(
+	options: Array,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	# CRAFT: remove if the character has no Artisan: Origami skill.
+	# (Other CRAFT uses via s49 are non-functional for NPCs; origami is the only path.)
+	var origami_rank: int = character.skills.get("Artisan: Origami", 0)
+	if origami_rank < 1:
+		options = _remove_action(options, "CRAFT")
+
+	var active_id: int = ctx.known_objectives.get("active_senbazuru_id", -1)
+	var is_complete: bool = ctx.known_objectives.get("senbazuru_is_complete", false)
+
+	# DECLARE_SENBAZURU: blocked while an active senbazuru already exists.
+	if active_id >= 0:
+		options = _remove_action(options, "DECLARE_SENBAZURU")
+
+	# PRESENT_SENBAZURU: blocked unless active senbazuru is complete.
+	if not is_complete:
+		options = _remove_action(options, "PRESENT_SENBAZURU")
+
+	return options
+
+
+# -- Phase 4c: Garden / Bonsai Precondition Filter (s57.23a) ------------------
+# Removes garden and bonsai actions when required state is absent.
+
+static func _apply_garden_precondition_filter(
+	options: Array,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	# CULTIVATE_GARDEN: requires an active commission and Artisan: Gardening rank ≥ 1.
+	var commission_id: int = ctx.known_objectives.get("active_commission_id", -1)
+	var gardening_rank: int = character.skills.get("Artisan: Gardening", 0)
+	if commission_id < 0 or gardening_rank < 1:
+		options = _remove_action(options, "CULTIVATE_GARDEN")
+
+	# MAINTAIN_GARDEN: requires a local garden and Artisan: Gardening rank ≥ 1.
+	var local_garden_id: int = ctx.known_objectives.get("local_garden_id", -1)
+	if local_garden_id < 0 or gardening_rank < 1:
+		options = _remove_action(options, "MAINTAIN_GARDEN")
+
+	# OFFER_ART_COMMISSION: requires a garden zone available at this settlement.
+	if not ctx.known_objectives.get("garden_zone_available", false):
+		options = _remove_action(options, "OFFER_ART_COMMISSION")
+
+	# TEND_BONSAI / DISPLAY_BONSAI: requires an owned bonsai.
+	var owned_bonsai_id: int = ctx.known_objectives.get("owned_bonsai_id", -1)
+	if owned_bonsai_id < 0:
+		options = _remove_action(options, "TEND_BONSAI")
+		options = _remove_action(options, "DISPLAY_BONSAI")
+
+	# DISPLAY_BONSAI: also requires bonsai_display_eligible flag.
+	if not ctx.known_objectives.get("bonsai_display_eligible", false):
+		options = _remove_action(options, "DISPLAY_BONSAI")
+
+	# COLLECT_BONSAI_SPECIMEN: requires Artisan: Gardening rank ≥ 1.
+	if gardening_rank < 1:
+		options = _remove_action(options, "COLLECT_BONSAI_SPECIMEN")
+
+	# COMPOSE_PAINTING: requires Artisan: Painting rank ≥ 1.
+	var painting_rank: int = character.skills.get("Artisan: Painting", 0)
+	if painting_rank < 1:
+		options = _remove_action(options, "COMPOSE_PAINTING")
+
+	# DISPLAY_PAINTING: requires a displayable painting in inventory.
+	var displayable: Array = ctx.known_objectives.get("displayable_paintings", [])
+	if displayable.is_empty():
+		options = _remove_action(options, "DISPLAY_PAINTING")
+
+	# PRESENT_EMAKIMONO: requires a completed emakimono.
+	var presentable: Array = ctx.known_objectives.get("presentable_emakimono", [])
+	if presentable.is_empty():
+		options = _remove_action(options, "PRESENT_EMAKIMONO")
+
+	# COMPOSE_SCULPTURE: requires Artisan: Sculpture rank ≥ 1.
+	# Also requires: either an active WIP, or a slot + permission at a religious settlement.
+	var sculpture_rank: int = character.skills.get("Artisan: Sculpture", 0)
+	if sculpture_rank < 1:
+		options = _remove_action(options, "COMPOSE_SCULPTURE")
+	else:
+		var has_wip: bool = ctx.known_objectives.get("active_sculpture_wip_id", -1) >= 0
+		var is_religious: bool = ctx.known_objectives.get("is_religious_settlement", false)
+		var statue_empty: bool = ctx.known_objectives.get("statue_slot_empty", false)
+		var guardian_empty: bool = ctx.known_objectives.get("guardian_slot_empty", false)
+		var has_statue_perm: bool = ctx.known_objectives.get("has_statue_permission", false)
+		var has_guardian_perm: bool = ctx.known_objectives.get("has_guardian_permission", false)
+		var can_start_new: bool = is_religious and (
+			(statue_empty and has_statue_perm) or (guardian_empty and has_guardian_perm) or true)
+		# Figurines can be started anywhere; statuary/guardian need a slot.
+		# Simplify: allow if WIP exists OR at a religious settlement (will declare format in metadata).
+		if not has_wip and not is_religious:
+			# Figurines allowed anywhere for artisans: keep the action if no slot needed.
+			# Only block if neither condition is true AND the artisan has no ongoing work.
+			pass  # Allow figurine composition anywhere
+
+	# PLACE_SHIDE: requires a shide item in inventory AND a shrine at this settlement.
+	var has_shide_inv: bool = ctx.known_objectives.get("has_shide_in_inventory", false)
+	var shrine_needs: bool = (
+		ctx.known_objectives.get("shrine_needs_shide", false) or
+		ctx.known_objectives.get("shrine_shide_at_normal", false)
+	)
+	if not has_shide_inv or not shrine_needs:
+		options = _remove_action(options, "PLACE_SHIDE")
+
+	return options
+
+
+static func _build_garden_commission_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+	chars_by_id: Dictionary,
+	is_request: bool,
+) -> Dictionary:
+	## REQUEST_ART: select available artisan with Artisan: Gardening, pick open zone.
+	## OFFER_ART_COMMISSION: pick the settlement lord as daimyo target, pick open zone.
+	var loc_int: int = int(ctx.location_id) if ctx.location_id.is_valid_int() else -1
+	var zone_type: String = ctx.known_objectives.get("available_garden_zone", "")
+	var quality_tier: int = clampi(
+		ctx.skill_ranks.get("Artisan: Gardening", 1), 1, 5
+	)
+
+	if is_request:
+		# Daimyo picks an artisan — prefer the need target if available.
+		var artisan_id: int = need.target_npc_id if need.target_npc_id >= 0 else -1
+		if artisan_id < 0:
+			for cid: Variant in ctx.disposition_values:
+				var c_int: int = int(cid)
+				var c_char: L5RCharacterData = chars_by_id.get(c_int)
+				if c_char == null or CharacterStats.is_dead(c_char):
+					continue
+				if c_char.skills.get("Artisan: Gardening", 0) >= 1:
+					artisan_id = c_int
+					break
+		return {
+			"artisan_id": artisan_id,
+			"daimyo_id": ctx.character_id,
+			"settlement_id": loc_int,
+			"zone_type": zone_type,
+			"target_quality_tier": quality_tier,
+		}
+	else:
+		# Artisan offers: pick the lord of the current settlement as daimyo.
+		var daimyo_id: int = need.target_npc_id if need.target_npc_id >= 0 else -1
+		return {
+			"artisan_id": ctx.character_id,
+			"daimyo_id": daimyo_id,
+			"settlement_id": loc_int,
+			"zone_type": zone_type,
+			"target_quality_tier": quality_tier,
+		}
+
+
+# -- Phase 4c: TERMINATE_CONTRACT Precondition Filter (s52.8 A79) -------------
+# Removes TERMINATE_CONTRACT when the lord has no active contracts.
+
+static func _apply_terminate_contract_precondition_filter(
+	options: Array,
+	world_state: Dictionary,
+) -> Array:
+	var has_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "TERMINATE_CONTRACT":
+			has_action = true
+			break
+	if not has_action:
+		return options
+	if world_state.get("has_active_contracts", false):
+		return options
+	return _remove_action(options, "TERMINATE_CONTRACT")
+
+
 # -- Phase 5: Score All Options ------------------------------------------------
 # Eight components per s55.4.5 / s55.3.3.
 
@@ -559,8 +815,6 @@ static func score_all(
 			if target != null:
 				option.deception_defense_penalty = float(-SkillResolver.get_deception_defense_bonus(target))
 
-		option.festival_modifier = _compute_festival_modifier(option.action_id, ctx)
-
 		if option.action_id in COVERT_ACTION_IDS:
 			option.honor_covert_penalty = _compute_honor_covert_penalty(
 				ctx.honor, ctx.school, ctx.clan
@@ -624,6 +878,83 @@ static func score_all(
 			option.disposition_modifier += float(CommerceStigmaSystem.HONOR_SELF_REG_7_PLUS)
 		elif ctx.honor >= 5.0:
 			option.disposition_modifier += float(CommerceStigmaSystem.HONOR_SELF_REG_5_6)
+
+	# §57.22.12/13 COMPOSE_THEATER_PIECE political scoring modifiers.
+	# Base alignment score 60 comes from objective_alignment.json for DAMAGE_RELATIONSHIP
+	# and MOVE_TOPIC_POSITION. These post-loop modifiers adjust based on context.
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id != "COMPOSE_THEATER_PIECE":
+			continue
+		var political_need: bool = need.need_type in ["DAMAGE_RELATIONSHIP", "MOVE_TOPIC_POSITION"]
+		if not political_need:
+			continue
+		var poetry_rank: int = ctx.skill_ranks.get("Poetry", 0)
+		if poetry_rank < 1:
+			continue
+
+		# §57.22.13: AT_COURT with no viable pieces → override alignment to 40 (fallback trigger).
+		# This is intentionally lower than the standard 60 to reflect that composition at court
+		# competes against immediate social options.
+		var has_viable_pieces: bool = not ctx.known_objectives.get(
+			"theater_pieces_to_perform", []
+		).is_empty()
+		if ctx.context_flag == "AT_COURT" and not has_viable_pieces:
+			option.objective_alignment = 40.0
+
+		# §57.22.12: +20 if not AT_COURT (writing is available regardless of location)
+		if ctx.context_flag != "AT_COURT":
+			option.disposition_modifier += 20.0
+
+		# §57.22.12: +15 if active topic matching intended subject has momentum > 40
+		var intended_subject: String = option.metadata.get("subject", ctx.clan)
+		var subject_type: int = option.metadata.get("subject_type", TheaterSystem.SubjectType.CLAN)
+		for tid: int in ctx.known_topic_momentums:
+			var momentum: int = ctx.known_topic_momentums.get(tid, 0)
+			if momentum <= 40:
+				continue
+			var subj_data: Dictionary = ctx.known_topic_subjects.get(tid, {})
+			var match_found: bool = false
+			match subject_type:
+				TheaterSystem.SubjectType.CLAN:
+					match_found = (subj_data.get("clan", "") == intended_subject)
+				TheaterSystem.SubjectType.FAMILY:
+					match_found = (subj_data.get("family", "") == intended_subject)
+				TheaterSystem.SubjectType.CHARACTER:
+					if intended_subject.is_valid_int():
+						match_found = (subj_data.get("char_id", -1) == int(intended_subject))
+			if match_found:
+				option.disposition_modifier += 15.0
+				break  # one matching topic is sufficient
+
+		# §57.22.12: -20 if no audience (no co-located named characters in zone)
+		if ctx.characters_present.is_empty():
+			option.disposition_modifier -= 20.0
+
+	# REQUEST_ART cultural motivation weights under MAINTAIN_SHRINE (s57.28 M):
+	# Phoenix +20, Crab (guardian commissions) +10, Lion (ancestral shrines) +10, Dragon +5.
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id != "REQUEST_ART":
+			continue
+		if need.need_type != "MAINTAIN_SHRINE":
+			continue
+		match ctx.clan:
+			"Phoenix":
+				option.disposition_modifier += 20.0
+			"Crab", "Lion":
+				option.disposition_modifier += 10.0
+			"Dragon":
+				option.disposition_modifier += 5.0
+
+	# REQUEST_PERFORMANCE season modifier (GDD s57.33.6): Winter court season
+	# (+15) or summer heat (-10). Spring and autumn are neutral.
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id != "REQUEST_PERFORMANCE":
+			continue
+		var season: int = ctx.season
+		if season == TimeSystem.Season.WINTER:
+			option.disposition_modifier += 15.0
+		elif season == TimeSystem.Season.SUMMER:
+			option.disposition_modifier -= 10.0
 
 
 # -- Phase 6: Selection -------------------------------------------------------
@@ -729,6 +1060,9 @@ static func run(
 	options = apply_personality_filter(options, ctx, filter_data)
 	options = apply_allowlist_filter(options, need.need_type, scoring_tables)
 	options = _apply_tattoo_precondition_filter(options, character, ctx, chars_by_id, world_state)
+	options = _apply_terminate_contract_precondition_filter(options, world_state)
+	options = _apply_origami_precondition_filter(options, character, ctx)
+	options = _apply_garden_precondition_filter(options, character, ctx)
 
 	# Phase 5
 	score_all(options, need, ctx, scoring_tables,
@@ -927,7 +1261,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"SCOUT_ENEMY",
 				"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 				"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
-				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
+				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION", "DISSOLVE_MARRIAGE",
 				"PURIFY_TAINTED_GROUND",
 				"DISPATCH_COURTIER",
 				"DECLARE_WAR", "NEGOTIATE_SURRENDER",
@@ -957,6 +1291,21 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"FORGE_IMPERSONATION_LETTER", "FORGE_ORDER",
 				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
+				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
+				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
+				"ACCEPT_RONIN_PETITION",
+				"HIRE_RONIN",
+				"PERFORM_CLAN_INDUCTION",
+				"APPROVE_CLAN_INDUCTION",
+				"TERMINATE_CONTRACT",
+				"CRAFT",
+				"CULTIVATE_GARDEN", "MAINTAIN_GARDEN",
+				"COLLECT_BONSAI_SPECIMEN", "TEND_BONSAI", "DISPLAY_BONSAI",
+				"OFFER_ART_COMMISSION",
+				"COMPOSE_PAINTING", "DISPLAY_PAINTING", "PRESENT_EMAKIMONO",
+				"COMPOSE_SCULPTURE",
+				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
+				"PLACE_SHIDE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
@@ -968,7 +1317,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"PERFORM_FOR", "DISCLOSE",
 				"PROVOKE_EMOTION", "PLAY_GAME", "DISCERN_NEED",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
-				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
+				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION", "DISSOLVE_MARRIAGE",
 				"COMPLY_WITH_EDICT", "DEFY_EDICT",
 				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"BRIBE_FOR_INFO", "EAVESDROP",
@@ -991,6 +1340,13 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"TRANSFER_KOKU",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
+				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
+				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
+				"APPROVE_CLAN_INDUCTION",
+				"CRAFT",
+				"OFFER_ART_COMMISSION", "TEND_BONSAI", "DISPLAY_BONSAI",
+				"DISPLAY_PAINTING", "PRESENT_EMAKIMONO",
+				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.VISITING:
@@ -1014,6 +1370,17 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"EXAMINE_CRIME_SCENE",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
+				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
+				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
+				"PETITION_RONIN",
+				"HIRE_RONIN",
+				"TERMINATE_CONTRACT",
+				"CRAFT",
+				"CULTIVATE_GARDEN", "TEND_BONSAI", "DISPLAY_BONSAI",
+				"COMPOSE_PAINTING", "DISPLAY_PAINTING", "PRESENT_EMAKIMONO",
+				"COMPOSE_SCULPTURE",
+				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
+				"PLACE_SHIDE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
@@ -1143,7 +1510,14 @@ static func _get_ap_cost(action_id: String) -> int:
 		"COMPLY_WITH_EDICT": 1,
 		"DEFY_EDICT": 1,
 		"APPOINT_TO_POSITION": 1,
+		"ACCEPT_RONIN_PETITION": 1,
+		"PETITION_RONIN": 1,
+		"HIRE_RONIN": 1,
+		"PERFORM_CLAN_INDUCTION": 2,
+		"APPROVE_CLAN_INDUCTION": 0,
+		"TERMINATE_CONTRACT": 0,
 		"ARRANGE_MARRIAGE": 1,
+		"DISSOLVE_MARRIAGE": 1,
 		"FOUND_VILLAGE": 1,
 		"BUILD_FORTIFICATION": 1,
 		"BUILD_SHRINE": 1,
@@ -1159,6 +1533,25 @@ static func _get_ap_cost(action_id: String) -> int:
 		"CANCEL_HUNT": 0,
 		"TRAIN_ANIMAL": 1,
 		"APPLY_TATTOO": 2,
+		"COMPOSE_THEATER_PIECE": 1,
+		"LEARN_THEATER_PIECE": 1,
+		"PERFORM_THEATER_PIECE": 1,
+		"DEDICATE_PIECE": 1,
+		"CRAFT": 1,
+		"REQUEST_ART": 1,
+		"OFFER_ART_COMMISSION": 1,
+		"CULTIVATE_GARDEN": 1,
+		"MAINTAIN_GARDEN": 1,
+		"COLLECT_BONSAI_SPECIMEN": 1,
+		"TEND_BONSAI": 1,
+		"DISPLAY_BONSAI": 1,
+		"DECLARE_SENBAZURU": 0,
+		"PRESENT_SENBAZURU": 1,
+		"PLACE_SHIDE": 0,
+		"COMPOSE_PAINTING": 1,
+		"DISPLAY_PAINTING": 1,
+		"PRESENT_EMAKIMONO": 1,
+		"COMPOSE_SCULPTURE": 1,
 	}
 	return costs.get(action_id, 1)
 
@@ -1777,6 +2170,12 @@ static func _evaluate_urgency_condition(
 			if ctx.objective_stalled_seasons >= 2:
 				return [{"relevance": 1.0}]
 			return []
+		"ikebana_slot_empty":
+			if ctx.skill_ranks.get("Artisan: Ikebana", 0) < 1:
+				return []
+			if ctx.known_objectives.get("ikebana_slot_empty", false):
+				return [{"relevance": 1.0}]
+			return []
 		_:
 			return []
 
@@ -1873,6 +2272,52 @@ static func _build_known_topic_types(
 			tt = topic.topic_type
 		if tid >= 0 and tid in topic_pool and tt != "":
 			result[tid] = tt
+	return result
+
+
+static func _build_known_topic_momentums(
+	topic_pool: Array,
+	active_topics: Array,
+) -> Dictionary:
+	## Map topic_id → momentum for topics the character knows.
+	var result: Dictionary = {}
+	for topic: Variant in active_topics:
+		var tid: int = -1
+		var momentum: int = 0
+		if topic is Dictionary:
+			tid = int(topic.get("topic_id", -1))
+			momentum = int(topic.get("momentum", 0))
+		elif topic is Resource:
+			tid = topic.topic_id
+			momentum = topic.momentum
+		if tid >= 0 and tid in topic_pool:
+			result[tid] = momentum
+	return result
+
+
+static func _build_known_topic_subjects(
+	topic_pool: Array,
+	active_topics: Array,
+) -> Dictionary:
+	## Map topic_id → {clan, family, char_id} for subject matching in scoring.
+	var result: Dictionary = {}
+	for topic: Variant in active_topics:
+		var tid: int = -1
+		var clan_inv: String = ""
+		var family_inv: String = ""
+		var char_id_inv: int = -1
+		if topic is Dictionary:
+			tid = int(topic.get("topic_id", -1))
+			clan_inv = topic.get("clan_involved", "")
+			family_inv = topic.get("family_involved", "")
+			char_id_inv = int(topic.get("subject_character_id", -1))
+		elif topic is Resource:
+			tid = topic.topic_id
+			clan_inv = topic.clan_involved
+			family_inv = topic.family_involved
+			char_id_inv = topic.subject_character_id
+		if tid >= 0 and tid in topic_pool:
+			result[tid] = {"clan": clan_inv, "family": family_inv, "char_id": char_id_inv}
 	return result
 
 
@@ -2044,7 +2489,7 @@ const COMMANDER_RANK_ACTIONS: Dictionary = {
 const LORD_ONLY_ACTIONS: Array[String] = [
 	"APPOINT_TO_POSITION", "DECLARE_WAR", "FOUND_VILLAGE",
 	"BUILD_FORTIFICATION", "BUILD_SHRINE", "FOUND_TEMPLE",
-	"FOUND_MONASTERY", "COMMISSION_SHIP", "ARRANGE_MARRIAGE",
+	"FOUND_MONASTERY", "COMMISSION_SHIP", "ARRANGE_MARRIAGE", "DISSOLVE_MARRIAGE",
 	# Reclassified from AP to Civilian Order per s57.34.4 — lord-only
 	"SET_TAX_RATE", "SET_STIPEND_RATE",
 	"REQUEST_ART", "REQUEST_PERFORMANCE",
@@ -2053,6 +2498,11 @@ const LORD_ONLY_ACTIONS: Array[String] = [
 	"COMMISSION_ASSASSINATION",
 	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID",
 	"TRANSFER_KOKU", "SHARE_SUPPLIES",
+	"ACCEPT_RONIN_PETITION",
+	"HIRE_RONIN",
+	"PERFORM_CLAN_INDUCTION",
+	"APPROVE_CLAN_INDUCTION",
+	"TERMINATE_CONTRACT",
 ]
 
 
@@ -2103,29 +2553,12 @@ const SOCIAL_ACTIONS: Array[String] = [
 	"GOSSIP", "DISCLOSE", "OFFER_FAVOR",
 ]
 
-const INAUSPICIOUS_PENALTY: float = 0.0
-const TAIAN_BONUS: float = 0.0
-
 static func _is_ceasefire_blocked(action_id: String) -> bool:
 	return action_id in CEASEFIRE_BLOCKED_ACTIONS
 
 
 static func _is_labor_halt_blocked(action_id: String) -> bool:
 	return action_id in LABOR_HALT_BLOCKED_ACTIONS
-
-
-static func _compute_festival_modifier(
-	action_id: String,
-	ctx: NPCDataStructures.ContextSnapshot,
-) -> float:
-	if action_id not in SOCIAL_ACTIONS:
-		return 0.0
-	var modifier: float = 0.0
-	if ctx.is_inauspicious_for_social:
-		modifier += INAUSPICIOUS_PENALTY
-	if ctx.is_taian:
-		modifier += TAIAN_BONUS
-	return modifier
 
 
 # -- Daily Letter Pass (s57.5) ------------------------------------------------
@@ -2177,6 +2610,13 @@ static func resolve_daily_letter(
 		result["meeting_settlement_id"] = meeting["settlement_id"]
 	elif visit:
 		result["visit_intent"] = true
+
+	# Attach poem scroll if available (s57.30.6): when NeedType supports it.
+	var poem_item_id: int = ctx.known_objectives.get("available_poem_item_id", -1)
+	if poem_item_id >= 0 and need_type in POEM_LETTER_NEED_TYPES:
+		result["attach_poem_item_id"] = poem_item_id
+		result["attach_poem_raises"] = ctx.known_objectives.get("available_poem_raises", 0)
+
 	return result
 
 
@@ -2188,6 +2628,13 @@ static func _get_letter_need_type(objectives: Dictionary) -> String:
 	if not standing.is_empty():
 		return standing.get("need_type", "")
 	return ""
+
+
+# NeedTypes where attaching a poem scroll to a letter is appropriate (s57.30.6).
+const POEM_LETTER_NEED_TYPES: Array[String] = [
+	"RAISE_DISPOSITION", "SEEK_GLORY", "ARTISTIC_EXPRESSION",
+	"SECURE_ALLIANCE", "PATRONIZE_ARTS",
+]
 
 
 const VISIT_INTENT_NEED_TYPES: Array[String] = [
@@ -2403,6 +2850,8 @@ static func _populate_action_metadata(
 			"favor_tier": favor,
 			"has_military_objective": mil_need,
 		}
+	elif option.action_id == "DISSOLVE_MARRIAGE":
+		option.metadata = _build_dissolve_marriage_metadata(need, ctx, chars_by_id)
 	elif option.action_id == "APPOINT_TO_POSITION":
 		option.metadata = {
 			"target_npc_id": need.target_npc_id,
@@ -2412,6 +2861,11 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"directed_fortune": need.target_npc_id if need.target_npc_id >= 0 else -1,
 			"location_type": _zone_to_worship_location(ctx.zone_subtype),
+			"ikebana_worship_fr": ctx.known_objectives.get("ikebana_worship_fr", 0),
+			"statuary_worship_fr": ctx.known_objectives.get("statuary_worship_fr", 0),
+			"guardian_worship_fr": ctx.known_objectives.get("guardian_worship_fr", 0),
+			"painting_fortune_fr": ctx.known_objectives.get("painting_fortune_fr", 0),
+			"shide_worship_fr": ctx.known_objectives.get("shide_worship_fr", 0),
 		}
 	elif option.action_id in ["FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 			"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP"]:
@@ -2597,7 +3051,7 @@ static func _populate_action_metadata(
 		}
 	elif option.action_id == "CANCEL_HUNT":
 		option.metadata = {
-			"accepted_invitee_ids": [],
+			"accepted_invitee_ids": ctx.known_objectives.get("hunt_accepted_invitee_ids", []),
 		}
 	elif option.action_id == "TRAIN_ANIMAL":
 		# Prefer a companion already in progress; otherwise first session with DOG default
@@ -2719,6 +3173,816 @@ static func _populate_action_metadata(
 		option.metadata = {"target_npc_id": need.target_npc_id}
 	elif option.action_id == "MENTOR":
 		option.metadata = _build_mentor_metadata(ctx, need, chars_by_id)
+	elif option.action_id == "TRAIN":
+		# Surface the training target skill name for competence scoring.
+		# The executor calls NPCAdvancement.apply_solo_training_progress() directly.
+		if character != null:
+			var target: Dictionary = NPCAdvancement.get_best_training_target(character)
+			option.metadata = {
+				"training_skill": target.get("skill", ""),
+				"training_ring": int(target.get("ring", Enums.Ring.EARTH)),
+			}
+		else:
+			option.metadata = {"training_skill": "", "training_ring": int(Enums.Ring.EARTH)}
+	elif option.action_id == "COMPOSE_THEATER_PIECE":
+		option.metadata = _build_compose_theater_metadata(ctx, need)
+	elif option.action_id == "LEARN_THEATER_PIECE":
+		option.metadata = _build_learn_theater_metadata(ctx, need, chars_by_id)
+	elif option.action_id == "PERFORM_THEATER_PIECE":
+		option.metadata = _build_perform_theater_metadata(ctx, need, chars_by_id)
+	elif option.action_id == "DEDICATE_PIECE":
+		option.metadata = _build_dedicate_piece_metadata(ctx, need)
+	elif option.action_id == "PETITION_RONIN":
+		option.metadata = {"target_lord_id": _pick_lord_for_petition(ctx, chars_by_id)}
+		option.target_npc_id = option.metadata.get("target_lord_id", -1)
+	elif option.action_id == "ACCEPT_RONIN_PETITION":
+		option.metadata = {"target_ronin_id": _pick_ronin_for_acceptance(ctx, chars_by_id)}
+		option.target_npc_id = option.metadata.get("target_ronin_id", -1)
+	elif option.action_id == "HIRE_RONIN":
+		var hire_meta: Dictionary = _build_hire_ronin_metadata(ctx, chars_by_id)
+		option.metadata = hire_meta
+		option.target_npc_id = hire_meta.get("target_ronin_id", -1)
+	elif option.action_id == "PERFORM_CLAN_INDUCTION":
+		var ind_meta: Dictionary = _build_induction_metadata(ctx, chars_by_id)
+		option.metadata = ind_meta
+		option.target_npc_id = ind_meta.get("target_ronin_id", -1)
+	elif option.action_id == "APPROVE_CLAN_INDUCTION":
+		var appr_meta: Dictionary = _build_approve_induction_metadata(ctx, chars_by_id)
+		option.metadata = appr_meta
+		option.target_npc_id = appr_meta.get("target_ronin_id", -1)
+	elif option.action_id == "TERMINATE_CONTRACT":
+		var term_meta: Dictionary = _build_terminate_contract_metadata(ctx, chars_by_id)
+		option.metadata = term_meta
+		option.target_npc_id = term_meta.get("target_ronin_id", -1)
+	elif option.action_id == "CRAFT":
+		var orig_rank: int = ctx.skill_ranks.get("Artisan: Origami", 0)
+		if orig_rank > 0:
+			option.metadata = _build_craft_origami_metadata(ctx, need, orig_rank)
+	elif option.action_id == "DECLARE_SENBAZURU":
+		option.metadata = _build_declare_senbazuru_metadata(ctx, need, chars_by_id)
+	elif option.action_id == "PRESENT_SENBAZURU":
+		var sb_id: int = ctx.known_objectives.get("active_senbazuru_id", -1)
+		option.metadata = {"senbazuru_id": sb_id}
+	elif option.action_id in ["REQUEST_ART", "OFFER_ART_COMMISSION"]:
+		option.metadata = _build_garden_commission_metadata(ctx, need, chars_by_id, option.action_id == "REQUEST_ART")
+		option.target_npc_id = option.metadata.get("artisan_id", -1) if option.action_id == "REQUEST_ART" else option.metadata.get("daimyo_id", -1)
+	elif option.action_id == "CULTIVATE_GARDEN":
+		option.metadata = {
+			"commission_id": ctx.known_objectives.get("active_commission_id", -1),
+			"target_quality_tier": ctx.known_objectives.get("commission_quality_tier", 1),
+		}
+	elif option.action_id == "MAINTAIN_GARDEN":
+		option.metadata = {
+			"garden_id": ctx.known_objectives.get("local_garden_id", -1),
+			"garden_tier": ctx.known_objectives.get("local_garden_tier", 1),
+		}
+	elif option.action_id == "COLLECT_BONSAI_SPECIMEN":
+		option.target_province_id = ctx.known_objectives.get("character_province_id", -1)
+		option.metadata = {"province_id": option.target_province_id}
+	elif option.action_id in ["TEND_BONSAI", "DISPLAY_BONSAI"]:
+		var bonsai_id_meta: int = ctx.known_objectives.get("owned_bonsai_id", -1)
+		option.metadata = {
+			"bonsai_id": bonsai_id_meta,
+			"settlement_id": int(ctx.location_id) if ctx.location_id.is_valid_int() else -1,
+		}
+	elif option.action_id == "COMPOSE_PAINTING":
+		var wip_pid: int = ctx.known_objectives.get("active_painting_wip_id", -1)
+		var painting_rank: int = ctx.skill_ranks.get("Artisan: Painting", 0)
+		option.metadata = {
+			"painting_id": wip_pid,
+			"target_quality_tier": clampi(painting_rank, 1, 5),
+			"format": PaintingSystem.Format.KAKEMONO,  # default format
+			"subject_type": PaintingSystem.SubjectType.NATURE,
+			"framing": true,
+		}
+	elif option.action_id == "DISPLAY_PAINTING":
+		var dp_list: Array = ctx.known_objectives.get("displayable_paintings", [])
+		var dp_id: int = dp_list[0] if not dp_list.is_empty() else -1
+		var loc_sid: int = int(ctx.location_id) if ctx.location_id.is_valid_int() else -1
+		option.metadata = {
+			"painting_id": dp_id,
+			"settlement_id": loc_sid,
+			"slot": PaintingSystem.DisplaySlot.WALL_ART,
+		}
+	elif option.action_id == "PRESENT_EMAKIMONO":
+		var em_list: Array = ctx.known_objectives.get("presentable_emakimono", [])
+		var em_id: int = em_list[0] if not em_list.is_empty() else -1
+		option.metadata = {
+			"painting_id": em_id,
+			"settlement_id": int(ctx.location_id) if ctx.location_id.is_valid_int() else -1,
+		}
+	elif option.action_id == "COMPOSE_SCULPTURE":
+		var wip_sc_id: int = ctx.known_objectives.get("active_sculpture_wip_id", -1)
+		var sculpture_rank: int = ctx.skill_ranks.get("Artisan: Sculpture", 0)
+		var is_religious: bool = ctx.known_objectives.get("is_religious_settlement", false)
+		# Select format: statuary/guardian at religious sites, figurine anywhere.
+		var sc_format: int = SculptureSystem.Format.FIGURINE
+		if is_religious:
+			var statue_empty: bool = ctx.known_objectives.get("statue_slot_empty", true)
+			sc_format = SculptureSystem.Format.STATUARY if statue_empty else SculptureSystem.Format.GUARDIAN
+		# Carry-forward existing WIP if one is active.
+		var target_quality: int = clampi(sculpture_rank, 1, 5)
+		var loc_sid: int = int(ctx.location_id) if ctx.location_id.is_valid_int() else -1
+		# Subject selection: RAISE_DISPOSITION targets an NPC, otherwise Buddha/fortune.
+		var sc_subject_id: int = need.target_npc_id if need.need_type == "RAISE_DISPOSITION" else -1
+		option.metadata = {
+			"sculpture_id": wip_sc_id,
+			"format": sc_format,
+			"material": SculptureSystem.Material.WOOD,
+			"target_quality_tier": target_quality,
+			"subject_id": sc_subject_id,
+			"display_settlement_id": loc_sid,
+			"raises": 0,
+		}
+	elif option.action_id == "PLACE_SHIDE":
+		# Pick best shide from inventory (highest quality_tier).
+		var best_shide_id: int = -1
+		var best_tier: int = -1
+		for it: Dictionary in character.items:
+			if it.get("item_type", "") == "shide" and it.get("uses_remaining", 0) > 0:
+				var t: int = it.get("quality_tier", 0)
+				if t > best_tier:
+					best_tier = t
+					best_shide_id = it.get("item_id", -1)
+		option.metadata = {
+			"shide_item_id": best_shide_id,
+		}
+
+
+static func _build_compose_theater_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+) -> Dictionary:
+	## Compose: select WIP piece to advance or declare a new composition.
+	## wip_piece_ids injected by _inject_theater_context.
+	var wip_ids: Array = ctx.known_objectives.get("wip_piece_ids", [])
+	if not wip_ids.is_empty():
+		return {
+			"piece_id": int(wip_ids[0]),
+			"is_new": false,
+			"raises": 0,
+		}
+	var poetry_rank: int = ctx.skill_ranks.get("Poetry", 0)
+	var target_magnitude: int = clampi(poetry_rank, 1, 3)
+
+	if need.need_type == "ARTISTIC_EXPRESSION":
+		return _build_artistic_expression_compose_metadata(ctx, target_magnitude)
+
+	# Declare a new piece: magnitude from Poetry rank (capped 1-3 for NPCs per GDD s57.22)
+	# Negative framing if DAMAGE_RELATIONSHIP need
+	var framing: bool = need.need_type != "DAMAGE_RELATIONSHIP"
+	var subject_type: int = TheaterSystem.SubjectType.CLAN
+	var subject: String = need.target_intent if not need.target_intent.is_empty() else ctx.clan
+	return {
+		"piece_id": -1,
+		"is_new": true,
+		"target_magnitude": target_magnitude,
+		"target_topic_weight": 1,
+		"num_roles": 1,
+		"framing": framing,
+		"subject": subject,
+		"subject_type": subject_type,
+		"topic_id": need.target_province_id if need.target_province_id >= 0 else -1,
+		"raises": 0,
+		"political_need_type": need.need_type if need.need_type in ["DAMAGE_RELATIONSHIP", "MOVE_TOPIC_POSITION"] else "",
+	}
+
+
+static func _build_artistic_expression_compose_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	target_magnitude: int,
+) -> Dictionary:
+	## §57.22.11 — new piece declaration for ARTISTIC_EXPRESSION need type.
+	## Subject: strongest disposition target. Style: school/personality weighted.
+	## Role count: 1 by default; 2 if Ambition-equivalent conditions met.
+
+	# Subject selection: scan disposition map for strongest opinion.
+	var strongest_disp: float = 0.0
+	var strongest_target: int = -1
+	var second_disp: float = 0.0
+	var second_target: int = -1
+	for cid: Variant in ctx.disposition_values:
+		var disp: float = float(ctx.disposition_values[cid])
+		if absf(disp) > absf(strongest_disp):
+			second_disp = strongest_disp
+			second_target = strongest_target
+			strongest_disp = disp
+			strongest_target = int(cid)
+		elif absf(disp) > absf(second_disp) and int(cid) != strongest_target:
+			second_disp = disp
+			second_target = int(cid)
+
+	var subject: String = str(strongest_target) if strongest_target >= 0 else ctx.clan
+	var subject_type: int = TheaterSystem.SubjectType.CHARACTER if strongest_target >= 0 else TheaterSystem.SubjectType.CLAN
+	var framing: bool = strongest_disp >= 0.0
+
+	# Prefer active-topic subject when two subjects score equally (GDD §57.22.11).
+	if strongest_target >= 0 and second_target >= 0 \
+			and absf(strongest_disp) == absf(second_disp):
+		var strongest_has_topic: bool = false
+		var second_has_topic: bool = false
+		for tid: int in ctx.known_topics:
+			var topic_subject: int = ctx.known_objectives.get("_topic_subject_%d" % tid, -1)
+			if topic_subject == strongest_target:
+				strongest_has_topic = true
+			elif topic_subject == second_target:
+				second_has_topic = true
+		if second_has_topic and not strongest_has_topic:
+			strongest_target = second_target
+			strongest_disp = second_disp
+			subject = str(second_target)
+			framing = second_disp >= 0.0
+
+	# Style selection: weighted by school type and personality (GDD §57.22.11).
+	var style: int = _pick_artistic_expression_style(ctx, framing)
+
+	# Kyogen requires negative framing; reject and default to NOH if framing is positive.
+	if style == TheaterSystem.Style.KYOGEN and framing:
+		style = TheaterSystem.Style.NOH
+
+	# Role count: default 1; choose 2 if personality-equivalent conditions met.
+	# GDD §57.22.11: personality Ambition weight ≥ +10, Acting rank ≥ 3,
+	# and at least one met_character has Acting rank ≥ target magnitude.
+	var num_roles: int = 1
+	var acting_rank: int = ctx.skill_ranks.get("Acting", 0)
+	# "Ambition" has no explicit Shourido enum mapping; proxy via ISHI or KETSUI
+	# (determination/drive), the closest Shourido equivalents to ambition.
+	var has_ambition: bool = ctx.shourido_virtue in [
+		Enums.ShouridoVirtue.ISHI, Enums.ShouridoVirtue.KETSUI,
+	]
+	# Kyogen cannot have more than 2 roles; NPC already capped at 2.
+	if has_ambition and acting_rank >= 3 and second_target >= 0 \
+			and absf(second_disp) >= 11.0 and second_target != strongest_target:
+		num_roles = 2
+
+	var meta: Dictionary = {
+		"piece_id": -1,
+		"is_new": true,
+		"target_magnitude": target_magnitude,
+		"target_topic_weight": 1,
+		"num_roles": num_roles,
+		"framing": framing,
+		"subject": subject,
+		"subject_type": subject_type,
+		"topic_id": -1,
+		"raises": 0,
+		"style": style,
+		"political_need_type": "",
+	}
+
+	# Second role: if 2 roles, add second strongest disposition subject.
+	if num_roles == 2 and second_target >= 0:
+		meta["subject_2"] = str(second_target)
+		meta["subject_type_2"] = TheaterSystem.SubjectType.CHARACTER
+		meta["framing_2"] = second_disp >= 0.0
+
+	return meta
+
+
+static func _pick_artistic_expression_style(
+	ctx: NPCDataStructures.ContextSnapshot,
+	framing: bool,
+) -> int:
+	## §57.22.11 style selection: school type and personality weighted.
+	var manipulation: int = ctx.skill_ranks.get("Manipulation", 0)
+	var deceit: int = ctx.skill_ranks.get("Deceit", 0)
+	var satirical: bool = manipulation >= 3 or deceit >= 3
+
+	# Kyogen: strong negative disposition AND satirical personality profile.
+	if not framing and satirical:
+		return TheaterSystem.Style.KYOGEN
+
+	# Personality overrides (applied before school defaults).
+	if ctx.shourido_virtue == Enums.ShouridoVirtue.SEIGYO:
+		return TheaterSystem.Style.KABUKI
+	if ctx.bushido_virtue == Enums.BushidoVirtue.JIN:
+		return TheaterSystem.Style.NOH
+
+	# School type defaults.
+	match ctx.school_type:
+		Enums.SchoolType.BUSHI:
+			return TheaterSystem.Style.NOH
+		Enums.SchoolType.SHUGENJA:
+			return TheaterSystem.Style.NOH
+		Enums.SchoolType.COURTIER:
+			# Equally weighted Noh / Kabuki — deterministic via character_id parity.
+			return TheaterSystem.Style.NOH if (ctx.character_id % 2 == 0) else TheaterSystem.Style.KABUKI
+
+	return TheaterSystem.Style.NOH
+
+
+static func _build_learn_theater_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	_need: NPCDataStructures.ImmediateNeed,
+	chars_by_id: Dictionary = {},
+) -> Dictionary:
+	## §57.22.6 — Select the best learnable piece for LEARN_THEATER_PIECE.
+	## Pieces scored by: political relevance (active topic momentum > 30) and
+	## personal disposition toward piece subject (§57.22.6 post-learning rationale).
+	var learnable_ids: Array = ctx.known_objectives.get("learnable_piece_ids", [])
+	var pieces_by_id: Dictionary = ctx.known_objectives.get("_theater_pieces_by_id", {})
+
+	if learnable_ids.is_empty():
+		return {"piece_id": -1}
+
+	var best_id: int = -1
+	var best_score: int = -1
+
+	for pid: Variant in learnable_ids:
+		var piece_id: int = int(pid)
+		var piece: TheaterPieceData = pieces_by_id.get(piece_id) as TheaterPieceData
+		if piece == null:
+			continue
+
+		# For private pieces validate teacher still available (chars_by_id may have changed).
+		if not piece.canonized and not chars_by_id.is_empty():
+			var teacher_id: int = TheaterSystem.find_willing_teacher(
+				ctx.character_id, piece, chars_by_id
+			)
+			if teacher_id < 0:
+				continue
+
+		var score: int = 50  # base
+
+		# +30 if any linked topic is still politically live (momentum > 30).
+		for tid: int in piece.topic_ids:
+			if (tid in ctx.known_topics) and ctx.known_topic_momentums.get(tid, 0) > 30:
+				score += 30
+				break
+
+		# +20 if NPC holds a strong personal disposition toward the piece's subject character.
+		if piece.subject != "":
+			var subject_as_id: int = piece.subject.to_int()
+			if subject_as_id > 0:
+				var disp: float = float(ctx.disposition_values.get(subject_as_id, 0.0))
+				if absf(disp) >= 11.0:
+					score += 20
+
+		if score > best_score:
+			best_score = score
+			best_id = piece_id
+
+	return {"piece_id": best_id}
+
+
+static func _build_perform_theater_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+	chars_by_id: Dictionary = {},
+) -> Dictionary:
+	## §57.22.13 — Score each performable piece and select the best.
+	var pieces_by_id: Dictionary = ctx.known_objectives.get("_theater_pieces_by_id", {})
+	var performable: Array = ctx.known_objectives.get("theater_pieces_to_perform", [])
+
+	var best_id: int = -1
+	var best_score: int = -1
+	var best_is_bunraku: bool = false
+
+	for pid: Variant in performable:
+		var piece_id: int = int(pid)
+		var piece: TheaterPieceData = pieces_by_id.get(piece_id) as TheaterPieceData
+		if piece == null:
+			continue
+
+		# Hard gate 1: need at least 1 non-immune non-known_by witness.
+		var non_immune_count: int = _count_non_immune_theater_witnesses(ctx, piece, chars_by_id)
+		if non_immune_count == 0:
+			continue
+
+		# Hard gate 2: co-located known_by members must cover all named roles.
+		var num_named_roles: int = maxi(1, piece.roles.size())
+		var colocated_knowers: int = _count_colocated_theater_knowers(ctx, piece, chars_by_id)
+		if colocated_knowers < num_named_roles:
+			continue
+
+		# Bunraku needs at least 3 co-located known_by members (§57.22.3).
+		if piece.style == TheaterSystem.Style.BUNRAKU and colocated_knowers < 3:
+			continue
+
+		var score: int = 50  # base
+
+		# +30 if any topic_id is in known_topics with momentum > 30 (§57.22.13).
+		for tid: int in piece.topic_ids:
+			if (tid in ctx.known_topics) and (ctx.known_topic_momentums.get(tid, 0) > 30):
+				score += 30
+				break
+
+		# +20 if >50% non-immune non-known_by witnesses aligned with piece framing.
+		if _theater_majority_aligned(ctx, piece, chars_by_id, non_immune_count):
+			score += 20
+
+		# +20 if NPC holds strong personal disposition toward any role's subject.
+		if _npc_strong_theater_disposition(ctx, piece):
+			score += 20
+
+		# +15 if NPC is author; -20 if already performed this piece today.
+		if piece.author_id == ctx.character_id:
+			score += 15
+			if _theater_author_performed_today(ctx, piece_id):
+				score -= 20
+
+		# -25 if >50% of non-known_by witnesses have active immunity.
+		if _theater_majority_immune(ctx, piece, chars_by_id):
+			score -= 25
+
+		# -30 if fewer than 3 non-immune named witnesses.
+		if non_immune_count < 3:
+			score -= 30
+
+		# +15 if at least one non-immune non-known_by witness has Status >= 3.
+		if _theater_has_high_value_witness(ctx, piece, chars_by_id):
+			score += 15
+
+		# Kyogen additional modifiers (§57.22.13).
+		if piece.style == TheaterSystem.Style.KYOGEN:
+			if _kyogen_subject_present(ctx, piece, chars_by_id):
+				score += 25
+			if not _kyogen_has_provocation_pretext(ctx, piece, chars_by_id):
+				var subj_status: float = _kyogen_subject_max_status(ctx, piece, chars_by_id)
+				if subj_status > ctx.status:
+					score -= 40
+
+		if score > best_score:
+			best_score = score
+			best_id = piece_id
+			best_is_bunraku = (piece.style == TheaterSystem.Style.BUNRAKU)
+
+	# If no piece scores above 0, do not fire.
+	if best_score <= 0:
+		best_id = -1
+
+	var raises: int = 0
+	if need.need_type == "SEEK_GLORY":
+		raises = 1
+	return {
+		"piece_id": best_id,
+		"is_bunraku_performance": best_is_bunraku,
+		"raises": raises,
+	}
+
+
+static func _count_non_immune_theater_witnesses(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+) -> int:
+	## Count non-immune non-known_by named witnesses per §57.22.8.
+	var count: int = 0
+	for cid_v: Variant in ctx.characters_present:
+		var wid: int = int(cid_v)
+		if wid == ctx.character_id:
+			continue
+		if wid in piece.known_by:
+			continue  # permanent immunity
+		var witness: L5RCharacterData = chars_by_id.get(wid) as L5RCharacterData
+		if witness == null or CharacterStats.is_dead(witness):
+			continue
+		var last_seen: int = witness.pieces_seen.get(piece.piece_id, -1)
+		if last_seen >= 0 and (ctx.ic_day - last_seen) <= 30:
+			continue  # 30-day immunity window
+		count += 1
+	return count
+
+
+static func _count_colocated_theater_knowers(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+) -> int:
+	## Count co-located known_by members (including the acting NPC).
+	var count: int = 0
+	for kid: int in piece.known_by:
+		if kid == ctx.character_id:
+			count += 1
+			continue
+		var knower: L5RCharacterData = chars_by_id.get(kid) as L5RCharacterData
+		if knower == null or CharacterStats.is_dead(knower):
+			continue
+		if knower.physical_location == ctx.location_id:
+			count += 1
+	return count
+
+
+static func _theater_majority_aligned(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+	non_immune_count: int,
+) -> bool:
+	## +20: >50% non-immune non-known_by witnesses aligned with framing for any role.
+	if non_immune_count == 0:
+		return false
+	var roles_to_check: Array = piece.roles if not piece.roles.is_empty() else [
+		{"subject_character": piece.subject, "subject_type": piece.subject_type, "framing": piece.framing}
+	]
+	for role: Dictionary in roles_to_check:
+		var role_subj: String = str(role.get("subject_character", piece.subject))
+		var role_stype: int = int(role.get("subject_type", piece.subject_type))
+		var role_framing: bool = bool(role.get("framing", piece.framing))
+		var aligned: int = 0
+		for cid_v: Variant in ctx.characters_present:
+			var wid: int = int(cid_v)
+			if wid == ctx.character_id:
+				continue
+			if wid in piece.known_by:
+				continue
+			var witness: L5RCharacterData = chars_by_id.get(wid) as L5RCharacterData
+			if witness == null or CharacterStats.is_dead(witness):
+				continue
+			var last_seen: int = witness.pieces_seen.get(piece.piece_id, -1)
+			if last_seen >= 0 and (ctx.ic_day - last_seen) <= 30:
+				continue
+			var disp: int = _theater_witness_disp_toward(witness, role_subj, role_stype, chars_by_id)
+			if role_framing and disp >= 11:
+				aligned += 1
+			elif not role_framing and disp <= -11:
+				aligned += 1
+		if aligned * 2 > non_immune_count:  # strictly more than 50%
+			return true
+	return false
+
+
+static func _theater_witness_disp_toward(
+	witness: L5RCharacterData,
+	subject: String,
+	subject_type: int,
+	chars_by_id: Dictionary,
+) -> int:
+	## Get witness disposition toward a theater piece subject.
+	match subject_type:
+		TheaterSystem.SubjectType.CHARACTER:
+			if subject.is_valid_int():
+				return witness.disposition_values.get(int(subject), 0)
+		TheaterSystem.SubjectType.CLAN:
+			# Use strongest disposition toward any character of that clan as proxy.
+			var best: int = 0
+			for cid_v: Variant in witness.disposition_values:
+				var cid_int: int = int(cid_v)
+				var c: L5RCharacterData = chars_by_id.get(cid_int) as L5RCharacterData
+				if c == null:
+					continue
+				if c.clan == subject:
+					var d: int = int(witness.disposition_values.get(cid_v, 0))
+					if absf(float(d)) > absf(float(best)):
+						best = d
+			return best
+		TheaterSystem.SubjectType.FAMILY:
+			var best: int = 0
+			for cid_v: Variant in witness.disposition_values:
+				var cid_int: int = int(cid_v)
+				var c: L5RCharacterData = chars_by_id.get(cid_int) as L5RCharacterData
+				if c == null:
+					continue
+				if c.family == subject:
+					var d: int = int(witness.disposition_values.get(cid_v, 0))
+					if absf(float(d)) > absf(float(best)):
+						best = d
+			return best
+	return 0
+
+
+static func _npc_strong_theater_disposition(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+) -> bool:
+	## +20: NPC holds strong disposition (≥+11 or ≤-11) toward any role's subject.
+	var roles_to_check: Array = piece.roles if not piece.roles.is_empty() else [
+		{"subject_character": piece.subject, "subject_type": piece.subject_type}
+	]
+	for role: Dictionary in roles_to_check:
+		var subj: String = str(role.get("subject_character", piece.subject))
+		var stype: int = int(role.get("subject_type", piece.subject_type))
+		var disp: int = _theater_npc_disp_toward(ctx, subj, stype)
+		if disp >= 11 or disp <= -11:
+			return true
+	return false
+
+
+static func _theater_npc_disp_toward(
+	ctx: NPCDataStructures.ContextSnapshot,
+	subject: String,
+	subject_type: int,
+) -> int:
+	## Get NPC's own disposition toward a theater piece subject.
+	match subject_type:
+		TheaterSystem.SubjectType.CHARACTER:
+			if subject.is_valid_int():
+				return int(ctx.disposition_values.get(int(subject), 0))
+		TheaterSystem.SubjectType.CLAN:
+			# Use strongest disposition toward any known contact of that clan.
+			var contacts: Array = ctx.known_contacts_by_clan.get(subject, [])
+			var best: int = 0
+			for cid_v: Variant in contacts:
+				var d: int = int(ctx.disposition_values.get(int(cid_v), 0))
+				if absf(float(d)) > absf(float(best)):
+					best = d
+			return best
+		TheaterSystem.SubjectType.FAMILY:
+			var best: int = 0
+			for cid_v: Variant in ctx.known_contacts:
+				var cid_int: int = int(cid_v)
+				var d: int = int(ctx.disposition_values.get(cid_int, 0))
+				var clan: String = ctx.contact_clans.get(cid_int, "")
+				# Use family from the contact if available (contact_clans stores clan; family
+				# not separately tracked — use clan as proxy for family-clan match).
+				if clan == subject:
+					if absf(float(d)) > absf(float(best)):
+						best = d
+			return best
+	return 0
+
+
+static func _theater_author_performed_today(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece_id: int,
+) -> bool:
+	## -20: check action_log for PERFORM_THEATER_PIECE with this piece_id today.
+	for entry: Variant in ctx.action_log:
+		if not entry is Dictionary:
+			continue
+		if entry.get("action_id", "") != "PERFORM_THEATER_PIECE":
+			continue
+		var meta: Dictionary = entry.get("metadata", {})
+		if meta.get("piece_id", -1) == piece_id:
+			return true
+	return false
+
+
+static func _theater_majority_immune(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+) -> bool:
+	## -25: >50% of non-known_by named witnesses have active immunity.
+	var total: int = 0
+	var immune: int = 0
+	for cid_v: Variant in ctx.characters_present:
+		var wid: int = int(cid_v)
+		if wid == ctx.character_id:
+			continue
+		if wid in piece.known_by:
+			continue  # excluded from this count
+		var witness: L5RCharacterData = chars_by_id.get(wid) as L5RCharacterData
+		if witness == null or CharacterStats.is_dead(witness):
+			continue
+		total += 1
+		var last_seen: int = witness.pieces_seen.get(piece.piece_id, -1)
+		if last_seen >= 0 and (ctx.ic_day - last_seen) <= 30:
+			immune += 1
+	if total == 0:
+		return false
+	return immune * 2 > total  # strictly more than 50%
+
+
+static func _theater_has_high_value_witness(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+) -> bool:
+	## +15: at least one non-immune non-known_by witness has Status >= 3.
+	for cid_v: Variant in ctx.characters_present:
+		var wid: int = int(cid_v)
+		if wid == ctx.character_id:
+			continue
+		if wid in piece.known_by:
+			continue
+		var witness: L5RCharacterData = chars_by_id.get(wid) as L5RCharacterData
+		if witness == null or CharacterStats.is_dead(witness):
+			continue
+		var last_seen: int = witness.pieces_seen.get(piece.piece_id, -1)
+		if last_seen >= 0 and (ctx.ic_day - last_seen) <= 30:
+			continue
+		if witness.status >= 3.0:
+			return true
+	return false
+
+
+static func _kyogen_subject_present(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+) -> bool:
+	## +25 for Kyogen: subject is physically present in zone.
+	var lead_role: Dictionary = piece.roles[0] if not piece.roles.is_empty() else {}
+	var subj: String = str(lead_role.get("subject_character", piece.subject))
+	var stype: int = int(lead_role.get("subject_type", piece.subject_type))
+	match stype:
+		TheaterSystem.SubjectType.CHARACTER:
+			if subj.is_valid_int():
+				return int(subj) in ctx.characters_present
+		TheaterSystem.SubjectType.CLAN:
+			for cid_v: Variant in ctx.characters_present:
+				var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+				if c != null and not CharacterStats.is_dead(c) and c.clan == subj:
+					return true
+		TheaterSystem.SubjectType.FAMILY:
+			for cid_v: Variant in ctx.characters_present:
+				var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+				if c != null and not CharacterStats.is_dead(c) and c.family == subj:
+					return true
+		TheaterSystem.SubjectType.ARCHETYPE:
+			# For archetype, check if any character matching the clan component is present.
+			var clan_req: String = lead_role.get("clan_requirement", "")
+			if not clan_req.is_empty():
+				for cid_v: Variant in ctx.characters_present:
+					var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+					if c != null and not CharacterStats.is_dead(c) and c.clan == clan_req:
+						return true
+	return false
+
+
+static func _kyogen_subject_max_status(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+) -> float:
+	## Returns highest Status for Kyogen subject present in zone (§57.22.13).
+	var lead_role: Dictionary = piece.roles[0] if not piece.roles.is_empty() else {}
+	var subj: String = str(lead_role.get("subject_character", piece.subject))
+	var stype: int = int(lead_role.get("subject_type", piece.subject_type))
+	match stype:
+		TheaterSystem.SubjectType.CHARACTER:
+			if subj.is_valid_int():
+				var c: L5RCharacterData = chars_by_id.get(int(subj)) as L5RCharacterData
+				if c != null:
+					return c.status
+		TheaterSystem.SubjectType.CLAN:
+			var max_status: float = 0.0
+			for cid_v: Variant in ctx.characters_present:
+				var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+				if c != null and not CharacterStats.is_dead(c) and c.clan == subj:
+					max_status = maxf(max_status, c.status)
+			return max_status
+		TheaterSystem.SubjectType.FAMILY:
+			var max_status: float = 0.0
+			for cid_v: Variant in ctx.characters_present:
+				var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+				if c != null and not CharacterStats.is_dead(c) and c.family == subj:
+					max_status = maxf(max_status, c.status)
+			return max_status
+		TheaterSystem.SubjectType.ARCHETYPE:
+			var clan_req: String = lead_role.get("clan_requirement", "")
+			var max_status: float = 0.0
+			for cid_v: Variant in ctx.characters_present:
+				var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+				if c != null and not CharacterStats.is_dead(c) and c.clan == clan_req:
+					max_status = maxf(max_status, c.status)
+			return max_status
+	return 0.0
+
+
+static func _kyogen_has_provocation_pretext(
+	ctx: NPCDataStructures.ContextSnapshot,
+	piece: TheaterPieceData,
+	chars_by_id: Dictionary,
+) -> bool:
+	## -40 guard: pretext exists if subject holds Enemy disposition toward performer.
+	## Implements GDD condition (4): subject Enemy disp toward performer.
+	## Conditions (1)(zone_event_log) and (3)(court session) deferred.
+	var lead_role: Dictionary = piece.roles[0] if not piece.roles.is_empty() else {}
+	var subj: String = str(lead_role.get("subject_character", piece.subject))
+	var stype: int = int(lead_role.get("subject_type", piece.subject_type))
+	var npc_id_str: String = str(ctx.character_id)
+	match stype:
+		TheaterSystem.SubjectType.CHARACTER:
+			if subj.is_valid_int():
+				var subject: L5RCharacterData = chars_by_id.get(int(subj)) as L5RCharacterData
+				if subject != null:
+					return int(subject.disposition_values.get(ctx.character_id, 0)) <= -51
+		TheaterSystem.SubjectType.CLAN:
+			for cid_v: Variant in ctx.characters_present:
+				var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+				if c != null and not CharacterStats.is_dead(c) and c.clan == subj:
+					if int(c.disposition_values.get(ctx.character_id, 0)) <= -51:
+						return true
+		TheaterSystem.SubjectType.FAMILY:
+			for cid_v: Variant in ctx.characters_present:
+				var c: L5RCharacterData = chars_by_id.get(int(cid_v)) as L5RCharacterData
+				if c != null and not CharacterStats.is_dead(c) and c.family == subj:
+					if int(c.disposition_values.get(ctx.character_id, 0)) <= -51:
+						return true
+	return false
+
+
+static func _build_dedicate_piece_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+) -> Dictionary:
+	## Dedicate: pick known completed piece + most relevant topic to link.
+	var performable: Array = ctx.known_objectives.get("theater_pieces_to_perform", [])
+	var piece_id: int = -1
+	for pid: Variant in performable:
+		piece_id = int(pid)
+		break
+	# Best topic: pick first known topic related to the need's target
+	var topic_id: int = -1
+	if not ctx.known_topics.is_empty():
+		topic_id = int(ctx.known_topics[0])
+	return {
+		"piece_id": piece_id,
+		"topic_id": topic_id,
+		"raises": 0,
+	}
 
 
 static func _build_mentor_metadata(
@@ -2890,11 +4154,11 @@ static func _pick_fabrication_severity(
 static func _pick_medicine_raises(
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> int:
+	# GDD s57.31a: 0-2→0 raises (TN 15), 3-4→1 raise (TN 20), 5+→3 raises (TN 30).
+	# GDD s57.31 explicitly uses "At Rank 5 with 3 Raises: 5k1" as canonical expert case.
 	var rank: int = ctx.skill_ranks.get("Medicine", 0)
-	if rank >= 7:
+	if rank >= 5:
 		return 3
-	elif rank >= 5:
-		return 2
 	elif rank >= 3:
 		return 1
 	return 0
@@ -2983,6 +4247,40 @@ static func _pick_best_game_skill(
 			best_rank = rank
 			best_skill = gs
 	return best_skill
+
+
+static func _build_dissolve_marriage_metadata(
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	# Find a vassal's marriage that meets the dissolution prerequisite gate (s57.49.7):
+	# disp <= -31 (Enemy tier) toward the other spouse OR that spouse's immediate lord.
+	for cid: int in chars_by_id:
+		var c: L5RCharacterData = chars_by_id[cid] as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.lord_id != ctx.character_id:
+			continue
+		if c.spouse_id < 0:
+			continue
+		var spouse: L5RCharacterData = chars_by_id.get(c.spouse_id) as L5RCharacterData
+		if spouse == null or CharacterStats.is_dead(spouse):
+			continue
+		var disp_toward_spouse: int = ctx.disposition_values.get(c.spouse_id, 0)
+		# Also gate on disp toward spouse's immediate lord (s57.49.7).
+		var disp_toward_spouse_lord: int = 0
+		if spouse.lord_id >= 0:
+			disp_toward_spouse_lord = ctx.disposition_values.get(spouse.lord_id, 0)
+		if disp_toward_spouse <= -31 or disp_toward_spouse_lord <= -31:
+			return {"spouse_a_id": c.character_id, "spouse_b_id": c.spouse_id}
+	# Fallback: use need.target_npc_id as the vassal to dissolve from.
+	var fallback_a: int = need.target_npc_id
+	if fallback_a >= 0:
+		var fa: L5RCharacterData = chars_by_id.get(fallback_a) as L5RCharacterData
+		if fa != null and not CharacterStats.is_dead(fa) and fa.spouse_id >= 0:
+			return {"spouse_a_id": fallback_a, "spouse_b_id": fa.spouse_id}
+	return {"spouse_a_id": -1, "spouse_b_id": -1}
 
 
 static func _get_favor_tier_held_against(
@@ -3677,6 +4975,188 @@ static func _extract_cut_supply_army_ids(
 	return result
 
 
+static func _pick_lord_for_petition(
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> int:
+	## Find the best co-located lord for a ronin to petition (s52.5 Part B).
+	## Only considers lords with disposition >= 0; negative-disposition lords
+	## auto-reject and would waste an AP attempting (s52.5 Part B Step 1).
+	## Prefers lords with higher disposition among eligible candidates.
+	var best_id: int = -1
+	var best_disp: int = -999
+	for present_id: int in ctx.characters_present:
+		var candidate: L5RCharacterData = chars_by_id.get(present_id) as L5RCharacterData
+		if candidate == null or CharacterStats.is_dead(candidate):
+			continue
+		if candidate.role_position.is_empty():
+			continue
+		var disp: int = int(ctx.disposition_values.get(present_id, 0))
+		if disp < 0:
+			continue
+		if disp > best_disp:
+			best_disp = disp
+			best_id = present_id
+	return best_id
+
+
+static func _pick_ronin_for_acceptance(
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> int:
+	## Find the best co-located ronin for a lord to accept into service (s52.5 Part D).
+	## Prefers non-permanent-ronin candidates with highest status.
+	var best_id: int = -1
+	var best_status: float = -1.0
+	for present_id: int in ctx.characters_present:
+		var candidate: L5RCharacterData = chars_by_id.get(present_id) as L5RCharacterData
+		if candidate == null or CharacterStats.is_dead(candidate):
+			continue
+		if not RoninSystem.is_ronin(candidate):
+			continue
+		if candidate.permanent_ronin:
+			continue
+		if candidate.status > best_status:
+			best_status = candidate.status
+			best_id = present_id
+	return best_id
+
+
+static func _build_hire_ronin_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	## Select the best co-located ronin and appropriate contract type (s52.6 Part B).
+	## Prefers desperate ronin (higher urgency for lord filling vacancy).
+	var best_id: int = -1
+	var best_score: float = -1.0
+	for present_id: int in ctx.characters_present:
+		var c: L5RCharacterData = chars_by_id.get(present_id) as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if not RoninSystem.is_ronin(c):
+			continue
+		if c.permanent_ronin:
+			continue
+		if c.supply_ledger.get("contract_end_ic_day", -1) >= 0:
+			continue  # already under contract
+		var disp: float = ctx.disposition_values.get(present_id, 0.0)
+		if disp <= -1.0:
+			continue  # auto-reject gate
+		var score: float = disp + c.status * 2.0
+		if score > best_score:
+			best_score = score
+			best_id = present_id
+
+	# Pick contract type from need context: military need → MILITARY_SERVICE, etc.
+	var contract_type: String = "PROVINCE_DEFENSE"
+	var need_type: String = ctx.known_objectives.get("primary", {}).get("need_type", "")
+	if need_type == "LEVY_TROOPS" or need_type == "RAISE_ARMY":
+		contract_type = "MILITARY_SERVICE"
+	elif need_type == "UPHOLD_LAW" or need_type == "INVESTIGATE_THREAT":
+		contract_type = "MAGISTRATE_AIDE"
+
+	return {
+		"target_ronin_id": best_id,
+		"contract_type": contract_type,
+		"duration_seasons": 1,
+	}
+
+
+static func _build_induction_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	## Select the best co-located ronin eligible for induction ceremony (s52.7 Part D).
+	## Sponsoring lord must be Provincial Daimyo+; ronin needs 8 deeds, 1 extraordinary
+	## deed, and prior Family Daimyo approval. Prefer highest deed count.
+	var sponsor: L5RCharacterData = chars_by_id.get(ctx.character_id) as L5RCharacterData
+	if sponsor == null:
+		return {"target_ronin_id": -1}
+	if sponsor.lord_rank < Enums.LordRank.PROVINCIAL_DAIMYO:
+		return {"target_ronin_id": -1}
+	var best_id: int = -1
+	var best_deeds: int = -1
+	for present_id: int in ctx.characters_present:
+		var c: L5RCharacterData = chars_by_id.get(present_id) as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.permanent_ronin:
+			continue
+		if c.clan == sponsor.clan:
+			continue
+		var disp: float = ctx.disposition_values.get(present_id, 0.0)
+		if disp < RoninSystem.INDUCTION_MIN_DISPOSITION:
+			continue
+		var deeds: int = RoninSystem.get_deed_count(c, sponsor.family)
+		if deeds < RoninSystem.INDUCTION_DEED_THRESHOLD:
+			continue
+		if RoninSystem.get_extraordinary_deed_count(c, sponsor.family) < RoninSystem.INDUCTION_EXTRAORDINARY_DEED_REQUIRED:
+			continue
+		if int(c.supply_ledger.get("family_daimyo_approval", -1)) < 0:
+			continue
+		if deeds > best_deeds:
+			best_deeds = deeds
+			best_id = present_id
+	return {"target_ronin_id": best_id}
+
+
+static func _build_approve_induction_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	## Family Daimyo selects the best known ronin to grant induction approval (s52.7 Part C).
+	## Requires 8 deeds + 1 extraordinary deed for the FD's family.
+	## Ronin does not need to be co-located — approval can be granted remotely.
+	var fd: L5RCharacterData = chars_by_id.get(ctx.character_id) as L5RCharacterData
+	if fd == null:
+		return {"target_ronin_id": -1}
+	if fd.lord_rank < Enums.LordRank.FAMILY_DAIMYO:
+		return {"target_ronin_id": -1}
+	var best_id: int = -1
+	var best_deeds: int = -1
+	# Check all known characters for ronins who qualify but lack FD approval.
+	for known_id: int in ctx.met_characters:
+		var c: L5RCharacterData = chars_by_id.get(known_id) as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.permanent_ronin:
+			continue
+		if c.clan == fd.clan:
+			continue
+		if c.supply_ledger.get("family_daimyo_approval", -1) >= 0:
+			continue  # already has approval
+		var deeds: int = RoninSystem.get_deed_count(c, fd.family)
+		if deeds < RoninSystem.INDUCTION_DEED_THRESHOLD:
+			continue
+		if RoninSystem.get_extraordinary_deed_count(c, fd.family) < RoninSystem.INDUCTION_EXTRAORDINARY_DEED_REQUIRED:
+			continue
+		var disp: float = ctx.disposition_values.get(known_id, 0.0)
+		if disp < RoninSystem.INDUCTION_MIN_DISPOSITION:
+			continue
+		if deeds > best_deeds:
+			best_deeds = deeds
+			best_id = known_id
+	return {"target_ronin_id": best_id}
+
+
+static func _build_terminate_contract_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	## Find a co-located contracted ronin serving under this lord (s52.6 Part G).
+	for present_id: int in ctx.characters_present:
+		var c: L5RCharacterData = chars_by_id.get(present_id) as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.lord_id != ctx.character_id:
+			continue
+		if c.supply_ledger.get("contract_end_ic_day", -1) < 0:
+			continue
+		return {"target_ronin_id": present_id}
+	return {"target_ronin_id": -1}
+
+
 static func _find_marriageable_vassals(
 	lord: L5RCharacterData,
 	chars_by_id: Dictionary,
@@ -3698,3 +5178,109 @@ static func _find_marriageable_vassals(
 			continue
 		result.append(c.character_id)
 	return result
+
+
+# -- s57.26 Origami Metadata Builders ------------------------------------------
+
+
+static func _build_craft_origami_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+	origami_rank: int,
+) -> Dictionary:
+	## Select origami sub-type and raises based on NeedType and context.
+	var raises: int = _pick_origami_raises(origami_rank)
+	var active_id: int = ctx.known_objectives.get("active_senbazuru_id", -1)
+
+	match need.need_type:
+		"RESTORE_WORSHIP":
+			# Shide if shrine needs it and NPC has no shide yet (s57.26b).
+			# Gohei otherwise for ongoing worship support (s57.26.12-13).
+			var shrine_needs: bool = ctx.known_objectives.get("shrine_needs_shide", false)
+			var shrine_at_normal: bool = ctx.known_objectives.get("shrine_shide_at_normal", false)
+			var has_shide_inv: bool = ctx.known_objectives.get("has_shide_in_inventory", false)
+			if (shrine_needs or shrine_at_normal) and not has_shide_inv:
+				return {"origami_type": "shide", "raises": raises}
+			return {"origami_type": "gohei", "raises": raises}
+		"RAISE_DISPOSITION":
+			# Noshi wraps a gift for the disposition target (s57.26.6-8).
+			return {
+				"origami_type": "noshi",
+				"raises": raises,
+				"target_npc_id": need.target_npc_id,
+			}
+		"ARTISTIC_EXPRESSION":
+			# Poetry scroll when NPC has Artisan: Poetry skill (s57.30.6).
+			# Falls back to senbazuru/gohei if no poetry skill.
+			var poetry_rank: int = ctx.skill_ranks.get("Artisan: Poetry", 0)
+			if poetry_rank > 0 and ctx.known_objectives.get("available_poem_item_id", -1) < 0:
+				return {"origami_type": "poetry_scroll", "raises": _pick_origami_raises(poetry_rank)}
+			if active_id >= 0:
+				return {
+					"origami_type": "senbazuru_progress",
+					"raises": raises,
+					"senbazuru_id": active_id,
+				}
+			return {"origami_type": "gohei", "raises": raises}
+		_:
+			# Advance active senbazuru if present; else gohei; else noshi.
+			if active_id >= 0:
+				return {
+					"origami_type": "senbazuru_progress",
+					"raises": raises,
+					"senbazuru_id": active_id,
+				}
+			return {"origami_type": "gohei", "raises": raises}
+
+
+static func _pick_origami_raises(origami_rank: int) -> int:
+	## NPC raise selection for origami rolls (0-2 based on skill rank).
+	if origami_rank <= 2:
+		return 0
+	elif origami_rank <= 4:
+		return 1
+	return 2
+
+
+static func _build_declare_senbazuru_metadata(
+	ctx: NPCDataStructures.ContextSnapshot,
+	need: NPCDataStructures.ImmediateNeed,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	## Select dedication type and recipient. Defaults to Atonement.
+	if need.need_type == "SEEK_GLORY":
+		# Remembrance: find a deceased known character.
+		var deceased_id: int = _pick_deceased_known_character(ctx, chars_by_id)
+		if deceased_id >= 0:
+			return {"dedication_type": "Remembrance", "recipient_id": deceased_id}
+
+	if need.target_npc_id >= 0:
+		var target: L5RCharacterData = chars_by_id.get(need.target_npc_id)
+		if target != null and not CharacterStats.is_dead(target):
+			# Healing if recipient is wounded or tainted; Protection otherwise.
+			if CharacterStats.is_wounded(target) or target.taint_rank > 0:
+				return {
+					"dedication_type": "Healing",
+					"recipient_id": need.target_npc_id,
+				}
+			return {
+				"dedication_type": "Protection",
+				"recipient_id": need.target_npc_id,
+			}
+
+	return {"dedication_type": "Atonement", "recipient_id": -1}
+
+
+static func _pick_deceased_known_character(
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> int:
+	## Find any deceased character with whom this NPC has a disposition relationship.
+	## Simplified: any dead known character (GDD requires "within last IC season"
+	## but no death timestamp exists on L5RCharacterData).
+	for cid_v: Variant in ctx.disposition_values.keys():
+		var cid: int = int(cid_v)
+		var known: L5RCharacterData = chars_by_id.get(cid)
+		if known != null and CharacterStats.is_dead(known):
+			return cid
+	return -1

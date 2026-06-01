@@ -50,7 +50,7 @@ const TEA_HOUSE_DISPOSITION_GAIN: int = 2       # s57.44.10
 # Do not tune without a GDD amendment to s57.44.
 
 const PROV_SAKE_DISHONORABLE_CHANCE: float = 0.0  # % scaled by Willpower, unspecified
-const PROV_GEISHA_KOKU_COST: float = 0.0           # per quality tier, unspecified
+# Geisha koku cost is now tier-dependent — see GeishaSystem.KOKU_BY_TIER (locked s57.45a A1–A3).
 const PROV_SHRINE_KOKU_COST: float = 0.0           # small offering, unspecified
 const PROV_BATHHOUSE_KOKU_COST: float = 0.0        # admission fee, unspecified
 const PROV_INCENSE_KOKU_COST: float = 0.0          # significant cost, unspecified
@@ -355,6 +355,7 @@ static func _pick_random_present(present_character_ids: Array, dice: DiceEngine)
 ##   met_character_ids, topic_leaked, leak_target_id, leak_routing,
 ##   go_parlor_roll, go_parlor_opponent_roll, go_parlor_win,
 ##   dishonorable_conduct, temple_info_received, koku_cost.
+## `okiya_tier` is the settlement's okiya tier (1–3) for cost lookup. Pass 0 if none.
 static func apply_wind_down(
 	character: L5RCharacterData,
 	method: Method,
@@ -363,6 +364,7 @@ static func apply_wind_down(
 	companion_id: int,
 	go_parlor_opponent: Dictionary,
 	fortune_id: int,
+	okiya_tier: int = 0,
 ) -> Dictionary:
 	character.last_wind_down_method = method_name(method)
 	character.wind_down_void_modifier = get_void_modifier(method)
@@ -408,7 +410,7 @@ static func apply_wind_down(
 					result["glory_change"] = -0.2
 
 		Method.GEISHA_HOUSE:
-			result["koku_cost"] = PROV_GEISHA_KOKU_COST
+			result["koku_cost"] = GeishaSystem.koku_cost_for_tier(okiya_tier)
 			result["glory_change"] = GEISHA_GLORY_GAIN
 			# 40% chance of one topic leaking to the handler pipeline.
 			if dice.rand_int_range(1, 100) <= int(GEISHA_TOPIC_LEAK_CHANCE * 100):

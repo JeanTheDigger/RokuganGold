@@ -9,6 +9,7 @@ enum ReactiveType {
 	FAVOR_REQUESTED,
 	COURT_INVITATION,
 	ACCEPT_TRAINING,
+	CONTRACT_OFFERED,
 }
 
 
@@ -29,6 +30,8 @@ static func evaluate_reactive_event(
 			return _evaluate_court_invitation(event, character)
 		"ACCEPT_TRAINING":
 			return _evaluate_training_response(event, character, ctx)
+		"CONTRACT_OFFERED":
+			return _evaluate_contract_offer(event, character)
 	return {"action": "PASS", "need_type": event.get("need_type", "")}
 
 
@@ -72,7 +75,6 @@ static func _evaluate_duel_response(
 		"need_type": "DECLINE_DUEL",
 		"target_npc_id": challenger_id,
 		"priority": 2,
-		"glory_loss": -0.3,
 	}
 
 
@@ -260,9 +262,10 @@ static func _evaluate_training_response(
 			return {"action": "DECLINE_TRAINING", "reason": "perfectionist_gate"}
 
 	if character.shourido_virtue == Enums.ShouridoVirtue.KETSUI:
-		var has_mentor_objective: bool = _has_mentor_objective(character, sensei_id, ctx)
-		if not has_mentor_objective:
-			return {"action": "DECLINE_TRAINING", "reason": "self_reliance"}
+		if not event.get("teacher_initiated", false):
+			var has_mentor_objective: bool = _has_mentor_objective(character, sensei_id, ctx)
+			if not has_mentor_objective:
+				return {"action": "DECLINE_TRAINING", "reason": "self_reliance"}
 
 	return {
 		"action": "ACCEPT_TRAINING",
@@ -279,5 +282,63 @@ static func _has_mentor_objective(
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> bool:
 	var primary: Dictionary = ctx.known_objectives.get("primary", {})
-	return primary.get("objective_type", "") == "MENTOR_CHARACTER" and \
+	return primary.get("need_type", "") == "MENTOR_CHARACTER" and \
 		primary.get("target_npc_id", -1) == sensei_id
+
+
+# -- Contract Offer Response (s52.6 Part D) ------------------------------------
+
+static func _evaluate_contract_offer(
+	event: Dictionary,
+	character: L5RCharacterData,
+) -> Dictionary:
+	var lord_id: int = event.get("lord_id", -1)
+	var contract_type: String = event.get("contract_type", "PROVINCE_DEFENSE")
+	var disposition: float = character.disposition_values.get(lord_id, 0.0)
+
+	var accept: bool = false
+
+	# Auto-accept conditions per s52.6 Part D.
+	var season_start: int = event.get("season_start", 0)
+	var current_season: int = event.get("current_season", season_start)
+	var is_desperate: bool = RoninSystem.is_desperate(character, current_season)
+
+	if is_desperate:
+		accept = true
+	elif disposition >= 31.0:
+		accept = true
+	elif character.bushido_virtue == Enums.BushidoVirtue.CHUGI:
+		if contract_type == "PROVINCE_DEFENSE" or contract_type == "MAGISTRATE_AIDE":
+			accept = true
+	elif character.bushido_virtue == Enums.BushidoVirtue.MEIYO:
+		# Accepts only if the lord is of sufficient status (s52.6 Part D).
+		accept = event.get("lord_status", 0.0) >= 4.0
+	elif character.shourido_virtue == Enums.ShouridoVirtue.KETSUI:
+		accept = true
+	elif character.shourido_virtue == Enums.ShouridoVirtue.SEIGYO:
+		# Accepts if FIND_NEW_LORD is their active standing objective — the contract
+		# fulfills that goal rather than conflicting with it (s52.6 Part D).
+		accept = event.get("has_find_new_lord_standing", false)
+	elif character.shourido_virtue == Enums.ShouridoVirtue.ISHI:
+		# Self-reliant: only accepts when truly desperate (already handled above)
+		accept = false
+	else:
+		accept = disposition >= 0.0
+
+	if accept:
+		return {
+			"action": "ACCEPT_CONTRACT",
+			"need_type": "FIND_NEW_LORD",
+			"target_npc_id": lord_id,
+			"priority": 3,
+			"contract_type": contract_type,
+			"duration_seasons": event.get("duration_seasons", 1),
+			"lord_id": lord_id,
+		}
+	return {
+		"action": "DECLINE_CONTRACT",
+		"need_type": "FIND_NEW_LORD",
+		"target_npc_id": lord_id,
+		"priority": 1,
+		"lord_id": lord_id,
+	}

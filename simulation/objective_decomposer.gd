@@ -33,6 +33,8 @@ const PERSONAL_OBJECTIVES: Array[String] = [
 	"LIVE_BY_BUSHIDO",
 	"ADVANCE_GLORY",
 	"SEEK_VENGEANCE",
+	"FIND_NEW_LORD",
+	"PERFORM_RITUAL",
 ]
 
 const MILITARY_OBJECTIVES: Array[String] = [
@@ -43,6 +45,7 @@ const MILITARY_OBJECTIVES: Array[String] = [
 	"ELIMINATE_SHADOWLANDS",
 	"MAINTAIN_PEACE",
 	"BUILD_STRONGEST_FORCE",
+	"MAINTAIN_FORTIFICATION",
 ]
 
 const INVESTIGATION_OBJECTIVES: Array[String] = [
@@ -159,6 +162,10 @@ static func _decompose_personal(
 			return _decompose_advance_glory(objective, ctx)
 		"SEEK_VENGEANCE":
 			return _decompose_seek_vengeance(objective, ctx)
+		"FIND_NEW_LORD":
+			return _decompose_find_new_lord(objective, ctx)
+		"PERFORM_RITUAL":
+			return _decompose_perform_ritual(objective, ctx)
 	return _passthrough(objective)
 
 
@@ -184,6 +191,8 @@ static func _decompose_military(
 			return _decompose_maintain_peace(objective, ctx)
 		"BUILD_STRONGEST_FORCE":
 			return _decompose_build_strongest_force(objective, ctx)
+		"MAINTAIN_FORTIFICATION":
+			return _decompose_maintain_fortification(objective, ctx)
 	return _passthrough(objective)
 
 
@@ -758,6 +767,49 @@ static func _decompose_seek_vengeance(
 			return _make_need("GATHER_INTELLIGENCE", 1, {"target_npc_id": target_npc})
 
 
+# -- FIND_NEW_LORD Decomposition (s52.5) ----------------------------------------
+# Ronin seeking a new lord: petition a co-located lord when visiting, write
+# letters from home, or travel toward samurai settlements when neither is an option.
+# Phase 4a metadata population (_pick_lord_for_petition) handles target selection
+# for PETITION_RONIN — the decomposer preserves the FIND_NEW_LORD NeedType so Phase 5
+# scores correctly against the FIND_NEW_LORD alignment table.
+
+
+static func _decompose_find_new_lord(
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match ctx.context_flag:
+		Enums.ContextFlag.VISITING:
+			# At another lord's settlement: petition directly (score 90) or write if
+			# no eligible lord is present (score 60). Scoring picks PETITION_RONIN when
+			# _pick_lord_for_petition() finds a candidate; falls to WRITE_LETTER otherwise.
+			return _passthrough(objective)
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			# At home base: write letters to potential lords (score 60) or begin travel
+			# toward samurai settlements (score 80). Scoring picks BEGIN_TRAVEL.
+			return _passthrough(objective)
+		Enums.ContextFlag.TRAVELING:
+			# Mid-travel: do not interrupt ongoing journey.
+			return _passthrough(objective)
+		_:
+			return _passthrough(objective)
+
+
+# -- PERFORM_RITUAL Decomposition (s55.11b) -------------------------------------
+# Monk standing objective: pursue ritual practice in all contexts. Phase 5 scores
+# against the PERFORM_RITUAL alignment table (PERFORM_RITUAL=100, PERFORM_WORSHIP=90,
+# MEDITATE=60). The context list filter ensures AT_COURT characters see only
+# context-available actions; no context branching is needed here.
+
+
+static func _decompose_perform_ritual(
+	objective: Dictionary,
+	_ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	return _passthrough(objective)
+
+
 # =============================================================================
 # Military Decomposition Trees (GDD s55.23)
 # =============================================================================
@@ -1086,6 +1138,20 @@ static func _decompose_build_strongest_force(
 		})
 
 	return _make_need("ACQUIRE_RESOURCE", 1, {"target_resource": "arms"})
+
+
+# -- MAINTAIN_FORTIFICATION Decomposition (s57.41) ------------------------------
+# Kaiu Engineer standing objective: maintain Wall integrity. Phase 5 scores against
+# the MAINTAIN_FORTIFICATION alignment table (SEAL_WALL_BREACH=100, ORDER_FORTIFY=100,
+# FORTIFY_WALL_SECTION=95, DISPATCH_COURTIER=85). Phase 4a metadata population reads
+# ctx.wall_statuses for target_province_id, so no target needs to be set here.
+
+
+static func _decompose_maintain_fortification(
+	objective: Dictionary,
+	_ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	return _passthrough(objective)
 
 
 # =============================================================================

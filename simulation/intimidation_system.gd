@@ -31,7 +31,7 @@ const PUBLIC_WITNESS_DISPOSITION_LOSS: int = -2
 const PRIVATE_TN_INCREASE_BASE: int = 10
 const PRIVATE_TN_INCREASE_PER_RAISE: int = 5
 const LETTER_TN_INCREASE: int = 5
-const PUBLIC_TN_INCREASE_BASE: int = 0
+const PUBLIC_TN_INCREASE_BASE: int = 10  # same as private — locked s12.9a
 const PUBLIC_TN_INCREASE_PER_RAISE: int = 5
 
 const PUSHBACK_TN_BASE: int = 15

@@ -194,6 +194,12 @@ func _bootstrap_fresh_world() -> void:
 		WorldState.bloodspeaker_cells.append(cell)
 	WorldState.next_cell_id[0] = result.get("next_cell_id", 1)
 
+	var bootstrap_okiyas: Array = result.get("active_okiyas", [])
+	WorldState.active_okiyas.clear()
+	for okiya: OkiyaData in bootstrap_okiyas:
+		WorldState.active_okiyas.append(okiya)
+	WorldState.next_okiya_id[0] = result.get("next_okiya_id", 1)
+
 	var bs_insurgencies: Array = result.get("bloodspeaker_insurgencies", [])
 	for ins: InsurgencyData in bs_insurgencies:
 		WorldState.insurgencies.append(ins)
@@ -201,6 +207,34 @@ func _bootstrap_fresh_world() -> void:
 
 	var togashi_ws: Dictionary = _build_togashi_bootstrap_state(result)
 	TogashiOversight.initialize_from_world_state(WorldState.togashi_state, togashi_ws)
+
+	# Generate world-start canonized theater pieces per GDD s57.22.9-10
+	var canon_pieces: Array[TheaterPieceData] = TheaterSystem.generate_canonized_pieces(
+		dice, WorldState.next_piece_id, WorldState.time_system.current_tick,
+	)
+	WorldState.theater_pieces.clear()
+	for piece: TheaterPieceData in canon_pieces:
+		WorldState.theater_pieces.append(piece)
+
+	# Seed world-start paintings per GDD s57.27
+	var initial_paintings: Array = PaintingSystem.generate_world_start_paintings(
+		WorldState.settlements, WorldState.next_painting_id, dice,
+	)
+	WorldState.active_paintings.clear()
+	for painting: PaintingData in initial_paintings:
+		WorldState.active_paintings.append(painting)
+
+	# Seed world-start ikebana arrangements per GDD s57.29.11
+	var initial_arrangements: Array[IkebanaArrangementData] = IkebanaSystem.generate_initial_arrangements(
+		WorldState.characters,
+		WorldState.settlements,
+		dice,
+		WorldState.next_arrangement_id,
+		WorldState.time_system.current_tick,
+	)
+	WorldState.active_arrangements.clear()
+	for arr: IkebanaArrangementData in initial_arrangements:
+		WorldState.active_arrangements.append(arr)
 
 	_save_world_state()
 	print("[SimulationScheduler] World bootstrapped: %d characters, %d provinces, %d settlements, %d cells." % [

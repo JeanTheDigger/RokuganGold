@@ -20,9 +20,12 @@ const ESCAPE_TN_PER_HALF_PU: int = 2
 const ESCAPE_CRITICAL_MARGIN: int = 10
 const ESCAPE_MIN_STEALTH: int = 3
 
-const HARMED_HOSTAGE_HONOR_LOSS: float = 0.0
-const ESCAPE_FAMILY_HONOR_LOSS: float = 0.0
-const ESCAPE_CRITICAL_FAMILY_HONOR_LOSS: float = 0.0
+const HARMED_HOSTAGE_HONOR_LOSS: float = -3.0          # "catastrophic" — locked s22.9a
+const ESCAPE_FAMILY_HONOR_LOSS: float = -1.0           # "significant" — locked s22.9a
+const ESCAPE_CRITICAL_FAMILY_HONOR_LOSS: float = -2.0  # clean escape embarrassment — locked s22.9a
+
+const YU_CAPTURE_LIKELIHOOD: float = 0.5    # 50% captured vs die fighting — locked s22.9a
+const ISHI_CAPTURE_LIKELIHOOD: float = 0.3  # 30% captured, 70% die rather than submit — locked s22.9a
 
 const LEVERAGE_RANK3: int = 3
 const LEVERAGE_RANK5: int = 8
@@ -74,9 +77,9 @@ static func get_capture_likelihood_modifier(
 	shourido_virtue: Enums.ShouridoVirtue,
 ) -> float:
 	if bushido_virtue == Enums.BushidoVirtue.YU:
-		return 0.0
+		return YU_CAPTURE_LIKELIHOOD
 	if shourido_virtue == Enums.ShouridoVirtue.ISHI:
-		return 0.0
+		return ISHI_CAPTURE_LIKELIHOOD
 	return 1.0
 
 

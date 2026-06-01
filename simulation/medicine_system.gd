@@ -125,9 +125,9 @@ static func evaluate_refusal(
 	if disp <= -50:
 		return true
 
-	# Non-humans: simplified rule — refuse only at Rival or worse disposition.
+	# Non-humans: simplified rule — refuse at Rival or worse (disp <= −10 per s57.31.3b).
 	if _is_non_human(target):
-		return disp < -10
+		return disp <= -10
 
 	var wound_level: Enums.WoundLevel = CharacterStats.get_wound_level(target)
 
@@ -177,9 +177,9 @@ static func _disposition_modifier(target: L5RCharacterData, healer_id: int) -> i
 		return -5
 	if disp >= 0:
 		return 0
-	if disp >= -25:
+	if disp >= -24:   # Rival: −10 to −24 (GDD s57.31.3b)
 		return 10
-	if disp >= -50:
+	if disp >= -50:   # Enemy: −25 to −49
 		return 20
 	return STRONG_ENEMY_PRESSURE  # already handled above, but safe fallback
 
@@ -220,14 +220,22 @@ static func treat_wound(
 
 	var tn: int = BASE_TN + tn_bonus
 
+	# Senbazuru Healing Free Raises (s57.26.17 second effect): consume pending FRs
+	# granted at presentation. Cleared after the roll fires (one-shot per senbazuru).
+	var healing_fr_flat: int = target.pending_healing_fr * 5
+
 	# Medicine / Intelligence skill check.
 	var check: Dictionary = SkillResolver.resolve_skill_check(
 		healer, dice, "Medicine", tn, raises, emphasis,
 		Enums.Trait.INTELLIGENCE,
+		0,             # bonus_rolled
+		0,             # bonus_kept
+		healing_fr_flat,
 	)
 
 	# Daily limit and kit charge apply regardless of success.
 	target.last_medicine_treatment_ic_day = ic_day
+	target.pending_healing_fr = 0
 	consume_kit_charge(healer)
 
 	var result: Dictionary = {

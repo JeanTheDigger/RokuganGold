@@ -561,7 +561,7 @@ const BUGEI_POOL: Array[String] = [
 
 const HIGH_POOL: Array[String] = [
 	"Acting", "Calligraphy", "Courtier", "Divination", "Etiquette",
-	"Games: Go", "Investigation", "Lore: History", "Lore: Theology",
+	"Games: Go", "Games: Letters", "Investigation", "Lore: History", "Lore: Theology",
 	"Medicine", "Meditation", "Perform: Storytelling", "Sincerity",
 	"Spellcraft", "Tea Ceremony",
 ]
@@ -580,7 +580,7 @@ const ALL_SKILL_POOL: Array[String] = [
 	"Iaijutsu", "Jiujutsu", "Kenjutsu", "Kyujutsu", "Spears",
 	"Polearms", "Heavy Weapons", "Knives", "War Fan", "Staves",
 	"Acting", "Calligraphy", "Courtier", "Divination", "Etiquette",
-	"Games: Go", "Investigation", "Lore: History", "Lore: Theology",
+	"Games: Go", "Games: Letters", "Investigation", "Lore: History", "Lore: Theology",
 	"Medicine", "Meditation", "Perform: Storytelling", "Sincerity",
 	"Tea Ceremony", "Commerce", "Animal Handling", "Intimidation",
 	"Stealth",

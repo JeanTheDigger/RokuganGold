@@ -36,28 +36,12 @@ func test_rokuyo_name_taian():
 	assert_eq(FestivalSystem.get_rokuyo_name(5), "Taian")
 
 
-func test_taian_bonus_on_taian_day():
-	assert_eq(FestivalSystem.get_taian_bonus(5), 1)
+func test_is_taian_on_taian_day():
+	assert_true(FestivalSystem.is_taian(5))
 
 
-func test_taian_bonus_on_non_taian_day():
-	assert_eq(FestivalSystem.get_taian_bonus(1), 0)
-
-
-func test_butsumetsu_inauspicious():
-	assert_true(FestivalSystem.is_inauspicious_for_social(4))
-
-
-func test_tomobiki_inauspicious():
-	assert_true(FestivalSystem.is_inauspicious_for_social(2))
-
-
-func test_taian_not_inauspicious():
-	assert_false(FestivalSystem.is_inauspicious_for_social(5))
-
-
-func test_sensho_not_inauspicious():
-	assert_false(FestivalSystem.is_inauspicious_for_social(1))
+func test_is_taian_on_non_taian_day():
+	assert_false(FestivalSystem.is_taian(1))
 
 
 # -- Calendar helper tests ----------------------------------------------------
@@ -162,12 +146,27 @@ func test_labor_halt_after_chrysanthemum():
 
 
 func test_marriage_bonus_day():
-	# Month 11, day 9 → IC day (10*30)+9 = 309
-	assert_true(FestivalSystem.is_marriage_bonus_day(309))
+	# Month 9 (Boar), day 9 → IC day (8*30)+9 = 249
+	assert_true(FestivalSystem.is_marriage_bonus_day(249))
 
 
 func test_not_marriage_bonus_day():
 	assert_false(FestivalSystem.is_marriage_bonus_day(100))
+
+
+func test_river_of_stars_fires_on_month9_day9():
+	# GDD s11.5: "9th day of the Boar, Winter" — Boar = month 9
+	# IC day (8*30)+9 = 249
+	var active: Array = FestivalSystem.get_active_festivals(249)
+	var names: Array = active.map(func(f): return f["name"])
+	assert_true("Festival of the River of Stars" in names)
+
+
+func test_river_of_stars_does_not_fire_on_old_month11_day9():
+	# Confirm old incorrect date (month 11, day 9 = IC day 309) no longer triggers it
+	var active: Array = FestivalSystem.get_active_festivals(309)
+	var names: Array = active.map(func(f): return f["name"])
+	assert_false("Festival of the River of Stars" in names)
 
 
 # -- Festival effects tests ---------------------------------------------------
@@ -205,23 +204,20 @@ func test_lion_honor_not_counted_as_generic_honor_gain():
 	assert_eq(gain, 0.0)
 
 
-func test_glory_gain_ning_panchiman_disabled():
-	# Ning Panchiman day set to -1 (GDD gives month but not day).
-	# martial_glory gain also disabled (0.0). No glory on any day.
+func test_glory_gain_ning_panchiman_no_active_day():
+	# Ning Panchiman day set to -1 (GDD gives month but not day) — no active festival.
 	var fest: Dictionary = {}
 	for f: Dictionary in FestivalSystem.CANONICAL_FESTIVALS:
 		if f["name"] == "Ning Panchiman":
 			fest = f
 			break
 	assert_eq(fest["day"], -1)
-	# Even if a festival were active, martial_glory yields 0.0
 	var gain := FestivalSystem.get_glory_gain_festivals(105)
 	assert_eq(gain, 0.0)
 
 
-func test_glory_gain_poetry_exchange_disabled():
-	# Festival of Leaves day set to -1 (GDD gives month but not day).
-	# poetry_exchange glory gain also yields 0.0 (disabled formula).
+func test_glory_gain_festival_of_leaves_no_active_day():
+	# Festival of Leaves day set to -1 (GDD gives month but not day) — no active festival.
 	var fest: Dictionary = {}
 	for f: Dictionary in FestivalSystem.CANONICAL_FESTIVALS:
 		if f["name"] == "Festival of Leaves":
@@ -279,19 +275,18 @@ func test_resolve_championship_empty():
 
 
 func test_resolve_championship_single_candidate():
+	# With null dice, all stages score 0; winner is the only candidate.
 	var candidates: Array = [
 		_make_candidate(1, {"Athletics": 3, "Kenjutsu": 3, "Etiquette": 2},
 			{"strength": 3, "agility": 3, "intelligence": 3}),
 	]
 	var result := FestivalSystem.resolve_championship(candidates, null)
 	assert_eq(result["winner_id"], 1)
-	# Scoring formula disabled (GDD says actual dice rolls, not derived formula)
 	assert_eq(result["winning_score"], 0)
 
 
-func test_resolve_championship_scoring_disabled_honor_tiebreak():
-	# Scoring formula disabled — both candidates score 0.
-	# Winner determined by honor tiebreak (candidate 1 has default 3.0).
+func test_resolve_championship_null_dice_equal_scores_honor_tiebreak():
+	# With null dice all candidates score 0; first candidate wins equal-honor tiebreak.
 	var candidates: Array = [
 		_make_candidate(1, {"Athletics": 5, "Kenjutsu": 5, "Etiquette": 5},
 			{"strength": 4, "agility": 4, "intelligence": 4}),
@@ -299,13 +294,12 @@ func test_resolve_championship_scoring_disabled_honor_tiebreak():
 			{"strength": 2, "agility": 2, "intelligence": 2}),
 	]
 	var result := FestivalSystem.resolve_championship(candidates, null)
-	# Both score 0; candidate 1 wins because it's first with equal honor (both 3.0)
 	assert_eq(result["winner_id"], 1)
 	assert_eq(result["winning_score"], 0)
 
 
 func test_resolve_championship_honor_tiebreak():
-	# Scoring disabled — both score 0. Honor tiebreak picks candidate 2 (7.0 > 5.0).
+	# With null dice both score 0; honor tiebreak picks candidate 2 (7.0 > 5.0).
 	var candidates: Array = [
 		_make_candidate(1, {"Athletics": 3, "Kenjutsu": 3, "Etiquette": 3},
 			{"strength": 3, "agility": 3, "intelligence": 3}, 5.0),
@@ -315,6 +309,81 @@ func test_resolve_championship_honor_tiebreak():
 	var result := FestivalSystem.resolve_championship(candidates, null)
 	assert_eq(result["winner_id"], 2)
 	assert_eq(result["winning_score"], 0)
+
+
+func test_resolve_championship_with_dice_nonzero_score():
+	var dice := DiceEngine.new(42)
+	var candidates: Array = [
+		_make_candidate(1, {"Athletics": 3, "Kenjutsu": 3, "Etiquette": 2},
+			{"strength": 3, "agility": 3, "intelligence": 3}),
+	]
+	var result := FestivalSystem.resolve_championship(candidates, dice)
+	assert_true(result["winning_score"] > 0)
+	assert_eq(result["winner_id"], 1)
+
+
+func test_resolve_championship_with_dice_better_candidate_wins():
+	# Candidate 1 rolls 10k5 per stage; candidate 2 rolls 1k1 per stage.
+	# Candidate 1 should overwhelmingly win with any reasonable seed.
+	var dice := DiceEngine.new(42)
+	var candidates: Array = [
+		_make_candidate(1, {"Athletics": 5, "Kenjutsu": 5, "Etiquette": 5},
+			{"strength": 5, "agility": 5, "intelligence": 5}),
+		{
+			"character_id": 2,
+			"championship": FestivalSystem.ChampionshipType.TOPAZ,
+			"skill_ranks": {},
+			"traits": {"strength": 1, "agility": 1, "intelligence": 1},
+			"honor": 3.0,
+		},
+	]
+	var result := FestivalSystem.resolve_championship(candidates, dice)
+	assert_eq(result["winner_id"], 1)
+
+
+func test_resolve_championship_jade_elemental_ring():
+	# Jade stage 3 uses highest ring. Air = min(reflexes=4, awareness=4) = 4.
+	var dice := DiceEngine.new(42)
+	var candidates: Array = [{
+		"character_id": 1,
+		"championship": FestivalSystem.ChampionshipType.JADE,
+		"skill_ranks": {"Spellcraft": 3, "Lore: Theology": 3},
+		"traits": {
+			"intelligence": 3, "reflexes": 4, "awareness": 4,
+			"agility": 2, "perception": 2, "strength": 1,
+			"stamina": 2, "willpower": 2, "void_ring": 2,
+		},
+		"honor": 3.0,
+	}]
+	var result := FestivalSystem.resolve_championship(candidates, dice)
+	assert_true(result["winning_score"] > 0)
+	assert_eq(result["winner_id"], 1)
+
+
+func test_resolve_championship_turquoise_artisan_subskill():
+	# Turquoise stage 1 picks best "Artisan: *" sub-skill (Artisan: Painting = 4).
+	var dice := DiceEngine.new(42)
+	var candidates: Array = [{
+		"character_id": 1,
+		"championship": FestivalSystem.ChampionshipType.TURQUOISE,
+		"skill_ranks": {"Artisan: Painting": 4, "Etiquette": 3},
+		"traits": {"awareness": 3},
+		"honor": 3.0,
+	}]
+	var result := FestivalSystem.resolve_championship(candidates, dice)
+	assert_true(result["winning_score"] > 0)
+	assert_eq(result["winner_id"], 1)
+
+
+func test_resolve_championship_topaz_or_skill_options():
+	# Topaz stage 2 accepts either Kenjutsu or Iaijutsu — candidate has Iaijutsu.
+	var dice := DiceEngine.new(42)
+	var candidates: Array = [
+		_make_candidate(1, {"Athletics": 3, "Iaijutsu": 4, "Etiquette": 2},
+			{"strength": 3, "agility": 3, "intelligence": 3}),
+	]
+	var result := FestivalSystem.resolve_championship(candidates, dice)
+	assert_true(result["winning_score"] > 0)
 
 
 func test_resolve_championship_returns_topic_tier_4():
@@ -473,3 +542,50 @@ func test_canonical_days_cache_populated():
 	var days: Array = FestivalSystem._get_canonical_days()
 	assert_true(days.size() > 0)
 	assert_true(days.size() <= FestivalSystem.CANONICAL_FESTIVALS.size())
+
+
+# -- Dated festival tests (GDD month-boundary dates) -------------------------
+
+func test_lotus_blossoms_on_month4_day30():
+	# Horse/Goat month boundary = month 4, day 30 → IC day (3*30)+30 = 120
+	var fests := FestivalSystem.get_active_festivals(120)
+	var names: Array = []
+	for f in fests:
+		names.append(f["name"])
+	assert_true(names.has("Lotus Blossoms"))
+
+
+func test_kumitae_tournament_on_month8_day30():
+	# Dog/Boar month boundary = month 8, day 30 → IC day (7*30)+30 = 240
+	var fests := FestivalSystem.get_active_festivals(240)
+	var names: Array = []
+	for f in fests:
+		names.append(f["name"])
+	assert_true(names.has("Kumitae Tournament"))
+
+
+func test_devil_chase_on_month12_day30():
+	# Tiger/Hare month boundary (Late Winter) = month 12, day 30 → IC day (11*30)+30 = 360
+	var fests := FestivalSystem.get_active_festivals(360)
+	var names: Array = []
+	for f in fests:
+		names.append(f["name"])
+	assert_true(names.has("Devil Chase"))
+
+
+func test_lotus_blossoms_glory_gain():
+	# Month 4, day 30 → IC day 120 — poetry_exchange yields +0.1 Glory per GDD s11.5
+	var gain := FestivalSystem.get_glory_gain_festivals(120)
+	assert_eq(gain, 0.1)
+
+
+func test_kumitae_tournament_glory_gain():
+	# Month 8, day 30 → IC day 240 — martial_glory yields +0.1 Glory per GDD s11.5
+	var gain := FestivalSystem.get_glory_gain_festivals(240)
+	assert_eq(gain, 0.1)
+
+
+func test_devil_chase_no_glory_gain():
+	# Devil Chase has "taint_assessment" effect, not martial_glory or poetry_exchange.
+	var gain := FestivalSystem.get_glory_gain_festivals(360)
+	assert_eq(gain, 0.0)

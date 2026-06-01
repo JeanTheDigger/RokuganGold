@@ -52,7 +52,7 @@ const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"DISPATCH_COURTIER",
 	"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 	"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
-	"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION",
+	"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION", "DISSOLVE_MARRIAGE",
 	"PURIFY_TAINTED_GROUND", "FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
 	"DECLARE_WAR",
 	"COMPLY_WITH_EDICT", "DEFY_EDICT",
@@ -71,6 +71,7 @@ const SELF_ACTIONS: Array[String] = [
 const NO_ROLL_ACTIONS: Array[String] = [
 	"DO_NOTHING", "REST", "BEGIN_TRAVEL", "CHANGE_DESTINATION",
 	"REQUEST_ART", "OFFER_ART_COMMISSION", "DISPLAY_BONSAI",
+	"PLACE_SHIDE",
 ]
 
 # -- TN Table -----------------------------------------------------------------
@@ -247,6 +248,9 @@ static func execute(
 	if action_id == "ARRANGE_MARRIAGE":
 		return _execute_arrange_marriage(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "DISSOLVE_MARRIAGE":
+		return _execute_dissolve_marriage(action, character, ctx, characters_by_id)
+
 	if action_id == "PERFORM_WORSHIP":
 		return _execute_perform_worship(action, character, ctx, dice_engine)
 
@@ -342,8 +346,36 @@ static func execute(
 			"effects": mentor_result,
 		}
 
+	if action_id == "PETITION_RONIN":
+		return _execute_petition_ronin(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "ACCEPT_RONIN_PETITION":
+		return _execute_accept_ronin_petition(action, character, ctx, characters_by_id)
+
+	if action_id == "HIRE_RONIN":
+		return _execute_hire_ronin(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "PERFORM_CLAN_INDUCTION":
+		return _execute_perform_clan_induction(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "APPROVE_CLAN_INDUCTION":
+		return _execute_approve_clan_induction(action, character, ctx, characters_by_id)
+
+	if action_id == "TERMINATE_CONTRACT":
+		return _execute_terminate_contract(action, character, ctx, characters_by_id)
+
 	if action_id == "CRAFT":
 		return _execute_craft(action, character, ctx, dice_engine)
+
+	if action_id == "DECLARE_SENBAZURU":
+		return _execute_declare_senbazuru(action, character, ctx)
+
+	if action_id == "PRESENT_SENBAZURU":
+		return _execute_present_senbazuru(action, character, ctx)
+
+	if action_id in ["COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
+			"PERFORM_THEATER_PIECE", "DEDICATE_PIECE"]:
+		return _execute_theater_action(action_id, action, character, ctx, dice_engine)
 
 	if action_id == "INVOKE_FAVOR":
 		return _execute_invoke_favor(action, character, ctx)
@@ -396,6 +428,33 @@ static func execute(
 				"reason": "already_atoned",
 				"effects": {},
 			}
+
+	if action_id in ["REQUEST_ART", "OFFER_ART_COMMISSION"]:
+		return _execute_garden_commission_action(action, character, ctx)
+
+	if action_id == "CULTIVATE_GARDEN":
+		return _execute_cultivate_garden(action, character, ctx, dice_engine)
+
+	if action_id == "MAINTAIN_GARDEN":
+		return _execute_maintain_garden(action, character, ctx, dice_engine)
+
+	if action_id == "COLLECT_BONSAI_SPECIMEN":
+		return _execute_collect_bonsai_specimen(action, character, ctx, dice_engine)
+
+	if action_id == "TEND_BONSAI":
+		return _execute_tend_bonsai(action, character, ctx, dice_engine)
+
+	if action_id == "DISPLAY_BONSAI":
+		return _execute_display_bonsai(action, character, ctx)
+
+	if action_id == "PLACE_SHIDE":
+		return _execute_place_shide(action, character, ctx, characters_by_id)
+
+	if action_id in ["COMPOSE_PAINTING", "DISPLAY_PAINTING", "PRESENT_EMAKIMONO"]:
+		return _execute_painting_action(action_id, action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "COMPOSE_SCULPTURE":
+		return _execute_compose_sculpture(action, character, ctx, dice_engine)
 
 	if action_id in NO_ROLL_ACTIONS:
 		return _execute_no_roll(action, character, ctx)
@@ -462,9 +521,27 @@ static func _try_execute_deliver_gift(
 	var subtype: int = gift_item.get("gift_subtype", -1)
 	var history_bonus: int = gift_item.get("history_point_bonus", 0)
 
+	# Noshi wrapping bonus (s57.26.6–57.26.8): scan for best noshi in inventory.
+	var noshi_item_id: int = -1
+	var noshi_is_mundane: bool = false
+	for _noshi: Dictionary in character.items:
+		if _noshi.get("item_type", "") == "noshi":
+			var _nt: int = _noshi.get("quality_tier", 0)
+			if not noshi_is_mundane or _nt > 0:
+				history_bonus += maxi(0, _nt - 1)  # FR = quality_tier - 1 (0 for Mundane)
+				noshi_is_mundane = _noshi.get("is_mundane", false)
+				noshi_item_id = _noshi.get("item_id", -1)
+			break
+
+	# Mantis figurine bonus: +3 FR when recipient is Mantis Clan (GDD s57.28 section H).
+	if recipient.clan == "Mantis" and gift_item.get("item_type", "") == "figurine":
+		history_bonus += SculptureSystem.MANTIS_FIGURINE_FR_BONUS
+
+	# Noshi mundane penalty (s57.26.8): -1k0 on the gift delivery roll.
+	var noshi_keep_mod: int = -1 if noshi_is_mundane else 0
 	var gift_result: Dictionary = GiftGivingSystem.resolve_deliver_gift(
 		character, recipient, tier, subtype, archetype, dice_engine, ctx.ic_day,
-		history_bonus,
+		history_bonus, noshi_keep_mod,
 	)
 
 	var outcome: String = gift_result.get("outcome", "")
@@ -480,6 +557,8 @@ static func _try_execute_deliver_gift(
 		"gift_tier": tier,
 		"gift_subtype": subtype,
 		"gift_free_raises": gift_result.get("free_raises_applied", 0),
+		"noshi_item_id": noshi_item_id,
+		"noshi_is_mundane": noshi_is_mundane,
 		# Preserve generic-social effect keys so downstream consumers that read
 		# disposition_change uniformly still see something — but for gifts the
 		# value lives on the recipient side.
@@ -516,8 +595,14 @@ static func _execute_no_roll(
 ) -> Dictionary:
 	var effects: Dictionary = _get_no_roll_effects(action.action_id)
 
-	if action.action_id == "TRAIN" and ctx.festival_glory_martial > 0.001:
-		effects["glory_change"] = ctx.festival_glory_martial
+	if action.action_id == "TRAIN":
+		# s48: solo training applies 50 progress per AP to the character's
+		# highest-priority training target. Locked in s48a A48a-4.
+		var train_result: Dictionary = NPCAdvancement.apply_solo_training_progress(character)
+		effects["training_result"] = train_result
+		effects["effect"] = "trained" if not train_result.get("reason", "") == "nothing_to_train" else "nothing_to_train"
+		if ctx.festival_glory_martial > 0.001:
+			effects["glory_change"] = ctx.festival_glory_martial
 
 	if action.action_id == "BEGIN_TRAVEL":
 		var destination: String = _resolve_travel_destination(action)
@@ -559,8 +644,15 @@ static func _execute_public_performance(
 	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 	var fatigue_count: int = character.pieces_seen.get("_performance_count_today", 0)
 
+	# Garden synergy (s57.29.6): ikebana artisans gain Free Raises from a local garden.
+	var garden_fr: int = 0
+	var garden_id: int = -1
+	if art_form == PerformativeArtsSystem.ArtForm.IKEBANA:
+		garden_fr = ctx.known_objectives.get("ikebana_garden_fr", 0)
+		garden_id = ctx.known_objectives.get("ikebana_garden_id", -1)
+
 	var perf_result: Dictionary = PerformativeArtsSystem.resolve_public_performance(
-		character, art_form, witness_ids, dice_engine, fatigue_count
+		character, art_form, witness_ids, dice_engine, fatigue_count, garden_fr,
 	)
 
 	PerformativeArtsSystem.apply_performance_effects(character, perf_result, characters_by_id)
@@ -589,6 +681,11 @@ static func _execute_public_performance(
 			"art_form": art_form,
 			"raises": perf_result.get("raises", 0),
 			"performance_applied": true,
+			"garden_id": garden_id,
+			"fulfills_request_id": action.metadata.get("fulfills_request_id", -1),
+			"requesting_lord_id": action.metadata.get("requesting_lord_id", -1),
+			"venue_mode": action.metadata.get("venue_mode", "public"),
+			"fatigue_multiplier": PerformativeArtsSystem.get_fatigue_multiplier(fatigue_count),
 		},
 	}
 
@@ -606,6 +703,7 @@ static func _execute_perform_for(
 	if recipient == null:
 		return _execute_no_roll(action, character, ctx)
 
+	var fatigue_count: int = character.pieces_seen.get("_performance_count_today", 0)
 	var perf_result: Dictionary = PerformativeArtsSystem.resolve_perform_for(
 		character, recipient, art_form, dice_engine
 	)
@@ -634,6 +732,10 @@ static func _execute_perform_for(
 			"art_form": art_form,
 			"raises": perf_result.get("raises", 0),
 			"performance_applied": true,
+			"fulfills_request_id": action.metadata.get("fulfills_request_id", -1),
+			"requesting_lord_id": action.metadata.get("requesting_lord_id", -1),
+			"venue_mode": action.metadata.get("venue_mode", "private"),
+			"fatigue_multiplier": PerformativeArtsSystem.get_fatigue_multiplier(fatigue_count),
 		},
 	}
 
@@ -687,7 +789,9 @@ static func _execute_intimidation(
 
 	var effects: Dictionary = {
 		"disposition_change": -(3 + int(clampi(attacker_roll - defender_roll, 0, 25) / 5)) if r["success"] else 0,
-		"honor_change": CrimeSystem.get_low_skill_honor_cost(character, "Intimidation"),
+		# GDD s12.9 specifies exact honor costs per type (blackmail=-0.3, private=-0.2, public=-0.3),
+		# applied regardless of success. Use the value returned by the resolve function.
+		"honor_change": r.get("honor_loss", 0.0),
 		"infamy_gain": r.get("infamy_gain", 0.0),
 		"compliance_active": r.get("compliance_active", false),
 	}
@@ -1472,7 +1576,10 @@ static func _apply_effects(
 	else:
 		effects = _compute_failure_effects(action_id, result.get("margin", 0))
 
-	if action_id == "WRITE_LETTER" and result.get("success", false) and ctx.festival_glory_poetry > 0.001:
+	# Poetry festival glory — s57.30.6: only for poem-letters (attached_poem_item_id set).
+	if action_id == "WRITE_LETTER" and result.get("success", false) \
+			and ctx.festival_glory_poetry > 0.001 \
+			and action.metadata.get("attach_poem_item_id", -1) >= 0:
 		effects["glory_change"] = effects.get("glory_change", 0.0) + ctx.festival_glory_poetry
 
 	# Commerce stigma (s57.40): fires on public Commerce rolls regardless of success
@@ -1600,7 +1707,8 @@ static func _compute_military_effects(action_id: String, action: NPCDataStructur
 	return {"effect": "military_order_issued"}
 
 
-# PROVISIONAL: Disposition threshold reuses feasibility ledger constant (31).
+# GDD s12.2 LOCKED: Friend tier = +31 to +60. Lords accept allied aid from characters
+# at Friend tier or above — the threshold where genuine mutual trust exists.
 const ALLIED_AID_ACCEPT_THRESHOLD: int = 31
 
 const RESOURCE_PROMISE_NEED_TYPES: Array[String] = [
@@ -1905,9 +2013,32 @@ static func _execute_perform_worship(
 
 	var location_type: String = action.metadata.get("location_type", "roadside_shrine")
 
+	# Gohei Free Raises (s57.26.12–57.26.13): scan for highest-quality gohei.
+	var gohei_item_id: int = -1
+	var gohei_fr: int = 0
+	var best_gohei_tier: int = -1
+	for _g: Dictionary in character.items:
+		if _g.get("item_type", "") == "gohei" and _g.get("uses_remaining", 0) > 0:
+			var _gt: int = _g.get("quality_tier", 0)
+			if _gt > best_gohei_tier:
+				best_gohei_tier = _gt
+				gohei_item_id = _g.get("item_id", -1)
+	if gohei_item_id >= 0:
+		gohei_fr = maxi(0, best_gohei_tier - 1)
+
+	# Aggregate all external artisan worship FRs with cap of 5 (s57.28 section C / s57.27.11 / s57.26.10,13 / s57.29.9).
+	# Only effective for shugenja (non-shugenja don't roll); injected per character by context builder.
+	var statuary_fr: int = action.metadata.get("statuary_worship_fr", 0)
+	var guardian_fr: int = action.metadata.get("guardian_worship_fr", 0)
+	var ikebana_fr: int = action.metadata.get("ikebana_worship_fr", 0)
+	var painting_fortune_fr: int = action.metadata.get("painting_fortune_fr", 0)
+	var shide_fr: int = action.metadata.get("shide_worship_fr", 0)
+	const WORSHIP_FR_CAP: int = 5
+	var total_artisan_fr: int = mini(gohei_fr + statuary_fr + guardian_fr + ikebana_fr + painting_fortune_fr + shide_fr, WORSHIP_FR_CAP)
+
 	var worship_result: Dictionary = WorshipSystem.resolve_active_worship(
 		char_type, is_shugenja, dice_engine, ring_value, theology_rank,
-		location_type, directed_fortune,
+		location_type, directed_fortune, total_artisan_fr,
 	)
 
 	var province_id: int = action.target_province_id
@@ -1929,6 +2060,8 @@ static func _execute_perform_worship(
 			"province_id": province_id,
 			"wp_distribution": worship_result.get("wp_distribution", {}),
 			"total_wp": worship_result.get("total_wp", 0.0),
+			"gohei_item_id": gohei_item_id,
+			"gohei_fr": gohei_fr,
 			"bonus_wp": worship_result.get("bonus_wp", 0.0),
 			"directed": worship_result.get("directed", false),
 			"honor_change": honor_bonus,
@@ -2137,8 +2270,12 @@ static func _execute_fortify_wall_section(
 		}
 
 	var tn: int = WallSystem.get_fortify_tn(si)
+	# s57.41.1: Engineering Rank 5 mastery grants +5 flat bonus on cumulative rolls.
+	var eng_rank: int = character.skills.get("Engineering", 0)
+	var mastery_bonus: int = 5 if eng_rank >= 5 else 0
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
-		character, dice_engine, "Engineering", tn
+		character, dice_engine, "Engineering", tn,
+		0, "", Enums.Trait.NONE, 0, 0, mastery_bonus
 	)
 	var success: bool = roll_result.get("success", false)
 	var margin: int = roll_result.get("margin", 0)
@@ -2498,6 +2635,7 @@ static func _execute_examine_crime_scene(
 			"suspect_found": exam_result.get("suspect_found", -1),
 			"raises": exam_result.get("raises", 0),
 			"threshold_crossed": exam_result.get("threshold_crossed", ""),
+			"roll_total": exam_result.get("roll_total", 0),
 		},
 	}
 
@@ -2946,6 +3084,484 @@ static func _compute_blockade_effects(action: NPCDataStructures.ScoredAction) ->
 
 # -- Governance Actions --------------------------------------------------------
 
+static func _execute_petition_ronin(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var lord_id: int = action.metadata.get("target_lord_id", action.target_npc_id)
+	var ic_day: int = ctx.ic_day
+
+	if lord_id < 0:
+		return {
+			"success": false,
+			"action_id": "PETITION_RONIN",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "no_lord_present",
+			"effects": {},
+		}
+
+	# Per-lord cooldown check: failed rolls set a per-lord key (s52.5 A46).
+	var cooldown_key: String = "petition_refused_until_%d" % lord_id
+	var refused_until: int = character.supply_ledger.get(cooldown_key, -1)
+	if refused_until >= 0 and ic_day < refused_until:
+		return {
+			"success": false,
+			"action_id": "PETITION_RONIN",
+			"character_id": character.character_id,
+			"target_npc_id": lord_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "petition_cooldown",
+			"effects": {},
+		}
+
+	var target_lord: L5RCharacterData = characters_by_id.get(lord_id) as L5RCharacterData
+	if target_lord == null or CharacterStats.is_dead(target_lord):
+		return {
+			"success": false,
+			"action_id": "PETITION_RONIN",
+			"character_id": character.character_id,
+			"target_npc_id": lord_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "lord_unavailable",
+			"effects": {},
+		}
+
+	var lord_disp: int = int(ctx.disposition_values.get(lord_id, 0))
+	var known_crimes: Array = []  # TODO: wire via ctx when crime-knowledge system exposes this
+	if RoninSystem.lord_auto_rejects(target_lord, character, lord_disp, known_crimes):
+		# Auto-rejection: lord refuses to grant an audience. No roll was made,
+		# so no roll-failure consequences apply (s52.5 Part B — penalties are for failed rolls).
+		return {
+			"success": false,
+			"action_id": "PETITION_RONIN",
+			"character_id": character.character_id,
+			"target_npc_id": lord_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "auto_rejected",
+			"effects": {},
+		}
+
+	var petition_result: Dictionary = RoninSystem.resolve_petition(
+		character, target_lord, dice_engine, lord_disp
+	)
+	var margin: int = petition_result.get("margin", 0)
+	var presentation_modifier: int = petition_result.get("presentation_modifier", 0)
+	var effective_disp: int = lord_disp + presentation_modifier
+	var accepted: bool = petition_result.get("success", false) and effective_disp >= 0
+
+	if accepted:
+		return {
+			"success": true,
+			"action_id": "PETITION_RONIN",
+			"character_id": character.character_id,
+			"target_npc_id": lord_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"effects": {
+				"requires_ronin_acceptance": true,
+				"accepting_lord_id": lord_id,
+				"ronin_id": character.character_id,
+				"margin": margin,
+			},
+		}
+	else:
+		# Failed roll: -3 disposition on lord, 90-day per-lord cooldown (s52.5 Part B, A45–A46).
+		return {
+			"success": false,
+			"action_id": "PETITION_RONIN",
+			"character_id": character.character_id,
+			"target_npc_id": lord_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "petition_refused",
+			"effects": {
+				"failed": true,
+				"petition_refused_until": ic_day + RoninSystem.PETITION_COOLDOWN_DAYS,
+				"recipient_disposition_change": RoninSystem.PETITION_FAILURE_DISPOSITION_PENALTY,
+				"recipient_id": lord_id,
+			},
+		}
+
+
+static func _execute_accept_ronin_petition(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var ronin_id: int = action.metadata.get("target_ronin_id", action.target_npc_id)
+	var ic_day: int = ctx.ic_day
+
+	if ronin_id < 0:
+		return {
+			"success": false,
+			"action_id": "ACCEPT_RONIN_PETITION",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "no_ronin_present",
+			"effects": {},
+		}
+
+	var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+	if ronin == null or CharacterStats.is_dead(ronin):
+		return {
+			"success": false,
+			"action_id": "ACCEPT_RONIN_PETITION",
+			"character_id": character.character_id,
+			"target_npc_id": ronin_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "ronin_unavailable",
+			"effects": {},
+		}
+
+	if not RoninSystem.is_ronin(ronin) or ronin.permanent_ronin:
+		return {
+			"success": false,
+			"action_id": "ACCEPT_RONIN_PETITION",
+			"character_id": character.character_id,
+			"target_npc_id": ronin_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "not_eligible",
+			"effects": {},
+		}
+
+	# Lord must have positive or neutral disposition toward the ronin.
+	var lord_disp: int = 0
+	for disp_key: Variant in character.disposition_values:
+		if int(disp_key) == ronin_id:
+			lord_disp = int(character.disposition_values[disp_key])
+			break
+	if lord_disp < 0:
+		return {
+			"success": false,
+			"action_id": "ACCEPT_RONIN_PETITION",
+			"character_id": character.character_id,
+			"target_npc_id": ronin_id,
+			"ic_day": ic_day,
+			"season": ctx.season,
+			"reason": "disposition_too_low",
+			"effects": {},
+		}
+
+	return {
+		"success": true,
+		"action_id": "ACCEPT_RONIN_PETITION",
+		"character_id": character.character_id,
+		"target_npc_id": ronin_id,
+		"ic_day": ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_ronin_acceptance": true,
+			"accepting_lord_id": character.character_id,
+			"ronin_id": ronin_id,
+		},
+	}
+
+
+static func _execute_hire_ronin(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var ic_day: int = ctx.ic_day
+	var ronin_id: int = action.metadata.get("target_ronin_id", -1)
+	var contract_type: String = action.metadata.get("contract_type", "PROVINCE_DEFENSE")
+	var duration_seasons: int = int(action.metadata.get("duration_seasons", 1))
+
+	if ronin_id < 0:
+		return {
+			"success": false, "action_id": "HIRE_RONIN",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "no_ronin_present", "effects": {},
+		}
+
+	var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+	if ronin == null or CharacterStats.is_dead(ronin):
+		return {
+			"success": false, "action_id": "HIRE_RONIN",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "ronin_unavailable", "effects": {},
+		}
+	if not RoninSystem.is_ronin(ronin) or ronin.permanent_ronin:
+		return {
+			"success": false, "action_id": "HIRE_RONIN",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "not_eligible", "effects": {},
+		}
+	if ronin.supply_ledger.get("contract_end_ic_day", -1) >= 0:
+		return {
+			"success": false, "action_id": "HIRE_RONIN",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "already_contracted", "effects": {},
+		}
+
+	var lord_disp: int = int(ronin.disposition_values.get(character.character_id, 0))
+	if lord_disp <= -1:
+		return {
+			"success": false, "action_id": "HIRE_RONIN",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "ronin_dislikes_lord", "effects": {},
+		}
+
+	var payment: float = RoninSystem.get_contract_payment(contract_type, duration_seasons)
+	if character.koku < payment:
+		return {
+			"success": false, "action_id": "HIRE_RONIN",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "insufficient_koku", "effects": {},
+		}
+
+	# Courtier/Awareness vs TN 10 — confirming the lord can articulate contract terms.
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Courtier", 10, ic_day,
+	)
+	if not check.get("success", false):
+		return {
+			"success": false, "action_id": "HIRE_RONIN",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": "offer_fumbled", "effects": {},
+		}
+
+	return {
+		"success": true, "action_id": "HIRE_RONIN",
+		"character_id": character.character_id, "target_npc_id": ronin_id,
+		"ic_day": ic_day, "season": ctx.season,
+		"effects": {
+			"injects_reactive_event": true,
+			"reactive_type": "CONTRACT_OFFERED",
+			"lord_id": character.character_id,
+			"lord_status": character.status,
+			"ronin_id": ronin_id,
+			"contract_type": contract_type,
+			"duration_seasons": duration_seasons,
+			"payment": payment,
+			"current_season": ctx.season,
+		},
+	}
+
+
+static func _execute_perform_clan_induction(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var ic_day: int = ctx.ic_day
+	var ronin_id: int = action.metadata.get("target_ronin_id", -1)
+
+	# Only Provincial Daimyo or higher may sponsor induction (s52.7 Part A).
+	if character.lord_rank < Enums.LordRank.PROVINCIAL_DAIMYO:
+		return {
+			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "sponsoring_lord_rank_too_low", "effects": {},
+		}
+
+	if ronin_id < 0:
+		return {
+			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "no_ronin_present", "effects": {},
+		}
+
+	var inductee: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+	if inductee == null or CharacterStats.is_dead(inductee):
+		return {
+			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "inductee_unavailable", "effects": {},
+		}
+
+	# Koku check — must have enough before the ceremony begins.
+	if character.koku < RoninSystem.INDUCTION_KOKU_COST:
+		return {
+			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": "insufficient_koku", "effects": {},
+		}
+
+	var lord_disp: int = int(character.disposition_values.get(ronin_id, 0))
+	var eligibility: Dictionary = RoninSystem.can_be_inducted(inductee, character, lord_disp, [])
+	if not eligibility.get("eligible", false):
+		return {
+			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": eligibility.get("reason", "ineligible"), "effects": {},
+		}
+
+	# Koku deducted after eligibility confirmed (Pattern B — paid before the roll).
+	character.koku -= RoninSystem.INDUCTION_KOKU_COST
+
+	# Courtier/Awareness vs TN 20 — ceremony must be performed with proper rites.
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Courtier", 20, ic_day,
+	)
+	if not check.get("success", false):
+		return {
+			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": "ceremony_failed",
+			"effects": {"ceremony_failure_topic": true},
+		}
+
+	return {
+		"success": true, "action_id": "PERFORM_CLAN_INDUCTION",
+		"character_id": character.character_id, "target_npc_id": ronin_id,
+		"ic_day": ic_day, "season": ctx.season,
+		"effects": {
+			"inductee_id": ronin_id,
+			"daimyo_id": character.character_id,
+		},
+	}
+
+
+## Family Daimyo issues formal approval for a specific ronin's induction (s52.7 Part A).
+## No skill roll — this is an executive decision, not a social contest.
+static func _execute_approve_clan_induction(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var ic_day: int = ctx.ic_day
+	var ronin_id: int = action.metadata.get("target_ronin_id", -1)
+
+	if character.lord_rank < Enums.LordRank.FAMILY_DAIMYO:
+		return {
+			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "approver_rank_too_low", "effects": {},
+		}
+
+	if ronin_id < 0:
+		return {
+			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "no_ronin_identified", "effects": {},
+		}
+
+	var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+	if ronin == null or CharacterStats.is_dead(ronin):
+		return {
+			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "ronin_unavailable", "effects": {},
+		}
+
+	# Verify the ronin has earned sufficient deeds for this family.
+	if RoninSystem.get_deed_count(ronin, character.family) < RoninSystem.INDUCTION_DEED_THRESHOLD:
+		return {
+			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": "insufficient_deeds", "effects": {},
+		}
+
+	if RoninSystem.get_extraordinary_deed_count(ronin, character.family) < RoninSystem.INDUCTION_EXTRAORDINARY_DEED_REQUIRED:
+		return {
+			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": "no_extraordinary_deed", "effects": {},
+		}
+
+	# Disposition must be at Friend tier or above (s52.7 Part D).
+	if int(character.disposition_values.get(ronin_id, 0)) < RoninSystem.INDUCTION_MIN_DISPOSITION:
+		return {
+			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": "disposition_too_low", "effects": {},
+		}
+
+	# Prevent duplicate approvals (s52.7 Part D).
+	if int(ronin.supply_ledger.get("family_daimyo_approval", -1)) >= 0:
+		return {
+			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
+			"character_id": character.character_id, "target_npc_id": ronin_id,
+			"ic_day": ic_day, "season": ctx.season,
+			"reason": "already_approved", "effects": {},
+		}
+
+	return {
+		"success": true, "action_id": "APPROVE_CLAN_INDUCTION",
+		"character_id": character.character_id, "target_npc_id": ronin_id,
+		"ic_day": ic_day, "season": ctx.season,
+		"effects": {
+			"approve_ronin_id": ronin_id,
+			"family_daimyo_id": character.character_id,
+		},
+	}
+
+
+static func _execute_terminate_contract(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var ic_day: int = ctx.ic_day
+	var ronin_id: int = action.metadata.get("target_ronin_id", -1)
+	if ronin_id < 0:
+		return {
+			"success": false, "action_id": "TERMINATE_CONTRACT",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "no_target", "effects": {},
+		}
+	var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+	if ronin == null or CharacterStats.is_dead(ronin):
+		return {
+			"success": false, "action_id": "TERMINATE_CONTRACT",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "target_unavailable", "effects": {},
+		}
+	var contract_end: int = ronin.supply_ledger.get("contract_end_ic_day", -1)
+	if contract_end < 0:
+		return {
+			"success": false, "action_id": "TERMINATE_CONTRACT",
+			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
+			"reason": "no_active_contract", "effects": {},
+		}
+	# Compute remaining seasons for refund calculation.
+	var days_remaining: int = max(0, contract_end - ic_day)
+	var season_days: int = InvestigationSystem.DAYS_PER_SEASON
+	var remaining_seasons: int = (days_remaining + season_days - 1) / season_days
+	var contract_type: String = ronin.supply_ledger.get("contract_type", "PROVINCE_DEFENSE")
+
+	return {
+		"success": true, "action_id": "TERMINATE_CONTRACT",
+		"character_id": character.character_id, "target_npc_id": ronin_id,
+		"ic_day": ic_day, "season": ctx.season,
+		"effects": {
+			"terminate_ronin_id": ronin_id,
+			"contract_type": contract_type,
+			"remaining_seasons": remaining_seasons,
+			"current_season": ctx.season,
+			"disposition_change": RoninSystem.CONTRACT_EARLY_TERMINATION_DISPOSITION,
+		},
+	}
+
+
 static func _execute_appoint_to_position(
 	action: NPCDataStructures.ScoredAction,
 	character: L5RCharacterData,
@@ -3078,6 +3694,67 @@ static func _execute_arrange_marriage(
 	}
 
 
+static func _execute_dissolve_marriage(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var base: Dictionary = {
+		"action_id": "DISSOLVE_MARRIAGE",
+		"character_id": ctx.character_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+	}
+	if ctx.lord_rank < Enums.LordRank.FAMILY_DAIMYO:
+		base["success"] = false
+		base["reason"] = "insufficient_rank"
+		base["effects"] = {}
+		return base
+
+	var spouse_a_id: int = action.metadata.get("spouse_a_id", -1)
+	var spouse_b_id: int = action.metadata.get("spouse_b_id", -1)
+
+	if spouse_a_id < 0 or spouse_b_id < 0:
+		base["success"] = false
+		base["reason"] = "missing_metadata"
+		base["effects"] = {}
+		return base
+
+	var spouse_a: L5RCharacterData = characters_by_id.get(spouse_a_id) as L5RCharacterData
+	var spouse_b: L5RCharacterData = characters_by_id.get(spouse_b_id) as L5RCharacterData
+
+	if spouse_a == null or CharacterStats.is_dead(spouse_a):
+		base["success"] = false
+		base["reason"] = "spouse_a_not_found"
+		base["effects"] = {}
+		return base
+
+	if spouse_b == null or CharacterStats.is_dead(spouse_b):
+		base["success"] = false
+		base["reason"] = "spouse_b_not_found"
+		base["effects"] = {}
+		return base
+
+	# Pathway 4 — Imperial Decree (s57.49.7): no Honor cost, no penalties.
+	# Pathway 1 — Lord's Command: Honor cost pre-applied (Pattern B, s57.49.7).
+	var pathway: int = 1
+	if ctx.lord_rank == Enums.LordRank.IMPERIAL:
+		pathway = 4
+	else:
+		HonorGlorySystem.apply_honor_change(character, MarriageSystem.DISSOLUTION_HONOR_LOSS_LORD)
+
+	base["success"] = true
+	base["effects"] = {
+		"requires_dissolution": true,
+		"spouse_a_id": spouse_a_id,
+		"spouse_b_id": spouse_b_id,
+		"ordering_lord_id": ctx.character_id,
+		"pathway": pathway,
+	}
+	return base
+
+
 static func _find_best_marriage_candidate(
 	lord: L5RCharacterData,
 	characters_by_id: Dictionary,
@@ -3135,6 +3812,21 @@ static func _get_doshin_bonus(action_id: String, bonus_value: int) -> int:
 const _DOSHIN_ELIGIBLE_ACTIONS: Array[String] = [
 	"EXAMINE_CRIME_SCENE", "INVESTIGATE_PROVINCE", "PROBE",
 ]
+
+
+# Cipher Gap 2 (s57.30 A4): returns +1 extra rolled die if the actor holds a
+# writer_motivation KnowledgeEntry for the given target (CIPHER_INSIGHT_BONUS_DICE).
+# Applied to READ_CHARACTER and PROBE rolls so the Kitsuki insight genuinely
+# improves the attacker's dice pool.
+static func _get_cipher_insight_bonus(character: L5RCharacterData, target_id: int) -> int:
+	for entry: Variant in character.knowledge_pool:
+		if not entry is KnowledgeEntry:
+			continue
+		var ke: KnowledgeEntry = entry as KnowledgeEntry
+		if ke.entry_type == "writer_motivation" \
+				and ke.data.get("writer_id", -1) == target_id:
+			return LetterSystem.CIPHER_INSIGHT_BONUS_DICE
+	return 0
 
 
 # -- Construction Intercepts ---------------------------------------------------
@@ -3584,9 +4276,18 @@ static func _execute_read_character(
 
 	var a_skill_rank: int = character.skills.get("Investigation", 0)
 	var a_trait_val: int = character.perception
-	var attacker_roll: int = dice_engine.roll_skill_check(
-		a_trait_val, a_skill_rank, 0
-	).get("total", 0)
+	var cipher_bonus: int = _get_cipher_insight_bonus(character, target_id)
+	var attacker_roll: int
+	if cipher_bonus > 0:
+		# +1k0: one extra rolled die, same kept count (s57.30 A4)
+		attacker_roll = dice_engine.roll_check(
+			a_trait_val + a_skill_rank + cipher_bonus, a_trait_val,
+			0, 0, 0, a_skill_rank > 0
+		).get("total", 0)
+	else:
+		attacker_roll = dice_engine.roll_skill_check(
+			a_trait_val, a_skill_rank, 0
+		).get("total", 0)
 
 	var defender_roll: int = 0
 	if target != null:
@@ -3641,9 +4342,18 @@ static func _execute_probe(
 	var a_skill_rank: int = character.skills.get("Courtier", 0)
 	var a_trait_val: int = character.perception
 	var probe_wc: int = _get_winter_court_skill_bonus(character, "Courtier", ctx)
-	var attacker_roll: int = dice_engine.roll_skill_check(
-		a_trait_val, a_skill_rank, 0
-	).get("total", 0) + probe_wc
+	var cipher_bonus: int = _get_cipher_insight_bonus(character, target_id)
+	var attacker_roll: int
+	if cipher_bonus > 0:
+		# +1k0: one extra rolled die, same kept count (s57.30 A4)
+		attacker_roll = dice_engine.roll_check(
+			a_trait_val + a_skill_rank + cipher_bonus, a_trait_val,
+			0, 0, 0, a_skill_rank > 0
+		).get("total", 0) + probe_wc
+	else:
+		attacker_roll = dice_engine.roll_skill_check(
+			a_trait_val, a_skill_rank, 0
+		).get("total", 0) + probe_wc
 
 	var defender_roll: int = 0
 	if target != null:
@@ -4797,6 +5507,13 @@ static func _execute_craft(
 	ctx: NPCDataStructures.ContextSnapshot,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	# Route origami sub-types (s57.26) and poetry scroll (s57.30.6) before s49 artisan path.
+	var origami_type: String = action.metadata.get("origami_type", "")
+	if origami_type in ["noshi", "gohei", "senbazuru_progress", "shide"]:
+		return _execute_craft_origami(action, character, ctx, dice_engine, origami_type)
+	if origami_type == "poetry_scroll":
+		return _execute_craft_poetry_scroll(action, character, ctx, dice_engine)
+
 	var wip_item_id: int = action.metadata.get("wip_item_id", -1)
 	if wip_item_id >= 0:
 		return {
@@ -4909,5 +5626,921 @@ static func _execute_craft(
 			"denomination": denomination,
 			"base_cost": base_cost,
 			"koku_cost": koku_cost,
+		},
+	}
+
+
+# -- s57.26 ORIGAMI ACTIONS -------------------------------------------------------
+
+
+static func _execute_craft_origami(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	origami_type: String,
+) -> Dictionary:
+	## Resolve a single origami craft session (noshi, gohei, senbazuru progress, shide).
+	var raises_declared: int = action.metadata.get("raises", 0)
+	var tn: int
+	match origami_type:
+		"noshi":
+			tn = OrigamiSystem.NOSHI_TN
+		"gohei":
+			tn = OrigamiSystem.GOHEI_TN
+		"senbazuru_progress":
+			tn = OrigamiSystem.SENBAZURU_SESSION_TN
+		"shide":
+			tn = OrigamiSystem.SHIDE_CRAFT_TN
+		_:
+			return {
+				"success": false, "action_id": "CRAFT",
+				"character_id": character.character_id,
+				"ic_day": ctx.ic_day, "season": ctx.season,
+				"effects": {"reason": "unknown_origami_type"},
+			}
+
+	var roll_tn: int = tn + raises_declared * 5
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Origami", roll_tn,
+		raises_declared, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+	var success: bool = total >= roll_tn
+	var quality_tier: int = OrigamiSystem.compute_quality_from_raises(raises_declared, success)
+
+	var effects: Dictionary = {
+		"origami_type": origami_type,
+		"quality_tier": quality_tier,
+		"roll_total": total,
+		"raises_declared": raises_declared,
+	}
+
+	match origami_type:
+		"noshi":
+			# GDD s57.26.6: failure produces mundane noshi. Item always stored.
+			if not success:
+				quality_tier = GiftGivingSystem.QualityTier.MUNDANE
+				effects["quality_tier"] = quality_tier
+			effects["requires_noshi_creation"] = true
+			effects["noshi_is_mundane"] = quality_tier == GiftGivingSystem.QualityTier.MUNDANE
+			effects["wrapper_target_id"] = action.metadata.get(
+				"target_npc_id", action.target_npc_id)
+		"gohei":
+			effects["requires_gohei_creation"] = success
+			if success:
+				effects["uses_remaining"] = OrigamiSystem.GOHEI_USES.get(
+					quality_tier,
+					OrigamiSystem.GOHEI_USES[GiftGivingSystem.QualityTier.NORMAL])
+		"senbazuru_progress":
+			var senbazuru_id: int = action.metadata.get("senbazuru_id", -1)
+			var cranes_added: int = 0
+			if success:
+				cranes_added = (OrigamiSystem.CRANES_BASE
+					+ raises_declared * OrigamiSystem.CRANES_PER_RAISE)
+			effects["senbazuru_id"] = senbazuru_id
+			effects["cranes_added"] = cranes_added
+			effects["session_success"] = success
+		"shide":
+			# GDD s57.26b A1–A3: on success, shide item created in writeback.
+			# On failure: no item (failed craft produces unusable paper).
+			effects["requires_shide_creation"] = success
+
+	return {
+		"success": success,
+		"action_id": "CRAFT",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": effects,
+	}
+
+
+static func _execute_craft_poetry_scroll(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	## CRAFT a poetry scroll (s57.30.6). Uses Artisan: Poetry / Awareness, TN 15.
+	## On success: creates a poetry_scroll item in writeback.
+	## On failure: no item created (a ruined scroll has no value as a gift).
+	var raises_declared: int = action.metadata.get("raises", 0)
+	var tn: int = OrigamiSystem.NOSHI_TN + raises_declared * 5  # TN 15 base, same as noshi
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Poetry", tn,
+		raises_declared, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+	var success: bool = total >= tn
+	return {
+		"success": success,
+		"action_id": "CRAFT",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"origami_type": "poetry_scroll",
+			"requires_poetry_scroll_creation": success,
+			"poetry_scroll_raises": raises_declared if success else 0,
+			"roll_total": total,
+			"raises_declared": raises_declared,
+		},
+	}
+
+
+static func _execute_declare_senbazuru(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	## 0 AP declaration that creates a new SenbazuruData (s57.26.14).
+	## Gate: one active senbazuru per folder; cleared on presentation.
+	var active_id: int = ctx.known_objectives.get("active_senbazuru_id", -1)
+	if active_id >= 0:
+		return {
+			"success": false, "action_id": "DECLARE_SENBAZURU",
+			"character_id": character.character_id,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"reason": "already_has_active_senbazuru"},
+		}
+	var dedication_type: String = action.metadata.get("dedication_type", "Atonement")
+	var recipient_id: int = action.metadata.get("recipient_id", -1)
+	if dedication_type == "Atonement":
+		recipient_id = -1
+	return {
+		"success": true, "action_id": "DECLARE_SENBAZURU",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"requires_senbazuru_creation": true,
+			"dedication_type": dedication_type,
+			"recipient_id": recipient_id,
+		},
+	}
+
+
+static func _execute_present_senbazuru(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	## 1 AP presentation; requires is_complete = true (s57.26.17).
+	var senbazuru_id: int = ctx.known_objectives.get("active_senbazuru_id", -1)
+	if senbazuru_id < 0:
+		return {
+			"success": false, "action_id": "PRESENT_SENBAZURU",
+			"character_id": character.character_id,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"reason": "no_active_senbazuru"},
+		}
+	if not ctx.known_objectives.get("senbazuru_is_complete", false):
+		return {
+			"success": false, "action_id": "PRESENT_SENBAZURU",
+			"character_id": character.character_id,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"reason": "senbazuru_not_complete"},
+		}
+	return {
+		"success": true, "action_id": "PRESENT_SENBAZURU",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"requires_senbazuru_presentation": true,
+			"senbazuru_id": senbazuru_id,
+		},
+	}
+
+
+# -- s57.22 THEATER PIECE ACTIONS -----------------------------------------------
+
+static func _execute_theater_action(
+	action_id: String,
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	match action_id:
+		"COMPOSE_THEATER_PIECE":
+			return _execute_compose_theater(action, character, ctx, dice_engine)
+		"LEARN_THEATER_PIECE":
+			return _execute_learn_theater(action, character, ctx, dice_engine)
+		"PERFORM_THEATER_PIECE":
+			return _execute_perform_theater(action, character, ctx, dice_engine)
+		"DEDICATE_PIECE":
+			return _execute_dedicate_piece(action, character, ctx, dice_engine)
+	return {"success": false, "action_id": action_id, "character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season, "effects": {}}
+
+
+static func _execute_compose_theater(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var meta: Dictionary = action.metadata
+	var piece_id: int = meta.get("piece_id", -1)
+	var is_new: bool = meta.get("is_new", false)
+	var raises: int = meta.get("raises", 0)
+
+	if is_new:
+		# Declare composition intent — actual piece created in writeback
+		var target_magnitude: int = meta.get("target_magnitude", 1)
+		if not TheaterSystem.check_composition_skill_gate(character, target_magnitude):
+			return {
+				"success": false, "action_id": "COMPOSE_THEATER_PIECE",
+				"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+				"effects": {"blocked_reason": "poetry_rank_insufficient"},
+			}
+		return {
+			"success": true, "action_id": "COMPOSE_THEATER_PIECE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {
+				"is_new_piece": true,
+				"target_magnitude": target_magnitude,
+				"target_topic_weight": meta.get("target_topic_weight", 1),
+				"num_roles": meta.get("num_roles", 1),
+				"framing": meta.get("framing", true),
+				"subject": meta.get("subject", character.clan),
+				"subject_type": meta.get("subject_type", TheaterSystem.SubjectType.CLAN),
+				"topic_id": meta.get("topic_id", -1),
+				"political_need_type": meta.get("political_need_type", ""),
+			},
+		}
+
+	if piece_id < 0:
+		return {
+			"success": false, "action_id": "COMPOSE_THEATER_PIECE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"blocked_reason": "no_wip_piece"},
+		}
+
+	var tn: int = TheaterSystem.COMPOSITION_BASE_TN + raises * 5
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Poetry", tn,
+		raises, "", Enums.Trait.INTELLIGENCE, 0, 0, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+	var progress: int = TheaterSystem.compose_progress_per_ap(total, raises)
+
+	return {
+		"success": total >= TheaterSystem.COMPOSITION_BASE_TN,
+		"action_id": "COMPOSE_THEATER_PIECE",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"piece_id": piece_id,
+			"roll_total": total,
+			"progress_earned": progress,
+			"raises": raises,
+			"ic_day": ctx.ic_day,
+		},
+	}
+
+
+static func _execute_learn_theater(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var meta: Dictionary = action.metadata
+	var piece_id: int = meta.get("piece_id", -1)
+
+	if piece_id < 0:
+		return {
+			"success": false, "action_id": "LEARN_THEATER_PIECE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"blocked_reason": "no_piece_available"},
+		}
+
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Acting", TheaterSystem.LEARNING_BASE_TN,
+		0, "", Enums.Trait.INTELLIGENCE, 0, 0, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+	var progress: int = TheaterSystem.learning_progress_per_ap(total)
+
+	return {
+		"success": total >= TheaterSystem.LEARNING_BASE_TN,
+		"action_id": "LEARN_THEATER_PIECE",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"piece_id": piece_id,
+			"roll_total": total,
+			"progress_earned": progress,
+			"ic_day": ctx.ic_day,
+		},
+	}
+
+
+static func _execute_perform_theater(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var meta: Dictionary = action.metadata
+	var piece_id: int = meta.get("piece_id", -1)
+	var is_bunraku: bool = meta.get("is_bunraku_performance", false)
+	var raises: int = meta.get("raises", 0)
+
+	if piece_id < 0:
+		return {
+			"success": false, "action_id": "PERFORM_THEATER_PIECE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"blocked_reason": "no_piece_to_perform"},
+		}
+
+	var tn: int = TheaterSystem.PERFORMANCE_BASE_TN + raises * 5
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Acting", tn,
+		raises, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+	var success: bool = total >= tn
+	var margin: int = total - TheaterSystem.PERFORMANCE_BASE_TN
+	var is_critical: bool = success and margin >= TheaterSystem.CRITICAL_SUCCESS_MARGIN
+	var raises_succeeded: int = raises if success else 0
+
+	var ap_cost_override: int = 2 if is_bunraku else 1
+
+	return {
+		"success": success,
+		"action_id": "PERFORM_THEATER_PIECE",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"piece_id": piece_id,
+			"roll_total": total,
+			"raises_succeeded": raises_succeeded,
+			"is_critical": is_critical,
+			"is_bunraku_performance": is_bunraku,
+			"location_id": ctx.location_id,
+			"ap_cost_override": ap_cost_override,
+			"ic_day": ctx.ic_day,
+		},
+	}
+
+
+static func _execute_dedicate_piece(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var meta: Dictionary = action.metadata
+	var piece_id: int = meta.get("piece_id", -1)
+	var topic_id: int = meta.get("topic_id", -1)
+	var raises: int = meta.get("raises", 0)
+
+	if piece_id < 0:
+		return {
+			"success": false, "action_id": "DEDICATE_PIECE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"blocked_reason": "no_piece_to_dedicate"},
+		}
+	if topic_id < 0 or topic_id not in ctx.known_topics:
+		return {
+			"success": false, "action_id": "DEDICATE_PIECE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"blocked_reason": "no_known_topic"},
+		}
+
+	# Courtier / Awareness roll vs TN 10 + magnitude * 2 (resolved in writeback since we lack piece here)
+	var tn: int = TheaterSystem.DEDICATION_BASE_TN + raises * 5
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Courtier", tn,
+		raises, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+
+	return {
+		"success": total >= tn,
+		"action_id": "DEDICATE_PIECE",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"piece_id": piece_id,
+			"topic_id": topic_id,
+			"roll_total": total,
+			"raises": raises,
+		},
+	}
+
+
+# ---------------------------------------------------------------------------
+# Garden and Bonsai executors (s57.23, s57.24)
+# ---------------------------------------------------------------------------
+
+static func _execute_garden_commission_action(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	## REQUEST_ART: daimyo requests a garden commission from a specific artisan.
+	## OFFER_ART_COMMISSION: artisan self-initiates a commission offer to a daimyo.
+	## Both create a commission record via orchestrator writeback.
+	var is_request: bool = action.action_id == "REQUEST_ART"
+	var meta: Dictionary = action.metadata
+	var zone_type: String = meta.get("zone_type", "")
+	var target_quality_tier: int = clampi(meta.get("target_quality_tier", 1), 1, 5)
+	var loc_int: int = int(ctx.location_id) if ctx.location_id.is_valid_int() else -1
+	var settlement_id: int = meta.get("settlement_id", loc_int)
+	var artisan_id: int
+	var daimyo_id: int
+	if is_request:
+		artisan_id = meta.get("artisan_id", action.target_npc_id)
+		daimyo_id = character.character_id
+	else:
+		artisan_id = character.character_id
+		daimyo_id = meta.get("daimyo_id", action.target_npc_id)
+
+	if zone_type.is_empty():
+		return {
+			"success": false,
+			"action_id": action.action_id,
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": "no_zone_type",
+			"effects": {"blocked_reason": "no_zone_type"},
+		}
+
+	return {
+		"success": true,
+		"action_id": action.action_id,
+		"character_id": character.character_id,
+		"target_npc_id": artisan_id if is_request else daimyo_id,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"requires_commission_creation": true,
+			"artisan_id": artisan_id,
+			"daimyo_id": daimyo_id,
+			"settlement_id": settlement_id,
+			"zone_type": zone_type,
+			"target_quality_tier": target_quality_tier,
+			"is_obligated": is_request,
+		},
+	}
+
+
+static func _execute_cultivate_garden(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	## Spend 1 AP to advance progress on an active commission.
+	## Skill gate: Artisan: Gardening rank ≥ target_quality_tier.
+	var meta: Dictionary = action.metadata
+	var commission_id: int = meta.get("commission_id", -1)
+	var quality_tier: int = clampi(meta.get("target_quality_tier", 1), 1, 5)
+	var gardening_rank: int = character.skills.get("Artisan: Gardening", 0)
+
+	if gardening_rank < GardenSystem.QUALITY_SKILL_GATE.get(quality_tier, 1):
+		return {
+			"success": false,
+			"action_id": "CULTIVATE_GARDEN",
+			"character_id": character.character_id,
+			"target_npc_id": -1,
+			"target_province_id": -1,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": "skill_gate_failed",
+			"effects": {"blocked_reason": "skill_gate_failed"},
+		}
+
+	var tn: int = GardenSystem.QUALITY_TN.get(quality_tier, 15)
+	var free_raise: int = GardenSystem.apply_gardening_free_raise(gardening_rank)
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Gardening", tn, free_raise,
+		"", Enums.Trait.NONE, 0, 0, 0, ctx.ic_day
+	)
+	var total: int = roll.get("total", 0)
+	var margin: int = total - tn
+	var raises: int = maxi(int(margin / 5.0), 0)
+
+	return {
+		"success": roll.get("success", false),
+		"action_id": "CULTIVATE_GARDEN",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"commission_id": commission_id,
+			"roll_total": total,
+			"tn": tn,
+			"raises": raises,
+		},
+	}
+
+
+static func _execute_maintain_garden(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	## Spend 1 AP to maintain an existing garden against tier degradation.
+	var meta: Dictionary = action.metadata
+	var garden_id: int = meta.get("garden_id", -1)
+	var garden_tier: int = clampi(meta.get("garden_tier", 1), 1, 5)
+	var gardening_rank: int = character.skills.get("Artisan: Gardening", 0)
+
+	var tn: int = GardenSystem.QUALITY_TN.get(garden_tier, 15)
+	var free_raise: int = GardenSystem.apply_gardening_free_raise(gardening_rank)
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Gardening", tn, free_raise,
+		"", Enums.Trait.NONE, 0, 0, 0, ctx.ic_day
+	)
+
+	return {
+		"success": roll.get("success", false),
+		"action_id": "MAINTAIN_GARDEN",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"garden_id": garden_id,
+			"roll_total": roll.get("total", 0),
+			"tn": tn,
+			"ic_season": ctx.season,
+		},
+	}
+
+
+static func _execute_collect_bonsai_specimen(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	## Roll Artisan: Gardening / Perception vs TN 10 to collect a wild bonsai specimen.
+	var province_id: int = action.target_province_id
+	if province_id < 0:
+		province_id = ctx.known_objectives.get("character_province_id", -1)
+
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Gardening", GardenSystem.BONSAI_COLLECT_TN, 0,
+		"", Enums.Trait.PERCEPTION, 0, 0, 0, ctx.ic_day
+	)
+
+	return {
+		"success": roll.get("success", false),
+		"action_id": "COLLECT_BONSAI_SPECIMEN",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": province_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"collector_id": character.character_id,
+			"province_id": province_id,
+			"roll_total": roll.get("total", 0),
+		},
+	}
+
+
+static func _execute_tend_bonsai(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	## Roll Artisan: Gardening / Awareness vs TN 10 to tend owned bonsai.
+	var meta: Dictionary = action.metadata
+	var bonsai_id: int = meta.get("bonsai_id", ctx.known_objectives.get("owned_bonsai_id", -1))
+	var ic_month: int = ctx.ic_day / 30
+
+	var gardening_rank: int = character.skills.get("Artisan: Gardening", 0)
+	var free_raise: int = GardenSystem.apply_gardening_free_raise(gardening_rank)
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Gardening", GardenSystem.BONSAI_TEND_TN, free_raise,
+		"", Enums.Trait.NONE, 0, 0, 0, ctx.ic_day
+	)
+	var total: int = roll.get("total", 0)
+	var margin: int = total - GardenSystem.BONSAI_TEND_TN
+	var raises: int = maxi(int(margin / 5.0), 0)
+
+	return {
+		"success": roll.get("success", false),
+		"action_id": "TEND_BONSAI",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"bonsai_id": bonsai_id,
+			"roll_total": total,
+			"raises": raises,
+			"ic_month": ic_month,
+		},
+	}
+
+
+static func _execute_display_bonsai(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	## No roll required. Sets the display_settlement_id on the bonsai.
+	var meta: Dictionary = action.metadata
+	var bonsai_id: int = meta.get("bonsai_id", ctx.known_objectives.get("owned_bonsai_id", -1))
+	var loc_int: int = int(ctx.location_id) if ctx.location_id.is_valid_int() else -1
+	var settlement_id: int = meta.get("settlement_id", loc_int)
+
+	return {
+		"success": bonsai_id >= 0 and settlement_id >= 0,
+		"action_id": "DISPLAY_BONSAI",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"bonsai_id": bonsai_id,
+			"settlement_id": settlement_id,
+		},
+	}
+
+
+static func _execute_place_shide(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	## Place shide from inventory at shrine's shide slot (s57.26b A20).
+	## 0 AP; no roll required; permission auto-granted from context injection.
+	var meta: Dictionary = action.metadata
+	var shide_item_id: int = meta.get("shide_item_id", -1)
+	var loc_str: String = ctx.location_id
+
+	# Find shide item in inventory.
+	var shide_item: Dictionary = {}
+	for it: Dictionary in character.items:
+		if it.get("item_type", "") == "shide" and it.get("uses_remaining", 0) > 0:
+			if shide_item_id < 0 or it.get("item_id", -1) == shide_item_id:
+				shide_item = it
+				break
+
+	if shide_item.is_empty():
+		return {
+			"success": false, "action_id": "PLACE_SHIDE",
+			"character_id": character.character_id,
+			"effects": {"blocked_reason": "no_shide_in_inventory"},
+		}
+
+	# Settlement resolved at writeback time — pass location for orchestrator lookup.
+	return {
+		"success": true,
+		"action_id": "PLACE_SHIDE",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"shide_item": shide_item,
+			"shide_settlement_str_id": loc_str,
+		},
+	}
+
+
+# ---------------------------------------------------------------------------
+# Painting executors (s57.27)
+# ---------------------------------------------------------------------------
+
+static func _execute_painting_action(
+	action_id: String,
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	match action_id:
+		"COMPOSE_PAINTING":
+			return _execute_compose_painting(action, character, ctx, dice_engine)
+		"DISPLAY_PAINTING":
+			return _execute_display_painting(action, character, ctx)
+		"PRESENT_EMAKIMONO":
+			return _execute_present_emakimono(action, character, ctx, characters_by_id)
+	return {"success": false, "action_id": action_id, "character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season, "effects": {}}
+
+
+static func _execute_compose_painting(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	## Advance WIP painting or declare new composition.
+	## painting_id < 0 in metadata → declare new composition (writeback creates PaintingData).
+	var meta: Dictionary = action.metadata
+	var painting_id: int = meta.get("painting_id", ctx.known_objectives.get("active_painting_wip_id", -1))
+	var painting_rank: int = character.skills.get("Artisan: Painting", 0)
+
+	if painting_id < 0:
+		# Declare new composition — actual PaintingData created in writeback.
+		var target_quality: int = meta.get("target_quality_tier", clampi(painting_rank, 1, 5))
+		if painting_rank < PaintingSystem.QUALITY_SKILL_GATE.get(target_quality, 1):
+			return {
+				"success": false, "action_id": "COMPOSE_PAINTING",
+				"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+				"effects": {"blocked_reason": "insufficient_skill_rank"},
+			}
+		return {
+			"success": true, "action_id": "COMPOSE_PAINTING",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {
+				"is_new_painting": true,
+				"format": meta.get("format", PaintingSystem.Format.KAKEMONO),
+				"target_quality_tier": target_quality,
+				"subject_type": meta.get("subject_type", PaintingSystem.SubjectType.NATURE),
+				"framing": meta.get("framing", true),
+				"style": meta.get("style", PaintingSystem.Style.NONE),
+				"subject_id": meta.get("subject_id", -1),
+				"season_affinity": meta.get("season_affinity", -1),
+				"target_topic_ids": meta.get("target_topic_ids", []),
+				"ic_day": ctx.ic_day,
+			},
+		}
+
+	# Advance existing WIP.
+	var raises_declared: int = meta.get("raises", 0)
+	var tn: int = PaintingSystem.COMPOSE_TN + raises_declared * 5
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Painting", tn,
+		raises_declared, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+
+	return {
+		"success": roll.get("success", false),
+		"action_id": "COMPOSE_PAINTING",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"painting_id": painting_id,
+			"roll_total": total,
+			"raises_declared": raises_declared,
+			"painter_rank": painting_rank,
+			"ic_day": ctx.ic_day,
+		},
+	}
+
+
+static func _execute_display_painting(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	## No roll. Sets display_settlement_id on painting — slot mutation in writeback.
+	var meta: Dictionary = action.metadata
+	var painting_id: int = meta.get("painting_id", -1)
+	var loc_int: int = int(ctx.location_id) if ctx.location_id.is_valid_int() else -1
+	var settlement_id: int = meta.get("settlement_id", loc_int)
+	var slot: int = meta.get("slot", PaintingSystem.DisplaySlot.WALL_ART)
+
+	return {
+		"success": painting_id >= 0 and settlement_id >= 0,
+		"action_id": "DISPLAY_PAINTING",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"painting_id": painting_id,
+			"settlement_id": settlement_id,
+			"slot": slot,
+		},
+	}
+
+
+static func _execute_present_emakimono(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	## No roll. Collect co-located living characters as recipients.
+	## PaintingSystem.resolve_present_emakimono() applied in writeback.
+	var meta: Dictionary = action.metadata
+	var painting_id: int = meta.get("painting_id", -1)
+
+	if painting_id < 0:
+		return {
+			"success": false, "action_id": "PRESENT_EMAKIMONO",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"blocked_reason": "no_emakimono_selected"},
+		}
+
+	# Gather co-located living recipients (excluding presenter).
+	var recipient_ids: Array = []
+	var presenter_loc: String = character.physical_location
+	for cid: int in characters_by_id:
+		if cid == character.character_id:
+			continue
+		var other = characters_by_id.get(cid)
+		if not other:
+			continue
+		if CharacterStats.is_dead(other):
+			continue
+		if other.physical_location != presenter_loc:
+			continue
+		recipient_ids.append(cid)
+
+	return {
+		"success": painting_id >= 0,
+		"action_id": "PRESENT_EMAKIMONO",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"painting_id": painting_id,
+			"recipient_ids": recipient_ids,
+			"ic_day": ctx.ic_day,
+		},
+	}
+
+
+static func _execute_compose_sculpture(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	## Advance WIP sculpture or declare new composition.
+	## sculpture_id < 0 in metadata → declare new composition (writeback creates SculptureData).
+	var meta: Dictionary = action.metadata
+	var sculpture_id: int = meta.get("sculpture_id", ctx.known_objectives.get("active_sculpture_wip_id", -1))
+	var sculpture_rank: int = character.skills.get("Artisan: Sculpture", 0)
+
+	if sculpture_id < 0:
+		# Declare new composition — actual SculptureData created in writeback.
+		var target_quality: int = meta.get("target_quality_tier", clampi(sculpture_rank, 1, 5))
+		if sculpture_rank < SculptureSystem.QUALITY_SKILL_GATE.get(target_quality, 1):
+			return {
+				"success": false, "action_id": "COMPOSE_SCULPTURE",
+				"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+				"effects": {"blocked_reason": "insufficient_skill_rank"},
+			}
+		return {
+			"success": true, "action_id": "COMPOSE_SCULPTURE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {
+				"is_new_sculpture": true,
+				"format": meta.get("format", SculptureSystem.Format.STATUARY),
+				"material": meta.get("material", SculptureSystem.Material.WOOD),
+				"target_quality_tier": target_quality,
+				"subject_type": meta.get("subject_type", SculptureSystem.SubjectType.FORTUNE),
+				"subject_id": meta.get("subject_id", -1),
+				"theme": meta.get("theme", SculptureSystem.FigurineTheme.OTHER),
+				"ic_day": ctx.ic_day,
+			},
+		}
+
+	# Advance existing WIP.
+	var raises_declared: int = meta.get("raises", 0)
+	var material: int = meta.get("material", SculptureSystem.Material.WOOD)
+	var sc_format: int = meta.get("format", SculptureSystem.Format.STATUARY)
+	var stone_penalty: int = SculptureSystem.STONE_TN_PENALTY if material == SculptureSystem.Material.STONE else 0
+	# GDD A5: bronze +1 FR requires a foundry in the province. Defaults false until foundry data modeled.
+	var has_foundry: bool = ctx.known_objectives.get("foundry_in_province", false)
+	var bronze_fr: int = 1 if (material == SculptureSystem.Material.BRONZE and has_foundry) else 0
+	# Yoritomo Sculptor: +1k1 on figurine rolls (GDD section N).
+	var yoritomo_bonus_dice: int = 0
+	var yoritomo_bonus_keep: int = 0
+	if sc_format == SculptureSystem.Format.FIGURINE and \
+			SculptureSystem.has_yoritomo_figurine_bonus(character.school):
+		yoritomo_bonus_dice = 1
+		yoritomo_bonus_keep = 1
+	var tn: int = SculptureSystem.COMPOSE_TN + stone_penalty + raises_declared * 5
+	var roll: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Artisan: Sculpture", tn,
+		raises_declared + bronze_fr, "", Enums.Trait.AWARENESS,
+		yoritomo_bonus_dice, yoritomo_bonus_keep, 0, ctx.ic_day,
+	)
+	var total: int = roll.get("total", 0)
+
+	return {
+		"success": roll.get("success", false),
+		"action_id": "COMPOSE_SCULPTURE",
+		"character_id": character.character_id,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"sculpture_id": sculpture_id,
+			"roll_total": total,
+			"raises_declared": raises_declared,
+			"sculptor_rank": sculpture_rank,
+			"material": material,
+			"ic_day": ctx.ic_day,
 		},
 	}

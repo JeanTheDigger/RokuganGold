@@ -86,13 +86,13 @@ func test_no_virtue_declines_duel() -> void:
 	assert_eq(result["action"], "DECLINE_DUEL")
 
 
-func test_decline_duel_includes_glory_loss() -> void:
+func test_decline_duel_returns_decline_action() -> void:
 	var c := _make_character(1, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.NONE)
 	c.disposition_values = {5: 10.0}
 	var ctx := _make_ctx()
 	var event: Dictionary = {"reactive_type": "DUEL_CHALLENGE_RECEIVED", "challenger_id": 5, "is_public": false}
 	var result: Dictionary = ReactiveDecisions.evaluate_reactive_event(event, c, ctx)
-	assert_eq(result["glory_loss"], -0.3)
+	assert_eq(result.get("action", ""), "DECLINE_DUEL")
 
 
 # =============================================================================
@@ -337,7 +337,7 @@ func test_ketsui_accepts_with_mentor_objective() -> void:
 	var c := _make_character(1, Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.KETSUI)
 	c.skills = {"Kenjutsu": 2}
 	var ctx := _make_ctx()
-	ctx.known_objectives = {"primary": {"objective_type": "MENTOR_CHARACTER", "target_npc_id": 5}}
+	ctx.known_objectives = {"primary": {"need_type": "MENTOR_CHARACTER", "target_npc_id": 5}}
 	var event: Dictionary = {"reactive_type": "ACCEPT_TRAINING", "sensei_id": 5, "skill": "Kenjutsu", "sensei_rank": 5}
 	var result: Dictionary = ReactiveDecisions.evaluate_reactive_event(event, c, ctx)
 	assert_eq(result["action"], "ACCEPT_TRAINING")

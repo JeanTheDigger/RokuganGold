@@ -6,6 +6,7 @@ enum ArtForm {
 	THEATER,
 	MUSIC,
 	TEA_CEREMONY,
+	IKEBANA,  # s57.29 — uses Artisan: Ikebana as _performance_skill
 }
 
 enum PerformanceOutcome {
@@ -25,8 +26,8 @@ const CRITICAL_FAILURE_DISPOSITION: int = -2
 const CRITICAL_FAILURE_GLORY: float = -0.3
 const CRITICAL_FAILURE_MARGIN: int = -10
 
-const PERFORM_FOR_SUCCESS_DISPOSITION: int = 0
-const PERFORM_FOR_FAILURE_DISPOSITION: int = 0
+const PERFORM_FOR_SUCCESS_DISPOSITION: int = 8  # "strong disposition gain" — locked s12.4a
+const PERFORM_FOR_FAILURE_DISPOSITION: int = -3  # "small disposition loss" — locked s12.4a
 
 const FATIGUE_FULL: float = 1.0
 const FATIGUE_HALF: float = 0.5
@@ -38,6 +39,7 @@ const ART_FORM_SKILLS: Dictionary = {
 	ArtForm.THEATER: "Acting",
 	ArtForm.MUSIC: "Perform",
 	ArtForm.TEA_CEREMONY: "Tea Ceremony",
+	ArtForm.IKEBANA: "Artisan: Ikebana",
 }
 
 
@@ -51,6 +53,7 @@ static func resolve_public_performance(
 	witness_ids: Array,
 	dice_engine: DiceEngine,
 	fatigue_count: int = 0,
+	free_raises: int = 0,
 ) -> Dictionary:
 	var skill_name: String = get_performance_skill(art_form)
 	var skill_rank: int = performer.skills.get(skill_name, 0)
@@ -58,7 +61,7 @@ static func resolve_public_performance(
 
 	var check: Dictionary = SkillResolver.resolve_skill_check(
 		performer, dice_engine, skill_name, PERFORMANCE_TN,
-		0, "", Enums.Trait.AWARENESS, unskilled_bonus,
+		free_raises, "", Enums.Trait.AWARENESS, unskilled_bonus,
 	)
 	var total: int = check.get("total", 0)
 	var margin: int = total - PERFORMANCE_TN

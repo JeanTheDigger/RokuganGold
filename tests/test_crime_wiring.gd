@@ -218,7 +218,16 @@ func test_treason_conviction_gi_names_conspirators():
 	assert_true(r.has("status_delta"), "Treason conviction should include status delta")
 
 
-func test_treason_conviction_seigyo_hides_conspirators():
+func test_treason_conviction_not_applicable_non_treason():
+	var record := _make_crime_record(Enums.CrimeType.UNSANCTIONED_OPEN_KILLING)
+	var convicted := _make_char(1, "Lion", 3.0)
+	var lord := _make_char(10, "Lion", 6.0)
+	var next_id: Array = [100]
+	var r := CrimeWiring.process_treason_conviction(record, convicted, lord, [], next_id, 200)
+	assert_false(r["applicable"])
+
+
+func test_treason_conviction_chugi_hides_conspirators():
 	var record := _make_crime_record(Enums.CrimeType.TREASON)
 	record.legal_status = Enums.LegalStatus.ACCUSED
 	var convicted := _make_char(1, "Scorpion", 3.0)

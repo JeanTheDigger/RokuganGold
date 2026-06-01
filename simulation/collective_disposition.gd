@@ -13,9 +13,9 @@ class_name CollectiveDisposition
 ##   - Personal change × 0.20 → Family baseline change
 ##   - Personal change × 0.05 → Clan baseline change
 ##
-## Baselines do not decay — they're collective historical memory. Negative
-## baselines only improve via deliberate diplomatic action (peace treaties,
-## marriages, formal apologies). All values are PROVISIONAL per GDD.
+## Permanent baselines do not decay (s12.2b).
+## Marriage boosts are tracked separately in marriage_clan_boosts /
+## marriage_family_boosts (s22.7) and decay per season.
 ##
 ## Pure simulation class — no Node inheritance, no scene tree.
 
@@ -31,17 +31,29 @@ const FAMILY_RIPPLE_WEIGHT: float = 0.20
 
 # -- Specific event deltas (s12.2b) ------------------------------------------
 
-const MARRIAGE_FAMILY_DELTA: int = 5
-const MARRIAGE_CLAN_DELTA: int = 1
 const FAMILY_LORD_RAID_DELTA: int = -3
 const FAMILY_BETRAYAL_DELTA: int = -10
 const INTRA_CLAN_RICE_SHARING_DELTA: int = 2
 const FAMILY_DUEL_DEATH_DELTA: int = -5
 const CLAN_WAR_DECLARED_DELTA: int = -10
 const CLAN_PEACE_TREATY_DELTA: int = 5
-const CHAMPION_MARRIAGE_CLAN_DELTA: int = 8
-const CHAMPION_MARRIAGE_FAMILY_DELTA: int = 5
 const HARVEST_DESTRUCTION_CLAN_DELTA: int = -5
+
+# -- Marriage boost (s22.7) — separate decaying layer --------------------------
+# Cross-clan marriage: +8 clan boost, +5 family boost.
+# Between-families: +5 family boost, no clan boost.
+# Boosts decay separately from permanent baselines and are tracked in
+# marriage_clan_boosts / marriage_family_boosts Dictionaries on WorldState.
+# Each entry: {"value": int, "seasons_acc": int}
+# Clan decay: 1 point per CLAN_DECAY_SEASONS seasons; cap CLAN_BOOST_CAP.
+# Family decay: 1 point per FAMILY_DECAY_SEASONS seasons; cap FAMILY_BOOST_CAP.
+
+const MARRIAGE_CLAN_BOOST: int = MarriageSystem.CLAN_BASELINE_BOOST       # 8
+const MARRIAGE_FAMILY_BOOST: int = MarriageSystem.FAMILY_BASELINE_BOOST   # 5
+const MARRIAGE_CLAN_BOOST_CAP: int = MarriageSystem.CLAN_BOOST_CAP        # 20
+const MARRIAGE_FAMILY_BOOST_CAP: int = MarriageSystem.FAMILY_BOOST_CAP    # 15
+const MARRIAGE_CLAN_DECAY_SEASONS: int = MarriageSystem.CLAN_DECAY_SEASONS     # 10
+const MARRIAGE_FAMILY_DECAY_SEASONS: int = MarriageSystem.FAMILY_DECAY_SEASONS  # 8
 
 
 # -- Starting clan-to-clan baselines (pre-Scorpion Coup) ---------------------
@@ -208,24 +220,32 @@ static func get_clan_baseline(
 	clan_a: String,
 	clan_b: String,
 	clan_baselines: Dictionary,
+	marriage_clan_boosts: Dictionary = {},
 ) -> int:
 	if clan_a == "" or clan_b == "":
 		return 0
 	if clan_a == clan_b:
 		return 0  # Same clan — collective sentiment is intra-clan, no baseline.
-	return int(clan_baselines.get(make_pair_key(clan_a, clan_b), 0))
+	var key: String = make_pair_key(clan_a, clan_b)
+	var base: int = int(clan_baselines.get(key, 0))
+	var marriage: int = int(marriage_clan_boosts.get(key, {}).get("value", 0))
+	return base + marriage
 
 
 static func get_family_baseline(
 	family_a: String,
 	family_b: String,
 	family_baselines: Dictionary,
+	marriage_family_boosts: Dictionary = {},
 ) -> int:
 	if family_a == "" or family_b == "":
 		return 0
 	if family_a == family_b:
 		return 0
-	return int(family_baselines.get(make_pair_key(family_a, family_b), 0))
+	var key: String = make_pair_key(family_a, family_b)
+	var base: int = int(family_baselines.get(key, 0))
+	var marriage: int = int(marriage_family_boosts.get(key, {}).get("value", 0))
+	return base + marriage
 
 
 # -- Seed disposition for first-meeting --------------------------------------
@@ -235,11 +255,17 @@ static func compute_seed_disposition(
 	target: L5RCharacterData,
 	clan_baselines: Dictionary,
 	family_baselines: Dictionary,
+	marriage_clan_boosts: Dictionary = {},
+	marriage_family_boosts: Dictionary = {},
 ) -> int:
 	if actor == null or target == null:
 		return 0
-	var clan_val: int = get_clan_baseline(actor.clan, target.clan, clan_baselines)
-	var family_val: int = get_family_baseline(actor.family, target.family, family_baselines)
+	var clan_val: int = get_clan_baseline(
+		actor.clan, target.clan, clan_baselines, marriage_clan_boosts
+	)
+	var family_val: int = get_family_baseline(
+		actor.family, target.family, family_baselines, marriage_family_boosts
+	)
 	var seed_val: float = (float(clan_val) * CLAN_SEED_WEIGHT) + (float(family_val) * FAMILY_SEED_WEIGHT)
 	return int(round(seed_val))
 
@@ -249,6 +275,8 @@ static func seed_first_meeting(
 	target: L5RCharacterData,
 	clan_baselines: Dictionary,
 	family_baselines: Dictionary,
+	marriage_clan_boosts: Dictionary = {},
+	marriage_family_boosts: Dictionary = {},
 ) -> int:
 	## Sets actor.disposition_values[target.character_id] to the computed
 	## seed value if not already set. Returns the value applied (or the
@@ -257,7 +285,10 @@ static func seed_first_meeting(
 		return 0
 	if actor.disposition_values.has(target.character_id):
 		return actor.disposition_values[target.character_id]
-	var seed_val: int = compute_seed_disposition(actor, target, clan_baselines, family_baselines)
+	var seed_val: int = compute_seed_disposition(
+		actor, target, clan_baselines, family_baselines,
+		marriage_clan_boosts, marriage_family_boosts,
+	)
 	actor.disposition_values[target.character_id] = clampi(seed_val, -100, 100)
 	return seed_val
 
@@ -303,20 +334,75 @@ static func apply_event_ripple(
 static func apply_marriage(
 	clan_a: String, clan_b: String,
 	family_a: String, family_b: String,
-	clan_baselines: Dictionary, family_baselines: Dictionary,
-	champion_level: bool = false,
+	_clan_baselines: Dictionary, _family_baselines: Dictionary,
+	_champion_level: bool = false,
+	marriage_clan_boosts: Dictionary = {},
+	marriage_family_boosts: Dictionary = {},
 ) -> Dictionary:
-	var fam_delta: int = (
-		CHAMPION_MARRIAGE_FAMILY_DELTA if champion_level else MARRIAGE_FAMILY_DELTA
-	)
-	var clan_delta: int = (
-		CHAMPION_MARRIAGE_CLAN_DELTA if champion_level else MARRIAGE_CLAN_DELTA
-	)
-	return _apply_baseline_delta(
-		clan_a, clan_b, family_a, family_b,
-		clan_delta, fam_delta,
-		clan_baselines, family_baselines,
-	)
+	## s22.7: marriage boost goes into the decaying marriage_*_boosts layer.
+	## Permanent clan_baselines are NOT modified by marriages (s22.7 wins).
+	var result: Dictionary = {}
+
+	# Family boost (between-families and cross-clan marriages both get +5 family).
+	if family_a != "" and family_b != "" and family_a != family_b:
+		var fkey: String = make_pair_key(family_a, family_b)
+		var entry: Dictionary = marriage_family_boosts.get(fkey, {"value": 0, "seasons_acc": 0})
+		entry = entry.duplicate()
+		entry["value"] = mini(entry["value"] + MARRIAGE_FAMILY_BOOST, MARRIAGE_FAMILY_BOOST_CAP)
+		entry["seasons_acc"] = 0  # Reset decay clock per s22.7.
+		marriage_family_boosts[fkey] = entry
+		result["family_key"] = fkey
+		result["family_boost"] = entry["value"]
+
+	# Clan boost (cross-clan marriages only).
+	if clan_a != "" and clan_b != "" and clan_a != clan_b:
+		var ckey: String = make_pair_key(clan_a, clan_b)
+		var entry: Dictionary = marriage_clan_boosts.get(ckey, {"value": 0, "seasons_acc": 0})
+		entry = entry.duplicate()
+		entry["value"] = mini(entry["value"] + MARRIAGE_CLAN_BOOST, MARRIAGE_CLAN_BOOST_CAP)
+		entry["seasons_acc"] = 0  # Reset decay clock per s22.7.
+		marriage_clan_boosts[ckey] = entry
+		result["clan_key"] = ckey
+		result["clan_boost"] = entry["value"]
+
+	return result
+
+
+static func decay_marriage_boosts(
+	marriage_clan_boosts: Dictionary,
+	marriage_family_boosts: Dictionary,
+) -> void:
+	## Called each season. Advances the decay clock for all marriage boosts.
+	for key: Variant in marriage_clan_boosts:
+		var entry: Dictionary = marriage_clan_boosts[key]
+		entry["seasons_acc"] = int(entry.get("seasons_acc", 0)) + 1
+		if entry["seasons_acc"] >= MARRIAGE_CLAN_DECAY_SEASONS:
+			entry["value"] = maxi(0, int(entry.get("value", 0)) - 1)
+			entry["seasons_acc"] = 0
+	for key: Variant in marriage_family_boosts:
+		var entry: Dictionary = marriage_family_boosts[key]
+		entry["seasons_acc"] = int(entry.get("seasons_acc", 0)) + 1
+		if entry["seasons_acc"] >= MARRIAGE_FAMILY_DECAY_SEASONS:
+			entry["value"] = maxi(0, int(entry.get("value", 0)) - 1)
+			entry["seasons_acc"] = 0
+
+
+static func get_marriage_clan_boost(
+	clan_a: String, clan_b: String,
+	marriage_clan_boosts: Dictionary,
+) -> int:
+	if clan_a == "" or clan_b == "" or clan_a == clan_b:
+		return 0
+	return int(marriage_clan_boosts.get(make_pair_key(clan_a, clan_b), {}).get("value", 0))
+
+
+static func get_marriage_family_boost(
+	family_a: String, family_b: String,
+	marriage_family_boosts: Dictionary,
+) -> int:
+	if family_a == "" or family_b == "" or family_a == family_b:
+		return 0
+	return int(marriage_family_boosts.get(make_pair_key(family_a, family_b), {}).get("value", 0))
 
 
 static func apply_clan_war_declared(

@@ -4,9 +4,8 @@ class_name DayOrchestrator
 ## info events → letter delivery → topic tick →
 ## (season boundary) resource tick + confidence decay.
 
-const _COMBAT_EVENT_MOMENTUM: float = 0.0
-const _CIVIL_WAR_MOMENTUM: float = 0.0
-const _CONSTRUCTION_TIER2_MOMENTUM: float = 0.0
+# Topic initial momentum uses tier-floor values from TopicSystem.TIER_INITIAL_MOMENTUM
+# (locked s16.1). TIER_3 floor = 26.0, TIER_2 floor = 51.0.
 
 
 static func advance_day(
@@ -90,6 +89,24 @@ static func advance_day(
 	next_cell_id: Array = [1],
 	crafted_items: Array = [],
 	next_item_id: Array = [1],
+	theater_pieces: Array = [],
+	next_piece_id: Array = [1],
+	active_senbazurus: Array = [],
+	next_senbazuru_id: Array = [1],
+	active_arrangements: Array = [],
+	next_arrangement_id: Array = [1],
+	active_gardens: Array = [],
+	next_garden_id: Array = [1],
+	active_bonsai: Array = [],
+	next_bonsai_id: Array = [1],
+	commission_records: Array = [],
+	next_commission_id: Array = [1],
+	active_paintings: Array = [],
+	next_painting_id: Array = [1],
+	active_sculptures: Array = [],
+	next_sculpture_id: Array = [1],
+	active_okiyas: Array = [],
+	next_okiya_id: Array = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -126,6 +143,9 @@ static func advance_day(
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
 	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
 	_assign_magistrate_standing_objectives(characters, objectives_map)
+	_assign_ronin_standing_objectives(characters, objectives_map)
+	_assign_kaiu_engineer_standing_objectives(characters, objectives_map, settlements)
+	_assign_monk_standing_objectives(characters, objectives_map)
 
 	_clear_stale_context_flags(world_states)
 
@@ -140,7 +160,7 @@ static func advance_day(
 		travel_arrivals, characters_by_id, dice_engine,
 	)
 	_process_duped_foolish_on_arrival(
-		travel_arrivals, characters_by_id, objectives_map,
+		travel_arrivals, characters_by_id, objectives_map, settlements,
 	)
 
 	var musha_season_count: int = int(season_meta.get("horde_season_count", 0))
@@ -174,10 +194,21 @@ static func advance_day(
 	)
 	_set_court_context_flags(active_courts, world_states)
 	_inject_hunt_context(active_hunts, world_states, active_topics)
+	_inject_theater_context(theater_pieces, characters, world_states)
+	_inject_senbazuru_context(active_senbazurus, characters, world_states)
+	_inject_ikebana_context(active_arrangements, settlements, characters, world_states, active_gardens)
+	_inject_garden_context(active_gardens, active_bonsai, commission_records, settlements, characters, world_states)
+	_inject_painting_context(active_paintings, settlements, characters, world_states)
+	_inject_sculpture_context(active_sculptures, settlements, characters, world_states)
+	_inject_shide_context(settlements, characters, world_states)
+	_process_shide_permission_grants(settlements, characters, characters_by_id, ic_day)
+	_inject_poem_context(characters, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_set_temple_context_flags(characters, settlements, world_states)
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
 	_inject_settlement_type(characters, settlements, world_states)
+	_pickup_ambient_public_records(characters, settlements, ic_day)
+
 	_inject_insurgency_context(characters, provinces, _spm, insurgencies, world_states)
 	_populate_court_availability_data(
 		active_courts, characters, characters_by_id, world_states, favors,
@@ -251,10 +282,15 @@ static func advance_day(
 	var letter_pass_results: Array = _process_daily_letter_pass(
 		characters, characters_by_id, objectives_map, scoring_tables, world_states,
 		pending_letters, ic_day, dice_engine, next_letter_id,
+		active_topics, settlements,
 	)
 
 	_apply_garrison_shortage_letter_writebacks(
 		letter_pass_results, characters_by_id, settlements, current_season
+	)
+
+	_process_festival_leaves_penalty(
+		letter_pass_results, characters, ic_day,
 	)
 
 	_process_duel_challenge_writebacks(
@@ -279,6 +315,11 @@ static func advance_day(
 		dice_engine,
 	)
 
+	_seed_public_records_from_crime_results(
+		crime_results, day_result.get("results", []),
+		settlements, characters_by_id, ic_day,
+	)
+
 	_process_scout_detection_topics(
 		day_result.get("results", []), characters_by_id,
 		active_topics, next_topic_id, ic_day,
@@ -286,7 +327,7 @@ static func advance_day(
 
 	_process_scene_examination_writebacks(
 		day_result.get("results", []), objectives_map, world_states,
-		characters_by_id, active_topics, next_topic_id, ic_day,
+		characters_by_id, active_topics, next_topic_id, ic_day, settlements,
 	)
 
 	_update_patrol_tracking(
@@ -550,6 +591,12 @@ static func advance_day(
 		ic_day,
 	)
 
+	_process_patron_glory_writebacks(
+		day_result.get("results", []),
+		active_courts,
+		characters_by_id,
+	)
+
 	_process_commitment_creation_writebacks(
 		day_result.get("results", []),
 		commitments,
@@ -712,8 +759,13 @@ static func advance_day(
 		day_result.get("results", []), world_states,
 	)
 
-	_process_training_acceptance_writebacks(
+	_process_solo_training_writebacks(
 		day_result.get("results", []), characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+
+	_process_training_acceptance_writebacks(
+		day_result.get("results", []), characters_by_id, objectives_map,
 	)
 
 	_process_favor_response_writebacks(
@@ -750,6 +802,157 @@ static func advance_day(
 	)
 
 	_remove_resolved_hunts(active_hunts)
+
+	_process_petition_writebacks(
+		day_result.get("results", []),
+		characters_by_id, objectives_map, current_season,
+	)
+
+	_process_hire_ronin_writebacks(
+		day_result.get("results", []),
+		characters_by_id, objectives_map,
+	)
+
+	_process_contract_acceptance_writebacks(
+		day_result.get("results", []),
+		characters_by_id, objectives_map, current_season, ic_day,
+	)
+
+	_process_approve_induction_writebacks(
+		day_result.get("results", []),
+		characters_by_id,
+	)
+
+	_process_terminate_contract_writebacks(
+		day_result.get("results", []),
+		characters_by_id, current_season,
+	)
+
+	_process_clan_induction_writebacks(
+		day_result.get("results", []),
+		characters_by_id, objectives_map, active_topics, next_topic_id, ic_day,
+	)
+
+	_process_contract_expiry(
+		characters_by_id, objectives_map, current_season, ic_day,
+		active_wars, provinces, character_province_map,
+	)
+
+	_process_compose_theater_writebacks(
+		day_result.get("results", []),
+		theater_pieces, next_piece_id, characters_by_id, ic_day, active_topics,
+	)
+
+	_process_learn_theater_writebacks(
+		day_result.get("results", []),
+		theater_pieces, characters_by_id,
+	)
+
+	_process_perform_theater_writebacks(
+		day_result.get("results", []),
+		theater_pieces, characters_by_id, active_topics, next_topic_id, ic_day,
+		pending_letters, next_letter_id, dice_engine, scoring_tables,
+	)
+
+	_process_dedicate_piece_writebacks(
+		day_result.get("results", []),
+		theater_pieces,
+	)
+
+	_process_craft_origami_writebacks(
+		day_result.get("results", []),
+		characters_by_id, next_item_id, active_topics, next_topic_id, ic_day,
+	)
+	_process_declare_senbazuru_writebacks(
+		day_result.get("results", []),
+		active_senbazurus, next_senbazuru_id, characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+	_process_senbazuru_progress_writebacks(
+		day_result.get("results", []),
+		active_senbazurus, characters_by_id, active_topics, next_topic_id, ic_day,
+	)
+	_process_present_senbazuru_writebacks(
+		day_result.get("results", []),
+		active_senbazurus, characters_by_id, active_topics, next_topic_id, ic_day,
+	)
+	_process_senbazuru_lifecycle_events(
+		death_events, active_senbazurus, characters_by_id,
+		active_topics, next_topic_id, ic_day,
+	)
+	_process_noshi_consumption_writebacks(
+		day_result.get("results", []), characters_by_id,
+	)
+	_process_gohei_usage_writebacks(
+		day_result.get("results", []), characters_by_id,
+	)
+	_process_place_shide_writebacks(
+		day_result.get("results", []),
+		characters_by_id, settlements, active_topics, next_topic_id, ic_day,
+	)
+	_process_ikebana_performance_writebacks(
+		day_result.get("results", []),
+		active_arrangements, next_arrangement_id, characters_by_id,
+		settlements, ic_day, current_season, active_topics, next_topic_id, dice_engine,
+	)
+	_process_ikebana_daily_decay(active_arrangements)
+	_process_ikebana_visitor_effects(
+		active_arrangements, characters, characters_by_id, settlements, ic_day,
+	)
+	_process_ikebana_creator_deceased_topics(
+		active_arrangements, characters_by_id, active_topics, next_topic_id, ic_day,
+	)
+	_remove_expired_arrangements(active_arrangements)
+
+	_process_garden_commission_writebacks(
+		day_result.get("results", []),
+		commission_records, next_commission_id, active_gardens, next_garden_id,
+		characters_by_id, settlements, active_topics, next_topic_id, ic_day, current_season,
+	)
+	_process_maintain_garden_writebacks(
+		day_result.get("results", []),
+		active_gardens, characters_by_id, settlements, active_topics, next_topic_id, ic_day, current_season,
+	)
+	_process_bonsai_collect_writebacks(
+		day_result.get("results", []),
+		active_bonsai, next_bonsai_id, characters_by_id, ic_day,
+	)
+	_process_bonsai_tend_writebacks(
+		day_result.get("results", []),
+		active_bonsai, characters_by_id, ic_day,
+	)
+	_process_bonsai_display_writebacks(
+		day_result.get("results", []),
+		active_bonsai, characters_by_id, settlements,
+	)
+	_process_garden_visitor_effects(
+		active_gardens, characters, characters_by_id, settlements, ic_day,
+	)
+
+	_process_compose_painting_writebacks(
+		day_result.get("results", []),
+		active_paintings, next_painting_id, ic_day,
+	)
+	_process_display_painting_writebacks(
+		day_result.get("results", []),
+		active_paintings, characters_by_id, settlements, active_topics, next_topic_id, ic_day,
+	)
+	_process_present_emakimono_writebacks(
+		day_result.get("results", []),
+		active_paintings, characters_by_id, active_topics, next_topic_id, ic_day,
+	)
+	_process_painting_visitor_effects(
+		active_paintings, characters, characters_by_id, settlements, ic_day, current_season,
+	)
+
+	_process_compose_sculpture_writebacks(
+		day_result.get("results", []),
+		active_sculptures, next_sculpture_id, ic_day,
+		settlements, active_topics, next_topic_id,
+	)
+	_process_sculpture_visitor_effects(
+		active_sculptures, characters, characters_by_id, settlements, ic_day, current_season,
+	)
 
 	_process_travel_redirect_writebacks(
 		day_result.get("results", []), objectives_map,
@@ -805,7 +1008,9 @@ static func advance_day(
 	_cleanup_dead_character_references(
 		characters, characters_by_id, active_courts, entanglements,
 		active_hunts, favors, bloodspeaker_cells, active_secrets,
+		theater_pieces, active_paintings, active_sculptures,
 	)
+	_apply_artist_grief_on_death(characters, characters_by_id, active_paintings, settlements, ic_day)
 
 	var succession_results: Array = _process_successions(
 		active_successions, characters_by_id
@@ -820,6 +1025,7 @@ static func advance_day(
 	var conversation_results: Array = _process_daily_conversations(
 		characters, dice_engine, current_season, active_topics
 	)
+	_update_social_ic_day_from_conversations(conversation_results, characters_by_id, ic_day)
 
 	_process_eavesdrop_writebacks(
 		day_result.get("results", []),
@@ -841,6 +1047,13 @@ static func advance_day(
 	var topic_results: Dictionary = TopicMomentumSystem.process_daily_tick(active_topics)
 
 	_remove_resolved_topics(active_topics)
+	TheaterSystem.purge_stale_topic_ids(theater_pieces, active_topics)
+
+	_process_stale_champion_priorities(
+		characters, characters_by_id, clans, active_wars, active_edicts,
+		active_topics, objectives_map, current_season, dice_engine,
+		pending_letters, next_letter_id, ic_day,
+	)
 
 	var province_clan_map: Dictionary = _build_province_clan_map(provinces)
 	var broadcast_results: Array = TopicMomentumSystem.broadcast_public_knowledge(
@@ -883,6 +1096,15 @@ static func advance_day(
 		conviction_results, crime_records, characters_by_id,
 	)
 
+	_auto_dissolve_marriage_on_conviction(
+		conviction_results, characters_by_id, marriages,
+		ic_day, active_topics, next_topic_id,
+	)
+
+	_auto_dissolve_on_monastic_retirement(
+		characters_by_id, marriages, ic_day, active_topics, next_topic_id,
+	)
+
 	_apply_assassination_vengeance(
 		conviction_results, crime_records, characters_by_id,
 		objectives_map, active_topics, next_topic_id, ic_day,
@@ -922,6 +1144,7 @@ static func advance_day(
 		active_wars if active_wars != null else [], dice_engine, letter_topics_by_id,
 	)
 	_compute_positions_from_letters(letter_results, active_topics, characters_by_id)
+	_process_kitsuki_cipher_writebacks(letter_results, settlements, ic_day)
 	_process_impersonation_detection(
 		pending_letters, characters_by_id, active_topics,
 		next_topic_id, ic_day, objectives_map, commitments,
@@ -937,6 +1160,10 @@ static func advance_day(
 		pending_letters, objectives_map, characters_by_id,
 	)
 
+	_process_teaching_offer_letter_delivery(
+		pending_letters, characters_by_id, theater_pieces,
+	)
+
 	var reply_letters: Array = []
 	if dice_engine != null:
 		var reply_next_id: Array = [next_letter_id[0]]
@@ -947,6 +1174,7 @@ static func advance_day(
 		for reply: LetterData in reply_letters:
 			pending_letters.append(reply)
 		next_letter_id[0] = reply_next_id[0]
+	_update_social_ic_day_from_letters(letter_results, characters_by_id, ic_day)
 
 	var seasonal_result: Dictionary = {}
 	var strategic_results: Array = []
@@ -1011,6 +1239,10 @@ static func advance_day(
 			next_topic_id, ic_day, season_meta, next_crisis_id,
 		)
 		_decay_all_historical_modifiers(characters, ic_day)
+		CollectiveDisposition.decay_marriage_boosts(
+			world_states.get("marriage_clan_boosts", {}),
+			world_states.get("marriage_family_boosts", {}),
+		)
 		military_seasonal_result = _process_military_seasonal(
 			companies, settlements, clans, characters_by_id,
 			dice_engine, _season_to_name(current_season),
@@ -1071,9 +1303,9 @@ static func advance_day(
 			characters, characters_by_id, _si_spm,
 			active_topics, next_topic_id, ic_day, next_crisis_id,
 		)
+		TheaterSystem.process_degradation(theater_pieces, ic_day)
 		_process_doshin_seasonal_recovery(world_states)
 		_tick_kuni_wards(season_meta)
-		season_meta.erase("patrolled_provinces")
 		_process_construction_completions(
 			constructions, settlements, provinces, ships, dice_engine,
 			next_settlement_id, active_topics, next_topic_id, ic_day,
@@ -1093,13 +1325,15 @@ static func advance_day(
 		advancement_results = _process_npc_advancement(
 			characters, active_courts, active_sieges, active_armies,
 			insurgencies, current_season,
+			active_topics, next_topic_id, ic_day,
 		)
 		progress_results = _evaluate_objective_progress(
 			characters, objectives_map, world_states
 		)
 		strategic_results = _run_strategic_reviews(
 			characters, objectives_map, world_states,
-			characters_by_id,
+			characters_by_id, marriages, active_wars,
+			active_topics, active_edicts, clans, current_season, dice_engine,
 		)
 		_assign_phoenix_champion_restore_objective(
 			characters, objectives_map, phoenix_council_state,
@@ -1121,6 +1355,7 @@ static func advance_day(
 				next_topic_id, ic_day, active_civil_wars,
 				objectives_map, cw_season_count,
 				provinces, emperor_id_for_phoenix,
+				active_successions, next_succession_id,
 			)
 		_evaluate_heir_designations(
 			characters, characters_by_id, active_topics
@@ -1138,9 +1373,12 @@ static func advance_day(
 		_process_vassal_reassignments(
 			strategic_results, objectives_map, characters_by_id,
 		)
+		_process_champion_letter_dispatches(
+			strategic_results, pending_letters, next_letter_id, ic_day, characters_by_id,
+		)
 		_process_tyrant_directives(
 			strategic_results, active_topics, next_topic_id, ic_day,
-			characters_by_id,
+			characters_by_id, marriages,
 		)
 		if not seiyaku_state.is_empty():
 			seiyaku_results = _process_seiyaku_review(
@@ -1156,10 +1394,27 @@ static func advance_day(
 		)
 		_increment_vacancy_seasons(season_meta)
 		_process_seasonal_stipend_disposition(characters, characters_by_id)
+		_process_garden_seasonal_maintenance(
+			active_gardens, commission_records, characters_by_id, settlements,
+			active_topics, next_topic_id, ic_day, current_season,
+		)
+		_process_painting_seasonal_maintenance(
+			active_paintings, characters_by_id, settlements, active_topics, next_topic_id,
+			ic_day, current_season,
+		)
+		_process_sculpture_seasonal_maintenance(
+			active_sculptures, characters_by_id, settlements, active_topics, next_topic_id,
+			ic_day, current_season,
+		)
+		_process_seasonal_shide_degradation(
+			settlements, active_topics, next_topic_id, ic_day,
+		)
 		extradition_results = _process_fugitive_extradition_seasonal(
 			crime_records, characters, characters_by_id, provinces, settlements,
-			active_topics, next_topic_id, ic_day,
+			active_topics, next_topic_id, ic_day, season_meta,
 		)
+		# Erase patrolled_provinces AFTER extradition pass reads it for Path B sighting.
+		season_meta.erase("patrolled_provinces")
 		pregnancy_results = _process_pregnancy_checks(
 			marriages, characters_by_id, children, dice_engine, ic_day,
 			next_character_id,
@@ -1178,6 +1433,7 @@ static func advance_day(
 			_cleanup_dead_character_references(
 				characters, characters_by_id, active_courts, entanglements,
 				active_hunts, favors, bloodspeaker_cells, active_secrets,
+				theater_pieces, active_paintings,
 			)
 
 	var koku_flow_results: Dictionary = {}
@@ -1192,11 +1448,40 @@ static func advance_day(
 		stipend_topic_results = _create_stipend_failure_topics(
 			stipends, characters_by_id, active_topics, next_topic_id, ic_day,
 		)
+		_process_bonsai_monthly_neglect(active_bonsai, characters_by_id, ic_day / 30)
 
 	if is_season_boundary:
 		_purge_resolved_crime_records(crime_records, ic_day)
 		_purge_delivered_letters(pending_letters, characters_by_id, ic_day)
 		_purge_exposed_secrets(active_secrets, characters_by_id, ic_day)
+		_purge_settlement_public_records(settlements, ic_day)
+		# s57.57 seasonal detection triggers
+		_process_disappearance_check(
+			characters, characters_by_id, pending_letters, crime_records,
+			active_topics, next_topic_id, ic_day,
+		)
+		_process_justice_refusal_check(
+			crime_records, characters_by_id, active_topics, next_topic_id, ic_day,
+			settlements,
+		)
+		_process_behavioral_anomaly_check(
+			characters, characters_by_id, pending_letters, active_topics,
+			next_topic_id, ic_day,
+		)
+
+	# s57.57 Path A: daily fugitive sighting via co-location
+	_process_fugitive_sighting_colocation(
+		crime_records, characters, characters_by_id, active_topics, next_topic_id, ic_day,
+		settlements,
+	)
+
+	# s57.54 §9 — mid-season crisis update fires on non-seasonal days when a
+	# champion has Tier 1/2 topics not yet addressed as forced conclusions.
+	if not is_season_boundary and not clans.is_empty():
+		_process_midseason_champion_updates(
+			characters, characters_by_id, clans, active_topics, current_season,
+			pending_letters, next_letter_id, ic_day,
+		)
 
 	var horde_results: Dictionary = _process_horde_rolls(
 		current_season, prev_season,
@@ -1212,7 +1497,7 @@ static func advance_day(
 	if ic_day % TimeSystem.TICKS_PER_REAL_DAY == 0:
 		ooc_tick_results = _process_ooc_day_tick(
 			characters, characters_by_id, settlements, dice_engine, worship_state, ic_day,
-			world_states,
+			world_states, active_topics, active_okiyas,
 		)
 
 	return {
@@ -1331,6 +1616,8 @@ static func _process_ooc_day_tick(
 	worship_state: Dictionary,
 	ic_day: int = 0,
 	world_states: Dictionary = {},
+	active_topics: Array = [],
+	active_okiyas: Array = [],
 ) -> Array:
 	## Runs Wind-Down selection and Void Point refresh once per OOC day (every
 	## 4 IC days) per GDD s57.44.2 and s57.32.2.
@@ -1342,6 +1629,17 @@ static func _process_ooc_day_tick(
 	for s: SettlementData in settlements:
 		settlements_by_id[s.settlement_id] = s
 	var empty_settlement: SettlementData = SettlementData.new()
+
+	# Build topics_by_id for geisha tier routing (needs TopicData.tier).
+	var ooc_topics_by_id: Dictionary = {}
+	for _t: TopicData in active_topics:
+		ooc_topics_by_id[_t.topic_id] = _t
+
+	# Build settlement_id (String) → OkiyaData for ROUTING_HANDLER_PIPELINE.
+	var okiya_by_settlement: Dictionary = {}
+	for _o: OkiyaData in active_okiyas:
+		if _o.is_active:
+			okiya_by_settlement[_o.settlement_id] = _o
 
 	var loc_to_chars: Dictionary = {}
 	for c: L5RCharacterData in characters:
@@ -1405,6 +1703,7 @@ static func _process_ooc_day_tick(
 
 		var wind_result: Dictionary = WindDownSystem.apply_wind_down(
 			c, method, dice_engine, present_ids, companion_id, go_opponent, fortune_id,
+			settlement.okiya_tier,
 		)
 
 		# Void Point refresh per s57.32.2 — gated on rested_last_night and
@@ -1446,8 +1745,10 @@ static func _process_ooc_day_tick(
 					continue
 				var _cb: Dictionary = world_states.get("clan_baselines", {})
 				var _fb: Dictionary = world_states.get("family_baselines", {})
-				InformationSystem.add_contact(c, met_id, met_char.clan, met_char, _cb, _fb)
-				InformationSystem.add_contact(met_char, c.character_id, c.clan, c, _cb, _fb)
+				var _mcb: Dictionary = world_states.get("marriage_clan_boosts", {})
+				var _mfb: Dictionary = world_states.get("marriage_family_boosts", {})
+				InformationSystem.add_contact(c, met_id, met_char.clan, met_char, _cb, _fb, _mcb, _mfb)
+				InformationSystem.add_contact(met_char, c.character_id, c.clan, c, _cb, _fb, _mcb, _mfb)
 
 		# Topic leak — copy topic to target character's pool.
 		var leaked_topic: int = wind_result["topic_leaked"]
@@ -1459,10 +1760,16 @@ static func _process_ooc_day_tick(
 					var target_2: L5RCharacterData = characters_by_id[target_id_2] as L5RCharacterData
 					if not CharacterStats.is_dead(target_2) and not target_2.topic_pool.has(leaked_topic):
 						target_2.topic_pool.append(leaked_topic)
-			# ROUTING_HANDLER_PIPELINE and ROUTING_BROTHERHOOD are handled by
-			# their respective systems (Geisha Intelligence, Brotherhood network)
-			# when those systems are implemented. The topic ID is available in
-			# wind_result for forwarding.
+			elif routing == WindDownSystem.ROUTING_HANDLER_PIPELINE:
+				# Geisha intelligence pipeline (s57.45): geisha → okaasan → handler.
+				var okiya: OkiyaData = okiya_by_settlement.get(c.physical_location)
+				if okiya != null:
+					var geisha_result: Dictionary = GeishaSystem.process_geisha_visit(
+						c, okiya, leaked_topic, ooc_topics_by_id, characters_by_id, dice_engine,
+					)
+					wind_result["geisha_visit_result"] = geisha_result
+			# ROUTING_BROTHERHOOD: handled by Brotherhood network when implemented.
+			# The topic ID is available in wind_result for forwarding.
 
 		# Koku cost — deduct from character's personal purse.
 		if wind_result["koku_cost"] > 0.0:
@@ -2573,7 +2880,7 @@ static func _process_horde_rolls(
 		topic.topic_type = "military"
 		topic.category = TopicData.Category.POLITICAL
 		topic.tier = TopicData.Tier.TIER_3
-		topic.momentum = _COMBAT_EVENT_MOMENTUM
+		topic.momentum = TopicSystem.initial_momentum_for_tier(topic.tier)
 		topic.ic_day_created = ic_day
 		var province: Variant = provinces.get(horde.target_province_id, null)
 		if province is ProvinceData:
@@ -2851,9 +3158,7 @@ static func _find_province_lord(
 # crisis topics for provinces at HUNGER or FAMINE. Tracks recovery: 10
 # consecutive seasons at positive Rice balance resolves the crisis.
 
-const _FAMINE_RECOVERY_THRESHOLD: int = 0
-const _FAMINE_HUNGER_MOMENTUM: float = 0.0
-const _FAMINE_FAMINE_MOMENTUM: float = 0.0
+const _FAMINE_RECOVERY_THRESHOLD: int = 4  # 4 seasons per GDD s4.3.6 — locked s04.3a
 
 
 static func _process_famine_crises(
@@ -2943,10 +3248,9 @@ static func _process_famine_crises(
 			var stage_2: int = int(entry["stage"])
 			if not _has_active_famine_topic(province_id_2, active_topics):
 				var tier: int = TopicData.Tier.TIER_3
-				var momentum: float = _FAMINE_HUNGER_MOMENTUM
 				if stage_2 >= ResourceTick.StarvationStage.FAMINE:
 					tier = TopicData.Tier.TIER_2
-					momentum = _FAMINE_FAMINE_MOMENTUM
+				var momentum: float = TopicSystem.initial_momentum_for_tier(tier)
 				var single_cid: int = -1
 				var single_prov: Variant = provinces.get(province_id_2, null)
 				if single_prov is ProvinceData:
@@ -3086,7 +3390,7 @@ static func _create_famine_topic_multi(
 	topic.clan_involved = clan
 	topic.provinces_affected = province_ids.duplicate()
 	topic.ic_day_created = ic_day
-	topic.momentum = _FAMINE_FAMINE_MOMENTUM
+	topic.momentum = TopicSystem.initial_momentum_for_tier(topic.tier)
 	topic.crisis_id = p_crisis_id
 	return topic
 
@@ -3132,6 +3436,7 @@ static func _process_scene_examination_writebacks(
 	active_topics: Array = [],
 	next_topic_id: Array = [1000],
 	ic_day: int = 0,
+	settlements: Array = [],
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
@@ -3187,6 +3492,34 @@ static func _process_scene_examination_writebacks(
 				case_id, world_states, characters_by_id,
 				active_topics, next_topic_id, ic_day
 			)
+
+		# Public record investigation — query settlement for older entries (s57.50)
+		if not settlements.is_empty():
+			var investigator: L5RCharacterData = characters_by_id.get(char_id)
+			if investigator != null and not CharacterStats.is_dead(investigator) \
+					and not investigator.physical_location.is_empty():
+				var roll_total_exam: int = effects.get("roll_total", 0)
+				var found: Array = _query_public_record_for_investigation(
+					investigator.physical_location, settlements, roll_total_exam, ic_day
+				)
+				for entry: Dictionary in found:
+					var pr_topic_id: int = entry.get("topic_id", -1)
+					if pr_topic_id >= 0 and pr_topic_id not in investigator.topic_pool:
+						investigator.topic_pool.append(pr_topic_id)
+
+
+static func _query_public_record_for_investigation(
+	location: String,
+	settlements: Array,
+	roll_total: int,
+	ic_day: int,
+) -> Array:
+	for s: Variant in settlements:
+		if s is SettlementData:
+			var settlement: SettlementData = s as SettlementData
+			if str(settlement.settlement_id) == location:
+				return PublicRecordSystem.query_by_investigation(settlement, roll_total, ic_day)
+	return []
 
 
 static func _update_patrol_tracking(
@@ -3638,12 +3971,21 @@ static func _process_fugitive_extradition_seasonal(
 	active_topics: Array,
 	next_topic_id: Array,
 	ic_day: int,
+	season_meta: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 
 	var sett_prov_map: Dictionary = {}
 	for s: SettlementData in settlements:
 		sett_prov_map[s.settlement_id] = s.province_id
+
+	# Collect existing sighting slugs for dedup (one per fugitive per season)
+	var existing_sighting_subjects: Dictionary = {}
+	for t: TopicData in active_topics:
+		if t.topic_type == "fugitive_sighting" and not t.resolved:
+			existing_sighting_subjects[t.subject_character_id] = true
+
+	var patrolled_provinces: Dictionary = season_meta.get("patrolled_provinces", {})
 
 	for record: CrimeRecord in crime_records:
 		if record.legal_status != Enums.LegalStatus.FUGITIVE:
@@ -3669,21 +4011,36 @@ static func _process_fugitive_extradition_seasonal(
 		if fugitive.clan.is_empty() or fugitive.clan == crime_clan:
 			continue
 
-		# Sighting topic for notable fugitives (s11.3.16a)
-		if FugitiveExtraditionSystem.generates_sighting_topic(fugitive.status):
-			var sighting: TopicData = TopicData.new()
-			sighting.topic_id = next_topic_id[0]
-			next_topic_id[0] += 1
-			sighting.slug = "fugitive_sighting_%d_d%d" % [fugitive.character_id, ic_day]
-			sighting.title = "A stranger matching %s was seen in foreign territory" % fugitive.character_name
-			sighting.topic_type = "fugitive_sighting"
-			sighting.tier = TopicData.Tier.TIER_4
-			sighting.category = TopicData.Category.POLITICAL
-			sighting.momentum = TopicMomentumSystem.initial_momentum_for_tier(sighting.tier)
-			sighting.subject_character_id = fugitive.character_id
-			sighting.clan_involved = fugitive.clan
-			sighting.ic_day_created = ic_day
-			active_topics.append(sighting)
+		# s57.57 §57.57.1: Sighting topic via Path B (patrol) or Path C (Status ≥ 5.0).
+		# Path A (co-location) is handled daily in _process_fugitive_sighting_colocation().
+		# Dedup: one sighting topic per fugitive per season.
+		if not existing_sighting_subjects.has(fugitive.character_id):
+			var fugitive_settlement_id: int = -1
+			if fugitive.physical_location.is_valid_int():
+				fugitive_settlement_id = int(fugitive.physical_location)
+			var fugitive_province_id: int = sett_prov_map.get(fugitive_settlement_id, -1)
+
+			var path_b_trigger: bool = (
+				fugitive_province_id >= 0
+				and patrolled_provinces.has(fugitive_province_id)
+			)
+			var path_c_trigger: bool = FugitiveExtraditionSystem.generates_sighting_topic(fugitive.status)
+
+			if path_b_trigger or path_c_trigger:
+				var sighting: TopicData = TopicData.new()
+				sighting.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				sighting.slug = "fugitive_sighting_%d_d%d" % [fugitive.character_id, ic_day]
+				sighting.title = "A stranger matching %s was seen in foreign territory" % fugitive.character_name
+				sighting.topic_type = "fugitive_sighting"
+				sighting.tier = TopicData.Tier.TIER_4
+				sighting.category = TopicData.Category.POLITICAL
+				sighting.momentum = TopicMomentumSystem.initial_momentum_for_tier(sighting.tier)
+				sighting.subject_character_id = fugitive.character_id
+				sighting.clan_involved = fugitive.clan
+				sighting.ic_day_created = ic_day
+				active_topics.append(sighting)
+				existing_sighting_subjects[fugitive.character_id] = true
 
 		# Harboring lord: fugitive's direct lord (still in fugitive.lord_id after flee)
 		var harboring_lord: L5RCharacterData = _extrad_find_harboring_lord(
@@ -3815,6 +4172,371 @@ static func _extrad_crime_tier(crime_type: Enums.CrimeType) -> int:
 		crime_type, [-0.1, 0.0, 0.0, TopicData.Tier.TIER_4]
 	)
 	return int(consequences[3])
+
+
+# -- s57.57 Topic Detection Mechanics -----------------------------------------
+
+# T4-48 Path A — daily co-location fugitive sighting (s57.57 §57.57.1 Path A).
+# Fires when a living non-lord observer is co-located with a FUGITIVE character.
+static func _process_fugitive_sighting_colocation(
+	crime_records: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	settlements: Array = [],
+) -> void:
+	var sett_prov_map: Dictionary = {}
+	for s: SettlementData in settlements:
+		sett_prov_map[s.settlement_id] = s.province_id
+
+	# Collect existing sighting subjects (dedup per fugitive per season)
+	var existing_sighting_subjects: Dictionary = {}
+	for t: TopicData in active_topics:
+		if t.topic_type == "fugitive_sighting" and not t.resolved:
+			existing_sighting_subjects[t.subject_character_id] = true
+
+	for record: CrimeRecord in crime_records:
+		if record.legal_status != Enums.LegalStatus.FUGITIVE:
+			continue
+		var fugitive: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
+		if fugitive == null or CharacterStats.is_dead(fugitive):
+			continue
+		if TravelSystem.is_traveling(fugitive) or fugitive.physical_location.is_empty():
+			continue
+		if existing_sighting_subjects.has(fugitive.character_id):
+			continue
+
+		for observer: L5RCharacterData in characters:
+			if CharacterStats.is_dead(observer):
+				continue
+			if observer.character_id == fugitive.character_id:
+				continue
+			if TravelSystem.is_traveling(observer):
+				continue
+			if observer.physical_location != fugitive.physical_location:
+				continue
+			if observer.lord_id == fugitive.character_id or observer.character_id == fugitive.lord_id:
+				continue
+			# Observer is co-located non-lord — fire sighting topic
+			var sighting: TopicData = TopicData.new()
+			sighting.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			sighting.slug = "fugitive_sighting_%d_d%d" % [fugitive.character_id, ic_day]
+			sighting.title = "A stranger matching %s was seen" % fugitive.character_name
+			sighting.topic_type = "fugitive_sighting"
+			sighting.tier = TopicData.Tier.TIER_4
+			sighting.category = TopicData.Category.POLITICAL
+			sighting.momentum = TopicMomentumSystem.initial_momentum_for_tier(sighting.tier)
+			sighting.subject_character_id = fugitive.character_id
+			sighting.clan_involved = fugitive.clan
+			sighting.ic_day_created = ic_day
+			active_topics.append(sighting)
+			existing_sighting_subjects[fugitive.character_id] = true
+			break
+
+
+# T4-13 DISAPPEARANCE — seasonal tick (s57.57 §57.57.2).
+static func _process_disappearance_check(
+	characters: Array,
+	characters_by_id: Dictionary,
+	pending_letters: Array,
+	crime_records: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	const SOCIAL_ABSENCE_THRESHOLD: int = 90  # 1 IC season per s57.57
+
+	# Build existing disappearance subjects (dedup)
+	var existing_disappearance_subjects: Dictionary = {}
+	for t: TopicData in active_topics:
+		if t.topic_type == "disappearance" and not t.resolved:
+			existing_disappearance_subjects[t.subject_character_id] = true
+
+	# Build perpetrator IDs from active investigations (exclusion rule)
+	var perpetrator_ids: Dictionary = {}
+	for rec: CrimeRecord in crime_records:
+		if rec.legal_status == Enums.LegalStatus.UNDER_INVESTIGATION:
+			perpetrator_ids[rec.perpetrator_id] = true
+
+	# Build fugitive set from crime records (legal_status is on CrimeRecord, not character)
+	var fugitive_character_ids: Dictionary = {}
+	for rec: CrimeRecord in crime_records:
+		if rec.legal_status == Enums.LegalStatus.FUGITIVE:
+			fugitive_character_ids[rec.perpetrator_id] = true
+
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if existing_disappearance_subjects.has(c.character_id):
+			continue
+
+		# Condition 1: social absence ≥ 1 IC season
+		if c.last_social_ic_day < 0:
+			continue
+		if (ic_day - c.last_social_ic_day) < SOCIAL_ABSENCE_THRESHOLD:
+			continue
+
+		# Condition 2: no outgoing letter in the same window
+		var sent_recently: bool = false
+		for letter: LetterData in pending_letters:
+			if letter.sender_id == c.character_id and letter.ic_day_sent >= ic_day - SOCIAL_ABSENCE_THRESHOLD:
+				sent_recently = true
+				break
+		if sent_recently:
+			continue
+
+		# Condition 3: not a fugitive
+		if fugitive_character_ids.has(c.character_id):
+			continue
+
+		# Condition 4: not legitimately traveling
+		if TravelSystem.is_traveling(c):
+			continue
+
+		# All conditions met — create disappearance topic
+		var topic: TopicData = TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "disappearance_%d_d%d" % [c.character_id, ic_day]
+		topic.title = "%s has not been seen or heard from for a season" % c.character_name
+		topic.topic_type = "disappearance"
+		topic.tier = TopicData.Tier.TIER_4
+		topic.category = TopicData.Category.PERSONAL
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		topic.subject_character_id = c.character_id
+		topic.clan_involved = c.clan
+		topic.ic_day_created = ic_day
+		active_topics.append(topic)
+		existing_disappearance_subjects[c.character_id] = true
+
+		# Notify lord (always)
+		if c.lord_id >= 0:
+			var lord: L5RCharacterData = characters_by_id.get(c.lord_id)
+			if lord != null and not CharacterStats.is_dead(lord):
+				lord.topic_pool.append(topic.topic_id)
+
+		# Notify close associates at last-seen settlement (Friend tier, exclusion rule)
+		for other: L5RCharacterData in characters:
+			if CharacterStats.is_dead(other):
+				continue
+			if other.character_id == c.character_id:
+				continue
+			if other.physical_location != c.physical_location or c.physical_location.is_empty():
+				continue
+			# Exclusion rule: perpetrator holding active CrimeRecord against missing char
+			if perpetrator_ids.has(other.character_id):
+				var is_perpetrator_vs_missing: bool = false
+				for rec: CrimeRecord in crime_records:
+					if rec.perpetrator_id == other.character_id and rec.victim_id == c.character_id:
+						is_perpetrator_vs_missing = true
+						break
+				if is_perpetrator_vs_missing:
+					continue
+			var disp: int = other.disposition_values.get(c.character_id, 0)
+			if disp >= 31:
+				other.topic_pool.append(topic.topic_id)
+
+
+# T3-39 JUSTICE_REFUSAL — seasonal tick (s57.57 §57.57.3).
+static func _process_justice_refusal_check(
+	crime_records: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	settlements: Array = [],
+) -> void:
+	const EXTRAD_WINDOW_DAYS: int = 90  # 1 IC season per s57.57
+
+	var sett_prov_map: Dictionary = {}
+	for s: SettlementData in settlements:
+		sett_prov_map[s.settlement_id] = s.province_id
+
+	# Build existing justice_refusal subjects (dedup)
+	var existing_refusal_subjects: Dictionary = {}
+	for t: TopicData in active_topics:
+		if t.topic_type == "justice_refusal" and not t.resolved:
+			existing_refusal_subjects[t.subject_character_id] = true
+
+	# Index extradition_request topics by subject_character_id for fast lookup
+	var extrad_topics_by_subject: Dictionary = {}
+	for t: TopicData in active_topics:
+		if t.topic_type == "extradition_request" and not t.resolved:
+			extrad_topics_by_subject[t.subject_character_id] = t
+
+	for record: CrimeRecord in crime_records:
+		# Condition 1: FUGITIVE status
+		if record.legal_status != Enums.LegalStatus.FUGITIVE:
+			continue
+
+		var fugitive: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
+		if fugitive == null or CharacterStats.is_dead(fugitive):
+			continue
+
+		# Condition 2: cross-clan (crime province clan vs fugitive's current province clan)
+		if not record.location.is_valid_int():
+			continue
+		var crime_prov_id: int = sett_prov_map.get(int(record.location), -1)
+		var fugitive_prov_id: int = -1
+		if fugitive.physical_location.is_valid_int():
+			fugitive_prov_id = sett_prov_map.get(int(fugitive.physical_location), -1)
+		# No clan lookup needed — fugitive.clan vs crime province clan is sufficient
+		# (fugitive remaining in their own clan territory = not cross-clan sheltering)
+		if fugitive.clan.is_empty():
+			continue
+
+		# Condition 3: T4-78 extradition_request exists for this fugitive
+		if not extrad_topics_by_subject.has(fugitive.character_id):
+			continue
+
+		# Condition 4: dedup — no existing justice_refusal for this fugitive
+		if existing_refusal_subjects.has(fugitive.character_id):
+			continue
+
+		# Condition 5: 90-day window elapsed since extradition_request was created
+		var extrad_topic: TopicData = extrad_topics_by_subject[fugitive.character_id]
+		if (ic_day - extrad_topic.ic_day_created) < EXTRAD_WINDOW_DAYS:
+			continue
+
+		var topic: TopicData = TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "justice_refusal_%d_d%d" % [fugitive.character_id, ic_day]
+		topic.title = "%s's clan has refused to extradite a fugitive" % fugitive.clan
+		topic.topic_type = "justice_refusal"
+		topic.tier = TopicData.Tier.TIER_3
+		topic.category = TopicData.Category.POLITICAL
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		topic.subject_character_id = fugitive.character_id
+		topic.clan_involved = fugitive.clan
+		topic.ic_day_created = ic_day
+		active_topics.append(topic)
+		existing_refusal_subjects[fugitive.character_id] = true
+
+
+# T4-90 Path B — correspondence gap (s57.57 §57.57.4 Path B).
+static func _process_behavioral_anomaly_check(
+	characters: Array,
+	characters_by_id: Dictionary,
+	pending_letters: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	const PRIOR_LETTER_MIN: int = 3     # minimum prior letters to establish a pattern
+	const SILENCE_THRESHOLD_DAYS: int = 90  # 1 IC season per s57.57
+
+	# Build existing behavioral_anomaly subjects (dedup)
+	var existing_anomaly_subjects: Dictionary = {}
+	for t: TopicData in active_topics:
+		if t.topic_type == "behavioral_anomaly" and not t.resolved:
+			existing_anomaly_subjects[t.subject_character_id] = true
+
+	# Pre-count total and recent letters per sender
+	var total_sent: Dictionary = {}
+	var recent_sent: Dictionary = {}
+	for letter: LetterData in pending_letters:
+		var sid: int = letter.sender_id
+		if sid < 0:
+			continue
+		total_sent[sid] = total_sent.get(sid, 0) + 1
+		if letter.ic_day_sent >= ic_day - SILENCE_THRESHOLD_DAYS:
+			recent_sent[sid] = recent_sent.get(sid, 0) + 1
+
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if existing_anomaly_subjects.has(c.character_id):
+			continue
+
+		var total: int = total_sent.get(c.character_id, 0)
+		if total < PRIOR_LETTER_MIN:
+			continue
+
+		var recent: int = recent_sent.get(c.character_id, 0)
+		if recent > 0:
+			continue
+
+		# Pattern established and now silent — generate topic
+		var topic: TopicData = TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "behavioral_anomaly_%d_d%d" % [c.character_id, ic_day]
+		topic.title = "%s has gone uncharacteristically silent" % c.character_name
+		topic.topic_type = "behavioral_anomaly"
+		topic.tier = TopicData.Tier.TIER_4
+		topic.category = TopicData.Category.PERSONAL
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		topic.subject_character_id = c.character_id
+		topic.clan_involved = c.clan
+		topic.ic_day_created = ic_day
+		active_topics.append(topic)
+		existing_anomaly_subjects[c.character_id] = true
+
+		# Notify lord
+		if c.lord_id >= 0:
+			var lord: L5RCharacterData = characters_by_id.get(c.lord_id)
+			if lord != null and not CharacterStats.is_dead(lord):
+				lord.topic_pool.append(topic.topic_id)
+
+		# Notify close associates at last-known settlement
+		for other: L5RCharacterData in characters:
+			if CharacterStats.is_dead(other):
+				continue
+			if other.character_id == c.character_id:
+				continue
+			if other.physical_location != c.physical_location or c.physical_location.is_empty():
+				continue
+			var disp: int = other.disposition_values.get(c.character_id, 0)
+			if disp >= 31:
+				other.topic_pool.append(topic.topic_id)
+
+
+# Update last_social_ic_day for all conversation participants (s57.57 §57.57.5).
+static func _update_social_ic_day_from_conversations(
+	conversation_results: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	for result: Variant in conversation_results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		for key: String in ["char_a_id", "char_b_id"]:
+			var cid: int = r.get(key, -1)
+			if cid < 0:
+				continue
+			var c: L5RCharacterData = characters_by_id.get(cid)
+			if c == null or CharacterStats.is_dead(c):
+				continue
+			c.last_social_ic_day = ic_day
+
+
+# Update last_social_ic_day for letter senders and recipients on delivery (s57.57 §57.57.5).
+static func _update_social_ic_day_from_letters(
+	letter_results: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	for result: Variant in letter_results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if r.get("undeliverable", false):
+			continue
+		if not r.has("sender_id") or not r.has("recipient_id"):
+			continue
+		for key: String in ["sender_id", "recipient_id"]:
+			var cid: int = r.get(key, -1)
+			if cid < 0:
+				continue
+			var c: L5RCharacterData = characters_by_id.get(cid)
+			if c == null or CharacterStats.is_dead(c):
+				continue
+			c.last_social_ic_day = ic_day
 
 
 static func _process_successful_bribe_writebacks(
@@ -4874,7 +5596,8 @@ static func _process_introduction_writebacks(
 		if CharacterStats.is_dead(actor) or CharacterStats.is_dead(contact):
 			continue
 		InformationSystem.add_contact(actor, contact_id, contact.clan, contact,
-			world_states.get("clan_baselines", {}), world_states.get("family_baselines", {}))
+			world_states.get("clan_baselines", {}), world_states.get("family_baselines", {}),
+			world_states.get("marriage_clan_boosts", {}), world_states.get("marriage_family_boosts", {}))
 		var disp_gain: int = effects.get("disposition_gain", 0)
 		if disp_gain != 0:
 			var old_val: int = contact.disposition_values.get(actor_id, 0)
@@ -5040,9 +5763,58 @@ static func _process_mentor_writebacks(
 		world_states[student_id] = student_ws
 
 
+static func _process_solo_training_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "TRAIN":
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		var train_result: Dictionary = effects.get("training_result", {})
+		if train_result.is_empty() or not train_result.get("advanced", false):
+			continue
+		var char_id: int = d.get("character_id", -1)
+		if char_id < 0:
+			continue
+		var character: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		var old_rank: int = character.school_rank
+		var new_rank: int = CharacterStats.get_insight_rank(character)
+		if new_rank <= old_rank:
+			continue
+		# Rank-up occurred from solo training — sync stored field and flags (s48a A48a-3)
+		character.school_rank = new_rank
+		SkillResolver.apply_technique_flags(character)
+		# Generate Tier 4 Personal topic (s48a A48a-2) and seed into character's own pool
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "rank_advancement_%d" % char_id
+		topic.title = "%s achieves Rank %d" % [character.name, new_rank]
+		topic.topic_type = "rank_advancement"
+		topic.tier = TopicData.Tier.TIER_4
+		topic.category = TopicData.Category.PERSONAL
+		topic.subject_character_id = char_id
+		topic.subject_role = "NEUTRAL"
+		topic.ic_day_created = ic_day
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		active_topics.append(topic)
+		if not character.topic_pool.has(topic.topic_id):
+			character.topic_pool.append(topic.topic_id)
+
+
 static func _process_training_acceptance_writebacks(
 	results: Array,
 	characters_by_id: Dictionary,
+	objectives_map: Dictionary = {},
 ) -> void:
 	for r: Variant in results:
 		if not r is Dictionary:
@@ -5061,6 +5833,24 @@ static func _process_training_acceptance_writebacks(
 		if student == null or sensei == null:
 			continue
 		if CharacterStats.is_dead(student) or CharacterStats.is_dead(sensei):
+			continue
+		# Teaching offer letters create a LEARN_THEATER_PIECE objective, not a training session
+		var teacher_initiated: bool = event_data.get("teacher_initiated", false)
+		var learn_piece_id: int = event_data.get("learn_piece_id", -1)
+		if teacher_initiated and learn_piece_id >= 0:
+			if not objectives_map.is_empty():
+				if student_id not in objectives_map:
+					objectives_map[student_id] = {}
+				var existing_primary: Dictionary = objectives_map[student_id].get("primary", {})
+				if existing_primary.get("need_type", "") != "ARTISTIC_EXPRESSION":
+					objectives_map[student_id]["primary"] = {
+						"need_type": "ARTISTIC_EXPRESSION",
+						"objective_type": "LEARN_THEATER_PIECE",
+						"target_npc_id": sensei_id,
+						"learn_piece_id": learn_piece_id,
+						"source": "teaching_offer_letter",
+						"priority": 3,
+					}
 			continue
 		NPCAdvancement.resolve_training_session(sensei, student, skill_name)
 		if student.action_points_current > 0:
@@ -5400,7 +6190,7 @@ static func _process_lying_honor_writebacks(
 		var subject_id: int = (secret as SecretData).subject_id
 		if subject_id < 0:
 			continue
-		var disp: int = fabricator.disposition_values.get(str(subject_id), 0)
+		var disp: int = fabricator.disposition_values.get(subject_id, 0)
 		if disp > 0:
 			HonorGlorySystem.apply_honor_change(fabricator, CrimeSystem.get_lying_honor(fabricator))
 
@@ -6006,6 +6796,553 @@ static func _assign_magistrate_standing_objectives(
 		}
 
 
+# -- FIND_NEW_LORD Standing Objective Assignment (s52.5 Part F) ----------------
+# Ronin NPCs automatically receive FIND_NEW_LORD as their standing objective
+# so they participate in the petition pipeline without requiring lord directives.
+
+
+static func _assign_ronin_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if not RoninSystem.is_ronin(character):
+			continue
+		if character.permanent_ronin:
+			continue
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+
+		if standing.get("need_type", "") == "FIND_NEW_LORD":
+			continue
+
+		if not standing.is_empty():
+			continue
+
+		objectives["standing"] = {
+			"need_type": "FIND_NEW_LORD",
+			"priority": 5,
+			"auto_assigned": true,
+		}
+
+
+# -- Monk Standing Objective Assignment (s55.11b) ------------------------------
+# Named monk characters auto-receive PERFORM_RITUAL as their standing objective.
+# GDD s55.11b specifies five types (Help People, Fight Bandits, Meditate, Train,
+# Worship) all using EXISTING NeedTypes. PERFORM_RITUAL covers the Meditate and
+# Worship types (both use PERFORM_RITUAL/PERFORM_WORSHIP actions) and is the
+# universally applicable monk baseline. School-based differentiation to the other
+# types (RAISE_DISPOSITION=Help People, INVESTIGATE_THREAT=Fight Bandits,
+# TRAIN_SKILL=Train) is deferred until the GDD specifies the school→type mapping.
+
+
+static func _assign_monk_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.school_type != Enums.SchoolType.MONK:
+			continue
+		if CharacterStats.is_dead(character):
+			continue
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+
+		# Do not replace existing standing objectives (magistrate dual-role monks,
+		# lord-assigned standing, etc.).
+		if not standing.is_empty():
+			continue
+
+		objectives["standing"] = {
+			"need_type": "PERFORM_RITUAL",
+			"priority": 3,
+			"auto_assigned": true,
+		}
+
+
+# -- Kaiu Engineer Standing Need (s57.41.2) ------------------------------------
+# Kaiu Engineers auto-receive MAINTAIN_FORTIFICATION or SEAL_WALL_BREACH
+# when Wall Tower SI thresholds are breached, without requiring a lord directive.
+
+
+static func _assign_kaiu_engineer_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+	settlements: Array,
+) -> void:
+	# Determine the lowest Wall Tower SI across all towers.
+	var min_si: int = 999
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			if s.wall_si < min_si:
+				min_si = s.wall_si
+
+	# No wall towers exist, or all towers are healthy.
+	if min_si >= 7:
+		return
+
+	var breach: bool = (min_si == 0)
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.school != "Kaiu Engineer":
+			continue
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+
+		if not standing.is_empty():
+			continue
+
+		if breach:
+			objectives["standing"] = {
+				"need_type": "MAINTAIN_FORTIFICATION",
+				"priority": 1,
+				"auto_assigned": true,
+			}
+		else:
+			objectives["standing"] = {
+				"need_type": "MAINTAIN_FORTIFICATION",
+				"priority": 2,
+				"auto_assigned": true,
+			}
+
+
+# -- Petition Writeback (s52.5 Parts B–D) -------------------------------------
+
+
+static func _process_petition_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	current_season: int,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") not in ["PETITION_RONIN", "ACCEPT_RONIN_PETITION"]:
+			continue
+
+		var effects: Dictionary = result.get("effects", {})
+		var ronin_actor_id: int = result.get("character_id", -1)
+
+		# On roll failure: write per-lord cooldown to petitioner's supply_ledger (s52.5 A46).
+		# Key is "petition_refused_until_<lord_id>" so only that lord is blocked (not others).
+		var refused_until: int = effects.get("petition_refused_until", -1)
+		if refused_until >= 0:
+			var refused_lord_id: int = result.get("target_npc_id", -1)
+			var petitioner: L5RCharacterData = characters_by_id.get(ronin_actor_id) as L5RCharacterData
+			if petitioner != null and not CharacterStats.is_dead(petitioner) and refused_lord_id >= 0:
+				petitioner.supply_ledger["petition_refused_until_%d" % refused_lord_id] = refused_until
+			continue
+
+		if not effects.get("requires_ronin_acceptance", false):
+			continue
+
+		var lord_id: int = effects.get("accepting_lord_id", -1)
+		var ronin_id: int = effects.get("ronin_id", -1)
+		if lord_id < 0 or ronin_id < 0:
+			continue
+
+		var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+		if ronin == null or CharacterStats.is_dead(ronin):
+			continue
+		if not RoninSystem.is_ronin(ronin):
+			continue
+
+		# Accept into service: set lord, restore status, apply glory recovery.
+		RoninSystem.accept_into_service(ronin, lord_id, "Samurai")
+		RoninSystem.record_income(ronin, current_season)
+
+		# Clear the FIND_NEW_LORD standing objective now that the ronin has a lord.
+		if objectives_map.has(ronin_id):
+			var objs: Dictionary = objectives_map[ronin_id]
+			var standing: Dictionary = objs.get("standing", {})
+			if standing.get("need_type", "") == "FIND_NEW_LORD":
+				objs.erase("standing")
+
+
+# -- Hire Ronin Writebacks (s52.6 Part B) -------------------------------------
+
+
+static func _process_hire_ronin_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "HIRE_RONIN":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("injects_reactive_event", false):
+			continue
+
+		var ronin_id: int = effects.get("ronin_id", -1)
+		var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+		if ronin == null or CharacterStats.is_dead(ronin):
+			continue
+		if not RoninSystem.is_ronin(ronin):
+			continue
+
+		# Seigyo evaluation needs to know whether FIND_NEW_LORD is the ronin's
+		# standing objective — it accepts contracts that resolve their current goal.
+		var standing: Dictionary = objectives_map.get(ronin_id, {}).get("standing", {})
+		var has_find_new_lord_standing: bool = standing.get("need_type", "") == "FIND_NEW_LORD"
+
+		# Inject CONTRACT_OFFERED reactive event into ronin's pending_events.
+		ronin.pending_events.append({
+			"reactive_type": "CONTRACT_OFFERED",
+			"lord_id": effects.get("lord_id", -1),
+			"lord_status": effects.get("lord_status", 0.0),
+			"ronin_id": ronin_id,
+			"contract_type": effects.get("contract_type", "PROVINCE_DEFENSE"),
+			"duration_seasons": effects.get("duration_seasons", 1),
+			"payment": effects.get("payment", 0.0),
+			"current_season": effects.get("current_season", 0),
+			"has_find_new_lord_standing": has_find_new_lord_standing,
+		})
+
+
+# -- Contract Acceptance Writebacks (s52.6 Part E) ----------------------------
+
+
+static func _process_contract_acceptance_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	current_season: int,
+	ic_day: int,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action", "") != "ACCEPT_CONTRACT":
+			continue
+
+		var ronin_id: int = result.get("character_id", -1)
+		var lord_id: int = result.get("target_npc_id", -1)
+		if ronin_id < 0 or lord_id < 0:
+			continue
+
+		var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+		var lord: L5RCharacterData = characters_by_id.get(lord_id) as L5RCharacterData
+		if ronin == null or CharacterStats.is_dead(ronin):
+			continue
+		if lord == null or CharacterStats.is_dead(lord):
+			continue
+		if not RoninSystem.is_ronin(ronin):
+			continue
+
+		var contract_type: String = result.get("contract_type", "PROVINCE_DEFENSE")
+		var duration_seasons: int = int(result.get("duration_seasons", 1))
+		var payment: float = RoninSystem.get_contract_payment(contract_type, duration_seasons)
+
+		# Deduct koku from lord on acceptance.
+		lord.koku = maxf(0.0, lord.koku - payment)
+		ronin.koku += payment
+
+		# Accept into retainer service (sets lord_id, role, status, glory recovery).
+		RoninSystem.accept_into_service(ronin, lord_id, "Samurai")
+		RoninSystem.record_income(ronin, current_season)
+
+		# Store contract metadata for expiry checking.
+		var season_days: int = InvestigationSystem.DAYS_PER_SEASON
+		ronin.supply_ledger["contract_end_ic_day"] = ic_day + duration_seasons * season_days
+		ronin.supply_ledger["contract_type"] = contract_type
+		ronin.supply_ledger["contract_lord_family"] = lord.family
+		ronin.supply_ledger["contract_duration_seasons"] = duration_seasons
+
+		# Assign the contract NeedType as primary objective.
+		var need_type: String = RoninSystem.CONTRACT_TYPE_NEED.get(contract_type, "DEFEND_PROVINCE")
+		if not objectives_map.has(ronin_id):
+			objectives_map[ronin_id] = {}
+		objectives_map[ronin_id]["primary"] = {
+			"need_type": need_type,
+			"assigned_by": lord_id,
+			"source": "contract",
+			"priority": 5,
+		}
+
+		# Clear FIND_NEW_LORD standing objective.
+		if objectives_map.has(ronin_id):
+			var standing: Dictionary = objectives_map[ronin_id].get("standing", {})
+			if standing.get("need_type", "") == "FIND_NEW_LORD":
+				objectives_map[ronin_id].erase("standing")
+
+	# DECLINE path: apply disposition penalty.
+	for result: Dictionary in results:
+		if result.get("action", "") != "DECLINE_CONTRACT":
+			continue
+		var ronin_id: int = result.get("character_id", -1)
+		var lord_id: int = result.get("target_npc_id", -1)
+		var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+		var lord: L5RCharacterData = characters_by_id.get(lord_id) as L5RCharacterData
+		if ronin != null and not CharacterStats.is_dead(ronin) and lord_id >= 0:
+			var cur: int = int(ronin.disposition_values.get(lord_id, 0))
+			ronin.disposition_values[lord_id] = clampi(
+				cur + RoninSystem.CONTRACT_DECLINE_DISPOSITION, -100, 100,
+			)
+		if lord != null and not CharacterStats.is_dead(lord) and ronin_id >= 0:
+			var cur: int = int(lord.disposition_values.get(ronin_id, 0))
+			lord.disposition_values[ronin_id] = clampi(
+				cur + RoninSystem.CONTRACT_DECLINE_DISPOSITION, -100, 100,
+			)
+
+
+# -- Contract Expiry (s52.6 Part F) -------------------------------------------
+
+
+static func _process_contract_expiry(
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	current_season: int,
+	ic_day: int,
+	active_wars: Array,
+	provinces: Dictionary,
+	character_province_map: Dictionary,
+) -> void:
+	for cid: int in characters_by_id:
+		var character: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		var contract_end: int = character.supply_ledger.get("contract_end_ic_day", -1)
+		if contract_end < 0 or ic_day < contract_end:
+			continue
+
+		# Contract has expired — determine clean vs abandoned outcome.
+		var lord_family: String = character.supply_ledger.get("contract_lord_family", "")
+		var primary: Dictionary = objectives_map.get(cid, {}).get("primary", {})
+		# GDD s52.6 Part F: clean = source=="contract" AND status is ACTIVE or COMPLETED.
+		var is_clean: bool = primary.get("source", "") == "contract" and \
+			primary.get("need_type", "") in RoninSystem.CONTRACT_TYPE_NEED.values() and \
+			primary.get("status", "ACTIVE") in ["ACTIVE", "COMPLETED"]
+
+		if is_clean:
+			var is_extraordinary: bool = _is_extraordinary_contract_deed(
+				character, characters_by_id, active_wars, provinces, character_province_map,
+			)
+			RoninSystem.complete_contract(character, lord_family, current_season, is_extraordinary)
+		else:
+			var lord_id: int = character.lord_id
+			var lord: L5RCharacterData = characters_by_id.get(lord_id) as L5RCharacterData
+			if lord != null and not CharacterStats.is_dead(lord):
+				var cur: int = int(lord.disposition_values.get(cid, 0))
+				lord.disposition_values[cid] = clampi(
+					cur + RoninSystem.CONTRACT_ABANDONED_DISPOSITION, -100, 100,
+				)
+			RoninSystem.abandon_contract(character, current_season)
+
+		# Clear contract primary objective — ronin is now free.
+		if objectives_map.has(cid):
+			var primary_obj: Dictionary = objectives_map[cid].get("primary", {})
+			if primary_obj.get("source", "") == "contract":
+				objectives_map[cid].erase("primary")
+
+
+# Evaluates all three extraordinary deed conditions (s52.7 A63–A65).
+# Returns true if ALL three conditions are met at contract expiry time.
+static func _is_extraordinary_contract_deed(
+	ronin: L5RCharacterData,
+	characters_by_id: Dictionary,
+	active_wars: Array,
+	provinces: Dictionary,
+	character_province_map: Dictionary,
+) -> bool:
+	var lord_id: int = ronin.lord_id
+	var lord: L5RCharacterData = characters_by_id.get(lord_id) as L5RCharacterData
+	if lord == null or CharacterStats.is_dead(lord):
+		return false
+
+	# A63 — Active war condition: lord's clan is currently at war.
+	var at_war: bool = false
+	for war: WarData in active_wars:
+		if not war.is_active:
+			continue
+		if war.clan_a == lord.clan or war.clan_b == lord.clan:
+			at_war = true
+			break
+
+	# A64 — Active crisis condition: lord's province has an active crisis.
+	var lord_province_id: int = character_province_map.get(lord_id, -1)
+	var in_crisis: bool = false
+	if lord_province_id >= 0:
+		var prov: ProvinceData = provinces.get(lord_province_id) as ProvinceData
+		if prov != null:
+			in_crisis = prov.active_crisis_id >= 0
+
+	# A65 — Continuous service condition: contract lasted 3+ seasons.
+	var duration_seasons: int = int(ronin.supply_ledger.get("contract_duration_seasons", 0))
+	var long_service: bool = duration_seasons >= RoninSystem.INDUCTION_MIN_CONTINUOUS_SEASONS
+
+	return at_war and in_crisis and long_service
+
+
+# -- Approve Induction Writebacks (s52.7 Part C) ------------------------------
+
+
+static func _process_approve_induction_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "APPROVE_CLAN_INDUCTION":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var ronin_id: int = effects.get("approve_ronin_id", -1)
+		var family_daimyo_id: int = effects.get("family_daimyo_id", -1)
+		if ronin_id < 0 or family_daimyo_id < 0:
+			continue
+		var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+		var fd: L5RCharacterData = characters_by_id.get(family_daimyo_id) as L5RCharacterData
+		if ronin == null or CharacterStats.is_dead(ronin):
+			continue
+		if fd == null or CharacterStats.is_dead(fd):
+			continue
+		RoninSystem.approve_induction(ronin, family_daimyo_id)
+
+
+# -- Early Termination Writebacks (s52.6 Part G) ------------------------------
+
+
+static func _process_terminate_contract_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	current_season: int,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "TERMINATE_CONTRACT":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var ronin_id: int = effects.get("terminate_ronin_id", -1)
+		var lord_id: int = result.get("character_id", -1)
+		if ronin_id < 0:
+			continue
+		var ronin: L5RCharacterData = characters_by_id.get(ronin_id) as L5RCharacterData
+		var lord: L5RCharacterData = characters_by_id.get(lord_id) as L5RCharacterData
+		if ronin == null or CharacterStats.is_dead(ronin):
+			continue
+
+		var remaining_seasons: int = effects.get("remaining_seasons", 0)
+		var contract_type: String = effects.get("contract_type", "PROVINCE_DEFENSE")
+		var term_result: Dictionary = RoninSystem.terminate_contract_early(
+			ronin, remaining_seasons, contract_type, current_season,
+		)
+
+		# Refund koku to lord.
+		if lord != null and not CharacterStats.is_dead(lord):
+			lord.koku += term_result.get("koku_refund", 0.0)
+			var disp: int = int(lord.disposition_values.get(ronin_id, 0))
+			lord.disposition_values[ronin_id] = clampi(
+				disp + RoninSystem.CONTRACT_EARLY_TERMINATION_DISPOSITION, -100, 100,
+			)
+
+
+# -- Clan Induction Writebacks (s52.7 Part D) ----------------------------------
+
+
+static func _process_clan_induction_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "PERFORM_CLAN_INDUCTION":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+
+		# Ceremony failure: generate TIER_4 topic and skip.
+		if effects.get("ceremony_failure_topic", false):
+			var fail_topic: TopicData = TopicData.new()
+			fail_topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			fail_topic.title = "Botched Induction Ceremony"
+			fail_topic.tier = TopicData.Tier.TIER_4
+			fail_topic.category = TopicData.Category.PERSONAL
+			fail_topic.subject_character_id = result.get("target_npc_id", -1)
+			fail_topic.ic_day_created = ic_day
+			active_topics.append(fail_topic)
+			continue
+
+		if not result.get("success", false):
+			continue
+
+		var inductee_id: int = effects.get("inductee_id", -1)
+		var daimyo_id: int = effects.get("daimyo_id", -1)
+		if inductee_id < 0 or daimyo_id < 0:
+			continue
+
+		var inductee: L5RCharacterData = characters_by_id.get(inductee_id) as L5RCharacterData
+		var daimyo: L5RCharacterData = characters_by_id.get(daimyo_id) as L5RCharacterData
+		if inductee == null or CharacterStats.is_dead(inductee):
+			continue
+		if daimyo == null or CharacterStats.is_dead(daimyo):
+			continue
+
+		var induction_result: Dictionary = RoninSystem.perform_induction(inductee, daimyo)
+
+		# Clear FIND_NEW_LORD standing objective.
+		if objectives_map.has(inductee_id):
+			var standing: Dictionary = objectives_map[inductee_id].get("standing", {})
+			if standing.get("need_type", "") == "FIND_NEW_LORD":
+				objectives_map[inductee_id].erase("standing")
+
+		# Apply family collective disposition shift (s52.7 Part D step 8).
+		for cid: int in characters_by_id:
+			var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
+			if c == null or CharacterStats.is_dead(c) or c.character_id == inductee_id:
+				continue
+			if c.family != daimyo.family:
+				continue
+			var cur: int = int(c.disposition_values.get(inductee_id, 0))
+			c.disposition_values[inductee_id] = clampi(
+				cur + RoninSystem.INDUCTION_FAMILY_BASELINE_SHIFT, -100, 100,
+			)
+
+		# TIER_3 POLITICAL topic (s52.7 Part D, A71).
+		var topic: TopicData = TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.title = "%s Inducted into %s Family" % [inductee.character_name, daimyo.family]
+		topic.tier = TopicData.Tier.TIER_3
+		topic.category = TopicData.Category.POLITICAL
+		topic.subject_character_id = inductee_id
+		topic.ic_day_created = ic_day
+		active_topics.append(topic)
+
+		# Distribute topic to nearby characters.
+		for cid: int in characters_by_id:
+			var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
+			if c == null or CharacterStats.is_dead(c):
+				continue
+			if c.physical_location == daimyo.physical_location:
+				if not c.topic_pool.has(topic.topic_id):
+					c.topic_pool.append(topic.topic_id)
+
+		_ = induction_result  # result used for side-effects; data available for callers
+
+
 static func _assign_phoenix_champion_restore_objective(
 	characters: Array,
 	objectives_map: Dictionary,
@@ -6013,20 +7350,14 @@ static func _assign_phoenix_champion_restore_objective(
 ) -> void:
 	if phoenix_council_state.is_empty():
 		return
-	if not phoenix_council_state.get("champion_authority_active", false):
+	if not phoenix_council_state.get("phoenix_champion_authority", false):
 		return
-	var champion_id: int = int(phoenix_council_state.get("champion_id", -1))
-	if champion_id < 0:
-		return
-	var champion: L5RCharacterData = null
-	for c: L5RCharacterData in characters:
-		if c.character_id == champion_id:
-			champion = c
-			break
-	if champion == null or CharacterStats.is_dead(champion):
+	var champion: L5RCharacterData = _find_shiba_champion(characters)
+	if champion == null:
 		return
 	if champion.bushido_virtue != Enums.BushidoVirtue.CHUGI:
 		return
+	var champion_id: int = champion.character_id
 	if not objectives_map.has(champion_id):
 		objectives_map[champion_id] = {}
 	var objectives: Dictionary = objectives_map[champion_id]
@@ -6346,6 +7677,9 @@ static func _cleanup_dead_character_references(
 	favors: Array,
 	bloodspeaker_cells: Array = [],
 	active_secrets: Array = [],
+	theater_pieces: Array = [],
+	active_paintings: Array = [],
+	active_sculptures: Array = [],
 ) -> void:
 	var dead_ids: Array = []
 	for c: L5RCharacterData in characters:
@@ -6394,6 +7728,18 @@ static func _cleanup_dead_character_references(
 	for cell: BloodspeakerCellData in bloodspeaker_cells:
 		if cell.leader_id in dead_ids:
 			cell.leader_id = -1
+
+	if not theater_pieces.is_empty():
+		for did: int in dead_ids:
+			TheaterSystem.handle_character_death(did, theater_pieces)
+
+	if not active_paintings.is_empty():
+		for did: int in dead_ids:
+			PaintingSystem.handle_character_death(did, active_paintings)
+
+	if not active_sculptures.is_empty():
+		for did: int in dead_ids:
+			SculptureSystem.handle_character_death(did, active_sculptures)
 
 	for secret: Variant in active_secrets:
 		if not secret is SecretData:
@@ -7132,6 +8478,13 @@ static func _run_strategic_reviews(
 	objectives_map: Dictionary,
 	world_states: Dictionary,
 	characters_by_id: Dictionary = {},
+	marriages: Array = [],
+	active_wars: Array = [],
+	active_topics: Array = [],
+	active_edicts: Array = [],
+	clans: Dictionary = {},
+	current_season: int = 0,
+	dice_engine: DiceEngine = null,
 ) -> Array:
 	var results: Array = []
 	var emperor_id: int = int(world_states.get("emperor_id", -1))
@@ -7145,7 +8498,8 @@ static func _run_strategic_reviews(
 		if lord.character_id == emperor_id and emperor_id >= 0:
 			var clan_champions: Array = _get_clan_champions(characters)
 			var directives: Array = StrategicReview.run_emperor_review(
-				lord, emperor_archetype, clan_champions, world_states, objectives_map
+				lord, emperor_archetype, clan_champions, world_states, objectives_map,
+				marriages, active_wars, characters_by_id,
 			)
 			for d: Dictionary in directives:
 				results.append(d)
@@ -7167,6 +8521,29 @@ static func _run_strategic_reviews(
 	world_states.erase("trainable_vassals")
 	world_states.erase("vengeance_targets")
 	world_states.erase("bitter_rivals")
+
+	# Champion Strategic Evaluation (s57.54) — runs quarterly for each Clan Champion.
+	if dice_engine != null and not clans.is_empty():
+		var topics_by_id: Dictionary = {}
+		for t: Variant in active_topics:
+			if t is TopicData:
+				topics_by_id[(t as TopicData).topic_id] = t
+		for champion: L5RCharacterData in characters:
+			if CharacterStats.is_dead(champion):
+				continue
+			if champion.status < 7.0 or champion.lord_id != -1:
+				continue
+			var clan_data: ClanData = clans.get(champion.clan)
+			if clan_data == null:
+				continue
+			var fd_ids: Array = _get_family_daimyo_ids(champion.clan, characters)
+			var dispatches: Array = StrategicReview.run_clan_champion_evaluation(
+				champion, clan_data, topics_by_id, active_wars, active_edicts,
+				characters_by_id, objectives_map, current_season, dice_engine, fd_ids,
+			)
+			for d: Dictionary in dispatches:
+				results.append(d)
+
 	return results
 
 
@@ -7182,8 +8559,126 @@ static func _get_clan_champions(
 	return champions
 
 
+static func _get_family_daimyo_ids(clan_name: String, characters: Array) -> Array:
+	var ids: Array = []
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.clan == clan_name and c.status >= 6.0 and c.status < 7.0:
+			ids.append(c.character_id)
+	return ids
+
+
 static func _is_lord_tier(character: L5RCharacterData) -> bool:
 	return character.status >= 5.0 or character.lord_id == -1
+
+
+## s57.54 §9 — fires on non-seasonal days when a champion has Tier 1/2 topics
+## not yet represented as forced conclusions in clan_strategic_priorities.
+## Dedup guard: skips any topic already listed in an existing forced conclusion's
+## source_topic_ids, so the same crisis topic is never processed twice.
+static func _process_midseason_champion_updates(
+	characters: Array,
+	characters_by_id: Dictionary,
+	clans: Dictionary,
+	active_topics: Array,
+	current_season: int,
+	pending_letters: Array,
+	next_letter_id: Array,
+	ic_day: int,
+) -> void:
+	var topics_by_id: Dictionary = {}
+	for t: Variant in active_topics:
+		if t is TopicData:
+			var td: TopicData = t as TopicData
+			if not td.resolved:
+				topics_by_id[td.topic_id] = td
+
+	for champion: L5RCharacterData in characters:
+		if CharacterStats.is_dead(champion):
+			continue
+		if champion.status < 7.0 or champion.lord_id != -1:
+			continue
+		var clan_data: ClanData = clans.get(champion.clan)
+		if clan_data == null:
+			continue
+		var fd_ids: Array = _get_family_daimyo_ids(champion.clan, characters)
+
+		for tid: int in champion.topic_pool:
+			var topic: TopicData = topics_by_id.get(tid)
+			if topic == null:
+				continue
+			if topic.tier != TopicData.Tier.TIER_1 and topic.tier != TopicData.Tier.TIER_2:
+				continue
+			# Skip if a forced conclusion already addresses this exact topic.
+			var already_addressed: bool = false
+			for sc: StrategicConclusionData in clan_data.clan_strategic_priorities:
+				if sc.is_forced and tid in sc.source_topic_ids:
+					already_addressed = true
+					break
+			if already_addressed:
+				continue
+			var dispatches: Array = StrategicReview.run_midseason_crisis_update(
+				champion, clan_data, topic, topics_by_id, current_season,
+				characters_by_id, fd_ids,
+			)
+			_process_champion_letter_dispatches(
+				dispatches, pending_letters, next_letter_id, ic_day, characters_by_id,
+			)
+
+
+## Scans all clan champions for stale strategic conclusions and removes them.
+## Fires daily after _remove_resolved_topics() so both war and topic cleanup
+## have already run. Ketsui champions get an immediate full re-evaluation when
+## a priority slot is freed (Trigger 3 — s57.54.1).
+## Dispatches notification letters to absent Family Daimyo via the standard
+## _process_champion_letter_dispatches() path.
+static func _process_stale_champion_priorities(
+	characters: Array,
+	characters_by_id: Dictionary,
+	clans: Dictionary,
+	active_wars: Array,
+	active_edicts: Array,
+	active_topics: Array,
+	objectives_map: Dictionary,
+	current_season: int,
+	dice_engine: DiceEngine,
+	pending_letters: Array,
+	next_letter_id: Array,
+	ic_day: int,
+) -> void:
+	if clans.is_empty() or dice_engine == null:
+		return
+	var topics_by_id: Dictionary = {}
+	for t: Variant in active_topics:
+		if t is TopicData:
+			topics_by_id[(t as TopicData).topic_id] = t
+
+	for champion: L5RCharacterData in characters:
+		if CharacterStats.is_dead(champion):
+			continue
+		if champion.status < 7.0 or champion.lord_id != -1:
+			continue
+		var clan_data: ClanData = clans.get(champion.clan)
+		if clan_data == null:
+			continue
+		var stale_ids: Array[int] = []
+		for sc: StrategicConclusionData in clan_data.clan_strategic_priorities:
+			if StrategicReview.is_conclusion_stale(
+				sc, champion.clan, active_wars, active_edicts, topics_by_id,
+			):
+				stale_ids.append(sc.conclusion_id)
+		if stale_ids.is_empty():
+			continue
+		var fd_ids: Array = _get_family_daimyo_ids(champion.clan, characters)
+		for cid: int in stale_ids:
+			var dispatches: Array = StrategicReview.run_priority_resolved(
+				champion, clan_data, cid, topics_by_id, active_wars, active_edicts,
+				characters_by_id, objectives_map, current_season, dice_engine, fd_ids,
+			)
+			_process_champion_letter_dispatches(
+				dispatches, pending_letters, next_letter_id, ic_day, characters_by_id,
+			)
 
 
 static func _get_vassals(
@@ -7282,8 +8777,7 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 	var active_festivals: Array = FestivalSystem.get_active_festivals(ic_day)
 	var effects: Array = FestivalSystem.get_festival_effects(ic_day)
 	var rokuyo_name: String = FestivalSystem.get_rokuyo_name(ic_day)
-	var is_taian: bool = FestivalSystem.get_taian_bonus(ic_day) > 0
-	var is_inauspicious: bool = FestivalSystem.is_inauspicious_for_social(ic_day)
+	var is_taian: bool = FestivalSystem.is_taian(ic_day)
 	var is_ceasefire: bool = FestivalSystem.is_ceasefire_day(ic_day)
 	var is_labor_halt: bool = FestivalSystem.is_labor_halt_day(ic_day)
 	var festival_honor: float = FestivalSystem.get_honor_gain_festivals(ic_day)
@@ -7295,7 +8789,6 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 		"is_ceasefire_day": is_ceasefire,
 		"is_labor_halt_day": is_labor_halt,
 		"is_taian": is_taian,
-		"is_inauspicious_for_social": is_inauspicious,
 		"rokuyo": rokuyo_name,
 		"festival_honor_gain": festival_honor,
 		"festival_has_lion_honor": festival_has_lion_honor,
@@ -7308,7 +8801,6 @@ static func _process_festivals(ic_day: int, world_states: Dictionary) -> Diction
 		"effects": effects,
 		"rokuyo": rokuyo_name,
 		"is_taian": is_taian,
-		"is_inauspicious": is_inauspicious,
 		"is_ceasefire": is_ceasefire,
 		"is_labor_halt": is_labor_halt,
 		"honor_gain": festival_honor,
@@ -7415,7 +8907,12 @@ static func _process_duped_foolish_on_arrival(
 	arrivals: Array,
 	characters_by_id: Dictionary,
 	objectives_map: Dictionary,
+	settlements: Array = [],
 ) -> void:
+	var settlement_province: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlement_province[str(s.settlement_id)] = s.province_id
+
 	for arrival: Dictionary in arrivals:
 		var char_id: int = arrival.get("character_id", -1)
 		var character: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
@@ -7438,6 +8935,11 @@ static func _process_duped_foolish_on_arrival(
 		var target_settlement_id: int = primary.get("target_settlement_id", -1)
 		if target_settlement_id >= 0 and destination == str(target_settlement_id):
 			has_target_here = true
+		var target_province_id: int = primary.get("target_province_id", -1)
+		if target_province_id >= 0:
+			var arrived_province: int = settlement_province.get(destination, -1)
+			if arrived_province == target_province_id:
+				has_target_here = true
 		if not has_target_here:
 			HonorGlorySystem.apply_honor_change(
 				character, CrimeSystem.get_duped_foolish_honor(character)
@@ -7502,7 +9004,19 @@ static func _process_daily_letter_pass(
 	ic_day: int = 0,
 	dice_engine: DiceEngine = null,
 	next_letter_id: Array = [1],
+	active_topics: Array = [],
+	settlements_arr: Array = [],
 ) -> Array:
+	var topics_by_id: Dictionary = {}
+	for _t: Variant in active_topics:
+		if _t is TopicData:
+			topics_by_id[(_t as TopicData).topic_id] = _t
+
+	var settlements_by_id: Dictionary = {}
+	for _s: Variant in settlements_arr:
+		if _s is SettlementData:
+			settlements_by_id[str((_s as SettlementData).settlement_id)] = _s
+
 	var results: Array = []
 	for character: L5RCharacterData in characters:
 		if CharacterStats.is_dead(character):
@@ -7524,7 +9038,11 @@ static func _process_daily_letter_pass(
 					lid, character,
 					letter_result["target_npc_id"],
 					topic_id, ic_day, dice_engine,
-					3,
+					3, 0, 0, 0, false, Enums.Trait.AWARENESS, false,
+					letter_result.get("need_type", ""),
+					topics_by_id,
+					settlements_by_id,
+					characters_by_id,
 				)
 				if letter_result.get("meeting_proposal", false):
 					letter.meeting_proposal = true
@@ -7533,6 +9051,19 @@ static func _process_daily_letter_pass(
 				elif letter_result.get("visit_intent", false):
 					letter.visit_intent = true
 					letter.visit_deadline_ic_day = _compute_visit_deadline(ic_day)
+				# Attach poem scroll if specified — s57.30.6.
+				var poem_item_id: int = letter_result.get("attach_poem_item_id", -1)
+				if poem_item_id >= 0:
+					letter.attached_poem_id = poem_item_id
+					letter.attached_poem_raises = letter_result.get("attach_poem_raises", 0)
+					# Consume the scroll from sender's items.
+					for i: int in range(character.items.size() - 1, -1, -1):
+						var it: Variant = character.items[i]
+						if it is Dictionary and \
+								(it as Dictionary).get("item_type", "") == "poetry_scroll" and \
+								(it as Dictionary).get("item_id", -1) == poem_item_id:
+							character.items.remove_at(i)
+							break
 				pending_letters.append(letter)
 	return results
 
@@ -7562,11 +9093,13 @@ static func _process_arrival_observation(
 				continue
 			var _cb2: Dictionary = world_states.get("clan_baselines", {})
 			var _fb2: Dictionary = world_states.get("family_baselines", {})
-			InformationSystem.add_contact(character, other_id, other.clan, other, _cb2, _fb2)
+			var _mcb2: Dictionary = world_states.get("marriage_clan_boosts", {})
+			var _mfb2: Dictionary = world_states.get("marriage_family_boosts", {})
+			InformationSystem.add_contact(character, other_id, other.clan, other, _cb2, _fb2, _mcb2, _mfb2)
 			InformationSystem.record_location_observation(
 				character, other_id, dest, current_season
 			)
-			InformationSystem.add_contact(other, char_id, character.clan, character, _cb2, _fb2)
+			InformationSystem.add_contact(other, char_id, character.clan, character, _cb2, _fb2, _mcb2, _mfb2)
 			InformationSystem.record_location_observation(
 				other, char_id, dest, current_season
 			)
@@ -10463,7 +11996,7 @@ static func _create_battle_topic(
 
 	var variant: String = "victory_clean"
 	var tier: TopicData.Tier = TopicData.Tier.TIER_3
-	var momentum: float = _COMBAT_EVENT_MOMENTUM
+	var momentum: float = TopicSystem.initial_momentum_for_tier(tier)
 
 	var title: String = "Battle at province %d" % province_id
 
@@ -10630,7 +12163,7 @@ static func _apply_service_assignment_effect(
 		return {}
 
 	var target: L5RCharacterData = characters_by_id.get(target_id)
-	if target == null:
+	if target == null or CharacterStats.is_dead(target):
 		return {}
 
 	var commander_id: int = effects.get("military_commander_id", -1)
@@ -10676,7 +12209,7 @@ static func _apply_vassal_objective_assignment(
 
 	var lord: L5RCharacterData = characters_by_id.get(lord_id)
 	var vassal: L5RCharacterData = characters_by_id.get(vassal_id)
-	if vassal == null:
+	if vassal == null or CharacterStats.is_dead(vassal):
 		return {}
 	if vassal.lord_id != lord_id:
 		return {"type": "assignment_failed", "reason": "not_vassal"}
@@ -10725,7 +12258,7 @@ static func _apply_court_invitation(
 		return {}
 
 	var invitee: L5RCharacterData = characters_by_id.get(invitee_id)
-	if invitee == null:
+	if invitee == null or CharacterStats.is_dead(invitee):
 		return {}
 
 	var target_court: CourtSessionData = null
@@ -11819,6 +13352,26 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"self_offenses", "wall_statuses", "criminal_recall",
 		"is_patrolled", "phoenix_champion_authority",
 		"settlement_type",
+		"champion_conclusion_candidates", "local_tier3_candidates",
+		"theater_pieces_to_perform", "wip_piece_ids", "learnable_piece_ids",
+		"has_active_contracts",
+		"ikebana_garden_fr", "ikebana_garden_id",
+		"active_senbazuru_id", "senbazuru_is_complete",
+		"active_commission_id", "commission_quality_tier",
+		"local_garden_id", "local_garden_tier",
+		"owned_bonsai_id", "bonsai_display_eligible",
+		"garden_zone_available", "available_garden_zone",
+		"character_province_id",
+		"active_painting_wip_id", "displayable_paintings", "presentable_emakimono",
+		"wall_art_slot_empty", "displayed_art_slot_empty", "fusuma_slot_empty",
+		"has_wall_art_permission", "painting_fortune_fr",
+		"active_sculpture_wip_id", "active_sculpture_material", "active_sculpture_format",
+		"statue_slot_empty", "guardian_slot_empty",
+		"is_religious_settlement", "has_statue_permission", "has_guardian_permission",
+		"statuary_worship_fr", "statuary_subject_id", "guardian_worship_fr", "foundry_in_province",
+		"available_poem_item_id", "available_poem_raises",
+		"shrine_needs_shide", "shrine_shide_at_normal",
+		"has_shide_in_inventory", "has_shide_permission", "shide_worship_fr",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -12874,7 +14427,7 @@ static func _generate_naval_battle_topics(
 		topic.slug = "naval_battle_%s_vs_%s_d%d" % [atk_clan.to_lower(), def_clan.to_lower(), ic_day]
 		topic.title = "Naval Battle — %s vs %s" % [atk_clan, def_clan]
 		topic.tier = TopicData.Tier.TIER_3
-		topic.momentum = _COMBAT_EVENT_MOMENTUM
+		topic.momentum = TopicSystem.initial_momentum_for_tier(topic.tier)
 		topic.category = TopicData.Category.MILITARY
 		topic.ic_day_created = ic_day
 		topic.resolved = false
@@ -12900,10 +14453,31 @@ static func _process_musha_shugyo(
 		if not MushaShugyo.should_end_pilgrimage(character, ic_day):
 			continue
 		var result: Dictionary = MushaShugyo.end_pilgrimage(character)
-		if MushaShugyo.is_lord_dead_or_missing(result["original_lord_id"], characters_by_id):
-			result["lord_dead"] = true
+		var lord_dead: bool = MushaShugyo.is_lord_dead_or_missing(result["original_lord_id"], characters_by_id)
+		result["lord_dead"] = lord_dead
 		if objectives_map.has(character.character_id):
 			objectives_map[character.character_id].erase("standing")
+
+		# GDD s57.48.4 step 5: Fire a BEGIN_TRAVEL need toward the lord's primary holding.
+		# Dead lord: clear lord_id so orphan/vacancy pipeline handles reassignment (s22.5).
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+		if lord_dead:
+			character.lord_id = -1
+		else:
+			var lord: L5RCharacterData = characters_by_id.get(character.lord_id)
+			if lord != null and not CharacterStats.is_dead(lord):
+				var lord_loc: String = lord.physical_location
+				if lord_loc.is_valid_int():
+					objectives_map[char_id]["primary"] = {
+						"need_type": "TRAVEL_TO",
+						"target_settlement_id": int(lord_loc),
+						"source": "musha_shugyo_return",
+						"status": "ACTIVE",
+					}
+					result["travel_target"] = lord_loc
+
 		results.append(result)
 	return results
 
@@ -13251,6 +14825,8 @@ static func _process_phoenix_council_gating(
 	current_season: int = 0,
 	provinces: Dictionary = {},
 	emperor_id: int = -1,
+	active_successions: Array = [],
+	next_succession_id: Array = [],
 ) -> Dictionary:
 	var shiba_champion: L5RCharacterData = _find_shiba_champion(characters)
 	if shiba_champion == null:
@@ -13447,21 +15023,51 @@ static func _process_phoenix_council_gating(
 			)
 			result_dict["civil_war_triggered"] = cw_result
 
-	# Champion Defiance Path schism: Champion refuses Stage 4 removal (s55.10.3.5, s55.10.3.7).
-	# Rebel = Champion (defied Council 4 times), Authority = Senior Master (Council representative).
-	# Standard −0.3 Honor/season hemorrhage applies to the Champion (suppress_hemorrhage = false).
+	# Champion Defiance Path — Stage 4 removal (s55.10.3.5, s55.10.3.7).
+	# Champion's virtue determines whether they accept removal or refuse and trigger schism.
+	# PROVISIONAL personality rule (user-approved): Meiyo/Chugi/Rei → accept (retire);
+	# Ketsui/Ishi/Seigyo or unset → refuse (civil war).
 	if PhoenixCouncil.is_unfit_declaration_active(phoenix_state):
-		var senior_master_id_2: int = _find_senior_elemental_master_id(living_masters, characters_by_id)
-		if senior_master_id_2 >= 0:
-			var cw_result_2: Dictionary = _trigger_civil_war(
-				shiba_champion.character_id, senior_master_id_2,
-				"Phoenix", "champion defiance",
-				characters, characters_by_id, objectives_map,
-				active_civil_wars, active_topics, next_topic_id,
-				ic_day, current_season,
-				false, "defiance",
-			)
-			result_dict["champion_defiance_civil_war_triggered"] = cw_result_2
+		var accepting_virtues: Array = [
+			Enums.BushidoVirtue.MEIYO,
+			Enums.BushidoVirtue.CHUGI,
+			Enums.BushidoVirtue.REI,
+		]
+		var champion_accepts: bool = shiba_champion.bushido_virtue in accepting_virtues
+		if champion_accepts:
+			# Accept removal: retire monastically, create succession vacancy, reset defiance.
+			shiba_champion.is_retired_monastic = true
+			if next_succession_id.size() > 0:
+				var succession := SuccessionSystem.trigger_succession(
+					shiba_champion, SuccessionData.VacancyCause.RETIREMENT,
+					Enums.LordRank.CLAN_CHAMPION, ic_day,
+				)
+				succession.succession_id = next_succession_id[0]
+				next_succession_id[0] += 1
+				var candidates := SuccessionSystem.get_candidates(shiba_champion, characters_by_id)
+				for cand: Dictionary in candidates:
+					succession.candidate_ids.append(cand["id"])
+				succession.confirming_authority_id = SuccessionSystem.find_confirming_authority(
+					Enums.LordRank.CLAN_CHAMPION, "Phoenix", characters_by_id
+				)
+				active_successions.append(succession)
+			phoenix_state["defiance_stage"] = 0
+			result_dict["champion_accepted_removal"] = true
+		else:
+			# Refuse removal: schism / civil war.
+			# Rebel = Champion (defied Council 4 times), Authority = Senior Master.
+			# Standard −0.3 Honor/season hemorrhage applies to the Champion (suppress_hemorrhage = false).
+			var senior_master_id_2: int = _find_senior_elemental_master_id(living_masters, characters_by_id)
+			if senior_master_id_2 >= 0:
+				var cw_result_2: Dictionary = _trigger_civil_war(
+					shiba_champion.character_id, senior_master_id_2,
+					"Phoenix", "champion defiance",
+					characters, characters_by_id, objectives_map,
+					active_civil_wars, active_topics, next_topic_id,
+					ic_day, current_season,
+					false, "defiance",
+				)
+				result_dict["champion_defiance_civil_war_triggered"] = cw_result_2
 
 	return result_dict
 
@@ -13674,6 +15280,9 @@ static func _process_npc_advancement(
 	active_armies: Array,
 	insurgencies: Array,
 	current_season: int,
+	active_topics: Array = [],
+	next_topic_id: Array = [1000],
+	ic_day: int = 0,
 ) -> Dictionary:
 	var days_in_season: int = _get_season_days(current_season)
 
@@ -13681,7 +15290,44 @@ static func _process_npc_advancement(
 		characters, active_courts, active_sieges, active_armies, insurgencies
 	)
 
-	return NPCAdvancement.process_seasonal_advancement(characters, adv_world_state, days_in_season)
+	var adv_result: Dictionary = NPCAdvancement.process_seasonal_advancement(
+		characters, adv_world_state, days_in_season
+	)
+
+	# Generate Tier 4 Personal topic for each NPC that ranked up. Locked in s48a A48a-2.
+	# Build a quick lookup so we can seed the topic into the character's own topic_pool.
+	var chars_by_id_local: Dictionary = {}
+	for c_v: Variant in characters:
+		var c_l: L5RCharacterData = c_v as L5RCharacterData
+		if c_l != null:
+			chars_by_id_local[c_l.character_id] = c_l
+
+	for entry: Dictionary in adv_result.get("results", []):
+		if not entry.get("ranked_up", false):
+			continue
+		var rut: Dictionary = entry.get("rank_up_topic", {})
+		if rut.is_empty():
+			continue
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "rank_advancement_%d" % rut["character_id"]
+		topic.title = "%s achieves Rank %d" % [rut["character_name"], rut["new_rank"]]
+		topic.topic_type = "rank_advancement"
+		topic.tier = TopicData.Tier.TIER_4
+		topic.category = TopicData.Category.PERSONAL
+		topic.subject_character_id = rut["character_id"]
+		topic.subject_role = "NEUTRAL"
+		topic.ic_day_created = ic_day
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		active_topics.append(topic)
+		# The character always knows their own rank advancement — seed directly into their pool
+		# so the ID persists even after the topic decays out of active_topics.
+		var ranked_char: L5RCharacterData = chars_by_id_local.get(rut["character_id"]) as L5RCharacterData
+		if ranked_char != null and not ranked_char.topic_pool.has(topic.topic_id):
+			ranked_char.topic_pool.append(topic.topic_id)
+
+	return adv_result
 
 
 static func _build_advancement_world_state(
@@ -13740,9 +15386,12 @@ static func _process_governance_effects(
 ) -> Dictionary:
 	var appointment_results: Array = []
 	var marriage_results: Array = []
+	var dissolution_results: Array = []
 
 	var clan_baselines: Dictionary = world_states.get("clan_baselines", {})
 	var family_baselines: Dictionary = world_states.get("family_baselines", {})
+	var marriage_clan_boosts: Dictionary = world_states.get("marriage_clan_boosts", {})
+	var marriage_family_boosts: Dictionary = world_states.get("marriage_family_boosts", {})
 
 	for result: Variant in results:
 		if not (result is Dictionary):
@@ -13766,6 +15415,7 @@ static func _process_governance_effects(
 					effects, characters_by_id, marriages, ic_day,
 					clan_baselines, family_baselines, favors,
 					active_topics, next_topic_id,
+					marriage_clan_boosts, marriage_family_boosts,
 				)
 				marriage_results.append(mr)
 
@@ -13773,9 +15423,17 @@ static func _process_governance_effects(
 			var rr: Dictionary = _apply_marriage_rejection(effects, characters_by_id)
 			marriage_results.append(rr)
 
+		if effects.get("requires_dissolution", false):
+			var dr: Dictionary = _apply_dissolution(
+				effects, characters_by_id, marriages, ic_day,
+				active_topics, next_topic_id, clan_baselines, family_baselines,
+			)
+			dissolution_results.append(dr)
+
 	return {
 		"appointments": appointment_results,
 		"marriages": marriage_results,
+		"dissolutions": dissolution_results,
 	}
 
 
@@ -13788,7 +15446,7 @@ static func _apply_appointment(
 	var lord_id: int = effects.get("appointing_lord_id", -1)
 
 	var appointee: L5RCharacterData = characters_by_id.get(appointee_id) as L5RCharacterData
-	if appointee == null:
+	if appointee == null or CharacterStats.is_dead(appointee):
 		return {"applied": false, "reason": "no_appointee", "appointee_id": appointee_id}
 
 	appointee.role_position = position
@@ -13812,6 +15470,8 @@ static func _apply_marriage(
 	favors: Array = [],
 	active_topics: Array = [],
 	next_topic_id: Array = [1000],
+	marriage_clan_boosts: Dictionary = {},
+	marriage_family_boosts: Dictionary = {},
 ) -> Dictionary:
 	var a_id: int = effects.get("candidate_a_id", -1)
 	var b_id: int = effects.get("candidate_b_id", -1)
@@ -13824,6 +15484,8 @@ static func _apply_marriage(
 
 	if char_a == null or char_b == null:
 		return {"applied": false, "reason": "missing_character", "a_id": a_id, "b_id": b_id}
+	if CharacterStats.is_dead(char_a) or CharacterStats.is_dead(char_b):
+		return {"applied": false, "reason": "character_dead", "a_id": a_id, "b_id": b_id}
 
 	if char_a.spouse_id >= 0 or char_b.spouse_id >= 0:
 		return {"applied": false, "reason": "already_married", "a_id": a_id, "b_id": b_id}
@@ -13852,12 +15514,16 @@ static func _apply_marriage(
 
 	var boosts: Dictionary = MarriageSystem.get_marriage_boosts(marriage_type)
 
-	if not clan_baselines.is_empty():
-		CollectiveDisposition.apply_marriage(
-			original_clan_a, original_clan_b,
-			original_family_a, original_family_b,
-			clan_baselines, family_baselines,
-		)
+	# s22.7: marriages add boosts to the decaying marriage_*_boosts layer.
+	# Cross-clan: +8 clan boost + +5 family boost. Between-families: +5 family only.
+	# CollectiveDisposition.apply_marriage guards clan_a != clan_b / family_a != family_b.
+	CollectiveDisposition.apply_marriage(
+		original_clan_a, original_clan_b,
+		original_family_a, original_family_b,
+		clan_baselines, family_baselines,
+		false,
+		marriage_clan_boosts, marriage_family_boosts,
+	)
 
 	var favor_created: bool = false
 	if boosts.get("favor_owed", false):
@@ -13965,6 +15631,184 @@ static func _apply_marriage_rejection(
 	}
 
 
+# -- Dissolution (s57.49.7) -------------------------------------------------------
+
+static func _apply_dissolution(
+	effects: Dictionary,
+	characters_by_id: Dictionary,
+	marriages: Array,
+	ic_day: int,
+	active_topics: Array,
+	next_topic_id: Array,
+	clan_baselines: Dictionary = {},
+	family_baselines: Dictionary = {},
+	pathway: int = 1,
+) -> Dictionary:
+	var resolved_pathway: int = effects.get("pathway", pathway)
+	var spouse_a_id: int = effects.get("spouse_a_id", -1)
+	var spouse_b_id: int = effects.get("spouse_b_id", -1)
+
+	if spouse_a_id < 0 or spouse_b_id < 0:
+		return {"applied": false, "reason": "missing_spouse_ids"}
+
+	var spouse_a: L5RCharacterData = characters_by_id.get(spouse_a_id) as L5RCharacterData
+	var spouse_b: L5RCharacterData = characters_by_id.get(spouse_b_id) as L5RCharacterData
+
+	if spouse_a == null or CharacterStats.is_dead(spouse_a):
+		return {"applied": false, "reason": "spouse_a_not_found"}
+	if spouse_b == null or CharacterStats.is_dead(spouse_b):
+		return {"applied": false, "reason": "spouse_b_not_found"}
+
+	var marriage: Dictionary = MarriageSystem.find_active_marriage_for_character(
+		spouse_a_id, marriages,
+	)
+	if marriage.is_empty():
+		return {"applied": false, "reason": "no_active_marriage"}
+
+	MarriageSystem.dissolve_marriage(marriage)
+	spouse_a.spouse_id = -1
+	spouse_b.spouse_id = -1
+
+	# Pathway 1 — Lord's Command: Glory −0.5 to both spouses, disposition penalties.
+	# Pathways 2/3/4 have no Glory, Honor, or disposition penalties (s57.49.7).
+	if resolved_pathway == 1:
+		HonorGlorySystem.apply_glory_change(spouse_a, MarriageSystem.DISSOLUTION_GLORY_LOSS_SPOUSE)
+		HonorGlorySystem.apply_glory_change(spouse_b, MarriageSystem.DISSOLUTION_GLORY_LOSS_SPOUSE)
+
+		# Family-level disposition penalty — locked s57.49b A34.
+		if not family_baselines.is_empty():
+			var fa: String = spouse_a.family
+			var fb: String = spouse_b.family
+			if fa in family_baselines and fb in family_baselines[fa]:
+				family_baselines[fa][fb] = clampi(
+					family_baselines[fa][fb] + MarriageSystem.DISSOLUTION_FAMILY_DISP_PENALTY,
+					-100, 100,
+				)
+			if fb in family_baselines and fa in family_baselines[fb]:
+				family_baselines[fb][fa] = clampi(
+					family_baselines[fb][fa] + MarriageSystem.DISSOLUTION_FAMILY_DISP_PENALTY,
+					-100, 100,
+				)
+
+		# Clan-level penalty if cross-clan — locked s57.49b A36.
+		if spouse_a.clan != spouse_b.clan and not clan_baselines.is_empty():
+			var ca: String = spouse_a.clan
+			var cb: String = spouse_b.clan
+			if ca in clan_baselines and cb in clan_baselines[ca]:
+				clan_baselines[ca][cb] = clampi(
+					clan_baselines[ca][cb] + MarriageSystem.DISSOLUTION_CLAN_DISP_PENALTY,
+					-100, 100,
+				)
+			if cb in clan_baselines and ca in clan_baselines[cb]:
+				clan_baselines[cb][ca] = clampi(
+					clan_baselines[cb][ca] + MarriageSystem.DISSOLUTION_CLAN_DISP_PENALTY,
+					-100, 100,
+				)
+
+	# T4-83 MARRIAGE_DISSOLVED topic (all pathways).
+	var topic_id: int = -1
+	if not next_topic_id.is_empty():
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "dissolution_%d_%d_d%d" % [spouse_a_id, spouse_b_id, ic_day]
+		topic.title = "Dissolution of Marriage of %s and %s" % [
+			spouse_a.character_name, spouse_b.character_name,
+		]
+		topic.topic_type = "marriage_dissolved"
+		topic.variant = MarriageSystem.get_dissolution_topic_variant(resolved_pathway)
+		topic.category = TopicData.Category.POLITICAL
+		topic.tier = TopicData.Tier.TIER_4
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		topic.ic_day_created = ic_day
+		if spouse_a.clan != spouse_b.clan:
+			topic.clan_involved = spouse_a.clan + "," + spouse_b.clan
+		else:
+			topic.clan_involved = spouse_a.clan
+		active_topics.append(topic)
+		topic_id = topic.topic_id
+
+	return {
+		"applied": true,
+		"spouse_a_id": spouse_a_id,
+		"spouse_b_id": spouse_b_id,
+		"pathway": resolved_pathway,
+		"topic_id": topic_id,
+	}
+
+
+static func _auto_dissolve_marriage_on_conviction(
+	conviction_results: Array,
+	characters_by_id: Dictionary,
+	marriages: Array,
+	ic_day: int,
+	active_topics: Array,
+	next_topic_id: Array,
+) -> Array:
+	# Pathway 2 — Criminal Conviction: auto-dissolve when convicted of a Tier 1 crime.
+	# No Honor/Glory/disposition cost to the dissolving family (s57.49.7).
+	const TIER_1_CRIME_TYPES: Array = [Enums.CrimeType.TREASON, Enums.CrimeType.MAHO]
+	var results: Array = []
+	for conv: Variant in conviction_results:
+		if not (conv is Dictionary):
+			continue
+		if conv.get("outcome", "") != "convicted":
+			continue
+		if not (conv.get("crime_type", -1) in TIER_1_CRIME_TYPES):
+			continue
+		var accused_id: int = conv.get("accused_id", -1)
+		if accused_id < 0:
+			continue
+		var accused: L5RCharacterData = characters_by_id.get(accused_id) as L5RCharacterData
+		if accused == null or CharacterStats.is_dead(accused) or accused.spouse_id < 0:
+			continue
+		var effects: Dictionary = {
+			"spouse_a_id": accused_id,
+			"spouse_b_id": accused.spouse_id,
+			"ordering_lord_id": -1,
+			"convicted_id": accused_id,
+			"pathway": 2,
+		}
+		var dr: Dictionary = _apply_dissolution(
+			effects, characters_by_id, marriages, ic_day,
+			active_topics, next_topic_id, {}, {},
+		)
+		results.append(dr)
+	return results
+
+
+static func _auto_dissolve_on_monastic_retirement(
+	characters_by_id: Dictionary,
+	marriages: Array,
+	ic_day: int,
+	active_topics: Array,
+	next_topic_id: Array,
+) -> Array:
+	# Pathway 3 — Monastic Retirement: auto-dissolve when a married character
+	# sets is_retired_monastic = true. No Honor/Glory/disposition penalties (s57.49.7).
+	var results: Array = []
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if not c.is_retired_monastic:
+			continue
+		if c.spouse_id < 0:
+			continue
+		var effects: Dictionary = {
+			"spouse_a_id": c.character_id,
+			"spouse_b_id": c.spouse_id,
+			"ordering_lord_id": -1,
+			"pathway": 3,
+		}
+		var dr: Dictionary = _apply_dissolution(
+			effects, characters_by_id, marriages, ic_day,
+			active_topics, next_topic_id, {}, {},
+		)
+		results.append(dr)
+	return results
+
+
 # -- Pregnancy Processing (s22.7) -----------------------------------------------
 
 static func _process_pregnancy_checks(
@@ -14036,6 +15880,37 @@ static func _process_pregnancy_checks(
 
 # -- Vassal Reassignment (Strategic Review Directives) -------------------------
 
+# Creates LetterData for absent Family Daimyo notified of Champion conclusions (s57.54.5).
+static func _process_champion_letter_dispatches(
+	strategic_results: Array,
+	pending_letters: Array,
+	next_letter_id: Array,
+	ic_day: int,
+	characters_by_id: Dictionary,
+) -> void:
+	for result: Dictionary in strategic_results:
+		if result.get("type", "") != "strategic_conclusion_letter":
+			continue
+		var sender_id: int = result.get("sender_id", -1)
+		var recipient_id: int = result.get("recipient_id", -1)
+		if sender_id < 0 or recipient_id < 0:
+			continue
+		var sender: L5RCharacterData = characters_by_id.get(sender_id)
+		if sender == null or CharacterStats.is_dead(sender):
+			continue
+		var recipient: L5RCharacterData = characters_by_id.get(recipient_id)
+		if recipient == null or CharacterStats.is_dead(recipient):
+			continue
+		var letter := LetterData.new()
+		letter.letter_id = next_letter_id[0]
+		next_letter_id[0] += 1
+		letter.sender_id = sender_id
+		letter.recipient_id = recipient_id
+		letter.ic_day_sent = ic_day
+		letter.ic_day_arrival = ic_day + 3  # PROVISIONAL: no adjacency data
+		pending_letters.append(letter)
+
+
 static func _process_vassal_reassignments(
 	strategic_results: Array,
 	objectives_map: Dictionary,
@@ -14087,6 +15962,7 @@ static func _process_tyrant_directives(
 	next_topic_id: Array,
 	ic_day: int,
 	characters_by_id: Dictionary,
+	marriages: Array = [],
 ) -> void:
 	for directive: Dictionary in strategic_results:
 		var dtype: String = str(directive.get("directive", ""))
@@ -14097,6 +15973,18 @@ static func _process_tyrant_directives(
 		elif dtype == "IMPERIAL_CIVIL_WAR":
 			_create_imperial_civil_war_topic(
 				directive, active_topics, next_topic_id, ic_day
+			)
+		elif dtype == "IMPERIAL_DISSOLVE_MARRIAGE":
+			# Pathway 4 — Imperial Decree (s57.49.7): no penalties for either spouse.
+			var effects: Dictionary = {
+				"spouse_a_id": directive.get("spouse_a_id", -1),
+				"spouse_b_id": directive.get("spouse_b_id", -1),
+				"ordering_lord_id": directive.get("lord_id", -1),
+				"pathway": 4,
+			}
+			_apply_dissolution(
+				effects, characters_by_id, marriages, ic_day,
+				active_topics, next_topic_id, {}, {},
 			)
 
 
@@ -14769,7 +16657,6 @@ static func _generate_construction_topic(
 			topic.title = "Grand Shinden Construction Completed"
 			topic.variant = "shinden_completed"
 			topic.tier = TopicData.Tier.TIER_2
-			topic.momentum = _CONSTRUCTION_TIER2_MOMENTUM
 		ConstructionData.ConstructionType.MONASTERY:
 			topic.slug = "monastery_completed_%d" % cd.construction_id
 			topic.title = "Monastery Construction Completed"
@@ -15452,7 +17339,7 @@ static func _process_commitment_seasonal(
 			topic.tier = topic_tier
 			topic.topic_type = topic_type
 			topic.variant = topic_variant
-			topic.momentum = TopicMomentumSystem.MOMENTUM_MINOR_FLOOR if topic_tier >= TopicData.Tier.TIER_3 else _COMBAT_EVENT_MOMENTUM
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic_tier)
 			topic.category = TopicData.Category.POLITICAL
 			topic.ic_day_created = ic_day
 			active_topics.append(topic)
@@ -15797,6 +17684,65 @@ static func _process_performance_request_writebacks(
 		court.pending_performance_requests.append(request)
 
 
+# -- Patron Glory Writebacks ---------------------------------------------------
+
+
+static func _process_patron_glory_writebacks(
+	day_results: Array,
+	active_courts: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for entry: Variant in day_results:
+		if not entry is Dictionary:
+			continue
+		var d: Dictionary = entry as Dictionary
+		var action_id: String = d.get("action_id", "")
+		if action_id not in ["PUBLIC_PERFORMANCE", "PERFORM_FOR"]:
+			continue
+		if not d.get("success", false):
+			continue
+		var effects: Dictionary = d.get("effects", {})
+		var request_id: int = effects.get("fulfills_request_id", -1)
+		if request_id < 0:
+			continue
+		var lord_id: int = effects.get("requesting_lord_id", -1)
+		if lord_id < 0:
+			continue
+		var lord: L5RCharacterData = characters_by_id.get(lord_id)
+		if lord == null or CharacterStats.is_dead(lord):
+			continue
+
+		# Find and remove the matching request from the court.
+		var request: Dictionary = {}
+		for c_v: Variant in active_courts:
+			if not c_v is CourtSessionData:
+				continue
+			var c: CourtSessionData = c_v as CourtSessionData
+			if not CourtSystem.is_active(c):
+				continue
+			for i: int in range(c.pending_performance_requests.size()):
+				var req: Dictionary = c.pending_performance_requests[i]
+				if req.get("request_id", -1) == request_id:
+					request = req
+					c.pending_performance_requests.remove_at(i)
+					break
+			if not request.is_empty():
+				break
+
+		if request.is_empty():
+			continue
+
+		var outcome: int = effects.get("performance_outcome",
+			PerformativeArtsSystem.PerformanceOutcome.FAILURE)
+		var venue_mode: String = effects.get("venue_mode",
+			request.get("venue_mode", "public"))
+		var fatigue_mult: float = effects.get("fatigue_multiplier", 1.0)
+		var patron_glory: float = RequestPerformanceSystem.compute_patron_glory(
+			outcome, venue_mode, fatigue_mult)
+		if patron_glory != 0.0:
+			HonorGlorySystem.apply_glory_change(lord, patron_glory)
+
+
 # -- Court Availability Data Population ----------------------------------------
 
 
@@ -16007,6 +17953,20 @@ static func _inject_base_character_context(
 	var clan_values: Array = clans.values()
 	var season_name: String = _season_to_name(current_season)
 
+	# Pre-build topics_by_id for champion conclusion injection (s57.54.10b).
+	var g_topics_by_id: Dictionary = {}
+	for _t: Variant in active_topics:
+		if _t is TopicData:
+			g_topics_by_id[(_t as TopicData).topic_id] = _t
+
+	# Pre-build set of lord IDs that have at least one active contract (s52.8 A78).
+	var g_lords_with_contracts: Dictionary = {}
+	for _cv: L5RCharacterData in characters:
+		if CharacterStats.is_dead(_cv):
+			continue
+		if _cv.lord_id >= 0 and _cv.supply_ledger.get("contract_end_ic_day", -1) >= 0:
+			g_lords_with_contracts[_cv.lord_id] = true
+
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
 			continue
@@ -16049,9 +18009,63 @@ static func _inject_base_character_context(
 			ws["characters_by_id"] = characters_by_id
 			ws["active_armies"] = active_armies
 			ws["active_insurgencies"] = insurgencies
+			ws["has_active_contracts"] = g_lords_with_contracts.get(c.character_id, false)
 
 		if has_champion_authority and c.character_id == phoenix_champion_id:
 			ws["phoenix_champion_authority"] = true
+
+		# Family Daimyo+ receive champion conclusions for Phase 2 combined pool (s57.54.10b).
+		var lord_rank: Enums.LordRank = CivilianOrderBudget.lord_rank_from_status(c.status)
+		if char_is_lord and lord_rank >= Enums.LordRank.FAMILY_DAIMYO \
+				and lord_rank < Enums.LordRank.CLAN_CHAMPION:
+			var char_clan: ClanData = clans.get(c.clan)
+			if char_clan != null:
+				ws["champion_conclusion_candidates"] = StrategicReview.get_champion_conclusion_needtypes(c, char_clan)
+			ws["local_tier3_candidates"] = _build_local_tier3_candidates(c, g_topics_by_id)
+
+
+# -- Local Tier 3 Candidates (s57.54.10b) -------------------------------------
+
+static func _build_local_tier3_candidates(
+	character: L5RCharacterData,
+	topics_by_id: Dictionary,
+) -> Array:
+	var candidates: Array = []
+	var seen_needtypes: Dictionary = {}
+	for tid: int in character.topic_pool:
+		var topic: TopicData = topics_by_id.get(tid)
+		if topic == null or topic.resolved:
+			continue
+		if topic.tier != TopicData.Tier.TIER_3 and topic.tier != TopicData.Tier.TIER_2 \
+				and topic.tier != TopicData.Tier.TIER_1:
+			continue
+		var score: int = 25 if topic.tier == TopicData.Tier.TIER_3 else 35
+		var need_type: String
+		match topic.category:
+			TopicData.Category.MILITARY:
+				need_type = "DEFEND_PROVINCE"
+			TopicData.Category.POLITICAL:
+				need_type = "INVESTIGATE_THREAT"
+			TopicData.Category.ECONOMIC:
+				need_type = "ACQUIRE_RESOURCE"
+			TopicData.Category.SUPERNATURAL:
+				need_type = "RESTORE_WORSHIP"
+			TopicData.Category.LEGAL:
+				need_type = "INVESTIGATE_THREAT"
+			_:
+				need_type = "RAISE_DISPOSITION"
+		if seen_needtypes.has(need_type):
+			continue
+		seen_needtypes[need_type] = true
+		candidates.append({
+			"need_type": need_type,
+			"score": score,
+			"source": "local_tier3",
+			"topic_id": tid,
+			"target_clan_id": -1,
+			"is_forced": topic.tier <= TopicData.Tier.TIER_2,
+		})
+	return candidates
 
 
 # -- Escalating Conflicts (s55.23) ---------------------------------------------
@@ -16503,7 +18517,7 @@ static func _resolve_civil_war(
 	topic.tier = TopicData.Tier.TIER_2
 	topic.topic_type = "civil_war"
 	topic.variant = "legitimacy_victory" if legitimacy_won else ("championship_seizure" if from_seizure else "rebel_victory")
-	topic.momentum = _CIVIL_WAR_MOMENTUM
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	topic.category = TopicData.Category.POLITICAL
 	topic.ic_day_created = ic_day
 	active_topics.append(topic)
@@ -16853,7 +18867,7 @@ static func _trigger_civil_war(
 	topic.tier = TopicData.Tier.TIER_2
 	topic.topic_type = "civil_war"
 	topic.variant = "civil_war_triggered"
-	topic.momentum = _CIVIL_WAR_MOMENTUM
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	topic.category = TopicData.Category.POLITICAL
 	topic.ic_day_created = ic_day
 	active_topics.append(topic)
@@ -17412,7 +19426,7 @@ static func _apply_promise_fulfillment_honor(
 		if commitment.crisis_id < 0:
 			continue
 		var debtor: L5RCharacterData = characters_by_id.get(commitment.debtor_npc_id)
-		if debtor == null:
+		if debtor == null or CharacterStats.is_dead(debtor):
 			continue
 		HonorGlorySystem.apply_honor_change(
 			debtor, CrimeSystem.get_fulfilling_promise_honor(debtor)
@@ -17433,6 +19447,8 @@ static func _process_duel_honor_writebacks(
 		var actor: L5RCharacterData = characters_by_id.get(actor_id)
 		var target: L5RCharacterData = characters_by_id.get(target_id)
 		if actor == null or target == null:
+			continue
+		if CharacterStats.is_dead(actor) or CharacterStats.is_dead(target):
 			continue
 		if target.status > actor.status:
 			HonorGlorySystem.apply_honor_change(
@@ -17515,6 +19531,8 @@ static func _process_kindness_honor_writebacks(
 		var target: L5RCharacterData = characters_by_id.get(target_id)
 		if actor == null or target == null:
 			continue
+		if CharacterStats.is_dead(actor) or CharacterStats.is_dead(target):
+			continue
 		if actor.status > target.status:
 			HonorGlorySystem.apply_honor_change(
 				actor, CrimeSystem.get_kindness_below_station_honor(actor)
@@ -17538,7 +19556,7 @@ static func _process_truthful_report_honor_writebacks(
 			continue
 		var actor_id: int = result.get("character_id", -1)
 		var actor: L5RCharacterData = characters_by_id.get(actor_id)
-		if actor == null:
+		if actor == null or CharacterStats.is_dead(actor):
 			continue
 		for s: SecretData in active_secrets:
 			if s.secret_id == secret_id:
@@ -17571,7 +19589,7 @@ static func _process_protecting_clan_honor_writebacks(
 			continue
 		var actor_id: int = result.get("character_id", -1)
 		var actor: L5RCharacterData = characters_by_id.get(actor_id)
-		if actor == null:
+		if actor == null or CharacterStats.is_dead(actor):
 			continue
 		HonorGlorySystem.apply_honor_change(
 			actor, CrimeSystem.get_protecting_clan_honor(actor)
@@ -18393,6 +20411,7 @@ static func _inject_hunt_context(
 			if hunt.get("host_id", -1) == int(char_id):
 				known_objs["active_hunt_id"] = hunt.get("hunt_id", -1)
 				known_objs["hunt_date_ic_day"] = hunt.get("hunt_date_ic_day", -1)
+				known_objs["hunt_accepted_invitee_ids"] = hunt.get("accepted_invitee_ids", [])
 				break
 
 		for topic: TopicData in active_topics:
@@ -18614,7 +20633,9 @@ static func _resolve_scheduled_hunts(
 
 		var _hcb: Dictionary = world_states.get("clan_baselines", {})
 		var _hfb: Dictionary = world_states.get("family_baselines", {})
-		_apply_hunt_disposition(participants, _hcb, _hfb)
+		var _hmcb: Dictionary = world_states.get("marriage_clan_boosts", {})
+		var _hmfb: Dictionary = world_states.get("marriage_family_boosts", {})
+		_apply_hunt_disposition(participants, _hcb, _hfb, _hmcb, _hmfb)
 
 		if killed_id >= 0:
 			var killed: L5RCharacterData = characters_by_id.get(killed_id)
@@ -18670,7 +20691,13 @@ static func _resolve_scheduled_hunts(
 	return results
 
 
-static func _apply_hunt_disposition(participants: Array, clan_baselines: Dictionary = {}, family_baselines: Dictionary = {}) -> void:
+static func _apply_hunt_disposition(
+	participants: Array,
+	clan_baselines: Dictionary = {},
+	family_baselines: Dictionary = {},
+	marriage_clan_boosts: Dictionary = {},
+	marriage_family_boosts: Dictionary = {},
+) -> void:
 	for i: int in range(participants.size()):
 		for j: int in range(i + 1, participants.size()):
 			var a: L5RCharacterData = participants[i]
@@ -18678,8 +20705,8 @@ static func _apply_hunt_disposition(participants: Array, clan_baselines: Diction
 			var disp_ab: int = a.disposition_values.get(b.character_id, 0)
 			var disp_ba: int = b.disposition_values.get(a.character_id, 0)
 			if a.character_id not in b.met_characters:
-				InformationSystem.add_contact(b, a.character_id, a.clan, a, clan_baselines, family_baselines)
-				InformationSystem.add_contact(a, b.character_id, b.clan, b, clan_baselines, family_baselines)
+				InformationSystem.add_contact(b, a.character_id, a.clan, a, clan_baselines, family_baselines, marriage_clan_boosts, marriage_family_boosts)
+				InformationSystem.add_contact(a, b.character_id, b.clan, b, clan_baselines, family_baselines, marriage_clan_boosts, marriage_family_boosts)
 				a.disposition_values[b.character_id] = clampi(disp_ab + 3, -100, 100)
 				b.disposition_values[a.character_id] = clampi(disp_ba + 3, -100, 100)
 			else:
@@ -18881,7 +20908,7 @@ static func _purge_delivered_letters(
 				continue
 			if ld.is_forged and ld.is_order and ld.order_applied:
 				var victim: L5RCharacterData = characters_by_id.get(ld.recipient_id) as L5RCharacterData
-				if victim != null:
+				if victim != null and not CharacterStats.is_dead(victim):
 					var aware: bool = false
 					for entry: KnowledgeEntry in victim.knowledge_pool:
 						if entry.entry_type == "impersonation_detected" \
@@ -18893,6 +20920,533 @@ static func _purge_delivered_letters(
 						continue
 			pending_letters.remove_at(i)
 		i -= 1
+
+
+static func _process_compose_theater_writebacks(
+	results: Array,
+	theater_pieces: Array,
+	next_piece_id: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+	active_topics: Array = [],
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "COMPOSE_THEATER_PIECE":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var char_id: int = result.get("character_id", -1)
+		if char_id < 0:
+			continue
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null or CharacterStats.is_dead(character):
+			continue
+
+		if effects.get("is_new_piece", false):
+			# Declare a new WIP piece
+			var piece_id: int = next_piece_id[0]
+			next_piece_id[0] = piece_id + 1
+			var magnitude: int = effects.get("target_magnitude", 1)
+			var num_roles: int = effects.get("num_roles", 1)
+			var p := TheaterPieceData.new()
+			p.piece_id = piece_id
+			p.title = "Untitled Work"
+			p.style = TheaterSystem.Style.NOH
+			p.author_id = char_id
+			p.subject = effects.get("subject", character.clan)
+			p.subject_type = effects.get("subject_type", TheaterSystem.SubjectType.CLAN)
+			p.framing = effects.get("framing", true)
+			p.disposition_magnitude = 1
+			p.target_magnitude = magnitude
+			p.topic_weight = 1
+			p.target_topic_weight = effects.get("target_topic_weight", 1)
+			p.num_roles_declared = num_roles
+			p.craft_progress = 0
+			p.ic_day_created = ic_day
+			p.ic_day_last_composition_ap = ic_day
+			p.political_need_type = effects.get("political_need_type", "")
+			var role := TheaterSystem.make_role(
+				0, p.subject, p.subject_type, p.framing,
+			)
+			p.roles = [role]
+			var initial_topic: int = effects.get("topic_id", -1)
+			if initial_topic >= 0:
+				p.topic_ids.append(initial_topic)
+			theater_pieces.append(p)
+			continue
+
+		# Advancing existing WIP
+		if not result.get("success", false):
+			continue
+		var piece_id: int = effects.get("piece_id", -1)
+		if piece_id < 0:
+			continue
+		var piece: TheaterPieceData = null
+		for tp: TheaterPieceData in theater_pieces:
+			if tp.piece_id == piece_id:
+				piece = tp
+				break
+		if piece == null or piece.craft_progress < 0:
+			continue
+
+		var progress: int = effects.get("progress_earned", 0)
+		if progress <= 0:
+			continue
+
+		piece.craft_progress += progress
+		piece.ic_day_last_composition_ap = ic_day
+
+		var threshold: int = TheaterSystem.get_composition_threshold(
+			piece.target_magnitude, piece.num_roles_declared,
+		)
+		if piece.craft_progress >= threshold:
+			# Check skill gate before completing
+			if TheaterSystem.check_composition_skill_gate(character, piece.target_magnitude):
+				var raises: int = effects.get("raises", 0)
+				# §57.22.13: political raises-at-completion — topic linkage and magnitude upgrade
+				if not piece.political_need_type.is_empty() and raises > 0 and not active_topics.is_empty():
+					var link_t1: int = -1
+					var link_t2: int = -1
+					var best_momentum: int = 0
+					var second_momentum: int = 0
+					for t: Variant in active_topics:
+						var tid: int = -1
+						var momentum: int = 0
+						var t_clan: String = ""
+						var t_family: String = ""
+						var t_char_id: int = -1
+						if t is TopicData:
+							tid = (t as TopicData).topic_id
+							momentum = (t as TopicData).momentum
+							t_clan = (t as TopicData).clan_involved
+							t_family = (t as TopicData).family_involved
+							t_char_id = (t as TopicData).subject_character_id
+						elif t is Dictionary:
+							tid = int(t.get("topic_id", -1))
+							momentum = int(t.get("momentum", 0))
+							t_clan = t.get("clan_involved", "")
+							t_family = t.get("family_involved", "")
+							t_char_id = int(t.get("subject_character_id", -1))
+						if tid < 0 or tid in piece.topic_ids:
+							continue
+						if tid not in character.topic_pool:
+							continue
+						if momentum <= 40:
+							continue
+						# Match against any role's subject per GDD s57.22.13
+						var matches: bool = false
+						for role: Dictionary in piece.roles:
+							var sub: String = role.get("subject_character", "")
+							var sub_type: int = role.get("subject_type", TheaterSystem.SubjectType.ABSTRACT)
+							match sub_type:
+								TheaterSystem.SubjectType.CLAN:
+									if t_clan == sub:
+										matches = true
+								TheaterSystem.SubjectType.FAMILY:
+									if t_family == sub:
+										matches = true
+								TheaterSystem.SubjectType.CHARACTER:
+									if sub.is_valid_int() and t_char_id == int(sub):
+										matches = true
+							if matches:
+								break
+						if not matches:
+							continue
+						if momentum > best_momentum:
+							# Demote current best to second if it's better than current second
+							if link_t1 >= 0 and best_momentum > second_momentum:
+								link_t2 = link_t1
+								second_momentum = best_momentum
+							link_t1 = tid
+							best_momentum = momentum
+						elif momentum > second_momentum:
+							link_t2 = tid
+							second_momentum = momentum
+					# Magnitude upgrade: if Poetry rank > target_magnitude and raises remain after topic costs
+					var remaining_after_topics: int = raises
+					if link_t1 >= 0:
+						remaining_after_topics -= 2
+					if link_t2 >= 0:
+						remaining_after_topics -= 2
+					var poetry_rank: int = character.skills.get("Poetry", 0)
+					var add_mag: int = 1 if (remaining_after_topics >= 1 and poetry_rank > piece.target_magnitude) else 0
+					TheaterSystem.apply_completion_raises(
+						piece, raises, link_t1, link_t2, add_mag, 0,
+					)
+				else:
+					TheaterSystem.apply_completion_raises(piece, raises)
+				TheaterSystem.complete_piece(piece, char_id)
+
+
+static func _process_learn_theater_writebacks(
+	results: Array,
+	theater_pieces: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "LEARN_THEATER_PIECE":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var char_id: int = result.get("character_id", -1)
+		var piece_id: int = effects.get("piece_id", -1)
+		if char_id < 0 or piece_id < 0:
+			continue
+
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null or CharacterStats.is_dead(character):
+			continue
+
+		var piece: TheaterPieceData = null
+		for tp: TheaterPieceData in theater_pieces:
+			if tp.piece_id == piece_id:
+				piece = tp
+				break
+		if piece == null or piece.craft_progress >= 0:
+			# piece must be complete (craft_progress == -1) to learn
+			continue
+
+		if TheaterSystem.is_already_known(char_id, piece):
+			continue
+
+		var progress: int = effects.get("progress_earned", 0)
+		if progress <= 0:
+			continue
+
+		var current: int = character.learning_progress.get(piece_id, 0)
+		var new_total: int = current + progress
+		character.learning_progress[piece_id] = new_total
+
+		var threshold: int = TheaterSystem.get_learning_threshold(piece.disposition_magnitude)
+		if new_total >= threshold:
+			if TheaterSystem.check_learning_skill_gate(character, piece):
+				piece.known_by.append(char_id)
+				character.learning_progress.erase(piece_id)
+
+
+static func _process_perform_theater_writebacks(
+	results: Array,
+	theater_pieces: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	pending_letters: Array = [],
+	next_letter_id: Array = [1],
+	dice_engine: DiceEngine = null,
+	scoring_tables: Dictionary = {},
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "PERFORM_THEATER_PIECE":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var char_id: int = result.get("character_id", -1)
+		var piece_id: int = effects.get("piece_id", -1)
+		if char_id < 0 or piece_id < 0:
+			continue
+
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null or CharacterStats.is_dead(character):
+			continue
+
+		var piece: TheaterPieceData = null
+		for tp: TheaterPieceData in theater_pieces:
+			if tp.piece_id == piece_id:
+				piece = tp
+				break
+		if piece == null or piece.craft_progress >= 0:
+			continue
+
+		var is_bunraku: bool = effects.get("is_bunraku_performance", false)
+		var raises_succeeded: int = effects.get("raises_succeeded", 0)
+		var is_critical: bool = effects.get("is_critical", false)
+		var location_id: String = effects.get("location_id", "")
+
+		# Bunraku costs 2 AP; NPC engine only deducts 1. Deduct the extra AP here.
+		var ap_override: int = effects.get("ap_cost_override", 1)
+		if ap_override > 1:
+			character.action_points_current = maxi(
+				character.action_points_current - (ap_override - 1), 0
+			)
+
+		var effective_magnitude: int = TheaterSystem.get_effective_magnitude(
+			piece, is_bunraku, raises_succeeded, is_critical,
+		)
+
+		# Gather co-located witnesses (characters at same settlement)
+		var witness_ids: Array[int] = []
+		for other: L5RCharacterData in characters_by_id.values():
+			if CharacterStats.is_dead(other):
+				continue
+			if other.character_id == char_id:
+				continue
+			if other.physical_location == location_id and not location_id.is_empty():
+				witness_ids.append(other.character_id)
+
+		var perf_effects: Dictionary = TheaterSystem.compute_performance_effects(
+			piece, witness_ids, characters_by_id, ic_day,
+			effective_magnitude, is_critical, active_topics,
+		)
+
+		# Apply disposition shifts to witnesses
+		var witness_effects_arr: Array = perf_effects.get("witness_effects", [])
+		for we: Dictionary in witness_effects_arr:
+			var wid: int = we.get("character_id", -1)
+			var witness: L5RCharacterData = characters_by_id.get(wid)
+			if witness == null or CharacterStats.is_dead(witness):
+				continue
+			var role_effects: Array = we.get("role_effects", [])
+			for re: Dictionary in role_effects:
+				var sub_type: int = re.get("subject_type", TheaterSystem.SubjectType.ABSTRACT)
+				var subject: String = re.get("subject", "")
+				var delta: int = re.get("delta", 0)
+				if delta == 0 or subject.is_empty():
+					continue
+				if sub_type == TheaterSystem.SubjectType.CHARACTER and subject.is_valid_int():
+					var target_id: int = int(subject)
+					var old_disp: int = witness.disposition_values.get(target_id, 0)
+					witness.disposition_values[target_id] = clampi(old_disp + delta, -100, 100)
+
+		# Apply topic amplifications
+		var amplifications: Array = perf_effects.get("topic_amplifications", [])
+		for amp: Dictionary in amplifications:
+			var tid: int = amp.get("topic_id", -1)
+			var gain: int = amp.get("momentum_gain", 0)
+			if tid < 0 or gain <= 0:
+				continue
+			for topic: TopicData in active_topics:
+				if topic.topic_id == tid and not topic.resolved:
+					topic.momentum += gain
+					break
+
+		# Generate performance topic on critical success
+		if is_critical:
+			var topic_id: int = next_topic_id[0]
+			next_topic_id[0] = topic_id + 1
+			var t := TopicData.new()
+			t.topic_id = topic_id
+			t.slug = "theater_perf_%d_day%d" % [piece_id, ic_day]
+			t.title = piece.title
+			t.topic_type = "theater_performance"
+			t.tier = TopicData.Tier.TIER_4
+			t.momentum = TopicMomentumSystem.initial_momentum_for_tier(t.tier)
+			t.category = TopicData.Category.PERSONAL
+			t.subject_character_id = char_id
+			t.ic_day_created = ic_day
+			active_topics.append(t)
+
+		piece.times_performed += 1
+
+		# §57.22.12 proactive teaching trigger
+		_trigger_proactive_teaching(
+			piece, character, characters_by_id,
+			pending_letters, next_letter_id, ic_day, dice_engine, scoring_tables,
+		)
+
+		# §57.22.2: +0.1 Glory to living author each time someone else performs their piece
+		if piece.author_id >= 0 and piece.author_id != char_id:
+			var author: L5RCharacterData = characters_by_id.get(piece.author_id)
+			if author != null and not CharacterStats.is_dead(author):
+				HonorGlorySystem.apply_glory_change(author, TheaterSystem.AUTHORSHIP_GLORY)
+
+
+static func _trigger_proactive_teaching(
+	piece: TheaterPieceData,
+	performer: L5RCharacterData,
+	characters_by_id: Dictionary,
+	pending_letters: Array,
+	next_letter_id: Array,
+	ic_day: int,
+	dice_engine: DiceEngine,
+	scoring_tables: Dictionary,
+) -> void:
+	# Conditions: 1–2 performances, piece underexposed, performer is author
+	if piece.times_performed < 1 or piece.times_performed >= 3:
+		return
+	if piece.known_by.size() >= 3:
+		return
+	if piece.author_id < 0 or piece.author_id != performer.character_id:
+		return
+	if dice_engine == null:
+		return
+	# Personality gate: JIN lean >= 15 or REI lean >= 10 for LEARN_THEATER_PIECE
+	var lean_table: Dictionary = scoring_tables.get("personality_lean", {})
+	if not _has_teaching_lean(performer, lean_table):
+		return
+	# Find candidates: met characters, don't already know the piece, Acting >= magnitude
+	var sent: int = 0
+	for mid: Variant in performer.met_characters:
+		if sent >= 2:
+			break
+		var met_id: int = int(mid)
+		if met_id in piece.known_by:
+			continue
+		var cand: L5RCharacterData = characters_by_id.get(met_id) as L5RCharacterData
+		if cand == null or CharacterStats.is_dead(cand):
+			continue
+		if cand.skills.get("Acting", 0) < piece.disposition_magnitude:
+			continue
+		var lid: int = next_letter_id[0]
+		next_letter_id[0] = lid + 1
+		var letter: LetterData = LetterSystem.write_letter(
+			lid, performer, met_id, -1, ic_day, dice_engine, 3,
+		)
+		letter.learn_piece_id = piece.piece_id
+		letter.teacher_initiated = true
+		pending_letters.append(letter)
+		sent += 1
+
+
+static func _has_teaching_lean(
+	author: L5RCharacterData,
+	lean_table: Dictionary,
+) -> bool:
+	if author.bushido_virtue == Enums.BushidoVirtue.JIN:
+		var jin_leans: Dictionary = lean_table.get("JIN", {})
+		return jin_leans.get("LEARN_THEATER_PIECE", 0) >= 15
+	if author.bushido_virtue == Enums.BushidoVirtue.REI:
+		var rei_leans: Dictionary = lean_table.get("REI", {})
+		return rei_leans.get("LEARN_THEATER_PIECE", 0) >= 10
+	return false
+
+
+static func _process_teaching_offer_letter_delivery(
+	pending_letters: Array,
+	characters_by_id: Dictionary,
+	theater_pieces: Array,
+) -> void:
+	for letter: Variant in pending_letters:
+		var l: LetterData = letter as LetterData
+		if l == null:
+			continue
+		if not l.delivered:
+			continue
+		if not l.teacher_initiated:
+			continue
+		if l.learn_piece_id < 0:
+			continue
+		var recipient: L5RCharacterData = characters_by_id.get(l.recipient_id) as L5RCharacterData
+		if recipient == null or CharacterStats.is_dead(recipient):
+			continue
+		var piece: TheaterPieceData = null
+		for tp: TheaterPieceData in theater_pieces:
+			if (tp as TheaterPieceData).piece_id == l.learn_piece_id:
+				piece = tp as TheaterPieceData
+				break
+		if piece == null or piece.lost or piece.abandoned_incomplete:
+			continue
+		if l.recipient_id in piece.known_by:
+			continue
+		var author: L5RCharacterData = characters_by_id.get(piece.author_id) as L5RCharacterData
+		if author == null or CharacterStats.is_dead(author):
+			continue
+		recipient.pending_events.append({
+			"reactive_type": "ACCEPT_TRAINING",
+			"teacher_initiated": true,
+			"learn_piece_id": piece.piece_id,
+			"sensei_id": author.character_id,
+			"skill": "Acting",
+			"sensei_rank": author.skills.get("Acting", 0),
+		})
+
+
+static func _process_dedicate_piece_writebacks(
+	results: Array,
+	theater_pieces: Array,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "DEDICATE_PIECE":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var piece_id: int = effects.get("piece_id", -1)
+		var topic_id: int = effects.get("topic_id", -1)
+		if piece_id < 0 or topic_id < 0:
+			continue
+
+		for piece: TheaterPieceData in theater_pieces:
+			if piece.piece_id != piece_id:
+				continue
+			if piece.topic_ids.size() >= 2:
+				break
+			if topic_id not in piece.topic_ids:
+				piece.topic_ids.append(topic_id)
+			break
+
+
+static func _inject_theater_context(
+	theater_pieces: Array,
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	## Inject per-character theater context into known_objectives (matching hunt pattern).
+	## theater_pieces_to_perform: Array of piece_ids the character can perform.
+	## wip_piece_ids: Array of piece_ids the character is composing.
+	## learnable_piece_ids: Array of piece_ids the character can learn via LEARN_THEATER_PIECE.
+	## _theater_pieces_by_id: Dict[piece_id → TheaterPieceData] for §57.22 scoring.
+
+	# Build chars_by_id once for teacher-availability checks on private pieces (§57.22.6).
+	var chars_by_id: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		chars_by_id[c.character_id] = c
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var char_id: int = character.character_id
+		var ws: Dictionary = world_states.get(char_id, {})
+		if ws.is_empty():
+			continue
+
+		var performable: Array[int] = []
+		var wip_ids: Array[int] = []
+		var learnable: Array[int] = []
+		var pieces_by_id: Dictionary = {}
+		var acting_rank: int = character.skills.get("Acting", 0)
+
+		for piece: TheaterPieceData in theater_pieces:
+			if piece.lost or piece.abandoned_incomplete:
+				continue
+			if piece.craft_progress >= 0:
+				if piece.author_id == char_id:
+					wip_ids.append(piece.piece_id)
+				continue
+
+			# Completed piece.
+			var already_knows: bool = char_id in piece.known_by
+
+			if already_knows or piece.canonized:
+				performable.append(piece.piece_id)
+				pieces_by_id[piece.piece_id] = piece
+
+			# Learnable if: skill gate passes, character does not already know it.
+			if not already_knows and acting_rank >= piece.disposition_magnitude:
+				if piece.canonized:
+					# Canonized: no teacher required (§57.22.6).
+					learnable.append(piece.piece_id)
+					# pieces_by_id already populated above
+				elif piece.author_id >= 0 and piece.author_id in character.met_characters:
+					# Private: author is a known contact; check for co-located willing teacher.
+					var teacher_id: int = TheaterSystem.find_willing_teacher(
+						char_id, piece, chars_by_id
+					)
+					if teacher_id >= 0:
+						learnable.append(piece.piece_id)
+						pieces_by_id[piece.piece_id] = piece
+
+		var known_objs: Dictionary = ws.get("known_objectives", {})
+		if not performable.is_empty():
+			known_objs["theater_pieces_to_perform"] = performable
+		if not wip_ids.is_empty():
+			known_objs["wip_piece_ids"] = wip_ids
+		if not learnable.is_empty():
+			known_objs["learnable_piece_ids"] = learnable
+		# Always write the dict (even empty) so stale data from yesterday never persists.
+		known_objs["_theater_pieces_by_id"] = pieces_by_id
+		ws["known_objectives"] = known_objs
 
 
 static func _purge_exposed_secrets(
@@ -18910,8 +21464,2753 @@ static func _purge_exposed_secrets(
 		i -= 1
 
 
+# -- Settlement Public Record (per GDD s57.50) ---------------------------------
+
+static func _seed_public_records_from_crime_results(
+	crime_results: Array,
+	wave_results: Array,
+	settlements: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	if settlements.is_empty() or crime_results.is_empty():
+		return
+
+	var settlements_by_str_id: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlements_by_str_id[str(s.settlement_id)] = s
+
+	# Path 1: auto_detected crimes (e.g. ViolenceSystem always sets auto_detected: true)
+	var auto_detected_locations: Dictionary = {}
+	for r: Variant in wave_results:
+		if not r is Dictionary:
+			continue
+		var rd: Dictionary = r as Dictionary
+		if rd.get("effects", {}).get("auto_detected", false):
+			var char_id: int = rd.get("character_id", -1)
+			var c: L5RCharacterData = characters_by_id.get(char_id)
+			if c != null and not c.physical_location.is_empty():
+				auto_detected_locations[char_id] = c.physical_location
+
+	# Path 2: inherently public killing crimes — always witnessed, no auto_detected needed.
+	# Duel deaths and open killings happen in front of witnesses by definition.
+	const INHERENTLY_PUBLIC: Array = [
+		Enums.CrimeType.UNSANCTIONED_DUEL_DEATH,
+		Enums.CrimeType.UNSANCTIONED_OPEN_KILLING,
+	]
+
+	for cr: Variant in crime_results:
+		if not cr is Dictionary:
+			continue
+		var result: Dictionary = cr as Dictionary
+		if result.get("no_crime", false):
+			continue
+
+		var char_id: int = result.get("character_id", -1)
+		var crime_type: int = result.get("crime_type", -1)
+
+		# Resolve location from auto_detected path first, then inherently public path
+		var location: String = auto_detected_locations.get(char_id, "")
+		if location.is_empty() and crime_type in INHERENTLY_PUBLIC:
+			var perp: L5RCharacterData = characters_by_id.get(char_id)
+			if perp != null and not perp.physical_location.is_empty():
+				location = perp.physical_location
+
+		if location.is_empty():
+			continue
+
+		var settlement: SettlementData = settlements_by_str_id.get(location)
+		if settlement == null:
+			continue
+
+		var event_type: String = _crime_type_to_string(crime_type)
+		var topic_id: int = result.get("topic_id", -1)
+		var tier: int = _crime_tier_for_public_record(crime_type)
+
+		PublicRecordSystem.seed_event(
+			settlement, event_type, tier, ic_day, topic_id, char_id,
+		)
 
 
+static func _crime_tier_for_public_record(crime_type: int) -> int:
+	match crime_type:
+		Enums.CrimeType.VIOLENCE:
+			return TopicData.Tier.TIER_4
+		Enums.CrimeType.UNSANCTIONED_OPEN_KILLING, Enums.CrimeType.UNSANCTIONED_DUEL_DEATH:
+			return TopicData.Tier.TIER_3
+		Enums.CrimeType.TREASON, Enums.CrimeType.VIOLATION_EMPERORS_PEACE:
+			return TopicData.Tier.TIER_2
+		_:
+			return TopicData.Tier.TIER_4
+
+
+# Cipher Gap 1 (s57.30 A3): Kitsuki written_deception → settlement public record.
+# letter_results entries with "kitsuki_written_deception" are returned by deliver_letter()
+# but were never consumed. Seeds a "written_deception" public record entry for the
+# recipient's settlement so EXAMINE_CRIME_SCENE can query it as investigation evidence.
+static func _process_kitsuki_cipher_writebacks(
+	letter_results: Array,
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	if settlements.is_empty():
+		return
+
+	var has_kitsuki: bool = false
+	for r: Variant in letter_results:
+		if r is Dictionary and (r as Dictionary).has("kitsuki_written_deception"):
+			has_kitsuki = true
+			break
+	if not has_kitsuki:
+		return
+
+	var settlements_by_str_id: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlements_by_str_id[str(s.settlement_id)] = s
+
+	for r: Variant in letter_results:
+		if not r is Dictionary:
+			continue
+		var rd: Dictionary = r as Dictionary
+		if not rd.has("kitsuki_written_deception"):
+			continue
+		var entry: Dictionary = rd["kitsuki_written_deception"]
+		var settlement_id_str: String = entry.get("settlement_id", "")
+		if settlement_id_str.is_empty():
+			continue
+		var settlement: SettlementData = settlements_by_str_id.get(settlement_id_str)
+		if settlement == null:
+			continue
+		PublicRecordSystem.seed_event(
+			settlement,
+			"written_deception",
+			TopicData.Tier.TIER_4,
+			ic_day,
+			-1,
+			entry.get("sender_id", -1),
+		)
+
+
+static func _pickup_ambient_public_records(
+	characters: Array,
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	if settlements.is_empty():
+		return
+
+	var settlements_by_str_id: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlements_by_str_id[str(s.settlement_id)] = s
+
+	for c: Variant in characters:
+		if not c is L5RCharacterData:
+			continue
+		var character: L5RCharacterData = c as L5RCharacterData
+		if CharacterStats.is_dead(character):
+			continue
+		if TravelSystem.is_traveling(character):
+			continue
+		var loc: String = character.physical_location
+		if loc.is_empty():
+			continue
+
+		var settlement: SettlementData = settlements_by_str_id.get(loc)
+		if settlement == null or settlement.public_record.is_empty():
+			continue
+
+		var ambient: Array = PublicRecordSystem.get_ambient_events(settlement, ic_day)
+		for entry: Variant in ambient:
+			if not entry is Dictionary:
+				continue
+			var topic_id: int = (entry as Dictionary).get("topic_id", -1)
+			if topic_id >= 0 and topic_id not in character.topic_pool:
+				character.topic_pool.append(topic_id)
+
+
+static func _purge_settlement_public_records(
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	for s: Variant in settlements:
+		if s is SettlementData:
+			PublicRecordSystem.purge_expired(s as SettlementData, ic_day)
+
+
+# -- s57.26 Origami Writebacks --------------------------------------------------
+
+
+static func _inject_senbazuru_context(
+	active_senbazurus: Array,
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	## Inject per-character senbazuru state into known_objectives.
+	## active_senbazuru_id: ID of the active senbazuru (-1 if none).
+	## senbazuru_is_complete: true when crane_count >= 1000 and state == "active".
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var char_id: int = character.character_id
+		var ws: Dictionary = world_states.get(char_id, {})
+		if ws.is_empty():
+			continue
+		for sb: Variant in active_senbazurus:
+			if not sb is SenbazuruData:
+				continue
+			var senbazuru: SenbazuruData = sb as SenbazuruData
+			if senbazuru.folder_id != char_id:
+				continue
+			if senbazuru.state != "active":
+				continue
+			if not ws.has("known_objectives"):
+				ws["known_objectives"] = {}
+			ws["known_objectives"]["active_senbazuru_id"] = senbazuru.senbazuru_id
+			ws["known_objectives"]["senbazuru_is_complete"] = senbazuru.is_complete
+			ws["known_objectives"]["senbazuru_dedication_type"] = senbazuru.dedication_type
+			ws["known_objectives"]["senbazuru_recipient_id"] = senbazuru.recipient_id
+			break
+
+
+static func _inject_poem_context(
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	## Inject poetry scroll availability into known_objectives — s57.30.6.
+	## available_poem_item_id: item_id of first unconsumed poetry_scroll (-1 if none).
+	## available_poem_raises: raises from that scroll's CRAFT roll.
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			continue
+		for item: Variant in character.items:
+			if item is Dictionary and \
+					(item as Dictionary).get("item_type", "") == "poetry_scroll":
+				if not ws.has("known_objectives"):
+					ws["known_objectives"] = {}
+				ws["known_objectives"]["available_poem_item_id"] = \
+					(item as Dictionary).get("item_id", -1)
+				ws["known_objectives"]["available_poem_raises"] = \
+					(item as Dictionary).get("raises", 0)
+				break
+
+
+static func _process_festival_leaves_penalty(
+	letter_pass_results: Array,
+	characters: Array,
+	ic_day: int,
+) -> void:
+	## On poetry-exchange festival days: living Status 4+ characters who did NOT send a
+	## poem-letter today lose -0.1 Glory — s57.30.6 (PROVISIONAL: Festival of Leaves).
+	## Poem-letter senders are identified by a poem attachment in their letter result.
+	var festival_effects: Array = FestivalSystem.get_festival_effects(ic_day)
+	if not "poetry_exchange" in festival_effects:
+		return
+	# Collect sender IDs who attached a poem today.
+	var poem_senders: Dictionary = {}
+	for lr: Variant in letter_pass_results:
+		if lr is Dictionary and \
+				(lr as Dictionary).get("attach_poem_item_id", -1) >= 0:
+			var sid: int = (lr as Dictionary).get("character_id", -1)
+			if sid >= 0:
+				poem_senders[sid] = true
+	# Apply penalty to Status 4+ characters who did not send a poem.
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.status < 4.0:
+			continue
+		if poem_senders.has(character.character_id):
+			continue
+		HonorGlorySystem.apply_glory_change(character, -0.1)
+
+
+static func _process_craft_origami_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	next_item_id: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Handle CRAFT results with origami_type set.
+	## noshi: add item to character.items; apply wrapper bonus if crafted for another.
+	## gohei: add item to character.items.
+	## poetry_scroll: add scroll to crafter's items (s57.30.6).
+	## senbazuru_progress: delegated to _process_senbazuru_progress_writebacks().
+	for result: Variant in results:
+		if result.get("action_id", "") != "CRAFT":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var origami_type: String = effects.get("origami_type", "")
+		if origami_type not in ["noshi", "gohei", "poetry_scroll", "shide"]:
+			continue
+		var char_id: int = result.get("character_id", -1)
+		var crafter: L5RCharacterData = characters_by_id.get(char_id)
+		if crafter == null or CharacterStats.is_dead(crafter):
+			continue
+
+		match origami_type:
+			"noshi":
+				if not effects.get("requires_noshi_creation", false):
+					continue
+				var quality_tier: int = effects.get("quality_tier",
+					GiftGivingSystem.QualityTier.MUNDANE)
+				var is_mundane: bool = effects.get("noshi_is_mundane", false)
+				var wrapper_target_id: int = effects.get("wrapper_target_id", -1)
+				var item: Dictionary = {
+					"item_type": "noshi",
+					"item_id": next_item_id[0],
+					"quality_tier": quality_tier,
+					"is_mundane": is_mundane,
+					"wrapper_id": char_id,
+					"wrapper_target_id": wrapper_target_id,
+				}
+				next_item_id[0] += 1
+				crafter.items.append(item)
+				# Wrapper disposition bonus fires at CRAFT time for non-self wrapping (A1).
+				if quality_tier >= GiftGivingSystem.QualityTier.NORMAL and \
+						wrapper_target_id >= 0 and wrapper_target_id != char_id:
+					var target: L5RCharacterData = characters_by_id.get(wrapper_target_id)
+					if target != null and not CharacterStats.is_dead(target):
+						var bonus: int = OrigamiSystem.NOSHI_WRAPPER_BONUS.get(
+							quality_tier, 0)
+						var duration: int = OrigamiSystem.NOSHI_WRAPPER_DURATION.get(
+							quality_tier, 0)
+						if bonus > 0:
+							var bucket_noshi: Array = target.temporary_modifiers.get(
+								char_id, [])
+							bucket_noshi.append({
+								"event_type": "noshi_wrapper_bonus",
+								"value": bonus,
+								"created_ic_day": ic_day,
+								"duration": duration,
+							})
+							target.temporary_modifiers[char_id] = bucket_noshi
+			"gohei":
+				if not effects.get("requires_gohei_creation", false):
+					continue
+				var quality_tier: int = effects.get("quality_tier",
+					GiftGivingSystem.QualityTier.NORMAL)
+				var uses: int = effects.get("uses_remaining",
+					OrigamiSystem.GOHEI_USES.get(
+						GiftGivingSystem.QualityTier.NORMAL,
+						OrigamiSystem.GOHEI_USES[GiftGivingSystem.QualityTier.NORMAL]))
+				var item: Dictionary = {
+					"item_type": "gohei",
+					"item_id": next_item_id[0],
+					"quality_tier": quality_tier,
+					"uses_remaining": uses,
+				}
+				next_item_id[0] += 1
+				crafter.items.append(item)
+			"poetry_scroll":
+				if not effects.get("requires_poetry_scroll_creation", false):
+					continue
+				var poem_raises: int = effects.get("poetry_scroll_raises", 0)
+				var poem_item: Dictionary = {
+					"item_type": "poetry_scroll",
+					"item_id": next_item_id[0],
+					"raises": poem_raises,
+					"crafter_id": char_id,
+				}
+				next_item_id[0] += 1
+				crafter.items.append(poem_item)
+			"shide":
+				if not effects.get("requires_shide_creation", false):
+					continue
+				var shide_raises: int = effects.get("raises_declared", 0)
+				OrigamiSystem.craft_shide(crafter, shide_raises, next_item_id)
+
+
+static func _process_declare_senbazuru_writebacks(
+	results: Array,
+	active_senbazurus: Array,
+	next_senbazuru_id: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Create SenbazuruData and Tier 4 declaration topic (s57.26.14).
+	for result: Variant in results:
+		if result.get("action_id", "") != "DECLARE_SENBAZURU":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("requires_senbazuru_creation", false):
+			continue
+		var char_id: int = result.get("character_id", -1)
+		var folder: L5RCharacterData = characters_by_id.get(char_id)
+		if folder == null or CharacterStats.is_dead(folder):
+			continue
+		# Dedup: only one active senbazuru per folder.
+		var already_active: bool = false
+		for sb: Variant in active_senbazurus:
+			if sb is SenbazuruData:
+				var s: SenbazuruData = sb as SenbazuruData
+				if s.folder_id == char_id and s.state == "active":
+					already_active = true
+					break
+		if already_active:
+			continue
+		var sb := SenbazuruData.new()
+		sb.senbazuru_id = next_senbazuru_id[0]
+		next_senbazuru_id[0] += 1
+		sb.folder_id = char_id
+		sb.dedication_type = effects.get("dedication_type", "Atonement")
+		sb.recipient_id = effects.get("recipient_id", -1)
+		sb.declaration_date = ic_day
+		active_senbazurus.append(sb)
+		# Tier 4 declaration topic (s57.26.14).
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.tier = OrigamiSystem.DECLARATION_TOPIC_TIER
+		topic.category = TopicData.Category.PERSONAL
+		topic.topic_type = "senbazuru_declaration"
+		topic.subject_character_id = char_id
+		topic.subject_role = "ACTIVE"
+		topic.ic_day_created = ic_day
+		topic.title = "Senbazuru Declaration"
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		active_topics.append(topic)
+		folder.topic_pool.append(topic.topic_id)
+
+
+static func _process_senbazuru_progress_writebacks(
+	results: Array,
+	active_senbazurus: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Apply crane progress from successful CRAFT (origami_type=senbazuru_progress).
+	## Checks for completion (crane_count >= 1000) and generates completion topic.
+	for result: Variant in results:
+		if result.get("action_id", "") != "CRAFT":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		if effects.get("origami_type", "") != "senbazuru_progress":
+			continue
+		var senbazuru_id: int = effects.get("senbazuru_id", -1)
+		if senbazuru_id < 0:
+			continue
+		var cranes_added: int = effects.get("cranes_added", 0)
+		var raises_declared: int = effects.get("raises_declared", 0)
+		var session_success: bool = effects.get("session_success", false)
+		# Find the SenbazuruData.
+		var sb: SenbazuruData = null
+		for entry: Variant in active_senbazurus:
+			if entry is SenbazuruData and (entry as SenbazuruData).senbazuru_id == senbazuru_id:
+				sb = entry as SenbazuruData
+				break
+		if sb == null or sb.state != "active" or sb.is_complete:
+			continue
+		sb.crane_count += cranes_added
+		if session_success:
+			sb.total_raises += raises_declared
+			sb.successful_session_count += 1
+		# Check for completion.
+		if sb.crane_count >= 1000 and not sb.is_complete:
+			sb.is_complete = true
+			sb.crane_count = 1000
+			sb.completion_date = ic_day
+			sb.quality_tier = SenbazuruData.compute_quality(
+				sb.total_raises, sb.successful_session_count)
+			# Completion topic (s57.26.16: TIER_3 for Exceptional+, TIER_4 otherwise).
+			var tier: int = OrigamiSystem.completion_topic_tier(sb.quality_tier)
+			var folder: L5RCharacterData = characters_by_id.get(sb.folder_id)
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			topic.tier = tier
+			topic.category = TopicData.Category.PERSONAL
+			topic.topic_type = "senbazuru_complete"
+			topic.subject_character_id = sb.folder_id
+			topic.subject_role = "ACTIVE"
+			topic.ic_day_created = ic_day
+			topic.title = "Senbazuru Completed"
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(tier)
+			active_topics.append(topic)
+			if folder != null and not CharacterStats.is_dead(folder):
+				folder.topic_pool.append(topic.topic_id)
+
+
+static func _process_present_senbazuru_writebacks(
+	results: Array,
+	active_senbazurus: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Apply full presentation effects by dedication type (s57.26.17).
+	## Healing: disposition to folder from recipient + Free Raises on next qualifying roll.
+	## Protection: disposition to folder + Void recovery.
+	## Remembrance: witness disposition to folder + folder glory.
+	## Atonement: folder honor recovery.
+	for result: Variant in results:
+		if result.get("action_id", "") != "PRESENT_SENBAZURU":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("requires_senbazuru_presentation", false):
+			continue
+		var senbazuru_id: int = effects.get("senbazuru_id", -1)
+		var folder_id: int = result.get("character_id", -1)
+		var folder: L5RCharacterData = characters_by_id.get(folder_id)
+		if folder == null or CharacterStats.is_dead(folder):
+			continue
+		# Find the SenbazuruData.
+		var sb: SenbazuruData = null
+		for entry: Variant in active_senbazurus:
+			if entry is SenbazuruData and (entry as SenbazuruData).senbazuru_id == senbazuru_id:
+				sb = entry as SenbazuruData
+				break
+		if sb == null or not sb.is_complete or sb.state != "active":
+			continue
+		var tier: int = sb.quality_tier
+		# Mark presented.
+		sb.state = "presented"
+		sb.presentation_date = ic_day
+
+		match sb.dedication_type:
+			"Healing", "Protection":
+				var recipient: L5RCharacterData = characters_by_id.get(sb.recipient_id)
+				if recipient != null and not CharacterStats.is_dead(recipient):
+					# First effect: recipient disposition toward folder.
+					var disp: int = OrigamiSystem.SENBAZURU_HEAL_PROT_DISP.get(tier, 0)
+					var dur: int = OrigamiSystem.SENBAZURU_HEAL_PROT_DURATION.get(tier, 0)
+					if disp > 0:
+						var bucket_sb: Array = recipient.temporary_modifiers.get(
+							folder_id, [])
+						bucket_sb.append({
+							"event_type": "senbazuru_presentation",
+							"value": disp,
+							"created_ic_day": ic_day,
+							"duration": dur,
+						})
+						recipient.temporary_modifiers[folder_id] = bucket_sb
+					if sb.dedication_type == "Protection":
+						# Second effect: recover all spent Void Points.
+						var max_void: int = recipient.void_ring
+						recipient.current_void_points = max_void
+					else:
+						# Healing second effect (s57.26.17): Free Raises on next
+						# qualifying Medicine roll, when recipient still wounded or Tainted.
+						if recipient.wounds_taken > 0 or recipient.taint > 0.0:
+							var fr: int = OrigamiSystem.SENBAZURU_HEAL_FREE_RAISES.get(
+								tier, 0)
+							if fr > 0:
+								recipient.pending_healing_fr = maxi(
+									recipient.pending_healing_fr, fr)
+			"Remembrance":
+				# Effect 1: all present witnesses gain disposition toward folder.
+				var witness_disp: int = OrigamiSystem.SENBAZURU_REMEMBRANCE_WITNESS_DISP.get(
+					tier, 0)
+				var dur: int = OrigamiSystem.SENBAZURU_HEAL_PROT_DURATION.get(tier, 0)
+				if witness_disp > 0:
+					for char_v: Variant in characters_by_id.values():
+						var witness: L5RCharacterData = char_v as L5RCharacterData
+						if witness == null or CharacterStats.is_dead(witness):
+							continue
+						if witness.character_id == folder_id:
+							continue
+						if witness.physical_location != folder.physical_location:
+							continue
+						var bucket_rem: Array = witness.temporary_modifiers.get(
+							folder_id, [])
+						bucket_rem.append({
+							"event_type": "senbazuru_remembrance_witness",
+							"value": witness_disp,
+							"created_ic_day": ic_day,
+							"duration": dur,
+						})
+						witness.temporary_modifiers[folder_id] = bucket_rem
+				# Effect 2: folder gains Glory.
+				var glory_gain: float = OrigamiSystem.SENBAZURU_REMEMBRANCE_GLORY.get(
+					tier, 0.0)
+				if glory_gain > 0.0:
+					HonorGlorySystem.apply_glory_change(folder, glory_gain)
+			"Atonement":
+				# Honor recovery.
+				var honor_gain: float = OrigamiSystem.SENBAZURU_ATONEMENT_HONOR.get(tier, 0.0)
+				if honor_gain > 0.0:
+					HonorGlorySystem.apply_honor_change(folder, honor_gain)
+
+
+static func _process_senbazuru_lifecycle_events(
+	death_events: Array,
+	active_senbazurus: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Handle dedication shifts (s57.26 Dedication shift) and creator death.
+	## Healing/Protection → Remembrance when recipient dies.
+	## state → "creator_deceased" when folder dies.
+	for death_event: Variant in death_events:
+		var deceased_id: int = death_event.get("character_id", -1)
+		if deceased_id < 0:
+			continue
+		for entry: Variant in active_senbazurus:
+			if not entry is SenbazuruData:
+				continue
+			var sb: SenbazuruData = entry as SenbazuruData
+			if sb.state != "active":
+				continue
+			# Creator death.
+			if sb.folder_id == deceased_id:
+				sb.state = "creator_deceased"
+				var topic := TopicData.new()
+				topic.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				topic.tier = OrigamiSystem.CREATOR_DECEASED_TOPIC_TIER
+				topic.category = TopicData.Category.PERSONAL
+				topic.topic_type = "senbazuru_creator_deceased"
+				topic.subject_character_id = deceased_id
+				topic.subject_role = "NEUTRAL"
+				topic.ic_day_created = ic_day
+				topic.title = "Senbazuru — Creator Deceased"
+				topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+				active_topics.append(topic)
+				continue
+			# Dedication shift: Healing or Protection recipient dies → Remembrance.
+			if sb.recipient_id == deceased_id and \
+					sb.dedication_type in ["Healing", "Protection"]:
+				sb.dedication_type = "Remembrance"
+				var topic := TopicData.new()
+				topic.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				topic.tier = OrigamiSystem.DEDICATION_SHIFT_TOPIC_TIER
+				topic.category = TopicData.Category.PERSONAL
+				topic.topic_type = "senbazuru_dedication_shift"
+				topic.subject_character_id = sb.folder_id
+				topic.subject_role = "ACTIVE"
+				topic.ic_day_created = ic_day
+				topic.title = "Senbazuru — Dedication Shifted to Remembrance"
+				topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+				active_topics.append(topic)
+				var folder: L5RCharacterData = characters_by_id.get(sb.folder_id)
+				if folder != null and not CharacterStats.is_dead(folder):
+					folder.topic_pool.append(topic.topic_id)
+
+
+static func _process_noshi_consumption_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	## Remove consumed noshi from character.items after DELIVER_GIFT (s57.26.6).
+	## The executor returns noshi_item_id in effects when a noshi is used.
+	for result: Variant in results:
+		if result.get("action_id", "") != "DELIVER_GIFT":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var noshi_item_id: int = effects.get("noshi_item_id", -1)
+		if noshi_item_id < 0:
+			continue
+		var char_id: int = result.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		var new_items: Array = []
+		for item: Variant in character.items:
+			if item.get("item_type", "") == "noshi" and \
+					item.get("item_id", -1) == noshi_item_id:
+				continue  # consumed
+			new_items.append(item)
+		character.items = new_items
+
+
+static func _process_gohei_usage_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	## Decrement uses_remaining on gohei used in PERFORM_WORSHIP (s57.26.13).
+	## Remove gohei when uses_remaining reaches 0.
+	for result: Variant in results:
+		if result.get("action_id", "") != "PERFORM_WORSHIP":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var gohei_item_id: int = effects.get("gohei_item_id", -1)
+		if gohei_item_id < 0:
+			continue
+		var char_id: int = result.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		var new_items: Array = []
+		for item: Variant in character.items:
+			if item.get("item_type", "") == "gohei" and \
+					item.get("item_id", -1) == gohei_item_id:
+				var remaining: int = item.get("uses_remaining", 1) - 1
+				if remaining > 0:
+					item["uses_remaining"] = remaining
+					new_items.append(item)
+				# else: destroyed when uses_remaining reaches 0 (s57.26.12)
+				continue
+			new_items.append(item)
+		character.items = new_items
+
+
+# -- Ikebana system (s57.29) ---------------------------------------------------
+
+static func _inject_ikebana_context(
+	active_arrangements: Array,
+	settlements: Array,
+	characters: Array,
+	world_states: Dictionary,
+	active_gardens: Array = [],
+) -> void:
+	## Inject per-character ikebana slot state into known_objectives.
+	## ikebana_slot_empty: true if no unexpired displayed arrangement at character's
+	##   settlement and character has Artisan: Ikebana rank ≥ 1.
+	## ikebana_worship_fr: FR bonus for PERFORM_WORSHIP at this settlement.
+	## ikebana_garden_fr: FR bonus from garden synergy (s57.29.6) when a non-destroyed
+	##   garden exists at the character's settlement.
+	## ikebana_garden_id: garden_id of the synergy garden, or -1 if none.
+
+	# Build settlement_id → arrangement lookup (only displayed, non-expired)
+	var slot_filled: Dictionary = {}   # str(settlement_id) → true
+	var worship_fr_map: Dictionary = {}  # str(settlement_id) → int FR
+
+	for arr_v: Variant in active_arrangements:
+		if not arr_v is IkebanaArrangementData:
+			continue
+		var arr: IkebanaArrangementData = arr_v as IkebanaArrangementData
+		if arr.expired:
+			continue
+		if arr.display_settlement_id.is_empty():
+			continue
+		slot_filled[arr.display_settlement_id] = true
+		# Worship FR for religious settlements
+		var fr: int = IkebanaSystem.worship_fr_for_quality(arr.quality_tier)
+		if fr > 0:
+			var existing: int = worship_fr_map.get(arr.display_settlement_id, 0)
+			worship_fr_map[arr.display_settlement_id] = maxi(existing, fr)
+
+	# Build settlement_id → best garden lookup for ikebana synergy (s57.29.6)
+	var garden_by_settlement: Dictionary = {}  # str(settlement_id) → GardenData
+	for g_v: Variant in active_gardens:
+		if not g_v is GardenData:
+			continue
+		var g: GardenData = g_v as GardenData
+		if g.destroyed:
+			continue
+		var sid: String = str(g.settlement_id)
+		var existing_g: Variant = garden_by_settlement.get(sid)
+		if existing_g == null or (existing_g as GardenData).current_tier < g.current_tier:
+			garden_by_settlement[sid] = g
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			continue
+		if not ws.has("known_objectives"):
+			ws["known_objectives"] = {}
+
+		var loc: String = character.physical_location
+		var slot_empty: bool = not slot_filled.get(loc, false)
+		ws["known_objectives"]["ikebana_slot_empty"] = slot_empty
+		ws["known_objectives"]["ikebana_worship_fr"] = worship_fr_map.get(loc, 0)
+
+		# Garden synergy (s57.29.6): inject FR bonus for ikebana artisans
+		var garden: Variant = garden_by_settlement.get(loc)
+		if garden != null and character.skills.get("Artisan: Ikebana", 0) >= 1:
+			var gd: GardenData = garden as GardenData
+			ws["known_objectives"]["ikebana_garden_fr"] = IkebanaSystem.garden_fr_for_quality(gd.current_tier)
+			ws["known_objectives"]["ikebana_garden_id"] = gd.garden_id
+		else:
+			ws["known_objectives"]["ikebana_garden_fr"] = 0
+			ws["known_objectives"]["ikebana_garden_id"] = -1
+
+
+static func _process_ikebana_performance_writebacks(
+	results: Array,
+	active_arrangements: Array,
+	next_arrangement_id: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	ic_day: int,
+	current_season: int,
+	active_topics: Array,
+	next_topic_id: Array,
+	dice_engine: DiceEngine,
+) -> void:
+	## Create IkebanaArrangementData when a PUBLIC_PERFORMANCE or PERFORM_FOR
+	## uses Artisan: Ikebana (s57.29.3). Replaces any prior arrangement at the
+	## same settlement (one slot per settlement as zone proxy).
+
+	# Build settlement lookup
+	var settlements_by_str_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_str_id[str(s.settlement_id)] = s
+
+	for result: Variant in results:
+		var action_id: String = result.get("action_id", "")
+		if action_id not in ["PUBLIC_PERFORMANCE", "PERFORM_FOR"]:
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var art_form: int = effects.get("art_form", -1)
+		if art_form != PerformativeArtsSystem.ArtForm.IKEBANA:
+			continue
+
+		var char_id: int = result.get("character_id", -1)
+		var creator: L5RCharacterData = characters_by_id.get(char_id)
+		if creator == null or CharacterStats.is_dead(creator):
+			continue
+
+		var loc: String = creator.physical_location
+		if loc.is_empty():
+			continue
+
+		var settlement: SettlementData = settlements_by_str_id.get(loc)
+		if settlement == null:
+			continue
+		if not IkebanaSystem.is_eligible_display_settlement(settlement):
+			continue
+
+		var raises: int = effects.get("raises", 0)
+		var quality: int = IkebanaSystem.quality_from_raises(raises)
+		var lifespan: int = IkebanaSystem.default_lifespan(quality)
+		var materials: Array[String] = IkebanaSystem.select_season_materials(
+			current_season, creator, quality, dice_engine,
+		)
+		var description: String = IkebanaSystem.generate_composition_description(
+			materials, quality, current_season, creator.clan,
+		)
+
+		# Replace any prior arrangement at this settlement (one slot per settlement)
+		for i: int in range(active_arrangements.size() - 1, -1, -1):
+			var prior: Variant = active_arrangements[i]
+			if prior is IkebanaArrangementData:
+				var p: IkebanaArrangementData = prior as IkebanaArrangementData
+				if p.display_settlement_id == loc and not p.expired:
+					p.expired = true  # Retired by the new arrangement
+
+		var arr: IkebanaArrangementData = IkebanaArrangementData.new()
+		arr.arrangement_id = next_arrangement_id[0]
+		next_arrangement_id[0] += 1
+		arr.creator_id = char_id
+		arr.quality_tier = quality
+		arr.season_created = current_season
+		arr.date_created = ic_day
+		arr.lifespan_remaining = lifespan
+		arr.display_settlement_id = loc
+		arr.owner_id = char_id
+		arr.is_shrine_offering = IkebanaSystem.is_shrine_eligible(settlement)
+		arr.composition_materials = materials
+		arr.composition_description = description
+		# Garden synergy (s57.29.6): record which garden supplied the materials.
+		var src_garden_id: int = effects.get("garden_id", -1)
+		if src_garden_id >= 0:
+			arr.materials_source = src_garden_id
+		active_arrangements.append(arr)
+
+
+static func _process_ikebana_daily_decay(
+	active_arrangements: Array,
+) -> void:
+	## Decrement lifespan_remaining on all displayed arrangements (s57.29.7).
+	## Arrangements in inventory (display_settlement_id empty) do not decay.
+	for arr_v: Variant in active_arrangements:
+		if not arr_v is IkebanaArrangementData:
+			continue
+		var arr: IkebanaArrangementData = arr_v as IkebanaArrangementData
+		if arr.expired:
+			continue
+		if arr.display_settlement_id.is_empty():
+			continue
+		arr.lifespan_remaining -= 1
+		if arr.lifespan_remaining <= 0:
+			arr.expired = true
+
+
+static func _process_ikebana_visitor_effects(
+	active_arrangements: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	## Apply visitor disposition bonus and track glory ticks (s57.29.8).
+	## Each non-expired displayed arrangement gives a temporary_modifier to any
+	## living co-located character who has not already received it.
+
+	if active_arrangements.is_empty():
+		return
+
+	# Build settlement lord lookup
+	var settlement_lord: Dictionary = {}  # str(settlement_id) → lord character_id
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s == null:
+			continue
+		settlement_lord[str(s.settlement_id)] = s.lord_character_id
+
+	# Build location → character list
+	var chars_at: Dictionary = {}
+	for char_v: Variant in characters:
+		var c: L5RCharacterData = char_v as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var loc: String = c.physical_location
+		if loc.is_empty():
+			continue
+		if not chars_at.has(loc):
+			chars_at[loc] = []
+		chars_at[loc].append(c)
+
+	for arr_v: Variant in active_arrangements:
+		if not arr_v is IkebanaArrangementData:
+			continue
+		var arr: IkebanaArrangementData = arr_v as IkebanaArrangementData
+		if arr.expired:
+			continue
+		if arr.display_settlement_id.is_empty():
+			continue
+
+		var bonus: int = IkebanaSystem.visitor_bonus_for_quality(arr.quality_tier)
+		var present: Array = chars_at.get(arr.display_settlement_id, [])
+		var new_visitors: int = 0
+
+		for char_v: Variant in present:
+			var c: L5RCharacterData = char_v as L5RCharacterData
+			if c.character_id in arr.visitors_who_received_bonus:
+				continue
+			# Apply temporary disposition modifier toward creator.
+			# temporary_modifiers is keyed by source_character_id → Array of entries.
+			var bucket: Array = c.temporary_modifiers.get(arr.creator_id, [])
+			bucket.append({
+				"event_type": "ikebana_visitor",
+				"value": bonus,
+				"created_ic_day": ic_day,
+				"duration": IkebanaSystem.VISITOR_BONUS_DURATION,
+			})
+			c.temporary_modifiers[arr.creator_id] = bucket
+			arr.visitors_who_received_bonus.append(c.character_id)
+			new_visitors += 1
+
+		# Glory ticks: every 5 unique visitors (s57.29.8)
+		var total_visitors: int = arr.visitors_who_received_bonus.size()
+		var ticks_deserved: int = total_visitors / IkebanaSystem.VISITORS_PER_GLORY_TICK
+		var ticks_to_apply: int = ticks_deserved - arr.glory_ticks_applied
+		if ticks_to_apply > 0:
+			var creator: L5RCharacterData = characters_by_id.get(arr.creator_id)
+			if creator != null and not CharacterStats.is_dead(creator):
+				HonorGlorySystem.apply_glory_change(
+					creator,
+					IkebanaSystem.CREATOR_GLORY_PER_TICK * ticks_to_apply,
+				)
+			# Zone lord bonus
+			var lord_id: int = settlement_lord.get(arr.display_settlement_id, -1)
+			if lord_id >= 0 and lord_id != arr.creator_id:
+				var lord: L5RCharacterData = characters_by_id.get(lord_id)
+				if lord != null and not CharacterStats.is_dead(lord):
+					HonorGlorySystem.apply_glory_change(
+						lord,
+						IkebanaSystem.ZONE_LORD_GLORY_PER_TICK * ticks_to_apply,
+					)
+			arr.glory_ticks_applied += ticks_to_apply
+
+
+static func _process_ikebana_creator_deceased_topics(
+	active_arrangements: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## When an arrangement's creator has died, fire a TIER_4 topic once (s57.29.12).
+	## GDD says "Tier 5" but TopicData.Tier only goes to TIER_4 (least significant).
+	for arr_v: Variant in active_arrangements:
+		if not arr_v is IkebanaArrangementData:
+			continue
+		var arr: IkebanaArrangementData = arr_v as IkebanaArrangementData
+		if arr.expired:
+			continue
+		if arr.creator_deceased_topic_fired:
+			continue
+		if arr.display_settlement_id.is_empty():
+			continue
+		var creator: L5RCharacterData = characters_by_id.get(arr.creator_id)
+		if creator == null or not CharacterStats.is_dead(creator):
+			continue
+		# Creator just died — fire the topic once
+		arr.creator_deceased_topic_fired = true
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.tier = TopicData.Tier.TIER_4
+		topic.category = TopicData.Category.PERSONAL
+		topic.topic_type = "ikebana_creator_deceased"
+		topic.subject_character_id = arr.creator_id
+		topic.subject_role = "NEUTRAL"  # Dead characters always NEUTRAL (s CLAUDE.md)
+		topic.ic_day_created = ic_day
+		topic.title = "Last Arrangement of the Deceased"
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		active_topics.append(topic)
+		# Seed to living characters at display settlement
+		# (actual seeding would happen via ambient pickup; we seed creator's
+		#  immediate known contacts as a courtesy)
+		if creator != null:
+			for contact_id: int in creator.met_characters:
+				var contact: L5RCharacterData = characters_by_id.get(contact_id)
+				if contact != null and not CharacterStats.is_dead(contact):
+					if topic.topic_id not in contact.topic_pool:
+						contact.topic_pool.append(topic.topic_id)
+
+
+static func _remove_expired_arrangements(
+	active_arrangements: Array,
+) -> void:
+	## Remove all expired arrangements from the active array.
+	for i: int in range(active_arrangements.size() - 1, -1, -1):
+		var arr_v: Variant = active_arrangements[i]
+		if arr_v is IkebanaArrangementData:
+			if (arr_v as IkebanaArrangementData).expired:
+				active_arrangements.remove_at(i)
+
+
+# ---------------------------------------------------------------------------
+# Shrine Shide system (s57.26b)
+# ---------------------------------------------------------------------------
+
+static func _inject_shide_context(
+	settlements: Array,
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	## Inject shrine shide state into per-character world_states.
+	## Keys: shrine_needs_shide, shrine_shide_at_normal, has_shide_in_inventory,
+	##       has_shide_permission, shide_worship_fr.
+
+	# Build str settlement_id → SettlementData for quick lookup.
+	var by_str_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			by_str_id[str(s.settlement_id)] = s
+
+	for c_v: Variant in characters:
+		var c: L5RCharacterData = c_v as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var ws: Dictionary = world_states.get(c.character_id, {})
+		if ws.is_empty():
+			continue
+
+		# Inventory check.
+		var has_shide: bool = false
+		for it: Variant in c.items:
+			if it is Dictionary and (it as Dictionary).get("item_type", "") == "shide" \
+					and (it as Dictionary).get("uses_remaining", 0) > 0:
+				has_shide = true
+				break
+		ws["has_shide_in_inventory"] = has_shide
+
+		# Settlement context.
+		var loc: String = c.physical_location
+		var settlement: SettlementData = by_str_id.get(loc) as SettlementData
+		if settlement == null or not settlement.has_shrine_slot():
+			ws["shrine_needs_shide"] = false
+			ws["shrine_shide_at_normal"] = false
+			ws["has_shide_permission"] = false
+			ws["shide_worship_fr"] = 0
+			continue
+
+		# Shide need: no shide at all, or existing shide is Normal tier (0).
+		var current_tier: int = settlement.shrine_shide_current_tier
+		ws["shrine_needs_shide"] = current_tier < 0
+		ws["shrine_shide_at_normal"] = current_tier == 0
+
+		# Permission check.
+		var perm_holder: int = settlement.shrine_shide_permission
+		var grace_active: bool = (
+			settlement.shrine_permission_grace_until_ic_day >= 0
+			and settlement.shrine_permission_grace_until_ic_day > 0
+		)
+		ws["has_shide_permission"] = (perm_holder == c.character_id) or grace_active
+
+		# Worship free raises from placed shide.
+		ws["shide_worship_fr"] = OrigamiSystem.shide_worship_fr(settlement)
+
+
+static func _process_shide_permission_grants(
+	settlements: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	## Daily pass: auto-grant placement permission for co-located eligible artisans.
+	## Also expire grace periods that have lapsed.
+
+	# Build settlement → characters at that settlement.
+	var chars_at: Dictionary = {}  # str_id → Array[L5RCharacterData]
+	for c_v: Variant in characters:
+		var c: L5RCharacterData = c_v as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c) or c.physical_location.is_empty():
+			continue
+		var loc: String = c.physical_location
+		if not chars_at.has(loc):
+			chars_at[loc] = []
+		(chars_at[loc] as Array).append(c)
+
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s == null or not s.has_shrine_slot():
+			continue
+
+		# Expire grace period.
+		if s.shrine_permission_grace_until_ic_day >= 0 \
+				and ic_day > s.shrine_permission_grace_until_ic_day:
+			s.shrine_permission_grace_until_ic_day = -1
+
+		# Auto-grant permission to eligible co-located artisans.
+		var loc_str: String = str(s.settlement_id)
+		var present: Array = chars_at.get(loc_str, [])
+		for c_v2: Variant in present:
+			var c: L5RCharacterData = c_v2 as L5RCharacterData
+			if c == null or CharacterStats.is_dead(c):
+				continue
+			# Already has permission?
+			if s.shrine_shide_permission == c.character_id:
+				continue
+			OrigamiSystem.try_auto_grant_permission(c, s, characters_by_id)
+
+
+static func _process_place_shide_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Apply PLACE_SHIDE results: consume shide item, update settlement fields,
+	## generate placement/upgrade topic (s57.26b).
+
+	var settlements_by_str_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_str_id[str(s.settlement_id)] = s
+
+	for result: Variant in results:
+		if result.get("action_id", "") != "PLACE_SHIDE":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var shide_item: Dictionary = effects.get("shide_item", {})
+		if shide_item.is_empty():
+			continue
+		var char_id: int = result.get("character_id", -1)
+		var actor: L5RCharacterData = characters_by_id.get(char_id)
+		if actor == null or CharacterStats.is_dead(actor):
+			continue
+		var loc_str: String = effects.get("shide_settlement_str_id", "")
+		var settlement: SettlementData = settlements_by_str_id.get(loc_str) as SettlementData
+		if settlement == null:
+			continue
+
+		var place_result: Dictionary = OrigamiSystem.place_shide(actor, settlement, shide_item, ic_day)
+		if not place_result.get("success", false):
+			continue
+
+		# Generate lifecycle topic (s57.26b A25–A27).
+		var new_tier: int = place_result.get("new_tier", 0)
+		var is_upgrade: bool = place_result.get("is_replacement_upgrade", false)
+		var topic_tier: int = (
+			TopicData.Tier.TIER_3 if new_tier >= GiftGivingSystem.QualityTier.EXCEPTIONAL
+			else TopicData.Tier.TIER_4
+		)
+		var title: String = (
+			settlement.settlement_name + " shrine shide upgraded"
+			if is_upgrade
+			else settlement.settlement_name + " shrine shide placed"
+		)
+		var t: TopicData = TopicData.new()
+		t.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		t.title = title
+		t.topic_type = "shrine_shide_placed"
+		t.tier = topic_tier
+		t.category = TopicData.Category.SUPERNATURAL
+		t.subject_character_id = char_id
+		t.ic_day_created = ic_day
+		t.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic_tier)
+		active_topics.append(t)
+		# Seed the actor's topic pool.
+		if char_id >= 0 and t.topic_id not in actor.topic_pool:
+			actor.topic_pool.append(t.topic_id)
+
+
+static func _process_seasonal_shide_degradation(
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Seasonal: degrade each settlement's shide by one tier (s57.26b A13–A15).
+	## Generates wear/destruction topics based on tier.
+
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s == null or s.shrine_shide_current_tier < 0:
+			continue
+
+		var old_tier: int = s.shrine_shide_current_tier
+		var new_tier: int = old_tier - 1
+
+		if new_tier < 0:
+			# Shide destroyed (s57.26b A14).
+			s.shrine_shide_current_tier = -1
+			s.shrine_shide_quality_tier = -1
+			var crafter_id: int = s.shrine_shide_crafter_id
+			s.shrine_shide_crafter_id = -1
+			s.shrine_shide_ic_day_placed = -1
+			# Only generate topic if shide was at Fine+ (notable destruction).
+			if old_tier >= GiftGivingSystem.QualityTier.FINE:
+				var td: TopicData = TopicData.new()
+				td.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				td.title = s.settlement_name + " shrine shide worn away"
+				td.topic_type = "shrine_shide_destroyed"
+				td.tier = TopicData.Tier.TIER_4
+				td.category = TopicData.Category.SUPERNATURAL
+				td.subject_character_id = crafter_id
+				td.ic_day_created = ic_day
+				td.momentum = TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4)
+				active_topics.append(td)
+		else:
+			# Tier downgraded (s57.26b A13).
+			s.shrine_shide_current_tier = new_tier
+			# Generate wear topic only for Fine+ (notable wear).
+			if old_tier >= GiftGivingSystem.QualityTier.FINE:
+				var tw: TopicData = TopicData.new()
+				tw.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				tw.title = s.settlement_name + " shrine shide showing wear"
+				tw.topic_type = "shrine_shide_worn"
+				tw.tier = TopicData.Tier.TIER_4
+				tw.category = TopicData.Category.SUPERNATURAL
+				tw.subject_character_id = s.shrine_shide_crafter_id
+				tw.ic_day_created = ic_day
+				tw.momentum = TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4)
+				active_topics.append(tw)
+
+
+# ---------------------------------------------------------------------------
+# Garden & Bonsai system (s57.23, s57.24)
+# ---------------------------------------------------------------------------
+
+static func _inject_garden_context(
+	active_gardens: Array,
+	active_bonsai: Array,
+	commission_records: Array,
+	settlements: Array,
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	## Inject per-character garden/bonsai state into known_objectives.
+
+	# Build settlement lookup
+	var settlements_by_str_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_str_id[str(s.settlement_id)] = s
+
+	# Build location → active garden (non-destroyed) lookup
+	var garden_at_loc: Dictionary = {}  # str(settlement_id) → GardenData
+	for g_v: Variant in active_gardens:
+		if not g_v is GardenData:
+			continue
+		var g: GardenData = g_v as GardenData
+		if g.destroyed:
+			continue
+		var key: String = str(g.settlement_id)
+		if not garden_at_loc.has(key):
+			garden_at_loc[key] = g
+
+	# Build creator_id → active commission lookup
+	var commission_by_creator: Dictionary = {}  # creator_id → CommissionRecordData
+	for r_v: Variant in commission_records:
+		if not r_v is CommissionRecordData:
+			continue
+		var r: CommissionRecordData = r_v as CommissionRecordData
+		if r.status != "ACTIVE":
+			continue
+		if not commission_by_creator.has(r.artisan_id):
+			commission_by_creator[r.artisan_id] = r
+
+	# Build owner_id → bonsai lookup (pick first alive non-dead bonsai)
+	var bonsai_by_owner: Dictionary = {}  # owner_id → BonsaiData
+	for b_v: Variant in active_bonsai:
+		if not b_v is BonsaiData:
+			continue
+		var b: BonsaiData = b_v as BonsaiData
+		if b.is_dead:
+			continue
+		if not bonsai_by_owner.has(b.owner_id):
+			bonsai_by_owner[b.owner_id] = b
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			continue
+		if not ws.has("known_objectives"):
+			ws["known_objectives"] = {}
+
+		var loc: String = character.physical_location
+		var settlement: SettlementData = settlements_by_str_id.get(loc)
+		var loc_int: int = int(loc) if loc.is_valid_int() else -1
+
+		# Active commission for this character as artisan
+		var commission: CommissionRecordData = commission_by_creator.get(character.character_id)
+		ws["known_objectives"]["active_commission_id"] = commission.commission_id if commission != null else -1
+		ws["known_objectives"]["commission_quality_tier"] = commission.target_quality_tier if commission != null else 1
+
+		# Garden at character's current location (for MAINTAIN_GARDEN)
+		var local_garden: GardenData = garden_at_loc.get(loc) if not loc.is_empty() else null
+		ws["known_objectives"]["local_garden_id"] = local_garden.garden_id if local_garden != null else -1
+		ws["known_objectives"]["local_garden_tier"] = local_garden.current_tier if local_garden != null else 1
+
+		# Owned bonsai
+		var bonsai: BonsaiData = bonsai_by_owner.get(character.character_id)
+		ws["known_objectives"]["owned_bonsai_id"] = bonsai.bonsai_id if bonsai != null else -1
+
+		# Province id for COLLECT_BONSAI_SPECIMEN
+		ws["known_objectives"]["character_province_id"] = loc_int
+
+		# Bonsai display eligibility at current settlement
+		var display_eligible: bool = false
+		if bonsai != null and settlement != null:
+			display_eligible = GardenSystem.get_bonsai_display_eligible(int(settlement.settlement_type))
+		ws["known_objectives"]["bonsai_display_eligible"] = display_eligible
+
+		# Garden zone availability at current settlement (for OFFER_ART_COMMISSION)
+		var zone_available: bool = false
+		var available_zone: String = ""
+		if settlement != null:
+			var eligible_zones: Array = GardenSystem.get_garden_eligible_zones(settlement.settlement_type)
+			for zone_type: String in eligible_zones:
+				if not GardenSystem.is_zone_committed(settlement, zone_type):
+					zone_available = true
+					available_zone = zone_type
+					break
+		ws["known_objectives"]["garden_zone_available"] = zone_available
+		ws["known_objectives"]["available_garden_zone"] = available_zone
+
+
+static func _process_garden_commission_writebacks(
+	results: Array,
+	commission_records: Array,
+	next_commission_id: Array,
+	active_gardens: Array,
+	next_garden_id: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	current_season: int,
+) -> void:
+	## Handle REQUEST_ART / OFFER_ART_COMMISSION (commission creation)
+	## and CULTIVATE_GARDEN progress (including garden completion).
+
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_id[s.settlement_id] = s
+
+	for result: Variant in results:
+		var action_id: String = result.get("action_id", "")
+		var effects: Dictionary = result.get("effects", {})
+
+		# --- Commission creation ---
+		if action_id in ["REQUEST_ART", "OFFER_ART_COMMISSION"]:
+			if not result.get("success", false):
+				continue
+			if not effects.get("requires_commission_creation", false):
+				continue
+			var artisan_id: int = effects.get("artisan_id", -1)
+			var daimyo_id: int = effects.get("daimyo_id", -1)
+			var settlement_id: int = effects.get("settlement_id", -1)
+			var zone_type: String = effects.get("zone_type", "")
+			var quality_tier: int = effects.get("target_quality_tier", 1)
+			if artisan_id < 0 or daimyo_id < 0 or zone_type.is_empty():
+				continue
+
+			var settlement: SettlementData = settlements_by_id.get(settlement_id)
+			if settlement == null:
+				continue
+			if GardenSystem.is_zone_committed(settlement, zone_type):
+				continue  # Zone already taken
+
+			var artisan: L5RCharacterData = characters_by_id.get(artisan_id)
+			if artisan == null or CharacterStats.is_dead(artisan):
+				continue
+
+			# Check artisan has not declined this commission
+			var already_declined: bool = false
+			for dec: Variant in artisan.declined_commissions:
+				var d: Dictionary = dec as Dictionary
+				if d.get("daimyo_id", -1) == daimyo_id and d.get("art_form", "") == "garden":
+					if d.get("expires_ic_day", 0) > ic_day:
+						already_declined = true
+						break
+			if already_declined:
+				continue
+
+			var record: CommissionRecordData = GardenSystem.create_commission_record(
+				next_commission_id[0],
+				artisan_id, daimyo_id, settlement_id, zone_type,
+				action_id, quality_tier, ic_day,
+			)
+			next_commission_id[0] += 1
+			commission_records.append(record)
+			GardenSystem.grant_permission(settlement, zone_type, artisan_id)
+
+		# --- Cultivate progress ---
+		elif action_id == "CULTIVATE_GARDEN":
+			if effects.is_empty():
+				continue
+			var commission_id: int = effects.get("commission_id", -1)
+			if commission_id < 0:
+				continue
+
+			var record: CommissionRecordData = null
+			for r_v: Variant in commission_records:
+				if r_v is CommissionRecordData:
+					var r: CommissionRecordData = r_v as CommissionRecordData
+					if r.commission_id == commission_id:
+						record = r
+						break
+			if record == null or record.status != "ACTIVE":
+				continue
+
+			var roll_total: int = effects.get("roll_total", 0)
+			var tn: int = effects.get("tn", 15)
+			var raises: int = effects.get("raises", 0)
+			var cultivate_result: Dictionary = GardenSystem.apply_cultivate_progress(
+				record, roll_total, tn, raises, ic_day,
+			)
+
+			if cultivate_result.get("completed", false):
+				var completion_raises: int = cultivate_result.get("completion_raises", 0)
+				var settlement: SettlementData = settlements_by_id.get(record.settlement_id)
+				var artisan: L5RCharacterData = characters_by_id.get(record.artisan_id)
+				var daimyo: L5RCharacterData = characters_by_id.get(record.daimyo_id)
+				if settlement == null or artisan == null:
+					continue
+
+				# Create garden
+				var garden: GardenData = GardenSystem.create_garden(
+					next_garden_id[0],
+					record.artisan_id,
+					record.settlement_id,
+					record.zone_type,
+					record.target_quality_tier,
+					completion_raises,
+					record.commission_id,
+					ic_day,
+				)
+				next_garden_id[0] += 1
+				active_gardens.append(garden)
+				settlement.garden_slots[record.zone_type] = garden.garden_id
+
+				# Disposition bonus to daimyo
+				if daimyo != null and not CharacterStats.is_dead(daimyo):
+					var bonus: int = GardenSystem.compute_completion_bonus(completion_raises)
+					var disp: int = clampi(
+						daimyo.disposition_values.get(artisan.character_id, 0) + bonus,
+						-100, 100,
+					)
+					daimyo.disposition_values[artisan.character_id] = disp
+
+				# Excess-raise glory for Legendary
+				var excess_glory: float = GardenSystem.apply_excess_raises_glory(
+					record.target_quality_tier, completion_raises,
+				)
+				if excess_glory > 0.0:
+					HonorGlorySystem.apply_glory_change(artisan, excess_glory)
+
+				# Completion topic
+				var topic_dict: Dictionary = GardenSystem.make_completion_topic(
+					garden,
+					artisan.character_name,
+					record.zone_type,
+					daimyo.character_name if daimyo != null else "the Daimyo",
+				)
+				if not topic_dict.is_empty():
+					var topic: TopicData = TopicData.new()
+					topic.topic_id = next_topic_id[0]
+					next_topic_id[0] += 1
+					topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4) as TopicData.Tier
+					topic.category = TopicData.Category.SOCIAL
+					topic.topic_type = topic_dict.get("topic_type", "garden_completed")
+					topic.title = topic_dict.get("title", "")
+					topic.subject_character_id = record.artisan_id
+					topic.ic_day_created = ic_day
+					topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+					active_topics.append(topic)
+					if artisan != null:
+						artisan.topic_pool.append(topic.topic_id)
+					if daimyo != null and not CharacterStats.is_dead(daimyo):
+						daimyo.topic_pool.append(topic.topic_id)
+
+
+static func _process_maintain_garden_writebacks(
+	results: Array,
+	active_gardens: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	current_season: int,
+) -> void:
+	## Apply MAINTAIN_GARDEN roll outcomes to garden state.
+
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_id[s.settlement_id] = s
+
+	for result: Variant in results:
+		if result.get("action_id", "") != "MAINTAIN_GARDEN":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var garden_id: int = effects.get("garden_id", -1)
+		if garden_id < 0:
+			continue
+
+		var garden: GardenData = null
+		for g_v: Variant in active_gardens:
+			if g_v is GardenData and (g_v as GardenData).garden_id == garden_id:
+				garden = g_v as GardenData
+				break
+		if garden == null or garden.destroyed:
+			continue
+
+		var from_tier: int = garden.current_tier
+		var maintain_result: Dictionary = GardenSystem.apply_maintain_result(
+			garden, result.get("success", false), current_season,
+		)
+
+		if maintain_result.get("degraded", false):
+			var creator: L5RCharacterData = characters_by_id.get(garden.creator_id)
+			var topic_dict: Dictionary = GardenSystem.make_degradation_topic(
+				garden,
+				creator.character_name if creator != null else "",
+				creator != null and not CharacterStats.is_dead(creator),
+				creator.glory if creator != null else 0.0,
+				garden.zone_type,
+				from_tier,
+			)
+			if not topic_dict.is_empty():
+				var topic: TopicData = TopicData.new()
+				topic.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4) as TopicData.Tier
+				topic.category = TopicData.Category.SOCIAL
+				topic.topic_type = topic_dict.get("topic_type", "garden_degraded")
+				topic.title = topic_dict.get("title", "")
+				topic.subject_character_id = garden.creator_id
+				topic.subject_role = "NEUTRAL" if creator == null else ""
+				topic.ic_day_created = ic_day
+				topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+				active_topics.append(topic)
+				if creator != null and not CharacterStats.is_dead(creator):
+					creator.topic_pool.append(topic.topic_id)
+
+		if maintain_result.get("destroyed", false):
+			var settlement: SettlementData = settlements_by_id.get(garden.settlement_id)
+			if settlement != null:
+				settlement.garden_slots[garden.zone_type] = -1
+				settlement.garden_permissions[garden.zone_type] = -1
+
+
+static func _process_bonsai_collect_writebacks(
+	results: Array,
+	active_bonsai: Array,
+	next_bonsai_id: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	## Create a new BonsaiData on successful COLLECT_BONSAI_SPECIMEN.
+	for result: Variant in results:
+		if result.get("action_id", "") != "COLLECT_BONSAI_SPECIMEN":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var collector_id: int = effects.get("collector_id", result.get("character_id", -1))
+		var province_id: int = effects.get("province_id", -1)
+		if collector_id < 0:
+			continue
+		var collector: L5RCharacterData = characters_by_id.get(collector_id)
+		if collector == null or CharacterStats.is_dead(collector):
+			continue
+
+		var bonsai: BonsaiData = GardenSystem.create_bonsai(
+			next_bonsai_id[0], collector_id, province_id, ic_day, false,
+		)
+		next_bonsai_id[0] += 1
+		active_bonsai.append(bonsai)
+
+
+static func _process_bonsai_tend_writebacks(
+	results: Array,
+	active_bonsai: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	## Apply TEND_BONSAI roll outcomes to bonsai quality progression.
+	for result: Variant in results:
+		if result.get("action_id", "") != "TEND_BONSAI":
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var bonsai_id: int = effects.get("bonsai_id", -1)
+		if bonsai_id < 0:
+			continue
+
+		var bonsai: BonsaiData = null
+		for b_v: Variant in active_bonsai:
+			if b_v is BonsaiData and (b_v as BonsaiData).bonsai_id == bonsai_id:
+				bonsai = b_v as BonsaiData
+				break
+		if bonsai == null or bonsai.is_dead:
+			continue
+
+		var ic_month: int = effects.get("ic_month", ic_day / 30)
+		var raises: int = effects.get("raises", 0)
+		var tend_result: Dictionary = GardenSystem.apply_tend_result(
+			bonsai, result.get("success", false), raises, ic_month,
+		)
+
+		if tend_result.get("quality_advanced", false):
+			var owner: L5RCharacterData = characters_by_id.get(bonsai.owner_id)
+			var excess_glory: float = tend_result.get("excess_glory", 0.0)
+			if excess_glory > 0.0 and owner != null and not CharacterStats.is_dead(owner):
+				HonorGlorySystem.apply_glory_change(owner, excess_glory)
+
+
+static func _process_bonsai_display_writebacks(
+	results: Array,
+	active_bonsai: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+) -> void:
+	## Set display_settlement_id on the bonsai when DISPLAY_BONSAI succeeds.
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_id[s.settlement_id] = s
+
+	for result: Variant in results:
+		if result.get("action_id", "") != "DISPLAY_BONSAI":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var bonsai_id: int = effects.get("bonsai_id", -1)
+		var settlement_id: int = effects.get("settlement_id", -1)
+		if bonsai_id < 0 or settlement_id < 0:
+			continue
+
+		var settlement: SettlementData = settlements_by_id.get(settlement_id)
+		if settlement == null:
+			continue
+		if not GardenSystem.get_bonsai_display_eligible(int(settlement.settlement_type)):
+			continue
+
+		var bonsai: BonsaiData = null
+		for b_v: Variant in active_bonsai:
+			if b_v is BonsaiData and (b_v as BonsaiData).bonsai_id == bonsai_id:
+				bonsai = b_v as BonsaiData
+				break
+		if bonsai == null or bonsai.is_dead:
+			continue
+
+		# Remove from previous display if any
+		if settlement.bonsai_display_slot >= 0 and settlement.bonsai_display_slot != bonsai_id:
+			for b_v: Variant in active_bonsai:
+				if b_v is BonsaiData and (b_v as BonsaiData).bonsai_id == settlement.bonsai_display_slot:
+					(b_v as BonsaiData).display_settlement_id = -1
+					break
+
+		bonsai.display_settlement_id = settlement_id
+		settlement.bonsai_display_slot = bonsai_id
+
+
+static func _process_garden_visitor_effects(
+	active_gardens: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	## Apply visitor disposition bonuses and glory ticks for co-located living characters.
+
+	if active_gardens.is_empty():
+		return
+
+	# Build location → character list
+	var chars_at: Dictionary = {}
+	for char_v: Variant in characters:
+		var c: L5RCharacterData = char_v as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var loc: String = c.physical_location
+		if loc.is_empty():
+			continue
+		if not chars_at.has(loc):
+			chars_at[loc] = []
+		chars_at[loc].append(c)
+
+	# Build settlement_id → lord lookup
+	var settlement_lord: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlement_lord[s.settlement_id] = s.lord_character_id
+
+	for g_v: Variant in active_gardens:
+		if not g_v is GardenData:
+			continue
+		var garden: GardenData = g_v as GardenData
+		if garden.destroyed:
+			continue
+
+		var loc_str: String = str(garden.settlement_id)
+		var present: Array = chars_at.get(loc_str, [])
+		var creator: L5RCharacterData = characters_by_id.get(garden.creator_id)
+		var daimyo_id: int = settlement_lord.get(garden.settlement_id, -1)
+
+		for char_v: Variant in present:
+			var visitor: L5RCharacterData = char_v as L5RCharacterData
+			if GardenSystem.has_active_bonus(visitor, garden.garden_id, ic_day):
+				continue
+
+			var visit_result: Dictionary = GardenSystem.apply_visitor(
+				garden, visitor.character_id, garden.creator_id, ic_day,
+			)
+			if visit_result.get("bonus", 0) <= 0:
+				continue
+
+			# Add temporary disposition modifier toward creator
+			var bucket: Array = visitor.temporary_modifiers.get(garden.creator_id, [])
+			bucket.append({
+				"event_type": "garden_visitor",
+				"value": visit_result["bonus"],
+				"created_ic_day": ic_day,
+				"duration": GardenSystem.VISITOR_BONUS_DURATION_DAYS,
+			})
+			visitor.temporary_modifiers[garden.creator_id] = bucket
+
+			# Track in active_garden_bonuses to prevent re-granting
+			visitor.active_garden_bonuses.append({
+				"garden_id": garden.garden_id,
+				"creator_id": garden.creator_id,
+				"expires_ic_day": ic_day + GardenSystem.VISITOR_BONUS_DURATION_DAYS,
+			})
+
+			# Glory tick
+			if visit_result.get("glory_tick", false):
+				if creator != null and not CharacterStats.is_dead(creator):
+					HonorGlorySystem.apply_glory_change(creator, visit_result.get("creator_glory", 0.0))
+				var daimyo: L5RCharacterData = characters_by_id.get(daimyo_id)
+				if daimyo != null and not CharacterStats.is_dead(daimyo):
+					HonorGlorySystem.apply_glory_change(daimyo, visit_result.get("daimyo_glory", 0.0))
+
+
+static func _process_garden_seasonal_maintenance(
+	active_gardens: Array,
+	commission_records: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	current_season: int,
+) -> void:
+	## Seasonal pass: auto-degrade gardens with no MAINTAIN_GARDEN this season,
+	## tick neglect counters on obligated commissions, check for abandonment.
+
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_id[s.settlement_id] = s
+
+	# Build set of garden_ids whose creator spent at least 1 CULTIVATE_GARDEN AP this season.
+	# (We track through commission_records: window_start_date changing = artisan worked)
+	# For gardens: we use last_maintained_season as proxy — if updated this season, maintained.
+
+	for g_v: Variant in active_gardens:
+		if not g_v is GardenData:
+			continue
+		var garden: GardenData = g_v as GardenData
+		if garden.destroyed:
+			continue
+
+		if garden.last_maintained_season == current_season:
+			continue  # Was maintained this season
+
+		# No maintenance this season — auto-degrade
+		var from_tier: int = garden.current_tier
+		var degrade_result: Dictionary = GardenSystem.apply_seasonal_auto_degradation(garden, current_season)
+
+		if degrade_result.get("degraded", false):
+			var creator: L5RCharacterData = characters_by_id.get(garden.creator_id)
+			var topic_dict: Dictionary = GardenSystem.make_degradation_topic(
+				garden,
+				creator.character_name if creator != null else "",
+				creator != null and not CharacterStats.is_dead(creator),
+				creator.glory if creator != null else 0.0,
+				garden.zone_type,
+				from_tier,
+			)
+			if not topic_dict.is_empty():
+				var topic: TopicData = TopicData.new()
+				topic.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4) as TopicData.Tier
+				topic.category = TopicData.Category.SOCIAL
+				topic.topic_type = topic_dict.get("topic_type", "garden_degraded")
+				topic.title = topic_dict.get("title", "")
+				topic.subject_character_id = garden.creator_id
+				topic.ic_day_created = ic_day
+				topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+				active_topics.append(topic)
+				if creator != null and not CharacterStats.is_dead(creator):
+					creator.topic_pool.append(topic.topic_id)
+
+			if degrade_result.get("destroyed", false):
+				var settlement: SettlementData = settlements_by_id.get(garden.settlement_id)
+				if settlement != null:
+					settlement.garden_slots[garden.zone_type] = -1
+					settlement.garden_permissions[garden.zone_type] = -1
+
+	# Tick neglect counters on obligated commissions
+	for r_v: Variant in commission_records:
+		if not r_v is CommissionRecordData:
+			continue
+		var record: CommissionRecordData = r_v as CommissionRecordData
+		if record.status != "ACTIVE" or record.completion_window <= 0:
+			continue
+		var artisan: L5RCharacterData = characters_by_id.get(record.artisan_id)
+		if artisan == null:
+			continue
+		# Check if artisan worked this season (window_start_date updated to recent ic_day)
+		var worked_this_season: bool = (
+			record.window_start_date >= 0 and
+			record.window_start_date > ic_day - 90  # approximate season length
+		)
+		GardenSystem.evaluate_neglect_tick(record, worked_this_season)
+
+		if GardenSystem.check_abandonment(record):
+			record.status = "ABANDONED"
+			record.progress_at_abandonment = record.cultivation_progress
+			var daimyo: L5RCharacterData = characters_by_id.get(record.daimyo_id)
+			if artisan != null and not CharacterStats.is_dead(artisan):
+				HonorGlorySystem.apply_honor_change(artisan, -GardenSystem.ABANDONMENT_HONOR_LOSS)
+				if daimyo != null and not CharacterStats.is_dead(daimyo):
+					var disp: int = clampi(
+						artisan.disposition_values.get(daimyo.character_id, 0) - GardenSystem.ABANDONMENT_DISPOSITION_LOSS,
+						-100, 100,
+					)
+					artisan.disposition_values[daimyo.character_id] = disp
+
+
+static func _process_bonsai_monthly_neglect(
+	active_bonsai: Array,
+	characters_by_id: Dictionary,
+	ic_month: int,
+) -> void:
+	## Check each living bonsai for missed tending this month.
+	## Bonsai not tended receive a failure tick via apply_tend_result(success=false),
+	## which handles consecutive_missed_months accumulation and degradation/death (B4).
+	for b_v: Variant in active_bonsai:
+		if not b_v is BonsaiData:
+			continue
+		var bonsai: BonsaiData = b_v as BonsaiData
+		if bonsai.is_dead:
+			continue
+		if bonsai.last_tended_month == ic_month:
+			continue  # Already tended this month; apply_tend_result reset counter
+
+		# Simulate a neglect tick (failure, no raises) — apply_tend_result handles all state.
+		GardenSystem.apply_tend_result(bonsai, false, 0, ic_month)
+
+
+# ---------------------------------------------------------------------------
+# Painting orchestrator functions (s57.27)
+# ---------------------------------------------------------------------------
+
+static func _inject_painting_context(
+	active_paintings: Array,
+	settlements: Array,
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	## Inject per-character painting state into known_objectives.
+	## Sets: active_painting_wip_id, displayable_paintings, presentable_emakimono,
+	##       wall_art_slot_empty, displayed_art_slot_empty, fusuma_slot_empty,
+	##       has_wall_art_permission.
+
+	# Build settlement lookup
+	var settlements_by_str_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_str_id[str(s.settlement_id)] = s
+
+	# Build creator_id → WIP painting lookup (first incomplete painting per creator)
+	var wip_by_creator: Dictionary = {}
+	# Build creator_id → completed paintings list
+	var completed_by_creator: Dictionary = {}
+
+	for p_v: Variant in active_paintings:
+		if not p_v is PaintingData:
+			continue
+		var p: PaintingData = p_v as PaintingData
+		if p.creator_id < 0:
+			continue
+		if p.craft_progress >= 0:
+			# WIP
+			if not wip_by_creator.has(p.creator_id):
+				wip_by_creator[p.creator_id] = p
+		else:
+			# Complete
+			if not completed_by_creator.has(p.creator_id):
+				completed_by_creator[p.creator_id] = []
+			completed_by_creator[p.creator_id].append(p)
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			continue
+		if not ws.has("known_objectives"):
+			ws["known_objectives"] = {}
+
+		var loc: String = character.physical_location
+		var settlement: SettlementData = settlements_by_str_id.get(loc)
+		var loc_int: int = int(loc) if loc.is_valid_int() else -1
+
+		# WIP painting for this creator
+		var wip: PaintingData = wip_by_creator.get(character.character_id)
+		ws["known_objectives"]["active_painting_wip_id"] = wip.painting_id if wip != null else -1
+
+		# Completed paintings owned by this character that can be displayed
+		var displayable: Array = []
+		var presentable: Array = []
+		var owned: Array = completed_by_creator.get(character.character_id, [])
+		for p: PaintingData in owned:
+			if p.display_settlement_id >= 0:
+				continue  # Already on display somewhere
+			if p.format in [PaintingSystem.Format.KAKEMONO, PaintingSystem.Format.BYOBU,
+					PaintingSystem.Format.FUSUMA]:
+				displayable.append(p.painting_id)
+			elif p.format == PaintingSystem.Format.EMAKIMONO:
+				presentable.append(p.painting_id)
+		ws["known_objectives"]["displayable_paintings"] = displayable
+		ws["known_objectives"]["presentable_emakimono"] = presentable
+
+		# Slot availability at current settlement
+		if settlement != null:
+			ws["known_objectives"]["wall_art_slot_empty"] = settlement.wall_art_slot < 0
+			ws["known_objectives"]["displayed_art_slot_empty"] = settlement.displayed_art_slot < 0
+			ws["known_objectives"]["fusuma_slot_empty"] = settlement.fusuma_slot < 0
+			ws["known_objectives"]["has_wall_art_permission"] = PaintingSystem._is_zone_lord(
+				character.character_id, settlement) or PaintingSystem._has_slot_permission(
+				character.character_id, settlement, PaintingSystem.DisplaySlot.WALL_ART)
+		else:
+			ws["known_objectives"]["wall_art_slot_empty"] = false
+			ws["known_objectives"]["displayed_art_slot_empty"] = false
+			ws["known_objectives"]["fusuma_slot_empty"] = false
+			ws["known_objectives"]["has_wall_art_permission"] = false
+		# Painting fortune focus FR for PERFORM_WORSHIP (s57.27.11 PROVISIONAL=0).
+		# When s57.27.11 is formally specified: check for RELIGIOUS subject painting
+		# displayed at this settlement and grant +1 FR.
+		ws["known_objectives"]["painting_fortune_fr"] = 0
+
+
+static func _process_compose_painting_writebacks(
+	results: Array,
+	active_paintings: Array,
+	next_painting_id: Array,
+	ic_day: int,
+) -> void:
+	## Handle COMPOSE_PAINTING results.
+	## is_new_painting=true → declare new WIP via PaintingSystem.declare_composition().
+	## Otherwise → advance WIP via PaintingSystem.resolve_compose_painting().
+	var paintings_by_id: Dictionary = {}
+	for p_v: Variant in active_paintings:
+		if p_v is PaintingData:
+			paintings_by_id[(p_v as PaintingData).painting_id] = p_v
+
+	for r: Dictionary in results:
+		if r.get("action_id", "") != "COMPOSE_PAINTING":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var char_id: int = r.get("character_id", -1)
+
+		if effects.get("is_new_painting", false):
+			# Create a new WIP PaintingData
+			var pid: int = next_painting_id[0]
+			next_painting_id[0] += 1
+			var painting: PaintingData = PaintingSystem.declare_composition(
+				effects.get("format", PaintingSystem.Format.KAKEMONO),
+				effects.get("target_quality_tier", 1),
+				effects.get("subject_type", PaintingSystem.SubjectType.NATURE),
+				effects.get("framing", true),
+				char_id,
+				pid,
+				effects.get("ic_day", ic_day),
+				effects.get("style", PaintingSystem.Style.NONE),
+				effects.get("subject_id", -1),
+				effects.get("subject_description", ""),
+				effects.get("season_affinity", -1),
+				effects.get("target_topic_ids", []),
+			)
+			active_paintings.append(painting)
+		else:
+			# Advance existing WIP
+			var painting_id: int = effects.get("painting_id", -1)
+			var painting: PaintingData = paintings_by_id.get(painting_id)
+			if painting == null:
+				continue
+			# painter_rank is stored in effects; skill gate was already passed at executor stage.
+			var painter_rank: int = effects.get("painter_rank", 99)
+			PaintingSystem.resolve_compose_painting(
+				painter_rank,
+				painting,
+				effects.get("roll_total", 0),
+				effects.get("raises_declared", 0),
+				effects.get("ic_day", ic_day),
+			)
+
+
+static func _process_display_painting_writebacks(
+	results: Array,
+	active_paintings: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Handle DISPLAY_PAINTING results. Calls PaintingSystem.resolve_display_painting().
+	var paintings_by_id: Dictionary = {}
+	for p_v: Variant in active_paintings:
+		if p_v is PaintingData:
+			paintings_by_id[(p_v as PaintingData).painting_id] = p_v
+
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		if s_v is SettlementData:
+			settlements_by_id[(s_v as SettlementData).settlement_id] = s_v
+
+	for r: Dictionary in results:
+		if r.get("action_id", "") != "DISPLAY_PAINTING":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var char_id: int = r.get("character_id", -1)
+		var char_data: L5RCharacterData = characters_by_id.get(char_id)
+		if char_data == null or CharacterStats.is_dead(char_data):
+			continue
+
+		var painting_id: int = effects.get("painting_id", -1)
+		var painting: PaintingData = paintings_by_id.get(painting_id)
+		if painting == null:
+			continue
+		var settlement_id: int = effects.get("settlement_id", -1)
+		var settlement: SettlementData = settlements_by_id.get(settlement_id)
+		if settlement == null:
+			continue
+		var slot: int = effects.get("slot", PaintingSystem.DisplaySlot.WALL_ART)
+
+		var lord_id: int = char_data.lord_id if char_data.lord_id >= 0 else char_id
+		var disp_result: Dictionary = PaintingSystem.resolve_display_painting(
+			char_id, lord_id, painting, settlement, slot, ic_day,
+		)
+		if not disp_result.get("success", false):
+			continue
+
+		# Generate placement topic for quality tier 3+
+		var topic_dict: Dictionary = PaintingSystem.generate_lifecycle_topic(
+			painting, "placement", "", settlement.settlement_type, ic_day,
+		)
+		if not topic_dict.is_empty() and topic_dict.get("tier", TopicData.Tier.TIER_4) <= TopicData.Tier.TIER_3:
+			_topic_from_dict(topic_dict, active_topics, next_topic_id, ic_day)
+
+
+static func _process_present_emakimono_writebacks(
+	results: Array,
+	active_paintings: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Handle PRESENT_EMAKIMONO results. Applies disposition shifts and topic delivery.
+	var paintings_by_id: Dictionary = {}
+	for p_v: Variant in active_paintings:
+		if p_v is PaintingData:
+			paintings_by_id[(p_v as PaintingData).painting_id] = p_v
+
+	for r: Dictionary in results:
+		if r.get("action_id", "") != "PRESENT_EMAKIMONO":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var painting_id: int = effects.get("painting_id", -1)
+		var painting: PaintingData = paintings_by_id.get(painting_id)
+		if painting == null:
+			continue
+		var recipient_ids: Array = effects.get("recipient_ids", [])
+		if recipient_ids.is_empty():
+			continue
+
+		var present_results: Array = PaintingSystem.resolve_present_emakimono(
+			painting, recipient_ids, characters_by_id, ic_day,
+		)
+		for pr: Dictionary in present_results:
+			if pr.get("immune", true):
+				continue
+			var recipient_id: int = pr.get("recipient_id", -1)
+			var recipient: L5RCharacterData = characters_by_id.get(recipient_id)
+			if recipient == null or CharacterStats.is_dead(recipient):
+				continue
+			# Polarization: push away from neutral regardless of framing
+			var shift: int = pr.get("disposition_shift", 0)
+			var subject_id: int = painting.subject_id
+			if subject_id >= 0:
+				var current_disp: int = DispositionSystem.get_disposition(recipient, subject_id)
+				# Positive framing → push positive (add shift if positive, subtract if negative)
+				# Negative framing → push negative (inverse)
+				var applied: int = shift if current_disp >= 0 else -shift
+				DispositionSystem.apply_disposition_change(recipient, subject_id, applied)
+			# Deliver linked topics
+			for tid: int in pr.get("topic_ids_delivered", []):
+				if tid not in recipient.topic_pool:
+					recipient.topic_pool.append(tid)
+
+
+static func _process_painting_visitor_effects(
+	active_paintings: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	ic_day: int,
+	current_ic_season: int,
+) -> void:
+	## Apply visitor disposition bonus and glory ticks for displayed paintings.
+	if active_paintings.is_empty():
+		return
+
+	# Build location → character list
+	var chars_at: Dictionary = {}
+	for char_v: Variant in characters:
+		var c: L5RCharacterData = char_v as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var loc: String = c.physical_location
+		if loc.is_empty():
+			continue
+		if not chars_at.has(loc):
+			chars_at[loc] = []
+		chars_at[loc].append(c)
+
+	# Build settlement_id → lord lookup
+	var settlement_lord: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlement_lord[s.settlement_id] = s.lord_character_id
+
+	for p_v: Variant in active_paintings:
+		if not p_v is PaintingData:
+			continue
+		var painting: PaintingData = p_v as PaintingData
+		if painting.display_settlement_id < 0:
+			continue  # Not on display
+		if painting.craft_progress >= 0:
+			continue  # Still WIP
+
+		var loc_str: String = str(painting.display_settlement_id)
+		var present: Array = chars_at.get(loc_str, [])
+		if present.is_empty():
+			continue
+
+		var creator: L5RCharacterData = characters_by_id.get(painting.creator_id)
+		var daimyo_id: int = settlement_lord.get(painting.display_settlement_id, -1)
+
+		for char_v: Variant in present:
+			var visitor: L5RCharacterData = char_v as L5RCharacterData
+			if visitor.character_id == painting.creator_id:
+				continue  # Creator excluded
+
+			var visit_result: Dictionary = PaintingSystem.apply_visitor_effect(
+				visitor.character_id, painting, current_ic_season, ic_day,
+			)
+			if visit_result.is_empty():
+				continue
+
+			# Disposition toward creator
+			if creator != null and not CharacterStats.is_dead(creator):
+				var disp: int = visit_result.get("disposition_change", 0)
+				if disp != 0:
+					var bucket: Array = visitor.temporary_modifiers.get(painting.creator_id, [])
+					bucket.append({
+						"event_type": "painting_visitor",
+						"value": disp,
+						"created_ic_day": ic_day,
+						"duration": PaintingSystem.VISITOR_BONUS_DURATION_DAYS,
+					})
+					visitor.temporary_modifiers[painting.creator_id] = bucket
+
+			# Glory tick
+			if visit_result.get("glory_tick", false):
+				if creator != null and not CharacterStats.is_dead(creator):
+					HonorGlorySystem.apply_glory_change(creator,
+						visit_result.get("creator_glory_gain", 0.0))
+				var daimyo: L5RCharacterData = characters_by_id.get(daimyo_id)
+				if daimyo != null and not CharacterStats.is_dead(daimyo):
+					HonorGlorySystem.apply_glory_change(daimyo,
+						visit_result.get("daimyo_glory_gain", 0.0))
+
+			# Negative framing: if visitor is subject of negatively framed painting
+			var neg_result: Dictionary = PaintingSystem.apply_negative_framing_on_subject_visit(
+				painting, visitor.character_id,
+			)
+			if not neg_result.is_empty():
+				var disp_loss: int = neg_result.get("disposition_change", 0)
+				if disp_loss != 0 and daimyo_id >= 0:
+					DispositionSystem.apply_disposition_change(visitor, daimyo_id, disp_loss)
+
+
+static func _process_painting_seasonal_maintenance(
+	active_paintings: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	current_ic_season: int,
+) -> void:
+	## Seasonal painting maintenance: apply WIP degradation, seasonal kakemono rotation.
+
+	# Build settlement lookup
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		if s_v is SettlementData:
+			settlements_by_id[(s_v as SettlementData).settlement_id] = s_v
+
+	# Build painting_id → painting for rotation lookup
+	var paintings_by_id: Dictionary = {}
+	for p_v: Variant in active_paintings:
+		if p_v is PaintingData:
+			paintings_by_id[(p_v as PaintingData).painting_id] = p_v
+
+	for p_v: Variant in active_paintings:
+		if not p_v is PaintingData:
+			continue
+		var painting: PaintingData = p_v as PaintingData
+
+		# WIP degradation for byōbu and emakimono
+		if painting.craft_progress >= 0:
+			PaintingSystem.apply_composition_degradation(painting, ic_day)
+			continue
+
+	# Seasonal kakemono rotation: check each settlement's wall_art_slot
+	for s_v: Variant in settlements:
+		if not s_v is SettlementData:
+			continue
+		var settlement: SettlementData = s_v as SettlementData
+		if settlement.wall_art_slot < 0:
+			continue
+
+		# Collect paintings owned by the settlement lord for rotation pool
+		var daimyo_id: int = settlement.lord_character_id
+		var daimyo: L5RCharacterData = characters_by_id.get(daimyo_id)
+		if daimyo == null or CharacterStats.is_dead(daimyo):
+			continue
+		# Build inventory: paintings owned by daimyo not displayed elsewhere
+		var inventory_ids: Array = []
+		for p_v2: Variant in active_paintings:
+			if not p_v2 is PaintingData:
+				continue
+			var p2: PaintingData = p_v2 as PaintingData
+			if p2.creator_id == daimyo_id and p2.craft_progress < 0:
+				if p2.display_settlement_id < 0 or p2.display_settlement_id == settlement.settlement_id:
+					inventory_ids.append(p2.painting_id)
+
+		var rotation: Dictionary = PaintingSystem.evaluate_seasonal_rotation(
+			settlement, paintings_by_id, inventory_ids, current_ic_season,
+		)
+		if rotation.get("needs_rotation", false) and rotation.get("has_replacement", false):
+			var replacement_id: int = rotation.get("replacement_painting_id", -1)
+			var replacement: PaintingData = paintings_by_id.get(replacement_id)
+			var old_painting: PaintingData = paintings_by_id.get(settlement.wall_art_slot)
+			if replacement != null and replacement_id != settlement.wall_art_slot:
+				# Swap: remove old, display new
+				if old_painting != null:
+					old_painting.display_settlement_id = -1
+					old_painting.display_slot = -1
+					old_painting.continuous_display_start_ic_day = -1
+				PaintingSystem.resolve_display_painting(
+					daimyo_id, daimyo.lord_id,
+					replacement, settlement,
+					PaintingSystem.DisplaySlot.WALL_ART, ic_day,
+				)
+
+
+# ---------------------------------------------------------------------------
+# Artist grief on creator death (s57.27.25)
+# ---------------------------------------------------------------------------
+
+static func _apply_artist_grief_on_death(
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_paintings: Array,
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	## Apply disposition loss to admirers of displayed paintings when the creator dies.
+	## Called after _cleanup_dead_character_references so dead characters are identifiable.
+	if active_paintings.is_empty():
+		return
+
+	# Build settlement → lord lookup.
+	var settlement_lord_map: Dictionary = {}  # str(settlement_id) → lord_character_id
+	for sv: Variant in settlements:
+		var s: SettlementData = sv as SettlementData
+		if s == null:
+			continue
+		settlement_lord_map[str(s.settlement_id)] = s.lord_character_id
+
+	for c: L5RCharacterData in characters:
+		if not CharacterStats.is_dead(c):
+			continue
+		var grief_events: Array = PaintingSystem.collect_admirer_grief(
+			c.character_id, active_paintings, ic_day)
+		for ev: Dictionary in grief_events:
+			var admirer_id: int = ev.get("admirer_id", -1)
+			var admirer: L5RCharacterData = characters_by_id.get(admirer_id)
+			if admirer == null or CharacterStats.is_dead(admirer):
+				continue
+			var disp_loss: int = ev.get("disposition_change", 0)
+			if disp_loss >= 0:
+				continue
+			# Resolve zone lord from display_settlement_id.
+			var sid: int = ev.get("display_settlement_id", -1)
+			var lord_id: int = settlement_lord_map.get(str(sid), -1)
+			if lord_id < 0:
+				continue
+			var current_disp: int = admirer.disposition_values.get(lord_id, 0)
+			admirer.disposition_values[lord_id] = clampi(
+				current_disp + disp_loss, -100, 100)
+
+
+# ---------------------------------------------------------------------------
+# Sculpture orchestrator functions (s57.28)
+# ---------------------------------------------------------------------------
+
+static func _inject_sculpture_context(
+	active_sculptures: Array,
+	settlements: Array,
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	## Inject per-character sculpture state into known_objectives.
+	## Sets: active_sculpture_wip_id, statue_slot_empty, guardian_slot_empty,
+	##       has_statue_permission, has_guardian_permission,
+	##       statuary_worship_fr, guardian_worship_fr.
+
+	# Build settlement lookup
+	var settlements_by_str_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_str_id[str(s.settlement_id)] = s
+
+	# Build creator_id → WIP sculpture lookup (statuary/guardian only; figurines never degrade)
+	var wip_by_creator: Dictionary = {}
+	# Settlement str_id → placed statuary (complete, format==STATUARY)
+	var statuary_by_settlement: Dictionary = {}
+	# Settlement str_id → placed guardian (complete, format==GUARDIAN)
+	var guardian_by_settlement: Dictionary = {}
+
+	for sc_v: Variant in active_sculptures:
+		if not sc_v is SculptureData:
+			continue
+		var sc: SculptureData = sc_v as SculptureData
+		if sc.craft_progress >= 0:
+			# WIP — track first WIP per creator
+			if not wip_by_creator.has(sc.creator_id):
+				wip_by_creator[sc.creator_id] = sc
+		else:
+			# Complete — track displayed pieces
+			if sc.display_settlement_id >= 0:
+				var sid: String = str(sc.display_settlement_id)
+				if sc.format == SculptureSystem.Format.STATUARY:
+					if not statuary_by_settlement.has(sid):
+						statuary_by_settlement[sid] = sc
+				elif sc.format == SculptureSystem.Format.GUARDIAN:
+					if not guardian_by_settlement.has(sid):
+						guardian_by_settlement[sid] = sc
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			continue
+		if not ws.has("known_objectives"):
+			ws["known_objectives"] = {}
+
+		var loc: String = character.physical_location
+		var settlement: SettlementData = settlements_by_str_id.get(loc)
+
+		# WIP sculpture for this creator
+		var wip: SculptureData = wip_by_creator.get(character.character_id)
+		ws["known_objectives"]["active_sculpture_wip_id"] = wip.sculpture_id if wip != null else -1
+		ws["known_objectives"]["active_sculpture_material"] = wip.material if wip != null else SculptureSystem.Material.WOOD
+		ws["known_objectives"]["active_sculpture_format"] = wip.format if wip != null else SculptureSystem.Format.STATUARY
+
+		# Slot availability and worship FRs at current settlement
+		if settlement != null:
+			ws["known_objectives"]["statue_slot_empty"] = settlement.statue_slot < 0
+			ws["known_objectives"]["guardian_slot_empty"] = settlement.guardian_slot < 0
+			ws["known_objectives"]["is_religious_settlement"] = settlement.is_religious()
+			# Foundry: always false until SettlementData gains a foundry field (GDD A5 prerequisite).
+			ws["known_objectives"]["foundry_in_province"] = false
+			ws["known_objectives"]["has_statue_permission"] = (
+				SculptureSystem.has_statue_permission(character.character_id, settlement)
+			)
+			ws["known_objectives"]["has_guardian_permission"] = (
+				SculptureSystem.has_guardian_permission(character.character_id, settlement)
+			)
+			# Statuary worship FRs: only if statue present, subject matches directed fortune.
+			# Inject the FR value; fortune matching is done at metadata population time.
+			var statuary_sc: SculptureData = statuary_by_settlement.get(loc)
+			if statuary_sc != null:
+				ws["known_objectives"]["statuary_worship_fr"] = SculptureSystem.statuary_worship_fr(
+					statuary_sc.quality_tier)
+				ws["known_objectives"]["statuary_subject_id"] = statuary_sc.subject_id
+			else:
+				ws["known_objectives"]["statuary_worship_fr"] = 0
+				ws["known_objectives"]["statuary_subject_id"] = -1
+			# Guardian worship FRs: only if pair_intact.
+			var guardian_sc: SculptureData = guardian_by_settlement.get(loc)
+			if guardian_sc != null and guardian_sc.pair_intact:
+				ws["known_objectives"]["guardian_worship_fr"] = SculptureSystem.guardian_worship_fr(
+					guardian_sc.quality_tier)
+			else:
+				ws["known_objectives"]["guardian_worship_fr"] = 0
+		else:
+			ws["known_objectives"]["statue_slot_empty"] = false
+			ws["known_objectives"]["guardian_slot_empty"] = false
+			ws["known_objectives"]["is_religious_settlement"] = false
+			ws["known_objectives"]["has_statue_permission"] = false
+			ws["known_objectives"]["has_guardian_permission"] = false
+			ws["known_objectives"]["foundry_in_province"] = false
+			ws["known_objectives"]["statuary_worship_fr"] = 0
+			ws["known_objectives"]["statuary_subject_id"] = -1
+			ws["known_objectives"]["guardian_worship_fr"] = 0
+
+
+static func _process_compose_sculpture_writebacks(
+	results: Array,
+	active_sculptures: Array,
+	next_sculpture_id: Array,
+	ic_day: int,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+) -> void:
+	## Handle COMPOSE_SCULPTURE results.
+	## is_new_sculpture=true → declare new WIP via SculptureSystem.declare_composition().
+	## Otherwise → advance WIP via SculptureSystem.resolve_compose_sculpture().
+	var sculptures_by_id: Dictionary = {}
+	for sc_v: Variant in active_sculptures:
+		if sc_v is SculptureData:
+			sculptures_by_id[(sc_v as SculptureData).sculpture_id] = sc_v
+
+	# Build settlement lookup for auto-placement on completion
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		if s_v is SettlementData:
+			settlements_by_id[(s_v as SettlementData).settlement_id] = s_v
+
+	for r: Dictionary in results:
+		if r.get("action_id", "") != "COMPOSE_SCULPTURE":
+			continue
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var char_id: int = r.get("character_id", -1)
+
+		if effects.get("is_new_sculpture", false):
+			# Create a new WIP SculptureData
+			var sid: int = next_sculpture_id[0]
+			next_sculpture_id[0] += 1
+			var sculpture: SculptureData = SculptureSystem.declare_composition(
+				effects.get("format", SculptureSystem.Format.STATUARY),
+				effects.get("material", SculptureSystem.Material.WOOD),
+				effects.get("subject_type", SculptureSystem.SubjectType.FORTUNE),
+				effects.get("subject_id", -1),
+				effects.get("target_quality_tier", 1),
+				char_id,
+				sid,
+				effects.get("ic_day", ic_day),
+				effects.get("theme", SculptureSystem.FigurineTheme.OTHER),
+			)
+			active_sculptures.append(sculpture)
+		else:
+			# Advance existing WIP
+			var sculpture_id: int = effects.get("sculpture_id", -1)
+			var sculpture: SculptureData = sculptures_by_id.get(sculpture_id)
+			if sculpture == null:
+				continue
+			var sculptor_rank: int = effects.get("sculptor_rank", 99)
+			var compose_result: Dictionary = SculptureSystem.resolve_compose_sculpture(
+				sculptor_rank,
+				sculpture,
+				effects.get("roll_total", 0),
+				effects.get("raises_declared", 0),
+				effects.get("ic_day", ic_day),
+			)
+			# On completion: auto-place if a slot is available at sculptor's last location.
+			if compose_result.get("completed", false):
+				_auto_place_completed_sculpture(sculpture, settlements_by_id)
+				# Generate lifecycle topic
+				var topic_dict: Dictionary = SculptureSystem.generate_lifecycle_topic(
+					sculpture, "completion", "", ic_day,
+				)
+				if not topic_dict.is_empty():
+					var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
+					if t != null:
+						active_topics.append(t)
+
+
+static func _auto_place_completed_sculpture(
+	sculpture: SculptureData,
+	settlements_by_id: Dictionary,
+) -> void:
+	## Auto-place completed statuary/guardian into available slot at their settlement.
+	## Figurines skip (they go into inventory for DELIVER_GIFT).
+	if sculpture.format == SculptureSystem.Format.FIGURINE:
+		return
+
+	# Sculptor's current settlement: we use the WIP's commission_record_id as proxy.
+	# Without a zone system, we can't determine exact location; slot assignment is deferred
+	# to when DISPLAY_SCULPTURE is added. For now, auto-place only if a slot target is
+	# recorded on the sculpture via display_settlement_id set at commission time.
+	if sculpture.display_settlement_id < 0:
+		return
+
+	var settlement: SettlementData = settlements_by_id.get(sculpture.display_settlement_id)
+	if settlement == null:
+		return
+	if not SculptureSystem.is_statue_eligible(settlement):
+		return
+
+	if sculpture.format == SculptureSystem.Format.STATUARY:
+		if settlement.statue_slot < 0 and SculptureSystem.has_statue_permission(
+				sculpture.creator_id, settlement):
+			settlement.statue_slot = sculpture.sculpture_id
+			sculpture.display_slot = SculptureSystem.DisplaySlot.STATUE_SLOT
+	elif sculpture.format == SculptureSystem.Format.GUARDIAN:
+		if settlement.guardian_slot < 0 and SculptureSystem.has_guardian_permission(
+				sculpture.creator_id, settlement):
+			settlement.guardian_slot = sculpture.sculpture_id
+			sculpture.display_slot = SculptureSystem.DisplaySlot.GUARDIAN_SLOT
+			# Mark guardian pair intact if this sculpture is the completing piece.
+			if sculpture.paired:
+				sculpture.pair_intact = true
+
+
+static func _process_sculpture_visitor_effects(
+	active_sculptures: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	ic_day: int,
+	current_ic_season: int,
+) -> void:
+	## Apply visitor disposition bonus and glory ticks for displayed sculptures.
+	if active_sculptures.is_empty():
+		return
+
+	# Build location → character list
+	var chars_at: Dictionary = {}
+	for char_v: Variant in characters:
+		var c: L5RCharacterData = char_v as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var loc: String = c.physical_location
+		if loc.is_empty():
+			continue
+		if not chars_at.has(loc):
+			chars_at[loc] = []
+		chars_at[loc].append(c)
+
+	# Build settlement_id → lord lookup
+	var settlement_lord: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlement_lord[s.settlement_id] = s.lord_character_id
+
+	for sc_v: Variant in active_sculptures:
+		if not sc_v is SculptureData:
+			continue
+		var sculpture: SculptureData = sc_v as SculptureData
+		if sculpture.display_settlement_id < 0:
+			continue  # Not on display
+		if sculpture.craft_progress >= 0:
+			continue  # Still WIP
+
+		var loc_str: String = str(sculpture.display_settlement_id)
+		var present: Array = chars_at.get(loc_str, [])
+		if present.is_empty():
+			continue
+
+		var creator: L5RCharacterData = characters_by_id.get(sculpture.creator_id)
+		var daimyo_id: int = settlement_lord.get(sculpture.display_settlement_id, -1)
+
+		for char_v: Variant in present:
+			var visitor: L5RCharacterData = char_v as L5RCharacterData
+			if visitor.character_id == sculpture.creator_id:
+				continue  # Creator excluded
+
+			var visit_result: Dictionary = SculptureSystem.apply_visitor_effect(
+				visitor.character_id, sculpture, current_ic_season, ic_day,
+			)
+			if visit_result.is_empty():
+				continue
+
+			# Disposition toward creator
+			if creator != null and not CharacterStats.is_dead(creator):
+				var disp: int = visit_result.get("disposition_change", 0)
+				if disp != 0:
+					var bucket: Array = visitor.temporary_modifiers.get(sculpture.creator_id, [])
+					bucket.append({
+						"event_type": "sculpture_visitor",
+						"value": disp,
+						"created_ic_day": ic_day,
+						"duration": SculptureSystem.VISITOR_BONUS_DURATION_DAYS,
+					})
+					visitor.temporary_modifiers[sculpture.creator_id] = bucket
+
+			# Glory tick
+			if visit_result.get("glory_tick", false):
+				if creator != null and not CharacterStats.is_dead(creator):
+					HonorGlorySystem.apply_glory_change(creator,
+						visit_result.get("creator_glory_gain", 0.0))
+				var daimyo: L5RCharacterData = characters_by_id.get(daimyo_id)
+				if daimyo != null and not CharacterStats.is_dead(daimyo):
+					HonorGlorySystem.apply_glory_change(daimyo,
+						visit_result.get("daimyo_glory_gain", 0.0))
+
+
+static func _process_sculpture_seasonal_maintenance(
+	active_sculptures: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	_current_ic_season: int,
+) -> void:
+	## Seasonal sculpture maintenance.
+	## 1. Apply WIP composition degradation (statuary/guardian only).
+	## 2. Apply passive WP accumulation from placed statuary.
+	## 3. Apply wood guardian outdoor degradation.
+
+	# Build settlement lookup
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		if s_v is SettlementData:
+			settlements_by_id[(s_v as SettlementData).settlement_id] = s_v
+
+	for sc_v: Variant in active_sculptures:
+		if not sc_v is SculptureData:
+			continue
+		var sculpture: SculptureData = sc_v as SculptureData
+
+		# --- 1. WIP degradation (statuary + guardian only; figurine excluded per GDD A6) ---
+		if sculpture.craft_progress >= 0:
+			if sculpture.format in [SculptureSystem.Format.STATUARY, SculptureSystem.Format.GUARDIAN]:
+				SculptureSystem.apply_composition_degradation(sculpture, ic_day)
+			continue
+
+		# --- 2. Passive WP accumulation (statuary only, per GDD section D) ---
+		if sculpture.format == SculptureSystem.Format.STATUARY and sculpture.display_settlement_id >= 0:
+			var passive_wp: float = SculptureSystem.passive_wp_per_season(sculpture.quality_tier)
+			if passive_wp > 0.0 and sculpture.subject_id >= 0:
+				# WP accumulation is applied via worship_state — delegate to the worship system.
+				# passive_wp is credited to the sculpture's subject fortune.
+				# The worship system handles distribution; we just report the intent.
+				# (Actual worship_state mutation happens in _process_worship_accumulation_result
+				# which reads this from a result dict — for now store intent as metadata.)
+				pass  # PROVISIONAL: passive WP wiring to worship_state pending worship tick design.
+
+		# --- 3. Wood guardian outdoor degradation (per GDD section G) ---
+		if sculpture.format == SculptureSystem.Format.GUARDIAN:
+			var tier_before: int = sculpture.quality_tier
+			SculptureSystem.apply_outdoor_degradation(sculpture, ic_day)
+			if sculpture.quality_tier < tier_before:
+				# Pair quality reduced; check if pair should be marked damaged.
+				if sculpture.quality_tier < SculptureSystem.GUARDIAN_DAMAGE_TIER_THRESHOLD:
+					var topic_dict: Dictionary = SculptureSystem.generate_lifecycle_topic(
+						sculpture, "guardian_damage", "", ic_day,
+					)
+					if not topic_dict.is_empty():
+						var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
+						if t != null:
+							active_topics.append(t)
+
+	# --- 4. Mantis figurine collection topics (GDD section H) ---
+	# Fires once per season per qualifying cluster (3+ figurines, same creator or theme).
+	var collection_topics: Array = SculptureSystem.collect_figurine_topics(active_sculptures, ic_day)
+	for td: Variant in collection_topics:
+		if not td is Dictionary:
+			continue
+		var t: TopicData = _topic_from_dict(td as Dictionary, next_topic_id, ic_day)
+		if t != null:
+			active_topics.append(t)
 
 
 

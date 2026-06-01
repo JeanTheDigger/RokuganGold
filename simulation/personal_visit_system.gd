@@ -28,12 +28,12 @@ enum VisitState {
 const INTIMATE_SETTING_BONUS: int = 3
 const DAILY_AP_DURING_VISIT: int = 2
 
-const DECLINE_INVITATION_DISPOSITION: int = 0
-const REFUSE_AFTER_INVITATION_DISPOSITION: int = 0
-const REFUSE_AFTER_INVITATION_HONOR: float = 0.0
-const REFUSE_LETTER_ARRIVAL_DISPOSITION: int = 0
-const REFUSE_UNINVITED_DISPOSITION: int = 0
-const RECEIVE_UNINVITED_DISPOSITION: int = 0
+const DECLINE_INVITATION_DISPOSITION: int = -2     # "small" — locked s17a
+const REFUSE_AFTER_INVITATION_DISPOSITION: int = -5  # "significant" — locked s17a
+const REFUSE_AFTER_INVITATION_HONOR: float = -0.5   # "significant Honor loss" — locked s17a
+const REFUSE_LETTER_ARRIVAL_DISPOSITION: int = -3   # between small and significant — locked s17a
+const REFUSE_UNINVITED_DISPOSITION: int = 0          # GDD silent — no host penalty
+const RECEIVE_UNINVITED_DISPOSITION: int = 5         # "significant goodwill" — locked s17a
 
 const CATEGORY_1_ACTIONS: Array[String] = [
 	"NEGOTIATE",

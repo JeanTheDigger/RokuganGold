@@ -29,6 +29,8 @@ const PURE_ORDER_ACTIONS: Array[String] = [
 	"ASSIGN_VASSAL_OBJECTIVE",
 	"ASSIGN_TO_MILITARY_SERVICE",
 	"ASSESS_PROVINCE_STATUS",
+	"APPROVE_CLAN_INDUCTION",  # s52.7 Part C — Family Daimyo grants induction approval
+	"TERMINATE_CONTRACT",   # s52.6 Part G — early contract termination
 ]
 
 # Military-or-civilian: draw from Military Orders if lord holds military rank,

@@ -204,19 +204,31 @@ The base rate is multiplied by the NPC's current activity level. Multipliers app
 
 **XP Spending Priority**
 
-When the engine spends accumulated NPC XP on progress bars, it follows a fixed priority order. NPCs do not make conscious choices — the engine optimizes toward their school's strengths:
+When the engine spends accumulated NPC XP on progress bars, it follows a fixed priority order. NPCs do not make conscious choices — the engine optimizes toward their school's strengths while reflecting how real skill deepens over time:
 
 - First: Primary Ring for the school (Earth for Hida Bushi, Air for Doji Courtier, Fire for Isawa Shugenja). The most important attribute for their school's function.
 
-- Second: The school's highest-ranked skill — the specialty skill that defines the character's role.
+- Second: All eligible skills, sorted by current rank descending (highest-ranked first). Eligible skills are: (a) all school skills, plus (b) any non-school skill the character already has at rank 1 or higher. Non-school skills at rank 0 are not eligible — NPCs deepen existing knowledge rather than beginning entirely new disciplines. Within the same current rank, school skills are prioritized over non-school skills.
 
-- Third: Other school skills in descending order of current rank. Raises existing strengths before developing new ones.
+- Third: Secondary Ring associated with the school's focus.
 
-- Fourth: Secondary Ring associated with the school's focus.
+- Fourth: Void Ring (all school types — bushi, courtier, monk, and shugenja alike). Every samurai may cultivate inner stillness. Void training is available after school skills and focus rings are addressed.
 
 - Fifth: Any remaining XP is held in reserve until a threshold is reached.
 
-- Never: Non-school skills, Void Ring (unless shugenja), or Rings unrelated to school function. NPCs do not develop broadly — they deepen their specialization.
+- Never: Rings unrelated to school function (beyond the two focus rings and Void), or non-school skills at rank 0. NPCs do not begin disciplines they have never touched.
+
+**XP Spending Priority — Characters Without a Known School**
+
+Born ronin, unschooled characters, and any character whose school data is absent follow a different priority. They have no focus rings and no school skill list. Their advancement reflects self-teaching: deepening their own strengths while developing all five aspects of their being equally.
+
+- First: All skills the character possesses, sorted by current rank descending. Skills the character holds at rank 0 are eligible — a self-taught warrior can develop a latent interest they once touched. Within the same rank, alphabetical order determines the sequence for determinism. Highest-ranked skills advance first.
+
+- Second: All five Rings, sorted by current rank ascending. The lowest-ranked Ring advances first. When multiple Rings share the lowest rank, they are raised in stable enum order (Air, Earth, Fire, Water, Void). This keeps all five Rings growing together rather than concentrating in two.
+
+- Never: XP is never held in reserve for school-less characters as long as any skill or Ring below maximum exists.
+
+A samurai who later becomes ronin retains their school record and continues to follow the schooled spending priority — they do not switch to the school-less path. The school-less path applies only to characters who never had a school assignment at all.
 
 **Worked Examples**
 

@@ -51,6 +51,28 @@ extends Resource
 # Blockade state
 @export var blocked_by_blockade: bool = false
 
+# Teaching offer flags (populated by §57.22.12 proactive teaching trigger)
+@export var learn_piece_id: int = -1
+@export var teacher_initiated: bool = false
+
+# Calligraphy (Cipher) subtext fields — s57.30 LOCKED
+# Concealment TN = result of writer's Sincerity/Awareness roll at write time.
+# Disposition tier and topic stance are frozen snapshots of the writer's state.
+@export var concealment_tn: int = 0
+@export var writer_disposition_tier: int = -1  # DispositionTier enum; -1 = unknown
+@export var writer_topic_stance: String = ""   # "supports" / "opposes" / "indifferent" / ""
+@export var writer_needtype: String = ""        # NeedType driving the letter; "" for players
+
+# Calligraphy (High Rokugani) fields — s57.30 LOCKED
+@export var high_rokugani_attempted: bool = false
+@export var high_rokugani_bonus: int = 0
+
+# Poetry-in-letter fields — s57.30.6 LOCKED
+# attached_poem_id: item_id of the poetry scroll from sender's items (-1 = none).
+# attached_poem_raises: raises from the original CRAFT roll; drives +2+(raises) disposition.
+@export var attached_poem_id: int = -1
+@export var attached_poem_raises: int = 0
+
 # Route info used for delivery time
 @export var province_distance: int = 0
 @export var mountain_provinces: int = 0

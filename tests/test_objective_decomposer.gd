@@ -1451,3 +1451,56 @@ func test_fill_vacancy_carries_province_id() -> void:
 	var obj := {"need_type": "FILL_VACANCY", "priority": 2}
 	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
 	assert_eq(need.target_province_id, 7)
+
+
+# === STANDING NEEDTYPE DISPATCH COVERAGE ===
+
+
+func test_perform_ritual_routes_via_personal_dispatch() -> void:
+	# PERFORM_RITUAL is in PERSONAL_OBJECTIVES — must not fall through to the
+	# generic _passthrough at the end of decompose(). Preserves NeedType so
+	# Phase 5 scores PERFORM_RITUAL=100, PERFORM_WORSHIP=90, MEDITATE=60.
+	var obj := {"need_type": "PERFORM_RITUAL", "priority": 3}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_not_null(need)
+	assert_eq(need.need_type, "PERFORM_RITUAL")
+
+
+func test_perform_ritual_passthrough_at_court() -> void:
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var obj := {"need_type": "PERFORM_RITUAL", "priority": 3}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "PERFORM_RITUAL",
+		"Context flag should not change the NeedType passthrough")
+
+
+func test_perform_ritual_passthrough_traveling() -> void:
+	_ctx.context_flag = Enums.ContextFlag.TRAVELING
+	var obj := {"need_type": "PERFORM_RITUAL", "priority": 3}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "PERFORM_RITUAL")
+
+
+func test_maintain_fortification_routes_via_military_dispatch() -> void:
+	# MAINTAIN_FORTIFICATION is in MILITARY_OBJECTIVES — must not fall through to
+	# generic passthrough. Preserves NeedType so Phase 5 scores
+	# SEAL_WALL_BREACH=100, ORDER_FORTIFY=100, FORTIFY_WALL_SECTION=95.
+	var obj := {"need_type": "MAINTAIN_FORTIFICATION", "priority": 1}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_not_null(need)
+	assert_eq(need.need_type, "MAINTAIN_FORTIFICATION")
+
+
+func test_maintain_fortification_passthrough_at_court() -> void:
+	_ctx.context_flag = Enums.ContextFlag.AT_COURT
+	var obj := {"need_type": "MAINTAIN_FORTIFICATION", "priority": 1}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "MAINTAIN_FORTIFICATION",
+		"Context flag should not change the NeedType passthrough")
+
+
+func test_maintain_fortification_passthrough_on_campaign() -> void:
+	_ctx.context_flag = Enums.ContextFlag.ON_CAMPAIGN
+	var obj := {"need_type": "MAINTAIN_FORTIFICATION", "priority": 2}
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, _ctx)
+	assert_eq(need.need_type, "MAINTAIN_FORTIFICATION")

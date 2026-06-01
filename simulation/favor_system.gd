@@ -321,8 +321,9 @@ static func is_blackmail_exposure_risk(favor: FavorData, invocation_is_public: b
 
 # -- Witness disposition on dispute win ---------------------------------------
 
-# GDD s12.10 line 47: "Witnesses gain disposition toward the creditor" — no numeric value.
+# GDD s12.10 line 47: "Witnesses gain disposition toward the creditor." Locked s12.10a.
+# Debtor win: GDD silent → 0.
 static func get_dispute_witness_disposition(creditor_won: bool) -> int:
 	if creditor_won:
-		return 0
+		return 2
 	return 0

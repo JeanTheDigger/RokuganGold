@@ -124,6 +124,9 @@ static func is_gempuku_eligible(birth_season: int, current_season: int) -> bool:
 
 # -- Proposal Evaluation (NPC lord decision) ----------------------------------
 
+const PROPOSAL_FAVOR_TIER_MULTIPLIER: int = 10  # MINOR=0, MODERATE=10, MAJOR=20 — locked s22.7a
+const PROPOSAL_MILITARY_BONUS: int = 10          # pressing military need — locked s22.7a
+
 static func evaluate_proposal(
 	proposing_clan_disposition: int,
 	character_value: int,
@@ -132,21 +135,64 @@ static func evaluate_proposal(
 ) -> int:
 	var score: int = proposing_clan_disposition
 	score += character_value
-	score += favor_tier * 0
+	score += favor_tier * PROPOSAL_FAVOR_TIER_MULTIPLIER
 	if has_military_objective:
-		score += 0
+		score += PROPOSAL_MILITARY_BONUS
 	return score
+
+
+# -- Dissolution Constants (s57.49.7) -----------------------------------------
+
+# Honor / Glory losses per GDD s57.49.7 Pathway 1.
+# DISSOLUTION_HONOR_LOSS_LORD: Table 2.3 Lord-Commanded Dissolution (s57.49.1, confirmed).
+const DISSOLUTION_HONOR_LOSS_LORD: float = -1.0
+# DISSOLUTION_GLORY_LOSS_SPOUSE: s46 Table 2.4 anchor: "Family Dishonor = −1 Glory Rank."
+# Dissolution is comparable but less severe (no personal act of dishonor by the spouse),
+# so half that magnitude = −0.5 (s57.49b).
+const DISSOLUTION_GLORY_LOSS_SPOUSE: float = -0.5
+# Disposition penalties — derived in s57.49b from s12.2 tier boundaries.
+# FAMILY: mid-Rival tier (−20, within −11 to −30 bounds). CLAN: Stranger/Rival
+# boundary (−10, keeps clan-level cooling in Stranger without forcing Rival).
+const DISSOLUTION_FAMILY_DISP_PENALTY: int = -20
+const DISSOLUTION_CLAN_DISP_PENALTY: int = -10  # cross-clan only
+
+
+static func dissolve_marriage(marriage: Dictionary) -> void:
+	marriage["active"] = false
+
+
+static func find_active_marriage_for_character(
+	char_id: int,
+	marriages: Array,
+) -> Dictionary:
+	for m: Dictionary in marriages:
+		if not m.get("active", false):
+			continue
+		if m.get("character_a_id", -1) == char_id or m.get("character_b_id", -1) == char_id:
+			return m
+	return {}
+
+
+static func get_dissolution_topic_variant(pathway: int) -> String:
+	match pathway:
+		2:
+			return "criminal_conviction"
+		3:
+			return "monastic_retirement"
+		4:
+			return "imperial_decree"
+	return "lord_command"
 
 
 # -- Benten Festival Bonus ----------------------------------------------------
 
 const BENTEN_FESTIVAL_DAY: int = 9
-const BENTEN_FESTIVAL_MONTH: int = 11
+const BENTEN_FESTIVAL_MONTH: int = 9  # Boar month per GDD s11.5 "9th day of the Boar"
 
-const BENTEN_FESTIVAL_BONUS: int = 0
+const BENTEN_FESTIVAL_BONUS: int = 15  # most auspicious marriage day — locked s22.7a
 
 static func is_benten_festival(ic_day: int) -> bool:
-	var day_of_year: int = ic_day % 360
+	var day_of_year: int = (ic_day - 1) % 360
 	var month: int = int(day_of_year / 30) + 1
 	var day_of_month: int = (day_of_year % 30) + 1
 	return month == BENTEN_FESTIVAL_MONTH and day_of_month == BENTEN_FESTIVAL_DAY

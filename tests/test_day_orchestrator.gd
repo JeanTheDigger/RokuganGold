@@ -1141,7 +1141,6 @@ func test_festival_sets_world_state_flags() -> void:
 	assert_true(char_ws.has("is_ceasefire_day"))
 	assert_true(char_ws.has("is_labor_halt_day"))
 	assert_true(char_ws.has("is_taian"))
-	assert_true(char_ws.has("is_inauspicious_for_social"))
 	assert_true(char_ws.has("rokuyo"))
 
 
@@ -1406,7 +1405,7 @@ func test_famine_crisis_tier_2_at_famine_stage() -> void:
 
 	assert_eq(results.size(), 1)
 	assert_eq(results[0]["tier"], TopicData.Tier.TIER_2)
-	assert_eq(topics[0].momentum, DayOrchestrator._FAMINE_FAMINE_MOMENTUM)
+	assert_eq(topics[0].momentum, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_2))
 
 
 func test_famine_crisis_no_duplicate_topic() -> void:
@@ -6375,6 +6374,105 @@ func test_impersonation_detection_no_duped_when_order_not_applied() -> void:
 		"Victim should not lose honor if forged order was never applied")
 
 
+func test_impersonation_detection_applies_duped_criminal_when_commitment_broken() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 92
+	victim.character_name = "Commitment Breaker"
+	victim.honor = 5.0
+	victim.school = "Hida Bushi"
+	victim.clan = "Crab"
+	victim.wounds_taken = 0
+	victim.knowledge_pool = []
+	var characters_by_id: Dictionary = {92: victim}
+
+	var forged_order := LetterData.new()
+	forged_order.recipient_id = 92
+	forged_order.delivered = true
+	forged_order.is_forged = true
+	forged_order.forged_sender_id = 60
+	forged_order.is_order = true
+	forged_order.order_applied = true
+	forged_order.ic_day_arrival = 10
+
+	var reply := LetterData.new()
+	reply.recipient_id = 92
+	reply.sender_id = 99
+	reply.delivered = true
+	reply.is_reply = true
+	reply.reply_to_forged = true
+	reply.original_forger_id = 60
+
+	var broken_commitment := CommitmentData.new()
+	broken_commitment.debtor_npc_id = 92
+	broken_commitment.status = Enums.CommitmentStatus.BROKEN_NO_NOTICE
+	broken_commitment.deadline_ic_day = 20
+
+	var pending_letters: Array = [forged_order, reply]
+	var active_topics: Array = []
+	var next_topic_id: Array = [500]
+	var objectives_map: Dictionary = {}
+	var initial_honor: float = victim.honor
+
+	DayOrchestrator._process_impersonation_detection(
+		pending_letters, characters_by_id, active_topics,
+		next_topic_id, 15, objectives_map, [broken_commitment],
+	)
+
+	assert_true(victim.honor < initial_honor,
+		"Victim should lose extra honor for breaking a commitment due to forged order")
+
+
+func test_impersonation_detection_no_duped_criminal_when_deadline_before_order() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 93
+	victim.character_name = "Pre-Commitment Breaker"
+	victim.honor = 5.0
+	victim.school = "Hida Bushi"
+	victim.clan = "Crab"
+	victim.wounds_taken = 0
+	victim.knowledge_pool = []
+	var characters_by_id: Dictionary = {93: victim}
+
+	var forged_order := LetterData.new()
+	forged_order.recipient_id = 93
+	forged_order.delivered = true
+	forged_order.is_forged = true
+	forged_order.forged_sender_id = 60
+	forged_order.is_order = true
+	forged_order.order_applied = true
+	forged_order.ic_day_arrival = 20
+
+	var reply := LetterData.new()
+	reply.recipient_id = 93
+	reply.sender_id = 99
+	reply.delivered = true
+	reply.is_reply = true
+	reply.reply_to_forged = true
+	reply.original_forger_id = 60
+
+	var broken_commitment := CommitmentData.new()
+	broken_commitment.debtor_npc_id = 93
+	broken_commitment.status = Enums.CommitmentStatus.BROKEN_NO_NOTICE
+	broken_commitment.deadline_ic_day = 10
+
+	var pending_letters: Array = [forged_order, reply]
+	var active_topics: Array = []
+	var next_topic_id: Array = [500]
+	var objectives_map: Dictionary = {}
+	var initial_honor: float = victim.honor
+
+	DayOrchestrator._process_impersonation_detection(
+		pending_letters, characters_by_id, active_topics,
+		next_topic_id, 25, objectives_map, [broken_commitment],
+	)
+
+	# DUPED_DISLOYAL fires (order was applied), but not DUPED_CRIMINAL
+	# because commitment deadline (10) is before forged order arrival (20)
+	var disloyal_cost: float = CrimeSystem.get_duped_disloyal_honor(victim)
+	assert_almost_eq(victim.honor, initial_honor + disloyal_cost, 0.01,
+		"Only DUPED_DISLOYAL should fire — commitment pre-dates the order")
+
+
 # CONVICTION CONSEQUENCES — TRIAL BY COMBAT LOSS
 # ==============================================================================
 
@@ -10207,6 +10305,170 @@ func test_fabricate_secret_writeback_no_duplicate_fabricator() -> void:
 	assert_eq(count, 1, "Should not duplicate fabricator in known_by_ids")
 
 
+# -- _process_lying_honor_writebacks ------------------------------------------
+
+
+func test_lying_honor_fires_when_positive_disposition_toward_subject() -> void:
+	var fabricator := L5RCharacterData.new()
+	fabricator.character_id = 1
+	fabricator.honor = 8.0
+	fabricator.clan = "Crane"
+	fabricator.school = "Doji Courtier"
+	fabricator.disposition_values = {5: 20}
+	var secret := SecretData.new()
+	secret.subject_id = 5
+	var chars: Dictionary = {1: fabricator}
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"success": true,
+		"character_id": 1,
+		"effects": {"secret": secret, "success": true},
+	}]
+	var honor_before: float = fabricator.honor
+	DayOrchestrator._process_lying_honor_writebacks(results, chars)
+	assert_lt(fabricator.honor, honor_before, "Positive disposition toward subject triggers lying honor loss")
+
+
+func test_lying_honor_skips_when_zero_disposition() -> void:
+	var fabricator := L5RCharacterData.new()
+	fabricator.character_id = 1
+	fabricator.honor = 8.0
+	fabricator.clan = "Crane"
+	fabricator.school = "Doji Courtier"
+	fabricator.disposition_values = {5: 0}
+	var secret := SecretData.new()
+	secret.subject_id = 5
+	var chars: Dictionary = {1: fabricator}
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"success": true,
+		"character_id": 1,
+		"effects": {"secret": secret, "success": true},
+	}]
+	DayOrchestrator._process_lying_honor_writebacks(results, chars)
+	assert_almost_eq(fabricator.honor, 8.0, 0.001, "Neutral disposition toward subject — no lying honor loss")
+
+
+func test_lying_honor_skips_when_negative_disposition() -> void:
+	var fabricator := L5RCharacterData.new()
+	fabricator.character_id = 1
+	fabricator.honor = 8.0
+	fabricator.clan = "Crane"
+	fabricator.school = "Doji Courtier"
+	fabricator.disposition_values = {5: -15}
+	var secret := SecretData.new()
+	secret.subject_id = 5
+	var chars: Dictionary = {1: fabricator}
+	var results: Array = [{
+		"action_id": "FABRICATE_SECRET",
+		"success": true,
+		"character_id": 1,
+		"effects": {"secret": secret, "success": true},
+	}]
+	DayOrchestrator._process_lying_honor_writebacks(results, chars)
+	assert_almost_eq(fabricator.honor, 8.0, 0.001, "Negative disposition toward subject — no lying honor loss")
+
+
+# -- _process_duped_foolish_on_arrival ----------------------------------------
+
+
+func test_duped_foolish_fires_when_npc_target_absent() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	victim.honor = 7.0
+	victim.clan = "Lion"
+	victim.school = "Akodo Bushi"
+	victim.physical_location = "settlement_5"
+	var target_npc := L5RCharacterData.new()
+	target_npc.character_id = 20
+	target_npc.physical_location = "settlement_9"
+	var chars: Dictionary = {10: victim, 20: target_npc}
+	var objectives_map: Dictionary = {
+		10: {"primary": {"source": "forged_order", "target_npc_id": 20}}
+	}
+	var arrivals: Array = [{"character_id": 10}]
+	var honor_before: float = victim.honor
+	DayOrchestrator._process_duped_foolish_on_arrival(arrivals, chars, objectives_map)
+	assert_lt(victim.honor, honor_before, "Target NPC absent — DUPED_FOOLISH fires")
+
+
+func test_duped_foolish_skips_when_npc_target_present() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	victim.honor = 7.0
+	victim.clan = "Lion"
+	victim.school = "Akodo Bushi"
+	victim.physical_location = "settlement_5"
+	var target_npc := L5RCharacterData.new()
+	target_npc.character_id = 20
+	target_npc.physical_location = "settlement_5"
+	var chars: Dictionary = {10: victim, 20: target_npc}
+	var objectives_map: Dictionary = {
+		10: {"primary": {"source": "forged_order", "target_npc_id": 20}}
+	}
+	var arrivals: Array = [{"character_id": 10}]
+	DayOrchestrator._process_duped_foolish_on_arrival(arrivals, chars, objectives_map)
+	assert_almost_eq(victim.honor, 7.0, 0.001, "Target NPC present — no DUPED_FOOLISH")
+
+
+func test_duped_foolish_skips_when_settlement_matches() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	victim.honor = 7.0
+	victim.clan = "Lion"
+	victim.school = "Akodo Bushi"
+	victim.physical_location = "42"
+	var chars: Dictionary = {10: victim}
+	var objectives_map: Dictionary = {
+		10: {"primary": {"source": "forged_order", "target_settlement_id": 42}}
+	}
+	var arrivals: Array = [{"character_id": 10}]
+	DayOrchestrator._process_duped_foolish_on_arrival(arrivals, chars, objectives_map)
+	assert_almost_eq(victim.honor, 7.0, 0.001, "Arrived at target settlement — no DUPED_FOOLISH")
+
+
+func test_duped_foolish_skips_when_province_matches() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	victim.honor = 7.0
+	victim.clan = "Lion"
+	victim.school = "Akodo Bushi"
+	victim.physical_location = "42"
+	var settlement := SettlementData.new()
+	settlement.settlement_id = 42
+	settlement.province_id = 7
+	var chars: Dictionary = {10: victim}
+	var objectives_map: Dictionary = {
+		10: {"primary": {"source": "forged_order", "target_province_id": 7}}
+	}
+	var arrivals: Array = [{"character_id": 10}]
+	DayOrchestrator._process_duped_foolish_on_arrival(
+		arrivals, chars, objectives_map, [settlement],
+	)
+	assert_almost_eq(victim.honor, 7.0, 0.001, "Arrived at settlement in target province — no DUPED_FOOLISH")
+
+
+func test_duped_foolish_fires_when_province_mismatch() -> void:
+	var victim := L5RCharacterData.new()
+	victim.character_id = 10
+	victim.honor = 7.0
+	victim.clan = "Lion"
+	victim.school = "Akodo Bushi"
+	victim.physical_location = "42"
+	var settlement := SettlementData.new()
+	settlement.settlement_id = 42
+	settlement.province_id = 99
+	var chars: Dictionary = {10: victim}
+	var objectives_map: Dictionary = {
+		10: {"primary": {"source": "forged_order", "target_province_id": 7}}
+	}
+	var arrivals: Array = [{"character_id": 10}]
+	DayOrchestrator._process_duped_foolish_on_arrival(
+		arrivals, chars, objectives_map, [settlement],
+	)
+	assert_lt(victim.honor, 7.0, "Arrived in wrong province — DUPED_FOOLISH fires")
+
+
 # -- Letter Delivery Topic Momentum -------------------------------------------
 
 func test_letter_delivery_increments_topic_discussion_count() -> void:
@@ -12743,7 +13005,7 @@ func test_inject_hunt_context_sets_known_objectives() -> void:
 		"host_id": 10,
 		"hunt_date_ic_day": 15,
 		"topic_id": 500,
-		"accepted_invitee_ids": [],
+		"accepted_invitee_ids": [20, 30],
 		"status": "active",
 	}]
 	var topic := TopicData.new()
@@ -12759,6 +13021,8 @@ func test_inject_hunt_context_sets_known_objectives() -> void:
 		"Host should see their active hunt ID")
 	assert_eq(host_objs.get("hunt_date_ic_day", -1), 15,
 		"Host should see hunt date")
+	assert_eq(host_objs.get("hunt_accepted_invitee_ids", []), [20, 30],
+		"Host should see accepted invitee IDs for cancel metadata")
 	var other_objs: Dictionary = world_states[20]["known_objectives"]
 	assert_eq(other_objs.get("hunt_topic_id", -1), 500,
 		"Other NPCs should see hunt topic ID for invitation requests")
@@ -15009,3 +15273,731 @@ func test_visiting_context_flag_skips_court_attendees() -> void:
 	DayOrchestrator._set_visiting_context_flags([courtier], settlements, provinces, ws)
 	assert_eq(ws[3].get("context_flag", -1), Enums.ContextFlag.AT_COURT,
 		"Court attendee should keep AT_COURT even at foreign settlement")
+
+
+# -- _inject_theater_context learnable_piece_ids tests ------------------------
+
+
+func _make_theater_char(char_id: int, acting: int, met: Array = []) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = char_id
+	c.wounds_taken = 0
+	c.skills = {"Acting": acting}
+	c.met_characters = met
+	return c
+
+
+func _make_theater_piece_do(pid: int, magnitude: int, is_canonized: bool,
+		author_id: int = -1) -> TheaterPieceData:
+	var p := TheaterPieceData.new()
+	p.piece_id = pid
+	p.title = "Piece %d" % pid
+	p.style = TheaterSystem.Style.NOH
+	p.author_id = author_id
+	p.subject = "Lion"
+	p.subject_type = TheaterSystem.SubjectType.CLAN
+	p.framing = true
+	p.disposition_magnitude = magnitude
+	p.target_magnitude = magnitude
+	p.topic_weight = 1
+	p.target_topic_weight = 1
+	p.num_roles_declared = 1
+	p.craft_progress = -1
+	p.canonized = is_canonized
+	p.known_by = []
+	p.topic_ids = []
+	return p
+
+
+func test_inject_theater_context_adds_learnable_canonized() -> void:
+	# Canonized piece not in known_by + Acting >= magnitude → appears in learnable_piece_ids.
+	var learner := _make_theater_char(1, 3)
+	var piece := _make_theater_piece_do(10, 2, true)
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+
+	DayOrchestrator._inject_theater_context([piece], [learner], ws)
+
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	var learnable: Array = known_objs.get("learnable_piece_ids", [])
+	assert_true(10 in learnable, "Canonized piece should appear in learnable_piece_ids")
+
+
+func test_inject_theater_context_blocks_if_already_known() -> void:
+	# Character already in known_by → NOT in learnable.
+	var learner := _make_theater_char(1, 3)
+	var piece := _make_theater_piece_do(10, 2, true)
+	piece.known_by = [1]  # learner already knows it
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+
+	DayOrchestrator._inject_theater_context([piece], [learner], ws)
+
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	var learnable: Array = known_objs.get("learnable_piece_ids", [])
+	assert_false(10 in learnable, "Already-known piece should not be in learnable_piece_ids")
+
+
+func test_inject_theater_context_blocks_if_skill_gate_fails() -> void:
+	# Acting rank 1 < magnitude 3 → NOT learnable.
+	var learner := _make_theater_char(1, 1)
+	var piece := _make_theater_piece_do(10, 3, true)
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+
+	DayOrchestrator._inject_theater_context([piece], [learner], ws)
+
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	var learnable: Array = known_objs.get("learnable_piece_ids", [])
+	assert_false(10 in learnable, "Piece should not be learnable when Acting < magnitude")
+
+
+func test_inject_theater_context_private_piece_needs_teacher() -> void:
+	# Private piece: author is in met_characters but no co-located teacher → NOT learnable.
+	var learner := _make_theater_char(1, 3, [99])  # met author 99
+	learner.physical_location = "castle_a"
+	var piece := _make_theater_piece_do(10, 2, false, 99)
+	piece.known_by = [99]
+	# Only learner is in characters array; author 99 is absent → no teacher.
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+
+	DayOrchestrator._inject_theater_context([piece], [learner], ws)
+
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	var learnable: Array = known_objs.get("learnable_piece_ids", [])
+	assert_false(10 in learnable, "Private piece with no co-located teacher should not be learnable")
+
+
+func test_inject_theater_context_private_piece_with_teacher() -> void:
+	# Private piece: author is met + co-located in characters array + willing → learnable.
+	var learner := _make_theater_char(1, 3, [99])
+	learner.physical_location = "castle_a"
+	var teacher := _make_theater_char(99, 4)
+	teacher.character_id = 99
+	teacher.physical_location = "castle_a"  # same location → co-located
+	# Default disposition_values is empty → 0 satisfies the >= 0 check.
+	var piece := _make_theater_piece_do(10, 2, false, 99)
+	piece.known_by = [99]
+	var ws: Dictionary = {1: {"known_objectives": {}}, 99: {"known_objectives": {}}}
+
+	DayOrchestrator._inject_theater_context([piece], [learner, teacher], ws)
+
+	var known_objs: Dictionary = ws[1].get("known_objectives", {})
+	var learnable: Array = known_objs.get("learnable_piece_ids", [])
+	assert_true(10 in learnable, "Private piece with willing co-located teacher should be learnable")
+
+
+# ============================================================================
+# §57.22.12 _process_teaching_offer_letter_delivery
+# ============================================================================
+
+func _make_teaching_letter(lid: int, sender_id: int, recipient_id: int, piece_id: int, delivered: bool = true) -> LetterData:
+	var l := LetterData.new()
+	l.letter_id = lid
+	l.sender_id = sender_id
+	l.recipient_id = recipient_id
+	l.learn_piece_id = piece_id
+	l.teacher_initiated = true
+	l.delivered = delivered
+	return l
+
+
+func _make_theater_piece_for_delivery(pid: int, author_id: int, magnitude: int = 2) -> TheaterPieceData:
+	var p := TheaterPieceData.new()
+	p.piece_id = pid
+	p.author_id = author_id
+	p.craft_progress = -1
+	p.canonized = false
+	p.disposition_magnitude = magnitude
+	p.known_by = [author_id]
+	p.lost = false
+	p.abandoned_incomplete = false
+	return p
+
+
+func test_teaching_offer_delivery_injects_accept_training_event() -> void:
+	# Delivered teacher_initiated letter → ACCEPT_TRAINING event injected into recipient.
+	var author := _make_theater_char(1, 5)
+	author.skills = {"Acting": 5}
+	var recipient := _make_theater_char(2, 3)
+	var piece := _make_theater_piece_for_delivery(10, 1)
+	var letter := _make_teaching_letter(100, 1, 2, 10)
+	var chars_by_id: Dictionary = {1: author, 2: recipient}
+
+	DayOrchestrator._process_teaching_offer_letter_delivery(
+		[letter], chars_by_id, [piece],
+	)
+
+	assert_eq(recipient.pending_events.size(), 1, "Should inject one event")
+	var ev: Dictionary = recipient.pending_events[0]
+	assert_eq(ev.get("reactive_type", ""), "ACCEPT_TRAINING")
+	assert_eq(ev.get("teacher_initiated", false), true)
+	assert_eq(ev.get("learn_piece_id", -1), 10)
+	assert_eq(ev.get("sensei_id", -1), 1)
+	assert_eq(ev.get("skill", ""), "Acting")
+
+
+func test_teaching_offer_delivery_skips_undelivered_letter() -> void:
+	var recipient := _make_theater_char(2, 3)
+	var piece := _make_theater_piece_for_delivery(10, 1)
+	var letter := _make_teaching_letter(100, 1, 2, 10, false)  # not delivered
+	var chars_by_id: Dictionary = {1: _make_theater_char(1, 5), 2: recipient}
+
+	DayOrchestrator._process_teaching_offer_letter_delivery(
+		[letter], chars_by_id, [piece],
+	)
+
+	assert_eq(recipient.pending_events.size(), 0, "Undelivered letter should not inject event")
+
+
+func test_teaching_offer_delivery_skips_when_recipient_already_knows() -> void:
+	var author := _make_theater_char(1, 5)
+	var recipient := _make_theater_char(2, 3)
+	var piece := _make_theater_piece_for_delivery(10, 1)
+	piece.known_by = [1, 2]  # recipient already knows it
+	var letter := _make_teaching_letter(100, 1, 2, 10)
+	var chars_by_id: Dictionary = {1: author, 2: recipient}
+
+	DayOrchestrator._process_teaching_offer_letter_delivery(
+		[letter], chars_by_id, [piece],
+	)
+
+	assert_eq(recipient.pending_events.size(), 0, "Should skip if recipient already knows piece")
+
+
+func test_teaching_offer_delivery_skips_dead_author() -> void:
+	var author := _make_theater_char(1, 5)
+	author.wounds_taken = 100  # dead: earth ring 2, threshold 4, clamped to DEAD level
+	var recipient := _make_theater_char(2, 3)
+	var piece := _make_theater_piece_for_delivery(10, 1)
+	var letter := _make_teaching_letter(100, 1, 2, 10)
+	var chars_by_id: Dictionary = {1: author, 2: recipient}
+
+	DayOrchestrator._process_teaching_offer_letter_delivery(
+		[letter], chars_by_id, [piece],
+	)
+
+	assert_eq(recipient.pending_events.size(), 0, "Should skip if author is dead")
+
+
+# ============================================================================
+# §57.22.12 _process_training_acceptance_writebacks — teacher_initiated path
+# ============================================================================
+
+func test_training_acceptance_teacher_initiated_creates_learn_objective() -> void:
+	# ACCEPT_TRAINING with teacher_initiated=true → LEARN_THEATER_PIECE objective created.
+	var student := _make_theater_char(2, 3)
+	var sensei := _make_theater_char(1, 5)
+	var chars_by_id: Dictionary = {1: sensei, 2: student}
+	var objectives_map: Dictionary = {}
+	var result: Dictionary = {
+		"action": "ACCEPT_TRAINING",
+		"character_id": 2,
+		"skill": "Acting",
+		"event_data": {
+			"teacher_initiated": true,
+			"learn_piece_id": 10,
+			"sensei_id": 1,
+			"skill": "Acting",
+			"sensei_rank": 5,
+		},
+	}
+
+	DayOrchestrator._process_training_acceptance_writebacks(
+		[result], chars_by_id, objectives_map,
+	)
+
+	assert_true(objectives_map.has(2), "Should create objectives entry for student")
+	var primary: Dictionary = objectives_map[2].get("primary", {})
+	assert_eq(primary.get("need_type", ""), "ARTISTIC_EXPRESSION")
+	assert_eq(primary.get("objective_type", ""), "LEARN_THEATER_PIECE")
+	assert_eq(primary.get("learn_piece_id", -1), 10)
+	assert_eq(primary.get("target_npc_id", -1), 1)
+
+
+func test_training_acceptance_teacher_initiated_does_not_advance_skill() -> void:
+	# teacher_initiated path skips NPCAdvancement.resolve_training_session.
+	var student := _make_theater_char(2, 3)
+	var sensei := _make_theater_char(1, 5)
+	var initial_acting: int = student.skills.get("Acting", 0)
+	var chars_by_id: Dictionary = {1: sensei, 2: student}
+	var objectives_map: Dictionary = {}
+	var result: Dictionary = {
+		"action": "ACCEPT_TRAINING",
+		"character_id": 2,
+		"skill": "Acting",
+		"event_data": {
+			"teacher_initiated": true,
+			"learn_piece_id": 10,
+			"sensei_id": 1,
+			"skill": "Acting",
+			"sensei_rank": 5,
+		},
+	}
+
+	DayOrchestrator._process_training_acceptance_writebacks(
+		[result], chars_by_id, objectives_map,
+	)
+
+	# Skill progress should not have been modified (NPCAdvancement not called)
+	assert_eq(student.skills.get("Acting", 0), initial_acting, "Acting rank should not change via teaching offer path")
+
+
+# ============================================================================
+# §57.22.12 ReactiveDecisions KETSUI bypass
+# ============================================================================
+
+func test_ketsui_bypass_when_teacher_initiated() -> void:
+	# KETSUI character without mentor objective normally declines.
+	# With teacher_initiated=true, should accept.
+	var student := _make_theater_char(2, 3)
+	student.shourido_virtue = Enums.ShouridoVirtue.KETSUI
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 2
+	ctx.known_objectives = {"primary": {}}  # no mentor objective
+	ctx.clan = "Crane"
+	ctx.disposition_values = {}
+	ctx.skill_ranks = {"Acting": 3}
+	ctx.known_topics = []
+	ctx.known_topic_momentums = {}
+	ctx.action_log = []
+
+	var event: Dictionary = {
+		"reactive_type": "ACCEPT_TRAINING",
+		"teacher_initiated": true,
+		"learn_piece_id": 10,
+		"sensei_id": 1,
+		"skill": "Acting",
+		"sensei_rank": 5,
+	}
+
+	var result: Dictionary = ReactiveDecisions._evaluate_training_response(event, student, ctx)
+	assert_eq(result.get("action", ""), "ACCEPT_TRAINING", "KETSUI should not block teacher_initiated offers")
+
+
+# ============================================================================
+# §57.50 Public Record Seeding — inherently public killing crimes
+# ============================================================================
+
+func _make_settlement_for_record(id: int, str_id: String) -> SettlementData:
+	var s := SettlementData.new()
+	s.settlement_id = id
+	s.settlement_name = "Test Settlement"
+	return s
+
+
+func test_seed_public_records_duel_death_seeded():
+	# UNSANCTIONED_DUEL_DEATH is inherently public — should seed without auto_detected
+	var settlement := _make_settlement_for_record(1, "1")
+	var settlements: Array = [settlement]
+
+	var killer := L5RCharacterData.new()
+	killer.character_id = 10
+	killer.physical_location = "1"
+	var chars_by_id: Dictionary = {10: killer}
+
+	var crime_results: Array = [{
+		"character_id": 10,
+		"crime_type": Enums.CrimeType.UNSANCTIONED_DUEL_DEATH,
+		"topic_id": 77,
+		"no_crime": false,
+	}]
+
+	DayOrchestrator._seed_public_records_from_crime_results(
+		crime_results, [], settlements, chars_by_id, 100
+	)
+
+	assert_eq(settlement.public_record.size(), 1)
+	assert_eq(settlement.public_record[0].get("topic_id", -1), 77)
+	assert_eq(settlement.public_record[0].get("tier", -1), TopicData.Tier.TIER_3)
+
+
+func test_seed_public_records_open_killing_seeded():
+	# UNSANCTIONED_OPEN_KILLING is inherently public — should seed without auto_detected
+	var settlement := _make_settlement_for_record(2, "2")
+	var settlements: Array = [settlement]
+
+	var killer := L5RCharacterData.new()
+	killer.character_id = 11
+	killer.physical_location = "2"
+	var chars_by_id: Dictionary = {11: killer}
+
+	var crime_results: Array = [{
+		"character_id": 11,
+		"crime_type": Enums.CrimeType.UNSANCTIONED_OPEN_KILLING,
+		"topic_id": 88,
+		"no_crime": false,
+	}]
+
+	DayOrchestrator._seed_public_records_from_crime_results(
+		crime_results, [], settlements, chars_by_id, 100
+	)
+
+	assert_eq(settlement.public_record.size(), 1)
+	assert_eq(settlement.public_record[0].get("tier", -1), TopicData.Tier.TIER_3)
+
+
+func test_seed_public_records_covert_killing_not_seeded_without_auto_detected():
+	# UNSANCTIONED_COVERT_KILLING is not inherently public — requires auto_detected
+	var settlement := _make_settlement_for_record(3, "3")
+	var settlements: Array = [settlement]
+
+	var killer := L5RCharacterData.new()
+	killer.character_id = 12
+	killer.physical_location = "3"
+	var chars_by_id: Dictionary = {12: killer}
+
+	var crime_results: Array = [{
+		"character_id": 12,
+		"crime_type": Enums.CrimeType.UNSANCTIONED_COVERT_KILLING,
+		"topic_id": 99,
+		"no_crime": false,
+	}]
+
+	DayOrchestrator._seed_public_records_from_crime_results(
+		crime_results, [], settlements, chars_by_id, 100
+	)
+
+	assert_eq(settlement.public_record.size(), 0, "Covert killing should not auto-seed")
+
+
+func test_seed_public_records_no_crime_skipped():
+	# Entries with no_crime: true should be skipped
+	var settlement := _make_settlement_for_record(4, "4")
+	var settlements: Array = [settlement]
+
+	var killer := L5RCharacterData.new()
+	killer.character_id = 13
+	killer.physical_location = "4"
+	var chars_by_id: Dictionary = {13: killer}
+
+	var crime_results: Array = [{
+		"character_id": 13,
+		"crime_type": Enums.CrimeType.UNSANCTIONED_DUEL_DEATH,
+		"no_crime": true,
+	}]
+
+	DayOrchestrator._seed_public_records_from_crime_results(
+		crime_results, [], settlements, chars_by_id, 100
+	)
+
+	assert_eq(settlement.public_record.size(), 0)
+
+
+func test_seed_public_records_auto_detected_seeds_violence():
+	# auto_detected: true in wave results seeds any crime including VIOLENCE
+	var settlement := _make_settlement_for_record(5, "5")
+	var settlements: Array = [settlement]
+
+	var attacker := L5RCharacterData.new()
+	attacker.character_id = 14
+	attacker.physical_location = "5"
+	var chars_by_id: Dictionary = {14: attacker}
+
+	var wave_results: Array = [{
+		"character_id": 14,
+		"action_id": "SOME_VIOLENCE_ACTION",
+		"effects": {"auto_detected": true},
+	}]
+	var crime_results: Array = [{
+		"character_id": 14,
+		"crime_type": Enums.CrimeType.VIOLENCE,
+		"topic_id": 55,
+		"no_crime": false,
+	}]
+
+	DayOrchestrator._seed_public_records_from_crime_results(
+		crime_results, wave_results, settlements, chars_by_id, 100
+	)
+
+	assert_eq(settlement.public_record.size(), 1)
+	assert_eq(settlement.public_record[0].get("tier", -1), TopicData.Tier.TIER_4)
+
+
+# ============================================================================
+# §B10 Data Retention Purge Functions
+# ============================================================================
+
+func _make_crime_record_with_status(
+	status: Enums.LegalStatus,
+	ic_day_committed: int,
+) -> CrimeRecord:
+	var r := CrimeRecord.new()
+	r.legal_status = status
+	r.ic_day_committed = ic_day_committed
+	r.case_id = 1
+	r.crime_type = Enums.CrimeType.VIOLENCE
+	return r
+
+
+func test_purge_crime_records_removes_terminal_old():
+	var records: Array = [
+		_make_crime_record_with_status(Enums.LegalStatus.DECREED_GUILTY, 0),
+	]
+	DayOrchestrator._purge_resolved_crime_records(records, 361)
+	assert_eq(records.size(), 0, "DECREED_GUILTY record older than 360 days should be purged")
+
+
+func test_purge_crime_records_keeps_terminal_recent():
+	var records: Array = [
+		_make_crime_record_with_status(Enums.LegalStatus.DECREED_GUILTY, 0),
+	]
+	DayOrchestrator._purge_resolved_crime_records(records, 359)
+	assert_eq(records.size(), 1, "DECREED_GUILTY record younger than 360 days should be kept")
+
+
+func test_purge_crime_records_all_terminal_statuses():
+	var terminal := [
+		Enums.LegalStatus.DECREED_GUILTY,
+		Enums.LegalStatus.CLEAR,
+		Enums.LegalStatus.PARDONED,
+		Enums.LegalStatus.ACQUITTED,
+	]
+	for status: Enums.LegalStatus in terminal:
+		var records: Array = [_make_crime_record_with_status(status, 0)]
+		DayOrchestrator._purge_resolved_crime_records(records, 400)
+		assert_eq(records.size(), 0, "Terminal status %d should be purged" % status)
+
+
+func test_purge_crime_records_keeps_fugitive():
+	# FUGITIVE is an active status — never purged
+	var records: Array = [
+		_make_crime_record_with_status(Enums.LegalStatus.FUGITIVE, 0),
+	]
+	DayOrchestrator._purge_resolved_crime_records(records, 9999)
+	assert_eq(records.size(), 1, "FUGITIVE record should never be purged")
+
+
+func test_purge_crime_records_keeps_under_investigation():
+	var records: Array = [
+		_make_crime_record_with_status(Enums.LegalStatus.UNDER_INVESTIGATION, 0),
+	]
+	DayOrchestrator._purge_resolved_crime_records(records, 9999)
+	assert_eq(records.size(), 1, "UNDER_INVESTIGATION record should not be purged")
+
+
+func _make_purge_letter(
+	ic_day_arrival: int,
+	recipient_id: int = 1,
+) -> LetterData:
+	var ld := LetterData.new()
+	ld.letter_id = 1
+	ld.sender_id = 10
+	ld.recipient_id = recipient_id
+	ld.delivered = true
+	ld.ic_day_sent = ic_day_arrival - 3
+	ld.ic_day_arrival = ic_day_arrival
+	ld.is_forged = false
+	ld.is_order = false
+	ld.order_applied = false
+	return ld
+
+
+func test_purge_delivered_letters_removes_old():
+	var letters: Array = [_make_purge_letter(0)]
+	DayOrchestrator._purge_delivered_letters(letters, {}, 181)
+	assert_eq(letters.size(), 0, "Letter delivered 181 days ago should be purged")
+
+
+func test_purge_delivered_letters_keeps_recent():
+	var letters: Array = [_make_purge_letter(0)]
+	DayOrchestrator._purge_delivered_letters(letters, {}, 179)
+	assert_eq(letters.size(), 1, "Letter delivered 179 days ago should be kept")
+
+
+func test_purge_delivered_letters_keeps_undelivered():
+	var ld := _make_purge_letter(0)
+	ld.delivered = false
+	var letters: Array = [ld]
+	DayOrchestrator._purge_delivered_letters(letters, {}, 9999)
+	assert_eq(letters.size(), 1, "Undelivered letter should never be purged")
+
+
+func test_purge_delivered_letters_retains_undetected_forged_order():
+	# Forged order whose victim hasn't detected it yet should be retained
+	var victim := L5RCharacterData.new()
+	victim.character_id = 5
+	victim.wounds_taken = 0
+	victim.knowledge_pool = []
+
+	var ld := _make_purge_letter(0, 5)
+	ld.is_forged = true
+	ld.is_order = true
+	ld.order_applied = true
+	ld.forged_sender_id = 99
+
+	var letters: Array = [ld]
+	var chars: Dictionary = {5: victim}
+	DayOrchestrator._purge_delivered_letters(letters, chars, 9999)
+	assert_eq(letters.size(), 1, "Undetected forged order letter should be retained")
+
+
+func test_purge_delivered_letters_purges_detected_forged_order():
+	# Forged order where victim HAS an impersonation_detected entry — can be purged
+	var victim := L5RCharacterData.new()
+	victim.character_id = 5
+	victim.wounds_taken = 0
+	var ke := KnowledgeEntry.new()
+	ke.entry_type = "impersonation_detected"
+	ke.data = {"forger_id": 99}
+	victim.knowledge_pool = [ke]
+
+	var ld := _make_purge_letter(0, 5)
+	ld.is_forged = true
+	ld.is_order = true
+	ld.order_applied = true
+	ld.forged_sender_id = 99
+
+	var letters: Array = [ld]
+	var chars: Dictionary = {5: victim}
+	DayOrchestrator._purge_delivered_letters(letters, chars, 9999)
+	assert_eq(letters.size(), 0, "Detected forged order letter should be purged after 180 days")
+
+
+func test_purge_delivered_letters_purges_forged_order_dead_victim():
+	# Dead victim cannot discover impersonation — letter should be purgeable
+	var victim := L5RCharacterData.new()
+	victim.character_id = 5
+	victim.wounds_taken = 50  # dead (default stamina=2 → threshold=4, wounds 50 >> DEAD)
+	victim.knowledge_pool = []
+
+	var ld := _make_purge_letter(0, 5)
+	ld.is_forged = true
+	ld.is_order = true
+	ld.order_applied = true
+	ld.forged_sender_id = 99
+
+	var letters: Array = [ld]
+	var chars: Dictionary = {5: victim}
+	DayOrchestrator._purge_delivered_letters(letters, chars, 9999)
+	assert_eq(letters.size(), 0, "Dead victim cannot discover impersonation; letter should be purged")
+
+
+func _make_secret(exposed_publicly: bool) -> SecretData:
+	var sd := SecretData.new()
+	sd.secret_id = 1
+	sd.exposed_publicly = exposed_publicly
+	return sd
+
+
+func test_purge_exposed_secrets_removes_public():
+	var secrets: Array = [_make_secret(true)]
+	DayOrchestrator._purge_exposed_secrets(secrets, {}, 100)
+	assert_eq(secrets.size(), 0, "Publicly exposed secret should be purged")
+
+
+func test_purge_exposed_secrets_keeps_private():
+	var secrets: Array = [_make_secret(false)]
+	DayOrchestrator._purge_exposed_secrets(secrets, {}, 100)
+	assert_eq(secrets.size(), 1, "Non-exposed secret should be kept")
+
+
+func test_purge_exposed_secrets_mixed():
+	var secrets: Array = [_make_secret(true), _make_secret(false), _make_secret(true)]
+	DayOrchestrator._purge_exposed_secrets(secrets, {}, 100)
+	assert_eq(secrets.size(), 1, "Only non-exposed secret should remain")
+
+
+# -- Poetry-in-Letter context injection (s57.30.6) ----------------------------
+
+func _make_char_with_poem(char_id: int, poem_id: int, poem_raises: int) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = char_id
+	c.status = 3.0
+	c.wounds_taken = 0
+	c.items = [{"item_type": "poetry_scroll", "item_id": poem_id, "raises": poem_raises}]
+	c.physical_location = "100"
+	return c
+
+
+func test_inject_poem_context_sets_item_id() -> void:
+	var c := _make_char_with_poem(1, 42, 2)
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+	DayOrchestrator._inject_poem_context([c], ws)
+	assert_eq(ws[1]["known_objectives"].get("available_poem_item_id", -1), 42)
+
+
+func test_inject_poem_context_sets_raises() -> void:
+	var c := _make_char_with_poem(1, 7, 3)
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+	DayOrchestrator._inject_poem_context([c], ws)
+	assert_eq(ws[1]["known_objectives"].get("available_poem_raises", -1), 3)
+
+
+func test_inject_poem_context_no_item_leaves_key_absent() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.wounds_taken = 0
+	c.items = []
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+	DayOrchestrator._inject_poem_context([c], ws)
+	assert_false(ws[1]["known_objectives"].has("available_poem_item_id"),
+		"No poem scroll = no context key injected")
+
+
+func test_inject_poem_context_skips_dead_characters() -> void:
+	var c := _make_char_with_poem(1, 5, 1)
+	c.wounds_taken = 999  # lethal wounds
+	var ws: Dictionary = {1: {"known_objectives": {}}}
+	DayOrchestrator._inject_poem_context([c], ws)
+	assert_false(ws[1]["known_objectives"].has("available_poem_item_id"),
+		"Dead character should not get poem context injected")
+
+
+# -- Festival of Leaves Glory Penalty (s57.30.6) ------------------------------
+
+func test_festival_leaves_penalty_no_effect_on_non_poetry_day() -> void:
+	# IC day 1 has no poetry_exchange effect — no penalty applied.
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.wounds_taken = 0
+	c.status = 5.0
+	c.glory = 3.0
+	DayOrchestrator._process_festival_leaves_penalty([], [c], 1)
+	assert_almost_eq(c.glory, 3.0, 0.001, "No glory change on non-poetry day")
+
+
+func test_festival_leaves_penalty_status3_not_penalised() -> void:
+	# Status 3 characters are below the Status 4+ threshold — no penalty.
+	# Use IC day 120 (Lotus Blossoms, poetry_exchange).
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.wounds_taken = 0
+	c.status = 3.0
+	c.glory = 5.0
+	DayOrchestrator._process_festival_leaves_penalty([], [c], 120)
+	assert_almost_eq(c.glory, 5.0, 0.001, "Status 3 should not lose glory for missing poem")
+
+
+func test_festival_leaves_penalty_status4_penalised_when_no_poem() -> void:
+	# Status 4+ with no poem sent on poetry exchange day → -0.1 Glory.
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.wounds_taken = 0
+	c.status = 4.0
+	c.glory = 5.0
+	DayOrchestrator._process_festival_leaves_penalty([], [c], 120)
+	assert_almost_eq(c.glory, 4.9, 0.001, "Status 4+ should lose 0.1 Glory for missing poem")
+
+
+func test_festival_leaves_penalty_skips_poem_senders() -> void:
+	# Character who sent a poem-letter today is exempted from the penalty.
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.wounds_taken = 0
+	c.status = 5.0
+	c.glory = 5.0
+	var letter_result: Dictionary = {
+		"character_id": 1,
+		"action_id": "WRITE_LETTER",
+		"attach_poem_item_id": 10,
+	}
+	DayOrchestrator._process_festival_leaves_penalty([letter_result], [c], 120)
+	assert_almost_eq(c.glory, 5.0, 0.001, "Poem sender should not lose glory")
+
+
+func test_festival_leaves_penalty_skips_dead_characters() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 1
+	c.wounds_taken = 999
+	c.status = 5.0
+	c.glory = 5.0
+	DayOrchestrator._process_festival_leaves_penalty([], [c], 120)
+	assert_almost_eq(c.glory, 5.0, 0.001, "Dead character should not receive penalty")

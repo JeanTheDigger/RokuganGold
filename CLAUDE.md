@@ -124,13 +124,16 @@ When implementing or auditing a system, go here first:
 | Zone subtypes and flag matrix                 | 57.36                |
 | Character sheet field index                   | 57.35                |
 | Tattoo system                                 | 57.25                |
+| Kata eligibility, acquisition, effect stubs   | 30, 30a              |
 | Artisan & crafting system                     | 49                   |
+| Sculpture system (COMPOSE_SCULPTURE)          | 57.28                |
 | Musha Shugyo (warrior's pilgrimage)           | 57.48                |
+| Clan Champion strategic evaluation           | 57.54                |
 | Otomo Seiyaku (alliance suppression)          | 55.22b               |
-| NPC advancement (XP, skill/ring progression)  | 52 Part 3, 48        |
+| NPC advancement (XP, skill/ring progression)  | 52 Part 3, 48, 48a   |
 | World population generator (game start pass)  | 52 Part 1, 22.4, 22.8|
 | Gempukku / NPC spawning / natural death       | 52, 22.4, 22.7       |
-| Ronin system (status transitions)             | 52 Part 5            |
+| Ronin system (status transitions, petition)   | 52 Part 5, 52.5      |
 
 ## Directory Structure
 ```
@@ -861,7 +864,8 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 - **TREAT_WOUND — raises not populated. FIXED.**
   Executor reads `raises` (default 0). NPCs never declared raises on
   Medicine rolls. Now set by `_pick_medicine_raises()` scaled by Medicine
-  skill rank: 0-2→0, 3-4→1, 5-6→2, 7+→3. Values PROVISIONAL. 4 tests.
+  skill rank: 0-2→0, 3-4→1, 5+→3. Locked in s57.31a (GDD anchor: "At Rank 5
+  with 3 Raises: 5k1" — no 2-Raise tier). 4 tests.
 - **FORGE_IMPERSONATION_LETTER / FORGE_ORDER — full NPC pipeline wired. FIXED.**
   Both had working executors (SecretSystem.resolve_forge_impersonation_letter,
   resolve_forge_order), TN tables, and tests, but were unreachable (no context
@@ -870,10 +874,9 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   (GDD s12.8). action_skill_map.json: Forgery/Agility for both (GDD-specified).
   personality_filter.json: blocked by JIN, REI, GI, MAKOTO (same as
   FABRICATE_SECRET — Category 6 Covert forgery actions). objective_alignment.json:
-  DAMAGE_RELATIONSHIP (70/55), ACQUIRE_LEVERAGE (50/40),
-  SUPPRESS_INVESTIGATION (45/60). Scores PROVISIONAL — GDD specifies action
-  purpose but not NeedType scoring weights. Metadata: authority_level from
-  Forgery skill rank (1-3→minor, 4-6→moderate, 7+→major); target_npc_id from
+  DAMAGE_RELATIONSHIP (70/55), ACQUIRE_LEVERAGE (50/30),
+  SUPPRESS_INVESTIGATION (45/60). Scores locked in s12.8b. Metadata:
+  authority_level from target's lord_rank (locked B11); target_npc_id from
   need. 8 tests.
 - **FORGE_IMPERSONATION_LETTER writeback — letter creation wired. FIXED.**
   `_process_forge_letter_writebacks()` creates LetterData on successful
@@ -932,9 +935,8 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
   TN 20, Family Daimyo/Champion TN 25, Emperor TN 30. Replaced with
   `_forge_authority_from_lord_rank(lord_rank)` mapping LordRank enum:
   IMPERIAL→major, FAMILY_DAIMYO/CLAN_CHAMPION→moderate, else→minor.
-  PROVISIONAL: uses forger's own lord_rank as proxy. Proper derivation
-  requires target character's lord rank lookup, blocked on adding
-  target_npc_status to ContextSnapshot or ImmediateNeed.
+  Uses target's lord_rank via chars_by_id lookup; falls back to forger's
+  own lord_rank when target not found. Locked in B11.
 
 ### Forge Pipeline PROVISIONAL Values Audit (2026-05-20)
 Values confirmed against GDD s12.8:
@@ -946,10 +948,10 @@ Values confirmed against GDD s12.8:
   Table 2.3, scaled by Honor Rank" — rank-scaling not yet implemented
   (systemic gap across all crime types, not forge-specific).
 - Personality filter blocks (JIN, REI, GI, MAKOTO) — matches GDD virtues.
-- Delivery distance 3 provinces — PROVISIONAL (blocked on map/adjacency data).
-- Forged objective priority 8 — PROVISIONAL (no GDD spec for objective priority).
-- Impersonation detection topic TIER_3 — PROVISIONAL (no explicit GDD tier).
-- INVESTIGATE_THREAT priority 6 — PROVISIONAL.
+- Delivery distance 3 provinces — PROVISIONAL (blocked on map/adjacency data; A16).
+- Forged objective priority 8 — LOCKED in s12.8b (A17: metadata only, inert).
+- Impersonation detection topic TIER_3 — LOCKED in s12.8b (A18: TIER_3).
+- INVESTIGATE_THREAT priority 6 — LOCKED in s12.8b (A19: metadata only, inert).
 
 ### Known Code Issues (found and fixed 2026-05-20, covert action audit)
 - **COVERT_ACTION_IDS missing 4 Category 6 actions. FIXED.**
@@ -1827,8 +1829,8 @@ costs, or forward-wiring. Do not treat as bugs.
   Name collision: PERFORM_RITUAL exists as both a NeedType (outer key) and
   ActionID. The ActionID was not listed under its own NeedType. Shugenja at
   temples with PERFORM_RITUAL need could never select the PERFORM_RITUAL
-  action. Added PERFORM_RITUAL: 90 (PROVISIONAL — below PERFORM_WORSHIP at
-  100). 1 test.
+  action. Added PERFORM_RITUAL: 90. Score locked in A22: direct action wins
+  its own NeedType (100); worship is valid fallback (90). 1 test.
 - **RESTORE_COUNCIL_COMPACT missing from objective_alignment — unreachable. DEFERRED.**
   Phoenix Champion voluntary action (s55.10.3.7) in AT_OWN_HOLDINGS context
   but has no scoring entry. Requires a NeedType that Phoenix Champions with
@@ -2860,38 +2862,33 @@ costs, or forward-wiring. Do not treat as bugs.
   `witnessed_harvest_destruction` (start:-10, floor:-5, decay) removed from
   HISTORICAL_EVENTS. Neither appears in GDD s12.2 historical modifier table.
   Day orchestrator harvest destruction path now creates empty modifiers (no-op).
-- **s12.7 Letter System — 5 invented reply constants zeroed.**
-  `BASE_REPLY_CHANCE` 0.20→0.0, `DISPOSITION_REPLY_BONUS` 0.008→0.0,
-  `COURTESY_REPLY_BONUS` 0.15→0.0, `HOSTILE_REPLY_THRESHOLD` -30→0,
-  `MEETING_ACCEPT_DISPOSITION` unchanged at 0. GDD s12.7 describes reply
-  mechanics qualitatively ("disposition toward sender", "personality profile",
-  "high Courtesy") but specifies no numeric values. Reply generation is
-  structurally intact but produces zero reply chance pending GDD specification.
-- **s15.4 Court Action System — 22 invented constants zeroed.**
-  GDD s15.4 specifies only 4 numeric values: Charm ceiling (40), Play a Game
-  base disposition (+3), winner bonus (+1), duration (2 months). All other
-  court action constants used qualitative GDD descriptions ("Moderate
-  disposition gain", "Strong disposition gain", "slight TN reduction",
-  "position moves slightly", "more significantly and durably") without
-  numeric values. Zeroed: CHARM_FULL_GAIN (8→0), CHARM_RAISE_BONUS (3→0),
-  NEGOTIATE_BASE_DISP (9→0), NEGOTIATE_RAISE_BONUS (3→0),
-  NEGOTIATE_POSITION_SHIFT (8.0→0.0), NEGOTIATE_RAISE_POSITION_BONUS (4.0→0.0),
-  NEGOTIATE_SESSION_TN_REDUCTION (5→0), PERSUADE_BASE_DISP (11→0),
-  PERSUADE_RAISE_BONUS (3→0), PERSUADE_POSITION_SHIFT (12.0→0.0),
-  PERSUADE_RAISE_POSITION_BONUS (5.0→0.0), IMPRESS_BASE_DISP (9→0),
-  IMPRESS_RAISE_BONUS (3→0), IMPRESS_POSITION_SHIFT (5.0→0.0),
-  IMPRESS_SESSION_TN_REDUCTION (5→0), LISTEN_REFLECT_BASE_DISP (11→0),
-  LISTEN_REFLECT_RAISE_BONUS (3→0), LISTEN_REFLECT_POSITION_SHIFT (10.0→0.0),
-  LISTEN_REFLECT_RAISE_POSITION_BONUS (4.0→0.0),
-  LISTEN_REFLECT_SESSION_TN_REDUCTION (5→0). CHARM_DIMINISHING_HALF (2) and
-  CHARM_DIMINISHING_MINIMAL (3) retained as structural thresholds (inert with
-  gain=0). Hardcoded diminishing floor changed from 1 to max(gain/4, 0).
-  Confirmed GDD-sourced: CHARM_CEILING (40), PLAY_GAME_BASE_DISP (3),
-  PLAY_GAME_WINNER_BONUS (1), PLAY_GAME_DURATION_MONTHS (2), PROVOKE_*
-  constants, GOSSIP_* constants, DEBATE_* constants.
-  NOTE: Failure-path inline penalties (-5/-6/-7 disposition on critical failure)
-  are also not GDD-specified but were left as-is for this pass — flagged for
-  future audit.
+- **s12.7 Letter System — reply constants locked in s12.7a.**
+  Previously zeroed during invented-content audit. Now formally locked in
+  `gdd/s12.7a_letter_reply_values_locked.md`. Calibrated against GDD-confirmed
+  factors (disposition toward sender, Rei virtue, hostile threshold) with
+  samurai etiquette baseline and topic-propagation requirements.
+  Final values: BASE_REPLY_CHANCE=0.35 (35% at neutral), DISPOSITION_REPLY_BONUS=0.005
+  (+0.5%/point), COURTESY_REPLY_BONUS=0.15 (+15% for Rei), HOSTILE_REPLY_THRESHOLD=−10
+  (Rival tier onset is −11; below this = no reply), MEETING_ACCEPT_DISPOSITION=0
+  (neutral or positive accepts meeting proposals). GAME_OF_LETTERS_REPLY_BONUS=0.02
+  PROVISIONAL (no GDD numeric spec for Games: Letters skill modifier).
+- **s15.4 Court Action System — 22 constants locked in s15.4a.**
+  Previously zeroed during invented-content audit. Now formally locked in
+  `gdd/s15.4a_court_action_numeric_values_locked.md`. Calibrated against
+  GDD-confirmed anchors: Play a Game (+3), Gossip (−5), Public Debate
+  per-witness tiers (±1/±2/±3/±4). NEGOTIATE_POSITION_SHIFT=8.0 and
+  PERSUADE_POSITION_SHIFT=12.0 are GDD-confirmed from s15.4 Public Debate
+  text ("targeted actions (Negotiate: +8, Persuade: +12)"). Final values:
+  CHARM_FULL_GAIN=5, CHARM_RAISE_BONUS=2; NEGOTIATE_BASE_DISP=6,
+  NEGOTIATE_RAISE_BONUS=2, NEGOTIATE_POSITION_SHIFT=8.0,
+  NEGOTIATE_RAISE_POSITION_BONUS=4.0, NEGOTIATE_SESSION_TN_REDUCTION=5;
+  PERSUADE_BASE_DISP=9, PERSUADE_RAISE_BONUS=3, PERSUADE_POSITION_SHIFT=12.0,
+  PERSUADE_RAISE_POSITION_BONUS=5.0; IMPRESS_BASE_DISP=6, IMPRESS_RAISE_BONUS=2,
+  IMPRESS_SESSION_TN_REDUCTION=5; LISTEN_REFLECT_BASE_DISP=9,
+  LISTEN_REFLECT_RAISE_BONUS=3, LISTEN_REFLECT_SESSION_TN_REDUCTION=10;
+  CHARM_CRITICAL_FAILURE_DISP=−3 (all "small" losses), PERSUADE_CRITICAL_FAILURE_DISP=−5
+  (unqualified "disposition loss"), NEGOTIATE_FAILURE_POSITION_HARDEN=−1.0,
+  NEGOTIATE_CRITICAL_POSITION_HARDEN=−3.0 (from Public Debate slight/strong scale).
 - **s4.3 Resource Tick — audited, no changes needed.**
   GARRISON_STABILITY_PENALTY_PER_SEASON (2.0) confirmed GDD-sourced (s4.3.11:
   "-2 Stability/season"). UPPER_TIER_PASSTHROUGH (0.42) correctly derived from
@@ -2907,36 +2904,45 @@ costs, or forward-wiring. Do not treat as bugs.
   tier→TN mapping (TIER_1 was 30, should be 15 per GDD s12.8 lines 163-169).
   FABRICATION_HONOR_COST had same inversion (TIER_1 was -1.5, should be -0.3 per
   GDD lines 173-181). Both dictionaries corrected. All other 37 constants confirmed.
-- **s12.8 Seduction System — 3 invented values zeroed.**
-  BASE_TN (15→0) — GDD specifies contested roll formula but no base TN addend.
-  INFAMY_GAIN (0.1→0.0) — GDD does not specify infamy for seduction.
-  `raises_for_detail` removed from SEDUCE_FOR_INFO effects — not in GDD.
+- **s12.8 Seduction System — 2 values confirmed at 0 (s12.8c) + 1 removed.**
+  BASE_TN = 0 confirmed: GDD formula `etiquette_rank + willpower + honor_rank` is
+  complete, no base addend implied. Low TNs for average characters are intentional —
+  Honor Rank scaling is the primary counterbalance. INFAMY_GAIN = 0.0 confirmed:
+  GDD specifies honor cost only; infamy accrues via scandal topic on exposure, not
+  at use. `raises_for_detail` removed from SEDUCE_FOR_INFO effects — not in GDD.
   HONOR_COST retained as dead metadata (superseded by CrimeSystem rank-scaled
   honor at line 69). All other values confirmed (disposition +5, maintenance
   16 days, 3 missed windows, affair severities, breakup disposition).
-- **s12.10 Favor System — 1 invented value zeroed.**
-  `get_dispute_witness_disposition()` creditor_won return value (2→0) — GDD
-  says witnesses gain disposition but specifies no numeric amount. All other
-  15 constants confirmed from GDD s12.10.
-- **s11.3.12 Violence System — 1 invented value zeroed.**
-  `INFAMY_PER_REPEATED_OFFENSE` (0.5→0.0) — GDD s11.3.12e says "Each
-  additional offense adds Infamy" but provides no numeric value. All other
-  constants confirmed: HONOR_LOSS (-0.2), GLORY_LOSS (-0.1), topic tiers
-  (TIER_4 first, TIER_3 on third), repeat window (4 seasons), repeat
-  threshold (3). Bribery system (s12.9) audited — fully compliant.
-- **s12.9 Intimidation System — 1 invented value zeroed.**
-  `PUBLIC_TN_INCREASE_BASE` (10→0) — GDD s12.9 says public intimidation
-  "raises the effective TN" on success but gives no base number (only
-  "+5 per Raise"). `PRIVATE_TN_INCREASE_BASE` (10) confirmed GDD-sourced
+- **s12.10 Favor System — 1 value locked in s12.10a.**
+  `get_dispute_witness_disposition()` creditor_won return value (2→0→2) —
+  GDD says "witnesses gain disposition toward the creditor" without a number.
+  Locked at +2: secondary social vindication, matches PUBLIC_PERFORMANCE
+  per-witness gain. Debtor win stays 0 (GDD silent). All other 15 constants
+  confirmed from GDD s12.10.
+- **s11.3.12 Violence System — 1 value locked in s11.3.12a.**
+  `INFAMY_PER_REPEATED_OFFENSE` (0.5→0.0→0.1) — locked at +0.1 per s11.3.12a.
+  Calibrated against floor of infamy accrual for hostile social acts: public
+  intimidation +0.1, blackmail +0.1 (both s12.9 LOCKED). Applies to repeat
+  offenses (prior_offenses >= 1) and brutal first offense. All other constants
+  confirmed: HONOR_LOSS (-0.2), GLORY_LOSS (-0.1), topic tiers (TIER_4 first,
+  TIER_3 on third), repeat window (4 seasons), repeat threshold (3).
+  Bribery system (s12.9) audited — fully compliant.
+- **s12.9 Intimidation System — 1 value locked in s12.9a.**
+  `PUBLIC_TN_INCREASE_BASE` (10→0→10) — GDD says "raises the effective TN"
+  with "+5 per Raise" but no explicit base. Locked at 10 (same as private)
+  per s12.9a: both are in-person contested rolls; public power differential
+  is social consequences (witnesses, Honor/Infamy), not a different base.
+  `PRIVATE_TN_INCREASE_BASE` (10) confirmed GDD-sourced
   (s12.9 explicitly says "+10"). `friend_threshold` (31) confirmed —
   matches GDD s12.2 Friend range (+31 to +60). All other constants
   confirmed: blackmail honor/infamy, private honor/infamy, public
   honor/infamy/witness disposition, letter TN, pushback TN base (15),
   disposition friend/enemy bonuses.
-- **s12.3 Gift Giving System — 2 invented values zeroed.**
-  `CRITICAL_FAILURE_DISPOSITION_LOSS` (-5→0) — GDD says "small disposition
-  loss" but no number. `FORBIDDEN_GIFT_DISPOSITION_LOSS` (-5→0) — GDD says
-  gifting a weapon is "an insult" but no numeric value. `DISPOSITION_PER_RAISE`
+- **s12.3 Gift Giving System — 2 values locked in s12.3a.**
+  `CRITICAL_FAILURE_DISPOSITION_LOSS` −3 ("small disposition loss" — matches
+  Charm critical failure, s15.4a). `FORBIDDEN_GIFT_DISPOSITION_LOSS` −5
+  ("an insult" — matches private_insult magnitude and Gossip base damage;
+  clumsiness vs actively implying recipient lacks a sword). `DISPOSITION_PER_RAISE`
   (3) confirmed GDD-sourced (s12.2: "+3 per Raise on Awareness + Etiquette
   roll"). `free_raises * 5` conversion confirmed (core L5R 4e: 1 Raise = +5
   TN). All other constants confirmed: quality Free Raises (s49), TN 15,
@@ -2950,17 +2956,20 @@ costs, or forward-wiring. Do not treat as bugs.
   replaced with GDD s56.6.3 fixed TNs: Quiet=20, Moderate=15 at listener's
   position (no distance scaling). KEEP: material TNs (GDD-sourced), rebind
   +5, quiet noise range 3, break chains TN 25, all escape mechanics.
-- **s17 Personal Visit System — 5 invented values zeroed.**
-  DECLINE_INVITATION_DISPOSITION (-3→0), REFUSE_AFTER_INVITATION_DISPOSITION
-  (-10→0), REFUSE_AFTER_INVITATION_HONOR (-0.3→0.0),
-  REFUSE_LETTER_ARRIVAL_DISPOSITION (-2→0), RECEIVE_UNINVITED_DISPOSITION
-  (5→0). GDD s17 says "small disposition cost"/"significant" without numbers.
+- **s17 Personal Visit System — 5 values locked in s17a.**
+  DECLINE_INVITATION_DISPOSITION −2, REFUSE_AFTER_INVITATION_DISPOSITION −5,
+  REFUSE_AFTER_INVITATION_HONOR −0.5, REFUSE_LETTER_ARRIVAL_DISPOSITION −3,
+  RECEIVE_UNINVITED_DISPOSITION +5. Calibrated against gossip (−5), Charm
+  critical failure (−3), and Minor Favor break (−0.5 Honor). REFUSE_UNINVITED
+  stays 0 (GDD silent — no host penalty for turning away uninvited guest).
   KEEP: INTIMATE_SETTING_BONUS (3, s17.2), DAILY_AP_DURING_VISIT (2, s14.1).
-- **s22.9 Hostage System — 5 invented values zeroed.**
-  HARMED_HOSTAGE_HONOR_LOSS (-3.0→0.0), ESCAPE_FAMILY_HONOR_LOSS (-1.0→0.0),
-  ESCAPE_CRITICAL_FAMILY_HONOR_LOSS (-2.0→0.0). GDD says "catastrophic"/
-  "significant" without numbers. Yu capture modifier (0.5→0.0), Ishi modifier
-  (0.3→0.0). KEEP: all escape TNs, garrison scaling, leverage values.
+- **s22.9 Hostage System — 5 values locked in s22.9a.**
+  HARMED_HOSTAGE_HONOR_LOSS −3.0 ("catastrophic" — matches assassination execution),
+  ESCAPE_FAMILY_HONOR_LOSS −1.0 ("significant" — Moderate Favor break),
+  ESCAPE_CRITICAL_FAMILY_HONOR_LOSS −2.0 (clean escape — Major Favor break).
+  YU_CAPTURE_LIKELIHOOD 0.5 (50% captured vs die fighting),
+  ISHI_CAPTURE_LIKELIHOOD 0.3 (30% captured, 70% die rather than submit).
+  KEEP: all escape TNs, garrison scaling, leverage values.
 - **s16.4 Court Commitment System — invented honor table replaced + 4 values zeroed.**
   VOLUNTARY_RENEGE_HONOR_BY_RANK dictionary (invented linear -0.5 to -5.0)
   replaced with CrimeSystem.get_disloyalty_honor() (Table 2.3: [0,-2,-6,-10,
@@ -2968,16 +2977,18 @@ costs, or forward-wiring. Do not treat as bugs.
   0.1→0, Chugi 0.05→0, default 0.3→0). Edict renege topic_tier TIER_2→TIER_3
   (GDD doesn't specify different tier for edict renege). KEEP: priority values,
   EDICT_RENEGE_HONOR_COST, RENEGE_DISPOSITION_PENALTY, VOLUNTARY_POSITION_THRESHOLD.
-- **s12.4 Performative Arts System — 2 values zeroed + 1 bug fix.**
-  PERFORM_FOR_SUCCESS_DISPOSITION (3→0), PERFORM_FOR_FAILURE_DISPOSITION (-1→0).
-  GDD says "strong disposition gain"/"small loss" without numbers. BUG FIX:
-  masterful threshold `raises >= 3` → `raises >= 2` per GDD s4.6 line 49:
+- **s12.4 Performative Arts System — 2 values locked in s12.4a + 1 bug fix.**
+  PERFORM_FOR_SUCCESS_DISPOSITION +8 ("strong disposition gain" — above moderate
+  actions at +6, approaching Persuade base at +9). PERFORM_FOR_FAILURE_DISPOSITION
+  −3 ("small disposition loss" — consistent with small-loss language across system).
+  BUG FIX: masterful threshold `raises >= 3` → `raises >= 2` per GDD s4.6 line 49:
   "2 or more Raises (masterful)" and s57.33 line 57. KEEP: PERFORMANCE_TN (15),
   SUCCESS_DISPOSITION (2), SUCCESS_GLORY (0.3), all other GDD-confirmed values.
-- **s22.7 Marriage System — 3 invented values zeroed.**
-  evaluate_proposal() favor_tier multiplier (10→0), military_objective bonus
-  (15→0), BENTEN_FESTIVAL_BONUS (20→0). GDD lists factors qualitatively without
-  numeric weights. KEEP: all 24 GDD-confirmed values (boosts, pregnancy, decay).
+- **s22.7 Marriage System — 3 values locked in s22.7a.**
+  PROPOSAL_FAVOR_TIER_MULTIPLIER 10 (MINOR=0, MODERATE=+10, MAJOR=+20),
+  PROPOSAL_MILITARY_BONUS 10 (pressing military need equals MODERATE favor weight),
+  BENTEN_FESTIVAL_BONUS 15 (most auspicious day — above military urgency, below
+  Major obligation). KEEP: all 24 GDD-confirmed values (boosts, pregnancy, decay).
 - **Tea Ceremony scoring — CONDUCT_TEA_CEREMONY alignment 85→100.**
   Under RECOVER_VOID_POINTS NeedType in objective_alignment.json. GDD says tea
   ceremony recovers void "identically to MEDITATE" which scores 100.
@@ -3053,6 +3064,124 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   assassination_system (s12.8).
 - **No remaining unaudited simulation files.**
 
+### Known Code Issues (found and fixed 2026-05-29, marriage dissolution audit)
+- **_build_dissolve_marriage_metadata() — spouse's lord gate missing. FIXED.**
+  s57.49.7 specifies the targeting gate passes when the ordering lord has
+  disposition ≤ −31 toward "the other spouse or that spouse's immediate lord."
+  Code only checked disposition toward the spouse; disposition toward the
+  spouse's lord was not evaluated. Added `spouse.lord_id` lookup and combined
+  gate check. 3 tests added.
+- **test_marriage_dissolution.gd — glory assertion off by 0.5. FIXED.**
+  `test_apply_dissolution_pathway1_glory_loss()` asserted glory 5.0 → 4.0 (−1.0 change).
+  The constant `DISSOLUTION_GLORY_LOSS_SPOUSE = -0.5` per s57.49b. §57.49.1's consequence
+  table shows −1.0 but §57.49.6 (same locked file) and s57.49b both say −0.5. The
+  §57.49.1 summary table was never updated when s57.49b formally locked the value at
+  half the magnitude. Test corrected to assert 4.5. NOTE: §57.49.1's summary table
+  (−1.0 Glory, −25 family baseline) remains stale relative to §57.49.6 and s57.49b
+  (−0.5 Glory, −20 family baseline). GDD files are read-only — this is a known GDD
+  internal inconsistency. §57.49.6 and s57.49b are authoritative.
+
+### GDD Sections Written 2026-05-28
+
+- **s57.49 Marriage Dissolution** — New GDD file `gdd/s57.49_marriage_dissolution_locked.md`.
+  Formalizes the 4-pathway dissolution system already implemented in code (marriage_system.gd,
+  day_orchestrator.gd). Four pathways: (1) Lord's Command (DISSOLVE_MARRIAGE ActionID, Family
+  Daimyo+, −1.0 Honor lord, −0.5 Glory each spouse, family penalty −20,
+  clan penalty −10 — all locked in s57.49b A34-A36),
+  (2) Criminal Conviction (TREASON/MAHO auto-dissolve, no penalties), (3) Monastic Retirement
+  (is_retired_monastic flag, no penalties, RETIRE_TO_MONASTERY ActionID deferred), (4) Imperial
+  Decree (war-marriages between belligerents, no penalties). Children remain with samurai parent.
+  TIER_4 POLITICAL topic on all pathways. A34-A36 locked in s57.49b.
+  Index updated. CLAUDE.md updated.
+
+### Systems Added 2026-05-28 (continued)
+- **s57.22 Theater Piece System** — `simulation/theater_system.gd`,
+  `shared/theater_piece_data.gd`. Four ActionIDs fully wired into the NPC pipeline:
+  COMPOSE_THEATER_PIECE (Poetry/Intelligence progress track; Poetry rank ≥ target_magnitude
+  skill gate; seasonal degradation halves WIP progress after 90 idle days; completion
+  Raises upgrade magnitude/topic_weight/topic linkage; new pieces declared in writeback
+  via is_new_piece flag), LEARN_THEATER_PIECE (Acting/Intelligence progress track;
+  Acting rank ≥ piece.disposition_magnitude gate; adds author_id to known_by on threshold
+  completion; private pieces require co-located willing teacher via find_willing_teacher()),
+  PERFORM_THEATER_PIECE (Acting/Awareness; polarization disposition rule — witnesses
+  pushed AWAY from neutral regardless of framing direction; neutral witnesses receive
+  flat DISP_NEUTRAL_FLAT=2 seed push; 30-day immunity window per witness per piece;
+  known_by members permanently immune; Bunraku style +1 effective magnitude, 2 AP cost;
+  critical success +2 magnitude bonus + Tier 4 performance topic; topic amplification
+  via topic_weight × 2 × shifted_witness_count per linked topic), DEDICATE_PIECE
+  (Courtier/Awareness; links topic to piece.topic_ids up to 2 slots; TN=10+magnitude×2).
+  `TheaterPieceData` Resource: piece_id, title, style (NOH/KABUKI/KYOGEN/BUNRAKU),
+  author_id, subject, subject_type (CLAN/FAMILY/CHARACTER/ARCHETYPE/ABSTRACT), framing
+  (bool), roles (Array), topic_ids (Array[int] max 2), topic_weight (1–3),
+  disposition_magnitude (1–5), known_by (Array[int]), canonized, times_performed,
+  craft_progress (-1=complete, ≥0=WIP), target_magnitude, target_topic_weight,
+  num_roles_declared, ic_day_last_composition_ap, lost, abandoned_incomplete, ic_day_created.
+  World-start canonized pieces generated via `TheaterSystem.generate_canonized_pieces()`
+  in `_bootstrap_fresh_world()` (Crane 12–15, Phoenix 10–12, Lion 7–9, Scorpion 6–8,
+  Dragon 5–7, Unicorn 4–6, Crab 2–4, etc.). Casting TN modifiers: same-clan −5,
+  enemy-clan +5, feature mismatch +5 per unmatched role requirement (Noh mask negates
+  clan/gender). Death cleanup via `handle_character_death()` — removes from known_by,
+  marks private pieces lost if known_by empties, marks WIP abandoned. Context injection
+  via `_inject_theater_context()` → `known_objectives["theater_pieces_to_perform"]`
+  and `known_objectives["wip_piece_ids"]`. Context keys cleared by stale flag clearing.
+  `theater_pieces` and `next_piece_id` persist via WorldStateSaver Resource array
+  pattern (one .tres per item in `theater_pieces/`). JSON scoring tables updated:
+  action_skill_map.json (all 4 ActionIDs), objective_alignment.json
+  (PERFORM_THEATER_PIECE → SEEK_GLORY 80 / DAMAGE_RELATIONSHIP 50 / MOVE_TOPIC_POSITION
+  60 / PATRONIZE_ARTS 85; LEARN_THEATER_PIECE → ARTISTIC_EXPRESSION 70 / PATRONIZE_ARTS
+  60; existing entries COMPOSE_THEATER_PIECE → ARTISTIC_EXPRESSION 100 / DAMAGE_RELATIONSHIP
+  60 / MOVE_TOPIC_POSITION 60 and DEDICATE_PIECE → MOVE_TOPIC_POSITION 55 retained). 45 tests.
+- **s57.54 Clan Champion Strategic Evaluation System** — `shared/strategic_conclusion_data.gd`,
+  extended `simulation/strategic_review.gd`. Quarterly evaluation producing 2–4 clan-wide
+  strategic conclusions that broadcast to Family Daimyo.
+  `StrategicConclusionData` Resource: 16 `ConclusionType` values across 5 domains
+  (MILITARY, DIPLOMATIC, ECONOMIC, SPIRITUAL, SOCIAL), `WarObjective` enum,
+  `target_clan_id` (int via `clan_name.hash()`), `score`, `is_forced`,
+  `is_continuation`, `source_topic_ids`, `season_originated`.
+  `ClanData` gains `clan_strategic_priorities: Array[StrategicConclusionData]` and
+  `next_conclusion_id`. `L5RCharacterData` gains `strategic_evaluation_log` (audit only).
+  `ContextSnapshot` gains `champion_conclusion_candidates` and `local_tier3_candidates`.
+  Six-step evaluation process: (1) Threat Scan — forced conclusions from Tier 1/2 topics
+  and active wars/edicts; (2) Opportunity Scan — candidate pool from Tier 3/4 topics;
+  (3) Scoring — standing objective match (+0/+30), topic urgency (Tier3=+25, Tier4=+10,
+  momentum ±10), convergent topics (+5/extra), personality preference (+25/+15/0/−15,
+  HARD_BLOCK removes from pool), continuation bonus (+10 base, Makoto +20, Ketsui +15,
+  Ishi locks); (4) Selection — slot count from personality; (5) Write conclusions to
+  `clan.clan_strategic_priorities`; (6) Dispatch notification letters to absent Family
+  Daimyo via `_process_champion_letter_dispatches()`. Three trigger points:
+  `run_clan_champion_evaluation` (quarterly, seasonal block), `run_midseason_crisis_update`
+  (new Tier 1/2 topic forces partial reevaluation), `run_priority_resolved` (conclusion
+  achieved or impossible — Ketsui immediately refills via full reevaluation).
+  Family Daimyo Phase 2 combined pool (s57.54.10b): `get_champion_conclusion_needtypes()`
+  translates Champion conclusions to NeedType candidates re-weighted by FD's own
+  personality preference matrix. `_build_local_tier3_candidates()` converts Tier 1–3
+  topics in character's topic_pool to NeedType candidates by topic category
+  (MILITARY→DEFEND_PROVINCE, POLITICAL→INVESTIGATE_THREAT, ECONOMIC→ACQUIRE_RESOURCE,
+  SUPERNATURAL→RESTORE_WORSHIP, LEGAL/other→INVESTIGATE_THREAT/RAISE_DISPOSITION).
+  NPC engine `_check_combined_pool()` merges both arrays and selects highest-scoring
+  need for Family Daimyo+ characters in Phase 2. Operational superior CO budget:
+  `get_operational_superior_co_budget()` returns 2/day for 1–3 subordinates, 3/day
+  for 4+ (s57.54.10d). PATRONIZE_ARTS added as 82nd NeedType in
+  `objective_alignment.json` with REQUEST_PERFORMANCE (90), PERFORM_THEATER_PIECE (85),
+  DELIVER_GIFT (70), LEARN_THEATER_PIECE (60), RAISE_DISPOSITION (40), WRITE_LETTER (35)
+  (LEARN_THEATER_PIECE and PERFORM_THEATER_PIECE added when Theater System was implemented).
+  Wired into DayOrchestrator:
+  `_run_strategic_reviews()` gains `active_topics, active_edicts, clans, current_season,
+  dice_engine` parameters; champion loop runs seasonally after standard lord reviews;
+  `_inject_base_character_context()` populates champion_conclusion_candidates and
+  local_tier3_candidates for Family Daimyo characters (status 6.0–6.99); both keys
+  cleared by stale flag clearing between days. 22 tests.
+
+### Known Code Issues (found and fixed 2026-05-29, theater system audit)
+- **Bunraku extra AP not deducted — Bunraku always cost 1 AP instead of 2. FIXED.**
+  `_execute_perform_theater()` returns `ap_cost_override: 2` for Bunraku performances
+  (GDD s57.22.3 specifies 2 AP for Bunraku). The NPC engine deducts 1 AP before
+  execution (from the `_get_ap_cost()` table). `_process_perform_theater_writebacks()`
+  was supposed to deduct the extra 1 AP from `ap_cost_override`, matching the pattern
+  used by APPLY_TATTOO, but did not. Added `ap_override = effects.get("ap_cost_override", 1)`
+  check; when `ap_override > 1`, deducts `ap_override - 1` extra AP from performer.
+  2 tests added.
+
 ### Systems Added 2026-05-18
 - **s29.15 Courtier School Techniques** — School technique bonuses wired into
   SkillResolver and ActionExecutor. Doji Courtier R1a (honor-gated Free Raise on
@@ -3110,10 +3239,26 @@ Do not re-audit this; the list is settled. Ask the user before investigating any
 - s57.40.9 — Appraisal skill emphasis modifier: GDD section not yet unlocked
 
 **REFERENCE sections** (source material only, design not started): s31–s37, s38,
-s44, s45, s54.7, s57.22–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57.46.
+s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57.46.
+
+**PARTIAL — eligibility/data done, effects blocked on s40:**
+- s30 / s30a — Katas: `simulation/kata_system.gd` contains all 43 katas, eligibility
+  (ring/school/clan checks), XP deduction, NPC selection logic, and stub effect registry.
+  All combat effects (Armor TN, attack bonuses, Initiative, stances, maneuver modifiers)
+  are registered as stubs with `blocked_on: "s40"` — no mechanical change is applied
+  until s40 (individual combat) is implemented.
 
 ### Pending Redesign
 (None currently pending.)
+
+### Tuning Review Needed After First Live Run
+- **School-less ring progression rate.** School-less characters (born ronin, unschooled)
+  advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
+  skills may spend 4–6 seasons on skills before touching rings. At peacetime XP rates,
+  raising a ring from rank 2 to 3 takes ~8 OOC years. If playtest reveals rings growing
+  too slowly relative to skills, consider interleaving (raise one ring after every N skill
+  advances) or adjusting the priority order. Do not change the order without playtesting
+  first — the current design is principled and matches "Strengths + spread rings" intent.
 
 ### Resolved Redesigns
 - **Winter Court lifecycle — RESOLVED v624.** Full Winter Court system designed
@@ -3143,6 +3288,406 @@ s44, s45, s54.7, s57.22–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   (_dispatch_winter_court_summons, 7 tests). Late arrival handling already
   implemented (_process_court_attendance, 2 tests).
 
+
+### Known Code Issues (found and fixed 2026-05-29, zeroed constant audit)
+- **6 topic momentum constants zeroed → replaced with tier-floor values. FIXED.**
+  `_COMBAT_EVENT_MOMENTUM`, `_CIVIL_WAR_MOMENTUM`, `_CONSTRUCTION_TIER2_MOMENTUM`,
+  `_FAMINE_HUNGER_MOMENTUM`, `_FAMINE_FAMINE_MOMENTUM` in `day_orchestrator.gd` and
+  `HARVEST_TOPIC_MOMENTUM` in `starvation_warfare.gd` were all `0.0` (invented values
+  removed during audit). Replaced with `TopicMomentumSystem.initial_momentum_for_tier(tier)`
+  at each call site — using the already-locked `TIER_INITIAL_MOMENTUM` table from s16.1
+  (TIER_3 floor = 26.0, TIER_2 floor = 51.0). Constants deleted. 4 test files updated.
+- **`_FAMINE_RECOVERY_THRESHOLD` locked at 4 seasons. FIXED.** Was `0` (invented value
+  removed). Set to `4` per GDD s4.3.6 "four seasons of uninterrupted adequate food."
+  Locked in `gdd/s04.3a_famine_recovery_threshold_locked.md`. Tests already handled
+  both zero and non-zero cases via guard; assertions remain correct with threshold=4.
+- **Remaining zeroed constants confirmed correct at 0 per GDD or blocked.** `DUEL_DECLINE_GLORY_LOSS`
+  stays 0 (GDD Table 2.4 has no duel-decline glory entry). `EVIDENCE_DECAY_INTERVAL_DAYS`
+  stays 0 (GDD s11.3.13 "Recorded evidence is permanent" — decay is intentionally disabled).
+  `COLD_CASE_THRESHOLD` stays 0 (decay disabled, never fires). `INTIMIDATION_DISPOSITION_PENALTY`
+  stays 0 (GDD s11.3 specifies provocation flag only, not a disposition value). `INAUSPICIOUS_PENALTY`
+  and `TAIAN_BONUS` stay 0 (GDD says rokuyo is not a mechanical modifier for NPC scoring).
+  `_RETREAT_DEFAULT_DAYS` stays 0 (blocked on sub-tile army movement s11.7a). `TAINT_DETECTION_PLACEHOLDER_TN`
+  stays 0 (blocked on s31 Sense spell). `get_renege_willingness()` values stay 0 (function
+  never called; GDD says "All renege values PROVISIONAL"). `compute_peace_willingness()`
+  already returns qualitative dict (correct per GDD s53 "not determined by a single threshold").
+  `get_patrol_detection_chances()` already returns qualitative dict (correct per GDD s11.3.19
+  "more chances to detect" — no numeric formula).
+
+### Known Code Issues (found and fixed 2026-05-29, RESTORE_COUNCIL_COMPACT)
+- **`_assign_phoenix_champion_restore_objective()` — two key bugs. FIXED.**
+  (1) Checked `phoenix_council_state.get("champion_authority_active", false)` — this key
+  is never set. The actual state key is `"phoenix_champion_authority"` (set by
+  `PhoenixCouncil.grant_champion_authority()`). Function always returned early without
+  assigning objectives. Fixed to use `"phoenix_champion_authority"`.
+  (2) Read `"champion_id"` from state — this key also doesn't exist. The actual lookup
+  is `"known_champion_id"`, but the cleanest fix is to delegate to `_find_shiba_champion()`
+  which is already in the same class and handles dead/non-champion cases correctly.
+  5 tests added to test_governance_exceptions_wiring.gd: Chugi champion gets objective,
+  non-Chugi (Ishi/Shourido) champion skipped, no-authority champion skipped, dead champion
+  skipped, dedup prevents reassignment.
+
+### Known Code Issues (found and fixed 2026-05-29, strategic_review.gd audit)
+- **run_priority_resolved() Ketsui refill — dispatches silently discarded. FIXED.**
+  `run_priority_resolved()` called `run_clan_champion_evaluation()` for Ketsui champions
+  but discarded the return value and returned `[]`. `run_clan_champion_evaluation()` returns
+  letter dispatch Dictionaries for absent Family Daimyo — they were never reaching the
+  orchestrator, so FDs were never notified after a Ketsui priority refill. Changed
+  `run_clan_champion_evaluation(...); return []` to `return run_clan_champion_evaluation(...)`.
+  1 test.
+- **_CONCLUSION_TO_NEEDTYPES DEFEND_TERRITORY — ASSIGN_GARRISON invalid NeedType. FIXED.**
+  "ASSIGN_GARRISON" is an ActionID, not a NeedType. It had no entry in objective_alignment.json
+  so any FD that received it as a combined pool candidate would score all actions at 0 and
+  silently fall to REST. DEFEND_PROVINCE (already in the list) covers garrison-level defensive
+  needs. Removed ASSIGN_GARRISON from the DEFEND_TERRITORY NeedType array. 1 test.
+- **_CONCLUSION_TO_NEEDTYPES RESTORE_WORSHIP — RESTORE_WORSHIP NeedType missing. FIXED.**
+  ConclusionType.RESTORE_WORSHIP mapped to ["PERFORM_RITUAL", "BUILD_INFRASTRUCTURE",
+  "GATHER_INTELLIGENCE"]. The "RESTORE_WORSHIP" NeedType (locked in s57.54a A37) was not
+  included, so FDs responding to a Champion's worship-restoration priority never received
+  the dedicated NeedType that maps to PERFORM_WORSHIP (90), PERFORM_RITUAL (80), BUILD_SHRINE
+  (70), etc. Added "RESTORE_WORSHIP" as the first entry in the mapping. 1 test.
+
+### Known Code Issues (found and fixed 2026-05-29, combined pool audit)
+- **_process_lying_honor_writebacks() — string key in int-keyed dictionary, LYING honor never fires. FIXED.**
+  `fabricator.disposition_values.get(str(subject_id), 0)` used `str(subject_id)` (string) but
+  `disposition_values` uses int character IDs as keys throughout the codebase. The lookup always
+  returned 0, so `disp > 0` never fired — fabricators who liked their target never received the
+  LYING honor penalty. Fixed to `fabricator.disposition_values.get(subject_id, 0)`. Five test
+  setups in test_day_orchestrator.gd and test_system_wiring.gd also updated from `{"5": 20}` to
+  `{5: 20}` int keys. 5 tests updated.
+- **ReactiveDecisions._has_mentor_objective() — key mismatch, KETSUI always declines training. FIXED.**
+  `_has_mentor_objective()` checked `primary.get("objective_type", "") == "MENTOR_CHARACTER"` but
+  lord-assigned objectives from `_apply_vassal_objective_assignment()` only set `"need_type"` (no
+  `"objective_type"` field). KETSUI-virtue students always received `has_mentor_objective = false`
+  regardless of their lord's directive, causing them to always decline training via `self_reliance`.
+  Fixed to `primary.get("need_type", "") == "MENTOR_CHARACTER"`. Test
+  `test_ketsui_accepts_with_mentor_objective` also updated from `"objective_type"` to `"need_type"`.
+  1 test updated.
+- **resolve_goal() combined pool condition too broad — Champions entered combined pool path. FIXED.**
+  `if ctx.is_lord and ctx.lord_rank >= Enums.LordRank.FAMILY_DAIMYO` matched CLAN_CHAMPION and
+  IMPERIAL characters. Neither gets `champion_conclusion_candidates` or `local_tier3_candidates`
+  injected (orchestrator injects only for `lord_rank < CLAN_CHAMPION`). A Champion with no
+  lord-assigned primary would find an empty combined pool and fall to REST, silently losing their
+  self-selected primary objectives. Fixed to `== Enums.LordRank.FAMILY_DAIMYO`. Champions and
+  Imperial now fall to the `else` branch and use the standard primary path (the same path as
+  non-lord characters). 2 tests.
+- **RESTORE_WORSHIP missing from objective_alignment.json — FDs never respond to supernatural crises. FIXED.**
+  `_build_local_tier3_candidates()` maps SUPERNATURAL topic category → `RESTORE_WORSHIP` NeedType
+  per GDD §57.54.10b line 361. But `RESTORE_WORSHIP` had no entries in `objective_alignment.json`,
+  so all actions scored 0 → allowlist filter stripped everything → FDs did nothing in response to
+  spirit realm overlaps, fortune displeasure, or elemental imbalance crises. Added 8 action entries
+  per s57.54a A37a–A37h: PERFORM_WORSHIP (90), PERFORM_RITUAL (80), BUILD_SHRINE (70),
+  FOUND_TEMPLE (60), PURIFY_TAINTED_GROUND (55), ASSIGN_VASSAL_OBJECTIVE (45), MEDITATE (35),
+  FOUND_MONASTERY (30). Locked in `gdd/s57.54a_restore_worship_needtype_locked.md`.
+
+### Known Code Issues (found and fixed 2026-05-29, B6 Table 2.3 trigger audit)
+- **DUPED_FOOLISH `target_province_id` not checked — PATROL_PROVINCE victims always penalised. FIXED.**
+  `_process_duped_foolish_on_arrival()` only checked `target_npc_id` and `target_settlement_id`.
+  FORGE_ORDER → PATROL_PROVINCE sets only `target_province_id` (no settlement or NPC target).
+  Victims arriving at any settlement in the target province had `has_target_here = false` and
+  incorrectly received DUPED_FOOLISH honor loss even when they arrived exactly where the forged
+  order directed. Added `settlements: Array = []` parameter, built settlement→province lookup dict
+  via `SettlementData.province_id`, and added `target_province_id` check as third target-match
+  branch. Call site updated to pass `settlements`. 2 new tests (province_match skips, province_mismatch fires).
+  8 additional orchestrator tests added covering all three B6 trigger conditions (LYING disposition
+  gate, DUPED_FOOLISH NPC/settlement/province targets, DUPED_CRIMINAL deadline ordering).
+
+### Known Code Issues (found and fixed 2026-05-29, public record seeding audit)
+- **Duel deaths and open killings never seeded into settlement public record. FIXED.**
+  `_seed_public_records_from_crime_results()` required `auto_detected: true` in wave results
+  for any crime to be seeded. UNSANCTIONED_DUEL_DEATH and UNSANCTIONED_OPEN_KILLING are
+  inherently public (they happen in front of witnesses by definition) but only set
+  `requires_crime_creation: true`, not `auto_detected: true`. The early-return guard
+  (`if auto_detected_locations.is_empty(): return`) caused the function to exit before
+  processing any crime_results when no violence executor had fired. Restructured:
+  settlements_by_str_id is built before the early-return check; INHERENTLY_PUBLIC array
+  gates a second location-lookup path for UNSANCTIONED_DUEL_DEATH and
+  UNSANCTIONED_OPEN_KILLING; other crime types still require `auto_detected: true`.
+  Early-return changed to `if crime_results.is_empty(): return` (the only truly cheap
+  skip). 5 tests.
+- **Dead investigator guard missing in EXAMINE_CRIME_SCENE public record query. FIXED.**
+  Line 3264 checked `investigator != null` but not `CharacterStats.is_dead(investigator)`.
+  Dead characters who completed EXAMINE_CRIME_SCENE before dying mid-day could have
+  their `topic_pool` updated from the public record. Added dead guard. 1 implicit (guard
+  tested through existing patterns).
+- **`_purge_delivered_letters` — dead victim allowed forged order letter to be retained forever. FIXED.**
+  The forged-order retention guard (`if victim != null:`) kept letters when the victim was dead.
+  Dead victims cannot discover impersonation (they never enter the decision loop), so forged
+  order letters targeting dead victims should be purgeable on the normal 180-day schedule.
+  Added `not CharacterStats.is_dead(victim)` to the retention check: dead victims fail the
+  guard, letter is pruned as a normal old letter. Also added 14 tests covering all B10 purge
+  functions: `_purge_resolved_crime_records` (5 tests — removes terminal old, keeps terminal
+  recent, all 4 terminal statuses, keeps FUGITIVE, keeps UNDER_INVESTIGATION),
+  `_purge_delivered_letters` (6 tests — removes old, keeps recent, keeps undelivered, retains
+  undetected forged order, purges detected forged order, purges forged order with dead victim),
+  `_purge_exposed_secrets` (3 tests — removes public, keeps private, mixed). 14 tests.
+
+### Known Code Issues (found and fixed 2026-05-29, OpportunityScanner audit)
+- **`character.objectives_map` — undeclared property, null crash on fresh characters. FIXED.**
+  `_scan_artistic_expression()` line 468 accessed `character.objectives_map.get(...)` but
+  `objectives_map` is a world-level Dictionary (keyed by character_id on WorldState), not a
+  field declared on `L5RCharacterData`. In production, `character.objectives_map` returns null
+  on a fresh character and `null.get("primary", {})` crashes at runtime. The strategic_review
+  caller filters active primary objectives before calling OpportunityScanner, so this is benign
+  on the nominal path, but reachable when a primary exists with status != "ACTIVE". Changed to
+  `character.get("objectives_map", {}).get(...)` which returns `{}` gracefully when unset.
+  1 test added: `test_artistic_expression_no_crash_without_objectives_map` verifies scan runs
+  without crash and returns ARTISTIC_EXPRESSION on a character without the dynamic property set.
+
+### Known Code Issues (found and fixed 2026-05-29, collective disposition audit)
+- **test_marriage_applies_standard_deltas / test_champion_marriage_applies_higher_deltas —
+  tests coded to old s12.2b permanent-baseline design; implementation uses s22.7 decaying
+  layer. FIXED.** The implementation (`apply_marriage()`) deliberately chose s22.7's
+  separate decaying boost layer over s12.2b's permanent baseline modification (comment:
+  "s22.7 wins"). The two tests were written before this redesign and still expected
+  `clan_change`/`family_change` return keys and direct mutation of `_family_baselines`.
+  Both tests updated to verify the actual s22.7 behavior: `marriage_family_boosts` and
+  `marriage_clan_boosts` are populated with the correct values, return dict has
+  `family_boost`/`clan_boost` keys, and `_family_baselines` is NOT modified.
+  `test_champion_marriage_applies_higher_deltas` now verifies that the `_champion_level`
+  flag has no effect on the decaying layer (s22.7 does not differentiate tiers).
+  2 tests updated.
+
+### Known Code Issues (found and fixed 2026-05-29, writeback audit)
+- **LYING honor trigger always returned 0 — string/int key mismatch. FIXED.**
+  `_process_lying_honor_writebacks()` called `disposition_values.get(str(subject_id), 0)`
+  but `disposition_values` uses int keys throughout. Lookup always returned 0 so LYING
+  honor (Table 2.3) never fired for any fabricator. Fixed to use int key directly.
+  5 test setups updated from string keys to int keys. 1 test.
+- **CANCEL_HUNT disposition penalties never applied — accepted_invitee_ids always empty. FIXED.**
+  `_populate_action_metadata()` set `"accepted_invitee_ids": []` (hardcoded empty array) for
+  CANCEL_HUNT. The executor reads this from `action.metadata`, so `effects["accepted_invitee_ids"]`
+  was always empty, and `_process_cancel_hunt_writebacks()` never penalized invitees.
+  Fixed: `_inject_hunt_context()` now also injects `hunt_accepted_invitee_ids` from the active
+  hunt dict for host characters. `_populate_action_metadata()` reads from
+  `ctx.known_objectives.get("hunt_accepted_invitee_ids", [])` instead of hardcoding `[]`. 1 test.
+- **Dead character guards missing from 8 writeback/apply functions. FIXED.**
+  `_apply_promise_fulfillment_honor()` debtor, `_process_duel_honor_writebacks()` actor/target,
+  `_process_kindness_honor_writebacks()` actor/target, `_process_truthful_report_honor_writebacks()`
+  actor, `_process_protecting_clan_honor_writebacks()` actor — all checked null but not dead.
+  Dead characters received honor changes from promise fulfillment, duel outcomes, gift-giving,
+  secret exposure, and sortie actions.
+  `_apply_appointment()` appointee, `_apply_service_assignment_effect()` target,
+  `_apply_vassal_objective_assignment()` vassal, `_apply_court_invitation()` invitee,
+  `_apply_marriage()` both parties — dead characters could be appointed to positions,
+  assigned to military service, receive lord objectives, added to court invitation lists,
+  and married. Added `CharacterStats.is_dead()` guards at all 9 sites.
+
+### Systems Added 2026-05-29
+- **s11.3.12a Violence System — INFAMY_PER_REPEATED_OFFENSE locked.** `INFAMY_PER_REPEATED_OFFENSE`
+  set to 0.1 (was 0.0). Locked in `gdd/s11.3.12a_violence_repeated_offense_infamy_locked.md`.
+  Calibrated at floor of infamy accrual: public intimidation +0.1, blackmail +0.1 (both s12.9).
+  Two existing test names updated to reflect the lock (were `*_zeroed_pending_gdd_spec`,
+  now `*_locked_s11_3_12a`).
+- **s57.50 Settlement Public Record** — `simulation/public_record_system.gd`,
+  `shared/settlement_data.gd` (add `public_record: Array`). Settlement-level buffer of public
+  events to bridge commoner memory into the information system. Design confirmed: settlement-level
+  locality (optional `zone_subtype` forward field for future zone narrowing), two retrieval paths
+  (ambient free within tier-scaled window + investigation roll for older entries), tier-scaled
+  retention (TIER_4=90d, TIER_3=360d, TIER_2=1080d, TIER_1=permanent). Ambient windows: TIER_4=14d,
+  TIER_3=90d, TIER_2=360d, TIER_1=always. Investigation TN: 10 + floor(days_past_window/10),
+  capped 30. DayOrchestrator wiring: `_seed_public_records_from_crime_results()` fires after
+  `_process_crime_detection()` for any result whose executor effects had `auto_detected: true`;
+  `_pickup_ambient_public_records()` runs daily before NPC wave to seed topics to living present
+  non-traveling characters; `_purge_settlement_public_records()` fires at season boundary.
+  EXAMINE_CRIME_SCENE investigation now also queries settlement public record for older entries
+  using the investigation roll total (added `roll_total` to `InvestigationSystem.examine_scene()`
+  and `ActionExecutor._execute_examine_crime_scene()`). `_process_scene_examination_writebacks()`
+  gains optional `settlements` parameter. `_crime_tier_for_public_record()` maps crime types:
+  VIOLENCE→TIER_4, open/duel killings→TIER_3, TREASON/EMPERORS_PEACE→TIER_2. 20 tests.
+  LIMITATION: ViolenceSystem.evaluate_violence() itself is not yet called from any ActionID
+  executor — the seeding path is wired and tested but requires a violence ActionID to be
+  implemented before it fires in actual gameplay.
+
+### Known Code Issues (found and fixed 2026-06-01, standing objectives audit)
+- **`compute_tend_personality_bonus()` never called — personality modifiers silently dropped. FIXED.**
+  `MedicineSystem.compute_tend_personality_bonus()` was defined with GDD-specified constants
+  (JIN+15, GI+10, REI+5, CHUGI+20 for lord/superior target) but was never called in the
+  TEND_WOUNDED_ALLY opportunity injection loop in `npc_decision_engine.gd`. Priority was
+  computed from `compute_tend_priority()` only. Added call after priority computation;
+  `is_superior` derived from `character.lord_id` and `character.operational_superior_id`.
+  3 tests.
+- **Monk standing objectives never assigned — `_assign_monk_standing_objectives()` missing. FIXED.**
+  Despite CLAUDE.md claiming s55.11b was implemented, the function
+  `_assign_monk_standing_objectives()` did not exist in `day_orchestrator.gd`.
+  All SchoolType.MONK characters had no standing objective, causing monks to fall through
+  to REST every AP. Added function in the same standing-assignment block as magistrates,
+  ronin, and Kaiu Engineers. Assigns PERFORM_RITUAL as universal default (Meditate +
+  Worship types). School-based differentiation deferred — GDD specifies school-based
+  selection but provides no school→type mapping table. 5 tests in `test_ronin_system.gd`.
+- **FIND_NEW_LORD, PERFORM_RITUAL, MAINTAIN_FORTIFICATION fell through generic passthrough. FIXED.**
+  Three standing NeedTypes fell through the generic `_passthrough()` at the end of
+  `ObjectiveDecomposer.decompose()` without being listed in any dispatch array.
+  Functionally correct (all have appropriate alignment tables, no context branching needed),
+  but undocumented. Added explicit dispatch paths: FIND_NEW_LORD added to
+  PERSONAL_OBJECTIVES with `_decompose_find_new_lord()` (all contexts → passthrough;
+  Phase 4a `_pick_lord_for_petition()` handles targeting). PERFORM_RITUAL added to
+  PERSONAL_OBJECTIVES with `_decompose_perform_ritual()` (passthrough). MAINTAIN_FORTIFICATION
+  added to MILITARY_OBJECTIVES with `_decompose_maintain_fortification()` (passthrough;
+  Phase 4a reads wall_statuses for target_province_id). All four standing NeedTypes
+  (UPHOLD_LAW, FIND_NEW_LORD, PERFORM_RITUAL, MAINTAIN_FORTIFICATION) now have explicit
+  dispatch paths. 6 tests in `test_objective_decomposer.gd`.
+
+### Systems Added 2026-06-01
+- **s52.5 Ronin Petition** — GDD `gdd/s52.5_ronin_petition_locked.md`. Full petition pipeline
+  confirmed implemented (was previously wired but undocumented as a standalone system entry).
+  `make_ronin()`: lord_id/role/military/hierarchy cleared, status −1.0 (floor 0), Glory loss by
+  cause (LORD_DEATH_NO_HEIR=0.3, CLAN_DESTROYED=1.0, DISMISSAL=0.3, DISMISSAL_DISGRACE=2.0,
+  VOLUNTARY_DEPARTURE=rank-scaled disloyalty via CrimeSystem.get_disloyalty_honor()).
+  `lord_auto_rejects()`: hard-rejects permanent ronin, negative disposition, TREASON/MAHO_USE/
+  UNSANCTIONED_COVERT_KILLING crimes. `resolve_petition()`: contested Courtier+Awareness vs
+  Etiquette+Awareness, PETITION_MIN_TN=20, presentation_modifier=margin/PETITION_MARGIN_SCALE(5),
+  failure=−3 disposition + 90-day per-lord cooldown keyed as
+  `supply_ledger["petition_refused_until_<lord_id>"]` (A50c — scoped so refused-lord 200 does not
+  block petitioning lord 201). `accept_into_service()`: lord/role assignment, status floor 1.0,
+  HIRING_GLORY_RECOVERY=+0.3, clan unchanged (formal induction is s52.7). Permanent ronin: 5
+  DISMISSAL_DISGRACE CrimeRecords → permanent_ronin flag. PETITION_RONIN executor (VISITING
+  context, 1 AP): per-lord cooldown check, auto-reject path (no roll-failure penalties applied),
+  contested roll, `requires_ronin_acceptance` flag on success. ACCEPT_RONIN_PETITION executor
+  (AT_OWN_HOLDINGS, 1 AP): lord-side initiation path. `_process_petition_writebacks()`: cooldown
+  write on roll failure, `accept_into_service()` on success, FIND_NEW_LORD standing cleared.
+  `_assign_ronin_standing_objectives()`: daily assignment for living non-permanent ronin without
+  existing standing. FIND_NEW_LORD NeedType: PETITION_RONIN=90, BEGIN_TRAVEL=80, WRITE_LETTER=60.
+  FILL_VACANCY: ACCEPT_RONIN_PETITION=40. Income tracking, desperation/insurgency seeding,
+  mercenary hire, `process_seasonal_ronin()` also in `simulation/ronin_system.gd`. Constants
+  A38–A50c locked. ~75 tests in `tests/test_ronin_system.gd`.
+
+### Systems Added 2026-05-30
+- **s52.6 Ronin Contract Hire** — GDD `gdd/s52.6_ronin_contracts_locked.md`. Three contract types
+  (PROVINCE_DEFENSE=3 koku/season, MAGISTRATE_AIDE=2 koku/season, MILITARY_SERVICE=2 koku/season).
+  HIRE_RONIN ActionID (1 AP, lord-only, AT_OWN_HOLDINGS+VISITING, Courtier/Awareness TN 10):
+  validates ronin present/alive/non-permanent/uncontracted, lord koku sufficient, ronin's disposition
+  toward lord ≥ 0, rolls Courtier TN 10, injects CONTRACT_OFFERED reactive event on success.
+  ReactiveDecisions._evaluate_contract_offer(): desperate→auto-accept, disposition≥31→auto-accept,
+  Chugi accepts PROVINCE_DEFENSE/MAGISTRATE_AIDE, Meiyo accepts at disp≥0, Ketsui always accepts,
+  Ishi refuses unless desperate, Seigyo/default accept at disp≥0. Contract acceptance writeback:
+  koku deducted from lord, paid to ronin, accept_into_service(), contract_end_ic_day/type/lord_family
+  stored in supply_ledger, NeedType primary objective assigned (DEFEND_PROVINCE/UPHOLD_LAW/LEVY_TROOPS),
+  FIND_NEW_LORD standing cleared. Contract decline: CONTRACT_DECLINE_DISPOSITION (−1) both directions.
+  Contract expiry (daily check): clean (primary source==contract)→complete_contract (+0.5 glory, deed++),
+  abandoned→CONTRACT_ABANDONED_DISPOSITION (−5) to lord. TERMINATE_CONTRACT (0 AP, 1 civilian order):
+  half-koku refund, CONTRACT_EARLY_TERMINATION_DISPOSITION (−3) to lord disposition. Constants A51–A59
+  locked. 44 tests.
+- **s52.8 TERMINATE_CONTRACT NeedType** — GDD `gdd/s52.8_terminate_contract_needtype_locked.md`.
+  TERMINATE_CONTRACT wired under ADJUST_TAX NeedType at score 35 (below SET_STIPEND_RATE=60 for
+  social-cost penalty, above WRITE_LETTER=30). Phase 4c precondition filter removes it when
+  `has_active_contracts=false`. `has_active_contracts` injected per lord via pre-built set of
+  contract holders scanned before wave resolution; cleared by stale-flag pass. Constants A77–A79
+  locked. 6 tests.
+- **s52.7 Clan Induction** — GDD `gdd/s52.7_clan_induction_locked.md` (redesigned).
+  Three-stage process: (1) 8 deed credits from contract completions, (2) 1 extraordinary
+  deed (contract completed while lord's clan at war AND province in crisis AND 3+ season
+  service), (3) Family Daimyo approval then Provincial Daimyo ceremony.
+  GRANT_DEED_CREDIT removed entirely — lords cannot fast-track via manual grants.
+  APPROVE_CLAN_INDUCTION (0 AP, 1 civilian order, AT_OWN_HOLDINGS+AT_COURT): Family Daimyo
+  only, validates 8 deeds + 1 extraordinary deed + disposition≥51, stores approval in
+  `supply_ledger["family_daimyo_approval"]`. Approval can be granted remotely.
+  PERFORM_CLAN_INDUCTION (2 AP, AT_OWN_HOLDINGS, Courtier/Awareness TN 20, 10 koku Pattern B):
+  Provincial Daimyo+ only; can_be_inducted() gate (rank, disposition≥51, deeds≥8,
+  extraordinary≥1, FD approval set, different clan, no TREASON/MAHO/COVERT_KILLING crimes);
+  ceremony failure→TIER_4 PERSONAL topic (FD approval not revoked).
+  Extraordinary deed detection in `_is_extraordinary_contract_deed()` at expiry time
+  checks active_wars, province active_crisis_id, and contract_duration_seasons≥3.
+  Induction writeback: perform_induction() mutates clan/family/lord_id/role_position,
+  status raised to 1.0 minimum, permanent_ronin cleared, deed credits + extraordinary
+  deeds + FD approval erased, +1.0 glory inductee, +0.3 glory sponsor, +15 disposition
+  from all co-family members toward inductee, TIER_3 POLITICAL topic distributed.
+  FIND_NEW_LORD standing cleared on induction. objective_alignment.json: FILL_VACANCY
+  NeedType: PERFORM_CLAN_INDUCTION (20), APPROVE_CLAN_INDUCTION (50), HIRE_RONIN (60).
+  Constants A60–A76 locked. ~55 tests.
+- **s57.28 Sculpture System** — GDD `gdd/s57.28_sculpture_system_locked.md`. Previously
+  implemented but lacking a lock document; now formally locked. One ActionID: COMPOSE_SCULPTURE
+  (Category 11, Artisan: Sculpture/Awareness, TN 15, progress = max(1, roll−15) per AP).
+  Three formats: STATUARY (shrine/temple statue_slot, passive WP 0.1–1.0/season PROVISIONAL,
+  worship FR 0/1/1/2/2 by tier), GUARDIAN (guardian_slot komainu pair, spiritual ward −1 to
+  −5 per non-Jigoku overlap tick when pair_intact=true, zero Jigoku effect, guardian worship
+  FR 0/0/1/1/2 by tier, outdoor wood degradation −1 tier per 1800 IC days), FIGURINE (inventory
+  gift item, any context, Mantis +3 FR on DELIVER_GIFT, collection topic at 3+ matching
+  theme/creator). Material modifiers: stone +5 TN, bronze +1 FR + foundry requirement.
+  Composition degradation halves progress after 90 IC days without AP (statuary/guardian only;
+  figurines exempt). Skill gate: rank ≥ target quality tier. Raises at completion: +1 quality
+  tier per Raise. Progress thresholds (statuary 20/40/65/95/130, guardian 25/50/80/110/150,
+  figurine 5/10/18/28/40). Worship FR cap = 5 combined PROVISIONAL. Visitor disposition
+  bonuses 1–5 by quality toward creator, 120-day window, glory tick every 5 visitors.
+  Yoritomo Sculptor school: +1k1 on figurine rolls. Siege/sacking survival: wood 30–70% by
+  tier, stone +20%, bronze +30%; zone destruction: wood destroyed, stone 50%, bronze 70%.
+  Lifecycle topic tiers: Normal/Fine=TIER_4, Exceptional/Masterwork=TIER_3, Legendary=TIER_2.
+  Settlement-level zone proxy (statue_slot, guardian_slot, statue_permissions,
+  guardian_permissions on SettlementData) replaces unavailable zone system until s4.4/s56.
+  World-state persistence: active_sculptures Array + next_sculpture_id, saved via
+  WorldStateSaver DIR_SCULPTURES. 931 tests in `tests/test_sculpture_system.gd`.
+
+### Systems Added 2026-05-31
+- **s57.23 Garden System & s57.24 Bonsai System** — `simulation/garden_system.gd` (811 lines),
+  `shared/garden_data.gd`, `shared/bonsai_data.gd`, `shared/commission_record_data.gd`.
+  Locked spec in `gdd/s57.23a_garden_bonsai_locked.md`. 58 tests in `tests/test_garden_system.gd`.
+
+  **Garden system (s57.23):**
+  Seven ActionIDs fully wired into the NPC pipeline: REQUEST_ART (lord requests artisan via
+  Courtier/Awareness, no roll), OFFER_ART_COMMISSION (artisan offers via Artisan: Gardening/
+  Awareness, no roll), CULTIVATE_GARDEN (Artisan: Gardening + free raise at rank≥3 vs
+  QUALITY_TN[tier]; skill gate per QUALITY_SKILL_GATE[tier]; progress bar advances per
+  apply_cultivate_progress; on completion creates GardenData, computes COMPLETION_BONUS_BY_RAISES
+  disposition effect to daimyo, awards EXCESS_RAISE_GLORY 0.2 per raise, Tier 3/4 topic),
+  MAINTAIN_GARDEN (Artisan: Gardening vs QUALITY_TN[garden_tier] + free raise; apply_maintain_result
+  prevents auto-degradation for the season; degradation/destruction topics generated),
+  COLLECT_BONSAI_SPECIMEN (Artisan: Gardening or Perception vs TN 10; creates BonsaiData),
+  TEND_BONSAI (Artisan: Gardening vs TN 10 + free raise; raises improve quality tier via
+  BONSAI_QUALITY_THRESHOLDS; excess raise glory 0.05/raise),
+  DISPLAY_BONSAI (no roll; sets display_settlement_id on bonsai, updates settlement slot).
+
+  Context injection (`_inject_garden_context()`): per-character world_state keys: `active_commission_id`,
+  `commission_quality_tier`, `local_garden_id`, `local_garden_tier`, `owned_bonsai_id`,
+  `bonsai_display_eligible`, `garden_zone_available`, `available_garden_zone`,
+  `character_province_id`. All keys cleared daily by stale-flag pass.
+
+  Visitor effects (`_process_garden_visitor_effects()`): living non-traveling characters co-located
+  with a garden settlement receive disposition temp_modifier via apply_visitor(); GLORY_TICK_THRESHOLD=5
+  unique visitors triggers CREATOR_GLORY_PER_TICK=0.1 glory (creator) and DAIMYO_GLORY_PER_TICK=0.01
+  (settlement daimyo). Duplicate guard via `active_garden_bonuses` Array on L5RCharacterData
+  (entries: `{garden_id, creator_id, expires_ic_day}`). VISITOR_BONUS_DURATION_DAYS=120.
+  VISITOR_MEMORY_CAP=200; purge after VISITOR_MEMORY_PURGE_DAYS=1800.
+
+  Seasonal maintenance (`_process_garden_seasonal_maintenance()`): gardens with no maintenance
+  this season auto-degrade via apply_seasonal_auto_degradation(); neglect ticks on obligated
+  commissions via evaluate_neglect_tick(); abandoned commissions (check_abandonment()) apply
+  ABANDONMENT_HONOR_LOSS=0.5, ABANDONMENT_DISPOSITION_LOSS=8 to artisan toward daimyo.
+
+  Settlement-level zone proxy: `garden_slots: Dictionary` and `garden_permissions: Dictionary`
+  on SettlementData bypass the unavailable s4.4 zone system. `get_garden_eligible_zones()`
+  returns zone type strings by settlement type (CITY/CASTLE get more zones). `is_zone_committed()`
+  and `grant_permission()` manage slot exclusivity.
+
+  Phase 4c precondition filter (`_apply_garden_precondition_filter()`): removes CULTIVATE_GARDEN
+  when no active commission or rank<1, MAINTAIN_GARDEN when no local garden or rank<1, OFFER_ART_COMMISSION
+  when no available zone, TEND_BONSAI/DISPLAY_BONSAI when no owned bonsai, DISPLAY_BONSAI when
+  settlement ineligible, COLLECT_BONSAI_SPECIMEN when rank<1.
+
+  **Bonsai system (s57.24):**
+  Monthly neglect (`_process_bonsai_monthly_neglect()`): fires at `ic_day / 30` boundary;
+  calls `GardenSystem.apply_tend_result(bonsai, false, 0, ic_month)` for bonsai whose
+  `last_tended_month != ic_month`. Internally increments `consecutive_missed_months`,
+  applies tier degradation, marks dead at cap. CULTURAL_INTEREST_THRESHOLD=2 months.
+  ARTISAN_SCHOOL_CULTURAL_INTEREST=10. BONSAI_MUNDANE=0 tier floor.
+
+  Context lists: CULTIVATE_GARDEN, MAINTAIN_GARDEN, COLLECT_BONSAI_SPECIMEN, TEND_BONSAI,
+  DISPLAY_BONSAI, OFFER_ART_COMMISSION in AT_OWN_HOLDINGS; OFFER_ART_COMMISSION, TEND_BONSAI,
+  DISPLAY_BONSAI in AT_COURT; CULTIVATE_GARDEN, TEND_BONSAI, DISPLAY_BONSAI in VISITING.
+  AP cost 1 for all 7 ActionIDs. action_skill_map.json and objective_alignment.json updated:
+  ARTISTIC_EXPRESSION (CULTIVATE_GARDEN:100, TEND_BONSAI:95, MAINTAIN_GARDEN:90, OFFER_ART_COMMISSION:80,
+  DISPLAY_BONSAI:70, COLLECT_BONSAI_SPECIMEN:60), PATRONIZE_ARTS (REQUEST_ART:85,
+  CULTIVATE_GARDEN:70, MAINTAIN_GARDEN:60, DISPLAY_BONSAI:50), SEEK_GLORY (CULTIVATE_GARDEN:70,
+  DISPLAY_BONSAI:60, OFFER_ART_COMMISSION:60, REQUEST_ART:55, TEND_BONSAI:40,
+  COLLECT_BONSAI_SPECIMEN:30).
+
+  **WorldState persistence:** `active_gardens: Array[GardenData]`, `next_garden_id: Array[int]`,
+  `active_bonsai: Array[BonsaiData]`, `next_bonsai_id: Array[int]`, `commission_records:
+  Array[CommissionRecordData]`, `next_commission_id: Array[int]` on WorldState. Saved/loaded
+  via WorldStateSaver Resource array pattern (DIR_GARDENS, DIR_BONSAI, DIR_COMMISSIONS).
+
+  **SettlementData additions:** `garden_slots: Dictionary`, `garden_permissions: Dictionary`,
+  `bonsai_display_slot: int = -1`. **L5RCharacterData additions:** `declined_garden_zones: Array`,
+  `declined_commissions: Array`, `active_garden_bonuses: Array`.
 
 ## Resolved Design Decisions
 
@@ -3337,39 +3882,42 @@ pending playtesting.
 
 | # | Value | Current | Where Used | GDD Says | Code Location |
 |---|-------|---------|------------|----------|---------------|
-| A1 | Non-shinobi TN penalty on Phase 1 access rolls | +10 | assassination_system.gd | "severe disadvantage" — no number | s12.8 |
-| A2 | Per-failed-access permanent TN penalty tiers | +5/+10/+15 | assassination_system.gd | GDD-sourced: matches suspicion accumulation tiers | s12.8 |
-| A3 | Critical failure detection TN (assassin's roll total) | roll total | assassination_system.gd | No explicit detection TN formula | s12.8 |
-| A4 | Execution honor cost (non-Scorpion) | -3.0 | assassination_system.gd | "significant" — no number | s12.8 |
-| A5 | Concealment partial failure threshold | missed by <10 | assassination_system.gd | "near miss" — no number | s12.8 |
-| A6 | Daily detection suspicion gain on observer success | +3 | assassination_system.gd | No explicit amount per observation | s12.8 |
-| A7 | Target Status as direct TN adder on Phase 1 access | int(status) | assassination_system.gd | "higher Status = higher base TN" — no formula | s12.8 |
-| A8 | Non-shinobi detection bonus for observers | +5 Investigation | assassination_system.gd | "easier to detect" — no number | s12.8 |
+| A1 | Non-shinobi TN penalty on Phase 1 access rolls | +10 | assassination_system.gd | RESOLVED — s12.8a: equal to lockdown response; between Seppun half (+8) and full (+15) protection. | s12.8a |
+| A2 | Per-failed-access permanent TN penalty tiers | +5/+10/+15 | assassination_system.gd | RESOLVED — s12.8a: mirrors GDD-confirmed suspicion accumulation tiers (+5/+10/+15 per s12.8). | s12.8a |
+| A3 | Critical failure detection TN (assassin's roll total) | roll total | assassination_system.gd | RESOLVED — s12.8a: detection difficulty scales with assassin quality; better assassins leave less detectable traces. | s12.8a |
+| A4 | Execution honor cost | Low Skill/Stealth | assassination_system.gd | RESOLVED — s12.8a: Table 2.3 Low Skill cost for Stealth. Shosuro=0, Scorpion=half, others rank-scaled. GDD: "Scorpion pay almost nothing, others pay steeply." | s12.8a |
+| A5 | Concealment partial failure threshold | missed by <10 | assassination_system.gd | RESOLVED — s12.8a: standard L5R 4e near-miss convention. Miss by 1–9 = partial; 10+ = clear failure. | s12.8a |
+| A6 | Daily detection suspicion gain on observer success | +3 | assassination_system.gd | RESOLVED — s12.8a: calibrated for 10–15 day natural windows before lockdown. ~3–4 detections to watchful threshold. | s12.8a |
+| A7 | Target Status as direct TN adder on Phase 1 access | int(status) | assassination_system.gd | RESOLVED — s12.8a: direct linear mapping of GDD "higher Status = higher base TN." Status 1–10 maps to +1–10. | s12.8a |
+| A8 | Non-shinobi detection bonus for observers | +5 Investigation | assassination_system.gd | RESOLVED — s12.8a: matches watchful-household bonus (+5). Untrained assassin = as detectable as alert household. | s12.8a |
 | A9 | VISIT_PROMISE deadline | Next season start (min 30d) | day_orchestrator.gd | "the season stated in the letter" — RESOLVED | s55.31 |
 | A10 | MEETING_ARRANGEMENT deadline | Season after next (min 30d) | day_orchestrator.gd | "the arranged meeting date" — RESOLVED | s55.31 |
-| A11 | MEETING_ARRANGEMENT reply disposition gate | >= 0 | letter_system.gd | No explicit threshold in GDD | s55.31 |
-| A12 | REQUEST_ALLIED_AID acceptance disposition gate | 31 | npc_decision_engine.gd | No explicit threshold in GDD | s55.31 |
+| A11 | MEETING_ARRANGEMENT reply disposition gate | >= 0 | letter_system.gd | RESOLVED — s12.7a LOCKED specifies MEETING_ACCEPT_DISPOSITION = 0 ("neutral or positive disposition"). | s12.7a |
+| A12 | REQUEST_ALLIED_AID acceptance disposition gate | 31 | action_executor.gd | RESOLVED — s12.2 LOCKED: Friend tier = +31 to +60. Lords accept allied aid from Friend-tier or above. | s12.2 |
 | A13 | RESOURCE_PROMISE deadline | Next/after-next season (urgency) | day_orchestrator.gd | "the agreed delivery season" — RESOLVED | s55.31 |
-| A14 | TREAT_WOUND raises by Medicine rank | 0-2→0, 3-4→1, 5-6→2, 7+ →3 | npc_decision_engine.gd | NPCs should declare raises; no scale given | s4.5 |
-| A15 | FORGE letter/order NeedType alignment scores | 40–70 | objective_alignment.json | GDD says what forges do but not how to score them vs other actions | s12.8 |
+| A14 | TREAT_WOUND raises by Medicine rank | 0-2→0, 3-4→1, 5+→3 | npc_decision_engine.gd | RESOLVED — s57.31a. GDD anchor: s57.31 "At Rank 5 with 3 Raises: 5k1." No 2-Raise tier. | s57.31a |
+| A15 | FORGE letter/order NeedType alignment scores | DAMAGE_REL: FIL=70/FO=55; ACQUIRE_LEV: FIL=50/FO=30; SUPPRESS_INV: FO=60/FIL=45 | objective_alignment.json | RESOLVED — s12.8b: calibrated against comparable covert actions. FORGE_ORDER ACQUIRE_LEVERAGE 40→30 (orders compel action, don't produce leverage material). | s12.8b |
 | A16 | Forged letter delivery distance | 3 provinces | day_orchestrator.gd | Blocked on map/adjacency data | s12.7 |
-| A17 | Forged objective priority | 8 | day_orchestrator.gd | No GDD spec for objective priority values | — |
-| A18 | Impersonation detection topic tier | TIER_3 | day_orchestrator.gd | No explicit tier in GDD | — |
-| A19 | INVESTIGATE_THREAT priority (from impersonation) | 6 | day_orchestrator.gd | No GDD spec for objective priority values | — |
+| A17 | Forged objective priority | 8 | day_orchestrator.gd | RESOLVED — s12.8b: metadata only (NPC engine does not read priority field). Value documents intent: above normal objectives (5), below crisis override. | s12.8b |
+| A18 | Impersonation detection topic tier | TIER_3 | day_orchestrator.gd | RESOLVED — s12.8b: TIER_3. Above Spy Uncovered (TIER_4, identity unknown); below lord assassination (TIER_2). Political scandal at family level. | s12.8b |
+| A19 | INVESTIGATE_THREAT priority (from impersonation) | 6 | day_orchestrator.gd | RESOLVED — s12.8b: metadata only (NPC engine does not read priority field). Value documents intent: above UPHOLD_LAW (4) and court attendance (5), below forged orders (8). | s12.8b |
 | A20 | Forge authority level | Target's lord_rank via chars_by_id | npc_decision_engine.gd | RESOLVED (B11) | s12.8 |
 | A21 | Hunt beast stat blocks (8 of 10 species) | Derived from s54.1 | hunt_system.gd | Bear and ozaru GDD-confirmed; 8 others interpolated | s57.38 |
-| A22 | PERFORM_RITUAL alignment score under PERFORM_RITUAL NeedType | 90 (below PERFORM_WORSHIP at 100) | objective_alignment.json | No explicit scoring hierarchy for rituals | — |
-| A23 | World gen POSITION_RANK by role | Champion 7.0, Family Daimyo 6.0, Provincial 5.0, Local 4.0 | world_population_generator.gd | GDD s22.4 gives ring ranges per rank but not a positional rank mapping | s52 |
-| A24 | World gen POSITION_STATUS by role | Champion 7.0, Family Daimyo 6.0, etc. | world_population_generator.gd | GDD does not specify exact Status values per lord position | s52 |
-| A25 | World gen BASE_PU per province tier | Family seat 60, regular 40 | world_bootstrap.gd | GDD does not specify base PU per province | s2.3 |
-| A26 | World gen _scale_pu_by_terrain multipliers | Plains 1.2, Hills 0.8, Mountains 0.6, etc. | world_bootstrap.gd | Distinct from Rice production modifiers in s4.3; no PU scaling in GDD | s2.3 |
-| A27 | World gen TERRAIN_PU_DISTRIBUTION | Type allocation percentages by terrain | world_generator.gd | GDD does not specify PU type allocation by terrain | s4.3 |
-| A28 | World gen POINTS_PER_RANK for character creation | 10 per insight rank | world_generator.gd | GDD s22.4 gives ring ranges per rank, not point budgets | s52 |
-| A29 | World gen parent age thresholds | Min 16, max 40 for children | world_population_generator.gd | GDD does not specify exact parent age constraints | s22.4 |
-| A30 | World gen marriage rate | 40% per generation | world_population_generator.gd | GDD does not specify marriage probability | s22.7 |
-| A31 | World gen cross-clan marriage rate | 15% of marriages | world_population_generator.gd | GDD does not specify cross-clan frequency | s22.7 |
-| A32 | LEGIONS_PER_ARMY | 3 | world_population_generator.gd | GDD does not specify legions per army count | s57.21 |
-| A33 | Minor Clan Champion stipend | 5.0 koku | world_population_generator.gd | Analogy to Clan Champion (GDD says 5); no explicit Minor Clan entry | s4.3 |
+| A22 | PERFORM_RITUAL alignment score under PERFORM_RITUAL NeedType | PERFORM_RITUAL=100, PERFORM_WORSHIP=90 | objective_alignment.json | RESOLVED — direct action wins its own NeedType (100); worship is valid fallback (90) when ritual conditions not met. | — |
+| A23 | World gen POSITION_RANK by role | Role-based: mastery=5, proven=4, veteran=3, junior=2, samurai=1 | world_population_generator.gd | RESOLVED — s52a A23: role-required excellence table (39 entries). Emperor/Clan Champion/School Master/Temple Head/Emerald Champion/Jade Champion/Abbots/Inquisitor leaders = 5; Family Daimyo/Rikugunshokan/Magistrates/Minor Clan Champion/Wall Cmdr = 4; Provincial Daimyo/Senior Courtier/Taisa = 3; Local Daimyo/Chui/Yoriki = 2; Samurai = 1. | s52a |
+| A24 | World gen POSITION_STATUS by role | Local Daimyo 4.0, Provincial Daimyo 5.0 (corrected) | world_population_generator.gd | RESOLVED — s52a A24: Local Daimyo 3.0→4.0 (resolves as CITY_DAIMYO, 5 civilian orders), Provincial Daimyo 4.0→5.0 (resolves as PROVINCIAL_DAIMYO, 8 civilian orders). Prior values produced 0 civilian orders for Local Daimyo and wrong tier for Provincial Daimyo. | s52a |
+| A25 | World gen BASE_PU per province tier | FAMILY_SEAT=20, GREAT_CLAN=10, MINOR_CLAN=5, UNGOVERNABLE=1 | world_bootstrap.gd | RESOLVED — s52a A25: PU is settlement-level (SettlementData.population_pu). Family castles receive BASE_PU/2 (~7–10 PU after terrain scaling). Villages receive 2–5 PU. Values are fresh-world initialization; production mechanics grow/shrink PU during play. | s52a |
+| A26 | World gen _scale_pu_by_terrain multipliers | PLAINS=1.2, COASTAL=1.0, FOREST=0.9, MOUNTAINS=0.7, SWAMP=0.6, WASTELAND=0.3 | world_bootstrap.gd | RESOLVED — s52a A26: directionally correct per GDD terrain flavor. ±10% variance applied after multiplication. | s52a |
+| A27 | World gen TERRAIN_PU_DISTRIBUTION | 8 terrain types × 4 sub-types (farming/town/mining/military) | world_generator.gd | RESOLVED — s52a A27: Plains 60/25/5/10, Mountains 25/20/40/15, Wasteland 15/15/10/60, etc. Calibrated against GDD terrain flavor. | s52a |
+| A28 | World gen POINTS_PER_RANK for character creation | 4 per insight rank (not 10 — prior CLAUDE.md entry was wrong) | world_generator.gd | RESOLVED — s52a A28: POINTS_PER_RANK=4. Allows Rank 5 characters 16 trait advances above base. Code value was always 4; CLAUDE.md previously stated "10" in error. | s52a |
+| A29 | World gen parent age thresholds | Min 16, max 40 year gap | world_population_generator.gd | RESOLVED — s52a A29: 16 = earliest post-gempukku parenthood; 40 = upper childbearing limit. | s52a |
+| A30 | World gen marriage rate | 40% per generation | world_population_generator.gd | RESOLVED — s52a A30: leaves majority of lower-status samurai unmarried at world start; ensures most senior characters have family bonds. | s52a |
+| A31 | World gen cross-clan marriage rate | 15% of marriages | world_population_generator.gd | RESOLVED — s52a A31: rare enough to be politically significant, common enough to seed cross-clan family tension. | s52a |
+| A32 | LEGIONS_PER_ARMY | 3 | world_population_generator.gd | RESOLVED — s52a A32: consistent with ~3,000-soldier army scale. World initialization only; actual composition varies through play. | s52a |
+| A33 | Minor Clan Champion stipend | 3.0 koku/season (was 5.0) | world_population_generator.gd | RESOLVED — s52a A33: equal to Family Daimyo. Minor Clan Champion governs at single-clan scale, not multi-family Great Clan scale. | s52a |
+| A34 | Dissolution family baseline penalty | −20 | marriage_system.gd | RESOLVED — s57.49b: within Rival tier (−11 to −30, s12.2). Mid-Rival; distinguished from high-end provocations like assassination vengeance (−50). | s57.49b |
+| A35 | Dissolution spouse Glory loss | −0.5 | marriage_system.gd | RESOLVED — s57.49b: half of s46 Table 2.4 "Family Dishonor = −1 Glory Rank." Comparable visibility, lesser cause (no personal dishonour by the spouse). | s57.49b |
+| A36 | Dissolution clan baseline penalty (cross-clan) | −10 | marriage_system.gd | RESOLVED — s57.49b: s12.2 Stranger/Rival boundary = −10/−11. Clan penalty caps at boundary without forcing structural Rival status. | s57.49b |
 
 ---
 
@@ -3419,7 +3967,9 @@ The flags remain emitted (harmless metadata) but will never be consumed.
 `_process_following_orders_honor_writebacks()` fires once per day per NPC
 whose primary objective has `assigned_by >= 0` (lord-assigned). Applies
 `get_following_orders_honor()` (positive at low rank, negative at high rank).
-Deduped per character per day.
+Deduped per character per day. Numeric values locked in s46a:
+HONOR_TABLE_FOLLOWING_ORDERS = [6, 4, 0, 0, -2, -4] (÷10 → +0.6/+0.4/0/0/−0.2/−0.4).
+Positive at honor ranks 0–2, neutral at 3–6, gentle negative at 7–10.
 
 **B6. Three Table 2.3 rows — RESOLVED: mechanical triggers wired.**
 LYING fires on successful FABRICATE_SECRET when fabricator has positive
@@ -3430,6 +3980,13 @@ the forged order's arrival (tricked into breaking social obligations).
 DUPED_FOOLISH fires on travel arrival when the character's primary
 objective has `source == "forged_order"` and the destination has no
 matching target (sent to a useless location by a fake order).
+BUG FIX (2026-05-29): DUPED_FOOLISH previously did not check
+`target_province_id`. PATROL_PROVINCE forged orders set only province
+target; victims correctly arriving in the target province always had
+`has_target_here=false` and incorrectly received the honor penalty.
+Fixed by passing `settlements` array to `_process_duped_foolish_on_arrival()`
+and building a settlement→province lookup. 10 orchestrator-level tests
+added covering all three trigger conditions.
 
 **B7. Koku transfer ActionID — RESOLVED: TRANSFER_KOKU.**
 Added TRANSFER_KOKU to AT_OWN_HOLDINGS, AT_COURT context lists and
@@ -3513,7 +4070,7 @@ These need GDD sections to be written or unlocked before implementation.
 | s38 | Kiho system — REFERENCE section |
 | s40 | Individual combat — REFERENCE section (beyond map dependency) |
 | s43 | Maho spell cast roll TN — GDD does not specify it. Blocks: CAST_MAHO NPC ActionID |
-| s48 | Sensei/training system — blocks MENTOR executor and ACCEPT_TRAINING reactive chain |
+| s48/s48a | LOCKED. Sensei/training and rank advancement values locked. school_rank sync and rank-up topics implemented. PC dojo-visit gate deferred (PC system not yet designed). |
 | s49 | Artisan: bonsai/garden (4 ActionIDs), theater composition (3 ActionIDs) — forward-scored, no executor. Core crafting pipeline DONE. |
 | s54.7 | Kolat system — blocks 23 Kolat spy network ActionIDs and BRIBE_GARRISON_COMMANDER |
 | s56.14 | Full Bloodspeaker cult encounters — trigger layer done, ASCII map encounters blocked |
@@ -3522,7 +4079,7 @@ These need GDD sections to be written or unlocked before implementation.
 | s11.3.5 | Kuni/Asako/Kuroiban Named Characters with UPHOLD_LAW standing objectives — PARTIALLY DESIGNED |
 
 **REFERENCE sections** (source material only, design not started): s31–s37,
-s38, s44, s45, s54.7, s57.22–s57.24, s57.26–s57.30, s57.41–s57.43,
+s38, s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43,
 s57.45–s57.46.
 
 ---

@@ -3349,6 +3349,7 @@ func test_treat_wound_high_medicine_three_raises() -> void:
 
 
 func test_pick_medicine_raises_tiers() -> void:
+	# GDD s57.31a: 0-2→0, 3-4→1, 5+→3. No 2-Raise tier.
 	var ctx := _make_metadata_ctx()
 	ctx.skill_ranks = {"Medicine": 0}
 	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 0)
@@ -3359,9 +3360,9 @@ func test_pick_medicine_raises_tiers() -> void:
 	ctx.skill_ranks = {"Medicine": 4}
 	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 1)
 	ctx.skill_ranks = {"Medicine": 5}
-	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 2)
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 3)
 	ctx.skill_ranks = {"Medicine": 6}
-	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 2)
+	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 3)
 	ctx.skill_ranks = {"Medicine": 7}
 	assert_eq(NPCDecisionEngine._pick_medicine_raises(ctx), 3)
 	ctx.skill_ranks = {"Medicine": 10}
@@ -3853,3 +3854,104 @@ func test_get_own_war_score_extracts_correct_clan_score() -> void:
 		"Should return clan_b score for Crane")
 	assert_eq(NPCDecisionEngine._get_own_war_score(war_dict, "Phoenix"), 50,
 		"Should return default 50 for uninvolved clan")
+
+
+# -- TEND_WOUNDED_ALLY personality bonus wiring (s57.31.7) --------------------
+
+func _make_healer(virtue: Enums.BushidoVirtue, healer_id: int = 10) -> L5RCharacterData:
+	var h := L5RCharacterData.new()
+	h.character_id = healer_id
+	h.skills = {"Medicine": 2}
+	h.items = [{"item_type": "medicine_kit", "remaining_uses": 5, "acquired_ic_day": 1}]
+	h.bushido_virtue = virtue
+	h.shourido_virtue = Enums.ShouridoVirtue.NONE
+	ActionPointSystem.reset_daily_ap(h)
+	return h
+
+
+func _make_wounded_target(target_id: int, healer_id: int, disposition: int = 30) -> L5RCharacterData:
+	var t := L5RCharacterData.new()
+	t.character_id = target_id
+	t.stamina = 2
+	t.willpower = 2
+	t.wounds_taken = 8
+	t.last_medicine_treatment_ic_day = -1
+	t.disposition_values = {healer_id: disposition}
+	return t
+
+
+func test_tend_opportunity_jin_healer_gets_bonus() -> void:
+	# Jin healers receive +15 personality bonus (s57.31.7 JIN_SCORE_MOD=15).
+	var healer := _make_healer(Enums.BushidoVirtue.JIN, 10)
+	var target := _make_wounded_target(20, 10)
+	healer.disposition_values = {20: 30}
+	var chars_by_id: Dictionary = {10: healer, 20: target}
+	var ws: Dictionary = {
+		"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
+		"ic_day": 5,
+		"characters_present": [20],
+		"pending_events": [],
+		"action_log": [],
+	}
+	var ctx := NPCDecisionEngine.build_context(healer, ws, chars_by_id)
+	var event: Dictionary = {}
+	for e: Dictionary in ctx.pending_events:
+		if e.get("type") == "tend_wounded_ally_opportunity":
+			event = e
+	assert_false(event.is_empty(), "Jin healer should inject tend opportunity")
+	# Base priority for disposition 30 (Friend tier) + HURT wounds = at least 2.
+	# JIN_SCORE_MOD (+15) pushes it above the non-virtue base.
+	var base_priority: int = MedicineSystem.compute_tend_priority(healer, target)
+	assert_eq(event["priority"], base_priority + 15,
+		"Jin healer priority should include +15 JIN_SCORE_MOD")
+
+
+func test_tend_opportunity_chugi_healer_gets_bonus_for_superior() -> void:
+	# Chugi healers receive +20 when target is their lord (s57.31.7 CHUGI_SCORE_MOD=20).
+	var healer := _make_healer(Enums.BushidoVirtue.CHUGI, 10)
+	healer.lord_id = 20
+	var target := _make_wounded_target(20, 10)
+	healer.disposition_values = {20: 30}
+	var chars_by_id: Dictionary = {10: healer, 20: target}
+	var ws: Dictionary = {
+		"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
+		"ic_day": 5,
+		"characters_present": [20],
+		"pending_events": [],
+		"action_log": [],
+	}
+	var ctx := NPCDecisionEngine.build_context(healer, ws, chars_by_id)
+	var event: Dictionary = {}
+	for e: Dictionary in ctx.pending_events:
+		if e.get("type") == "tend_wounded_ally_opportunity":
+			event = e
+	assert_false(event.is_empty(), "Chugi healer tending lord should inject tend opportunity")
+	var base_priority: int = MedicineSystem.compute_tend_priority(healer, target)
+	assert_eq(event["priority"], base_priority + 20,
+		"Chugi healer priority should include +20 CHUGI_SCORE_MOD when target is lord")
+
+
+func test_tend_opportunity_chugi_healer_no_bonus_for_non_superior() -> void:
+	# Chugi bonus only fires when target is lord or operational superior.
+	var healer := _make_healer(Enums.BushidoVirtue.CHUGI, 10)
+	healer.lord_id = 99  # Different character — target is not the lord.
+	healer.operational_superior_id = -1
+	var target := _make_wounded_target(20, 10)
+	healer.disposition_values = {20: 30}
+	var chars_by_id: Dictionary = {10: healer, 20: target}
+	var ws: Dictionary = {
+		"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS,
+		"ic_day": 5,
+		"characters_present": [20],
+		"pending_events": [],
+		"action_log": [],
+	}
+	var ctx := NPCDecisionEngine.build_context(healer, ws, chars_by_id)
+	var event: Dictionary = {}
+	for e: Dictionary in ctx.pending_events:
+		if e.get("type") == "tend_wounded_ally_opportunity":
+			event = e
+	assert_false(event.is_empty(), "Chugi healer should inject opportunity even without superior match")
+	var base_priority: int = MedicineSystem.compute_tend_priority(healer, target)
+	assert_eq(event["priority"], base_priority,
+		"Chugi healer priority should not include bonus when target is not lord/superior")

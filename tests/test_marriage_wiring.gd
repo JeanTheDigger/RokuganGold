@@ -1225,10 +1225,9 @@ func test_benten_festival_boosts_acceptance() -> void:
 	target_candidate.glory = 2.0
 	var chars_by_id: Dictionary = {1: lord_a, 2: candidate, 10: lord_b, 11: target_candidate}
 
-	# BENTEN_FESTIVAL_MONTH=11, BENTEN_FESTIVAL_DAY=9.
-	# is_benten_festival computes month = int(day_of_year/30)+1, day = (day_of_year%30)+1.
-	# For month=11, day=9: day_of_year = (11-1)*30 + (9-1) = 308.
-	var benten_ic_day: int = (11 - 1) * 30 + (9 - 1)
+	# BENTEN_FESTIVAL_MONTH=9 (Boar), BENTEN_FESTIVAL_DAY=9.
+	# is_benten_festival uses (ic_day-1)%360; IC day for month 9, day 9 = (8*30)+9 = 249.
+	var benten_ic_day: int = (9 - 1) * 30 + 9
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx(lord_a)
 	ctx.ic_day = benten_ic_day
 	var action: NPCDataStructures.ScoredAction = _make_action("ARRANGE_MARRIAGE", {
@@ -1239,8 +1238,8 @@ func test_benten_festival_boosts_acceptance() -> void:
 
 	var result: Dictionary = ActionExecutor.execute(action, lord_a, ctx, _dice, {}, {}, chars_by_id)
 	var effects: Dictionary = result.get("effects", {})
-	# BENTEN_FESTIVAL_BONUS zeroed — marginal proposal with disposition -15 is rejected
-	assert_true(effects.get("marriage_rejected", false), "With BENTEN_FESTIVAL_BONUS=0, marginal proposal should be rejected")
+	# BENTEN_FESTIVAL_BONUS=15 (locked s22.7a) boosts marginal score from -7 to +8 → accepted
+	assert_true(effects.get("requires_marriage", false), "Festival bonus of +15 should push marginal proposal to acceptance")
 
 
 func test_no_benten_bonus_on_normal_day() -> void:
@@ -1335,3 +1334,148 @@ func test_cross_clan_preferred_over_between_families() -> void:
 	)
 	assert_eq(need.need_type, "ARRANGE_MARRIAGE")
 	assert_eq(need.target_npc_id_secondary, 20, "Cross-clan preferred when available")
+
+
+# -- s22.7 Marriage boost layer ------------------------------------------------
+
+func _make_effects(a_id: int, b_id: int, lord_id: int) -> Dictionary:
+	return {
+		"requires_marriage": true,
+		"candidate_a_id": a_id,
+		"candidate_b_id": b_id,
+		"marriage_type": MarriageSystem.MarriageType.CROSS_CLAN,
+		"proposing_lord_id": lord_id,
+		"target_lord_id": lord_id + 100,
+	}
+
+
+func test_cross_clan_marriage_writes_clan_boost_to_marriage_dict() -> void:
+	# s22.7: cross-clan marriage adds +8 to marriage_clan_boosts, NOT clan_baselines.
+	var char_a := _make_char(10, "Crane", "Doji")
+	var char_b := _make_char(11, "Lion", "Akodo")
+	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
+	var clan_baselines: Dictionary = {}
+	var marriage_clan_boosts: Dictionary = {}
+	var marriage_family_boosts: Dictionary = {}
+	var effects: Dictionary = _make_effects(10, 11, -1)
+
+	DayOrchestrator._apply_marriage(
+		effects, chars_by_id, [], 100,
+		clan_baselines, {}, [], [], [1000],
+		marriage_clan_boosts, marriage_family_boosts,
+	)
+
+	var key: String = CollectiveDisposition.make_pair_key("Crane", "Lion")
+	assert_eq(clan_baselines.get(key, 0), 0, "clan_baselines unchanged by s22.7 marriage")
+	assert_eq(
+		marriage_clan_boosts.get(key, {}).get("value", 0),
+		MarriageSystem.CLAN_BASELINE_BOOST,
+		"marriage_clan_boosts gets +8 from cross-clan marriage",
+	)
+
+
+func test_cross_clan_marriage_writes_family_boost_to_marriage_dict() -> void:
+	# s22.7: cross-clan marriage adds +5 to marriage_family_boosts, NOT family_baselines.
+	var char_a := _make_char(10, "Crane", "Doji")
+	var char_b := _make_char(11, "Lion", "Akodo")
+	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
+	var family_baselines: Dictionary = {}
+	var marriage_clan_boosts: Dictionary = {}
+	var marriage_family_boosts: Dictionary = {}
+	var effects: Dictionary = _make_effects(10, 11, -1)
+
+	DayOrchestrator._apply_marriage(
+		effects, chars_by_id, [], 100,
+		{}, family_baselines, [], [], [1000],
+		marriage_clan_boosts, marriage_family_boosts,
+	)
+
+	var fkey: String = CollectiveDisposition.make_pair_key("Doji", "Akodo")
+	assert_eq(family_baselines.get(fkey, 0), 0, "family_baselines unchanged by s22.7 marriage")
+	assert_eq(
+		marriage_family_boosts.get(fkey, {}).get("value", 0),
+		MarriageSystem.FAMILY_BASELINE_BOOST,
+		"marriage_family_boosts gets +5 from cross-clan marriage",
+	)
+
+
+func test_marriage_boost_decays_after_enough_seasons() -> void:
+	# After CLAN_DECAY_SEASONS calls to decay_marriage_boosts, boost decrements by 1.
+	var mcb: Dictionary = {}
+	var mfb: Dictionary = {}
+	var key: String = CollectiveDisposition.make_pair_key("Crane", "Lion")
+	mcb[key] = {"value": 8, "seasons_acc": 0}
+
+	for _i: int in range(MarriageSystem.CLAN_DECAY_SEASONS):
+		CollectiveDisposition.decay_marriage_boosts(mcb, mfb)
+
+	assert_eq(mcb[key]["value"], 7, "Boost decrements by 1 after CLAN_DECAY_SEASONS seasons")
+	assert_eq(mcb[key]["seasons_acc"], 0, "seasons_acc resets to 0 after decrement")
+
+
+func test_marriage_boost_does_not_decay_before_threshold() -> void:
+	# Boost stays at 8 until CLAN_DECAY_SEASONS - 1 calls.
+	var mcb: Dictionary = {}
+	var key: String = CollectiveDisposition.make_pair_key("Crane", "Lion")
+	mcb[key] = {"value": 8, "seasons_acc": 0}
+
+	for _i: int in range(MarriageSystem.CLAN_DECAY_SEASONS - 1):
+		CollectiveDisposition.decay_marriage_boosts(mcb, {})
+
+	assert_eq(mcb[key]["value"], 8, "Boost unchanged before threshold")
+
+
+func test_new_marriage_resets_decay_clock() -> void:
+	# A second marriage to same pair resets seasons_acc and increases value (capped).
+	var mcb: Dictionary = {}
+	var mfb: Dictionary = {}
+	var key: String = CollectiveDisposition.make_pair_key("Crane", "Lion")
+	mcb[key] = {"value": 8, "seasons_acc": 5}  # Mid-decay
+
+	# Another marriage between same clans.
+	CollectiveDisposition.apply_marriage(
+		"Crane", "Lion", "Doji", "Akodo",
+		{}, {}, false, mcb, mfb,
+	)
+
+	assert_eq(mcb[key]["value"], mini(16, MarriageSystem.CLAN_BOOST_CAP), "Second marriage stacks boost")
+	assert_eq(mcb[key]["seasons_acc"], 0, "seasons_acc resets on new marriage")
+
+
+func test_between_families_marriage_adds_family_boost_not_clan_boost() -> void:
+	# BETWEEN_FAMILIES marriage: +5 family boost, no clan boost.
+	var char_a := _make_char(10, "Crane", "Doji")
+	var char_b := _make_char(11, "Crane", "Daidoji")  # Same clan, different family.
+	var chars_by_id: Dictionary = {10: char_a, 11: char_b}
+	var mcb: Dictionary = {}
+	var mfb: Dictionary = {}
+	var effects: Dictionary = {
+		"requires_marriage": true,
+		"candidate_a_id": 10,
+		"candidate_b_id": 11,
+		"marriage_type": MarriageSystem.MarriageType.BETWEEN_FAMILIES,
+		"proposing_lord_id": -1,
+	}
+
+	DayOrchestrator._apply_marriage(
+		effects, chars_by_id, [], 100,
+		{}, {}, [], [], [1000],
+		mcb, mfb,
+	)
+
+	var fkey: String = CollectiveDisposition.make_pair_key("Doji", "Daidoji")
+	var ckey: String = CollectiveDisposition.make_pair_key("Crane", "Crane")
+	assert_eq(mfb.get(fkey, {}).get("value", 0), MarriageSystem.FAMILY_BASELINE_BOOST,
+		"Between-families marriage adds +5 family boost")
+	assert_eq(mcb.get(ckey, {}).get("value", 0), 0,
+		"Between-families marriage adds no clan boost (same clan)")
+
+
+func test_get_clan_baseline_includes_marriage_boost() -> void:
+	# get_clan_baseline() sums permanent baseline + decaying marriage boost.
+	var key: String = CollectiveDisposition.make_pair_key("Crane", "Lion")
+	var clan_baselines: Dictionary = {key: -5}
+	var marriage_clan_boosts: Dictionary = {key: {"value": 8, "seasons_acc": 0}}
+
+	var result: int = CollectiveDisposition.get_clan_baseline("Crane", "Lion", clan_baselines, marriage_clan_boosts)
+	assert_eq(result, 3, "get_clan_baseline returns permanent (-5) + marriage boost (+8) = 3")

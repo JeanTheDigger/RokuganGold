@@ -646,3 +646,132 @@ func test_default_permanent_ronin_false() -> void:
 	assert_false(c.permanent_ronin)
 
 
+# -- GDD s57.48.4 step 5: BEGIN_TRAVEL objective on pilgrimage end -------------
+
+func test_orchestrator_sets_travel_objective_on_end() -> void:
+	_char.lord_id = 100
+	MushaShugyo.begin_pilgrimage(_char, 0)
+	var lord := L5RCharacterData.new()
+	lord.character_id = 100
+	lord.wounds_taken = 0
+	lord.physical_location = "42"
+	var chars: Array = [_char]
+	var chars_by_id: Dictionary = {1: _char, 100: lord}
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._process_musha_shugyo(chars, chars_by_id, 360, objectives_map)
+	var primary: Dictionary = objectives_map.get(1, {}).get("primary", {})
+	assert_eq(primary.get("need_type", ""), "TRAVEL_TO")
+	assert_eq(primary.get("target_settlement_id", -1), 42)
+	assert_eq(primary.get("source", ""), "musha_shugyo_return")
+
+
+func test_orchestrator_travel_target_in_result() -> void:
+	_char.lord_id = 100
+	MushaShugyo.begin_pilgrimage(_char, 0)
+	var lord := L5RCharacterData.new()
+	lord.character_id = 100
+	lord.wounds_taken = 0
+	lord.physical_location = "99"
+	var chars: Array = [_char]
+	var chars_by_id: Dictionary = {1: _char, 100: lord}
+	var objectives_map: Dictionary = {}
+	var results: Array = DayOrchestrator._process_musha_shugyo(chars, chars_by_id, 360, objectives_map)
+	assert_eq(results[0].get("travel_target", ""), "99")
+
+
+func test_orchestrator_dead_lord_clears_lord_id() -> void:
+	_char.lord_id = 100
+	MushaShugyo.begin_pilgrimage(_char, 0)
+	var lord := L5RCharacterData.new()
+	lord.character_id = 100
+	lord.stamina = 2
+	lord.willpower = 2
+	lord.wounds_taken = 999
+	var chars: Array = [_char]
+	var chars_by_id: Dictionary = {1: _char, 100: lord}
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._process_musha_shugyo(chars, chars_by_id, 360, objectives_map)
+	assert_eq(_char.lord_id, -1)
+
+
+func test_orchestrator_dead_lord_sets_no_travel_objective() -> void:
+	_char.lord_id = 100
+	MushaShugyo.begin_pilgrimage(_char, 0)
+	var lord := L5RCharacterData.new()
+	lord.character_id = 100
+	lord.stamina = 2
+	lord.willpower = 2
+	lord.wounds_taken = 999
+	lord.physical_location = "55"
+	var chars: Array = [_char]
+	var chars_by_id: Dictionary = {1: _char, 100: lord}
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._process_musha_shugyo(chars, chars_by_id, 360, objectives_map)
+	var primary: Dictionary = objectives_map.get(1, {}).get("primary", {})
+	assert_eq(primary.get("need_type", ""), "")
+
+
+# -- REQUEST_PERFORMANCE season modifier (GDD s57.33.6) ----------------------
+
+func _make_perf_ctx(season: int) -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 1
+	ctx.clan = "Crane"
+	ctx.school = "Doji Courtier"
+	ctx.school_type = Enums.SchoolType.COURTIER
+	ctx.is_lord = true
+	ctx.lord_rank = Enums.LordRank.LOCAL_DAIMYO
+	ctx.honor = 5.0
+	ctx.glory = 3.0
+	ctx.status = 3.0
+	ctx.civilian_orders_remaining = 2
+	ctx.context_flag = Enums.ContextFlag.AT_COURT
+	ctx.season = season
+	ctx.skill_ranks = {}
+	ctx.disposition_values = {}
+	ctx.topic_pool = []
+	ctx.province_statuses = []
+	ctx.known_objectives = {}
+	ctx.famine_crisis_province_ids = []
+	ctx.active_insurgency_id = -1
+	ctx.zone_flags = {}
+	return ctx
+
+
+func _make_perf_option() -> NPCDataStructures.ScoredAction:
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "REQUEST_PERFORMANCE"
+	option.target_npc_id = -1
+	option.metadata = {}
+	option.objective_alignment = 50.0
+	option.disposition_modifier = 0.0
+	return option
+
+
+func test_request_performance_winter_bonus() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_perf_ctx(TimeSystem.Season.WINTER)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "PATRONIZE_ARTS"
+	var options: Array = [_make_perf_option()]
+	NPCDecisionEngine.score_all(options, need, ctx, {})
+	assert_almost_eq((options[0] as NPCDataStructures.ScoredAction).disposition_modifier, 15.0, 0.001)
+
+
+func test_request_performance_summer_penalty() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_perf_ctx(TimeSystem.Season.SUMMER)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "PATRONIZE_ARTS"
+	var options: Array = [_make_perf_option()]
+	NPCDecisionEngine.score_all(options, need, ctx, {})
+	assert_almost_eq((options[0] as NPCDataStructures.ScoredAction).disposition_modifier, -10.0, 0.001)
+
+
+func test_request_performance_spring_neutral() -> void:
+	var ctx: NPCDataStructures.ContextSnapshot = _make_perf_ctx(TimeSystem.Season.SPRING)
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = "PATRONIZE_ARTS"
+	var options: Array = [_make_perf_option()]
+	NPCDecisionEngine.score_all(options, need, ctx, {})
+	assert_almost_eq((options[0] as NPCDataStructures.ScoredAction).disposition_modifier, 0.0, 0.001)
+
+

@@ -84,14 +84,14 @@ func test_negotiate_failure_topic_hardens() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_negotiate(10, 15, 0, true, 0)
 	assert_false(r["success"])
 	assert_true(r.get("position_hardened", false))
-	assert_eq(r["target_position_shift"], -1.0)
+	assert_eq(r["target_position_shift"], CourtActionSystem.NEGOTIATE_FAILURE_POSITION_HARDEN)
 
 
 func test_negotiate_critical_failure() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_negotiate(5, 20, 0, true, 0)
 	assert_false(r["success"])
-	assert_eq(r["disposition_change"], -6)
-	assert_eq(r["target_position_shift"], -3.0)
+	assert_eq(r["disposition_change"], CourtActionSystem.NEGOTIATE_CRITICAL_FAILURE_DISP)
+	assert_eq(r["target_position_shift"], CourtActionSystem.NEGOTIATE_CRITICAL_POSITION_HARDEN)
 
 
 # -- Persuade -----------------------------------------------------------------
@@ -118,7 +118,7 @@ func test_persuade_failure() -> void:
 func test_persuade_critical_failure() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_persuade(5, 20, 0, true)
 	assert_false(r["success"])
-	assert_eq(r["disposition_change"], -7)
+	assert_eq(r["disposition_change"], CourtActionSystem.PERSUADE_CRITICAL_FAILURE_DISP)
 	assert_true(r.get("position_hardened", false))
 
 
@@ -165,7 +165,7 @@ func test_charm_failure() -> void:
 func test_charm_critical_failure() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_charm(5, 20, 0, 0, 0)
 	assert_false(r["success"])
-	assert_eq(r["disposition_change"], -5)
+	assert_eq(r["disposition_change"], CourtActionSystem.CHARM_CRITICAL_FAILURE_DISP)
 
 
 # -- Impress ------------------------------------------------------------------
@@ -187,7 +187,7 @@ func test_impress_success_with_topic() -> void:
 func test_impress_critical_failure() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_impress(5, 20, 0)
 	assert_false(r["success"])
-	assert_eq(r["disposition_change"], -6)
+	assert_eq(r["disposition_change"], CourtActionSystem.IMPRESS_CRITICAL_FAILURE_DISP)
 
 
 # -- Listen and Reflect -------------------------------------------------------
@@ -209,7 +209,7 @@ func test_listen_reflect_success_with_topic() -> void:
 func test_listen_reflect_critical_failure() -> void:
 	var r: Dictionary = CourtActionSystem.resolve_listen_reflect(5, 20, 0)
 	assert_false(r["success"])
-	assert_eq(r["disposition_change"], -7)
+	assert_eq(r["disposition_change"], CourtActionSystem.LISTEN_REFLECT_CRITICAL_FAILURE_DISP)
 
 
 # -- Offer Favor --------------------------------------------------------------

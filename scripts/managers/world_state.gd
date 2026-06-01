@@ -136,6 +136,42 @@ var next_cell_id: Array[int] = [1]
 var crafted_items: Array[ArtisanItemData] = []
 var next_item_id: Array[int] = [1]
 
+# -- Theater Pieces (s57.22) --------------------------------------------------
+var theater_pieces: Array[TheaterPieceData] = []
+var next_piece_id: Array[int] = [1]
+
+# -- Senbazuru Projects (s57.26) ----------------------------------------------
+var active_senbazurus: Array[SenbazuruData] = []
+var next_senbazuru_id: Array[int] = [1]
+
+# -- Ikebana Arrangements (s57.29) -------------------------------------------
+var active_arrangements: Array[IkebanaArrangementData] = []
+var next_arrangement_id: Array[int] = [1]
+
+# -- Gardens (s57.23) --------------------------------------------------------
+var active_gardens: Array[GardenData] = []
+var next_garden_id: Array[int] = [1]
+
+# -- Bonsai Specimens (s57.24) -----------------------------------------------
+var active_bonsai: Array[BonsaiData] = []
+var next_bonsai_id: Array[int] = [1]
+
+# -- Garden Commissions (s57.23.5) -------------------------------------------
+var commission_records: Array[CommissionRecordData] = []
+var next_commission_id: Array[int] = [1]
+
+# -- Paintings (s57.27) -------------------------------------------------------
+var active_paintings: Array[PaintingData] = []
+var next_painting_id: Array[int] = [1]
+
+# -- Sculptures (s57.28) -------------------------------------------------------
+var active_sculptures: Array[SculptureData] = []
+var next_sculpture_id: Array[int] = [1]
+
+# -- Okiya (s57.45) -----------------------------------------------------------
+var active_okiyas: Array[OkiyaData] = []
+var next_okiya_id: Array[int] = [1]
+
 # -- Commitments ID Counter (s55.31) ------------------------------------------
 var next_commitment_id: Array[int] = [1]
 
@@ -157,6 +193,11 @@ var worship_state: Dictionary = WorshipSystem.make_initial_worship_state()
 
 var clan_baselines: Dictionary = {}
 var family_baselines: Dictionary = {}
+
+# Decaying marriage boosts (s22.7) tracked separately from permanent baselines.
+# Each entry: {"value": int, "seasons_acc": int} keyed by CollectiveDisposition.make_pair_key().
+var marriage_clan_boosts: Dictionary = {}
+var marriage_family_boosts: Dictionary = {}
 
 # -- Imperial Capital (s11.5b) -------------------------------------------------
 # Identifies the Emperor character and the settlement holding the Imperial
@@ -224,6 +265,8 @@ func _sync_wars_to_world_states() -> void:
 	world_states["settlements"] = settlements
 	world_states["clan_baselines"] = clan_baselines
 	world_states["family_baselines"] = family_baselines
+	world_states["marriage_clan_boosts"] = marriage_clan_boosts
+	world_states["marriage_family_boosts"] = marriage_family_boosts
 	world_states["emperor_id"] = emperor_id
 	world_states["emperor_archetype"] = emperor_archetype
 
@@ -311,6 +354,24 @@ func advance_one_day() -> Dictionary:
 		next_cell_id,
 		crafted_items,
 		next_item_id,
+		theater_pieces,
+		next_piece_id,
+		active_senbazurus,
+		next_senbazuru_id,
+		active_arrangements,
+		next_arrangement_id,
+		active_gardens,
+		next_garden_id,
+		active_bonsai,
+		next_bonsai_id,
+		commission_records,
+		next_commission_id,
+		active_paintings,
+		next_painting_id,
+		active_sculptures,
+		next_sculpture_id,
+		active_okiyas,
+		next_okiya_id,
 	)
 	_apply_succession_updates(result)
 	return result

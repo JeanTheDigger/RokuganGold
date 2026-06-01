@@ -52,6 +52,76 @@ extends Resource
 @export var garrison_shortage_courtier_refused: bool = false
 
 
+# -- Public Record (per GDD s57.50) -------------------------------------------
+# Each entry: {"event_type": String, "ic_day": int, "tier": int,
+#              "topic_id": int, "subject_id": int, "zone_subtype": String}
+@export var public_record: Array = []
+
+# -- Lord (for permission checks across art/garden systems) -------------------
+# Populated by DayOrchestrator from province lord data each day.
+@export var lord_character_id: int = -1
+
+# -- Garden Slots (per GDD s57.23a — settlement-level zone proxy) -------------
+# Keys: "CASTLE_OUTER_COURTYARD", "TSUBONIWA". Values: garden_id (int) or -1 (empty).
+# Only populated for eligible settlement types (FAMILY_CASTLE, CASTLE, CITY).
+@export var garden_slots: Dictionary = {}
+# Artisan currently holding permission for each zone type slot.
+# Keys: "CASTLE_OUTER_COURTYARD", "TSUBONIWA". Values: artisan_id (int) or -1.
+@export var garden_permissions: Dictionary = {}
+# Bonsai display slot. -1 = empty, otherwise bonsai_id.
+# Eligible types: FAMILY_CASTLE, CASTLE, CITY, KEEP, TEMPLE, SHINDEN, MONASTERY.
+@export var bonsai_display_slot: int = -1
+
+# -- Painting Slots (per GDD s57.27.4 — settlement-level zone proxy) ----------
+# wall_art_slot: kakemono on the wall (tokonoma). -1 = empty, otherwise painting_id.
+@export var wall_art_slot: int = -1
+# displayed_art_slot: byōbu or prominent display piece. -1 = empty, otherwise painting_id.
+@export var displayed_art_slot: int = -1
+# fusuma_slot: fusuma sliding door painting. -1 = empty, otherwise painting_id.
+@export var fusuma_slot: int = -1
+# Permission holders for each painting slot (character_id → true).
+@export var wall_art_permissions: Dictionary = {}
+@export var displayed_art_permissions: Dictionary = {}
+@export var fusuma_permissions: Dictionary = {}
+
+# -- Sculpture Slots (per GDD s57.28.3 — settlement-level zone proxy) ----------
+# statue_slot: religious statuary inside shrine/temple. -1 = empty, otherwise sculpture_id.
+# Only eligible at TEMPLE, SHINDEN, MONASTERY settlement types (s57.28 section J).
+@export var statue_slot: int = -1
+# guardian_slot: guardian pair (komainu) at entrance. -1 = empty, otherwise sculpture_id.
+# Only eligible at TEMPLE, SHINDEN, MONASTERY settlement types (s57.28 section J).
+@export var guardian_slot: int = -1
+# Permission holders for statue placement (sculptor_id → true).
+@export var statue_permissions: Dictionary = {}
+# Permission holders for guardian pair placement (sculptor_id → true).
+@export var guardian_permissions: Dictionary = {}
+
+# -- Okiya Tier (s57.45) -------------------------------------------------------
+## 0 = no okiya; 1/2/3 = tier (Provincial/Established/Famous).
+@export var okiya_tier: int = 0
+
+# -- Shrine Shide (per GDD s57.26b — settlement-level zone proxy) -------------
+# -1 = no shide; 0=Normal, 1=Fine, 2=Exceptional, 3=Masterwork, 4=Legendary.
+@export var shrine_shide_current_tier: int = -1
+@export var shrine_shide_quality_tier: int = -1   ## quality when placed; for provenance
+@export var shrine_shide_crafter_id: int = -1
+@export var shrine_shide_ic_day_placed: int = -1
+@export var shrine_shide_permission: int = -1     ## character_id with placement permission
+@export var shrine_custodian_id: int = -1         ## shugenja custodian; -1 = unstaffed
+@export var shrine_permission_grace_until_ic_day: int = -1  ## -1 = no grace active
+
+
+func has_shrine_slot() -> bool:
+	## Returns true when this settlement can hold a shide object (s57.26b A11).
+	if settlement_type in [Enums.SettlementType.TEMPLE, Enums.SettlementType.SHINDEN]:
+		return true
+	const SHRINE_TYPES: Array = ["roadside_shrine", "village_shrine", "local_shrine"]
+	for entry: Variant in worship_locations:
+		if entry is Dictionary and entry.get("type", "") in SHRINE_TYPES:
+			return true
+	return false
+
+
 func has_infrastructure(feature: String) -> bool:
 	return feature in infrastructure
 

@@ -123,8 +123,9 @@ const DISPOSITION_PER_RAISE: int = 3
 
 # Disposition loss when the gift itself is the offense (forbidden item, or
 # a presentation so botched the gesture undermines the object).
-const FORBIDDEN_GIFT_DISPOSITION_LOSS: int = 0
-const CRITICAL_FAILURE_DISPOSITION_LOSS: int = 0
+# Locked in s12.3a.
+const FORBIDDEN_GIFT_DISPOSITION_LOSS: int = -5  # "an insult" — implies recipient lacks a sword
+const CRITICAL_FAILURE_DISPOSITION_LOSS: int = -3  # "small disposition loss" — clumsiness, not aggression
 
 
 # -- Free Raise computation ---------------------------------------------------
@@ -241,6 +242,7 @@ static func resolve_deliver_gift(
 	dice_engine: DiceEngine,
 	current_ic_day: int,
 	history_point_bonus: int = 0,
+	keep_modifier: int = 0,
 ) -> Dictionary:
 	var result: Dictionary = {
 		"giver_id": giver.character_id,
@@ -274,11 +276,11 @@ static func resolve_deliver_gift(
 		dice_engine,
 		"Etiquette",
 		TN_DELIVER_GIFT,
-		0,        # raises
-		"",       # emphasis
+		0,            # raises
+		"",           # emphasis
 		Enums.Trait.NONE,
-		0,        # bonus_rolled
-		0,        # bonus_kept
+		0,            # bonus_rolled
+		keep_modifier, # bonus_kept: -1 for mundane noshi (s57.26.8), 0 otherwise
 		flat_bonus,
 	)
 	result["roll"] = roll_result

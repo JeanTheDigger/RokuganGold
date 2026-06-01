@@ -256,59 +256,71 @@ static func spend_accumulated_xp(character: L5RCharacterData) -> Dictionary:
 	if available_xp <= 0:
 		return {"xp_spent": 0, "advancements": []}
 
+	var focus_rings: Array = get_focus_rings(character)
+	var school_skills: Array = get_school_skills(character)
 	var available_progress: int = available_xp * XP_TO_PROGRESS
 	var total_spent_progress: int = 0
 	var advancements: Array = []
 
-	var focus_rings: Array = get_focus_rings(character)
-	var school_skills: Array = get_school_skills(character)
-	var is_shugenja: bool = character.school_type == Enums.SchoolType.SHUGENJA
-
-	# Priority 1: Primary Ring (first focus ring)
-	if focus_rings.size() > 0:
-		var result: Dictionary = _try_spend_on_ring(character, focus_rings[0], available_progress - total_spent_progress)
-		total_spent_progress += result["spent"]
-		if result["advanced"]:
-			advancements.append({"type": "ring", "ring": focus_rings[0], "priority": 1})
-
-	# Priority 2: Highest-ranked school skill (the specialty)
-	if total_spent_progress < available_progress and school_skills.size() > 0:
-		var best_skill: String = _get_highest_ranked_skill(character, school_skills)
-		if best_skill != "":
-			var result: Dictionary = _try_spend_on_skill(character, best_skill, available_progress - total_spent_progress)
-			total_spent_progress += result["spent"]
-			if result["advanced"]:
-				advancements.append({"type": "skill", "skill": best_skill, "priority": 2})
-
-	# Priority 3: Other school skills in descending rank order
-	if total_spent_progress < available_progress and school_skills.size() > 1:
-		var best_skill: String = _get_highest_ranked_skill(character, school_skills)
-		var sorted_skills: Array = _sort_skills_by_rank_desc(character, school_skills)
-		for skill: String in sorted_skills:
-			if skill == best_skill:
-				continue
+	if school_skills.is_empty() and focus_rings.is_empty():
+		# School-less path (s52 Part 3): deepen existing strengths, spread all five rings evenly.
+		# Priority 1: All skills sorted by rank desc (alpha tie-break). Rank 0 eligible.
+		for skill: String in _get_schoolless_sorted_skills(character):
 			if total_spent_progress >= available_progress:
 				break
-			var result: Dictionary = _try_spend_on_skill(character, skill, available_progress - total_spent_progress)
+			if character.skills.get(skill, 0) < MAX_SKILL_RANK:
+				var result: Dictionary = _try_spend_on_skill(character, skill, available_progress - total_spent_progress)
+				total_spent_progress += result["spent"]
+				if result["advanced"]:
+					advancements.append({"type": "skill", "skill": skill, "priority": 1})
+		# Priority 2: All five rings sorted by current rank asc (lowest first = spread evenly).
+		for ring: Enums.Ring in _get_rings_sorted_by_rank_asc(character):
+			if total_spent_progress >= available_progress:
+				break
+			if _get_ring_rank(character, ring) < MAX_RING_RANK:
+				var result: Dictionary = _try_spend_on_ring(character, ring, available_progress - total_spent_progress)
+				total_spent_progress += result["spent"]
+				if result["advanced"]:
+					advancements.append({"type": "ring", "ring": ring, "priority": 2})
+	else:
+		# Schooled path: specialize into focus rings and school skills.
+		var eligible_skills: Array = get_eligible_skills(character)
+		var sorted_skills: Array = _sort_eligible_skills_by_priority(character, eligible_skills, school_skills)
+
+		# Priority 1: Primary Ring (first focus ring)
+		if focus_rings.size() > 0:
+			var result: Dictionary = _try_spend_on_ring(character, focus_rings[0], available_progress - total_spent_progress)
 			total_spent_progress += result["spent"]
 			if result["advanced"]:
-				advancements.append({"type": "skill", "skill": skill, "priority": 3})
+				advancements.append({"type": "ring", "ring": focus_rings[0], "priority": 1})
 
-	# Priority 4: Secondary Ring (second focus ring)
-	if total_spent_progress < available_progress and focus_rings.size() > 1:
-		var result: Dictionary = _try_spend_on_ring(character, focus_rings[1], available_progress - total_spent_progress)
-		total_spent_progress += result["spent"]
-		if result["advanced"]:
-			advancements.append({"type": "ring", "ring": focus_rings[1], "priority": 4})
+		# Priority 2: All eligible skills sorted by rank desc (school skills first within same rank)
+		for skill: String in sorted_skills:
+			if total_spent_progress >= available_progress:
+				break
+			if character.skills.get(skill, 0) < MAX_SKILL_RANK:
+				var result: Dictionary = _try_spend_on_skill(character, skill, available_progress - total_spent_progress)
+				total_spent_progress += result["spent"]
+				if result["advanced"]:
+					advancements.append({"type": "skill", "skill": skill, "priority": 2})
 
-	# Priority 4b: Void Ring for shugenja only
-	if total_spent_progress < available_progress and is_shugenja:
-		var result: Dictionary = _try_spend_on_ring(character, Enums.Ring.VOID, available_progress - total_spent_progress)
-		total_spent_progress += result["spent"]
-		if result["advanced"]:
-			advancements.append({"type": "ring", "ring": Enums.Ring.VOID, "priority": 4})
+		# Priority 3: Secondary Ring (second focus ring)
+		if total_spent_progress < available_progress and focus_rings.size() > 1:
+			var result: Dictionary = _try_spend_on_ring(character, focus_rings[1], available_progress - total_spent_progress)
+			total_spent_progress += result["spent"]
+			if result["advanced"]:
+				advancements.append({"type": "ring", "ring": focus_rings[1], "priority": 3})
 
-	# Convert progress spent back to XP consumed (ceiling division)
+		# Priority 4: Void Ring (all school types)
+		if total_spent_progress < available_progress:
+			var void_is_focus: bool = focus_rings.has(Enums.Ring.VOID)
+			if not void_is_focus and _get_ring_rank(character, Enums.Ring.VOID) < MAX_RING_RANK:
+				var result: Dictionary = _try_spend_on_ring(character, Enums.Ring.VOID, available_progress - total_spent_progress)
+				total_spent_progress += result["spent"]
+				if result["advanced"]:
+					advancements.append({"type": "ring", "ring": Enums.Ring.VOID, "priority": 4})
+
+	# Convert progress spent back to XP consumed (ceiling division). Shared by both paths.
 	@warning_ignore("integer_division")
 	var xp_consumed: int = total_spent_progress / XP_TO_PROGRESS
 	if total_spent_progress % XP_TO_PROGRESS > 0:
@@ -316,9 +328,85 @@ static func spend_accumulated_xp(character: L5RCharacterData) -> Dictionary:
 
 	character.xp_spent += xp_consumed
 
-	# Priority 5: Remaining XP held in reserve (not spent)
-
 	return {"xp_spent": xp_consumed, "advancements": advancements}
+
+
+# === SKILL ELIGIBILITY (s52 Part 3) ===
+
+# Returns all skills eligible for XP spending:
+# - All school skills (any rank, including 0)
+# - Non-school skills the character already knows at rank 1+
+static func get_eligible_skills(character: L5RCharacterData) -> Array:
+	var school_skills: Array = get_school_skills(character)
+	var school_set: Dictionary = {}
+	for s: String in school_skills:
+		school_set[s] = true
+	var eligible: Array = school_skills.duplicate()
+	for skill: String in character.skills.keys():
+		if school_set.has(skill):
+			continue
+		if character.skills.get(skill, 0) >= 1:
+			eligible.append(skill)
+	return eligible
+
+
+# Sorts eligible skills by rank desc, with school skills ranked above
+# non-school skills at the same current rank.
+static func _sort_eligible_skills_by_priority(
+		character: L5RCharacterData,
+		eligible: Array,
+		school_skills: Array,
+) -> Array:
+	var school_set: Dictionary = {}
+	for s: String in school_skills:
+		school_set[s] = true
+	var pairs: Array = []
+	for skill: String in eligible:
+		pairs.append({
+			"skill": skill,
+			"rank": character.skills.get(skill, 0),
+			"is_school": school_set.has(skill),
+		})
+	pairs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a["rank"] != b["rank"]:
+			return a["rank"] > b["rank"]
+		if a["is_school"] != b["is_school"]:
+			return a["is_school"]
+		return false
+	)
+	var result: Array = []
+	for p: Dictionary in pairs:
+		result.append(p["skill"])
+	return result
+
+
+# === SCHOOL-LESS HELPERS ===
+
+# All skills in character.skills sorted by rank desc (alpha tie-break for determinism).
+# Includes rank-0 skills so school-less characters can develop latent disciplines.
+static func _get_schoolless_sorted_skills(character: L5RCharacterData) -> Array:
+	var pairs: Array = []
+	for skill: String in character.skills.keys():
+		pairs.append({"skill": skill, "rank": character.skills.get(skill, 0)})
+	pairs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a["rank"] != b["rank"]:
+			return a["rank"] > b["rank"]
+		return a["skill"] < b["skill"]
+	)
+	var result: Array = []
+	for p: Dictionary in pairs:
+		result.append(p["skill"])
+	return result
+
+
+# All five rings sorted by current rank ascending (lowest first = spread evenly).
+# Ties broken by stable enum order: AIR, EARTH, FIRE, WATER, VOID.
+static func _get_rings_sorted_by_rank_asc(character: L5RCharacterData) -> Array:
+	var rings: Array = [Enums.Ring.AIR, Enums.Ring.EARTH, Enums.Ring.FIRE, Enums.Ring.WATER, Enums.Ring.VOID]
+	rings.sort_custom(func(a: Enums.Ring, b: Enums.Ring) -> bool:
+		return _get_ring_rank(character, a) < _get_ring_rank(character, b)
+	)
+	return rings
 
 
 # === SKILL SORTING HELPERS ===
@@ -345,6 +433,81 @@ static func _sort_skills_by_rank_desc(character: L5RCharacterData, skill_list: A
 	return result
 
 
+# === SOLO TRAINING (s48) ===
+
+# Returns the next skill or ring to train using the same priority order as spend_accumulated_xp.
+# Result dict: {"type": "skill"|"ring", "skill": String, "ring": Enums.Ring}
+# Returns {} when the character has nothing left to train.
+static func get_best_training_target(character: L5RCharacterData) -> Dictionary:
+	var focus_rings: Array = get_focus_rings(character)
+	var school_skills: Array = get_school_skills(character)
+
+	if school_skills.is_empty() and focus_rings.is_empty():
+		# School-less path: highest-ranked skill first, then lowest-ranked ring.
+		for skill: String in _get_schoolless_sorted_skills(character):
+			if character.skills.get(skill, 0) < MAX_SKILL_RANK:
+				return {"type": "skill", "skill": skill, "ring": Enums.Ring.EARTH}
+		for ring: Enums.Ring in _get_rings_sorted_by_rank_asc(character):
+			if _get_ring_rank(character, ring) < MAX_RING_RANK:
+				return {"type": "ring", "ring": ring, "skill": ""}
+		return {}
+
+	# Schooled path
+	var eligible_skills: Array = get_eligible_skills(character)
+	var sorted_skills: Array = _sort_eligible_skills_by_priority(character, eligible_skills, school_skills)
+
+	# Priority 1: Primary Ring
+	if focus_rings.size() > 0:
+		if _get_ring_rank(character, focus_rings[0]) < MAX_RING_RANK:
+			return {"type": "ring", "ring": focus_rings[0], "skill": ""}
+
+	# Priority 2: All eligible skills sorted by rank desc (school first within same rank)
+	for skill: String in sorted_skills:
+		if character.skills.get(skill, 0) < MAX_SKILL_RANK:
+			return {"type": "skill", "skill": skill, "ring": Enums.Ring.EARTH}
+
+	# Priority 3: Secondary Ring
+	if focus_rings.size() > 1:
+		if _get_ring_rank(character, focus_rings[1]) < MAX_RING_RANK:
+			return {"type": "ring", "ring": focus_rings[1], "skill": ""}
+
+	# Priority 4: Void Ring (all school types)
+	var void_is_focus: bool = focus_rings.has(Enums.Ring.VOID)
+	if not void_is_focus and _get_ring_rank(character, Enums.Ring.VOID) < MAX_RING_RANK:
+		return {"type": "ring", "ring": Enums.Ring.VOID, "skill": ""}
+
+	return {}
+
+
+# Apply solo training progress (s48: 50 progress per AP) to the character's
+# highest-priority training target.  Called by the TRAIN executor.
+# Returns: {"advanced": bool, "type": "skill"|"ring", "skill": String, "ring": Enums.Ring}
+# or {"advanced": false, "reason": "nothing_to_train"} when nothing is left.
+static func apply_solo_training_progress(character: L5RCharacterData) -> Dictionary:
+	var target: Dictionary = get_best_training_target(character)
+	if target.is_empty():
+		return {"advanced": false, "reason": "nothing_to_train"}
+
+	if target["type"] == "skill":
+		var result: Dictionary = _try_spend_on_skill(character, target["skill"], TRAINING_PROGRESS_SOLO)
+		return {
+			"advanced": result["advanced"],
+			"type": "skill",
+			"skill": target["skill"],
+			"ring": Enums.Ring.EARTH,
+			"progress_added": result["spent"],
+		}
+	else:
+		var result: Dictionary = _try_spend_on_ring(character, target["ring"], TRAINING_PROGRESS_SOLO)
+		return {
+			"advanced": result["advanced"],
+			"type": "ring",
+			"ring": target["ring"],
+			"skill": "",
+			"progress_added": result["spent"],
+		}
+
+
 # === SEASONAL BATCH PROCESSING ===
 
 static func process_seasonal_advancement(characters: Array, world_state: Dictionary, days_in_season: int) -> Dictionary:
@@ -368,13 +531,22 @@ static func process_seasonal_advancement(characters: Array, world_state: Diction
 			character.xp_total += whole
 			character.xp_fractional -= float(whole)
 
-		# Spend accumulated XP on progress bars
+		# Bushi claim kata XP before progress bars (s30a).
+		# Progress bars vacuum all remaining XP, so kata spending must come first.
+		var kata_learned: String = ""
+		if character.school_type == Enums.SchoolType.BUSHI and not character.school_name.is_empty():
+			var kata_name: String = KataSystem.select_kata_for_npc(character)
+			if not kata_name.is_empty():
+				if KataSystem.learn_kata(character, kata_name):
+					kata_learned = kata_name
+
+		# Spend remaining accumulated XP on skill/ring progress bars.
 		var spend_result: Dictionary = spend_accumulated_xp(character)
 
 		var new_rank: int = CharacterStats.get_insight_rank(character)
 		var ranked_up: bool = new_rank > old_rank
 
-		if ranked_up or spend_result["advancements"].size() > 0:
+		if ranked_up or spend_result["advancements"].size() > 0 or not kata_learned.is_empty():
 			var entry: Dictionary = {
 				"character_id": character.character_id,
 				"xp_earned_season": season_xp,
@@ -382,11 +554,23 @@ static func process_seasonal_advancement(characters: Array, world_state: Diction
 				"advancements": spend_result["advancements"],
 				"ranked_up": ranked_up,
 			}
+			if not kata_learned.is_empty():
+				entry["kata_learned"] = kata_learned
 			if ranked_up:
 				entry["old_rank"] = old_rank
 				entry["new_rank"] = new_rank
+				# s52 Part 3: NPCs advance school_rank automatically (no dojo visit required).
+				# Locked in s48a A48a-3.
+				character.school_rank = new_rank
 				total_rank_advancements += 1
 				SkillResolver.apply_technique_flags(character)
+				# Rank-up generates a Tier 4 Personal topic. Locked in s48a A48a-2.
+				entry["rank_up_topic"] = {
+					"character_name": character.character_name,
+					"character_id": character.character_id,
+					"clan": character.clan,
+					"new_rank": new_rank,
+				}
 			results.append(entry)
 
 	return {"results": results, "total_rank_advancements": total_rank_advancements}

@@ -3,6 +3,10 @@
     "primary": "Stealth",
     "secondary": null
   },
+  "ACCEPT_RONIN_PETITION": {
+    "primary": "Etiquette",
+    "secondary": "Awareness"
+  },
   "ANNOUNCE_HUNT": {
     "primary": "Hunting",
     "secondary": null
@@ -95,6 +99,21 @@
     "primary": "Courtier",
     "secondary": "Sincerity"
   },
+  "COMPOSE_PAINTING": {
+    "primary": "Artisan: Painting",
+    "secondary": "Awareness",
+    "trait": "Awareness"
+  },
+  "COMPOSE_SCULPTURE": {
+    "primary": "Artisan: Sculpture",
+    "secondary": "Awareness",
+    "trait": "Awareness"
+  },
+  "COMPOSE_THEATER_PIECE": {
+    "primary": "Poetry",
+    "secondary": "Poetry",
+    "trait": "Intelligence"
+  },
   "CONCEAL_ITEM": {
     "primary": "Sleight of Hand",
     "secondary": "Agility"
@@ -102,6 +121,11 @@
   "CONDUCT_COMMERCE": {
     "primary": "Commerce",
     "secondary": "Investigation"
+  },
+  "CRAFT": {
+    "primary": "Artisan: Origami",
+    "secondary": "Artisan: Origami",
+    "trait": "Awareness"
   },
   "CONDUCT_RAID": {
     "primary": "Battle",
@@ -127,6 +151,14 @@
     "primary": "Courtier",
     "secondary": "Awareness"
   },
+  "DECLARE_SENBAZURU": {
+    "primary": "_none"
+  },
+  "DEDICATE_PIECE": {
+    "primary": "Courtier",
+    "secondary": "Courtier",
+    "trait": "Awareness"
+  },
   "DEFY_EDICT": {
     "primary": "Courtier",
     "secondary": "Awareness"
@@ -143,6 +175,9 @@
     "primary": "Investigation",
     "secondary": "Awareness"
   },
+  "DISPLAY_PAINTING": {
+    "primary": "_none"
+  },
   "DISCLOSE": {
     "primary": "Sincerity",
     "secondary": "Perception"
@@ -154,6 +189,10 @@
   "DISPLAY_BONSAI": {
     "primary": null,
     "secondary": null
+  },
+  "DISSOLVE_MARRIAGE": {
+    "primary": "Courtier",
+    "secondary": "Awareness"
   },
   "DO_NOTHING": {
     "primary": null,
@@ -203,6 +242,10 @@
     "primary": "Forgery",
     "secondary": "Intelligence"
   },
+  "FORCE_MARCH": {
+    "primary": "Battle",
+    "secondary": null
+  },
   "FORGE_IMPERSONATION_LETTER": {
     "primary": "Forgery",
     "secondary": "Agility"
@@ -210,10 +253,6 @@
   "FORGE_ORDER": {
     "primary": "Forgery",
     "secondary": "Agility"
-  },
-  "FORCE_MARCH": {
-    "primary": "Battle",
-    "secondary": null
   },
   "FORTIFY_WALL_SECTION": {
     "primary": "Engineering",
@@ -232,6 +271,10 @@
     "secondary": "Intelligence"
   },
   "GOSSIP": {
+    "primary": "Courtier",
+    "secondary": "Awareness"
+  },
+  "HIRE_RONIN": {
     "primary": "Courtier",
     "secondary": "Awareness"
   },
@@ -267,6 +310,11 @@
     "primary": "Stealth",
     "secondary": "Agility"
   },
+  "LEARN_THEATER_PIECE": {
+    "primary": "Acting",
+    "secondary": "Acting",
+    "trait": "Intelligence"
+  },
   "LISTEN_REFLECT": {
     "primary": "Investigation",
     "secondary": "Perception"
@@ -300,8 +348,8 @@
     "secondary": "Lore: Heraldry"
   },
   "OFFER_ART_COMMISSION": {
-    "primary": null,
-    "secondary": null
+    "primary": "Courtier",
+    "secondary": "Awareness"
   },
   "OFFER_FAVOR": {
     "primary": "Sincerity",
@@ -331,6 +379,10 @@
     "primary": "Battle",
     "secondary": null
   },
+  "PERFORM_CLAN_INDUCTION": {
+    "primary": "Courtier",
+    "secondary": "Awareness"
+  },
   "PERFORM_FOR": {
     "primary": "_performance_skill",
     "secondary": null
@@ -338,6 +390,11 @@
   "PERFORM_RITUAL": {
     "primary": "Lore: Theology",
     "secondary": null
+  },
+  "PERFORM_THEATER_PIECE": {
+    "primary": "Acting",
+    "secondary": "Acting",
+    "trait": "Awareness"
   },
   "PERFORM_WORSHIP": {
     "primary": "Lore: Theology",
@@ -347,9 +404,23 @@
     "primary": "Sincerity",
     "secondary": "Courtier"
   },
+  "PETITION_RONIN": {
+    "primary": "Courtier",
+    "secondary": "Awareness"
+  },
   "PLAY_GAME": {
     "primary": "Games",
     "secondary": "Awareness"
+  },
+  "PLACE_SHIDE": {
+    "primary": "Artisan: Origami",
+    "secondary": "Awareness"
+  },
+  "PRESENT_EMAKIMONO": {
+    "primary": "_none"
+  },
+  "PRESENT_SENBAZURU": {
+    "primary": "_none"
   },
   "PROBE": {
     "primary": "Courtier",
@@ -400,8 +471,8 @@
     "secondary": "Sincerity"
   },
   "REQUEST_ART": {
-    "primary": null,
-    "secondary": null
+    "primary": "Courtier",
+    "secondary": "Awareness"
   },
   "REQUEST_HUNT_INVITATION": {
     "primary": "Etiquette",
@@ -483,6 +554,10 @@
     "primary": "Animal Handling",
     "secondary": "Awareness"
   },
+  "TRANSFER_KOKU": {
+    "primary": "Commerce",
+    "secondary": null
+  },
   "TREAT_WOUND": {
     "primary": "Medicine",
     "secondary": null
@@ -490,9 +565,5 @@
   "WRITE_LETTER": {
     "primary": "Calligraphy",
     "secondary": "Courtier"
-  },
-  "TRANSFER_KOKU": {
-    "primary": "Commerce",
-    "secondary": null
   }
 }

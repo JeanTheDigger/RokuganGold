@@ -139,6 +139,13 @@ func test_refusal_non_human_accepts_at_neutral() -> void:
 	assert_false(MedicineSystem.evaluate_refusal(_target, _healer, 0))
 
 
+func test_refusal_non_human_refuses_at_rival_boundary() -> void:
+	# GDD s57.31.3b: "Rival or worse (disposition −10 or lower)" — −10 is the Rival boundary.
+	_target.clan = "Nezumi"
+	_target.disposition_values[1] = -10  # Exactly Rival boundary.
+	assert_true(MedicineSystem.evaluate_refusal(_target, _healer, 0))
+
+
 func test_refusal_non_human_refuses_at_rival() -> void:
 	_target.clan = "Nezumi"
 	_target.disposition_values[1] = -15  # Rival.
@@ -173,6 +180,25 @@ func test_refusal_chugi_dominant_virtue_reduces_pressure() -> void:
 	_target.wounds_taken = 13  # Hurt for Earth 3.
 	_target.disposition_values[1] = 25  # Friend.
 	assert_false(MedicineSystem.evaluate_refusal(_target, _healer, 0))
+
+
+func test_refusal_pressure_enemy_at_boundary() -> void:
+	# GDD s57.31.3b: Enemy = −25 to −49 (+20 pressure modifier).
+	# Verify that disposition −25 uses Enemy modifier (+20), not Rival (+10).
+	# character: willpower 2 (Yū 2), honor 3.0, NONE virtue, Nicked wound (0 severity), 0 witnesses
+	# pressure = (2×5) + (3×2) + 0 - (2×4) + 0 + 20 (Enemy) = 10+6+0-8+0+20 = 28 → refuses
+	_target.disposition_values[1] = -25  # Exactly Enemy boundary.
+	_target.wounds_taken = 3  # Nicked for Earth 3.
+	assert_true(MedicineSystem.evaluate_refusal(_target, _healer, 0))
+
+
+func test_refusal_pressure_rival_at_boundary() -> void:
+	# GDD s57.31.3b: Rival = −10 to −24 (+10 pressure modifier).
+	# At disposition −24 (top of Rival range), should get +10 modifier.
+	# pressure = (2×5) + (3×2) + 0 - (2×4) + 0 + 10 (Rival) = 10+6+0-8+0+10 = 18 → refuses
+	_target.disposition_values[1] = -24  # Top of Rival range.
+	_target.wounds_taken = 3  # Nicked.
+	assert_true(MedicineSystem.evaluate_refusal(_target, _healer, 0))
 
 
 # =============================================================================
@@ -300,3 +326,35 @@ func test_chugi_virtue_bonus_only_for_lord() -> void:
 func test_no_virtue_no_bonus() -> void:
 	_healer.bushido_virtue = Enums.BushidoVirtue.NONE
 	assert_eq(MedicineSystem.compute_tend_personality_bonus(_healer, _target, false), 0)
+
+
+# =============================================================================
+# Senbazuru Healing Free Raises — pending_healing_fr consumption (s57.26.17)
+# =============================================================================
+
+func test_treat_wound_consumes_pending_healing_fr() -> void:
+	# 2 pending FRs = +10 flat bonus on the Medicine roll.
+	# Verify pending_healing_fr is 0 after treat_wound fires.
+	_target.pending_healing_fr = 2
+	MedicineSystem.treat_wound(_healer, _target, _dice, 5)
+	assert_eq(_target.pending_healing_fr, 0)
+
+
+func test_treat_wound_clears_fr_even_on_failure() -> void:
+	# FRs are one-shot regardless of roll success.
+	var weak_healer: L5RCharacterData = L5RCharacterData.new()
+	weak_healer.character_id = 10
+	weak_healer.intelligence = 1
+	weak_healer.willpower = 1
+	weak_healer.skills = {"Medicine": 1}
+	weak_healer.items = [{"item_type": "medicine_kit", "remaining_uses": 5, "acquired_ic_day": 1}]
+	_target.pending_healing_fr = 1
+	MedicineSystem.treat_wound(weak_healer, _target, DiceEngine.new(999), 5)
+	assert_eq(_target.pending_healing_fr, 0)
+
+
+func test_treat_wound_no_fr_when_zero() -> void:
+	# No pending FRs — verify field remains 0 after call (no negative mutation).
+	_target.pending_healing_fr = 0
+	MedicineSystem.treat_wound(_healer, _target, _dice, 5)
+	assert_eq(_target.pending_healing_fr, 0)

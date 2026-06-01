@@ -1092,8 +1092,7 @@ func test_generate_battle_topic_from_movement() -> void:
 	assert_eq(topics.size(), 1)
 	assert_eq(topics[0].topic_type, "battle_outcome")
 	assert_eq(topics[0].category, TopicData.Category.MILITARY)
-	# _COMBAT_EVENT_MOMENTUM was zeroed (invented value removed).
-	assert_true(topics[0].momentum >= 0.0)
+	assert_eq(topics[0].momentum, TopicMomentumSystem.initial_momentum_for_tier(topics[0].tier))
 	assert_eq(next_id[0], 101)
 	assert_eq(active_topics.size(), 1)
 

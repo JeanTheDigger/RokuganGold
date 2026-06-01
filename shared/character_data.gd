@@ -72,6 +72,9 @@ extends Resource
 # Total wounds taken. Wound levels derived from Earth ring at query time.
 
 @export var wounds_taken: int = 0
+# Senbazuru Healing Free Raises pending consumption (s57.26.17). Cleared after
+# the next Medicine/treat_wound roll fires against this character.
+@export var pending_healing_fr: int = 0
 
 # -- Shadowlands Taint ---------------------------------------------------------
 
@@ -118,6 +121,7 @@ extends Resource
 @export var cohabitation_days: Dictionary = {}
 @export var fear_rating: int = 0
 @export var captive_status: String = ""
+@export var is_retired_monastic: bool = false
 @export var topic_pool: Array = []
 @export var topic_positions: Dictionary = {}
 @export var active_quest: String = ""
@@ -174,6 +178,12 @@ extends Resource
 
 @export var last_wind_down_method: String = "rest"
 @export var wind_down_void_modifier: float = 0.5
+
+# -- Geisha Intelligence System (s57.45) --------------------------------------
+## okiya_id (int) → geisha NPC id (int) for the patron's assigned geisha per okiya.
+@export var assigned_geisha_ids: Dictionary = {}
+## okiya_id (int) → visit count (int) — tracks patron's history at each okiya.
+@export var okiya_visit_counts: Dictionary = {}
 
 # -- Poison Tracking -----------------------------------------------------------
 
@@ -237,6 +247,12 @@ extends Resource
 @export var active_tattoo_ability: Enums.TattooAbility = Enums.TattooAbility.NONE
 @export var is_bald: bool = false
 
+# -- Topic Detection (Section 57.57) ------------------------------------------
+# Updated on: daily conversation participation, letter send, letter receipt.
+# Sentinel −1 = never interacted socially.
+
+@export var last_social_ic_day: int = -1
+
 # -- Musha Shugyo (Section 57.48) ---------------------------------------------
 
 @export var musha_shugyo: bool = false
@@ -260,6 +276,22 @@ extends Resource
 
 # -- Bodyguard / Yojimbo Assignment -------------------------------------------
 @export var assigned_protection_target_id: int = -1
+
+# -- Champion Strategic Evaluation Log (s57.54.4) ------------------------------
+# Full scored candidate list from the last Champion evaluation. Not read by any
+# game system — debugging and audit only.
+@export var strategic_evaluation_log: Array = []
+
+# -- Garden & Bonsai (Section 57.23a) -----------------------------------------
+# Zones the character has declined to permit or fill; prevents re-offering the same slot.
+# Each entry: {"settlement_id": int, "zone_type": String, "declined_date": int}
+@export var declined_garden_zones: Array = []
+# Commissions declined by this character as artisan (prevents NPC re-offering same commission).
+# Each entry: {"daimyo_id": int, "art_form": String, "declined_date": int, "expires_ic_day": int}
+@export var declined_commissions: Array = []
+# Active garden/bonsai visitor disposition bonuses received. Prevents duplicate bonuses.
+# Each entry: {"garden_id": int, "creator_id": int, "expires_ic_day": int}
+@export var active_garden_bonuses: Array = []
 
 
 # -- Trait Access Helpers (used by CharacterStats) -----------------------------

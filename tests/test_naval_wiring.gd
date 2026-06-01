@@ -708,7 +708,7 @@ func test_naval_battle_generates_topic() -> void:
 	assert_eq(topics[0].variant, "naval_battle")
 	assert_eq(topics[0].tier, TopicData.Tier.TIER_3)
 	assert_eq(topics[0].category, TopicData.Category.MILITARY)
-	assert_eq(topics[0].momentum, DayOrchestrator._COMBAT_EVENT_MOMENTUM)
+	assert_eq(topics[0].momentum, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3))
 	assert_eq(next_topic_id[0], 101)
 
 

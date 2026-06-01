@@ -18,11 +18,14 @@ func _make_lord(
 # -- Fugitive Visibility (s11.3.16a) ----
 
 func test_high_status_generates_sighting_topic():
+	# s57.57 §57.57.1 Path C: threshold is 5.0 (was 3.0, corrected)
 	assert_true(FugitiveExtraditionSystem.generates_sighting_topic(5.0))
-	assert_true(FugitiveExtraditionSystem.generates_sighting_topic(3.0))
+	assert_true(FugitiveExtraditionSystem.generates_sighting_topic(6.0))
 
 
 func test_low_status_no_sighting_topic():
+	# Status 3.0–4.9 fugitives visible via Path A/B but NOT Path C
+	assert_false(FugitiveExtraditionSystem.generates_sighting_topic(4.9))
 	assert_false(FugitiveExtraditionSystem.generates_sighting_topic(2.0))
 	assert_false(FugitiveExtraditionSystem.generates_sighting_topic(1.0))
 

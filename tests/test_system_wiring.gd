@@ -2349,8 +2349,7 @@ func test_horde_formed_generates_topic() -> void:
 			assert_eq(topic.tier, TopicData.Tier.TIER_3)
 			assert_eq(topic.category, TopicData.Category.POLITICAL)
 			assert_eq(topic.topic_type, "military")
-			# _COMBAT_EVENT_MOMENTUM was zeroed (invented value removed).
-			assert_true(topic.momentum >= 0.0)
+			assert_eq(topic.momentum, TopicMomentumSystem.initial_momentum_for_tier(topic.tier))
 			assert_eq(int(result.get("topic_id", -1)), topic.topic_id)
 			found = true
 			break
@@ -3359,7 +3358,7 @@ func test_lying_honor_fires_on_fabricate_with_positive_disposition() -> void:
 	fabricator.honor = 5.0
 	fabricator.stamina = 2
 	fabricator.willpower = 2
-	fabricator.disposition_values = {"42": 15}
+	fabricator.disposition_values = {42: 15}
 	var secret := SecretData.new()
 	secret.subject_id = 42
 	var results: Array = [{
@@ -3379,7 +3378,7 @@ func test_lying_honor_skips_negative_disposition() -> void:
 	fabricator.honor = 5.0
 	fabricator.stamina = 2
 	fabricator.willpower = 2
-	fabricator.disposition_values = {"42": -10}
+	fabricator.disposition_values = {42: -10}
 	var secret := SecretData.new()
 	secret.subject_id = 42
 	var results: Array = [{

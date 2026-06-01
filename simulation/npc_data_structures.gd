@@ -46,7 +46,6 @@ class ScoredAction:
 	var travel_redirect_penalty: float = 0.0
 	var confidence_penalty: float = 0.0
 	var stale_intel_bonus: float = 0.0
-	var festival_modifier: float = 0.0
 	var deception_defense_penalty: float = 0.0
 	var honor_covert_penalty: float = 0.0
 	var virtue_covert_modifier: float = 0.0
@@ -66,7 +65,6 @@ class ScoredAction:
 			+ travel_redirect_penalty
 			+ confidence_penalty
 			+ stale_intel_bonus
-			+ festival_modifier
 			+ deception_defense_penalty
 			+ honor_covert_penalty
 			+ virtue_covert_modifier
@@ -117,6 +115,10 @@ class ContextSnapshot:
 	var known_topics: Array = []
 	var known_positions: Dictionary = {}
 	var known_topic_types: Dictionary = {}
+	# topic_id → current momentum int (for scoring checks like momentum > 40)
+	var known_topic_momentums: Dictionary = {}
+	# topic_id → {clan: String, family: String, char_id: int} for subject matching
+	var known_topic_subjects: Dictionary = {}
 	var known_objectives: Dictionary = {}
 	var known_contacts: Array = []
 	var contact_clans: Dictionary = {}
@@ -180,8 +182,6 @@ class ContextSnapshot:
 	# Festival state (s11.5)
 	var is_ceasefire_day: bool = false
 	var is_labor_halt_day: bool = false
-	var is_taian: bool = false
-	var is_inauspicious_for_social: bool = false
 	var festival_honor_gain: float = 0.0
 	var festival_has_lion_honor: bool = false
 	var festival_glory_poetry: float = 0.0
@@ -209,6 +209,15 @@ class ContextSnapshot:
 
 	# Phoenix-specific governance (s55.10.3.7)
 	var phoenix_champion_authority: bool = false
+
+	# Champion conclusion candidates for lord-tier Phase 2 combined pool (s57.54.10b).
+	# Populated by day_orchestrator for Family Daimyo and higher.
+	# Format: [{"need_type": String, "score": int, "source": String,
+	#            "conclusion_type": int, "target_clan_id": int, "is_forced": bool}, ...]
+	var champion_conclusion_candidates: Array = []
+	# Local Tier 3+ need candidates from known_topics converted to NeedType candidates.
+	# Populated by day_orchestrator alongside champion_conclusion_candidates.
+	var local_tier3_candidates: Array = []
 
 
 class ProvinceStatus:
