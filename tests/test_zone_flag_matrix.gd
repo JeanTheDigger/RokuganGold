@@ -478,3 +478,96 @@ func test_world_bootstrap_does_not_set_has_dojo_for_non_champion_family() -> voi
 		crab_families[0],
 		"second family is different from champion family",
 	)
+
+
+# =============================================================================
+# zone_subtype propagation (context setters)
+# =============================================================================
+
+func _make_temple_settlement(id: int) -> SettlementData:
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = id
+	s.settlement_type = Enums.SettlementType.TEMPLE
+	s.has_dojo = false
+	return s
+
+
+func _make_wall_tower_settlement(id: int) -> SettlementData:
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = id
+	s.settlement_type = Enums.SettlementType.WALL_TOWER
+	s.wall_si = 100
+	s.garrison_pu = 100
+	return s
+
+
+func test_temple_context_sets_zone_subtype_temple_grounds() -> void:
+	var settlements: Array = [_make_temple_settlement(30)]
+	var character: L5RCharacterData = _make_char_at(3, 30)
+	var world_states: Dictionary = {}
+	DayOrchestrator._set_temple_context_flags([character], settlements, world_states)
+	var ws: Dictionary = world_states.get(3, {})
+	assert_eq(
+		ws.get("context_flag", -1),
+		Enums.ContextFlag.AT_TEMPLE,
+		"pre-condition: AT_TEMPLE flag set",
+	)
+	assert_eq(
+		ws.get("zone_subtype", -1),
+		Enums.ZoneSubtype.TEMPLE_GROUNDS,
+		"temple context sets zone_subtype to TEMPLE_GROUNDS",
+	)
+
+
+func test_dojo_context_sets_zone_subtype_dojo() -> void:
+	var settlements: Array = [_make_dojo_settlement(10, true)]
+	var character: L5RCharacterData = _make_char_at(4, 10)
+	var world_states: Dictionary = {}
+	DayOrchestrator._set_dojo_context_flags([character], settlements, world_states)
+	var ws: Dictionary = world_states.get(4, {})
+	assert_eq(
+		ws.get("context_flag", -1),
+		Enums.ContextFlag.AT_DOJO,
+		"pre-condition: AT_DOJO flag set",
+	)
+	assert_eq(
+		ws.get("zone_subtype", -1),
+		Enums.ZoneSubtype.DOJO,
+		"dojo context sets zone_subtype to DOJO",
+	)
+
+
+func test_temple_priority_blocks_dojo_zone_subtype() -> void:
+	# A character at a dojo settlement that also has a temple context should
+	# retain TEMPLE_GROUNDS, not be overwritten with DOJO.
+	var dojo_s: SettlementData = _make_dojo_settlement(50, true)
+	var character: L5RCharacterData = _make_char_at(5, 50)
+	var world_states: Dictionary = {
+		5: {
+			"context_flag": Enums.ContextFlag.AT_TEMPLE,
+			"zone_subtype": Enums.ZoneSubtype.TEMPLE_GROUNDS,
+		},
+	}
+	DayOrchestrator._set_dojo_context_flags([character], [dojo_s], world_states)
+	assert_eq(
+		world_states.get(5, {}).get("zone_subtype", -1),
+		Enums.ZoneSubtype.TEMPLE_GROUNDS,
+		"AT_TEMPLE zone_subtype not overwritten by dojo pass",
+	)
+
+
+func test_court_priority_blocks_temple_zone_subtype() -> void:
+	var settlements: Array = [_make_temple_settlement(60)]
+	var character: L5RCharacterData = _make_char_at(6, 60)
+	var world_states: Dictionary = {
+		6: {
+			"context_flag": Enums.ContextFlag.AT_COURT,
+			"zone_subtype": Enums.ZoneSubtype.OHIROMA,
+		},
+	}
+	DayOrchestrator._set_temple_context_flags([character], settlements, world_states)
+	assert_eq(
+		world_states.get(6, {}).get("zone_subtype", -1),
+		Enums.ZoneSubtype.OHIROMA,
+		"AT_COURT zone_subtype not overwritten by temple pass",
+	)

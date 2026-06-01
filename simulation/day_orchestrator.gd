@@ -13553,6 +13553,7 @@ static func _set_temple_context_flags(
 		if ws.get("context_flag", -1) == Enums.ContextFlag.AT_WALL_TOWER:
 			continue
 		ws["context_flag"] = Enums.ContextFlag.AT_TEMPLE
+		ws["zone_subtype"] = Enums.ZoneSubtype.TEMPLE_GROUNDS
 
 
 static func _set_dojo_context_flags(
@@ -13588,6 +13589,7 @@ static func _set_dojo_context_flags(
 		if current_flag == Enums.ContextFlag.AT_TEMPLE:
 			continue
 		ws["context_flag"] = Enums.ContextFlag.AT_DOJO
+		ws["zone_subtype"] = Enums.ZoneSubtype.DOJO
 
 
 static func _set_visiting_context_flags(
