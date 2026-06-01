@@ -3499,6 +3499,35 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   executor — the seeding path is wired and tested but requires a violence ActionID to be
   implemented before it fires in actual gameplay.
 
+### Known Code Issues (found and fixed 2026-06-01, standing objectives audit)
+- **`compute_tend_personality_bonus()` never called — personality modifiers silently dropped. FIXED.**
+  `MedicineSystem.compute_tend_personality_bonus()` was defined with GDD-specified constants
+  (JIN+15, GI+10, REI+5, CHUGI+20 for lord/superior target) but was never called in the
+  TEND_WOUNDED_ALLY opportunity injection loop in `npc_decision_engine.gd`. Priority was
+  computed from `compute_tend_priority()` only. Added call after priority computation;
+  `is_superior` derived from `character.lord_id` and `character.operational_superior_id`.
+  3 tests.
+- **Monk standing objectives never assigned — `_assign_monk_standing_objectives()` missing. FIXED.**
+  Despite CLAUDE.md claiming s55.11b was implemented, the function
+  `_assign_monk_standing_objectives()` did not exist in `day_orchestrator.gd`.
+  All SchoolType.MONK characters had no standing objective, causing monks to fall through
+  to REST every AP. Added function in the same standing-assignment block as magistrates,
+  ronin, and Kaiu Engineers. Assigns PERFORM_RITUAL as universal default (Meditate +
+  Worship types). School-based differentiation deferred — GDD specifies school-based
+  selection but provides no school→type mapping table. 5 tests in `test_ronin_system.gd`.
+- **FIND_NEW_LORD, PERFORM_RITUAL, MAINTAIN_FORTIFICATION fell through generic passthrough. FIXED.**
+  Three standing NeedTypes fell through the generic `_passthrough()` at the end of
+  `ObjectiveDecomposer.decompose()` without being listed in any dispatch array.
+  Functionally correct (all have appropriate alignment tables, no context branching needed),
+  but undocumented. Added explicit dispatch paths: FIND_NEW_LORD added to
+  PERSONAL_OBJECTIVES with `_decompose_find_new_lord()` (all contexts → passthrough;
+  Phase 4a `_pick_lord_for_petition()` handles targeting). PERFORM_RITUAL added to
+  PERSONAL_OBJECTIVES with `_decompose_perform_ritual()` (passthrough). MAINTAIN_FORTIFICATION
+  added to MILITARY_OBJECTIVES with `_decompose_maintain_fortification()` (passthrough;
+  Phase 4a reads wall_statuses for target_province_id). All four standing NeedTypes
+  (UPHOLD_LAW, FIND_NEW_LORD, PERFORM_RITUAL, MAINTAIN_FORTIFICATION) now have explicit
+  dispatch paths. 6 tests in `test_objective_decomposer.gd`.
+
 ### Systems Added 2026-06-01
 - **s52.5 Ronin Petition** — GDD `gdd/s52.5_ronin_petition_locked.md`. Full petition pipeline
   confirmed implemented (was previously wired but undocumented as a standalone system entry).
