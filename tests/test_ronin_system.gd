@@ -2129,3 +2129,60 @@ func test_objective_alignment_adjust_tax_contains_terminate_contract():
 		"ADJUST_TAX must have TERMINATE_CONTRACT entry",
 	)
 	assert_eq(adjust_tax.get("TERMINATE_CONTRACT", 0), 35)
+
+
+# ============================================================
+# _assign_artisan_standing_objectives — s49
+# ============================================================
+
+func _make_artisan_char(id: int = 60) -> L5RCharacterData:
+	var c := _make_samurai(id)
+	c.school_type = Enums.SchoolType.ARTISAN
+	c.lord_id = 1
+	c.role_position = ""
+	return c
+
+
+func test_assign_artisan_standing_assigns_artistic_expression() -> void:
+	var c := _make_artisan_char()
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_artisan_standing_objectives([c], objectives_map)
+	var standing: Dictionary = objectives_map[c.character_id].get("standing", {})
+	assert_eq(standing.get("need_type", ""), "ARTISTIC_EXPRESSION",
+		"Artisan should receive ARTISTIC_EXPRESSION standing objective")
+
+
+func test_assign_artisan_standing_skips_non_artisan() -> void:
+	var c := _make_samurai()  # SchoolType.BUSHI
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_artisan_standing_objectives([c], objectives_map)
+	assert_false(objectives_map.has(c.character_id),
+		"Non-artisan should not receive artisan standing objective")
+
+
+func test_assign_artisan_standing_skips_dead() -> void:
+	var c := _make_artisan_char()
+	c.wounds_taken = 999
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_artisan_standing_objectives([c], objectives_map)
+	assert_false(objectives_map.has(c.character_id),
+		"Dead artisan should not receive standing objective")
+
+
+func test_assign_artisan_standing_does_not_overwrite_existing() -> void:
+	var c := _make_artisan_char()
+	var objectives_map: Dictionary = {
+		c.character_id: {"standing": {"need_type": "MAINTAIN_FORTIFICATION"}},
+	}
+	DayOrchestrator._assign_artisan_standing_objectives([c], objectives_map)
+	assert_eq(objectives_map[c.character_id]["standing"]["need_type"], "MAINTAIN_FORTIFICATION",
+		"Existing standing objective (e.g. Kaiu crisis) should not be replaced")
+
+
+func test_assign_artisan_standing_auto_assigned_flag() -> void:
+	var c := _make_artisan_char()
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_artisan_standing_objectives([c], objectives_map)
+	var standing: Dictionary = objectives_map[c.character_id].get("standing", {})
+	assert_true(standing.get("auto_assigned", false),
+		"Artisan standing objective should carry auto_assigned flag")

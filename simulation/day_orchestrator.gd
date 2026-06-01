@@ -145,6 +145,7 @@ static func advance_day(
 	_assign_magistrate_standing_objectives(characters, objectives_map)
 	_assign_ronin_standing_objectives(characters, objectives_map)
 	_assign_kaiu_engineer_standing_objectives(characters, objectives_map, settlements)
+	_assign_artisan_standing_objectives(characters, objectives_map)
 	_assign_monk_standing_objectives(characters, objectives_map)
 
 	_populate_military_data(military_data, companies)
@@ -6928,6 +6929,41 @@ static func _assign_kaiu_engineer_standing_objectives(
 				"priority": 2,
 				"auto_assigned": true,
 			}
+
+
+# -- ARTISTIC_EXPRESSION Standing Objective Assignment (s49) -------------------
+# Artisan-school NPCs who have no other standing objective default to pursuing
+# artistic expression in peacetime. This gives Kaiu Engineers (and future artisan
+# schools) a productive standing rather than REST during non-crisis periods.
+
+
+static func _assign_artisan_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.school_type != Enums.SchoolType.ARTISAN:
+			continue
+		if CharacterStats.is_dead(character):
+			continue
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+
+		# Do not replace a standing objective already assigned (e.g. Kaiu Engineers
+		# during wall crises receive MAINTAIN_FORTIFICATION from the Kaiu-specific pass).
+		if not standing.is_empty():
+			continue
+
+		objectives["standing"] = {
+			"need_type": "ARTISTIC_EXPRESSION",
+			"priority": 3,
+			"auto_assigned": true,
+		}
 
 
 # -- Petition Writeback (s52.5 Parts B–D) -------------------------------------
