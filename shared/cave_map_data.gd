@@ -1,0 +1,151 @@
+class_name CaveMapData
+extends Resource
+## Data model for a variable-size ASCII tile map produced by the Cave template
+## generator (s56.3). Unlike AsciiMapData (fixed 31×31 zone maps), cave maps
+## vary in size by insurgency Strength and die roll.
+## Tiles stored flat, row-major: index = y * width + x.
+
+# -- Size categories (s56.3.1) -----------------------------------------------
+
+enum SizeCategory {
+	SMALL     = 0,   # 3-5 rooms, houses Strength ≤ 3
+	MEDIUM    = 1,   # 6-10 rooms, houses Strength ≤ 6
+	LARGE     = 2,   # 11-16 rooms, houses Strength ≤ 9
+	EXTENSIVE = 3,   # 17+ rooms, houses Strength 10
+}
+
+# -- Flow patterns (s56.3.2) -------------------------------------------------
+
+enum FlowPattern {
+	LINEAR    = 0,   # Rooms in sequence; one main path. Most common for Small.
+	BRANCHING = 1,   # Central junction splits into non-reconnecting paths. Common for Medium.
+	LOOP      = 2,   # Paths reconnect, creating a circuit. Common for Large.
+	WEB       = 3,   # Multiple interconnected paths. Extensive only.
+}
+
+# -- Room types (s56.3.3) ----------------------------------------------------
+
+enum RoomType {
+	ENTRY_TUNNEL  = 0,  # First space at entrance. Narrow (1-2 tiles wide).
+	SMALL_CHAMBER = 1,  # 4-6 tiles across. Single encounter, 1-2 exits.
+	LARGE_CHAMBER = 2,  # 8-12 tiles across. Multiple enemies. 2-3 exits.
+	JUNCTION      = 3,  # Path-split node. Requires ≥3 connections.
+	DEAD_END      = 4,  # Branch that terminates. Holds loot, traps, prisoners.
+	DEEP_CHAMBER  = 5,  # Final room. Largest space. Leader + objective. One way in.
+}
+
+# -- Population placement roles (s56.3.4) ------------------------------------
+
+enum PopRole {
+	SENTRY         = 0,  # Entry tunnel / first corridor. Early warning.
+	PATROL_WAYPOINT = 1,  # Move between rooms. One per 4-5 rooms. Medium+ only.
+	CAMP_GROUP     = 2,  # Stationary cluster in a chamber. Most of the population.
+	GUARD_POST     = 3,  # Hold a junction or corridor chokepoint. Won't leave.
+	LEADER         = 4,  # Deep Chamber. Leader + best fighters. ~20-25% of total.
+}
+
+# -- Objective types (s56.3.6) -----------------------------------------------
+
+enum ObjType {
+	KILL_LEADER      = 0,  # Leader in Deep Chamber. Primary default.
+	RECOVER_GOODS    = 1,  # Stolen goods in a Large Chamber near the Deep Chamber.
+	BURN_POINT       = 2,  # Spread across all occupied rooms (Burn the Camp).
+	RESCUE_HOSTAGES  = 3,  # Small Chamber or Dead End, separate from main population.
+}
+
+# -- Dimensional constraints (s56.3.1) ----------------------------------------
+
+# Map pixel dimensions per size category [width, height].
+const DIMS: Array[Vector2i] = [
+	Vector2i(40, 36),   # SMALL
+	Vector2i(60, 52),   # MEDIUM
+	Vector2i(80, 68),   # LARGE
+	Vector2i(100, 84),  # EXTENSIVE
+]
+
+# Maximum insurgency Strength that each size can house (s56.3.1).
+const MAX_STRENGTH: Array[int] = [3, 6, 9, 10]
+
+# Room count range [min, max] per size category (s56.3.1).
+const ROOM_RANGE: Array[Vector2i] = [
+	Vector2i(3, 5),    # SMALL
+	Vector2i(6, 10),   # MEDIUM
+	Vector2i(11, 16),  # LARGE
+	Vector2i(17, 22),  # EXTENSIVE
+]
+
+# -- Identity -----------------------------------------------------------------
+
+@export var seed_string: String = ""
+@export var size_category: int = SizeCategory.MEDIUM
+@export var flow_pattern: int = FlowPattern.BRANCHING
+
+# -- Tile data ----------------------------------------------------------------
+
+@export var width: int = 60
+@export var height: int = 52
+
+# Flat tile array. Each byte is an Enums.TileType value.
+@export var tile_types: PackedByteArray = []
+
+# Persistent overrides (destroyed walls, placed fire, etc.).
+# Key: "x,y", Value: Enums.TileType int.
+@export var deltas: Dictionary = {}
+
+# -- Graph data ---------------------------------------------------------------
+
+# Each room dict: { id:int, type:int (RoomType), cx:int, cy:int,
+#   half_w:int, half_h:int, depth:int, connections:Array[int] (room ids) }
+@export var rooms: Array = []
+
+# Each entry point dict: { x:int, y:int, is_main:bool }
+@export var entry_points: Array = []
+
+# -- Placement data -----------------------------------------------------------
+
+# Each slot dict: { x:int, y:int, role:int (PopRole), room_id:int }
+@export var population_slots: Array = []
+
+# Each slot dict: { x:int, y:int, obj_type:int (ObjType), room_id:int }
+@export var objective_slots: Array = []
+
+# -- Helpers ------------------------------------------------------------------
+
+func init_tiles(fill: int = Enums.TileType.WALL_STONE) -> void:
+	tile_types.resize(width * height)
+	for i: int in range(width * height):
+		tile_types[i] = fill
+
+
+func get_tile(x: int, y: int) -> int:
+	if x < 0 or x >= width or y < 0 or y >= height:
+		return Enums.TileType.WALL_STONE
+	var key: String = "%d,%d" % [x, y]
+	if deltas.has(key):
+		return deltas[key]
+	if tile_types.size() != width * height:
+		return Enums.TileType.VOID
+	return tile_types[y * width + x]
+
+
+func set_tile(x: int, y: int, tile: int) -> void:
+	if x < 0 or x >= width or y < 0 or y >= height:
+		return
+	tile_types[y * width + x] = tile
+
+
+func set_delta(x: int, y: int, tile: int) -> void:
+	if x < 0 or x >= width or y < 0 or y >= height:
+		return
+	deltas["%d,%d" % [x, y]] = tile
+
+
+func clear_delta(x: int, y: int) -> void:
+	deltas.erase("%d,%d" % [x, y])
+
+
+# Fills a rectangle of tiles. Used by the generator to carve rooms.
+func fill_rect(lx: int, ly: int, rx: int, ry: int, tile: int) -> void:
+	for yy: int in range(ly, ry + 1):
+		for xx: int in range(lx, rx + 1):
+			set_tile(xx, yy, tile)
