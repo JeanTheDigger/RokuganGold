@@ -1421,6 +1421,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"PUBLIC_ATONEMENT", "TRAIN",
 				"CHARM", "PROBE", "READ_CHARACTER",
 				"TREAT_WOUND",
+				"PLACE_SHIDE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_DOJO:

@@ -571,3 +571,11 @@ func test_court_priority_blocks_temple_zone_subtype() -> void:
 		Enums.ZoneSubtype.OHIROMA,
 		"AT_COURT zone_subtype not overwritten by temple pass",
 	)
+
+
+func test_place_shide_in_at_temple_context_list() -> void:
+	## AT_TEMPLE context must include PLACE_SHIDE so shrine artisans at temples
+	## can place shide. Previously missing — AT_TEMPLE was overriding AT_OWN_HOLDINGS/
+	## VISITING but lacked PLACE_SHIDE, making it unreachable at primary shrine locations.
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(Enums.ContextFlag.AT_TEMPLE)
+	assert_true("PLACE_SHIDE" in actions, "PLACE_SHIDE must be in AT_TEMPLE context list")
