@@ -34,6 +34,7 @@ const PERSONAL_OBJECTIVES: Array[String] = [
 	"ADVANCE_GLORY",
 	"SEEK_VENGEANCE",
 	"FIND_NEW_LORD",
+	"PERFORM_RITUAL",
 ]
 
 const MILITARY_OBJECTIVES: Array[String] = [
@@ -44,6 +45,7 @@ const MILITARY_OBJECTIVES: Array[String] = [
 	"ELIMINATE_SHADOWLANDS",
 	"MAINTAIN_PEACE",
 	"BUILD_STRONGEST_FORCE",
+	"MAINTAIN_FORTIFICATION",
 ]
 
 const INVESTIGATION_OBJECTIVES: Array[String] = [
@@ -162,6 +164,8 @@ static func _decompose_personal(
 			return _decompose_seek_vengeance(objective, ctx)
 		"FIND_NEW_LORD":
 			return _decompose_find_new_lord(objective, ctx)
+		"PERFORM_RITUAL":
+			return _decompose_perform_ritual(objective, ctx)
 	return _passthrough(objective)
 
 
@@ -187,6 +191,8 @@ static func _decompose_military(
 			return _decompose_maintain_peace(objective, ctx)
 		"BUILD_STRONGEST_FORCE":
 			return _decompose_build_strongest_force(objective, ctx)
+		"MAINTAIN_FORTIFICATION":
+			return _decompose_maintain_fortification(objective, ctx)
 	return _passthrough(objective)
 
 
@@ -790,6 +796,20 @@ static func _decompose_find_new_lord(
 			return _passthrough(objective)
 
 
+# -- PERFORM_RITUAL Decomposition (s55.11b) -------------------------------------
+# Monk standing objective: pursue ritual practice in all contexts. Phase 5 scores
+# against the PERFORM_RITUAL alignment table (PERFORM_RITUAL=100, PERFORM_WORSHIP=90,
+# MEDITATE=60). The context list filter ensures AT_COURT characters see only
+# context-available actions; no context branching is needed here.
+
+
+static func _decompose_perform_ritual(
+	objective: Dictionary,
+	_ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	return _passthrough(objective)
+
+
 # =============================================================================
 # Military Decomposition Trees (GDD s55.23)
 # =============================================================================
@@ -1118,6 +1138,20 @@ static func _decompose_build_strongest_force(
 		})
 
 	return _make_need("ACQUIRE_RESOURCE", 1, {"target_resource": "arms"})
+
+
+# -- MAINTAIN_FORTIFICATION Decomposition (s57.41) ------------------------------
+# Kaiu Engineer standing objective: maintain Wall integrity. Phase 5 scores against
+# the MAINTAIN_FORTIFICATION alignment table (SEAL_WALL_BREACH=100, ORDER_FORTIFY=100,
+# FORTIFY_WALL_SECTION=95, DISPATCH_COURTIER=85). Phase 4a metadata population reads
+# ctx.wall_statuses for target_province_id, so no target needs to be set here.
+
+
+static func _decompose_maintain_fortification(
+	objective: Dictionary,
+	_ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	return _passthrough(objective)
 
 
 # =============================================================================
