@@ -10,8 +10,8 @@ class_name AsciiMapGenerator
 ##   All 25 ZoneSubtype values have dedicated generators.
 
 
-const S: int = AsciiMapData.MAP_SIZE      # 31
-const MID: int = AsciiMapData.MAP_SIZE / 2  # 15
+const S: int = 31    # default zone dimension (viewport is also 31×31)
+const MID: int = 15  # S / 2
 
 
 # --- Public API ---------------------------------------------------------------

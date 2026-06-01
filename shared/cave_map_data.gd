@@ -1,8 +1,8 @@
 class_name CaveMapData
 extends Resource
 ## Data model for a variable-size ASCII tile map produced by the Cave template
-## generator (s56.3). Unlike AsciiMapData (fixed 31×31 zone maps), cave maps
-## vary in size by insurgency Strength and die roll.
+## generator (s56.3). Cave maps vary in size by insurgency Strength and die roll;
+## AsciiMapData (settlement zones) is also variable-size — 31×31 is the viewport.
 ## Tiles stored flat, row-major: index = y * width + x.
 
 # -- Size categories (s56.3.1) -----------------------------------------------

@@ -10,7 +10,7 @@ extends GutTest
 func test_ascii_map_data_init_correct_size() -> void:
 	var m: AsciiMapData = AsciiMapData.new()
 	m.init_tiles(Enums.TileType.FLOOR_GRASS)
-	assert_eq(m.tile_types.size(), AsciiMapData.TILE_COUNT)
+	assert_eq(m.tile_types.size(), m.width * m.height)
 
 
 func test_ascii_map_data_init_fill() -> void:
@@ -34,8 +34,8 @@ func test_ascii_map_data_out_of_bounds_returns_wall() -> void:
 	m.init_tiles(Enums.TileType.FLOOR_GRASS)
 	assert_eq(m.get_tile(-1, 0), Enums.TileType.WALL_STONE)
 	assert_eq(m.get_tile(0, -1), Enums.TileType.WALL_STONE)
-	assert_eq(m.get_tile(31, 0), Enums.TileType.WALL_STONE)
-	assert_eq(m.get_tile(0, 31), Enums.TileType.WALL_STONE)
+	assert_eq(m.get_tile(m.width, 0), Enums.TileType.WALL_STONE)
+	assert_eq(m.get_tile(0, m.height), Enums.TileType.WALL_STONE)
 
 
 func test_ascii_map_data_delta_overrides_base() -> void:
@@ -174,7 +174,7 @@ func test_fov_tiles_beyond_radius_not_visible() -> void:
 func test_fov_wall_blocks_tiles_behind_it() -> void:
 	var m: AsciiMapData = _make_open_map()
 	# Place a horizontal stone wall at y=12 across the full width.
-	for x in range(0, AsciiMapData.MAP_SIZE):
+	for x in range(0, m.width):
 		m.set_tile(x, 12, Enums.TileType.WALL_STONE)
 	var visible: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
 	# Tile at y=10 (north of wall) should NOT be visible from y=15 (south).
@@ -201,7 +201,7 @@ func test_fov_diagonal_wall_blocks_behind() -> void:
 func test_fov_open_door_allows_sight() -> void:
 	var m: AsciiMapData = _make_open_map()
 	# Wood wall row with one open door.
-	for x in range(0, AsciiMapData.MAP_SIZE):
+	for x in range(0, m.width):
 		m.set_tile(x, 12, Enums.TileType.WALL_WOOD)
 	m.set_tile(15, 12, Enums.TileType.DOOR_WOOD_OPEN)
 	var visible: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
@@ -211,7 +211,7 @@ func test_fov_open_door_allows_sight() -> void:
 
 func test_fov_closed_door_blocks_sight() -> void:
 	var m: AsciiMapData = _make_open_map()
-	for x in range(0, AsciiMapData.MAP_SIZE):
+	for x in range(0, m.width):
 		m.set_tile(x, 12, Enums.TileType.WALL_WOOD)
 	m.set_tile(15, 12, Enums.TileType.DOOR_WOOD_CLOSED)
 	var visible: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
@@ -230,7 +230,7 @@ func _gen(subtype: int, settlement: String = "Shiro Kakita") -> AsciiMapData:
 
 func test_generator_returns_full_map() -> void:
 	var m: AsciiMapData = _gen(Enums.ZoneSubtype.MARKET_STREET)
-	assert_eq(m.tile_types.size(), AsciiMapData.TILE_COUNT)
+	assert_eq(m.tile_types.size(), m.width * m.height)
 
 
 func test_generator_deterministic_same_output() -> void:
@@ -245,7 +245,7 @@ func test_generator_different_settlements_produce_different_maps() -> void:
 	var m2: AsciiMapData = _gen(Enums.ZoneSubtype.FOREST_PATH, "Shiro Hiruma")
 	# Different seeds → at least one tile should differ.
 	var differs: bool = false
-	for i in range(AsciiMapData.TILE_COUNT):
+	for i in range(m1.tile_types.size()):
 		if m1.tile_types[i] != m2.tile_types[i]:
 			differs = true
 			break
@@ -256,7 +256,7 @@ func test_generator_different_subtypes_produce_different_maps() -> void:
 	var m1: AsciiMapData = _gen(Enums.ZoneSubtype.MARKET_STREET)
 	var m2: AsciiMapData = _gen(Enums.ZoneSubtype.TEMPLE_GROUNDS)
 	var differs: bool = false
-	for i in range(AsciiMapData.TILE_COUNT):
+	for i in range(m1.tile_types.size()):
 		if m1.tile_types[i] != m2.tile_types[i]:
 			differs = true
 			break
@@ -303,7 +303,7 @@ func test_generator_forest_path_centre_passable() -> void:
 	# The path generator clears a walkable route — at least some centre
 	# column tiles should be passable dirt.
 	var passable_count: int = 0
-	for y in range(AsciiMapData.MAP_SIZE):
+	for y in range(m.height):
 		var tile: int = m.get_tile(15, y)
 		if AsciiMapData.is_passable(tile):
 			passable_count += 1
@@ -313,7 +313,7 @@ func test_generator_forest_path_centre_passable() -> void:
 func test_generator_road_centre_passable() -> void:
 	var m: AsciiMapData = _gen(Enums.ZoneSubtype.ROAD)
 	var passable_count: int = 0
-	for y in range(AsciiMapData.MAP_SIZE):
+	for y in range(m.height):
 		if AsciiMapData.is_passable(m.get_tile(15, y)):
 			passable_count += 1
 	assert_gt(passable_count, 20, "Road centre column should be mostly passable")
@@ -322,7 +322,7 @@ func test_generator_road_centre_passable() -> void:
 func test_generator_river_crossing_has_water() -> void:
 	var m: AsciiMapData = _gen(Enums.ZoneSubtype.RIVER_CROSSING)
 	var water_count: int = 0
-	for x in range(AsciiMapData.MAP_SIZE):
+	for x in range(m.width):
 		var t: int = m.get_tile(x, 15)
 		if t == Enums.TileType.WATER_DEEP or \
 		   t == Enums.TileType.WATER_SHALLOW or \
@@ -334,7 +334,7 @@ func test_generator_river_crossing_has_water() -> void:
 func test_generator_farmland_has_crops() -> void:
 	var m: AsciiMapData = _gen(Enums.ZoneSubtype.FARMLAND)
 	var crop_count: int = 0
-	for i in range(AsciiMapData.TILE_COUNT):
+	for i in range(m.tile_types.size()):
 		if m.tile_types[i] == Enums.TileType.CROPS or \
 		   m.tile_types[i] == Enums.TileType.WATER_PADDY:
 			crop_count += 1
@@ -347,7 +347,7 @@ func test_generator_default_fallback_produces_valid_map() -> void:
 	var m: AsciiMapData = AsciiMapGenerator.generate(
 		"zone_test", "Test Zone", 999, "Shiro Kakita"
 	)
-	assert_eq(m.tile_types.size(), AsciiMapData.TILE_COUNT)
+	assert_eq(m.tile_types.size(), m.width * m.height)
 	assert_eq(m.exits.size(), 2)
 
 
@@ -432,7 +432,7 @@ func test_wood_wall_horizontal_glyph() -> void:
 
 func test_fov_thin_wall_gap_allows_sight() -> void:
 	var m: AsciiMapData = _make_open_map()
-	for x in range(0, AsciiMapData.MAP_SIZE):
+	for x in range(0, m.width):
 		m.set_tile(x, 12, Enums.TileType.WALL_STONE)
 	m.set_tile(15, 12, Enums.TileType.FLOOR_GRASS)
 	var visible: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
@@ -516,7 +516,7 @@ func test_has_los_wall_itself_reachable() -> void:
 
 func test_has_los_open_door_allows() -> void:
 	var m: AsciiMapData = _make_open_map()
-	for x in range(0, AsciiMapData.MAP_SIZE):
+	for x in range(0, m.width):
 		m.set_tile(x, 12, Enums.TileType.WALL_WOOD)
 	m.set_tile(15, 12, Enums.TileType.DOOR_WOOD_OPEN)
 	assert_true(FovSystem.has_los(15, 15, 15, 10, m))
@@ -568,7 +568,7 @@ func test_fov_fire_blocks_los_in_fov() -> void:
 
 func test_fov_delta_opened_door_allows_sight() -> void:
 	var m: AsciiMapData = _make_open_map()
-	for x in range(0, AsciiMapData.MAP_SIZE):
+	for x in range(0, m.width):
 		m.set_tile(x, 12, Enums.TileType.WALL_WOOD)
 	m.set_tile(15, 12, Enums.TileType.DOOR_WOOD_CLOSED)
 	# Door is closed in base map — blocks LOS.
@@ -628,11 +628,12 @@ func test_fov_at_corner_does_not_crash() -> void:
 
 func test_fov_at_far_corner() -> void:
 	var m: AsciiMapData = _make_open_map()
-	var edge: int = AsciiMapData.MAP_SIZE - 1
-	var visible: Dictionary = FovSystem.compute_visible(edge, edge, 3, m)
-	assert_true(visible.get(Vector2i(edge, edge), false))
-	assert_true(visible.get(Vector2i(edge - 1, edge), false))
-	assert_false(visible.has(Vector2i(edge + 1, edge)))
+	var edge_x: int = m.width - 1
+	var edge_y: int = m.height - 1
+	var visible: Dictionary = FovSystem.compute_visible(edge_x, edge_y, 3, m)
+	assert_true(visible.get(Vector2i(edge_x, edge_y), false))
+	assert_true(visible.get(Vector2i(edge_x - 1, edge_y), false))
+	assert_false(visible.has(Vector2i(edge_x + 1, edge_y)))
 
 
 # ---------------------------------------------------------------------------
@@ -741,7 +742,7 @@ func test_fov_closed_doors_block_los() -> void:
 # ---------------------------------------------------------------------------
 
 func _has_tile_type(map: AsciiMapData, tile: int) -> bool:
-	for i in range(AsciiMapData.TILE_COUNT):
+	for i in range(map.tile_types.size()):
 		if map.tile_types[i] == tile:
 			return true
 	return false
@@ -749,7 +750,7 @@ func _has_tile_type(map: AsciiMapData, tile: int) -> bool:
 
 func _count_tile_type(map: AsciiMapData, tile: int) -> int:
 	var count: int = 0
-	for i in range(AsciiMapData.TILE_COUNT):
+	for i in range(map.tile_types.size()):
 		if map.tile_types[i] == tile:
 			count += 1
 	return count
@@ -1228,7 +1229,7 @@ func test_all_zone_subtypes_produce_valid_maps() -> void:
 	]
 	for st in subtypes:
 		var m: AsciiMapData = _gen(st)
-		assert_eq(m.tile_types.size(), AsciiMapData.TILE_COUNT,
+		assert_eq(m.tile_types.size(), m.width * m.height,
 			"Subtype %d should produce full map" % st)
 		assert_gt(m.exits.size(), 0,
 			"Subtype %d should have at least one exit" % st)

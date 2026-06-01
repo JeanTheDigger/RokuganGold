@@ -1,12 +1,10 @@
 class_name AsciiMapData
 extends Resource
-## Data model for a 31×31 ASCII tile map for a single Lesser Zone (s4.4).
-## Tiles stored as a flat PackedByteArray, row-major: index = y * MAP_SIZE + x.
+## Data model for a variable-size ASCII tile map for a single Lesser Zone (s4.4).
+## 31×31 is the viewport size, not the zone size — zones vary by settlement type
+## and zone type. Tiles stored flat, row-major: index = y * width + x.
 ## Deltas override generated tiles to persist physical changes (destroyed walls,
 ## new construction) without regenerating the whole map.
-
-const MAP_SIZE: int = 31
-const TILE_COUNT: int = MAP_SIZE * MAP_SIZE  # 961
 
 # -- Zone identity ------------------------------------------------------------
 
@@ -18,6 +16,9 @@ const TILE_COUNT: int = MAP_SIZE * MAP_SIZE  # 961
 @export var seed_string: String = ""
 
 # -- Tile data ----------------------------------------------------------------
+
+@export var width: int = 31
+@export var height: int = 31
 
 # Primary flat tile array. Each byte is an Enums.TileType value.
 # Populated by AsciiMapGenerator; read-only after generation.
@@ -35,24 +36,24 @@ const TILE_COUNT: int = MAP_SIZE * MAP_SIZE  # 961
 # -- Helpers ------------------------------------------------------------------
 
 func get_tile(x: int, y: int) -> int:
-	if x < 0 or x >= MAP_SIZE or y < 0 or y >= MAP_SIZE:
+	if x < 0 or x >= width or y < 0 or y >= height:
 		return Enums.TileType.WALL_STONE
 	var key: String = "%d,%d" % [x, y]
 	if deltas.has(key):
 		return deltas[key]
-	if tile_types.size() != TILE_COUNT:
+	if tile_types.size() != width * height:
 		return Enums.TileType.VOID
-	return tile_types[y * MAP_SIZE + x]
+	return tile_types[y * width + x]
 
 
 func set_tile(x: int, y: int, tile: int) -> void:
-	if x < 0 or x >= MAP_SIZE or y < 0 or y >= MAP_SIZE:
+	if x < 0 or x >= width or y < 0 or y >= height:
 		return
-	tile_types[y * MAP_SIZE + x] = tile
+	tile_types[y * width + x] = tile
 
 
 func set_delta(x: int, y: int, tile: int) -> void:
-	if x < 0 or x >= MAP_SIZE or y < 0 or y >= MAP_SIZE:
+	if x < 0 or x >= width or y < 0 or y >= height:
 		return
 	deltas["%d,%d" % [x, y]] = tile
 
@@ -63,8 +64,9 @@ func clear_delta(x: int, y: int) -> void:
 
 
 func init_tiles(fill: int = Enums.TileType.FLOOR_GRASS) -> void:
-	tile_types.resize(TILE_COUNT)
-	for i in range(TILE_COUNT):
+	var count: int = width * height
+	tile_types.resize(count)
+	for i in range(count):
 		tile_types[i] = fill
 
 

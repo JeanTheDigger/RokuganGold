@@ -102,8 +102,8 @@ static func _cast_light(
 			if end_slope > l_slope:
 				break
 			if dx * dx + dy * dy <= radius_sq:
-				if mx >= 0 and mx < AsciiMapData.MAP_SIZE \
-						and my >= 0 and my < AsciiMapData.MAP_SIZE:
+				if mx >= 0 and mx < map.width \
+						and my >= 0 and my < map.height:
 					visible[Vector2i(mx, my)] = true
 			if blocked:
 				if _is_opaque(mx, my, map):
@@ -123,7 +123,7 @@ static func _cast_light(
 
 
 static func _is_opaque(x: int, y: int, map: AsciiMapData) -> bool:
-	if x < 0 or x >= AsciiMapData.MAP_SIZE or y < 0 or y >= AsciiMapData.MAP_SIZE:
+	if x < 0 or x >= map.width or y < 0 or y >= map.height:
 		return true
 	return AsciiMapData.blocks_los(map.get_tile(x, y))
 

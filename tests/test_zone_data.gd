@@ -125,7 +125,7 @@ func test_lesser_zone_build_map_returns_correct_size() -> void:
 	z.zone_name = "Test Zone"
 	z.zone_subtype = Enums.ZoneSubtype.ROAD
 	var map: AsciiMapData = z.build_map("TestSettlement")
-	assert_eq(map.tile_types.size(), AsciiMapData.TILE_COUNT)
+	assert_eq(map.tile_types.size(), map.width * map.height)
 
 
 func test_lesser_zone_build_map_applies_deltas() -> void:
