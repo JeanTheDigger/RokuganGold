@@ -518,6 +518,9 @@ static func _create_province_settlements(
 				maxi(5, pu / 2 if pu > 0 else 10),
 				terrain, true,
 			)
+			var champ_families: Array = WorldPopulationGenerator.CLAN_FAMILIES.get(clan, [])
+			if not champ_families.is_empty() and family == champ_families[0]:
+				castle.has_dojo = true
 			result.append(castle)
 			next_id += 1
 

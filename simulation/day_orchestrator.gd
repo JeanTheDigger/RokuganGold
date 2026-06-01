@@ -207,6 +207,7 @@ static func advance_day(
 	_inject_poem_context(characters, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_set_temple_context_flags(characters, settlements, world_states)
+	_set_dojo_context_flags(characters, settlements, world_states)
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
 	_inject_settlement_type(characters, settlements, world_states)
 	_pickup_ambient_public_records(characters, settlements, ic_day)
@@ -13507,6 +13508,41 @@ static func _set_temple_context_flags(
 		if ws.get("context_flag", -1) == Enums.ContextFlag.AT_WALL_TOWER:
 			continue
 		ws["context_flag"] = Enums.ContextFlag.AT_TEMPLE
+
+
+static func _set_dojo_context_flags(
+	characters: Array,
+	settlements: Array,
+	world_states: Dictionary,
+) -> void:
+	var dojo_locs: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.has_dojo or s.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			dojo_locs[str(s.settlement_id)] = true
+
+	if dojo_locs.is_empty():
+		return
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var loc: String = character.physical_location
+		if not dojo_locs.has(loc):
+			continue
+		if TravelSystem.is_traveling(character):
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			ws = {}
+			world_states[character.character_id] = ws
+		var current_flag: int = ws.get("context_flag", -1)
+		if current_flag == Enums.ContextFlag.AT_COURT:
+			continue
+		if current_flag == Enums.ContextFlag.AT_WALL_TOWER:
+			continue
+		if current_flag == Enums.ContextFlag.AT_TEMPLE:
+			continue
+		ws["context_flag"] = Enums.ContextFlag.AT_DOJO
 
 
 static func _set_visiting_context_flags(

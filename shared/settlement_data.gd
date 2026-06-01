@@ -61,6 +61,11 @@ extends Resource
 # Populated by DayOrchestrator from province lord data each day.
 @export var lord_character_id: int = -1
 
+# -- Dojo Zone Proxy (per GDD s57.36.2 — settlement-level zone proxy) ----------
+# true when this settlement contains a DOJO zone (Clan Champion Capital or
+# Imperial Capital). Set during world bootstrap; not mutated at runtime.
+@export var has_dojo: bool = false
+
 # -- Garden Slots (per GDD s57.23a — settlement-level zone proxy) -------------
 # Keys: "CASTLE_OUTER_COURTYARD", "TSUBONIWA". Values: garden_id (int) or -1 (empty).
 # Only populated for eligible settlement types (FAMILY_CASTLE, CASTLE, CITY).
