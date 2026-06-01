@@ -342,10 +342,12 @@ func test_generator_farmland_has_crops() -> void:
 
 
 func test_generator_default_fallback_produces_valid_map() -> void:
-	# WALL_TOWER is a zone subtype with no dedicated generator — uses default.
-	var m: AsciiMapData = _gen(Enums.ZoneSubtype.WALL_TOWER)
+	# All 25 ZoneSubtype values have dedicated generators. Use a raw int
+	# outside the enum range to exercise the default fallback.
+	var m: AsciiMapData = AsciiMapGenerator.generate(
+		"zone_test", "Test Zone", 999, "Shiro Kakita"
+	)
 	assert_eq(m.tile_types.size(), AsciiMapData.TILE_COUNT)
-	# Should have at least two exits.
 	assert_eq(m.exits.size(), 2)
 
 
@@ -437,3 +439,279 @@ func test_fov_thin_wall_gap_allows_diagonal_sight() -> void:
 	var visible: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
 	# Tile directly through the gap should be visible.
 	assert_true(visible.get(Vector2i(15, 11), false), "Should see through gap in wall")
+
+
+# ---------------------------------------------------------------------------
+# AsciiMapGenerator — Castle Interior zone generators
+# ---------------------------------------------------------------------------
+
+func _has_tile_type(map: AsciiMapData, tile: int) -> bool:
+	for i in range(AsciiMapData.TILE_COUNT):
+		if map.tile_types[i] == tile:
+			return true
+	return false
+
+
+func _count_tile_type(map: AsciiMapData, tile: int) -> int:
+	var count: int = 0
+	for i in range(AsciiMapData.TILE_COUNT):
+		if map.tile_types[i] == tile:
+			count += 1
+	return count
+
+
+func _assert_exits_passable(map: AsciiMapData) -> void:
+	for exit in map.exits:
+		var tile: int = map.get_tile(exit.x, exit.y)
+		assert_true(AsciiMapData.is_passable(tile),
+			"Exit at (%d,%d) must be passable, got %d" % [exit.x, exit.y, tile])
+
+
+func test_generator_ohiroma_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.OHIROMA)
+	assert_gt(m.exits.size(), 0)
+	_assert_exits_passable(m)
+
+
+func test_generator_ohiroma_has_tatami_and_dais() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.OHIROMA)
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_TATAMI))
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_STONE))
+
+
+func test_generator_enkai_hall_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.ENKAI_HALL)
+	assert_gt(m.exits.size(), 0)
+	_assert_exits_passable(m)
+
+
+func test_generator_enkai_hall_has_tatami_seating() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.ENKAI_HALL)
+	assert_gt(_count_tile_type(m, Enums.TileType.FLOOR_TATAMI), 30)
+
+
+func test_generator_audience_chamber_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.AUDIENCE_CHAMBER)
+	assert_eq(m.exits.size(), 2)
+	_assert_exits_passable(m)
+
+
+func test_generator_audience_chamber_has_tokonoma() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.AUDIENCE_CHAMBER)
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_TATAMI))
+	assert_true(_has_tile_type(m, Enums.TileType.WALL_PAPER))
+
+
+func test_generator_chashitsu_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.CHASHITSU)
+	assert_gt(m.exits.size(), 0)
+	_assert_exits_passable(m)
+
+
+func test_generator_chashitsu_has_garden_and_tea_room() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.CHASHITSU)
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_GRASS))
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_TATAMI))
+	assert_true(_has_tile_type(m, Enums.TileType.TREE_CHERRY))
+
+
+func test_generator_guest_wing_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.GUEST_WING)
+	assert_gt(m.exits.size(), 0)
+	_assert_exits_passable(m)
+
+
+func test_generator_guest_wing_has_rooms() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.GUEST_WING)
+	assert_gt(_count_tile_type(m, Enums.TileType.FLOOR_TATAMI), 20)
+	assert_true(_has_tile_type(m, Enums.TileType.DOOR_SHOJI_OPEN))
+
+
+func test_generator_lord_quarters_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.LORD_QUARTERS)
+	assert_gt(m.exits.size(), 0)
+	_assert_exits_passable(m)
+
+
+func test_generator_lord_quarters_has_tokonoma_and_chambers() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.LORD_QUARTERS)
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_TATAMI))
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_STONE))
+	assert_true(_has_tile_type(m, Enums.TileType.DOOR_SHOJI_OPEN))
+
+
+func test_generator_war_council_room_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.WAR_COUNCIL_ROOM)
+	assert_gt(m.exits.size(), 0)
+	_assert_exits_passable(m)
+
+
+func test_generator_war_council_room_has_table_and_wood_floor() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.WAR_COUNCIL_ROOM)
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_STONE))
+	assert_gt(_count_tile_type(m, Enums.TileType.FLOOR_WOOD), 50)
+
+
+func test_generator_dojo_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.DOJO)
+	assert_gt(m.exits.size(), 0)
+	_assert_exits_passable(m)
+
+
+func test_generator_dojo_has_open_training_floor() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.DOJO)
+	assert_gt(_count_tile_type(m, Enums.TileType.FLOOR_WOOD), 100)
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_STONE))
+
+
+func test_generator_outer_courtyard_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.OUTER_COURTYARD)
+	assert_eq(m.exits.size(), 2)
+	_assert_exits_passable(m)
+
+
+func test_generator_outer_courtyard_has_stone_and_garden() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.OUTER_COURTYARD)
+	assert_gt(_count_tile_type(m, Enums.TileType.FLOOR_STONE), 50)
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_GRASS))
+	assert_true(_has_tile_type(m, Enums.TileType.TREE_CHERRY))
+
+
+func test_generator_tsuboniwa_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.TSUBONIWA)
+	assert_gt(m.exits.size(), 0)
+	_assert_exits_passable(m)
+
+
+func test_generator_tsuboniwa_has_garden_features() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.TSUBONIWA)
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_GRASS))
+	assert_true(_has_tile_type(m, Enums.TileType.WATER_SHALLOW))
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_STONE))
+
+
+func test_generator_castle_shrine_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.CASTLE_SHRINE)
+	assert_gt(m.exits.size(), 0)
+	_assert_exits_passable(m)
+
+
+func test_generator_castle_shrine_has_torii_and_altar() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.CASTLE_SHRINE)
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_TATAMI))
+	assert_true(_has_tile_type(m, Enums.TileType.TREE_EVERGREEN))
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_GRASS))
+
+
+# ---------------------------------------------------------------------------
+# AsciiMapGenerator — Urban District zone generators
+# ---------------------------------------------------------------------------
+
+func test_generator_pleasure_quarter_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.PLEASURE_QUARTER)
+	assert_eq(m.exits.size(), 2)
+	_assert_exits_passable(m)
+
+
+func test_generator_pleasure_quarter_has_buildings() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.PLEASURE_QUARTER)
+	assert_gt(_count_tile_type(m, Enums.TileType.FLOOR_TATAMI), 30)
+	assert_true(_has_tile_type(m, Enums.TileType.DOOR_SHOJI_OPEN))
+
+
+func test_generator_docks_waterfront_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.DOCKS_WATERFRONT)
+	assert_eq(m.exits.size(), 2)
+	_assert_exits_passable(m)
+
+
+func test_generator_docks_waterfront_has_water_and_piers() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.DOCKS_WATERFRONT)
+	assert_gt(_count_tile_type(m, Enums.TileType.WATER_DEEP), 50)
+	assert_true(_has_tile_type(m, Enums.TileType.WATER_SHALLOW))
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_STONE))
+
+
+func test_generator_poor_quarter_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.POOR_QUARTER)
+	assert_eq(m.exits.size(), 2)
+	_assert_exits_passable(m)
+
+
+func test_generator_poor_quarter_has_mud_and_dirt() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.POOR_QUARTER)
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_MUD))
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_DIRT))
+
+
+func test_generator_government_quarter_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.GOVERNMENT_QUARTER)
+	assert_eq(m.exits.size(), 2)
+	_assert_exits_passable(m)
+
+
+func test_generator_government_quarter_has_stone_buildings() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.GOVERNMENT_QUARTER)
+	assert_gt(_count_tile_type(m, Enums.TileType.FLOOR_STONE), 100)
+	assert_gt(_count_tile_type(m, Enums.TileType.WALL_STONE), 20)
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_TATAMI))
+
+
+# ---------------------------------------------------------------------------
+# AsciiMapGenerator — Wilderness and Military zone generators
+# ---------------------------------------------------------------------------
+
+func test_generator_mountain_pass_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.MOUNTAIN_PASS)
+	assert_eq(m.exits.size(), 2)
+	_assert_exits_passable(m)
+
+
+func test_generator_mountain_pass_has_cliff_walls_and_path() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.MOUNTAIN_PASS)
+	assert_gt(_count_tile_type(m, Enums.TileType.WALL_STONE), 100)
+	assert_gt(_count_tile_type(m, Enums.TileType.FLOOR_STONE), 30)
+
+
+func test_generator_wall_tower_has_exits() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.WALL_TOWER)
+	assert_gt(m.exits.size(), 0)
+	_assert_exits_passable(m)
+
+
+func test_generator_wall_tower_has_battlements_and_interior() -> void:
+	var m: AsciiMapData = _gen(Enums.ZoneSubtype.WALL_TOWER)
+	assert_gt(_count_tile_type(m, Enums.TileType.WALL_STONE), 30)
+	assert_true(_has_tile_type(m, Enums.TileType.FLOOR_WOOD))
+	assert_true(_has_tile_type(m, Enums.TileType.DOOR_WOOD_OPEN))
+
+
+# ---------------------------------------------------------------------------
+# AsciiMapGenerator — all 25 subtypes produce valid maps
+# ---------------------------------------------------------------------------
+
+func test_all_zone_subtypes_produce_valid_maps() -> void:
+	var subtypes: Array[int] = [
+		Enums.ZoneSubtype.OHIROMA, Enums.ZoneSubtype.ENKAI_HALL,
+		Enums.ZoneSubtype.AUDIENCE_CHAMBER, Enums.ZoneSubtype.CHASHITSU,
+		Enums.ZoneSubtype.GUEST_WING, Enums.ZoneSubtype.LORD_QUARTERS,
+		Enums.ZoneSubtype.WAR_COUNCIL_ROOM, Enums.ZoneSubtype.DOJO,
+		Enums.ZoneSubtype.OUTER_COURTYARD, Enums.ZoneSubtype.TSUBONIWA,
+		Enums.ZoneSubtype.CASTLE_SHRINE, Enums.ZoneSubtype.MARKET_STREET,
+		Enums.ZoneSubtype.RESIDENTIAL_QUARTER, Enums.ZoneSubtype.TEMPLE_GROUNDS,
+		Enums.ZoneSubtype.PLEASURE_QUARTER, Enums.ZoneSubtype.DOCKS_WATERFRONT,
+		Enums.ZoneSubtype.POOR_QUARTER, Enums.ZoneSubtype.GOVERNMENT_QUARTER,
+		Enums.ZoneSubtype.SHRINE_CLEARING, Enums.ZoneSubtype.FOREST_PATH,
+		Enums.ZoneSubtype.ROAD, Enums.ZoneSubtype.RIVER_CROSSING,
+		Enums.ZoneSubtype.FARMLAND, Enums.ZoneSubtype.MOUNTAIN_PASS,
+		Enums.ZoneSubtype.WALL_TOWER,
+	]
+	for st in subtypes:
+		var m: AsciiMapData = _gen(st)
+		assert_eq(m.tile_types.size(), AsciiMapData.TILE_COUNT,
+			"Subtype %d should produce full map" % st)
+		assert_gt(m.exits.size(), 0,
+			"Subtype %d should have at least one exit" % st)
+		for exit in m.exits:
+			assert_true(AsciiMapData.is_passable(m.get_tile(exit.x, exit.y)),
+				"Subtype %d exit at (%d,%d) must be passable" % [st, exit.x, exit.y])

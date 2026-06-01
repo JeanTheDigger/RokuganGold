@@ -7,10 +7,7 @@ class_name AsciiMapGenerator
 ## sessions — the base map is regenerated identically on each entry.
 ##
 ## Zone types implemented (LOCKED, s4.4):
-##   MARKET_STREET, TEMPLE_GROUNDS, SHRINE_CLEARING, FOREST_PATH,
-##   ROAD, RESIDENTIAL_QUARTER, FARMLAND, RIVER_CROSSING.
-## All other ZoneSubtype values fall back to a plain FLOOR_GRASS fill with
-## perimeter walls until their generation algorithm is designed.
+##   All 25 ZoneSubtype values have dedicated generators.
 
 
 const S: int = AsciiMapData.MAP_SIZE      # 31
@@ -54,6 +51,40 @@ static func generate(
 			_gen_farmland(map, rng)
 		Enums.ZoneSubtype.RIVER_CROSSING:
 			_gen_river_crossing(map, rng)
+		Enums.ZoneSubtype.OHIROMA:
+			_gen_ohiroma(map, rng)
+		Enums.ZoneSubtype.ENKAI_HALL:
+			_gen_enkai_hall(map, rng)
+		Enums.ZoneSubtype.AUDIENCE_CHAMBER:
+			_gen_audience_chamber(map, rng)
+		Enums.ZoneSubtype.CHASHITSU:
+			_gen_chashitsu(map, rng)
+		Enums.ZoneSubtype.GUEST_WING:
+			_gen_guest_wing(map, rng)
+		Enums.ZoneSubtype.LORD_QUARTERS:
+			_gen_lord_quarters(map, rng)
+		Enums.ZoneSubtype.WAR_COUNCIL_ROOM:
+			_gen_war_council_room(map, rng)
+		Enums.ZoneSubtype.DOJO:
+			_gen_dojo(map, rng)
+		Enums.ZoneSubtype.OUTER_COURTYARD:
+			_gen_outer_courtyard(map, rng)
+		Enums.ZoneSubtype.TSUBONIWA:
+			_gen_tsuboniwa(map, rng)
+		Enums.ZoneSubtype.CASTLE_SHRINE:
+			_gen_castle_shrine(map, rng)
+		Enums.ZoneSubtype.PLEASURE_QUARTER:
+			_gen_pleasure_quarter(map, rng)
+		Enums.ZoneSubtype.DOCKS_WATERFRONT:
+			_gen_docks_waterfront(map, rng)
+		Enums.ZoneSubtype.POOR_QUARTER:
+			_gen_poor_quarter(map, rng)
+		Enums.ZoneSubtype.GOVERNMENT_QUARTER:
+			_gen_government_quarter(map, rng)
+		Enums.ZoneSubtype.MOUNTAIN_PASS:
+			_gen_mountain_pass(map, rng)
+		Enums.ZoneSubtype.WALL_TOWER:
+			_gen_wall_tower(map, rng)
 		_:
 			_gen_default(map, rng)
 
@@ -505,6 +536,645 @@ static func _gen_river_crossing(map: AsciiMapData, rng: RandomNumberGenerator) -
 		{x = MID, y = 0, direction = "north", target_zone_id = ""},
 		{x = MID, y = S - 1, direction = "south", target_zone_id = ""},
 	]
+
+
+# OHIROMA (Great Hall): large formal hall with dais, tatami floor, wood-framed
+# columns, shoji dividers. The lord's primary audience and court space.
+static func _gen_ohiroma(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_WOOD)
+	_draw_wood_border(map, 0, 0, S - 1, S - 1)
+
+	# Main hall tatami floor.
+	_fill_rect(map, 2, 2, S - 3, S - 3, Enums.TileType.FLOOR_TATAMI)
+
+	# Dais at north: raised stone platform rows 2–5.
+	_fill_rect(map, 4, 2, S - 5, 5, Enums.TileType.FLOOR_STONE)
+
+	# Columns along sides (wood wall pillars).
+	for y in range(6, S - 4, 4):
+		map.set_tile(3, y, Enums.TileType.WALL_WOOD)
+		map.set_tile(S - 4, y, Enums.TileType.WALL_WOOD)
+
+	# Shoji screen dividers partitioning side alcoves.
+	_fill_rect(map, 1, 6, 1, S - 6, Enums.TileType.WALL_PAPER)
+	_fill_rect(map, S - 2, 6, S - 2, S - 6, Enums.TileType.WALL_PAPER)
+	map.set_tile(1, MID, Enums.TileType.DOOR_SHOJI_OPEN)
+	map.set_tile(S - 2, MID, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# Entrance doors south face.
+	map.set_tile(MID - 1, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(MID, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(MID + 1, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
+
+	# Zone exit south.
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# ENKAI_HALL (Banquet Hall): entertainment and feasting. Open tatami hall
+# with wood-floor aisles between seating clusters.
+static func _gen_enkai_hall(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_WOOD)
+	_draw_wood_border(map, 0, 0, S - 1, S - 1)
+
+	# Tatami seating clusters: 2x3 grid of tatami pads separated by wood aisles.
+	var pad_w: int = 8
+	var pad_h: int = 8
+	for row in range(3):
+		for col in range(2):
+			var ox: int = 3 + col * (pad_w + 3)
+			var oy: int = 3 + row * (pad_h + 2)
+			if ox + pad_w - 1 < S - 2 and oy + pad_h - 1 < S - 2:
+				_fill_rect(map, ox, oy, ox + pad_w - 1, oy + pad_h - 1,
+					Enums.TileType.FLOOR_TATAMI)
+
+	# Paper screens along north wall for serving area.
+	_fill_rect(map, 4, 1, S - 5, 1, Enums.TileType.WALL_PAPER)
+	map.set_tile(MID, 1, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# Entrance doors south face.
+	map.set_tile(MID - 1, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(MID, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(MID + 1, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
+
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# AUDIENCE_CHAMBER (Private Meeting Room): intimate room with tokonoma alcove,
+# fusuma dividers, tatami floor. Smaller than ohiroma.
+static func _gen_audience_chamber(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_WOOD)
+
+	# Room inset: 5–25 x 5–25.
+	_draw_wood_border(map, 5, 5, S - 6, S - 6)
+	_fill_rect(map, 6, 6, S - 7, S - 7, Enums.TileType.FLOOR_TATAMI)
+
+	# Tokonoma alcove recessed into north wall (columns 12–18, row 5).
+	_fill_rect(map, 12, 3, 18, 5, Enums.TileType.FLOOR_TATAMI)
+	_draw_wood_border(map, 12, 3, 18, 5)
+	map.set_tile(MID, 5, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# Fusuma dividers creating ante-room at south.
+	_fill_rect(map, 6, S - 10, S - 7, S - 10, Enums.TileType.WALL_PAPER)
+	map.set_tile(MID, S - 10, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# Engawa corridor around exterior (wood floor already set).
+	# Entrance on south.
+	map.set_tile(MID, S - 6, Enums.TileType.DOOR_SHOJI_OPEN)
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+
+	# Side exit east for connecting corridor.
+	map.set_tile(S - 1, MID, Enums.TileType.ZONE_EXIT)
+	map.exits = [
+		{x = MID, y = S - 1, direction = "south", target_zone_id = ""},
+		{x = S - 1, y = MID, direction = "east", target_zone_id = ""},
+	]
+
+
+# CHASHITSU (Tea Room): tiny detached tea ceremony building. Austere, intimate.
+# Nijiriguchi (small entrance), single tokonoma, 4-6 person capacity.
+static func _gen_chashitsu(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	# Surrounding garden.
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_GRASS)
+
+	# Stone path approach from south to tea room.
+	for y in range(S - 1, 16, -1):
+		map.set_tile(MID, y, Enums.TileType.FLOOR_STONE)
+
+	# Tea room: small 9x9 building centred at (11-19, 8-16).
+	_draw_wood_border(map, 11, 8, 19, 16)
+	_fill_rect(map, 12, 9, 18, 15, Enums.TileType.FLOOR_TATAMI)
+
+	# Tokonoma alcove (north wall recess).
+	_fill_rect(map, 13, 6, 17, 8, Enums.TileType.FLOOR_TATAMI)
+	_draw_wood_border(map, 13, 6, 17, 8)
+	map.set_tile(MID, 8, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# Nijiriguchi (small entrance) on south face — single shoji.
+	map.set_tile(MID, 16, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# Garden features: stepping stones, trees, bushes.
+	var garden_trees: Array[Vector2i] = [
+		Vector2i(5, 5), Vector2i(7, 10), Vector2i(25, 7),
+		Vector2i(23, 12), Vector2i(4, 18), Vector2i(26, 20),
+	]
+	for tp in garden_trees:
+		map.set_tile(tp.x, tp.y, Enums.TileType.TREE_CHERRY)
+
+	for _i in range(8 + rng.randi() % 5):
+		var bx: int = 2 + rng.randi() % (S - 4)
+		var by: int = 2 + rng.randi() % (S - 4)
+		if map.get_tile(bx, by) == Enums.TileType.FLOOR_GRASS:
+			map.set_tile(bx, by, Enums.TileType.BUSH if rng.randi() % 3 != 0 else Enums.TileType.FLOWERS)
+
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# GUEST_WING (Guest Quarters): multiple rooms separated by fusuma/shoji,
+# refined but semi-private, each room with tatami.
+static func _gen_guest_wing(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_WOOD)
+	_draw_wood_border(map, 0, 0, S - 1, S - 1)
+
+	# Central corridor running east-west at mid height.
+	_fill_rect(map, 1, MID - 1, S - 2, MID + 1, Enums.TileType.FLOOR_WOOD)
+
+	# Guest rooms: 3 rooms on north side, 3 on south side.
+	var room_w: int = 8
+	for i in range(3):
+		var ox: int = 2 + i * (room_w + 2)
+		# North rooms.
+		_draw_wood_border(map, ox, 1, ox + room_w - 1, MID - 2)
+		_fill_rect(map, ox + 1, 2, ox + room_w - 2, MID - 3,
+			Enums.TileType.FLOOR_TATAMI)
+		# Shoji dividers between rooms.
+		map.set_tile(ox + room_w / 2, MID - 2, Enums.TileType.DOOR_SHOJI_OPEN)
+		# South rooms.
+		_draw_wood_border(map, ox, MID + 2, ox + room_w - 1, S - 2)
+		_fill_rect(map, ox + 1, MID + 3, ox + room_w - 2, S - 3,
+			Enums.TileType.FLOOR_TATAMI)
+		map.set_tile(ox + room_w / 2, MID + 2, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# Entrance on west.
+	map.set_tile(0, MID, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(0, MID, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = 0, y = MID, direction = "west", target_zone_id = ""}]
+
+
+# LORD_QUARTERS (Lord's Private Chambers): private rooms with fusuma,
+# tokonoma alcove, tatami floors, paper-screen exterior walls.
+static func _gen_lord_quarters(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_WOOD)
+	_draw_wood_border(map, 0, 0, S - 1, S - 1)
+
+	# Main chamber: north half.
+	_draw_wood_border(map, 3, 2, S - 4, MID - 1)
+	_fill_rect(map, 4, 3, S - 5, MID - 2, Enums.TileType.FLOOR_TATAMI)
+	# Tokonoma alcove in north wall.
+	_fill_rect(map, 12, 2, 18, 2, Enums.TileType.FLOOR_STONE)
+	# Door from main chamber to corridor.
+	map.set_tile(MID, MID - 1, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# Private study: south-east.
+	_draw_wood_border(map, MID + 2, MID + 2, S - 2, S - 2)
+	_fill_rect(map, MID + 3, MID + 3, S - 3, S - 3, Enums.TileType.FLOOR_TATAMI)
+	map.set_tile(MID + 2, MID + 5, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# Sleeping chamber: south-west.
+	_draw_wood_border(map, 2, MID + 2, MID - 2, S - 2)
+	_fill_rect(map, 3, MID + 3, MID - 3, S - 3, Enums.TileType.FLOOR_TATAMI)
+	map.set_tile(MID - 2, MID + 5, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# Entrance on west wall.
+	map.set_tile(0, MID, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(0, MID, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = 0, y = MID, direction = "west", target_zone_id = ""}]
+
+
+# WAR_COUNCIL_ROOM (Military Planning): functional room with wood floor,
+# central table (stone tiles), no art, no performances.
+static func _gen_war_council_room(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_WOOD)
+	_draw_wood_border(map, 0, 0, S - 1, S - 1)
+
+	# Room interior stays wood floor (military, not ceremonial).
+
+	# Central map table: stone tiles in a rectangle.
+	_fill_rect(map, 10, 10, 20, 20, Enums.TileType.FLOOR_STONE)
+
+	# Weapon/map racks along walls (wood wall segments).
+	for y in range(3, S - 3, 5):
+		map.set_tile(2, y, Enums.TileType.WALL_WOOD)
+		map.set_tile(S - 3, y, Enums.TileType.WALL_WOOD)
+
+	# Support pillars.
+	map.set_tile(8, 8, Enums.TileType.WALL_WOOD)
+	map.set_tile(22, 8, Enums.TileType.WALL_WOOD)
+	map.set_tile(8, 22, Enums.TileType.WALL_WOOD)
+	map.set_tile(22, 22, Enums.TileType.WALL_WOOD)
+
+	# Entrance south.
+	map.set_tile(MID, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# DOJO (Training Hall): large open wood floor for martial practice,
+# weapon racks along walls, no art.
+static func _gen_dojo(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_WOOD)
+	_draw_wood_border(map, 0, 0, S - 1, S - 1)
+
+	# Training area is open wood floor (already set).
+
+	# Weapon racks along north and south inner walls.
+	for x in range(3, S - 3, 3):
+		map.set_tile(x, 1, Enums.TileType.WALL_WOOD)
+		map.set_tile(x, S - 2, Enums.TileType.WALL_WOOD)
+
+	# Kamiza (spirit seat / shrine alcove) at north-centre.
+	_fill_rect(map, 13, 1, 17, 1, Enums.TileType.FLOOR_STONE)
+
+	# Support pillars defining the training rectangle.
+	map.set_tile(5, 5, Enums.TileType.WALL_WOOD)
+	map.set_tile(S - 6, 5, Enums.TileType.WALL_WOOD)
+	map.set_tile(5, S - 6, Enums.TileType.WALL_WOOD)
+	map.set_tile(S - 6, S - 6, Enums.TileType.WALL_WOOD)
+
+	# Entrance south.
+	map.set_tile(MID, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# OUTER_COURTYARD (Castle Outer Courtyard): large open outdoor space,
+# stone paving, mustering point, bonsai display areas, garden edges.
+static func _gen_outer_courtyard(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_DIRT)
+	_draw_stone_border(map, 0, 0, S - 1, S - 1)
+
+	# Stone-paved central area.
+	_fill_rect(map, 5, 5, S - 6, S - 6, Enums.TileType.FLOOR_STONE)
+
+	# Garden patches in corners.
+	_fill_rect(map, 1, 1, 4, 4, Enums.TileType.FLOOR_GRASS)
+	_fill_rect(map, S - 5, 1, S - 2, 4, Enums.TileType.FLOOR_GRASS)
+	_fill_rect(map, 1, S - 5, 4, S - 2, Enums.TileType.FLOOR_GRASS)
+	_fill_rect(map, S - 5, S - 5, S - 2, S - 2, Enums.TileType.FLOOR_GRASS)
+
+	# Trees in garden corners.
+	map.set_tile(2, 2, Enums.TileType.TREE_CHERRY)
+	map.set_tile(S - 3, 2, Enums.TileType.TREE_CHERRY)
+	map.set_tile(2, S - 3, Enums.TileType.TREE_DECIDUOUS)
+	map.set_tile(S - 3, S - 3, Enums.TileType.TREE_DECIDUOUS)
+
+	# Scattered bushes along edges.
+	for _i in range(6 + rng.randi() % 4):
+		var bx: int = 1 + rng.randi() % (S - 2)
+		var by: int = 1 + rng.randi() % (S - 2)
+		if map.get_tile(bx, by) == Enums.TileType.FLOOR_GRASS:
+			map.set_tile(bx, by, Enums.TileType.BUSH)
+
+	# Gate on south wall.
+	map.set_tile(MID - 1, S - 1, Enums.TileType.GATE_OPEN)
+	map.set_tile(MID, S - 1, Enums.TileType.GATE_OPEN)
+	map.set_tile(MID + 1, S - 1, Enums.TileType.GATE_OPEN)
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+
+	# North entrance to inner castle.
+	map.set_tile(MID, 0, Enums.TileType.GATE_OPEN)
+	map.set_tile(MID, 0, Enums.TileType.ZONE_EXIT)
+
+	map.exits = [
+		{x = MID, y = S - 1, direction = "south", target_zone_id = ""},
+		{x = MID, y = 0, direction = "north", target_zone_id = ""},
+	]
+
+
+# TSUBONIWA (Inner Courtyard Garden): small enclosed garden between buildings,
+# stone path, moss, flowers, small water feature. Contemplation space.
+static func _gen_tsuboniwa(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	# Surrounding building walls.
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.WALL_WOOD)
+
+	# Garden interior.
+	_fill_rect(map, 3, 3, S - 4, S - 4, Enums.TileType.FLOOR_GRASS)
+
+	# Stone stepping path winding through garden.
+	var px: int = MID
+	for y in range(S - 4, 3, -1):
+		map.set_tile(px, y, Enums.TileType.FLOOR_STONE)
+		if rng.randi() % 3 == 0:
+			px = clampi(px + ((rng.randi() % 3) - 1), 4, S - 5)
+
+	# Small water feature (pond) in north-east area.
+	_fill_rect(map, 19, 5, 24, 9, Enums.TileType.WATER_SHALLOW)
+
+	# Moss groundcover.
+	for _i in range(20 + rng.randi() % 10):
+		var gx: int = 4 + rng.randi() % (S - 8)
+		var gy: int = 4 + rng.randi() % (S - 8)
+		if map.get_tile(gx, gy) == Enums.TileType.FLOOR_GRASS:
+			map.set_tile(gx, gy, Enums.TileType.GROUNDCOVER)
+
+	# Flowers and small trees.
+	var tree_spots: Array[Vector2i] = [
+		Vector2i(6, 6), Vector2i(10, 12), Vector2i(24, 18),
+		Vector2i(8, 22), Vector2i(20, 24),
+	]
+	for tp in tree_spots:
+		if map.get_tile(tp.x, tp.y) == Enums.TileType.FLOOR_GRASS or \
+		   map.get_tile(tp.x, tp.y) == Enums.TileType.GROUNDCOVER:
+			map.set_tile(tp.x, tp.y, Enums.TileType.TREE_CHERRY)
+
+	for _i in range(8 + rng.randi() % 6):
+		var fx: int = 4 + rng.randi() % (S - 8)
+		var fy: int = 4 + rng.randi() % (S - 8)
+		if map.get_tile(fx, fy) == Enums.TileType.FLOOR_GRASS:
+			map.set_tile(fx, fy, Enums.TileType.FLOWERS)
+
+	# Engawa (veranda) access on south wall — shoji doors.
+	_fill_rect(map, 3, S - 4, S - 4, S - 4, Enums.TileType.WALL_PAPER)
+	map.set_tile(MID, S - 4, Enums.TileType.DOOR_SHOJI_OPEN)
+	_fill_rect(map, 3, S - 3, S - 4, S - 3, Enums.TileType.FLOOR_WOOD)
+
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# CASTLE_SHRINE (Compound Shrine): small Shinto shrine within castle walls.
+# Torii gate, stone altar area, small timber building.
+static func _gen_castle_shrine(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_STONE)
+	_draw_stone_border(map, 0, 0, S - 1, S - 1)
+
+	# Grassy garden areas flanking the approach path.
+	_fill_rect(map, 2, 12, 11, S - 3, Enums.TileType.FLOOR_GRASS)
+	_fill_rect(map, 19, 12, S - 3, S - 3, Enums.TileType.FLOOR_GRASS)
+
+	# Shrine building: small wood structure at north.
+	_draw_wood_border(map, 10, 3, 20, 10)
+	_fill_rect(map, 11, 4, 19, 9, Enums.TileType.FLOOR_TATAMI)
+	map.set_tile(MID, 10, Enums.TileType.DOOR_WOOD_OPEN)
+
+	# Altar stone in front of shrine.
+	_fill_rect(map, 13, 11, 17, 11, Enums.TileType.FLOOR_STONE)
+
+	# Torii gate at south approach.
+	map.set_tile(13, 24, Enums.TileType.WALL_WOOD)
+	map.set_tile(17, 24, Enums.TileType.WALL_WOOD)
+	map.set_tile(13, 23, Enums.TileType.WALL_WOOD)
+	map.set_tile(17, 23, Enums.TileType.WALL_WOOD)
+	map.set_tile(14, 23, Enums.TileType.WALL_WOOD)
+	map.set_tile(16, 23, Enums.TileType.WALL_WOOD)
+
+	# Trees around shrine grounds.
+	var tree_spots: Array[Vector2i] = [
+		Vector2i(4, 15), Vector2i(6, 20), Vector2i(3, 25),
+		Vector2i(24, 15), Vector2i(26, 20), Vector2i(25, 25),
+	]
+	for tp in tree_spots:
+		if map.get_tile(tp.x, tp.y) == Enums.TileType.FLOOR_GRASS:
+			map.set_tile(tp.x, tp.y, Enums.TileType.TREE_EVERGREEN)
+
+	# South exit.
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	# Clear stone wall at exit.
+	map.set_tile(MID - 1, S - 1, Enums.TileType.FLOOR_STONE)
+	map.set_tile(MID + 1, S - 1, Enums.TileType.FLOOR_STONE)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# PLEASURE_QUARTER: lantern-lit streets, geisha houses and sake houses,
+# high NPC density at night. More buildings than market, narrower streets.
+static func _gen_pleasure_quarter(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_STONE)
+	_draw_wood_border(map, 0, 0, S - 1, S - 1)
+
+	# Main street: north-south through centre.
+	_fill_rect(map, MID - 2, 0, MID + 2, S - 1, Enums.TileType.FLOOR_STONE)
+
+	# West block: 3 buildings (geisha houses).
+	var bh: int = 8
+	for i in range(3):
+		var oy: int = 2 + i * (bh + 1)
+		if oy + bh < S - 1:
+			_draw_wood_border(map, 1, oy, MID - 4, oy + bh)
+			_fill_rect(map, 2, oy + 1, MID - 5, oy + bh - 1, Enums.TileType.FLOOR_TATAMI)
+			map.set_tile(MID - 4, oy + bh / 2, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# East block: 3 buildings (sake houses).
+	for i in range(3):
+		var oy: int = 2 + i * (bh + 1)
+		if oy + bh < S - 1:
+			_draw_wood_border(map, MID + 4, oy, S - 2, oy + bh)
+			_fill_rect(map, MID + 5, oy + 1, S - 3, oy + bh - 1, Enums.TileType.FLOOR_TATAMI)
+			map.set_tile(MID + 4, oy + bh / 2, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# Zone exits north and south on main street.
+	map.set_tile(MID, 0, Enums.TileType.ZONE_EXIT)
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [
+		{x = MID, y = 0, direction = "north", target_zone_id = ""},
+		{x = MID, y = S - 1, direction = "south", target_zone_id = ""},
+	]
+
+
+# DOCKS_WATERFRONT: piers extending into water, warehouses on land,
+# cargo areas, water tiles on south side.
+static func _gen_docks_waterfront(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	# Water on south half.
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.WATER_DEEP)
+
+	# Land on north half (rows 0–14).
+	_fill_rect(map, 0, 0, S - 1, 14, Enums.TileType.FLOOR_DIRT)
+
+	# Shoreline: shallow water at row 15.
+	_fill_rect(map, 0, 15, S - 1, 15, Enums.TileType.WATER_SHALLOW)
+
+	# Warehouses along north edge.
+	var wh_count: int = 3 + (rng.randi() % 2)
+	var wh_w: int = (S - 2) / wh_count
+	for i in range(wh_count):
+		var ox: int = 1 + i * wh_w
+		_draw_wood_box(map, ox, 1, ox + wh_w - 2, 7)
+		_fill_rect(map, ox + 1, 2, ox + wh_w - 3, 6, Enums.TileType.FLOOR_WOOD)
+		map.set_tile(ox + wh_w / 2, 7, Enums.TileType.DOOR_WOOD_OPEN)
+
+	# Stone quay along waterfront.
+	_fill_rect(map, 0, 12, S - 1, 14, Enums.TileType.FLOOR_STONE)
+
+	# Piers extending into water (wood floor strips).
+	for px in range(4, S - 4, 8):
+		_fill_rect(map, px, 15, px + 1, S - 4, Enums.TileType.FLOOR_WOOD)
+
+	# Zone exits east and west along land edge.
+	map.set_tile(0, 8, Enums.TileType.ZONE_EXIT)
+	map.set_tile(S - 1, 8, Enums.TileType.ZONE_EXIT)
+	map.exits = [
+		{x = 0, y = 8, direction = "west", target_zone_id = ""},
+		{x = S - 1, y = 8, direction = "east", target_zone_id = ""},
+	]
+
+
+# POOR_QUARTER: cramped narrow alleys, run-down buildings, muddy areas.
+# Dense small buildings, dirt and mud floors.
+static func _gen_poor_quarter(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_DIRT)
+	_draw_wood_border(map, 0, 0, S - 1, S - 1)
+
+	# Dense grid of small shacks: 4x4 grid of tiny buildings.
+	var plot_w: int = 6
+	var plot_h: int = 6
+	for row in range(4):
+		for col in range(4):
+			var ox: int = 1 + col * (plot_w + 1)
+			var oy: int = 1 + row * (plot_h + 1)
+			if ox + plot_w - 1 >= S - 1 or oy + plot_h - 1 >= S - 1:
+				continue
+			_draw_wood_box(map, ox, oy, ox + plot_w - 1, oy + plot_h - 1)
+			_fill_rect(map, ox + 1, oy + 1, ox + plot_w - 2, oy + plot_h - 2,
+				Enums.TileType.FLOOR_WOOD)
+			# Random door placement.
+			var door_side: int = rng.randi() % 2
+			if door_side == 0:
+				map.set_tile(ox + plot_w / 2, oy + plot_h - 1,
+					Enums.TileType.DOOR_WOOD_OPEN)
+			else:
+				map.set_tile(ox + plot_w - 1, oy + plot_h / 2,
+					Enums.TileType.DOOR_WOOD_OPEN)
+
+	# Muddy patches in alleys.
+	for _i in range(15 + rng.randi() % 10):
+		var mx: int = 1 + rng.randi() % (S - 2)
+		var my: int = 1 + rng.randi() % (S - 2)
+		if map.get_tile(mx, my) == Enums.TileType.FLOOR_DIRT:
+			map.set_tile(mx, my, Enums.TileType.FLOOR_MUD)
+
+	# Zone exits east and west.
+	map.set_tile(0, MID, Enums.TileType.ZONE_EXIT)
+	map.set_tile(S - 1, MID, Enums.TileType.ZONE_EXIT)
+	map.exits = [
+		{x = 0, y = MID, direction = "west", target_zone_id = ""},
+		{x = S - 1, y = MID, direction = "east", target_zone_id = ""},
+	]
+
+
+# GOVERNMENT_QUARTER: magistrate offices, record halls, stone buildings,
+# orderly grid layout, formal stone-floor streets.
+static func _gen_government_quarter(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_STONE)
+	_draw_stone_border(map, 0, 0, S - 1, S - 1)
+
+	# Two large administrative buildings: north and south of central plaza.
+	# North building (magistrate office).
+	_draw_stone_border(map, 3, 2, S - 4, 11)
+	_fill_rect(map, 4, 3, S - 5, 10, Enums.TileType.FLOOR_TATAMI)
+	map.set_tile(MID, 11, Enums.TileType.DOOR_WOOD_OPEN)
+
+	# South building (record hall).
+	_draw_stone_border(map, 3, 19, S - 4, S - 3)
+	_fill_rect(map, 4, 20, S - 5, S - 4, Enums.TileType.FLOOR_TATAMI)
+	map.set_tile(MID, 19, Enums.TileType.DOOR_WOOD_OPEN)
+
+	# Central plaza between buildings (stone floor, already set).
+	# Guard post (small stone structure) in plaza.
+	_draw_stone_border(map, 13, 13, 17, 17)
+	_fill_rect(map, 14, 14, 16, 16, Enums.TileType.FLOOR_WOOD)
+	map.set_tile(MID, 17, Enums.TileType.DOOR_WOOD_OPEN)
+
+	# Zone exits east and west.
+	map.set_tile(0, MID, Enums.TileType.ZONE_EXIT)
+	map.set_tile(S - 1, MID, Enums.TileType.ZONE_EXIT)
+	# Clear wall at exits.
+	map.set_tile(0, MID - 1, Enums.TileType.FLOOR_STONE)
+	map.set_tile(0, MID + 1, Enums.TileType.FLOOR_STONE)
+	map.set_tile(S - 1, MID - 1, Enums.TileType.FLOOR_STONE)
+	map.set_tile(S - 1, MID + 1, Enums.TileType.FLOOR_STONE)
+	map.exits = [
+		{x = 0, y = MID, direction = "west", target_zone_id = ""},
+		{x = S - 1, y = MID, direction = "east", target_zone_id = ""},
+	]
+
+
+# MOUNTAIN_PASS: rocky terrain, narrow winding path between cliff faces,
+# steep elevation, weather exposure.
+static func _gen_mountain_pass(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.WALL_STONE)
+
+	# Carve a winding path through the rock.
+	var path_x: int = MID
+	for y in range(S - 1, -1, -1):
+		var drift: int = (rng.randi() % 3) - 1
+		path_x = clampi(path_x + drift, 4, S - 5)
+		# Path: 3-5 tiles wide.
+		var w: int = 1 + rng.randi() % 2
+		for dx in range(-w, w + 1):
+			var tx: int = path_x + dx
+			if tx >= 0 and tx < S:
+				map.set_tile(tx, y, Enums.TileType.FLOOR_STONE)
+
+	# Widen a few areas into small clearings.
+	for _i in range(2 + rng.randi() % 2):
+		var cy: int = 5 + rng.randi() % (S - 10)
+		for dy in range(-2, 3):
+			for dx in range(-3, 4):
+				var tx: int = path_x + dx
+				var ty: int = cy + dy
+				if tx >= 1 and tx < S - 1 and ty >= 0 and ty < S:
+					if map.get_tile(tx, ty) == Enums.TileType.WALL_STONE:
+						map.set_tile(tx, ty, Enums.TileType.FLOOR_DIRT)
+
+	# Scattered dead trees and bushes on path edges.
+	for _i in range(8 + rng.randi() % 6):
+		var bx: int = 2 + rng.randi() % (S - 4)
+		var by: int = 2 + rng.randi() % (S - 4)
+		if map.get_tile(bx, by) == Enums.TileType.FLOOR_STONE or \
+		   map.get_tile(bx, by) == Enums.TileType.FLOOR_DIRT:
+			var adj_wall: bool = false
+			for d in [Vector2i(-1,0), Vector2i(1,0), Vector2i(0,-1), Vector2i(0,1)]:
+				if map.get_tile(bx + d.x, by + d.y) == Enums.TileType.WALL_STONE:
+					adj_wall = true
+					break
+			if adj_wall:
+				map.set_tile(bx, by, Enums.TileType.BUSH if rng.randi() % 2 == 0 else Enums.TileType.TREE_DEAD)
+
+	# Zone exits north and south.
+	map.set_tile(MID, 0, Enums.TileType.ZONE_EXIT)
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	# Ensure exit tiles are passable.
+	for ey in [0, S - 1]:
+		if not AsciiMapData.is_passable(map.get_tile(MID, ey)):
+			map.set_tile(MID, ey, Enums.TileType.FLOOR_STONE)
+		map.set_tile(MID, ey, Enums.TileType.ZONE_EXIT)
+
+	map.exits = [
+		{x = MID, y = 0, direction = "north", target_zone_id = ""},
+		{x = MID, y = S - 1, direction = "south", target_zone_id = ""},
+	]
+
+
+# WALL_TOWER (Kaiu Wall Tower): stone fortification, battlements,
+# defensive structure with arrow slits and lookout positions.
+static func _gen_wall_tower(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_STONE)
+	_draw_stone_border(map, 0, 0, S - 1, S - 1)
+
+	# Outer battlements: crenellated stone wall (gaps every 3 tiles).
+	for x in range(0, S):
+		if x % 3 == 0:
+			map.set_tile(x, 0, Enums.TileType.FLOOR_STONE)
+			map.set_tile(x, S - 1, Enums.TileType.FLOOR_STONE)
+	for y in range(0, S):
+		if y % 3 == 0:
+			map.set_tile(0, y, Enums.TileType.FLOOR_STONE)
+			map.set_tile(S - 1, y, Enums.TileType.FLOOR_STONE)
+
+	# Inner tower structure: thick stone walls forming central room.
+	_draw_stone_border(map, 8, 8, 22, 22)
+
+	# Interior: wood floor (garrison quarters).
+	_fill_rect(map, 9, 9, 21, 21, Enums.TileType.FLOOR_WOOD)
+
+	# Central pillar / stairwell (stone).
+	_fill_rect(map, 13, 13, 17, 17, Enums.TileType.WALL_STONE)
+
+	# Doors on all four faces of inner tower.
+	map.set_tile(MID, 8, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(MID, 22, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(8, MID, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(22, MID, Enums.TileType.DOOR_WOOD_OPEN)
+
+	# Weapon racks inside (wood wall segments).
+	for y in range(10, 13):
+		map.set_tile(9, y, Enums.TileType.WALL_WOOD)
+		map.set_tile(21, y, Enums.TileType.WALL_WOOD)
+
+	# Exit south (connects to wall walkway).
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
 
 
 # Default fallback: flat grass with stone perimeter (zone type not yet designed).
