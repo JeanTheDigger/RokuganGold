@@ -575,6 +575,61 @@ func test_assign_ronin_standing_does_not_overwrite_existing():
 	assert_eq(objectives_map[c.character_id]["standing"]["need_type"], "UPHOLD_LAW")
 
 
+# === MONK STANDING OBJECTIVE ASSIGNMENT (s55.11b) ===
+
+func _make_monk_char(id: int = 50) -> L5RCharacterData:
+	var c := _make_samurai(id)
+	c.school_type = Enums.SchoolType.MONK
+	c.lord_id = -1
+	c.role_position = ""
+	return c
+
+
+func test_assign_monk_standing_assigns_perform_ritual() -> void:
+	var c := _make_monk_char()
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_monk_standing_objectives([c], objectives_map)
+	var standing: Dictionary = objectives_map[c.character_id].get("standing", {})
+	assert_eq(standing.get("need_type", ""), "PERFORM_RITUAL",
+		"Monk should receive PERFORM_RITUAL standing objective")
+
+
+func test_assign_monk_standing_skips_non_monk() -> void:
+	var c := _make_samurai()  # SchoolType.BUSHI
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_monk_standing_objectives([c], objectives_map)
+	assert_false(objectives_map.has(c.character_id),
+		"Non-monk should not receive monk standing objective")
+
+
+func test_assign_monk_standing_skips_dead() -> void:
+	var c := _make_monk_char()
+	c.wounds_taken = 999
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_monk_standing_objectives([c], objectives_map)
+	assert_false(objectives_map.has(c.character_id),
+		"Dead monk should not receive standing objective")
+
+
+func test_assign_monk_standing_does_not_overwrite_existing() -> void:
+	var c := _make_monk_char()
+	var objectives_map: Dictionary = {
+		c.character_id: {"standing": {"need_type": "UPHOLD_LAW"}},
+	}
+	DayOrchestrator._assign_monk_standing_objectives([c], objectives_map)
+	assert_eq(objectives_map[c.character_id]["standing"]["need_type"], "UPHOLD_LAW",
+		"Existing standing objective should not be replaced by monk assignment")
+
+
+func test_assign_monk_standing_auto_assigned_flag() -> void:
+	var c := _make_monk_char()
+	var objectives_map: Dictionary = {}
+	DayOrchestrator._assign_monk_standing_objectives([c], objectives_map)
+	var standing: Dictionary = objectives_map[c.character_id].get("standing", {})
+	assert_true(standing.get("auto_assigned", false),
+		"Monk standing objective should carry auto_assigned flag")
+
+
 # === EXECUTOR: PETITION_RONIN ===
 
 func _make_ctx_for_petition(ronin_id: int, lord_id: int, loc: String = "1") -> NPCDataStructures.ContextSnapshot:

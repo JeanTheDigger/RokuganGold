@@ -33,6 +33,7 @@ const PERSONAL_OBJECTIVES: Array[String] = [
 	"LIVE_BY_BUSHIDO",
 	"ADVANCE_GLORY",
 	"SEEK_VENGEANCE",
+	"FIND_NEW_LORD",
 ]
 
 const MILITARY_OBJECTIVES: Array[String] = [
@@ -159,6 +160,8 @@ static func _decompose_personal(
 			return _decompose_advance_glory(objective, ctx)
 		"SEEK_VENGEANCE":
 			return _decompose_seek_vengeance(objective, ctx)
+		"FIND_NEW_LORD":
+			return _decompose_find_new_lord(objective, ctx)
 	return _passthrough(objective)
 
 
@@ -756,6 +759,35 @@ static func _decompose_seek_vengeance(
 			if _court_need != null:
 				return _court_need
 			return _make_need("GATHER_INTELLIGENCE", 1, {"target_npc_id": target_npc})
+
+
+# -- FIND_NEW_LORD Decomposition (s52.5) ----------------------------------------
+# Ronin seeking a new lord: petition a co-located lord when visiting, write
+# letters from home, or travel toward samurai settlements when neither is an option.
+# Phase 4a metadata population (_pick_lord_for_petition) handles target selection
+# for PETITION_RONIN — the decomposer preserves the FIND_NEW_LORD NeedType so Phase 5
+# scores correctly against the FIND_NEW_LORD alignment table.
+
+
+static func _decompose_find_new_lord(
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	match ctx.context_flag:
+		Enums.ContextFlag.VISITING:
+			# At another lord's settlement: petition directly (score 90) or write if
+			# no eligible lord is present (score 60). Scoring picks PETITION_RONIN when
+			# _pick_lord_for_petition() finds a candidate; falls to WRITE_LETTER otherwise.
+			return _passthrough(objective)
+		Enums.ContextFlag.AT_OWN_HOLDINGS:
+			# At home base: write letters to potential lords (score 60) or begin travel
+			# toward samurai settlements (score 80). Scoring picks BEGIN_TRAVEL.
+			return _passthrough(objective)
+		Enums.ContextFlag.TRAVELING:
+			# Mid-travel: do not interrupt ongoing journey.
+			return _passthrough(objective)
+		_:
+			return _passthrough(objective)
 
 
 # =============================================================================

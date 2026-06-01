@@ -145,6 +145,7 @@ static func advance_day(
 	_assign_magistrate_standing_objectives(characters, objectives_map)
 	_assign_ronin_standing_objectives(characters, objectives_map)
 	_assign_kaiu_engineer_standing_objectives(characters, objectives_map, settlements)
+	_assign_monk_standing_objectives(characters, objectives_map)
 
 	_clear_stale_context_flags(world_states)
 
@@ -6828,6 +6829,45 @@ static func _assign_ronin_standing_objectives(
 		objectives["standing"] = {
 			"need_type": "FIND_NEW_LORD",
 			"priority": 5,
+			"auto_assigned": true,
+		}
+
+
+# -- Monk Standing Objective Assignment (s55.11b) ------------------------------
+# Named monk characters auto-receive PERFORM_RITUAL as their standing objective.
+# GDD s55.11b specifies five types (Help People, Fight Bandits, Meditate, Train,
+# Worship) all using EXISTING NeedTypes. PERFORM_RITUAL covers the Meditate and
+# Worship types (both use PERFORM_RITUAL/PERFORM_WORSHIP actions) and is the
+# universally applicable monk baseline. School-based differentiation to the other
+# types (RAISE_DISPOSITION=Help People, INVESTIGATE_THREAT=Fight Bandits,
+# TRAIN_SKILL=Train) is deferred until the GDD specifies the school→type mapping.
+
+
+static func _assign_monk_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.school_type != Enums.SchoolType.MONK:
+			continue
+		if CharacterStats.is_dead(character):
+			continue
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+
+		# Do not replace existing standing objectives (magistrate dual-role monks,
+		# lord-assigned standing, etc.).
+		if not standing.is_empty():
+			continue
+
+		objectives["standing"] = {
+			"need_type": "PERFORM_RITUAL",
+			"priority": 3,
 			"auto_assigned": true,
 		}
 
