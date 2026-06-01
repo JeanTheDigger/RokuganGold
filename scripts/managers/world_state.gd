@@ -172,6 +172,11 @@ var next_sculpture_id: Array[int] = [1]
 var active_okiyas: Array[OkiyaData] = []
 var next_okiya_id: Array[int] = [1]
 
+# -- Zone graph (s4.4.1) -------------------------------------------------------
+var greater_zones: Array[GreaterZoneData] = []
+var navigation_zones: Array[NavigationZoneData] = []
+var lesser_zones: Array[LesserZoneData] = []
+
 # -- Commitments ID Counter (s55.31) ------------------------------------------
 var next_commitment_id: Array[int] = [1]
 
