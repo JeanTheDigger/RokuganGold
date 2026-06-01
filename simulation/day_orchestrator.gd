@@ -18082,6 +18082,8 @@ static func _inject_base_character_context(
 		var cf: int = ws.get("context_flag", -1)
 		if cf == Enums.ContextFlag.AT_COURT:
 			ws["sublocation"] = Enums.Sublocation.COURT
+		elif cf == Enums.ContextFlag.AT_WALL_TOWER or cf == Enums.ContextFlag.AT_DOJO:
+			ws["sublocation"] = Enums.Sublocation.RESTRICTED
 		else:
 			ws["sublocation"] = Enums.Sublocation.PUBLIC
 		ws.merge(g_festival)
