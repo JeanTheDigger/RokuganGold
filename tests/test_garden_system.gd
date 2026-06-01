@@ -962,3 +962,87 @@ func test_get_maintain_tn_tier_3() -> void:
 func test_get_maintain_tn_tier_5() -> void:
 	var g: GardenData = _make_garden(5)
 	assert_eq(GardenSystem.get_maintain_tn(g), 35)
+
+
+# ---------------------------------------------------------------------------
+# handle_character_death — garden system death cleanup
+# ---------------------------------------------------------------------------
+
+func _make_commission(artisan_id: int, status: String = "ACTIVE") -> CommissionRecordData:
+	var r: CommissionRecordData = CommissionRecordData.new()
+	r.commission_id = 1
+	r.artisan_id = artisan_id
+	r.daimyo_id = 99
+	r.settlement_id = 100
+	r.zone_type = "CASTLE_OUTER_COURTYARD"
+	r.status = status
+	return r
+
+
+func test_handle_death_terminates_active_commission() -> void:
+	var rec: CommissionRecordData = _make_commission(10, "ACTIVE")
+	GardenSystem.handle_character_death(10, [rec], [], [])
+	assert_eq(rec.status, "CREATOR_DECEASED")
+
+
+func test_handle_death_terminates_suspended_commission() -> void:
+	var rec: CommissionRecordData = _make_commission(10, "SUSPENDED")
+	GardenSystem.handle_character_death(10, [rec], [], [])
+	assert_eq(rec.status, "CREATOR_DECEASED")
+
+
+func test_handle_death_ignores_completed_commission() -> void:
+	var rec: CommissionRecordData = _make_commission(10, "COMPLETED")
+	GardenSystem.handle_character_death(10, [rec], [], [])
+	assert_eq(rec.status, "COMPLETED")
+
+
+func test_handle_death_ignores_other_artisan_commission() -> void:
+	var rec: CommissionRecordData = _make_commission(11, "ACTIVE")
+	GardenSystem.handle_character_death(10, [rec], [], [])
+	assert_eq(rec.status, "ACTIVE")
+
+
+func test_handle_death_clears_garden_permission() -> void:
+	var s: SettlementData = _make_settlement()
+	s.garden_permissions["CASTLE_OUTER_COURTYARD"] = 10
+	GardenSystem.handle_character_death(10, [], [s], [])
+	assert_eq(s.garden_permissions["CASTLE_OUTER_COURTYARD"], -1)
+
+
+func test_handle_death_does_not_clear_other_artisan_permission() -> void:
+	var s: SettlementData = _make_settlement()
+	s.garden_permissions["CASTLE_OUTER_COURTYARD"] = 11
+	GardenSystem.handle_character_death(10, [], [s], [])
+	assert_eq(s.garden_permissions["CASTLE_OUTER_COURTYARD"], 11)
+
+
+func test_handle_death_orphans_bonsai() -> void:
+	var b: BonsaiData = _make_bonsai()
+	b.bonsai_id = 5
+	b.owner_id = 10
+	b.display_settlement_id = -1
+	GardenSystem.handle_character_death(10, [], [], [b])
+	assert_eq(b.owner_id, -1)
+
+
+func test_handle_death_clears_bonsai_display_slot() -> void:
+	var s: SettlementData = _make_settlement(Enums.SettlementType.CITY)
+	s.settlement_id = 200
+	s.bonsai_display_slot = 5
+	var b: BonsaiData = _make_bonsai()
+	b.bonsai_id = 5
+	b.owner_id = 10
+	b.display_settlement_id = 200
+	GardenSystem.handle_character_death(10, [], [s], [b])
+	assert_eq(b.display_settlement_id, -1)
+	assert_eq(s.bonsai_display_slot, -1)
+
+
+func test_handle_death_does_not_clear_other_owners_bonsai() -> void:
+	var b: BonsaiData = _make_bonsai()
+	b.bonsai_id = 5
+	b.owner_id = 11
+	b.display_settlement_id = -1
+	GardenSystem.handle_character_death(10, [], [], [b])
+	assert_eq(b.owner_id, 11)

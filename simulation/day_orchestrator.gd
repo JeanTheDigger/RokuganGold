@@ -1012,6 +1012,7 @@ static func advance_day(
 		characters, characters_by_id, active_courts, entanglements,
 		active_hunts, favors, bloodspeaker_cells, active_secrets,
 		theater_pieces, active_paintings, active_sculptures,
+		commission_records, settlements, active_bonsai,
 	)
 	_apply_artist_grief_on_death(characters, characters_by_id, active_paintings, settlements, ic_day)
 
@@ -1436,7 +1437,8 @@ static func advance_day(
 			_cleanup_dead_character_references(
 				characters, characters_by_id, active_courts, entanglements,
 				active_hunts, favors, bloodspeaker_cells, active_secrets,
-				theater_pieces, active_paintings,
+				theater_pieces, active_paintings, active_sculptures,
+				commission_records, settlements, active_bonsai,
 			)
 
 	var koku_flow_results: Dictionary = {}
@@ -7683,6 +7685,9 @@ static func _cleanup_dead_character_references(
 	theater_pieces: Array = [],
 	active_paintings: Array = [],
 	active_sculptures: Array = [],
+	commission_records: Array = [],
+	settlements: Array = [],
+	active_bonsai: Array = [],
 ) -> void:
 	var dead_ids: Array = []
 	for c: L5RCharacterData in characters:
@@ -7743,6 +7748,10 @@ static func _cleanup_dead_character_references(
 	if not active_sculptures.is_empty():
 		for did: int in dead_ids:
 			SculptureSystem.handle_character_death(did, active_sculptures)
+
+	if not commission_records.is_empty() or not active_bonsai.is_empty():
+		for did: int in dead_ids:
+			GardenSystem.handle_character_death(did, commission_records, settlements, active_bonsai)
 
 	for secret: Variant in active_secrets:
 		if not secret is SecretData:

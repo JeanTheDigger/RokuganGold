@@ -797,6 +797,59 @@ static func apply_gardening_free_raise(gardening_rank: int) -> int:
 	return 0
 
 # ---------------------------------------------------------------------------
+# Death cleanup
+# ---------------------------------------------------------------------------
+
+static func handle_character_death(
+	dead_id: int,
+	commission_records: Array,
+	settlements: Array,
+	active_bonsai: Array,
+) -> void:
+	## On artisan/owner death:
+	## - Active garden commissions become CREATOR_DECEASED (slot held but work stops).
+	## - Garden permissions held by the dead artisan are cleared (slot reopens).
+	## - Bonsai owned by the dead character are orphaned and their display slots cleared.
+
+	# Commission records: terminate active/suspended commissions for this artisan.
+	for rec_v: Variant in commission_records:
+		if not rec_v is CommissionRecordData:
+			continue
+		var rec: CommissionRecordData = rec_v as CommissionRecordData
+		if rec.artisan_id != dead_id:
+			continue
+		if rec.status in ["ACTIVE", "SUSPENDED"]:
+			rec.status = "CREATOR_DECEASED"
+
+	# Settlement permissions: free any zone permission held by the dead artisan.
+	for s_v: Variant in settlements:
+		if not s_v is SettlementData:
+			continue
+		var s: SettlementData = s_v as SettlementData
+		for zone_type: String in s.garden_permissions.keys():
+			if s.garden_permissions[zone_type] == dead_id:
+				s.garden_permissions[zone_type] = -1
+
+	# Bonsai: orphan ownership and clear display.
+	for b_v: Variant in active_bonsai:
+		if not b_v is BonsaiData:
+			continue
+		var b: BonsaiData = b_v as BonsaiData
+		if b.owner_id != dead_id:
+			continue
+		# Clear displayed bonsai from settlement slot before orphaning.
+		if b.display_settlement_id >= 0:
+			for s_v: Variant in settlements:
+				if not s_v is SettlementData:
+					continue
+				var s: SettlementData = s_v as SettlementData
+				if s.settlement_id == b.display_settlement_id and s.bonsai_display_slot == b.bonsai_id:
+					s.bonsai_display_slot = -1
+			b.display_settlement_id = -1
+		b.owner_id = -1
+
+
+# ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
 
