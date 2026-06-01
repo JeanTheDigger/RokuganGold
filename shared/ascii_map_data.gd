@@ -102,7 +102,110 @@ static func blocks_los(tile: int) -> bool:
 		Enums.TileType.BAMBOO, \
 		Enums.TileType.DOOR_SHOJI_CLOSED, \
 		Enums.TileType.DOOR_WOOD_CLOSED, \
-		Enums.TileType.GATE_CLOSED:
+		Enums.TileType.GATE_CLOSED, \
+		Enums.TileType.FIRE:
 			return true
 		_:
 			return false
+
+
+# -- Door operations ----------------------------------------------------------
+
+const _DOOR_PAIRS: Dictionary = {
+	Enums.TileType.DOOR_SHOJI_CLOSED: Enums.TileType.DOOR_SHOJI_OPEN,
+	Enums.TileType.DOOR_SHOJI_OPEN:   Enums.TileType.DOOR_SHOJI_CLOSED,
+	Enums.TileType.DOOR_WOOD_CLOSED:  Enums.TileType.DOOR_WOOD_OPEN,
+	Enums.TileType.DOOR_WOOD_OPEN:    Enums.TileType.DOOR_WOOD_CLOSED,
+	Enums.TileType.GATE_CLOSED:       Enums.TileType.GATE_OPEN,
+	Enums.TileType.GATE_OPEN:         Enums.TileType.GATE_CLOSED,
+}
+
+
+static func is_door(tile: int) -> bool:
+	return _DOOR_PAIRS.has(tile)
+
+
+func toggle_door(x: int, y: int) -> bool:
+	var tile: int = get_tile(x, y)
+	if not _DOOR_PAIRS.has(tile):
+		return false
+	set_delta(x, y, _DOOR_PAIRS[tile])
+	return true
+
+
+# -- Tile destruction ---------------------------------------------------------
+# s4.4: shoji "can be cut through … destroyed in one action."
+# Paper walls and shoji doors are fragile; wood walls require force; stone is
+# indestructible under normal circumstances. Returns the replacement tile type,
+# or -1 if the tile cannot be destroyed.
+
+const _DESTRUCTION_MAP: Dictionary = {
+	Enums.TileType.WALL_PAPER:        Enums.TileType.RUBBLE,
+	Enums.TileType.DOOR_SHOJI_CLOSED: Enums.TileType.RUBBLE,
+	Enums.TileType.DOOR_SHOJI_OPEN:   Enums.TileType.RUBBLE,
+	Enums.TileType.WALL_WOOD:         Enums.TileType.RUBBLE,
+	Enums.TileType.DOOR_WOOD_CLOSED:  Enums.TileType.RUBBLE,
+	Enums.TileType.DOOR_WOOD_OPEN:    Enums.TileType.RUBBLE,
+	Enums.TileType.BAMBOO:            Enums.TileType.FLOOR_GRASS,
+	Enums.TileType.BUSH:              Enums.TileType.FLOOR_GRASS,
+	Enums.TileType.TREE_DEAD:         Enums.TileType.FLOOR_GRASS,
+}
+
+const _BURN_MAP: Dictionary = {
+	Enums.TileType.WALL_WOOD:         Enums.TileType.FLOOR_ASH,
+	Enums.TileType.WALL_PAPER:        Enums.TileType.FLOOR_ASH,
+	Enums.TileType.DOOR_SHOJI_CLOSED: Enums.TileType.FLOOR_ASH,
+	Enums.TileType.DOOR_SHOJI_OPEN:   Enums.TileType.FLOOR_ASH,
+	Enums.TileType.DOOR_WOOD_CLOSED:  Enums.TileType.FLOOR_ASH,
+	Enums.TileType.DOOR_WOOD_OPEN:    Enums.TileType.FLOOR_ASH,
+	Enums.TileType.FLOOR_WOOD:        Enums.TileType.FLOOR_ASH,
+	Enums.TileType.FLOOR_TATAMI:      Enums.TileType.FLOOR_ASH,
+	Enums.TileType.BAMBOO:            Enums.TileType.FLOOR_ASH,
+	Enums.TileType.BUSH:              Enums.TileType.FLOOR_ASH,
+	Enums.TileType.TREE_DEAD:         Enums.TileType.FLOOR_ASH,
+	Enums.TileType.TREE_EVERGREEN:    Enums.TileType.FLOOR_ASH,
+	Enums.TileType.TREE_DECIDUOUS:    Enums.TileType.FLOOR_ASH,
+	Enums.TileType.TREE_CHERRY:       Enums.TileType.FLOOR_ASH,
+	Enums.TileType.CROPS:             Enums.TileType.FLOOR_ASH,
+}
+
+
+static func is_destructible(tile: int) -> bool:
+	return _DESTRUCTION_MAP.has(tile)
+
+
+static func is_flammable(tile: int) -> bool:
+	return _BURN_MAP.has(tile)
+
+
+func destroy_tile(x: int, y: int) -> int:
+	var tile: int = get_tile(x, y)
+	if not _DESTRUCTION_MAP.has(tile):
+		return -1
+	var replacement: int = _DESTRUCTION_MAP[tile]
+	set_delta(x, y, replacement)
+	return replacement
+
+
+func burn_tile(x: int, y: int) -> int:
+	var tile: int = get_tile(x, y)
+	if not _BURN_MAP.has(tile):
+		return -1
+	var replacement: int = _BURN_MAP[tile]
+	set_delta(x, y, replacement)
+	return replacement
+
+
+func set_fire(x: int, y: int) -> bool:
+	var tile: int = get_tile(x, y)
+	if not _BURN_MAP.has(tile):
+		return false
+	set_delta(x, y, Enums.TileType.FIRE)
+	return true
+
+
+func extinguish(x: int, y: int) -> bool:
+	if get_tile(x, y) != Enums.TileType.FIRE:
+		return false
+	set_delta(x, y, Enums.TileType.FLOOR_ASH)
+	return true

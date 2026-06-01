@@ -141,6 +141,9 @@ static func get_glyph(
 		Enums.TileType.GATE_CLOSED:       return "╬"
 		Enums.TileType.GATE_OPEN:         return "∏"
 		Enums.TileType.ZONE_EXIT:         return ">"
+		Enums.TileType.FLOOR_ASH:         return ","
+		Enums.TileType.FIRE:              return "^"
+		Enums.TileType.RUBBLE:            return ";"
 	return "?"
 
 
@@ -179,6 +182,9 @@ static func get_fg_color(tile: int) -> Color:
 		Enums.TileType.GATE_CLOSED:       return Color(0.5, 0.4, 0.2)
 		Enums.TileType.GATE_OPEN:         return Color(0.5, 0.4, 0.2)
 		Enums.TileType.ZONE_EXIT:         return Color(0.4, 0.9, 0.9)
+		Enums.TileType.FLOOR_ASH:         return Color(0.35, 0.35, 0.35)
+		Enums.TileType.FIRE:              return Color(1.0, 0.4, 0.0)
+		Enums.TileType.RUBBLE:            return Color(0.45, 0.4, 0.35)
 	return Color.WHITE
 
 
@@ -188,6 +194,7 @@ static func get_bg_color(tile: int) -> Color:
 	match tile:
 		Enums.TileType.WATER_DEEP:  return Color(0.05, 0.1, 0.3, 1.0)
 		Enums.TileType.WATER_PADDY: return Color(0.05, 0.2, 0.15, 1.0)
+		Enums.TileType.FIRE:        return Color(0.3, 0.05, 0.0, 1.0)
 		_:                          return Color(0, 0, 0, 0)
 
 

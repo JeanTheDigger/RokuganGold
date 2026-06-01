@@ -690,6 +690,231 @@ func test_generator_wall_tower_has_battlements_and_interior() -> void:
 # AsciiMapGenerator — all 25 subtypes produce valid maps
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# AsciiMapData — dynamic tile operations (doors, destruction, fire)
+# ---------------------------------------------------------------------------
+
+func test_toggle_door_shoji_closed_to_open() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.set_tile(5, 5, Enums.TileType.DOOR_SHOJI_CLOSED)
+	var ok: bool = m.toggle_door(5, 5)
+	assert_true(ok)
+	assert_eq(m.get_tile(5, 5), Enums.TileType.DOOR_SHOJI_OPEN)
+
+
+func test_toggle_door_shoji_open_to_closed() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.set_tile(5, 5, Enums.TileType.DOOR_SHOJI_OPEN)
+	assert_true(m.toggle_door(5, 5))
+	assert_eq(m.get_tile(5, 5), Enums.TileType.DOOR_SHOJI_CLOSED)
+
+
+func test_toggle_door_wood() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.set_tile(5, 5, Enums.TileType.DOOR_WOOD_CLOSED)
+	assert_true(m.toggle_door(5, 5))
+	assert_eq(m.get_tile(5, 5), Enums.TileType.DOOR_WOOD_OPEN)
+	assert_true(m.toggle_door(5, 5))
+	assert_eq(m.get_tile(5, 5), Enums.TileType.DOOR_WOOD_CLOSED)
+
+
+func test_toggle_door_gate() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.set_tile(5, 5, Enums.TileType.GATE_CLOSED)
+	assert_true(m.toggle_door(5, 5))
+	assert_eq(m.get_tile(5, 5), Enums.TileType.GATE_OPEN)
+
+
+func test_toggle_door_non_door_returns_false() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	assert_false(m.toggle_door(5, 5))
+	assert_eq(m.get_tile(5, 5), Enums.TileType.FLOOR_GRASS)
+
+
+func test_toggle_door_uses_delta() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.set_tile(5, 5, Enums.TileType.DOOR_SHOJI_CLOSED)
+	m.toggle_door(5, 5)
+	assert_true(m.deltas.has("5,5"))
+	m.clear_delta(5, 5)
+	assert_eq(m.get_tile(5, 5), Enums.TileType.DOOR_SHOJI_CLOSED)
+
+
+func test_is_door_true_for_all_door_types() -> void:
+	assert_true(AsciiMapData.is_door(Enums.TileType.DOOR_SHOJI_CLOSED))
+	assert_true(AsciiMapData.is_door(Enums.TileType.DOOR_SHOJI_OPEN))
+	assert_true(AsciiMapData.is_door(Enums.TileType.DOOR_WOOD_CLOSED))
+	assert_true(AsciiMapData.is_door(Enums.TileType.DOOR_WOOD_OPEN))
+	assert_true(AsciiMapData.is_door(Enums.TileType.GATE_CLOSED))
+	assert_true(AsciiMapData.is_door(Enums.TileType.GATE_OPEN))
+
+
+func test_is_door_false_for_non_doors() -> void:
+	assert_false(AsciiMapData.is_door(Enums.TileType.WALL_STONE))
+	assert_false(AsciiMapData.is_door(Enums.TileType.FLOOR_GRASS))
+	assert_false(AsciiMapData.is_door(Enums.TileType.ZONE_EXIT))
+
+
+func test_destroy_tile_paper_wall() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.set_tile(5, 5, Enums.TileType.WALL_PAPER)
+	var result: int = m.destroy_tile(5, 5)
+	assert_eq(result, Enums.TileType.RUBBLE)
+	assert_eq(m.get_tile(5, 5), Enums.TileType.RUBBLE)
+
+
+func test_destroy_tile_shoji_door() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.set_tile(5, 5, Enums.TileType.DOOR_SHOJI_CLOSED)
+	var result: int = m.destroy_tile(5, 5)
+	assert_eq(result, Enums.TileType.RUBBLE)
+	assert_true(AsciiMapData.is_passable(m.get_tile(5, 5)))
+
+
+func test_destroy_tile_wood_wall() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.set_tile(5, 5, Enums.TileType.WALL_WOOD)
+	assert_eq(m.destroy_tile(5, 5), Enums.TileType.RUBBLE)
+
+
+func test_destroy_tile_stone_wall_indestructible() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.set_tile(5, 5, Enums.TileType.WALL_STONE)
+	assert_eq(m.destroy_tile(5, 5), -1)
+	assert_eq(m.get_tile(5, 5), Enums.TileType.WALL_STONE)
+
+
+func test_destroy_tile_bush_becomes_grass() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.set_tile(5, 5, Enums.TileType.BUSH)
+	assert_eq(m.destroy_tile(5, 5), Enums.TileType.FLOOR_GRASS)
+
+
+func test_destroy_tile_floor_not_destructible() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_TATAMI)
+	assert_eq(m.destroy_tile(5, 5), -1)
+
+
+func test_is_destructible() -> void:
+	assert_true(AsciiMapData.is_destructible(Enums.TileType.WALL_PAPER))
+	assert_true(AsciiMapData.is_destructible(Enums.TileType.WALL_WOOD))
+	assert_true(AsciiMapData.is_destructible(Enums.TileType.DOOR_SHOJI_CLOSED))
+	assert_true(AsciiMapData.is_destructible(Enums.TileType.BAMBOO))
+	assert_false(AsciiMapData.is_destructible(Enums.TileType.WALL_STONE))
+	assert_false(AsciiMapData.is_destructible(Enums.TileType.FLOOR_GRASS))
+
+
+func test_burn_tile_wood_becomes_ash() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.set_tile(5, 5, Enums.TileType.WALL_WOOD)
+	assert_eq(m.burn_tile(5, 5), Enums.TileType.FLOOR_ASH)
+	assert_eq(m.get_tile(5, 5), Enums.TileType.FLOOR_ASH)
+
+
+func test_burn_tile_tatami_becomes_ash() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_TATAMI)
+	assert_eq(m.burn_tile(5, 5), Enums.TileType.FLOOR_ASH)
+
+
+func test_burn_tile_stone_not_flammable() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.set_tile(5, 5, Enums.TileType.WALL_STONE)
+	assert_eq(m.burn_tile(5, 5), -1)
+	assert_eq(m.get_tile(5, 5), Enums.TileType.WALL_STONE)
+
+
+func test_is_flammable() -> void:
+	assert_true(AsciiMapData.is_flammable(Enums.TileType.WALL_WOOD))
+	assert_true(AsciiMapData.is_flammable(Enums.TileType.WALL_PAPER))
+	assert_true(AsciiMapData.is_flammable(Enums.TileType.FLOOR_WOOD))
+	assert_true(AsciiMapData.is_flammable(Enums.TileType.FLOOR_TATAMI))
+	assert_true(AsciiMapData.is_flammable(Enums.TileType.TREE_EVERGREEN))
+	assert_true(AsciiMapData.is_flammable(Enums.TileType.CROPS))
+	assert_false(AsciiMapData.is_flammable(Enums.TileType.WALL_STONE))
+	assert_false(AsciiMapData.is_flammable(Enums.TileType.FLOOR_STONE))
+	assert_false(AsciiMapData.is_flammable(Enums.TileType.WATER_DEEP))
+
+
+func test_set_fire_on_flammable_tile() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_WOOD)
+	assert_true(m.set_fire(5, 5))
+	assert_eq(m.get_tile(5, 5), Enums.TileType.FIRE)
+
+
+func test_set_fire_on_non_flammable_fails() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_STONE)
+	assert_false(m.set_fire(5, 5))
+	assert_eq(m.get_tile(5, 5), Enums.TileType.FLOOR_STONE)
+
+
+func test_extinguish_fire_becomes_ash() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_WOOD)
+	m.set_fire(5, 5)
+	assert_true(m.extinguish(5, 5))
+	assert_eq(m.get_tile(5, 5), Enums.TileType.FLOOR_ASH)
+
+
+func test_extinguish_non_fire_fails() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	assert_false(m.extinguish(5, 5))
+
+
+func test_fire_blocks_los() -> void:
+	assert_true(AsciiMapData.blocks_los(Enums.TileType.FIRE))
+
+
+func test_ash_passable_no_los() -> void:
+	assert_true(AsciiMapData.is_passable(Enums.TileType.FLOOR_ASH))
+	assert_false(AsciiMapData.blocks_los(Enums.TileType.FLOOR_ASH))
+
+
+func test_rubble_passable_no_los() -> void:
+	assert_true(AsciiMapData.is_passable(Enums.TileType.RUBBLE))
+	assert_false(AsciiMapData.blocks_los(Enums.TileType.RUBBLE))
+
+
+func test_fire_passable() -> void:
+	assert_true(AsciiMapData.is_passable(Enums.TileType.FIRE))
+
+
+func test_glyph_for_new_tile_types() -> void:
+	assert_eq(AsciiMapGenerator.get_glyph(Enums.TileType.FLOOR_ASH), ",")
+	assert_eq(AsciiMapGenerator.get_glyph(Enums.TileType.FIRE), "^")
+	assert_eq(AsciiMapGenerator.get_glyph(Enums.TileType.RUBBLE), ";")
+
+
+func test_destroy_uses_delta_not_base() -> void:
+	var m: AsciiMapData = AsciiMapData.new()
+	m.init_tiles(Enums.TileType.WALL_PAPER)
+	m.destroy_tile(5, 5)
+	assert_true(m.deltas.has("5,5"))
+	m.clear_delta(5, 5)
+	assert_eq(m.get_tile(5, 5), Enums.TileType.WALL_PAPER)
+
+
+# ---------------------------------------------------------------------------
+# AsciiMapGenerator — all 25 subtypes produce valid maps
+# ---------------------------------------------------------------------------
+
 func test_all_zone_subtypes_produce_valid_maps() -> void:
 	var subtypes: Array[int] = [
 		Enums.ZoneSubtype.OHIROMA, Enums.ZoneSubtype.ENKAI_HALL,

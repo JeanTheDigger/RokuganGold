@@ -809,4 +809,8 @@ enum TileType {
 	GATE_OPEN         = 30,  # ∏  brown/grey
 	# Navigation
 	ZONE_EXIT      = 31,  # >  cyan (tile leads to another zone, always passable)
+	# Dynamic / environmental — produced by gameplay events, not generation
+	FLOOR_ASH      = 32,  # ,  dark grey (burned-out tile, s56.6)
+	FIRE           = 33,  # ^  orange/red (actively burning, s56.6)
+	RUBBLE         = 34,  # ;  grey (destroyed wall remains)
 }
