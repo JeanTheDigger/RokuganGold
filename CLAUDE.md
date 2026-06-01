@@ -126,6 +126,7 @@ When implementing or auditing a system, go here first:
 | Tattoo system                                 | 57.25                |
 | Kata eligibility, acquisition, effect stubs   | 30, 30a              |
 | Artisan & crafting system                     | 49                   |
+| Sculpture system (COMPOSE_SCULPTURE)          | 57.28                |
 | Musha Shugyo (warrior's pilgrimage)           | 57.48                |
 | Clan Champion strategic evaluation           | 57.54                |
 | Otomo Seiyaku (alliance suppression)          | 55.22b               |
@@ -3565,6 +3566,27 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   FIND_NEW_LORD standing cleared on induction. objective_alignment.json: FILL_VACANCY
   NeedType: PERFORM_CLAN_INDUCTION (20), APPROVE_CLAN_INDUCTION (50), HIRE_RONIN (60).
   Constants A60–A76 locked. ~55 tests.
+- **s57.28 Sculpture System** — GDD `gdd/s57.28_sculpture_system_locked.md`. Previously
+  implemented but lacking a lock document; now formally locked. One ActionID: COMPOSE_SCULPTURE
+  (Category 11, Artisan: Sculpture/Awareness, TN 15, progress = max(1, roll−15) per AP).
+  Three formats: STATUARY (shrine/temple statue_slot, passive WP 0.1–1.0/season PROVISIONAL,
+  worship FR 0/1/1/2/2 by tier), GUARDIAN (guardian_slot komainu pair, spiritual ward −1 to
+  −5 per non-Jigoku overlap tick when pair_intact=true, zero Jigoku effect, guardian worship
+  FR 0/0/1/1/2 by tier, outdoor wood degradation −1 tier per 1800 IC days), FIGURINE (inventory
+  gift item, any context, Mantis +3 FR on DELIVER_GIFT, collection topic at 3+ matching
+  theme/creator). Material modifiers: stone +5 TN, bronze +1 FR + foundry requirement.
+  Composition degradation halves progress after 90 IC days without AP (statuary/guardian only;
+  figurines exempt). Skill gate: rank ≥ target quality tier. Raises at completion: +1 quality
+  tier per Raise. Progress thresholds (statuary 20/40/65/95/130, guardian 25/50/80/110/150,
+  figurine 5/10/18/28/40). Worship FR cap = 5 combined PROVISIONAL. Visitor disposition
+  bonuses 1–5 by quality toward creator, 120-day window, glory tick every 5 visitors.
+  Yoritomo Sculptor school: +1k1 on figurine rolls. Siege/sacking survival: wood 30–70% by
+  tier, stone +20%, bronze +30%; zone destruction: wood destroyed, stone 50%, bronze 70%.
+  Lifecycle topic tiers: Normal/Fine=TIER_4, Exceptional/Masterwork=TIER_3, Legendary=TIER_2.
+  Settlement-level zone proxy (statue_slot, guardian_slot, statue_permissions,
+  guardian_permissions on SettlementData) replaces unavailable zone system until s4.4/s56.
+  World-state persistence: active_sculptures Array + next_sculpture_id, saved via
+  WorldStateSaver DIR_SCULPTURES. 931 tests in `tests/test_sculpture_system.gd`.
 
 ### Systems Added 2026-05-31
 - **s57.23 Garden System & s57.24 Bonsai System** — `simulation/garden_system.gd` (811 lines),
