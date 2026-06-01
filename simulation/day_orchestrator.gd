@@ -147,6 +147,8 @@ static func advance_day(
 	_assign_kaiu_engineer_standing_objectives(characters, objectives_map, settlements)
 	_assign_monk_standing_objectives(characters, objectives_map)
 
+	_populate_military_data(military_data, companies)
+
 	_clear_stale_context_flags(world_states)
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
@@ -18164,6 +18166,27 @@ static func _populate_crime_suppression_data(
 		}
 
 	world_states["_crime_suppression_data"] = per_settlement
+
+
+static func _populate_military_data(military_data: Dictionary, companies: Array) -> void:
+	var companies_dict: Dictionary = {}
+	for mc: Dictionary in companies:
+		var cid: int = mc.get("company_id", -1)
+		if cid < 0 or mc.get("destroyed", false):
+			continue
+		var cd: MilitaryUnitData.CompanyData = MilitaryUnitData.CompanyData.new()
+		cd.company_id = cid
+		cd.commander_id = mc.get("commander_id", -1)
+		cd.parent_legion_id = mc.get("parent_legion_id", -1)
+		cd.source_province_id = mc.get("source_province_id", -1)
+		cd.unit_type = mc.get("unit_type", Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+		# deployment_status not stored in raw dict; default WITH_LEGION is correct
+		companies_dict[cid] = cd
+	military_data["companies"] = companies_dict
+	if not military_data.has("legions"):
+		military_data["legions"] = {}
+	if not military_data.has("sections"):
+		military_data["sections"] = {}
 
 
 static func _process_doshin_seasonal_recovery(world_states: Dictionary) -> void:
