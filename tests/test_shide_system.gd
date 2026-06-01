@@ -324,3 +324,44 @@ func test_auto_grant_min_rank() -> void:
 
 func test_worship_fr_cap() -> void:
 	assert_eq(OrigamiSystem.SHIDE_WORSHIP_FR_CAP, 5)
+
+
+# ---------------------------------------------------------------------------
+# _inject_shide_context — known_objectives storage (bug regression)
+# ---------------------------------------------------------------------------
+
+func test_inject_shide_context_keys_in_known_objectives() -> void:
+	## Verifies all shide context keys land in ws["known_objectives"], not ws top-level.
+	## Regression: previously stored at ws["key"] but NPC engine reads ctx.known_objectives.get("key").
+	var c: L5RCharacterData = _make_character(1, 3)
+	c.physical_location = "1"
+	var s: SettlementData = _make_settlement(Enums.SettlementType.TEMPLE)
+	s.settlement_id = 1
+	s.shrine_shide_current_tier = 1
+	s.shrine_shide_permission = 1
+	var ws: Dictionary = {}
+	var world_states: Dictionary = {1: ws}
+	DayOrchestrator._inject_shide_context([s], [c], world_states)
+	var ko: Dictionary = ws.get("known_objectives", {})
+	assert_true(ko.has("has_shide_in_inventory"), "has_shide_in_inventory in known_objectives")
+	assert_true(ko.has("shrine_needs_shide"), "shrine_needs_shide in known_objectives")
+	assert_true(ko.has("shrine_shide_at_normal"), "shrine_shide_at_normal in known_objectives")
+	assert_true(ko.has("has_shide_permission"), "has_shide_permission in known_objectives")
+	assert_true(ko.has("shide_worship_fr"), "shide_worship_fr in known_objectives")
+	# Must NOT be at top level
+	assert_false(ws.has("shide_worship_fr"), "shide_worship_fr not at ws top-level")
+
+
+func test_inject_shide_context_worship_fr_value() -> void:
+	## With a Fine shide (tier 1) placed, worship_fr should match shide_worship_fr(settlement).
+	var c: L5RCharacterData = _make_character(2, 2)
+	c.physical_location = "5"
+	var s: SettlementData = _make_settlement(Enums.SettlementType.TEMPLE)
+	s.settlement_id = 5
+	s.shrine_shide_current_tier = 1   # Fine = FR 2 per SHIDE_WORSHIP_FR table
+	s.shrine_shide_permission = 2
+	var ws: Dictionary = {}
+	var world_states: Dictionary = {2: ws}
+	DayOrchestrator._inject_shide_context([s], [c], world_states)
+	var expected: int = OrigamiSystem.shide_worship_fr(s)
+	assert_eq(ws.get("known_objectives", {}).get("shide_worship_fr", -1), expected)

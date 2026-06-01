@@ -13418,8 +13418,6 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"is_religious_settlement", "has_statue_permission", "has_guardian_permission",
 		"statuary_worship_fr", "statuary_subject_id", "guardian_worship_fr", "foundry_in_province",
 		"available_poem_item_id", "available_poem_raises",
-		"shrine_needs_shide", "shrine_shide_at_normal",
-		"has_shide_in_inventory", "has_shide_permission", "shide_worship_fr",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -22620,6 +22618,8 @@ static func _inject_shide_context(
 		var ws: Dictionary = world_states.get(c.character_id, {})
 		if ws.is_empty():
 			continue
+		if not ws.has("known_objectives"):
+			ws["known_objectives"] = {}
 
 		# Inventory check.
 		var has_shide: bool = false
@@ -22628,22 +22628,22 @@ static func _inject_shide_context(
 					and (it as Dictionary).get("uses_remaining", 0) > 0:
 				has_shide = true
 				break
-		ws["has_shide_in_inventory"] = has_shide
+		ws["known_objectives"]["has_shide_in_inventory"] = has_shide
 
 		# Settlement context.
 		var loc: String = c.physical_location
 		var settlement: SettlementData = by_str_id.get(loc) as SettlementData
 		if settlement == null or not settlement.has_shrine_slot():
-			ws["shrine_needs_shide"] = false
-			ws["shrine_shide_at_normal"] = false
-			ws["has_shide_permission"] = false
-			ws["shide_worship_fr"] = 0
+			ws["known_objectives"]["shrine_needs_shide"] = false
+			ws["known_objectives"]["shrine_shide_at_normal"] = false
+			ws["known_objectives"]["has_shide_permission"] = false
+			ws["known_objectives"]["shide_worship_fr"] = 0
 			continue
 
 		# Shide need: no shide at all, or existing shide is Normal tier (0).
 		var current_tier: int = settlement.shrine_shide_current_tier
-		ws["shrine_needs_shide"] = current_tier < 0
-		ws["shrine_shide_at_normal"] = current_tier == 0
+		ws["known_objectives"]["shrine_needs_shide"] = current_tier < 0
+		ws["known_objectives"]["shrine_shide_at_normal"] = current_tier == 0
 
 		# Permission check.
 		var perm_holder: int = settlement.shrine_shide_permission
@@ -22651,10 +22651,10 @@ static func _inject_shide_context(
 			settlement.shrine_permission_grace_until_ic_day >= 0
 			and settlement.shrine_permission_grace_until_ic_day > 0
 		)
-		ws["has_shide_permission"] = (perm_holder == c.character_id) or grace_active
+		ws["known_objectives"]["has_shide_permission"] = (perm_holder == c.character_id) or grace_active
 
 		# Worship free raises from placed shide.
-		ws["shide_worship_fr"] = OrigamiSystem.shide_worship_fr(settlement)
+		ws["known_objectives"]["shide_worship_fr"] = OrigamiSystem.shide_worship_fr(settlement)
 
 
 static func _process_shide_permission_grants(
