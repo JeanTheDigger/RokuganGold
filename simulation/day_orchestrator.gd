@@ -321,7 +321,7 @@ static func advance_day(
 
 	_seed_public_records_from_crime_results(
 		crime_results, day_result.get("results", []),
-		settlements, characters_by_id, ic_day,
+		settlements, characters_by_id, ic_day, world_states,
 	)
 
 	_process_scout_detection_topics(
@@ -21577,6 +21577,7 @@ static func _seed_public_records_from_crime_results(
 	settlements: Array,
 	characters_by_id: Dictionary,
 	ic_day: int,
+	world_states: Dictionary = {},
 ) -> void:
 	if settlements.is_empty() or crime_results.is_empty():
 		return
@@ -21631,9 +21632,11 @@ static func _seed_public_records_from_crime_results(
 		var event_type: String = _crime_type_to_string(crime_type)
 		var topic_id: int = result.get("topic_id", -1)
 		var tier: int = _crime_tier_for_public_record(crime_type)
+		# Record the actor's zone subtype so investigators can narrow the scene location.
+		var zone_subtype: int = world_states.get(char_id, {}).get("zone_subtype", -1)
 
 		PublicRecordSystem.seed_event(
-			settlement, event_type, tier, ic_day, topic_id, char_id,
+			settlement, event_type, tier, ic_day, topic_id, char_id, zone_subtype,
 		)
 
 
