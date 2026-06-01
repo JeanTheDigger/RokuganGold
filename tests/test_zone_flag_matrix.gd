@@ -579,3 +579,51 @@ func test_place_shide_in_at_temple_context_list() -> void:
 	## VISITING but lacked PLACE_SHIDE, making it unreachable at primary shrine locations.
 	var actions: Array = NPCDecisionEngine._get_actions_for_context(Enums.ContextFlag.AT_TEMPLE)
 	assert_true("PLACE_SHIDE" in actions, "PLACE_SHIDE must be in AT_TEMPLE context list")
+
+
+# =============================================================================
+# PERFORM_WORSHIP NeedType — objective_alignment.json scores (s57.26b A23, A29)
+# =============================================================================
+
+func test_perform_worship_needtype_is_in_personal_objectives() -> void:
+	## PERFORM_WORSHIP standing objective must route through the personal decomposer
+	## and produce a valid ImmediateNeed (passthrough pattern, same as PERFORM_RITUAL).
+	assert_true(
+		"PERFORM_WORSHIP" in ObjectiveDecomposer.PERSONAL_OBJECTIVES,
+		"PERFORM_WORSHIP must be in PERSONAL_OBJECTIVES"
+	)
+
+
+func test_perform_worship_needtype_decomposes_without_error() -> void:
+	## ObjectiveDecomposer.decompose() must return a non-null ImmediateNeed
+	## for a PERFORM_WORSHIP objective (no crash, no null, no fallthrough to null).
+	var obj: Dictionary = {"need_type": "PERFORM_WORSHIP"}
+	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
+	var need: NPCDataStructures.ImmediateNeed = ObjectiveDecomposer.decompose(obj, ctx)
+	assert_not_null(need, "PERFORM_WORSHIP must produce a non-null ImmediateNeed")
+	assert_eq(need.need_type, "PERFORM_WORSHIP")
+
+
+func test_perform_worship_alignment_score_place_shide() -> void:
+	## PLACE_SHIDE must score 55 under PERFORM_WORSHIP NeedType (s57.26b A29).
+	var tables: Dictionary = WorldState.scoring_tables
+	var pw_block: Dictionary = tables.get("objective_alignment", {}).get("PERFORM_WORSHIP", {})
+	assert_eq(pw_block.get("PLACE_SHIDE", -1), 55,
+		"PLACE_SHIDE should score 55 under PERFORM_WORSHIP (s57.26b A29)")
+
+
+func test_perform_worship_alignment_score_craft() -> void:
+	## CRAFT must score 50 under PERFORM_WORSHIP NeedType (s57.26b A23).
+	var tables: Dictionary = WorldState.scoring_tables
+	var pw_block: Dictionary = tables.get("objective_alignment", {}).get("PERFORM_WORSHIP", {})
+	assert_eq(pw_block.get("CRAFT", -1), 50,
+		"CRAFT should score 50 under PERFORM_WORSHIP (s57.26b A23)")
+
+
+func test_perform_worship_alignment_score_self() -> void:
+	## PERFORM_WORSHIP action must score 100 under its own NeedType
+	## (standard direct-action pattern, matching PERFORM_RITUAL:100 under PERFORM_RITUAL).
+	var tables: Dictionary = WorldState.scoring_tables
+	var pw_block: Dictionary = tables.get("objective_alignment", {}).get("PERFORM_WORSHIP", {})
+	assert_eq(pw_block.get("PERFORM_WORSHIP", -1), 100,
+		"PERFORM_WORSHIP should score 100 under its own NeedType")
