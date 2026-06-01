@@ -40,6 +40,7 @@ const DIR_BONSAI := "bonsai/"
 const DIR_COMMISSIONS := "commissions/"
 const DIR_PAINTINGS := "paintings/"
 const DIR_SCULPTURES := "sculptures/"
+const DIR_OKIYAS := "okiyas/"
 
 
 # ============================================================================
@@ -78,6 +79,7 @@ func save_world(ws: Node) -> bool:
 	ok = _save_resource_array(ws.commission_records, base + DIR_COMMISSIONS, "commission_id") and ok
 	ok = _save_resource_array(ws.active_paintings, base + DIR_PAINTINGS, "painting_id") and ok
 	ok = _save_resource_array(ws.active_sculptures, base + DIR_SCULPTURES, "sculpture_id") and ok
+	ok = _save_resource_array(ws.active_okiyas, base + DIR_OKIYAS, "okiya_id") and ok
 
 	# Provinces and settlements use their own ID fields
 	ok = _save_resource_array(ws.settlements, base + DIR_SETTLEMENTS, "settlement_id") and ok
@@ -134,6 +136,7 @@ func load_world(ws: Node) -> bool:
 	ws.commission_records.assign(_load_resource_array(base + DIR_COMMISSIONS))
 	ws.active_paintings.assign(_load_resource_array(base + DIR_PAINTINGS))
 	ws.active_sculptures.assign(_load_resource_array(base + DIR_SCULPTURES))
+	ws.active_okiyas.assign(_load_resource_array(base + DIR_OKIYAS))
 	ws.settlements.assign(_load_resource_array(base + DIR_SETTLEMENTS))
 	ws.provinces = _load_province_dict(base + DIR_PROVINCES)
 	ws.favors = _load_favors(base + DIR_FAVORS)
@@ -615,6 +618,7 @@ func _reconcile_id_counters(ws: Node) -> void:
 	_ensure_counter_above(ws.next_bonsai_id, ws.active_bonsai, "bonsai_id")
 	_ensure_counter_above(ws.next_commission_id, ws.commission_records, "commission_id")
 	_ensure_counter_above(ws.next_painting_id, ws.active_paintings, "painting_id")
+	_ensure_counter_above(ws.next_okiya_id, ws.active_okiyas, "okiya_id")
 
 
 func _ensure_counter_above(counter: Array[int], collection: Variant, id_field: String) -> void:

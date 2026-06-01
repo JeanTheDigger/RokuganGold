@@ -96,6 +96,10 @@ extends Resource
 # Permission holders for guardian pair placement (sculptor_id → true).
 @export var guardian_permissions: Dictionary = {}
 
+# -- Okiya Tier (s57.45) -------------------------------------------------------
+## 0 = no okiya; 1/2/3 = tier (Provincial/Established/Famous).
+@export var okiya_tier: int = 0
+
 
 func has_infrastructure(feature: String) -> bool:
 	return feature in infrastructure

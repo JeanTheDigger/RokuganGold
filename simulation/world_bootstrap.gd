@@ -405,6 +405,18 @@ static func bootstrap_world(
 		provinces, dice, next_cell_id, 0, next_insurgency_id,
 	)
 
+	# -- Okiya generation (s57.45) -------------------------------------------
+	# Build settlement → clan lookup from provinces.
+	var settlement_clan_map: Dictionary = {}
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid]
+		for sid: int in prov.settlement_ids:
+			settlement_clan_map[str(sid)] = prov.clan
+	var next_okiya_id: Array = [1]
+	var active_okiyas: Array = GeishaSystem.generate_initial_okiya(
+		settlements, settlement_clan_map, dice, next_okiya_id,
+	)
+
 	return {
 		"provinces": provinces,
 		"settlements": settlements,
@@ -420,6 +432,8 @@ static func bootstrap_world(
 		"bloodspeaker_insurgencies": bloodspeaker_result.get("insurgencies", []),
 		"next_cell_id": next_cell_id[0],
 		"next_insurgency_id": next_insurgency_id[0],
+		"active_okiyas": active_okiyas,
+		"next_okiya_id": next_okiya_id[0],
 	}
 
 

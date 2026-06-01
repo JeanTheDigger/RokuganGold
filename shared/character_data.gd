@@ -179,6 +179,12 @@ extends Resource
 @export var last_wind_down_method: String = "rest"
 @export var wind_down_void_modifier: float = 0.5
 
+# -- Geisha Intelligence System (s57.45) --------------------------------------
+## okiya_id (int) → geisha NPC id (int) for the patron's assigned geisha per okiya.
+@export var assigned_geisha_ids: Dictionary = {}
+## okiya_id (int) → visit count (int) — tracks patron's history at each okiya.
+@export var okiya_visit_counts: Dictionary = {}
+
 # -- Poison Tracking -----------------------------------------------------------
 
 @export var active_poisons: Array = []

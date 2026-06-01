@@ -194,6 +194,12 @@ func _bootstrap_fresh_world() -> void:
 		WorldState.bloodspeaker_cells.append(cell)
 	WorldState.next_cell_id[0] = result.get("next_cell_id", 1)
 
+	var bootstrap_okiyas: Array = result.get("active_okiyas", [])
+	WorldState.active_okiyas.clear()
+	for okiya: OkiyaData in bootstrap_okiyas:
+		WorldState.active_okiyas.append(okiya)
+	WorldState.next_okiya_id[0] = result.get("next_okiya_id", 1)
+
 	var bs_insurgencies: Array = result.get("bloodspeaker_insurgencies", [])
 	for ins: InsurgencyData in bs_insurgencies:
 		WorldState.insurgencies.append(ins)

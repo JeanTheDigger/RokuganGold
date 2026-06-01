@@ -105,6 +105,8 @@ static func advance_day(
 	next_painting_id: Array = [1],
 	active_sculptures: Array = [],
 	next_sculpture_id: Array = [1],
+	active_okiyas: Array = [],
+	next_okiya_id: Array = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -1485,7 +1487,7 @@ static func advance_day(
 	if ic_day % TimeSystem.TICKS_PER_REAL_DAY == 0:
 		ooc_tick_results = _process_ooc_day_tick(
 			characters, characters_by_id, settlements, dice_engine, worship_state, ic_day,
-			world_states,
+			world_states, active_topics, active_okiyas,
 		)
 
 	return {
@@ -1604,6 +1606,8 @@ static func _process_ooc_day_tick(
 	worship_state: Dictionary,
 	ic_day: int = 0,
 	world_states: Dictionary = {},
+	active_topics: Array = [],
+	active_okiyas: Array = [],
 ) -> Array:
 	## Runs Wind-Down selection and Void Point refresh once per OOC day (every
 	## 4 IC days) per GDD s57.44.2 and s57.32.2.
@@ -1615,6 +1619,17 @@ static func _process_ooc_day_tick(
 	for s: SettlementData in settlements:
 		settlements_by_id[s.settlement_id] = s
 	var empty_settlement: SettlementData = SettlementData.new()
+
+	# Build topics_by_id for geisha tier routing (needs TopicData.tier).
+	var ooc_topics_by_id: Dictionary = {}
+	for _t: TopicData in active_topics:
+		ooc_topics_by_id[_t.topic_id] = _t
+
+	# Build settlement_id (String) → OkiyaData for ROUTING_HANDLER_PIPELINE.
+	var okiya_by_settlement: Dictionary = {}
+	for _o: OkiyaData in active_okiyas:
+		if _o.is_active:
+			okiya_by_settlement[_o.settlement_id] = _o
 
 	var loc_to_chars: Dictionary = {}
 	for c: L5RCharacterData in characters:
@@ -1678,6 +1693,7 @@ static func _process_ooc_day_tick(
 
 		var wind_result: Dictionary = WindDownSystem.apply_wind_down(
 			c, method, dice_engine, present_ids, companion_id, go_opponent, fortune_id,
+			settlement.okiya_tier,
 		)
 
 		# Void Point refresh per s57.32.2 — gated on rested_last_night and
@@ -1734,10 +1750,16 @@ static func _process_ooc_day_tick(
 					var target_2: L5RCharacterData = characters_by_id[target_id_2] as L5RCharacterData
 					if not CharacterStats.is_dead(target_2) and not target_2.topic_pool.has(leaked_topic):
 						target_2.topic_pool.append(leaked_topic)
-			# ROUTING_HANDLER_PIPELINE and ROUTING_BROTHERHOOD are handled by
-			# their respective systems (Geisha Intelligence, Brotherhood network)
-			# when those systems are implemented. The topic ID is available in
-			# wind_result for forwarding.
+			elif routing == WindDownSystem.ROUTING_HANDLER_PIPELINE:
+				# Geisha intelligence pipeline (s57.45): geisha → okaasan → handler.
+				var okiya: OkiyaData = okiya_by_settlement.get(c.physical_location)
+				if okiya != null:
+					var geisha_result: Dictionary = GeishaSystem.process_geisha_visit(
+						c, okiya, leaked_topic, ooc_topics_by_id, characters_by_id, dice_engine,
+					)
+					wind_result["geisha_visit_result"] = geisha_result
+			# ROUTING_BROTHERHOOD: handled by Brotherhood network when implemented.
+			# The topic ID is available in wind_result for forwarding.
 
 		# Koku cost — deduct from character's personal purse.
 		if wind_result["koku_cost"] > 0.0:
