@@ -92,6 +92,97 @@ func remove_delta(x: int, y: int) -> void:
 func has_delta(x: int, y: int) -> bool:
 	return map_deltas.has("%d,%d" % [x, y])
 
+# -- Zone flag matrix (s57.36 SUPREMACY CLAUSE) -----------------------------
+# Returns the flag Dictionary for a given ZoneSubtype.
+# Keys: performance_permitted, wall_art_slot, displayed_art_slot, fusuma_slot,
+#       tokonoma, bonsai_display_slot, garden_eligible, shrine_eligible.
+static func get_zone_flags(subtype: int) -> Dictionary:
+	var F: Dictionary = {
+		"performance_permitted": false,
+		"wall_art_slot": false,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	}
+	match subtype:
+		# --- Castle interior zones (s57.36.3) ---
+		Enums.ZoneSubtype.OHIROMA:
+			F["performance_permitted"] = true
+			F["wall_art_slot"] = true
+			F["displayed_art_slot"] = true
+			F["fusuma_slot"] = true
+		Enums.ZoneSubtype.ENKAI_HALL:
+			F["performance_permitted"] = true
+			F["wall_art_slot"] = true
+			F["displayed_art_slot"] = true
+			F["fusuma_slot"] = true
+		Enums.ZoneSubtype.AUDIENCE_CHAMBER:
+			F["wall_art_slot"] = true
+			F["displayed_art_slot"] = true
+			F["fusuma_slot"] = true
+			F["tokonoma"] = true
+		Enums.ZoneSubtype.CHASHITSU:
+			F["performance_permitted"] = true
+			F["wall_art_slot"] = true
+			F["tokonoma"] = true
+		Enums.ZoneSubtype.GUEST_WING:
+			F["wall_art_slot"] = true
+			F["fusuma_slot"] = true
+			F["tokonoma"] = true
+		Enums.ZoneSubtype.LORD_QUARTERS:
+			F["wall_art_slot"] = true
+			F["displayed_art_slot"] = true
+			F["fusuma_slot"] = true
+			F["tokonoma"] = true
+		Enums.ZoneSubtype.WAR_COUNCIL_ROOM:
+			pass  # all false
+		Enums.ZoneSubtype.DOJO:
+			pass  # all false
+		Enums.ZoneSubtype.OUTER_COURTYARD:
+			F["performance_permitted"] = true
+			F["bonsai_display_slot"] = true
+			F["garden_eligible"] = true
+		Enums.ZoneSubtype.TSUBONIWA:
+			F["tokonoma"] = true
+			F["bonsai_display_slot"] = true
+			F["garden_eligible"] = true
+		Enums.ZoneSubtype.CASTLE_SHRINE:
+			F["wall_art_slot"] = true
+			F["shrine_eligible"] = true
+		# --- Urban district zones (s57.36.4) ---
+		Enums.ZoneSubtype.MARKET_STREET:
+			F["performance_permitted"] = true
+		Enums.ZoneSubtype.RESIDENTIAL_QUARTER:
+			pass  # all false
+		Enums.ZoneSubtype.TEMPLE_GROUNDS:
+			F["performance_permitted"] = true
+			F["wall_art_slot"] = true
+			F["displayed_art_slot"] = true
+			F["fusuma_slot"] = true
+			F["bonsai_display_slot"] = true
+			F["garden_eligible"] = true
+			F["shrine_eligible"] = true
+		Enums.ZoneSubtype.PLEASURE_QUARTER:
+			F["performance_permitted"] = true
+			F["wall_art_slot"] = true
+			F["displayed_art_slot"] = true
+			F["fusuma_slot"] = true
+			F["tokonoma"] = true
+		Enums.ZoneSubtype.DOCKS_WATERFRONT:
+			pass  # all false
+		Enums.ZoneSubtype.POOR_QUARTER:
+			pass  # all false
+		Enums.ZoneSubtype.GOVERNMENT_QUARTER:
+			F["wall_art_slot"] = true
+		# --- Wilderness zones (s57.36.5) ---
+		Enums.ZoneSubtype.SHRINE_CLEARING:
+			F["shrine_eligible"] = true
+		# ROAD, FOREST_PATH, MOUNTAIN_PASS, RIVER_CROSSING, FARMLAND, WALL_TOWER: all false
+	return F
+
 # -- Event log helpers -------------------------------------------------------
 
 func log_event(
