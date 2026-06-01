@@ -412,6 +412,10 @@
     "primary": "Games",
     "secondary": "Awareness"
   },
+  "PLACE_SHIDE": {
+    "primary": "Artisan: Origami",
+    "secondary": "Awareness"
+  },
   "PRESENT_EMAKIMONO": {
     "primary": "_none"
   },

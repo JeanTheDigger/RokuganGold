@@ -417,6 +417,10 @@ static func bootstrap_world(
 		settlements, settlement_clan_map, dice, next_okiya_id,
 	)
 
+	# -- Shide generation (s57.26b A17–A19) ----------------------------------
+	var next_item_id: Array = [1]
+	_seed_initial_shide(settlements, chars_by_id, dice, next_item_id)
+
 	return {
 		"provinces": provinces,
 		"settlements": settlements,
@@ -434,6 +438,7 @@ static func bootstrap_world(
 		"next_insurgency_id": next_insurgency_id[0],
 		"active_okiyas": active_okiyas,
 		"next_okiya_id": next_okiya_id[0],
+		"next_item_id": next_item_id[0],
 	}
 
 
@@ -714,6 +719,50 @@ static func _create_initial_military(
 		"companies": companies,
 		"next_company_id": next_company_id,
 	}
+
+
+static func _seed_initial_shide(
+	settlements: Array,
+	chars_by_id: Dictionary,
+	dice: DiceEngine,
+	next_item_id: Array,
+) -> void:
+	## Seed shide on shrines at world start (s57.26b A17–A19).
+	## TEMPLE/SHINDEN: Exceptional quality (tier 2).
+	## Provincial settlements with shrine: Fine quality (tier 1).
+	## Village settlements with shrine: 50% chance Normal quality (tier 0).
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s == null or not s.has_shrine_slot():
+			continue
+
+		var quality_tier: int = -1
+		if s.settlement_type in [
+			Enums.SettlementType.TEMPLE,
+			Enums.SettlementType.SHINDEN,
+		]:
+			quality_tier = GiftGivingSystem.QualityTier.EXCEPTIONAL  # tier 2
+		elif s.settlement_type in [
+			Enums.SettlementType.CITY,
+			Enums.SettlementType.CASTLE,
+			Enums.SettlementType.FAMILY_CASTLE,
+			Enums.SettlementType.KEEP,
+		]:
+			quality_tier = GiftGivingSystem.QualityTier.FINE  # tier 1
+		else:
+			# Village or monastery: 50% chance of Normal shide.
+			if dice.roll_1d10() <= 5:
+				quality_tier = GiftGivingSystem.QualityTier.NORMAL  # tier 0
+
+		if quality_tier < 0:
+			continue
+
+		# Assign directly to settlement (no crafter at world start).
+		s.shrine_shide_current_tier = quality_tier
+		s.shrine_shide_quality_tier = quality_tier
+		s.shrine_shide_crafter_id = -1
+		s.shrine_shide_ic_day_placed = 0
+		next_item_id[0] += 1
 
 
 # -- Adjacency Table ----------------------------------------------------------

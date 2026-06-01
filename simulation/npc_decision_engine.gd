@@ -661,6 +661,15 @@ static func _apply_garden_precondition_filter(
 			# Only block if neither condition is true AND the artisan has no ongoing work.
 			pass  # Allow figurine composition anywhere
 
+	# PLACE_SHIDE: requires a shide item in inventory AND a shrine at this settlement.
+	var has_shide_inv: bool = ctx.known_objectives.get("has_shide_in_inventory", false)
+	var shrine_needs: bool = (
+		ctx.known_objectives.get("shrine_needs_shide", false) or
+		ctx.known_objectives.get("shrine_shide_at_normal", false)
+	)
+	if not has_shide_inv or not shrine_needs:
+		options = _remove_action(options, "PLACE_SHIDE")
+
 	return options
 
 
@@ -1291,6 +1300,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"COMPOSE_PAINTING", "DISPLAY_PAINTING", "PRESENT_EMAKIMONO",
 				"COMPOSE_SCULPTURE",
 				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
+				"PLACE_SHIDE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_COURT:
@@ -1365,6 +1375,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"COMPOSE_PAINTING", "DISPLAY_PAINTING", "PRESENT_EMAKIMONO",
 				"COMPOSE_SCULPTURE",
 				"DECLARE_SENBAZURU", "PRESENT_SENBAZURU",
+				"PLACE_SHIDE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.TRAVELING:
@@ -1531,6 +1542,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"DISPLAY_BONSAI": 1,
 		"DECLARE_SENBAZURU": 0,
 		"PRESENT_SENBAZURU": 1,
+		"PLACE_SHIDE": 0,
 		"COMPOSE_PAINTING": 1,
 		"DISPLAY_PAINTING": 1,
 		"PRESENT_EMAKIMONO": 1,
@@ -2848,6 +2860,7 @@ static func _populate_action_metadata(
 			"statuary_worship_fr": ctx.known_objectives.get("statuary_worship_fr", 0),
 			"guardian_worship_fr": ctx.known_objectives.get("guardian_worship_fr", 0),
 			"painting_fortune_fr": ctx.known_objectives.get("painting_fortune_fr", 0),
+			"shide_worship_fr": ctx.known_objectives.get("shide_worship_fr", 0),
 		}
 	elif option.action_id in ["FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 			"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP"]:
@@ -3275,6 +3288,19 @@ static func _populate_action_metadata(
 			"subject_id": sc_subject_id,
 			"display_settlement_id": loc_sid,
 			"raises": 0,
+		}
+	elif option.action_id == "PLACE_SHIDE":
+		# Pick best shide from inventory (highest quality_tier).
+		var best_shide_id: int = -1
+		var best_tier: int = -1
+		for it: Dictionary in character.items:
+			if it.get("item_type", "") == "shide" and it.get("uses_remaining", 0) > 0:
+				var t: int = it.get("quality_tier", 0)
+				if t > best_tier:
+					best_tier = t
+					best_shide_id = it.get("item_id", -1)
+		option.metadata = {
+			"shide_item_id": best_shide_id,
 		}
 
 
@@ -5163,7 +5189,13 @@ static func _build_craft_origami_metadata(
 
 	match need.need_type:
 		"RESTORE_WORSHIP":
-			# Gohei supports worship (s57.26.12-13).
+			# Shide if shrine needs it and NPC has no shide yet (s57.26b).
+			# Gohei otherwise for ongoing worship support (s57.26.12-13).
+			var shrine_needs: bool = ctx.known_objectives.get("shrine_needs_shide", false)
+			var shrine_at_normal: bool = ctx.known_objectives.get("shrine_shide_at_normal", false)
+			var has_shide_inv: bool = ctx.known_objectives.get("has_shide_in_inventory", false)
+			if (shrine_needs or shrine_at_normal) and not has_shide_inv:
+				return {"origami_type": "shide", "raises": raises}
 			return {"origami_type": "gohei", "raises": raises}
 		"RAISE_DISPOSITION":
 			# Noshi wraps a gift for the disposition target (s57.26.6-8).

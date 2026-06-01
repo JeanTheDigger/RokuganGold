@@ -71,6 +71,7 @@ const SELF_ACTIONS: Array[String] = [
 const NO_ROLL_ACTIONS: Array[String] = [
 	"DO_NOTHING", "REST", "BEGIN_TRAVEL", "CHANGE_DESTINATION",
 	"REQUEST_ART", "OFFER_ART_COMMISSION", "DISPLAY_BONSAI",
+	"PLACE_SHIDE",
 ]
 
 # -- TN Table -----------------------------------------------------------------
@@ -445,6 +446,9 @@ static func execute(
 
 	if action_id == "DISPLAY_BONSAI":
 		return _execute_display_bonsai(action, character, ctx)
+
+	if action_id == "PLACE_SHIDE":
+		return _execute_place_shide(action, character, ctx, characters_by_id)
 
 	if action_id in ["COMPOSE_PAINTING", "DISPLAY_PAINTING", "PRESENT_EMAKIMONO"]:
 		return _execute_painting_action(action_id, action, character, ctx, dice_engine, characters_by_id)
@@ -2028,8 +2032,9 @@ static func _execute_perform_worship(
 	var guardian_fr: int = action.metadata.get("guardian_worship_fr", 0)
 	var ikebana_fr: int = action.metadata.get("ikebana_worship_fr", 0)
 	var painting_fortune_fr: int = action.metadata.get("painting_fortune_fr", 0)
+	var shide_fr: int = action.metadata.get("shide_worship_fr", 0)
 	const WORSHIP_FR_CAP: int = 5
-	var total_artisan_fr: int = mini(gohei_fr + statuary_fr + guardian_fr + ikebana_fr + painting_fortune_fr, WORSHIP_FR_CAP)
+	var total_artisan_fr: int = mini(gohei_fr + statuary_fr + guardian_fr + ikebana_fr + painting_fortune_fr + shide_fr, WORSHIP_FR_CAP)
 
 	var worship_result: Dictionary = WorshipSystem.resolve_active_worship(
 		char_type, is_shugenja, dice_engine, ring_value, theology_rank,
@@ -5504,7 +5509,7 @@ static func _execute_craft(
 ) -> Dictionary:
 	# Route origami sub-types (s57.26) and poetry scroll (s57.30.6) before s49 artisan path.
 	var origami_type: String = action.metadata.get("origami_type", "")
-	if origami_type in ["noshi", "gohei", "senbazuru_progress"]:
+	if origami_type in ["noshi", "gohei", "senbazuru_progress", "shide"]:
 		return _execute_craft_origami(action, character, ctx, dice_engine, origami_type)
 	if origami_type == "poetry_scroll":
 		return _execute_craft_poetry_scroll(action, character, ctx, dice_engine)
@@ -5635,7 +5640,7 @@ static func _execute_craft_origami(
 	dice_engine: DiceEngine,
 	origami_type: String,
 ) -> Dictionary:
-	## Resolve a single origami craft session (noshi, gohei, or senbazuru progress).
+	## Resolve a single origami craft session (noshi, gohei, senbazuru progress, shide).
 	var raises_declared: int = action.metadata.get("raises", 0)
 	var tn: int
 	match origami_type:
@@ -5645,6 +5650,8 @@ static func _execute_craft_origami(
 			tn = OrigamiSystem.GOHEI_TN
 		"senbazuru_progress":
 			tn = OrigamiSystem.SENBAZURU_SESSION_TN
+		"shide":
+			tn = OrigamiSystem.SHIDE_CRAFT_TN
 		_:
 			return {
 				"success": false, "action_id": "CRAFT",
@@ -5694,6 +5701,10 @@ static func _execute_craft_origami(
 			effects["senbazuru_id"] = senbazuru_id
 			effects["cranes_added"] = cranes_added
 			effects["session_success"] = success
+		"shide":
+			# GDD s57.26b A1–A3: on success, shide item created in writeback.
+			# On failure: no item (failed craft produces unusable paper).
+			effects["requires_shide_creation"] = success
 
 	return {
 		"success": success,
@@ -6254,6 +6265,48 @@ static func _execute_display_bonsai(
 		"effects": {
 			"bonsai_id": bonsai_id,
 			"settlement_id": settlement_id,
+		},
+	}
+
+
+static func _execute_place_shide(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	## Place shide from inventory at shrine's shide slot (s57.26b A20).
+	## 0 AP; no roll required; permission auto-granted from context injection.
+	var meta: Dictionary = action.metadata
+	var shide_item_id: int = meta.get("shide_item_id", -1)
+	var loc_str: String = ctx.location_id
+
+	# Find shide item in inventory.
+	var shide_item: Dictionary = {}
+	for it: Dictionary in character.items:
+		if it.get("item_type", "") == "shide" and it.get("uses_remaining", 0) > 0:
+			if shide_item_id < 0 or it.get("item_id", -1) == shide_item_id:
+				shide_item = it
+				break
+
+	if shide_item.is_empty():
+		return {
+			"success": false, "action_id": "PLACE_SHIDE",
+			"character_id": character.character_id,
+			"effects": {"blocked_reason": "no_shide_in_inventory"},
+		}
+
+	# Settlement resolved at writeback time — pass location for orchestrator lookup.
+	return {
+		"success": true,
+		"action_id": "PLACE_SHIDE",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day, "season": ctx.season,
+		"effects": {
+			"shide_item": shide_item,
+			"shide_settlement_str_id": loc_str,
 		},
 	}
 

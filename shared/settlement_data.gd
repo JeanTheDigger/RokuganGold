@@ -100,6 +100,27 @@ extends Resource
 ## 0 = no okiya; 1/2/3 = tier (Provincial/Established/Famous).
 @export var okiya_tier: int = 0
 
+# -- Shrine Shide (per GDD s57.26b — settlement-level zone proxy) -------------
+# -1 = no shide; 0=Normal, 1=Fine, 2=Exceptional, 3=Masterwork, 4=Legendary.
+@export var shrine_shide_current_tier: int = -1
+@export var shrine_shide_quality_tier: int = -1   ## quality when placed; for provenance
+@export var shrine_shide_crafter_id: int = -1
+@export var shrine_shide_ic_day_placed: int = -1
+@export var shrine_shide_permission: int = -1     ## character_id with placement permission
+@export var shrine_custodian_id: int = -1         ## shugenja custodian; -1 = unstaffed
+@export var shrine_permission_grace_until_ic_day: int = -1  ## -1 = no grace active
+
+
+func has_shrine_slot() -> bool:
+	## Returns true when this settlement can hold a shide object (s57.26b A11).
+	if settlement_type in [Enums.SettlementType.TEMPLE, Enums.SettlementType.SHINDEN]:
+		return true
+	const SHRINE_TYPES: Array = ["roadside_shrine", "village_shrine", "local_shrine"]
+	for entry: Variant in worship_locations:
+		if entry is Dictionary and entry.get("type", "") in SHRINE_TYPES:
+			return true
+	return false
+
 
 func has_infrastructure(feature: String) -> bool:
 	return feature in infrastructure

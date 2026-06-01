@@ -1,8 +1,8 @@
 class_name OrigamiSystem
 
 
-## s57.26 Origami System constants and helpers (LOCKED: noshi, gohei, senbazuru).
-## Shide deferred — zone-dependent (blocked on zone system data).
+## s57.26 Origami System constants and helpers.
+## Locked: noshi, gohei, senbazuru, shide (s57.26b settlement-level proxy).
 
 
 # -- Craft TNs (s57.26.6, s57.26.12, s57.26.15) ----------------------------------
@@ -153,3 +153,103 @@ static func completion_topic_tier(quality_tier: int) -> int:
 	if quality_tier >= GiftGivingSystem.QualityTier.EXCEPTIONAL:
 		return COMPLETION_TOPIC_TIER_HIGH
 	return COMPLETION_TOPIC_TIER_LOW
+
+
+# -- Shide constants (s57.26b settlement-level proxy) ----------------------------
+
+const SHIDE_CRAFT_TN: int = 15                     # A1
+const SHIDE_PERMISSION_GRACE_DAYS: int = 90        # A5 (1 IC season)
+const SHIDE_AUTO_GRANT_MIN_RANK: int = 2           # A12
+const SHIDE_WORSHIP_FR_CAP: int = 5                # shared cap with all artisan FRs
+
+## int tier (0–4) → Free Raises on PERFORM_WORSHIP (A3).
+const SHIDE_FREE_RAISES: Dictionary = {
+	0: 0,  # Normal
+	1: 1,  # Fine
+	2: 2,  # Exceptional
+	3: 3,  # Masterwork
+	4: 4,  # Legendary
+}
+
+## Provenance investigation TN by placement quality tier (A9).
+const SHIDE_PROVENANCE_TN: Dictionary = {
+	4: 15,  # Legendary
+	3: 20,  # Masterwork
+	2: 25,  # Exceptional
+	1: 30,  # Fine
+	0: 35,  # Normal
+}
+
+
+static func shide_worship_fr(settlement: SettlementData) -> int:
+	## Free Raises from shrine shide at this settlement (s57.26b A3).
+	## Returns 0 when no shide is present.
+	return maxi(0, SHIDE_FREE_RAISES.get(settlement.shrine_shide_current_tier, 0))
+
+
+static func shide_quality_from_raises(raises: int) -> int:
+	## Quality tier 0–4 from Raises (s57.26b A2).
+	return mini(4, raises)
+
+
+static func craft_shide(actor: L5RCharacterData, raises: int, next_item_id: Array) -> Dictionary:
+	## Create a shide item in actor.items. Called from craft writeback (s57.26b).
+	var quality_tier: int = shide_quality_from_raises(raises)
+	var item_id: int = next_item_id[0]
+	next_item_id[0] += 1
+	var item: Dictionary = {
+		"item_type": "shide",
+		"item_id": item_id,
+		"quality_tier": quality_tier,
+		"crafter_id": actor.character_id,
+		"uses_remaining": 1,
+	}
+	actor.items.append(item)
+	return {"item_id": item_id, "quality_tier": quality_tier}
+
+
+static func place_shide(
+	actor: L5RCharacterData,
+	settlement: SettlementData,
+	shide_item: Dictionary,
+	ic_day: int,
+) -> Dictionary:
+	## Place a shide item at settlement's shrine slot (s57.26b A20).
+	## Removes shide from actor.items, writes to settlement fields.
+	## Returns: {success, old_tier, new_tier, crafter_id, is_replacement_upgrade}
+	var old_tier: int = settlement.shrine_shide_current_tier
+	var new_tier: int = shide_item.get("quality_tier", 0)
+	actor.items = actor.items.filter(
+		func(it): return it.get("item_id", -1) != shide_item.get("item_id", -1)
+	)
+	settlement.shrine_shide_current_tier = new_tier
+	settlement.shrine_shide_quality_tier = new_tier
+	settlement.shrine_shide_crafter_id = actor.character_id
+	settlement.shrine_shide_ic_day_placed = ic_day
+	return {
+		"success": true,
+		"old_tier": old_tier,
+		"new_tier": new_tier,
+		"crafter_id": actor.character_id,
+		"is_replacement_upgrade": old_tier >= 0 and new_tier > old_tier,
+	}
+
+
+static func try_auto_grant_permission(
+	actor: L5RCharacterData,
+	settlement: SettlementData,
+	characters_by_id: Dictionary,
+) -> bool:
+	## Auto-grant shide permission when conditions from s57.26b A12 are met.
+	## Returns true if permission was granted.
+	if settlement.shrine_custodian_id < 0:
+		return false
+	var custodian: L5RCharacterData = characters_by_id.get(settlement.shrine_custodian_id)
+	if custodian == null or CharacterStats.is_dead(custodian):
+		return false
+	var disp: int = custodian.disposition_values.get(actor.character_id, 0)
+	var origami_rank: int = actor.skills.get("Artisan: Origami", 0)
+	if disp >= 0 and origami_rank >= SHIDE_AUTO_GRANT_MIN_RANK:
+		settlement.shrine_shide_permission = actor.character_id
+		return true
+	return false

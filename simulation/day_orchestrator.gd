@@ -199,6 +199,8 @@ static func advance_day(
 	_inject_garden_context(active_gardens, active_bonsai, commission_records, settlements, characters, world_states)
 	_inject_painting_context(active_paintings, settlements, characters, world_states)
 	_inject_sculpture_context(active_sculptures, settlements, characters, world_states)
+	_inject_shide_context(settlements, characters, world_states)
+	_process_shide_permission_grants(settlements, characters, characters_by_id, ic_day)
 	_inject_poem_context(characters, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_set_temple_context_flags(characters, settlements, world_states)
@@ -883,6 +885,10 @@ static func advance_day(
 	_process_gohei_usage_writebacks(
 		day_result.get("results", []), characters_by_id,
 	)
+	_process_place_shide_writebacks(
+		day_result.get("results", []),
+		characters_by_id, settlements, active_topics, next_topic_id, ic_day,
+	)
 	_process_ikebana_performance_writebacks(
 		day_result.get("results", []),
 		active_arrangements, next_arrangement_id, characters_by_id,
@@ -1398,6 +1404,9 @@ static func advance_day(
 		_process_sculpture_seasonal_maintenance(
 			active_sculptures, characters_by_id, settlements, active_topics, next_topic_id,
 			ic_day, current_season,
+		)
+		_process_seasonal_shide_degradation(
+			settlements, active_topics, next_topic_id, ic_day,
 		)
 		extradition_results = _process_fugitive_extradition_seasonal(
 			crime_records, characters, characters_by_id, provinces, settlements,
@@ -13321,6 +13330,8 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"is_religious_settlement", "has_statue_permission", "has_guardian_permission",
 		"statuary_worship_fr", "statuary_subject_id", "guardian_worship_fr", "foundry_in_province",
 		"available_poem_item_id", "available_poem_raises",
+		"shrine_needs_shide", "shrine_shide_at_normal",
+		"has_shide_in_inventory", "has_shide_permission", "shide_worship_fr",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -21694,7 +21705,7 @@ static func _process_craft_origami_writebacks(
 			continue
 		var effects: Dictionary = result.get("effects", {})
 		var origami_type: String = effects.get("origami_type", "")
-		if origami_type not in ["noshi", "gohei", "poetry_scroll"]:
+		if origami_type not in ["noshi", "gohei", "poetry_scroll", "shide"]:
 			continue
 		var char_id: int = result.get("character_id", -1)
 		var crafter: L5RCharacterData = characters_by_id.get(char_id)
@@ -21767,6 +21778,11 @@ static func _process_craft_origami_writebacks(
 				}
 				next_item_id[0] += 1
 				crafter.items.append(poem_item)
+			"shide":
+				if not effects.get("requires_shide_creation", false):
+					continue
+				var shide_raises: int = effects.get("raises_declared", 0)
+				OrigamiSystem.craft_shide(crafter, shide_raises, next_item_id)
 
 
 static func _process_declare_senbazuru_writebacks(
@@ -22427,6 +22443,235 @@ static func _remove_expired_arrangements(
 		if arr_v is IkebanaArrangementData:
 			if (arr_v as IkebanaArrangementData).expired:
 				active_arrangements.remove_at(i)
+
+
+# ---------------------------------------------------------------------------
+# Shrine Shide system (s57.26b)
+# ---------------------------------------------------------------------------
+
+static func _inject_shide_context(
+	settlements: Array,
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	## Inject shrine shide state into per-character world_states.
+	## Keys: shrine_needs_shide, shrine_shide_at_normal, has_shide_in_inventory,
+	##       has_shide_permission, shide_worship_fr.
+
+	# Build str settlement_id → SettlementData for quick lookup.
+	var by_str_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			by_str_id[str(s.settlement_id)] = s
+
+	for c_v: Variant in characters:
+		var c: L5RCharacterData = c_v as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var ws: Dictionary = world_states.get(c.character_id, {})
+		if ws.is_empty():
+			continue
+
+		# Inventory check.
+		var has_shide: bool = false
+		for it: Variant in c.items:
+			if it is Dictionary and (it as Dictionary).get("item_type", "") == "shide" \
+					and (it as Dictionary).get("uses_remaining", 0) > 0:
+				has_shide = true
+				break
+		ws["has_shide_in_inventory"] = has_shide
+
+		# Settlement context.
+		var loc: String = c.physical_location
+		var settlement: SettlementData = by_str_id.get(loc) as SettlementData
+		if settlement == null or not settlement.has_shrine_slot():
+			ws["shrine_needs_shide"] = false
+			ws["shrine_shide_at_normal"] = false
+			ws["has_shide_permission"] = false
+			ws["shide_worship_fr"] = 0
+			continue
+
+		# Shide need: no shide at all, or existing shide is Normal tier (0).
+		var current_tier: int = settlement.shrine_shide_current_tier
+		ws["shrine_needs_shide"] = current_tier < 0
+		ws["shrine_shide_at_normal"] = current_tier == 0
+
+		# Permission check.
+		var perm_holder: int = settlement.shrine_shide_permission
+		var grace_active: bool = (
+			settlement.shrine_permission_grace_until_ic_day >= 0
+			and settlement.shrine_permission_grace_until_ic_day > 0
+		)
+		ws["has_shide_permission"] = (perm_holder == c.character_id) or grace_active
+
+		# Worship free raises from placed shide.
+		ws["shide_worship_fr"] = OrigamiSystem.shide_worship_fr(settlement)
+
+
+static func _process_shide_permission_grants(
+	settlements: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	## Daily pass: auto-grant placement permission for co-located eligible artisans.
+	## Also expire grace periods that have lapsed.
+
+	# Build settlement → characters at that settlement.
+	var chars_at: Dictionary = {}  # str_id → Array[L5RCharacterData]
+	for c_v: Variant in characters:
+		var c: L5RCharacterData = c_v as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c) or c.physical_location.is_empty():
+			continue
+		var loc: String = c.physical_location
+		if not chars_at.has(loc):
+			chars_at[loc] = []
+		(chars_at[loc] as Array).append(c)
+
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s == null or not s.has_shrine_slot():
+			continue
+
+		# Expire grace period.
+		if s.shrine_permission_grace_until_ic_day >= 0 \
+				and ic_day > s.shrine_permission_grace_until_ic_day:
+			s.shrine_permission_grace_until_ic_day = -1
+
+		# Auto-grant permission to eligible co-located artisans.
+		var loc_str: String = str(s.settlement_id)
+		var present: Array = chars_at.get(loc_str, [])
+		for c_v2: Variant in present:
+			var c: L5RCharacterData = c_v2 as L5RCharacterData
+			if c == null or CharacterStats.is_dead(c):
+				continue
+			# Already has permission?
+			if s.shrine_shide_permission == c.character_id:
+				continue
+			OrigamiSystem.try_auto_grant_permission(c, s, characters_by_id)
+
+
+static func _process_place_shide_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Apply PLACE_SHIDE results: consume shide item, update settlement fields,
+	## generate placement/upgrade topic (s57.26b).
+
+	var settlements_by_str_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s != null:
+			settlements_by_str_id[str(s.settlement_id)] = s
+
+	for result: Variant in results:
+		if result.get("action_id", "") != "PLACE_SHIDE":
+			continue
+		if not result.get("success", false):
+			continue
+		var effects: Dictionary = result.get("effects", {})
+		var shide_item: Dictionary = effects.get("shide_item", {})
+		if shide_item.is_empty():
+			continue
+		var char_id: int = result.get("character_id", -1)
+		var actor: L5RCharacterData = characters_by_id.get(char_id)
+		if actor == null or CharacterStats.is_dead(actor):
+			continue
+		var loc_str: String = effects.get("shide_settlement_str_id", "")
+		var settlement: SettlementData = settlements_by_str_id.get(loc_str) as SettlementData
+		if settlement == null:
+			continue
+
+		var place_result: Dictionary = OrigamiSystem.place_shide(actor, settlement, shide_item, ic_day)
+		if not place_result.get("success", false):
+			continue
+
+		# Generate lifecycle topic (s57.26b A25–A27).
+		var new_tier: int = place_result.get("new_tier", 0)
+		var is_upgrade: bool = place_result.get("is_replacement_upgrade", false)
+		var topic_tier: int = (
+			TopicData.Tier.TIER_3 if new_tier >= GiftGivingSystem.QualityTier.EXCEPTIONAL
+			else TopicData.Tier.TIER_4
+		)
+		var title: String = (
+			settlement.settlement_name + " shrine shide upgraded"
+			if is_upgrade
+			else settlement.settlement_name + " shrine shide placed"
+		)
+		var t: TopicData = TopicData.new()
+		t.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		t.title = title
+		t.topic_type = "shrine_shide_placed"
+		t.tier = topic_tier
+		t.category = TopicData.Category.SUPERNATURAL
+		t.subject_character_id = char_id
+		t.ic_day_created = ic_day
+		t.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic_tier)
+		active_topics.append(t)
+		# Seed the actor's topic pool.
+		if char_id >= 0 and t.topic_id not in actor.topic_pool:
+			actor.topic_pool.append(t.topic_id)
+
+
+static func _process_seasonal_shide_degradation(
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Seasonal: degrade each settlement's shide by one tier (s57.26b A13–A15).
+	## Generates wear/destruction topics based on tier.
+
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s == null or s.shrine_shide_current_tier < 0:
+			continue
+
+		var old_tier: int = s.shrine_shide_current_tier
+		var new_tier: int = old_tier - 1
+
+		if new_tier < 0:
+			# Shide destroyed (s57.26b A14).
+			s.shrine_shide_current_tier = -1
+			s.shrine_shide_quality_tier = -1
+			var crafter_id: int = s.shrine_shide_crafter_id
+			s.shrine_shide_crafter_id = -1
+			s.shrine_shide_ic_day_placed = -1
+			# Only generate topic if shide was at Fine+ (notable destruction).
+			if old_tier >= GiftGivingSystem.QualityTier.FINE:
+				var td: TopicData = TopicData.new()
+				td.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				td.title = s.settlement_name + " shrine shide worn away"
+				td.topic_type = "shrine_shide_destroyed"
+				td.tier = TopicData.Tier.TIER_4
+				td.category = TopicData.Category.SUPERNATURAL
+				td.subject_character_id = crafter_id
+				td.ic_day_created = ic_day
+				td.momentum = TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4)
+				active_topics.append(td)
+		else:
+			# Tier downgraded (s57.26b A13).
+			s.shrine_shide_current_tier = new_tier
+			# Generate wear topic only for Fine+ (notable wear).
+			if old_tier >= GiftGivingSystem.QualityTier.FINE:
+				var tw: TopicData = TopicData.new()
+				tw.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				tw.title = s.settlement_name + " shrine shide showing wear"
+				tw.topic_type = "shrine_shide_worn"
+				tw.tier = TopicData.Tier.TIER_4
+				tw.category = TopicData.Category.SUPERNATURAL
+				tw.subject_character_id = s.shrine_shide_crafter_id
+				tw.ic_day_created = ic_day
+				tw.momentum = TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4)
+				active_topics.append(tw)
 
 
 # ---------------------------------------------------------------------------
