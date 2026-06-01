@@ -268,6 +268,36 @@ enum ZoneSubtype {
 	WALL_TOWER,
 }
 
+# Three-tier zone hierarchy — Greater Zone is the top container.
+# Province sub-tiles, settlements, and travel routes are all Greater Zones.
+# (s4.4.1 LOCKED)
+enum GreaterZoneType {
+	PROVINCE_SUBTILE,  # one of 4-5 sub-tiles in a province (matches army movement grid)
+	SETTLEMENT,        # a whole settlement (village through major city)
+	TRAVEL_ROUTE,      # a road or wilderness path between sub-tiles or settlements
+}
+
+# Middle tier between Greater Zone and Lesser Zone.
+# A Navigation Zone groups Lesser Zones; it may have its own ASCII map (outdoor
+# spaces) or be pure MUD navigation (city districts, castle compound listings).
+# (s4.4.1 Amendment v564 — types marked PROVISIONAL)
+enum NavigationZoneType {
+	# Urban
+	CITY_DISTRICT,      # neighbourhood-scale container (streets + buildings)
+	EKOHIKEI_DISTRICT,  # restricted inner-city district; gated by ekohikei_access flag
+	FORBIDDEN_CITY,     # imperial restricted zone; gated by forbidden_city_access flag
+	ACCESS_LAYER,       # structural grouping of districts by access tier (Otosan Uchi)
+	STREET,             # named road or lane with building entrances; usually has ASCII map
+	PLAZA,              # open public space (market square, shrine courtyard)
+	CASTLE_COMPOUND,    # castle/estate as a whole; contains interior Lesser Zones (s57.36)
+	WATERFRONT,         # docks and harbour area; contains pier/warehouse Lesser Zones
+	RESIDENTIAL_BLOCK,  # quiet neighbourhood section; houses and small shops
+	# Wilderness
+	ROAD_SEGMENT,       # stretch of road between settlements; contains roadside encounters
+	FOREST_TRAIL,       # path through wilderness with branching clearings
+	MOUNTAIN_APPROACH,  # route through mountain terrain with pass and cave entrances
+}
+
 enum LordRank {
 	VILLAGE_HEADMAN,
 	CITY_DAIMYO,
