@@ -736,3 +736,47 @@ enum HistoryEventType {
 	SUBJECT_OF_ART,      # +1 HP — made subject of poem, performance, story
 	PRESENT_AT_EVENT,    # +2 HP — present at historically significant event
 }
+
+
+# ASCII map tile types (s4.4). Values fit in one byte (0–255).
+# Passability and LOS-blocking are derived from type; see AsciiMapGenerator.
+enum TileType {
+	VOID           = 0,   # outside map bounds / unexplored
+	# Floors — passable, no LOS block
+	FLOOR_GRASS    = 1,   # .  green
+	FLOOR_DIRT     = 2,   # .  brown
+	FLOOR_WOOD     = 3,   # =  brown (parallel planks)
+	FLOOR_TATAMI   = 4,   # ≡  yellow (woven mat)
+	FLOOR_STONE    = 5,   # ∷  grey (flagstone)
+	FLOOR_MUD      = 6,   # ,  brown (mud/swamp)
+	FLOOR_SNOW     = 7,   # .  white
+	FLOOR_SAND     = 8,   # .  yellow
+	# Walls — impassable, block LOS
+	WALL_STONE     = 9,   # █  grey
+	WALL_WOOD      = 10,  # box-drawing heavy lines, brown (glyph computed from neighbours)
+	WALL_PAPER     = 11,  # box-drawing light lines, white (shoji screens)
+	# Water — LOS not blocked
+	WATER_SHALLOW  = 12,  # ~  blue (passable, movement +1 cost)
+	WATER_DEEP     = 13,  # ~  dark blue (impassable on foot)
+	WATER_RAPID    = 14,  # ≈  cyan (passable, dangerous)
+	WATER_PADDY    = 15,  # ~  green on dark-blue bg (seasonal)
+	# Vegetation — impassable trees block LOS; bushes/groundcover do not
+	TREE_EVERGREEN = 16,  # ♣  dark green (blocks move and LOS)
+	TREE_DECIDUOUS = 17,  # ♣  green (blocks move and LOS)
+	TREE_CHERRY    = 18,  # ♣  pink/green by season (blocks move and LOS)
+	TREE_DEAD      = 19,  # ¥  brown (blocks move, no LOS block — no canopy)
+	BAMBOO         = 20,  # ♠  green (blocks move, blocks LOS)
+	BUSH           = 21,  # "  green (passable, no LOS block)
+	CROPS          = 22,  # %  yellow (passable, movement +1 cost)
+	GROUNDCOVER    = 23,  # ,  green (passable, no LOS block)
+	FLOWERS        = 24,  # *  various (passable, no LOS block)
+	# Doors — closed = impassable + LOS block; open = passable + no LOS block
+	DOOR_SHOJI_CLOSED = 25,  # +  white
+	DOOR_SHOJI_OPEN   = 26,  # '  white
+	DOOR_WOOD_CLOSED  = 27,  # +  brown
+	DOOR_WOOD_OPEN    = 28,  # /  brown
+	GATE_CLOSED       = 29,  # ╬  brown/grey
+	GATE_OPEN         = 30,  # ∏  brown/grey
+	# Navigation
+	ZONE_EXIT      = 31,  # >  cyan (tile leads to another zone, always passable)
+}
