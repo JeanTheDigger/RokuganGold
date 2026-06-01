@@ -211,3 +211,12 @@ func extinguish(x: int, y: int) -> bool:
 		return false
 	set_delta(x, y, Enums.TileType.FLOOR_ASH)
 	return true
+
+
+# -- Rectangle fill -----------------------------------------------------------
+
+# Fills a rectangular area of tiles (inclusive bounds). Used by generators.
+func fill_rect(lx: int, ly: int, rx: int, ry: int, tile: int) -> void:
+	for yy: int in range(ly, ry + 1):
+		for xx: int in range(lx, rx + 1):
+			set_tile(xx, yy, tile)
