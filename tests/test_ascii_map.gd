@@ -427,18 +427,313 @@ func test_wood_wall_horizontal_glyph() -> void:
 
 
 # ---------------------------------------------------------------------------
-# FovSystem — Bresenham line (internal, tested indirectly through visibility)
+# FovSystem — wall gap and corridor visibility
 # ---------------------------------------------------------------------------
 
-func test_fov_thin_wall_gap_allows_diagonal_sight() -> void:
+func test_fov_thin_wall_gap_allows_sight() -> void:
 	var m: AsciiMapData = _make_open_map()
-	# Wall row with a 1-tile gap.
 	for x in range(0, AsciiMapData.MAP_SIZE):
 		m.set_tile(x, 12, Enums.TileType.WALL_STONE)
-	m.set_tile(15, 12, Enums.TileType.FLOOR_GRASS)  # gap at centre
+	m.set_tile(15, 12, Enums.TileType.FLOOR_GRASS)
 	var visible: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
-	# Tile directly through the gap should be visible.
 	assert_true(visible.get(Vector2i(15, 11), false), "Should see through gap in wall")
+
+
+func test_fov_l_shaped_corridor_blocks_around_corner() -> void:
+	var m: AsciiMapData = _make_open_map()
+	# Build an L-shaped wall: horizontal at y=12, vertical at x=17.
+	for x in range(10, 21):
+		m.set_tile(x, 12, Enums.TileType.WALL_STONE)
+	for y in range(8, 13):
+		m.set_tile(17, y, Enums.TileType.WALL_STONE)
+	# Gap at (15,12) for door.
+	m.set_tile(15, 12, Enums.TileType.FLOOR_GRASS)
+	var visible: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
+	# Can see through the gap directly north.
+	assert_true(visible.get(Vector2i(15, 11), false))
+	# Cannot see around the corner past the vertical wall.
+	assert_false(visible.get(Vector2i(18, 10), false))
+
+
+func test_fov_pillar_casts_shadow() -> void:
+	var m: AsciiMapData = _make_open_map()
+	# Single pillar 2 tiles north.
+	m.set_tile(15, 13, Enums.TileType.WALL_STONE)
+	var visible: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
+	# Pillar visible.
+	assert_true(visible.get(Vector2i(15, 13), false))
+	# Tile directly behind pillar hidden.
+	assert_false(visible.get(Vector2i(15, 12), false))
+
+
+func test_fov_pillar_does_not_block_adjacent_tiles() -> void:
+	var m: AsciiMapData = _make_open_map()
+	m.set_tile(15, 13, Enums.TileType.WALL_STONE)
+	var visible: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
+	# Tiles to the side of the pillar's shadow should still be visible.
+	assert_true(visible.get(Vector2i(14, 12), false))
+	assert_true(visible.get(Vector2i(16, 12), false))
+
+
+# ---------------------------------------------------------------------------
+# FovSystem — lookout_radius (s56.10)
+# ---------------------------------------------------------------------------
+
+func test_fov_lookout_radius_adds_bonus() -> void:
+	assert_eq(FovSystem.lookout_radius(3, 0), 5)
+
+
+func test_fov_lookout_radius_with_env_modifier() -> void:
+	assert_eq(FovSystem.lookout_radius(3, 2), 3)
+
+
+func test_fov_lookout_radius_minimum_one() -> void:
+	assert_eq(FovSystem.lookout_radius(1, 10), 1)
+
+
+# ---------------------------------------------------------------------------
+# FovSystem — has_los (point-to-point Bresenham)
+# ---------------------------------------------------------------------------
+
+func test_has_los_open_field() -> void:
+	var m: AsciiMapData = _make_open_map()
+	assert_true(FovSystem.has_los(15, 15, 15, 10, m))
+
+
+func test_has_los_wall_blocks() -> void:
+	var m: AsciiMapData = _make_open_map()
+	m.set_tile(15, 13, Enums.TileType.WALL_STONE)
+	# Wall at (15,13) blocks LOS to (15,10).
+	assert_false(FovSystem.has_los(15, 15, 15, 10, m))
+
+
+func test_has_los_wall_itself_reachable() -> void:
+	var m: AsciiMapData = _make_open_map()
+	m.set_tile(15, 13, Enums.TileType.WALL_STONE)
+	# Can see the wall itself.
+	assert_true(FovSystem.has_los(15, 15, 15, 13, m))
+
+
+func test_has_los_open_door_allows() -> void:
+	var m: AsciiMapData = _make_open_map()
+	for x in range(0, AsciiMapData.MAP_SIZE):
+		m.set_tile(x, 12, Enums.TileType.WALL_WOOD)
+	m.set_tile(15, 12, Enums.TileType.DOOR_WOOD_OPEN)
+	assert_true(FovSystem.has_los(15, 15, 15, 10, m))
+
+
+func test_has_los_closed_door_blocks() -> void:
+	var m: AsciiMapData = _make_open_map()
+	m.set_tile(15, 12, Enums.TileType.DOOR_WOOD_CLOSED)
+	assert_false(FovSystem.has_los(15, 15, 15, 10, m))
+
+
+# ---------------------------------------------------------------------------
+# FovSystem — is_visible (combined radius + LOS)
+# ---------------------------------------------------------------------------
+
+func test_is_visible_within_radius_clear() -> void:
+	var m: AsciiMapData = _make_open_map()
+	assert_true(FovSystem.is_visible(15, 15, 15, 13, 4, m))
+
+
+func test_is_visible_beyond_radius() -> void:
+	var m: AsciiMapData = _make_open_map()
+	assert_false(FovSystem.is_visible(15, 15, 15, 5, 4, m))
+
+
+func test_is_visible_blocked_by_wall() -> void:
+	var m: AsciiMapData = _make_open_map()
+	m.set_tile(15, 13, Enums.TileType.WALL_STONE)
+	assert_false(FovSystem.is_visible(15, 15, 15, 12, 6, m))
+
+
+# ---------------------------------------------------------------------------
+# FovSystem — fire blocks LOS
+# ---------------------------------------------------------------------------
+
+func test_fov_fire_blocks_los_in_fov() -> void:
+	var m: AsciiMapData = _make_open_map()
+	m.set_tile(15, 13, Enums.TileType.FIRE)
+	var visible: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
+	# Fire tile visible.
+	assert_true(visible.get(Vector2i(15, 13), false))
+	# Tile behind fire hidden.
+	assert_false(visible.get(Vector2i(15, 12), false))
+
+
+# ---------------------------------------------------------------------------
+# FovSystem — delta-modified tiles affect FOV
+# ---------------------------------------------------------------------------
+
+func test_fov_delta_opened_door_allows_sight() -> void:
+	var m: AsciiMapData = _make_open_map()
+	for x in range(0, AsciiMapData.MAP_SIZE):
+		m.set_tile(x, 12, Enums.TileType.WALL_WOOD)
+	m.set_tile(15, 12, Enums.TileType.DOOR_WOOD_CLOSED)
+	# Door is closed in base map — blocks LOS.
+	var v1: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
+	assert_false(v1.get(Vector2i(15, 11), false))
+	# Open the door via delta.
+	m.toggle_door(15, 12)
+	var v2: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
+	assert_true(v2.get(Vector2i(15, 11), false), "Opened door should allow sight")
+
+
+func test_fov_destroyed_wall_allows_sight() -> void:
+	var m: AsciiMapData = _make_open_map()
+	m.set_tile(15, 13, Enums.TileType.WALL_PAPER)
+	# Paper wall blocks LOS.
+	var v1: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
+	assert_false(v1.get(Vector2i(15, 12), false))
+	# Destroy it → becomes RUBBLE (passable, no LOS block).
+	m.destroy_tile(15, 13)
+	var v2: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
+	assert_true(v2.get(Vector2i(15, 12), false), "Rubble should not block LOS")
+
+
+# ---------------------------------------------------------------------------
+# FovSystem — radius 1 (minimum, adjacent only)
+# ---------------------------------------------------------------------------
+
+func test_fov_radius_one_sees_adjacent_only() -> void:
+	var m: AsciiMapData = _make_open_map()
+	var visible: Dictionary = FovSystem.compute_visible(15, 15, 1, m)
+	# All 8 adjacent tiles visible.
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			assert_true(
+				visible.get(Vector2i(15 + dx, 15 + dy), false),
+				"Adjacent (%d,%d) should be visible" % [15 + dx, 15 + dy]
+			)
+	# 2 tiles away not visible.
+	assert_false(visible.get(Vector2i(15, 13), false))
+	assert_false(visible.get(Vector2i(17, 15), false))
+
+
+# ---------------------------------------------------------------------------
+# FovSystem — map edge behaviour
+# ---------------------------------------------------------------------------
+
+func test_fov_at_corner_does_not_crash() -> void:
+	var m: AsciiMapData = _make_open_map()
+	var visible: Dictionary = FovSystem.compute_visible(0, 0, 3, m)
+	assert_true(visible.get(Vector2i(0, 0), false))
+	assert_true(visible.get(Vector2i(1, 0), false))
+	assert_true(visible.get(Vector2i(0, 1), false))
+	# Out-of-bounds tiles should not appear.
+	assert_false(visible.has(Vector2i(-1, 0)))
+	assert_false(visible.has(Vector2i(0, -1)))
+
+
+func test_fov_at_far_corner() -> void:
+	var m: AsciiMapData = _make_open_map()
+	var edge: int = AsciiMapData.MAP_SIZE - 1
+	var visible: Dictionary = FovSystem.compute_visible(edge, edge, 3, m)
+	assert_true(visible.get(Vector2i(edge, edge), false))
+	assert_true(visible.get(Vector2i(edge - 1, edge), false))
+	assert_false(visible.has(Vector2i(edge + 1, edge)))
+
+
+# ---------------------------------------------------------------------------
+# FovSystem — environmental modifier constants match GDD s4.4.2
+# ---------------------------------------------------------------------------
+
+func test_env_modifier_values() -> void:
+	assert_eq(FovSystem.ENV_CLEAR, 0)
+	assert_eq(FovSystem.ENV_OVERCAST, 1)
+	assert_eq(FovSystem.ENV_HEAVY_RAIN, 2)
+	assert_eq(FovSystem.ENV_NIGHT, 3)
+	assert_eq(FovSystem.ENV_SUPERNATURAL, 4)
+
+
+# ---------------------------------------------------------------------------
+# FovSystem — symmetry: if A sees B, B sees A (in open space)
+# ---------------------------------------------------------------------------
+
+func test_fov_symmetry_open_field() -> void:
+	var m: AsciiMapData = _make_open_map()
+	var r: int = 4
+	var ax: int = 13
+	var ay: int = 14
+	var bx: int = 16
+	var by: int = 12
+	var vis_a: Dictionary = FovSystem.compute_visible(ax, ay, r, m)
+	var vis_b: Dictionary = FovSystem.compute_visible(bx, by, r, m)
+	assert_eq(
+		vis_a.get(Vector2i(bx, by), false),
+		vis_b.get(Vector2i(ax, ay), false),
+		"Symmetric visibility in open field"
+	)
+
+
+# ---------------------------------------------------------------------------
+# FovSystem — all wall types block, all open types don't
+# ---------------------------------------------------------------------------
+
+func test_fov_all_wall_types_block() -> void:
+	var walls: Array[int] = [
+		Enums.TileType.WALL_STONE,
+		Enums.TileType.WALL_WOOD,
+		Enums.TileType.WALL_PAPER,
+	]
+	for wall in walls:
+		var m: AsciiMapData = _make_open_map()
+		m.set_tile(15, 13, wall)
+		var visible: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
+		assert_false(
+			visible.get(Vector2i(15, 12), false),
+			"Wall type %d should block LOS" % wall
+		)
+
+
+func test_fov_trees_block_los() -> void:
+	var trees: Array[int] = [
+		Enums.TileType.TREE_EVERGREEN,
+		Enums.TileType.TREE_DECIDUOUS,
+		Enums.TileType.TREE_CHERRY,
+		Enums.TileType.BAMBOO,
+	]
+	for tree in trees:
+		var m: AsciiMapData = _make_open_map()
+		m.set_tile(15, 13, tree)
+		var visible: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
+		assert_false(
+			visible.get(Vector2i(15, 12), false),
+			"Tree type %d should block LOS" % tree
+		)
+
+
+func test_fov_open_doors_allow_los() -> void:
+	var open_doors: Array[int] = [
+		Enums.TileType.DOOR_SHOJI_OPEN,
+		Enums.TileType.DOOR_WOOD_OPEN,
+		Enums.TileType.GATE_OPEN,
+	]
+	for door in open_doors:
+		var m: AsciiMapData = _make_open_map()
+		m.set_tile(15, 13, door)
+		var visible: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
+		assert_true(
+			visible.get(Vector2i(15, 12), false),
+			"Open door type %d should not block LOS" % door
+		)
+
+
+func test_fov_closed_doors_block_los() -> void:
+	var closed_doors: Array[int] = [
+		Enums.TileType.DOOR_SHOJI_CLOSED,
+		Enums.TileType.DOOR_WOOD_CLOSED,
+		Enums.TileType.GATE_CLOSED,
+	]
+	for door in closed_doors:
+		var m: AsciiMapData = _make_open_map()
+		m.set_tile(15, 13, door)
+		var visible: Dictionary = FovSystem.compute_visible(15, 15, 6, m)
+		assert_false(
+			visible.get(Vector2i(15, 12), false),
+			"Closed door type %d should block LOS" % door
+		)
 
 
 # ---------------------------------------------------------------------------
