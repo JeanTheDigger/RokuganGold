@@ -773,6 +773,8 @@ static func _assign_initial_koku(
 		chars_by_id[c.character_id] = c
 
 	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
 		var stipend: float = _get_monthly_stipend(c, chars_by_id)
 		var rank: int = CharacterStats.get_insight_rank(c)
 		c.koku = stipend + float(dice.rand_int_range(1, 10)) * float(rank)
