@@ -627,3 +627,39 @@ func test_perform_worship_alignment_score_self() -> void:
 	var pw_block: Dictionary = tables.get("objective_alignment", {}).get("PERFORM_WORSHIP", {})
 	assert_eq(pw_block.get("PERFORM_WORSHIP", -1), 100,
 		"PERFORM_WORSHIP should score 100 under its own NeedType")
+
+
+# =============================================================================
+# PERFORM_RITUAL / PERFORM_WORSHIP in AT_OWN_HOLDINGS and VISITING
+# =============================================================================
+
+func test_perform_ritual_in_at_own_holdings() -> void:
+	## Monks at their own holding must be able to perform rituals.
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS)
+	assert_true("PERFORM_RITUAL" in actions,
+		"PERFORM_RITUAL must be in AT_OWN_HOLDINGS context list")
+
+
+func test_perform_worship_in_at_own_holdings() -> void:
+	## Characters at their own holding must be able to perform worship.
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.AT_OWN_HOLDINGS)
+	assert_true("PERFORM_WORSHIP" in actions,
+		"PERFORM_WORSHIP must be in AT_OWN_HOLDINGS context list")
+
+
+func test_perform_ritual_in_visiting() -> void:
+	## Monks visiting a non-temple settlement must be able to perform rituals.
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.VISITING)
+	assert_true("PERFORM_RITUAL" in actions,
+		"PERFORM_RITUAL must be in VISITING context list")
+
+
+func test_perform_worship_in_visiting() -> void:
+	## Characters visiting a non-temple settlement must be able to perform worship.
+	var actions: Array = NPCDecisionEngine._get_actions_for_context(
+		Enums.ContextFlag.VISITING)
+	assert_true("PERFORM_WORSHIP" in actions,
+		"PERFORM_WORSHIP must be in VISITING context list")
