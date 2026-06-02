@@ -179,7 +179,9 @@ func test_budget_clamps_maximum_to_10() -> void:
 
 func _make_map(width: int, height: int, default_tile: int = Enums.TileType.FLOOR_GRASS) -> AsciiMapData:
 	var m: AsciiMapData = AsciiMapData.new()
-	m.init_tiles(default_tile, width, height)
+	m.width = width
+	m.height = height
+	m.init_tiles(default_tile)
 	return m
 
 

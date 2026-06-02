@@ -39,6 +39,46 @@ const CELL_SIZE: int = 20      # pixels per tile cell
 const BG_DEFAULT: Color = Color(0.06, 0.06, 0.08, 1.0)
 const HIDDEN_BG: Color = Color(0.06, 0.06, 0.08, 1.0)
 
+# unit_type string → {glyph, color} for entity rendering.
+const ENTITY_GLYPHS: Dictionary = {
+	# ── Bandit / ronin ────────────────────────────────────────────────────────
+	"RONIN":              {"glyph": "r", "color": Color(0.6, 0.8, 1.0)},
+	"RONIN_ENFORCER":     {"glyph": "r", "color": Color(0.5, 0.7, 0.9)},
+	"BANDIT_THUG":        {"glyph": "t", "color": Color(0.9, 0.6, 0.2)},
+	"BANDIT_RABBLE":      {"glyph": "p", "color": Color(0.7, 0.5, 0.3)},
+	# ── Peasant revolt ────────────────────────────────────────────────────────
+	"REBEL_PEASANT":      {"glyph": "p", "color": Color(0.7, 0.5, 0.3)},
+	# ── Nezumi ────────────────────────────────────────────────────────────────
+	"NEZUMI_CHIEFTAIN":   {"glyph": "N", "color": Color(0.8, 0.6, 0.2)},
+	"NEZUMI_WARRIOR":     {"glyph": "n", "color": Color(0.7, 0.5, 0.2)},
+	"NEZUMI_ARCHER":      {"glyph": "n", "color": Color(0.6, 0.5, 0.2)},
+	"NEZUMI_SCOUT":       {"glyph": "n", "color": Color(0.6, 0.4, 0.2)},
+	"NEZUMI_BROODMOTHER": {"glyph": "N", "color": Color(0.9, 0.4, 0.1)},
+	# ── Maho cult / bloodspeakers ─────────────────────────────────────────────
+	"CULT_INITIATE":      {"glyph": "c", "color": Color(0.7, 0.3, 0.8)},
+	"MAHO_CULTIST":       {"glyph": "C", "color": Color(0.8, 0.2, 0.9)},
+	"BLOODSPEAKER_ADEPT": {"glyph": "A", "color": Color(1.0, 0.1, 1.0)},
+	"MAHO_TSUKAI":        {"glyph": "M", "color": Color(1.0, 0.2, 0.3)},
+	# ── Undead / tainted ──────────────────────────────────────────────────────
+	"ZOMBIE":             {"glyph": "z", "color": Color(0.4, 0.6, 0.3)},
+	"TAINTED_ANIMAL":     {"glyph": "a", "color": Color(0.5, 0.7, 0.1)},
+	"TAINTED_HUMAN":      {"glyph": "T", "color": Color(0.6, 0.8, 0.1)},
+	# ── Shadowlands creatures ─────────────────────────────────────────────────
+	"BAKEMONO":           {"glyph": "b", "color": Color(0.5, 0.7, 0.2)},
+	"BAKEMONO_WARRIOR":   {"glyph": "B", "color": Color(0.5, 0.8, 0.2)},
+	"BAKEMONO_ARCHER":    {"glyph": "b", "color": Color(0.4, 0.6, 0.2)},
+	"BAKEMONO_SHAMAN":    {"glyph": "S", "color": Color(0.8, 0.9, 0.2)},
+	"SKELETON_WARRIOR":   {"glyph": "s", "color": Color(0.8, 0.8, 0.7)},
+	"OGRE_WARRIOR":       {"glyph": "O", "color": Color(0.9, 0.3, 0.1)},
+	"OGRE_RAVENOUS":      {"glyph": "O", "color": Color(1.0, 0.2, 0.0)},
+	"OGRE_WARLORD":       {"glyph": "O", "color": Color(1.0, 0.4, 0.0)},
+	"ONI_SPAWN":          {"glyph": "o", "color": Color(1.0, 0.1, 0.1)},
+	# ── Crab Clan (friendly side in wall-sortie missions) ─────────────────────
+	"HIDA_BUSHI":         {"glyph": "H", "color": Color(0.3, 0.5, 1.0)},
+	"HIRUMA_SCOUT":       {"glyph": "h", "color": Color(0.2, 0.8, 0.7)},
+	"KUNI_WITCH_HUNTER":  {"glyph": "K", "color": Color(0.9, 0.9, 1.0)},
+}
+
 var _map: AsciiMapData = null
 var _player_x: int = 15
 var _player_y: int = 15
@@ -50,6 +90,8 @@ var _env_modifier: int = 0
 var _water_ring: int = 3
 var _visible: Dictionary = {}  # Vector2i (map coords) -> bool
 var _look_mode: bool = false   # true: arrow keys pan camera, not player
+# Transient entity list: Array of {x, y, unit_type, faction, is_alive}.
+var _entities: Array = []
 
 
 func _ready() -> void:
@@ -76,6 +118,7 @@ func set_map(
 	_env_modifier = env_modifier
 	_water_ring = water_ring
 	_look_mode = false
+	_entities.clear()
 	_center_camera_on(_player_x, _player_y)
 	_recompute_fov()
 	queue_redraw()
@@ -110,6 +153,69 @@ func reset_camera() -> void:
 	_look_mode = false
 	_center_camera_on(_player_x, _player_y)
 	queue_redraw()
+
+
+# ── Entity layer ─────────────────────────────────────────────────────────────
+
+# Load entities from MissionBuilder/MissionPopulator output.
+# placements may be:
+#   • Array — all entities treated as "enemy" (standard missions)
+#   • Dictionary {"friendly": [...], "enemy": [...]} — wall-sortie missions
+# Clears any previously loaded entities. Also called automatically by set_map().
+func set_entities(placements) -> void:
+	_entities.clear()
+	if placements is Array:
+		for p: Dictionary in placements:
+			_entities.append(_make_entity(p, "enemy"))
+	elif placements is Dictionary:
+		for p: Dictionary in placements.get("friendly", []):
+			_entities.append(_make_entity(p, "friendly"))
+		for p: Dictionary in placements.get("enemy", []):
+			_entities.append(_make_entity(p, "enemy"))
+	queue_redraw()
+
+
+func clear_entities() -> void:
+	_entities.clear()
+	queue_redraw()
+
+
+# Mark the first alive entity at (x, y) as dead (removed from display).
+func kill_entity_at(x: int, y: int) -> void:
+	for e: Dictionary in _entities:
+		if e["is_alive"] and e["x"] == x and e["y"] == y:
+			e["is_alive"] = false
+			break
+	queue_redraw()
+
+
+# Move the first alive entity at (fx, fy) to (tx, ty).
+func move_entity(fx: int, fy: int, tx: int, ty: int) -> void:
+	for e: Dictionary in _entities:
+		if e["is_alive"] and e["x"] == fx and e["y"] == fy:
+			e["x"] = tx
+			e["y"] = ty
+			break
+	queue_redraw()
+
+
+# Returns all alive entities at (x, y), or an empty array.
+func get_entities_at(x: int, y: int) -> Array:
+	var result: Array = []
+	for e: Dictionary in _entities:
+		if e["is_alive"] and e["x"] == x and e["y"] == y:
+			result.append(e)
+	return result
+
+
+func _make_entity(p: Dictionary, faction: String) -> Dictionary:
+	return {
+		"x":         p.get("x", 0),
+		"y":         p.get("y", 0),
+		"unit_type": p.get("unit_type", ""),
+		"faction":   faction,
+		"is_alive":  true,
+	}
 
 
 # ── Keyboard input ───────────────────────────────────────────────────────────
@@ -281,6 +387,24 @@ func _draw() -> void:
 			var text_y: float = cell_pos.y + font.get_ascent(font_size)
 			draw_string(font, Vector2(cell_pos.x + 2, text_y), glyph,
 				HORIZONTAL_ALIGNMENT_LEFT, CELL_SIZE, font_size, fg)
+
+	# Draw entities (above tiles, below player marker).
+	for e: Dictionary in _entities:
+		if not e["is_alive"]:
+			continue
+		var ex: int = e["x"]
+		var ey: int = e["y"]
+		if not _visible.get(Vector2i(ex, ey), false):
+			continue
+		var evx: int = ex - _camera_x
+		var evy: int = ey - _camera_y
+		if evx < 0 or evx >= VIEWPORT_SIZE or evy < 0 or evy >= VIEWPORT_SIZE:
+			continue
+		var unit_type: String = e.get("unit_type", "")
+		var gd: Dictionary = ENTITY_GLYPHS.get(unit_type, {"glyph": "?", "color": Color.WHITE})
+		var ecell: Vector2 = Vector2(evx * CELL_SIZE, evy * CELL_SIZE)
+		draw_string(font, Vector2(ecell.x + 2, ecell.y + font.get_ascent(font_size)),
+			gd["glyph"], HORIZONTAL_ALIGNMENT_LEFT, CELL_SIZE, font_size, gd["color"])
 
 	# Draw player marker if visible through the current viewport window.
 	var pvx: int = _player_x - _camera_x
