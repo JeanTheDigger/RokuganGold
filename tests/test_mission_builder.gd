@@ -34,6 +34,7 @@ func test_assemble_returns_all_required_keys():
 	assert_true(result.has("objective_slots"), "objective_slots key missing")
 	assert_true(result.has("seed_dict"),       "seed_dict key missing")
 	assert_true(result.has("roster"),          "roster key missing")
+	assert_true(result.has("entry_pos"),       "entry_pos key missing")
 
 
 func test_assemble_map_is_ascii_map_data():
@@ -368,3 +369,154 @@ func test_environment_roster_ready_false_returns_empty():
 	}
 	var result := MissionBuilder.assemble(p, [], sd, "env_blocked")
 	assert_eq(result, {})
+
+
+# -- entry_pos key in assemble() -----------------------------------------------
+
+func test_assemble_returns_entry_pos_key():
+	var p := _make_province(Enums.TerrainType.MOUNTAINS)
+	var result := MissionBuilder.assemble(
+		p, [], _seed_dict(RosterCompositionSystem.SEED_RONIN_BANDIT), "entry_pos_key")
+	assert_true(result.has("entry_pos"), "entry_pos key missing from assemble() return")
+
+
+func test_assemble_entry_pos_is_vector2i():
+	var p := _make_province(Enums.TerrainType.MOUNTAINS)
+	var result := MissionBuilder.assemble(
+		p, [], _seed_dict(RosterCompositionSystem.SEED_RONIN_BANDIT), "entry_pos_type")
+	assert_true(result["entry_pos"] is Vector2i)
+
+
+func test_assemble_entry_pos_is_in_map_bounds():
+	var p := _make_province(Enums.TerrainType.MOUNTAINS)
+	var result := MissionBuilder.assemble(
+		p, [], _seed_dict(RosterCompositionSystem.SEED_RONIN_BANDIT), "entry_pos_bounds")
+	var ep: Vector2i = result["entry_pos"]
+	var m: AsciiMapData = result["map"]
+	assert_true(ep.x >= 0 and ep.x < m.width,  "entry_pos.x out of bounds")
+	assert_true(ep.y >= 0 and ep.y < m.height, "entry_pos.y out of bounds")
+
+
+func test_assemble_urban_entry_pos_is_in_map_bounds():
+	var p := _make_province(Enums.TerrainType.PLAINS)
+	var result := MissionBuilder.assemble(
+		p, [], _seed_dict(RosterCompositionSystem.SEED_URBAN_CRIMINAL_NETWORK), "urban_entry")
+	var ep: Vector2i = result["entry_pos"]
+	var m: AsciiMapData = result["map"]
+	assert_true(ep.x >= 0 and ep.x < m.width,  "urban entry_pos.x out of bounds")
+	assert_true(ep.y >= 0 and ep.y < m.height, "urban entry_pos.y out of bounds")
+
+
+# -- get_player_entry() — unit tests per map type ------------------------------
+
+func _make_bare_map(w: int, h: int) -> AsciiMapData:
+	var m := AsciiMapData.new()
+	m.width  = w
+	m.height = h
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	return m
+
+
+func test_get_player_entry_cave_uses_is_main_entry():
+	var m := CaveMapData.new()
+	m.width  = 20
+	m.height = 20
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.entry_points = [
+		{"x": 10, "y": 18, "is_main": true},
+		{"x": 3,  "y": 1,  "is_main": false},
+	]
+	var ep := MissionBuilder.get_player_entry(m)
+	assert_eq(ep, Vector2i(10, 18),
+		"Cave: should pick the is_main entry")
+
+
+func test_get_player_entry_cave_falls_back_to_first_when_no_main():
+	var m := CaveMapData.new()
+	m.width  = 20
+	m.height = 20
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.entry_points = [
+		{"x": 5, "y": 18, "is_main": false},
+	]
+	var ep := MissionBuilder.get_player_entry(m)
+	assert_eq(ep, Vector2i(5, 18),
+		"Cave: no is_main → fall back to first entry")
+
+
+func test_get_player_entry_entry_vectors_picks_southernmost():
+	var m := ForestApproachCampMapData.new()
+	m.width  = 30
+	m.height = 30
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	# South entry at y=28, north entry at y=1
+	m.entry_vectors = [
+		{"x": 15, "y": 1,  "is_trail": false},
+		{"x": 15, "y": 28, "is_trail": true},
+	]
+	var ep := MissionBuilder.get_player_entry(m)
+	assert_eq(ep, Vector2i(15, 28),
+		"entry_vectors: should pick southernmost (largest y)")
+
+
+func test_get_player_entry_entry_vectors_single_entry():
+	var m := HilltopPositionMapData.new()
+	m.width  = 25
+	m.height = 25
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.entry_vectors = [{"x": 12, "y": 23, "is_path": true}]
+	var ep := MissionBuilder.get_player_entry(m)
+	assert_eq(ep, Vector2i(12, 23))
+
+
+func test_get_player_entry_castle_siege_uses_player_start():
+	var m := CastleSiegeMapData.new()
+	m.width          = 40
+	m.height         = 30
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.player_start_x = 5
+	m.player_start_y = 27
+	var ep := MissionBuilder.get_player_entry(m)
+	assert_eq(ep, Vector2i(5, 27),
+		"CastleSiege: should use explicit player_start_x/y")
+
+
+func test_get_player_entry_castle_siege_negative_start_falls_through():
+	# player_start_x = -1 means not set; should fall through to another strategy.
+	var m := CastleSiegeMapData.new()
+	m.width  = 40
+	m.height = 30
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	# player_start_x defaults to -1 — entry_vectors or fallback should be used
+	assert_true(MissionBuilder.get_player_entry(m).y >= 0,
+		"Should not crash when player_start_x is -1")
+
+
+func test_get_player_entry_urban_hideout_uses_entrance_plus_one():
+	var m := UrbanHideoutMapData.new()
+	m.width      = 20
+	m.height     = 20
+	m.init_tiles(Enums.TileType.FLOOR_GRASS)
+	m.entrance_x = 8
+	m.entrance_y = 3  # trapdoor top of room 0; player is one row south
+	var ep := MissionBuilder.get_player_entry(m)
+	assert_eq(ep, Vector2i(8, 4),
+		"UrbanHideout: player starts one row south of entrance (inside room)")
+
+
+func test_get_player_entry_ship_boarding_uses_entrance_plus_one():
+	var m := ShipBoardingMapData.new()
+	m.entrance_x = 7
+	m.entrance_y = 0  # north hull zone exit; player starts on deck row 1
+	var ep := MissionBuilder.get_player_entry(m)
+	assert_eq(ep, Vector2i(7, 1),
+		"ShipBoarding: player starts one row south of north hull (deck)")
+
+
+func test_get_player_entry_fallback_bare_map():
+	# AsciiMapData has no entry fields → fallback scan of second-to-last row.
+	var m := _make_bare_map(10, 10)
+	# All grass, so second-to-last row (y=8) is passable.
+	var ep := MissionBuilder.get_player_entry(m)
+	assert_eq(ep.y, 8, "Fallback: should land on second-to-last row")
+	assert_true(ep.x >= 0 and ep.x < m.width)

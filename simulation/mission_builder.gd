@@ -3,6 +3,7 @@ class_name MissionBuilder
 ## Wires QuestSeedSelector output into the full ASCII map mission pipeline:
 ## seed_dict → objectives → map generation → roster composition → unit placement.
 ## Returns a complete mission package ready for the quest display layer.
+## get_player_entry() resolves the player start tile per s4.4 entry conventions.
 
 # Objectives by seed type (s56.10) -----------------------------------------------
 # Maps seed_type int → ObjType int array passed to the template generator.
@@ -20,6 +21,56 @@ const _OBJECTIVES_BY_SEED: Dictionary = {
 	QuestSeedSelector.SEED_ONI_MANIFESTATION:            [0],       # KILL_LEADER (oni boss; roster_ready=false in practice)
 	QuestSeedSelector.SEED_ROAD_ENCOUNTER:               [0],       # road encounters use RONIN_BANDIT seed_type in practice
 }
+
+
+## Returns the player's starting tile for a newly-entered mission map.
+## Dispatches by which entry field the map subclass exposes (duck-typed via Object.get).
+##
+## Priority order:
+##   1. CastleSiegeMapData:   explicit player_start_x / player_start_y
+##   2. ShipBoardingMapData,
+##      UrbanHideoutMapData:  entrance_x / entrance_y  →  (entrance_x, entrance_y + 1)
+##   3. CaveMapData:          entry_points[is_main]    →  ZONE_EXIT tile position
+##   4. ForestApproachCamp,
+##      HilltopPosition, …:  entry_vectors southernmost (largest y)
+##   5. Fallback:             scan second-to-last row for a passable tile
+static func get_player_entry(map: AsciiMapData) -> Vector2i:
+	# 1. CastleSiegeMapData: set explicitly by the generator.
+	var psx: Variant = map.get("player_start_x")
+	if psx != null and (psx as int) >= 0:
+		return Vector2i(psx as int, map.get("player_start_y") as int)
+
+	# 2. ShipBoardingMapData (entrance_y == 0) + UrbanHideoutMapData (entrance_y > 0).
+	#    Both: player starts one row south of the ZONE_EXIT, inside the entry space.
+	var enx: Variant = map.get("entrance_x")
+	if enx != null and (enx as int) >= 0:
+		var eny: int = map.get("entrance_y") as int
+		return Vector2i(enx as int, eny + 1)
+
+	# 3. CaveMapData: prefer the is_main == true entry point.
+	var eps: Variant = map.get("entry_points")
+	if eps != null and (eps as Array).size() > 0:
+		for ep: Dictionary in (eps as Array):
+			if ep.get("is_main", false):
+				return Vector2i(ep["x"], ep["y"])
+		var ep0: Dictionary = (eps as Array)[0]
+		return Vector2i(ep0["x"], ep0["y"])
+
+	# 4. Template entry_vectors: pick southernmost entry (largest y).
+	var evs: Variant = map.get("entry_vectors")
+	if evs != null and (evs as Array).size() > 0:
+		var best: Dictionary = (evs as Array)[0]
+		for ev: Dictionary in (evs as Array):
+			if ev.get("y", 0) > best.get("y", 0):
+				best = ev
+		return Vector2i(best["x"], best["y"])
+
+	# 5. Fallback: first passable tile on the second-to-last row.
+	var fy: int = map.height - 2
+	for fx in range(map.width):
+		if MovementSystem.is_passable(map.get_tile(fx, fy)):
+			return Vector2i(fx, fy)
+	return Vector2i(map.width / 2, map.height / 2)
 
 
 ## Returns the province's BiomeType for environment metadata.
@@ -91,6 +142,7 @@ static func assemble(
 		"objective_slots": map.objective_slots,
 		"seed_dict":       seed_dict,
 		"roster":          roster,
+		"entry_pos":       get_player_entry(map),
 		"environment": {
 			"biome":        biome,
 			"weather":      weather,
