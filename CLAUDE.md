@@ -3689,6 +3689,153 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   `bonsai_display_slot: int = -1`. **L5RCharacterData additions:** `declined_garden_zones: Array`,
   `declined_commissions: Array`, `active_garden_bonuses: Array`.
 
+### Systems Added 2026-06-02
+- **s4.4 Zone Hierarchy and ASCII Map Foundation** — Full zone data model and settlement map
+  generation layer. Three zone data classes (`shared/greater_zone_data.gd`,
+  `shared/navigation_zone_data.gd`, `shared/lesser_zone_data.gd`) per GDD s4.4.1.
+  `simulation/settlement_zone_builder.gd` (SettlementZoneBuilder, 378 lines): factory that
+  creates all zone tiers for a settlement by type (CITY/CASTLE/TOWN/VILLAGE etc.) and wires
+  the navigation zone graph. `simulation/zone_flag_matrix.gd` (ZoneFlagMatrix, 512 lines):
+  implements the full zone flag matrix from GDD s57.36 — 7 flag categories, 32 flag types,
+  per-zone allowed-action filtering and action-context mapping. `simulation/zone_registry.gd`
+  (ZoneRegistry, 57 lines): world-level index mapping zone_id strings to their data objects;
+  wired into WorldState. `shared/ascii_map_data.gd` (AsciiMapData): base tile-grid Resource
+  (variable-size, default 31×31 viewport), TileType enum, `init_tiles()`, `set_tile()`,
+  `get_tile()`, `fill_rect()`. Dynamic map feature support: doors (OPEN/CLOSED), destruction
+  tracking (destroyed_tiles Array), fire (burning_tiles Array). `simulation/fov_system.gd`
+  (FovSystem, 168 lines): recursive shadowcasting field-of-vision per s4.4.2. Base radius =
+  Perception trait. Environmental modifiers: forest −2, darkness −3, fog/mist −3, rain −2,
+  storm −4, snow −2. Lookout position bonus: +3 radius on WALL_STONE or elevated tile.
+  Stacks with environmental modifiers (minimum 1 tile). `simulation/ascii_map_generator.gd`
+  (AsciiMapGenerator, 1318 lines): deterministic procedural generation for all 25 ZoneSubtype
+  values (MARKET_STREET, TEMPLE_GROUNDS, SHRINE_CLEARING, FOREST_PATH, ROAD,
+  RESIDENTIAL_QUARTER, FARMLAND, RIVER_CROSSING, OHIROMA, ENKAI_HALL, AUDIENCE_CHAMBER,
+  CHASHITSU, GARDENS, TRAINING_GROUNDS, ARMORY, FORGE, DUNGEON, DOJO, STABLE, GRANARY,
+  HARBOR, WALL_TOWER, BARRACKS, GATEHOUSE, WILDERNESS). Each generator places walls, floors,
+  features, and zone exits using a fixed seed (settlement_name + zone_name + zone_type string).
+  Same inputs always produce the same layout; only physical deltas (destroyed walls, new
+  construction) are persisted between sessions. Zone graph wired into world bootstrap and
+  WorldState; zone_id lookup added to per-character world_states context injection.
+  38 + 95 tests in `test_zone_data.gd` and `test_zone_flag_matrix.gd`;
+  142 + 14 tests in `test_ascii_map.gd` and `test_cave_fov.gd`.
+- **s56.3 Cave Template** — `simulation/cave_template_generator.gd` (CaveMapGenerator, 742
+  lines) + `shared/cave_map_data.gd` (CaveMapData). Deterministic cellular-automaton cave
+  generation: 5 smoothing passes, guaranteed main-chamber flood-fill connectivity, 1–3
+  side chambers, blocked side passages become cache sites. Population slots: 3–7 guard posts
+  in main chamber, 1 leader position in deepest alcove, 1 objective marker. Darkness penalty
+  (−3 vision) wired as metadata; mechanical effects blocked on s40. 46 tests in
+  `test_cave_template.gd`.
+- **s56.4 Occupied Village Template** — `simulation/occupied_village_template_generator.gd`
+  (OccupiedVillageGenerator, 545 lines) + `shared/occupied_village_map_data.gd`. 20×20 grid:
+  3×3 building blocks with roads between, river optional (40% chance), well centred in plaza.
+  Population slots: 2–5 roving patrol pairs on road tiles, 1–2 chokepoint guards at road
+  junctions, leader in largest building, objective in locked storage building. Civilian
+  non-combatants flagged separately. 34 tests in `test_occupied_village_template.gd`.
+- **s56.5 Forest Approach + Camp Template** — `simulation/forest_approach_camp_generator.gd`
+  (ForestApproachCampGenerator, 591 lines) + `shared/forest_approach_camp_map_data.gd`.
+  Two-zone layout: dense forest approach corridor (40% of map, stealth +5 TN) leading into
+  fortified camp clearing. Camp: log palisade, 2–4 sentry towers with overlapping sight lines,
+  campfire in centre (generates Loud noise 12 tiles). Population slots: sentry posts in
+  towers, patrol route through forest edge, leader tent, objective crate.
+  33 tests in `test_forest_approach_camp_template.gd`.
+- **s56.7 Makeshift Stockade Template** — `simulation/makeshift_stockade_generator.gd`
+  (MakeshiftStockadeGenerator, 623 lines) + `shared/makeshift_stockade_map_data.gd`.
+  25×25 outer perimeter of log walls with 1–2 breachable sections (WALL_WOOD tiles),
+  inner keep of WALL_STONE, elevated wall-walk tiles (guard posts with +3 lookout bonus).
+  Defense angle metadata: each wall section stores its facing direction for flanking logic
+  (blocked on s40). Population slots: perimeter walkers, gate guards, keep interior guards,
+  commander in keep. 59 tests in `test_makeshift_stockade_template.gd`.
+- **s56.8 Hilltop Position Template** — `simulation/hilltop_position_generator.gd`
+  (HilltopPositionGenerator, 578 lines) + `shared/hilltop_position_map_data.gd`.
+  Concentric elevation rings: outer FLOOR_STONE (exposed approach), mid FLOOR_WOOD
+  (partial cover), summit WALL_STONE cluster. Elevation tier metadata stored per tile;
+  summit defenders get +1k0 ranged (blocked on s40). 2–4 approach corridors through
+  rocky outcroppings. Population slots: approach observers, ridgeline archers, summit
+  defenders, commander flag on highest tile. 38 tests in `test_hilltop_position_template.gd`.
+- **s56.11 Ravine Camp Template** — `simulation/ravine_camp_generator.gd`
+  (RavineCampGenerator, 623 lines) + `shared/ravine_camp_map_data.gd`. 30×20 ravine:
+  vertical cliff walls (WALL_STONE impassable) with 1–2 rope-bridge crossings (FLOOR_WOOD
+  tiles flagged as bridges, removable). Rope bridge destruction metadata: bridge_status
+  per crossing, collapse TN 20 (blocked on s40). River runs along ravine floor (WATER_SHALLOW,
+  passable at Agility TN 15 — metadata only). Population slots: cliff-top archers,
+  bridge guards, ravine floor patrol, commander in cave alcove at ravine end.
+  70 tests in `test_ravine_camp_template.gd`.
+- **s56.12 Ruined Structure Template** — `simulation/ruined_structure_generator.gd`
+  (RuinedStructureGenerator, 730 lines) + `shared/ruined_structure_map_data.gd`. Partially
+  collapsed building: original floor plan generated, then 25–45% of interior walls randomly
+  destroyed (added to destroyed_tiles). Rubble tiles (WALL_RUBBLE) block movement, grant
+  cover (+5 Armor TN — metadata). Roof collapse zones: areas under partial ceiling get
+  fall-debris hazard tag (blocked on s40). 3–5 rooms remain intact as defensible positions.
+  Population slots: rubble-covered approach snipers, intact-room garrison, leader in deepest
+  intact room, objective in collapse-sealed basement.
+  70 tests in `test_ruined_structure_template.gd`.
+- **s56.13 Relocation Mechanics** — `simulation/insurgency_relocation_system.gd`
+  (InsurgencyRelocationSystem). Pure simulation layer (no map tiles). Five mission outcome
+  types (FULL_SUCCESS, PARTIAL_SUCCESS, RETREAT_INSIDE, RETREAT_OUTSIDE, FAILURE).
+  Three triggers for relocation: FULL_SUCCESS always triggers if survivors remain,
+  PARTIAL_SUCCESS/RETREAT_INSIDE trigger if player reached objective space, FAILURE/
+  RETREAT_OUTSIDE never trigger. Template-specific rules: Makeshift Stockade delays
+  same-province relocation 1 season (GDD s56.13.2); Ruined Structure cannot relocate
+  (structure-bound). Province adjacency travel time calculation for new camp selection
+  (uses ProvinceData adjacency graph, blocked-on-map fallback to 1 season). Insurgency
+  strength attrition on relocation: −1 strength per relocation event. Wired into
+  InsurgencySystem resolution pipeline. 36 tests in `test_insurgency_relocation_system.gd`.
+- **s56.15 Urban Hideout Template** — `simulation/urban_hideout_generator.gd`
+  (UrbanHideoutGenerator, 404 lines) + `shared/urban_hideout_map_data.gd`. Two-phase
+  structure: surface search phase (street grid, civilian cover, normal settlement zone)
+  and underground hideout phase (hidden basement, tunnel network). Surface → underground
+  transition via hidden door tile (ZONE_EXIT flagged hidden). Underground: 3–5 rooms
+  connected by narrow tunnels (1-tile wide, chokepoint guards). Criminal network presence
+  module cross-reference (s11.11 Pirate Fleet / Bloodspeaker cell). Population slots:
+  surface lookouts (disguised, spawn as civilian), tunnel guards, underground objective
+  room, cell leader in deepest chamber. 41 tests in `test_urban_hideout_template.gd`.
+- **s56.17 Castle Siege Template** — `simulation/castle_siege_generator.gd`
+  (CastleSiegeGenerator, 681 lines) + `shared/castle_siege_map_data.gd`. 40×30 outer
+  bailey + inner keep. Four gate zones (North/East/South/West, one randomly breached by
+  siege engines). Wall-walk patrol route on WALL_STONE perimeter. Keep interior: great
+  hall, audience chamber, dungeon (objective). Keep gate is secondary chokepoint.
+  Siege-damage metadata: outer_wall_breached, keep_gate_damaged, catapult_impact_zones
+  (rubble overlay on random bailey sections). Population slots: wall-walk defenders per
+  section, gate guards at each approach, keep garrison, target in audience chamber or
+  dungeon. 49 tests in `test_castle_siege_template.gd`.
+- **s56.2 ASCII Map Template Selector** — `simulation/template_selector.gd`
+  (TemplateSelector, 171 lines). GDD-locked probability pools keyed by TerrainType
+  (PLAINS/FOREST/MOUNTAINS/HILLS/SWAMP/COASTAL/RIVER_DELTA): weighted selection among
+  available templates (OccupiedVillage, MakeshiftStockade, RuinedStructure, RavineCamp,
+  ForestApproachCamp, Cave, HilltopPosition). Ruin-eligibility check: province history
+  tags `{war_damage, famine, taint_corruption, peasant_revolt, natural_decay}` unlock
+  RuinedStructure; weight redistributed to other pools when no ruin condition applies.
+  Province-history-aware: Strength 1–3 biases toward smaller templates, Strength 7+
+  biases toward defended positions. Deterministic selection from seeded RNG (province_id +
+  season string). 20 tests in `test_template_selector.gd`.
+- **s56.6 ASCII Map Environment Data Layer** — `simulation/ascii_map_environment.gd`
+  (AsciiMapEnvironment, 262 lines). Pure data and lookup layer for outdoor map environment
+  mechanics per GDD s56.6.1–56.6.4. BiomeType enum (7 values). WeatherState enum (8 values
+  including biome-specific Snow/Blizzard/Mist). WEATHER_DATA dictionary: per-state TN modifiers
+  for ranged attacks, vision range, stealth, movement multiplier, wound exposure rate, and
+  coastal-only flag. All effect values stored as metadata; runtime application blocked on
+  s40/s4.4. NOISE_LEVEL enum (QUIET/MODERATE/LOUD/VERY_LOUD) with tile-radius constants
+  (3/6/12/20). AlertState enum (UNAWARE/SUSPICIOUS/ALERT/COMBAT) with transition rules:
+  Unaware→Suspicious on Moderate noise in radius, Suspicious→Alert on investigation failure
+  or Loud noise, Alert→Combat on direct sighting. KANSEN_DENSITY enum (5 levels) with
+  threshold table keyed by PTL ranges. BiomeType helper: `biome_for_terrain(TerrainType)`,
+  `weather_for_season(season, biome)`, `kansen_density_for_ptl(ptl)`,
+  `alert_transition(current_state, noise_level, distance)`.
+  Fire propagation (s56.6.6) NOT implemented — labeled PROVISIONAL in GDD, not LOCKED.
+  59 tests in `test_ascii_map_environment.gd`.
+- **s56.18 Ship Boarding Template** — `simulation/ship_boarding_generator.gd`
+  (ShipBoardingGenerator, 134 lines) + `shared/ship_boarding_map_data.gd`. 15×10 tile map:
+  player ship rows 0–3, water gap rows 4–5, enemy ship rows 6–9. Three ship types
+  (SMALL_KOBUNE=1 plank, MEDIUM_ATAKEBUNE=2 planks, LARGE_KOBUNE=3 planks) each with
+  GDD-specified plank column positions. Two boarding modes: OFFENSIVE (player enters from
+  row 3, objective is enemy quarterdeck tile at row 6) and DEFENSIVE (player spawns on
+  own quarterdeck, objective is protecting it). Player quarterdeck: cols 0–2, rows 1–2
+  (elevated FLOOR_STONE marker). Enemy quarterdeck: cols 12–14, rows 7–8. Water tiles
+  (WATER_DEEP) fill the gap; plank tiles (FLOOR_WOOD) bridge it. Quarterdeck elevation
+  and water-hazard mechanical effects (Agility TN 15 to avoid falling in) stored as
+  metadata; effects blocked on s40. Zone exits placed at north hull (player entry) and
+  south hull (enemy entry point). 32 tests in `test_ship_boarding_template.gd`.
+
 ## Resolved Design Decisions
 
 ### 1. Topic Identity — RESOLVED: int IDs
