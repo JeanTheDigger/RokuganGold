@@ -2421,17 +2421,13 @@ costs, or forward-wiring. Do not treat as bugs.
   `hierarchy_cascade_results` arrays.
 
 ### Known Architectural Gaps — Deferred
-- **military_data Dictionary permanently empty.** `WorldState.military_data`
-  is declared as `{}` and passed to `advance_day()` but never populated by
-  any system. The actual military data lives in `military_companies` (array
-  of Dictionaries), `active_armies`, `active_sieges`, etc. ActionExecutor
-  reads `military_data` for validation but silently allows all military
-  orders when it's empty (fallback behavior). Not causing crashes because
-  military order validation has other guards (commanded_unit_id checks,
-  lord carve-out). Proper fix would either: (a) populate military_data
-  from military_companies at start of advance_day(), or (b) refactor
-  military validation to read from military_companies directly. Low
-  priority — military orders still function correctly via other guards.
+- **military_data Dictionary — FIXED (resolved 2026-06-02, note was stale).**
+  `_populate_military_data(military_data, companies)` runs at the start of
+  `advance_day()` (line ~151), before NPC wave resolution at line ~276.
+  It builds a `companies` dict keyed by company_id from the raw companies
+  array. `legions` and `sections` keys are initialised to empty dicts
+  (those sub-tiers are populated by other passes). ActionExecutor's
+  `_validate_military_order()` receives a populated dict at runtime.
 - **AT_DOJO context flag never assigned.** No DOJO settlement type exists
   in SettlementData. Dojos exist only as ZoneSubtype.DOJO (sub-settlement
   level), and the zone system data is not yet available. Monk objective
