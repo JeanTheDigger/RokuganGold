@@ -297,6 +297,9 @@ static func advance_day(
 		letter_pass_results, characters, ic_day,
 	)
 
+	# Process offline PC reactive events via s60.6 policies.
+	_process_pc_offline_events(characters, characters_by_id, ic_day)
+
 	_process_duel_challenge_writebacks(
 		day_result.get("results", []), world_states,
 	)
@@ -6777,6 +6780,8 @@ static func _assign_magistrate_standing_objectives(
 	objectives_map: Dictionary,
 ) -> void:
 	for character: L5RCharacterData in characters:
+		if character.is_pc:
+			continue
 		if character.role_position not in MAGISTRATE_ROLE_POSITIONS:
 			continue
 		if CharacterStats.is_dead(character):
@@ -6813,6 +6818,8 @@ static func _assign_ronin_standing_objectives(
 ) -> void:
 	for character: L5RCharacterData in characters:
 		if CharacterStats.is_dead(character):
+			continue
+		if character.is_pc:
 			continue
 		if not RoninSystem.is_ronin(character):
 			continue
@@ -6857,6 +6864,8 @@ static func _assign_monk_standing_objectives(
 		if character.school_type != Enums.SchoolType.MONK:
 			continue
 		if CharacterStats.is_dead(character):
+			continue
+		if character.is_pc:
 			continue
 
 		var char_id: int = character.character_id
@@ -8541,6 +8550,8 @@ static func _run_strategic_reviews(
 	for lord: L5RCharacterData in characters:
 		if CharacterStats.is_dead(lord):
 			continue
+		if lord.is_pc:
+			continue
 		if not _is_lord_tier(lord):
 			continue
 		if lord.character_id == emperor_id and emperor_id >= 0:
@@ -9068,6 +9079,8 @@ static func _process_daily_letter_pass(
 	var results: Array = []
 	for character: L5RCharacterData in characters:
 		if CharacterStats.is_dead(character):
+			continue
+		if character.is_pc:
 			continue
 		var objectives: Dictionary = objectives_map.get(character.character_id, {})
 		if objectives.is_empty():
@@ -18098,6 +18111,13 @@ static func _inject_base_character_context(
 		if has_champion_authority and c.character_id == phoenix_champion_id:
 			ws["phoenix_champion_authority"] = true
 
+		# PCs: expose pending_events to reactive phase via world_states (s60.4).
+		# pending_events is stored on L5RCharacterData for PCs so events persist
+		# across ticks.  The reference assignment means appends from injection
+		# sites automatically reach the character's persistent array.
+		if c.is_pc:
+			ws["pending_events"] = c.pending_events
+
 		# Family Daimyo+ receive champion conclusions for Phase 2 combined pool (s57.54.10b).
 		var lord_rank: Enums.LordRank = CivilianOrderBudget.lord_rank_from_status(c.status)
 		if char_is_lord and lord_rank >= Enums.LordRank.FAMILY_DAIMYO \
@@ -21835,6 +21855,33 @@ static func _process_festival_leaves_penalty(
 		if poem_senders.has(character.character_id):
 			continue
 		HonorGlorySystem.apply_glory_change(character, -0.1)
+
+
+static func _process_pc_offline_events(
+	characters: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	# Evaluate offline reactive events against each logged-out PC's policies (s60.6).
+	# HONOR/ACCEPT consequences from FAVOR_REQUESTED are handled similarly to the
+	# NPC reactive path: the event is consumed and a consequence dict is stored on
+	# the character's supply_ledger for presentation on next login.
+	for character: L5RCharacterData in characters:
+		if not character.is_pc:
+			continue
+		if character.is_logged_in:
+			continue
+		if character.pending_events.is_empty():
+			continue
+		var consequences: Array = PcSystem.process_offline_events(
+			character, characters_by_id, ic_day
+		)
+		if consequences.is_empty():
+			continue
+		var log: Array = character.supply_ledger.get("offline_event_log", [])
+		for c: Dictionary in consequences:
+			log.append(c)
+		character.supply_ledger["offline_event_log"] = log
 
 
 static func _process_craft_origami_writebacks(

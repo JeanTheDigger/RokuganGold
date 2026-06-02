@@ -177,6 +177,10 @@ var greater_zones: Array[GreaterZoneData] = []
 var navigation_zones: Array[NavigationZoneData] = []
 var lesser_zones: Array[LesserZoneData] = []
 
+# -- PC Bubble Time Scenes (s60.7) -------------------------------------------
+var active_bubble_scenes: Array[Dictionary] = []
+var next_bubble_scene_id: Array[int] = [1]
+
 # -- Commitments ID Counter (s55.31) ------------------------------------------
 var next_commitment_id: Array[int] = [1]
 
