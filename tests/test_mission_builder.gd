@@ -276,3 +276,95 @@ func test_assemble_with_ruin_history_does_not_crash():
 	var result := MissionBuilder.assemble(p, ["war_damage"], sd, "ruin_hist")
 	assert_not_null(result.get("map"))
 	assert_true(result["map"] is AsciiMapData)
+
+
+# -- Environment metadata (s56.6 weather + FoV integration) -------------------
+
+func test_assemble_returns_environment_key():
+	var p := _make_province(Enums.TerrainType.MOUNTAINS)
+	var result := MissionBuilder.assemble(
+		p, [], _seed_dict(RosterCompositionSystem.SEED_RONIN_BANDIT), "env_key")
+	assert_true(result.has("environment"), "environment key missing")
+
+
+func test_environment_has_biome_key():
+	var p := _make_province(Enums.TerrainType.MOUNTAINS)
+	var result := MissionBuilder.assemble(
+		p, [], _seed_dict(RosterCompositionSystem.SEED_RONIN_BANDIT), "env_biome")
+	assert_true(result["environment"].has("biome"))
+
+
+func test_environment_has_weather_key():
+	var p := _make_province(Enums.TerrainType.MOUNTAINS)
+	var result := MissionBuilder.assemble(
+		p, [], _seed_dict(RosterCompositionSystem.SEED_RONIN_BANDIT), "env_weather")
+	assert_true(result["environment"].has("weather"))
+
+
+func test_environment_has_fov_modifier_key():
+	var p := _make_province(Enums.TerrainType.MOUNTAINS)
+	var result := MissionBuilder.assemble(
+		p, [], _seed_dict(RosterCompositionSystem.SEED_RONIN_BANDIT), "env_fov")
+	assert_true(result["environment"].has("fov_modifier"))
+
+
+func test_environment_has_weather_data_key():
+	var p := _make_province(Enums.TerrainType.MOUNTAINS)
+	var result := MissionBuilder.assemble(
+		p, [], _seed_dict(RosterCompositionSystem.SEED_RONIN_BANDIT), "env_wd")
+	assert_true(result["environment"].has("weather_data"))
+	assert_true(result["environment"]["weather_data"] is Dictionary)
+
+
+func test_environment_biome_matches_terrain_type():
+	# Mountains province → NORTHERN_HIGHLAND biome.
+	var p := _make_province(Enums.TerrainType.MOUNTAINS)
+	var result := MissionBuilder.assemble(
+		p, [], _seed_dict(RosterCompositionSystem.SEED_RONIN_BANDIT), "env_biome_match")
+	assert_eq(result["environment"]["biome"],
+		AsciiMapEnvironment.BiomeType.NORTHERN_HIGHLAND)
+
+
+func test_environment_default_weather_is_clear():
+	var p := _make_province(Enums.TerrainType.MOUNTAINS)
+	var result := MissionBuilder.assemble(
+		p, [], _seed_dict(RosterCompositionSystem.SEED_RONIN_BANDIT), "env_clear")
+	assert_eq(result["environment"]["weather"], AsciiMapEnvironment.WeatherState.CLEAR)
+
+
+func test_environment_fov_modifier_zero_for_clear_weather():
+	var p := _make_province(Enums.TerrainType.MOUNTAINS)
+	var result := MissionBuilder.assemble(
+		p, [], _seed_dict(RosterCompositionSystem.SEED_RONIN_BANDIT), "env_fov_clear")
+	assert_eq(result["environment"]["fov_modifier"], 0)
+
+
+func test_environment_rain_weather_gives_fov_modifier_2():
+	var p := _make_province(Enums.TerrainType.MOUNTAINS)
+	var sd := _seed_dict(RosterCompositionSystem.SEED_RONIN_BANDIT)
+	sd["weather"] = AsciiMapEnvironment.WeatherState.RAIN
+	sd["season"]  = TimeSystem.Season.SUMMER  # Summer: no snow conversion
+	var result := MissionBuilder.assemble(p, [], sd, "env_rain_fov")
+	assert_eq(result["environment"]["fov_modifier"], 2)
+
+
+func test_environment_rain_winter_northern_highland_converts_to_snow():
+	# Province is MOUNTAINS → NORTHERN_HIGHLAND biome; Rain + Winter → Snow.
+	var p := _make_province(Enums.TerrainType.MOUNTAINS)
+	var sd := _seed_dict(RosterCompositionSystem.SEED_RONIN_BANDIT)
+	sd["weather"] = AsciiMapEnvironment.WeatherState.RAIN
+	sd["season"]  = TimeSystem.Season.WINTER
+	var result := MissionBuilder.assemble(p, [], sd, "env_snow_conv")
+	assert_eq(result["environment"]["weather"], AsciiMapEnvironment.WeatherState.SNOW)
+
+
+func test_environment_roster_ready_false_returns_empty():
+	var p := _make_province(Enums.TerrainType.MOUNTAINS)
+	var sd := {
+		"seed_type":    RosterCompositionSystem.SEED_RONIN_BANDIT,
+		"strength":     1,
+		"options":      {},
+		"roster_ready": false,
+	}
+	var result := MissionBuilder.assemble(p, [], sd, "env_blocked")
+	assert_eq(result, {})

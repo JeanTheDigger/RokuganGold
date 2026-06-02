@@ -200,3 +200,141 @@ func test_ptl_9_is_high() -> void:
 
 func test_ptl_10_is_high() -> void:
 	assert_eq(AsciiMapEnvironment.density_from_ptl(10.0), AsciiMapEnvironment.KansenDensity.HIGH)
+
+# -- biome_for_terrain (PROVISIONAL fallback) ---------------------------------
+
+func test_biome_mountains_is_northern_highland() -> void:
+	assert_eq(AsciiMapEnvironment.biome_for_terrain(Enums.TerrainType.MOUNTAINS),
+		AsciiMapEnvironment.BiomeType.NORTHERN_HIGHLAND)
+
+func test_biome_forest_is_shinomen() -> void:
+	assert_eq(AsciiMapEnvironment.biome_for_terrain(Enums.TerrainType.FOREST),
+		AsciiMapEnvironment.BiomeType.SHINOMEN)
+
+func test_biome_coastal_is_eastern_coast() -> void:
+	assert_eq(AsciiMapEnvironment.biome_for_terrain(Enums.TerrainType.COASTAL),
+		AsciiMapEnvironment.BiomeType.EASTERN_COAST)
+
+func test_biome_river_delta_is_eastern_coast() -> void:
+	assert_eq(AsciiMapEnvironment.biome_for_terrain(Enums.TerrainType.RIVER_DELTA),
+		AsciiMapEnvironment.BiomeType.EASTERN_COAST)
+
+func test_biome_swamp_is_southern_border() -> void:
+	assert_eq(AsciiMapEnvironment.biome_for_terrain(Enums.TerrainType.SWAMP),
+		AsciiMapEnvironment.BiomeType.SOUTHERN_BORDER)
+
+func test_biome_wasteland_is_southern_border() -> void:
+	assert_eq(AsciiMapEnvironment.biome_for_terrain(Enums.TerrainType.WASTELAND),
+		AsciiMapEnvironment.BiomeType.SOUTHERN_BORDER)
+
+func test_biome_hills_is_central_plains() -> void:
+	assert_eq(AsciiMapEnvironment.biome_for_terrain(Enums.TerrainType.HILLS),
+		AsciiMapEnvironment.BiomeType.CENTRAL_PLAINS)
+
+func test_biome_plains_is_central_plains() -> void:
+	assert_eq(AsciiMapEnvironment.biome_for_terrain(Enums.TerrainType.PLAINS),
+		AsciiMapEnvironment.BiomeType.CENTRAL_PLAINS)
+
+# -- apply_biome_weather_conversion (s56.6.2 LOCKED) -------------------------
+
+func test_rain_northern_highland_winter_becomes_snow() -> void:
+	assert_eq(
+		AsciiMapEnvironment.apply_biome_weather_conversion(
+			AsciiMapEnvironment.WeatherState.RAIN,
+			AsciiMapEnvironment.BiomeType.NORTHERN_HIGHLAND,
+			TimeSystem.Season.WINTER),
+		AsciiMapEnvironment.WeatherState.SNOW)
+
+func test_storm_northern_highland_winter_becomes_blizzard() -> void:
+	assert_eq(
+		AsciiMapEnvironment.apply_biome_weather_conversion(
+			AsciiMapEnvironment.WeatherState.STORM,
+			AsciiMapEnvironment.BiomeType.NORTHERN_HIGHLAND,
+			TimeSystem.Season.WINTER),
+		AsciiMapEnvironment.WeatherState.BLIZZARD)
+
+func test_rain_central_plains_winter_becomes_snow() -> void:
+	assert_eq(
+		AsciiMapEnvironment.apply_biome_weather_conversion(
+			AsciiMapEnvironment.WeatherState.RAIN,
+			AsciiMapEnvironment.BiomeType.CENTRAL_PLAINS,
+			TimeSystem.Season.WINTER),
+		AsciiMapEnvironment.WeatherState.SNOW)
+
+func test_rain_western_steppe_winter_becomes_snow() -> void:
+	assert_eq(
+		AsciiMapEnvironment.apply_biome_weather_conversion(
+			AsciiMapEnvironment.WeatherState.RAIN,
+			AsciiMapEnvironment.BiomeType.WESTERN_STEPPE,
+			TimeSystem.Season.WINTER),
+		AsciiMapEnvironment.WeatherState.SNOW)
+
+func test_storm_central_plains_winter_stays_storm() -> void:
+	# Only NORTHERN_HIGHLAND gets blizzard conversion per s56.6.2.
+	assert_eq(
+		AsciiMapEnvironment.apply_biome_weather_conversion(
+			AsciiMapEnvironment.WeatherState.STORM,
+			AsciiMapEnvironment.BiomeType.CENTRAL_PLAINS,
+			TimeSystem.Season.WINTER),
+		AsciiMapEnvironment.WeatherState.STORM)
+
+func test_rain_northern_highland_summer_stays_rain() -> void:
+	assert_eq(
+		AsciiMapEnvironment.apply_biome_weather_conversion(
+			AsciiMapEnvironment.WeatherState.RAIN,
+			AsciiMapEnvironment.BiomeType.NORTHERN_HIGHLAND,
+			TimeSystem.Season.SUMMER),
+		AsciiMapEnvironment.WeatherState.RAIN)
+
+func test_rain_eastern_coast_winter_stays_rain() -> void:
+	assert_eq(
+		AsciiMapEnvironment.apply_biome_weather_conversion(
+			AsciiMapEnvironment.WeatherState.RAIN,
+			AsciiMapEnvironment.BiomeType.EASTERN_COAST,
+			TimeSystem.Season.WINTER),
+		AsciiMapEnvironment.WeatherState.RAIN)
+
+func test_clear_northern_highland_winter_stays_clear() -> void:
+	assert_eq(
+		AsciiMapEnvironment.apply_biome_weather_conversion(
+			AsciiMapEnvironment.WeatherState.CLEAR,
+			AsciiMapEnvironment.BiomeType.NORTHERN_HIGHLAND,
+			TimeSystem.Season.WINTER),
+		AsciiMapEnvironment.WeatherState.CLEAR)
+
+# -- weather_to_fov_modifier (s56.6.2 LOCKED) ---------------------------------
+
+func test_fov_modifier_clear_is_zero() -> void:
+	assert_eq(AsciiMapEnvironment.weather_to_fov_modifier(
+		AsciiMapEnvironment.WeatherState.CLEAR), 0)
+
+func test_fov_modifier_wind_is_zero() -> void:
+	assert_eq(AsciiMapEnvironment.weather_to_fov_modifier(
+		AsciiMapEnvironment.WeatherState.WIND), 0)
+
+func test_fov_modifier_rain_is_2() -> void:
+	assert_eq(AsciiMapEnvironment.weather_to_fov_modifier(
+		AsciiMapEnvironment.WeatherState.RAIN), 2)
+
+func test_fov_modifier_storm_is_4() -> void:
+	assert_eq(AsciiMapEnvironment.weather_to_fov_modifier(
+		AsciiMapEnvironment.WeatherState.STORM), 4)
+
+func test_fov_modifier_typhoon_is_4() -> void:
+	assert_eq(AsciiMapEnvironment.weather_to_fov_modifier(
+		AsciiMapEnvironment.WeatherState.TYPHOON), 4)
+
+func test_fov_modifier_mist_is_3() -> void:
+	assert_eq(AsciiMapEnvironment.weather_to_fov_modifier(
+		AsciiMapEnvironment.WeatherState.MIST), 3)
+
+func test_fov_modifier_snow_is_2() -> void:
+	assert_eq(AsciiMapEnvironment.weather_to_fov_modifier(
+		AsciiMapEnvironment.WeatherState.SNOW), 2)
+
+func test_fov_modifier_blizzard_is_4() -> void:
+	assert_eq(AsciiMapEnvironment.weather_to_fov_modifier(
+		AsciiMapEnvironment.WeatherState.BLIZZARD), 4)
+
+func test_fov_modifier_unknown_state_defaults_to_zero() -> void:
+	assert_eq(AsciiMapEnvironment.weather_to_fov_modifier(999), 0)

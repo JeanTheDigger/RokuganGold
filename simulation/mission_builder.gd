@@ -22,6 +22,14 @@ const _OBJECTIVES_BY_SEED: Dictionary = {
 }
 
 
+## Returns the province's BiomeType for environment metadata.
+## Reads province.biome if set; falls back to biome_for_terrain() when absent.
+static func biome_for_province(province: ProvinceData) -> int:
+	if province.get("biome") != null:
+		return province.biome
+	return AsciiMapEnvironment.biome_for_terrain(province.terrain_type)
+
+
 ## Assembles a complete mission package from a QuestSeedSelector seed_dict.
 ## province_history: Array[String] event tags (war_damage, famine, taint_corruption,
 ##   peasant_revolt, natural_decay) — controls RuinedStructure availability.
@@ -70,10 +78,23 @@ static func assemble(
 			province, province_history, seed_dict, objectives, seed_str)
 		placements = MissionPopulator.populate(map, roster, pop_seed)
 
+	var biome: int        = biome_for_province(province)
+	var base_weather: int = seed_dict.get("weather", AsciiMapEnvironment.WeatherState.CLEAR)
+	var season: int       = seed_dict.get("season", TimeSystem.Season.SPRING)
+	var weather: int      = AsciiMapEnvironment.apply_biome_weather_conversion(
+		base_weather, biome, season)
+	var fov_mod: int      = AsciiMapEnvironment.weather_to_fov_modifier(weather)
+
 	return {
 		"map":             map,
 		"placements":      placements,
 		"objective_slots": map.objective_slots,
 		"seed_dict":       seed_dict,
 		"roster":          roster,
+		"environment": {
+			"biome":        biome,
+			"weather":      weather,
+			"fov_modifier": fov_mod,
+			"weather_data": AsciiMapEnvironment.get_weather_data(weather),
+		},
 	}

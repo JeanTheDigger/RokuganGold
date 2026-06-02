@@ -260,3 +260,58 @@ static func exposure_interval(density: int) -> int:
 ## Returns the kansen exposure Fortitude TN.
 static func exposure_tn(density: int) -> int:
 	return KANSEN_EXPOSURE_TN.get(density, 0)
+
+
+## Returns the BiomeType that best represents a given TerrainType for ASCII map
+## mission generation when no explicit province biome tag is available.
+## PROVISIONAL — s56.6.1 says biomes are assigned at world generation by province
+## and clan territory, not derived from terrain type alone.  This fallback is used
+## only by the mission assembly layer when the explicit biome is absent.
+static func biome_for_terrain(terrain_type: int) -> int:
+	match terrain_type:
+		Enums.TerrainType.MOUNTAINS:
+			return BiomeType.NORTHERN_HIGHLAND
+		Enums.TerrainType.FOREST:
+			return BiomeType.SHINOMEN
+		Enums.TerrainType.COASTAL:
+			return BiomeType.EASTERN_COAST
+		Enums.TerrainType.RIVER_DELTA:
+			return BiomeType.EASTERN_COAST
+		Enums.TerrainType.SWAMP:
+			return BiomeType.SOUTHERN_BORDER
+		Enums.TerrainType.WASTELAND:
+			return BiomeType.SOUTHERN_BORDER
+		Enums.TerrainType.HILLS:
+			return BiomeType.CENTRAL_PLAINS
+		_:  # PLAINS and unrecognised
+			return BiomeType.CENTRAL_PLAINS
+
+
+## Converts a base (unified 5-state) weather value to its biome-specific variant
+## per GDD s56.6.2 LOCKED biome conversion rules.
+## Rain → Snow in NORTHERN_HIGHLAND, CENTRAL_PLAINS, and WESTERN_STEPPE during
+##   winter.  ("Deep winter" is not a distinct season we model — WINTER applies.)
+## Storm → Blizzard in NORTHERN_HIGHLAND during winter only.
+## All other biome/season combinations return the base weather unchanged.
+static func apply_biome_weather_conversion(
+		base_weather: int, biome: int, season: int) -> int:
+	if season != TimeSystem.Season.WINTER:
+		return base_weather
+	match biome:
+		BiomeType.NORTHERN_HIGHLAND:
+			if base_weather == WeatherState.RAIN:
+				return WeatherState.SNOW
+			if base_weather == WeatherState.STORM:
+				return WeatherState.BLIZZARD
+		BiomeType.CENTRAL_PLAINS, BiomeType.WESTERN_STEPPE:
+			if base_weather == WeatherState.RAIN:
+				return WeatherState.SNOW
+	return base_weather
+
+
+## Returns the env_modifier integer for FovSystem.effective_radius() and
+## FovSystem.lookout_radius() that corresponds to the given WeatherState.
+## Maps directly from WEATHER_DATA["vision_mod"] (tiles of vision range reduction).
+## Pass the result straight to FovSystem as env_modifier.
+static func weather_to_fov_modifier(weather: int) -> int:
+	return WEATHER_DATA.get(weather, WEATHER_DATA[WeatherState.CLEAR]).get("vision_mod", 0)
