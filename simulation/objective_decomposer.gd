@@ -35,6 +35,7 @@ const PERSONAL_OBJECTIVES: Array[String] = [
 	"SEEK_VENGEANCE",
 	"FIND_NEW_LORD",
 	"PERFORM_RITUAL",
+	"PERFORM_WORSHIP",
 ]
 
 const MILITARY_OBJECTIVES: Array[String] = [
@@ -166,6 +167,8 @@ static func _decompose_personal(
 			return _decompose_find_new_lord(objective, ctx)
 		"PERFORM_RITUAL":
 			return _decompose_perform_ritual(objective, ctx)
+		"PERFORM_WORSHIP":
+			return _decompose_perform_worship(objective, ctx)
 	return _passthrough(objective)
 
 
@@ -804,6 +807,18 @@ static func _decompose_find_new_lord(
 
 
 static func _decompose_perform_ritual(
+	objective: Dictionary,
+	_ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	return _passthrough(objective)
+
+
+# -- PERFORM_WORSHIP Decomposition (s57.26b A29) --------------------------------
+# Scoring against PERFORM_WORSHIP table: PERFORM_WORSHIP=100, PLACE_SHIDE=55,
+# CRAFT=50. Phase 4c PLACE_SHIDE precondition gates placement to characters who
+# hold a shide and are at a shrine-eligible settlement.
+
+static func _decompose_perform_worship(
 	objective: Dictionary,
 	_ctx: NPCDataStructures.ContextSnapshot,
 ) -> NPCDataStructures.ImmediateNeed:

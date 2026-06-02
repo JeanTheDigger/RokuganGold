@@ -236,6 +236,11 @@ func _bootstrap_fresh_world() -> void:
 	for arr: IkebanaArrangementData in initial_arrangements:
 		WorldState.active_arrangements.append(arr)
 
+	# Zone graph (s4.4.1)
+	WorldState.greater_zones.assign(result.get("greater_zones", []))
+	WorldState.navigation_zones.assign(result.get("navigation_zones", []))
+	WorldState.lesser_zones.assign(result.get("lesser_zones", []))
+
 	_save_world_state()
 	print("[SimulationScheduler] World bootstrapped: %d characters, %d provinces, %d settlements, %d cells." % [
 		WorldState.characters.size(),

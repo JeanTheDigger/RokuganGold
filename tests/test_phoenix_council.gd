@@ -844,6 +844,43 @@ func test_generate_options_includes_compact_when_authority_held() -> void:
 	assert_true("RESTORE_COUNCIL_COMPACT" in action_ids)
 
 
+func test_generate_options_includes_compact_at_court() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 10
+	ctx.clan = "Phoenix"
+	ctx.context_flag = Enums.ContextFlag.AT_COURT
+	ctx.phoenix_champion_authority = true
+	ctx.is_lord = true
+	ctx.civilian_orders_remaining = 3
+	ctx.ap_remaining = 5
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+	var action_ids: Array = []
+	for opt in options:
+		action_ids.append(opt.action_id)
+	assert_true("RESTORE_COUNCIL_COMPACT" in action_ids,
+		"Phoenix Champion with authority should see RESTORE_COUNCIL_COMPACT at AT_COURT")
+
+
+func test_generate_options_excludes_compact_at_court_without_authority() -> void:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.character_id = 11
+	ctx.clan = "Phoenix"
+	ctx.context_flag = Enums.ContextFlag.AT_COURT
+	ctx.phoenix_champion_authority = false
+	ctx.is_lord = true
+	ctx.civilian_orders_remaining = 3
+
+	var need := NPCDataStructures.ImmediateNeed.new()
+	var options: Array = NPCDecisionEngine.generate_options(ctx, need)
+	var action_ids: Array = []
+	for opt in options:
+		action_ids.append(opt.action_id)
+	assert_false("RESTORE_COUNCIL_COMPACT" in action_ids,
+		"Champion without phoenix_champion_authority should not see RESTORE_COUNCIL_COMPACT at AT_COURT")
+
+
 # =============================================================================
 # GRAND RITUAL DEVASTATING EFFECT (s55.10.3.7)
 # =============================================================================

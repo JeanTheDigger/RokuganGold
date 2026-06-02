@@ -41,7 +41,7 @@ static func seed_event(
 	ic_day: int,
 	topic_id: int = -1,
 	subject_id: int = -1,
-	zone_subtype: String = "",
+	zone_subtype: int = -1,
 ) -> void:
 	settlement.public_record.append({
 		"event_type": event_type,

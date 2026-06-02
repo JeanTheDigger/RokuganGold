@@ -15113,6 +15113,42 @@ func test_inject_base_context_sublocation_default_public() -> void:
 		"Default sublocation should be PUBLIC")
 
 
+func test_inject_base_context_sublocation_at_temple_is_public() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 904
+	c.status = 2.0
+	c.lord_id = 10
+	c.clan = "Phoenix"
+	var ws: Dictionary = {904: {"context_flag": Enums.ContextFlag.AT_TEMPLE}}
+	DayOrchestrator._inject_base_character_context(ws, [c], [], [], [], {}, [])
+	assert_eq(ws[904].get("sublocation", -1), Enums.Sublocation.PUBLIC,
+		"AT_TEMPLE context should set sublocation to PUBLIC")
+
+
+func test_inject_base_context_sublocation_at_wall_tower_is_restricted() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 905
+	c.status = 2.0
+	c.lord_id = 10
+	c.clan = "Crab"
+	var ws: Dictionary = {905: {"context_flag": Enums.ContextFlag.AT_WALL_TOWER}}
+	DayOrchestrator._inject_base_character_context(ws, [c], [], [], [], {}, [])
+	assert_eq(ws[905].get("sublocation", -1), Enums.Sublocation.RESTRICTED,
+		"AT_WALL_TOWER context should set sublocation to RESTRICTED")
+
+
+func test_inject_base_context_sublocation_at_dojo_is_restricted() -> void:
+	var c := L5RCharacterData.new()
+	c.character_id = 906
+	c.status = 2.0
+	c.lord_id = 10
+	c.clan = "Crane"
+	var ws: Dictionary = {906: {"context_flag": Enums.ContextFlag.AT_DOJO}}
+	DayOrchestrator._inject_base_character_context(ws, [c], [], [], [], {}, [])
+	assert_eq(ws[906].get("sublocation", -1), Enums.Sublocation.RESTRICTED,
+		"AT_DOJO context should set sublocation to RESTRICTED")
+
+
 func test_inject_base_context_escalating_conflicts_injected() -> void:
 	var c := L5RCharacterData.new()
 	c.character_id = 903

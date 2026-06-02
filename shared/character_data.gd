@@ -293,6 +293,21 @@ extends Resource
 # Each entry: {"garden_id": int, "creator_id": int, "expires_ic_day": int}
 @export var active_garden_bonuses: Array = []
 
+# -- Pending Reactive Events ---------------------------------------------------
+# Events injected by other systems (FAVOR_REQUESTED, DUEL_CHALLENGE_RECEIVED, etc.)
+# Consumed on the next tick by the reactive phase. Also used for offline PC policy.
+@export var pending_events: Array = []
+
+# -- PC Integration (Section 60) ----------------------------------------------
+@export var is_pc: bool = false
+@export var player_id: String = ""
+@export var is_logged_in: bool = false
+@export var home_settlement_id: int = -1
+@export var banked_ap: int = 0
+@export var offline_policies: Dictionary = {}
+@export var bubble_scene_id: int = -1
+@export var bubble_anchor_ic_day: int = -1
+
 
 # -- Trait Access Helpers (used by CharacterStats) -----------------------------
 

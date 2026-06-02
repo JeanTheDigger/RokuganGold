@@ -18,6 +18,12 @@ static func reset_daily_ap(character: L5RCharacterData) -> void:
 		character.action_points_current = 0
 		character.action_points_max = 0
 		return
+	if character.is_pc:
+		# PCs never enter the NPC wave; AP accrues to banked_ap instead (s60.5).
+		character.action_points_current = 0
+		character.action_points_max = 0
+		PcSystem.bank_daily_ap(character, AP_PER_IC_DAY)
+		return
 	character.action_points_current = AP_PER_IC_DAY
 	character.action_points_max = AP_PER_IC_DAY
 

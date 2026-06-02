@@ -145,7 +145,10 @@ static func advance_day(
 	_assign_magistrate_standing_objectives(characters, objectives_map)
 	_assign_ronin_standing_objectives(characters, objectives_map)
 	_assign_kaiu_engineer_standing_objectives(characters, objectives_map, settlements)
+	_assign_artisan_standing_objectives(characters, objectives_map)
 	_assign_monk_standing_objectives(characters, objectives_map)
+
+	_populate_military_data(military_data, companies)
 
 	_clear_stale_context_flags(world_states)
 
@@ -205,6 +208,7 @@ static func advance_day(
 	_inject_poem_context(characters, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_set_temple_context_flags(characters, settlements, world_states)
+	_set_dojo_context_flags(characters, settlements, world_states)
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
 	_inject_settlement_type(characters, settlements, world_states)
 	_pickup_ambient_public_records(characters, settlements, ic_day)
@@ -293,6 +297,9 @@ static func advance_day(
 		letter_pass_results, characters, ic_day,
 	)
 
+	# Process offline PC reactive events via s60.6 policies.
+	_process_pc_offline_events(characters, characters_by_id, ic_day)
+
 	_process_duel_challenge_writebacks(
 		day_result.get("results", []), world_states,
 	)
@@ -317,7 +324,7 @@ static func advance_day(
 
 	_seed_public_records_from_crime_results(
 		crime_results, day_result.get("results", []),
-		settlements, characters_by_id, ic_day,
+		settlements, characters_by_id, ic_day, world_states,
 	)
 
 	_process_scout_detection_topics(
@@ -1009,6 +1016,7 @@ static func advance_day(
 		characters, characters_by_id, active_courts, entanglements,
 		active_hunts, favors, bloodspeaker_cells, active_secrets,
 		theater_pieces, active_paintings, active_sculptures,
+		commission_records, settlements, active_bonsai,
 	)
 	_apply_artist_grief_on_death(characters, characters_by_id, active_paintings, settlements, ic_day)
 
@@ -1433,7 +1441,8 @@ static func advance_day(
 			_cleanup_dead_character_references(
 				characters, characters_by_id, active_courts, entanglements,
 				active_hunts, favors, bloodspeaker_cells, active_secrets,
-				theater_pieces, active_paintings,
+				theater_pieces, active_paintings, active_sculptures,
+				commission_records, settlements, active_bonsai,
 			)
 
 	var koku_flow_results: Dictionary = {}
@@ -6771,6 +6780,8 @@ static func _assign_magistrate_standing_objectives(
 	objectives_map: Dictionary,
 ) -> void:
 	for character: L5RCharacterData in characters:
+		if character.is_pc:
+			continue
 		if character.role_position not in MAGISTRATE_ROLE_POSITIONS:
 			continue
 		if CharacterStats.is_dead(character):
@@ -6807,6 +6818,8 @@ static func _assign_ronin_standing_objectives(
 ) -> void:
 	for character: L5RCharacterData in characters:
 		if CharacterStats.is_dead(character):
+			continue
+		if character.is_pc:
 			continue
 		if not RoninSystem.is_ronin(character):
 			continue
@@ -6851,6 +6864,8 @@ static func _assign_monk_standing_objectives(
 		if character.school_type != Enums.SchoolType.MONK:
 			continue
 		if CharacterStats.is_dead(character):
+			continue
+		if character.is_pc:
 			continue
 
 		var char_id: int = character.character_id
@@ -6923,6 +6938,41 @@ static func _assign_kaiu_engineer_standing_objectives(
 				"priority": 2,
 				"auto_assigned": true,
 			}
+
+
+# -- ARTISTIC_EXPRESSION Standing Objective Assignment (s49) -------------------
+# Artisan-school NPCs who have no other standing objective default to pursuing
+# artistic expression in peacetime. This gives Kaiu Engineers (and future artisan
+# schools) a productive standing rather than REST during non-crisis periods.
+
+
+static func _assign_artisan_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.school_type != Enums.SchoolType.ARTISAN:
+			continue
+		if CharacterStats.is_dead(character):
+			continue
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+
+		# Do not replace a standing objective already assigned (e.g. Kaiu Engineers
+		# during wall crises receive MAINTAIN_FORTIFICATION from the Kaiu-specific pass).
+		if not standing.is_empty():
+			continue
+
+		objectives["standing"] = {
+			"need_type": "ARTISTIC_EXPRESSION",
+			"priority": 3,
+			"auto_assigned": true,
+		}
 
 
 # -- Petition Writeback (s52.5 Parts B–D) -------------------------------------
@@ -7680,6 +7730,9 @@ static func _cleanup_dead_character_references(
 	theater_pieces: Array = [],
 	active_paintings: Array = [],
 	active_sculptures: Array = [],
+	commission_records: Array = [],
+	settlements: Array = [],
+	active_bonsai: Array = [],
 ) -> void:
 	var dead_ids: Array = []
 	for c: L5RCharacterData in characters:
@@ -7740,6 +7793,10 @@ static func _cleanup_dead_character_references(
 	if not active_sculptures.is_empty():
 		for did: int in dead_ids:
 			SculptureSystem.handle_character_death(did, active_sculptures)
+
+	if not commission_records.is_empty() or not active_bonsai.is_empty():
+		for did: int in dead_ids:
+			GardenSystem.handle_character_death(did, commission_records, settlements, active_bonsai)
 
 	for secret: Variant in active_secrets:
 		if not secret is SecretData:
@@ -8493,6 +8550,8 @@ static func _run_strategic_reviews(
 	for lord: L5RCharacterData in characters:
 		if CharacterStats.is_dead(lord):
 			continue
+		if lord.is_pc:
+			continue
 		if not _is_lord_tier(lord):
 			continue
 		if lord.character_id == emperor_id and emperor_id >= 0:
@@ -9020,6 +9079,8 @@ static func _process_daily_letter_pass(
 	var results: Array = []
 	for character: L5RCharacterData in characters:
 		if CharacterStats.is_dead(character):
+			continue
+		if character.is_pc:
 			continue
 		var objectives: Dictionary = objectives_map.get(character.character_id, {})
 		if objectives.is_empty():
@@ -13369,9 +13430,6 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"statue_slot_empty", "guardian_slot_empty",
 		"is_religious_settlement", "has_statue_permission", "has_guardian_permission",
 		"statuary_worship_fr", "statuary_subject_id", "guardian_worship_fr", "foundry_in_province",
-		"available_poem_item_id", "available_poem_raises",
-		"shrine_needs_shide", "shrine_shide_at_normal",
-		"has_shide_in_inventory", "has_shide_permission", "shide_worship_fr",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -13505,6 +13563,43 @@ static func _set_temple_context_flags(
 		if ws.get("context_flag", -1) == Enums.ContextFlag.AT_WALL_TOWER:
 			continue
 		ws["context_flag"] = Enums.ContextFlag.AT_TEMPLE
+		ws["zone_subtype"] = Enums.ZoneSubtype.TEMPLE_GROUNDS
+
+
+static func _set_dojo_context_flags(
+	characters: Array,
+	settlements: Array,
+	world_states: Dictionary,
+) -> void:
+	var dojo_locs: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.has_dojo or s.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			dojo_locs[str(s.settlement_id)] = true
+
+	if dojo_locs.is_empty():
+		return
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var loc: String = character.physical_location
+		if not dojo_locs.has(loc):
+			continue
+		if TravelSystem.is_traveling(character):
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			ws = {}
+			world_states[character.character_id] = ws
+		var current_flag: int = ws.get("context_flag", -1)
+		if current_flag == Enums.ContextFlag.AT_COURT:
+			continue
+		if current_flag == Enums.ContextFlag.AT_WALL_TOWER:
+			continue
+		if current_flag == Enums.ContextFlag.AT_TEMPLE:
+			continue
+		ws["context_flag"] = Enums.ContextFlag.AT_DOJO
+		ws["zone_subtype"] = Enums.ZoneSubtype.DOJO
 
 
 static func _set_visiting_context_flags(
@@ -17997,6 +18092,8 @@ static func _inject_base_character_context(
 		var cf: int = ws.get("context_flag", -1)
 		if cf == Enums.ContextFlag.AT_COURT:
 			ws["sublocation"] = Enums.Sublocation.COURT
+		elif cf == Enums.ContextFlag.AT_WALL_TOWER or cf == Enums.ContextFlag.AT_DOJO:
+			ws["sublocation"] = Enums.Sublocation.RESTRICTED
 		else:
 			ws["sublocation"] = Enums.Sublocation.PUBLIC
 		ws.merge(g_festival)
@@ -18013,6 +18110,13 @@ static func _inject_base_character_context(
 
 		if has_champion_authority and c.character_id == phoenix_champion_id:
 			ws["phoenix_champion_authority"] = true
+
+		# PCs: expose pending_events to reactive phase via world_states (s60.4).
+		# pending_events is stored on L5RCharacterData for PCs so events persist
+		# across ticks.  The reference assignment means appends from injection
+		# sites automatically reach the character's persistent array.
+		if c.is_pc:
+			ws["pending_events"] = c.pending_events
 
 		# Family Daimyo+ receive champion conclusions for Phase 2 combined pool (s57.54.10b).
 		var lord_rank: Enums.LordRank = CivilianOrderBudget.lord_rank_from_status(c.status)
@@ -18164,6 +18268,27 @@ static func _populate_crime_suppression_data(
 		}
 
 	world_states["_crime_suppression_data"] = per_settlement
+
+
+static func _populate_military_data(military_data: Dictionary, companies: Array) -> void:
+	var companies_dict: Dictionary = {}
+	for mc: Dictionary in companies:
+		var cid: int = mc.get("company_id", -1)
+		if cid < 0 or mc.get("destroyed", false):
+			continue
+		var cd: MilitaryUnitData.CompanyData = MilitaryUnitData.CompanyData.new()
+		cd.company_id = cid
+		cd.commander_id = mc.get("commander_id", -1)
+		cd.parent_legion_id = mc.get("parent_legion_id", -1)
+		cd.source_province_id = mc.get("source_province_id", -1)
+		cd.unit_type = mc.get("unit_type", Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+		# deployment_status not stored in raw dict; default WITH_LEGION is correct
+		companies_dict[cid] = cd
+	military_data["companies"] = companies_dict
+	if not military_data.has("legions"):
+		military_data["legions"] = {}
+	if not military_data.has("sections"):
+		military_data["sections"] = {}
 
 
 static func _process_doshin_seasonal_recovery(world_states: Dictionary) -> void:
@@ -21472,6 +21597,7 @@ static func _seed_public_records_from_crime_results(
 	settlements: Array,
 	characters_by_id: Dictionary,
 	ic_day: int,
+	world_states: Dictionary = {},
 ) -> void:
 	if settlements.is_empty() or crime_results.is_empty():
 		return
@@ -21526,9 +21652,11 @@ static func _seed_public_records_from_crime_results(
 		var event_type: String = _crime_type_to_string(crime_type)
 		var topic_id: int = result.get("topic_id", -1)
 		var tier: int = _crime_tier_for_public_record(crime_type)
+		# Record the actor's zone subtype so investigators can narrow the scene location.
+		var zone_subtype: int = world_states.get(char_id, {}).get("zone_subtype", -1)
 
 		PublicRecordSystem.seed_event(
-			settlement, event_type, tier, ic_day, topic_id, char_id,
+			settlement, event_type, tier, ic_day, topic_id, char_id, zone_subtype,
 		)
 
 
@@ -21685,11 +21813,13 @@ static func _inject_poem_context(
 		var ws: Dictionary = world_states.get(character.character_id, {})
 		if ws.is_empty():
 			continue
+		if not ws.has("known_objectives"):
+			ws["known_objectives"] = {}
+		ws["known_objectives"]["available_poem_item_id"] = -1
+		ws["known_objectives"]["available_poem_raises"] = 0
 		for item: Variant in character.items:
 			if item is Dictionary and \
 					(item as Dictionary).get("item_type", "") == "poetry_scroll":
-				if not ws.has("known_objectives"):
-					ws["known_objectives"] = {}
 				ws["known_objectives"]["available_poem_item_id"] = \
 					(item as Dictionary).get("item_id", -1)
 				ws["known_objectives"]["available_poem_raises"] = \
@@ -21725,6 +21855,33 @@ static func _process_festival_leaves_penalty(
 		if poem_senders.has(character.character_id):
 			continue
 		HonorGlorySystem.apply_glory_change(character, -0.1)
+
+
+static func _process_pc_offline_events(
+	characters: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	# Evaluate offline reactive events against each logged-out PC's policies (s60.6).
+	# HONOR/ACCEPT consequences from FAVOR_REQUESTED are handled similarly to the
+	# NPC reactive path: the event is consumed and a consequence dict is stored on
+	# the character's supply_ledger for presentation on next login.
+	for character: L5RCharacterData in characters:
+		if not character.is_pc:
+			continue
+		if character.is_logged_in:
+			continue
+		if character.pending_events.is_empty():
+			continue
+		var consequences: Array = PcSystem.process_offline_events(
+			character, characters_by_id, ic_day
+		)
+		if consequences.is_empty():
+			continue
+		var log: Array = character.supply_ledger.get("offline_event_log", [])
+		for c: Dictionary in consequences:
+			log.append(c)
+		character.supply_ledger["offline_event_log"] = log
 
 
 static func _process_craft_origami_writebacks(
@@ -22512,6 +22669,8 @@ static func _inject_shide_context(
 		var ws: Dictionary = world_states.get(c.character_id, {})
 		if ws.is_empty():
 			continue
+		if not ws.has("known_objectives"):
+			ws["known_objectives"] = {}
 
 		# Inventory check.
 		var has_shide: bool = false
@@ -22520,22 +22679,22 @@ static func _inject_shide_context(
 					and (it as Dictionary).get("uses_remaining", 0) > 0:
 				has_shide = true
 				break
-		ws["has_shide_in_inventory"] = has_shide
+		ws["known_objectives"]["has_shide_in_inventory"] = has_shide
 
 		# Settlement context.
 		var loc: String = c.physical_location
 		var settlement: SettlementData = by_str_id.get(loc) as SettlementData
 		if settlement == null or not settlement.has_shrine_slot():
-			ws["shrine_needs_shide"] = false
-			ws["shrine_shide_at_normal"] = false
-			ws["has_shide_permission"] = false
-			ws["shide_worship_fr"] = 0
+			ws["known_objectives"]["shrine_needs_shide"] = false
+			ws["known_objectives"]["shrine_shide_at_normal"] = false
+			ws["known_objectives"]["has_shide_permission"] = false
+			ws["known_objectives"]["shide_worship_fr"] = 0
 			continue
 
 		# Shide need: no shide at all, or existing shide is Normal tier (0).
 		var current_tier: int = settlement.shrine_shide_current_tier
-		ws["shrine_needs_shide"] = current_tier < 0
-		ws["shrine_shide_at_normal"] = current_tier == 0
+		ws["known_objectives"]["shrine_needs_shide"] = current_tier < 0
+		ws["known_objectives"]["shrine_shide_at_normal"] = current_tier == 0
 
 		# Permission check.
 		var perm_holder: int = settlement.shrine_shide_permission
@@ -22543,10 +22702,10 @@ static func _inject_shide_context(
 			settlement.shrine_permission_grace_until_ic_day >= 0
 			and settlement.shrine_permission_grace_until_ic_day > 0
 		)
-		ws["has_shide_permission"] = (perm_holder == c.character_id) or grace_active
+		ws["known_objectives"]["has_shide_permission"] = (perm_holder == c.character_id) or grace_active
 
 		# Worship free raises from placed shide.
-		ws["shide_worship_fr"] = OrigamiSystem.shide_worship_fr(settlement)
+		ws["known_objectives"]["shide_worship_fr"] = OrigamiSystem.shide_worship_fr(settlement)
 
 
 static func _process_shide_permission_grants(

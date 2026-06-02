@@ -25,14 +25,31 @@ func test_seed_adds_entry():
 
 func test_seed_stores_all_fields():
 	var s := _make_settlement()
-	PublicRecordSystem.seed_event(s, "violence", TopicData.Tier.TIER_4, 100, 55, 7, "MARKET_STREET")
+	PublicRecordSystem.seed_event(
+		s, "violence", TopicData.Tier.TIER_4, 100, 55, 7, Enums.ZoneSubtype.MARKET_STREET,
+	)
 	var entry: Dictionary = s.public_record[0]
 	assert_eq(entry["event_type"], "violence")
 	assert_eq(entry["tier"], TopicData.Tier.TIER_4)
 	assert_eq(entry["ic_day"], 100)
 	assert_eq(entry["topic_id"], 55)
 	assert_eq(entry["subject_id"], 7)
-	assert_eq(entry["zone_subtype"], "MARKET_STREET")
+	assert_eq(entry["zone_subtype"], Enums.ZoneSubtype.MARKET_STREET)
+
+
+func test_seed_stores_zone_subtype_from_world_state():
+	# zone_subtype defaults to -1 when not provided
+	var s := _make_settlement()
+	PublicRecordSystem.seed_event(s, "murder", TopicData.Tier.TIER_3, 200, -1, 10)
+	assert_eq(s.public_record[0].get("zone_subtype", -1), -1)
+
+
+func test_seed_zone_subtype_dojo():
+	var s := _make_settlement()
+	PublicRecordSystem.seed_event(
+		s, "violence", TopicData.Tier.TIER_4, 100, -1, 3, Enums.ZoneSubtype.DOJO,
+	)
+	assert_eq(s.public_record[0].get("zone_subtype", -1), Enums.ZoneSubtype.DOJO)
 
 
 func test_seed_multiple_entries():

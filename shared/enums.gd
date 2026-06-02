@@ -268,6 +268,36 @@ enum ZoneSubtype {
 	WALL_TOWER,
 }
 
+# Three-tier zone hierarchy — Greater Zone is the top container.
+# Province sub-tiles, settlements, and travel routes are all Greater Zones.
+# (s4.4.1 LOCKED)
+enum GreaterZoneType {
+	PROVINCE_SUBTILE,  # one of 4-5 sub-tiles in a province (matches army movement grid)
+	SETTLEMENT,        # a whole settlement (village through major city)
+	TRAVEL_ROUTE,      # a road or wilderness path between sub-tiles or settlements
+}
+
+# Middle tier between Greater Zone and Lesser Zone.
+# A Navigation Zone groups Lesser Zones; it may have its own ASCII map (outdoor
+# spaces) or be pure MUD navigation (city districts, castle compound listings).
+# (s4.4.1 Amendment v564 — types marked PROVISIONAL)
+enum NavigationZoneType {
+	# Urban
+	CITY_DISTRICT,      # neighbourhood-scale container (streets + buildings)
+	EKOHIKEI_DISTRICT,  # restricted inner-city district; gated by ekohikei_access flag
+	FORBIDDEN_CITY,     # imperial restricted zone; gated by forbidden_city_access flag
+	ACCESS_LAYER,       # structural grouping of districts by access tier (Otosan Uchi)
+	STREET,             # named road or lane with building entrances; usually has ASCII map
+	PLAZA,              # open public space (market square, shrine courtyard)
+	CASTLE_COMPOUND,    # castle/estate as a whole; contains interior Lesser Zones (s57.36)
+	WATERFRONT,         # docks and harbour area; contains pier/warehouse Lesser Zones
+	RESIDENTIAL_BLOCK,  # quiet neighbourhood section; houses and small shops
+	# Wilderness
+	ROAD_SEGMENT,       # stretch of road between settlements; contains roadside encounters
+	FOREST_TRAIL,       # path through wilderness with branching clearings
+	MOUNTAIN_APPROACH,  # route through mountain terrain with pass and cave entrances
+}
+
 enum LordRank {
 	VILLAGE_HEADMAN,
 	CITY_DAIMYO,
@@ -735,4 +765,52 @@ enum HistoryEventType {
 	GIFTED_AT_COURT,     # +1 HP — gifted at Winter Court or major ceremony
 	SUBJECT_OF_ART,      # +1 HP — made subject of poem, performance, story
 	PRESENT_AT_EVENT,    # +2 HP — present at historically significant event
+}
+
+
+# ASCII map tile types (s4.4). Values fit in one byte (0–255).
+# Passability and LOS-blocking are derived from type; see AsciiMapGenerator.
+enum TileType {
+	VOID           = 0,   # outside map bounds / unexplored
+	# Floors — passable, no LOS block
+	FLOOR_GRASS    = 1,   # .  green
+	FLOOR_DIRT     = 2,   # .  brown
+	FLOOR_WOOD     = 3,   # =  brown (parallel planks)
+	FLOOR_TATAMI   = 4,   # ≡  yellow (woven mat)
+	FLOOR_STONE    = 5,   # ∷  grey (flagstone)
+	FLOOR_MUD      = 6,   # ,  brown (mud/swamp)
+	FLOOR_SNOW     = 7,   # .  white
+	FLOOR_SAND     = 8,   # .  yellow
+	# Walls — impassable, block LOS
+	WALL_STONE     = 9,   # █  grey
+	WALL_WOOD      = 10,  # box-drawing heavy lines, brown (glyph computed from neighbours)
+	WALL_PAPER     = 11,  # box-drawing light lines, white (shoji screens)
+	# Water — LOS not blocked
+	WATER_SHALLOW  = 12,  # ~  blue (passable, movement +1 cost)
+	WATER_DEEP     = 13,  # ~  dark blue (impassable on foot)
+	WATER_RAPID    = 14,  # ≈  cyan (passable, dangerous)
+	WATER_PADDY    = 15,  # ~  green on dark-blue bg (seasonal)
+	# Vegetation — impassable trees block LOS; bushes/groundcover do not
+	TREE_EVERGREEN = 16,  # ♣  dark green (blocks move and LOS)
+	TREE_DECIDUOUS = 17,  # ♣  green (blocks move and LOS)
+	TREE_CHERRY    = 18,  # ♣  pink/green by season (blocks move and LOS)
+	TREE_DEAD      = 19,  # ¥  brown (blocks move, no LOS block — no canopy)
+	BAMBOO         = 20,  # ♠  green (blocks move, blocks LOS)
+	BUSH           = 21,  # "  green (passable, no LOS block)
+	CROPS          = 22,  # %  yellow (passable, movement +1 cost)
+	GROUNDCOVER    = 23,  # ,  green (passable, no LOS block)
+	FLOWERS        = 24,  # *  various (passable, no LOS block)
+	# Doors — closed = impassable + LOS block; open = passable + no LOS block
+	DOOR_SHOJI_CLOSED = 25,  # +  white
+	DOOR_SHOJI_OPEN   = 26,  # '  white
+	DOOR_WOOD_CLOSED  = 27,  # +  brown
+	DOOR_WOOD_OPEN    = 28,  # /  brown
+	GATE_CLOSED       = 29,  # ╬  brown/grey
+	GATE_OPEN         = 30,  # ∏  brown/grey
+	# Navigation
+	ZONE_EXIT      = 31,  # >  cyan (tile leads to another zone, always passable)
+	# Dynamic / environmental — produced by gameplay events, not generation
+	FLOOR_ASH      = 32,  # ,  dark grey (burned-out tile, s56.6)
+	FIRE           = 33,  # ^  orange/red (actively burning, s56.6)
+	RUBBLE         = 34,  # ;  grey (destroyed wall remains)
 }

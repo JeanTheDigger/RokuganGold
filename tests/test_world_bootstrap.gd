@@ -692,3 +692,54 @@ func test_bloodspeaker_active_cells_have_insurgencies() -> void:
 			active += 1
 			assert_gt(cell.insurgency_id, 0, "Active cell should have insurgency_id")
 	assert_eq(insurgencies.size(), active, "Each active cell should have an insurgency")
+
+
+# -- Zone Graph ---------------------------------------------------------------
+
+func test_zone_keys_present_in_bootstrap_result() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	assert_true(result.has("greater_zones"), "bootstrap result has greater_zones key")
+	assert_true(result.has("navigation_zones"), "bootstrap result has navigation_zones key")
+	assert_true(result.has("lesser_zones"), "bootstrap result has lesser_zones key")
+
+
+func test_greater_zones_non_empty() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var gzs: Array = result.get("greater_zones", [])
+	assert_gt(gzs.size(), 0, "At least one GreaterZoneData should be generated")
+
+
+func test_nav_zones_outnumber_greater_zones() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var gzs: Array = result.get("greater_zones", [])
+	var navs: Array = result.get("navigation_zones", [])
+	assert_gt(navs.size(), gzs.size(), "Each settlement has multiple nav zones")
+
+
+func test_lesser_zones_outnumber_nav_zones() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var navs: Array = result.get("navigation_zones", [])
+	var lzs: Array = result.get("lesser_zones", [])
+	assert_gt(lzs.size(), navs.size(), "Each nav zone has multiple lesser zones")
+
+
+func test_greater_zone_ids_are_unique() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var seen: Dictionary = {}
+	for gz: GreaterZoneData in result.get("greater_zones", []):
+		assert_false(seen.has(gz.zone_id), "Duplicate GreaterZoneData zone_id: %s" % gz.zone_id)
+		seen[gz.zone_id] = true
+
+
+func test_each_settlement_has_exactly_one_greater_zone() -> void:
+	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var settlements: Array = result.get("settlements", [])
+	var gzs: Array = result.get("greater_zones", [])
+	var gz_count: Dictionary = {}
+	for gz: GreaterZoneData in gzs:
+		gz_count[gz.settlement_id] = gz_count.get(gz.settlement_id, 0) + 1
+	for s: SettlementData in settlements:
+		assert_eq(
+			gz_count.get(s.settlement_id, 0), 1,
+			"Settlement %d should have exactly one GreaterZoneData" % s.settlement_id,
+		)

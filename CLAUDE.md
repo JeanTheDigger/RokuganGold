@@ -95,8 +95,8 @@ When implementing or auditing a system, go here first:
 | Courtier school techniques & rerolls          | 29.15                |
 | Skill resolver (technique/wound/emphasis)     | 29.15, 4.5           |
 | Individual combat                             | 40 (not yet built)   |
-| ASCII map mission generation                  | 56 (not yet built)   |
-| Quest seeds                                   | 56.1 (not yet built) |
+| ASCII map mission generation                  | 56                   |
+| Quest seeds                                   | 56.1                 |
 | Spiritual insurgency (trigger layer)          | 56.16                |
 | Bloodspeaker cult network                     | 56.14                |
 | NPC decision engine — core loop               | 55 (all subsects)    |
@@ -134,6 +134,7 @@ When implementing or auditing a system, go here first:
 | World population generator (game start pass)  | 52 Part 1, 22.4, 22.8|
 | Gempukku / NPC spawning / natural death       | 52, 22.4, 22.7       |
 | Ronin system (status transitions, petition)   | 52 Part 5, 52.5      |
+| PC integration (presence, AP banking, offline)| 60                   |
 
 ## Directory Structure
 ```
@@ -2421,17 +2422,13 @@ costs, or forward-wiring. Do not treat as bugs.
   `hierarchy_cascade_results` arrays.
 
 ### Known Architectural Gaps — Deferred
-- **military_data Dictionary permanently empty.** `WorldState.military_data`
-  is declared as `{}` and passed to `advance_day()` but never populated by
-  any system. The actual military data lives in `military_companies` (array
-  of Dictionaries), `active_armies`, `active_sieges`, etc. ActionExecutor
-  reads `military_data` for validation but silently allows all military
-  orders when it's empty (fallback behavior). Not causing crashes because
-  military order validation has other guards (commanded_unit_id checks,
-  lord carve-out). Proper fix would either: (a) populate military_data
-  from military_companies at start of advance_day(), or (b) refactor
-  military validation to read from military_companies directly. Low
-  priority — military orders still function correctly via other guards.
+- **military_data Dictionary — FIXED (resolved 2026-06-02, note was stale).**
+  `_populate_military_data(military_data, companies)` runs at the start of
+  `advance_day()` (line ~151), before NPC wave resolution at line ~276.
+  It builds a `companies` dict keyed by company_id from the raw companies
+  array. `legions` and `sections` keys are initialised to empty dicts
+  (those sub-tiers are populated by other passes). ActionExecutor's
+  `_validate_military_order()` receives a populated dict at runtime.
 - **AT_DOJO context flag never assigned.** No DOJO settlement type exists
   in SettlementData. Dojos exist only as ZoneSubtype.DOJO (sub-settlement
   level), and the zone system data is not yet available. Monk objective
@@ -3226,8 +3223,11 @@ Do not re-audit this; the list is settled. Ask the user before investigating any
 - s11.7 — sub-tile pathfinding; 5 stub military ActionIDs
 - s11.9 — ship movement initiation; naval blockade (per-sub-tile military unit)
 - s40 — ASCII map tile positioning and range tracking
-- s4.4 — Local Interface / ASCII Map (NOT STARTED)
-- s56 — Quest System / ASCII Map (NOT STARTED)
+- s4.4 — Local Interface / ASCII Map (map data + zone hierarchy + display + movement + FOV + door
+  interaction done; entity layer, MUD text interface, and mission entry flow remain; ASCII combat
+  display blocked on s40)
+- s56 — Quest System / ASCII Map (map generation + roster + mission orchestration layer done;
+  PC mission initiation + ASCII combat display blocked on s40)
 
 **Blocked on GDD spec gap (no LOCKED spec; do not implement until GDD specifies it):**
 - s2.4 — `DECLARE_WALL_EMERGENCY` ActionID: s2.4.14 Decision 6 has no LOCKED spec
@@ -3688,6 +3688,253 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   **SettlementData additions:** `garden_slots: Dictionary`, `garden_permissions: Dictionary`,
   `bonsai_display_slot: int = -1`. **L5RCharacterData additions:** `declined_garden_zones: Array`,
   `declined_commissions: Array`, `active_garden_bonuses: Array`.
+
+### Systems Added 2026-06-02
+- **s4.4 Zone Hierarchy and ASCII Map Foundation** — Full zone data model and settlement map
+  generation layer. Three zone data classes (`shared/greater_zone_data.gd`,
+  `shared/navigation_zone_data.gd`, `shared/lesser_zone_data.gd`) per GDD s4.4.1.
+  `simulation/settlement_zone_builder.gd` (SettlementZoneBuilder, 378 lines): factory that
+  creates all zone tiers for a settlement by type (CITY/CASTLE/TOWN/VILLAGE etc.) and wires
+  the navigation zone graph. `simulation/zone_flag_matrix.gd` (ZoneFlagMatrix, 512 lines):
+  implements the full zone flag matrix from GDD s57.36 — 7 flag categories, 32 flag types,
+  per-zone allowed-action filtering and action-context mapping. `simulation/zone_registry.gd`
+  (ZoneRegistry, 57 lines): world-level index mapping zone_id strings to their data objects;
+  wired into WorldState. `shared/ascii_map_data.gd` (AsciiMapData): base tile-grid Resource
+  (variable-size, default 31×31 viewport), TileType enum, `init_tiles()`, `set_tile()`,
+  `get_tile()`, `fill_rect()`. Dynamic map feature support: doors (OPEN/CLOSED), destruction
+  tracking (destroyed_tiles Array), fire (burning_tiles Array). `simulation/fov_system.gd`
+  (FovSystem, 168 lines): recursive shadowcasting field-of-vision per s4.4.2. Base radius =
+  Perception trait. Environmental modifiers: forest −2, darkness −3, fog/mist −3, rain −2,
+  storm −4, snow −2. Lookout position bonus: +3 radius on WALL_STONE or elevated tile.
+  Stacks with environmental modifiers (minimum 1 tile). `simulation/ascii_map_generator.gd`
+  (AsciiMapGenerator, 1318 lines): deterministic procedural generation for all 25 ZoneSubtype
+  values (MARKET_STREET, TEMPLE_GROUNDS, SHRINE_CLEARING, FOREST_PATH, ROAD,
+  RESIDENTIAL_QUARTER, FARMLAND, RIVER_CROSSING, OHIROMA, ENKAI_HALL, AUDIENCE_CHAMBER,
+  CHASHITSU, GARDENS, TRAINING_GROUNDS, ARMORY, FORGE, DUNGEON, DOJO, STABLE, GRANARY,
+  HARBOR, WALL_TOWER, BARRACKS, GATEHOUSE, WILDERNESS). Each generator places walls, floors,
+  features, and zone exits using a fixed seed (settlement_name + zone_name + zone_type string).
+  Same inputs always produce the same layout; only physical deltas (destroyed walls, new
+  construction) are persisted between sessions. Zone graph wired into world bootstrap and
+  WorldState; zone_id lookup added to per-character world_states context injection.
+  38 + 95 tests in `test_zone_data.gd` and `test_zone_flag_matrix.gd`;
+  142 + 14 tests in `test_ascii_map.gd` and `test_cave_fov.gd`.
+- **s56.3 Cave Template** — `simulation/cave_template_generator.gd` (CaveMapGenerator, 742
+  lines) + `shared/cave_map_data.gd` (CaveMapData). Deterministic cellular-automaton cave
+  generation: 5 smoothing passes, guaranteed main-chamber flood-fill connectivity, 1–3
+  side chambers, blocked side passages become cache sites. Population slots: 3–7 guard posts
+  in main chamber, 1 leader position in deepest alcove, 1 objective marker. Darkness penalty
+  (−3 vision) wired as metadata; mechanical effects blocked on s40. 46 tests in
+  `test_cave_template.gd`.
+- **s56.4 Occupied Village Template** — `simulation/occupied_village_template_generator.gd`
+  (OccupiedVillageGenerator, 545 lines) + `shared/occupied_village_map_data.gd`. 20×20 grid:
+  3×3 building blocks with roads between, river optional (40% chance), well centred in plaza.
+  Population slots: 2–5 roving patrol pairs on road tiles, 1–2 chokepoint guards at road
+  junctions, leader in largest building, objective in locked storage building. Civilian
+  non-combatants flagged separately. 34 tests in `test_occupied_village_template.gd`.
+- **s56.5 Forest Approach + Camp Template** — `simulation/forest_approach_camp_generator.gd`
+  (ForestApproachCampGenerator, 591 lines) + `shared/forest_approach_camp_map_data.gd`.
+  Two-zone layout: dense forest approach corridor (40% of map, stealth +5 TN) leading into
+  fortified camp clearing. Camp: log palisade, 2–4 sentry towers with overlapping sight lines,
+  campfire in centre (generates Loud noise 12 tiles). Population slots: sentry posts in
+  towers, patrol route through forest edge, leader tent, objective crate.
+  33 tests in `test_forest_approach_camp_template.gd`.
+- **s56.7 Makeshift Stockade Template** — `simulation/makeshift_stockade_generator.gd`
+  (MakeshiftStockadeGenerator, 623 lines) + `shared/makeshift_stockade_map_data.gd`.
+  25×25 outer perimeter of log walls with 1–2 breachable sections (WALL_WOOD tiles),
+  inner keep of WALL_STONE, elevated wall-walk tiles (guard posts with +3 lookout bonus).
+  Defense angle metadata: each wall section stores its facing direction for flanking logic
+  (blocked on s40). Population slots: perimeter walkers, gate guards, keep interior guards,
+  commander in keep. 59 tests in `test_makeshift_stockade_template.gd`.
+- **s56.8 Hilltop Position Template** — `simulation/hilltop_position_generator.gd`
+  (HilltopPositionGenerator, 578 lines) + `shared/hilltop_position_map_data.gd`.
+  Concentric elevation rings: outer FLOOR_STONE (exposed approach), mid FLOOR_WOOD
+  (partial cover), summit WALL_STONE cluster. Elevation tier metadata stored per tile;
+  summit defenders get +1k0 ranged (blocked on s40). 2–4 approach corridors through
+  rocky outcroppings. Population slots: approach observers, ridgeline archers, summit
+  defenders, commander flag on highest tile. 38 tests in `test_hilltop_position_template.gd`.
+- **s56.11 Ravine Camp Template** — `simulation/ravine_camp_generator.gd`
+  (RavineCampGenerator, 623 lines) + `shared/ravine_camp_map_data.gd`. 30×20 ravine:
+  vertical cliff walls (WALL_STONE impassable) with 1–2 rope-bridge crossings (FLOOR_WOOD
+  tiles flagged as bridges, removable). Rope bridge destruction metadata: bridge_status
+  per crossing, collapse TN 20 (blocked on s40). River runs along ravine floor (WATER_SHALLOW,
+  passable at Agility TN 15 — metadata only). Population slots: cliff-top archers,
+  bridge guards, ravine floor patrol, commander in cave alcove at ravine end.
+  70 tests in `test_ravine_camp_template.gd`.
+- **s56.12 Ruined Structure Template** — `simulation/ruined_structure_generator.gd`
+  (RuinedStructureGenerator, 730 lines) + `shared/ruined_structure_map_data.gd`. Partially
+  collapsed building: original floor plan generated, then 25–45% of interior walls randomly
+  destroyed (added to destroyed_tiles). Rubble tiles (WALL_RUBBLE) block movement, grant
+  cover (+5 Armor TN — metadata). Roof collapse zones: areas under partial ceiling get
+  fall-debris hazard tag (blocked on s40). 3–5 rooms remain intact as defensible positions.
+  Population slots: rubble-covered approach snipers, intact-room garrison, leader in deepest
+  intact room, objective in collapse-sealed basement.
+  70 tests in `test_ruined_structure_template.gd`.
+- **s56.13 Relocation Mechanics** — `simulation/insurgency_relocation_system.gd`
+  (InsurgencyRelocationSystem). Pure simulation layer (no map tiles). Five mission outcome
+  types (FULL_SUCCESS, PARTIAL_SUCCESS, RETREAT_INSIDE, RETREAT_OUTSIDE, FAILURE).
+  Three triggers for relocation: FULL_SUCCESS always triggers if survivors remain,
+  PARTIAL_SUCCESS/RETREAT_INSIDE trigger if player reached objective space, FAILURE/
+  RETREAT_OUTSIDE never trigger. Template-specific rules: Makeshift Stockade delays
+  same-province relocation 1 season (GDD s56.13.2); Ruined Structure cannot relocate
+  (structure-bound). Province adjacency travel time calculation for new camp selection
+  (uses ProvinceData adjacency graph, blocked-on-map fallback to 1 season). Insurgency
+  strength attrition on relocation: −1 strength per relocation event. Wired into
+  InsurgencySystem resolution pipeline. 36 tests in `test_insurgency_relocation_system.gd`.
+- **s56.15 Urban Hideout Template** — `simulation/urban_hideout_generator.gd`
+  (UrbanHideoutGenerator, 404 lines) + `shared/urban_hideout_map_data.gd`. Two-phase
+  structure: surface search phase (street grid, civilian cover, normal settlement zone)
+  and underground hideout phase (hidden basement, tunnel network). Surface → underground
+  transition via hidden door tile (ZONE_EXIT flagged hidden). Underground: 3–5 rooms
+  connected by narrow tunnels (1-tile wide, chokepoint guards). Criminal network presence
+  module cross-reference (s11.11 Pirate Fleet / Bloodspeaker cell). Population slots:
+  surface lookouts (disguised, spawn as civilian), tunnel guards, underground objective
+  room, cell leader in deepest chamber. 41 tests in `test_urban_hideout_template.gd`.
+- **s56.17 Castle Siege Template** — `simulation/castle_siege_generator.gd`
+  (CastleSiegeGenerator, 681 lines) + `shared/castle_siege_map_data.gd`. 40×30 outer
+  bailey + inner keep. Four gate zones (North/East/South/West, one randomly breached by
+  siege engines). Wall-walk patrol route on WALL_STONE perimeter. Keep interior: great
+  hall, audience chamber, dungeon (objective). Keep gate is secondary chokepoint.
+  Siege-damage metadata: outer_wall_breached, keep_gate_damaged, catapult_impact_zones
+  (rubble overlay on random bailey sections). Population slots: wall-walk defenders per
+  section, gate guards at each approach, keep garrison, target in audience chamber or
+  dungeon. 49 tests in `test_castle_siege_template.gd`.
+- **s56.2 ASCII Map Template Selector** — `simulation/template_selector.gd`
+  (TemplateSelector, 171 lines). GDD-locked probability pools keyed by TerrainType
+  (PLAINS/FOREST/MOUNTAINS/HILLS/SWAMP/COASTAL/RIVER_DELTA): weighted selection among
+  available templates (OccupiedVillage, MakeshiftStockade, RuinedStructure, RavineCamp,
+  ForestApproachCamp, Cave, HilltopPosition). Ruin-eligibility check: province history
+  tags `{war_damage, famine, taint_corruption, peasant_revolt, natural_decay}` unlock
+  RuinedStructure; weight redistributed to other pools when no ruin condition applies.
+  Province-history-aware: Strength 1–3 biases toward smaller templates, Strength 7+
+  biases toward defended positions. Deterministic selection from seeded RNG (province_id +
+  season string). 20 tests in `test_template_selector.gd`.
+- **s56.6 ASCII Map Environment Data Layer** — `simulation/ascii_map_environment.gd`
+  (AsciiMapEnvironment, 317 lines). Pure data and lookup layer for outdoor map environment
+  mechanics per GDD s56.6.1–56.6.4. BiomeType enum (7 values). WeatherState enum (8 values
+  including biome-specific Snow/Blizzard/Mist). WEATHER_DATA dictionary: per-state TN modifiers
+  for ranged attacks, vision range, stealth, movement multiplier, wound exposure rate, and
+  coastal-only flag. All effect values stored as metadata; runtime application blocked on
+  s40/s4.4. NOISE_LEVEL enum (QUIET/MODERATE/LOUD/VERY_LOUD) with tile-radius constants
+  (3/6/12/20). AlertState enum (UNAWARE/SUSPICIOUS/ALERT/COMBAT) with transition rules:
+  Unaware→Suspicious on Moderate noise in radius, Suspicious→Alert on investigation failure
+  or Loud noise, Alert→Combat on direct sighting. KANSEN_DENSITY enum (5 levels) with
+  threshold table keyed by PTL ranges. Static helpers: `biome_for_terrain(terrain_type)`,
+  `density_from_ptl(ptl)`, `get_weather_data(weather)`, `is_coastal_only(weather)`,
+  `apply_biome_weather_conversion(base_weather, biome, season)` (Rain→Snow in NORTHERN_HIGHLAND/
+  CENTRAL_PLAINS/WESTERN_STEPPE in winter; Storm→Blizzard in NORTHERN_HIGHLAND in winter),
+  `weather_to_fov_modifier(weather)` (returns WEATHER_DATA vision_mod for FovSystem).
+  Fire propagation (s56.6.6) NOT implemented — labeled PROVISIONAL in GDD, not LOCKED.
+  84 tests in `test_ascii_map_environment.gd`.
+- **s56.18 Ship Boarding Template** — `simulation/ship_boarding_generator.gd`
+  (ShipBoardingGenerator, 134 lines) + `shared/ship_boarding_map_data.gd`. 15×10 tile map:
+  player ship rows 0–3, water gap rows 4–5, enemy ship rows 6–9. Three ship types
+  (SMALL_KOBUNE=1 plank, MEDIUM_ATAKEBUNE=2 planks, LARGE_KOBUNE=3 planks) each with
+  GDD-specified plank column positions. Two boarding modes: OFFENSIVE (player enters from
+  row 3, objective is enemy quarterdeck tile at row 6) and DEFENSIVE (player spawns on
+  own quarterdeck, objective is protecting it). Player quarterdeck: cols 0–2, rows 1–2
+  (elevated FLOOR_STONE marker). Enemy quarterdeck: cols 12–14, rows 7–8. Water tiles
+  (WATER_DEEP) fill the gap; plank tiles (FLOOR_WOOD) bridge it. Quarterdeck elevation
+  and water-hazard mechanical effects (Agility TN 15 to avoid falling in) stored as
+  metadata; effects blocked on s40. Zone exits placed at north hull (player entry) and
+  south hull (enemy entry point). 32 tests in `test_ship_boarding_template.gd`.
+- **s56.6.3 Noise Propagation System** — `simulation/noise_system.gd` (NoiseSystem).
+  Modified Dijkstra BFS on the ASCII tile grid per GDD s56.6.3 (LOCKED). Five noise
+  levels (SILENT/QUIET/MODERATE/LOUD/VERY_LOUD) with tile-radius budgets (0/3/6/12/9999
+  from AsciiMapEnvironment.NOISE_RADIUS). SILENT returns empty immediately. Walls
+  (VOID/WALL_STONE/WALL_WOOD/WALL_PAPER) block propagation entirely; wall tiles are
+  excluded from the reachable set. Corridor axis detection: EW corridor = walls at
+  N+S perpendicular to the current tile; NS corridor = walls at E+W; out-of-bounds
+  map edges count as walls (map.get_tile() returns WALL_STONE for OOB). Corridor bonus
+  (CORRIDOR_COST_MULT = 2/3): noise travels 50% farther along corridor axis. Vegetation
+  tiles (TREE_*, BAMBOO, BUSH, CROPS, GROUNDCOVER, FLOWERS) and water tiles
+  (WATER_SHALLOW/DEEP/RAPID/PADDY) dampen noise (DAMPING_COST_MULT = 4/3, −25% reach).
+  These tile types dampen but do NOT block — distinct from FovSystem blocking behavior.
+  Ravine echo: effective noise level bumped +1 (capped at VERY_LOUD) when `is_ravine=true`.
+  Rain weather (RAIN/STORM/TYPHOON): budget × RAIN_BUDGET_MULT (0.75) applied before BFS.
+  Source tile excluded from reachable set (enemies at source are adjacent to actor).
+  O(V²) priority-queue extraction — sufficient for 31×31 maps. 38 tests in
+  `tests/test_noise_system.gd`.
+- **s56.6.4 Kansen Hazard Grid System** — `simulation/kansen_system.gd` (KansenSystem).
+  Per-tile kansen density grid per GDD s56.6.4 (LOCKED). Density stored as PackedByteArray
+  (one byte per tile, AsciiMapEnvironment.KansenDensity values: NONE=0/LOW=1/MODERATE=2/HIGH=3).
+  `generate_density_grid()`: for non-maho quest seeds → flat density from PTL via
+  AsciiMapEnvironment.density_from_ptl(). For maho quest seeds with objectives (MAHO_CULT,
+  PROVINCE_TAINT_MANIFESTATION, ONI_MANIFESTATION, HUNT_THE_DEFECTOR, GAKI_DO_MANIFESTATION,
+  TOSHIGOKU_BLEED) → spatial overlay using Chebyshev distance: HIGH within 2 tiles of any
+  objective, MODERATE within 5 tiles, LOW within 10 tiles, outer area = max(NONE, base−1).
+  `density_at()`: safe accessor returning NONE for out-of-bounds coordinates.
+  `apply_jade_suppression()`: reduces density by one tier within
+  AsciiMapEnvironment.JADE_SUPPRESSION_RADIUS=3 tiles (Chebyshev square) of center; returns
+  new PackedByteArray (immutable — never mutates input). `apply_banishment()`: reduces density
+  by one tier on target tile and 4 cardinal neighbors; out-of-bounds neighbors silently skipped;
+  returns new PackedByteArray (immutable). Both reduction functions floor at NONE (no underflow).
+  Progressive clearing: HIGH→MODERATE→LOW→NONE with successive applications. 30 tests in
+  `tests/test_kansen_system.gd`.
+- **s56.1 Quest Seed Selector** — `simulation/quest_seed_selector.gd` (QuestSeedSelector).
+  Seed type routing per GDD s56.1: maps InsurgencyData to seed_dict with `seed_type`,
+  `strength`, `options`, `roster_ready`, `source_insurgency_id`. Seed types: RONIN_BANDIT,
+  MAHO_CULT, PEASANT_REVOLT, TAINT_MANIFESTATION, NEZUMI_INFESTATION, URBAN_CRIMINAL_NETWORK,
+  WALL_SORTIE, ONI_MANIFESTATION, ROAD_ENCOUNTER. `roster_ready` gate: SEED_ONI_MANIFESTATION
+  returns `roster_ready: false` (s54 Named Oni stat blocks not yet in Reference sections).
+  Deterministic seed string format: `province_id + "_" + season + "_" + seed_type`. 41 tests
+  in `test_quest_seed_selector.gd`.
+- **s56.10 Roster Composition System** — `simulation/roster_composition_system.gd`
+  (RosterCompositionSystem, 760 lines). Pure data layer per GDD s56.10: returns unit type
+  specs and role assignments for ASCII map population. Seed types: RONIN_BANDIT (stability-
+  driven Restless/Volatile/Broken headcount tiers: 3–4/4–5/5–6 per Strength point; role
+  assignment: ronin hold critical positions, Thugs secondary, Rabble expendable), PEASANT_REVOLT
+  (5–6 per strength), NEZUMI_INFESTATION (4–5, chieftain + warriors + archers + scouts +
+  broodmother), MAHO_CULT (3–5, initiate + cultist + adept + zombie tiers), TAINT_MANIFESTATION
+  (PTL-driven: Touched/Corrupted/Blighted tiers 3–5/4–6/5–8), URBAN_CRIMINAL_NETWORK (strength-
+  tier 1–4: 3–6/8–12/14–20/20–30 total), WALL_SORTIE (Crab friendly: Hida/Hiruma/Kuni vs
+  Shadowlands enemy: Bakemono/Ogre/Maho-Tsukai/Skeleton/Oni Spawn by strength tier).
+  Individual variance per s56.10.0a: 30–40% chance, +1 to one Trait or Skill; capped at next
+  tier equivalent; skill selection constrained to unit-appropriate skills.
+  38 tests in `test_roster_composition_system.gd`.
+- **s56 Mission Template Resolver** — `simulation/mission_template_resolver.gd`
+  (MissionTemplateResolver). Structural wiring layer: QuestSeedSelector → TemplateSelector →
+  template generator → AsciiMapData. `select_and_generate()` calls TemplateSelector to choose
+  template ID from province terrain + history, then dispatches to the appropriate generator.
+  `dispatch()` allows direct template selection by ID (for re-rolling or seed-type restriction).
+  Fallback: unknown template_id → Cave (safe generic layout). 27 tests in
+  `test_mission_template_resolver.gd`.
+- **s56.10 Mission Populator** — `simulation/mission_populator.gd` (MissionPopulator).
+  Spatial distribution of roster groups across map population_slots per s56.10. `populate(map,
+  roster, seed) -> Array` for all standard templates: priority-ordered role assignment
+  (LEADER first, then chokepoint/guard/edge/sentry/patrol/camp slots) with role-compatible unit
+  type selection from roster. `populate_sortie(map, roster, seed) -> Dictionary` returns
+  `{friendly: Array, enemy: Array}` for SEED_WALL_SORTIE missions. Unit placement entries include
+  tile coordinates from population_slot positions, unit_type, role, and individual variance flags.
+  Deterministic from seed. 33 tests in `test_mission_populator.gd`.
+- **s56.9 Mission Builder + s56.6 Weather/FoV Integration** — `simulation/mission_builder.gd`
+  (MissionBuilder, 101 lines). Top-level mission assembly orchestrator: wires QuestSeedSelector
+  → RosterCompositionSystem → MissionTemplateResolver → MissionPopulator into a single
+  `assemble(province, province_history, seed_dict, seed_str) -> Dictionary` call. `roster_ready`
+  gate returns `{}` for blocked seeds. Urban Criminal Network routes directly to
+  UrbanHideoutGenerator (absent from every TemplateSelector terrain pool). Wall Sortie routes to
+  `populate_sortie()`. Return dict keys: `map` (AsciiMapData subclass), `placements` (Array or
+  `{friendly, enemy}` dict), `objective_slots` (from map.objective_slots), `seed_dict` (passthrough),
+  `roster` (Dictionary), `environment` (biome, weather, fov_modifier, weather_data). Weather
+  integration (s56.6): `biome_for_province()` reads province.biome if set, falls back to
+  `AsciiMapEnvironment.biome_for_terrain()`. `seed_dict["weather"]` (default CLEAR) passed through
+  `apply_biome_weather_conversion()` (Rain→Snow/Storm→Blizzard for cold biomes in winter) before
+  `weather_to_fov_modifier()` → `fov_modifier` int for FovSystem. 37 tests in
+  `test_mission_builder.gd`.
+- **s4.4/s4.5 MovementSystem + AsciiMapView Input** — `simulation/movement_system.gd`
+  (MovementSystem, pure simulation class, no Node inheritance). `terrain_cost()`: impassable
+  tiles return 0 (VOID, all walls, WATER_DEEP, all trees, BAMBOO, GATE_CLOSED, closed doors),
+  difficult terrain returns 2 (WATER_SHALLOW, WATER_PADDY, WATER_RAPID, CROPS, RUBBLE), all
+  other passable tiles return 1. `is_passable()`, `is_closed_door()`, `open_door()`,
+  `close_door()` for door state toggling. `budget(water_ring, action)` per GDD s4.5:
+  FREE=WR, SIMPLE=WR×2, FULL_MOVE=WR×4; water_ring clamped to [1, 10].
+  `check_step(map, from_x, from_y, to_x, to_y) -> Dictionary`: returns
+  `{ok, cost, is_door, is_exit}` for single-step validation including bounds checking.
+  `scripts/ui/ascii_map_view.gd` updated: signals (moved, zone_exit_reached, door_toggled,
+  waited), `water_ring` parameter on `set_map()`, `_look_mode` state (L key toggles,
+  Esc exits), `_unhandled_input()` handling numpad 1-9 / WASD+QEZC 8-directional movement
+  and numpad 5/period wait, `_try_move()` delegating to `MovementSystem.check_step()`,
+  `_open_door_at()` for bump-to-open door interaction (player stays, tile flipped, FOV
+  recomputed). 40 GUT tests in `tests/test_movement_system.gd`.
 
 ## Resolved Design Decisions
 

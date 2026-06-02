@@ -592,6 +592,8 @@ static func _get_max_ap(characters: Array) -> int:
 static func _get_active_characters(characters: Array) -> Array:
 	var active: Array = []
 	for c: L5RCharacterData in characters:
+		if c.is_pc:
+			continue
 		if c.action_points_current > 0 and not CharacterStats.is_dead(c):
 			active.append(c)
 	return active
@@ -604,6 +606,8 @@ static func _gather_reactive_npcs(
 	var reactive_npcs: Array = []
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
+			continue
+		if c.is_pc:
 			continue
 		var ws: Dictionary = world_states.get(c.character_id, {})
 		var events: Array = ws.get("pending_events", [])

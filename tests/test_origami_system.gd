@@ -1022,3 +1022,33 @@ func test_healing_writeback_takes_max_fr_not_additive() -> void:
 	DayOrchestrator._process_present_senbazuru_writebacks(
 		results, senbazurus, chars, topics, next_id, 100)
 	assert_eq(_recipient.pending_healing_fr, 2)
+
+
+# ---------------------------------------------------------------------------
+# _inject_poem_context — known_objectives staleness fix
+# ---------------------------------------------------------------------------
+
+func test_inject_poem_no_scroll_writes_negative_one() -> void:
+	## Character with no poetry_scroll must get available_poem_item_id = -1 each day.
+	## Regression: old code wrote nothing when no scroll found, leaving stale data.
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = 50
+	var ws: Dictionary = {}
+	var world_states: Dictionary = {50: ws}
+	DayOrchestrator._inject_poem_context([c], world_states)
+	assert_eq(ws.get("known_objectives", {}).get("available_poem_item_id", 999), -1)
+	assert_eq(ws.get("known_objectives", {}).get("available_poem_raises", 999), 0)
+
+
+func test_inject_poem_stale_scroll_cleared_after_consumption() -> void:
+	## If a character had a scroll yesterday (stale entry in known_objectives)
+	## but consumed it today, inject must reset to -1 not leave the old item_id.
+	var c: L5RCharacterData = L5RCharacterData.new()
+	c.character_id = 51
+	# Pre-load stale value as if from yesterday.
+	var ws: Dictionary = {"known_objectives": {"available_poem_item_id": 99, "available_poem_raises": 3}}
+	var world_states: Dictionary = {51: ws}
+	# Character has NO scroll in items.
+	DayOrchestrator._inject_poem_context([c], world_states)
+	assert_eq(ws["known_objectives"].get("available_poem_item_id"), -1)
+	assert_eq(ws["known_objectives"].get("available_poem_raises"), 0)

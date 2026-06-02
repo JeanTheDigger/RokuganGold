@@ -41,6 +41,9 @@ const DIR_COMMISSIONS := "commissions/"
 const DIR_PAINTINGS := "paintings/"
 const DIR_SCULPTURES := "sculptures/"
 const DIR_OKIYAS := "okiyas/"
+const DIR_GREATER_ZONES := "greater_zones/"
+const DIR_NAV_ZONES := "nav_zones/"
+const DIR_LESSER_ZONES := "lesser_zones/"
 
 
 # ============================================================================
@@ -80,6 +83,9 @@ func save_world(ws: Node) -> bool:
 	ok = _save_resource_array(ws.active_paintings, base + DIR_PAINTINGS, "painting_id") and ok
 	ok = _save_resource_array(ws.active_sculptures, base + DIR_SCULPTURES, "sculpture_id") and ok
 	ok = _save_resource_array(ws.active_okiyas, base + DIR_OKIYAS, "okiya_id") and ok
+	ok = _save_resource_array_string_id(ws.greater_zones, base + DIR_GREATER_ZONES, "zone_id") and ok
+	ok = _save_resource_array_string_id(ws.navigation_zones, base + DIR_NAV_ZONES, "zone_id") and ok
+	ok = _save_resource_array_string_id(ws.lesser_zones, base + DIR_LESSER_ZONES, "zone_id") and ok
 
 	# Provinces and settlements use their own ID fields
 	ok = _save_resource_array(ws.settlements, base + DIR_SETTLEMENTS, "settlement_id") and ok
@@ -137,6 +143,9 @@ func load_world(ws: Node) -> bool:
 	ws.active_paintings.assign(_load_resource_array(base + DIR_PAINTINGS))
 	ws.active_sculptures.assign(_load_resource_array(base + DIR_SCULPTURES))
 	ws.active_okiyas.assign(_load_resource_array(base + DIR_OKIYAS))
+	ws.greater_zones.assign(_load_resource_array(base + DIR_GREATER_ZONES))
+	ws.navigation_zones.assign(_load_resource_array(base + DIR_NAV_ZONES))
+	ws.lesser_zones.assign(_load_resource_array(base + DIR_LESSER_ZONES))
 	ws.settlements.assign(_load_resource_array(base + DIR_SETTLEMENTS))
 	ws.provinces = _load_province_dict(base + DIR_PROVINCES)
 	ws.favors = _load_favors(base + DIR_FAVORS)
@@ -165,6 +174,22 @@ func _save_resource_array(arr: Array, dir_path: String, id_field: String) -> boo
 		if err != OK:
 			push_error("WorldStateSaver: failed to save %s id=%d: %s" % [
 				id_field, id_val, error_string(err)])
+			ok = false
+	return ok
+
+
+func _save_resource_array_string_id(arr: Array, dir_path: String, id_field: String) -> bool:
+	DirAccess.make_dir_recursive_absolute(dir_path)
+	_purge_directory(dir_path)
+	var ok: bool = true
+	for i: int in range(arr.size()):
+		var item: Resource = arr[i]
+		var id_val: String = str(item.get(id_field))
+		var safe_id: String = id_val.replace("/", "_").replace("\\", "_")
+		var path: String = dir_path + safe_id + ".tres"
+		var err := ResourceSaver.save(item, path)
+		if err != OK:
+			push_error("WorldStateSaver: failed to save %s id=%s" % [id_field, id_val])
 			ok = false
 	return ok
 
@@ -457,6 +482,8 @@ func _save_json_state(ws: Node, base: String) -> bool:
 		"approach_penalties": ws.approach_penalties,
 		"active_hunts": ws.active_hunts,
 		"active_hostages": ws.active_hostages,
+		"active_bubble_scenes": ws.active_bubble_scenes,
+		"next_bubble_scene_id": ws.next_bubble_scene_id[0],
 
 		# Horde counters
 		"horde_strength_counters": ws.horde_strength_counters,
@@ -562,6 +589,8 @@ func _load_json_state(ws: Node, base: String) -> void:
 	ws.approach_penalties.assign(state.get("approach_penalties", []))
 	ws.active_hunts.assign(state.get("active_hunts", []))
 	ws.active_hostages.assign(state.get("active_hostages", []))
+	ws.active_bubble_scenes.assign(state.get("active_bubble_scenes", []))
+	_restore_counter(ws.next_bubble_scene_id, state, "next_bubble_scene_id")
 
 	# Horde
 	ws.horde_strength_counters = state.get("horde_strength_counters", {})
@@ -682,6 +711,9 @@ func _ensure_dirs(base: String) -> void:
 		base + DIR_THEATER_PIECES,
 		base + DIR_SENBAZURUS,
 		base + DIR_ARRANGEMENTS,
+		base + DIR_GREATER_ZONES,
+		base + DIR_NAV_ZONES,
+		base + DIR_LESSER_ZONES,
 	]
 	for d: String in dirs:
 		DirAccess.make_dir_recursive_absolute(d)

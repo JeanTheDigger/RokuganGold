@@ -1255,6 +1255,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"PROBE", "READ_CHARACTER", "PUBLIC_DEBATE",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
 				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
+				"PERFORM_RITUAL", "PERFORM_WORSHIP",
 				"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE",
 				"INVESTIGATE_RUMOR", "ORDER_PATROL",
 				"EXAMINE_LETTER",
@@ -1319,6 +1320,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
 				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION", "DISSOLVE_MARRIAGE",
 				"COMPLY_WITH_EDICT", "DEFY_EDICT",
+				"RESTORE_COUNCIL_COMPACT",
 				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"BRIBE_FOR_INFO", "EAVESDROP",
 				"INTERCEPT_LETTER", "SEARCH_QUARTERS",
@@ -1356,6 +1358,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"DELIVER_GIFT", "OFFER_FAVOR", "DISCERN_NEED",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
 				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
+				"PERFORM_RITUAL", "PERFORM_WORSHIP",
 				"TREAT_WOUND",
 				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
@@ -1420,6 +1423,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"PUBLIC_ATONEMENT", "TRAIN",
 				"CHARM", "PROBE", "READ_CHARACTER",
 				"TREAT_WOUND",
+				"PLACE_SHIDE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_DOJO:
@@ -2174,6 +2178,28 @@ static func _evaluate_urgency_condition(
 			if ctx.skill_ranks.get("Artisan: Ikebana", 0) < 1:
 				return []
 			if ctx.known_objectives.get("ikebana_slot_empty", false):
+				return [{"relevance": 1.0}]
+			return []
+		"shrine_needs_shide":
+			# s57.26b A22: +5 to CRAFT when co-located shrine has no shide.
+			# Gated on Artisan: Origami rank ≥ 1 (only origami crafters benefit).
+			if ctx.skill_ranks.get("Artisan: Origami", 0) < 1:
+				return []
+			if ctx.known_objectives.get("shrine_needs_shide", false):
+				return [{"relevance": 1.0}]
+			return []
+		"shrine_shide_at_normal_craft":
+			# s57.26b A24: +15 to CRAFT when co-located shrine has a Normal-tier shide.
+			# Motivates upgrading the shide to a finer quality.
+			if ctx.skill_ranks.get("Artisan: Origami", 0) < 1:
+				return []
+			if ctx.known_objectives.get("shrine_shide_at_normal", false):
+				return [{"relevance": 1.0}]
+			return []
+		"shrine_shide_at_normal_place":
+			# s57.26b A24: +5 to PLACE_SHIDE when co-located shrine has a Normal-tier shide.
+			# Reflects urgency to replace the worn shide with a better one.
+			if ctx.known_objectives.get("shrine_shide_at_normal", false):
 				return [{"relevance": 1.0}]
 			return []
 		_:

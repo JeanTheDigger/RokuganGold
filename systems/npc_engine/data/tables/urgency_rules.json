@@ -63,5 +63,23 @@
     "bonus": 10,
     "applies_to": ["PUBLIC_PERFORMANCE", "PERFORM_FOR"],
     "stacks_per_crisis": false
+  },
+  {
+    "condition": "shrine_needs_shide",
+    "bonus": 5,
+    "applies_to": ["CRAFT"],
+    "stacks_per_crisis": false
+  },
+  {
+    "condition": "shrine_shide_at_normal_craft",
+    "bonus": 15,
+    "applies_to": ["CRAFT"],
+    "stacks_per_crisis": false
+  },
+  {
+    "condition": "shrine_shide_at_normal_place",
+    "bonus": 5,
+    "applies_to": ["PLACE_SHIDE"],
+    "stacks_per_crisis": false
   }
 ]

@@ -421,6 +421,9 @@ static func bootstrap_world(
 	var next_item_id: Array = [1]
 	_seed_initial_shide(settlements, chars_by_id, dice, next_item_id)
 
+	# -- Zone graph generation (s4.4.1) ---------------------------------------
+	var zone_result: Dictionary = _build_all_zones(settlements, provinces)
+
 	return {
 		"provinces": provinces,
 		"settlements": settlements,
@@ -439,6 +442,9 @@ static func bootstrap_world(
 		"active_okiyas": active_okiyas,
 		"next_okiya_id": next_okiya_id[0],
 		"next_item_id": next_item_id[0],
+		"greater_zones": zone_result["greater_zones"],
+		"navigation_zones": zone_result["navigation_zones"],
+		"lesser_zones": zone_result["lesser_zones"],
 	}
 
 
@@ -518,6 +524,9 @@ static func _create_province_settlements(
 				maxi(5, pu / 2 if pu > 0 else 10),
 				terrain, true,
 			)
+			var champ_families: Array = WorldPopulationGenerator.CLAN_FAMILIES.get(clan, [])
+			if not champ_families.is_empty() and family == champ_families[0]:
+				castle.has_dojo = true
 			result.append(castle)
 			next_id += 1
 
@@ -763,6 +772,63 @@ static func _seed_initial_shide(
 		s.shrine_shide_crafter_id = -1
 		s.shrine_shide_ic_day_placed = 0
 		next_item_id[0] += 1
+
+
+# -- Zone graph generation (s4.4.1) -------------------------------------------
+
+static func _build_all_zones(
+	settlements: Array,
+	provinces: Dictionary,
+) -> Dictionary:
+	# Build province_id → is_coastal lookup once.
+	var coastal_by_province: Dictionary = {}
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid]
+		coastal_by_province[prov.province_id] = prov.is_coastal
+
+	var greater_zones: Array = []
+	var navigation_zones: Array = []
+	var lesser_zones: Array = []
+
+	for s_v: Variant in settlements:
+		var s: SettlementData = s_v as SettlementData
+		if s == null:
+			continue
+		var is_coastal: bool = coastal_by_province.get(s.province_id, false)
+		var lord_rank: int = _infer_lord_rank_for_zones(s)
+		var result: Dictionary = SettlementZoneBuilder.build(s, is_coastal, lord_rank)
+		greater_zones.append(result["greater_zone"])
+		navigation_zones.append_array(result["navigation_zones"])
+		lesser_zones.append_array(result["lesser_zones"])
+
+	return {
+		"greater_zones": greater_zones,
+		"navigation_zones": navigation_zones,
+		"lesser_zones": lesser_zones,
+	}
+
+
+# Infer zone structure lord rank from settlement type and has_dojo flag.
+# This determines castle interior zone count — not the actual ruling lord's rank.
+static func _infer_lord_rank_for_zones(settlement: SettlementData) -> int:
+	match settlement.settlement_type:
+		Enums.SettlementType.IMPERIAL_CAPITAL:
+			return Enums.LordRank.IMPERIAL
+		Enums.SettlementType.FAMILY_CASTLE:
+			if settlement.has_dojo:
+				return Enums.LordRank.CLAN_CHAMPION
+			return Enums.LordRank.FAMILY_DAIMYO
+		Enums.SettlementType.CASTLE:
+			return Enums.LordRank.PROVINCIAL_DAIMYO
+		Enums.SettlementType.KEEP:
+			return Enums.LordRank.CITY_DAIMYO
+		Enums.SettlementType.CITY:
+			return Enums.LordRank.PROVINCIAL_DAIMYO
+		Enums.SettlementType.TOWN:
+			return Enums.LordRank.CITY_DAIMYO
+		_:
+			# VILLAGE, FORTIFICATION, WALL_TOWER, TEMPLE, SHINDEN, MONASTERY
+			return Enums.LordRank.VILLAGE_HEADMAN
 
 
 # -- Adjacency Table ----------------------------------------------------------

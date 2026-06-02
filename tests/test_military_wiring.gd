@@ -6113,3 +6113,65 @@ func test_drill_results_in_advance_day_return() -> void:
 		applied, [], {}, dice,
 	)
 	assert_eq(r.size(), 0)
+
+
+# -- military_data population ----------------------------------------------------
+
+func test_populate_military_data_builds_companies_dict() -> void:
+	var md: Dictionary = {}
+	var companies: Array = [
+		{"company_id": 1, "commander_id": 10, "parent_legion_id": 2,
+			"unit_type": Enums.CompanyUnitType.ASHIGARU_SPEARMEN},
+		{"company_id": 2, "commander_id": -1, "parent_legion_id": 2,
+			"unit_type": Enums.CompanyUnitType.PEASANT_LEVY},
+	]
+	DayOrchestrator._populate_military_data(md, companies)
+	assert_true(md.has("companies"), "companies key populated")
+	assert_eq(md["companies"].size(), 2, "two companies in dict")
+	var cd: MilitaryUnitData.CompanyData = md["companies"].get(1)
+	assert_not_null(cd, "company 1 accessible by id")
+	assert_eq(cd.commander_id, 10, "commander_id copied")
+	assert_eq(cd.parent_legion_id, 2, "parent_legion_id copied")
+	assert_eq(
+		cd.deployment_status,
+		Enums.DeploymentStatus.WITH_LEGION,
+		"deployment_status defaults to WITH_LEGION",
+	)
+
+
+func test_populate_military_data_skips_destroyed() -> void:
+	var md: Dictionary = {}
+	var companies: Array = [
+		{"company_id": 1, "destroyed": true, "commander_id": 5},
+		{"company_id": 2, "commander_id": -1},
+	]
+	DayOrchestrator._populate_military_data(md, companies)
+	assert_eq(md["companies"].size(), 1, "destroyed company excluded")
+	assert_null(md["companies"].get(1), "destroyed company not in dict")
+	assert_not_null(md["companies"].get(2), "valid company present")
+
+
+func test_populate_military_data_skips_invalid_id() -> void:
+	var md: Dictionary = {}
+	var companies: Array = [
+		{"company_id": -1, "commander_id": 5},
+		{"company_id": 3, "commander_id": 7},
+	]
+	DayOrchestrator._populate_military_data(md, companies)
+	assert_eq(md["companies"].size(), 1, "negative-id company excluded")
+	assert_not_null(md["companies"].get(3), "valid id present")
+
+
+func test_populate_military_data_seeds_empty_legions_sections() -> void:
+	var md: Dictionary = {}
+	DayOrchestrator._populate_military_data(md, [])
+	assert_true(md.has("legions"), "legions key present")
+	assert_true(md.has("sections"), "sections key present")
+	assert_eq(md["legions"].size(), 0, "legions empty dict")
+	assert_eq(md["sections"].size(), 0, "sections empty dict")
+
+
+func test_populate_military_data_does_not_overwrite_existing_legions() -> void:
+	var md: Dictionary = {"legions": {99: "existing"}}
+	DayOrchestrator._populate_military_data(md, [])
+	assert_eq(md["legions"].get(99), "existing", "pre-existing legions preserved")
