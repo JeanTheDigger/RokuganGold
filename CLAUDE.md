@@ -3222,9 +3222,11 @@ Do not re-audit this; the list is settled. Ask the user before investigating any
 - s11.7 — sub-tile pathfinding; 5 stub military ActionIDs
 - s11.9 — ship movement initiation; naval blockade (per-sub-tile military unit)
 - s40 — ASCII map tile positioning and range tracking
-- s4.4 — Local Interface / ASCII Map (map data layer done; coordinate system + display blocked)
+- s4.4 — Local Interface / ASCII Map (map data + zone hierarchy + display + movement + FOV + door
+  interaction done; entity layer, MUD text interface, and mission entry flow remain; ASCII combat
+  display blocked on s40)
 - s56 — Quest System / ASCII Map (map generation + roster + mission orchestration layer done;
-  PC mission initiation + ASCII combat display blocked on s40 / s4.4 coordinate system)
+  PC mission initiation + ASCII combat display blocked on s40)
 
 **Blocked on GDD spec gap (no LOCKED spec; do not implement until GDD specifies it):**
 - s2.4 — `DECLARE_WALL_EMERGENCY` ActionID: s2.4.14 Decision 6 has no LOCKED spec
@@ -3917,6 +3919,21 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   `apply_biome_weather_conversion()` (Rain→Snow/Storm→Blizzard for cold biomes in winter) before
   `weather_to_fov_modifier()` → `fov_modifier` int for FovSystem. 37 tests in
   `test_mission_builder.gd`.
+- **s4.4/s4.5 MovementSystem + AsciiMapView Input** — `simulation/movement_system.gd`
+  (MovementSystem, pure simulation class, no Node inheritance). `terrain_cost()`: impassable
+  tiles return 0 (VOID, all walls, WATER_DEEP, all trees, BAMBOO, GATE_CLOSED, closed doors),
+  difficult terrain returns 2 (WATER_SHALLOW, WATER_PADDY, WATER_RAPID, CROPS, RUBBLE), all
+  other passable tiles return 1. `is_passable()`, `is_closed_door()`, `open_door()`,
+  `close_door()` for door state toggling. `budget(water_ring, action)` per GDD s4.5:
+  FREE=WR, SIMPLE=WR×2, FULL_MOVE=WR×4; water_ring clamped to [1, 10].
+  `check_step(map, from_x, from_y, to_x, to_y) -> Dictionary`: returns
+  `{ok, cost, is_door, is_exit}` for single-step validation including bounds checking.
+  `scripts/ui/ascii_map_view.gd` updated: signals (moved, zone_exit_reached, door_toggled,
+  waited), `water_ring` parameter on `set_map()`, `_look_mode` state (L key toggles,
+  Esc exits), `_unhandled_input()` handling numpad 1-9 / WASD+QEZC 8-directional movement
+  and numpad 5/period wait, `_try_move()` delegating to `MovementSystem.check_step()`,
+  `_open_door_at()` for bump-to-open door interaction (player stays, tile flipped, FOV
+  recomputed). 40 GUT tests in `tests/test_movement_system.gd`.
 
 ## Resolved Design Decisions
 
