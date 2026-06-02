@@ -3835,6 +3835,39 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   and water-hazard mechanical effects (Agility TN 15 to avoid falling in) stored as
   metadata; effects blocked on s40. Zone exits placed at north hull (player entry) and
   south hull (enemy entry point). 32 tests in `test_ship_boarding_template.gd`.
+- **s56.6.3 Noise Propagation System** — `simulation/noise_system.gd` (NoiseSystem).
+  Modified Dijkstra BFS on the ASCII tile grid per GDD s56.6.3 (LOCKED). Five noise
+  levels (SILENT/QUIET/MODERATE/LOUD/VERY_LOUD) with tile-radius budgets (0/3/6/12/9999
+  from AsciiMapEnvironment.NOISE_RADIUS). SILENT returns empty immediately. Walls
+  (VOID/WALL_STONE/WALL_WOOD/WALL_PAPER) block propagation entirely; wall tiles are
+  excluded from the reachable set. Corridor axis detection: EW corridor = walls at
+  N+S perpendicular to the current tile; NS corridor = walls at E+W; out-of-bounds
+  map edges count as walls (map.get_tile() returns WALL_STONE for OOB). Corridor bonus
+  (CORRIDOR_COST_MULT = 2/3): noise travels 50% farther along corridor axis. Vegetation
+  tiles (TREE_*, BAMBOO, BUSH, CROPS, GROUNDCOVER, FLOWERS) and water tiles
+  (WATER_SHALLOW/DEEP/RAPID/PADDY) dampen noise (DAMPING_COST_MULT = 4/3, −25% reach).
+  These tile types dampen but do NOT block — distinct from FovSystem blocking behavior.
+  Ravine echo: effective noise level bumped +1 (capped at VERY_LOUD) when `is_ravine=true`.
+  Rain weather (RAIN/STORM/TYPHOON): budget × RAIN_BUDGET_MULT (0.75) applied before BFS.
+  Source tile excluded from reachable set (enemies at source are adjacent to actor).
+  O(V²) priority-queue extraction — sufficient for 31×31 maps. 38 tests in
+  `tests/test_noise_system.gd`.
+- **s56.6.4 Kansen Hazard Grid System** — `simulation/kansen_system.gd` (KansenSystem).
+  Per-tile kansen density grid per GDD s56.6.4 (LOCKED). Density stored as PackedByteArray
+  (one byte per tile, AsciiMapEnvironment.KansenDensity values: NONE=0/LOW=1/MODERATE=2/HIGH=3).
+  `generate_density_grid()`: for non-maho quest seeds → flat density from PTL via
+  AsciiMapEnvironment.density_from_ptl(). For maho quest seeds with objectives (MAHO_CULT,
+  PROVINCE_TAINT_MANIFESTATION, ONI_MANIFESTATION, HUNT_THE_DEFECTOR, GAKI_DO_MANIFESTATION,
+  TOSHIGOKU_BLEED) → spatial overlay using Chebyshev distance: HIGH within 2 tiles of any
+  objective, MODERATE within 5 tiles, LOW within 10 tiles, outer area = max(NONE, base−1).
+  `density_at()`: safe accessor returning NONE for out-of-bounds coordinates.
+  `apply_jade_suppression()`: reduces density by one tier within
+  AsciiMapEnvironment.JADE_SUPPRESSION_RADIUS=3 tiles (Chebyshev square) of center; returns
+  new PackedByteArray (immutable — never mutates input). `apply_banishment()`: reduces density
+  by one tier on target tile and 4 cardinal neighbors; out-of-bounds neighbors silently skipped;
+  returns new PackedByteArray (immutable). Both reduction functions floor at NONE (no underflow).
+  Progressive clearing: HIGH→MODERATE→LOW→NONE with successive applications. 30 tests in
+  `tests/test_kansen_system.gd`.
 
 ## Resolved Design Decisions
 
