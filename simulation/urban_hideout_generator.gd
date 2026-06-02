@@ -34,7 +34,9 @@ static func generate(seed_str: String, strength: int, obj_types: Array) -> Urban
 	var dim: Vector2i = UrbanHideoutMapData.DIMS[size]
 	var w: int = dim.x
 	var h: int = dim.y
-	map.init_tiles(w, h, _WALL_STONE)
+	map.width = w
+	map.height = h
+	map.init_tiles(_WALL_STONE)
 
 	rng = _place_rooms(map, w, h, size, rng)
 	_connect_rooms(map)

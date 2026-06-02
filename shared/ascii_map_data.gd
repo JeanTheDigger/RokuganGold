@@ -70,6 +70,14 @@ func init_tiles(fill: int = Enums.TileType.FLOOR_GRASS) -> void:
 		tile_types[i] = fill
 
 
+func get_width() -> int:
+	return width
+
+
+func get_height() -> int:
+	return height
+
+
 # Returns true if the tile blocks movement (walls, closed doors, deep water,
 # trees). Used by the FOV raycaster and movement validation.
 static func is_passable(tile: int) -> bool:

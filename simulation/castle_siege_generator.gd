@@ -29,7 +29,9 @@ static func generate(seed_str: String, size_cat: int, assault_mode: int) -> Cast
 	var dim: Vector2i = CastleSiegeMapData.DIMS[size_cat]
 	var w: int = dim.x
 	var h: int = dim.y
-	map.init_tiles(w, h, _WALL)
+	map.width = w
+	map.height = h
+	map.init_tiles(_WALL)
 
 	match size_cat:
 		CastleSiegeMapData.SizeCategory.FORTIFICATION:
