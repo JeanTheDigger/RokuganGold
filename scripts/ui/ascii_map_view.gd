@@ -41,6 +41,8 @@ const HIDDEN_BG: Color = Color(0.06, 0.06, 0.08, 1.0)
 # Explored tiles (seen before, not currently visible) render at this fraction
 # of their full foreground/background brightness.
 const DIM_FACTOR: float = 0.30
+# Animated glyphs (player, entities) blink at 1 Hz (toggle every 0.5 s).
+const BLINK_INTERVAL: float = 0.5
 
 # unit_type string → {glyph, color} for entity rendering.
 const ENTITY_GLYPHS: Dictionary = {
@@ -97,11 +99,23 @@ var _seen: Dictionary = {}     # Vector2i (map coords) -> bool; all tiles ever s
 var _look_mode: bool = false   # true: arrow keys pan camera, not player
 # Transient entity list: Array of {x, y, unit_type, faction, is_alive}.
 var _entities: Array = []
+# Blink state for animated glyphs (player marker + entities).
+var _blink_timer: float = 0.0
+var _blink_visible: bool = true
 
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(VIEWPORT_SIZE * CELL_SIZE, VIEWPORT_SIZE * CELL_SIZE)
 	set_process_unhandled_input(true)
+	set_process(true)
+
+
+func _process(delta: float) -> void:
+	_blink_timer += delta
+	if _blink_timer >= BLINK_INTERVAL:
+		_blink_timer -= BLINK_INTERVAL
+		_blink_visible = not _blink_visible
+		queue_redraw()
 
 
 # Load a new map and set the player position. Camera centers on the player.
@@ -434,28 +448,30 @@ func _draw() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, CELL_SIZE, font_size, fg)
 
 	# Draw entities (above tiles, below player marker).
-	for e: Dictionary in _entities:
-		if not e["is_alive"]:
-			continue
-		var ex: int = e["x"]
-		var ey: int = e["y"]
-		if not _visible.get(Vector2i(ex, ey), false):
-			continue
-		var evx: int = ex - _camera_x
-		var evy: int = ey - _camera_y
-		if evx < 0 or evx >= VIEWPORT_SIZE or evy < 0 or evy >= VIEWPORT_SIZE:
-			continue
-		var unit_type: String = e.get("unit_type", "")
-		var gd: Dictionary = ENTITY_GLYPHS.get(unit_type, {"glyph": "?", "color": Color.WHITE})
-		var ecell: Vector2 = Vector2(evx * CELL_SIZE, evy * CELL_SIZE)
-		draw_string(font, Vector2(ecell.x + 2, ecell.y + font.get_ascent(font_size)),
-			gd["glyph"], HORIZONTAL_ALIGNMENT_LEFT, CELL_SIZE, font_size, gd["color"])
+	# Blink off phase: skip animated glyphs so they visually pulse at 1 Hz.
+	if _blink_visible:
+		for e: Dictionary in _entities:
+			if not e["is_alive"]:
+				continue
+			var ex: int = e["x"]
+			var ey: int = e["y"]
+			if not _visible.get(Vector2i(ex, ey), false):
+				continue
+			var evx: int = ex - _camera_x
+			var evy: int = ey - _camera_y
+			if evx < 0 or evx >= VIEWPORT_SIZE or evy < 0 or evy >= VIEWPORT_SIZE:
+				continue
+			var unit_type: String = e.get("unit_type", "")
+			var gd: Dictionary = ENTITY_GLYPHS.get(unit_type, {"glyph": "?", "color": Color.WHITE})
+			var ecell: Vector2 = Vector2(evx * CELL_SIZE, evy * CELL_SIZE)
+			draw_string(font, Vector2(ecell.x + 2, ecell.y + font.get_ascent(font_size)),
+				gd["glyph"], HORIZONTAL_ALIGNMENT_LEFT, CELL_SIZE, font_size, gd["color"])
 
 	# Draw player marker if visible through the current viewport window.
 	var pvx: int = _player_x - _camera_x
 	var pvy: int = _player_y - _camera_y
 	if pvx >= 0 and pvx < VIEWPORT_SIZE and pvy >= 0 and pvy < VIEWPORT_SIZE:
-		if _visible.get(Vector2i(_player_x, _player_y), false):
+		if _visible.get(Vector2i(_player_x, _player_y), false) and _blink_visible:
 			var player_cell: Vector2 = Vector2(pvx * CELL_SIZE, pvy * CELL_SIZE)
 			var text_y: float = player_cell.y + font.get_ascent(font_size)
 			draw_string(font, Vector2(player_cell.x + 2, text_y), "@",
