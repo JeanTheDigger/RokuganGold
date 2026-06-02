@@ -95,8 +95,8 @@ When implementing or auditing a system, go here first:
 | Courtier school techniques & rerolls          | 29.15                |
 | Skill resolver (technique/wound/emphasis)     | 29.15, 4.5           |
 | Individual combat                             | 40 (not yet built)   |
-| ASCII map mission generation                  | 56 (not yet built)   |
-| Quest seeds                                   | 56.1 (not yet built) |
+| ASCII map mission generation                  | 56                   |
+| Quest seeds                                   | 56.1                 |
 | Spiritual insurgency (trigger layer)          | 56.16                |
 | Bloodspeaker cult network                     | 56.14                |
 | NPC decision engine — core loop               | 55 (all subsects)    |
@@ -3226,8 +3226,9 @@ Do not re-audit this; the list is settled. Ask the user before investigating any
 - s11.7 — sub-tile pathfinding; 5 stub military ActionIDs
 - s11.9 — ship movement initiation; naval blockade (per-sub-tile military unit)
 - s40 — ASCII map tile positioning and range tracking
-- s4.4 — Local Interface / ASCII Map (NOT STARTED)
-- s56 — Quest System / ASCII Map (NOT STARTED)
+- s4.4 — Local Interface / ASCII Map (map data layer done; coordinate system + display blocked)
+- s56 — Quest System / ASCII Map (map generation + roster + mission orchestration layer done;
+  PC mission initiation + ASCII combat display blocked on s40 / s4.4 coordinate system)
 
 **Blocked on GDD spec gap (no LOCKED spec; do not implement until GDD specifies it):**
 - s2.4 — `DECLARE_WALL_EMERGENCY` ActionID: s2.4.14 Decision 6 has no LOCKED spec
@@ -3809,7 +3810,7 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   biases toward defended positions. Deterministic selection from seeded RNG (province_id +
   season string). 20 tests in `test_template_selector.gd`.
 - **s56.6 ASCII Map Environment Data Layer** — `simulation/ascii_map_environment.gd`
-  (AsciiMapEnvironment, 262 lines). Pure data and lookup layer for outdoor map environment
+  (AsciiMapEnvironment, 317 lines). Pure data and lookup layer for outdoor map environment
   mechanics per GDD s56.6.1–56.6.4. BiomeType enum (7 values). WeatherState enum (8 values
   including biome-specific Snow/Blizzard/Mist). WEATHER_DATA dictionary: per-state TN modifiers
   for ranged attacks, vision range, stealth, movement multiplier, wound exposure rate, and
@@ -3818,11 +3819,13 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   (3/6/12/20). AlertState enum (UNAWARE/SUSPICIOUS/ALERT/COMBAT) with transition rules:
   Unaware→Suspicious on Moderate noise in radius, Suspicious→Alert on investigation failure
   or Loud noise, Alert→Combat on direct sighting. KANSEN_DENSITY enum (5 levels) with
-  threshold table keyed by PTL ranges. BiomeType helper: `biome_for_terrain(TerrainType)`,
-  `weather_for_season(season, biome)`, `kansen_density_for_ptl(ptl)`,
-  `alert_transition(current_state, noise_level, distance)`.
+  threshold table keyed by PTL ranges. Static helpers: `biome_for_terrain(terrain_type)`,
+  `density_from_ptl(ptl)`, `get_weather_data(weather)`, `is_coastal_only(weather)`,
+  `apply_biome_weather_conversion(base_weather, biome, season)` (Rain→Snow in NORTHERN_HIGHLAND/
+  CENTRAL_PLAINS/WESTERN_STEPPE in winter; Storm→Blizzard in NORTHERN_HIGHLAND in winter),
+  `weather_to_fov_modifier(weather)` (returns WEATHER_DATA vision_mod for FovSystem).
   Fire propagation (s56.6.6) NOT implemented — labeled PROVISIONAL in GDD, not LOCKED.
-  59 tests in `test_ascii_map_environment.gd`.
+  84 tests in `test_ascii_map_environment.gd`.
 - **s56.18 Ship Boarding Template** — `simulation/ship_boarding_generator.gd`
   (ShipBoardingGenerator, 134 lines) + `shared/ship_boarding_map_data.gd`. 15×10 tile map:
   player ship rows 0–3, water gap rows 4–5, enemy ship rows 6–9. Three ship types
@@ -3868,6 +3871,56 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   returns new PackedByteArray (immutable). Both reduction functions floor at NONE (no underflow).
   Progressive clearing: HIGH→MODERATE→LOW→NONE with successive applications. 30 tests in
   `tests/test_kansen_system.gd`.
+- **s56.1 Quest Seed Selector** — `simulation/quest_seed_selector.gd` (QuestSeedSelector).
+  Seed type routing per GDD s56.1: maps InsurgencyData to seed_dict with `seed_type`,
+  `strength`, `options`, `roster_ready`, `source_insurgency_id`. Seed types: RONIN_BANDIT,
+  MAHO_CULT, PEASANT_REVOLT, TAINT_MANIFESTATION, NEZUMI_INFESTATION, URBAN_CRIMINAL_NETWORK,
+  WALL_SORTIE, ONI_MANIFESTATION, ROAD_ENCOUNTER. `roster_ready` gate: SEED_ONI_MANIFESTATION
+  returns `roster_ready: false` (s54 Named Oni stat blocks not yet in Reference sections).
+  Deterministic seed string format: `province_id + "_" + season + "_" + seed_type`. 41 tests
+  in `test_quest_seed_selector.gd`.
+- **s56.10 Roster Composition System** — `simulation/roster_composition_system.gd`
+  (RosterCompositionSystem, 760 lines). Pure data layer per GDD s56.10: returns unit type
+  specs and role assignments for ASCII map population. Seed types: RONIN_BANDIT (stability-
+  driven Restless/Volatile/Broken headcount tiers: 3–4/4–5/5–6 per Strength point; role
+  assignment: ronin hold critical positions, Thugs secondary, Rabble expendable), PEASANT_REVOLT
+  (5–6 per strength), NEZUMI_INFESTATION (4–5, chieftain + warriors + archers + scouts +
+  broodmother), MAHO_CULT (3–5, initiate + cultist + adept + zombie tiers), TAINT_MANIFESTATION
+  (PTL-driven: Touched/Corrupted/Blighted tiers 3–5/4–6/5–8), URBAN_CRIMINAL_NETWORK (strength-
+  tier 1–4: 3–6/8–12/14–20/20–30 total), WALL_SORTIE (Crab friendly: Hida/Hiruma/Kuni vs
+  Shadowlands enemy: Bakemono/Ogre/Maho-Tsukai/Skeleton/Oni Spawn by strength tier).
+  Individual variance per s56.10.0a: 30–40% chance, +1 to one Trait or Skill; capped at next
+  tier equivalent; skill selection constrained to unit-appropriate skills.
+  38 tests in `test_roster_composition_system.gd`.
+- **s56 Mission Template Resolver** — `simulation/mission_template_resolver.gd`
+  (MissionTemplateResolver). Structural wiring layer: QuestSeedSelector → TemplateSelector →
+  template generator → AsciiMapData. `select_and_generate()` calls TemplateSelector to choose
+  template ID from province terrain + history, then dispatches to the appropriate generator.
+  `dispatch()` allows direct template selection by ID (for re-rolling or seed-type restriction).
+  Fallback: unknown template_id → Cave (safe generic layout). 27 tests in
+  `test_mission_template_resolver.gd`.
+- **s56.10 Mission Populator** — `simulation/mission_populator.gd` (MissionPopulator).
+  Spatial distribution of roster groups across map population_slots per s56.10. `populate(map,
+  roster, seed) -> Array` for all standard templates: priority-ordered role assignment
+  (LEADER first, then chokepoint/guard/edge/sentry/patrol/camp slots) with role-compatible unit
+  type selection from roster. `populate_sortie(map, roster, seed) -> Dictionary` returns
+  `{friendly: Array, enemy: Array}` for SEED_WALL_SORTIE missions. Unit placement entries include
+  tile coordinates from population_slot positions, unit_type, role, and individual variance flags.
+  Deterministic from seed. 33 tests in `test_mission_populator.gd`.
+- **s56.9 Mission Builder + s56.6 Weather/FoV Integration** — `simulation/mission_builder.gd`
+  (MissionBuilder, 101 lines). Top-level mission assembly orchestrator: wires QuestSeedSelector
+  → RosterCompositionSystem → MissionTemplateResolver → MissionPopulator into a single
+  `assemble(province, province_history, seed_dict, seed_str) -> Dictionary` call. `roster_ready`
+  gate returns `{}` for blocked seeds. Urban Criminal Network routes directly to
+  UrbanHideoutGenerator (absent from every TemplateSelector terrain pool). Wall Sortie routes to
+  `populate_sortie()`. Return dict keys: `map` (AsciiMapData subclass), `placements` (Array or
+  `{friendly, enemy}` dict), `objective_slots` (from map.objective_slots), `seed_dict` (passthrough),
+  `roster` (Dictionary), `environment` (biome, weather, fov_modifier, weather_data). Weather
+  integration (s56.6): `biome_for_province()` reads province.biome if set, falls back to
+  `AsciiMapEnvironment.biome_for_terrain()`. `seed_dict["weather"]` (default CLEAR) passed through
+  `apply_biome_weather_conversion()` (Rain→Snow/Storm→Blizzard for cold biomes in winter) before
+  `weather_to_fov_modifier()` → `fov_modifier` int for FovSystem. 37 tests in
+  `test_mission_builder.gd`.
 
 ## Resolved Design Decisions
 
