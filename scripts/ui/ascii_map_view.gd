@@ -38,6 +38,9 @@ const CELL_SIZE: int = 20      # pixels per tile cell
 
 const BG_DEFAULT: Color = Color(0.06, 0.06, 0.08, 1.0)
 const HIDDEN_BG: Color = Color(0.06, 0.06, 0.08, 1.0)
+# Explored tiles (seen before, not currently visible) render at this fraction
+# of their full foreground/background brightness.
+const DIM_FACTOR: float = 0.30
 
 # unit_type string → {glyph, color} for entity rendering.
 const ENTITY_GLYPHS: Dictionary = {
@@ -85,10 +88,12 @@ var _player_y: int = 15
 # Top-left corner of the viewport in map coordinates.
 var _camera_x: int = 0
 var _camera_y: int = 0
-var _vision_radius: int = 4
+var _perception: int = 4      # raw Perception trait; base for FovSystem calls
+var _vision_radius: int = 4   # effective radius after env modifier + lookout
 var _env_modifier: int = 0
 var _water_ring: int = 3
-var _visible: Dictionary = {}  # Vector2i (map coords) -> bool
+var _visible: Dictionary = {}  # Vector2i (map coords) -> bool; current FOV
+var _seen: Dictionary = {}     # Vector2i (map coords) -> bool; all tiles ever seen
 var _look_mode: bool = false   # true: arrow keys pan camera, not player
 # Transient entity list: Array of {x, y, unit_type, faction, is_alive}.
 var _entities: Array = []
@@ -114,11 +119,12 @@ func set_map(
 	_map = map
 	_player_x = player_x
 	_player_y = player_y
-	_vision_radius = FovSystem.effective_radius(perception, env_modifier)
+	_perception = perception
 	_env_modifier = env_modifier
 	_water_ring = water_ring
 	_look_mode = false
 	_entities.clear()
+	_seen.clear()
 	_center_camera_on(_player_x, _player_y)
 	_recompute_fov()
 	queue_redraw()
@@ -134,7 +140,7 @@ func move_player(
 ) -> void:
 	_player_x = player_x
 	_player_y = player_y
-	_vision_radius = FovSystem.effective_radius(perception, env_modifier)
+	_perception = perception
 	_env_modifier = env_modifier
 	_center_camera_on(_player_x, _player_y)
 	_recompute_fov()
@@ -349,7 +355,28 @@ func _recompute_fov() -> void:
 	if _map == null:
 		_visible = {}
 		return
+	_vision_radius = FovSystem.lookout_radius(_perception, _env_modifier) \
+		if _is_lookout_position() \
+		else FovSystem.effective_radius(_perception, _env_modifier)
 	_visible = FovSystem.compute_visible(_player_x, _player_y, _vision_radius, _map)
+	for pos: Vector2i in _visible:
+		_seen[pos] = true
+
+
+# Returns true when the player is standing on a wall-walk or elevated position
+# that grants the FovSystem.LOOKOUT_BONUS radius increase.
+# Duck-typed check: castle siege maps expose wall_walkways rects; other templates
+# may be added here as their data formats are confirmed.
+func _is_lookout_position() -> bool:
+	if _map == null:
+		return false
+	var wws: Variant = _map.get("wall_walkways")
+	if wws is Array:
+		for ww: Dictionary in (wws as Array):
+			if _player_x >= ww.get("lx", -1) and _player_x <= ww.get("rx", -1) \
+					and _player_y >= ww.get("ly", -1) and _player_y <= ww.get("ry", -1):
+				return true
+	return false
 
 
 # ── Rendering ────────────────────────────────────────────────────────────────
@@ -371,7 +398,25 @@ func _draw() -> void:
 			var grid_pos: Vector2i = Vector2i(mx, my)
 
 			if not _visible.get(grid_pos, false):
-				draw_rect(Rect2(cell_pos, Vector2(CELL_SIZE, CELL_SIZE)), HIDDEN_BG)
+				if not _seen.get(grid_pos, false):
+					# Never seen — pure dark.
+					draw_rect(Rect2(cell_pos, Vector2(CELL_SIZE, CELL_SIZE)), HIDDEN_BG)
+				else:
+					# Explored but not currently visible — draw dimmed tile.
+					var rem_tile: int = _map.get_tile(mx, my)
+					var rem_bg: Color = AsciiMapGenerator.get_bg_color(rem_tile)
+					if rem_bg.a > 0.01:
+						draw_rect(Rect2(cell_pos, Vector2(CELL_SIZE, CELL_SIZE)),
+							Color(rem_bg.r * DIM_FACTOR, rem_bg.g * DIM_FACTOR,
+								rem_bg.b * DIM_FACTOR, 1.0))
+					var rem_glyph: String = AsciiMapGenerator.get_glyph(rem_tile, mx, my, _map)
+					if not rem_glyph.is_empty() and rem_glyph != " ":
+						var rem_fg: Color = AsciiMapGenerator.get_fg_color(rem_tile)
+						var dfg: Color = Color(rem_fg.r * DIM_FACTOR, rem_fg.g * DIM_FACTOR,
+							rem_fg.b * DIM_FACTOR, 1.0)
+						draw_string(font, Vector2(cell_pos.x + 2,
+							cell_pos.y + font.get_ascent(font_size)),
+							rem_glyph, HORIZONTAL_ALIGNMENT_LEFT, CELL_SIZE, font_size, dfg)
 				continue
 
 			var tile: int = _map.get_tile(mx, my)
