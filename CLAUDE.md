@@ -134,6 +134,7 @@ When implementing or auditing a system, go here first:
 | World population generator (game start pass)  | 52 Part 1, 22.4, 22.8|
 | Gempukku / NPC spawning / natural death       | 52, 22.4, 22.7       |
 | Ronin system (status transitions, petition)   | 52 Part 5, 52.5      |
+| PC integration (presence, AP banking, offline)| 60                   |
 
 ## Directory Structure
 ```
