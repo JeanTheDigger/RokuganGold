@@ -1017,6 +1017,7 @@ static func advance_day(
 		active_hunts, favors, bloodspeaker_cells, active_secrets,
 		theater_pieces, active_paintings, active_sculptures,
 		commission_records, settlements, active_bonsai,
+		active_okiyas, active_arrangements, active_senbazurus,
 	)
 	_apply_artist_grief_on_death(characters, characters_by_id, active_paintings, settlements, ic_day)
 
@@ -1443,6 +1444,7 @@ static func advance_day(
 				active_hunts, favors, bloodspeaker_cells, active_secrets,
 				theater_pieces, active_paintings, active_sculptures,
 				commission_records, settlements, active_bonsai,
+				active_okiyas, active_arrangements, active_senbazurus,
 			)
 
 	var koku_flow_results: Dictionary = {}
@@ -7733,6 +7735,9 @@ static func _cleanup_dead_character_references(
 	commission_records: Array = [],
 	settlements: Array = [],
 	active_bonsai: Array = [],
+	active_okiyas: Array = [],
+	active_arrangements: Array = [],
+	active_senbazurus: Array = [],
 ) -> void:
 	var dead_ids: Array = []
 	for c: L5RCharacterData in characters:
@@ -7797,6 +7802,18 @@ static func _cleanup_dead_character_references(
 	if not commission_records.is_empty() or not active_bonsai.is_empty():
 		for did: int in dead_ids:
 			GardenSystem.handle_character_death(did, commission_records, settlements, active_bonsai)
+
+	if not active_okiyas.is_empty():
+		for did: int in dead_ids:
+			GeishaSystem.handle_character_death(active_okiyas, did, characters_by_id)
+
+	if not active_arrangements.is_empty():
+		for did: int in dead_ids:
+			IkebanaSystem.handle_character_death(active_arrangements, did)
+
+	if not active_senbazurus.is_empty():
+		for did: int in dead_ids:
+			OrigamiSystem.handle_character_death(active_senbazurus, did)
 
 	for secret: Variant in active_secrets:
 		if not secret is SecretData:
@@ -13405,6 +13422,7 @@ static func _compute_topic_relevance(topic: TopicData, character: L5RCharacterDa
 
 
 static func _clear_stale_context_flags(world_states: Dictionary) -> void:
+	# Top-level ws keys that are set conditionally and must be erased each day.
 	var stale_keys: Array = [
 		"context_flag", "active_court_at_location", "court_id",
 		"court_settlement_id", "court_session_state",
@@ -13414,22 +13432,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"is_patrolled", "phoenix_champion_authority",
 		"settlement_type",
 		"champion_conclusion_candidates", "local_tier3_candidates",
-		"theater_pieces_to_perform", "wip_piece_ids", "learnable_piece_ids",
 		"has_active_contracts",
-		"ikebana_garden_fr", "ikebana_garden_id",
-		"active_senbazuru_id", "senbazuru_is_complete",
-		"active_commission_id", "commission_quality_tier",
-		"local_garden_id", "local_garden_tier",
-		"owned_bonsai_id", "bonsai_display_eligible",
-		"garden_zone_available", "available_garden_zone",
-		"character_province_id",
-		"active_painting_wip_id", "displayable_paintings", "presentable_emakimono",
-		"wall_art_slot_empty", "displayed_art_slot_empty", "fusuma_slot_empty",
-		"has_wall_art_permission", "painting_fortune_fr",
-		"active_sculpture_wip_id", "active_sculpture_material", "active_sculpture_format",
-		"statue_slot_empty", "guardian_slot_empty",
-		"is_religious_settlement", "has_statue_permission", "has_guardian_permission",
-		"statuary_worship_fr", "statuary_subject_id", "guardian_worship_fr", "foundry_in_province",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -13438,6 +13441,11 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		if ws is Dictionary:
 			for key: String in stale_keys:
 				(ws as Dictionary).erase(key)
+			# All nested known_objectives sub-keys (urgency context, hunt, art/craft
+			# context, shide, ikebana, garden, etc.) are stored here and rebuilt each
+			# day by their respective injectors — clear the entire sub-dict.
+			if (ws as Dictionary).has("known_objectives"):
+				((ws as Dictionary)["known_objectives"] as Dictionary).clear()
 
 
 static func _set_court_context_flags(

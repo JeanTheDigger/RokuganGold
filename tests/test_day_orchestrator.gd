@@ -16037,3 +16037,34 @@ func test_festival_leaves_penalty_skips_dead_characters() -> void:
 	c.glory = 5.0
 	DayOrchestrator._process_festival_leaves_penalty([], [c], 120)
 	assert_almost_eq(c.glory, 5.0, 0.001, "Dead character should not receive penalty")
+
+
+# ============================================================================
+# STALE CONTEXT FLAG CLEARING — known_objectives sub-dict
+# ============================================================================
+
+func test_clear_stale_flags_clears_known_objectives_subdict() -> void:
+	var ws: Dictionary = {
+		1: {
+			"context_flag": "AT_COURT",
+			"known_objectives": {
+				"standing_need_type": "UPHOLD_LAW",
+				"lord_assigned": true,
+				"active_hunt_id": 5,
+				"ikebana_garden_fr": 2,
+				"theater_pieces_to_perform": [1, 2, 3],
+			}
+		}
+	}
+	DayOrchestrator._clear_stale_context_flags(ws)
+	assert_false(ws[1].has("context_flag"), "Top-level stale key should be erased")
+	var known: Dictionary = ws[1].get("known_objectives", {"sentinel": true})
+	assert_eq(known.size(), 0, "known_objectives should be empty after stale clearing")
+
+
+func test_clear_stale_flags_does_not_crash_when_known_objectives_absent() -> void:
+	var ws: Dictionary = {
+		1: {"context_flag": "AT_OWN_HOLDINGS"}
+	}
+	DayOrchestrator._clear_stale_context_flags(ws)
+	assert_false(ws[1].has("context_flag"), "Stale key erased even without known_objectives")

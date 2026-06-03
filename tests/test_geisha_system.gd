@@ -368,3 +368,34 @@ func test_kolat_infiltration_rate_roughly_15pct() -> void:
 	# Expect ~15% ± generous margin.
 	assert_true(infiltrated >= 10, "Expected ≥10 infiltrations in 200 trials, got %d" % infiltrated)
 	assert_true(infiltrated <= 50, "Expected ≤50 infiltrations in 200 trials, got %d" % infiltrated)
+
+
+func test_handle_character_death_removes_dead_geisha() -> void:
+	var okiya := OkiyaData.new()
+	okiya.geisha_ids = [10, 20, 30]
+	okiya.okaasan_id = 5
+	okiya.handler_id = 7
+	GeishaSystem.handle_character_death([okiya], 20, {})
+	assert_false(okiya.geisha_ids.has(20), "Dead geisha removed from geisha_ids")
+	assert_true(okiya.geisha_ids.has(10), "Other geisha unaffected")
+	assert_eq(okiya.okaasan_id, 5, "Okaasan unaffected")
+
+
+func test_handle_character_death_clears_dead_okaasan() -> void:
+	var okiya := OkiyaData.new()
+	okiya.geisha_ids = [10]
+	okiya.okaasan_id = 99
+	okiya.handler_id = 7
+	GeishaSystem.handle_character_death([okiya], 99, {})
+	assert_eq(okiya.okaasan_id, -1, "Dead okaasan cleared")
+	assert_eq(okiya.handler_id, 7, "Handler unaffected")
+
+
+func test_handle_character_death_clears_dead_handler() -> void:
+	var okiya := OkiyaData.new()
+	okiya.geisha_ids = []
+	okiya.okaasan_id = 5
+	okiya.handler_id = 42
+	GeishaSystem.handle_character_death([okiya], 42, {})
+	assert_eq(okiya.handler_id, -1, "Dead handler cleared")
+	assert_eq(okiya.okaasan_id, 5, "Okaasan unaffected")

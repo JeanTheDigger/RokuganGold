@@ -1052,3 +1052,27 @@ func test_inject_poem_stale_scroll_cleared_after_consumption() -> void:
 	DayOrchestrator._inject_poem_context([c], world_states)
 	assert_eq(ws["known_objectives"].get("available_poem_item_id"), -1)
 	assert_eq(ws["known_objectives"].get("available_poem_raises"), 0)
+
+
+func test_handle_character_death_marks_active_senbazuru_abandoned() -> void:
+	var sb := SenbazuruData.new()
+	sb.folder_id = 7
+	sb.state = "active"
+	OrigamiSystem.handle_character_death([sb], 7)
+	assert_eq(sb.state, "abandoned", "Active senbazuru abandoned when folder dies")
+
+
+func test_handle_character_death_ignores_already_complete_senbazuru() -> void:
+	var sb := SenbazuruData.new()
+	sb.folder_id = 7
+	sb.state = "presented"
+	OrigamiSystem.handle_character_death([sb], 7)
+	assert_eq(sb.state, "presented", "Presented senbazuru not mutated on folder death")
+
+
+func test_handle_character_death_noop_when_folder_alive() -> void:
+	var sb := SenbazuruData.new()
+	sb.folder_id = 7
+	sb.state = "active"
+	OrigamiSystem.handle_character_death([sb], 99)
+	assert_eq(sb.state, "active", "Unrelated death does not affect senbazuru")

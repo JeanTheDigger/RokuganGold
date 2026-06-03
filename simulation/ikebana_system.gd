@@ -358,6 +358,18 @@ static func generate_initial_arrangements(
 	return result
 
 
+## Removes a dead character ID from visitors_who_received_bonus on all arrangements.
+static func handle_character_death(
+	active_arrangements: Array,
+	dead_id: int,
+) -> void:
+	for arr_v: Variant in active_arrangements:
+		if not arr_v is IkebanaArrangementData:
+			continue
+		var arr: IkebanaArrangementData = arr_v as IkebanaArrangementData
+		arr.visitors_who_received_bonus.erase(dead_id)
+
+
 static func _world_start_quality(
 	settlement: SettlementData,
 	artisan: L5RCharacterData,

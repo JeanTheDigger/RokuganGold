@@ -238,9 +238,7 @@ func _load_npc_scoring_tables() -> void:
 		"topic_position_alignment": _load_json(base + "topic_position_alignment.json"),
 		"action_skill_map": _load_json(base + "action_skill_map.json"),
 	}
-	filter_data = {
-		"personality_filter": _load_json(base + "personality_filter.json"),
-	}
+	filter_data = _load_json(base + "personality_filter.json")
 	action_skill_map = scoring_tables.get("action_skill_map", {})
 
 

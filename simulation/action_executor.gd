@@ -4437,7 +4437,7 @@ static func _execute_duel_challenge(
 		"ic_day": ctx.ic_day,
 		"season": ctx.season,
 		"injects_reactive_event": true,
-		"reactive_event_type": "DUEL_CHALLENGE_RECEIVED",
+		"reactive_type": "DUEL_CHALLENGE_RECEIVED",
 		"reactive_event_target_id": target_id,
 		"effects": {
 			"challenge_issued": true,
@@ -4833,7 +4833,7 @@ static func _execute_mentor(
 		"sensei_skill_rank": sensei_rank,
 		"rank_gap": sensei_rank - student_rank,
 		"injects_reactive_event": true,
-		"reactive_event_type": "ACCEPT_TRAINING",
+		"reactive_type": "ACCEPT_TRAINING",
 		"reactive_event_target_id": student_id,
 	}
 

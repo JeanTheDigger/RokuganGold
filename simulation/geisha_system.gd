@@ -392,6 +392,24 @@ static func _roll_kolat_infiltration(dice: DiceEngine) -> int:
 # HELPERS — KOKU COST LOOKUP
 # ============================================================================
 
+## Cleans dead character references from an okiya. Removes dead IDs from
+## geisha_ids, clears okaasan_id and handler_id if the holder is dead.
+static func handle_character_death(
+	okiyas: Array,
+	dead_id: int,
+	characters_by_id: Dictionary,
+) -> void:
+	for okiya_v: Variant in okiyas:
+		if not okiya_v is OkiyaData:
+			continue
+		var okiya: OkiyaData = okiya_v as OkiyaData
+		okiya.geisha_ids.erase(dead_id)
+		if okiya.okaasan_id == dead_id:
+			okiya.okaasan_id = -1
+		if okiya.handler_id == dead_id:
+			okiya.handler_id = -1
+
+
 ## Returns the koku cost for a visit to an okiya of the given tier.
 static func koku_cost_for_tier(tier: int) -> float:
 	return KOKU_BY_TIER[clampi(tier, 0, 3)]
