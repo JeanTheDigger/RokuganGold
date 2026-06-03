@@ -2407,3 +2407,338 @@ func test_perceived_honor_no_advantage_uses_actual_honor():
 	var effective: float = AdvantageSystem.get_perceived_honor(witness)
 	assert_eq(effective, 3.5)
 	assert_eq(int(effective) * 5, 15, "Honor bonus without PERCEIVED_HONOR uses actual rank")
+
+
+# ---------------------------------------------------------------------------
+# s45 additional query functions — batch 2
+# ---------------------------------------------------------------------------
+
+func test_has_absolute_direction_true():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.ABSOLUTE_DIRECTION)
+	assert_true(AdvantageSystem.has_absolute_direction(c))
+
+
+func test_has_absolute_direction_false():
+	var c := _make_character()
+	assert_false(AdvantageSystem.has_absolute_direction(c))
+
+
+func test_can_read_lips_true():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.READ_LIPS)
+	assert_true(AdvantageSystem.can_read_lips(c))
+
+
+func test_can_read_lips_false():
+	var c := _make_character()
+	assert_false(AdvantageSystem.can_read_lips(c))
+
+
+func test_get_read_lips_tn_base():
+	# GDD s45 line 279-281: TN 15 at 0-19 feet (0 full 20-foot increments)
+	assert_eq(AdvantageSystem.get_read_lips_tn(0), 15)
+
+
+func test_get_read_lips_tn_one_increment():
+	# 20 feet = 1 increment → TN 15 + 5 = 20
+	assert_eq(AdvantageSystem.get_read_lips_tn(20), 20)
+
+
+func test_get_read_lips_tn_three_increments():
+	# 60 feet = 3 increments → TN 15 + 15 = 30
+	assert_eq(AdvantageSystem.get_read_lips_tn(60), 30)
+
+
+func test_character_knows_language_true():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.LANGUAGES, 1, {"language": "Yobanjin"})
+	assert_true(AdvantageSystem.character_knows_language(c, "Yobanjin"))
+
+
+func test_character_knows_language_false_when_absent():
+	var c := _make_character()
+	assert_false(AdvantageSystem.character_knows_language(c, "Yobanjin"))
+
+
+func test_character_knows_language_false_when_different_language():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.LANGUAGES, 1, {"language": "Naga"})
+	assert_false(AdvantageSystem.character_knows_language(c, "Yobanjin"))
+
+
+func test_get_known_languages_empty():
+	var c := _make_character()
+	assert_eq(AdvantageSystem.get_known_languages(c).size(), 0)
+
+
+func test_get_known_languages_multiple():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.LANGUAGES, 1, {"language": "Yobanjin"})
+	_add_advantage(c, Enums.Advantage.LANGUAGES, 3, {"language": "Naga"})
+	var langs := AdvantageSystem.get_known_languages(c)
+	assert_eq(langs.size(), 2)
+	assert_true("Yobanjin" in langs)
+	assert_true("Naga" in langs)
+
+
+func test_is_school_advancement_blocked_true():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.FORCED_RETIREMENT)
+	assert_true(AdvantageSystem.is_school_advancement_blocked(c))
+
+
+func test_is_school_advancement_blocked_false():
+	var c := _make_character()
+	assert_false(AdvantageSystem.is_school_advancement_blocked(c))
+
+
+func test_get_obligation_tier_none():
+	var c := _make_character()
+	assert_eq(AdvantageSystem.get_obligation_tier(c), 0)
+
+
+func test_get_obligation_tier_minor():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.OBLIGATION, 1, {"tier": 3})
+	assert_eq(AdvantageSystem.get_obligation_tier(c), 3)
+
+
+func test_get_obligation_tier_major():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.OBLIGATION, 1, {"tier": 6})
+	assert_eq(AdvantageSystem.get_obligation_tier(c), 6)
+
+
+func test_get_debt_tier_none():
+	var c := _make_character()
+	assert_eq(AdvantageSystem.get_debt_tier(c), 0)
+
+
+func test_get_debt_tier_quarter_stipend():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.DEBT, 1, {"tier": 1})
+	assert_eq(AdvantageSystem.get_debt_tier(c), 1)
+
+
+func test_get_debt_tier_exceeds_stipend():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.DEBT, 1, {"tier": 3})
+	assert_eq(AdvantageSystem.get_debt_tier(c), 3)
+
+
+func test_has_dark_secret_true():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.DARK_SECRET)
+	assert_true(AdvantageSystem.has_dark_secret(c))
+
+
+func test_has_dark_secret_false():
+	var c := _make_character()
+	assert_false(AdvantageSystem.has_dark_secret(c))
+
+
+func test_is_blackmailed_true():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.BLACKMAILED)
+	assert_true(AdvantageSystem.is_blackmailed(c))
+
+
+func test_is_blackmailed_false():
+	var c := _make_character()
+	assert_false(AdvantageSystem.is_blackmailed(c))
+
+
+func test_get_blackmail_target_id_found():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.BLACKMAIL, 1, {"target_id": 42})
+	assert_eq(AdvantageSystem.get_blackmail_target_id(c), 42)
+
+
+func test_get_blackmail_target_id_none():
+	var c := _make_character()
+	assert_eq(AdvantageSystem.get_blackmail_target_id(c), -1)
+
+
+func test_is_void_kiho_blocked_true():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.UNCENTERED)
+	assert_true(AdvantageSystem.is_void_kiho_blocked(c))
+
+
+func test_is_void_kiho_blocked_false():
+	var c := _make_character()
+	assert_false(AdvantageSystem.is_void_kiho_blocked(c))
+
+
+func test_can_study_multiple_schools_true():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.MULTIPLE_SCHOOLS)
+	assert_true(AdvantageSystem.can_study_multiple_schools(c))
+
+
+func test_can_study_multiple_schools_false():
+	var c := _make_character()
+	assert_false(AdvantageSystem.can_study_multiple_schools(c))
+
+
+func test_get_elemental_blessing_ring_found():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.ELEMENTAL_BLESSING, 1, {"ring": int(Enums.Ring.EARTH)})
+	assert_eq(AdvantageSystem.get_elemental_blessing_ring(c), int(Enums.Ring.EARTH))
+
+
+func test_get_elemental_blessing_ring_none():
+	var c := _make_character()
+	assert_eq(AdvantageSystem.get_elemental_blessing_ring(c), -1)
+
+
+func test_get_trait_xp_discount_elemental_blessing_matching_ring():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.ELEMENTAL_BLESSING, 1, {"ring": int(Enums.Ring.EARTH)})
+	assert_eq(AdvantageSystem.get_trait_xp_discount(c, Enums.Ring.EARTH), 1)
+
+
+func test_get_trait_xp_discount_elemental_blessing_non_matching_ring():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.ELEMENTAL_BLESSING, 1, {"ring": int(Enums.Ring.EARTH)})
+	assert_eq(AdvantageSystem.get_trait_xp_discount(c, Enums.Ring.FIRE), 0)
+
+
+func test_get_trait_xp_discount_enlightened_void():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.ENLIGHTENED)
+	assert_eq(AdvantageSystem.get_trait_xp_discount(c, Enums.Ring.VOID), 2)
+
+
+func test_get_trait_xp_discount_enlightened_non_void_ring():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.ENLIGHTENED)
+	assert_eq(AdvantageSystem.get_trait_xp_discount(c, Enums.Ring.AIR), 0)
+
+
+func test_get_trait_xp_discount_no_advantage():
+	var c := _make_character()
+	assert_eq(AdvantageSystem.get_trait_xp_discount(c, Enums.Ring.EARTH), 0)
+	assert_eq(AdvantageSystem.get_trait_xp_discount(c, Enums.Ring.VOID), 0)
+
+
+func test_get_wealth_koku_bonus_none():
+	var c := _make_character()
+	assert_eq(AdvantageSystem.get_wealth_koku_bonus(c), 0)
+
+
+func test_get_wealth_koku_bonus_one_rank():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.WEALTHY)
+	assert_eq(AdvantageSystem.get_wealth_koku_bonus(c), 2)
+
+
+func test_get_wealth_koku_bonus_multiple_ranks():
+	# 3 WEALTHY entries → 3 × 2 = 6 koku bonus
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.WEALTHY)
+	_add_advantage(c, Enums.Advantage.WEALTHY)
+	_add_advantage(c, Enums.Advantage.WEALTHY)
+	assert_eq(AdvantageSystem.get_wealth_koku_bonus(c), 6)
+
+
+func test_get_forbidden_knowledge_type_found():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.FORBIDDEN_KNOWLEDGE, 1, {"subject": "Kolat"})
+	assert_eq(AdvantageSystem.get_forbidden_knowledge_type(c), "Kolat")
+
+
+func test_get_forbidden_knowledge_type_none():
+	var c := _make_character()
+	assert_eq(AdvantageSystem.get_forbidden_knowledge_type(c), "")
+
+
+func test_get_sworn_enemy_id_found():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.SWORN_ENEMY, 1, {"enemy_id": 77, "is_nemesis": false})
+	assert_eq(AdvantageSystem.get_sworn_enemy_id(c), 77)
+
+
+func test_get_sworn_enemy_id_none():
+	var c := _make_character()
+	assert_eq(AdvantageSystem.get_sworn_enemy_id(c), -1)
+
+
+func test_is_enemy_nemesis_true():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.SWORN_ENEMY, 1, {"enemy_id": 77, "is_nemesis": true})
+	assert_true(AdvantageSystem.is_enemy_nemesis(c, 77))
+
+
+func test_is_enemy_nemesis_false_non_nemesis():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.SWORN_ENEMY, 1, {"enemy_id": 77, "is_nemesis": false})
+	assert_false(AdvantageSystem.is_enemy_nemesis(c, 77))
+
+
+func test_is_enemy_nemesis_false_wrong_enemy():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.SWORN_ENEMY, 1, {"enemy_id": 77, "is_nemesis": true})
+	assert_false(AdvantageSystem.is_enemy_nemesis(c, 99))
+
+
+func test_get_jealousy_target_id_found():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.JEALOUSY, 1, {"target_id": 55})
+	assert_eq(AdvantageSystem.get_jealousy_target_id(c), 55)
+
+
+func test_get_jealousy_target_id_none():
+	var c := _make_character()
+	assert_eq(AdvantageSystem.get_jealousy_target_id(c), -1)
+
+
+# ---------------------------------------------------------------------------
+# ELEMENTAL_BLESSING / ENLIGHTENED wired into NPCAdvancement ring cost (s45)
+# ---------------------------------------------------------------------------
+
+func test_elemental_blessing_reduces_ring_progress_cost():
+	var c := _make_character()
+	c.stamina = 2
+	c.willpower = 2
+	# Earth ring rank 2 costs RING_PROGRESS_COST[2] = 12000 normally.
+	# With ELEMENTAL_BLESSING (Earth), discount = 1 XP × 200 progress = 200.
+	# Effective cost = 12000 - 200 = 11800.
+	_add_advantage(c, Enums.Advantage.ELEMENTAL_BLESSING, 1, {"ring": int(Enums.Ring.EARTH)})
+	var result: Dictionary = NPCAdvancement._try_spend_on_ring(c, Enums.Ring.EARTH, 11800)
+	assert_eq(result["spent"], 11800)
+	assert_true(result["advanced"])
+
+
+func test_elemental_blessing_no_discount_on_other_ring():
+	var c := _make_character()
+	c.reflexes = 2
+	c.awareness = 2
+	# Air ring rank 2 costs 12000. Blessed element is Earth, so no discount.
+	_add_advantage(c, Enums.Advantage.ELEMENTAL_BLESSING, 1, {"ring": int(Enums.Ring.EARTH)})
+	var result: Dictionary = NPCAdvancement._try_spend_on_ring(c, Enums.Ring.AIR, 11800)
+	# 11800 < 12000, so should not advance
+	assert_false(result["advanced"])
+
+
+func test_enlightened_reduces_void_ring_progress_cost():
+	var c := _make_character()
+	c.void_ring = 2
+	# Void ring rank 2 costs RING_PROGRESS_COST[2] = 12000 normally.
+	# With ENLIGHTENED, discount = 2 XP × 200 progress = 400.
+	# Effective cost = 12000 - 400 = 11600.
+	_add_advantage(c, Enums.Advantage.ENLIGHTENED)
+	var result: Dictionary = NPCAdvancement._try_spend_on_ring(c, Enums.Ring.VOID, 11600)
+	assert_eq(result["spent"], 11600)
+	assert_true(result["advanced"])
+
+
+func test_enlightened_no_discount_on_non_void_ring():
+	var c := _make_character()
+	c.agility = 2
+	c.intelligence = 2
+	# Fire ring rank 2 costs 12000. ENLIGHTENED only helps Void.
+	_add_advantage(c, Enums.Advantage.ENLIGHTENED)
+	var result: Dictionary = NPCAdvancement._try_spend_on_ring(c, Enums.Ring.FIRE, 11600)
+	assert_false(result["advanced"])

@@ -207,6 +207,9 @@ static func _try_spend_on_ring(character: L5RCharacterData, ring: Enums.Ring, av
 	var cost: int = RING_PROGRESS_COST.get(current_rank, 0)
 	if cost <= 0:
 		return {"spent": 0, "advanced": false}
+	# ELEMENTAL_BLESSING / ENLIGHTENED (s45): reduced XP cost per trait advance.
+	var discount: int = AdvantageSystem.get_trait_xp_discount(character, ring) * XP_TO_PROGRESS
+	cost = maxi(0, cost - discount)
 
 	var key: String = _ring_key(ring)
 	var current_progress: int = _get_progress(character, key)

@@ -1623,6 +1623,29 @@ static func assign_derived_advantages(
 		dis.disadvantage_type = Enums.Disadvantage.SOCIAL_DISADVANTAGE
 		character.disadvantages.append(dis)
 
+	# VIRTUOUS — +1 Honor Rank at generation (s45)
+	if has_advantage(character, Enums.Advantage.VIRTUOUS):
+		character.honor = minf(character.honor + 1.0, 10.0)
+
+	# SOCIAL_POSITION — +1 Status Rank at generation (s45)
+	if has_advantage(character, Enums.Advantage.SOCIAL_POSITION):
+		character.status = minf(character.status + 1.0, 10.0)
+
+	# INFAMOUS — starting Glory Rank replaced with Infamy Rank at generation (s45)
+	if has_disadvantage(character, Enums.Disadvantage.INFAMOUS):
+		character.infamy = maxf(character.infamy, character.glory)
+		character.glory = 0.0
+
+	# UNCENTERED — blocks ISHIKEN_DO and VOID_VERSATILITY (s45)
+	if has_disadvantage(character, Enums.Disadvantage.UNCENTERED):
+		for i: int in range(character.advantages.size() - 1, -1, -1):
+			var blocked_adv: AdvantageData = character.advantages[i]
+			if blocked_adv.advantage_type in [
+				Enums.Advantage.ISHIKEN_DO,
+				Enums.Advantage.VOID_VERSATILITY,
+			]:
+				character.advantages.remove_at(i)
+
 	# BLACK_SHEEP — apply permanent -40 family / -20 clan disposition modifiers
 	# to all named characters' dispositions toward this character.
 	if has_disadvantage(character, Enums.Disadvantage.BLACK_SHEEP):
@@ -1640,3 +1663,167 @@ static func assign_derived_advantages(
 			elif other.clan == char_clan and char_clan != "":
 				var current_clan: int = other.disposition_values.get(character.character_id, 0)
 				other.disposition_values[character.character_id] = clampi(current_clan - 20, -100, 100)
+
+
+# =============================================================================
+# s45 ADDITIONAL QUERY FUNCTIONS
+# =============================================================================
+
+# ABSOLUTE_DIRECTION: always know which direction is north (s45 line 7-9).
+# Does not function if more than one day inside the Shadowlands — callers must
+# check province taint context if applicable.
+static func has_absolute_direction(character: L5RCharacterData) -> bool:
+	return has_advantage(character, Enums.Advantage.ABSOLUTE_DIRECTION)
+
+
+# READ_LIPS: understand speech by observing lip movement (s45 line 279-281).
+static func can_read_lips(character: L5RCharacterData) -> bool:
+	return has_advantage(character, Enums.Advantage.READ_LIPS)
+
+
+# READ_LIPS TN formula: Perception Trait Roll (s45: TN 15 + 5 per 20 feet).
+static func get_read_lips_tn(distance_feet: int) -> int:
+	return 15 + (distance_feet / 20) * 5
+
+
+# LANGUAGES: true when character has a LANGUAGES advantage entry for this
+# language (s45 line 211-213).
+static func character_knows_language(character: L5RCharacterData, language: String) -> bool:
+	for adv: AdvantageData in character.advantages:
+		if adv.advantage_type == Enums.Advantage.LANGUAGES:
+			if adv.metadata.get("language", "") == language:
+				return true
+	return false
+
+
+# LANGUAGES: all language strings this character knows (s45).
+static func get_known_languages(character: L5RCharacterData) -> Array[String]:
+	var langs: Array[String] = []
+	for adv: AdvantageData in character.advantages:
+		if adv.advantage_type == Enums.Advantage.LANGUAGES:
+			var lang: String = adv.metadata.get("language", "")
+			if lang != "" and lang not in langs:
+				langs.append(lang)
+	return langs
+
+
+# FORCED_RETIREMENT: may not advance further in current School (s45 line 563-565).
+static func is_school_advancement_blocked(character: L5RCharacterData) -> bool:
+	return has_disadvantage(character, Enums.Disadvantage.FORCED_RETIREMENT)
+
+
+# OBLIGATION: 0 = none, 3 = minor, 6 = major (s45 line 647-649).
+# NOT AVAILABLE AT CHARACTER CREATION — acquired during play only.
+static func get_obligation_tier(character: L5RCharacterData) -> int:
+	for dis: DisadvantageData in character.disadvantages:
+		if dis.disadvantage_type == Enums.Disadvantage.OBLIGATION:
+			return dis.metadata.get("tier", 3)
+	return 0
+
+
+# DEBT: 0 = none, 1 = quarter stipend, 2 = full stipend, 3 = exceeds stipend (s45 line 505-507).
+static func get_debt_tier(character: L5RCharacterData) -> int:
+	for dis: DisadvantageData in character.disadvantages:
+		if dis.disadvantage_type == Enums.Disadvantage.DEBT:
+			return dis.metadata.get("tier", 1)
+	return 0
+
+
+# DARK_SECRET: character carries a potentially life-ruining secret (s45 line 501-503).
+static func has_dark_secret(character: L5RCharacterData) -> bool:
+	return has_disadvantage(character, Enums.Disadvantage.DARK_SECRET)
+
+
+# BLACKMAILED: someone holds a dark secret over this character (s45 line 445-447).
+static func is_blackmailed(character: L5RCharacterData) -> bool:
+	return has_disadvantage(character, Enums.Disadvantage.BLACKMAILED)
+
+
+# BLACKMAIL (advantage): character_id of the individual being blackmailed (s45 line 23-25).
+# Returns -1 if character does not hold blackmail material.
+static func get_blackmail_target_id(character: L5RCharacterData) -> int:
+	for adv: AdvantageData in character.advantages:
+		if adv.advantage_type == Enums.Advantage.BLACKMAIL:
+			return adv.metadata.get("target_id", -1)
+	return -1
+
+
+# UNCENTERED: cannot learn any Void Kiho (s45 line 711-713).
+# Advantage-blocking (ISHIKEN_DO, VOID_VERSATILITY) handled in assign_derived_advantages.
+static func is_void_kiho_blocked(character: L5RCharacterData) -> bool:
+	return has_disadvantage(character, Enums.Disadvantage.UNCENTERED)
+
+
+# MULTIPLE_SCHOOLS: may study at Schools from different major Schools during play (s45 line 239-241).
+static func can_study_multiple_schools(character: L5RCharacterData) -> bool:
+	return has_advantage(character, Enums.Advantage.MULTIPLE_SCHOOLS)
+
+
+# ELEMENTAL_BLESSING: returns the Ring enum int this character is blessed with,
+# or -1 if no blessing (s45 line 87-89). Void is never a valid element for this advantage.
+static func get_elemental_blessing_ring(character: L5RCharacterData) -> int:
+	for adv: AdvantageData in character.advantages:
+		if adv.advantage_type == Enums.Advantage.ELEMENTAL_BLESSING:
+			return adv.metadata.get("ring", -1)
+	return -1
+
+
+# ELEMENTAL_BLESSING + ENLIGHTENED: XP discount (in XP, not progress) per trait
+# advance for the given ring (s45 lines 87-93).
+# ELEMENTAL_BLESSING: -1 XP per trait advance on the blessed element's ring (not Void).
+# ENLIGHTENED:       -2 XP per advance of the Void ring.
+# Callers multiply by NPCAdvancement.XP_TO_PROGRESS to convert to progress units.
+static func get_trait_xp_discount(character: L5RCharacterData, ring: Enums.Ring) -> int:
+	if ring == Enums.Ring.VOID:
+		if has_advantage(character, Enums.Advantage.ENLIGHTENED):
+			return 2
+		return 0
+	var blessed: int = get_elemental_blessing_ring(character)
+	if blessed == int(ring):
+		return 1
+	return 0
+
+
+# WEALTHY: 2 additional starting koku per point (per WEALTHY advantage entry) (s45 line 403-405).
+static func get_wealth_koku_bonus(character: L5RCharacterData) -> int:
+	var total: int = 0
+	for adv: AdvantageData in character.advantages:
+		if adv.advantage_type == Enums.Advantage.WEALTHY:
+			total += 2
+	return total
+
+
+# FORBIDDEN_KNOWLEDGE: subject string (e.g. "Kolat", "Maho") for social bonus
+# lookups. Returns "" if character does not have this advantage (s45 line 99-101).
+static func get_forbidden_knowledge_type(character: L5RCharacterData) -> String:
+	for adv: AdvantageData in character.advantages:
+		if adv.advantage_type == Enums.Advantage.FORBIDDEN_KNOWLEDGE:
+			return adv.metadata.get("subject", "")
+	return ""
+
+
+# SWORN_ENEMY: character_id of this character's sworn enemy (s45 line 699-701).
+# Returns -1 if no sworn enemy.
+static func get_sworn_enemy_id(character: L5RCharacterData) -> int:
+	for dis: DisadvantageData in character.disadvantages:
+		if dis.disadvantage_type == Enums.Disadvantage.SWORN_ENEMY:
+			return dis.metadata.get("enemy_id", -1)
+	return -1
+
+
+# SWORN_ENEMY nemesis variant: cannot spend Void Points when opposing this enemy (s45).
+static func is_enemy_nemesis(character: L5RCharacterData, enemy_id: int) -> bool:
+	for dis: DisadvantageData in character.disadvantages:
+		if dis.disadvantage_type == Enums.Disadvantage.SWORN_ENEMY:
+			if dis.metadata.get("enemy_id", -1) == enemy_id:
+				return dis.metadata.get("is_nemesis", false)
+	return false
+
+
+# JEALOUSY: character_id of the NPC this character is obsessed with outperforming (s45 line 607-609).
+# Returns -1 if none.
+static func get_jealousy_target_id(character: L5RCharacterData) -> int:
+	for dis: DisadvantageData in character.disadvantages:
+		if dis.disadvantage_type == Enums.Disadvantage.JEALOUSY:
+			return dis.metadata.get("target_id", -1)
+	return -1
