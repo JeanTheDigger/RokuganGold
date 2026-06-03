@@ -2194,3 +2194,103 @@ func test_sakkaku_no_realm_mismatch():
 	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Gaki_do"})
 	var r: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(c, 3)
 	assert_false(r["triggered"], "Non-Sakkaku realm must not trigger Sakkaku prank")
+
+
+# ---------------------------------------------------------------------------
+# BLIND — get_skill_bonus Perception penalty (s45)
+# ---------------------------------------------------------------------------
+
+func test_blind_penalises_perception_based_rolls():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.BLIND)
+	var r: Dictionary = AdvantageSystem.get_skill_bonus(c, "Investigation",
+		{"is_perception_based": true})
+	assert_eq(r["rolled"], -1)
+	assert_eq(r["kept"], -1)
+
+
+func test_blind_no_penalty_when_not_perception_based():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.BLIND)
+	var r: Dictionary = AdvantageSystem.get_skill_bonus(c, "Kenjutsu", {})
+	assert_eq(r["rolled"], 0)
+	assert_eq(r["kept"], 0)
+
+
+func test_blind_and_bad_eyesight_do_not_double_penalise():
+	# Both carry the same -1k1 gate; stacking both deals -2k2 (each applies independently)
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.BLIND)
+	_add_disadvantage(c, Enums.Disadvantage.BAD_EYESIGHT)
+	var r: Dictionary = AdvantageSystem.get_skill_bonus(c, "Investigation",
+		{"is_perception_based": true})
+	assert_eq(r["rolled"], -2, "Both penalties stack independently")
+	assert_eq(r["kept"], -2)
+
+
+# ---------------------------------------------------------------------------
+# STRATEGIST — query functions (s45)
+# ---------------------------------------------------------------------------
+
+func test_strategist_winning_modifier_is_2():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.STRATEGIST)
+	assert_eq(AdvantageSystem.get_strategist_winning_modifier(c), 2)
+
+
+func test_strategist_battle_modifier_is_1():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.STRATEGIST)
+	assert_eq(AdvantageSystem.get_strategist_battle_modifier(c), 1)
+
+
+func test_no_strategist_winning_modifier_is_0():
+	var c := _make_character(1)
+	assert_eq(AdvantageSystem.get_strategist_winning_modifier(c), 0)
+
+
+func test_no_strategist_battle_modifier_is_0():
+	var c := _make_character(1)
+	assert_eq(AdvantageSystem.get_strategist_battle_modifier(c), 0)
+
+
+# ---------------------------------------------------------------------------
+# STUDENT_OF_SHOURIDO — get_shourido_honor_bonus (s45)
+# ---------------------------------------------------------------------------
+
+func test_shourido_returns_5_when_honor_rank_below_5():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.STUDENT_OF_SHOURIDO)
+	assert_eq(AdvantageSystem.get_shourido_honor_bonus(c, 3), 5)
+
+
+func test_shourido_returns_honor_rank_when_above_5():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.STUDENT_OF_SHOURIDO)
+	assert_eq(AdvantageSystem.get_shourido_honor_bonus(c, 7), 7)
+
+
+func test_shourido_returns_5_when_honor_rank_equals_5():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.STUDENT_OF_SHOURIDO)
+	assert_eq(AdvantageSystem.get_shourido_honor_bonus(c, 5), 5)
+
+
+func test_no_shourido_returns_honor_rank_unchanged():
+	var c := _make_character(1)
+	assert_eq(AdvantageSystem.get_shourido_honor_bonus(c, 4), 4)
+
+
+# ---------------------------------------------------------------------------
+# BLOOD_OF_OSANO_WO — has_weather_immunity (s45)
+# ---------------------------------------------------------------------------
+
+func test_blood_of_osano_wo_grants_weather_immunity():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.BLOOD_OF_OSANO_WO)
+	assert_true(AdvantageSystem.has_weather_immunity(c))
+
+
+func test_no_blood_of_osano_wo_no_weather_immunity():
+	var c := _make_character(1)
+	assert_false(AdvantageSystem.has_weather_immunity(c))

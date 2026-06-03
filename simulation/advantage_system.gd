@@ -417,6 +417,12 @@ static func get_skill_bonus(
 					rolled -= 1
 					kept -= 1
 
+			Enums.Disadvantage.BLIND:
+				# May not make Perception rolls based on sight (s45); -1k1 on is_perception_based
+				if context.get("is_perception_based", false):
+					rolled -= 1
+					kept -= 1
+
 			Enums.Disadvantage.BAD_FORTUNE:
 				# Moto Curse sub-type: -1k0 to resist Taint
 				if dis.metadata.get("type", "") == "Moto_Curse" \
@@ -952,6 +958,46 @@ static func get_tactician_modifier(character: L5RCharacterData) -> int:
 	if has_advantage(character, Enums.Advantage.TACTICIAN):
 		return 5
 	return 0
+
+
+# ---------------------------------------------------------------------------
+# STRATEGIST: +2k0 to the winning-roll, +1k0 to other Battle Skill rolls.
+# Two query functions — callers use the appropriate one for each context.
+# ---------------------------------------------------------------------------
+
+## Returns the +2k0 rolled-die bonus to the Battle/Perception who-is-winning roll (s45).
+static func get_strategist_winning_modifier(character: L5RCharacterData) -> int:
+	if has_advantage(character, Enums.Advantage.STRATEGIST):
+		return 2  # +2k0 rolled dice (s45)
+	return 0
+
+
+## Returns the +1k0 rolled-die bonus to all other Battle Skill rolls (s45).
+static func get_strategist_battle_modifier(character: L5RCharacterData) -> int:
+	if has_advantage(character, Enums.Advantage.STRATEGIST):
+		return 1  # +1k0 rolled dice (s45)
+	return 0
+
+
+# ---------------------------------------------------------------------------
+# STUDENT_OF_SHOURIDO: may add +5 instead of Honor Rank to resist Temptation,
+# Intimidation, or Fear. NPC always picks whichever value is higher (s45).
+# ---------------------------------------------------------------------------
+
+## Returns the resistance bonus the character adds on Temptation/Intimidation/Fear.
+static func get_shourido_honor_bonus(character: L5RCharacterData, honor_rank: int) -> int:
+	if has_advantage(character, Enums.Advantage.STUDENT_OF_SHOURIDO):
+		return maxi(5, honor_rank)  # choose better of flat +5 or actual Honor Rank (s45)
+	return honor_rank
+
+
+# ---------------------------------------------------------------------------
+# BLOOD_OF_OSANO_WO: immune to penalties or damage from natural weather (s45).
+# ---------------------------------------------------------------------------
+
+## Returns true if character is immune to natural weather penalties.
+static func has_weather_immunity(character: L5RCharacterData) -> bool:
+	return has_advantage(character, Enums.Advantage.BLOOD_OF_OSANO_WO)
 
 
 # ---------------------------------------------------------------------------

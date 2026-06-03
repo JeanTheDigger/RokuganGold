@@ -192,6 +192,7 @@ static func advance_day(
 	)
 	var court_openings: Array = _process_court_openings(active_courts, ic_day)
 	var court_attendance: Array = _process_court_attendance(active_courts, characters, characters_by_id)
+	_apply_well_connected_court_bonus(court_attendance, active_courts, characters_by_id)
 	var court_results: Array = _process_active_courts(
 		active_courts, active_topics, next_topic_id, ic_day,
 		active_edicts, next_edict_id, active_wars,
@@ -14047,6 +14048,58 @@ static func _process_court_attendance(
 				departure["action"] = "departed"
 				results.append(departure)
 	return results
+
+
+## Applies the WELL_CONNECTED +10 mutual disposition bonus on first arrival at a
+## court session the character is connected to (s45). Deduped per court via
+## metadata["applied_for_court_id"] on the AdvantageData.
+static func _apply_well_connected_court_bonus(
+	court_attendance: Array,
+	active_courts: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for entry: Dictionary in court_attendance:
+		if entry.get("action", "") != "arrived":
+			continue
+		var char_id: int = entry.get("character_id", -1)
+		var court_id: int = entry.get("court_id", -1)
+		if char_id < 0 or court_id < 0:
+			continue
+		var character: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		# Find matching AdvantageData for WELL_CONNECTED at this settlement
+		var court_session: CourtSessionData = null
+		for c_entry: Variant in active_courts:
+			if c_entry is CourtSessionData and (c_entry as CourtSessionData).court_id == court_id:
+				court_session = c_entry as CourtSessionData
+				break
+		if court_session == null:
+			continue
+		var wc_adv: AdvantageData = null
+		for adv: AdvantageData in character.advantages:
+			if adv.advantage_type != Enums.Advantage.WELL_CONNECTED:
+				continue
+			if adv.metadata.get("settlement_id", -1) == court_session.host_settlement_id:
+				wc_adv = adv
+				break
+		if wc_adv == null:
+			continue
+		# Dedup: only fire once per court session
+		if wc_adv.metadata.get("applied_for_court_id", -1) == court_id:
+			continue
+		wc_adv.metadata["applied_for_court_id"] = court_id
+		# Apply +10 mutual disposition with every other attendee (s45)
+		for attendee_id: int in court_session.attendee_ids:
+			if attendee_id == char_id:
+				continue
+			var attendee: L5RCharacterData = characters_by_id.get(attendee_id) as L5RCharacterData
+			if attendee == null or CharacterStats.is_dead(attendee):
+				continue
+			var cur_wc: int = character.disposition_values.get(attendee_id, 0)
+			character.disposition_values[attendee_id] = clampi(cur_wc + 10, -100, 100)
+			var cur_att: int = attendee.disposition_values.get(char_id, 0)
+			attendee.disposition_values[char_id] = clampi(cur_att + 10, -100, 100)
 
 
 static func _apply_early_departure(

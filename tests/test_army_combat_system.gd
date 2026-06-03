@@ -1793,3 +1793,30 @@ func test_no_tactician_bonus_value_equals_battle_rank() -> void:
 func test_tactician_with_null_commander_returns_empty() -> void:
 	var bonus: Dictionary = ArmyCombatSystem.resolve_commander_bonus(null, "Lion")
 	assert_eq(bonus["bonus_value"], 0, "Null commander should return zero bonus")
+
+
+# -- STRATEGIST advantage (s45 wiring) ----------------------------------------
+
+func _add_strategist(c: L5RCharacterData) -> void:
+	var adv := AdvantageData.new()
+	adv.advantage_type = Enums.Advantage.STRATEGIST
+	adv.rank = 1
+	adv.metadata = {}
+	c.advantages.append(adv)
+
+
+func test_strategist_adds_1_to_commander_bonus_value() -> void:
+	var cmd := _make_commander(1, "Lion", 3, 3, 3, 3, 2, 3)
+	_add_strategist(cmd)
+	var bonus: Dictionary = ArmyCombatSystem.resolve_commander_bonus(cmd, "Lion")
+	# Battle rank 3 + STRATEGIST +1 = 4
+	assert_eq(bonus["bonus_value"], 4, "STRATEGIST should add 1 to bonus_value")
+
+
+func test_strategist_and_tactician_stack() -> void:
+	var cmd := _make_commander(1, "Lion", 3, 3, 3, 3, 2, 3)
+	_add_tactician(cmd)
+	_add_strategist(cmd)
+	var bonus: Dictionary = ArmyCombatSystem.resolve_commander_bonus(cmd, "Lion")
+	# Battle rank 3 + TACTICIAN +5 + STRATEGIST +1 = 9
+	assert_eq(bonus["bonus_value"], 9, "TACTICIAN and STRATEGIST bonuses should stack")
