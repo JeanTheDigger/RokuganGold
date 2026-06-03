@@ -3955,3 +3955,162 @@ func test_tend_opportunity_chugi_healer_no_bonus_for_non_superior() -> void:
 	var base_priority: int = MedicineSystem.compute_tend_priority(healer, target)
 	assert_eq(event["priority"], base_priority,
 		"Chugi healer priority should not include bonus when target is not lord/superior")
+
+
+# -- Spell metadata population (s31-s37) ----------------------------------------
+
+
+func _make_shugenja(char_id: int = 1) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = char_id
+	c.school_type = Enums.SchoolType.SHUGENJA
+	c.school = "Kuni Shugenja"
+	c.insight_rank = 3
+	c.stamina = 3
+	c.willpower = 3
+	c.reflexes = 3
+	c.awareness = 2
+	c.agility = 2
+	c.intelligence = 3
+	c.strength = 2
+	c.perception = 3
+	c.void_ring = 2
+	c.affinity_element = Enums.Ring.NONE
+	c.deficiency_element = Enums.Ring.NONE
+	return c
+
+
+func test_perform_worship_metadata_ritual_spell_id_for_shugenja_with_ritual_spell() -> void:
+	# bentens_touch is RITUAL_HONOR ML2 AIR — should be picked as ritual_spell_id.
+	var shugen := _make_shugenja()
+	shugen.spells_known = ["bentens_touch", "commune"]
+	var ctx := _make_metadata_ctx()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PERFORM_WORSHIP"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx, shugen)
+	assert_eq(option.metadata.get("ritual_spell_id", ""), "bentens_touch",
+		"PERFORM_WORSHIP should pick best RITUAL_HONOR spell when available")
+
+
+func test_perform_worship_metadata_falls_back_to_commune() -> void:
+	# Shugenja with no RITUAL_HONOR spell but commune known — commune is COMMUNE_KAMI.
+	var shugen := _make_shugenja()
+	shugen.spells_known = ["commune", "jade_strike"]
+	var ctx := _make_metadata_ctx()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PERFORM_WORSHIP"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx, shugen)
+	assert_eq(option.metadata.get("ritual_spell_id", ""), "commune",
+		"PERFORM_WORSHIP should fall back to commune when no RITUAL_HONOR spell known")
+
+
+func test_perform_worship_metadata_empty_for_non_shugenja() -> void:
+	var bushi := L5RCharacterData.new()
+	bushi.school_type = Enums.SchoolType.BUSHI
+	var ctx := _make_metadata_ctx()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PERFORM_WORSHIP"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx, bushi)
+	assert_eq(option.metadata.get("ritual_spell_id", ""), "",
+		"PERFORM_WORSHIP ritual_spell_id should be empty for non-shugenja")
+
+
+func test_perform_worship_metadata_includes_worship_keys() -> void:
+	# Verify existing worship keys (fortune, location_type, etc.) still present.
+	var ctx := _make_metadata_ctx()
+	ctx.known_objectives["ikebana_worship_fr"] = 2
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PERFORM_WORSHIP"
+	var need := _make_metadata_need()
+	need.target_npc_id = 5
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
+	assert_true(option.metadata.has("directed_fortune"),
+		"PERFORM_WORSHIP should still include directed_fortune key")
+	assert_eq(option.metadata.get("ikebana_worship_fr", 0), 2,
+		"PERFORM_WORSHIP should pass through ikebana worship FR from context")
+
+
+func test_perform_ritual_metadata_picks_ritual_honor_spell() -> void:
+	var shugen := _make_shugenja()
+	shugen.spells_known = ["bentens_touch", "commune"]
+	var ctx := _make_metadata_ctx()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PERFORM_RITUAL"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx, shugen)
+	assert_eq(option.metadata.get("ritual_spell_id", ""), "bentens_touch",
+		"PERFORM_RITUAL should pick best RITUAL_HONOR spell")
+
+
+func test_perform_ritual_metadata_prefers_taint_removal_in_tainted_province() -> void:
+	# purge_the_taint is REMOVE_TAINT (EARTH ML3) — should be preferred over RITUAL_HONOR
+	# when taint_topic_province_ids is non-empty.
+	var shugen := _make_shugenja()
+	shugen.spells_known = ["bentens_touch", "purge_the_taint"]
+	var ctx := _make_metadata_ctx()
+	ctx.taint_topic_province_ids = [5]
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PERFORM_RITUAL"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx, shugen)
+	assert_eq(option.metadata.get("ritual_spell_id", ""), "purge_the_taint",
+		"PERFORM_RITUAL should prefer REMOVE_TAINT spell when taint_topic_province_ids is set")
+
+
+func test_perform_ritual_metadata_empty_for_non_shugenja() -> void:
+	var bushi := L5RCharacterData.new()
+	bushi.school_type = Enums.SchoolType.BUSHI
+	var ctx := _make_metadata_ctx()
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "PERFORM_RITUAL"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx, bushi)
+	assert_eq(option.metadata.get("ritual_spell_id", ""), "",
+		"PERFORM_RITUAL ritual_spell_id should be empty for non-shugenja")
+
+
+func test_treat_wound_metadata_includes_healing_spell_for_shugenja() -> void:
+	# jurojins_balm is HEAL_WOUNDS — should be picked as healing_spell_id.
+	var shugen := _make_shugenja()
+	shugen.spells_known = ["jurojins_balm", "commune"]
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks["Medicine"] = 3
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "TREAT_WOUND"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx, shugen)
+	assert_eq(option.metadata.get("healing_spell_id", ""), "jurojins_balm",
+		"TREAT_WOUND should pick best HEAL_WOUNDS spell for shugenja")
+	assert_true(option.metadata.has("raises"),
+		"TREAT_WOUND metadata should still include raises key")
+
+
+func test_treat_wound_metadata_empty_healing_spell_for_non_shugenja() -> void:
+	var bushi := L5RCharacterData.new()
+	bushi.school_type = Enums.SchoolType.BUSHI
+	bushi.skills = {"Medicine": 3}
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks["Medicine"] = 3
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "TREAT_WOUND"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx, bushi)
+	assert_eq(option.metadata.get("healing_spell_id", ""), "",
+		"TREAT_WOUND healing_spell_id should be empty for non-shugenja")
+
+
+func test_treat_wound_metadata_empty_healing_spell_when_no_spells_known() -> void:
+	# Shugenja with no HEAL_WOUNDS spells gets empty healing_spell_id.
+	var shugen := _make_shugenja()
+	shugen.spells_known = ["commune", "jade_strike"]
+	var ctx := _make_metadata_ctx()
+	ctx.skill_ranks["Medicine"] = 2
+	var option := NPCDataStructures.ScoredAction.new()
+	option.action_id = "TREAT_WOUND"
+	var need := _make_metadata_need()
+	NPCDecisionEngine._populate_action_metadata(option, need, ctx, shugen)
+	assert_eq(option.metadata.get("healing_spell_id", ""), "",
+		"TREAT_WOUND healing_spell_id should be empty when no HEAL_WOUNDS spells known")

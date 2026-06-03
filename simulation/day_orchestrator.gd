@@ -887,6 +887,11 @@ static func advance_day(
 		death_events, active_senbazurus, characters_by_id,
 		active_topics, next_topic_id, ic_day,
 	)
+	_process_ritual_spell_writebacks(
+		day_result.get("results", []),
+		characters_by_id, provinces, character_province_map, dice_engine,
+		active_topics, next_topic_id, ic_day,
+	)
 	_process_noshi_consumption_writebacks(
 		day_result.get("results", []), characters_by_id,
 	)
@@ -22292,6 +22297,75 @@ static func _process_noshi_consumption_writebacks(
 				continue  # consumed
 			new_items.append(item)
 		character.items = new_items
+
+
+static func _process_ritual_spell_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	character_province_map: Dictionary,
+	dice_engine: DiceEngine,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	## Resolve spell rolls embedded in PERFORM_RITUAL / PERFORM_WORSHIP (s31-s37).
+	## Executors flag requires_spell_roll=true when a ritual_spell_id was set.
+	## Effect routing by SpellSimEffect:
+	##   RITUAL_HONOR    → honor/glory already applied by EffectApplicator via honor_change
+	##   COMMUNE_KAMI    → no additional sim effect (worship economy handled by WKS)
+	##   DETECT_PRESENCE → topic if tainted province found
+	##   PURIFY_AREA     → province PTL reduction on success
+	##   REMOVE_TAINT    → character taint reduction on success
+	for result: Variant in results:
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("requires_spell_roll", false):
+			continue
+		var ritual_spell_id: String = effects.get("ritual_spell_id", "")
+		if ritual_spell_id.is_empty():
+			continue
+		if not SpellSystem.SPELL_LIBRARY.has(ritual_spell_id):
+			continue
+		var char_id: int = result.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		var province_id: int = character_province_map.get(char_id, -1)
+		var sim_effect: int = SpellSystem.SPELL_LIBRARY[ritual_spell_id].get(
+			"s", SpellSystem.SpellSimEffect.COMBAT_ONLY
+		)
+		var cast_result: Dictionary = SpellSystem.resolve_cast(
+			character, ritual_spell_id, dice_engine
+		)
+		var success: bool = cast_result.get("success", false)
+		var margin: int = cast_result.get("margin", 0)
+		match sim_effect:
+			SpellSystem.SpellSimEffect.DETECT_PRESENCE:
+				if success and province_id >= 0:
+					var province: ProvinceData = provinces.get(province_id)
+					if province != null and province.province_taint_level > 0.0:
+						var detect_topic: TopicData = TopicData.new()
+						detect_topic.topic_id = next_topic_id[0]
+						next_topic_id[0] += 1
+						detect_topic.title = "Taint Detected in Province"
+						detect_topic.category = TopicData.Category.SUPERNATURAL
+						detect_topic.tier = TopicData.Tier.TIER_4
+						detect_topic.topic_type = "taint_detection"
+						detect_topic.subject_character_id = -1
+						detect_topic.ic_day_created = ic_day
+						detect_topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(detect_topic.tier)
+						active_topics.append(detect_topic)
+						character.topic_pool.append(detect_topic.topic_id)
+			SpellSystem.SpellSimEffect.PURIFY_AREA:
+				# Forward-wired: no PURIFY_AREA spells exist in library yet.
+				# Province PTL reduction needs dedicated apply_purify_area() — blocked on
+				# PURIFY_AREA spell specs. Leave branch for when they are added.
+				pass
+			SpellSystem.SpellSimEffect.REMOVE_TAINT:
+				if success:
+					SpellSystem.apply_taint_removal(character, ritual_spell_id, margin)
+			_:
+				pass  # RITUAL_HONOR/COMMUNE_KAMI: honor_change already handled by EffectApplicator
 
 
 static func _process_gohei_usage_writebacks(

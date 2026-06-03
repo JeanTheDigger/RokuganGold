@@ -2883,8 +2883,27 @@ static func _populate_action_metadata(
 			"target_npc_id": need.target_npc_id,
 			"position": need.target_intent,
 		}
+	elif option.action_id == "PERFORM_RITUAL":
+		var ritual_spell: String = ""
+		if character != null and SpellSystem.is_shugenja(character):
+			# Prefer taint-cleansing spells in provinces with known taint.
+			if not ctx.taint_topic_province_ids.is_empty():
+				ritual_spell = SpellSystem.get_best_spell_by_effect(character, SpellSystem.SpellSimEffect.PURIFY_AREA)
+				if ritual_spell.is_empty():
+					ritual_spell = SpellSystem.get_best_taint_removal_spell(character)
+			if ritual_spell.is_empty():
+				ritual_spell = SpellSystem.get_best_ritual_spell(character)
+			if ritual_spell.is_empty():
+				ritual_spell = SpellSystem.get_best_detection_spell(character)
+		option.metadata = {"ritual_spell_id": ritual_spell}
 	elif option.action_id == "PERFORM_WORSHIP":
+		var worship_spell: String = ""
+		if character != null and SpellSystem.is_shugenja(character):
+			worship_spell = SpellSystem.get_best_ritual_spell(character)
+			if worship_spell.is_empty() and "commune" in character.spells_known:
+				worship_spell = "commune"
 		option.metadata = {
+			"ritual_spell_id": worship_spell,
 			"directed_fortune": need.target_npc_id if need.target_npc_id >= 0 else -1,
 			"location_type": _zone_to_worship_location(ctx.zone_subtype),
 			"ikebana_worship_fr": ctx.known_objectives.get("ikebana_worship_fr", 0),
@@ -3190,7 +3209,13 @@ static func _populate_action_metadata(
 		var sortie_meta: Dictionary = _build_sortie_metadata(ctx)
 		option.metadata = sortie_meta
 	elif option.action_id == "TREAT_WOUND":
-		option.metadata = {"raises": _pick_medicine_raises(ctx)}
+		var healing_spell: String = ""
+		if character != null and SpellSystem.is_shugenja(character):
+			healing_spell = SpellSystem.get_best_healing_spell(character)
+		option.metadata = {
+			"raises": _pick_medicine_raises(ctx),
+			"healing_spell_id": healing_spell,
+		}
 	elif option.action_id == "FORGE_IMPERSONATION_LETTER":
 		option.metadata = _build_forge_letter_metadata(ctx, need, chars_by_id)
 	elif option.action_id == "FORGE_ORDER":
