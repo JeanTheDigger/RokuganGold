@@ -1589,6 +1589,11 @@ static func assign_derived_advantages(
 			adv.advantage_type = Enums.Advantage.ISHIKEN_DO
 			character.advantages.append(adv)
 
+	# FAME (purchased advantage) — +1 Glory Rank at generation (s45 line 95-97).
+	# Must run before the derive block below so the derive block sees the resulting glory.
+	if has_advantage(character, Enums.Advantage.FAME):
+		character.glory = minf(character.glory + 1.0, 10.0)
+
 	# FAME — assigned if glory >= 2.0 at world start
 	if character.glory >= 2.0 and not has_advantage(character, Enums.Advantage.FAME):
 		var adv: AdvantageData = AdvantageData.new()
@@ -1630,6 +1635,33 @@ static func assign_derived_advantages(
 	# SOCIAL_POSITION — +1 Status Rank at generation (s45)
 	if has_advantage(character, Enums.Advantage.SOCIAL_POSITION):
 		character.status = minf(character.status + 1.0, 10.0)
+
+	# WEALTHY — 2 koku per purchased point at generation (s45 line 403-405).
+	# Multiple WEALTHY entries stack.
+	var wealth_bonus: int = get_wealth_koku_bonus(character)
+	if wealth_bonus > 0:
+		character.koku += float(wealth_bonus)
+
+	# FORBIDDEN_KNOWLEDGE — grant skill at rank 1 at generation (s45 line 99-101).
+	# Skill capped at rank 1 — does not overwrite higher ranks from school progression.
+	var fk_type: String = get_forbidden_knowledge_type(character)
+	if fk_type != "":
+		match fk_type:
+			"Gaijin Pepper":
+				if character.skills.get("Craft: Explosives", 0) < 1:
+					character.skills["Craft: Explosives"] = 1
+			"Gozoku":
+				if character.skills.get("Lore: Gozoku", 0) < 1:
+					character.skills["Lore: Gozoku"] = 1
+			"Kolat":
+				if character.skills.get("Lore: Kolat", 0) < 1:
+					character.skills["Lore: Kolat"] = 1
+			"Lying Darkness":
+				if character.skills.get("Lore: Lying Darkness", 0) < 1:
+					character.skills["Lore: Lying Darkness"] = 1
+			"Maho":
+				if character.skills.get("Lore: Maho", 0) < 1:
+					character.skills["Lore: Maho"] = 1
 
 	# INFAMOUS — starting Glory Rank replaced with Infamy Rank at generation (s45)
 	if has_disadvantage(character, Enums.Disadvantage.INFAMOUS):

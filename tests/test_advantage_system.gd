@@ -2742,3 +2742,144 @@ func test_enlightened_no_discount_on_non_void_ring():
 	_add_advantage(c, Enums.Advantage.ENLIGHTENED)
 	var result: Dictionary = NPCAdvancement._try_spend_on_ring(c, Enums.Ring.FIRE, 11600)
 	assert_false(result["advanced"])
+
+
+# ---------------------------------------------------------------------------
+# assign_derived_advantages — FAME (purchased), WEALTHY, FORBIDDEN_KNOWLEDGE
+# ---------------------------------------------------------------------------
+
+func test_fame_purchased_grants_one_glory():
+	var c := _make_character()
+	c.glory = 1.5
+	_add_advantage(c, Enums.Advantage.FAME)
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_almost_eq(c.glory, 2.5, 0.001)
+
+
+func test_fame_purchased_glory_caps_at_10():
+	var c := _make_character()
+	c.glory = 9.8
+	_add_advantage(c, Enums.Advantage.FAME)
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_almost_eq(c.glory, 10.0, 0.001)
+
+
+func test_fame_purchased_runs_before_derive_block():
+	# A character with FAME purchased starts at glory 1.5, gets +1.0 → 2.5.
+	# The derive block sees 2.5 >= 2.0 and finds FAME already present — no duplicate.
+	var c := _make_character()
+	c.glory = 1.5
+	_add_advantage(c, Enums.Advantage.FAME)
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	var count: int = 0
+	for adv: AdvantageData in c.advantages:
+		if adv.advantage_type == Enums.Advantage.FAME:
+			count += 1
+	assert_eq(count, 1)
+
+
+func test_fame_derive_still_assigns_for_high_glory_without_purchase():
+	# Character has glory 2.5 but no FAME purchased. Derive block assigns it.
+	var c := _make_character()
+	c.glory = 2.5
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_true(AdvantageSystem.has_advantage(c, Enums.Advantage.FAME))
+
+
+func test_no_fame_purchased_no_glory_grant():
+	var c := _make_character()
+	c.glory = 1.5
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	# glory 1.5 < 2.0, derive block does not trigger, no FAME
+	assert_almost_eq(c.glory, 1.5, 0.001)
+	assert_false(AdvantageSystem.has_advantage(c, Enums.Advantage.FAME))
+
+
+func test_wealthy_single_point_grants_2_koku():
+	var c := _make_character()
+	c.koku = 0.0
+	_add_advantage(c, Enums.Advantage.WEALTHY)
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_almost_eq(c.koku, 2.0, 0.001)
+
+
+func test_wealthy_two_points_grants_4_koku():
+	var c := _make_character()
+	c.koku = 0.0
+	_add_advantage(c, Enums.Advantage.WEALTHY)
+	_add_advantage(c, Enums.Advantage.WEALTHY)
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_almost_eq(c.koku, 4.0, 0.001)
+
+
+func test_wealthy_stacks_with_existing_koku():
+	var c := _make_character()
+	c.koku = 5.0
+	_add_advantage(c, Enums.Advantage.WEALTHY)
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_almost_eq(c.koku, 7.0, 0.001)
+
+
+func test_no_wealthy_no_koku_grant():
+	var c := _make_character()
+	c.koku = 3.0
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_almost_eq(c.koku, 3.0, 0.001)
+
+
+func test_forbidden_knowledge_gaijin_pepper_grants_skill():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.FORBIDDEN_KNOWLEDGE, 1, {"subject": "Gaijin Pepper"})
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_eq(c.skills.get("Craft: Explosives", 0), 1)
+
+
+func test_forbidden_knowledge_gozoku_grants_skill():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.FORBIDDEN_KNOWLEDGE, 1, {"subject": "Gozoku"})
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_eq(c.skills.get("Lore: Gozoku", 0), 1)
+
+
+func test_forbidden_knowledge_kolat_grants_skill():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.FORBIDDEN_KNOWLEDGE, 1, {"subject": "Kolat"})
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_eq(c.skills.get("Lore: Kolat", 0), 1)
+
+
+func test_forbidden_knowledge_lying_darkness_grants_skill():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.FORBIDDEN_KNOWLEDGE, 1, {"subject": "Lying Darkness"})
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_eq(c.skills.get("Lore: Lying Darkness", 0), 1)
+
+
+func test_forbidden_knowledge_maho_grants_skill():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.FORBIDDEN_KNOWLEDGE, 1, {"subject": "Maho"})
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_eq(c.skills.get("Lore: Maho", 0), 1)
+
+
+func test_forbidden_knowledge_does_not_overwrite_higher_rank():
+	var c := _make_character()
+	c.skills["Lore: Maho"] = 3
+	_add_advantage(c, Enums.Advantage.FORBIDDEN_KNOWLEDGE, 1, {"subject": "Maho"})
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_eq(c.skills.get("Lore: Maho", 0), 3)
+
+
+func test_forbidden_knowledge_unknown_subject_no_crash():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.FORBIDDEN_KNOWLEDGE, 1, {"subject": "Unknown"})
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	# Should complete without crash; no unexpected skills added
+	assert_eq(c.skills.get("Lore: Unknown", 0), 0)
+
+
+func test_forbidden_knowledge_no_advantage_no_skill():
+	var c := _make_character()
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_eq(c.skills.get("Lore: Maho", 0), 0)
+	assert_eq(c.skills.get("Craft: Explosives", 0), 0)
