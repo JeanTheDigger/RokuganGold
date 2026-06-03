@@ -3891,6 +3891,60 @@ mechanical change is applied until s40 individual combat is implemented.
   `_open_door_at()` for bump-to-open door interaction (player stays, tile flipped, FOV
   recomputed). 40 GUT tests in `tests/test_movement_system.gd`.
 
+### Known Code Issues (found and fixed 2026-06-03, comprehensive audit)
+- **`filter_data` personality filter permanently disabled. FIXED.**
+  `world_state.gd` wrapped the JSON under `{"personality_filter": <json>}` but
+  `npc_decision_engine.gd` reads `filter_data.get("bushido", {})` — top-level key.
+  Every virtue block returned `{}` always. Personality filtering (action blocks,
+  conditional blocks, lean values) was completely non-functional at runtime for the
+  entire project lifetime. Fixed to `filter_data = _load_json(...)` directly,
+  exposing `"bushido"` and `"shourido"` as top-level keys.
+- **`objectives_map` int keys corrupted to strings after save/reload. FIXED.**
+  JSON serializes `{100: {...}}` as `{"100": {...}}`. Load path was a bare dict
+  assignment — all `objectives_map.get(character_id, {})` calls returned `{}` after
+  any restart. Every NPC fell to REST/DO_NOTHING until the world was regenerated.
+  Fixed by iterating the loaded raw dict and casting each key with `int(k)`.
+- **`successor_map` same JSON int→string key corruption. FIXED.**
+  Same pattern. Pre-restart succession selections became invisible after reload.
+  Fixed with `int(k)` conversion on load; values also cast to `int()`.
+- **`known_objectives` sub-dict never cleared between days. FIXED.**
+  `_clear_stale_context_flags()` erased top-level `ws` keys via a stale_keys list,
+  but all urgency data (`standing_need_type`, `lord_assigned`, `active_case`), hunt
+  context, theater context, garden/bonsai/ikebana/senbazuru/shide/sculpture/painting
+  context are stored inside `ws["known_objectives"]` (a nested sub-dict). The stale
+  list only worked on top-level keys — nested keys persisted indefinitely. `lord_assigned`
+  stayed `true` after reassignment (Chugi covert modifier wrong); concluded hunts
+  remained "active"; art context from yesterday's location persisted today. Fixed by
+  adding `ws.get("known_objectives", {}).clear()` in the clearing loop. All nested
+  injectors repopulate relevant sub-keys each day. Also removed the ~20 incorrectly-
+  leveled keys from `stale_keys` (they were in `known_objectives`, never at top level).
+  2 tests.
+- **`next_sculpture_id` missing from save/load/reconcile. FIXED.**
+  Had zero coverage in `WorldStateSaver` — neither JSON save, nor `_restore_counter`,
+  nor `_ensure_counter_above`. After any restart, reset to 1 and collided with
+  existing saved sculpture IDs. Added to JSON save blob, `_restore_counter` call,
+  and `_reconcile_id_counters`. `next_garden_id`, `next_bonsai_id`,
+  `next_commission_id`, `next_okiya_id` were also missing from the JSON save blob
+  (had `_ensure_counter_above` fallback but wrong to omit). All 5 now explicit.
+- **`GeishaSystem`, `IkebanaSystem`, `OrigamiSystem` — no `handle_character_death()`. FIXED.**
+  Dead geisha/okaasan/handler IDs persisted in `OkiyaData.geisha_ids/okaasan_id/
+  handler_id`, dead visitor IDs accumulated unboundedly in
+  `IkebanaArrangementData.visitors_who_received_bonus`, dead folder IDs remained
+  on active `SenbazuruData` objects (should be abandoned). Added `handle_character_death()`
+  to all three systems and wired into `_cleanup_dead_character_references()` with
+  updated function signature. 7 tests.
+- **`_ensure_dirs()` missing 5 art-system directories. FIXED.**
+  `DIR_GARDENS`, `DIR_BONSAI`, `DIR_COMMISSIONS`, `DIR_PAINTINGS`, `DIR_SCULPTURES`,
+  `DIR_OKIYAS` were not in `_ensure_dirs()`. Directories were lazily created by
+  `_save_resource_array()` (not a crash), but inconsistent with all other dirs
+  being pre-created. Added all 5 to the pre-creation list.
+- **`reactive_event_type` vs `reactive_type` key naming inconsistency. FIXED.**
+  `_execute_duel_challenge()` and `_execute_mentor()` in `action_executor.gd`
+  returned `"reactive_event_type"` key while all consumers (orchestrator writebacks,
+  `npc_wave_resolver`) read `"reactive_type"`. Was latent (writeback functions create
+  pending_events independently with correct key), but could cause silent failures if
+  any future code reads the key from executor results. Standardized to `"reactive_type"`.
+
 ### Systems Added 2026-06-02 (continued)
 - **s60 PC Integration** — `simulation/pc_system.gd`. New fields on L5RCharacterData: `is_pc`, `player_id`, `is_logged_in`, `home_settlement_id`, `banked_ap`, `offline_policies`, `bubble_scene_id`, `bubble_anchor_ic_day`. Logged-in: full world presence, NPC engine never runs for PCs. Logged-out: disappear from world, home anchor for letter delivery, AP accrues to `banked_ap` each tick (cap = 4× daily allocation). Offline reactive auto-resolve policies: QUEUE / HONOR / ACCEPT / DECLINE / CONDITIONAL per event type; 5 reactive event types; CONDITIONAL conditions (same_clan, disposition_friend, higher_status, lower_status). Bubble Time: scene_id + anchor_ic_day; AP reserved during scene, NPC participants occupied for scene IC duration. PC exclusions: no NPC decision engine, no standing objective auto-assignment, no strategic review, no daily letter pass. NPCs may target PCs normally; assassination PC crisis event gated on ASSASSINATION_GRACE policy. WorldState additions: `active_bubble_scenes`, `next_bubble_scene_id`. Constants A1–A5 locked (BANKED_AP_CAP_MULTIPLIER=4, OFFLINE_EVENT_QUEUE_CAP=30). Locked in gdd/s60_pc_integration_locked.md.
 
