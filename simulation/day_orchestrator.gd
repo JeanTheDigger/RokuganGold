@@ -594,6 +594,20 @@ static func advance_day(
 		active_courts,
 	)
 
+	_process_brash_reactions(
+		day_result.get("results", []),
+		characters_by_id,
+		world_states,
+		dice_engine,
+	)
+
+	_process_contrary_reactions(
+		day_result.get("results", []),
+		characters_by_id,
+		world_states,
+		dice_engine,
+	)
+
 	_process_performance_request_writebacks(
 		day_result.get("results", []),
 		active_courts,
@@ -6061,6 +6075,108 @@ static func _process_duel_response_writebacks(
 			"effects": duel_effects,
 		}
 		results.append(wrapped)
+
+
+# -- s45 BRASH: inject duel challenge when BRASH character fails Willpower check
+# after being successfully publicly insulted. The BRASH character challenges the
+# insulter; DUEL_CHALLENGE_RECEIVED goes into the insulter's pending_events.
+static func _process_brash_reactions(
+	results: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	dice_engine: DiceEngine,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "PUBLIC_INSULT":
+			continue
+		if not d.get("success", false):
+			continue
+		var insulter_id: int = d.get("character_id", -1)
+		var target_id: int = d.get("target_npc_id", -1)
+		if insulter_id < 0 or target_id < 0:
+			continue
+		var target: L5RCharacterData = characters_by_id.get(target_id)
+		if target == null or CharacterStats.is_dead(target):
+			continue
+		var brash_check: Dictionary = AdvantageSystem.check_brash_trigger(target, true)
+		if not brash_check.get("triggered", false):
+			continue
+		var tn: int = brash_check.get("tn", 25)
+		var roll: DiceResult = dice_engine.roll_and_keep(
+			target.willpower, target.willpower, false, ""
+		)
+		var total: int = roll.total + int(target.honor)
+		if total >= tn:
+			continue  # Passed — stays composed
+		# Failed: BRASH character challenges the insulter to a duel.
+		var insulter_ws: Dictionary = world_states.get(insulter_id, {})
+		var pending: Array = insulter_ws.get("pending_events", [])
+		pending.append({
+			"reactive_type": "DUEL_CHALLENGE_RECEIVED",
+			"challenger_id": target_id,
+			"to_death": false,
+			"is_sanctioned": true,
+			"is_public": true,
+			"brash_triggered": true,
+		})
+		insulter_ws["pending_events"] = pending
+		world_states[insulter_id] = insulter_ws
+
+
+# -- s45 CONTRARY: log informational event when CONTRARY character fails Willpower
+# check after a PUBLIC_DEBATE in their location. Position shift magnitude is not
+# specified in GDD s45 — no numeric effect applied; log only.
+static func _process_contrary_reactions(
+	results: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	dice_engine: DiceEngine,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "PUBLIC_DEBATE":
+			continue
+		if not d.get("success", false):
+			continue
+		var actor_id: int = d.get("character_id", -1)
+		if actor_id < 0:
+			continue
+		var actor: L5RCharacterData = characters_by_id.get(actor_id)
+		if actor == null or CharacterStats.is_dead(actor):
+			continue
+		var actor_glory_rank: float = actor.glory
+		var actor_location: String = actor.physical_location
+		for cid: Variant in characters_by_id:
+			var c: L5RCharacterData = characters_by_id.get(cid)
+			if c == null or CharacterStats.is_dead(c):
+				continue
+			if c.character_id == actor_id:
+				continue
+			if c.physical_location != actor_location:
+				continue
+			var contrary_check: Dictionary = AdvantageSystem.check_contrary_trigger(c, actor_glory_rank)
+			if not contrary_check.get("triggered", false):
+				continue
+			var tn: int = contrary_check.get("tn", 0)
+			var roll: DiceResult = dice_engine.roll_and_keep(c.willpower, c.willpower, false, "")
+			if roll.total >= tn:
+				continue  # Passed — stays composed
+			# Failed: CONTRARY character publicly contradicts the debater.
+			# GDD s45 does not specify a position shift magnitude — log only.
+			var cws: Dictionary = world_states.get(c.character_id, {})
+			var action_log: Array = cws.get("action_log", [])
+			action_log.append({
+				"action_id": "CONTRARY_REACTION",
+				"contrary_character_id": c.character_id,
+				"debate_actor_id": actor_id,
+			})
+			cws["action_log"] = action_log
+			world_states[c.character_id] = cws
 
 
 static func _process_commerce_topic_writebacks(
