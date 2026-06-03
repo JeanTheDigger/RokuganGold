@@ -232,6 +232,8 @@ static func _try_spend_on_skill(character: L5RCharacterData, skill_name: String,
 	var cost: int = SKILL_PROGRESS_COST.get(current_rank, 0)
 	if cost <= 0:
 		return {"spent": 0, "advanced": false}
+	# OBTUSE (s45): XP cost doubled for High Skills except Investigation/Medicine.
+	cost *= AdvantageSystem.get_high_skill_xp_multiplier(character, skill_name)
 
 	var key: String = _skill_key(skill_name)
 	var current_progress: int = _get_progress(character, key)
