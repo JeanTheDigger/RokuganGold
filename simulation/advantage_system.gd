@@ -1302,6 +1302,7 @@ static func check_dark_paragon_activation(
 	roll_total: int,
 	tn: int,
 	precept: String,
+	ic_day: int = -1,
 ) -> Dictionary:
 	var adv: AdvantageData = get_advantage(character, Enums.Advantage.DARK_PARAGON)
 	if adv == null:
@@ -1309,11 +1310,31 @@ static func check_dark_paragon_activation(
 	var char_precept: String = adv.metadata.get("precept", "")
 	if char_precept != precept:
 		return {"should_activate": false}
+	# Once-per-OOC-week limit (s45:77)
+	if ic_day >= 0:
+		var current_week: int = ic_day / 7
+		if adv.metadata.get("last_activation_week", -1) == current_week:
+			return {"should_activate": false}
 	# Activate if +5 bonus would turn a miss into a hit
 	var would_succeed: bool = (roll_total + 5) >= tn and roll_total < tn
 	# Or if Will/Determination would prevent death
 	var is_survival_precept: bool = (precept == "Will" or precept == "Determination")
 	return {"should_activate": would_succeed or is_survival_precept}
+
+
+## DARK_PARAGON: deduct cost (1 Void Point if available, else 0.5 Honor) and record weekly limit.
+## GDD s45:77 "sacrifice 5 Honor" = 5 points = 0.5 rank on the 0.0–10.0 scale.
+## Call immediately after activation is confirmed.
+static func apply_dark_paragon_cost(character: L5RCharacterData, ic_day: int) -> void:
+	var adv: AdvantageData = get_advantage(character, Enums.Advantage.DARK_PARAGON)
+	if adv == null:
+		return
+	if character.current_void_points > 0:
+		character.current_void_points -= 1
+	else:
+		HonorGlorySystem.apply_honor_change(character, -0.5)
+	if ic_day >= 0:
+		adv.metadata["last_activation_week"] = ic_day / 7
 
 
 ## BRASH: returns {triggered: bool, tn: int}.

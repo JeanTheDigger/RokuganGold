@@ -3233,3 +3233,86 @@ func test_well_connected_weekly_dedup_blocks_second_call() -> void:
 	DayOrchestrator._process_well_connected_weekly([c, local_char], {}, [t], 10)
 
 	assert_false(20 in c.topic_pool)
+
+
+# ---------------------------------------------------------------------------
+# DARK_PARAGON (s45) — weekly limit and cost (0.5 Honor or 1 Void Point)
+# ---------------------------------------------------------------------------
+
+func test_dark_paragon_weekly_limit_blocks_same_week() -> void:
+	var c := _make_character()
+	# last_activation_week=1, ic_day=10 → week=10/7=1 → same week → blocked
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1,
+		{"precept": "Honor", "last_activation_week": 1})
+	var r: Dictionary = AdvantageSystem.check_dark_paragon_activation(c, 7, 10, "Honor", 10)
+	assert_false(r.get("should_activate", true))
+
+
+func test_dark_paragon_weekly_limit_allows_next_week() -> void:
+	var c := _make_character()
+	# last_activation_week=0, ic_day=7 → week=7/7=1 → different week → allowed
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1,
+		{"precept": "Honor", "last_activation_week": 0})
+	var r: Dictionary = AdvantageSystem.check_dark_paragon_activation(c, 7, 10, "Honor", 7)
+	assert_true(r.get("should_activate", false))
+
+
+func test_dark_paragon_cost_spends_void_point_when_available() -> void:
+	var c := _make_character()
+	c.current_void_points = 2
+	c.honor = 5.0
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1, {"precept": "Honor"})
+	AdvantageSystem.apply_dark_paragon_cost(c, 7)
+	assert_eq(c.current_void_points, 1)
+	assert_almost_eq(c.honor, 5.0, 0.001)  # honor unchanged when void available
+
+
+func test_dark_paragon_cost_deducts_honor_when_no_void() -> void:
+	var c := _make_character()
+	c.current_void_points = 0
+	c.honor = 5.0
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1, {"precept": "Honor"})
+	AdvantageSystem.apply_dark_paragon_cost(c, 7)
+	assert_eq(c.current_void_points, 0)
+	assert_almost_eq(c.honor, 4.5, 0.001)  # 5 points = 0.5 rank lost (s45:77)
+
+
+func test_dark_paragon_cost_records_activation_week() -> void:
+	var c := _make_character()
+	c.current_void_points = 1
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1, {"precept": "Honor"})
+	AdvantageSystem.apply_dark_paragon_cost(c, 14)  # ic_day 14 → week 2
+	var adv: AdvantageData = AdvantageSystem.get_advantage(c, Enums.Advantage.DARK_PARAGON)
+	assert_eq(adv.metadata.get("last_activation_week", -1), 2)
+
+
+func test_dark_paragon_integration_applies_cost_on_activation() -> void:
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	c.current_void_points = 1
+	c.honor = 5.0
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1, {"precept": "Honor"})
+	# flat_bonus=7, tn=10 → total=7 (miss by 3), +5 flips; ic_day=7 → week=1, no prior limit
+	var r: Dictionary = SkillResolver.resolve_skill_check(
+		c, dice, "Etiquette", 10, 0, "", Enums.Trait.NONE, -5, 0, 7, 7
+	)
+	assert_true(r.get("dark_paragon_activated", false))
+	assert_eq(c.current_void_points, 0)
+	assert_almost_eq(c.honor, 5.0, 0.001)  # void spent, honor untouched
+
+
+func test_dark_paragon_integration_weekly_limit_blocks_activation() -> void:
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	c.current_void_points = 2
+	# Already activated this week (week 1)
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1,
+		{"precept": "Honor", "last_activation_week": 1})
+	# ic_day=10 → week=1 → same week → blocked even on a qualifying near-miss
+	var r: Dictionary = SkillResolver.resolve_skill_check(
+		c, dice, "Etiquette", 10, 0, "", Enums.Trait.NONE, -5, 0, 7, 10
+	)
+	assert_false(r.get("dark_paragon_activated", false))
+	assert_eq(c.current_void_points, 2)  # no cost deducted

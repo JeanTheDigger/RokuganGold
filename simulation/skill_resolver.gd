@@ -461,13 +461,14 @@ static func resolve_skill_check(
 		if dp_adv != null:
 			var dp_precept: String = dp_adv.metadata.get("precept", "")
 			var dp: Dictionary = AdvantageSystem.check_dark_paragon_activation(
-				character, result.get("total", 0), result.get("tn", tn), dp_precept
+				character, result.get("total", 0), result.get("tn", tn), dp_precept, ic_day
 			)
 			if dp.get("should_activate", false):
 				result["total"] = result["total"] + 5
 				result["margin"] = result["total"] - result["tn"]
 				result["success"] = result["margin"] >= 0
 				result["dark_paragon_activated"] = true
+				AdvantageSystem.apply_dark_paragon_cost(character, ic_day)
 
 	return result
 
