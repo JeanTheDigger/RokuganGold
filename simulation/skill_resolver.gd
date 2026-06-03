@@ -368,6 +368,7 @@ static func resolve_skill_check(
 	bonus_kept: int = 0,
 	flat_bonus: int = 0,
 	ic_day: int = -1,
+	context: Dictionary = {},
 ) -> Dictionary:
 	# Determine trait
 	var trait_used: Enums.Trait
@@ -378,6 +379,9 @@ static func resolve_skill_check(
 
 	var trait_value: int = character.get_trait_value(trait_used)
 	var skill_rank: int = get_skill_rank(character, skill_name)
+	# CRAB_HANDS / CRAFTY / SAGE / SENSATION / SOUL_OF_ARTISTRY (s45)
+	if skill_rank == 0 and not context.is_empty():
+		skill_rank = AdvantageSystem.get_unskilled_rank_bonus(character, skill_name, context)
 
 	# Emphasis check
 	var has_emph: bool = false
@@ -395,10 +399,20 @@ static func resolve_skill_check(
 	if not character.from_the_ashes.is_empty():
 		ashes_bonus = _get_ashes_bonus_for_skill(character, skill_name, ic_day)
 
+	# Advantage & Disadvantage modifiers (s45)
+	var adv_skill: Dictionary = AdvantageSystem.get_skill_bonus(character, skill_name, context)
+	var adv_tn: int = AdvantageSystem.get_tn_modifier(character, context)
+	var adv_wound: int = AdvantageSystem.get_wound_tn_modifier(character)
+	var adv_trait: int = AdvantageSystem.get_trait_modifier(character, trait_used, context)
+	trait_value += adv_trait
+	if wound_penalty < 0:
+		wound_penalty = mini(0, wound_penalty + adv_wound)
+
 	# Build the pool: (trait + skill + bonus_rolled) k (trait + bonus_kept)
-	var rolled: int = trait_value + skill_rank + bonus_rolled + ashes_bonus
-	var kept: int = trait_value + bonus_kept
-	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE)
+	var rolled: int = trait_value + skill_rank + bonus_rolled + ashes_bonus + adv_skill.get("rolled", 0)
+	var kept: int = trait_value + bonus_kept + adv_skill.get("kept", 0)
+	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
+		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn
 
 	# Unskilled: no explosions
 	var explodes: bool = skill_rank > 0
@@ -413,6 +427,7 @@ static func resolve_skill_check(
 	result["wound_penalty"] = wound_penalty
 	result["emphasis_applied"] = has_emph
 	result["technique_free_raises"] = technique_fr
+	result["advantage_bonus"] = adv_skill
 
 	return result
 
@@ -434,6 +449,8 @@ static func resolve_contested_check(
 	flat_bonus_a: int = 0,
 	flat_bonus_b: int = 0,
 	ic_day: int = -1,
+	context_a: Dictionary = {},
+	context_b: Dictionary = {},
 ) -> Dictionary:
 	# Character A
 	var trait_a: Enums.Trait = trait_override_a if trait_override_a != Enums.Trait.NONE else get_trait_for_skill(skill_a)
@@ -453,15 +470,33 @@ static func resolve_contested_check(
 	var tfr_b: int = get_technique_free_raises(char_b, skill_b)
 	var ashes_b: int = _get_ashes_bonus_for_skill(char_b, skill_b, ic_day) if not char_b.from_the_ashes.is_empty() else 0
 
+	# Advantage & Disadvantage modifiers (s45)
+	var adv_a: Dictionary = AdvantageSystem.get_skill_bonus(char_a, skill_a, context_a)
+	var adv_b: Dictionary = AdvantageSystem.get_skill_bonus(char_b, skill_b, context_b)
+	var adv_tn_a: int = AdvantageSystem.get_tn_modifier(char_a, context_a)
+	var adv_tn_b: int = AdvantageSystem.get_tn_modifier(char_b, context_b)
+	var adv_wound_a: int = AdvantageSystem.get_wound_tn_modifier(char_a)
+	var adv_wound_b: int = AdvantageSystem.get_wound_tn_modifier(char_b)
+	tv_a += AdvantageSystem.get_trait_modifier(char_a, trait_a, context_a)
+	tv_b += AdvantageSystem.get_trait_modifier(char_b, trait_b, context_b)
+	if wp_a < 0:
+		wp_a = mini(0, wp_a + adv_wound_a)
+	if wp_b < 0:
+		wp_b = mini(0, wp_b + adv_wound_b)
+
 	var roll_a: DiceResult = dice_engine.roll_and_keep(
-		tv_a + sr_a + bonus_rolled_a + ashes_a, tv_a, sr_a > 0, emph_a
+		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0),
+		tv_a + adv_a.get("kept", 0), sr_a > 0, emph_a
 	)
 	var roll_b: DiceResult = dice_engine.roll_and_keep(
-		tv_b + sr_b + bonus_rolled_b + ashes_b, tv_b, sr_b > 0, emph_b
+		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0),
+		tv_b + adv_b.get("kept", 0), sr_b > 0, emph_b
 	)
 
-	var total_a: int = roll_a.total + flat_bonus_a + wp_a + (tfr_a * FREE_RAISE_VALUE)
-	var total_b: int = roll_b.total + flat_bonus_b + wp_b + (tfr_b * FREE_RAISE_VALUE)
+	var total_a: int = roll_a.total + flat_bonus_a + wp_a + (tfr_a * FREE_RAISE_VALUE) \
+		+ (adv_a.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_a
+	var total_b: int = roll_b.total + flat_bonus_b + wp_b + (tfr_b * FREE_RAISE_VALUE) \
+		+ (adv_b.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_b
 
 	var winner: String = "a"
 	if total_b > total_a:

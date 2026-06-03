@@ -165,6 +165,9 @@ static func advance_day(
 	_process_duped_foolish_on_arrival(
 		travel_arrivals, characters_by_id, objectives_map, settlements,
 	)
+	_process_compulsion_on_arrival(
+		travel_arrivals, characters_by_id, settlements, world_states, dice_engine,
+	)
 
 	var musha_season_count: int = int(season_meta.get("horde_season_count", 0))
 	var musha_shugyo_results: Array = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map, dice_engine, musha_season_count)
@@ -9073,6 +9076,71 @@ static func _process_auto_conceal_on_arrival(
 	return results
 
 
+# -- Compulsion Arrival Check (s45) -------------------------------------------
+# Checks COMPULSION disadvantage for each arriving character. When the
+# destination settlement type matches the compulsion's location_tags and the
+# character fails a Willpower roll, sets ws["compulsion_active"] so the NPC
+# engine can respond during the day's AP wave.
+
+static func _location_tags_for_settlement_type(stype: Enums.SettlementType) -> Array:
+	match stype:
+		Enums.SettlementType.CITY, Enums.SettlementType.IMPERIAL_CAPITAL:
+			return ["urban", "sake_house", "gambling", "market", "entertainment"]
+		Enums.SettlementType.TOWN:
+			return ["town", "sake_house", "market"]
+		Enums.SettlementType.CASTLE, Enums.SettlementType.FAMILY_CASTLE:
+			return ["castle", "sake_house"]
+		Enums.SettlementType.VILLAGE:
+			return ["village"]
+		Enums.SettlementType.TEMPLE, Enums.SettlementType.SHINDEN, Enums.SettlementType.MONASTERY:
+			return ["temple", "sacred"]
+		_:
+			return []
+
+
+static func _process_compulsion_on_arrival(
+	arrivals: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	world_states: Dictionary,
+	dice_engine: DiceEngine,
+) -> void:
+	var settlement_type_map: Dictionary = {}
+	for s: Variant in settlements:
+		if s is SettlementData:
+			settlement_type_map[(s as SettlementData).settlement_name] = (s as SettlementData).settlement_type
+
+	for arrival: Dictionary in arrivals:
+		var char_id: int = arrival.get("character_id", -1)
+		var dest: String = arrival.get("destination", "")
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null or CharacterStats.is_dead(character) or dest.is_empty():
+			continue
+		if not AdvantageSystem.has_disadvantage(character, Enums.Disadvantage.COMPULSION):
+			continue
+
+		var stype: Enums.SettlementType = settlement_type_map.get(dest, Enums.SettlementType.VILLAGE)
+		var location_tags: Array = _location_tags_for_settlement_type(stype)
+		var trigger: Dictionary = AdvantageSystem.check_compulsion_trigger(character, location_tags)
+		if not trigger.get("triggered", false):
+			continue
+
+		var tn: int = trigger.get("tn", 15)
+		var wil: int = character.willpower
+		var roll: DiceResult = dice_engine.roll_and_keep(wil, wil, false, "")
+		if roll.total < tn:
+			var comp_dis: DisadvantageData = AdvantageSystem.get_disadvantage(
+				character, Enums.Disadvantage.COMPULSION
+			)
+			var ws: Dictionary = world_states.get(char_id, {})
+			if not ws.is_empty():
+				ws["compulsion_active"] = {
+					"subject": comp_dis.metadata.get("subject", "") if comp_dis != null else "",
+					"tn": tn,
+					"roll": roll.total,
+				}
+
+
 # -- Daily Letter Pass (s57.5) -------------------------------------------------
 
 static func _process_daily_letter_pass(
@@ -13438,6 +13506,10 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"settlement_type",
 		"champion_conclusion_candidates", "local_tier3_candidates",
 		"has_active_contracts",
+		# s45 Advantage/Disadvantage behavioral context (rebuilt daily by _inject_base_character_context)
+		"spy_network_focus", "true_love_target_id",
+		"compulsion_location_tags", "compulsion_active",
+		"phobia_situation_tags", "rumormonger_max_glory_rank",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -18139,6 +18211,39 @@ static func _inject_base_character_context(
 			if char_clan != null:
 				ws["champion_conclusion_candidates"] = StrategicReview.get_champion_conclusion_needtypes(c, char_clan)
 			ws["local_tier3_candidates"] = _build_local_tier3_candidates(c, g_topics_by_id)
+
+		# s45 Advantage/Disadvantage behavioral context flags (consumed by NPC engine)
+		var well_courts: Array = AdvantageSystem.get_well_connected_courts(c)
+		if not well_courts.is_empty():
+			if not ws.has("known_objectives"):
+				ws["known_objectives"] = {}
+			ws["known_objectives"]["well_connected_courts"] = well_courts
+		var spy_focus: Dictionary = AdvantageSystem.get_spy_network_focus(c)
+		if not spy_focus.is_empty():
+			ws["spy_network_focus"] = spy_focus
+		if AdvantageSystem.has_disadvantage(c, Enums.Disadvantage.TRUE_LOVE):
+			var tl_dis: DisadvantageData = AdvantageSystem.get_disadvantage(c, Enums.Disadvantage.TRUE_LOVE)
+			if tl_dis != null:
+				ws["true_love_target_id"] = tl_dis.metadata.get("target_id", -1)
+		if AdvantageSystem.has_disadvantage(c, Enums.Disadvantage.COMPULSION):
+			var comp_dis: DisadvantageData = AdvantageSystem.get_disadvantage(c, Enums.Disadvantage.COMPULSION)
+			if comp_dis != null:
+				ws["compulsion_location_tags"] = comp_dis.metadata.get("location_tags", [])
+		if AdvantageSystem.has_disadvantage(c, Enums.Disadvantage.PHOBIA):
+			var ph_dis: DisadvantageData = AdvantageSystem.get_disadvantage(c, Enums.Disadvantage.PHOBIA)
+			if ph_dis != null:
+				ws["phobia_situation_tags"] = ph_dis.metadata.get("situation_tags", [])
+		if AdvantageSystem.has_disadvantage(c, Enums.Disadvantage.RUMORMONGER):
+			var rm_loc: String = c.physical_location
+			if not rm_loc.is_empty():
+				var max_gr: float = 0.0
+				for rm_c: L5RCharacterData in characters:
+					if CharacterStats.is_dead(rm_c):
+						continue
+					if rm_c.physical_location == rm_loc and rm_c.character_id != c.character_id:
+						max_gr = maxf(max_gr, float(AdvantageSystem.get_glory_rank(rm_c)))
+				if max_gr > 0.0:
+					ws["rumormonger_max_glory_rank"] = max_gr
 
 
 # -- Local Tier 3 Candidates (s57.54.10b) -------------------------------------

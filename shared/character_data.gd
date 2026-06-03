@@ -61,8 +61,8 @@ var spell_void_bonus_used: int = 0
 
 # -- Advantages & Disadvantages ------------------------------------------------
 
-@export var advantages: Array = []
-@export var disadvantages: Array = []
+@export var advantages: Array[AdvantageData] = []
+@export var disadvantages: Array[DisadvantageData] = []
 
 # -- Honor, Glory, Status, Infamy (0.0 to 10.0) -------------------------------
 
