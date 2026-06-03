@@ -214,3 +214,41 @@ func test_atonement_tn_by_tier_has_four_tiers() -> void:
 	assert_eq(HonorGlorySystem.ATONEMENT_TN_BY_TIER.size(), 4)
 	assert_eq(HonorGlorySystem.ATONEMENT_TN_BY_TIER[1], 30)
 	assert_eq(HonorGlorySystem.ATONEMENT_TN_BY_TIER[4], 15)
+
+
+# -- ASCETIC glory scaling (s45 wiring) ----------------------------------------
+
+func _add_ascetic(c: L5RCharacterData) -> void:
+	var dis := DisadvantageData.new()
+	dis.disadvantage_type = Enums.Disadvantage.ASCETIC
+	dis.rank = 1
+	dis.metadata = {}
+	c.disadvantages.append(dis)
+
+
+func test_ascetic_samurai_halves_glory_gain() -> void:
+	var c := _make_char(5.0, 3.0)
+	_add_ascetic(c)
+	HonorGlorySystem.apply_glory_change(c, 2.0)
+	assert_almost_eq(c.glory, 4.0, 0.01, "samurai ASCETIC should receive only 1.0 glory (half of 2.0)")
+
+
+func test_ascetic_samurai_halves_glory_loss() -> void:
+	var c := _make_char(5.0, 5.0)
+	_add_ascetic(c)
+	HonorGlorySystem.apply_glory_change(c, -2.0)
+	assert_almost_eq(c.glory, 4.0, 0.01, "samurai ASCETIC glory loss also halved")
+
+
+func test_ascetic_monk_quarters_glory_gain() -> void:
+	var c := _make_char(5.0, 3.0)
+	c.school_type = Enums.SchoolType.MONK
+	_add_ascetic(c)
+	HonorGlorySystem.apply_glory_change(c, 2.0)
+	assert_almost_eq(c.glory, 3.5, 0.01, "monk ASCETIC receives only 0.5 glory (quarter of 2.0)")
+
+
+func test_no_ascetic_full_glory() -> void:
+	var c := _make_char(5.0, 3.0)
+	HonorGlorySystem.apply_glory_change(c, 2.0)
+	assert_almost_eq(c.glory, 5.0, 0.01, "non-ASCETIC receives full glory")

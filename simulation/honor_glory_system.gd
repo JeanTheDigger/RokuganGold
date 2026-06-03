@@ -14,7 +14,9 @@ static func apply_honor_change(character: L5RCharacterData, delta: float) -> flo
 
 static func apply_glory_change(character: L5RCharacterData, delta: float) -> float:
 	var old: float = character.glory
-	character.glory = clampf(character.glory + delta, 0.0, 10.0)
+	# ASCETIC disadvantage halves all glory changes (s45)
+	var scaled: float = delta * AdvantageSystem.get_glory_multiplier(character)
+	character.glory = clampf(character.glory + scaled, 0.0, 10.0)
 	return character.glory - old
 
 

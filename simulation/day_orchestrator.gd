@@ -1482,6 +1482,7 @@ static func advance_day(
 			stipends, characters_by_id, active_topics, next_topic_id, ic_day,
 		)
 		_process_bonsai_monthly_neglect(active_bonsai, characters_by_id, ic_day / 30)
+		_process_sakkaku_monthly_pranks(characters, characters_by_id, ic_day)
 
 	if is_season_boundary:
 		_purge_resolved_crime_records(crime_records, ic_day)
@@ -9374,6 +9375,10 @@ static func _process_arrival_observation(
 			InformationSystem.record_location_observation(
 				other, char_id, dest, current_season
 			)
+
+		# BOUNTY: observers who share a location with the arriving character attempt
+		# recognition via Perception + Investigation vs the bounty TN (s45)
+		_check_bounty_recognition(character, dest, characters_by_id)
 
 
 # -- Witness Testimony on Arrival (s57.16 — witness reaches magistrate) --------
@@ -24735,6 +24740,90 @@ static func _process_taint_rank_changes(
 	return results
 
 
+# -- s45 BOUNTY Recognition ----------------------------------------------------
+
+static func _check_bounty_recognition(
+	arriving: L5RCharacterData,
+	location: String,
+	characters_by_id: Dictionary,
+) -> void:
+	var bounty_tn: int = AdvantageSystem.get_recognition_tn(arriving)
+	if bounty_tn < 0:
+		return
+	for obs_id: int in characters_by_id:
+		if obs_id == arriving.character_id:
+			continue
+		var obs: L5RCharacterData = characters_by_id[obs_id]
+		if CharacterStats.is_dead(obs):
+			continue
+		if obs.physical_location != location:
+			continue
+		var per: int = obs.perception
+		var inv: int = obs.skills.get("Investigation", 0)
+		var roll_total: int = (per + inv) * 5  # Rough average roll without dice engine
+		if roll_total >= bounty_tn:
+			# Observer recognises the wanted character — add to met_characters
+			# so they can report through existing topic/investigation channels
+			var bounty_knowledge: KnowledgeEntry = KnowledgeEntry.new()
+			bounty_knowledge.source = "bounty_recognition"
+			bounty_knowledge.entry_type = "bounty_spotted"
+			bounty_knowledge.data = {
+				"target_id": arriving.character_id,
+				"location": location,
+			}
+			bounty_knowledge.confidence = Enums.KnowledgeConfidence.FRESH
+			obs.knowledge_pool.append(bounty_knowledge)
+
+
+# -- s45 CURSED_BY_THE_REALM (Sakkaku) Monthly Pranks -------------------------
+
+static func _process_sakkaku_monthly_pranks(
+	characters: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	var ic_month: int = ic_day / 30
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var prank: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(character, ic_month)
+		if not prank.get("triggered", false):
+			continue
+		_apply_sakkaku_prank(character, prank, ic_month, ic_day, characters_by_id)
+
+
+static func _apply_sakkaku_prank(
+	character: L5RCharacterData,
+	prank: Dictionary,
+	ic_month: int,
+	ic_day: int,
+	_characters_by_id: Dictionary,
+) -> void:
+	var effect: String = prank.get("prank", "")
+	var meta: Dictionary = prank.get("metadata", {})
+	match effect:
+		"VOID_DRAIN":
+			if character.current_void_points > 0:
+				character.current_void_points -= 1
+		"SPOILED_PROVISIONS":
+			character.koku = maxf(0.0, character.koku - float(meta.get("koku_loss", 1)))
+		"WHISPERED_EMBARRASSMENT":
+			HonorGlorySystem.apply_glory_change(character, -meta.get("glory_loss", 1.0))
+		"WRONG_PATH":
+			if character.travel_days_remaining > 0:
+				character.travel_days_remaining += meta.get("travel_extra_days", 1)
+		"RESTLESS_NIGHT":
+			# Block void refresh for 1 OOC day (s45 spirit prank — restless sleep)
+			var ooc_day: int = ic_day / TimeSystem.TICKS_PER_REAL_DAY
+			character.void_refresh_blocked_until = ooc_day + 1
+		_:
+			pass  # Timed skill penalties and combat effects blocked on timed_advantages/s40
+	# Stamp last_prank_month to prevent re-triggering this month
+	for dis: DisadvantageData in character.disadvantages:
+		if dis.disadvantage_type == Enums.Disadvantage.CURSED_BY_THE_REALM:
+			if dis.metadata.get("realm", "") == "Sakkaku":
+				dis.metadata["last_prank_month"] = ic_month
+				break
 
 
 

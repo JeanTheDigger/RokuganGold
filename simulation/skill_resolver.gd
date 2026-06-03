@@ -438,6 +438,21 @@ static func resolve_skill_check(
 	result["technique_free_raises"] = technique_fr
 	result["advantage_bonus"] = adv_skill
 
+	# LINGERING_MISFORTUNE: a narrow success (margin 0–4) is overturned once per month (s45)
+	if ic_day >= 0 and result.get("success", false):
+		var ic_month: int = ic_day / 30
+		var lm: Dictionary = AdvantageSystem.check_lingering_misfortune(
+			character, result.get("margin", 0), ic_month
+		)
+		if lm.get("triggered", false):
+			result["success"] = false
+			result["lingering_misfortune"] = true
+			for dis: DisadvantageData in character.disadvantages:
+				if dis.disadvantage_type == Enums.Disadvantage.BAD_FORTUNE:
+					if dis.metadata.get("type", "") == "Lingering_Misfortune":
+						dis.metadata["last_misfortune_month"] = ic_month
+						break
+
 	return result
 
 

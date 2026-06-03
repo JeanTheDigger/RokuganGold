@@ -510,8 +510,10 @@ static func resolve_commander_bonus(
 
 	var highest_ring: Enums.Ring = _get_highest_ring(commander, clan_id)
 	var bonus_type: String = RING_TO_BONUS_TYPE.get(highest_ring, "attack")
+	# TACTICIAN advantage adds +5 to the commander's battle contribution (s45)
+	var tactician_bonus: int = AdvantageSystem.get_tactician_modifier(commander)
 
-	return {"bonus_type": bonus_type, "bonus_value": battle_rank}
+	return {"bonus_type": bonus_type, "bonus_value": battle_rank + tactician_bonus}
 
 
 static func _get_highest_ring(

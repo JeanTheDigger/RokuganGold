@@ -2096,3 +2096,101 @@ func test_lingering_misfortune_no_disadvantage():
 	var c := _make_character(1)
 	var r: Dictionary = AdvantageSystem.check_lingering_misfortune(c, 2, 5)
 	assert_false(r["triggered"])
+
+
+# -- s45 Wiring Integration Tests (ASCETIC, BOUNTY, Sakkaku orchestrator) ------
+
+func test_ascetic_glory_multiplier_samurai():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.ASCETIC)
+	assert_almost_eq(AdvantageSystem.get_glory_multiplier(c), 0.5, 0.001,
+		"samurai ASCETIC glory multiplier must be 0.5")
+
+
+func test_ascetic_glory_multiplier_monk():
+	var c := _make_character(1)
+	c.school_type = Enums.SchoolType.MONK
+	_add_disadvantage(c, Enums.Disadvantage.ASCETIC)
+	assert_almost_eq(AdvantageSystem.get_glory_multiplier(c), 0.25, 0.001,
+		"monk ASCETIC glory multiplier must be 0.25")
+
+
+func test_no_ascetic_multiplier_is_one():
+	var c := _make_character(1)
+	assert_almost_eq(AdvantageSystem.get_glory_multiplier(c), 1.0, 0.001,
+		"non-ASCETIC glory multiplier must be 1.0")
+
+
+func test_bounty_rank1_tn_is_25():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.BOUNTY, 1)
+	assert_eq(AdvantageSystem.get_recognition_tn(c), 25)
+
+
+func test_bounty_rank2_tn_is_15():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.BOUNTY, 2)
+	assert_eq(AdvantageSystem.get_recognition_tn(c), 15)
+
+
+func test_bounty_rank3_tn_is_10():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.BOUNTY, 3)
+	assert_eq(AdvantageSystem.get_recognition_tn(c), 10)
+
+
+func test_no_bounty_recognition_tn_is_minus1():
+	var c := _make_character(1)
+	assert_eq(AdvantageSystem.get_recognition_tn(c), -1)
+
+
+func test_tactician_modifier_is_5():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.TACTICIAN)
+	assert_eq(AdvantageSystem.get_tactician_modifier(c), 5)
+
+
+func test_no_tactician_modifier_is_0():
+	var c := _make_character(1)
+	assert_eq(AdvantageSystem.get_tactician_modifier(c), 0)
+
+
+func test_sakkaku_prank_triggered_new_month():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Sakkaku"})
+	var r: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(c, 3)
+	assert_true(r["triggered"])
+	assert_ne(r["prank"], "", "prank name must be non-empty")
+
+
+func test_sakkaku_prank_not_retriggered_same_month():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1,
+		{"realm": "Sakkaku", "last_prank_month": 3})
+	var r: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(c, 3)
+	assert_false(r["triggered"])
+
+
+func test_sakkaku_prank_fires_new_month_after_previous():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1,
+		{"realm": "Sakkaku", "last_prank_month": 2})
+	var r: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(c, 3)
+	assert_true(r["triggered"])
+
+
+func test_sakkaku_prank_deterministic_same_inputs():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Sakkaku"})
+	var r1: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(c, 5)
+	# Reset metadata to allow re-trigger
+	c.disadvantages[0].metadata["last_prank_month"] = -1
+	var r2: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(c, 5)
+	assert_eq(r1["prank"], r2["prank"], "Same inputs must produce same prank")
+
+
+func test_sakkaku_no_realm_mismatch():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Gaki_do"})
+	var r: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(c, 3)
+	assert_false(r["triggered"], "Non-Sakkaku realm must not trigger Sakkaku prank")
