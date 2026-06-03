@@ -811,3 +811,101 @@ func test_dissolve_metadata_gate_blocked_when_both_neutral():
 		_make_dissolve_need(), ctx, chars_by_id,
 	)
 	assert_eq(meta.get("spouse_a_id", -1), -1)
+
+
+# -- Topic seeding (s57.49) ---------------------------------------------------
+
+func test_dissolution_topic_seeded_to_both_spouses():
+	var char_a: L5RCharacterData = _make_char(1, 2)
+	var char_b: L5RCharacterData = _make_char(2, 1)
+	var chars: Dictionary = {1: char_a, 2: char_b}
+	var marriages: Array = [_make_marriage(1, 2)]
+	var active_topics: Array = []
+	var next_topic_id: Array = [700]
+	var effects: Dictionary = {
+		"spouse_a_id": 1, "spouse_b_id": 2,
+		"ordering_lord_id": -1, "pathway": 2,
+	}
+	DayOrchestrator._apply_dissolution(
+		effects, chars, marriages, 100, active_topics, next_topic_id,
+	)
+	assert_true(700 in char_a.topic_pool, "spouse_a must receive dissolution topic")
+	assert_true(700 in char_b.topic_pool, "spouse_b must receive dissolution topic")
+
+
+func test_dissolution_topic_seeded_to_ordering_lord_pathway1():
+	var char_a: L5RCharacterData = _make_char(1, 2)
+	var char_b: L5RCharacterData = _make_char(2, 1)
+	var lord: L5RCharacterData = _make_char(99)
+	var chars: Dictionary = {1: char_a, 2: char_b, 99: lord}
+	var marriages: Array = [_make_marriage(1, 2)]
+	var active_topics: Array = []
+	var next_topic_id: Array = [701]
+	var effects: Dictionary = {
+		"spouse_a_id": 1, "spouse_b_id": 2,
+		"ordering_lord_id": 99, "pathway": 1,
+	}
+	DayOrchestrator._apply_dissolution(
+		effects, chars, marriages, 100, active_topics, next_topic_id,
+	)
+	assert_true(701 in lord.topic_pool, "ordering lord must receive dissolution topic")
+
+
+func test_dissolution_topic_seeded_to_spouses_lords():
+	var char_a: L5RCharacterData = _make_char(1, 2, 10)  # lord_id = 10
+	var char_b: L5RCharacterData = _make_char(2, 1, 11)  # lord_id = 11
+	var lord_a: L5RCharacterData = _make_char(10)
+	var lord_b: L5RCharacterData = _make_char(11)
+	var chars: Dictionary = {1: char_a, 2: char_b, 10: lord_a, 11: lord_b}
+	var marriages: Array = [_make_marriage(1, 2)]
+	var active_topics: Array = []
+	var next_topic_id: Array = [702]
+	var effects: Dictionary = {
+		"spouse_a_id": 1, "spouse_b_id": 2,
+		"ordering_lord_id": -1, "pathway": 3,
+	}
+	DayOrchestrator._apply_dissolution(
+		effects, chars, marriages, 100, active_topics, next_topic_id,
+	)
+	assert_true(702 in lord_a.topic_pool, "spouse_a's lord must receive dissolution topic")
+	assert_true(702 in lord_b.topic_pool, "spouse_b's lord must receive dissolution topic")
+
+
+func test_dissolution_topic_no_duplicate_when_ordering_lord_is_spouses_lord():
+	# Ordering lord (id=10) is also spouse_a's immediate lord — seeded only once.
+	var char_a: L5RCharacterData = _make_char(1, 2, 10)
+	var char_b: L5RCharacterData = _make_char(2, 1, 11)
+	var lord_a: L5RCharacterData = _make_char(10)
+	var lord_b: L5RCharacterData = _make_char(11)
+	var chars: Dictionary = {1: char_a, 2: char_b, 10: lord_a, 11: lord_b}
+	var marriages: Array = [_make_marriage(1, 2)]
+	var active_topics: Array = []
+	var next_topic_id: Array = [703]
+	var effects: Dictionary = {
+		"spouse_a_id": 1, "spouse_b_id": 2,
+		"ordering_lord_id": 10, "pathway": 1,
+	}
+	DayOrchestrator._apply_dissolution(
+		effects, chars, marriages, 100, active_topics, next_topic_id,
+	)
+	var count: int = lord_a.topic_pool.count(703)
+	assert_eq(count, 1, "ordering lord who is also spouse's lord seeded exactly once")
+
+
+func test_dissolution_topic_not_seeded_to_dead_lord():
+	var char_a: L5RCharacterData = _make_char(1, 2, 10)
+	var char_b: L5RCharacterData = _make_char(2, 1)
+	var dead_lord: L5RCharacterData = _make_char(10)
+	dead_lord.wounds_taken = 40  # lethal wound level
+	var chars: Dictionary = {1: char_a, 2: char_b, 10: dead_lord}
+	var marriages: Array = [_make_marriage(1, 2)]
+	var active_topics: Array = []
+	var next_topic_id: Array = [704]
+	var effects: Dictionary = {
+		"spouse_a_id": 1, "spouse_b_id": 2,
+		"ordering_lord_id": -1, "pathway": 3,
+	}
+	DayOrchestrator._apply_dissolution(
+		effects, chars, marriages, 100, active_topics, next_topic_id,
+	)
+	assert_false(704 in dead_lord.topic_pool, "dead lord must not receive dissolution topic")

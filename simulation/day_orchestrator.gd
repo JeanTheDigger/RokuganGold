@@ -16005,6 +16005,7 @@ static func _apply_dissolution(
 	var resolved_pathway: int = effects.get("pathway", pathway)
 	var spouse_a_id: int = effects.get("spouse_a_id", -1)
 	var spouse_b_id: int = effects.get("spouse_b_id", -1)
+	var ordering_lord_id: int = effects.get("ordering_lord_id", -1)
 
 	if spouse_a_id < 0 or spouse_b_id < 0:
 		return {"applied": false, "reason": "missing_spouse_ids"}
@@ -16085,6 +16086,24 @@ static func _apply_dissolution(
 			topic.clan_involved = spouse_a.clan
 		active_topics.append(topic)
 		topic_id = topic.topic_id
+
+		# Seed topic to directly involved parties and their lords (s57.49).
+		# Both spouses, the ordering lord (Pathway 1), and each spouse's immediate lord
+		# all have direct knowledge of the dissolution.
+		var _to_notify: Array[int] = [
+			spouse_a_id, spouse_b_id, ordering_lord_id,
+			spouse_a.lord_id, spouse_b.lord_id,
+		]
+		var _notified: Dictionary = {}
+		for _nid: int in _to_notify:
+			if _nid < 0 or _notified.has(_nid):
+				continue
+			var _nc: L5RCharacterData = characters_by_id.get(_nid) as L5RCharacterData
+			if _nc == null or CharacterStats.is_dead(_nc):
+				continue
+			if topic_id not in _nc.topic_pool:
+				_nc.topic_pool.append(topic_id)
+			_notified[_nid] = true
 
 	return {
 		"applied": true,
