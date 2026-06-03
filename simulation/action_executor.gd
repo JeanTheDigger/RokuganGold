@@ -853,15 +853,16 @@ static func _execute_gossip(
 	var listener_id: int = action.target_npc_id
 	var subject_id: int = action.metadata.get("gossip_subject_id", -1)
 
+	var listener: L5RCharacterData = characters_by_id.get(listener_id)
 	var subject: L5RCharacterData = characters_by_id.get(subject_id)
-	var subject_glory: float = subject.glory if subject != null else 0.0
+	# s45 CAST_OUT: listener's sect may see subject's glory as infamy (zero effective glory).
+	var subject_glory: float = float(HonorGlorySystem.get_observed_glory_rank(subject, listener)) if subject != null else 0.0
 
 	var base_tn: int = clampi(
 		10 + int(subject_glory) * 5 - int(character.glory) * 5,
 		5, 60
 	)
 
-	var listener: L5RCharacterData = characters_by_id.get(listener_id)
 	var deception_tn: int = SkillResolver.get_deception_defense_bonus(listener) if listener != null else 0
 	var tn: int = base_tn + deception_tn
 
@@ -3681,7 +3682,8 @@ static func _execute_arrange_marriage(
 	var candidate_char: L5RCharacterData = characters_by_id.get(target_candidate_id) as L5RCharacterData
 	var char_value: int = 0
 	if candidate_char != null:
-		char_value = int(candidate_char.status * 2 + candidate_char.glory)
+		# s45 CAST_OUT: target_lord's sect may see candidate's glory as 0
+		char_value = int(candidate_char.status * 2 + float(HonorGlorySystem.get_observed_glory_rank(candidate_char, target_lord)))
 	var favor_tier: int = action.metadata.get("favor_tier", 0)
 	var has_mil_obj: bool = action.metadata.get("has_military_objective", false)
 
@@ -3818,7 +3820,8 @@ static func _find_best_marriage_candidate(
 		var is_child: bool = lord.children_ids.has(c.character_id)
 		if not is_vassal and not is_child:
 			continue
-		var value: int = int(c.status * 2 + c.glory)
+		# s45 CAST_OUT: lord's sect may see candidate's glory as 0
+		var value: int = int(c.status * 2 + float(HonorGlorySystem.get_observed_glory_rank(c, lord)))
 		if value > best_value:
 			best_value = value
 			best_id = c.character_id

@@ -288,7 +288,7 @@ static func _score_delegate_candidate(
 	court_skills += float(candidate.skills.get("Perform", 0))
 	var court_skill_score: float = clampf(court_skills / 4.0, 0.0, 10.0) * 15.0 / 10.0
 
-	var prestige_val: float = (candidate.status + candidate.glory) / 2.0
+	var prestige_val: float = (candidate.status + float(HonorGlorySystem.get_observed_glory_rank(candidate, champion))) / 2.0
 	var prestige_score: float = clampf(prestige_val, 0.0, 10.0) * 10.0 / 10.0
 
 	var disp: float = champion.disposition_values.get(candidate.character_id, 0.0)
@@ -376,7 +376,7 @@ static func select_personal_invitations(
 		else:
 			disp_score = clampf((disp + 100.0) / 200.0 * 10.0, 0.0, 10.0)
 
-		var prestige_val: float = (candidate.status + candidate.glory) / 2.0
+		var prestige_val: float = (candidate.status + float(HonorGlorySystem.get_observed_glory_rank(candidate, emperor))) / 2.0
 		var prestige_score: float = clampf(prestige_val, 0.0, 10.0)
 
 		var crisis_score: float = 0.0

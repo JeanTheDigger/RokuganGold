@@ -17503,12 +17503,13 @@ static func _find_vacancy_candidate(
 	lord_id: int,
 	position_type: String,
 	characters: Array,
-	_characters_by_id: Dictionary,
+	characters_by_id: Dictionary,
 	clan_balance_weight: float = 0.0,
 	clan_position_counts: Dictionary = {},
 ) -> int:
 	var best_id: int = -1
 	var best_score: float = -999.0
+	var lord_char: L5RCharacterData = characters_by_id.get(lord_id)
 	var skill_keys: Array = POSITION_SKILL_WEIGHTS.get(position_type, [])
 	var virtue_list: Array = POSITION_VIRTUE_BONUSES.get(position_type, [])
 	var school_types: Array = POSITION_SCHOOL_TYPE_BONUS.get(position_type, [])
@@ -17527,8 +17528,8 @@ static func _find_vacancy_candidate(
 			continue
 		if not c.role_position.is_empty():
 			continue
-		# Base: status + honor + glory (same as before)
-		var score: float = c.status + c.honor + c.glory
+		# Base: status + honor + glory (s45 CAST_OUT: lord's sect may see candidate's glory as 0)
+		var score: float = c.status + c.honor + float(HonorGlorySystem.get_observed_glory_rank(c, lord_char))
 		# Loyalty: disposition toward lord (weight 0.1)
 		var disp: int = c.disposition_values.get(lord_id, 0)
 		score += float(disp) * 0.1
