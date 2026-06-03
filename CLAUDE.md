@@ -3950,6 +3950,43 @@ mechanical change is applied until s40 individual combat is implemented.
 ### Systems Added 2026-06-02 (continued)
 - **s60 PC Integration** — `simulation/pc_system.gd`. New fields on L5RCharacterData: `is_pc`, `player_id`, `is_logged_in`, `home_settlement_id`, `banked_ap`, `offline_policies`, `bubble_scene_id`, `bubble_anchor_ic_day`. Logged-in: full world presence, NPC engine never runs for PCs. Logged-out: disappear from world, home anchor for letter delivery, AP accrues to `banked_ap` each tick (cap = 4× daily allocation). Offline reactive auto-resolve policies: QUEUE / HONOR / ACCEPT / DECLINE / CONDITIONAL per event type; 5 reactive event types; CONDITIONAL conditions (same_clan, disposition_friend, higher_status, lower_status). Bubble Time: scene_id + anchor_ic_day; AP reserved during scene, NPC participants occupied for scene IC duration. PC exclusions: no NPC decision engine, no standing objective auto-assignment, no strategic review, no daily letter pass. NPCs may target PCs normally; assassination PC crisis event gated on ASSASSINATION_GRACE policy. WorldState additions: `active_bubble_scenes`, `next_bubble_scene_id`. Constants A1–A5 locked (BANKED_AP_CAP_MULTIPLIER=4, OFFLINE_EVENT_QUEUE_CAP=30). Locked in gdd/s60_pc_integration_locked.md.
 
+### Systems Added 2026-06-04
+- **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),
+  `shared/mutation_data.gd`, `shared/shadowlands_power_data.gd`. Full catalog from GDD s44.
+  Three new enums on `shared/enums.gd`: `MutationType` (17 values), `ShadowlandsPowerTier`
+  (MINOR/MAJOR/AKUTENSHI), `ShadowlandsPowerType` (44 values). Three new character fields on
+  `L5RCharacterData`: `mutations: Array[MutationData]`, `shadowlands_powers: Array[ShadowlandsPowerData]`,
+  `taint_rank_last_processed: int`.
+  Taint rank thresholds (s42): 0.0–0.9=Rank 0, 1.0–1.9=Rank 1, 2.0–2.9=Rank 2,
+  3.0–3.9=Rank 3, 4.0–4.9=Rank 4, 5.0+=Rank 5 (Lost).
+  Periodic taint roll periods: Rank 0–1=30 IC days, Rank 2=15, Rank 3=7, Rank 4=1, Rank 5=none.
+  TN = 5 + (5 × Rank). Power-use taint roll TN: Minor=15, Major/Akutenshi=20.
+  Rank-up processing (`process_rank_up`): Rank 2=+1 Minor power; Rank 3=+1 power (Minor or
+  Major) + 1 mutation; Rank 4=+2 powers (first guaranteed Major, second any) + 1 mutation;
+  Rank 5=0–3 mutations + 0–3 powers from Minor+Major pool (Akutenshi excluded — separate category).
+  Secondary effects on acquisition: DISTORTED_LIMBS leg → LAME disadvantage added (no duplicate);
+  EXTRA_LIMB → 50% chance non-functional (−1k0 Agility/Reflexes); UNHOLY_BEAUTY → clears
+  mutations array; MASTER_OF_SHADOWS → gains DISCOLORED_SKIN if absent. Duplicate prevention
+  for both mutations and powers. Pool exhaustion handled gracefully (returns NONE).
+  Skill modifier interface (`get_skill_modifiers` → `{rolled, kept, tn}` deltas):
+  ALBINISM (−1k0 social, gated on `appearance_known` context key), DISCOLORED_SKIN (+5 TN
+  all social), EXTRA_DIGIT/FOUL_ODOR (−1k0 social each), TOUGH_HIDE (−2k0 social),
+  EXTRA_EYE (+1k0 perception, gated on `extra_eye_uncovered`), EXTRA_LIMB non-functional
+  (−1k0 agility/reflexes), MASTER_OF_SHADOWS (+Taint Rank unkept dice to Stealth),
+  MONSTROUS_STRENGTH (−1k0 social, +Taint Rank unkept dice to Strength-based skills),
+  FATHER_OF_LIES (+Taint Rank kept dice to Temptation, Intimidation, Sincerity:Deceit only).
+  `SkillResolver.resolve_skill_check()` wired: `mutation_mod` applied to rolled, kept, TN.
+  MASTER_OF_BLOOD wired into `MahoSystem.resolve_cast()`: blood cost −1 (min 1), taint gain
+  reduced by Earth ring (min 1). `get_social_rolled_penalty()` and `get_social_tn_penalty()`
+  helpers for NPC context injection.
+  DayOrchestrator: `_process_periodic_taint_rolls()` and `_process_taint_rank_changes()`
+  called daily (line ~1512); both guard dead characters and untainted (taint < 1.0) characters;
+  rank-change processor handles multi-rank jumps by iterating from last_processed+1 to current.
+  Combat stubs (Reduction, Fear, CHITINOUS_ARMOR, TENTACLES, UNDEAD_VISAGE attack bonuses)
+  registered as no-ops — deferred to s40 individual combat. Mental trait collapse to 1 on
+  Rank 5 (Lost) documented but not enforced — s40 reads trait values at combat time.
+  60+ tests in `tests/test_mutation_system.gd`.
+
 ### Systems Added 2026-06-03
 - **s31–s37 Spell System** — `simulation/spell_system.gd` (pure class, no Node inheritance),
   `tests/test_spell_system.gd`. Full L5R 4e shugenja spell resolution for simulation use.
