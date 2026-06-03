@@ -16,6 +16,9 @@ extends Resource
 @export var age: int = 16
 @export var gender: String = ""
 @export var orientation: String = "straight"
+## s45 CAST_OUT: Brotherhood of Shinsei sect affiliation ("Shintao", "Fortunist", or "").
+## Empty for non-monks and non-Brotherhood monks (e.g. Togashi Tattooed Order).
+@export var brotherhood_sect: String = ""
 
 # -- The Five Rings & Traits ---------------------------------------------------
 # Ring = min(trait1, trait2). Both traits tracked individually per s4.5.2.

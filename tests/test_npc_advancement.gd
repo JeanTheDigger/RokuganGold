@@ -804,6 +804,8 @@ func test_solo_training_writeback_rank_up_creates_topic() -> void:
 	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_4)
 	assert_true(c.topic_pool.has(active_topics[0].topic_id),
 		"Character's topic_pool must contain their solo-training rank-up topic")
+	assert_true(active_topics[0].title.contains("Hida Taro"),
+		"Rank-up topic title must contain the character's name (character_name, not .name)")
 
 
 func test_solo_training_writeback_no_topic_without_rank_up() -> void:

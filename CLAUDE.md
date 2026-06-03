@@ -4405,7 +4405,7 @@ These sections have partial or no GDD spec. **Do not implement any of these with
 | s57.40.9 | Appraisal skill emphasis modifier — design needed |
 | s57.42–s57.43 | Sailing / Ship lesser zones — source material available, design needed |
 | s57.46 | Allied NPC Companion system — source material available, design needed |
-| s45 CAST_OUT | `is_glory_treated_as_infamy_by(character, observer_sect)` query exists but cannot be wired — `L5RCharacterData` has no `brotherhood_sect` field. Brotherhood of Shinsei sect affiliation for monk observer NPCs is not tracked anywhere. Design decision needed: add a `brotherhood_sect` field to `L5RCharacterData` (or a separate monk affiliation structure) before the caller can identify which sect an observing NPC belongs to and invoke the CAST_OUT glory-as-infamy substitution. |
+| s45 CAST_OUT | **RESOLVED.** `brotherhood_sect: String` field added to `L5RCharacterData`. `WorldGenerator.generate_character()` copies `"brotherhood_sect"` from `SCHOOL_DATA` (Togashi Tattooed Order = `""`; non-Brotherhood schools omit the key, defaulting to `""`). `HonorGlorySystem.get_observed_glory_rank(target, observer)` returns 0 when `AdvantageSystem.is_glory_treated_as_infamy_by(target, observer.brotherhood_sect)` is true. 5 tests in `test_honor_glory_system.gd`. |
 
 ---
 

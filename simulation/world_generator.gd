@@ -186,6 +186,7 @@ const SCHOOL_DATA: Dictionary = {
 		"wildcards": ["High", "Bugei"],
 		"focus_rings": [Enums.Ring.VOID, Enums.Ring.FIRE],
 		"skill_rank_2": [],
+		"brotherhood_sect": "",  # Togashi are not Brotherhood of Shinsei monks
 	},
 	# -- Lion --
 	"Akodo Bushi": {
@@ -678,6 +679,7 @@ static func generate_character(
 		return c
 
 	c.school_type = sd["type"]
+	c.brotherhood_sect = sd.get("brotherhood_sect", "")
 
 	_apply_trait_bonus(c, FAMILY_TRAIT_BONUS.get(family, ""))
 	_apply_trait_bonus(c, sd["benefit"])

@@ -5837,7 +5837,7 @@ static func _process_solo_training_writebacks(
 		topic.topic_id = next_topic_id[0]
 		next_topic_id[0] += 1
 		topic.slug = "rank_advancement_%d" % char_id
-		topic.title = "%s achieves Rank %d" % [character.name, new_rank]
+		topic.title = "%s achieves Rank %d" % [character.character_name, new_rank]
 		topic.topic_type = "rank_advancement"
 		topic.tier = TopicData.Tier.TIER_4
 		topic.category = TopicData.Category.PERSONAL

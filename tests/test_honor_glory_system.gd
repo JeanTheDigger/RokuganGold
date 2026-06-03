@@ -252,3 +252,53 @@ func test_no_ascetic_full_glory() -> void:
 	var c := _make_char(5.0, 3.0)
 	HonorGlorySystem.apply_glory_change(c, 2.0)
 	assert_almost_eq(c.glory, 5.0, 0.01, "non-ASCETIC receives full glory")
+
+
+# -- CAST_OUT get_observed_glory_rank (s45) ------------------------------------
+
+func _make_cast_out_char(target_glory: float, sect_match: bool) -> L5RCharacterData:
+	var target := _make_char(5.0, target_glory)
+	var dis := DisadvantageData.new()
+	dis.disadvantage_type = Enums.Disadvantage.CAST_OUT
+	dis.rank = 3
+	dis.metadata = {"sect": "Shintao"}
+	target.disadvantages.append(dis)
+	return target
+
+
+func test_cast_out_observer_matching_sect_sees_zero_glory() -> void:
+	var target := _make_cast_out_char(6.0, true)
+	var observer := _make_char()
+	observer.brotherhood_sect = "Shintao"
+	assert_eq(HonorGlorySystem.get_observed_glory_rank(target, observer), 0,
+		"Shintao observer sees CAST_OUT target's glory as 0")
+
+
+func test_cast_out_observer_different_sect_sees_normal_glory() -> void:
+	var target := _make_cast_out_char(6.0, false)
+	var observer := _make_char()
+	observer.brotherhood_sect = "Fortunist"
+	assert_eq(HonorGlorySystem.get_observed_glory_rank(target, observer), 6,
+		"Fortunist observer not in target's cast-out sect sees real glory")
+
+
+func test_cast_out_non_monk_observer_sees_normal_glory() -> void:
+	var target := _make_cast_out_char(4.0, true)
+	var observer := _make_char()
+	observer.brotherhood_sect = ""
+	assert_eq(HonorGlorySystem.get_observed_glory_rank(target, observer), 4,
+		"Non-Brotherhood observer sees full glory regardless of CAST_OUT")
+
+
+func test_no_cast_out_disadvantage_normal_glory() -> void:
+	var target := _make_char(5.0, 3.0)
+	var observer := _make_char()
+	observer.brotherhood_sect = "Shintao"
+	assert_eq(HonorGlorySystem.get_observed_glory_rank(target, observer), 3,
+		"Character without CAST_OUT disadvantage always shows real glory")
+
+
+func test_observed_glory_null_observer_safe() -> void:
+	var target := _make_cast_out_char(5.0, true)
+	assert_eq(HonorGlorySystem.get_observed_glory_rank(target, null), 5,
+		"Null observer falls back to real glory rank safely")

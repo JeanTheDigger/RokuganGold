@@ -42,6 +42,15 @@ static func get_glory_rank(character: L5RCharacterData) -> int:
 	return int(character.glory)
 
 
+## s45 CAST_OUT: returns 0 when observer's Brotherhood sect treats target's glory as infamy.
+## Use this instead of get_glory_rank() whenever glory is displayed or scored socially.
+static func get_observed_glory_rank(target: L5RCharacterData, observer: L5RCharacterData) -> int:
+	if observer != null and observer.brotherhood_sect != "":
+		if AdvantageSystem.is_glory_treated_as_infamy_by(target, observer.brotherhood_sect):
+			return 0
+	return get_glory_rank(target)
+
+
 static func get_status_rank(character: L5RCharacterData) -> int:
 	return int(character.status)
 
