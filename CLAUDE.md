@@ -124,6 +124,7 @@ When implementing or auditing a system, go here first:
 | Zone subtypes and flag matrix                 | 57.36                |
 | Character sheet field index                   | 57.35                |
 | Tattoo system                                 | 57.25                |
+| Spell system (Ring values, casting, slots)    | 31–37                |
 | Kata eligibility, acquisition, effect stubs   | 30, 30a              |
 | Artisan & crafting system                     | 49                   |
 | Sculpture system (COMPOSE_SCULPTURE)          | 57.28                |
@@ -766,11 +767,12 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 ### Known Code Issues — Deferred (2026-05-19, data model audit)
 - **Orphaned character_data fields (blocked sections).** The following
   fields exist on L5RCharacterData but are never referenced by any
-  simulation code: `techniques`, `kiho`, `katas`, `spells_known`,
-  `weapons`, `armor_worn`, `active_quest`, `active_poisons`,
-  `combat_modifiers_pending`. All are schema placeholders for blocked
-  sections (s40 individual combat, s31–s37 spells, s56 quest system).
-  Do not remove — they will be consumed when those sections unlock.
+  simulation code: `techniques`, `kiho`, `katas`, `weapons`, `armor_worn`,
+  `active_quest`, `active_poisons`, `combat_modifiers_pending`. All are
+  schema placeholders for blocked sections (s40 individual combat, s38
+  kiho, s56 quest system). Do not remove — they will be consumed when
+  those sections unlock. NOTE: `spells_known`, `spell_slots_used`,
+  `spell_void_bonus_used` are now active (consumed by SpellSystem — s31–s37).
 - **Orphaned character_data fields (not blocked) — RECLASSIFIED: blocked.**
   `timed_advantages` and `action_blocks` on L5RCharacterData ARE specified
   in s29.15.24 (LOCKED). timed_advantages: Ikoma Orator Paragon/Failure of
@@ -3948,6 +3950,42 @@ mechanical change is applied until s40 individual combat is implemented.
 ### Systems Added 2026-06-02 (continued)
 - **s60 PC Integration** — `simulation/pc_system.gd`. New fields on L5RCharacterData: `is_pc`, `player_id`, `is_logged_in`, `home_settlement_id`, `banked_ap`, `offline_policies`, `bubble_scene_id`, `bubble_anchor_ic_day`. Logged-in: full world presence, NPC engine never runs for PCs. Logged-out: disappear from world, home anchor for letter delivery, AP accrues to `banked_ap` each tick (cap = 4× daily allocation). Offline reactive auto-resolve policies: QUEUE / HONOR / ACCEPT / DECLINE / CONDITIONAL per event type; 5 reactive event types; CONDITIONAL conditions (same_clan, disposition_friend, higher_status, lower_status). Bubble Time: scene_id + anchor_ic_day; AP reserved during scene, NPC participants occupied for scene IC duration. PC exclusions: no NPC decision engine, no standing objective auto-assignment, no strategic review, no daily letter pass. NPCs may target PCs normally; assassination PC crisis event gated on ASSASSINATION_GRACE policy. WorldState additions: `active_bubble_scenes`, `next_bubble_scene_id`. Constants A1–A5 locked (BANKED_AP_CAP_MULTIPLIER=4, OFFLINE_EVENT_QUEUE_CAP=30). Locked in gdd/s60_pc_integration_locked.md.
 
+### Systems Added 2026-06-03
+- **s31–s37 Spell System** — `simulation/spell_system.gd` (pure class, no Node inheritance),
+  `tests/test_spell_system.gd`. Full L5R 4e shugenja spell resolution for simulation use.
+  Core mechanics: `get_ring_value(char, ring)` — Air=min(Ref,Awr), Earth=min(Sta,Wil),
+  Fire=min(Agi,Int), Water=min(Str,Per), Void=void_ring. `get_effective_school_rank(char, ring)`
+  — affinity +1, deficiency −1, floor 0. `get_casting_tn(mastery_level)` — TN = 5 + ML×5
+  (ML1=10, ML2=15, ML3=20). `get_best_cast_ring(char, spell_id)` — elemental spells locked
+  to their element, Universal picks highest (ring_val + eff_rank). `get_daily_slots(char, ring)`
+  — returns ring value. Slot tracking via character dict fields `spell_slots_used` and
+  `spell_void_bonus_used`; ring-primary slots overflow to void bonus pool. `can_afford_slot`,
+  `consume_slot`, `get_slots_used`, `get_void_bonus_used`. `can_cast(char, spell_id)` —
+  validates: spell exists in library, in spells_known, insight_rank ≥ mastery_level, has
+  affordable slot, passes Ishiken restriction for void spells. `resolve_cast(char, spell_id,
+  dice, raises=0)` — rolls ring_value keep ring_value (xky), applies raises (+5 TN per
+  raise), consumes slot, returns {success, total, tn, margin, spell_id, sim_effect, cast_ring}.
+  `apply_healing(char, spell_id, margin)` and `apply_taint_removal(char, spell_id, margin)`
+  for applying cast outcomes. `assign_starting_spells(char, school)` populates spells_known
+  from school table (Kuni: sense+commune+jade_strike; default: sense+commune).
+  SPELL_LIBRARY: 32 named spells covering all 5 elements plus Universal, mastery levels 1–6.
+  SpellSimEffect enum: COMBAT_ONLY=0, HEAL_WOUNDS=1, REMOVE_TAINT=2, DETECT_PRESENCE=3,
+  COMMUNE_KAMI=4, PURIFY_AREA=8 (no library entries yet — forward-wired), RITUAL_HONOR=15.
+  Helper selectors: `get_best_healing_spell`, `get_best_ritual_spell`, `get_best_detection_spell`,
+  `get_best_taint_removal_spell`, `get_spells_by_sim_effect`, `get_best_spell_by_effect`,
+  `get_spells_for_element_ml`. 75 tests in `tests/test_spell_system.gd`.
+  NPC pipeline integration: `_populate_action_metadata` in `npc_decision_engine.gd` populates
+  `ritual_spell_id` (PERFORM_RITUAL: prefers taint-removal in tainted provinces, else best
+  ritual-honor spell; PERFORM_WORSHIP: best ritual-honor or commune), and `healing_spell_id`
+  (TREAT_WOUND: best heal-wounds spell for shugenja). `_process_ritual_spell_writebacks` in
+  `day_orchestrator.gd` resolves `requires_spell_roll=true` executor flags: DETECT_PRESENCE
+  creates a SUPERNATURAL TIER_4 taint-detection topic when province PTL > 0; REMOVE_TAINT
+  calls `apply_taint_removal`; PURIFY_AREA forward-wired (no spells yet). 11 engine tests.
+  LIMITATIONS: Sense spell TN for Maho Channel 3 detection deferred (blocked on s31 design
+  decision — see D table). `spells_known` field on L5RCharacterData promoted from orphaned
+  placeholder to active use. `spell_slots_used` and `spell_void_bonus_used` added as new
+  character fields. PURIFY_AREA sim_effect has no library spells yet.
+
 ## Resolved Design Decisions
 
 ### 1. Topic Identity — RESOLVED: int IDs
@@ -4320,7 +4358,7 @@ These sections have partial or no GDD spec. **Do not implement any of these with
 | Section | What's Needed |
 |---------|--------------|
 | s2.4 | `DECLARE_WALL_EMERGENCY` ActionID — s2.4.14 Decision 6: AP cost, agenda topic format, compliance enforcement |
-| s31–s37 | Spell system — Sense spell detection TN (Maho Channel 3), spell_intent tag, spells_known field |
+| s31 | Sense spell detection TN — Maho Channel 3 roll TN (core spell system DONE; this one value pending) |
 | s38 | Kiho system — full design needed |
 | s40 | Individual combat — full design needed |
 | s43 | Maho spell cast roll TN — not specified. Needed for CAST_MAHO NPC ActionID |
@@ -4337,16 +4375,16 @@ These sections have partial or no GDD spec. **Do not implement any of these with
 
 | Item | What's Needed |
 |------|--------------|
-| `techniques`, `kiho`, `katas`, `spells_known`, `weapons`, `armor_worn` | s40 individual combat, s31–s37 spells design |
+| `techniques`, `kiho`, `katas`, `weapons`, `armor_worn` | s40 individual combat, s38 kiho design |
 | `active_quest`, `active_poisons`, `combat_modifiers_pending` | s56 quest extension, s40 combat design |
 | `timed_advantages` and `action_blocks` | Individual school technique implementation (per-school design) |
 | SEEK_PRETEXT ActionID executor | Executor mechanics unspecified in GDD s14 |
 | `eta` community weight in Bloodspeaker cell placement | No `eta` field on ProvinceData/SettlementData |
-| Maho Channel 3 detection roll TN | s31 Sense spell design |
+| Maho Channel 3 detection TN | s31 Sense spell design decision needed |
 | Animal companion ASCII combat | s40/s56 design |
 
-**Sections available for design and implementation (source material exists, design decisions needed before coding):** s31–s37 (spells), s38 (kiho), s40 (individual combat), s44 (Shadowlands mutations), s45 (advantages/disadvantages), s54.7 (Kolat), s57.42–s57.43 (sailing/ship zones), s57.46 (allied NPC companion).
-**Note:** s57.23 (garden), s57.24 (bonsai), s57.26 (origami), s57.27 (painting), s57.29 (ikebana), s57.30 (calligraphy), s57.41 (engineering), s57.45 (geisha) are all **DONE**.
+**Sections available for design and implementation (source material exists, design decisions needed before coding):** s38 (kiho), s40 (individual combat), s44 (Shadowlands mutations), s45 (advantages/disadvantages), s54.7 (Kolat), s57.42–s57.43 (sailing/ship zones), s57.46 (allied NPC companion).
+**Note:** s31–s37 (spells — DONE, one pending value: Sense spell detection TN), s57.23 (garden), s57.24 (bonsai), s57.26 (origami), s57.27 (painting), s57.29 (ikebana), s57.30 (calligraphy), s57.41 (engineering), s57.45 (geisha) are all **DONE**.
 
 ---
 
