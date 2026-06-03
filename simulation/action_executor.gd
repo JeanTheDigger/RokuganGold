@@ -1295,7 +1295,8 @@ static func _resolve_bribe_witness(
 	_action: NPCDataStructures.ScoredAction,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	var honor_bonus: int = HonorGlorySystem.get_honor_rank(witness) * 5
+	# PERCEIVED_HONOR (s45): others see a falsely high Honor Rank when discerning it
+	var honor_bonus: int = int(AdvantageSystem.get_perceived_honor(witness)) * 5
 	var contested: Dictionary = SkillResolver.resolve_contested_check(
 		criminal, witness, dice_engine,
 		"Temptation", "Etiquette",
@@ -1323,7 +1324,8 @@ static func _resolve_intimidate_witness(
 	_action: NPCDataStructures.ScoredAction,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	var honor_bonus: int = HonorGlorySystem.get_honor_rank(witness) * 5
+	# PERCEIVED_HONOR (s45): others see a falsely high Honor Rank when discerning it
+	var honor_bonus: int = int(AdvantageSystem.get_perceived_honor(witness)) * 5
 	var contested: Dictionary = SkillResolver.resolve_contested_check(
 		criminal, witness, dice_engine,
 		"Intimidation", "Etiquette",
@@ -2915,7 +2917,8 @@ static func _execute_extort_accused(
 			"effects": {},
 		}
 
-	var honor_bonus: int = HonorGlorySystem.get_honor_rank(suspect) * 5
+	# PERCEIVED_HONOR (s45): others see a falsely high Honor Rank when discerning it
+	var honor_bonus: int = int(AdvantageSystem.get_perceived_honor(suspect)) * 5
 	var contested: Dictionary = SkillResolver.resolve_contested_check(
 		character, suspect, dice_engine,
 		"Intimidation", "Etiquette",

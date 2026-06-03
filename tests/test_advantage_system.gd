@@ -2294,3 +2294,116 @@ func test_blood_of_osano_wo_grants_weather_immunity():
 func test_no_blood_of_osano_wo_no_weather_immunity():
 	var c := _make_character(1)
 	assert_false(AdvantageSystem.has_weather_immunity(c))
+
+
+# ---------------------------------------------------------------------------
+# FOOL_IMPRESSION wiring — DayOrchestrator._apply_fool_impression (s45)
+# ---------------------------------------------------------------------------
+
+func _make_sakkaku_prank(effect: String, meta: Dictionary = {}) -> Dictionary:
+	return {"prank": effect, "metadata": meta, "triggered": true}
+
+
+func test_fool_impression_applies_disposition_penalty_to_met_character():
+	var afflicted := _make_character(10)
+	afflicted.clan = "Scorpion"
+	var target := _make_character(20)
+	target.disposition_values[10] = 0
+	afflicted.met_characters.append(20)
+	var chars_by_id: Dictionary = {10: afflicted, 20: target}
+	DayOrchestrator._apply_fool_impression(afflicted, {"disposition_loss": -5}, 3, chars_by_id)
+	assert_eq(target.disposition_values.get(10, 0), -5)
+
+
+func test_fool_impression_clamps_disposition_at_minus100():
+	var afflicted := _make_character(10)
+	var target := _make_character(20)
+	target.disposition_values[10] = -98
+	afflicted.met_characters.append(20)
+	var chars_by_id: Dictionary = {10: afflicted, 20: target}
+	DayOrchestrator._apply_fool_impression(afflicted, {"disposition_loss": -5}, 3, chars_by_id)
+	assert_eq(target.disposition_values.get(10, 0), -100)
+
+
+func test_fool_impression_skips_dead_met_characters():
+	var afflicted := _make_character(10)
+	var dead := _make_character(20)
+	dead.wounds_taken = 99
+	dead.stamina = 2
+	afflicted.met_characters.append(20)
+	var chars_by_id: Dictionary = {10: afflicted, 20: dead}
+	DayOrchestrator._apply_fool_impression(afflicted, {"disposition_loss": -5}, 3, chars_by_id)
+	# Dead character should not receive disposition change
+	assert_eq(dead.disposition_values.get(10, 0), 0)
+
+
+func test_fool_impression_no_met_characters_does_not_crash():
+	var afflicted := _make_character(10)
+	var chars_by_id: Dictionary = {10: afflicted}
+	# Should not crash when met_characters is empty
+	DayOrchestrator._apply_fool_impression(afflicted, {"disposition_loss": -5}, 3, chars_by_id)
+
+
+# ---------------------------------------------------------------------------
+# WAY_OF_THE_LAND wiring — WRONG_PATH prank in known territory (s45)
+# ---------------------------------------------------------------------------
+
+func test_wrong_path_blocked_by_way_of_the_land_in_own_clan_territory():
+	var c := _make_character(5)
+	c.clan = "Crab"
+	c.travel_days_remaining = 10
+	_add_advantage(c, Enums.Advantage.WAY_OF_THE_LAND)
+	var prank: Dictionary = _make_sakkaku_prank("WRONG_PATH", {"travel_extra_days": 2})
+	# Character province is owned by Crab — known territory
+	var char_province_map: Dictionary = {5: 1}
+	var province_clan_map: Dictionary = {1: "Crab"}
+	DayOrchestrator._apply_sakkaku_prank(c, prank, 3, 90, {}, char_province_map, province_clan_map)
+	assert_eq(c.travel_days_remaining, 10, "WAY_OF_THE_LAND blocks WRONG_PATH in own territory")
+
+
+func test_wrong_path_applies_outside_own_clan_territory():
+	var c := _make_character(5)
+	c.clan = "Crab"
+	c.travel_days_remaining = 10
+	_add_advantage(c, Enums.Advantage.WAY_OF_THE_LAND)
+	var prank: Dictionary = _make_sakkaku_prank("WRONG_PATH", {"travel_extra_days": 2})
+	# Character province is owned by Lion — not known territory
+	var char_province_map: Dictionary = {5: 2}
+	var province_clan_map: Dictionary = {2: "Lion"}
+	DayOrchestrator._apply_sakkaku_prank(c, prank, 3, 90, {}, char_province_map, province_clan_map)
+	assert_eq(c.travel_days_remaining, 12, "WRONG_PATH applies outside known territory")
+
+
+func test_wrong_path_applies_without_way_of_the_land():
+	var c := _make_character(5)
+	c.clan = "Crab"
+	c.travel_days_remaining = 10
+	# No WAY_OF_THE_LAND advantage
+	var prank: Dictionary = _make_sakkaku_prank("WRONG_PATH", {"travel_extra_days": 3})
+	var char_province_map: Dictionary = {5: 1}
+	var province_clan_map: Dictionary = {1: "Crab"}
+	DayOrchestrator._apply_sakkaku_prank(c, prank, 3, 90, {}, char_province_map, province_clan_map)
+	assert_eq(c.travel_days_remaining, 13, "WRONG_PATH applies without WAY_OF_THE_LAND even in own territory")
+
+
+# ---------------------------------------------------------------------------
+# PERCEIVED_HONOR wiring — honor_bonus in bribe/intimidate/extort (s45)
+# ---------------------------------------------------------------------------
+
+func test_perceived_honor_raises_effective_honor_bonus_for_bribe_witness():
+	# Witness with honor 2.0 + PERCEIVED_HONOR rank 2 → effective honor 4.0 → bonus 20
+	# Without PERCEIVED_HONOR: honor 2.0 → int(2.0) = 2 → bonus 10
+	var witness := _make_character(20)
+	witness.honor = 2.0
+	_add_advantage(witness, Enums.Advantage.PERCEIVED_HONOR, 2)
+	var effective: float = AdvantageSystem.get_perceived_honor(witness)
+	assert_eq(effective, 4.0)
+	assert_eq(int(effective) * 5, 20, "Honor bonus with PERCEIVED_HONOR rank 2 should be 20")
+
+
+func test_perceived_honor_no_advantage_uses_actual_honor():
+	var witness := _make_character(20)
+	witness.honor = 3.5
+	var effective: float = AdvantageSystem.get_perceived_honor(witness)
+	assert_eq(effective, 3.5)
+	assert_eq(int(effective) * 5, 15, "Honor bonus without PERCEIVED_HONOR uses actual rank")

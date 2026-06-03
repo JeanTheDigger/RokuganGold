@@ -1483,7 +1483,7 @@ static func advance_day(
 			stipends, characters_by_id, active_topics, next_topic_id, ic_day,
 		)
 		_process_bonsai_monthly_neglect(active_bonsai, characters_by_id, ic_day / 30)
-		_process_sakkaku_monthly_pranks(characters, characters_by_id, ic_day)
+		_process_sakkaku_monthly_pranks(characters, characters_by_id, ic_day, character_province_map, province_clan_map)
 
 	if is_season_boundary:
 		_purge_resolved_crime_records(crime_records, ic_day)
@@ -24834,6 +24834,8 @@ static func _process_sakkaku_monthly_pranks(
 	characters: Array,
 	characters_by_id: Dictionary,
 	ic_day: int,
+	character_province_map: Dictionary = {},
+	province_clan_map: Dictionary = {},
 ) -> void:
 	var ic_month: int = ic_day / 30
 	for character: L5RCharacterData in characters:
@@ -24842,7 +24844,7 @@ static func _process_sakkaku_monthly_pranks(
 		var prank: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(character, ic_month)
 		if not prank.get("triggered", false):
 			continue
-		_apply_sakkaku_prank(character, prank, ic_month, ic_day, characters_by_id)
+		_apply_sakkaku_prank(character, prank, ic_month, ic_day, characters_by_id, character_province_map, province_clan_map)
 
 
 static func _apply_sakkaku_prank(
@@ -24850,7 +24852,9 @@ static func _apply_sakkaku_prank(
 	prank: Dictionary,
 	ic_month: int,
 	ic_day: int,
-	_characters_by_id: Dictionary,
+	characters_by_id: Dictionary,
+	character_province_map: Dictionary = {},
+	province_clan_map: Dictionary = {},
 ) -> void:
 	var effect: String = prank.get("prank", "")
 	var meta: Dictionary = prank.get("metadata", {})
@@ -24863,8 +24867,16 @@ static func _apply_sakkaku_prank(
 		"WHISPERED_EMBARRASSMENT":
 			HonorGlorySystem.apply_glory_change(character, -meta.get("glory_loss", 1.0))
 		"WRONG_PATH":
+			# WAY_OF_THE_LAND (s45) blocks getting lost in own clan territory
 			if character.travel_days_remaining > 0:
-				character.travel_days_remaining += meta.get("travel_extra_days", 1)
+				var province_id: int = character_province_map.get(character.character_id, -1)
+				var province_clan: String = province_clan_map.get(province_id, "")
+				var is_known: bool = not province_clan.is_empty() and province_clan == character.clan
+				if not AdvantageSystem.is_navigation_immune(character, {"is_known_territory": is_known}):
+					character.travel_days_remaining += meta.get("travel_extra_days", 1)
+		"FOOL_IMPRESSION":
+			# Selects a random living met character; applies -5 disposition toward the Sakkaku afflicted (s45)
+			_apply_fool_impression(character, meta, ic_month, characters_by_id)
 		"RESTLESS_NIGHT":
 			# Block void refresh for 1 OOC day (s45 spirit prank — restless sleep)
 			var ooc_day: int = ic_day / TimeSystem.TICKS_PER_REAL_DAY
@@ -24877,6 +24889,27 @@ static func _apply_sakkaku_prank(
 			if dis.metadata.get("realm", "") == "Sakkaku":
 				dis.metadata["last_prank_month"] = ic_month
 				break
+
+
+static func _apply_fool_impression(
+	character: L5RCharacterData,
+	meta: Dictionary,
+	ic_month: int,
+	characters_by_id: Dictionary,
+) -> void:
+	if character.met_characters.is_empty():
+		return
+	var pool: Array = []
+	for cid: int in character.met_characters:
+		var c: L5RCharacterData = characters_by_id.get(cid)
+		if c != null and not CharacterStats.is_dead(c):
+			pool.append(c)
+	if pool.is_empty():
+		return
+	var idx: int = (character.character_id * 11 + ic_month * 17) % pool.size()
+	var target: L5RCharacterData = pool[idx]
+	var disp: int = target.disposition_values.get(character.character_id, 0)
+	target.disposition_values[character.character_id] = clampi(disp + meta.get("disposition_loss", -5), -100, 100)
 
 
 
