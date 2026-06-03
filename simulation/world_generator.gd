@@ -706,6 +706,8 @@ static func generate_character(
 	c.koku = float(insight_rank) * float(dice_engine.rand_int_range(1, 10))
 
 	SkillResolver.apply_technique_flags(c)
+	if c.school_type == Enums.SchoolType.SHUGENJA:
+		SpellSystem.assign_starting_spells(c, school)
 	return c
 
 

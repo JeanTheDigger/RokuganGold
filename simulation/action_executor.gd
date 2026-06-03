@@ -2458,6 +2458,11 @@ static func _compute_self_effects(action_id: String) -> Dictionary:
 		"WRITE_LETTER":
 			return {"effect": "letter_sent"}
 		"PERFORM_RITUAL", "PERFORM_WORSHIP":
+			# Shugenja cast a ritual/worship spell; metadata carries spell_id if set.
+			var ritual_spell: String = action.metadata.get("ritual_spell_id", "")
+			if ritual_spell != "" and SpellSystem.is_shugenja(character):
+				return {"effect": "ritual_spell_cast", "ritual_spell_id": ritual_spell,
+						"honor_change": 0.1, "requires_spell_roll": true}
 			return {"effect": "ritual_completed", "honor_change": 0.1}
 		"MENTOR":
 			return {"effect": "mentor_offered"}
@@ -2745,6 +2750,41 @@ static func _execute_treat_wound(
 		}
 
 	var raises: int = action.metadata.get("raises", 0)
+
+	# Shugenja may cast a healing spell instead of a Medicine roll.
+	var healing_spell: String = action.metadata.get("healing_spell_id", "")
+	if healing_spell != "" and SpellSystem.is_shugenja(character) \
+			and SpellSystem.can_cast(character, healing_spell):
+		var cast_result: Dictionary = SpellSystem.resolve_cast(
+			character, healing_spell, dice_engine, raises
+		)
+		var healed_wounds: int = 0
+		if cast_result["success"]:
+			var heal_r: Dictionary = SpellSystem.apply_healing(
+				target, healing_spell, cast_result["margin"]
+			)
+			healed_wounds = heal_r.get("healed_wounds", 0)
+		return {
+			"success": cast_result["success"],
+			"action_id": "TREAT_WOUND",
+			"character_id": character.character_id,
+			"target_npc_id": target_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"skill_used": "spell",
+			"spell_id": healing_spell,
+			"roll_total": cast_result.get("total", 0),
+			"tn": cast_result.get("tn", 0),
+			"raises": raises,
+			"effects": {
+				"wounds_healed": healed_wounds,
+				"kit_charge_consumed": false,
+				"target_id": target_id,
+				"wound_level_after": -1,
+			},
+		}
+
 	var treat_result: Dictionary = MedicineSystem.treat_wound(
 		character, target, dice_engine, ctx.ic_day, raises
 	)

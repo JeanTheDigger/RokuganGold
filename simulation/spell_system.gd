@@ -1,0 +1,663 @@
+class_name SpellSystem
+## s31-s37 Spell system: data library and world-simulation casting mechanics.
+## Plain GDScript class — no extends Node.
+
+enum SpellSimEffect {
+	COMBAT_ONLY,       ## 0 — meaningful only in ASCII map combat
+	HEAL_WOUNDS,       ## 1 — reduce wound rank on target
+	REMOVE_TAINT,      ## 2 — reduce taint on character or province PTL
+	DETECT_PRESENCE,   ## 3 — detect kami, spirits, or maho residue
+	COMMUNE_KAMI,      ## 4 — commune with local kami (worship economy)
+	SUMMON_KAMI,       ## 5 — summon a kami to manifest
+	COMMAND_KAMI,      ## 6 — command a summoned or local kami
+	TRANSMUTE_MATERIAL,## 7 — change material properties (crafting aid)
+	PURIFY_AREA,       ## 8 — purify tainted ground, reduce province PTL
+	REVEAL_DECEPTION,  ## 9 — pierce illusions, detect lies, reveal true nature
+	WARD_CREATION,     ## 10 — create protective elemental ward at location
+	TRAVEL_AID,        ## 11 — assist or speed overland travel
+	PRESERVATION,      ## 12 — preserve corpse or item against decay
+	DISPEL_MAGIC,      ## 13 — end another spell or magical binding
+	SPIRIT_BIND,       ## 14 — bind a spirit (aids insurgency suppression)
+	RITUAL_HONOR,      ## 15 — grants honor/glory bonus during worship ritual
+	WEATHER_SHIFT,     ## 16 — alter weather conditions (affects travel TN)
+	INFORMATION_GATHER,## 17 — gain information about distant location or person
+}
+
+## Spell library.
+## Keys: snake_case spell ID  Values: {e=element int, m=mastery_level, s=SpellSimEffect int,
+##   u=is_universal (true only), i=ishiken_only (true only), omit absent booleans}
+## Element ints: -1=universal/NONE, 0=AIR, 1=EARTH, 2=FIRE, 3=WATER, 4=VOID
+## SpellSimEffect ints: 0=COMBAT_ONLY, 1=HEAL, 2=REMOVE_TAINT, 3=DETECT, 4=COMMUNE,
+##   5=SUMMON, 6=COMMAND, 7=TRANSMUTE, 8=PURIFY, 9=REVEAL, 10=WARD, 11=TRAVEL,
+##   12=PRESERVE, 13=DISPEL, 14=BIND, 15=RITUAL, 16=WEATHER, 17=INFO
+const SPELL_LIBRARY: Dictionary = {
+	# === UNIVERSAL (s32) — available to all shugenja ===
+	"sense":     {"e": -1, "m": 1, "s": 3,  "u": true},
+	"commune":   {"e": -1, "m": 1, "s": 4,  "u": true},
+	"summon":    {"e": -1, "m": 2, "s": 5,  "u": true},
+	"command":   {"e": -1, "m": 3, "s": 6,  "u": true},
+	"transmute": {"e": -1, "m": 4, "s": 7,  "u": true},
+
+	# === AIR (s33) ===
+	# ML1
+	"arrows_flight":              {"e": 0, "m": 1, "s": 0},
+	"blessed_wind":               {"e": 0, "m": 1, "s": 16},
+	"by_the_light_of_the_moon":   {"e": 0, "m": 1, "s": 0},
+	"cloak_of_night":             {"e": 0, "m": 1, "s": 0},
+	"gathering_swirl":            {"e": 0, "m": 1, "s": 0},
+	"legacy_of_kaze_no_kami":     {"e": 0, "m": 1, "s": 0},
+	"natures_touch":              {"e": 0, "m": 1, "s": 3},
+	"tempest_of_air":             {"e": 0, "m": 1, "s": 0},
+	"token_of_memory":            {"e": 0, "m": 1, "s": 17},
+	"to_seek_the_truth":          {"e": 0, "m": 1, "s": 9},
+	"voice_of_the_wind":          {"e": 0, "m": 1, "s": 17},
+	"way_of_deception":           {"e": 0, "m": 1, "s": 0},
+	"yari_of_air":                {"e": 0, "m": 1, "s": 0},
+	# ML2
+	"bentens_touch":              {"e": 0, "m": 2, "s": 15},
+	"blessed_wind_of_lady_sun":   {"e": 0, "m": 2, "s": 16},
+	"call_upon_the_wind":         {"e": 0, "m": 2, "s": 0},
+	"elemental_cipher":           {"e": 0, "m": 2, "s": 17},
+	"flight_of_doves":            {"e": 0, "m": 2, "s": 17},
+	"freedom_of_the_air":         {"e": 0, "m": 2, "s": 13},
+	"garbled_tongue":             {"e": 0, "m": 2, "s": 0},
+	"heart_betrays_eyes":         {"e": 0, "m": 2, "s": 9},
+	"hidden_visage":              {"e": 0, "m": 2, "s": 0},
+	"the_kamis_whisper":          {"e": 0, "m": 2, "s": 17},
+	"mists_of_illusion":          {"e": 0, "m": 2, "s": 0},
+	"quiescence_of_air":          {"e": 0, "m": 2, "s": 0},
+	"request_to_hato_no_kami":    {"e": 0, "m": 2, "s": 17},
+	"secrets_on_the_wind":        {"e": 0, "m": 2, "s": 17},
+	"whispering_wind":            {"e": 0, "m": 2, "s": 17},
+	"wind_born_slumbers":         {"e": 0, "m": 2, "s": 0},
+	"wolfs_proposal":             {"e": 0, "m": 2, "s": 0},
+	# ML3
+	"air_kamis_blessing":         {"e": 0, "m": 3, "s": 15},
+	"essence_of_air":             {"e": 0, "m": 3, "s": 0},
+	"the_eye_shall_not_see":      {"e": 0, "m": 3, "s": 0},
+	"mask_of_wind":               {"e": 0, "m": 3, "s": 0},
+	"master_clouds_eyes":         {"e": 0, "m": 3, "s": 17},
+	"soul_of_kaze_no_kami":       {"e": 0, "m": 3, "s": 0},
+	"striking_the_storm":         {"e": 0, "m": 3, "s": 0},
+	"summoning_the_gale":         {"e": 0, "m": 3, "s": 16},
+	"summon_fog":                 {"e": 0, "m": 3, "s": 16},
+	"touch_of_airs_grace":        {"e": 0, "m": 3, "s": 0},
+	"your_hearts_enemy":          {"e": 0, "m": 3, "s": 9},
+	# ML4
+	"call_the_spirit":            {"e": 0, "m": 4, "s": 5},
+	"castle_of_air":              {"e": 0, "m": 4, "s": 0},
+	"false_realm":                {"e": 0, "m": 4, "s": 0},
+	"funeral_rites":              {"e": 0, "m": 4, "s": 12},
+	"gift_of_wind":               {"e": 0, "m": 4, "s": 0},
+	"howl_of_isora":              {"e": 0, "m": 4, "s": 16},
+	"know_the_mind":              {"e": 0, "m": 4, "s": 17},
+	"look_into_the_soul":         {"e": 0, "m": 4, "s": 9},
+	"netsuke_of_wind":            {"e": 0, "m": 4, "s": 0},
+	"seeking_the_way":            {"e": 0, "m": 4, "s": 17},
+	"symbol_of_air":              {"e": 0, "m": 4, "s": 10},
+	"tenjins_ear":                {"e": 0, "m": 4, "s": 17},
+	"whispers_of_the_forgotten":  {"e": 0, "m": 4, "s": 17},
+	"wisdom_of_the_kami":         {"e": 0, "m": 4, "s": 17},
+	# ML5
+	"cloud_the_mind":             {"e": 0, "m": 5, "s": 0},
+	"defender_from_beyond":       {"e": 0, "m": 5, "s": 0},
+	"draw_back_the_shadow":       {"e": 0, "m": 5, "s": 13},
+	"echoes_on_the_breeze":       {"e": 0, "m": 5, "s": 17},
+	"facing_your_devils":         {"e": 0, "m": 5, "s": 0},
+	"legion_of_the_moon":         {"e": 0, "m": 5, "s": 0},
+	"slayers_knives":             {"e": 0, "m": 5, "s": 0},
+	# ML6
+	"rise_air":                   {"e": 0, "m": 6, "s": 0},
+	"the_false_legion":           {"e": 0, "m": 6, "s": 0},
+	"piercing_the_heavens":       {"e": 0, "m": 6, "s": 0},
+	"wind_of_the_moon":           {"e": 0, "m": 6, "s": 0},
+	"the_world_is_truth":         {"e": 0, "m": 6, "s": 9},
+	"wrath_of_kaze_no_kami":      {"e": 0, "m": 6, "s": 0},
+
+	# === EARTH (s34) ===
+	# ML1
+	"armor_of_earth":                {"e": 1, "m": 1, "s": 0},
+	"courage_of_the_seven_thunders": {"e": 1, "m": 1, "s": 0},
+	"earths_stagnation":             {"e": 1, "m": 1, "s": 0},
+	"earths_touch":                  {"e": 1, "m": 1, "s": 1},
+	"elemental_ward":                {"e": 1, "m": 1, "s": 10},
+	"jade_strike":                   {"e": 1, "m": 1, "s": 0},
+	"jurojins_balm":                 {"e": 1, "m": 1, "s": 1},
+	"minor_binding":                 {"e": 1, "m": 1, "s": 14},
+	"soul_of_stone":                 {"e": 1, "m": 1, "s": 0},
+	"stones_endurance":              {"e": 1, "m": 1, "s": 0},
+	"tetsubo_of_earth":              {"e": 1, "m": 1, "s": 0},
+	# ML2
+	"be_the_mountain":               {"e": 1, "m": 2, "s": 0},
+	"earth_becomes_sky":             {"e": 1, "m": 2, "s": 0},
+	"embrace_of_kenro_ji_jin":       {"e": 1, "m": 2, "s": 0},
+	"force_of_will":                 {"e": 1, "m": 2, "s": 0},
+	"grasp_of_earth":                {"e": 1, "m": 2, "s": 0},
+	"hands_of_clay":                 {"e": 1, "m": 2, "s": 0},
+	"jurojins_curse":                {"e": 1, "m": 2, "s": 0},
+	"rites_of_preservation":         {"e": 1, "m": 2, "s": 12},
+	"taming_the_beast":              {"e": 1, "m": 2, "s": 14},
+	"the_mountains_feet":            {"e": 1, "m": 2, "s": 11},
+	"wholeness_of_the_world":        {"e": 1, "m": 2, "s": 1},
+	"whispers_of_the_land":          {"e": 1, "m": 2, "s": 17},
+	# ML3
+	"bonds_of_ningen_do":            {"e": 1, "m": 3, "s": 14},
+	"earth_kamis_blessing":          {"e": 1, "m": 3, "s": 15},
+	"earths_protection":             {"e": 1, "m": 3, "s": 0},
+	"earthen_wave":                  {"e": 1, "m": 3, "s": 0},
+	"groves_of_stone":               {"e": 1, "m": 3, "s": 0},
+	"murmur_of_earth":               {"e": 1, "m": 3, "s": 17},
+	"purge_the_taint":               {"e": 1, "m": 3, "s": 2},
+	"sharing_the_strength_of_many":  {"e": 1, "m": 3, "s": 0},
+	"shelter_of_the_earth":          {"e": 1, "m": 3, "s": 0},
+	"strength_of_the_crow":          {"e": 1, "m": 3, "s": 0},
+	"strike_as_stone":               {"e": 1, "m": 3, "s": 0},
+	"times_deadly_hand":             {"e": 1, "m": 3, "s": 0},
+	"the_wolfs_mercy":               {"e": 1, "m": 3, "s": 0},
+	"wooden_prison":                 {"e": 1, "m": 3, "s": 0},
+	# ML4
+	"armor_of_the_emperor":          {"e": 1, "m": 4, "s": 0},
+	"earth_dragons_ward":            {"e": 1, "m": 4, "s": 10},
+	"essence_of_earth":              {"e": 1, "m": 4, "s": 0},
+	"maw_of_the_earth":              {"e": 1, "m": 4, "s": 0},
+	"sapphire_strike":               {"e": 1, "m": 4, "s": 0},
+	"symbol_of_earth":               {"e": 1, "m": 4, "s": 10},
+	"the_earth_flows":               {"e": 1, "m": 4, "s": 0},
+	"tomb_of_jade":                  {"e": 1, "m": 4, "s": 2},
+	"wall_of_earth":                 {"e": 1, "m": 4, "s": 0},
+	# ML5
+	"drawing_on_the_mountain":       {"e": 1, "m": 5, "s": 1},
+	"earthquake":                    {"e": 1, "m": 5, "s": 0},
+	"grounding_energy":              {"e": 1, "m": 5, "s": 13},
+	"major_binding":                 {"e": 1, "m": 5, "s": 14},
+	"strike_at_the_roots":           {"e": 1, "m": 5, "s": 0},
+	"the_kamis_strength":            {"e": 1, "m": 5, "s": 0},
+	"the_kamis_will":                {"e": 1, "m": 5, "s": 6},
+	# ML6
+	"essence_of_jade":               {"e": 1, "m": 6, "s": 2},
+	"power_of_the_earth_dragon":     {"e": 1, "m": 6, "s": 0},
+	"prison_of_earth":               {"e": 1, "m": 6, "s": 0},
+	"rise_earth":                    {"e": 1, "m": 6, "s": 0},
+	"soldiers_of_clay":              {"e": 1, "m": 6, "s": 0},
+
+	# === FIRE (s35) ===
+	# ML1
+	"biting_steel":                  {"e": 2, "m": 1, "s": 0},
+	"burning_kiss_of_steel":         {"e": 2, "m": 1, "s": 0},
+	"elemental_crucible":            {"e": 2, "m": 1, "s": 7},
+	"envious_flames":                {"e": 2, "m": 1, "s": 0},
+	"extinguish":                    {"e": 2, "m": 1, "s": 13},
+	"fire_kamis_blessing":           {"e": 2, "m": 1, "s": 15},
+	"fires_of_purity":               {"e": 2, "m": 1, "s": 15},
+	"the_fires_that_cleanse":        {"e": 2, "m": 1, "s": 2},
+	"fury_of_osano_wo":              {"e": 2, "m": 1, "s": 0},
+	"gift_of_amaterasu":             {"e": 2, "m": 1, "s": 15},
+	"katana_of_fire":                {"e": 2, "m": 1, "s": 0},
+	"never_alone":                   {"e": 2, "m": 1, "s": 0},
+	"osano_wos_blessing":            {"e": 2, "m": 1, "s": 15},
+	"the_raging_forge":              {"e": 2, "m": 1, "s": 7},
+	"warning_flame":                 {"e": 2, "m": 1, "s": 3},
+	# ML2
+	"disrupt_the_aura":              {"e": 2, "m": 2, "s": 0},
+	"enticing_the_dance_of_flame":   {"e": 2, "m": 2, "s": 0},
+	"the_fires_from_within":         {"e": 2, "m": 2, "s": 0},
+	"hurried_steps":                 {"e": 2, "m": 2, "s": 11},
+	"mental_quickness":              {"e": 2, "m": 2, "s": 0},
+	"purity_of_shinsei":             {"e": 2, "m": 2, "s": 15},
+	"relentless_heat":               {"e": 2, "m": 2, "s": 0},
+	"tail_of_the_fire_dragon":       {"e": 2, "m": 2, "s": 0},
+	"ward_of_purity":                {"e": 2, "m": 2, "s": 10},
+	"wings_of_fire":                 {"e": 2, "m": 2, "s": 11},
+	# ML3
+	"agashas_shield":                {"e": 2, "m": 3, "s": 0},
+	"breath_of_the_fire_dragon":     {"e": 2, "m": 3, "s": 0},
+	"fiery_wrath":                   {"e": 2, "m": 3, "s": 0},
+	"the_fist_of_osano_wo":          {"e": 2, "m": 3, "s": 0},
+	"haze_of_battle":                {"e": 2, "m": 3, "s": 0},
+	"hungry_blade":                  {"e": 2, "m": 3, "s": 0},
+	"oath_of_the_heavens":           {"e": 2, "m": 3, "s": 15},
+	"ravenous_swarms":               {"e": 2, "m": 3, "s": 0},
+	"shining_light":                 {"e": 2, "m": 3, "s": 0},
+	"the_breath_of_battle":          {"e": 2, "m": 3, "s": 0},
+	"whispering_flames":             {"e": 2, "m": 3, "s": 17},
+	# ML4
+	"blessing_of_the_sun":           {"e": 2, "m": 4, "s": 15},
+	"death_of_flame":                {"e": 2, "m": 4, "s": 0},
+	"defense_of_the_firestorm":      {"e": 2, "m": 4, "s": 0},
+	"essence_of_fire":               {"e": 2, "m": 4, "s": 0},
+	"eyes_of_the_phoenix":           {"e": 2, "m": 4, "s": 17},
+	"the_mending_forge":             {"e": 2, "m": 4, "s": 7},
+	"symbol_of_fire":                {"e": 2, "m": 4, "s": 10},
+	"wall_of_fire":                  {"e": 2, "m": 4, "s": 0},
+	"ward_of_thunder":               {"e": 2, "m": 4, "s": 10},
+	# ML5
+	"castle_of_fire":                {"e": 2, "m": 5, "s": 0},
+	"consumed_by_five_fires":        {"e": 2, "m": 5, "s": 0},
+	"destructive_wave":              {"e": 2, "m": 5, "s": 0},
+	"the_dragons_talon":             {"e": 2, "m": 5, "s": 0},
+	"everburning_rage":              {"e": 2, "m": 5, "s": 0},
+	"follow_the_flame":              {"e": 2, "m": 5, "s": 17},
+	"light_of_the_sun":              {"e": 2, "m": 5, "s": 15},
+	"wings_of_the_phoenix":          {"e": 2, "m": 5, "s": 11},
+	# ML6
+	"beam_of_the_inferno":           {"e": 2, "m": 6, "s": 0},
+	"curse_of_the_burning_hand":     {"e": 2, "m": 6, "s": 0},
+	"globe_of_the_everlasting_sun":  {"e": 2, "m": 6, "s": 0},
+	"rise_fire":                     {"e": 2, "m": 6, "s": 0},
+	"the_elements_fury":             {"e": 2, "m": 6, "s": 0},
+	"the_souls_blade":               {"e": 2, "m": 6, "s": 0},
+
+	# === WATER (s36) ===
+	# ML1
+	"bo_of_water":                   {"e": 3, "m": 1, "s": 0},
+	"clarity_of_purpose":            {"e": 3, "m": 1, "s": 0},
+	"ebbing_strength":               {"e": 3, "m": 1, "s": 0},
+	"path_to_inner_peace":           {"e": 3, "m": 1, "s": 15},
+	"purification_of_the_kami":      {"e": 3, "m": 1, "s": 15},
+	"reflections_of_pan_ku":         {"e": 3, "m": 1, "s": 17},
+	"reversal_of_fortunes":          {"e": 3, "m": 1, "s": 0},
+	"speed_of_the_waterfall":        {"e": 3, "m": 1, "s": 11},
+	"spirit_of_the_water":           {"e": 3, "m": 1, "s": 3},
+	"suitengus_curse":               {"e": 3, "m": 1, "s": 0},
+	"sympathetic_energies":          {"e": 3, "m": 1, "s": 1},
+	"the_rushing_wave":              {"e": 3, "m": 1, "s": 0},
+	"the_swell_of_the_storm":        {"e": 3, "m": 1, "s": 16},
+	# ML2
+	"cloak_of_the_miya":             {"e": 3, "m": 2, "s": 11},
+	"heavens_tears":                 {"e": 3, "m": 2, "s": 16},
+	"inaris_blessing":               {"e": 3, "m": 2, "s": 15},
+	"judgment_of_yomi":              {"e": 3, "m": 2, "s": 17},
+	"reflective_pool":               {"e": 3, "m": 2, "s": 17},
+	"rejuvenating_vapors":           {"e": 3, "m": 2, "s": 1},
+	"stand_against_the_waves":       {"e": 3, "m": 2, "s": 0},
+	"strength_of_the_tsunami":       {"e": 3, "m": 2, "s": 0},
+	"surging_soul":                  {"e": 3, "m": 2, "s": 0},
+	"the_ties_that_bind":            {"e": 3, "m": 2, "s": 14},
+	"wave_borne_speed":              {"e": 3, "m": 2, "s": 11},
+	"wisdom_and_clarity":            {"e": 3, "m": 2, "s": 17},
+	"yukis_touch":                   {"e": 3, "m": 2, "s": 0},
+	# ML3
+	"endless_deluge":                {"e": 3, "m": 3, "s": 16},
+	"near_to_ice":                   {"e": 3, "m": 3, "s": 0},
+	"regrow_the_wound":              {"e": 3, "m": 3, "s": 1},
+	"sanctuary_of_the_waves":        {"e": 3, "m": 3, "s": 0},
+	"silent_waters":                 {"e": 3, "m": 3, "s": 0},
+	"strike_of_the_tsunami":         {"e": 3, "m": 3, "s": 0},
+	"the_inner_ocean":               {"e": 3, "m": 3, "s": 15},
+	"typhoons_surge":                {"e": 3, "m": 3, "s": 0},
+	"visions_of_the_future":         {"e": 3, "m": 3, "s": 17},
+	"walking_upon_the_waves":        {"e": 3, "m": 3, "s": 11},
+	"water_kamis_blessing":          {"e": 3, "m": 3, "s": 15},
+	# ML4
+	"dominion_of_suitengu":          {"e": 3, "m": 4, "s": 6},
+	"ebb_and_flow_of_battle":        {"e": 3, "m": 4, "s": 0},
+	"heart_of_the_water_dragon":     {"e": 3, "m": 4, "s": 0},
+	"master_of_the_rolling_river":   {"e": 3, "m": 4, "s": 11},
+	"the_mirrors_smile":             {"e": 3, "m": 4, "s": 17},
+	"seed_of_qanan":                 {"e": 3, "m": 4, "s": 15},
+	"steed_of_the_ebbing_tides":     {"e": 3, "m": 4, "s": 11},
+	"strike_of_the_flowing_waters":  {"e": 3, "m": 4, "s": 0},
+	"symbol_of_water":               {"e": 3, "m": 4, "s": 10},
+	"the_emperors_road":             {"e": 3, "m": 4, "s": 11},
+	"the_path_not_taken":            {"e": 3, "m": 4, "s": 17},
+	"within_the_waves":              {"e": 3, "m": 4, "s": 0},
+	# ML5
+	"chi_reversal":                  {"e": 3, "m": 5, "s": 0},
+	"ever_changing_waves":           {"e": 3, "m": 5, "s": 0},
+	"the_final_bond":                {"e": 3, "m": 5, "s": 14},
+	"hands_of_the_tides":            {"e": 3, "m": 5, "s": 0},
+	"open_the_waves":                {"e": 3, "m": 5, "s": 11},
+	"power_of_the_ocean":            {"e": 3, "m": 5, "s": 0},
+	"suitengus_embrace":             {"e": 3, "m": 5, "s": 0},
+	"whirlpool":                     {"e": 3, "m": 5, "s": 0},
+	# ML6
+	"breath_of_mist":                {"e": 3, "m": 6, "s": 16},
+	"opening_the_veil":              {"e": 3, "m": 6, "s": 0},
+	"peace_of_the_kami":             {"e": 3, "m": 6, "s": 15},
+	"rise_water":                    {"e": 3, "m": 6, "s": 0},
+	"waters_sweet_clarity":          {"e": 3, "m": 6, "s": 17},
+
+	# === VOID (s37) — restricted to Isawa Ishiken ===
+	# ML1
+	"boundless_sight":               {"e": 4, "m": 1, "s": 17, "i": true},
+	"drawing_the_void":              {"e": 4, "m": 1, "s": 0,  "i": true},
+	"flow_through_the_void":         {"e": 4, "m": 1, "s": 11, "i": true},
+	"see_through_lies":              {"e": 4, "m": 1, "s": 9,  "i": true},
+	"sense_void":                    {"e": 4, "m": 1, "s": 3,  "i": true},
+	"touch_the_emptiness":           {"e": 4, "m": 1, "s": 0,  "i": true},
+	"the_voids_caress":              {"e": 4, "m": 1, "s": 0,  "i": true},
+	"witness_the_untold":            {"e": 4, "m": 1, "s": 17, "i": true},
+	# ML2
+	"altering_the_course":           {"e": 4, "m": 2, "s": 0,  "i": true},
+	"balance_in_all":                {"e": 4, "m": 2, "s": 15, "i": true},
+	"commune_with_the_void":         {"e": 4, "m": 2, "s": 4,  "i": true},
+	"drink_of_your_essence":         {"e": 4, "m": 2, "s": 0,  "i": true},
+	"strengthen_the_void":           {"e": 4, "m": 2, "s": 15, "i": true},
+	"the_empty_voice":               {"e": 4, "m": 2, "s": 17, "i": true},
+	"false_whispers":                {"e": 4, "m": 2, "s": 9,  "i": true},
+	"reach_through_the_void":        {"e": 4, "m": 2, "s": 17, "i": true},
+	"severed_from_the_stream":       {"e": 4, "m": 2, "s": 0,  "i": true},
+	# ML3
+	"banish_the_void":               {"e": 4, "m": 3, "s": 13, "i": true},
+	"echoes_in_the_void":            {"e": 4, "m": 3, "s": 17, "i": true},
+	"kharmic_intent":                {"e": 4, "m": 3, "s": 17, "i": true},
+	"moment_of_clarity":             {"e": 4, "m": 3, "s": 0,  "i": true},
+	"read_the_essence":              {"e": 4, "m": 3, "s": 3,  "i": true},
+	"void_release":                  {"e": 4, "m": 3, "s": 13, "i": true},
+	# ML4
+	"balance_of_elements":           {"e": 4, "m": 4, "s": 15, "i": true},
+	"dart_of_void":                  {"e": 4, "m": 4, "s": 0,  "i": true},
+	"draw_closed_the_veil":          {"e": 4, "m": 4, "s": 0,  "i": true},
+	"essence_of_void":               {"e": 4, "m": 4, "s": 0,  "i": true},
+	"fill_the_emptiness":            {"e": 4, "m": 4, "s": 1,  "i": true},
+	"void_strike":                   {"e": 4, "m": 4, "s": 0,  "i": true},
+	# ML5
+	"divide_the_soul":               {"e": 4, "m": 5, "s": 0,  "i": true},
+	"reforge":                       {"e": 4, "m": 5, "s": 7,  "i": true},
+	"unbound_essence":               {"e": 4, "m": 5, "s": 13, "i": true},
+	# ML6
+	"ring_of_the_void":              {"e": 4, "m": 6, "s": 0,  "i": true},
+	"rise_from_the_ashes":           {"e": 4, "m": 6, "s": 1,  "i": true},
+	"unmake_the_world":              {"e": 4, "m": 6, "s": 0,  "i": true},
+}
+
+## PROVISIONAL — actual school curricula require s28/s29 review.
+## All shugenja start with Sense and Commune (universal ML1) plus element-appropriate ML1 spells.
+const _DEFAULT_STARTING_SPELLS: Array = ["sense", "commune"]
+
+const _SCHOOL_STARTING_SPELLS: Dictionary = {
+	## Air-primary schools
+	"Doji Shugenja":    ["sense", "commune", "to_seek_the_truth", "bentens_touch"],
+	"Asako Shugenja":   ["sense", "commune", "to_seek_the_truth", "token_of_memory"],
+	"Moshi Shugenja":   ["sense", "commune", "gift_of_amaterasu", "fire_kamis_blessing"],
+	## Earth-primary schools
+	"Kuni Shugenja":    ["sense", "commune", "jade_strike", "jurojins_balm"],
+	"Isawa Shugenja":   ["sense", "commune", "summon", "command"],
+	"Agasha Shugenja":  ["sense", "commune", "earths_touch", "jurojins_balm"],
+	## Fire-primary schools
+	"Shiba Shugenja":   ["sense", "commune", "fire_kamis_blessing", "fires_of_purity"],
+	"Tamori Shugenja":  ["sense", "commune", "elemental_crucible", "the_raging_forge"],
+	## Water-primary schools
+	"Yogo Shugenja":    ["sense", "commune", "path_to_inner_peace", "purification_of_the_kami"],
+	"Iuchi Shugenja":   ["sense", "commune", "speed_of_the_waterfall", "cloak_of_the_miya"],
+	"Kitsu Shugenja":   ["sense", "commune", "sympathetic_energies", "judgment_of_yomi"],
+	## Void school
+	"Isawa Ishiken":    ["sense", "commune", "sense_void", "boundless_sight", "see_through_lies"],
+}
+
+
+## Returns the Ring rank for a given element on a character.
+static func get_ring_value(character: L5RCharacterData, ring: int) -> int:
+	match ring:
+		0: return mini(character.reflexes, character.awareness)    # AIR
+		1: return mini(character.stamina, character.willpower)     # EARTH
+		2: return mini(character.agility, character.intelligence)  # FIRE
+		3: return mini(character.strength, character.perception)   # WATER
+		4: return character.void_ring                              # VOID
+	return 0
+
+
+## Returns effective school rank accounting for affinity (+1) and deficiency (-1, min 0).
+static func get_effective_school_rank(character: L5RCharacterData, ring: int) -> int:
+	var rank: int = character.insight_rank
+	if character.affinity_element == ring:
+		rank += 1
+	if character.deficiency_element == ring:
+		rank = maxi(0, rank - 1)
+	return rank
+
+
+## Returns the casting TN for a given mastery level: 5 + (5 × ml).
+static func get_casting_tn(mastery_level: int) -> int:
+	return 5 + (5 * mastery_level)
+
+
+## Returns the best ring for casting a given spell for this character.
+## Universal spells (e=-1) choose whichever non-void ring gives the highest roll pool.
+static func get_best_cast_ring(character: L5RCharacterData, spell_id: String) -> int:
+	if not SPELL_LIBRARY.has(spell_id):
+		return -1
+	var el: int = SPELL_LIBRARY[spell_id].get("e", -1)
+	if el >= 0:
+		return el
+	# Universal: pick non-void ring with highest (ring_val + eff_rank)
+	var best_ring: int = 0
+	var best_pool: int = -1
+	for r: int in [0, 1, 2, 3]:
+		var rv: int = get_ring_value(character, r)
+		var er: int = get_effective_school_rank(character, r)
+		var pool: int = rv + er
+		if pool > best_pool:
+			best_pool = pool
+			best_ring = r
+	return best_ring
+
+
+## Returns the daily spell slot count for the given element ring value.
+static func get_daily_slots(character: L5RCharacterData, ring: int) -> int:
+	return get_ring_value(character, ring)
+
+
+## Returns how many elemental slots have been consumed today for a ring.
+static func get_slots_used(character: L5RCharacterData, ring: int) -> int:
+	return character.spell_slots_used.get(ring, 0)
+
+
+## Returns how many void bonus slots (any element) have been used today.
+static func get_void_bonus_used(character: L5RCharacterData) -> int:
+	return character.spell_void_bonus_used
+
+
+## Returns true if the character has a slot available for the given ring.
+static func can_afford_slot(character: L5RCharacterData, ring: int) -> bool:
+	var used: int = get_slots_used(character, ring)
+	if used < get_daily_slots(character, ring):
+		return true
+	# Fall back to void bonus slots
+	return character.spell_void_bonus_used < get_daily_slots(character, 4)  # 4 = VOID ring
+
+
+## Consumes one slot for the given ring, using void bonus if primary slots exhausted.
+## Writes directly to character.spell_slots_used / spell_void_bonus_used.
+static func consume_slot(character: L5RCharacterData, ring: int) -> void:
+	var used_count: int = character.spell_slots_used.get(ring, 0)
+	if used_count < get_daily_slots(character, ring):
+		character.spell_slots_used[ring] = used_count + 1
+	else:
+		character.spell_void_bonus_used += 1
+
+
+## Returns true if this character can cast the given spell right now.
+static func can_cast(character: L5RCharacterData, spell_id: String) -> bool:
+	if not SPELL_LIBRARY.has(spell_id):
+		return false
+	var spell: Dictionary = SPELL_LIBRARY[spell_id]
+	var ml: int = spell.get("m", 1)
+	var ring: int = spell.get("e", -1)
+	# Void spells: Isawa Ishiken restriction
+	if spell.get("i", false):
+		if character.school != "Isawa Ishiken":
+			var has_school: bool = false
+			for sp: String in character.school_paths:
+				if sp == "Isawa Ishiken":
+					has_school = true
+					break
+			if not has_school:
+				return false
+	# Must know the spell
+	if not (spell_id in character.spells_known):
+		return false
+	# School rank must meet mastery level
+	if character.insight_rank < ml:
+		return false
+	# Must have a slot available
+	var cast_ring: int = ring if ring >= 0 else get_best_cast_ring(character, spell_id)
+	return can_afford_slot(character, cast_ring)
+
+
+## Resolves a casting attempt in world simulation (1 AP, abstracted from combat rounds).
+## Consumes a slot on both success and failure per GDD s31.
+## Returns: {success, total, tn, margin, spell_id, sim_effect, cast_ring, raises}
+static func resolve_cast(character: L5RCharacterData, spell_id: String,
+		dice: DiceEngine, raises: int = 0) -> Dictionary:
+	if not SPELL_LIBRARY.has(spell_id):
+		return {"success": false, "error": "unknown_spell"}
+	var spell: Dictionary = SPELL_LIBRARY[spell_id]
+	var ml: int = spell.get("m", 1)
+	var ring: int = spell.get("e", -1)
+	var cast_ring: int = ring if ring >= 0 else get_best_cast_ring(character, spell_id)
+	var ring_val: int = get_ring_value(character, cast_ring)
+	var eff_rank: int = get_effective_school_rank(character, cast_ring)
+	var tn: int = get_casting_tn(ml) + (raises * 5)
+	var roll_dice: int = ring_val + eff_rank
+	var keep_dice: int = ring_val
+	# Slot consumed on attempt regardless of outcome
+	consume_slot(character, cast_ring)
+	var roll_result: DiceResult = dice.roll_and_keep(roll_dice, keep_dice)
+	var total: int = roll_result.total
+	var margin: int = total - tn
+	return {
+		"success": margin >= 0,
+		"total": total,
+		"tn": tn,
+		"margin": margin,
+		"spell_id": spell_id,
+		"sim_effect": spell.get("s", SpellSimEffect.COMBAT_ONLY),
+		"cast_ring": cast_ring,
+		"raises": raises,
+	}
+
+
+## Apply healing from a successful HEAL_WOUNDS cast. Returns {healed_wounds}.
+## Healing amount: base by spell + 1 per 5 margin (PROVISIONAL formula).
+static func apply_healing(target: L5RCharacterData, spell_id: String,
+		margin: int) -> Dictionary:
+	var base: int = _healing_base(spell_id)
+	var healed: int = base + (margin / 5)
+	if healed <= 0:
+		return {"healed_wounds": 0}
+	var before: int = target.wounds_taken
+	target.wounds_taken = maxi(0, target.wounds_taken - healed)
+	return {"healed_wounds": before - target.wounds_taken}
+
+
+## Apply taint removal from a REMOVE_TAINT cast. Returns {taint_removed}.
+## Removal amount: base by spell + 0.1 per margin point (PROVISIONAL formula).
+static func apply_taint_removal(target: L5RCharacterData, spell_id: String,
+		margin: int) -> Dictionary:
+	var base: float = _taint_base(spell_id)
+	var removed: float = base + float(margin) * 0.1
+	if removed <= 0.0:
+		return {"taint_removed": 0.0}
+	var before: float = target.taint
+	target.taint = maxf(0.0, target.taint - removed)
+	return {"taint_removed": before - target.taint}
+
+
+## Evaluate spirit detection result vs province PTL. Returns {detected, province_ptl}.
+## Detection TN from GDD design decision #5: Perception + Lore: Shadowlands vs (PTL × 5).
+static func apply_spirit_detection(margin: int, province_ptl: float) -> Dictionary:
+	# The Sense spell roll feeds into the PTL-detection pipeline.
+	# detect_tn is the target: PTL * 5 relative to base casting TN (ML1=10).
+	var detect_tn_offset: int = int(province_ptl * 5.0) - get_casting_tn(1)
+	var detected: bool = margin >= detect_tn_offset
+	return {"detected": detected, "province_ptl": province_ptl}
+
+
+## Returns all spell IDs in spells_known matching a given SpellSimEffect.
+static func get_spells_by_sim_effect(character: L5RCharacterData,
+		effect: SpellSimEffect) -> Array[String]:
+	var result: Array[String] = []
+	for spell_id: String in character.spells_known:
+		if not SPELL_LIBRARY.has(spell_id):
+			continue
+		if SPELL_LIBRARY[spell_id].get("s", SpellSimEffect.COMBAT_ONLY) == effect:
+			result.append(spell_id)
+	return result
+
+
+## Returns the highest-mastery-level spell with a given effect, or "" if none.
+static func get_best_spell_by_effect(character: L5RCharacterData,
+		effect: SpellSimEffect) -> String:
+	var best: String = ""
+	var best_ml: int = -1
+	for spell_id: String in character.spells_known:
+		if not SPELL_LIBRARY.has(spell_id):
+			continue
+		var spell: Dictionary = SPELL_LIBRARY[spell_id]
+		if spell.get("s", SpellSimEffect.COMBAT_ONLY) != effect:
+			continue
+		var ml: int = spell.get("m", 0)
+		if ml > best_ml:
+			best_ml = ml
+			best = spell_id
+	return best
+
+
+static func get_best_healing_spell(character: L5RCharacterData) -> String:
+	return get_best_spell_by_effect(character, SpellSimEffect.HEAL_WOUNDS)
+
+
+static func get_best_taint_removal_spell(character: L5RCharacterData) -> String:
+	return get_best_spell_by_effect(character, SpellSimEffect.REMOVE_TAINT)
+
+
+static func get_best_detection_spell(character: L5RCharacterData) -> String:
+	return get_best_spell_by_effect(character, SpellSimEffect.DETECT_PRESENCE)
+
+
+static func get_best_ritual_spell(character: L5RCharacterData) -> String:
+	return get_best_spell_by_effect(character, SpellSimEffect.RITUAL_HONOR)
+
+
+## Assign starting spells to a shugenja. Call once at character creation.
+## PROVISIONAL — curricula pending s28/s29 review.
+static func assign_starting_spells(character: L5RCharacterData, school: String) -> void:
+	var starting: Array = _SCHOOL_STARTING_SPELLS.get(school, _DEFAULT_STARTING_SPELLS)
+	for spell_id: Variant in starting:
+		var sid: String = str(spell_id)
+		if SPELL_LIBRARY.has(sid) and not (sid in character.spells_known):
+			character.spells_known.append(sid)
+
+
+## Returns true if a character is a shugenja school type.
+static func is_shugenja(character: L5RCharacterData) -> bool:
+	return character.school_type == Enums.SchoolType.SHUGENJA
+
+
+## Returns all spell IDs for a given element and mastery level.
+static func get_spells_for_element_ml(element: int, mastery_level: int) -> Array[String]:
+	var result: Array[String] = []
+	for spell_id: String in SPELL_LIBRARY:
+		var spell: Dictionary = SPELL_LIBRARY[spell_id]
+		if spell.get("e", -1) == element and spell.get("m", 0) == mastery_level:
+			result.append(spell_id)
+	return result
+
+
+## -- Internal helpers --
+
+static func _healing_base(spell_id: String) -> int:
+	## PROVISIONAL: base wound reduction per spell (GDD s34/s36 do not specify amounts).
+	match spell_id:
+		"jurojins_balm":        return 1
+		"earths_touch":         return 1
+		"sympathetic_energies": return 1
+		"rejuvenating_vapors":  return 1
+		"wholeness_of_the_world": return 2
+		"regrow_the_wound":     return 2
+		"drawing_on_the_mountain": return 3
+		"fill_the_emptiness":   return 1
+		"rise_from_the_ashes":  return 3
+	return 1
+
+
+static func _taint_base(spell_id: String) -> float:
+	## PROVISIONAL: base taint reduction per spell (GDD s34 specifies Purge removes taint;
+	## amounts not numerically specified).
+	match spell_id:
+		"purge_the_taint":     return 1.0
+		"tomb_of_jade":        return 1.5
+		"essence_of_jade":     return 2.0
+		"the_fires_that_cleanse": return 0.5
+	return 0.5

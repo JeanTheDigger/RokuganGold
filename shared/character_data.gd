@@ -34,6 +34,10 @@ extends Resource
 
 @export var current_void_points: int = 2
 @export var max_void_points: int = 2
+## Transient — reset to {} / 0 each IC day by ActionPointSystem.reset_daily_ap().
+## Not @export: these must not persist across save/load.
+var spell_slots_used: Dictionary = {}
+var spell_void_bonus_used: int = 0
 
 # -- Skills --------------------------------------------------------------------
 # Dict of { skill_name: String -> rank: int }. Only skills at rank >= 1 present.
@@ -53,7 +57,7 @@ extends Resource
 
 @export var affinity_element: Enums.Ring = Enums.Ring.NONE
 @export var deficiency_element: Enums.Ring = Enums.Ring.NONE
-@export var spells_known: Array = []
+@export var spells_known: Array[String] = []
 
 # -- Advantages & Disadvantages ------------------------------------------------
 
