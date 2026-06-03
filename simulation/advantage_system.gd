@@ -3,49 +3,82 @@ class_name AdvantageSystem
 ## Pure query and effect layer. No dice rolls; callers supply context dicts.
 ##
 ## Context dict keys (all optional; unrecognised keys are silently ignored):
-##   "is_contested"         bool   — this roll is part of a contested check
-##   "is_school_skill"      bool   — skill is in the character's school list
-##   "is_social"            bool   — Etiquette / Courtier / Sincerity / Temptation
-##   "is_voice_perform"     bool   — Perform roll using voice (Singing, Oratory)
-##   "is_memory"            bool   — remembering something exactly (PRECISE_MEMORY)
-##   "is_stealth"           bool   — any Stealth roll
-##   "is_ambush_detection"  bool   — Investigation(Notice)/Perception vs ambush
-##   "is_spell_casting"     bool   — casting a spell
-##   "spell_type"           String — "sense", "commune", "summon" for FRIENDLY_KAMI
-##   "element"              Enums.Ring — element of spell / ring roll
-##   "is_ring_roll"         bool   — pure Trait/Ring roll (no skill)
-##   "is_resist_temptation" bool   — resisting a Temptation roll
-##   "is_resist_intimidation" bool — resisting Intimidation
-##   "is_resist_fear"       bool   — resisting a Fear effect
-##   "is_vs_persuasion"     bool   — HEARTLESS: being target of Courtier/Sin/Temp
-##   "honor_rank_adding"    bool   — roll adds Honor Rank (BALANCE fires here)
-##   "attacker_gender_matches" bool — for DANGEROUS_BEAUTY / LECHERY
-##   "opponent_clan"        String — clan of the other character (contested)
-##   "opponent_family"      String — family of the other character
-##   "opponent_is_shugenja" bool
-##   "opponent_is_artisan"  bool
-##   "opponent_is_imperial" bool
-##   "opponent_is_naga"     bool
-##   "opponent_id"          int    — character_id of opponent
-##   "is_resist_manipulation" bool — CLEAR_THINKER: opponent confusing/manipulating
-##   "is_calligraphy"       bool   — Calligraphy skill roll (IMPERIAL_SCRIBE FR)
-##   "is_athletics"         bool   — Athletics roll (DAREDEVIL)
-##   "is_void_spend"        bool   — spending Void on this roll (DAREDEVIL, TOUCH_OF_VOID)
-##   "is_unarmed_damage"    bool   — HANDS_OF_STONE
-##   "is_weapon_skill"      bool   — CRAB_HANDS unskilled gate
-##   "is_low_skill"         bool   — CRAFTY unskilled gate (Low Skills)
-##   "is_lore_skill"        bool   — SAGE unskilled gate
-##   "is_perform_skill"     bool   — SENSATION unskilled gate
-##   "is_artisan_skill"     bool   — SOUL_OF_ARTISTRY
-##   "is_craft_skill"       bool   — SOUL_OF_ARTISTRY
-##   "is_detecting_intentions" bool — SHADOWED_HEART: opponent reading your intent
-##   "is_navigation"        bool   — Navigation emphasis roll (WANDERER)
-##   "situation_tags"       Array  — tags matching phobia/compulsion triggers
-##   "lost_love_clan"       String — clan/family being interacted with (LOST_LOVE)
-##   "lost_love_province_id" int   — province_id being entered (LOST_LOVE)
-##   "is_debate"            bool   — public debate in progress (CONTRARY)
-##   "max_glory_rank"       float  — highest Glory Rank of debate participants
-##   "debater_direction"    int    — +1 or -1 position direction (CONTRARY NPC)
+##   "is_contested"               bool   — this roll is part of a contested check
+##   "is_school_skill"            bool   — skill is in the character's school list
+##   "is_social"                  bool   — Etiquette / Courtier / Sincerity / Temptation
+##   "is_voice_perform"           bool   — Perform roll using voice (Singing, Oratory)
+##   "is_memory"                  bool   — remembering something exactly (PRECISE_MEMORY)
+##   "is_stealth"                 bool   — any Stealth roll
+##   "is_ambush_detection"        bool   — Investigation(Notice)/Perception vs ambush
+##   "is_spell_casting"           bool   — casting a spell
+##   "spell_type"                 String — "sense", "commune", "summon" for FRIENDLY_KAMI
+##   "element"                    Enums.Ring — element of spell / ring roll
+##   "is_ring_roll"               bool   — pure Trait/Ring roll (no skill)
+##   "is_resist_temptation"       bool   — resisting a Temptation roll
+##   "is_resist_intimidation"     bool   — resisting Intimidation
+##   "is_resist_fear"             bool   — resisting a Fear effect
+##   "is_vs_persuasion"           bool   — HEARTLESS: being target of Courtier/Sin/Temp
+##   "honor_rank_adding"          bool   — roll adds Honor Rank (BALANCE fires here)
+##   "attacker_gender_matches"    bool   — for DANGEROUS_BEAUTY / LECHERY
+##   "opponent_clan"              String — clan of the other character (contested)
+##   "opponent_family"            String — family of the other character
+##   "opponent_is_shugenja"       bool
+##   "opponent_is_artisan"        bool
+##   "opponent_is_imperial"       bool
+##   "opponent_is_naga"           bool
+##   "opponent_is_commoner"       bool   — opponent is non-samurai Rokugani
+##   "opponent_is_spirit"         bool   — opponent is a spirit entity (CURSED Maigo_no_Musha)
+##   "opponent_id"                int    — character_id of opponent
+##   "is_resist_manipulation"     bool   — CLEAR_THINKER: opponent confusing/manipulating
+##   "is_calligraphy"             bool   — Calligraphy skill roll (IMPERIAL_SCRIBE FR)
+##   "is_athletics"               bool   — Athletics roll (DAREDEVIL)
+##   "is_void_spend"              bool   — spending Void on this roll (DAREDEVIL, TOUCH_OF_VOID)
+##   "is_unarmed_damage"          bool   — HANDS_OF_STONE
+##   "is_weapon_skill"            bool   — CRAB_HANDS unskilled gate
+##   "is_low_skill"               bool   — CRAFTY unskilled gate (Low Skills)
+##   "is_lore_skill"              bool   — SAGE unskilled gate
+##   "is_perform_skill"           bool   — SENSATION unskilled gate
+##   "is_artisan_skill"           bool   — SOUL_OF_ARTISTRY
+##   "is_craft_skill"             bool   — SOUL_OF_ARTISTRY
+##   "is_detecting_intentions"    bool   — SHADOWED_HEART: opponent reading your intent
+##   "is_navigation"              bool   — Navigation emphasis roll (WANDERER)
+##   "situation_tags"             Array  — tags matching phobia/compulsion triggers
+##   "lost_love_clan"             String — clan/family being interacted with (LOST_LOVE)
+##   "lost_love_province_id"      int    — province_id being entered (LOST_LOVE)
+##   "is_debate"                  bool   — public debate in progress (CONTRARY)
+##   "max_glory_rank"             float  — highest Glory Rank of debate participants
+##   "debater_direction"          int    — +1 or -1 position direction (CONTRARY NPC)
+##   "is_perception_based"        bool   — Perception-based roll (BAD_EYESIGHT, CURSED Meido)
+##   "is_unoccupied"              bool   — character is idle/unoccupied (CURSED Meido)
+##   "is_resist_disease_or_poison" bool  — resisting disease or poison (SEVEN_FORTUNES_CURSE Jurojin)
+##   "is_in_celestial_temple"     bool   — inside a celestial temple (CURSED Tengoku)
+##   "is_sensing_feelings"        bool   — Courtier roll to sense feelings (INNER_GIFT Empathy)
+##   "is_void_enhance"            bool   — standard +1k1 void spend (CONSUMED Determination)
+##   "is_honest_sincerity"        bool   — Sincerity (Honesty) roll (FAILURE_OF_BUSHIDO Honesty)
+##   "is_negate_wounds"           bool   — void spend to negate wound penalties (FAILURE_OF_BUSHIDO Duty)
+##   "is_new_topic"               bool   — encountering a new topic (CONSUMED Knowledge)
+##   "is_resist_taint"            bool   — resisting Taint (CURSED Jigoku, BAD_FORTUNE Moto_Curse)
+##   "is_honest"                  bool   — Sincerity Honesty emphasis roll (PARAGON Honesty)
+##   "is_deceit"                  bool   — Sincerity Deceit emphasis roll (TOUCH Sakkaku)
+##   "is_conviction"              bool   — Sincerity conviction roll (FAILURE_OF_BUSHIDO Sincerity)
+##   "is_physical_trait"          bool   — Physical Trait roll (TOUCH_OF_SPIRIT Jigoku)
+##   "is_combat"                  bool   — attack or damage roll (TOUCH_OF_SPIRIT Jigoku)
+##   "is_coercion"                bool   — coercive social roll (SEVEN_FORTUNES_BLESSING Benten)
+##   "using_alternate_identity"   bool   — STOLEN_IDENTITY
+##   "bland_active"               bool   — BLAND voluntary TN increase
+##   "opponent_higher_glory"      bool   — FAILURE_OF_BUSHIDO Courage: facing higher-ranked foe
+##   "opponent_is_shadowlands"    bool   — FAILURE_OF_BUSHIDO Courage: Shadowlands opponent
+##   "is_technique_void_spend"    bool   — void spend required by a School Technique
+##   "involves_missing_limb"      bool   — task requires the missing limb (MISSING_LIMB)
+##   "is_leg_agility_roll"        bool   — Agility roll involving lower limbs (LAME)
+##   "is_wound_check"             bool   — wound rank or disease resistance check (BAD_HEALTH)
+##   "is_move_action"             bool   — movement action (LAME, SMALL, BLIND)
+##   "is_bribery"                 bool   — Temptation Bribery emphasis (GREEDY)
+##   "is_seduction"               bool   — Temptation Seduction emphasis (LECHERY)
+##   "is_willpower_contest"       bool   — Willpower contested roll (FRAIL_MIND)
+##   "is_acting_for_lower_status" bool   — acting on behalf of someone of lower Status (PARAGON Compassion, FAILURE_OF_BUSHIDO Compassion, INSENSITIVE)
+##   "is_acting_at_personal_risk_for_other" bool — placing self at personal risk for another's welfare (INSENSITIVE)
+##   "is_known_territory"         bool   — character is in their WAY_OF_THE_LAND known region
 
 # ---------------------------------------------------------------------------
 # Query helpers
@@ -83,6 +116,7 @@ static func get_disadvantage(character: L5RCharacterData, type: Enums.Disadvanta
 # Skill-roll bonus aggregator
 # Returns {rolled: int, kept: int, free_raises: int}.
 # Callers add returned values to their bonus_rolled / bonus_kept / flat_bonus.
+# Negative values reduce dice (disadvantage penalties).
 # ---------------------------------------------------------------------------
 
 static func get_skill_bonus(
@@ -182,6 +216,12 @@ static func get_skill_bonus(
 				if context.get("is_social", false) and context.get("opponent_is_imperial", false):
 					kept += 1
 
+			Enums.Advantage.INNER_GIFT:
+				# Empathy sub-type: +1k1 Courtier rolls to sense feelings
+				if adv.metadata.get("gift", "") == "Empathy":
+					if skill_name == "Courtier" and context.get("is_sensing_feelings", false):
+						kept += 1
+
 			Enums.Advantage.IRREPROACHABLE:
 				# +1k0 to rolls resisting Temptation
 				if context.get("is_resist_temptation", false):
@@ -220,8 +260,10 @@ static func get_skill_bonus(
 						if skill_name == "Sincerity" and context.get("is_contested", false):
 							rolled += 2
 					"Compassion":
-						# +2k2 when spending Void to help lower-Status — handled by Void system
-						pass
+						# +2k2 when spending Void to help someone of lower Status (s45 line 257)
+						if context.get("is_void_spend", false) and context.get("is_acting_for_lower_status", false):
+							rolled += 2
+							kept += 2
 					"Duty":
 						# Void Point negates all TN/Wound penalties on one roll — handled by Void system
 						pass
@@ -280,8 +322,13 @@ static func get_skill_bonus(
 						if skill_name == lore_skill:
 							kept += 1
 					"Jurojin":
-						# +2k0 to resist disease or poison (handled by relevant systems)
-						pass
+						# +2k0 to rolls resisting disease or poison (s45 line 321)
+						if context.get("is_resist_disease_or_poison", false):
+							rolled += 2
+					"Hotei":
+						# +2 Free Raises (+10) on all Contested Rolls (s45 line 321)
+						if context.get("is_contested", false):
+							free_raises += 2
 
 			Enums.Advantage.SILENT:
 				# +1k0 to all Stealth rolls
@@ -351,6 +398,92 @@ static func get_skill_bonus(
 				# Executor must enforce this when computing max raises.
 				pass
 
+	# Disadvantage penalties
+	for dis: DisadvantageData in character.disadvantages:
+		match dis.disadvantage_type:
+
+			Enums.Disadvantage.ANTISOCIAL:
+				# 2 pts (-1k0) or 4 pts (-1k1) to all Social Skill Rolls
+				if context.get("is_social", false):
+					if dis.rank >= 2:  # 4-pt version
+						rolled -= 1
+						kept -= 1
+					else:  # 2-pt version
+						rolled -= 1
+
+			Enums.Disadvantage.BAD_EYESIGHT:
+				# -1k1 to Perception-based rolls (ranged attack part blocked on s40)
+				if context.get("is_perception_based", false):
+					rolled -= 1
+					kept -= 1
+
+			Enums.Disadvantage.BAD_FORTUNE:
+				# Moto Curse sub-type: -1k0 to resist Taint
+				if dis.metadata.get("type", "") == "Moto_Curse" \
+						and context.get("is_resist_taint", false):
+					rolled -= 1
+
+			Enums.Disadvantage.CONSUMED:
+				var precept: String = dis.metadata.get("precept", "")
+				match precept:
+					"Control":
+						# -1k1 to Etiquette and Sincerity
+						if skill_name in ["Etiquette", "Sincerity"]:
+							rolled -= 1
+							kept -= 1
+					"Strength":
+						# -1k0 to Etiquette (Called Shot/Feint/Disarm extra Raise blocked on s40)
+						if skill_name == "Etiquette":
+							rolled -= 1
+					"Will":
+						# -1k1 to Courtier and Temptation
+						if skill_name in ["Courtier", "Temptation"]:
+							rolled -= 1
+							kept -= 1
+
+			Enums.Disadvantage.CURSED_BY_THE_REALM:
+				var c_realm: String = dis.metadata.get("realm", "")
+				match c_realm:
+					"Chikushudo":
+						# -1k1 to Animal Handling
+						if skill_name == "Animal Handling":
+							rolled -= 1
+							kept -= 1
+					"Jigoku":
+						# -1k1 to rolls resisting Taint
+						if context.get("is_resist_taint", false):
+							rolled -= 1
+							kept -= 1
+					"Maigo_no_Musha":
+						# -1k1 to all rolls against any spirit
+						if context.get("opponent_is_spirit", false):
+							rolled -= 1
+							kept -= 1
+					"Meido":
+						# -1k0 to Perception rolls when unoccupied
+						if context.get("is_perception_based", false) \
+								and context.get("is_unoccupied", false):
+							rolled -= 1
+
+			Enums.Disadvantage.SEVEN_FORTUNES_CURSE:
+				var sc_fortune: String = dis.metadata.get("fortune", "")
+				match sc_fortune:
+					"Daikoku":
+						# -1k1 to Commerce rolls
+						if skill_name == "Commerce":
+							rolled -= 1
+							kept -= 1
+					"Ebisu":
+						# -1k1 to Social Skill Rolls with non-samurai Rokugani
+						if context.get("is_social", false) \
+								and context.get("opponent_is_commoner", false):
+							rolled -= 1
+							kept -= 1
+					"Jurojin":
+						# -2k0 to resist all poisons and diseases
+						if context.get("is_resist_disease_or_poison", false):
+							rolled -= 2
+
 	return {"rolled": rolled, "kept": kept, "free_raises": free_raises}
 
 
@@ -380,6 +513,13 @@ static func get_tn_modifier(
 
 			Enums.Disadvantage.DISTURBING_COUNTENANCE:
 				if context.get("is_social", false):
+					mod += 5
+
+			Enums.Disadvantage.DOUBT:
+				# Must declare one Raise that confers no benefit on the chosen School Skill.
+				# Equivalent to +5 TN (one wasted Raise) on that skill.
+				var doubt_skill: String = dis.metadata.get("skill", "")
+				if doubt_skill != "" and skill_name_from_context(context) == doubt_skill:
 					mod += 5
 
 			Enums.Disadvantage.FAILURE_OF_BUSHIDO:
@@ -421,6 +561,32 @@ static func get_tn_modifier(
 					if tag in sit_tags:
 						mod += 5 * dis.rank
 						break
+
+			Enums.Disadvantage.CONSUMED:
+				var c_precept: String = dis.metadata.get("precept", "")
+				if c_precept == "Perfection":
+					# Must call one extra Raise for no effect on every roll — equivalent to +5 TN.
+					mod += 5
+
+			Enums.Disadvantage.CURSED_BY_THE_REALM:
+				var cr_realm: String = dis.metadata.get("realm", "")
+				if cr_realm == "Tengoku":
+					# +10 TN to all rolls while inside a temple devoted to the Celestial Heavens
+					if context.get("is_in_celestial_temple", false):
+						mod += 10
+
+			Enums.Disadvantage.SEVEN_FORTUNES_CURSE:
+				var sc_fortune: String = dis.metadata.get("fortune", "")
+				match sc_fortune:
+					"Benten":
+						# +10 TN to all Etiquette rolls
+						if skill_name_from_context(context) == "Etiquette":
+							mod += 10
+					"Fukurokujin":
+						# +5 TN to Lore Skill Rolls
+						var sn: String = skill_name_from_context(context)
+						if sn.begins_with("Lore"):
+							mod += 5
 
 			Enums.Disadvantage.SHADOWED_HEART:
 				# Applied to the ATTACKER trying to read you, not your own roll.
@@ -655,15 +821,173 @@ static func get_honor_loss_increase(character: L5RCharacterData) -> float:
 
 
 # ---------------------------------------------------------------------------
-# MOMOKU: cannot spend Void Points on non-Technique things.
-# Returns true if the Void spend should be blocked.
+# Void spend blocking: returns true if the Void spend should be blocked.
+# Handles MOMOKU, CONSUMED Determination, FAILURE_OF_BUSHIDO Honesty/Duty.
 # ---------------------------------------------------------------------------
 
 static func is_void_spend_blocked(character: L5RCharacterData, context: Dictionary) -> bool:
-	if not has_disadvantage(character, Enums.Disadvantage.MOMOKU):
+	# MOMOKU: cannot spend Void on anything except Techniques
+	if has_disadvantage(character, Enums.Disadvantage.MOMOKU):
+		if not context.get("is_technique_void_spend", false):
+			return true
+
+	# CONSUMED Determination: cannot spend Void Points to enhance die rolls
+	for dis: DisadvantageData in character.disadvantages:
+		if dis.disadvantage_type == Enums.Disadvantage.CONSUMED:
+			if dis.metadata.get("precept", "") == "Determination":
+				if context.get("is_void_enhance", false):
+					return true
+
+	# FAILURE_OF_BUSHIDO Honesty: cannot spend Void on Sincerity (Honesty) rolls
+	# FAILURE_OF_BUSHIDO Duty: cannot spend Void to negate Wounds
+	for dis: DisadvantageData in character.disadvantages:
+		if dis.disadvantage_type == Enums.Disadvantage.FAILURE_OF_BUSHIDO:
+			var virtue: String = dis.metadata.get("virtue", "")
+			match virtue:
+				"Honesty":
+					if context.get("is_honest_sincerity", false):
+						return true
+				"Duty":
+					if context.get("is_negate_wounds", false):
+						return true
+
+	# SWORN_ENEMY: cannot spend Void Points when directly opposing the nemesis (s45 lines 699-701)
+	for dis: DisadvantageData in character.disadvantages:
+		if dis.disadvantage_type == Enums.Disadvantage.SWORN_ENEMY:
+			var nemesis_id: int = dis.metadata.get("nemesis_id", -1)
+			if nemesis_id >= 0 and context.get("opponent_id", -1) == nemesis_id:
+				return true
+
+	return false
+
+
+# ---------------------------------------------------------------------------
+# INSENSITIVE / FAILURE_OF_BUSHIDO Compassion: Void Point must be spent before acting.
+# Returns true when a Void Point is required to perform the action at all.
+# Different from is_void_spend_blocked() — here VP spending is mandatory, not forbidden.
+# ---------------------------------------------------------------------------
+
+static func requires_void_to_act(character: L5RCharacterData, context: Dictionary) -> bool:
+	# INSENSITIVE: must spend Void to place self at personal risk for any other person's welfare
+	if has_disadvantage(character, Enums.Disadvantage.INSENSITIVE):
+		if context.get("is_acting_at_personal_risk_for_other", false):
+			return true
+
+	# FAILURE_OF_BUSHIDO Compassion: must spend Void before acting on behalf of lower Status
+	for dis: DisadvantageData in character.disadvantages:
+		if dis.disadvantage_type == Enums.Disadvantage.FAILURE_OF_BUSHIDO:
+			if dis.metadata.get("virtue", "") == "Compassion":
+				if context.get("is_acting_for_lower_status", false):
+					return true
+
+	return false
+
+
+# ---------------------------------------------------------------------------
+# SEVEN_FORTUNES_CURSE Hotei: any Void spend costs one extra Void Point.
+# Returns the number of additional Void Points that must be spent.
+# ---------------------------------------------------------------------------
+
+static func get_extra_void_cost(character: L5RCharacterData) -> int:
+	var dis: DisadvantageData = get_disadvantage(character, Enums.Disadvantage.SEVEN_FORTUNES_CURSE)
+	if dis != null and dis.metadata.get("fortune", "") == "Hotei":
+		return 1
+	return 0
+
+
+# ---------------------------------------------------------------------------
+# SEVEN_FORTUNES_BLESSING Hotei: any effect that would drain Void Points first
+# requires a Contested Void Roll against TN 10 (s45 line 321).
+# Returns true if this protection is active.
+# ---------------------------------------------------------------------------
+
+static func check_hotei_void_protection(character: L5RCharacterData) -> bool:
+	for adv: AdvantageData in character.advantages:
+		if adv.advantage_type == Enums.Advantage.SEVEN_FORTUNES_BLESSING:
+			if adv.metadata.get("fortune", "") == "Hotei":
+				return true
+	return false
+
+
+# ---------------------------------------------------------------------------
+# ASCETIC: Glory gained is halved (normal) or quartered (monk school).
+# Returns the multiplier to apply to any Glory award.
+# ---------------------------------------------------------------------------
+
+static func get_glory_multiplier(character: L5RCharacterData) -> float:
+	if not has_disadvantage(character, Enums.Disadvantage.ASCETIC):
+		return 1.0
+	if character.school_type == Enums.SchoolType.MONK:
+		return 0.25
+	return 0.5
+
+
+# ---------------------------------------------------------------------------
+# BOUNTY: returns the TN for Perception + Investigation to identify this character.
+# 2 pt (rank 1) → TN 25; 4 pt (rank 2) → TN 15; 6 pt (rank 3) → TN 10.
+# Returns -1 if the character has no bounty.
+# ---------------------------------------------------------------------------
+
+static func get_recognition_tn(character: L5RCharacterData) -> int:
+	var dis: DisadvantageData = get_disadvantage(character, Enums.Disadvantage.BOUNTY)
+	if dis == null:
+		return -1
+	match dis.rank:
+		1:
+			return 25
+		2:
+			return 15
+		3:
+			return 10
+		_:
+			return 25
+
+
+# ---------------------------------------------------------------------------
+# TACTICIAN: may increase or decrease the Mass Battle Table result by 5.
+# Returns 5 as the adjustment magnitude; caller decides direction (+/-).
+# ---------------------------------------------------------------------------
+
+static func get_tactician_modifier(character: L5RCharacterData) -> int:
+	if has_advantage(character, Enums.Advantage.TACTICIAN):
+		return 5
+	return 0
+
+
+# ---------------------------------------------------------------------------
+# PERCEIVED_HONOR: others see Honor as (actual + rank) when attempting to discern it.
+# Lore: Bushido rolls against TN 15 reveal the true rank — caller's responsibility.
+# ---------------------------------------------------------------------------
+
+static func get_perceived_honor(character: L5RCharacterData) -> float:
+	var adv: AdvantageData = get_advantage(character, Enums.Advantage.PERCEIVED_HONOR)
+	if adv == null:
+		return character.honor
+	return character.honor + float(adv.rank)
+
+
+# ---------------------------------------------------------------------------
+# WAY_OF_THE_LAND: cannot get lost in known territory; knows resource locations.
+# Returns true when navigation failure would be blocked.
+# ---------------------------------------------------------------------------
+
+static func is_navigation_immune(character: L5RCharacterData, context: Dictionary) -> bool:
+	if not has_advantage(character, Enums.Advantage.WAY_OF_THE_LAND):
 		return false
-	# Allowed if spending on a School Technique that requires Void
-	return not context.get("is_technique_void_spend", false)
+	return context.get("is_known_territory", false)
+
+
+# ---------------------------------------------------------------------------
+# GAIJIN_NAME: dice may only explode once on Social Skill Rolls (max result 20/die).
+# Returns 1 (one explosion cap) when active, 0 for normal unlimited explosions.
+# ---------------------------------------------------------------------------
+
+static func get_die_explosion_cap(character: L5RCharacterData, context: Dictionary) -> int:
+	if not has_disadvantage(character, Enums.Disadvantage.GAIJIN_NAME):
+		return 0
+	if context.get("is_social", false):
+		return 1
+	return 0
 
 
 # ---------------------------------------------------------------------------
@@ -673,10 +997,6 @@ static func is_void_spend_blocked(character: L5RCharacterData, context: Dictiona
 # ---------------------------------------------------------------------------
 
 static func get_void_spend_bonus(character: L5RCharacterData) -> Dictionary:
-	if has_advantage(character, Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS):
-		var adv: AdvantageData = get_advantage(character, Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS)
-		if adv != null and adv.metadata.get("realm", "") == "Yume-do":
-			pass  # Yume-do is rest recovery, not a roll bonus
 	if has_advantage(character, Enums.Advantage.TOUCH_OF_THE_VOID):
 		return {"extra_kept": 1}  # +2k1 total vs normal +1k1
 	return {"extra_kept": 0}
@@ -695,6 +1015,91 @@ static func is_sacrosanct(character: L5RCharacterData) -> bool:
 	if not has_advantage(character, Enums.Advantage.SACROSANCT):
 		return false
 	return character.honor >= 6.0
+
+
+# ---------------------------------------------------------------------------
+# GREAT_DESTINY: death-protection query.
+# Returns true if the death-protection can fire in the given IC year.
+# Call with the character's last_triggered_ic_year stored in metadata.
+# ---------------------------------------------------------------------------
+
+static func check_great_destiny(character: L5RCharacterData, current_ic_year: int) -> bool:
+	var adv: AdvantageData = get_advantage(character, Enums.Advantage.GREAT_DESTINY)
+	if adv == null:
+		return false
+	var last_year: int = adv.metadata.get("last_triggered_ic_year", -1)
+	return last_year != current_ic_year
+
+
+# ---------------------------------------------------------------------------
+# DARLING_OF_THE_COURT: +1 effective Status at a specific court.
+# Returns 1 if the character has this advantage for the given settlement, 0 otherwise.
+# May be purchased multiple times for different courts.
+# ---------------------------------------------------------------------------
+
+static func get_darling_status_bonus(character: L5RCharacterData, court_settlement_id: int) -> int:
+	for adv: AdvantageData in character.advantages:
+		if adv.advantage_type == Enums.Advantage.DARLING_OF_THE_COURT:
+			if adv.metadata.get("settlement_id", -1) == court_settlement_id:
+				return 1
+	return 0
+
+
+# ---------------------------------------------------------------------------
+# VOID_VERSATILITY: returns true if spell slots from ring may be used to cast
+# Void spells. ring must be the non-Void ring whose slots would be spent.
+# Only valid if character has Void Affinity (Ishiken-Do advantage).
+# ---------------------------------------------------------------------------
+
+static func can_use_void_versatility(character: L5RCharacterData, ring: int) -> bool:
+	var adv: AdvantageData = get_advantage(character, Enums.Advantage.VOID_VERSATILITY)
+	if adv == null:
+		return false
+	return adv.metadata.get("ring", Enums.Ring.NONE) == ring
+
+
+# ---------------------------------------------------------------------------
+# HERO_OF_THE_PEOPLE: lowers the TN for non-samurai to recognize character.
+# Returns -10 when is_non_samurai_recognizer is true and advantage is present.
+# Negative return = TN is lowered (easier to recognize).
+# ---------------------------------------------------------------------------
+
+static func get_hero_recognition_tn_modifier(character: L5RCharacterData, is_non_samurai_recognizer: bool) -> int:
+	if not is_non_samurai_recognizer:
+		return 0
+	if has_advantage(character, Enums.Advantage.HERO_OF_THE_PEOPLE):
+		return -10
+	return 0
+
+
+# ---------------------------------------------------------------------------
+# INHERITANCE: +1k1 to non-combat Skill Rolls when using the heirloom item.
+# Returns {rolled: int, kept: int} bonus.
+# ---------------------------------------------------------------------------
+
+static func get_inheritance_skill_bonus(character: L5RCharacterData, using_heirloom: bool) -> Dictionary:
+	if using_heirloom and has_advantage(character, Enums.Advantage.INHERITANCE):
+		return {"rolled": 0, "kept": 1}
+	return {"rolled": 0, "kept": 0}
+
+
+# ---------------------------------------------------------------------------
+# get_void_recovery_hours: returns hours of rest needed to regain all Void.
+# TOUCH_OF_THE_SPIRIT_REALMS Yume-do: 4 hours.
+# CURSED_BY_THE_REALM Yume-do: 10 hours.
+# Default: 8 hours.
+# ---------------------------------------------------------------------------
+
+static func get_void_recovery_hours(character: L5RCharacterData) -> int:
+	for adv: AdvantageData in character.advantages:
+		if adv.advantage_type == Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS:
+			if adv.metadata.get("realm", "") == "Yume-do":
+				return 4
+	for dis: DisadvantageData in character.disadvantages:
+		if dis.disadvantage_type == Enums.Disadvantage.CURSED_BY_THE_REALM:
+			if dis.metadata.get("realm", "") == "Yume-do":
+				return 10
+	return 8
 
 
 # ---------------------------------------------------------------------------
@@ -722,6 +1127,45 @@ static func check_contrary_trigger(character: L5RCharacterData, max_glory_rank: 
 		return {"triggered": false, "tn": 0}
 	var tn: int = int(5.0 * max_glory_rank)
 	return {"triggered": true, "tn": tn}
+
+
+## CONSUMED: returns {triggered: bool, tn: int, precept: String}.
+## Insight (4 pts): Willpower TN 20 when using the chosen School Skill or falls into reverie.
+## Knowledge (4 pts): Willpower TN 25 when encountering a new topic or must study it.
+## Caller passes precept_type to check only one sub-type.
+static func check_consumed_trigger(
+	character: L5RCharacterData,
+	precept_type: String,
+	context: Dictionary,
+) -> Dictionary:
+	var dis: DisadvantageData = get_disadvantage(character, Enums.Disadvantage.CONSUMED)
+	if dis == null:
+		return {"triggered": false, "tn": 0, "precept": ""}
+	var precept: String = dis.metadata.get("precept", "")
+	if precept != precept_type:
+		return {"triggered": false, "tn": 0, "precept": precept}
+	match precept:
+		"Insight":
+			if context.get("is_school_skill", false):
+				return {"triggered": true, "tn": 20, "precept": precept}
+		"Knowledge":
+			if context.get("is_new_topic", false):
+				return {"triggered": true, "tn": 25, "precept": precept}
+	return {"triggered": false, "tn": 0, "precept": precept}
+
+
+## CURSED_BY_THE_REALM Toshigoku: must roll Willpower TN 15 or attack any wounded opponent.
+## Returns {triggered: bool, tn: int}.
+static func check_cursed_toshigoku_trigger(
+	character: L5RCharacterData,
+	opponent_is_wounded: bool,
+) -> Dictionary:
+	var dis: DisadvantageData = get_disadvantage(character, Enums.Disadvantage.CURSED_BY_THE_REALM)
+	if dis == null or dis.metadata.get("realm", "") != "Toshigoku":
+		return {"triggered": false, "tn": 0}
+	if opponent_is_wounded:
+		return {"triggered": true, "tn": 15}
+	return {"triggered": false, "tn": 0}
 
 
 ## LOST_LOVE: returns {triggered: bool, tiers_used: int}.
@@ -891,6 +1335,83 @@ static func check_overconfident_trigger(
 
 
 # ---------------------------------------------------------------------------
+# CURSED_BY_THE_REALM Sakkaku: once per IC month a Spirit Prank fires automatically.
+# ic_month is an integer counter unique per month in the world (e.g. ic_year * 4 + season).
+# Returns {triggered: bool, prank: String, metadata: Dictionary}.
+# Caller must update dis.metadata["last_prank_month"] to ic_month after processing.
+# ---------------------------------------------------------------------------
+
+static func check_sakkaku_monthly_prank(character: L5RCharacterData, ic_month: int) -> Dictionary:
+	var dis: DisadvantageData = get_disadvantage(character, Enums.Disadvantage.CURSED_BY_THE_REALM)
+	if dis == null or dis.metadata.get("realm", "") != "Sakkaku":
+		return {"triggered": false, "prank": "", "metadata": {}}
+
+	var last_month: int = dis.metadata.get("last_prank_month", -1)
+	if last_month == ic_month:
+		return {"triggered": false, "prank": "", "metadata": {}}  # already fired this month
+
+	# Deterministic prank selection: one per character per month (GDD s45 lines 491-510)
+	var idx: int = (character.character_id * 7 + ic_month * 13) % 20
+	var prank_table: Array[Dictionary] = [
+		{"prank": "MISPLACED_ITEM",           "duration_days": 1},
+		{"prank": "LOOSE_TONGUE",             "penalty": -1, "skill": "social", "duration_days": 7},
+		{"prank": "VOID_DRAIN",               "vp_loss": 1},
+		{"prank": "NOISY_SHADOW",             "penalty": -1, "skill": "Stealth", "duration_days": 7},
+		{"prank": "SPOILED_PROVISIONS",       "koku_loss": 1},
+		{"prank": "FOOL_IMPRESSION",          "disposition_loss": -5},
+		{"prank": "STUMBLE",                  "penalty": -1, "next_roll_only": true},
+		{"prank": "SMEARED_INK",              "letter_delay_days": 3},
+		{"prank": "RESTLESS_NIGHT",           "blocks_vp_recovery": true},
+		{"prank": "PHANTOM_SOUNDS",           "penalty": -1, "skill": "Investigation", "duration_days": 7},
+		{"prank": "LOOSE_STRAPS",             "armor_tn_penalty": -5},
+		{"prank": "WHISPERED_EMBARRASSMENT",  "glory_loss": 1.0},
+		{"prank": "UNSETTLING_PRESENCE",      "penalty": -1, "skill": "Willpower", "duration_days": 7},
+		{"prank": "STUCK_BLADE",              "penalty": -1, "next_attack_only": true},
+		{"prank": "WRONG_PATH",               "travel_extra_days": 1},
+		{"prank": "SPILLED_TEA",              "breach_type": "ETIQUETTE_MINOR"},
+		{"prank": "SPOOKED_MOUNT",            "penalty": -2, "skill": "Horsemanship"},
+		{"prank": "SNAPPED_STRING",           "penalty": -1, "skill": "Perform or Kyujutsu"},
+		{"prank": "DISRUPTED_KAMI",           "penalty": -1, "skill": "spell_casting"},
+		{"prank": "TAINTED_GIFT",             "disposition_change": -3},
+	]
+
+	return {
+		"triggered": true,
+		"prank": prank_table[idx]["prank"],
+		"metadata": prank_table[idx],
+	}
+
+
+# ---------------------------------------------------------------------------
+# BAD_FORTUNE Lingering Misfortune: once per IC month, one roll that succeeds
+# by fewer than 5 (margin 0–4) is automatically turned into a failure.
+# roll_margin = roll_total - tn (positive = success, negative = already failed).
+# ic_month is the current IC month counter.
+# Caller must update dis.metadata["last_misfortune_month"] to ic_month after trigger.
+# Returns {triggered: bool}.
+# ---------------------------------------------------------------------------
+
+static func check_lingering_misfortune(
+	character: L5RCharacterData,
+	roll_margin: int,
+	ic_month: int,
+) -> Dictionary:
+	var dis: DisadvantageData = get_disadvantage(character, Enums.Disadvantage.BAD_FORTUNE)
+	if dis == null or dis.metadata.get("type", "") != "Lingering_Misfortune":
+		return {"triggered": false}
+
+	var last_month: int = dis.metadata.get("last_misfortune_month", -1)
+	if last_month == ic_month:
+		return {"triggered": false}  # already fired this month
+
+	# Only narrow successes qualify (margin 0–4: succeeded but by less than 5)
+	if roll_margin < 0 or roll_margin >= 5:
+		return {"triggered": false}
+
+	return {"triggered": true}
+
+
+# ---------------------------------------------------------------------------
 # WRATH_OF_THE_KAMI: returns the Free Raise bonus granted to a spellcaster
 # targeting this character with the marked element.
 # ---------------------------------------------------------------------------
@@ -903,6 +1424,61 @@ static func get_wrath_of_kami_bonus(target: L5RCharacterData, spell_element: int
 	if marked_elem != Enums.Ring.NONE and spell_element == marked_elem:
 		return 1  # +1 Free Raise on Spell Casting Roll
 	return 0
+
+
+# ---------------------------------------------------------------------------
+# TOUCH_OF_THE_SPIRIT_REALMS Maigo no Musha: +1 bonus Glory when more than 3 Glory awarded.
+# glory_awarded is the raw amount being granted. Returns 1 if bonus applies, 0 otherwise.
+# ---------------------------------------------------------------------------
+
+static func get_spirit_realm_glory_bonus(character: L5RCharacterData, glory_awarded: float) -> int:
+	if glory_awarded <= 3.0:
+		return 0
+	for adv: AdvantageData in character.advantages:
+		if adv.advantage_type == Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS:
+			if adv.metadata.get("realm", "") == "Maigo_no_Musha":
+				return 1
+	return 0
+
+
+# ---------------------------------------------------------------------------
+# CAST_OUT: members of the character's cast-out sect treat their Glory as Infamy.
+# Returns true when observer_sect matches the sect the character was cast out from.
+# ---------------------------------------------------------------------------
+
+static func is_glory_treated_as_infamy_by(character: L5RCharacterData, observer_sect: String) -> bool:
+	var dis: DisadvantageData = get_disadvantage(character, Enums.Disadvantage.CAST_OUT)
+	if dis == null:
+		return false
+	return dis.metadata.get("sect", "") == observer_sect and observer_sect != ""
+
+
+# ---------------------------------------------------------------------------
+# OBTUSE: XP cost to raise a High Skill (except Investigation or Medicine) is doubled.
+# Returns 2 when the doubling applies, 1 otherwise.
+# is_high_skill() enumerates the High Skills per L5R 4e (GDD s45 lines 651-653).
+# ---------------------------------------------------------------------------
+
+static func is_high_skill(skill_name: String) -> bool:
+	if skill_name.begins_with("Lore"):
+		return true
+	if skill_name.begins_with("Games"):
+		return true
+	return skill_name in [
+		"Calligraphy", "Courtier", "Etiquette", "Horsemanship",
+		"Investigation", "Medicine", "Meditation", "Poetry",
+		"Sincerity", "Tea Ceremony", "Temptation",
+	]
+
+
+static func get_high_skill_xp_multiplier(character: L5RCharacterData, skill_name: String) -> int:
+	if not has_disadvantage(character, Enums.Disadvantage.OBTUSE):
+		return 1
+	if not is_high_skill(skill_name):
+		return 1
+	if skill_name in ["Investigation", "Medicine"]:
+		return 1
+	return 2
 
 
 # ---------------------------------------------------------------------------
@@ -1000,3 +1576,21 @@ static func assign_derived_advantages(
 		var dis: DisadvantageData = DisadvantageData.new()
 		dis.disadvantage_type = Enums.Disadvantage.SOCIAL_DISADVANTAGE
 		character.disadvantages.append(dis)
+
+	# BLACK_SHEEP — apply permanent -40 family / -20 clan disposition modifiers
+	# to all named characters' dispositions toward this character.
+	if has_disadvantage(character, Enums.Disadvantage.BLACK_SHEEP):
+		var char_family: String = character.family
+		var char_clan: String = character.clan
+		for other_id: int in chars_by_id:
+			var other: L5RCharacterData = chars_by_id[other_id]
+			if other == null or CharacterStats.is_dead(other):
+				continue
+			if other.character_id == character.character_id:
+				continue
+			if other.family == char_family and char_family != "":
+				var current_fam: int = other.disposition_values.get(character.character_id, 0)
+				other.disposition_values[character.character_id] = clampi(current_fam - 40, -100, 100)
+			elif other.clan == char_clan and char_clan != "":
+				var current_clan: int = other.disposition_values.get(character.character_id, 0)
+				other.disposition_values[character.character_id] = clampi(current_clan - 20, -100, 100)

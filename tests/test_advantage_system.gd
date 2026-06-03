@@ -968,3 +968,1131 @@ func test_small_grants_melee_damage_penalty():
 func test_no_small_no_damage_penalty():
 	var c := _make_character()
 	assert_eq(AdvantageSystem.get_melee_damage_penalty(c), 0)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_skill_bonus — INNER_GIFT Empathy (advantage)
+# ---------------------------------------------------------------------------
+
+func test_inner_gift_empathy_kept_bonus_on_courtier_sensing():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.INNER_GIFT, 1, {"gift": "Empathy"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Courtier", {"is_sensing_feelings": true})
+	assert_eq(result["kept"], 1)
+
+
+func test_inner_gift_empathy_no_bonus_without_sensing_context():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.INNER_GIFT, 1, {"gift": "Empathy"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Courtier", {})
+	assert_eq(result["kept"], 0)
+
+
+func test_inner_gift_empathy_no_bonus_on_wrong_skill():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.INNER_GIFT, 1, {"gift": "Empathy"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Etiquette", {"is_sensing_feelings": true})
+	assert_eq(result["kept"], 0)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_skill_bonus — ANTISOCIAL disadvantage
+# ---------------------------------------------------------------------------
+
+func test_antisocial_rank1_minus_1k0_on_social():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.ANTISOCIAL, 1)
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Etiquette", {"is_social": true})
+	assert_eq(result["rolled"], -1)
+	assert_eq(result["kept"], 0)
+
+
+func test_antisocial_rank2_minus_1k1_on_social():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.ANTISOCIAL, 2)
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Etiquette", {"is_social": true})
+	assert_eq(result["rolled"], -1)
+	assert_eq(result["kept"], -1)
+
+
+func test_antisocial_no_effect_on_non_social():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.ANTISOCIAL, 1)
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Kenjutsu", {})
+	assert_eq(result["rolled"], 0)
+	assert_eq(result["kept"], 0)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_skill_bonus — BAD_EYESIGHT disadvantage
+# ---------------------------------------------------------------------------
+
+func test_bad_eyesight_minus_1k1_on_perception_based():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.BAD_EYESIGHT)
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Investigation", {"is_perception_based": true})
+	assert_eq(result["rolled"], -1)
+	assert_eq(result["kept"], -1)
+
+
+func test_bad_eyesight_no_effect_on_non_perception():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.BAD_EYESIGHT)
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Etiquette", {})
+	assert_eq(result["rolled"], 0)
+	assert_eq(result["kept"], 0)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_skill_bonus — BAD_FORTUNE Moto Curse
+# ---------------------------------------------------------------------------
+
+func test_bad_fortune_moto_curse_minus_1k0_resist_taint():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.BAD_FORTUNE, 1, {"type": "Moto_Curse"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "any", {"is_resist_taint": true})
+	assert_eq(result["rolled"], -1)
+
+
+func test_bad_fortune_moto_curse_no_effect_on_non_taint():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.BAD_FORTUNE, 1, {"type": "Moto_Curse"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Etiquette", {})
+	assert_eq(result["rolled"], 0)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_skill_bonus — CONSUMED sub-types (Control / Strength / Will)
+# ---------------------------------------------------------------------------
+
+func test_consumed_control_minus_1k1_etiquette():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CONSUMED, 1, {"precept": "Control"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Etiquette", {})
+	assert_eq(result["rolled"], -1)
+	assert_eq(result["kept"], -1)
+
+
+func test_consumed_control_minus_1k1_sincerity():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CONSUMED, 1, {"precept": "Control"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Sincerity", {})
+	assert_eq(result["rolled"], -1)
+	assert_eq(result["kept"], -1)
+
+
+func test_consumed_control_no_effect_on_other_skills():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CONSUMED, 1, {"precept": "Control"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Kenjutsu", {})
+	assert_eq(result["rolled"], 0)
+	assert_eq(result["kept"], 0)
+
+
+func test_consumed_strength_minus_1k0_etiquette():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CONSUMED, 1, {"precept": "Strength"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Etiquette", {})
+	assert_eq(result["rolled"], -1)
+	assert_eq(result["kept"], 0)
+
+
+func test_consumed_will_minus_1k1_courtier():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CONSUMED, 1, {"precept": "Will"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Courtier", {})
+	assert_eq(result["rolled"], -1)
+	assert_eq(result["kept"], -1)
+
+
+func test_consumed_will_minus_1k1_temptation():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CONSUMED, 1, {"precept": "Will"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Temptation", {})
+	assert_eq(result["rolled"], -1)
+	assert_eq(result["kept"], -1)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_skill_bonus — CURSED_BY_THE_REALM sub-types
+# ---------------------------------------------------------------------------
+
+func test_cursed_chikushudo_minus_1k1_animal_handling():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Chikushudo"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Animal Handling", {})
+	assert_eq(result["rolled"], -1)
+	assert_eq(result["kept"], -1)
+
+
+func test_cursed_jigoku_minus_1k1_resist_taint():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Jigoku"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "any", {"is_resist_taint": true})
+	assert_eq(result["rolled"], -1)
+	assert_eq(result["kept"], -1)
+
+
+func test_cursed_maigo_no_musha_minus_1k1_vs_spirit():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Maigo_no_Musha"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "any", {"opponent_is_spirit": true})
+	assert_eq(result["rolled"], -1)
+	assert_eq(result["kept"], -1)
+
+
+func test_cursed_meido_minus_1k0_perception_when_unoccupied():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Meido"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Investigation", {"is_perception_based": true, "is_unoccupied": true})
+	assert_eq(result["rolled"], -1)
+	assert_eq(result["kept"], 0)
+
+
+func test_cursed_meido_no_effect_when_occupied():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Meido"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Investigation", {"is_perception_based": true, "is_unoccupied": false})
+	assert_eq(result["rolled"], 0)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_skill_bonus — SEVEN_FORTUNES_CURSE sub-types
+# ---------------------------------------------------------------------------
+
+func test_seven_fortunes_curse_daikoku_minus_1k1_commerce():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.SEVEN_FORTUNES_CURSE, 1, {"fortune": "Daikoku"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Commerce", {})
+	assert_eq(result["rolled"], -1)
+	assert_eq(result["kept"], -1)
+
+
+func test_seven_fortunes_curse_ebisu_minus_1k1_social_vs_commoner():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.SEVEN_FORTUNES_CURSE, 1, {"fortune": "Ebisu"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Etiquette", {"is_social": true, "opponent_is_commoner": true})
+	assert_eq(result["rolled"], -1)
+	assert_eq(result["kept"], -1)
+
+
+func test_seven_fortunes_curse_ebisu_no_effect_vs_samurai():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.SEVEN_FORTUNES_CURSE, 1, {"fortune": "Ebisu"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "Etiquette", {"is_social": true, "opponent_is_commoner": false})
+	assert_eq(result["rolled"], 0)
+
+
+func test_seven_fortunes_curse_jurojin_minus_2k0_resist_disease():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.SEVEN_FORTUNES_CURSE, 1, {"fortune": "Jurojin"})
+	var result: Dictionary = AdvantageSystem.get_skill_bonus(c, "any", {"is_resist_disease_or_poison": true})
+	assert_eq(result["rolled"], -2)
+	assert_eq(result["kept"], 0)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_tn_modifier — DOUBT
+# ---------------------------------------------------------------------------
+
+func test_doubt_plus5_tn_on_chosen_school_skill():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.DOUBT, 1, {"skill": "Kenjutsu"})
+	var mod: int = AdvantageSystem.get_tn_modifier(c, {"skill_name": "Kenjutsu"})
+	assert_eq(mod, 5)
+
+
+func test_doubt_no_effect_on_other_skills():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.DOUBT, 1, {"skill": "Kenjutsu"})
+	var mod: int = AdvantageSystem.get_tn_modifier(c, {"skill_name": "Etiquette"})
+	assert_eq(mod, 0)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_tn_modifier — CONSUMED Perfection
+# ---------------------------------------------------------------------------
+
+func test_consumed_perfection_plus5_tn_all_rolls():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CONSUMED, 1, {"precept": "Perfection"})
+	var mod: int = AdvantageSystem.get_tn_modifier(c, {})
+	assert_eq(mod, 5)
+
+
+func test_consumed_non_perfection_no_universal_tn_penalty():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CONSUMED, 1, {"precept": "Control"})
+	var mod: int = AdvantageSystem.get_tn_modifier(c, {})
+	assert_eq(mod, 0)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_tn_modifier — CURSED_BY_THE_REALM Tengoku
+# ---------------------------------------------------------------------------
+
+func test_cursed_tengoku_plus10_tn_in_celestial_temple():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Tengoku"})
+	var mod: int = AdvantageSystem.get_tn_modifier(c, {"is_in_celestial_temple": true})
+	assert_eq(mod, 10)
+
+
+func test_cursed_tengoku_no_effect_outside_temple():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Tengoku"})
+	var mod: int = AdvantageSystem.get_tn_modifier(c, {})
+	assert_eq(mod, 0)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_tn_modifier — SEVEN_FORTUNES_CURSE Benten / Fukurokujin
+# ---------------------------------------------------------------------------
+
+func test_seven_fortunes_curse_benten_plus10_tn_etiquette():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.SEVEN_FORTUNES_CURSE, 1, {"fortune": "Benten"})
+	var mod: int = AdvantageSystem.get_tn_modifier(c, {"skill_name": "Etiquette"})
+	assert_eq(mod, 10)
+
+
+func test_seven_fortunes_curse_benten_no_effect_on_non_etiquette():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.SEVEN_FORTUNES_CURSE, 1, {"fortune": "Benten"})
+	var mod: int = AdvantageSystem.get_tn_modifier(c, {"skill_name": "Courtier"})
+	assert_eq(mod, 0)
+
+
+func test_seven_fortunes_curse_fukurokujin_plus5_tn_lore():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.SEVEN_FORTUNES_CURSE, 1, {"fortune": "Fukurokujin"})
+	var mod: int = AdvantageSystem.get_tn_modifier(c, {"skill_name": "Lore: History"})
+	assert_eq(mod, 5)
+
+
+func test_seven_fortunes_curse_fukurokujin_no_effect_on_non_lore():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.SEVEN_FORTUNES_CURSE, 1, {"fortune": "Fukurokujin"})
+	var mod: int = AdvantageSystem.get_tn_modifier(c, {"skill_name": "Kenjutsu"})
+	assert_eq(mod, 0)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: is_void_spend_blocked — CONSUMED Determination and FAILURE_OF_BUSHIDO
+# ---------------------------------------------------------------------------
+
+func test_consumed_determination_blocks_void_enhance():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CONSUMED, 1, {"precept": "Determination"})
+	assert_true(AdvantageSystem.is_void_spend_blocked(c, {"is_void_enhance": true}))
+
+
+func test_consumed_determination_allows_technique_void():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CONSUMED, 1, {"precept": "Determination"})
+	assert_false(AdvantageSystem.is_void_spend_blocked(c, {"is_void_enhance": false}))
+
+
+func test_failure_of_bushido_honesty_blocks_sincere_void():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.FAILURE_OF_BUSHIDO, 1, {"virtue": "Honesty"})
+	assert_true(AdvantageSystem.is_void_spend_blocked(c, {"is_honest_sincerity": true}))
+
+
+func test_failure_of_bushido_honesty_allows_other_void():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.FAILURE_OF_BUSHIDO, 1, {"virtue": "Honesty"})
+	assert_false(AdvantageSystem.is_void_spend_blocked(c, {"is_honest_sincerity": false}))
+
+
+func test_failure_of_bushido_duty_blocks_wound_negate_void():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.FAILURE_OF_BUSHIDO, 1, {"virtue": "Duty"})
+	assert_true(AdvantageSystem.is_void_spend_blocked(c, {"is_negate_wounds": true}))
+
+
+func test_failure_of_bushido_duty_allows_other_void():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.FAILURE_OF_BUSHIDO, 1, {"virtue": "Duty"})
+	assert_false(AdvantageSystem.is_void_spend_blocked(c, {"is_negate_wounds": false}))
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_extra_void_cost — SEVEN_FORTUNES_CURSE Hotei
+# ---------------------------------------------------------------------------
+
+func test_hotei_curse_costs_one_extra_void():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.SEVEN_FORTUNES_CURSE, 1, {"fortune": "Hotei"})
+	assert_eq(AdvantageSystem.get_extra_void_cost(c), 1)
+
+
+func test_no_hotei_zero_extra_void_cost():
+	var c := _make_character()
+	assert_eq(AdvantageSystem.get_extra_void_cost(c), 0)
+
+
+func test_other_fortune_curse_zero_extra_void_cost():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.SEVEN_FORTUNES_CURSE, 1, {"fortune": "Benten"})
+	assert_eq(AdvantageSystem.get_extra_void_cost(c), 0)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: check_consumed_trigger — Insight and Knowledge sub-types
+# ---------------------------------------------------------------------------
+
+func test_consumed_insight_triggers_on_school_skill():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CONSUMED, 1, {"precept": "Insight"})
+	var result: Dictionary = AdvantageSystem.check_consumed_trigger(c, "Insight", {"is_school_skill": true})
+	assert_true(result["triggered"])
+	assert_eq(result["tn"], 20)
+
+
+func test_consumed_insight_no_trigger_without_school_skill_context():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CONSUMED, 1, {"precept": "Insight"})
+	var result: Dictionary = AdvantageSystem.check_consumed_trigger(c, "Insight", {})
+	assert_false(result["triggered"])
+
+
+func test_consumed_knowledge_triggers_on_new_topic():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CONSUMED, 1, {"precept": "Knowledge"})
+	var result: Dictionary = AdvantageSystem.check_consumed_trigger(c, "Knowledge", {"is_new_topic": true})
+	assert_true(result["triggered"])
+	assert_eq(result["tn"], 25)
+
+
+func test_consumed_knowledge_no_trigger_without_new_topic():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CONSUMED, 1, {"precept": "Knowledge"})
+	var result: Dictionary = AdvantageSystem.check_consumed_trigger(c, "Knowledge", {})
+	assert_false(result["triggered"])
+
+
+func test_consumed_trigger_wrong_precept_type_no_trigger():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CONSUMED, 1, {"precept": "Insight"})
+	var result: Dictionary = AdvantageSystem.check_consumed_trigger(c, "Knowledge", {"is_school_skill": true})
+	assert_false(result["triggered"])
+
+
+func test_consumed_trigger_no_disadvantage_no_trigger():
+	var c := _make_character()
+	var result: Dictionary = AdvantageSystem.check_consumed_trigger(c, "Insight", {"is_school_skill": true})
+	assert_false(result["triggered"])
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: check_cursed_toshigoku_trigger
+# ---------------------------------------------------------------------------
+
+func test_cursed_toshigoku_triggers_when_opponent_wounded():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Toshigoku"})
+	var result: Dictionary = AdvantageSystem.check_cursed_toshigoku_trigger(c, true)
+	assert_true(result["triggered"])
+	assert_eq(result["tn"], 15)
+
+
+func test_cursed_toshigoku_no_trigger_when_opponent_healthy():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Toshigoku"})
+	var result: Dictionary = AdvantageSystem.check_cursed_toshigoku_trigger(c, false)
+	assert_false(result["triggered"])
+
+
+func test_cursed_toshigoku_no_trigger_without_disadvantage():
+	var c := _make_character()
+	var result: Dictionary = AdvantageSystem.check_cursed_toshigoku_trigger(c, true)
+	assert_false(result["triggered"])
+
+
+func test_cursed_other_realm_no_toshigoku_trigger():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Jigoku"})
+	var result: Dictionary = AdvantageSystem.check_cursed_toshigoku_trigger(c, true)
+	assert_false(result["triggered"])
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: check_great_destiny
+# ---------------------------------------------------------------------------
+
+func test_great_destiny_true_when_different_year():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.GREAT_DESTINY, 1, {"last_triggered_ic_year": 1000})
+	assert_true(AdvantageSystem.check_great_destiny(c, 1001))
+
+
+func test_great_destiny_false_when_same_year():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.GREAT_DESTINY, 1, {"last_triggered_ic_year": 1000})
+	assert_false(AdvantageSystem.check_great_destiny(c, 1000))
+
+
+func test_great_destiny_true_when_never_triggered():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.GREAT_DESTINY)
+	assert_true(AdvantageSystem.check_great_destiny(c, 1000))
+
+
+func test_great_destiny_false_without_advantage():
+	var c := _make_character()
+	assert_false(AdvantageSystem.check_great_destiny(c, 1000))
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_darling_status_bonus
+# ---------------------------------------------------------------------------
+
+func test_darling_returns_1_for_matching_settlement():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.DARLING_OF_THE_COURT, 1, {"settlement_id": 42})
+	assert_eq(AdvantageSystem.get_darling_status_bonus(c, 42), 1)
+
+
+func test_darling_returns_0_for_different_settlement():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.DARLING_OF_THE_COURT, 1, {"settlement_id": 42})
+	assert_eq(AdvantageSystem.get_darling_status_bonus(c, 99), 0)
+
+
+func test_darling_returns_0_without_advantage():
+	var c := _make_character()
+	assert_eq(AdvantageSystem.get_darling_status_bonus(c, 42), 0)
+
+
+func test_darling_multiple_courts_returns_1_for_each():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.DARLING_OF_THE_COURT, 1, {"settlement_id": 10})
+	_add_advantage(c, Enums.Advantage.DARLING_OF_THE_COURT, 1, {"settlement_id": 20})
+	assert_eq(AdvantageSystem.get_darling_status_bonus(c, 10), 1)
+	assert_eq(AdvantageSystem.get_darling_status_bonus(c, 20), 1)
+	assert_eq(AdvantageSystem.get_darling_status_bonus(c, 30), 0)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: can_use_void_versatility
+# ---------------------------------------------------------------------------
+
+func test_void_versatility_true_for_matching_ring():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.VOID_VERSATILITY, 1, {"ring": Enums.Ring.FIRE})
+	assert_true(AdvantageSystem.can_use_void_versatility(c, Enums.Ring.FIRE))
+
+
+func test_void_versatility_false_for_different_ring():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.VOID_VERSATILITY, 1, {"ring": Enums.Ring.FIRE})
+	assert_false(AdvantageSystem.can_use_void_versatility(c, Enums.Ring.WATER))
+
+
+func test_void_versatility_false_without_advantage():
+	var c := _make_character()
+	assert_false(AdvantageSystem.can_use_void_versatility(c, Enums.Ring.FIRE))
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_hero_recognition_tn_modifier
+# ---------------------------------------------------------------------------
+
+func test_hero_of_the_people_minus10_for_non_samurai_recognizer():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.HERO_OF_THE_PEOPLE)
+	assert_eq(AdvantageSystem.get_hero_recognition_tn_modifier(c, true), -10)
+
+
+func test_hero_of_the_people_zero_for_samurai_recognizer():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.HERO_OF_THE_PEOPLE)
+	assert_eq(AdvantageSystem.get_hero_recognition_tn_modifier(c, false), 0)
+
+
+func test_hero_of_the_people_zero_without_advantage():
+	var c := _make_character()
+	assert_eq(AdvantageSystem.get_hero_recognition_tn_modifier(c, true), 0)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_inheritance_skill_bonus
+# ---------------------------------------------------------------------------
+
+func test_inheritance_plus_1k1_when_using_heirloom():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.INHERITANCE)
+	var result: Dictionary = AdvantageSystem.get_inheritance_skill_bonus(c, true)
+	assert_eq(result["rolled"], 0)
+	assert_eq(result["kept"], 1)
+
+
+func test_inheritance_zero_when_not_using_heirloom():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.INHERITANCE)
+	var result: Dictionary = AdvantageSystem.get_inheritance_skill_bonus(c, false)
+	assert_eq(result["kept"], 0)
+
+
+func test_inheritance_zero_without_advantage():
+	var c := _make_character()
+	var result: Dictionary = AdvantageSystem.get_inheritance_skill_bonus(c, true)
+	assert_eq(result["kept"], 0)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: get_void_recovery_hours
+# ---------------------------------------------------------------------------
+
+func test_touch_yume_do_returns_4_hours():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS, 1, {"realm": "Yume-do"})
+	assert_eq(AdvantageSystem.get_void_recovery_hours(c), 4)
+
+
+func test_cursed_yume_do_returns_10_hours():
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Yume-do"})
+	assert_eq(AdvantageSystem.get_void_recovery_hours(c), 10)
+
+
+func test_default_void_recovery_8_hours():
+	var c := _make_character()
+	assert_eq(AdvantageSystem.get_void_recovery_hours(c), 8)
+
+
+func test_touch_other_realm_still_returns_default():
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS, 1, {"realm": "Tengoku"})
+	assert_eq(AdvantageSystem.get_void_recovery_hours(c), 8)
+
+
+# ---------------------------------------------------------------------------
+# s45 gap: assign_derived_advantages — BLACK_SHEEP disposition penalties
+# ---------------------------------------------------------------------------
+
+func test_black_sheep_family_member_gets_minus40_disposition():
+	var black_sheep := _make_character(1)
+	black_sheep.clan = "Crane"
+	black_sheep.family = "Doji"
+	_add_disadvantage(black_sheep, Enums.Disadvantage.BLACK_SHEEP)
+
+	var family_member := _make_character(2)
+	family_member.clan = "Crane"
+	family_member.family = "Doji"
+
+	var chars_by_id: Dictionary = {1: black_sheep, 2: family_member}
+	AdvantageSystem.assign_derived_advantages(black_sheep, [], chars_by_id)
+
+	assert_eq(family_member.disposition_values.get(1, 0), -40)
+
+
+func test_black_sheep_clan_member_gets_minus20_disposition():
+	var black_sheep := _make_character(1)
+	black_sheep.clan = "Crane"
+	black_sheep.family = "Doji"
+	_add_disadvantage(black_sheep, Enums.Disadvantage.BLACK_SHEEP)
+
+	var clan_member := _make_character(3)
+	clan_member.clan = "Crane"
+	clan_member.family = "Kakita"  # different family, same clan
+
+	var chars_by_id: Dictionary = {1: black_sheep, 3: clan_member}
+	AdvantageSystem.assign_derived_advantages(black_sheep, [], chars_by_id)
+
+	assert_eq(clan_member.disposition_values.get(1, 0), -20)
+
+
+func test_black_sheep_does_not_affect_self():
+	var black_sheep := _make_character(1)
+	black_sheep.clan = "Crane"
+	black_sheep.family = "Doji"
+	_add_disadvantage(black_sheep, Enums.Disadvantage.BLACK_SHEEP)
+
+	var chars_by_id: Dictionary = {1: black_sheep}
+	AdvantageSystem.assign_derived_advantages(black_sheep, [], chars_by_id)
+
+	assert_eq(black_sheep.disposition_values.get(1, 0), 0)
+
+
+func test_black_sheep_no_effect_without_disadvantage():
+	var target := _make_character(1)
+	target.clan = "Crane"
+	target.family = "Doji"
+
+	var family_member := _make_character(2)
+	family_member.clan = "Crane"
+	family_member.family = "Doji"
+
+	var chars_by_id: Dictionary = {1: target, 2: family_member}
+	AdvantageSystem.assign_derived_advantages(target, [], chars_by_id)
+
+	assert_eq(family_member.disposition_values.get(1, 0), 0)
+
+
+func test_black_sheep_penalty_clamped_at_minus100():
+	var black_sheep := _make_character(1)
+	black_sheep.clan = "Crane"
+	black_sheep.family = "Doji"
+	_add_disadvantage(black_sheep, Enums.Disadvantage.BLACK_SHEEP)
+
+	var family_member := _make_character(2)
+	family_member.clan = "Crane"
+	family_member.family = "Doji"
+	family_member.disposition_values[1] = -75  # pre-existing negative disposition
+
+	var chars_by_id: Dictionary = {1: black_sheep, 2: family_member}
+	AdvantageSystem.assign_derived_advantages(black_sheep, [], chars_by_id)
+
+	assert_eq(family_member.disposition_values.get(1, 0), -100)  # clamped at floor
+
+
+# ===========================================================================
+# s45 Gap-fill tests (added 2026-06-03)
+# ===========================================================================
+
+# --- PARAGON Compassion ---
+
+func test_paragon_compassion_grants_2k2_when_void_and_lower_status():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.PARAGON, 1, {"virtue": "Compassion"})
+	var ctx := {"is_void_spend": true, "is_acting_for_lower_status": true}
+	var r: Dictionary = AdvantageSystem.get_skill_bonus(c, "Courtier", ctx)
+	assert_eq(r["rolled"], 2)
+	assert_eq(r["kept"], 2)
+
+
+func test_paragon_compassion_no_bonus_without_lower_status():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.PARAGON, 1, {"virtue": "Compassion"})
+	var ctx := {"is_void_spend": true, "is_acting_for_lower_status": false}
+	var r: Dictionary = AdvantageSystem.get_skill_bonus(c, "Courtier", ctx)
+	assert_eq(r["rolled"], 0)
+	assert_eq(r["kept"], 0)
+
+
+func test_paragon_compassion_no_bonus_without_void_spend():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.PARAGON, 1, {"virtue": "Compassion"})
+	var ctx := {"is_void_spend": false, "is_acting_for_lower_status": true}
+	var r: Dictionary = AdvantageSystem.get_skill_bonus(c, "Courtier", ctx)
+	assert_eq(r["rolled"], 0)
+	assert_eq(r["kept"], 0)
+
+
+# --- SEVEN_FORTUNES_BLESSING Jurojin ---
+
+func test_blessing_jurojin_grants_2k0_resist_disease():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.SEVEN_FORTUNES_BLESSING, 1, {"fortune": "Jurojin"})
+	var ctx := {"is_resist_disease_or_poison": true}
+	var r: Dictionary = AdvantageSystem.get_skill_bonus(c, "Stamina", ctx)
+	assert_eq(r["rolled"], 2)
+	assert_eq(r["kept"], 0)
+
+
+func test_blessing_jurojin_no_bonus_without_resist_flag():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.SEVEN_FORTUNES_BLESSING, 1, {"fortune": "Jurojin"})
+	var ctx: Dictionary = {}
+	var r: Dictionary = AdvantageSystem.get_skill_bonus(c, "Medicine", ctx)
+	assert_eq(r["rolled"], 0)
+
+
+# --- SEVEN_FORTUNES_BLESSING Hotei ---
+
+func test_blessing_hotei_grants_2_free_raises_contested():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.SEVEN_FORTUNES_BLESSING, 1, {"fortune": "Hotei"})
+	var ctx := {"is_contested": true}
+	var r: Dictionary = AdvantageSystem.get_skill_bonus(c, "Courtier", ctx)
+	assert_eq(r["free_raises"], 2)
+
+
+func test_blessing_hotei_no_free_raises_non_contested():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.SEVEN_FORTUNES_BLESSING, 1, {"fortune": "Hotei"})
+	var ctx: Dictionary = {}
+	var r: Dictionary = AdvantageSystem.get_skill_bonus(c, "Courtier", ctx)
+	assert_eq(r["free_raises"], 0)
+
+
+# --- SWORN_ENEMY void block ---
+
+func test_sworn_enemy_blocks_void_against_nemesis():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.SWORN_ENEMY, 1, {"nemesis_id": 99})
+	var ctx := {"opponent_id": 99}
+	assert_true(AdvantageSystem.is_void_spend_blocked(c, ctx))
+
+
+func test_sworn_enemy_does_not_block_void_against_other():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.SWORN_ENEMY, 1, {"nemesis_id": 99})
+	var ctx := {"opponent_id": 55}
+	assert_false(AdvantageSystem.is_void_spend_blocked(c, ctx))
+
+
+func test_sworn_enemy_does_not_block_when_no_opponent():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.SWORN_ENEMY, 1, {"nemesis_id": 99})
+	assert_false(AdvantageSystem.is_void_spend_blocked(c, {}))
+
+
+# --- requires_void_to_act ---
+
+func test_requires_void_insensitive_at_personal_risk():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.INSENSITIVE)
+	var ctx := {"is_acting_at_personal_risk_for_other": true}
+	assert_true(AdvantageSystem.requires_void_to_act(c, ctx))
+
+
+func test_requires_void_insensitive_not_at_risk():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.INSENSITIVE)
+	var ctx: Dictionary = {}
+	assert_false(AdvantageSystem.requires_void_to_act(c, ctx))
+
+
+func test_requires_void_fob_compassion_lower_status():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.FAILURE_OF_BUSHIDO, 1, {"virtue": "Compassion"})
+	var ctx := {"is_acting_for_lower_status": true}
+	assert_true(AdvantageSystem.requires_void_to_act(c, ctx))
+
+
+func test_requires_void_fob_compassion_same_status():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.FAILURE_OF_BUSHIDO, 1, {"virtue": "Compassion"})
+	var ctx: Dictionary = {}
+	assert_false(AdvantageSystem.requires_void_to_act(c, ctx))
+
+
+func test_requires_void_no_relevant_disadvantage():
+	var c := _make_character(1)
+	assert_false(AdvantageSystem.requires_void_to_act(c, {"is_acting_at_personal_risk_for_other": true}))
+
+
+# --- check_hotei_void_protection ---
+
+func test_hotei_void_protection_present():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.SEVEN_FORTUNES_BLESSING, 1, {"fortune": "Hotei"})
+	assert_true(AdvantageSystem.check_hotei_void_protection(c))
+
+
+func test_hotei_void_protection_absent_other_fortune():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.SEVEN_FORTUNES_BLESSING, 1, {"fortune": "Benten"})
+	assert_false(AdvantageSystem.check_hotei_void_protection(c))
+
+
+func test_hotei_void_protection_absent_no_advantage():
+	var c := _make_character(1)
+	assert_false(AdvantageSystem.check_hotei_void_protection(c))
+
+
+# --- get_glory_multiplier ---
+
+func test_glory_multiplier_normal_character():
+	var c := _make_character(1)
+	assert_eq(AdvantageSystem.get_glory_multiplier(c), 1.0)
+
+
+func test_glory_multiplier_ascetic_samurai():
+	var c := _make_character(1)
+	c.school_type = Enums.SchoolType.COURTIER
+	_add_disadvantage(c, Enums.Disadvantage.ASCETIC)
+	assert_eq(AdvantageSystem.get_glory_multiplier(c), 0.5)
+
+
+func test_glory_multiplier_ascetic_monk():
+	var c := _make_character(1)
+	c.school_type = Enums.SchoolType.MONK
+	_add_disadvantage(c, Enums.Disadvantage.ASCETIC)
+	assert_eq(AdvantageSystem.get_glory_multiplier(c), 0.25)
+
+
+# --- get_recognition_tn ---
+
+func test_recognition_tn_no_bounty():
+	var c := _make_character(1)
+	assert_eq(AdvantageSystem.get_recognition_tn(c), -1)
+
+
+func test_recognition_tn_rank1_returns_25():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.BOUNTY, 1)
+	assert_eq(AdvantageSystem.get_recognition_tn(c), 25)
+
+
+func test_recognition_tn_rank2_returns_15():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.BOUNTY, 2)
+	assert_eq(AdvantageSystem.get_recognition_tn(c), 15)
+
+
+func test_recognition_tn_rank3_returns_10():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.BOUNTY, 3)
+	assert_eq(AdvantageSystem.get_recognition_tn(c), 10)
+
+
+# --- get_tactician_modifier ---
+
+func test_tactician_modifier_present():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.TACTICIAN)
+	assert_eq(AdvantageSystem.get_tactician_modifier(c), 5)
+
+
+func test_tactician_modifier_absent():
+	var c := _make_character(1)
+	assert_eq(AdvantageSystem.get_tactician_modifier(c), 0)
+
+
+# --- get_perceived_honor ---
+
+func test_perceived_honor_no_advantage():
+	var c := _make_character(1)
+	c.honor = 4.0
+	assert_eq(AdvantageSystem.get_perceived_honor(c), 4.0)
+
+
+func test_perceived_honor_rank1():
+	var c := _make_character(1)
+	c.honor = 4.0
+	_add_advantage(c, Enums.Advantage.PERCEIVED_HONOR, 1)
+	assert_eq(AdvantageSystem.get_perceived_honor(c), 5.0)
+
+
+func test_perceived_honor_rank2():
+	var c := _make_character(1)
+	c.honor = 3.0
+	_add_advantage(c, Enums.Advantage.PERCEIVED_HONOR, 2)
+	assert_eq(AdvantageSystem.get_perceived_honor(c), 5.0)
+
+
+# --- is_navigation_immune ---
+
+func test_navigation_immune_known_territory():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.WAY_OF_THE_LAND)
+	assert_true(AdvantageSystem.is_navigation_immune(c, {"is_known_territory": true}))
+
+
+func test_navigation_immune_unknown_territory():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.WAY_OF_THE_LAND)
+	assert_false(AdvantageSystem.is_navigation_immune(c, {}))
+
+
+func test_navigation_immune_no_advantage():
+	var c := _make_character(1)
+	assert_false(AdvantageSystem.is_navigation_immune(c, {"is_known_territory": true}))
+
+
+# --- get_die_explosion_cap ---
+
+func test_die_explosion_cap_gaijin_name_social():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.GAIJIN_NAME)
+	assert_eq(AdvantageSystem.get_die_explosion_cap(c, {"is_social": true}), 1)
+
+
+func test_die_explosion_cap_gaijin_name_non_social():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.GAIJIN_NAME)
+	assert_eq(AdvantageSystem.get_die_explosion_cap(c, {}), 0)
+
+
+func test_die_explosion_cap_no_gaijin_name():
+	var c := _make_character(1)
+	assert_eq(AdvantageSystem.get_die_explosion_cap(c, {"is_social": true}), 0)
+
+
+# --- get_spirit_realm_glory_bonus ---
+
+func test_spirit_realm_glory_bonus_maigo_over_3():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS, 1, {"realm": "Maigo_no_Musha"})
+	assert_eq(AdvantageSystem.get_spirit_realm_glory_bonus(c, 4.0), 1)
+
+
+func test_spirit_realm_glory_bonus_maigo_exactly_3():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS, 1, {"realm": "Maigo_no_Musha"})
+	assert_eq(AdvantageSystem.get_spirit_realm_glory_bonus(c, 3.0), 0)
+
+
+func test_spirit_realm_glory_bonus_other_realm():
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS, 1, {"realm": "Yomi"})
+	assert_eq(AdvantageSystem.get_spirit_realm_glory_bonus(c, 5.0), 0)
+
+
+# --- is_glory_treated_as_infamy_by ---
+
+func test_glory_as_infamy_matching_sect():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.CAST_OUT, 1, {"sect": "Brotherhood_of_Shinsei"})
+	assert_true(AdvantageSystem.is_glory_treated_as_infamy_by(c, "Brotherhood_of_Shinsei"))
+
+
+func test_glory_as_infamy_different_sect():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.CAST_OUT, 1, {"sect": "Brotherhood_of_Shinsei"})
+	assert_false(AdvantageSystem.is_glory_treated_as_infamy_by(c, "Kolat"))
+
+
+func test_glory_as_infamy_no_cast_out():
+	var c := _make_character(1)
+	assert_false(AdvantageSystem.is_glory_treated_as_infamy_by(c, "Brotherhood_of_Shinsei"))
+
+
+# --- is_high_skill and get_high_skill_xp_multiplier ---
+
+func test_is_high_skill_lore():
+	assert_true(AdvantageSystem.is_high_skill("Lore: Heraldry"))
+	assert_true(AdvantageSystem.is_high_skill("Lore: Theology"))
+
+
+func test_is_high_skill_games():
+	assert_true(AdvantageSystem.is_high_skill("Games: Go"))
+
+
+func test_is_high_skill_explicit_list():
+	assert_true(AdvantageSystem.is_high_skill("Etiquette"))
+	assert_true(AdvantageSystem.is_high_skill("Sincerity"))
+	assert_true(AdvantageSystem.is_high_skill("Investigation"))
+
+
+func test_is_high_skill_low_skill():
+	assert_false(AdvantageSystem.is_high_skill("Athletics"))
+	assert_false(AdvantageSystem.is_high_skill("Stealth"))
+	assert_false(AdvantageSystem.is_high_skill("Kenjutsu"))
+
+
+func test_obtuse_doubles_high_skill_xp():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.OBTUSE)
+	assert_eq(AdvantageSystem.get_high_skill_xp_multiplier(c, "Etiquette"), 2)
+	assert_eq(AdvantageSystem.get_high_skill_xp_multiplier(c, "Lore: Heraldry"), 2)
+
+
+func test_obtuse_no_doubling_investigation_medicine():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.OBTUSE)
+	assert_eq(AdvantageSystem.get_high_skill_xp_multiplier(c, "Investigation"), 1)
+	assert_eq(AdvantageSystem.get_high_skill_xp_multiplier(c, "Medicine"), 1)
+
+
+func test_obtuse_no_doubling_low_skills():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.OBTUSE)
+	assert_eq(AdvantageSystem.get_high_skill_xp_multiplier(c, "Athletics"), 1)
+
+
+func test_obtuse_absent_returns_1():
+	var c := _make_character(1)
+	assert_eq(AdvantageSystem.get_high_skill_xp_multiplier(c, "Etiquette"), 1)
+
+
+# --- check_sakkaku_monthly_prank ---
+
+func test_sakkaku_prank_triggers_once_per_month():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Sakkaku"})
+	var r: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(c, 7)
+	assert_true(r["triggered"])
+	assert_ne(r["prank"], "")
+
+
+func test_sakkaku_prank_does_not_trigger_same_month():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1,
+		{"realm": "Sakkaku", "last_prank_month": 7})
+	var r: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(c, 7)
+	assert_false(r["triggered"])
+
+
+func test_sakkaku_prank_different_month_triggers_again():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1,
+		{"realm": "Sakkaku", "last_prank_month": 6})
+	var r: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(c, 7)
+	assert_true(r["triggered"])
+
+
+func test_sakkaku_prank_no_cursed_disadvantage():
+	var c := _make_character(1)
+	var r: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(c, 7)
+	assert_false(r["triggered"])
+
+
+func test_sakkaku_prank_wrong_realm():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Meido"})
+	var r: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(c, 7)
+	assert_false(r["triggered"])
+
+
+func test_sakkaku_prank_deterministic_same_character_month():
+	var c := _make_character(42)
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_THE_REALM, 1, {"realm": "Sakkaku"})
+	var r1: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(c, 5)
+	var r2: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(c, 5)
+	assert_eq(r1["prank"], r2["prank"])
+
+
+# --- check_lingering_misfortune ---
+
+func test_lingering_misfortune_narrow_success_triggers():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.BAD_FORTUNE, 1, {"type": "Lingering_Misfortune"})
+	var r: Dictionary = AdvantageSystem.check_lingering_misfortune(c, 3, 5)
+	assert_true(r["triggered"])
+
+
+func test_lingering_misfortune_margin_zero_triggers():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.BAD_FORTUNE, 1, {"type": "Lingering_Misfortune"})
+	var r: Dictionary = AdvantageSystem.check_lingering_misfortune(c, 0, 5)
+	assert_true(r["triggered"])
+
+
+func test_lingering_misfortune_wide_success_does_not_trigger():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.BAD_FORTUNE, 1, {"type": "Lingering_Misfortune"})
+	var r: Dictionary = AdvantageSystem.check_lingering_misfortune(c, 5, 5)
+	assert_false(r["triggered"])
+
+
+func test_lingering_misfortune_failure_does_not_trigger():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.BAD_FORTUNE, 1, {"type": "Lingering_Misfortune"})
+	var r: Dictionary = AdvantageSystem.check_lingering_misfortune(c, -3, 5)
+	assert_false(r["triggered"])
+
+
+func test_lingering_misfortune_same_month_does_not_retrigger():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.BAD_FORTUNE, 1,
+		{"type": "Lingering_Misfortune", "last_misfortune_month": 5})
+	var r: Dictionary = AdvantageSystem.check_lingering_misfortune(c, 2, 5)
+	assert_false(r["triggered"])
+
+
+func test_lingering_misfortune_wrong_type():
+	var c := _make_character(1)
+	_add_disadvantage(c, Enums.Disadvantage.BAD_FORTUNE, 1, {"type": "Moto_Curse"})
+	var r: Dictionary = AdvantageSystem.check_lingering_misfortune(c, 2, 5)
+	assert_false(r["triggered"])
+
+
+func test_lingering_misfortune_no_disadvantage():
+	var c := _make_character(1)
+	var r: Dictionary = AdvantageSystem.check_lingering_misfortune(c, 2, 5)
+	assert_false(r["triggered"])
