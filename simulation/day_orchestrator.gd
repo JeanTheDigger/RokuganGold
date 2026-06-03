@@ -119,6 +119,7 @@ static func advance_day(
 		_populate_disposition_snapshots(characters, disposition_snapshots)
 
 	_reset_all_ap(characters)
+	_reset_lost_love_daily_state(characters)
 
 	var _spm: Dictionary = {}
 	for _s: SettlementData in settlements:
@@ -168,6 +169,7 @@ static func advance_day(
 	_process_compulsion_on_arrival(
 		travel_arrivals, characters_by_id, settlements, world_states, dice_engine,
 	)
+	_process_lost_love_arrival_trigger(travel_arrivals, characters_by_id, settlements, ic_day)
 
 	var musha_season_count: int = int(season_meta.get("horde_season_count", 0))
 	var musha_shugyo_results: Array = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map, dice_engine, musha_season_count)
@@ -1484,6 +1486,14 @@ static func advance_day(
 		)
 		_process_bonsai_monthly_neglect(active_bonsai, characters_by_id, ic_day / 30)
 		_process_sakkaku_monthly_pranks(characters, characters_by_id, ic_day, character_province_map, province_clan_map)
+
+	if ic_day > 0 and ic_day % 7 == 0:
+		_process_spy_network_weekly(
+			characters, characters_by_id, active_topics, ic_day,
+		)
+		_process_well_connected_weekly(
+			characters, characters_by_id, active_topics, ic_day,
+		)
 
 	if is_season_boundary:
 		_purge_resolved_crime_records(crime_records, ic_day)
@@ -9261,6 +9271,182 @@ static func _process_compulsion_on_arrival(
 					"tn": tn,
 					"roll": roll.total,
 				}
+
+
+# -- LOST_LOVE daily state reset (s45) -----------------------------------------
+
+static func _reset_lost_love_daily_state(characters: Array) -> void:
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if not AdvantageSystem.has_disadvantage(c, Enums.Disadvantage.LOST_LOVE):
+			continue
+		var dis: DisadvantageData = AdvantageSystem.get_disadvantage(c, Enums.Disadvantage.LOST_LOVE)
+		if dis == null:
+			continue
+		dis.metadata["lost_love_tn_active"] = false
+		dis.metadata["triggers_today"] = 0
+
+
+# -- LOST_LOVE arrival trigger (s45) ------------------------------------------
+
+static func _process_lost_love_arrival_trigger(
+	arrivals: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	var settlement_province_map: Dictionary = {}
+	for s: Variant in settlements:
+		if s is SettlementData:
+			settlement_province_map[(s as SettlementData).settlement_id] = (s as SettlementData).province_id
+
+	for arrival: Dictionary in arrivals:
+		var char_id: int = arrival.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		if not AdvantageSystem.has_disadvantage(character, Enums.Disadvantage.LOST_LOVE):
+			continue
+		var dis: DisadvantageData = AdvantageSystem.get_disadvantage(
+			character, Enums.Disadvantage.LOST_LOVE
+		)
+		if dis == null:
+			continue
+		var death_province: int = dis.metadata.get("province_id", -1)
+		if death_province < 0:
+			continue
+		var dest_str: String = arrival.get("destination", "")
+		if not dest_str.is_valid_int():
+			continue
+		var arrived_province: int = settlement_province_map.get(dest_str.to_int(), -1)
+		if arrived_province != death_province:
+			continue
+		var ctx: Dictionary = {"lost_love_province_id": arrived_province}
+		var trigger: Dictionary = AdvantageSystem.check_lost_love_trigger(character, ctx, ic_day)
+		if trigger.get("triggered", false):
+			dis.metadata["lost_love_tn_active"] = true
+			dis.metadata["triggers_today"] = dis.metadata.get("triggers_today", 0) + 1
+			dis.metadata["last_trigger_ic_day"] = ic_day
+
+
+# -- SPY_NETWORK weekly intelligence cycle (s45) ------------------------------
+
+static func _process_spy_network_weekly(
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	ic_day: int,
+) -> void:
+	var week_num: int = ic_day / 7
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		var adv: AdvantageData = AdvantageSystem.get_advantage(c, Enums.Advantage.SPY_NETWORK)
+		if adv == null:
+			continue
+		var last_update: int = adv.metadata.get("last_update_ooc_day", -1)
+		if last_update >= 0 and last_update / 7 >= week_num:
+			continue  # already produced intelligence this week
+		var focus_type: String = adv.metadata.get("focus_type", "")
+		var focus_id: int = adv.metadata.get("focus_id", -1)
+		adv.metadata["last_update_ooc_day"] = ic_day
+
+		if focus_type == "character" and focus_id >= 0:
+			var target: L5RCharacterData = characters_by_id.get(focus_id)
+			if target == null or CharacterStats.is_dead(target):
+				continue
+			var entry: KnowledgeEntry = KnowledgeEntry.new()
+			entry.source = Enums.KnowledgeSource.INTELLIGENCE
+			entry.entry_type = "shadow_surveillance"
+			entry.data = {
+				"character_id": focus_id,
+				"location": target.physical_location,
+				"clan": target.clan,
+				"ic_day": ic_day,
+			}
+			entry.confidence = Enums.KnowledgeConfidence.FRESH
+			entry.season_acquired = ic_day / 90
+			InformationSystem.add_knowledge(c, entry)
+
+		elif focus_type == "place" and focus_id >= 0:
+			# Gather topics discussed by characters at the focused settlement.
+			var local_topic_ids: Array = []
+			for other: L5RCharacterData in characters:
+				if CharacterStats.is_dead(other) or other.character_id == c.character_id:
+					continue
+				if not other.physical_location.is_valid_int():
+					continue
+				if other.physical_location.to_int() != focus_id:
+					continue
+				for tid: int in other.topic_pool:
+					if tid not in local_topic_ids and tid not in c.topic_pool:
+						local_topic_ids.append(tid)
+			if not local_topic_ids.is_empty():
+				c.topic_pool.append(local_topic_ids[ic_day % local_topic_ids.size()])
+
+		elif focus_type == "army" and focus_id >= 0:
+			var entry: KnowledgeEntry = KnowledgeEntry.new()
+			entry.source = Enums.KnowledgeSource.INTELLIGENCE
+			entry.entry_type = "shadow_surveillance"
+			entry.data = {
+				"company_id": focus_id,
+				"ic_day": ic_day,
+			}
+			entry.confidence = Enums.KnowledgeConfidence.FRESH
+			entry.season_acquired = ic_day / 90
+			InformationSystem.add_knowledge(c, entry)
+
+
+# -- WELL_CONNECTED weekly secret topic revelation (s45) ----------------------
+
+static func _process_well_connected_weekly(
+	characters: Array,
+	_characters_by_id: Dictionary,
+	active_topics: Array,
+	ic_day: int,
+) -> void:
+	var week_num: int = ic_day / 7
+	# Build topic pool per settlement (topics held by characters at each settlement).
+	var settlement_topics: Dictionary = {}
+	for other: L5RCharacterData in characters:
+		if CharacterStats.is_dead(other) or not other.physical_location.is_valid_int():
+			continue
+		var sid: int = other.physical_location.to_int()
+		if not settlement_topics.has(sid):
+			settlement_topics[sid] = []
+		for tid: int in other.topic_pool:
+			if tid not in settlement_topics[sid]:
+				settlement_topics[sid].append(tid)
+
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		var wc_courts: Array = AdvantageSystem.get_well_connected_courts(c)
+		if wc_courts.is_empty():
+			continue
+		var wc_adv: AdvantageData = AdvantageSystem.get_advantage(c, Enums.Advantage.WELL_CONNECTED)
+		if wc_adv == null:
+			continue
+		var last_wc: int = wc_adv.metadata.get("last_intel_ic_day", -1)
+		if last_wc >= 0 and last_wc / 7 >= week_num:
+			continue
+		wc_adv.metadata["last_intel_ic_day"] = ic_day
+		var rank: int = wc_adv.rank if wc_adv.rank > 0 else 1
+		for sid: int in wc_courts:
+			var pool: Array = settlement_topics.get(sid, [])
+			# Reveal one topic per rank from this court that the character doesn't know.
+			var revealed: int = 0
+			for topic: Variant in active_topics:
+				if revealed >= rank:
+					break
+				if not (topic is TopicData):
+					continue
+				var t: TopicData = topic as TopicData
+				if t.resolved or t.topic_id not in pool or t.topic_id in c.topic_pool:
+					continue
+				c.topic_pool.append(t.topic_id)
+				revealed += 1
 
 
 # -- Daily Letter Pass (s57.5) -------------------------------------------------
@@ -18411,6 +18597,33 @@ static func _inject_base_character_context(
 			ws["local_tier3_candidates"] = _build_local_tier3_candidates(c, g_topics_by_id)
 
 		# s45 Advantage/Disadvantage behavioral context flags (consumed by NPC engine)
+		# LOST_LOVE: trigger fires when co-located with someone from lost love's clan/family.
+		if AdvantageSystem.has_disadvantage(c, Enums.Disadvantage.LOST_LOVE) \
+				and not c.physical_location.is_empty():
+			var ll_dis: DisadvantageData = AdvantageSystem.get_disadvantage(c, Enums.Disadvantage.LOST_LOVE)
+			if ll_dis != null:
+				var ll_clan: String = ll_dis.metadata.get("clan", "")
+				var ll_family: String = ll_dis.metadata.get("family", "")
+				if ll_clan != "" or ll_family != "":
+					for _ll_other: L5RCharacterData in characters:
+						if CharacterStats.is_dead(_ll_other) or _ll_other.character_id == c.character_id:
+							continue
+						if _ll_other.physical_location != c.physical_location:
+							continue
+						if (ll_clan != "" and _ll_other.clan == ll_clan) \
+								or (ll_family != "" and _ll_other.family == ll_family):
+							var _ll_ctx: Dictionary = {
+								"lost_love_clan": _ll_other.clan,
+								"lost_love_family": _ll_other.family,
+							}
+							var _ll_trig: Dictionary = AdvantageSystem.check_lost_love_trigger(
+								c, _ll_ctx, ic_day
+							)
+							if _ll_trig.get("triggered", false):
+								ll_dis.metadata["lost_love_tn_active"] = true
+								ll_dis.metadata["triggers_today"] = ll_dis.metadata.get("triggers_today", 0) + 1
+								ll_dis.metadata["last_trigger_ic_day"] = ic_day
+							break
 		var well_courts: Array = AdvantageSystem.get_well_connected_courts(c)
 		if not well_courts.is_empty():
 			if not ws.has("known_objectives"):

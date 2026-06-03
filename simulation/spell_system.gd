@@ -499,7 +499,8 @@ static func can_cast(character: L5RCharacterData, spell_id: String) -> bool:
 ## Consumes a slot on both success and failure per GDD s31.
 ## Returns: {success, total, tn, margin, spell_id, sim_effect, cast_ring, raises}
 static func resolve_cast(character: L5RCharacterData, spell_id: String,
-		dice: DiceEngine, raises: int = 0) -> Dictionary:
+		dice: DiceEngine, raises: int = 0,
+		target: L5RCharacterData = null) -> Dictionary:
 	if not SPELL_LIBRARY.has(spell_id):
 		return {"success": false, "error": "unknown_spell"}
 	var spell: Dictionary = SPELL_LIBRARY[spell_id]
@@ -508,7 +509,9 @@ static func resolve_cast(character: L5RCharacterData, spell_id: String,
 	var cast_ring: int = ring if ring >= 0 else get_best_cast_ring(character, spell_id)
 	var ring_val: int = get_ring_value(character, cast_ring)
 	var eff_rank: int = get_effective_school_rank(character, cast_ring)
-	var tn: int = get_casting_tn(ml) + (raises * 5)
+	# WRATH_OF_THE_KAMI (s45): target's curse grants caster one Free Raise on the casting roll.
+	var wrath_bonus: int = AdvantageSystem.get_wrath_of_kami_bonus(target, cast_ring) if target != null else 0
+	var tn: int = get_casting_tn(ml) + (raises * 5) - (wrath_bonus * 5)
 	var roll_dice: int = ring_val + eff_rank
 	var keep_dice: int = ring_val
 	# Slot consumed on attempt regardless of outcome
@@ -525,6 +528,7 @@ static func resolve_cast(character: L5RCharacterData, spell_id: String,
 		"sim_effect": spell.get("s", SpellSimEffect.COMBAT_ONLY),
 		"cast_ring": cast_ring,
 		"raises": raises,
+		"wrath_of_kami_bonus": wrath_bonus,
 	}
 
 

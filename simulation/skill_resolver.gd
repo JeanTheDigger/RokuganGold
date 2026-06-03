@@ -453,6 +453,22 @@ static func resolve_skill_check(
 						dis.metadata["last_misfortune_month"] = ic_month
 						break
 
+	# DARK_PARAGON (s45): NPC activates retroactively when +5 would turn a failed roll to success.
+	if not result.get("success", false):
+		var dp_adv: AdvantageData = AdvantageSystem.get_advantage(
+			character, Enums.Advantage.DARK_PARAGON
+		)
+		if dp_adv != null:
+			var dp_precept: String = dp_adv.metadata.get("precept", "")
+			var dp: Dictionary = AdvantageSystem.check_dark_paragon_activation(
+				character, result.get("total", 0), result.get("tn", tn), dp_precept
+			)
+			if dp.get("should_activate", false):
+				result["total"] = result["total"] + 5
+				result["margin"] = result["total"] - result["tn"]
+				result["success"] = result["margin"] >= 0
+				result["dark_paragon_activated"] = true
+
 	return result
 
 

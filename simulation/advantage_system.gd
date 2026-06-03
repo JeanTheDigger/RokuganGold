@@ -574,6 +574,11 @@ static func get_tn_modifier(
 					# Must call one extra Raise for no effect on every roll — equivalent to +5 TN.
 					mod += 5
 
+			Enums.Disadvantage.LOST_LOVE:
+				# +5 TN to all rolls while the emotion is triggered (s45); reset daily for NPCs.
+				if dis.metadata.get("lost_love_tn_active", false):
+					mod += 5
+
 			Enums.Disadvantage.CURSED_BY_THE_REALM:
 				var cr_realm: String = dis.metadata.get("realm", "")
 				if cr_realm == "Tengoku":

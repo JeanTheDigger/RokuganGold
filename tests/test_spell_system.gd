@@ -372,3 +372,76 @@ func test_get_spells_for_element_ml_universal_not_included() -> void:
 	assert_true("sense" in universal_ml1)
 	assert_true("commune" in universal_ml1)
 	assert_false("jade_strike" in universal_ml1)
+
+
+# -- WRATH_OF_THE_KAMI (s45) --------------------------------------------------
+
+func test_wrath_of_kami_result_has_bonus_key() -> void:
+	# resolve_cast always includes wrath_of_kami_bonus in return dict.
+	var r: Dictionary = SpellSystem.resolve_cast(_char, "jurojins_balm", _dice)
+	assert_true(r.has("wrath_of_kami_bonus"))
+
+
+func test_wrath_of_kami_no_target_bonus_is_zero() -> void:
+	# When no target is provided, the bonus is 0 and TN is unmodified.
+	var r: Dictionary = SpellSystem.resolve_cast(_char, "jurojins_balm", _dice)
+	assert_eq(r.get("wrath_of_kami_bonus", -1), 0)
+	assert_eq(r.get("tn", -1), 10)  # ML1 base TN with no raises
+
+
+func test_wrath_of_kami_matching_element_reduces_tn() -> void:
+	# Target cursed for EARTH; caster casts an earth spell → TN is 5 lower.
+	var target: L5RCharacterData = L5RCharacterData.new()
+	target.character_id = 99
+	target.advantages = []
+	var dis: DisadvantageData = DisadvantageData.new()
+	dis.disadvantage_type = Enums.Disadvantage.WRATH_OF_THE_KAMI
+	dis.metadata = {"element": Enums.Ring.EARTH}
+	target.disadvantages = [dis]
+
+	# jurojins_balm is ML1 earth → base TN = 10; with wrath bonus = 1 FR, TN = 10 - 5 = 5.
+	var r: Dictionary = SpellSystem.resolve_cast(_char, "jurojins_balm", _dice, 0, target)
+	assert_eq(r.get("wrath_of_kami_bonus", -1), 1)
+	assert_eq(r.get("tn", -1), 5)
+
+
+func test_wrath_of_kami_wrong_element_no_reduction() -> void:
+	# Target cursed for FIRE; caster casts an EARTH spell → no bonus, TN unchanged.
+	var target: L5RCharacterData = L5RCharacterData.new()
+	target.character_id = 99
+	target.advantages = []
+	var dis: DisadvantageData = DisadvantageData.new()
+	dis.disadvantage_type = Enums.Disadvantage.WRATH_OF_THE_KAMI
+	dis.metadata = {"element": Enums.Ring.FIRE}
+	target.disadvantages = [dis]
+
+	var r: Dictionary = SpellSystem.resolve_cast(_char, "jurojins_balm", _dice, 0, target)
+	assert_eq(r.get("wrath_of_kami_bonus", -1), 0)
+	assert_eq(r.get("tn", -1), 10)  # ML1 base TN, unmodified
+
+
+func test_wrath_of_kami_target_without_disadvantage_no_bonus() -> void:
+	# Target exists but has no WRATH_OF_THE_KAMI disadvantage.
+	var target: L5RCharacterData = L5RCharacterData.new()
+	target.character_id = 99
+	target.advantages = []
+	target.disadvantages = []
+
+	var r: Dictionary = SpellSystem.resolve_cast(_char, "jurojins_balm", _dice, 0, target)
+	assert_eq(r.get("wrath_of_kami_bonus", -1), 0)
+
+
+func test_wrath_of_kami_stacks_with_raises() -> void:
+	# WRATH bonus still applies when caster also declares raises.
+	# jurojins_balm ML1: base TN 10, 1 raise → effective TN = 15; wrath → 15 - 5 = 10.
+	var target: L5RCharacterData = L5RCharacterData.new()
+	target.character_id = 99
+	target.advantages = []
+	var dis: DisadvantageData = DisadvantageData.new()
+	dis.disadvantage_type = Enums.Disadvantage.WRATH_OF_THE_KAMI
+	dis.metadata = {"element": Enums.Ring.EARTH}
+	target.disadvantages = [dis]
+
+	var r: Dictionary = SpellSystem.resolve_cast(_char, "jurojins_balm", _dice, 1, target)
+	assert_eq(r.get("wrath_of_kami_bonus", -1), 1)
+	assert_eq(r.get("tn", -1), 10)  # 10 + 5 (raise) - 5 (wrath) = 10

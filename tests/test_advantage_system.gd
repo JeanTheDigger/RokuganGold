@@ -2883,3 +2883,353 @@ func test_forbidden_knowledge_no_advantage_no_skill():
 	AdvantageSystem.assign_derived_advantages(c, [], {})
 	assert_eq(c.skills.get("Lore: Maho", 0), 0)
 	assert_eq(c.skills.get("Craft: Explosives", 0), 0)
+
+
+# ---------------------------------------------------------------------------
+# DARK_PARAGON (s45) — unit tests
+# ---------------------------------------------------------------------------
+
+func test_dark_paragon_near_miss_activates() -> void:
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1, {"precept": "Honor"})
+	var r: Dictionary = AdvantageSystem.check_dark_paragon_activation(c, 7, 10, "Honor")
+	assert_true(r.get("should_activate", false))
+
+
+func test_dark_paragon_too_far_behind_no_activate() -> void:
+	# roll_total + 5 = 8 < tn=10 → +5 wouldn't help
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1, {"precept": "Honor"})
+	var r: Dictionary = AdvantageSystem.check_dark_paragon_activation(c, 3, 10, "Honor")
+	assert_false(r.get("should_activate", true))
+
+
+func test_dark_paragon_already_success_no_activate() -> void:
+	# roll_total >= tn already; condition roll_total < tn is false
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1, {"precept": "Honor"})
+	var r: Dictionary = AdvantageSystem.check_dark_paragon_activation(c, 12, 10, "Honor")
+	assert_false(r.get("should_activate", true))
+
+
+func test_dark_paragon_no_advantage_returns_false() -> void:
+	var c := _make_character()
+	var r: Dictionary = AdvantageSystem.check_dark_paragon_activation(c, 7, 10, "Honor")
+	assert_false(r.get("should_activate", true))
+
+
+func test_dark_paragon_wrong_precept_returns_false() -> void:
+	# Character stores "Honor"; caller passes "Loyalty" → mismatch → false
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1, {"precept": "Honor"})
+	var r: Dictionary = AdvantageSystem.check_dark_paragon_activation(c, 7, 10, "Loyalty")
+	assert_false(r.get("should_activate", true))
+
+
+# ---------------------------------------------------------------------------
+# DARK_PARAGON (s45) — integration tests through SkillResolver
+# ---------------------------------------------------------------------------
+# Technique: bonus_rolled = -(trait + skill_rank) forces rolled = 0,
+# making DiceEngine return total = 0. flat_bonus then becomes the entire roll total.
+# _make_character(): reflexes=2, awareness=3 → Air=2; Etiquette=3 → 2+3=5 rolled.
+# Setting bonus_rolled=-5 → rolled=0 → dice total=0 → final_total=flat_bonus.
+
+func test_dark_paragon_integration_near_miss_flips_success() -> void:
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1, {"precept": "Honor"})
+	# flat_bonus=7, tn=10 → total=7 (miss by 3). (7+5)=12 >= 10 → DARK_PARAGON fires.
+	var r: Dictionary = SkillResolver.resolve_skill_check(
+		c, dice, "Etiquette", 10, 0, "", Enums.Trait.NONE, -5, 0, 7
+	)
+	assert_true(r.get("dark_paragon_activated", false))
+	assert_true(r.get("success", false))
+	assert_eq(r.get("total", 0), 12)
+
+
+func test_dark_paragon_integration_large_miss_no_activate() -> void:
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1, {"precept": "Honor"})
+	# flat_bonus=3, tn=10 → total=3 (miss by 7). (3+5)=8 < 10 → DARK_PARAGON does not fire.
+	var r: Dictionary = SkillResolver.resolve_skill_check(
+		c, dice, "Etiquette", 10, 0, "", Enums.Trait.NONE, -5, 0, 3
+	)
+	assert_false(r.get("dark_paragon_activated", false))
+	assert_false(r.get("success", false))
+
+
+func test_dark_paragon_integration_no_advantage_no_activate() -> void:
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	# No DARK_PARAGON advantage
+	var r: Dictionary = SkillResolver.resolve_skill_check(
+		c, dice, "Etiquette", 10, 0, "", Enums.Trait.NONE, -5, 0, 7
+	)
+	assert_false(r.get("dark_paragon_activated", false))
+
+
+# ---------------------------------------------------------------------------
+# LOST_LOVE (s45) — get_tn_modifier
+# ---------------------------------------------------------------------------
+
+func test_lost_love_tn_modifier_active_returns_5() -> void:
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.LOST_LOVE, 1,
+		{"clan": "Crab", "province_id": 5, "lost_love_tn_active": true})
+	assert_eq(AdvantageSystem.get_tn_modifier(c, {}), 5)
+
+
+func test_lost_love_tn_modifier_inactive_returns_0() -> void:
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.LOST_LOVE, 1,
+		{"clan": "Crab", "province_id": 5, "lost_love_tn_active": false})
+	assert_eq(AdvantageSystem.get_tn_modifier(c, {}), 0)
+
+
+func test_lost_love_tn_modifier_absent_returns_0() -> void:
+	var c := _make_character()
+	assert_eq(AdvantageSystem.get_tn_modifier(c, {}), 0)
+
+
+# ---------------------------------------------------------------------------
+# LOST_LOVE (s45) — check_lost_love_trigger
+# ---------------------------------------------------------------------------
+
+func test_lost_love_trigger_clan_match() -> void:
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.LOST_LOVE, 1, {"clan": "Crab", "province_id": -1})
+	var r: Dictionary = AdvantageSystem.check_lost_love_trigger(
+		c, {"lost_love_clan": "Crab"}, 1
+	)
+	assert_true(r.get("triggered", false))
+	assert_eq(r.get("tn_penalty", 0), 5)
+
+
+func test_lost_love_trigger_clan_mismatch() -> void:
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.LOST_LOVE, 1, {"clan": "Crab", "province_id": -1})
+	var r: Dictionary = AdvantageSystem.check_lost_love_trigger(
+		c, {"lost_love_clan": "Phoenix"}, 1
+	)
+	assert_false(r.get("triggered", true))
+
+
+func test_lost_love_trigger_province_match() -> void:
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.LOST_LOVE, 1, {"province_id": 5})
+	var r: Dictionary = AdvantageSystem.check_lost_love_trigger(
+		c, {"lost_love_province_id": 5}, 1
+	)
+	assert_true(r.get("triggered", false))
+	assert_eq(r.get("tn_penalty", 0), 5)
+
+
+func test_lost_love_trigger_daily_cap_blocks() -> void:
+	var c := _make_character()
+	# Already triggered twice today
+	_add_disadvantage(c, Enums.Disadvantage.LOST_LOVE, 1,
+		{"clan": "Crab", "province_id": -1, "triggers_today": 2, "last_trigger_ic_day": 1})
+	var r: Dictionary = AdvantageSystem.check_lost_love_trigger(
+		c, {"lost_love_clan": "Crab"}, 1
+	)
+	assert_false(r.get("triggered", true))
+
+
+# ---------------------------------------------------------------------------
+# LOST_LOVE (s45) — _reset_lost_love_daily_state
+# ---------------------------------------------------------------------------
+
+func test_reset_lost_love_clears_active_flag() -> void:
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.LOST_LOVE, 1,
+		{"clan": "Crab", "province_id": 5, "lost_love_tn_active": true, "triggers_today": 1})
+	DayOrchestrator._reset_lost_love_daily_state([c])
+	var dis: DisadvantageData = AdvantageSystem.get_disadvantage(c, Enums.Disadvantage.LOST_LOVE)
+	assert_false(dis.metadata.get("lost_love_tn_active", true))
+
+
+func test_reset_lost_love_clears_triggers_count() -> void:
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.LOST_LOVE, 1,
+		{"clan": "Crab", "province_id": 5, "lost_love_tn_active": true, "triggers_today": 2})
+	DayOrchestrator._reset_lost_love_daily_state([c])
+	var dis: DisadvantageData = AdvantageSystem.get_disadvantage(c, Enums.Disadvantage.LOST_LOVE)
+	assert_eq(dis.metadata.get("triggers_today", -1), 0)
+
+
+# ---------------------------------------------------------------------------
+# LOST_LOVE (s45) — _process_lost_love_arrival_trigger
+# ---------------------------------------------------------------------------
+
+func test_arrival_trigger_matching_province_activates_tn() -> void:
+	var c := _make_character()
+	c.character_id = 1
+	_add_disadvantage(c, Enums.Disadvantage.LOST_LOVE, 1,
+		{"province_id": 5, "lost_love_tn_active": false})
+	var chars_by_id: Dictionary = {1: c}
+
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 100
+	s.province_id = 5
+
+	var arrivals: Array = [{"character_id": 1, "destination": "100"}]
+	DayOrchestrator._process_lost_love_arrival_trigger(arrivals, chars_by_id, [s], 10)
+
+	var dis: DisadvantageData = AdvantageSystem.get_disadvantage(c, Enums.Disadvantage.LOST_LOVE)
+	assert_true(dis.metadata.get("lost_love_tn_active", false))
+
+
+func test_arrival_trigger_wrong_province_no_activation() -> void:
+	var c := _make_character()
+	c.character_id = 1
+	_add_disadvantage(c, Enums.Disadvantage.LOST_LOVE, 1,
+		{"province_id": 99, "lost_love_tn_active": false})
+	var chars_by_id: Dictionary = {1: c}
+
+	var s: SettlementData = SettlementData.new()
+	s.settlement_id = 100
+	s.province_id = 5  # province 5, not 99
+
+	var arrivals: Array = [{"character_id": 1, "destination": "100"}]
+	DayOrchestrator._process_lost_love_arrival_trigger(arrivals, chars_by_id, [s], 10)
+
+	var dis: DisadvantageData = AdvantageSystem.get_disadvantage(c, Enums.Disadvantage.LOST_LOVE)
+	assert_false(dis.metadata.get("lost_love_tn_active", true))
+
+
+# ---------------------------------------------------------------------------
+# SPY_NETWORK (s45)
+# ---------------------------------------------------------------------------
+
+func test_spy_network_character_focus_creates_knowledge_entry() -> void:
+	var c := _make_character(1)
+	c.physical_location = "50"
+	_add_advantage(c, Enums.Advantage.SPY_NETWORK, 1,
+		{"focus_type": "character", "focus_id": 2, "last_update_ooc_day": -1})
+
+	var target := _make_character(2)
+	target.physical_location = "75"
+	target.clan = "Lion"
+
+	var chars_by_id: Dictionary = {1: c, 2: target}
+	DayOrchestrator._process_spy_network_weekly([c, target], chars_by_id, [], 7)
+
+	assert_gt(c.knowledge_pool.size(), 0)
+	var entry: KnowledgeEntry = c.knowledge_pool[0]
+	assert_eq(entry.entry_type, "shadow_surveillance")
+	assert_eq(entry.data.get("character_id", -1), 2)
+
+
+func test_spy_network_place_focus_adds_topic() -> void:
+	var c := _make_character(1)
+	c.physical_location = "10"
+	_add_advantage(c, Enums.Advantage.SPY_NETWORK, 1,
+		{"focus_type": "place", "focus_id": 100, "last_update_ooc_day": -1})
+
+	var local_char := _make_character(2)
+	local_char.physical_location = "100"
+	local_char.topic_pool = [42]
+
+	var chars_by_id: Dictionary = {1: c, 2: local_char}
+	DayOrchestrator._process_spy_network_weekly([c, local_char], chars_by_id, [], 7)
+
+	assert_true(42 in c.topic_pool)
+
+
+func test_spy_network_army_focus_creates_knowledge_entry() -> void:
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.SPY_NETWORK, 1,
+		{"focus_type": "army", "focus_id": 50, "last_update_ooc_day": -1})
+
+	var chars_by_id: Dictionary = {1: c}
+	DayOrchestrator._process_spy_network_weekly([c], chars_by_id, [], 7)
+
+	assert_gt(c.knowledge_pool.size(), 0)
+	var entry: KnowledgeEntry = c.knowledge_pool[0]
+	assert_eq(entry.entry_type, "shadow_surveillance")
+	assert_eq(entry.data.get("company_id", -1), 50)
+
+
+func test_spy_network_weekly_dedup_blocks_second_call() -> void:
+	var c := _make_character(1)
+	var target := _make_character(2)
+	target.physical_location = "75"
+	_add_advantage(c, Enums.Advantage.SPY_NETWORK, 1,
+		{"focus_type": "character", "focus_id": 2, "last_update_ooc_day": 7})
+
+	var chars_by_id: Dictionary = {1: c, 2: target}
+	# ic_day=10 → week_num=1; last_update_ooc_day=7 → 7/7=1 → same week → skip
+	DayOrchestrator._process_spy_network_weekly([c, target], chars_by_id, [], 10)
+
+	assert_eq(c.knowledge_pool.size(), 0)
+
+
+# ---------------------------------------------------------------------------
+# WELL_CONNECTED (s45)
+# ---------------------------------------------------------------------------
+
+func test_well_connected_reveals_topic_from_court() -> void:
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.WELL_CONNECTED, 1,
+		{"settlement_id": 100, "last_intel_ic_day": -1})
+
+	var local_char := _make_character(2)
+	local_char.physical_location = "100"
+	local_char.topic_pool = [7]
+
+	var t: TopicData = TopicData.new()
+	t.topic_id = 7
+	t.resolved = false
+
+	DayOrchestrator._process_well_connected_weekly([c, local_char], {}, [t], 7)
+
+	assert_true(7 in c.topic_pool)
+
+
+func test_well_connected_rank_limits_revelations() -> void:
+	# rank=1 → only 1 topic revealed even if 3 are available at the court
+	var c := _make_character(1)
+	_add_advantage(c, Enums.Advantage.WELL_CONNECTED, 1,
+		{"settlement_id": 100, "last_intel_ic_day": -1})
+
+	var local_char := _make_character(2)
+	local_char.physical_location = "100"
+	local_char.topic_pool = [10, 11, 12]
+
+	var active_topics: Array = []
+	for tid: int in [10, 11, 12]:
+		var t: TopicData = TopicData.new()
+		t.topic_id = tid
+		t.resolved = false
+		active_topics.append(t)
+
+	DayOrchestrator._process_well_connected_weekly([c, local_char], {}, active_topics, 7)
+
+	var count: int = 0
+	for tid: int in [10, 11, 12]:
+		if tid in c.topic_pool:
+			count += 1
+	assert_eq(count, 1)
+
+
+func test_well_connected_weekly_dedup_blocks_second_call() -> void:
+	var c := _make_character(1)
+	# last_intel_ic_day=7, ic_day=10 → both in week 1 → skip
+	_add_advantage(c, Enums.Advantage.WELL_CONNECTED, 1,
+		{"settlement_id": 100, "last_intel_ic_day": 7})
+
+	var local_char := _make_character(2)
+	local_char.physical_location = "100"
+	local_char.topic_pool = [20]
+
+	var t: TopicData = TopicData.new()
+	t.topic_id = 20
+	t.resolved = false
+
+	DayOrchestrator._process_well_connected_weekly([c, local_char], {}, [t], 10)
+
+	assert_false(20 in c.topic_pool)
