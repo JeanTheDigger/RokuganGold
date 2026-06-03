@@ -408,11 +408,20 @@ static func resolve_skill_check(
 	if wound_penalty < 0:
 		wound_penalty = mini(0, wound_penalty + adv_wound)
 
+	# Mutation / Shadowlands Power modifiers (s44)
+	var mutation_mod: Dictionary = MutationSystem.get_skill_modifiers(
+		character, skill_name, emphasis_name, context
+	)
+
 	# Build the pool: (trait + skill + bonus_rolled) k (trait + bonus_kept)
-	var rolled: int = trait_value + skill_rank + bonus_rolled + ashes_bonus + adv_skill.get("rolled", 0)
-	var kept: int = trait_value + bonus_kept + adv_skill.get("kept", 0)
+	var rolled: int = (
+		trait_value + skill_rank + bonus_rolled + ashes_bonus
+		+ adv_skill.get("rolled", 0) + mutation_mod.get("rolled", 0)
+	)
+	var kept: int = trait_value + bonus_kept + adv_skill.get("kept", 0) + mutation_mod.get("kept", 0)
 	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
-		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn
+		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn \
+		+ mutation_mod.get("tn", 0)
 
 	# Unskilled: no explosions
 	var explodes: bool = skill_rank > 0

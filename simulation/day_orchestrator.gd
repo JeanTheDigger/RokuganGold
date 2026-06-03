@@ -1508,6 +1508,10 @@ static func advance_day(
 		settlements,
 	)
 
+	# s44 Periodic taint rolls then rank-up processing
+	_process_periodic_taint_rolls(characters, dice_engine, ic_day)
+	_process_taint_rank_changes(characters, dice_engine, ic_day)
+
 	# s57.54 §9 — mid-season crisis update fires on non-seasonal days when a
 	# champion has Tier 1/2 topics not yet addressed as forced conclusions.
 	if not is_season_boundary and not clans.is_empty():
@@ -24673,6 +24677,62 @@ static func _process_sculpture_seasonal_maintenance(
 		var t: TopicData = _topic_from_dict(td as Dictionary, next_topic_id, ic_day)
 		if t != null:
 			active_topics.append(t)
+
+
+# ---------------------------------------------------------------------------
+# s44 Periodic Taint Rolls
+# ---------------------------------------------------------------------------
+
+## Resolve periodic Earth taint rolls for all living Tainted characters.
+## Called daily from advance_day.
+static func _process_periodic_taint_rolls(
+	characters: Array,
+	dice_engine: DiceEngine,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	for c: Variant in characters:
+		if not c is L5RCharacterData:
+			continue
+		var ch: L5RCharacterData = c as L5RCharacterData
+		if CharacterStats.is_dead(ch):
+			continue
+		if ch.taint < 1.0:
+			continue  # Rank 0 — not yet Tainted enough to trigger rolls (Rank 0 roll period would fire but taint gain requires rank 1+)
+		if not MutationSystem.should_roll_today(ch, ic_day):
+			continue
+		var earth: int = mini(ch.stamina, ch.willpower)
+		var r: Dictionary = MutationSystem.resolve_periodic_taint_roll(ch, earth, dice_engine, ic_day)
+		results.append(r)
+	return results
+
+
+## Check for Taint rank-up events and assign mutations/powers.
+## Called daily from advance_day after taint rolls complete.
+static func _process_taint_rank_changes(
+	characters: Array,
+	dice_engine: DiceEngine,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	for c: Variant in characters:
+		if not c is L5RCharacterData:
+			continue
+		var ch: L5RCharacterData = c as L5RCharacterData
+		if CharacterStats.is_dead(ch):
+			continue
+		var current_rank: int = MutationSystem.get_taint_rank(ch.taint)
+		if current_rank <= ch.taint_rank_last_processed:
+			continue
+		# Process all ranks between last processed and current (catches multi-rank jumps)
+		var next_rank: int = ch.taint_rank_last_processed + 1
+		while next_rank <= current_rank and next_rank <= 5:
+			var rank_result: Dictionary = MutationSystem.process_rank_up(ch, next_rank, dice_engine, ic_day)
+			rank_result["character_id"] = ch.character_id
+			results.append(rank_result)
+			next_rank += 1
+		ch.taint_rank_last_processed = current_rank
+	return results
 
 
 

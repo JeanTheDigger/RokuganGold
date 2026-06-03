@@ -76,11 +76,15 @@ static func resolve_cast(
 	witnesses: Array = [],
 ) -> Dictionary:
 	# 1. Apply wounds to blood source — bypasses armor (deliberate blood-letting)
-	var blood_wounds: int = total_blood_cost(mastery_level, raises_purchased)
+	# MASTER_OF_BLOOD (s44): one fewer wound cost, taint reduced by Earth (min 1)
+	var base_cost: int = total_blood_cost(mastery_level, raises_purchased)
+	var base_gain: int = taint_gain(mastery_level)
+	var mob: Dictionary = MutationSystem.apply_master_of_blood(caster, base_cost, base_gain)
+	var blood_wounds: int = mob["blood_cost"]
 	var wound_result: Dictionary = WoundSystem.apply_damage(blood_source, blood_wounds, 0)
 
-	# 2. Taint gain for caster (s43)
-	var gain: int = taint_gain(mastery_level)
+	# 2. Taint gain for caster (s43), adjusted for MASTER_OF_BLOOD
+	var gain: int = mob["taint_gain"]
 	caster.taint += float(gain)
 
 	# 3. At-act Honor loss (s57.47.7 → Table 2.3 "blasphemous")

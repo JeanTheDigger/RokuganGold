@@ -83,6 +83,10 @@ var spell_void_bonus_used: int = 0
 # -- Shadowlands Taint ---------------------------------------------------------
 
 @export var taint: float = 0.0
+@export var mutations: Array[MutationData] = []
+@export var shadowlands_powers: Array[ShadowlandsPowerData] = []
+## Highest Taint Rank already processed for rank-up mutation/power events.
+@export var taint_rank_last_processed: int = 0
 
 # -- Equipment & Outfit --------------------------------------------------------
 

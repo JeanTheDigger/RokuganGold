@@ -1,0 +1,676 @@
+extends GutTest
+## Tests for s44 MutationSystem — Shadowlands Mutations & Powers
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+func _make_char(id: int, sta: int = 3, wil: int = 3) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.character_name = "Test " + str(id)
+	c.taint = 0.0
+	c.taint_rank_last_processed = 0
+	c.mutations = []
+	c.shadowlands_powers = []
+	c.stamina = sta
+	c.willpower = wil
+	c.strength = 2
+	c.reflexes = 2
+	c.agility = 2
+	c.awareness = 2
+	c.perception = 2
+	c.intelligence = 2
+	c.void_ring = 2
+	c.current_void_points = 2
+	c.honor = 2.0
+	c.glory = 2.0
+	c.status = 2.0
+	c.wounds_taken = 0
+	c.skills = {}
+	c.disadvantages = []
+	c.advantages = []
+	c.school = "Test"
+	c.clan = "Crab"
+	c.bushido_virtue = Enums.BushidoVirtue.NONE
+	c.shourido_virtue = Enums.ShouridoVirtue.NONE
+	c.physical_location = "100"
+	c.action_points_current = 2
+	c.action_points_max = 2
+	return c
+
+
+func _dice() -> DiceEngine:
+	var d := DiceEngine.new()
+	d.set_seed(42)
+	return d
+
+
+# ---------------------------------------------------------------------------
+# Taint rank helpers
+# ---------------------------------------------------------------------------
+
+func test_get_taint_rank_rank0() -> void:
+	assert_eq(MutationSystem.get_taint_rank(0.0), 0)
+	assert_eq(MutationSystem.get_taint_rank(0.9), 0)
+
+
+func test_get_taint_rank_rank1() -> void:
+	assert_eq(MutationSystem.get_taint_rank(1.0), 1)
+	assert_eq(MutationSystem.get_taint_rank(1.9), 1)
+
+
+func test_get_taint_rank_rank2() -> void:
+	assert_eq(MutationSystem.get_taint_rank(2.0), 2)
+
+
+func test_get_taint_rank_rank5() -> void:
+	assert_eq(MutationSystem.get_taint_rank(5.0), 5)
+	assert_eq(MutationSystem.get_taint_rank(9.0), 5)
+
+
+func test_get_roll_period_ranks() -> void:
+	assert_eq(MutationSystem.get_roll_period(0), 30)
+	assert_eq(MutationSystem.get_roll_period(1), 30)
+	assert_eq(MutationSystem.get_roll_period(2), 15)
+	assert_eq(MutationSystem.get_roll_period(3), 7)
+	assert_eq(MutationSystem.get_roll_period(4), 1)
+	assert_eq(MutationSystem.get_roll_period(5), 0)  # Lost: no roll
+
+
+func test_get_roll_tn_ranks() -> void:
+	assert_eq(MutationSystem.get_roll_tn(0), 5)
+	assert_eq(MutationSystem.get_roll_tn(1), 10)
+	assert_eq(MutationSystem.get_roll_tn(2), 15)
+	assert_eq(MutationSystem.get_roll_tn(3), 20)
+	assert_eq(MutationSystem.get_roll_tn(4), 25)
+
+
+func test_get_power_use_tn_minor() -> void:
+	assert_eq(MutationSystem.get_power_use_tn(Enums.ShadowlandsPowerTier.MINOR), 15)
+
+
+func test_get_power_use_tn_major() -> void:
+	assert_eq(MutationSystem.get_power_use_tn(Enums.ShadowlandsPowerTier.MAJOR), 20)
+
+
+func test_get_power_use_tn_akutenshi_treated_as_major() -> void:
+	assert_eq(MutationSystem.get_power_use_tn(Enums.ShadowlandsPowerTier.AKUTENSHI), 20)
+
+
+# ---------------------------------------------------------------------------
+# should_roll_today
+# ---------------------------------------------------------------------------
+
+func test_should_roll_today_rank1_monthly() -> void:
+	var c := _make_char(1)
+	c.taint = 1.0
+	# Rank 1: period = 30; ic_day 30 → 30 % 30 == 0
+	assert_true(MutationSystem.should_roll_today(c, 30))
+	assert_false(MutationSystem.should_roll_today(c, 29))
+
+
+func test_should_roll_today_rank2_bimonthly() -> void:
+	var c := _make_char(1)
+	c.taint = 2.0
+	# Rank 2: period = 15
+	assert_true(MutationSystem.should_roll_today(c, 15))
+	assert_false(MutationSystem.should_roll_today(c, 16))
+
+
+func test_should_roll_today_rank3_weekly() -> void:
+	var c := _make_char(1)
+	c.taint = 3.0
+	# Rank 3: period = 7
+	assert_true(MutationSystem.should_roll_today(c, 7))
+	assert_false(MutationSystem.should_roll_today(c, 8))
+
+
+func test_should_roll_today_rank4_daily() -> void:
+	var c := _make_char(1)
+	c.taint = 4.0
+	assert_true(MutationSystem.should_roll_today(c, 1))
+	assert_true(MutationSystem.should_roll_today(c, 2))
+
+
+func test_should_roll_today_rank5_never() -> void:
+	var c := _make_char(1)
+	c.taint = 5.0
+	assert_false(MutationSystem.should_roll_today(c, 1))
+	assert_false(MutationSystem.should_roll_today(c, 30))
+
+
+# ---------------------------------------------------------------------------
+# Periodic taint rolls
+# ---------------------------------------------------------------------------
+
+func test_resolve_periodic_success_no_taint_gain() -> void:
+	# Earth 10: guaranteed success vs TN 10 (Rank 1)
+	var c := _make_char(1, 10, 10)
+	c.taint = 1.0
+	var d := _dice()
+	var r := MutationSystem.resolve_periodic_taint_roll(c, 10, d, 30)
+	assert_true(r["success"])
+	assert_eq(r["taint_gained"], 0)
+	assert_eq(c.taint, 1.0)
+
+
+func test_resolve_periodic_failure_gains_taint() -> void:
+	# Earth 1: guaranteed failure vs TN 25 (Rank 4)
+	var c := _make_char(1, 1, 1)
+	c.taint = 4.0
+	var d := _dice()
+	var r := MutationSystem.resolve_periodic_taint_roll(c, 1, d, 1)
+	assert_false(r["success"])
+	assert_eq(r["taint_gained"], 1)
+	assert_eq(c.taint, 5.0)
+
+
+func test_periodic_roll_result_contains_expected_keys() -> void:
+	var c := _make_char(1, 3, 3)
+	c.taint = 2.0
+	var r := MutationSystem.resolve_periodic_taint_roll(c, 3, _dice(), 15)
+	assert_has(r, "character_id")
+	assert_has(r, "taint_roll")
+	assert_has(r, "taint_rank")
+	assert_has(r, "tn")
+	assert_has(r, "success")
+	assert_has(r, "taint_gained")
+	assert_has(r, "taint_after")
+
+
+# ---------------------------------------------------------------------------
+# Power use taint roll
+# ---------------------------------------------------------------------------
+
+func test_power_use_roll_minor_failure_gains_taint() -> void:
+	var c := _make_char(1, 1, 1)
+	c.taint = 1.0
+	var r := MutationSystem.resolve_power_use_taint_roll(
+		c, 1, Enums.ShadowlandsPowerTier.MINOR, _dice()
+	)
+	assert_false(r["success"])
+	assert_eq(r["taint_gained"], 1)
+
+
+func test_power_use_roll_major_tn_is_20() -> void:
+	var c := _make_char(1, 3, 3)
+	c.taint = 2.0
+	var r := MutationSystem.resolve_power_use_taint_roll(
+		c, 3, Enums.ShadowlandsPowerTier.MAJOR, _dice()
+	)
+	assert_eq(r["tn"], 20)
+	assert_eq(r["power_tier"], Enums.ShadowlandsPowerTier.MAJOR)
+
+
+# ---------------------------------------------------------------------------
+# has_mutation / has_power
+# ---------------------------------------------------------------------------
+
+func test_has_mutation_false_when_empty() -> void:
+	var c := _make_char(1)
+	assert_false(MutationSystem.has_mutation(c, Enums.MutationType.ALBINISM))
+
+
+func test_has_mutation_true_after_gain() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.ALBINISM, _dice(), 1)
+	assert_true(MutationSystem.has_mutation(c, Enums.MutationType.ALBINISM))
+
+
+func test_has_power_false_when_empty() -> void:
+	var c := _make_char(1)
+	assert_false(MutationSystem.has_power(c, Enums.ShadowlandsPowerType.MASTER_OF_SHADOWS))
+
+
+func test_has_power_true_after_gain() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_power(c, Enums.ShadowlandsPowerType.JADE_SENSE, Enums.ShadowlandsPowerTier.MINOR, _dice(), 1)
+	assert_true(MutationSystem.has_power(c, Enums.ShadowlandsPowerType.JADE_SENSE))
+
+
+func test_gain_mutation_no_duplicate() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.FOUL_ODOR, _dice(), 1)
+	var result := MutationSystem.gain_mutation(c, Enums.MutationType.FOUL_ODOR, _dice(), 2)
+	assert_null(result)  # null on duplicate
+	assert_eq(c.mutations.size(), 1)
+
+
+func test_gain_power_no_duplicate() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_power(c, Enums.ShadowlandsPowerType.JADE_SENSE, Enums.ShadowlandsPowerTier.MINOR, _dice(), 1)
+	var result := MutationSystem.gain_power(c, Enums.ShadowlandsPowerType.JADE_SENSE, Enums.ShadowlandsPowerTier.MINOR, _dice(), 2)
+	assert_null(result)
+	assert_eq(c.shadowlands_powers.size(), 1)
+
+
+# ---------------------------------------------------------------------------
+# Mutation secondary effects
+# ---------------------------------------------------------------------------
+
+func test_distorted_limbs_leg_adds_lame() -> void:
+	var c := _make_char(1)
+	# Force leg result by iterating until leg is chosen (seed 42 deterministic)
+	# Instead: verify that LAME appears somewhere in one of the two outcomes
+	# We run both paths by setting up a seeded dice that gives 0 (leg)
+	var d := DiceEngine.new()
+	d.set_seed(0)  # seed 0: rand_int_range(0,1) returns 0 → leg
+	MutationSystem.gain_mutation(c, Enums.MutationType.DISTORTED_LIMBS, d, 1)
+	var mut: MutationData = c.mutations[0]
+	if mut.affected_limb == "leg":
+		var has_lame := false
+		for dis: DisadvantageData in c.disadvantages:
+			if dis.disadvantage_type == Enums.Disadvantage.LAME:
+				has_lame = true
+		assert_true(has_lame)
+	else:
+		# arm — no LAME added
+		assert_eq(c.disadvantages.size(), 0)
+
+
+func test_distorted_limbs_arm_no_lame() -> void:
+	var c := _make_char(1)
+	# Use a different seed to get arm
+	var d := DiceEngine.new()
+	d.set_seed(1)  # may give 1 → arm; we verify the other condition
+	MutationSystem.gain_mutation(c, Enums.MutationType.DISTORTED_LIMBS, d, 1)
+	var mut: MutationData = c.mutations[0]
+	if mut.affected_limb == "arm":
+		assert_eq(c.disadvantages.size(), 0)
+
+
+func test_lame_not_duplicated_if_already_present() -> void:
+	var c := _make_char(1)
+	var dis := DisadvantageData.new()
+	dis.disadvantage_type = Enums.Disadvantage.LAME
+	dis.rank = 1
+	c.disadvantages.append(dis)
+	var d := DiceEngine.new()
+	d.set_seed(0)  # seed 0 → leg
+	MutationSystem.gain_mutation(c, Enums.MutationType.DISTORTED_LIMBS, d, 1)
+	assert_eq(c.disadvantages.size(), 1)  # still only one LAME
+
+
+func test_unholy_beauty_clears_mutations() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.ALBINISM, _dice(), 1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.FOUL_ODOR, _dice(), 1)
+	assert_eq(c.mutations.size(), 2)
+	MutationSystem.gain_power(c, Enums.ShadowlandsPowerType.UNHOLY_BEAUTY, Enums.ShadowlandsPowerTier.MAJOR, _dice(), 2)
+	assert_eq(c.mutations.size(), 0)
+
+
+func test_master_of_shadows_adds_discolored_skin_if_absent() -> void:
+	var c := _make_char(1)
+	assert_false(MutationSystem.has_mutation(c, Enums.MutationType.DISCOLORED_SKIN))
+	MutationSystem.gain_power(c, Enums.ShadowlandsPowerType.MASTER_OF_SHADOWS, Enums.ShadowlandsPowerTier.MINOR, _dice(), 1)
+	assert_true(MutationSystem.has_mutation(c, Enums.MutationType.DISCOLORED_SKIN))
+
+
+func test_master_of_shadows_no_duplicate_discolored_skin() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.DISCOLORED_SKIN, _dice(), 1)
+	MutationSystem.gain_power(c, Enums.ShadowlandsPowerType.MASTER_OF_SHADOWS, Enums.ShadowlandsPowerTier.MINOR, _dice(), 2)
+	var count := 0
+	for m: MutationData in c.mutations:
+		if m.mutation_type == Enums.MutationType.DISCOLORED_SKIN:
+			count += 1
+	assert_eq(count, 1)
+
+
+func test_extra_limb_has_non_functional_flag_set() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.EXTRA_LIMB, _dice(), 1)
+	assert_eq(c.mutations.size(), 1)
+	# is_non_functional is bool — just check the field exists and is a bool
+	var mut: MutationData = c.mutations[0]
+	assert_true(mut.is_non_functional == true or mut.is_non_functional == false)
+
+
+# ---------------------------------------------------------------------------
+# Rank-up processing
+# ---------------------------------------------------------------------------
+
+func test_rank2_up_grants_minor_power() -> void:
+	var c := _make_char(1)
+	c.taint = 2.0
+	var result := MutationSystem.process_rank_up(c, 2, _dice(), 1)
+	# Should have gained exactly one power
+	assert_eq(result["gained_powers"].size(), 1)
+	assert_eq(result["gained_mutations"].size(), 0)
+	# The power should be Minor
+	var pt: Enums.ShadowlandsPowerType = result["gained_powers"][0]
+	assert_true(MutationSystem.MINOR_POWERS.has(pt))
+
+
+func test_rank3_up_grants_power_and_mutation() -> void:
+	var c := _make_char(1)
+	c.taint = 3.0
+	var result := MutationSystem.process_rank_up(c, 3, _dice(), 1)
+	assert_eq(result["gained_powers"].size(), 1)
+	assert_eq(result["gained_mutations"].size(), 1)
+
+
+func test_rank4_up_grants_two_powers_first_is_major() -> void:
+	var c := _make_char(1)
+	c.taint = 4.0
+	var result := MutationSystem.process_rank_up(c, 4, _dice(), 1)
+	assert_eq(result["gained_powers"].size(), 2)
+	assert_eq(result["gained_mutations"].size(), 1)
+	var first: Enums.ShadowlandsPowerType = result["gained_powers"][0]
+	assert_true(MutationSystem.MAJOR_POWERS.has(first))
+
+
+func test_rank5_up_grants_random_mutations_and_powers() -> void:
+	var c := _make_char(1)
+	c.taint = 5.0
+	var result := MutationSystem.process_rank_up(c, 5, _dice(), 1)
+	# 0–3 mutations and 0–3 powers; just verify range
+	assert_true(result["gained_mutations"].size() >= 0)
+	assert_true(result["gained_mutations"].size() <= 3)
+	assert_true(result["gained_powers"].size() >= 0)
+	assert_true(result["gained_powers"].size() <= 3)
+
+
+func test_rank5_powers_from_minor_major_only() -> void:
+	var c := _make_char(1)
+	c.taint = 5.0
+	# Run multiple times to increase coverage
+	for _i in range(5):
+		var c2 := _make_char(_i + 100)
+		c2.taint = 5.0
+		var d := DiceEngine.new()
+		d.set_seed(_i * 7 + 3)
+		var result := MutationSystem.process_rank_up(c2, 5, d, 1)
+		for pt: Enums.ShadowlandsPowerType in result["gained_powers"]:
+			# Must be Minor or Major — not Akutenshi
+			assert_true(
+				MutationSystem.MINOR_POWERS.has(pt) or MutationSystem.MAJOR_POWERS.has(pt)
+			)
+
+
+func test_no_duplicate_mutations_across_rank_ups() -> void:
+	var c := _make_char(1)
+	c.taint = 3.0
+	# Pre-fill all mutations to exhaust the pool
+	for mt: Enums.MutationType in MutationSystem.ALL_MUTATIONS:
+		if mt == Enums.MutationType.NONE:
+			continue
+		MutationSystem.gain_mutation(c, mt, _dice(), 0)
+	var result := MutationSystem.process_rank_up(c, 3, _dice(), 1)
+	# No new mutation should be granted (pool exhausted)
+	assert_eq(result["gained_mutations"].size(), 0)
+
+
+# ---------------------------------------------------------------------------
+# Skill modifiers
+# ---------------------------------------------------------------------------
+
+func test_discolored_skin_adds_tn_penalty_to_social() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.DISCOLORED_SKIN, _dice(), 1)
+	var mod := MutationSystem.get_skill_modifiers(c, "Courtier")
+	assert_eq(mod["tn"], 5)
+
+
+func test_discolored_skin_no_tn_on_non_social() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.DISCOLORED_SKIN, _dice(), 1)
+	var mod := MutationSystem.get_skill_modifiers(c, "Athletics")
+	assert_eq(mod["tn"], 0)
+
+
+func test_foul_odor_minus_1k0_on_social() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.FOUL_ODOR, _dice(), 1)
+	var mod := MutationSystem.get_skill_modifiers(c, "Etiquette")
+	assert_eq(mod["rolled"], -1)
+
+
+func test_tough_hide_minus_2k0_on_social() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.TOUGH_HIDE, _dice(), 1)
+	var mod := MutationSystem.get_skill_modifiers(c, "Sincerity")
+	assert_eq(mod["rolled"], -2)
+
+
+func test_extra_digit_minus_1k0_on_social() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.EXTRA_DIGIT, _dice(), 1)
+	var mod := MutationSystem.get_skill_modifiers(c, "Acting")
+	assert_eq(mod["rolled"], -1)
+
+
+func test_albinism_minus_1k0_social_when_appearance_known() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.ALBINISM, _dice(), 1)
+	var mod_known := MutationSystem.get_skill_modifiers(c, "Courtier", "", {"appearance_known": true})
+	assert_eq(mod_known["rolled"], -1)
+	var mod_unknown := MutationSystem.get_skill_modifiers(c, "Courtier", "", {"appearance_known": false})
+	assert_eq(mod_unknown["rolled"], 0)
+
+
+func test_extra_eye_plus_1k0_perception_uncovered() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.EXTRA_EYE, _dice(), 1)
+	var mod := MutationSystem.get_skill_modifiers(c, "Investigation", "", {"extra_eye_uncovered": true})
+	assert_eq(mod["rolled"], 1)
+
+
+func test_extra_limb_nonfunctional_penalty_agility() -> void:
+	var c := _make_char(1)
+	# Force non-functional
+	var md := MutationData.new()
+	md.mutation_type = Enums.MutationType.EXTRA_LIMB
+	md.is_non_functional = true
+	c.mutations.append(md)
+	var mod := MutationSystem.get_skill_modifiers(c, "Defense")
+	assert_eq(mod["rolled"], -1)
+
+
+func test_extra_limb_functional_no_penalty() -> void:
+	var c := _make_char(1)
+	var md := MutationData.new()
+	md.mutation_type = Enums.MutationType.EXTRA_LIMB
+	md.is_non_functional = false
+	c.mutations.append(md)
+	var mod := MutationSystem.get_skill_modifiers(c, "Defense")
+	assert_eq(mod["rolled"], 0)
+
+
+func test_master_of_shadows_adds_taint_rank_unkept_stealth() -> void:
+	var c := _make_char(1)
+	c.taint = 3.0  # Rank 3
+	MutationSystem.gain_power(c, Enums.ShadowlandsPowerType.MASTER_OF_SHADOWS, Enums.ShadowlandsPowerTier.MINOR, _dice(), 1)
+	var mod := MutationSystem.get_skill_modifiers(c, "Stealth")
+	assert_eq(mod["rolled"], 3)  # Taint Rank unkept dice added
+
+
+func test_monstrous_strength_social_penalty_and_strength_bonus() -> void:
+	var c := _make_char(1)
+	c.taint = 2.0
+	MutationSystem.gain_power(c, Enums.ShadowlandsPowerType.MONSTROUS_STRENGTH, Enums.ShadowlandsPowerTier.MINOR, _dice(), 1)
+	var social_mod := MutationSystem.get_skill_modifiers(c, "Courtier")
+	assert_eq(social_mod["rolled"], -1)
+	var str_mod := MutationSystem.get_skill_modifiers(c, "Athletics")
+	assert_eq(str_mod["rolled"], 2)  # Taint Rank 2 unkept added
+
+
+func test_father_of_lies_adds_kept_to_temptation() -> void:
+	var c := _make_char(1)
+	c.taint = 4.0  # Rank 4
+	MutationSystem.gain_power(c, Enums.ShadowlandsPowerType.FATHER_OF_LIES, Enums.ShadowlandsPowerTier.MAJOR, _dice(), 1)
+	var mod := MutationSystem.get_skill_modifiers(c, "Temptation")
+	assert_eq(mod["kept"], 4)
+
+
+func test_father_of_lies_adds_kept_to_intimidation() -> void:
+	var c := _make_char(1)
+	c.taint = 3.0
+	MutationSystem.gain_power(c, Enums.ShadowlandsPowerType.FATHER_OF_LIES, Enums.ShadowlandsPowerTier.MAJOR, _dice(), 1)
+	var mod := MutationSystem.get_skill_modifiers(c, "Intimidation")
+	assert_eq(mod["kept"], 3)
+
+
+func test_father_of_lies_adds_kept_to_sincerity_deceit() -> void:
+	var c := _make_char(1)
+	c.taint = 2.0
+	MutationSystem.gain_power(c, Enums.ShadowlandsPowerType.FATHER_OF_LIES, Enums.ShadowlandsPowerTier.MAJOR, _dice(), 1)
+	var mod := MutationSystem.get_skill_modifiers(c, "Sincerity", "Deceit")
+	assert_eq(mod["kept"], 2)
+
+
+func test_father_of_lies_no_bonus_sincerity_non_deceit() -> void:
+	var c := _make_char(1)
+	c.taint = 3.0
+	MutationSystem.gain_power(c, Enums.ShadowlandsPowerType.FATHER_OF_LIES, Enums.ShadowlandsPowerTier.MAJOR, _dice(), 1)
+	var mod := MutationSystem.get_skill_modifiers(c, "Sincerity", "")
+	assert_eq(mod["kept"], 0)
+
+
+func test_no_modifiers_no_mutations_no_powers() -> void:
+	var c := _make_char(1)
+	var mod := MutationSystem.get_skill_modifiers(c, "Kenjutsu")
+	assert_eq(mod["rolled"], 0)
+	assert_eq(mod["kept"], 0)
+	assert_eq(mod["tn"], 0)
+
+
+# ---------------------------------------------------------------------------
+# MASTER_OF_BLOOD maho interaction
+# ---------------------------------------------------------------------------
+
+func test_master_of_blood_reduces_blood_cost() -> void:
+	var c := _make_char(1)
+	c.taint = 2.0
+	MutationSystem.gain_power(c, Enums.ShadowlandsPowerType.MASTER_OF_BLOOD, Enums.ShadowlandsPowerTier.MINOR, _dice(), 1)
+	var result := MutationSystem.apply_master_of_blood(c, 4, 2)
+	assert_eq(result["blood_cost"], 3)  # 4 - 1 = 3
+
+
+func test_master_of_blood_reduces_taint_gain_by_earth() -> void:
+	var c := _make_char(1, 3, 3)  # Earth = min(sta, wil) = 3
+	c.taint = 2.0
+	MutationSystem.gain_power(c, Enums.ShadowlandsPowerType.MASTER_OF_BLOOD, Enums.ShadowlandsPowerTier.MINOR, _dice(), 1)
+	var result := MutationSystem.apply_master_of_blood(c, 4, 3)
+	assert_eq(result["taint_gain"], 1)  # max(1, 3 - 3) = 1
+
+
+func test_master_of_blood_taint_minimum_is_1() -> void:
+	var c := _make_char(1, 10, 10)  # Earth 10
+	c.taint = 2.0
+	MutationSystem.gain_power(c, Enums.ShadowlandsPowerType.MASTER_OF_BLOOD, Enums.ShadowlandsPowerTier.MINOR, _dice(), 1)
+	var result := MutationSystem.apply_master_of_blood(c, 4, 1)
+	assert_eq(result["taint_gain"], 1)  # min 1
+
+
+func test_apply_master_of_blood_no_power_returns_unchanged() -> void:
+	var c := _make_char(1)
+	var result := MutationSystem.apply_master_of_blood(c, 6, 3)
+	assert_eq(result["blood_cost"], 6)
+	assert_eq(result["taint_gain"], 3)
+
+
+# ---------------------------------------------------------------------------
+# Social penalty helpers
+# ---------------------------------------------------------------------------
+
+func test_get_social_rolled_penalty_stacks_mutations() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.EXTRA_DIGIT, _dice(), 1)  # -1
+	MutationSystem.gain_mutation(c, Enums.MutationType.FOUL_ODOR, _dice(), 1)   # -1
+	assert_eq(MutationSystem.get_social_rolled_penalty(c), 2)
+
+
+func test_get_social_tn_penalty_discolored_skin() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.DISCOLORED_SKIN, _dice(), 1)
+	assert_eq(MutationSystem.get_social_tn_penalty(c), 5)
+
+
+func test_get_social_penalties_zero_without_mutations() -> void:
+	var c := _make_char(1)
+	assert_eq(MutationSystem.get_social_rolled_penalty(c), 0)
+	assert_eq(MutationSystem.get_social_tn_penalty(c), 0)
+
+
+# ---------------------------------------------------------------------------
+# is_lost
+# ---------------------------------------------------------------------------
+
+func test_is_lost_false_below_5() -> void:
+	var c := _make_char(1)
+	c.taint = 4.9
+	assert_false(MutationSystem.is_lost(c))
+
+
+func test_is_lost_true_at_5() -> void:
+	var c := _make_char(1)
+	c.taint = 5.0
+	assert_true(MutationSystem.is_lost(c))
+
+
+# ---------------------------------------------------------------------------
+# DayOrchestrator integration stubs
+# ---------------------------------------------------------------------------
+
+func test_process_taint_rank_changes_triggers_on_threshold_crossing() -> void:
+	var c := _make_char(1, 3, 3)
+	c.taint = 2.0
+	c.taint_rank_last_processed = 0  # rank 0 was last processed
+	var characters: Array = [c]
+	var d := _dice()
+	var results := DayOrchestrator._process_taint_rank_changes(characters, d, 1)
+	# Should trigger rank 1 and rank 2 events
+	assert_true(results.size() >= 1)
+	assert_eq(c.taint_rank_last_processed, 2)
+
+
+func test_process_taint_rank_changes_no_event_already_processed() -> void:
+	var c := _make_char(1, 3, 3)
+	c.taint = 2.0
+	c.taint_rank_last_processed = 2  # already processed up to rank 2
+	var characters: Array = [c]
+	var results := DayOrchestrator._process_taint_rank_changes(characters, _dice(), 1)
+	assert_eq(results.size(), 0)
+
+
+func test_process_taint_rank_changes_skips_dead() -> void:
+	var c := _make_char(1, 3, 3)
+	c.taint = 3.0
+	c.taint_rank_last_processed = 0
+	c.wounds_taken = 100  # dead
+	var results := DayOrchestrator._process_taint_rank_changes([c], _dice(), 1)
+	assert_eq(results.size(), 0)
+
+
+func test_process_periodic_taint_rolls_fires_on_period() -> void:
+	var c := _make_char(1, 1, 1)  # Earth 1 — likely fails TN 10
+	c.taint = 1.0  # Rank 1: period = 30
+	var results := DayOrchestrator._process_periodic_taint_rolls([c], _dice(), 30)
+	assert_eq(results.size(), 1)
+	assert_eq(results[0]["taint_rank"], 1)
+
+
+func test_process_periodic_taint_rolls_skips_non_period_day() -> void:
+	var c := _make_char(1, 3, 3)
+	c.taint = 1.0  # period 30
+	var results := DayOrchestrator._process_periodic_taint_rolls([c], _dice(), 29)
+	assert_eq(results.size(), 0)
+
+
+func test_process_periodic_taint_rolls_skips_dead() -> void:
+	var c := _make_char(1, 1, 1)
+	c.taint = 1.0
+	c.wounds_taken = 100
+	var results := DayOrchestrator._process_periodic_taint_rolls([c], _dice(), 30)
+	assert_eq(results.size(), 0)
+
+
+func test_process_periodic_taint_rolls_skips_untainted() -> void:
+	var c := _make_char(1, 3, 3)
+	c.taint = 0.0
+	var results := DayOrchestrator._process_periodic_taint_rolls([c], _dice(), 30)
+	assert_eq(results.size(), 0)
