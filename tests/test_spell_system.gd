@@ -1103,3 +1103,6 @@ func test_master_of_the_rolling_river_is_combat_only() -> void:
 
 func test_flow_through_the_void_is_transmute_material() -> void:
 	assert_eq(SpellSystem.SPELL_LIBRARY["flow_through_the_void"]["s"], SpellSystem.SpellSimEffect.TRANSMUTE_MATERIAL)
+
+func test_the_kamis_will_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["the_kamis_will"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)

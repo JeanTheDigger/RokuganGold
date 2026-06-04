@@ -172,7 +172,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"major_binding":                 {"e": 1, "m": 5, "s": 0},
 	"strike_at_the_roots":           {"e": 1, "m": 5, "s": 0},
 	"the_kamis_strength":            {"e": 1, "m": 5, "s": 0},
-	"the_kamis_will":                {"e": 1, "m": 5, "s": 6},
+	"the_kamis_will":                {"e": 1, "m": 5, "s": 0},   # Willpower boost + spell resistance buff — COMBAT_ONLY
 	# ML6
 	"essence_of_jade":               {"e": 1, "m": 6, "s": 10},
 	"power_of_the_earth_dragon":     {"e": 1, "m": 6, "s": 0},
