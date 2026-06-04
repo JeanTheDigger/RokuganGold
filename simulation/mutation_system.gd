@@ -508,6 +508,18 @@ static func get_skill_modifiers(
 		if is_temptation or is_intimidation or is_sincerity_deceit:
 			dk += taint_rank
 
+	# MIND_OF_DARKNESS (s44 line 123): if Lost, add Taint Rank (flat) to rolls with
+	# mental Traits (Intelligence, Willpower, Awareness, Perception).
+	# "Embrace" path for non-Lost characters is an active narrative choice — not wired
+	# for NPC simulation.
+	if has_power(character, Enums.ShadowlandsPowerType.MIND_OF_DARKNESS) and is_lost(character):
+		var used_trait: Enums.Trait = SkillResolver.get_trait_for_skill(skill_name)
+		if used_trait in [Enums.Trait.INTELLIGENCE, Enums.Trait.WILLPOWER,
+				Enums.Trait.AWARENESS, Enums.Trait.PERCEPTION]:
+			# Positive dtn = benefit (adds to final_total via total_bonus chain).
+			# This matches the existing sign convention shared by all dtn entries here.
+			dtn += taint_rank
+
 	return {"rolled": dr, "kept": dk, "tn": dtn}
 
 

@@ -445,3 +445,49 @@ func test_wrath_of_kami_stacks_with_raises() -> void:
 	var r: Dictionary = SpellSystem.resolve_cast(_char, "jurojins_balm", _dice, 1, target)
 	assert_eq(r.get("wrath_of_kami_bonus", -1), 1)
 	assert_eq(r.get("tn", -1), 10)  # 10 + 5 (raise) - 5 (wrath) = 10
+
+
+# -- MASTER_OF_BLOOD +10 TN on non-maho spells (s44 line 117) --------------------
+
+func _add_master_of_blood(char: L5RCharacterData) -> void:
+	char.mutations = []
+	char.shadowlands_powers = []
+	var p: ShadowlandsPowerData = ShadowlandsPowerData.new()
+	p.power_type = Enums.ShadowlandsPowerType.MASTER_OF_BLOOD
+	p.tier = Enums.ShadowlandsPowerTier.MAJOR
+	char.shadowlands_powers = [p]
+	char.taint = 3.0
+
+
+func test_master_of_blood_adds_10_tn_to_non_maho_spell() -> void:
+	# jurojins_balm ML1: base TN = 10. With MASTER_OF_BLOOD TN must be 20.
+	_char.spell_slots_used = {}
+	_char.spell_void_bonus_used = 0
+	_char.advantages = []
+	_char.disadvantages = []
+	_add_master_of_blood(_char)
+	var r: Dictionary = SpellSystem.resolve_cast(_char, "jurojins_balm", _dice)
+	assert_eq(r.get("tn", -1), 20)
+
+
+func test_master_of_blood_stacks_with_raises() -> void:
+	# 1 raise adds +5; MASTER_OF_BLOOD adds +10 → TN = 25.
+	_char.spell_slots_used = {}
+	_char.spell_void_bonus_used = 0
+	_char.advantages = []
+	_char.disadvantages = []
+	_add_master_of_blood(_char)
+	var r: Dictionary = SpellSystem.resolve_cast(_char, "jurojins_balm", _dice, 1)
+	assert_eq(r.get("tn", -1), 25)
+
+
+func test_no_master_of_blood_no_extra_tn() -> void:
+	# Without the power TN is the base 10 for ML1.
+	_char.spell_slots_used = {}
+	_char.spell_void_bonus_used = 0
+	_char.advantages = []
+	_char.disadvantages = []
+	_char.mutations = []
+	_char.shadowlands_powers = []
+	var r: Dictionary = SpellSystem.resolve_cast(_char, "jurojins_balm", _dice)
+	assert_eq(r.get("tn", -1), 10)

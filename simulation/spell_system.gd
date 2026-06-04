@@ -512,6 +512,10 @@ static func resolve_cast(character: L5RCharacterData, spell_id: String,
 	# WRATH_OF_THE_KAMI (s45): target's curse grants caster one Free Raise on the casting roll.
 	var wrath_bonus: int = AdvantageSystem.get_wrath_of_kami_bonus(target, cast_ring) if target != null else 0
 	var tn: int = get_casting_tn(ml) + (raises * 5) - (wrath_bonus * 5)
+	# MASTER_OF_BLOOD (s44 line 117): all non-maho spells suffer +10 TN for the caster.
+	# Every SpellSystem spell is non-maho, so the check is unconditional.
+	if MutationSystem.has_power(character, Enums.ShadowlandsPowerType.MASTER_OF_BLOOD):
+		tn += 10
 	var roll_dice: int = ring_val + eff_rank
 	var keep_dice: int = ring_val
 	# Slot consumed on attempt regardless of outcome

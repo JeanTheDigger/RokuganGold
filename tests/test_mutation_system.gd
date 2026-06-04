@@ -674,3 +674,67 @@ func test_process_periodic_taint_rolls_skips_untainted() -> void:
 	c.taint = 0.0
 	var results := DayOrchestrator._process_periodic_taint_rolls([c], _dice(), 30)
 	assert_eq(results.size(), 0)
+
+
+# ---------------------------------------------------------------------------
+# MIND_OF_DARKNESS — s44 line 123
+# ---------------------------------------------------------------------------
+
+func _char_with_mind_of_darkness(taint: float, is_lost: bool) -> L5RCharacterData:
+	var c := _make_char(50)
+	c.taint = taint
+	var p := ShadowlandsPowerData.new()
+	p.power_type = Enums.ShadowlandsPowerType.MIND_OF_DARKNESS
+	p.tier = Enums.ShadowlandsPowerTier.MAJOR
+	c.shadowlands_powers = [p]
+	return c
+
+
+func test_mind_of_darkness_lost_adds_taint_rank_to_awareness_skill() -> void:
+	# Lost character (taint 5.1 → rank 5) with MIND_OF_DARKNESS.
+	# Etiquette uses Awareness; dtn should be +5.
+	var c := _char_with_mind_of_darkness(5.1, true)
+	var mod: Dictionary = MutationSystem.get_skill_modifiers(c, "Etiquette")
+	assert_eq(mod.get("tn", 0), 5)  # taint_rank 5
+
+
+func test_mind_of_darkness_lost_adds_taint_rank_to_intelligence_skill() -> void:
+	# Lore: Heraldry uses Intelligence.
+	var c := _char_with_mind_of_darkness(5.0, true)
+	var mod: Dictionary = MutationSystem.get_skill_modifiers(c, "Lore: Heraldry")
+	assert_eq(mod.get("tn", 0), 5)
+
+
+func test_mind_of_darkness_lost_adds_taint_rank_to_willpower_skill() -> void:
+	# Meditation uses Willpower.
+	var c := _char_with_mind_of_darkness(5.0, true)
+	var mod: Dictionary = MutationSystem.get_skill_modifiers(c, "Meditation")
+	assert_eq(mod.get("tn", 0), 5)
+
+
+func test_mind_of_darkness_lost_adds_taint_rank_to_perception_skill() -> void:
+	# Investigation uses Perception.
+	var c := _char_with_mind_of_darkness(5.0, true)
+	var mod: Dictionary = MutationSystem.get_skill_modifiers(c, "Investigation")
+	assert_eq(mod.get("tn", 0), 5)
+
+
+func test_mind_of_darkness_does_not_affect_non_mental_skill() -> void:
+	# Kenjutsu uses Agility — must not get the bonus.
+	var c := _char_with_mind_of_darkness(5.0, true)
+	var mod: Dictionary = MutationSystem.get_skill_modifiers(c, "Kenjutsu")
+	assert_eq(mod.get("tn", 0), 0)
+
+
+func test_mind_of_darkness_not_applied_to_non_lost() -> void:
+	# Taint rank 3 (not Lost) — GDD says "if Lost" for flat bonus.
+	var c := _char_with_mind_of_darkness(3.5, false)
+	var mod: Dictionary = MutationSystem.get_skill_modifiers(c, "Etiquette")
+	assert_eq(mod.get("tn", 0), 0)
+
+
+func test_mind_of_darkness_rank_scales_with_taint() -> void:
+	# Taint 5.0 → rank 5, so dtn should be +5. Verify rank scaling.
+	var c := _char_with_mind_of_darkness(5.0, true)
+	var mod: Dictionary = MutationSystem.get_skill_modifiers(c, "Sincerity")
+	assert_eq(mod.get("tn", 0), 5)  # Sincerity uses Awareness
