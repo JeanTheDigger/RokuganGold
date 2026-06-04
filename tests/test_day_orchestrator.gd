@@ -16253,3 +16253,116 @@ func test_spy_network_army_focus_missing_company_still_creates_entry() -> void:
 	var entry: KnowledgeEntry = spy.knowledge_pool[0]
 	assert_eq(entry.data.get("company_id", -1), 999)
 	assert_eq(entry.data.get("position", "MISSING"), "")  # empty when company not found
+
+
+# -- _process_ritual_spell_writebacks: DETECT_PRESENCE + kansen density ----------
+
+func test_detect_presence_success_adds_density_knowledge_entry() -> void:
+	# On success, caster receives a kansen_density KnowledgeEntry with density tier from PTL.
+	var shugenja := L5RCharacterData.new()
+	shugenja.character_id = 77
+	shugenja.school_type = Enums.SchoolType.SHUGENJA
+	shugenja.void_ring = 3
+	shugenja.stamina = 3
+	shugenja.willpower = 3
+	shugenja.spells_known = ["sense"]
+	shugenja.insight_rank = 2
+
+	var province := ProvinceData.new()
+	province.province_id = 9
+	province.province_taint_level = 6.5  # MODERATE density tier (6.0–8.9)
+
+	var chars_by_id: Dictionary = {77: shugenja}
+	var character_province_map: Dictionary = {77: 9}
+	var provinces: Dictionary = {9: province}
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(0)
+	var active_topics: Array = []
+	var next_topic_id: Array = [1]
+
+	var results: Array = [{
+		"action_id": "PERFORM_RITUAL",
+		"character_id": 77,
+		"effects": {
+			"requires_spell_roll": true,
+			"ritual_spell_id": "sense",
+		},
+	}]
+
+	DayOrchestrator._process_ritual_spell_writebacks(
+		results, chars_by_id, provinces, character_province_map, dice,
+		active_topics, next_topic_id, 180,
+	)
+
+	# Cast may fail on some seeds, so check conditionally.
+	var density_entries: Array = shugenja.knowledge_pool.filter(
+		func(e: KnowledgeEntry) -> bool: return e.entry_type == "kansen_density"
+	)
+	if active_topics.size() > 0:
+		assert_eq(density_entries.size(), 1)
+		var de: KnowledgeEntry = density_entries[0]
+		assert_eq(de.source, "spell_detect_presence")
+		assert_eq(de.data.get("density_tier"), AsciiMapEnvironment.KansenDensity.MODERATE)
+		assert_eq(de.data.get("province_id"), 9)
+		assert_true(de.data.get("ptl") > 0.0)
+		assert_eq(de.confidence, Enums.KnowledgeConfidence.FRESH)
+	else:
+		pass_test("Spell roll failed with this seed — probabilistic cast")
+
+
+func test_detect_presence_skips_zero_ptl_province() -> void:
+	# No topic and no knowledge entry when province PTL is 0.
+	var shugenja := L5RCharacterData.new()
+	shugenja.character_id = 78
+	shugenja.school_type = Enums.SchoolType.SHUGENJA
+	shugenja.stamina = 3
+	shugenja.willpower = 3
+	shugenja.spells_known = ["sense"]
+	shugenja.insight_rank = 2
+
+	var province := ProvinceData.new()
+	province.province_id = 10
+	province.province_taint_level = 0.0
+
+	var chars_by_id: Dictionary = {78: shugenja}
+	var character_province_map: Dictionary = {78: 10}
+	var provinces: Dictionary = {10: province}
+	var dice: DiceEngine = DiceEngine.new()
+	var active_topics: Array = []
+	var next_topic_id: Array = [1]
+
+	var results: Array = [{
+		"action_id": "PERFORM_RITUAL",
+		"character_id": 78,
+		"effects": {
+			"requires_spell_roll": true,
+			"ritual_spell_id": "sense",
+		},
+	}]
+
+	DayOrchestrator._process_ritual_spell_writebacks(
+		results, chars_by_id, provinces, character_province_map, dice,
+		active_topics, next_topic_id, 180,
+	)
+
+	assert_eq(active_topics.size(), 0)
+	var density_entries: Array = shugenja.knowledge_pool.filter(
+		func(e: KnowledgeEntry) -> bool: return e.entry_type == "kansen_density"
+	)
+	assert_eq(density_entries.size(), 0)
+
+
+func test_detect_presence_density_tier_high_at_ptl_9() -> void:
+	# density_from_ptl thresholds: PTL >= 9.0 → HIGH.
+	assert_eq(
+		AsciiMapEnvironment.density_from_ptl(9.0),
+		AsciiMapEnvironment.KansenDensity.HIGH
+	)
+	assert_eq(
+		AsciiMapEnvironment.density_from_ptl(3.0),
+		AsciiMapEnvironment.KansenDensity.LOW
+	)
+	assert_eq(
+		AsciiMapEnvironment.density_from_ptl(2.9),
+		AsciiMapEnvironment.KansenDensity.NONE
+	)

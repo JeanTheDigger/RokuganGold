@@ -709,3 +709,22 @@ func test_find_bindable_spirit_event_skips_elemental_imbalance() -> void:
 		"bonds_of_ningen_do", 5, [event]
 	)
 	assert_null(found)
+
+
+# -- binding spell reclassifications (minor_binding / major_binding) --------------
+
+func test_minor_binding_is_combat_only() -> void:
+	# GDD s34 ML1: binds Shadowlands/Tainted creatures for 2 hours — combat duration only.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["minor_binding"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_major_binding_is_combat_only() -> void:
+	# GDD s34 ML5: binds any Lost/Shadowlands/Tainted creature for 12 hours — combat duration.
+	# Does not suppress REALM_OVERLAP spiritual insurgency events.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["major_binding"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)

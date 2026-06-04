@@ -123,7 +123,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"elemental_ward":                {"e": 1, "m": 1, "s": 10},
 	"jade_strike":                   {"e": 1, "m": 1, "s": 0},
 	"jurojins_balm":                 {"e": 1, "m": 1, "s": 1},
-	"minor_binding":                 {"e": 1, "m": 1, "s": 14},
+	"minor_binding":                 {"e": 1, "m": 1, "s": 0},
 	"soul_of_stone":                 {"e": 1, "m": 1, "s": 0},
 	"stones_endurance":              {"e": 1, "m": 1, "s": 0},
 	"tetsubo_of_earth":              {"e": 1, "m": 1, "s": 0},
@@ -169,7 +169,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"drawing_on_the_mountain":       {"e": 1, "m": 5, "s": 1},
 	"earthquake":                    {"e": 1, "m": 5, "s": 0},
 	"grounding_energy":              {"e": 1, "m": 5, "s": 13},
-	"major_binding":                 {"e": 1, "m": 5, "s": 14},
+	"major_binding":                 {"e": 1, "m": 5, "s": 0},
 	"strike_at_the_roots":           {"e": 1, "m": 5, "s": 0},
 	"the_kamis_strength":            {"e": 1, "m": 5, "s": 0},
 	"the_kamis_will":                {"e": 1, "m": 5, "s": 6},
@@ -618,7 +618,8 @@ static func apply_ward_creation(character: L5RCharacterData, _spell_id: String) 
 ## Realms that each binding spell can suppress per GDD s34.
 ## bonds_of_ningen_do: "Affects creatures from Sakkaku, Chikushudo, Gaki-Do, Toshigoku,
 ##   or Yume-Do." (s34 ML3 — explicitly excludes Meido and Shadowlands/Jigoku creatures)
-## minor_binding / major_binding: target Shadowlands/Tainted creatures; no realm list.
+## minor_binding / major_binding: bind Shadowlands/Tainted creatures (2h/12h combat
+##   duration only) — COMBAT_ONLY, no REALM_OVERLAP suppression effect.
 ## All realms here correspond to SpiritualInsurgencyData REALM_OVERLAP event types only.
 const BINDABLE_REALMS: Dictionary = {
 	"bonds_of_ningen_do": [

@@ -23310,11 +23310,14 @@ static func _process_ritual_spell_writebacks(
 	## Resolve spell rolls embedded in PERFORM_RITUAL / PERFORM_WORSHIP (s31-s37).
 	## Executors flag requires_spell_roll=true when a ritual_spell_id was set.
 	## Effect routing by SpellSimEffect:
-	##   RITUAL_HONOR    → honor/glory already applied by EffectApplicator via honor_change
-	##   COMMUNE_KAMI    → no additional sim effect (worship economy handled by WKS)
-	##   DETECT_PRESENCE → topic if tainted province found
-	##   PURIFY_AREA     → province PTL reduction on success
-	##   REMOVE_TAINT    → character taint reduction on success
+	##   RITUAL_HONOR      → honor/glory already applied by EffectApplicator via honor_change
+	##   COMMUNE_KAMI      → no additional sim effect (worship economy handled by WKS)
+	##   DETECT_PRESENCE   → topic if tainted province found + KnowledgeEntry with density tier
+	##   PURIFY_AREA       → province PTL reduction on success
+	##   REMOVE_TAINT      → character taint reduction on success
+	##   SPIRIT_BIND       → resolves a REALM_OVERLAP SpiritualInsurgencyData event
+	##   WARD_CREATION     → taint gate check; if caster tainted, self-knowledge entry
+	##   INFORMATION_GATHER → no sim effect (divination results are scene-specific; falls to _:)
 	for result: Variant in results:
 		var effects: Dictionary = result.get("effects", {})
 		if not effects.get("requires_spell_roll", false):
@@ -23354,6 +23357,23 @@ static func _process_ritual_spell_writebacks(
 						detect_topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(detect_topic.tier)
 						active_topics.append(detect_topic)
 						character.topic_pool.append(detect_topic.topic_id)
+						# Personal knowledge: province kansen density tier derived from PTL.
+						# Tile-level kansen grid (KansenSystem) is ASCII-map-only; province-level
+						# density is the simulation proxy (AsciiMapEnvironment.density_from_ptl).
+						var density_tier: int = AsciiMapEnvironment.density_from_ptl(
+							province.province_taint_level
+						)
+						var density_entry: KnowledgeEntry = KnowledgeEntry.new()
+						density_entry.source = "spell_detect_presence"
+						density_entry.entry_type = "kansen_density"
+						density_entry.data = {
+							"density_tier": density_tier,
+							"province_id": province_id,
+							"ptl": province.province_taint_level,
+						}
+						density_entry.confidence = Enums.KnowledgeConfidence.FRESH
+						density_entry.season_acquired = ic_day / 90
+						character.knowledge_pool.append(density_entry)
 			SpellSystem.SpellSimEffect.PURIFY_AREA:
 				if success and province_id >= 0:
 					var province: ProvinceData = provinces.get(province_id)
