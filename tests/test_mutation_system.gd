@@ -925,3 +925,161 @@ func test_get_social_rolled_penalty_all_sources_stack() -> void:
 		Enums.ShadowlandsPowerTier.MINOR, _dice(), 1
 	)  # +1
 	assert_eq(MutationSystem.get_social_rolled_penalty(c), 6)
+
+
+# ---------------------------------------------------------------------------
+# Combat stubs — get_armor_reduction
+# ---------------------------------------------------------------------------
+
+func test_get_armor_reduction_no_mutations_returns_zero() -> void:
+	var c := _make_char(1)
+	assert_eq(MutationSystem.get_armor_reduction(c), 0)
+
+
+func test_get_armor_reduction_chitinous_armor_is_10() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.CHITINOUS_ARMOR, _dice(), 1)
+	assert_eq(MutationSystem.get_armor_reduction(c), 10)
+
+
+func test_get_armor_reduction_tough_hide_is_5() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.TOUGH_HIDE, _dice(), 1)
+	assert_eq(MutationSystem.get_armor_reduction(c), 5)
+
+
+func test_get_armor_reduction_chitinous_and_tough_hide_stack() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.CHITINOUS_ARMOR, _dice(), 1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.TOUGH_HIDE, _dice(), 1)
+	assert_eq(MutationSystem.get_armor_reduction(c), 15)
+
+
+# ---------------------------------------------------------------------------
+# Combat stubs — get_fear_rating
+# ---------------------------------------------------------------------------
+
+func test_get_fear_rating_no_mutations_returns_zero() -> void:
+	var c := _make_char(1)
+	assert_eq(MutationSystem.get_fear_rating(c), 0)
+
+
+func test_get_fear_rating_beast_of_fu_leng_is_1() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.BEAST_OF_FU_LENG, _dice(), 1)
+	assert_eq(MutationSystem.get_fear_rating(c), 1)
+
+
+func test_get_fear_rating_undead_visage_is_3() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.UNDEAD_VISAGE, _dice(), 1)
+	assert_eq(MutationSystem.get_fear_rating(c), 3)
+
+
+func test_get_fear_rating_takes_highest_when_both_present() -> void:
+	# UNDEAD_VISAGE (3) beats BEAST_OF_FU_LENG (1)
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.BEAST_OF_FU_LENG, _dice(), 1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.UNDEAD_VISAGE, _dice(), 1)
+	assert_eq(MutationSystem.get_fear_rating(c), 3)
+
+
+# ---------------------------------------------------------------------------
+# Combat stubs — has_tentacle_attacks / has_blackened_claws
+# ---------------------------------------------------------------------------
+
+func test_has_tentacle_attacks_false_without_mutation() -> void:
+	var c := _make_char(1)
+	assert_false(MutationSystem.has_tentacle_attacks(c))
+
+
+func test_has_tentacle_attacks_true_with_mutation() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.TENTACLES, _dice(), 1)
+	assert_true(MutationSystem.has_tentacle_attacks(c))
+
+
+func test_has_blackened_claws_false_without_power() -> void:
+	var c := _make_char(1)
+	assert_false(MutationSystem.has_blackened_claws(c))
+
+
+func test_has_blackened_claws_true_with_power() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_power(
+		c, Enums.ShadowlandsPowerType.BLACKENED_CLAWS,
+		Enums.ShadowlandsPowerTier.MINOR, _dice(), 1
+	)
+	assert_true(MutationSystem.has_blackened_claws(c))
+
+
+# ---------------------------------------------------------------------------
+# Combat stubs — get_wound_rank_bonus
+# ---------------------------------------------------------------------------
+
+func test_get_wound_rank_bonus_no_powers_returns_zero() -> void:
+	var c := _make_char(1)
+	assert_eq(MutationSystem.get_wound_rank_bonus(c), 0)
+
+
+func test_get_wound_rank_bonus_blessing_is_3() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_power(
+		c, Enums.ShadowlandsPowerType.BLESSING_OF_THE_DARK_ONE,
+		Enums.ShadowlandsPowerTier.MINOR, _dice(), 1
+	)
+	assert_eq(MutationSystem.get_wound_rank_bonus(c), 3)
+
+
+func test_get_wound_rank_bonus_strength_is_5() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_power(
+		c, Enums.ShadowlandsPowerType.STRENGTH_OF_THE_DARK_ONE,
+		Enums.ShadowlandsPowerTier.MAJOR, _dice(), 1
+	)
+	assert_eq(MutationSystem.get_wound_rank_bonus(c), 5)
+
+
+func test_get_wound_rank_bonus_both_stack_to_8() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_power(
+		c, Enums.ShadowlandsPowerType.BLESSING_OF_THE_DARK_ONE,
+		Enums.ShadowlandsPowerTier.MINOR, _dice(), 1
+	)
+	MutationSystem.gain_power(
+		c, Enums.ShadowlandsPowerType.STRENGTH_OF_THE_DARK_ONE,
+		Enums.ShadowlandsPowerTier.MAJOR, _dice(), 1
+	)
+	assert_eq(MutationSystem.get_wound_rank_bonus(c), 8)
+
+
+# ---------------------------------------------------------------------------
+# Combat stubs — has_no_wound_penalties / has_invulnerability
+# ---------------------------------------------------------------------------
+
+func test_has_no_wound_penalties_false_without_power() -> void:
+	var c := _make_char(1)
+	assert_false(MutationSystem.has_no_wound_penalties(c))
+
+
+func test_has_no_wound_penalties_true_with_power() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_power(
+		c, Enums.ShadowlandsPowerType.UNDEAD_STRENGTH,
+		Enums.ShadowlandsPowerTier.MAJOR, _dice(), 1
+	)
+	assert_true(MutationSystem.has_no_wound_penalties(c))
+
+
+func test_has_invulnerability_false_without_power() -> void:
+	var c := _make_char(1)
+	assert_false(MutationSystem.has_invulnerability(c))
+
+
+func test_has_invulnerability_true_with_power() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_power(
+		c, Enums.ShadowlandsPowerType.PROTECTION_OF_THE_DARK,
+		Enums.ShadowlandsPowerTier.MAJOR, _dice(), 1
+	)
+	assert_true(MutationSystem.has_invulnerability(c))

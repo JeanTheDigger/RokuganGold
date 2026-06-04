@@ -573,6 +573,78 @@ static func get_social_tn_penalty(character: L5RCharacterData) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Combat stubs  (blocked on s40 individual combat — values correct, not applied)
+# ---------------------------------------------------------------------------
+
+## Returns total Reduction from mutations (s44). Stacks with armor and spells.
+## CHITINOUS_ARMOR grants Reduction 10; TOUGH_HIDE grants Reduction 5.
+## ARMOR_OF_DEATH is conditional on inflicting 15+ Wounds per round — not
+## pre-computable here; s40 must check has_power(ARMOR_OF_DEATH) inline.
+## Not applied by the simulation engine until s40 is implemented.
+static func get_armor_reduction(character: L5RCharacterData) -> int:
+	var reduction: int = 0
+	if has_mutation(character, Enums.MutationType.CHITINOUS_ARMOR):
+		reduction += 10
+	if has_mutation(character, Enums.MutationType.TOUGH_HIDE):
+		reduction += 5
+	return reduction
+
+
+## Returns the passive Fear rating from the character's visible appearance (s44).
+## BEAST_OF_FU_LENG → Fear 1; UNDEAD_VISAGE → Fear 3. Returns the highest.
+## Activated power Fear (FEAR_POWER=5, TERROR_OF_FU_LENG=10) are per-skirmish
+## active abilities — s40 handles those during combat action resolution.
+## Not applied by the simulation engine until s40 is implemented.
+static func get_fear_rating(character: L5RCharacterData) -> int:
+	var rating: int = 0
+	if has_mutation(character, Enums.MutationType.BEAST_OF_FU_LENG):
+		rating = maxi(rating, 1)
+	if has_mutation(character, Enums.MutationType.UNDEAD_VISAGE):
+		rating = maxi(rating, 3)
+	return rating
+
+
+## Returns true if the character has the TENTACLES mutation (s44).
+## Enables attacks with Small weapons and Grapple initiation via tentacles.
+## Not applied by the simulation engine until s40 is implemented.
+static func has_tentacle_attacks(character: L5RCharacterData) -> bool:
+	return has_mutation(character, Enums.MutationType.TENTACLES)
+
+
+## Returns true if the character has BLACKENED_CLAWS power (s44).
+## Unarmed attacks use DR 2k3; obsidian for bypassing Reduction / Invulnerability.
+## Not applied by the simulation engine until s40 is implemented.
+static func has_blackened_claws(character: L5RCharacterData) -> bool:
+	return has_power(character, Enums.ShadowlandsPowerType.BLACKENED_CLAWS)
+
+
+## Returns extra Wounds added to each Wound Rank from powers (s44).
+## BLESSING_OF_THE_DARK_ONE: +3/rank; STRENGTH_OF_THE_DARK_ONE: +5/rank. Both stack.
+## Not applied by the simulation engine until s40 / wound_system integration.
+static func get_wound_rank_bonus(character: L5RCharacterData) -> int:
+	var bonus: int = 0
+	if has_power(character, Enums.ShadowlandsPowerType.BLESSING_OF_THE_DARK_ONE):
+		bonus += 3
+	if has_power(character, Enums.ShadowlandsPowerType.STRENGTH_OF_THE_DARK_ONE):
+		bonus += 5
+	return bonus
+
+
+## Returns true if the character has UNDEAD_STRENGTH power (s44).
+## When true: no Wound penalties — operates at full effect until killed.
+## Not applied by the simulation engine until s40 is implemented.
+static func has_no_wound_penalties(character: L5RCharacterData) -> bool:
+	return has_power(character, Enums.ShadowlandsPowerType.UNDEAD_STRENGTH)
+
+
+## Returns true if the character has PROTECTION_OF_THE_DARK power (s44).
+## When true: treated as Invulnerable (skin glows when damage is ignored).
+## Not applied by the simulation engine until s40 is implemented.
+static func has_invulnerability(character: L5RCharacterData) -> bool:
+	return has_power(character, Enums.ShadowlandsPowerType.PROTECTION_OF_THE_DARK)
+
+
+# ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
 
