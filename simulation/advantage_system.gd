@@ -1022,11 +1022,45 @@ static func has_weather_immunity(character: L5RCharacterData) -> bool:
 # Lore: Bushido rolls against TN 15 reveal the true rank — caller's responsibility.
 # ---------------------------------------------------------------------------
 
-static func get_perceived_honor(character: L5RCharacterData) -> float:
+static func get_perceived_honor(character: L5RCharacterData, ic_day: int = -1) -> float:
+	# Air ML3-4 overflow: Perceived Honor advantage fails for 7 IC days (s45 line 537).
+	if ic_day >= 0 and character.perceived_honor_blocked_until >= 0 \
+			and ic_day < character.perceived_honor_blocked_until:
+		return character.honor
 	var adv: AdvantageData = get_advantage(character, Enums.Advantage.PERCEIVED_HONOR)
 	if adv == null:
 		return character.honor
 	return character.honor + float(adv.rank)
+
+
+# ---------------------------------------------------------------------------
+# Elemental Imbalance overflow skill penalty (s45 lines 537-545).
+# Returns {rolled: int, kept: int} penalty from active timed overflow states.
+# Consumes the water one-shot flag on first social roll.
+# ---------------------------------------------------------------------------
+
+static func get_imbalance_skill_penalty(
+	character: L5RCharacterData,
+	is_social: bool,
+	ic_day: int = -1,
+) -> Dictionary:
+	var rolled: int = 0
+	var kept: int = 0
+	# Void ML3-4: -1k0 to all rolls for 4 IC days (24 hours, s45 line 545).
+	if ic_day >= 0 and character.void_imbalance_penalty_until >= 0 \
+			and ic_day < character.void_imbalance_penalty_until:
+		rolled -= 1
+	if is_social:
+		# Water ML1-2: -1k0 to next Social Skill Roll (one-shot, s45 line 543).
+		if character.water_imbalance_social_penalty:
+			rolled -= 1
+			character.water_imbalance_social_penalty = false
+		# Air ML3-4: -1k1 to all Social Skill Rolls for 7 IC days (s45 line 537).
+		if ic_day >= 0 and character.air_imbalance_social_penalty_until >= 0 \
+				and ic_day < character.air_imbalance_social_penalty_until:
+			rolled -= 1
+			kept -= 1
+	return {"rolled": rolled, "kept": kept}
 
 
 # ---------------------------------------------------------------------------
@@ -1951,12 +1985,15 @@ static func apply_elemental_imbalance_overflow(
 					sim_effects.append("void_overflow_5_wounds")
 			elif mastery_level <= 4:
 				# ML3-4: All VPs drained; cannot recover for 48 IC days.
+				# Also -1k0 to all rolls for 24 hours (4 IC days) per s45 line 545.
 				vp_lost = character.current_void_points
 				character.current_void_points = 0
 				void_blocked_until = ic_day + 48
 				character.void_refresh_blocked_until = void_blocked_until
+				character.void_imbalance_penalty_until = ic_day + 4
 				sim_effects.append("void_drain_all")
 				sim_effects.append("void_blocked_48")
+				sim_effects.append("void_penalty_4_ic_days")
 			else:
 				# ML5-6: All VPs lost; blocked 1 IC week (7 days). AoE Fear blocked on s40.
 				vp_lost = character.current_void_points
@@ -1984,12 +2021,21 @@ static func apply_elemental_imbalance_overflow(
 				sim_effects.append("fire_aoe_blocked_s40")
 
 		Enums.Ring.AIR:
-			# All Air overflows involve stealth/social flags or AoE — blocked or deferred.
 			if mastery_level <= 2:
+				# ML1-2: stealth is broken; blocked on s40.
 				sim_effects.append("air_stealth_broken_blocked")
 			elif mastery_level <= 4:
-				sim_effects.append("air_perceived_honor_fail_blocked")
+				# ML3-4: Perceived Honor advantage fails for 7 IC days; if no Perceived Honor,
+				# -1k1 to all Social Skill Rolls for 7 IC days (s45 line 537).
+				var has_ph: bool = get_advantage(character, Enums.Advantage.PERCEIVED_HONOR) != null
+				if has_ph:
+					character.perceived_honor_blocked_until = ic_day + 7
+					sim_effects.append("air_perceived_honor_blocked_7_ic_days")
+				else:
+					character.air_imbalance_social_penalty_until = ic_day + 7
+					sim_effects.append("air_social_penalty_1k1_7_ic_days")
 			else:
+				# ML5-6: AoE knockdown — blocked on s40.
 				sim_effects.append("air_aoe_knockdown_blocked_s40")
 
 		Enums.Ring.EARTH:
@@ -1997,9 +2043,10 @@ static func apply_elemental_imbalance_overflow(
 			sim_effects.append("earth_overflow_blocked_s40")
 
 		Enums.Ring.WATER:
-			# Water ML1-2: -1k0 next Social roll (stored as a flag for caller use).
 			# ML3-4 and ML5-6 involve trait reduction and AoE — blocked on s40.
 			if mastery_level <= 2:
+				# ML1-2: -1k0 to next Social Skill Roll (s45 line 543).
+				character.water_imbalance_social_penalty = true
 				sim_effects.append("water_next_social_minus_1k0")
 			else:
 				sim_effects.append("water_overflow_blocked_s40")

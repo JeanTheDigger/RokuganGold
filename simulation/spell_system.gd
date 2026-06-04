@@ -511,7 +511,9 @@ static func resolve_cast(character: L5RCharacterData, spell_id: String,
 	var eff_rank: int = get_effective_school_rank(character, cast_ring)
 	# WRATH_OF_THE_KAMI (s45): target's curse grants caster one Free Raise on the casting roll.
 	var wrath_bonus: int = AdvantageSystem.get_wrath_of_kami_bonus(target, cast_ring) if target != null else 0
-	var tn: int = get_casting_tn(ml) + (raises * 5) - (wrath_bonus * 5)
+	# MAGIC_RESISTANCE (s45): target's advantage adds +3 TN per rank to spells targeting them.
+	var magic_resist_tn: int = AdvantageSystem.get_magic_resistance_tn(target) if target != null else 0
+	var tn: int = get_casting_tn(ml) + (raises * 5) - (wrath_bonus * 5) + magic_resist_tn
 	# MASTER_OF_BLOOD (s44 line 117): all non-maho spells suffer +10 TN for the caster.
 	# Every SpellSystem spell is non-maho, so the check is unconditional.
 	if MutationSystem.has_power(character, Enums.ShadowlandsPowerType.MASTER_OF_BLOOD):

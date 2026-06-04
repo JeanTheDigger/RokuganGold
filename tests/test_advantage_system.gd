@@ -3977,3 +3977,207 @@ func test_spy_army_focus_respects_ooc_week_gate() -> void:
 	# Second call in the same OOC week — should not add another entry.
 	DayOrchestrator._spy_tick_army_focus(spymaster, 55, [comp], {}, 3, 96)
 	assert_eq(spymaster.knowledge_pool.size(), 1)
+
+
+# ---------------------------------------------------------------------------
+# Elemental Imbalance overflow — timed state fields (s45 lines 537-545)
+# ---------------------------------------------------------------------------
+
+func test_void_ml3_sets_void_imbalance_penalty_field() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	c.current_void_points = 2
+	AdvantageSystem.apply_elemental_imbalance_overflow(c, Enums.Ring.VOID, 3, dice, 200)
+	assert_eq(c.void_imbalance_penalty_until, 204)  # 200 + 4 IC days (24 hours)
+
+
+func test_void_ml5_does_not_set_void_imbalance_penalty_field() -> void:
+	# ML5-6 is AoE Fear, not -1k0 penalty; penalty field should stay at -1.
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	c.current_void_points = 2
+	c.void_imbalance_penalty_until = -1
+	AdvantageSystem.apply_elemental_imbalance_overflow(c, Enums.Ring.VOID, 5, dice, 200)
+	assert_eq(c.void_imbalance_penalty_until, -1)
+
+
+func test_water_ml1_sets_social_penalty_flag() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	c.water_imbalance_social_penalty = false
+	AdvantageSystem.apply_elemental_imbalance_overflow(c, Enums.Ring.WATER, 1, dice, 100)
+	assert_true(c.water_imbalance_social_penalty)
+
+
+func test_water_ml3_does_not_set_social_penalty_flag() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	c.water_imbalance_social_penalty = false
+	AdvantageSystem.apply_elemental_imbalance_overflow(c, Enums.Ring.WATER, 3, dice, 100)
+	assert_false(c.water_imbalance_social_penalty)
+
+
+func test_air_ml3_without_perceived_honor_sets_social_penalty_field() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	# No PERCEIVED_HONOR advantage
+	AdvantageSystem.apply_elemental_imbalance_overflow(c, Enums.Ring.AIR, 3, dice, 50)
+	assert_eq(c.air_imbalance_social_penalty_until, 57)  # 50 + 7 IC days
+	assert_eq(c.perceived_honor_blocked_until, -1)
+
+
+func test_air_ml3_with_perceived_honor_blocks_advantage_field() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.PERCEIVED_HONOR, 2)
+	AdvantageSystem.apply_elemental_imbalance_overflow(c, Enums.Ring.AIR, 4, dice, 50)
+	assert_eq(c.perceived_honor_blocked_until, 57)  # 50 + 7 IC days
+	assert_eq(c.air_imbalance_social_penalty_until, -1)
+
+
+func test_air_ml1_does_not_set_timed_fields() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	AdvantageSystem.apply_elemental_imbalance_overflow(c, Enums.Ring.AIR, 1, dice, 50)
+	assert_eq(c.air_imbalance_social_penalty_until, -1)
+	assert_eq(c.perceived_honor_blocked_until, -1)
+
+
+# ---------------------------------------------------------------------------
+# get_imbalance_skill_penalty (s45 lines 537-545)
+# ---------------------------------------------------------------------------
+
+func test_imbalance_penalty_void_active_reduces_rolled() -> void:
+	var c := _make_character()
+	c.void_imbalance_penalty_until = 110
+	var mod: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(c, false, 100)
+	assert_eq(mod.get("rolled", 0), -1)
+	assert_eq(mod.get("kept", 0), 0)
+
+
+func test_imbalance_penalty_void_expired_no_effect() -> void:
+	var c := _make_character()
+	c.void_imbalance_penalty_until = 90  # expired before ic_day 100
+	var mod: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(c, false, 100)
+	assert_eq(mod.get("rolled", 0), 0)
+
+
+func test_imbalance_penalty_water_one_shot_consumed_on_social() -> void:
+	var c := _make_character()
+	c.water_imbalance_social_penalty = true
+	var mod: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(c, true, 100)
+	assert_eq(mod.get("rolled", 0), -1)
+	assert_false(c.water_imbalance_social_penalty)  # flag consumed
+
+
+func test_imbalance_penalty_water_not_applied_to_non_social() -> void:
+	var c := _make_character()
+	c.water_imbalance_social_penalty = true
+	var mod: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(c, false, 100)
+	assert_eq(mod.get("rolled", 0), 0)
+	assert_true(c.water_imbalance_social_penalty)  # flag NOT consumed
+
+
+func test_imbalance_penalty_air_social_active() -> void:
+	var c := _make_character()
+	c.air_imbalance_social_penalty_until = 110
+	var mod: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(c, true, 100)
+	assert_eq(mod.get("rolled", 0), -1)
+	assert_eq(mod.get("kept", 0), -1)
+
+
+func test_imbalance_penalty_air_social_not_applied_to_non_social() -> void:
+	var c := _make_character()
+	c.air_imbalance_social_penalty_until = 110
+	var mod: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(c, false, 100)
+	assert_eq(mod.get("rolled", 0), 0)
+	assert_eq(mod.get("kept", 0), 0)
+
+
+func test_imbalance_penalty_stacks_void_and_water() -> void:
+	var c := _make_character()
+	c.void_imbalance_penalty_until = 110
+	c.water_imbalance_social_penalty = true
+	var mod: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(c, true, 100)
+	assert_eq(mod.get("rolled", 0), -2)  # void -1k0 + water -1k0
+	assert_eq(mod.get("kept", 0), 0)
+
+
+# ---------------------------------------------------------------------------
+# get_perceived_honor with ic_day (s45 line 537)
+# ---------------------------------------------------------------------------
+
+func test_perceived_honor_returns_bonus_when_not_blocked() -> void:
+	var c := _make_character()
+	c.honor = 4.0
+	_add_advantage(c, Enums.Advantage.PERCEIVED_HONOR, 2)
+	c.perceived_honor_blocked_until = -1
+	assert_eq(AdvantageSystem.get_perceived_honor(c, 100), 6.0)
+
+
+func test_perceived_honor_returns_true_honor_when_blocked() -> void:
+	var c := _make_character()
+	c.honor = 4.0
+	_add_advantage(c, Enums.Advantage.PERCEIVED_HONOR, 2)
+	c.perceived_honor_blocked_until = 110  # still active at ic_day 100
+	assert_eq(AdvantageSystem.get_perceived_honor(c, 100), 4.0)
+
+
+func test_perceived_honor_returns_bonus_after_block_expires() -> void:
+	var c := _make_character()
+	c.honor = 4.0
+	_add_advantage(c, Enums.Advantage.PERCEIVED_HONOR, 2)
+	c.perceived_honor_blocked_until = 90  # expired before ic_day 100
+	assert_eq(AdvantageSystem.get_perceived_honor(c, 100), 6.0)
+
+
+func test_perceived_honor_no_ic_day_ignores_block() -> void:
+	# Backward-compat: callers passing no ic_day still get the bonus.
+	var c := _make_character()
+	c.honor = 4.0
+	_add_advantage(c, Enums.Advantage.PERCEIVED_HONOR, 2)
+	c.perceived_honor_blocked_until = 110
+	assert_eq(AdvantageSystem.get_perceived_honor(c), 6.0)
+
+
+# ---------------------------------------------------------------------------
+# MAGIC_RESISTANCE wired into SpellSystem.resolve_cast (s45)
+# ---------------------------------------------------------------------------
+
+func test_magic_resistance_increases_casting_tn() -> void:
+	# jade_strike is Earth ML1; base TN = 10. Rank-2 Magic Resistance adds +6.
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var caster := _make_shugenja(1)
+	caster.spells_known = ["jade_strike"]
+	var target := _make_character(2)
+	_add_advantage(target, Enums.Advantage.MAGIC_RESISTANCE, 2)
+	var r: Dictionary = SpellSystem.resolve_cast(caster, "jade_strike", dice, 0, target)
+	assert_eq(r.get("tn", 0), 16)
+
+
+func test_no_magic_resistance_uses_base_tn() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var caster := _make_shugenja(1)
+	caster.spells_known = ["jade_strike"]
+	var target := _make_character(2)
+	# No Magic Resistance advantage
+	var r: Dictionary = SpellSystem.resolve_cast(caster, "jade_strike", dice, 0, target)
+	assert_eq(r.get("tn", 0), 10)
+
+
+func test_magic_resistance_not_applied_when_no_target() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var caster := _make_shugenja(1)
+	caster.spells_known = ["jade_strike"]
+	var r: Dictionary = SpellSystem.resolve_cast(caster, "jade_strike", dice)
+	assert_eq(r.get("tn", 0), 10)

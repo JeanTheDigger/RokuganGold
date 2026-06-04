@@ -413,12 +413,22 @@ static func resolve_skill_check(
 		character, skill_name, emphasis_name, context
 	)
 
+	# Elemental Imbalance overflow penalties (s45 lines 537-545)
+	var is_social: bool = context.get("is_social", false)
+	var imbalance_mod: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(
+		character, is_social, ic_day
+	)
+
 	# Build the pool: (trait + skill + bonus_rolled) k (trait + bonus_kept)
 	var rolled: int = (
 		trait_value + skill_rank + bonus_rolled + ashes_bonus
 		+ adv_skill.get("rolled", 0) + mutation_mod.get("rolled", 0)
+		+ imbalance_mod.get("rolled", 0)
 	)
-	var kept: int = trait_value + bonus_kept + adv_skill.get("kept", 0) + mutation_mod.get("kept", 0)
+	var kept: int = (
+		trait_value + bonus_kept + adv_skill.get("kept", 0) + mutation_mod.get("kept", 0)
+		+ imbalance_mod.get("kept", 0)
+	)
 	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
 		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn \
 		+ mutation_mod.get("tn", 0)
@@ -554,13 +564,19 @@ static func resolve_contested_check(
 	if wp_b < 0:
 		wp_b = mini(0, wp_b + adv_wound_b)
 
+	# Elemental Imbalance overflow penalties (s45 lines 537-545)
+	var is_social_a: bool = context_a.get("is_social", false)
+	var is_social_b: bool = context_b.get("is_social", false)
+	var imb_a: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(char_a, is_social_a, ic_day)
+	var imb_b: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(char_b, is_social_b, ic_day)
+
 	var roll_a: DiceResult = dice_engine.roll_and_keep(
-		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0),
-		tv_a + adv_a.get("kept", 0), sr_a > 0, emph_a
+		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0),
+		tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0), sr_a > 0, emph_a
 	)
 	var roll_b: DiceResult = dice_engine.roll_and_keep(
-		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0),
-		tv_b + adv_b.get("kept", 0), sr_b > 0, emph_b
+		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0),
+		tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0), sr_b > 0, emph_b
 	)
 
 	var total_a: int = roll_a.total + flat_bonus_a + wp_a + (tfr_a * FREE_RAISE_VALUE) \

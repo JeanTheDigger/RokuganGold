@@ -161,6 +161,12 @@ var spell_void_bonus_used: int = 0
 @export var from_the_ashes: Dictionary = {}
 @export var perfect_gift_targets: Array = []
 
+# -- Elemental Imbalance overflow timed states (s45) --------------------------
+@export var void_imbalance_penalty_until: int = -1   # IC day; -1 = inactive
+@export var water_imbalance_social_penalty: bool = false  # one-shot: -1k0 next social roll
+@export var perceived_honor_blocked_until: int = -1  # IC day; -1 = inactive
+@export var air_imbalance_social_penalty_until: int = -1  # IC day; -1 = inactive
+
 # -- Theater & Art Tracking ----------------------------------------------------
 
 @export var pieces_seen: Dictionary = {}
