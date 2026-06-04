@@ -23334,7 +23334,7 @@ static func _process_ritual_spell_writebacks(
 	##   REMOVE_TAINT      → character taint reduction on success
 	##   SPIRIT_BIND       → resolves a REALM_OVERLAP SpiritualInsurgencyData event
 	##   WARD_CREATION     → taint gate check; if caster tainted, self-knowledge entry
-	##   INFORMATION_GATHER → no sim effect (divination results are scene-specific; falls to _:)
+	##   INFORMATION_GATHER → personality_insight KnowledgeEntry when target is co-located
 	for result: Variant in results:
 		var effects: Dictionary = result.get("effects", {})
 		if not effects.get("requires_spell_roll", false):
@@ -23446,6 +23446,49 @@ static func _process_ritual_spell_writebacks(
 						entry.confidence = Enums.KnowledgeConfidence.FRESH
 						entry.season_acquired = ic_day / 90
 						character.knowledge_pool.append(entry)
+			SpellSystem.SpellSimEffect.INFORMATION_GATHER:
+				# s33-s37 person-intelligence divination (Group A: target must be present).
+				# Produces a personality_insight KnowledgeEntry on success.
+				# Transient-result spells (whispering_wind, master_clouds_eyes,
+				# witness_the_untold) never create lasting knowledge entries.
+				if not success:
+					break
+				var div_target_id: int = effects.get("target_npc_id", -1)
+				if div_target_id < 0:
+					break
+				var div_target: L5RCharacterData = characters_by_id.get(div_target_id)
+				if div_target == null or CharacterStats.is_dead(div_target):
+					break
+				if character.physical_location.is_empty() or \
+						character.physical_location != div_target.physical_location:
+					break
+				var transient_spells: Array[String] = [
+					"whispering_wind", "master_clouds_eyes", "witness_the_untold"
+				]
+				if ritual_spell_id in transient_spells:
+					break
+				var div_data: Dictionary = {
+					"target_character_id": div_target_id,
+					"bushido_virtue": div_target.bushido_virtue,
+					"shourido_virtue": div_target.shourido_virtue,
+				}
+				if ritual_spell_id == "look_into_the_soul":
+					div_data["ring_values"] = {
+						"air":   SpellSystem.get_ring_value(div_target, 0),
+						"earth": SpellSystem.get_ring_value(div_target, 1),
+						"fire":  SpellSystem.get_ring_value(div_target, 2),
+						"water": SpellSystem.get_ring_value(div_target, 3),
+						"void":  SpellSystem.get_ring_value(div_target, 4),
+					}
+				InformationSystem.update_intelligence_knowledge(
+					character,
+					InformationSystem.make_entry(
+						Enums.KnowledgeSource.INTELLIGENCE,
+						"personality_insight",
+						div_data,
+						ic_day / 90
+					)
+				)
 			_:
 				pass  # RITUAL_HONOR/COMMUNE_KAMI: honor_change already handled by EffectApplicator
 

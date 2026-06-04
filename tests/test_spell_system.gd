@@ -1106,3 +1106,63 @@ func test_flow_through_the_void_is_transmute_material() -> void:
 
 func test_the_kamis_will_is_combat_only() -> void:
 	assert_eq(SpellSystem.SPELL_LIBRARY["the_kamis_will"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+
+# -- INFORMATION_GATHER pipeline: get_best_spell_by_effect + NPC metadata ----
+
+func test_get_best_information_spell_returns_highest_ml() -> void:
+	# know_the_mind=ML4, echoes_in_the_void requires Ishiken; know_the_mind wins
+	_char.spells_known = ["reflections_of_pan_ku", "know_the_mind", "the_ties_that_bind"]
+	# reflections=ML1 (Water, INFORMATION_GATHER), know_the_mind=ML4 (Air)
+	var best: String = SpellSystem.get_best_spell_by_effect(
+		_char, SpellSystem.SpellSimEffect.INFORMATION_GATHER
+	)
+	assert_eq(best, "know_the_mind")
+
+
+func test_get_best_information_spell_empty_for_non_shugenja() -> void:
+	# get_best_spell_by_effect doesn't gate on shugenja; NPC engine gate does.
+	# But if spells_known is empty (non-shugenja) the result is empty.
+	_char.spells_known = []
+	var best: String = SpellSystem.get_best_spell_by_effect(
+		_char, SpellSystem.SpellSimEffect.INFORMATION_GATHER
+	)
+	assert_eq(best, "")
+
+
+func test_get_best_information_spell_empty_when_none_known() -> void:
+	_char.spells_known = ["jade_strike", "touch_of_the_void"]
+	var best: String = SpellSystem.get_best_spell_by_effect(
+		_char, SpellSystem.SpellSimEffect.INFORMATION_GATHER
+	)
+	assert_eq(best, "")
+
+
+func test_information_gather_spells_are_in_library() -> void:
+	# Spot-check that the 7 Group-A person-intelligence spells have correct sim_effect.
+	var expected: Array[String] = [
+		"know_the_mind", "look_into_the_soul",
+		"whispering_wind", "master_clouds_eyes",
+		"reflections_of_pan_ku", "the_ties_that_bind",
+	]
+	for spell_id: String in expected:
+		assert_true(SpellSystem.SPELL_LIBRARY.has(spell_id), "missing: " + spell_id)
+		assert_eq(
+			SpellSystem.SPELL_LIBRARY[spell_id]["s"],
+			SpellSystem.SpellSimEffect.INFORMATION_GATHER,
+			"wrong sim_effect for " + spell_id
+		)
+
+
+func test_look_into_the_soul_is_information_gather() -> void:
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["look_into_the_soul"]["s"],
+		SpellSystem.SpellSimEffect.INFORMATION_GATHER
+	)
+
+
+func test_know_the_mind_is_information_gather() -> void:
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["know_the_mind"]["s"],
+		SpellSystem.SpellSimEffect.INFORMATION_GATHER
+	)

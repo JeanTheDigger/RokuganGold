@@ -2884,18 +2884,25 @@ static func _populate_action_metadata(
 			"position": need.target_intent,
 		}
 	elif option.action_id == "PERFORM_RITUAL":
-		var ritual_spell: String = ""
-		if character != null and SpellSystem.is_shugenja(character):
-			# Prefer taint-cleansing spells in provinces with known taint.
-			if not ctx.taint_topic_province_ids.is_empty():
-				ritual_spell = SpellSystem.get_best_spell_by_effect(character, SpellSystem.SpellSimEffect.PURIFY_AREA)
+		if need.need_type == "GATHER_INTELLIGENCE" and character != null and SpellSystem.is_shugenja(character):
+			# Divination path: select highest-ML INFORMATION_GATHER spell for person-intelligence.
+			var info_spell: String = SpellSystem.get_best_spell_by_effect(
+				character, SpellSystem.SpellSimEffect.INFORMATION_GATHER
+			)
+			option.metadata = {"ritual_spell_id": info_spell, "target_npc_id": need.target_npc_id}
+		else:
+			var ritual_spell: String = ""
+			if character != null and SpellSystem.is_shugenja(character):
+				# Prefer taint-cleansing spells in provinces with known taint.
+				if not ctx.taint_topic_province_ids.is_empty():
+					ritual_spell = SpellSystem.get_best_spell_by_effect(character, SpellSystem.SpellSimEffect.PURIFY_AREA)
+					if ritual_spell.is_empty():
+						ritual_spell = SpellSystem.get_best_taint_removal_spell(character)
 				if ritual_spell.is_empty():
-					ritual_spell = SpellSystem.get_best_taint_removal_spell(character)
-			if ritual_spell.is_empty():
-				ritual_spell = SpellSystem.get_best_ritual_spell(character)
-			if ritual_spell.is_empty():
-				ritual_spell = SpellSystem.get_best_detection_spell(character)
-		option.metadata = {"ritual_spell_id": ritual_spell}
+					ritual_spell = SpellSystem.get_best_ritual_spell(character)
+				if ritual_spell.is_empty():
+					ritual_spell = SpellSystem.get_best_detection_spell(character)
+			option.metadata = {"ritual_spell_id": ritual_spell}
 	elif option.action_id == "PERFORM_WORSHIP":
 		var worship_spell: String = ""
 		if character != null and SpellSystem.is_shugenja(character):

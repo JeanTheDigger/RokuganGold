@@ -2465,6 +2465,7 @@ static func _compute_self_effects(action_id: String) -> Dictionary:
 			var ritual_spell: String = action.metadata.get("ritual_spell_id", "")
 			if ritual_spell != "" and SpellSystem.is_shugenja(character):
 				return {"effect": "ritual_spell_cast", "ritual_spell_id": ritual_spell,
+						"target_npc_id": action.metadata.get("target_npc_id", -1),
 						"honor_change": 0.1, "requires_spell_roll": true}
 			return {"effect": "ritual_completed", "honor_change": 0.1}
 		"MENTOR":
