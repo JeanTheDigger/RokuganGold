@@ -609,3 +609,103 @@ func test_apply_ward_creation_boundary_below_rank1() -> void:
 	_char.taint = 0.999
 	var result: Dictionary = SpellSystem.apply_ward_creation(_char, "essence_of_jade")
 	assert_eq(result.get("ward_applied"), true)
+
+
+# -- spell library classification fixes ----------------------------------------
+
+func test_taming_the_beast_is_combat_only() -> void:
+	# GDD s34: tames a natural animal; not a spirit-binding spell.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["taming_the_beast"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_the_ties_that_bind_is_information_gather() -> void:
+	# GDD s36: locates a specific familiar object — Divination, not spirit binding.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["the_ties_that_bind"].get("s"),
+		SpellSystem.SpellSimEffect.INFORMATION_GATHER
+	)
+
+
+func test_the_final_bond_is_information_gather() -> void:
+	# GDD s36: locates a well-known person regardless of location — Divination, not binding.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["the_final_bond"].get("s"),
+		SpellSystem.SpellSimEffect.INFORMATION_GATHER
+	)
+
+
+# -- can_bind_realm / find_bindable_spirit_event --------------------------------
+
+func test_bonds_of_ningen_do_can_bind_gaki_do() -> void:
+	assert_true(SpellSystem.can_bind_realm("bonds_of_ningen_do", Enums.SpiritRealm.GAKI_DO))
+
+
+func test_bonds_of_ningen_do_can_bind_toshigoku() -> void:
+	assert_true(SpellSystem.can_bind_realm("bonds_of_ningen_do", Enums.SpiritRealm.TOSHIGOKU))
+
+
+func test_bonds_of_ningen_do_cannot_bind_meido() -> void:
+	# GDD s34 ML3: explicitly lists Sakkaku/Chikushudo/Gaki-Do/Toshigoku/Yume-Do.
+	# Meido (realm of the dead) is not listed.
+	assert_false(SpellSystem.can_bind_realm("bonds_of_ningen_do", Enums.SpiritRealm.MEIDO))
+
+
+func test_minor_binding_cannot_bind_realm_spirits() -> void:
+	# minor_binding targets Shadowlands creatures — no realm list.
+	assert_false(SpellSystem.can_bind_realm("minor_binding", Enums.SpiritRealm.GAKI_DO))
+
+
+func test_find_bindable_spirit_event_returns_matching_event() -> void:
+	var event: SpiritualInsurgencyData = SpiritualInsurgencyData.new()
+	event.event_id = 1
+	event.province_id = 5
+	event.event_type = Enums.SpiritualEventType.REALM_OVERLAP
+	event.realm = Enums.SpiritRealm.GAKI_DO
+	event.resolved = false
+	var found: SpiritualInsurgencyData = SpellSystem.find_bindable_spirit_event(
+		"bonds_of_ningen_do", 5, [event]
+	)
+	assert_eq(found, event)
+
+
+func test_find_bindable_spirit_event_skips_resolved_events() -> void:
+	var event: SpiritualInsurgencyData = SpiritualInsurgencyData.new()
+	event.event_id = 1
+	event.province_id = 5
+	event.event_type = Enums.SpiritualEventType.REALM_OVERLAP
+	event.realm = Enums.SpiritRealm.GAKI_DO
+	event.resolved = true
+	var found: SpiritualInsurgencyData = SpellSystem.find_bindable_spirit_event(
+		"bonds_of_ningen_do", 5, [event]
+	)
+	assert_null(found)
+
+
+func test_find_bindable_spirit_event_skips_wrong_province() -> void:
+	var event: SpiritualInsurgencyData = SpiritualInsurgencyData.new()
+	event.event_id = 1
+	event.province_id = 99
+	event.event_type = Enums.SpiritualEventType.REALM_OVERLAP
+	event.realm = Enums.SpiritRealm.GAKI_DO
+	event.resolved = false
+	var found: SpiritualInsurgencyData = SpellSystem.find_bindable_spirit_event(
+		"bonds_of_ningen_do", 5, [event]
+	)
+	assert_null(found)
+
+
+func test_find_bindable_spirit_event_skips_elemental_imbalance() -> void:
+	# ELEMENTAL_IMBALANCE events are not REALM_OVERLAP — binding spells cannot target them.
+	var event: SpiritualInsurgencyData = SpiritualInsurgencyData.new()
+	event.event_id = 1
+	event.province_id = 5
+	event.event_type = Enums.SpiritualEventType.ELEMENTAL_IMBALANCE
+	event.realm = Enums.SpiritRealm.GAKI_DO
+	event.resolved = false
+	var found: SpiritualInsurgencyData = SpellSystem.find_bindable_spirit_event(
+		"bonds_of_ningen_do", 5, [event]
+	)
+	assert_null(found)

@@ -136,7 +136,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"hands_of_clay":                 {"e": 1, "m": 2, "s": 0},
 	"jurojins_curse":                {"e": 1, "m": 2, "s": 0},
 	"rites_of_preservation":         {"e": 1, "m": 2, "s": 12},
-	"taming_the_beast":              {"e": 1, "m": 2, "s": 14},
+	"taming_the_beast":              {"e": 1, "m": 2, "s": 0},
 	"the_mountains_feet":            {"e": 1, "m": 2, "s": 11},
 	"wholeness_of_the_world":        {"e": 1, "m": 2, "s": 1},
 	"whispers_of_the_land":          {"e": 1, "m": 2, "s": 17},
@@ -272,7 +272,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"stand_against_the_waves":       {"e": 3, "m": 2, "s": 0},
 	"strength_of_the_tsunami":       {"e": 3, "m": 2, "s": 0},
 	"surging_soul":                  {"e": 3, "m": 2, "s": 0},
-	"the_ties_that_bind":            {"e": 3, "m": 2, "s": 14},
+	"the_ties_that_bind":            {"e": 3, "m": 2, "s": 17},
 	"wave_borne_speed":              {"e": 3, "m": 2, "s": 11},
 	"wisdom_and_clarity":            {"e": 3, "m": 2, "s": 17},
 	"yukis_touch":                   {"e": 3, "m": 2, "s": 0},
@@ -304,7 +304,7 @@ const SPELL_LIBRARY: Dictionary = {
 	# ML5
 	"chi_reversal":                  {"e": 3, "m": 5, "s": 0},
 	"ever_changing_waves":           {"e": 3, "m": 5, "s": 0},
-	"the_final_bond":                {"e": 3, "m": 5, "s": 14},
+	"the_final_bond":                {"e": 3, "m": 5, "s": 17},
 	"hands_of_the_tides":            {"e": 3, "m": 5, "s": 0},
 	"open_the_waves":                {"e": 3, "m": 5, "s": 11},
 	"power_of_the_ocean":            {"e": 3, "m": 5, "s": 0},
@@ -613,6 +613,50 @@ static func apply_ward_creation(character: L5RCharacterData, _spell_id: String) 
 		# s34: jade spirits recoil — ward blocked and caster learns of their own Taint.
 		return {"ward_applied": false, "taint_revealed": true}
 	return {"ward_applied": true, "taint_revealed": false}
+
+
+## Realms that each binding spell can suppress per GDD s34.
+## bonds_of_ningen_do: "Affects creatures from Sakkaku, Chikushudo, Gaki-Do, Toshigoku,
+##   or Yume-Do." (s34 ML3 — explicitly excludes Meido and Shadowlands/Jigoku creatures)
+## minor_binding / major_binding: target Shadowlands/Tainted creatures; no realm list.
+## All realms here correspond to SpiritualInsurgencyData REALM_OVERLAP event types only.
+const BINDABLE_REALMS: Dictionary = {
+	"bonds_of_ningen_do": [
+		Enums.SpiritRealm.GAKI_DO,
+		Enums.SpiritRealm.TOSHIGOKU,
+		Enums.SpiritRealm.CHIKUSHUDO,
+		Enums.SpiritRealm.SAKKAKU,
+		Enums.SpiritRealm.YUME_DO,
+	],
+}
+
+
+## Returns true if the spell can bind a spirit of the given realm type.
+static func can_bind_realm(spell_id: String, realm: Enums.SpiritRealm) -> bool:
+	var bindable: Array = BINDABLE_REALMS.get(spell_id, [])
+	return realm in bindable
+
+
+## Find the first active REALM_OVERLAP spiritual insurgency event at the province that
+## this spell can bind. Returns the SpiritualInsurgencyData or null.
+## Used by _process_ritual_spell_writebacks to apply SPIRIT_BIND suppression (s34, s56.16).
+static func find_bindable_spirit_event(
+		spell_id: String,
+		province_id: int,
+		spiritual_insurgency_events: Array,
+) -> SpiritualInsurgencyData:
+	for event: Variant in spiritual_insurgency_events:
+		if event is not SpiritualInsurgencyData:
+			continue
+		if event.resolved:
+			continue
+		if event.province_id != province_id:
+			continue
+		if event.event_type != Enums.SpiritualEventType.REALM_OVERLAP:
+			continue
+		if can_bind_realm(spell_id, event.realm):
+			return event
+	return null
 
 
 ## Returns all spell IDs in spells_known matching a given SpellSimEffect.

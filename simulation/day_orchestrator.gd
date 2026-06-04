@@ -916,7 +916,7 @@ static func advance_day(
 	_process_ritual_spell_writebacks(
 		day_result.get("results", []),
 		characters_by_id, provinces, character_province_map, dice_engine,
-		active_topics, next_topic_id, ic_day,
+		active_topics, next_topic_id, ic_day, spiritual_insurgency_events,
 	)
 	_process_noshi_consumption_writebacks(
 		day_result.get("results", []), characters_by_id,
@@ -23305,6 +23305,7 @@ static func _process_ritual_spell_writebacks(
 	active_topics: Array,
 	next_topic_id: Array,
 	ic_day: int,
+	spiritual_insurgency_events: Array = [],
 ) -> void:
 	## Resolve spell rolls embedded in PERFORM_RITUAL / PERFORM_WORSHIP (s31-s37).
 	## Executors flag requires_spell_roll=true when a ritual_spell_id was set.
@@ -23361,6 +23362,18 @@ static func _process_ritual_spell_writebacks(
 			SpellSystem.SpellSimEffect.REMOVE_TAINT:
 				if success:
 					SpellSystem.apply_taint_removal(character, ritual_spell_id, margin)
+			SpellSystem.SpellSimEffect.SPIRIT_BIND:
+				# s34/s56.16: a successful binding spell suppresses one matching REALM_OVERLAP
+				# spiritual insurgency event at the province (bonds_of_ningen_do targets
+				# Sakkaku/Chikushudo/Gaki-Do/Toshigoku/Yume-Do per GDD s34 ML3).
+				if success and province_id >= 0:
+					var target_event: SpiritualInsurgencyData = \
+						SpellSystem.find_bindable_spirit_event(
+							ritual_spell_id, province_id, spiritual_insurgency_events
+						)
+					if target_event != null:
+						target_event.resolved = true
+						target_event.resolution_type = "spirit_bind"
 			SpellSystem.SpellSimEffect.WARD_CREATION:
 				# s34 essence_of_jade: jade spirits recoil from Taint rank >= 1.
 				# If the caster is Tainted, the ward is blocked and caster learns their own Taint.
