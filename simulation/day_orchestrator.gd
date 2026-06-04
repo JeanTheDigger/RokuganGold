@@ -23334,7 +23334,8 @@ static func _process_ritual_spell_writebacks(
 	##   REMOVE_TAINT      → character taint reduction on success
 	##   SPIRIT_BIND       → resolves a REALM_OVERLAP SpiritualInsurgencyData event
 	##   WARD_CREATION     → taint gate check; if caster tainted, self-knowledge entry
-	##   INFORMATION_GATHER → personality_insight KnowledgeEntry when target is co-located
+	##   INFORMATION_GATHER → personality_insight (Group A: co-located) or
+	##                         location_intelligence (Group B: remote) KnowledgeEntry
 	for result: Variant in results:
 		var effects: Dictionary = result.get("effects", {})
 		if not effects.get("requires_spell_roll", false):
@@ -23447,10 +23448,11 @@ static func _process_ritual_spell_writebacks(
 						entry.season_acquired = ic_day / 90
 						character.knowledge_pool.append(entry)
 			SpellSystem.SpellSimEffect.INFORMATION_GATHER:
-				# s33-s37 person-intelligence divination (Group A: target must be present).
-				# Produces a personality_insight KnowledgeEntry on success.
-				# Transient-result spells (whispering_wind, master_clouds_eyes,
-				# witness_the_untold) never create lasting knowledge entries.
+				# s33-s37 divination spells. Two sub-groups:
+				#   Group A (person-intelligence): target must be co-located with caster.
+				#   Group B (remote viewing): caster observes target's current settlement
+				#     from a distance (familiarity tracking not yet modeled — known gap).
+				# Transient-result spells and two-step spells produce no lasting knowledge.
 				if not success:
 					break
 				var div_target_id: int = effects.get("target_npc_id", -1)
@@ -23459,13 +23461,62 @@ static func _process_ritual_spell_writebacks(
 				var div_target: L5RCharacterData = characters_by_id.get(div_target_id)
 				if div_target == null or CharacterStats.is_dead(div_target):
 					break
-				if character.physical_location.is_empty() or \
-						character.physical_location != div_target.physical_location:
-					break
+				# Spells that produce no persistent knowledge:
+				# - whispering_wind / witness_the_untold: results stale in <1 round
+				# - master_clouds_eyes: 2-min visual through target's eyes, person-present
+				# - secrets_on_the_wind: requires prior 10-min ritual preparation at site
+				#   (two-step spell not modeled in current single-AP framework)
+				# - whispers_of_the_land: local track revelation (50' radius), not
+				#   strategic intelligence
 				var transient_spells: Array[String] = [
-					"whispering_wind", "master_clouds_eyes", "witness_the_untold"
+					"whispering_wind", "master_clouds_eyes", "witness_the_untold",
+					"secrets_on_the_wind", "whispers_of_the_land",
 				]
 				if ritual_spell_id in transient_spells:
+					break
+				# Group B — remote location scrying (s33/s36/s37)
+				# boundless_sight: see+hear, 50-mile range (Void 1, Ishiken)
+				# reflective_pool: visual only, 10-mile range (Water 2)
+				# dominion_of_suitengu: visual only, 100-mile range, coastal only (Water 4)
+				var location_scrying_spells: Array[String] = [
+					"boundless_sight", "reflective_pool", "dominion_of_suitengu",
+				]
+				if ritual_spell_id in location_scrying_spells:
+					var target_loc: String = div_target.physical_location
+					if target_loc.is_empty():
+						break
+					# dominion_of_suitengu requires target location to be coastal
+					if ritual_spell_id == "dominion_of_suitengu":
+						var target_prov_id: int = character_province_map.get(div_target_id, -1)
+						var target_prov: ProvinceData = provinces.get(target_prov_id) as ProvinceData
+						if target_prov == null or not target_prov.is_coastal:
+							break
+					# Gather all living non-traveling characters visible at target settlement
+					var spotted: Array[int] = []
+					for cid: int in characters_by_id:
+						var sc: L5RCharacterData = characters_by_id[cid]
+						if CharacterStats.is_dead(sc) or sc.is_traveling:
+							continue
+						if sc.physical_location == target_loc:
+							spotted.append(cid)
+					InformationSystem.update_intelligence_knowledge(
+						character,
+						InformationSystem.make_entry(
+							Enums.KnowledgeSource.INTELLIGENCE,
+							"location_intelligence",
+							{
+								"target_character_id": div_target_id,
+								"settlement_id": target_loc,
+								"spotted_characters": spotted,
+								"is_audio_enabled": ritual_spell_id == "boundless_sight",
+							},
+							ic_day / 90
+						)
+					)
+					break
+				# Group A — person-intelligence (target must be co-located with caster)
+				if character.physical_location.is_empty() or \
+						character.physical_location != div_target.physical_location:
 					break
 				var div_data: Dictionary = {
 					"target_character_id": div_target_id,

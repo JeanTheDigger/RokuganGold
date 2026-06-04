@@ -1166,3 +1166,58 @@ func test_know_the_mind_is_information_gather() -> void:
 		SpellSystem.SPELL_LIBRARY["know_the_mind"]["s"],
 		SpellSystem.SpellSimEffect.INFORMATION_GATHER
 	)
+
+
+# -- Group B location-scrying: spell library classification ------------------
+
+func test_boundless_sight_is_information_gather() -> void:
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["boundless_sight"]["s"],
+		SpellSystem.SpellSimEffect.INFORMATION_GATHER
+	)
+
+
+func test_reflective_pool_is_information_gather() -> void:
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["reflective_pool"]["s"],
+		SpellSystem.SpellSimEffect.INFORMATION_GATHER
+	)
+
+
+func test_dominion_of_suitengu_is_information_gather() -> void:
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["dominion_of_suitengu"]["s"],
+		SpellSystem.SpellSimEffect.INFORMATION_GATHER
+	)
+
+
+func test_boundless_sight_is_void_element() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["boundless_sight"]["e"], 4)
+
+
+func test_boundless_sight_is_ishiken_only() -> void:
+	assert_true(SpellSystem.SPELL_LIBRARY["boundless_sight"].get("i", false))
+
+
+func test_reflective_pool_is_water_element() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["reflective_pool"]["e"], 3)
+
+
+func test_dominion_of_suitengu_is_water_element() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["dominion_of_suitengu"]["e"], 3)
+
+
+func test_secrets_on_the_wind_is_information_gather() -> void:
+	# Classified INFORMATION_GATHER but skipped in writeback (preparation-ritual gate).
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["secrets_on_the_wind"]["s"],
+		SpellSystem.SpellSimEffect.INFORMATION_GATHER
+	)
+
+
+func test_whispers_of_the_land_is_information_gather() -> void:
+	# Classified INFORMATION_GATHER but skipped (local track revelation, not strategic intel).
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["whispers_of_the_land"]["s"],
+		SpellSystem.SpellSimEffect.INFORMATION_GATHER
+	)

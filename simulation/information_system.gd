@@ -39,7 +39,7 @@ static func add_knowledge(
 const _DEDUP_ENTRY_TYPES: Array[String] = [
 	"personality_insight", "disposition_toward",
 	"topic_attitude", "topic_position", "court_objective",
-	"priority_objective",
+	"priority_objective", "location_intelligence",
 ]
 
 
