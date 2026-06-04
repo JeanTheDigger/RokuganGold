@@ -149,6 +149,7 @@ static func advance_day(
 	_assign_kaiu_engineer_standing_objectives(characters, objectives_map, settlements)
 	_assign_artisan_standing_objectives(characters, objectives_map)
 	_assign_monk_standing_objectives(characters, objectives_map)
+	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
 
 	_populate_military_data(military_data, companies)
 
@@ -276,6 +277,10 @@ static func advance_day(
 		active_armies, insurgencies,
 	)
 	world_states["_crime_records"] = crime_records
+
+	_process_spy_network_tick(
+		characters, characters_by_id, active_topics, objectives_map, companies, ic_day,
+	)
 
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
@@ -9301,6 +9306,333 @@ static func _reset_battle_healing_daily_state(characters: Array) -> void:
 		if adv == null:
 			continue
 		adv.metadata["healed_today"] = []
+
+
+# =============================================================================
+# SPY NETWORK intelligence tick (s45 lines 341-349)
+# =============================================================================
+
+## NeedTypes that map to Character Focus: the spy tracks a specific rival / target.
+const _SPY_POLITICAL_NEED_TYPES: Array = [
+	"ACQUIRE_LEVERAGE", "ARRANGE_MARRIAGE", "CHALLENGE_TO_DUEL",
+	"DAMAGE_RELATIONSHIP", "ELIMINATE_CHARACTER", "GATHER_INTELLIGENCE",
+	"IDENTIFY_CONTACT", "INVESTIGATE_THREAT", "INVESTIGATE_CRIME",
+	"LOCATE_CHARACTER", "MOVE_TOPIC_POSITION", "RAISE_DISPOSITION",
+	"REASSESS_ELIMINATION", "RESTORE_HONOR", "RESTORE_GOVERNANCE",
+	"SECURE_ALLIANCE", "SEEK_GLORY", "SEEK_MAGISTRATE",
+	"SUPPRESS_INVESTIGATION", "TRIGGER_COMMITMENT",
+]
+
+## NeedTypes that map to Army Focus: the spy tracks a specific military force.
+const _SPY_MILITARY_NEED_TYPES: Array = [
+	"CONDUCT_SIEGE", "CONDUCT_SORTIE", "DEFEND_PROVINCE", "DEPLOY_ARMY",
+	"DEPLOY_SCOUTS", "ENDURE_SIEGE", "LEVY_TROOPS", "MAINTAIN_FORTIFICATION",
+	"MAINTAIN_STEEL_GARRISON", "ORDER_SHADOWLANDS_SORTIE", "PATROL_PROVINCE",
+	"RELIEVE_SIEGE", "TRAIN_TROOPS",
+]
+
+
+## Sync each NPC's spy network focus to their current primary objective (s45 line 349).
+## Reassigns automatically when need_type changes. Political → Character focus,
+## Military → Army focus, everything else → Place focus.
+static func _sync_spy_network_focus(
+	characters: Array,
+	objectives_map: Dictionary,
+	companies: Array,
+	ic_day: int,
+) -> void:
+	var ooc_day: int = ic_day / TimeSystem.TICKS_PER_REAL_DAY
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.is_pc:
+			continue
+		if not AdvantageSystem.has_advantage(character, Enums.Advantage.SPY_NETWORK):
+			continue
+		var adv: AdvantageData = AdvantageSystem.get_advantage(character, Enums.Advantage.SPY_NETWORK)
+		if adv == null:
+			continue
+		var primary: Dictionary = objectives_map.get(character.character_id, {}).get("primary", {})
+		var need_type: String = primary.get("need_type", "")
+		if need_type.is_empty():
+			continue
+		# Only reassign when the primary objective category changes.
+		if need_type == adv.metadata.get("last_synced_need_type", ""):
+			continue
+		var new_focus_type: String
+		var new_focus_id: int = -1
+		if need_type in _SPY_POLITICAL_NEED_TYPES:
+			new_focus_type = "character"
+			new_focus_id = primary.get("target_npc_id", -1)
+		elif need_type in _SPY_MILITARY_NEED_TYPES:
+			new_focus_type = "army"
+			# Prefer target character's commanded unit.
+			var target_npc_id: int = primary.get("target_npc_id", -1)
+			if target_npc_id >= 0:
+				for ch: L5RCharacterData in characters:
+					if not CharacterStats.is_dead(ch) and ch.character_id == target_npc_id:
+						new_focus_id = ch.commanded_unit_id
+						break
+			if new_focus_id < 0:
+				# Fallback: first company commanded by someone not of the spymaster's clan.
+				for comp: Variant in companies:
+					if not comp is MilitaryUnitData.CompanyData:
+						continue
+					if (comp as MilitaryUnitData.CompanyData).commander_id < 0:
+						continue
+					var cmdr_id: int = (comp as MilitaryUnitData.CompanyData).commander_id
+					for ch: L5RCharacterData in characters:
+						if not CharacterStats.is_dead(ch) and ch.character_id == cmdr_id:
+							if ch.clan != character.clan:
+								new_focus_id = (comp as MilitaryUnitData.CompanyData).company_id
+							break
+					if new_focus_id >= 0:
+						break
+		else:
+			# Economic / territorial → place focus on the relevant settlement or province.
+			new_focus_type = "place"
+			new_focus_id = primary.get("target_settlement_id", -1)
+			if new_focus_id < 0:
+				new_focus_id = primary.get("target_province_id", -1)
+		# Record the synced need_type regardless of whether we found a valid focus_id,
+		# so we don't retry on every tick for objectives with no resolvable target.
+		adv.metadata["last_synced_need_type"] = need_type
+		if new_focus_id < 0:
+			continue  # No resolvable target; keep existing focus.
+		AdvantageSystem.set_spy_network_focus(character, new_focus_type, new_focus_id, ooc_day)
+
+
+static func _process_spy_network_tick(
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	objectives_map: Dictionary,
+	companies: Array,
+	ic_day: int,
+) -> void:
+	var ooc_day: int = ic_day / TimeSystem.TICKS_PER_REAL_DAY
+	var ooc_week: int = ooc_day / 7
+	# Build topic lookup
+	var topics_by_id: Dictionary = {}
+	for t_entry: Variant in active_topics:
+		if t_entry is TopicData:
+			topics_by_id[t_entry.topic_id] = t_entry
+	# Build settlement → Set of topic_ids known by any living character there.
+	# Used by "place" focus to simulate agents on the ground.
+	var settlement_topics: Dictionary = {}  # String loc → Array[int]
+	for c_entry: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c_entry) or c_entry.physical_location.is_empty():
+			continue
+		var loc: String = c_entry.physical_location
+		if not settlement_topics.has(loc):
+			settlement_topics[loc] = []
+		for tid: int in c_entry.topic_pool:
+			if tid not in settlement_topics[loc]:
+				settlement_topics[loc].append(tid)
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if not AdvantageSystem.has_advantage(c, Enums.Advantage.SPY_NETWORK):
+			continue
+		var focus: Dictionary = AdvantageSystem.get_spy_network_focus(c)
+		var focus_type: String = focus.get("focus_type", "")
+		var focus_id: int = focus.get("focus_id", -1)
+		if focus_type.is_empty() or focus_id < 0:
+			continue
+		match focus_type:
+			"character":
+				_spy_tick_character_focus(
+					c, focus_id, characters_by_id, objectives_map, topics_by_id, ic_day,
+				)
+			"place":
+				_spy_tick_place_focus(
+					c, focus_id, active_topics, topics_by_id, settlement_topics, ic_day,
+				)
+			"army":
+				_spy_tick_army_focus(c, focus_id, companies, characters_by_id, ooc_week, ic_day)
+
+
+## Character Focus: reveal one unknown fact about the watched character per tick (s45 line 343).
+static func _spy_tick_character_focus(
+	spymaster: L5RCharacterData,
+	target_id: int,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	topics_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	var target: L5RCharacterData = characters_by_id.get(target_id) as L5RCharacterData
+	if target == null or CharacterStats.is_dead(target):
+		return
+	# Select priority order based on spymaster's active objective
+	var primary: Dictionary = objectives_map.get(spymaster.character_id, {}).get("primary", {})
+	var need_type: String = primary.get("need_type", "")
+	var fact_priority: Array
+	if need_type in ["ELIMINATE_CHARACTER", "ACQUIRE_LEVERAGE"]:
+		fact_priority = ["dark_secret", "honor_rank", "priority_objective", "disposition_toward", "observed_location"]
+	elif need_type in ["INVESTIGATE_THREAT", "INVESTIGATE_CRIME"]:
+		fact_priority = ["priority_objective", "dark_secret", "honor_rank", "disposition_toward", "observed_location"]
+	elif need_type in ["RAISE_DISPOSITION", "SECURE_ALLIANCE", "ARRANGE_MARRIAGE"]:
+		fact_priority = ["disposition_toward", "honor_rank", "priority_objective", "dark_secret", "observed_location"]
+	else:
+		fact_priority = ["honor_rank", "priority_objective", "disposition_toward", "dark_secret", "observed_location"]
+	for fact_type: String in fact_priority:
+		var entry: KnowledgeEntry = _spy_build_character_fact(
+			spymaster, target, fact_type, objectives_map, ic_day,
+		)
+		if entry != null:
+			InformationSystem.update_intelligence_knowledge(spymaster, entry)
+			return  # One fact per tick
+
+
+static func _spy_build_character_fact(
+	spymaster: L5RCharacterData,
+	target: L5RCharacterData,
+	fact_type: String,
+	objectives_map: Dictionary,
+	ic_day: int,
+) -> KnowledgeEntry:
+	# Check if already known (dedup by entry_type + target_character_id)
+	for k: KnowledgeEntry in spymaster.knowledge_pool:
+		if k.entry_type == fact_type \
+				and k.data.get("target_character_id", -1) == target.character_id:
+			return null  # Already known
+	var e: KnowledgeEntry = KnowledgeEntry.new()
+	e.source = Enums.KnowledgeSource.INTELLIGENCE
+	e.confidence = Enums.KnowledgeConfidence.FRESH
+	e.season_acquired = ic_day / 90  # 90 IC days per season
+	e.data["target_character_id"] = target.character_id
+	match fact_type:
+		"honor_rank":
+			e.entry_type = "honor_rank"
+			e.data["honor"] = target.honor
+		"priority_objective":
+			e.entry_type = "priority_objective"
+			var tgt_primary: Dictionary = objectives_map.get(target.character_id, {}).get("primary", {})
+			e.data["need_type"] = tgt_primary.get("need_type", "")
+			e.data["target_npc_id"] = tgt_primary.get("target_npc_id", -1)
+		"disposition_toward":
+			# Reveal the most extreme disposition value the spymaster hasn't yet seen
+			e.entry_type = "disposition_toward"
+			var known_targets: Array = []
+			for k: KnowledgeEntry in spymaster.knowledge_pool:
+				if k.entry_type == "disposition_toward" \
+						and k.data.get("target_character_id", -1) == target.character_id:
+					known_targets.append(k.data.get("toward_id", -1))
+			var best_id: int = -1
+			var best_abs: int = -1
+			for cid: int in target.disposition_values:
+				if cid == target.character_id:
+					continue
+				if cid in known_targets:
+					continue
+				var val: int = abs(int(target.disposition_values.get(cid, 0)))
+				if val > best_abs:
+					best_abs = val
+					best_id = cid
+			if best_id < 0:
+				return null  # All dispositions already known
+			e.data["toward_id"] = best_id
+			e.data["disposition"] = int(target.disposition_values.get(best_id, 0))
+		"dark_secret":
+			# Check for DARK_SECRET or FORBIDDEN_KNOWLEDGE disadvantage
+			var has_dark: bool = AdvantageSystem.has_disadvantage(
+				target, Enums.Disadvantage.DARK_SECRET,
+			)
+			var has_forbidden: bool = AdvantageSystem.has_disadvantage(
+				target, Enums.Disadvantage.FORBIDDEN_KNOWLEDGE,
+			)
+			if not has_dark and not has_forbidden:
+				return null
+			e.entry_type = "dark_secret"
+			if has_dark:
+				var dis: DisadvantageData = AdvantageSystem.get_disadvantage(
+					target, Enums.Disadvantage.DARK_SECRET,
+				)
+				e.data["secret_type"] = "DARK_SECRET"
+				e.data["description"] = dis.metadata.get("description", "") if dis != null else ""
+			else:
+				var dis: DisadvantageData = AdvantageSystem.get_disadvantage(
+					target, Enums.Disadvantage.FORBIDDEN_KNOWLEDGE,
+				)
+				e.data["secret_type"] = "FORBIDDEN_KNOWLEDGE"
+				e.data["description"] = dis.metadata.get("knowledge_type", "") if dis != null else ""
+		"observed_location":
+			e.entry_type = "observed_location"
+			e.data["location"] = target.physical_location
+			e.data["observed_ic_day"] = ic_day
+	return e
+
+
+## Place Focus: reveal one Tier 3/4 topic from the watched location per tick (s45 line 345).
+## Uses living characters currently at the location as proxy for "agents on the ground."
+static func _spy_tick_place_focus(
+	spymaster: L5RCharacterData,
+	settlement_id: int,
+	active_topics: Array,
+	topics_by_id: Dictionary,
+	settlement_topics: Dictionary,
+	ic_day: int,
+) -> void:
+	var loc_str: String = str(settlement_id)
+	var local_topic_ids: Array = settlement_topics.get(loc_str, [])
+	if local_topic_ids.is_empty():
+		return
+	# Collect qualifying topics (Tier 3/4, not already known to spymaster)
+	var candidates: Array = []
+	for tid: int in local_topic_ids:
+		if tid in spymaster.topic_pool:
+			continue
+		var t: TopicData = topics_by_id.get(tid) as TopicData
+		if t == null:
+			continue
+		if t.tier == TopicData.Tier.TIER_3 or t.tier == TopicData.Tier.TIER_4:
+			candidates.append(t)
+	if candidates.is_empty():
+		return
+	# Pick most recently created topic
+	var best: TopicData = candidates[0]
+	for t: TopicData in candidates:
+		if t.ic_day_created > best.ic_day_created:
+			best = t
+	spymaster.topic_pool.append(best.topic_id)
+
+
+## Army Focus: once per OOC week, reveal position/size/commander of watched force (s45 line 347).
+static func _spy_tick_army_focus(
+	spymaster: L5RCharacterData,
+	company_id: int,
+	companies: Array,
+	characters_by_id: Dictionary,
+	ooc_week: int,
+	ic_day: int,
+) -> void:
+	var adv: AdvantageData = AdvantageSystem.get_advantage(spymaster, Enums.Advantage.SPY_NETWORK)
+	if adv == null:
+		return
+	# Once per OOC week gate
+	if adv.metadata.get("army_focus_last_ooc_week", -1) == ooc_week:
+		return
+	# Find the target company
+	var target_company: MilitaryUnitData.CompanyData = null
+	for comp: Variant in companies:
+		if comp is MilitaryUnitData.CompanyData and comp.company_id == company_id:
+			target_company = comp
+			break
+	if target_company == null:
+		return
+	adv.metadata["army_focus_last_ooc_week"] = ooc_week
+	var e: KnowledgeEntry = KnowledgeEntry.new()
+	e.source = Enums.KnowledgeSource.INTELLIGENCE
+	e.confidence = Enums.KnowledgeConfidence.FRESH
+	e.season_acquired = ic_day / 90
+	e.entry_type = "army_intelligence"
+	e.data["company_id"] = company_id
+	e.data["location"] = target_company.current_location_id
+	e.data["size_pu"] = target_company.health  # health = PU proxy at company level
+	e.data["commander_id"] = target_company.commander_id
+	e.data["observed_ic_day"] = ic_day
+	InformationSystem.add_knowledge(spymaster, e)
 
 
 # -- LOST_LOVE arrival trigger (s45) ------------------------------------------

@@ -3763,3 +3763,217 @@ func test_imperial_spouse_stacks_with_social_position() -> void:
 	AdvantageSystem.assign_derived_advantages(c, [], {})
 	# SOCIAL_POSITION +1.0 then IMPERIAL_SPOUSE +0.5 = 3.5
 	assert_eq(c.status, 3.5)
+
+
+# ---------------------------------------------------------------------------
+# SPY_NETWORK — focus sync (s45 line 349)
+# ---------------------------------------------------------------------------
+
+func _make_spy_character(id: int, clan: String = "Crane") -> L5RCharacterData:
+	var c := _make_character(id)
+	c.clan = clan
+	_add_advantage(c, Enums.Advantage.SPY_NETWORK)
+	return c
+
+
+func test_sync_spy_political_objective_sets_character_focus() -> void:
+	var spymaster := _make_spy_character(1)
+	var target := _make_character(99)
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "DAMAGE_RELATIONSHIP", "target_npc_id": 99}},
+	}
+	DayOrchestrator._sync_spy_network_focus([spymaster, target], objectives_map, [], 0)
+	var focus := AdvantageSystem.get_spy_network_focus(spymaster)
+	assert_eq(focus.get("focus_type"), "character")
+	assert_eq(focus.get("focus_id"), 99)
+
+
+func test_sync_spy_military_objective_sets_army_focus_from_commander() -> void:
+	var spymaster := _make_spy_character(1, "Crane")
+	var enemy_commander := _make_character(50)
+	enemy_commander.clan = "Lion"
+	enemy_commander.commanded_unit_id = 201
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "DEFEND_PROVINCE", "target_npc_id": 50}},
+	}
+	DayOrchestrator._sync_spy_network_focus(
+		[spymaster, enemy_commander], objectives_map, [], 0,
+	)
+	var focus := AdvantageSystem.get_spy_network_focus(spymaster)
+	assert_eq(focus.get("focus_type"), "army")
+	assert_eq(focus.get("focus_id"), 201)
+
+
+func test_sync_spy_military_fallback_to_enemy_company() -> void:
+	# No target_npc_id in objective — fall back to first company with non-same-clan commander.
+	var spymaster := _make_spy_character(1, "Crane")
+	var enemy_commander := _make_character(50)
+	enemy_commander.clan = "Lion"
+	var comp := MilitaryUnitData.CompanyData.new()
+	comp.company_id = 77
+	comp.commander_id = 50
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "CONDUCT_SIEGE", "target_npc_id": -1}},
+	}
+	DayOrchestrator._sync_spy_network_focus(
+		[spymaster, enemy_commander], objectives_map, [comp], 0,
+	)
+	var focus := AdvantageSystem.get_spy_network_focus(spymaster)
+	assert_eq(focus.get("focus_type"), "army")
+	assert_eq(focus.get("focus_id"), 77)
+
+
+func test_sync_spy_economic_objective_sets_place_focus() -> void:
+	var spymaster := _make_spy_character(1)
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "ACQUIRE_RESOURCE", "target_settlement_id": 42}},
+	}
+	DayOrchestrator._sync_spy_network_focus([spymaster], objectives_map, [], 0)
+	var focus := AdvantageSystem.get_spy_network_focus(spymaster)
+	assert_eq(focus.get("focus_type"), "place")
+	assert_eq(focus.get("focus_id"), 42)
+
+
+func test_sync_spy_no_reassignment_when_need_type_unchanged() -> void:
+	var spymaster := _make_spy_character(1)
+	# Pre-set focus and last_synced_need_type.
+	var adv := AdvantageSystem.get_advantage(spymaster, Enums.Advantage.SPY_NETWORK)
+	adv.metadata["focus_type"] = "character"
+	adv.metadata["focus_id"] = 5
+	adv.metadata["last_synced_need_type"] = "DAMAGE_RELATIONSHIP"
+	var objectives_map: Dictionary = {
+		1: {"primary": {"need_type": "DAMAGE_RELATIONSHIP", "target_npc_id": 99}},
+	}
+	DayOrchestrator._sync_spy_network_focus([spymaster], objectives_map, [], 0)
+	# focus_id should remain 5, not be updated to 99.
+	var focus := AdvantageSystem.get_spy_network_focus(spymaster)
+	assert_eq(focus.get("focus_id"), 5)
+
+
+# ---------------------------------------------------------------------------
+# SPY_NETWORK — intelligence tick (s45 lines 343-347)
+# ---------------------------------------------------------------------------
+
+func test_spy_character_focus_reveals_honor_rank() -> void:
+	var spymaster := _make_spy_character(1)
+	var target := _make_character(10)
+	target.honor = 7.5
+	var objectives_map: Dictionary = {1: {}}
+	var topics_by_id: Dictionary = {}
+	DayOrchestrator._spy_tick_character_focus(
+		spymaster, 10, {10: target}, objectives_map, topics_by_id, 0,
+	)
+	assert_eq(spymaster.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = spymaster.knowledge_pool[0]
+	assert_eq(entry.entry_type, "honor_rank")
+	assert_eq(entry.data.get("honor"), 7.5)
+	assert_eq(entry.data.get("target_character_id"), 10)
+
+
+func test_spy_character_focus_skips_known_fact_tries_next() -> void:
+	# honor_rank already known → moves to priority_objective.
+	var spymaster := _make_spy_character(1)
+	var target := _make_character(10)
+	# Pre-populate honor_rank knowledge.
+	var existing := KnowledgeEntry.new()
+	existing.entry_type = "honor_rank"
+	existing.data = {"target_character_id": 10, "honor": 3.0}
+	spymaster.knowledge_pool.append(existing)
+	var objectives_map: Dictionary = {
+		1: {},
+		10: {"primary": {"need_type": "RAISE_DISPOSITION", "target_npc_id": 5}},
+	}
+	var topics_by_id: Dictionary = {}
+	DayOrchestrator._spy_tick_character_focus(
+		spymaster, 10, {10: target}, objectives_map, topics_by_id, 0,
+	)
+	# Should have 2 entries now: old honor_rank + new priority_objective.
+	assert_eq(spymaster.knowledge_pool.size(), 2)
+	var new_entry: KnowledgeEntry = spymaster.knowledge_pool[1]
+	assert_eq(new_entry.entry_type, "priority_objective")
+	assert_eq(new_entry.data.get("need_type"), "RAISE_DISPOSITION")
+
+
+func test_spy_character_focus_skips_dead_target() -> void:
+	var spymaster := _make_spy_character(1)
+	var target := _make_character(10)
+	target.wounds_taken = 999  # Dead via wound overflow.
+	var objectives_map: Dictionary = {1: {}}
+	DayOrchestrator._spy_tick_character_focus(
+		spymaster, 10, {10: target}, objectives_map, {}, 0,
+	)
+	assert_eq(spymaster.knowledge_pool.size(), 0)
+
+
+func test_spy_place_focus_reveals_most_recent_tier4_topic() -> void:
+	var spymaster := _make_spy_character(1)
+	spymaster.physical_location = "99"  # Spy is elsewhere.
+	var t1 := TopicData.new()
+	t1.topic_id = 1
+	t1.tier = TopicData.Tier.TIER_4
+	t1.ic_day_created = 10
+	var t2 := TopicData.new()
+	t2.topic_id = 2
+	t2.tier = TopicData.Tier.TIER_4
+	t2.ic_day_created = 20  # More recent — should be selected.
+	var topics_by_id: Dictionary = {1: t1, 2: t2}
+	var active_topics: Array = [t1, t2]
+	var settlement_topics: Dictionary = {"42": [1, 2]}
+	DayOrchestrator._spy_tick_place_focus(
+		spymaster, 42, active_topics, topics_by_id, settlement_topics, 0,
+	)
+	assert_true(2 in spymaster.topic_pool)
+	assert_false(1 in spymaster.topic_pool)  # Older topic not added this tick.
+
+
+func test_spy_place_focus_skips_already_known_topics() -> void:
+	var spymaster := _make_spy_character(1)
+	spymaster.topic_pool.append(1)
+	spymaster.topic_pool.append(2)
+	var t1 := TopicData.new()
+	t1.topic_id = 1
+	t1.tier = TopicData.Tier.TIER_4
+	t1.ic_day_created = 10
+	var t2 := TopicData.new()
+	t2.topic_id = 2
+	t2.tier = TopicData.Tier.TIER_4
+	t2.ic_day_created = 20
+	var topics_by_id: Dictionary = {1: t1, 2: t2}
+	var settlement_topics: Dictionary = {"42": [1, 2]}
+	DayOrchestrator._spy_tick_place_focus(
+		spymaster, 42, [], topics_by_id, settlement_topics, 0,
+	)
+	# Both already known — pool size should not grow.
+	assert_eq(spymaster.topic_pool.size(), 2)
+
+
+func test_spy_army_focus_creates_intel_entry() -> void:
+	var spymaster := _make_spy_character(1)
+	var comp := MilitaryUnitData.CompanyData.new()
+	comp.company_id = 55
+	comp.commander_id = 20
+	comp.current_location_id = "province_7"
+	comp.health = 80
+	DayOrchestrator._spy_tick_army_focus(spymaster, 55, [comp], {}, 0, 28)
+	assert_eq(spymaster.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = spymaster.knowledge_pool[0]
+	assert_eq(entry.entry_type, "army_intelligence")
+	assert_eq(entry.data.get("company_id"), 55)
+	assert_eq(entry.data.get("location"), "province_7")
+	assert_eq(entry.data.get("size_pu"), 80)
+	assert_eq(entry.data.get("commander_id"), 20)
+
+
+func test_spy_army_focus_respects_ooc_week_gate() -> void:
+	var spymaster := _make_spy_character(1)
+	var comp := MilitaryUnitData.CompanyData.new()
+	comp.company_id = 55
+	comp.commander_id = 20
+	comp.current_location_id = "province_7"
+	comp.health = 80
+	# First call fires.
+	DayOrchestrator._spy_tick_army_focus(spymaster, 55, [comp], {}, 3, 84)
+	assert_eq(spymaster.knowledge_pool.size(), 1)
+	# Second call in the same OOC week — should not add another entry.
+	DayOrchestrator._spy_tick_army_focus(spymaster, 55, [comp], {}, 3, 96)
+	assert_eq(spymaster.knowledge_pool.size(), 1)
