@@ -497,10 +497,10 @@ static func can_cast(character: L5RCharacterData, spell_id: String) -> bool:
 
 ## Resolves a casting attempt in world simulation (1 AP, abstracted from combat rounds).
 ## Consumes a slot on both success and failure per GDD s31.
-## Returns: {success, total, tn, margin, spell_id, sim_effect, cast_ring, raises}
+## Returns: {success, total, tn, margin, spell_id, sim_effect, cast_ring, raises, imbalance_overflow}
 static func resolve_cast(character: L5RCharacterData, spell_id: String,
 		dice: DiceEngine, raises: int = 0,
-		target: L5RCharacterData = null) -> Dictionary:
+		target: L5RCharacterData = null, ic_day: int = -1) -> Dictionary:
 	if not SPELL_LIBRARY.has(spell_id):
 		return {"success": false, "error": "unknown_spell"}
 	var spell: Dictionary = SPELL_LIBRARY[spell_id]
@@ -519,6 +519,20 @@ static func resolve_cast(character: L5RCharacterData, spell_id: String,
 	var roll_result: DiceResult = dice.roll_and_keep(roll_dice, keep_dice)
 	var total: int = roll_result.total
 	var margin: int = total - tn
+
+	# ELEMENTAL_IMBALANCE overflow (s45 lines 535-545): when casting the imbalanced element,
+	# caster must roll Willpower (TN 15 + 5 × (rank-1)). On failure the element surges.
+	var imbalance_result: Dictionary = {}
+	var imb_check: Dictionary = AdvantageSystem.check_elemental_imbalance_trigger(character, cast_ring)
+	if imb_check.get("triggered", false):
+		var imb_tn: int = imb_check.get("tn", 15)
+		var wil_val: int = character.willpower if character.willpower > 0 else 1
+		var wil_roll: DiceResult = dice.roll_and_keep(wil_val, wil_val)
+		if wil_roll.total < imb_tn:
+			imbalance_result = AdvantageSystem.apply_elemental_imbalance_overflow(
+				character, cast_ring, ml, dice, ic_day
+			)
+
 	return {
 		"success": margin >= 0,
 		"total": total,
@@ -529,6 +543,7 @@ static func resolve_cast(character: L5RCharacterData, spell_id: String,
 		"cast_ring": cast_ring,
 		"raises": raises,
 		"wrath_of_kami_bonus": wrath_bonus,
+		"imbalance_overflow": imbalance_result,
 	}
 
 

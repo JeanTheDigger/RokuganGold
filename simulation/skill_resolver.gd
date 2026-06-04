@@ -483,6 +483,22 @@ static func resolve_skill_check(
 				result["dark_paragon_precept"] = dp_precept
 				AdvantageSystem.apply_dark_paragon_cost(character, ic_day)
 
+	# PARAGON Duty (s45 line 257): NPC spends a VP to negate all Wound/TN penalties on one roll.
+	# Retroactive activation: fires when the roll failed and VP spend would change the outcome.
+	# Does not activate if DARK_PARAGON already fixed the roll this tick.
+	if not result.get("success", false) and not result.get("dark_paragon_activated", false):
+		var pd: Dictionary = AdvantageSystem.check_paragon_duty_activation(
+			character, result.get("total", 0), result.get("tn", tn),
+			result.get("wound_penalty", 0)
+		)
+		if pd.get("should_activate", false):
+			var wp: int = result.get("wound_penalty", 0)
+			result["total"] = result["total"] - wp  # wound_penalty is negative; subtracting negates it
+			result["margin"] = result["total"] - result["tn"]
+			result["success"] = result["margin"] >= 0
+			result["paragon_duty_activated"] = true
+			character.current_void_points -= 1
+
 	return result
 
 

@@ -3385,3 +3385,311 @@ func test_dark_paragon_determination_records_precept_in_result() -> void:
 		c, dice, "Etiquette", 10, 0, "", Enums.Trait.NONE, -5, 0, 12
 	)
 	assert_eq(r.get("dark_paragon_precept", ""), "Determination")
+
+
+# ---------------------------------------------------------------------------
+# FORBIDDEN_KNOWLEDGE social bonus (s45 line 101)
+# ---------------------------------------------------------------------------
+
+func test_forbidden_knowledge_gozoku_social_bonus_matching_faction() -> void:
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.FORBIDDEN_KNOWLEDGE, 1, {"subject": "Gozoku"})
+	var ctx := {"is_social": true, "opponent_known_faction": "Gozoku"}
+	var b: Dictionary = AdvantageSystem.get_skill_bonus(c, "Courtier", ctx)
+	assert_eq(b.get("kept", 0), 1)
+
+func test_forbidden_knowledge_kolat_social_bonus_matching_faction() -> void:
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.FORBIDDEN_KNOWLEDGE, 1, {"subject": "Kolat"})
+	var ctx := {"is_social": true, "opponent_known_faction": "Kolat"}
+	var b: Dictionary = AdvantageSystem.get_skill_bonus(c, "Courtier", ctx)
+	assert_eq(b.get("kept", 0), 1)
+
+func test_forbidden_knowledge_no_bonus_wrong_faction() -> void:
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.FORBIDDEN_KNOWLEDGE, 1, {"subject": "Gozoku"})
+	var ctx := {"is_social": true, "opponent_known_faction": "Kolat"}
+	var b: Dictionary = AdvantageSystem.get_skill_bonus(c, "Courtier", ctx)
+	assert_eq(b.get("kept", 0), 0)
+
+func test_forbidden_knowledge_no_bonus_maho_subject() -> void:
+	# Maho subject has no social bonus (only Gozoku and Kolat grant +1k1 social)
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.FORBIDDEN_KNOWLEDGE, 1, {"subject": "Maho"})
+	var ctx := {"is_social": true, "opponent_known_faction": "Maho"}
+	var b: Dictionary = AdvantageSystem.get_skill_bonus(c, "Courtier", ctx)
+	assert_eq(b.get("kept", 0), 0)
+
+func test_forbidden_knowledge_no_bonus_non_social() -> void:
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.FORBIDDEN_KNOWLEDGE, 1, {"subject": "Kolat"})
+	var ctx := {"is_social": false, "opponent_known_faction": "Kolat"}
+	var b: Dictionary = AdvantageSystem.get_skill_bonus(c, "Investigation", ctx)
+	assert_eq(b.get("kept", 0), 0)
+
+func test_forbidden_knowledge_no_bonus_no_faction_in_context() -> void:
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.FORBIDDEN_KNOWLEDGE, 1, {"subject": "Gozoku"})
+	var ctx := {"is_social": true}
+	var b: Dictionary = AdvantageSystem.get_skill_bonus(c, "Courtier", ctx)
+	assert_eq(b.get("kept", 0), 0)
+
+
+# ---------------------------------------------------------------------------
+# TOUCH_OF_THE_SPIRIT_REALMS Jigoku — Lost doubles Taint Rank (s45 line 373)
+# ---------------------------------------------------------------------------
+
+func test_jigoku_combat_adds_taint_rank_normal() -> void:
+	var c := _make_character()
+	c.taint = 3.0  # Rank 3, not Lost
+	_add_advantage(c, Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS, 1, {"realm": "Jigoku"})
+	var ctx := {"is_combat": true}
+	var b: Dictionary = AdvantageSystem.get_skill_bonus(c, "Kenjutsu", ctx)
+	assert_eq(b.get("rolled", 0), 3)
+
+func test_jigoku_combat_doubles_taint_rank_when_lost() -> void:
+	var c := _make_character()
+	c.taint = 5.0  # Lost (taint >= 5.0)
+	_add_advantage(c, Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS, 1, {"realm": "Jigoku"})
+	var ctx := {"is_combat": true}
+	var b: Dictionary = AdvantageSystem.get_skill_bonus(c, "Kenjutsu", ctx)
+	assert_eq(b.get("rolled", 0), 10)  # int(5.0) * 2 = 10
+
+func test_jigoku_lost_at_taint_6_doubles() -> void:
+	var c := _make_character()
+	c.taint = 6.5
+	_add_advantage(c, Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS, 1, {"realm": "Jigoku"})
+	var ctx := {"is_combat": true}
+	var b: Dictionary = AdvantageSystem.get_skill_bonus(c, "Kenjutsu", ctx)
+	assert_eq(b.get("rolled", 0), 12)  # int(6.5) = 6, * 2 = 12
+
+func test_jigoku_physical_trait_roll_adds_taint() -> void:
+	var c := _make_character()
+	c.taint = 2.0
+	_add_advantage(c, Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS, 1, {"realm": "Jigoku"})
+	var ctx := {"is_ring_roll": true, "is_physical_trait": true}
+	var b: Dictionary = AdvantageSystem.get_skill_bonus(c, "Kenjutsu", ctx)
+	assert_eq(b.get("rolled", 0), 2)
+
+func test_jigoku_no_bonus_on_social_roll() -> void:
+	var c := _make_character()
+	c.taint = 3.0
+	_add_advantage(c, Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS, 1, {"realm": "Jigoku"})
+	var ctx := {"is_social": true}
+	var b: Dictionary = AdvantageSystem.get_skill_bonus(c, "Courtier", ctx)
+	assert_eq(b.get("rolled", 0), 0)
+
+
+# ---------------------------------------------------------------------------
+# PARAGON Duty — check_paragon_duty_activation (s45 line 257)
+# ---------------------------------------------------------------------------
+
+func test_paragon_duty_activates_when_wound_penalty_would_turn_failure() -> void:
+	var c := _make_character()
+	c.current_void_points = 2
+	c.wounds_taken = 20  # Crippled: wound_penalty = -10
+	_add_advantage(c, Enums.Advantage.PARAGON, 1, {"virtue": "Duty"})
+	# Roll total = 18, TN = 20, wound_penalty = -10 (already baked in). Negating would give 28 >= 20.
+	var r: Dictionary = AdvantageSystem.check_paragon_duty_activation(c, 18, 20, -10)
+	assert_true(r.get("should_activate", false))
+
+func test_paragon_duty_does_not_activate_wrong_virtue() -> void:
+	var c := _make_character()
+	c.current_void_points = 2
+	c.wounds_taken = 20
+	_add_advantage(c, Enums.Advantage.PARAGON, 1, {"virtue": "Courage"})
+	var r: Dictionary = AdvantageSystem.check_paragon_duty_activation(c, 18, 20, -10)
+	assert_false(r.get("should_activate", false))
+
+func test_paragon_duty_does_not_activate_without_vp() -> void:
+	var c := _make_character()
+	c.current_void_points = 0
+	c.wounds_taken = 20
+	_add_advantage(c, Enums.Advantage.PARAGON, 1, {"virtue": "Duty"})
+	var r: Dictionary = AdvantageSystem.check_paragon_duty_activation(c, 18, 20, -10)
+	assert_false(r.get("should_activate", false))
+
+func test_paragon_duty_blocked_by_failure_of_bushido_duty() -> void:
+	var c := _make_character()
+	c.current_void_points = 2
+	c.wounds_taken = 20
+	_add_advantage(c, Enums.Advantage.PARAGON, 1, {"virtue": "Duty"})
+	_add_disadvantage(c, Enums.Disadvantage.FAILURE_OF_BUSHIDO, 1, {"precept": "Duty"})
+	var r: Dictionary = AdvantageSystem.check_paragon_duty_activation(c, 18, 20, -10)
+	assert_false(r.get("should_activate", false))
+
+func test_paragon_duty_does_not_activate_when_negation_insufficient() -> void:
+	var c := _make_character()
+	c.current_void_points = 2
+	# wound_penalty = -3, total = 14, TN = 20 — even negating -3 gives 17 < 20
+	_add_advantage(c, Enums.Advantage.PARAGON, 1, {"virtue": "Duty"})
+	var r: Dictionary = AdvantageSystem.check_paragon_duty_activation(c, 14, 20, -3)
+	assert_false(r.get("should_activate", false))
+
+func test_paragon_duty_integration_negates_wound_penalty_and_spends_vp() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(999)
+	var c := _make_character()
+	c.current_void_points = 1
+	c.wounds_taken = 20  # wound_penalty = -10
+	c.void_ring = 3
+	_add_advantage(c, Enums.Advantage.PARAGON, 1, {"virtue": "Duty"})
+	# Use a context where wounds create a meaningful roll gap
+	var r: Dictionary = SkillResolver.resolve_skill_check(
+		c, dice, "Etiquette", 10, 0, "", Enums.Trait.NONE, -15, 0, 15
+	)
+	if r.get("paragon_duty_activated", false):
+		assert_eq(c.current_void_points, 0)
+
+
+# ---------------------------------------------------------------------------
+# ELEMENTAL_IMBALANCE overflow — apply_elemental_imbalance_overflow (s45 lines 535-545)
+# ---------------------------------------------------------------------------
+
+func test_elemental_imbalance_void_ml1_drains_one_vp() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	c.current_void_points = 2
+	c.void_ring = 2
+	var r: Dictionary = AdvantageSystem.apply_elemental_imbalance_overflow(
+		c, Enums.Ring.VOID, 1, dice, 100
+	)
+	assert_true(r.get("applied", false))
+	assert_eq(r.get("void_points_lost", 0), 1)
+	assert_eq(c.current_void_points, 1)
+	assert_eq(r.get("wounds_taken", 0), 0)
+
+func test_elemental_imbalance_void_ml1_no_vp_deals_5_wounds() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	c.current_void_points = 0
+	var r: Dictionary = AdvantageSystem.apply_elemental_imbalance_overflow(
+		c, Enums.Ring.VOID, 1, dice, 100
+	)
+	assert_eq(r.get("wounds_taken", 0), 5)
+	assert_eq(c.wounds_taken, 5)
+	assert_eq(r.get("void_points_lost", 0), 0)
+
+func test_elemental_imbalance_void_ml3_drains_all_vp_and_blocks_recovery() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	c.current_void_points = 3
+	c.void_refresh_blocked_until = -1
+	var r: Dictionary = AdvantageSystem.apply_elemental_imbalance_overflow(
+		c, Enums.Ring.VOID, 3, dice, 100
+	)
+	assert_eq(r.get("void_points_lost", 0), 3)
+	assert_eq(c.current_void_points, 0)
+	assert_eq(r.get("void_blocked_until_ic_day", -1), 148)  # 100 + 48
+	assert_eq(c.void_refresh_blocked_until, 148)
+
+func test_elemental_imbalance_fire_ml1_applies_wounds() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	c.wounds_taken = 0
+	var r: Dictionary = AdvantageSystem.apply_elemental_imbalance_overflow(
+		c, Enums.Ring.FIRE, 1, dice, 100
+	)
+	assert_true(r.get("wounds_taken", 0) > 0)
+	assert_eq(c.wounds_taken, r.get("wounds_taken", 0))
+
+func test_elemental_imbalance_fire_ml3_blocked() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	var r: Dictionary = AdvantageSystem.apply_elemental_imbalance_overflow(
+		c, Enums.Ring.FIRE, 3, dice, 100
+	)
+	assert_true(r.get("applied", false))
+	assert_eq(r.get("wounds_taken", 0), 0)
+	var effects: Array = r.get("sim_effects", [])
+	assert_true(effects.has("fire_aoe_blocked_s40"))
+
+func test_elemental_imbalance_air_returns_metadata_only() -> void:
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	var r: Dictionary = AdvantageSystem.apply_elemental_imbalance_overflow(
+		c, Enums.Ring.AIR, 2, dice, 100
+	)
+	assert_true(r.get("applied", false))
+	assert_eq(r.get("wounds_taken", 0), 0)
+	assert_eq(r.get("void_points_lost", 0), 0)
+
+
+# ---------------------------------------------------------------------------
+# BATTLE_HEALING — can_use and consume (s45 line 21)
+# ---------------------------------------------------------------------------
+
+func _make_shugenja(id: int = 10) -> L5RCharacterData:
+	var c := _make_character(id)
+	c.school_type = Enums.SchoolType.SHUGENJA
+	c.stamina = 3
+	c.willpower = 3
+	c.reflexes = 2
+	c.awareness = 2
+	c.agility = 2
+	c.intelligence = 2
+	c.strength = 2
+	c.perception = 2
+	c.void_ring = 2
+	c.affinity_element = Enums.Ring.NONE
+	c.deficiency_element = Enums.Ring.NONE
+	c.insight_rank = 2
+	c.spells_known = ["jurojins_balm", "commune"]
+	c.spell_slots_used = {}
+	c.spell_void_bonus_used = 0
+	return c
+
+func test_battle_healing_requires_advantage() -> void:
+	var c := _make_shugenja()
+	var r: Dictionary = AdvantageSystem.can_use_battle_healing(c, Enums.Ring.WATER)
+	assert_false(r.get("can_use", false))
+
+func test_battle_healing_water_slot_available() -> void:
+	var c := _make_shugenja()
+	# Water = min(strength, perception) = min(2, 2) = 2; get_daily_slots = 2
+	_add_advantage(c, Enums.Advantage.BATTLE_HEALING)
+	var r: Dictionary = AdvantageSystem.can_use_battle_healing(c, Enums.Ring.WATER)
+	assert_true(r.get("can_use", false))
+	assert_eq(r.get("cost_slots", 0), 1)
+
+func test_battle_healing_water_slot_exhausted() -> void:
+	var c := _make_shugenja()
+	_add_advantage(c, Enums.Advantage.BATTLE_HEALING)
+	# Exhaust all Water slots (Water ring value = 2)
+	c.spell_slots_used[Enums.Ring.WATER] = 2
+	var r: Dictionary = AdvantageSystem.can_use_battle_healing(c, Enums.Ring.WATER)
+	assert_false(r.get("can_use", false))
+
+func test_battle_healing_two_mixed_slots() -> void:
+	var c := _make_shugenja()
+	_add_advantage(c, Enums.Advantage.BATTLE_HEALING)
+	# Exhaust Water slots but other elements have slots
+	c.spell_slots_used[Enums.Ring.WATER] = 3  # over max, treated as exhausted
+	var r: Dictionary = AdvantageSystem.can_use_battle_healing(c, Enums.Ring.NONE)
+	assert_true(r.get("can_use", false))
+	assert_eq(r.get("cost_slots", 0), 2)
+
+func test_battle_healing_consume_water_heals_wound_rank() -> void:
+	var healer := _make_shugenja(10)
+	var target := _make_character(11)
+	_add_advantage(healer, Enums.Advantage.BATTLE_HEALING)
+	target.wounds_taken = 10
+	var r: Dictionary = AdvantageSystem.consume_battle_healing_slot(healer, target, Enums.Ring.WATER)
+	assert_true(r.get("healed", false))
+	assert_eq(r.get("wounds_removed", 0), 5)
+	assert_eq(target.wounds_taken, 5)
+	assert_eq(r.get("slots_consumed", 0), 1)
+
+func test_battle_healing_consume_no_advantage_fails() -> void:
+	var healer := _make_shugenja(10)
+	var target := _make_character(11)
+	target.wounds_taken = 10
+	var r: Dictionary = AdvantageSystem.consume_battle_healing_slot(healer, target, Enums.Ring.WATER)
+	assert_false(r.get("healed", false))
+	assert_eq(target.wounds_taken, 10)

@@ -175,6 +175,16 @@ static func get_skill_bonus(
 					if ring != Enums.Ring.NONE and context.get("element", Enums.Ring.NONE) == ring:
 						free_raises += 1
 
+			Enums.Advantage.FORBIDDEN_KNOWLEDGE:
+				# +1k1 Social with known Gozoku/Kolat members (s45 line 101).
+				# Requires opponent_known_faction context key set to the matching faction string.
+				if context.get("is_social", false):
+					var fk_subj: String = adv.metadata.get("subject", "")
+					var opp_faction: String = context.get("opponent_known_faction", "")
+					if fk_subj != "" and opp_faction != "" and fk_subj == opp_faction \
+							and (fk_subj == "Gozoku" or fk_subj == "Kolat"):
+						kept += 1
+
 			Enums.Advantage.FRIENDLY_KAMI:
 				# +1k1 to Spell Casting for Sense/Commune/Summon of chosen element. Shugenja only.
 				if context.get("is_spell_casting", false):
@@ -356,9 +366,11 @@ static func get_skill_bonus(
 						if skill_name == "Animal Handling":
 							kept += 1
 					"Jigoku":
-						# Add Taint Rank to attack and Physical Trait rolls
+						# Add Taint Rank to attack and Physical Trait rolls.
+						# Characters who have become Lost (taint >= 5.0) add twice Taint Rank (s45 line 373).
 						if context.get("is_combat", false) or (context.get("is_ring_roll", false) and context.get("is_physical_trait", false)):
-							rolled += int(character.taint)
+							var taint_rank: int = int(character.taint)
+							rolled += (taint_rank * 2) if character.taint >= 5.0 else taint_rank
 					"Meido":
 						# +2k0 Contested Rolls vs social manipulation
 						if context.get("is_contested", false) and context.get("is_resist_manipulation", false):
@@ -1867,6 +1879,208 @@ static func get_sworn_enemy_id(character: L5RCharacterData) -> int:
 		if dis.disadvantage_type == Enums.Disadvantage.SWORN_ENEMY:
 			return dis.metadata.get("enemy_id", -1)
 	return -1
+
+
+## PARAGON Duty: check whether spending a Void Point to negate all TN/Wound penalties
+## would change a failed roll into a success (s45 line 257).
+## NPC simulation proxy: retroactive activation matching DARK_PARAGON pattern.
+## Preconditions: character has PARAGON Duty, owns ≥1 VP, does not have FAILURE_OF_BUSHIDO Duty.
+## Returns {should_activate: bool}.
+static func check_paragon_duty_activation(
+	character: L5RCharacterData,
+	roll_total: int,
+	tn: int,
+	wound_penalty: int,
+) -> Dictionary:
+	var adv: AdvantageData = get_advantage(character, Enums.Advantage.PARAGON)
+	if adv == null or adv.metadata.get("virtue", "") != "Duty":
+		return {"should_activate": false}
+	# FAILURE_OF_BUSHIDO Duty: cannot spend Void to negate Wounds (s45 line 561)
+	if has_disadvantage(character, Enums.Disadvantage.FAILURE_OF_BUSHIDO):
+		var fob: DisadvantageData = get_disadvantage(character, Enums.Disadvantage.FAILURE_OF_BUSHIDO)
+		if fob != null and fob.metadata.get("precept", "") == "Duty":
+			return {"should_activate": false}
+	if character.current_void_points <= 0:
+		return {"should_activate": false}
+	# Only the wound_penalty portion is tracked in the result dict. Negate it if
+	# doing so would turn the failure into a success.
+	if wound_penalty >= 0:
+		return {"should_activate": false}
+	var new_total: int = roll_total - wound_penalty  # wound_penalty is negative; subtracting negates it
+	return {"should_activate": new_total >= tn}
+
+
+## ELEMENTAL_IMBALANCE overflow resolver (s45 lines 535-545).
+## Called after a failed Willpower resistance roll while casting the imbalanced element.
+## `element` is the cast element (Enums.Ring), `mastery_level` is the spell ML (1–6).
+## `dice` may be null for tests; Fire ML1-2 wounds require dice.
+## Returns {applied: bool, element: int, tier: String, sim_effects: Array[String],
+##          wounds_taken: int, void_points_lost: int, void_blocked_until_ic_day: int}.
+## Effect fields set to 0/-1 if not applicable.
+## Combat/movement effects (Air, Earth, Water overflows; Fire ML3+) are metadata only —
+## blocked on s40 individual combat.
+static func apply_elemental_imbalance_overflow(
+	character: L5RCharacterData,
+	element: int,
+	mastery_level: int,
+	dice: DiceEngine,
+	ic_day: int,
+) -> Dictionary:
+	var sim_effects: Array[String] = []
+	var wounds_taken: int = 0
+	var vp_lost: int = 0
+	var void_blocked_until: int = -1
+
+	var tier: String = "low" if mastery_level <= 2 else ("mid" if mastery_level <= 4 else "high")
+
+	match element:
+		Enums.Ring.VOID:
+			if mastery_level <= 2:
+				# ML1-2: Lose 1 VP. If no VP remain, take 5 Wounds instead.
+				if character.current_void_points > 0:
+					character.current_void_points -= 1
+					vp_lost = 1
+					sim_effects.append("void_drain_1")
+				else:
+					character.wounds_taken += 5
+					wounds_taken = 5
+					sim_effects.append("void_overflow_5_wounds")
+			elif mastery_level <= 4:
+				# ML3-4: All VPs drained; cannot recover for 48 IC days.
+				vp_lost = character.current_void_points
+				character.current_void_points = 0
+				void_blocked_until = ic_day + 48
+				character.void_refresh_blocked_until = void_blocked_until
+				sim_effects.append("void_drain_all")
+				sim_effects.append("void_blocked_48")
+			else:
+				# ML5-6: All VPs lost; blocked 1 IC week (7 days). AoE Fear blocked on s40.
+				vp_lost = character.current_void_points
+				character.current_void_points = 0
+				void_blocked_until = ic_day + 7
+				character.void_refresh_blocked_until = void_blocked_until
+				sim_effects.append("void_drain_all")
+				sim_effects.append("void_blocked_7_days")
+				sim_effects.append("aoe_fear_3_blocked_s40")
+
+		Enums.Ring.FIRE:
+			if mastery_level <= 2:
+				# ML1-2: Caster's hands ignite. Take MLk1 Wounds (s45 line 541).
+				var wound_roll: int = 0
+				if dice != null:
+					var dr: DiceResult = dice.roll_and_keep(mastery_level, 1)
+					wound_roll = dr.total
+				else:
+					wound_roll = mastery_level * 3  # average fallback for tests
+				character.wounds_taken += wound_roll
+				wounds_taken = wound_roll
+				sim_effects.append("fire_hand_wounds_%d" % wound_roll)
+			else:
+				# ML3-4 and ML5-6 involve AoE effects — blocked on s40.
+				sim_effects.append("fire_aoe_blocked_s40")
+
+		Enums.Ring.AIR:
+			# All Air overflows involve stealth/social flags or AoE — blocked or deferred.
+			if mastery_level <= 2:
+				sim_effects.append("air_stealth_broken_blocked")
+			elif mastery_level <= 4:
+				sim_effects.append("air_perceived_honor_fail_blocked")
+			else:
+				sim_effects.append("air_aoe_knockdown_blocked_s40")
+
+		Enums.Ring.EARTH:
+			# All Earth overflows involve movement or trait reduction — blocked on s40.
+			sim_effects.append("earth_overflow_blocked_s40")
+
+		Enums.Ring.WATER:
+			# Water ML1-2: -1k0 next Social roll (stored as a flag for caller use).
+			# ML3-4 and ML5-6 involve trait reduction and AoE — blocked on s40.
+			if mastery_level <= 2:
+				sim_effects.append("water_next_social_minus_1k0")
+			else:
+				sim_effects.append("water_overflow_blocked_s40")
+
+	return {
+		"applied": true,
+		"element": element,
+		"tier": tier,
+		"sim_effects": sim_effects,
+		"wounds_taken": wounds_taken,
+		"void_points_lost": vp_lost,
+		"void_blocked_until_ic_day": void_blocked_until,
+	}
+
+
+## BATTLE_HEALING query: can this character use Battle Healing to restore a Wound Rank?
+## Battle Healing requires ≥1 Water slot OR ≥2 combined slots in any other element(s) (s45 line 21).
+## Caller must pass element = Enums.Ring.WATER (1 slot) or Enums.Ring.NONE (2 mixed slots).
+## Returns {can_use: bool, cost_element: int, cost_slots: int}.
+static func can_use_battle_healing(character: L5RCharacterData, element: int) -> Dictionary:
+	if not has_advantage(character, Enums.Advantage.BATTLE_HEALING):
+		return {"can_use": false, "cost_element": Enums.Ring.NONE, "cost_slots": 0}
+	if element == Enums.Ring.WATER:
+		# One Water slot is sufficient
+		var water_used: int = SpellSystem.get_slots_used(character, Enums.Ring.WATER)
+		var water_max: int = SpellSystem.get_daily_slots(character, Enums.Ring.WATER)
+		if water_max - water_used >= 1:
+			return {"can_use": true, "cost_element": Enums.Ring.WATER, "cost_slots": 1}
+		return {"can_use": false, "cost_element": Enums.Ring.NONE, "cost_slots": 0}
+	else:
+		# Two slots from any combination of non-Water elements
+		var available: int = 0
+		for ring: int in [Enums.Ring.AIR, Enums.Ring.EARTH, Enums.Ring.FIRE, Enums.Ring.VOID]:
+			var used: int = SpellSystem.get_slots_used(character, ring)
+			var max_slots: int = SpellSystem.get_daily_slots(character, ring)
+			available += max_slots - used
+		if available >= 2:
+			return {"can_use": true, "cost_element": Enums.Ring.NONE, "cost_slots": 2}
+		return {"can_use": false, "cost_element": Enums.Ring.NONE, "cost_slots": 0}
+
+
+## BATTLE_HEALING consumption: spend slots and apply one Wound Rank of healing to target (s45 line 21).
+## Caller must verify can_use_battle_healing() first.
+## Returns {healed: bool, wounds_removed: int, slots_consumed: int, heal_element: int}.
+static func consume_battle_healing_slot(
+	healer: L5RCharacterData,
+	target: L5RCharacterData,
+	element: int,
+) -> Dictionary:
+	if not has_advantage(healer, Enums.Advantage.BATTLE_HEALING):
+		return {"healed": false, "wounds_removed": 0, "slots_consumed": 0, "heal_element": element}
+	# Determine slots to consume
+	var slots_consumed: int = 0
+	if element == Enums.Ring.WATER:
+		var water_used: int = SpellSystem.get_slots_used(healer, Enums.Ring.WATER)
+		var water_max: int = SpellSystem.get_daily_slots(healer, Enums.Ring.WATER)
+		if water_max - water_used < 1:
+			return {"healed": false, "wounds_removed": 0, "slots_consumed": 0, "heal_element": element}
+		SpellSystem.consume_slot(healer, Enums.Ring.WATER)
+		slots_consumed = 1
+	else:
+		# Consume two slots from available non-Water elements (lowest-remaining first)
+		var rings_order: Array[int] = [Enums.Ring.AIR, Enums.Ring.EARTH, Enums.Ring.FIRE, Enums.Ring.VOID]
+		var needed: int = 2
+		for ring: int in rings_order:
+			if needed <= 0:
+				break
+			var used: int = SpellSystem.get_slots_used(healer, ring)
+			var max_slots: int = SpellSystem.get_daily_slots(healer, ring)
+			if max_slots - used > 0:
+				SpellSystem.consume_slot(healer, ring)
+				needed -= 1
+				slots_consumed += 1
+		if needed > 0:
+			return {"healed": false, "wounds_removed": 0, "slots_consumed": 0, "heal_element": element}
+	# Heal one Wound Rank (5 wounds per L5R 4e wound track step)
+	var WOUNDS_PER_RANK: int = 5
+	var before: int = target.wounds_taken
+	target.wounds_taken = maxi(0, target.wounds_taken - WOUNDS_PER_RANK)
+	return {
+		"healed": true,
+		"wounds_removed": before - target.wounds_taken,
+		"slots_consumed": slots_consumed,
+		"heal_element": element,
+	}
 
 
 # SWORN_ENEMY nemesis variant: cannot spend Void Points when opposing this enemy (s45).
