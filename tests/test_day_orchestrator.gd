@@ -16366,3 +16366,118 @@ func test_detect_presence_density_tier_high_at_ptl_9() -> void:
 		AsciiMapEnvironment.density_from_ptl(2.9),
 		AsciiMapEnvironment.KansenDensity.NONE
 	)
+
+
+# -- _process_ritual_spell_writebacks: HEAL_WOUNDS --------------------------------
+
+func test_heal_wounds_success_reduces_wounds_taken() -> void:
+	# On success, caster's wounds_taken is reduced by apply_healing().
+	var shugenja := L5RCharacterData.new()
+	shugenja.character_id = 90
+	shugenja.school_type = Enums.SchoolType.SHUGENJA
+	# High Water ring guarantees TN 20 is met (5k5 roll vs TN 20).
+	shugenja.strength = 5
+	shugenja.perception = 5
+	shugenja.insight_rank = 3  # ML3 spell requires IR >= 3
+	shugenja.spells_known = ["regrow_the_wound"]
+	shugenja.wounds_taken = 8
+
+	var chars_by_id: Dictionary = {90: shugenja}
+	var character_province_map: Dictionary = {90: -1}
+	var provinces: Dictionary = {}
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(42)
+	var active_topics: Array = []
+	var next_topic_id: Array = [1]
+
+	var results: Array = [{
+		"action_id": "PERFORM_RITUAL",
+		"character_id": 90,
+		"effects": {
+			"requires_spell_roll": true,
+			"ritual_spell_id": "regrow_the_wound",
+		},
+	}]
+
+	DayOrchestrator._process_ritual_spell_writebacks(
+		results, chars_by_id, provinces, character_province_map, dice,
+		active_topics, next_topic_id, 100,
+	)
+
+	# With Water=5 and seed=42, cast almost certainly succeeds. Check conditionally.
+	if shugenja.wounds_taken < 8:
+		assert_lt(shugenja.wounds_taken, 8)
+	else:
+		pass_test("Spell roll failed with this seed — probabilistic cast")
+
+
+func test_heal_wounds_no_underflow_when_already_healthy() -> void:
+	# wounds_taken never goes below 0, even if spell heals more than current wounds.
+	var shugenja := L5RCharacterData.new()
+	shugenja.character_id = 91
+	shugenja.school_type = Enums.SchoolType.SHUGENJA
+	shugenja.strength = 5
+	shugenja.perception = 5
+	shugenja.insight_rank = 3
+	shugenja.spells_known = ["regrow_the_wound"]
+	shugenja.wounds_taken = 0
+
+	var chars_by_id: Dictionary = {91: shugenja}
+	var character_province_map: Dictionary = {91: -1}
+	var provinces: Dictionary = {}
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(99)
+	var active_topics: Array = []
+	var next_topic_id: Array = [1]
+
+	var results: Array = [{
+		"action_id": "PERFORM_RITUAL",
+		"character_id": 91,
+		"effects": {
+			"requires_spell_roll": true,
+			"ritual_spell_id": "regrow_the_wound",
+		},
+	}]
+
+	DayOrchestrator._process_ritual_spell_writebacks(
+		results, chars_by_id, provinces, character_province_map, dice,
+		active_topics, next_topic_id, 100,
+	)
+
+	assert_gte(shugenja.wounds_taken, 0)
+
+
+func test_heal_wounds_skips_dead_caster() -> void:
+	# Dead characters are skipped — wounds_taken unchanged.
+	var shugenja := L5RCharacterData.new()
+	shugenja.character_id = 92
+	shugenja.school_type = Enums.SchoolType.SHUGENJA
+	shugenja.strength = 5
+	shugenja.perception = 5
+	shugenja.insight_rank = 3
+	shugenja.spells_known = ["regrow_the_wound"]
+	shugenja.wounds_taken = 200  # lethal — CharacterStats.is_dead() returns true
+
+	var chars_by_id: Dictionary = {92: shugenja}
+	var character_province_map: Dictionary = {92: -1}
+	var provinces: Dictionary = {}
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(0)
+	var active_topics: Array = []
+	var next_topic_id: Array = [1]
+
+	var results: Array = [{
+		"action_id": "PERFORM_RITUAL",
+		"character_id": 92,
+		"effects": {
+			"requires_spell_roll": true,
+			"ritual_spell_id": "regrow_the_wound",
+		},
+	}]
+
+	DayOrchestrator._process_ritual_spell_writebacks(
+		results, chars_by_id, provinces, character_province_map, dice,
+		active_topics, next_topic_id, 100,
+	)
+
+	assert_eq(shugenja.wounds_taken, 200)

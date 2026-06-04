@@ -59,7 +59,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"call_upon_the_wind":         {"e": 0, "m": 2, "s": 0},
 	"elemental_cipher":           {"e": 0, "m": 2, "s": 17},
 	"flight_of_doves":            {"e": 0, "m": 2, "s": 17},
-	"freedom_of_the_air":         {"e": 0, "m": 2, "s": 13},
+	"freedom_of_the_air":         {"e": 0, "m": 2, "s": 14},  # Compels hostile spirits out for Air Ring hours — SPIRIT_BIND
 	"garbled_tongue":             {"e": 0, "m": 2, "s": 0},
 	"heart_betrays_eyes":         {"e": 0, "m": 2, "s": 9},
 	"hidden_visage":              {"e": 0, "m": 2, "s": 0},
@@ -101,7 +101,7 @@ const SPELL_LIBRARY: Dictionary = {
 	# ML5
 	"cloud_the_mind":             {"e": 0, "m": 5, "s": 0},
 	"defender_from_beyond":       {"e": 0, "m": 5, "s": 0},
-	"draw_back_the_shadow":       {"e": 0, "m": 5, "s": 13},
+	"draw_back_the_shadow":       {"e": 0, "m": 5, "s": 0},   # Dispels illusions ML4 and below — combat duration
 	"echoes_on_the_breeze":       {"e": 0, "m": 5, "s": 17},
 	"facing_your_devils":         {"e": 0, "m": 5, "s": 0},
 	"legion_of_the_moon":         {"e": 0, "m": 5, "s": 0},
@@ -119,10 +119,10 @@ const SPELL_LIBRARY: Dictionary = {
 	"armor_of_earth":                {"e": 1, "m": 1, "s": 0},
 	"courage_of_the_seven_thunders": {"e": 1, "m": 1, "s": 0},
 	"earths_stagnation":             {"e": 1, "m": 1, "s": 0},
-	"earths_touch":                  {"e": 1, "m": 1, "s": 1},
+	"earths_touch":                  {"e": 1, "m": 1, "s": 0},  # Trait boost 1h — buff, not healing
 	"elemental_ward":                {"e": 1, "m": 1, "s": 10},
 	"jade_strike":                   {"e": 1, "m": 1, "s": 0},
-	"jurojins_balm":                 {"e": 1, "m": 1, "s": 1},
+	"jurojins_balm":                 {"e": 1, "m": 1, "s": 0},  # Poison resist 1h — buff, not healing
 	"minor_binding":                 {"e": 1, "m": 1, "s": 0},
 	"soul_of_stone":                 {"e": 1, "m": 1, "s": 0},
 	"stones_endurance":              {"e": 1, "m": 1, "s": 0},
@@ -138,7 +138,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"rites_of_preservation":         {"e": 1, "m": 2, "s": 12},
 	"taming_the_beast":              {"e": 1, "m": 2, "s": 0},
 	"the_mountains_feet":            {"e": 1, "m": 2, "s": 11},
-	"wholeness_of_the_world":        {"e": 1, "m": 2, "s": 1},
+	"wholeness_of_the_world":        {"e": 1, "m": 2, "s": 0},  # Ring/Trait resistance — buff, not healing
 	"whispers_of_the_land":          {"e": 1, "m": 2, "s": 17},
 	# ML3
 	"bonds_of_ningen_do":            {"e": 1, "m": 3, "s": 14},
@@ -166,9 +166,9 @@ const SPELL_LIBRARY: Dictionary = {
 	"tomb_of_jade":                  {"e": 1, "m": 4, "s": 2},
 	"wall_of_earth":                 {"e": 1, "m": 4, "s": 0},
 	# ML5
-	"drawing_on_the_mountain":       {"e": 1, "m": 5, "s": 1},
+	"drawing_on_the_mountain":       {"e": 1, "m": 5, "s": 0},  # Structure wound/reduction buff — not healing
 	"earthquake":                    {"e": 1, "m": 5, "s": 0},
-	"grounding_energy":              {"e": 1, "m": 5, "s": 13},
+	"grounding_energy":              {"e": 1, "m": 5, "s": 0},   # Anti-maho TN boost 3 rounds — combat only
 	"major_binding":                 {"e": 1, "m": 5, "s": 0},
 	"strike_at_the_roots":           {"e": 1, "m": 5, "s": 0},
 	"the_kamis_strength":            {"e": 1, "m": 5, "s": 0},
@@ -186,7 +186,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"burning_kiss_of_steel":         {"e": 2, "m": 1, "s": 0},
 	"elemental_crucible":            {"e": 2, "m": 1, "s": 7},
 	"envious_flames":                {"e": 2, "m": 1, "s": 0},
-	"extinguish":                    {"e": 2, "m": 1, "s": 13},
+	"extinguish":                    {"e": 2, "m": 1, "s": 0},   # Dismisses fire kami / extinguishes fire — instantaneous combat
 	"fire_kamis_blessing":           {"e": 2, "m": 1, "s": 15},
 	"fires_of_purity":               {"e": 2, "m": 1, "s": 15},
 	"the_fires_that_cleanse":        {"e": 2, "m": 1, "s": 0},
@@ -259,7 +259,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"speed_of_the_waterfall":        {"e": 3, "m": 1, "s": 11},
 	"spirit_of_the_water":           {"e": 3, "m": 1, "s": 3},
 	"suitengus_curse":               {"e": 3, "m": 1, "s": 0},
-	"sympathetic_energies":          {"e": 3, "m": 1, "s": 1},
+	"sympathetic_energies":          {"e": 3, "m": 1, "s": 0},  # Transfers a spell effect — not healing
 	"the_rushing_wave":              {"e": 3, "m": 1, "s": 0},
 	"the_swell_of_the_storm":        {"e": 3, "m": 1, "s": 16},
 	# ML2
@@ -268,7 +268,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"inaris_blessing":               {"e": 3, "m": 2, "s": 15},
 	"judgment_of_yomi":              {"e": 3, "m": 2, "s": 17},
 	"reflective_pool":               {"e": 3, "m": 2, "s": 17},
-	"rejuvenating_vapors":           {"e": 3, "m": 2, "s": 1},
+	"rejuvenating_vapors":           {"e": 3, "m": 2, "s": 0},  # Fatigue removal / Void slot restore — not wound healing
 	"stand_against_the_waves":       {"e": 3, "m": 2, "s": 0},
 	"strength_of_the_tsunami":       {"e": 3, "m": 2, "s": 0},
 	"surging_soul":                  {"e": 3, "m": 2, "s": 0},
@@ -338,23 +338,23 @@ const SPELL_LIBRARY: Dictionary = {
 	"reach_through_the_void":        {"e": 4, "m": 2, "s": 17, "i": true},
 	"severed_from_the_stream":       {"e": 4, "m": 2, "s": 0,  "i": true},
 	# ML3
-	"banish_the_void":               {"e": 4, "m": 3, "s": 13, "i": true},
+	"banish_the_void":               {"e": 4, "m": 3, "s": 0,  "i": true},  # Thickens Void veil 5 rounds — combat only
 	"echoes_in_the_void":            {"e": 4, "m": 3, "s": 17, "i": true},
 	"kharmic_intent":                {"e": 4, "m": 3, "s": 17, "i": true},
 	"moment_of_clarity":             {"e": 4, "m": 3, "s": 0,  "i": true},
 	"read_the_essence":              {"e": 4, "m": 3, "s": 3,  "i": true},
-	"void_release":                  {"e": 4, "m": 3, "s": 13, "i": true},
+	"void_release":                  {"e": 4, "m": 3, "s": 0,  "i": true},  # Transfers Void Points — not a dispel, combat aid
 	# ML4
 	"balance_of_elements":           {"e": 4, "m": 4, "s": 15, "i": true},
 	"dart_of_void":                  {"e": 4, "m": 4, "s": 0,  "i": true},
 	"draw_closed_the_veil":          {"e": 4, "m": 4, "s": 0,  "i": true},
 	"essence_of_void":               {"e": 4, "m": 4, "s": 0,  "i": true},
-	"fill_the_emptiness":            {"e": 4, "m": 4, "s": 1,  "i": true},
+	"fill_the_emptiness":            {"e": 4, "m": 4, "s": 0,  "i": true},  # Restores Void Points — not wound healing
 	"void_strike":                   {"e": 4, "m": 4, "s": 0,  "i": true},
 	# ML5
 	"divide_the_soul":               {"e": 4, "m": 5, "s": 0,  "i": true},
 	"reforge":                       {"e": 4, "m": 5, "s": 7,  "i": true},
-	"unbound_essence":               {"e": 4, "m": 5, "s": 13, "i": true},
+	"unbound_essence":               {"e": 4, "m": 5, "s": 0,  "i": true},  # Randomly reorders Rings 1h — no trackable sim state
 	# ML6
 	"ring_of_the_void":              {"e": 4, "m": 6, "s": 0,  "i": true},
 	"rise_from_the_ashes":           {"e": 4, "m": 6, "s": 1,  "i": true},
@@ -618,6 +618,9 @@ static func apply_ward_creation(character: L5RCharacterData, _spell_id: String) 
 ## Realms that each binding spell can suppress per GDD s34.
 ## bonds_of_ningen_do: "Affects creatures from Sakkaku, Chikushudo, Gaki-Do, Toshigoku,
 ##   or Yume-Do." (s34 ML3 — explicitly excludes Meido and Shadowlands/Jigoku creatures)
+## freedom_of_the_air: "kansen, ghosts, and other hostile disembodied spirits within are
+##   compelled to leave" — realm-agnostic per GDD s33 ML2; affects all 6 SpiritRealm types.
+##   Duration: Air Ring hours. Classified SPIRIT_BIND for REALM_OVERLAP suppression.
 ## minor_binding / major_binding: bind Shadowlands/Tainted creatures (2h/12h combat
 ##   duration only) — COMBAT_ONLY, no REALM_OVERLAP suppression effect.
 ## All realms here correspond to SpiritualInsurgencyData REALM_OVERLAP event types only.
@@ -628,6 +631,14 @@ const BINDABLE_REALMS: Dictionary = {
 		Enums.SpiritRealm.CHIKUSHUDO,
 		Enums.SpiritRealm.SAKKAKU,
 		Enums.SpiritRealm.YUME_DO,
+	],
+	"freedom_of_the_air": [
+		Enums.SpiritRealm.GAKI_DO,
+		Enums.SpiritRealm.TOSHIGOKU,
+		Enums.SpiritRealm.CHIKUSHUDO,
+		Enums.SpiritRealm.SAKKAKU,
+		Enums.SpiritRealm.YUME_DO,
+		Enums.SpiritRealm.MEIDO,
 	],
 }
 
@@ -739,16 +750,10 @@ static func get_spells_for_element_ml(element: int, mastery_level: int) -> Array
 
 static func _healing_base(spell_id: String) -> int:
 	## PROVISIONAL: base wound reduction per spell (GDD s34/s36 do not specify amounts).
+	## Only spells classified HEAL_WOUNDS (s=1) should appear here.
 	match spell_id:
-		"jurojins_balm":        return 1
-		"earths_touch":         return 1
-		"sympathetic_energies": return 1
-		"rejuvenating_vapors":  return 1
-		"wholeness_of_the_world": return 2
-		"regrow_the_wound":     return 2
-		"drawing_on_the_mountain": return 3
-		"fill_the_emptiness":   return 1
-		"rise_from_the_ashes":  return 3
+		"regrow_the_wound":    return 2  # Water ML3 — wounds per round (scaled at resolution)
+		"rise_from_the_ashes": return 3  # Void ML6 — restores prior state, undoing injuries
 	return 1
 
 

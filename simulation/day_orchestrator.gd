@@ -23312,6 +23312,7 @@ static func _process_ritual_spell_writebacks(
 	## Effect routing by SpellSimEffect:
 	##   RITUAL_HONOR      → honor/glory already applied by EffectApplicator via honor_change
 	##   COMMUNE_KAMI      → no additional sim effect (worship economy handled by WKS)
+	##   HEAL_WOUNDS       → caster's wounds_taken reduced via SpellSystem.apply_healing()
 	##   DETECT_PRESENCE   → topic if tainted province found + KnowledgeEntry with density tier
 	##   PURIFY_AREA       → province PTL reduction on success
 	##   REMOVE_TAINT      → character taint reduction on success
@@ -23341,6 +23342,12 @@ static func _process_ritual_spell_writebacks(
 		var success: bool = cast_result.get("success", false)
 		var margin: int = cast_result.get("margin", 0)
 		match sim_effect:
+			SpellSystem.SpellSimEffect.HEAL_WOUNDS:
+				# s36 regrow_the_wound / s37 rise_from_the_ashes.
+				# NPC engine selects healing spells via get_best_healing_spell().
+				# In simulation context caster heals themselves (no target selection yet).
+				if success:
+					SpellSystem.apply_healing(character, ritual_spell_id, margin)
 			SpellSystem.SpellSimEffect.DETECT_PRESENCE:
 				if success and province_id >= 0:
 					var province: ProvinceData = provinces.get(province_id)

@@ -728,3 +728,155 @@ func test_major_binding_is_combat_only() -> void:
 		SpellSystem.SPELL_LIBRARY["major_binding"].get("s"),
 		SpellSystem.SpellSimEffect.COMBAT_ONLY
 	)
+
+
+# -- freedom_of_the_air: SPIRIT_BIND reclassification from DISPEL_MAGIC ---------
+
+func test_freedom_of_the_air_is_spirit_bind() -> void:
+	# GDD s33 ML2: "kansen, ghosts, and other hostile disembodied spirits within
+	# are compelled to leave for the spell's duration" — realm-agnostic, hours duration.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["freedom_of_the_air"].get("s"),
+		SpellSystem.SpellSimEffect.SPIRIT_BIND
+	)
+
+
+func test_freedom_of_the_air_can_bind_gaki_do() -> void:
+	assert_true(SpellSystem.can_bind_realm("freedom_of_the_air", Enums.SpiritRealm.GAKI_DO))
+
+
+func test_freedom_of_the_air_can_bind_meido() -> void:
+	# Unlike bonds_of_ningen_do, freedom_of_the_air affects all spirits including Meido.
+	assert_true(SpellSystem.can_bind_realm("freedom_of_the_air", Enums.SpiritRealm.MEIDO))
+
+
+func test_freedom_of_the_air_can_bind_all_realms() -> void:
+	for realm: int in Enums.SpiritRealm.values():
+		assert_true(
+			SpellSystem.can_bind_realm("freedom_of_the_air", realm as Enums.SpiritRealm),
+			"freedom_of_the_air should bind realm %d" % realm
+		)
+
+
+func test_freedom_of_the_air_find_bindable_event_meido() -> void:
+	# Verify find_bindable_spirit_event finds a MEIDO REALM_OVERLAP event for freedom_of_the_air.
+	var event: SpiritualInsurgencyData = SpiritualInsurgencyData.new()
+	event.event_id = 10
+	event.province_id = 3
+	event.event_type = Enums.SpiritualEventType.REALM_OVERLAP
+	event.realm = Enums.SpiritRealm.MEIDO
+	event.resolved = false
+	var found: SpiritualInsurgencyData = SpellSystem.find_bindable_spirit_event(
+		"freedom_of_the_air", 3, [event]
+	)
+	assert_eq(found, event)
+
+
+# -- DISPEL_MAGIC → COMBAT_ONLY reclassifications --------------------------------
+
+func test_draw_back_the_shadow_is_combat_only() -> void:
+	# GDD s33 ML5: dispels illusions — combat-duration effect.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["draw_back_the_shadow"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_grounding_energy_is_combat_only() -> void:
+	# GDD s34 ML5: anti-maho TN boost for 3 rounds — combat only.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["grounding_energy"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_extinguish_is_combat_only() -> void:
+	# GDD s35 ML1: dismisses fire kami / extinguishes fire — instantaneous combat effect.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["extinguish"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_banish_the_void_is_combat_only() -> void:
+	# GDD s37 ML3: thickens the Void veil for 5 rounds — combat only.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["banish_the_void"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_void_release_is_combat_only() -> void:
+	# GDD s37 ML3: transfers Void Points — combat aid, not a dispel.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["void_release"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_unbound_essence_is_combat_only() -> void:
+	# GDD s37 ML5: randomly reorders Rings for 1 hour — no trackable simulation state.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["unbound_essence"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+# -- HEAL_WOUNDS spell classification -------------------------------------------
+
+func test_regrow_the_wound_is_heal_wounds() -> void:
+	# GDD s36 ML3: "Target recovers Wounds equal to Water Ring + School Rank each Round."
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["regrow_the_wound"].get("s"),
+		SpellSystem.SpellSimEffect.HEAL_WOUNDS
+	)
+
+
+func test_rise_from_the_ashes_is_heal_wounds() -> void:
+	# GDD s37 ML6: restores existence to how it was 8 hours prior, undoing injuries.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["rise_from_the_ashes"].get("s"),
+		SpellSystem.SpellSimEffect.HEAL_WOUNDS
+	)
+
+
+# -- Buff spells reclassified COMBAT_ONLY (were incorrectly HEAL_WOUNDS) ---------
+
+func test_wholeness_of_the_world_is_combat_only() -> void:
+	# GDD s34 ML2: Rings/Traits resistant to change — buff, not wound healing.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["wholeness_of_the_world"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_drawing_on_the_mountain_is_combat_only() -> void:
+	# GDD s34 ML5: doubles structure Wounds/Reduction for siege — structure buff.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["drawing_on_the_mountain"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_sympathetic_energies_is_combat_only() -> void:
+	# GDD s36 ML1: transfers an existing spell effect to another target — not wound healing.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["sympathetic_energies"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_rejuvenating_vapors_is_combat_only() -> void:
+	# GDD s36 ML2: removes fatigue, restores Void Ring spell slots — not wound healing.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["rejuvenating_vapors"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_fill_the_emptiness_is_combat_only() -> void:
+	# GDD s37 ML4: restores Void Points — not wound healing.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["fill_the_emptiness"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
