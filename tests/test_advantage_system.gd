@@ -3693,3 +3693,73 @@ func test_battle_healing_consume_no_advantage_fails() -> void:
 	var r: Dictionary = AdvantageSystem.consume_battle_healing_slot(healer, target, Enums.Ring.WATER)
 	assert_false(r.get("healed", false))
 	assert_eq(target.wounds_taken, 10)
+
+
+# -- BATTLE_HEALING per-target-per-day limit (s45 line 21) --------------------
+
+func test_battle_healing_once_per_target_per_day_blocks_repeat() -> void:
+	var healer := _make_shugenja(10)
+	var target := _make_character(11)
+	_add_advantage(healer, Enums.Advantage.BATTLE_HEALING)
+	target.wounds_taken = 15
+	# First heal succeeds
+	var r1: Dictionary = AdvantageSystem.consume_battle_healing_slot(healer, target, Enums.Ring.WATER)
+	assert_true(r1.get("healed", false))
+	# Second heal on same target blocked by per-day gate
+	var can2: Dictionary = AdvantageSystem.can_use_battle_healing(healer, Enums.Ring.WATER, target)
+	assert_false(can2.get("can_use", true), "Should block second heal on same target")
+
+
+func test_battle_healing_can_heal_different_targets_same_day() -> void:
+	var healer := _make_shugenja(10)
+	healer.water = 4  # ensure enough slots
+	var target_a := _make_character(11)
+	var target_b := _make_character(12)
+	_add_advantage(healer, Enums.Advantage.BATTLE_HEALING)
+	target_a.wounds_taken = 10
+	target_b.wounds_taken = 10
+	AdvantageSystem.consume_battle_healing_slot(healer, target_a, Enums.Ring.WATER)
+	var can_b: Dictionary = AdvantageSystem.can_use_battle_healing(healer, Enums.Ring.WATER, target_b)
+	assert_true(can_b.get("can_use", false), "Different target should still be healable")
+
+
+func test_battle_healing_daily_reset_clears_healed_today() -> void:
+	var healer := _make_shugenja(10)
+	var target := _make_character(11)
+	_add_advantage(healer, Enums.Advantage.BATTLE_HEALING)
+	target.wounds_taken = 15
+	AdvantageSystem.consume_battle_healing_slot(healer, target, Enums.Ring.WATER)
+	# Simulate day reset
+	var adv: AdvantageData = AdvantageSystem.get_advantage(healer, Enums.Advantage.BATTLE_HEALING)
+	adv.metadata["healed_today"] = []
+	# Now the gate is cleared
+	var can_again: Dictionary = AdvantageSystem.can_use_battle_healing(healer, Enums.Ring.WATER, target)
+	assert_true(can_again.get("can_use", false), "After daily reset gate should clear")
+
+
+# -- IMPERIAL_SPOUSE +0.5 Status at generation (s45 line 165) -----------------
+
+func test_imperial_spouse_grants_half_status_rank() -> void:
+	var c := _make_character(1)
+	c.status = 2.0
+	_add_advantage(c, Enums.Advantage.IMPERIAL_SPOUSE)
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_eq(c.status, 2.5)
+
+
+func test_imperial_spouse_status_capped_at_ten() -> void:
+	var c := _make_character(1)
+	c.status = 10.0
+	_add_advantage(c, Enums.Advantage.IMPERIAL_SPOUSE)
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	assert_eq(c.status, 10.0)
+
+
+func test_imperial_spouse_stacks_with_social_position() -> void:
+	var c := _make_character(1)
+	c.status = 2.0
+	_add_advantage(c, Enums.Advantage.SOCIAL_POSITION)
+	_add_advantage(c, Enums.Advantage.IMPERIAL_SPOUSE)
+	AdvantageSystem.assign_derived_advantages(c, [], {})
+	# SOCIAL_POSITION +1.0 then IMPERIAL_SPOUSE +0.5 = 3.5
+	assert_eq(c.status, 3.5)

@@ -120,6 +120,7 @@ static func advance_day(
 
 	_reset_all_ap(characters)
 	_reset_lost_love_daily_state(characters)
+	_reset_battle_healing_daily_state(characters)
 
 	var _spm: Dictionary = {}
 	for _s: SettlementData in settlements:
@@ -9286,6 +9287,20 @@ static func _reset_lost_love_daily_state(characters: Array) -> void:
 			continue
 		dis.metadata["lost_love_tn_active"] = false
 		dis.metadata["triggers_today"] = 0
+
+
+# -- BATTLE_HEALING daily reset (s45 line 21: "Once per day per person") ------
+
+static func _reset_battle_healing_daily_state(characters: Array) -> void:
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if not AdvantageSystem.has_advantage(c, Enums.Advantage.BATTLE_HEALING):
+			continue
+		var adv: AdvantageData = AdvantageSystem.get_advantage(c, Enums.Advantage.BATTLE_HEALING)
+		if adv == null:
+			continue
+		adv.metadata["healed_today"] = []
 
 
 # -- LOST_LOVE arrival trigger (s45) ------------------------------------------

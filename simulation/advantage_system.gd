@@ -1674,6 +1674,10 @@ static func assign_derived_advantages(
 	if has_advantage(character, Enums.Advantage.SOCIAL_POSITION):
 		character.status = minf(character.status + 1.0, 10.0)
 
+	# IMPERIAL_SPOUSE — +0.5 Status Rank at generation (s45 line 165).
+	if has_advantage(character, Enums.Advantage.IMPERIAL_SPOUSE):
+		character.status = minf(character.status + 0.5, 10.0)
+
 	# WEALTHY — 2 koku per purchased point at generation (s45 line 403-405).
 	# Multiple WEALTHY entries stack.
 	var wealth_bonus: int = get_wealth_koku_bonus(character)
@@ -2013,11 +2017,24 @@ static func apply_elemental_imbalance_overflow(
 
 ## BATTLE_HEALING query: can this character use Battle Healing to restore a Wound Rank?
 ## Battle Healing requires ≥1 Water slot OR ≥2 combined slots in any other element(s) (s45 line 21).
+## GDD: "Once per day per person" — healer may only heal each target once per day.
 ## Caller must pass element = Enums.Ring.WATER (1 slot) or Enums.Ring.NONE (2 mixed slots).
+## Optional target: when provided, checks the per-day-per-person gate.
 ## Returns {can_use: bool, cost_element: int, cost_slots: int}.
-static func can_use_battle_healing(character: L5RCharacterData, element: int) -> Dictionary:
+static func can_use_battle_healing(
+	character: L5RCharacterData,
+	element: int,
+	target: L5RCharacterData = null,
+) -> Dictionary:
 	if not has_advantage(character, Enums.Advantage.BATTLE_HEALING):
 		return {"can_use": false, "cost_element": Enums.Ring.NONE, "cost_slots": 0}
+	# Once per day per person gate (s45 line 21).
+	if target != null:
+		var adv: AdvantageData = get_advantage(character, Enums.Advantage.BATTLE_HEALING)
+		if adv != null:
+			var healed_today: Array = adv.metadata.get("healed_today", [])
+			if target.character_id in healed_today:
+				return {"can_use": false, "cost_element": Enums.Ring.NONE, "cost_slots": 0}
 	if element == Enums.Ring.WATER:
 		# One Water slot is sufficient
 		var water_used: int = SpellSystem.get_slots_used(character, Enums.Ring.WATER)
@@ -2075,6 +2092,13 @@ static func consume_battle_healing_slot(
 	var WOUNDS_PER_RANK: int = 5
 	var before: int = target.wounds_taken
 	target.wounds_taken = maxi(0, target.wounds_taken - WOUNDS_PER_RANK)
+	# Record target as healed today to enforce once-per-day-per-person limit (s45 line 21).
+	var bh_adv: AdvantageData = get_advantage(healer, Enums.Advantage.BATTLE_HEALING)
+	if bh_adv != null:
+		if not bh_adv.metadata.has("healed_today"):
+			bh_adv.metadata["healed_today"] = []
+		if target.character_id not in bh_adv.metadata["healed_today"]:
+			bh_adv.metadata["healed_today"].append(target.character_id)
 	return {
 		"healed": true,
 		"wounds_removed": before - target.wounds_taken,
