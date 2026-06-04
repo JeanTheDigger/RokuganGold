@@ -48,25 +48,25 @@ const SPELL_LIBRARY: Dictionary = {
 	"legacy_of_kaze_no_kami":     {"e": 0, "m": 1, "s": 0},
 	"natures_touch":              {"e": 0, "m": 1, "s": 3},
 	"tempest_of_air":             {"e": 0, "m": 1, "s": 0},
-	"token_of_memory":            {"e": 0, "m": 1, "s": 17},
+	"token_of_memory":            {"e": 0, "m": 1, "s": 0},   # memory illusion; perception bonus — COMBAT_ONLY
 	"to_seek_the_truth":          {"e": 0, "m": 1, "s": 9},
-	"voice_of_the_wind":          {"e": 0, "m": 1, "s": 17},
+	"voice_of_the_wind":          {"e": 0, "m": 1, "s": 0},   # social skill bonus for caster — COMBAT_ONLY
 	"way_of_deception":           {"e": 0, "m": 1, "s": 0},
 	"yari_of_air":                {"e": 0, "m": 1, "s": 0},
 	# ML2
 	"bentens_touch":              {"e": 0, "m": 2, "s": 15},
 	"blessed_wind_of_lady_sun":   {"e": 0, "m": 2, "s": 0},  # concentration area aura — COMBAT_ONLY
 	"call_upon_the_wind":         {"e": 0, "m": 2, "s": 0},
-	"elemental_cipher":           {"e": 0, "m": 2, "s": 17},
-	"flight_of_doves":            {"e": 0, "m": 2, "s": 17},
+	"elemental_cipher":           {"e": 0, "m": 2, "s": 0},   # encrypts writing (passive protection, no active gather) — COMBAT_ONLY
+	"flight_of_doves":            {"e": 0, "m": 2, "s": 0},   # entertainment illusion — COMBAT_ONLY
 	"freedom_of_the_air":         {"e": 0, "m": 2, "s": 14},  # Compels hostile spirits out for Air Ring hours — SPIRIT_BIND
 	"garbled_tongue":             {"e": 0, "m": 2, "s": 0},
 	"heart_betrays_eyes":         {"e": 0, "m": 2, "s": 9},
 	"hidden_visage":              {"e": 0, "m": 2, "s": 0},
-	"the_kamis_whisper":          {"e": 0, "m": 2, "s": 17},
+	"the_kamis_whisper":          {"e": 0, "m": 2, "s": 0},   # creates false sounds — COMBAT_ONLY
 	"mists_of_illusion":          {"e": 0, "m": 2, "s": 0},
 	"quiescence_of_air":          {"e": 0, "m": 2, "s": 0},
-	"request_to_hato_no_kami":    {"e": 0, "m": 2, "s": 17},
+	"request_to_hato_no_kami":    {"e": 0, "m": 2, "s": 0},   # concentration bird command — COMBAT_ONLY
 	"secrets_on_the_wind":        {"e": 0, "m": 2, "s": 17},
 	"whispering_wind":            {"e": 0, "m": 2, "s": 17},
 	"wind_born_slumbers":         {"e": 0, "m": 2, "s": 0},
@@ -93,11 +93,11 @@ const SPELL_LIBRARY: Dictionary = {
 	"know_the_mind":              {"e": 0, "m": 4, "s": 17},
 	"look_into_the_soul":         {"e": 0, "m": 4, "s": 9},
 	"netsuke_of_wind":            {"e": 0, "m": 4, "s": 0},
-	"seeking_the_way":            {"e": 0, "m": 4, "s": 17},
+	"seeking_the_way":            {"e": 0, "m": 4, "s": 0},   # hides caster's tracks — COMBAT_ONLY
 	"symbol_of_air":              {"e": 0, "m": 4, "s": 10},
-	"tenjins_ear":                {"e": 0, "m": 4, "s": 17},
-	"whispers_of_the_forgotten":  {"e": 0, "m": 4, "s": 17},
-	"wisdom_of_the_kami":         {"e": 0, "m": 4, "s": 17},
+	"tenjins_ear":                {"e": 0, "m": 4, "s": 0},   # language comprehension buff — COMBAT_ONLY
+	"whispers_of_the_forgotten":  {"e": 0, "m": 4, "s": 0},   # psychic fear/disorientation — COMBAT_ONLY
+	"wisdom_of_the_kami":         {"e": 0, "m": 4, "s": 0},   # temporary skill rating bonus — COMBAT_ONLY
 	# ML5
 	"cloud_the_mind":             {"e": 0, "m": 5, "s": 0},
 	"defender_from_beyond":       {"e": 0, "m": 5, "s": 0},
@@ -146,7 +146,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"earths_protection":             {"e": 1, "m": 3, "s": 0},
 	"earthen_wave":                  {"e": 1, "m": 3, "s": 0},
 	"groves_of_stone":               {"e": 1, "m": 3, "s": 0},
-	"murmur_of_earth":               {"e": 1, "m": 3, "s": 17},
+	"murmur_of_earth":               {"e": 1, "m": 3, "s": 0},   # earthquake/terrain damage — COMBAT_ONLY
 	"purge_the_taint":               {"e": 1, "m": 3, "s": 8},
 	"sharing_the_strength_of_many":  {"e": 1, "m": 3, "s": 0},
 	"shelter_of_the_earth":          {"e": 1, "m": 3, "s": 0},
@@ -219,13 +219,13 @@ const SPELL_LIBRARY: Dictionary = {
 	"ravenous_swarms":               {"e": 2, "m": 3, "s": 0},
 	"shining_light":                 {"e": 2, "m": 3, "s": 0},
 	"the_breath_of_battle":          {"e": 2, "m": 3, "s": 0},
-	"whispering_flames":             {"e": 2, "m": 3, "s": 17},
+	"whispering_flames":             {"e": 2, "m": 3, "s": 0},   # fire daze attack — COMBAT_ONLY
 	# ML4
 	"blessing_of_the_sun":           {"e": 2, "m": 4, "s": 15},
 	"death_of_flame":                {"e": 2, "m": 4, "s": 0},
 	"defense_of_the_firestorm":      {"e": 2, "m": 4, "s": 0},
 	"essence_of_fire":               {"e": 2, "m": 4, "s": 0},
-	"eyes_of_the_phoenix":           {"e": 2, "m": 4, "s": 17},
+	"eyes_of_the_phoenix":           {"e": 2, "m": 4, "s": 0},   # blind/fear burst — COMBAT_ONLY
 	"the_mending_forge":             {"e": 2, "m": 4, "s": 7},
 	"symbol_of_fire":                {"e": 2, "m": 4, "s": 10},
 	"wall_of_fire":                  {"e": 2, "m": 4, "s": 0},
@@ -236,7 +236,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"destructive_wave":              {"e": 2, "m": 5, "s": 0},
 	"the_dragons_talon":             {"e": 2, "m": 5, "s": 0},
 	"everburning_rage":              {"e": 2, "m": 5, "s": 0},
-	"follow_the_flame":              {"e": 2, "m": 5, "s": 17},
+	"follow_the_flame":              {"e": 2, "m": 5, "s": 0},   # fire damage / elemental tracking — COMBAT_ONLY
 	"light_of_the_sun":              {"e": 2, "m": 5, "s": 15},
 	"wings_of_the_phoenix":          {"e": 2, "m": 5, "s": 11},
 	# ML6
@@ -266,7 +266,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"cloak_of_the_miya":             {"e": 3, "m": 2, "s": 11},
 	"heavens_tears":                 {"e": 3, "m": 2, "s": 0},  # per-round brief deluge, outdoors only — COMBAT_ONLY
 	"inaris_blessing":               {"e": 3, "m": 2, "s": 15},
-	"judgment_of_yomi":              {"e": 3, "m": 2, "s": 17},
+	"judgment_of_yomi":              {"e": 3, "m": 2, "s": 0},   # behavioral/social debuff — COMBAT_ONLY
 	"reflective_pool":               {"e": 3, "m": 2, "s": 17},
 	"rejuvenating_vapors":           {"e": 3, "m": 2, "s": 0},  # Fatigue removal / Void slot restore — not wound healing
 	"stand_against_the_waves":       {"e": 3, "m": 2, "s": 0},
@@ -274,7 +274,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"surging_soul":                  {"e": 3, "m": 2, "s": 0},
 	"the_ties_that_bind":            {"e": 3, "m": 2, "s": 17},
 	"wave_borne_speed":              {"e": 3, "m": 2, "s": 11},
-	"wisdom_and_clarity":            {"e": 3, "m": 2, "s": 17},
+	"wisdom_and_clarity":            {"e": 3, "m": 2, "s": 0},   # reading speed buff — COMBAT_ONLY
 	"yukis_touch":                   {"e": 3, "m": 2, "s": 0},
 	# ML3
 	"endless_deluge":                {"e": 3, "m": 3, "s": 16},
@@ -293,13 +293,13 @@ const SPELL_LIBRARY: Dictionary = {
 	"ebb_and_flow_of_battle":        {"e": 3, "m": 4, "s": 0},
 	"heart_of_the_water_dragon":     {"e": 3, "m": 4, "s": 0},
 	"master_of_the_rolling_river":   {"e": 3, "m": 4, "s": 11},
-	"the_mirrors_smile":             {"e": 3, "m": 4, "s": 17},
+	"the_mirrors_smile":             {"e": 3, "m": 4, "s": 0},   # physical disguise transformation — COMBAT_ONLY
 	"seed_of_qanan":                 {"e": 3, "m": 4, "s": 15},
 	"steed_of_the_ebbing_tides":     {"e": 3, "m": 4, "s": 11},
 	"strike_of_the_flowing_waters":  {"e": 3, "m": 4, "s": 0},
 	"symbol_of_water":               {"e": 3, "m": 4, "s": 10},
 	"the_emperors_road":             {"e": 3, "m": 4, "s": 11},
-	"the_path_not_taken":            {"e": 3, "m": 4, "s": 17},
+	"the_path_not_taken":            {"e": 3, "m": 4, "s": 0},   # transfers a spell slot to ally — COMBAT_ONLY
 	"within_the_waves":              {"e": 3, "m": 4, "s": 0},
 	# ML5
 	"chi_reversal":                  {"e": 3, "m": 5, "s": 0},
@@ -333,14 +333,14 @@ const SPELL_LIBRARY: Dictionary = {
 	"commune_with_the_void":         {"e": 4, "m": 2, "s": 4,  "i": true},
 	"drink_of_your_essence":         {"e": 4, "m": 2, "s": 0,  "i": true},
 	"strengthen_the_void":           {"e": 4, "m": 2, "s": 15, "i": true},
-	"the_empty_voice":               {"e": 4, "m": 2, "s": 17, "i": true},
+	"the_empty_voice":               {"e": 4, "m": 2, "s": 0,  "i": true},  # allows silent casting — COMBAT_ONLY
 	"false_whispers":                {"e": 4, "m": 2, "s": 9,  "i": true},
-	"reach_through_the_void":        {"e": 4, "m": 2, "s": 17, "i": true},
+	"reach_through_the_void":        {"e": 4, "m": 2, "s": 0,  "i": true},  # telekinesis — COMBAT_ONLY
 	"severed_from_the_stream":       {"e": 4, "m": 2, "s": 0,  "i": true},
 	# ML3
 	"banish_the_void":               {"e": 4, "m": 3, "s": 0,  "i": true},  # Thickens Void veil 5 rounds — combat only
 	"echoes_in_the_void":            {"e": 4, "m": 3, "s": 17, "i": true},
-	"kharmic_intent":                {"e": 4, "m": 3, "s": 17, "i": true},
+	"kharmic_intent":                {"e": 4, "m": 3, "s": 0,  "i": true},  # shares Void Points with ally — COMBAT_ONLY
 	"moment_of_clarity":             {"e": 4, "m": 3, "s": 0,  "i": true},
 	"read_the_essence":              {"e": 4, "m": 3, "s": 3,  "i": true},
 	"void_release":                  {"e": 4, "m": 3, "s": 0,  "i": true},  # Transfers Void Points — not a dispel, combat aid

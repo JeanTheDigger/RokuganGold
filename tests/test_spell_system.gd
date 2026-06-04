@@ -980,3 +980,69 @@ func test_get_weather_shift_duration_endless_deluge() -> void:
 func test_get_weather_shift_duration_breath_of_mist() -> void:
 	# A83: Water Ring hours → 1 IC day tick.
 	assert_eq(SpellSystem.get_weather_shift_duration_days("breath_of_mist"), 1)
+
+
+# --- INFORMATION_GATHER reclassification: 21 misclassified spells → COMBAT_ONLY ---
+
+func test_token_of_memory_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["token_of_memory"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_voice_of_the_wind_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["voice_of_the_wind"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_elemental_cipher_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["elemental_cipher"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_flight_of_doves_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["flight_of_doves"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_the_kamis_whisper_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["the_kamis_whisper"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_request_to_hato_no_kami_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["request_to_hato_no_kami"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_seeking_the_way_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["seeking_the_way"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_tenjins_ear_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["tenjins_ear"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_whispers_of_the_forgotten_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["whispers_of_the_forgotten"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_wisdom_of_the_kami_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["wisdom_of_the_kami"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_murmur_of_earth_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["murmur_of_earth"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_whispering_flames_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["whispering_flames"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_eyes_of_the_phoenix_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["eyes_of_the_phoenix"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_follow_the_flame_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["follow_the_flame"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_judgment_of_yomi_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["judgment_of_yomi"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_wisdom_and_clarity_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["wisdom_and_clarity"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_the_mirrors_smile_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["the_mirrors_smile"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_the_path_not_taken_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["the_path_not_taken"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_the_empty_voice_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["the_empty_voice"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_reach_through_the_void_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["reach_through_the_void"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_kharmic_intent_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["kharmic_intent"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
