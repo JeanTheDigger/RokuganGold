@@ -1076,3 +1076,30 @@ func test_dominion_of_suitengu_is_information_gather() -> void:
 
 func test_see_through_lies_is_information_gather() -> void:
 	assert_eq(SpellSystem.SPELL_LIBRARY["see_through_lies"]["s"], SpellSystem.SpellSimEffect.INFORMATION_GATHER)
+
+
+# --- TRAVEL_AID audit: 7 combat-duration spells → COMBAT_ONLY, 1 → TRANSMUTE_MATERIAL ---
+
+func test_the_mountains_feet_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["the_mountains_feet"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_hurried_steps_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["hurried_steps"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_wings_of_fire_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["wings_of_fire"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_wings_of_the_phoenix_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["wings_of_the_phoenix"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_cloak_of_the_miya_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["cloak_of_the_miya"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_wave_borne_speed_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["wave_borne_speed"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_master_of_the_rolling_river_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["master_of_the_rolling_river"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_flow_through_the_void_is_transmute_material() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["flow_through_the_void"]["s"], SpellSystem.SpellSimEffect.TRANSMUTE_MATERIAL)

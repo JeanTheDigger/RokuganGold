@@ -137,7 +137,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"jurojins_curse":                {"e": 1, "m": 2, "s": 0},
 	"rites_of_preservation":         {"e": 1, "m": 2, "s": 12},
 	"taming_the_beast":              {"e": 1, "m": 2, "s": 0},
-	"the_mountains_feet":            {"e": 1, "m": 2, "s": 11},
+	"the_mountains_feet":            {"e": 1, "m": 2, "s": 0},   # 1h knockdown resistance stance — COMBAT_ONLY
 	"wholeness_of_the_world":        {"e": 1, "m": 2, "s": 0},  # Ring/Trait resistance — buff, not healing
 	"whispers_of_the_land":          {"e": 1, "m": 2, "s": 17},
 	# ML3
@@ -201,13 +201,13 @@ const SPELL_LIBRARY: Dictionary = {
 	"disrupt_the_aura":              {"e": 2, "m": 2, "s": 0},
 	"enticing_the_dance_of_flame":   {"e": 2, "m": 2, "s": 0},
 	"the_fires_from_within":         {"e": 2, "m": 2, "s": 0},
-	"hurried_steps":                 {"e": 2, "m": 2, "s": 11},
+	"hurried_steps":                 {"e": 2, "m": 2, "s": 0},   # 2-round casting speed reduction — COMBAT_ONLY
 	"mental_quickness":              {"e": 2, "m": 2, "s": 0},
 	"purity_of_shinsei":             {"e": 2, "m": 2, "s": 15},
 	"relentless_heat":               {"e": 2, "m": 2, "s": 0},
 	"tail_of_the_fire_dragon":       {"e": 2, "m": 2, "s": 0},
 	"ward_of_purity":                {"e": 2, "m": 2, "s": 10},
-	"wings_of_fire":                 {"e": 2, "m": 2, "s": 11},
+	"wings_of_fire":                 {"e": 2, "m": 2, "s": 0},   # 10-min slow flight at Water 1 speed; too slow for overland — COMBAT_ONLY
 	# ML3
 	"agashas_shield":                {"e": 2, "m": 3, "s": 0},
 	"breath_of_the_fire_dragon":     {"e": 2, "m": 3, "s": 0},
@@ -238,7 +238,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"everburning_rage":              {"e": 2, "m": 5, "s": 0},
 	"follow_the_flame":              {"e": 2, "m": 5, "s": 0},   # fire damage / elemental tracking — COMBAT_ONLY
 	"light_of_the_sun":              {"e": 2, "m": 5, "s": 15},
-	"wings_of_the_phoenix":          {"e": 2, "m": 5, "s": 11},
+	"wings_of_the_phoenix":          {"e": 2, "m": 5, "s": 0},   # 10-round combat flight — COMBAT_ONLY
 	# ML6
 	"beam_of_the_inferno":           {"e": 2, "m": 6, "s": 0},
 	"curse_of_the_burning_hand":     {"e": 2, "m": 6, "s": 0},
@@ -263,7 +263,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"the_rushing_wave":              {"e": 3, "m": 1, "s": 0},
 	"the_swell_of_the_storm":        {"e": 3, "m": 1, "s": 0},  # one-time knockdown — COMBAT_ONLY
 	# ML2
-	"cloak_of_the_miya":             {"e": 3, "m": 2, "s": 11},
+	"cloak_of_the_miya":             {"e": 3, "m": 2, "s": 0},   # 5-round Armor TN defensive boost — COMBAT_ONLY
 	"heavens_tears":                 {"e": 3, "m": 2, "s": 0},  # per-round brief deluge, outdoors only — COMBAT_ONLY
 	"inaris_blessing":               {"e": 3, "m": 2, "s": 15},
 	"judgment_of_yomi":              {"e": 3, "m": 2, "s": 0},   # behavioral/social debuff — COMBAT_ONLY
@@ -273,7 +273,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"strength_of_the_tsunami":       {"e": 3, "m": 2, "s": 0},
 	"surging_soul":                  {"e": 3, "m": 2, "s": 0},
 	"the_ties_that_bind":            {"e": 3, "m": 2, "s": 17},
-	"wave_borne_speed":              {"e": 3, "m": 2, "s": 11},
+	"wave_borne_speed":              {"e": 3, "m": 2, "s": 0},   # 2-round Water Ring movement boost — COMBAT_ONLY
 	"wisdom_and_clarity":            {"e": 3, "m": 2, "s": 0},   # reading speed buff — COMBAT_ONLY
 	"yukis_touch":                   {"e": 3, "m": 2, "s": 0},
 	# ML3
@@ -292,7 +292,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"dominion_of_suitengu":          {"e": 3, "m": 4, "s": 17},  # Divination: scry between water bodies — INFORMATION_GATHER
 	"ebb_and_flow_of_battle":        {"e": 3, "m": 4, "s": 0},
 	"heart_of_the_water_dragon":     {"e": 3, "m": 4, "s": 0},
-	"master_of_the_rolling_river":   {"e": 3, "m": 4, "s": 11},
+	"master_of_the_rolling_river":   {"e": 3, "m": 4, "s": 0},   # 5-min military unit buff; battlefield scale — COMBAT_ONLY
 	"the_mirrors_smile":             {"e": 3, "m": 4, "s": 0},   # physical disguise transformation — COMBAT_ONLY
 	"seed_of_qanan":                 {"e": 3, "m": 4, "s": 15},
 	"steed_of_the_ebbing_tides":     {"e": 3, "m": 4, "s": 11},
@@ -321,7 +321,7 @@ const SPELL_LIBRARY: Dictionary = {
 	# ML1
 	"boundless_sight":               {"e": 4, "m": 1, "s": 17, "i": true},
 	"drawing_the_void":              {"e": 4, "m": 1, "s": 0,  "i": true},
-	"flow_through_the_void":         {"e": 4, "m": 1, "s": 11, "i": true},
+	"flow_through_the_void":         {"e": 4, "m": 1, "s": 7,  "i": true},  # permanent elemental transmutation — TRANSMUTE_MATERIAL
 	"see_through_lies":              {"e": 4, "m": 1, "s": 17, "i": true},  # reveals target's highest Advantage or Disadvantage — INFORMATION_GATHER
 	"sense_void":                    {"e": 4, "m": 1, "s": 3,  "i": true},
 	"touch_the_emptiness":           {"e": 4, "m": 1, "s": 0,  "i": true},
