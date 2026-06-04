@@ -1225,12 +1225,12 @@ func test_whispers_of_the_land_is_information_gather() -> void:
 
 # -- INFORMATION_GATHER group constants and NPC selector ----------------------
 
-func test_group_a_contains_exactly_three_spells() -> void:
-	assert_eq(SpellSystem.INFORMATION_GATHER_GROUP_A.size(), 3)
+func test_group_a_contains_exactly_four_spells() -> void:
+	assert_eq(SpellSystem.INFORMATION_GATHER_GROUP_A.size(), 4)
 
 
-func test_group_b_contains_exactly_three_spells() -> void:
-	assert_eq(SpellSystem.INFORMATION_GATHER_GROUP_B.size(), 3)
+func test_group_b_contains_exactly_four_spells() -> void:
+	assert_eq(SpellSystem.INFORMATION_GATHER_GROUP_B.size(), 4)
 
 
 func test_group_a_contains_know_the_mind() -> void:
@@ -1304,3 +1304,49 @@ func test_get_best_npc_information_spell_funeral_rites_not_selected() -> void:
 	# not in Group A/B so NPC engine never selects it.
 	_char.spells_known = ["funeral_rites", "know_the_mind"]
 	assert_eq(SpellSystem.get_best_npc_information_spell(_char), "know_the_mind")
+
+
+# -- Group C/D: echoes_in_the_void (Group A) and the_final_bond (Group B) -----
+
+func test_group_a_contains_echoes_in_the_void() -> void:
+	assert_true("echoes_in_the_void" in SpellSystem.INFORMATION_GATHER_GROUP_A)
+
+
+func test_group_b_contains_the_final_bond() -> void:
+	assert_true("the_final_bond" in SpellSystem.INFORMATION_GATHER_GROUP_B)
+
+
+func test_echoes_in_the_void_is_information_gather() -> void:
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["echoes_in_the_void"]["s"],
+		SpellSystem.SpellSimEffect.INFORMATION_GATHER
+	)
+
+
+func test_the_final_bond_is_information_gather() -> void:
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["the_final_bond"]["s"],
+		SpellSystem.SpellSimEffect.INFORMATION_GATHER
+	)
+
+
+func test_npc_selector_picks_echoes_in_the_void_over_lower_ml_group_a() -> void:
+	# echoes_in_the_void ML3 (Ishiken) beats see_through_lies ML1 in Group A selection.
+	_char.spells_known = ["see_through_lies", "echoes_in_the_void"]
+	_char.school_paths = ["Ishiken Initiate"]
+	# Both are Group A — ML3 wins.
+	assert_eq(SpellSystem.get_best_npc_information_spell(_char), "echoes_in_the_void")
+
+
+func test_npc_selector_picks_the_final_bond_over_reflective_pool() -> void:
+	# the_final_bond ML5 beats reflective_pool ML2 in Group B selection.
+	_char.spells_known = ["reflective_pool", "the_final_bond"]
+	assert_eq(SpellSystem.get_best_npc_information_spell(_char), "the_final_bond")
+
+
+func test_the_final_bond_ml_is_5() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["the_final_bond"].get("m", 0), 5)
+
+
+func test_echoes_in_the_void_is_ishiken_only() -> void:
+	assert_true(SpellSystem.SPELL_LIBRARY["echoes_in_the_void"].get("i", false))

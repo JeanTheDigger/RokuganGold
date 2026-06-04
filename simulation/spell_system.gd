@@ -702,19 +702,23 @@ static func get_best_spell_by_effect(character: L5RCharacterData,
 
 
 ## Group A: person-intelligence divination — caster must be co-located with target.
-## Produces personality_insight KnowledgeEntries. (s33-s37)
+## Produces personality_insight KnowledgeEntries. (s33, s37)
 const INFORMATION_GATHER_GROUP_A: Array[String] = [
 	"know_the_mind",       # Air ML4: reads thoughts
 	"look_into_the_soul",  # Air ML4: reads 2 lowest Rings
 	"see_through_lies",    # Void ML1, Ishiken: reads Advantage/Disadvantage
+	"echoes_in_the_void",  # Void ML3, Ishiken: hear target's thoughts (concentration, 25' range)
 ]
 
 ## Group B: remote location-scrying divination. No co-location required.
-## Produces location_intelligence KnowledgeEntries. (s33-s36)
+## Produces location_intelligence KnowledgeEntries. (s33, s36)
+## the_final_bond requires caster to be immediate family or close friend (disposition >= 31)
+## of the target; locate-only (spotted_characters = [target_id], not full settlement scan).
 const INFORMATION_GATHER_GROUP_B: Array[String] = [
 	"boundless_sight",       # Void ML1, Ishiken: see+hear 50-mile range
 	"reflective_pool",       # Water ML2: visual 10-mile range
 	"dominion_of_suitengu",  # Water ML4: visual 100-mile range, coastal only
+	"the_final_bond",        # Water ML5: locate one person (immediate family or close friend)
 ]
 
 ## Returns the best INFORMATION_GATHER spell usable by the NPC decision pipeline

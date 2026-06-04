@@ -23474,7 +23474,39 @@ static func _process_ritual_spell_writebacks(
 						var target_prov: ProvinceData = provinces.get(target_prov_id) as ProvinceData
 						if target_prov == null or not target_prov.is_coastal:
 							break
-					# Gather all living non-traveling characters present at target settlement
+					# the_final_bond requires immediate family or close friend (s36 LOCKED:
+					# "individual must be well known — immediate family or close friend").
+					# Close friend = Friend tier disposition (s12.2: >= 31).
+					if ritual_spell_id == "the_final_bond":
+						var is_family: bool = (
+							character.mother_id == div_target_id or
+							character.father_id == div_target_id or
+							character.spouse_id == div_target_id or
+							div_target_id in character.sibling_ids or
+							div_target_id in character.children_ids or
+							div_target_id in character.adopted_children_ids
+						)
+						var is_friend: bool = character.disposition_values.get(div_target_id, 0) >= 31
+						if not is_family and not is_friend:
+							break
+						# the_final_bond locates the target only — no full settlement scan
+						InformationSystem.update_intelligence_knowledge(
+							character,
+							InformationSystem.make_entry(
+								Enums.KnowledgeSource.INTELLIGENCE,
+								"location_intelligence",
+								{
+									"target_character_id": div_target_id,
+									"settlement_id": target_loc,
+									"spotted_characters": [div_target_id],
+									"is_audio_enabled": false,
+								},
+								ic_day / 90
+							)
+						)
+						break
+					# All other Group B spells: gather all living non-traveling characters
+					# present at the target settlement.
 					var spotted: Array[int] = []
 					for cid: int in characters_by_id:
 						var sc: L5RCharacterData = characters_by_id[cid]
