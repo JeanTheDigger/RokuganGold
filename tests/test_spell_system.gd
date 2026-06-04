@@ -270,14 +270,14 @@ func test_apply_healing_cannot_go_negative() -> void:
 
 func test_apply_taint_removal_reduces_taint() -> void:
 	_char.taint = 3.0
-	var r: Dictionary = SpellSystem.apply_taint_removal(_char, "purge_the_taint", 10)
+	var r: Dictionary = SpellSystem.apply_taint_removal(_char, "tomb_of_jade", 10)
 	assert_true(_char.taint < 3.0)
 	assert_true(r["taint_removed"] > 0.0)
 
 
 func test_apply_taint_removal_floor_zero() -> void:
 	_char.taint = 0.0
-	SpellSystem.apply_taint_removal(_char, "purge_the_taint", 100)
+	SpellSystem.apply_taint_removal(_char, "tomb_of_jade", 100)
 	assert_eq(_char.taint, 0.0)
 
 
