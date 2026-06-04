@@ -701,6 +701,43 @@ static func get_best_spell_by_effect(character: L5RCharacterData,
 	return best
 
 
+## Group A: person-intelligence divination — caster must be co-located with target.
+## Produces personality_insight KnowledgeEntries. (s33-s37)
+const INFORMATION_GATHER_GROUP_A: Array[String] = [
+	"know_the_mind",       # Air ML4: reads thoughts
+	"look_into_the_soul",  # Air ML4: reads 2 lowest Rings
+	"see_through_lies",    # Void ML1, Ishiken: reads Advantage/Disadvantage
+]
+
+## Group B: remote location-scrying divination. No co-location required.
+## Produces location_intelligence KnowledgeEntries. (s33-s36)
+const INFORMATION_GATHER_GROUP_B: Array[String] = [
+	"boundless_sight",       # Void ML1, Ishiken: see+hear 50-mile range
+	"reflective_pool",       # Water ML2: visual 10-mile range
+	"dominion_of_suitengu",  # Water ML4: visual 100-mile range, coastal only
+]
+
+## Returns the best INFORMATION_GATHER spell usable by the NPC decision pipeline
+## (Group A or Group B only — other INFORMATION_GATHER spells produce no persistent
+## knowledge in the simulation and are excluded from NPC selection).
+## Prefers Group B (higher max ML: dominion ML4 > look_into_soul ML4 tie-break).
+## If no processable spell is known, returns "".
+static func get_best_npc_information_spell(character: L5RCharacterData) -> String:
+	var best: String = ""
+	var best_ml: int = -1
+	for spell_id: String in character.spells_known:
+		if not SPELL_LIBRARY.has(spell_id):
+			continue
+		if not (spell_id in INFORMATION_GATHER_GROUP_A or \
+				spell_id in INFORMATION_GATHER_GROUP_B):
+			continue
+		var ml: int = SPELL_LIBRARY[spell_id].get("m", 0)
+		if ml > best_ml:
+			best_ml = ml
+			best = spell_id
+	return best
+
+
 static func get_best_healing_spell(character: L5RCharacterData) -> String:
 	return get_best_spell_by_effect(character, SpellSimEffect.HEAL_WOUNDS)
 

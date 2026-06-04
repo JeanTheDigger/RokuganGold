@@ -1221,3 +1221,86 @@ func test_whispers_of_the_land_is_information_gather() -> void:
 		SpellSystem.SPELL_LIBRARY["whispers_of_the_land"]["s"],
 		SpellSystem.SpellSimEffect.INFORMATION_GATHER
 	)
+
+
+# -- INFORMATION_GATHER group constants and NPC selector ----------------------
+
+func test_group_a_contains_exactly_three_spells() -> void:
+	assert_eq(SpellSystem.INFORMATION_GATHER_GROUP_A.size(), 3)
+
+
+func test_group_b_contains_exactly_three_spells() -> void:
+	assert_eq(SpellSystem.INFORMATION_GATHER_GROUP_B.size(), 3)
+
+
+func test_group_a_contains_know_the_mind() -> void:
+	assert_true("know_the_mind" in SpellSystem.INFORMATION_GATHER_GROUP_A)
+
+
+func test_group_a_contains_look_into_the_soul() -> void:
+	assert_true("look_into_the_soul" in SpellSystem.INFORMATION_GATHER_GROUP_A)
+
+
+func test_group_a_contains_see_through_lies() -> void:
+	assert_true("see_through_lies" in SpellSystem.INFORMATION_GATHER_GROUP_A)
+
+
+func test_group_b_contains_boundless_sight() -> void:
+	assert_true("boundless_sight" in SpellSystem.INFORMATION_GATHER_GROUP_B)
+
+
+func test_group_b_contains_reflective_pool() -> void:
+	assert_true("reflective_pool" in SpellSystem.INFORMATION_GATHER_GROUP_B)
+
+
+func test_group_b_contains_dominion_of_suitengu() -> void:
+	assert_true("dominion_of_suitengu" in SpellSystem.INFORMATION_GATHER_GROUP_B)
+
+
+func test_get_best_npc_information_spell_returns_empty_when_no_spells() -> void:
+	_char.spells_known = ["sense", "commune"]
+	assert_eq(SpellSystem.get_best_npc_information_spell(_char), "")
+
+
+func test_get_best_npc_information_spell_ignores_transient_spells() -> void:
+	# echoes_on_the_breeze is Air ML5 INFORMATION_GATHER but not Group A/B
+	_char.spells_known = ["echoes_on_the_breeze", "whispering_wind", "whispers_of_the_land"]
+	assert_eq(SpellSystem.get_best_npc_information_spell(_char), "")
+
+
+func test_get_best_npc_information_spell_ignores_unhandled_water_spells() -> void:
+	# waters_sweet_clarity is Water ML6 INFORMATION_GATHER but not Group A/B
+	_char.spells_known = ["waters_sweet_clarity", "the_final_bond", "visions_of_the_future"]
+	assert_eq(SpellSystem.get_best_npc_information_spell(_char), "")
+
+
+func test_get_best_npc_information_spell_returns_group_a_spell() -> void:
+	_char.spells_known = ["sense", "know_the_mind"]
+	assert_eq(SpellSystem.get_best_npc_information_spell(_char), "know_the_mind")
+
+
+func test_get_best_npc_information_spell_returns_group_b_spell() -> void:
+	_char.spells_known = ["sense", "reflective_pool"]
+	assert_eq(SpellSystem.get_best_npc_information_spell(_char), "reflective_pool")
+
+
+func test_get_best_npc_information_spell_prefers_higher_ml() -> void:
+	# dominion_of_suitengu ML4 beats know_the_mind ML4 by iteration order;
+	# more importantly, a higher-ML processable spell wins over lower-ML.
+	_char.spells_known = ["sense", "reflective_pool", "dominion_of_suitengu"]
+	# Both are Water Group B; dominion (ML4) > reflective_pool (ML2)
+	assert_eq(SpellSystem.get_best_npc_information_spell(_char), "dominion_of_suitengu")
+
+
+func test_get_best_npc_information_spell_high_ml_unhandled_does_not_win() -> void:
+	# An Air ML5 shugenja knowing echoes_on_the_breeze + know_the_mind should pick
+	# know_the_mind (ML4, Group A) not echoes_on_the_breeze (ML5, not processable).
+	_char.spells_known = ["echoes_on_the_breeze", "know_the_mind"]
+	assert_eq(SpellSystem.get_best_npc_information_spell(_char), "know_the_mind")
+
+
+func test_get_best_npc_information_spell_funeral_rites_not_selected() -> void:
+	# funeral_rites is Air ML4 INFORMATION_GATHER but targets dead characters;
+	# not in Group A/B so NPC engine never selects it.
+	_char.spells_known = ["funeral_rites", "know_the_mind"]
+	assert_eq(SpellSystem.get_best_npc_information_spell(_char), "know_the_mind")

@@ -23448,11 +23448,13 @@ static func _process_ritual_spell_writebacks(
 						entry.season_acquired = ic_day / 90
 						character.knowledge_pool.append(entry)
 			SpellSystem.SpellSimEffect.INFORMATION_GATHER:
-				# s33-s37 divination spells. Two sub-groups:
-				#   Group A (person-intelligence): target must be co-located with caster.
-				#   Group B (remote viewing): caster observes target's current settlement
-				#     from a distance (familiarity tracking not yet modeled — known gap).
-				# Transient-result spells and two-step spells produce no lasting knowledge.
+				# s33-s37 divination spells. Two sub-groups per SpellSystem constants:
+				#   Group A (INFORMATION_GATHER_GROUP_A): person-intelligence, co-located.
+				#   Group B (INFORMATION_GATHER_GROUP_B): remote location-scrying.
+				# All other INFORMATION_GATHER spells are not NPC-selectable (handled by
+				# get_best_npc_information_spell) so this path only fires for Group A/B.
+				# familiarity tracking (reflective_pool, boundless_sight "familiar place"
+				# gate) not yet modeled — known gap (no visited_settlements on character).
 				if not success:
 					break
 				var div_target_id: int = effects.get("target_npc_id", -1)
@@ -23461,37 +23463,18 @@ static func _process_ritual_spell_writebacks(
 				var div_target: L5RCharacterData = characters_by_id.get(div_target_id)
 				if div_target == null or CharacterStats.is_dead(div_target):
 					break
-				# Spells that produce no persistent knowledge:
-				# - whispering_wind / witness_the_untold: results stale in <1 round
-				# - master_clouds_eyes: 2-min visual through target's eyes, person-present
-				# - secrets_on_the_wind: requires prior 10-min ritual preparation at site
-				#   (two-step spell not modeled in current single-AP framework)
-				# - whispers_of_the_land: local track revelation (50' radius), not
-				#   strategic intelligence
-				var transient_spells: Array[String] = [
-					"whispering_wind", "master_clouds_eyes", "witness_the_untold",
-					"secrets_on_the_wind", "whispers_of_the_land",
-				]
-				if ritual_spell_id in transient_spells:
-					break
-				# Group B — remote location scrying (s33/s36/s37)
-				# boundless_sight: see+hear, 50-mile range (Void 1, Ishiken)
-				# reflective_pool: visual only, 10-mile range (Water 2)
-				# dominion_of_suitengu: visual only, 100-mile range, coastal only (Water 4)
-				var location_scrying_spells: Array[String] = [
-					"boundless_sight", "reflective_pool", "dominion_of_suitengu",
-				]
-				if ritual_spell_id in location_scrying_spells:
+				# Group B — remote location scrying
+				if ritual_spell_id in SpellSystem.INFORMATION_GATHER_GROUP_B:
 					var target_loc: String = div_target.physical_location
 					if target_loc.is_empty():
 						break
-					# dominion_of_suitengu requires target location to be coastal
+					# dominion_of_suitengu requires target's province to be coastal
 					if ritual_spell_id == "dominion_of_suitengu":
 						var target_prov_id: int = character_province_map.get(div_target_id, -1)
 						var target_prov: ProvinceData = provinces.get(target_prov_id) as ProvinceData
 						if target_prov == null or not target_prov.is_coastal:
 							break
-					# Gather all living non-traveling characters visible at target settlement
+					# Gather all living non-traveling characters present at target settlement
 					var spotted: Array[int] = []
 					for cid: int in characters_by_id:
 						var sc: L5RCharacterData = characters_by_id[cid]
@@ -23515,6 +23498,8 @@ static func _process_ritual_spell_writebacks(
 					)
 					break
 				# Group A — person-intelligence (target must be co-located with caster)
+				if ritual_spell_id not in SpellSystem.INFORMATION_GATHER_GROUP_A:
+					break
 				if character.physical_location.is_empty() or \
 						character.physical_location != div_target.physical_location:
 					break

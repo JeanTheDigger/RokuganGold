@@ -2885,10 +2885,9 @@ static func _populate_action_metadata(
 		}
 	elif option.action_id == "PERFORM_RITUAL":
 		if need.need_type == "GATHER_INTELLIGENCE" and character != null and SpellSystem.is_shugenja(character):
-			# Divination path: select highest-ML INFORMATION_GATHER spell for person-intelligence.
-			var info_spell: String = SpellSystem.get_best_spell_by_effect(
-				character, SpellSystem.SpellSimEffect.INFORMATION_GATHER
-			)
+			# Divination path: select best NPC-processable information spell.
+			# Group A (co-located person-reading) or Group B (remote scrying) only.
+			var info_spell: String = SpellSystem.get_best_npc_information_spell(character)
 			option.metadata = {"ritual_spell_id": info_spell, "target_npc_id": need.target_npc_id}
 		else:
 			var ritual_spell: String = ""
