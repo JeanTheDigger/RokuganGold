@@ -738,3 +738,190 @@ func test_mind_of_darkness_rank_scales_with_taint() -> void:
 	var c := _char_with_mind_of_darkness(5.0, true)
 	var mod: Dictionary = MutationSystem.get_skill_modifiers(c, "Sincerity")
 	assert_eq(mod.get("tn", 0), 5)  # Sincerity uses Awareness
+
+
+# ---------------------------------------------------------------------------
+# process_rank_up — return dict and character mutation / power arrays
+# ---------------------------------------------------------------------------
+
+func test_process_rank_up_return_dict_has_new_rank() -> void:
+	var c := _make_char(1)
+	c.taint = 2.0
+	var result := MutationSystem.process_rank_up(c, 2, _dice(), 1)
+	assert_has(result, "new_rank")
+	assert_eq(result["new_rank"], 2)
+
+
+func test_rank2_up_adds_power_to_character_shadowlands_powers() -> void:
+	var c := _make_char(1)
+	c.taint = 2.0
+	MutationSystem.process_rank_up(c, 2, _dice(), 1)
+	assert_eq(c.shadowlands_powers.size(), 1)
+
+
+func test_rank3_up_adds_mutation_to_character_mutations() -> void:
+	var c := _make_char(1)
+	c.taint = 3.0
+	MutationSystem.process_rank_up(c, 3, _dice(), 1)
+	assert_eq(c.mutations.size(), 1)
+
+
+func test_rank2_all_minor_powers_exhausted_no_power_gained() -> void:
+	var c := _make_char(1)
+	c.taint = 2.0
+	for pt: Enums.ShadowlandsPowerType in MutationSystem.MINOR_POWERS:
+		var pd := ShadowlandsPowerData.new()
+		pd.power_type = pt
+		pd.tier = Enums.ShadowlandsPowerTier.MINOR
+		c.shadowlands_powers.append(pd)
+	var result := MutationSystem.process_rank_up(c, 2, _dice(), 1)
+	assert_eq(result["gained_powers"].size(), 0)
+
+
+func test_rank3_power_tier_matches_pool_membership() -> void:
+	var c := _make_char(1)
+	c.taint = 3.0
+	var result := MutationSystem.process_rank_up(c, 3, _dice(), 1)
+	if result["gained_powers"].size() > 0:
+		var pt: Enums.ShadowlandsPowerType = result["gained_powers"][0]
+		var expected_tier: Enums.ShadowlandsPowerTier = (
+			Enums.ShadowlandsPowerTier.MINOR
+			if MutationSystem.MINOR_POWERS.has(pt)
+			else Enums.ShadowlandsPowerTier.MAJOR
+		)
+		for sp: ShadowlandsPowerData in c.shadowlands_powers:
+			if sp.power_type == pt:
+				assert_eq(sp.tier, expected_tier)
+				break
+
+
+func test_rank4_second_power_any_tier_when_major_pool_exhausted() -> void:
+	var c := _make_char(1)
+	c.taint = 4.0
+	# Exhaust all Major powers so first (guaranteed Major) gains nothing.
+	# Second draw falls back to any pool (Minor).
+	for pt: Enums.ShadowlandsPowerType in MutationSystem.MAJOR_POWERS:
+		var pd := ShadowlandsPowerData.new()
+		pd.power_type = pt
+		pd.tier = Enums.ShadowlandsPowerTier.MAJOR
+		c.shadowlands_powers.append(pd)
+	var result := MutationSystem.process_rank_up(c, 4, _dice(), 1)
+	# First guaranteed-Major draw yields nothing; second draw from any pool.
+	for pt: Enums.ShadowlandsPowerType in result["gained_powers"]:
+		assert_true(
+			MutationSystem.MINOR_POWERS.has(pt) or MutationSystem.MAJOR_POWERS.has(pt)
+		)
+
+
+# ---------------------------------------------------------------------------
+# Multi-rank jump via _process_taint_rank_changes
+# ---------------------------------------------------------------------------
+
+func test_process_taint_rank_changes_multi_rank_jump_updates_last_processed() -> void:
+	var c := _make_char(1, 3, 3)
+	c.taint = 3.5  # current rank = 3
+	c.taint_rank_last_processed = 0
+	DayOrchestrator._process_taint_rank_changes([c], _dice(), 1)
+	assert_eq(c.taint_rank_last_processed, 3)
+
+
+func test_process_taint_rank_changes_multi_rank_jump_fires_multiple_events() -> void:
+	var c := _make_char(1, 3, 3)
+	c.taint = 3.5  # rank 3; last_processed = 0 → should fire for ranks 1, 2, 3
+	c.taint_rank_last_processed = 0
+	var results := DayOrchestrator._process_taint_rank_changes([c], _dice(), 1)
+	assert_eq(results.size(), 3)
+
+
+# ---------------------------------------------------------------------------
+# Gain — ic_day storage
+# ---------------------------------------------------------------------------
+
+func test_gain_mutation_stores_ic_day_manifested() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.ALBINISM, _dice(), 42)
+	assert_eq(c.mutations[0].ic_day_manifested, 42)
+
+
+func test_gain_power_stores_ic_day_acquired() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_power(
+		c, Enums.ShadowlandsPowerType.JADE_SENSE,
+		Enums.ShadowlandsPowerTier.MINOR, _dice(), 99
+	)
+	assert_eq(c.shadowlands_powers[0].ic_day_acquired, 99)
+
+
+# ---------------------------------------------------------------------------
+# Skill modifiers — coverage gaps
+# ---------------------------------------------------------------------------
+
+func test_distorted_limbs_arm_uses_distorted_arm_context_penalty() -> void:
+	var c := _make_char(1)
+	var md := MutationData.new()
+	md.mutation_type = Enums.MutationType.DISTORTED_LIMBS
+	md.affected_limb = "arm"
+	c.mutations.append(md)
+	var mod := MutationSystem.get_skill_modifiers(c, "Kenjutsu", "", {"uses_distorted_arm": true})
+	assert_eq(mod["rolled"], -3)
+
+
+func test_distorted_limbs_arm_no_context_flag_no_penalty() -> void:
+	var c := _make_char(1)
+	var md := MutationData.new()
+	md.mutation_type = Enums.MutationType.DISTORTED_LIMBS
+	md.affected_limb = "arm"
+	c.mutations.append(md)
+	var mod := MutationSystem.get_skill_modifiers(c, "Kenjutsu")
+	assert_eq(mod["rolled"], 0)
+
+
+func test_extra_limb_nonfunctional_penalty_reflexes_stealth() -> void:
+	var c := _make_char(1)
+	var md := MutationData.new()
+	md.mutation_type = Enums.MutationType.EXTRA_LIMB
+	md.is_non_functional = true
+	c.mutations.append(md)
+	# Stealth is in REFLEXES_SKILLS — non-functional limb penalises it
+	var mod := MutationSystem.get_skill_modifiers(c, "Stealth")
+	assert_eq(mod["rolled"], -1)
+
+
+func test_multiple_social_penalties_stack_rolled_and_tn() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.DISCOLORED_SKIN, _dice(), 1)  # +5 TN
+	MutationSystem.gain_mutation(c, Enums.MutationType.FOUL_ODOR, _dice(), 1)        # -1 rolled
+	MutationSystem.gain_mutation(c, Enums.MutationType.EXTRA_DIGIT, _dice(), 1)      # -1 rolled
+	var mod := MutationSystem.get_skill_modifiers(c, "Courtier")
+	assert_eq(mod["rolled"], -2)
+	assert_eq(mod["tn"], 5)
+
+
+# ---------------------------------------------------------------------------
+# get_social_rolled_penalty — coverage gaps
+# ---------------------------------------------------------------------------
+
+func test_get_social_rolled_penalty_tough_hide() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.TOUGH_HIDE, _dice(), 1)
+	assert_eq(MutationSystem.get_social_rolled_penalty(c), 2)
+
+
+func test_get_social_rolled_penalty_albinism() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.ALBINISM, _dice(), 1)
+	# Helper includes albinism unconditionally; caller checks context separately
+	assert_eq(MutationSystem.get_social_rolled_penalty(c), 1)
+
+
+func test_get_social_rolled_penalty_all_sources_stack() -> void:
+	var c := _make_char(1)
+	MutationSystem.gain_mutation(c, Enums.MutationType.ALBINISM, _dice(), 1)   # +1
+	MutationSystem.gain_mutation(c, Enums.MutationType.EXTRA_DIGIT, _dice(), 1) # +1
+	MutationSystem.gain_mutation(c, Enums.MutationType.FOUL_ODOR, _dice(), 1)  # +1
+	MutationSystem.gain_mutation(c, Enums.MutationType.TOUGH_HIDE, _dice(), 1) # +2
+	MutationSystem.gain_power(
+		c, Enums.ShadowlandsPowerType.MONSTROUS_STRENGTH,
+		Enums.ShadowlandsPowerTier.MINOR, _dice(), 1
+	)  # +1
+	assert_eq(MutationSystem.get_social_rolled_penalty(c), 6)
