@@ -16068,3 +16068,188 @@ func test_clear_stale_flags_does_not_crash_when_known_objectives_absent() -> voi
 	}
 	DayOrchestrator._clear_stale_context_flags(ws)
 	assert_false(ws[1].has("context_flag"), "Stale key erased even without known_objectives")
+
+
+# ---------------------------------------------------------------------------
+# SPY_NETWORK weekly intelligence cycle (s45) — enrichment and tier filter
+# ---------------------------------------------------------------------------
+
+func _make_spy_character(id: int = 10) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.character_name = "Spymaster"
+	c.clan = "Scorpion"
+	c.action_points_current = 2
+	c.action_points_max = 2
+	c.honor = 4.0
+	c.glory = 2.0
+	c.reflexes = 2; c.awareness = 2; c.stamina = 2
+	c.willpower = 2; c.agility = 2; c.intelligence = 2
+	c.strength = 2; c.perception = 2; c.void_ring = 2
+	c.advantages = []
+	c.disadvantages = []
+	c.topic_pool = []
+	c.knowledge_pool = []
+	c.skills = {}
+	c.physical_location = "100"
+	c.wounds_taken = 0
+	return c
+
+
+func _add_spy_network(c: L5RCharacterData, focus_type: String, focus_id: int) -> AdvantageData:
+	var adv := AdvantageData.new()
+	adv.advantage_type = Enums.Advantage.SPY_NETWORK
+	adv.rank = 1
+	adv.metadata = {"focus_type": focus_type, "focus_id": focus_id}
+	c.advantages.append(adv)
+	return adv
+
+
+func _make_topic(id: int, tier: TopicData.Tier) -> TopicData:
+	var t := TopicData.new()
+	t.topic_id = id
+	t.tier = tier
+	t.resolved = false
+	t.topic_type = "political"
+	t.slug = "topic_%d" % id
+	return t
+
+
+func test_spy_network_place_focus_reveals_only_tier3_topic() -> void:
+	var spy := _make_spy_character(10)
+	_add_spy_network(spy, "place", 200)
+
+	var target := _make_spy_character(20)
+	target.physical_location = "200"
+	var t3 := _make_topic(300, TopicData.Tier.TIER_3)
+	var t4 := _make_topic(301, TopicData.Tier.TIER_4)
+	var t2 := _make_topic(302, TopicData.Tier.TIER_2)
+	var t1 := _make_topic(303, TopicData.Tier.TIER_1)
+	target.topic_pool = [300, 301, 302, 303]
+
+	var active_topics: Array = [t3, t4, t2, t1]
+	var characters: Array = [spy, target]
+	var chars_by_id: Dictionary = {10: spy, 20: target}
+
+	# ic_day=7, week=1; spy hasn't received intel yet (last_update=-1).
+	DayOrchestrator._process_spy_network_weekly(
+		characters, chars_by_id, active_topics, {}, [], 7
+	)
+
+	# Spy should have received exactly one Tier3 or Tier4 topic, not Tier1 or Tier2.
+	assert_eq(spy.topic_pool.size(), 1)
+	assert_true(spy.topic_pool[0] == 300 or spy.topic_pool[0] == 301,
+		"Only Tier3/Tier4 topics eligible for place focus")
+	assert_false(302 in spy.topic_pool, "Tier2 topics must be excluded")
+	assert_false(303 in spy.topic_pool, "Tier1 topics must be excluded")
+
+
+func test_spy_network_place_focus_skips_tier1_and_tier2_even_if_only_option() -> void:
+	var spy := _make_spy_character(10)
+	_add_spy_network(spy, "place", 200)
+
+	var target := _make_spy_character(20)
+	target.physical_location = "200"
+	var t2 := _make_topic(302, TopicData.Tier.TIER_2)
+	target.topic_pool = [302]
+
+	var active_topics: Array = [t2]
+	var characters: Array = [spy, target]
+	var chars_by_id: Dictionary = {10: spy, 20: target}
+
+	DayOrchestrator._process_spy_network_weekly(
+		characters, chars_by_id, active_topics, {}, [], 7
+	)
+
+	# No eligible topics — spy pool should remain empty.
+	assert_eq(spy.topic_pool.size(), 0)
+
+
+func test_spy_network_character_focus_reveals_location_on_first_tick() -> void:
+	var spy := _make_spy_character(10)
+	_add_spy_network(spy, "character", 20)
+
+	var tgt := _make_spy_character(20)
+	tgt.physical_location = "999"
+	tgt.clan = "Dragon"
+
+	var characters: Array = [spy, tgt]
+	var chars_by_id: Dictionary = {10: spy, 20: tgt}
+
+	# Provide objectives_map with no active need for spy → default ordering → first fact
+	DayOrchestrator._process_spy_network_weekly(
+		characters, chars_by_id, [], {}, [], 7
+	)
+
+	# Should have added a knowledge entry about the target.
+	assert_eq(spy.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = spy.knowledge_pool[0]
+	assert_eq(entry.entry_type, "shadow_surveillance")
+	assert_eq(entry.data.get("character_id", -1), 20)
+
+
+func test_spy_network_character_focus_cycles_fact_types() -> void:
+	var spy := _make_spy_character(10)
+	var adv: AdvantageData = _add_spy_network(spy, "character", 20)
+	# Simulate that "primary_objective" was already revealed.
+	adv.metadata["revealed_facts_20"] = ["primary_objective"]
+
+	var tgt := _make_spy_character(20)
+	tgt.physical_location = "999"
+
+	var characters: Array = [spy, tgt]
+	var chars_by_id: Dictionary = {10: spy, 20: tgt}
+
+	DayOrchestrator._process_spy_network_weekly(
+		characters, chars_by_id, [], {}, [], 7
+	)
+
+	# Second fact type should be revealed (not "primary_objective" again).
+	var entry: KnowledgeEntry = spy.knowledge_pool[0]
+	assert_ne(entry.data.get("fact", ""), "primary_objective")
+	# The revealed list should now contain two entries.
+	assert_eq(adv.metadata.get("revealed_facts_20", []).size(), 2)
+
+
+func test_spy_network_army_focus_includes_pu_and_commander() -> void:
+	var spy := _make_spy_character(10)
+	_add_spy_network(spy, "army", 500)
+
+	var company: Dictionary = {
+		"company_id": 500,
+		"current_location_id": "prov_12",
+		"current_health": 75,
+		"commander_id": 42,
+	}
+
+	var characters: Array = [spy]
+	var chars_by_id: Dictionary = {10: spy}
+
+	DayOrchestrator._process_spy_network_weekly(
+		characters, chars_by_id, [], {}, [company], 7
+	)
+
+	assert_eq(spy.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = spy.knowledge_pool[0]
+	assert_eq(entry.data.get("company_id", -1), 500)
+	assert_eq(entry.data.get("position", ""), "prov_12")
+	assert_eq(entry.data.get("current_health", -1), 75)
+	assert_eq(entry.data.get("commander_id", -1), 42)
+
+
+func test_spy_network_army_focus_missing_company_still_creates_entry() -> void:
+	# If company_id not found in companies array, entry is created with empty position.
+	var spy := _make_spy_character(10)
+	_add_spy_network(spy, "army", 999)
+
+	var characters: Array = [spy]
+	var chars_by_id: Dictionary = {10: spy}
+
+	DayOrchestrator._process_spy_network_weekly(
+		characters, chars_by_id, [], {}, [], 7
+	)
+
+	assert_eq(spy.knowledge_pool.size(), 1)
+	var entry: KnowledgeEntry = spy.knowledge_pool[0]
+	assert_eq(entry.data.get("company_id", -1), 999)
+	assert_eq(entry.data.get("position", "MISSING"), "")  # empty when company not found

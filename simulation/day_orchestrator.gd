@@ -1489,7 +1489,7 @@ static func advance_day(
 
 	if ic_day > 0 and ic_day % 7 == 0:
 		_process_spy_network_weekly(
-			characters, characters_by_id, active_topics, ic_day,
+			characters, characters_by_id, active_topics, objectives_map, companies, ic_day,
 		)
 		_process_well_connected_weekly(
 			characters, characters_by_id, active_topics, ic_day,
@@ -9332,12 +9332,37 @@ static func _process_lost_love_arrival_trigger(
 
 # -- SPY_NETWORK weekly intelligence cycle (s45) ------------------------------
 
+# Ordered fact types for character focus (s45:343).
+# Engine cycles through revealed facts so repeats are avoided.
+const _SPY_CHARACTER_FACT_TYPES: Array = [
+	"primary_objective",
+	"concealed_disadvantage",
+	"true_honor_rank",
+	"disposition_value",
+	"location",
+]
+
 static func _process_spy_network_weekly(
 	characters: Array,
 	characters_by_id: Dictionary,
 	active_topics: Array,
+	objectives_map: Dictionary,
+	companies: Array,
 	ic_day: int,
 ) -> void:
+	# Build company lookup by company_id for O(1) army-focus queries.
+	var companies_by_id: Dictionary = {}
+	for comp: Dictionary in companies:
+		var cid: int = comp.get("company_id", -1)
+		if cid >= 0:
+			companies_by_id[cid] = comp
+
+	# Build topic lookup for tier filtering.
+	var topics_by_id: Dictionary = {}
+	for t: Variant in active_topics:
+		if t is TopicData:
+			topics_by_id[(t as TopicData).topic_id] = t
+
 	var week_num: int = ic_day / 7
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
@@ -9356,21 +9381,90 @@ static func _process_spy_network_weekly(
 			var target: L5RCharacterData = characters_by_id.get(focus_id)
 			if target == null or CharacterStats.is_dead(target):
 				continue
+			# Select the most relevant unrevealed fact per s45:343.
+			# Relevance is driven by the spymaster's own active primary objective;
+			# cycle through fact types and skip already-revealed ones.
+			var spymaster_obj: Dictionary = objectives_map.get(c.character_id, {}).get("primary", {})
+			var spymaster_need: String = spymaster_obj.get("need_type", "")
+			var revealed_key: String = "revealed_facts_%d" % focus_id
+			var revealed: Array = adv.metadata.get(revealed_key, [])
+
+			# Prioritise fact types by spymaster's active need.
+			var ordered_facts: Array = _spy_char_fact_priority(spymaster_need)
+			var chosen_fact: String = ""
+			for ft: String in ordered_facts:
+				if ft not in revealed:
+					chosen_fact = ft
+					break
+			if chosen_fact.is_empty():
+				# All facts revealed; reset and cycle from top.
+				revealed.clear()
+				chosen_fact = ordered_facts[0]
+			revealed.append(chosen_fact)
+			adv.metadata[revealed_key] = revealed
+
 			var entry: KnowledgeEntry = KnowledgeEntry.new()
 			entry.source = Enums.KnowledgeSource.INTELLIGENCE
 			entry.entry_type = "shadow_surveillance"
-			entry.data = {
-				"character_id": focus_id,
-				"location": target.physical_location,
-				"clan": target.clan,
-				"ic_day": ic_day,
-			}
 			entry.confidence = Enums.KnowledgeConfidence.FRESH
 			entry.season_acquired = ic_day / 90
+
+			match chosen_fact:
+				"primary_objective":
+					var tgt_obj: Dictionary = objectives_map.get(focus_id, {}).get("primary", {})
+					entry.data = {
+						"character_id": focus_id,
+						"fact": "primary_objective",
+						"need_type": tgt_obj.get("need_type", ""),
+						"target_npc_id": tgt_obj.get("target_npc_id", -1),
+						"target_province_id": tgt_obj.get("target_province_id", -1),
+						"ic_day": ic_day,
+					}
+				"concealed_disadvantage":
+					var concealed_dis: String = ""
+					for dis: DisadvantageData in target.disadvantages:
+						if dis.disadvantage_type == Enums.Disadvantage.DARK_SECRET:
+							concealed_dis = "DARK_SECRET"
+							break
+						if concealed_dis.is_empty():
+							concealed_dis = Enums.Disadvantage.keys()[dis.disadvantage_type]
+					entry.data = {
+						"character_id": focus_id,
+						"fact": "concealed_disadvantage",
+						"disadvantage": concealed_dis,
+						"ic_day": ic_day,
+					}
+				"true_honor_rank":
+					entry.data = {
+						"character_id": focus_id,
+						"fact": "true_honor_rank",
+						"honor": target.honor,
+						"ic_day": ic_day,
+					}
+				"disposition_value":
+					# Reveal target's disposition toward the spymaster (most actionable).
+					var disp: int = target.disposition_values.get(c.character_id, 0)
+					entry.data = {
+						"character_id": focus_id,
+						"fact": "disposition_value",
+						"toward_character_id": c.character_id,
+						"disposition": disp,
+						"ic_day": ic_day,
+					}
+				_:  # "location" or fallback
+					entry.data = {
+						"character_id": focus_id,
+						"fact": "location",
+						"location": target.physical_location,
+						"clan": target.clan,
+						"ic_day": ic_day,
+					}
+
 			InformationSystem.add_knowledge(c, entry)
 
 		elif focus_type == "place" and focus_id >= 0:
-			# Gather topics discussed by characters at the focused settlement.
+			# Gather Tier 3 or Tier 4 topics from the focused settlement (s45:345).
+			# Collect topic IDs held by characters present at this settlement.
 			var local_topic_ids: Array = []
 			for other: L5RCharacterData in characters:
 				if CharacterStats.is_dead(other) or other.character_id == c.character_id:
@@ -9382,20 +9476,60 @@ static func _process_spy_network_weekly(
 				for tid: int in other.topic_pool:
 					if tid not in local_topic_ids and tid not in c.topic_pool:
 						local_topic_ids.append(tid)
-			if not local_topic_ids.is_empty():
-				c.topic_pool.append(local_topic_ids[ic_day % local_topic_ids.size()])
+
+			# Filter to Tier 3 (TIER_3) or Tier 4 (TIER_4) topics only, newest first.
+			var eligible_ids: Array = []
+			for tid: int in local_topic_ids:
+				var t: Variant = topics_by_id.get(tid)
+				if not (t is TopicData):
+					continue
+				var td: TopicData = t as TopicData
+				if td.resolved:
+					continue
+				if td.tier == TopicData.Tier.TIER_3 or td.tier == TopicData.Tier.TIER_4:
+					eligible_ids.append(tid)
+			# Prioritise by recency: later topics have higher IDs, so sort descending.
+			eligible_ids.sort()
+			eligible_ids.reverse()
+			if not eligible_ids.is_empty():
+				c.topic_pool.append(eligible_ids[0])
 
 		elif focus_type == "army" and focus_id >= 0:
+			# Reveal position, PU count, and commander identity (s45:347).
+			var comp: Dictionary = companies_by_id.get(focus_id, {})
 			var entry: KnowledgeEntry = KnowledgeEntry.new()
 			entry.source = Enums.KnowledgeSource.INTELLIGENCE
 			entry.entry_type = "shadow_surveillance"
 			entry.data = {
 				"company_id": focus_id,
+				"position": comp.get("current_location_id", ""),
+				"current_health": comp.get("current_health", -1),
+				"commander_id": comp.get("commander_id", -1),
 				"ic_day": ic_day,
 			}
 			entry.confidence = Enums.KnowledgeConfidence.FRESH
 			entry.season_acquired = ic_day / 90
 			InformationSystem.add_knowledge(c, entry)
+
+
+# Returns fact types ordered by relevance to the given NeedType (s45:343).
+static func _spy_char_fact_priority(need_type: String) -> Array:
+	# Military/threat needs: objective first helps predict hostile moves.
+	if need_type in ["DEFEND_PROVINCE", "LEVY_TROOPS", "PATROL_PROVINCE",
+			"INVESTIGATE_THREAT", "ELIMINATE_CHARACTER", "CONDUCT_SIEGE"]:
+		return ["primary_objective", "location", "true_honor_rank",
+				"disposition_value", "concealed_disadvantage"]
+	# Diplomatic/relationship needs: disposition and secrets most actionable.
+	if need_type in ["RAISE_DISPOSITION", "SECURE_ALLIANCE", "DAMAGE_RELATIONSHIP",
+			"ACQUIRE_LEVERAGE", "ARRANGE_MARRIAGE"]:
+		return ["disposition_value", "concealed_disadvantage", "true_honor_rank",
+				"primary_objective", "location"]
+	# Legal/investigative needs: concealed disadvantages reveal wrongdoers.
+	if need_type in ["UPHOLD_LAW", "INVESTIGATE_CRIME", "SUPPRESS_INVESTIGATION"]:
+		return ["concealed_disadvantage", "primary_objective", "true_honor_rank",
+				"disposition_value", "location"]
+	# Default: cycle through all facts.
+	return _SPY_CHARACTER_FACT_TYPES.duplicate()
 
 
 # -- WELL_CONNECTED weekly secret topic revelation (s45) ----------------------

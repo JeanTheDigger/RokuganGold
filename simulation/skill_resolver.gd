@@ -453,7 +453,13 @@ static func resolve_skill_check(
 						dis.metadata["last_misfortune_month"] = ic_month
 						break
 
-	# DARK_PARAGON (s45): NPC activates retroactively when +5 would turn a failed roll to success.
+	# DARK_PARAGON (s45): NPC activates retroactively when activation would turn a failed roll
+	# into a success, or prevent death/crippling for Will/Determination.
+	# Precept effects per s45:77:
+	#   Determination — negate all TN/Wound penalties (no +5 bonus).
+	#   Perfection    — NPC simulation proxy: +5 (die explosion cannot be simulated; GDD NPC
+	#                   trigger rule uses "+5 or re-roll would change outcome" as proxy).
+	#   All others    — +5 bonus (Control, Insight, Knowledge, Strength, Will).
 	if not result.get("success", false):
 		var dp_adv: AdvantageData = AdvantageSystem.get_advantage(
 			character, Enums.Advantage.DARK_PARAGON
@@ -464,10 +470,17 @@ static func resolve_skill_check(
 				character, result.get("total", 0), result.get("tn", tn), dp_precept, ic_day
 			)
 			if dp.get("should_activate", false):
-				result["total"] = result["total"] + 5
+				if dp_precept == "Determination":
+					# Negate wound penalty (wound_penalty is negative; subtracting negates it).
+					var wp: int = result.get("wound_penalty", 0)
+					result["total"] = result["total"] - wp
+				else:
+					# Perfection proxy (+5) and all other precepts (+5).
+					result["total"] = result["total"] + 5
 				result["margin"] = result["total"] - result["tn"]
 				result["success"] = result["margin"] >= 0
 				result["dark_paragon_activated"] = true
+				result["dark_paragon_precept"] = dp_precept
 				AdvantageSystem.apply_dark_paragon_cost(character, ic_day)
 
 	return result

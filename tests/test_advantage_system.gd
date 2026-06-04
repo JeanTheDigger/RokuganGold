@@ -3316,3 +3316,72 @@ func test_dark_paragon_integration_weekly_limit_blocks_activation() -> void:
 	)
 	assert_false(r.get("dark_paragon_activated", false))
 	assert_eq(c.current_void_points, 2)  # no cost deducted
+
+
+# ---------------------------------------------------------------------------
+# DARK_PARAGON Determination precept — wound penalty negation (s45:77)
+# ---------------------------------------------------------------------------
+# Determination negates wound penalty instead of adding +5 (s45:77).
+# _make_character() has stamina=2, willpower=2 → Earth=2 → threshold=4 wounds/level.
+# wounds_taken=13 → level_index=int(12/4)=3 → HURT → wound_penalty=-10.
+# wounds_taken=9  → level_index=int(8/4)=2  → GRAZED → wound_penalty=-5.
+# bonus_rolled=-5 forces dice to 0; final_total = flat_bonus + wound_penalty.
+
+func test_dark_paragon_determination_negates_wound_penalty() -> void:
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	c.wounds_taken = 13                  # HURT → wound_penalty = -10
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1, {"precept": "Determination"})
+	# flat_bonus=12, wound_penalty=-10 → total=2 (fails TN 10).
+	# Determination negates -10: total=2-(-10)=12 → 12 >= 10 → success.
+	# +5 branch would give 2+5=7 < 10 → would NOT have saved it.
+	var r: Dictionary = SkillResolver.resolve_skill_check(
+		c, dice, "Etiquette", 10, 0, "", Enums.Trait.NONE, -5, 0, 12
+	)
+	assert_true(r.get("dark_paragon_activated", false))
+	assert_true(r.get("success", false))
+	assert_eq(r.get("total", 0), 12)     # wound penalty negated, not +5 added
+
+
+func test_dark_paragon_determination_does_not_add_five() -> void:
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	c.wounds_taken = 13                  # HURT → wound_penalty = -10
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1, {"precept": "Determination"})
+	# If +5 were added (wrong), total would be 2+5=7. With negation, total=12.
+	var r: Dictionary = SkillResolver.resolve_skill_check(
+		c, dice, "Etiquette", 10, 0, "", Enums.Trait.NONE, -5, 0, 12
+	)
+	# Confirm total is 12 (negation) and not 7 (+5 would give) or 17 (+5 on top of negation).
+	assert_eq(r.get("total", 0), 12)
+	assert_ne(r.get("total", 0), 7)
+
+
+func test_dark_paragon_non_determination_still_adds_five() -> void:
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	c.wounds_taken = 13                  # HURT → wound_penalty = -10
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1, {"precept": "Knowledge"})
+	# flat_bonus=17, wound_penalty=-10 → total=7 (fails TN 10).
+	# Knowledge (non-Determination): +5 → 7+5=12 >= 10 → success.
+	var r: Dictionary = SkillResolver.resolve_skill_check(
+		c, dice, "Etiquette", 10, 0, "", Enums.Trait.NONE, -5, 0, 17
+	)
+	assert_true(r.get("dark_paragon_activated", false))
+	assert_true(r.get("success", false))
+	assert_eq(r.get("total", 0), 12)     # 17 - 10 (wound) + 5 (bonus) = 12
+
+
+func test_dark_paragon_determination_records_precept_in_result() -> void:
+	var dice: DiceEngine = DiceEngine.new()
+	dice.set_seed(1)
+	var c := _make_character()
+	c.wounds_taken = 13
+	_add_advantage(c, Enums.Advantage.DARK_PARAGON, 1, {"precept": "Determination"})
+	var r: Dictionary = SkillResolver.resolve_skill_check(
+		c, dice, "Etiquette", 10, 0, "", Enums.Trait.NONE, -5, 0, 12
+	)
+	assert_eq(r.get("dark_paragon_precept", ""), "Determination")
