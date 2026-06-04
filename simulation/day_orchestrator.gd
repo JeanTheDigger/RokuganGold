@@ -23361,6 +23361,22 @@ static func _process_ritual_spell_writebacks(
 			SpellSystem.SpellSimEffect.REMOVE_TAINT:
 				if success:
 					SpellSystem.apply_taint_removal(character, ritual_spell_id, margin)
+			SpellSystem.SpellSimEffect.WARD_CREATION:
+				# s34 essence_of_jade: jade spirits recoil from Taint rank >= 1.
+				# If the caster is Tainted, the ward is blocked and caster learns their own Taint.
+				# Ward protective effect (10-round duration) is combat-only — no sim wiring until s40.
+				if success:
+					var ward_result: Dictionary = SpellSystem.apply_ward_creation(
+						character, ritual_spell_id
+					)
+					if ward_result.get("taint_revealed", false):
+						var entry: KnowledgeEntry = KnowledgeEntry.new()
+						entry.source = "spell_ward"
+						entry.entry_type = "taint_detected_self"
+						entry.data = {"taint": character.taint, "spell_id": ritual_spell_id}
+						entry.confidence = Enums.KnowledgeConfidence.FRESH
+						entry.season_acquired = ic_day / 90
+						character.knowledge_pool.append(entry)
 			_:
 				pass  # RITUAL_HONOR/COMMUNE_KAMI: honor_change already handled by EffectApplicator
 

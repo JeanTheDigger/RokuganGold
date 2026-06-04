@@ -601,6 +601,20 @@ static func apply_spirit_detection(margin: int, province_ptl: float) -> Dictiona
 	return {"detected": detected, "province_ptl": province_ptl}
 
 
+## Evaluate ward creation attempt (s34 essence_of_jade).
+## Gate: cannot ward a character who has at least 1 full Rank of Taint (taint >= 1.0).
+## When blocked, the jade spirits' recoil reveals the caster's Taint to themselves.
+## The ward's protective effect (Taint immunity for 10 rounds per GDD s34) is combat-only;
+## no simulation-duration wiring exists until s40 individual combat is implemented.
+## Returns {ward_applied: bool, taint_revealed: bool}.
+static func apply_ward_creation(character: L5RCharacterData, _spell_id: String) -> Dictionary:
+	var taint_rank: int = MutationSystem.get_taint_rank(character.taint)
+	if taint_rank >= 1:
+		# s34: jade spirits recoil — ward blocked and caster learns of their own Taint.
+		return {"ward_applied": false, "taint_revealed": true}
+	return {"ward_applied": true, "taint_revealed": false}
+
+
 ## Returns all spell IDs in spells_known matching a given SpellSimEffect.
 static func get_spells_by_sim_effect(character: L5RCharacterData,
 		effect: SpellSimEffect) -> Array[String]:

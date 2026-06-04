@@ -565,3 +565,47 @@ func test_get_best_purify_spell_returns_purge_the_taint() -> void:
 func test_get_best_purify_spell_empty_when_none_known() -> void:
 	# No PURIFY_AREA spells in default kit.
 	assert_eq(SpellSystem.get_best_purify_spell(_char), "")
+
+
+# -- apply_ward_creation -------------------------------------------------------
+
+func test_apply_ward_creation_clean_caster_applies_ward() -> void:
+	# Taint < 1.0 = rank 0 — jade spirits do not recoil.
+	_char.taint = 0.9
+	var result: Dictionary = SpellSystem.apply_ward_creation(_char, "essence_of_jade")
+	assert_eq(result.get("ward_applied"), true)
+
+
+func test_apply_ward_creation_clean_caster_no_taint_reveal() -> void:
+	_char.taint = 0.0
+	var result: Dictionary = SpellSystem.apply_ward_creation(_char, "essence_of_jade")
+	assert_eq(result.get("taint_revealed"), false)
+
+
+func test_apply_ward_creation_blocked_at_rank1() -> void:
+	# Taint 1.0 = rank 1 — GDD s34: cannot cast on anyone with at least 1 full Rank of Taint.
+	_char.taint = 1.0
+	var result: Dictionary = SpellSystem.apply_ward_creation(_char, "essence_of_jade")
+	assert_eq(result.get("ward_applied"), false)
+
+
+func test_apply_ward_creation_reveals_taint_when_blocked() -> void:
+	# s34: jade spirits "immediately alerting the caster to their Tainted nature."
+	_char.taint = 1.0
+	var result: Dictionary = SpellSystem.apply_ward_creation(_char, "essence_of_jade")
+	assert_eq(result.get("taint_revealed"), true)
+
+
+func test_apply_ward_creation_blocked_at_higher_rank() -> void:
+	# Rank 3 is also blocked — gate is >= 1, not exactly == 1.
+	_char.taint = 3.5
+	var result: Dictionary = SpellSystem.apply_ward_creation(_char, "essence_of_jade")
+	assert_eq(result.get("ward_applied"), false)
+	assert_eq(result.get("taint_revealed"), true)
+
+
+func test_apply_ward_creation_boundary_below_rank1() -> void:
+	# Taint 0.999 = still rank 0 — ward succeeds (int(0.999) = 0).
+	_char.taint = 0.999
+	var result: Dictionary = SpellSystem.apply_ward_creation(_char, "essence_of_jade")
+	assert_eq(result.get("ward_applied"), true)
