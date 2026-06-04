@@ -49,7 +49,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"natures_touch":              {"e": 0, "m": 1, "s": 3},
 	"tempest_of_air":             {"e": 0, "m": 1, "s": 0},
 	"token_of_memory":            {"e": 0, "m": 1, "s": 0},   # memory illusion; perception bonus — COMBAT_ONLY
-	"to_seek_the_truth":          {"e": 0, "m": 1, "s": 9},
+	"to_seek_the_truth":          {"e": 0, "m": 1, "s": 0},   # clears temporary mental/social penalties — COMBAT_ONLY
 	"voice_of_the_wind":          {"e": 0, "m": 1, "s": 0},   # social skill bonus for caster — COMBAT_ONLY
 	"way_of_deception":           {"e": 0, "m": 1, "s": 0},
 	"yari_of_air":                {"e": 0, "m": 1, "s": 0},
@@ -61,7 +61,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"flight_of_doves":            {"e": 0, "m": 2, "s": 0},   # entertainment illusion — COMBAT_ONLY
 	"freedom_of_the_air":         {"e": 0, "m": 2, "s": 14},  # Compels hostile spirits out for Air Ring hours — SPIRIT_BIND
 	"garbled_tongue":             {"e": 0, "m": 2, "s": 0},
-	"heart_betrays_eyes":         {"e": 0, "m": 2, "s": 9},
+	"heart_betrays_eyes":         {"e": 0, "m": 2, "s": 0},   # target perceives unusual as normal; maintains illusion — COMBAT_ONLY
 	"hidden_visage":              {"e": 0, "m": 2, "s": 0},
 	"the_kamis_whisper":          {"e": 0, "m": 2, "s": 0},   # creates false sounds — COMBAT_ONLY
 	"mists_of_illusion":          {"e": 0, "m": 2, "s": 0},
@@ -82,16 +82,16 @@ const SPELL_LIBRARY: Dictionary = {
 	"summoning_the_gale":         {"e": 0, "m": 3, "s": 0},  # concentration area wind block — COMBAT_ONLY
 	"summon_fog":                 {"e": 0, "m": 3, "s": 0},  # concentration fog ("while maintained") — COMBAT_ONLY
 	"touch_of_airs_grace":        {"e": 0, "m": 3, "s": 0},
-	"your_hearts_enemy":          {"e": 0, "m": 3, "s": 9},
+	"your_hearts_enemy":          {"e": 0, "m": 3, "s": 0},   # manifests Fear 4 illusion attack — COMBAT_ONLY
 	# ML4
 	"call_the_spirit":            {"e": 0, "m": 4, "s": 5},
 	"castle_of_air":              {"e": 0, "m": 4, "s": 0},
 	"false_realm":                {"e": 0, "m": 4, "s": 0},
-	"funeral_rites":              {"e": 0, "m": 4, "s": 12},
+	"funeral_rites":              {"e": 0, "m": 4, "s": 17},  # speaks with departed spirit for information — INFORMATION_GATHER
 	"gift_of_wind":               {"e": 0, "m": 4, "s": 0},
 	"howl_of_isora":              {"e": 0, "m": 4, "s": 0},  # one-time damage blast — COMBAT_ONLY
 	"know_the_mind":              {"e": 0, "m": 4, "s": 17},
-	"look_into_the_soul":         {"e": 0, "m": 4, "s": 9},
+	"look_into_the_soul":         {"e": 0, "m": 4, "s": 17},  # Divination: reveals target's 2 lowest Rings — INFORMATION_GATHER
 	"netsuke_of_wind":            {"e": 0, "m": 4, "s": 0},
 	"seeking_the_way":            {"e": 0, "m": 4, "s": 0},   # hides caster's tracks — COMBAT_ONLY
 	"symbol_of_air":              {"e": 0, "m": 4, "s": 10},
@@ -111,7 +111,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"the_false_legion":           {"e": 0, "m": 6, "s": 0},
 	"piercing_the_heavens":       {"e": 0, "m": 6, "s": 0},
 	"wind_of_the_moon":           {"e": 0, "m": 6, "s": 0},
-	"the_world_is_truth":         {"e": 0, "m": 6, "s": 9},
+	"the_world_is_truth":         {"e": 0, "m": 6, "s": 0},   # Kolat memory rewrite; blocked on s54.7 — COMBAT_ONLY
 	"wrath_of_kaze_no_kami":      {"e": 0, "m": 6, "s": 0},
 
 	# === EARTH (s34) ===
@@ -289,7 +289,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"walking_upon_the_waves":        {"e": 3, "m": 3, "s": 11},
 	"water_kamis_blessing":          {"e": 3, "m": 3, "s": 15},
 	# ML4
-	"dominion_of_suitengu":          {"e": 3, "m": 4, "s": 6},
+	"dominion_of_suitengu":          {"e": 3, "m": 4, "s": 17},  # Divination: scry between water bodies — INFORMATION_GATHER
 	"ebb_and_flow_of_battle":        {"e": 3, "m": 4, "s": 0},
 	"heart_of_the_water_dragon":     {"e": 3, "m": 4, "s": 0},
 	"master_of_the_rolling_river":   {"e": 3, "m": 4, "s": 11},
@@ -322,7 +322,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"boundless_sight":               {"e": 4, "m": 1, "s": 17, "i": true},
 	"drawing_the_void":              {"e": 4, "m": 1, "s": 0,  "i": true},
 	"flow_through_the_void":         {"e": 4, "m": 1, "s": 11, "i": true},
-	"see_through_lies":              {"e": 4, "m": 1, "s": 9,  "i": true},
+	"see_through_lies":              {"e": 4, "m": 1, "s": 17, "i": true},  # reveals target's highest Advantage or Disadvantage — INFORMATION_GATHER
 	"sense_void":                    {"e": 4, "m": 1, "s": 3,  "i": true},
 	"touch_the_emptiness":           {"e": 4, "m": 1, "s": 0,  "i": true},
 	"the_voids_caress":              {"e": 4, "m": 1, "s": 0,  "i": true},
@@ -334,7 +334,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"drink_of_your_essence":         {"e": 4, "m": 2, "s": 0,  "i": true},
 	"strengthen_the_void":           {"e": 4, "m": 2, "s": 15, "i": true},
 	"the_empty_voice":               {"e": 4, "m": 2, "s": 0,  "i": true},  # allows silent casting — COMBAT_ONLY
-	"false_whispers":                {"e": 4, "m": 2, "s": 9,  "i": true},
+	"false_whispers":                {"e": 4, "m": 2, "s": 0,  "i": true},  # makes target repeat one sentence verbatim — COMBAT_ONLY
 	"reach_through_the_void":        {"e": 4, "m": 2, "s": 0,  "i": true},  # telekinesis — COMBAT_ONLY
 	"severed_from_the_stream":       {"e": 4, "m": 2, "s": 0,  "i": true},
 	# ML3

@@ -1046,3 +1046,33 @@ func test_reach_through_the_void_is_combat_only() -> void:
 
 func test_kharmic_intent_is_combat_only() -> void:
 	assert_eq(SpellSystem.SPELL_LIBRARY["kharmic_intent"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+
+# --- Sim-effect audit: misclassified REVEAL_DECEPTION, COMMAND_KAMI, PRESERVATION spells ---
+
+func test_to_seek_the_truth_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["to_seek_the_truth"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_heart_betrays_eyes_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["heart_betrays_eyes"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_your_hearts_enemy_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["your_hearts_enemy"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_the_world_is_truth_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["the_world_is_truth"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_false_whispers_is_combat_only() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["false_whispers"]["s"], SpellSystem.SpellSimEffect.COMBAT_ONLY)
+
+func test_look_into_the_soul_is_information_gather() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["look_into_the_soul"]["s"], SpellSystem.SpellSimEffect.INFORMATION_GATHER)
+
+func test_funeral_rites_is_information_gather() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["funeral_rites"]["s"], SpellSystem.SpellSimEffect.INFORMATION_GATHER)
+
+func test_dominion_of_suitengu_is_information_gather() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["dominion_of_suitengu"]["s"], SpellSystem.SpellSimEffect.INFORMATION_GATHER)
+
+func test_see_through_lies_is_information_gather() -> void:
+	assert_eq(SpellSystem.SPELL_LIBRARY["see_through_lies"]["s"], SpellSystem.SpellSimEffect.INFORMATION_GATHER)
