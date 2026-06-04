@@ -23354,10 +23354,10 @@ static func _process_ritual_spell_writebacks(
 						active_topics.append(detect_topic)
 						character.topic_pool.append(detect_topic.topic_id)
 			SpellSystem.SpellSimEffect.PURIFY_AREA:
-				# Forward-wired: no PURIFY_AREA spells exist in library yet.
-				# Province PTL reduction needs dedicated apply_purify_area() — blocked on
-				# PURIFY_AREA spell specs. Leave branch for when they are added.
-				pass
+				if success and province_id >= 0:
+					var province: ProvinceData = provinces.get(province_id)
+					if province != null:
+						SpellSystem.apply_purify_area(province, ritual_spell_id, margin)
 			SpellSystem.SpellSimEffect.REMOVE_TAINT:
 				if success:
 					SpellSystem.apply_taint_removal(character, ritual_spell_id, margin)

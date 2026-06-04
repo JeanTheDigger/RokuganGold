@@ -147,7 +147,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"earthen_wave":                  {"e": 1, "m": 3, "s": 0},
 	"groves_of_stone":               {"e": 1, "m": 3, "s": 0},
 	"murmur_of_earth":               {"e": 1, "m": 3, "s": 17},
-	"purge_the_taint":               {"e": 1, "m": 3, "s": 2},
+	"purge_the_taint":               {"e": 1, "m": 3, "s": 8},
 	"sharing_the_strength_of_many":  {"e": 1, "m": 3, "s": 0},
 	"shelter_of_the_earth":          {"e": 1, "m": 3, "s": 0},
 	"strength_of_the_crow":          {"e": 1, "m": 3, "s": 0},
@@ -174,7 +174,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"the_kamis_strength":            {"e": 1, "m": 5, "s": 0},
 	"the_kamis_will":                {"e": 1, "m": 5, "s": 6},
 	# ML6
-	"essence_of_jade":               {"e": 1, "m": 6, "s": 2},
+	"essence_of_jade":               {"e": 1, "m": 6, "s": 10},
 	"power_of_the_earth_dragon":     {"e": 1, "m": 6, "s": 0},
 	"prison_of_earth":               {"e": 1, "m": 6, "s": 0},
 	"rise_earth":                    {"e": 1, "m": 6, "s": 0},
@@ -189,7 +189,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"extinguish":                    {"e": 2, "m": 1, "s": 13},
 	"fire_kamis_blessing":           {"e": 2, "m": 1, "s": 15},
 	"fires_of_purity":               {"e": 2, "m": 1, "s": 15},
-	"the_fires_that_cleanse":        {"e": 2, "m": 1, "s": 2},
+	"the_fires_that_cleanse":        {"e": 2, "m": 1, "s": 0},
 	"fury_of_osano_wo":              {"e": 2, "m": 1, "s": 0},
 	"gift_of_amaterasu":             {"e": 2, "m": 1, "s": 15},
 	"katana_of_fire":                {"e": 2, "m": 1, "s": 0},
@@ -577,6 +577,20 @@ static func apply_taint_removal(target: L5RCharacterData, spell_id: String,
 	return {"taint_removed": before - target.taint}
 
 
+## Apply area purification from a PURIFY_AREA cast (s34 purge_the_taint).
+## Reduces province PTL. Amount: base by spell + 0.1 per margin point (PROVISIONAL formula).
+## Returns {ptl_reduced}.
+static func apply_purify_area(province: ProvinceData, spell_id: String,
+		margin: int) -> Dictionary:
+	var base: float = _purify_base(spell_id)
+	var reduced: float = base + float(margin) * 0.1
+	if reduced <= 0.0:
+		return {"ptl_reduced": 0.0}
+	var before: float = province.province_taint_level
+	province.province_taint_level = maxf(0.0, province.province_taint_level - reduced)
+	return {"ptl_reduced": before - province.province_taint_level}
+
+
 ## Evaluate spirit detection result vs province PTL. Returns {detected, province_ptl}.
 ## Detection TN from GDD design decision #5: Perception + Lore: Shadowlands vs (PTL × 5).
 static func apply_spirit_detection(margin: int, province_ptl: float) -> Dictionary:
@@ -623,6 +637,10 @@ static func get_best_healing_spell(character: L5RCharacterData) -> String:
 
 static func get_best_taint_removal_spell(character: L5RCharacterData) -> String:
 	return get_best_spell_by_effect(character, SpellSimEffect.REMOVE_TAINT)
+
+
+static func get_best_purify_spell(character: L5RCharacterData) -> String:
+	return get_best_spell_by_effect(character, SpellSimEffect.PURIFY_AREA)
 
 
 static func get_best_detection_spell(character: L5RCharacterData) -> String:
@@ -676,11 +694,16 @@ static func _healing_base(spell_id: String) -> int:
 
 
 static func _taint_base(spell_id: String) -> float:
-	## PROVISIONAL: base taint reduction per spell (GDD s34 specifies Purge removes taint;
-	## amounts not numerically specified).
+	## PROVISIONAL: base taint reduction per spell (GDD s34 specifies these spells
+	## reduce character taint; amounts not numerically specified).
 	match spell_id:
-		"purge_the_taint":     return 1.0
-		"tomb_of_jade":        return 1.5
-		"essence_of_jade":     return 2.0
-		"the_fires_that_cleanse": return 0.5
+		"tomb_of_jade":   return 1.5
+	return 0.5
+
+
+static func _purify_base(spell_id: String) -> float:
+	## PROVISIONAL: base province PTL reduction per PURIFY_AREA spell
+	## (GDD s34 specifies purge_the_taint removes taint from land; amount not specified).
+	match spell_id:
+		"purge_the_taint": return 1.0
 	return 0.5

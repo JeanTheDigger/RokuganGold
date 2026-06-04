@@ -491,3 +491,77 @@ func test_no_master_of_blood_no_extra_tn() -> void:
 	_char.shadowlands_powers = []
 	var r: Dictionary = SpellSystem.resolve_cast(_char, "jurojins_balm", _dice)
 	assert_eq(r.get("tn", -1), 10)
+
+
+# -- sim_effect classification corrections ------------------------------------
+
+func test_purge_the_taint_is_purify_area() -> void:
+	# GDD s34: purges Taint from land/objects, cannot remove from living creatures.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["purge_the_taint"].get("s"),
+		SpellSystem.SpellSimEffect.PURIFY_AREA
+	)
+
+
+func test_fires_that_cleanse_is_combat_only() -> void:
+	# GDD s35: area fire damage spell — no taint removal in description.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["the_fires_that_cleanse"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_essence_of_jade_is_ward_creation() -> void:
+	# GDD s34: prevents gaining Taint and blocks maho — a protection ward, not removal.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["essence_of_jade"].get("s"),
+		SpellSystem.SpellSimEffect.WARD_CREATION
+	)
+
+
+# -- apply_purify_area --------------------------------------------------------
+
+func test_apply_purify_area_reduces_province_ptl() -> void:
+	var province: ProvinceData = ProvinceData.new()
+	province.province_taint_level = 3.0
+	var result: Dictionary = SpellSystem.apply_purify_area(province, "purge_the_taint", 0)
+	assert_true(province.province_taint_level < 3.0)
+	assert_true(result.get("ptl_reduced", 0.0) > 0.0)
+
+
+func test_apply_purify_area_higher_margin_removes_more() -> void:
+	var p1: ProvinceData = ProvinceData.new()
+	p1.province_taint_level = 5.0
+	var p2: ProvinceData = ProvinceData.new()
+	p2.province_taint_level = 5.0
+	SpellSystem.apply_purify_area(p1, "purge_the_taint", 0)
+	SpellSystem.apply_purify_area(p2, "purge_the_taint", 10)
+	assert_true(p2.province_taint_level < p1.province_taint_level)
+
+
+func test_apply_purify_area_floors_at_zero() -> void:
+	var province: ProvinceData = ProvinceData.new()
+	province.province_taint_level = 0.2
+	SpellSystem.apply_purify_area(province, "purge_the_taint", 100)
+	assert_eq(province.province_taint_level, 0.0)
+
+
+func test_apply_purify_area_returns_actual_reduced_amount() -> void:
+	var province: ProvinceData = ProvinceData.new()
+	province.province_taint_level = 0.5
+	# purge_the_taint base=1.0 + 0*0.1 = 1.0, but PTL only 0.5 → reduced = 0.5
+	var result: Dictionary = SpellSystem.apply_purify_area(province, "purge_the_taint", 0)
+	assert_almost_eq(result.get("ptl_reduced", -1.0), 0.5, 0.001)
+
+
+# -- get_best_purify_spell ----------------------------------------------------
+
+func test_get_best_purify_spell_returns_purge_the_taint() -> void:
+	_char.spells_known = ["sense", "commune", "purge_the_taint"]
+	_char.insight_rank = 3
+	assert_eq(SpellSystem.get_best_purify_spell(_char), "purge_the_taint")
+
+
+func test_get_best_purify_spell_empty_when_none_known() -> void:
+	# No PURIFY_AREA spells in default kit.
+	assert_eq(SpellSystem.get_best_purify_spell(_char), "")
