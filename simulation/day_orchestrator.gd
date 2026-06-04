@@ -154,6 +154,7 @@ static func advance_day(
 	_populate_military_data(military_data, companies)
 
 	_clear_stale_context_flags(world_states)
+	_expire_province_weather(provinces, ic_day)
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
@@ -14287,6 +14288,21 @@ static func _compute_topic_relevance(topic: TopicData, character: L5RCharacterDa
 	)
 
 
+static func _expire_province_weather(provinces: Dictionary, ic_day: int) -> void:
+	## Clear spell-induced weather when the duration has elapsed (s31-37a).
+	## Runs at the start of each IC day before context injection.
+	for province_v: Variant in provinces.values():
+		if not province_v is ProvinceData:
+			continue
+		var province: ProvinceData = province_v as ProvinceData
+		if province.province_weather_state == 0:
+			continue
+		if province.province_weather_expires_ic_day >= 0 and \
+				ic_day >= province.province_weather_expires_ic_day:
+			province.province_weather_state = 0
+			province.province_weather_expires_ic_day = -1
+
+
 static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 	# Top-level ws keys that are set conditionally and must be erased each day.
 	var stale_keys: Array = [
@@ -23401,6 +23417,19 @@ static func _process_ritual_spell_writebacks(
 					if target_event != null:
 						target_event.resolved = true
 						target_event.resolution_type = "spirit_bind"
+			SpellSystem.SpellSimEffect.WEATHER_SHIFT:
+				# s31-37a: endless_deluge → STORM, breath_of_mist → MIST.
+				# Writes province_weather_state + expires ic day.
+				# Downstream effects (drought abatement, travel penalties) deferred until
+				# GDD s4.3 and s11.7a specify numeric weather modifiers.
+				if success and province_id >= 0:
+					var wp: ProvinceData = provinces.get(province_id)
+					if wp != null:
+						var new_state: int = SpellSystem.get_weather_shift_state(ritual_spell_id)
+						if new_state > 0:  # 0 = CLEAR — only write non-trivial states
+							wp.province_weather_state = new_state
+							wp.province_weather_expires_ic_day = \
+								ic_day + SpellSystem.get_weather_shift_duration_days(ritual_spell_id)
 			SpellSystem.SpellSimEffect.WARD_CREATION:
 				# s34 essence_of_jade: jade spirits recoil from Taint rank >= 1.
 				# If the caster is Tainted, the ward is blocked and caster learns their own Taint.

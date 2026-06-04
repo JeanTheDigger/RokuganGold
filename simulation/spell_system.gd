@@ -41,7 +41,7 @@ const SPELL_LIBRARY: Dictionary = {
 	# === AIR (s33) ===
 	# ML1
 	"arrows_flight":              {"e": 0, "m": 1, "s": 0},
-	"blessed_wind":               {"e": 0, "m": 1, "s": 16},
+	"blessed_wind":               {"e": 0, "m": 1, "s": 0},  # concentration ranged defense — COMBAT_ONLY
 	"by_the_light_of_the_moon":   {"e": 0, "m": 1, "s": 0},
 	"cloak_of_night":             {"e": 0, "m": 1, "s": 0},
 	"gathering_swirl":            {"e": 0, "m": 1, "s": 0},
@@ -55,7 +55,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"yari_of_air":                {"e": 0, "m": 1, "s": 0},
 	# ML2
 	"bentens_touch":              {"e": 0, "m": 2, "s": 15},
-	"blessed_wind_of_lady_sun":   {"e": 0, "m": 2, "s": 16},
+	"blessed_wind_of_lady_sun":   {"e": 0, "m": 2, "s": 0},  # concentration area aura — COMBAT_ONLY
 	"call_upon_the_wind":         {"e": 0, "m": 2, "s": 0},
 	"elemental_cipher":           {"e": 0, "m": 2, "s": 17},
 	"flight_of_doves":            {"e": 0, "m": 2, "s": 17},
@@ -79,8 +79,8 @@ const SPELL_LIBRARY: Dictionary = {
 	"master_clouds_eyes":         {"e": 0, "m": 3, "s": 17},
 	"soul_of_kaze_no_kami":       {"e": 0, "m": 3, "s": 0},
 	"striking_the_storm":         {"e": 0, "m": 3, "s": 0},
-	"summoning_the_gale":         {"e": 0, "m": 3, "s": 16},
-	"summon_fog":                 {"e": 0, "m": 3, "s": 16},
+	"summoning_the_gale":         {"e": 0, "m": 3, "s": 0},  # concentration area wind block — COMBAT_ONLY
+	"summon_fog":                 {"e": 0, "m": 3, "s": 0},  # concentration fog ("while maintained") — COMBAT_ONLY
 	"touch_of_airs_grace":        {"e": 0, "m": 3, "s": 0},
 	"your_hearts_enemy":          {"e": 0, "m": 3, "s": 9},
 	# ML4
@@ -89,7 +89,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"false_realm":                {"e": 0, "m": 4, "s": 0},
 	"funeral_rites":              {"e": 0, "m": 4, "s": 12},
 	"gift_of_wind":               {"e": 0, "m": 4, "s": 0},
-	"howl_of_isora":              {"e": 0, "m": 4, "s": 16},
+	"howl_of_isora":              {"e": 0, "m": 4, "s": 0},  # one-time damage blast — COMBAT_ONLY
 	"know_the_mind":              {"e": 0, "m": 4, "s": 17},
 	"look_into_the_soul":         {"e": 0, "m": 4, "s": 9},
 	"netsuke_of_wind":            {"e": 0, "m": 4, "s": 0},
@@ -261,10 +261,10 @@ const SPELL_LIBRARY: Dictionary = {
 	"suitengus_curse":               {"e": 3, "m": 1, "s": 0},
 	"sympathetic_energies":          {"e": 3, "m": 1, "s": 0},  # Transfers a spell effect — not healing
 	"the_rushing_wave":              {"e": 3, "m": 1, "s": 0},
-	"the_swell_of_the_storm":        {"e": 3, "m": 1, "s": 16},
+	"the_swell_of_the_storm":        {"e": 3, "m": 1, "s": 0},  # one-time knockdown — COMBAT_ONLY
 	# ML2
 	"cloak_of_the_miya":             {"e": 3, "m": 2, "s": 11},
-	"heavens_tears":                 {"e": 3, "m": 2, "s": 16},
+	"heavens_tears":                 {"e": 3, "m": 2, "s": 0},  # per-round brief deluge, outdoors only — COMBAT_ONLY
 	"inaris_blessing":               {"e": 3, "m": 2, "s": 15},
 	"judgment_of_yomi":              {"e": 3, "m": 2, "s": 17},
 	"reflective_pool":               {"e": 3, "m": 2, "s": 17},
@@ -719,6 +719,25 @@ static func get_best_detection_spell(character: L5RCharacterData) -> String:
 
 static func get_best_ritual_spell(character: L5RCharacterData) -> String:
 	return get_best_spell_by_effect(character, SpellSimEffect.RITUAL_HONOR)
+
+
+## Returns the AsciiMapEnvironment.WeatherState int written to the province by a
+## WEATHER_SHIFT spell. Locked in s31-37a A80/A82.
+## Returns 0 (CLEAR) for any spell without a province weather write.
+static func get_weather_shift_state(spell_id: String) -> int:
+	match spell_id:
+		"endless_deluge": return 3   # WeatherState.STORM — A80
+		"breath_of_mist": return 5   # WeatherState.MIST  — A82
+	return 0  # WeatherState.CLEAR (no province write)
+
+
+## Returns how many IC days the province weather state persists after casting.
+## Locked in s31-37a A81/A83.
+static func get_weather_shift_duration_days(spell_id: String) -> int:
+	match spell_id:
+		"endless_deluge": return 1   # 12 hours → rounds up to 1 IC day tick — A81
+		"breath_of_mist": return 1   # Water Ring hours → ≤10h → 1 IC day tick — A83
+	return 1
 
 
 ## Assign starting spells to a shugenja. Call once at character creation.

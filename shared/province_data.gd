@@ -42,6 +42,13 @@ extends Resource
 # (non-wall provinces). Accumulates passively; reduced only by sorties.
 @export var shadowlands_strength: int = 0
 
+# -- Spell-induced Weather (s31-37a) -------------------------------------------
+# Set by WEATHER_SHIFT spells (endless_deluge, breath_of_mist).
+# Uses AsciiMapEnvironment.WeatherState int values. 0 = CLEAR (no active spell).
+# Expires at province_weather_expires_ic_day; cleared by _expire_province_weather().
+@export var province_weather_state: int = 0
+@export var province_weather_expires_ic_day: int = -1
+
 # -- Terrain Multipliers (s4.3) -----------------------------------------------
 
 func get_rice_multiplier() -> float:

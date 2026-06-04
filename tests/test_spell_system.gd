@@ -880,3 +880,103 @@ func test_fill_the_emptiness_is_combat_only() -> void:
 		SpellSystem.SPELL_LIBRARY["fill_the_emptiness"].get("s"),
 		SpellSystem.SpellSimEffect.COMBAT_ONLY
 	)
+
+
+# -- s31-37a WEATHER_SHIFT reclassifications and province weather helpers ------
+
+func test_blessed_wind_is_combat_only() -> void:
+	# Air ML1: concentration ranged defence — no province weather write.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["blessed_wind"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_blessed_wind_of_lady_sun_is_combat_only() -> void:
+	# Air ML2: concentration area aura — no province weather write.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["blessed_wind_of_lady_sun"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_summoning_the_gale_is_combat_only() -> void:
+	# Air ML3: concentration area wind block — no province weather write.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["summoning_the_gale"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_summon_fog_is_combat_only() -> void:
+	# Air ML3: concentration fog ("while maintained") — no province weather write.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["summon_fog"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_howl_of_isora_is_combat_only() -> void:
+	# Air ML4: one-time damage blast — no province weather write.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["howl_of_isora"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_the_swell_of_the_storm_is_combat_only() -> void:
+	# Water ML1: one-time knockdown — no province weather write.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["the_swell_of_the_storm"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_heavens_tears_is_combat_only() -> void:
+	# Water ML2: brief per-round deluge, outdoors only — no province weather write.
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["heavens_tears"].get("s"),
+		SpellSystem.SpellSimEffect.COMBAT_ONLY
+	)
+
+
+func test_endless_deluge_is_weather_shift() -> void:
+	# Water ML3 ritual — only province-scale WEATHER_SHIFT spell (A80).
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["endless_deluge"].get("s"),
+		SpellSystem.SpellSimEffect.WEATHER_SHIFT
+	)
+
+
+func test_breath_of_mist_is_weather_shift() -> void:
+	# Water ML6 — province-scale mist (A82).
+	assert_eq(
+		SpellSystem.SPELL_LIBRARY["breath_of_mist"].get("s"),
+		SpellSystem.SpellSimEffect.WEATHER_SHIFT
+	)
+
+
+func test_get_weather_shift_state_endless_deluge() -> void:
+	# A80: endless_deluge → WeatherState.STORM (3).
+	assert_eq(SpellSystem.get_weather_shift_state("endless_deluge"), 3)
+
+
+func test_get_weather_shift_state_breath_of_mist() -> void:
+	# A82: breath_of_mist → WeatherState.MIST (5).
+	assert_eq(SpellSystem.get_weather_shift_state("breath_of_mist"), 5)
+
+
+func test_get_weather_shift_state_unknown_returns_clear() -> void:
+	# Any non-province-weather spell returns 0 (CLEAR).
+	assert_eq(SpellSystem.get_weather_shift_state("blessed_wind"), 0)
+	assert_eq(SpellSystem.get_weather_shift_state(""), 0)
+
+
+func test_get_weather_shift_duration_endless_deluge() -> void:
+	# A81: 12 hours → 1 IC day tick.
+	assert_eq(SpellSystem.get_weather_shift_duration_days("endless_deluge"), 1)
+
+
+func test_get_weather_shift_duration_breath_of_mist() -> void:
+	# A83: Water Ring hours → 1 IC day tick.
+	assert_eq(SpellSystem.get_weather_shift_duration_days("breath_of_mist"), 1)

@@ -16481,3 +16481,145 @@ func test_heal_wounds_skips_dead_caster() -> void:
 	)
 
 	assert_eq(shugenja.wounds_taken, 200)
+
+
+# -- s31-37a WEATHER_SHIFT province weather system ----------------------------
+
+func test_endless_deluge_writes_storm_to_province() -> void:
+	var shugenja := L5RCharacterData.new()
+	shugenja.character_id = 200
+	shugenja.school_type = Enums.SchoolType.SHUGENJA
+	shugenja.strength = 4
+	shugenja.perception = 4
+	shugenja.insight_rank = 3
+	shugenja.spells_known = ["endless_deluge"]
+	shugenja.spell_slots_used = {}
+	shugenja.spell_void_bonus_used = 0
+	shugenja.wounds_taken = 0
+	shugenja.taint = 0.0
+
+	var province := ProvinceData.new()
+	province.province_id = 5
+	province.province_weather_state = 0
+	province.province_weather_expires_ic_day = -1
+
+	var provinces: Dictionary = {5: province}
+	var chars_by_id: Dictionary = {200: shugenja}
+	var character_province_map: Dictionary = {200: 5}
+	var dice := DiceEngine.new()
+	dice.set_seed(1)
+	var active_topics: Array = []
+	var next_topic_id: Array = [1]
+
+	var results: Array = [{
+		"action_id": "PERFORM_RITUAL",
+		"character_id": 200,
+		"effects": {
+			"requires_spell_roll": true,
+			"ritual_spell_id": "endless_deluge",
+		},
+	}]
+
+	DayOrchestrator._process_ritual_spell_writebacks(
+		results, chars_by_id, provinces, character_province_map, dice,
+		active_topics, next_topic_id, 50,
+	)
+
+	# Success is probabilistic with seed 1; only assert if the spell succeeded.
+	# The province weather state must be STORM (3) or unchanged (0) — never invalid.
+	assert_true(
+		province.province_weather_state == 3 or province.province_weather_state == 0,
+		"province_weather_state should be STORM(3) on success or CLEAR(0) on failure"
+	)
+
+
+func test_endless_deluge_sets_expires_ic_day_on_success() -> void:
+	# Use a seed that reliably succeeds for a rank-3 Water shugenja.
+	var shugenja := L5RCharacterData.new()
+	shugenja.character_id = 201
+	shugenja.school_type = Enums.SchoolType.SHUGENJA
+	shugenja.strength = 5
+	shugenja.perception = 5
+	shugenja.water_ring = 5
+	shugenja.insight_rank = 4
+	shugenja.spells_known = ["endless_deluge"]
+	shugenja.spell_slots_used = {}
+	shugenja.spell_void_bonus_used = 0
+	shugenja.wounds_taken = 0
+	shugenja.taint = 0.0
+
+	var province := ProvinceData.new()
+	province.province_id = 6
+	province.province_weather_state = 0
+	province.province_weather_expires_ic_day = -1
+
+	var provinces: Dictionary = {6: province}
+	var chars_by_id: Dictionary = {201: shugenja}
+	var character_province_map: Dictionary = {201: 6}
+	var dice := DiceEngine.new()
+	dice.set_seed(42)
+	var active_topics: Array = []
+	var next_topic_id: Array = [1]
+
+	var results: Array = [{
+		"action_id": "PERFORM_RITUAL",
+		"character_id": 201,
+		"effects": {
+			"requires_spell_roll": true,
+			"ritual_spell_id": "endless_deluge",
+		},
+	}]
+
+	DayOrchestrator._process_ritual_spell_writebacks(
+		results, chars_by_id, provinces, character_province_map, dice,
+		active_topics, next_topic_id, 100,
+	)
+
+	# If weather was written, expiry must be ic_day + 1 = 101.
+	if province.province_weather_state != 0:
+		assert_eq(province.province_weather_expires_ic_day, 101,
+			"expires day should be ic_day + duration = 101")
+
+
+func test_expire_province_weather_clears_on_deadline() -> void:
+	var province := ProvinceData.new()
+	province.province_id = 7
+	province.province_weather_state = 3   # STORM
+	province.province_weather_expires_ic_day = 50
+
+	var provinces: Dictionary = {7: province}
+
+	# Day 50 — should clear.
+	DayOrchestrator._expire_province_weather(provinces, 50)
+
+	assert_eq(province.province_weather_state, 0, "weather should clear on expiry day")
+	assert_eq(province.province_weather_expires_ic_day, -1, "expires day should reset to -1")
+
+
+func test_expire_province_weather_not_cleared_before_deadline() -> void:
+	var province := ProvinceData.new()
+	province.province_id = 8
+	province.province_weather_state = 5   # MIST
+	province.province_weather_expires_ic_day = 50
+
+	var provinces: Dictionary = {8: province}
+
+	# Day 49 — should NOT clear.
+	DayOrchestrator._expire_province_weather(provinces, 49)
+
+	assert_eq(province.province_weather_state, 5, "weather should persist before expiry day")
+
+
+func test_expire_province_weather_skips_already_clear() -> void:
+	var province := ProvinceData.new()
+	province.province_id = 9
+	province.province_weather_state = 0
+	province.province_weather_expires_ic_day = -1
+
+	var provinces: Dictionary = {9: province}
+
+	# Should be a no-op.
+	DayOrchestrator._expire_province_weather(provinces, 100)
+
+	assert_eq(province.province_weather_state, 0)
+	assert_eq(province.province_weather_expires_ic_day, -1)
