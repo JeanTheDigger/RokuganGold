@@ -1597,3 +1597,135 @@ func test_npc_summary_combat_hit_beats_miss_attacker_wins() -> void:
 		# Defender missed: attacker must win unconditionally.
 		assert_eq(result["winner_id"], attacker.character_id,
 			"hit beats miss: attacker who hit must be winner when defender missed")
+
+
+# -- Wound Penalty on Contested Rolls -----------------------------------------
+
+func _make_wounded_char(id: int, str_val: int, wil_val: int, wounds: int) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.stamina = 2
+	c.willpower = wil_val
+	c.agility = 3
+	c.intelligence = 3
+	c.reflexes = 3
+	c.awareness = 3
+	c.strength = str_val
+	c.perception = 3
+	c.void_ring = 2
+	c.wounds_taken = wounds
+	c.skills = {}
+	return c
+
+
+func test_disarm_wound_penalty_reduces_attacker_roll() -> void:
+	# Earth 2 → threshold 4. HURT = 9-12 wounds → -10 penalty.
+	var healthy := _make_wounded_char(10, 3, 2, 0)
+	var hurt := _make_wounded_char(11, 3, 2, 10)
+	assert_eq(CharacterStats.get_wound_penalty(hurt), -10)
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var r_healthy: Dictionary = IndividualCombat.resolve_disarm(healthy, _char_b, dice1)
+	var r_hurt: Dictionary = IndividualCombat.resolve_disarm(hurt, _char_b, dice2)
+	assert_eq(r_healthy["attacker_strength_roll"] - 10, r_hurt["attacker_strength_roll"])
+
+
+func test_knockdown_wound_penalty_reduces_attacker_roll() -> void:
+	var healthy := _make_wounded_char(10, 3, 2, 0)
+	var hurt := _make_wounded_char(11, 3, 2, 10)
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var r_healthy: Dictionary = IndividualCombat.resolve_knockdown(healthy, _char_b, false, dice1)
+	var r_hurt: Dictionary = IndividualCombat.resolve_knockdown(hurt, _char_b, false, dice2)
+	assert_eq(r_healthy["attacker_strength_roll"] - 10, r_hurt["attacker_strength_roll"])
+
+
+func test_grapple_control_wound_penalty_reduces_rolls() -> void:
+	var healthy := _make_wounded_char(10, 3, 2, 0)
+	var hurt := _make_wounded_char(11, 3, 2, 10)
+	healthy.skills = {"Jiujutsu": 2}
+	hurt.skills = {"Jiujutsu": 2}
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var r_healthy: Dictionary = IndividualCombat.resolve_grapple_control(healthy, _char_b, dice1)
+	var r_hurt: Dictionary = IndividualCombat.resolve_grapple_control(hurt, _char_b, dice2)
+	assert_eq(r_healthy["attacker_roll"] - 10, r_hurt["attacker_roll"])
+
+
+func test_sumai_bout_wound_penalty_reduces_rolls() -> void:
+	var healthy := _make_wounded_char(10, 3, 2, 0)
+	var hurt := _make_wounded_char(11, 3, 2, 10)
+	healthy.skills = {"Jiujutsu": 2}
+	hurt.skills = {"Jiujutsu": 2}
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var r_healthy: Dictionary = IndividualCombat.resolve_sumai_bout(healthy, _char_b, false, dice1)
+	var r_hurt: Dictionary = IndividualCombat.resolve_sumai_bout(hurt, _char_b, false, dice2)
+	assert_eq(r_healthy["wrestler1_roll"] - 10, r_hurt["wrestler1_roll"])
+
+
+func test_sumai_stare_down_wound_penalty_reduces_rolls() -> void:
+	var healthy := _make_wounded_char(10, 3, 3, 0)
+	var hurt := _make_wounded_char(11, 3, 3, 10)
+	# Earth = min(2_stamina, 3_willpower) = 2, threshold 4. 10 wounds = HURT = -10.
+	healthy.skills = {"Intimidation": 2}
+	hurt.skills = {"Intimidation": 2}
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var r_healthy: Dictionary = IndividualCombat.resolve_sumai_stare_down(healthy, _char_b, dice1)
+	var r_hurt: Dictionary = IndividualCombat.resolve_sumai_stare_down(hurt, _char_b, dice2)
+	assert_eq(r_healthy["wrestler1_roll"] - 10, r_hurt["wrestler1_roll"])
+
+
+func test_iaijutsu_stare_down_wound_penalty_reduces_rolls() -> void:
+	var duel := IndividualCombat.create_duel(10, 20)
+	var healthy := _make_wounded_char(10, 3, 3, 0)
+	var hurt := _make_wounded_char(10, 3, 3, 10)
+	healthy.skills = {"Intimidation": 2}
+	hurt.skills = {"Intimidation": 2}
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var target := _make_wounded_char(20, 2, 2, 0)
+	target.skills = {"Intimidation": 1}
+	var target2 := _make_wounded_char(20, 2, 2, 0)
+	target2.skills = {"Intimidation": 1}
+	var r_healthy: Dictionary = IndividualCombat.resolve_iaijutsu_stare_down(healthy, target, duel, dice1)
+	var duel2 := IndividualCombat.create_duel(10, 20)
+	var r_hurt: Dictionary = IndividualCombat.resolve_iaijutsu_stare_down(hurt, target2, duel2, dice2)
+	assert_eq(r_healthy["challenger_roll"] - 10, r_hurt["challenger_roll"])
+
+
+func test_duel_assessment_wound_penalty_reduces_rolls() -> void:
+	var duel := IndividualCombat.create_duel(10, 20)
+	var healthy := _make_wounded_char(10, 3, 3, 0)
+	var hurt := _make_wounded_char(10, 3, 3, 10)
+	healthy.skills = {"Iaijutsu": 3}
+	hurt.skills = {"Iaijutsu": 3}
+	var target := _make_wounded_char(20, 2, 2, 0)
+	target.skills = {"Iaijutsu": 1}
+	var target2 := _make_wounded_char(20, 2, 2, 0)
+	target2.skills = {"Iaijutsu": 1}
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var r_healthy: Dictionary = IndividualCombat.resolve_duel_assessment(healthy, target, duel, dice1)
+	var duel2 := IndividualCombat.create_duel(10, 20)
+	var r_hurt: Dictionary = IndividualCombat.resolve_duel_assessment(hurt, target2, duel2, dice2)
+	assert_eq(r_healthy["challenger_roll"] - 10, r_hurt["challenger_roll"])
+
+
+func test_duel_focus_wound_penalty_reduces_rolls() -> void:
+	var duel := IndividualCombat.create_duel(10, 20)
+	var healthy := _make_wounded_char(10, 3, 3, 0)
+	var hurt := _make_wounded_char(10, 3, 3, 10)
+	healthy.skills = {"Iaijutsu": 3}
+	hurt.skills = {"Iaijutsu": 3}
+	var target := _make_wounded_char(20, 2, 2, 0)
+	target.skills = {"Iaijutsu": 1}
+	var target2 := _make_wounded_char(20, 2, 2, 0)
+	target2.skills = {"Iaijutsu": 1}
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var r_healthy: Dictionary = IndividualCombat.resolve_duel_focus(healthy, target, duel, dice1)
+	var duel2 := IndividualCombat.create_duel(10, 20)
+	var r_hurt: Dictionary = IndividualCombat.resolve_duel_focus(hurt, target2, duel2, dice2)
+	assert_eq(r_healthy["challenger_roll"] - 10, r_hurt["challenger_roll"])

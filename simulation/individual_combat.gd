@@ -778,7 +778,9 @@ static func resolve_disarm(
 		var dmg_result: Dictionary = dice_engine.roll_damage(2, 1)
 		damage_total = dmg_result["raw"]
 
-	# Contested Strength Roll — advantage/disadvantage modifiers (s45)
+	# Contested Strength Roll — advantage/disadvantage modifiers (s45) + wound penalties
+	var att_wound: int = CharacterStats.get_wound_penalty(attacker)
+	var def_wound: int = CharacterStats.get_wound_penalty(defender)
 	var att_adv_dis: Dictionary = AdvantageSystem.get_skill_bonus(attacker, "", {"is_combat": true, "is_contested": true})
 	var def_adv_dis: Dictionary = AdvantageSystem.get_skill_bonus(defender, "", {"is_combat": true, "is_contested": true})
 	var att_tn_dis: int = AdvantageSystem.get_tn_modifier(attacker, {"is_combat": true, "is_contested": true})
@@ -787,8 +789,8 @@ static func resolve_disarm(
 		maxi(attacker.strength + att_adv_dis["rolled"], 1), maxi(attacker.strength + att_adv_dis["kept"], 1), false)
 	var def_r_dis: DiceResult = dice_engine.roll_and_keep(
 		maxi(defender.strength + def_adv_dis["rolled"], 1), maxi(defender.strength + def_adv_dis["kept"], 1), false)
-	var att_total_dis: int = att_r_dis.total + att_adv_dis["free_raises"] * 5 - att_tn_dis
-	var def_total_dis: int = def_r_dis.total + def_adv_dis["free_raises"] * 5 - def_tn_dis
+	var att_total_dis: int = att_r_dis.total + att_adv_dis["free_raises"] * 5 - att_tn_dis + att_wound
+	var def_total_dis: int = def_r_dis.total + def_adv_dis["free_raises"] * 5 - def_tn_dis + def_wound
 
 	return {
 		"damage": damage_total,
@@ -813,8 +815,9 @@ static func resolve_knockdown(
 	is_quadruped: bool,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	# Advantage/disadvantage modifiers (s45): CONSUMED Perfection, TOUCH_OF_THE_SPIRIT_REALMS, etc.
-	# No skill name — use empty string; is_combat applies CONSUMED Perfection TN penalty.
+	# Advantage/disadvantage modifiers (s45) + wound penalties
+	var att_wound: int = CharacterStats.get_wound_penalty(attacker)
+	var def_wound: int = CharacterStats.get_wound_penalty(defender)
 	var att_adv_kd: Dictionary = AdvantageSystem.get_skill_bonus(attacker, "", {"is_combat": true, "is_contested": true})
 	var def_adv_kd: Dictionary = AdvantageSystem.get_skill_bonus(defender, "", {"is_combat": true, "is_contested": true})
 	var att_tn_kd: int = AdvantageSystem.get_tn_modifier(attacker, {"is_combat": true, "is_contested": true})
@@ -825,9 +828,8 @@ static func resolve_knockdown(
 	var def_kept_kd: int = maxi(defender.strength + def_adv_kd["kept"], 1)
 	var att_r: DiceResult = dice_engine.roll_and_keep(att_rolled_kd, att_kept_kd, false)
 	var def_r: DiceResult = dice_engine.roll_and_keep(def_rolled_kd, def_kept_kd, false)
-	# Quadruped defenders resist knockdown — treated as +4 additional Strength per GDD s40.
-	var att_total_kd: int = att_r.total + (att_adv_kd["free_raises"] * 5) - att_tn_kd
-	var def_total_kd: int = def_r.total + (def_adv_kd["free_raises"] * 5) - def_tn_kd + (4 if is_quadruped else 0)
+	var att_total_kd: int = att_r.total + (att_adv_kd["free_raises"] * 5) - att_tn_kd + att_wound
+	var def_total_kd: int = def_r.total + (def_adv_kd["free_raises"] * 5) - def_tn_kd + def_wound + (4 if is_quadruped else 0)
 	return {
 		"attacker_strength_roll": att_total_kd,
 		"defender_strength_roll": def_total_kd,
@@ -1147,7 +1149,9 @@ static func resolve_grapple_control(
 	# Unskilled (rank 0) rolls do not explode per L5R4e p.78.
 	var att_jiu: int = attacker.skills.get("Jiujutsu", 0)
 	var def_jiu: int = defender.skills.get("Jiujutsu", 0)
-	# Mutation modifiers (s44) and Advantage modifiers (s45)
+	# Mutation modifiers (s44), Advantage modifiers (s45), and wound penalties
+	var att_wound: int = CharacterStats.get_wound_penalty(attacker)
+	var def_wound: int = CharacterStats.get_wound_penalty(defender)
 	var att_mut_ctrl: Dictionary = MutationSystem.get_skill_modifiers(attacker, "Jiujutsu")
 	var def_mut_ctrl: Dictionary = MutationSystem.get_skill_modifiers(defender, "Jiujutsu")
 	var att_sch_jiu: bool = NPCAdvancement.get_school_skills(attacker).has("Jiujutsu")
@@ -1164,10 +1168,12 @@ static func resolve_grapple_control(
 		defender.strength + def_jiu + def_mut_ctrl["rolled"] + def_adv_ctrl["rolled"],
 		defender.strength + def_mut_ctrl["kept"] + def_adv_ctrl["kept"], def_jiu > 0,
 	)
-	var att_wins: bool = att_result.total >= def_result.total  # attacker wins ties (s40)
+	var att_total: int = att_result.total + att_wound
+	var def_total: int = def_result.total + def_wound
+	var att_wins: bool = att_total >= def_total  # attacker wins ties (s40)
 	return {
-		"attacker_roll": att_result.total,
-		"defender_roll": def_result.total,
+		"attacker_roll": att_total,
+		"defender_roll": def_total,
 		"attacker_wins": att_wins,
 	}
 
@@ -1204,7 +1210,9 @@ static func resolve_sumai_bout(
 	# Unskilled Jiujutsu (rank 0) rolls do not explode per L5R4e p.78.
 	var w1_jiu: int = wrestler1.skills.get("Jiujutsu", 0)
 	var w2_jiu: int = wrestler2.skills.get("Jiujutsu", 0)
-	# Mutation modifiers (s44) and Advantage modifiers (s45)
+	# Mutation modifiers (s44), Advantage modifiers (s45), and wound penalties
+	var w1_wound: int = CharacterStats.get_wound_penalty(wrestler1)
+	var w2_wound: int = CharacterStats.get_wound_penalty(wrestler2)
 	var w1_mut: Dictionary = MutationSystem.get_skill_modifiers(wrestler1, "Jiujutsu")
 	var w2_mut: Dictionary = MutationSystem.get_skill_modifiers(wrestler2, "Jiujutsu")
 	var w1_sch: bool = NPCAdvancement.get_school_skills(wrestler1).has("Jiujutsu")
@@ -1217,13 +1225,15 @@ static func resolve_sumai_bout(
 	var w2_rolled: int = wrestler2.strength + w2_jiu + w2_mut["rolled"] + w2_adv["rolled"]
 	var w1_result: DiceResult = dice_engine.roll_and_keep(w1_rolled, wrestler1.strength + w1_mut["kept"] + w1_adv["kept"], w1_jiu > 0)
 	var w2_result: DiceResult = dice_engine.roll_and_keep(w2_rolled, wrestler2.strength + w2_mut["kept"] + w2_adv["kept"], w2_jiu > 0)
-	var margin: int = abs(w1_result.total - w2_result.total)
+	var w1_total: int = w1_result.total + w1_wound
+	var w2_total: int = w2_result.total + w2_wound
+	var margin: int = abs(w1_total - w2_total)
 	var bout_over: bool = margin >= 5
 	return {
-		"wrestler1_roll": w1_result.total,
-		"wrestler2_roll": w2_result.total,
-		"winner_wrestler1": w1_result.total > w2_result.total and bout_over,
-		"winner_wrestler2": w2_result.total > w1_result.total and bout_over,
+		"wrestler1_roll": w1_total,
+		"wrestler2_roll": w2_total,
+		"winner_wrestler1": w1_total > w2_total and bout_over,
+		"winner_wrestler2": w2_total > w1_total and bout_over,
 		"bout_over": bout_over,
 		"continue": not bout_over,
 	}
@@ -1236,7 +1246,9 @@ static func resolve_sumai_stare_down(
 ) -> Dictionary:
 	var intim1: int = wrestler1.skills.get("Intimidation", 0)
 	var intim2: int = wrestler2.skills.get("Intimidation", 0)
-	# Advantage/disadvantage modifiers (s45): CONSUMED Perfection, etc.
+	# Advantage/disadvantage modifiers (s45) + wound penalties
+	var w1_wound: int = CharacterStats.get_wound_penalty(wrestler1)
+	var w2_wound: int = CharacterStats.get_wound_penalty(wrestler2)
 	var w1_sch_i: bool = NPCAdvancement.get_school_skills(wrestler1).has("Intimidation")
 	var w2_sch_i: bool = NPCAdvancement.get_school_skills(wrestler2).has("Intimidation")
 	var w1_adv_s: Dictionary = AdvantageSystem.get_skill_bonus(
@@ -1251,13 +1263,12 @@ static func resolve_sumai_stare_down(
 	var w2_rolled_s: int = maxi(wrestler2.willpower + intim2 + w2_adv_s["rolled"], 1)
 	var w1_kept_s: int = maxi(wrestler1.willpower + w1_adv_s["kept"], 1)
 	var w2_kept_s: int = maxi(wrestler2.willpower + w2_adv_s["kept"], 1)
-	# Free raises add +5 to flat bonus; TN penalties reduce it via contested_roll flat param.
 	var w1_flat_s: int = w1_adv_s["free_raises"] * 5 - w1_tn_s
 	var w2_flat_s: int = w2_adv_s["free_raises"] * 5 - w2_tn_s
 	var r1: DiceResult = dice_engine.roll_and_keep(w1_rolled_s, w1_kept_s, intim1 > 0)
 	var r2: DiceResult = dice_engine.roll_and_keep(w2_rolled_s, w2_kept_s, intim2 > 0)
-	var t1: int = r1.total + w1_flat_s
-	var t2: int = r2.total + w2_flat_s
+	var t1: int = r1.total + w1_flat_s + w1_wound
+	var t2: int = r2.total + w2_flat_s + w2_wound
 	var wrestler1_wins: bool = t1 >= t2
 	var margin: int = abs(t1 - t2)
 	return {
@@ -1280,7 +1291,9 @@ static func resolve_iaijutsu_stare_down(
 ) -> Dictionary:
 	var ch_intim: int = challenger.skills.get("Intimidation", 0)
 	var def_intim: int = defender.skills.get("Intimidation", 0)
-	# Advantage/disadvantage modifiers (s45): CONSUMED Perfection, HEART_OF_VENGEANCE, etc.
+	# Advantage/disadvantage modifiers (s45) + wound penalties
+	var ch_wound: int = CharacterStats.get_wound_penalty(challenger)
+	var def_wound: int = CharacterStats.get_wound_penalty(defender)
 	var ch_sch_sd: bool = NPCAdvancement.get_school_skills(challenger).has("Intimidation")
 	var def_sch_sd: bool = NPCAdvancement.get_school_skills(defender).has("Intimidation")
 	var ch_adv_sd: Dictionary = AdvantageSystem.get_skill_bonus(
@@ -1297,8 +1310,8 @@ static func resolve_iaijutsu_stare_down(
 	var def_kept_sd: int = maxi(defender.willpower + def_adv_sd["kept"], 1)
 	var ch_r_sd: DiceResult = dice_engine.roll_and_keep(ch_rolled_sd, ch_kept_sd, ch_intim > 0)
 	var def_r_sd: DiceResult = dice_engine.roll_and_keep(def_rolled_sd, def_kept_sd, def_intim > 0)
-	var ch_total_sd: int = ch_r_sd.total + (ch_adv_sd["free_raises"] * 5) - ch_tn_sd
-	var def_total_sd: int = def_r_sd.total + (def_adv_sd["free_raises"] * 5) - def_tn_sd
+	var ch_total_sd: int = ch_r_sd.total + (ch_adv_sd["free_raises"] * 5) - ch_tn_sd + ch_wound
+	var def_total_sd: int = def_r_sd.total + (def_adv_sd["free_raises"] * 5) - def_tn_sd + def_wound
 	if ch_total_sd == def_total_sd:
 		return {"attempted": true, "resolved": false, "penalty_id": -1}
 	var winner_is_challenger: bool = ch_total_sd > def_total_sd
@@ -1366,12 +1379,14 @@ static func resolve_duel_assessment(
 	var def_flat: int = def_adv_ass["free_raises"] * 5 - def_tn_ass
 	var ch_explodes: bool = ch_iai > 0
 	var def_explodes: bool = def_iai > 0
+	var ch_wound: int = CharacterStats.get_wound_penalty(challenger)
+	var def_wound: int = CharacterStats.get_wound_penalty(defender)
 
 	var ch_result: Dictionary = dice_engine.roll_check(
-		ch_rolled, challenger.awareness + ch_mut_ass["kept"] + ch_adv_ass["kept"], ch_tn, 0, ch_flat, ch_explodes
+		ch_rolled, challenger.awareness + ch_mut_ass["kept"] + ch_adv_ass["kept"], ch_tn, 0, ch_flat + ch_wound, ch_explodes
 	)
 	var def_result: Dictionary = dice_engine.roll_check(
-		def_rolled, defender.awareness + def_mut_ass["kept"] + def_adv_ass["kept"], def_tn, 0, def_flat, def_explodes
+		def_rolled, defender.awareness + def_mut_ass["kept"] + def_adv_ass["kept"], def_tn, 0, def_flat + def_wound, def_explodes
 	)
 
 	var ch_learned: Array = []
@@ -1469,12 +1484,16 @@ static func resolve_duel_focus(
 		def_rolled += 1
 		def_kept += 1
 
-	var contested: Dictionary = dice_engine.contested_roll(
-		ch_rolled, ch_kept,
-		def_rolled, def_kept,
-	)
+	var ch_explodes: bool = ch_iai > 0
+	var def_explodes: bool = def_iai > 0
+	var ch_wound: int = CharacterStats.get_wound_penalty(challenger)
+	var def_wound: int = CharacterStats.get_wound_penalty(defender)
+	var ch_result: DiceResult = dice_engine.roll_and_keep(ch_rolled, ch_kept, ch_explodes)
+	var def_result: DiceResult = dice_engine.roll_and_keep(def_rolled, def_kept, def_explodes)
+	var ch_total: int = ch_result.total + ch_wound
+	var def_total: int = def_result.total + def_wound
 
-	var margin: int = contested["total_a"] - contested["total_b"]
+	var margin: int = ch_total - def_total
 
 	if abs(margin) < 5:
 		duel.simultaneous = true
@@ -1490,8 +1509,8 @@ static func resolve_duel_focus(
 		duel.simultaneous = false
 
 	return {
-		"challenger_roll": contested["total_a"],
-		"defender_roll": contested["total_b"],
+		"challenger_roll": ch_total,
+		"defender_roll": def_total,
 		"margin": margin,
 		"first_striker_id": duel.first_striker_id,
 		"free_raises_for_first": duel.free_raises_first,
