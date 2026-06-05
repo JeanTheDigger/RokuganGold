@@ -695,7 +695,9 @@ static func execute_extra_attack(
 		result["wounds_inflicted"] = dmg_result.get("wounds", 0)
 		result["target_dead"] = dmg_result.get("dead", false)
 
-	ts.consume_free()
+	# Mark success so callers can distinguish from a precondition-failure early return.
+	if not result.has("reason"):
+		result["success"] = true
 	state.combat_log.append({
 		"type": "extra_attack",
 		"round": state.combat.round_number,
