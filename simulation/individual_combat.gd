@@ -887,8 +887,8 @@ static func resolve_extra_attack(
 	if attacker_p.dual_wielding and _has_kata_effect(attacker, "fire_extra_attack_3_raises"):
 		required_raises = EXTRA_ATTACK_SPINNING_BLADES_RAISES
 
-	attacker_p.extra_attack_used_this_turn = true
 	var attack: Dictionary = resolve_attack(attacker, attacker_p, weapon_name, target_armor_tn, 0, dice_engine)
+	attacker_p.extra_attack_used_this_turn = true
 	attack["required_raises"] = required_raises
 	attack["spinning_blades_active"] = required_raises == EXTRA_ATTACK_SPINNING_BLADES_RAISES
 	return attack

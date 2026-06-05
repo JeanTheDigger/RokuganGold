@@ -1280,19 +1280,25 @@ static func execute_npc_turn(
 	if target_in_melee or (not is_melee_weapon and target_in_ranged):
 		var target_char: L5RCharacterData = chars_by_id.get(best_target, null)
 		if target_char != null and not CharacterStats.is_dead(target_char):
+			# Extra Attack requires 5 Raises on the first attack (GDD s40:
+			# "These Raises confer no other benefits"). Decide upfront so the
+			# first attack is made with the correct raise count.
+			var skill_name: String = wp.get("skill", "Kenjutsu")
+			var skill_rank: int = npc.skills.get(skill_name, 0)
+			var use_extra_attack: bool = target_in_melee and skill_rank >= 5
+
 			var atk_result: Dictionary = _npc_execute_attack(
 				state, npc_id, best_target, npc, target_char, weapon_name,
-				target_in_melee, dice_engine
+				target_in_melee, dice_engine, use_extra_attack
 			)
 			actions_taken.append({"action": "attack", "result": atk_result})
 
-			# Extra Attack if we have the Raises and skill (GDD s40: 5 Raises = extra attack).
-			if atk_result.get("hit", false) and not CharacterStats.is_dead(target_char):
-				var skill_rank: int = npc.skills.get(wp.get("skill", "Kenjutsu"), 0)
-				if skill_rank >= 5:
-					var ea: Dictionary = execute_extra_attack(state, npc_id, best_target, npc, target_char, weapon_name, dice_engine)
-					if ea.get("success", false):
-						actions_taken.append({"action": "extra_attack", "result": ea})
+			# Extra Attack: only valid when 5 raises were declared on the first
+			# attack and that attack hit (GDD s40).
+			if use_extra_attack and atk_result.get("hit", false) and not CharacterStats.is_dead(target_char):
+				var ea: Dictionary = execute_extra_attack(state, npc_id, best_target, npc, target_char, weapon_name, dice_engine)
+				if ea.get("success", false):
+					actions_taken.append({"action": "extra_attack", "result": ea})
 	elif ts.can_use_free_move() and not ts.is_down_restricted(wl):
 		# Can still use free move to get closer.
 		var free_budget: int = MovementSystem.budget(CharacterStats.get_ring_value(npc, Enums.Ring.WATER), MovementSystem.MoveAction.FREE)
@@ -1412,7 +1418,9 @@ static func _npc_move_toward(
 	return execute_move(state, npc_id, dest, budget, npc, dice_engine, action_type)
 
 
-## Execute NPC attack with smart raise selection (GDD s40: 1 raise = Increased Damage).
+## Execute NPC attack with smart raise selection (GDD s40 maneuvers).
+## When use_extra_attack is true, declares 5 Raises for Extra Attack (GDD s40:
+## "These Raises confer no other benefits"), precluding Increased Damage.
 static func _npc_execute_attack(
 	state: MapCombatState,
 	attacker_id: int,
@@ -1422,20 +1430,28 @@ static func _npc_execute_attack(
 	weapon_name: String,
 	target_in_melee: bool,
 	dice_engine: DiceEngine,
+	use_extra_attack: bool = false,
 ) -> Dictionary:
 	var wp: Dictionary = IndividualCombat.get_weapon_profile(weapon_name)
 	var is_melee: bool = wp.get("melee", true)
 
-	# Declare 1 raise for Increased Damage when skill rank ≥ 3 (GDD s40 maneuvers).
 	var skill_name: String = wp.get("skill", "Kenjutsu")
 	var skill_rank: int = attacker.skills.get(skill_name, 0)
-	var raises: int = 1 if skill_rank >= 3 else 0
+	var raises: int = 0
+	var maneuver: String = ""
+
+	if use_extra_attack:
+		# 5 Raises dedicated to Extra Attack; no other raise benefit (GDD s40).
+		raises = 5
+	elif skill_rank >= 3:
+		# 1 Raise for Increased Damage (GDD s40 maneuvers).
+		raises = 1
+		maneuver = "increased_damage"
 
 	if is_melee or target_in_melee:
 		return execute_melee_attack(
 			state, attacker_id, target_id, attacker, target,
-			weapon_name, raises, dice_engine,
-			"increased_damage" if raises > 0 else ""
+			weapon_name, raises, dice_engine, maneuver
 		)
 	else:
 		return execute_ranged_attack(

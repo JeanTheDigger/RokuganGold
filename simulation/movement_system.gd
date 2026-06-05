@@ -16,6 +16,7 @@ static func terrain_cost(tile: int) -> int:
 		Enums.TileType.WATER_DEEP,
 		Enums.TileType.TREE_EVERGREEN, Enums.TileType.TREE_DECIDUOUS,
 		Enums.TileType.TREE_CHERRY, Enums.TileType.TREE_DEAD, Enums.TileType.BAMBOO,
+		Enums.TileType.DOOR_SHOJI_CLOSED, Enums.TileType.DOOR_WOOD_CLOSED,
 		Enums.TileType.GATE_CLOSED:
 			return 0
 		Enums.TileType.WATER_SHALLOW, Enums.TileType.WATER_PADDY,
