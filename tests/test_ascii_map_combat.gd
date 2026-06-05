@@ -650,9 +650,12 @@ func test_ranged_attack_in_melee_penalty_logged() -> void:
 	var result := AsciiMapCombatOrchestrator.execute_ranged_attack(
 		state, 1, 2, p, e, "yumi", 0, _dice
 	)
-	assert_true(result.get("in_melee_penalty", false) or result.get("success", false) == false or
-		state.combat_log.any(func(x): return x.get("in_melee_penalty", false)),
-		"In-melee penalty should be noted in result or log")
+	# The ranged attack MUST report an in_melee_penalty when an enemy is adjacent —
+	# a success without the flag is wrong. Neither is it sufficient to just fail.
+	var penalty_logged: bool = state.combat_log.any(func(x): return x.get("in_melee_penalty", false))
+	var penalty_in_result: bool = result.get("in_melee_penalty", false)
+	assert_true(penalty_in_result or penalty_logged,
+		"In-melee penalty must appear in result or combat_log when enemy is adjacent to attacker")
 
 
 # ===========================================================================
@@ -1069,10 +1072,12 @@ func test_npc_turn_moves_toward_enemy() -> void:
 	AsciiMapCombatOrchestrator.execute_npc_turn(
 		state, 1, npc, {1: npc, 2: player}, _dice
 	)
-	var new_pos: Vector2i = state.positions.get(1, old_pos)
+	# Use Vector2i(-999, -999) as sentinel so absence from positions is detectable.
+	var new_pos: Vector2i = state.positions.get(1, Vector2i(-999, -999))
+	assert_true(new_pos != Vector2i(-999, -999), "NPC should still be on the map after turn")
 	var old_dist: int = AsciiMapCombatOrchestrator._chebyshev(old_pos, Vector2i(1, 7))
 	var new_dist: int = AsciiMapCombatOrchestrator._chebyshev(new_pos, Vector2i(1, 7))
-	assert_true(new_dist <= old_dist, "NPC should have moved closer to enemy")
+	assert_true(new_dist < old_dist, "NPC should have moved strictly closer to enemy")
 
 
 func test_npc_turn_attacks_adjacent_enemy() -> void:
@@ -1137,6 +1142,15 @@ func test_npc_desired_stance_attack_when_healthy() -> void:
 	npc.skills = {"Kenjutsu": 4}
 	var desired := AsciiMapCombatOrchestrator._npc_desired_stance(npc, Enums.WoundLevel.HEALTHY)
 	assert_eq(desired, Enums.Stance.ATTACK)
+
+
+func test_npc_desired_stance_center_when_low_skill() -> void:
+	# Low-skill combatants (best combat skill < 4) should use CENTER for balanced defense.
+	var npc := _make_char(1)
+	npc.skills = {"Kenjutsu": 2}
+	var desired := AsciiMapCombatOrchestrator._npc_desired_stance(npc, Enums.WoundLevel.HEALTHY)
+	assert_eq(desired, Enums.Stance.CENTER,
+		"Low-skill NPC should prefer CENTER stance, not ATTACK")
 
 
 # ===========================================================================

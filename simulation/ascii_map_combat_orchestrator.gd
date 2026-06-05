@@ -123,6 +123,7 @@ static func setup_combat(
 	mcs.map = map
 
 	var chars_for_combat: Array = []
+	var participant_dicts: Array = []
 	for entry: Dictionary in combatants_data:
 		var c: L5RCharacterData = entry["char"]
 		if CharacterStats.is_dead(c):
@@ -130,8 +131,31 @@ static func setup_combat(
 		chars_for_combat.append(c)
 		mcs.positions[c.character_id] = Vector2i(entry.get("x", 0), entry.get("y", 0))
 		mcs.factions[c.character_id] = entry.get("faction", FACTION_NEUTRAL)
+		participant_dicts.append({
+			"character_id": c.character_id,
+			"stance": entry.get("stance", Enums.Stance.ATTACK),
+			"initiative_score": 0,
+		})
 
-	mcs.combat = IndividualCombat.begin_combat(chars_for_combat, dice_engine)
+	mcs.combat = IndividualCombat.build_combat_state(participant_dicts)
+
+	# Roll initiative for each participant separately (L5R 4e: Reflexes + roll, per-round).
+	for c: L5RCharacterData in chars_for_combat:
+		var p: IndividualCombat.Participant = mcs.combat.participants.get(c.character_id, null)
+		if p == null:
+			continue
+		var weapon_name: String = IndividualCombat.pick_best_weapon(c).weapon_name
+		var init_result: Dictionary = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name)
+		p.initiative_score = init_result.get("initiative_score", c.reflexes)
+
+	# Sort turn order descending by initiative score.
+	mcs.combat.turn_order.sort_custom(func(a: int, b: int) -> bool:
+		var pa: IndividualCombat.Participant = mcs.combat.participants.get(a, null)
+		var pb: IndividualCombat.Participant = mcs.combat.participants.get(b, null)
+		var ia: int = pa.initiative_score if pa != null else 0
+		var ib: int = pb.initiative_score if pb != null else 0
+		return ia > ib
+	)
 
 	for cid: int in mcs.combat.participants.keys():
 		var ts := TurnState.new()
@@ -475,6 +499,10 @@ static func execute_melee_attack(
 		# Down: only free actions + must spend Void (GDD s40).
 		return _execute_down_attack(state, attacker_id, target_id, attacker, target, weapon_name, dice_engine)
 
+	# Special maneuver: Guard (free action — does not consume complex budget).
+	if maneuver == "guard":
+		return execute_guard(state, attacker_id, target_id, attacker, target)
+
 	if not ts.can_use_complex():
 		return {"success": false, "reason": "no_complex_actions_remaining"}
 
@@ -490,10 +518,6 @@ static func execute_melee_attack(
 	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
 	if a_p == null or t_p == null:
 		return {"success": false, "reason": "participant_missing"}
-
-	# Special maneuver: Guard (free action, not an attack roll).
-	if maneuver == "guard":
-		return execute_guard(state, attacker_id, target_id, attacker, target)
 
 	var is_being_guarded: bool = _is_being_guarded(state, target_id)
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, true, is_being_guarded, weapon_name)
@@ -638,6 +662,14 @@ static func execute_extra_attack(
 	weapon_name: String,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(attacker_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+
+	var wl: int = CharacterStats.get_wound_level(attacker)
+	if ts.is_down_restricted(wl):
+		return {"success": false, "reason": "down_only_free_actions"}
+
 	var a_p: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
 	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
 	if a_p == null or t_p == null:
@@ -645,6 +677,8 @@ static func execute_extra_attack(
 
 	var apos: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
 	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
+	if apos.x < 0 or tpos.x < 0:
+		return {"success": false, "reason": "position_unknown"}
 	if _chebyshev(apos, tpos) > MELEE_RANGE_TILES:
 		return {"success": false, "reason": "out_of_melee_range"}
 
@@ -661,6 +695,7 @@ static func execute_extra_attack(
 		result["wounds_inflicted"] = dmg_result.get("wounds", 0)
 		result["target_dead"] = dmg_result.get("dead", false)
 
+	ts.consume_free()
 	state.combat_log.append({
 		"type": "extra_attack",
 		"round": state.combat.round_number,
@@ -892,12 +927,15 @@ static func execute_void_spend(
 	if p.void_spent_this_round:
 		return {"success": false, "reason": "void_already_spent_this_round"}
 
-	var result: Dictionary = VoidSystem.spend_for_armor_tn(character)
+	# Spend VP for +1k1 on next roll (GDD s40). Must check success BEFORE
+	# marking the once-per-round slot consumed.
+	var result: Dictionary = VoidSystem.spend_for_roll(character)
 	if not result.get("success", false):
 		return {"success": false, "reason": "no_void_points"}
 
 	p.void_spent_this_round = true
-	p.void_armor_tn_bonus += result.get("armor_tn_bonus", 0)
+	p.void_roll_pending_rolled = result.get("rolled_bonus", 1)
+	p.void_roll_pending_kept = result.get("kept_bonus", 1)
 	ts.consume_free()
 
 	state.combat_log.append({
@@ -1014,6 +1052,9 @@ static func get_current_actor(state: MapCombatState) -> int:
 	while (cid in state.fled_ids or _is_participant_out(state, cid)) and idx < order.size() - 1:
 		idx += 1
 		cid = order[idx]
+	# If the final candidate is also out, return -1 (no valid actor).
+	if cid in state.fled_ids or _is_participant_out(state, cid):
+		return -1
 	state.combat.current_turn_index = idx
 	return cid
 
@@ -1053,7 +1094,7 @@ static func advance_turn(
 	}
 
 
-## Advance to the next round: reactions, condition recovery, re-check combat over.
+## Advance to the next round: reactions, condition recovery, initiative re-roll, re-check combat over.
 static func advance_round(
 	state: MapCombatState,
 	chars_by_id: Dictionary,
@@ -1073,6 +1114,30 @@ static func advance_round(
 
 	state.combat.round_number += 1
 	state.combat.current_turn_index = 0
+
+	# Re-roll initiative for all active participants (L5R 4e: initiative re-rolled each round).
+	# CENTER stance carry-forward: void bonus from last round applies to this roll.
+	for cid: int in state.combat.turn_order:
+		if _is_participant_out(state, cid):
+			continue
+		var c: L5RCharacterData = chars_by_id.get(cid, null)
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+		if p == null:
+			continue
+		var weapon_name: String = IndividualCombat.pick_best_weapon(c).weapon_name
+		var init_result: Dictionary = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name)
+		p.initiative_score = init_result.get("initiative_score", c.reflexes)
+
+	# Re-sort turn order by new initiative scores.
+	state.combat.turn_order.sort_custom(func(a: int, b: int) -> bool:
+		var pa: IndividualCombat.Participant = state.combat.participants.get(a, null)
+		var pb: IndividualCombat.Participant = state.combat.participants.get(b, null)
+		var ia: int = pa.initiative_score if pa != null else 0
+		var ib: int = pb.initiative_score if pb != null else 0
+		return ia > ib
+	)
 
 	# Begin first actor's turn.
 	var first_actor: int = -1
@@ -1268,7 +1333,8 @@ static func _npc_desired_stance(npc: L5RCharacterData, wound_level: int) -> Enum
 		best_combat = maxi(best_combat, npc.skills.get(skill_name, 0))
 	if best_combat >= 4:
 		return Enums.Stance.ATTACK
-	return Enums.Stance.ATTACK
+	# Low-skill combatants use CENTER stance: balanced defense with void carry potential.
+	return Enums.Stance.CENTER
 
 
 ## Pick the best target: most-wounded (highest wounds_taken) enemy to focus fire.
@@ -1455,11 +1521,11 @@ static func _apply_hit(
 	)
 	var raw: int = dmg["raw_damage"]
 
-	WoundSystem.apply_damage(target, raw)
+	var wd_result: Dictionary = WoundSystem.apply_damage(target, raw)
 
 	return {
-		"damage": raw,
-		"wounds": target.wounds_taken,
+		"damage": wd_result.get("final_damage", raw),
+		"wounds": wd_result.get("final_damage", raw),
 		"dead": CharacterStats.is_dead(target),
 	}
 
@@ -1486,10 +1552,11 @@ static func _check_and_mark_over(
 			state.combat.winner_id = faction_to_id.values()[0]
 
 
-## True if a participant is effectively out of combat (DOWN, OUT, or DEAD).
+## True if a participant is effectively out of combat (dead or fled).
+## Fled characters are already erased from positions, so absence from
+## positions is sufficient — no need to exclude fled_ids separately.
 static func _is_participant_out(state: MapCombatState, char_id: int) -> bool:
-	# We only have positions, not char references here. Used conservatively.
-	return not state.positions.has(char_id) and char_id not in state.fled_ids
+	return not state.positions.has(char_id)
 
 
 ## Chebyshev (chessboard) distance: max(|dx|, |dy|).

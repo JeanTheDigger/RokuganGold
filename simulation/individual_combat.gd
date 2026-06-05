@@ -133,6 +133,8 @@ class Participant:
 	var fatigue_days: int = 0        # consecutive days without rest
 	var void_spent_this_round: bool = false  # once-per-Round Void spend restriction (RAW)
 	var void_armor_tn_bonus: int = 0         # from Void spend_for_armor_tn (RAW)
+	var void_roll_pending_rolled: int = 0    # pending +N rolled dice from pre-declared Void spend (GDD s40)
+	var void_roll_pending_kept: int = 0      # pending +N kept dice from pre-declared Void spend (GDD s40)
 	var kata_used_this_turn: Dictionary = {}   # tracks once-per-Turn kata uses by effect_id
 	var kata_used_this_round: Dictionary = {}  # tracks once-per-Round kata uses by effect_id
 	var dual_wielding: bool = false            # true when holding an off-hand weapon
@@ -574,8 +576,15 @@ static func resolve_attack(
 		kept = attacker.strength
 
 	# Void spend for +1k1 (or +2k2) on attack roll (RAW). Not valid for Damage Rolls.
+	# Apply either inline spend_void or pre-declared pending bonus from execute_void_spend.
 	var void_used: bool = false
-	if spend_void and VoidSystem.can_spend(attacker) and not attacker_p.void_spent_this_round:
+	if attacker_p.void_roll_pending_rolled > 0 or attacker_p.void_roll_pending_kept > 0:
+		rolled += attacker_p.void_roll_pending_rolled
+		kept += attacker_p.void_roll_pending_kept
+		attacker_p.void_roll_pending_rolled = 0
+		attacker_p.void_roll_pending_kept = 0
+		void_used = true
+	elif spend_void and VoidSystem.can_spend(attacker) and not attacker_p.void_spent_this_round:
 		var vbonus: Dictionary = VoidSystem.spend_for_roll(attacker)
 		if vbonus["success"]:
 			rolled += vbonus["rolled_bonus"]
@@ -1510,6 +1519,8 @@ static func begin_round(state: CombatState) -> void:
 		p.is_delaying = false
 		p.void_spent_this_round = false
 		p.void_armor_tn_bonus = 0
+		p.void_roll_pending_rolled = 0
+		p.void_roll_pending_kept = 0
 		p.kata_used_this_round.clear()
 		p.extra_attack_used_this_turn = false
 		p.earth_init_trade_amount = 0
