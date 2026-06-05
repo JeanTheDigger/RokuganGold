@@ -2048,3 +2048,90 @@ func test_player_attack_raises_improve_attack_not_damage_dice() -> void:
 	# result is structurally correct and the raises key is recorded as declared.
 	assert_eq(result["attack_result"].get("raises", -1), 3,
 		"declared raises must be recorded in attack_result for UI feedback")
+
+
+# =============================================================================
+# -- Bug fix regressions: door noise position (Bugs 3a, 3b) + stealth --------
+# =============================================================================
+
+func test_player_open_door_noise_originates_at_door_tile() -> void:
+	# Regression for Bug 3a: player bump-opens a door; MODERATE noise must
+	# originate at the door tile (tx, ty), not the player tile.
+	#
+	# Layout (row y=5):
+	#   col:  5(player)  6(door)  7  8  9  10  11  12(enemy)
+	#
+	# MODERATE budget = 6 cardinal steps.
+	# Enemy at (12,5) is 6 steps from door (6,5)  → exactly on boundary → REACHED.
+	# Enemy at (12,5) is 7 steps from player (5,5) → outside budget    → NOT reached.
+	# Old code emitted from player → no detection. New code emits from door → detection fires.
+	# Enemy perception boosted to 6 to guarantee roll success (6k6 vs TN 15).
+	var session := _make_session(5, 5, [
+		{"unit_type": "SIMPLE_BANDIT", "x": 12, "y": 5, "seed": 0}
+	])
+	session.map.set_tile(6, 5, Enums.TileType.DOOR_WOOD_CLOSED)
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
+	var enemy_es: CombatController.EntityState = cc.get_enemies_at(12, 5)[0]
+	enemy_es.character.perception = 6
+	assert_eq(enemy_es.alert_state, AsciiMapEnvironment.AlertState.UNAWARE,
+		"precondition: enemy must start UNAWARE")
+	var result: Dictionary = cc.try_move_player(1, 0)
+	assert_true(result.get("opened_door", false),
+		"bump into closed door must open it and report opened_door=true")
+	assert_eq(enemy_es.alert_state, AsciiMapEnvironment.AlertState.SUSPICIOUS,
+		"enemy at MODERATE boundary from door tile must detect door-open noise")
+
+
+func test_npc_open_door_noise_originates_at_door_tile() -> void:
+	# Regression for Bug 3b: NPC opens a door while pursuing player; MODERATE
+	# noise must originate at the door tile (step_vec), not the NPC's current tile.
+	#
+	# Layout (row y=5):
+	#   col:  5(pursuer)  6(door)  7  8  9  10  11  12(observer)  13(player)
+	#
+	# MODERATE budget = 6 cardinal steps.
+	# Observer at (12,5) is 6 steps from door (6,5)  → exactly on boundary → REACHED.
+	# Observer at (12,5) is 7 steps from pursuer (5,5) → outside budget  → NOT reached.
+	# Old code emitted from pursuer → observer not reached. New code emits from door → reached.
+	# Observer perception boosted to 6 to guarantee roll success.
+	var session := _make_session(13, 5, [
+		{"unit_type": "SIMPLE_BANDIT", "x": 5,  "y": 5, "seed": 0},
+		{"unit_type": "SIMPLE_BANDIT", "x": 12, "y": 5, "seed": 1},
+	])
+	session.map.set_tile(6, 5, Enums.TileType.DOOR_WOOD_CLOSED)
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
+	var pursuer:  CombatController.EntityState = cc.get_enemies_at(5,  5)[0]
+	var observer: CombatController.EntityState = cc.get_enemies_at(12, 5)[0]
+	pursuer.alert_state = AsciiMapEnvironment.AlertState.ALERT
+	observer.character.perception = 6
+	assert_eq(observer.alert_state, AsciiMapEnvironment.AlertState.UNAWARE,
+		"precondition: observer must start UNAWARE")
+	cc.advance_npc_turns()
+	assert_eq(observer.alert_state, AsciiMapEnvironment.AlertState.SUSPICIOUS,
+		"observer at MODERATE boundary from door tile must detect NPC door-open noise")
+
+
+func test_stealth_kill_survivor_clears_player_stealth() -> void:
+	# Regression for Bug 4: if execute_stealth_kill lands but the target survives
+	# (tough enough to absorb the hit), _player_stealth must be set to false.
+	# Target stamina=10 / willpower=10 → Earth ring=10 → wound capacity=160.
+	# Even the strongest katana single-hit cannot kill such a target in one blow.
+	var session := _make_session(5, 5, [
+		{"unit_type": "SIMPLE_BANDIT", "x": 6, "y": 5, "seed": 0}
+	])
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
+	var target_es: CombatController.EntityState = cc.get_enemies_at(6, 5)[0]
+	target_es.character.stamina   = 10
+	target_es.character.willpower = 10
+	target_es.character.wounds_taken = 0
+	cc._player_stealth = true
+	assert_true(cc._player_stealth, "precondition: player must start stealthed")
+	var result: Dictionary = cc.execute_stealth_kill(target_es.entity_id)
+	assert_true(result.get("success", false),
+		"execute_stealth_kill must return success=true (approach succeeded and hit landed)")
+	assert_true(target_es.is_alive,
+		"tough target must survive the single stealth hit")
+	assert_false(cc._player_stealth,
+		"_player_stealth must be false after target survives stealth kill")
+	assert_eq(target_es.alert_state, AsciiMapEnvironment.AlertState.ALERT,
+		"surviving target must be ALERT after surviving a stealth kill attempt")

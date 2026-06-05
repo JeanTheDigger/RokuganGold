@@ -669,8 +669,8 @@ func try_move_player(dx: int, dy: int) -> Dictionary:
 	# Closed door → bump opens it, player stays.
 	if MovementSystem.is_closed_door(target_tile):
 		_map.set_tile(tx, ty, MovementSystem.open_door(target_tile))
-		# Opening a door makes MODERATE noise (structural: door creak is a recognized sound event).
-		_emit_noise(player.x, player.y, AsciiMapEnvironment.NoiseLevel.MODERATE)
+		# Door creak originates at the door tile, not the player's current position.
+		_emit_noise(tx, ty, AsciiMapEnvironment.NoiseLevel.MODERATE)
 		return {"opened_door": true, "door_x": tx, "door_y": ty}
 
 	# Zone exit.
@@ -864,6 +864,7 @@ func execute_stealth_kill(target_id: int) -> Dictionary:
 		target.alert_state = AsciiMapEnvironment.AlertState.ALERT
 		target.in_combat = true
 		target.combat_target_id = player.entity_id
+		_player_stealth = false  # Target survived and is now alert — stealth is broken.
 		_emit_noise(player.x, player.y, AsciiMapEnvironment.NoiseLevel.LOUD)
 
 	return {
@@ -1276,7 +1277,8 @@ func _npc_move_toward(es: EntityState, tx: int, ty: int, budget: int) -> bool:
 		# Auto-open doors in path.
 		if MovementSystem.is_closed_door(tile):
 			_map.set_tile(step_vec.x, step_vec.y, MovementSystem.open_door(tile))
-			_emit_noise(es.x, es.y, AsciiMapEnvironment.NoiseLevel.MODERATE)
+			# Door creak originates at the door tile, not the NPC's current position.
+			_emit_noise(step_vec.x, step_vec.y, AsciiMapEnvironment.NoiseLevel.MODERATE)
 			# Door opening costs movement.
 			remaining -= 1
 			continue
