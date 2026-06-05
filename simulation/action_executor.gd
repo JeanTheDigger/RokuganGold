@@ -772,19 +772,23 @@ static func _execute_intimidation(
 	var is_public: bool = ctx.context_flag == Enums.ContextFlag.AT_COURT
 
 	var r: Dictionary
+	# STUDENT_OF_SHOURIDO (s45): defender's effective Honor rank is 5 minimum.
+	var effective_defender_honor: float = float(
+		AdvantageSystem.get_shourido_honor_bonus(target, int(target.honor))
+	)
 	if has_secret:
 		var secret_tier: int = action.metadata.get("secret_tier", 3)
 		r = IntimidationSystem.resolve_blackmail(
-			attacker_roll, defender_roll, target.honor, secret_tier, disp_tier
+			attacker_roll, defender_roll, effective_defender_honor, secret_tier, disp_tier
 		)
 	elif is_public:
 		var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
 		r = IntimidationSystem.resolve_public_intimidation(
-			attacker_roll, defender_roll, target.honor, 0, witness_ids, disp_tier
+			attacker_roll, defender_roll, effective_defender_honor, 0, witness_ids, disp_tier
 		)
 	else:
 		r = IntimidationSystem.resolve_private_intimidation(
-			attacker_roll, defender_roll, target.honor, by_letter, 0, disp_tier
+			attacker_roll, defender_roll, effective_defender_honor, by_letter, 0, disp_tier
 		)
 
 	var effects: Dictionary = {
@@ -816,8 +820,8 @@ static func _execute_intimidation(
 		"season": ctx.season,
 		"skill_used": "Intimidation",
 		"roll_total": attacker_roll,
-		"tn": defender_roll + int(target.honor),
-		"margin": attacker_roll - (defender_roll + int(target.honor)),
+		"tn": defender_roll + int(effective_defender_honor),
+		"margin": attacker_roll - (defender_roll + int(effective_defender_honor)),
 		"effects": effects,
 	}
 
@@ -4503,6 +4507,11 @@ static func resolve_accepted_duel(
 	is_at_court: bool,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	# CURSED_BY_TOSHIGOKU (s45): if either duelist carries the curse, the duel is to the death.
+	if AdvantageSystem.check_cursed_toshigoku_trigger(challenger, true).get("triggered", false) \
+		or AdvantageSystem.check_cursed_toshigoku_trigger(defender, true).get("triggered", false):
+		to_death = true
+
 	var duel: IndividualCombat.DuelState = IndividualCombat.create_duel(
 		challenger.character_id, defender.character_id, to_death
 	)

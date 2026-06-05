@@ -167,6 +167,9 @@ var spell_void_bonus_used: int = 0
 @export var perceived_honor_blocked_until: int = -1  # IC day; -1 = inactive
 @export var air_imbalance_social_penalty_until: int = -1  # IC day; -1 = inactive
 
+# -- Soft-Hearted post-kill TN penalty (s45) -----------------------------------
+@export var soft_hearted_tn_until: int = -1  # IC day; -1 = inactive; +10 TN all rolls this day
+
 # -- Theater & Art Tracking ----------------------------------------------------
 
 @export var pieces_seen: Dictionary = {}

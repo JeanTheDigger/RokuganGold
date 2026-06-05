@@ -7,8 +7,12 @@ class_name HonorGlorySystem
 # -- Core Modification ---------------------------------------------------------
 
 static func apply_honor_change(character: L5RCharacterData, delta: float) -> float:
+	var actual_delta: float = delta
+	# IDEALISTIC (s45): honor losses are 1 point larger.
+	if delta < 0.0:
+		actual_delta -= float(AdvantageSystem.get_honor_loss_increase(character))
 	var old: float = character.honor
-	character.honor = clampf(character.honor + delta, 0.0, 10.0)
+	character.honor = clampf(character.honor + actual_delta, 0.0, 10.0)
 	return character.honor - old
 
 

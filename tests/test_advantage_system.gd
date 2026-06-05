@@ -4181,3 +4181,186 @@ func test_magic_resistance_not_applied_when_no_target() -> void:
 	caster.spells_known = ["jade_strike"]
 	var r: Dictionary = SpellSystem.resolve_cast(caster, "jade_strike", dice)
 	assert_eq(r.get("tn", 0), 10)
+
+
+# ---------------------------------------------------------------------------
+# Wiring tests: 14 s45 dead functions now wired into simulation systems
+# ---------------------------------------------------------------------------
+
+# IDEALISTIC wiring — HonorGlorySystem.apply_honor_change
+func test_idealistic_increases_honor_loss_when_wired() -> void:
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.IDEALISTIC)
+	c.honor = 5.0
+	var old: float = c.honor
+	HonorGlorySystem.apply_honor_change(c, -1.0)
+	# IDEALISTIC adds 1 point to each honor loss: expected -2.0 total loss
+	assert_eq(c.honor, old - 2.0)
+
+func test_idealistic_does_not_affect_honor_gains() -> void:
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.IDEALISTIC)
+	c.honor = 3.0
+	HonorGlorySystem.apply_honor_change(c, 1.0)
+	assert_eq(c.honor, 4.0)
+
+func test_no_idealistic_honor_loss_is_normal() -> void:
+	var c := _make_character()
+	c.honor = 5.0
+	HonorGlorySystem.apply_honor_change(c, -1.0)
+	assert_eq(c.honor, 4.0)
+
+# QUICK_HEALER wiring — MedicineSystem
+func test_quick_healer_stamina_bonus_positive_without_advantage() -> void:
+	var c := _make_character()
+	var bonus: int = AdvantageSystem.get_healing_stamina_bonus(c)
+	assert_eq(bonus, 0)
+
+func test_quick_healer_stamina_bonus_with_advantage() -> void:
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.QUICK_HEALER)
+	var bonus: int = AdvantageSystem.get_healing_stamina_bonus(c)
+	assert_eq(bonus, 2)
+
+# PERMANENT_WOUND wiring — CharacterStats.get_wound_level
+func test_permanent_wound_gives_nicked_minimum_when_no_wounds() -> void:
+	var c := _make_character()
+	c.stamina = 2
+	c.willpower = 2  # earth ring = 2, threshold = 4
+	c.wounds_taken = 0
+	_add_disadvantage(c, Enums.Disadvantage.PERMANENT_WOUND)
+	var level: Enums.WoundLevel = CharacterStats.get_wound_level(c)
+	assert_eq(level, Enums.WoundLevel.NICKED)
+
+func test_no_permanent_wound_is_healthy_at_zero_wounds() -> void:
+	var c := _make_character()
+	c.stamina = 2
+	c.willpower = 2
+	c.wounds_taken = 0
+	var level: Enums.WoundLevel = CharacterStats.get_wound_level(c)
+	assert_eq(level, Enums.WoundLevel.HEALTHY)
+
+# DARLING_OF_THE_COURT wiring — CharacterStats.get_effective_status
+func test_get_effective_status_returns_status_plus_1_at_home_court() -> void:
+	var c := _make_character()
+	c.status = 3.0
+	var adv: AdvantageData = _add_advantage(c, Enums.Advantage.DARLING_OF_THE_COURT)
+	adv.metadata["settlement_id"] = 42
+	var effective: float = CharacterStats.get_effective_status(c, 42)
+	assert_eq(effective, 4.0)
+
+func test_get_effective_status_unchanged_at_other_settlement() -> void:
+	var c := _make_character()
+	c.status = 3.0
+	var adv: AdvantageData = _add_advantage(c, Enums.Advantage.DARLING_OF_THE_COURT)
+	adv.metadata["settlement_id"] = 42
+	var effective: float = CharacterStats.get_effective_status(c, 99)
+	assert_eq(effective, 3.0)
+
+# VOID extra cost wiring — VoidSystem.spend
+func test_hotei_curse_costs_extra_void_on_spend() -> void:
+	var c := _make_character()
+	c.max_void_points = 3
+	c.current_void_points = 3
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_HOTEI)
+	# First spend should cost 2 VP (1 + 1 extra)
+	var ok: bool = VoidSystem.spend(c)
+	assert_true(ok)
+	assert_eq(c.current_void_points, 1)
+
+func test_hotei_curse_blocks_spend_with_only_one_vp() -> void:
+	var c := _make_character()
+	c.max_void_points = 3
+	c.current_void_points = 1
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_HOTEI)
+	var ok: bool = VoidSystem.spend(c)
+	assert_false(ok)
+	assert_eq(c.current_void_points, 1)
+
+func test_no_curse_spend_costs_one_vp() -> void:
+	var c := _make_character()
+	c.max_void_points = 3
+	c.current_void_points = 1
+	var ok: bool = VoidSystem.spend(c)
+	assert_true(ok)
+	assert_eq(c.current_void_points, 0)
+
+# Void recovery hours — VoidSystem.get_recovery_hours / can_recover_full
+func test_void_recovery_hours_default_8() -> void:
+	var c := _make_character()
+	assert_eq(VoidSystem.get_recovery_hours(c), 8)
+
+func test_void_can_recover_full_after_enough_hours() -> void:
+	var c := _make_character()
+	assert_true(VoidSystem.can_recover_full(c, 8))
+
+func test_void_cannot_recover_full_before_enough_hours() -> void:
+	var c := _make_character()
+	assert_false(VoidSystem.can_recover_full(c, 4))
+
+# SACROSANCT wiring — ViolenceSystem.evaluate_violence
+func test_sacrosanct_victim_elevates_crime_to_capital() -> void:
+	var attacker := _make_character(1)
+	var victim := _make_character(2)
+	_add_advantage(victim, Enums.Advantage.SACROSANCT)
+	var result: Dictionary = ViolenceSystem.evaluate_violence(attacker, victim, 0, false)
+	assert_eq(result["severity"], Enums.CrimeSeverity.CAPITAL)
+	assert_true(result.get("sacrosanct_victim", false))
+
+func test_non_sacrosanct_victim_crime_is_minor() -> void:
+	var attacker := _make_character(1)
+	var victim := _make_character(2)
+	var result: Dictionary = ViolenceSystem.evaluate_violence(attacker, victim, 0, false)
+	assert_eq(result["severity"], Enums.CrimeSeverity.MINOR)
+
+# STUDENT_OF_SHOURIDO wiring — SeductionSystem defense TN
+func test_shourido_defense_tn_minimum_5_when_honor_low() -> void:
+	var seducer := _make_character(1)
+	seducer.skills["Temptation"] = 3
+	seducer.awareness = 3
+	var target := _make_character(2)
+	target.honor = 1.0  # rank 1, below minimum
+	target.willpower = 2
+	target.skills["Etiquette"] = 0
+	_add_advantage(target, Enums.Advantage.STUDENT_OF_SHOURIDO)
+	var effective_rank: int = AdvantageSystem.get_shourido_honor_bonus(target, int(target.honor))
+	assert_eq(effective_rank, 5)
+
+# CURSED_BY_TOSHIGOKU wiring — forces to_death in duel
+func test_cursed_toshigoku_trigger_with_opponent_wounded() -> void:
+	var c := _make_character()
+	_add_disadvantage(c, Enums.Disadvantage.CURSED_BY_TOSHIGOKU)
+	var result: Dictionary = AdvantageSystem.check_cursed_toshigoku_trigger(c, true)
+	assert_true(result.get("triggered", false))
+
+# INHERITANCE wiring — SkillResolver extra die
+func test_inheritance_bonus_in_skill_check_context() -> void:
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.INHERITANCE)
+	var bonus: Dictionary = AdvantageSystem.get_inheritance_skill_bonus(c, true)
+	# INHERITANCE returns +1 kept die when using heirloom
+	assert_eq(bonus.get("kept", 0), 1)
+
+# SOFT_HEARTED field — exists on character data
+func test_soft_hearted_tn_until_defaults_to_minus_one() -> void:
+	var c := _make_character()
+	assert_eq(c.soft_hearted_tn_until, -1)
+
+func test_soft_hearted_field_settable() -> void:
+	var c := _make_character()
+	c.soft_hearted_tn_until = 100
+	assert_eq(c.soft_hearted_tn_until, 100)
+
+# GREAT_DESTINY wiring — reduces wound level to DOWN start rather than lethal
+func test_great_destiny_check_triggers_in_different_year() -> void:
+	var c := _make_character()
+	_add_advantage(c, Enums.Advantage.GREAT_DESTINY)
+	var result: Dictionary = AdvantageSystem.check_great_destiny(c, 5)
+	assert_true(result.get("triggered", false))
+
+func test_great_destiny_check_does_not_trigger_same_year() -> void:
+	var c := _make_character()
+	var adv: AdvantageData = _add_advantage(c, Enums.Advantage.GREAT_DESTINY)
+	adv.metadata["last_triggered_ic_year"] = 5
+	var result: Dictionary = AdvantageSystem.check_great_destiny(c, 5)
+	assert_false(result.get("triggered", false))

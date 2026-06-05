@@ -419,19 +419,54 @@ static func resolve_skill_check(
 		character, is_social, ic_day
 	)
 
+	# INHERITANCE (s45): +1k1 when using the family heirloom (extra kept die).
+	var inheritance_mod: Dictionary = AdvantageSystem.get_inheritance_skill_bonus(
+		character, context.get("using_heirloom", false)
+	)
+
+	# SOFT_HEARTED (s45): +10 TN on all rolls until end of the IC day a kill occurred.
+	var soft_hearted_tn: int = 0
+	if character.soft_hearted_tn_until >= 0 and ic_day >= 0 and ic_day < character.soft_hearted_tn_until:
+		soft_hearted_tn = 10
+
+	# CANT_LIE (s45): contested Willpower TN 20 before any Sincerity:Deceit roll.
+	# On failure the roll is automatically treated as failed (returns early).
+	if "Sincerity" in skill_name and context.get("is_deception", false):
+		var cant_lie: Dictionary = AdvantageSystem.check_cant_lie_trigger(character)
+		if cant_lie.get("blocked", false):
+			# Roll Willpower TN 20 to override the block.
+			var will_roll: Dictionary = dice_engine.roll_check(
+				character.willpower, character.willpower, 20, 0, 0, true, false
+			)
+			if not will_roll.get("success", false):
+				return {
+					"success": false, "total": 0, "tn": tn, "margin": -tn,
+					"skill": skill_name, "trait_used": trait_used, "skill_rank": skill_rank,
+					"wound_penalty": wound_penalty, "emphasis_applied": false,
+					"technique_free_raises": 0, "advantage_bonus": {},
+					"cant_lie_blocked": true,
+				}
+
+	# DARLING_OF_THE_COURT (s45): +1 effective Status rank at home court → +5 TN equivalent.
+	var darling_bonus: int = 0
+	if context.get("is_court", false):
+		darling_bonus = AdvantageSystem.get_darling_status_bonus(
+			character, context.get("court_settlement_id", -1)
+		) * 5  # 1 Status rank ≈ 1 Free Raise ≈ +5 effective bonus — PROVISIONAL
+
 	# Build the pool: (trait + skill + bonus_rolled) k (trait + bonus_kept)
 	var rolled: int = (
 		trait_value + skill_rank + bonus_rolled + ashes_bonus
 		+ adv_skill.get("rolled", 0) + mutation_mod.get("rolled", 0)
-		+ imbalance_mod.get("rolled", 0)
+		+ imbalance_mod.get("rolled", 0) + inheritance_mod.get("rolled", 0)
 	)
 	var kept: int = (
 		trait_value + bonus_kept + adv_skill.get("kept", 0) + mutation_mod.get("kept", 0)
-		+ imbalance_mod.get("kept", 0)
+		+ imbalance_mod.get("kept", 0) + inheritance_mod.get("kept", 0)
 	)
 	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
 		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn \
-		+ mutation_mod.get("tn", 0)
+		+ mutation_mod.get("tn", 0) + soft_hearted_tn + darling_bonus
 
 	# Unskilled: no explosions
 	var explodes: bool = skill_rank > 0

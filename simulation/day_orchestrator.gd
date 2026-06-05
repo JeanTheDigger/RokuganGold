@@ -1032,6 +1032,9 @@ static func advance_day(
 
 	_remove_terminal_commitments(commitments)
 
+	# SOFT_HEARTED (s45): killers must pass Willpower TN 20 or suffer +10 TN until next day.
+	_process_soft_hearted_kill_penalties(death_events, characters_by_id, dice_engine, ic_day)
+
 	var orphan_results: Array = _process_lord_deaths(
 		death_events, characters, objectives_map, successor_map,
 		active_successions, next_succession_id, characters_by_id, ic_day,
@@ -5183,7 +5186,7 @@ static func _process_witness_tampering_writebacks(
 					next_case_id[0] += 1
 					crime_records.append(murder_record)
 					if victim != null:
-						_apply_victim_death(victim, active_topics, next_topic_id, ic_day, kill_location, death_events)
+						_apply_victim_death(victim, active_topics, next_topic_id, ic_day, kill_location, death_events, criminal_id)
 					var criminal_2: L5RCharacterData = characters_by_id.get(criminal_id)
 					if criminal_2 != null:
 						var murder_topic: TopicData = _create_crime_topic(
@@ -5266,15 +5269,25 @@ static func _apply_victim_death(
 	ic_day: int,
 	kill_location: String,
 	death_events: Array = [],
+	killer_id: int = -1,
 ) -> void:
 	var earth: int = CharacterStats.get_ring_value(victim, Enums.Ring.EARTH)
-	victim.wounds_taken = earth * 5 * 5
+	var ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+	if AdvantageSystem.check_great_destiny(victim, ic_year).get("triggered", false):
+		var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(victim)
+		victim.wounds_taken = gd_threshold * 6 + 1  # start of DOWN level
+		var gd_adv: AdvantageData = AdvantageSystem.get_advantage(victim, Enums.Advantage.GREAT_DESTINY)
+		if gd_adv != null:
+			gd_adv.metadata["last_triggered_ic_year"] = ic_year
+	else:
+		victim.wounds_taken = earth * 5 * 5
 	death_events.append({
 		"character_id": victim.character_id,
 		"is_lord": victim.role_position != "",
 		"cause": "witness_killed",
 		"suspicious_death": true,
 		"ic_day": ic_day,
+		"killer_id": killer_id,
 	})
 	var death_topic_id: int = next_topic_id[0]
 	next_topic_id[0] = death_topic_id + 1
@@ -10528,7 +10541,15 @@ static func _process_hostage_escapes(
 			hostage["escaped"] = true
 		elif escape_result.get("executed", false):
 			var lethal: int = CharacterStats.get_ring_value(character, Enums.Ring.EARTH) * 5 * 5
-			character.wounds_taken = lethal
+			var he_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+			if AdvantageSystem.check_great_destiny(character, he_ic_year).get("triggered", false):
+				var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(character)
+				character.wounds_taken = gd_threshold * 6 + 1
+				var gd_he: AdvantageData = AdvantageSystem.get_advantage(character, Enums.Advantage.GREAT_DESTINY)
+				if gd_he != null:
+					gd_he.metadata["last_triggered_ic_year"] = he_ic_year
+			else:
+				character.wounds_taken = lethal
 			character.captive_status = ""
 			death_events.append({
 				"character_id": char_id,
@@ -16277,7 +16298,15 @@ static func _process_gempukku(
 		if characters_by_id.has(dead_id):
 			var dead_char: L5RCharacterData = characters_by_id[dead_id]
 			var lethal: int = CharacterStats.get_ring_value(dead_char, Enums.Ring.EARTH) * 5 * 5
-			dead_char.wounds_taken = lethal
+			var nd_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+			if AdvantageSystem.check_great_destiny(dead_char, nd_ic_year).get("triggered", false):
+				var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(dead_char)
+				dead_char.wounds_taken = gd_threshold * 6 + 1
+				var gd_nd: AdvantageData = AdvantageSystem.get_advantage(dead_char, Enums.Advantage.GREAT_DESTINY)
+				if gd_nd != null:
+					gd_nd.metadata["last_triggered_ic_year"] = nd_ic_year
+			else:
+				dead_char.wounds_taken = lethal
 			death_events.append({
 				"character_id": dead_id,
 				"is_lord": dead_char.role_position != "",
@@ -20499,7 +20528,15 @@ static func _apply_assassination_outcome(
 	characters_by_id: Dictionary,
 ) -> void:
 	var earth: int = CharacterStats.get_ring_value(target, Enums.Ring.EARTH)
-	target.wounds_taken = earth * 5 * 5
+	var ass_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+	if AdvantageSystem.check_great_destiny(target, ass_ic_year).get("triggered", false):
+		var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(target)
+		target.wounds_taken = gd_threshold * 6 + 1
+		var gd_ass: AdvantageData = AdvantageSystem.get_advantage(target, Enums.Advantage.GREAT_DESTINY)
+		if gd_ass != null:
+			gd_ass.metadata["last_triggered_ic_year"] = ass_ic_year
+	else:
+		target.wounds_taken = earth * 5 * 5
 	death_events.append({
 		"character_id": target.character_id,
 		"ic_day": ic_day,
@@ -20605,6 +20642,33 @@ static func _process_duel_honor_writebacks(
 			HonorGlorySystem.apply_honor_change(
 				actor, CrimeSystem.get_facing_superior_foe_honor(actor)
 			)
+
+
+## SOFT_HEARTED (s45): after all deaths are registered for the day, roll Willpower TN 20
+## for each living character whose killer_id appears in a death_event. On failure, set
+## soft_hearted_tn_until to ic_day + 1 (expires at dawn of the following day).
+static func _process_soft_hearted_kill_penalties(
+	death_events: Array,
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+	ic_day: int,
+) -> void:
+	for event: Dictionary in death_events:
+		var killer_id: int = event.get("killer_id", event.get("assassin_id", -1))
+		if killer_id < 0:
+			continue
+		var killer: L5RCharacterData = characters_by_id.get(killer_id)
+		if killer == null or CharacterStats.is_dead(killer):
+			continue
+		var check: Dictionary = AdvantageSystem.check_soft_hearted_trigger(killer)
+		if not check.get("blocked", false):
+			continue
+		# Roll Willpower TN 20 to suppress the penalty.
+		var roll: Dictionary = dice_engine.roll_check(
+			killer.willpower, killer.willpower, 20, 0, 0, true, false
+		)
+		if not roll.get("success", false):
+			killer.soft_hearted_tn_until = ic_day + 1
 
 
 static func _process_duel_death_writebacks(
@@ -21792,7 +21856,15 @@ static func _resolve_scheduled_hunts(
 			var killed: L5RCharacterData = characters_by_id.get(killed_id)
 			if killed != null:
 				var earth: int = CharacterStats.get_ring_value(killed, Enums.Ring.EARTH)
-				killed.wounds_taken = earth * 5 * 5
+				var hunt_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+				if AdvantageSystem.check_great_destiny(killed, hunt_ic_year).get("triggered", false):
+					var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(killed)
+					killed.wounds_taken = gd_threshold * 6 + 1
+					var gd_hunt: AdvantageData = AdvantageSystem.get_advantage(killed, Enums.Advantage.GREAT_DESTINY)
+					if gd_hunt != null:
+						gd_hunt.metadata["last_triggered_ic_year"] = hunt_ic_year
+				else:
+					killed.wounds_taken = earth * 5 * 5
 				death_events.append({
 					"character_id": killed_id,
 					"ic_day": ic_day,
