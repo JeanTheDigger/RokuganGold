@@ -325,8 +325,8 @@ static func _gen_temple_grounds(map: AsciiMapData, rng: RandomNumberGenerator) -
 static func _gen_shrine_clearing(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
 	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.TREE_EVERGREEN)
 
-	# Clearing: oval-ish open area, rows 9–27, columns 8–22.
-	for y in range(8, 24):
+	# Clearing: ellipse center=(15,15), semi-axes=(8,9). Full y extent = [6, 24].
+	for y in range(6, 25):
 		for x in range(7, 24):
 			var dx: float = (x - MID) / 8.0
 			var dy: float = (y - MID) / 9.0

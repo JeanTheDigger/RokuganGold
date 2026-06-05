@@ -145,8 +145,8 @@ static func setup_combat(
 		if p == null:
 			continue
 		var weapon_name: String = IndividualCombat.pick_best_weapon(c).weapon_name
-		var init_result: Dictionary = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name)
-		p.initiative_score = init_result.get("initiative_score", c.reflexes)
+		var init_score: int = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name)
+		p.initiative_score = init_score
 
 	# Sort turn order descending by initiative score.
 	mcs.combat.turn_order.sort_custom(func(a: int, b: int) -> bool:
@@ -1112,6 +1112,20 @@ static func advance_round(
 		})
 		return {"type": "combat_over", "winner_id": state.combat.winner_id, "is_over": true}
 
+	# Reset per-round participant flags before the new round begins.
+	for _p: IndividualCombat.Participant in state.combat.participants.values():
+		_p.has_acted_this_round = false
+		_p.is_delaying = false
+		_p.void_spent_this_round = false
+		_p.void_armor_tn_bonus = 0
+		_p.void_roll_pending_rolled = 0
+		_p.void_roll_pending_kept = 0
+		_p.kata_used_this_round.clear()
+		_p.extra_attack_used_this_turn = false
+		_p.earth_init_trade_amount = 0
+		if _p.void_ring_bonus > 0 and not _p.center_stance_bonus_used:
+			_p.void_ring_bonus = 0
+
 	state.combat.round_number += 1
 	state.combat.current_turn_index = 0
 
@@ -1127,8 +1141,8 @@ static func advance_round(
 		if p == null:
 			continue
 		var weapon_name: String = IndividualCombat.pick_best_weapon(c).weapon_name
-		var init_result: Dictionary = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name)
-		p.initiative_score = init_result.get("initiative_score", c.reflexes)
+		var init_score: int = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name)
+		p.initiative_score = init_score
 
 	# Re-sort turn order by new initiative scores.
 	state.combat.turn_order.sort_custom(func(a: int, b: int) -> bool:

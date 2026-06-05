@@ -88,7 +88,10 @@ static func generate_density_grid(
 static func density_at(grid: PackedByteArray, map_width: int, x: int, y: int) -> int:
 	if x < 0 or y < 0 or map_width <= 0:
 		return _KD.NONE
-	if x >= map_width:  # Bug 10 FIX: row-wrap into wrong cell when x out of right bound
+	if x >= map_width:
+		return _KD.NONE
+	var map_height: int = grid.size() / map_width
+	if y >= map_height:
 		return _KD.NONE
 	var idx: int = y * map_width + x
 	if idx >= grid.size():
