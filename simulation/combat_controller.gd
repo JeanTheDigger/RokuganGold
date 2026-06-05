@@ -680,6 +680,15 @@ func try_move_player(dx: int, dy: int) -> Dictionary:
 		var result: Dictionary = _resolve_melee_attack(player, target_es, weapon, 0)
 		# Melee noise: MODERATE normally, LOUD if a shout (aggressive attacker).
 		_emit_noise(player.x, player.y, AsciiMapEnvironment.NoiseLevel.MODERATE)
+		_player_stealth = false
+		# Alert the target (it fights back next NPC turn).
+		if target_es.is_alive and not _is_entity_dead(target_es):
+			target_es.alert_state = AsciiMapEnvironment.AlertState.ALERT
+			target_es.alert_rounds_lost = 0
+			target_es.in_combat = true
+			target_es.combat_target_id = player.entity_id
+			target_es.noise_src_x = player.x
+			target_es.noise_src_y = player.y
 		return {
 			"type":          "attacked",
 			"attacked":      true,

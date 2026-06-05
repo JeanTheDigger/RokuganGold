@@ -1272,7 +1272,7 @@ func test_body_discovery_events_returned_in_same_round() -> void:
 		{"unit_type": "BANDIT_THUG", "x": 3, "y": 3, "seed": 0},
 		{"unit_type": "BANDIT_THUG", "x": 4, "y": 3, "seed": 1},
 	])
-	var cc := CombatController.create(session, _make_player(), DiceEngine.new(1))
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(1))
 
 	# Kill the first enemy to create a body.
 	var enemies: Array = cc.get_entity_display_data()
@@ -1307,3 +1307,45 @@ func test_body_discovery_events_returned_in_same_round() -> void:
 			break
 	assert_true(found_body_event,
 		"body_spotted event must be returned in the same advance_npc_turns() call, not delayed")
+
+
+func test_bump_to_attack_alerts_surviving_target() -> void:
+	# Bug fix: a non-lethal bump-to-attack must mark the surviving enemy ALERT and
+	# set in_combat so it fights back on its next NPC turn.
+	# Use a tough enemy (BANDIT_LORD) and a weak attacker so the hit is non-lethal.
+	var session := _make_session(5, 5, [
+		{"unit_type": "BANDIT_LORD", "x": 6, "y": 5, "seed": 0},
+	])
+	var weak_player := _make_weak_char()
+	weak_player.character_id = 999
+	weak_player.skills = {"Kenjutsu": 1}
+	var cc := CombatController.create(session, weak_player, DiceEngine.new(42))
+
+	# Verify the enemy starts UNAWARE.
+	var enemy_id: int = -1
+	for eid: int in cc._entities.keys():
+		var es: CombatController.EntityState = cc._entities[eid]
+		if es.faction == CombatController.FACTION_ENEMY:
+			enemy_id = eid
+			assert_eq(es.alert_state, AsciiMapEnvironment.AlertState.UNAWARE,
+				"enemy should start UNAWARE")
+			break
+	assert_true(enemy_id >= 0, "need a BANDIT_LORD enemy")
+
+	# Bump into the enemy — the weak player will almost certainly not one-shot it.
+	var result: Dictionary = cc.try_move_player(1, 0)
+	assert_true(result.get("attacked", false), "bump into enemy should produce attack")
+
+	var enemy_es: CombatController.EntityState = cc._entities[enemy_id]
+	if enemy_es.is_alive:
+		# Surviving enemy must be ALERT and in_combat.
+		assert_eq(enemy_es.alert_state, AsciiMapEnvironment.AlertState.ALERT,
+			"surviving bump target must be ALERT after non-lethal attack")
+		assert_true(enemy_es.in_combat,
+			"surviving bump target must have in_combat=true")
+		assert_eq(enemy_es.combat_target_id, cc.get_player().entity_id,
+			"surviving bump target must track the player as combat target")
+
+	# _player_stealth must be cleared regardless of kill/survive.
+	assert_false(cc._player_stealth,
+		"bump-to-attack must clear player stealth")
