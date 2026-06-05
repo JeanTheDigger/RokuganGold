@@ -1093,3 +1093,128 @@ static func check_combat_over(
 			state.winner_id = alive[0]
 		return true
 	return false
+
+
+# =============================================================================
+# -- WeaponData Integration (s40) ---------------------------------------------
+# =============================================================================
+
+static func get_weapon_data(weapon_name: String) -> WeaponData:
+	## Returns a typed WeaponData populated from WEAPON_CATALOG for the given weapon name.
+	## Falls back to DEFAULT_WEAPON values if name is unknown.
+	var profile: Dictionary = get_weapon_profile(weapon_name)
+	var wd := WeaponData.new()
+	wd.weapon_name = weapon_name
+	wd.rolled = profile.get("rolled", DEFAULT_WEAPON["rolled"])
+	wd.kept = profile.get("kept", DEFAULT_WEAPON["kept"])
+	wd.strength_adds = profile.get("strength_adds", true)
+	wd.skill = profile.get("skill", DEFAULT_WEAPON["skill"])
+	wd.size = profile.get("size", DEFAULT_WEAPON["size"])
+	wd.melee = profile.get("melee", true)
+	wd.trait = profile.get("trait", DEFAULT_WEAPON["trait"])
+	return wd
+
+
+static func pick_best_weapon(character: L5RCharacterData) -> String:
+	## Selects the weapon name from WEAPON_CATALOG for which the character has the highest skill rank.
+	## Used by the NPC summary roll when no explicit weapon is assigned.
+	## Returns "unarmed" for characters with no weapon skills.
+	var best_weapon: String = "unarmed"
+	var best_score: int = -1
+	for weapon_name: String in WEAPON_CATALOG:
+		var profile: Dictionary = WEAPON_CATALOG[weapon_name]
+		var skill: String = profile.get("skill", "")
+		if skill.is_empty():
+			continue
+		var rank: int = character.skills.get(skill, 0)
+		if rank > best_score:
+			best_score = rank
+			best_weapon = weapon_name
+	return best_weapon
+
+
+# =============================================================================
+# -- NPC Summary Combat (s40 — design decision: single-exchange model) --------
+# =============================================================================
+
+static func resolve_npc_summary_combat(
+	attacker: L5RCharacterData,
+	defender: L5RCharacterData,
+	dice_engine: DiceEngine,
+	attacker_weapon: String = "",
+	defender_weapon: String = "",
+) -> Dictionary:
+	## Single-exchange NPC vs NPC resolution per design decision (summary roll model).
+	## Both combatants attack simultaneously in Attack Stance. Damage is applied from
+	## successful hits. Winner is determined by wound outcome; roll total breaks ties.
+	## Returns winner_id (-1 = tie), wounds delivered to each side, and full roll details.
+
+	var att_wname: String = attacker_weapon if attacker_weapon != "" else pick_best_weapon(attacker)
+	var def_wname: String = defender_weapon if defender_weapon != "" else pick_best_weapon(defender)
+
+	var att_p := Participant.new()
+	att_p.stance = Enums.Stance.ATTACK
+	var def_p := Participant.new()
+	def_p.stance = Enums.Stance.ATTACK
+
+	var att_armor_tn: int = get_armor_tn(attacker, att_p, dice_engine)
+	var def_armor_tn: int = get_armor_tn(defender, def_p, dice_engine)
+
+	var att_attack: Dictionary = resolve_attack(attacker, att_p, att_wname, def_armor_tn, 0, dice_engine)
+	var def_attack: Dictionary = resolve_attack(defender, def_p, def_wname, att_armor_tn, 0, dice_engine)
+
+	var att_damage: Dictionary = {}
+	var def_damage: Dictionary = {}
+	var att_wounds: Dictionary = {}
+	var def_wounds: Dictionary = {}
+
+	if att_attack.get("hit", false):
+		att_damage = resolve_damage(attacker, att_wname, 0, 0, dice_engine)
+		def_wounds = WoundSystem.apply_damage(defender, att_damage.get("raw_damage", 0))
+
+	if def_attack.get("hit", false):
+		def_damage = resolve_damage(defender, def_wname, 0, 0, dice_engine)
+		att_wounds = WoundSystem.apply_damage(attacker, def_damage.get("raw_damage", 0))
+
+	var att_dead: bool = CharacterStats.is_dead(attacker)
+	var def_dead: bool = CharacterStats.is_dead(defender)
+
+	var winner_id: int = -1
+	var loser_id: int = -1
+
+	if att_dead and not def_dead:
+		winner_id = defender.character_id
+		loser_id = attacker.character_id
+	elif def_dead and not att_dead:
+		winner_id = attacker.character_id
+		loser_id = defender.character_id
+	elif not att_dead and not def_dead:
+		# Both standing: higher attack roll wins the exchange
+		var att_roll: int = att_attack.get("roll", 0)
+		var def_roll: int = def_attack.get("roll", 0)
+		if att_roll > def_roll:
+			winner_id = attacker.character_id
+			loser_id = defender.character_id
+		elif def_roll > att_roll:
+			winner_id = defender.character_id
+			loser_id = attacker.character_id
+		# exact tie: winner_id stays -1
+
+	return {
+		"winner_id": winner_id,
+		"loser_id": loser_id,
+		"attacker_id": attacker.character_id,
+		"defender_id": defender.character_id,
+		"attacker_weapon": att_wname,
+		"defender_weapon": def_wname,
+		"attacker_hit": att_attack.get("hit", false),
+		"defender_hit": def_attack.get("hit", false),
+		"attacker_attack": att_attack,
+		"defender_attack": def_attack,
+		"attacker_damage": att_damage,
+		"defender_damage": def_damage,
+		"attacker_wounds": att_wounds,
+		"defender_wounds": def_wounds,
+		"attacker_dead": att_dead,
+		"defender_dead": def_dead,
+	}

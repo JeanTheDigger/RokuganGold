@@ -925,3 +925,118 @@ func test_strike_after_first_blood_returns_honor_penalty() -> void:
 	assert_true(result["struck_after_first_blood"])
 	assert_eq(result["honor_change"], 0.0, "Honor cost blocked — GDD Table 2.3 not yet specified")
 	assert_true(duel.struck_after_first_blood)
+
+
+# -- WeaponData Resource -------------------------------------------------------
+
+func test_get_weapon_data_returns_typed_resource() -> void:
+	var wd: WeaponData = IndividualCombat.get_weapon_data("katana")
+	assert_not_null(wd)
+	assert_true(wd is WeaponData)
+
+
+func test_get_weapon_data_katana_fields() -> void:
+	var wd: WeaponData = IndividualCombat.get_weapon_data("katana")
+	assert_eq(wd.weapon_name, "katana")
+	assert_eq(wd.rolled, 3)
+	assert_eq(wd.kept, 2)
+	assert_true(wd.strength_adds)
+	assert_eq(wd.skill, "Kenjutsu")
+	assert_eq(wd.size, "Medium")
+	assert_true(wd.melee)
+	assert_eq(wd.trait, "agility")
+
+
+func test_get_weapon_data_yumi_is_ranged() -> void:
+	var wd: WeaponData = IndividualCombat.get_weapon_data("yumi")
+	assert_false(wd.melee)
+	assert_eq(wd.skill, "Kyujutsu")
+	assert_eq(wd.trait, "reflexes")
+
+
+func test_get_weapon_data_unknown_falls_back_to_unarmed() -> void:
+	var wd: WeaponData = IndividualCombat.get_weapon_data("nonexistent_weapon")
+	assert_not_null(wd)
+	assert_eq(wd.weapon_name, "nonexistent_weapon")
+
+
+# -- pick_best_weapon ----------------------------------------------------------
+
+func test_pick_best_weapon_kenjutsu_picks_katana() -> void:
+	var c: L5RCharacterData = _make_char(50, 2, 2, 3, 2, 3, 2, 2, 2)
+	c.skills = {"Kenjutsu": 3, "Iaijutsu": 2}
+	assert_eq(IndividualCombat.pick_best_weapon(c), "katana")
+
+
+func test_pick_best_weapon_kyujutsu_picks_yumi() -> void:
+	var c: L5RCharacterData = _make_char(51, 2, 2, 2, 2, 3, 2, 2, 2)
+	c.skills = {"Kyujutsu": 4}
+	assert_eq(IndividualCombat.pick_best_weapon(c), "yumi")
+
+
+func test_pick_best_weapon_no_skills_picks_unarmed() -> void:
+	var c: L5RCharacterData = _make_char(52, 2, 2, 2, 2, 2, 2, 2, 2)
+	c.skills = {}
+	assert_eq(IndividualCombat.pick_best_weapon(c), "unarmed")
+
+
+func test_pick_best_weapon_heavy_weapons_picks_tetsubo() -> void:
+	var c: L5RCharacterData = _make_char(53, 3, 2, 2, 2, 2, 2, 3, 2)
+	c.skills = {"Heavy Weapons": 3}
+	assert_eq(IndividualCombat.pick_best_weapon(c), "tetsubo")
+
+
+func test_pick_best_weapon_prefers_higher_ranked_skill() -> void:
+	var c: L5RCharacterData = _make_char(54, 2, 2, 3, 2, 3, 2, 2, 2)
+	c.skills = {"Kenjutsu": 4, "Kyujutsu": 2}
+	assert_eq(IndividualCombat.pick_best_weapon(c), "katana")
+
+
+# -- resolve_npc_summary_combat ------------------------------------------------
+
+func test_summary_combat_returns_required_keys() -> void:
+	var att: L5RCharacterData = _make_char(60, 3, 3, 3, 3, 3, 3, 3, 3)
+	att.skills = {"Kenjutsu": 3}
+	var def: L5RCharacterData = _make_char(61, 2, 2, 2, 2, 2, 2, 2, 2)
+	def.skills = {}
+	var result: Dictionary = IndividualCombat.resolve_npc_summary_combat(att, def, _dice)
+	for key: String in ["winner_id", "loser_id", "attacker_id", "defender_id",
+			"attacker_weapon", "defender_weapon", "attacker_hit", "defender_hit",
+			"attacker_dead", "defender_dead"]:
+		assert_true(result.has(key), "Missing key: " + key)
+
+
+func test_summary_combat_strong_beats_weak() -> void:
+	# Run 20 seeds; strong character should win majority.
+	var wins: int = 0
+	for seed: int in range(1, 21):
+		var dice: DiceEngine = DiceEngine.new(seed)
+		var strong: L5RCharacterData = _make_char(70, 5, 5, 5, 5, 5, 5, 5, 5)
+		strong.skills = {"Kenjutsu": 5}
+		var weak: L5RCharacterData = _make_char(71, 1, 1, 1, 1, 1, 1, 1, 1)
+		weak.skills = {}
+		var r: Dictionary = IndividualCombat.resolve_npc_summary_combat(strong, weak, dice)
+		if r["winner_id"] == 70:
+			wins += 1
+	assert_true(wins >= 14, "Strong character should win at least 14/20: got " + str(wins))
+
+
+func test_summary_combat_dead_character_is_loser() -> void:
+	var att: L5RCharacterData = _make_char(80, 5, 5, 5, 5, 5, 5, 5, 5)
+	att.skills = {"Kenjutsu": 5}
+	var def: L5RCharacterData = _make_char(81, 1, 1, 1, 1, 1, 1, 1, 1)
+	def.skills = {}
+	var result: Dictionary = IndividualCombat.resolve_npc_summary_combat(att, def, _dice, "katana", "unarmed")
+	if result["defender_dead"]:
+		assert_eq(result["loser_id"], 81)
+	if result["attacker_dead"]:
+		assert_eq(result["loser_id"], 80)
+
+
+func test_summary_combat_explicit_weapons_used() -> void:
+	var att: L5RCharacterData = _make_char(90, 3, 3, 3, 3, 3, 3, 3, 3)
+	att.skills = {"Kenjutsu": 3, "Heavy Weapons": 5}
+	var def: L5RCharacterData = _make_char(91, 2, 2, 2, 2, 2, 2, 2, 2)
+	def.skills = {}
+	var result: Dictionary = IndividualCombat.resolve_npc_summary_combat(att, def, _dice, "katana", "unarmed")
+	assert_eq(result["attacker_weapon"], "katana", "Explicit weapon should override pick_best_weapon")

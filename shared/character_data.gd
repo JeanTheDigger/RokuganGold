@@ -93,9 +93,9 @@ var spell_void_bonus_used: int = 0
 
 # -- Equipment & Outfit --------------------------------------------------------
 
-@export var weapons: Array = []
-@export var armor_worn: String = ""
-@export var armor_tn_bonus: int = 0
+@export var weapons: Array[WeaponData] = []
+@export var armor_worn: ArmorData = null
+@export var armor_tn_bonus: int = 0  # mirrors armor_worn.tn_bonus; kept for fast lookup
 @export var armor_reduction: int = 0
 @export var outfit: Array = []
 @export var koku: float = 0.0
