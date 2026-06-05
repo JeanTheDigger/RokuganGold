@@ -1093,7 +1093,7 @@ func test_off_hand_attack_small_weapon_penalty_is_five() -> void:
 		_char_a, p, "wakizashi", 40, _dice
 	)
 	assert_true(result.has("off_hand_penalty"))
-	assert_eq(result["off_hand_penalty"], 5)
+	assert_eq(result["off_hand_penalty"], -5)
 
 
 func test_off_hand_attack_medium_weapon_penalty_is_ten() -> void:
@@ -1104,7 +1104,7 @@ func test_off_hand_attack_medium_weapon_penalty_is_ten() -> void:
 	var result: Dictionary = IndividualCombat.resolve_off_hand_attack(
 		_char_a, p, "katana", 40, _dice
 	)
-	assert_eq(result["off_hand_penalty"], 10)
+	assert_eq(result["off_hand_penalty"], -10)
 
 
 func test_off_hand_attack_result_has_required_keys() -> void:
@@ -1367,3 +1367,138 @@ func test_advance_round_reactions_applies_air_initiative_stack() -> void:
 	# After recovering from stunned with air_initiative_stack kata, initiative should be >= before
 	# (recovery adds +2; if not stunned path fires, no change — both are valid)
 	assert_true(pa.initiative_score >= 0)
+
+
+# -- dominant hand penalty in resolve_attack ------------------------------------
+
+func test_dual_wielder_dominant_hand_attack_gets_minus_five_flat_penalty() -> void:
+	# With DOMINANT_HAND_PENALTY = -5, a dual-wielder's dominant-hand attack always
+	# takes -5 to the flat roll total (s40).
+	_char_a.skills = {"Kenjutsu": 3}
+	var p_single := IndividualCombat.Participant.new()
+	p_single.stance = IndividualCombat.STANCE_ATTACK
+	p_single.dual_wielding = false
+	var p_dual := IndividualCombat.Participant.new()
+	p_dual.stance = IndividualCombat.STANCE_ATTACK
+	p_dual.dual_wielding = true
+	# Use a deterministic dice engine seeded identically for both rolls
+	var dice_single := DiceEngine.new(42)
+	var dice_dual := DiceEngine.new(42)
+	var result_single: Dictionary = IndividualCombat.resolve_attack(
+		_char_a, p_single, "katana", 0, 0, dice_single
+	)
+	var result_dual: Dictionary = IndividualCombat.resolve_attack(
+		_char_a, p_dual, "katana", 0, 0, dice_dual
+	)
+	# Dual-wielder rolls exactly 5 lower (DOMINANT_HAND_PENALTY)
+	assert_eq(result_dual["roll"], result_single["roll"] - 5)
+
+
+func test_single_wielder_resolve_attack_no_dual_wield_penalty() -> void:
+	_char_a.skills = {"Kenjutsu": 2}
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	p.dual_wielding = false
+	var result: Dictionary = IndividualCombat.resolve_attack(_char_a, p, "katana", 5, 0, _dice)
+	assert_true(result.has("roll"))
+
+
+# -- begin_round center stance bonus expiry ------------------------------------
+
+func test_begin_round_expires_unconsumed_center_stance_bonus() -> void:
+	# Character was in CENTER stance last round but never attacked (never consumed bonus).
+	# begin_round() should clear void_ring_bonus so initiative can set a fresh one.
+	var data: Array = [
+		{"character_id": _char_a.character_id, "initiative_score": 10, "stance": IndividualCombat.STANCE_CENTER},
+		{"character_id": _char_b.character_id, "initiative_score": 5},
+	]
+	var state: IndividualCombat.CombatState = IndividualCombat.build_combat_state(data)
+	var pa: IndividualCombat.Participant = state.participants[_char_a.character_id]
+	# Simulate: bonus was set during initiative but never consumed (no attack occurred)
+	pa.void_ring_bonus = 3
+	pa.center_stance_bonus_used = false
+	IndividualCombat.begin_round(state)
+	assert_eq(pa.void_ring_bonus, 0, "Unconsumed Center Stance bonus must expire at round start")
+	assert_false(pa.center_stance_bonus_used, "center_stance_bonus_used must be false so initiative can re-set the bonus")
+
+
+func test_begin_round_does_not_touch_consumed_center_stance_bonus() -> void:
+	# When the bonus was already consumed (center_stance_bonus_used == true),
+	# advance_round_reactions() cleared it. begin_round() should not re-set the flag.
+	var data: Array = [
+		{"character_id": _char_a.character_id, "initiative_score": 10},
+	]
+	var state: IndividualCombat.CombatState = IndividualCombat.build_combat_state(data)
+	var pa: IndividualCombat.Participant = state.participants[_char_a.character_id]
+	# Simulate post-advance_round_reactions() state: bonus already cleared
+	pa.void_ring_bonus = 0
+	pa.center_stance_bonus_used = false
+	IndividualCombat.begin_round(state)
+	assert_eq(pa.void_ring_bonus, 0)
+	assert_false(pa.center_stance_bonus_used)
+
+
+func test_begin_round_resets_earth_init_trade_amount() -> void:
+	var data: Array = [{"character_id": _char_a.character_id, "initiative_score": 10}]
+	var state: IndividualCombat.CombatState = IndividualCombat.build_combat_state(data)
+	var pa: IndividualCombat.Participant = state.participants[_char_a.character_id]
+	pa.earth_init_trade_amount = 5
+	IndividualCombat.begin_round(state)
+	assert_eq(pa.earth_init_trade_amount, 0)
+
+
+# -- declare_*_trade setters ---------------------------------------------------
+
+func test_declare_earth_armor_trade_sets_earth_trade_amount() -> void:
+	var p := IndividualCombat.Participant.new()
+	IndividualCombat.declare_earth_armor_trade(p, 4)
+	assert_eq(p.earth_trade_amount, 4)
+
+
+func test_declare_earth_armor_trade_clamps_negative_to_zero() -> void:
+	var p := IndividualCombat.Participant.new()
+	IndividualCombat.declare_earth_armor_trade(p, -3)
+	assert_eq(p.earth_trade_amount, 0)
+
+
+func test_declare_earth_initiative_trade_sets_earth_init_trade_amount() -> void:
+	var p := IndividualCombat.Participant.new()
+	IndividualCombat.declare_earth_initiative_trade(p, 6)
+	assert_eq(p.earth_init_trade_amount, 6)
+
+
+func test_declare_water_armor_trade_sets_water_trade_armor_amount() -> void:
+	var p := IndividualCombat.Participant.new()
+	IndividualCombat.declare_water_armor_trade(p, 3)
+	assert_eq(p.water_trade_armor_amount, 3)
+
+
+func test_begin_turn_clears_earth_and_water_trade_amounts() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.earth_trade_amount = 5
+	p.water_trade_armor_amount = 3
+	IndividualCombat.begin_turn(p)
+	assert_eq(p.earth_trade_amount, 0)
+	assert_eq(p.water_trade_armor_amount, 0)
+
+
+# -- spinning_blades_active flag in resolve_extra_attack -----------------------
+
+func test_extra_attack_spinning_blades_active_flag_true_for_dual_wielder_with_kata() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	p.dual_wielding = true
+	_char_a.katas = ["Spinning Blades Style"]
+	_char_a.skills = {"Kenjutsu": 5}
+	var result: Dictionary = IndividualCombat.resolve_extra_attack(_char_a, p, "katana", 5, _dice)
+	assert_true(result.get("spinning_blades_active", false))
+
+
+func test_extra_attack_spinning_blades_active_flag_false_without_kata() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	p.dual_wielding = true
+	_char_a.katas = []
+	_char_a.skills = {"Kenjutsu": 5}
+	var result: Dictionary = IndividualCombat.resolve_extra_attack(_char_a, p, "katana", 5, _dice)
+	assert_false(result.get("spinning_blades_active", true))

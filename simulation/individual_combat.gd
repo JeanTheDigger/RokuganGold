@@ -629,6 +629,10 @@ static func resolve_attack(
 
 	flat_bonus += kata_atk["flat_bonus"]
 
+	# Dominant hand attack penalty while holding an off-hand weapon (s40)
+	if attacker_p.dual_wielding:
+		flat_bonus += DOMINANT_HAND_PENALTY  # -5
+
 	# Unskilled rolls (skill_rank == 0) do not explode per L5R4e p.78.
 	# raises passed directly — roll_check applies raises * 5 to TN.
 	var result: Dictionary = dice_engine.roll_check(
@@ -783,6 +787,23 @@ static func begin_turn(participant: Participant) -> void:
 	## Call this before the character resolves their first action in a round.
 	participant.kata_used_this_turn.clear()
 	participant.extra_attack_used_this_turn = false
+	participant.earth_trade_amount = 0
+	participant.water_trade_armor_amount = 0
+
+
+static func declare_earth_armor_trade(participant: Participant, tn_reduction: int) -> void:
+	## Declare how much Armor TN to trade for damage bonus this action (earth_trade_armor_for_damage kata, s30a).
+	participant.earth_trade_amount = maxi(0, tn_reduction)
+
+
+static func declare_earth_initiative_trade(participant: Participant, tn_bonus: int) -> void:
+	## Declare how much Initiative score to trade for Armor TN this round (earth_trade_initiative_for_armor kata, s30a).
+	participant.earth_init_trade_amount = maxi(0, tn_bonus)
+
+
+static func declare_water_armor_trade(participant: Participant, tn_reduction: int) -> void:
+	## Declare how much Armor TN to trade for movement this action (water_trade_armor_for_movement kata, s30a).
+	participant.water_trade_armor_amount = maxi(0, tn_reduction)
 
 
 static func get_dual_wield_armor_tn_bonus(character: L5RCharacterData, participant: Participant) -> int:
@@ -860,6 +881,7 @@ static func resolve_extra_attack(
 	attacker_p.extra_attack_used_this_turn = true
 	var attack: Dictionary = resolve_attack(attacker, attacker_p, weapon_name, target_armor_tn, 0, dice_engine)
 	attack["required_raises"] = required_raises
+	attack["spinning_blades_active"] = required_raises == EXTRA_ATTACK_SPINNING_BLADES_RAISES
 	return attack
 
 
@@ -1487,9 +1509,11 @@ static func begin_round(state: CombatState) -> void:
 		p.void_armor_tn_bonus = 0
 		p.kata_used_this_round.clear()
 		p.extra_attack_used_this_turn = false
-		# Center Stance bonus only lasts one round (s40)
-		if p.stance == Enums.Stance.CENTER and p.void_ring_bonus > 0:
-			p.center_stance_bonus_used = true
+		p.earth_init_trade_amount = 0
+		# Expire unconsumed Center Stance bonus — it lasts only the round it's earned (s40).
+		# If the bonus was consumed, advance_round_reactions() already cleared it.
+		if p.void_ring_bonus > 0 and not p.center_stance_bonus_used:
+			p.void_ring_bonus = 0
 
 
 static func advance_round_reactions(
