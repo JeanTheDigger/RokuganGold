@@ -712,6 +712,31 @@ func test_body_discovery_already_alert_stays_alert() -> void:
 	assert_eq(enemy.alert_state, AsciiMapEnvironment.AlertState.ALERT)
 
 
+func test_body_discovery_queues_body_spotted_event() -> void:
+	var session := _make_session(1, 1, [
+		{"unit_type": "SIMPLE_BANDIT", "x": 5, "y": 1, "seed": 0},
+	])
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
+	cc._add_corpse(5, 2)
+	cc._check_body_discovery()
+	assert_false(cc._pending_noise_events.is_empty(),
+		"body_spotted event should be queued in _pending_noise_events")
+	assert_eq(cc._pending_noise_events[0].get("type"), "body_spotted")
+
+
+func test_body_discovery_no_event_when_already_alert() -> void:
+	var session := _make_session(1, 1, [
+		{"unit_type": "SIMPLE_BANDIT", "x": 5, "y": 1, "seed": 0},
+	])
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
+	var enemy: CombatController.EntityState = cc.get_enemies_at(5, 1)[0]
+	enemy.alert_state = AsciiMapEnvironment.AlertState.ALERT
+	cc._add_corpse(5, 2)
+	cc._check_body_discovery()
+	assert_true(cc._pending_noise_events.is_empty(),
+		"already-alert enemy should not queue another event")
+
+
 # =============================================================================
 # -- 14. Morale check (_check_morale) ----------------------------------------
 # =============================================================================
@@ -1047,9 +1072,18 @@ func test_execute_player_attack_adjacent_returns_attack_keys() -> void:
 	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
 	var enemy: CombatController.EntityState = cc.get_enemies_at(6, 5)[0]
 	var result: Dictionary = cc.execute_player_attack(enemy.entity_id)
-	assert_true(result.has("hit"))
-	assert_true(result.has("attack_roll"))
-	assert_true(result.has("armor_tn"))
+	# Enriched dict matches try_move_player attack shape.
+	assert_eq(result.get("type"), "attacked")
+	assert_true(result.get("attacked", false))
+	assert_eq(result.get("target_id"), enemy.entity_id)
+	assert_true(result.has("unit_type"))
+	assert_true(result.has("damage"))
+	assert_true(result.has("killed"))
+	# Raw combat detail is nested under attack_result.
+	var ar: Dictionary = result.get("attack_result", {})
+	assert_true(ar.has("hit"))
+	assert_true(ar.has("attack_roll"))
+	assert_true(ar.has("armor_tn"))
 
 
 func test_execute_player_attack_alerts_target() -> void:
@@ -1152,3 +1186,79 @@ func test_get_all_entities_includes_player_and_enemies() -> void:
 	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
 	var all: Array = cc.get_all_entities()
 	assert_eq(all.size(), 2)  # Player + 1 enemy.
+
+
+# =============================================================================
+# -- 28. Investigate phase transition (search → return, no double-move) --------
+# =============================================================================
+
+func test_investigate_search_phase_runs_exactly_n_rounds() -> void:
+	# Enemy far from player and noise source; player is hidden so no FoV escalation.
+	var session := _make_session(1, 1, [
+		{"unit_type": "SIMPLE_BANDIT", "x": 18, "y": 18, "seed": 0},
+	])
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
+	var enemy: CombatController.EntityState = cc.get_enemies_at(18, 18)[0]
+	enemy.alert_state       = AsciiMapEnvironment.AlertState.SUSPICIOUS
+	enemy.phase_rounds_left = CombatController.SUSPICIOUS_SEARCH_ROUNDS  # 3
+	enemy.noise_src_x       = 15
+	enemy.noise_src_y       = 18
+
+	# Run SUSPICIOUS_SEARCH_ROUNDS turns; entity should still be SUSPICIOUS (not yet returning).
+	for i: int in range(CombatController.SUSPICIOUS_SEARCH_ROUNDS):
+		if enemy.alert_state != AsciiMapEnvironment.AlertState.SUSPICIOUS:
+			break
+		cc._npc_investigate(enemy)
+
+	# After search phase ends (prl hits 0), the entity should be in return phase (prl == 0).
+	if enemy.alert_state == AsciiMapEnvironment.AlertState.SUSPICIOUS:
+		assert_eq(enemy.phase_rounds_left, 0,
+			"prl should be 0 after SUSPICIOUS_SEARCH_ROUNDS ticks")
+
+
+func test_investigate_return_phase_reaches_unaware() -> void:
+	# Enemy far from player and noise source so no FoV escalation.
+	var session := _make_session(1, 1, [
+		{"unit_type": "SIMPLE_BANDIT", "x": 18, "y": 18, "seed": 0},
+	])
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
+	var enemy: CombatController.EntityState = cc.get_enemies_at(18, 18)[0]
+	# Simulate entity already at start of return phase (prl = 0).
+	enemy.alert_state       = AsciiMapEnvironment.AlertState.SUSPICIOUS
+	enemy.phase_rounds_left = 0
+	enemy.noise_src_x       = 15
+	enemy.noise_src_y       = 18
+
+	# Run SUSPICIOUS_RETURN_ROUNDS more turns; entity should return to UNAWARE.
+	for i: int in range(CombatController.SUSPICIOUS_RETURN_ROUNDS + 1):
+		if enemy.alert_state != AsciiMapEnvironment.AlertState.SUSPICIOUS:
+			break
+		cc._npc_investigate(enemy)
+
+	assert_eq(enemy.alert_state, AsciiMapEnvironment.AlertState.UNAWARE,
+		"entity should return to UNAWARE after full return phase")
+
+
+func test_investigate_no_double_move_at_phase_boundary() -> void:
+	# Verify that the NPC makes exactly one move per call to _npc_investigate,
+	# regardless of phase (search vs return).
+	var session := _make_session(1, 1, [
+		{"unit_type": "SIMPLE_BANDIT", "x": 10, "y": 10, "seed": 0},
+	])
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
+	var enemy: CombatController.EntityState = cc.get_enemies_at(10, 10)[0]
+	enemy.alert_state       = AsciiMapEnvironment.AlertState.SUSPICIOUS
+	enemy.phase_rounds_left = 1  # One search round left.
+	enemy.patrol_x          = 10
+	enemy.patrol_y          = 10
+	enemy.noise_src_x       = 12
+	enemy.noise_src_y       = 10
+	var start_x: int = enemy.x
+	# One call at prl=1 (search phase): should move toward noise_src.
+	cc._npc_investigate(enemy)
+	# prl is now 0; enemy should have moved toward (12, 10) — not back to patrol yet.
+	assert_eq(enemy.alert_state, AsciiMapEnvironment.AlertState.SUSPICIOUS)
+	assert_eq(enemy.phase_rounds_left, 0)
+	# Enemy moved toward noise (12,10), not back to patrol (10,10).
+	assert_true(enemy.x > start_x or enemy.x == start_x,
+		"enemy should move toward noise source, not patrol, during search phase")
