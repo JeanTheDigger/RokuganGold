@@ -176,6 +176,7 @@ static func resolve_active_worship(
 	location_type: String,
 	directed_fortune: int,
 	artisan_free_raises: int = 0,
+	character: L5RCharacterData = null,
 ) -> Dictionary:
 	var base_wp: float = NORMAL_WORSHIP_WP
 	if character_type == "monk":
@@ -189,12 +190,12 @@ static func resolve_active_worship(
 		base_wp = SHUGENJA_BASE_WP
 		var location_fr: int = SHUGENJA_LOCATION_FREE_RAISES.get(location_type, 0)
 		var free_raises: int = location_fr + artisan_free_raises
-		var kept: int = max(1, ring_value)
-		var rolled: int = max(1, theology_rank + ring_value)
-		var wound_pen: int = CharacterStats.get_wound_penalty(character)
-		# Ring+Skill roll (spellcasting pattern) — not routable through SkillResolver
+		var worship_mut: Dictionary = MutationSystem.get_skill_modifiers(character, "Lore: Theology") if character != null else {"rolled": 0, "kept": 0, "tn": 0}
+		var kept: int = maxi(1, ring_value + worship_mut["kept"])
+		var rolled: int = maxi(1, theology_rank + ring_value + worship_mut["rolled"])
+		var wound_pen: int = CharacterStats.get_wound_penalty(character) if character != null else 0
 		var result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
-		roll_total = result.total + free_raises * 5 + wound_pen
+		roll_total = result.total + free_raises * 5 + wound_pen + worship_mut["tn"]
 		roll_tn = SHUGENJA_WORSHIP_TN
 		if roll_total >= roll_tn:
 			var margin: int = roll_total - roll_tn

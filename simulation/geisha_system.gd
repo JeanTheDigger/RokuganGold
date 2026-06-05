@@ -316,8 +316,11 @@ static func _kolat_eavesdrop_roll(
 	var investigation: int = SkillResolver.get_skill_rank(kolat_agent, "Investigation")
 	var perception: int = kolat_agent.perception
 	var wound_pen: int = CharacterStats.get_wound_penalty(kolat_agent)
-	var roll_result: DiceResult = dice.roll_and_keep(investigation + 1, perception, true, false)
-	return (roll_result.total + wound_pen) >= tn
+	var inv_mut: Dictionary = MutationSystem.get_skill_modifiers(kolat_agent, "Investigation")
+	var inv_rolled: int = maxi(1, investigation + 1 + inv_mut["rolled"])
+	var inv_kept: int = maxi(1, perception + inv_mut["kept"])
+	var roll_result: DiceResult = dice.roll_and_keep(inv_rolled, inv_kept, true, false)
+	return (roll_result.total + wound_pen + inv_mut["tn"]) >= tn
 
 
 # ============================================================================

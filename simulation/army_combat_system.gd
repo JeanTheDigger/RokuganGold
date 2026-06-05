@@ -1418,15 +1418,16 @@ static func _roll_commander_survival(
 ) -> Dictionary:
 	var earth: int = CharacterStats.get_ring_value(commander, Enums.Ring.EARTH)
 	var battle: int = commander.skills.get("Battle", 0)
-	var rolled: int = earth + battle
-	var kept: int = earth
+	var cmd_mut: Dictionary = MutationSystem.get_skill_modifiers(commander, "Battle")
+	var rolled: int = maxi(1, earth + battle + cmd_mut["rolled"])
+	var kept: int = maxi(1, earth + cmd_mut["kept"])
 
 	if rolled <= 0 or kept <= 0:
 		return {"outcome": "dead", "roll_total": 0, "tn": tn}
 
 	var wound_pen: int = CharacterStats.get_wound_penalty(commander)
 	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, true, false)
-	var total: int = result.total + wound_pen
+	var total: int = result.total + wound_pen + cmd_mut["tn"]
 
 	if total >= tn:
 		return {"outcome": "survived", "roll_total": total, "tn": tn}

@@ -898,11 +898,11 @@ static func score_all(
 		var has_viable_pieces: bool = not ctx.known_objectives.get(
 			"theater_pieces_to_perform", []
 		).is_empty()
-		if ctx.context_flag == "AT_COURT" and not has_viable_pieces:
+		if ctx.context_flag == Enums.ContextFlag.AT_COURT and not has_viable_pieces:
 			option.objective_alignment = 40.0
 
 		# §57.22.12: +20 if not AT_COURT (writing is available regardless of location)
-		if ctx.context_flag != "AT_COURT":
+		if ctx.context_flag != Enums.ContextFlag.AT_COURT:
 			option.disposition_modifier += 20.0
 
 		# §57.22.12: +15 if active topic matching intended subject has momentum > 40

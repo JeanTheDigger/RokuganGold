@@ -636,15 +636,16 @@ static func _roll_captain_survival(
 ) -> Dictionary:
 	var earth: int = CharacterStats.get_ring_value(captain, Enums.Ring.EARTH)
 	var battle: int = captain.skills.get("Battle", 0)
-	var rolled: int = earth + battle
-	var kept: int = earth
+	var cap_mut: Dictionary = MutationSystem.get_skill_modifiers(captain, "Battle")
+	var rolled: int = maxi(1, earth + battle + cap_mut["rolled"])
+	var kept: int = maxi(1, earth + cap_mut["kept"])
 
 	if rolled <= 0 or kept <= 0:
 		return {"outcome": "dead", "roll_total": 0, "tn": tn}
 
 	var wound_pen: int = CharacterStats.get_wound_penalty(captain)
 	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, true, false)
-	var total: int = result.total + wound_pen
+	var total: int = result.total + wound_pen + cap_mut["tn"]
 
 	if total >= tn:
 		return {"outcome": "survived", "roll_total": total, "tn": tn}

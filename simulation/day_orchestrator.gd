@@ -14343,6 +14343,9 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"settlement_type",
 		"champion_conclusion_candidates", "local_tier3_candidates",
 		"has_active_contracts",
+		# Lord-specific keys (cleared so ex-lords don't retain stale data after succession)
+		"province_data", "settlements", "clans", "current_season",
+		"characters_by_id", "active_armies", "active_insurgencies",
 		# s45 Advantage/Disadvantage behavioral context (rebuilt daily by _inject_base_character_context)
 		"spy_network_focus", "true_love_target_id",
 		"compulsion_location_tags", "compulsion_active",

@@ -2065,7 +2065,7 @@ static func _execute_perform_worship(
 
 	var worship_result: Dictionary = WorshipSystem.resolve_active_worship(
 		char_type, is_shugenja, dice_engine, ring_value, theology_rank,
-		location_type, directed_fortune, total_artisan_fr,
+		location_type, directed_fortune, total_artisan_fr, character,
 	)
 
 	var province_id: int = action.target_province_id
@@ -3490,7 +3490,7 @@ static func _execute_perform_clan_induction(
 			"character_id": character.character_id, "target_npc_id": ronin_id,
 			"ic_day": ic_day, "season": ctx.season,
 			"reason": "ceremony_failed",
-			"effects": {"ceremony_failure_topic": true},
+			"effects": {"failed": true, "ceremony_failure_topic": true},
 		}
 
 	return {
