@@ -877,8 +877,11 @@ static func _execute_gossip(
 	var trait_val: int = _get_trait_value_by_name(character, primary_trait)
 	var gossip_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var gossip_wound: int = CharacterStats.get_wound_penalty(character)
-	var roll_result: Dictionary = dice_engine.roll_skill_check(
-		trait_val, skill_rank, tn, 0, gossip_wound
+	var gossip_mut: Dictionary = MutationSystem.get_skill_modifiers(character, primary_skill)
+	var gossip_rolled: int = maxi(1, trait_val + skill_rank + gossip_mut["rolled"])
+	var gossip_kept: int = maxi(1, trait_val + gossip_mut["kept"])
+	var roll_result: Dictionary = dice_engine.roll_check(
+		gossip_rolled, gossip_kept, tn, 0, gossip_wound, skill_rank > 0
 	)
 
 	var roll_total: int = roll_result.get("total", 0) + gossip_wc
@@ -944,8 +947,11 @@ static func _execute_public_insult(
 
 	var insult_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var insult_wound_a: int = CharacterStats.get_wound_penalty(character)
-	var attacker_total: int = dice_engine.roll_skill_check(
-		trait_val, skill_rank, 0, 0, insult_wound_a
+	var insult_mut_a: Dictionary = MutationSystem.get_skill_modifiers(character, primary_skill)
+	var attacker_total: int = dice_engine.roll_check(
+		maxi(1, trait_val + skill_rank + insult_mut_a["rolled"]),
+		maxi(1, trait_val + insult_mut_a["kept"]),
+		0, 0, insult_wound_a, skill_rank > 0
 	).get("total", 0) + insult_wc
 
 	var defender_total: int = 0
@@ -953,8 +959,11 @@ static func _execute_public_insult(
 		var def_etiquette: int = target.skills.get("Etiquette", 0)
 		var def_awareness: int = target.awareness
 		var insult_wound_d: int = CharacterStats.get_wound_penalty(target)
-		defender_total = dice_engine.roll_skill_check(
-			def_awareness, def_etiquette, 0, 0, insult_wound_d
+		var insult_mut_d: Dictionary = MutationSystem.get_skill_modifiers(target, "Etiquette")
+		defender_total = dice_engine.roll_check(
+			maxi(1, def_awareness + def_etiquette + insult_mut_d["rolled"]),
+			maxi(1, def_awareness + insult_mut_d["kept"]),
+			0, 0, insult_wound_d, def_etiquette > 0
 		).get("total", 0)
 
 	var success: bool = attacker_total >= defender_total
@@ -1078,8 +1087,11 @@ static func _execute_public_debate(
 	var a_trait_val: int = _get_trait_value_by_name(character, a_trait_name)
 	var debate_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var debate_wound_a: int = CharacterStats.get_wound_penalty(character)
-	var a_roll: int = dice_engine.roll_skill_check(
-		a_trait_val, a_skill_rank, 0, 0, debate_wound_a
+	var debate_mut_a: Dictionary = MutationSystem.get_skill_modifiers(character, primary_skill)
+	var a_roll: int = dice_engine.roll_check(
+		maxi(1, a_trait_val + a_skill_rank + debate_mut_a["rolled"]),
+		maxi(1, a_trait_val + debate_mut_a["kept"]),
+		0, 0, debate_wound_a, a_skill_rank > 0
 	).get("total", 0) + debate_wc
 
 	var b_roll: int = 0
@@ -1087,8 +1099,11 @@ static func _execute_public_debate(
 		var b_courtier: int = target.skills.get("Courtier", 0)
 		var b_awareness: int = target.awareness
 		var debate_wound_b: int = CharacterStats.get_wound_penalty(target)
-		b_roll = dice_engine.roll_skill_check(
-			b_awareness, b_courtier, 0, 0, debate_wound_b
+		var debate_mut_b: Dictionary = MutationSystem.get_skill_modifiers(target, "Courtier")
+		b_roll = dice_engine.roll_check(
+			maxi(1, b_awareness + b_courtier + debate_mut_b["rolled"]),
+			maxi(1, b_awareness + debate_mut_b["kept"]),
+			0, 0, debate_wound_b, b_courtier > 0
 		).get("total", 0)
 
 	var margin: int = a_roll - b_roll
@@ -3969,8 +3984,11 @@ static func _execute_contested_court_action(
 	var a_trait_val: int = _get_trait_value_by_name(character, a_trait_name)
 	var wc_bonus: int = _get_winter_court_skill_bonus(character, a_skill, ctx)
 	var contested_wound_a: int = CharacterStats.get_wound_penalty(character)
-	var attacker_roll: int = dice_engine.roll_skill_check(
-		a_trait_val, a_skill_rank, 0, 0, contested_wound_a
+	var contested_mut_a: Dictionary = MutationSystem.get_skill_modifiers(character, a_skill)
+	var attacker_roll: int = dice_engine.roll_check(
+		maxi(1, a_trait_val + a_skill_rank + contested_mut_a["rolled"]),
+		maxi(1, a_trait_val + contested_mut_a["kept"]),
+		0, 0, contested_wound_a, a_skill_rank > 0
 	).get("total", 0) + wc_bonus
 
 	var defender_roll: int = 0
@@ -3980,8 +3998,11 @@ static func _execute_contested_court_action(
 		var d_skill_rank: int = target.skills.get(d_skill, 0)
 		var d_trait_val: int = _get_trait_value_by_name(target, d_trait_name)
 		var contested_wound_d: int = CharacterStats.get_wound_penalty(target)
-		defender_roll = dice_engine.roll_skill_check(
-			d_trait_val, d_skill_rank, 0, 0, contested_wound_d
+		var contested_mut_d: Dictionary = MutationSystem.get_skill_modifiers(target, d_skill)
+		defender_roll = dice_engine.roll_check(
+			maxi(1, d_trait_val + d_skill_rank + contested_mut_d["rolled"]),
+			maxi(1, d_trait_val + contested_mut_d["kept"]),
+			0, 0, contested_wound_d, d_skill_rank > 0
 		).get("total", 0)
 
 	if action_id == "OFFER_FAVOR":
@@ -4139,8 +4160,11 @@ static func _execute_provoke_emotion(
 	var a_trait_val: int = character.awareness
 	var provoke_wc: int = _get_winter_court_skill_bonus(character, "Courtier", ctx)
 	var provoke_wound_a: int = CharacterStats.get_wound_penalty(character)
-	var attacker_roll: int = dice_engine.roll_skill_check(
-		a_trait_val, a_skill_rank, 0, 0, provoke_wound_a
+	var provoke_mut_a: Dictionary = MutationSystem.get_skill_modifiers(character, "Courtier")
+	var attacker_roll: int = dice_engine.roll_check(
+		maxi(1, a_trait_val + a_skill_rank + provoke_mut_a["rolled"]),
+		maxi(1, a_trait_val + provoke_mut_a["kept"]),
+		0, 0, provoke_wound_a, a_skill_rank > 0
 	).get("total", 0) + provoke_wc
 
 	var defender_roll: int = 0
@@ -4148,8 +4172,11 @@ static func _execute_provoke_emotion(
 		var d_etiquette: int = target.skills.get("Etiquette", 0)
 		var d_willpower: int = target.willpower
 		var provoke_wound_d: int = CharacterStats.get_wound_penalty(target)
-		defender_roll = dice_engine.roll_skill_check(
-			d_willpower, d_etiquette, 0, 0, provoke_wound_d
+		var provoke_mut_d: Dictionary = MutationSystem.get_skill_modifiers(target, "Etiquette")
+		defender_roll = dice_engine.roll_check(
+			maxi(1, d_willpower + d_etiquette + provoke_mut_d["rolled"]),
+			maxi(1, d_willpower + provoke_mut_d["kept"]),
+			0, 0, provoke_wound_d, d_etiquette > 0
 		).get("total", 0)
 
 	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
@@ -4213,8 +4240,11 @@ static func _execute_play_game(
 	var a_skill_rank: int = character.skills.get(game_skill, 0)
 	var a_trait_val: int = _get_trait_value_by_name(character, game_trait)
 	var game_wound_a: int = CharacterStats.get_wound_penalty(character)
-	var a_roll: int = dice_engine.roll_skill_check(
-		a_trait_val, a_skill_rank, 0, 0, game_wound_a
+	var game_mut_a: Dictionary = MutationSystem.get_skill_modifiers(character, game_skill)
+	var a_roll: int = dice_engine.roll_check(
+		maxi(1, a_trait_val + a_skill_rank + game_mut_a["rolled"]),
+		maxi(1, a_trait_val + game_mut_a["kept"]),
+		0, 0, game_wound_a, a_skill_rank > 0
 	).get("total", 0)
 
 	var b_roll: int = 0
@@ -4222,8 +4252,11 @@ static func _execute_play_game(
 		var b_skill_rank: int = target.skills.get(game_skill, 0)
 		var b_trait_val: int = _get_trait_value_by_name(target, game_trait)
 		var game_wound_b: int = CharacterStats.get_wound_penalty(target)
-		b_roll = dice_engine.roll_skill_check(
-			b_trait_val, b_skill_rank, 0, 0, game_wound_b
+		var game_mut_b: Dictionary = MutationSystem.get_skill_modifiers(target, game_skill)
+		b_roll = dice_engine.roll_check(
+			maxi(1, b_trait_val + b_skill_rank + game_mut_b["rolled"]),
+			maxi(1, b_trait_val + game_mut_b["kept"]),
+			0, 0, game_wound_b, b_skill_rank > 0
 		).get("total", 0)
 
 	var resolution: Dictionary = CourtActionSystem.resolve_play_game(
@@ -4238,6 +4271,7 @@ static func _execute_play_game(
 		"target_province_id": action.target_province_id,
 		"ic_day": ctx.ic_day,
 		"season": ctx.season,
+		"roll_total": a_roll,
 		"effects": {
 			"play_game_result": resolution,
 			"a_disposition_toward_b": resolution["a_disposition_toward_b"],
@@ -4281,8 +4315,11 @@ static func _execute_discern_need(
 	var a_trait_val: int = _get_trait_value_by_name(character, a_trait_name)
 	var discern_wc: int = _get_winter_court_skill_bonus(character, a_skill, ctx)
 	var discern_wound_a: int = CharacterStats.get_wound_penalty(character)
-	var attacker_roll: int = dice_engine.roll_skill_check(
-		a_trait_val, a_skill_rank, 0, 0, discern_wound_a
+	var discern_mut_a: Dictionary = MutationSystem.get_skill_modifiers(character, a_skill)
+	var attacker_roll: int = dice_engine.roll_check(
+		maxi(1, a_trait_val + a_skill_rank + discern_mut_a["rolled"]),
+		maxi(1, a_trait_val + discern_mut_a["kept"]),
+		0, 0, discern_wound_a, a_skill_rank > 0
 	).get("total", 0) + discern_wc
 
 	var defender_roll: int = 0
@@ -4290,8 +4327,11 @@ static func _execute_discern_need(
 		var d_etiquette: int = target.skills.get("Etiquette", 0)
 		var d_awareness: int = target.awareness
 		var discern_wound_d: int = CharacterStats.get_wound_penalty(target)
-		defender_roll = dice_engine.roll_skill_check(
-			d_awareness, d_etiquette, 0, 0, discern_wound_d
+		var discern_mut_d: Dictionary = MutationSystem.get_skill_modifiers(target, "Etiquette")
+		defender_roll = dice_engine.roll_check(
+			maxi(1, d_awareness + d_etiquette + discern_mut_d["rolled"]),
+			maxi(1, d_awareness + discern_mut_d["kept"]),
+			0, 0, discern_wound_d, d_etiquette > 0
 		).get("total", 0)
 
 	var resolution: Dictionary = CourtActionSystem.resolve_discern_need(
@@ -4734,8 +4774,11 @@ static func _execute_ask_for_introduction(
 	var has_emphasis: bool = target_is_kuge and character.skills.has("Bureaucracy")
 	var intro_wc: int = _get_winter_court_skill_bonus(character, skill, ctx)
 	var intro_wound: int = CharacterStats.get_wound_penalty(character)
-	var roll_result: Dictionary = dice_engine.roll_skill_check(
-		trait_val, skill_rank, 0, 0, intro_wound, has_emphasis
+	var intro_mut: Dictionary = MutationSystem.get_skill_modifiers(character, skill)
+	var intro_rolled: int = maxi(1, trait_val + skill_rank + intro_mut["rolled"])
+	var intro_kept: int = maxi(1, trait_val + intro_mut["kept"])
+	var roll_result: Dictionary = dice_engine.roll_check(
+		intro_rolled, intro_kept, 0, 0, intro_wound, skill_rank > 0, has_emphasis
 	)
 	var roll_total: int = roll_result.get("total", 0) + intro_wc
 
@@ -4783,7 +4826,12 @@ static func _execute_observe_court_attendees(
 	var skill_rank: int = character.skills.get("Investigation", 0)
 	var trait_val: int = character.perception
 	var observe_wound: int = CharacterStats.get_wound_penalty(character)
-	var roll_result: Dictionary = dice_engine.roll_skill_check(trait_val, skill_rank, 0, 0, observe_wound)
+	var observe_mut: Dictionary = MutationSystem.get_skill_modifiers(character, "Investigation")
+	var roll_result: Dictionary = dice_engine.roll_check(
+		maxi(1, trait_val + skill_rank + observe_mut["rolled"]),
+		maxi(1, trait_val + observe_mut["kept"]),
+		0, 0, observe_wound, skill_rank > 0
+	)
 	var roll_total: int = roll_result.get("total", 0)
 
 	var observable_ids: Array = action.metadata.get("observable_attendee_ids", [])

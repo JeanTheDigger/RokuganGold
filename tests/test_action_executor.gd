@@ -2722,3 +2722,205 @@ func test_observe_court_attendees_wound_penalty_reduces_roll() -> void:
 				action, cw, ctx_l, dice, chars_by_id)
 			return r.get("roll_total", 0),
 		"Wounded observer should have lower roll totals")
+
+
+# -- Court Action Mutation Modifier Tests --------------------------------------
+
+
+func _make_mutated_char(id: int) -> L5RCharacterData:
+	var c := _make_healthy_char(id)
+	var m := MutationData.new()
+	m.mutation_type = Enums.MutationType.FOUL_ODOR
+	c.mutations = [m]
+	return c
+
+
+func _run_mutation_comparison(
+	normal_fn: Callable, mutated_fn: Callable, label: String
+) -> void:
+	var normal_totals: Array[int] = []
+	var mutated_totals: Array[int] = []
+	for seed_val: int in range(100):
+		var d1 := DiceEngine.new()
+		d1.set_seed(seed_val)
+		normal_totals.append(normal_fn.call(d1))
+		var d2 := DiceEngine.new()
+		d2.set_seed(seed_val)
+		mutated_totals.append(mutated_fn.call(d2))
+	var normal_avg: float = 0.0
+	var mutated_avg: float = 0.0
+	for i: int in range(100):
+		normal_avg += normal_totals[i]
+		mutated_avg += mutated_totals[i]
+	normal_avg /= 100.0
+	mutated_avg /= 100.0
+	assert_true(normal_avg > mutated_avg + 2.0,
+		"%s (normal=%.1f, mutated=%.1f)" % [label, normal_avg, mutated_avg])
+
+
+func test_gossip_mutation_modifier_reduces_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_mutation_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("GOSSIP", 10)
+			action.metadata = {"gossip_subject_id": 10}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_gossip(
+				action, ch, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cm := _make_mutated_char(2)
+			var action := _make_action("GOSSIP", 10)
+			action.metadata = {"gossip_subject_id": 10}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_gossip(
+				action, cm, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		"Mutated gossiper (FOUL_ODOR) should have lower roll totals")
+
+
+func test_public_insult_mutation_modifier_reduces_attacker_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_mutation_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("PUBLIC_INSULT", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_public_insult(
+				action, ch, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cm := _make_mutated_char(2)
+			var action := _make_action("PUBLIC_INSULT", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_public_insult(
+				action, cm, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		"Mutated insulter (FOUL_ODOR) should have lower roll totals")
+
+
+func test_contested_court_charm_mutation_modifier_reduces_attacker_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_mutation_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("CHARM", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_contested_court_action(
+				action, "CHARM", ch, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cm := _make_mutated_char(2)
+			var action := _make_action("CHARM", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_contested_court_action(
+				action, "CHARM", cm, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		"Mutated charmer (FOUL_ODOR) should have lower roll totals")
+
+
+func test_provoke_emotion_mutation_modifier_reduces_attacker_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_mutation_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("PROVOKE_EMOTION", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_provoke_emotion(
+				action, ch, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cm := _make_mutated_char(2)
+			var action := _make_action("PROVOKE_EMOTION", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_provoke_emotion(
+				action, cm, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		"Mutated provoker (FOUL_ODOR) should have lower roll totals")
+
+
+func test_discern_need_mutation_modifier_affects_attacker_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_mutation_comparison(
+		func(dice: DiceEngine) -> int:
+			var cm := _make_healthy_char(2)
+			var me := MutationData.new()
+			me.mutation_type = Enums.MutationType.EXTRA_EYE
+			cm.mutations = [me]
+			var action := _make_action("DISCERN_NEED", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_discern_need(
+				action, cm, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("DISCERN_NEED", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_discern_need(
+				action, ch, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		"EXTRA_EYE discerner should have higher roll totals (Investigation is perception-based)")
+
+
+func test_observe_court_attendees_mutation_modifier_affects_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_mutation_comparison(
+		func(dice: DiceEngine) -> int:
+			var cm := _make_healthy_char(2)
+			var me := MutationData.new()
+			me.mutation_type = Enums.MutationType.EXTRA_EYE
+			cm.mutations = [me]
+			var action := _make_action("OBSERVE_COURT_ATTENDEES", -1)
+			action.metadata = {"observable_attendee_ids": [10]}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_observe_court_attendees(
+				action, cm, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("OBSERVE_COURT_ATTENDEES", -1)
+			action.metadata = {"observable_attendee_ids": [10]}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_observe_court_attendees(
+				action, ch, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		"EXTRA_EYE observer should have higher roll totals (Investigation is perception-based)")

@@ -98,10 +98,13 @@ static func resolve_cast(
 	# 5. Blood evidence concealment roll — Stealth/Agility per CLAUDE.md Decision 5
 	var stealth_rank: int = caster.skills.get("Stealth", 0)
 	var wound_pen: int = CharacterStats.get_wound_penalty(caster)
-	var concealment_result: Dictionary = dice_engine.roll_skill_check(
-		caster.agility, stealth_rank, 0
+	var stealth_mut: Dictionary = MutationSystem.get_skill_modifiers(caster, "Stealth")
+	var conceal_rolled: int = maxi(1, caster.agility + stealth_rank + stealth_mut["rolled"])
+	var conceal_kept: int = maxi(1, caster.agility + stealth_mut["kept"])
+	var concealment_result: Dictionary = dice_engine.roll_check(
+		conceal_rolled, conceal_kept, 0, 0, wound_pen, stealth_rank > 0
 	)
-	var blood_concealment_tn: int = concealment_result["total"] + wound_pen
+	var blood_concealment_tn: int = concealment_result["total"]
 
 	# 6. Crime record — concealment_tn used by blood evidence detection (Channel 2)
 	var record: CrimeRecord = CrimeSystem.create_crime_record(
