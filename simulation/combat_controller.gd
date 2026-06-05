@@ -737,13 +737,17 @@ func try_stealth_move(dx: int, dy: int) -> Dictionary:
 	if MovementSystem.is_closed_door(target_tile):
 		# Stealth doesn't auto-open doors (would make noise).
 		return {"blocked": true, "reason": "closed_door"}
-	if target_tile == Enums.TileType.ZONE_EXIT:
-		return {"exited": true, "exit_x": tx, "exit_y": ty}
 
-	# Enemy in target tile while stealthy → stealth kill prompt, not movement.
+	# Enemy in target tile while stealthy → stealth kill prompt (checked before zone
+	# exit so an enemy guarding the exit is offered for stealth kill rather than the
+	# player slipping past them).
 	var target_es: EntityState = _entity_at(tx, ty)
 	if target_es != null and target_es.faction == FACTION_ENEMY:
 		return {"stealth_kill_available": true, "target_id": target_es.entity_id}
+
+	# Zone exit (only reachable when the tile has no enemy on it).
+	if target_tile == Enums.TileType.ZONE_EXIT:
+		return {"exited": true, "exit_x": tx, "exit_y": ty}
 
 	var step: Dictionary = MovementSystem.check_step(_map, player.x, player.y, tx, ty)
 	if not step.ok:

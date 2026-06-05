@@ -2182,3 +2182,43 @@ func test_zone_exit_works_when_tile_is_clear() -> void:
 		"exited result must carry the correct exit x coordinate")
 	assert_eq(result.get("exit_y", -1), 5,
 		"exited result must carry the correct exit y coordinate")
+
+
+# =============================================================================
+# -- Bug fix regression: stealth enemy on ZONE_EXIT tile (Bug 6) -------------
+# =============================================================================
+
+func test_stealth_enemy_on_exit_tile_offers_kill_not_exit() -> void:
+	# Regression for Bug 6: try_stealth_move had the same ordering bug as Bug 5.
+	# An enemy on a ZONE_EXIT tile caused stealth move to return exited=true
+	# instead of stealth_kill_available=true.
+	#
+	# Layout (row y=5):
+	#   col: 5(player)  6(enemy standing on ZONE_EXIT)
+	var session := _make_session(5, 5, [
+		{"unit_type": "SIMPLE_BANDIT", "x": 6, "y": 5, "seed": 0}
+	])
+	session.map.set_tile(6, 5, Enums.TileType.ZONE_EXIT)
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
+	var enemy_es: CombatController.EntityState = cc.get_enemies_at(6, 5)[0]
+	cc._player_stealth = true
+	var result: Dictionary = cc.try_stealth_move(1, 0)
+	assert_false(result.get("exited", false),
+		"stealth move must NOT exit zone when an enemy guards the exit tile")
+	assert_true(result.get("stealth_kill_available", false),
+		"stealth move must offer stealth kill when enemy is on the exit tile")
+	assert_eq(result.get("target_id", -1), enemy_es.entity_id,
+		"stealth kill offer must target the enemy on the exit tile")
+
+
+func test_stealth_zone_exit_works_when_clear() -> void:
+	# Positive regression: stealth move onto a clear ZONE_EXIT must still exit.
+	var session := _make_session(5, 5, [])
+	session.map.set_tile(6, 5, Enums.TileType.ZONE_EXIT)
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
+	cc._player_stealth = true
+	var result: Dictionary = cc.try_stealth_move(1, 0)
+	assert_true(result.get("exited", false),
+		"stealth move must exit when moving onto a clear ZONE_EXIT tile")
+	assert_eq(result.get("exit_x", -1), 6,
+		"exited result must carry the correct exit x coordinate")
