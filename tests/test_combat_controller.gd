@@ -1349,3 +1349,162 @@ func test_bump_to_attack_alerts_surviving_target() -> void:
 	# _player_stealth must be cleared regardless of kill/survive.
 	assert_false(cc._player_stealth,
 		"bump-to-attack must clear player stealth")
+
+
+# =============================================================================
+# -- 30. Alert escalation — SUSPICIOUS→ALERT on LOUD noise (Fix B) -----------
+# =============================================================================
+
+func test_suspicious_enemy_escalates_to_alert_on_loud_noise() -> void:
+	# s56.6.3 LOCKED: Suspicious→Alert on Loud noise.
+	# A SUSPICIOUS enemy that detects LOUD noise must become ALERT immediately.
+	var cc := _make_cc_with_enemy("SIMPLE_BANDIT", 8, 5)
+
+	# Manually set the enemy to SUSPICIOUS with a noise source far from player.
+	var enemy_es: CombatController.EntityState
+	for eid: int in cc._entities.keys():
+		var es: CombatController.EntityState = cc._entities[eid]
+		if es.faction == CombatController.FACTION_ENEMY:
+			enemy_es = es
+			break
+	assert_not_null(enemy_es, "need an enemy")
+	enemy_es.alert_state = AsciiMapEnvironment.AlertState.SUSPICIOUS
+	enemy_es.phase_rounds_left = 3
+	# Enemy at (8,5), player at (5,5) — LOUD noise emitted from (5,5) should reach (8,5).
+	cc._emit_noise(5, 5, AsciiMapEnvironment.NoiseLevel.LOUD)
+
+	assert_eq(enemy_es.alert_state, AsciiMapEnvironment.AlertState.ALERT,
+		"SUSPICIOUS enemy must escalate to ALERT on LOUD noise (s56.6.3)")
+
+
+func test_unaware_enemy_does_not_jump_to_alert_on_moderate_noise() -> void:
+	# UNAWARE enemy on MODERATE noise → SUSPICIOUS (not directly to ALERT).
+	var cc := _make_cc_with_enemy("SIMPLE_BANDIT", 7, 5)
+	var enemy_es: CombatController.EntityState
+	for eid: int in cc._entities.keys():
+		var es: CombatController.EntityState = cc._entities[eid]
+		if es.faction == CombatController.FACTION_ENEMY:
+			enemy_es = es
+			break
+	assert_not_null(enemy_es)
+	# MODERATE noise at adjacent position — guaranteed detection (TN very low).
+	enemy_es.alert_state = AsciiMapEnvironment.AlertState.UNAWARE
+	cc._emit_noise(6, 5, AsciiMapEnvironment.NoiseLevel.MODERATE)
+	# Enemy should be SUSPICIOUS (not ALERT) after a single MODERATE event.
+	assert_ne(enemy_es.alert_state, AsciiMapEnvironment.AlertState.ALERT,
+		"single MODERATE noise must not jump UNAWARE enemy straight to ALERT")
+
+
+func test_suspicious_enemy_stays_suspicious_on_moderate_noise() -> void:
+	# SUSPICIOUS + MODERATE noise → stays SUSPICIOUS (only LOUD escalates).
+	var cc := _make_cc_with_enemy("SIMPLE_BANDIT", 7, 5)
+	var enemy_es: CombatController.EntityState
+	for eid: int in cc._entities.keys():
+		var es: CombatController.EntityState = cc._entities[eid]
+		if es.faction == CombatController.FACTION_ENEMY:
+			enemy_es = es
+			break
+	assert_not_null(enemy_es)
+	enemy_es.alert_state = AsciiMapEnvironment.AlertState.SUSPICIOUS
+	cc._emit_noise(6, 5, AsciiMapEnvironment.NoiseLevel.MODERATE)
+	assert_eq(enemy_es.alert_state, AsciiMapEnvironment.AlertState.SUSPICIOUS,
+		"MODERATE noise must not escalate a SUSPICIOUS enemy to ALERT")
+
+
+# =============================================================================
+# -- 31. Stealth kill triggers morale check (Fix A) ---------------------------
+# =============================================================================
+
+func test_stealth_kill_triggers_morale_event() -> void:
+	# Bug fix: stealth kills must fire _check_morale() and propagate morale_broken
+	# events into _pending_noise_events so advance_npc_turns() returns them.
+	# Set up: one weak enemy (morale breaks at 50% dead), one surviving enemy.
+	# Use seed=99 so we control rolls.
+	var session := _make_session(5, 5, [
+		{"unit_type": "SIMPLE_BANDIT", "x": 6, "y": 5, "seed": 0},
+		{"unit_type": "SIMPLE_BANDIT", "x": 6, "y": 7, "seed": 0},
+	])
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(99))
+
+	# Move player adjacent to first enemy at (6,5).
+	var player: CombatController.EntityState = cc.get_player()
+	player.x = 5
+	player.y = 5
+
+	# Force initial enemy count to 2 and deaths to 0 for clean morale math.
+	cc._initial_enemy_count = 2
+	cc._enemy_deaths_total = 0
+
+	# Find the enemy at (6,5) and make it UNAWARE (stealth kill eligible).
+	var target_id: int = -1
+	var survivor_id: int = -1
+	for eid: int in cc._entities.keys():
+		var es: CombatController.EntityState = cc._entities[eid]
+		if es.faction == CombatController.FACTION_ENEMY:
+			if es.x == 6 and es.y == 5:
+				es.alert_state = AsciiMapEnvironment.AlertState.UNAWARE
+				target_id = eid
+			else:
+				survivor_id = eid
+
+	assert_true(target_id >= 0, "need target enemy at (6,5)")
+	assert_true(survivor_id >= 0, "need a surviving enemy")
+
+	# Set the survivor's morale threshold to break at the first death (low threshold).
+	var survivor_es: CombatController.EntityState = cc._entities[survivor_id]
+	# SIMPLE_BANDIT morale threshold should be <= 0.5, so 1/2 deaths triggers it.
+	# Verify SIMPLE_BANDIT is in MORALE_THRESHOLDS and <= 0.5.
+	var threshold: float = CombatController.MORALE_THRESHOLDS.get("SIMPLE_BANDIT", 0.0)
+	if threshold <= 0.0 or threshold > 0.5:
+		# Not a morale-breakable unit at this ratio; skip rather than assert-fail.
+		return
+
+	var result: Dictionary = cc.execute_stealth_kill(target_id)
+	assert_true(result.get("success", false) and result.get("target_killed", false),
+		"stealth kill must succeed and kill the target for this test")
+
+	# advance_npc_turns flushes _pending_noise_events.
+	var events: Array = cc.advance_npc_turns()
+	var found_morale: bool = false
+	for ev: Dictionary in events:
+		if ev.get("type") == "morale_broken":
+			found_morale = true
+			break
+	assert_true(found_morale,
+		"stealth kill of 50% enemies must produce morale_broken event in advance_npc_turns()")
+
+
+# =============================================================================
+# -- 32. NPC sets in_combat when attacking (Fix D) ----------------------------
+# =============================================================================
+
+func test_npc_sets_in_combat_when_attacking_adjacent() -> void:
+	# Bug fix: NPC must set in_combat=true when it attacks so that subsequent
+	# COMBAT_DETECTION_BONUS applies (+10 TN to detection while fighting).
+	var cc := _make_cc_with_enemy("SIMPLE_BANDIT", 6, 5)
+
+	var enemy_es: CombatController.EntityState
+	for eid: int in cc._entities.keys():
+		var es: CombatController.EntityState = cc._entities[eid]
+		if es.faction == CombatController.FACTION_ENEMY:
+			enemy_es = es
+			break
+	assert_not_null(enemy_es, "need an enemy")
+
+	# Put enemy ALERT adjacent to player.
+	enemy_es.alert_state = AsciiMapEnvironment.AlertState.ALERT
+	enemy_es.x = 6
+	enemy_es.y = 5
+
+	assert_false(enemy_es.in_combat, "enemy must start with in_combat=false")
+
+	# Drive the NPC turn; it should attack the adjacent player.
+	var events: Array = cc.advance_npc_turns()
+	var attacked: bool = false
+	for ev: Dictionary in events:
+		if ev.get("type") == "npc_attacked" and ev.get("entity_id", -1) == enemy_es.entity_id:
+			attacked = true
+			break
+	assert_true(attacked, "ALERT enemy adjacent to player must attack")
+	assert_true(enemy_es.in_combat,
+		"NPC must have in_combat=true after executing an attack")

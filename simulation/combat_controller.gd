@@ -851,6 +851,8 @@ func execute_stealth_kill(target_id: int) -> Dictionary:
 		# s56.6.3 LOCKED: death on first hit → Quiet noise.
 		_add_corpse(target.x, target.y)
 		_emit_noise(player.x, player.y, AsciiMapEnvironment.NoiseLevel.QUIET)
+		var morale_events: Array = _check_morale()
+		_pending_noise_events.append_array(morale_events)
 	else:
 		# s56.6.3 LOCKED: survival → Loud noise + immediate propagation.
 		target.alert_state = AsciiMapEnvironment.AlertState.ALERT
@@ -1165,6 +1167,7 @@ func _npc_pursue_and_attack(es: EntityState) -> Dictionary:
 		# Aggressive style: shout on attack.
 		if es.investigation_style == "aggressive":
 			_emit_noise(es.x, es.y, AsciiMapEnvironment.NoiseLevel.LOUD)
+		es.in_combat = true
 		return {
 			"type":          "npc_attacked",
 			"entity_id":     es.entity_id,
@@ -1190,6 +1193,10 @@ func _npc_pursue_and_attack(es: EntityState) -> Dictionary:
 		var weapon: String = IndividualCombat.pick_best_weapon(es.character)
 		var attack_result: Dictionary = _resolve_melee_attack(es, player, weapon, 0)
 		_emit_noise(es.x, es.y, AsciiMapEnvironment.NoiseLevel.MODERATE)
+		# Aggressive style: shout on charge-attack.
+		if es.investigation_style == "aggressive":
+			_emit_noise(es.x, es.y, AsciiMapEnvironment.NoiseLevel.LOUD)
+		es.in_combat = true
 		return {
 			"type":          "npc_attacked",
 			"entity_id":     es.entity_id,
@@ -1369,6 +1376,17 @@ func _emit_noise(sx: int, sy: int, noise_level: int) -> void:
 				es.phase_rounds_left = SUSPICIOUS_SEARCH_ROUNDS
 				_pending_noise_events.append({
 					"type": "noise_detected",
+					"entity_id": es.entity_id,
+					"unit_type": es.unit_type,
+				})
+			# s56.6.3 LOCKED: Suspicious→Alert on Loud or Very Loud noise.
+			elif es.alert_state == AsciiMapEnvironment.AlertState.SUSPICIOUS \
+					and (noise_level == AsciiMapEnvironment.NoiseLevel.LOUD \
+					or noise_level == AsciiMapEnvironment.NoiseLevel.VERY_LOUD):
+				es.alert_state = AsciiMapEnvironment.AlertState.ALERT
+				es.alert_rounds_lost = 0
+				_pending_noise_events.append({
+					"type": "escalated_to_alert",
 					"entity_id": es.entity_id,
 					"unit_type": es.unit_type,
 				})
