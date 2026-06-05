@@ -234,10 +234,15 @@ func _run_npc_turns_and_sync() -> void:
 	queue_redraw()
 	for ev: Dictionary in events:
 		combat_event.emit(ev)
+		# Flatten morale events nested inside npc_attacked results.
+		for mev: Dictionary in ev.get("attack_result", {}).get("morale_events", []):
+			combat_event.emit(mev)
 	# Check terminal states.
 	if _combat_controller.is_player_dead():
+		combat_event.emit({"type": "player_died"})
 		player_died.emit()
 	elif _combat_controller.is_mission_complete():
+		combat_event.emit({"type": "mission_complete"})
 		mission_complete.emit()
 
 
@@ -271,9 +276,26 @@ func _apply_player_result(result: Dictionary) -> void:
 		_run_npc_turns_and_sync()
 		return
 
-	if result.get("attacked") or result.get("success"):
-		# bump-to-attack or stealth kill — emit combat_event with result.
-		combat_event.emit(result)
+	if result.get("attacked") or result.has("success"):
+		# bump-to-attack or stealth kill attempt (success or failure).
+		if result.get("success", false):
+			combat_event.emit(result)
+		elif result.get("approach_failed") or result.get("attack_failed"):
+			# Stealth approach/attack failed → target alerted; show stealth_failed.
+			combat_event.emit({"type": "stealth_failed"})
+		else:
+			combat_event.emit(result)
+		# Emit any morale events triggered by the kill.
+		for mev: Dictionary in result.get("attack_result", {}).get("morale_events", []):
+			combat_event.emit(mev)
+		# Mission complete if last enemy fell.
+		if _combat_controller != null and _combat_controller.is_mission_complete():
+			_sync_entities_from_cc()
+			_recompute_fov()
+			queue_redraw()
+			combat_event.emit({"type": "mission_complete"})
+			mission_complete.emit()
+			return
 		_sync_entities_from_cc()
 		_recompute_fov()
 		queue_redraw()

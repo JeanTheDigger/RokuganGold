@@ -160,6 +160,10 @@ var _initial_enemy_count: int = 0
 ## Set of tile positions that currently hold a visible corpse.
 var _corpse_positions: Array[Vector2i] = []
 
+## Events collected during the current action (e.g. noise detection from _emit_noise).
+## Flushed by advance_npc_turns() and player action methods.
+var _pending_noise_events: Array = []
+
 ## Mission objective tile positions.
 var _objective_slots: Array = []
 
@@ -539,7 +543,8 @@ func get_all_entities() -> Array:
 func get_enemies_at(px: int, py: int) -> Array:
 	var result: Array = []
 	for es: EntityState in _entities.values():
-		if es.faction == FACTION_ENEMY and es.is_alive and es.x == px and es.y == py:
+		if es.faction == FACTION_ENEMY and es.is_alive and not _is_entity_dead(es) \
+				and es.x == px and es.y == py:
 			result.append(es)
 	return result
 
@@ -676,11 +681,15 @@ func try_move_player(dx: int, dy: int) -> Dictionary:
 		# Melee noise: MODERATE normally, LOUD if a shout (aggressive attacker).
 		_emit_noise(player.x, player.y, AsciiMapEnvironment.NoiseLevel.MODERATE)
 		return {
-			"attacked":     true,
-			"target_id":    target_es.entity_id,
+			"type":          "attacked",
+			"attacked":      true,
+			"target_id":     target_es.entity_id,
+			"unit_type":     target_es.unit_type,
+			"damage":        result.get("wounds_final", 0),
+			"killed":        result.get("target_killed", false),
 			"attack_result": result,
-			"player_x": player.x,
-			"player_y": player.y,
+			"player_x":      player.x,
+			"player_y":      player.y,
 		}
 
 	# Normal movement.
@@ -768,7 +777,8 @@ func execute_stealth_kill(target_id: int) -> Dictionary:
 		return {"success": false, "reason": "invalid_target"}
 	if not _is_adjacent(player.x, player.y, target.x, target.y):
 		return {"success": false, "reason": "not_adjacent"}
-	if target.alert_state == AsciiMapEnvironment.AlertState.ALERT:
+	# s56.6.3 LOCKED: stealth kill requires UNAWARE or SLEEPING target only.
+	if target.alert_state >= AsciiMapEnvironment.AlertState.SUSPICIOUS:
 		return {"success": false, "reason": "target_is_alert"}
 	if target.faction != FACTION_ENEMY:
 		return {"success": false, "reason": "not_an_enemy"}
@@ -840,15 +850,17 @@ func execute_stealth_kill(target_id: int) -> Dictionary:
 		_emit_noise(player.x, player.y, AsciiMapEnvironment.NoiseLevel.LOUD)
 
 	return {
-		"success": true,
+		"type":          "stealth_kill",
+		"success":       true,
+		"unit_type":     target.unit_type,
 		"approach_roll": approach_roll["total"],
-		"approach_tn": approach_tn,
-		"attack_roll": atk["roll"],
-		"flat_atn": flat_atn,
-		"raw_damage": dmg["raw_damage"],
+		"approach_tn":   approach_tn,
+		"attack_roll":   atk["roll"],
+		"flat_atn":      flat_atn,
+		"raw_damage":    dmg["raw_damage"],
 		"wounds_applied": wounds["final_damage"],
 		"target_killed": target_killed,
-		"target_id": target_id,
+		"target_id":     target_id,
 	}
 
 
@@ -908,6 +920,7 @@ func _resolve_melee_attack(
 	var dmg_dict: Dictionary = {}
 	var wounds_dict: Dictionary = {}
 	var killed: bool = false
+	var morale_events: Array = []
 
 	if atk.get("hit", false):
 		dmg_dict = IndividualCombat.resolve_damage(
@@ -921,19 +934,20 @@ func _resolve_melee_attack(
 			if defender_es.faction == FACTION_ENEMY:
 				_enemy_deaths_total += 1
 				_add_corpse(defender_es.x, defender_es.y)
-				_check_morale()
+				morale_events = _check_morale()
 
 	return {
-		"hit":          atk.get("hit", false),
-		"attack_roll":  atk.get("roll", 0),
-		"armor_tn":     armor_tn,
-		"raw_damage":   dmg_dict.get("raw_damage", 0),
-		"wounds_final": wounds_dict.get("final_damage", 0),
+		"hit":           atk.get("hit", false),
+		"attack_roll":   atk.get("roll", 0),
+		"armor_tn":      armor_tn,
+		"raw_damage":    dmg_dict.get("raw_damage", 0),
+		"wounds_final":  wounds_dict.get("final_damage", 0),
 		"target_killed": killed,
-		"attacker_id":  attacker_es.entity_id,
-		"defender_id":  defender_es.entity_id,
-		"weapon":       weapon,
-		"raises":       raises,
+		"attacker_id":   attacker_es.entity_id,
+		"defender_id":   defender_es.entity_id,
+		"weapon":        weapon,
+		"raises":        raises,
+		"morale_events": morale_events,
 	}
 
 
@@ -947,6 +961,10 @@ func advance_npc_turns() -> Array:
 	_round += 1
 	var events: Array = []
 
+	# Flush noise detection events that fired during the player's action.
+	events.append_array(_pending_noise_events)
+	_pending_noise_events.clear()
+
 	# Roll initiative for all living non-player entities.
 	var turn_order: Array = _build_initiative_order()
 
@@ -959,6 +977,9 @@ func advance_npc_turns() -> Array:
 		es.move_budget_used = 0
 		var turn_events: Array = _npc_turn(es)
 		events.append_array(turn_events)
+		# Flush any noise events emitted during NPC turns.
+		events.append_array(_pending_noise_events)
+		_pending_noise_events.clear()
 
 	# After all NPCs move, player body-discovery check.
 	_check_body_discovery()
@@ -1002,9 +1023,11 @@ func _npc_turn(es: EntityState) -> Array:
 		if es.alert_state == AsciiMapEnvironment.AlertState.UNAWARE:
 			es.alert_state = AsciiMapEnvironment.AlertState.SUSPICIOUS
 			es.phase_rounds_left = SUSPICIOUS_SEARCH_ROUNDS
-		if es.alert_state == AsciiMapEnvironment.AlertState.SUSPICIOUS:
+			events.append({"type": "noise_detected", "entity_id": es.entity_id, "unit_type": es.unit_type})
+		elif es.alert_state == AsciiMapEnvironment.AlertState.SUSPICIOUS:
 			es.alert_state = AsciiMapEnvironment.AlertState.ALERT
 			es.alert_rounds_lost = 0
+			events.append({"type": "escalated_to_alert", "entity_id": es.entity_id, "unit_type": es.unit_type})
 		var player: EntityState = get_player()
 		if player != null:
 			es.noise_src_x = player.x
@@ -1065,6 +1088,7 @@ func _npc_investigate(es: EntityState) -> Dictionary:
 		moved = _npc_move_toward(es, es.noise_src_x, es.noise_src_y, budget)
 
 	# If player is now visible, escalate immediately.
+	# (The detection event was already added by _npc_turn; just update state here.)
 	if _npc_can_see_player(es):
 		es.alert_state = AsciiMapEnvironment.AlertState.ALERT
 		es.alert_rounds_lost = 0
@@ -1072,7 +1096,7 @@ func _npc_investigate(es: EntityState) -> Dictionary:
 		if player != null:
 			es.noise_src_x = player.x
 			es.noise_src_y = player.y
-		return {"type": "escalated_to_alert", "entity_id": es.entity_id}
+		return {}  # event generated by _npc_turn detection block
 
 	# Tick down investigation phase.
 	es.phase_rounds_left -= 1
@@ -1119,9 +1143,12 @@ func _npc_pursue_and_attack(es: EntityState) -> Dictionary:
 		if es.investigation_style == "aggressive":
 			_emit_noise(es.x, es.y, AsciiMapEnvironment.NoiseLevel.LOUD)
 		return {
-			"type": "npc_attacked",
-			"entity_id": es.entity_id,
-			"target_id": player.entity_id,
+			"type":          "npc_attacked",
+			"entity_id":     es.entity_id,
+			"target_id":     player.entity_id,
+			"unit_type":     es.unit_type,
+			"damage":        attack_result.get("wounds_final", 0),
+			"player_killed": attack_result.get("target_killed", false),
 			"attack_result": attack_result,
 		}
 
@@ -1141,11 +1168,14 @@ func _npc_pursue_and_attack(es: EntityState) -> Dictionary:
 		var attack_result: Dictionary = _resolve_melee_attack(es, player, weapon, 0)
 		_emit_noise(es.x, es.y, AsciiMapEnvironment.NoiseLevel.MODERATE)
 		return {
-			"type": "npc_attacked",
-			"entity_id": es.entity_id,
-			"target_id": player.entity_id,
+			"type":          "npc_attacked",
+			"entity_id":     es.entity_id,
+			"target_id":     player.entity_id,
+			"unit_type":     es.unit_type,
+			"damage":        attack_result.get("wounds_final", 0),
+			"player_killed": attack_result.get("target_killed", false),
 			"attack_result": attack_result,
-			"moved_first": moved,
+			"moved_first":   moved,
 		}
 
 	return {"type": "npc_moving", "entity_id": es.entity_id, "moved": moved}
@@ -1169,7 +1199,12 @@ func _npc_flee(es: EntityState) -> Dictionary:
 	if step.ok:
 		es.x = away_x
 		es.y = away_y
-	return {"type": "npc_fleeing", "entity_id": es.entity_id}
+		# Fled through a zone exit → remove from combat permanently.
+		if step.get("is_exit", false):
+			es.is_alive = false
+			_enemy_deaths_total += 1
+			return {"type": "npc_fled", "entity_id": es.entity_id, "unit_type": es.unit_type}
+	return {"type": "npc_fleeing", "entity_id": es.entity_id, "unit_type": es.unit_type}
 
 
 # =============================================================================
@@ -1309,6 +1344,11 @@ func _emit_noise(sx: int, sy: int, noise_level: int) -> void:
 			if es.alert_state == AsciiMapEnvironment.AlertState.UNAWARE:
 				es.alert_state = AsciiMapEnvironment.AlertState.SUSPICIOUS
 				es.phase_rounds_left = SUSPICIOUS_SEARCH_ROUNDS
+				_pending_noise_events.append({
+					"type": "noise_detected",
+					"entity_id": es.entity_id,
+					"unit_type": es.unit_type,
+				})
 			es.noise_src_x = sx
 			es.noise_src_y = sy
 
@@ -1374,11 +1414,13 @@ func _npc_can_see_player(es: EntityState) -> bool:
 # -- Morale (s54.8 LOCKED) ----------------------------------------------------
 # =============================================================================
 
-func _check_morale() -> void:
+## Check morale for all living enemies. Returns events for newly broken units.
+func _check_morale() -> Array:
 	if _initial_enemy_count == 0:
-		return
+		return []
 
 	var death_fraction: float = float(_enemy_deaths_total) / float(_initial_enemy_count)
+	var events: Array = []
 
 	for es: EntityState in _entities.values():
 		if es.faction != FACTION_ENEMY:
@@ -1394,6 +1436,9 @@ func _check_morale() -> void:
 		if threshold > 0.0 and death_fraction >= threshold:
 			es.morale_broken = true
 			es.alert_state = AsciiMapEnvironment.AlertState.FLEEING
+			events.append({"type": "morale_broken", "entity_id": es.entity_id, "unit_type": es.unit_type})
+
+	return events
 
 
 # =============================================================================
