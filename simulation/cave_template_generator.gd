@@ -590,7 +590,7 @@ static func _place_population_slots(
 				if depth_frac < 0.33:
 					# Early rooms: sparse, maybe nothing.
 					if rng.randi_range(0, 2) != 0:
-						break
+						continue
 				# Camp group.
 				map.population_slots.append({ "x": cx, "y": cy,
 					"role": CaveMapData.PopRole.CAMP_GROUP, "room_id": room["id"] })
