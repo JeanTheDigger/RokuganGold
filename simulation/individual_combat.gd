@@ -527,8 +527,13 @@ static func roll_full_defense_bonus(
 ) -> int:
 	var def_rank: int = character.skills.get("Defense", 0)
 	var wound_penalty: int = CharacterStats.get_wound_penalty(character)
+	# Mutation modifiers (s44): EXTRA_LIMB non-functional applies -1k0 to Defense skill
+	var mutation_def: Dictionary = MutationSystem.get_skill_modifiers(character, "Defense")
 	# Full Defense: Defense/Reflexes — roll (Reflexes + Defense Rank), keep Reflexes (s40)
-	var result: DiceResult = dice_engine.roll_and_keep(character.reflexes + def_rank, character.reflexes)
+	var result: DiceResult = dice_engine.roll_and_keep(
+		character.reflexes + def_rank + mutation_def["rolled"],
+		character.reflexes + mutation_def["kept"]
+	)
 	var half_result: int = ceili(float(result.total + wound_penalty) / 2.0)
 	participant.full_defense_bonus = half_result
 	return half_result
@@ -599,6 +604,11 @@ static func resolve_attack(
 	# Kata dice bonuses applied after stance
 	rolled += kata_atk["rolled_bonus"]
 	kept += kata_atk["kept_bonus"]
+
+	# Mutation modifiers (s44): EXTRA_LIMB non-functional applies -1k0 to weapon skills
+	var mutation_atk: Dictionary = MutationSystem.get_skill_modifiers(attacker, skill_name)
+	rolled += mutation_atk["rolled"]
+	kept += mutation_atk["kept"]
 
 	# Mounted / Higher Ground: +1k0 against unmounted or lower characters (s40)
 	if CONDITION_MOUNTED in attacker_p.conditions and not target_is_mounted:

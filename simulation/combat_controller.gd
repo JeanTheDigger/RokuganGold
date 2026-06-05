@@ -758,9 +758,11 @@ func try_stealth_move(dx: int, dy: int) -> Dictionary:
 	var ground_tn: int = _stealth_tn_for_tile(target_tile)
 	var stealth_rank: int = player.character.skills.get("Stealth", 0)
 	var wound_pen: int = CharacterStats.get_wound_penalty(player.character)
+	# Mutation modifiers (s44): MASTER_OF_SHADOWS +taint_rank unkept to Stealth
+	var stealth_mut: Dictionary = MutationSystem.get_skill_modifiers(player.character, "Stealth")
 	var roll_result: Dictionary = _dice.roll_check(
-		player.character.agility + stealth_rank,
-		player.character.agility,
+		player.character.agility + stealth_rank + stealth_mut["rolled"],
+		player.character.agility + stealth_mut["kept"],
 		ground_tn, 0, wound_pen, stealth_rank > 0
 	)
 
@@ -808,9 +810,11 @@ func execute_stealth_kill(target_id: int) -> Dictionary:
 	var approach_tn: int = _stealth_tn_for_tile(_map.get_tile(target.x, target.y))
 	if target.is_sleeping:
 		approach_tn = maxi(5, approach_tn - SLEEPING_DETECTION_BONUS)  # easier approach vs sleeping
+	# Mutation modifiers (s44): MASTER_OF_SHADOWS +taint_rank unkept to Stealth
+	var stealth_mut_kill: Dictionary = MutationSystem.get_skill_modifiers(player.character, "Stealth")
 	var approach_roll: Dictionary = _dice.roll_check(
-		player.character.agility + stealth_rank,
-		player.character.agility,
+		player.character.agility + stealth_rank + stealth_mut_kill["rolled"],
+		player.character.agility + stealth_mut_kill["kept"],
 		approach_tn, 0, wound_pen, stealth_rank > 0
 	)
 
