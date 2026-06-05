@@ -1508,3 +1508,142 @@ func test_npc_sets_in_combat_when_attacking_adjacent() -> void:
 	assert_true(attacked, "ALERT enemy adjacent to player must attack")
 	assert_true(enemy_es.in_combat,
 		"NPC must have in_combat=true after executing an attack")
+
+
+# =============================================================================
+# -- Section 33: Terminal event generation ------------------------------------
+# -- Bugs: mission_complete and player_died events were never generated.
+# =============================================================================
+
+func test_mission_complete_event_generated_when_all_enemies_killed() -> void:
+	# Bug fix: is_mission_complete() was a query only; no event was ever produced
+	# for the CombatHUD. advance_npc_turns() must emit "mission_complete" once.
+	var cc := _make_cc_with_enemy("SIMPLE_BANDIT", 6, 5)
+
+	# Kill the enemy directly (simulate one-shot).
+	var enemy_es: CombatController.EntityState
+	for eid: int in cc._entities.keys():
+		var es: CombatController.EntityState = cc._entities[eid]
+		if es.faction == CombatController.FACTION_ENEMY:
+			enemy_es = es
+			break
+	assert_not_null(enemy_es, "need an enemy")
+	enemy_es.is_alive = false
+
+	assert_true(cc.is_mission_complete(), "all enemies dead → mission should be complete")
+
+	var events: Array = cc.advance_npc_turns()
+	var found: bool = false
+	for ev: Dictionary in events:
+		if ev.get("type") == "mission_complete":
+			found = true
+			break
+	assert_true(found, "advance_npc_turns must emit mission_complete when all enemies are dead")
+
+
+func test_mission_complete_event_not_duplicated_on_second_call() -> void:
+	# mission_complete must only fire once even if advance_npc_turns is called again.
+	var cc := _make_cc_with_enemy("SIMPLE_BANDIT", 6, 5)
+	for eid: int in cc._entities.keys():
+		var es: CombatController.EntityState = cc._entities[eid]
+		if es.faction == CombatController.FACTION_ENEMY:
+			es.is_alive = false
+			break
+
+	var _first_events: Array = cc.advance_npc_turns()
+	var second_events: Array = cc.advance_npc_turns()
+	var found: bool = false
+	for ev: Dictionary in second_events:
+		if ev.get("type") == "mission_complete":
+			found = true
+			break
+	assert_false(found, "mission_complete must not fire a second time on repeated calls")
+
+
+func test_player_died_event_generated_when_player_killed() -> void:
+	# Bug fix: player death was only embedded in npc_attacked.player_killed.
+	# advance_npc_turns must emit a standalone "player_died" event so CombatHUD
+	# can display the terminal "You have fallen." message.
+	var cc := _make_cc_with_enemy("SIMPLE_BANDIT", 6, 5)
+
+	# Kill the player directly.
+	var player_es: CombatController.EntityState = cc.get_player()
+	assert_not_null(player_es, "need a player")
+	# Apply lethal wounds so is_dead() returns true.
+	player_es.character.wounds_taken = 100
+
+	var events: Array = cc.advance_npc_turns()
+	var found: bool = false
+	for ev: Dictionary in events:
+		if ev.get("type") == "player_died":
+			found = true
+			break
+	assert_true(found, "advance_npc_turns must emit player_died when player is dead")
+
+
+func test_player_died_event_not_duplicated_on_second_call() -> void:
+	# player_died must only fire once.
+	var cc := _make_cc_with_enemy("SIMPLE_BANDIT", 6, 5)
+	var player_es: CombatController.EntityState = cc.get_player()
+	player_es.character.wounds_taken = 100
+
+	var _first_events: Array = cc.advance_npc_turns()
+	var second_events: Array = cc.advance_npc_turns()
+	var found: bool = false
+	for ev: Dictionary in second_events:
+		if ev.get("type") == "player_died":
+			found = true
+			break
+	assert_false(found, "player_died must not fire a second time on repeated calls")
+
+
+# =============================================================================
+# -- Section 34: Alarm immediately alerts all enemies -------------------------
+# -- Bug: _raise_alarm used _emit_noise(VERY_LOUD) which only moves
+# --      UNAWARE → SUSPICIOUS, not UNAWARE → ALERT directly.
+# =============================================================================
+
+func test_alarm_sets_unaware_enemies_directly_to_alert() -> void:
+	# Bug fix: UNAWARE enemies must become ALERT on alarm, not just SUSPICIOUS.
+	# Old code called _emit_noise(VERY_LOUD) which only moves UNAWARE→SUSPICIOUS.
+	# New code directly sets all non-fleeing entities to ALERT.
+	var cc := _make_cc_with_enemy("SIMPLE_BANDIT", 8, 5)
+
+	var enemy_es: CombatController.EntityState
+	for eid: int in cc._entities.keys():
+		var es: CombatController.EntityState = cc._entities[eid]
+		if es.faction == CombatController.FACTION_ENEMY:
+			enemy_es = es
+			break
+	assert_not_null(enemy_es, "need an enemy")
+
+	assert_eq(enemy_es.alert_state, AsciiMapEnvironment.AlertState.UNAWARE,
+		"enemy must start UNAWARE")
+
+	# Use the enemy itself as the alarm source (direct call to internal function).
+	cc._raise_alarm(enemy_es)
+
+	assert_eq(enemy_es.alert_state, AsciiMapEnvironment.AlertState.ALERT,
+		"UNAWARE enemy must be ALERT immediately after alarm, not just SUSPICIOUS")
+
+
+func test_alarm_does_not_affect_fleeing_enemies() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 5)
+
+	var enemy_es: CombatController.EntityState
+	for eid: int in cc._entities.keys():
+		var es: CombatController.EntityState = cc._entities[eid]
+		if es.faction == CombatController.FACTION_ENEMY:
+			enemy_es = es
+			break
+	assert_not_null(enemy_es, "need an enemy")
+
+	# Put enemy into FLEEING state before the alarm.
+	enemy_es.alert_state = AsciiMapEnvironment.AlertState.FLEEING
+	enemy_es.morale_broken = true
+
+	# Raise alarm sourced from the fleeing enemy itself.
+	cc._raise_alarm(enemy_es)
+
+	assert_eq(enemy_es.alert_state, AsciiMapEnvironment.AlertState.FLEEING,
+		"FLEEING enemy must remain FLEEING after alarm — they are already routed")

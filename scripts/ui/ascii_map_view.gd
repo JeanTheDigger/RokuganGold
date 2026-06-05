@@ -248,12 +248,10 @@ func _run_npc_turns_and_sync() -> void:
 		# Flatten morale events nested inside npc_attacked results.
 		for mev: Dictionary in ev.get("attack_result", {}).get("morale_events", []):
 			combat_event.emit(mev)
-	# Check terminal states.
+	# Check terminal states — signals only; combat_event already emitted in the loop above.
 	if _combat_controller.is_player_dead():
-		combat_event.emit({"type": "player_died"})
 		player_died.emit()
 	elif _combat_controller.is_mission_complete():
-		combat_event.emit({"type": "mission_complete"})
 		mission_complete.emit()
 
 
@@ -311,6 +309,7 @@ func _apply_player_result(result: Dictionary) -> void:
 		_recompute_fov()
 		queue_redraw()
 		if _combat_controller != null and _combat_controller.is_player_dead():
+			combat_event.emit({"type": "player_died"})
 			player_died.emit()
 			return
 		_run_npc_turns_and_sync()

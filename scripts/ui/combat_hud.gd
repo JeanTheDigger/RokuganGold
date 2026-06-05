@@ -200,7 +200,10 @@ func _format_event(ev: Dictionary) -> String:
 
 		"stealth_kill":
 			var target: String = ev.get("unit_type", "enemy")
-			return "Silently eliminated %s." % target
+			if ev.get("target_killed", true):
+				return "Silently eliminated %s." % target
+			else:
+				return "Struck %s from stealth — they retaliate!" % target
 
 		"npc_attacked":
 			var attacker: String = ev.get("unit_type", "enemy")

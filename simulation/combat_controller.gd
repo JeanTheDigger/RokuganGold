@@ -167,6 +167,10 @@ var _pending_noise_events: Array = []
 ## Mission objective tile positions.
 var _objective_slots: Array = []
 
+## Dedup flags — prevent terminal events from firing more than once.
+var _mission_complete_notified: bool = false
+var _player_died_notified: bool = false
+
 
 # =============================================================================
 # -- Factory ------------------------------------------------------------------
@@ -1009,6 +1013,15 @@ func advance_npc_turns() -> Array:
 	_check_body_discovery()
 	events.append_array(_pending_noise_events)
 	_pending_noise_events.clear()
+
+	# Terminal condition notifications — emitted once per session.
+	if not _player_died_notified and is_player_dead():
+		_player_died_notified = true
+		events.append({"type": "player_died"})
+	if not _mission_complete_notified and is_mission_complete():
+		_mission_complete_notified = true
+		events.append({"type": "mission_complete"})
+
 	return events
 
 
@@ -1494,9 +1507,22 @@ func _check_morale() -> Array:
 # -- Alarm (s56.6.3 LOCKED) ---------------------------------------------------
 # =============================================================================
 
-## Raise a general alarm: emit VERY_LOUD noise (map-wide, automatic detection).
+## Raise a general alarm: immediately sets ALL living non-fleeing enemies to ALERT.
+## s56.6.3 LOCKED: the alarm is not a noise event; it is a map-wide command that
+## bypasses the two-step noise→detect→escalate chain.
 func _raise_alarm(source: EntityState) -> Dictionary:
 	source.alarm_sounded = true
-	# Alert all unaware enemies immediately.
-	_emit_noise(source.x, source.y, AsciiMapEnvironment.NoiseLevel.VERY_LOUD)
+	for es: EntityState in _entities.values():
+		if es.faction == FACTION_PLAYER:
+			continue
+		if not es.is_alive or _is_entity_dead(es):
+			continue
+		if es.alert_state == AsciiMapEnvironment.AlertState.FLEEING:
+			continue
+		if es.alert_state != AsciiMapEnvironment.AlertState.ALERT:
+			es.alert_state = AsciiMapEnvironment.AlertState.ALERT
+			es.alert_rounds_lost = 0
+			es.noise_src_x = source.x
+			es.noise_src_y = source.y
+			es.is_sleeping = false
 	return {"type": "alarm_raised", "entity_id": source.entity_id}
