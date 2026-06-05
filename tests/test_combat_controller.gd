@@ -1262,3 +1262,48 @@ func test_investigate_no_double_move_at_phase_boundary() -> void:
 	# Enemy moved toward noise (12,10), not back to patrol (10,10).
 	assert_true(enemy.x > start_x or enemy.x == start_x,
 		"enemy should move toward noise source, not patrol, during search phase")
+
+
+func test_body_discovery_events_returned_in_same_round() -> void:
+	# Bug fix: _check_body_discovery() runs at end of advance_npc_turns().
+	# Events it queues to _pending_noise_events must be flushed into the
+	# returned array before the function exits — not delayed to the next round.
+	var session := _make_session(1, 1, [
+		{"unit_type": "BANDIT_THUG", "x": 3, "y": 3, "seed": 0},
+		{"unit_type": "BANDIT_THUG", "x": 4, "y": 3, "seed": 1},
+	])
+	var cc := CombatController.create(session, _make_player(), DiceEngine.new(1))
+
+	# Kill the first enemy to create a body.
+	var enemies: Array = cc.get_entity_display_data()
+	var dead_id: int = -1
+	for e: Dictionary in enemies:
+		if e.get("faction") == "enemy":
+			dead_id = e["id"]
+			break
+	assert_true(dead_id >= 0, "need an enemy to kill")
+
+	# Directly mark the entity dead (avoid full attack resolution complexity).
+	var dead_es: CombatController.EntityState = cc._entities.get(dead_id)
+	assert_not_null(dead_es)
+	dead_es.is_alive = false
+	dead_es.character.wounds_taken = 99
+
+	# Put the surviving enemy in ALERT and adjacent to the body.
+	for eid: int in cc._entities.keys():
+		var es: CombatController.EntityState = cc._entities[eid]
+		if es.faction == CombatController.FACTION_ENEMY and es.is_alive:
+			es.alert_state = AsciiMapEnvironment.AlertState.ALERT
+			es.x = dead_es.x + 1
+			es.y = dead_es.y
+			break
+
+	# advance_npc_turns must return body_spotted in the SAME call.
+	var events: Array = cc.advance_npc_turns()
+	var found_body_event: bool = false
+	for ev: Dictionary in events:
+		if ev.get("type") == "body_spotted":
+			found_body_event = true
+			break
+	assert_true(found_body_event,
+		"body_spotted event must be returned in the same advance_npc_turns() call, not delayed")

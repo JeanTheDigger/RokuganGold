@@ -996,6 +996,8 @@ func advance_npc_turns() -> Array:
 
 	# After all NPCs move, player body-discovery check.
 	_check_body_discovery()
+	events.append_array(_pending_noise_events)
+	_pending_noise_events.clear()
 	return events
 
 
