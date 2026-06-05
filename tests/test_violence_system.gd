@@ -174,3 +174,92 @@ func test_blades_drawn_no_death_no_escalation():
 
 func test_no_blades_no_escalation():
 	assert_false(ViolenceSystem.should_escalate_to_killing(false, false))
+
+
+# -- violence_offense_days field and wiring (s11.3.12 wiring) ----
+
+func test_violence_offense_days_field_exists():
+	var c := _make_character()
+	# Field must exist and default to empty array.
+	assert_not_null(c.violence_offense_days)
+	assert_eq(c.violence_offense_days.size(), 0)
+
+
+func test_violence_offense_days_accumulates():
+	var c := _make_character()
+	c.violence_offense_days.append(100)
+	c.violence_offense_days.append(200)
+	assert_eq(ViolenceSystem.count_offenses_in_window(c.violence_offense_days, 300), 2)
+
+
+func test_brutal_bodyguard_combat_wiring_produces_infamy():
+	# Simulate the non-lethal bodyguard path: evaluate + apply, is_brutal=true.
+	var assassin := _make_character(3.0, 5.0)
+	var guard := _make_character(3.0, 5.0)
+	var prior_count: int = ViolenceSystem.count_offenses_in_window(
+		assassin.violence_offense_days, 500)
+	var v_eval: Dictionary = ViolenceSystem.evaluate_violence(
+		assassin, guard, prior_count, true)
+	ViolenceSystem.apply_consequences(assassin, v_eval)
+	assassin.violence_offense_days.append(500)
+	# is_brutal=true always triggers infamy regardless of prior offenses.
+	assert_almost_eq(assassin.infamy, ViolenceSystem.INFAMY_PER_REPEATED_OFFENSE, 0.01)
+	# Offense recorded.
+	assert_eq(assassin.violence_offense_days.size(), 1)
+
+
+func test_seed_assassination_violence_seeds_settlement():
+	var settlement := SettlementData.new()
+	settlement.settlement_id = 42
+	settlement.public_record = []
+
+	var assassination_results: Array = [
+		{
+			"violence_result": {
+				"topic_tier": TopicData.Tier.TIER_4,
+				"crime_type": Enums.CrimeType.VIOLENCE,
+			},
+			"violence_attacker_id": 7,
+			"violence_location": "42",
+		}
+	]
+
+	DayOrchestrator._seed_assassination_violence_public_records(
+		assassination_results, [settlement], 100)
+
+	assert_eq(settlement.public_record.size(), 1)
+	var entry: Dictionary = settlement.public_record[0]
+	assert_eq(entry["event_type"], "violence")
+	assert_eq(entry["tier"], TopicData.Tier.TIER_4)
+	assert_eq(entry["subject_id"], 7)
+
+
+func test_seed_assassination_violence_skips_no_violence_result():
+	var settlement := SettlementData.new()
+	settlement.settlement_id = 1
+	settlement.public_record = []
+
+	# Tick result with no violence_result key should be skipped.
+	var assassination_results: Array = [{"other_key": "value"}]
+	DayOrchestrator._seed_assassination_violence_public_records(
+		assassination_results, [settlement], 100)
+
+	assert_eq(settlement.public_record.size(), 0)
+
+
+func test_seed_assassination_violence_skips_empty_location():
+	var settlement := SettlementData.new()
+	settlement.settlement_id = 5
+	settlement.public_record = []
+
+	var assassination_results: Array = [
+		{
+			"violence_result": {"topic_tier": TopicData.Tier.TIER_4},
+			"violence_attacker_id": 3,
+			"violence_location": "",
+		}
+	]
+	DayOrchestrator._seed_assassination_violence_public_records(
+		assassination_results, [settlement], 100)
+
+	assert_eq(settlement.public_record.size(), 0)

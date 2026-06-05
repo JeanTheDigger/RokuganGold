@@ -144,6 +144,9 @@ var spell_void_bonus_used: int = 0
 # -- Legal System (Section 11.3.14) --------------------------------------------
 
 @export var legal_cases: Array = []
+## IC days on which this character committed violence outside a duel (s11.3.12).
+## Used by ViolenceSystem.count_offenses_in_window() for repeat-offense detection.
+@export var violence_offense_days: Array[int] = []
 
 # -- Courtier Framework Fields -------------------------------------------------
 

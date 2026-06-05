@@ -678,6 +678,9 @@ static func advance_day(
 		entanglements,
 	)
 
+	_seed_assassination_violence_public_records(
+		assassination_results, settlements, ic_day)
+
 	var war_declarations: Array = _process_war_declarations(
 		day_result.get("results", []),
 		active_wars,
@@ -20458,7 +20461,25 @@ static func _process_assassination_daily_tick(
 										"killer_id": guard.character_id,
 									})
 							elif not CharacterStats.is_dead(guard):
-								pass  # guard survived; execution retry proceeds below
+								# Both survived — non-lethal combat outside any duel framework.
+								# Wire into ViolenceSystem (s11.3.12). is_brutal=true because
+								# blades were drawn during an assassination attempt.
+								var prior_count: int = ViolenceSystem.count_offenses_in_window(
+									assassin.violence_offense_days, ic_day)
+								var v_eval: Dictionary = ViolenceSystem.evaluate_violence(
+									assassin, guard, prior_count, true)
+								ViolenceSystem.apply_consequences(assassin, v_eval)
+								assassin.violence_offense_days.append(ic_day)
+								var v_record: CrimeRecord = CrimeSystem.create_crime_record(
+									next_case_id[0], Enums.CrimeType.VIOLENCE,
+									assassin.character_id, assassin.physical_location,
+									ic_day, guard.character_id)
+								v_record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+								next_case_id[0] += 1
+								crime_records.append(v_record)
+								tick_result["violence_result"] = v_eval
+								tick_result["violence_attacker_id"] = assassin.character_id
+								tick_result["violence_location"] = assassin.physical_location
 							else:
 								death_events.append({
 									"character_id": guard.character_id,
@@ -22793,6 +22814,38 @@ static func _crime_tier_for_public_record(crime_type: int) -> int:
 			return TopicData.Tier.TIER_2
 		_:
 			return TopicData.Tier.TIER_4
+
+
+# Seeds violence public records from non-lethal bodyguard combat in assassination ops.
+# Assassination tick results are separate from NPC wave results, so the standard
+# _seed_public_records_from_crime_results() path cannot reach them via wave_results.
+# This helper seeds directly for tick entries that contain a "violence_result" key.
+static func _seed_assassination_violence_public_records(
+	assassination_results: Array,
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	if settlements.is_empty() or assassination_results.is_empty():
+		return
+	var settlements_by_str_id: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlements_by_str_id[str(s.settlement_id)] = s
+	for tr: Variant in assassination_results:
+		if not tr is Dictionary:
+			continue
+		var v_eval: Dictionary = (tr as Dictionary).get("violence_result", {})
+		if v_eval.is_empty():
+			continue
+		var attacker_id: int = (tr as Dictionary).get("violence_attacker_id", -1)
+		var location: String = (tr as Dictionary).get("violence_location", "")
+		if location.is_empty():
+			continue
+		var settlement: SettlementData = settlements_by_str_id.get(location)
+		if settlement == null:
+			continue
+		var tier: int = v_eval.get("topic_tier", ViolenceSystem.BASE_TOPIC_TIER)
+		PublicRecordSystem.seed_event(
+			settlement, "violence", tier, ic_day, -1, attacker_id)
 
 
 # Cipher Gap 1 (s57.30 A3): Kitsuki written_deception → settlement public record.

@@ -3444,9 +3444,14 @@ mechanical change is applied until s40 individual combat is implemented.
   and `ActionExecutor._execute_examine_crime_scene()`). `_process_scene_examination_writebacks()`
   gains optional `settlements` parameter. `_crime_tier_for_public_record()` maps crime types:
   VIOLENCE→TIER_4, open/duel killings→TIER_3, TREASON/EMPERORS_PEACE→TIER_2. 20 tests.
-  LIMITATION: ViolenceSystem.evaluate_violence() itself is not yet called from any ActionID
-  executor — the seeding path is wired and tested but requires a violence ActionID to be
-  implemented before it fires in actual gameplay.
+  ViolenceSystem is wired into the non-lethal bodyguard combat path (s11.3.12): when an
+  assassin and bodyguard both survive `resolve_npc_summary_combat()`, `evaluate_violence()`
+  fires with `is_brutal=true`, `apply_consequences()` applies honor/glory/infamy,
+  a CrimeRecord is created as UNDER_INVESTIGATION, and the settlement public record is
+  seeded via `_seed_assassination_violence_public_records()`. The `violence_offense_days:
+  Array[int]` field on L5RCharacterData tracks per-character offense history for the
+  repeat-offense window. Violence is not a deliberate AP action — it is an organic outcome
+  of physical confrontation, as the GDD specifies.
 
 ### Known Code Issues (found and fixed 2026-06-01, standing objectives audit)
 - **`compute_tend_personality_bonus()` never called — personality modifiers silently dropped. FIXED.**
