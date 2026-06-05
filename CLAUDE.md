@@ -3950,6 +3950,20 @@ mechanical change is applied until s40 individual combat is implemented.
 ### Systems Added 2026-06-02 (continued)
 - **s60 PC Integration** — `simulation/pc_system.gd`. New fields on L5RCharacterData: `is_pc`, `player_id`, `is_logged_in`, `home_settlement_id`, `banked_ap`, `offline_policies`, `bubble_scene_id`, `bubble_anchor_ic_day`. Logged-in: full world presence, NPC engine never runs for PCs. Logged-out: disappear from world, home anchor for letter delivery, AP accrues to `banked_ap` each tick (cap = 4× daily allocation). Offline reactive auto-resolve policies: QUEUE / HONOR / ACCEPT / DECLINE / CONDITIONAL per event type; 5 reactive event types; CONDITIONAL conditions (same_clan, disposition_friend, higher_status, lower_status). Bubble Time: scene_id + anchor_ic_day; AP reserved during scene, NPC participants occupied for scene IC duration. PC exclusions: no NPC decision engine, no standing objective auto-assignment, no strategic review, no daily letter pass. NPCs may target PCs normally; assassination PC crisis event gated on ASSASSINATION_GRACE policy. WorldState additions: `active_bubble_scenes`, `next_bubble_scene_id`. Constants A1–A5 locked (BANKED_AP_CAP_MULTIPLIER=4, OFFLINE_EVENT_QUEUE_CAP=30). Locked in gdd/s60_pc_integration_locked.md.
 
+### Known Code Issues (found and fixed 2026-06-05, bodyguard combat wiring)
+- **Bodyguard FIGHT_FIRST path never resolved combat — execution retry always fired. FIXED.**
+  `AssassinationSystem.resolve_bodyguard_encounter()` FIGHT_FIRST path returned
+  `fight_initiated: true` with initiative roll data but never actually resolved the fight.
+  The orchestrator fell through to execution retry regardless of whether the assassin
+  won or lost. Assassins were never killed or driven off by a competent bodyguard.
+  `_process_assassination_daily_tick()` now calls
+  `IndividualCombat.resolve_npc_summary_combat(assassin, guard, dice_engine)` when
+  `fight_initiated: true`. If assassin loses (`attacker_dead` or `loser_id == assassin_id`):
+  op phase → ABORTED, suspicion raised to CRITICAL_FAILURE, death event created if assassin
+  dies. If guard dies: death event created for guard, execution retry proceeds. If both
+  survive and assassin wins: execution retry fires. `bodyguard_combat` key added to
+  tick_result for downstream use. 3 tests.
+
 ### Systems Added 2026-06-05
 - **s40 Individual Combat — WeaponData/ArmorData Resources, NPC summary roll, weapon assignment.**
   `shared/weapon_data.gd` (WeaponData Resource: weapon_name, rolled, kept, strength_adds, skill,

@@ -20442,7 +20442,32 @@ static func _process_assassination_daily_tick(
 							assassin, guard, response, op, dice_engine,
 						)
 						tick_result["bodyguard"] = bg_result
-						if not bg_result.get("aborted", false):
+						if bg_result.get("fight_initiated", false) and not CharacterStats.is_dead(guard):
+							var combat: Dictionary = IndividualCombat.resolve_npc_summary_combat(
+								assassin, guard, dice_engine,
+							)
+							tick_result["bodyguard_combat"] = combat
+							if combat.get("attacker_dead", false) or combat.get("loser_id", -1) == assassin.character_id:
+								op["phase"] = AssassinationSystem.AssassinationPhase.ABORTED
+								AssassinationSystem.add_suspicion(op, AssassinationSystem.SUSPICION_CRITICAL_FAILURE)
+								if CharacterStats.is_dead(assassin):
+									death_events.append({
+										"character_id": assassin.character_id,
+										"is_lord": assassin.role_position != "",
+										"suspicious_death": true,
+										"killer_id": guard.character_id,
+									})
+							elif not CharacterStats.is_dead(guard):
+								pass  # guard survived; execution retry proceeds below
+							else:
+								death_events.append({
+									"character_id": guard.character_id,
+									"is_lord": guard.role_position != "",
+									"suspicious_death": true,
+									"killer_id": assassin.character_id,
+								})
+						var assassin_lost: bool = op.get("phase", -1) == AssassinationSystem.AssassinationPhase.ABORTED
+						if not bg_result.get("aborted", false) and not assassin_lost:
 							exec_result = AssassinationSystem.resolve_execution(
 								assassin, target, op, dice_engine, false, characters_by_id,
 							)
