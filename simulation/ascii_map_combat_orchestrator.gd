@@ -144,7 +144,7 @@ static func setup_combat(
 		var p: IndividualCombat.Participant = mcs.combat.participants.get(c.character_id, null)
 		if p == null:
 			continue
-		var weapon_name: String = IndividualCombat.pick_best_weapon(c).weapon_name
+		var weapon_name: String = IndividualCombat.pick_best_weapon(c)
 		var init_score: int = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name)
 		p.initiative_score = init_score
 
@@ -1144,7 +1144,7 @@ static func advance_round(
 		var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
 		if p == null:
 			continue
-		var weapon_name: String = IndividualCombat.pick_best_weapon(c).weapon_name
+		var weapon_name: String = IndividualCombat.pick_best_weapon(c)
 		var init_score: int = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name)
 		p.initiative_score = init_score
 

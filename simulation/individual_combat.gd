@@ -540,15 +540,16 @@ static func roll_full_defense_bonus(
 	var mutation_def: Dictionary = MutationSystem.get_skill_modifiers(character, "Defense")
 	# Advantage/disadvantage modifiers (s45): PRODIGY, TOUCH_OF_THE_SPIRIT_REALMS Jigoku, etc.
 	var is_school_def: bool = NPCAdvancement.get_school_skills(character).has("Defense")
-	var adv_def: Dictionary = AdvantageSystem.get_skill_bonus(
-		character, "Defense", {"is_combat": true, "is_school_skill": is_school_def}
-	)
+	var adv_def_ctx: Dictionary = {"is_combat": true, "is_school_skill": is_school_def}
+	var adv_def: Dictionary = AdvantageSystem.get_skill_bonus(character, "Defense", adv_def_ctx)
+	var adv_def_tn: int = AdvantageSystem.get_tn_modifier(character, adv_def_ctx)
 	# Full Defense: Defense/Reflexes — roll (Reflexes + Defense Rank), keep Reflexes (s40)
 	var result: DiceResult = dice_engine.roll_and_keep(
-		character.reflexes + def_rank + mutation_def["rolled"] + adv_def["rolled"],
-		character.reflexes + mutation_def["kept"] + adv_def["kept"]
+		maxi(character.reflexes + def_rank + mutation_def["rolled"] + adv_def["rolled"], 1),
+		maxi(character.reflexes + mutation_def["kept"] + adv_def["kept"], 1)
 	)
-	var half_result: int = ceili(float(result.total + wound_penalty) / 2.0)
+	# Free raises add +5 to effective total; TN penalties reduce it (CONSUMED Perfection = -5)
+	var half_result: int = ceili(float(result.total + adv_def["free_raises"] * 5 - adv_def_tn + wound_penalty) / 2.0)
 	participant.full_defense_bonus = half_result
 	return half_result
 
