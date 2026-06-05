@@ -240,7 +240,7 @@ func test_tenshu_bounds_set() -> void:
 		assert_true(m.tenshu_lx >= 0)
 		assert_true(m.tenshu_ly >= 0)
 		assert_true(m.tenshu_rx > m.tenshu_lx)
-		assert_true(m.tenshu_ry >= m.tenshu_ly)
+		assert_true(m.tenshu_ry > m.tenshu_ly)
 
 func test_tenshu_interior_is_floor_stone() -> void:
 	var m := CastleSiegeGenerator.generate("tenshu_floor", SC.FORTIFICATION, AM.ATTACKER)

@@ -67,7 +67,8 @@ static func _build_fortification(map: CastleSiegeMapData, w: int, h: int, rng: i
 
 	# Outer wall ring
 	var wall_y: int = approach_y - 1  # Y=21
-	_fill_wall_ring(map, 0, 0, w - 1, wall_y)
+	for x in range(w):
+		map.set_tile(x, wall_y, _WALL)
 	map.walls.append({
 		"id": 0, "lx": 0, "ly": wall_y, "rx": w - 1, "ry": wall_y, "layer_idx": 0,
 	})
@@ -171,7 +172,7 @@ static func _place_defender_slots_fortification(
 	})
 	# Murder hole guard (metadata slot)
 	map.population_slots.append({
-		"x": gate_x, "y": walkway_y - 1,
+		"x": gate_x, "y": walkway_y,
 		"role": CastleSiegeMapData.PopRole.MURDER_HOLE_GUARD,
 		"zone": CastleSiegeMapData.Zone.WALL_TOP, "layer_idx": 0,
 	})
@@ -215,7 +216,8 @@ static func _build_castle_town(map: CastleSiegeMapData, w: int, h: int, rng: int
 
 	# Outer wall (layer 0)
 	var ow_y: int = approach_y - 1  # Y=26
-	_fill_wall_ring(map, 0, 0, w - 1, ow_y)
+	for x in range(w):
+		map.set_tile(x, ow_y, _WALL)
 	map.walls.append({
 		"id": 0, "lx": 0, "ly": ow_y, "rx": w - 1, "ry": ow_y, "layer_idx": 0,
 	})
@@ -256,7 +258,8 @@ static func _build_castle_town(map: CastleSiegeMapData, w: int, h: int, rng: int
 
 	# Inner wall (layer 1)
 	var iw_y: int = ob_ly - 1  # Y=15
-	_fill_wall_ring(map, 0, 0, w - 1, iw_y)
+	for x in range(w):
+		map.set_tile(x, iw_y, _WALL)
 	map.walls.append({
 		"id": 1, "lx": 0, "ly": iw_y, "rx": w - 1, "ry": iw_y, "layer_idx": 1,
 	})
@@ -354,7 +357,7 @@ static func _place_defender_slots_castle_town(
 		"zone": CastleSiegeMapData.Zone.WALL_TOP, "layer_idx": 0,
 	})
 	map.population_slots.append({
-		"x": ow_gate_x, "y": ow_walk_y - 1,
+		"x": ow_gate_x, "y": ow_walk_y,
 		"role": CastleSiegeMapData.PopRole.MURDER_HOLE_GUARD,
 		"zone": CastleSiegeMapData.Zone.WALL_TOP, "layer_idx": 0,
 	})
@@ -378,7 +381,7 @@ static func _place_defender_slots_castle_town(
 		"zone": CastleSiegeMapData.Zone.WALL_TOP, "layer_idx": 1,
 	})
 	map.population_slots.append({
-		"x": iw_gate_x, "y": iw_walk_y - 1,
+		"x": iw_gate_x, "y": iw_walk_y,
 		"role": CastleSiegeMapData.PopRole.MURDER_HOLE_GUARD,
 		"zone": CastleSiegeMapData.Zone.WALL_TOP, "layer_idx": 1,
 	})
@@ -423,7 +426,8 @@ static func _build_city(map: CastleSiegeMapData, w: int, h: int, rng: int) -> in
 
 	# Outer wall (layer 0) — 3 gates for CITY
 	var ow_y: int = approach_y - 4  # Y=27
-	_fill_wall_ring(map, 0, 0, w - 1, ow_y)
+	for x in range(w):
+		map.set_tile(x, ow_y, _WALL)
 	map.walls.append({
 		"id": 0, "lx": 0, "ly": ow_y, "rx": w - 1, "ry": ow_y, "layer_idx": 0,
 	})
@@ -474,7 +478,8 @@ static func _build_city(map: CastleSiegeMapData, w: int, h: int, rng: int) -> in
 
 	# Inner wall (layer 1)
 	var iw_y: int = od_ly - 1  # Y=14
-	_fill_wall_ring(map, 0, 0, w - 1, iw_y)
+	for x in range(w):
+		map.set_tile(x, iw_y, _WALL)
 	map.walls.append({
 		"id": 1, "lx": 0, "ly": iw_y, "rx": w - 1, "ry": iw_y, "layer_idx": 1,
 	})
@@ -515,7 +520,8 @@ static func _build_city(map: CastleSiegeMapData, w: int, h: int, rng: int) -> in
 
 	# Tenshu (layer 2 — castle compound wall separates it)
 	var cw_y: int = 3  # Castle compound wall (layer 2)
-	_fill_wall_ring(map, 0, 0, w - 1, cw_y)
+	for x in range(w):
+		map.set_tile(x, cw_y, _WALL)
 	map.walls.append({
 		"id": 2, "lx": 0, "ly": cw_y, "rx": w - 1, "ry": cw_y, "layer_idx": 2,
 	})
@@ -582,7 +588,7 @@ static func _place_defender_slots_city(
 			"zone": CastleSiegeMapData.Zone.WALL_TOP, "layer_idx": 0,
 		})
 		map.population_slots.append({
-			"x": gx, "y": ow_walk_y - 1,
+			"x": gx, "y": ow_walk_y,
 			"role": CastleSiegeMapData.PopRole.MURDER_HOLE_GUARD,
 			"zone": CastleSiegeMapData.Zone.WALL_TOP, "layer_idx": 0,
 		})
@@ -612,7 +618,7 @@ static func _place_defender_slots_city(
 		"zone": CastleSiegeMapData.Zone.WALL_TOP, "layer_idx": 1,
 	})
 	map.population_slots.append({
-		"x": iw_gate_x, "y": iw_walk_y - 1,
+		"x": iw_gate_x, "y": iw_walk_y,
 		"role": CastleSiegeMapData.PopRole.MURDER_HOLE_GUARD,
 		"zone": CastleSiegeMapData.Zone.WALL_TOP, "layer_idx": 1,
 	})

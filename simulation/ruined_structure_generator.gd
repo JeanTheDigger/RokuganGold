@@ -504,7 +504,7 @@ static func _place_upper_floor(
 
 	# Stairwell: narrow FLOOR_STONE column on one side of the room.
 	var stair_x: int = lx + 1
-	var stair_y: int = clampi(ry + 0, ly, ry)   # bottom edge of room
+	var stair_y: int = ry + 1  # one tile south of room's bottom wall
 	map.stairwells.append({"x": stair_x, "y": stair_y, "room_id": host_rm["id"]})
 
 
