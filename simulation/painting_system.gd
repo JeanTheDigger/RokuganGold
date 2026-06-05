@@ -120,10 +120,16 @@ const NEGATIVE_PLACEMENT_TIER_THRESHOLD: int = 3  # Exceptional = quality tier 3
 # ---------------------------------------------------------------------------
 
 ## Completion topic tier: quality ≤ 3 → TIER_4, quality ≥ 4 → TIER_3 (s57.27.21 table).
-const COMPLETION_TOPIC_TIER: Dictionary = {1: 3, 2: 3, 3: 3, 4: 2, 5: 2}  # TopicData.Tier enum
+const COMPLETION_TOPIC_TIER: Dictionary = {
+	1: TopicData.Tier.TIER_4,
+	2: TopicData.Tier.TIER_4,
+	3: TopicData.Tier.TIER_4,
+	4: TopicData.Tier.TIER_3,
+	5: TopicData.Tier.TIER_3,
+}
 
 ## Placement topic tier: Tier 4. Removal of Fine+ = Tier 4.
-const PLACEMENT_TOPIC_TIER: int = 3  # TIER_4
+const PLACEMENT_TOPIC_TIER: int = TopicData.Tier.TIER_4
 
 ## Fusuma repainting topic tier: Exceptional+ original = TIER_3, Fine = TIER_4.
 const FUSUMA_REPAINT_TIER_THRESHOLD: int = 3
@@ -653,26 +659,26 @@ static func generate_lifecycle_topic(
 static func _topic_tier_for_event(painting: PaintingData, event_type: String) -> int:
 	match event_type:
 		"completion", "copy_completion":
-			return COMPLETION_TOPIC_TIER.get(painting.quality_tier, 3)
+			return COMPLETION_TOPIC_TIER.get(painting.quality_tier, TopicData.Tier.TIER_4)
 		"placement":
-			return PLACEMENT_TOPIC_TIER  # TIER_4
+			return PLACEMENT_TOPIC_TIER
 		"fusuma_completion":
-			return COMPLETION_TOPIC_TIER.get(painting.quality_tier, 3)
+			return COMPLETION_TOPIC_TIER.get(painting.quality_tier, TopicData.Tier.TIER_4)
 		"fusuma_repaint":
-			return 2 if painting.quality_tier >= FUSUMA_REPAINT_TIER_THRESHOLD else 3  # TIER_3 / TIER_4
+			return TopicData.Tier.TIER_3 if painting.quality_tier >= FUSUMA_REPAINT_TIER_THRESHOLD else TopicData.Tier.TIER_4
 		"negative_placement":
-			return 2 if painting.quality_tier >= NEGATIVE_PLACEMENT_TIER_THRESHOLD else 3
+			return TopicData.Tier.TIER_3 if painting.quality_tier >= NEGATIVE_PLACEMENT_TIER_THRESHOLD else TopicData.Tier.TIER_4
 		"presentation":
-			return 4  # TIER_5 for targeted; TIER_4 for gathering (caller differentiates)
+			return TopicData.Tier.TIER_4
 		"creator_deceased":
-			return 3  # TIER_4
+			return TopicData.Tier.TIER_4
 		"loot", "destruction":
 			if painting.quality_tier >= 3:
-				return 2  # TIER_3
+				return TopicData.Tier.TIER_3
 			elif painting.quality_tier >= 2:
-				return 3  # TIER_4
+				return TopicData.Tier.TIER_4
 			else:
-				return -1  # Normal quality doesn't warrant a topic
+				return -1
 	return -1
 
 
