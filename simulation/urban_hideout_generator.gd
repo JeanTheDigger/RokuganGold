@@ -266,16 +266,21 @@ static func _place_doors(map: UrbanHideoutMapData) -> void:
 		if to_room.get("zone", -1) == UrbanHideoutMapData.Zone.ENTRANCE:
 			continue
 		# Door at last corridor tile before destination room boundary.
-		var door_x: int = corr["lx"]
+		# Vertical corridor: lx == rx, ly < ry.  Door placed at junction row.
+		# Horizontal corridor: ly == ry.  Door placed at corridor mid-X on corridor Y.
+		var door_x: int
 		var door_y: int
-		if corr["ly"] <= corr["ry"]:
+		if corr["ly"] < corr["ry"]:
 			# Vertical corridor.
+			door_x = corr["lx"]
 			if corr["ry"] >= to_room["ly"]:
 				door_y = to_room["ly"] - 1
 			else:
 				door_y = to_room["ry"] + 1
 		else:
-			door_y = (corr["ly"] + corr["ry"]) / 2
+			# Horizontal corridor (ly == ry).
+			door_x = (corr["lx"] + corr["rx"]) / 2
+			door_y = corr["ly"]
 		if door_y >= 0 and map.get_tile(door_x, door_y) == _FLOOR_STONE:
 			map.set_tile(door_x, door_y, _DOOR)
 

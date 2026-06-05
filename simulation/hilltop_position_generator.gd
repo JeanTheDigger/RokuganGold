@@ -426,8 +426,10 @@ static func _place_population_slots(
 		"zone": HilltopPositionMapData.Zone.SLOPE,
 	})
 	if size >= HilltopPositionMapData.SizeCategory.STEEP_HILL:
+		# path_x + 1 is within the _PATH_CLEAR protected zone; path_x + 2 has a
+		# 30% chance of being WALL_STONE (rock scatter) and must be avoided.
 		map.population_slots.append({
-			"x":    path_x + 2,
+			"x":    path_x + 1,
 			"y":    map.crest_y + 6,
 			"role": HilltopPositionMapData.PopRole.PATH_GUARD,
 			"zone": HilltopPositionMapData.Zone.SLOPE,

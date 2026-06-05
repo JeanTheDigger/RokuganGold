@@ -22,7 +22,7 @@ const _EXIT  := _T.ZONE_EXIT
 ## seed_str     : deterministic seed string
 ## ship_type    : ShipBoardingMapData.ShipType int
 ## boarding_mode: ShipBoardingMapData.BoardingMode int
-static func generate(seed_str: String, ship_type: int, boarding_mode: int) -> ShipBoardingMapData:
+static func generate(_seed_str: String, ship_type: int, boarding_mode: int) -> ShipBoardingMapData:
 	var map := ShipBoardingMapData.new()
 	map.ship_type     = ship_type
 	map.boarding_mode = boarding_mode

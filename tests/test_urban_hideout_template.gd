@@ -102,7 +102,11 @@ func test_connected_room_count_in_range() -> void:
 func test_catacombs_room_count_in_range() -> void:
 	var m := UrbanHideoutGenerator.generate("rc_cat", 8, [])
 	var range_v: Vector2i = UrbanHideoutMapData.ROOM_COUNT_RANGE[m.size_category]
-	assert_true(m.rooms.size() >= range_v.x and m.rooms.size() <= range_v.y)
+	# CATACOMBS adds optional branch rooms beyond the main chain.
+	# Max main rooms = range_v.y; max branches = range_v.y - 2 (one per middle room).
+	var max_rooms: int = range_v.y + (range_v.y - 2)
+	assert_true(m.rooms.size() >= range_v.x and m.rooms.size() <= max_rooms,
+		"CATACOMBS room count %d outside [%d, %d]" % [m.rooms.size(), range_v.x, max_rooms])
 
 # -- Generator: entrance placement ---------------------------------------------
 
@@ -239,7 +243,7 @@ func test_different_seeds_may_differ() -> void:
 	var differs: bool = (m1.rooms.size() != m2.rooms.size()) or
 		(m1.entrance_x != m2.entrance_x) or (m1.entrance_y != m2.entrance_y)
 	# This is probabilistic but extremely unlikely to fail with two different seeds.
-	assert_true(differs or true)  # soft assertion — seeds could theoretically collide
+	assert_true(differs, "Different seeds produced identical map layouts")
 
 # -- Room data structure -------------------------------------------------------
 

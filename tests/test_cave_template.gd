@@ -245,7 +245,7 @@ func test_rooms_count_within_range() -> void:
 	for strength: int in [1, 3, 5, 8]:
 		var map: CaveMapData = _gen("rc_%d" % strength, strength)
 		var range_vec: Vector2i = CaveMapData.ROOM_RANGE[map.size_category]
-		assert_true(map.rooms.size() >= range_vec.x and map.rooms.size() <= range_vec.y + 2,
+		assert_true(map.rooms.size() >= range_vec.x and map.rooms.size() <= range_vec.y,
 			"Room count %d out of range for size %d" % [map.rooms.size(), map.size_category])
 
 
@@ -480,7 +480,7 @@ func test_objective_never_in_first_third() -> void:
 			if slot["obj_type"] == CaveMapData.ObjType.BURN_POINT:
 				continue  # Burn points may be in early rooms
 			var room: Dictionary = map.rooms[slot["room_id"]]
-			assert_true(room["depth"] > first_third or room["depth"] == 0,
+			assert_true(room["depth"] > first_third,
 				"Objective in first third at depth %d" % room["depth"])
 
 

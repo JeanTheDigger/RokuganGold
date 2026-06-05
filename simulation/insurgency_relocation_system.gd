@@ -93,11 +93,12 @@ static func evaluate_relocation(
 	if not triggers_relocation(outcome):
 		return result
 
-	result["triggers"] = true
 	var survivors: int = maxi(0, insurgency.strength - kills)
 	if survivors == 0:
 		result["strength_after"] = 0
 		return result
+
+	result["triggers"] = true
 
 	result["strength_after"] = survivors
 

@@ -451,7 +451,7 @@ static func _carve_l_corridor(map: CaveMapData, ax: int, ay: int, bx: int, by: i
 	var x0: int = mini(ax, bx)
 	var x1: int = maxi(ax, bx)
 	for x: int in range(x0, x1 + 1):
-		for dy: int in range(-1, 1):
+		for dy: int in range(-1, 2):
 			var yy: int = clamp(ay + dy, 1, map.height - 2)
 			map.set_tile(x, yy, Enums.TileType.FLOOR_STONE)
 
@@ -459,7 +459,7 @@ static func _carve_l_corridor(map: CaveMapData, ax: int, ay: int, bx: int, by: i
 	var y0: int = mini(ay, by)
 	var y1: int = maxi(ay, by)
 	for y: int in range(y0, y1 + 1):
-		for dx: int in range(-1, 1):
+		for dx: int in range(-1, 2):
 			var xx: int = clamp(bx + dx, 1, map.width - 2)
 			map.set_tile(xx, y, Enums.TileType.FLOOR_STONE)
 
