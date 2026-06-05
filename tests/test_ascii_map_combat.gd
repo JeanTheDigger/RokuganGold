@@ -940,6 +940,8 @@ func test_void_spend_succeeds_with_available_points() -> void:
 	AsciiMapCombatOrchestrator.begin_turn(state, 1)
 	var result := AsciiMapCombatOrchestrator.execute_void_spend(state, 1, p)
 	assert_true(result["success"])
+	var part: IndividualCombat.Participant = state.combat.participants[1]
+	assert_eq(part.void_armor_tn_bonus, 10, "spend_for_armor_tn should grant +10 ATN")
 
 
 func test_void_spend_fails_twice_same_round() -> void:
@@ -979,6 +981,21 @@ func test_get_current_actor_returns_first_in_order() -> void:
 	var actor := AsciiMapCombatOrchestrator.get_current_actor(state)
 	# One of the two combatants should be the first actor.
 	assert_true(actor == 1 or actor == 2)
+
+
+func test_get_current_actor_writes_index_back_when_skipping_dead() -> void:
+	## After skipping fled/dead entries, the index must be persisted so the
+	## next call doesn't re-scan from the same stale position.
+	var p := _make_char(1)
+	var e := _make_char(2)
+	var state := _make_state(p, e)
+	# Artificially put index 0 in fled_ids so it gets skipped.
+	var first_in_order: int = state.combat.turn_order[0]
+	state.fled_ids.append(first_in_order)
+	var actor := AsciiMapCombatOrchestrator.get_current_actor(state)
+	# Index should have advanced past the fled actor.
+	assert_ne(actor, first_in_order, "Should skip fled actor")
+	assert_true(state.combat.current_turn_index > 0, "Index must be written back")
 
 
 func test_advance_turn_moves_to_next_actor() -> void:
@@ -1087,6 +1104,24 @@ func test_npc_turn_skips_dead_npc() -> void:
 		state, 1, npc, {1: npc, 2: player}, _dice
 	)
 	assert_eq(result["reason"], "dead")
+
+
+func test_npc_pick_target_prefers_most_wounded() -> void:
+	## NPC should target the enemy with the most wounds (focus fire), not least.
+	var npc := _make_char(1)
+	var fresh  := _make_char(2)  # 0 wounds
+	var wounded := _make_char(3)
+	wounded.wounds_taken = 15     # heavily wounded
+	var m := _make_map()
+	var state := AsciiMapCombatOrchestrator.setup_combat(m, [
+		{"char": npc,     "faction": AsciiMapCombatOrchestrator.FACTION_ENEMY,  "x": 1, "y": 1},
+		{"char": fresh,   "faction": AsciiMapCombatOrchestrator.FACTION_PLAYER, "x": 2, "y": 1},
+		{"char": wounded, "faction": AsciiMapCombatOrchestrator.FACTION_PLAYER, "x": 3, "y": 1},
+	], _dice)
+	var picked := AsciiMapCombatOrchestrator._npc_pick_target(
+		state, 1, [2, 3], {1: npc, 2: fresh, 3: wounded}
+	)
+	assert_eq(picked, 3, "NPC should focus the most-wounded enemy")
 
 
 func test_npc_desired_stance_defense_when_hurt() -> void:

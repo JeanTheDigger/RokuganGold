@@ -352,11 +352,12 @@ static func execute_stance_change(
 	if not ts.can_use_simple():
 		return {"success": false, "reason": "no_actions_remaining"}
 
+	p.stance = new_stance as Enums.Stance
+
 	# Full Defense stance: roll Defense now for full_defense_bonus (GDD s40).
+	# Called after stance is assigned so any stance-gated logic inside is correct.
 	if new_stance == Enums.Stance.FULL_DEFENSE:
 		IndividualCombat.roll_full_defense_bonus(character, p, dice_engine)
-
-	p.stance = new_stance as Enums.Stance
 	ts.consume_simple()
 	ts.stance_changed = true
 
@@ -449,7 +450,8 @@ static func execute_move(
 
 
 ## Melee attack on target_id. Costs a Complex action.
-## maneuver: "" / "increased_damage" / "disarm" / "feint" / "knockdown" /
+## maneuver: "" / "increased_damage" / "disarm" / "feint" /
+##           "knockdown_biped" / "knockdown_quad" /
 ##           "called_shot_limb" / "called_shot_hand" / "called_shot_head" /
 ##           "called_shot_small" / "extra_attack" / "guard"
 static func execute_melee_attack(
@@ -890,12 +892,12 @@ static func execute_void_spend(
 	if p.void_spent_this_round:
 		return {"success": false, "reason": "void_already_spent_this_round"}
 
-	var result: Dictionary = VoidSystem.spend_for_roll(character)
+	var result: Dictionary = VoidSystem.spend_for_armor_tn(character)
 	if not result.get("success", false):
 		return {"success": false, "reason": "no_void_points"}
 
 	p.void_spent_this_round = true
-	p.void_armor_tn_bonus += result.get("kept_bonus", 0) * 10  # +10 ATN per kept (GDD s40 Void for armor TN)
+	p.void_armor_tn_bonus += result.get("armor_tn_bonus", 0)
 	ts.consume_free()
 
 	state.combat_log.append({
@@ -1012,6 +1014,7 @@ static func get_current_actor(state: MapCombatState) -> int:
 	while (cid in state.fled_ids or _is_participant_out(state, cid)) and idx < order.size() - 1:
 		idx += 1
 		cid = order[idx]
+	state.combat.current_turn_index = idx
 	return cid
 
 
@@ -1056,20 +1059,11 @@ static func advance_round(
 	chars_by_id: Dictionary,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	# Advance reaction phase for all living participants.
-	for cid: int in state.combat.turn_order:
-		if cid in state.fled_ids:
-			continue
-		var c: L5RCharacterData = chars_by_id.get(cid, null)
-		if c == null or CharacterStats.is_dead(c):
-			continue
-		IndividualCombat.advance_round_reactions(state.combat.participants[cid])
+	# Advance reaction phase for all living participants (handles dazed/stunned recovery).
+	IndividualCombat.advance_round_reactions(state.combat, chars_by_id, dice_engine)
 
 	# Check if combat is over.
-	var over_result: Dictionary = IndividualCombat.check_combat_over(state.combat)
-	if over_result.get("is_over", false):
-		state.combat.is_over = true
-		state.combat.winner_id = over_result.get("winner_id", -1)
+	if IndividualCombat.check_combat_over(state.combat, chars_by_id):
 		state.combat_log.append({
 			"type": "combat_over",
 			"round": state.combat.round_number,
@@ -1277,7 +1271,7 @@ static func _npc_desired_stance(npc: L5RCharacterData, wound_level: int) -> Enum
 	return Enums.Stance.ATTACK
 
 
-## Pick the best target: lowest wound-threshold enemy visible.
+## Pick the best target: most-wounded (highest wounds_taken) enemy to focus fire.
 static func _npc_pick_target(
 	state: MapCombatState,
 	npc_id: int,
@@ -1285,7 +1279,7 @@ static func _npc_pick_target(
 	chars_by_id: Dictionary,
 ) -> int:
 	var best_id: int = -1
-	var best_wounds: int = 999999
+	var best_wounds: int = -1
 	for cid: int in candidate_ids:
 		if cid == npc_id:
 			continue
@@ -1293,7 +1287,7 @@ static func _npc_pick_target(
 		if c == null or CharacterStats.is_dead(c):
 			continue
 		var wt: int = c.wounds_taken
-		if wt < best_wounds:
+		if wt > best_wounds:
 			best_wounds = wt
 			best_id = cid
 	return best_id
@@ -1470,17 +1464,26 @@ static func _apply_hit(
 	}
 
 
-## Check if a character is incapacitated (Out or Dead) and mark combat over if needed.
+## Check if a character is dead, erase them from the map, and mark combat over
+## if no two opposing factions remain. Avoids requiring chars_by_id in hot path.
 static func _check_and_mark_over(
 	state: MapCombatState,
 	char_id: int,
 	character: L5RCharacterData,
 ) -> void:
-	if CharacterStats.is_dead(character):
-		var over: Dictionary = IndividualCombat.check_combat_over(state.combat)
-		if over.get("is_over", false):
-			state.combat.is_over = true
-			state.combat.winner_id = over.get("winner_id", -1)
+	if not CharacterStats.is_dead(character):
+		return
+	# Remove the dead combatant from the map immediately.
+	state.positions.erase(char_id)
+	# Scan remaining positioned combatants; if only one faction remains, combat ends.
+	var faction_to_id: Dictionary = {}  # faction -> one surviving char_id
+	for cid: int in state.positions.keys():
+		var f: String = state.factions.get(cid, FACTION_NEUTRAL)
+		faction_to_id[f] = cid
+	if faction_to_id.size() <= 1:
+		state.combat.is_over = true
+		if faction_to_id.size() == 1:
+			state.combat.winner_id = faction_to_id.values()[0]
 
 
 ## True if a participant is effectively out of combat (DOWN, OUT, or DEAD).
