@@ -760,10 +760,15 @@ func try_stealth_move(dx: int, dy: int) -> Dictionary:
 	var wound_pen: int = CharacterStats.get_wound_penalty(player.character)
 	# Mutation modifiers (s44): MASTER_OF_SHADOWS +taint_rank unkept to Stealth
 	var stealth_mut: Dictionary = MutationSystem.get_skill_modifiers(player.character, "Stealth")
+	# Advantage/disadvantage modifiers (s45): SILENT +1k0 to Stealth
+	var stealth_adv: Dictionary = AdvantageSystem.get_skill_bonus(
+		player.character, "Stealth", {"is_stealth": true}
+	)
+	var stealth_adv_tn: int = AdvantageSystem.get_tn_modifier(player.character, {"is_stealth": true})
 	var roll_result: Dictionary = _dice.roll_check(
-		player.character.agility + stealth_rank + stealth_mut["rolled"],
-		player.character.agility + stealth_mut["kept"],
-		ground_tn, 0, wound_pen, stealth_rank > 0
+		player.character.agility + stealth_rank + stealth_mut["rolled"] + stealth_adv["rolled"],
+		player.character.agility + stealth_mut["kept"] + stealth_adv["kept"],
+		ground_tn, 0, wound_pen - stealth_adv_tn + (stealth_adv["free_raises"] * 5), stealth_rank > 0
 	)
 
 	player.x = tx
@@ -812,10 +817,15 @@ func execute_stealth_kill(target_id: int) -> Dictionary:
 		approach_tn = maxi(5, approach_tn - SLEEPING_DETECTION_BONUS)  # easier approach vs sleeping
 	# Mutation modifiers (s44): MASTER_OF_SHADOWS +taint_rank unkept to Stealth
 	var stealth_mut_kill: Dictionary = MutationSystem.get_skill_modifiers(player.character, "Stealth")
+	# Advantage/disadvantage modifiers (s45): SILENT +1k0 to Stealth
+	var stealth_kill_adv: Dictionary = AdvantageSystem.get_skill_bonus(
+		player.character, "Stealth", {"is_stealth": true}
+	)
+	var stealth_kill_adv_tn: int = AdvantageSystem.get_tn_modifier(player.character, {"is_stealth": true})
 	var approach_roll: Dictionary = _dice.roll_check(
-		player.character.agility + stealth_rank + stealth_mut_kill["rolled"],
-		player.character.agility + stealth_mut_kill["kept"],
-		approach_tn, 0, wound_pen, stealth_rank > 0
+		player.character.agility + stealth_rank + stealth_mut_kill["rolled"] + stealth_kill_adv["rolled"],
+		player.character.agility + stealth_mut_kill["kept"] + stealth_kill_adv["kept"],
+		approach_tn, 0, wound_pen - stealth_kill_adv_tn + (stealth_kill_adv["free_raises"] * 5), stealth_rank > 0
 	)
 
 	if not approach_roll["success"]:
@@ -1395,9 +1405,15 @@ func _emit_noise(sx: int, sy: int, noise_level: int) -> void:
 
 			var perc: int = es.character.perception
 			var invest: int = es.character.skills.get("Investigation", 0)
-			var rolled: int = perc + invest + bonus
-			var kept: int = perc
-			var roll: Dictionary = _dice.roll_check(rolled, kept, effective_tn, 0, 0, invest > 0)
+			# Advantage/disadvantage modifiers (s45): CONSUMED Perfection, etc.
+			var is_sch_inv: bool = NPCAdvancement.get_school_skills(es.character).has("Investigation")
+			var adv_inv: Dictionary = AdvantageSystem.get_skill_bonus(
+				es.character, "Investigation", {"is_school_skill": is_sch_inv})
+			var adv_inv_tn: int = AdvantageSystem.get_tn_modifier(es.character, {})
+			var rolled: int = perc + invest + bonus + adv_inv["rolled"]
+			var kept: int = perc + adv_inv["kept"]
+			var inv_flat: int = adv_inv["free_raises"] * 5 - adv_inv_tn
+			var roll: Dictionary = _dice.roll_check(rolled, kept, effective_tn, 0, inv_flat, invest > 0)
 			detected = roll["success"]
 
 		if detected:

@@ -524,7 +524,8 @@ static func execute_melee_attack(
 
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
-		false, spend_void, false, maneuver
+		false, spend_void, false, maneuver,
+		{"opponent_clan": target.clan}
 	)
 
 	var log_entry: Dictionary = {
@@ -620,7 +621,8 @@ static func execute_ranged_attack(
 
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
-		in_melee, spend_void, false, ""
+		in_melee, spend_void, false, "",
+		{"opponent_clan": target.clan}
 	)
 
 	var log_entry: Dictionary = {
@@ -686,7 +688,7 @@ static func execute_extra_attack(
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, true, is_being_guarded, weapon_name)
 
 	var result: Dictionary = IndividualCombat.resolve_extra_attack(
-		attacker, a_p, weapon_name, armor_tn, dice_engine
+		attacker, a_p, weapon_name, armor_tn, dice_engine, {"opponent_clan": target.clan}
 	)
 
 	if result.get("hit", false):
@@ -1501,7 +1503,8 @@ static func _execute_down_attack(
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, true, is_being_guarded, weapon_name)
 
 	var result: Dictionary = IndividualCombat.resolve_attack(
-		attacker, a_p, weapon_name, armor_tn, 0, dice_engine, false, false, false, ""
+		attacker, a_p, weapon_name, armor_tn, 0, dice_engine, false, false, false, "",
+		{"opponent_clan": target.clan}
 	)
 	result["void_required"] = true
 
