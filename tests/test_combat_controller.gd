@@ -2135,3 +2135,50 @@ func test_stealth_kill_survivor_clears_player_stealth() -> void:
 		"_player_stealth must be false after target survives stealth kill")
 	assert_eq(target_es.alert_state, AsciiMapEnvironment.AlertState.ALERT,
 		"surviving target must be ALERT after surviving a stealth kill attempt")
+
+
+# =============================================================================
+# -- Bug fix regression: enemy on ZONE_EXIT tile (Bug 5) ---------------------
+# =============================================================================
+
+func test_enemy_on_exit_tile_attacked_not_exited() -> void:
+	# Regression for Bug 5: when an enemy stands on a ZONE_EXIT tile and the
+	# player bumps into that tile, the player must attack the enemy instead of
+	# exiting the zone.
+	#
+	# Old code checked zone exit BEFORE the enemy check — the player would
+	# silently exit even though a live enemy was blocking the tile.
+	# New code checks enemy first; zone exit only fires if the tile is clear.
+	#
+	# Layout (row y=5):
+	#   col: 5(player)  6(enemy standing on ZONE_EXIT)
+	var session := _make_session(5, 5, [
+		{"unit_type": "SIMPLE_BANDIT", "x": 6, "y": 5, "seed": 0}
+	])
+	session.map.set_tile(6, 5, Enums.TileType.ZONE_EXIT)
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
+	var enemy_es: CombatController.EntityState = cc.get_enemies_at(6, 5)[0]
+	assert_eq(session.map.get_tile(6, 5), Enums.TileType.ZONE_EXIT,
+		"precondition: tile (6,5) must be ZONE_EXIT")
+	var result: Dictionary = cc.try_move_player(1, 0)
+	assert_false(result.get("exited", false),
+		"player must NOT exit zone when an enemy guards the exit tile")
+	assert_true(result.get("attacked", false),
+		"player must attack the enemy standing on the exit tile")
+	assert_eq(result.get("target_id", -1), enemy_es.entity_id,
+		"attack must target the enemy on the exit tile")
+
+
+func test_zone_exit_works_when_tile_is_clear() -> void:
+	# Companion positive test: when no enemy is on the ZONE_EXIT tile,
+	# the player must still be able to exit normally (regression guard).
+	var session := _make_session(5, 5, [])
+	session.map.set_tile(6, 5, Enums.TileType.ZONE_EXIT)
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
+	var result: Dictionary = cc.try_move_player(1, 0)
+	assert_true(result.get("exited", false),
+		"player must exit when moving onto a clear ZONE_EXIT tile")
+	assert_eq(result.get("exit_x", -1), 6,
+		"exited result must carry the correct exit x coordinate")
+	assert_eq(result.get("exit_y", -1), 5,
+		"exited result must carry the correct exit y coordinate")

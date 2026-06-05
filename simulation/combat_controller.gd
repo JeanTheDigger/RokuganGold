@@ -673,11 +673,8 @@ func try_move_player(dx: int, dy: int) -> Dictionary:
 		_emit_noise(tx, ty, AsciiMapEnvironment.NoiseLevel.MODERATE)
 		return {"opened_door": true, "door_x": tx, "door_y": ty}
 
-	# Zone exit.
-	if target_tile == Enums.TileType.ZONE_EXIT:
-		return {"exited": true, "exit_x": tx, "exit_y": ty}
-
-	# Enemy in the target tile → bump-to-attack.
+	# Enemy in the target tile → bump-to-attack (checked before zone exit so an
+	# enemy guarding the exit can be fought rather than the player slipping past).
 	var target_es: EntityState = _entity_at(tx, ty)
 	if target_es != null and target_es.faction == FACTION_ENEMY:
 		var weapon: String = IndividualCombat.pick_best_weapon(player.character)
@@ -704,6 +701,10 @@ func try_move_player(dx: int, dy: int) -> Dictionary:
 			"player_x":      player.x,
 			"player_y":      player.y,
 		}
+
+	# Zone exit (only reachable if no enemy is standing on the tile).
+	if target_tile == Enums.TileType.ZONE_EXIT:
+		return {"exited": true, "exit_x": tx, "exit_y": ty}
 
 	# Normal movement.
 	var step: Dictionary = MovementSystem.check_step(_map, player.x, player.y, tx, ty)
