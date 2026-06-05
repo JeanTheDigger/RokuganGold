@@ -642,8 +642,9 @@ static func _roll_captain_survival(
 	if rolled <= 0 or kept <= 0:
 		return {"outcome": "dead", "roll_total": 0, "tn": tn}
 
+	var wound_pen: int = CharacterStats.get_wound_penalty(captain)
 	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, true, false)
-	var total: int = result.total
+	var total: int = result.total + wound_pen
 
 	if total >= tn:
 		return {"outcome": "survived", "roll_total": total, "tn": tn}

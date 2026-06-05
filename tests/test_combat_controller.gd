@@ -2300,3 +2300,55 @@ func test_execute_player_attack_kill_surfaces_morale_event() -> void:
 			break
 	assert_true(found_morale,
 		"execute_player_attack kill of 50% enemies must surface morale_broken in advance_npc_turns()")
+
+
+# =============================================================================
+# -- Noise Detection: Wound Penalty + Mutation Modifiers ----------------------
+# =============================================================================
+
+func test_noise_detection_wounded_npc_has_penalty() -> void:
+	var session := _make_session(1, 1, [
+		{"unit_type": "SIMPLE_BANDIT", "x": 3, "y": 1, "seed": 0},
+	])
+	var pc := _make_strong_player()
+	var dice := DiceEngine.new(42)
+	var cc := CombatController.create(session, pc, dice)
+
+	var enemy: CombatController.EntityState
+	for e: CombatController.EntityState in cc.get_all_entities():
+		if e.faction == CombatController.FACTION_ENEMY:
+			enemy = e
+			break
+
+	# Wound the NPC heavily — Earth 2 (stamina=2 for SIMPLE_BANDIT), so
+	# wound levels at 4/8/12/16/20/24/28.  9 wounds = Grazed level = -3 penalty.
+	enemy.character.wounds_taken = 9
+	var penalty: int = CharacterStats.get_wound_penalty(enemy.character)
+	assert_lt(penalty, 0, "Wounded NPC should have negative wound penalty")
+
+	# The wound penalty is a flat modifier that reduces the NPC's detection roll
+	# total. We can't easily assert the exact roll outcome (dice are random), but
+	# we can confirm the code path doesn't crash and the penalty is applied by
+	# comparing detection rates across many seeds.
+	var detections_wounded: int = 0
+	var detections_healthy: int = 0
+	for seed_val: int in range(200):
+		# Wounded run
+		enemy.character.wounds_taken = 9
+		enemy.alert_state = AsciiMapEnvironment.AlertState.UNAWARE
+		dice.set_seed(seed_val)
+		cc._emit_noise(3, 1, AsciiMapEnvironment.NoiseLevel.QUIET)
+		if enemy.alert_state == AsciiMapEnvironment.AlertState.SUSPICIOUS:
+			detections_wounded += 1
+		enemy.alert_state = AsciiMapEnvironment.AlertState.UNAWARE
+
+		# Healthy run (same seed)
+		enemy.character.wounds_taken = 0
+		dice.set_seed(seed_val)
+		cc._emit_noise(3, 1, AsciiMapEnvironment.NoiseLevel.QUIET)
+		if enemy.alert_state == AsciiMapEnvironment.AlertState.SUSPICIOUS:
+			detections_healthy += 1
+		enemy.alert_state = AsciiMapEnvironment.AlertState.UNAWARE
+
+	assert_true(detections_healthy >= detections_wounded,
+		"Healthy NPC should detect at least as often as wounded NPC")

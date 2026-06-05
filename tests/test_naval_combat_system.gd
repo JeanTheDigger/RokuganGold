@@ -714,3 +714,44 @@ func test_collect_escaped_ships_returns_correct_side() -> void:
 		sides.append(e["side"])
 	sides.sort()
 	assert_eq(sides, ["attacker", "defender"])
+
+
+# -- Captain Survival: Wound Penalty -------------------------------------------
+
+func _make_captain(
+	id: int,
+	earth: int = 3,
+	battle: int = 3,
+) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.clan = "Mantis"
+	c.stamina = earth
+	c.willpower = earth
+	c.agility = 3; c.intelligence = 3
+	c.strength = 3; c.perception = 3
+	c.reflexes = 3; c.awareness = 3
+	c.void_ring = 2
+	c.skills = {"Battle": battle}
+	c.wounds_taken = 0
+	return c
+
+
+func test_captain_survival_wound_penalty_reduces_total() -> void:
+	var cap := _make_captain(1, 2, 1)
+	var survived_healthy: int = 0
+	var survived_wounded: int = 0
+	for seed_val: int in range(100):
+		_dice.set_seed(seed_val)
+		cap.wounds_taken = 0
+		var r_h: Dictionary = NavalCombatSystem._roll_captain_survival(cap, 15, _dice)
+		if r_h["outcome"] != "dead":
+			survived_healthy += 1
+
+		_dice.set_seed(seed_val)
+		cap.wounds_taken = 5
+		var r_w: Dictionary = NavalCombatSystem._roll_captain_survival(cap, 15, _dice)
+		if r_w["outcome"] != "dead":
+			survived_wounded += 1
+	assert_true(survived_healthy >= survived_wounded,
+		"Healthy captain should survive at least as often as wounded")

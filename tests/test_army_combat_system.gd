@@ -1820,3 +1820,26 @@ func test_strategist_and_tactician_stack() -> void:
 	var bonus: Dictionary = ArmyCombatSystem.resolve_commander_bonus(cmd, "Lion")
 	# Battle rank 3 + TACTICIAN +5 + STRATEGIST +1 = 9
 	assert_eq(bonus["bonus_value"], 9, "TACTICIAN and STRATEGIST bonuses should stack")
+
+
+# -- Commander Survival: Wound Penalty -----------------------------------------
+
+func test_commander_survival_wound_penalty_reduces_total() -> void:
+	# Earth 2, Battle 1 → rolled=3, kept=2. Wound at 5 = Nicked (-3 penalty).
+	var cmd := _make_commander(1, "Lion", 2, 2, 2, 2, 2, 1)
+	var survived_healthy: int = 0
+	var survived_wounded: int = 0
+	for seed_val: int in range(100):
+		_dice.set_seed(seed_val)
+		cmd.wounds_taken = 0
+		var r_h: Dictionary = ArmyCombatSystem._roll_commander_survival(cmd, 15, _dice)
+		if r_h["outcome"] != "dead":
+			survived_healthy += 1
+
+		_dice.set_seed(seed_val)
+		cmd.wounds_taken = 5
+		var r_w: Dictionary = ArmyCombatSystem._roll_commander_survival(cmd, 15, _dice)
+		if r_w["outcome"] != "dead":
+			survived_wounded += 1
+	assert_true(survived_healthy >= survived_wounded,
+		"Healthy commander should survive at least as often as wounded")

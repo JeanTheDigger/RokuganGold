@@ -1405,14 +1405,16 @@ func _emit_noise(sx: int, sy: int, noise_level: int) -> void:
 
 			var perc: int = es.character.perception
 			var invest: int = es.character.skills.get("Investigation", 0)
+			var wound_pen_npc: int = CharacterStats.get_wound_penalty(es.character)
+			var inv_mut: Dictionary = MutationSystem.get_skill_modifiers(es.character, "Investigation")
 			# Advantage/disadvantage modifiers (s45): CONSUMED Perfection, etc.
 			var is_sch_inv: bool = NPCAdvancement.get_school_skills(es.character).has("Investigation")
 			var adv_inv: Dictionary = AdvantageSystem.get_skill_bonus(
 				es.character, "Investigation", {"is_school_skill": is_sch_inv})
 			var adv_inv_tn: int = AdvantageSystem.get_tn_modifier(es.character, {})
-			var rolled: int = perc + invest + bonus + adv_inv["rolled"]
-			var kept: int = perc + adv_inv["kept"]
-			var inv_flat: int = adv_inv["free_raises"] * 5 - adv_inv_tn
+			var rolled: int = perc + invest + bonus + adv_inv["rolled"] + inv_mut["rolled"]
+			var kept: int = perc + adv_inv["kept"] + inv_mut["kept"]
+			var inv_flat: int = adv_inv["free_raises"] * 5 - adv_inv_tn + wound_pen_npc
 			var roll: Dictionary = _dice.roll_check(rolled, kept, effective_tn, 0, inv_flat, invest > 0)
 			detected = roll["success"]
 
