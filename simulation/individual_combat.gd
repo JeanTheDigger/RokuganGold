@@ -1061,6 +1061,9 @@ static func grapple_throw(controller_p: Participant, target_p: Participant) -> v
 	apply_condition(target_p, CONDITION_PRONE)
 	target_p.grapple_partner_id = -1
 	target_p.grapple_in_control = false
+	remove_condition(controller_p, CONDITION_GRAPPLED)   # Bug 8 FIX: throw ends grapple for controller too
+	controller_p.grapple_partner_id = -1                 # Bug 8 FIX
+	controller_p.grapple_in_control = false              # Bug 8 FIX
 
 
 # =============================================================================

@@ -396,6 +396,25 @@ func test_grapple_throw_makes_target_prone() -> void:
 	assert_true(IndividualCombat.has_condition(target_p, IndividualCombat.CONDITION_PRONE))
 
 
+func test_grapple_throw_clears_controller_grapple_state() -> void:
+	# Bug 8 regression: grapple_throw cleared target state but left controller stuck in GRAPPLED.
+	var controller_p := IndividualCombat.Participant.new()
+	var target_p := IndividualCombat.Participant.new()
+	IndividualCombat.apply_condition(controller_p, IndividualCombat.CONDITION_GRAPPLED)
+	IndividualCombat.apply_condition(target_p, IndividualCombat.CONDITION_GRAPPLED)
+	controller_p.grapple_partner_id = 99
+	controller_p.grapple_in_control = true
+	target_p.grapple_partner_id = 1
+	target_p.grapple_in_control = false
+	IndividualCombat.grapple_throw(controller_p, target_p)
+	assert_false(IndividualCombat.has_condition(controller_p, IndividualCombat.CONDITION_GRAPPLED),
+		"controller must not remain GRAPPLED after throw")
+	assert_eq(controller_p.grapple_partner_id, -1,
+		"controller grapple_partner_id must be cleared to -1 after throw")
+	assert_false(controller_p.grapple_in_control,
+		"controller grapple_in_control must be cleared after throw")
+
+
 # -- Sumai --------------------------------------------------------------------
 
 func test_sumai_bout_has_outcome() -> void:
