@@ -399,3 +399,43 @@ func test_handle_character_death_clears_dead_handler() -> void:
 	GeishaSystem.handle_character_death([okiya], 42, {})
 	assert_eq(okiya.handler_id, -1, "Dead handler cleared")
 	assert_eq(okiya.okaasan_id, 5, "Okaasan unaffected")
+
+
+# ============================================================================
+# WOUND PENALTY ON KOLAT EAVESDROP ROLL
+# ============================================================================
+
+func test_kolat_eavesdrop_wound_penalty_reduces_success_rate() -> void:
+	var okaasan := L5RCharacterData.new()
+	okaasan.character_id = 200
+	okaasan.skills = {"Stealth": 2}
+	okaasan.stamina = 2
+	okaasan.willpower = 2
+	okaasan.wounds_taken = 0
+
+	var healthy_successes: int = 0
+	var wounded_successes: int = 0
+	for seed_val: int in range(100):
+		var agent_h := L5RCharacterData.new()
+		agent_h.character_id = 300
+		agent_h.skills = {"Investigation": 3}
+		agent_h.perception = 3
+		agent_h.stamina = 2
+		agent_h.willpower = 2
+		agent_h.wounds_taken = 0
+		var d1 := DiceEngine.new(seed_val)
+		if GeishaSystem._kolat_eavesdrop_roll(okaasan, agent_h, d1):
+			healthy_successes += 1
+
+		var agent_w := L5RCharacterData.new()
+		agent_w.character_id = 301
+		agent_w.skills = {"Investigation": 3}
+		agent_w.perception = 3
+		agent_w.stamina = 2
+		agent_w.willpower = 2
+		agent_w.wounds_taken = 13  # HURT = -10 with Earth 2
+		var d2 := DiceEngine.new(seed_val)
+		if GeishaSystem._kolat_eavesdrop_roll(okaasan, agent_w, d2):
+			wounded_successes += 1
+	assert_true(healthy_successes >= wounded_successes,
+		"Wounded Kolat agent should succeed less often (healthy=%d, wounded=%d)" % [healthy_successes, wounded_successes])

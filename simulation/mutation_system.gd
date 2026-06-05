@@ -379,8 +379,10 @@ static func resolve_periodic_taint_roll(
 ) -> Dictionary:
 	var rank: int = get_taint_rank(character.taint)
 	var tn: int = get_roll_tn(rank)
+	var wound_pen: int = CharacterStats.get_wound_penalty(character)
 	var result: Dictionary = dice.roll_skill_check(earth_ring, 0, 0)
-	var success: bool = result["total"] >= tn
+	var adjusted_total: int = result["total"] + wound_pen
+	var success: bool = adjusted_total >= tn
 	if not success:
 		character.taint += 1.0
 
@@ -389,10 +391,11 @@ static func resolve_periodic_taint_roll(
 		"taint_roll": true,
 		"taint_rank": rank,
 		"tn": tn,
-		"roll_total": result["total"],
+		"roll_total": adjusted_total,
 		"success": success,
 		"taint_gained": 0 if success else 1,
 		"taint_after": character.taint,
+		"wound_penalty": wound_pen,
 	}
 
 
@@ -405,8 +408,10 @@ static func resolve_power_use_taint_roll(
 	dice: DiceEngine,
 ) -> Dictionary:
 	var tn: int = get_power_use_tn(power_tier)
+	var wound_pen: int = CharacterStats.get_wound_penalty(character)
 	var result: Dictionary = dice.roll_skill_check(earth_ring, 0, 0)
-	var success: bool = result["total"] >= tn
+	var adjusted_total: int = result["total"] + wound_pen
+	var success: bool = adjusted_total >= tn
 	if not success:
 		character.taint += 1.0
 
@@ -415,10 +420,11 @@ static func resolve_power_use_taint_roll(
 		"power_taint_roll": true,
 		"power_tier": power_tier,
 		"tn": tn,
-		"roll_total": result["total"],
+		"roll_total": adjusted_total,
 		"success": success,
 		"taint_gained": 0 if success else 1,
 		"taint_after": character.taint,
+		"wound_penalty": wound_pen,
 	}
 
 

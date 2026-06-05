@@ -1083,3 +1083,55 @@ func test_has_invulnerability_true_with_power() -> void:
 		Enums.ShadowlandsPowerTier.MAJOR, _dice(), 1
 	)
 	assert_true(MutationSystem.has_invulnerability(c))
+
+
+# ---------------------------------------------------------------------------
+# Wound penalty on taint rolls
+# ---------------------------------------------------------------------------
+
+func test_periodic_taint_roll_wound_penalty_reduces_total() -> void:
+	var healthy_totals: int = 0
+	var wounded_totals: int = 0
+	for seed_val: int in range(100):
+		var ch := _make_char(1, 3, 3)
+		ch.taint = 2.0
+		ch.wounds_taken = 0
+		var d1 := DiceEngine.new()
+		d1.set_seed(seed_val)
+		var r1: Dictionary = MutationSystem.resolve_periodic_taint_roll(ch, 3, d1, 1)
+		healthy_totals += r1["roll_total"]
+
+		var cw := _make_char(2, 3, 3)
+		cw.taint = 2.0
+		cw.wounds_taken = 13  # HURT = -10 with Earth 2 threshold
+		var d2 := DiceEngine.new()
+		d2.set_seed(seed_val)
+		var r2: Dictionary = MutationSystem.resolve_periodic_taint_roll(cw, 3, d2, 1)
+		wounded_totals += r2["roll_total"]
+	assert_true(healthy_totals > wounded_totals,
+		"Wounded characters should have lower taint roll totals (healthy=%d, wounded=%d)" % [healthy_totals, wounded_totals])
+
+
+func test_power_use_taint_roll_wound_penalty_reduces_total() -> void:
+	var healthy_totals: int = 0
+	var wounded_totals: int = 0
+	for seed_val: int in range(100):
+		var ch := _make_char(1, 3, 3)
+		ch.taint = 2.0
+		ch.wounds_taken = 0
+		var d1 := DiceEngine.new()
+		d1.set_seed(seed_val)
+		var r1: Dictionary = MutationSystem.resolve_power_use_taint_roll(
+			ch, 3, Enums.ShadowlandsPowerTier.MINOR, d1)
+		healthy_totals += r1["roll_total"]
+
+		var cw := _make_char(2, 3, 3)
+		cw.taint = 2.0
+		cw.wounds_taken = 13
+		var d2 := DiceEngine.new()
+		d2.set_seed(seed_val)
+		var r2: Dictionary = MutationSystem.resolve_power_use_taint_roll(
+			cw, 3, Enums.ShadowlandsPowerTier.MINOR, d2)
+		wounded_totals += r2["roll_total"]
+	assert_true(healthy_totals > wounded_totals,
+		"Wounded characters should have lower power taint roll totals (healthy=%d, wounded=%d)" % [healthy_totals, wounded_totals])

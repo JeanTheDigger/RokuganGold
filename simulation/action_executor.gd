@@ -876,8 +876,9 @@ static func _execute_gossip(
 	var skill_rank: int = character.skills.get(primary_skill, 0)
 	var trait_val: int = _get_trait_value_by_name(character, primary_trait)
 	var gossip_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
+	var gossip_wound: int = CharacterStats.get_wound_penalty(character)
 	var roll_result: Dictionary = dice_engine.roll_skill_check(
-		trait_val, skill_rank, tn
+		trait_val, skill_rank, tn, 0, gossip_wound
 	)
 
 	var roll_total: int = roll_result.get("total", 0) + gossip_wc
@@ -942,16 +943,18 @@ static func _execute_public_insult(
 	var trait_val: int = _get_trait_value_by_name(character, primary_trait)
 
 	var insult_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
+	var insult_wound_a: int = CharacterStats.get_wound_penalty(character)
 	var attacker_total: int = dice_engine.roll_skill_check(
-		trait_val, skill_rank, 0
+		trait_val, skill_rank, 0, 0, insult_wound_a
 	).get("total", 0) + insult_wc
 
 	var defender_total: int = 0
 	if target != null:
 		var def_etiquette: int = target.skills.get("Etiquette", 0)
 		var def_awareness: int = target.awareness
+		var insult_wound_d: int = CharacterStats.get_wound_penalty(target)
 		defender_total = dice_engine.roll_skill_check(
-			def_awareness, def_etiquette, 0
+			def_awareness, def_etiquette, 0, 0, insult_wound_d
 		).get("total", 0)
 
 	var success: bool = attacker_total >= defender_total
@@ -1074,16 +1077,18 @@ static func _execute_public_debate(
 	var a_skill_rank: int = character.skills.get(primary_skill, 0)
 	var a_trait_val: int = _get_trait_value_by_name(character, a_trait_name)
 	var debate_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
+	var debate_wound_a: int = CharacterStats.get_wound_penalty(character)
 	var a_roll: int = dice_engine.roll_skill_check(
-		a_trait_val, a_skill_rank, 0
+		a_trait_val, a_skill_rank, 0, 0, debate_wound_a
 	).get("total", 0) + debate_wc
 
 	var b_roll: int = 0
 	if target != null:
 		var b_courtier: int = target.skills.get("Courtier", 0)
 		var b_awareness: int = target.awareness
+		var debate_wound_b: int = CharacterStats.get_wound_penalty(target)
 		b_roll = dice_engine.roll_skill_check(
-			b_awareness, b_courtier, 0
+			b_awareness, b_courtier, 0, 0, debate_wound_b
 		).get("total", 0)
 
 	var margin: int = a_roll - b_roll
@@ -3963,8 +3968,9 @@ static func _execute_contested_court_action(
 		a_skill_rank = character.skills.get(a_skill, 0)
 	var a_trait_val: int = _get_trait_value_by_name(character, a_trait_name)
 	var wc_bonus: int = _get_winter_court_skill_bonus(character, a_skill, ctx)
+	var contested_wound_a: int = CharacterStats.get_wound_penalty(character)
 	var attacker_roll: int = dice_engine.roll_skill_check(
-		a_trait_val, a_skill_rank, 0
+		a_trait_val, a_skill_rank, 0, 0, contested_wound_a
 	).get("total", 0) + wc_bonus
 
 	var defender_roll: int = 0
@@ -3973,8 +3979,9 @@ static func _execute_contested_court_action(
 		var d_trait_name: String = _CONTESTED_DEFENDER_TRAIT.get(action_id, "Awareness")
 		var d_skill_rank: int = target.skills.get(d_skill, 0)
 		var d_trait_val: int = _get_trait_value_by_name(target, d_trait_name)
+		var contested_wound_d: int = CharacterStats.get_wound_penalty(target)
 		defender_roll = dice_engine.roll_skill_check(
-			d_trait_val, d_skill_rank, 0
+			d_trait_val, d_skill_rank, 0, 0, contested_wound_d
 		).get("total", 0)
 
 	if action_id == "OFFER_FAVOR":
@@ -4131,16 +4138,18 @@ static func _execute_provoke_emotion(
 	var a_skill_rank: int = character.skills.get("Courtier", 0)
 	var a_trait_val: int = character.awareness
 	var provoke_wc: int = _get_winter_court_skill_bonus(character, "Courtier", ctx)
+	var provoke_wound_a: int = CharacterStats.get_wound_penalty(character)
 	var attacker_roll: int = dice_engine.roll_skill_check(
-		a_trait_val, a_skill_rank, 0
+		a_trait_val, a_skill_rank, 0, 0, provoke_wound_a
 	).get("total", 0) + provoke_wc
 
 	var defender_roll: int = 0
 	if target != null:
 		var d_etiquette: int = target.skills.get("Etiquette", 0)
 		var d_willpower: int = target.willpower
+		var provoke_wound_d: int = CharacterStats.get_wound_penalty(target)
 		defender_roll = dice_engine.roll_skill_check(
-			d_willpower, d_etiquette, 0
+			d_willpower, d_etiquette, 0, 0, provoke_wound_d
 		).get("total", 0)
 
 	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
@@ -4203,16 +4212,18 @@ static func _execute_play_game(
 
 	var a_skill_rank: int = character.skills.get(game_skill, 0)
 	var a_trait_val: int = _get_trait_value_by_name(character, game_trait)
+	var game_wound_a: int = CharacterStats.get_wound_penalty(character)
 	var a_roll: int = dice_engine.roll_skill_check(
-		a_trait_val, a_skill_rank, 0
+		a_trait_val, a_skill_rank, 0, 0, game_wound_a
 	).get("total", 0)
 
 	var b_roll: int = 0
 	if target != null:
 		var b_skill_rank: int = target.skills.get(game_skill, 0)
 		var b_trait_val: int = _get_trait_value_by_name(target, game_trait)
+		var game_wound_b: int = CharacterStats.get_wound_penalty(target)
 		b_roll = dice_engine.roll_skill_check(
-			b_trait_val, b_skill_rank, 0
+			b_trait_val, b_skill_rank, 0, 0, game_wound_b
 		).get("total", 0)
 
 	var resolution: Dictionary = CourtActionSystem.resolve_play_game(
@@ -4269,16 +4280,18 @@ static func _execute_discern_need(
 	var a_skill_rank: int = character.skills.get(a_skill, 0)
 	var a_trait_val: int = _get_trait_value_by_name(character, a_trait_name)
 	var discern_wc: int = _get_winter_court_skill_bonus(character, a_skill, ctx)
+	var discern_wound_a: int = CharacterStats.get_wound_penalty(character)
 	var attacker_roll: int = dice_engine.roll_skill_check(
-		a_trait_val, a_skill_rank, 0
+		a_trait_val, a_skill_rank, 0, 0, discern_wound_a
 	).get("total", 0) + discern_wc
 
 	var defender_roll: int = 0
 	if target != null:
 		var d_etiquette: int = target.skills.get("Etiquette", 0)
 		var d_awareness: int = target.awareness
+		var discern_wound_d: int = CharacterStats.get_wound_penalty(target)
 		defender_roll = dice_engine.roll_skill_check(
-			d_awareness, d_etiquette, 0
+			d_awareness, d_etiquette, 0, 0, discern_wound_d
 		).get("total", 0)
 
 	var resolution: Dictionary = CourtActionSystem.resolve_discern_need(
@@ -4720,8 +4733,9 @@ static func _execute_ask_for_introduction(
 	# Bureaucracy emphasis grants +1k0 on kuge rolls per s55.7.3.
 	var has_emphasis: bool = target_is_kuge and character.skills.has("Bureaucracy")
 	var intro_wc: int = _get_winter_court_skill_bonus(character, skill, ctx)
+	var intro_wound: int = CharacterStats.get_wound_penalty(character)
 	var roll_result: Dictionary = dice_engine.roll_skill_check(
-		trait_val, skill_rank, 0, 0, 0, has_emphasis
+		trait_val, skill_rank, 0, 0, intro_wound, has_emphasis
 	)
 	var roll_total: int = roll_result.get("total", 0) + intro_wc
 
@@ -4768,7 +4782,8 @@ static func _execute_observe_court_attendees(
 ) -> Dictionary:
 	var skill_rank: int = character.skills.get("Investigation", 0)
 	var trait_val: int = character.perception
-	var roll_result: Dictionary = dice_engine.roll_skill_check(trait_val, skill_rank, 0)
+	var observe_wound: int = CharacterStats.get_wound_penalty(character)
+	var roll_result: Dictionary = dice_engine.roll_skill_check(trait_val, skill_rank, 0, 0, observe_wound)
 	var roll_total: int = roll_result.get("total", 0)
 
 	var observable_ids: Array = action.metadata.get("observable_attendee_ids", [])

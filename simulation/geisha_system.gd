@@ -315,8 +315,9 @@ static func _kolat_eavesdrop_roll(
 
 	var investigation: int = SkillResolver.get_skill_rank(kolat_agent, "Investigation")
 	var perception: int = kolat_agent.perception
-	var roll: int = DiceEngine.roll_and_keep(investigation + 1, perception, dice)
-	return roll >= tn
+	var wound_pen: int = CharacterStats.get_wound_penalty(kolat_agent)
+	var roll_result: DiceResult = dice.roll_and_keep(investigation + 1, perception, true, false)
+	return (roll_result.total + wound_pen) >= tn
 
 
 # ============================================================================
