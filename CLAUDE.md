@@ -94,7 +94,7 @@ When implementing or auditing a system, go here first:
 | Intra-clan civil war                          | 53.2                 |
 | Courtier school techniques & rerolls          | 29.15                |
 | Skill resolver (technique/wound/emphasis)     | 29.15, 4.5           |
-| Individual combat                             | 40 (not yet built)   |
+| Individual combat                             | 40                   |
 | ASCII map mission generation                  | 56                   |
 | Quest seeds                                   | 56.1                 |
 | Spiritual insurgency (trigger layer)          | 56.16                |
@@ -3950,6 +3950,27 @@ mechanical change is applied until s40 individual combat is implemented.
 ### Systems Added 2026-06-02 (continued)
 - **s60 PC Integration** — `simulation/pc_system.gd`. New fields on L5RCharacterData: `is_pc`, `player_id`, `is_logged_in`, `home_settlement_id`, `banked_ap`, `offline_policies`, `bubble_scene_id`, `bubble_anchor_ic_day`. Logged-in: full world presence, NPC engine never runs for PCs. Logged-out: disappear from world, home anchor for letter delivery, AP accrues to `banked_ap` each tick (cap = 4× daily allocation). Offline reactive auto-resolve policies: QUEUE / HONOR / ACCEPT / DECLINE / CONDITIONAL per event type; 5 reactive event types; CONDITIONAL conditions (same_clan, disposition_friend, higher_status, lower_status). Bubble Time: scene_id + anchor_ic_day; AP reserved during scene, NPC participants occupied for scene IC duration. PC exclusions: no NPC decision engine, no standing objective auto-assignment, no strategic review, no daily letter pass. NPCs may target PCs normally; assassination PC crisis event gated on ASSASSINATION_GRACE policy. WorldState additions: `active_bubble_scenes`, `next_bubble_scene_id`. Constants A1–A5 locked (BANKED_AP_CAP_MULTIPLIER=4, OFFLINE_EVENT_QUEUE_CAP=30). Locked in gdd/s60_pc_integration_locked.md.
 
+### Systems Added 2026-06-05
+- **s40 Individual Combat — WeaponData/ArmorData Resources, NPC summary roll, weapon assignment.**
+  `shared/weapon_data.gd` (WeaponData Resource: weapon_name, rolled, kept, strength_adds, skill,
+  size, melee, trait — typed replacement for Dictionary-based WEAPON_CATALOG entries).
+  `shared/armor_data.gd` (ArmorData Resource: armor_name, tn_bonus, is_heavy — catalog empty;
+  Equipment section not yet in GDD, `armor_tn_bonus: int` on character retained for fast lookup).
+  `shared/character_data.gd`: `weapons: Array[WeaponData]` (was untyped Array),
+  `armor_worn: ArmorData = null` (was String).
+  `simulation/individual_combat.gd`: three new static functions —
+  `get_weapon_data(weapon_name)` converts WEAPON_CATALOG entry to typed WeaponData on demand;
+  `pick_best_weapon(character)` selects highest-skill weapon from catalog (unarmed fallback);
+  `resolve_npc_summary_combat(attacker, defender, dice, attacker_weapon, defender_weapon)`
+  implements the summary roll model (design decision): both NPCs roll attack simultaneously in
+  Attack Stance, damage applied via WoundSystem, winner by dead check then roll total tiebreak,
+  returns winner_id/loser_id plus full roll details for both sides.
+  `simulation/world_generator.gd`: `_assign_weapons(c)` assigns starting weapons at character
+  creation — daisho (katana+wakizashi) for Kenjutsu/Iaijutsu, naginata+tanto for Polearms,
+  tetsubo+tanto for Heavy Weapons, wakizashi for War Fan, unarmed for Jiujutsu-primary, tanto
+  for shugenja, katana+wakizashi fallback for all others; yumi added when Kyujutsu trained.
+  14 tests in `tests/test_individual_combat.gd`.
+
 ### Systems Added 2026-06-04
 - **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),
   `shared/mutation_data.gd`, `shared/shadowlands_power_data.gd`. Full catalog from GDD s44.
@@ -4397,7 +4418,7 @@ These sections have partial or no GDD spec. **Do not implement any of these with
 | s2.4 | `DECLARE_WALL_EMERGENCY` ActionID — s2.4.14 Decision 6: AP cost, agenda topic format, compliance enforcement |
 | s31 | Sense spell detection TN — Maho Channel 3 roll TN (core spell system DONE; this one value pending) |
 | s38 | Kiho system — full design needed |
-| s40 | Individual combat — full design needed |
+| s40 | Individual combat — PARTIAL. WeaponData/ArmorData Resources, NPC summary roll, weapon assignment done. Full PC-facing mechanics (all maneuvers, kata effects, grapple, sumai) blocked on design decisions. |
 | s43 | Maho spell cast roll TN — not specified. Needed for CAST_MAHO NPC ActionID |
 | s54.7 | Kolat system — 23 spy network ActionIDs, BRIBE_GARRISON_COMMANDER |
 | s56.14 | Bloodspeaker cult ASCII map encounters — trigger layer done, encounter design needed |
@@ -4421,7 +4442,7 @@ These sections have partial or no GDD spec. **Do not implement any of these with
 | Maho Channel 3 detection TN | s31 Sense spell design decision needed |
 | Animal companion ASCII combat | s40/s56 design |
 
-**Sections available for design and implementation (source material exists, design decisions needed before coding):** s38 (kiho), s40 (individual combat), s44 (Shadowlands mutations), s45 (advantages/disadvantages), s54.7 (Kolat), s57.42–s57.43 (sailing/ship zones), s57.46 (allied NPC companion).
+**Sections available for design and implementation (source material exists, design decisions needed before coding):** s38 (kiho), s40 (individual combat — partial, further design decisions needed), s44 (Shadowlands mutations — DONE), s45 (advantages/disadvantages — DONE), s54.7 (Kolat), s57.42–s57.43 (sailing/ship zones), s57.46 (allied NPC companion).
 **Note:** s31–s37 (spells — DONE, one pending value: Sense spell detection TN), s57.23 (garden), s57.24 (bonsai), s57.26 (origami), s57.27 (painting), s57.29 (ikebana), s57.30 (calligraphy), s57.41 (engineering), s57.45 (geisha) are all **DONE**.
 
 ---
