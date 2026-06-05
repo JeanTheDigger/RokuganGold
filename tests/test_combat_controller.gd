@@ -1863,3 +1863,130 @@ func test_body_discovery_does_not_alert_friendly_units() -> void:
 
 	assert_eq(friendly_es.alert_state, AsciiMapEnvironment.AlertState.UNAWARE,
 		"_check_body_discovery must not change friendly NPC alert state")
+
+
+# =============================================================================
+# -- Section 40: Bug fixes — in_combat on ALERT target, stealth flag on
+# --             stealth-kill failure, NPC FoV re-check after pursuit move
+# =============================================================================
+
+## Returns the sole enemy EntityState from the CC, asserts it exists.
+func _get_sole_enemy(cc: CombatController) -> CombatController.EntityState:
+	for es: CombatController.EntityState in cc._entities.values():
+		if es.faction == CombatController.FACTION_ENEMY:
+			return es
+	return null
+
+
+func test_execute_player_attack_sets_in_combat_on_already_alert_enemy() -> void:
+	# Bug: in_combat and combat_target_id were only set when transitioning
+	# from a non-ALERT state. An enemy already ALERT (e.g. from noise) would
+	# never get in_combat=true when the player first attacked it, so the NPC
+	# counter-attack loop would never engage properly.
+	var cc := _make_cc_with_enemy("SIMPLE_BANDIT", 6, 5)
+
+	var enemy_es: CombatController.EntityState = _get_sole_enemy(cc)
+	assert_not_null(enemy_es, "need enemy")
+
+	# Pre-set the enemy to ALERT with in_combat deliberately false.
+	enemy_es.alert_state = AsciiMapEnvironment.AlertState.ALERT
+	enemy_es.in_combat       = false
+	enemy_es.combat_target_id = -1
+
+	var player: CombatController.EntityState = cc.get_player()
+	assert_not_null(player, "need player")
+
+	cc.execute_player_attack(enemy_es.entity_id)
+
+	assert_true(enemy_es.in_combat,
+		"execute_player_attack must set in_combat even on already-ALERT enemy")
+	assert_eq(enemy_es.combat_target_id, player.entity_id,
+		"execute_player_attack must set combat_target_id to player even on already-ALERT enemy")
+
+
+func test_stealth_kill_approach_failure_clears_player_stealth() -> void:
+	# Bug: _player_stealth was not cleared when execute_stealth_kill()
+	# failed at the approach roll.  Broken stealth left the player
+	# invisible to all NPCs for the remainder of the encounter.
+	#
+	# Guarantee approach failure: agility=1, no Stealth skill →
+	# roll_check(1, 1, TN=15, ..., explodes=false) → max total = 10 < 15.
+	var session := _make_session(5, 5,
+		[{"unit_type": "SIMPLE_BANDIT", "x": 6, "y": 5, "seed": 0}])
+	var weak := _make_weak_char()
+	var cc := CombatController.create(session, weak, DiceEngine.new(0))
+
+	var enemy_es: CombatController.EntityState = _get_sole_enemy(cc)
+	assert_not_null(enemy_es, "need enemy")
+	enemy_es.alert_state = AsciiMapEnvironment.AlertState.UNAWARE
+
+	# Manually engage stealth mode as if the player had just crept forward.
+	cc._player_stealth = true
+
+	# The map is all FLOOR_STONE (TN=15); approach with 1k1 non-exploding
+	# never exceeds 10 → guaranteed failure regardless of seed.
+	var result: Dictionary = cc.execute_stealth_kill(enemy_es.entity_id)
+
+	assert_true(result.get("approach_failed", false),
+		"weak player on FLOOR_STONE must fail the approach roll")
+	assert_false(cc._player_stealth,
+		"_player_stealth must be cleared to false on approach failure")
+
+
+func test_stealth_kill_attack_failure_clears_player_stealth() -> void:
+	# Bug: _player_stealth was not cleared when execute_stealth_kill()
+	# passed the approach but missed the flat-footed attack.
+	#
+	# Guarantee attack failure: armor_tn_bonus=200 → flat_atn=205.
+	# The strong player (10k5 exploding) cannot reach 205 in practice.
+	# Approach still succeeds: strong player 10k5 vs TN=15 (FLOOR_STONE).
+	var session := _make_session(5, 5,
+		[{"unit_type": "SIMPLE_BANDIT", "x": 6, "y": 5, "seed": 0}])
+	var strong := _make_strong_player()
+	var cc := CombatController.create(session, strong, DiceEngine.new(42))
+
+	var enemy_es: CombatController.EntityState = _get_sole_enemy(cc)
+	assert_not_null(enemy_es, "need enemy")
+	enemy_es.alert_state = AsciiMapEnvironment.AlertState.UNAWARE
+	# Inflate armor so flat_atn = 205 — impossible to hit with any realistic roll.
+	enemy_es.character.armor_tn_bonus = 200
+
+	cc._player_stealth = true
+
+	var result: Dictionary = cc.execute_stealth_kill(enemy_es.entity_id)
+
+	# Approach should have succeeded (strong player vs TN=15); attack must fail.
+	assert_false(result.get("approach_failed", false),
+		"strong player should pass the approach roll")
+	assert_true(result.get("attack_failed", false),
+		"armor_tn_bonus=200 must cause flat-footed attack to fail")
+	assert_false(cc._player_stealth,
+		"_player_stealth must be cleared to false on attack failure")
+
+
+func test_npc_turn_resets_alert_rounds_lost_after_moving_into_los() -> void:
+	# Bug: alert_rounds_lost was only checked against the pre-move
+	# player_seen snapshot.  If the NPC started outside LOS but moved
+	# within sight range during _npc_pursue_and_attack(), alert_rounds_lost
+	# incremented even though the NPC now sees the player.
+	#
+	# Setup: SIMPLE_BANDIT at (9,5) → perception=2 → sight radius 2.
+	# Player at (5,5) → distance 4 > radius 2 (not seen before move).
+	# With water_ring=2, budget = SIMPLE = 2×2 = 4 tiles.
+	# BFS moves to (6,5) (budget 3) or (5,6) adjacency; distance = 1 ≤ 2 → seen after.
+	var cc := _make_cc_with_enemy("SIMPLE_BANDIT", 9, 5)
+
+	var enemy_es: CombatController.EntityState = _get_sole_enemy(cc)
+	assert_not_null(enemy_es, "need enemy")
+
+	# Place the enemy in ALERT state with accumulated lost-rounds counter.
+	enemy_es.alert_state      = AsciiMapEnvironment.AlertState.ALERT
+	enemy_es.in_combat        = false
+	enemy_es.alert_rounds_lost = 5  # Would normally trigger alarm at threshold.
+
+	# Run one round of NPC turns.
+	cc.advance_npc_turns()
+
+	# The NPC must have moved into LOS and the re-check must have reset the counter.
+	assert_eq(enemy_es.alert_rounds_lost, 0,
+		"alert_rounds_lost must reset to 0 when NPC moves into LOS during pursuit")

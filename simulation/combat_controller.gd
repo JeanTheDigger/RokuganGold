@@ -811,6 +811,7 @@ func execute_stealth_kill(target_id: int) -> Dictionary:
 	if not approach_roll["success"]:
 		# Approach failed → target wakes/alerts, normal combat.
 		target.alert_state = AsciiMapEnvironment.AlertState.ALERT
+		_player_stealth = false  # Detected during approach — stealth broken.
 		_emit_noise(player.x, player.y, AsciiMapEnvironment.NoiseLevel.LOUD)
 		return {
 			"success": false,
@@ -830,6 +831,7 @@ func execute_stealth_kill(target_id: int) -> Dictionary:
 	if not atk.get("hit", false):
 		# Missed even a flat-footed target → Loud noise, target alarms.
 		target.alert_state = AsciiMapEnvironment.AlertState.ALERT
+		_player_stealth = false  # Attack blown — stealth broken.
 		_emit_noise(player.x, player.y, AsciiMapEnvironment.NoiseLevel.LOUD)
 		return {
 			"success": false,
@@ -899,11 +901,12 @@ func execute_player_attack(target_id: int, weapon_name: String = "", raises: int
 	_emit_noise(player.x, player.y, AsciiMapEnvironment.NoiseLevel.MODERATE)
 	_player_stealth = false
 
-	# Make sure the target is alerted.
+	# Make sure the target is alerted and knows who it's fighting.
+	# in_combat and combat_target_id must be set even if already ALERT.
 	if target.alert_state != AsciiMapEnvironment.AlertState.ALERT:
 		target.alert_state = AsciiMapEnvironment.AlertState.ALERT
-		target.in_combat = true
-		target.combat_target_id = player.entity_id
+	target.in_combat = true
+	target.combat_target_id = player.entity_id
 
 	return {
 		"type":          "attacked",
@@ -1095,7 +1098,8 @@ func _npc_turn(es: EntityState) -> Array:
 				if not ev.is_empty():
 					events.append(ev)
 
-				if player_seen:
+				# Re-check after potential movement — NPC may have stepped into LOS.
+				if player_seen or _npc_can_see_player(es):
 					es.alert_rounds_lost = 0
 				else:
 					es.alert_rounds_lost += 1

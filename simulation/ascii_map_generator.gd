@@ -1092,10 +1092,15 @@ static func _gen_mountain_pass(map: AsciiMapData, rng: RandomNumberGenerator) ->
 	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.WALL_STONE)
 
 	# Carve a winding path through the rock.
+	# Record path_x per row so clearing placement can reference the actual
+	# path position at each y, rather than the stale end-of-loop value.
 	var path_x: int = MID
+	var path_x_by_y: Array[int] = []
+	path_x_by_y.resize(S)
 	for y in range(S - 1, -1, -1):
 		var drift: int = (rng.randi() % 3) - 1
 		path_x = clampi(path_x + drift, 4, S - 5)
+		path_x_by_y[y] = path_x
 		# Path: 3-5 tiles wide.
 		var w: int = 1 + rng.randi() % 2
 		for dx in range(-w, w + 1):
@@ -1106,9 +1111,10 @@ static func _gen_mountain_pass(map: AsciiMapData, rng: RandomNumberGenerator) ->
 	# Widen a few areas into small clearings.
 	for _i in range(2 + rng.randi() % 2):
 		var cy: int = 5 + rng.randi() % (S - 10)
+		var cx: int = path_x_by_y[cy]  # Use the actual path x at this row.
 		for dy in range(-2, 3):
 			for dx in range(-3, 4):
-				var tx: int = path_x + dx
+				var tx: int = cx + dx
 				var ty: int = cy + dy
 				if tx >= 1 and tx < S - 1 and ty >= 0 and ty < S:
 					if map.get_tile(tx, ty) == Enums.TileType.WALL_STONE:
