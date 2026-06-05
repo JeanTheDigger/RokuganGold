@@ -1647,3 +1647,121 @@ func test_alarm_does_not_affect_fleeing_enemies() -> void:
 
 	assert_eq(enemy_es.alert_state, AsciiMapEnvironment.AlertState.FLEEING,
 		"FLEEING enemy must remain FLEEING after alarm — they are already routed")
+
+
+# =============================================================================
+# -- Section 35: FoV visual detection emits player_noticed, not noise_detected
+# --             Bug A: UNAWARE→SUSPICIOUS via FoV used "noise_detected" type
+# =============================================================================
+
+func test_fov_detection_emits_player_noticed_not_noise_detected() -> void:
+	# Enemy adjacent to player should detect via FoV and emit "player_noticed".
+	var cc := _make_cc_with_enemy("SIMPLE_BANDIT", 6, 5)
+
+	var enemy_es: CombatController.EntityState
+	for eid: int in cc._entities.keys():
+		var es: CombatController.EntityState = cc._entities[eid]
+		if es.faction == CombatController.FACTION_ENEMY:
+			enemy_es = es
+			break
+	assert_not_null(enemy_es, "need an enemy")
+
+	# Enemy at (6,5), player at (5,5) — adjacent → FoV detection guaranteed.
+	enemy_es.alert_state = AsciiMapEnvironment.AlertState.UNAWARE
+
+	var events: Array = cc._npc_turn(enemy_es)
+
+	var types: Array = events.map(func(e): return e.get("type", ""))
+	assert_true(types.has("player_noticed"),
+		"FoV visual detection must emit player_noticed, not noise_detected")
+	assert_false(types.has("noise_detected"),
+		"noise_detected must NOT be emitted for FoV visual detection")
+	assert_eq(enemy_es.alert_state, AsciiMapEnvironment.AlertState.SUSPICIOUS,
+		"enemy must advance to SUSPICIOUS after FoV visual detection")
+
+
+# =============================================================================
+# -- Section 36: escalated_to_alert emitted when SUSPICIOUS enemy spots player
+# --             Bug B: no handler for this event type in CombatHUD
+# =============================================================================
+
+func test_suspicious_enemy_spotting_player_emits_escalated_to_alert() -> void:
+	var cc := _make_cc_with_enemy("SIMPLE_BANDIT", 6, 5)
+
+	var enemy_es: CombatController.EntityState
+	for eid: int in cc._entities.keys():
+		var es: CombatController.EntityState = cc._entities[eid]
+		if es.faction == CombatController.FACTION_ENEMY:
+			enemy_es = es
+			break
+	assert_not_null(enemy_es, "need an enemy")
+
+	# Put enemy into SUSPICIOUS so next FoV sight → ALERT.
+	enemy_es.alert_state = AsciiMapEnvironment.AlertState.SUSPICIOUS
+
+	var events: Array = cc._npc_turn(enemy_es)
+
+	var types: Array = events.map(func(e): return e.get("type", ""))
+	assert_true(types.has("escalated_to_alert"),
+		"SUSPICIOUS enemy spotting player must emit escalated_to_alert")
+	assert_eq(enemy_es.alert_state, AsciiMapEnvironment.AlertState.ALERT,
+		"enemy must advance to ALERT after being SUSPICIOUS and spotting player")
+
+
+# =============================================================================
+# -- Section 37: _raise_alarm sets alarm_sounded on ALL entities
+# --             Bug C: only source entity got alarm_sounded=true; others could
+# --             re-raise the alarm after ALERT_ALARM_ROUNDS
+# =============================================================================
+
+func test_raise_alarm_sets_alarm_sounded_on_all_alive_enemies() -> void:
+	# Two enemies: one raises the alarm, both must have alarm_sounded=true.
+	var session := _make_session(5, 5, [
+		{"unit_type": "SIMPLE_BANDIT", "x": 8, "y": 5, "seed": 0},
+		{"unit_type": "SIMPLE_BANDIT", "x": 12, "y": 5, "seed": 1},
+	])
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
+
+	var enemies: Array = []
+	for es: CombatController.EntityState in cc._entities.values():
+		if es.faction == CombatController.FACTION_ENEMY:
+			enemies.append(es)
+	assert_eq(enemies.size(), 2, "need two enemies")
+
+	cc._raise_alarm(enemies[0])
+
+	assert_true(enemies[0].alarm_sounded, "source enemy must have alarm_sounded=true")
+	assert_true(enemies[1].alarm_sounded,
+		"non-source enemy must also have alarm_sounded=true to prevent re-raising")
+
+
+# =============================================================================
+# -- Section 38: _npc_flee stops when player is dead
+# --             Bug D: guard only checked player == null, not is_entity_dead
+# =============================================================================
+
+func test_npc_flee_returns_empty_when_player_dead() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 5)
+
+	# Kill the player by setting wounds above lethal threshold.
+	var player_es: CombatController.EntityState
+	var enemy_es: CombatController.EntityState
+	for es: CombatController.EntityState in cc._entities.values():
+		if es.faction == CombatController.FACTION_PLAYER:
+			player_es = es
+		else:
+			enemy_es = es
+	assert_not_null(player_es, "need player")
+	assert_not_null(enemy_es, "need enemy")
+
+	# Set player wounds to lethal.
+	player_es.character.wounds_taken = 9999
+	enemy_es.morale_broken = true
+	enemy_es.alert_state = AsciiMapEnvironment.AlertState.FLEEING
+
+	var ev: Dictionary = cc._npc_flee(enemy_es)
+
+	# Fleeing away from a dead player must not crash and should return empty
+	# (no flee direction when player cannot be targeted).
+	assert_true(ev.is_empty(),
+		"_npc_flee must return empty dict when player is dead")

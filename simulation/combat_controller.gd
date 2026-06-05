@@ -1062,7 +1062,7 @@ func _npc_turn(es: EntityState) -> Array:
 		if es.alert_state == AsciiMapEnvironment.AlertState.UNAWARE:
 			es.alert_state = AsciiMapEnvironment.AlertState.SUSPICIOUS
 			es.phase_rounds_left = SUSPICIOUS_SEARCH_ROUNDS
-			events.append({"type": "noise_detected", "entity_id": es.entity_id, "unit_type": es.unit_type})
+			events.append({"type": "player_noticed", "entity_id": es.entity_id, "unit_type": es.unit_type})
 		elif es.alert_state == AsciiMapEnvironment.AlertState.SUSPICIOUS:
 			es.alert_state = AsciiMapEnvironment.AlertState.ALERT
 			es.alert_rounds_lost = 0
@@ -1230,7 +1230,7 @@ func _npc_pursue_and_attack(es: EntityState) -> Dictionary:
 
 func _npc_flee(es: EntityState) -> Dictionary:
 	var player: EntityState = get_player()
-	if player == null:
+	if player == null or _is_entity_dead(player):
 		return {}
 	# Move away from player.
 	var away_x: int = es.x + signi(es.x - player.x)
@@ -1519,6 +1519,8 @@ func _raise_alarm(source: EntityState) -> Dictionary:
 			continue
 		if es.alert_state == AsciiMapEnvironment.AlertState.FLEEING:
 			continue
+		# Mark every entity as alarm_sounded so none can re-raise the alarm later.
+		es.alarm_sounded = true
 		if es.alert_state != AsciiMapEnvironment.AlertState.ALERT:
 			es.alert_state = AsciiMapEnvironment.AlertState.ALERT
 			es.alert_rounds_lost = 0

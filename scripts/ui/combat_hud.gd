@@ -216,6 +216,13 @@ func _format_event(ev: Dictionary) -> String:
 		"noise_detected":
 			return "An enemy heard something…"
 
+		"player_noticed":
+			return "An enemy spotted something unusual…"
+
+		"escalated_to_alert":
+			var ut2: String = ev.get("unit_type", "enemy")
+			return "The %s has spotted you!" % ut2
+
 		"body_spotted":
 			var ut: String = ev.get("unit_type", "enemy")
 			return "%s found a body — alerted!" % ut
@@ -253,7 +260,7 @@ func _line_color(line: String) -> Color:
 		return Color(0.4, 1.0, 0.4)
 	if line.begins_with("Mission"):
 		return Color(0.4, 1.0, 0.9)
-	if line.contains("strikes you") or line.contains("heard"):
+	if line.contains("strikes you") or line.contains("heard") or line.contains("spotted"):
 		return Color(1.0, 0.7, 0.2)
 	if line.contains("found a body"):
 		return Color(1.0, 0.5, 0.1)
