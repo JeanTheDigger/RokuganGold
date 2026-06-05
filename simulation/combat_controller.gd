@@ -552,6 +552,55 @@ func is_mission_complete() -> bool:
 	return _count_living_enemies() == 0
 
 
+## Public wrapper: returns true if the entity with given ID is dead.
+func is_entity_dead(entity_id: int) -> bool:
+	var es: EntityState = _entities.get(entity_id)
+	if es == null:
+		return true
+	return _is_entity_dead(es)
+
+
+## Returns true if the player entity is dead or missing.
+func is_player_dead() -> bool:
+	var p: EntityState = get_player()
+	if p == null:
+		return true
+	return _is_entity_dead(p)
+
+
+## Returns the player's current map position.
+func get_player_pos() -> Vector2i:
+	var p: EntityState = get_player()
+	if p == null:
+		return Vector2i(-1, -1)
+	return Vector2i(p.x, p.y)
+
+
+## Returns all corpse tile positions (for UI rendering).
+func get_corpse_positions() -> Array[Vector2i]:
+	return _corpse_positions
+
+
+## Returns display Dictionaries for all non-player entities.
+## Keys: entity_id, x, y, unit_type, faction (String), is_alive, alert_state, morale_broken.
+func get_entity_display_data() -> Array:
+	var result: Array = []
+	for es: EntityState in _entities.values():
+		if es.faction == FACTION_PLAYER:
+			continue
+		result.append({
+			"entity_id":    es.entity_id,
+			"x":            es.x,
+			"y":            es.y,
+			"unit_type":    es.unit_type,
+			"faction":      "friendly" if es.faction == FACTION_FRIENDLY else "enemy",
+			"is_alive":     es.is_alive and not _is_entity_dead(es),
+			"alert_state":  es.alert_state,
+			"morale_broken": es.morale_broken,
+		})
+	return result
+
+
 ## Returns FoV-visible tiles from the player's position.
 func get_visible_tiles() -> Dictionary:
 	var player: EntityState = get_player()
