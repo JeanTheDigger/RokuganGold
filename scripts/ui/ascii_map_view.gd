@@ -204,6 +204,7 @@ func set_combat_controller(cc: CombatController) -> void:
 func clear_combat_controller() -> void:
 	_combat_controller = null
 	_stealth_mode = false
+	_look_mode = false
 
 
 ## Returns true when a CombatController is active.
@@ -403,6 +404,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 
+	# S key toggles stealth mode (combat only) — checked before look-mode block
+	# so the stealth toggle works even when the camera is panning.
+	if key.keycode == KEY_S and not key.echo and _combat_controller != null:
+		_stealth_mode = not _stealth_mode
+		stealth_mode_changed.emit(_stealth_mode)
+		queue_redraw()
+		get_viewport().set_input_as_handled()
+		return
+
 	# Look mode: pan camera.
 	if _look_mode:
 		var ldx: int = 0
@@ -426,14 +436,6 @@ func _unhandled_input(event: InputEvent) -> void:
 				maxi(0, _map.height - 1))
 			look_at(cx, cy)
 			get_viewport().set_input_as_handled()
-		return
-
-	# S key toggles stealth mode (combat only).
-	if key.keycode == KEY_S and not key.echo and _combat_controller != null:
-		_stealth_mode = not _stealth_mode
-		stealth_mode_changed.emit(_stealth_mode)
-		queue_redraw()
-		get_viewport().set_input_as_handled()
 		return
 
 	# Movement direction mapping.

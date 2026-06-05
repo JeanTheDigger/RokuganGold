@@ -168,8 +168,7 @@ func _draw() -> void:
 		return
 
 	var log_h: int   = line_h * _log_lines.size() + padding * 2
-	var size: Vector2 = get_parent_area_size() if has_method("get_parent_area_size") \
-		else Vector2(620, 620)
+	var size: Vector2 = get_viewport_rect().size
 	var log_y: float = size.y - log_h
 	draw_rect(Rect2(Vector2(0.0, log_y), Vector2(status_w + 40, log_h)), HUD_BG)
 

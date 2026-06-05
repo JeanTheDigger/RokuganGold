@@ -198,4 +198,4 @@ static func _step_cost(map: AsciiMapData, nx: int, ny: int, dx: int, dy: int) ->
 static func _is_wall_tile(map: AsciiMapData, x: int, y: int) -> bool:
 	# get_tile() returns WALL_STONE for out-of-bounds — map edges act as walls.
 	var t: int = map.get_tile(x, y)
-	return t == _T.WALL_STONE or t == _T.WALL_WOOD or t == _T.WALL_PAPER
+	return t == _T.VOID or t == _T.WALL_STONE or t == _T.WALL_WOOD or t == _T.WALL_PAPER

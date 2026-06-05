@@ -202,3 +202,35 @@ func test_effective_radius_minimum_one() -> void:
 func test_effective_radius_subtracts_env_modifier() -> void:
 	assert_eq(FovSystem.effective_radius(5, 3), 2,
 		"effective_radius(5, 3) should be 2")
+
+
+# ---------------------------------------------------------------------------
+# Section 41 regression: LOOKOUT_BONUS must be 3 (was 2 — bug fix)
+# ---------------------------------------------------------------------------
+
+func test_lookout_bonus_constant_is_three() -> void:
+	assert_eq(FovSystem.LOOKOUT_BONUS, 3,
+		"LOOKOUT_BONUS must be 3 per GDD s56.10 LOCKED (was erroneously 2)")
+
+
+func test_lookout_radius_adds_three_to_perception() -> void:
+	# perception=3, no env penalty → lookout radius should be 6, not 5.
+	assert_eq(FovSystem.lookout_radius(3, 0), 6,
+		"lookout_radius(3, 0) must be 3 + LOOKOUT_BONUS(3) = 6")
+
+
+func test_lookout_radius_sees_farther_than_normal_radius() -> void:
+	# On a wide-open map a player on a WALL_STONE (lookout) tile can see
+	# 3 tiles further than normal.
+	var map := CaveMapData.new()
+	map.width = 31
+	map.height = 31
+	map.init_tiles(Enums.TileType.FLOOR_STONE)
+	var perception: int = 2  # normal radius = 2
+	var lookout_r: int = FovSystem.lookout_radius(perception, 0)  # must be 5
+	assert_eq(lookout_r, 5,
+		"lookout_radius(2,0) must be 5 (2 + 3)")
+	# Tile at distance 5 must be visible at lookout radius.
+	var visible: Dictionary = FovSystem.compute_visible(15, 15, lookout_r, map)
+	assert_true(visible.has(Vector2i(15, 20)),
+		"tile 5 away must be visible at lookout radius")

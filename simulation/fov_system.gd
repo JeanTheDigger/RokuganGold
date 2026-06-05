@@ -17,7 +17,7 @@ const ENV_NIGHT: int = 3
 const ENV_SUPERNATURAL: int = 4
 
 # Lookout expanded radius bonus (s56.10, LOCKED).
-const LOOKOUT_BONUS: int = 2
+const LOOKOUT_BONUS: int = 3
 
 # Octant transform multipliers for recursive shadowcasting.
 const _XX: PackedInt32Array = [ 1,  0,  0, -1, -1,  0,  0,  1]

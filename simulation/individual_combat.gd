@@ -20,7 +20,7 @@ const WEAPON_CATALOG: Dictionary = {
 	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms",       "size": "Large",  "melee": true,  "trait": "agility"},
 	"tetsubo":    {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Heavy Weapons",  "size": "Large",  "melee": true,  "trait": "agility"},
 	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",       "size": "Large",  "melee": false, "trait": "agility"},
-	"unarmed":    {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu",       "size": "Small",  "melee": true,  "trait": "agility"},
+	"unarmed":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu",       "size": "Small",  "melee": true,  "trait": "agility"},
 }
 
 const DEFAULT_WEAPON: Dictionary = {
@@ -1643,11 +1643,11 @@ static func resolve_npc_summary_combat(
 
 	if att_attack.get("hit", false):
 		att_damage = resolve_damage(attacker, att_wname, 0, 0, dice_engine)
-		def_wounds = WoundSystem.apply_damage(defender, att_damage.get("raw_damage", 0))
+		def_wounds = WoundSystem.apply_damage(defender, att_damage.get("raw_damage", 0), defender.armor_reduction)
 
 	if def_attack.get("hit", false):
 		def_damage = resolve_damage(defender, def_wname, 0, 0, dice_engine)
-		att_wounds = WoundSystem.apply_damage(attacker, def_damage.get("raw_damage", 0))
+		att_wounds = WoundSystem.apply_damage(attacker, def_damage.get("raw_damage", 0), attacker.armor_reduction)
 
 	var att_dead: bool = CharacterStats.is_dead(attacker)
 	var def_dead: bool = CharacterStats.is_dead(defender)
@@ -1662,16 +1662,25 @@ static func resolve_npc_summary_combat(
 		winner_id = attacker.character_id
 		loser_id = defender.character_id
 	elif not att_dead and not def_dead:
-		# Both standing: higher attack roll wins the exchange
-		var att_roll: int = att_attack.get("roll", 0)
-		var def_roll: int = def_attack.get("roll", 0)
-		if att_roll > def_roll:
+		# Both standing: a hit beats a miss; ties broken by roll total.
+		var att_hit: bool = att_attack.get("hit", false)
+		var def_hit: bool = def_attack.get("hit", false)
+		if att_hit and not def_hit:
 			winner_id = attacker.character_id
 			loser_id = defender.character_id
-		elif def_roll > att_roll:
+		elif def_hit and not att_hit:
 			winner_id = defender.character_id
 			loser_id = attacker.character_id
-		# exact tie: winner_id stays -1
+		else:
+			var att_roll: int = att_attack.get("roll", 0)
+			var def_roll: int = def_attack.get("roll", 0)
+			if att_roll > def_roll:
+				winner_id = attacker.character_id
+				loser_id = defender.character_id
+			elif def_roll > att_roll:
+				winner_id = defender.character_id
+				loser_id = attacker.character_id
+			# exact tie: winner_id stays -1
 
 	return {
 		"winner_id": winner_id,

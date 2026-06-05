@@ -955,7 +955,7 @@ func _resolve_melee_attack(
 
 	if atk.get("hit", false):
 		dmg_dict = IndividualCombat.resolve_damage(
-			attacker_es.character, weapon, raises, 0, _dice, attacker_es.participant
+			attacker_es.character, weapon, 0, 0, _dice, attacker_es.participant
 		)
 		var reduction: int = defender_es.character.armor_reduction
 		wounds_dict = WoundSystem.apply_damage(defender_es.character, dmg_dict["raw_damage"], reduction)

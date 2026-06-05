@@ -1502,3 +1502,79 @@ func test_extra_attack_spinning_blades_active_flag_false_without_kata() -> void:
 	_char_a.skills = {"Kenjutsu": 5}
 	var result: Dictionary = IndividualCombat.resolve_extra_attack(_char_a, p, "katana", 5, _dice)
 	assert_false(result.get("spinning_blades_active", true))
+
+
+# =============================================================================
+# -- Section 41 regressions ---------------------------------------------------
+# =============================================================================
+
+# -- Bug fix: unarmed catalog entry had rolled:0 (caused DiceEngine early-return zero damage)
+
+func test_unarmed_catalog_entry_has_rolled_one() -> void:
+	var w: Dictionary = IndividualCombat.get_weapon_profile("unarmed")
+	assert_eq(w["rolled"], 1,
+		"unarmed weapon profile must have rolled=1 (was erroneously 0, causing zero damage)")
+
+
+func test_unarmed_resolve_damage_is_nonzero() -> void:
+	# L5R 4e: unarmed damage is 1k1 + Strength. With strength=3 the pool is
+	# 4k1 — any positive Strength guarantees nonzero raw_damage.
+	_char_a.strength = 3
+	var result: Dictionary = IndividualCombat.resolve_damage(_char_a, "unarmed", 0, 0, _dice)
+	assert_true(result["raw_damage"] > 0,
+		"unarmed damage must be nonzero when strength > 0 (was 0 due to rolled=0 in catalog)")
+
+
+# -- Bug fix: Increased Damage maneuver — raises_for_damage adds rolled dice (s40 LOCKED)
+
+func test_resolve_damage_raises_for_damage_adds_to_rolled_pool() -> void:
+	# s40 LOCKED: Increased Damage maneuver grants +1k0 per declared raise.
+	# resolve_damage(character, weapon, raises_for_damage, ...) must add
+	# raises_for_damage to the rolled pool, not to kept.
+	_char_a.strength = 3
+	var base: Dictionary = IndividualCombat.resolve_damage(_char_a, "katana", 0, 0, _dice)
+	var with_raises: Dictionary = IndividualCombat.resolve_damage(
+			_char_a, "katana", 3, 0, DiceEngine.new(42))
+	# katana: rolled=3, strength_adds=true, strength=3 → base rolled = 3+3 = 6.
+	# With 3 raises_for_damage:                           raised rolled = 3+3+3 = 9.
+	assert_eq(base["rolled"], 6,
+		"base damage pool: katana(3) + strength(3) = 6")
+	assert_eq(with_raises["rolled"], 9,
+		"raises_for_damage(3) must add 3 extra rolled dice: katana(3)+strength(3)+raises(3)=9")
+
+
+# -- Bug fix: resolve_npc_summary_combat armor_reduction applies to damage
+
+func test_npc_summary_combat_armor_reduction_blocks_damage() -> void:
+	# When defender.armor_reduction is very large, no damage should reach
+	# the defender's wounds regardless of how hard the attacker hits.
+	var attacker: L5RCharacterData = _make_char(10, 5, 5, 5, 5, 5, 5, 5, 5)
+	attacker.skills = {"Kenjutsu": 5}
+	var defender: L5RCharacterData = _make_char(11, 1, 1, 1, 1, 1, 1, 1, 1)
+	defender.armor_reduction = 1000   # absorbs all incoming damage
+	defender.wounds_taken = 0
+	IndividualCombat.resolve_npc_summary_combat(attacker, defender, _dice)
+	assert_eq(defender.wounds_taken, 0,
+		"armor_reduction=1000 must absorb all damage — wounds_taken must remain 0")
+
+
+# -- Bug fix: hit-beats-miss tiebreak in resolve_npc_summary_combat
+
+func test_npc_summary_combat_hit_beats_miss_attacker_wins() -> void:
+	# s40 LOCKED: in the simultaneous-attack model, a side that hits outranks
+	# a side that misses, regardless of roll total. Attacker has max stats
+	# (guaranteed hit); defender has min stats (near-certain miss against
+	# attacker's TN=30). Winner must be attacker.
+	var attacker: L5RCharacterData = _make_char(20, 5, 5, 5, 5, 5, 5, 5, 5)
+	attacker.skills = {"Kenjutsu": 5}
+	var defender: L5RCharacterData = _make_char(21, 1, 1, 1, 1, 1, 1, 1, 1)
+	# Use a different seed that we know the attacker hits (high rolls from 10k5 pool).
+	var dice: DiceEngine = DiceEngine.new(7)
+	var result: Dictionary = IndividualCombat.resolve_npc_summary_combat(
+			attacker, defender, dice)
+	assert_true(result["attacker_hit"],
+		"max-stat attacker must hit min-stat defender (armor_tn=10)")
+	if not result["defender_hit"]:
+		# Defender missed: attacker must win unconditionally.
+		assert_eq(result["winner_id"], attacker.character_id,
+			"hit beats miss: attacker who hit must be winner when defender missed")
