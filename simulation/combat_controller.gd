@@ -998,7 +998,7 @@ func advance_npc_turns() -> Array:
 
 	for eid: int in turn_order:
 		var es: EntityState = _entities.get(eid)
-		if es == null or es.faction == FACTION_PLAYER:
+		if es == null or es.faction == FACTION_PLAYER or es.faction == FACTION_FRIENDLY:
 			continue
 		if not es.is_alive or _is_entity_dead(es):
 			continue
@@ -1029,7 +1029,8 @@ func _build_initiative_order() -> Array:
 	var pairs: Array = []
 	for eid: int in _entities.keys():
 		var es: EntityState = _entities[eid]
-		if es.faction == FACTION_PLAYER or not es.is_alive or _is_entity_dead(es):
+		if es.faction == FACTION_PLAYER or es.faction == FACTION_FRIENDLY \
+				or not es.is_alive or _is_entity_dead(es):
 			continue
 		var score: int = IndividualCombat.roll_initiative(
 			es.character, es.participant, _dice, IndividualCombat.pick_best_weapon(es.character)
@@ -1418,7 +1419,7 @@ func _check_body_discovery() -> void:
 		return
 
 	for es: EntityState in _entities.values():
-		if es.faction == FACTION_PLAYER:
+		if es.faction == FACTION_PLAYER or es.faction == FACTION_FRIENDLY:
 			continue
 		if not es.is_alive or _is_entity_dead(es):
 			continue
@@ -1513,7 +1514,7 @@ func _check_morale() -> Array:
 func _raise_alarm(source: EntityState) -> Dictionary:
 	source.alarm_sounded = true
 	for es: EntityState in _entities.values():
-		if es.faction == FACTION_PLAYER:
+		if es.faction == FACTION_PLAYER or es.faction == FACTION_FRIENDLY:
 			continue
 		if not es.is_alive or _is_entity_dead(es):
 			continue

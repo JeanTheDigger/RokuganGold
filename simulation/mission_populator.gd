@@ -194,13 +194,13 @@ static func populate_sortie(
 	var entry_slots: Array = []
 	var far_slots:   Array = []
 	for sl: Dictionary in map.population_slots:
-		if sl.get("x", 0) <= midpoint_x:
+		if sl.get("x", 0) < midpoint_x:
 			entry_slots.append(sl)
 		else:
 			far_slots.append(sl)
 
-	# Entry side (x ≤ midpoint) → friendly units.
-	# Far side (x > midpoint)   → enemy units.
+	# Entry side (x < midpoint) → friendly units.
+	# Far side (x >= midpoint)  → enemy units.
 	var friendly_slots_by_tier: Dictionary = _bucket_slots(entry_slots, tier_map)
 	var enemy_slots_by_tier:    Dictionary = _bucket_slots(far_slots,   tier_map)
 

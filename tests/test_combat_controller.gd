@@ -1765,3 +1765,101 @@ func test_npc_flee_returns_empty_when_player_dead() -> void:
 	# (no flee direction when player cannot be targeted).
 	assert_true(ev.is_empty(),
 		"_npc_flee must return empty dict when player is dead")
+
+
+# =============================================================================
+# -- Section 39: FACTION_FRIENDLY entities must not get enemy NPC turns
+# --             Bug E: friendly units were given enemy AI turns (attack player)
+# =============================================================================
+
+func _make_cc_with_friendly_adjacent() -> CombatController:
+	# Build a sortie-style session by directly calling create() with a friendly
+	# entity placed adjacent to the player.
+	var map := _make_open_map(20, 20)
+	var session := MissionSession.new()
+	session.map             = map
+	session.objective_slots = []
+	session.seed_dict       = {}
+	session.roster          = {}
+	session.environment     = {}
+	session.entry_pos       = Vector2i(5, 5)
+	session.water_ring      = 3
+	session.perception      = 3
+
+	# Place both a friendly and an enemy next to the player.
+	session.placements = {
+		"friendly": [{"unit_type": "SIMPLE_BANDIT", "x": 6, "y": 5, "seed": 1}],
+		"enemy":    [{"unit_type": "SIMPLE_BANDIT", "x": 15, "y": 5, "seed": 2}]
+	}
+	var player := _make_strong_player()
+	return CombatController.create(session, player, DiceEngine.new(42))
+
+
+func test_friendly_entity_does_not_get_npc_turn() -> void:
+	var cc := _make_cc_with_friendly_adjacent()
+
+	# Player is at (5,5); friendly entity at (6,5) — directly adjacent.
+	# If friendly got an NPC turn it would emit "npc_attacked" targeting the player.
+	var events: Array = cc.advance_npc_turns()
+
+	var npc_attacked_events: Array = events.filter(
+		func(ev: Dictionary) -> bool: return ev.get("type", "") == "npc_attacked"
+	)
+	assert_eq(npc_attacked_events.size(), 0,
+		"friendly NPC adjacent to player must not attack the player")
+
+
+func test_friendly_entity_not_in_initiative_order() -> void:
+	var cc := _make_cc_with_friendly_adjacent()
+
+	# _build_initiative_order() must exclude FACTION_FRIENDLY.
+	var order: Array = cc._build_initiative_order()
+
+	for eid: int in order:
+		var es: CombatController.EntityState = cc._entities.get(eid)
+		assert_false(es != null and es.faction == CombatController.FACTION_FRIENDLY,
+			"friendly entity must not appear in initiative order")
+
+
+func test_alarm_does_not_alert_friendly_units() -> void:
+	var cc := _make_cc_with_friendly_adjacent()
+
+	# Find the enemy and raise alarm from it.
+	var enemy_es: CombatController.EntityState = null
+	var friendly_es: CombatController.EntityState = null
+	for es: CombatController.EntityState in cc._entities.values():
+		if es.faction == CombatController.FACTION_ENEMY:
+			enemy_es = es
+		elif es.faction == CombatController.FACTION_FRIENDLY:
+			friendly_es = es
+	assert_not_null(enemy_es, "need enemy")
+	assert_not_null(friendly_es, "need friendly")
+
+	enemy_es.alarm_sounded = false
+	var _ev: Dictionary = cc._raise_alarm(enemy_es)
+
+	assert_eq(friendly_es.alert_state, AsciiMapEnvironment.AlertState.UNAWARE,
+		"_raise_alarm must not change friendly NPC alert state")
+	assert_false(friendly_es.alarm_sounded,
+		"_raise_alarm must not set alarm_sounded on friendly NPC")
+
+
+func test_body_discovery_does_not_alert_friendly_units() -> void:
+	var cc := _make_cc_with_friendly_adjacent()
+
+	# Place a corpse right next to the friendly NPC.
+	cc._add_corpse(6, 4)
+
+	var friendly_es: CombatController.EntityState = null
+	for es: CombatController.EntityState in cc._entities.values():
+		if es.faction == CombatController.FACTION_FRIENDLY:
+			friendly_es = es
+			break
+	assert_not_null(friendly_es, "need friendly")
+	assert_eq(friendly_es.alert_state, AsciiMapEnvironment.AlertState.UNAWARE,
+		"friendly should start UNAWARE")
+
+	cc._check_body_discovery()
+
+	assert_eq(friendly_es.alert_state, AsciiMapEnvironment.AlertState.UNAWARE,
+		"_check_body_discovery must not change friendly NPC alert state")
