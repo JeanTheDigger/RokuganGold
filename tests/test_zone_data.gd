@@ -255,7 +255,7 @@ func test_greater_zone_default_values() -> void:
 	assert_eq(g.zone_id, "")
 	assert_eq(g.zone_name, "")
 	assert_eq(g.zone_type, Enums.GreaterZoneType.SETTLEMENT)
-	assert_eq(g.settlement_id, "")
+	assert_eq(g.settlement_id, -1)
 	assert_eq(g.province_id, "")
 	assert_eq(g.subtile_index, -1)
 	assert_eq(g.child_zone_ids.size(), 0)
@@ -316,8 +316,8 @@ func test_greater_zone_province_subtile_fields() -> void:
 func test_greater_zone_settlement_fields() -> void:
 	var g: GreaterZoneData = GreaterZoneData.new()
 	g.zone_type = Enums.GreaterZoneType.SETTLEMENT
-	g.settlement_id = "shiro_hida"
-	assert_eq(g.settlement_id, "shiro_hida")
+	g.settlement_id = 1001
+	assert_eq(g.settlement_id, 1001)
 
 
 # ---------------------------------------------------------------------------

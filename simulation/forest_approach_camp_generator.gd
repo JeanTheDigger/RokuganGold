@@ -370,15 +370,10 @@ static func _carve_shelter(
 	var half_w: int = dim.x / 2
 	var half_h: int = dim.y / 2
 
-	var lx: int = cx - half_w
-	var rx: int = lx + dim.x - 1
-	var ly: int = cy - half_h
-	var ry: int = ly + dim.y - 1
-
-	lx = clampi(lx, _MARGIN, map.width  - _MARGIN - 1)
-	rx = clampi(rx, _MARGIN, map.width  - _MARGIN - 1)
-	ly = clampi(ly, map.clearing_start_y, map.height - _MARGIN - 1)
-	ry = clampi(ry, map.clearing_start_y, map.height - _MARGIN - 1)
+	var lx: int = clampi(cx - half_w, _MARGIN, map.width - _MARGIN - 1)
+	var rx: int = clampi(lx + dim.x - 1, _MARGIN, map.width - _MARGIN - 1)
+	var ly: int = clampi(cy - half_h, map.clearing_start_y, map.height - _MARGIN - 1)
+	var ry: int = clampi(ly + dim.y - 1, map.clearing_start_y, map.height - _MARGIN - 1)
 
 	# Shelters are FLOOR_DIRT footprints — no wall tiles (soft cover, s56.5.4).
 	for y: int in range(ly, ry + 1):
