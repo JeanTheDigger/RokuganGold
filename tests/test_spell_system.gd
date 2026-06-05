@@ -1350,3 +1350,71 @@ func test_the_final_bond_ml_is_5() -> void:
 
 func test_echoes_in_the_void_is_ishiken_only() -> void:
 	assert_true(SpellSystem.SPELL_LIBRARY["echoes_in_the_void"].get("i", false))
+
+
+func test_spellcasting_wound_penalty_reduces_total() -> void:
+	_char.spells_known = ["jade_strike"]
+	_char.stamina = 3
+	_char.willpower = 3
+	var healthy_totals: Array[int] = []
+	var wounded_totals: Array[int] = []
+	for seed_val: int in range(100):
+		# Healthy cast
+		var ch: L5RCharacterData = L5RCharacterData.new()
+		ch.character_id = 1
+		ch.school_type = Enums.SchoolType.SHUGENJA
+		ch.school = "Kuni Shugenja"
+		ch.insight_rank = 3
+		ch.stamina = 3
+		ch.willpower = 3
+		ch.reflexes = 3
+		ch.awareness = 2
+		ch.agility = 2
+		ch.intelligence = 3
+		ch.strength = 2
+		ch.perception = 3
+		ch.void_ring = 2
+		ch.affinity_element = Enums.Ring.NONE
+		ch.deficiency_element = Enums.Ring.NONE
+		ch.spells_known = ["jade_strike"]
+		ch.wounds_taken = 0
+		ch.spell_slots_used = {}
+		ch.spell_void_bonus_used = 0
+		var d1 := DiceEngine.new()
+		d1.set_seed(seed_val)
+		var r1: Dictionary = SpellSystem.resolve_cast(ch, "jade_strike", d1)
+		healthy_totals.append(r1["total"])
+		# Wounded cast (HURT = -10)
+		var cw: L5RCharacterData = L5RCharacterData.new()
+		cw.character_id = 2
+		cw.school_type = Enums.SchoolType.SHUGENJA
+		cw.school = "Kuni Shugenja"
+		cw.insight_rank = 3
+		cw.stamina = 3
+		cw.willpower = 3
+		cw.reflexes = 3
+		cw.awareness = 2
+		cw.agility = 2
+		cw.intelligence = 3
+		cw.strength = 2
+		cw.perception = 3
+		cw.void_ring = 2
+		cw.affinity_element = Enums.Ring.NONE
+		cw.deficiency_element = Enums.Ring.NONE
+		cw.spells_known = ["jade_strike"]
+		cw.wounds_taken = 19  # Earth 3 → threshold 6 → HURT at 19
+		cw.spell_slots_used = {}
+		cw.spell_void_bonus_used = 0
+		var d2 := DiceEngine.new()
+		d2.set_seed(seed_val)
+		var r2: Dictionary = SpellSystem.resolve_cast(cw, "jade_strike", d2)
+		wounded_totals.append(r2["total"])
+	var healthy_avg: float = 0.0
+	var wounded_avg: float = 0.0
+	for i: int in range(100):
+		healthy_avg += healthy_totals[i]
+		wounded_avg += wounded_totals[i]
+	healthy_avg /= 100.0
+	wounded_avg /= 100.0
+	assert_true(healthy_avg > wounded_avg + 5.0,
+		"Wounded spellcaster should average lower totals (healthy=%.1f, wounded=%.1f)" % [healthy_avg, wounded_avg])

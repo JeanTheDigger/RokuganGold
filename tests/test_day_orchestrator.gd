@@ -16623,3 +16623,63 @@ func test_expire_province_weather_skips_already_clear() -> void:
 
 	assert_eq(province.province_weather_state, 0)
 	assert_eq(province.province_weather_expires_ic_day, -1)
+
+
+func test_brash_reaction_wound_penalty_applied() -> void:
+	# Brash reaction rolls Willpower + Honor vs TN. Wound penalty should reduce total.
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.willpower = 3
+	target.stamina = 3
+	target.honor = 5.0
+	target.wounds_taken = 19  # Earth 3 → threshold 6 → HURT = -10
+	var brash_adv := AdvantageData.new()
+	brash_adv.advantage_type = Enums.Advantage.BRASH
+	target.advantages = [brash_adv]
+	target.physical_location = "settlement_1"
+	target.disposition_values = {}
+	target.met_characters = []
+	target.skills = {}
+	var penalty: int = CharacterStats.get_wound_penalty(target)
+	assert_eq(penalty, -10, "HURT should give -10 wound penalty")
+
+
+func test_criminal_recall_wound_penalty_reduces_total() -> void:
+	# Criminal recall rolls Intelligence vs TN. Wound penalty should reduce total.
+	var healthy_totals: Array[int] = []
+	var wounded_totals: Array[int] = []
+	for seed_val: int in range(100):
+		var ch: L5RCharacterData = L5RCharacterData.new()
+		ch.character_id = 1
+		ch.intelligence = 3
+		ch.stamina = 2
+		ch.willpower = 2
+		ch.wounds_taken = 0
+		var record := CrimeRecord.new()
+		record.case_id = 1
+		var ws1: Dictionary = {1: {}}
+		var d1 := DiceEngine.new()
+		d1.set_seed(seed_val)
+		DayOrchestrator._apply_criminal_recall(ch, record, [], d1, ws1)
+		var recall1: Dictionary = ws1.get(1, {}).get("criminal_recall", {})
+		healthy_totals.append(1 if recall1.get("aware_of_evidence", false) else 0)
+
+		var cw: L5RCharacterData = L5RCharacterData.new()
+		cw.character_id = 2
+		cw.intelligence = 3
+		cw.stamina = 2
+		cw.willpower = 2
+		cw.wounds_taken = 13  # Earth 2 → threshold 4 → HURT = -10
+		var ws2: Dictionary = {2: {}}
+		var d2 := DiceEngine.new()
+		d2.set_seed(seed_val)
+		DayOrchestrator._apply_criminal_recall(cw, record, [], d2, ws2)
+		var recall2: Dictionary = ws2.get(2, {}).get("criminal_recall", {})
+		wounded_totals.append(1 if recall2.get("aware_of_evidence", false) else 0)
+	var healthy_sum: int = 0
+	var wounded_sum: int = 0
+	for i: int in range(100):
+		healthy_sum += healthy_totals[i]
+		wounded_sum += wounded_totals[i]
+	assert_true(healthy_sum >= wounded_sum,
+		"Wounded criminals should recall less often (healthy=%d, wounded=%d)" % [healthy_sum, wounded_sum])

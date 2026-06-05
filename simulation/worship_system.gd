@@ -191,9 +191,10 @@ static func resolve_active_worship(
 		var free_raises: int = location_fr + artisan_free_raises
 		var kept: int = max(1, ring_value)
 		var rolled: int = max(1, theology_rank + ring_value)
+		var wound_pen: int = CharacterStats.get_wound_penalty(character)
 		# Ring+Skill roll (spellcasting pattern) — not routable through SkillResolver
 		var result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
-		roll_total = result.total + free_raises * 5
+		roll_total = result.total + free_raises * 5 + wound_pen
 		roll_tn = SHUGENJA_WORSHIP_TN
 		if roll_total >= roll_tn:
 			var margin: int = roll_total - roll_tn
@@ -316,6 +317,7 @@ static func resolve_divination(
 	target_fortune: int,
 	province_wp: Dictionary,
 	province_malus: Dictionary = {},
+	wound_penalty: int = 0,
 ) -> Dictionary:
 	if province_malus.get("divination_impossible", false):
 		return {"success": false, "divination_impossible": true}
@@ -323,7 +325,7 @@ static func resolve_divination(
 	var kept: int = max(1, ring_value)
 	var rolled: int = max(1, theology_rank + ring_value + dice_penalty)
 	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept)
-	var roll_total: int = result.total
+	var roll_total: int = result.total + wound_penalty
 	var base_tn: int = 15
 
 	var wp: float = province_wp.get(target_fortune, 0.0)

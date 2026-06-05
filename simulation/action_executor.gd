@@ -4327,25 +4327,25 @@ static func _execute_read_character(
 
 	var a_skill_rank: int = character.skills.get("Investigation", 0)
 	var a_trait_val: int = character.perception
+	var a_wound: int = CharacterStats.get_wound_penalty(character)
+	var a_mut: Dictionary = MutationSystem.get_skill_modifiers(character, "Investigation")
 	var cipher_bonus: int = _get_cipher_insight_bonus(character, target_id)
-	var attacker_roll: int
-	if cipher_bonus > 0:
-		# +1k0: one extra rolled die, same kept count (s57.30 A4)
-		attacker_roll = dice_engine.roll_check(
-			a_trait_val + a_skill_rank + cipher_bonus, a_trait_val,
-			0, 0, 0, a_skill_rank > 0
-		).get("total", 0)
-	else:
-		attacker_roll = dice_engine.roll_skill_check(
-			a_trait_val, a_skill_rank, 0
-		).get("total", 0)
+	var a_rolled: int = maxi(1, a_trait_val + a_skill_rank + cipher_bonus + a_mut["rolled"])
+	var a_kept: int = maxi(1, a_trait_val + a_mut["kept"])
+	var attacker_roll: int = dice_engine.roll_check(
+		a_rolled, a_kept, 0, 0, a_wound, a_skill_rank > 0
+	).get("total", 0)
 
 	var defender_roll: int = 0
 	if target != null:
 		var d_etiquette: int = target.skills.get("Etiquette", 0)
 		var d_awareness: int = target.awareness
-		defender_roll = dice_engine.roll_skill_check(
-			d_awareness, d_etiquette, 0
+		var d_wound: int = CharacterStats.get_wound_penalty(target)
+		var d_mut: Dictionary = MutationSystem.get_skill_modifiers(target, "Etiquette")
+		defender_roll = dice_engine.roll_check(
+			maxi(1, d_awareness + d_etiquette + d_mut["rolled"]),
+			maxi(1, d_awareness + d_mut["kept"]),
+			0, 0, d_wound, d_etiquette > 0
 		).get("total", 0)
 
 	var resolution: Dictionary = CourtActionSystem.resolve_read_character(
@@ -4392,26 +4392,26 @@ static func _execute_probe(
 
 	var a_skill_rank: int = character.skills.get("Courtier", 0)
 	var a_trait_val: int = character.perception
+	var a_wound_p: int = CharacterStats.get_wound_penalty(character)
+	var a_mut_p: Dictionary = MutationSystem.get_skill_modifiers(character, "Courtier")
 	var probe_wc: int = _get_winter_court_skill_bonus(character, "Courtier", ctx)
 	var cipher_bonus: int = _get_cipher_insight_bonus(character, target_id)
-	var attacker_roll: int
-	if cipher_bonus > 0:
-		# +1k0: one extra rolled die, same kept count (s57.30 A4)
-		attacker_roll = dice_engine.roll_check(
-			a_trait_val + a_skill_rank + cipher_bonus, a_trait_val,
-			0, 0, 0, a_skill_rank > 0
-		).get("total", 0) + probe_wc
-	else:
-		attacker_roll = dice_engine.roll_skill_check(
-			a_trait_val, a_skill_rank, 0
-		).get("total", 0) + probe_wc
+	var a_rolled_p: int = maxi(1, a_trait_val + a_skill_rank + cipher_bonus + a_mut_p["rolled"])
+	var a_kept_p: int = maxi(1, a_trait_val + a_mut_p["kept"])
+	var attacker_roll: int = dice_engine.roll_check(
+		a_rolled_p, a_kept_p, 0, 0, a_wound_p, a_skill_rank > 0
+	).get("total", 0) + probe_wc
 
 	var defender_roll: int = 0
 	if target != null:
 		var d_sincerity: int = target.skills.get("Sincerity", 0)
 		var d_awareness: int = target.awareness
-		defender_roll = dice_engine.roll_skill_check(
-			d_awareness, d_sincerity, 0
+		var d_wound_p: int = CharacterStats.get_wound_penalty(target)
+		var d_mut_s: Dictionary = MutationSystem.get_skill_modifiers(target, "Sincerity")
+		defender_roll = dice_engine.roll_check(
+			maxi(1, d_awareness + d_sincerity + d_mut_s["rolled"]),
+			maxi(1, d_awareness + d_mut_s["kept"]),
+			0, 0, d_wound_p, d_sincerity > 0
 		).get("total", 0)
 
 	var resolution: Dictionary = CourtActionSystem.resolve_probe(

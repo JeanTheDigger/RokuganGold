@@ -2307,3 +2307,121 @@ func test_craft_poetry_scroll_raises_stored_on_success() -> void:
 	)
 	if result.get("success", false):
 		assert_eq(result["effects"].get("poetry_scroll_raises", -1), 2)
+
+
+func test_read_character_wound_penalty_reduces_attacker_roll() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.awareness = 3
+	target.skills = {"Etiquette": 3}
+	target.stamina = 3
+	target.willpower = 3
+	target.wounds_taken = 0
+	var chars_by_id: Dictionary = {10: target}
+	var healthy_totals: Array[int] = []
+	var wounded_totals: Array[int] = []
+	for seed_val: int in range(100):
+		var ch: L5RCharacterData = L5RCharacterData.new()
+		ch.character_id = 1
+		ch.perception = 3
+		ch.skills = {"Investigation": 2}
+		ch.stamina = 3
+		ch.willpower = 3
+		ch.wounds_taken = 0
+		ch.school = ""
+		var action := _make_action("READ_CHARACTER", 10)
+		var ctx_h := NPCDataStructures.ContextSnapshot.new()
+		ctx_h.character_id = 1
+		ctx_h.context_flag = Enums.ContextFlag.AT_COURT
+		var d1 := DiceEngine.new()
+		d1.set_seed(seed_val)
+		var r1: Dictionary = ActionExecutor._execute_read_character(
+			action, ch, ctx_h, d1, chars_by_id
+		)
+		healthy_totals.append(r1.get("roll_total", 0))
+
+		var cw: L5RCharacterData = L5RCharacterData.new()
+		cw.character_id = 2
+		cw.perception = 3
+		cw.skills = {"Investigation": 2}
+		cw.stamina = 3
+		cw.willpower = 3
+		cw.wounds_taken = 19  # Earth 3 → threshold 6 → HURT = -10
+		cw.school = ""
+		var ctx_w := NPCDataStructures.ContextSnapshot.new()
+		ctx_w.character_id = 2
+		ctx_w.context_flag = Enums.ContextFlag.AT_COURT
+		var d2 := DiceEngine.new()
+		d2.set_seed(seed_val)
+		var r2: Dictionary = ActionExecutor._execute_read_character(
+			action, cw, ctx_w, d2, chars_by_id
+		)
+		wounded_totals.append(r2.get("roll_total", 0))
+	var healthy_avg: float = 0.0
+	var wounded_avg: float = 0.0
+	for i: int in range(100):
+		healthy_avg += healthy_totals[i]
+		wounded_avg += wounded_totals[i]
+	healthy_avg /= 100.0
+	wounded_avg /= 100.0
+	assert_true(healthy_avg > wounded_avg + 5.0,
+		"Wounded attacker should have lower roll totals (healthy=%.1f, wounded=%.1f)" % [healthy_avg, wounded_avg])
+
+
+func test_probe_wound_penalty_reduces_attacker_roll() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.awareness = 3
+	target.skills = {"Sincerity": 3}
+	target.stamina = 3
+	target.willpower = 3
+	target.wounds_taken = 0
+	var chars_by_id: Dictionary = {10: target}
+	var healthy_totals: Array[int] = []
+	var wounded_totals: Array[int] = []
+	for seed_val: int in range(100):
+		var ch: L5RCharacterData = L5RCharacterData.new()
+		ch.character_id = 1
+		ch.perception = 3
+		ch.skills = {"Courtier": 3}
+		ch.stamina = 3
+		ch.willpower = 3
+		ch.wounds_taken = 0
+		ch.school = ""
+		var action := _make_action("PROBE", 10)
+		var ctx_h := NPCDataStructures.ContextSnapshot.new()
+		ctx_h.character_id = 1
+		ctx_h.context_flag = Enums.ContextFlag.AT_COURT
+		var d1 := DiceEngine.new()
+		d1.set_seed(seed_val)
+		var r1: Dictionary = ActionExecutor._execute_probe(
+			action, ch, ctx_h, d1, chars_by_id
+		)
+		healthy_totals.append(r1.get("roll_total", 0))
+
+		var cw: L5RCharacterData = L5RCharacterData.new()
+		cw.character_id = 2
+		cw.perception = 3
+		cw.skills = {"Courtier": 3}
+		cw.stamina = 3
+		cw.willpower = 3
+		cw.wounds_taken = 19  # Earth 3 → threshold 6 → HURT = -10
+		cw.school = ""
+		var ctx_w := NPCDataStructures.ContextSnapshot.new()
+		ctx_w.character_id = 2
+		ctx_w.context_flag = Enums.ContextFlag.AT_COURT
+		var d2 := DiceEngine.new()
+		d2.set_seed(seed_val)
+		var r2: Dictionary = ActionExecutor._execute_probe(
+			action, cw, ctx_w, d2, chars_by_id
+		)
+		wounded_totals.append(r2.get("roll_total", 0))
+	var healthy_avg: float = 0.0
+	var wounded_avg: float = 0.0
+	for i: int in range(100):
+		healthy_avg += healthy_totals[i]
+		wounded_avg += wounded_totals[i]
+	healthy_avg /= 100.0
+	wounded_avg /= 100.0
+	assert_true(healthy_avg > wounded_avg + 5.0,
+		"Wounded prober should have lower roll totals (healthy=%.1f, wounded=%.1f)" % [healthy_avg, wounded_avg])

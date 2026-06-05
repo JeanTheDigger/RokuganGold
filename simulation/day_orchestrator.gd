@@ -6144,10 +6144,11 @@ static func _process_brash_reactions(
 		if not brash_check.get("triggered", false):
 			continue
 		var tn: int = brash_check.get("tn", 25)
+		var brash_wound: int = CharacterStats.get_wound_penalty(target)
 		var roll: DiceResult = dice_engine.roll_and_keep(
 			target.willpower, target.willpower, false, ""
 		)
-		var total: int = roll.total + int(target.honor)
+		var total: int = roll.total + int(target.honor) + brash_wound
 		if total >= tn:
 			continue  # Passed — stays composed
 		# Failed: BRASH character challenges the insulter to a duel.
@@ -6202,8 +6203,9 @@ static func _process_contrary_reactions(
 			if not contrary_check.get("triggered", false):
 				continue
 			var tn: int = contrary_check.get("tn", 0)
+			var contrary_wound: int = CharacterStats.get_wound_penalty(c)
 			var roll: DiceResult = dice_engine.roll_and_keep(c.willpower, c.willpower, false, "")
-			if roll.total >= tn:
+			if (roll.total + contrary_wound) >= tn:
 				continue  # Passed — stays composed
 			# Failed: CONTRARY character publicly contradicts the debater.
 			# GDD s45 does not specify a position shift magnitude — log only.
@@ -6894,8 +6896,9 @@ static func _apply_criminal_recall(
 	world_states: Dictionary,
 ) -> void:
 	var intelligence: int = criminal.intelligence if criminal.intelligence > 0 else 2
+	var recall_wound: int = CharacterStats.get_wound_penalty(criminal)
 	var recall_result: DiceResult = dice_engine.roll_and_keep(intelligence, intelligence)
-	var total: int = recall_result.total
+	var total: int = recall_result.total + recall_wound
 	if total < InvestigationLoopSystem.CRIMINAL_RECALL_TN:
 		return
 
@@ -9282,8 +9285,9 @@ static func _process_compulsion_on_arrival(
 
 		var tn: int = trigger.get("tn", 15)
 		var wil: int = character.willpower
+		var compulsion_wound: int = CharacterStats.get_wound_penalty(character)
 		var roll: DiceResult = dice_engine.roll_and_keep(wil, wil, false, "")
-		if roll.total < tn:
+		if (roll.total + compulsion_wound) < tn:
 			var comp_dis: DisadvantageData = AdvantageSystem.get_disadvantage(
 				character, Enums.Disadvantage.COMPULSION
 			)
@@ -20710,8 +20714,9 @@ static func _process_soft_hearted_kill_penalties(
 		if not check.get("blocked", false):
 			continue
 		# Roll Willpower TN 20 to suppress the penalty.
+		var sh_wound: int = CharacterStats.get_wound_penalty(killer)
 		var roll: Dictionary = dice_engine.roll_check(
-			killer.willpower, killer.willpower, 20, 0, 0, true, false
+			killer.willpower, killer.willpower, 20, 0, sh_wound, true, false
 		)
 		if not roll.get("success", false):
 			killer.soft_hearted_tn_until = ic_day + 1

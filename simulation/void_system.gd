@@ -38,8 +38,9 @@ static func try_spend_protected(character: L5RCharacterData, dice_engine: DiceEn
 		var spent: bool = spend(character)
 		return {"success": spent, "protected": false}
 	# Contested Void roll vs TN 10.
+	var wound_pen: int = CharacterStats.get_wound_penalty(character)
 	var roll: Dictionary = dice_engine.roll_check(
-		character.void_ring, character.void_ring, 10, 0, 0, true, false
+		character.void_ring, character.void_ring, 10, 0, wound_pen, true, false
 	)
 	if roll.get("success", false):
 		return {"success": true, "protected": true}

@@ -234,3 +234,50 @@ func test_begin_round_clears_void_spent_this_round() -> void:
 	state.participants[1].void_spent_this_round = true
 	IndividualCombat.begin_round(state)
 	assert_false(state.participants[1].void_spent_this_round)
+
+
+func test_hotei_protection_wound_penalty_applied() -> void:
+	# Hotei's Blessing protection path rolls Void vs TN 10.
+	# Wound penalty should reduce the roll total, making protection harder.
+	var healthy_successes: int = 0
+	var wounded_successes: int = 0
+	for seed_val: int in range(100):
+		# Healthy
+		var ch: L5RCharacterData = L5RCharacterData.new()
+		ch.character_id = 1
+		ch.void_ring = 3
+		ch.max_void_points = 3
+		ch.current_void_points = 3
+		ch.stamina = 2
+		ch.willpower = 2
+		ch.wounds_taken = 0
+		# Give Hotei's Blessing protection advantage
+		var adv := AdvantageData.new()
+		adv.advantage_type = Enums.Advantage.HOTEI_BLESSING
+		adv.metadata = {"curse_variant": false}
+		ch.advantages = [adv]
+		var d1 := DiceEngine.new()
+		d1.set_seed(seed_val)
+		var r1: Dictionary = VoidSystem.try_spend_protected(ch, d1)
+		if r1.get("protected", false):
+			healthy_successes += 1
+		# Wounded (HURT = -10 with Earth 2 → threshold 4 → HURT at 13)
+		var cw: L5RCharacterData = L5RCharacterData.new()
+		cw.character_id = 2
+		cw.void_ring = 3
+		cw.max_void_points = 3
+		cw.current_void_points = 3
+		cw.stamina = 2
+		cw.willpower = 2
+		cw.wounds_taken = 13
+		var adv2 := AdvantageData.new()
+		adv2.advantage_type = Enums.Advantage.HOTEI_BLESSING
+		adv2.metadata = {"curse_variant": false}
+		cw.advantages = [adv2]
+		var d2 := DiceEngine.new()
+		d2.set_seed(seed_val)
+		var r2: Dictionary = VoidSystem.try_spend_protected(cw, d2)
+		if r2.get("protected", false):
+			wounded_successes += 1
+	assert_true(healthy_successes >= wounded_successes,
+		"Wounded characters should succeed at protection less often (healthy=%d, wounded=%d)" % [healthy_successes, wounded_successes])

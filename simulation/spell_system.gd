@@ -520,10 +520,11 @@ static func resolve_cast(character: L5RCharacterData, spell_id: String,
 		tn += 10
 	var roll_dice: int = ring_val + eff_rank
 	var keep_dice: int = ring_val
+	var wound_pen: int = CharacterStats.get_wound_penalty(character)
 	# Slot consumed on attempt regardless of outcome
 	consume_slot(character, cast_ring)
 	var roll_result: DiceResult = dice.roll_and_keep(roll_dice, keep_dice)
-	var total: int = roll_result.total
+	var total: int = roll_result.total + wound_pen
 	var margin: int = total - tn
 
 	# ELEMENTAL_IMBALANCE overflow (s45 lines 535-545): when casting the imbalanced element,
@@ -534,7 +535,7 @@ static func resolve_cast(character: L5RCharacterData, spell_id: String,
 		var imb_tn: int = imb_check.get("tn", 15)
 		var wil_val: int = character.willpower if character.willpower > 0 else 1
 		var wil_roll: DiceResult = dice.roll_and_keep(wil_val, wil_val)
-		if wil_roll.total < imb_tn:
+		if (wil_roll.total + wound_pen) < imb_tn:
 			imbalance_result = AdvantageSystem.apply_elemental_imbalance_overflow(
 				character, cast_ring, ml, dice, ic_day
 			)
