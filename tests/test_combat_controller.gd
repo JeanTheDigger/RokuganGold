@@ -2222,3 +2222,81 @@ func test_stealth_zone_exit_works_when_clear() -> void:
 		"stealth move must exit when moving onto a clear ZONE_EXIT tile")
 	assert_eq(result.get("exit_x", -1), 6,
 		"exited result must carry the correct exit x coordinate")
+
+
+# =============================================================================
+# -- 42. Bug 7 regression: morale events from player attack paths (Bug 7) ----
+# =============================================================================
+
+func test_bump_to_attack_kill_surfaces_morale_event() -> void:
+	# Bug 7: try_move_player (bump-to-attack) did not append morale_events from
+	# _resolve_melee_attack into _pending_noise_events. Fixed: one-line append added.
+	# Setup: 2 BANDIT_RABBLE (morale threshold 0.40). Player pre-wounds the target
+	# to one below dead, then bumps. Kill → 1/2 = 50% dead > 40% threshold → survivor
+	# breaks morale → morale_broken event must appear in advance_npc_turns().
+	#
+	# BANDIT_RABBLE Earth = min(stamina 2, willpower 2) = 2.
+	# Dead at wounds_taken >= 33 (threshold_per_level=4, level 8 reached at 4*8+1=33).
+	# Pre-wound to 32 so any positive damage kills.
+	var session := _make_session(5, 5, [
+		{"unit_type": "BANDIT_RABBLE", "x": 6, "y": 5, "seed": 0},  # target
+		{"unit_type": "BANDIT_RABBLE", "x": 6, "y": 7, "seed": 0},  # survivor
+	])
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
+	cc._initial_enemy_count = 2
+	cc._enemy_deaths_total  = 0
+
+	var target_es: CombatController.EntityState = null
+	for es: CombatController.EntityState in cc._entities.values():
+		if es.faction == CombatController.FACTION_ENEMY and es.x == 6 and es.y == 5:
+			target_es = es
+			break
+	assert_not_null(target_es, "need BANDIT_RABBLE target at (6,5)")
+	target_es.character.wounds_taken = 32  # one below dead threshold of 33
+
+	var result: Dictionary = cc.try_move_player(1, 0)
+	assert_true(result.get("killed", false),
+		"bump-to-attack must kill the pre-wounded BANDIT_RABBLE")
+
+	var events: Array = cc.advance_npc_turns()
+	var found_morale: bool = false
+	for ev: Dictionary in events:
+		if ev.get("type") == "morale_broken":
+			found_morale = true
+			break
+	assert_true(found_morale,
+		"bump-to-attack kill of 50% enemies must surface morale_broken in advance_npc_turns()")
+
+
+func test_execute_player_attack_kill_surfaces_morale_event() -> void:
+	# Bug 7: execute_player_attack did not append morale_events from _resolve_melee_attack
+	# into _pending_noise_events. Fixed: one-line append added.
+	# Same morale setup as bump-to-attack test above.
+	var session := _make_session(5, 5, [
+		{"unit_type": "BANDIT_RABBLE", "x": 6, "y": 5, "seed": 0},  # target
+		{"unit_type": "BANDIT_RABBLE", "x": 6, "y": 7, "seed": 0},  # survivor
+	])
+	var cc := CombatController.create(session, _make_strong_player(), DiceEngine.new(42))
+	cc._initial_enemy_count = 2
+	cc._enemy_deaths_total  = 0
+
+	var target_es: CombatController.EntityState = null
+	for es: CombatController.EntityState in cc._entities.values():
+		if es.faction == CombatController.FACTION_ENEMY and es.x == 6 and es.y == 5:
+			target_es = es
+			break
+	assert_not_null(target_es, "need BANDIT_RABBLE target at (6,5)")
+	target_es.character.wounds_taken = 32  # one below dead threshold of 33
+
+	var result: Dictionary = cc.execute_player_attack(target_es.entity_id, "", 0)
+	assert_true(result.get("killed", false),
+		"execute_player_attack must kill the pre-wounded BANDIT_RABBLE")
+
+	var events: Array = cc.advance_npc_turns()
+	var found_morale: bool = false
+	for ev: Dictionary in events:
+		if ev.get("type") == "morale_broken":
+			found_morale = true
+			break
+	assert_true(found_morale,
+		"execute_player_attack kill of 50% enemies must surface morale_broken in advance_npc_turns()")

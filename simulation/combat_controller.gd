@@ -679,6 +679,7 @@ func try_move_player(dx: int, dy: int) -> Dictionary:
 	if target_es != null and target_es.faction == FACTION_ENEMY:
 		var weapon: String = IndividualCombat.pick_best_weapon(player.character)
 		var result: Dictionary = _resolve_melee_attack(player, target_es, weapon, 0)
+		_pending_noise_events.append_array(result.get("morale_events", []))
 		# Melee noise: MODERATE normally, LOUD if a shout (aggressive attacker).
 		_emit_noise(player.x, player.y, AsciiMapEnvironment.NoiseLevel.MODERATE)
 		_player_stealth = false
@@ -902,6 +903,7 @@ func execute_player_attack(target_id: int, weapon_name: String = "", raises: int
 	var weapon: String = weapon_name if weapon_name != "" \
 			else IndividualCombat.pick_best_weapon(player.character)
 	var result: Dictionary = _resolve_melee_attack(player, target, weapon, raises)
+	_pending_noise_events.append_array(result.get("morale_events", []))
 
 	# Combat noise.
 	_emit_noise(player.x, player.y, AsciiMapEnvironment.NoiseLevel.MODERATE)
