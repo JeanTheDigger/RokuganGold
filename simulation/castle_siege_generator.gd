@@ -642,16 +642,18 @@ static func _place_player_start(map: CastleSiegeMapData, assault_mode: int, w: i
 	else:
 		# DEFENDER: outer wall walkway center
 		x = w / 2
-		# Outer wall walkway is one row above the outer wall row.
-		# For all sizes, outer wall is the row just above the approach zone.
-		# Walkway is one row above that.
+		# Outer wall walkway is one row inside the outer wall.
+		# FORTIFICATION/CASTLE_TOWN: approach=3 rows, outer wall immediately above,
+		#   walkway one row above that → h - 3 - 1(wall) - 1(walkway) = h - 5.
+		# CITY: approach=9 rows, outer wall 4 rows above approach (buffer zone between),
+		#   walkway one row above that → h - 9 - 4(wall) - 1(walkway) = h - 14.
 		match map.size_category:
 			CastleSiegeMapData.SizeCategory.FORTIFICATION:
-				y = h - 3 - 2  # Y=20
+				y = h - 5  # Y=20 (ow_walk_y)
 			CastleSiegeMapData.SizeCategory.CASTLE_TOWN:
-				y = h - 3 - 2  # Y=25
+				y = h - 5  # Y=25 (ow_walk_y)
 			_: # CITY
-				y = h - 9 - 2  # Y=26 (ow_walk_y)
+				y = h - 14  # Y=26 (ow_walk_y)
 	map.set_tile(x, y, _EXIT)
 	map.player_start_x = x
 	map.player_start_y = y

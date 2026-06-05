@@ -595,8 +595,8 @@ static func _place_population_slots(
 	for sec in map.collapsed_sections:
 		var lx: int = sec["lx"]; var rx_: int = sec["rx"]
 		var ly: int = sec["ly"]; var ry:  int = sec["ry"]
-		var px: int = lx + rng.randi_range(0, maxi(0, (rx_ - lx) - 1))
-		var py: int = ly + rng.randi_range(0, maxi(0, (ry  - ly) - 1))
+		var px: int = lx + rng.randi_range(0, maxi(0, rx_ - lx))
+		var py: int = ly + rng.randi_range(0, maxi(0, ry  - ly))
 		map.population_slots.append({
 			"x": px, "y": py,
 			"role":    RuinedStructureMapData.PopRole.RUBBLE_LURKER,
