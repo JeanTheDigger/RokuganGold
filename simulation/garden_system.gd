@@ -429,10 +429,10 @@ static func voluntary_remove(garden: GardenData, ic_day: int) -> Dictionary:
 
 	# Fine or Exceptional: Tier 4 social topic
 	if garden.current_tier <= 3:
-		return {"topic_tier": 4, "topic_type": "garden_removed", "fire_topic": true}
+		return {"topic_tier": TopicData.Tier.TIER_4, "topic_type": "garden_removed", "fire_topic": true}
 
 	# Masterwork or Legendary: Tier 3 social topic
-	return {"topic_tier": 3, "topic_type": "garden_removed", "fire_topic": true}
+	return {"topic_tier": TopicData.Tier.TIER_3, "topic_type": "garden_removed", "fire_topic": true}
 
 
 static func daimyo_remove(garden: GardenData, ic_day: int) -> Dictionary:
@@ -445,7 +445,7 @@ static func daimyo_remove(garden: GardenData, ic_day: int) -> Dictionary:
 	garden.destruction_date = ic_day
 
 	if garden.current_tier >= 2:
-		return {"topic_tier": 3, "fire_topic": true, "creator_notified": true}
+		return {"topic_tier": TopicData.Tier.TIER_3, "fire_topic": true, "creator_notified": true}
 
 	return {"topic_tier": -1, "fire_topic": false, "creator_notified": false}
 
@@ -463,11 +463,11 @@ static func make_completion_topic(
 	var tier: int
 	match garden.current_tier:
 		1, 2:
-			tier = 4  # Normal / Fine
+			tier = TopicData.Tier.TIER_4  # Normal / Fine
 		3, 4:
-			tier = 3  # Exceptional / Masterwork
+			tier = TopicData.Tier.TIER_3  # Exceptional / Masterwork
 		_:
-			tier = 2  # Legendary
+			tier = TopicData.Tier.TIER_2  # Legendary
 
 	var quality_name: String = _tier_to_name(garden.current_tier)
 	return {
@@ -502,7 +502,7 @@ static func make_degradation_topic(
 	if from_tier >= 3 and to_tier == 2:
 		if creator_glory >= 3.0:
 			return {
-				"tier": 4,
+				"tier": TopicData.Tier.TIER_4,
 				"topic_type": "garden_degraded",
 				"title": "%s's garden at %s has degraded from %s to Fine" % [
 					creator_name, zone_name, _tier_to_name(from_tier)
@@ -515,7 +515,7 @@ static func make_degradation_topic(
 	# Trigger 2: Fine degraded to Normal
 	if from_tier == 2 and to_tier == 1:
 		return {
-			"tier": 4,
+			"tier": TopicData.Tier.TIER_4,
 			"topic_type": "garden_degraded",
 			"title": "%s's garden at %s has degraded from Fine to Normal" % [creator_name, zone_name],
 			"subject_creator_id": garden.creator_id,
@@ -538,11 +538,11 @@ static func make_destruction_topic(
 	var tier: int
 	match garden.quality_tier:
 		1, 2:
-			tier = 4  # Normal / Fine original
+			tier = TopicData.Tier.TIER_4  # Normal / Fine original
 		3, 4:
-			tier = 3  # Exceptional / Masterwork original
+			tier = TopicData.Tier.TIER_3  # Exceptional / Masterwork original
 		_:
-			tier = 2  # Legendary original
+			tier = TopicData.Tier.TIER_2  # Legendary original
 
 	return {
 		"tier": tier,
@@ -561,7 +561,7 @@ static func make_daimyo_removal_topic(
 ) -> Dictionary:
 	## Returns a Tier 3 topic dict for Daimyo-forced removal of a Fine+ garden (A11 / A12).
 	return {
-		"tier": 3,
+		"tier": TopicData.Tier.TIER_3,
 		"topic_type": "garden_forced_removed",
 		"title": "%s ordered the removal of %s's garden at %s" % [lord_name, creator_name, zone_name],
 		"subject_creator_id": garden.creator_id,

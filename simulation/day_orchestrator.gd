@@ -13740,11 +13740,11 @@ static func _process_ladder_side_effects(
 			"rung": side.get("rung", -1),
 		}
 
-		if side.get("glory_cost", 0.0) != 0.0 and lord != null:
+		if side.get("glory_cost", 0.0) != 0.0 and lord != null and not CharacterStats.is_dead(lord):
 			HonorGlorySystem.apply_glory_change(lord, side["glory_cost"])
 			result["glory_applied"] = side["glory_cost"]
 
-		if side.has("disposition_cost") and lord != null:
+		if side.has("disposition_cost") and lord != null and not CharacterStats.is_dead(lord):
 			var disp_cost: int = side["disposition_cost"]
 			_apply_vassal_disposition_cost(lord, characters_by_id, disp_cost)
 			result["vassal_disposition_applied"] = disp_cost
@@ -13773,7 +13773,7 @@ static func _process_ladder_side_effects(
 			)
 			result["topic_id"] = topic.topic_id
 
-		if side.get("creates_favor", false) and lord != null:
+		if side.get("creates_favor", false) and lord != null and not CharacterStats.is_dead(lord):
 			var favor_tier: int = side.get("favor_tier", 3)
 			var ally_ids: Array = side.get("contributing_ally_ids", [])
 			var created_favors: Array = []

@@ -343,7 +343,7 @@ static func has_seduce_for_access(
 			continue
 		var seduced_id: int = int(ent.get("target_id", -1))
 		var seduced: L5RCharacterData = characters_by_id.get(seduced_id) as L5RCharacterData
-		if seduced != null and seduced.physical_location == target_location:
+		if seduced != null and not CharacterStats.is_dead(seduced) and seduced.physical_location == target_location:
 			return true
 	return false
 
