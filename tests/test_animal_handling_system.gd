@@ -393,3 +393,35 @@ func test_executor_fails_no_animal_handling_skill() -> void:
 	)
 	assert_false(result.get("success", true))
 	assert_eq(result.get("reason", ""), "no_animal_handling_skill")
+
+
+# -- Wound Penalty on Training Roll ------------------------------------------------
+
+func test_training_roll_wound_penalty_reduces_total() -> void:
+	var healthy_total: int = 0
+	var wounded_total: int = 0
+	var trials: int = 100
+	for i: int in range(trials):
+		var d1: DiceEngine = DiceEngine.new(i * 7)
+		var healthy: L5RCharacterData = L5RCharacterData.new()
+		healthy.character_id = 90
+		healthy.awareness = 3
+		healthy.skills = {"Animal Handling": 3}
+		healthy.trained_companions = []
+		var r1: Dictionary = AnimalHandlingSystem.make_training_roll(healthy, "DOG", d1)
+		healthy_total += r1.get("roll_total", 0)
+
+		var d2: DiceEngine = DiceEngine.new(i * 7)
+		var wounded: L5RCharacterData = L5RCharacterData.new()
+		wounded.character_id = 91
+		wounded.awareness = 3
+		wounded.skills = {"Animal Handling": 3}
+		wounded.trained_companions = []
+		wounded.wounds_taken = 50
+		var r2: Dictionary = AnimalHandlingSystem.make_training_roll(wounded, "DOG", d2)
+		wounded_total += r2.get("roll_total", 0)
+
+	assert_true(
+		healthy_total > wounded_total,
+		"Wounded trainer should have lower training roll totals due to wound penalty"
+	)

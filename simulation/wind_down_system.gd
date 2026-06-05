@@ -455,6 +455,7 @@ static func apply_wind_down(
 				var char_games: int = SkillResolver.get_skill_rank(character, "Games: Go")
 				if char_games == 0:
 					char_games = SkillResolver.get_skill_rank(character, "Games")
+				var char_wound: int = CharacterStats.get_wound_penalty(character)
 				var opp_intel: int = go_parlor_opponent.get("intelligence", 0)
 				var opp_games: int = go_parlor_opponent.get("games_rank", 0)
 				var rolled_char: int = char_intel + char_games
@@ -464,6 +465,7 @@ static func apply_wind_down(
 				var contest: Dictionary = dice.contested_roll(
 					maxi(1, rolled_char), maxi(1, kept_char),
 					maxi(1, rolled_opp), maxi(1, kept_opp),
+					char_wound, 0,
 				)
 				result["go_parlor_roll"] = contest["total_a"]
 				result["go_parlor_opponent_roll"] = contest["total_b"]

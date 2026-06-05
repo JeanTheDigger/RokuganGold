@@ -672,13 +672,16 @@ static func resolve_bodyguard_encounter(
 			var guard_init: DiceResult = dice_engine.roll_and_keep(
 				bodyguard.reflexes + 1, bodyguard.reflexes
 			)
-			var assassin_first: bool = assassin_init.total >= guard_init.total
+			var assassin_wound: int = CharacterStats.get_wound_penalty(assassin)
+			var guard_wound: int = CharacterStats.get_wound_penalty(bodyguard)
+			var assassin_first: bool = (assassin_init.total + assassin_wound) >= \
+				(guard_init.total + guard_wound)
 			add_suspicion(state, SUSPICION_NOTABLE_FAILURE)
 			return {
 				"fight_initiated": true,
 				"assassin_first": assassin_first,
-				"assassin_initiative": assassin_init.total,
-				"guard_initiative": guard_init.total,
+				"assassin_initiative": assassin_init.total + assassin_wound,
+				"guard_initiative": guard_init.total + guard_wound,
 				"suspicion": state["suspicion"],
 			}
 

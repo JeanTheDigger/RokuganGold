@@ -287,15 +287,17 @@ static func free_ally_chains(
 	if not has_tool:
 		return {"success": false, "reason": "no_tool"}
 
+	var wound_pen: int = CharacterStats.get_wound_penalty(rescuer)
 	var result: DiceResult = dice_engine.roll_and_keep(rescuer.strength, rescuer.strength)
-	var success: bool = result.total >= BREAK_CHAINS_TN
+	var total: int = result.total + wound_pen
+	var success: bool = total >= BREAK_CHAINS_TN
 
 	if success:
 		bound_state["state"] = BoundState.FREE
 
 	return {
 		"success": success,
-		"roll_total": result.total,
+		"roll_total": total,
 		"tn": BREAK_CHAINS_TN,
 		"method": "force",
 		"noise_level": NoiseLevel.MODERATE if success else NoiseLevel.QUIET,

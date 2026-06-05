@@ -1702,3 +1702,47 @@ func test_guard_death_creates_death_event_and_execution_retries() -> void:
 	assert_true(death_events[0]["suspicious_death"])
 	assert_has(results[0], "execution_retry",
 		"Execution retry must fire when assassin kills guard and continues")
+
+
+# ==============================================================================
+# Wound Penalty — Bodyguard FIGHT_FIRST Initiative
+# ==============================================================================
+
+func test_bodyguard_fight_first_wound_penalty_on_initiative() -> void:
+	var healthy_assassin_total: int = 0
+	var wounded_assassin_total: int = 0
+	var trials: int = 100
+	for i: int in range(trials):
+		var d1: DiceEngine = DiceEngine.new(i * 13)
+		var healthy: L5RCharacterData = L5RCharacterData.new()
+		healthy.character_id = 80
+		healthy.reflexes = 4
+		healthy.skills = {"Stealth": 5, "Kenjutsu": 4}
+		var guard1: L5RCharacterData = L5RCharacterData.new()
+		guard1.character_id = 81
+		guard1.reflexes = 3
+		var s1: Dictionary = AssassinationSystem.create_assassination_state(80, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+		var r1: Dictionary = AssassinationSystem.resolve_bodyguard_encounter(
+			healthy, guard1, AssassinationSystem.BodyguardResponse.FIGHT_FIRST, s1, d1
+		)
+		healthy_assassin_total += r1.get("assassin_initiative", 0)
+
+		var d2: DiceEngine = DiceEngine.new(i * 13)
+		var wounded: L5RCharacterData = L5RCharacterData.new()
+		wounded.character_id = 82
+		wounded.reflexes = 4
+		wounded.wounds_taken = 50
+		wounded.skills = {"Stealth": 5, "Kenjutsu": 4}
+		var guard2: L5RCharacterData = L5RCharacterData.new()
+		guard2.character_id = 83
+		guard2.reflexes = 3
+		var s2: Dictionary = AssassinationSystem.create_assassination_state(82, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+		var r2: Dictionary = AssassinationSystem.resolve_bodyguard_encounter(
+			wounded, guard2, AssassinationSystem.BodyguardResponse.FIGHT_FIRST, s2, d2
+		)
+		wounded_assassin_total += r2.get("assassin_initiative", 0)
+
+	assert_true(
+		healthy_assassin_total > wounded_assassin_total,
+		"Wounded assassin should have lower initiative totals due to wound penalty"
+	)
