@@ -48,6 +48,22 @@ const WEAPON_SKILLS: Array[String] = [
 	"Knives", "Jiujutsu", "War Fan", "Ninjutsu", "Staves", "Spears",
 ]
 
+# Bushido virtue hard blocks (s54.7b): virtue → Sects it can never master.
+# Shourido virtues carry no hard blocks (they shape pursuit, not eligibility).
+const BUSHIDO_HARD_BLOCKS: Dictionary = {
+	Enums.BushidoVirtue.GI: [
+		Enums.KolatSect.TIGER, Enums.KolatSect.SILK, Enums.KolatSect.COIN,
+		Enums.KolatSect.DREAM, Enums.KolatSect.LOTUS,
+	],
+	Enums.BushidoVirtue.MAKOTO: [
+		Enums.KolatSect.TIGER, Enums.KolatSect.SILK,
+		Enums.KolatSect.DREAM, Enums.KolatSect.LOTUS,
+	],
+	Enums.BushidoVirtue.REI: [Enums.KolatSect.DREAM],
+	Enums.BushidoVirtue.JIN: [Enums.KolatSect.DREAM, Enums.KolatSect.LOTUS],
+	Enums.BushidoVirtue.CHUGI: [Enums.KolatSect.TIGER],
+}
+
 
 # === PUBLIC ENTRY ============================================================
 
@@ -199,11 +215,22 @@ static func _living_tiger_id(npcs: Array) -> int:
 
 # === ELIGIBILITY (universal filters + Sect minimums, s54.7a) =================
 
+## Bushido virtue hard block check (s54.7b). Returns false if the NPC's virtue
+## forbids this Sect. Shourido and NONE never block.
+static func _personality_permits(sect: int, npc: L5RCharacterData) -> bool:
+	var blocked: Array = BUSHIDO_HARD_BLOCKS.get(npc.bushido_virtue, [])
+	return sect not in blocked
+
+
 static func _meets_minimums(sect: int, npc: L5RCharacterData) -> bool:
 	# Universal: Insight 3+, not the Emperor. ("Not already selected" handled by caller.)
 	if CharacterStats.get_insight_rank(npc) < 3:
 		return false
 	if npc.role_position == "Emperor":
+		return false
+	# Bushido virtue hard blocks (s54.7b): some virtues make an NPC ineligible
+	# for a Sect entirely — they are never added to that Sect's draw pool.
+	if not _personality_permits(sect, npc):
 		return false
 	match sect:
 		Enums.KolatSect.TIGER:

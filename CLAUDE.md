@@ -4412,6 +4412,19 @@ template generators it depends on. Faithful summary of the fixes that landed:
   and the win-condition world-state event emission. Plus the prior deferred items (population
   channels, metadata, Conclave, Tiger Tear routing, network-record lifecycle, dependent
   executors).
+- **s54.7 The Kolat (Tranche 11 — Bushido virtue hard blocks)** — fixes a real gap: the
+  Master selector never enforced the s54.7b personality hard-block table, so virtue-ineligible
+  NPCs could be drawn into forbidden Sects. `KolatMasterSelector.BUSHIDO_HARD_BLOCKS` encodes
+  the locked table (Gi → Tiger/Silk/Coin/Dream/Lotus; Makoto → Tiger/Silk/Dream/Lotus; Rei →
+  Dream; Jin → Dream/Lotus; Chugi → Tiger). `_personality_permits()` is checked inside
+  `_meets_minimums()`, so the block applies to both world-gen selection AND the Tranche 8
+  discretionary succession path (which routes through `_meets_minimums`). Shourido virtues and
+  NONE never block (they shape pursuit, not eligibility, per s54.7b). +5 tests (23 total in
+  `test_kolat_master_selector.gd`). NOTE: the Sect→standing-objective NeedType mapping (s54.7b)
+  is only pinned explicitly for Silk (MAINTAIN_KOLAT_NETWORK), Coin (MANAGE_KOLAT_FUNDS), and
+  Dream (MAINTAIN_SLEEPER); the GDD gives the other seven Sects' standing mandates as prose
+  without NeedType identifiers, so standing-objective assignment is a genuine design gap
+  (owner must supply the remaining Sect→NeedType mappings) rather than something to invent.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`

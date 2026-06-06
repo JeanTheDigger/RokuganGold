@@ -192,3 +192,44 @@ func test_new_tiger_repoints_other_masters() -> void:
 	assert_eq(nid, 3, "Tiger heir elevated")
 	assert_eq(new_tiger.kolat_superior_id, -1, "new Tiger reports to no one")
 	assert_eq(coin.kolat_superior_id, 3, "other living Masters re-point to the new Tiger")
+
+
+# === Tranche 11: Bushido virtue hard blocks (s54.7b) ===
+
+func test_gi_cannot_be_tiger() -> void:
+	var t := _tiger_candidate(1)
+	t.bushido_virtue = Enums.BushidoVirtue.GI
+	var got := KolatMasterSelector.select_masters([t], DiceEngine.new(30))
+	assert_eq(got[Enums.KolatSect.TIGER], -1, "Gi virtue is hard-blocked from Tiger")
+
+
+func test_chugi_cannot_be_tiger_but_can_be_jade() -> void:
+	# Chugi is blocked from Tiger only; a Chugi shugenja can still hold Jade.
+	var c := _npc(1, {"Lore: Shadowlands": 4, "Investigation": 4}, "Dragon", "Tamori", "",
+		Enums.SchoolType.SHUGENJA)
+	c.bushido_virtue = Enums.BushidoVirtue.CHUGI
+	var got := KolatMasterSelector.select_masters([c], DiceEngine.new(31))
+	assert_eq(got[Enums.KolatSect.JADE], 1, "Chugi is permitted for Jade")
+
+
+func test_makoto_cannot_be_silk() -> void:
+	var s := _npc(1, {"Acting": 4, "Courtier": 4, "Sincerity (Deceit)": 4}, "Scorpion", "Shosuro", "")
+	s.bushido_virtue = Enums.BushidoVirtue.MAKOTO
+	var got := KolatMasterSelector.select_masters([s], DiceEngine.new(32))
+	assert_eq(got[Enums.KolatSect.SILK], -1, "Makoto is hard-blocked from Silk")
+
+
+func test_jin_cannot_be_dream() -> void:
+	var d := _npc(1, {"Temptation": 5, "Intimidation (Control)": 3, "Medicine": 4})
+	d.bushido_virtue = Enums.BushidoVirtue.JIN
+	var got := KolatMasterSelector.select_masters([d], DiceEngine.new(33))
+	assert_eq(got[Enums.KolatSect.DREAM], -1, "Jin is hard-blocked from Dream")
+
+
+func test_no_virtue_block_for_shourido() -> void:
+	# A Shourido-virtue (or NONE bushido) Lotus candidate is never hard-blocked.
+	var l := _npc(1, {"Stealth": 4, "Kenjutsu": 5})
+	l.bushido_virtue = Enums.BushidoVirtue.NONE
+	l.shourido_virtue = Enums.ShouridoVirtue.KETSUI
+	var got := KolatMasterSelector.select_masters([l], DiceEngine.new(34))
+	assert_eq(got[Enums.KolatSect.LOTUS], 1, "no Bushido virtue → no hard block")
