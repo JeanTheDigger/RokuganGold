@@ -21,6 +21,19 @@ The master index is at /gdd/00_INDEX.md — read it before asking what exists.
 Never extrapolate from one system to another (e.g. land combat rules to naval
 combat, one school's technique to another's). If the GDD is silent, stop and ask.
 
+**The GDD design files in /gdd/ MAY be changed — but ONLY with the owner's
+explicit opinion and absolute, prior approval.** GDD design is no longer
+permanently read-only. However, you may NEVER edit, add, remove, or reword any
+design content in /gdd/ on your own initiative. Before touching a GDD design
+file you MUST: (1) state exactly what you propose to change and why, (2) ask
+for the owner's opinion, and (3) receive explicit, unambiguous approval. No
+approval, no edit — silence is not approval, and a general "go ahead" on a
+task does not extend to GDD design changes. The owner's opinion governs the
+final wording. Updating the Code Implementation Status table in
+/gdd/00_INDEX.md to reflect what code now exists does NOT require approval
+(it records implementation status, not design); changing design intent,
+mechanics, or numeric values anywhere in /gdd/ always does.
+
 When implementing any system, read its LOCKED section directly from /gdd/.
 Do not rely on summaries, cross-references, or inference. LOCKED sections win.
 
@@ -139,7 +152,10 @@ When implementing or auditing a system, go here first:
 
 ## Directory Structure
 ```
-/gdd/                              — GDD markdown files (read-only reference, never edit)
+/gdd/                              — GDD markdown files (design source; edit ONLY with the
+                                     owner's explicit prior approval — see "The GDD Is the
+                                     Authoritative Source". 00_INDEX.md status table is the
+                                     one exception: status updates need no approval)
 /simulation/                       — Headless simulation logic: NPC engine, resource tick,
                                      world event resolution. NO Node inheritance here.
                                      Plain GDScript classes only (class_name, no extends Node).
