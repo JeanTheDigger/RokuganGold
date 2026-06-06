@@ -234,3 +234,34 @@ Using two weapons simultaneously is uncommon in Rokugan. Exceptions include the 
 
 - Armor TN bonus: A character wielding two weapons adds their Insight Rank to Armor TN due to the larger area covered.
 
+## 40.x Persistent-World ASCII Map Combat
+
+This subsection governs how the combat rules above are expressed on the
+persistent-world ASCII map. The rules above (Initiative, Stances, Attack &
+Defense, Maneuvers, Grapple, Sumai, Iaijutsu, etc.) are unchanged; this
+subsection only specifies their spatial and temporal expression on the map.
+
+**Real-time vs. turn-based mode.**
+
+- While no combat is active in a zone, character movement on the ASCII map is **real-time** — characters move freely tile-to-tile with no Initiative, Round, or Turn structure (normal exploration and social movement).
+- A zone enters **turn-based combat mode** the instant combat is initiated within it (first hostile attack, a detected stealth kill, or an enemy reaching Combat alert against a hostile present). At that moment, Stage 1 Initiative is rolled for all participants in the zone, and the Round/Turn structure (Stages 1–3) governs the zone until combat resolves.
+- The zone returns to real-time when no mutually-hostile, conscious participants remain (one side dead/Out/fled/subdued, or hostility ends).
+- The turn-based state is **per-zone**: the navigation/lesser zone where combat occurs. Adjacent zones not in combat stay real-time.
+
+**Tile ↔ distance mapping.**
+
+- One tile = 5 feet. "Within 5 feet" (melee reach, Guard range) = an adjacent tile (Chebyshev distance ≤ 1; the 8 surrounding tiles).
+- During combat, map movement uses the Water Ring action economy: Free move = Water Ring tiles; Simple = ×2; Full Move (Complex) = ×4.
+
+**Action economy on the map (during combat).**
+
+- Each Turn provides the standard budget: 1 Complex action **OR** 2 Simple actions, plus a Free move and Free actions. Changing Stance costs a Simple action after Round 1.
+
+**Ranged ranges — PROVISIONAL.**
+
+Specific ranged weapon ranges are not yet specified (pending the Equipment section). Until then, any enemy in line of sight is a valid ranged target; the existing −10 ranged-in-melee penalty applies when the shooter is adjacent to an enemy.
+
+**NPC-vs-NPC resolution without a PC present.**
+
+Per the standing constraint that NPCs never use the ASCII map unless a PC is personally present, NPC-only fights resolve via a **summary roll** (both attack in Attack Stance, damage applied, survivor/higher-total wins) rather than tile-by-tile. The full tile-based skirmish runs only when a PC is in the zone.
+

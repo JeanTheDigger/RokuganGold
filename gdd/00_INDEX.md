@@ -347,7 +347,7 @@ Content has not been modified — only split at section boundaries.
 
 | File | Section | Size | Status |
 |------|---------|------|--------|
-| `s40_combat.md` | # 40. Combat | 14K | Reference / No tags |
+| `s40_combat.md` | # 40. Combat | 14K | Reference / No tags. 2026-06-06: added subsection 40.x Persistent-World ASCII Map Combat (owner-approved) — real-time movement outside combat, per-zone turn-based mode on combat initiation, tile=5ft / melee=adjacent mapping, Water Ring move budget, ranged ranges PROVISIONAL, NPC-vs-NPC summary-roll resolution. |
 
 ### Section 41
 

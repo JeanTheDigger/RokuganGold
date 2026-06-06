@@ -200,6 +200,10 @@ When implementing or auditing a system, go here first:
 - The simulation does not pause for absent players.
 - NPCs never use the ASCII map unless a PC is personally present.
   NPC-only resolution goes through the dice engine, not map generation.
+  (NPC-vs-NPC fights resolve via summary roll, not tile-by-tile — GDD s40.x.)
+- ASCII map movement is real-time when no combat is active in a zone; the
+  zone switches to turn-based (Initiative/Round/Turn) only when combat is
+  initiated, and returns to real-time when combat resolves. See GDD s40.x.
 - CrimeRecord exists at world level. The system always knows who committed
   the crime. Investigation is players discovering what the system knows.
 - met_characters, hostile tag, provocation flag, zone_event_log,
