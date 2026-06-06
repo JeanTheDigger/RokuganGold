@@ -28,7 +28,7 @@ const COST_MULT_NON_BROTHERHOOD_MONK: float = 1.5
 # Catalog (GDD s38). Each entry: ring, mastery, type, atemi, staff, optional flags.
 const KIHO_DATA: Dictionary = {
 	# -- AIR --
-	"Air Fist":               {"ring": Enums.Ring.AIR, "mastery": 3, "type": KihoType.INTERNAL},
+	"Air Fist":               {"ring": Enums.Ring.AIR, "mastery": 3, "type": KihoType.INTERNAL, "effect_id": "kiho_air_fist_initiative"},
 	"Calling the East Wind":  {"ring": Enums.Ring.AIR, "mastery": 5, "type": KihoType.MARTIAL},
 	"Censure of Thunder":     {"ring": Enums.Ring.AIR, "mastery": 7, "type": KihoType.MARTIAL, "atemi": true},
 	"Eye of the Eagle":       {"ring": Enums.Ring.AIR, "mastery": 5, "type": KihoType.INTERNAL},
@@ -38,7 +38,7 @@ const KIHO_DATA: Dictionary = {
 	"Hurricane Palm":         {"ring": Enums.Ring.AIR, "mastery": 7, "type": KihoType.MARTIAL},
 	"Inari's Wrath":          {"ring": Enums.Ring.AIR, "mastery": 8, "type": KihoType.MYSTICAL},
 	"Riding the Clouds":      {"ring": Enums.Ring.AIR, "mastery": 3, "type": KihoType.MYSTICAL},
-	"Soul of the Four Winds": {"ring": Enums.Ring.AIR, "mastery": 4, "type": KihoType.INTERNAL},
+	"Soul of the Four Winds": {"ring": Enums.Ring.AIR, "mastery": 4, "type": KihoType.INTERNAL, "effect_id": "kiho_soul_four_winds_armor"},
 	"Stain Upon the Soul":    {"ring": Enums.Ring.AIR, "mastery": 3, "type": KihoType.MARTIAL, "atemi": true},
 	"Steal the Air Dragon":   {"ring": Enums.Ring.AIR, "mastery": 7, "type": KihoType.KHARMIC},
 	"Strike Through the Wind": {"ring": Enums.Ring.AIR, "mastery": 5, "type": KihoType.MYSTICAL},
@@ -54,7 +54,7 @@ const KIHO_DATA: Dictionary = {
 	"Earth Needs No Eyes":    {"ring": Enums.Ring.EARTH, "mastery": 3, "type": KihoType.INTERNAL},
 	"Earth Palm":             {"ring": Enums.Ring.EARTH, "mastery": 6, "type": KihoType.MARTIAL, "atemi": true},
 	"Embrace the Stone":      {"ring": Enums.Ring.EARTH, "mastery": 5, "type": KihoType.MYSTICAL},
-	"Grasp the Earth Dragon": {"ring": Enums.Ring.EARTH, "mastery": 5, "type": KihoType.INTERNAL},
+	"Grasp the Earth Dragon": {"ring": Enums.Ring.EARTH, "mastery": 5, "type": KihoType.INTERNAL, "effect_id": "kiho_grasp_earth_dragon_wound"},
 	"Harmony in Earth":       {"ring": Enums.Ring.EARTH, "mastery": 6, "type": KihoType.INTERNAL},
 	"Rest, My Brother":       {"ring": Enums.Ring.EARTH, "mastery": 5, "type": KihoType.MARTIAL, "atemi": true},
 	"Rising Mountain":        {"ring": Enums.Ring.EARTH, "mastery": 6, "type": KihoType.KHARMIC},

@@ -137,6 +137,7 @@ class Participant:
 	var void_roll_pending_kept: int = 0      # pending +N kept dice from pre-declared Void spend (GDD s40)
 	var kata_used_this_turn: Dictionary = {}   # tracks once-per-Turn kata uses by effect_id
 	var kata_used_this_round: Dictionary = {}  # tracks once-per-Round kata uses by effect_id
+	var active_kiho: Array = []                 # currently-active kiho names (GDD s38; see KihoSystem)
 	var dual_wielding: bool = false            # true when holding an off-hand weapon
 	var off_hand_weapon: String = ""           # name of off-hand weapon ("" = none)
 	var earth_trade_amount: int = 0            # Armor TN traded for damage (earth_trade_armor_for_damage)
@@ -411,6 +412,82 @@ static func get_kata_opponent_reduction_penalty(
 
 
 # =============================================================================
+# -- Kiho Effect Modifiers (s38 → s40) -----------------------------------------
+# =============================================================================
+# Kiho effects apply only while the kiho is ACTIVE (participant.active_kiho),
+# unlike katas (passive once known). First wired tranche: persistent passive
+# buffs that map onto the existing kata modifier hooks (Armor TN, Initiative,
+# wound-penalty). Atemi-delivered, contested-roll, and unique kiho remain
+# deferred. Kiho is monk-only (s38a A0).
+
+## effect_ids of the combatant's currently-active kiho (skips kiho with no wired effect).
+static func _active_kiho_effect_ids(participant: Participant) -> Array:
+	var ids: Array = []
+	for kiho_name: String in participant.active_kiho:
+		if KihoSystem.KIHO_DATA.has(kiho_name):
+			var eid: String = KihoSystem.KIHO_DATA[kiho_name].get("effect_id", "")
+			if eid != "":
+				ids.append(eid)
+	return ids
+
+
+## Armor TN bonus from active kiho. Soul of the Four Winds: +Insight + Air Ring.
+static func _get_kiho_armor_tn_bonus(character: L5RCharacterData, participant: Participant) -> int:
+	var bonus: int = 0
+	var air_ring: int = CharacterStats.get_ring_value(character, Enums.Ring.AIR)
+	var insight: int = CharacterStats.get_insight_rank(character)
+	for effect_id: String in _active_kiho_effect_ids(participant):
+		match effect_id:
+			"kiho_soul_four_winds_armor":
+				bonus += insight + air_ring
+	return bonus
+
+
+## Initiative flat bonus from active kiho. Air Fist: +5 while only unarmed.
+static func _get_kiho_initiative_bonus(
+	character: L5RCharacterData,
+	participant: Participant,
+	weapon_name: String,
+) -> int:
+	var bonus: int = 0
+	for effect_id: String in _active_kiho_effect_ids(participant):
+		match effect_id:
+			"kiho_air_fist_initiative":
+				if weapon_name == "" or weapon_name == "unarmed":
+					bonus += 5
+	return bonus
+
+
+## Wound-penalty TN reduction from active kiho. Grasp the Earth Dragon: −Earth Ring.
+static func _get_kiho_wound_penalty_reduction(character: L5RCharacterData, participant: Participant) -> int:
+	var reduction: int = 0
+	var earth_ring: int = CharacterStats.get_earth_ring(character)
+	for effect_id: String in _active_kiho_effect_ids(participant):
+		match effect_id:
+			"kiho_grasp_earth_dragon_wound":
+				reduction += earth_ring
+	return reduction
+
+
+## Activate a kiho on a combatant for the current skirmish. Validates the kiho is
+## known and the active-slot constraint (one Internal/Kharmic/Mystical, unlimited
+## Martial — GDD s38). Returns {ok, reason}. The activation cost (Void Point /
+## Meditation roll) is the caller's responsibility (orchestrator / NPC AI).
+static func activate_kiho(
+	character: L5RCharacterData,
+	participant: Participant,
+	kiho_name: String,
+) -> Dictionary:
+	if not character.kiho.has(kiho_name):
+		return {"ok": false, "reason": "not_known"}
+	var slot: Dictionary = KihoSystem.can_activate(kiho_name, participant.active_kiho)
+	if not slot.get("ok", false):
+		return slot
+	participant.active_kiho.append(kiho_name)
+	return {"ok": true}
+
+
+# =============================================================================
 # -- Initiative (s40 Stage 1) --------------------------------------------------
 # =============================================================================
 
@@ -442,6 +519,7 @@ static func roll_initiative(
 			maxi(reflexes + adv_init["kept"], 1), true)
 		score = result.total + wound_penalty
 	score += kata_init["flat_bonus"] + adv_init["free_raises"] * 5 - adv_init_tn
+	score += _get_kiho_initiative_bonus(character, participant, weapon_name)
 
 	# Center Stance carry-over adds +10 to Initiative Score for that round only (s40)
 	if participant.stance == Enums.Stance.CENTER and not participant.center_stance_bonus_used:
@@ -525,8 +603,9 @@ static func get_armor_tn(
 
 	# Kata armor TN bonuses (s30a) and dual-wield bonus (+InsightRank, s40)
 	var kata_bonus: int = _get_kata_armor_tn_bonus(character, participant, weapon_name)
+	var kiho_bonus: int = _get_kiho_armor_tn_bonus(character, participant)
 	var dual_wield_bonus: int = CharacterStats.get_insight_rank(character) if participant.dual_wielding else 0
-	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection + kata_bonus + dual_wield_bonus
+	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection + kata_bonus + kiho_bonus + dual_wield_bonus
 
 
 static func roll_full_defense_bonus(
@@ -657,9 +736,10 @@ static func resolve_attack(
 		else:
 			rolled = maxi(0, rolled - 2)
 
-	# earth_wound_tn_reduce kata reduces wound penalty on attack rolls (s30a)
+	# earth_wound_tn_reduce kata + Grasp the Earth Dragon kiho reduce wound penalty (s30a/s38)
 	var kata_wound_reduction: int = _get_kata_wound_penalty_reduction(attacker)
-	var effective_wound_penalty: int = mini(0, wound_penalty + kata_wound_reduction)
+	var kiho_wound_reduction: int = _get_kiho_wound_penalty_reduction(attacker, attacker_p)
+	var effective_wound_penalty: int = mini(0, wound_penalty + kata_wound_reduction + kiho_wound_reduction)
 
 	# Center Stance carry-over: +1k1 + Void Ring on the first roll of the turn (s40)
 	var flat_bonus: int = effective_wound_penalty - get_condition_roll_penalty(attacker_p)

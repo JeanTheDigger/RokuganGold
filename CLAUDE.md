@@ -3211,11 +3211,34 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   seppuku option, Imperial jurisdiction). Wired into full crime/investigation pipeline
   and Winter Court Emperor's Peace enforcement (v624).
 
-### s30 / s30a Katas — Combat Effects Pending s40
-`simulation/kata_system.gd` contains all 43 katas, eligibility (ring/school/clan checks),
-XP deduction, NPC selection logic, and stub effect registry. Combat effects (Armor TN,
-attack bonuses, Initiative, stances, maneuver modifiers) are registered as stubs — no
-mechanical change is applied until s40 individual combat is implemented.
+### s30 / s30a Katas — Combat Effects WIRED into s40 (2026-06-06)
+`simulation/kata_system.gd` contains all 43 katas (eligibility, XP deduction, NPC
+selection). Combat effects are now **wired into IndividualCombat** (s40), not stubs:
+`_get_kata_initiative_modifiers`, `_get_kata_armor_tn_bonus`, `_get_kata_attack_modifiers`,
+`_get_kata_damage_modifiers`, `_get_kata_wound_penalty_reduction`, `get_kata_reduction_bonus`,
+`get_kata_opponent_reduction_penalty` resolve effect_ids into Armor TN / attack / damage /
+Initiative / wound-penalty / Reduction modifiers, gated by stance and maneuver. 33 of 42
+distinct kata effect_ids are wired. **9 remain deferred** (need ASCII-map movement / ally /
+mount / orchestrator context, not the core resolve): `earth_spider_wound_debuff`,
+`multi_empire_edge_skill_bonus`, `multi_standing_heavens_void_reroll`,
+`multi_victory_river_armor_pierce`, `multi_world_empty_void_attack`,
+`water_attack_stance_movement`, `water_lion_ally_initiative`, `water_stealth_movement`,
+`water_unicorn_mount_bonus`. (`get_kata_reduction_bonus` is wired but currently has no
+caller — Reduction is applied via the orchestrator damage path; harmless until consumed.)
+
+### s38 Kiho — Combat Effects (first tranche wired into s40, 2026-06-06)
+`KihoSystem` effects apply only while a kiho is ACTIVE on a combatant
+(`IndividualCombat.Participant.active_kiho`), unlike passive katas. First wired tranche
+(passive Internal buffs mapping onto existing kata hooks): **Soul of the Four Winds**
+(Armor TN += Insight + Air ring), **Air Fist** (+5 Initiative while unarmed), **Grasp the
+Earth Dragon** (wound-penalty TN reduced by Earth ring). `IndividualCombat.activate_kiho()`
+validates the kiho is known and the active-slot rule (one Internal/Kharmic/Mystical,
+unlimited Martial); `_get_kiho_armor_tn_bonus` / `_get_kiho_initiative_bonus` /
+`_get_kiho_wound_penalty_reduction` are called alongside the kata equivalents in
+`get_armor_tn` / `roll_initiative` / the attack-roll wound path. The activation COST
+(Void Point / Meditation roll) and the remaining ~70 kiho effects (atemi-delivered,
+contested-roll, unique mechanics like Death Touch) are deferred — they need per-effect
+design + orchestrator wiring. 8 tests in `tests/test_individual_combat.gd`.
 
 ### Pending Redesign
 (None currently pending.)

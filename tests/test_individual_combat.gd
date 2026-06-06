@@ -1729,3 +1729,90 @@ func test_duel_focus_wound_penalty_reduces_rolls() -> void:
 	var duel2 := IndividualCombat.create_duel(10, 20)
 	var r_hurt: Dictionary = IndividualCombat.resolve_duel_focus(hurt, target2, duel2, dice2)
 	assert_eq(r_healthy["challenger_roll"] - 10, r_hurt["challenger_roll"])
+
+
+# === Kiho combat effects (s38 → s40) ===
+
+func _monk_char(id: int = 50) -> L5RCharacterData:
+	# Monk with rings 3, school rank 3 so several kiho are usable.
+	var c := _make_char(id, 3, 3, 3, 3, 3, 3, 3, 3)
+	c.school_type = Enums.SchoolType.MONK
+	c.school_name = "Brotherhood Monk"
+	c.school_rank = 3
+	c.brotherhood_sect = "Order of Osano-Wo"
+	return c
+
+
+func test_activate_kiho_requires_known() -> void:
+	var c := _monk_char()
+	var p := IndividualCombat.Participant.new()
+	var r := IndividualCombat.activate_kiho(c, p, "Soul of the Four Winds")
+	assert_false(r["ok"], "cannot activate an unknown kiho")
+	c.kiho = ["Soul of the Four Winds"]
+	assert_true(IndividualCombat.activate_kiho(c, p, "Soul of the Four Winds")["ok"],
+		"known kiho activates")
+	assert_true("Soul of the Four Winds" in p.active_kiho)
+
+
+func test_activate_kiho_enforces_slot() -> void:
+	var c := _monk_char()
+	c.kiho = ["Air Fist", "Soul of the Four Winds"]  # both Internal
+	var p := IndividualCombat.Participant.new()
+	IndividualCombat.activate_kiho(c, p, "Air Fist")
+	var r := IndividualCombat.activate_kiho(c, p, "Soul of the Four Winds")
+	assert_false(r["ok"], "second Internal kiho blocked by slot rule")
+
+
+func test_soul_of_four_winds_raises_armor_tn() -> void:
+	var c := _monk_char()
+	c.kiho = ["Soul of the Four Winds"]
+	var p := IndividualCombat.Participant.new()
+	p.stance = Enums.Stance.ATTACK
+	var base_tn: int = IndividualCombat.get_armor_tn(c, p, _dice)
+	IndividualCombat.activate_kiho(c, p, "Soul of the Four Winds")
+	var buffed_tn: int = IndividualCombat.get_armor_tn(c, p, _dice)
+	var expected: int = CharacterStats.get_insight_rank(c) + CharacterStats.get_ring_value(c, Enums.Ring.AIR)
+	assert_eq(buffed_tn - base_tn, expected,
+		"Soul of the Four Winds adds Insight rank + Air ring to Armor TN")
+
+
+func test_air_fist_raises_initiative_when_unarmed() -> void:
+	var c := _monk_char()
+	c.kiho = ["Air Fist"]
+	var p_base := IndividualCombat.Participant.new()
+	var base_score: int = IndividualCombat.roll_initiative(c, p_base, DiceEngine.new(100), "unarmed")
+	var p := IndividualCombat.Participant.new()
+	IndividualCombat.activate_kiho(c, p, "Air Fist")
+	var buffed: int = IndividualCombat.roll_initiative(c, p, DiceEngine.new(100), "unarmed")
+	assert_eq(buffed - base_score, 5, "Air Fist adds +5 Initiative while unarmed")
+
+
+func test_air_fist_no_initiative_with_weapon() -> void:
+	var c := _monk_char()
+	c.kiho = ["Air Fist"]
+	var p_base := IndividualCombat.Participant.new()
+	var base_score: int = IndividualCombat.roll_initiative(c, p_base, DiceEngine.new(100), "katana")
+	var p := IndividualCombat.Participant.new()
+	IndividualCombat.activate_kiho(c, p, "Air Fist")
+	var armed: int = IndividualCombat.roll_initiative(c, p, DiceEngine.new(100), "katana")
+	assert_eq(armed, base_score, "Air Fist gives no Initiative bonus when armed")
+
+
+func test_grasp_earth_dragon_reduces_wound_penalty() -> void:
+	var c := _monk_char()
+	c.kiho = ["Grasp the Earth Dragon"]
+	var p := IndividualCombat.Participant.new()
+	# No reduction before activation.
+	assert_eq(IndividualCombat._get_kiho_wound_penalty_reduction(c, p), 0)
+	IndividualCombat.activate_kiho(c, p, "Grasp the Earth Dragon")
+	assert_eq(IndividualCombat._get_kiho_wound_penalty_reduction(c, p),
+		CharacterStats.get_earth_ring(c),
+		"Grasp the Earth Dragon reduces wound TN penalty by Earth ring")
+
+
+func test_inactive_kiho_has_no_effect() -> void:
+	var c := _monk_char()
+	c.kiho = ["Soul of the Four Winds"]  # known but NOT activated
+	var p := IndividualCombat.Participant.new()
+	assert_eq(IndividualCombat._get_kiho_armor_tn_bonus(c, p), 0,
+		"a known-but-inactive kiho confers no bonus")
