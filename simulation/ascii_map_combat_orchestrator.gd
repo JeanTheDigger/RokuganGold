@@ -106,6 +106,10 @@ class MapCombatState:
 	var combat_log: Array = []
 	## Characters who have fled (removed from map, no longer in turn order).
 	var fled_ids: Array = []
+	## Allied companion records (GDD s57.46). Key: int (character_id), Value: CompanionData.
+	var companion_data: Dictionary = {}
+	## companion_ids who started the mission — denominator for morale casualties.
+	var companion_started_count: int = 0
 
 
 # =============================================================================
@@ -1659,6 +1663,240 @@ static func _execute_down_attack(
 	})
 	_check_and_mark_over(state, target_id, target)
 	return result
+
+
+# =============================================================================
+# -- Allied Companions (GDD s57.46) -------------------------------------------
+# =============================================================================
+# Companions are friendly participants (FACTION_PLAYER) added to the skirmish.
+# On their turn, CompanionSystem.decide_action() picks the standing command and
+# this layer translates it into grid movement + attacks, reusing the NPC helpers.
+
+## Add a companion to an active skirmish as a player-faction participant.
+## `character` is the companion's stat sheet (doshin use a generated sheet).
+## Rolls initiative, inserts into the turn order, and registers the CompanionData.
+static func add_companion(
+	state: MapCombatState,
+	companion: CompanionData,
+	character: L5RCharacterData,
+	x: int, y: int,
+	dice_engine: DiceEngine,
+) -> bool:
+	var cid: int = character.character_id
+	if state.combat.participants.has(cid):
+		return false
+	state.positions[cid] = Vector2i(x, y)
+	state.factions[cid] = FACTION_PLAYER
+	var p := IndividualCombat.Participant.new()
+	p.character_id = cid
+	p.stance = Enums.Stance.ATTACK
+	p.initiative_score = IndividualCombat.roll_initiative(
+		character, p, dice_engine, IndividualCombat.pick_best_weapon(character))
+	state.combat.participants[cid] = p
+	state.combat.turn_order.append(cid)
+	state.combat.turn_order.sort_custom(func(a: int, b: int) -> bool:
+		var pa: IndividualCombat.Participant = state.combat.participants.get(a, null)
+		var pb: IndividualCombat.Participant = state.combat.participants.get(b, null)
+		var ia: int = pa.initiative_score if pa != null else 0
+		var ib: int = pb.initiative_score if pb != null else 0
+		return ia > ib
+	)
+	var ts := TurnState.new()
+	ts.char_id = cid
+	state.turn_states[cid] = ts
+	state.companion_data[cid] = companion
+	state.companion_started_count += 1
+	return true
+
+
+## Recompute morale for every companion from the allied-casualty fraction
+## (companions dead or fled ÷ companions who started). Call after casualties.
+static func update_companion_morale(state: MapCombatState, chars_by_id: Dictionary) -> void:
+	if state.companion_started_count <= 0:
+		return
+	var down: int = 0
+	for cid: int in state.companion_data.keys():
+		var ch: L5RCharacterData = chars_by_id.get(cid, null)
+		var dead: bool = ch != null and CharacterStats.is_dead(ch)
+		if dead or cid in state.fled_ids:
+			down += 1
+	var frac: float = float(down) / float(state.companion_started_count)
+	for cid: int in state.companion_data.keys():
+		CompanionSystem.update_morale(state.companion_data[cid], frac)
+
+
+## Resolve a companion's turn: pick the standing command via the AI priority
+## stack, then translate it to grid behavior. Returns {actions, command}.
+static func execute_companion_turn(
+	state: MapCombatState,
+	cid: int,
+	character: L5RCharacterData,
+	chars_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var companion: CompanionData = state.companion_data.get(cid, null)
+	if companion == null:
+		return {"actions": [], "reason": "not_a_companion"}
+	if CharacterStats.is_dead(character) or cid in state.fled_ids:
+		return {"actions": [], "reason": "out"}
+	var ts: TurnState = state.turn_states.get(cid, null)
+	if ts == null:
+		return {"actions": [], "reason": "not_in_combat"}
+
+	begin_turn(state, cid)
+	var cmd: int = CompanionSystem.decide_action(companion)
+	var actions: Array = []
+
+	# RETREAT / BROKEN-FLEE: move toward the nearest exit; leave if reached.
+	if cmd == CompanionData.Command.RETREAT:
+		var exit_tile: Vector2i = _nearest_exit_tile(state, cid)
+		if exit_tile.x >= 0 and state.positions.get(cid) == exit_tile:
+			state.positions.erase(cid)
+			if cid not in state.fled_ids:
+				state.fled_ids.append(cid)
+			actions.append({"action": "fled"})
+			return {"actions": actions, "command": cmd}
+		var goal: Vector2i = exit_tile if exit_tile.x >= 0 else _away_from_enemies_tile(state, cid)
+		var mv: Dictionary = _companion_step_toward(state, cid, goal, character, dice_engine)
+		if mv.get("success", false):
+			actions.append({"action": "retreat_move", "result": mv})
+		return {"actions": actions, "command": cmd}
+
+	# Engage an adjacent enemy (REACT / fight-through), unless doshin samurai-avoidance.
+	var melee: Array = get_melee_targets(state, cid)
+	if not melee.is_empty():
+		var tgt_id: int = _companion_pick_enemy(state, companion, melee, chars_by_id)
+		if tgt_id >= 0:
+			var tc: L5RCharacterData = chars_by_id.get(tgt_id, null)
+			if tc != null and not CharacterStats.is_dead(tc):
+				var atk: Dictionary = _npc_execute_attack(
+					state, cid, tgt_id, character, tc,
+					IndividualCombat.pick_best_weapon(character), true, dice_engine, false)
+				actions.append({"action": "attack", "result": atk})
+				return {"actions": actions, "command": cmd}
+
+	# No adjacent enemy: move toward the command's goal tile.
+	var goal_tile: Vector2i = _companion_goal_tile(state, companion, cmd)
+	if goal_tile.x >= 0 and state.positions.get(cid) != goal_tile:
+		var mv2: Dictionary = _companion_step_toward(state, cid, goal_tile, character, dice_engine)
+		if mv2.get("success", false):
+			actions.append({"action": "move", "result": mv2})
+	return {"actions": actions, "command": cmd}
+
+
+## The tile a companion should move toward for its command. (-1,-1) = stay put.
+static func _companion_goal_tile(state: MapCombatState, companion: CompanionData, cmd: int) -> Vector2i:
+	match cmd:
+		CompanionData.Command.HOLD, CompanionData.Command.GUARD_EXIT, \
+		CompanionData.Command.IDENTIFY, CompanionData.Command.SEARCH_AREA, \
+		CompanionData.Command.INVESTIGATE:
+			# GUARD_EXIT moves to its tile; once there it holds. The investigate/
+			# identify/search resolutions are deferred (non-combat).
+			if cmd == CompanionData.Command.GUARD_EXIT:
+				return companion.command_target_tile
+			return Vector2i(-1, -1)
+		CompanionData.Command.MOVE_TO:
+			return companion.command_target_tile
+		CompanionData.Command.PROTECT:
+			return state.positions.get(companion.command_target_id, Vector2i(-1, -1))
+		_:  # FOLLOW (default): trail the player.
+			return _player_tile(state)
+
+
+## Pick an adjacent enemy to attack, honoring doshin samurai-avoidance.
+static func _companion_pick_enemy(
+	state: MapCombatState,
+	companion: CompanionData,
+	candidates: Array,
+	chars_by_id: Dictionary,
+) -> int:
+	for tid: int in candidates:
+		var tc: L5RCharacterData = chars_by_id.get(tid, null)
+		if tc == null:
+			continue
+		var is_samurai: bool = tc.school_type != Enums.SchoolType.NINJA and not tc.school_name.is_empty()
+		if not CompanionSystem.will_engage_samurai(companion, is_samurai, false, false):
+			continue
+		return tid
+	return -1
+
+
+## Step a companion toward a goal tile using free + simple move budgets.
+static func _companion_step_toward(
+	state: MapCombatState,
+	cid: int,
+	goal: Vector2i,
+	character: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var water: int = CharacterStats.get_ring_value(character, Enums.Ring.WATER)
+	var path: Array = find_path(state, cid, goal)
+	if path.is_empty():
+		return {"success": false, "reason": "no_path"}
+	var budget: int = MovementSystem.budget(water, MovementSystem.MoveAction.FREE)
+	var dest: Vector2i = state.positions.get(cid, Vector2i(-1, -1))
+	var cost: int = 0
+	for step: Vector2i in path:
+		# Don't step onto an occupied goal tile (e.g. trailing the player).
+		if step == goal and _player_id_at(state, goal) >= 0:
+			break
+		var tcost: int = MovementSystem.terrain_cost(state.map.get_tile(step.x, step.y))
+		if tcost == 0 or cost + tcost > budget:
+			break
+		dest = step
+		cost += tcost
+	if dest == state.positions.get(cid, Vector2i(-1, -1)):
+		return {"success": false, "reason": "cannot_advance"}
+	return execute_move(state, cid, dest, budget, character, dice_engine, "free")
+
+
+static func _player_tile(state: MapCombatState) -> Vector2i:
+	for cid: int in state.positions.keys():
+		if state.factions.get(cid) == FACTION_PLAYER and not state.companion_data.has(cid):
+			return state.positions[cid]
+	return Vector2i(-1, -1)
+
+
+static func _player_id_at(state: MapCombatState, tile: Vector2i) -> int:
+	for cid: int in state.positions.keys():
+		if state.positions[cid] == tile:
+			return cid
+	return -1
+
+
+## Nearest ZONE_EXIT tile to a character, or (-1,-1) if the map has none.
+static func _nearest_exit_tile(state: MapCombatState, cid: int) -> Vector2i:
+	var here: Vector2i = state.positions.get(cid, Vector2i(-1, -1))
+	if here.x < 0:
+		return Vector2i(-1, -1)
+	var best := Vector2i(-1, -1)
+	var best_d: int = 1 << 30
+	for y: int in range(state.map.height):
+		for x: int in range(state.map.width):
+			if state.map.get_tile(x, y) == Enums.TileType.ZONE_EXIT:
+				var d: int = _chebyshev(here, Vector2i(x, y))
+				if d < best_d:
+					best_d = d
+					best = Vector2i(x, y)
+	return best
+
+
+## Fallback retreat goal when the map has no exit: move directly away from the
+## nearest enemy.
+static func _away_from_enemies_tile(state: MapCombatState, cid: int) -> Vector2i:
+	var here: Vector2i = state.positions.get(cid, Vector2i(-1, -1))
+	var my_faction: String = state.factions.get(cid, FACTION_PLAYER)
+	var nearest := Vector2i(-1, -1)
+	var nd: int = 1 << 30
+	for other: int in state.positions.keys():
+		if _are_enemies(my_faction, state.factions.get(other, FACTION_NEUTRAL)):
+			var d: int = _chebyshev(here, state.positions[other])
+			if d < nd:
+				nd = d
+				nearest = state.positions[other]
+	if nearest.x < 0:
+		return here
+	return here + (here - nearest).sign()
 
 
 # =============================================================================

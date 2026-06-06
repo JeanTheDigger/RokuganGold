@@ -4262,6 +4262,20 @@ template generators it depends on. Faithful summary of the fixes that landed:
   selection screen, local-knowledge prompts, live IDENTIFY/SEARCH/INVESTIGATE rolls.
   Locked in `gdd/s57.46a_allied_npc_companion_locked.md`. 25 tests in
   `tests/test_companion_system.gd`.
+- **Companion ↔ orchestrator integration (s57.46, 2026-06-06).**
+  `AsciiMapCombatOrchestrator` now hosts companions as FACTION_PLAYER participants:
+  `add_companion()` (rolls initiative, inserts into turn order, registers
+  CompanionData + started count); `execute_companion_turn()` (runs
+  `CompanionSystem.decide_action`, then translates the command to grid behavior —
+  RETREAT/BROKEN → move to nearest ZONE_EXIT and leave, else engage an adjacent
+  enemy with doshin samurai-avoidance, else move toward the command's goal tile:
+  FOLLOW→player, MOVE_TO/GUARD_EXIT→tile, PROTECT→protected char; reuses
+  find_path/execute_move/get_melee_targets/_npc_execute_attack);
+  `update_companion_morale()` (recomputes from allied-casualty fraction).
+  `MapCombatState` gains `companion_data` + `companion_started_count`. Live UI
+  (grid tokens, TAB menu, mission-launch screen, local-knowledge prompts,
+  IDENTIFY/SEARCH/INVESTIGATE live rolls) still deferred (needs Godot). 4
+  integration tests in `tests/test_ascii_map_combat.gd`.
 
 ### Systems Added 2026-06-06 (Kiho)
 - **s38 Kiho** — `simulation/kiho_system.gd` (pure class). New system (was REFERENCE).

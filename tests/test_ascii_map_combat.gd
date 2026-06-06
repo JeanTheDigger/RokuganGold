@@ -1364,3 +1364,77 @@ func test_combat_ends_when_all_enemies_dead() -> void:
 	e.wounds_taken = earth_e * 2 * 9
 	AsciiMapCombatOrchestrator._check_and_mark_over(state, 2, e)
 	assert_true(state.combat.is_over, "Combat should be over when all enemies are dead")
+
+
+# ===========================================================================
+# -- Allied companions (GDD s57.46) -----------------------------------------
+# ===========================================================================
+
+func _companion(id: int, type: CompanionData.CompanionType) -> CompanionData:
+	var c := CompanionData.new()
+	c.companion_id = id
+	c.type = type
+	return c
+
+
+func test_add_companion_registers_participant() -> void:
+	var player := _make_char(1)
+	var enemy := _make_char(2)
+	var state := _make_state(player, enemy)
+	var ally := _make_char(3)
+	var comp := _companion(3, CompanionData.CompanionType.YOJIMBO)
+	assert_true(AsciiMapCombatOrchestrator.add_companion(state, comp, ally, 1, 2, _dice))
+	assert_true(state.combat.participants.has(3), "companion is a participant")
+	assert_eq(state.factions.get(3), AsciiMapCombatOrchestrator.FACTION_PLAYER,
+		"companion is player-faction")
+	assert_true(state.companion_data.has(3))
+	assert_eq(state.companion_started_count, 1)
+	assert_true(3 in state.combat.turn_order, "companion is in the turn order")
+
+
+func test_companion_follow_moves_toward_player() -> void:
+	var player := _make_char(1)
+	var enemy := _make_char(2)
+	var state := _make_state(player, enemy)  # player at (1,1)
+	var ally := _make_char(3)
+	var comp := _companion(3, CompanionData.CompanionType.YOJIMBO)  # FOLLOW default
+	# Place the companion far from the player, no enemy adjacent.
+	AsciiMapCombatOrchestrator.add_companion(state, comp, ally, 8, 8, _dice)
+	var before: Vector2i = state.positions[3]
+	AsciiMapCombatOrchestrator.execute_companion_turn(state, 3, ally, {1: player, 2: enemy, 3: ally}, _dice)
+	var after: Vector2i = state.positions[3]
+	assert_lt(_cheb(after, Vector2i(1, 1)), _cheb(before, Vector2i(1, 1)),
+		"FOLLOW closes distance to the player")
+
+
+func test_companion_morale_breaks_on_casualties() -> void:
+	var player := _make_char(1)
+	var enemy := _make_char(2)
+	var state := _make_state(player, enemy)
+	# Two village doshin (break at 30% casualties).
+	var d1 := _make_char(10); var d2 := _make_char(11)
+	AsciiMapCombatOrchestrator.add_companion(state, _companion(10, CompanionData.CompanionType.VILLAGE_DOSHIN), d1, 2, 1, _dice)
+	AsciiMapCombatOrchestrator.add_companion(state, _companion(11, CompanionData.CompanionType.VILLAGE_DOSHIN), d2, 2, 2, _dice)
+	# Kill one → 50% casualties ≥ 30% threshold → survivor breaks.
+	d1.wounds_taken = 999
+	AsciiMapCombatOrchestrator.update_companion_morale(state, {1: player, 2: enemy, 10: d1, 11: d2})
+	assert_eq(state.companion_data[11].morale, CompanionData.Morale.BROKEN,
+		"surviving doshin breaks at 50% casualties")
+
+
+func test_broken_companion_flees_via_decide_action() -> void:
+	var player := _make_char(1)
+	var enemy := _make_char(2)
+	var state := _make_state(player, enemy)
+	var ally := _make_char(3)
+	var comp := _companion(3, CompanionData.CompanionType.VILLAGE_DOSHIN)
+	comp.command = CompanionData.Command.HOLD
+	comp.morale = CompanionData.Morale.BROKEN
+	AsciiMapCombatOrchestrator.add_companion(state, comp, ally, 5, 5, _dice)
+	var r := AsciiMapCombatOrchestrator.execute_companion_turn(state, 3, ally, {1: player, 2: enemy, 3: ally}, _dice)
+	assert_eq(r["command"], CompanionData.Command.RETREAT,
+		"BROKEN companion's turn resolves as RETREAT")
+
+
+func _cheb(a: Vector2i, b: Vector2i) -> int:
+	return maxi(abs(a.x - b.x), abs(a.y - b.y))
