@@ -3,10 +3,14 @@ class_name KolatExecutor
 ## backed by KolatSystem. Pure simulation class — no Node inheritance.
 ##
 ## This is the headless executor layer: `execute()` resolves a Kolat action from
-## (actor, metadata, dice) and returns a result Dictionary. It is NOT yet wired
-## into the main ActionExecutor dispatch or gated by the Phase-3 context unlock —
-## those, the 6 decomposition functions, and the sleeper override loop are the
-## deep NPC-engine integration that needs a Godot runtime to verify.
+## (actor, metadata, dice) and returns a result Dictionary. As of Tranche 5 it IS
+## wired into the main ActionExecutor dispatch (ActionExecutor._KOLAT_ACTION_IDS)
+## and reachable through the Phase-3 context unlock (NPCDecisionEngine
+## .KOLAT_ACTION_POOL) plus the sleeper override loop. Still deferred: full
+## per-action metadata population by the 6 Kolat decomposition functions (this
+## layer reads targets/amounts/drops from action.metadata, which the decomposers
+## do not yet populate end-to-end). All NPC-engine integration is unverified
+## without a Godot runtime.
 ##
 ## Actions whose effect requires another system not callable here (topic
 ## resurrection, the Cloud's-Eyes spell, anonymous-tip topics, intelligence

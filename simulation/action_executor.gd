@@ -68,6 +68,19 @@ const SELF_ACTIONS: Array[String] = [
 	"OBSERVE_COURT_ATTENDEES",
 ]
 
+# Kolat ActionIDs routed to KolatExecutor (s54.7c). Mechanically-resolvable ones
+# act; topic/spell/network ones return deferred_system from KolatExecutor.
+const _KOLAT_ACTION_IDS: Array[String] = [
+	"TRANSMIT_VIA_TEAR", "OBSERVE_VIA_EYE", "SUBMIT_KOLAT_REPORT", "RUN_COURIER_ROUTE",
+	"DISTRIBUTE_INTELLIGENCE", "ESTABLISH_DEAD_DROP", "UNDERREPORT_KOKU", "LAUNDER_KOKU",
+	"TRANSFER_KOLAT_FUNDS", "ANONYMOUS_TIP", "CONDUCT_CONDITIONING", "MAINTAIN_SLEEPER_CONTACT",
+	"ACTIVATE_SLEEPER", "SECURE_ONI_EYE", "APPROACH_FOR_RECRUITMENT", "ROUTE_VIA_DEAD_DROP",
+	"CHECK_DEAD_DROP", "ROTATE_DEAD_DROP", "ARRANGE_PROXY_DUEL", "CHECK_CONFIRMATION_DROP",
+	"ROUTE_ANONYMOUS_INTELLIGENCE", "SPONSOR_INSURGENCY", "BRIBE_GARRISON_COMMANDER",
+	"CONTRIBUTE_TO_RESERVE", "CONDUCT_PERIMETER_PATROL", "ARCHIVE_TOPIC", "RESURRECT_TOPIC",
+	"USE_CLOUDS_EYES", "DELIVER_SEALED_LETTER",
+]
+
 const NO_ROLL_ACTIONS: Array[String] = [
 	"DO_NOTHING", "REST", "BEGIN_TRAVEL", "CHANGE_DESTINATION",
 	"REQUEST_ART", "OFFER_ART_COMMISSION", "DISPLAY_BONSAI",
@@ -127,6 +140,28 @@ static func execute(
 				"reason": "hostage_restricted",
 				"effects": {},
 			}
+
+	# Kolat actions route to KolatExecutor (s54.7c). Metadata from the decomposition
+	# (action.metadata) is enriched with the resolved NPC target where relevant.
+	if action_id in _KOLAT_ACTION_IDS:
+		var kmeta: Dictionary = action.metadata.duplicate()
+		if not kmeta.has("target") and action.target_npc_id >= 0:
+			var kt: L5RCharacterData = characters_by_id.get(action.target_npc_id, null)
+			if kt != null:
+				kmeta["target"] = kt
+				kmeta["sleeper"] = kt
+		var keff: Dictionary = KolatExecutor.execute(action_id, character, kmeta, dice_engine)
+		return {
+			"success": keff.get("ok", false),
+			"action_id": action_id,
+			"character_id": ctx.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": keff.get("reason", ""),
+			"effects": keff,
+		}
 
 	if action_id == "DELIVER_GIFT":
 		var gift_result: Dictionary = _try_execute_deliver_gift(

@@ -82,6 +82,10 @@ class ContextSnapshot:
 	var is_lord: bool = false
 	var lord_rank: Enums.LordRank = Enums.LordRank.VILLAGE_HEADMAN
 	var civilian_orders_remaining: int = 0
+	# Kolat (s54.7d Phase-3 ActionID unlock).
+	var kolat_sect: Enums.KolatSect = Enums.KolatSect.NONE
+	var is_kolat_master: bool = false
+	var has_kolat_objective: bool = false
 
 	# Location & situation
 	var location_id: String = ""

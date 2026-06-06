@@ -3,6 +3,19 @@ class_name NPCDecisionEngine
 ## Runs identically for every named NPC regardless of context.
 ## Pure data — no Node inheritance, no scene tree dependency.
 
+# Kolat ActionID pool unlocked in Phase 3 for Kolat agents (s54.7c/d). The
+# Phase-4b allowlist (objective_alignment) narrows this to the active NeedType.
+const KOLAT_ACTION_POOL: Array[String] = [
+	"TRANSMIT_VIA_TEAR", "OBSERVE_VIA_EYE", "SUBMIT_KOLAT_REPORT", "RUN_COURIER_ROUTE",
+	"DISTRIBUTE_INTELLIGENCE", "ESTABLISH_DEAD_DROP", "UNDERREPORT_KOKU", "LAUNDER_KOKU",
+	"TRANSFER_KOLAT_FUNDS", "ANONYMOUS_TIP", "CONDUCT_CONDITIONING", "MAINTAIN_SLEEPER_CONTACT",
+	"ACTIVATE_SLEEPER", "SECURE_ONI_EYE", "APPROACH_FOR_RECRUITMENT", "ROUTE_VIA_DEAD_DROP",
+	"CHECK_DEAD_DROP", "ROTATE_DEAD_DROP", "ARRANGE_PROXY_DUEL", "CHECK_CONFIRMATION_DROP",
+	"ROUTE_ANONYMOUS_INTELLIGENCE", "SPONSOR_INSURGENCY", "BRIBE_GARRISON_COMMANDER",
+	"CONTRIBUTE_TO_RESERVE", "CONDUCT_PERIMETER_PATROL", "ARCHIVE_TOPIC", "RESURRECT_TOPIC",
+	"USE_CLOUDS_EYES", "DELIVER_SEALED_LETTER",
+]
+
 
 # -- Phase 1: Build Context ----------------------------------------------------
 
@@ -22,6 +35,10 @@ static func build_context(
 	ctx.school_type = character.school_type
 	ctx.is_lord = world_state.get("is_lord", false)
 	ctx.is_hostage = character.captive_status != ""
+	# Kolat agent context (s54.7d Phase-3 ActionID unlock).
+	ctx.kolat_sect = character.kolat_sect
+	ctx.is_kolat_master = character.is_kolat_master
+	ctx.has_kolat_objective = bool(world_state.get("has_kolat_objective", false))
 	ctx.lord_rank = CivilianOrderBudget.lord_rank_from_status(character.status)
 	ctx.civilian_orders_remaining = character.civilian_orders_remaining
 
@@ -400,6 +417,16 @@ static func generate_options(
 	var options: Array = []
 	var available_actions: Array = _get_actions_for_context(ctx.context_flag)
 	var has_mil_rank: bool = ctx.military_rank > Enums.MilitaryRank.NONE
+
+	# Kolat Phase-3 ActionID unlock (s54.7d): Masters always have the full Sect
+	# pool; conscious agents unlock it when a Kolat objective is active. The
+	# Phase-4b allowlist (objective_alignment) then narrows the pool to the
+	# actions aligned with the current Kolat NeedType.
+	if ctx.is_kolat_master or (ctx.kolat_sect != Enums.KolatSect.NONE and ctx.has_kolat_objective):
+		available_actions = available_actions.duplicate()
+		for ka: String in KOLAT_ACTION_POOL:
+			if ka not in available_actions:
+				available_actions.append(ka)
 
 	if need.need_type == "RESPOND_TO_SEPPUKU":
 		available_actions = ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"]
@@ -1050,6 +1077,13 @@ static func run(
 	# Phase 1
 	var ctx := build_context(character, world_state, chars_by_id)
 
+	# Sleeper override (s54.7e): an activated sleeper bypasses Phase 2 goal
+	# resolution AND the Phase-4 personality filter, pursuing the installed
+	# command at maximum weight through the normal action system until it
+	# completes or they die.
+	if not character.active_sleeper_command.is_empty():
+		return _run_sleeper_override(character, ctx, scoring_tables, chars_by_id)
+
 	# Phase 2
 	var need := resolve_goal(character, ctx, objectives)
 
@@ -1076,6 +1110,42 @@ static func run(
 	result["need_source"] = need.source
 	result["need_type"] = need.need_type
 	return result
+
+
+## Sleeper override loop (s54.7e): decompose the installed command as an
+## ImmediateNeed and pursue it through the normal action pipeline, but WITHOUT the
+## personality filter (the conditioning overrides virtues/honor). Actions are
+## tagged memory_suppressed so the sleeper cannot recall them.
+static func _run_sleeper_override(
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	scoring_tables: Dictionary,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	var need := _need_from_command(character.active_sleeper_command)
+	var options := generate_options(ctx, need, character, chars_by_id)
+	# NO personality filter — that is the whole point of conditioning (s54.7e).
+	options = apply_allowlist_filter(options, need.need_type, scoring_tables)
+	score_all(options, need, ctx, scoring_tables, [], [], character, 0, chars_by_id)
+	var chosen := select_action(options, ctx)
+	var result: Dictionary = execute_action(chosen, character, ctx)
+	result["need_type"] = need.need_type
+	result["sleeper_override"] = true
+	result["memory_suppressed"] = true
+	return result
+
+
+## Build an ImmediateNeed from a stored sleeper command Dictionary.
+static func _need_from_command(command: Dictionary) -> NPCDataStructures.ImmediateNeed:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = String(command.get("need_type", command.get("need", "")))
+	need.priority = 3
+	need.target_npc_id = int(command.get("target_npc_id", -1))
+	need.target_settlement_id = int(command.get("target_settlement_id", -1))
+	need.target_province_id = int(command.get("target_province_id", -1))
+	need.target_topic_id = int(command.get("target_topic_id", -1))
+	need.source = "sleeper_command"
+	return need
 
 
 # -- Comparison for Phase 6 tiebreakers ---------------------------------------

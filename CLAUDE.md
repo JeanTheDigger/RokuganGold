@@ -4298,9 +4298,34 @@ template generators it depends on. Faithful summary of the fixes that landed:
   BRIBE_GARRISON_COMMANDER (funding from vault-if-at-temple else kolat_koku; the insurgency
   seed / Stability penalty application is deferred to InsurgencySystem wiring). Topic/spell/
   network ActionIDs (ARCHIVE_TOPIC, RESURRECT_TOPIC, USE_CLOUDS_EYES, ANONYMOUS_TIP,
-  DISTRIBUTE_INTELLIGENCE, …) return `{ok:false, reason:"deferred_system"}`. NOT yet wired
-  into the main ActionExecutor dispatch or the Phase-3 context unlock (deep engine, needs
-  Godot). 12 tests.
+  DISTRIBUTE_INTELLIGENCE, …) return `{ok:false, reason:"deferred_system"}`. Wired into the
+  main ActionExecutor dispatch and the Phase-3 context unlock in Tranche 5 (below). 12 tests.
+- **s54.7 The Kolat (Tranche 5 — NPC-engine pipeline wiring)** — connects the executor and
+  scoring data into the live decision loop (s54.7d/e; deep engine, unverified without Godot).
+  `ContextSnapshot` gains `kolat_sect` / `is_kolat_master` / `has_kolat_objective`;
+  `build_context()` populates them (sect + master flag from the hidden character fields,
+  the objective flag from `world_state["has_kolat_objective"]`). **Phase-3 ActionID unlock:**
+  `NPCDecisionEngine.KOLAT_ACTION_POOL` (29 IDs) is appended to the available-action list in
+  `generate_options()` when `is_kolat_master` OR (`kolat_sect != NONE` AND
+  `has_kolat_objective`) — Masters always carry the full Sect pool, conscious agents unlock it
+  only while a Kolat objective is active. The Phase-4b allowlist (objective_alignment.json)
+  then narrows the pool to the actions aligned with the current Kolat NeedType, so the 6 Kolat
+  NeedTypes need no bespoke decomposition — they fall through `ObjectiveDecomposer._passthrough`
+  and are scored normally. **Sleeper override loop:** `run()` short-circuits to
+  `_run_sleeper_override()` whenever `character.active_sleeper_command` is non-empty —
+  it bypasses Phase-2 goal resolution AND the Phase-4 personality filter (conditioning
+  overrides virtues/honor), decomposes the installed command via `_need_from_command()`, scores
+  through the normal pipeline, and tags the result `sleeper_override` + `memory_suppressed`.
+  **ActionExecutor dispatch:** `_KOLAT_ACTION_IDS` routes any Kolat ActionID to
+  `KolatExecutor.execute()`, enriching `action.metadata` with the resolved NPC target; the
+  result is wrapped into the standard executor result dict (`success` from `ok`, `reason`
+  passthrough). `_get_ap_cost` sets ARCHIVE_TOPIC / CONTRIBUTE_TO_RESERVE = 0 AP. action_skill_map
+  (29 IDs, Tranche 3) and personality_filter Gi-block (Tranche 3) already cover scoring.
+  6 pipeline tests in `tests/test_kolat_pipeline.gd`. DEFERRED: full per-action metadata
+  population by the 6 decomposition functions (targets/amounts/drops), dual-stance topic
+  positions, Master succession, win-condition pipeline, the Conclave, Tiger Tear routing,
+  per-Master network-record lifecycle, special-rule world mutation, sleeper-command completion
+  detection, and the topic/spell/insurgency-dependent executors.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
