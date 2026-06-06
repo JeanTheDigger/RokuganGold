@@ -4425,6 +4425,26 @@ template generators it depends on. Faithful summary of the fixes that landed:
   Dream (MAINTAIN_SLEEPER); the GDD gives the other seven Sects' standing mandates as prose
   without NeedType identifiers, so standing-objective assignment is a genuine design gap
   (owner must supply the remaining Sect→NeedType mappings) rather than something to invent.
+- **s54.7 The Kolat (Tranche 12 — Sect standing-objective mandate)** — when a character holds
+  a Master seat their standing objective becomes the Kolat mandate for their Sect (s54.7b).
+  `KolatSystem.SECT_STANDING_NEEDTYPE` maps eight Sects: three pinned explicitly by s54.7c
+  (Silk→MAINTAIN_KOLAT_NETWORK, Coin→MANAGE_KOLAT_FUNDS, Dream→MAINTAIN_SLEEPER) and five
+  structural name-matches where the s54.7b mandate sentence restates one already-defined
+  objective_alignment NeedType (Tiger→MONITOR_KOLAT_SECURITY, Chrysanthemum→MONITOR_IMPERIAL_COURT,
+  Cloud→MAINTAIN_CLOUD_ARCHIVE, Jade→ASSESS_SUPERNATURAL_THREAT, Steel→MONITOR_TEMPLE_PERIMETER).
+  Roc → "" (inactive at launch, s54.7b). **Lotus → "" is a genuine, un-papered design gap:**
+  its mandate ("ensure the organisation's enemies do not survive") matches no standing NeedType
+  and Lotus acts reactively on Tiger's dead-drop elimination assignments — the owner must
+  supply the identifier; it is NOT invented. `standing_needtype_for_sect()` returns the
+  mapping; `DayOrchestrator._assign_kolat_standing_objectives()` (wired into the daily standing-
+  assignment block beside magistrate/monk/ronin) writes the mandate into
+  `objectives_map[id]["standing"]` for living non-PC Masters, never overwriting an existing
+  standing objective, skipping Roc/Lotus (empty mandate). +6 tests (18 total in
+  `test_kolat_pipeline.gd`). DEFERRED unchanged minus standing assignment: the Lotus identifier
+  (owner decision), the three kolat_positions population channels, amount/temple metadata,
+  scalar event hooks + Imperial-response NPC behaviors + Tiger candidate pipeline + win-condition
+  event emission, the Conclave, Tiger Tear routing, the network-record lifecycle, and the
+  topic/spell/insurgency-dependent executors.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`

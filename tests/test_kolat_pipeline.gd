@@ -197,3 +197,52 @@ func test_build_context_populates_kolat_positions_for_agents_only() -> void:
 	plain.kolat_positions = {7: -100}  # should be ignored — not a conscious agent
 	var ctx_plain := NPCDecisionEngine.build_context(plain, {"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS})
 	assert_true(ctx_plain.kolat_positions.is_empty(), "non-Kolat characters carry no dual stance")
+
+
+# === Tranche 12: Sect standing-objective mandate (s54.7b) ===
+
+func test_standing_needtype_explicit_sects() -> void:
+	assert_eq(KolatSystem.standing_needtype_for_sect(Enums.KolatSect.SILK), "MAINTAIN_KOLAT_NETWORK")
+	assert_eq(KolatSystem.standing_needtype_for_sect(Enums.KolatSect.COIN), "MANAGE_KOLAT_FUNDS")
+	assert_eq(KolatSystem.standing_needtype_for_sect(Enums.KolatSect.DREAM), "MAINTAIN_SLEEPER")
+
+
+func test_standing_needtype_structural_sects() -> void:
+	assert_eq(KolatSystem.standing_needtype_for_sect(Enums.KolatSect.TIGER), "MONITOR_KOLAT_SECURITY")
+	assert_eq(KolatSystem.standing_needtype_for_sect(Enums.KolatSect.JADE), "ASSESS_SUPERNATURAL_THREAT")
+	assert_eq(KolatSystem.standing_needtype_for_sect(Enums.KolatSect.STEEL), "MONITOR_TEMPLE_PERIMETER")
+
+
+func test_standing_needtype_empty_for_roc_and_lotus() -> void:
+	assert_eq(KolatSystem.standing_needtype_for_sect(Enums.KolatSect.ROC), "",
+		"Roc is inactive at launch (s54.7b)")
+	assert_eq(KolatSystem.standing_needtype_for_sect(Enums.KolatSect.LOTUS), "",
+		"Lotus identifier is a pending owner design decision")
+
+
+func test_assign_kolat_standing_sets_mandate_for_master() -> void:
+	var coin := _coin_master(50)
+	var omap: Dictionary = {}
+	DayOrchestrator._assign_kolat_standing_objectives([coin], omap)
+	assert_eq(omap[50]["standing"]["need_type"], "MANAGE_KOLAT_FUNDS")
+	assert_true(omap[50]["standing"]["auto_assigned"])
+
+
+func test_assign_kolat_standing_skips_non_master_and_roc() -> void:
+	var agent := _coin_master(51)
+	agent.is_kolat_master = false  # conscious agent, not a Master
+	var roc := _coin_master(52)
+	roc.kolat_sect = Enums.KolatSect.ROC
+	var omap: Dictionary = {}
+	DayOrchestrator._assign_kolat_standing_objectives([agent, roc], omap)
+	assert_false(omap.has(51), "non-Masters get no Sect standing mandate")
+	assert_false(omap.has(52) and omap[52].get("standing", {}).has("need_type"),
+		"Roc Master gets no standing mandate")
+
+
+func test_assign_kolat_standing_does_not_overwrite_existing() -> void:
+	var coin := _coin_master(53)
+	var omap: Dictionary = {53: {"standing": {"need_type": "UPHOLD_LAW", "priority": 4}}}
+	DayOrchestrator._assign_kolat_standing_objectives([coin], omap)
+	assert_eq(omap[53]["standing"]["need_type"], "UPHOLD_LAW",
+		"an existing standing objective is never overwritten")

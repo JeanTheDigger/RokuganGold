@@ -149,6 +149,7 @@ static func advance_day(
 	_assign_kaiu_engineer_standing_objectives(characters, objectives_map, settlements)
 	_assign_artisan_standing_objectives(characters, objectives_map)
 	_assign_monk_standing_objectives(characters, objectives_map)
+	_assign_kolat_standing_objectives(characters, objectives_map)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
 
 	_populate_military_data(military_data, companies)
@@ -6963,6 +6964,47 @@ static func _assign_magistrate_standing_objectives(
 
 		objectives["standing"] = {
 			"need_type": "UPHOLD_LAW",
+			"priority": 4,
+			"auto_assigned": true,
+		}
+
+
+# -- Kolat Master Standing Objectives (s54.7b) --------------------------------
+# When a character is elevated to a Master seat their standing objective is the
+# Kolat mandate for their Sect (s54.7b). Eight Sects have a mapped NeedType;
+# Roc is inactive and Lotus has no pinned identifier (KolatSystem returns "").
+# A Master keeps their Sect mandate; it is never overwritten once set.
+
+
+static func _assign_kolat_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.is_pc:
+			continue
+		if not KolatSystem.is_master(character):
+			continue
+		if CharacterStats.is_dead(character):
+			continue
+
+		var mandate: String = KolatSystem.standing_needtype_for_sect(character.kolat_sect)
+		if mandate.is_empty():
+			continue  # Roc inactive / Lotus identifier pending owner decision
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+		if standing.get("need_type", "") == mandate:
+			continue
+		if not standing.is_empty():
+			continue  # do not overwrite an existing standing objective
+
+		objectives["standing"] = {
+			"need_type": mandate,
 			"priority": 4,
 			"auto_assigned": true,
 		}

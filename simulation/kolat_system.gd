@@ -28,6 +28,41 @@ const BRIBE_GARRISON_KOKU_PER_SEASON: int = 5
 
 # === SECT / MASTER HELPERS ===================================================
 
+## Sect → Kolat standing-objective NeedType (s54.7b standing-objective table).
+## Three mappings are pinned explicitly by the GDD (s54.7c prose names the Sect):
+##   Silk → MAINTAIN_KOLAT_NETWORK, Coin → MANAGE_KOLAT_FUNDS, Dream → MAINTAIN_SLEEPER.
+## Five more are structural name-matches — each Sect's s54.7b mandate sentence
+## restates exactly one already-defined NeedType in objective_alignment.json:
+##   Tiger "maintain the secrecy of the organisation" → MONITOR_KOLAT_SECURITY,
+##   Chrysanthemum "advance warning of every Imperial decision" → MONITOR_IMPERIAL_COURT,
+##   Cloud "preserve forbidden knowledge" → MAINTAIN_CLOUD_ARCHIVE,
+##   Jade "prevent supernatural corruption" → ASSESS_SUPERNATURAL_THREAT,
+##   Steel "keep the Hidden Temple secure" → MONITOR_TEMPLE_PERIMETER.
+## Roc is explicitly inactive at launch (s54.7b: "no standing mandate assigned") → "".
+## Lotus's mandate ("ensure the organisation's enemies do not survive") has no
+## matching standing NeedType — Lotus acts on Tiger's elimination assignments via
+## dead drops rather than a self-generated standing — so it is left "" pending an
+## explicit owner Sect→NeedType decision (not invented here).
+const SECT_STANDING_NEEDTYPE: Dictionary = {
+	Enums.KolatSect.TIGER: "MONITOR_KOLAT_SECURITY",
+	Enums.KolatSect.CHRYSANTHEMUM: "MONITOR_IMPERIAL_COURT",
+	Enums.KolatSect.SILK: "MAINTAIN_KOLAT_NETWORK",
+	Enums.KolatSect.COIN: "MANAGE_KOLAT_FUNDS",
+	Enums.KolatSect.CLOUD: "MAINTAIN_CLOUD_ARCHIVE",
+	Enums.KolatSect.JADE: "ASSESS_SUPERNATURAL_THREAT",
+	Enums.KolatSect.DREAM: "MAINTAIN_SLEEPER",
+	Enums.KolatSect.STEEL: "MONITOR_TEMPLE_PERIMETER",
+	Enums.KolatSect.LOTUS: "",   # design gap — owner must supply the identifier
+	Enums.KolatSect.ROC: "",     # inactive at launch (s54.7b)
+}
+
+
+## The Master's Sect standing-objective NeedType, or "" when none applies
+## (Roc inactive; Lotus pending an explicit identifier).
+static func standing_needtype_for_sect(sect: int) -> String:
+	return String(SECT_STANDING_NEEDTYPE.get(sect, ""))
+
+
 static func is_kolat(character: L5RCharacterData) -> bool:
 	return character.kolat_sect != Enums.KolatSect.NONE
 
