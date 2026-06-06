@@ -4300,7 +4300,7 @@ template generators it depends on. Faithful summary of the fixes that landed:
   network ActionIDs (ARCHIVE_TOPIC, RESURRECT_TOPIC, USE_CLOUDS_EYES, ANONYMOUS_TIP,
   DISTRIBUTE_INTELLIGENCE, …) return `{ok:false, reason:"deferred_system"}`. NOT yet wired
   into the main ActionExecutor dispatch or the Phase-3 context unlock (deep engine, needs
-  Godot). 13 tests.
+  Godot). 12 tests.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
