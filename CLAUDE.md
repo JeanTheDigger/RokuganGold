@@ -4405,7 +4405,7 @@ template generators it depends on. Faithful summary of the fixes that landed:
   (a) holds an Imperial-proximity role (Regent/Imperial Advisor/Voice of the Emperor/Imperial
   Chancellor), (b) has held it ≥ one full IC year (`TimeSystem.IC_DAYS_PER_YEAR`), and (c)
   awareness < 70 — and not while the candidate's pipeline stage is "compromised" or they are
-  dead. 18 tests in `test_kolat_secrecy.gd`. DEFERRED (NPC-engine/orchestrator wiring, needs
+  dead. 11 tests in `test_kolat_secrecy.gd`. DEFERRED (NPC-engine/orchestrator wiring, needs
   Godot): the event hooks that raise/lower the scalars at real operation/investigation points,
   Imperial-response NPC behaviors (expanded magistrate mandates, Hidden Guard reassignment,
   candidate protection), Tiger's candidate-pipeline fields + OVERSEE_KOLAT_NETWORK cultivation,
