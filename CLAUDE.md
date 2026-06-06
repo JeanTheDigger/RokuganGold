@@ -4264,6 +4264,20 @@ template generators it depends on. Faithful summary of the fixes that landed:
   entries (scoring JSON + decomposition + executors), the sleeper override loop,
   dual-stance topic positions, succession, win-condition pipeline, the Conclave, Tiger
   Tear routing, per-Master network-record lifecycle.
+- **s54.7 The Kolat (Tranche 2 — Master selection)** — `simulation/kolat_master_selector.gd`
+  (pure class; locked s54.7j2). World-generation Master selection per s54.7a:
+  `select_masters(npcs, dice)` applies universal filters (Insight ≥ 3, not Emperor, one
+  seat/NPC), per-Sect minimums, a weighted-tier draw (T1 ×5 / T2 ×2 / T3 ×1), the fixed
+  processing order as conflict resolution (Tiger→…→Steel), Sect skill boosts (max rule),
+  and stamps the hidden Master fields (`is_kolat_master`, `kolat_sect`, `kolat_superior_id`
+  — Tiger → -1, others → Tiger). Returns KolatSect → npc_id (-1 = vacant).
+  `get_special_rule_flags()` surfaces Coin 2d10×10 hidden koku / Dream 1d6+2 sleepers /
+  Silk 1d6+2 contacts for the world generator. Role-based tier criteria mapped to queryable
+  fields (clan/family/school_name/role_position/skills/status/glory/school_type; lord-tier
+  via role_position); Dream and Steel T1 relaxed to skill/glory thresholds (PROVISIONAL — no
+  institutional-access field). 9 tests. DEFERRED: the NeedType/ActionID NPC-engine pipeline,
+  sleeper override loop, dual-stance, succession, win condition, Conclave, special-rule world
+  mutation.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
