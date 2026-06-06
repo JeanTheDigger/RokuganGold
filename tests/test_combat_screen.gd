@@ -112,3 +112,15 @@ func test_end_mission_disconnects_signals() -> void:
 	screen._view.combat_ended.emit()
 	assert_signal_not_emitted(screen, "combat_ended",
 		"Relays are disconnected after end_mission")
+
+
+func test_restart_mission_does_not_double_connect() -> void:
+	# Re-starting without end_mission must not double-connect signals.
+	var screen := _make_screen()
+	screen.start_mission(_make_session(), _make_player(), DiceEngine.new(1))
+	screen.start_mission(_make_session(), _make_player(), DiceEngine.new(2))
+	watch_signals(screen)
+	screen._view.combat_ended.emit()
+	# Exactly one relay, not two.
+	assert_signal_emit_count(screen, "combat_ended", 1,
+		"combat_ended relayed exactly once after a re-start")

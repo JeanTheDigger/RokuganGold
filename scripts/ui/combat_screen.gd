@@ -95,6 +95,9 @@ func is_turn_based() -> bool:
 # -- Signal wiring ------------------------------------------------------------
 
 func _connect_view_signals() -> void:
+	# Idempotent: drop any stale connections first so a re-start_mission without
+	# an intervening end_mission does not double-connect (Godot errors on that).
+	_disconnect_view_signals()
 	_view.combat_event.connect(_on_combat_event)
 	_view.combat_mode_changed.connect(_on_combat_mode_changed)
 	_view.stealth_mode_changed.connect(_on_stealth_mode_changed)
