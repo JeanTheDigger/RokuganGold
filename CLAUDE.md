@@ -4163,6 +4163,18 @@ template generators it depends on. Faithful summary of the fixes that landed:
   `MissionEntryController.get_auto_launch_seeds()`, call `MissionLauncher.build_session()`,
   then `CombatScreen.start_mission()`; plus a PC-arrival event source and zone-level AUTO
   triggering (deferred, s4.4/s60).
+- **`scripts/ui/mission_flow.gd` (MissionFlow) — UI/session glue. ⚠ UNVERIFIED (no Godot
+  runtime — written, never executed/scene-tested).** Extends Node, owns a `CombatScreen`.
+  `on_pc_arrived(pc, province, province_history, active_seeds, seed_str)` auto-launches the
+  first AUTO seed and returns engageable PLAYER_INITIATED seeds; `engage(pc, seed, …)` fires
+  ENGAGE_MISSION (spends 1 banked AP) and launches. Builds the session via `MissionLauncher`,
+  calls `CombatScreen.start_mission()`, guards one-mission-at-a-time (`is_busy()`), relays
+  mission_complete/player_died/mission_blocked. 5 tests (written, not executed). This is the
+  integration point the future PC world-map travel system will call. The ONLY remaining
+  dependency is that **PC world-map travel / province-arrival event source** (and supplying
+  the province's seeds via `QuestSeedSelector.select_province_seeds`) — PC world-map navigation
+  doesn't exist yet and the arrival trigger is undesigned (s60). With that, the combat loop is
+  end-to-end.
 
 ### Systems Added 2026-06-04
 - **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),
