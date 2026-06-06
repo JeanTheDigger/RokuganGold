@@ -391,8 +391,12 @@ static func _carve_shelter(
 
 	var lx: int = clampi(cx - half_w,        map.perim_lx + 1, map.perim_rx - 1)
 	var rx: int = clampi(lx + dim.x - 1,     map.perim_lx + 1, map.perim_rx - 1)
+	# Re-derive lx from clamped rx to preserve shelter width when rx was clamped.
+	lx = clampi(rx - dim.x + 1, map.perim_lx + 1, map.perim_rx - 1)
 	var ly: int = clampi(cy - half_h,        map.perim_ty + 1, map.perim_by - 1)
 	var ry: int = clampi(ly + dim.y - 1,     map.perim_ty + 1, map.perim_by - 1)
+	# Re-derive ly from clamped ry to preserve shelter height when ry was clamped.
+	ly = clampi(ry - dim.y + 1, map.perim_ty + 1, map.perim_by - 1)
 
 	for y: int in range(ly, ry + 1):
 		for x: int in range(lx, rx + 1):

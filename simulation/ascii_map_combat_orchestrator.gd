@@ -1529,6 +1529,8 @@ static func _execute_down_attack(
 	if not void_result.get("success", false):
 		return {"success": false, "reason": "void_spend_failed"}
 	a_p.void_spent_this_round = true
+	a_p.void_roll_pending_rolled = void_result.get("rolled_bonus", 1)
+	a_p.void_roll_pending_kept = void_result.get("kept_bonus", 1)
 
 	var apos: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
 	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))

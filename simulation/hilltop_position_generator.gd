@@ -395,6 +395,7 @@ static func _place_population_slots(
 	# Lookout(s): partway up slope at vantage points (s56.8.3: "watching downhill").
 	var lookout_side: int = _MARGIN + 2 \
 		if rng.randi_range(0, 1) == 0 else map.width - _MARGIN - 3
+	_ensure_passable(map, lookout_side, mid_slope_y)
 	map.population_slots.append({
 		"x":    lookout_side,
 		"y":    mid_slope_y,
@@ -406,6 +407,7 @@ static func _place_population_slots(
 	if size == HilltopPositionMapData.SizeCategory.RIDGE_BLUFF:
 		var other_side: int = map.width - _MARGIN - 3 \
 			if lookout_side < map.width / 2 else _MARGIN + 2
+		_ensure_passable(map, other_side, mid_slope_y - 4)
 		map.population_slots.append({
 			"x":    other_side,
 			"y":    mid_slope_y - 4,
@@ -414,6 +416,7 @@ static func _place_population_slots(
 		})
 
 	# Path guard(s): on path near crest (s56.8.3: "controls easy route up").
+	_ensure_passable(map, path_x, map.crest_y + 3)
 	map.population_slots.append({
 		"x":    path_x,
 		"y":    map.crest_y + 3,
@@ -423,6 +426,7 @@ static func _place_population_slots(
 	if size >= HilltopPositionMapData.SizeCategory.STEEP_HILL:
 		# path_x + 1 is within the _PATH_CLEAR protected zone; path_x + 2 has a
 		# 30% chance of being WALL_STONE (rock scatter) and must be avoided.
+		_ensure_passable(map, path_x + 1, map.crest_y + 6)
 		map.population_slots.append({
 			"x":    path_x + 1,
 			"y":    map.crest_y + 6,
@@ -540,6 +544,14 @@ static func _place_objective_slots(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+## Ensures the tile at (x, y) is passable for population slot placement.
+## If the tile is WALL_STONE (from rock scatter on the slope), clears it
+## to FLOOR_DIRT so guards are not placed on impassable rock tiles.
+static func _ensure_passable(map: HilltopPositionMapData, x: int, y: int) -> void:
+	if map.get_tile(x, y) == Enums.TileType.WALL_STONE:
+		map.set_tile(x, y, Enums.TileType.FLOOR_DIRT)
+
 
 static func _find_command_shelter(map: HilltopPositionMapData) -> Dictionary:
 	for s: Dictionary in map.shelters:

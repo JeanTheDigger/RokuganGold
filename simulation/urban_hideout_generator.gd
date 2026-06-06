@@ -112,6 +112,12 @@ static func _place_chain_rooms(map: UrbanHideoutMapData, w: int, h: int, size: i
 	var x_margin: int = (w - room_w) / 2
 	var gap: int = 2
 
+	# Cap room count to what fits vertically: each room needs room_h rows
+	# plus a gap, and the first room starts at y=2. Last room needs at least
+	# room_h rows before the map boundary (h - 2).
+	var max_rooms: int = maxi(1, (h - 2 - 2 + gap) / (room_h + gap))
+	count = mini(count, max_rooms)
+
 	var y: int = 2
 	var main_id: int = 0
 	for i in range(count):
@@ -119,6 +125,9 @@ static func _place_chain_rooms(map: UrbanHideoutMapData, w: int, h: int, size: i
 		var ly: int = y
 		var rx: int = lx + room_w - 1
 		var ry: int = mini(ly + room_h - 1, h - 2)
+		# Guard against degenerate rooms where ly > ry (no vertical space left).
+		if ly > ry:
+			break
 		map.fill_rect(lx, ly, rx, ry, _FLOOR_STONE)
 		var zone_type: int
 		var taint: int
