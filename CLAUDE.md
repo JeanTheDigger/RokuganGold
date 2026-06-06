@@ -4123,6 +4123,19 @@ template generators it depends on. Faithful summary of the fixes that landed:
   (other present PCs still to agree — multi-PC collection out of scope for local play), and
   `end_combat_resolved`. CombatHUD formats all three and shows `X=end` in the controls hint.
   3 HUD format tests (`test_combat_hud.gd`, 7→10).
+- **`scripts/ui/combat_screen.gd` (CombatScreen) — mission connective layer.** Previously
+  the entire ASCII combat layer was only ever wired together in tests — no production code
+  created a `CombatController` or booted a mission, and the view/HUD were in no scene.
+  CombatScreen (extends Control) is the missing glue: `start_mission(session, player, dice)`
+  creates the controller from a `MissionSession`, binds it to a child `AsciiMapView`
+  (`set_map` + `set_combat_controller`), wires a child `CombatHUD`, and connects the view's
+  signals. It refreshes the HUD after each action (combat_event/moved/waited/mode change)
+  and relays `mission_complete`, `player_died`, `zone_exit_reached`, `combat_mode_changed`,
+  and `combat_ended` up to the mission owner. `end_mission()` detaches the controller,
+  hides the HUD, and disconnects all relays. The world-map → mission **entry point** (which
+  builds the session and calls `start_mission`) remains design-pending (PC mission
+  initiation, s56/s60); CombatScreen makes that a one-call hookup. 8 tests in
+  `tests/test_combat_screen.gd`.
 
 ### Systems Added 2026-06-04
 - **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),
