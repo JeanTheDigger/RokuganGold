@@ -244,9 +244,18 @@ subsection only specifies their spatial and temporal expression on the map.
 **Real-time vs. turn-based mode.**
 
 - While no combat is active in a zone, character movement on the ASCII map is **real-time** — characters move freely tile-to-tile with no Initiative, Round, or Turn structure (normal exploration and social movement).
-- A zone enters **turn-based combat mode** the instant combat is initiated within it (first hostile attack, a detected stealth kill, or an enemy reaching Combat alert against a hostile present). At that moment, Stage 1 Initiative is rolled for all participants in the zone, and the Round/Turn structure (Stages 1–3) governs the zone until combat resolves.
-- The zone returns to real-time when no mutually-hostile, conscious participants remain (one side dead/Out/fled/subdued, or hostility ends).
+- A zone enters **turn-based combat mode** the instant combat is initiated within it (first hostile attack, a detected stealth kill, or an enemy reaching the **ALERT** state — s56.6.3 alert ladder: Unaware → Suspicious → Alert → Fleeing). At that moment, Stage 1 Initiative is rolled for all participants in the zone, and the Round/Turn structure (Stages 1–3) governs the zone until combat resolves.
 - The turn-based state is **per-zone**: the navigation/lesser zone where combat occurs. Adjacent zones not in combat stay real-time.
+
+**Ending combat (End Combat).**
+
+The zone returns to real-time only through an explicit **End Combat** resolution — clearing the field is necessary but not sufficient.
+
+- **End Combat is blocked while any aware hostile remains.** An enemy counts as an aware hostile if it is alive and at **Suspicious or Alert**. Unaware enemies, Fleeing enemies, and the dead/unconscious do not block ending.
+- Once no aware hostiles remain, ending requires the **unanimous consent of all present, living player-characters** in the zone. Offline or absent PCs are not present and are not polled.
+- Any single PC declining cancels the proposal and combat continues. If an enemy re-engages (returns to Suspicious or higher) before consent completes, the proposal is cancelled.
+- On unanimous consent with the field clear, the zone returns to real-time.
+- NPC-only combat (no PC present) needs no consent step: it resolves and ends by the summary-roll rule below.
 
 **Tile ↔ distance mapping.**
 
