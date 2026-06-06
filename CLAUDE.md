@@ -4151,7 +4151,7 @@ template generators it depends on. Faithful summary of the fixes that landed:
   seeds launch via **`ENGAGE_MISSION`, 1 AP** (`engage_mission`, `ENGAGE_MISSION_AP_COST = 1`),
   spent from the PC's banked-AP pool. `PcSystem.can_spend_banked_ap()` / `spend_banked_ap()`
   added (s60.5). `engage_mission` validates PC actor + player-initiated seed + AP, spends 1
-  banked AP, returns a launch request the UI consumes. 13 tests
+  banked AP, returns a launch request the UI consumes. 10 tests
   (`test_mission_entry_controller.gd`). REMAINING (UI/session layer, unverified without Godot):
   the thin consumer that assembles a `MissionSession` (MissionBuilder) for the seed's province
   and calls `CombatScreen.start_mission()`; zone-level (finer than province) AUTO triggering
