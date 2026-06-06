@@ -80,6 +80,15 @@ func is_busy() -> bool:
 	return _screen != null and _screen.get_controller() != null
 
 
+## Tear down the active mission and free the screen for the next one. The owner
+## calls this after a mission resolves (mission_complete / player_died) or when
+## leaving the zone; without it is_busy() stays true and no further mission —
+## including AUTO arrivals — can launch.
+func end_mission() -> void:
+	if _screen != null:
+		_screen.end_mission()
+
+
 func _launch(
 		seed: Dictionary,
 		province: ProvinceData,

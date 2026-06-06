@@ -4168,13 +4168,15 @@ template generators it depends on. Faithful summary of the fixes that landed:
   `on_pc_arrived(pc, province, province_history, active_seeds, seed_str)` auto-launches the
   first AUTO seed and returns engageable PLAYER_INITIATED seeds; `engage(pc, seed, …)` fires
   ENGAGE_MISSION (spends 1 banked AP) and launches. Builds the session via `MissionLauncher`,
-  calls `CombatScreen.start_mission()`, guards one-mission-at-a-time (`is_busy()`), relays
-  mission_complete/player_died/mission_blocked. 5 tests (written, not executed). This is the
-  integration point the future PC world-map travel system will call. The ONLY remaining
-  dependency is that **PC world-map travel / province-arrival event source** (and supplying
-  the province's seeds via `QuestSeedSelector.select_province_seeds`) — PC world-map navigation
-  doesn't exist yet and the arrival trigger is undesigned (s60). With that, the combat loop is
-  end-to-end.
+  calls `CombatScreen.start_mission()`, guards one-mission-at-a-time (`is_busy()`), exposes
+  `end_mission()` (owner calls it after a mission resolves to free the screen for the next
+  launch), relays mission_complete/player_died/mission_blocked. 6 tests (written, not executed).
+  This is the integration point the future PC world-map travel system will call. The ONLY
+  remaining dependency is that **PC world-map travel / province-arrival event source** (and
+  supplying the province's seeds via `QuestSeedSelector.select_province_seeds`) — PC world-map
+  navigation doesn't exist yet and the arrival trigger is undesigned (s60). **PC world-map
+  travel is ON HOLD per owner (2026-06-06)** — deferred, not built. With it, the combat loop
+  is end-to-end.
 
 ### Systems Added 2026-06-04
 - **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),

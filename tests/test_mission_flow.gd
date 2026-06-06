@@ -92,3 +92,16 @@ func test_no_double_launch_while_busy() -> void:
 	flow.on_pc_arrived(
 		_player(), _province(), [], [_seed(RosterCompositionSystem.SEED_RONIN_BANDIT)], "busy2")
 	assert_signal_emitted(flow, "mission_blocked")
+
+
+func test_end_mission_resets_busy_and_allows_relaunch() -> void:
+	var flow := _make_flow()
+	flow.on_pc_arrived(
+		_player(), _province(), [], [_seed(RosterCompositionSystem.SEED_RONIN_BANDIT)], "r1")
+	assert_true(flow.is_busy(), "First mission active")
+	flow.end_mission()
+	assert_false(flow.is_busy(), "end_mission frees the screen")
+	# A new AUTO arrival can now launch.
+	flow.on_pc_arrived(
+		_player(), _province(), [], [_seed(RosterCompositionSystem.SEED_RONIN_BANDIT)], "r2")
+	assert_true(flow.is_busy(), "A second mission launches after teardown")
