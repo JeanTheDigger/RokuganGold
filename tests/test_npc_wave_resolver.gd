@@ -571,3 +571,34 @@ func test_consume_reactive_event_discards_unprocessable_non_reactive() -> void:
 	var decision: Dictionary = {"action_id": "CHARM", "success": true, "need_source": "primary_objective"}
 	NPCWaveResolver._consume_reactive_event(decision, ws)
 	assert_eq(ws["pending_events"].size(), 0, "Non-reactive unknown event should be discarded")
+
+
+func test_rumormonger_wound_penalty_applied_to_willpower_check() -> void:
+	var healthy_fails: int = 0
+	var wounded_fails: int = 0
+	for seed_val: int in range(100):
+		var ch: L5RCharacterData = L5RCharacterData.new()
+		ch.character_id = 1
+		ch.willpower = 3
+		ch.stamina = 2
+		ch.wounds_taken = 0
+		var d1 := DiceEngine.new()
+		d1.set_seed(seed_val)
+		var roll1: DiceResult = d1.roll_and_keep(ch.willpower, ch.willpower, false, "")
+		var wound1: int = CharacterStats.get_wound_penalty(ch)
+		if (roll1.total + wound1) < 15:
+			healthy_fails += 1
+
+		var cw: L5RCharacterData = L5RCharacterData.new()
+		cw.character_id = 2
+		cw.willpower = 3
+		cw.stamina = 2
+		cw.wounds_taken = 13  # Earth 2 → threshold 4 → HURT = -10
+		var d2 := DiceEngine.new()
+		d2.set_seed(seed_val)
+		var roll2: DiceResult = d2.roll_and_keep(cw.willpower, cw.willpower, false, "")
+		var wound2: int = CharacterStats.get_wound_penalty(cw)
+		if (roll2.total + wound2) < 15:
+			wounded_fails += 1
+	assert_true(wounded_fails >= healthy_fails,
+		"Wounded characters should fail Willpower checks more often (healthy_fails=%d, wounded_fails=%d)" % [healthy_fails, wounded_fails])

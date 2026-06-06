@@ -2307,3 +2307,620 @@ func test_craft_poetry_scroll_raises_stored_on_success() -> void:
 	)
 	if result.get("success", false):
 		assert_eq(result["effects"].get("poetry_scroll_raises", -1), 2)
+
+
+func test_read_character_wound_penalty_reduces_attacker_roll() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.awareness = 3
+	target.skills = {"Etiquette": 3}
+	target.stamina = 3
+	target.willpower = 3
+	target.wounds_taken = 0
+	var chars_by_id: Dictionary = {10: target}
+	var healthy_totals: Array[int] = []
+	var wounded_totals: Array[int] = []
+	for seed_val: int in range(100):
+		var ch: L5RCharacterData = L5RCharacterData.new()
+		ch.character_id = 1
+		ch.perception = 3
+		ch.skills = {"Investigation": 2}
+		ch.stamina = 3
+		ch.willpower = 3
+		ch.wounds_taken = 0
+		ch.school = ""
+		var action := _make_action("READ_CHARACTER", 10)
+		var ctx_h := NPCDataStructures.ContextSnapshot.new()
+		ctx_h.character_id = 1
+		ctx_h.context_flag = Enums.ContextFlag.AT_COURT
+		var d1 := DiceEngine.new()
+		d1.set_seed(seed_val)
+		var r1: Dictionary = ActionExecutor._execute_read_character(
+			action, ch, ctx_h, d1, chars_by_id
+		)
+		healthy_totals.append(r1.get("roll_total", 0))
+
+		var cw: L5RCharacterData = L5RCharacterData.new()
+		cw.character_id = 2
+		cw.perception = 3
+		cw.skills = {"Investigation": 2}
+		cw.stamina = 3
+		cw.willpower = 3
+		cw.wounds_taken = 19  # Earth 3 → threshold 6 → HURT = -10
+		cw.school = ""
+		var ctx_w := NPCDataStructures.ContextSnapshot.new()
+		ctx_w.character_id = 2
+		ctx_w.context_flag = Enums.ContextFlag.AT_COURT
+		var d2 := DiceEngine.new()
+		d2.set_seed(seed_val)
+		var r2: Dictionary = ActionExecutor._execute_read_character(
+			action, cw, ctx_w, d2, chars_by_id
+		)
+		wounded_totals.append(r2.get("roll_total", 0))
+	var healthy_avg: float = 0.0
+	var wounded_avg: float = 0.0
+	for i: int in range(100):
+		healthy_avg += healthy_totals[i]
+		wounded_avg += wounded_totals[i]
+	healthy_avg /= 100.0
+	wounded_avg /= 100.0
+	assert_true(healthy_avg > wounded_avg + 5.0,
+		"Wounded attacker should have lower roll totals (healthy=%.1f, wounded=%.1f)" % [healthy_avg, wounded_avg])
+
+
+func test_probe_wound_penalty_reduces_attacker_roll() -> void:
+	var target := L5RCharacterData.new()
+	target.character_id = 10
+	target.awareness = 3
+	target.skills = {"Sincerity": 3}
+	target.stamina = 3
+	target.willpower = 3
+	target.wounds_taken = 0
+	var chars_by_id: Dictionary = {10: target}
+	var healthy_totals: Array[int] = []
+	var wounded_totals: Array[int] = []
+	for seed_val: int in range(100):
+		var ch: L5RCharacterData = L5RCharacterData.new()
+		ch.character_id = 1
+		ch.perception = 3
+		ch.skills = {"Courtier": 3}
+		ch.stamina = 3
+		ch.willpower = 3
+		ch.wounds_taken = 0
+		ch.school = ""
+		var action := _make_action("PROBE", 10)
+		var ctx_h := NPCDataStructures.ContextSnapshot.new()
+		ctx_h.character_id = 1
+		ctx_h.context_flag = Enums.ContextFlag.AT_COURT
+		var d1 := DiceEngine.new()
+		d1.set_seed(seed_val)
+		var r1: Dictionary = ActionExecutor._execute_probe(
+			action, ch, ctx_h, d1, chars_by_id
+		)
+		healthy_totals.append(r1.get("roll_total", 0))
+
+		var cw: L5RCharacterData = L5RCharacterData.new()
+		cw.character_id = 2
+		cw.perception = 3
+		cw.skills = {"Courtier": 3}
+		cw.stamina = 3
+		cw.willpower = 3
+		cw.wounds_taken = 19  # Earth 3 → threshold 6 → HURT = -10
+		cw.school = ""
+		var ctx_w := NPCDataStructures.ContextSnapshot.new()
+		ctx_w.character_id = 2
+		ctx_w.context_flag = Enums.ContextFlag.AT_COURT
+		var d2 := DiceEngine.new()
+		d2.set_seed(seed_val)
+		var r2: Dictionary = ActionExecutor._execute_probe(
+			action, cw, ctx_w, d2, chars_by_id
+		)
+		wounded_totals.append(r2.get("roll_total", 0))
+	var healthy_avg: float = 0.0
+	var wounded_avg: float = 0.0
+	for i: int in range(100):
+		healthy_avg += healthy_totals[i]
+		wounded_avg += wounded_totals[i]
+	healthy_avg /= 100.0
+	wounded_avg /= 100.0
+	assert_true(healthy_avg > wounded_avg + 5.0,
+		"Wounded prober should have lower roll totals (healthy=%.1f, wounded=%.1f)" % [healthy_avg, wounded_avg])
+
+
+# -- Court Action Wound Penalty Tests ------------------------------------------
+
+
+func _make_healthy_char(id: int) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.awareness = 3
+	c.perception = 3
+	c.willpower = 3
+	c.stamina = 3
+	c.reflexes = 3
+	c.agility = 3
+	c.intelligence = 3
+	c.strength = 3
+	c.wounds_taken = 0
+	c.skills = {"Courtier": 3, "Etiquette": 3, "Investigation": 2, "Games: Go": 2}
+	c.school = ""
+	return c
+
+
+func _make_wounded_char(id: int) -> L5RCharacterData:
+	var c := _make_healthy_char(id)
+	c.wounds_taken = 19  # Earth 3 → threshold 6 → HURT = -10
+	return c
+
+
+func _run_wound_comparison(
+	healthy_fn: Callable, wounded_fn: Callable, label: String
+) -> void:
+	var healthy_totals: Array[int] = []
+	var wounded_totals: Array[int] = []
+	for seed_val: int in range(100):
+		var d1 := DiceEngine.new()
+		d1.set_seed(seed_val)
+		healthy_totals.append(healthy_fn.call(d1))
+		var d2 := DiceEngine.new()
+		d2.set_seed(seed_val)
+		wounded_totals.append(wounded_fn.call(d2))
+	var healthy_avg: float = 0.0
+	var wounded_avg: float = 0.0
+	for i: int in range(100):
+		healthy_avg += healthy_totals[i]
+		wounded_avg += wounded_totals[i]
+	healthy_avg /= 100.0
+	wounded_avg /= 100.0
+	assert_true(healthy_avg > wounded_avg + 5.0,
+		"%s (healthy=%.1f, wounded=%.1f)" % [label, healthy_avg, wounded_avg])
+
+
+func test_gossip_wound_penalty_reduces_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_wound_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("GOSSIP", 10)
+			action.metadata = {"gossip_subject_id": 10}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_gossip(
+				action, ch, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cw := _make_wounded_char(2)
+			var action := _make_action("GOSSIP", 10)
+			action.metadata = {"gossip_subject_id": 10}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_gossip(
+				action, cw, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		"Wounded gossiper should have lower roll totals")
+
+
+func test_public_insult_wound_penalty_reduces_attacker_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_wound_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("PUBLIC_INSULT", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_public_insult(
+				action, ch, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cw := _make_wounded_char(2)
+			var action := _make_action("PUBLIC_INSULT", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_public_insult(
+				action, cw, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		"Wounded insulter should have lower roll totals")
+
+
+func test_public_debate_wound_penalty_reduces_attacker_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_wound_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("PUBLIC_DEBATE", 10)
+			action.metadata = {"topic_id": 1, "position_shift": 5.0}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_public_debate(
+				action, ch, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cw := _make_wounded_char(2)
+			var action := _make_action("PUBLIC_DEBATE", 10)
+			action.metadata = {"topic_id": 1, "position_shift": 5.0}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_public_debate(
+				action, cw, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		"Wounded debater should have lower roll totals")
+
+
+func test_contested_court_charm_wound_penalty_reduces_attacker_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_wound_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("CHARM", 10)
+			action.metadata = {"has_topic": false}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			ctx_l.dispositions = {10: 0}
+			var r: Dictionary = ActionExecutor._execute_contested_court_action(
+				action, ch, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cw := _make_wounded_char(2)
+			var action := _make_action("CHARM", 10)
+			action.metadata = {"has_topic": false}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			ctx_l.dispositions = {10: 0}
+			var r: Dictionary = ActionExecutor._execute_contested_court_action(
+				action, cw, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		"Wounded charmer should have lower roll totals")
+
+
+func test_provoke_emotion_wound_penalty_reduces_attacker_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_wound_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("PROVOKE_EMOTION", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_provoke_emotion(
+				action, ch, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cw := _make_wounded_char(2)
+			var action := _make_action("PROVOKE_EMOTION", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_provoke_emotion(
+				action, cw, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		"Wounded provoker should have lower roll totals")
+
+
+func test_play_game_wound_penalty_reduces_attacker_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_wound_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("PLAY_GAME", 10)
+			action.metadata = {"game_skill": "Games: Go"}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_play_game(
+				action, ch, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cw := _make_wounded_char(2)
+			var action := _make_action("PLAY_GAME", 10)
+			action.metadata = {"game_skill": "Games: Go"}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_play_game(
+				action, cw, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		"Wounded game player should have lower roll totals")
+
+
+func test_discern_need_wound_penalty_reduces_attacker_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_wound_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("DISCERN_NEED", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_discern_need(
+				action, ch, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cw := _make_wounded_char(2)
+			var action := _make_action("DISCERN_NEED", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_discern_need(
+				action, cw, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		"Wounded discerner should have lower roll totals")
+
+
+func test_ask_for_introduction_wound_penalty_reduces_roll() -> void:
+	var target := _make_healthy_char(10)
+	target.status = 3.0
+	var intermediary := _make_healthy_char(20)
+	intermediary.status = 4.0
+	var chars_by_id: Dictionary = {10: target, 20: intermediary}
+	_run_wound_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("ASK_FOR_INTRODUCTION", 10)
+			action.metadata = {"intermediary_id": 20}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_ask_for_introduction(
+				action, ch, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cw := _make_wounded_char(2)
+			var action := _make_action("ASK_FOR_INTRODUCTION", 10)
+			action.metadata = {"intermediary_id": 20}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_ask_for_introduction(
+				action, cw, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		"Wounded introducer should have lower roll totals")
+
+
+func test_observe_court_attendees_wound_penalty_reduces_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_wound_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("OBSERVE_COURT_ATTENDEES", -1)
+			action.metadata = {"observable_attendee_ids": [10]}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_observe_court_attendees(
+				action, ch, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cw := _make_wounded_char(2)
+			var action := _make_action("OBSERVE_COURT_ATTENDEES", -1)
+			action.metadata = {"observable_attendee_ids": [10]}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_observe_court_attendees(
+				action, cw, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		"Wounded observer should have lower roll totals")
+
+
+# -- Court Action Mutation Modifier Tests --------------------------------------
+
+
+func _make_mutated_char(id: int) -> L5RCharacterData:
+	var c := _make_healthy_char(id)
+	var m := MutationData.new()
+	m.mutation_type = Enums.MutationType.FOUL_ODOR
+	c.mutations = [m]
+	return c
+
+
+func _run_mutation_comparison(
+	normal_fn: Callable, mutated_fn: Callable, label: String
+) -> void:
+	var normal_totals: Array[int] = []
+	var mutated_totals: Array[int] = []
+	for seed_val: int in range(100):
+		var d1 := DiceEngine.new()
+		d1.set_seed(seed_val)
+		normal_totals.append(normal_fn.call(d1))
+		var d2 := DiceEngine.new()
+		d2.set_seed(seed_val)
+		mutated_totals.append(mutated_fn.call(d2))
+	var normal_avg: float = 0.0
+	var mutated_avg: float = 0.0
+	for i: int in range(100):
+		normal_avg += normal_totals[i]
+		mutated_avg += mutated_totals[i]
+	normal_avg /= 100.0
+	mutated_avg /= 100.0
+	assert_true(normal_avg > mutated_avg + 2.0,
+		"%s (normal=%.1f, mutated=%.1f)" % [label, normal_avg, mutated_avg])
+
+
+func test_gossip_mutation_modifier_reduces_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_mutation_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("GOSSIP", 10)
+			action.metadata = {"gossip_subject_id": 10}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_gossip(
+				action, ch, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cm := _make_mutated_char(2)
+			var action := _make_action("GOSSIP", 10)
+			action.metadata = {"gossip_subject_id": 10}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_gossip(
+				action, cm, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		"Mutated gossiper (FOUL_ODOR) should have lower roll totals")
+
+
+func test_public_insult_mutation_modifier_reduces_attacker_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_mutation_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("PUBLIC_INSULT", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_public_insult(
+				action, ch, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cm := _make_mutated_char(2)
+			var action := _make_action("PUBLIC_INSULT", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_public_insult(
+				action, cm, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		"Mutated insulter (FOUL_ODOR) should have lower roll totals")
+
+
+func test_contested_court_charm_mutation_modifier_reduces_attacker_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_mutation_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("CHARM", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_contested_court_action(
+				action, "CHARM", ch, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cm := _make_mutated_char(2)
+			var action := _make_action("CHARM", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_contested_court_action(
+				action, "CHARM", cm, ctx_l, dice, _action_skill_map, chars_by_id)
+			return r.get("roll_total", 0),
+		"Mutated charmer (FOUL_ODOR) should have lower roll totals")
+
+
+func test_provoke_emotion_mutation_modifier_reduces_attacker_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_mutation_comparison(
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("PROVOKE_EMOTION", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_provoke_emotion(
+				action, ch, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var cm := _make_mutated_char(2)
+			var action := _make_action("PROVOKE_EMOTION", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_provoke_emotion(
+				action, cm, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		"Mutated provoker (FOUL_ODOR) should have lower roll totals")
+
+
+func test_discern_need_mutation_modifier_affects_attacker_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_mutation_comparison(
+		func(dice: DiceEngine) -> int:
+			var cm := _make_healthy_char(2)
+			var me := MutationData.new()
+			me.mutation_type = Enums.MutationType.EXTRA_EYE
+			cm.mutations = [me]
+			var action := _make_action("DISCERN_NEED", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_discern_need(
+				action, cm, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("DISCERN_NEED", 10)
+			action.metadata = {}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_discern_need(
+				action, ch, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		"EXTRA_EYE discerner should have higher roll totals (Investigation is perception-based)")
+
+
+func test_observe_court_attendees_mutation_modifier_affects_roll() -> void:
+	var target := _make_healthy_char(10)
+	var chars_by_id: Dictionary = {10: target}
+	_run_mutation_comparison(
+		func(dice: DiceEngine) -> int:
+			var cm := _make_healthy_char(2)
+			var me := MutationData.new()
+			me.mutation_type = Enums.MutationType.EXTRA_EYE
+			cm.mutations = [me]
+			var action := _make_action("OBSERVE_COURT_ATTENDEES", -1)
+			action.metadata = {"observable_attendee_ids": [10]}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 2
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_observe_court_attendees(
+				action, cm, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		func(dice: DiceEngine) -> int:
+			var ch := _make_healthy_char(1)
+			var action := _make_action("OBSERVE_COURT_ATTENDEES", -1)
+			action.metadata = {"observable_attendee_ids": [10]}
+			var ctx_l := NPCDataStructures.ContextSnapshot.new()
+			ctx_l.character_id = 1
+			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
+			var r: Dictionary = ActionExecutor._execute_observe_court_attendees(
+				action, ch, ctx_l, dice, chars_by_id)
+			return r.get("roll_total", 0),
+		"EXTRA_EYE observer should have higher roll totals (Investigation is perception-based)")

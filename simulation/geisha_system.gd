@@ -315,8 +315,12 @@ static func _kolat_eavesdrop_roll(
 
 	var investigation: int = SkillResolver.get_skill_rank(kolat_agent, "Investigation")
 	var perception: int = kolat_agent.perception
-	var roll: int = DiceEngine.roll_and_keep(investigation + 1, perception, dice)
-	return roll >= tn
+	var wound_pen: int = CharacterStats.get_wound_penalty(kolat_agent)
+	var inv_mut: Dictionary = MutationSystem.get_skill_modifiers(kolat_agent, "Investigation")
+	var inv_rolled: int = maxi(1, investigation + 1 + inv_mut["rolled"])
+	var inv_kept: int = maxi(1, perception + inv_mut["kept"])
+	var roll_result: DiceResult = dice.roll_and_keep(inv_rolled, inv_kept, true, false)
+	return (roll_result.total + wound_pen + inv_mut["tn"]) >= tn
 
 
 # ============================================================================
@@ -391,6 +395,24 @@ static func _roll_kolat_infiltration(dice: DiceEngine) -> int:
 # ============================================================================
 # HELPERS — KOKU COST LOOKUP
 # ============================================================================
+
+## Cleans dead character references from an okiya. Removes dead IDs from
+## geisha_ids, clears okaasan_id and handler_id if the holder is dead.
+static func handle_character_death(
+	okiyas: Array,
+	dead_id: int,
+	characters_by_id: Dictionary,
+) -> void:
+	for okiya_v: Variant in okiyas:
+		if not okiya_v is OkiyaData:
+			continue
+		var okiya: OkiyaData = okiya_v as OkiyaData
+		okiya.geisha_ids.erase(dead_id)
+		if okiya.okaasan_id == dead_id:
+			okiya.okaasan_id = -1
+		if okiya.handler_id == dead_id:
+			okiya.handler_id = -1
+
 
 ## Returns the koku cost for a visit to an okiya of the given tier.
 static func koku_cost_for_tier(tier: int) -> float:

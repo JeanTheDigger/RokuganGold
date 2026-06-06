@@ -184,16 +184,13 @@ const ELITE_UNIT_TYPES: Array[int] = [
 static func is_cavalry(unit_type: int) -> bool:
 	return unit_type in CAVALRY_UNIT_TYPES
 
-static func _is_cavalry(unit_type: int) -> bool:
-	return unit_type in CAVALRY_UNIT_TYPES
-
 
 static func _get_unit_clan(unit_type: int) -> String:
 	return CLAN_OF_UNIT.get(unit_type, "")
 
 
 static func _get_anti_cavalry_bonus(attacker_type: int, defender_type: int) -> int:
-	if not _is_cavalry(defender_type):
+	if not is_cavalry(defender_type):
 		return 0
 	if attacker_type == Enums.CompanyUnitType.ASHIGARU_SPEARMEN:
 		return ASHIGARU_SPEARMEN_VS_CAVALRY_BONUS
@@ -510,8 +507,11 @@ static func resolve_commander_bonus(
 
 	var highest_ring: Enums.Ring = _get_highest_ring(commander, clan_id)
 	var bonus_type: String = RING_TO_BONUS_TYPE.get(highest_ring, "attack")
+	# TACTICIAN adds +5; STRATEGIST adds +1k0 on all Battle rolls (s45)
+	var tactician_bonus: int = AdvantageSystem.get_tactician_modifier(commander)
+	var strategist_bonus: int = AdvantageSystem.get_strategist_battle_modifier(commander)
 
-	return {"bonus_type": bonus_type, "bonus_value": battle_rank}
+	return {"bonus_type": bonus_type, "bonus_value": battle_rank + tactician_bonus + strategist_bonus}
 
 
 static func _get_highest_ring(
@@ -594,7 +594,7 @@ static func get_terrain_modifiers(
 	else:
 		mods["attack_mod"] += t.get("attacker_attack_penalty", 0)
 
-	var unit_is_cavalry: bool = _is_cavalry(unit_type)
+	var unit_is_cavalry: bool = is_cavalry(unit_type)
 	var is_spearmen: bool = unit_type in ANTI_CAVALRY_UNIT_TYPES
 	var is_archer: bool = unit_type == Enums.CompanyUnitType.ASHIGARU_ARCHERS
 
@@ -1418,14 +1418,16 @@ static func _roll_commander_survival(
 ) -> Dictionary:
 	var earth: int = CharacterStats.get_ring_value(commander, Enums.Ring.EARTH)
 	var battle: int = commander.skills.get("Battle", 0)
-	var rolled: int = earth + battle
-	var kept: int = earth
+	var cmd_mut: Dictionary = MutationSystem.get_skill_modifiers(commander, "Battle")
+	var rolled: int = maxi(1, earth + battle + cmd_mut["rolled"])
+	var kept: int = maxi(1, earth + cmd_mut["kept"])
 
 	if rolled <= 0 or kept <= 0:
 		return {"outcome": "dead", "roll_total": 0, "tn": tn}
 
+	var wound_pen: int = CharacterStats.get_wound_penalty(commander)
 	var result: DiceResult = dice_engine.roll_and_keep(rolled, kept, true, false)
-	var total: int = result.total
+	var total: int = result.total + wound_pen + cmd_mut["tn"]
 
 	if total >= tn:
 		return {"outcome": "survived", "roll_total": total, "tn": tn}

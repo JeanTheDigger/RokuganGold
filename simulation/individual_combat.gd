@@ -20,7 +20,7 @@ const WEAPON_CATALOG: Dictionary = {
 	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms",       "size": "Large",  "melee": true,  "trait": "agility"},
 	"tetsubo":    {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Heavy Weapons",  "size": "Large",  "melee": true,  "trait": "agility"},
 	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",       "size": "Large",  "melee": false, "trait": "agility"},
-	"unarmed":    {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu",       "size": "Small",  "melee": true,  "trait": "agility"},
+	"unarmed":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu",       "size": "Small",  "melee": true,  "trait": "agility"},
 }
 
 const DEFAULT_WEAPON: Dictionary = {
@@ -82,6 +82,18 @@ const ATHLETICS_TERRAIN_REDUCTION: Dictionary = {
 	5: {"basic": 0, "moderate": -1, "difficult": -2},  # Rank 5 (eliminates all)
 }
 
+# -- Off-hand and Extra Attack Constants (s40) ---------------------------------
+
+# Penalty to off-hand weapon attack by weapon size.
+const OFF_HAND_PENALTY: Dictionary = {"Small": -5, "Medium": -10, "Large": -15}
+# Dominant hand attack penalty while holding an off-hand weapon (s40).
+const DOMINANT_HAND_PENALTY: int = -5
+# Blinded Simple Move: Athletics/Agility TN 20 or fall Prone (s40).
+const BLINDED_SIMPLE_MOVE_TN: int = 20
+# Extra Attack: 5 Raises required (3 with Spinning Blades kata for dual-wielders).
+const EXTRA_ATTACK_BASE_RAISES: int = 5
+const EXTRA_ATTACK_SPINNING_BLADES_RAISES: int = 3
+
 # -- CombatCondition flags (s40 Conditional Effects) ---------------------------
 
 const CONDITION_BLINDED:   String = "blinded"
@@ -121,6 +133,17 @@ class Participant:
 	var fatigue_days: int = 0        # consecutive days without rest
 	var void_spent_this_round: bool = false  # once-per-Round Void spend restriction (RAW)
 	var void_armor_tn_bonus: int = 0         # from Void spend_for_armor_tn (RAW)
+	var void_roll_pending_rolled: int = 0    # pending +N rolled dice from pre-declared Void spend (GDD s40)
+	var void_roll_pending_kept: int = 0      # pending +N kept dice from pre-declared Void spend (GDD s40)
+	var kata_used_this_turn: Dictionary = {}   # tracks once-per-Turn kata uses by effect_id
+	var kata_used_this_round: Dictionary = {}  # tracks once-per-Round kata uses by effect_id
+	var dual_wielding: bool = false            # true when holding an off-hand weapon
+	var off_hand_weapon: String = ""           # name of off-hand weapon ("" = none)
+	var earth_trade_amount: int = 0            # Armor TN traded for damage (earth_trade_armor_for_damage)
+	var earth_init_trade_amount: int = 0       # Initiative traded for Armor TN (earth_trade_initiative_for_armor)
+	var water_trade_armor_amount: int = 0      # Armor TN traded for movement (water_trade_armor_for_movement)
+	var guard_kata_bonus: int = 0              # extra Armor TN from void_phoenix_guard_bonus kata
+	var extra_attack_used_this_turn: bool = false  # Extra Attack may only be used once per turn
 
 
 class CombatState:
@@ -150,6 +173,244 @@ class DuelState:
 
 
 # =============================================================================
+# -- Kata Effect Modifiers (s30a → s40) ----------------------------------------
+# =============================================================================
+
+static func _has_kata_effect(character: L5RCharacterData, effect_id: String) -> bool:
+	for kata_name: String in character.katas:
+		if KataSystem.KATA_DATA.has(kata_name):
+			if KataSystem.KATA_DATA[kata_name]["effect_id"] == effect_id:
+				return true
+	return false
+
+
+## Returns {flat_bonus, use_void_ring} for initiative kata effects.
+static func _get_kata_initiative_modifiers(character: L5RCharacterData, weapon_name: String) -> Dictionary:
+	var flat_bonus: int = 0
+	var use_void_ring: bool = false
+	for kata_name: String in character.katas:
+		if not KataSystem.KATA_DATA.has(kata_name):
+			continue
+		var effect_id: String = KataSystem.KATA_DATA[kata_name]["effect_id"]
+		match effect_id:
+			"air_polearm_initiative":
+				if get_weapon_profile(weapon_name).get("skill", "") == "Polearms":
+					flat_bonus += 3
+			"void_initiative_void_ring":
+				use_void_ring = true
+	return {"flat_bonus": flat_bonus, "use_void_ring": use_void_ring}
+
+
+## Returns the kata bonus to Armor TN for this participant on the incoming attack.
+## Side-effect: marks once-per-Turn kata uses in participant.kata_used_this_turn.
+static func _get_kata_armor_tn_bonus(
+	character: L5RCharacterData,
+	participant: Participant,
+	weapon_name: String,
+) -> int:
+	var bonus: int = 0
+	var air_ring: int = CharacterStats.get_ring_value(character, Enums.Ring.AIR)
+	var earth_ring: int = CharacterStats.get_earth_ring(character)
+	var fire_ring: int = CharacterStats.get_ring_value(character, Enums.Ring.FIRE)
+	var void_ring: int = character.void_ring
+	for kata_name: String in character.katas:
+		if not KataSystem.KATA_DATA.has(kata_name):
+			continue
+		var effect_id: String = KataSystem.KATA_DATA[kata_name]["effect_id"]
+		match effect_id:
+			"air_defense_armor_tn":
+				if participant.stance == Enums.Stance.DEFENSE:
+					bonus += air_ring
+			"air_crane_honor_armor":
+				var skill: String = get_weapon_profile(weapon_name).get("skill", "")
+				if skill in ["Kenjutsu", "Polearms"]:
+					bonus += maxi(1, HonorGlorySystem.get_honor_rank(character) - 3)
+			"air_stealth_armor_once":
+				if not participant.kata_used_this_turn.get("air_stealth_armor_once", false):
+					bonus += character.skills.get("Stealth", 0)
+					participant.kata_used_this_turn["air_stealth_armor_once"] = true
+			"earth_defense_extra_armor":
+				if participant.stance in [Enums.Stance.DEFENSE, Enums.Stance.FULL_DEFENSE]:
+					bonus += earth_ring
+			"earth_trade_armor_for_damage":
+				bonus -= participant.earth_trade_amount
+			"earth_trade_initiative_for_armor":
+				bonus += participant.earth_init_trade_amount
+			"fire_full_attack_armor_tn":
+				if participant.stance == Enums.Stance.FULL_ATTACK:
+					bonus += fire_ring
+			"fire_dragon_daisho_armor":
+				if participant.dual_wielding and weapon_name == "katana" and participant.off_hand_weapon == "wakizashi":
+					bonus += 3
+			"void_center_stance_armor":
+				if participant.stance == Enums.Stance.CENTER:
+					bonus += void_ring
+			"water_trade_armor_for_movement":
+				bonus -= participant.water_trade_armor_amount
+	# void_phoenix_guard_bonus is stored by resolve_guard() on the guarded participant.
+	bonus += participant.guard_kata_bonus
+	return bonus
+
+
+## Returns {rolled_bonus, kept_bonus, flat_bonus, use_air_ring, use_strength} for attacks.
+## Side-effect: marks once-per-Round/Turn kata uses.
+static func _get_kata_attack_modifiers(
+	attacker: L5RCharacterData,
+	attacker_p: Participant,
+	weapon_name: String,
+	maneuver: String,
+) -> Dictionary:
+	var rolled_bonus: int = 0
+	var kept_bonus: int = 0
+	var flat_bonus: int = 0
+	var use_air_ring: bool = false
+	var use_strength: bool = false
+	var profile: Dictionary = get_weapon_profile(weapon_name)
+	var skill: String = profile.get("skill", "")
+	var air_ring: int = CharacterStats.get_ring_value(attacker, Enums.Ring.AIR)
+	var fire_ring: int = CharacterStats.get_ring_value(attacker, Enums.Ring.FIRE)
+	for kata_name: String in attacker.katas:
+		if not KataSystem.KATA_DATA.has(kata_name):
+			continue
+		var effect_id: String = KataSystem.KATA_DATA[kata_name]["effect_id"]
+		match effect_id:
+			"air_spear_attack_ring":
+				if skill == "Polearms":
+					use_air_ring = true
+			"air_increased_damage_bonus":
+				if maneuver == "increased_damage":
+					flat_bonus += air_ring
+			"air_called_knockdown_bonus":
+				if maneuver in ["called_shot_limb", "called_shot_hand", "called_shot_head",
+						"called_shot_small", "knockdown_biped", "knockdown_quad"]:
+					flat_bonus += air_ring
+			"air_ranged_melee_penalty":
+				# Reduces ranged-in-melee penalty by 3 — handled as a flat bonus on the
+				# attack roll (the -10 penalty is already applied by the caller; we add back 3).
+				flat_bonus += 3  # only meaningful when is_ranged_in_melee; always safe to add
+			"fire_full_attack_attack_bonus":
+				if attacker_p.stance == Enums.Stance.FULL_ATTACK:
+					if not attacker_p.kata_used_this_round.get("fire_full_attack_attack_bonus", false):
+						rolled_bonus += fire_ring
+						attacker_p.kata_used_this_round["fire_full_attack_attack_bonus"] = true
+			"water_strength_for_attack":
+				if skill == "Heavy Weapons":
+					if not attacker_p.kata_used_this_turn.get("water_strength_for_attack", false):
+						use_strength = true
+						attacker_p.kata_used_this_turn["water_strength_for_attack"] = true
+			"earth_water_movement_penalty":
+				# Heavy Weapons: 1 Free Raise for Knockdown (free raise = +5 roll total effectively)
+				if skill == "Heavy Weapons" and maneuver in ["knockdown_biped", "knockdown_quad"]:
+					flat_bonus += 5
+	return {
+		"rolled_bonus": rolled_bonus,
+		"kept_bonus": kept_bonus,
+		"flat_bonus": flat_bonus,
+		"use_air_ring": use_air_ring,
+		"use_strength": use_strength,
+	}
+
+
+## Returns {rolled_bonus, flat_bonus, use_agility, strength_bonus} for damage rolls.
+## Side-effect: marks once-per-Turn kata uses.
+static func _get_kata_damage_modifiers(
+	attacker: L5RCharacterData,
+	attacker_p: Participant,
+	weapon_name: String,
+	was_feint: bool,
+) -> Dictionary:
+	var rolled_bonus: int = 0
+	var flat_bonus: int = 0
+	var use_agility: bool = false
+	var strength_bonus: int = 0
+	var skill: String = get_weapon_profile(weapon_name).get("skill", "")
+	for kata_name: String in attacker.katas:
+		if not KataSystem.KATA_DATA.has(kata_name):
+			continue
+		var effect_id: String = KataSystem.KATA_DATA[kata_name]["effect_id"]
+		match effect_id:
+			"earth_heavy_weapons_strength":
+				if skill == "Heavy Weapons":
+					strength_bonus += 1
+			"fire_agility_for_damage":
+				if not attacker_p.kata_used_this_turn.get("fire_agility_for_damage", false):
+					use_agility = true
+					attacker_p.kata_used_this_turn["fire_agility_for_damage"] = true
+			"fire_scorpion_feint_damage":
+				if was_feint and not attacker_p.kata_used_this_turn.get("fire_scorpion_feint_damage", false):
+					flat_bonus += 3
+					attacker_p.kata_used_this_turn["fire_scorpion_feint_damage"] = true
+			"water_skilled_weapon_damage":
+				if attacker.skills.get(skill, 0) >= 3:
+					rolled_bonus += 1
+			"void_honor_damage":
+				if not attacker_p.kata_used_this_turn.get("void_honor_damage", false):
+					rolled_bonus += HonorGlorySystem.get_honor_rank(attacker)
+					attacker_p.kata_used_this_turn["void_honor_damage"] = true
+	return {
+		"rolled_bonus": rolled_bonus,
+		"flat_bonus": flat_bonus,
+		"use_agility": use_agility,
+		"strength_bonus": strength_bonus,
+	}
+
+
+## Returns wound TN penalty reduction from katas (earth_wound_tn_reduce kata).
+static func _get_kata_wound_penalty_reduction(character: L5RCharacterData) -> int:
+	if _has_kata_effect(character, "earth_wound_tn_reduce"):
+		return CharacterStats.get_earth_ring(character)
+	return 0
+
+
+## Returns bonus to own Reduction from katas (earth_full_defense, earth_crab variants).
+## Public — called by WoundSystem context builders.
+static func get_kata_reduction_bonus(
+	character: L5RCharacterData,
+	participant: Participant,
+	weapon_name: String,
+) -> int:
+	var bonus: int = 0
+	var earth_ring: int = CharacterStats.get_earth_ring(character)
+	for kata_name: String in character.katas:
+		if not KataSystem.KATA_DATA.has(kata_name):
+			continue
+		var effect_id: String = KataSystem.KATA_DATA[kata_name]["effect_id"]
+		match effect_id:
+			"earth_full_defense_reduction":
+				if participant.stance == Enums.Stance.FULL_DEFENSE:
+					bonus += earth_ring
+			"earth_crab_armor_reduction":
+				if participant.stance == Enums.Stance.ATTACK and character.armor_tn_bonus > 0:
+					bonus += 2
+	return bonus
+
+
+## Returns how much the attacker's katas reduce the defender's Reduction.
+## Side-effect: marks once-per-Round kata uses.
+static func get_kata_opponent_reduction_penalty(
+	attacker: L5RCharacterData,
+	attacker_p: Participant,
+	weapon_name: String,
+) -> int:
+	var penalty: int = 0
+	var size: String = get_weapon_profile(weapon_name).get("size", "Medium")
+	var water_ring: int = CharacterStats.get_ring_value(attacker, Enums.Ring.WATER)
+	for kata_name: String in attacker.katas:
+		if not KataSystem.KATA_DATA.has(kata_name):
+			continue
+		var effect_id: String = KataSystem.KATA_DATA[kata_name]["effect_id"]
+		match effect_id:
+			"water_small_weapon_reduction":
+				if size == "Small":
+					penalty += 1
+			"water_ignore_reduction":
+				if not attacker_p.kata_used_this_round.get("water_ignore_reduction", false):
+					penalty += water_ring
+					attacker_p.kata_used_this_round["water_ignore_reduction"] = true
+	return penalty
+
+
+# =============================================================================
 # -- Initiative (s40 Stage 1) --------------------------------------------------
 # =============================================================================
 
@@ -157,10 +418,30 @@ static func roll_initiative(
 	character: L5RCharacterData,
 	participant: Participant,
 	dice_engine: DiceEngine,
+	weapon_name: String = "",
 ) -> int:
-	var result: DiceResult = dice_engine.roll_initiative(character.reflexes, CharacterStats.get_insight_rank(character))
+	var kata_init: Dictionary = _get_kata_initiative_modifiers(character, weapon_name)
 	var wound_penalty: int = CharacterStats.get_wound_penalty(character)
-	var score: int = result.total + wound_penalty
+	# Advantage/disadvantage modifiers (s45): CONSUMED Perfection (-5 to score), TOUCH_OF_THE_SPIRIT_REALMS, etc.
+	var adv_init: Dictionary = AdvantageSystem.get_skill_bonus(character, "", {"is_combat": true})
+	var adv_init_tn: int = AdvantageSystem.get_tn_modifier(character, {"is_combat": true})
+	var score: int
+	if kata_init["use_void_ring"]:
+		# void_initiative_void_ring: roll Void Ring + InsightRank, keep Void Ring (s30a)
+		var void_rank: int = character.void_ring
+		var insight_rank: int = CharacterStats.get_insight_rank(character)
+		var result: DiceResult = dice_engine.roll_and_keep(
+			void_rank + insight_rank + adv_init["rolled"],
+			maxi(void_rank + adv_init["kept"], 1))
+		score = result.total + wound_penalty
+	else:
+		var reflexes: int = character.reflexes
+		var insight_rank: int = CharacterStats.get_insight_rank(character)
+		var result: DiceResult = dice_engine.roll_and_keep(
+			reflexes + insight_rank + adv_init["rolled"],
+			maxi(reflexes + adv_init["kept"], 1), true)
+		score = result.total + wound_penalty
+	score += kata_init["flat_bonus"] + adv_init["free_raises"] * 5 - adv_init_tn
 
 	# Center Stance carry-over adds +10 to Initiative Score for that round only (s40)
 	if participant.stance == Enums.Stance.CENTER and not participant.center_stance_bonus_used:
@@ -203,15 +484,21 @@ static func get_armor_tn(
 	dice_engine: DiceEngine,
 	is_melee_attack: bool = true,
 	is_being_guarded: bool = false,
+	weapon_name: String = "",
 ) -> int:
 	var base_tn: int = CharacterStats.get_armor_tn(character)
 	var stance_mod: int = STANCE_ARMOR_TN_BONUS.get(participant.stance, 0)
 
 	var defense_bonus: int = 0
 	if participant.stance == Enums.Stance.DEFENSE:
-		var air_ring: int = CharacterStats.get_ring_value(character, Enums.Ring.AIR)
+		# earth_defense_stance_ring kata: use Earth Ring instead of Air Ring for Defense bonus (s30a)
+		var def_ring: int
+		if _has_kata_effect(character, "earth_defense_stance_ring"):
+			def_ring = CharacterStats.get_earth_ring(character)
+		else:
+			def_ring = CharacterStats.get_ring_value(character, Enums.Ring.AIR)
 		var def_rank: int = character.skills.get("Defense", 0)
-		defense_bonus = air_ring + def_rank
+		defense_bonus = def_ring + def_rank
 
 	var full_def_bonus: int = 0
 	if participant.stance == Enums.Stance.FULL_DEFENSE:
@@ -236,8 +523,10 @@ static func get_armor_tn(
 		# Blinded base = Reflexes + 5 (armor still adds)
 		return character.reflexes + 5 + character.armor_tn_bonus
 
-	# Two-weapon bonus: +InsightRank to Armor TN (handled by caller marking dual_wielding)
-	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection
+	# Kata armor TN bonuses (s30a) and dual-wield bonus (+InsightRank, s40)
+	var kata_bonus: int = _get_kata_armor_tn_bonus(character, participant, weapon_name)
+	var dual_wield_bonus: int = CharacterStats.get_insight_rank(character) if participant.dual_wielding else 0
+	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection + kata_bonus + dual_wield_bonus
 
 
 static func roll_full_defense_bonus(
@@ -247,9 +536,20 @@ static func roll_full_defense_bonus(
 ) -> int:
 	var def_rank: int = character.skills.get("Defense", 0)
 	var wound_penalty: int = CharacterStats.get_wound_penalty(character)
+	# Mutation modifiers (s44): EXTRA_LIMB non-functional applies -1k0 to Defense skill
+	var mutation_def: Dictionary = MutationSystem.get_skill_modifiers(character, "Defense")
+	# Advantage/disadvantage modifiers (s45): PRODIGY, TOUCH_OF_THE_SPIRIT_REALMS Jigoku, etc.
+	var is_school_def: bool = NPCAdvancement.get_school_skills(character).has("Defense")
+	var adv_def_ctx: Dictionary = {"is_combat": true, "is_school_skill": is_school_def}
+	var adv_def: Dictionary = AdvantageSystem.get_skill_bonus(character, "Defense", adv_def_ctx)
+	var adv_def_tn: int = AdvantageSystem.get_tn_modifier(character, adv_def_ctx)
 	# Full Defense: Defense/Reflexes — roll (Reflexes + Defense Rank), keep Reflexes (s40)
-	var result: DiceResult = dice_engine.roll_and_keep(character.reflexes + def_rank, character.reflexes)
-	var half_result: int = ceili(float(result.total + wound_penalty) / 2.0)
+	var result: DiceResult = dice_engine.roll_and_keep(
+		maxi(character.reflexes + def_rank + mutation_def["rolled"] + adv_def["rolled"], 1),
+		maxi(character.reflexes + mutation_def["kept"] + adv_def["kept"], 1)
+	)
+	# Free raises add +5 to effective total; TN penalties reduce it (CONSUMED Perfection = -5)
+	var half_result: int = ceili(float(result.total + adv_def["free_raises"] * 5 - adv_def_tn + wound_penalty) / 2.0)
 	participant.full_defense_bonus = half_result
 	return half_result
 
@@ -272,6 +572,8 @@ static func resolve_attack(
 	is_ranged_in_melee: bool = false,
 	spend_void: bool = false,
 	target_is_mounted: bool = false,
+	maneuver: String = "",
+	adv_context: Dictionary = {},
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	var skill_name: String = weapon.get("skill", "Kenjutsu")
@@ -284,9 +586,26 @@ static func resolve_attack(
 	var rolled: int = trait_value + skill_rank
 	var kept: int = trait_value
 
+	# Kata attack modifiers (s30a): trait substitution applied before void/stance
+	var kata_atk: Dictionary = _get_kata_attack_modifiers(attacker, attacker_p, weapon_name, maneuver)
+	if kata_atk["use_air_ring"]:
+		var air_ring: int = CharacterStats.get_ring_value(attacker, Enums.Ring.AIR)
+		rolled = air_ring + skill_rank
+		kept = air_ring
+	elif kata_atk["use_strength"]:
+		rolled = attacker.strength + skill_rank
+		kept = attacker.strength
+
 	# Void spend for +1k1 (or +2k2) on attack roll (RAW). Not valid for Damage Rolls.
+	# Apply either inline spend_void or pre-declared pending bonus from execute_void_spend.
 	var void_used: bool = false
-	if spend_void and VoidSystem.can_spend(attacker) and not attacker_p.void_spent_this_round:
+	if attacker_p.void_roll_pending_rolled > 0 or attacker_p.void_roll_pending_kept > 0:
+		rolled += attacker_p.void_roll_pending_rolled
+		kept += attacker_p.void_roll_pending_kept
+		attacker_p.void_roll_pending_rolled = 0
+		attacker_p.void_roll_pending_kept = 0
+		void_used = true
+	elif spend_void and VoidSystem.can_spend(attacker) and not attacker_p.void_spent_this_round:
 		var vbonus: Dictionary = VoidSystem.spend_for_roll(attacker)
 		if vbonus["success"]:
 			rolled += vbonus["rolled_bonus"]
@@ -297,6 +616,26 @@ static func resolve_attack(
 	# Stance bonuses
 	rolled += STANCE_ATTACK_ROLLED_BONUS.get(attacker_p.stance, 0)
 	kept += STANCE_ATTACK_KEPT_BONUS.get(attacker_p.stance, 0)
+
+	# Kata dice bonuses applied after stance
+	rolled += kata_atk["rolled_bonus"]
+	kept += kata_atk["kept_bonus"]
+
+	# Mutation modifiers (s44): EXTRA_LIMB non-functional applies -1k0 to weapon skills
+	var mutation_atk: Dictionary = MutationSystem.get_skill_modifiers(attacker, skill_name)
+	rolled += mutation_atk["rolled"]
+	kept += mutation_atk["kept"]
+
+	# Advantage/disadvantage modifiers (s45): TOUCH_OF_THE_SPIRIT_REALMS Jigoku, PRODIGY,
+	# HEART_OF_VENGEANCE, CONSUMED Perfection (+5 TN), FAILURE_OF_BUSHIDO Courage, etc.
+	var is_school_skill_atk: bool = NPCAdvancement.get_school_skills(attacker).has(skill_name)
+	var adv_ctx: Dictionary = {"is_combat": true, "is_school_skill": is_school_skill_atk}
+	adv_ctx.merge(adv_context)
+	var adv_skill_atk: Dictionary = AdvantageSystem.get_skill_bonus(attacker, skill_name, adv_ctx)
+	rolled += adv_skill_atk["rolled"]
+	kept += adv_skill_atk["kept"]
+	var adv_free_raises_atk: int = adv_skill_atk["free_raises"]
+	var adv_tn_atk: int = AdvantageSystem.get_tn_modifier(attacker, adv_ctx)
 
 	# Mounted / Higher Ground: +1k0 against unmounted or lower characters (s40)
 	if CONDITION_MOUNTED in attacker_p.conditions and not target_is_mounted:
@@ -318,17 +657,31 @@ static func resolve_attack(
 		else:
 			rolled = maxi(0, rolled - 2)
 
+	# earth_wound_tn_reduce kata reduces wound penalty on attack rolls (s30a)
+	var kata_wound_reduction: int = _get_kata_wound_penalty_reduction(attacker)
+	var effective_wound_penalty: int = mini(0, wound_penalty + kata_wound_reduction)
+
 	# Center Stance carry-over: +1k1 + Void Ring on the first roll of the turn (s40)
-	var flat_bonus: int = wound_penalty - get_condition_roll_penalty(attacker_p)
+	var flat_bonus: int = effective_wound_penalty - get_condition_roll_penalty(attacker_p)
 	if attacker_p.void_ring_bonus > 0 and not attacker_p.center_stance_bonus_used:
 		rolled += 1
 		kept += 1
 		flat_bonus += attacker_p.void_ring_bonus
 		attacker_p.center_stance_bonus_used = true
 
-	# Ranged in melee range: -10 flat to total
+	# Ranged in melee range: -10 flat to total (air_ranged_melee_penalty kata adds back +3)
 	if is_ranged_in_melee and not weapon.get("melee", true):
 		flat_bonus -= 10
+
+	flat_bonus += kata_atk["flat_bonus"]
+
+	# Dominant hand attack penalty while holding an off-hand weapon (s40)
+	if attacker_p.dual_wielding:
+		flat_bonus += DOMINANT_HAND_PENALTY  # -5
+
+	# Advantage free raises add +5 each to roll total; advantage TN penalties reduce it.
+	flat_bonus += adv_free_raises_atk * 5
+	flat_bonus -= adv_tn_atk
 
 	# Unskilled rolls (skill_rank == 0) do not explode per L5R4e p.78.
 	# raises passed directly — roll_check applies raises * 5 to TN.
@@ -353,21 +706,49 @@ static func resolve_damage(
 	raises_for_damage: int,
 	feint_bonus: int,
 	dice_engine: DiceEngine,
+	attacker_p: Participant = null,
+	was_feint: bool = false,
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	var rolled: int = weapon.get("rolled", 2)
 	var kept: int = weapon.get("kept", 1)
 
+	# Advantage/disadvantage modifiers (s45): HANDS_OF_STONE adds +1 kept for unarmed damage
+	var dmg_skill: String = weapon.get("skill", "Kenjutsu")
+	var is_unarmed_dmg: bool = (dmg_skill == "Jiujutsu")
+	var adv_dmg: Dictionary = AdvantageSystem.get_skill_bonus(
+		attacker, dmg_skill, {"is_unarmed_damage": is_unarmed_dmg}
+	)
+	rolled += adv_dmg["rolled"]
+	kept += adv_dmg["kept"]
+
+	# Kata damage modifiers (s30a)
+	var kata_dmg: Dictionary = {
+		"rolled_bonus": 0, "flat_bonus": 0, "use_agility": false, "strength_bonus": 0,
+	}
+	if attacker_p != null:
+		kata_dmg = _get_kata_damage_modifiers(attacker, attacker_p, weapon_name, was_feint)
+
 	# Strength adds to rolled dice for melee weapons (s40: "add Strength to first number")
+	# fire_agility_for_damage kata: use Agility instead of Strength (s30a)
 	if weapon.get("strength_adds", true) and weapon.get("melee", true):
-		rolled += attacker.strength
+		if kata_dmg["use_agility"]:
+			rolled += attacker.agility
+		else:
+			rolled += attacker.strength
+
+	# earth_heavy_weapons_strength kata: +1 extra unkept die of strength (s30a)
+	rolled += kata_dmg["strength_bonus"]
 
 	# Increased Damage maneuver: +1k0 per Raise (s40)
 	rolled += raises_for_damage
 
+	# Kata extra unkept dice (water_skilled_weapon_damage, void_honor_damage)
+	rolled += kata_dmg["rolled_bonus"]
+
 	# roll_damage handles the dice pool; we pass strength already absorbed above
 	var result: Dictionary = dice_engine.roll_damage(rolled, kept)
-	var total: int = result["raw"] + feint_bonus
+	var total: int = result["raw"] + feint_bonus + kata_dmg["flat_bonus"]
 
 	return {
 		"rolled": rolled,
@@ -385,21 +766,38 @@ static func resolve_disarm(
 	attacker: L5RCharacterData,
 	defender: L5RCharacterData,
 	dice_engine: DiceEngine,
+	weapon_name: String = "",
+	attacker_p: Participant = null,
 ) -> Dictionary:
 	# Disarm inflicts 2k1 damage regardless of weapon (s40)
-	var dmg_result: Dictionary = dice_engine.roll_damage(2, 1)
+	# air_disarm_normal_damage kata: use normal weapon damage instead (s30a)
+	var damage_total: int
+	if weapon_name != "" and _has_kata_effect(attacker, "air_disarm_normal_damage"):
+		var dmg: Dictionary = resolve_damage(attacker, weapon_name, 0, 0, dice_engine, attacker_p)
+		damage_total = dmg["raw_damage"]
+	else:
+		var dmg_result: Dictionary = dice_engine.roll_damage(2, 1)
+		damage_total = dmg_result["raw"]
 
-	# Contested Strength Roll
-	var contested: Dictionary = dice_engine.contested_roll(
-		attacker.strength, attacker.strength,
-		defender.strength, defender.strength,
-	)
+	# Contested Strength Roll — advantage/disadvantage modifiers (s45) + wound penalties
+	var att_wound: int = CharacterStats.get_wound_penalty(attacker)
+	var def_wound: int = CharacterStats.get_wound_penalty(defender)
+	var att_adv_dis: Dictionary = AdvantageSystem.get_skill_bonus(attacker, "", {"is_combat": true, "is_contested": true})
+	var def_adv_dis: Dictionary = AdvantageSystem.get_skill_bonus(defender, "", {"is_combat": true, "is_contested": true})
+	var att_tn_dis: int = AdvantageSystem.get_tn_modifier(attacker, {"is_combat": true, "is_contested": true})
+	var def_tn_dis: int = AdvantageSystem.get_tn_modifier(defender, {"is_combat": true, "is_contested": true})
+	var att_r_dis: DiceResult = dice_engine.roll_and_keep(
+		maxi(attacker.strength + att_adv_dis["rolled"], 1), maxi(attacker.strength + att_adv_dis["kept"], 1), false)
+	var def_r_dis: DiceResult = dice_engine.roll_and_keep(
+		maxi(defender.strength + def_adv_dis["rolled"], 1), maxi(defender.strength + def_adv_dis["kept"], 1), false)
+	var att_total_dis: int = att_r_dis.total + att_adv_dis["free_raises"] * 5 - att_tn_dis + att_wound
+	var def_total_dis: int = def_r_dis.total + def_adv_dis["free_raises"] * 5 - def_tn_dis + def_wound
 
 	return {
-		"damage": dmg_result["raw"],
-		"attacker_strength_roll": contested["total_a"],
-		"defender_strength_roll": contested["total_b"],
-		"disarmed": contested["winner"] == "a",
+		"damage": damage_total,
+		"attacker_strength_roll": att_total_dis,
+		"defender_strength_roll": def_total_dis,
+		"disarmed": att_total_dis > def_total_dis,
 	}
 
 
@@ -418,29 +816,169 @@ static func resolve_knockdown(
 	is_quadruped: bool,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	var contested: Dictionary = dice_engine.contested_roll(
-		attacker.strength, attacker.strength,
-		defender.strength, defender.strength,
-	)
+	# Advantage/disadvantage modifiers (s45) + wound penalties
+	var att_wound: int = CharacterStats.get_wound_penalty(attacker)
+	var def_wound: int = CharacterStats.get_wound_penalty(defender)
+	var att_adv_kd: Dictionary = AdvantageSystem.get_skill_bonus(attacker, "", {"is_combat": true, "is_contested": true})
+	var def_adv_kd: Dictionary = AdvantageSystem.get_skill_bonus(defender, "", {"is_combat": true, "is_contested": true})
+	var att_tn_kd: int = AdvantageSystem.get_tn_modifier(attacker, {"is_combat": true, "is_contested": true})
+	var def_tn_kd: int = AdvantageSystem.get_tn_modifier(defender, {"is_combat": true, "is_contested": true})
+	var att_rolled_kd: int = maxi(attacker.strength + att_adv_kd["rolled"], 1)
+	var def_rolled_kd: int = maxi(defender.strength + def_adv_kd["rolled"], 1)
+	var att_kept_kd: int = maxi(attacker.strength + att_adv_kd["kept"], 1)
+	var def_kept_kd: int = maxi(defender.strength + def_adv_kd["kept"], 1)
+	var att_r: DiceResult = dice_engine.roll_and_keep(att_rolled_kd, att_kept_kd, false)
+	var def_r: DiceResult = dice_engine.roll_and_keep(def_rolled_kd, def_kept_kd, false)
+	var att_total_kd: int = att_r.total + (att_adv_kd["free_raises"] * 5) - att_tn_kd + att_wound
+	var def_total_kd: int = def_r.total + (def_adv_kd["free_raises"] * 5) - def_tn_kd + def_wound + (4 if is_quadruped else 0)
 	return {
-		"attacker_strength_roll": contested["total_a"],
-		"defender_strength_roll": contested["total_b"],
-		"knocked_down": contested["winner"] == "a",
+		"attacker_strength_roll": att_total_kd,
+		"defender_strength_roll": def_total_kd,
+		"knocked_down": att_total_kd > def_total_kd,
 	}
 
 
 static func resolve_guard(
 	guardian_p: Participant,
 	target_id: int,
+	guardian: L5RCharacterData = null,
+	target_p: Participant = null,
 ) -> void:
 	## Guard maneuver (s40): guardian designates one person within 5 feet.
 	## The caller must verify stance != Full Attack and target proximity.
 	## Sets guarding_id; get_armor_tn() applies +10 to guarded and -5 to guardian.
 	guardian_p.guarding_id = target_id
+	# void_phoenix_guard_bonus kata: guarded character gains +3 Armor TN (s30a)
+	if guardian != null and target_p != null and _has_kata_effect(guardian, "void_phoenix_guard_bonus"):
+		target_p.guard_kata_bonus = 3
 
 
 static func clear_guard(guardian_p: Participant) -> void:
 	guardian_p.guarding_id = -1
+
+
+# =============================================================================
+# -- Turn Management (s40) ----------------------------------------------------
+# =============================================================================
+
+static func begin_turn(participant: Participant) -> void:
+	## Clears once-per-Turn kata tracking at the start of a character's turn.
+	## Call this before the character resolves their first action in a round.
+	participant.kata_used_this_turn.clear()
+	participant.extra_attack_used_this_turn = false
+	participant.earth_trade_amount = 0
+	participant.water_trade_armor_amount = 0
+
+
+static func declare_earth_armor_trade(participant: Participant, tn_reduction: int) -> void:
+	## Declare how much Armor TN to trade for damage bonus this action (earth_trade_armor_for_damage kata, s30a).
+	participant.earth_trade_amount = maxi(0, tn_reduction)
+
+
+static func declare_earth_initiative_trade(participant: Participant, tn_bonus: int) -> void:
+	## Declare how much Initiative score to trade for Armor TN this round (earth_trade_initiative_for_armor kata, s30a).
+	participant.earth_init_trade_amount = maxi(0, tn_bonus)
+
+
+static func declare_water_armor_trade(participant: Participant, tn_reduction: int) -> void:
+	## Declare how much Armor TN to trade for movement this action (water_trade_armor_for_movement kata, s30a).
+	participant.water_trade_armor_amount = maxi(0, tn_reduction)
+
+
+static func get_dual_wield_armor_tn_bonus(character: L5RCharacterData, participant: Participant) -> int:
+	## Returns +InsightRank Armor TN bonus for dual-wielding (s40).
+	## Also included in get_armor_tn() when participant.dual_wielding is true.
+	if participant.dual_wielding:
+		return CharacterStats.get_insight_rank(character)
+	return 0
+
+
+# =============================================================================
+# -- Off-hand and Extra Attack (s40) ------------------------------------------
+# =============================================================================
+
+static func resolve_off_hand_attack(
+	attacker: L5RCharacterData,
+	attacker_p: Participant,
+	off_hand_weapon_name: String,
+	target_armor_tn: int,
+	dice_engine: DiceEngine,
+	spend_void: bool = false,
+	adv_context: Dictionary = {},
+) -> Dictionary:
+	## Off-hand weapon attack (s40). Penalty by weapon size: Small=-5, Medium=-10, Large=-15.
+	## Dominant hand attacks while holding off-hand weapon take DOMINANT_HAND_PENALTY (-5).
+	var weapon: Dictionary = get_weapon_profile(off_hand_weapon_name)
+	var skill_name: String = weapon.get("skill", "Kenjutsu")
+	var skill_rank: int = attacker.skills.get(skill_name, 0)
+	var wound_penalty: int = CharacterStats.get_wound_penalty(attacker)
+	var size: String = weapon.get("size", "Medium")
+	var off_hand_pen: int = OFF_HAND_PENALTY.get(size, -10)
+
+	var rolled: int = attacker.agility + skill_rank
+	var kept: int = attacker.agility
+
+	var void_used: bool = false
+	if spend_void and VoidSystem.can_spend(attacker) and not attacker_p.void_spent_this_round:
+		var vbonus: Dictionary = VoidSystem.spend_for_roll(attacker)
+		if vbonus["success"]:
+			rolled += vbonus["rolled_bonus"]
+			kept += vbonus["kept_bonus"]
+			attacker_p.void_spent_this_round = true
+			void_used = true
+
+	# Mutation modifiers (s44): EXTRA_LIMB non-functional, etc.
+	var mut_off: Dictionary = MutationSystem.get_skill_modifiers(attacker, skill_name)
+	rolled += mut_off["rolled"]
+	kept += mut_off["kept"]
+	# Advantage/disadvantage modifiers (s45): CONSUMED Perfection, HEART_OF_VENGEANCE, etc.
+	var is_sch_off: bool = NPCAdvancement.get_school_skills(attacker).has(skill_name)
+	var adv_ctx_off: Dictionary = {"is_combat": true, "is_school_skill": is_sch_off}
+	adv_ctx_off.merge(adv_context)
+	var adv_off: Dictionary = AdvantageSystem.get_skill_bonus(attacker, skill_name, adv_ctx_off)
+	var adv_tn_off: int = AdvantageSystem.get_tn_modifier(attacker, adv_ctx_off)
+	rolled += adv_off["rolled"]
+	kept += adv_off["kept"]
+
+	var flat_bonus: int = wound_penalty - get_condition_roll_penalty(attacker_p) + off_hand_pen
+	flat_bonus += adv_off["free_raises"] * 5 - adv_tn_off
+	var result: Dictionary = dice_engine.roll_check(rolled, kept, target_armor_tn, 0, flat_bonus, skill_rank > 0)
+
+	return {
+		"success": result["success"],
+		"hit": result["success"],
+		"roll": result["total"],
+		"target_tn": result["tn"],
+		"margin": result["margin"],
+		"off_hand_penalty": off_hand_pen,
+		"void_used": void_used,
+	}
+
+
+static func resolve_extra_attack(
+	attacker: L5RCharacterData,
+	attacker_p: Participant,
+	weapon_name: String,
+	target_armor_tn: int,
+	dice_engine: DiceEngine,
+	adv_context: Dictionary = {},
+) -> Dictionary:
+	## Extra Attack maneuver (s40): spend 5 Raises (3 with Spinning Blades kata for
+	## dual-wielders) on the first attack to immediately make a second attack at 0 Raises.
+	## May only be used once per turn.
+	if attacker_p.extra_attack_used_this_turn:
+		return {"success": false, "reason": "extra_attack_already_used"}
+
+	var required_raises: int = EXTRA_ATTACK_BASE_RAISES
+	if attacker_p.dual_wielding and _has_kata_effect(attacker, "fire_extra_attack_3_raises"):
+		required_raises = EXTRA_ATTACK_SPINNING_BLADES_RAISES
+
+	var attack: Dictionary = resolve_attack(attacker, attacker_p, weapon_name, target_armor_tn, 0, dice_engine,
+		false, false, false, "", adv_context)
+	attacker_p.extra_attack_used_this_turn = true
+	attack["required_raises"] = required_raises
+	attack["spinning_blades_active"] = required_raises == EXTRA_ATTACK_SPINNING_BLADES_RAISES
+	return attack
 
 
 # =============================================================================
@@ -477,6 +1015,36 @@ static func get_max_move_feet(character: L5RCharacterData, terrain: String = "ba
 	return get_water_ring_for_terrain(character, terrain) * 20
 
 
+static func resolve_blinded_simple_move(
+	character: L5RCharacterData,
+	participant: Participant,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if CONDITION_BLINDED not in participant.conditions:
+		return {"required": false}
+	var athletics: int = character.skills.get("Athletics", 0)
+	var wound_penalty: int = CharacterStats.get_wound_penalty(character)
+	# Advantage/disadvantage modifiers (s45): CONSUMED Perfection, LAME (leg roll), etc.
+	var is_sch_ath: bool = NPCAdvancement.get_school_skills(character).has("Athletics")
+	var adv_ath: Dictionary = AdvantageSystem.get_skill_bonus(
+		character, "Athletics", {"is_combat": true, "is_school_skill": is_sch_ath})
+	var adv_ath_tn: int = AdvantageSystem.get_tn_modifier(character, {"is_combat": true})
+	var result: Dictionary = dice_engine.roll_check(
+		character.agility + athletics + adv_ath["rolled"],
+		character.agility + adv_ath["kept"],
+		BLINDED_SIMPLE_MOVE_TN, 0, wound_penalty + adv_ath["free_raises"] * 5 - adv_ath_tn, athletics > 0
+	)
+	if not result["success"]:
+		apply_condition(participant, CONDITION_PRONE)
+	return {
+		"required": true,
+		"success": result["success"],
+		"roll": result["total"],
+		"tn": BLINDED_SIMPLE_MOVE_TN,
+		"fell_prone": not result["success"],
+	}
+
+
 # =============================================================================
 # -- Conditional Effects (s40) ------------------------------------------------
 # =============================================================================
@@ -510,7 +1078,9 @@ static func attempt_recover_dazed(
 		return false
 	var tn: int = maxi(5, 20 - (attempt_number - 1) * 5)  # TN 20, -5 per prior failure
 	var earth_ring: int = CharacterStats.get_earth_ring(character)
-	var result: Dictionary = dice_engine.roll_check(earth_ring, earth_ring, tn)
+	# Advantage/disadvantage modifiers (s45): CONSUMED Perfection applies +5 TN
+	var adv_dazed_tn: int = AdvantageSystem.get_tn_modifier(character, {"is_combat": true})
+	var result: Dictionary = dice_engine.roll_check(earth_ring, earth_ring, tn, 0, -adv_dazed_tn)
 	if result["success"]:
 		remove_condition(participant, CONDITION_DAZED)
 		return true
@@ -525,7 +1095,9 @@ static func attempt_recover_stunned(
 	if CONDITION_STUNNED not in participant.conditions:
 		return false
 	var earth_ring: int = CharacterStats.get_earth_ring(character)
-	var result: Dictionary = dice_engine.roll_check(earth_ring, earth_ring, 20)
+	# Advantage/disadvantage modifiers (s45): CONSUMED Perfection applies +5 TN
+	var adv_stunned_tn: int = AdvantageSystem.get_tn_modifier(character, {"is_combat": true})
+	var result: Dictionary = dice_engine.roll_check(earth_ring, earth_ring, 20, 0, -adv_stunned_tn)
 	if result["success"]:
 		remove_condition(participant, CONDITION_STUNNED)
 		return true
@@ -545,9 +1117,20 @@ static func initiate_grapple(
 	var jiujutsu: int = attacker.skills.get("Jiujutsu", 0)
 	var wound_penalty: int = CharacterStats.get_wound_penalty(attacker)
 
+	# Mutation modifiers (s44) and Advantage modifiers (s45) for Jiujutsu
+	var mut_jiu_init: Dictionary = MutationSystem.get_skill_modifiers(attacker, "Jiujutsu")
+	var is_school_jiu_init: bool = NPCAdvancement.get_school_skills(attacker).has("Jiujutsu")
+	var adv_jiu_init: Dictionary = AdvantageSystem.get_skill_bonus(
+		attacker, "Jiujutsu", {"is_combat": true, "is_school_skill": is_school_jiu_init}
+	)
+	var adv_jiu_init_tn: int = AdvantageSystem.get_tn_modifier(attacker, {"is_combat": true})
+	var grapple_flat: int = wound_penalty + adv_jiu_init["free_raises"] * 5 - adv_jiu_init_tn
+
 	# Grapple initiation ignores armor's Armor TN bonus — target TN = Reflexes × 5 + 5
-	var result: Dictionary = dice_engine.roll_skill_check(
-		attacker.agility, jiujutsu, target_armor_tn, 0, wound_penalty
+	var result: Dictionary = dice_engine.roll_check(
+		attacker.agility + jiujutsu + mut_jiu_init["rolled"] + adv_jiu_init["rolled"],
+		attacker.agility + mut_jiu_init["kept"] + adv_jiu_init["kept"],
+		target_armor_tn, 0, grapple_flat, jiujutsu > 0
 	)
 	if result["success"]:
 		# Both attacker and target enter the Grapple on success (s40)
@@ -567,16 +1150,31 @@ static func resolve_grapple_control(
 	# Unskilled (rank 0) rolls do not explode per L5R4e p.78.
 	var att_jiu: int = attacker.skills.get("Jiujutsu", 0)
 	var def_jiu: int = defender.skills.get("Jiujutsu", 0)
+	# Mutation modifiers (s44), Advantage modifiers (s45), and wound penalties
+	var att_wound: int = CharacterStats.get_wound_penalty(attacker)
+	var def_wound: int = CharacterStats.get_wound_penalty(defender)
+	var att_mut_ctrl: Dictionary = MutationSystem.get_skill_modifiers(attacker, "Jiujutsu")
+	var def_mut_ctrl: Dictionary = MutationSystem.get_skill_modifiers(defender, "Jiujutsu")
+	var att_sch_jiu: bool = NPCAdvancement.get_school_skills(attacker).has("Jiujutsu")
+	var def_sch_jiu: bool = NPCAdvancement.get_school_skills(defender).has("Jiujutsu")
+	var att_adv_ctrl: Dictionary = AdvantageSystem.get_skill_bonus(attacker, "Jiujutsu",
+		{"is_combat": true, "is_school_skill": att_sch_jiu, "opponent_clan": defender.clan})
+	var def_adv_ctrl: Dictionary = AdvantageSystem.get_skill_bonus(defender, "Jiujutsu",
+		{"is_combat": true, "is_school_skill": def_sch_jiu, "opponent_clan": attacker.clan})
 	var att_result: DiceResult = dice_engine.roll_and_keep(
-		attacker.strength + att_jiu, attacker.strength, att_jiu > 0,
+		attacker.strength + att_jiu + att_mut_ctrl["rolled"] + att_adv_ctrl["rolled"],
+		attacker.strength + att_mut_ctrl["kept"] + att_adv_ctrl["kept"], att_jiu > 0,
 	)
 	var def_result: DiceResult = dice_engine.roll_and_keep(
-		defender.strength + def_jiu, defender.strength, def_jiu > 0,
+		defender.strength + def_jiu + def_mut_ctrl["rolled"] + def_adv_ctrl["rolled"],
+		defender.strength + def_mut_ctrl["kept"] + def_adv_ctrl["kept"], def_jiu > 0,
 	)
-	var att_wins: bool = att_result.total >= def_result.total  # attacker wins ties (s40)
+	var att_total: int = att_result.total + att_wound
+	var def_total: int = def_result.total + def_wound
+	var att_wins: bool = att_total >= def_total  # attacker wins ties (s40)
 	return {
-		"attacker_roll": att_result.total,
-		"defender_roll": def_result.total,
+		"attacker_roll": att_total,
+		"defender_roll": def_total,
 		"attacker_wins": att_wins,
 	}
 
@@ -595,6 +1193,9 @@ static func grapple_throw(controller_p: Participant, target_p: Participant) -> v
 	apply_condition(target_p, CONDITION_PRONE)
 	target_p.grapple_partner_id = -1
 	target_p.grapple_in_control = false
+	remove_condition(controller_p, CONDITION_GRAPPLED)   # Bug 8 FIX: throw ends grapple for controller too
+	controller_p.grapple_partner_id = -1                 # Bug 8 FIX
+	controller_p.grapple_in_control = false              # Bug 8 FIX
 
 
 # =============================================================================
@@ -610,17 +1211,30 @@ static func resolve_sumai_bout(
 	# Unskilled Jiujutsu (rank 0) rolls do not explode per L5R4e p.78.
 	var w1_jiu: int = wrestler1.skills.get("Jiujutsu", 0)
 	var w2_jiu: int = wrestler2.skills.get("Jiujutsu", 0)
-	var w1_rolled: int = wrestler1.strength + w1_jiu + (1 if w1_larger else 0)
-	var w2_rolled: int = wrestler2.strength + w2_jiu
-	var w1_result: DiceResult = dice_engine.roll_and_keep(w1_rolled, wrestler1.strength, w1_jiu > 0)
-	var w2_result: DiceResult = dice_engine.roll_and_keep(w2_rolled, wrestler2.strength, w2_jiu > 0)
-	var margin: int = abs(w1_result.total - w2_result.total)
+	# Mutation modifiers (s44), Advantage modifiers (s45), and wound penalties
+	var w1_wound: int = CharacterStats.get_wound_penalty(wrestler1)
+	var w2_wound: int = CharacterStats.get_wound_penalty(wrestler2)
+	var w1_mut: Dictionary = MutationSystem.get_skill_modifiers(wrestler1, "Jiujutsu")
+	var w2_mut: Dictionary = MutationSystem.get_skill_modifiers(wrestler2, "Jiujutsu")
+	var w1_sch: bool = NPCAdvancement.get_school_skills(wrestler1).has("Jiujutsu")
+	var w2_sch: bool = NPCAdvancement.get_school_skills(wrestler2).has("Jiujutsu")
+	var w1_adv: Dictionary = AdvantageSystem.get_skill_bonus(wrestler1, "Jiujutsu",
+		{"is_combat": true, "is_school_skill": w1_sch, "opponent_clan": wrestler2.clan})
+	var w2_adv: Dictionary = AdvantageSystem.get_skill_bonus(wrestler2, "Jiujutsu",
+		{"is_combat": true, "is_school_skill": w2_sch, "opponent_clan": wrestler1.clan})
+	var w1_rolled: int = wrestler1.strength + w1_jiu + (1 if w1_larger else 0) + w1_mut["rolled"] + w1_adv["rolled"]
+	var w2_rolled: int = wrestler2.strength + w2_jiu + w2_mut["rolled"] + w2_adv["rolled"]
+	var w1_result: DiceResult = dice_engine.roll_and_keep(w1_rolled, wrestler1.strength + w1_mut["kept"] + w1_adv["kept"], w1_jiu > 0)
+	var w2_result: DiceResult = dice_engine.roll_and_keep(w2_rolled, wrestler2.strength + w2_mut["kept"] + w2_adv["kept"], w2_jiu > 0)
+	var w1_total: int = w1_result.total + w1_wound
+	var w2_total: int = w2_result.total + w2_wound
+	var margin: int = abs(w1_total - w2_total)
 	var bout_over: bool = margin >= 5
 	return {
-		"wrestler1_roll": w1_result.total,
-		"wrestler2_roll": w2_result.total,
-		"winner_wrestler1": w1_result.total > w2_result.total and bout_over,
-		"winner_wrestler2": w2_result.total > w1_result.total and bout_over,
+		"wrestler1_roll": w1_total,
+		"wrestler2_roll": w2_total,
+		"winner_wrestler1": w1_total > w2_total and bout_over,
+		"winner_wrestler2": w2_total > w1_total and bout_over,
 		"bout_over": bout_over,
 		"continue": not bout_over,
 	}
@@ -633,15 +1247,35 @@ static func resolve_sumai_stare_down(
 ) -> Dictionary:
 	var intim1: int = wrestler1.skills.get("Intimidation", 0)
 	var intim2: int = wrestler2.skills.get("Intimidation", 0)
-	var contested: Dictionary = dice_engine.contested_roll(
-		wrestler1.willpower + intim1, wrestler1.willpower,
-		wrestler2.willpower + intim2, wrestler2.willpower,
+	# Advantage/disadvantage modifiers (s45) + wound penalties
+	var w1_wound: int = CharacterStats.get_wound_penalty(wrestler1)
+	var w2_wound: int = CharacterStats.get_wound_penalty(wrestler2)
+	var w1_sch_i: bool = NPCAdvancement.get_school_skills(wrestler1).has("Intimidation")
+	var w2_sch_i: bool = NPCAdvancement.get_school_skills(wrestler2).has("Intimidation")
+	var w1_adv_s: Dictionary = AdvantageSystem.get_skill_bonus(
+		wrestler1, "Intimidation", {"is_combat": true, "is_contested": true, "is_school_skill": w1_sch_i, "opponent_clan": wrestler2.clan}
 	)
-	var margin: int = abs(contested["total_a"] - contested["total_b"])
+	var w2_adv_s: Dictionary = AdvantageSystem.get_skill_bonus(
+		wrestler2, "Intimidation", {"is_combat": true, "is_contested": true, "is_school_skill": w2_sch_i, "opponent_clan": wrestler1.clan}
+	)
+	var w1_tn_s: int = AdvantageSystem.get_tn_modifier(wrestler1, {"is_combat": true, "is_contested": true})
+	var w2_tn_s: int = AdvantageSystem.get_tn_modifier(wrestler2, {"is_combat": true, "is_contested": true})
+	var w1_rolled_s: int = maxi(wrestler1.willpower + intim1 + w1_adv_s["rolled"], 1)
+	var w2_rolled_s: int = maxi(wrestler2.willpower + intim2 + w2_adv_s["rolled"], 1)
+	var w1_kept_s: int = maxi(wrestler1.willpower + w1_adv_s["kept"], 1)
+	var w2_kept_s: int = maxi(wrestler2.willpower + w2_adv_s["kept"], 1)
+	var w1_flat_s: int = w1_adv_s["free_raises"] * 5 - w1_tn_s
+	var w2_flat_s: int = w2_adv_s["free_raises"] * 5 - w2_tn_s
+	var r1: DiceResult = dice_engine.roll_and_keep(w1_rolled_s, w1_kept_s, intim1 > 0)
+	var r2: DiceResult = dice_engine.roll_and_keep(w2_rolled_s, w2_kept_s, intim2 > 0)
+	var t1: int = r1.total + w1_flat_s + w1_wound
+	var t2: int = r2.total + w2_flat_s + w2_wound
+	var wrestler1_wins: bool = t1 >= t2
+	var margin: int = abs(t1 - t2)
 	return {
-		"wrestler1_roll": contested["total_a"],
-		"wrestler2_roll": contested["total_b"],
-		"wrestler1_wins": contested["winner"] != "b",
+		"wrestler1_roll": t1,
+		"wrestler2_roll": t2,
+		"wrestler1_wins": wrestler1_wins,
 		"grants_bonus": margin >= 5,
 	}
 
@@ -658,13 +1292,30 @@ static func resolve_iaijutsu_stare_down(
 ) -> Dictionary:
 	var ch_intim: int = challenger.skills.get("Intimidation", 0)
 	var def_intim: int = defender.skills.get("Intimidation", 0)
-	var contested: Dictionary = dice_engine.contested_roll(
-		challenger.willpower + ch_intim, challenger.willpower,
-		defender.willpower + def_intim, defender.willpower,
+	# Advantage/disadvantage modifiers (s45) + wound penalties
+	var ch_wound: int = CharacterStats.get_wound_penalty(challenger)
+	var def_wound: int = CharacterStats.get_wound_penalty(defender)
+	var ch_sch_sd: bool = NPCAdvancement.get_school_skills(challenger).has("Intimidation")
+	var def_sch_sd: bool = NPCAdvancement.get_school_skills(defender).has("Intimidation")
+	var ch_adv_sd: Dictionary = AdvantageSystem.get_skill_bonus(
+		challenger, "Intimidation", {"is_combat": true, "is_contested": true, "is_school_skill": ch_sch_sd, "opponent_clan": defender.clan}
 	)
-	var winner_is_challenger: bool = contested["winner"] != "b"
-	if contested["winner"] == "tie":
+	var def_adv_sd: Dictionary = AdvantageSystem.get_skill_bonus(
+		defender, "Intimidation", {"is_combat": true, "is_contested": true, "is_school_skill": def_sch_sd, "opponent_clan": challenger.clan}
+	)
+	var ch_tn_sd: int = AdvantageSystem.get_tn_modifier(challenger, {"is_combat": true, "is_contested": true})
+	var def_tn_sd: int = AdvantageSystem.get_tn_modifier(defender, {"is_combat": true, "is_contested": true})
+	var ch_rolled_sd: int = maxi(challenger.willpower + ch_intim + ch_adv_sd["rolled"], 1)
+	var def_rolled_sd: int = maxi(defender.willpower + def_intim + def_adv_sd["rolled"], 1)
+	var ch_kept_sd: int = maxi(challenger.willpower + ch_adv_sd["kept"], 1)
+	var def_kept_sd: int = maxi(defender.willpower + def_adv_sd["kept"], 1)
+	var ch_r_sd: DiceResult = dice_engine.roll_and_keep(ch_rolled_sd, ch_kept_sd, ch_intim > 0)
+	var def_r_sd: DiceResult = dice_engine.roll_and_keep(def_rolled_sd, def_kept_sd, def_intim > 0)
+	var ch_total_sd: int = ch_r_sd.total + (ch_adv_sd["free_raises"] * 5) - ch_tn_sd + ch_wound
+	var def_total_sd: int = def_r_sd.total + (def_adv_sd["free_raises"] * 5) - def_tn_sd + def_wound
+	if ch_total_sd == def_total_sd:
 		return {"attempted": true, "resolved": false, "penalty_id": -1}
+	var winner_is_challenger: bool = ch_total_sd > def_total_sd
 	if winner_is_challenger:
 		duel.stare_down_penalty_id = duel.defender_id
 	else:
@@ -672,8 +1323,8 @@ static func resolve_iaijutsu_stare_down(
 	return {
 		"attempted": true,
 		"resolved": true,
-		"challenger_roll": contested["total_a"],
-		"defender_roll": contested["total_b"],
+		"challenger_roll": ch_total_sd,
+		"defender_roll": def_total_sd,
 		"penalty_id": duel.stare_down_penalty_id,
 	}
 
@@ -709,16 +1360,34 @@ static func resolve_duel_assessment(
 	var ch_stare_penalty: int = 1 if duel.stare_down_penalty_id == duel.challenger_id else 0
 	var def_stare_penalty: int = 1 if duel.stare_down_penalty_id == duel.defender_id else 0
 
-	var ch_rolled: int = maxi(challenger.awareness + ch_iai - ch_stare_penalty, 1)
-	var def_rolled: int = maxi(defender.awareness + def_iai - def_stare_penalty, 1)
+	# Mutation modifiers (s44): EXTRA_LIMB non-functional applies -1k0 to Iaijutsu
+	var ch_mut_ass: Dictionary = MutationSystem.get_skill_modifiers(challenger, "Iaijutsu")
+	var def_mut_ass: Dictionary = MutationSystem.get_skill_modifiers(defender, "Iaijutsu")
+
+	# Advantage/disadvantage modifiers (s45): CONSUMED, PRODIGY, etc.
+	var ch_school_iai: bool = NPCAdvancement.get_school_skills(challenger).has("Iaijutsu")
+	var def_school_iai: bool = NPCAdvancement.get_school_skills(defender).has("Iaijutsu")
+	var ch_adv_ctx: Dictionary = {"is_combat": true, "is_school_skill": ch_school_iai, "opponent_clan": defender.clan}
+	var def_adv_ctx: Dictionary = {"is_combat": true, "is_school_skill": def_school_iai, "opponent_clan": challenger.clan}
+	var ch_adv_ass: Dictionary = AdvantageSystem.get_skill_bonus(challenger, "Iaijutsu", ch_adv_ctx)
+	var def_adv_ass: Dictionary = AdvantageSystem.get_skill_bonus(defender, "Iaijutsu", def_adv_ctx)
+	var ch_tn_ass: int = AdvantageSystem.get_tn_modifier(challenger, ch_adv_ctx)
+	var def_tn_ass: int = AdvantageSystem.get_tn_modifier(defender, def_adv_ctx)
+
+	var ch_rolled: int = maxi(challenger.awareness + ch_iai - ch_stare_penalty + ch_mut_ass["rolled"] + ch_adv_ass["rolled"], 1)
+	var def_rolled: int = maxi(defender.awareness + def_iai - def_stare_penalty + def_mut_ass["rolled"] + def_adv_ass["rolled"], 1)
+	var ch_flat: int = ch_adv_ass["free_raises"] * 5 - ch_tn_ass
+	var def_flat: int = def_adv_ass["free_raises"] * 5 - def_tn_ass
 	var ch_explodes: bool = ch_iai > 0
 	var def_explodes: bool = def_iai > 0
+	var ch_wound: int = CharacterStats.get_wound_penalty(challenger)
+	var def_wound: int = CharacterStats.get_wound_penalty(defender)
 
 	var ch_result: Dictionary = dice_engine.roll_check(
-		ch_rolled, challenger.awareness, ch_tn, 0, 0, ch_explodes
+		ch_rolled, challenger.awareness + ch_mut_ass["kept"] + ch_adv_ass["kept"], ch_tn, 0, ch_flat + ch_wound, ch_explodes
 	)
 	var def_result: Dictionary = dice_engine.roll_check(
-		def_rolled, defender.awareness, def_tn, 0, 0, def_explodes
+		def_rolled, defender.awareness + def_mut_ass["kept"] + def_adv_ass["kept"], def_tn, 0, def_flat + def_wound, def_explodes
 	)
 
 	var ch_learned: Array = []
@@ -786,6 +1455,28 @@ static func resolve_duel_focus(
 	var def_rolled: int = def_iai + defender.void_ring
 	var def_kept: int = defender.void_ring
 
+	# Mutation modifiers (s44): EXTRA_LIMB non-functional applies -1k0 to Iaijutsu
+	var ch_mut_foc: Dictionary = MutationSystem.get_skill_modifiers(challenger, "Iaijutsu")
+	var def_mut_foc: Dictionary = MutationSystem.get_skill_modifiers(defender, "Iaijutsu")
+	ch_rolled += ch_mut_foc["rolled"]
+	ch_kept += ch_mut_foc["kept"]
+	def_rolled += def_mut_foc["rolled"]
+	def_kept += def_mut_foc["kept"]
+
+	# Advantage/disadvantage modifiers (s45): HEART_OF_VENGEANCE, CONSUMED, PRODIGY, etc.
+	var ch_school_foc: bool = NPCAdvancement.get_school_skills(challenger).has("Iaijutsu")
+	var def_school_foc: bool = NPCAdvancement.get_school_skills(defender).has("Iaijutsu")
+	var ch_adv_focus: Dictionary = AdvantageSystem.get_skill_bonus(
+		challenger, "Iaijutsu", {"is_combat": true, "is_contested": true, "is_school_skill": ch_school_foc, "opponent_clan": defender.clan}
+	)
+	var def_adv_focus: Dictionary = AdvantageSystem.get_skill_bonus(
+		defender, "Iaijutsu", {"is_combat": true, "is_contested": true, "is_school_skill": def_school_foc, "opponent_clan": challenger.clan}
+	)
+	ch_rolled += ch_adv_focus["rolled"]
+	ch_kept += ch_adv_focus["kept"]
+	def_rolled += def_adv_focus["rolled"]
+	def_kept += def_adv_focus["kept"]
+
 	# +1k1 bonus from winning Assessment by 10+
 	if duel.assessment_bonus_id == duel.challenger_id:
 		ch_rolled += 1
@@ -794,12 +1485,16 @@ static func resolve_duel_focus(
 		def_rolled += 1
 		def_kept += 1
 
-	var contested: Dictionary = dice_engine.contested_roll(
-		ch_rolled, ch_kept,
-		def_rolled, def_kept,
-	)
+	var ch_explodes: bool = ch_iai > 0
+	var def_explodes: bool = def_iai > 0
+	var ch_wound: int = CharacterStats.get_wound_penalty(challenger)
+	var def_wound: int = CharacterStats.get_wound_penalty(defender)
+	var ch_result: DiceResult = dice_engine.roll_and_keep(ch_rolled, ch_kept, ch_explodes)
+	var def_result: DiceResult = dice_engine.roll_and_keep(def_rolled, def_kept, def_explodes)
+	var ch_total: int = ch_result.total + ch_wound
+	var def_total: int = def_result.total + def_wound
 
-	var margin: int = contested["total_a"] - contested["total_b"]
+	var margin: int = ch_total - def_total
 
 	if abs(margin) < 5:
 		duel.simultaneous = true
@@ -815,8 +1510,8 @@ static func resolve_duel_focus(
 		duel.simultaneous = false
 
 	return {
-		"challenger_roll": contested["total_a"],
-		"defender_roll": contested["total_b"],
+		"challenger_roll": ch_total,
+		"defender_roll": def_total,
 		"margin": margin,
 		"first_striker_id": duel.first_striker_id,
 		"free_raises_for_first": duel.free_raises_first,
@@ -855,6 +1550,21 @@ static func _iaijutsu_attack(
 			striker_p.void_spent_this_round = true
 			void_used = true
 
+	# Mutation modifiers (s44): EXTRA_LIMB non-functional applies -1k0 to weapon skills
+	var mutation_iai: Dictionary = MutationSystem.get_skill_modifiers(striker, "Iaijutsu")
+	rolled += mutation_iai["rolled"]
+	kept += mutation_iai["kept"]
+
+	# Advantage/disadvantage modifiers (s45): HEART_OF_VENGEANCE, PRODIGY, CONSUMED, etc.
+	var is_school_iai: bool = NPCAdvancement.get_school_skills(striker).has("Iaijutsu")
+	var adv_iai: Dictionary = AdvantageSystem.get_skill_bonus(
+		striker, "Iaijutsu", {"is_combat": true, "is_school_skill": is_school_iai}
+	)
+	rolled += adv_iai["rolled"]
+	kept += adv_iai["kept"]
+	flat_bonus += adv_iai["free_raises"] * 5
+	flat_bonus -= AdvantageSystem.get_tn_modifier(striker, {"is_combat": true, "is_school_skill": is_school_iai})
+
 	# Free Raises from Focus grant effects without raising TN (s40); applied as
 	# Increased Damage in resolve_duel_strike(), so raises=0 here.
 	# Unskilled Iaijutsu (rank 0) does not explode per L5R4e p.78.
@@ -887,7 +1597,7 @@ static func resolve_duel_strike(
 	var first_wounds: Dictionary = {}
 	if first_attack.get("hit", false):
 		# Free Raises from Focus applied as Increased Damage (+1k0 per Raise, s40)
-		first_damage = resolve_damage(first_striker, "katana", duel.free_raises_first, 0, dice_engine)
+		first_damage = resolve_damage(first_striker, "katana", duel.free_raises_first, 0, dice_engine, first_striker_p)
 		first_wounds = WoundSystem.apply_damage(second_striker, first_damage["raw_damage"])
 
 	var first_blood_drawn: bool = not duel.duel_to_death and first_attack.get("hit", false)
@@ -906,7 +1616,7 @@ static func resolve_duel_strike(
 			second_striker, second_striker_p, second_armor_tn, dice_engine
 		)
 		if second_attack.get("hit", false):
-			second_damage = resolve_damage(second_striker, "katana", 0, 0, dice_engine)
+			second_damage = resolve_damage(second_striker, "katana", 0, 0, dice_engine, second_striker_p)
 			second_wounds = WoundSystem.apply_damage(first_striker, second_damage["raw_damage"])
 
 	var first_dead: bool = CharacterStats.is_dead(first_striker)
@@ -914,7 +1624,15 @@ static func resolve_duel_strike(
 
 	if duel.simultaneous:
 		duel.is_over = true
-		duel.winner_id = -1
+		if first_dead and not second_dead:
+			duel.winner_id = second_striker.character_id
+			duel.loser_id = first_striker.character_id
+		elif second_dead and not first_dead:
+			duel.winner_id = first_striker.character_id
+			duel.loser_id = second_striker.character_id
+		else:
+			duel.winner_id = -1
+			duel.loser_id = -1
 	elif first_blood_drawn:
 		duel.winner_id = first_striker.character_id
 		duel.loser_id = second_striker.character_id
@@ -961,7 +1679,7 @@ static func resolve_strike_after_first_blood(
 	var damage: Dictionary = {}
 	var wounds: Dictionary = {}
 	if attack.get("hit", false):
-		damage = resolve_damage(striker, "katana", 0, 0, dice_engine)
+		damage = resolve_damage(striker, "katana", 0, 0, dice_engine, striker_p)
 		wounds = WoundSystem.apply_damage(target, damage["raw_damage"])
 	return {
 		"struck_after_first_blood": true,
@@ -1041,9 +1759,15 @@ static func begin_round(state: CombatState) -> void:
 		p.is_delaying = false
 		p.void_spent_this_round = false
 		p.void_armor_tn_bonus = 0
-		# Center Stance bonus only lasts one round (s40)
-		if p.stance == Enums.Stance.CENTER and p.void_ring_bonus > 0:
-			p.center_stance_bonus_used = true
+		p.void_roll_pending_rolled = 0
+		p.void_roll_pending_kept = 0
+		p.kata_used_this_round.clear()
+		p.extra_attack_used_this_turn = false
+		p.earth_init_trade_amount = 0
+		# Expire unconsumed Center Stance bonus — it lasts only the round it's earned (s40).
+		# If the bonus was consumed, advance_round_reactions() already cleared it.
+		if p.void_ring_bonus > 0 and not p.center_stance_bonus_used:
+			p.void_ring_bonus = 0
 
 
 static func advance_round_reactions(
@@ -1070,6 +1794,9 @@ static func advance_round_reactions(
 			var recovered: bool = attempt_recover_stunned(c, p, dice_engine)
 			if recovered:
 				events.append({"type": "condition_cleared", "condition": CONDITION_STUNNED, "character_id": cid})
+		# air_initiative_stack kata: +2 Initiative each Reactions Stage (s30a)
+		if _has_kata_effect(c, "air_initiative_stack"):
+			p.initiative_score += 2
 		# Clear Center Stance bonus after reactions
 		if p.center_stance_bonus_used:
 			p.void_ring_bonus = 0
@@ -1093,3 +1820,140 @@ static func check_combat_over(
 			state.winner_id = alive[0]
 		return true
 	return false
+
+
+# =============================================================================
+# -- WeaponData Integration (s40) ---------------------------------------------
+# =============================================================================
+
+static func get_weapon_data(weapon_name: String) -> WeaponData:
+	## Returns a typed WeaponData populated from WEAPON_CATALOG for the given weapon name.
+	## Falls back to DEFAULT_WEAPON values if name is unknown.
+	var profile: Dictionary = get_weapon_profile(weapon_name)
+	var wd := WeaponData.new()
+	wd.weapon_name = weapon_name
+	wd.rolled = profile.get("rolled", DEFAULT_WEAPON["rolled"])
+	wd.kept = profile.get("kept", DEFAULT_WEAPON["kept"])
+	wd.strength_adds = profile.get("strength_adds", true)
+	wd.skill = profile.get("skill", DEFAULT_WEAPON["skill"])
+	wd.size = profile.get("size", DEFAULT_WEAPON["size"])
+	wd.melee = profile.get("melee", true)
+	wd.trait = profile.get("trait", DEFAULT_WEAPON["trait"])
+	return wd
+
+
+static func pick_best_weapon(character: L5RCharacterData) -> String:
+	## Selects the weapon name from WEAPON_CATALOG for which the character has the highest skill rank.
+	## Used by the NPC summary roll when no explicit weapon is assigned.
+	## Returns "unarmed" for characters with no weapon skills.
+	var best_weapon: String = "unarmed"
+	var best_score: int = -1
+	for weapon_name: String in WEAPON_CATALOG:
+		var profile: Dictionary = WEAPON_CATALOG[weapon_name]
+		var skill: String = profile.get("skill", "")
+		if skill.is_empty():
+			continue
+		var rank: int = character.skills.get(skill, 0)
+		if rank > best_score:
+			best_score = rank
+			best_weapon = weapon_name
+	return best_weapon
+
+
+# =============================================================================
+# -- NPC Summary Combat (s40 — design decision: single-exchange model) --------
+# =============================================================================
+
+static func resolve_npc_summary_combat(
+	attacker: L5RCharacterData,
+	defender: L5RCharacterData,
+	dice_engine: DiceEngine,
+	attacker_weapon: String = "",
+	defender_weapon: String = "",
+) -> Dictionary:
+	## Single-exchange NPC vs NPC resolution per design decision (summary roll model).
+	## Both combatants attack simultaneously in Attack Stance. Damage is applied from
+	## successful hits. Winner is determined by wound outcome; roll total breaks ties.
+	## Returns winner_id (-1 = tie), wounds delivered to each side, and full roll details.
+
+	var att_wname: String = attacker_weapon if attacker_weapon != "" else pick_best_weapon(attacker)
+	var def_wname: String = defender_weapon if defender_weapon != "" else pick_best_weapon(defender)
+
+	var att_p := Participant.new()
+	att_p.stance = Enums.Stance.ATTACK
+	var def_p := Participant.new()
+	def_p.stance = Enums.Stance.ATTACK
+
+	var att_armor_tn: int = get_armor_tn(attacker, att_p, dice_engine)
+	var def_armor_tn: int = get_armor_tn(defender, def_p, dice_engine)
+
+	# Pass opponent_clan for HEART_OF_VENGEANCE advantage check (s45).
+	var att_attack: Dictionary = resolve_attack(attacker, att_p, att_wname, def_armor_tn, 0, dice_engine,
+		false, false, false, "", {"opponent_clan": defender.clan})
+	var def_attack: Dictionary = resolve_attack(defender, def_p, def_wname, att_armor_tn, 0, dice_engine,
+		false, false, false, "", {"opponent_clan": attacker.clan})
+
+	var att_damage: Dictionary = {}
+	var def_damage: Dictionary = {}
+	var att_wounds: Dictionary = {}
+	var def_wounds: Dictionary = {}
+
+	if att_attack.get("hit", false):
+		att_damage = resolve_damage(attacker, att_wname, 0, 0, dice_engine, att_p)
+		def_wounds = WoundSystem.apply_damage(defender, att_damage.get("raw_damage", 0), defender.armor_reduction)
+
+	if def_attack.get("hit", false):
+		def_damage = resolve_damage(defender, def_wname, 0, 0, dice_engine, def_p)
+		att_wounds = WoundSystem.apply_damage(attacker, def_damage.get("raw_damage", 0), attacker.armor_reduction)
+
+	var att_dead: bool = CharacterStats.is_dead(attacker)
+	var def_dead: bool = CharacterStats.is_dead(defender)
+
+	var winner_id: int = -1
+	var loser_id: int = -1
+
+	if att_dead and not def_dead:
+		winner_id = defender.character_id
+		loser_id = attacker.character_id
+	elif def_dead and not att_dead:
+		winner_id = attacker.character_id
+		loser_id = defender.character_id
+	elif not att_dead and not def_dead:
+		# Both standing: a hit beats a miss; ties broken by roll total.
+		var att_hit: bool = att_attack.get("hit", false)
+		var def_hit: bool = def_attack.get("hit", false)
+		if att_hit and not def_hit:
+			winner_id = attacker.character_id
+			loser_id = defender.character_id
+		elif def_hit and not att_hit:
+			winner_id = defender.character_id
+			loser_id = attacker.character_id
+		else:
+			var att_roll: int = att_attack.get("roll", 0)
+			var def_roll: int = def_attack.get("roll", 0)
+			if att_roll > def_roll:
+				winner_id = attacker.character_id
+				loser_id = defender.character_id
+			elif def_roll > att_roll:
+				winner_id = defender.character_id
+				loser_id = attacker.character_id
+			# exact tie: winner_id stays -1
+
+	return {
+		"winner_id": winner_id,
+		"loser_id": loser_id,
+		"attacker_id": attacker.character_id,
+		"defender_id": defender.character_id,
+		"attacker_weapon": att_wname,
+		"defender_weapon": def_wname,
+		"attacker_hit": att_attack.get("hit", false),
+		"defender_hit": def_attack.get("hit", false),
+		"attacker_attack": att_attack,
+		"defender_attack": def_attack,
+		"attacker_damage": att_damage,
+		"defender_damage": def_damage,
+		"attacker_wounds": att_wounds,
+		"defender_wounds": def_wounds,
+		"attacker_dead": att_dead,
+		"defender_dead": def_dead,
+	}

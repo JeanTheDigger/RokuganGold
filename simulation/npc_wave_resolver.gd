@@ -397,11 +397,79 @@ static func _resolve_character_wave_full(
 	var doshin_bonus: int = int(doshin_entry.get("doshin_investigation_bonus", 0))
 	var cr: Array = world_states.get("_crime_records", [])
 
+	# -- s45 Behavioral Triggers (pre-decision) -----------------------------------
+
+	# COMPULSION: ws["compulsion_active"] is set by the arrival check when the
+	# character failed their Willpower roll upon entering a matching location.
+	# Consume 1 AP here to represent the NPC indulging the compulsion.
+	var compulsion_data: Dictionary = ws.get("compulsion_active", {})
+	if not compulsion_data.is_empty() and character.action_points_current > 0:
+		character.action_points_current = maxi(character.action_points_current - 1, 0)
+		var comp_result: Dictionary = {
+			"success": true,
+			"action_id": "DO_NOTHING",
+			"character_id": character.character_id,
+			"ic_day": ws.get("ic_day", 0),
+			"ap_spent": 1,
+			"compulsion_consumed": true,
+			"compulsion_subject": compulsion_data.get("subject", ""),
+		}
+		_append_to_action_log(ws, comp_result)
+		results.append(comp_result)
+
+	# RUMORMONGER: forced GOSSIP when Willpower vs TN(5×max_glory_rank) fails.
+	var rm_rank: float = ws.get("rumormonger_max_glory_rank", 0.0)
+	if rm_rank > 0.0 and character.action_points_current > 0:
+		var rm_check: Dictionary = AdvantageSystem.check_rumormonger_trigger(character, rm_rank)
+		if rm_check.get("triggered", false):
+			var rm_wound: int = CharacterStats.get_wound_penalty(character)
+			var rm_roll: DiceResult = dice_engine.roll_and_keep(
+				character.willpower, character.willpower, false, ""
+			)
+			if (rm_roll.total + rm_wound) < rm_check.get("tn", 0):
+				var rm_targets: Dictionary = _pick_rumormonger_targets(character, characters_by_id)
+				var rm_decision: Dictionary = {
+					"success": true,
+					"action_id": "GOSSIP",
+					"character_id": character.character_id,
+					"target_npc_id": rm_targets.get("listener_id", -1),
+					"target_npc_id_secondary": -1,
+					"target_settlement_id": -1,
+					"target_province_id": -1,
+					"metadata": {"gossip_subject_id": rm_targets.get("subject_id", -1)},
+					"rumormonger_compulsion": true,
+				}
+				var rm_exec: Dictionary = _execute_decision(
+					rm_decision, character, ws, dice_engine, action_skill_map,
+					military_data, characters_by_id, doshin_bonus, cr
+				)
+				rm_decision.merge(rm_exec, true)
+				character.action_points_current = maxi(character.action_points_current - 1, 0)
+				_append_to_action_log(ws, rm_decision)
+				results.append(rm_decision)
+
 	if character.action_points_current > 0:
 		var decision: Dictionary = NPCDecisionEngine.run(
 			character, ws, objs, scoring_tables, filter_data,
 			approach_penalties, commitments, redirects, characters_by_id
 		)
+
+		# TRUE_LOVE: block hostile actions targeting the lover (s45).
+		# Costs 1 Void Point to override; blocked entirely if no Void remains.
+		var love_id: int = ws.get("true_love_target_id", -1)
+		if love_id >= 0 and decision.get("success", false):
+			var dec_target: int = decision.get("target_npc_id", -1)
+			if dec_target == love_id:
+				var harms: bool = decision.get("action_id", "") in NPCDecisionEngine.HOSTILE_ACTIONS
+				var constraint: Dictionary = AdvantageSystem.check_true_love_constraint(character, harms)
+				if constraint.get("void_cost_required", false):
+					if character.current_void_points <= 0:
+						decision["action_id"] = "DO_NOTHING"
+						decision["true_love_blocked"] = true
+					else:
+						character.current_void_points -= 1
+						decision["true_love_void_spent"] = true
+
 		if decision.get("success", false):
 			var exec_result: Dictionary = _execute_decision(
 				decision, character, ws, dice_engine, action_skill_map,
@@ -645,6 +713,33 @@ static func _partition_by_court(
 static func _get_travel_redirects(objectives: Dictionary) -> int:
 	var primary: Dictionary = objectives.get("primary", {})
 	return primary.get("travel_redirects", 0)
+
+
+# -- s45 RUMORMONGER target selection -----------------------------------------
+# Returns {subject_id: int, listener_id: int}.
+# Subject = highest-glory co-located living character (the one being gossiped about).
+# Listener = next co-located living character, or same as subject if only one present.
+static func _pick_rumormonger_targets(
+	character: L5RCharacterData,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var location: String = character.physical_location
+	var co_located: Array = []
+	for entry: Variant in characters_by_id.values():
+		var c: L5RCharacterData = entry as L5RCharacterData
+		if c == null or c.character_id == character.character_id:
+			continue
+		if CharacterStats.is_dead(c):
+			continue
+		if c.physical_location == location:
+			co_located.append(c)
+	if co_located.is_empty():
+		return {"subject_id": -1, "listener_id": -1}
+	co_located.sort_custom(func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+		return a.glory > b.glory)
+	var subject: L5RCharacterData = co_located[0]
+	var listener: L5RCharacterData = co_located[1] if co_located.size() > 1 else co_located[0]
+	return {"subject_id": subject.character_id, "listener_id": listener.character_id}
 
 
 static func _append_to_action_log(ws: Dictionary, decision: Dictionary) -> void:

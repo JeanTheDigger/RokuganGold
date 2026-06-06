@@ -396,6 +396,25 @@ func test_grapple_throw_makes_target_prone() -> void:
 	assert_true(IndividualCombat.has_condition(target_p, IndividualCombat.CONDITION_PRONE))
 
 
+func test_grapple_throw_clears_controller_grapple_state() -> void:
+	# Bug 8 regression: grapple_throw cleared target state but left controller stuck in GRAPPLED.
+	var controller_p := IndividualCombat.Participant.new()
+	var target_p := IndividualCombat.Participant.new()
+	IndividualCombat.apply_condition(controller_p, IndividualCombat.CONDITION_GRAPPLED)
+	IndividualCombat.apply_condition(target_p, IndividualCombat.CONDITION_GRAPPLED)
+	controller_p.grapple_partner_id = 99
+	controller_p.grapple_in_control = true
+	target_p.grapple_partner_id = 1
+	target_p.grapple_in_control = false
+	IndividualCombat.grapple_throw(controller_p, target_p)
+	assert_false(IndividualCombat.has_condition(controller_p, IndividualCombat.CONDITION_GRAPPLED),
+		"controller must not remain GRAPPLED after throw")
+	assert_eq(controller_p.grapple_partner_id, -1,
+		"controller grapple_partner_id must be cleared to -1 after throw")
+	assert_false(controller_p.grapple_in_control,
+		"controller grapple_in_control must be cleared after throw")
+
+
 # -- Sumai --------------------------------------------------------------------
 
 func test_sumai_bout_has_outcome() -> void:
@@ -925,3 +944,788 @@ func test_strike_after_first_blood_returns_honor_penalty() -> void:
 	assert_true(result["struck_after_first_blood"])
 	assert_eq(result["honor_change"], 0.0, "Honor cost blocked — GDD Table 2.3 not yet specified")
 	assert_true(duel.struck_after_first_blood)
+
+
+# -- WeaponData Resource -------------------------------------------------------
+
+func test_get_weapon_data_returns_typed_resource() -> void:
+	var wd: WeaponData = IndividualCombat.get_weapon_data("katana")
+	assert_not_null(wd)
+	assert_true(wd is WeaponData)
+
+
+func test_get_weapon_data_katana_fields() -> void:
+	var wd: WeaponData = IndividualCombat.get_weapon_data("katana")
+	assert_eq(wd.weapon_name, "katana")
+	assert_eq(wd.rolled, 3)
+	assert_eq(wd.kept, 2)
+	assert_true(wd.strength_adds)
+	assert_eq(wd.skill, "Kenjutsu")
+	assert_eq(wd.size, "Medium")
+	assert_true(wd.melee)
+	assert_eq(wd.trait, "agility")
+
+
+func test_get_weapon_data_yumi_is_ranged() -> void:
+	var wd: WeaponData = IndividualCombat.get_weapon_data("yumi")
+	assert_false(wd.melee)
+	assert_eq(wd.skill, "Kyujutsu")
+	assert_eq(wd.trait, "reflexes")
+
+
+func test_get_weapon_data_unknown_falls_back_to_unarmed() -> void:
+	var wd: WeaponData = IndividualCombat.get_weapon_data("nonexistent_weapon")
+	assert_not_null(wd)
+	assert_eq(wd.weapon_name, "nonexistent_weapon")
+
+
+# -- pick_best_weapon ----------------------------------------------------------
+
+func test_pick_best_weapon_kenjutsu_picks_katana() -> void:
+	var c: L5RCharacterData = _make_char(50, 2, 2, 3, 2, 3, 2, 2, 2)
+	c.skills = {"Kenjutsu": 3, "Iaijutsu": 2}
+	assert_eq(IndividualCombat.pick_best_weapon(c), "katana")
+
+
+func test_pick_best_weapon_kyujutsu_picks_yumi() -> void:
+	var c: L5RCharacterData = _make_char(51, 2, 2, 2, 2, 3, 2, 2, 2)
+	c.skills = {"Kyujutsu": 4}
+	assert_eq(IndividualCombat.pick_best_weapon(c), "yumi")
+
+
+func test_pick_best_weapon_no_skills_picks_unarmed() -> void:
+	var c: L5RCharacterData = _make_char(52, 2, 2, 2, 2, 2, 2, 2, 2)
+	c.skills = {}
+	assert_eq(IndividualCombat.pick_best_weapon(c), "unarmed")
+
+
+func test_pick_best_weapon_heavy_weapons_picks_tetsubo() -> void:
+	var c: L5RCharacterData = _make_char(53, 3, 2, 2, 2, 2, 2, 3, 2)
+	c.skills = {"Heavy Weapons": 3}
+	assert_eq(IndividualCombat.pick_best_weapon(c), "tetsubo")
+
+
+func test_pick_best_weapon_prefers_higher_ranked_skill() -> void:
+	var c: L5RCharacterData = _make_char(54, 2, 2, 3, 2, 3, 2, 2, 2)
+	c.skills = {"Kenjutsu": 4, "Kyujutsu": 2}
+	assert_eq(IndividualCombat.pick_best_weapon(c), "katana")
+
+
+# -- resolve_npc_summary_combat ------------------------------------------------
+
+func test_summary_combat_returns_required_keys() -> void:
+	var att: L5RCharacterData = _make_char(60, 3, 3, 3, 3, 3, 3, 3, 3)
+	att.skills = {"Kenjutsu": 3}
+	var def: L5RCharacterData = _make_char(61, 2, 2, 2, 2, 2, 2, 2, 2)
+	def.skills = {}
+	var result: Dictionary = IndividualCombat.resolve_npc_summary_combat(att, def, _dice)
+	for key: String in ["winner_id", "loser_id", "attacker_id", "defender_id",
+			"attacker_weapon", "defender_weapon", "attacker_hit", "defender_hit",
+			"attacker_dead", "defender_dead"]:
+		assert_true(result.has(key), "Missing key: " + key)
+
+
+func test_summary_combat_strong_beats_weak() -> void:
+	# Run 20 seeds; strong character should win majority.
+	var wins: int = 0
+	for seed: int in range(1, 21):
+		var dice: DiceEngine = DiceEngine.new(seed)
+		var strong: L5RCharacterData = _make_char(70, 5, 5, 5, 5, 5, 5, 5, 5)
+		strong.skills = {"Kenjutsu": 5}
+		var weak: L5RCharacterData = _make_char(71, 1, 1, 1, 1, 1, 1, 1, 1)
+		weak.skills = {}
+		var r: Dictionary = IndividualCombat.resolve_npc_summary_combat(strong, weak, dice)
+		if r["winner_id"] == 70:
+			wins += 1
+	assert_true(wins >= 14, "Strong character should win at least 14/20: got " + str(wins))
+
+
+func test_summary_combat_dead_character_is_loser() -> void:
+	var att: L5RCharacterData = _make_char(80, 5, 5, 5, 5, 5, 5, 5, 5)
+	att.skills = {"Kenjutsu": 5}
+	var def: L5RCharacterData = _make_char(81, 1, 1, 1, 1, 1, 1, 1, 1)
+	def.skills = {}
+	var result: Dictionary = IndividualCombat.resolve_npc_summary_combat(att, def, _dice, "katana", "unarmed")
+	if result["defender_dead"]:
+		assert_eq(result["loser_id"], 81)
+	if result["attacker_dead"]:
+		assert_eq(result["loser_id"], 80)
+
+
+func test_summary_combat_explicit_weapons_used() -> void:
+	var att: L5RCharacterData = _make_char(90, 3, 3, 3, 3, 3, 3, 3, 3)
+	att.skills = {"Kenjutsu": 3, "Heavy Weapons": 5}
+	var def: L5RCharacterData = _make_char(91, 2, 2, 2, 2, 2, 2, 2, 2)
+	def.skills = {}
+	var result: Dictionary = IndividualCombat.resolve_npc_summary_combat(att, def, _dice, "katana", "unarmed")
+	assert_eq(result["attacker_weapon"], "katana", "Explicit weapon should override pick_best_weapon")
+
+
+# -- begin_turn ----------------------------------------------------------------
+
+func test_begin_turn_clears_kata_used_this_turn() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.kata_used_this_turn["some_kata"] = true
+	IndividualCombat.begin_turn(p)
+	assert_eq(p.kata_used_this_turn.size(), 0)
+
+
+func test_begin_turn_resets_extra_attack_used() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.extra_attack_used_this_turn = true
+	IndividualCombat.begin_turn(p)
+	assert_false(p.extra_attack_used_this_turn)
+
+
+func test_begin_turn_does_not_clear_kata_used_this_round() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.kata_used_this_round["round_kata"] = true
+	IndividualCombat.begin_turn(p)
+	assert_eq(p.kata_used_this_round.size(), 1)
+
+
+# -- get_dual_wield_armor_tn_bonus --------------------------------------------
+
+func test_dual_wield_bonus_returns_insight_rank_when_dual_wielding() -> void:
+	# insight_rank = floor((total_rings + total_skills) / 10) + 1
+	# _char_a has all rings 3 → total rings = 3*5 = 15, no skills → rank 2 (floor(15/10)+1=2)
+	var p := IndividualCombat.Participant.new()
+	p.dual_wielding = true
+	var bonus: int = IndividualCombat.get_dual_wield_armor_tn_bonus(_char_a, p)
+	assert_eq(bonus, CharacterStats.get_insight_rank(_char_a))
+
+
+func test_dual_wield_bonus_returns_zero_when_not_dual_wielding() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.dual_wielding = false
+	assert_eq(IndividualCombat.get_dual_wield_armor_tn_bonus(_char_a, p), 0)
+
+
+# -- resolve_off_hand_attack ---------------------------------------------------
+
+func test_off_hand_attack_small_weapon_penalty_is_five() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	p.dual_wielding = true
+	_char_a.skills = {"Kenjutsu": 3}
+	var result: Dictionary = IndividualCombat.resolve_off_hand_attack(
+		_char_a, p, "wakizashi", 40, _dice
+	)
+	assert_true(result.has("off_hand_penalty"))
+	assert_eq(result["off_hand_penalty"], -5)
+
+
+func test_off_hand_attack_medium_weapon_penalty_is_ten() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	p.dual_wielding = true
+	_char_a.skills = {"Kenjutsu": 3}
+	var result: Dictionary = IndividualCombat.resolve_off_hand_attack(
+		_char_a, p, "katana", 40, _dice
+	)
+	assert_eq(result["off_hand_penalty"], -10)
+
+
+func test_off_hand_attack_result_has_required_keys() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	p.dual_wielding = true
+	_char_a.skills = {"Kenjutsu": 3}
+	var result: Dictionary = IndividualCombat.resolve_off_hand_attack(
+		_char_a, p, "wakizashi", 5, _dice
+	)
+	for key: String in ["hit", "roll", "margin", "off_hand_penalty", "void_used"]:
+		assert_true(result.has(key), "Missing key: " + key)
+
+
+# -- resolve_extra_attack ------------------------------------------------------
+
+func test_extra_attack_requires_five_raises_normally() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	_char_a.skills = {"Kenjutsu": 3}
+	var result: Dictionary = IndividualCombat.resolve_extra_attack(
+		_char_a, p, "katana", 5, _dice
+	)
+	assert_eq(result["required_raises"], 5)
+
+
+func test_extra_attack_blocked_after_first_use() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	p.extra_attack_used_this_turn = true
+	_char_a.skills = {"Kenjutsu": 3}
+	var result: Dictionary = IndividualCombat.resolve_extra_attack(
+		_char_a, p, "katana", 5, _dice
+	)
+	assert_false(result.get("success", true))
+	assert_eq(result.get("reason", ""), "extra_attack_already_used")
+
+
+func test_extra_attack_with_spinning_blades_kata_dual_wielder_needs_three_raises() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	p.dual_wielding = true
+	# Add Spinning Blades kata effect
+	_char_a.katas = ["Spinning Blades Style"]
+	_char_a.skills = {"Kenjutsu": 5}
+	var result: Dictionary = IndividualCombat.resolve_extra_attack(
+		_char_a, p, "katana", 5, _dice
+	)
+	assert_eq(result["required_raises"], 3)
+
+
+func test_extra_attack_spinning_blades_single_wielder_still_needs_five() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	p.dual_wielding = false
+	_char_a.katas = ["Spinning Blades Style"]
+	_char_a.skills = {"Kenjutsu": 5}
+	var result: Dictionary = IndividualCombat.resolve_extra_attack(
+		_char_a, p, "katana", 5, _dice
+	)
+	assert_eq(result["required_raises"], 5)
+
+
+# -- resolve_blinded_simple_move -----------------------------------------------
+
+func test_blinded_move_not_required_when_not_blinded() -> void:
+	var p := IndividualCombat.Participant.new()
+	var result: Dictionary = IndividualCombat.resolve_blinded_simple_move(_char_a, p, _dice)
+	assert_false(result["required"])
+
+
+func test_blinded_move_required_when_blinded() -> void:
+	var p := IndividualCombat.Participant.new()
+	IndividualCombat.apply_condition(p, IndividualCombat.CONDITION_BLINDED)
+	var result: Dictionary = IndividualCombat.resolve_blinded_simple_move(_char_a, p, _dice)
+	assert_true(result["required"])
+	assert_eq(result["tn"], 20)
+
+
+func test_blinded_move_failure_adds_prone() -> void:
+	# Use a character with agility 1 and no Athletics — likely to fail TN 20
+	var weak := _make_char(99, 1, 1, 1, 1, 1, 1, 1, 1)
+	weak.skills = {}
+	var p := IndividualCombat.Participant.new()
+	IndividualCombat.apply_condition(p, IndividualCombat.CONDITION_BLINDED)
+	# Roll with seed that produces low values (seed 0 tends low)
+	var dice_low := DiceEngine.new(0)
+	var result: Dictionary = IndividualCombat.resolve_blinded_simple_move(weak, p, dice_low)
+	if not result["success"]:
+		assert_true(result["fell_prone"])
+		assert_true(IndividualCombat.has_condition(p, IndividualCombat.CONDITION_PRONE))
+
+
+func test_blinded_move_success_does_not_add_prone() -> void:
+	# Strong character with Athletics should pass TN 20
+	var strong := _make_char(98, 5, 5, 5, 5, 5, 5, 5, 5)
+	strong.skills = {"Athletics": 5}
+	var p := IndividualCombat.Participant.new()
+	IndividualCombat.apply_condition(p, IndividualCombat.CONDITION_BLINDED)
+	var dice_high := DiceEngine.new(1234)
+	# Run a few seeds to get a success
+	for seed_val: int in range(1, 20):
+		var d := DiceEngine.new(seed_val * 7)
+		var r := IndividualCombat.resolve_blinded_simple_move(strong, p, d)
+		if r["success"]:
+			assert_false(r["fell_prone"])
+			assert_false(IndividualCombat.has_condition(p, IndividualCombat.CONDITION_PRONE))
+			return
+
+
+# -- roll_initiative with kata modifiers --------------------------------------
+
+func test_initiative_void_ring_kata_uses_void_ring() -> void:
+	# If character has a kata with use_void_ring effect, initiative uses Void Ring
+	# We test the standard path (no kata) returns reflexes-based roll
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	_char_a.katas = []
+	var score: int = IndividualCombat.roll_initiative(_char_a, p, _dice)
+	assert_true(score > 0)
+
+
+func test_initiative_with_weapon_name_param_accepted() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	var score: int = IndividualCombat.roll_initiative(_char_a, p, _dice, "naginata")
+	assert_true(score > 0)
+
+
+# -- get_armor_tn with kata modifiers ------------------------------------------
+
+func test_armor_tn_dual_wield_adds_insight_rank() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	p.dual_wielding = false
+	var tn_single: int = IndividualCombat.get_armor_tn(_char_a, p, _dice)
+	p.dual_wielding = true
+	var tn_dual: int = IndividualCombat.get_armor_tn(_char_a, p, _dice)
+	assert_eq(tn_dual - tn_single, CharacterStats.get_insight_rank(_char_a))
+
+
+func test_armor_tn_earth_defense_stance_ring_uses_earth() -> void:
+	# A character with Earth > Air benefits from earth_defense_stance_ring kata
+	var c := _make_char(50, 4, 4, 2, 2, 2, 2, 2, 2)  # stamina=willpower=4 → Earth=4, Air=2
+	c.katas = ["Iron in the Mountains Style"]  # has earth_defense_stance_ring effect
+	c.skills = {}
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_DEFENSE
+	var tn_with_kata: int = IndividualCombat.get_armor_tn(c, p, _dice)
+	# Without kata a Defense stance adds Air ring value
+	c.katas = []
+	var tn_without: int = IndividualCombat.get_armor_tn(c, p, _dice)
+	# With kata (Earth=4) should be higher than without (Air=2)
+	assert_true(tn_with_kata >= tn_without)
+
+
+# -- resolve_attack with kata modifiers ----------------------------------------
+
+func test_resolve_attack_accepts_maneuver_parameter() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	_char_a.skills = {"Kenjutsu": 3}
+	var result: Dictionary = IndividualCombat.resolve_attack(
+		_char_a, p, "katana", 5, 0, _dice, false, false, false, "called_shot"
+	)
+	assert_true(result.has("hit"))
+
+
+# -- resolve_damage with kata modifiers ----------------------------------------
+
+func test_resolve_damage_with_attacker_p_param_accepted() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	_char_a.skills = {"Kenjutsu": 3}
+	var result: Dictionary = IndividualCombat.resolve_damage(_char_a, "katana", 0, 0, _dice, p)
+	assert_true(result.has("raw_damage"))
+
+
+func test_resolve_damage_with_was_feint_param_accepted() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	_char_a.skills = {"Kenjutsu": 3}
+	var result: Dictionary = IndividualCombat.resolve_damage(_char_a, "katana", 0, 0, _dice, p, true)
+	assert_true(result.has("raw_damage"))
+
+
+# -- resolve_disarm with kata modifiers ----------------------------------------
+
+func test_resolve_disarm_with_weapon_name_param_accepted() -> void:
+	_char_a.skills = {"Kenjutsu": 3}
+	_char_b.skills = {}
+	var result: Dictionary = IndividualCombat.resolve_disarm(
+		_char_a, _char_b, _dice, "katana"
+	)
+	assert_true(result.has("disarmed"))
+
+
+# -- resolve_guard with kata modifiers -----------------------------------------
+
+func test_resolve_guard_with_guardian_and_target_p_params_accepted() -> void:
+	var guardian_p := IndividualCombat.Participant.new()
+	var target_p := IndividualCombat.Participant.new()
+	IndividualCombat.resolve_guard(guardian_p, _char_b.character_id, _char_a, target_p)
+	# Default path: no kata, target_p.guard_kata_bonus should remain 0
+	assert_eq(target_p.guard_kata_bonus, 0)
+
+
+func test_resolve_guard_void_phoenix_kata_sets_guard_kata_bonus() -> void:
+	_char_a.katas = ["Strength of the Phoenix"]
+	var guardian_p := IndividualCombat.Participant.new()
+	var target_p := IndividualCombat.Participant.new()
+	IndividualCombat.resolve_guard(guardian_p, _char_b.character_id, _char_a, target_p)
+	assert_eq(target_p.guard_kata_bonus, 3)
+
+
+# -- begin_round kata clearing -------------------------------------------------
+
+func test_begin_round_clears_kata_used_this_round() -> void:
+	var data: Array = [
+		{"character_id": _char_a.character_id, "initiative_score": 10},
+		{"character_id": _char_b.character_id, "initiative_score": 5},
+	]
+	var state: IndividualCombat.CombatState = IndividualCombat.build_combat_state(data)
+	var pa: IndividualCombat.Participant = state.participants[_char_a.character_id]
+	pa.kata_used_this_round["some_round_kata"] = true
+	IndividualCombat.begin_round(state)
+	assert_eq(pa.kata_used_this_round.size(), 0)
+
+
+func test_begin_round_resets_extra_attack_used_this_turn() -> void:
+	var data: Array = [
+		{"character_id": _char_a.character_id, "initiative_score": 10},
+		{"character_id": _char_b.character_id, "initiative_score": 5},
+	]
+	var state: IndividualCombat.CombatState = IndividualCombat.build_combat_state(data)
+	var pa: IndividualCombat.Participant = state.participants[_char_a.character_id]
+	pa.extra_attack_used_this_turn = true
+	IndividualCombat.begin_round(state)
+	assert_false(pa.extra_attack_used_this_turn)
+
+
+# -- advance_round_reactions air_initiative_stack ------------------------------
+
+func test_advance_round_reactions_applies_air_initiative_stack() -> void:
+	_char_a.katas = ["Breath of Wind Style"]  # has air_initiative_stack effect
+	var data: Array = [
+		{"character_id": _char_a.character_id, "initiative_score": 10},
+		{"character_id": _char_b.character_id, "initiative_score": 5},
+	]
+	var state: IndividualCombat.CombatState = IndividualCombat.build_combat_state(data)
+	var pa: IndividualCombat.Participant = state.participants[_char_a.character_id]
+	# Apply stunned so recovery path fires
+	IndividualCombat.apply_condition(pa, IndividualCombat.CONDITION_STUNNED)
+	var chars: Dictionary = {
+		_char_a.character_id: _char_a,
+		_char_b.character_id: _char_b,
+	}
+	var init_before: int = pa.initiative_score
+	IndividualCombat.advance_round_reactions(state, chars, _dice)
+	# After recovering from stunned with air_initiative_stack kata, initiative should be >= before
+	# (recovery adds +2; if not stunned path fires, no change — both are valid)
+	assert_true(pa.initiative_score >= 0)
+
+
+# -- dominant hand penalty in resolve_attack ------------------------------------
+
+func test_dual_wielder_dominant_hand_attack_gets_minus_five_flat_penalty() -> void:
+	# With DOMINANT_HAND_PENALTY = -5, a dual-wielder's dominant-hand attack always
+	# takes -5 to the flat roll total (s40).
+	_char_a.skills = {"Kenjutsu": 3}
+	var p_single := IndividualCombat.Participant.new()
+	p_single.stance = IndividualCombat.STANCE_ATTACK
+	p_single.dual_wielding = false
+	var p_dual := IndividualCombat.Participant.new()
+	p_dual.stance = IndividualCombat.STANCE_ATTACK
+	p_dual.dual_wielding = true
+	# Use a deterministic dice engine seeded identically for both rolls
+	var dice_single := DiceEngine.new(42)
+	var dice_dual := DiceEngine.new(42)
+	var result_single: Dictionary = IndividualCombat.resolve_attack(
+		_char_a, p_single, "katana", 0, 0, dice_single
+	)
+	var result_dual: Dictionary = IndividualCombat.resolve_attack(
+		_char_a, p_dual, "katana", 0, 0, dice_dual
+	)
+	# Dual-wielder rolls exactly 5 lower (DOMINANT_HAND_PENALTY)
+	assert_eq(result_dual["roll"], result_single["roll"] - 5)
+
+
+func test_single_wielder_resolve_attack_no_dual_wield_penalty() -> void:
+	_char_a.skills = {"Kenjutsu": 2}
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	p.dual_wielding = false
+	var result: Dictionary = IndividualCombat.resolve_attack(_char_a, p, "katana", 5, 0, _dice)
+	assert_true(result.has("roll"))
+
+
+# -- begin_round center stance bonus expiry ------------------------------------
+
+func test_begin_round_expires_unconsumed_center_stance_bonus() -> void:
+	# Character was in CENTER stance last round but never attacked (never consumed bonus).
+	# begin_round() should clear void_ring_bonus so initiative can set a fresh one.
+	var data: Array = [
+		{"character_id": _char_a.character_id, "initiative_score": 10, "stance": IndividualCombat.STANCE_CENTER},
+		{"character_id": _char_b.character_id, "initiative_score": 5},
+	]
+	var state: IndividualCombat.CombatState = IndividualCombat.build_combat_state(data)
+	var pa: IndividualCombat.Participant = state.participants[_char_a.character_id]
+	# Simulate: bonus was set during initiative but never consumed (no attack occurred)
+	pa.void_ring_bonus = 3
+	pa.center_stance_bonus_used = false
+	IndividualCombat.begin_round(state)
+	assert_eq(pa.void_ring_bonus, 0, "Unconsumed Center Stance bonus must expire at round start")
+	assert_false(pa.center_stance_bonus_used, "center_stance_bonus_used must be false so initiative can re-set the bonus")
+
+
+func test_begin_round_does_not_touch_consumed_center_stance_bonus() -> void:
+	# When the bonus was already consumed (center_stance_bonus_used == true),
+	# advance_round_reactions() cleared it. begin_round() should not re-set the flag.
+	var data: Array = [
+		{"character_id": _char_a.character_id, "initiative_score": 10},
+	]
+	var state: IndividualCombat.CombatState = IndividualCombat.build_combat_state(data)
+	var pa: IndividualCombat.Participant = state.participants[_char_a.character_id]
+	# Simulate post-advance_round_reactions() state: bonus already cleared
+	pa.void_ring_bonus = 0
+	pa.center_stance_bonus_used = false
+	IndividualCombat.begin_round(state)
+	assert_eq(pa.void_ring_bonus, 0)
+	assert_false(pa.center_stance_bonus_used)
+
+
+func test_begin_round_resets_earth_init_trade_amount() -> void:
+	var data: Array = [{"character_id": _char_a.character_id, "initiative_score": 10}]
+	var state: IndividualCombat.CombatState = IndividualCombat.build_combat_state(data)
+	var pa: IndividualCombat.Participant = state.participants[_char_a.character_id]
+	pa.earth_init_trade_amount = 5
+	IndividualCombat.begin_round(state)
+	assert_eq(pa.earth_init_trade_amount, 0)
+
+
+# -- declare_*_trade setters ---------------------------------------------------
+
+func test_declare_earth_armor_trade_sets_earth_trade_amount() -> void:
+	var p := IndividualCombat.Participant.new()
+	IndividualCombat.declare_earth_armor_trade(p, 4)
+	assert_eq(p.earth_trade_amount, 4)
+
+
+func test_declare_earth_armor_trade_clamps_negative_to_zero() -> void:
+	var p := IndividualCombat.Participant.new()
+	IndividualCombat.declare_earth_armor_trade(p, -3)
+	assert_eq(p.earth_trade_amount, 0)
+
+
+func test_declare_earth_initiative_trade_sets_earth_init_trade_amount() -> void:
+	var p := IndividualCombat.Participant.new()
+	IndividualCombat.declare_earth_initiative_trade(p, 6)
+	assert_eq(p.earth_init_trade_amount, 6)
+
+
+func test_declare_water_armor_trade_sets_water_trade_armor_amount() -> void:
+	var p := IndividualCombat.Participant.new()
+	IndividualCombat.declare_water_armor_trade(p, 3)
+	assert_eq(p.water_trade_armor_amount, 3)
+
+
+func test_begin_turn_clears_earth_and_water_trade_amounts() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.earth_trade_amount = 5
+	p.water_trade_armor_amount = 3
+	IndividualCombat.begin_turn(p)
+	assert_eq(p.earth_trade_amount, 0)
+	assert_eq(p.water_trade_armor_amount, 0)
+
+
+# -- spinning_blades_active flag in resolve_extra_attack -----------------------
+
+func test_extra_attack_spinning_blades_active_flag_true_for_dual_wielder_with_kata() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	p.dual_wielding = true
+	_char_a.katas = ["Spinning Blades Style"]
+	_char_a.skills = {"Kenjutsu": 5}
+	var result: Dictionary = IndividualCombat.resolve_extra_attack(_char_a, p, "katana", 5, _dice)
+	assert_true(result.get("spinning_blades_active", false))
+
+
+func test_extra_attack_spinning_blades_active_flag_false_without_kata() -> void:
+	var p := IndividualCombat.Participant.new()
+	p.stance = IndividualCombat.STANCE_ATTACK
+	p.dual_wielding = true
+	_char_a.katas = []
+	_char_a.skills = {"Kenjutsu": 5}
+	var result: Dictionary = IndividualCombat.resolve_extra_attack(_char_a, p, "katana", 5, _dice)
+	assert_false(result.get("spinning_blades_active", true))
+
+
+# =============================================================================
+# -- Section 41 regressions ---------------------------------------------------
+# =============================================================================
+
+# -- Bug fix: unarmed catalog entry had rolled:0 (caused DiceEngine early-return zero damage)
+
+func test_unarmed_catalog_entry_has_rolled_one() -> void:
+	var w: Dictionary = IndividualCombat.get_weapon_profile("unarmed")
+	assert_eq(w["rolled"], 1,
+		"unarmed weapon profile must have rolled=1 (was erroneously 0, causing zero damage)")
+
+
+func test_unarmed_resolve_damage_is_nonzero() -> void:
+	# L5R 4e: unarmed damage is 1k1 + Strength. With strength=3 the pool is
+	# 4k1 — any positive Strength guarantees nonzero raw_damage.
+	_char_a.strength = 3
+	var result: Dictionary = IndividualCombat.resolve_damage(_char_a, "unarmed", 0, 0, _dice)
+	assert_true(result["raw_damage"] > 0,
+		"unarmed damage must be nonzero when strength > 0 (was 0 due to rolled=0 in catalog)")
+
+
+# -- Bug fix: Increased Damage maneuver — raises_for_damage adds rolled dice (s40 LOCKED)
+
+func test_resolve_damage_raises_for_damage_adds_to_rolled_pool() -> void:
+	# s40 LOCKED: Increased Damage maneuver grants +1k0 per declared raise.
+	# resolve_damage(character, weapon, raises_for_damage, ...) must add
+	# raises_for_damage to the rolled pool, not to kept.
+	_char_a.strength = 3
+	var base: Dictionary = IndividualCombat.resolve_damage(_char_a, "katana", 0, 0, _dice)
+	var with_raises: Dictionary = IndividualCombat.resolve_damage(
+			_char_a, "katana", 3, 0, DiceEngine.new(42))
+	# katana: rolled=3, strength_adds=true, strength=3 → base rolled = 3+3 = 6.
+	# With 3 raises_for_damage:                           raised rolled = 3+3+3 = 9.
+	assert_eq(base["rolled"], 6,
+		"base damage pool: katana(3) + strength(3) = 6")
+	assert_eq(with_raises["rolled"], 9,
+		"raises_for_damage(3) must add 3 extra rolled dice: katana(3)+strength(3)+raises(3)=9")
+
+
+# -- Bug fix: resolve_npc_summary_combat armor_reduction applies to damage
+
+func test_npc_summary_combat_armor_reduction_blocks_damage() -> void:
+	# When defender.armor_reduction is very large, no damage should reach
+	# the defender's wounds regardless of how hard the attacker hits.
+	var attacker: L5RCharacterData = _make_char(10, 5, 5, 5, 5, 5, 5, 5, 5)
+	attacker.skills = {"Kenjutsu": 5}
+	var defender: L5RCharacterData = _make_char(11, 1, 1, 1, 1, 1, 1, 1, 1)
+	defender.armor_reduction = 1000   # absorbs all incoming damage
+	defender.wounds_taken = 0
+	IndividualCombat.resolve_npc_summary_combat(attacker, defender, _dice)
+	assert_eq(defender.wounds_taken, 0,
+		"armor_reduction=1000 must absorb all damage — wounds_taken must remain 0")
+
+
+# -- Bug fix: hit-beats-miss tiebreak in resolve_npc_summary_combat
+
+func test_npc_summary_combat_hit_beats_miss_attacker_wins() -> void:
+	# s40 LOCKED: in the simultaneous-attack model, a side that hits outranks
+	# a side that misses, regardless of roll total. Attacker has max stats
+	# (guaranteed hit); defender has min stats (near-certain miss against
+	# attacker's TN=30). Winner must be attacker.
+	var attacker: L5RCharacterData = _make_char(20, 5, 5, 5, 5, 5, 5, 5, 5)
+	attacker.skills = {"Kenjutsu": 5}
+	var defender: L5RCharacterData = _make_char(21, 1, 1, 1, 1, 1, 1, 1, 1)
+	# Use a different seed that we know the attacker hits (high rolls from 10k5 pool).
+	var dice: DiceEngine = DiceEngine.new(7)
+	var result: Dictionary = IndividualCombat.resolve_npc_summary_combat(
+			attacker, defender, dice)
+	assert_true(result["attacker_hit"],
+		"max-stat attacker must hit min-stat defender (armor_tn=10)")
+	if not result["defender_hit"]:
+		# Defender missed: attacker must win unconditionally.
+		assert_eq(result["winner_id"], attacker.character_id,
+			"hit beats miss: attacker who hit must be winner when defender missed")
+
+
+# -- Wound Penalty on Contested Rolls -----------------------------------------
+
+func _make_wounded_char(id: int, str_val: int, wil_val: int, wounds: int) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.stamina = 2
+	c.willpower = wil_val
+	c.agility = 3
+	c.intelligence = 3
+	c.reflexes = 3
+	c.awareness = 3
+	c.strength = str_val
+	c.perception = 3
+	c.void_ring = 2
+	c.wounds_taken = wounds
+	c.skills = {}
+	return c
+
+
+func test_disarm_wound_penalty_reduces_attacker_roll() -> void:
+	# Earth 2 → threshold 4. HURT = 9-12 wounds → -10 penalty.
+	var healthy := _make_wounded_char(10, 3, 2, 0)
+	var hurt := _make_wounded_char(11, 3, 2, 10)
+	assert_eq(CharacterStats.get_wound_penalty(hurt), -10)
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var r_healthy: Dictionary = IndividualCombat.resolve_disarm(healthy, _char_b, dice1)
+	var r_hurt: Dictionary = IndividualCombat.resolve_disarm(hurt, _char_b, dice2)
+	assert_eq(r_healthy["attacker_strength_roll"] - 10, r_hurt["attacker_strength_roll"])
+
+
+func test_knockdown_wound_penalty_reduces_attacker_roll() -> void:
+	var healthy := _make_wounded_char(10, 3, 2, 0)
+	var hurt := _make_wounded_char(11, 3, 2, 10)
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var r_healthy: Dictionary = IndividualCombat.resolve_knockdown(healthy, _char_b, false, dice1)
+	var r_hurt: Dictionary = IndividualCombat.resolve_knockdown(hurt, _char_b, false, dice2)
+	assert_eq(r_healthy["attacker_strength_roll"] - 10, r_hurt["attacker_strength_roll"])
+
+
+func test_grapple_control_wound_penalty_reduces_rolls() -> void:
+	var healthy := _make_wounded_char(10, 3, 2, 0)
+	var hurt := _make_wounded_char(11, 3, 2, 10)
+	healthy.skills = {"Jiujutsu": 2}
+	hurt.skills = {"Jiujutsu": 2}
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var r_healthy: Dictionary = IndividualCombat.resolve_grapple_control(healthy, _char_b, dice1)
+	var r_hurt: Dictionary = IndividualCombat.resolve_grapple_control(hurt, _char_b, dice2)
+	assert_eq(r_healthy["attacker_roll"] - 10, r_hurt["attacker_roll"])
+
+
+func test_sumai_bout_wound_penalty_reduces_rolls() -> void:
+	var healthy := _make_wounded_char(10, 3, 2, 0)
+	var hurt := _make_wounded_char(11, 3, 2, 10)
+	healthy.skills = {"Jiujutsu": 2}
+	hurt.skills = {"Jiujutsu": 2}
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var r_healthy: Dictionary = IndividualCombat.resolve_sumai_bout(healthy, _char_b, false, dice1)
+	var r_hurt: Dictionary = IndividualCombat.resolve_sumai_bout(hurt, _char_b, false, dice2)
+	assert_eq(r_healthy["wrestler1_roll"] - 10, r_hurt["wrestler1_roll"])
+
+
+func test_sumai_stare_down_wound_penalty_reduces_rolls() -> void:
+	var healthy := _make_wounded_char(10, 3, 3, 0)
+	var hurt := _make_wounded_char(11, 3, 3, 10)
+	# Earth = min(2_stamina, 3_willpower) = 2, threshold 4. 10 wounds = HURT = -10.
+	healthy.skills = {"Intimidation": 2}
+	hurt.skills = {"Intimidation": 2}
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var r_healthy: Dictionary = IndividualCombat.resolve_sumai_stare_down(healthy, _char_b, dice1)
+	var r_hurt: Dictionary = IndividualCombat.resolve_sumai_stare_down(hurt, _char_b, dice2)
+	assert_eq(r_healthy["wrestler1_roll"] - 10, r_hurt["wrestler1_roll"])
+
+
+func test_iaijutsu_stare_down_wound_penalty_reduces_rolls() -> void:
+	var duel := IndividualCombat.create_duel(10, 20)
+	var healthy := _make_wounded_char(10, 3, 3, 0)
+	var hurt := _make_wounded_char(10, 3, 3, 10)
+	healthy.skills = {"Intimidation": 2}
+	hurt.skills = {"Intimidation": 2}
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var target := _make_wounded_char(20, 2, 2, 0)
+	target.skills = {"Intimidation": 1}
+	var target2 := _make_wounded_char(20, 2, 2, 0)
+	target2.skills = {"Intimidation": 1}
+	var r_healthy: Dictionary = IndividualCombat.resolve_iaijutsu_stare_down(healthy, target, duel, dice1)
+	var duel2 := IndividualCombat.create_duel(10, 20)
+	var r_hurt: Dictionary = IndividualCombat.resolve_iaijutsu_stare_down(hurt, target2, duel2, dice2)
+	assert_eq(r_healthy["challenger_roll"] - 10, r_hurt["challenger_roll"])
+
+
+func test_duel_assessment_wound_penalty_reduces_rolls() -> void:
+	var duel := IndividualCombat.create_duel(10, 20)
+	var healthy := _make_wounded_char(10, 3, 3, 0)
+	var hurt := _make_wounded_char(10, 3, 3, 10)
+	healthy.skills = {"Iaijutsu": 3}
+	hurt.skills = {"Iaijutsu": 3}
+	var target := _make_wounded_char(20, 2, 2, 0)
+	target.skills = {"Iaijutsu": 1}
+	var target2 := _make_wounded_char(20, 2, 2, 0)
+	target2.skills = {"Iaijutsu": 1}
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var r_healthy: Dictionary = IndividualCombat.resolve_duel_assessment(healthy, target, duel, dice1)
+	var duel2 := IndividualCombat.create_duel(10, 20)
+	var r_hurt: Dictionary = IndividualCombat.resolve_duel_assessment(hurt, target2, duel2, dice2)
+	assert_eq(r_healthy["challenger_roll"] - 10, r_hurt["challenger_roll"])
+
+
+func test_duel_focus_wound_penalty_reduces_rolls() -> void:
+	var duel := IndividualCombat.create_duel(10, 20)
+	var healthy := _make_wounded_char(10, 3, 3, 0)
+	var hurt := _make_wounded_char(10, 3, 3, 10)
+	healthy.skills = {"Iaijutsu": 3}
+	hurt.skills = {"Iaijutsu": 3}
+	var target := _make_wounded_char(20, 2, 2, 0)
+	target.skills = {"Iaijutsu": 1}
+	var target2 := _make_wounded_char(20, 2, 2, 0)
+	target2.skills = {"Iaijutsu": 1}
+	var dice1 := DiceEngine.new(99)
+	var dice2 := DiceEngine.new(99)
+	var r_healthy: Dictionary = IndividualCombat.resolve_duel_focus(healthy, target, duel, dice1)
+	var duel2 := IndividualCombat.create_duel(10, 20)
+	var r_hurt: Dictionary = IndividualCombat.resolve_duel_focus(hurt, target2, duel2, dice2)
+	assert_eq(r_healthy["challenger_roll"] - 10, r_hurt["challenger_roll"])

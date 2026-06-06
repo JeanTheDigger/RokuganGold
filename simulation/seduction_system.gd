@@ -62,7 +62,8 @@ static func resolve_seduction(
 		return {"success": false, "reason": "no_temptation_skill"}
 
 	var etiquette_rank: int = target.skills.get("Etiquette", 0)
-	var honor_rank: int = int(target.honor)
+	# STUDENT_OF_SHOURIDO (s45): effective Honor rank is 5 minimum for social defense.
+	var honor_rank: int = AdvantageSystem.get_shourido_honor_bonus(target, int(target.honor))
 	var defense_tn: int = BASE_TN + etiquette_rank + target.willpower + honor_rank
 
 	var needed: int = defense_tn + (raises_called * 5)

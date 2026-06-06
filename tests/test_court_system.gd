@@ -1060,13 +1060,13 @@ func test_strategic_call_court_tracks_last_court_season():
 
 
 func test_status_to_lord_rank_mapping():
-	assert_eq(DayOrchestrator._status_to_lord_rank(10.0), Enums.LordRank.IMPERIAL)
-	assert_eq(DayOrchestrator._status_to_lord_rank(9.0), Enums.LordRank.IMPERIAL)
-	assert_eq(DayOrchestrator._status_to_lord_rank(8.0), Enums.LordRank.CLAN_CHAMPION)
-	assert_eq(DayOrchestrator._status_to_lord_rank(7.0), Enums.LordRank.CLAN_CHAMPION)
-	assert_eq(DayOrchestrator._status_to_lord_rank(6.0), Enums.LordRank.FAMILY_DAIMYO)
-	assert_eq(DayOrchestrator._status_to_lord_rank(5.0), Enums.LordRank.PROVINCIAL_DAIMYO)
-	assert_eq(DayOrchestrator._status_to_lord_rank(4.0), Enums.LordRank.CITY_DAIMYO)
+	assert_eq(RoleRegistry.lord_rank_from_status(10.0), Enums.LordRank.IMPERIAL)
+	assert_eq(RoleRegistry.lord_rank_from_status(9.0), Enums.LordRank.IMPERIAL)
+	assert_eq(RoleRegistry.lord_rank_from_status(8.0), Enums.LordRank.CLAN_CHAMPION)
+	assert_eq(RoleRegistry.lord_rank_from_status(7.0), Enums.LordRank.CLAN_CHAMPION)
+	assert_eq(RoleRegistry.lord_rank_from_status(6.0), Enums.LordRank.FAMILY_DAIMYO)
+	assert_eq(RoleRegistry.lord_rank_from_status(5.0), Enums.LordRank.PROVINCIAL_DAIMYO)
+	assert_eq(RoleRegistry.lord_rank_from_status(4.0), Enums.LordRank.CITY_DAIMYO)
 
 
 # -- Renege Historical Modifier (s15.2) ----------------------------------------
@@ -1131,7 +1131,7 @@ func test_renege_excludes_reneging_lord_from_own_modifier() -> void:
 	# Witness gets modifier; lord does not get self-referential modifier.
 	assert_true(witness.historical_modifiers.has(1))
 	assert_false(lord.historical_modifiers.has(1))
-	assert_eq(DayOrchestrator._status_to_lord_rank(2.0), Enums.LordRank.VILLAGE_HEADMAN)
+	assert_eq(RoleRegistry.lord_rank_from_status(2.0), Enums.LordRank.VILLAGE_HEADMAN)
 
 
 # =============================================================================

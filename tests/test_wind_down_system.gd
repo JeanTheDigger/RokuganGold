@@ -481,3 +481,42 @@ func test_method_name_round_trips() -> void:
 	assert_eq(WindDownSystem.method_name(WindDownSystem.Method.INCENSE_CEREMONY), "incense_ceremony")
 	assert_eq(WindDownSystem.method_name(WindDownSystem.Method.BATHHOUSE), "bathhouse")
 	assert_eq(WindDownSystem.method_name(WindDownSystem.Method.PLEASURE_QUARTER), "pleasure_quarter")
+
+
+# -- Wound Penalty — Go Parlor Contest -------------------------------------------
+
+func test_go_parlor_wound_penalty_reduces_contest_roll() -> void:
+	var healthy_total: int = 0
+	var wounded_total: int = 0
+	var trials: int = 100
+	var opponent: Dictionary = {"id": 7, "intelligence": 3, "games_rank": 3}
+	for i: int in range(trials):
+		var d1: DiceEngine = DiceEngine.new(i * 11)
+		var healthy: L5RCharacterData = L5RCharacterData.new()
+		healthy.clan = "Crane"
+		healthy.honor = 5.0
+		healthy.willpower = 2
+		healthy.intelligence = 4
+		healthy.skills = {"Games: Go": 4}
+		var r1: Dictionary = WindDownSystem.apply_wind_down(
+			healthy, WindDownSystem.Method.GO_PARLOR, d1,
+			[7], -1, opponent, -1)
+		healthy_total += r1.get("go_parlor_roll", 0)
+
+		var d2: DiceEngine = DiceEngine.new(i * 11)
+		var wounded: L5RCharacterData = L5RCharacterData.new()
+		wounded.clan = "Crane"
+		wounded.honor = 5.0
+		wounded.willpower = 2
+		wounded.intelligence = 4
+		wounded.skills = {"Games: Go": 4}
+		wounded.wounds_taken = 50
+		var r2: Dictionary = WindDownSystem.apply_wind_down(
+			wounded, WindDownSystem.Method.GO_PARLOR, d2,
+			[7], -1, opponent, -1)
+		wounded_total += r2.get("go_parlor_roll", 0)
+
+	assert_true(
+		healthy_total > wounded_total,
+		"Wounded character should have lower Go parlor contest rolls due to wound penalty"
+	)

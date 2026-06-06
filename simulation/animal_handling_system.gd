@@ -192,8 +192,10 @@ static func make_training_roll(
 	# Reversed keep pattern (keeps skill, not trait) — not routable through SkillResolver
 	var skill_rank: int = SkillResolver.get_skill_rank(character, "Animal Handling")
 	var trait_value: int = character.awareness
-	var rolled: int = skill_rank + trait_value
-	var kept: int = skill_rank  # Keep Animal Handling rank
+	var wound_pen: int = CharacterStats.get_wound_penalty(character)
+	var ah_mut: Dictionary = MutationSystem.get_skill_modifiers(character, "Animal Handling")
+	var rolled: int = skill_rank + trait_value + ah_mut["rolled"]
+	var kept: int = skill_rank + ah_mut["kept"]
 
 	# Clamp to L5R 4e pool limits
 	var overflow_bonus: int = 0
@@ -209,7 +211,7 @@ static func make_training_roll(
 		rolled = kept
 
 	var dr: DiceResult = dice_engine.roll_and_keep(rolled, kept, true, false)
-	var total: int = dr.total + overflow_bonus
+	var total: int = dr.total + overflow_bonus + wound_pen
 
 	var success: bool = total >= tn
 	var progress_gained: int = 0

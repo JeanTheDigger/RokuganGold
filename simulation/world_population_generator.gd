@@ -41,216 +41,18 @@ const MINOR_CLANS: Array[String] = [
 ]
 
 
-# -- Position Definitions (s22.8) ---------------------------------------------
+# -- Position Definitions — delegated to RoleRegistry -------------------------
+# All position enums, rank/status/stipend tables, and name mappings are in
+# shared/role_registry.gd.  Local aliases for backward compatibility.
 
-enum PositionType {
-	EMPEROR,
-	IMPERIAL_HEIR,
-	IMPERIAL_ADVISOR,
-	IMPERIAL_CHANCELLOR,
-	IMPERIAL_HERALD,
-	IMPERIAL_TREASURER,
-	VOICE_OF_EMPEROR,
-	EMERALD_CHAMPION,
-	JADE_CHAMPION,
-	AMETHYST_CHAMPION,
-	TURQUOISE_CHAMPION,
-	TOPAZ_CHAMPION,
-	RUBY_CHAMPION,
-	IMPERIAL_FAMILY_DAIMYO,
-	CLAN_CHAMPION,
-	FAMILY_DAIMYO,
-	RIKUGUNSHOKAN,
-	SENIOR_COURTIER,
-	CLAN_MAGISTRATE_COMMANDER,
-	SCHOOL_MASTER,
-	PROVINCIAL_DAIMYO,
-	LOCAL_DAIMYO,
-	CLAN_MAGISTRATE,
-	GARRISON_COMMANDER,
-	TAISA,
-	CHUI,
-	TEMPLE_HEAD,
-	MONASTERY_ABBOT,
-	EMERALD_MAGISTRATE,
-	JADE_MAGISTRATE,
-	INQUISITOR_LEADER,
-	WITCH_HUNTER_LEADER,
-	KUROIBAN_LEADER,
-	YORIKI,
-	MINOR_CLAN_CHAMPION,
-	MINOR_CLAN_SENIOR,
-	WALL_SEGMENT_COMMANDER,
-	HIRUMA_SCOUT_COMMANDER,
-	SAMURAI,
-}
-
-# s52a — role-required excellence; mastery positions = 5, proven excellence = 4,
-# veteran = 3, junior lord/officer = 2, base samurai = 1.
-const POSITION_RANK: Dictionary = {
-	PositionType.EMPEROR: 5,
-	PositionType.IMPERIAL_HEIR: 4,
-	PositionType.IMPERIAL_ADVISOR: 4,
-	PositionType.IMPERIAL_CHANCELLOR: 4,
-	PositionType.IMPERIAL_HERALD: 3,
-	PositionType.IMPERIAL_TREASURER: 3,
-	PositionType.VOICE_OF_EMPEROR: 3,
-	PositionType.EMERALD_CHAMPION: 5,
-	PositionType.JADE_CHAMPION: 5,
-	PositionType.AMETHYST_CHAMPION: 4,
-	PositionType.TURQUOISE_CHAMPION: 3,
-	PositionType.TOPAZ_CHAMPION: 2,
-	PositionType.RUBY_CHAMPION: 4,
-	PositionType.IMPERIAL_FAMILY_DAIMYO: 4,
-	PositionType.CLAN_CHAMPION: 5,
-	PositionType.FAMILY_DAIMYO: 4,
-	PositionType.RIKUGUNSHOKAN: 4,
-	PositionType.SENIOR_COURTIER: 3,
-	PositionType.CLAN_MAGISTRATE_COMMANDER: 3,
-	PositionType.SCHOOL_MASTER: 5,
-	PositionType.PROVINCIAL_DAIMYO: 3,
-	PositionType.LOCAL_DAIMYO: 2,
-	PositionType.CLAN_MAGISTRATE: 2,
-	PositionType.GARRISON_COMMANDER: 2,
-	PositionType.TAISA: 3,
-	PositionType.CHUI: 2,
-	PositionType.TEMPLE_HEAD: 5,
-	PositionType.MONASTERY_ABBOT: 5,
-	PositionType.EMERALD_MAGISTRATE: 4,
-	PositionType.JADE_MAGISTRATE: 4,
-	PositionType.INQUISITOR_LEADER: 5,
-	PositionType.WITCH_HUNTER_LEADER: 5,
-	PositionType.KUROIBAN_LEADER: 5,
-	PositionType.YORIKI: 2,
-	PositionType.MINOR_CLAN_CHAMPION: 4,
-	PositionType.MINOR_CLAN_SENIOR: 3,
-	PositionType.WALL_SEGMENT_COMMANDER: 4,
-	PositionType.HIRUMA_SCOUT_COMMANDER: 4,
-	PositionType.SAMURAI: 1,
-}
-
-# PROVISIONAL — GDD s22.4 gives 2 examples (Local Daimyo 3.0, samurai 1.0).
-const POSITION_STATUS: Dictionary = {
-	PositionType.EMPEROR: 10.0,
-	PositionType.IMPERIAL_HEIR: 8.0,
-	PositionType.IMPERIAL_ADVISOR: 7.0,
-	PositionType.IMPERIAL_CHANCELLOR: 7.0,
-	PositionType.IMPERIAL_HERALD: 6.5,
-	PositionType.IMPERIAL_TREASURER: 6.5,
-	PositionType.VOICE_OF_EMPEROR: 6.5,
-	PositionType.EMERALD_CHAMPION: 7.5,
-	PositionType.JADE_CHAMPION: 7.0,
-	PositionType.AMETHYST_CHAMPION: 6.0,
-	PositionType.TURQUOISE_CHAMPION: 6.0,
-	PositionType.TOPAZ_CHAMPION: 5.0,
-	PositionType.RUBY_CHAMPION: 6.0,
-	PositionType.IMPERIAL_FAMILY_DAIMYO: 6.0,
-	PositionType.CLAN_CHAMPION: 8.0,
-	PositionType.FAMILY_DAIMYO: 6.0,
-	PositionType.RIKUGUNSHOKAN: 5.5,
-	PositionType.SENIOR_COURTIER: 5.0,
-	PositionType.CLAN_MAGISTRATE_COMMANDER: 4.5,
-	PositionType.SCHOOL_MASTER: 5.0,
-	PositionType.PROVINCIAL_DAIMYO: 5.0,
-	PositionType.LOCAL_DAIMYO: 4.0,
-	PositionType.CLAN_MAGISTRATE: 3.0,
-	PositionType.GARRISON_COMMANDER: 2.5,
-	PositionType.TAISA: 3.5,
-	PositionType.CHUI: 2.5,
-	PositionType.TEMPLE_HEAD: 3.5,
-	PositionType.MONASTERY_ABBOT: 3.5,
-	PositionType.EMERALD_MAGISTRATE: 4.0,
-	PositionType.JADE_MAGISTRATE: 4.0,
-	PositionType.INQUISITOR_LEADER: 4.0,
-	PositionType.WITCH_HUNTER_LEADER: 4.0,
-	PositionType.KUROIBAN_LEADER: 4.0,
-	PositionType.YORIKI: 2.0,
-	PositionType.MINOR_CLAN_CHAMPION: 5.0,
-	PositionType.MINOR_CLAN_SENIOR: 3.5,
-	PositionType.WALL_SEGMENT_COMMANDER: 3.5,
-	PositionType.HIRUMA_SCOUT_COMMANDER: 3.5,
-	PositionType.SAMURAI: 1.0,
-}
-
-
-const POSITION_ROLE_NAMES: Dictionary = {
-	PositionType.EMPEROR: "Emperor",
-	PositionType.IMPERIAL_HEIR: "Imperial Heir",
-	PositionType.IMPERIAL_ADVISOR: "Imperial Advisor",
-	PositionType.IMPERIAL_CHANCELLOR: "Imperial Chancellor",
-	PositionType.IMPERIAL_HERALD: "Imperial Herald",
-	PositionType.IMPERIAL_TREASURER: "Imperial Treasurer",
-	PositionType.VOICE_OF_EMPEROR: "Voice of the Emperor",
-	PositionType.EMERALD_CHAMPION: "Emerald Champion",
-	PositionType.JADE_CHAMPION: "Jade Champion",
-	PositionType.AMETHYST_CHAMPION: "Amethyst Champion",
-	PositionType.TURQUOISE_CHAMPION: "Turquoise Champion",
-	PositionType.TOPAZ_CHAMPION: "Topaz Champion",
-	PositionType.RUBY_CHAMPION: "Ruby Champion",
-	PositionType.IMPERIAL_FAMILY_DAIMYO: "Imperial Family Daimyo",
-	PositionType.CLAN_CHAMPION: "Clan Champion",
-	PositionType.FAMILY_DAIMYO: "Family Daimyo",
-	PositionType.RIKUGUNSHOKAN: "Rikugunshokan",
-	PositionType.SENIOR_COURTIER: "Senior Courtier",
-	PositionType.CLAN_MAGISTRATE_COMMANDER: "Clan Magistrate Commander",
-	PositionType.SCHOOL_MASTER: "School Master",
-	PositionType.PROVINCIAL_DAIMYO: "Provincial Daimyo",
-	PositionType.LOCAL_DAIMYO: "Local Daimyo",
-	PositionType.CLAN_MAGISTRATE: "Clan Magistrate",
-	PositionType.GARRISON_COMMANDER: "Garrison Commander",
-	PositionType.TAISA: "Taisa",
-	PositionType.CHUI: "Chui",
-	PositionType.TEMPLE_HEAD: "Temple Head",
-	PositionType.MONASTERY_ABBOT: "Monastery Abbot",
-	PositionType.EMERALD_MAGISTRATE: "Emerald Magistrate",
-	PositionType.JADE_MAGISTRATE: "Jade Magistrate",
-	PositionType.INQUISITOR_LEADER: "Inquisitor Leader",
-	PositionType.WITCH_HUNTER_LEADER: "Witch Hunter Leader",
-	PositionType.KUROIBAN_LEADER: "Kuroiban Leader",
-	PositionType.YORIKI: "Yoriki",
-	PositionType.MINOR_CLAN_CHAMPION: "Minor Clan Champion",
-	PositionType.MINOR_CLAN_SENIOR: "Minor Clan Senior",
-	PositionType.WALL_SEGMENT_COMMANDER: "Wall Segment Commander",
-	PositionType.HIRUMA_SCOUT_COMMANDER: "Hiruma Scout Commander",
-}
-
-const POSITION_MILITARY_RANK: Dictionary = {
-	PositionType.RIKUGUNSHOKAN: Enums.MilitaryRank.RIKUGUNSHOKAN,
-	PositionType.TAISA: Enums.MilitaryRank.TAISA,
-	PositionType.CHUI: Enums.MilitaryRank.CHUI,
-	PositionType.GARRISON_COMMANDER: Enums.MilitaryRank.GUNSO,
-	PositionType.WALL_SEGMENT_COMMANDER: Enums.MilitaryRank.CHUI,
-}
-
-
-# -- Position School Type Preferences -----------------------------------------
-
-const BUSHI_POSITION_TYPES: Array[int] = [
-	PositionType.EMERALD_CHAMPION,
-	PositionType.JADE_CHAMPION,
-	PositionType.RIKUGUNSHOKAN,
-	PositionType.GARRISON_COMMANDER,
-	PositionType.TAISA,
-	PositionType.CHUI,
-	PositionType.WALL_SEGMENT_COMMANDER,
-	PositionType.HIRUMA_SCOUT_COMMANDER,
-	PositionType.MINOR_CLAN_CHAMPION,
-]
-
-const COURTIER_POSITION_TYPES: Array[int] = [
-	PositionType.IMPERIAL_ADVISOR,
-	PositionType.IMPERIAL_CHANCELLOR,
-	PositionType.IMPERIAL_HERALD,
-	PositionType.IMPERIAL_TREASURER,
-	PositionType.VOICE_OF_EMPEROR,
-	PositionType.SENIOR_COURTIER,
-	PositionType.EMERALD_MAGISTRATE,
-]
-
-const SHUGENJA_POSITION_TYPES: Array[int] = [
-	PositionType.JADE_MAGISTRATE,
-	PositionType.TEMPLE_HEAD,
-]
+const PositionType = RoleRegistry.PositionType
+const POSITION_RANK = RoleRegistry.POSITION_RANK
+const POSITION_STATUS = RoleRegistry.POSITION_STATUS
+const POSITION_ROLE_NAMES = RoleRegistry.POSITION_NAMES
+const POSITION_MILITARY_RANK = RoleRegistry.POSITION_MILITARY_RANK
+const BUSHI_POSITION_TYPES = RoleRegistry.BUSHI_POSITION_TYPES
+const COURTIER_POSITION_TYPES = RoleRegistry.COURTIER_POSITION_TYPES
+const SHUGENJA_POSITION_TYPES = RoleRegistry.SHUGENJA_POSITION_TYPES
 
 
 # -- Population Multiplier (s52) -----------------------------------------------
@@ -714,10 +516,10 @@ static func _assign_lord_ids(
 	var provincial_daimyos_by_clan: Dictionary = {}
 
 	for c: L5RCharacterData in characters:
-		if c.role_position == "Family Daimyo":
+		if c.role_position == RoleRegistry.FAMILY_DAIMYO:
 			var key: String = "%s_%s" % [c.clan, c.family]
 			family_daimyos[key] = c.character_id
-		elif c.role_position == "Provincial Daimyo":
+		elif c.role_position == RoleRegistry.PROVINCIAL_DAIMYO:
 			if not provincial_daimyos_by_clan.has(c.clan):
 				provincial_daimyos_by_clan[c.clan] = []
 			provincial_daimyos_by_clan[c.clan].append(c.character_id)
@@ -755,12 +557,11 @@ static func _assign_lord_ids(
 # GDD: "Koku on hand = (1 month's stipend for their role) + 1d10 × Rank"
 
 const _STIPEND_BY_ROLE: Dictionary = {
-	# GDD s4.3: "Direct retainer of the Clan Champion: 5 koku per month" etc.
-	"Clan Champion": 5.0,
-	"Minor Clan Champion": 3.0,  # s52a A33 — equal to Family Daimyo (single-clan governance scale)
-	"Family Daimyo": 3.0,
-	"Provincial Daimyo": 2.0,
-	"Local Daimyo": 1.0,
+	RoleRegistry.CLAN_CHAMPION: 5.0,
+	RoleRegistry.MINOR_CLAN_CHAMPION: 3.0,
+	RoleRegistry.FAMILY_DAIMYO: 3.0,
+	RoleRegistry.PROVINCIAL_DAIMYO: 2.0,
+	RoleRegistry.LOCAL_DAIMYO: 1.0,
 }
 
 
@@ -1034,7 +835,7 @@ static func generate_world_population(
 	for c: L5RCharacterData in mantis_leadership:
 		if c.status >= 8.0:
 			clan_champions["Mantis"] = c.character_id
-		if c.role_position == "Rikugunshokan":
+		if c.role_position == RoleRegistry.RIKUGUNSHOKAN:
 			clan_rikugunshokans["Mantis"] = c.character_id
 
 	var mantis_rik_id: int = clan_rikugunshokans.get("Mantis", -1)

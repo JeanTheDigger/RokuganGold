@@ -433,3 +433,35 @@ func test_kitsuki_guard_gets_free_raise_on_detection() -> void:
 		kitsuki_total > generic_total,
 		"Kitsuki guard should average higher due to Investigation free raise"
 	)
+
+
+# ==============================================================================
+# Wound Penalty — Break Chains
+# ==============================================================================
+
+func test_break_chains_wound_penalty_reduces_total() -> void:
+	var healthy_total: int = 0
+	var wounded_total: int = 0
+	var trials: int = 100
+	for i: int in range(trials):
+		var d1: DiceEngine = DiceEngine.new(i * 7)
+		var healthy: L5RCharacterData = L5RCharacterData.new()
+		healthy.character_id = 50
+		healthy.strength = 5
+		var s1: Dictionary = BoundEscapeSystem.create_bound_state(1, 3, BoundEscapeSystem.BindingMaterial.CHAINS, 100)
+		var r1: Dictionary = BoundEscapeSystem.free_ally_chains(healthy, s1, false, true, d1)
+		healthy_total += r1.get("roll_total", 0)
+
+		var d2: DiceEngine = DiceEngine.new(i * 7)
+		var wounded: L5RCharacterData = L5RCharacterData.new()
+		wounded.character_id = 51
+		wounded.strength = 5
+		wounded.wounds_taken = 50
+		var s2: Dictionary = BoundEscapeSystem.create_bound_state(1, 3, BoundEscapeSystem.BindingMaterial.CHAINS, 100)
+		var r2: Dictionary = BoundEscapeSystem.free_ally_chains(wounded, s2, false, true, d2)
+		wounded_total += r2.get("roll_total", 0)
+
+	assert_true(
+		healthy_total > wounded_total,
+		"Wounded rescuer should have lower break chains totals due to wound penalty"
+	)

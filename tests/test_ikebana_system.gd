@@ -852,3 +852,19 @@ func test_writeback_materials_source_minus1_when_no_garden() -> void:
 	assert_eq(active_arrangements.size(), 1)
 	var arr: IkebanaArrangementData = active_arrangements[0] as IkebanaArrangementData
 	assert_eq(arr.materials_source, -1)
+
+
+func test_handle_character_death_removes_from_visitor_list() -> void:
+	var arr := IkebanaArrangementData.new()
+	arr.visitors_who_received_bonus.assign([10, 20, 30])
+	IkebanaSystem.handle_character_death([arr], 20)
+	assert_false(arr.visitors_who_received_bonus.has(20), "Dead visitor removed")
+	assert_true(arr.visitors_who_received_bonus.has(10), "Other visitor unaffected")
+	assert_true(arr.visitors_who_received_bonus.has(30), "Other visitor unaffected")
+
+
+func test_handle_character_death_noop_if_not_in_list() -> void:
+	var arr := IkebanaArrangementData.new()
+	arr.visitors_who_received_bonus.assign([10, 30])
+	IkebanaSystem.handle_character_death([arr], 99)
+	assert_eq(arr.visitors_who_received_bonus.size(), 2, "No change when dead_id not present")

@@ -436,3 +436,177 @@ func test_higher_stealth_produces_higher_or_equal_concealment_on_average() -> vo
 
 	assert_gte(high_total, low_total,
 		"Stealth 4 caster should produce >= average concealment_tn vs Stealth 0")
+
+
+func test_blood_concealment_wound_penalty_reduces_tn() -> void:
+	var healthy_total: int = 0
+	var wounded_total: int = 0
+	for seed_val: int in range(100):
+		var ch := L5RCharacterData.new()
+		ch.character_id = 10
+		ch.character_name = "Healthy Maho"
+		ch.clan = "Scorpion"
+		ch.family = "Soshi"
+		ch.school = "Soshi Shugenja"
+		ch.school_type = Enums.SchoolType.SHUGENJA
+		ch.stamina = 3
+		ch.willpower = 3
+		ch.strength = 2
+		ch.perception = 2
+		ch.agility = 3
+		ch.intelligence = 3
+		ch.reflexes = 2
+		ch.awareness = 3
+		ch.void_ring = 2
+		ch.honor = 5.0
+		ch.glory = 2.0
+		ch.status = 2.0
+		ch.taint = 0.0
+		ch.wounds_taken = 0
+		ch.armor_reduction = 0
+		ch.skills = {"Stealth": 3}
+
+		var src := L5RCharacterData.new()
+		src.character_id = 11
+		src.character_name = "Blood"
+		src.stamina = 5
+		src.willpower = 5
+		src.wounds_taken = 0
+		src.armor_reduction = 0
+
+		var prov := ProvinceData.new()
+		prov.province_id = 50
+		prov.province_taint_level = 0.0
+
+		var d1 := DiceEngine.new(seed_val)
+		var r1: Dictionary = MahoSystem.resolve_cast(ch, src, prov, 1, 0, d1, 900 + seed_val, 1, "P")
+		healthy_total += r1["blood_concealment_tn"]
+
+		var cw := L5RCharacterData.new()
+		cw.character_id = 12
+		cw.character_name = "Wounded Maho"
+		cw.clan = "Scorpion"
+		cw.family = "Soshi"
+		cw.school = "Soshi Shugenja"
+		cw.school_type = Enums.SchoolType.SHUGENJA
+		cw.stamina = 2
+		cw.willpower = 2
+		cw.strength = 2
+		cw.perception = 2
+		cw.agility = 3
+		cw.intelligence = 3
+		cw.reflexes = 2
+		cw.awareness = 3
+		cw.void_ring = 2
+		cw.honor = 5.0
+		cw.glory = 2.0
+		cw.status = 2.0
+		cw.taint = 0.0
+		cw.wounds_taken = 13
+		cw.armor_reduction = 0
+		cw.skills = {"Stealth": 3}
+
+		var src2 := L5RCharacterData.new()
+		src2.character_id = 13
+		src2.character_name = "Blood2"
+		src2.stamina = 5
+		src2.willpower = 5
+		src2.wounds_taken = 0
+		src2.armor_reduction = 0
+
+		var prov2 := ProvinceData.new()
+		prov2.province_id = 51
+		prov2.province_taint_level = 0.0
+
+		var d2 := DiceEngine.new(seed_val)
+		var r2: Dictionary = MahoSystem.resolve_cast(cw, src2, prov2, 1, 0, d2, 1000 + seed_val, 1, "P")
+		wounded_total += r2["blood_concealment_tn"]
+
+	assert_true(healthy_total > wounded_total,
+		"Wounded caster should produce lower concealment_tn (healthy=%d, wounded=%d)" % [healthy_total, wounded_total])
+
+
+func test_blood_concealment_applies_mutation_modifiers() -> void:
+	var normal_total: int = 0
+	var mutated_total: int = 0
+
+	for seed_val: int in range(50):
+		var cn := L5RCharacterData.new()
+		cn.character_id = 20
+		cn.character_name = "Normal"
+		cn.school = "Soshi Shugenja"
+		cn.school_type = Enums.SchoolType.SHUGENJA
+		cn.stamina = 3
+		cn.willpower = 3
+		cn.strength = 2
+		cn.perception = 2
+		cn.agility = 3
+		cn.intelligence = 3
+		cn.reflexes = 2
+		cn.awareness = 3
+		cn.void_ring = 2
+		cn.honor = 5.0
+		cn.glory = 2.0
+		cn.status = 2.0
+		cn.taint = 2.0
+		cn.wounds_taken = 0
+		cn.armor_reduction = 0
+		cn.skills = {"Stealth": 3}
+
+		var src1 := L5RCharacterData.new()
+		src1.character_id = 21
+		src1.stamina = 5
+		src1.willpower = 5
+		src1.wounds_taken = 0
+		src1.armor_reduction = 0
+
+		var prov1 := ProvinceData.new()
+		prov1.province_id = 60
+		prov1.province_taint_level = 0.0
+
+		var d1 := DiceEngine.new(seed_val)
+		var r1: Dictionary = MahoSystem.resolve_cast(cn, src1, prov1, 1, 0, d1, seed_val, 1, "P")
+		normal_total += r1["blood_concealment_tn"]
+
+		var cm := L5RCharacterData.new()
+		cm.character_id = 22
+		cm.character_name = "MasterShadows"
+		cm.school = "Soshi Shugenja"
+		cm.school_type = Enums.SchoolType.SHUGENJA
+		cm.stamina = 3
+		cm.willpower = 3
+		cm.strength = 2
+		cm.perception = 2
+		cm.agility = 3
+		cm.intelligence = 3
+		cm.reflexes = 2
+		cm.awareness = 3
+		cm.void_ring = 2
+		cm.honor = 5.0
+		cm.glory = 2.0
+		cm.status = 2.0
+		cm.taint = 2.0
+		cm.wounds_taken = 0
+		cm.armor_reduction = 0
+		cm.skills = {"Stealth": 3}
+		var sp := ShadowlandsPowerData.new()
+		sp.power_type = Enums.ShadowlandsPowerType.MASTER_OF_SHADOWS
+		cm.shadowlands_powers = [sp]
+
+		var src2 := L5RCharacterData.new()
+		src2.character_id = 23
+		src2.stamina = 5
+		src2.willpower = 5
+		src2.wounds_taken = 0
+		src2.armor_reduction = 0
+
+		var prov2 := ProvinceData.new()
+		prov2.province_id = 61
+		prov2.province_taint_level = 0.0
+
+		var d2 := DiceEngine.new(seed_val)
+		var r2: Dictionary = MahoSystem.resolve_cast(cm, src2, prov2, 1, 0, d2, 1000 + seed_val, 1, "P")
+		mutated_total += r2["blood_concealment_tn"]
+
+	assert_true(mutated_total > normal_total,
+		"MASTER_OF_SHADOWS caster should produce higher concealment_tn (mutated=%d, normal=%d)" % [mutated_total, normal_total])

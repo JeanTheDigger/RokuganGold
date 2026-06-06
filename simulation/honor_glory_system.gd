@@ -7,14 +7,20 @@ class_name HonorGlorySystem
 # -- Core Modification ---------------------------------------------------------
 
 static func apply_honor_change(character: L5RCharacterData, delta: float) -> float:
+	var actual_delta: float = delta
+	# IDEALISTIC (s45): honor losses are 1 point larger.
+	if delta < 0.0:
+		actual_delta -= float(AdvantageSystem.get_honor_loss_increase(character))
 	var old: float = character.honor
-	character.honor = clampf(character.honor + delta, 0.0, 10.0)
+	character.honor = clampf(character.honor + actual_delta, 0.0, 10.0)
 	return character.honor - old
 
 
 static func apply_glory_change(character: L5RCharacterData, delta: float) -> float:
 	var old: float = character.glory
-	character.glory = clampf(character.glory + delta, 0.0, 10.0)
+	# ASCETIC disadvantage halves all glory changes (s45)
+	var scaled: float = delta * AdvantageSystem.get_glory_multiplier(character)
+	character.glory = clampf(character.glory + scaled, 0.0, 10.0)
 	return character.glory - old
 
 
@@ -38,6 +44,15 @@ static func get_honor_rank(character: L5RCharacterData) -> int:
 
 static func get_glory_rank(character: L5RCharacterData) -> int:
 	return int(character.glory)
+
+
+## s45 CAST_OUT: returns 0 when observer's Brotherhood sect treats target's glory as infamy.
+## Use this instead of get_glory_rank() whenever glory is displayed or scored socially.
+static func get_observed_glory_rank(target: L5RCharacterData, observer: L5RCharacterData) -> int:
+	if observer != null and observer.brotherhood_sect != "":
+		if AdvantageSystem.is_glory_treated_as_infamy_by(target, observer.brotherhood_sect):
+			return 0
+	return get_glory_rank(target)
 
 
 static func get_status_rank(character: L5RCharacterData) -> int:

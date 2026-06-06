@@ -125,6 +125,8 @@ func test_all_killed_returns_early_no_delay() -> void:
 		InsurgencyRelocationSystem.MissionOutcome.FULL_SUCCESS,
 		10, "", true, [])
 	assert_eq(r["delay_seasons"], 0)
+	assert_false(r.get("triggers", false),
+		"No survivors → relocation must NOT trigger")
 
 # -- Stockade delay -----------------------------------------------------------
 

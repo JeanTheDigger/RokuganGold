@@ -93,11 +93,12 @@ static func evaluate_relocation(
 	if not triggers_relocation(outcome):
 		return result
 
-	result["triggers"] = true
 	var survivors: int = maxi(0, insurgency.strength - kills)
 	if survivors == 0:
 		result["strength_after"] = 0
 		return result
+
+	result["triggers"] = true
 
 	result["strength_after"] = survivors
 
@@ -138,7 +139,7 @@ static func apply_adjacent_effects(
 	return {
 		"rabble_attrition": attrition,
 		"strength_transferred": transferred,
-		"topic_tier": 3,          # TopicData.Tier.TIER_4 = 3
+		"topic_tier": TopicData.Tier.TIER_4,
 		"topic_category": "POLITICAL",
 		"topic_title": "Bandits from " + origin_clan + " territory enter " + dest_clan + " lands",
 		"topic_subject_clan": origin_clan,

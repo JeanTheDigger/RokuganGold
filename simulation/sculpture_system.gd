@@ -714,7 +714,7 @@ static func collect_figurine_topics(
 			avg_q += (sc_v as SculptureData).quality_tier
 		avg_q /= cluster.size()
 		results.append({
-			"tier": 3,  # TIER_4
+			"tier": TopicData.Tier.TIER_4,
 			"category": "SOCIAL",
 			"topic_type": "figurine_collection",
 			"title": "A collection of figurines by the same sculptor draws admirers.",
@@ -738,7 +738,7 @@ static func collect_figurine_topics(
 				by_creator[first_creator].size() >= MANTIS_COLLECTION_THRESHOLD:
 			continue  # Already reported under creator cluster.
 		results.append({
-			"tier": 3,  # TIER_4
+			"tier": TopicData.Tier.TIER_4,
 			"category": "SOCIAL",
 			"topic_type": "figurine_collection",
 			"title": "A collection of thematically linked figurines draws admirers.",

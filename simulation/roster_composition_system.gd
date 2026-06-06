@@ -634,9 +634,13 @@ static func _sortie_enemy(size: String, total: int, rng: RandomNumberGenerator) 
 			if mt_c > 0:     groups.append(_group(MAHO_TSUKAI,      mt_c,   ROLE_RITUAL_SPACE))
 			if ogre_war > 0: groups.append(_group(OGRE_WARRIOR,     ogre_war, ROLE_GUARD_POST))
 			if ogre_rav > 0: groups.append(_group(OGRE_RAVENOUS,    ogre_rav, ROLE_CAMP_GROUP))
-			if ogre_wl > 0:  groups.append(_group(OGRE_WARLORD,     ogre_wl,  ROLE_LEADER))
+			# When Oni is present, it is the apex combatant; Ogre Warlord leads the approach.
+			if oni_c > 0:
+				groups.append(_group(ONI_SPAWN,    oni_c,   ROLE_LEADER))
+				if ogre_wl > 0: groups.append(_group(OGRE_WARLORD, ogre_wl, ROLE_CHOKEPOINT_HOLDER))
+			else:
+				if ogre_wl > 0: groups.append(_group(OGRE_WARLORD, ogre_wl, ROLE_LEADER))
 			if troll_c > 0:  groups.append(_group(TROLL,            troll_c,  ROLE_CHOKEPOINT_HOLDER))
-			if oni_c > 0:    groups.append(_group(ONI_SPAWN,        oni_c,    ROLE_LEADER))
 		SORTIE_MEDIUM:
 			# 40% Bakemono, 30% Undead (with Maho-tsukai), 20% Ogre, 10% chance Troll (s56.10.11 LOCKED).
 			var troll: bool = rng.randf() < 0.10
@@ -663,7 +667,7 @@ static func _sortie_enemy(size: String, total: int, rng: RandomNumberGenerator) 
 			if zomb_c > 0:   groups.append(_group(ZOMBIE,           zomb_c, ROLE_CAMP_GROUP))
 			if skel_c > 0:   groups.append(_group(SKELETON_WARRIOR, skel_c, ROLE_GUARD_POST))
 			if rev_c > 0:    groups.append(_group(UNDEAD_REVENANT,  rev_c,  ROLE_CHOKEPOINT_HOLDER))
-			if mt_c > 0:     groups.append(_group(MAHO_TSUKAI,      mt_c,   ROLE_LEADER))
+			if mt_c > 0:     groups.append(_group(MAHO_TSUKAI,      mt_c,   ROLE_RITUAL_SPACE))
 			if ogre_war > 0: groups.append(_group(OGRE_WARRIOR,     ogre_war, ROLE_GUARD_POST))
 			if ogre_rav > 0: groups.append(_group(OGRE_RAVENOUS,    ogre_rav, ROLE_CAMP_GROUP))
 			if ogre_wl > 0:  groups.append(_group(OGRE_WARLORD,     ogre_wl,  ROLE_LEADER))

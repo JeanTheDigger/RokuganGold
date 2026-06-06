@@ -255,7 +255,9 @@ static func treat_wound(
 	# Healing roll: 1k1 base; +1 die at Rank 5 mastery; +1 die per raise (keep 1).
 	var medicine_rank: int = SkillResolver.get_skill_rank(healer, "Medicine")
 	var mastery_bonus: int = 1 if medicine_rank >= MEDICINE_MASTERY_RANK else 0
-	var healing_dice: int = 1 + mastery_bonus + raises
+	# QUICK_HEALER (s45): +2 extra rolled dice on healing rolls.
+	var stamina_bonus: int = AdvantageSystem.get_healing_stamina_bonus(target)
+	var healing_dice: int = 1 + mastery_bonus + raises + stamina_bonus
 	var heal_roll: int = dice.roll_and_keep(healing_dice, 1).total
 
 	var heal_result: Dictionary = WoundSystem.heal_wounds(target, heal_roll)

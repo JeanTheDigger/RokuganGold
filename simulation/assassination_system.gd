@@ -343,7 +343,7 @@ static func has_seduce_for_access(
 			continue
 		var seduced_id: int = int(ent.get("target_id", -1))
 		var seduced: L5RCharacterData = characters_by_id.get(seduced_id) as L5RCharacterData
-		if seduced != null and seduced.physical_location == target_location:
+		if seduced != null and not CharacterStats.is_dead(seduced) and seduced.physical_location == target_location:
 			return true
 	return false
 
@@ -672,13 +672,16 @@ static func resolve_bodyguard_encounter(
 			var guard_init: DiceResult = dice_engine.roll_and_keep(
 				bodyguard.reflexes + 1, bodyguard.reflexes
 			)
-			var assassin_first: bool = assassin_init.total >= guard_init.total
+			var assassin_wound: int = CharacterStats.get_wound_penalty(assassin)
+			var guard_wound: int = CharacterStats.get_wound_penalty(bodyguard)
+			var assassin_first: bool = (assassin_init.total + assassin_wound) >= \
+				(guard_init.total + guard_wound)
 			add_suspicion(state, SUSPICION_NOTABLE_FAILURE)
 			return {
 				"fight_initiated": true,
 				"assassin_first": assassin_first,
-				"assassin_initiative": assassin_init.total,
-				"guard_initiative": guard_init.total,
+				"assassin_initiative": assassin_init.total + assassin_wound,
+				"guard_initiative": guard_init.total + guard_wound,
 				"suspicion": state["suspicion"],
 			}
 

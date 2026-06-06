@@ -453,3 +453,23 @@ func test_different_seeds_may_differ() -> void:
 	# This is not a strict failure — just document that seeds can diverge.
 	if not same:
 		pass  # Expected divergence.
+
+
+# -- Population slot passability (regression for river/building overlap) --------
+
+func test_all_population_slots_are_on_passable_tiles() -> void:
+	# Generates a VILLAGE (strength=6) with a river forced by seed "river_overlap_check".
+	# Verifies every population slot tile is passable after all generation steps
+	# run — catches the river-overwrites-building-floor bug (BUG 2).
+	for seed: String in ["river_overlap_check", "river_b", "river_c", "no_river_d"]:
+		var map: OccupiedVillageMapData = OccupiedVillageTemplateGenerator.generate(
+			seed, 6,
+			[OccupiedVillageMapData.ObjType.KILL_LEADER])
+		for slot: Dictionary in map.population_slots:
+			var tx: int = slot.get("x", -1)
+			var ty: int = slot.get("y", -1)
+			assert_true(tx >= 0 and ty >= 0,
+				"Population slot has invalid coordinates (%d, %d)" % [tx, ty])
+			var tile_type: int = map.get_tile(tx, ty)
+			assert_true(MovementSystem.is_passable(tile_type),
+				"Population slot at (%d,%d) is on impassable tile type %d" % [tx, ty, tile_type])

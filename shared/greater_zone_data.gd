@@ -20,7 +20,7 @@ extends Resource
 # -- Type-specific identity --------------------------------------------------
 
 # SETTLEMENT: the settlement this Greater Zone represents.
-@export var settlement_id: String = ""
+@export var settlement_id: int = -1  # Bug 11 FIX: was String; int matches all other settlement ID fields
 
 # PROVINCE_SUBTILE: which province and which sub-tile index (0-based, up to 4).
 @export var province_id: String = ""

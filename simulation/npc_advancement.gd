@@ -70,11 +70,11 @@ static func get_base_xp_rate(character: L5RCharacterData) -> float:
 		return BASE_RATE_GUNSO
 
 	var pos: String = character.role_position
-	if pos == "School Master":
+	if pos == RoleRegistry.SCHOOL_MASTER:
 		return BASE_RATE_SENSEI
-	if pos == "Temple Head" or pos == "Monastery Abbot":
+	if pos == RoleRegistry.TEMPLE_HEAD or pos == RoleRegistry.MONASTERY_ABBOT:
 		return BASE_RATE_TEMPLE_HEAD
-	if pos == "Clan Magistrate" or pos == "Emerald Magistrate":
+	if pos == RoleRegistry.CLAN_MAGISTRATE or pos == RoleRegistry.EMERALD_MAGISTRATE:
 		return BASE_RATE_MAGISTRATE
 
 	if character.school_type == Enums.SchoolType.COURTIER:
@@ -207,6 +207,9 @@ static func _try_spend_on_ring(character: L5RCharacterData, ring: Enums.Ring, av
 	var cost: int = RING_PROGRESS_COST.get(current_rank, 0)
 	if cost <= 0:
 		return {"spent": 0, "advanced": false}
+	# ELEMENTAL_BLESSING / ENLIGHTENED (s45): reduced XP cost per trait advance.
+	var discount: int = AdvantageSystem.get_trait_xp_discount(character, ring) * XP_TO_PROGRESS
+	cost = maxi(0, cost - discount)
 
 	var key: String = _ring_key(ring)
 	var current_progress: int = _get_progress(character, key)
@@ -232,6 +235,8 @@ static func _try_spend_on_skill(character: L5RCharacterData, skill_name: String,
 	var cost: int = SKILL_PROGRESS_COST.get(current_rank, 0)
 	if cost <= 0:
 		return {"spent": 0, "advanced": false}
+	# OBTUSE (s45): XP cost doubled for High Skills except Investigation/Medicine.
+	cost *= AdvantageSystem.get_high_skill_xp_multiplier(character, skill_name)
 
 	var key: String = _skill_key(skill_name)
 	var current_progress: int = _get_progress(character, key)

@@ -399,6 +399,24 @@ func test_all_katas_have_effect_stubs() -> void:
 		assert_ne(stub.get("effect_desc", ""), "", "Empty effect_desc for: %s" % kata_name)
 
 
+func test_mirumoto_reduces_requirement_via_school_paths() -> void:
+	# Bug 9 regression: _has_mirumoto_kakita_reduction only checked school_name,
+	# not school_paths. Multi-school character with Mirumoto as secondary path
+	# was incorrectly denied the ring reduction for multi-ring katas.
+	var c: L5RCharacterData = _make_bushi("Hida Bushi", "Crab", 2, 2, 2)
+	c.school_paths = ["Mirumoto Bushi"]
+	assert_true(KataSystem.can_learn_kata(c, "The Empire Rests on its Edge"),
+		"secondary Mirumoto school must grant ring reduction on multi-ring katas")
+
+
+func test_kakita_reduces_requirement_via_school_paths() -> void:
+	# Bug 9 regression: same issue for Kakita as secondary school.
+	var c: L5RCharacterData = _make_bushi("Hida Bushi", "Crab", 2, 2, 2)
+	c.school_paths = ["Kakita Bushi"]
+	assert_true(KataSystem.can_learn_kata(c, "The Empire Rests on its Edge"),
+		"secondary Kakita school must grant ring reduction on multi-ring katas")
+
+
 # === KATA COUNT SANITY ===
 
 func test_kata_data_has_43_entries() -> void:

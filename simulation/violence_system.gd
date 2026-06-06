@@ -25,6 +25,22 @@ static func evaluate_violence(
 	prior_offenses_in_window: int,
 	is_brutal: bool,
 ) -> Dictionary:
+	# SACROSANCT (s45): violence against a sacrosanct character is a capital crime.
+	if AdvantageSystem.is_sacrosanct(victim):
+		return {
+			"crime_type": Enums.CrimeType.VIOLENCE,
+			"severity": Enums.CrimeSeverity.CAPITAL,
+			"honor_loss": HONOR_LOSS,
+			"glory_loss": GLORY_LOSS,
+			"infamy_gain": INFAMY_PER_REPEATED_OFFENSE,
+			"topic_tier": TopicData.Tier.TIER_2,
+			"punishment": PunishmentLevel.FORMAL_CENSURE,
+			"status_direction": _get_status_direction(attacker, victim),
+			"creates_duel_pretext": false,
+			"auto_detected": true,
+			"sacrosanct_victim": true,
+		}
+
 	var status_direction: String = _get_status_direction(attacker, victim)
 	var punishment: PunishmentLevel = _determine_punishment(status_direction, prior_offenses_in_window)
 	var topic_tier: int = _determine_topic_tier(prior_offenses_in_window)

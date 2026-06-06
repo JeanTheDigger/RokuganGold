@@ -240,7 +240,7 @@ func test_tenshu_bounds_set() -> void:
 		assert_true(m.tenshu_lx >= 0)
 		assert_true(m.tenshu_ly >= 0)
 		assert_true(m.tenshu_rx > m.tenshu_lx)
-		assert_true(m.tenshu_ry >= m.tenshu_ly)
+		assert_true(m.tenshu_ry > m.tenshu_ly)
 
 func test_tenshu_interior_is_floor_stone() -> void:
 	var m := CastleSiegeGenerator.generate("tenshu_floor", SC.FORTIFICATION, AM.ATTACKER)
@@ -349,16 +349,30 @@ func test_attacker_start_in_approach_zone() -> void:
 	assert_true(found)
 
 func test_defender_start_on_outer_walkway() -> void:
-	var m := CastleSiegeGenerator.generate("def_start", SC.FORTIFICATION, AM.DEFENDER)
-	# Defender starts on wall walkway (layer 0)
-	var on_walkway := false
-	for ww in m.wall_walkways:
-		if ww["layer_idx"] == 0:
-			if m.player_start_x >= ww["lx"] and m.player_start_x <= ww["rx"] \
-					and m.player_start_y == ww["ly"]:
-				on_walkway = true
-				break
-	assert_true(on_walkway)
+	# Defender starts on the layer-0 outer wall walkway for all three size categories.
+	for sc in [SC.FORTIFICATION, SC.CASTLE_TOWN, SC.CITY]:
+		var m := CastleSiegeGenerator.generate("def_start_%d" % sc, sc, AM.DEFENDER)
+		var on_walkway := false
+		for ww in m.wall_walkways:
+			if ww["layer_idx"] == 0:
+				if m.player_start_x >= ww["lx"] and m.player_start_x <= ww["rx"] \
+						and m.player_start_y == ww["ly"]:
+					on_walkway = true
+					break
+		assert_true(on_walkway, "Defender not on outer walkway for size %d" % sc)
+
+
+func test_defender_start_exact_y() -> void:
+	# Exact Y coordinates for the outer wall walkway per layout comments.
+	# FORTIFICATION h=25: ow_walk_y = 20
+	# CASTLE_TOWN   h=30: ow_walk_y = 25
+	# CITY          h=40: ow_walk_y = 26  (regression: was 29 before fix)
+	var expected_ys: Array = [20, 25, 26]
+	var sizes: Array = [SC.FORTIFICATION, SC.CASTLE_TOWN, SC.CITY]
+	for i in range(sizes.size()):
+		var m := CastleSiegeGenerator.generate("def_y_%d" % i, sizes[i], AM.DEFENDER)
+		assert_eq(m.player_start_y, expected_ys[i],
+			"Wrong defender Y for size %d: got %d expected %d" % [sizes[i], m.player_start_y, expected_ys[i]])
 
 # -- Generator: determinism ---------------------------------------------------
 

@@ -121,23 +121,23 @@ func test_shugenja_rate():
 
 func test_magistrate_rate():
 	var c := _make_character()
-	c.role_position = "Clan Magistrate"
+	c.role_position = RoleRegistry.CLAN_MAGISTRATE
 	assert_almost_eq(NPCAdvancement.get_base_xp_rate(c), 0.06, 0.001)
 
 func test_sensei_rate():
 	var c := _make_character()
-	c.role_position = "School Master"
+	c.role_position = RoleRegistry.SCHOOL_MASTER
 	assert_almost_eq(NPCAdvancement.get_base_xp_rate(c), 0.04, 0.001)
 
 func test_temple_head_rate():
 	var c := _make_character()
-	c.role_position = "Temple Head"
+	c.role_position = RoleRegistry.TEMPLE_HEAD
 	assert_almost_eq(NPCAdvancement.get_base_xp_rate(c), 0.05, 0.001)
 
 func test_military_rank_overrides_role_position():
 	var c := _make_character()
 	c.military_rank = Enums.MilitaryRank.TAISA
-	c.role_position = "School Master"
+	c.role_position = RoleRegistry.SCHOOL_MASTER
 	assert_almost_eq(NPCAdvancement.get_base_xp_rate(c), 0.08, 0.001)
 
 
@@ -804,6 +804,8 @@ func test_solo_training_writeback_rank_up_creates_topic() -> void:
 	assert_eq(active_topics[0].tier, TopicData.Tier.TIER_4)
 	assert_true(c.topic_pool.has(active_topics[0].topic_id),
 		"Character's topic_pool must contain their solo-training rank-up topic")
+	assert_true(active_topics[0].title.contains("Hida Taro"),
+		"Rank-up topic title must contain the character's name (character_name, not .name)")
 
 
 func test_solo_training_writeback_no_topic_without_rank_up() -> void:
@@ -1154,3 +1156,116 @@ func test_seasonal_kata_not_learned_twice_same_season() -> void:
 		if k == known_first:
 			count += 1
 	assert_eq(count, 1, "Same kata must not appear twice in katas array")
+
+
+# ---------------------------------------------------------------------------
+# OBTUSE (s45) XP cost doubling — wired into _try_spend_on_skill
+# ---------------------------------------------------------------------------
+
+func _make_obtuse_character() -> L5RCharacterData:
+	var c: L5RCharacterData = _make_character(90, "Hida Bushi")
+	c.skills = {"Calligraphy": 0}
+	c.progress_bars = {}
+	var dis: DisadvantageData = DisadvantageData.new()
+	dis.disadvantage_type = Enums.Disadvantage.OBTUSE
+	dis.rank = 1
+	dis.metadata = {}
+	c.disadvantages = [dis]
+	return c
+
+
+func _make_sensei(rank: int) -> L5RCharacterData:
+	var s: L5RCharacterData = _make_character(91, "Hida Bushi")
+	s.skills = {"Calligraphy": rank}
+	s.progress_bars = {}
+	s.disadvantages = []
+	return s
+
+
+func test_obtuse_doubles_cost_for_high_skill_via_training() -> void:
+	# SKILL_PROGRESS_COST[0] = 1000; with OBTUSE on Calligraphy (High Skill) → 2000.
+	# Each TRAINING_PROGRESS_SENSEI_2_ABOVE session = 100 progress.
+	# Without OBTUSE: 10 sessions to advance; with OBTUSE: 20 sessions.
+	var student: L5RCharacterData = _make_obtuse_character()
+	var sensei: L5RCharacterData = _make_sensei(2)
+	for _i: int in range(10):
+		NPCAdvancement.resolve_training_session(sensei, student, "Calligraphy")
+	assert_eq(student.skills.get("Calligraphy", 0), 0,
+		"OBTUSE should prevent advancement after only 10 sessions (need 20)")
+	for _i: int in range(10):
+		NPCAdvancement.resolve_training_session(sensei, student, "Calligraphy")
+	assert_eq(student.skills.get("Calligraphy", 0), 1,
+		"OBTUSE character must advance after 20 sessions on a High Skill")
+
+
+func test_no_obtuse_advances_after_ten_sessions() -> void:
+	# Without OBTUSE: rank 0 → 1 costs 1000 progress; 10 sessions × 100 = 1000.
+	var student: L5RCharacterData = _make_character(92, "Hida Bushi")
+	student.skills = {"Calligraphy": 0}
+	student.progress_bars = {}
+	student.disadvantages = []
+	var sensei: L5RCharacterData = _make_sensei(2)
+	for _i: int in range(10):
+		NPCAdvancement.resolve_training_session(sensei, student, "Calligraphy")
+	assert_eq(student.skills.get("Calligraphy", 0), 1,
+		"Without OBTUSE, Calligraphy must advance after 10 training sessions")
+
+
+func test_obtuse_does_not_double_cost_for_investigation() -> void:
+	# Investigation is explicitly exempt from OBTUSE per GDD s45.
+	var student: L5RCharacterData = _make_obtuse_character()
+	student.skills = {"Investigation": 0}
+	student.progress_bars = {}
+	var sensei: L5RCharacterData = _make_character(93, "Hida Bushi")
+	sensei.skills = {"Investigation": 2}
+	sensei.disadvantages = []
+	for _i: int in range(10):
+		NPCAdvancement.resolve_training_session(sensei, student, "Investigation")
+	assert_eq(student.skills.get("Investigation", 0), 1,
+		"OBTUSE must not double cost for Investigation (GDD s45 exemption)")
+
+
+func test_obtuse_does_not_double_cost_for_medicine() -> void:
+	# Medicine is explicitly exempt from OBTUSE per GDD s45.
+	var student: L5RCharacterData = _make_obtuse_character()
+	student.skills = {"Medicine": 0}
+	student.progress_bars = {}
+	var sensei: L5RCharacterData = _make_character(94, "Hida Bushi")
+	sensei.skills = {"Medicine": 2}
+	sensei.disadvantages = []
+	for _i: int in range(10):
+		NPCAdvancement.resolve_training_session(sensei, student, "Medicine")
+	assert_eq(student.skills.get("Medicine", 0), 1,
+		"OBTUSE must not double cost for Medicine (GDD s45 exemption)")
+
+
+func test_obtuse_does_not_double_cost_for_non_high_skill() -> void:
+	# Kenjutsu is not a High Skill; OBTUSE has no effect on it.
+	var student: L5RCharacterData = _make_obtuse_character()
+	student.skills = {"Kenjutsu": 0}
+	student.progress_bars = {}
+	var sensei: L5RCharacterData = _make_character(95, "Hida Bushi")
+	sensei.skills = {"Kenjutsu": 2}
+	sensei.disadvantages = []
+	for _i: int in range(10):
+		NPCAdvancement.resolve_training_session(sensei, student, "Kenjutsu")
+	assert_eq(student.skills.get("Kenjutsu", 0), 1,
+		"OBTUSE must not double cost for Kenjutsu (not a High Skill)")
+
+
+func test_obtuse_doubles_lore_skill_cost() -> void:
+	# All Lore: sub-skills are High Skills. OBTUSE applies.
+	var student: L5RCharacterData = _make_obtuse_character()
+	student.skills = {"Lore: Heraldry": 0}
+	student.progress_bars = {}
+	var sensei: L5RCharacterData = _make_character(96, "Hida Bushi")
+	sensei.skills = {"Lore: Heraldry": 2}
+	sensei.disadvantages = []
+	for _i: int in range(10):
+		NPCAdvancement.resolve_training_session(sensei, student, "Lore: Heraldry")
+	assert_eq(student.skills.get("Lore: Heraldry", 0), 0,
+		"OBTUSE must double cost for Lore: Heraldry (High Skill via prefix)")
+	for _i: int in range(10):
+		NPCAdvancement.resolve_training_session(sensei, student, "Lore: Heraldry")
+	assert_eq(student.skills.get("Lore: Heraldry", 0), 1,
+		"OBTUSE character must advance Lore: Heraldry after 20 sessions")

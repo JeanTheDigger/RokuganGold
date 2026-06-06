@@ -235,6 +235,20 @@ static func place_shide(
 	}
 
 
+## Cleans dead character references from senbazurus. Marks senbazurus as
+## abandoned when the folder (creator) dies; retains recipient_id for topic text.
+static func handle_character_death(
+	active_senbazurus: Array,
+	dead_id: int,
+) -> void:
+	for s_v: Variant in active_senbazurus:
+		if not s_v is SenbazuruData:
+			continue
+		var s: SenbazuruData = s_v as SenbazuruData
+		if s.folder_id == dead_id and s.state == "active":
+			s.state = "abandoned"
+
+
 static func try_auto_grant_permission(
 	actor: L5RCharacterData,
 	settlement: SettlementData,

@@ -119,6 +119,8 @@ static func advance_day(
 		_populate_disposition_snapshots(characters, disposition_snapshots)
 
 	_reset_all_ap(characters)
+	_reset_lost_love_daily_state(characters)
+	_reset_battle_healing_daily_state(characters)
 
 	var _spm: Dictionary = {}
 	for _s: SettlementData in settlements:
@@ -147,10 +149,12 @@ static func advance_day(
 	_assign_kaiu_engineer_standing_objectives(characters, objectives_map, settlements)
 	_assign_artisan_standing_objectives(characters, objectives_map)
 	_assign_monk_standing_objectives(characters, objectives_map)
+	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
 
 	_populate_military_data(military_data, companies)
 
 	_clear_stale_context_flags(world_states)
+	_expire_province_weather(provinces, ic_day)
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
 
@@ -165,6 +169,10 @@ static func advance_day(
 	_process_duped_foolish_on_arrival(
 		travel_arrivals, characters_by_id, objectives_map, settlements,
 	)
+	_process_compulsion_on_arrival(
+		travel_arrivals, characters_by_id, settlements, world_states, dice_engine,
+	)
+	_process_lost_love_arrival_trigger(travel_arrivals, characters_by_id, settlements, ic_day)
 
 	var musha_season_count: int = int(season_meta.get("horde_season_count", 0))
 	var musha_shugyo_results: Array = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map, dice_engine, musha_season_count)
@@ -189,6 +197,7 @@ static func advance_day(
 	)
 	var court_openings: Array = _process_court_openings(active_courts, ic_day)
 	var court_attendance: Array = _process_court_attendance(active_courts, characters, characters_by_id)
+	_apply_well_connected_court_bonus(court_attendance, active_courts, characters_by_id)
 	var court_results: Array = _process_active_courts(
 		active_courts, active_topics, next_topic_id, ic_day,
 		active_edicts, next_edict_id, active_wars,
@@ -269,6 +278,10 @@ static func advance_day(
 		active_armies, insurgencies,
 	)
 	world_states["_crime_records"] = crime_records
+
+	_process_spy_network_tick(
+		characters, characters_by_id, active_topics, objectives_map, companies, ic_day,
+	)
 
 	var day_result: Dictionary = NPCWaveResolver.resolve_day_applied(
 		characters, world_states, objectives_map, scoring_tables, filter_data,
@@ -591,6 +604,20 @@ static func advance_day(
 		active_courts,
 	)
 
+	_process_brash_reactions(
+		day_result.get("results", []),
+		characters_by_id,
+		world_states,
+		dice_engine,
+	)
+
+	_process_contrary_reactions(
+		day_result.get("results", []),
+		characters_by_id,
+		world_states,
+		dice_engine,
+	)
+
 	_process_performance_request_writebacks(
 		day_result.get("results", []),
 		active_courts,
@@ -650,6 +677,9 @@ static func advance_day(
 		next_topic_id,
 		entanglements,
 	)
+
+	_seed_assassination_violence_public_records(
+		assassination_results, settlements, ic_day)
 
 	var war_declarations: Array = _process_war_declarations(
 		day_result.get("results", []),
@@ -887,6 +917,11 @@ static func advance_day(
 		death_events, active_senbazurus, characters_by_id,
 		active_topics, next_topic_id, ic_day,
 	)
+	_process_ritual_spell_writebacks(
+		day_result.get("results", []),
+		characters_by_id, provinces, character_province_map, dice_engine,
+		active_topics, next_topic_id, ic_day, spiritual_insurgency_events,
+	)
 	_process_noshi_consumption_writebacks(
 		day_result.get("results", []), characters_by_id,
 	)
@@ -1000,6 +1035,9 @@ static func advance_day(
 
 	_remove_terminal_commitments(commitments)
 
+	# SOFT_HEARTED (s45): killers must pass Willpower TN 20 or suffer +10 TN until next day.
+	_process_soft_hearted_kill_penalties(death_events, characters_by_id, dice_engine, ic_day)
+
 	var orphan_results: Array = _process_lord_deaths(
 		death_events, characters, objectives_map, successor_map,
 		active_successions, next_succession_id, characters_by_id, ic_day,
@@ -1017,6 +1055,7 @@ static func advance_day(
 		active_hunts, favors, bloodspeaker_cells, active_secrets,
 		theater_pieces, active_paintings, active_sculptures,
 		commission_records, settlements, active_bonsai,
+		active_okiyas, active_arrangements, active_senbazurus,
 	)
 	_apply_artist_grief_on_death(characters, characters_by_id, active_paintings, settlements, ic_day)
 
@@ -1443,6 +1482,7 @@ static func advance_day(
 				active_hunts, favors, bloodspeaker_cells, active_secrets,
 				theater_pieces, active_paintings, active_sculptures,
 				commission_records, settlements, active_bonsai,
+				active_okiyas, active_arrangements, active_senbazurus,
 			)
 
 	var koku_flow_results: Dictionary = {}
@@ -1458,6 +1498,15 @@ static func advance_day(
 			stipends, characters_by_id, active_topics, next_topic_id, ic_day,
 		)
 		_process_bonsai_monthly_neglect(active_bonsai, characters_by_id, ic_day / 30)
+		_process_sakkaku_monthly_pranks(characters, characters_by_id, ic_day, character_province_map, province_clan_map)
+
+	if ic_day > 0 and ic_day % 7 == 0:
+		_process_spy_network_weekly(
+			characters, characters_by_id, active_topics, objectives_map, companies, ic_day,
+		)
+		_process_well_connected_weekly(
+			characters, characters_by_id, active_topics, ic_day,
+		)
 
 	if is_season_boundary:
 		_purge_resolved_crime_records(crime_records, ic_day)
@@ -1483,6 +1532,10 @@ static func advance_day(
 		crime_records, characters, characters_by_id, active_topics, next_topic_id, ic_day,
 		settlements,
 	)
+
+	# s44 Periodic taint rolls then rank-up processing
+	_process_periodic_taint_rolls(characters, dice_engine, ic_day)
+	_process_taint_rank_changes(characters, dice_engine, ic_day)
 
 	# s57.54 §9 — mid-season crisis update fires on non-seasonal days when a
 	# champion has Tier 1/2 topics not yet addressed as forced conclusions.
@@ -4164,14 +4217,14 @@ static func _extrad_find_harboring_lord(
 		if lord != null and not CharacterStats.is_dead(lord) and lord.clan == fugitive.clan:
 			return lord
 	for c: L5RCharacterData in characters:
-		if c.clan == fugitive.clan and c.role_position == "Clan Champion" and not CharacterStats.is_dead(c):
+		if c.clan == fugitive.clan and c.role_position == RoleRegistry.CLAN_CHAMPION and not CharacterStats.is_dead(c):
 			return c
 	return null
 
 
 static func _extrad_find_clan_champion_id(clan: String, characters: Array) -> int:
 	for c: L5RCharacterData in characters:
-		if c.clan == clan and c.role_position == "Clan Champion" and not CharacterStats.is_dead(c):
+		if c.clan == clan and c.role_position == RoleRegistry.CLAN_CHAMPION and not CharacterStats.is_dead(c):
 			return c.character_id
 	return -1
 
@@ -5136,7 +5189,7 @@ static func _process_witness_tampering_writebacks(
 					next_case_id[0] += 1
 					crime_records.append(murder_record)
 					if victim != null:
-						_apply_victim_death(victim, active_topics, next_topic_id, ic_day, kill_location, death_events)
+						_apply_victim_death(victim, active_topics, next_topic_id, ic_day, kill_location, death_events, criminal_id)
 					var criminal_2: L5RCharacterData = characters_by_id.get(criminal_id)
 					if criminal_2 != null:
 						var murder_topic: TopicData = _create_crime_topic(
@@ -5219,15 +5272,25 @@ static func _apply_victim_death(
 	ic_day: int,
 	kill_location: String,
 	death_events: Array = [],
+	killer_id: int = -1,
 ) -> void:
 	var earth: int = CharacterStats.get_ring_value(victim, Enums.Ring.EARTH)
-	victim.wounds_taken = earth * 5 * 5
+	var ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+	if AdvantageSystem.check_great_destiny(victim, ic_year).get("triggered", false):
+		var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(victim)
+		victim.wounds_taken = gd_threshold * 6 + 1  # start of DOWN level
+		var gd_adv: AdvantageData = AdvantageSystem.get_advantage(victim, Enums.Advantage.GREAT_DESTINY)
+		if gd_adv != null:
+			gd_adv.metadata["last_triggered_ic_year"] = ic_year
+	else:
+		victim.wounds_taken = earth * 5 * 5
 	death_events.append({
 		"character_id": victim.character_id,
 		"is_lord": victim.role_position != "",
 		"cause": "witness_killed",
 		"suspicious_death": true,
 		"ic_day": ic_day,
+		"killer_id": killer_id,
 	})
 	var death_topic_id: int = next_topic_id[0]
 	next_topic_id[0] = death_topic_id + 1
@@ -5807,7 +5870,7 @@ static func _process_solo_training_writebacks(
 		topic.topic_id = next_topic_id[0]
 		next_topic_id[0] += 1
 		topic.slug = "rank_advancement_%d" % char_id
-		topic.title = "%s achieves Rank %d" % [character.name, new_rank]
+		topic.title = "%s achieves Rank %d" % [character.character_name, new_rank]
 		topic.topic_type = "rank_advancement"
 		topic.tier = TopicData.Tier.TIER_4
 		topic.category = TopicData.Category.PERSONAL
@@ -6051,6 +6114,110 @@ static func _process_duel_response_writebacks(
 			"effects": duel_effects,
 		}
 		results.append(wrapped)
+
+
+# -- s45 BRASH: inject duel challenge when BRASH character fails Willpower check
+# after being successfully publicly insulted. The BRASH character challenges the
+# insulter; DUEL_CHALLENGE_RECEIVED goes into the insulter's pending_events.
+static func _process_brash_reactions(
+	results: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	dice_engine: DiceEngine,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "PUBLIC_INSULT":
+			continue
+		if not d.get("success", false):
+			continue
+		var insulter_id: int = d.get("character_id", -1)
+		var target_id: int = d.get("target_npc_id", -1)
+		if insulter_id < 0 or target_id < 0:
+			continue
+		var target: L5RCharacterData = characters_by_id.get(target_id)
+		if target == null or CharacterStats.is_dead(target):
+			continue
+		var brash_check: Dictionary = AdvantageSystem.check_brash_trigger(target, true)
+		if not brash_check.get("triggered", false):
+			continue
+		var tn: int = brash_check.get("tn", 25)
+		var brash_wound: int = CharacterStats.get_wound_penalty(target)
+		var roll: DiceResult = dice_engine.roll_and_keep(
+			target.willpower, target.willpower, false, ""
+		)
+		var total: int = roll.total + int(target.honor) + brash_wound
+		if total >= tn:
+			continue  # Passed — stays composed
+		# Failed: BRASH character challenges the insulter to a duel.
+		var insulter_ws: Dictionary = world_states.get(insulter_id, {})
+		var pending: Array = insulter_ws.get("pending_events", [])
+		pending.append({
+			"reactive_type": "DUEL_CHALLENGE_RECEIVED",
+			"challenger_id": target_id,
+			"to_death": false,
+			"is_sanctioned": true,
+			"is_public": true,
+			"brash_triggered": true,
+		})
+		insulter_ws["pending_events"] = pending
+		world_states[insulter_id] = insulter_ws
+
+
+# -- s45 CONTRARY: log informational event when CONTRARY character fails Willpower
+# check after a PUBLIC_DEBATE in their location. Position shift magnitude is not
+# specified in GDD s45 — no numeric effect applied; log only.
+static func _process_contrary_reactions(
+	results: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	dice_engine: DiceEngine,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "PUBLIC_DEBATE":
+			continue
+		if not d.get("success", false):
+			continue
+		var actor_id: int = d.get("character_id", -1)
+		if actor_id < 0:
+			continue
+		var actor: L5RCharacterData = characters_by_id.get(actor_id)
+		if actor == null or CharacterStats.is_dead(actor):
+			continue
+		var actor_glory_rank: float = actor.glory
+		var actor_location: String = actor.physical_location
+		for cid: Variant in characters_by_id:
+			var c: L5RCharacterData = characters_by_id.get(cid)
+			if c == null or CharacterStats.is_dead(c):
+				continue
+			if c.character_id == actor_id:
+				continue
+			if c.physical_location != actor_location:
+				continue
+			var contrary_check: Dictionary = AdvantageSystem.check_contrary_trigger(c, actor_glory_rank)
+			if not contrary_check.get("triggered", false):
+				continue
+			var tn: int = contrary_check.get("tn", 0)
+			var contrary_wound: int = CharacterStats.get_wound_penalty(c)
+			var roll: DiceResult = dice_engine.roll_and_keep(c.willpower, c.willpower, false, "")
+			if (roll.total + contrary_wound) >= tn:
+				continue  # Passed — stays composed
+			# Failed: CONTRARY character publicly contradicts the debater.
+			# GDD s45 does not specify a position shift magnitude — log only.
+			var cws: Dictionary = world_states.get(c.character_id, {})
+			var action_log: Array = cws.get("action_log", [])
+			action_log.append({
+				"action_id": "CONTRARY_REACTION",
+				"contrary_character_id": c.character_id,
+				"debate_actor_id": actor_id,
+			})
+			cws["action_log"] = action_log
+			world_states[c.character_id] = cws
 
 
 static func _process_commerce_topic_writebacks(
@@ -6729,8 +6896,9 @@ static func _apply_criminal_recall(
 	world_states: Dictionary,
 ) -> void:
 	var intelligence: int = criminal.intelligence if criminal.intelligence > 0 else 2
+	var recall_wound: int = CharacterStats.get_wound_penalty(criminal)
 	var recall_result: DiceResult = dice_engine.roll_and_keep(intelligence, intelligence)
-	var total: int = recall_result.total
+	var total: int = recall_result.total + recall_wound
 	if total < InvestigationLoopSystem.CRIMINAL_RECALL_TN:
 		return
 
@@ -6752,7 +6920,7 @@ static func _seed_crime_topic_to_knowers(
 		var witness: L5RCharacterData = characters_by_id.get(witness_id)
 		if witness != null and not CharacterStats.is_dead(witness) and topic.topic_id not in witness.topic_pool:
 			witness.topic_pool.append(topic.topic_id)
-			if witness.role_position not in MAGISTRATE_ROLE_POSITIONS \
+			if witness.role_position not in RoleRegistry.MAGISTRATE_POSITIONS \
 					and witness_id != record.victim_id:
 				HonorGlorySystem.apply_honor_change(
 					witness, CrimeSystem.get_ignoring_dishonorable_honor(witness)
@@ -6768,13 +6936,6 @@ static func _seed_crime_topic_to_knowers(
 # objective if they don't already have one. This ensures they participate in
 # the crime topic scan each tick without requiring explicit lord directives.
 
-const MAGISTRATE_ROLE_POSITIONS: Array = [
-	"Clan Magistrate",
-	"Emerald Magistrate",
-	"Clan Magistrate Commander",
-]
-
-
 static func _assign_magistrate_standing_objectives(
 	characters: Array,
 	objectives_map: Dictionary,
@@ -6782,7 +6943,7 @@ static func _assign_magistrate_standing_objectives(
 	for character: L5RCharacterData in characters:
 		if character.is_pc:
 			continue
-		if character.role_position not in MAGISTRATE_ROLE_POSITIONS:
+		if character.role_position not in RoleRegistry.MAGISTRATE_POSITIONS:
 			continue
 		if CharacterStats.is_dead(character):
 			continue
@@ -7733,6 +7894,9 @@ static func _cleanup_dead_character_references(
 	commission_records: Array = [],
 	settlements: Array = [],
 	active_bonsai: Array = [],
+	active_okiyas: Array = [],
+	active_arrangements: Array = [],
+	active_senbazurus: Array = [],
 ) -> void:
 	var dead_ids: Array = []
 	for c: L5RCharacterData in characters:
@@ -7797,6 +7961,18 @@ static func _cleanup_dead_character_references(
 	if not commission_records.is_empty() or not active_bonsai.is_empty():
 		for did: int in dead_ids:
 			GardenSystem.handle_character_death(did, commission_records, settlements, active_bonsai)
+
+	if not active_okiyas.is_empty():
+		for did: int in dead_ids:
+			GeishaSystem.handle_character_death(active_okiyas, did, characters_by_id)
+
+	if not active_arrangements.is_empty():
+		for did: int in dead_ids:
+			IkebanaSystem.handle_character_death(active_arrangements, did)
+
+	if not active_senbazurus.is_empty():
+		for did: int in dead_ids:
+			OrigamiSystem.handle_character_death(active_senbazurus, did)
 
 	for secret: Variant in active_secrets:
 		if not secret is SecretData:
@@ -8493,7 +8669,7 @@ static func _process_magistrate_conviction_cascade(
 		var perpetrator: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
 		if perpetrator == null:
 			continue
-		if perpetrator.role_position not in MAGISTRATE_ROLE_POSITIONS:
+		if perpetrator.role_position not in RoleRegistry.MAGISTRATE_POSITIONS:
 			continue
 
 		var cascade: Dictionary = MagistrateAllocationSystem.resolve_magistrate_conviction(
@@ -9051,6 +9227,723 @@ static func _process_auto_conceal_on_arrival(
 	return results
 
 
+# -- Compulsion Arrival Check (s45) -------------------------------------------
+# Checks COMPULSION disadvantage for each arriving character. When the
+# destination settlement type matches the compulsion's location_tags and the
+# character fails a Willpower roll, sets ws["compulsion_active"] so the NPC
+# engine can respond during the day's AP wave.
+
+static func _location_tags_for_settlement_type(stype: Enums.SettlementType) -> Array:
+	match stype:
+		Enums.SettlementType.CITY, Enums.SettlementType.IMPERIAL_CAPITAL:
+			return ["urban", "sake_house", "gambling", "market", "entertainment"]
+		Enums.SettlementType.TOWN:
+			return ["town", "sake_house", "market"]
+		Enums.SettlementType.CASTLE, Enums.SettlementType.FAMILY_CASTLE:
+			return ["castle", "sake_house"]
+		Enums.SettlementType.VILLAGE:
+			return ["village"]
+		Enums.SettlementType.TEMPLE, Enums.SettlementType.SHINDEN, Enums.SettlementType.MONASTERY:
+			return ["temple", "sacred"]
+		_:
+			return []
+
+
+static func _process_compulsion_on_arrival(
+	arrivals: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	world_states: Dictionary,
+	dice_engine: DiceEngine,
+) -> void:
+	var settlement_type_map: Dictionary = {}
+	for s: Variant in settlements:
+		if s is SettlementData:
+			settlement_type_map[(s as SettlementData).settlement_name] = (s as SettlementData).settlement_type
+
+	for arrival: Dictionary in arrivals:
+		var char_id: int = arrival.get("character_id", -1)
+		var dest: String = arrival.get("destination", "")
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null or CharacterStats.is_dead(character) or dest.is_empty():
+			continue
+		if not AdvantageSystem.has_disadvantage(character, Enums.Disadvantage.COMPULSION):
+			continue
+
+		var stype: Enums.SettlementType = settlement_type_map.get(dest, Enums.SettlementType.VILLAGE)
+		var location_tags: Array = _location_tags_for_settlement_type(stype)
+		var trigger: Dictionary = AdvantageSystem.check_compulsion_trigger(character, location_tags)
+		if not trigger.get("triggered", false):
+			continue
+
+		var tn: int = trigger.get("tn", 15)
+		var wil: int = character.willpower
+		var compulsion_wound: int = CharacterStats.get_wound_penalty(character)
+		var roll: DiceResult = dice_engine.roll_and_keep(wil, wil, false, "")
+		if (roll.total + compulsion_wound) < tn:
+			var comp_dis: DisadvantageData = AdvantageSystem.get_disadvantage(
+				character, Enums.Disadvantage.COMPULSION
+			)
+			var ws: Dictionary = world_states.get(char_id, {})
+			if not ws.is_empty():
+				ws["compulsion_active"] = {
+					"subject": comp_dis.metadata.get("subject", "") if comp_dis != null else "",
+					"tn": tn,
+					"roll": roll.total,
+				}
+
+
+# -- LOST_LOVE daily state reset (s45) -----------------------------------------
+
+static func _reset_lost_love_daily_state(characters: Array) -> void:
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if not AdvantageSystem.has_disadvantage(c, Enums.Disadvantage.LOST_LOVE):
+			continue
+		var dis: DisadvantageData = AdvantageSystem.get_disadvantage(c, Enums.Disadvantage.LOST_LOVE)
+		if dis == null:
+			continue
+		dis.metadata["lost_love_tn_active"] = false
+		dis.metadata["triggers_today"] = 0
+
+
+# -- BATTLE_HEALING daily reset (s45 line 21: "Once per day per person") ------
+
+static func _reset_battle_healing_daily_state(characters: Array) -> void:
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if not AdvantageSystem.has_advantage(c, Enums.Advantage.BATTLE_HEALING):
+			continue
+		var adv: AdvantageData = AdvantageSystem.get_advantage(c, Enums.Advantage.BATTLE_HEALING)
+		if adv == null:
+			continue
+		adv.metadata["healed_today"] = []
+
+
+# =============================================================================
+# SPY NETWORK intelligence tick (s45 lines 341-349)
+# =============================================================================
+
+## NeedTypes that map to Character Focus: the spy tracks a specific rival / target.
+const _SPY_POLITICAL_NEED_TYPES: Array = [
+	"ACQUIRE_LEVERAGE", "ARRANGE_MARRIAGE", "CHALLENGE_TO_DUEL",
+	"DAMAGE_RELATIONSHIP", "ELIMINATE_CHARACTER", "GATHER_INTELLIGENCE",
+	"IDENTIFY_CONTACT", "INVESTIGATE_THREAT", "INVESTIGATE_CRIME",
+	"LOCATE_CHARACTER", "MOVE_TOPIC_POSITION", "RAISE_DISPOSITION",
+	"REASSESS_ELIMINATION", "RESTORE_HONOR", "RESTORE_GOVERNANCE",
+	"SECURE_ALLIANCE", "SEEK_GLORY", "SEEK_MAGISTRATE",
+	"SUPPRESS_INVESTIGATION", "TRIGGER_COMMITMENT",
+]
+
+## NeedTypes that map to Army Focus: the spy tracks a specific military force.
+const _SPY_MILITARY_NEED_TYPES: Array = [
+	"CONDUCT_SIEGE", "CONDUCT_SORTIE", "DEFEND_PROVINCE", "DEPLOY_ARMY",
+	"DEPLOY_SCOUTS", "ENDURE_SIEGE", "LEVY_TROOPS", "MAINTAIN_FORTIFICATION",
+	"MAINTAIN_STEEL_GARRISON", "ORDER_SHADOWLANDS_SORTIE", "PATROL_PROVINCE",
+	"RELIEVE_SIEGE", "TRAIN_TROOPS",
+]
+
+
+## Sync each NPC's spy network focus to their current primary objective (s45 line 349).
+## Reassigns automatically when need_type changes. Political → Character focus,
+## Military → Army focus, everything else → Place focus.
+static func _sync_spy_network_focus(
+	characters: Array,
+	objectives_map: Dictionary,
+	companies: Array,
+	ic_day: int,
+) -> void:
+	var ooc_day: int = ic_day / TimeSystem.TICKS_PER_REAL_DAY
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.is_pc:
+			continue
+		if not AdvantageSystem.has_advantage(character, Enums.Advantage.SPY_NETWORK):
+			continue
+		var adv: AdvantageData = AdvantageSystem.get_advantage(character, Enums.Advantage.SPY_NETWORK)
+		if adv == null:
+			continue
+		var primary: Dictionary = objectives_map.get(character.character_id, {}).get("primary", {})
+		var need_type: String = primary.get("need_type", "")
+		if need_type.is_empty():
+			continue
+		# Only reassign when the primary objective category changes.
+		if need_type == adv.metadata.get("last_synced_need_type", ""):
+			continue
+		var new_focus_type: String
+		var new_focus_id: int = -1
+		if need_type in _SPY_POLITICAL_NEED_TYPES:
+			new_focus_type = "character"
+			new_focus_id = primary.get("target_npc_id", -1)
+		elif need_type in _SPY_MILITARY_NEED_TYPES:
+			new_focus_type = "army"
+			# Prefer target character's commanded unit.
+			var target_npc_id: int = primary.get("target_npc_id", -1)
+			if target_npc_id >= 0:
+				for ch: L5RCharacterData in characters:
+					if not CharacterStats.is_dead(ch) and ch.character_id == target_npc_id:
+						new_focus_id = ch.commanded_unit_id
+						break
+			if new_focus_id < 0:
+				# Fallback: first company commanded by someone not of the spymaster's clan.
+				for comp: Variant in companies:
+					if not comp is MilitaryUnitData.CompanyData:
+						continue
+					if (comp as MilitaryUnitData.CompanyData).commander_id < 0:
+						continue
+					var cmdr_id: int = (comp as MilitaryUnitData.CompanyData).commander_id
+					for ch: L5RCharacterData in characters:
+						if not CharacterStats.is_dead(ch) and ch.character_id == cmdr_id:
+							if ch.clan != character.clan:
+								new_focus_id = (comp as MilitaryUnitData.CompanyData).company_id
+							break
+					if new_focus_id >= 0:
+						break
+		else:
+			# Economic / territorial → place focus on the relevant settlement or province.
+			new_focus_type = "place"
+			new_focus_id = primary.get("target_settlement_id", -1)
+			if new_focus_id < 0:
+				new_focus_id = primary.get("target_province_id", -1)
+		# Record the synced need_type regardless of whether we found a valid focus_id,
+		# so we don't retry on every tick for objectives with no resolvable target.
+		adv.metadata["last_synced_need_type"] = need_type
+		if new_focus_id < 0:
+			continue  # No resolvable target; keep existing focus.
+		AdvantageSystem.set_spy_network_focus(character, new_focus_type, new_focus_id, ooc_day)
+
+
+static func _process_spy_network_tick(
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	objectives_map: Dictionary,
+	companies: Array,
+	ic_day: int,
+) -> void:
+	var ooc_day: int = ic_day / TimeSystem.TICKS_PER_REAL_DAY
+	var ooc_week: int = ooc_day / 7
+	# Build topic lookup
+	var topics_by_id: Dictionary = {}
+	for t_entry: Variant in active_topics:
+		if t_entry is TopicData:
+			topics_by_id[t_entry.topic_id] = t_entry
+	# Build settlement → Set of topic_ids known by any living character there.
+	# Used by "place" focus to simulate agents on the ground.
+	var settlement_topics: Dictionary = {}  # String loc → Array[int]
+	for c_entry: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c_entry) or c_entry.physical_location.is_empty():
+			continue
+		var loc: String = c_entry.physical_location
+		if not settlement_topics.has(loc):
+			settlement_topics[loc] = []
+		for tid: int in c_entry.topic_pool:
+			if tid not in settlement_topics[loc]:
+				settlement_topics[loc].append(tid)
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if not AdvantageSystem.has_advantage(c, Enums.Advantage.SPY_NETWORK):
+			continue
+		var focus: Dictionary = AdvantageSystem.get_spy_network_focus(c)
+		var focus_type: String = focus.get("focus_type", "")
+		var focus_id: int = focus.get("focus_id", -1)
+		if focus_type.is_empty() or focus_id < 0:
+			continue
+		match focus_type:
+			"character":
+				_spy_tick_character_focus(
+					c, focus_id, characters_by_id, objectives_map, topics_by_id, ic_day,
+				)
+			"place":
+				_spy_tick_place_focus(
+					c, focus_id, active_topics, topics_by_id, settlement_topics, ic_day,
+				)
+			"army":
+				_spy_tick_army_focus(c, focus_id, companies, characters_by_id, ooc_week, ic_day)
+
+
+## Character Focus: reveal one unknown fact about the watched character per tick (s45 line 343).
+static func _spy_tick_character_focus(
+	spymaster: L5RCharacterData,
+	target_id: int,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	topics_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	var target: L5RCharacterData = characters_by_id.get(target_id) as L5RCharacterData
+	if target == null or CharacterStats.is_dead(target):
+		return
+	# Select priority order based on spymaster's active objective
+	var primary: Dictionary = objectives_map.get(spymaster.character_id, {}).get("primary", {})
+	var need_type: String = primary.get("need_type", "")
+	var fact_priority: Array
+	if need_type in ["ELIMINATE_CHARACTER", "ACQUIRE_LEVERAGE"]:
+		fact_priority = ["dark_secret", "honor_rank", "priority_objective", "disposition_toward", "observed_location"]
+	elif need_type in ["INVESTIGATE_THREAT", "INVESTIGATE_CRIME"]:
+		fact_priority = ["priority_objective", "dark_secret", "honor_rank", "disposition_toward", "observed_location"]
+	elif need_type in ["RAISE_DISPOSITION", "SECURE_ALLIANCE", "ARRANGE_MARRIAGE"]:
+		fact_priority = ["disposition_toward", "honor_rank", "priority_objective", "dark_secret", "observed_location"]
+	else:
+		fact_priority = ["honor_rank", "priority_objective", "disposition_toward", "dark_secret", "observed_location"]
+	for fact_type: String in fact_priority:
+		var entry: KnowledgeEntry = _spy_build_character_fact(
+			spymaster, target, fact_type, objectives_map, ic_day,
+		)
+		if entry != null:
+			InformationSystem.update_intelligence_knowledge(spymaster, entry)
+			return  # One fact per tick
+
+
+static func _spy_build_character_fact(
+	spymaster: L5RCharacterData,
+	target: L5RCharacterData,
+	fact_type: String,
+	objectives_map: Dictionary,
+	ic_day: int,
+) -> KnowledgeEntry:
+	# Check if already known (dedup by entry_type + target_character_id)
+	for k: KnowledgeEntry in spymaster.knowledge_pool:
+		if k.entry_type == fact_type \
+				and k.data.get("target_character_id", -1) == target.character_id:
+			return null  # Already known
+	var e: KnowledgeEntry = KnowledgeEntry.new()
+	e.source = Enums.KnowledgeSource.INTELLIGENCE
+	e.confidence = Enums.KnowledgeConfidence.FRESH
+	e.season_acquired = ic_day / 90  # 90 IC days per season
+	e.data["target_character_id"] = target.character_id
+	match fact_type:
+		"honor_rank":
+			e.entry_type = "honor_rank"
+			e.data["honor"] = target.honor
+		"priority_objective":
+			e.entry_type = "priority_objective"
+			var tgt_primary: Dictionary = objectives_map.get(target.character_id, {}).get("primary", {})
+			e.data["need_type"] = tgt_primary.get("need_type", "")
+			e.data["target_npc_id"] = tgt_primary.get("target_npc_id", -1)
+		"disposition_toward":
+			# Reveal the most extreme disposition value the spymaster hasn't yet seen
+			e.entry_type = "disposition_toward"
+			var known_targets: Array = []
+			for k: KnowledgeEntry in spymaster.knowledge_pool:
+				if k.entry_type == "disposition_toward" \
+						and k.data.get("target_character_id", -1) == target.character_id:
+					known_targets.append(k.data.get("toward_id", -1))
+			var best_id: int = -1
+			var best_abs: int = -1
+			for cid: int in target.disposition_values:
+				if cid == target.character_id:
+					continue
+				if cid in known_targets:
+					continue
+				var val: int = abs(int(target.disposition_values.get(cid, 0)))
+				if val > best_abs:
+					best_abs = val
+					best_id = cid
+			if best_id < 0:
+				return null  # All dispositions already known
+			e.data["toward_id"] = best_id
+			e.data["disposition"] = int(target.disposition_values.get(best_id, 0))
+		"dark_secret":
+			# Check for DARK_SECRET or FORBIDDEN_KNOWLEDGE disadvantage
+			var has_dark: bool = AdvantageSystem.has_disadvantage(
+				target, Enums.Disadvantage.DARK_SECRET,
+			)
+			var has_forbidden: bool = AdvantageSystem.has_disadvantage(
+				target, Enums.Disadvantage.FORBIDDEN_KNOWLEDGE,
+			)
+			if not has_dark and not has_forbidden:
+				return null
+			e.entry_type = "dark_secret"
+			if has_dark:
+				var dis: DisadvantageData = AdvantageSystem.get_disadvantage(
+					target, Enums.Disadvantage.DARK_SECRET,
+				)
+				e.data["secret_type"] = "DARK_SECRET"
+				e.data["description"] = dis.metadata.get("description", "") if dis != null else ""
+			else:
+				var dis: DisadvantageData = AdvantageSystem.get_disadvantage(
+					target, Enums.Disadvantage.FORBIDDEN_KNOWLEDGE,
+				)
+				e.data["secret_type"] = "FORBIDDEN_KNOWLEDGE"
+				e.data["description"] = dis.metadata.get("knowledge_type", "") if dis != null else ""
+		"observed_location":
+			e.entry_type = "observed_location"
+			e.data["location"] = target.physical_location
+			e.data["observed_ic_day"] = ic_day
+	return e
+
+
+## Place Focus: reveal one Tier 3/4 topic from the watched location per tick (s45 line 345).
+## Uses living characters currently at the location as proxy for "agents on the ground."
+static func _spy_tick_place_focus(
+	spymaster: L5RCharacterData,
+	settlement_id: int,
+	active_topics: Array,
+	topics_by_id: Dictionary,
+	settlement_topics: Dictionary,
+	ic_day: int,
+) -> void:
+	var loc_str: String = str(settlement_id)
+	var local_topic_ids: Array = settlement_topics.get(loc_str, [])
+	if local_topic_ids.is_empty():
+		return
+	# Collect qualifying topics (Tier 3/4, not already known to spymaster)
+	var candidates: Array = []
+	for tid: int in local_topic_ids:
+		if tid in spymaster.topic_pool:
+			continue
+		var t: TopicData = topics_by_id.get(tid) as TopicData
+		if t == null:
+			continue
+		if t.tier == TopicData.Tier.TIER_3 or t.tier == TopicData.Tier.TIER_4:
+			candidates.append(t)
+	if candidates.is_empty():
+		return
+	# Pick most recently created topic
+	var best: TopicData = candidates[0]
+	for t: TopicData in candidates:
+		if t.ic_day_created > best.ic_day_created:
+			best = t
+	spymaster.topic_pool.append(best.topic_id)
+
+
+## Army Focus: once per OOC week, reveal position/size/commander of watched force (s45 line 347).
+static func _spy_tick_army_focus(
+	spymaster: L5RCharacterData,
+	company_id: int,
+	companies: Array,
+	characters_by_id: Dictionary,
+	ooc_week: int,
+	ic_day: int,
+) -> void:
+	var adv: AdvantageData = AdvantageSystem.get_advantage(spymaster, Enums.Advantage.SPY_NETWORK)
+	if adv == null:
+		return
+	# Once per OOC week gate
+	if adv.metadata.get("army_focus_last_ooc_week", -1) == ooc_week:
+		return
+	# Find the target company
+	var target_company: MilitaryUnitData.CompanyData = null
+	for comp: Variant in companies:
+		if comp is MilitaryUnitData.CompanyData and comp.company_id == company_id:
+			target_company = comp
+			break
+	if target_company == null:
+		return
+	adv.metadata["army_focus_last_ooc_week"] = ooc_week
+	var e: KnowledgeEntry = KnowledgeEntry.new()
+	e.source = Enums.KnowledgeSource.INTELLIGENCE
+	e.confidence = Enums.KnowledgeConfidence.FRESH
+	e.season_acquired = ic_day / 90
+	e.entry_type = "army_intelligence"
+	e.data["company_id"] = company_id
+	e.data["location"] = target_company.current_location_id
+	e.data["size_pu"] = target_company.health  # health = PU proxy at company level
+	e.data["commander_id"] = target_company.commander_id
+	e.data["observed_ic_day"] = ic_day
+	InformationSystem.add_knowledge(spymaster, e)
+
+
+# -- LOST_LOVE arrival trigger (s45) ------------------------------------------
+
+static func _process_lost_love_arrival_trigger(
+	arrivals: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	var settlement_province_map: Dictionary = {}
+	for s: Variant in settlements:
+		if s is SettlementData:
+			settlement_province_map[(s as SettlementData).settlement_id] = (s as SettlementData).province_id
+
+	for arrival: Dictionary in arrivals:
+		var char_id: int = arrival.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		if not AdvantageSystem.has_disadvantage(character, Enums.Disadvantage.LOST_LOVE):
+			continue
+		var dis: DisadvantageData = AdvantageSystem.get_disadvantage(
+			character, Enums.Disadvantage.LOST_LOVE
+		)
+		if dis == null:
+			continue
+		var death_province: int = dis.metadata.get("province_id", -1)
+		if death_province < 0:
+			continue
+		var dest_str: String = arrival.get("destination", "")
+		if not dest_str.is_valid_int():
+			continue
+		var arrived_province: int = settlement_province_map.get(dest_str.to_int(), -1)
+		if arrived_province != death_province:
+			continue
+		var ctx: Dictionary = {"lost_love_province_id": arrived_province}
+		var trigger: Dictionary = AdvantageSystem.check_lost_love_trigger(character, ctx, ic_day)
+		if trigger.get("triggered", false):
+			dis.metadata["lost_love_tn_active"] = true
+			dis.metadata["triggers_today"] = dis.metadata.get("triggers_today", 0) + 1
+			dis.metadata["last_trigger_ic_day"] = ic_day
+
+
+# -- SPY_NETWORK weekly intelligence cycle (s45) ------------------------------
+
+# Ordered fact types for character focus (s45:343).
+# Engine cycles through revealed facts so repeats are avoided.
+const _SPY_CHARACTER_FACT_TYPES: Array = [
+	"primary_objective",
+	"concealed_disadvantage",
+	"true_honor_rank",
+	"disposition_value",
+	"location",
+]
+
+static func _process_spy_network_weekly(
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	objectives_map: Dictionary,
+	companies: Array,
+	ic_day: int,
+) -> void:
+	# Build company lookup by company_id for O(1) army-focus queries.
+	var companies_by_id: Dictionary = {}
+	for comp: Dictionary in companies:
+		var cid: int = comp.get("company_id", -1)
+		if cid >= 0:
+			companies_by_id[cid] = comp
+
+	# Build topic lookup for tier filtering.
+	var topics_by_id: Dictionary = {}
+	for t: Variant in active_topics:
+		if t is TopicData:
+			topics_by_id[(t as TopicData).topic_id] = t
+
+	var week_num: int = ic_day / 7
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		var adv: AdvantageData = AdvantageSystem.get_advantage(c, Enums.Advantage.SPY_NETWORK)
+		if adv == null:
+			continue
+		var last_update: int = adv.metadata.get("last_update_ooc_day", -1)
+		if last_update >= 0 and last_update / 7 >= week_num:
+			continue  # already produced intelligence this week
+		var focus_type: String = adv.metadata.get("focus_type", "")
+		var focus_id: int = adv.metadata.get("focus_id", -1)
+		adv.metadata["last_update_ooc_day"] = ic_day
+
+		if focus_type == "character" and focus_id >= 0:
+			var target: L5RCharacterData = characters_by_id.get(focus_id)
+			if target == null or CharacterStats.is_dead(target):
+				continue
+			# Select the most relevant unrevealed fact per s45:343.
+			# Relevance is driven by the spymaster's own active primary objective;
+			# cycle through fact types and skip already-revealed ones.
+			var spymaster_obj: Dictionary = objectives_map.get(c.character_id, {}).get("primary", {})
+			var spymaster_need: String = spymaster_obj.get("need_type", "")
+			var revealed_key: String = "revealed_facts_%d" % focus_id
+			var revealed: Array = adv.metadata.get(revealed_key, [])
+
+			# Prioritise fact types by spymaster's active need.
+			var ordered_facts: Array = _spy_char_fact_priority(spymaster_need)
+			var chosen_fact: String = ""
+			for ft: String in ordered_facts:
+				if ft not in revealed:
+					chosen_fact = ft
+					break
+			if chosen_fact.is_empty():
+				# All facts revealed; reset and cycle from top.
+				revealed.clear()
+				chosen_fact = ordered_facts[0]
+			revealed.append(chosen_fact)
+			adv.metadata[revealed_key] = revealed
+
+			var entry: KnowledgeEntry = KnowledgeEntry.new()
+			entry.source = Enums.KnowledgeSource.INTELLIGENCE
+			entry.entry_type = "shadow_surveillance"
+			entry.confidence = Enums.KnowledgeConfidence.FRESH
+			entry.season_acquired = ic_day / 90
+
+			match chosen_fact:
+				"primary_objective":
+					var tgt_obj: Dictionary = objectives_map.get(focus_id, {}).get("primary", {})
+					entry.data = {
+						"character_id": focus_id,
+						"fact": "primary_objective",
+						"need_type": tgt_obj.get("need_type", ""),
+						"target_npc_id": tgt_obj.get("target_npc_id", -1),
+						"target_province_id": tgt_obj.get("target_province_id", -1),
+						"ic_day": ic_day,
+					}
+				"concealed_disadvantage":
+					var concealed_dis: String = ""
+					for dis: DisadvantageData in target.disadvantages:
+						if dis.disadvantage_type == Enums.Disadvantage.DARK_SECRET:
+							concealed_dis = "DARK_SECRET"
+							break
+						if concealed_dis.is_empty():
+							concealed_dis = Enums.Disadvantage.keys()[dis.disadvantage_type]
+					entry.data = {
+						"character_id": focus_id,
+						"fact": "concealed_disadvantage",
+						"disadvantage": concealed_dis,
+						"ic_day": ic_day,
+					}
+				"true_honor_rank":
+					entry.data = {
+						"character_id": focus_id,
+						"fact": "true_honor_rank",
+						"honor": target.honor,
+						"ic_day": ic_day,
+					}
+				"disposition_value":
+					# Reveal target's disposition toward the spymaster (most actionable).
+					var disp: int = target.disposition_values.get(c.character_id, 0)
+					entry.data = {
+						"character_id": focus_id,
+						"fact": "disposition_value",
+						"toward_character_id": c.character_id,
+						"disposition": disp,
+						"ic_day": ic_day,
+					}
+				_:  # "location" or fallback
+					entry.data = {
+						"character_id": focus_id,
+						"fact": "location",
+						"location": target.physical_location,
+						"clan": target.clan,
+						"ic_day": ic_day,
+					}
+
+			InformationSystem.add_knowledge(c, entry)
+
+		elif focus_type == "place" and focus_id >= 0:
+			# Gather Tier 3 or Tier 4 topics from the focused settlement (s45:345).
+			# Collect topic IDs held by characters present at this settlement.
+			var local_topic_ids: Array = []
+			for other: L5RCharacterData in characters:
+				if CharacterStats.is_dead(other) or other.character_id == c.character_id:
+					continue
+				if not other.physical_location.is_valid_int():
+					continue
+				if other.physical_location.to_int() != focus_id:
+					continue
+				for tid: int in other.topic_pool:
+					if tid not in local_topic_ids and tid not in c.topic_pool:
+						local_topic_ids.append(tid)
+
+			# Filter to Tier 3 (TIER_3) or Tier 4 (TIER_4) topics only, newest first.
+			var eligible_ids: Array = []
+			for tid: int in local_topic_ids:
+				var t: Variant = topics_by_id.get(tid)
+				if not (t is TopicData):
+					continue
+				var td: TopicData = t as TopicData
+				if td.resolved:
+					continue
+				if td.tier == TopicData.Tier.TIER_3 or td.tier == TopicData.Tier.TIER_4:
+					eligible_ids.append(tid)
+			# Prioritise by recency: later topics have higher IDs, so sort descending.
+			eligible_ids.sort()
+			eligible_ids.reverse()
+			if not eligible_ids.is_empty():
+				c.topic_pool.append(eligible_ids[0])
+
+		elif focus_type == "army" and focus_id >= 0:
+			# Reveal position, PU count, and commander identity (s45:347).
+			var comp: Dictionary = companies_by_id.get(focus_id, {})
+			var entry: KnowledgeEntry = KnowledgeEntry.new()
+			entry.source = Enums.KnowledgeSource.INTELLIGENCE
+			entry.entry_type = "shadow_surveillance"
+			entry.data = {
+				"company_id": focus_id,
+				"position": comp.get("current_location_id", ""),
+				"current_health": comp.get("current_health", -1),
+				"commander_id": comp.get("commander_id", -1),
+				"ic_day": ic_day,
+			}
+			entry.confidence = Enums.KnowledgeConfidence.FRESH
+			entry.season_acquired = ic_day / 90
+			InformationSystem.add_knowledge(c, entry)
+
+
+# Returns fact types ordered by relevance to the given NeedType (s45:343).
+static func _spy_char_fact_priority(need_type: String) -> Array:
+	# Military/threat needs: objective first helps predict hostile moves.
+	if need_type in ["DEFEND_PROVINCE", "LEVY_TROOPS", "PATROL_PROVINCE",
+			"INVESTIGATE_THREAT", "ELIMINATE_CHARACTER", "CONDUCT_SIEGE"]:
+		return ["primary_objective", "location", "true_honor_rank",
+				"disposition_value", "concealed_disadvantage"]
+	# Diplomatic/relationship needs: disposition and secrets most actionable.
+	if need_type in ["RAISE_DISPOSITION", "SECURE_ALLIANCE", "DAMAGE_RELATIONSHIP",
+			"ACQUIRE_LEVERAGE", "ARRANGE_MARRIAGE"]:
+		return ["disposition_value", "concealed_disadvantage", "true_honor_rank",
+				"primary_objective", "location"]
+	# Legal/investigative needs: concealed disadvantages reveal wrongdoers.
+	if need_type in ["UPHOLD_LAW", "INVESTIGATE_CRIME", "SUPPRESS_INVESTIGATION"]:
+		return ["concealed_disadvantage", "primary_objective", "true_honor_rank",
+				"disposition_value", "location"]
+	# Default: cycle through all facts.
+	return _SPY_CHARACTER_FACT_TYPES.duplicate()
+
+
+# -- WELL_CONNECTED weekly secret topic revelation (s45) ----------------------
+
+static func _process_well_connected_weekly(
+	characters: Array,
+	_characters_by_id: Dictionary,
+	active_topics: Array,
+	ic_day: int,
+) -> void:
+	var week_num: int = ic_day / 7
+	# Build topic pool per settlement (topics held by characters at each settlement).
+	var settlement_topics: Dictionary = {}
+	for other: L5RCharacterData in characters:
+		if CharacterStats.is_dead(other) or not other.physical_location.is_valid_int():
+			continue
+		var sid: int = other.physical_location.to_int()
+		if not settlement_topics.has(sid):
+			settlement_topics[sid] = []
+		for tid: int in other.topic_pool:
+			if tid not in settlement_topics[sid]:
+				settlement_topics[sid].append(tid)
+
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		var wc_courts: Array = AdvantageSystem.get_well_connected_courts(c)
+		if wc_courts.is_empty():
+			continue
+		var wc_adv: AdvantageData = AdvantageSystem.get_advantage(c, Enums.Advantage.WELL_CONNECTED)
+		if wc_adv == null:
+			continue
+		var last_wc: int = wc_adv.metadata.get("last_intel_ic_day", -1)
+		if last_wc >= 0 and last_wc / 7 >= week_num:
+			continue
+		wc_adv.metadata["last_intel_ic_day"] = ic_day
+		var rank: int = wc_adv.rank if wc_adv.rank > 0 else 1
+		for sid: int in wc_courts:
+			var pool: Array = settlement_topics.get(sid, [])
+			# Reveal one topic per rank from this court that the character doesn't know.
+			var revealed: int = 0
+			for topic: Variant in active_topics:
+				if revealed >= rank:
+					break
+				if not (topic is TopicData):
+					continue
+				var t: TopicData = topic as TopicData
+				if t.resolved or t.topic_id not in pool or t.topic_id in c.topic_pool:
+					continue
+				c.topic_pool.append(t.topic_id)
+				revealed += 1
+
+
 # -- Daily Letter Pass (s57.5) -------------------------------------------------
 
 static func _process_daily_letter_pass(
@@ -9164,6 +10057,10 @@ static func _process_arrival_observation(
 			InformationSystem.record_location_observation(
 				other, char_id, dest, current_season
 			)
+
+		# BOUNTY: observers who share a location with the arriving character attempt
+		# recognition via Perception + Investigation vs the bounty TN (s45)
+		_check_bounty_recognition(character, dest, characters_by_id)
 
 
 # -- Witness Testimony on Arrival (s57.16 — witness reaches magistrate) --------
@@ -9644,7 +10541,15 @@ static func _process_hostage_escapes(
 			hostage["escaped"] = true
 		elif escape_result.get("executed", false):
 			var lethal: int = CharacterStats.get_ring_value(character, Enums.Ring.EARTH) * 5 * 5
-			character.wounds_taken = lethal
+			var he_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+			if AdvantageSystem.check_great_destiny(character, he_ic_year).get("triggered", false):
+				var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(character)
+				character.wounds_taken = gd_threshold * 6 + 1
+				var gd_he: AdvantageData = AdvantageSystem.get_advantage(character, Enums.Advantage.GREAT_DESTINY)
+				if gd_he != null:
+					gd_he.metadata["last_triggered_ic_year"] = he_ic_year
+			else:
+				character.wounds_taken = lethal
 			character.captive_status = ""
 			death_events.append({
 				"character_id": char_id,
@@ -12828,11 +13733,11 @@ static func _process_ladder_side_effects(
 			"rung": side.get("rung", -1),
 		}
 
-		if side.get("glory_cost", 0.0) != 0.0 and lord != null:
+		if side.get("glory_cost", 0.0) != 0.0 and lord != null and not CharacterStats.is_dead(lord):
 			HonorGlorySystem.apply_glory_change(lord, side["glory_cost"])
 			result["glory_applied"] = side["glory_cost"]
 
-		if side.has("disposition_cost") and lord != null:
+		if side.has("disposition_cost") and lord != null and not CharacterStats.is_dead(lord):
 			var disp_cost: int = side["disposition_cost"]
 			_apply_vassal_disposition_cost(lord, characters_by_id, disp_cost)
 			result["vassal_disposition_applied"] = disp_cost
@@ -12861,7 +13766,7 @@ static func _process_ladder_side_effects(
 			)
 			result["topic_id"] = topic.topic_id
 
-		if side.get("creates_favor", false) and lord != null:
+		if side.get("creates_favor", false) and lord != null and not CharacterStats.is_dead(lord):
 			var favor_tier: int = side.get("favor_tier", 3)
 			var ally_ids: Array = side.get("contributing_ally_ids", [])
 			var created_favors: Array = []
@@ -13404,7 +14309,23 @@ static func _compute_topic_relevance(topic: TopicData, character: L5RCharacterDa
 	)
 
 
+static func _expire_province_weather(provinces: Dictionary, ic_day: int) -> void:
+	## Clear spell-induced weather when the duration has elapsed (s31-37a).
+	## Runs at the start of each IC day before context injection.
+	for province_v: Variant in provinces.values():
+		if not province_v is ProvinceData:
+			continue
+		var province: ProvinceData = province_v as ProvinceData
+		if province.province_weather_state == 0:
+			continue
+		if province.province_weather_expires_ic_day >= 0 and \
+				ic_day >= province.province_weather_expires_ic_day:
+			province.province_weather_state = 0
+			province.province_weather_expires_ic_day = -1
+
+
 static func _clear_stale_context_flags(world_states: Dictionary) -> void:
+	# Top-level ws keys that are set conditionally and must be erased each day.
 	var stale_keys: Array = [
 		"context_flag", "active_court_at_location", "court_id",
 		"court_settlement_id", "court_session_state",
@@ -13414,22 +14335,14 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"is_patrolled", "phoenix_champion_authority",
 		"settlement_type",
 		"champion_conclusion_candidates", "local_tier3_candidates",
-		"theater_pieces_to_perform", "wip_piece_ids", "learnable_piece_ids",
 		"has_active_contracts",
-		"ikebana_garden_fr", "ikebana_garden_id",
-		"active_senbazuru_id", "senbazuru_is_complete",
-		"active_commission_id", "commission_quality_tier",
-		"local_garden_id", "local_garden_tier",
-		"owned_bonsai_id", "bonsai_display_eligible",
-		"garden_zone_available", "available_garden_zone",
-		"character_province_id",
-		"active_painting_wip_id", "displayable_paintings", "presentable_emakimono",
-		"wall_art_slot_empty", "displayed_art_slot_empty", "fusuma_slot_empty",
-		"has_wall_art_permission", "painting_fortune_fr",
-		"active_sculpture_wip_id", "active_sculpture_material", "active_sculpture_format",
-		"statue_slot_empty", "guardian_slot_empty",
-		"is_religious_settlement", "has_statue_permission", "has_guardian_permission",
-		"statuary_worship_fr", "statuary_subject_id", "guardian_worship_fr", "foundry_in_province",
+		# Lord-specific keys (cleared so ex-lords don't retain stale data after succession)
+		"province_data", "settlements", "clans", "current_season",
+		"characters_by_id", "active_armies", "active_insurgencies",
+		# s45 Advantage/Disadvantage behavioral context (rebuilt daily by _inject_base_character_context)
+		"spy_network_focus", "true_love_target_id",
+		"compulsion_location_tags", "compulsion_active",
+		"phobia_situation_tags", "rumormonger_max_glory_rank",
 	]
 	for char_id: Variant in world_states:
 		if not char_id is int:
@@ -13438,6 +14351,11 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		if ws is Dictionary:
 			for key: String in stale_keys:
 				(ws as Dictionary).erase(key)
+			# All nested known_objectives sub-keys (urgency context, hunt, art/craft
+			# context, shide, ikebana, garden, etc.) are stored here and rebuilt each
+			# day by their respective injectors — clear the entire sub-dict.
+			if (ws as Dictionary).has("known_objectives"):
+				((ws as Dictionary)["known_objectives"] as Dictionary).clear()
 
 
 static func _set_court_context_flags(
@@ -13705,7 +14623,7 @@ static func _process_crisis_court_calls(
 	for lord: L5RCharacterData in characters:
 		if not _is_lord_tier(lord):
 			continue
-		var lord_rank: Enums.LordRank = _status_to_lord_rank(lord.status)
+		var lord_rank: Enums.LordRank = RoleRegistry.lord_rank_from_status(lord.status)
 		var courts_at_settlement: Array = []
 		var settlement_str: String = str(lord.physical_location)
 		for c_entry: Variant in active_courts:
@@ -13769,20 +14687,6 @@ static func _track_court_called(
 		ws["last_court_season"] = current_season
 
 
-static func _status_to_lord_rank(status: float) -> Enums.LordRank:
-	if status >= 9.0:
-		return Enums.LordRank.IMPERIAL
-	elif status >= 7.0:
-		return Enums.LordRank.CLAN_CHAMPION
-	elif status >= 6.0:
-		return Enums.LordRank.FAMILY_DAIMYO
-	elif status >= 5.0:
-		return Enums.LordRank.PROVINCIAL_DAIMYO
-	elif status >= 4.0:
-		return Enums.LordRank.CITY_DAIMYO
-	return Enums.LordRank.VILLAGE_HEADMAN
-
-
 static func _process_court_openings(
 	active_courts: Array,
 	ic_day: int,
@@ -13837,6 +14741,58 @@ static func _process_court_attendance(
 				departure["action"] = "departed"
 				results.append(departure)
 	return results
+
+
+## Applies the WELL_CONNECTED +10 mutual disposition bonus on first arrival at a
+## court session the character is connected to (s45). Deduped per court via
+## metadata["applied_for_court_id"] on the AdvantageData.
+static func _apply_well_connected_court_bonus(
+	court_attendance: Array,
+	active_courts: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for entry: Dictionary in court_attendance:
+		if entry.get("action", "") != "arrived":
+			continue
+		var char_id: int = entry.get("character_id", -1)
+		var court_id: int = entry.get("court_id", -1)
+		if char_id < 0 or court_id < 0:
+			continue
+		var character: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		# Find matching AdvantageData for WELL_CONNECTED at this settlement
+		var court_session: CourtSessionData = null
+		for c_entry: Variant in active_courts:
+			if c_entry is CourtSessionData and (c_entry as CourtSessionData).court_id == court_id:
+				court_session = c_entry as CourtSessionData
+				break
+		if court_session == null:
+			continue
+		var wc_adv: AdvantageData = null
+		for adv: AdvantageData in character.advantages:
+			if adv.advantage_type != Enums.Advantage.WELL_CONNECTED:
+				continue
+			if adv.metadata.get("settlement_id", -1) == court_session.host_settlement_id:
+				wc_adv = adv
+				break
+		if wc_adv == null:
+			continue
+		# Dedup: only fire once per court session
+		if wc_adv.metadata.get("applied_for_court_id", -1) == court_id:
+			continue
+		wc_adv.metadata["applied_for_court_id"] = court_id
+		# Apply +10 mutual disposition with every other attendee (s45)
+		for attendee_id: int in court_session.attendee_ids:
+			if attendee_id == char_id:
+				continue
+			var attendee: L5RCharacterData = characters_by_id.get(attendee_id) as L5RCharacterData
+			if attendee == null or CharacterStats.is_dead(attendee):
+				continue
+			var cur_wc: int = character.disposition_values.get(attendee_id, 0)
+			character.disposition_values[attendee_id] = clampi(cur_wc + 10, -100, 100)
+			var cur_att: int = attendee.disposition_values.get(char_id, 0)
+			attendee.disposition_values[char_id] = clampi(cur_att + 10, -100, 100)
 
 
 static func _apply_early_departure(
@@ -14083,7 +15039,7 @@ static func _create_winter_court_from_directive(
 	if host_daimyo_id >= 0:
 		var host_char: L5RCharacterData = characters_by_id.get(host_daimyo_id) as L5RCharacterData
 		if host_char != null:
-			host_lord_rank = _status_to_lord_rank(host_char.status)
+			host_lord_rank = RoleRegistry.lord_rank_from_status(host_char.status)
 
 	var invitation_result: Dictionary = WinterCourtSystem.run_invitation_pipeline(
 		host_result, emperor, archetype, characters_by_id,
@@ -15331,7 +16287,15 @@ static func _process_gempukku(
 		if characters_by_id.has(dead_id):
 			var dead_char: L5RCharacterData = characters_by_id[dead_id]
 			var lethal: int = CharacterStats.get_ring_value(dead_char, Enums.Ring.EARTH) * 5 * 5
-			dead_char.wounds_taken = lethal
+			var nd_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+			if AdvantageSystem.check_great_destiny(dead_char, nd_ic_year).get("triggered", false):
+				var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(dead_char)
+				dead_char.wounds_taken = gd_threshold * 6 + 1
+				var gd_nd: AdvantageData = AdvantageSystem.get_advantage(dead_char, Enums.Advantage.GREAT_DESTINY)
+				if gd_nd != null:
+					gd_nd.metadata["last_triggered_ic_year"] = nd_ic_year
+			else:
+				dead_char.wounds_taken = lethal
 			death_events.append({
 				"character_id": dead_id,
 				"is_lord": dead_char.role_position != "",
@@ -15454,7 +16418,7 @@ static func _build_advancement_world_state(
 	var in_crisis_ids: Array = []
 	if insurgencies.size() > 0:
 		for c: L5RCharacterData in characters:
-			if c.role_position == "Clan Magistrate" or c.role_position == "Emerald Magistrate":
+			if c.role_position == RoleRegistry.CLAN_MAGISTRATE or c.role_position == RoleRegistry.EMERALD_MAGISTRATE:
 				in_crisis_ids.append(c.character_id)
 			elif c.military_rank >= Enums.MilitaryRank.CHUI:
 				in_crisis_ids.append(c.character_id)
@@ -15742,6 +16706,7 @@ static func _apply_dissolution(
 	var resolved_pathway: int = effects.get("pathway", pathway)
 	var spouse_a_id: int = effects.get("spouse_a_id", -1)
 	var spouse_b_id: int = effects.get("spouse_b_id", -1)
+	var ordering_lord_id: int = effects.get("ordering_lord_id", -1)
 
 	if spouse_a_id < 0 or spouse_b_id < 0:
 		return {"applied": false, "reason": "missing_spouse_ids"}
@@ -15822,6 +16787,24 @@ static func _apply_dissolution(
 			topic.clan_involved = spouse_a.clan
 		active_topics.append(topic)
 		topic_id = topic.topic_id
+
+		# Seed topic to directly involved parties and their lords (s57.49).
+		# Both spouses, the ordering lord (Pathway 1), and each spouse's immediate lord
+		# all have direct knowledge of the dissolution.
+		var _to_notify: Array[int] = [
+			spouse_a_id, spouse_b_id, ordering_lord_id,
+			spouse_a.lord_id, spouse_b.lord_id,
+		]
+		var _notified: Dictionary = {}
+		for _nid: int in _to_notify:
+			if _nid < 0 or _notified.has(_nid):
+				continue
+			var _nc: L5RCharacterData = characters_by_id.get(_nid) as L5RCharacterData
+			if _nc == null or CharacterStats.is_dead(_nc):
+				continue
+			if topic_id not in _nc.topic_pool:
+				_nc.topic_pool.append(topic_id)
+			_notified[_nid] = true
 
 	return {
 		"applied": true,
@@ -16893,11 +17876,11 @@ static func _populate_infrastructure_intelligence(
 
 
 const CRITICAL_POSITIONS: Array[String] = [
-	"Clan Magistrate", "Emerald Magistrate", "Garrison Commander",
+	RoleRegistry.CLAN_MAGISTRATE, RoleRegistry.EMERALD_MAGISTRATE, RoleRegistry.GARRISON_COMMANDER,
 ]
 
 const IMPORTANT_POSITIONS: Array[String] = [
-	"School Master", "Temple Head", "Monastery Abbot", "Senior Courtier",
+	RoleRegistry.SCHOOL_MASTER, RoleRegistry.TEMPLE_HEAD, RoleRegistry.MONASTERY_ABBOT, RoleRegistry.SENIOR_COURTIER,
 ]
 
 
@@ -16999,7 +17982,7 @@ static func _populate_vacancy_intelligence(
 			if not lord_vacancies.has(lord_id_3):
 				lord_vacancies[lord_id_3] = []
 			lord_vacancies[lord_id_3].append({
-				"position_type": "Clan Magistrate",
+				"position_type": RoleRegistry.CLAN_MAGISTRATE,
 				"priority": 3,
 				"province_id": -1,
 				"candidate_id": candidate,
@@ -17013,17 +17996,17 @@ static func _populate_vacancy_intelligence(
 			continue
 		var lord_positions_2: Array = filled_positions.get(lord_id_4, [])
 
-		if s.is_military() and not _has_position(lord_positions_2, "Garrison Commander"):
+		if s.is_military() and not _has_position(lord_positions_2, RoleRegistry.GARRISON_COMMANDER):
 			var bal_w2: float = cunning_balance_weight if lord_id_4 == emperor_id else 0.0
 			var bal_c2: Dictionary = emperor_clan_counts if lord_id_4 == emperor_id else {}
 			var candidate_2: int = _find_vacancy_candidate(
-				lord_id_4, "Garrison Commander", characters, characters_by_id,
+				lord_id_4, RoleRegistry.GARRISON_COMMANDER, characters, characters_by_id,
 				bal_w2, bal_c2,
 			)
 			if not lord_vacancies.has(lord_id_4):
 				lord_vacancies[lord_id_4] = []
 			lord_vacancies[lord_id_4].append({
-				"position_type": "Garrison Commander",
+				"position_type": RoleRegistry.GARRISON_COMMANDER,
 				"priority": 3,
 				"province_id": s.province_id,
 				"settlement_id": s.settlement_id,
@@ -17033,19 +18016,19 @@ static func _populate_vacancy_intelligence(
 			# Mark as found so we don't duplicate per settlement
 			if not filled_positions.has(lord_id_4):
 				filled_positions[lord_id_4] = []
-			filled_positions[lord_id_4].append("Garrison Commander (pending)")
+			filled_positions[lord_id_4].append(RoleRegistry.GARRISON_COMMANDER + " (pending)")
 
-		if s.settlement_type == Enums.SettlementType.TEMPLE and not _has_position(lord_positions_2, "Temple Head"):
+		if s.settlement_type == Enums.SettlementType.TEMPLE and not _has_position(lord_positions_2, RoleRegistry.TEMPLE_HEAD):
 			var bal_w3: float = cunning_balance_weight if lord_id_4 == emperor_id else 0.0
 			var bal_c3: Dictionary = emperor_clan_counts if lord_id_4 == emperor_id else {}
 			var candidate_3: int = _find_vacancy_candidate(
-				lord_id_4, "Temple Head", characters, characters_by_id,
+				lord_id_4, RoleRegistry.TEMPLE_HEAD, characters, characters_by_id,
 				bal_w3, bal_c3,
 			)
 			if not lord_vacancies.has(lord_id_4):
 				lord_vacancies[lord_id_4] = []
 			lord_vacancies[lord_id_4].append({
-				"position_type": "Temple Head",
+				"position_type": RoleRegistry.TEMPLE_HEAD,
 				"priority": 2,
 				"province_id": s.province_id,
 				"settlement_id": s.settlement_id,
@@ -17054,19 +18037,19 @@ static func _populate_vacancy_intelligence(
 			})
 			if not filled_positions.has(lord_id_4):
 				filled_positions[lord_id_4] = []
-			filled_positions[lord_id_4].append("Temple Head (pending)")
+			filled_positions[lord_id_4].append(RoleRegistry.TEMPLE_HEAD + " (pending)")
 
-		if s.settlement_type == Enums.SettlementType.MONASTERY and not _has_position(lord_positions_2, "Monastery Abbot"):
+		if s.settlement_type == Enums.SettlementType.MONASTERY and not _has_position(lord_positions_2, RoleRegistry.MONASTERY_ABBOT):
 			var bal_w4: float = cunning_balance_weight if lord_id_4 == emperor_id else 0.0
 			var bal_c4: Dictionary = emperor_clan_counts if lord_id_4 == emperor_id else {}
 			var candidate_4: int = _find_vacancy_candidate(
-				lord_id_4, "Monastery Abbot", characters, characters_by_id,
+				lord_id_4, RoleRegistry.MONASTERY_ABBOT, characters, characters_by_id,
 				bal_w4, bal_c4,
 			)
 			if not lord_vacancies.has(lord_id_4):
 				lord_vacancies[lord_id_4] = []
 			lord_vacancies[lord_id_4].append({
-				"position_type": "Monastery Abbot",
+				"position_type": RoleRegistry.MONASTERY_ABBOT,
 				"priority": 2,
 				"province_id": s.province_id,
 				"settlement_id": s.settlement_id,
@@ -17075,7 +18058,7 @@ static func _populate_vacancy_intelligence(
 			})
 			if not filled_positions.has(lord_id_4):
 				filled_positions[lord_id_4] = []
-			filled_positions[lord_id_4].append("Monastery Abbot (pending)")
+			filled_positions[lord_id_4].append(RoleRegistry.MONASTERY_ABBOT + " (pending)")
 
 	# School Master vacancies: one per family that has a canonical school
 	var clan_lord_map: Dictionary = {}
@@ -17099,7 +18082,7 @@ static func _populate_vacancy_intelligence(
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
 			continue
-		if _has_position([c.role_position], "School Master"):
+		if _has_position([c.role_position], RoleRegistry.SCHOOL_MASTER):
 			school_master_families[c.family] = true
 
 	for fam: String in GempukkuSystem.FAMILY_DEFAULT_SCHOOL:
@@ -17118,13 +18101,13 @@ static func _populate_vacancy_intelligence(
 		var bal_w5: float = cunning_balance_weight if lord_id_5 == emperor_id else 0.0
 		var bal_c5: Dictionary = emperor_clan_counts if lord_id_5 == emperor_id else {}
 		var candidate_5: int = _find_vacancy_candidate(
-			lord_id_5, "School Master", characters, characters_by_id,
+			lord_id_5, RoleRegistry.SCHOOL_MASTER, characters, characters_by_id,
 			bal_w5, bal_c5,
 		)
 		if not lord_vacancies.has(lord_id_5):
 			lord_vacancies[lord_id_5] = []
 		lord_vacancies[lord_id_5].append({
-			"position_type": "School Master",
+			"position_type": RoleRegistry.SCHOOL_MASTER,
 			"priority": 2,
 			"province_id": -1,
 			"candidate_id": candidate_5,
@@ -17191,45 +18174,20 @@ static func _family_to_clan(family: String) -> String:
 	return ""
 
 
-const POSITION_SKILL_WEIGHTS: Dictionary = {
-	"Clan Magistrate": ["Investigation", "Lore: Law", "Etiquette"],
-	"Emerald Magistrate": ["Investigation", "Lore: Law", "Etiquette"],
-	"Garrison Commander": ["Battle", "Defense", "Kenjutsu"],
-	"military_commander": ["Battle", "War", "Kenjutsu"],
-	"Temple Head": ["Lore: Theology", "Meditation"],
-	"Monastery Abbot": ["Lore: Theology", "Meditation", "Jiujutsu"],
-	"School Master": ["Lore: Theology", "Instruction"],
-}
-
-const POSITION_VIRTUE_BONUSES: Dictionary = {
-	"Clan Magistrate": [Enums.BushidoVirtue.GI, Enums.BushidoVirtue.MEIYO],
-	"Emerald Magistrate": [Enums.BushidoVirtue.GI, Enums.BushidoVirtue.MEIYO],
-	"Garrison Commander": [Enums.BushidoVirtue.YU, Enums.BushidoVirtue.CHUGI],
-	"military_commander": [Enums.BushidoVirtue.YU, Enums.BushidoVirtue.CHUGI],
-	"Temple Head": [Enums.BushidoVirtue.REI, Enums.BushidoVirtue.JIN],
-	"Monastery Abbot": [Enums.BushidoVirtue.REI, Enums.BushidoVirtue.JIN],
-	"School Master": [Enums.BushidoVirtue.MEIYO, Enums.BushidoVirtue.GI],
-}
-
-const POSITION_SCHOOL_TYPE_BONUS: Dictionary = {
-	"Temple Head": [Enums.SchoolType.SHUGENJA, Enums.SchoolType.MONK],
-	"Monastery Abbot": [Enums.SchoolType.MONK],
-}
-
-
 static func _find_vacancy_candidate(
 	lord_id: int,
 	position_type: String,
 	characters: Array,
-	_characters_by_id: Dictionary,
+	characters_by_id: Dictionary,
 	clan_balance_weight: float = 0.0,
 	clan_position_counts: Dictionary = {},
 ) -> int:
 	var best_id: int = -1
 	var best_score: float = -999.0
-	var skill_keys: Array = POSITION_SKILL_WEIGHTS.get(position_type, [])
-	var virtue_list: Array = POSITION_VIRTUE_BONUSES.get(position_type, [])
-	var school_types: Array = POSITION_SCHOOL_TYPE_BONUS.get(position_type, [])
+	var lord_char: L5RCharacterData = characters_by_id.get(lord_id)
+	var skill_keys: Array = RoleRegistry.POSITION_SKILL_WEIGHTS.get(position_type, [])
+	var virtue_list: Array = RoleRegistry.POSITION_VIRTUE_BONUSES.get(position_type, [])
+	var school_types: Array = RoleRegistry.POSITION_SCHOOL_TYPE_BONUS.get(position_type, [])
 	var avg_positions: float = 0.0
 	if clan_balance_weight > 0.0 and not clan_position_counts.is_empty():
 		var total: float = 0.0
@@ -17245,8 +18203,8 @@ static func _find_vacancy_candidate(
 			continue
 		if not c.role_position.is_empty():
 			continue
-		# Base: status + honor + glory (same as before)
-		var score: float = c.status + c.honor + c.glory
+		# Base: status + honor + glory (s45 CAST_OUT: lord's sect may see candidate's glory as 0)
+		var score: float = c.status + c.honor + float(HonorGlorySystem.get_observed_glory_rank(c, lord_char))
 		# Loyalty: disposition toward lord (weight 0.1)
 		var disp: int = c.disposition_values.get(lord_id, 0)
 		score += float(disp) * 0.1
@@ -18017,7 +18975,7 @@ static func _inject_base_character_context(
 		for c: L5RCharacterData in characters:
 			if CharacterStats.is_dead(c):
 				continue
-			if c.clan == "Phoenix" and c.role_position == "Clan Champion":
+			if c.clan == "Phoenix" and c.role_position == RoleRegistry.CLAN_CHAMPION:
 				phoenix_champion_id = c.character_id
 				break
 
@@ -18126,6 +19084,66 @@ static func _inject_base_character_context(
 			if char_clan != null:
 				ws["champion_conclusion_candidates"] = StrategicReview.get_champion_conclusion_needtypes(c, char_clan)
 			ws["local_tier3_candidates"] = _build_local_tier3_candidates(c, g_topics_by_id)
+
+		# s45 Advantage/Disadvantage behavioral context flags (consumed by NPC engine)
+		# LOST_LOVE: trigger fires when co-located with someone from lost love's clan/family.
+		if AdvantageSystem.has_disadvantage(c, Enums.Disadvantage.LOST_LOVE) \
+				and not c.physical_location.is_empty():
+			var ll_dis: DisadvantageData = AdvantageSystem.get_disadvantage(c, Enums.Disadvantage.LOST_LOVE)
+			if ll_dis != null:
+				var ll_clan: String = ll_dis.metadata.get("clan", "")
+				var ll_family: String = ll_dis.metadata.get("family", "")
+				if ll_clan != "" or ll_family != "":
+					for _ll_other: L5RCharacterData in characters:
+						if CharacterStats.is_dead(_ll_other) or _ll_other.character_id == c.character_id:
+							continue
+						if _ll_other.physical_location != c.physical_location:
+							continue
+						if (ll_clan != "" and _ll_other.clan == ll_clan) \
+								or (ll_family != "" and _ll_other.family == ll_family):
+							var _ll_ctx: Dictionary = {
+								"lost_love_clan": _ll_other.clan,
+								"lost_love_family": _ll_other.family,
+							}
+							var _ll_trig: Dictionary = AdvantageSystem.check_lost_love_trigger(
+								c, _ll_ctx, ic_day
+							)
+							if _ll_trig.get("triggered", false):
+								ll_dis.metadata["lost_love_tn_active"] = true
+								ll_dis.metadata["triggers_today"] = ll_dis.metadata.get("triggers_today", 0) + 1
+								ll_dis.metadata["last_trigger_ic_day"] = ic_day
+							break
+		var well_courts: Array = AdvantageSystem.get_well_connected_courts(c)
+		if not well_courts.is_empty():
+			if not ws.has("known_objectives"):
+				ws["known_objectives"] = {}
+			ws["known_objectives"]["well_connected_courts"] = well_courts
+		var spy_focus: Dictionary = AdvantageSystem.get_spy_network_focus(c)
+		if not spy_focus.is_empty():
+			ws["spy_network_focus"] = spy_focus
+		if AdvantageSystem.has_disadvantage(c, Enums.Disadvantage.TRUE_LOVE):
+			var tl_dis: DisadvantageData = AdvantageSystem.get_disadvantage(c, Enums.Disadvantage.TRUE_LOVE)
+			if tl_dis != null:
+				ws["true_love_target_id"] = tl_dis.metadata.get("target_id", -1)
+		if AdvantageSystem.has_disadvantage(c, Enums.Disadvantage.COMPULSION):
+			var comp_dis: DisadvantageData = AdvantageSystem.get_disadvantage(c, Enums.Disadvantage.COMPULSION)
+			if comp_dis != null:
+				ws["compulsion_location_tags"] = comp_dis.metadata.get("location_tags", [])
+		if AdvantageSystem.has_disadvantage(c, Enums.Disadvantage.PHOBIA):
+			var ph_dis: DisadvantageData = AdvantageSystem.get_disadvantage(c, Enums.Disadvantage.PHOBIA)
+			if ph_dis != null:
+				ws["phobia_situation_tags"] = ph_dis.metadata.get("situation_tags", [])
+		if AdvantageSystem.has_disadvantage(c, Enums.Disadvantage.RUMORMONGER):
+			var rm_loc: String = c.physical_location
+			if not rm_loc.is_empty():
+				var max_gr: float = 0.0
+				for rm_c: L5RCharacterData in characters:
+					if CharacterStats.is_dead(rm_c):
+						continue
+					if rm_c.physical_location == rm_loc and rm_c.character_id != c.character_id:
+						max_gr = maxf(max_gr, float(AdvantageSystem.get_glory_rank(rm_c)))
+				if max_gr > 0.0:
+					ws["rumormonger_max_glory_rank"] = max_gr
 
 
 # -- Local Tier 3 Candidates (s57.54.10b) -------------------------------------
@@ -19387,7 +20405,50 @@ static func _process_assassination_daily_tick(
 							assassin, guard, response, op, dice_engine,
 						)
 						tick_result["bodyguard"] = bg_result
-						if not bg_result.get("aborted", false):
+						if bg_result.get("fight_initiated", false) and not CharacterStats.is_dead(guard):
+							var combat: Dictionary = IndividualCombat.resolve_npc_summary_combat(
+								assassin, guard, dice_engine,
+							)
+							tick_result["bodyguard_combat"] = combat
+							if combat.get("attacker_dead", false) or combat.get("loser_id", -1) == assassin.character_id:
+								op["phase"] = AssassinationSystem.AssassinationPhase.ABORTED
+								AssassinationSystem.add_suspicion(op, AssassinationSystem.SUSPICION_CRITICAL_FAILURE)
+								if CharacterStats.is_dead(assassin):
+									death_events.append({
+										"character_id": assassin.character_id,
+										"is_lord": assassin.role_position != "",
+										"suspicious_death": true,
+										"killer_id": guard.character_id,
+									})
+							elif not CharacterStats.is_dead(guard):
+								# Both survived — non-lethal combat outside any duel framework.
+								# Wire into ViolenceSystem (s11.3.12). is_brutal=true because
+								# blades were drawn during an assassination attempt.
+								var prior_count: int = ViolenceSystem.count_offenses_in_window(
+									assassin.violence_offense_days, ic_day)
+								var v_eval: Dictionary = ViolenceSystem.evaluate_violence(
+									assassin, guard, prior_count, true)
+								ViolenceSystem.apply_consequences(assassin, v_eval)
+								assassin.violence_offense_days.append(ic_day)
+								var v_record: CrimeRecord = CrimeSystem.create_crime_record(
+									next_case_id[0], Enums.CrimeType.VIOLENCE,
+									assassin.character_id, assassin.physical_location,
+									ic_day, guard.character_id)
+								v_record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+								next_case_id[0] += 1
+								crime_records.append(v_record)
+								tick_result["violence_result"] = v_eval
+								tick_result["violence_attacker_id"] = assassin.character_id
+								tick_result["violence_location"] = assassin.physical_location
+							else:
+								death_events.append({
+									"character_id": guard.character_id,
+									"is_lord": guard.role_position != "",
+									"suspicious_death": true,
+									"killer_id": assassin.character_id,
+								})
+						var assassin_lost: bool = op.get("phase", -1) == AssassinationSystem.AssassinationPhase.ABORTED
+						if not bg_result.get("aborted", false) and not assassin_lost:
 							exec_result = AssassinationSystem.resolve_execution(
 								assassin, target, op, dice_engine, false, characters_by_id,
 							)
@@ -19473,7 +20534,15 @@ static func _apply_assassination_outcome(
 	characters_by_id: Dictionary,
 ) -> void:
 	var earth: int = CharacterStats.get_ring_value(target, Enums.Ring.EARTH)
-	target.wounds_taken = earth * 5 * 5
+	var ass_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+	if AdvantageSystem.check_great_destiny(target, ass_ic_year).get("triggered", false):
+		var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(target)
+		target.wounds_taken = gd_threshold * 6 + 1
+		var gd_ass: AdvantageData = AdvantageSystem.get_advantage(target, Enums.Advantage.GREAT_DESTINY)
+		if gd_ass != null:
+			gd_ass.metadata["last_triggered_ic_year"] = ass_ic_year
+	else:
+		target.wounds_taken = earth * 5 * 5
 	death_events.append({
 		"character_id": target.character_id,
 		"ic_day": ic_day,
@@ -19579,6 +20648,34 @@ static func _process_duel_honor_writebacks(
 			HonorGlorySystem.apply_honor_change(
 				actor, CrimeSystem.get_facing_superior_foe_honor(actor)
 			)
+
+
+## SOFT_HEARTED (s45): after all deaths are registered for the day, roll Willpower TN 20
+## for each living character whose killer_id appears in a death_event. On failure, set
+## soft_hearted_tn_until to ic_day + 1 (expires at dawn of the following day).
+static func _process_soft_hearted_kill_penalties(
+	death_events: Array,
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+	ic_day: int,
+) -> void:
+	for event: Dictionary in death_events:
+		var killer_id: int = event.get("killer_id", event.get("assassin_id", -1))
+		if killer_id < 0:
+			continue
+		var killer: L5RCharacterData = characters_by_id.get(killer_id)
+		if killer == null or CharacterStats.is_dead(killer):
+			continue
+		var check: Dictionary = AdvantageSystem.check_soft_hearted_trigger(killer)
+		if not check.get("blocked", false):
+			continue
+		# Roll Willpower TN 20 to suppress the penalty.
+		var sh_wound: int = CharacterStats.get_wound_penalty(killer)
+		var roll: Dictionary = dice_engine.roll_check(
+			killer.willpower, killer.willpower, 20, 0, sh_wound, true, false
+		)
+		if not roll.get("success", false):
+			killer.soft_hearted_tn_until = ic_day + 1
 
 
 static func _process_duel_death_writebacks(
@@ -20766,7 +21863,15 @@ static func _resolve_scheduled_hunts(
 			var killed: L5RCharacterData = characters_by_id.get(killed_id)
 			if killed != null:
 				var earth: int = CharacterStats.get_ring_value(killed, Enums.Ring.EARTH)
-				killed.wounds_taken = earth * 5 * 5
+				var hunt_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+				if AdvantageSystem.check_great_destiny(killed, hunt_ic_year).get("triggered", false):
+					var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(killed)
+					killed.wounds_taken = gd_threshold * 6 + 1
+					var gd_hunt: AdvantageData = AdvantageSystem.get_advantage(killed, Enums.Advantage.GREAT_DESTINY)
+					if gd_hunt != null:
+						gd_hunt.metadata["last_triggered_ic_year"] = hunt_ic_year
+				else:
+					killed.wounds_taken = earth * 5 * 5
 				death_events.append({
 					"character_id": killed_id,
 					"ic_day": ic_day,
@@ -20897,7 +22002,7 @@ static func _apply_confirmed_successions(
 				cd.champion_id = succ.successor_id
 
 		# Update emperor_id and archetype if emperor succession
-		if old_role == "Emperor":
+		if old_role == RoleRegistry.EMPEROR:
 			world_states["emperor_id"] = succ.successor_id
 			world_states["emperor_archetype"] = StrategicReview.derive_emperor_archetype(successor)
 
@@ -20907,7 +22012,7 @@ static func _apply_confirmed_successions(
 			"successor_id": succ.successor_id,
 			"deceased_id": succ.deceased_id,
 			"role": old_role,
-			"is_emperor": old_role == "Emperor",
+			"is_emperor": old_role == RoleRegistry.EMPEROR,
 		})
 	return results
 
@@ -21672,6 +22777,38 @@ static func _crime_tier_for_public_record(crime_type: int) -> int:
 			return TopicData.Tier.TIER_4
 
 
+# Seeds violence public records from non-lethal bodyguard combat in assassination ops.
+# Assassination tick results are separate from NPC wave results, so the standard
+# _seed_public_records_from_crime_results() path cannot reach them via wave_results.
+# This helper seeds directly for tick entries that contain a "violence_result" key.
+static func _seed_assassination_violence_public_records(
+	assassination_results: Array,
+	settlements: Array,
+	ic_day: int,
+) -> void:
+	if settlements.is_empty() or assassination_results.is_empty():
+		return
+	var settlements_by_str_id: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlements_by_str_id[str(s.settlement_id)] = s
+	for tr: Variant in assassination_results:
+		if not tr is Dictionary:
+			continue
+		var v_eval: Dictionary = (tr as Dictionary).get("violence_result", {})
+		if v_eval.is_empty():
+			continue
+		var attacker_id: int = (tr as Dictionary).get("violence_attacker_id", -1)
+		var location: String = (tr as Dictionary).get("violence_location", "")
+		if location.is_empty():
+			continue
+		var settlement: SettlementData = settlements_by_str_id.get(location)
+		if settlement == null:
+			continue
+		var tier: int = v_eval.get("topic_tier", ViolenceSystem.BASE_TOPIC_TIER)
+		PublicRecordSystem.seed_event(
+			settlement, "violence", tier, ic_day, -1, attacker_id)
+
+
 # Cipher Gap 1 (s57.30 A3): Kitsuki written_deception → settlement public record.
 # letter_results entries with "kitsuki_written_deception" are returned by deliver_letter()
 # but were never consumed. Seeds a "written_deception" public record entry for the
@@ -22284,6 +23421,255 @@ static func _process_noshi_consumption_writebacks(
 				continue  # consumed
 			new_items.append(item)
 		character.items = new_items
+
+
+static func _process_ritual_spell_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	character_province_map: Dictionary,
+	dice_engine: DiceEngine,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	spiritual_insurgency_events: Array = [],
+) -> void:
+	## Resolve spell rolls embedded in PERFORM_RITUAL / PERFORM_WORSHIP (s31-s37).
+	## Executors flag requires_spell_roll=true when a ritual_spell_id was set.
+	## Effect routing by SpellSimEffect:
+	##   RITUAL_HONOR      → honor/glory already applied by EffectApplicator via honor_change
+	##   COMMUNE_KAMI      → no additional sim effect (worship economy handled by WKS)
+	##   HEAL_WOUNDS       → caster's wounds_taken reduced via SpellSystem.apply_healing()
+	##   DETECT_PRESENCE   → topic if tainted province found + KnowledgeEntry with density tier
+	##   PURIFY_AREA       → province PTL reduction on success
+	##   REMOVE_TAINT      → character taint reduction on success
+	##   SPIRIT_BIND       → resolves a REALM_OVERLAP SpiritualInsurgencyData event
+	##   WARD_CREATION     → taint gate check; if caster tainted, self-knowledge entry
+	##   INFORMATION_GATHER → personality_insight (Group A: co-located) or
+	##                         location_intelligence (Group B: remote) KnowledgeEntry
+	for result: Variant in results:
+		var effects: Dictionary = result.get("effects", {})
+		if not effects.get("requires_spell_roll", false):
+			continue
+		var ritual_spell_id: String = effects.get("ritual_spell_id", "")
+		if ritual_spell_id.is_empty():
+			continue
+		if not SpellSystem.SPELL_LIBRARY.has(ritual_spell_id):
+			continue
+		var char_id: int = result.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		var province_id: int = character_province_map.get(char_id, -1)
+		var sim_effect: int = SpellSystem.SPELL_LIBRARY[ritual_spell_id].get(
+			"s", SpellSystem.SpellSimEffect.COMBAT_ONLY
+		)
+		var cast_result: Dictionary = SpellSystem.resolve_cast(
+			character, ritual_spell_id, dice_engine
+		)
+		var success: bool = cast_result.get("success", false)
+		var margin: int = cast_result.get("margin", 0)
+		match sim_effect:
+			SpellSystem.SpellSimEffect.HEAL_WOUNDS:
+				# s36 regrow_the_wound / s37 rise_from_the_ashes.
+				# NPC engine selects healing spells via get_best_healing_spell().
+				# In simulation context caster heals themselves (no target selection yet).
+				if success:
+					SpellSystem.apply_healing(character, ritual_spell_id, margin)
+			SpellSystem.SpellSimEffect.DETECT_PRESENCE:
+				if success and province_id >= 0:
+					var province: ProvinceData = provinces.get(province_id)
+					if province != null and province.province_taint_level > 0.0:
+						var detect_topic: TopicData = TopicData.new()
+						detect_topic.topic_id = next_topic_id[0]
+						next_topic_id[0] += 1
+						detect_topic.title = "Taint Detected in Province"
+						detect_topic.category = TopicData.Category.SUPERNATURAL
+						detect_topic.tier = TopicData.Tier.TIER_4
+						detect_topic.topic_type = "taint_detection"
+						detect_topic.subject_character_id = -1
+						detect_topic.ic_day_created = ic_day
+						detect_topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(detect_topic.tier)
+						active_topics.append(detect_topic)
+						character.topic_pool.append(detect_topic.topic_id)
+						# Personal knowledge: province kansen density tier derived from PTL.
+						# Tile-level kansen grid (KansenSystem) is ASCII-map-only; province-level
+						# density is the simulation proxy (AsciiMapEnvironment.density_from_ptl).
+						var density_tier: int = AsciiMapEnvironment.density_from_ptl(
+							province.province_taint_level
+						)
+						var density_entry: KnowledgeEntry = KnowledgeEntry.new()
+						density_entry.source = "spell_detect_presence"
+						density_entry.entry_type = "kansen_density"
+						density_entry.data = {
+							"density_tier": density_tier,
+							"province_id": province_id,
+							"ptl": province.province_taint_level,
+						}
+						density_entry.confidence = Enums.KnowledgeConfidence.FRESH
+						density_entry.season_acquired = ic_day / 90
+						character.knowledge_pool.append(density_entry)
+			SpellSystem.SpellSimEffect.PURIFY_AREA:
+				if success and province_id >= 0:
+					var province: ProvinceData = provinces.get(province_id)
+					if province != null:
+						SpellSystem.apply_purify_area(province, ritual_spell_id, margin)
+			SpellSystem.SpellSimEffect.REMOVE_TAINT:
+				if success:
+					SpellSystem.apply_taint_removal(character, ritual_spell_id, margin)
+			SpellSystem.SpellSimEffect.SPIRIT_BIND:
+				# s34/s56.16: a successful binding spell suppresses one matching REALM_OVERLAP
+				# spiritual insurgency event at the province (bonds_of_ningen_do targets
+				# Sakkaku/Chikushudo/Gaki-Do/Toshigoku/Yume-Do per GDD s34 ML3).
+				if success and province_id >= 0:
+					var target_event: SpiritualInsurgencyData = \
+						SpellSystem.find_bindable_spirit_event(
+							ritual_spell_id, province_id, spiritual_insurgency_events
+						)
+					if target_event != null:
+						target_event.resolved = true
+						target_event.resolution_type = "spirit_bind"
+			SpellSystem.SpellSimEffect.WEATHER_SHIFT:
+				# s31-37a: endless_deluge → STORM, breath_of_mist → MIST.
+				# Writes province_weather_state + expires ic day.
+				# Downstream effects (drought abatement, travel penalties) deferred until
+				# GDD s4.3 and s11.7a specify numeric weather modifiers.
+				if success and province_id >= 0:
+					var wp: ProvinceData = provinces.get(province_id)
+					if wp != null:
+						var new_state: int = SpellSystem.get_weather_shift_state(ritual_spell_id)
+						if new_state > 0:  # 0 = CLEAR — only write non-trivial states
+							wp.province_weather_state = new_state
+							wp.province_weather_expires_ic_day = \
+								ic_day + SpellSystem.get_weather_shift_duration_days(ritual_spell_id)
+			SpellSystem.SpellSimEffect.WARD_CREATION:
+				# s34 essence_of_jade: jade spirits recoil from Taint rank >= 1.
+				# If the caster is Tainted, the ward is blocked and caster learns their own Taint.
+				# Ward protective effect (10-round duration) is combat-only — no sim wiring until s40.
+				if success:
+					var ward_result: Dictionary = SpellSystem.apply_ward_creation(
+						character, ritual_spell_id
+					)
+					if ward_result.get("taint_revealed", false):
+						var entry: KnowledgeEntry = KnowledgeEntry.new()
+						entry.source = "spell_ward"
+						entry.entry_type = "taint_detected_self"
+						entry.data = {"taint": character.taint, "spell_id": ritual_spell_id}
+						entry.confidence = Enums.KnowledgeConfidence.FRESH
+						entry.season_acquired = ic_day / 90
+						character.knowledge_pool.append(entry)
+			SpellSystem.SpellSimEffect.INFORMATION_GATHER:
+				# s33-s37 divination spells. Two sub-groups per SpellSystem constants:
+				#   Group A (INFORMATION_GATHER_GROUP_A): person-intelligence, co-located.
+				#   Group B (INFORMATION_GATHER_GROUP_B): remote location-scrying.
+				# All other INFORMATION_GATHER spells are not NPC-selectable (handled by
+				# get_best_npc_information_spell) so this path only fires for Group A/B.
+				# familiarity tracking (reflective_pool, boundless_sight "familiar place"
+				# gate) not yet modeled — known gap (no visited_settlements on character).
+				if not success:
+					break
+				var div_target_id: int = effects.get("target_npc_id", -1)
+				if div_target_id < 0:
+					break
+				var div_target: L5RCharacterData = characters_by_id.get(div_target_id)
+				if div_target == null or CharacterStats.is_dead(div_target):
+					break
+				# Group B — remote location scrying
+				if ritual_spell_id in SpellSystem.INFORMATION_GATHER_GROUP_B:
+					var target_loc: String = div_target.physical_location
+					if target_loc.is_empty():
+						break
+					# dominion_of_suitengu requires target's province to be coastal
+					if ritual_spell_id == "dominion_of_suitengu":
+						var target_prov_id: int = character_province_map.get(div_target_id, -1)
+						var target_prov: ProvinceData = provinces.get(target_prov_id) as ProvinceData
+						if target_prov == null or not target_prov.is_coastal:
+							break
+					# the_final_bond requires immediate family or close friend (s36 LOCKED:
+					# "individual must be well known — immediate family or close friend").
+					# Close friend = Friend tier disposition (s12.2: >= 31).
+					if ritual_spell_id == "the_final_bond":
+						var is_family: bool = (
+							character.mother_id == div_target_id or
+							character.father_id == div_target_id or
+							character.spouse_id == div_target_id or
+							div_target_id in character.sibling_ids or
+							div_target_id in character.children_ids or
+							div_target_id in character.adopted_children_ids
+						)
+						var is_friend: bool = character.disposition_values.get(div_target_id, 0) >= 31
+						if not is_family and not is_friend:
+							break
+						# the_final_bond locates the target only — no full settlement scan
+						InformationSystem.update_intelligence_knowledge(
+							character,
+							InformationSystem.make_entry(
+								Enums.KnowledgeSource.INTELLIGENCE,
+								"location_intelligence",
+								{
+									"target_character_id": div_target_id,
+									"settlement_id": target_loc,
+									"spotted_characters": [div_target_id],
+									"is_audio_enabled": false,
+								},
+								ic_day / 90
+							)
+						)
+						break
+					# All other Group B spells: gather all living non-traveling characters
+					# present at the target settlement.
+					var spotted: Array[int] = []
+					for cid: int in characters_by_id:
+						var sc: L5RCharacterData = characters_by_id[cid]
+						if CharacterStats.is_dead(sc) or sc.is_traveling:
+							continue
+						if sc.physical_location == target_loc:
+							spotted.append(cid)
+					InformationSystem.update_intelligence_knowledge(
+						character,
+						InformationSystem.make_entry(
+							Enums.KnowledgeSource.INTELLIGENCE,
+							"location_intelligence",
+							{
+								"target_character_id": div_target_id,
+								"settlement_id": target_loc,
+								"spotted_characters": spotted,
+								"is_audio_enabled": ritual_spell_id == "boundless_sight",
+							},
+							ic_day / 90
+						)
+					)
+					break
+				# Group A — person-intelligence (target must be co-located with caster)
+				if ritual_spell_id not in SpellSystem.INFORMATION_GATHER_GROUP_A:
+					break
+				if character.physical_location.is_empty() or \
+						character.physical_location != div_target.physical_location:
+					break
+				var div_data: Dictionary = {
+					"target_character_id": div_target_id,
+					"bushido_virtue": div_target.bushido_virtue,
+					"shourido_virtue": div_target.shourido_virtue,
+				}
+				if ritual_spell_id == "look_into_the_soul":
+					div_data["ring_values"] = {
+						"air":   SpellSystem.get_ring_value(div_target, 0),
+						"earth": SpellSystem.get_ring_value(div_target, 1),
+						"fire":  SpellSystem.get_ring_value(div_target, 2),
+						"water": SpellSystem.get_ring_value(div_target, 3),
+						"void":  SpellSystem.get_ring_value(div_target, 4),
+					}
+				InformationSystem.update_intelligence_knowledge(
+					character,
+					InformationSystem.make_entry(
+						Enums.KnowledgeSource.INTELLIGENCE,
+						"personality_insight",
+						div_data,
+						ic_day / 90
+					)
+				)
+			_:
+				pass  # RITUAL_HONOR/COMMUNE_KAMI: honor_change already handled by EffectApplicator
 
 
 static func _process_gohei_usage_writebacks(
@@ -24372,6 +25758,179 @@ static func _process_sculpture_seasonal_maintenance(
 			active_topics.append(t)
 
 
+# ---------------------------------------------------------------------------
+# s44 Periodic Taint Rolls
+# ---------------------------------------------------------------------------
+
+## Resolve periodic Earth taint rolls for all living Tainted characters.
+## Called daily from advance_day.
+static func _process_periodic_taint_rolls(
+	characters: Array,
+	dice_engine: DiceEngine,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	for c: Variant in characters:
+		if not c is L5RCharacterData:
+			continue
+		var ch: L5RCharacterData = c as L5RCharacterData
+		if CharacterStats.is_dead(ch):
+			continue
+		if ch.taint < 1.0:
+			continue  # Rank 0 — not yet Tainted enough to trigger rolls (Rank 0 roll period would fire but taint gain requires rank 1+)
+		if not MutationSystem.should_roll_today(ch, ic_day):
+			continue
+		var earth: int = mini(ch.stamina, ch.willpower)
+		var r: Dictionary = MutationSystem.resolve_periodic_taint_roll(ch, earth, dice_engine, ic_day)
+		results.append(r)
+	return results
+
+
+## Check for Taint rank-up events and assign mutations/powers.
+## Called daily from advance_day after taint rolls complete.
+static func _process_taint_rank_changes(
+	characters: Array,
+	dice_engine: DiceEngine,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	for c: Variant in characters:
+		if not c is L5RCharacterData:
+			continue
+		var ch: L5RCharacterData = c as L5RCharacterData
+		if CharacterStats.is_dead(ch):
+			continue
+		var current_rank: int = MutationSystem.get_taint_rank(ch.taint)
+		if current_rank <= ch.taint_rank_last_processed:
+			continue
+		# Process all ranks between last processed and current (catches multi-rank jumps)
+		var next_rank: int = ch.taint_rank_last_processed + 1
+		while next_rank <= current_rank and next_rank <= 5:
+			var rank_result: Dictionary = MutationSystem.process_rank_up(ch, next_rank, dice_engine, ic_day)
+			rank_result["character_id"] = ch.character_id
+			results.append(rank_result)
+			next_rank += 1
+		ch.taint_rank_last_processed = current_rank
+	return results
+
+
+# -- s45 BOUNTY Recognition ----------------------------------------------------
+
+static func _check_bounty_recognition(
+	arriving: L5RCharacterData,
+	location: String,
+	characters_by_id: Dictionary,
+) -> void:
+	var bounty_tn: int = AdvantageSystem.get_recognition_tn(arriving)
+	if bounty_tn < 0:
+		return
+	for obs_id: int in characters_by_id:
+		if obs_id == arriving.character_id:
+			continue
+		var obs: L5RCharacterData = characters_by_id[obs_id]
+		if CharacterStats.is_dead(obs):
+			continue
+		if obs.physical_location != location:
+			continue
+		var per: int = obs.perception
+		var inv: int = obs.skills.get("Investigation", 0)
+		var roll_total: int = (per + inv) * 5  # Rough average roll without dice engine
+		if roll_total >= bounty_tn:
+			# Observer recognises the wanted character — add to met_characters
+			# so they can report through existing topic/investigation channels
+			var bounty_knowledge: KnowledgeEntry = KnowledgeEntry.new()
+			bounty_knowledge.source = "bounty_recognition"
+			bounty_knowledge.entry_type = "bounty_spotted"
+			bounty_knowledge.data = {
+				"target_id": arriving.character_id,
+				"location": location,
+			}
+			bounty_knowledge.confidence = Enums.KnowledgeConfidence.FRESH
+			obs.knowledge_pool.append(bounty_knowledge)
+
+
+# -- s45 CURSED_BY_THE_REALM (Sakkaku) Monthly Pranks -------------------------
+
+static func _process_sakkaku_monthly_pranks(
+	characters: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+	character_province_map: Dictionary = {},
+	province_clan_map: Dictionary = {},
+) -> void:
+	var ic_month: int = ic_day / 30
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var prank: Dictionary = AdvantageSystem.check_sakkaku_monthly_prank(character, ic_month)
+		if not prank.get("triggered", false):
+			continue
+		_apply_sakkaku_prank(character, prank, ic_month, ic_day, characters_by_id, character_province_map, province_clan_map)
+
+
+static func _apply_sakkaku_prank(
+	character: L5RCharacterData,
+	prank: Dictionary,
+	ic_month: int,
+	ic_day: int,
+	characters_by_id: Dictionary,
+	character_province_map: Dictionary = {},
+	province_clan_map: Dictionary = {},
+) -> void:
+	var effect: String = prank.get("prank", "")
+	var meta: Dictionary = prank.get("metadata", {})
+	match effect:
+		"VOID_DRAIN":
+			if character.current_void_points > 0:
+				character.current_void_points -= 1
+		"SPOILED_PROVISIONS":
+			character.koku = maxf(0.0, character.koku - float(meta.get("koku_loss", 1)))
+		"WHISPERED_EMBARRASSMENT":
+			HonorGlorySystem.apply_glory_change(character, -meta.get("glory_loss", 1.0))
+		"WRONG_PATH":
+			# WAY_OF_THE_LAND (s45) blocks getting lost in own clan territory
+			if character.travel_days_remaining > 0:
+				var province_id: int = character_province_map.get(character.character_id, -1)
+				var province_clan: String = province_clan_map.get(province_id, "")
+				var is_known: bool = not province_clan.is_empty() and province_clan == character.clan
+				if not AdvantageSystem.is_navigation_immune(character, {"is_known_territory": is_known}):
+					character.travel_days_remaining += meta.get("travel_extra_days", 1)
+		"FOOL_IMPRESSION":
+			# Selects a random living met character; applies -5 disposition toward the Sakkaku afflicted (s45)
+			_apply_fool_impression(character, meta, ic_month, characters_by_id)
+		"RESTLESS_NIGHT":
+			# Block void refresh for 1 OOC day (s45 spirit prank — restless sleep)
+			var ooc_day: int = ic_day / TimeSystem.TICKS_PER_REAL_DAY
+			character.void_refresh_blocked_until = ooc_day + 1
+		_:
+			pass  # Timed skill penalties and combat effects blocked on timed_advantages/s40
+	# Stamp last_prank_month to prevent re-triggering this month
+	for dis: DisadvantageData in character.disadvantages:
+		if dis.disadvantage_type == Enums.Disadvantage.CURSED_BY_THE_REALM:
+			if dis.metadata.get("realm", "") == "Sakkaku":
+				dis.metadata["last_prank_month"] = ic_month
+				break
+
+
+static func _apply_fool_impression(
+	character: L5RCharacterData,
+	meta: Dictionary,
+	ic_month: int,
+	characters_by_id: Dictionary,
+) -> void:
+	if character.met_characters.is_empty():
+		return
+	var pool: Array = []
+	for cid: int in character.met_characters:
+		var c: L5RCharacterData = characters_by_id.get(cid)
+		if c != null and not CharacterStats.is_dead(c):
+			pool.append(c)
+	if pool.is_empty():
+		return
+	var idx: int = (character.character_id * 11 + ic_month * 17) % pool.size()
+	var target: L5RCharacterData = pool[idx]
+	var disp: int = target.disposition_values.get(character.character_id, 0)
+	target.disposition_values[character.character_id] = clampi(disp + meta.get("disposition_loss", -5), -100, 100)
 
 
 

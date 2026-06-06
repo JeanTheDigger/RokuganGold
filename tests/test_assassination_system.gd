@@ -1594,3 +1594,155 @@ func test_apply_assassination_vengeance_skips_no_commissioner() -> void:
 func test_crime_record_has_commissioner_field() -> void:
 	var record: CrimeRecord = CrimeRecord.new()
 	assert_eq(record.commissioner_id, -1, "Default should be -1 sentinel")
+
+
+# ==============================================================================
+# Bodyguard Combat Wiring (DayOrchestrator._process_assassination_daily_tick)
+# ==============================================================================
+
+func _make_execution_op(assassin_id: int, target_id: int) -> Dictionary:
+	var op: Dictionary = AssassinationSystem.create_assassination_state(
+		assassin_id, target_id, AssassinationSystem.ExecutionMethod.BLADE, 10
+	)
+	op["phase"] = AssassinationSystem.AssassinationPhase.EXECUTION
+	return op
+
+
+func test_bodyguard_combat_key_present_when_fight_first_triggered() -> void:
+	# Assassin Kenjutsu=4 triggers FIGHT_FIRST via evaluate_bodyguard_response.
+	# Verify that the orchestrator runs the summary combat and records the result.
+	_bodyguard.assigned_protection_target_id = _target.character_id
+	_bodyguard.physical_location = "castle_a"
+	_target.physical_location = "castle_a"
+	_assassin.physical_location = "castle_a"
+
+	var op: Dictionary = _make_execution_op(_assassin.character_id, _target.character_id)
+	var death_events: Array = []
+	var results: Array = DayOrchestrator._process_assassination_daily_tick(
+		[op], {
+			_assassin.character_id: _assassin,
+			_target.character_id: _target,
+			_bodyguard.character_id: _bodyguard,
+		},
+		_engine, 10, death_events, [], [1], [], [1]
+	)
+
+	assert_eq(results.size(), 1)
+	assert_has(results[0], "bodyguard_combat",
+		"bodyguard_combat key must appear when FIGHT_FIRST is triggered")
+
+
+func test_bodyguard_wins_combat_aborts_operation() -> void:
+	# Assassin: Kenjutsu=4 (FIGHT_FIRST), agility=1 (5k1 attack — cannot beat guard's TN 55).
+	# Guard: agility=10, reflexes=10, Kenjutsu=10 (20k10 attack — overwhelms assassin TN 25).
+	# Assassin misses and has lower roll total → loser_id == assassin.character_id → ABORTED.
+	_assassin.agility = 1
+
+	var strong_guard: L5RCharacterData = L5RCharacterData.new()
+	strong_guard.character_id = 3
+	strong_guard.agility = 10
+	strong_guard.reflexes = 10
+	strong_guard.strength = 10
+	strong_guard.skills = {"Kenjutsu": 10}
+	strong_guard.assigned_protection_target_id = _target.character_id
+	strong_guard.physical_location = "castle_a"
+	_target.physical_location = "castle_a"
+	_assassin.physical_location = "castle_a"
+
+	var op: Dictionary = _make_execution_op(_assassin.character_id, _target.character_id)
+	var death_events: Array = []
+	var results: Array = DayOrchestrator._process_assassination_daily_tick(
+		[op], {
+			_assassin.character_id: _assassin,
+			_target.character_id: _target,
+			strong_guard.character_id: strong_guard,
+		},
+		_engine, 10, death_events, [], [1], [], [1]
+	)
+
+	assert_eq(results.size(), 1)
+	assert_has(results[0], "bodyguard_combat")
+	assert_eq(results[0]["bodyguard_combat"]["loser_id"], _assassin.character_id,
+		"Overwhelmed assassin should be the loser")
+	assert_eq(op["phase"], AssassinationSystem.AssassinationPhase.ABORTED,
+		"Op must be ABORTED when assassin loses the fight")
+
+
+func test_guard_death_creates_death_event_and_execution_retries() -> void:
+	# Assassin: agility=5, strength=10 (13k2 damage with katana — kills pre-wounded guard).
+	# Guard: reflexes=1 (armor TN 10, easy to hit), pre-wounded to 30 of 32 capacity.
+	# Assassin's 9k5 attack almost certainly beats TN 10 → any damage finishes the guard.
+	_assassin.strength = 10
+
+	_bodyguard.reflexes = 1
+	_bodyguard.wounds_taken = 30  # Near capacity (earth=2 → 8 levels × 4 = 32)
+	_bodyguard.assigned_protection_target_id = _target.character_id
+	_bodyguard.physical_location = "castle_a"
+	_target.physical_location = "castle_a"
+	_assassin.physical_location = "castle_a"
+
+	var op: Dictionary = _make_execution_op(_assassin.character_id, _target.character_id)
+	var death_events: Array = []
+	var results: Array = DayOrchestrator._process_assassination_daily_tick(
+		[op], {
+			_assassin.character_id: _assassin,
+			_target.character_id: _target,
+			_bodyguard.character_id: _bodyguard,
+		},
+		_engine, 10, death_events, [], [1], [], [1]
+	)
+
+	assert_eq(results.size(), 1)
+	var combat: Dictionary = results[0].get("bodyguard_combat", {})
+	assert_true(combat.get("defender_dead", false),
+		"Pre-wounded guard should die from any hit by a high-strength assassin")
+	assert_eq(death_events.size(), 1,
+		"A death event must be created for the killed bodyguard")
+	assert_eq(death_events[0]["character_id"], _bodyguard.character_id)
+	assert_true(death_events[0]["suspicious_death"])
+	assert_has(results[0], "execution_retry",
+		"Execution retry must fire when assassin kills guard and continues")
+
+
+# ==============================================================================
+# Wound Penalty — Bodyguard FIGHT_FIRST Initiative
+# ==============================================================================
+
+func test_bodyguard_fight_first_wound_penalty_on_initiative() -> void:
+	var healthy_assassin_total: int = 0
+	var wounded_assassin_total: int = 0
+	var trials: int = 100
+	for i: int in range(trials):
+		var d1: DiceEngine = DiceEngine.new(i * 13)
+		var healthy: L5RCharacterData = L5RCharacterData.new()
+		healthy.character_id = 80
+		healthy.reflexes = 4
+		healthy.skills = {"Stealth": 5, "Kenjutsu": 4}
+		var guard1: L5RCharacterData = L5RCharacterData.new()
+		guard1.character_id = 81
+		guard1.reflexes = 3
+		var s1: Dictionary = AssassinationSystem.create_assassination_state(80, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+		var r1: Dictionary = AssassinationSystem.resolve_bodyguard_encounter(
+			healthy, guard1, AssassinationSystem.BodyguardResponse.FIGHT_FIRST, s1, d1
+		)
+		healthy_assassin_total += r1.get("assassin_initiative", 0)
+
+		var d2: DiceEngine = DiceEngine.new(i * 13)
+		var wounded: L5RCharacterData = L5RCharacterData.new()
+		wounded.character_id = 82
+		wounded.reflexes = 4
+		wounded.wounds_taken = 50
+		wounded.skills = {"Stealth": 5, "Kenjutsu": 4}
+		var guard2: L5RCharacterData = L5RCharacterData.new()
+		guard2.character_id = 83
+		guard2.reflexes = 3
+		var s2: Dictionary = AssassinationSystem.create_assassination_state(82, 2, AssassinationSystem.ExecutionMethod.BLADE, 0)
+		var r2: Dictionary = AssassinationSystem.resolve_bodyguard_encounter(
+			wounded, guard2, AssassinationSystem.BodyguardResponse.FIGHT_FIRST, s2, d2
+		)
+		wounded_assassin_total += r2.get("assassin_initiative", 0)
+
+	assert_true(
+		healthy_assassin_total > wounded_assassin_total,
+		"Wounded assassin should have lower initiative totals due to wound penalty"
+	)

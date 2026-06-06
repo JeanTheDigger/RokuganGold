@@ -302,7 +302,7 @@ static func _make_gz(sid: int, sname: String) -> GreaterZoneData:
 	gz.zone_id = "%d_gz" % sid
 	gz.zone_name = sname
 	gz.zone_type = Enums.GreaterZoneType.SETTLEMENT
-	gz.settlement_id = str(sid)
+	gz.settlement_id = sid  # Bug 11 FIX: was str(sid); field is now int
 	return gz
 
 

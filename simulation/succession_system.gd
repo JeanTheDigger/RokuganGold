@@ -206,7 +206,7 @@ static func find_confirming_authority(
 		if _is_dead(c):
 			continue
 		if target_tier == Enums.LordRank.IMPERIAL:
-			if c.status >= 8.0 and (c.role_position == "Emperor" or c.clan == "Imperial"):
+			if c.status >= 8.0 and (c.role_position == RoleRegistry.EMPEROR or c.clan == "Imperial"):
 				if c.status > best_status:
 					best_status = c.status
 					best_id = c.character_id
@@ -310,8 +310,8 @@ static func evaluate_candidate(
 	# Factor 3 — Honor Rank
 	scores["honor"] = _score_honor(candidate.honor)
 
-	# Factor 4 — Glory Rank
-	scores["glory"] = _score_glory(candidate.glory)
+	# Factor 4 — Glory Rank (s45 CAST_OUT: lord's sect may see candidate's glory as 0)
+	scores["glory"] = _score_glory(float(HonorGlorySystem.get_observed_glory_rank(candidate, lord)))
 
 	# Factor 5 — Insight Rank
 	var insight_rank: int = CharacterStats.get_insight_rank(candidate)

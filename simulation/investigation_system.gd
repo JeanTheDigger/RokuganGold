@@ -325,7 +325,7 @@ static func check_jurisdiction(
 	magistrate: L5RCharacterData,
 	crime_record: CrimeRecord,
 ) -> bool:
-	if magistrate.role_position == "Emerald Magistrate":
+	if magistrate.role_position == RoleRegistry.EMERALD_MAGISTRATE:
 		return true
 	var mag_location: String = magistrate.physical_location
 	var crime_location: String = crime_record.location

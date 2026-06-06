@@ -66,7 +66,7 @@ func test_player_deck_row1_is_not_wall() -> void:
 		ShipBoardingMapData.BoardingMode.ASSAULT)
 	# Non-mast tiles on row 1 should be walkable (FLOOR_WOOD or FLOOR_STONE).
 	for x in range(15):
-		if x == ShipBoardingMapData.PLAYER_MAST_COL and 1 == ShipBoardingMapData.PLAYER_MAST_ROW:
+		if x == ShipBoardingMapData.PLAYER_MAST_COL and ShipBoardingMapData.PLAYER_MAST_ROW == 1:
 			continue
 		var t: int = m.get_tile(x, 1)
 		assert_true(t == Enums.TileType.FLOOR_WOOD or t == Enums.TileType.FLOOR_STONE,

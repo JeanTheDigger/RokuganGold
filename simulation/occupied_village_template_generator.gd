@@ -286,8 +286,13 @@ static func _place_river(map: OccupiedVillageMapData, size: int, road_x: int) ->
 	map.river_y = ry
 	map.bridge_x = road_x
 
-	# Full E-W WATER_DEEP row.
+	# Full E-W WATER_DEEP row — skip building floor tiles so the last building row
+	# (slot y=47 for VILLAGE, whose interior extends up to y=46) is not overwritten
+	# with impassable water, which would strand NPC population slots.
 	for x: int in range(map.width):
+		var existing: int = map.get_tile(x, ry)
+		if existing == Enums.TileType.FLOOR_STONE or existing == Enums.TileType.FLOOR_DIRT:
+			continue
 		map.set_tile(x, ry, Enums.TileType.WATER_DEEP)
 
 	# Road-width FLOOR_WOOD bridge crossing.

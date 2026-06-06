@@ -365,7 +365,12 @@ static func _get_ring_rank(character: L5RCharacterData, ring: Enums.Ring) -> int
 # Returns true when this character's school qualifies for the given entry's
 # Mirumoto/Kakita ring reduction (requirement −1).
 static func _has_mirumoto_kakita_reduction(character: L5RCharacterData) -> bool:
-	return character.school_name in ["Mirumoto Bushi", "Kakita Bushi"]
+	if character.school_name in ["Mirumoto Bushi", "Kakita Bushi"]:
+		return true
+	for path: String in character.school_paths:  # Bug 9 FIX: check secondary schools too
+		if path in ["Mirumoto Bushi", "Kakita Bushi"]:
+			return true
+	return false
 
 
 # === ELIGIBILITY ===

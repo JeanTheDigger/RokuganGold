@@ -132,6 +132,18 @@ func test_density_at_out_of_bounds_returns_none() -> void:
 	assert_eq(KansenSystem.density_at(grid, m.width, 0, -1), _KD.NONE)
 	assert_eq(KansenSystem.density_at(grid, m.width, 100, 100), _KD.NONE)
 
+func test_density_at_x_equals_width_returns_none() -> void:
+	# Bug 10 regression: density_at lacked x >= map_width guard. x == map_width with
+	# y < map_height-1 would compute idx = y*w + w which is still within the grid and
+	# reads the first cell of the next row instead of returning NONE.
+	var m: AsciiMapData = _make_map(10, 10)
+	var grid: PackedByteArray = KansenSystem.generate_density_grid(
+			m, 9.0, "OTHER", [])
+	assert_eq(KansenSystem.density_at(grid, m.width, m.width, 0), _KD.NONE,
+			"x == map_width must return NONE (was wrapping into next row)")
+	assert_eq(KansenSystem.density_at(grid, m.width, m.width, 4), _KD.NONE,
+			"x == map_width with y < height-1 must return NONE")
+
 # ---------------------------------------------------------------------------
 # apply_jade_suppression
 # ---------------------------------------------------------------------------

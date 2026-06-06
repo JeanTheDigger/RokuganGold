@@ -163,7 +163,7 @@ static func create_bubble_scene(
 
 	for pid: int in participant_ids:
 		var c: L5RCharacterData = characters_by_id.get(pid)
-		if c != null:
+		if c != null and not CharacterStats.is_dead(c):
 			c.bubble_scene_id = scene_id
 			c.bubble_anchor_ic_day = anchor_ic_day
 
@@ -190,7 +190,7 @@ static func close_bubble_scene(
 
 	for pid: int in scene.get("participant_ids", []):
 		var c: L5RCharacterData = characters_by_id.get(pid)
-		if c != null:
+		if c != null and not CharacterStats.is_dead(c):
 			c.bubble_scene_id = -1
 			c.bubble_anchor_ic_day = -1
 

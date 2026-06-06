@@ -278,10 +278,10 @@ static func resolve_championship(
 # -- Emperor's Chosen Vacancy -------------------------------------------------
 
 const CHOSEN_POSITIONS: Array[String] = [
-	"Imperial Advisor",
-	"Imperial Chancellor",
-	"Imperial Treasurer",
-	"Voice of the Emperor",
+	RoleRegistry.IMPERIAL_ADVISOR,
+	RoleRegistry.IMPERIAL_CHANCELLOR,
+	RoleRegistry.IMPERIAL_TREASURER,
+	RoleRegistry.VOICE_OF_EMPEROR,
 ]
 
 const CHOSEN_EVALUATION_WEIGHTS: Dictionary = {

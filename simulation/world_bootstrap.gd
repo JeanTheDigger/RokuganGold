@@ -399,6 +399,11 @@ static func bootstrap_world(
 	for _c: L5RCharacterData in characters:
 		chars_by_id[_c.character_id] = _c
 
+	# s45 — derive advantages/disadvantages from confirmed world-start data.
+	# No active hostages exist at world generation; pass empty array.
+	for _c: L5RCharacterData in characters:
+		AdvantageSystem.assign_derived_advantages(_c, [], chars_by_id)
+
 	var next_cell_id: Array = [1]
 	var next_insurgency_id: Array = [1]
 	var bloodspeaker_result: Dictionary = BloodspeakerNetworkSystem.generate_initial_cells(

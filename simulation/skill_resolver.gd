@@ -368,6 +368,7 @@ static func resolve_skill_check(
 	bonus_kept: int = 0,
 	flat_bonus: int = 0,
 	ic_day: int = -1,
+	context: Dictionary = {},
 ) -> Dictionary:
 	# Determine trait
 	var trait_used: Enums.Trait
@@ -378,6 +379,9 @@ static func resolve_skill_check(
 
 	var trait_value: int = character.get_trait_value(trait_used)
 	var skill_rank: int = get_skill_rank(character, skill_name)
+	# CRAB_HANDS / CRAFTY / SAGE / SENSATION / SOUL_OF_ARTISTRY (s45)
+	if skill_rank == 0 and not context.is_empty():
+		skill_rank = AdvantageSystem.get_unskilled_rank_bonus(character, skill_name, context)
 
 	# Emphasis check
 	var has_emph: bool = false
@@ -395,10 +399,74 @@ static func resolve_skill_check(
 	if not character.from_the_ashes.is_empty():
 		ashes_bonus = _get_ashes_bonus_for_skill(character, skill_name, ic_day)
 
+	# Advantage & Disadvantage modifiers (s45)
+	var adv_skill: Dictionary = AdvantageSystem.get_skill_bonus(character, skill_name, context)
+	var adv_tn: int = AdvantageSystem.get_tn_modifier(character, context)
+	var adv_wound: int = AdvantageSystem.get_wound_tn_modifier(character)
+	var adv_trait: int = AdvantageSystem.get_trait_modifier(character, trait_used, context)
+	trait_value += adv_trait
+	if wound_penalty < 0:
+		wound_penalty = mini(0, wound_penalty + adv_wound)
+
+	# Mutation / Shadowlands Power modifiers (s44)
+	var mutation_mod: Dictionary = MutationSystem.get_skill_modifiers(
+		character, skill_name, emphasis_name, context
+	)
+
+	# Elemental Imbalance overflow penalties (s45 lines 537-545)
+	var is_social: bool = context.get("is_social", false)
+	var imbalance_mod: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(
+		character, is_social, ic_day
+	)
+
+	# INHERITANCE (s45): +1k1 when using the family heirloom (extra kept die).
+	var inheritance_mod: Dictionary = AdvantageSystem.get_inheritance_skill_bonus(
+		character, context.get("using_heirloom", false)
+	)
+
+	# SOFT_HEARTED (s45): +10 TN on all rolls until end of the IC day a kill occurred.
+	var soft_hearted_tn: int = 0
+	if character.soft_hearted_tn_until >= 0 and ic_day >= 0 and ic_day < character.soft_hearted_tn_until:
+		soft_hearted_tn = 10
+
+	# CANT_LIE (s45): contested Willpower TN 20 before any Sincerity:Deceit roll.
+	# On failure the roll is automatically treated as failed (returns early).
+	if "Sincerity" in skill_name and context.get("is_deception", false):
+		var cant_lie: Dictionary = AdvantageSystem.check_cant_lie_trigger(character)
+		if cant_lie.get("blocked", false):
+			# Roll Willpower TN 20 to override the block.
+			var will_roll: Dictionary = dice_engine.roll_check(
+				character.willpower, character.willpower, 20, 0, 0, true, false
+			)
+			if not will_roll.get("success", false):
+				return {
+					"success": false, "total": 0, "tn": tn, "margin": -tn,
+					"skill": skill_name, "trait_used": trait_used, "skill_rank": skill_rank,
+					"wound_penalty": wound_penalty, "emphasis_applied": false,
+					"technique_free_raises": 0, "advantage_bonus": {},
+					"cant_lie_blocked": true,
+				}
+
+	# DARLING_OF_THE_COURT (s45): +1 effective Status rank at home court → +5 TN equivalent.
+	var darling_bonus: int = 0
+	if context.get("is_court", false):
+		darling_bonus = AdvantageSystem.get_darling_status_bonus(
+			character, context.get("court_settlement_id", -1)
+		) * 5  # 1 Status rank ≈ 1 Free Raise ≈ +5 effective bonus — PROVISIONAL
+
 	# Build the pool: (trait + skill + bonus_rolled) k (trait + bonus_kept)
-	var rolled: int = trait_value + skill_rank + bonus_rolled + ashes_bonus
-	var kept: int = trait_value + bonus_kept
-	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE)
+	var rolled: int = (
+		trait_value + skill_rank + bonus_rolled + ashes_bonus
+		+ adv_skill.get("rolled", 0) + mutation_mod.get("rolled", 0)
+		+ imbalance_mod.get("rolled", 0) + inheritance_mod.get("rolled", 0)
+	)
+	var kept: int = (
+		trait_value + bonus_kept + adv_skill.get("kept", 0) + mutation_mod.get("kept", 0)
+		+ imbalance_mod.get("kept", 0) + inheritance_mod.get("kept", 0)
+	)
+	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
+		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn \
+		+ mutation_mod.get("tn", 0) + soft_hearted_tn + darling_bonus
 
 	# Unskilled: no explosions
 	var explodes: bool = skill_rank > 0
@@ -413,6 +481,68 @@ static func resolve_skill_check(
 	result["wound_penalty"] = wound_penalty
 	result["emphasis_applied"] = has_emph
 	result["technique_free_raises"] = technique_fr
+	result["advantage_bonus"] = adv_skill
+
+	# LINGERING_MISFORTUNE: a narrow success (margin 0–4) is overturned once per month (s45)
+	if ic_day >= 0 and result.get("success", false):
+		var ic_month: int = ic_day / 30
+		var lm: Dictionary = AdvantageSystem.check_lingering_misfortune(
+			character, result.get("margin", 0), ic_month
+		)
+		if lm.get("triggered", false):
+			result["success"] = false
+			result["lingering_misfortune"] = true
+			for dis: DisadvantageData in character.disadvantages:
+				if dis.disadvantage_type == Enums.Disadvantage.BAD_FORTUNE:
+					if dis.metadata.get("type", "") == "Lingering_Misfortune":
+						dis.metadata["last_misfortune_month"] = ic_month
+						break
+
+	# DARK_PARAGON (s45): NPC activates retroactively when activation would turn a failed roll
+	# into a success, or prevent death/crippling for Will/Determination.
+	# Precept effects per s45:77:
+	#   Determination — negate all TN/Wound penalties (no +5 bonus).
+	#   Perfection    — NPC simulation proxy: +5 (die explosion cannot be simulated; GDD NPC
+	#                   trigger rule uses "+5 or re-roll would change outcome" as proxy).
+	#   All others    — +5 bonus (Control, Insight, Knowledge, Strength, Will).
+	if not result.get("success", false):
+		var dp_adv: AdvantageData = AdvantageSystem.get_advantage(
+			character, Enums.Advantage.DARK_PARAGON
+		)
+		if dp_adv != null:
+			var dp_precept: String = dp_adv.metadata.get("precept", "")
+			var dp: Dictionary = AdvantageSystem.check_dark_paragon_activation(
+				character, result.get("total", 0), result.get("tn", tn), dp_precept, ic_day
+			)
+			if dp.get("should_activate", false):
+				if dp_precept == "Determination":
+					# Negate wound penalty (wound_penalty is negative; subtracting negates it).
+					var wp: int = result.get("wound_penalty", 0)
+					result["total"] = result["total"] - wp
+				else:
+					# Perfection proxy (+5) and all other precepts (+5).
+					result["total"] = result["total"] + 5
+				result["margin"] = result["total"] - result["tn"]
+				result["success"] = result["margin"] >= 0
+				result["dark_paragon_activated"] = true
+				result["dark_paragon_precept"] = dp_precept
+				AdvantageSystem.apply_dark_paragon_cost(character, ic_day)
+
+	# PARAGON Duty (s45 line 257): NPC spends a VP to negate all Wound/TN penalties on one roll.
+	# Retroactive activation: fires when the roll failed and VP spend would change the outcome.
+	# Does not activate if DARK_PARAGON already fixed the roll this tick.
+	if not result.get("success", false) and not result.get("dark_paragon_activated", false):
+		var pd: Dictionary = AdvantageSystem.check_paragon_duty_activation(
+			character, result.get("total", 0), result.get("tn", tn),
+			result.get("wound_penalty", 0)
+		)
+		if pd.get("should_activate", false):
+			var wp: int = result.get("wound_penalty", 0)
+			result["total"] = result["total"] - wp  # wound_penalty is negative; subtracting negates it
+			result["margin"] = result["total"] - result["tn"]
+			result["success"] = result["margin"] >= 0
+			result["paragon_duty_activated"] = true
+			character.current_void_points -= 1
 
 	return result
 
@@ -434,6 +564,8 @@ static func resolve_contested_check(
 	flat_bonus_a: int = 0,
 	flat_bonus_b: int = 0,
 	ic_day: int = -1,
+	context_a: Dictionary = {},
+	context_b: Dictionary = {},
 ) -> Dictionary:
 	# Character A
 	var trait_a: Enums.Trait = trait_override_a if trait_override_a != Enums.Trait.NONE else get_trait_for_skill(skill_a)
@@ -453,15 +585,39 @@ static func resolve_contested_check(
 	var tfr_b: int = get_technique_free_raises(char_b, skill_b)
 	var ashes_b: int = _get_ashes_bonus_for_skill(char_b, skill_b, ic_day) if not char_b.from_the_ashes.is_empty() else 0
 
+	# Advantage & Disadvantage modifiers (s45)
+	var adv_a: Dictionary = AdvantageSystem.get_skill_bonus(char_a, skill_a, context_a)
+	var adv_b: Dictionary = AdvantageSystem.get_skill_bonus(char_b, skill_b, context_b)
+	var adv_tn_a: int = AdvantageSystem.get_tn_modifier(char_a, context_a)
+	var adv_tn_b: int = AdvantageSystem.get_tn_modifier(char_b, context_b)
+	var adv_wound_a: int = AdvantageSystem.get_wound_tn_modifier(char_a)
+	var adv_wound_b: int = AdvantageSystem.get_wound_tn_modifier(char_b)
+	tv_a += AdvantageSystem.get_trait_modifier(char_a, trait_a, context_a)
+	tv_b += AdvantageSystem.get_trait_modifier(char_b, trait_b, context_b)
+	if wp_a < 0:
+		wp_a = mini(0, wp_a + adv_wound_a)
+	if wp_b < 0:
+		wp_b = mini(0, wp_b + adv_wound_b)
+
+	# Elemental Imbalance overflow penalties (s45 lines 537-545)
+	var is_social_a: bool = context_a.get("is_social", false)
+	var is_social_b: bool = context_b.get("is_social", false)
+	var imb_a: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(char_a, is_social_a, ic_day)
+	var imb_b: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(char_b, is_social_b, ic_day)
+
 	var roll_a: DiceResult = dice_engine.roll_and_keep(
-		tv_a + sr_a + bonus_rolled_a + ashes_a, tv_a, sr_a > 0, emph_a
+		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0),
+		tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0), sr_a > 0, emph_a
 	)
 	var roll_b: DiceResult = dice_engine.roll_and_keep(
-		tv_b + sr_b + bonus_rolled_b + ashes_b, tv_b, sr_b > 0, emph_b
+		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0),
+		tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0), sr_b > 0, emph_b
 	)
 
-	var total_a: int = roll_a.total + flat_bonus_a + wp_a + (tfr_a * FREE_RAISE_VALUE)
-	var total_b: int = roll_b.total + flat_bonus_b + wp_b + (tfr_b * FREE_RAISE_VALUE)
+	var total_a: int = roll_a.total + flat_bonus_a + wp_a + (tfr_a * FREE_RAISE_VALUE) \
+		+ (adv_a.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_a
+	var total_b: int = roll_b.total + flat_bonus_b + wp_b + (tfr_b * FREE_RAISE_VALUE) \
+		+ (adv_b.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_b
 
 	var winner: String = "a"
 	if total_b > total_a:

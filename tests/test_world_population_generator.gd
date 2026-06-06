@@ -693,7 +693,7 @@ func test_positioned_characters_get_role_position():
 		next_id, WorldPopulationGenerator.PositionType.SCHOOL_MASTER,
 		"Crab", "Hida", dice, 99,
 	)
-	assert_eq(c.role_position, "School Master")
+	assert_eq(c.role_position, RoleRegistry.SCHOOL_MASTER)
 
 
 func test_positioned_magistrate_gets_role_position():
@@ -704,7 +704,7 @@ func test_positioned_magistrate_gets_role_position():
 		next_id, WorldPopulationGenerator.PositionType.CLAN_MAGISTRATE,
 		"Lion", "Akodo", dice, 99,
 	)
-	assert_eq(c.role_position, "Clan Magistrate")
+	assert_eq(c.role_position, RoleRegistry.CLAN_MAGISTRATE)
 
 
 func test_positioned_samurai_has_empty_role():

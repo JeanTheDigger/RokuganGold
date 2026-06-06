@@ -398,7 +398,7 @@ func test_voluntary_remove_fine_fires_tier4() -> void:
 	var garden: GardenData = _make_garden(2, 2)
 	var result: Dictionary = GardenSystem.voluntary_remove(garden, 500)
 	assert_true(result["fire_topic"])
-	assert_eq(result["topic_tier"], 4)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_4)
 
 
 # ---------------------------------------------------------------------------
@@ -421,7 +421,7 @@ func test_daimyo_remove_fine_fires_tier3() -> void:
 	var garden: GardenData = _make_garden(2, 2)
 	var result: Dictionary = GardenSystem.daimyo_remove(garden, 500)
 	assert_true(result["fire_topic"])
-	assert_eq(result["topic_tier"], 3)
+	assert_eq(result["topic_tier"], TopicData.Tier.TIER_3)
 
 
 # ---------------------------------------------------------------------------
@@ -431,23 +431,23 @@ func test_daimyo_remove_fine_fires_tier3() -> void:
 func test_make_completion_topic_tier_by_quality() -> void:
 	var g_normal: GardenData = _make_garden(1)
 	var t_normal: Dictionary = GardenSystem.make_completion_topic(g_normal, "Doji Taro", "Eastern Courtyard", "Doji Daimyo")
-	assert_eq(t_normal["tier"], 4, "Normal → Tier 4")
+	assert_eq(t_normal["tier"], TopicData.Tier.TIER_4, "Normal → Tier 4")
 
 	var g_fine: GardenData = _make_garden(2, 2)
 	var t_fine: Dictionary = GardenSystem.make_completion_topic(g_fine, "Doji Taro", "Eastern Courtyard", "Doji Daimyo")
-	assert_eq(t_fine["tier"], 4, "Fine → Tier 4")
+	assert_eq(t_fine["tier"], TopicData.Tier.TIER_4, "Fine → Tier 4")
 
 	var g_excep: GardenData = _make_garden(3, 3)
 	var t_excep: Dictionary = GardenSystem.make_completion_topic(g_excep, "Doji Taro", "Eastern Courtyard", "Doji Daimyo")
-	assert_eq(t_excep["tier"], 3, "Exceptional → Tier 3")
+	assert_eq(t_excep["tier"], TopicData.Tier.TIER_3, "Exceptional → Tier 3")
 
 	var g_master: GardenData = _make_garden(4, 4)
 	var t_master: Dictionary = GardenSystem.make_completion_topic(g_master, "Doji Taro", "Eastern Courtyard", "Doji Daimyo")
-	assert_eq(t_master["tier"], 3, "Masterwork → Tier 3")
+	assert_eq(t_master["tier"], TopicData.Tier.TIER_3, "Masterwork → Tier 3")
 
 	var g_legend: GardenData = _make_garden(5, 5)
 	var t_legend: Dictionary = GardenSystem.make_completion_topic(g_legend, "Doji Taro", "Eastern Courtyard", "Doji Daimyo")
-	assert_eq(t_legend["tier"], 2, "Legendary → Tier 2")
+	assert_eq(t_legend["tier"], TopicData.Tier.TIER_2, "Legendary → Tier 2")
 
 
 # ---------------------------------------------------------------------------
@@ -458,7 +458,7 @@ func test_make_degradation_topic_first_trigger() -> void:
 	var garden: GardenData = _make_garden(3, 2)  # current_tier = 2 (already degraded to Fine)
 	var topic: Dictionary = GardenSystem.make_degradation_topic(garden, "Doji Taro", true, 3.5, "Eastern Courtyard", 3)
 	assert_false(topic.is_empty(), "Topic should fire")
-	assert_eq(topic["tier"], 4)
+	assert_eq(topic["tier"], TopicData.Tier.TIER_4)
 
 
 # ---------------------------------------------------------------------------
@@ -479,17 +479,17 @@ func test_make_destruction_topic_tiers() -> void:
 	var g_fine: GardenData = _make_garden(2, 0)  # Normal/Fine original → Tier 4
 	g_fine.destroyed = true
 	var t_fine: Dictionary = GardenSystem.make_destruction_topic(g_fine, "Creator", true, "Courtyard")
-	assert_eq(t_fine["tier"], 4)
+	assert_eq(t_fine["tier"], TopicData.Tier.TIER_4)
 
 	var g_excep: GardenData = _make_garden(3, 0)  # Exceptional original → Tier 3
 	g_excep.destroyed = true
 	var t_excep: Dictionary = GardenSystem.make_destruction_topic(g_excep, "Creator", true, "Courtyard")
-	assert_eq(t_excep["tier"], 3)
+	assert_eq(t_excep["tier"], TopicData.Tier.TIER_3)
 
 	var g_legend: GardenData = _make_garden(5, 0)  # Legendary original → Tier 2
 	g_legend.destroyed = true
 	var t_legend: Dictionary = GardenSystem.make_destruction_topic(g_legend, "Creator", false, "Courtyard")
-	assert_eq(t_legend["tier"], 2)
+	assert_eq(t_legend["tier"], TopicData.Tier.TIER_2)
 
 
 # ---------------------------------------------------------------------------
@@ -894,7 +894,7 @@ func test_make_daimyo_removal_topic_tier() -> void:
 	var t: Dictionary = GardenSystem.make_daimyo_removal_topic(
 		garden, "Lord Doji", "Artisan Taro", "Western Courtyard"
 	)
-	assert_eq(t.get("tier", -1), 3)
+	assert_eq(t.get("tier", -1), TopicData.Tier.TIER_3)
 
 
 func test_make_daimyo_removal_topic_type() -> void:

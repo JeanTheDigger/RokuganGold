@@ -130,7 +130,13 @@ static func assemble(
 		placements = MissionPopulator.populate(map, roster, pop_seed)
 
 	var biome: int        = biome_for_province(province)
-	var base_weather: int = seed_dict.get("weather", AsciiMapEnvironment.WeatherState.CLEAR)
+	# Use spell-induced province weather when active (s31-37a), otherwise fall back to
+	# seed_dict default (CLEAR if not specified by caller).
+	var spell_weather: int = province.province_weather_state \
+		if province.province_weather_state > 0 else AsciiMapEnvironment.WeatherState.CLEAR
+	var seed_base: int    = seed_dict.get("weather", AsciiMapEnvironment.WeatherState.CLEAR)
+	var base_weather: int = spell_weather if spell_weather != AsciiMapEnvironment.WeatherState.CLEAR \
+		else seed_base
 	var season: int       = seed_dict.get("season", TimeSystem.Season.SPRING)
 	var weather: int      = AsciiMapEnvironment.apply_biome_weather_conversion(
 		base_weather, biome, season)

@@ -315,3 +315,36 @@ func test_rain_and_vegetation_stack() -> void:
 			m, 10, 10, _NL.MODERATE, _WS.RAIN, false)
 	assert_true(reaches.has(Vector2i(13, 10)))
 	assert_false(reaches.has(Vector2i(14, 10)))
+
+
+# ---------------------------------------------------------------------------
+# Section 41 regression: VOID must count as wall for corridor bonus detection
+# ---------------------------------------------------------------------------
+
+func test_void_counts_as_wall_for_ew_corridor_bonus() -> void:
+	# VOID tiles flanking a floor row must trigger the EW corridor bonus,
+	# just like WALL_STONE would. Budget=6 for MODERATE; corridor cost 2/3
+	# per step → 8 steps = 5.33 budget consumed < 6 → tile at distance 8
+	# reachable. On an open map (no flanking walls) 8 steps costs 8.0 > 6.
+	var m: AsciiMapData = AsciiMapData.new()
+	m.width = 20
+	m.height = 3
+	m.init_tiles(_T.VOID)                     # fill with VOID
+	for x in range(20):
+		m.set_tile(x, 1, _T.FLOOR_STONE)      # single floor corridor on row 1
+	var reaches: Array[Vector2i] = NoiseSystem.compute_noise_reaches(
+			m, 0, 1, _NL.MODERATE, _WS.CLEAR, false)
+	# Without corridor bonus: 8 steps × 1.0 = 8 > 6 → not reachable.
+	# With corridor bonus  : 8 steps × 2/3 = 5.33 ≤ 6 → reachable.
+	assert_true(reaches.has(Vector2i(8, 1)),
+		"VOID-flanked corridor must give noise the EW corridor bonus (reach 8 tiles at MODERATE)")
+
+
+func test_void_does_not_count_as_corridor_on_open_map() -> void:
+	# Sanity check: on an open FLOOR map (no perpendicular walls), the corridor
+	# bonus is NOT triggered. Distance 7 must not be reachable at MODERATE.
+	var m: AsciiMapData = _open_map()
+	var reaches: Array[Vector2i] = NoiseSystem.compute_noise_reaches(
+			m, 0, 15, _NL.MODERATE, _WS.CLEAR, false)
+	assert_false(reaches.has(Vector2i(7, 15)),
+		"7-step tile must not be reachable without corridor bonus (MODERATE budget = 6)")

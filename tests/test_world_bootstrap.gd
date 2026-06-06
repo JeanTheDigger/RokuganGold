@@ -289,7 +289,7 @@ func test_military_rank_assigned_to_positioned_characters() -> void:
 	var chars: Array = result["characters"]
 	var found_ranked: int = 0
 	for c: L5RCharacterData in chars:
-		if c.role_position in ["Rikugunshokan", "Taisa", "Chui", "Garrison Commander"]:
+		if c.role_position in [RoleRegistry.RIKUGUNSHOKAN, RoleRegistry.TAISA, RoleRegistry.CHUI, RoleRegistry.GARRISON_COMMANDER]:
 			assert_true(
 				c.military_rank > 0,
 				"Character with position %s should have military_rank > 0" % c.role_position,
@@ -473,7 +473,7 @@ func test_emperor_has_role_position() -> void:
 	var emperor_id: int = result["emperor_id"]
 	for c: L5RCharacterData in result["characters"]:
 		if c.character_id == emperor_id:
-			assert_eq(c.role_position, "Emperor", "Emperor should have role_position 'Emperor'")
+			assert_eq(c.role_position, RoleRegistry.EMPEROR, "Emperor should have role_position 'Emperor'")
 			return
 	assert_true(false, "Should find emperor character")
 
@@ -486,7 +486,7 @@ func test_clan_champions_have_role_position() -> void:
 		for c: L5RCharacterData in result["characters"]:
 			if c.character_id == champ_id:
 				assert_eq(
-					c.role_position, "Clan Champion",
+					c.role_position, RoleRegistry.CLAN_CHAMPION,
 					"%s clan champion should have role_position 'Clan Champion'" % clan,
 				)
 				break
@@ -518,7 +518,7 @@ func test_herald_is_imperial_miya() -> void:
 		if c.character_id == herald_id:
 			assert_eq(c.clan, "Imperial", "Herald should be Imperial clan")
 			assert_eq(c.family, "Miya", "Herald should be Miya family")
-			assert_eq(c.role_position, "Imperial Herald", "Herald should have 'Imperial Herald' role")
+			assert_eq(c.role_position, RoleRegistry.IMPERIAL_HERALD, "Herald should have 'Imperial Herald' role")
 			return
 	assert_true(false, "Should find herald character")
 
@@ -562,7 +562,7 @@ func test_mantis_has_family_daimyos() -> void:
 	var result: Dictionary = _WB.bootstrap_world(_dice)
 	var fd_count: int = 0
 	for c: L5RCharacterData in result["characters"]:
-		if c.clan == "Mantis" and c.role_position == "Family Daimyo":
+		if c.clan == "Mantis" and c.role_position == RoleRegistry.FAMILY_DAIMYO:
 			fd_count += 1
 	assert_eq(fd_count, 3, "Mantis should have 3 Family Daimyos (Yoritomo, Moshi, Tsuruchi)")
 

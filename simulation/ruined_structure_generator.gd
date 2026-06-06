@@ -473,6 +473,27 @@ static func _punch_wall_gaps(
 		map.set_tile(gx, gy, Enums.TileType.FLOOR_STONE)
 		map.wall_gaps.append({"x": gx, "y": gy, "side": side})
 		placed += 1
+	# Graceful fallback: if max attempts reached without placing enough gaps,
+	# scan remaining wall perimeter tiles sequentially and place any that qualify.
+	if placed < count:
+		var fallback_candidates: Array = []
+		for x in range(map.struct_lx + 3, map.struct_rx - 2):
+			if map.get_tile(x, map.struct_ty) == Enums.TileType.WALL_STONE:
+				fallback_candidates.append({"x": x, "y": map.struct_ty, "side": "N"})
+			if map.get_tile(x, map.struct_by) == Enums.TileType.WALL_STONE \
+					and abs(x - map.entrance_x) >= _ENTRANCE_W + 2:
+				fallback_candidates.append({"x": x, "y": map.struct_by, "side": "S"})
+		for y in range(map.struct_ty + 3, map.struct_by - 2):
+			if map.get_tile(map.struct_rx, y) == Enums.TileType.WALL_STONE:
+				fallback_candidates.append({"x": map.struct_rx, "y": y, "side": "E"})
+			if map.get_tile(map.struct_lx, y) == Enums.TileType.WALL_STONE:
+				fallback_candidates.append({"x": map.struct_lx, "y": y, "side": "W"})
+		for cand in fallback_candidates:
+			if placed >= count:
+				break
+			map.set_tile(cand["x"], cand["y"], Enums.TileType.FLOOR_STONE)
+			map.wall_gaps.append(cand)
+			placed += 1
 
 
 static func _place_upper_floor(
@@ -504,7 +525,7 @@ static func _place_upper_floor(
 
 	# Stairwell: narrow FLOOR_STONE column on one side of the room.
 	var stair_x: int = lx + 1
-	var stair_y: int = clampi(ry + 0, ly, ry)   # bottom edge of room
+	var stair_y: int = ry + 1  # one tile south of room's bottom wall
 	map.stairwells.append({"x": stair_x, "y": stair_y, "room_id": host_rm["id"]})
 
 
@@ -595,8 +616,8 @@ static func _place_population_slots(
 	for sec in map.collapsed_sections:
 		var lx: int = sec["lx"]; var rx_: int = sec["rx"]
 		var ly: int = sec["ly"]; var ry:  int = sec["ry"]
-		var px: int = lx + rng.randi_range(0, maxi(0, (rx_ - lx) - 1))
-		var py: int = ly + rng.randi_range(0, maxi(0, (ry  - ly) - 1))
+		var px: int = lx + rng.randi_range(0, maxi(0, rx_ - lx))
+		var py: int = ly + rng.randi_range(0, maxi(0, ry  - ly))
 		map.population_slots.append({
 			"x": px, "y": py,
 			"role":    RuinedStructureMapData.PopRole.RUBBLE_LURKER,

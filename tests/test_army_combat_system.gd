@@ -1764,3 +1764,82 @@ func test_pack_hunters_in_full_battle_resolve() -> void:
 	assert_true(result["rounds"] > 0, "Battle must last at least one round")
 	assert_true(result["victor"] in ["attacker", "defender", "draw"],
 		"Victor must be a valid string")
+
+
+# -- TACTICIAN advantage (s45 wiring) ------------------------------------------
+
+func _add_tactician(c: L5RCharacterData) -> void:
+	var adv := AdvantageData.new()
+	adv.advantage_type = Enums.Advantage.TACTICIAN
+	adv.rank = 1
+	adv.metadata = {}
+	c.advantages.append(adv)
+
+
+func test_tactician_adds_5_to_commander_bonus_value() -> void:
+	var cmd := _make_commander(1, "Lion", 3, 3, 3, 3, 2, 3)
+	_add_tactician(cmd)
+	var bonus: Dictionary = ArmyCombatSystem.resolve_commander_bonus(cmd, "Lion")
+	# Battle rank 3 + TACTICIAN +5 = 8
+	assert_eq(bonus["bonus_value"], 8, "TACTICIAN should add 5 to bonus_value")
+
+
+func test_no_tactician_bonus_value_equals_battle_rank() -> void:
+	var cmd := _make_commander(1, "Lion", 3, 3, 3, 3, 2, 4)
+	var bonus: Dictionary = ArmyCombatSystem.resolve_commander_bonus(cmd, "Lion")
+	assert_eq(bonus["bonus_value"], 4, "Without TACTICIAN bonus_value equals Battle rank")
+
+
+func test_tactician_with_null_commander_returns_empty() -> void:
+	var bonus: Dictionary = ArmyCombatSystem.resolve_commander_bonus(null, "Lion")
+	assert_eq(bonus["bonus_value"], 0, "Null commander should return zero bonus")
+
+
+# -- STRATEGIST advantage (s45 wiring) ----------------------------------------
+
+func _add_strategist(c: L5RCharacterData) -> void:
+	var adv := AdvantageData.new()
+	adv.advantage_type = Enums.Advantage.STRATEGIST
+	adv.rank = 1
+	adv.metadata = {}
+	c.advantages.append(adv)
+
+
+func test_strategist_adds_1_to_commander_bonus_value() -> void:
+	var cmd := _make_commander(1, "Lion", 3, 3, 3, 3, 2, 3)
+	_add_strategist(cmd)
+	var bonus: Dictionary = ArmyCombatSystem.resolve_commander_bonus(cmd, "Lion")
+	# Battle rank 3 + STRATEGIST +1 = 4
+	assert_eq(bonus["bonus_value"], 4, "STRATEGIST should add 1 to bonus_value")
+
+
+func test_strategist_and_tactician_stack() -> void:
+	var cmd := _make_commander(1, "Lion", 3, 3, 3, 3, 2, 3)
+	_add_tactician(cmd)
+	_add_strategist(cmd)
+	var bonus: Dictionary = ArmyCombatSystem.resolve_commander_bonus(cmd, "Lion")
+	# Battle rank 3 + TACTICIAN +5 + STRATEGIST +1 = 9
+	assert_eq(bonus["bonus_value"], 9, "TACTICIAN and STRATEGIST bonuses should stack")
+
+
+# -- Commander Survival: Wound Penalty -----------------------------------------
+
+func test_commander_survival_wound_penalty_reduces_total() -> void:
+	# Earth 2, Battle 1 → rolled=3, kept=2. Wound at 5 = Nicked (-3 penalty).
+	var cmd := _make_commander(1, "Lion", 2, 2, 2, 2, 2, 1)
+	var survived_healthy: int = 0
+	var survived_wounded: int = 0
+	for seed_val: int in range(100):
+		_dice.set_seed(seed_val)
+		cmd.wounds_taken = 0
+		var r_h: Dictionary = ArmyCombatSystem._roll_commander_survival(cmd, 15, _dice)
+		if r_h["outcome"] != "dead":
+			survived_healthy += 1
+
+		_dice.set_seed(seed_val)
+		cmd.wounds_taken = 5
+		var r_w: Dictionary = ArmyCombatSystem._roll_commander_survival(cmd, 15, _dice)
+		if r_w["outcome"] != "dead":
+			survived_wounded += 1
+	assert_true(survived_healthy >= survived_wounded,
+		"Healthy commander should survive at least as often as wounded")

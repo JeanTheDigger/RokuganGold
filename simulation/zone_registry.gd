@@ -19,22 +19,40 @@ func build_from_world_state(ws: Object) -> void:
 
 	for gz: GreaterZoneData in ws.greater_zones:
 		_zone_by_id[gz.zone_id] = gz
-		_gz_by_settlement[gz.settlement_id] = gz
+		if gz.settlement_id >= 0:
+			_gz_by_settlement[gz.settlement_id] = gz
 
 	for nav: NavigationZoneData in ws.navigation_zones:
 		_zone_by_id[nav.zone_id] = nav
-		if not _nav_by_settlement.has(nav.settlement_id):
-			_nav_by_settlement[nav.settlement_id] = []
-		_nav_by_settlement[nav.settlement_id].append(nav)
+		# Bug 11 FIX: NavigationZoneData has no settlement_id field.
+		# Derive settlement by walking up to the parent GreaterZoneData.
+		var parent_gz: GreaterZoneData = _zone_by_id.get(nav.parent_zone_id) as GreaterZoneData
+		if parent_gz != null and parent_gz.settlement_id >= 0:
+			var sid: int = parent_gz.settlement_id
+			if not _nav_by_settlement.has(sid):
+				_nav_by_settlement[sid] = []
+			_nav_by_settlement[sid].append(nav)
 
 	for lz: LesserZoneData in ws.lesser_zones:
 		_zone_by_id[lz.zone_id] = lz
-		if not _lz_by_nav.has(lz.parent_nav_zone_id):
-			_lz_by_nav[lz.parent_nav_zone_id] = []
-		_lz_by_nav[lz.parent_nav_zone_id].append(lz)
-		if not _lz_by_settlement.has(lz.settlement_id):
-			_lz_by_settlement[lz.settlement_id] = []
-		_lz_by_settlement[lz.settlement_id].append(lz)
+		# Bug 11 FIX: correct field is parent_zone_id, not the non-existent parent_nav_zone_id.
+		var lz_parent_id: String = lz.parent_zone_id
+		if not _lz_by_nav.has(lz_parent_id):
+			_lz_by_nav[lz_parent_id] = []
+		_lz_by_nav[lz_parent_id].append(lz)
+		# Bug 11 FIX: LesserZoneData has no settlement_id field.
+		# Derive settlement by walking up through parent NavigationZone or directly to GreaterZone.
+		var gz: GreaterZoneData = null
+		var parent: Resource = _zone_by_id.get(lz_parent_id)
+		if parent is GreaterZoneData:
+			gz = parent as GreaterZoneData
+		elif parent is NavigationZoneData:
+			gz = _zone_by_id.get((parent as NavigationZoneData).parent_zone_id) as GreaterZoneData
+		if gz != null and gz.settlement_id >= 0:
+			var sid: int = gz.settlement_id
+			if not _lz_by_settlement.has(sid):
+				_lz_by_settlement[sid] = []
+			_lz_by_settlement[sid].append(lz)
 
 
 func get_zone(zone_id: String) -> Resource:

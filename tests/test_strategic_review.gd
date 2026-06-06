@@ -696,7 +696,7 @@ func test_emperor_vacancy_fill_iron_immediate() -> void:
 		"last_host_seasons": {},
 		"crisis_momentum_by_clan": {},
 		"current_season_index": 4,
-		"vacancies": [{"position_type": "Clan Magistrate", "priority": 3, "seasons_vacant": 0}],
+		"vacancies": [{"position_type": RoleRegistry.CLAN_MAGISTRATE, "priority": 3, "seasons_vacant": 0}],
 		"shogun_exists": false,
 	}
 
@@ -732,7 +732,7 @@ func test_cunning_emperor_delays_vacancy_season_zero() -> void:
 		"last_host_seasons": {},
 		"crisis_momentum_by_clan": {},
 		"current_season_index": 4,
-		"vacancies": [{"position_type": "Clan Magistrate", "priority": 3, "seasons_vacant": 0}],
+		"vacancies": [{"position_type": RoleRegistry.CLAN_MAGISTRATE, "priority": 3, "seasons_vacant": 0}],
 		"shogun_exists": false,
 	}
 
@@ -762,7 +762,7 @@ func test_cunning_emperor_fills_after_one_season() -> void:
 		"last_host_seasons": {},
 		"crisis_momentum_by_clan": {},
 		"current_season_index": 4,
-		"vacancies": [{"position_type": "Clan Magistrate", "priority": 3, "seasons_vacant": 1}],
+		"vacancies": [{"position_type": RoleRegistry.CLAN_MAGISTRATE, "priority": 3, "seasons_vacant": 1}],
 		"shogun_exists": false,
 	}
 
@@ -834,7 +834,7 @@ func test_warlike_delays_political_vacancy() -> void:
 		"last_host_seasons": {},
 		"crisis_momentum_by_clan": {},
 		"current_season_index": 4,
-		"vacancies": [{"position_type": "Clan Magistrate", "priority": 3, "seasons_vacant": 0}],
+		"vacancies": [{"position_type": RoleRegistry.CLAN_MAGISTRATE, "priority": 3, "seasons_vacant": 0}],
 		"shogun_exists": false,
 	}
 
@@ -864,7 +864,7 @@ func test_warlike_fills_political_after_season() -> void:
 		"last_host_seasons": {},
 		"crisis_momentum_by_clan": {},
 		"current_season_index": 4,
-		"vacancies": [{"position_type": "Clan Magistrate", "priority": 3, "seasons_vacant": 1}],
+		"vacancies": [{"position_type": RoleRegistry.CLAN_MAGISTRATE, "priority": 3, "seasons_vacant": 1}],
 		"shogun_exists": false,
 	}
 
@@ -899,7 +899,7 @@ func test_warlike_prefers_military_over_political() -> void:
 		"crisis_momentum_by_clan": {},
 		"current_season_index": 4,
 		"vacancies": [
-			{"position_type": "Clan Magistrate", "priority": 2, "seasons_vacant": 1},
+			{"position_type": RoleRegistry.CLAN_MAGISTRATE, "priority": 2, "seasons_vacant": 1},
 			{"position_type": "military_commander", "priority": 3, "seasons_vacant": 0},
 		],
 		"shogun_exists": false,

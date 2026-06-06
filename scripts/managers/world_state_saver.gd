@@ -453,6 +453,11 @@ func _save_json_state(ws: Node, base: String) -> bool:
 		"next_senbazuru_id": ws.next_senbazuru_id[0],
 		"next_arrangement_id": ws.next_arrangement_id[0],
 		"next_painting_id": ws.next_painting_id[0],
+		"next_garden_id": ws.next_garden_id[0],
+		"next_bonsai_id": ws.next_bonsai_id[0],
+		"next_commission_id": ws.next_commission_id[0],
+		"next_sculpture_id": ws.next_sculpture_id[0],
+		"next_okiya_id": ws.next_okiya_id[0],
 		"last_targeted_province_id": ws.last_targeted_province_id[0],
 
 		# Emperor
@@ -560,6 +565,11 @@ func _load_json_state(ws: Node, base: String) -> void:
 	_restore_counter(ws.next_senbazuru_id, state, "next_senbazuru_id")
 	_restore_counter(ws.next_arrangement_id, state, "next_arrangement_id")
 	_restore_counter(ws.next_painting_id, state, "next_painting_id")
+	_restore_counter(ws.next_garden_id, state, "next_garden_id")
+	_restore_counter(ws.next_bonsai_id, state, "next_bonsai_id")
+	_restore_counter(ws.next_commission_id, state, "next_commission_id")
+	_restore_counter(ws.next_sculpture_id, state, "next_sculpture_id")
+	_restore_counter(ws.next_okiya_id, state, "next_okiya_id")
 	_restore_counter(ws.last_targeted_province_id, state, "last_targeted_province_id")
 
 	# Emperor
@@ -569,12 +579,19 @@ func _load_json_state(ws: Node, base: String) -> void:
 	ws.miya_representative_id = int(state.get("miya_representative_id", -1))
 
 	# NPC engine
-	ws.objectives_map = state.get("objectives_map", {})
+	# JSON serialises int dict keys as strings — convert back to int keys on load.
+	var raw_objectives: Dictionary = state.get("objectives_map", {})
+	ws.objectives_map.clear()
+	for k: Variant in raw_objectives:
+		ws.objectives_map[int(k)] = raw_objectives[k]
 	ws.season_meta = state.get("season_meta", {})
 
 	# Supplementary
 	ws.military_data = state.get("military_data", {})
-	ws.successor_map = state.get("successor_map", {})
+	var raw_successor: Dictionary = state.get("successor_map", {})
+	ws.successor_map.clear()
+	for k: Variant in raw_successor:
+		ws.successor_map[int(k)] = int(raw_successor[k])
 	ws.entanglements.assign(state.get("entanglements", []))
 	ws.bound_states.assign(state.get("bound_states", []))
 	ws.active_armies.assign(state.get("active_armies", []))
@@ -647,6 +664,7 @@ func _reconcile_id_counters(ws: Node) -> void:
 	_ensure_counter_above(ws.next_bonsai_id, ws.active_bonsai, "bonsai_id")
 	_ensure_counter_above(ws.next_commission_id, ws.commission_records, "commission_id")
 	_ensure_counter_above(ws.next_painting_id, ws.active_paintings, "painting_id")
+	_ensure_counter_above(ws.next_sculpture_id, ws.active_sculptures, "sculpture_id")
 	_ensure_counter_above(ws.next_okiya_id, ws.active_okiyas, "okiya_id")
 
 
@@ -711,6 +729,12 @@ func _ensure_dirs(base: String) -> void:
 		base + DIR_THEATER_PIECES,
 		base + DIR_SENBAZURUS,
 		base + DIR_ARRANGEMENTS,
+		base + DIR_GARDENS,
+		base + DIR_BONSAI,
+		base + DIR_COMMISSIONS,
+		base + DIR_PAINTINGS,
+		base + DIR_SCULPTURES,
+		base + DIR_OKIYAS,
 		base + DIR_GREATER_ZONES,
 		base + DIR_NAV_ZONES,
 		base + DIR_LESSER_ZONES,

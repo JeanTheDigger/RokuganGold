@@ -252,7 +252,14 @@ static func _place_stream(
 	# Clamp within floor.
 	map.stream_x = clampi(map.stream_x, map.floor_lx + 1, map.floor_rx - 1)
 	# Paint WATER_SHALLOW column through the full ravine floor.
+	# Collect barricade rows to avoid overwriting barricade gaps with water.
+	var barricade_rows: Dictionary = {}
+	for chk in map.chokepoints:
+		if chk["has_barricade"]:
+			barricade_rows[chk["y"]] = true
 	for y in range(0, map.height):
+		if barricade_rows.has(y):
+			continue  # Preserve barricade gap tiles at chokepoint rows.
 		if map.get_tile(map.stream_x, y) == Enums.TileType.FLOOR_DIRT:
 			map.set_tile(map.stream_x, y, Enums.TileType.WATER_SHALLOW)
 

@@ -77,7 +77,12 @@ static func get_wound_level(character: L5RCharacterData) -> Enums.WoundLevel:
 	if threshold <= 0:
 		return Enums.WoundLevel.DEAD
 
-	if character.wounds_taken <= 0:
+	# PERMANENT_WOUND (s45): first wound box is always occupied — minimum NICKED.
+	var effective_wounds: int = character.wounds_taken
+	if effective_wounds <= 0 and AdvantageSystem.has_permanent_wound(character):
+		effective_wounds = 1
+
+	if effective_wounds <= 0:
 		return Enums.WoundLevel.HEALTHY
 
 	var levels: Array = [
@@ -95,7 +100,7 @@ static func get_wound_level(character: L5RCharacterData) -> Enums.WoundLevel:
 	# Each level holds `threshold` wound boxes. Wounds 1–threshold fill Healthy,
 	# threshold+1 through threshold*2 fill Nicked, etc. The penalty applies once
 	# wounds spill into a new level.
-	var level_index: int = int((character.wounds_taken - 1) / threshold)
+	var level_index: int = int((effective_wounds - 1) / threshold)
 	level_index = mini(level_index, levels.size() - 1)
 	return levels[level_index]
 
@@ -111,3 +116,9 @@ static func get_total_wound_capacity(character: L5RCharacterData) -> int:
 
 static func is_dead(character: L5RCharacterData) -> bool:
 	return get_wound_level(character) == Enums.WoundLevel.DEAD
+
+
+# DARLING_OF_THE_COURT (s45): +1 effective Status at a specific court settlement.
+# Use instead of character.status for court-context social calculations.
+static func get_effective_status(character: L5RCharacterData, settlement_id: int = -1) -> float:
+	return character.status + float(AdvantageSystem.get_darling_status_bonus(character, settlement_id))

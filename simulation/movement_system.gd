@@ -16,6 +16,7 @@ static func terrain_cost(tile: int) -> int:
 		Enums.TileType.WATER_DEEP,
 		Enums.TileType.TREE_EVERGREEN, Enums.TileType.TREE_DECIDUOUS,
 		Enums.TileType.TREE_CHERRY, Enums.TileType.TREE_DEAD, Enums.TileType.BAMBOO,
+		Enums.TileType.DOOR_SHOJI_CLOSED, Enums.TileType.DOOR_WOOD_CLOSED,
 		Enums.TileType.GATE_CLOSED:
 			return 0
 		Enums.TileType.WATER_SHALLOW, Enums.TileType.WATER_PADDY,
@@ -31,7 +32,8 @@ static func is_passable(tile: int) -> bool:
 
 static func is_closed_door(tile: int) -> bool:
 	return tile == Enums.TileType.DOOR_SHOJI_CLOSED \
-		or tile == Enums.TileType.DOOR_WOOD_CLOSED
+		or tile == Enums.TileType.DOOR_WOOD_CLOSED \
+		or tile == Enums.TileType.GATE_CLOSED
 
 
 ## Returns the open-state tile for a closed door tile (identity if not a door).
@@ -39,6 +41,7 @@ static func open_door(closed_tile: int) -> int:
 	match closed_tile:
 		Enums.TileType.DOOR_SHOJI_CLOSED: return Enums.TileType.DOOR_SHOJI_OPEN
 		Enums.TileType.DOOR_WOOD_CLOSED:  return Enums.TileType.DOOR_WOOD_OPEN
+		Enums.TileType.GATE_CLOSED:       return Enums.TileType.GATE_OPEN
 	return closed_tile
 
 
@@ -47,6 +50,7 @@ static func close_door(open_tile: int) -> int:
 	match open_tile:
 		Enums.TileType.DOOR_SHOJI_OPEN: return Enums.TileType.DOOR_SHOJI_CLOSED
 		Enums.TileType.DOOR_WOOD_OPEN:  return Enums.TileType.DOOR_WOOD_CLOSED
+		Enums.TileType.GATE_OPEN:       return Enums.TileType.GATE_CLOSED
 	return open_tile
 
 

@@ -22,10 +22,40 @@ static func can_spend(character: L5RCharacterData) -> bool:
 
 
 static func spend(character: L5RCharacterData) -> bool:
-	if character.current_void_points <= 0:
+	# HOTEI'S BLESSING CURSE variant (s45): each spend costs 1 extra VP.
+	var extra_cost: int = AdvantageSystem.get_extra_void_cost(character)
+	if character.current_void_points <= extra_cost:
 		return false
-	character.current_void_points -= 1
+	character.current_void_points -= (1 + extra_cost)
 	return true
+
+
+## HOTEI'S BLESSING protection variant (s45): contested Void vs TN 10.
+## On success, the VP is NOT consumed. Returns {success, protected}.
+static func try_spend_protected(character: L5RCharacterData, dice_engine: DiceEngine) -> Dictionary:
+	var protection: Dictionary = AdvantageSystem.check_hotei_void_protection(character)
+	if not protection.get("protected", false):
+		var spent: bool = spend(character)
+		return {"success": spent, "protected": false}
+	# Contested Void roll vs TN 10.
+	var wound_pen: int = CharacterStats.get_wound_penalty(character)
+	var roll: Dictionary = dice_engine.roll_check(
+		character.void_ring, character.void_ring, 10, 0, wound_pen, true, false
+	)
+	if roll.get("success", false):
+		return {"success": true, "protected": true}
+	var spent: bool = spend(character)
+	return {"success": spent, "protected": false}
+
+
+## Returns the number of hours of rest required to fully recover VP (s45).
+static func get_recovery_hours(character: L5RCharacterData) -> int:
+	return AdvantageSystem.get_void_recovery_hours(character)
+
+
+## Returns true if the character has rested enough hours to fully recover.
+static func can_recover_full(character: L5RCharacterData, hours_rested: int) -> bool:
+	return hours_rested >= get_recovery_hours(character)
 
 
 static func recover(character: L5RCharacterData, amount: int) -> void:

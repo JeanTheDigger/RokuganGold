@@ -76,6 +76,14 @@ const _TEMPLATE_TIERS: Dictionary = {
 		3: TIER_BULK,     # ZOMBIE_SCREEN
 		4: TIER_BULK,     # CULTIST_GROUP
 	},
+	"CastleSiegeMapData": {
+		4: TIER_LEADER,   # GARRISON_COMMANDER (tenshu / command building)
+		1: TIER_GUARD,    # GATE_GUARD (chokepoint approach)
+		2: TIER_GUARD,    # MURDER_HOLE_GUARD (elevated, flanking)
+		0: TIER_PATROL,   # WALL_DEFENDER (wall walkways)
+		3: TIER_BULK,     # BAILEY_DEFENDER (open courtyard)
+		5: TIER_BULK,     # FRIENDLY_SOLDIER (player allies — own side)
+	},
 }
 
 # -- Roster role → preferred placement tiers -----------------------------------
@@ -199,8 +207,8 @@ static func populate_sortie(
 		else:
 			far_slots.append(sl)
 
-	# Entry side (x ≤ midpoint) → friendly units.
-	# Far side (x > midpoint)   → enemy units.
+	# Entry side (x <= midpoint) → friendly units.
+	# Far side   (x > midpoint)  → enemy units.
 	var friendly_slots_by_tier: Dictionary = _bucket_slots(entry_slots, tier_map)
 	var enemy_slots_by_tier:    Dictionary = _bucket_slots(far_slots,   tier_map)
 
@@ -275,17 +283,22 @@ static func _pick_slot(
 
 
 # Sorts groups by ROLE_ORDER priority so LEADER is placed first.
+# Uses index-tracking for dedup to avoid false positives from value-equal dicts.
 static func _sort_groups(groups: Array) -> Array:
 	var sorted: Array = []
+	var added_indices: Dictionary = {}   # index:int → true
+
 	# First pass: ordered roles.
 	for role in _ROLE_ORDER:
-		for g: Dictionary in groups:
-			if g.get("role", "") == role:
+		for i: int in range(groups.size()):
+			var g: Dictionary = groups[i]
+			if g.get("role", "") == role and not added_indices.has(i):
 				sorted.append(g)
+				added_indices[i] = true
 	# Second pass: any roles not in _ROLE_ORDER (forward-compatible).
-	for g: Dictionary in groups:
-		if not sorted.has(g):
-			sorted.append(g)
+	for i: int in range(groups.size()):
+		if not added_indices.has(i):
+			sorted.append(groups[i])
 	return sorted
 
 

@@ -186,6 +186,7 @@ const SCHOOL_DATA: Dictionary = {
 		"wildcards": ["High", "Bugei"],
 		"focus_rings": [Enums.Ring.VOID, Enums.Ring.FIRE],
 		"skill_rank_2": [],
+		"brotherhood_sect": "",  # Togashi are not Brotherhood of Shinsei monks
 	},
 	# -- Lion --
 	"Akodo Bushi": {
@@ -678,6 +679,7 @@ static func generate_character(
 		return c
 
 	c.school_type = sd["type"]
+	c.brotherhood_sect = sd.get("brotherhood_sect", "")
 
 	_apply_trait_bonus(c, FAMILY_TRAIT_BONUS.get(family, ""))
 	_apply_trait_bonus(c, sd["benefit"])
@@ -706,7 +708,47 @@ static func generate_character(
 	c.koku = float(insight_rank) * float(dice_engine.rand_int_range(1, 10))
 
 	SkillResolver.apply_technique_flags(c)
+	if c.school_type == Enums.SchoolType.SHUGENJA:
+		SpellSystem.assign_starting_spells(c, school)
+	_assign_weapons(c)
 	return c
+
+
+static func _assign_weapons(c: L5RCharacterData) -> void:
+	var skills: Dictionary = c.skills
+	var has_kenjutsu: bool = skills.get("Kenjutsu", 0) > 0
+	var has_iaijutsu: bool = skills.get("Iaijutsu", 0) > 0
+	var kyujutsu_rank: int = skills.get("Kyujutsu", 0)
+	var polearms_rank: int = skills.get("Polearms", 0)
+	var heavy_rank: int = skills.get("Heavy Weapons", 0)
+	var jiujutsu_rank: int = skills.get("Jiujutsu", 0)
+	var warfan_rank: int = skills.get("War Fan", 0)
+
+	var weapons: Array[WeaponData] = []
+
+	if has_kenjutsu or has_iaijutsu:
+		weapons.append(IndividualCombat.get_weapon_data("katana"))
+		weapons.append(IndividualCombat.get_weapon_data("wakizashi"))
+	elif polearms_rank >= heavy_rank and polearms_rank > 0:
+		weapons.append(IndividualCombat.get_weapon_data("naginata"))
+		weapons.append(IndividualCombat.get_weapon_data("tanto"))
+	elif heavy_rank > 0:
+		weapons.append(IndividualCombat.get_weapon_data("tetsubo"))
+		weapons.append(IndividualCombat.get_weapon_data("tanto"))
+	elif warfan_rank > 0:
+		weapons.append(IndividualCombat.get_weapon_data("wakizashi"))
+	elif jiujutsu_rank > 0:
+		weapons.append(IndividualCombat.get_weapon_data("unarmed"))
+	elif c.school_type == Enums.SchoolType.SHUGENJA:
+		weapons.append(IndividualCombat.get_weapon_data("tanto"))
+	else:
+		weapons.append(IndividualCombat.get_weapon_data("katana"))
+		weapons.append(IndividualCombat.get_weapon_data("wakizashi"))
+
+	if kyujutsu_rank > 0:
+		weapons.append(IndividualCombat.get_weapon_data("yumi"))
+
+	c.weapons = weapons
 
 
 # =============================================================================

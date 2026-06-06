@@ -287,9 +287,12 @@ func test_wars_round_trip() -> void:
 # -- Objectives Map (JSON dict) -----------------------------------------------
 
 func test_objectives_map_round_trip() -> void:
+	# objectives_map uses int character_id keys at runtime — verify they survive
+	# the JSON round-trip as ints (JSON converts int keys to strings; we re-convert
+	# back to int on load).
 	_ws.objectives_map = {
-		"100": {"primary": "SECURE_ALLIANCE", "target_clan": "Lion"},
-		"200": {"primary": "DEFEND_PROVINCE", "target_province_id": 7},
+		100: {"primary": "SECURE_ALLIANCE", "target_clan": "Lion"},
+		200: {"primary": "DEFEND_PROVINCE", "target_province_id": 7},
 	}
 
 	_saver.save_world(_ws)
@@ -298,8 +301,9 @@ func test_objectives_map_round_trip() -> void:
 	_saver.load_world(ws2)
 
 	assert_eq(ws2.objectives_map.size(), 2)
-	assert_true(ws2.objectives_map.has("100"))
-	assert_eq(ws2.objectives_map["100"]["primary"], "SECURE_ALLIANCE")
+	assert_true(ws2.objectives_map.has(100), "int key 100 must survive round-trip")
+	assert_false(ws2.objectives_map.has("100"), "string key must not be present after fix")
+	assert_eq(ws2.objectives_map[100]["primary"], "SECURE_ALLIANCE")
 
 	ws2.free()
 
@@ -568,5 +572,77 @@ func test_theater_pieces_round_trip() -> void:
 	assert_eq(loaded.known_by.size(), 3)
 	assert_eq(loaded.times_performed, 4)
 	assert_gte(ws2.next_piece_id[0], 7, "next_piece_id counter should survive round-trip")
+
+	ws2.free()
+
+
+# -- objectives_map int key preservation ------------------------------------------
+
+func test_objectives_map_int_keys_survive_round_trip() -> void:
+	# Runtime code uses int character_id keys. JSON converts them to strings.
+	# Load must convert back so objectives_map.get(int_id) works after restart.
+	_ws.objectives_map[42] = {"primary": "DEFEND_PROVINCE"}
+	_ws.objectives_map[999] = {"primary": "ATTEND_COURT"}
+
+	_saver.save_world(_ws)
+	var ws2 := _make_world_state()
+	_saver.load_world(ws2)
+
+	assert_true(ws2.objectives_map.has(42), "int key 42 must survive JSON round-trip")
+	assert_true(ws2.objectives_map.has(999), "int key 999 must survive JSON round-trip")
+	assert_false(ws2.objectives_map.has("42"), "string residue key must not be present")
+	assert_eq(ws2.objectives_map[42]["primary"], "DEFEND_PROVINCE")
+
+	ws2.free()
+
+
+# -- successor_map int key preservation -------------------------------------------
+
+func test_successor_map_int_keys_survive_round_trip() -> void:
+	_ws.successor_map[10] = 20
+	_ws.successor_map[30] = 40
+
+	_saver.save_world(_ws)
+	var ws2 := _make_world_state()
+	_saver.load_world(ws2)
+
+	assert_true(ws2.successor_map.has(10), "int key 10 must survive JSON round-trip")
+	assert_false(ws2.successor_map.has("10"), "string residue key must not be present")
+	assert_eq(ws2.successor_map[10], 20)
+	assert_eq(ws2.successor_map[30], 40)
+
+	ws2.free()
+
+
+# -- next_sculpture_id counter round-trip ----------------------------------------
+
+func test_next_sculpture_id_round_trip() -> void:
+	_ws.next_sculpture_id[0] = 77
+
+	_saver.save_world(_ws)
+	var ws2 := _make_world_state()
+	_saver.load_world(ws2)
+
+	assert_eq(ws2.next_sculpture_id[0], 77, "next_sculpture_id must survive JSON round-trip")
+
+	ws2.free()
+
+
+# -- garden/bonsai/commission/okiya counter round-trips --------------------------
+
+func test_artisan_system_id_counters_round_trip() -> void:
+	_ws.next_garden_id[0] = 11
+	_ws.next_bonsai_id[0] = 22
+	_ws.next_commission_id[0] = 33
+	_ws.next_okiya_id[0] = 44
+
+	_saver.save_world(_ws)
+	var ws2 := _make_world_state()
+	_saver.load_world(ws2)
+
+	assert_eq(ws2.next_garden_id[0], 11, "next_garden_id must survive round-trip")
+	assert_eq(ws2.next_bonsai_id[0], 22, "next_bonsai_id must survive round-trip")
+	assert_eq(ws2.next_commission_id[0], 33, "next_commission_id must survive round-trip")
+	assert_eq(ws2.next_okiya_id[0], 44, "next_okiya_id must survive round-trip")
 
 	ws2.free()

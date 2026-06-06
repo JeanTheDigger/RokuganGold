@@ -16,8 +16,8 @@ All gameplay resolves through L5R 4th Edition rules (Roll and Keep dice system).
 All game mechanics are in /gdd/ as markdown files.
 The master index is at /gdd/00_INDEX.md — read it before asking what exists.
 
-**If a mechanic is not in a LOCKED section, do not implement it.**
-Sections marked DEFERRED or Reference/No tags are not ready for code.
+**All GDD sections are now open for implementation — there are no off-limits sections by policy.**
+**Any game design decision (new mechanics, numeric values, behavioral rules not already specified in the GDD) requires explicit owner approval before implementation.** If the GDD doesn't specify a value or behavior, stop and ask — do not invent defaults.
 Never extrapolate from one system to another (e.g. land combat rules to naval
 combat, one school's technique to another's). If the GDD is silent, stop and ask.
 
@@ -94,7 +94,7 @@ When implementing or auditing a system, go here first:
 | Intra-clan civil war                          | 53.2                 |
 | Courtier school techniques & rerolls          | 29.15                |
 | Skill resolver (technique/wound/emphasis)     | 29.15, 4.5           |
-| Individual combat                             | 40 (not yet built)   |
+| Individual combat                             | 40                   |
 | ASCII map mission generation                  | 56                   |
 | Quest seeds                                   | 56.1                 |
 | Spiritual insurgency (trigger layer)          | 56.16                |
@@ -124,6 +124,7 @@ When implementing or auditing a system, go here first:
 | Zone subtypes and flag matrix                 | 57.36                |
 | Character sheet field index                   | 57.35                |
 | Tattoo system                                 | 57.25                |
+| Spell system (Ring values, casting, slots)    | 31–37                |
 | Kata eligibility, acquisition, effect stubs   | 30, 30a              |
 | Artisan & crafting system                     | 49                   |
 | Sculpture system (COMPOSE_SCULPTURE)          | 57.28                |
@@ -766,11 +767,12 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 ### Known Code Issues — Deferred (2026-05-19, data model audit)
 - **Orphaned character_data fields (blocked sections).** The following
   fields exist on L5RCharacterData but are never referenced by any
-  simulation code: `techniques`, `kiho`, `katas`, `spells_known`,
-  `weapons`, `armor_worn`, `active_quest`, `active_poisons`,
-  `combat_modifiers_pending`. All are schema placeholders for blocked
-  sections (s40 individual combat, s31–s37 spells, s56 quest system).
-  Do not remove — they will be consumed when those sections unlock.
+  simulation code: `techniques`, `kiho`, `katas`, `weapons`, `armor_worn`,
+  `active_quest`, `active_poisons`, `combat_modifiers_pending`. All are
+  schema placeholders for blocked sections (s40 individual combat, s38
+  kiho, s56 quest system). Do not remove — they will be consumed when
+  those sections unlock. NOTE: `spells_known`, `spell_slots_used`,
+  `spell_void_bonus_used` are now active (consumed by SpellSystem — s31–s37).
 - **Orphaned character_data fields (not blocked) — RECLASSIFIED: blocked.**
   `timed_advantages` and `action_blocks` on L5RCharacterData ARE specified
   in s29.15.24 (LOCKED). timed_advantages: Ikoma Orator Paragon/Failure of
@@ -2421,35 +2423,10 @@ costs, or forward-wiring. Do not treat as bugs.
   dict. Now appends seasonal results to the daily `orphan_results` and
   `hierarchy_cascade_results` arrays.
 
-### Known Architectural Gaps — Deferred
-- **military_data Dictionary — FIXED (resolved 2026-06-02, note was stale).**
-  `_populate_military_data(military_data, companies)` runs at the start of
-  `advance_day()` (line ~151), before NPC wave resolution at line ~276.
-  It builds a `companies` dict keyed by company_id from the raw companies
-  array. `legions` and `sections` keys are initialised to empty dicts
-  (those sub-tiers are populated by other passes). ActionExecutor's
-  `_validate_military_order()` receives a populated dict at runtime.
-- **AT_DOJO context flag never assigned.** No DOJO settlement type exists
-  in SettlementData. Dojos exist only as ZoneSubtype.DOJO (sub-settlement
-  level), and the zone system data is not yet available. Monk objective
-  decomposition routes through AT_DOJO but characters never receive this
-  context, so dojo-specific action paths are unreachable. Blocked on zone
-  system implementation.
-- **ON_CAMPAIGN, UNDER_SIEGE, IN_EXILE context flags never assigned.**
-  These require the sub-tile army movement system (s11.7a) and map data
-  that don't exist yet. Characters in these states fall through to
-  AT_OWN_HOLDINGS or VISITING context. Blocked on world map / adjacency
-  data.
-
-### Known Performance Concerns — Deferred
-- **Unbounded array growth in advance_day().** `crime_records`,
-  `pending_letters`, `active_secrets`, and `action_log` grow
-  monotonically. `pending_letters` cannot be removed after delivery
-  because multi-stage forgery/impersonation processing reads delivered
-  letters. `crime_records` have complex terminal state logic (PARDONED,
-  FUGITIVE are live states). `active_secrets` partially exposed secrets
-  may still be read. `action_log` is cleared daily (via stale key
-  clearing). These require design decisions about retention windows.
+### Known Technical Notes
+- **AT_DOJO context flag unassigned.** Dojos exist as ZoneSubtype.DOJO (sub-settlement). The zone system data is in place; the `_set_dojo_context_flag()` pass needs to be written once a dojo's settlement presence is queryable. Monk dojo paths currently fall through to AT_OWN_HOLDINGS.
+- **ON_CAMPAIGN, UNDER_SIEGE, IN_EXILE context flags unassigned.** These require sub-tile army position tracking from s11.7a. Characters in these states currently fall through to AT_OWN_HOLDINGS or VISITING. Implement when army movement data is available.
+- **Unbounded array growth.** `crime_records`, `pending_letters`, `active_secrets` grow monotonically. Retention window design decisions needed before adding automatic purges beyond the existing seasonal cleanups.
 
 ### Systems Added 2026-05-23
 - **s55.11b Named Monk Standing Objectives** — `simulation/monk_objective_system.gd`.
@@ -3214,39 +3191,11 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   seppuku option, Imperial jurisdiction). Wired into full crime/investigation pipeline
   and Winter Court Emperor's Peace enforcement (v624).
 
-### Blocked Sections — Do Not Re-Audit
-As of 2026-05-18, every remaining PARTIAL and NOT STARTED section is blocked.
-Do not re-audit this; the list is settled. Ask the user before investigating any of these.
-
-**Blocked on world map / adjacency data (not yet available):**
-- s4.3 — `is_coastal` flag always false
-- s11.7 — sub-tile pathfinding; 5 stub military ActionIDs
-- s11.9 — ship movement initiation; naval blockade (per-sub-tile military unit)
-- s40 — ASCII map tile positioning and range tracking
-- s4.4 — Local Interface / ASCII Map (map data + zone hierarchy + display + movement + FOV + door
-  interaction done; entity layer, MUD text interface, and mission entry flow remain; ASCII combat
-  display blocked on s40)
-- s56 — Quest System / ASCII Map (map generation + roster + mission orchestration layer done;
-  PC mission initiation + ASCII combat display blocked on s40)
-
-**Blocked on GDD spec gap (no LOCKED spec; do not implement until GDD specifies it):**
-- s2.4 — `DECLARE_WALL_EMERGENCY` ActionID: s2.4.14 Decision 6 has no LOCKED spec
-  (AP cost, agenda topic format, compliance enforcement all unspecified)
-- s43 — Maho spell cast roll TN: GDD s43 does not specify it
-- s49 — Artisan progression beyond core crafting: bonsai/garden actions (4 ActionIDs),
-  theater composition actions (3 ActionIDs) remain forward-scored but no executor
-- s57.40.8 — Commerce rank 5 mastery (price ±20%): GDD section not yet unlocked
-- s57.40.9 — Appraisal skill emphasis modifier: GDD section not yet unlocked
-
-**REFERENCE sections** (source material only, design not started): s31–s37, s38,
-s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57.46.
-
-**PARTIAL — eligibility/data done, effects blocked on s40:**
-- s30 / s30a — Katas: `simulation/kata_system.gd` contains all 43 katas, eligibility
-  (ring/school/clan checks), XP deduction, NPC selection logic, and stub effect registry.
-  All combat effects (Armor TN, attack bonuses, Initiative, stances, maneuver modifiers)
-  are registered as stubs with `blocked_on: "s40"` — no mechanical change is applied
-  until s40 (individual combat) is implemented.
+### s30 / s30a Katas — Combat Effects Pending s40
+`simulation/kata_system.gd` contains all 43 katas, eligibility (ring/school/clan checks),
+XP deduction, NPC selection logic, and stub effect registry. Combat effects (Armor TN,
+attack bonuses, Initiative, stances, maneuver modifiers) are registered as stubs — no
+mechanical change is applied until s40 individual combat is implemented.
 
 ### Pending Redesign
 (None currently pending.)
@@ -3495,9 +3444,14 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   and `ActionExecutor._execute_examine_crime_scene()`). `_process_scene_examination_writebacks()`
   gains optional `settlements` parameter. `_crime_tier_for_public_record()` maps crime types:
   VIOLENCE→TIER_4, open/duel killings→TIER_3, TREASON/EMPERORS_PEACE→TIER_2. 20 tests.
-  LIMITATION: ViolenceSystem.evaluate_violence() itself is not yet called from any ActionID
-  executor — the seeding path is wired and tested but requires a violence ActionID to be
-  implemented before it fires in actual gameplay.
+  ViolenceSystem is wired into the non-lethal bodyguard combat path (s11.3.12): when an
+  assassin and bodyguard both survive `resolve_npc_summary_combat()`, `evaluate_violence()`
+  fires with `is_brutal=true`, `apply_consequences()` applies honor/glory/infamy,
+  a CrimeRecord is created as UNDER_INVESTIGATION, and the settlement public record is
+  seeded via `_seed_assassination_violence_public_records()`. The `violence_offense_days:
+  Array[int]` field on L5RCharacterData tracks per-character offense history for the
+  repeat-offense window. Violence is not a deliberate AP action — it is an organic outcome
+  of physical confrontation, as the GDD specifies.
 
 ### Known Code Issues (found and fixed 2026-06-01, standing objectives audit)
 - **`compute_tend_personality_bonus()` never called — personality modifiers silently dropped. FIXED.**
@@ -3688,6 +3642,14 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   **SettlementData additions:** `garden_slots: Dictionary`, `garden_permissions: Dictionary`,
   `bonsai_display_slot: int = -1`. **L5RCharacterData additions:** `declined_garden_zones: Array`,
   `declined_commissions: Array`, `active_garden_bonuses: Array`.
+
+### Systems Added (pre-2026-06-02, previously undocumented)
+- **s57.26 Origami System** — `simulation/origami_system.gd`, `shared/senbazuru_data.gd`. Three ActionIDs: CRAFT (noshi/gohei/senbazuru_progress dispatch), DECLARE_SENBAZURU (0 AP, one-active gate), PRESENT_SENBAZURU (1 AP, completion gate). Noshi wrapper disposition bonus, gohei uses_remaining, senbazuru crane accumulation with completion topic (TIER_3 Exceptional+, TIER_4 Fine/Normal). Presentation effects by dedication type (Healing/Protection/Remembrance/Atonement). Lifecycle events on creator/recipient death. Noshi consumed on DELIVER_GIFT; gohei decremented on PERFORM_WORSHIP. Context injection and precondition filter. Locked in GDD s57.26_origami_system_locked.md. **s57.26b Shide proxy** — settlement-level shide placement system (CRAFT origami_type="shide", PLACE_SHIDE 0 AP). Seven SettlementData fields. Seasonal degradation. World-start seeding. Locked in gdd/s57.26b_shide_settlement_proxy_locked.md.
+- **s57.27 Painting System** — `simulation/painting_system.gd`, `shared/painting_data.gd`. Three ActionIDs: COMPOSE_PAINTING (progress accumulation), DISPLAY_PAINTING (lord/permission gate), PRESENT_EMAKIMONO (polarization disposition per quality, 30-day immunity, topic delivery). Four formats: KAKEMONO, BYŌBU, EMAKIMONO, FUSUMA. Visitor disposition and glory tick effects. Negative framing: enemy visit triggers disposition loss. Seasonal kakemono rotation. Emakimono copy pipeline. Artist grief on forced display. Sacking survival by tier and material. Death cleanup for WIP. Settlement display slot proxy. World-start seeding. Locked in gdd/s57.27_painting_system_locked.md. 37 tests.
+- **s57.29 Ikebana System** — `simulation/ikebana_system.gd`, `shared/ikebana_arrangement_data.gd`. Uses PUBLIC_PERFORMANCE and PERFORM_FOR with Artisan: Ikebana skill. One slot per settlement (zone proxy). Lifespan 7–45 IC days by quality tier. Visitor effects and glory ticks. Creator-deceased topic. Garden synergy (s57.29.6): free raises from co-located garden by quality. NPC urgency bonus when slot empty. World bootstrap seeding. 35 tests.
+- **s57.30 Calligraphy System** — Cipher and High Rokugani emphases implemented in `simulation/letter_system.gd`. Writer-side: concealment roll (roll total = concealment_tn), disposition tier and topic stance frozen at write time. High Rokugani: bonus by Imperial Capital recipient tier. Reader-side: contested roll with emphasis and Rank 5 mastery bonus; raise tiers expose disposition/stance/intensity/deception/motivation. Locked in gdd/s57.30_calligraphy_system_locked.md. 40 tests.
+- **s57.41 Engineering System** — `simulation/day_orchestrator.gd` + `simulation/action_executor.gd`. Two mechanics: (1) Rank 5 mastery +5 flat bonus on FORTIFY_WALL_SECTION cumulative track (excludes SEAL_WALL_BREACH). (2) Kaiu Engineer standing need auto-assignment: MAINTAIN_FORTIFICATION priority 2 at wall_si < 7, priority 1 at si == 0. Locked in gdd/s57.41_engineering_locked.md. 11 tests.
+- **s57.45 Geisha Intelligence System** — `simulation/geisha_system.gd`, `shared/okiya_data.gd`. OkiyaData Resource. Two-stage routing: geisha→okaasan then okaasan→handler with personality-gated probability. Kolat eavesdrop parallel roll. Wind-down koku costs tier-dependent. World generation: CITY/FAMILY_CASTLE/CASTLE okiya placement with clan-specific tier bonuses. Scorpion 90% control, Kolat 15% infiltration rate. WorldState persistence via WorldStateSaver. WorldBootstrap generates okiya for all eligible settlements. Locked values in gdd/s57.45a_geisha_intelligence_locked.md. ~20 tests.
 
 ### Systems Added 2026-06-02
 - **s4.4 Zone Hierarchy and ASCII Map Foundation** — Full zone data model and settlement map
@@ -3935,6 +3897,171 @@ s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43, s57.45–s57
   and numpad 5/period wait, `_try_move()` delegating to `MovementSystem.check_step()`,
   `_open_door_at()` for bump-to-open door interaction (player stays, tile flipped, FOV
   recomputed). 40 GUT tests in `tests/test_movement_system.gd`.
+
+### Known Code Issues (found and fixed 2026-06-03, comprehensive audit)
+- **`filter_data` personality filter permanently disabled. FIXED.**
+  `world_state.gd` wrapped the JSON under `{"personality_filter": <json>}` but
+  `npc_decision_engine.gd` reads `filter_data.get("bushido", {})` — top-level key.
+  Every virtue block returned `{}` always. Personality filtering (action blocks,
+  conditional blocks, lean values) was completely non-functional at runtime for the
+  entire project lifetime. Fixed to `filter_data = _load_json(...)` directly,
+  exposing `"bushido"` and `"shourido"` as top-level keys.
+- **`objectives_map` int keys corrupted to strings after save/reload. FIXED.**
+  JSON serializes `{100: {...}}` as `{"100": {...}}`. Load path was a bare dict
+  assignment — all `objectives_map.get(character_id, {})` calls returned `{}` after
+  any restart. Every NPC fell to REST/DO_NOTHING until the world was regenerated.
+  Fixed by iterating the loaded raw dict and casting each key with `int(k)`.
+- **`successor_map` same JSON int→string key corruption. FIXED.**
+  Same pattern. Pre-restart succession selections became invisible after reload.
+  Fixed with `int(k)` conversion on load; values also cast to `int()`.
+- **`known_objectives` sub-dict never cleared between days. FIXED.**
+  `_clear_stale_context_flags()` erased top-level `ws` keys via a stale_keys list,
+  but all urgency data (`standing_need_type`, `lord_assigned`, `active_case`), hunt
+  context, theater context, garden/bonsai/ikebana/senbazuru/shide/sculpture/painting
+  context are stored inside `ws["known_objectives"]` (a nested sub-dict). The stale
+  list only worked on top-level keys — nested keys persisted indefinitely. `lord_assigned`
+  stayed `true` after reassignment (Chugi covert modifier wrong); concluded hunts
+  remained "active"; art context from yesterday's location persisted today. Fixed by
+  adding `ws.get("known_objectives", {}).clear()` in the clearing loop. All nested
+  injectors repopulate relevant sub-keys each day. Also removed the ~20 incorrectly-
+  leveled keys from `stale_keys` (they were in `known_objectives`, never at top level).
+  2 tests.
+- **`next_sculpture_id` missing from save/load/reconcile. FIXED.**
+  Had zero coverage in `WorldStateSaver` — neither JSON save, nor `_restore_counter`,
+  nor `_ensure_counter_above`. After any restart, reset to 1 and collided with
+  existing saved sculpture IDs. Added to JSON save blob, `_restore_counter` call,
+  and `_reconcile_id_counters`. `next_garden_id`, `next_bonsai_id`,
+  `next_commission_id`, `next_okiya_id` were also missing from the JSON save blob
+  (had `_ensure_counter_above` fallback but wrong to omit). All 5 now explicit.
+- **`GeishaSystem`, `IkebanaSystem`, `OrigamiSystem` — no `handle_character_death()`. FIXED.**
+  Dead geisha/okaasan/handler IDs persisted in `OkiyaData.geisha_ids/okaasan_id/
+  handler_id`, dead visitor IDs accumulated unboundedly in
+  `IkebanaArrangementData.visitors_who_received_bonus`, dead folder IDs remained
+  on active `SenbazuruData` objects (should be abandoned). Added `handle_character_death()`
+  to all three systems and wired into `_cleanup_dead_character_references()` with
+  updated function signature. 7 tests.
+- **`_ensure_dirs()` missing 5 art-system directories. FIXED.**
+  `DIR_GARDENS`, `DIR_BONSAI`, `DIR_COMMISSIONS`, `DIR_PAINTINGS`, `DIR_SCULPTURES`,
+  `DIR_OKIYAS` were not in `_ensure_dirs()`. Directories were lazily created by
+  `_save_resource_array()` (not a crash), but inconsistent with all other dirs
+  being pre-created. Added all 5 to the pre-creation list.
+- **`reactive_event_type` vs `reactive_type` key naming inconsistency. FIXED.**
+  `_execute_duel_challenge()` and `_execute_mentor()` in `action_executor.gd`
+  returned `"reactive_event_type"` key while all consumers (orchestrator writebacks,
+  `npc_wave_resolver`) read `"reactive_type"`. Was latent (writeback functions create
+  pending_events independently with correct key), but could cause silent failures if
+  any future code reads the key from executor results. Standardized to `"reactive_type"`.
+
+### Systems Added 2026-06-02 (continued)
+- **s60 PC Integration** — `simulation/pc_system.gd`. New fields on L5RCharacterData: `is_pc`, `player_id`, `is_logged_in`, `home_settlement_id`, `banked_ap`, `offline_policies`, `bubble_scene_id`, `bubble_anchor_ic_day`. Logged-in: full world presence, NPC engine never runs for PCs. Logged-out: disappear from world, home anchor for letter delivery, AP accrues to `banked_ap` each tick (cap = 4× daily allocation). Offline reactive auto-resolve policies: QUEUE / HONOR / ACCEPT / DECLINE / CONDITIONAL per event type; 5 reactive event types; CONDITIONAL conditions (same_clan, disposition_friend, higher_status, lower_status). Bubble Time: scene_id + anchor_ic_day; AP reserved during scene, NPC participants occupied for scene IC duration. PC exclusions: no NPC decision engine, no standing objective auto-assignment, no strategic review, no daily letter pass. NPCs may target PCs normally; assassination PC crisis event gated on ASSASSINATION_GRACE policy. WorldState additions: `active_bubble_scenes`, `next_bubble_scene_id`. Constants A1–A5 locked (BANKED_AP_CAP_MULTIPLIER=4, OFFLINE_EVENT_QUEUE_CAP=30). Locked in gdd/s60_pc_integration_locked.md.
+
+### Known Code Issues (found and fixed 2026-06-05, bodyguard combat wiring)
+- **Bodyguard FIGHT_FIRST path never resolved combat — execution retry always fired. FIXED.**
+  `AssassinationSystem.resolve_bodyguard_encounter()` FIGHT_FIRST path returned
+  `fight_initiated: true` with initiative roll data but never actually resolved the fight.
+  The orchestrator fell through to execution retry regardless of whether the assassin
+  won or lost. Assassins were never killed or driven off by a competent bodyguard.
+  `_process_assassination_daily_tick()` now calls
+  `IndividualCombat.resolve_npc_summary_combat(assassin, guard, dice_engine)` when
+  `fight_initiated: true`. If assassin loses (`attacker_dead` or `loser_id == assassin_id`):
+  op phase → ABORTED, suspicion raised to CRITICAL_FAILURE, death event created if assassin
+  dies. If guard dies: death event created for guard, execution retry proceeds. If both
+  survive and assassin wins: execution retry fires. `bodyguard_combat` key added to
+  tick_result for downstream use. 3 tests.
+
+### Systems Added 2026-06-05
+- **s40 Individual Combat — WeaponData/ArmorData Resources, NPC summary roll, weapon assignment.**
+  `shared/weapon_data.gd` (WeaponData Resource: weapon_name, rolled, kept, strength_adds, skill,
+  size, melee, trait — typed replacement for Dictionary-based WEAPON_CATALOG entries).
+  `shared/armor_data.gd` (ArmorData Resource: armor_name, tn_bonus, is_heavy — catalog empty;
+  Equipment section not yet in GDD, `armor_tn_bonus: int` on character retained for fast lookup).
+  `shared/character_data.gd`: `weapons: Array[WeaponData]` (was untyped Array),
+  `armor_worn: ArmorData = null` (was String).
+  `simulation/individual_combat.gd`: three new static functions —
+  `get_weapon_data(weapon_name)` converts WEAPON_CATALOG entry to typed WeaponData on demand;
+  `pick_best_weapon(character)` selects highest-skill weapon from catalog (unarmed fallback);
+  `resolve_npc_summary_combat(attacker, defender, dice, attacker_weapon, defender_weapon)`
+  implements the summary roll model (design decision): both NPCs roll attack simultaneously in
+  Attack Stance, damage applied via WoundSystem, winner by dead check then roll total tiebreak,
+  returns winner_id/loser_id plus full roll details for both sides.
+  `simulation/world_generator.gd`: `_assign_weapons(c)` assigns starting weapons at character
+  creation — daisho (katana+wakizashi) for Kenjutsu/Iaijutsu, naginata+tanto for Polearms,
+  tetsubo+tanto for Heavy Weapons, wakizashi for War Fan, unarmed for Jiujutsu-primary, tanto
+  for shugenja, katana+wakizashi fallback for all others; yumi added when Kyujutsu trained.
+  14 tests in `tests/test_individual_combat.gd`.
+
+### Systems Added 2026-06-04
+- **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),
+  `shared/mutation_data.gd`, `shared/shadowlands_power_data.gd`. Full catalog from GDD s44.
+  Three new enums on `shared/enums.gd`: `MutationType` (17 values), `ShadowlandsPowerTier`
+  (MINOR/MAJOR/AKUTENSHI), `ShadowlandsPowerType` (44 values). Three new character fields on
+  `L5RCharacterData`: `mutations: Array[MutationData]`, `shadowlands_powers: Array[ShadowlandsPowerData]`,
+  `taint_rank_last_processed: int`.
+  Taint rank thresholds (s42): 0.0–0.9=Rank 0, 1.0–1.9=Rank 1, 2.0–2.9=Rank 2,
+  3.0–3.9=Rank 3, 4.0–4.9=Rank 4, 5.0+=Rank 5 (Lost).
+  Periodic taint roll periods: Rank 0–1=30 IC days, Rank 2=15, Rank 3=7, Rank 4=1, Rank 5=none.
+  TN = 5 + (5 × Rank). Power-use taint roll TN: Minor=15, Major/Akutenshi=20.
+  Rank-up processing (`process_rank_up`): Rank 2=+1 Minor power; Rank 3=+1 power (Minor or
+  Major) + 1 mutation; Rank 4=+2 powers (first guaranteed Major, second any) + 1 mutation;
+  Rank 5=0–3 mutations + 0–3 powers from Minor+Major pool (Akutenshi excluded — separate category).
+  Secondary effects on acquisition: DISTORTED_LIMBS leg → LAME disadvantage added (no duplicate);
+  EXTRA_LIMB → 50% chance non-functional (−1k0 Agility/Reflexes); UNHOLY_BEAUTY → clears
+  mutations array; MASTER_OF_SHADOWS → gains DISCOLORED_SKIN if absent. Duplicate prevention
+  for both mutations and powers. Pool exhaustion handled gracefully (returns NONE).
+  Skill modifier interface (`get_skill_modifiers` → `{rolled, kept, tn}` deltas):
+  ALBINISM (−1k0 social, gated on `appearance_known` context key), DISCOLORED_SKIN (+5 TN
+  all social), EXTRA_DIGIT/FOUL_ODOR (−1k0 social each), TOUGH_HIDE (−2k0 social),
+  EXTRA_EYE (+1k0 perception, gated on `extra_eye_uncovered`), EXTRA_LIMB non-functional
+  (−1k0 agility/reflexes), MASTER_OF_SHADOWS (+Taint Rank unkept dice to Stealth),
+  MONSTROUS_STRENGTH (−1k0 social, +Taint Rank unkept dice to Strength-based skills),
+  FATHER_OF_LIES (+Taint Rank kept dice to Temptation, Intimidation, Sincerity:Deceit only).
+  `SkillResolver.resolve_skill_check()` wired: `mutation_mod` applied to rolled, kept, TN.
+  MASTER_OF_BLOOD wired into `MahoSystem.resolve_cast()`: blood cost −1 (min 1), taint gain
+  reduced by Earth ring (min 1). `get_social_rolled_penalty()` and `get_social_tn_penalty()`
+  helpers for NPC context injection.
+  DayOrchestrator: `_process_periodic_taint_rolls()` and `_process_taint_rank_changes()`
+  called daily (line ~1512); both guard dead characters and untainted (taint < 1.0) characters;
+  rank-change processor handles multi-rank jumps by iterating from last_processed+1 to current.
+  Combat stubs (Reduction, Fear, CHITINOUS_ARMOR, TENTACLES, UNDEAD_VISAGE attack bonuses)
+  registered as no-ops — deferred to s40 individual combat. Mental trait collapse to 1 on
+  Rank 5 (Lost) documented but not enforced — s40 reads trait values at combat time.
+  60+ tests in `tests/test_mutation_system.gd`.
+
+### Systems Added 2026-06-03
+- **s31–s37 Spell System** — `simulation/spell_system.gd` (pure class, no Node inheritance),
+  `tests/test_spell_system.gd`. Full L5R 4e shugenja spell resolution for simulation use.
+  Core mechanics: `get_ring_value(char, ring)` — Air=min(Ref,Awr), Earth=min(Sta,Wil),
+  Fire=min(Agi,Int), Water=min(Str,Per), Void=void_ring. `get_effective_school_rank(char, ring)`
+  — affinity +1, deficiency −1, floor 0. `get_casting_tn(mastery_level)` — TN = 5 + ML×5
+  (ML1=10, ML2=15, ML3=20). `get_best_cast_ring(char, spell_id)` — elemental spells locked
+  to their element, Universal picks highest (ring_val + eff_rank). `get_daily_slots(char, ring)`
+  — returns ring value. Slot tracking via character dict fields `spell_slots_used` and
+  `spell_void_bonus_used`; ring-primary slots overflow to void bonus pool. `can_afford_slot`,
+  `consume_slot`, `get_slots_used`, `get_void_bonus_used`. `can_cast(char, spell_id)` —
+  validates: spell exists in library, in spells_known, insight_rank ≥ mastery_level, has
+  affordable slot, passes Ishiken restriction for void spells. `resolve_cast(char, spell_id,
+  dice, raises=0)` — rolls ring_value keep ring_value (xky), applies raises (+5 TN per
+  raise), consumes slot, returns {success, total, tn, margin, spell_id, sim_effect, cast_ring}.
+  `apply_healing(char, spell_id, margin)` and `apply_taint_removal(char, spell_id, margin)`
+  for applying cast outcomes. `assign_starting_spells(char, school)` populates spells_known
+  from school table (Kuni: sense+commune+jade_strike; default: sense+commune).
+  SPELL_LIBRARY: 32 named spells covering all 5 elements plus Universal, mastery levels 1–6.
+  SpellSimEffect enum: COMBAT_ONLY=0, HEAL_WOUNDS=1, REMOVE_TAINT=2, DETECT_PRESENCE=3,
+  COMMUNE_KAMI=4, PURIFY_AREA=8 (no library entries yet — forward-wired), RITUAL_HONOR=15.
+  Helper selectors: `get_best_healing_spell`, `get_best_ritual_spell`, `get_best_detection_spell`,
+  `get_best_taint_removal_spell`, `get_spells_by_sim_effect`, `get_best_spell_by_effect`,
+  `get_spells_for_element_ml`. 75 tests in `tests/test_spell_system.gd`.
+  NPC pipeline integration: `_populate_action_metadata` in `npc_decision_engine.gd` populates
+  `ritual_spell_id` (PERFORM_RITUAL: prefers taint-removal in tainted provinces, else best
+  ritual-honor spell; PERFORM_WORSHIP: best ritual-honor or commune), and `healing_spell_id`
+  (TREAT_WOUND: best heal-wounds spell for shugenja). `_process_ritual_spell_writebacks` in
+  `day_orchestrator.gd` resolves `requires_spell_roll=true` executor flags: DETECT_PRESENCE
+  creates a SUPERNATURAL TIER_4 taint-detection topic when province PTL > 0; REMOVE_TAINT
+  calls `apply_taint_removal`; PURIFY_AREA forward-wired (no spells yet). 11 engine tests.
+  LIMITATIONS: Sense spell TN for Maho Channel 3 detection deferred (blocked on s31 design
+  decision — see D table). `spells_known` field on L5RCharacterData promoted from orphaned
+  placeholder to active use. `spell_slots_used` and `spell_void_bonus_used` added as new
+  character fields. PURIFY_AREA sim_effect has no library spells yet.
 
 ## Resolved Design Decisions
 
@@ -4286,66 +4413,56 @@ intervention/false accusation/refused seppuku. Table 2.3 Low Skill costs
 
 ---
 
-### C. Blocked on World Map / Adjacency Data
+### C. Areas Requiring Sub-Tile Map Data
 
-These sections cannot be implemented until the tile/sub-tile map system and
-province adjacency data are available. No design decision needed — just
-the data.
+These features are structurally complete but cannot resolve without sub-tile army position data from s11.7a or the province adjacency coordinate system.
 
-| Section | What's Blocked |
-|---------|----------------|
-| s4.3 | `is_coastal` flag — always false; naval context keys unreachable |
-| s11.7 | Sub-tile pathfinding; 5 stub military ActionIDs (FORCE_MARCH, EVALUATE_CLAN_STRENGTH, DEPLOY_ARMY sub-tile, etc.) |
+| Section | What's Needed |
+|---------|--------------|
+| s4.3 | `is_coastal` flag — always false; requires coordinate data |
+| s11.7 | Sub-tile pathfinding; FORCE_MARCH, EVALUATE_CLAN_STRENGTH, DEPLOY_ARMY sub-tile |
 | s11.7a | Army movement, levy & mobilization (sub-tile movement) |
 | s11.9 | Ship movement initiation; naval blockade (per-sub-tile military unit) |
-| s40 | Individual combat — ASCII map tile positioning and range tracking |
-| s4.4 | Local Interface / ASCII Map (NOT STARTED) |
-| s56 | Quest System / ASCII Map (NOT STARTED) |
 | A16 | Forged letter delivery distance (3 provinces — needs adjacency data) |
-| — | `rivers` and `roads` fields on ProvinceData — no producer or consumer until map format decided |
+| — | `rivers` and `roads` fields on ProvinceData — no consumer until map format decided |
 
 ---
 
-### D. Blocked on GDD Spec (No LOCKED Section)
+### D. Areas Needing Design Decisions (Owner Approval Required)
 
-These need GDD sections to be written or unlocked before implementation.
+These sections have partial or no GDD spec. **Do not implement any of these without explicit owner approval first.** The design decisions are the owner's to make.
 
-| Section | What's Blocked |
-|---------|----------------|
-| s2.4 | `DECLARE_WALL_EMERGENCY` ActionID — s2.4.14 Decision 6 has no LOCKED spec (AP cost, agenda topic format, compliance enforcement all unspecified) |
-| s31–s37 | Spell system — all REFERENCE sections, no design started. Blocks: Sense spell detection TN (Maho Channel 3), spell_intent tag, spells_known field |
-| s38 | Kiho system — REFERENCE section |
-| s40 | Individual combat — REFERENCE section (beyond map dependency) |
-| s43 | Maho spell cast roll TN — GDD does not specify it. Blocks: CAST_MAHO NPC ActionID |
-| s48/s48a | LOCKED. Sensei/training and rank advancement values locked. school_rank sync and rank-up topics implemented. PC dojo-visit gate deferred (PC system not yet designed). |
-| s49 | Artisan: bonsai/garden (4 ActionIDs), theater composition (3 ActionIDs) — forward-scored, no executor. Core crafting pipeline DONE. |
-| s54.7 | Kolat system — blocks 23 Kolat spy network ActionIDs and BRIBE_GARRISON_COMMANDER |
-| s56.14 | Full Bloodspeaker cult encounters — trigger layer done, ASCII map encounters blocked |
-| s57.40.8 | Commerce rank 5 mastery (price ±20%) — section not unlocked |
-| s57.40.9 | Appraisal skill emphasis modifier — section not unlocked |
-| s11.3.5 | Kuni/Asako/Kuroiban Named Characters with UPHOLD_LAW standing objectives — PARTIALLY DESIGNED |
-
-**REFERENCE sections** (source material only, design not started): s31–s37,
-s38, s44, s45, s54.7, s57.23–s57.24, s57.26–s57.30, s57.41–s57.43,
-s57.45–s57.46.
+| Section | What's Needed |
+|---------|--------------|
+| s2.4 | `DECLARE_WALL_EMERGENCY` ActionID — s2.4.14 Decision 6: AP cost, agenda topic format, compliance enforcement |
+| s31 | Sense spell detection TN — Maho Channel 3 roll TN (core spell system DONE; this one value pending) |
+| s38 | Kiho system — full design needed |
+| s40 | Individual combat — PARTIAL. WeaponData/ArmorData Resources, NPC summary roll, weapon assignment done. Full PC-facing mechanics (all maneuvers, kata effects, grapple, sumai) blocked on design decisions. |
+| s43 | Maho spell cast roll TN — not specified. Needed for CAST_MAHO NPC ActionID |
+| s54.7 | Kolat system — 23 spy network ActionIDs, BRIBE_GARRISON_COMMANDER |
+| s56.14 | Bloodspeaker cult ASCII map encounters — trigger layer done, encounter design needed |
+| s57.40.8 | Commerce rank 5 mastery (price ±20%) — design needed |
+| s57.40.9 | Appraisal skill emphasis modifier — design needed |
+| s57.42–s57.43 | Sailing / Ship lesser zones — source material available, design needed |
+| s57.46 | Allied NPC Companion system — source material available, design needed |
+| s45 CAST_OUT | **RESOLVED.** `brotherhood_sect: String` field added to `L5RCharacterData`. `WorldGenerator.generate_character()` copies `"brotherhood_sect"` from `SCHOOL_DATA` (Togashi Tattooed Order = `""`; non-Brotherhood schools omit the key, defaulting to `""`). `HonorGlorySystem.get_observed_glory_rank(target, observer)` returns 0 when `AdvantageSystem.is_glory_treated_as_infamy_by(target, observer.brotherhood_sect)` is true. 5 tests in `test_honor_glory_system.gd`. |
 
 ---
 
-### E. Blocked on Other Systems Being Built First
+### E. Unimplemented Due to Missing Data or Design
 
-| Blocked Item | Depends On |
-|--------------|------------|
-| `techniques`, `kiho`, `katas`, `spells_known`, `weapons`, `armor_worn` fields on L5RCharacterData | s40 individual combat, s31–s37 spells |
-| `active_quest`, `active_poisons`, `combat_modifiers_pending` fields on L5RCharacterData | s56 quest system, s40 combat |
-| `timed_advantages` and `action_blocks` on L5RCharacterData | Individual school technique implementation (s29.15.24 is LOCKED but techniques are per-school) |
-| FORCE_MARCH, EVALUATE_CLAN_STRENGTH ActionIDs | Sub-tile army movement (s11.7a) |
-| BRIBE_GARRISON_COMMANDER ActionID | Kolat system (s54.7d) |
-| 37 Kolat/artisan/theater ActionIDs (scored in objective_alignment.json) | Kolat (s54.7d/s56.14), artisan (s49), theater (s49) |
-| SEEK_PRETEXT ActionID executor | GDD s14 Category 13 lists it as both NeedType and ActionID, but no executor mechanics specified |
+| Item | What's Needed |
+|------|--------------|
+| `techniques`, `kiho`, `katas`, `weapons`, `armor_worn` | s40 individual combat, s38 kiho design |
+| `active_quest`, `active_poisons`, `combat_modifiers_pending` | s56 quest extension, s40 combat design |
+| `timed_advantages` and `action_blocks` | Individual school technique implementation (per-school design) |
+| SEEK_PRETEXT ActionID executor | Executor mechanics unspecified in GDD s14 |
 | `eta` community weight in Bloodspeaker cell placement | No `eta` field on ProvinceData/SettlementData |
-| Maho Channel 3 detection roll TN | s31 Sense spell design |
-| Hunt player ASCII missions | s56 coordinate system |
-| Animal companion ASCII combat | s40/s56 |
+| Maho Channel 3 detection TN | s31 Sense spell design decision needed |
+| Animal companion ASCII combat | s40/s56 design |
+
+**Sections available for design and implementation (source material exists, design decisions needed before coding):** s38 (kiho), s40 (individual combat — partial, further design decisions needed), s44 (Shadowlands mutations — DONE), s45 (advantages/disadvantages — DONE), s54.7 (Kolat), s57.42–s57.43 (sailing/ship zones), s57.46 (allied NPC companion).
+**Note:** s31–s37 (spells — DONE, one pending value: Sense spell detection TN), s57.23 (garden), s57.24 (bonsai), s57.26 (origami), s57.27 (painting), s57.29 (ikebana), s57.30 (calligraphy), s57.41 (engineering), s57.45 (geisha) are all **DONE**.
 
 ---
 

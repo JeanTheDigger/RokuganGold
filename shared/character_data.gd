@@ -16,6 +16,9 @@ extends Resource
 @export var age: int = 16
 @export var gender: String = ""
 @export var orientation: String = "straight"
+## s45 CAST_OUT: Brotherhood of Shinsei sect affiliation ("Shintao", "Fortunist", or "").
+## Empty for non-monks and non-Brotherhood monks (e.g. Togashi Tattooed Order).
+@export var brotherhood_sect: String = ""
 
 # -- The Five Rings & Traits ---------------------------------------------------
 # Ring = min(trait1, trait2). Both traits tracked individually per s4.5.2.
@@ -34,6 +37,10 @@ extends Resource
 
 @export var current_void_points: int = 2
 @export var max_void_points: int = 2
+## Transient — reset to {} / 0 each IC day by ActionPointSystem.reset_daily_ap().
+## Not @export: these must not persist across save/load.
+var spell_slots_used: Dictionary = {}
+var spell_void_bonus_used: int = 0
 
 # -- Skills --------------------------------------------------------------------
 # Dict of { skill_name: String -> rank: int }. Only skills at rank >= 1 present.
@@ -53,12 +60,12 @@ extends Resource
 
 @export var affinity_element: Enums.Ring = Enums.Ring.NONE
 @export var deficiency_element: Enums.Ring = Enums.Ring.NONE
-@export var spells_known: Array = []
+@export var spells_known: Array[String] = []
 
 # -- Advantages & Disadvantages ------------------------------------------------
 
-@export var advantages: Array = []
-@export var disadvantages: Array = []
+@export var advantages: Array[AdvantageData] = []
+@export var disadvantages: Array[DisadvantageData] = []
 
 # -- Honor, Glory, Status, Infamy (0.0 to 10.0) -------------------------------
 
@@ -79,12 +86,16 @@ extends Resource
 # -- Shadowlands Taint ---------------------------------------------------------
 
 @export var taint: float = 0.0
+@export var mutations: Array[MutationData] = []
+@export var shadowlands_powers: Array[ShadowlandsPowerData] = []
+## Highest Taint Rank already processed for rank-up mutation/power events.
+@export var taint_rank_last_processed: int = 0
 
 # -- Equipment & Outfit --------------------------------------------------------
 
-@export var weapons: Array = []
-@export var armor_worn: String = ""
-@export var armor_tn_bonus: int = 0
+@export var weapons: Array[WeaponData] = []
+@export var armor_worn: ArmorData = null
+@export var armor_tn_bonus: int = 0  # mirrors armor_worn.tn_bonus; kept for fast lookup
 @export var armor_reduction: int = 0
 @export var outfit: Array = []
 @export var koku: float = 0.0
@@ -133,6 +144,9 @@ extends Resource
 # -- Legal System (Section 11.3.14) --------------------------------------------
 
 @export var legal_cases: Array = []
+## IC days on which this character committed violence outside a duel (s11.3.12).
+## Used by ViolenceSystem.count_offenses_in_window() for repeat-offense detection.
+@export var violence_offense_days: Array[int] = []
 
 # -- Courtier Framework Fields -------------------------------------------------
 
@@ -149,6 +163,15 @@ extends Resource
 @export var supply_ledger: Dictionary = {}
 @export var from_the_ashes: Dictionary = {}
 @export var perfect_gift_targets: Array = []
+
+# -- Elemental Imbalance overflow timed states (s45) --------------------------
+@export var void_imbalance_penalty_until: int = -1   # IC day; -1 = inactive
+@export var water_imbalance_social_penalty: bool = false  # one-shot: -1k0 next social roll
+@export var perceived_honor_blocked_until: int = -1  # IC day; -1 = inactive
+@export var air_imbalance_social_penalty_until: int = -1  # IC day; -1 = inactive
+
+# -- Soft-Hearted post-kill TN penalty (s45) -----------------------------------
+@export var soft_hearted_tn_until: int = -1  # IC day; -1 = inactive; +10 TN all rolls this day
 
 # -- Theater & Art Tracking ----------------------------------------------------
 
