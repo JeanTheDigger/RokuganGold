@@ -469,6 +469,39 @@ static func _get_kiho_wound_penalty_reduction(character: L5RCharacterData, parti
 	return reduction
 
 
+## Reduction bonus from active kiho. Embrace the Stone: 2× Earth; Partaking the
+## Waters: Water Ring.
+static func _get_kiho_reduction_bonus(character: L5RCharacterData, participant: Participant) -> int:
+	var bonus: int = 0
+	var earth_ring: int = CharacterStats.get_earth_ring(character)
+	var water_ring: int = CharacterStats.get_ring_value(character, Enums.Ring.WATER)
+	for effect_id: String in _active_kiho_effect_ids(participant):
+		match effect_id:
+			"kiho_embrace_stone_reduction":
+				bonus += 2 * earth_ring
+			"kiho_partaking_waters_reduction":
+				bonus += water_ring
+	return bonus
+
+
+## Total Reduction the defender has against this attack: base armor Reduction +
+## kata + active-kiho Reduction, minus the attacker's Reduction-piercing effects,
+## floored at 0. Feed this into WoundSystem.apply_damage. (Wires the kata/kiho
+## Reduction modifiers, which were computed but never passed into damage before.)
+static func total_defender_reduction(
+	defender: L5RCharacterData,
+	defender_p: Participant,
+	attacker: L5RCharacterData,
+	attacker_p: Participant,
+	weapon_name: String,
+) -> int:
+	var base: int = defender.armor_reduction
+	var kata: int = get_kata_reduction_bonus(defender, defender_p, weapon_name)
+	var kiho: int = _get_kiho_reduction_bonus(defender, defender_p)
+	var pierce: int = get_kata_opponent_reduction_penalty(attacker, attacker_p, weapon_name)
+	return maxi(0, base + kata + kiho - pierce)
+
+
 ## Activate a kiho on a combatant for the current skirmish. Validates the kiho is
 ## known and the active-slot constraint (one Internal/Kharmic/Mystical, unlimited
 ## Martial — GDD s38). Returns {ok, reason}. The activation cost (Void Point /
@@ -1980,11 +2013,13 @@ static func resolve_npc_summary_combat(
 
 	if att_attack.get("hit", false):
 		att_damage = resolve_damage(attacker, att_wname, 0, 0, dice_engine, att_p)
-		def_wounds = WoundSystem.apply_damage(defender, att_damage.get("raw_damage", 0), defender.armor_reduction)
+		var def_reduction: int = total_defender_reduction(defender, def_p, attacker, att_p, att_wname)
+		def_wounds = WoundSystem.apply_damage(defender, att_damage.get("raw_damage", 0), def_reduction)
 
 	if def_attack.get("hit", false):
 		def_damage = resolve_damage(defender, def_wname, 0, 0, dice_engine, def_p)
-		att_wounds = WoundSystem.apply_damage(attacker, def_damage.get("raw_damage", 0), attacker.armor_reduction)
+		var att_reduction: int = total_defender_reduction(attacker, att_p, defender, def_p, def_wname)
+		att_wounds = WoundSystem.apply_damage(attacker, def_damage.get("raw_damage", 0), att_reduction)
 
 	var att_dead: bool = CharacterStats.is_dead(attacker)
 	var def_dead: bool = CharacterStats.is_dead(defender)

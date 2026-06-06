@@ -1816,3 +1816,47 @@ func test_inactive_kiho_has_no_effect() -> void:
 	var p := IndividualCombat.Participant.new()
 	assert_eq(IndividualCombat._get_kiho_armor_tn_bonus(c, p), 0,
 		"a known-but-inactive kiho confers no bonus")
+
+
+# === Kiho/kata Reduction pipeline (s38/s30a) ===
+
+func test_total_reduction_base_only_without_buffs() -> void:
+	var d := _monk_char(60); d.armor_reduction = 2
+	var dp := IndividualCombat.Participant.new()
+	var a := _monk_char(61)
+	var ap := IndividualCombat.Participant.new()
+	assert_eq(IndividualCombat.total_defender_reduction(d, dp, a, ap, "unarmed"), 2,
+		"base armor reduction only when no kata/kiho active")
+
+
+func test_embrace_the_stone_adds_reduction() -> void:
+	var d := _monk_char(62); d.armor_reduction = 1
+	d.kiho = ["Embrace the Stone"]
+	var dp := IndividualCombat.Participant.new()
+	IndividualCombat.activate_kiho(d, dp, "Embrace the Stone")
+	var a := _monk_char(63)
+	var ap := IndividualCombat.Participant.new()
+	var expected: int = 1 + 2 * CharacterStats.get_earth_ring(d)
+	assert_eq(IndividualCombat.total_defender_reduction(d, dp, a, ap, "unarmed"), expected,
+		"Embrace the Stone adds 2× Earth ring Reduction on top of armor")
+
+
+func test_partaking_the_waters_adds_reduction() -> void:
+	var d := _monk_char(64); d.armor_reduction = 0
+	d.kiho = ["Partaking the Waters"]
+	var dp := IndividualCombat.Participant.new()
+	IndividualCombat.activate_kiho(d, dp, "Partaking the Waters")
+	var a := _monk_char(65)
+	var ap := IndividualCombat.Participant.new()
+	assert_eq(IndividualCombat.total_defender_reduction(d, dp, a, ap, "unarmed"),
+		CharacterStats.get_ring_value(d, Enums.Ring.WATER),
+		"Partaking the Waters adds Water ring Reduction")
+
+
+func test_reduction_never_negative() -> void:
+	var d := _monk_char(66); d.armor_reduction = 0
+	var dp := IndividualCombat.Participant.new()
+	var a := _monk_char(67)
+	var ap := IndividualCombat.Participant.new()
+	assert_true(IndividualCombat.total_defender_reduction(d, dp, a, ap, "unarmed") >= 0,
+		"Reduction floored at 0")

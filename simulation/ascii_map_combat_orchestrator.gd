@@ -1693,7 +1693,12 @@ static func _apply_hit(
 	)
 	var raw: int = dmg["raw_damage"]
 
-	var wd_result: Dictionary = WoundSystem.apply_damage(target, raw)
+	# Reduction: base armor + kata/active-kiho Reduction − attacker piercing (s30a/s38).
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target.character_id, null)
+	var reduction: int = target.armor_reduction
+	if t_p != null:
+		reduction = IndividualCombat.total_defender_reduction(target, t_p, attacker, a_p, weapon_name)
+	var wd_result: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
 
 	return {
 		"damage": wd_result.get("final_damage", raw),
