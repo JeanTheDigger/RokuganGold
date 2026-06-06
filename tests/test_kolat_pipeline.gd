@@ -154,3 +154,46 @@ func test_sleeper_command_persists_while_target_alive() -> void:
 		{}, _scoring, {"bushido": {}, "shourido": {}}, [], [], 0, {98: victim})
 	assert_true(result.get("sleeper_override", false), "live target keeps the override active")
 	assert_false(sleeper.active_sleeper_command.is_empty(), "command persists while target alive")
+
+
+# === Tranche 9: dual-stance topic positions (s54.7f) ===
+
+func _pos_ctx() -> NPCDataStructures.ContextSnapshot:
+	var ctx := NPCDataStructures.ContextSnapshot.new()
+	ctx.known_topics = [1]
+	ctx.known_positions = {1: 20}      # mild public support
+	ctx.kolat_positions = {1: -100}    # true Kolat stance: maximum opposition
+	return ctx
+
+
+func _pos_tables() -> Dictionary:
+	return {"topic_position_alignment": {"T": {"strong_support": 15, "strong_opposition": -15}}}
+
+
+func test_dual_stance_substitutes_kolat_position() -> void:
+	var ctx := _pos_ctx()
+	var mod := NPCDecisionEngine._compute_topic_position_modifier("X", _need("T"), ctx, _pos_tables())
+	assert_eq(mod, -15.0, "kolat_positions stance (-100) drives the modifier, not the mild public +20")
+
+
+func test_dual_stance_falls_back_to_known_positions() -> void:
+	var ctx := _pos_ctx()
+	ctx.kolat_positions = {}  # no Kolat entry for this topic
+	var mod := NPCDecisionEngine._compute_topic_position_modifier("X", _need("T"), ctx, _pos_tables())
+	assert_true(mod > 0.0 and mod < 15.0, "with no kolat stance, the mild public +20 is used")
+
+
+func test_build_context_populates_kolat_positions_for_agents_only() -> void:
+	var agent := _coin_master(40)
+	agent.is_kolat_master = false
+	agent.kolat_sect = Enums.KolatSect.SILK
+	agent.kolat_positions = {7: -100}
+	var ctx_agent := NPCDecisionEngine.build_context(agent, {"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS})
+	assert_eq(ctx_agent.kolat_positions.get(7), -100, "conscious agent's kolat_positions reach context")
+
+	var plain := _coin_master(41)
+	plain.is_kolat_master = false
+	plain.kolat_sect = Enums.KolatSect.NONE
+	plain.kolat_positions = {7: -100}  # should be ignored — not a conscious agent
+	var ctx_plain := NPCDecisionEngine.build_context(plain, {"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS})
+	assert_true(ctx_plain.kolat_positions.is_empty(), "non-Kolat characters carry no dual stance")

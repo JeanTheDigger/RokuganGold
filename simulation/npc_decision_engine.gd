@@ -39,6 +39,9 @@ static func build_context(
 	ctx.kolat_sect = character.kolat_sect
 	ctx.is_kolat_master = character.is_kolat_master
 	ctx.has_kolat_objective = bool(world_state.get("has_kolat_objective", false))
+	# Dual-stance positions exist only for conscious Kolat agents (s54.7f).
+	if character.kolat_sect != Enums.KolatSect.NONE:
+		ctx.kolat_positions = character.kolat_positions.duplicate()
 	ctx.lord_rank = CivilianOrderBudget.lord_rank_from_status(character.status)
 	ctx.civilian_orders_remaining = character.civilian_orders_remaining
 
@@ -2467,7 +2470,13 @@ static func _compute_topic_position_modifier(
 			var tt: String = ctx.known_topic_types.get(topic_id, "")
 			if not tt.is_empty() and tt not in type_filter:
 				continue
-		var position: float = float(ctx.known_positions.get(topic_id, 0))
+		# Dual stance (s54.7f): a conscious Kolat agent uses their kolat_positions
+		# entry for a topic when one exists, falling back to known_positions.
+		var position: float
+		if ctx.kolat_positions.has(topic_id):
+			position = float(ctx.kolat_positions[topic_id])
+		else:
+			position = float(ctx.known_positions.get(topic_id, 0))
 		if invert:
 			position = -position
 		var modifier: float = _interpolate_topic_position(position, need_entry)

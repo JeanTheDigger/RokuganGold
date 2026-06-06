@@ -259,6 +259,10 @@ var spell_void_bonus_used: int = 0
 @export var dirty_koku: int = 0
 ## Tiger-allocated operational budget for this Master's Sect.
 @export var operational_koku: int = 0
+## Hidden dual-stance topic positions for conscious Kolat agents (Section 54.7f):
+## topic_id → position (−100..+100). Substituted for topic_positions in Phase 5
+## scoring when an entry exists. Empty for non-Kolat characters.
+@export var kolat_positions: Dictionary = {}
 
 # -- Bloodspeaker Cult (Section 56.14) ----------------------------------------
 

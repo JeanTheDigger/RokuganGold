@@ -86,6 +86,9 @@ class ContextSnapshot:
 	var kolat_sect: Enums.KolatSect = Enums.KolatSect.NONE
 	var is_kolat_master: bool = false
 	var has_kolat_objective: bool = false
+	# Dual-stance topic positions for conscious Kolat agents (s54.7f):
+	# topic_id → position. Substituted for known_positions in Phase 5 scoring.
+	var kolat_positions: Dictionary = {}
 
 	# Location & situation
 	var location_id: String = ""

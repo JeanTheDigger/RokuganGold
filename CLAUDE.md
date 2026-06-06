@@ -4374,6 +4374,22 @@ template generators it depends on. Faithful summary of the fixes that landed:
   actions), plus amount/temple metadata, dual-stance topic positions, win-condition pipeline,
   the Conclave, Tiger Tear routing, the network-record lifecycle, and the
   topic/spell/insurgency-dependent executors.
+- **s54.7 The Kolat (Tranche 9 — dual-stance topic positions)** — `kolat_positions` (s54.7f,
+  LOCKED): a hidden second topic-position dictionary on L5RCharacterData (topic_id →
+  −100..+100), present only for conscious Kolat agents. ContextSnapshot gains `kolat_positions`;
+  `build_context()` populates it from the character field only when `kolat_sect != NONE` (empty
+  for everyone else). **Phase-5 substitution:** `_compute_topic_position_modifier()` now reads
+  `ctx.kolat_positions` first for each scored topic and uses that stance when an entry exists,
+  falling back to `known_positions` otherwise — so a Silk merchant whose public stance on an
+  investigator topic is a mild −15 but whose true Kolat stance is −100 scores covert responses
+  at full urgency, while the personality filter still constrains *which* actions the agent may
+  take (the other six score components are unchanged). Topic-removal cleanup stays symmetric
+  with `known_positions` (orphaned entries on resolved topics are benign — no separate pass,
+  matching the existing `topic_positions` behavior). +3 tests (12 total in
+  `test_kolat_pipeline.gd`). DEFERRED: the three population channels (Master/Tiger directive
+  delivery, DISTRIBUTE_INTELLIGENCE stance push, direct-observation generation), plus
+  amount/temple metadata, win-condition pipeline, the Conclave, Tiger Tear routing, the
+  network-record lifecycle, and the topic/spell/insurgency-dependent executors.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
