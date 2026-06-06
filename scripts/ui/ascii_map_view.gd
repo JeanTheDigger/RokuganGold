@@ -245,7 +245,9 @@ func submit_end_combat_consent(pc_id: int, agree: bool) -> Dictionary:
 	var result: Dictionary = _combat_controller.register_end_combat_consent(pc_id, agree)
 	if result.get("ended", false):
 		combat_ended.emit()
-		combat_mode_changed.emit(false)
+		# Route the mode signal through the shared latch so the next NPC-turn poll
+		# does not re-emit the same real-time transition.
+		_emit_mode_change_if_any()
 	return result
 
 
@@ -313,13 +315,22 @@ func _run_npc_turns_and_sync() -> void:
 		for mev: Dictionary in ev.get("attack_result", {}).get("morale_events", []):
 			combat_event.emit(mev)
 	# Combat mode transition (real-time ↔ turn-based) detected this action.
-	if _combat_controller.poll_mode_changed():
-		combat_mode_changed.emit(_combat_controller.is_turn_based())
+	_emit_mode_change_if_any()
 	# Check terminal states — signals only; combat_event already emitted in the loop above.
 	if _combat_controller.is_player_dead():
 		player_died.emit()
 	elif _combat_controller.is_mission_complete():
 		mission_complete.emit()
+
+
+## Fire combat_mode_changed once if the zone's real-time ↔ turn-based mode flipped
+## since the last check. Single source of truth for the mode signal (consumes the
+## controller's transition latch), so callers never double-emit.
+func _emit_mode_change_if_any() -> void:
+	if _combat_controller == null:
+		return
+	if _combat_controller.poll_mode_changed():
+		combat_mode_changed.emit(_combat_controller.is_turn_based())
 
 
 ## Process the Dictionary returned by CombatController's player action methods.

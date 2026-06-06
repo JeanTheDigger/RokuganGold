@@ -30,7 +30,13 @@ var _water_ring: int = 3
 
 
 func _ready() -> void:
-	# Build child UI if it was not provided in the scene.
+	_ensure_ui()
+
+
+## Build the child view + HUD if they do not exist yet. Called from _ready() and
+## defensively from start_mission() so the screen works even if a mission is
+## started before the node has entered the tree.
+func _ensure_ui() -> void:
 	if _view == null:
 		_view = AsciiMapView.new()
 		_view.name = "AsciiMapView"
@@ -55,6 +61,7 @@ func start_mission(
 	if session == null or not session.is_valid() or player == null:
 		return false
 
+	_ensure_ui()
 	_water_ring = session.water_ring
 	_cc = CombatController.create(session, player, dice)
 

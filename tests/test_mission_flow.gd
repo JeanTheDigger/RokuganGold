@@ -105,3 +105,18 @@ func test_end_mission_resets_busy_and_allows_relaunch() -> void:
 	flow.on_pc_arrived(
 		_player(), _province(), [], [_seed(RosterCompositionSystem.SEED_RONIN_BANDIT)], "r2")
 	assert_true(flow.is_busy(), "A second mission launches after teardown")
+
+
+func test_engage_while_busy_does_not_burn_ap() -> void:
+	# Firing ENGAGE_MISSION while already in a mission must not spend AP.
+	var flow := _make_flow()
+	flow.on_pc_arrived(
+		_player(), _province(), [], [_seed(RosterCompositionSystem.SEED_RONIN_BANDIT)], "b1")
+	assert_true(flow.is_busy(), "A mission is active")
+	var pc := _player(2)
+	watch_signals(flow)
+	var ok: bool = flow.engage(
+		pc, _seed(RosterCompositionSystem.SEED_MAHO_CULT), _province(), [], "b2")
+	assert_false(ok, "Engage refused while busy")
+	assert_eq(pc.banked_ap, 2, "No AP spent when the launch is blocked")
+	assert_signal_emitted(flow, "mission_blocked")

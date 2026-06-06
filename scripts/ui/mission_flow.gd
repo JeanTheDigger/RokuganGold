@@ -68,6 +68,14 @@ func engage(
 		province_history: Array,
 		seed_str: String,
 ) -> bool:
+	# Guard BEFORE engage_mission() spends AP — otherwise a blocked launch (no
+	# screen / already in a mission) would burn the PC's AP for nothing.
+	if _screen == null:
+		mission_blocked.emit("no_screen")
+		return false
+	if is_busy():
+		mission_blocked.emit("already_in_mission")
+		return false
 	var req: Dictionary = MissionEntryController.engage_mission(pc, seed)
 	if not req.get("ok", false):
 		mission_blocked.emit(req.get("reason", "cannot_engage"))

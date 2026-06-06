@@ -4178,6 +4178,25 @@ template generators it depends on. Faithful summary of the fixes that landed:
   travel is ON HOLD per owner (2026-06-06)** — deferred, not built. With it, the combat loop
   is end-to-end.
 
+### Known Code Issues (found and fixed 2026-06-06, combat layer audit)
+- **CombatScreen.start_mission crashed if called before _ready. FIXED.**
+  `_view`/`_hud` were built only in `_ready()`, but `start_mission()` dereferenced
+  them — a caller starting a mission before the node entered the tree hit a null.
+  Extracted `_ensure_ui()` (builds the children if absent) and call it from both
+  `_ready()` and the top of `start_mission()`.
+- **combat_mode_changed double-emitted on End Combat. FIXED.**
+  `submit_end_combat_consent()` emitted `combat_mode_changed(false)` directly but did
+  not sync the controller's `_last_reported_mode`; the next `_run_npc_turns_and_sync()`
+  poll saw the stale `true` and emitted the same false transition again. Added
+  `AsciiMapView._emit_mode_change_if_any()` as the single source of truth (consumes the
+  controller's transition latch via `poll_mode_changed`) and routed both the NPC-turn
+  path and the End-Combat path through it. Now fires exactly once per transition.
+- **MissionFlow.engage() burned AP on a blocked launch. FIXED.**
+  `engage()` called `MissionEntryController.engage_mission()` (which spends 1 banked AP)
+  before `_launch()` checked `is_busy()`/`_screen` — so firing ENGAGE_MISSION while
+  already in a mission (or with no screen) spent the PC's AP for nothing. Moved the
+  no-screen / already-in-mission guards ahead of the AP spend. +1 regression test.
+
 ### Systems Added 2026-06-04
 - **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),
   `shared/mutation_data.gd`, `shared/shadowlands_power_data.gd`. Full catalog from GDD s44.
