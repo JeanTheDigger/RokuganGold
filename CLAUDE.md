@@ -4271,7 +4271,10 @@ template generators it depends on. Faithful summary of the fixes that landed:
   enemy with doshin samurai-avoidance, else move toward the command's goal tile:
   FOLLOW→player, MOVE_TO/GUARD_EXIT→tile, PROTECT→protected char; reuses
   find_path/execute_move/get_melee_targets/_npc_execute_attack);
-  `update_companion_morale()` (recomputes from allied-casualty fraction).
+  `update_companion_morale()` (recomputes from allied-casualty fraction);
+  `resolve_current_turn()` (turn-loop dispatcher — auto-resolves enemy NPCs and
+  companions on their initiative, refreshes companion morale first, yields
+  `awaiting_player` on a PC turn).
   `MapCombatState` gains `companion_data` + `companion_started_count`. Live UI
   (grid tokens, TAB menu, mission-launch screen, local-knowledge prompts,
   IDENTIFY/SEARCH/INVESTIGATE live rolls) still deferred (needs Godot). 4

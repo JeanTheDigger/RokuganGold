@@ -1438,3 +1438,36 @@ func test_broken_companion_flees_via_decide_action() -> void:
 
 func _cheb(a: Vector2i, b: Vector2i) -> int:
 	return maxi(abs(a.x - b.x), abs(a.y - b.y))
+
+
+func test_resolve_current_turn_yields_on_player() -> void:
+	var player := _make_char(1)
+	var enemy := _make_char(2)
+	var state := _make_state(player, enemy)
+	# Force the player to the front of the turn order.
+	state.combat.current_turn_index = state.combat.turn_order.find(1)
+	var r := AsciiMapCombatOrchestrator.resolve_current_turn(state, {1: player, 2: enemy}, _dice)
+	assert_true(r.get("awaiting_player", false), "a PC turn yields control")
+	assert_eq(r.get("actor"), 1)
+
+
+func test_resolve_current_turn_runs_companion() -> void:
+	var player := _make_char(1)
+	var enemy := _make_char(2)
+	var state := _make_state(player, enemy)
+	var ally := _make_char(3)
+	AsciiMapCombatOrchestrator.add_companion(state, _companion(3, CompanionData.CompanionType.YOJIMBO), ally, 8, 8, _dice)
+	# Point the turn cursor at the companion.
+	state.combat.current_turn_index = state.combat.turn_order.find(3)
+	var r := AsciiMapCombatOrchestrator.resolve_current_turn(state, {1: player, 2: enemy, 3: ally}, _dice)
+	assert_eq(r.get("actor_type"), "companion", "companion turn auto-resolved")
+	assert_eq(r.get("actor"), 3)
+
+
+func test_resolve_current_turn_runs_enemy_npc() -> void:
+	var player := _make_char(1)
+	var enemy := _make_char(2)
+	var state := _make_state(player, enemy)
+	state.combat.current_turn_index = state.combat.turn_order.find(2)
+	var r := AsciiMapCombatOrchestrator.resolve_current_turn(state, {1: player, 2: enemy}, _dice)
+	assert_eq(r.get("actor_type"), "npc", "enemy turn auto-resolved")

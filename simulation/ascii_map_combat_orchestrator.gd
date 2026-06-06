@@ -1146,6 +1146,47 @@ static func advance_turn(
 	}
 
 
+## Auto-resolve the current actor's turn and advance, dispatching by actor kind.
+## The external loop calls this repeatedly: it resolves enemy NPCs
+## (execute_npc_turn) and allied companions (execute_companion_turn) automatically,
+## and yields control on a player turn. Companion morale is refreshed from current
+## casualties before each non-player turn. Returns one of:
+##   {"over": true}                          — combat is over
+##   {"no_actor": true}                       — no valid actor remains
+##   {"awaiting_player": true, "actor": id}    — a PC must act (caller takes input)
+##   {actor_type: "companion"|"npc", actor, actions, ...}  — resolved + advanced
+static func resolve_current_turn(
+	state: MapCombatState,
+	chars_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if state.combat.is_over:
+		return {"over": true}
+	var actor: int = get_current_actor(state)
+	if actor < 0:
+		return {"no_actor": true}
+	# A player character (player-faction, not a companion) yields to input.
+	if state.factions.get(actor, FACTION_NEUTRAL) == FACTION_PLAYER \
+			and not state.companion_data.has(actor):
+		return {"awaiting_player": true, "actor": actor}
+	var character: L5RCharacterData = chars_by_id.get(actor, null)
+	if character == null or CharacterStats.is_dead(character):
+		advance_turn(state, chars_by_id, dice_engine)
+		return {"skipped": actor}
+	# Refresh companion morale from the current casualty state before they act.
+	update_companion_morale(state, chars_by_id)
+	var result: Dictionary
+	if state.companion_data.has(actor):
+		result = execute_companion_turn(state, actor, character, chars_by_id, dice_engine)
+		result["actor_type"] = "companion"
+	else:
+		result = execute_npc_turn(state, actor, character, chars_by_id, dice_engine)
+		result["actor_type"] = "npc"
+	result["actor"] = actor
+	advance_turn(state, chars_by_id, dice_engine)
+	return result
+
+
 ## Advance to the next round: reactions, condition recovery, initiative re-roll, re-check combat over.
 static func advance_round(
 	state: MapCombatState,
