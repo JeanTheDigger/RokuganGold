@@ -3990,6 +3990,86 @@ mechanical change is applied until s40 individual combat is implemented.
   for shugenja, katana+wakizashi fallback for all others; yumi added when Kyujutsu trained.
   14 tests in `tests/test_individual_combat.gd`.
 
+### Known Code Issues (found and fixed 2026-06-06, ASCII map combat sweep)
+Post-implementation bug sweeps across the new ASCII map combat layer and the
+template generators it depends on. Faithful summary of the fixes that landed:
+- **Combat system bugs (multiple rounds).** Stance restriction enforcement, FoV
+  lookout-bonus application, dead-character guards in combat resolution, duel
+  winner/loser assignment, gate (open/closed door) handling in melee, stealth-combat
+  flag transitions, morale break thresholds, Down-state attack Void-bonus application,
+  and missing `failed` keys on failed-action effect dicts.
+- **`AsciiMapCombatOrchestrator` bug fixes.** Several rounds against the orchestrator
+  itself (initiative/turn-order, target selection, noise-event propagation from player
+  attack paths, ZONE_EXIT step ordering, door noise origin).
+- **Raw int topic tier values.** Painting, sculpture, and insurgency-relocation systems
+  assigned raw ints to `TopicData.Tier` enum fields (same bug class as the legal-pipeline
+  fixes) — corrected to enum references.
+- **Template generator hardening.** Cave room-population loop break-in-match-arm,
+  castle siege wall fill, murder-hole guard positions, ruined-structure stairwell,
+  shelter bounds inversion, kansen/shrine bound errors, and several zone-test type
+  mismatches across the s56 template generators.
+
+### Systems Added 2026-06-06
+- **s40 ASCII Map Combat — full tile-based skirmish layer.** Two pure-simulation
+  classes tie IndividualCombat mechanics to the AsciiMapData tile grid (no Node
+  inheritance). One tile = 5 feet (MovementSystem); melee range = Chebyshev distance
+  ≤ 1 (adjacent 8 directions).
+  - **`simulation/ascii_map_combat_orchestrator.gd` (AsciiMapCombatOrchestrator, 1815
+    lines).** Turn/action-budget skirmish driver for player-present combat. Inner
+    classes: `TurnState` (per-character action budget — 1 Complex OR 2 Simple + Free +
+    Free Move per turn; stance change costs a Simple; Down-restricted move handling) and
+    `MapCombatState` (full state: tile positions, factions, turn order, round counter).
+    Setup: `setup_combat()`. Movement: `get_reachable_tiles()`, `find_path()` (A*),
+    `get_melee_targets()`, `get_ranged_targets()`, `is_in_melee_range_of_enemy()`.
+    Execute actions: `execute_stance_change`, `execute_move`, `execute_melee_attack`,
+    `execute_ranged_attack` (RANGED_IN_MELEE_PENALTY −10, GDD-confirmed),
+    `execute_extra_attack`, `execute_guard` (Guard maneuver, within-5-feet = 1 tile),
+    `execute_grapple_initiate`, `execute_grapple_action`, `execute_stand_up` (Simple
+    action from Prone), `execute_void_spend`, `execute_destroy_tile` (shoji cut-through,
+    GDD s4.4, 0 Raises), `execute_flee`. Turn management: `begin_turn`,
+    `get_current_actor`, `advance_turn`, `advance_round`. Full NPC AI turn:
+    `execute_npc_turn` with `_npc_pick_stance`/`_npc_desired_stance` (contextual stance
+    by wound level and threat), `_npc_pick_target`, `_npc_move_toward`,
+    `_npc_execute_attack`. Down-state attack (`_execute_down_attack`) requires a Void
+    Point per GDD s40. All damage routes through `_apply_hit` →
+    `IndividualCombat.resolve_damage()` with a Participant (kata/mutation/advantage
+    modifiers honored). PROVISIONAL: ranged weapon ranges not specified in GDD s40
+    (Equipment section blocked) — any enemy in LOS is a valid ranged target.
+    97 tests in `tests/test_ascii_map_combat.gd`.
+  - **`simulation/combat_controller.gd` (CombatController) — expanded.** Roguelike /
+    Dwarf Fortress Adventure Mode stealth-combat model per s40/s56.6.3/s54.8/s54.9.
+    Enemy alert state machine (Unaware/Suspicious/Alert/Fleeing; LOCKED round counts
+    SUSPICIOUS_SEARCH=3, SUSPICIOUS_RETURN=3, ALERT_ALARM=5). Noise detection
+    (QUIET/MODERATE/LOUD/VERY_LOUD; automatic detection on VERY_LOUD, contested
+    Perception+Investigation otherwise). Stealth movement and stealth kills (flat-footed
+    ATN = 5 + armor_tn_bonus; Quiet noise on kill, Loud on survival). Bump-to-attack.
+    NPC behavior (patrol, three investigate styles, pursue+attack, flee). Caller style
+    (BAKEMONO_SHAMAN sounds alarm immediately). Creature wound thresholds (s54.9
+    `wounds_dead` override). Swift movement (s54.9). Morale (s54.8: BANDIT_RABBLE 40%,
+    REBEL_PEASANT/THUG 60%, REBEL_ASHIGARU 70%, MORALE_UNBREAKABLE for REBEL_LEADER).
+    Individual variance (s56.10.0a). 17 LOCKED unit types. 154 tests in
+    `tests/test_combat_controller.gd`.
+  - **`scripts/ui/combat_hud.gd` (CombatHUD, CanvasLayer overlay).** Player-facing combat
+    HUD for AsciiMapView: round number, wound level + penalty (color-coded by WoundLevel),
+    movement budget, stealth/normal mode indicator, scrolling combat-event log
+    (MAX_LOG_LINES=8). `update_from_cc()`, `push_event()`, `set_mode()`. 7 tests in
+    `tests/test_combat_hud.gd`.
+- **`shared/role_registry.gd` (RoleRegistry) — centralized role/position definitions.**
+  All role string constants, `PositionType` enum, POSITION_NAMES / POSITION_RANK
+  lookups, and lord-rank helpers consolidated into one file (previously scattered across
+  world_population_generator, day_orchestrator, and others). Behavior-preserving refactor.
+- **s44/s45 combat-roll wiring sweep.** AdvantageSystem and MutationSystem modifiers, plus
+  wound penalties, were wired into every combat and contested dice-roll site that was
+  previously skipping them. Coverage: 8 contested roll functions in individual_combat.gd,
+  3 combat roll sites missing both wound + mutation, 4 non-combat roll sites, 12
+  non-SkillResolver roll sites, 20 additional roll sites, and 17 mutation-modifier sites.
+  Kata damage modifiers fixed: `resolve_damage()` calls were missing the Participant
+  argument, silently skipping kata damage bonuses — Participant now threaded through all
+  call sites (including the ASCII map orchestrator's `_apply_hit`).
+- **Contextual NPC stance selection for wounded combatants.** `_npc_desired_stance()` now
+  factors wound level and threat type — wounded NPCs favor Defense/Full Defense, healthy
+  aggressors favor Attack, ranged-threatened NPCs adjust accordingly.
+
 ### Systems Added 2026-06-04
 - **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),
   `shared/mutation_data.gd`, `shared/shadowlands_power_data.gd`. Full catalog from GDD s44.
