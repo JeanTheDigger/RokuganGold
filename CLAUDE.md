@@ -4104,6 +4104,18 @@ template generators it depends on. Faithful summary of the fixes that landed:
   zone back to real-time. The consent gate is pure decision logic over present PC entity IDs
   — no networking/RPC is scaffolded (out of scope); the actual prompting is the UI/future
   multiplayer layer's job. 12 tests in `tests/test_combat_controller.gd`.
+- **Event-driven combat-mode signals + view passthroughs (s40.x follow-up).**
+  `CombatController.poll_mode_changed()` reports the real-time↔turn-based transition
+  exactly once per change (compares current `is_turn_based()` against a last-reported
+  latch, so it is correct regardless of call order — no per-frame polling needed).
+  `AsciiMapView` fires two new signals: `combat_mode_changed(turn_based)` (emitted from
+  `_run_npc_turns_and_sync()` after each action when the mode flips) and `combat_ended()`.
+  View End Combat passthroughs added: `request_end_combat()` and
+  `submit_end_combat_consent(pc_id, agree)` (the latter emits `combat_ended` +
+  `combat_mode_changed(false)` on a successful end). `is_in_combat()` semantics
+  reconciled: it now explicitly means "a combat mission is loaded" (controller attached),
+  NOT active combat — `is_turn_based()` is the engagement query. 4 tests
+  (`test_combat_controller.gd`, 166→170).
 
 ### Systems Added 2026-06-04
 - **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),

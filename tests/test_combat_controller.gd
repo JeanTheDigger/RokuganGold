@@ -2481,3 +2481,48 @@ func test_consent_without_pending_request_is_noop() -> void:
 	var r := cc.register_end_combat_consent(cc.get_present_pc_ids()[0], true)
 	assert_false(r.get("ended", true), "No-op without an open poll")
 	assert_eq(r.get("reason", ""), "no_pending_request")
+
+
+# =============================================================================
+# -- 29. Combat mode transition signal hook (GDD s40.x) -----------------------
+# =============================================================================
+
+func test_poll_mode_changed_quiet_when_no_change() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	assert_false(cc.poll_mode_changed(),
+		"No transition reported on a fresh real-time zone")
+	assert_false(cc.poll_mode_changed(), "Still quiet on repeat poll")
+
+
+func test_poll_mode_changed_fires_once_on_engage() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	cc.poll_mode_changed()  # establish baseline (real-time)
+	_first_enemy(cc).alert_state = AsciiMapEnvironment.AlertState.ALERT
+	assert_true(cc.poll_mode_changed(), "Engage transition reported once")
+	assert_false(cc.poll_mode_changed(), "Not reported again while still turn-based")
+
+
+func test_poll_mode_changed_does_not_require_prior_is_turn_based_call() -> void:
+	# poll_mode_changed must latch engagement itself, independent of call order.
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	cc.poll_mode_changed()  # baseline
+	_first_enemy(cc).alert_state = AsciiMapEnvironment.AlertState.ALERT
+	# Note: is_turn_based() not called first here.
+	assert_true(cc.poll_mode_changed(),
+		"poll_mode_changed latches engagement on its own")
+	assert_true(cc.is_turn_based(), "Latched to turn-based")
+
+
+func test_poll_mode_changed_fires_on_end_combat() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	var e := _first_enemy(cc)
+	e.alert_state = AsciiMapEnvironment.AlertState.ALERT
+	cc.poll_mode_changed()  # consume the engage transition
+	# Clear the field and end combat.
+	e.alert_state = AsciiMapEnvironment.AlertState.UNAWARE
+	cc.request_end_combat()
+	for pc_id: int in cc.get_present_pc_ids():
+		cc.register_end_combat_consent(pc_id, true)
+	assert_false(cc.is_turn_based(), "Combat ended")
+	assert_true(cc.poll_mode_changed(), "Return-to-real-time transition reported")
+	assert_false(cc.poll_mode_changed(), "Not reported again")

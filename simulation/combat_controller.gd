@@ -183,6 +183,11 @@ var _turn_based: bool = false
 var _end_combat_pending: bool = false
 var _end_combat_consent: Dictionary = {}
 
+## Last combat mode reported by poll_mode_changed(). Lets the view fire a
+## combat_mode_changed signal on the real-time ↔ turn-based transition instead
+## of polling every frame.
+var _last_reported_mode: bool = false
+
 
 # =============================================================================
 # -- Factory ------------------------------------------------------------------
@@ -659,6 +664,19 @@ func is_turn_based() -> bool:
 	return false
 
 
+## Returns true exactly once after the combat mode (real-time ↔ turn-based)
+## changes value. Evaluates the current mode (forcing the engage latch) and
+## compares it to the last reported value, so it is correct regardless of call
+## order. The view calls this after each action to fire combat_mode_changed on
+## the transition rather than polling every frame.
+func poll_mode_changed() -> bool:
+	var current: bool = is_turn_based()
+	if current == _last_reported_mode:
+		return false
+	_last_reported_mode = current
+	return true
+
+
 ## Entity IDs of enemies that count as "still hostile" for End Combat (GDD s40.x):
 ## alive and aware (Suspicious or Alert). Unaware, Fleeing, and dead enemies do
 ## not block ending.
@@ -739,7 +757,8 @@ func try_finalize_end_combat() -> Dictionary:
 			remaining.append(pc_id)
 	if not remaining.is_empty():
 		return {"ended": false, "reason": "awaiting_consent", "remaining": remaining}
-	# Unanimous consent, field clear → return the zone to real-time.
+	# Unanimous consent, field clear → return the zone to real-time. The
+	# transition is reported by poll_mode_changed()'s last-reported compare.
 	_turn_based = false
 	_end_combat_pending = false
 	_end_combat_consent.clear()
