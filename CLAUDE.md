@@ -4309,9 +4309,9 @@ template generators it depends on. Faithful summary of the fixes that landed:
   `generate_options()` when `is_kolat_master` OR (`kolat_sect != NONE` AND
   `has_kolat_objective`) — Masters always carry the full Sect pool, conscious agents unlock it
   only while a Kolat objective is active. The Phase-4b allowlist (objective_alignment.json)
-  then narrows the pool to the actions aligned with the current Kolat NeedType, so the 6 Kolat
-  NeedTypes need no bespoke decomposition — they fall through `ObjectiveDecomposer._passthrough`
-  and are scored normally. **Sleeper override loop:** `run()` short-circuits to
+  then narrows the pool to the actions aligned with the current Kolat NeedType, so the Kolat
+  NeedTypes (forward-wired in objective_alignment.json) need no bespoke decomposition — they
+  fall through `ObjectiveDecomposer._passthrough` and are scored normally. **Sleeper override loop:** `run()` short-circuits to
   `_run_sleeper_override()` whenever `character.active_sleeper_command` is non-empty —
   it bypasses Phase-2 goal resolution AND the Phase-4 personality filter (conditioning
   overrides virtues/honor), decomposes the installed command via `_need_from_command()`, scores
