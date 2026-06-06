@@ -4116,6 +4116,13 @@ template generators it depends on. Faithful summary of the fixes that landed:
   reconciled: it now explicitly means "a combat mission is loaded" (controller attached),
   NOT active combat — `is_turn_based()` is the engagement query. 4 tests
   (`test_combat_controller.gd`, 166→170).
+- **Player-facing End Combat input (s40.x follow-up).** `AsciiMapView` binds **X** (in
+  turn-based mode) to `_handle_end_combat_input()`: requests End Combat, and on a clear
+  field auto-submits the local PC's consent (the player consents by requesting). Feedback
+  via `combat_event`: `end_combat_blocked` (with active-hostile count), `end_combat_awaiting`
+  (other present PCs still to agree — multi-PC collection out of scope for local play), and
+  `end_combat_resolved`. CombatHUD formats all three and shows `X=end` in the controls hint.
+  3 HUD format tests (`test_combat_hud.gd`, 7→10).
 
 ### Systems Added 2026-06-04
 - **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),

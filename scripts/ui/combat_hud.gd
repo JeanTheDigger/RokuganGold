@@ -171,7 +171,7 @@ func _draw() -> void:
 	# ── Controls hint (bottom of status panel) ─────────────────────────────────
 	var hint_y: float = float(status_h) - line_h * 0.5
 	_draw_text(font, fs - 2, x0, hint_y,
-		"S=stealth  .=wait  L=look", Color(0.5, 0.5, 0.5))
+		"S=stealth  .=wait  L=look  X=end", Color(0.5, 0.5, 0.5))
 
 	# ── Event log panel (bottom-left) ─────────────────────────────────────────
 	if _log_lines.is_empty():
@@ -255,6 +255,17 @@ func _format_event(ev: Dictionary) -> String:
 
 		"player_died":
 			return "You have fallen."
+
+		"end_combat_blocked":
+			var n: int = ev.get("count", 0)
+			return "Cannot end combat — %d enemy still active." % n
+
+		"end_combat_awaiting":
+			var n: int = ev.get("count", 0)
+			return "End combat: awaiting %d other PC(s)…" % n
+
+		"end_combat_resolved":
+			return "Combat ended — the field is yours."
 
 		_:
 			return ""

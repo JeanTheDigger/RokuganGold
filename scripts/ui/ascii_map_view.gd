@@ -249,6 +249,32 @@ func submit_end_combat_consent(pc_id: int, agree: bool) -> Dictionary:
 	return result
 
 
+## Player-initiated End Combat from input (GDD s40.x). Only meaningful in
+## turn-based mode. Blocked while aware hostiles remain (emits end_combat_blocked
+## with the hostile count). When the field is clear, the local PC consents by
+## requesting; any other present PCs must still agree before combat ends
+## (multi-PC consent collection is out of scope for local play). Emits a
+## combat_event describing the outcome for the HUD log.
+func _handle_end_combat_input() -> void:
+	if not _combat_controller.is_turn_based():
+		return  # Nothing to end in real-time exploration.
+	var req: Dictionary = request_end_combat()
+	if not req.get("ok", false):
+		var hostiles: Array = req.get("hostiles", [])
+		combat_event.emit({"type": "end_combat_blocked", "count": hostiles.size()})
+		return
+	# Field is clear — the local player consents by requesting.
+	var player: CombatController.EntityState = _combat_controller.get_player()
+	if player == null:
+		return
+	var res: Dictionary = submit_end_combat_consent(player.entity_id, true)
+	if res.get("ended", false):
+		combat_event.emit({"type": "end_combat_resolved"})
+	else:
+		var remaining: Array = res.get("remaining", [])
+		combat_event.emit({"type": "end_combat_awaiting", "count": remaining.size()})
+
+
 ## Returns true when stealth mode is active.
 func is_in_stealth_mode() -> bool:
 	return _stealth_mode
@@ -450,6 +476,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		_stealth_mode = not _stealth_mode
 		stealth_mode_changed.emit(_stealth_mode)
 		queue_redraw()
+		get_viewport().set_input_as_handled()
+		return
+
+	# X key requests End Combat (turn-based only) — GDD s40.x.
+	if key.keycode == KEY_X and not key.echo and _combat_controller != null:
+		_handle_end_combat_input()
 		get_viewport().set_input_as_handled()
 		return
 
