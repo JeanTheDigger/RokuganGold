@@ -139,7 +139,7 @@ func _init() -> void:
 			herald_found = true
 			assert(c.clan == "Imperial", "Herald should be Imperial")
 			assert(c.family == "Miya", "Herald should be Miya")
-			assert(c.role_position == "Imperial Herald", "Herald role_position mismatch: %s" % c.role_position)
+			assert(c.role_position == RoleRegistry.IMPERIAL_HERALD, "Herald role_position mismatch: %s" % c.role_position)
 			print("Herald: clan=%s, family=%s, role=%s" % [c.clan, c.family, c.role_position])
 			break
 	assert(herald_found, "Should find herald character")
@@ -154,7 +154,7 @@ func _init() -> void:
 		if c.status >= 4.0 and c.role_position.is_empty():
 			high_status_no_role += 1
 	print("Emperor role_position: '%s'" % emperor_role)
-	assert(emperor_role == "Emperor", "Emperor should have 'Emperor' role_position")
+	assert(emperor_role == RoleRegistry.EMPEROR, "Emperor should have 'Emperor' role_position")
 	print("High-status characters (>= 4.0) without role_position: %d" % high_status_no_role)
 	assert(high_status_no_role == 0, "All high-status characters should have role_position set")
 

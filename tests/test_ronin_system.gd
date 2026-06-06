@@ -179,7 +179,7 @@ func test_is_ronin_false_with_lord():
 func test_is_ronin_false_lord_tier():
 	var c := _make_samurai()
 	c.lord_id = -1
-	c.role_position = "Clan Champion"
+	c.role_position = RoleRegistry.CLAN_CHAMPION
 	c.status = 7.0
 	assert_false(RoninSystem.is_ronin(c))
 

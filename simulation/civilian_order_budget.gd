@@ -60,17 +60,7 @@ const WRITE_LETTER: String = "WRITE_LETTER"
 # Thresholds are structural wiring based on L5R Status Range conventions.
 
 static func lord_rank_from_status(status: float) -> Enums.LordRank:
-	if status >= 9.0:
-		return Enums.LordRank.IMPERIAL
-	elif status >= 7.0:
-		return Enums.LordRank.CLAN_CHAMPION
-	elif status >= 6.0:
-		return Enums.LordRank.FAMILY_DAIMYO
-	elif status >= 5.0:
-		return Enums.LordRank.PROVINCIAL_DAIMYO
-	elif status >= 4.0:
-		return Enums.LordRank.CITY_DAIMYO
-	return Enums.LordRank.VILLAGE_HEADMAN
+	return RoleRegistry.lord_rank_from_status(status)
 
 
 static func get_budget_for_rank(rank: Enums.LordRank) -> int:

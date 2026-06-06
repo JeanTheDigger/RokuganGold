@@ -17,7 +17,7 @@ func before_each() -> void:
 	_emperor = _make_character(1, "Emperor", "Imperial", "Hantei", 10.0)
 	_emperor.lord_id = -1
 	_chancellor = _make_character(2, "Chancellor", "Imperial", "Otomo", 8.0)
-	_chancellor.role_position = "Imperial Chancellor"
+	_chancellor.role_position = RoleRegistry.IMPERIAL_CHANCELLOR
 	_chancellor.lord_id = -1
 	_characters_by_id = {1: _emperor, 2: _chancellor}
 	_provinces = []
@@ -1351,7 +1351,7 @@ func test_peace_violation_emperor_disposition_hit() -> void:
 func test_peace_violation_family_daimyo_glory_loss() -> void:
 	var offender := _make_character(10, "Akodo Toturi", "Lion", "Akodo", 6.0)
 	var daimyo := _make_character(40, "Akodo Arasou", "Lion", "Akodo", 7.0)
-	daimyo.role_position = "Family Daimyo"
+	daimyo.role_position = RoleRegistry.FAMILY_DAIMYO
 	daimyo.glory = 5.0
 	var chars: Dictionary = {10: offender, 40: daimyo}
 	var court := _make_active_winter_court(100)

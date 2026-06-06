@@ -183,7 +183,7 @@ func test_appoint_to_position_returns_requires_flag() -> void:
 	var ctx := _make_ctx(char)
 	var action := _make_action("APPOINT_TO_POSITION", {
 		"target_npc_id": 5,
-		"position": "Clan Magistrate",
+		"position": RoleRegistry.CLAN_MAGISTRATE,
 	})
 	var result: Dictionary = ActionExecutor.execute(
 		action, char, ctx, _dice, {}
@@ -193,7 +193,7 @@ func test_appoint_to_position_returns_requires_flag() -> void:
 	var effects: Dictionary = result["effects"]
 	assert_true(effects.get("requires_appointment", false))
 	assert_eq(effects["appointee_id"], 5)
-	assert_eq(effects["position"], "Clan Magistrate")
+	assert_eq(effects["position"], RoleRegistry.CLAN_MAGISTRATE)
 	assert_eq(effects["appointing_lord_id"], 1)
 
 
@@ -426,7 +426,7 @@ func test_vacancy_detects_garrison_commander_for_fortification() -> void:
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
 	var found_garrison: bool = false
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "Garrison Commander":
+		if v.get("position_type", "") == RoleRegistry.GARRISON_COMMANDER:
 			found_garrison = true
 			assert_eq(v["priority"], 3)
 			assert_eq(v["province_id"], 10)
@@ -452,7 +452,7 @@ func test_vacancy_detects_temple_head() -> void:
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
 	var found_temple: bool = false
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "Temple Head":
+		if v.get("position_type", "") == RoleRegistry.TEMPLE_HEAD:
 			found_temple = true
 			assert_eq(v["priority"], 2)
 	assert_true(found_temple, "Should detect temple head vacancy")
@@ -476,7 +476,7 @@ func test_vacancy_detects_monastery_abbot() -> void:
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
 	var found_abbot: bool = false
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "Monastery Abbot":
+		if v.get("position_type", "") == RoleRegistry.MONASTERY_ABBOT:
 			found_abbot = true
 			assert_eq(v["priority"], 2)
 	assert_true(found_abbot, "Should detect monastery abbot vacancy")
@@ -501,7 +501,7 @@ func test_vacancy_no_duplicate_garrison_for_multiple_forts() -> void:
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
 	var garrison_count: int = 0
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "Garrison Commander":
+		if v.get("position_type", "") == RoleRegistry.GARRISON_COMMANDER:
 			garrison_count += 1
 	assert_eq(garrison_count, 1, "Should only generate one garrison vacancy per lord")
 
@@ -512,7 +512,7 @@ func test_vacancy_skips_filled_garrison_commander() -> void:
 	lord.clan = "Crab"
 	var commander := _make_char(2, "Crab", 3.0)
 	commander.lord_id = 1
-	commander.role_position = "Garrison Commander"
+	commander.role_position = RoleRegistry.GARRISON_COMMANDER
 	var characters: Array = [lord, commander]
 	var chars_by_id: Dictionary = {1: lord, 2: commander}
 
@@ -527,7 +527,7 @@ func test_vacancy_skips_filled_garrison_commander() -> void:
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
 	var found_garrison: bool = false
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "Garrison Commander":
+		if v.get("position_type", "") == RoleRegistry.GARRISON_COMMANDER:
 			found_garrison = true
 	assert_false(found_garrison, "Should not detect vacancy when garrison commander exists")
 
@@ -538,7 +538,7 @@ func test_vacancy_skips_filled_temple_head() -> void:
 	lord.clan = "Phoenix"
 	var head := _make_char(2, "Phoenix", 3.0)
 	head.lord_id = 1
-	head.role_position = "Temple Head"
+	head.role_position = RoleRegistry.TEMPLE_HEAD
 	var characters: Array = [lord, head]
 	var chars_by_id: Dictionary = {1: lord, 2: head}
 
@@ -553,7 +553,7 @@ func test_vacancy_skips_filled_temple_head() -> void:
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
 	var found_temple: bool = false
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "Temple Head":
+		if v.get("position_type", "") == RoleRegistry.TEMPLE_HEAD:
 			found_temple = true
 	assert_false(found_temple, "Should not detect vacancy when temple head exists")
 
@@ -582,7 +582,7 @@ func test_vacancy_candidate_selection_prefers_high_score() -> void:
 
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "Temple Head":
+		if v.get("position_type", "") == RoleRegistry.TEMPLE_HEAD:
 			assert_eq(v["candidate_id"], 3, "Should pick highest-scoring vassal")
 
 
@@ -599,7 +599,7 @@ func test_vacancy_no_settlement_detection_without_settlements() -> void:
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
 	var settlement_vacancies: int = 0
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") in ["Garrison Commander", "Temple Head", "Monastery Abbot"]:
+		if v.get("position_type", "") in [RoleRegistry.GARRISON_COMMANDER, RoleRegistry.TEMPLE_HEAD, RoleRegistry.MONASTERY_ABBOT]:
 			settlement_vacancies += 1
 	assert_eq(settlement_vacancies, 0, "No settlement vacancies when no settlements provided")
 
@@ -622,7 +622,7 @@ func test_vacancy_village_does_not_trigger_garrison() -> void:
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
 	var found_garrison: bool = false
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "Garrison Commander":
+		if v.get("position_type", "") == RoleRegistry.GARRISON_COMMANDER:
 			found_garrison = true
 	assert_false(found_garrison, "Village should not trigger garrison commander vacancy")
 
@@ -647,7 +647,7 @@ func test_vacancy_per_lord_key_includes_settlement_vacancies() -> void:
 	var per_lord: Array = ws[per_lord_key]
 	var found_garrison: bool = false
 	for v: Dictionary in per_lord:
-		if v.get("position_type", "") == "Garrison Commander":
+		if v.get("position_type", "") == RoleRegistry.GARRISON_COMMANDER:
 			found_garrison = true
 	assert_true(found_garrison, "Per-lord flat list should include settlement vacancies")
 
@@ -668,7 +668,7 @@ func test_vacancy_detects_school_master_for_family() -> void:
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
 	var school_master_count: int = 0
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "School Master":
+		if v.get("position_type", "") == RoleRegistry.SCHOOL_MASTER:
 			school_master_count += 1
 			assert_eq(v["priority"], 2)
 	# Crab has 5 families (Hida, Hiruma, Kaiu, Kuni, Yasuki) — all have schools
@@ -682,7 +682,7 @@ func test_vacancy_skips_filled_school_master() -> void:
 	var master := _make_char(2, "Crab", 5.0)
 	master.lord_id = 1
 	master.family = "Hida"
-	master.role_position = "School Master"
+	master.role_position = RoleRegistry.SCHOOL_MASTER
 	var characters: Array = [lord, master]
 	var chars_by_id: Dictionary = {1: lord, 2: master}
 
@@ -692,7 +692,7 @@ func test_vacancy_skips_filled_school_master() -> void:
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
 	var hida_master_found: bool = false
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "School Master" and v.get("family", "") == "Hida":
+		if v.get("position_type", "") == RoleRegistry.SCHOOL_MASTER and v.get("family", "") == "Hida":
 			hida_master_found = true
 	assert_false(hida_master_found, "Should not detect vacancy for Hida when school master exists")
 
@@ -710,7 +710,7 @@ func test_vacancy_school_master_has_family_field() -> void:
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
 	var families_found: Array = []
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "School Master":
+		if v.get("position_type", "") == RoleRegistry.SCHOOL_MASTER:
 			assert_true(v.has("family"), "School Master vacancy should include family field")
 			families_found.append(v.get("family", ""))
 	# Dragon has 4 families: Mirumoto, Kitsuki, Tamori, Togashi
@@ -731,7 +731,7 @@ func test_vacancy_school_master_only_for_clans_with_lords() -> void:
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
 	var school_master_count: int = 0
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "School Master":
+		if v.get("position_type", "") == RoleRegistry.SCHOOL_MASTER:
 			school_master_count += 1
 	assert_eq(school_master_count, 0, "No school master vacancies when no lord with status >= 5")
 
@@ -757,7 +757,7 @@ func test_candidate_scoring_magistrate_prefers_investigation_skill() -> void:
 	var chars_by_id: Dictionary = {1: lord, 2: bushi, 3: investigator}
 
 	var result: int = DayOrchestrator._find_vacancy_candidate(
-		1, "Clan Magistrate", characters, chars_by_id,
+		1, RoleRegistry.CLAN_MAGISTRATE, characters, chars_by_id,
 	)
 	assert_eq(result, 3, "Investigator should score higher for magistrate position")
 
@@ -780,7 +780,7 @@ func test_candidate_scoring_garrison_prefers_battle_skill() -> void:
 	var chars_by_id: Dictionary = {1: lord, 2: courtier, 3: warrior}
 
 	var result: int = DayOrchestrator._find_vacancy_candidate(
-		1, "Garrison Commander", characters, chars_by_id,
+		1, RoleRegistry.GARRISON_COMMANDER, characters, chars_by_id,
 	)
 	assert_eq(result, 3, "Warrior should score higher for garrison commander")
 
@@ -802,7 +802,7 @@ func test_candidate_scoring_virtue_bonus_for_magistrate() -> void:
 	var chars_by_id: Dictionary = {1: lord, 2: base, 3: virtuous}
 
 	var result: int = DayOrchestrator._find_vacancy_candidate(
-		1, "Clan Magistrate", characters, chars_by_id,
+		1, RoleRegistry.CLAN_MAGISTRATE, characters, chars_by_id,
 	)
 	assert_eq(result, 3, "Gi-virtue character should get bonus for magistrate")
 
@@ -825,7 +825,7 @@ func test_candidate_scoring_school_type_bonus_for_temple() -> void:
 	var chars_by_id: Dictionary = {1: lord, 2: bushi, 3: shugenja}
 
 	var result: int = DayOrchestrator._find_vacancy_candidate(
-		1, "Temple Head", characters, chars_by_id,
+		1, RoleRegistry.TEMPLE_HEAD, characters, chars_by_id,
 	)
 	assert_eq(result, 3, "Shugenja should get school type bonus for temple head")
 
@@ -848,7 +848,7 @@ func test_candidate_scoring_monastery_prefers_monk() -> void:
 	var chars_by_id: Dictionary = {1: lord, 2: bushi, 3: monk}
 
 	var result: int = DayOrchestrator._find_vacancy_candidate(
-		1, "Monastery Abbot", characters, chars_by_id,
+		1, RoleRegistry.MONASTERY_ABBOT, characters, chars_by_id,
 	)
 	assert_eq(result, 3, "Monk should get school type bonus for monastery abbot")
 
@@ -872,7 +872,7 @@ func test_candidate_scoring_still_uses_loyalty() -> void:
 	var chars_by_id: Dictionary = {1: lord, 2: disliked, 3: loyal}
 
 	var result: int = DayOrchestrator._find_vacancy_candidate(
-		1, "Garrison Commander", characters, chars_by_id,
+		1, RoleRegistry.GARRISON_COMMANDER, characters, chars_by_id,
 	)
 	assert_eq(result, 3, "Loyal vassal should score higher via disposition bonus")
 
@@ -885,7 +885,7 @@ func test_candidate_scoring_skips_already_assigned() -> void:
 	assigned.lord_id = 1
 	assigned.honor = 8.0
 	assigned.glory = 5.0
-	assigned.role_position = "Clan Magistrate"
+	assigned.role_position = RoleRegistry.CLAN_MAGISTRATE
 	assigned.skills = {"Battle": 5, "Defense": 4}
 	var free := _make_char(3, "Crab", 2.0)
 	free.lord_id = 1
@@ -895,7 +895,7 @@ func test_candidate_scoring_skips_already_assigned() -> void:
 	var chars_by_id: Dictionary = {1: lord, 2: assigned, 3: free}
 
 	var result: int = DayOrchestrator._find_vacancy_candidate(
-		1, "Garrison Commander", characters, chars_by_id,
+		1, RoleRegistry.GARRISON_COMMANDER, characters, chars_by_id,
 	)
 	assert_eq(result, 3, "Already-assigned character should be skipped")
 
@@ -934,7 +934,7 @@ func test_vacancy_seasons_vacant_starts_at_zero() -> void:
 
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "Garrison Commander":
+		if v.get("position_type", "") == RoleRegistry.GARRISON_COMMANDER:
 			assert_eq(v["seasons_vacant"], 0, "New vacancy starts at 0 seasons")
 
 
@@ -977,7 +977,7 @@ func test_vacancy_inherits_seasons_from_registry() -> void:
 
 	var vacancies: Array = ws.get("vacancy_data", {}).get(1, [])
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "Garrison Commander":
+		if v.get("position_type", "") == RoleRegistry.GARRISON_COMMANDER:
 			assert_eq(v["seasons_vacant"], 3, "Should inherit seasons_vacant from registry")
 
 
@@ -987,7 +987,7 @@ func test_vacancy_registry_clears_filled_positions() -> void:
 	lord.clan = "Crab"
 	var commander := _make_char(2, "Crab", 3.0)
 	commander.lord_id = 1
-	commander.role_position = "Garrison Commander"
+	commander.role_position = RoleRegistry.GARRISON_COMMANDER
 	var characters: Array = [lord, commander]
 	var chars_by_id: Dictionary = {1: lord, 2: commander}
 
@@ -1012,13 +1012,13 @@ func test_vacancy_registry_clears_filled_positions() -> void:
 
 
 func test_vacancy_key_includes_family_for_school_master() -> void:
-	var v: Dictionary = {"position_type": "School Master", "family": "Hida"}
+	var v: Dictionary = {"position_type": RoleRegistry.SCHOOL_MASTER, "family": "Hida"}
 	var key: String = DayOrchestrator._vacancy_key(1, v)
 	assert_eq(key, "1_School Master_Hida")
 
 
 func test_vacancy_key_includes_settlement_for_garrison() -> void:
-	var v: Dictionary = {"position_type": "Garrison Commander", "settlement_id": 100}
+	var v: Dictionary = {"position_type": RoleRegistry.GARRISON_COMMANDER, "settlement_id": 100}
 	var key: String = DayOrchestrator._vacancy_key(1, v)
 	assert_eq(key, "1_Garrison Commander_s100")
 
@@ -1030,7 +1030,7 @@ func test_vacancy_key_includes_unit_for_military() -> void:
 
 
 func test_vacancy_key_fallback_for_magistrate() -> void:
-	var v: Dictionary = {"position_type": "Clan Magistrate"}
+	var v: Dictionary = {"position_type": RoleRegistry.CLAN_MAGISTRATE}
 	var key: String = DayOrchestrator._vacancy_key(1, v)
 	assert_eq(key, "1_Clan Magistrate")
 
@@ -1192,7 +1192,7 @@ func test_completed_temple_triggers_vacancy() -> void:
 	var vacancies: Array = ws.get("vacant_positions_1", [])
 	var found_temple_head: bool = false
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "Temple Head":
+		if v.get("position_type", "") == RoleRegistry.TEMPLE_HEAD:
 			found_temple_head = true
 			break
 	assert_true(found_temple_head, "Completed temple should trigger Temple Head vacancy")
@@ -1227,7 +1227,7 @@ func test_completed_monastery_triggers_vacancy() -> void:
 	var vacancies: Array = ws.get("vacant_positions_1", [])
 	var found_abbot: bool = false
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "Monastery Abbot":
+		if v.get("position_type", "") == RoleRegistry.MONASTERY_ABBOT:
 			found_abbot = true
 			break
 	assert_true(found_abbot, "Completed monastery should trigger Monastery Abbot vacancy")
@@ -1258,7 +1258,7 @@ func test_organic_village_no_position_vacancy() -> void:
 	# and should not trigger Temple Head or Monastery Abbot
 	for v: Dictionary in vacancies:
 		var pt: String = v.get("position_type", "")
-		if pt == "Garrison Commander" or pt == "Temple Head" or pt == "Monastery Abbot":
+		if pt == RoleRegistry.GARRISON_COMMANDER or pt == RoleRegistry.TEMPLE_HEAD or pt == RoleRegistry.MONASTERY_ABBOT:
 			# Check if this vacancy is from the village (settlement_id 200)
 			if v.get("settlement_id", -1) == 200:
 				fail_test("Village should not trigger position vacancy: " + pt)
@@ -1291,7 +1291,7 @@ func test_construction_vacancy_has_zero_seasons_vacant() -> void:
 
 	var vacancies: Array = ws.get("vacant_positions_1", [])
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "Temple Head":
+		if v.get("position_type", "") == RoleRegistry.TEMPLE_HEAD:
 			assert_eq(v.get("seasons_vacant", -1), 0,
 				"Newly created settlement vacancy should start at 0 seasons")
 			return
@@ -1316,7 +1316,7 @@ func test_completed_fortification_triggers_garrison_vacancy() -> void:
 	var vacancies: Array = ws.get("vacant_positions_1", [])
 	var found_garrison: bool = false
 	for v: Dictionary in vacancies:
-		if v.get("position_type", "") == "Garrison Commander":
+		if v.get("position_type", "") == RoleRegistry.GARRISON_COMMANDER:
 			found_garrison = true
 			break
 	assert_true(found_garrison, "Fortification should trigger Garrison Commander vacancy")
@@ -1339,7 +1339,7 @@ func test_vacancy_registry_tracks_new_settlement() -> void:
 	var registry: Dictionary = sm.get("vacancy_registry", {})
 	var found_key: bool = false
 	for key: String in registry:
-		if "Temple Head" in key:
+		if RoleRegistry.TEMPLE_HEAD in key:
 			found_key = true
 			assert_eq(registry[key], 0, "New vacancy should start at season 0")
 			break
@@ -1365,7 +1365,7 @@ func test_vacancy_refresh_overwrites_stale_data() -> void:
 	var vacancies_before: Array = ws.get("vacant_positions_1", [])
 	var had_garrison_before: bool = false
 	for v: Dictionary in vacancies_before:
-		if v.get("position_type", "") == "Garrison Commander":
+		if v.get("position_type", "") == RoleRegistry.GARRISON_COMMANDER:
 			had_garrison_before = true
 	assert_false(had_garrison_before, "No garrison vacancy before fort exists")
 
@@ -1380,7 +1380,7 @@ func test_vacancy_refresh_overwrites_stale_data() -> void:
 	var vacancies_after: Array = ws.get("vacant_positions_1", [])
 	var has_garrison_after: bool = false
 	for v: Dictionary in vacancies_after:
-		if v.get("position_type", "") == "Garrison Commander":
+		if v.get("position_type", "") == RoleRegistry.GARRISON_COMMANDER:
 			has_garrison_after = true
 	assert_true(has_garrison_after, "Garrison vacancy should appear after refresh")
 
@@ -1413,8 +1413,8 @@ func test_vacancy_refresh_preserves_existing_vacancies() -> void:
 	var types: Array = []
 	for v: Dictionary in vacancies:
 		types.append(v.get("position_type", ""))
-	assert_true("Temple Head" in types, "Temple Head should be preserved after refresh")
-	assert_true("Garrison Commander" in types, "Garrison Commander should appear after refresh")
+	assert_true(RoleRegistry.TEMPLE_HEAD in types, "Temple Head should be preserved after refresh")
+	assert_true(RoleRegistry.GARRISON_COMMANDER in types, "Garrison Commander should appear after refresh")
 
 
 # -- Worship Failure Detection Tests ------------------------------------------

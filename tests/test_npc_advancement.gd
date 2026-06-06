@@ -121,23 +121,23 @@ func test_shugenja_rate():
 
 func test_magistrate_rate():
 	var c := _make_character()
-	c.role_position = "Clan Magistrate"
+	c.role_position = RoleRegistry.CLAN_MAGISTRATE
 	assert_almost_eq(NPCAdvancement.get_base_xp_rate(c), 0.06, 0.001)
 
 func test_sensei_rate():
 	var c := _make_character()
-	c.role_position = "School Master"
+	c.role_position = RoleRegistry.SCHOOL_MASTER
 	assert_almost_eq(NPCAdvancement.get_base_xp_rate(c), 0.04, 0.001)
 
 func test_temple_head_rate():
 	var c := _make_character()
-	c.role_position = "Temple Head"
+	c.role_position = RoleRegistry.TEMPLE_HEAD
 	assert_almost_eq(NPCAdvancement.get_base_xp_rate(c), 0.05, 0.001)
 
 func test_military_rank_overrides_role_position():
 	var c := _make_character()
 	c.military_rank = Enums.MilitaryRank.TAISA
-	c.role_position = "School Master"
+	c.role_position = RoleRegistry.SCHOOL_MASTER
 	assert_almost_eq(NPCAdvancement.get_base_xp_rate(c), 0.08, 0.001)
 
 

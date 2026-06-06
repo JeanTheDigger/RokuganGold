@@ -509,7 +509,7 @@ static func record_emperors_peace_violation(
 		var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
 		if c == null or CharacterStats.is_dead(c):
 			continue
-		if c.family == offender.family and c.role_position == "Family Daimyo":
+		if c.family == offender.family and c.role_position == RoleRegistry.FAMILY_DAIMYO:
 			family_daimyo_glory_applied = HonorGlorySystem.apply_glory_change(
 				c, PEACE_VIOLATION_FAMILY_DAIMYO_GLORY
 			)
@@ -660,7 +660,7 @@ static func find_imperial_chancellor(characters_by_id: Dictionary) -> L5RCharact
 			continue
 		if CharacterStats.is_dead(c):
 			continue
-		if c.clan == "Imperial" and c.role_position == "Imperial Chancellor":
+		if c.clan == "Imperial" and c.role_position == RoleRegistry.IMPERIAL_CHANCELLOR:
 			return c
 	return null
 

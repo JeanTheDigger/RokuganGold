@@ -3444,11 +3444,11 @@ func _make_retainer(id: int, lord_id: int, clan: String, status: float = 2.0) ->
 func test_clan_position_counts() -> void:
 	var emperor_id: int = 1
 	var r1 := _make_retainer(10, emperor_id, "Crane")
-	r1.role_position = "Emerald Magistrate"
+	r1.role_position = RoleRegistry.EMERALD_MAGISTRATE
 	var r2 := _make_retainer(11, emperor_id, "Crane")
-	r2.role_position = "Imperial Advisor"
+	r2.role_position = RoleRegistry.IMPERIAL_ADVISOR
 	var r3 := _make_retainer(12, emperor_id, "Lion")
-	r3.role_position = "Imperial Herald"
+	r3.role_position = RoleRegistry.IMPERIAL_HERALD
 	var r4 := _make_retainer(13, emperor_id, "Scorpion")
 	var chars: Array = [r1, r2, r3, r4]
 	var counts: Dictionary = DayOrchestrator._compute_clan_position_counts(emperor_id, chars)
@@ -5672,7 +5672,7 @@ func test_magistrate_assigned_uphold_law_standing() -> void:
 	var magistrate := L5RCharacterData.new()
 	magistrate.character_id = 200
 	magistrate.character_name = "Soshi Magistrate"
-	magistrate.role_position = "Clan Magistrate"
+	magistrate.role_position = RoleRegistry.CLAN_MAGISTRATE
 	magistrate.wounds_taken = 0
 
 	var characters: Array = [magistrate]
@@ -5691,7 +5691,7 @@ func test_emerald_magistrate_assigned_uphold_law() -> void:
 	var magistrate := L5RCharacterData.new()
 	magistrate.character_id = 201
 	magistrate.character_name = "Emerald Champion's Agent"
-	magistrate.role_position = "Emerald Magistrate"
+	magistrate.role_position = RoleRegistry.EMERALD_MAGISTRATE
 	magistrate.wounds_taken = 0
 
 	var characters: Array = [magistrate]
@@ -5707,7 +5707,7 @@ func test_magistrate_commander_assigned_uphold_law() -> void:
 	var magistrate := L5RCharacterData.new()
 	magistrate.character_id = 202
 	magistrate.character_name = "Magistrate Commander"
-	magistrate.role_position = "Clan Magistrate Commander"
+	magistrate.role_position = RoleRegistry.CLAN_MAGISTRATE_COMMANDER
 	magistrate.wounds_taken = 0
 
 	var characters: Array = [magistrate]
@@ -5723,7 +5723,7 @@ func test_magistrate_does_not_overwrite_existing_standing() -> void:
 	var magistrate := L5RCharacterData.new()
 	magistrate.character_id = 203
 	magistrate.character_name = "Busy Magistrate"
-	magistrate.role_position = "Clan Magistrate"
+	magistrate.role_position = RoleRegistry.CLAN_MAGISTRATE
 	magistrate.wounds_taken = 0
 
 	var characters: Array = [magistrate]
@@ -5748,7 +5748,7 @@ func test_magistrate_preserves_existing_uphold_law_with_active_case() -> void:
 	var magistrate := L5RCharacterData.new()
 	magistrate.character_id = 204
 	magistrate.character_name = "Working Magistrate"
-	magistrate.role_position = "Emerald Magistrate"
+	magistrate.role_position = RoleRegistry.EMERALD_MAGISTRATE
 	magistrate.wounds_taken = 0
 
 	var characters: Array = [magistrate]
@@ -5776,7 +5776,7 @@ func test_non_magistrate_not_assigned_uphold_law() -> void:
 	var samurai := L5RCharacterData.new()
 	samurai.character_id = 205
 	samurai.character_name = "Regular Samurai"
-	samurai.role_position = "Garrison Commander"
+	samurai.role_position = RoleRegistry.GARRISON_COMMANDER
 	samurai.wounds_taken = 0
 
 	var characters: Array = [samurai]
@@ -5791,7 +5791,7 @@ func test_dead_magistrate_not_assigned_uphold_law() -> void:
 	var dead_magistrate := L5RCharacterData.new()
 	dead_magistrate.character_id = 206
 	dead_magistrate.character_name = "Dead Magistrate"
-	dead_magistrate.role_position = "Clan Magistrate"
+	dead_magistrate.role_position = RoleRegistry.CLAN_MAGISTRATE
 	dead_magistrate.wounds_taken = 999
 
 	var characters: Array = [dead_magistrate]
@@ -5809,7 +5809,7 @@ func test_magistrate_assignment_flows_into_scan() -> void:
 	magistrate.character_name = "Kitsuki Inspector"
 	magistrate.clan = "Dragon"
 	magistrate.family = "Kitsuki"
-	magistrate.role_position = "Clan Magistrate"
+	magistrate.role_position = RoleRegistry.CLAN_MAGISTRATE
 	magistrate.physical_location = "dragon_province_1"
 	magistrate.wounds_taken = 0
 	magistrate.topic_pool = []
@@ -6690,7 +6690,7 @@ func test_scene_exam_bribery_eval_injects_extortion_opportunity() -> void:
 	var magistrate := L5RCharacterData.new()
 	magistrate.character_id = 300
 	magistrate.character_name = "Investigating Magistrate"
-	magistrate.role_position = "Clan Magistrate"
+	magistrate.role_position = RoleRegistry.CLAN_MAGISTRATE
 	magistrate.wounds_taken = 0
 
 	var criminal := L5RCharacterData.new()
@@ -12295,7 +12295,7 @@ func test_magistrate_witness_no_ignoring_honor() -> void:
 	magistrate.honor = 7.0
 	magistrate.school = "Doji Courtier"
 	magistrate.clan = "Crane"
-	magistrate.role_position = "Clan Magistrate"
+	magistrate.role_position = RoleRegistry.CLAN_MAGISTRATE
 	magistrate.topic_pool = []
 	var characters_by_id: Dictionary = {281: magistrate}
 
@@ -13077,7 +13077,7 @@ func test_duel_death_creates_death_event_and_topic() -> void:
 func test_duel_death_lord_creates_lord_death_event() -> void:
 	var dead := L5RCharacterData.new()
 	dead.character_id = 100
-	dead.role_position = "Provincial Daimyo"
+	dead.role_position = RoleRegistry.PROVINCIAL_DAIMYO
 	dead.wounds_taken = 999
 	var winner := L5RCharacterData.new()
 	winner.character_id = 200
@@ -13228,7 +13228,7 @@ func test_no_death_no_event() -> void:
 func test_assassination_death_event_includes_is_lord() -> void:
 	var target := L5RCharacterData.new()
 	target.character_id = 50
-	target.role_position = "Family Daimyo"
+	target.role_position = RoleRegistry.FAMILY_DAIMYO
 	target.stamina = 2
 	target.willpower = 2
 	target.wounds_taken = 0
@@ -13491,7 +13491,7 @@ func test_hunt_casualty_creates_death_event() -> void:
 func test_death_events_cleared_after_lord_death_processing() -> void:
 	var lord := L5RCharacterData.new()
 	lord.character_id = 1
-	lord.role_position = "Family Daimyo"
+	lord.role_position = RoleRegistry.FAMILY_DAIMYO
 	lord.stamina = 0
 	var heir := L5RCharacterData.new()
 	heir.character_id = 2
@@ -13736,7 +13736,7 @@ func test_natural_death_creates_death_event() -> void:
 	var dead_char := L5RCharacterData.new()
 	dead_char.character_id = 42
 	dead_char.character_name = "Old Lord"
-	dead_char.role_position = "Family Daimyo"
+	dead_char.role_position = RoleRegistry.FAMILY_DAIMYO
 	dead_char.stamina = 2
 	dead_char.willpower = 2
 	var characters: Array = [dead_char]
@@ -13929,7 +13929,7 @@ func test_kill_witness_creates_death_event() -> void:
 	var victim := L5RCharacterData.new()
 	victim.character_id = 50
 	victim.character_name = "Witness Lord"
-	victim.role_position = "Provincial Daimyo"
+	victim.role_position = RoleRegistry.PROVINCIAL_DAIMYO
 	victim.stamina = 2
 	victim.willpower = 2
 	var death_events: Array = []
@@ -14134,10 +14134,10 @@ func test_cohabitation_skips_dead_characters() -> void:
 
 func test_uphold_law_scan_skips_dead_magistrate() -> void:
 	var dead_magistrate := _make_dead_char_do(1)
-	dead_magistrate.role_position = "Emerald Magistrate"
+	dead_magistrate.role_position = RoleRegistry.EMERALD_MAGISTRATE
 	var alive_magistrate := L5RCharacterData.new()
 	alive_magistrate.character_id = 2
-	alive_magistrate.role_position = "Emerald Magistrate"
+	alive_magistrate.role_position = RoleRegistry.EMERALD_MAGISTRATE
 	alive_magistrate.stamina = 2
 	alive_magistrate.willpower = 2
 	var objectives_map: Dictionary = {
@@ -14422,7 +14422,7 @@ func test_inject_base_context_phoenix_champion_authority() -> void:
 	c.status = 7.0
 	c.lord_id = -1
 	c.clan = "Phoenix"
-	c.role_position = "Clan Champion"
+	c.role_position = RoleRegistry.CLAN_CHAMPION
 	var phoenix_state: Dictionary = {"phoenix_champion_authority": true}
 	var ws: Dictionary = {}
 	DayOrchestrator._inject_base_character_context(
@@ -14437,7 +14437,7 @@ func test_inject_base_context_non_phoenix_no_authority() -> void:
 	c.status = 7.0
 	c.lord_id = -1
 	c.clan = "Crane"
-	c.role_position = "Clan Champion"
+	c.role_position = RoleRegistry.CLAN_CHAMPION
 	var phoenix_state: Dictionary = {"phoenix_champion_authority": true}
 	var ws: Dictionary = {}
 	DayOrchestrator._inject_base_character_context(
@@ -14780,7 +14780,7 @@ func test_remove_resolved_successions() -> void:
 func test_apply_confirmed_succession_transfers_role() -> void:
 	var deceased := L5RCharacterData.new()
 	deceased.character_id = 100
-	deceased.role_position = "Clan Champion"
+	deceased.role_position = RoleRegistry.CLAN_CHAMPION
 	deceased.status = 8.0
 	deceased.clan = "Crane"
 	deceased.wounds_taken = 999
@@ -14807,7 +14807,7 @@ func test_apply_confirmed_succession_transfers_role() -> void:
 	var results: Array = DayOrchestrator._apply_confirmed_successions(
 		[succ], chars, by_id, {}, clans_dict)
 	assert_eq(results.size(), 1)
-	assert_eq(successor.role_position, "Clan Champion")
+	assert_eq(successor.role_position, RoleRegistry.CLAN_CHAMPION)
 	assert_eq(successor.status, 8.0)
 	assert_eq(vassal.lord_id, 200, "Vassals should transfer to successor")
 	assert_eq(clans_dict["Crane"].champion_id, 200)
@@ -14817,7 +14817,7 @@ func test_apply_confirmed_succession_transfers_role() -> void:
 func test_apply_confirmed_succession_emperor_updates_world_states() -> void:
 	var emperor := L5RCharacterData.new()
 	emperor.character_id = 1
-	emperor.role_position = "Emperor"
+	emperor.role_position = RoleRegistry.EMPEROR
 	emperor.status = 10.0
 	emperor.wounds_taken = 999
 	var heir := L5RCharacterData.new()
@@ -14841,7 +14841,7 @@ func test_apply_confirmed_succession_emperor_updates_world_states() -> void:
 	assert_eq(ws.get("emperor_archetype", -1),
 		StrategicReview.EmperorArchetype.BENEVOLENT,
 		"Jin virtue emperor should be Benevolent")
-	assert_eq(heir.role_position, "Emperor")
+	assert_eq(heir.role_position, RoleRegistry.EMPEROR)
 	assert_eq(heir.status, 10.0)
 
 

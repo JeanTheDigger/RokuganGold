@@ -4217,14 +4217,14 @@ static func _extrad_find_harboring_lord(
 		if lord != null and not CharacterStats.is_dead(lord) and lord.clan == fugitive.clan:
 			return lord
 	for c: L5RCharacterData in characters:
-		if c.clan == fugitive.clan and c.role_position == "Clan Champion" and not CharacterStats.is_dead(c):
+		if c.clan == fugitive.clan and c.role_position == RoleRegistry.CLAN_CHAMPION and not CharacterStats.is_dead(c):
 			return c
 	return null
 
 
 static func _extrad_find_clan_champion_id(clan: String, characters: Array) -> int:
 	for c: L5RCharacterData in characters:
-		if c.clan == clan and c.role_position == "Clan Champion" and not CharacterStats.is_dead(c):
+		if c.clan == clan and c.role_position == RoleRegistry.CLAN_CHAMPION and not CharacterStats.is_dead(c):
 			return c.character_id
 	return -1
 
@@ -6920,7 +6920,7 @@ static func _seed_crime_topic_to_knowers(
 		var witness: L5RCharacterData = characters_by_id.get(witness_id)
 		if witness != null and not CharacterStats.is_dead(witness) and topic.topic_id not in witness.topic_pool:
 			witness.topic_pool.append(topic.topic_id)
-			if witness.role_position not in MAGISTRATE_ROLE_POSITIONS \
+			if witness.role_position not in RoleRegistry.MAGISTRATE_POSITIONS \
 					and witness_id != record.victim_id:
 				HonorGlorySystem.apply_honor_change(
 					witness, CrimeSystem.get_ignoring_dishonorable_honor(witness)
@@ -6936,13 +6936,6 @@ static func _seed_crime_topic_to_knowers(
 # objective if they don't already have one. This ensures they participate in
 # the crime topic scan each tick without requiring explicit lord directives.
 
-const MAGISTRATE_ROLE_POSITIONS: Array = [
-	"Clan Magistrate",
-	"Emerald Magistrate",
-	"Clan Magistrate Commander",
-]
-
-
 static func _assign_magistrate_standing_objectives(
 	characters: Array,
 	objectives_map: Dictionary,
@@ -6950,7 +6943,7 @@ static func _assign_magistrate_standing_objectives(
 	for character: L5RCharacterData in characters:
 		if character.is_pc:
 			continue
-		if character.role_position not in MAGISTRATE_ROLE_POSITIONS:
+		if character.role_position not in RoleRegistry.MAGISTRATE_POSITIONS:
 			continue
 		if CharacterStats.is_dead(character):
 			continue
@@ -8676,7 +8669,7 @@ static func _process_magistrate_conviction_cascade(
 		var perpetrator: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
 		if perpetrator == null:
 			continue
-		if perpetrator.role_position not in MAGISTRATE_ROLE_POSITIONS:
+		if perpetrator.role_position not in RoleRegistry.MAGISTRATE_POSITIONS:
 			continue
 
 		var cascade: Dictionary = MagistrateAllocationSystem.resolve_magistrate_conviction(
@@ -14630,7 +14623,7 @@ static func _process_crisis_court_calls(
 	for lord: L5RCharacterData in characters:
 		if not _is_lord_tier(lord):
 			continue
-		var lord_rank: Enums.LordRank = _status_to_lord_rank(lord.status)
+		var lord_rank: Enums.LordRank = RoleRegistry.lord_rank_from_status(lord.status)
 		var courts_at_settlement: Array = []
 		var settlement_str: String = str(lord.physical_location)
 		for c_entry: Variant in active_courts:
@@ -14692,20 +14685,6 @@ static func _track_court_called(
 	ws["last_court_called_ic_day"] = ic_day
 	if current_season >= 0:
 		ws["last_court_season"] = current_season
-
-
-static func _status_to_lord_rank(status: float) -> Enums.LordRank:
-	if status >= 9.0:
-		return Enums.LordRank.IMPERIAL
-	elif status >= 7.0:
-		return Enums.LordRank.CLAN_CHAMPION
-	elif status >= 6.0:
-		return Enums.LordRank.FAMILY_DAIMYO
-	elif status >= 5.0:
-		return Enums.LordRank.PROVINCIAL_DAIMYO
-	elif status >= 4.0:
-		return Enums.LordRank.CITY_DAIMYO
-	return Enums.LordRank.VILLAGE_HEADMAN
 
 
 static func _process_court_openings(
@@ -15060,7 +15039,7 @@ static func _create_winter_court_from_directive(
 	if host_daimyo_id >= 0:
 		var host_char: L5RCharacterData = characters_by_id.get(host_daimyo_id) as L5RCharacterData
 		if host_char != null:
-			host_lord_rank = _status_to_lord_rank(host_char.status)
+			host_lord_rank = RoleRegistry.lord_rank_from_status(host_char.status)
 
 	var invitation_result: Dictionary = WinterCourtSystem.run_invitation_pipeline(
 		host_result, emperor, archetype, characters_by_id,
@@ -16439,7 +16418,7 @@ static func _build_advancement_world_state(
 	var in_crisis_ids: Array = []
 	if insurgencies.size() > 0:
 		for c: L5RCharacterData in characters:
-			if c.role_position == "Clan Magistrate" or c.role_position == "Emerald Magistrate":
+			if c.role_position == RoleRegistry.CLAN_MAGISTRATE or c.role_position == RoleRegistry.EMERALD_MAGISTRATE:
 				in_crisis_ids.append(c.character_id)
 			elif c.military_rank >= Enums.MilitaryRank.CHUI:
 				in_crisis_ids.append(c.character_id)
@@ -17897,11 +17876,11 @@ static func _populate_infrastructure_intelligence(
 
 
 const CRITICAL_POSITIONS: Array[String] = [
-	"Clan Magistrate", "Emerald Magistrate", "Garrison Commander",
+	RoleRegistry.CLAN_MAGISTRATE, RoleRegistry.EMERALD_MAGISTRATE, RoleRegistry.GARRISON_COMMANDER,
 ]
 
 const IMPORTANT_POSITIONS: Array[String] = [
-	"School Master", "Temple Head", "Monastery Abbot", "Senior Courtier",
+	RoleRegistry.SCHOOL_MASTER, RoleRegistry.TEMPLE_HEAD, RoleRegistry.MONASTERY_ABBOT, RoleRegistry.SENIOR_COURTIER,
 ]
 
 
@@ -18003,7 +17982,7 @@ static func _populate_vacancy_intelligence(
 			if not lord_vacancies.has(lord_id_3):
 				lord_vacancies[lord_id_3] = []
 			lord_vacancies[lord_id_3].append({
-				"position_type": "Clan Magistrate",
+				"position_type": RoleRegistry.CLAN_MAGISTRATE,
 				"priority": 3,
 				"province_id": -1,
 				"candidate_id": candidate,
@@ -18017,17 +17996,17 @@ static func _populate_vacancy_intelligence(
 			continue
 		var lord_positions_2: Array = filled_positions.get(lord_id_4, [])
 
-		if s.is_military() and not _has_position(lord_positions_2, "Garrison Commander"):
+		if s.is_military() and not _has_position(lord_positions_2, RoleRegistry.GARRISON_COMMANDER):
 			var bal_w2: float = cunning_balance_weight if lord_id_4 == emperor_id else 0.0
 			var bal_c2: Dictionary = emperor_clan_counts if lord_id_4 == emperor_id else {}
 			var candidate_2: int = _find_vacancy_candidate(
-				lord_id_4, "Garrison Commander", characters, characters_by_id,
+				lord_id_4, RoleRegistry.GARRISON_COMMANDER, characters, characters_by_id,
 				bal_w2, bal_c2,
 			)
 			if not lord_vacancies.has(lord_id_4):
 				lord_vacancies[lord_id_4] = []
 			lord_vacancies[lord_id_4].append({
-				"position_type": "Garrison Commander",
+				"position_type": RoleRegistry.GARRISON_COMMANDER,
 				"priority": 3,
 				"province_id": s.province_id,
 				"settlement_id": s.settlement_id,
@@ -18037,19 +18016,19 @@ static func _populate_vacancy_intelligence(
 			# Mark as found so we don't duplicate per settlement
 			if not filled_positions.has(lord_id_4):
 				filled_positions[lord_id_4] = []
-			filled_positions[lord_id_4].append("Garrison Commander (pending)")
+			filled_positions[lord_id_4].append(RoleRegistry.GARRISON_COMMANDER + " (pending)")
 
-		if s.settlement_type == Enums.SettlementType.TEMPLE and not _has_position(lord_positions_2, "Temple Head"):
+		if s.settlement_type == Enums.SettlementType.TEMPLE and not _has_position(lord_positions_2, RoleRegistry.TEMPLE_HEAD):
 			var bal_w3: float = cunning_balance_weight if lord_id_4 == emperor_id else 0.0
 			var bal_c3: Dictionary = emperor_clan_counts if lord_id_4 == emperor_id else {}
 			var candidate_3: int = _find_vacancy_candidate(
-				lord_id_4, "Temple Head", characters, characters_by_id,
+				lord_id_4, RoleRegistry.TEMPLE_HEAD, characters, characters_by_id,
 				bal_w3, bal_c3,
 			)
 			if not lord_vacancies.has(lord_id_4):
 				lord_vacancies[lord_id_4] = []
 			lord_vacancies[lord_id_4].append({
-				"position_type": "Temple Head",
+				"position_type": RoleRegistry.TEMPLE_HEAD,
 				"priority": 2,
 				"province_id": s.province_id,
 				"settlement_id": s.settlement_id,
@@ -18058,19 +18037,19 @@ static func _populate_vacancy_intelligence(
 			})
 			if not filled_positions.has(lord_id_4):
 				filled_positions[lord_id_4] = []
-			filled_positions[lord_id_4].append("Temple Head (pending)")
+			filled_positions[lord_id_4].append(RoleRegistry.TEMPLE_HEAD + " (pending)")
 
-		if s.settlement_type == Enums.SettlementType.MONASTERY and not _has_position(lord_positions_2, "Monastery Abbot"):
+		if s.settlement_type == Enums.SettlementType.MONASTERY and not _has_position(lord_positions_2, RoleRegistry.MONASTERY_ABBOT):
 			var bal_w4: float = cunning_balance_weight if lord_id_4 == emperor_id else 0.0
 			var bal_c4: Dictionary = emperor_clan_counts if lord_id_4 == emperor_id else {}
 			var candidate_4: int = _find_vacancy_candidate(
-				lord_id_4, "Monastery Abbot", characters, characters_by_id,
+				lord_id_4, RoleRegistry.MONASTERY_ABBOT, characters, characters_by_id,
 				bal_w4, bal_c4,
 			)
 			if not lord_vacancies.has(lord_id_4):
 				lord_vacancies[lord_id_4] = []
 			lord_vacancies[lord_id_4].append({
-				"position_type": "Monastery Abbot",
+				"position_type": RoleRegistry.MONASTERY_ABBOT,
 				"priority": 2,
 				"province_id": s.province_id,
 				"settlement_id": s.settlement_id,
@@ -18079,7 +18058,7 @@ static func _populate_vacancy_intelligence(
 			})
 			if not filled_positions.has(lord_id_4):
 				filled_positions[lord_id_4] = []
-			filled_positions[lord_id_4].append("Monastery Abbot (pending)")
+			filled_positions[lord_id_4].append(RoleRegistry.MONASTERY_ABBOT + " (pending)")
 
 	# School Master vacancies: one per family that has a canonical school
 	var clan_lord_map: Dictionary = {}
@@ -18103,7 +18082,7 @@ static func _populate_vacancy_intelligence(
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
 			continue
-		if _has_position([c.role_position], "School Master"):
+		if _has_position([c.role_position], RoleRegistry.SCHOOL_MASTER):
 			school_master_families[c.family] = true
 
 	for fam: String in GempukkuSystem.FAMILY_DEFAULT_SCHOOL:
@@ -18122,13 +18101,13 @@ static func _populate_vacancy_intelligence(
 		var bal_w5: float = cunning_balance_weight if lord_id_5 == emperor_id else 0.0
 		var bal_c5: Dictionary = emperor_clan_counts if lord_id_5 == emperor_id else {}
 		var candidate_5: int = _find_vacancy_candidate(
-			lord_id_5, "School Master", characters, characters_by_id,
+			lord_id_5, RoleRegistry.SCHOOL_MASTER, characters, characters_by_id,
 			bal_w5, bal_c5,
 		)
 		if not lord_vacancies.has(lord_id_5):
 			lord_vacancies[lord_id_5] = []
 		lord_vacancies[lord_id_5].append({
-			"position_type": "School Master",
+			"position_type": RoleRegistry.SCHOOL_MASTER,
 			"priority": 2,
 			"province_id": -1,
 			"candidate_id": candidate_5,
@@ -18195,32 +18174,6 @@ static func _family_to_clan(family: String) -> String:
 	return ""
 
 
-const POSITION_SKILL_WEIGHTS: Dictionary = {
-	"Clan Magistrate": ["Investigation", "Lore: Law", "Etiquette"],
-	"Emerald Magistrate": ["Investigation", "Lore: Law", "Etiquette"],
-	"Garrison Commander": ["Battle", "Defense", "Kenjutsu"],
-	"military_commander": ["Battle", "War", "Kenjutsu"],
-	"Temple Head": ["Lore: Theology", "Meditation"],
-	"Monastery Abbot": ["Lore: Theology", "Meditation", "Jiujutsu"],
-	"School Master": ["Lore: Theology", "Instruction"],
-}
-
-const POSITION_VIRTUE_BONUSES: Dictionary = {
-	"Clan Magistrate": [Enums.BushidoVirtue.GI, Enums.BushidoVirtue.MEIYO],
-	"Emerald Magistrate": [Enums.BushidoVirtue.GI, Enums.BushidoVirtue.MEIYO],
-	"Garrison Commander": [Enums.BushidoVirtue.YU, Enums.BushidoVirtue.CHUGI],
-	"military_commander": [Enums.BushidoVirtue.YU, Enums.BushidoVirtue.CHUGI],
-	"Temple Head": [Enums.BushidoVirtue.REI, Enums.BushidoVirtue.JIN],
-	"Monastery Abbot": [Enums.BushidoVirtue.REI, Enums.BushidoVirtue.JIN],
-	"School Master": [Enums.BushidoVirtue.MEIYO, Enums.BushidoVirtue.GI],
-}
-
-const POSITION_SCHOOL_TYPE_BONUS: Dictionary = {
-	"Temple Head": [Enums.SchoolType.SHUGENJA, Enums.SchoolType.MONK],
-	"Monastery Abbot": [Enums.SchoolType.MONK],
-}
-
-
 static func _find_vacancy_candidate(
 	lord_id: int,
 	position_type: String,
@@ -18232,9 +18185,9 @@ static func _find_vacancy_candidate(
 	var best_id: int = -1
 	var best_score: float = -999.0
 	var lord_char: L5RCharacterData = characters_by_id.get(lord_id)
-	var skill_keys: Array = POSITION_SKILL_WEIGHTS.get(position_type, [])
-	var virtue_list: Array = POSITION_VIRTUE_BONUSES.get(position_type, [])
-	var school_types: Array = POSITION_SCHOOL_TYPE_BONUS.get(position_type, [])
+	var skill_keys: Array = RoleRegistry.POSITION_SKILL_WEIGHTS.get(position_type, [])
+	var virtue_list: Array = RoleRegistry.POSITION_VIRTUE_BONUSES.get(position_type, [])
+	var school_types: Array = RoleRegistry.POSITION_SCHOOL_TYPE_BONUS.get(position_type, [])
 	var avg_positions: float = 0.0
 	if clan_balance_weight > 0.0 and not clan_position_counts.is_empty():
 		var total: float = 0.0
@@ -19022,7 +18975,7 @@ static func _inject_base_character_context(
 		for c: L5RCharacterData in characters:
 			if CharacterStats.is_dead(c):
 				continue
-			if c.clan == "Phoenix" and c.role_position == "Clan Champion":
+			if c.clan == "Phoenix" and c.role_position == RoleRegistry.CLAN_CHAMPION:
 				phoenix_champion_id = c.character_id
 				break
 
@@ -22049,7 +22002,7 @@ static func _apply_confirmed_successions(
 				cd.champion_id = succ.successor_id
 
 		# Update emperor_id and archetype if emperor succession
-		if old_role == "Emperor":
+		if old_role == RoleRegistry.EMPEROR:
 			world_states["emperor_id"] = succ.successor_id
 			world_states["emperor_archetype"] = StrategicReview.derive_emperor_archetype(successor)
 
@@ -22059,7 +22012,7 @@ static func _apply_confirmed_successions(
 			"successor_id": succ.successor_id,
 			"deceased_id": succ.deceased_id,
 			"role": old_role,
-			"is_emperor": old_role == "Emperor",
+			"is_emperor": old_role == RoleRegistry.EMPEROR,
 		})
 	return results
 
