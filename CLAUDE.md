@@ -4390,6 +4390,28 @@ template generators it depends on. Faithful summary of the fixes that landed:
   delivery, DISTRIBUTE_INTELLIGENCE stance push, direct-observation generation), plus
   amount/temple metadata, win-condition pipeline, the Conclave, Tiger Tear routing, the
   network-record lifecycle, and the topic/spell/insurgency-dependent executors.
+- **s54.7 The Kolat (Tranche 10 — secrecy, Imperial counter-response, win condition)** —
+  `simulation/kolat_secrecy.gd` (pure class, s54.7i LOCKED). Two world-state scalars added to
+  WorldStateData (`kolat_exposure_level`, `imperial_awareness_level`, both 0–100, start 0) and
+  persisted via WorldStateSaver JSON state. All deltas verbatim from s54.7i: exposure
+  +5 traced merchant net / +10 cover-identity-criminal / +15 org-attributed assassination /
+  +10–25 PC publish / −5 Lotus / −3 Coin bribe / −5 Cloud resurrect / −2 per season natural;
+  awareness +5 Jade internal / +10–30 PC evidence / +20 Master interrogated / +40 key found.
+  `apply_delta()` clamps 0–100; `apply_seasonal_exposure_decay()` applies −2/season (Imperial
+  suppression above the response threshold uses the same numeric — s54.7i gives no extra
+  amount, none invented). `is_response_active()` (awareness ≥ 30) and `response_tier()` map to
+  the six s54.7i tiers (Unaware/Suspicious/Confirmed/PartiallyMapped/SignificantlyMapped/
+  FullKnowledge at 0/30/50/70/90/100). `check_win_condition()` fires when the primary candidate
+  (a) holds an Imperial-proximity role (Regent/Imperial Advisor/Voice of the Emperor/Imperial
+  Chancellor), (b) has held it ≥ one full IC year (`TimeSystem.IC_DAYS_PER_YEAR`), and (c)
+  awareness < 70 — and not while the candidate's pipeline stage is "compromised" or they are
+  dead. 18 tests in `test_kolat_secrecy.gd`. DEFERRED (NPC-engine/orchestrator wiring, needs
+  Godot): the event hooks that raise/lower the scalars at real operation/investigation points,
+  Imperial-response NPC behaviors (expanded magistrate mandates, Hidden Guard reassignment,
+  candidate protection), Tiger's candidate-pipeline fields + OVERSEE_KOLAT_NETWORK cultivation,
+  and the win-condition world-state event emission. Plus the prior deferred items (population
+  channels, metadata, Conclave, Tiger Tear routing, network-record lifecycle, dependent
+  executors).
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
