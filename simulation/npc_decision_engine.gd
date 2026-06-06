@@ -1080,9 +1080,13 @@ static func run(
 	# Sleeper override (s54.7e): an activated sleeper bypasses Phase 2 goal
 	# resolution AND the Phase-4 personality filter, pursuing the installed
 	# command at maximum weight through the normal action system until it
-	# completes or they die.
+	# completes or they die. Completion clears the command and returns the
+	# sleeper to ordinary behavior on the same AP.
 	if not character.active_sleeper_command.is_empty():
-		return _run_sleeper_override(character, ctx, scoring_tables, chars_by_id)
+		if _sleeper_command_complete(character.active_sleeper_command, chars_by_id):
+			character.active_sleeper_command = {}
+		else:
+			return _run_sleeper_override(character, ctx, scoring_tables, chars_by_id)
 
 	# Phase 2
 	var need := resolve_goal(character, ctx, objectives)
@@ -1146,6 +1150,25 @@ static func _need_from_command(command: Dictionary) -> NPCDataStructures.Immedia
 	need.target_topic_id = int(command.get("target_topic_id", -1))
 	need.source = "sleeper_command"
 	return need
+
+
+## Sleeper-command completion (s54.7e). The only completion signal the engine can
+## read faithfully is target death for elimination-type commands: once the named
+## target is dead (or no longer exists), the kill order is fulfilled. Commands
+## without a death condition have no engine-detectable completion — the sleeper
+## keeps acting until they die, per s54.7e — so this returns false for them.
+static func _sleeper_command_complete(command: Dictionary, chars_by_id: Dictionary) -> bool:
+	const ELIMINATION_NEEDS := ["ELIMINATE_CHARACTER", "ASSASSINATE"]
+	var nt: String = String(command.get("need_type", command.get("need", "")))
+	if nt not in ELIMINATION_NEEDS:
+		return false
+	var tid: int = int(command.get("target_npc_id", -1))
+	if tid < 0:
+		return false
+	var tgt: L5RCharacterData = chars_by_id.get(tid, null)
+	if tgt == null:
+		return true  # target no longer in the world
+	return CharacterStats.is_dead(tgt)
 
 
 # -- Comparison for Phase 6 tiebreakers ---------------------------------------
@@ -3439,7 +3462,30 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"shide_item_id": best_shide_id,
 		}
+	elif option.action_id in KOLAT_ACTION_POOL:
+		option.metadata = _build_kolat_metadata(option, need, ctx, chars_by_id)
 
+
+## Kolat action metadata (s54.7c). The ActionExecutor dispatch already injects
+## `target`/`sleeper` from `target_npc_id` and KolatExecutor defaults amount /
+## strength / concealment, so this only populates what the engine can derive
+## faithfully and the dispatch cannot: the trigger phrase the activating Dream
+## Master speaks (ACTIVATE_SLEEPER), and the resolved sleeper/target objects.
+static func _build_kolat_metadata(
+	option: NPCDataStructures.ScoredAction,
+	need: NPCDataStructures.ImmediateNeed,
+	_ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	var meta: Dictionary = {"target_npc_id": need.target_npc_id}
+	var tgt: L5RCharacterData = chars_by_id.get(need.target_npc_id, null) if need.target_npc_id >= 0 else null
+	if tgt != null:
+		meta["target"] = tgt
+		meta["sleeper"] = tgt
+		if option.action_id == "ACTIVATE_SLEEPER":
+			# The conditioning Master knows the phrase they installed (s54.7c).
+			meta["spoken_phrase"] = tgt.trigger_phrase
+	return meta
 
 static func _build_compose_theater_metadata(
 	ctx: NPCDataStructures.ContextSnapshot,

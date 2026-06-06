@@ -4324,8 +4324,25 @@ template generators it depends on. Faithful summary of the fixes that landed:
   6 pipeline tests in `tests/test_kolat_pipeline.gd`. DEFERRED: full per-action metadata
   population by the 6 decomposition functions (targets/amounts/drops), dual-stance topic
   positions, Master succession, win-condition pipeline, the Conclave, Tiger Tear routing,
-  per-Master network-record lifecycle, special-rule world mutation, sleeper-command completion
-  detection, and the topic/spell/insurgency-dependent executors.
+  per-Master network-record lifecycle, special-rule world mutation, and the
+  topic/spell/insurgency-dependent executors.
+- **s54.7 The Kolat (Tranche 6 — Kolat metadata + sleeper completion)** — fills the two
+  faithful gaps left after Tranche 5. **Metadata:** `_build_kolat_metadata()` in
+  `npc_decision_engine.gd` populates the resolved `target`/`sleeper` object plus
+  `target_npc_id` for any Kolat ActionID, and — for ACTIVATE_SLEEPER — the `spoken_phrase`
+  read from the sleeper's installed `trigger_phrase` (the conditioning Master knows the
+  phrase, s54.7c). KolatExecutor still defaults amount/strength/concealment, and TRANSFER/
+  SPONSOR/BRIBE temple resolution remains deferred (no SettlementData in NPC context).
+  **Sleeper completion (s54.7e):** `run()` now checks `_sleeper_command_complete()` before
+  entering the override — for elimination-type commands (ELIMINATE_CHARACTER / ASSASSINATE)
+  the order is fulfilled once the named target is dead or no longer exists, at which point
+  `active_sleeper_command` is cleared and the sleeper returns to ordinary behavior on the
+  same AP. Non-elimination commands have no engine-detectable completion (the sleeper keeps
+  acting until they die, per s54.7e) and are left untouched. +3 tests (9 total in
+  `test_kolat_pipeline.gd`). DEFERRED unchanged minus completion detection: amount/temple
+  metadata population, dual-stance topic positions, Master succession, win-condition
+  pipeline, the Conclave, Tiger Tear routing, per-Master network-record lifecycle,
+  special-rule world mutation, and the topic/spell/insurgency-dependent executors.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`

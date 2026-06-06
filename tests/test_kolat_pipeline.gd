@@ -105,3 +105,52 @@ func test_action_executor_deferred_kolat_action() -> void:
 	var res := ActionExecutor.execute(action, c, ctx, DiceEngine.new(1), {})
 	assert_false(res["success"], "topic/spell Kolat actions are deferred")
 	assert_eq(res["reason"], "deferred_system")
+
+
+# === Tranche 6: metadata + sleeper completion ===
+
+func test_activate_sleeper_metadata_carries_trigger_phrase() -> void:
+	var master := _coin_master(20)
+	var sleeper := _coin_master(21)
+	sleeper.is_kolat_master = false
+	sleeper.kolat_sect = Enums.KolatSect.NONE
+	sleeper.trigger_phrase = "the river runs north"
+	var ctx := _ctx_for(master)
+	var need := _need("CONDITION_SLEEPER")
+	need.target_npc_id = 21
+	var opts := NPCDecisionEngine.generate_options(ctx, need, master, {21: sleeper})
+	var act: NPCDataStructures.ScoredAction = null
+	for o: NPCDataStructures.ScoredAction in opts:
+		if o.action_id == "ACTIVATE_SLEEPER":
+			act = o
+			break
+	assert_not_null(act, "ACTIVATE_SLEEPER is in the unlocked pool")
+	assert_eq(act.metadata.get("spoken_phrase"), "the river runs north")
+	assert_eq(act.metadata.get("target"), sleeper)
+
+
+func test_sleeper_command_clears_when_target_dead() -> void:
+	var sleeper := _coin_master(30)
+	sleeper.is_kolat_master = false
+	sleeper.kolat_sect = Enums.KolatSect.NONE
+	sleeper.active_sleeper_command = {"need_type": "ELIMINATE_CHARACTER", "target_npc_id": 99}
+	var victim := L5RCharacterData.new()
+	victim.character_id = 99
+	victim.wounds_taken = 9999  # dead
+	var result := NPCDecisionEngine.run(sleeper, {"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS},
+		{}, _scoring, {"bushido": {}, "shourido": {}}, [], [], 0, {99: victim})
+	assert_false(result.get("sleeper_override", false), "completed kill order returns to normal behavior")
+	assert_true(sleeper.active_sleeper_command.is_empty(), "completed command is cleared")
+
+
+func test_sleeper_command_persists_while_target_alive() -> void:
+	var sleeper := _coin_master(31)
+	sleeper.is_kolat_master = false
+	sleeper.kolat_sect = Enums.KolatSect.NONE
+	sleeper.active_sleeper_command = {"need_type": "ELIMINATE_CHARACTER", "target_npc_id": 98}
+	var victim := L5RCharacterData.new()
+	victim.character_id = 98  # alive
+	var result := NPCDecisionEngine.run(sleeper, {"context_flag": Enums.ContextFlag.AT_OWN_HOLDINGS},
+		{}, _scoring, {"bushido": {}, "shourido": {}}, [], [], 0, {98: victim})
+	assert_true(result.get("sleeper_override", false), "live target keeps the override active")
+	assert_false(sleeper.active_sleeper_command.is_empty(), "command persists while target alive")
