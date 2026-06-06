@@ -562,7 +562,7 @@ static func execute_melee_attack(
 
 		# Disarm maneuver: contested Strength if hit.
 		if maneuver == "disarm":
-			var dr: Dictionary = IndividualCombat.resolve_disarm(attacker, target, dice_engine, weapon_name)
+			var dr: Dictionary = IndividualCombat.resolve_disarm(attacker, target, dice_engine, weapon_name, a_p)
 			result["disarmed"] = dr["disarmed"]
 			log_entry["disarmed"] = dr["disarmed"]
 

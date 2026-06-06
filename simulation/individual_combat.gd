@@ -767,12 +767,13 @@ static func resolve_disarm(
 	defender: L5RCharacterData,
 	dice_engine: DiceEngine,
 	weapon_name: String = "",
+	attacker_p: Participant = null,
 ) -> Dictionary:
 	# Disarm inflicts 2k1 damage regardless of weapon (s40)
 	# air_disarm_normal_damage kata: use normal weapon damage instead (s30a)
 	var damage_total: int
 	if weapon_name != "" and _has_kata_effect(attacker, "air_disarm_normal_damage"):
-		var dmg: Dictionary = resolve_damage(attacker, weapon_name, 0, 0, dice_engine)
+		var dmg: Dictionary = resolve_damage(attacker, weapon_name, 0, 0, dice_engine, attacker_p)
 		damage_total = dmg["raw_damage"]
 	else:
 		var dmg_result: Dictionary = dice_engine.roll_damage(2, 1)
@@ -1596,7 +1597,7 @@ static func resolve_duel_strike(
 	var first_wounds: Dictionary = {}
 	if first_attack.get("hit", false):
 		# Free Raises from Focus applied as Increased Damage (+1k0 per Raise, s40)
-		first_damage = resolve_damage(first_striker, "katana", duel.free_raises_first, 0, dice_engine)
+		first_damage = resolve_damage(first_striker, "katana", duel.free_raises_first, 0, dice_engine, first_striker_p)
 		first_wounds = WoundSystem.apply_damage(second_striker, first_damage["raw_damage"])
 
 	var first_blood_drawn: bool = not duel.duel_to_death and first_attack.get("hit", false)
@@ -1615,7 +1616,7 @@ static func resolve_duel_strike(
 			second_striker, second_striker_p, second_armor_tn, dice_engine
 		)
 		if second_attack.get("hit", false):
-			second_damage = resolve_damage(second_striker, "katana", 0, 0, dice_engine)
+			second_damage = resolve_damage(second_striker, "katana", 0, 0, dice_engine, second_striker_p)
 			second_wounds = WoundSystem.apply_damage(first_striker, second_damage["raw_damage"])
 
 	var first_dead: bool = CharacterStats.is_dead(first_striker)
@@ -1670,7 +1671,7 @@ static func resolve_strike_after_first_blood(
 	var damage: Dictionary = {}
 	var wounds: Dictionary = {}
 	if attack.get("hit", false):
-		damage = resolve_damage(striker, "katana", 0, 0, dice_engine)
+		damage = resolve_damage(striker, "katana", 0, 0, dice_engine, striker_p)
 		wounds = WoundSystem.apply_damage(target, damage["raw_damage"])
 	return {
 		"struck_after_first_blood": true,
@@ -1890,11 +1891,11 @@ static func resolve_npc_summary_combat(
 	var def_wounds: Dictionary = {}
 
 	if att_attack.get("hit", false):
-		att_damage = resolve_damage(attacker, att_wname, 0, 0, dice_engine)
+		att_damage = resolve_damage(attacker, att_wname, 0, 0, dice_engine, att_p)
 		def_wounds = WoundSystem.apply_damage(defender, att_damage.get("raw_damage", 0), defender.armor_reduction)
 
 	if def_attack.get("hit", false):
-		def_damage = resolve_damage(defender, def_wname, 0, 0, dice_engine)
+		def_damage = resolve_damage(defender, def_wname, 0, 0, dice_engine, def_p)
 		att_wounds = WoundSystem.apply_damage(attacker, def_damage.get("raw_damage", 0), attacker.armor_reduction)
 
 	var att_dead: bool = CharacterStats.is_dead(attacker)
