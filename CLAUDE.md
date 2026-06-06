@@ -4197,6 +4197,28 @@ template generators it depends on. Faithful summary of the fixes that landed:
   already in a mission (or with no screen) spent the PC's AP for nothing. Moved the
   no-screen / already-in-mission guards ahead of the AP spend. +1 regression test.
 
+### Systems Added 2026-06-06 (Kiho)
+- **s38 Kiho** — `simulation/kiho_system.gd` (pure class). New system (was REFERENCE).
+  Full 73-kiho catalog faithful to s38 (Air 18 / Earth 17 / Fire 12 / Water 11 /
+  Void 15): each entry has ring, mastery, `KihoType` (INTERNAL/KHARMIC/MARTIAL/MYSTICAL),
+  and atemi/staff flags. Eligibility (`meets_mastery`): monks meet a kiho if
+  `school_rank + relevant_ring ≥ mastery`; shugenja use ring only. Cost multiplier
+  (`cost_multiplier`): Brotherhood monk ×1.0, non-Brotherhood monk ×1.5, shugenja ×2.0;
+  `learn_cost = ceil(mastery × multiplier)` (base mirrors KataSystem's `xp_cost = mastery`).
+  Knowledge cap (`knowledge_cap`/`at_knowledge_cap`): non-Brotherhood characters ≤ their
+  school rank; Brotherhood uncapped (-1). Kuni −1 on Sever the Dark Lord's Touch;
+  Rebuke of the Heavens monks-only. Acquisition (`can_learn`/`can_afford`/`learn_kiho`)
+  consumes the existing `kiho` character field and deducts XP. NPC selection
+  (`select_kiho_for_npc`): highest affordable+eligible mastery, alpha tie-break. Activation
+  (`activation_options`): Void Point = Free, Meditation TN 15 = Complex / TN 30 = Simple,
+  atemi free. Active-slot constraint (`can_activate`): one Internal + one Kharmic + one
+  Mystical active at a time, Martial unlimited. Effect registry is STUBS
+  (`get_effect_stub`, `blocked_on: "s40_effects"`) — per-kiho combat effects deferred,
+  mirroring KataSystem. Wired into NPCAdvancement: monks claim kiho XP before progress bars
+  (same precedence as bushi/kata); shugenja kiho supported but not auto-driven by the
+  seasonal pass (avoids diverting their spell XP). Locked in `gdd/s38a_kiho_locked.md`
+  (A1–A9). 20 tests in `tests/test_kiho_system.gd`.
+
 ### Systems Added 2026-06-04
 - **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),
   `shared/mutation_data.gd`, `shared/shadowlands_power_data.gd`. Full catalog from GDD s44.

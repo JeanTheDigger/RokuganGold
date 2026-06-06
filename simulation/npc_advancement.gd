@@ -545,13 +545,25 @@ static func process_seasonal_advancement(characters: Array, world_state: Diction
 				if KataSystem.learn_kata(character, kata_name):
 					kata_learned = kata_name
 
+		# Monks claim kiho XP before progress bars (s38), same as bushi claim kata.
+		# Kiho is the monk's signature; shugenja MAY learn kiho (KihoSystem supports
+		# it) but the NPC seasonal pass does not auto-divert their XP from spells.
+		var kiho_learned: String = ""
+		if character.school_type == Enums.SchoolType.MONK \
+				and not character.school_name.is_empty():
+			var kiho_name: String = KihoSystem.select_kiho_for_npc(character)
+			if not kiho_name.is_empty():
+				if KihoSystem.learn_kiho(character, kiho_name):
+					kiho_learned = kiho_name
+
 		# Spend remaining accumulated XP on skill/ring progress bars.
 		var spend_result: Dictionary = spend_accumulated_xp(character)
 
 		var new_rank: int = CharacterStats.get_insight_rank(character)
 		var ranked_up: bool = new_rank > old_rank
 
-		if ranked_up or spend_result["advancements"].size() > 0 or not kata_learned.is_empty():
+		if ranked_up or spend_result["advancements"].size() > 0 \
+				or not kata_learned.is_empty() or not kiho_learned.is_empty():
 			var entry: Dictionary = {
 				"character_id": character.character_id,
 				"xp_earned_season": season_xp,
@@ -561,6 +573,8 @@ static func process_seasonal_advancement(characters: Array, world_state: Diction
 			}
 			if not kata_learned.is_empty():
 				entry["kata_learned"] = kata_learned
+			if not kiho_learned.is_empty():
+				entry["kiho_learned"] = kiho_learned
 			if ranked_up:
 				entry["old_rank"] = old_rank
 				entry["new_rank"] = new_rank
