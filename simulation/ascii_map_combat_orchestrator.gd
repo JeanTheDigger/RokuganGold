@@ -527,6 +527,9 @@ static func execute_melee_attack(
 	if a_p == null or t_p == null:
 		return {"success": false, "reason": "participant_missing"}
 
+	if a_p.stance == Enums.Stance.DEFENSE or a_p.stance == Enums.Stance.FULL_DEFENSE:
+		return {"success": false, "reason": "defense_cannot_attack"}
+
 	var is_being_guarded: bool = _is_being_guarded(state, target_id)
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, true, is_being_guarded, weapon_name)
 
@@ -624,6 +627,11 @@ static func execute_ranged_attack(
 	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
 	if a_p == null or t_p == null:
 		return {"success": false, "reason": "participant_missing"}
+
+	if a_p.stance == Enums.Stance.DEFENSE or a_p.stance == Enums.Stance.FULL_DEFENSE:
+		return {"success": false, "reason": "defense_cannot_attack"}
+	if a_p.stance == Enums.Stance.FULL_ATTACK:
+		return {"success": false, "reason": "full_attack_cannot_ranged_attack"}
 
 	# -10 penalty if attacker is within melee range of any enemy (GDD s40).
 	var in_melee: bool = is_in_melee_range_of_enemy(state, attacker_id)
@@ -1545,6 +1553,10 @@ static func _execute_down_attack(
 		{"opponent_clan": target.clan}
 	)
 	result["void_required"] = true
+
+	var ts: TurnState = state.turn_states.get(attacker_id, null)
+	if ts != null:
+		ts.consume_free()
 
 	if result.get("hit", false):
 		var dmg: Dictionary = _apply_hit(state, attacker, a_p, target, weapon_name, 0, "", result, dice_engine)

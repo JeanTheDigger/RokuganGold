@@ -40,7 +40,7 @@ func _make_char(
 	c.strength = str
 	c.perception = per
 	c.void_ring = 2
-	c.void_points_current = 2
+	c.current_void_points = 2
 	c.wounds_taken = 0
 	c.skills = {"Kenjutsu": 3}
 	c.armor_tn_bonus = 0
@@ -896,7 +896,7 @@ func test_flee_costs_complex_action() -> void:
 
 func test_down_attack_requires_void_point() -> void:
 	var p := _make_char(1, 2, 2)
-	p.void_points_current = 0  # no Void.
+	p.current_void_points = 0  # no Void.
 	var e := _make_char(2)
 	var m := _make_map()
 	var state := AsciiMapCombatOrchestrator.setup_combat(m, [
@@ -915,7 +915,7 @@ func test_down_attack_requires_void_point() -> void:
 func test_down_attack_blocked_when_down_and_no_actions() -> void:
 	# Normal melee attack should route to _execute_down_attack when DOWN.
 	var p := _make_char(1, 2, 2)
-	p.void_points_current = 0
+	p.current_void_points = 0
 	var e := _make_char(2)
 	var m := _make_map()
 	var state := AsciiMapCombatOrchestrator.setup_combat(m, [
@@ -937,20 +937,21 @@ func test_down_attack_blocked_when_down_and_no_actions() -> void:
 func test_void_spend_succeeds_with_available_points() -> void:
 	var p := _make_char(1)
 	p.void_ring = 3
-	p.void_points_current = 3
+	p.current_void_points = 3
 	var e := _make_char(2)
 	var state := _make_state(p, e)
 	AsciiMapCombatOrchestrator.begin_turn(state, 1)
 	var result := AsciiMapCombatOrchestrator.execute_void_spend(state, 1, p)
 	assert_true(result["success"])
 	var part: IndividualCombat.Participant = state.combat.participants[1]
-	assert_eq(part.void_armor_tn_bonus, 10, "spend_for_armor_tn should grant +10 ATN")
+	assert_eq(part.void_roll_pending_rolled, 1, "spend_for_roll should grant +1 rolled")
+	assert_eq(part.void_roll_pending_kept, 1, "spend_for_roll should grant +1 kept")
 
 
 func test_void_spend_fails_twice_same_round() -> void:
 	var p := _make_char(1)
 	p.void_ring = 3
-	p.void_points_current = 3
+	p.current_void_points = 3
 	var e := _make_char(2)
 	var state := _make_state(p, e)
 	AsciiMapCombatOrchestrator.begin_turn(state, 1)
@@ -958,6 +959,76 @@ func test_void_spend_fails_twice_same_round() -> void:
 	var result2 := AsciiMapCombatOrchestrator.execute_void_spend(state, 1, p)
 	assert_false(result2["success"])
 	assert_eq(result2["reason"], "void_already_spent_this_round")
+
+
+# ===========================================================================
+# -- Stance restrictions on attacks -----------------------------------------
+# ===========================================================================
+
+func test_defense_stance_blocks_melee_attack() -> void:
+	var p := _make_char(1)
+	var e := _make_char(2)
+	var state := _make_state(p, e)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	AsciiMapCombatOrchestrator.execute_stance_change(state, 1, Enums.Stance.DEFENSE, p, _dice)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	var result := AsciiMapCombatOrchestrator.execute_melee_attack(
+		state, 1, 2, p, e, "katana", 0, _dice
+	)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "defense_cannot_attack")
+
+
+func test_full_defense_blocks_melee_attack() -> void:
+	var p := _make_char(1)
+	var e := _make_char(2)
+	var state := _make_state(p, e)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	AsciiMapCombatOrchestrator.execute_stance_change(state, 1, Enums.Stance.FULL_DEFENSE, p, _dice)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	var result := AsciiMapCombatOrchestrator.execute_melee_attack(
+		state, 1, 2, p, e, "katana", 0, _dice
+	)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "defense_cannot_attack")
+
+
+func test_defense_stance_blocks_ranged_attack() -> void:
+	var p := _make_char(1)
+	p.skills = {"Kyujutsu": 3}
+	var e := _make_char(2)
+	var m := _make_map()
+	var state := AsciiMapCombatOrchestrator.setup_combat(m, [
+		{"char": p, "faction": AsciiMapCombatOrchestrator.FACTION_PLAYER, "x": 1, "y": 1},
+		{"char": e, "faction": AsciiMapCombatOrchestrator.FACTION_ENEMY,  "x": 5, "y": 1},
+	], _dice)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	AsciiMapCombatOrchestrator.execute_stance_change(state, 1, Enums.Stance.DEFENSE, p, _dice)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	var result := AsciiMapCombatOrchestrator.execute_ranged_attack(
+		state, 1, 2, p, e, "yumi", 0, _dice
+	)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "defense_cannot_attack")
+
+
+func test_full_attack_blocks_ranged_attack() -> void:
+	var p := _make_char(1)
+	p.skills = {"Kyujutsu": 3}
+	var e := _make_char(2)
+	var m := _make_map()
+	var state := AsciiMapCombatOrchestrator.setup_combat(m, [
+		{"char": p, "faction": AsciiMapCombatOrchestrator.FACTION_PLAYER, "x": 1, "y": 1},
+		{"char": e, "faction": AsciiMapCombatOrchestrator.FACTION_ENEMY,  "x": 5, "y": 1},
+	], _dice)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	AsciiMapCombatOrchestrator.execute_stance_change(state, 1, Enums.Stance.FULL_ATTACK, p, _dice)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	var result := AsciiMapCombatOrchestrator.execute_ranged_attack(
+		state, 1, 2, p, e, "yumi", 0, _dice
+	)
+	assert_false(result["success"])
+	assert_eq(result["reason"], "full_attack_cannot_ranged_attack")
 
 
 # ===========================================================================

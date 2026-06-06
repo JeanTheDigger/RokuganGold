@@ -615,10 +615,7 @@ func get_visible_tiles() -> Dictionary:
 	var player: EntityState = get_player()
 	if player == null:
 		return {}
-	var radius: int = FovSystem.effective_radius(
-		player.character.perception,
-		AsciiMapEnvironment.weather_to_fov_modifier(_weather)
-	)
+	var radius: int = _fov_radius(player.character.perception, player.x, player.y)
 	return FovSystem.compute_visible(player.x, player.y, radius, _map)
 
 
@@ -632,6 +629,23 @@ func _count_living_enemies() -> int:
 
 func _is_adjacent(ax: int, ay: int, bx: int, by: int) -> bool:
 	return absi(ax - bx) <= 1 and absi(ay - by) <= 1 and not (ax == bx and ay == by)
+
+
+func _fov_radius(perception: int, x: int, y: int) -> int:
+	var fov_mod: int = AsciiMapEnvironment.weather_to_fov_modifier(_weather)
+	if _is_lookout_tile(x, y):
+		return FovSystem.lookout_radius(perception, fov_mod)
+	return FovSystem.effective_radius(perception, fov_mod)
+
+
+func _is_lookout_tile(x: int, y: int) -> bool:
+	var wws: Variant = _map.get("wall_walkways")
+	if wws is Array:
+		for ww: Dictionary in (wws as Array):
+			if x >= ww.get("lx", -1) and x <= ww.get("rx", -1) \
+					and y >= ww.get("ly", -1) and y <= ww.get("ry", -1):
+				return true
+	return false
 
 
 ## Returns the entity at the given tile, or null.
@@ -1465,8 +1479,7 @@ func _check_body_discovery() -> void:
 			continue
 
 		var perc: int = es.character.perception
-		var fov_mod: int = AsciiMapEnvironment.weather_to_fov_modifier(_weather)
-		var radius: int = FovSystem.effective_radius(perc, fov_mod)
+		var radius: int = _fov_radius(perc, es.x, es.y)
 		var visible: Dictionary = FovSystem.compute_visible(es.x, es.y, radius, _map)
 
 		for corpse_pos: Vector2i in _corpse_positions:
@@ -1506,8 +1519,7 @@ func _npc_can_see_player(es: EntityState) -> bool:
 		return false  # Stealth suppresses NPC detection for this round.
 
 	var perc: int = es.character.perception
-	var fov_mod: int = AsciiMapEnvironment.weather_to_fov_modifier(_weather)
-	var radius: int = FovSystem.effective_radius(perc, fov_mod)
+	var radius: int = _fov_radius(perc, es.x, es.y)
 	return FovSystem.is_visible(es.x, es.y, player.x, player.y, radius, _map)
 
 
