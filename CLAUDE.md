@@ -4240,6 +4240,30 @@ template generators it depends on. Faithful summary of the fixes that landed:
   already in a mission (or with no screen) spent the PC's AP for nothing. Moved the
   no-screen / already-in-mission guards ahead of the AP spend. +1 regression test.
 
+### Systems Added 2026-06-06 (Sailing)
+- **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
+  (pure class); `shared/ship_data.gd` gains `owner_id` + `departure_tick`. New system
+  (was REFERENCE; locked s57.42a). Headless core faithful to s57.42/43:
+  captain Sailing minimums (`min_sailing_for_class`: 1 small / 3 oceangoing / 4 heavy;
+  TORTOISE_OCEANGOING = 3 PROVISIONAL), `captain_meets_requirement`, `self_captain_penalty`
+  (−2k0 under-qualified). Captain succession (`select_acting_captain`: highest Sailing,
+  tiebreak Insight Rank → Status; -1 = catastrophic peril; skips dead). REQUEST_PASSAGE
+  acceptance (`evaluate_passage_request`): standing-orders + schedule-incompatible hard
+  refuses; Acquaintance+ (disposition ≥ 11) rides free; below that koku + personality lean
+  must bridge the gap (Jin +5 / Seigyo +3 koku-offered / Rei +2 high-Status[≥4.0] or polite);
+  `refusal_disposition_shift` (0 polite / −1..−3 rude). Throttle/cooldown
+  (`can_request_passage`: 2/IC day, 1-IC-day per-captain refusal cooldown). Embarkation
+  (`board_passengers` sets `aboard_ship_id` for accepted passengers co-located at the port
+  when `departure_tick` fires; `disembark` clears + places). Owner-granted passage =
+  3-point Obligation. s57.43 voyage formulas: `pirate_interception_chance` (Strength × 10%),
+  `interception_resolution` (4+ → naval mass battle, 1–3 → deck skirmish),
+  `shipwreck_landfall_chance` (10/25/40/60, Mantis day-1 30%, 6-day ceiling).
+  DEFERRED (UI / NPC-engine, needs Godot): ship ASCII Lesser Zone (SHIP_INTERIOR) + voyage
+  play map, AT_SHIP context + action allow/block list, voyage-event resolution + arrival
+  route-disruption, passenger-manifest generation, REQUEST_PASSAGE/JUMP_OVERBOARD/
+  INTERVENE_CAPTAIN as live ActionIDs, named-crew REPORT_TO_SHIP, owner-override letter flow.
+  Locked in `gdd/s57.42a_sailing_captains_passage_locked.md`. 20 tests.
+
 ### Systems Added 2026-06-06 (Allied NPC Companion)
 - **s57.46 Allied NPC Companion** — `simulation/companion_system.gd` (pure class),
   `shared/companion_data.gd` (Resource). New system (was REFERENCE; locked s57.46a).
