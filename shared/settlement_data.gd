@@ -115,6 +115,10 @@ extends Resource
 @export var shrine_custodian_id: int = -1         ## shugenja custodian; -1 = unstaffed
 @export var shrine_permission_grace_until_ic_day: int = -1  ## -1 = no grace active
 
+## Hidden Kolat treasury held at the Hidden Temple settlement (s54.7h). Hidden;
+## not visible in normal settlement inspection. -1 = this is not the Hidden Temple.
+@export var temple_vault_koku: int = -1
+
 
 func has_shrine_slot() -> bool:
 	## Returns true when this settlement can hold a shide object (s57.26b A11).

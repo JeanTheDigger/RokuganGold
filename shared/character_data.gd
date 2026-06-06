@@ -235,6 +235,30 @@ var spell_void_bonus_used: int = 0
 
 @export var kolat_superior_id: int = -1
 @export var kolat_sect: Enums.KolatSect = Enums.KolatSect.NONE
+## True on elevation to a Master seat (s54.7a/h). Hidden.
+@export var is_kolat_master: bool = false
+## Per-Master record dictionaries, koku fields, cover personas, etc. (s54.7h). Hidden.
+@export var special_data: Dictionary = {}
+
+# -- Kolat sleeper hidden fields (Section 54.7e/h; installed by conditioning) --
+## Spoken phrase that activates the sleeper ("" = not a sleeper).
+@export var trigger_phrase: String = ""
+## Engine-readable command the sleeper executes on activation ({} = none).
+@export var sleeper_command: Dictionary = {}
+## 0–100 conditioning stability; -1.0 = not a sleeper. Degrades 5/season untended.
+@export var conditioning_stability: float = -1.0
+## Populated from sleeper_command when ACTIVATE_SLEEPER fires; {} = dormant.
+@export var active_sleeper_command: Dictionary = {}
+## IC days since last MAINTAIN_SLEEPER_CONTACT (-1 = not a sleeper).
+@export var sleeper_contact_overdue: int = -1
+
+# -- Kolat koku fields (Section 54.7h; Coin/Master use, stored hidden) ---------
+## Laundered, untraceable working reserve (Master Coin).
+@export var kolat_koku: int = 0
+## Collected-but-unlaundered koku (Master Coin).
+@export var dirty_koku: int = 0
+## Tiger-allocated operational budget for this Master's Sect.
+@export var operational_koku: int = 0
 
 # -- Bloodspeaker Cult (Section 56.14) ----------------------------------------
 

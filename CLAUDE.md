@@ -4240,6 +4240,31 @@ template generators it depends on. Faithful summary of the fixes that landed:
   already in a mission (or with no screen) spent the PC's AP for nothing. Moved the
   no-screen / already-in-mission guards ahead of the AP spend. +1 regression test.
 
+### Systems Added 2026-06-06 (Kolat — Tranche 1)
+- **s54.7 The Kolat (Tranche 1)** — `simulation/kolat_system.gd` (pure class). The
+  Kolat is a huge multi-tranche system; this is the headless mechanical core (locked
+  s54.7j). Was REFERENCE. Data model: `KolatSect` enum completed (+JADE/ROC/STEEL);
+  hidden `L5RCharacterData` fields (`is_kolat_master`, `special_data`, sleeper fields
+  `trigger_phrase`/`sleeper_command`/`conditioning_stability`/`active_sleeper_command`/
+  `sleeper_contact_overdue`, koku fields `kolat_koku`/`dirty_koku`/`operational_koku`);
+  `SettlementData.temple_vault_koku`. Subsystems with explicit s54.7c/e/h numbers:
+  **sleeper conditioning** (`sessions_required` = Willpower×3, `resolve_conditioning_session`
+  = 3-in-a-row contested Willpower vs Temptation+Intelligence, `complete_conditioning`
+  installs the 4 hidden fields + applies −3.0 Honor to the Dream Master,
+  `degrade_sleeper_seasonal` −5/season, `maintain_sleeper_contact` +10 capped,
+  `can_activate_sleeper`/`activate_sleeper` gated on dormant + stability > 50 + phrase
+  match, `is_valid_command_phrase` ≤5 words); **koku pipeline** (`add_dirty_koku`,
+  `launder_koku` ≤5/AP dirty→kolat, `transfer_to_vault` kolat→vault, `allocate_from_vault`
+  vault→operational, `vault_below_threshold` 50); **disruption** (`sponsor_insurgency_cost`
+  10/strength, `bribe_garrison_cost_per_season` 5, `can_fund_disruption`); **dead-drop
+  concealment** (`make_dead_drop`/`register_dead_drop_visit` −1 past 3 visits/season,
+  0=abandoned/`reset_dead_drop_season`); **Eye contention** (`resolve_eye_contention`
+  priority→Tiger→Status). 21 tests. DEFERRED (later tranches): master selection at
+  world-gen (10 fuzzy sect profiles), the 6 NeedTypes + 29 ActionIDs as live pipeline
+  entries (scoring JSON + decomposition + executors), the sleeper override loop,
+  dual-stance topic positions, succession, win-condition pipeline, the Conclave, Tiger
+  Tear routing, per-Master network-record lifecycle.
+
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
   (pure class); `shared/ship_data.gd` gains `owner_id` + `departure_tick`. New system

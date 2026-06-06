@@ -397,6 +397,9 @@ enum KolatSect {
 	LOTUS,
 	SILK,
 	TIGER,
+	JADE,
+	ROC,
+	STEEL,
 }
 
 enum BloodspeakerCellState {
