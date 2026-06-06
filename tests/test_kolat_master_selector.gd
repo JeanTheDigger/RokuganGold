@@ -98,3 +98,26 @@ func test_special_rule_flags() -> void:
 		"1d6+2 sleepers in [3,8]")
 	var silk_flags := KolatMasterSelector.get_special_rule_flags(Enums.KolatSect.SILK, dice)
 	assert_true(silk_flags["preplaced_contacts"] >= 3 and silk_flags["preplaced_contacts"] <= 8)
+
+
+# === Tranche 7: special-rule world mutation applied at selection ===
+
+func test_coin_master_gets_hidden_koku() -> void:
+	var coin := _npc(2, {"Commerce": 5}, "Crab", "Yasuki", "Family Daimyo")
+	KolatMasterSelector.select_masters([coin], DiceEngine.new(11))
+	assert_true(coin.kolat_koku >= 20 and coin.kolat_koku <= 200,
+		"Coin Master receives a 2d10×10 hidden reserve at selection")
+
+
+func test_dream_master_records_sleeper_count() -> void:
+	var dream := _npc(3, {"Temptation": 5, "Intimidation (Control)": 3, "Medicine": 4})
+	KolatMasterSelector.select_masters([dream], DiceEngine.new(12))
+	assert_eq(dream.kolat_sect, Enums.KolatSect.DREAM)
+	var n: int = dream.special_data.get("world_start_sleepers", 0)
+	assert_true(n >= 3 and n <= 8, "Dream Master records a 1d6+2 world-start sleeper target")
+
+
+func test_non_coin_master_has_no_hidden_koku() -> void:
+	var t := _tiger_candidate(1)
+	KolatMasterSelector.select_masters([t], DiceEngine.new(13))
+	assert_eq(t.kolat_koku, 0, "non-Coin Masters receive no koku reserve")

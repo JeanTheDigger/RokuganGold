@@ -79,6 +79,7 @@ static func select_masters(npcs: Array, dice: DiceEngine) -> Dictionary:
 		if sect == Enums.KolatSect.TIGER:
 			tiger_id = pick_id
 		_apply_master(master, sect)
+		_apply_special_rules(master, sect, dice)
 	# Wire the Kolat chain: every Master reports to Tiger; Tiger reports to none.
 	for sect: int in result.keys():
 		var nid: int = result[sect]
@@ -210,6 +211,23 @@ static func _apply_master(npc: L5RCharacterData, sect: int) -> void:
 	# Coin: hidden untraceable reserves (2d10 × 10), stored as kolat_koku.
 	# Dream/Silk world-start sleeper/contact counts are surfaced via
 	# get_special_rule_flags(); the generator creates the registry entries.
+
+
+## Apply a Master's Sect special rule at selection (s54.7a). The Coin reserve is
+## a number on the Master, so it is applied directly to `kolat_koku`. The Dream
+## sleeper count and Silk contact count drive a network-creation pass that needs
+## NPC selection (deferred) — they are stamped into `special_data` so that pass
+## knows the target count without inventing which NPCs become sleepers/contacts.
+static func _apply_special_rules(npc: L5RCharacterData, sect: int, dice: DiceEngine) -> void:
+	if npc == null:
+		return
+	var flags: Dictionary = get_special_rule_flags(sect, dice)
+	if flags.has("hidden_kolat_koku"):
+		npc.kolat_koku += int(flags["hidden_kolat_koku"])
+	if flags.has("world_start_sleepers"):
+		npc.special_data["world_start_sleepers"] = int(flags["world_start_sleepers"])
+	if flags.has("preplaced_contacts"):
+		npc.special_data["preplaced_contacts"] = int(flags["preplaced_contacts"])
 
 
 ## Special-rule flags for the world generator to act on after selection

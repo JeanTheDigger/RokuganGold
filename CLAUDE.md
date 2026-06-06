@@ -4343,6 +4343,18 @@ template generators it depends on. Faithful summary of the fixes that landed:
   metadata population, dual-stance topic positions, Master succession, win-condition
   pipeline, the Conclave, Tiger Tear routing, per-Master network-record lifecycle,
   special-rule world mutation, and the topic/spell/insurgency-dependent executors.
+- **s54.7 The Kolat (Tranche 7 — special-rule world mutation)** — `KolatMasterSelector`
+  now acts on the Sect special rules at selection time (`_apply_special_rules`, called per
+  selected Master in `select_masters`). The Coin reserve (2d10×10) is applied directly to the
+  Master's `kolat_koku`. The Dream sleeper count (1d6+2) and Silk contact count (1d6+2) are
+  stamped into `special_data["world_start_sleepers"]` / `["preplaced_contacts"]` so the
+  deferred network-creation pass knows the target counts without inventing which NPCs become
+  sleepers/contacts (that selection is the per-Master network-record lifecycle, still
+  deferred). `get_special_rule_flags()` retained as the pure descriptor. +3 tests (12 total in
+  `test_kolat_master_selector.gd`). DEFERRED: amount/temple metadata, dual-stance topic
+  positions, Master succession, win-condition pipeline, the Conclave, Tiger Tear routing, the
+  network-record lifecycle (actual sleeper/contact NPC selection + conditioning), and the
+  topic/spell/insurgency-dependent executors.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
