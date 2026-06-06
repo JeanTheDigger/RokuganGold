@@ -362,6 +362,8 @@ static func execute_stance_change(
 	character: L5RCharacterData,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
 	var ts: TurnState = state.turn_states.get(char_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}
@@ -405,6 +407,8 @@ static func execute_move(
 	dice_engine: DiceEngine,
 	action_type: String = "free",  # "free", "simple", "complex"
 ) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
 	var ts: TurnState = state.turn_states.get(char_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}
@@ -490,6 +494,10 @@ static func execute_melee_attack(
 	maneuver: String = "",
 	spend_void: bool = false,
 ) -> Dictionary:
+	if CharacterStats.is_dead(attacker):
+		return {"success": false, "reason": "character_is_dead"}
+	if CharacterStats.is_dead(target):
+		return {"success": false, "reason": "target_is_dead"}
 	var ts: TurnState = state.turn_states.get(attacker_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}
@@ -584,6 +592,10 @@ static func execute_ranged_attack(
 	dice_engine: DiceEngine,
 	spend_void: bool = false,
 ) -> Dictionary:
+	if CharacterStats.is_dead(attacker):
+		return {"success": false, "reason": "character_is_dead"}
+	if CharacterStats.is_dead(target):
+		return {"success": false, "reason": "target_is_dead"}
 	var ts: TurnState = state.turn_states.get(attacker_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}
@@ -664,6 +676,10 @@ static func execute_extra_attack(
 	weapon_name: String,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	if CharacterStats.is_dead(attacker):
+		return {"success": false, "reason": "character_is_dead"}
+	if CharacterStats.is_dead(target):
+		return {"success": false, "reason": "target_is_dead"}
 	var ts: TurnState = state.turn_states.get(attacker_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}
@@ -719,6 +735,10 @@ static func execute_guard(
 	guardian: L5RCharacterData,
 	target: L5RCharacterData,
 ) -> Dictionary:
+	if CharacterStats.is_dead(guardian):
+		return {"success": false, "reason": "character_is_dead"}
+	if CharacterStats.is_dead(target):
+		return {"success": false, "reason": "target_is_dead"}
 	var ts: TurnState = state.turn_states.get(guardian_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}
@@ -759,6 +779,10 @@ static func execute_grapple_initiate(
 	target: L5RCharacterData,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	if CharacterStats.is_dead(attacker):
+		return {"success": false, "reason": "character_is_dead"}
+	if CharacterStats.is_dead(target):
+		return {"success": false, "reason": "target_is_dead"}
 	var ts: TurnState = state.turn_states.get(attacker_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}
@@ -814,6 +838,10 @@ static func execute_grapple_action(
 	target: L5RCharacterData,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	if CharacterStats.is_dead(target):
+		return {"success": false, "reason": "target_is_dead"}
 	var ts: TurnState = state.turn_states.get(char_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}
@@ -885,6 +913,8 @@ static func execute_stand_up(
 	char_id: int,
 	character: L5RCharacterData,
 ) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
 	var ts: TurnState = state.turn_states.get(char_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}
@@ -921,6 +951,8 @@ static func execute_void_spend(
 	char_id: int,
 	character: L5RCharacterData,
 ) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
 	var ts: TurnState = state.turn_states.get(char_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}
@@ -958,6 +990,8 @@ static func execute_destroy_tile(
 	ty: int,
 	character: L5RCharacterData,
 ) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
 	var ts: TurnState = state.turn_states.get(char_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}
@@ -1002,6 +1036,8 @@ static func execute_flee(
 	char_id: int,
 	character: L5RCharacterData,
 ) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
 	var ts: TurnState = state.turn_states.get(char_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}

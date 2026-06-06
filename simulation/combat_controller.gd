@@ -831,6 +831,8 @@ func execute_stealth_kill(target_id: int) -> Dictionary:
 	if not approach_roll["success"]:
 		# Approach failed → target wakes/alerts, normal combat.
 		target.alert_state = AsciiMapEnvironment.AlertState.ALERT
+		target.in_combat = true
+		target.combat_target_id = player.entity_id
 		_player_stealth = false  # Detected during approach — stealth broken.
 		_emit_noise(player.x, player.y, AsciiMapEnvironment.NoiseLevel.LOUD)
 		return {
@@ -851,6 +853,8 @@ func execute_stealth_kill(target_id: int) -> Dictionary:
 	if not atk.get("hit", false):
 		# Missed even a flat-footed target → Loud noise, target alarms.
 		target.alert_state = AsciiMapEnvironment.AlertState.ALERT
+		target.in_combat = true
+		target.combat_target_id = player.entity_id
 		_player_stealth = false  # Attack blown — stealth broken.
 		_emit_noise(player.x, player.y, AsciiMapEnvironment.NoiseLevel.LOUD)
 		return {
@@ -1272,7 +1276,6 @@ func _npc_flee(es: EntityState) -> Dictionary:
 		# Fled through a zone exit → remove from combat permanently.
 		if step.get("is_exit", false):
 			es.is_alive = false
-			_enemy_deaths_total += 1
 			return {"type": "npc_fled", "entity_id": es.entity_id, "unit_type": es.unit_type}
 	return {"type": "npc_fleeing", "entity_id": es.entity_id, "unit_type": es.unit_type}
 

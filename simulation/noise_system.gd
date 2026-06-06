@@ -18,6 +18,7 @@ const BLOCKING_TILES: Array[int] = [
 	_T.WALL_STONE,
 	_T.WALL_WOOD,
 	_T.WALL_PAPER,
+	_T.GATE_CLOSED,
 ]
 
 # Tiles that dampen noise: reduce effective radius by 25% (cost = 4/3 per step).

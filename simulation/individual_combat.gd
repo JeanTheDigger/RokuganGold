@@ -1624,7 +1624,15 @@ static func resolve_duel_strike(
 
 	if duel.simultaneous:
 		duel.is_over = true
-		duel.winner_id = -1
+		if first_dead and not second_dead:
+			duel.winner_id = second_striker.character_id
+			duel.loser_id = first_striker.character_id
+		elif second_dead and not first_dead:
+			duel.winner_id = first_striker.character_id
+			duel.loser_id = second_striker.character_id
+		else:
+			duel.winner_id = -1
+			duel.loser_id = -1
 	elif first_blood_drawn:
 		duel.winner_id = first_striker.character_id
 		duel.loser_id = second_striker.character_id
