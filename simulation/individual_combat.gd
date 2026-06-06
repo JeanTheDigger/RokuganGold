@@ -502,6 +502,47 @@ static func total_defender_reduction(
 	return maxi(0, base + kata + kiho - pierce)
 
 
+## Resolve an atemi-delivered kiho strike (GDD s38). Atemi deal no normal damage —
+## only the kiho effect occurs, and armor's Armor TN bonus is DOUBLED against atemi.
+## Covers atemi kiho whose effect is an instant, roll-recoverable condition
+## (Dazed / Stunned, per the existing s40 condition model). Some require a Contested
+## Ring roll after the hit. Returns {ok, hit, effect_applied, condition, ...}.
+## Atemi kiho with durations, new condition types, or unique mechanics are not yet
+## wired (need timed-condition infrastructure) — they return effect_not_wired.
+static func resolve_atemi_strike(
+	attacker: L5RCharacterData,
+	attacker_p: Participant,
+	target: L5RCharacterData,
+	target_p: Participant,
+	kiho_name: String,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if not attacker.kiho.has(kiho_name):
+		return {"ok": false, "reason": "not_known"}
+	var kiho: Dictionary = KihoSystem.KIHO_DATA.get(kiho_name, {})
+	if not kiho.get("atemi", false):
+		return {"ok": false, "reason": "not_atemi"}
+	var spec: Dictionary = kiho.get("atemi_effect", {})
+	if spec.is_empty():
+		return {"ok": false, "reason": "effect_not_wired"}
+	# Atemi armor TN: the armor's Armor TN bonus is doubled (add it once more).
+	var atemi_tn: int = get_armor_tn(target, target_p, dice_engine) + target.armor_tn_bonus
+	var attack: Dictionary = resolve_attack(attacker, attacker_p, "unarmed", atemi_tn, 0, dice_engine)
+	if not attack.get("hit", false):
+		return {"ok": true, "hit": false}
+	# Optional Contested Ring roll after the hit.
+	if spec.has("contest"):
+		var c: Dictionary = spec["contest"]
+		var atk_ring: int = CharacterStats.get_ring_value(attacker, c["attacker_ring"])
+		var def_ring: int = CharacterStats.get_ring_value(target, c["defender_ring"])
+		var atk_roll: DiceResult = dice_engine.roll_and_keep(atk_ring, atk_ring, true)
+		var def_roll: DiceResult = dice_engine.roll_and_keep(def_ring, def_ring, true)
+		if atk_roll.total < def_roll.total:
+			return {"ok": true, "hit": true, "effect_applied": false, "contested_lost": true}
+	apply_condition(target_p, spec["condition"])
+	return {"ok": true, "hit": true, "effect_applied": true, "condition": spec["condition"]}
+
+
 ## Activate a kiho on a combatant for the current skirmish. Validates the kiho is
 ## known and the active-slot constraint (one Internal/Kharmic/Mystical, unlimited
 ## Martial — GDD s38). Returns {ok, reason}. The activation cost (Void Point /

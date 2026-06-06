@@ -3228,17 +3228,37 @@ caller — Reduction is applied via the orchestrator damage path; harmless until
 
 ### s38 Kiho — Combat Effects (first tranche wired into s40, 2026-06-06)
 `KihoSystem` effects apply only while a kiho is ACTIVE on a combatant
-(`IndividualCombat.Participant.active_kiho`), unlike passive katas. First wired tranche
-(passive Internal buffs mapping onto existing kata hooks): **Soul of the Four Winds**
-(Armor TN += Insight + Air ring), **Air Fist** (+5 Initiative while unarmed), **Grasp the
-Earth Dragon** (wound-penalty TN reduced by Earth ring). `IndividualCombat.activate_kiho()`
-validates the kiho is known and the active-slot rule (one Internal/Kharmic/Mystical,
-unlimited Martial); `_get_kiho_armor_tn_bonus` / `_get_kiho_initiative_bonus` /
-`_get_kiho_wound_penalty_reduction` are called alongside the kata equivalents in
-`get_armor_tn` / `roll_initiative` / the attack-roll wound path. The activation COST
-(Void Point / Meditation roll) and the remaining ~70 kiho effects (atemi-delivered,
-contested-roll, unique mechanics like Death Touch) are deferred — they need per-effect
-design + orchestrator wiring. 8 tests in `tests/test_individual_combat.gd`.
+(`IndividualCombat.Participant.active_kiho`), unlike passive katas.
+**Wired so far:**
+- Passive active-buffs via the kata modifier hooks: **Soul of the Four Winds**
+  (Armor TN += Insight + Air ring), **Air Fist** (+5 Initiative while unarmed),
+  **Grasp the Earth Dragon** (wound-penalty TN −Earth ring), **Embrace the Stone**
+  (Reduction += 2× Earth), **Partaking the Waters** (Reduction += Water).
+  `_get_kiho_armor_tn_bonus` / `_get_kiho_initiative_bonus` /
+  `_get_kiho_wound_penalty_reduction` / `_get_kiho_reduction_bonus` are called
+  alongside the kata equivalents in `get_armor_tn` / `roll_initiative` / the
+  attack-roll wound path / `total_defender_reduction`.
+- **Reduction pipeline** (`total_defender_reduction`): base armor + kata + kiho
+  Reduction − attacker piercing, now fed into `WoundSystem.apply_damage` at the
+  summary-combat and orchestrator hit sites. This also activated the previously-
+  dead kata Reduction (earth_full_defense, earth_crab, water_ignore_reduction,
+  water_small_weapon).
+- **Atemi resolver** (`resolve_atemi_strike`): atemi attack with doubled armor TN;
+  optional Contested Ring roll; applies an instant, roll-recoverable condition on
+  hit. Wired: **Unbalance the Mind** (Dazed), **Freezing the Lifeblood** (Stunned),
+  **Seven Storm's Fist** (contested Fire → Stunned), **Mind/No-Mind** (contested
+  Void vs Fire → Dazed), **Tasaii-Do** (contested Water vs Earth → Stunned).
+`activate_kiho()` validates known + the active-slot rule (one Internal/Kharmic/
+Mystical, unlimited Martial). **Deferred (need infrastructure that doesn't exist
+yet):** the activation COST path (Void Point / Meditation roll integrated into the
+turn loop); **timed/duration conditions** (s40 conditions are flat + roll-recovered,
+so "for N Rounds" effects, silenced, flat-TN-penalty, paralysis-with-no-move aren't
+modeled); **character-level active kiho** for non-combat buffs (Stealth, Intelligence,
+vision, water-walking — active_kiho is combat-Participant-scoped); **ASCII-map
+movement** kiho (Riding the Clouds, Buoyed by the Kami, leaps); **ally/mount** kiho;
+**healing-over-time** (per-round regen); and **unique** mechanics (Death Touch ring
+drain, Spin the Kharmic Wheel disadvantage swap, Void Fist VP refund). 24 kiho-effect
+tests in `tests/test_individual_combat.gd`.
 
 ### Pending Redesign
 (None currently pending.)

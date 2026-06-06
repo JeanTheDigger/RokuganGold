@@ -1860,3 +1860,80 @@ func test_reduction_never_negative() -> void:
 	var ap := IndividualCombat.Participant.new()
 	assert_true(IndividualCombat.total_defender_reduction(d, dp, a, ap, "unarmed") >= 0,
 		"Reduction floored at 0")
+
+
+# === Atemi-delivered kiho (s38) ===
+
+func _atemi_attacker() -> L5RCharacterData:
+	var c := _monk_char(70)
+	c.agility = 5; c.intelligence = 5  # Fire ring 5
+	c.void_ring = 5
+	c.skills = {"Jiujutsu": 5}
+	return c
+
+
+func _atemi_target() -> L5RCharacterData:
+	var t := _make_char(71, 1, 1, 1, 1, 1, 1, 1, 1)  # weak; atemi armor TN ~10
+	t.armor_tn_bonus = 0
+	return t
+
+
+func test_atemi_unknown_kiho_rejected() -> void:
+	var a := _atemi_attacker(); var ap := IndividualCombat.Participant.new()
+	var t := _atemi_target(); var tp := IndividualCombat.Participant.new()
+	var r := IndividualCombat.resolve_atemi_strike(a, ap, t, tp, "Unbalance the Mind", _dice)
+	assert_false(r["ok"], "unknown (unlearned) kiho rejected")
+
+
+func test_atemi_non_atemi_kiho_rejected() -> void:
+	var a := _atemi_attacker(); a.kiho = ["Air Fist"]
+	var ap := IndividualCombat.Participant.new()
+	var t := _atemi_target(); var tp := IndividualCombat.Participant.new()
+	var r := IndividualCombat.resolve_atemi_strike(a, ap, t, tp, "Air Fist", _dice)
+	assert_eq(r.get("reason"), "not_atemi")
+
+
+func test_atemi_unwired_effect_reports_not_wired() -> void:
+	# The Great Silence is atemi but has no wired atemi_effect (silence not modeled).
+	var a := _atemi_attacker(); a.kiho = ["The Great Silence"]
+	var ap := IndividualCombat.Participant.new()
+	var t := _atemi_target(); var tp := IndividualCombat.Participant.new()
+	var r := IndividualCombat.resolve_atemi_strike(a, ap, t, tp, "The Great Silence", _dice)
+	assert_eq(r.get("reason"), "effect_not_wired")
+
+
+func test_unbalance_the_mind_dazes_on_hit() -> void:
+	var a := _atemi_attacker(); a.kiho = ["Unbalance the Mind"]
+	var ap := IndividualCombat.Participant.new()
+	var applied: bool = false
+	for seed: int in range(10):
+		var t := _atemi_target(); var tp := IndividualCombat.Participant.new()
+		var r := IndividualCombat.resolve_atemi_strike(a, ap, t, tp, "Unbalance the Mind", DiceEngine.new(seed))
+		assert_true(r["ok"])
+		if r.get("hit", false) and r.get("effect_applied", false):
+			assert_true(IndividualCombat.CONDITION_DAZED in tp.conditions,
+				"Unbalance the Mind applies Dazed on a successful atemi")
+			applied = true
+	assert_true(applied, "overwhelming atemi attacker lands at least once across seeds")
+
+
+func test_freezing_the_lifeblood_stuns_on_hit() -> void:
+	var a := _atemi_attacker(); a.kiho = ["Freezing the Lifeblood"]
+	var ap := IndividualCombat.Participant.new()
+	var applied: bool = false
+	for seed: int in range(10):
+		var t := _atemi_target(); var tp := IndividualCombat.Participant.new()
+		var r := IndividualCombat.resolve_atemi_strike(a, ap, t, tp, "Freezing the Lifeblood", DiceEngine.new(seed))
+		if r.get("effect_applied", false):
+			assert_true(IndividualCombat.CONDITION_STUNNED in tp.conditions)
+			applied = true
+	assert_true(applied)
+
+
+func test_contested_atemi_smoke() -> void:
+	# Seven Storm's Fist: hit + contested Fire. Overwhelming attacker should land+win.
+	var a := _atemi_attacker(); a.kiho = ["Seven Storm's Fist"]
+	var ap := IndividualCombat.Participant.new()
+	var t := _atemi_target(); var tp := IndividualCombat.Participant.new()
+	var r := IndividualCombat.resolve_atemi_strike(a, ap, t, tp, "Seven Storm's Fist", DiceEngine.new(3))
+	assert_true(r["ok"], "contested atemi resolves cleanly")
