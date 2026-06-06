@@ -1556,6 +1556,11 @@ static func _get_ap_cost(action_id: String) -> int:
 		"DISPLAY_PAINTING": 1,
 		"PRESENT_EMAKIMONO": 1,
 		"COMPOSE_SCULPTURE": 1,
+		# Kolat (s54.7c): most are 1 AP (default); these two are 0-AP auto-actions.
+		# OBSERVE_VIA_EYE is "all AP for the day" — needs full-day special handling
+		# in the engine/executor (deferred), not a fixed cost here.
+		"ARCHIVE_TOPIC": 0,
+		"CONTRIBUTE_TO_RESERVE": 0,
 	}
 	return costs.get(action_id, 1)
 

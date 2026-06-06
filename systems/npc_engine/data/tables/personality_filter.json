@@ -191,7 +191,8 @@
         "SEDUCE_FOR_ACCESS",
         "SEDUCE_FOR_LEVERAGE",
         "SEDUCE_TO_COMPROMISE",
-        "COMMISSION_ASSASSINATION"
+        "COMMISSION_ASSASSINATION",
+        "APPROACH_FOR_RECRUITMENT"
       ],
       "conditional": [
         {

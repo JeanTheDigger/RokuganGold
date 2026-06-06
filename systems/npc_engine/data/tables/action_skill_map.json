@@ -7,9 +7,17 @@
     "primary": "Etiquette",
     "secondary": "Awareness"
   },
+  "ACTIVATE_SLEEPER": {
+    "primary": "Acting",
+    "secondary": "Sincerity"
+  },
   "ANNOUNCE_HUNT": {
     "primary": "Hunting",
     "secondary": null
+  },
+  "ANONYMOUS_TIP": {
+    "primary": "Calligraphy (Cipher)",
+    "secondary": "Stealth"
   },
   "APPLY_TATTOO": {
     "primary": "Artisan: Tattooing",
@@ -19,9 +27,21 @@
     "primary": "Courtier",
     "secondary": "Awareness"
   },
+  "APPROACH_FOR_RECRUITMENT": {
+    "primary": "Sincerity (Temptation)",
+    "secondary": "Courtier (Manipulation)"
+  },
+  "ARCHIVE_TOPIC": {
+    "primary": "Calligraphy (Cipher)",
+    "secondary": null
+  },
   "ARRANGE_MARRIAGE": {
     "primary": "Courtier",
     "secondary": "Awareness"
+  },
+  "ARRANGE_PROXY_DUEL": {
+    "primary": "Courtier (Manipulation)",
+    "secondary": "Acting"
   },
   "ASK_FOR_INTRODUCTION": {
     "primary": "Courtier",
@@ -55,6 +75,10 @@
     "primary": "Temptation",
     "secondary": "Awareness"
   },
+  "BRIBE_GARRISON_COMMANDER": {
+    "primary": "Commerce (Appraisal)",
+    "secondary": "Sincerity (Temptation)"
+  },
   "BRIBE_WITNESS": {
     "primary": "Temptation",
     "secondary": "Awareness"
@@ -82,6 +106,14 @@
   "CHARM": {
     "primary": "Etiquette",
     "secondary": "Courtier"
+  },
+  "CHECK_CONFIRMATION_DROP": {
+    "primary": "Investigation (Notice)",
+    "secondary": "Stealth (Sneaking)"
+  },
+  "CHECK_DEAD_DROP": {
+    "primary": "Investigation (Notice)",
+    "secondary": "Stealth (Sneaking)"
   },
   "COLLECT_BONSAI_SPECIMEN": {
     "primary": "Artisan: Gardening",
@@ -122,10 +154,13 @@
     "primary": "Commerce",
     "secondary": "Investigation"
   },
-  "CRAFT": {
-    "primary": "Artisan: Origami",
-    "secondary": "Artisan: Origami",
-    "trait": "Awareness"
+  "CONDUCT_CONDITIONING": {
+    "primary": "Temptation",
+    "secondary": "Intimidation (Control)"
+  },
+  "CONDUCT_PERIMETER_PATROL": {
+    "primary": "Stealth (Sneaking)",
+    "secondary": "Investigation (Notice)"
   },
   "CONDUCT_RAID": {
     "primary": "Battle",
@@ -143,16 +178,25 @@
     "primary": "Tea Ceremony",
     "secondary": null
   },
+  "CONTRIBUTE_TO_RESERVE": {
+    "primary": null,
+    "secondary": null
+  },
+  "CRAFT": {
+    "primary": "Artisan: Origami",
+    "secondary": "Artisan: Origami",
+    "trait": "Awareness"
+  },
   "CULTIVATE_GARDEN": {
     "primary": "Artisan: Gardening",
     "secondary": "Awareness"
   },
+  "DECLARE_SENBAZURU": {
+    "primary": "_none"
+  },
   "DECLARE_WAR": {
     "primary": "Courtier",
     "secondary": "Awareness"
-  },
-  "DECLARE_SENBAZURU": {
-    "primary": "_none"
   },
   "DEDICATE_PIECE": {
     "primary": "Courtier",
@@ -167,6 +211,10 @@
     "primary": "Etiquette",
     "secondary": "Courtier"
   },
+  "DELIVER_SEALED_LETTER": {
+    "primary": "Sincerity (Deceit)",
+    "secondary": "Stealth (Sneaking)"
+  },
   "DEMAND_TRIBUTE": {
     "primary": "Intimidation",
     "secondary": "Courtier"
@@ -174,9 +222,6 @@
   "DISCERN_NEED": {
     "primary": "Investigation",
     "secondary": "Awareness"
-  },
-  "DISPLAY_PAINTING": {
-    "primary": "_none"
   },
   "DISCLOSE": {
     "primary": "Sincerity",
@@ -190,9 +235,16 @@
     "primary": null,
     "secondary": null
   },
+  "DISPLAY_PAINTING": {
+    "primary": "_none"
+  },
   "DISSOLVE_MARRIAGE": {
     "primary": "Courtier",
     "secondary": "Awareness"
+  },
+  "DISTRIBUTE_INTELLIGENCE": {
+    "primary": "Courtier",
+    "secondary": "Calligraphy (Cipher)"
   },
   "DO_NOTHING": {
     "primary": null,
@@ -205,6 +257,10 @@
   "EAVESDROP": {
     "primary": "Stealth",
     "secondary": "Investigation"
+  },
+  "ESTABLISH_DEAD_DROP": {
+    "primary": "Investigation (Notice)",
+    "secondary": "Stealth (Sneaking)"
   },
   "EVALUATE_CLAN_STRENGTH": {
     "primary": "Lore: Heraldry",
@@ -310,6 +366,10 @@
     "primary": "Stealth",
     "secondary": "Agility"
   },
+  "LAUNDER_KOKU": {
+    "primary": "Commerce (Appraisal)",
+    "secondary": "Sincerity (Deceit)"
+  },
   "LEARN_THEATER_PIECE": {
     "primary": "Acting",
     "secondary": "Acting",
@@ -326,6 +386,10 @@
   "MAINTAIN_SIEGE": {
     "primary": "Battle",
     "secondary": "Commerce"
+  },
+  "MAINTAIN_SLEEPER_CONTACT": {
+    "primary": "Acting",
+    "secondary": "Medicine"
   },
   "MEDITATE": {
     "primary": "Meditation",
@@ -346,6 +410,10 @@
   "OBSERVE_COURT_ATTENDEES": {
     "primary": "Investigation",
     "secondary": "Lore: Heraldry"
+  },
+  "OBSERVE_VIA_EYE": {
+    "primary": null,
+    "secondary": null
   },
   "OFFER_ART_COMMISSION": {
     "primary": "Courtier",
@@ -408,12 +476,12 @@
     "primary": "Courtier",
     "secondary": "Awareness"
   },
-  "PLAY_GAME": {
-    "primary": "Games",
-    "secondary": "Awareness"
-  },
   "PLACE_SHIDE": {
     "primary": "Artisan: Origami",
+    "secondary": "Awareness"
+  },
+  "PLAY_GAME": {
+    "primary": "Games",
     "secondary": "Awareness"
   },
   "PRESENT_EMAKIMONO": {
@@ -486,6 +554,26 @@
     "primary": null,
     "secondary": null
   },
+  "RESURRECT_TOPIC": {
+    "primary": "Calligraphy (Cipher)",
+    "secondary": "Sincerity (Deceit)"
+  },
+  "ROTATE_DEAD_DROP": {
+    "primary": "Stealth (Sneaking)",
+    "secondary": "Courtier"
+  },
+  "ROUTE_ANONYMOUS_INTELLIGENCE": {
+    "primary": "Calligraphy (Cipher)",
+    "secondary": "Lore: Shadowlands"
+  },
+  "ROUTE_VIA_DEAD_DROP": {
+    "primary": "Stealth (Sneaking)",
+    "secondary": "Calligraphy (Cipher)"
+  },
+  "RUN_COURIER_ROUTE": {
+    "primary": "Stealth (Shadowing)",
+    "secondary": "Investigation (Notice)"
+  },
   "SCOUT_ENEMY": {
     "primary": "Battle",
     "secondary": "Perception"
@@ -501,6 +589,10 @@
   "SEARCH_QUARTERS": {
     "primary": "Sleight of Hand",
     "secondary": "Investigation"
+  },
+  "SECURE_ONI_EYE": {
+    "primary": "Investigation (Notice)",
+    "secondary": "Battle"
   },
   "SEDUCE": {
     "primary": "Temptation",
@@ -542,6 +634,14 @@
     "primary": "Commerce",
     "secondary": null
   },
+  "SPONSOR_INSURGENCY": {
+    "primary": "Commerce (Merchant)",
+    "secondary": "Sincerity (Deceit)"
+  },
+  "SUBMIT_KOLAT_REPORT": {
+    "primary": "Calligraphy (Cipher)",
+    "secondary": "Lore: Kolat"
+  },
   "TEND_BONSAI": {
     "primary": "Artisan: Gardening",
     "secondary": "Awareness"
@@ -558,9 +658,25 @@
     "primary": "Commerce",
     "secondary": null
   },
+  "TRANSFER_KOLAT_FUNDS": {
+    "primary": "Commerce (Mathematics)",
+    "secondary": "Stealth"
+  },
+  "TRANSMIT_VIA_TEAR": {
+    "primary": "Calligraphy (Cipher)",
+    "secondary": "Awareness"
+  },
   "TREAT_WOUND": {
     "primary": "Medicine",
     "secondary": null
+  },
+  "UNDERREPORT_KOKU": {
+    "primary": "Commerce (Mathematics)",
+    "secondary": "Forgery"
+  },
+  "USE_CLOUDS_EYES": {
+    "primary": "Spellcraft",
+    "secondary": "Lore: Shugenja"
   },
   "WRITE_LETTER": {
     "primary": "Calligraphy",

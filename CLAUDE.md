@@ -4275,9 +4275,19 @@ template generators it depends on. Faithful summary of the fixes that landed:
   Silk 1d6+2 contacts for the world generator. Role-based tier criteria mapped to queryable
   fields (clan/family/school_name/role_position/skills/status/glory/school_type; lord-tier
   via role_position); Dream and Steel T1 relaxed to skill/glory thresholds (PROVISIONAL — no
-  institutional-access field). 9 tests. DEFERRED: the NeedType/ActionID NPC-engine pipeline,
-  sleeper override loop, dual-stance, succession, win condition, Conclave, special-rule world
-  mutation.
+  institutional-access field). 9 tests.
+- **s54.7 The Kolat (Tranche 3 — scoring/data pipeline)** — completed the NPC-engine
+  scoring data for the Kolat ActionIDs/NeedTypes (s54.7c). objective_alignment.json already
+  carried the 6 Kolat NeedTypes (forward-wired); added all **29 Kolat ActionID skill
+  mappings** to `action_skill_map.json` (exact s54.7c primary/secondary), AP costs in
+  `_get_ap_cost` (1-AP default covers most; ARCHIVE_TOPIC / CONTRIBUTE_TO_RESERVE = 0;
+  OBSERVE_VIA_EYE "all AP for the day" needs full-day special handling — deferred), and the
+  Gi block on APPROACH_FOR_RECRUITMENT in `personality_filter.json` (other Kolat covert
+  actions were already in Gi.always_blocked). 3 scoring-table tests. DEFERRED (deep engine,
+  needs Godot): the 29 **executors** + 6 **decomposition functions** + **Phase-3 context-list
+  unlock** (Kolat ActionIDs gated on `kolat_sect`/`kolat_objective`), the sleeper override
+  loop, dual-stance topic positions, succession, win-condition pipeline, the Conclave, Tiger
+  Tear routing, and special-rule world mutation.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
