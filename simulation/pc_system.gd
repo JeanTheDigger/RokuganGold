@@ -23,6 +23,27 @@ static func bank_daily_ap(character: L5RCharacterData, daily_ap: int) -> void:
 	character.banked_ap = mini(character.banked_ap + daily_ap, cap)
 
 
+## True if the PC has at least `cost` banked AP to spend (s60.5).
+static func can_spend_banked_ap(character: L5RCharacterData, cost: int) -> bool:
+	return cost > 0 and character.banked_ap >= cost
+
+
+## Spend `cost` from the PC's banked AP pool (s60.5). Returns
+## {success, remaining} or {success:false, reason, available, required}.
+static func spend_banked_ap(character: L5RCharacterData, cost: int) -> Dictionary:
+	if cost <= 0:
+		return {"success": false, "reason": "invalid_cost"}
+	if character.banked_ap < cost:
+		return {
+			"success": false,
+			"reason": "insufficient_ap",
+			"available": character.banked_ap,
+			"required": cost,
+		}
+	character.banked_ap -= cost
+	return {"success": true, "remaining": character.banked_ap, "spent": cost}
+
+
 # -- Presence (s60.3 / s60.4) -------------------------------------------------
 
 static func login(character: L5RCharacterData) -> void:

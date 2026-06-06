@@ -528,7 +528,7 @@ Content has not been modified — only split at section boundaries.
 | `s56.16_spiritual_insurgency_system_locked.md` | ## 56.16 Spiritual Insurgency System --- LOCKED | 74K | FULLY LOCKED (43) |
 | `s56.17_castle_siege_template_locked.md` | ## 56.17 Castle Siege Template --- LOCKED | 6K | FULLY LOCKED (1) |
 | `s56.18_ship_boarding_template_locked.md` | ## 56.18 Ship Boarding Template --- LOCKED | 6K | FULLY LOCKED (1) |
-| `s56.19_mission_entry_policy_locked.md` | # 56.19 Mission Entry Policy --- LOCKED | 2K | LOCKED (owner-approved 2026-06-06). Per-seed-type AUTO vs PLAYER_INITIATED classification. Code: `simulation/mission_entry_policy.gd`. AUTO-trigger wiring and the PLAYER_INITIATED ActionID (name/AP cost) remain undesigned — flagged, not invented. |
+| `s56.19_mission_entry_policy_locked.md` | # 56.19 Mission Entry Policy --- LOCKED | 3K | LOCKED (owner-approved 2026-06-06). Per-seed-type AUTO vs PLAYER_INITIATED classification + entry mechanism: AUTO fires on PC province arrival; PLAYER_INITIATED via ENGAGE_MISSION (1 AP, PC-only, from banked AP). Code: `mission_entry_policy.gd`, `mission_entry_controller.gd`, PcSystem banked-AP spend. UI/session layer (MissionBuilder → CombatScreen.start_mission) and zone-level AUTO triggering still pending. |
 
 ### Section 57
 

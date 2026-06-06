@@ -4143,10 +4143,19 @@ template generators it depends on. Faithful summary of the fixes that landed:
   chooses to assault: Maho Cult, Urban Criminal Network, Nezumi Infestation, Peasant Revolt,
   Wall Sortie). Unknown seeds default to PLAYER_INITIATED (never auto-launch on contact).
   `entry_mode_for()`, `is_auto()`, `is_player_initiated()`. Locked in
-  `gdd/s56.19_mission_entry_policy_locked.md`. 4 tests. NOTE: the policy is the classification
-  only — the AUTO-trigger wiring (PC-arrival/zone hook → `CombatScreen.start_mission`) and the
-  PLAYER_INITIATED ActionID (name/AP cost) remain undesigned (s14/s56/s60) and are flagged, not
-  invented.
+  `gdd/s56.19_mission_entry_policy_locked.md`. 4 tests.
+- **s56.19 Mission entry mechanism (LOCKED, owner-approved).** PC-only — NPCs never use the
+  ASCII map and PCs never run the NPC engine (s60), so this is NOT an NPC ActionID and does
+  not touch the NPC pipeline. `simulation/mission_entry_controller.gd` (MissionEntryController):
+  AUTO seeds launch **on PC province arrival** (`get_auto_launch_seeds`); PLAYER_INITIATED
+  seeds launch via **`ENGAGE_MISSION`, 1 AP** (`engage_mission`, `ENGAGE_MISSION_AP_COST = 1`),
+  spent from the PC's banked-AP pool. `PcSystem.can_spend_banked_ap()` / `spend_banked_ap()`
+  added (s60.5). `engage_mission` validates PC actor + player-initiated seed + AP, spends 1
+  banked AP, returns a launch request the UI consumes. 13 tests
+  (`test_mission_entry_controller.gd`). REMAINING (UI/session layer, unverified without Godot):
+  the thin consumer that assembles a `MissionSession` (MissionBuilder) for the seed's province
+  and calls `CombatScreen.start_mission()`; zone-level (finer than province) AUTO triggering
+  deferred (s4.4/s60).
 
 ### Systems Added 2026-06-04
 - **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),
