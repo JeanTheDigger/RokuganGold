@@ -92,6 +92,111 @@ static func select_masters(npcs: Array, dice: DiceEngine) -> Dictionary:
 	return result
 
 
+# === MASTER SUCCESSION (s54.7g) ==============================================
+
+## Resolve a vacant Master seat (s54.7g). Runs the three-ranked-heir cascade,
+## then Tiger's discretionary selection from the Sect's senior conscious agents
+## if all three heirs are unavailable. Mutates the elevated agent (applies boosts
+## + hidden fields, NOT the world-gen special-rule reserves) and re-points the
+## Kolat chain. Returns the new Master's npc_id, or -1 if the Sect cannot be
+## filled (no valid heir and no eligible agent).
+##
+## `heir_designations`: Dictionary[kolat_sect: int → Array[npc_id, npc_id, npc_id]]
+##   (the Cloud-archive cipher record; ranked in order of preference).
+## `under_investigation_ids`: npc_ids currently under active investigation — an
+##   heir condition the pure selector cannot read from character data alone, so
+##   the caller (which holds CrimeRecords) supplies it. Default empty = none.
+static func evaluate_succession(
+	sect: int,
+	npcs: Array,
+	heir_designations: Dictionary,
+	dice: DiceEngine,
+	under_investigation_ids: Array = [],
+) -> int:
+	var new_master: L5RCharacterData = null
+	# 1) Three ranked heirs in order (s54.7g Succession Cascade).
+	var heirs: Array = heir_designations.get(sect, [])
+	for heir_id: int in heirs:
+		var heir: L5RCharacterData = _find(npcs, int(heir_id))
+		if _heir_valid(heir, sect, under_investigation_ids):
+			new_master = heir
+			break
+	# 2) Tiger's discretionary selection from the Sect's senior conscious agents.
+	if new_master == null:
+		new_master = _discretionary_select(sect, npcs, dice, under_investigation_ids)
+	if new_master == null:
+		return -1
+	_apply_master(new_master, sect)  # boosts + hidden fields; no world-gen reserves
+	# Orientation, not inherited tasks (s54.7g): clear the Kolat objective slot.
+	new_master.special_data.erase("kolat_objective")
+	_repoint_chain_after_succession(sect, new_master, npcs)
+	return new_master.character_id
+
+
+## An heir is valid only if alive, a conscious agent in the vacant Sect, not
+## already a Master, not Broken, and not under active investigation (s54.7g).
+static func _heir_valid(heir: L5RCharacterData, sect: int, under_investigation_ids: Array) -> bool:
+	if heir == null or CharacterStats.is_dead(heir):
+		return false
+	if heir.kolat_sect != sect:
+		return false
+	if heir.is_kolat_master:
+		return false  # already holds a seat
+	if bool(heir.special_data.get("kolat_broken", false)):
+		return false
+	if heir.character_id in under_investigation_ids:
+		return false
+	return true
+
+
+## Tiger's discretionary fallback (s54.7g): the s54.7a weighted tier draw,
+## restricted to conscious agents already in the vacant Sect.
+static func _discretionary_select(
+	sect: int, npcs: Array, dice: DiceEngine, under_investigation_ids: Array,
+) -> L5RCharacterData:
+	var pool: Array = []
+	for npc: L5RCharacterData in npcs:
+		if npc == null or CharacterStats.is_dead(npc) or npc.is_kolat_master:
+			continue
+		if npc.kolat_sect != sect:
+			continue
+		if bool(npc.special_data.get("kolat_broken", false)):
+			continue
+		if npc.character_id in under_investigation_ids:
+			continue
+		if not _meets_minimums(sect, npc):
+			continue
+		var tier: int = _classify_tier(sect, npc)
+		for _w: int in range(TIER_WEIGHTS.get(tier, 1)):
+			pool.append(npc.character_id)
+	if pool.is_empty():
+		return null
+	return _find(npcs, pool[dice.rand_int_range(0, pool.size() - 1)])
+
+
+## Re-point the Kolat chain after a succession. A new non-Tiger Master reports to
+## the living Tiger. A new Tiger reports to no one and every other living Master
+## re-points to them (s54.7g Tiger's Succession).
+static func _repoint_chain_after_succession(sect: int, new_master: L5RCharacterData, npcs: Array) -> void:
+	if sect == Enums.KolatSect.TIGER:
+		new_master.kolat_superior_id = -1
+		for npc: L5RCharacterData in npcs:
+			if npc == null or npc.character_id == new_master.character_id:
+				continue
+			if npc.is_kolat_master and npc.kolat_sect != Enums.KolatSect.TIGER and not CharacterStats.is_dead(npc):
+				npc.kolat_superior_id = new_master.character_id
+		return
+	new_master.kolat_superior_id = _living_tiger_id(npcs)
+
+
+static func _living_tiger_id(npcs: Array) -> int:
+	for npc: L5RCharacterData in npcs:
+		if npc != null and npc.is_kolat_master and npc.kolat_sect == Enums.KolatSect.TIGER \
+			and not CharacterStats.is_dead(npc):
+			return npc.character_id
+	return -1
+
+
 # === ELIGIBILITY (universal filters + Sect minimums, s54.7a) =================
 
 static func _meets_minimums(sect: int, npc: L5RCharacterData) -> bool:

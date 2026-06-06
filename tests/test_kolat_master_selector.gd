@@ -121,3 +121,74 @@ func test_non_coin_master_has_no_hidden_koku() -> void:
 	var t := _tiger_candidate(1)
 	KolatMasterSelector.select_masters([t], DiceEngine.new(13))
 	assert_eq(t.kolat_koku, 0, "non-Coin Masters receive no koku reserve")
+
+
+# === Tranche 8: Master succession (s54.7g) ===
+
+## A conscious agent in `sect` (kolat_sect set, not a Master), eligible by Coin minimums.
+func _coin_agent(id: int) -> L5RCharacterData:
+	var c := _npc(id, {"Commerce": 5}, "Crab", "Yasuki", "Family Daimyo")
+	c.kolat_sect = Enums.KolatSect.COIN
+	return c
+
+
+func test_succession_elevates_first_valid_heir() -> void:
+	var h1 := _coin_agent(10)
+	var h2 := _coin_agent(11)
+	var npcs := [h1, h2]
+	var designations := {Enums.KolatSect.COIN: [10, 11]}
+	var nid := KolatMasterSelector.evaluate_succession(Enums.KolatSect.COIN, npcs, designations, DiceEngine.new(20))
+	assert_eq(nid, 10, "first valid heir is elevated")
+	assert_true(h1.is_kolat_master)
+	assert_eq(h1.kolat_sect, Enums.KolatSect.COIN)
+	assert_false(h2.is_kolat_master, "second heir untouched when first is valid")
+
+
+func test_succession_skips_dead_heir() -> void:
+	var h1 := _coin_agent(10)
+	h1.wounds_taken = 9999  # dead
+	var h2 := _coin_agent(11)
+	var npcs := [h1, h2]
+	var designations := {Enums.KolatSect.COIN: [10, 11]}
+	var nid := KolatMasterSelector.evaluate_succession(Enums.KolatSect.COIN, npcs, designations, DiceEngine.new(21))
+	assert_eq(nid, 11, "cascade falls through a dead heir to the next")
+
+
+func test_succession_skips_heir_under_investigation() -> void:
+	var h1 := _coin_agent(10)
+	var h2 := _coin_agent(11)
+	var npcs := [h1, h2]
+	var designations := {Enums.KolatSect.COIN: [10, 11]}
+	var nid := KolatMasterSelector.evaluate_succession(
+		Enums.KolatSect.COIN, npcs, designations, DiceEngine.new(22), [10])
+	assert_eq(nid, 11, "heir under active investigation is skipped")
+
+
+func test_succession_discretionary_when_no_valid_heir() -> void:
+	var stranger := _coin_agent(12)  # not designated, but eligible Coin agent
+	var npcs := [stranger]
+	var designations := {Enums.KolatSect.COIN: [99, 98]}  # both nonexistent
+	var nid := KolatMasterSelector.evaluate_succession(Enums.KolatSect.COIN, npcs, designations, DiceEngine.new(23))
+	assert_eq(nid, 12, "discretionary fallback picks an eligible Sect agent")
+	assert_true(stranger.is_kolat_master)
+
+
+func test_succession_returns_vacant_when_unfillable() -> void:
+	var npcs: Array = []
+	var nid := KolatMasterSelector.evaluate_succession(
+		Enums.KolatSect.COIN, npcs, {Enums.KolatSect.COIN: [99]}, DiceEngine.new(24))
+	assert_eq(nid, -1, "no heir and no eligible agent leaves the seat vacant")
+
+
+func test_new_tiger_repoints_other_masters() -> void:
+	# A living Coin Master pointing at the old (now dead) Tiger; a new Tiger heir.
+	var coin := _npc(2, {"Commerce": 5}, "Crab", "Yasuki", "Family Daimyo")
+	KolatMasterSelector.select_masters([coin], DiceEngine.new(25))  # makes Coin a Master, superior -1 (no tiger yet)
+	var new_tiger := _tiger_candidate(3)
+	new_tiger.kolat_sect = Enums.KolatSect.TIGER  # conscious Tiger agent heir
+	var npcs := [coin, new_tiger]
+	var nid := KolatMasterSelector.evaluate_succession(
+		Enums.KolatSect.TIGER, npcs, {Enums.KolatSect.TIGER: [3]}, DiceEngine.new(26))
+	assert_eq(nid, 3, "Tiger heir elevated")
+	assert_eq(new_tiger.kolat_superior_id, -1, "new Tiger reports to no one")
+	assert_eq(coin.kolat_superior_id, 3, "other living Masters re-point to the new Tiger")

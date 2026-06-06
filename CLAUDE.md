@@ -4355,6 +4355,25 @@ template generators it depends on. Faithful summary of the fixes that landed:
   positions, Master succession, win-condition pipeline, the Conclave, Tiger Tear routing, the
   network-record lifecycle (actual sleeper/contact NPC selection + conditioning), and the
   topic/spell/insurgency-dependent executors.
+- **s54.7 The Kolat (Tranche 8 — Master succession)** — `KolatMasterSelector.evaluate_succession()`
+  implements the s54.7g cascade (LOCKED, no new design). Pure resolver: takes the vacant
+  `sect`, the npc pool, the decrypted `heir_designations` record (Dictionary[sect →
+  Array[3 ranked npc_ids]]), and an `under_investigation_ids` array the caller supplies (the
+  one heir condition the pure selector cannot read from character data). Runs the three-heir
+  cascade — `_heir_valid()` checks alive / conscious agent in the Sect / not already a Master /
+  not Broken (`special_data["kolat_broken"]`) / not under investigation — then falls back to
+  `_discretionary_select()` (the s54.7a weighted tier draw restricted to conscious Sect agents)
+  when all three heirs are unavailable. Elevation applies boosts + hidden fields but NOT the
+  world-gen special-rule reserves (succession is inheritance, not a fresh seed) and clears the
+  Kolat objective slot ("orientation, not inherited tasks", s54.7g). `_repoint_chain_after_succession()`
+  re-points the chain: a new non-Tiger Master reports to the living Tiger; a new Tiger reports
+  to no one and every other living Master re-points to them. Returns the new Master's npc_id or
+  -1 (Sect unfillable). +6 tests (18 total in `test_kolat_master_selector.gd`). DEFERRED: the
+  EVALUATE_SUCCESSION trigger wiring (death→IntelDB confirmation, heir_designations_key /
+  tiger_succession_key hidden fields + Cloud-archive storage, the follow-on Tear/report AP
+  actions), plus amount/temple metadata, dual-stance topic positions, win-condition pipeline,
+  the Conclave, Tiger Tear routing, the network-record lifecycle, and the
+  topic/spell/insurgency-dependent executors.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
