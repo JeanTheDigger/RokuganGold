@@ -1200,18 +1200,36 @@ func test_npc_pick_target_prefers_most_wounded() -> void:
 	assert_eq(picked, 3, "NPC should focus the most-wounded enemy")
 
 
-func test_npc_desired_stance_defense_when_hurt() -> void:
-	var npc := _make_char(1)
-	npc.skills = {"Kenjutsu": 5}
-	# HURT level.
-	var desired := AsciiMapCombatOrchestrator._npc_desired_stance(npc, Enums.WoundLevel.HURT)
-	assert_eq(desired, Enums.Stance.DEFENSE)
+## Build a state for stance tests. The NPC (id 1, ENEMY faction) faces one player.
+## When add_ally is true, a second ENEMY-faction combatant joins as the NPC's ally.
+## enemy_skills sets the opposing player's skill dict (controls weapon: bow vs blade).
+func _make_stance_state(
+	npc: L5RCharacterData,
+	add_ally: bool,
+	enemy_skills: Dictionary,
+) -> Dictionary:
+	var enemy := _make_char(2)
+	enemy.skills = enemy_skills
+	var m := _make_map()
+	var entities := [
+		{"char": npc,   "faction": AsciiMapCombatOrchestrator.FACTION_ENEMY,  "x": 1, "y": 1},
+		{"char": enemy, "faction": AsciiMapCombatOrchestrator.FACTION_PLAYER, "x": 5, "y": 1},
+	]
+	var chars := {1: npc, 2: enemy}
+	if add_ally:
+		var ally := _make_char(3)
+		entities.append({"char": ally, "faction": AsciiMapCombatOrchestrator.FACTION_ENEMY, "x": 2, "y": 1})
+		chars[3] = ally
+	var state := AsciiMapCombatOrchestrator.setup_combat(m, entities, _dice)
+	return {"state": state, "chars": chars}
 
 
 func test_npc_desired_stance_attack_when_healthy() -> void:
 	var npc := _make_char(1)
 	npc.skills = {"Kenjutsu": 4}
-	var desired := AsciiMapCombatOrchestrator._npc_desired_stance(npc, Enums.WoundLevel.HEALTHY)
+	var ctx := _make_stance_state(npc, false, {"Kenjutsu": 3})
+	var desired := AsciiMapCombatOrchestrator._npc_desired_stance(
+		ctx["state"], 1, npc, Enums.WoundLevel.HEALTHY, ctx["chars"])
 	assert_eq(desired, Enums.Stance.ATTACK)
 
 
@@ -1219,9 +1237,58 @@ func test_npc_desired_stance_center_when_low_skill() -> void:
 	# Low-skill combatants (best combat skill < 4) should use CENTER for balanced defense.
 	var npc := _make_char(1)
 	npc.skills = {"Kenjutsu": 2}
-	var desired := AsciiMapCombatOrchestrator._npc_desired_stance(npc, Enums.WoundLevel.HEALTHY)
+	var ctx := _make_stance_state(npc, false, {"Kenjutsu": 3})
+	var desired := AsciiMapCombatOrchestrator._npc_desired_stance(
+		ctx["state"], 1, npc, Enums.WoundLevel.HEALTHY, ctx["chars"])
 	assert_eq(desired, Enums.Stance.CENTER,
 		"Low-skill NPC should prefer CENTER stance, not ATTACK")
+
+
+func test_npc_desired_stance_alone_hurt_fights_on() -> void:
+	# Wounded but alone: no rescue coming, so fight on in CENTER (not turtle).
+	var npc := _make_char(1)
+	npc.skills = {"Kenjutsu": 5}
+	var ctx := _make_stance_state(npc, false, {"Kenjutsu": 3})
+	var desired := AsciiMapCombatOrchestrator._npc_desired_stance(
+		ctx["state"], 1, npc, Enums.WoundLevel.HURT, ctx["chars"])
+	assert_eq(desired, Enums.Stance.CENTER,
+		"A lone wounded NPC should fight on, not turtle in Defense")
+
+
+func test_npc_desired_stance_ally_defense_specialist_hurt_defends() -> void:
+	# Wounded, has an ally, and is a Defense specialist (Defense rank >= best attack):
+	# turtle in DEFENSE and let the ally finish the fight.
+	var npc := _make_char(1)
+	npc.skills = {"Kenjutsu": 3, "Defense": 4}
+	var ctx := _make_stance_state(npc, true, {"Kenjutsu": 3})
+	var desired := AsciiMapCombatOrchestrator._npc_desired_stance(
+		ctx["state"], 1, npc, Enums.WoundLevel.HURT, ctx["chars"])
+	assert_eq(desired, Enums.Stance.DEFENSE,
+		"A wounded Defense specialist with an ally should turtle in Defense")
+
+
+func test_npc_desired_stance_ally_ranged_threat_hurt_defends() -> void:
+	# Wounded, has an ally, faces a bow-wielding enemy: raise Armor TN in DEFENSE
+	# to weather arrows while the ally engages, even without Defense specialty.
+	var npc := _make_char(1)
+	npc.skills = {"Kenjutsu": 5}
+	var ctx := _make_stance_state(npc, true, {"Kyujutsu": 5})
+	var desired := AsciiMapCombatOrchestrator._npc_desired_stance(
+		ctx["state"], 1, npc, Enums.WoundLevel.HURT, ctx["chars"])
+	assert_eq(desired, Enums.Stance.DEFENSE,
+		"A wounded NPC with an ally facing a bow should turtle in Defense")
+
+
+func test_npc_desired_stance_ally_melee_attacker_hurt_fights_on() -> void:
+	# Wounded, has an ally, NOT a Defense specialist, melee threat: the better
+	# attacker contributes more by fighting on in CENTER than by weak turtling.
+	var npc := _make_char(1)
+	npc.skills = {"Kenjutsu": 5}
+	var ctx := _make_stance_state(npc, true, {"Kenjutsu": 5})
+	var desired := AsciiMapCombatOrchestrator._npc_desired_stance(
+		ctx["state"], 1, npc, Enums.WoundLevel.HURT, ctx["chars"])
+	assert_eq(desired, Enums.Stance.CENTER,
+		"A wounded attacker (not Defense-specialist) vs a melee foe should fight on")
 
 
 # ===========================================================================

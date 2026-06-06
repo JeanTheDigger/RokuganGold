@@ -1282,6 +1282,14 @@ static func execute_npc_turn(
 			var su: Dictionary = execute_stand_up(state, npc_id, npc)
 			actions_taken.append({"action": "stand_up", "result": su})
 
+	# -- Defensive stance: hold and turtle ------------------------------------
+	# Defense / Full Defense Stance cannot attack (GDD s40). A wounded NPC that
+	# committed to a defensive stance holds position (it already gained the
+	# Armor TN benefit from the stance change) and relies on its allies rather
+	# than attempting a doomed attack.
+	if p.stance == Enums.Stance.DEFENSE or p.stance == Enums.Stance.FULL_DEFENSE:
+		return {"actions": actions_taken}
+
 	# -- Identify best target -------------------------------------------------
 	var melee_targets: Array = get_melee_targets(state, npc_id)
 	var ranged_targets: Array = get_ranged_targets(state, npc_id)
@@ -1379,7 +1387,7 @@ static func _npc_pick_stance(
 		return {"changed": false}
 
 	var wl: int = CharacterStats.get_wound_level(npc)
-	var desired: int = _npc_desired_stance(npc, wl)
+	var desired: int = _npc_desired_stance(state, npc_id, npc, wl, chars_by_id)
 
 	if p.stance == desired as Enums.Stance:
 		return {"changed": false}
@@ -1392,17 +1400,96 @@ static func _npc_pick_stance(
 
 
 ## Determine desired stance for an NPC based on wound level and role (GDD s40 stances).
-static func _npc_desired_stance(npc: L5RCharacterData, wound_level: int) -> Enums.Stance:
-	if wound_level >= Enums.WoundLevel.HURT:
-		return Enums.Stance.DEFENSE
-	# High Kenjutsu/combat skill: use Attack stance for Void carry-forward potential.
+## Wounded NPCs choose contextually (per design owner): a defensive stance is a
+## commitment to NOT attack (s40), so it is only worthwhile when something else can
+## finish the fight. Factors: the character's Defense aptitude (school skill / Defense
+## rank vs their best attack skill), whether a living ally remains in the fight, and
+## whether the threat is a ranged attacker (raising Armor TN to weather arrows while
+## an ally closes). A lone wounded combatant fights on (CENTER) rather than turtling.
+static func _npc_desired_stance(
+	state: MapCombatState,
+	npc_id: int,
+	npc: L5RCharacterData,
+	wound_level: int,
+	chars_by_id: Dictionary,
+) -> Enums.Stance:
 	var best_combat: int = 0
 	for skill_name: String in ["Kenjutsu", "Polearms", "Heavy Weapons", "Jiujutsu"]:
 		best_combat = maxi(best_combat, npc.skills.get(skill_name, 0))
-	if best_combat >= 4:
+
+	if wound_level < Enums.WoundLevel.HURT:
+		# Healthy: high-skill combatants press the attack (Void carry-forward);
+		# low-skill combatants use CENTER for balanced defense.
+		if best_combat >= 4:
+			return Enums.Stance.ATTACK
+		return Enums.Stance.CENTER
+
+	# DOWN or worse is handled by the free-action path in resolve_npc_turn; the
+	# stance choice is moot (no normal actions). Return a nominal aggressive stance.
+	if wound_level >= Enums.WoundLevel.DOWN:
 		return Enums.Stance.ATTACK
-	# Low-skill combatants use CENTER stance: balanced defense with void carry potential.
+
+	# HURT / INJURED / CRIPPLED — contextual.
+	var has_ally: bool = _npc_has_living_ally(state, npc_id, chars_by_id)
+	if not has_ally:
+		# Alone: no one is coming to help — turtling is slow death. Fight on with
+		# CENTER (defensive lean, but still able to attack and close distance).
+		return Enums.Stance.CENTER
+
+	# Has a living ally. Turtle (DEFENSE) when the character is a Defense specialist
+	# or when facing a ranged threat (raise Armor TN, let the ally engage). Otherwise
+	# keep fighting in CENTER — a better attacker contributes more than a weak turtle.
+	var def_rank: int = npc.skills.get("Defense", 0)
+	var is_school_defense: bool = NPCAdvancement.get_school_skills(npc).has("Defense")
+	var defense_specialist: bool = is_school_defense or def_rank >= best_combat
+	var threat_ranged: bool = _npc_primary_threat_is_ranged(state, npc_id, chars_by_id)
+	if defense_specialist or threat_ranged:
+		return Enums.Stance.DEFENSE
 	return Enums.Stance.CENTER
+
+
+## True if a living same-faction combatant other than the NPC remains positioned
+## on the map (i.e., the NPC is not the last one standing on its side).
+static func _npc_has_living_ally(
+	state: MapCombatState,
+	npc_id: int,
+	chars_by_id: Dictionary,
+) -> bool:
+	var my_faction: String = state.factions.get(npc_id, FACTION_NEUTRAL)
+	for cid: int in state.positions.keys():
+		if cid == npc_id:
+			continue
+		if state.factions.get(cid, FACTION_NEUTRAL) != my_faction:
+			continue
+		var c: L5RCharacterData = chars_by_id.get(cid, null)
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		return true
+	return false
+
+
+## True if any living enemy combatant's best weapon is a ranged weapon (a bow).
+## Used to bias a wounded-with-ally NPC toward Defense to weather incoming fire.
+static func _npc_primary_threat_is_ranged(
+	state: MapCombatState,
+	npc_id: int,
+	chars_by_id: Dictionary,
+) -> bool:
+	var my_faction: String = state.factions.get(npc_id, FACTION_NEUTRAL)
+	for cid: int in state.positions.keys():
+		if cid == npc_id:
+			continue
+		var their_faction: String = state.factions.get(cid, FACTION_NEUTRAL)
+		if not _are_enemies(my_faction, their_faction):
+			continue
+		var c: L5RCharacterData = chars_by_id.get(cid, null)
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var weapon_name: String = IndividualCombat.pick_best_weapon(c)
+		var wp: Dictionary = IndividualCombat.get_weapon_profile(weapon_name)
+		if not wp.get("melee", true):
+			return true
+	return false
 
 
 ## Pick the best target: most-wounded (highest wounds_taken) enemy to focus fire.
