@@ -5,10 +5,13 @@ class_name KihoSystem
 ##
 ## Kiho fall between spells and bushi Techniques — elemental abilities of the
 ## Brotherhood of Shinsei. This system covers learning, eligibility, the cost
-## multiplier and knowledge cap for non-Brotherhood characters, the activation
-## rules, and the active-slot constraint. Per-kiho COMBAT EFFECTS are deferred
-## (stub registry), mirroring KataSystem — wiring ~73 distinct effects into the
-## s40 layer is a separate pass.
+## multiplier and knowledge cap for non-Brotherhood monks, the activation rules,
+## and the active-slot constraint.
+##
+## MONK-ONLY (owner override, 2026-06-06, s38a): only MONK characters may learn
+## kiho. This overrides s38's provision that shugenja may learn kiho at 2× cost —
+## shugenja are excluded entirely. Combined with the rule that PCs may not be
+## monks (s60.2), PCs never learn kiho.
 
 enum KihoType { INTERNAL, KHARMIC, MARTIAL, MYSTICAL }
 
@@ -17,10 +20,10 @@ enum KihoType { INTERNAL, KHARMIC, MARTIAL, MYSTICAL }
 const ACTIVATION_TN_COMPLEX: int = 15
 const ACTIVATION_TN_SIMPLE: int = 30
 
-# Cost multipliers (GDD s38): non-Brotherhood monks pay 1.5×, shugenja pay 2×.
+# Cost multipliers (GDD s38): non-Brotherhood monks pay 1.5× (Brotherhood ×1).
+# Shugenja are excluded from kiho entirely (s38a monk-only override).
 const COST_MULT_BROTHERHOOD: float = 1.0
 const COST_MULT_NON_BROTHERHOOD_MONK: float = 1.5
-const COST_MULT_SHUGENJA: float = 2.0
 
 # Catalog (GDD s38). Each entry: ring, mastery, type, atemi, staff, optional flags.
 const KIHO_DATA: Dictionary = {
@@ -121,29 +124,15 @@ static func _is_monk(character: L5RCharacterData) -> bool:
 	return character.school_type == Enums.SchoolType.MONK
 
 
-static func _is_shugenja(character: L5RCharacterData) -> bool:
-	return character.school_type == Enums.SchoolType.SHUGENJA
-
-
 ## A Brotherhood-affiliated monk (Brotherhood of Shinsei). Non-Brotherhood monks
 ## (e.g. Togashi Tattooed Order) have an empty brotherhood_sect.
 static func _is_brotherhood_monk(character: L5RCharacterData) -> bool:
 	return _is_monk(character) and character.brotherhood_sect != ""
 
 
-static func _is_kuni(character: L5RCharacterData) -> bool:
-	if character.school_name in ["Kuni Shugenja", "Kuni Witch-Hunter"]:
-		return true
-	for path: String in character.school_paths:
-		if path in ["Kuni Shugenja", "Kuni Witch-Hunter"]:
-			return true
-	return false
-
-
-## Cost multiplier for learning kiho (GDD s38).
+## Cost multiplier for learning kiho (GDD s38). Monk-only: Brotherhood ×1,
+## non-Brotherhood monk ×1.5.
 static func cost_multiplier(character: L5RCharacterData) -> float:
-	if _is_shugenja(character):
-		return COST_MULT_SHUGENJA
 	if _is_monk(character) and character.brotherhood_sect == "":
 		return COST_MULT_NON_BROTHERHOOD_MONK
 	return COST_MULT_BROTHERHOOD
@@ -151,25 +140,14 @@ static func cost_multiplier(character: L5RCharacterData) -> float:
 
 # === ELIGIBILITY =============================================================
 
-## Effective mastery requirement (applies Kuni −1 for Sever the Dark Lord's Touch).
-static func _effective_mastery(character: L5RCharacterData, kiho: Dictionary) -> int:
-	var mastery: int = kiho["mastery"]
-	if kiho.get("kuni_reduce", false) and _is_kuni(character):
-		return maxi(1, mastery - 1)
-	return mastery
-
-
 ## True if the character meets a kiho's Mastery Level (GDD s38): a monk meets it
-## if School Rank + relevant Ring ≥ Mastery; a shugenja uses Ring only.
+## if School Rank + relevant Ring ≥ Mastery. (Monk-only — s38a override.)
 static func meets_mastery(character: L5RCharacterData, kiho_name: String) -> bool:
 	if not KIHO_DATA.has(kiho_name):
 		return false
 	var kiho: Dictionary = KIHO_DATA[kiho_name]
 	var ring_rank: int = _get_ring_rank(character, kiho["ring"])
-	var req: int = _effective_mastery(character, kiho)
-	if _is_shugenja(character):
-		return ring_rank >= req
-	return (character.school_rank + ring_rank) >= req
+	return (character.school_rank + ring_rank) >= int(kiho["mastery"])
 
 
 ## Knowledge cap (GDD s38): non-Brotherhood characters may know ≤ their school
@@ -195,21 +173,18 @@ static func learn_cost(character: L5RCharacterData, kiho_name: String) -> int:
 
 
 ## True if the character may learn `kiho_name` (ignores XP — see can_afford).
+## MONK-ONLY (s38a override): only monk characters channel kiho.
 static func can_learn(character: L5RCharacterData, kiho_name: String) -> bool:
 	if not KIHO_DATA.has(kiho_name):
 		return false
-	# Only monks and shugenja channel kiho, and only with a real school.
-	if not (_is_monk(character) or _is_shugenja(character)):
+	if not _is_monk(character):
 		return false
 	if character.school_name.is_empty():
 		return false
 	# Already known?
 	if character.kiho.has(kiho_name):
 		return false
-	# Monks-only kiho (Rebuke of the Heavens) — shugenja cannot learn.
-	if KIHO_DATA[kiho_name].get("monks_only", false) and not _is_monk(character):
-		return false
-	# Knowledge cap for non-Brotherhood characters.
+	# Knowledge cap for non-Brotherhood monks.
 	if at_knowledge_cap(character):
 		return false
 	return meets_mastery(character, kiho_name)

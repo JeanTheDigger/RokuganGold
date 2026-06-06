@@ -42,22 +42,23 @@ func test_monk_below_mastery() -> void:
 	assert_false(KihoSystem.meets_mastery(_monk(true, 1), "Calling the East Wind"))
 
 
-func test_shugenja_uses_ring_only() -> void:
-	# Shugenja ignores school rank. Air ring 2 < 3 → fails Air Fist despite rank 3.
-	var s := _shugenja(3)
-	assert_false(KihoSystem.meets_mastery(s, "Air Fist"),
-		"Shugenja uses ring only — Air 2 < 3")
-	s.reflexes = 3; s.awareness = 3  # Air ring 3
-	assert_true(KihoSystem.meets_mastery(s, "Air Fist"), "Air 3 meets Air 3")
+func test_shugenja_cannot_learn_kiho() -> void:
+	# MONK-ONLY (s38a): shugenja are excluded entirely, even with high rings.
+	var s := _shugenja(5)
+	s.reflexes = 5; s.awareness = 5  # Air ring 5
+	assert_false(KihoSystem.can_learn(s, "Air Fist"),
+		"Shugenja cannot learn kiho (monk-only override)")
+	assert_true(KihoSystem.get_eligible_kiho(s).is_empty(),
+		"Shugenja have no eligible kiho")
 
 
-func test_kuni_reduction_on_sever_dark_lords_touch() -> void:
-	# Sever the Dark Lord's Touch = Fire 5; Kuni −1 → Fire 4.
-	var s := _shugenja(3)
-	s.school_name = "Kuni Shugenja"
-	s.agility = 4; s.intelligence = 4  # Fire ring 4
-	assert_true(KihoSystem.meets_mastery(s, "Sever the Dark Lord's Touch"),
-		"Kuni meets Fire 4 (reduced from 5)")
+func test_monk_sever_requires_fire_5() -> void:
+	# Sever the Dark Lord's Touch = Fire 5. No Kuni reduction (monk-only).
+	var m := _monk(true, 1)
+	m.agility = 3; m.intelligence = 3  # Fire 3 → 1+3=4 < 5
+	assert_false(KihoSystem.meets_mastery(m, "Sever the Dark Lord's Touch"))
+	m.agility = 4; m.intelligence = 4  # Fire 4 → 1+4=5 ≥ 5
+	assert_true(KihoSystem.meets_mastery(m, "Sever the Dark Lord's Touch"))
 
 
 # === COST MULTIPLIER & LEARN COST ===
@@ -65,15 +66,12 @@ func test_kuni_reduction_on_sever_dark_lords_touch() -> void:
 func test_cost_multipliers() -> void:
 	assert_eq(KihoSystem.cost_multiplier(_monk(true)), 1.0, "Brotherhood ×1")
 	assert_eq(KihoSystem.cost_multiplier(_monk(false)), 1.5, "Non-Brotherhood monk ×1.5")
-	assert_eq(KihoSystem.cost_multiplier(_shugenja()), 2.0, "Shugenja ×2")
 
 
 func test_learn_cost_ceils_by_multiplier() -> void:
 	# Air Fist mastery 3.
 	assert_eq(KihoSystem.learn_cost(_monk(true), "Air Fist"), 3, "Brotherhood: 3")
 	assert_eq(KihoSystem.learn_cost(_monk(false), "Air Fist"), 5, "Non-Brotherhood: ceil(4.5)=5")
-	var s := _shugenja(3); s.reflexes = 3; s.awareness = 3
-	assert_eq(KihoSystem.learn_cost(s, "Air Fist"), 6, "Shugenja: 6")
 
 
 # === KNOWLEDGE CAP ===
@@ -114,13 +112,10 @@ func test_bushi_cannot_learn_kiho() -> void:
 	assert_false(KihoSystem.can_learn(b, "Air Fist"), "Bushi channel no kiho")
 
 
-func test_monks_only_kiho_blocks_shugenja() -> void:
-	# Rebuke of the Heavens (Void 5, monks only).
-	var s := _shugenja(3); s.void_ring = 5
-	assert_false(KihoSystem.can_learn(s, "Rebuke of the Heavens"),
-		"Shugenja cannot learn monks-only kiho")
-	var m := _monk(true, 1); m.void_ring = 5
-	assert_true(KihoSystem.can_learn(m, "Rebuke of the Heavens"), "Monk can")
+func test_monk_can_learn_rebuke_of_the_heavens() -> void:
+	# Rebuke of the Heavens (Void 5). Learnable by a monk meeting the mastery.
+	var m := _monk(true, 1, 50); m.void_ring = 5  # 1 + 5 = 6 ≥ 5
+	assert_true(KihoSystem.can_learn(m, "Rebuke of the Heavens"), "Monk can learn it")
 
 
 # === NPC SELECTION ===

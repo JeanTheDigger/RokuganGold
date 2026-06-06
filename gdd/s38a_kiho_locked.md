@@ -14,30 +14,35 @@ exactly as KataSystem deferred kata effects.
 
 ## Locked values
 
-- **A1 — Eligibility (from s38).** A monk meets a kiho's Mastery Level if
-  `school_rank + relevant_ring ≥ mastery`. A shugenja uses `ring ≥ mastery`
-  (ring only, no school rank).
-- **A2 — Cost multiplier (from s38).** Brotherhood monk ×1.0; non-Brotherhood
-  monk ×1.5; shugenja ×2.0.
+- **A0 — MONK-ONLY (owner override, 2026-06-06).** Only MONK characters may learn
+  kiho. This **overrides s38's provision that shugenja may learn kiho at 2× cost** —
+  shugenja are excluded entirely. Combined with A10 (PCs may not be monks), PCs
+  never learn kiho. s38's catalog and effect text remain the reference; this clause
+  governs who may channel kiho.
+- **A1 — Eligibility.** A monk meets a kiho's Mastery Level if
+  `school_rank + relevant_ring ≥ mastery`. (Shugenja path removed per A0.)
+- **A2 — Cost multiplier.** Brotherhood monk ×1.0; non-Brotherhood monk ×1.5.
+  (Shugenja ×2 removed per A0.)
 - **A3 — Base XP cost (LOCKED here).** `learn_cost = ceil(mastery × cost_multiplier)`.
-  The base (mastery level) mirrors the KataSystem convention (`xp_cost = mastery`);
-  the multiplier is the s38 cost factor.
-- **A4 — Knowledge cap (from s38).** Non-Brotherhood characters may know at most
+  The base (mastery level) mirrors the KataSystem convention (`xp_cost = mastery`).
+- **A4 — Knowledge cap (from s38).** Non-Brotherhood monks may know at most
   `school_rank` kiho. Brotherhood monks are uncapped.
 - **A5 — Brotherhood identity.** `school_type == MONK` with `brotherhood_sect != ""`
   is a Brotherhood monk; `MONK` with `""` (e.g. Togashi Tattooed Order) is a
-  non-Brotherhood monk; `SHUGENJA` is the shugenja path.
-- **A6 — Kuni reduction.** Sever the Dark Lord's Touch mastery is 1 lower for Kuni
-  Shugenja / Kuni Witch-Hunters (from s38), floor 1.
-- **A7 — Monks-only.** Rebuke of the Heavens is learnable by monks only (from s38).
+  non-Brotherhood monk.
+- **A6 — Kuni reduction.** Inert under A0: the s38 Kuni −1 on Sever the Dark Lord's
+  Touch applied to Kuni Shugenja / Witch-Hunters, who are shugenja and can no longer
+  learn kiho. No monk is Kuni, so the reduction never fires.
+- **A7 — Rebuke of the Heavens.** Monk-learnable (trivially satisfied under A0).
 - **A8 — Activation (from s38).** Void Point = Free Action (no roll); Meditation/Void
   roll TN 15 = Complex, TN 30 = Simple; atemi delivery is Free. Active-slot
   constraint: one Internal + one Kharmic + one Mystical active at a time; Martial
   kiho are unlimited.
 - **A9 — NPC auto-learning.** In the seasonal advancement pass, **monks** claim
-  kiho XP before progress bars (same precedence as bushi claiming kata). Shugenja
-  may learn kiho via KihoSystem but the NPC seasonal pass does not auto-divert
-  their XP from spells.
+  kiho XP before progress bars (same precedence as bushi claiming kata).
+- **A10 — PCs may not be monks (s60.2).** Player characters cannot take a monk
+  school. Enforced by `PcSystem.is_school_type_allowed_for_pc()` /
+  `PcSystem.is_valid_pc()`. Because kiho is monk-only (A0), PCs never learn kiho.
 
 ## Deferred
 
