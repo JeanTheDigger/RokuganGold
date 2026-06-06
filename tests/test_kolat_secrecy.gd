@@ -18,6 +18,43 @@ func test_seasonal_decay() -> void:
 	assert_eq(KolatSecrecy.apply_seasonal_exposure_decay(10, 50), 8)
 
 
+# === Event → delta dispatch (s54.7i) ===
+
+func test_exposure_event_fixed_deltas() -> void:
+	assert_eq(KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.ORG_ASSASSINATION), 15)
+	assert_eq(KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.LOTUS_ELIMINATE), -5)
+	assert_eq(KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.COIN_BRIBE), -3)
+	assert_eq(KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.NATURAL_DECAY), -2)
+
+
+func test_exposure_player_publish_scope_lerp() -> void:
+	assert_eq(KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.PLAYER_PUBLISH, 0.0), 10,
+		"min scope → +10")
+	assert_eq(KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.PLAYER_PUBLISH, 1.0), 25,
+		"max scope → +25")
+	assert_eq(KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.PLAYER_PUBLISH, 0.5), 18,
+		"mid scope → ~18 (rounded)")
+
+
+func test_awareness_event_deltas() -> void:
+	assert_eq(KolatSecrecy.awareness_delta(KolatSecrecy.AwarenessEvent.JADE_INTERNAL), 5)
+	assert_eq(KolatSecrecy.awareness_delta(KolatSecrecy.AwarenessEvent.MASTER_INTERROGATED), 20)
+	assert_eq(KolatSecrecy.awareness_delta(KolatSecrecy.AwarenessEvent.KEY_DISCOVERED), 40)
+	assert_eq(KolatSecrecy.awareness_delta(KolatSecrecy.AwarenessEvent.PLAYER_EVIDENCE, 0.0), 10)
+	assert_eq(KolatSecrecy.awareness_delta(KolatSecrecy.AwarenessEvent.PLAYER_EVIDENCE, 1.0), 30)
+
+
+func test_dispatch_composes_with_apply_delta() -> void:
+	# A traced merchant network on a fresh world: 0 → +5.
+	var e := KolatSecrecy.apply_delta(0, KolatSecrecy.exposure_delta(
+		KolatSecrecy.ExposureEvent.TRACED_MERCHANT_NETWORK))
+	assert_eq(e, 5)
+	# A captured Master interrogated: awareness 25 → 45.
+	var a := KolatSecrecy.apply_delta(25, KolatSecrecy.awareness_delta(
+		KolatSecrecy.AwarenessEvent.MASTER_INTERROGATED))
+	assert_eq(a, 45)
+
+
 # === Imperial response ===
 
 func test_response_active_threshold() -> void:

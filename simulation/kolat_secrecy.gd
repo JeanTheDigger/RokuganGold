@@ -44,6 +44,61 @@ static func apply_delta(current: int, delta: int) -> int:
 	return clampi(current + delta, 0, 100)
 
 
+# === EVENT → DELTA DISPATCH (s54.7i) =========================================
+# A single tested entry point the future operation/investigation executors call
+# instead of hand-coding deltas. All values are verbatim from s54.7i.
+
+enum ExposureEvent {
+	TRACED_MERCHANT_NETWORK, COVER_IDENTITY_CRIMINAL, ORG_ASSASSINATION,
+	PLAYER_PUBLISH, LOTUS_ELIMINATE, COIN_BRIBE, CLOUD_RESURRECT, NATURAL_DECAY,
+}
+
+enum AwarenessEvent { JADE_INTERNAL, PLAYER_EVIDENCE, MASTER_INTERROGATED, KEY_DISCOVERED }
+
+
+## Exposure delta for an event. `scope` (0.0–1.0) interpolates the player-publish
+## range (+10..+25); ignored for fixed-value events.
+static func exposure_delta(event: ExposureEvent, scope: float = 0.0) -> int:
+	match event:
+		ExposureEvent.TRACED_MERCHANT_NETWORK:
+			return EXPOSURE_TRACED_MERCHANT_NETWORK
+		ExposureEvent.COVER_IDENTITY_CRIMINAL:
+			return EXPOSURE_COVER_IDENTITY_CRIMINAL
+		ExposureEvent.ORG_ASSASSINATION:
+			return EXPOSURE_ORG_ASSASSINATION
+		ExposureEvent.PLAYER_PUBLISH:
+			return _scope_lerp(EXPOSURE_PLAYER_PUBLISH_MIN, EXPOSURE_PLAYER_PUBLISH_MAX, scope)
+		ExposureEvent.LOTUS_ELIMINATE:
+			return EXPOSURE_LOTUS_ELIMINATE
+		ExposureEvent.COIN_BRIBE:
+			return EXPOSURE_COIN_BRIBE
+		ExposureEvent.CLOUD_RESURRECT:
+			return EXPOSURE_CLOUD_RESURRECT
+		ExposureEvent.NATURAL_DECAY:
+			return EXPOSURE_NATURAL_DECAY_PER_SEASON
+	return 0
+
+
+## Awareness delta for an event. `scope` (0.0–1.0) interpolates the player-evidence
+## range (+10..+30); ignored for fixed-value events.
+static func awareness_delta(event: AwarenessEvent, scope: float = 0.0) -> int:
+	match event:
+		AwarenessEvent.JADE_INTERNAL:
+			return AWARENESS_JADE_INTERNAL
+		AwarenessEvent.PLAYER_EVIDENCE:
+			return _scope_lerp(AWARENESS_PLAYER_EVIDENCE_MIN, AWARENESS_PLAYER_EVIDENCE_MAX, scope)
+		AwarenessEvent.MASTER_INTERROGATED:
+			return AWARENESS_MASTER_INTERROGATED
+		AwarenessEvent.KEY_DISCOVERED:
+			return AWARENESS_KEY_DISCOVERED
+	return 0
+
+
+## Linear interpolation across a scope range, rounded to the nearest int.
+static func _scope_lerp(lo: int, hi: int, scope: float) -> int:
+	return int(round(lerpf(float(lo), float(hi), clampf(scope, 0.0, 1.0))))
+
+
 ## Seasonal exposure decay (s54.7i). The −2/season natural decay always applies;
 ## while the Empire is actively suppressing (awareness above the response
 ## threshold) the same decrement represents deliberate containment — s54.7i gives

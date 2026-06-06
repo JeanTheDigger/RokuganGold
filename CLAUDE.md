@@ -4445,6 +4445,17 @@ template generators it depends on. Faithful summary of the fixes that landed:
   Imperial-response NPC behaviors + Tiger candidate pipeline + win-condition event emission,
   the Conclave, Tiger Tear routing, the network-record lifecycle, CONTRIBUTE_TO_RESERVE→
   local_reserve_koku correct routing, and the topic/spell/insurgency-dependent executors.
+- **s54.7 The Kolat (Tranche 13 — secrecy event→delta dispatch)** — `KolatSecrecy` gains
+  `ExposureEvent`/`AwarenessEvent` enums and `exposure_delta()`/`awareness_delta()` dispatchers,
+  the single tested entry point the future operation/investigation executors call instead of
+  hand-coding s54.7i deltas. Fixed-value events return their constant; the two GDD ranges
+  (player-publish +10..+25, player-evidence +10..+30) interpolate by a 0–1 `scope` via
+  `_scope_lerp`. Composes with `apply_delta` (clamp 0–100). All values verbatim from s54.7i —
+  no invention. +5 tests (16 total in `test_kolat_secrecy.gd`). The seasonal orchestrator pass
+  that calls these at real operation points (and applies natural decay + recomputes
+  `imperial_response_active` + checks the win condition) remains deferred — it is inert until
+  the operation executors that move the scalars exist, and wiring it now would add unverifiable
+  plumbing for zero behavior.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
