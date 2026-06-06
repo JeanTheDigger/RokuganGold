@@ -4288,6 +4288,19 @@ template generators it depends on. Faithful summary of the fixes that landed:
   unlock** (Kolat ActionIDs gated on `kolat_sect`/`kolat_objective`), the sleeper override
   loop, dual-stance topic positions, succession, win-condition pipeline, the Conclave, Tiger
   Tear routing, and special-rule world mutation.
+- **s54.7 The Kolat (Tranche 4 — executor layer)** — `simulation/kolat_executor.gd` (pure
+  class). Headless `execute(action_id, actor, metadata, dice)` handlers for the
+  KolatSystem-backed ActionIDs: LAUNDER_KOKU / UNDERREPORT_KOKU / TRANSFER_KOLAT_FUNDS /
+  CONTRIBUTE_TO_RESERVE (koku pipeline), CONDUCT_CONDITIONING (single session; cumulative
+  progress + completion driven by the deferred decomposition), MAINTAIN_SLEEPER_CONTACT
+  (+ Medicine/Perception TN 20 degradation read), ACTIVATE_SLEEPER, ESTABLISH_DEAD_DROP /
+  CHECK_DEAD_DROP / ROUTE_VIA_DEAD_DROP / CHECK_CONFIRMATION_DROP, SPONSOR_INSURGENCY +
+  BRIBE_GARRISON_COMMANDER (funding from vault-if-at-temple else kolat_koku; the insurgency
+  seed / Stability penalty application is deferred to InsurgencySystem wiring). Topic/spell/
+  network ActionIDs (ARCHIVE_TOPIC, RESURRECT_TOPIC, USE_CLOUDS_EYES, ANONYMOUS_TIP,
+  DISTRIBUTE_INTELLIGENCE, …) return `{ok:false, reason:"deferred_system"}`. NOT yet wired
+  into the main ActionExecutor dispatch or the Phase-3 context unlock (deep engine, needs
+  Godot). 13 tests.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`

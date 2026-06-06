@@ -1,0 +1,142 @@
+extends GutTest
+## GUT tests for KolatExecutor (simulation/kolat_executor.gd). GDD s54.7c / s54.7j.
+
+
+func _coin(id: int = 1) -> L5RCharacterData:
+	var c := L5RCharacterData.new()
+	c.character_id = id
+	c.willpower = 3; c.intelligence = 4; c.perception = 3
+	c.skills = {"Medicine": 4, "Temptation": 6}
+	return c
+
+
+func _temple(vault: int = 100) -> SettlementData:
+	var s := SettlementData.new()
+	s.temple_vault_koku = vault
+	return s
+
+
+func _dice() -> DiceEngine:
+	return DiceEngine.new(11)
+
+
+# === Koku ===
+
+func test_launder() -> void:
+	var coin := _coin()
+	coin.dirty_koku = 12
+	var r := KolatExecutor.execute("LAUNDER_KOKU", coin, {}, _dice())
+	assert_true(r["ok"])
+	assert_eq(r["laundered"], 5)
+	assert_eq(coin.kolat_koku, 5)
+	assert_eq(coin.dirty_koku, 7)
+	assert_eq(r["action"], "LAUNDER_KOKU")
+
+
+func test_underreport_requires_amount() -> void:
+	var coin := _coin()
+	assert_false(KolatExecutor.execute("UNDERREPORT_KOKU", coin, {}, _dice())["ok"])
+	var r := KolatExecutor.execute("UNDERREPORT_KOKU", coin, {"amount": 8}, _dice())
+	assert_true(r["ok"])
+	assert_eq(coin.dirty_koku, 8)
+
+
+func test_transfer_to_vault() -> void:
+	var coin := _coin(); coin.kolat_koku = 30
+	var temple := _temple(100)
+	var r := KolatExecutor.execute("TRANSFER_KOLAT_FUNDS", coin, {"temple": temple, "amount": 25}, _dice())
+	assert_true(r["ok"])
+	assert_eq(r["transferred"], 25)
+	assert_eq(temple.temple_vault_koku, 125)
+
+
+func test_contribute_to_reserve_skims() -> void:
+	var coin := _coin()
+	var r := KolatExecutor.execute("CONTRIBUTE_TO_RESERVE", coin, {"commerce_yield": 10.4, "skim_rate": 0.25}, _dice())
+	assert_eq(r["diverted"], 2, "floor(10.4 * 0.25) = 2")
+	assert_eq(coin.dirty_koku, 2)
+
+
+# === Sleeper ===
+
+func test_conduct_conditioning_resolves_session() -> void:
+	var dream := _coin(); dream.skills = {"Temptation": 8}; dream.intelligence = 5
+	var target := _coin(2); target.willpower = 1
+	var r := KolatExecutor.execute("CONDUCT_CONDITIONING", dream, {"target": target}, _dice())
+	assert_true(r["ok"])
+	assert_true(r.has("progressed"))
+	assert_eq(r["sessions_required"], 3, "Willpower 1 × 3")
+
+
+func test_maintain_sleeper_contact() -> void:
+	var dream := _coin()
+	var sleeper := _coin(2)
+	KolatSystem.complete_conditioning(sleeper, dream, "phrase", {"need": "X"})
+	sleeper.conditioning_stability = 80.0
+	var r := KolatExecutor.execute("MAINTAIN_SLEEPER_CONTACT", dream, {"sleeper": sleeper}, _dice())
+	assert_true(r["ok"])
+	assert_eq(r["conditioning_stability"], 90.0, "+10 restore")
+
+
+func test_activate_sleeper() -> void:
+	var dream := _coin()
+	var sleeper := _coin(2)
+	KolatSystem.complete_conditioning(sleeper, dream, "the tide turns", {"need": "ELIMINATE"})
+	var r := KolatExecutor.execute("ACTIVATE_SLEEPER", dream, {"sleeper": sleeper, "spoken_phrase": "the tide turns"}, _dice())
+	assert_true(r["ok"])
+	assert_false(sleeper.active_sleeper_command.is_empty())
+	# Wrong phrase fails.
+	var sleeper2 := _coin(3)
+	KolatSystem.complete_conditioning(sleeper2, dream, "correct", {"need": "X"})
+	assert_false(KolatExecutor.execute("ACTIVATE_SLEEPER", dream, {"sleeper": sleeper2, "spoken_phrase": "wrong"}, _dice())["ok"])
+
+
+# === Dead drops ===
+
+func test_establish_and_visit_dead_drop() -> void:
+	var lotus := _coin()
+	var est := KolatExecutor.execute("ESTABLISH_DEAD_DROP", lotus, {"concealment": 1}, _dice())
+	var drop: Dictionary = est["drop"]
+	assert_eq(drop["concealment"], 1)
+	# 4th visit drops concealment to 0 → abandoned.
+	for i: int in range(4):
+		KolatExecutor.execute("CHECK_DEAD_DROP", lotus, {"drop": drop}, _dice())
+	assert_true(drop["abandoned"])
+
+
+# === Disruption ===
+
+func test_sponsor_insurgency_deducts_reserve() -> void:
+	var coin := _coin(); coin.kolat_koku = 40
+	var r := KolatExecutor.execute("SPONSOR_INSURGENCY", coin, {"strength": 3}, _dice())
+	assert_true(r["ok"])
+	assert_eq(r["cost"], 30)
+	assert_eq(coin.kolat_koku, 10)
+	# Insufficient funds fails.
+	assert_false(KolatExecutor.execute("SPONSOR_INSURGENCY", coin, {"strength": 3}, _dice())["ok"])
+
+
+func test_sponsor_insurgency_from_vault() -> void:
+	var coin := _coin()
+	var temple := _temple(50)
+	var r := KolatExecutor.execute("SPONSOR_INSURGENCY", coin, {"strength": 2, "temple": temple}, _dice())
+	assert_true(r["ok"])
+	assert_eq(temple.temple_vault_koku, 30, "20 drawn from the vault when at-temple")
+
+
+func test_bribe_garrison() -> void:
+	var coin := _coin(); coin.kolat_koku = 5
+	var r := KolatExecutor.execute("BRIBE_GARRISON_COMMANDER", coin, {}, _dice())
+	assert_true(r["ok"])
+	assert_eq(r["cost"], 5)
+	assert_eq(coin.kolat_koku, 0)
+
+
+# === Deferred actions ===
+
+func test_topic_spell_actions_deferred() -> void:
+	var coin := _coin()
+	for a: String in ["ARCHIVE_TOPIC", "RESURRECT_TOPIC", "USE_CLOUDS_EYES", "ANONYMOUS_TIP", "DISTRIBUTE_INTELLIGENCE"]:
+		var r := KolatExecutor.execute(a, coin, {}, _dice())
+		assert_false(r["ok"], a + " is deferred")
+		assert_eq(r["reason"], "deferred_system")
