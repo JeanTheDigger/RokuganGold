@@ -4134,8 +4134,19 @@ template generators it depends on. Faithful summary of the fixes that landed:
   and `combat_ended` up to the mission owner. `end_mission()` detaches the controller,
   hides the HUD, and disconnects all relays. The world-map → mission **entry point** (which
   builds the session and calls `start_mission`) remains design-pending (PC mission
-  initiation, s56/s60); CombatScreen makes that a one-call hookup. 8 tests in
+  initiation, s56/s60); CombatScreen makes that a one-call hookup. 9 tests in
   `tests/test_combat_screen.gd`.
+- **s56.19 Mission Entry Policy (LOCKED, owner-approved).** `simulation/mission_entry_policy.gd`
+  (MissionEntryPolicy) classifies each quest-seed type as **AUTO** (the threat comes to the PC
+  or erupts where they stand — launches on contact: Road Encounter, Ronin/Bandit, Oni
+  Manifestation, Taint Manifestation) or **PLAYER_INITIATED** (a known, located threat the PC
+  chooses to assault: Maho Cult, Urban Criminal Network, Nezumi Infestation, Peasant Revolt,
+  Wall Sortie). Unknown seeds default to PLAYER_INITIATED (never auto-launch on contact).
+  `entry_mode_for()`, `is_auto()`, `is_player_initiated()`. Locked in
+  `gdd/s56.19_mission_entry_policy_locked.md`. 4 tests. NOTE: the policy is the classification
+  only — the AUTO-trigger wiring (PC-arrival/zone hook → `CombatScreen.start_mission`) and the
+  PLAYER_INITIATED ActionID (name/AP cost) remain undesigned (s14/s56/s60) and are flagged, not
+  invented.
 
 ### Systems Added 2026-06-04
 - **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),
