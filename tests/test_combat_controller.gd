@@ -2352,3 +2352,132 @@ func test_noise_detection_wounded_npc_has_penalty() -> void:
 
 	assert_true(detections_healthy >= detections_wounded,
 		"Healthy NPC should detect at least as often as wounded NPC")
+
+
+# =============================================================================
+# -- 28. Combat mode & End Combat (GDD s40.x) ---------------------------------
+# =============================================================================
+
+func _first_enemy(cc: CombatController) -> CombatController.EntityState:
+	for es: CombatController.EntityState in cc.get_all_entities():
+		if es.faction == CombatController.FACTION_ENEMY:
+			return es
+	return null
+
+
+func test_zone_starts_in_real_time() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	assert_false(cc.is_turn_based(), "Fresh zone with an unaware enemy is real-time")
+
+
+func test_engages_turn_based_on_alert() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	_first_enemy(cc).alert_state = AsciiMapEnvironment.AlertState.ALERT
+	assert_true(cc.is_turn_based(), "Enemy reaching ALERT engages turn-based mode")
+
+
+func test_suspicious_alone_does_not_engage() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	_first_enemy(cc).alert_state = AsciiMapEnvironment.AlertState.SUSPICIOUS
+	assert_false(cc.is_turn_based(),
+		"A merely-suspicious enemy does not flip the zone to turn-based")
+
+
+func test_turn_based_latches_after_engage() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	var e := _first_enemy(cc)
+	e.alert_state = AsciiMapEnvironment.AlertState.ALERT
+	assert_true(cc.is_turn_based(), "Engaged")
+	e.alert_state = AsciiMapEnvironment.AlertState.UNAWARE
+	assert_true(cc.is_turn_based(),
+		"Turn-based latches — it does not auto-clear when the enemy loses awareness")
+
+
+func test_active_hostiles_includes_suspicious_and_alert() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	var e := _first_enemy(cc)
+	e.alert_state = AsciiMapEnvironment.AlertState.SUSPICIOUS
+	assert_true(cc.has_active_hostiles(), "Suspicious enemy is an active hostile")
+	assert_true(cc.get_active_hostiles().has(e.entity_id), "Hostile id reported")
+	e.alert_state = AsciiMapEnvironment.AlertState.ALERT
+	assert_true(cc.has_active_hostiles(), "Alert enemy is an active hostile")
+
+
+func test_active_hostiles_excludes_unaware_fleeing_dead() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	var e := _first_enemy(cc)
+	e.alert_state = AsciiMapEnvironment.AlertState.UNAWARE
+	assert_false(cc.has_active_hostiles(), "Unaware enemy does not block End Combat")
+	e.alert_state = AsciiMapEnvironment.AlertState.FLEEING
+	assert_false(cc.has_active_hostiles(), "Fleeing enemy does not block End Combat")
+	e.alert_state = AsciiMapEnvironment.AlertState.ALERT
+	e.is_alive = false
+	assert_false(cc.has_active_hostiles(), "Dead enemy does not block End Combat")
+
+
+func test_request_end_combat_blocked_while_hostiles_active() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	_first_enemy(cc).alert_state = AsciiMapEnvironment.AlertState.ALERT
+	var r := cc.request_end_combat()
+	assert_false(r.get("ok", true), "End Combat blocked while a hostile is active")
+	assert_eq(r.get("reason", ""), "hostiles_remain")
+	assert_false(r.get("hostiles", []).is_empty(), "Reports the blocking hostiles")
+
+
+func test_request_end_combat_opens_poll_when_clear() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	_first_enemy(cc).alert_state = AsciiMapEnvironment.AlertState.UNAWARE
+	var r := cc.request_end_combat()
+	assert_true(r.get("ok", false), "Poll opens when no aware hostiles remain")
+	assert_true(r.get("awaiting_consent", []).has(cc.get_present_pc_ids()[0]),
+		"Present PC is polled for consent")
+
+
+func test_unanimous_consent_ends_combat() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	var e := _first_enemy(cc)
+	e.alert_state = AsciiMapEnvironment.AlertState.ALERT
+	assert_true(cc.is_turn_based(), "Engaged first")
+	# Field clears.
+	e.alert_state = AsciiMapEnvironment.AlertState.UNAWARE
+	assert_true(cc.request_end_combat().get("ok", false), "Poll opens")
+	var last: Dictionary = {}
+	for pc_id: int in cc.get_present_pc_ids():
+		last = cc.register_end_combat_consent(pc_id, true)
+	assert_true(last.get("ended", false), "Unanimous consent ends combat")
+	assert_false(cc.is_turn_based(), "Zone returns to real-time after End Combat")
+
+
+func test_single_decline_cancels_end_combat() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	var e := _first_enemy(cc)
+	e.alert_state = AsciiMapEnvironment.AlertState.ALERT
+	var _engaged := cc.is_turn_based()
+	e.alert_state = AsciiMapEnvironment.AlertState.UNAWARE
+	cc.request_end_combat()
+	var r := cc.register_end_combat_consent(cc.get_present_pc_ids()[0], false)
+	assert_true(r.get("cancelled", false), "A decline cancels the proposal")
+	assert_false(r.get("ended", true), "Combat does not end on decline")
+	assert_true(cc.is_turn_based(), "Zone stays turn-based after a decline")
+
+
+func test_finalize_blocked_if_hostile_reengages() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	var e := _first_enemy(cc)
+	e.alert_state = AsciiMapEnvironment.AlertState.ALERT
+	var _engaged := cc.is_turn_based()
+	e.alert_state = AsciiMapEnvironment.AlertState.UNAWARE
+	cc.request_end_combat()
+	# An enemy re-engages before consent completes.
+	e.alert_state = AsciiMapEnvironment.AlertState.ALERT
+	var r := cc.try_finalize_end_combat()
+	assert_false(r.get("ended", true), "Finalize fails if a hostile re-engaged")
+	assert_eq(r.get("reason", ""), "hostiles_remain")
+	assert_true(cc.is_turn_based(), "Zone stays turn-based")
+
+
+func test_consent_without_pending_request_is_noop() -> void:
+	var cc := _make_cc_with_enemy("BANDIT_RABBLE", 8, 8)
+	var r := cc.register_end_combat_consent(cc.get_present_pc_ids()[0], true)
+	assert_false(r.get("ended", true), "No-op without an open poll")
+	assert_eq(r.get("reason", ""), "no_pending_request")

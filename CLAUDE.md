@@ -4089,6 +4089,21 @@ template generators it depends on. Faithful summary of the fixes that landed:
 - **Contextual NPC stance selection for wounded combatants.** `_npc_desired_stance()` now
   factors wound level and threat type — wounded NPCs favor Defense/Full Defense, healthy
   aggressors favor Attack, ranged-threatened NPCs adjust accordingly.
+- **Real-time ↔ turn-based combat mode + End Combat (GDD s40.x, owner-approved design).**
+  Implemented on `CombatController`. A zone is **real-time** during exploration and latches
+  into **turn-based** the instant a hostile contact occurs (any living enemy reaches the
+  ALERT state). `is_turn_based()` lazily evaluates and latches the engage trigger; the
+  ASCII map view exposes a passthrough `is_turn_based()` and the CombatHUD renders a
+  REAL-TIME / TURN-BASED indicator. The zone only returns to real-time through a successful
+  **End Combat**: `request_end_combat()` is **blocked while any aware hostile remains**
+  (`get_active_hostiles()` = alive enemies at Suspicious or Alert; Unaware/Fleeing/dead do
+  not block); when the field is clear it opens a consent poll requiring **unanimous consent
+  of all present living PCs** (`get_present_pc_ids()`). `register_end_combat_consent(pc_id,
+  agree)` tallies votes — a single decline cancels the proposal; unanimous agreement calls
+  `try_finalize_end_combat()`, which re-checks for re-engaged hostiles before flipping the
+  zone back to real-time. The consent gate is pure decision logic over present PC entity IDs
+  — no networking/RPC is scaffolded (out of scope); the actual prompting is the UI/future
+  multiplayer layer's job. 12 tests in `tests/test_combat_controller.gd`.
 
 ### Systems Added 2026-06-04
 - **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),

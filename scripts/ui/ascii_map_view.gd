@@ -207,9 +207,17 @@ func clear_combat_controller() -> void:
 	_look_mode = false
 
 
-## Returns true when a CombatController is active.
+## Returns true when a CombatController is active (a combat mission is loaded).
 func is_in_combat() -> bool:
 	return _combat_controller != null
+
+
+## Returns true when the active zone is in turn-based combat mode (GDD s40.x).
+## False while in real-time exploration. False when no CombatController is loaded.
+func is_turn_based() -> bool:
+	if _combat_controller == null:
+		return false
+	return _combat_controller.is_turn_based()
 
 
 ## Returns true when stealth mode is active.
