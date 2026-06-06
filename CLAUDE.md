@@ -4152,10 +4152,17 @@ template generators it depends on. Faithful summary of the fixes that landed:
   spent from the PC's banked-AP pool. `PcSystem.can_spend_banked_ap()` / `spend_banked_ap()`
   added (s60.5). `engage_mission` validates PC actor + player-initiated seed + AP, spends 1
   banked AP, returns a launch request the UI consumes. 10 tests
-  (`test_mission_entry_controller.gd`). REMAINING (UI/session layer, unverified without Godot):
-  the thin consumer that assembles a `MissionSession` (MissionBuilder) for the seed's province
-  and calls `CombatScreen.start_mission()`; zone-level (finer than province) AUTO triggering
-  deferred (s4.4/s60).
+  (`test_mission_entry_controller.gd`).
+- **`simulation/mission_launcher.gd` (MissionLauncher) — headless launch bridge.**
+  `build_session(seed, province, province_history, seed_str, player)` turns a launch request
+  into a ready `MissionSession` via `MissionBuilder.assemble` + `MissionSession.from_builder`
+  (Water Ring = min(Strength, Perception); FoV from Perception). Returns null when the roster
+  is not ready or the session is invalid. 4 tests. This completes the headless pipeline
+  (classify → validate/AP → build session). The ONLY remaining step is UI/session glue
+  (unverified without Godot): on PC province arrival, query
+  `MissionEntryController.get_auto_launch_seeds()`, call `MissionLauncher.build_session()`,
+  then `CombatScreen.start_mission()`; plus a PC-arrival event source and zone-level AUTO
+  triggering (deferred, s4.4/s60).
 
 ### Systems Added 2026-06-04
 - **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),
