@@ -4432,19 +4432,19 @@ template generators it depends on. Faithful summary of the fixes that landed:
   structural name-matches where the s54.7b mandate sentence restates one already-defined
   objective_alignment NeedType (Tiger→MONITOR_KOLAT_SECURITY, Chrysanthemum→MONITOR_IMPERIAL_COURT,
   Cloud→MAINTAIN_CLOUD_ARCHIVE, Jade→ASSESS_SUPERNATURAL_THREAT, Steel→MONITOR_TEMPLE_PERIMETER).
-  Roc → "" (inactive at launch, s54.7b). **Lotus → "" is a genuine, un-papered design gap:**
-  its mandate ("ensure the organisation's enemies do not survive") matches no standing NeedType
-  and Lotus acts reactively on Tiger's dead-drop elimination assignments — the owner must
-  supply the identifier; it is NOT invented. `standing_needtype_for_sect()` returns the
-  mapping; `DayOrchestrator._assign_kolat_standing_objectives()` (wired into the daily standing-
-  assignment block beside magistrate/monk/ronin) writes the mandate into
+  Roc → "" (inactive at launch, s54.7b). **Lotus → MAINTAIN_DEAD_DROP_SCHEDULE (owner
+  decision 2026-06-06):** Lotus is reactive — it executes Tiger's dead-drop elimination
+  assignments — so its self-generated standing is keeping that assignment channel ready.
+  All 9 active Sects are now mapped (Roc alone is empty, by GDD). `standing_needtype_for_sect()`
+  returns the mapping; `DayOrchestrator._assign_kolat_standing_objectives()` (wired into the
+  daily standing-assignment block beside magistrate/monk/ronin) writes the mandate into
   `objectives_map[id]["standing"]` for living non-PC Masters, never overwriting an existing
-  standing objective, skipping Roc/Lotus (empty mandate). +6 tests (18 total in
-  `test_kolat_pipeline.gd`). DEFERRED unchanged minus standing assignment: the Lotus identifier
-  (owner decision), the three kolat_positions population channels, amount/temple metadata,
-  scalar event hooks + Imperial-response NPC behaviors + Tiger candidate pipeline + win-condition
-  event emission, the Conclave, Tiger Tear routing, the network-record lifecycle, and the
-  topic/spell/insurgency-dependent executors.
+  standing objective, skipping Roc (empty mandate). +6 tests (18 total in
+  `test_kolat_pipeline.gd`). DEFERRED (need Godot runtime / other live systems): the three
+  kolat_positions population channels, amount/temple metadata, scalar event hooks +
+  Imperial-response NPC behaviors + Tiger candidate pipeline + win-condition event emission,
+  the Conclave, Tiger Tear routing, the network-record lifecycle, CONTRIBUTE_TO_RESERVE→
+  local_reserve_koku correct routing, and the topic/spell/insurgency-dependent executors.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`

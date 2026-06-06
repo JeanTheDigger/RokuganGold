@@ -38,11 +38,10 @@ const BRIBE_GARRISON_KOKU_PER_SEASON: int = 5
 ##   Cloud "preserve forbidden knowledge" → MAINTAIN_CLOUD_ARCHIVE,
 ##   Jade "prevent supernatural corruption" → ASSESS_SUPERNATURAL_THREAT,
 ##   Steel "keep the Hidden Temple secure" → MONITOR_TEMPLE_PERIMETER.
+## Lotus → MAINTAIN_DEAD_DROP_SCHEDULE: owner decision 2026-06-06. Lotus is
+## reactive (it executes Tiger's elimination assignments delivered via dead drop),
+## so its self-generated standing is keeping that assignment channel ready.
 ## Roc is explicitly inactive at launch (s54.7b: "no standing mandate assigned") → "".
-## Lotus's mandate ("ensure the organisation's enemies do not survive") has no
-## matching standing NeedType — Lotus acts on Tiger's elimination assignments via
-## dead drops rather than a self-generated standing — so it is left "" pending an
-## explicit owner Sect→NeedType decision (not invented here).
 const SECT_STANDING_NEEDTYPE: Dictionary = {
 	Enums.KolatSect.TIGER: "MONITOR_KOLAT_SECURITY",
 	Enums.KolatSect.CHRYSANTHEMUM: "MONITOR_IMPERIAL_COURT",
@@ -52,13 +51,13 @@ const SECT_STANDING_NEEDTYPE: Dictionary = {
 	Enums.KolatSect.JADE: "ASSESS_SUPERNATURAL_THREAT",
 	Enums.KolatSect.DREAM: "MAINTAIN_SLEEPER",
 	Enums.KolatSect.STEEL: "MONITOR_TEMPLE_PERIMETER",
-	Enums.KolatSect.LOTUS: "",   # design gap — owner must supply the identifier
+	Enums.KolatSect.LOTUS: "MAINTAIN_DEAD_DROP_SCHEDULE",  # owner decision 2026-06-06
 	Enums.KolatSect.ROC: "",     # inactive at launch (s54.7b)
 }
 
 
 ## The Master's Sect standing-objective NeedType, or "" when none applies
-## (Roc inactive; Lotus pending an explicit identifier).
+## (Roc is inactive at launch).
 static func standing_needtype_for_sect(sect: int) -> String:
 	return String(SECT_STANDING_NEEDTYPE.get(sect, ""))
 

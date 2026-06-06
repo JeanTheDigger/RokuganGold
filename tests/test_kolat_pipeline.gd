@@ -213,11 +213,14 @@ func test_standing_needtype_structural_sects() -> void:
 	assert_eq(KolatSystem.standing_needtype_for_sect(Enums.KolatSect.STEEL), "MONITOR_TEMPLE_PERIMETER")
 
 
-func test_standing_needtype_empty_for_roc_and_lotus() -> void:
+func test_standing_needtype_empty_for_roc() -> void:
 	assert_eq(KolatSystem.standing_needtype_for_sect(Enums.KolatSect.ROC), "",
 		"Roc is inactive at launch (s54.7b)")
-	assert_eq(KolatSystem.standing_needtype_for_sect(Enums.KolatSect.LOTUS), "",
-		"Lotus identifier is a pending owner design decision")
+
+
+func test_standing_needtype_lotus_owner_decision() -> void:
+	assert_eq(KolatSystem.standing_needtype_for_sect(Enums.KolatSect.LOTUS),
+		"MAINTAIN_DEAD_DROP_SCHEDULE", "Lotus standing per owner decision 2026-06-06")
 
 
 func test_assign_kolat_standing_sets_mandate_for_master() -> void:
