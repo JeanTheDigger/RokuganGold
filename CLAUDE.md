@@ -4240,6 +4240,29 @@ template generators it depends on. Faithful summary of the fixes that landed:
   already in a mission (or with no screen) spent the PC's AP for nothing. Moved the
   no-screen / already-in-mission guards ahead of the AP spend. +1 regression test.
 
+### Systems Added 2026-06-06 (Allied NPC Companion)
+- **s57.46 Allied NPC Companion** — `simulation/companion_system.gd` (pure class),
+  `shared/companion_data.gd` (Resource). New system (was REFERENCE; locked s57.46a).
+  Headless core faithful to s57.46: `CompanionType` (village/city-team/headman doshin,
+  yojimbo, yoriki, named ally), `Command` (FOLLOW/HOLD/MOVE_TO/RETREAT + GUARD_EXIT/
+  IDENTIFY/SEARCH_AREA/PROTECT/INVESTIGATE), `Morale` (STEADY/SHAKEN/BROKEN).
+  6-slot hard cap (doshin team = 1 slot). `available_commands()` gates type-specific
+  commands; `can_assign_command()` blocks orders to BROKEN companions and limits SHAKEN
+  to RETREAT. `decide_action()` is the AI priority stack (SURVIVAL→PLAYER_COMMAND→DEFAULT;
+  BROKEN forces RETREAT). `morale_threshold()` per type (village .30/city .40/headman .50/
+  yojimbo never; yoriki .30–.50 by school+Yu; named .20–.50 by Yu); `update_morale()`
+  (SHAKEN at half threshold, BROKEN at threshold, no un-break), `relieve_shaken()`,
+  `combat_penalty()` (−5 SHAKEN). `noise_contribution()` (doshin baked-in bases;
+  others Stealth-reduced) + `party_noise_contribution()`. `teamwork_grapple_bonus()`
+  (+5 city team 2+), `will_engage_samurai()` (warrant + headman gates),
+  `guard_exit_penalty()` (−10 vs samurai). `death_consequences()` (doshin_losses
+  increment / named vacancy + Tier 4 topic). DEFERRED to UI/orchestrator (needs Godot,
+  same boundary as the combat layer): grid rendering, TAB command menu, A* path
+  execution, turn-loop integration into AsciiMapCombatOrchestrator, mission-launch
+  selection screen, local-knowledge prompts, live IDENTIFY/SEARCH/INVESTIGATE rolls.
+  Locked in `gdd/s57.46a_allied_npc_companion_locked.md`. 25 tests in
+  `tests/test_companion_system.gd`.
+
 ### Systems Added 2026-06-06 (Kiho)
 - **s38 Kiho** — `simulation/kiho_system.gd` (pure class). New system (was REFERENCE).
   Full 73-kiho catalog faithful to s38 (Air 18 / Earth 17 / Fire 12 / Water 11 /
