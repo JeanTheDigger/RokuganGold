@@ -69,6 +69,11 @@ static func at_capacity(master: L5RCharacterData, sect: String) -> bool:
 	return agent_count(master, sect) >= MAX_AGENTS
 
 
+## Public accessor for an entry's capacity/lifecycle status (s54.7d).
+static func status_of(entry: Variant) -> String:
+	return _status_of(entry)
+
+
 static func _status_of(entry: Variant) -> String:
 	# Detailed schemas use "operative_status" (Silk/Coin/Lotus) or "agent_status"
 	# (Chrysanthemum/universal) or "asset_status" (Jade); steel uses "morale_status"

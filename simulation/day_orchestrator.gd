@@ -1278,6 +1278,7 @@ static func advance_day(
 			provinces,
 		)
 		_process_kolat_bribes_seasonal(characters, provinces)
+		_process_kolat_network_seasonal(characters, active_topics, next_topic_id, ic_day)
 		wall_seasonal_result = _process_wall_seasonal_pressure(
 			settlements, provinces, current_season, season_meta
 		)
@@ -3733,6 +3734,55 @@ static func _process_kolat_bribes_seasonal(characters: Array, provinces: Diction
 			character.special_data.erase("active_bribes")
 		else:
 			character.special_data["active_bribes"] = still_active
+
+
+# -- Kolat Network Maintenance (s54.7d) ---------------------------------------
+# Seasonal silence detection across every Master's agent-network record. When an
+# agent's gap since last contact exceeds its threshold, a Tier 4 personal concern
+# topic fires in the Master's known_topics (s54.7d). A per-entry silence_flagged
+# guard prevents re-firing every season for the same lapse. (The accompanying
+# LOCATE_CHARACTER priority-2 objective and the MANAGE_COMPROMISED_AGENT response
+# route through the engine's NeedType pipeline and are not generated here.)
+
+static func _process_kolat_network_seasonal(
+	characters: Array, active_topics: Array, next_topic_id: Array, ic_day: int
+) -> void:
+	for master: L5RCharacterData in characters:
+		if master == null or CharacterStats.is_dead(master):
+			continue
+		if not master.is_kolat_master:
+			continue
+		var field: String = KolatNetwork.network_field_for_sect(master.kolat_sect)
+		if field == "":
+			continue
+		var record: Dictionary = master.special_data.get(field, {})
+		for code_name: String in record:
+			var entry: Variant = record[code_name]
+			if not entry is Dictionary:
+				continue
+			var e: Dictionary = entry
+			if KolatNetwork.status_of(e) == "burned":
+				continue
+			if KolatNetwork.silence_overdue(e, ic_day):
+				if e.get("silence_flagged", false):
+					continue
+				e["silence_flagged"] = true
+				var tid: int = next_topic_id[0]
+				next_topic_id[0] = tid + 1
+				var topic: TopicData = TopicMomentumSystem.create_topic(
+					tid, "%s has not reported in some time" % code_name,
+					TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
+					ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+					[], "", "", int(e.get("npc_id", -1)),
+					"kolat_silence", "kolat_agent_silence",
+				)
+				active_topics.append(topic)
+				if not master.topic_pool.has(tid):
+					master.topic_pool.append(tid)
+			else:
+				# Contact within threshold — clear any stale silence flag.
+				if e.get("silence_flagged", false):
+					e["silence_flagged"] = false
 
 
 # -- Scene Examination Writebacks (s11.3.13) -----------------------------------

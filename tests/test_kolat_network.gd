@@ -119,3 +119,37 @@ func test_leverage_value_clamped() -> void:
 	var cloud := _master()
 	KolatNetwork.archive_topic(cloud, _topic(71), 10, 9)  # over-range
 	assert_eq(KolatNetwork.get_archived_topic(cloud, 71)["leverage_value"], 3)
+
+
+# === Seasonal silence-detection pass (s54.7d) ===
+
+func test_silence_pass_fires_topic_and_dedups() -> void:
+	var silk := _master(); silk.kolat_sect = "kolat_silk"
+	KolatNetwork.register_silk_operative(silk, "Heron", 12, "Lion court", 100)
+	var topics: Array = []
+	var nti: Array = [1000]
+	# gap 100 > city threshold 30 → fires.
+	DayOrchestrator._process_kolat_network_seasonal([silk], topics, nti, 200)
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].subject_character_id, 12)
+	assert_true(silk.topic_pool.has(topics[0].topic_id))
+	# Second pass: silence_flagged prevents a duplicate.
+	DayOrchestrator._process_kolat_network_seasonal([silk], topics, nti, 260)
+	assert_eq(topics.size(), 1, "dedup via silence_flagged")
+
+
+func test_silence_pass_quiet_when_recent() -> void:
+	var silk := _master(); silk.kolat_sect = "kolat_silk"
+	KolatNetwork.register_silk_operative(silk, "Heron", 12, "Lion court", 100)
+	var topics: Array = []
+	DayOrchestrator._process_kolat_network_seasonal([silk], topics, [1000], 120)  # gap 20 < 30
+	assert_eq(topics.size(), 0)
+
+
+func test_silence_pass_skips_non_master() -> void:
+	var agent := L5RCharacterData.new()
+	agent.character_id = 5
+	agent.kolat_sect = "kolat_silk"  # conscious agent, NOT a Master
+	var topics: Array = []
+	DayOrchestrator._process_kolat_network_seasonal([agent], topics, [1000], 999)
+	assert_eq(topics.size(), 0, "only Masters maintain network records")
