@@ -323,6 +323,11 @@ static func resolve_goal(
 	if crisis_need != null:
 		return crisis_need
 
+	# Kolat objective — priority 3 fires before the primary (s54.7d cascade).
+	var kolat_hi := _decompose_kolat_objective(ctx, objectives, true)
+	if kolat_hi != null:
+		return kolat_hi
+
 	# Family Daimyo tier: Combined Pool (Champion conclusions + local Tier 3 needs)
 	# replaces the Primary Objective step per s57.54.10b. Only FAMILY_DAIMYO uses
 	# this pool — Champion/Imperial have no conclusions injected and use the
@@ -349,6 +354,12 @@ static func resolve_goal(
 			if primary_need != null:
 				return primary_need
 
+	# Kolat objective — priority 1–2 yields to the primary but precedes standing
+	# (s54.7d cascade).
+	var kolat_lo := _decompose_kolat_objective(ctx, objectives, false)
+	if kolat_lo != null:
+		return kolat_lo
+
 	# Standing objective fallback
 	var standing: Dictionary = objectives.get("standing", {})
 	if standing.size() > 0:
@@ -368,6 +379,27 @@ static func resolve_goal(
 	fallback.need_type = "REST"
 	fallback.priority = 3
 	return fallback
+
+
+## Kolat objective slot (s54.7d). The third objective slot, active only when a
+## Master has assigned a task through the Kolat delivery channel. It enters the
+## Phase-2 cascade at two points: priority 3 fires before the primary, priority 1–2
+## yields to the primary but precedes the standing objective. high_priority_only
+## selects which pass this call is. Decomposes exactly like any other objective.
+static func _decompose_kolat_objective(
+	ctx: NPCDataStructures.ContextSnapshot,
+	objectives: Dictionary,
+	high_priority_only: bool,
+) -> NPCDataStructures.ImmediateNeed:
+	var kolat: Dictionary = objectives.get("kolat", {})
+	if kolat.is_empty():
+		return null
+	var priority: int = int(kolat.get("priority", 2))
+	if high_priority_only and priority < 3:
+		return null
+	if not high_priority_only and priority >= 3:
+		return null
+	return _decompose_objective(kolat, ctx)
 
 
 ## Combined pool for lord-tier characters (s57.54.10b).

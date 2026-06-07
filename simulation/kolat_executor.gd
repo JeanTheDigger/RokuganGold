@@ -81,6 +81,8 @@ static func execute(
 			r = _conduct_perimeter_patrol(actor, dice)
 		"SUBMIT_KOLAT_REPORT":
 			r = _submit_kolat_report(metadata)
+		"TRANSMIT_VIA_TEAR":
+			r = _transmit_via_tear(actor, metadata)
 		"DELIVER_SEALED_LETTER":
 			r = _deliver_sealed_letter(actor, metadata, dice)
 		"ROUTE_ANONYMOUS_INTELLIGENCE":
@@ -260,6 +262,31 @@ static func _rotate_dead_drop(actor: L5RCharacterData, metadata: Dictionary, dic
 		return {"ok": false, "reason": "no_compromised_drop"}
 	var roll: Dictionary = SkillResolver.resolve_skill_check(actor, dice, "Stealth", 10)
 	return {"ok": true, "rotated_operative": rotated, "unnoticed": bool(roll.get("success", false))}
+
+
+# === TEAR TRANSMISSION (Tiger/Cloud/Lotus, s54.7c/d) =========================
+
+## TRANSMIT_VIA_TEAR. 1 AP, any context. Requires the sender holds a Tear. Sends a
+## directive (a NeedType + target + priority — the Tear carries intent, not
+## paragraphs) to another part of the organisation. The DayOrchestrator writeback
+## resolves the recipient (Tiger routes to any Master by Sect via its identity map;
+## other Masters route only to Tiger) and installs it as the recipient's Kolat
+## objective, replacing any existing one (Tiger directive override, s54.7d).
+static func _transmit_via_tear(actor: L5RCharacterData, metadata: Dictionary) -> Dictionary:
+	if not actor.holds_tear:
+		return {"ok": false, "reason": "no_tear"}
+	var need_type: String = String(metadata.get("directive_need_type", ""))
+	if need_type == "":
+		return {"ok": false, "reason": "no_directive"}
+	return {
+		"ok": true, "transmits_directive": true,
+		"directive_need_type": need_type,
+		"directive_target_npc_id": int(metadata.get("directive_target_npc_id", -1)),
+		"directive_target_province_id": int(metadata.get("directive_target_province_id", -1)),
+		"directive_priority": int(metadata.get("directive_priority", 2)),
+		"recipient_sect": int(metadata.get("recipient_sect", Enums.KolatSect.NONE)),
+		"recipient_npc_id": int(metadata.get("recipient_npc_id", -1)),
+	}
 
 
 # === HIDDEN TEMPLE / STEEL / SILK FIELD ACTIONS (s54.7c) =====================

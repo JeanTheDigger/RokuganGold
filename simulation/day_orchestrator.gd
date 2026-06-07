@@ -155,6 +155,7 @@ static func advance_day(
 	_populate_military_data(military_data, companies)
 
 	_clear_stale_context_flags(world_states)
+	_inject_kolat_objective_flags(world_states, objectives_map)
 	_expire_province_weather(provinces, ic_day)
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
@@ -350,6 +351,7 @@ static func advance_day(
 		day_result.get("results", []), characters_by_id,
 		active_topics, next_topic_id, insurgencies, next_insurgency_id,
 		ic_day, current_season, pending_letters, next_letter_id, settlements,
+		objectives_map,
 	)
 
 	_process_scene_examination_writebacks(
@@ -3529,6 +3531,7 @@ static func _process_kolat_writebacks(
 	pending_letters: Array = [],
 	next_letter_id: Array = [1],
 	settlements: Array = [],
+	objectives_map: Dictionary = {},
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
@@ -3905,6 +3908,40 @@ static func _process_kolat_writebacks(
 						"leverage_value": 0,
 					}
 					break
+
+			"TRANSMIT_VIA_TEAR":
+				if not effects.get("transmits_directive", false):
+					continue
+				var tr_sender: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if tr_sender == null or CharacterStats.is_dead(tr_sender):
+					continue
+				# Resolve recipient: Tiger routes to any Master by Sect via its identity
+				# map; any other Master routes only to Tiger (lateral-comms constraint,
+				# s54.7d).
+				var recipient_id: int = -1
+				if tr_sender.kolat_sect == Enums.KolatSect.TIGER:
+					var ids: Dictionary = tr_sender.special_data.get("kolat_master_identities", {})
+					var rsect: int = int(effects.get("recipient_sect", Enums.KolatSect.NONE))
+					recipient_id = int(ids.get(rsect, effects.get("recipient_npc_id", -1)))
+				else:
+					recipient_id = tr_sender.kolat_superior_id  # to Tiger
+				if recipient_id < 0:
+					continue
+				var recipient: L5RCharacterData = characters_by_id.get(recipient_id, null)
+				if recipient == null or CharacterStats.is_dead(recipient) or recipient.is_pc:
+					continue
+				# Install as the recipient's Kolat objective, replacing any existing one
+				# (Tiger directive override, s54.7d).
+				if not objectives_map.has(recipient_id):
+					objectives_map[recipient_id] = {}
+				objectives_map[recipient_id]["kolat"] = {
+					"need_type": String(effects.get("directive_need_type", "")),
+					"target_npc_id": int(effects.get("directive_target_npc_id", -1)),
+					"target_province_id": int(effects.get("directive_target_province_id", -1)),
+					"priority": int(effects.get("directive_priority", 2)),
+					"kolat_objective": true,
+					"source": "tear",
+				}
 
 
 # -- Kolat Bribe Upkeep (s54.7c) ----------------------------------------------
@@ -14864,6 +14901,24 @@ static func _expire_province_weather(provinces: Dictionary, ic_day: int) -> void
 			province.province_weather_expires_ic_day = -1
 
 
+## Sets has_kolat_objective on each character whose objectives_map carries a
+## non-empty Kolat objective slot (s54.7d). Conscious Kolat agents need this flag
+## for the Phase-3 ActionID unlock; Masters unlock unconditionally via
+## is_kolat_master, so this matters mainly for field agents handed a Tear directive.
+static func _inject_kolat_objective_flags(world_states: Dictionary, objectives_map: Dictionary) -> void:
+	for char_id: Variant in objectives_map:
+		if not char_id is int:
+			continue
+		var objs: Variant = objectives_map[char_id]
+		if not objs is Dictionary:
+			continue
+		var kolat: Variant = (objs as Dictionary).get("kolat", {})
+		if kolat is Dictionary and not (kolat as Dictionary).is_empty():
+			if not world_states.has(char_id) or not world_states[char_id] is Dictionary:
+				world_states[char_id] = {}
+			world_states[char_id]["has_kolat_objective"] = true
+
+
 static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 	# Top-level ws keys that are set conditionally and must be erased each day.
 	var stale_keys: Array = [
@@ -14875,7 +14930,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"is_patrolled", "phoenix_champion_authority",
 		"settlement_type",
 		"champion_conclusion_candidates", "local_tier3_candidates",
-		"has_active_contracts",
+		"has_active_contracts", "has_kolat_objective",
 		# Lord-specific keys (cleared so ex-lords don't retain stale data after succession)
 		"province_data", "settlements", "clans", "current_season",
 		"characters_by_id", "active_armies", "active_insurgencies",

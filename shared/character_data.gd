@@ -237,6 +237,9 @@ var spell_void_bonus_used: int = 0
 @export var kolat_sect: Enums.KolatSect = Enums.KolatSect.NONE
 ## True on elevation to a Master seat (s54.7a/h). Hidden.
 @export var is_kolat_master: bool = false
+## True if this agent carries a Tear of the Oni's Eye — enables TRANSMIT_VIA_TEAR
+## (s54.7c/d). All Masters hold a Tear; senior agents may also. Hidden.
+@export var holds_tear: bool = false
 ## Per-Master record dictionaries, koku fields, cover personas, etc. (s54.7h). Hidden.
 @export var special_data: Dictionary = {}
 

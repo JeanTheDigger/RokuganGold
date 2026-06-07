@@ -396,10 +396,28 @@ func test_submit_kolat_report_requires_topic() -> void:
 	assert_eq(r["report_topic_id"], 88)
 
 
-func test_topic_spell_actions_deferred() -> void:
-	var coin := _coin()
-	# Only TRANSMIT_VIA_TEAR remains (Tear network — Tranche E2).
-	for a: String in ["TRANSMIT_VIA_TEAR"]:
-		var r := KolatExecutor.execute(a, coin, {}, _dice())
-		assert_false(r["ok"], a + " is deferred")
-		assert_eq(r["reason"], "deferred_system")
+# === Tear transmission (s54.7c/d) ===
+
+func test_transmit_via_tear_requires_tear() -> void:
+	var tiger := _coin(1); tiger.kolat_sect = Enums.KolatSect.TIGER  # no Tear yet
+	var r := KolatExecutor.execute("TRANSMIT_VIA_TEAR", tiger,
+		{"directive_need_type": "ELIMINATE_CHARACTER", "directive_target_npc_id": 9}, _dice())
+	assert_false(r["ok"])
+	assert_eq(r["reason"], "no_tear")
+
+
+func test_transmit_via_tear_requires_directive() -> void:
+	var tiger := _coin(1); tiger.kolat_sect = Enums.KolatSect.TIGER; tiger.holds_tear = true
+	assert_false(KolatExecutor.execute("TRANSMIT_VIA_TEAR", tiger, {}, _dice())["ok"])
+
+
+func test_transmit_via_tear_returns_directive() -> void:
+	var tiger := _coin(1); tiger.kolat_sect = Enums.KolatSect.TIGER; tiger.holds_tear = true
+	var r := KolatExecutor.execute("TRANSMIT_VIA_TEAR", tiger, {
+		"directive_need_type": "ELIMINATE_CHARACTER", "directive_target_npc_id": 9,
+		"directive_priority": 3, "recipient_sect": Enums.KolatSect.LOTUS,
+	}, _dice())
+	assert_true(r["ok"])
+	assert_true(r["transmits_directive"])
+	assert_eq(r["directive_need_type"], "ELIMINATE_CHARACTER")
+	assert_eq(r["directive_priority"], 3)

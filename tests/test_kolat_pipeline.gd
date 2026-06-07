@@ -249,3 +249,41 @@ func test_assign_kolat_standing_does_not_overwrite_existing() -> void:
 	DayOrchestrator._assign_kolat_standing_objectives([coin], omap)
 	assert_eq(omap[53]["standing"]["need_type"], "UPHOLD_LAW",
 		"an existing standing objective is never overwritten")
+
+
+# === Phase-2 Kolat objective cascade (s54.7d) ===
+
+func test_kolat_objective_priority3_fires_before_primary() -> void:
+	var c := _coin_master(60)
+	var ctx := _ctx_for(c)
+	var objectives := {
+		"primary": {"need_type": "ACQUIRE_RESOURCE", "priority": 2},
+		"kolat": {"need_type": "MANAGE_KOLAT_FUNDS", "priority": 3, "kolat_objective": true},
+	}
+	var need := NPCDecisionEngine.resolve_goal(c, ctx, objectives)
+	assert_eq(need.need_type, "MANAGE_KOLAT_FUNDS",
+		"priority-3 Kolat objective fires before the primary")
+
+
+func test_kolat_objective_priority1_yields_to_primary() -> void:
+	var c := _coin_master(61)
+	var ctx := _ctx_for(c)
+	var objectives := {
+		"primary": {"need_type": "ACQUIRE_RESOURCE", "priority": 2},
+		"kolat": {"need_type": "MANAGE_KOLAT_FUNDS", "priority": 1, "kolat_objective": true},
+	}
+	var need := NPCDecisionEngine.resolve_goal(c, ctx, objectives)
+	assert_eq(need.need_type, "ACQUIRE_RESOURCE",
+		"priority-1 Kolat objective yields to the primary")
+
+
+func test_kolat_objective_precedes_standing_when_no_primary() -> void:
+	var c := _coin_master(62)
+	var ctx := _ctx_for(c)
+	var objectives := {
+		"standing": {"need_type": "UPHOLD_LAW", "priority": 4},
+		"kolat": {"need_type": "MANAGE_KOLAT_FUNDS", "priority": 1, "kolat_objective": true},
+	}
+	var need := NPCDecisionEngine.resolve_goal(c, ctx, objectives)
+	assert_eq(need.need_type, "MANAGE_KOLAT_FUNDS",
+		"priority-1 Kolat objective precedes the standing objective")

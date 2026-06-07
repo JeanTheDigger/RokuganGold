@@ -97,6 +97,9 @@ static func select_masters(npcs: Array, dice: DiceEngine) -> Dictionary:
 		_apply_master(master, sect)
 		_apply_special_rules(master, sect, dice)
 	# Wire the Kolat chain: every Master reports to Tiger; Tiger reports to none.
+	# Every Master also carries a Tear (s54.7c/d), and Tiger holds the only complete
+	# Sect → npc_id identity map (s54.7h kolat_master_identities).
+	var identities: Dictionary = {}
 	for sect: int in result.keys():
 		var nid: int = result[sect]
 		if nid < 0:
@@ -105,6 +108,12 @@ static func select_masters(npcs: Array, dice: DiceEngine) -> Dictionary:
 		if m == null:
 			continue
 		m.kolat_superior_id = -1 if sect == Enums.KolatSect.TIGER else tiger_id
+		m.holds_tear = true
+		identities[sect] = nid
+	if tiger_id >= 0:
+		var tiger: L5RCharacterData = _find(npcs, tiger_id)
+		if tiger != null:
+			tiger.special_data["kolat_master_identities"] = identities
 	return result
 
 
