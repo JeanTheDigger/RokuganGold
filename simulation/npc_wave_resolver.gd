@@ -424,7 +424,7 @@ static func _resolve_character_wave_full(
 		if rm_check.get("triggered", false):
 			var rm_wound: int = CharacterStats.get_wound_penalty(character)
 			var rm_roll: DiceResult = dice_engine.roll_and_keep(
-				character.willpower, character.willpower, false, ""
+				character.willpower, character.willpower, false, false
 			)
 			if (rm_roll.total + rm_wound) < rm_check.get("tn", 0):
 				var rm_targets: Dictionary = _pick_rumormonger_targets(character, characters_by_id)

@@ -226,7 +226,7 @@ static func lord_auto_rejects(
 	if lord_disposition <= -1:
 		return true
 	for ct: int in lords_known_crime_types:
-		if ct == Enums.CrimeType.TREASON or ct == Enums.CrimeType.MAHO_USE \
+		if ct == Enums.CrimeType.TREASON or ct == Enums.CrimeType.MAHO \
 				or ct == Enums.CrimeType.UNSANCTIONED_COVERT_KILLING:
 			return true
 	return false
@@ -404,7 +404,7 @@ static func can_be_inducted(
 	if inductee.clan == sponsoring_lord.clan:
 		return {"eligible": false, "reason": "already_same_clan"}
 	for ct: int in lords_known_crime_types:
-		if ct == Enums.CrimeType.TREASON or ct == Enums.CrimeType.MAHO_USE \
+		if ct == Enums.CrimeType.TREASON or ct == Enums.CrimeType.MAHO \
 				or ct == Enums.CrimeType.UNSANCTIONED_COVERT_KILLING:
 			return {"eligible": false, "reason": "known_serious_crime"}
 	return {"eligible": true}

@@ -1635,7 +1635,7 @@ static func _apply_effects(
 		elif action_id in INTELLIGENCE_ACTIONS:
 			effects = _compute_intelligence_effects(action_id, result.get("margin", 0))
 		else:
-			effects = _compute_self_effects(action_id)
+			effects = _compute_self_effects(action_id, action, _character)
 	else:
 		effects = _compute_failure_effects(action_id, result.get("margin", 0))
 
@@ -2510,7 +2510,7 @@ static func _execute_purify_tainted_ground(
 	}
 
 
-static func _compute_self_effects(action_id: String) -> Dictionary:
+static func _compute_self_effects(action_id: String, action: NPCDataStructures.ScoredAction, character: L5RCharacterData) -> Dictionary:
 	match action_id:
 		"TRAIN":
 			return {"effect": "skill_practiced"}
@@ -6653,7 +6653,7 @@ static func _execute_compose_sculpture(
 			"effects": {
 				"is_new_sculpture": true,
 				"format": meta.get("format", SculptureSystem.Format.STATUARY),
-				"material": meta.get("material", SculptureSystem.Material.WOOD),
+				"material": meta.get("material", SculptureSystem.MaterialType.WOOD),
 				"target_quality_tier": target_quality,
 				"subject_type": meta.get("subject_type", SculptureSystem.SubjectType.FORTUNE),
 				"subject_id": meta.get("subject_id", -1),
@@ -6664,12 +6664,12 @@ static func _execute_compose_sculpture(
 
 	# Advance existing WIP.
 	var raises_declared: int = meta.get("raises", 0)
-	var material: int = meta.get("material", SculptureSystem.Material.WOOD)
+	var material: int = meta.get("material", SculptureSystem.MaterialType.WOOD)
 	var sc_format: int = meta.get("format", SculptureSystem.Format.STATUARY)
-	var stone_penalty: int = SculptureSystem.STONE_TN_PENALTY if material == SculptureSystem.Material.STONE else 0
+	var stone_penalty: int = SculptureSystem.STONE_TN_PENALTY if material == SculptureSystem.MaterialType.STONE else 0
 	# GDD A5: bronze +1 FR requires a foundry in the province. Defaults false until foundry data modeled.
 	var has_foundry: bool = ctx.known_objectives.get("foundry_in_province", false)
-	var bronze_fr: int = 1 if (material == SculptureSystem.Material.BRONZE and has_foundry) else 0
+	var bronze_fr: int = 1 if (material == SculptureSystem.MaterialType.BRONZE and has_foundry) else 0
 	# Yoritomo Sculptor: +1k1 on figurine rolls (GDD section N).
 	var yoritomo_bonus_dice: int = 0
 	var yoritomo_bonus_keep: int = 0
