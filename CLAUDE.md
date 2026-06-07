@@ -4511,14 +4511,44 @@ but not executed in this environment.
 - **GDD note (read-only, not edited):** s54.7d line 39 says Silk/Lotus keep no
   network record, but s54.7h defines detailed silk/lotus records. The consolidated
   fields reference (s54.7h) is followed as authoritative.
-- **Still deferred** (owner rulings / absent infrastructure, not buildable without
-  inventing): TRANSMIT_VIA_TEAR & OBSERVE_VIA_EYE & SECURE_ONI_EYE &
-  CONDUCT_PERIMETER_PATROL (Tear network / Hidden Temple settlement — abstract per
-  owner), SUBMIT_KOLAT_REPORT (cross-Master Cloud routing under the
-  lateral-communication constraint), RUN_COURIER_ROUTE (patrol-scaled TN),
-  DISTRIBUTE_INTELLIGENCE (route-compromise interception state), USE_CLOUDS_EYES
-  (the Master Cloud's Eyes Air-3 spell is not in the SpellSystem library),
-  ARRANGE_PROXY_DUEL (multi-step grievance decomposition).
+- **Tranches D5–E2 (2026-06-07, second pass — owner directive "do ALL of it"):**
+  the remaining deferred executors, completing **all 29 Kolat ActionIDs**.
+  - **D5** — USE_CLOUDS_EYES (Spellcraft + Air vs TN 15; copies 1d3+Raises ambient
+    topics from the target settlement's province into known_topics) and
+    DISTRIBUTE_INTELLIGENCE (delivers a topic to a registered Silk agent + refreshes
+    their last-report; interception layer deferred — no route-compromise model).
+  - **D6** — ARRANGE_PROXY_DUEL (Courtier vs TN 20 narrative build → Tier 3
+    confrontation topic, −1.0 Honor; sub-step-1 proxy cultivation deferred).
+  - **E1** — Hidden Temple designated at world-gen (owner reversed the abstract
+    ruling): SettlementData.is_hidden_temple + temple_cloud_archive;
+    WorldBootstrap._designate_hidden_temple (deterministic lowest-id mountain
+    VILLAGE); KolatNetwork.find_hidden_temple/is_at_hidden_temple. Executors:
+    RUN_COURIER_ROUTE (Stealth TN 15 base + patrol hook +0, owner ruling),
+    OBSERVE_VIA_EYE (at-temple full-fidelity ambient-topic copy), SECURE_ONI_EYE
+    (Investigation+Perception TN 20), CONDUCT_PERIMETER_PATROL (Stealth TN 15;
+    failure → Tier 4 topic), SUBMIT_KOLAT_REPORT (at-temple; archives into the
+    Temple's master Cloud archive — sidesteps cross-Master identity routing).
+  - **E2** — TRANSMIT_VIA_TEAR + the Tear network. holds_tear field;
+    KolatMasterSelector stamps holds_tear + populates Tiger's
+    kolat_master_identities. **Phase-2 cascade (s54.7d):** the Kolat objective slot
+    now enters resolve_goal at priority 3 (before primary) and priority 1-2 (after
+    primary, before standing); a no-op for non-Kolat characters. Tear writeback
+    installs the directive as the recipient's Kolat objective (Tiger routes by Sect,
+    others route to Tiger). _inject_kolat_objective_flags drives the Phase-3 unlock
+    for field agents.
+  - **Owner rulings (second pass):** Hidden Temple designated (not abstract); courier
+    TN base 15 + patrol hook; Gi-rank dropped from recruitment (first pass).
+- **Still deferred — NOT executors (all 29 are done), but the layers that feed
+  them:** the 6 Kolat **decomposition functions** that populate executor metadata
+  end-to-end (targets/amounts/drops/topic-ids — most executors are correct but
+  dormant until a decomposition hands them inputs); Kolat-objective
+  completion/recall (the slot persists until overwritten); OBSERVE_VIA_EYE
+  contention (one Master/day) and all-AP cost; SECURE two-failure auto-report;
+  CONDUCT_PERIMETER_PATROL within-3-provinces range + cover identity; courier
+  patrol-TN scaling; DISTRIBUTE_INTELLIGENCE route-compromise interception; the
+  Conclave and win-condition orchestrator passes (KolatSecrecy data layer exists).
+  These need the NPC-engine decomposition layer, map-distance data, or action-log
+  state — none buildable without inventing.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
