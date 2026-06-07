@@ -328,6 +328,32 @@ const BASE_PU_MINOR_CLAN: int = 5
 const BASE_PU_UNGOVERNABLE: int = 1
 
 
+## Designates one settlement as the Kolat Hidden Temple (s54.7h, owner-approved
+## 2026-06-07). The GDD says "set at world generation" but names no settlement, so
+## this picks deterministically: the lowest-id VILLAGE in a MOUNTAINS province (the
+## most overlooked, remote site), falling back to any VILLAGE, then any settlement.
+## Initialises the vault to 0 (Coin funds it during play).
+static func _designate_hidden_temple(settlements: Array, provinces: Dictionary) -> void:
+	var chosen: SettlementData = null
+	for s: SettlementData in settlements:
+		if s.settlement_type != Enums.SettlementType.VILLAGE:
+			continue
+		var prov: ProvinceData = provinces.get(s.province_id, null)
+		if prov != null and prov.terrain_type == Enums.TerrainType.MOUNTAINS:
+			if chosen == null or s.settlement_id < chosen.settlement_id:
+				chosen = s
+	if chosen == null:
+		for s: SettlementData in settlements:
+			if s.settlement_type == Enums.SettlementType.VILLAGE:
+				chosen = s
+				break
+	if chosen == null and not settlements.is_empty():
+		chosen = settlements[0]
+	if chosen != null:
+		chosen.is_hidden_temple = true
+		chosen.temple_vault_koku = 0
+
+
 static func bootstrap_world(
 	dice: DiceEngine,
 ) -> Dictionary:
@@ -376,6 +402,8 @@ static func bootstrap_world(
 		next_province_id += 1
 
 	_wire_adjacencies(provinces, province_name_to_id)
+
+	_designate_hidden_temple(settlements, provinces)
 
 	var clans: Dictionary = _create_clan_data(provinces)
 

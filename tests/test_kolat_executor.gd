@@ -356,11 +356,50 @@ func test_arrange_proxy_duel_resolves() -> void:
 	assert_true(r.get("arranges_duel", false) or r.get("narrative_failed", false))
 
 
+# === Hidden Temple / Steel / Silk field actions (s54.7c) ===
+
+func test_run_courier_route_resolves() -> void:
+	var silk := _coin(1); silk.kolat_sect = Enums.KolatSect.SILK
+	var r := KolatExecutor.execute("RUN_COURIER_ROUTE", silk, {}, _dice())
+	assert_true(r["ok"])
+	assert_true(r.has("route_clean"))
+
+
+func test_observe_via_eye_requires_target() -> void:
+	var cloud := _coin(1); cloud.kolat_sect = Enums.KolatSect.CLOUD
+	assert_false(KolatExecutor.execute("OBSERVE_VIA_EYE", cloud, {}, _dice())["ok"])
+	var r := KolatExecutor.execute("OBSERVE_VIA_EYE", cloud, {"target_settlement_id": "12"}, _dice())
+	assert_true(r["ok"])
+	assert_true(r["observes_via_eye"])
+
+
+func test_secure_oni_eye_resolves() -> void:
+	var steel := _coin(1); steel.kolat_sect = Enums.KolatSect.STEEL
+	var r := KolatExecutor.execute("SECURE_ONI_EYE", steel, {}, _dice())
+	assert_true(r["ok"])
+	assert_true(r.has("eye_secure"))
+
+
+func test_conduct_perimeter_patrol_resolves() -> void:
+	var steel := _coin(1); steel.kolat_sect = Enums.KolatSect.STEEL
+	var r := KolatExecutor.execute("CONDUCT_PERIMETER_PATROL", steel, {}, _dice())
+	assert_true(r["ok"])
+	assert_true(r.has("patrol_unnoticed"))
+
+
+func test_submit_kolat_report_requires_topic() -> void:
+	var cloud := _coin(1); cloud.kolat_sect = Enums.KolatSect.CLOUD
+	assert_false(KolatExecutor.execute("SUBMIT_KOLAT_REPORT", cloud, {}, _dice())["ok"])
+	var r := KolatExecutor.execute("SUBMIT_KOLAT_REPORT", cloud, {"topic": _topic(88)}, _dice())
+	assert_true(r["ok"])
+	assert_true(r["submits_report"])
+	assert_eq(r["report_topic_id"], 88)
+
+
 func test_topic_spell_actions_deferred() -> void:
 	var coin := _coin()
-	# Still deferred (Tear network / Hidden Temple / patrol-TN / Cloud routing).
-	for a: String in ["TRANSMIT_VIA_TEAR", "OBSERVE_VIA_EYE", "SUBMIT_KOLAT_REPORT",
-			"RUN_COURIER_ROUTE", "SECURE_ONI_EYE", "CONDUCT_PERIMETER_PATROL"]:
+	# Only TRANSMIT_VIA_TEAR remains (Tear network — Tranche E2).
+	for a: String in ["TRANSMIT_VIA_TEAR"]:
 		var r := KolatExecutor.execute(a, coin, {}, _dice())
 		assert_false(r["ok"], a + " is deferred")
 		assert_eq(r["reason"], "deferred_system")

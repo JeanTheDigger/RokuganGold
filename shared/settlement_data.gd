@@ -119,6 +119,16 @@ extends Resource
 ## not visible in normal settlement inspection. -1 = this is not the Hidden Temple.
 @export var temple_vault_koku: int = -1
 
+## True on the single settlement designated as the Kolat Hidden Temple at world
+## generation (s54.7h). Gates the at-temple Kolat actions (OBSERVE_VIA_EYE,
+## SECURE_ONI_EYE, SUBMIT_KOLAT_REPORT, CONDUCT_PERIMETER_PATROL range origin).
+@export var is_hidden_temple: bool = false
+
+## Master copy of the Cloud archive, physically held at the Hidden Temple under
+## Steel guard (s54.7h). Keyed by archive_id, same schema as Master Cloud's working
+## copy. Only the Hidden Temple settlement uses this.
+@export var temple_cloud_archive: Dictionary = {}
+
 
 func has_shrine_slot() -> bool:
 	## Returns true when this settlement can hold a shide object (s57.26b A11).

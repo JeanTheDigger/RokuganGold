@@ -3509,6 +3509,14 @@ static func _process_scout_detection_topics(
 # The koku funding, the conditioning, dead-drop, and sleeper handlers are fully
 # resolved inside KolatExecutor and need no writeback here.
 
+## settlement_id (int) → province_id, scanning the settlements array. -1 if absent.
+static func _kolat_settlement_province(settlements: Array, settlement_id: int) -> int:
+	for sv: Variant in settlements:
+		if sv is SettlementData and (sv as SettlementData).settlement_id == settlement_id:
+			return (sv as SettlementData).province_id
+	return -1
+
+
 static func _process_kolat_writebacks(
 	results: Array,
 	characters_by_id: Dictionary,
@@ -3815,6 +3823,88 @@ static func _process_kolat_writebacks(
 				active_topics.append(conf)
 				# Honor −1.0 for manufacturing a false grievance leading to a death.
 				HonorGlorySystem.apply_honor_change(pd_op, -float(effects.get("honor_loss", 1.0)))
+
+			"OBSERVE_VIA_EYE":
+				if not effects.get("observes_via_eye", false):
+					continue
+				var oe_caster: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if oe_caster == null or CharacterStats.is_dead(oe_caster):
+					continue
+				# At-Hidden-Temple gate (s54.7c — VISITING the Eye only).
+				var oe_temple: SettlementData = KolatNetwork.find_hidden_temple(settlements)
+				if not KolatNetwork.is_at_hidden_temple(oe_caster, oe_temple):
+					continue
+				var oe_province: int = _kolat_settlement_province(
+					settlements, String(effects.get("target_settlement_id", "")).to_int())
+				if oe_province < 0:
+					continue
+				# Full-fidelity Direct Observation: every ambient topic enters
+				# known_topics (no count limit, unlike Clouds Eyes). Contention (one
+				# Master/day) is not enforced here (no action-log gate).
+				for tv2: Variant in active_topics:
+					if not tv2 is TopicData:
+						continue
+					var ot: TopicData = tv2
+					if ot.resolved or not ot.provinces_affected.has(oe_province):
+						continue
+					if not oe_caster.topic_pool.has(ot.topic_id):
+						oe_caster.topic_pool.append(ot.topic_id)
+
+			"CONDUCT_PERIMETER_PATROL":
+				if effects.get("patrol_unnoticed", true):
+					continue  # clean patrol, no signal
+				var pp_scout: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if pp_scout == null or CharacterStats.is_dead(pp_scout):
+					continue
+				var pp_province: int = _kolat_settlement_province(
+					settlements, pp_scout.physical_location.to_int())
+				var pp_tid: int = next_topic_id[0]
+				next_topic_id[0] = pp_tid + 1
+				var pp_topic: TopicData = TopicMomentumSystem.create_topic(
+					pp_tid, "A stranger was seen watching the road",
+					TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
+					ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+					([pp_province] if pp_province >= 0 else []), "", "", -1,
+					"patrol_seen", "perimeter_patrol_noticed",
+				)
+				active_topics.append(pp_topic)
+
+			"RUN_COURIER_ROUTE":
+				if effects.get("route_clean", true):
+					continue
+				# Failure flags route integrity (s54.7c) — a hint that elevates the
+				# Silk Master's network-maintenance priority. Stored as a flag on the
+				# Master until the segment is repaired.
+				var rc_master: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if rc_master != null and not CharacterStats.is_dead(rc_master):
+					rc_master.special_data["route_integrity_reduced"] = true
+
+			"SUBMIT_KOLAT_REPORT":
+				if not effects.get("submits_report", false):
+					continue
+				var sr_master: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if sr_master == null or CharacterStats.is_dead(sr_master):
+					continue
+				var sr_temple: SettlementData = KolatNetwork.find_hidden_temple(settlements)
+				if not KolatNetwork.is_at_hidden_temple(sr_master, sr_temple):
+					continue  # full report requires physical presence at the Temple
+				# Archive the report topic into the Temple's master Cloud archive.
+				var sr_tid: int = int(effects.get("report_topic_id", -1))
+				for tv3: Variant in active_topics:
+					if not tv3 is TopicData:
+						continue
+					var st: TopicData = tv3
+					if st.topic_id != sr_tid:
+						continue
+					var aid: String = KolatNetwork.archive_id_for(st.topic_id)
+					sr_temple.temple_cloud_archive[aid] = {
+						"topic_id": st.topic_id, "tier": int(st.tier),
+						"parties_named": ([st.subject_character_id] if st.subject_character_id >= 0 else []),
+						"content_summary": st.title, "source": "kolat_report",
+						"original_momentum": int(st.momentum), "ic_day_archived": ic_day,
+						"leverage_value": 0,
+					}
+					break
 
 
 # -- Kolat Bribe Upkeep (s54.7c) ----------------------------------------------

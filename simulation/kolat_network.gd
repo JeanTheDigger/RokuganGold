@@ -261,6 +261,20 @@ static func rotate_dead_drop(master: L5RCharacterData, new_settlement_id: String
 	return ""
 
 
+# -- Hidden Temple (s54.7h) ---------------------------------------------------
+
+## Returns the settlement flagged is_hidden_temple, or null if none exists.
+static func find_hidden_temple(settlements: Array) -> SettlementData:
+	for s: Variant in settlements:
+		if s is SettlementData and (s as SettlementData).is_hidden_temple:
+			return s
+	return null
+
+
+static func is_at_hidden_temple(character: L5RCharacterData, temple: SettlementData) -> bool:
+	return temple != null and character.physical_location == str(temple.settlement_id)
+
+
 # -- Sleeper registry (Dream, s54.7h) -----------------------------------------
 
 static func register_sleeper(

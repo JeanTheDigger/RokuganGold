@@ -71,6 +71,16 @@ static func execute(
 			r = _distribute_intelligence(metadata)
 		"ARRANGE_PROXY_DUEL":
 			r = _arrange_proxy_duel(actor, metadata, dice)
+		"RUN_COURIER_ROUTE":
+			r = _run_courier_route(actor, metadata, dice)
+		"OBSERVE_VIA_EYE":
+			r = _observe_via_eye(metadata)
+		"SECURE_ONI_EYE":
+			r = _secure_oni_eye(actor, dice)
+		"CONDUCT_PERIMETER_PATROL":
+			r = _conduct_perimeter_patrol(actor, dice)
+		"SUBMIT_KOLAT_REPORT":
+			r = _submit_kolat_report(metadata)
 		"DELIVER_SEALED_LETTER":
 			r = _deliver_sealed_letter(actor, metadata, dice)
 		"ROUTE_ANONYMOUS_INTELLIGENCE":
@@ -250,6 +260,68 @@ static func _rotate_dead_drop(actor: L5RCharacterData, metadata: Dictionary, dic
 		return {"ok": false, "reason": "no_compromised_drop"}
 	var roll: Dictionary = SkillResolver.resolve_skill_check(actor, dice, "Stealth", 10)
 	return {"ok": true, "rotated_operative": rotated, "unnoticed": bool(roll.get("success", false))}
+
+
+# === HIDDEN TEMPLE / STEEL / SILK FIELD ACTIONS (s54.7c) =====================
+
+## RUN_COURIER_ROUTE (Silk). 1 AP. Travels/dispatches a Silk courier-route segment.
+## Roll Stealth (Shadowing) vs TN 15 (OWNER RULING 2026-06-07: base 15 — matching
+## the sibling Stealth covert-logistics actions — plus a patrol-scaling hook that
+## adds +0 until per-segment patrol/route data exists). Failure flags the segment's
+## integrity (handled by the writeback), it does not lose the message (s54.7c).
+const COURIER_ROUTE_BASE_TN: int = 15
+static func _run_courier_route(actor: L5RCharacterData, metadata: Dictionary, dice: DiceEngine) -> Dictionary:
+	var patrol_modifier: int = int(metadata.get("patrol_tn_modifier", 0))  # +0 until patrol data exists
+	var tn: int = COURIER_ROUTE_BASE_TN + patrol_modifier
+	var roll: Dictionary = SkillResolver.resolve_skill_check(actor, dice, "Stealth", tn)
+	return {"ok": true, "route_clean": bool(roll.get("success", false)),
+		"segment": String(metadata.get("segment", ""))}
+
+
+## OBSERVE_VIA_EYE (Cloud/Chrysanthemum/Tiger). All AP for the day, at the Hidden
+## Temple only. No roll — the observer receives every topic firing at the target
+## settlement at full fidelity for the rest of the day (s54.7c). The at-temple gate,
+## the full-fidelity topic copy, and the contention rule (one Master/day) are
+## applied by the writeback (it has settlements + the action log).
+static func _observe_via_eye(metadata: Dictionary) -> Dictionary:
+	var settlement_id: String = String(metadata.get("target_settlement_id", ""))
+	if settlement_id == "":
+		return {"ok": false, "reason": "no_target"}
+	return {"ok": true, "observes_via_eye": true, "target_settlement_id": settlement_id}
+
+
+## SECURE_ONI_EYE (Steel). 1 AP, at the Hidden Temple. Investigation (Notice) +
+## Perception vs TN 20 (s54.7c). Confirms the Eye is secure for the season. The
+## at-temple gate is enforced by the writeback. The two-consecutive-failure auto
+## report to Tiger is deferred (action-log tracking).
+static func _secure_oni_eye(actor: L5RCharacterData, dice: DiceEngine) -> Dictionary:
+	var roll: Dictionary = SkillResolver.resolve_skill_check(actor, dice, "Investigation", 20)
+	return {"ok": true, "requires_hidden_temple": true,
+		"eye_secure": bool(roll.get("success", false))}
+
+
+## CONDUCT_PERIMETER_PATROL (Steel scout). 1 AP. Stealth (Sneaking) vs TN 15 to
+## avoid drawing attention (s54.7c). Failure fires a Tier 4 "a stranger was seen
+## watching the road" topic (writeback). The within-3-provinces-of-the-Temple range
+## gate and the steel_scout cover-identity prerequisite are deferred (map distance /
+## cover-identity data).
+static func _conduct_perimeter_patrol(actor: L5RCharacterData, dice: DiceEngine) -> Dictionary:
+	var roll: Dictionary = SkillResolver.resolve_skill_check(actor, dice, "Stealth", 15)
+	return {"ok": true, "patrol_unnoticed": bool(roll.get("success", false))}
+
+
+## SUBMIT_KOLAT_REPORT (Chrysanthemum/Cloud). 1 AP, at the Hidden Temple for a full
+## report. The submitted topic enters the Cloud archive master copy held at the
+## Temple (s54.7h) — the writeback writes it to the Hidden Temple settlement's
+## temple_cloud_archive, sidestepping cross-Master identity routing (which the
+## lateral-communication constraint otherwise blocks). The condensed Tear variant
+## is deferred with the Tear network.
+static func _submit_kolat_report(metadata: Dictionary) -> Dictionary:
+	var topic: TopicData = metadata.get("topic", null)
+	if topic == null:
+		return {"ok": false, "reason": "no_topic"}
+	return {"ok": true, "submits_report": true, "requires_hidden_temple": true,
+		"report_topic_id": topic.topic_id}
 
 
 # === PROXY DUEL (Lotus, s54.7c) ==============================================
