@@ -793,7 +793,7 @@ static func _seed_initial_shide(
 			quality_tier = GiftGivingSystem.QualityTier.FINE  # tier 1
 		else:
 			# Village or monastery: 50% chance of Normal shide.
-			if dice.roll_1d10() <= 5:
+			if dice.roll_d10() <= 5:
 				quality_tier = GiftGivingSystem.QualityTier.NORMAL  # tier 0
 
 		if quality_tier < 0:

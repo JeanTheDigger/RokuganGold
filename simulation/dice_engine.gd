@@ -159,3 +159,8 @@ func roll_damage(rolled: int, kept: int, strength_bonus: int = 0, reduction: int
 
 func _roll_d10() -> int:
 	return _rng.randi_range(1, 10)
+
+
+## Public single d10 roll (1–10) for systems that need a raw die (s57.22, s57.26b).
+func roll_d10() -> int:
+	return _roll_d10()
