@@ -3484,7 +3484,7 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"sculpture_id": wip_sc_id,
 			"format": sc_format,
-			"material": SculptureSystem.Material.WOOD,
+			"material": SculptureSystem.MaterialType.WOOD,
 			"target_quality_tier": target_quality,
 			"subject_id": sc_subject_id,
 			"display_settlement_id": loc_sid,
@@ -5592,7 +5592,7 @@ static func _build_declare_senbazuru_metadata(
 		var target: L5RCharacterData = chars_by_id.get(need.target_npc_id)
 		if target != null and not CharacterStats.is_dead(target):
 			# Healing if recipient is wounded or tainted; Protection otherwise.
-			if CharacterStats.is_wounded(target) or target.taint_rank > 0:
+			if CharacterStats.get_wound_level(target) != Enums.WoundLevel.HEALTHY or target.taint_rank > 0:
 				return {
 					"dedication_type": "Healing",
 					"recipient_id": need.target_npc_id,
