@@ -8177,7 +8177,7 @@ static func _process_clan_induction_writebacks(
 		if daimyo == null or CharacterStats.is_dead(daimyo):
 			continue
 
-		var induction_result: Dictionary = RoninSystem.perform_induction(inductee, daimyo)
+		var _induction_result: Dictionary = RoninSystem.perform_induction(inductee, daimyo)
 
 		# Clear FIND_NEW_LORD standing objective.
 		if objectives_map.has(inductee_id):
@@ -8217,7 +8217,6 @@ static func _process_clan_induction_writebacks(
 				if not c.topic_pool.has(topic.topic_id):
 					c.topic_pool.append(topic.topic_id)
 
-		_ = induction_result  # result used for side-effects; data available for callers
 
 
 static func _assign_phoenix_champion_restore_objective(

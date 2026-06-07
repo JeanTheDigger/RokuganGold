@@ -268,7 +268,7 @@ static func generate_composition_description(
 		if has_all_three:
 			return (
 				"A shōchikubai arrangement of pine (matsu), bamboo (take), and "
-				"plum (ume) in a %s — the Three Friends of Winter, auspicious for the new year."
+				+ "plum (ume) in a %s — the Three Friends of Winter, auspicious for the new year."
 			) % vessel
 		return "%s of %s in a %s, the composition speaking of %s." % [
 			tier_phrase, mat_list, vessel, season_name,

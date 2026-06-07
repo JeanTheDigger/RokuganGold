@@ -1992,7 +1992,7 @@ static func get_weapon_data(weapon_name: String) -> WeaponData:
 	wd.skill = profile.get("skill", DEFAULT_WEAPON["skill"])
 	wd.size = profile.get("size", DEFAULT_WEAPON["size"])
 	wd.melee = profile.get("melee", true)
-	wd.trait = profile.get("trait", DEFAULT_WEAPON["trait"])
+	wd.attack_trait = profile.get("trait", DEFAULT_WEAPON["trait"])
 	return wd
 
 

@@ -11,4 +11,4 @@ extends Resource
 @export var skill: String = "Kenjutsu"
 @export var size: String = "Medium"  # "Small" / "Medium" / "Large" (affects off-hand penalties, Prone)
 @export var melee: bool = true
-@export var trait: String = "agility"  # "agility" or "reflexes"
+@export var attack_trait: String = "agility"  # "agility"/"reflexes" ('trait' is reserved in Godot 4.6)

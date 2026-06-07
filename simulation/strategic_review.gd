@@ -1218,8 +1218,7 @@ static func _scan_topic_for_candidates(
 				_make_with_source(clan, StrategicConclusionData.ConclusionType.SECURE_RESOURCE,
 					current_season, [topic.topic_id]),
 			)
-		"art_removal_slight", "art_removal_minor", "legendary_artisan_completion",
-		"masterful_performance":
+		"art_removal_slight", "art_removal_minor", "legendary_artisan_completion", "masterful_performance":
 			_add_candidate_if_new(
 				candidates, forced_types,
 				_make_with_source(clan, StrategicConclusionData.ConclusionType.BUILD_CULTURAL_PRESTIGE,

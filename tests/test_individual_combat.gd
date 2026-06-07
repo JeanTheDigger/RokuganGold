@@ -963,14 +963,14 @@ func test_get_weapon_data_katana_fields() -> void:
 	assert_eq(wd.skill, "Kenjutsu")
 	assert_eq(wd.size, "Medium")
 	assert_true(wd.melee)
-	assert_eq(wd.trait, "agility")
+	assert_eq(wd.attack_trait, "agility")
 
 
 func test_get_weapon_data_yumi_is_ranged() -> void:
 	var wd: WeaponData = IndividualCombat.get_weapon_data("yumi")
 	assert_false(wd.melee)
 	assert_eq(wd.skill, "Kyujutsu")
-	assert_eq(wd.trait, "reflexes")
+	assert_eq(wd.attack_trait, "reflexes")
 
 
 func test_get_weapon_data_unknown_falls_back_to_unarmed() -> void:

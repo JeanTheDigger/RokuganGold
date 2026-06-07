@@ -42,7 +42,6 @@ static func generate(seed_str: String, size_cat: int, assault_mode: int) -> Cast
 			rng = _build_city(map, w, h, rng)
 
 	_place_player_start(map, assault_mode, w, h)
-	_ = rng
 	return map
 
 # -- FORTIFICATION (20×25, 2 layers) ------------------------------------------
