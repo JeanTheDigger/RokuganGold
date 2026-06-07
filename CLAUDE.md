@@ -4457,6 +4457,69 @@ template generators it depends on. Faithful summary of the fixes that landed:
   the operation executors that move the scalars exist, and wiring it now would add unverifiable
   plumbing for zero behavior.
 
+### Systems Added 2026-06-07 (Kolat — deferred executors + network records)
+Implemented the Kolat ActionID executors that were stubbed `deferred_system` in
+`kolat_executor.gd`, plus the LOCKED network-record data layer (s54.7h/d). Each
+executor returns effect flags consumed by `DayOrchestrator._process_kolat_writebacks()`
+(topic pool / insurgency list / Honor / network records); ARCHIVE_TOPIC and the
+koku/dead-drop handlers are self-contained Pattern B. **Verification note:** GUT
+cannot run headlessly here (the `WeaponData` cold-boot class-resolution cascade
+fails the whole dependency graph, which also masks type errors in the import
+parse-check), so all of this was validated by static review only. Tests written
+but not executed in this environment.
+- **Tranche A** — ARCHIVE_TOPIC (writes the s54.7h cloud_archive), ANONYMOUS_TIP
+  (Tier 4 org tip topic), RESURRECT_TOPIC (Calligraphy+Int vs TN 20, re-injects an
+  archived topic as "historical records", −0.5 Honor), SPONSOR_INSURGENCY
+  (Commerce+trait vs TN 20; seeds a Ronin Bandit Uprising Str 1/Conceal 8 or +2
+  cap 10; failure fires the province investigation topic).
+- **Tranche B** — BRIBE_GARRISON_COMMANDER (Commerce+trait vs commander
+  Willpower×5; registers a standing bribe on the Coin Master). New
+  `_process_kolat_bribes_seasonal`: 5 koku/season upkeep + the −2 under-garrison
+  Stability penalty (s11.11) per bribed province, cancelled silently when a
+  payment is missed.
+- **Tranche C** — DELIVER_SEALED_LETTER (Sincerity Deceit vs TN 10; LetterData via
+  the letter pipeline; Tier 4 "courier asking after X" topic on a noticed
+  delivery), ROUTE_ANONYMOUS_INTELLIGENCE (Calligraphy vs TN 15; +5 disposition to
+  a registered jade asset; Tier 4 traced-document topic on critical failure).
+- **Tranche D1/D2** — `simulation/kolat_network.gd` (KolatNetwork pure class): the
+  per-Sect network-record schemas from s54.7h (silk/coin/jade/lotus/chrysanthemum/
+  steel records, dream_sleeper_registry, cloud_archive) keyed by `Enums.KolatSect`
+  (the character-sheet truth — the GDD's "kolat_silk" prose strings are NOT used).
+  Registration helpers, capacity cap (6 agents, burned excluded — s54.7d), Jade
+  cap 3, silence detection (30 city / 60 remote). `_process_kolat_network_seasonal`:
+  per-Master per-agent silence check → Tier 4 concern topic, deduped via a
+  `silence_flagged` per-entry guard. cloud_archive reconciled to the s54.7h schema
+  (archive_id keys; parties_named / content_summary / original_momentum /
+  ic_day_archived + reconstruction extras).
+- **Tranche D3** — APPROACH_FOR_RECRUITMENT (Friend-tier +31 disposition gate;
+  contested Sincerity vs the target's Willpower; on success sets `kolat_sect`,
+  registers the recruit in the Master's Sect record via
+  `KolatNetwork.register_recruit`, −0.5 Honor; failure/critical-failure topics;
+  never converts dead characters or PCs). This is how networks populate during
+  play (no world-gen seeding, per owner ruling).
+- **Tranche D4** — ROTATE_DEAD_DROP (Stealth vs TN 10; moves the first compromised
+  drop in lotus_network_record to the current settlement). Closes the network
+  loop: records are created by recruitment, maintained by the silence pass, and
+  consumed here.
+- **Owner rulings (2026-06-07):** (1) APPROACH_FOR_RECRUITMENT's GDD roll
+  "Willpower + (Gi rank ×2)" is a mistake — personality drives decisions, not
+  mechanics — so the Gi modifier is dropped (contest is vs Willpower only).
+  (2) RUN_COURIER_ROUTE's TN should scale with conditions like patrols; no formula
+  or patrol data exists, so it stays deferred. (3) Hidden Temple `temple_vault_koku`
+  stays an abstract treasury (no map settlement designated). (4) No world-gen Silk
+  seeding — networks populate via recruitment.
+- **GDD note (read-only, not edited):** s54.7d line 39 says Silk/Lotus keep no
+  network record, but s54.7h defines detailed silk/lotus records. The consolidated
+  fields reference (s54.7h) is followed as authoritative.
+- **Still deferred** (owner rulings / absent infrastructure, not buildable without
+  inventing): TRANSMIT_VIA_TEAR & OBSERVE_VIA_EYE & SECURE_ONI_EYE &
+  CONDUCT_PERIMETER_PATROL (Tear network / Hidden Temple settlement — abstract per
+  owner), SUBMIT_KOLAT_REPORT (cross-Master Cloud routing under the
+  lateral-communication constraint), RUN_COURIER_ROUTE (patrol-scaled TN),
+  DISTRIBUTE_INTELLIGENCE (route-compromise interception state), USE_CLOUDS_EYES
+  (the Master Cloud's Eyes Air-3 spell is not in the SpellSystem library),
+  ARRANGE_PROXY_DUEL (multi-step grievance decomposition).
+
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
   (pure class); `shared/ship_data.gd` gains `owner_id` + `departure_tick`. New system
