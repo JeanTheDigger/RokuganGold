@@ -1058,6 +1058,8 @@ static func advance_day(
 		death_events, characters,
 	)
 
+	_process_kolat_master_death_recall(death_events, characters_by_id, objectives_map)
+
 	death_events.clear()
 
 	_cleanup_dead_character_references(
@@ -1488,6 +1490,7 @@ static func advance_day(
 			hierarchy_cascade_results.append_array(_process_operational_death_cascade(
 				death_events, characters,
 			))
+			_process_kolat_master_death_recall(death_events, characters_by_id, objectives_map)
 			death_events.clear()
 			_cleanup_dead_character_references(
 				characters, characters_by_id, active_courts, entanglements,
@@ -7544,6 +7547,50 @@ static func _assign_kolat_standing_objectives(
 			"priority": 4,
 			"auto_assigned": true,
 		}
+
+
+# -- Kolat Stage-5 Damage-Assessment Recall (s54.7) ---------------------------
+# When a Kolat Master is eliminated, Tiger (the routing node) issues recall
+# directives through the Kolat delivery channels: the agents who had contact with
+# the compromised Master halt their Kolat objective immediately and treat it as
+# abandoned (their kolat_objective slot is cleared, GDD s54.7 Stage 5). A living
+# Tiger is required to route the recall; if Tiger itself is the dead Master and
+# no successor is yet seated, the organisation is briefly blind and no recall
+# fires that tick (matching the GDD's degraded-coordination state). The
+# operational/elimination directive composition (Stages 1–4) remains blocked on
+# the Master-surveillance/investigation-detection layer.
+
+
+static func _process_kolat_master_death_recall(
+	death_events: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+) -> int:
+	var tiger_alive: bool = false
+	for cid: Variant in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.is_kolat_master and c.kolat_sect == Enums.KolatSect.TIGER:
+			tiger_alive = true
+			break
+	if not tiger_alive:
+		return 0
+
+	var recalled: int = 0
+	for ev: Variant in death_events:
+		if not ev is Dictionary:
+			continue
+		var did: int = int((ev as Dictionary).get("character_id", -1))
+		var dead: L5RCharacterData = characters_by_id.get(did, null)
+		if dead == null or not KolatSystem.is_master(dead):
+			continue
+		for aid: int in KolatNetwork.collect_field_agent_ids(dead):
+			var obj: Dictionary = objectives_map.get(aid, {})
+			if obj.has("kolat"):
+				obj.erase("kolat")
+				recalled += 1
+	return recalled
 
 
 # -- Kolat Opportunistic Objective Assignment (s54.7d/e) ----------------------

@@ -135,3 +135,43 @@ func test_should_not_clear_tiger_directive() -> void:
 	var m := _master(1, Enums.KolatSect.SILK)
 	var slot := {"need_type": "RECRUIT_KOLAT_AGENT", "source": "kolat_directive", "target_npc_id": 2}
 	assert_false(KolatOpportunityScanner.should_clear(m, slot, {}))
+
+
+# === Stage-5 damage-assessment recall (s54.7) ===
+
+func _dead_silk_master_with_agent(master_id: int, agent_id: int) -> L5RCharacterData:
+	var sm := _master(master_id, Enums.KolatSect.SILK)
+	KolatNetwork.register_silk_operative(sm, "op", agent_id, "court", 1)
+	sm.stamina = 0  # Earth 0 → DEAD
+	return sm
+
+
+func test_master_death_recalls_agents_with_living_tiger() -> void:
+	var tiger := _master(1, Enums.KolatSect.TIGER)
+	var sm := _dead_silk_master_with_agent(2, 50)
+	var objectives := {50: {"kolat": {"need_type": "DISTRIBUTE_INTELLIGENCE"}}}
+	var chars := {1: tiger, 2: sm, 50: _candidate(50, 0, 2)}
+	var n := DayOrchestrator._process_kolat_master_death_recall(
+		[{"character_id": 2}], chars, objectives)
+	assert_eq(n, 1, "one agent recalled")
+	assert_false(objectives[50].has("kolat"), "agent's kolat slot cleared")
+
+
+func test_no_recall_without_living_tiger() -> void:
+	var sm := _dead_silk_master_with_agent(2, 50)
+	var objectives := {50: {"kolat": {"need_type": "DISTRIBUTE_INTELLIGENCE"}}}
+	var chars := {2: sm, 50: _candidate(50, 0, 2)}
+	var n := DayOrchestrator._process_kolat_master_death_recall(
+		[{"character_id": 2}], chars, objectives)
+	assert_eq(n, 0, "no living Tiger → no recall")
+	assert_true(objectives[50].has("kolat"), "agent's kolat slot retained")
+
+
+func test_non_master_death_no_recall() -> void:
+	var tiger := _master(1, Enums.KolatSect.TIGER)
+	var plain := _candidate(2, 0, 1); plain.stamina = 0  # dead non-master
+	var objectives := {50: {"kolat": {"need_type": "DISTRIBUTE_INTELLIGENCE"}}}
+	var chars := {1: tiger, 2: plain}
+	var n := DayOrchestrator._process_kolat_master_death_recall(
+		[{"character_id": 2}], chars, objectives)
+	assert_eq(n, 0)

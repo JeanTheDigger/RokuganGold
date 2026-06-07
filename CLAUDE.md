@@ -4566,17 +4566,33 @@ but not executed in this environment.
     `_build_kolat_metadata` (E3) → the executor end to end, so Masters now grow
     their networks and create sleepers autonomously. 16 tests in
     `tests/test_kolat_opportunity_scanner.gd`.
-- **Still deferred (29 executors + metadata + self-init done) — the remaining
-  generation channels and a few data-blocked inputs:** Chrysanthemum shallow-IntelDB /
-  winter-court scanner and Tiger strategic-directive composition (what directive
-  Tiger sends, via the strategic review); UNDERREPORT_KOKU amount (domain income not
-  in context); ARCHIVE_TOPIC / SUBMIT_KOLAT_REPORT topic object (context carries topic
-  IDs, not TopicData); OBSERVE_VIA_EYE contention + all-AP cost; SECURE two-failure
+  - **E5 — Tiger Stage-5 damage-assessment recall (s54.7).** When a Kolat Master
+    is eliminated, `DayOrchestrator._process_kolat_master_death_recall()` (run at
+    both death-processing sites before `death_events.clear()`) fires the recall
+    sweep: a living Tiger (the routing node) issues recall directives through the
+    Kolat channels, so every field agent who had contact with the compromised
+    Master halts their Kolat objective and treats it as abandoned — their
+    `kolat_objective` slot is cleared. `KolatNetwork.collect_field_agent_ids()`
+    enumerates the dead Master's own Sect-record agents. A living Tiger is required
+    (if Tiger itself is the dead Master with no successor yet seated, no recall
+    fires — the organisation is briefly blind, matching the GDD degraded state).
+    3 tests. The operational/elimination directive composition (Stages 1–4:
+    Broken-Master surveillance detection, Tiger threat assessment, Lotus
+    elimination contracts) remains blocked — it needs the
+    Master-surveillance/investigation-detection layer and the GDD's "low/medium/
+    high threat" thresholds, which are not numerically specified (cannot invent).
+- **Still deferred (29 executors + metadata + self-init + Stage-5 recall done) —
+  the remaining generation channels and a few data-blocked inputs:** Chrysanthemum
+  shallow-IntelDB / winter-court scanner; Tiger operational/elimination directive
+  composition (Stages 1–4, blocked on the surveillance-detection layer + unspecified
+  threat thresholds); UNDERREPORT_KOKU amount (domain income not in context);
+  ARCHIVE_TOPIC / SUBMIT_KOLAT_REPORT topic object (context carries topic IDs, not
+  TopicData); OBSERVE_VIA_EYE contention + all-AP cost; SECURE two-failure
   auto-report; CONDUCT_PERIMETER_PATROL within-3-provinces range + cover identity;
   courier patrol-TN scaling; DISTRIBUTE_INTELLIGENCE route-compromise interception;
   the Conclave + win-condition orchestrator passes (KolatSecrecy data layer exists).
-  These need the strategic-review integration, IntelDB, map-distance data, or
-  action-log state — none buildable without inventing.
+  These need the surveillance/strategic-review integration, IntelDB, map-distance
+  data, or action-log state — none buildable without inventing.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`

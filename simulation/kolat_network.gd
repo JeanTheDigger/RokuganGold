@@ -71,6 +71,22 @@ static func at_capacity(master: L5RCharacterData, sect: Enums.KolatSect) -> bool
 	return agent_count(master, sect) >= MAX_AGENTS
 
 
+## npc_ids of every field agent in the Master's own Sect network record (s54.7h).
+## Used by the Stage-5 damage-assessment recall sweep (s54.7) when a Master is
+## eliminated — the agents who had contact are cut off. Sects with no agent-network
+## record (Dream/Tiger/Cloud/Roc) return an empty list.
+static func collect_field_agent_ids(master: L5RCharacterData) -> Array[int]:
+	var ids: Array[int] = []
+	var record: Dictionary = get_network(master, master.kolat_sect)
+	for code_name: Variant in record:
+		var e: Variant = record[code_name]
+		if e is Dictionary:
+			var nid: int = int((e as Dictionary).get("npc_id", -1))
+			if nid >= 0:
+				ids.append(nid)
+	return ids
+
+
 ## Public accessor for an entry's capacity/lifecycle status (s54.7d).
 static func status_of(entry: Variant) -> String:
 	return _status_of(entry)
