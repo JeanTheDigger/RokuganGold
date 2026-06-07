@@ -4793,6 +4793,12 @@ Everything below needs a decision, a GDD spec, or a dependency before dev
 can proceed. Items are grouped by what's blocking them. Each entry says
 what the code currently does, what it needs, and where the answer lives.
 
+**Policy:** Blocked features are no longer off-limits by default. Any item
+here MAY be implemented once the owner gives explicit, prior authorization
+for that specific feature (see Section D). Items blocked purely on a missing
+dependency (e.g. sub-tile map data in Section C) still cannot proceed until
+that dependency exists, regardless of authorization.
+
 ---
 
 ### A. PROVISIONAL Numeric Values — Audited 2026-05-24
@@ -4979,9 +4985,9 @@ These features are structurally complete but cannot resolve without sub-tile arm
 
 ---
 
-### D. Areas Needing Design Decisions (Owner Approval Required)
+### D. Areas Needing Design Decisions (Owner Authorization Required)
 
-These sections have partial or no GDD spec. **Do not implement any of these without explicit owner approval first.** The design decisions are the owner's to make.
+These sections have partial or no GDD spec. **Blocked features MAY be worked on — but only with the owner's explicit, prior authorization for that specific feature.** Authorization is per-feature and per-occasion: a general "go ahead" or approval on one blocked feature does NOT extend to any other. Before starting any item below you MUST (1) state exactly what you propose to build and the design choices it requires, (2) ask the owner, and (3) receive explicit, unambiguous authorization. No authorization, no code — silence is not authorization. Once authorized, the design decisions still trace to the owner's stated intent; you may not invent mechanics, numeric values, or behavioral rules beyond what the owner authorizes (the "Do not invent mechanics" hard constraint still applies).
 
 | Section | What's Needed |
 |---------|--------------|
