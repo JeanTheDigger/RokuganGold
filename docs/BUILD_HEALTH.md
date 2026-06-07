@@ -1,0 +1,105 @@
+# Build Health — Compile & Test Status
+
+_Last updated: 2026-06-07_
+
+## TL;DR
+
+For a long time the project **did not compile and the test suite did not run**.
+The GUT test runner was broken by a Godot 4.6 incompatibility, so there was
+**no compile/test feedback at all** — and parse errors accumulated undetected
+across many "static-review-only" commits. The central integration file
+(`day_orchestrator.gd`) and several recent systems were never compiled.
+
+As of this writing the suite **runs again** (GUT fixed + the boot cascade
+cleared). Latest run: **~7775 passing / ~207 failing / ~7982 tests**. The
+remaining failures are concentrated cascades from a handful of never-compiled
+files and are now visible and fixable with the working loop.
+
+## How to run the suite
+
+```bash
+godot --headless --import            # build the import / class cache first
+godot --headless -s addons/gut/gut_cmdln.gd -gexit   # run all tests
+# single file:
+godot --headless -s addons/gut/gut_cmdln.gd -gtest=res://tests/test_x.gd -gexit
+# parse-check one script (note: cold-boot single-script checks can show
+# spurious cascade errors until the whole graph compiles — trust the GUT run):
+godot --headless --check-only --script simulation/x.gd
+```
+
+## Root causes
+
+1. **GUT runner broken on Godot 4.6.** GUT 9.3.0's `addons/gut/utils.gd`
+   declared `static var Logger`, which shadows the native `Logger` class added
+   in Godot 4.4+ — a hard parse error in 4.6 that took down the whole runner
+   (cascading `get_logger`/`set_gut` Nil errors). **Fixed** by renaming the
+   static var to `GutLogger`. (Consider updating GUT to ≥9.3.1 instead of
+   carrying this patch.)
+
+2. **No feedback → accumulated parse errors.** With GUT down, nothing ever
+   compiled the project, so GDScript-4.6 errors and API/enum drift piled up.
+   The first one in load order (`WeaponData`) broke the `world_state` and
+   `simulation_scheduler` autoloads — i.e. the simulation could not even boot.
+
+## Recurring GDScript-4.6 bug classes (for fixing the rest)
+
+- **`trait` is now a reserved word** — `var trait` fails. Rename the field.
+- **Multi-line `match` patterns are invalid** — all patterns of an arm must be
+  on one line. `a,\n b:` → `a, b:`. (Verified empirically.)
+- **`var _ = x`** — `_` is not a valid variable name in a `var` declaration.
+  Use a real name (prefix `_` to suppress unused warnings) or remove the line.
+- **Implicit (adjacent) string concatenation** — `"a"\n"b"` is invalid; use `+`.
+- **API/enum drift** — calls/ened members that no longer exist or are in the
+  wrong enum (e.g. `DispositionSystem.apply_disposition_change` doesn't exist;
+  `TopicSystem` is `TopicMomentumSystem`; `TopicData.Category.SOCIAL` is not a
+  category; `roll_and_keep()` arg 4 is a `bool`, not a `String`). These need
+  per-site analysis — the file was written against an older API and never built.
+
+## Fixed so far (committed)
+
+- `addons/gut/utils.gd` — GUT `Logger` → `GutLogger` (runner works again).
+- `shared/weapon_data.gd` + `individual_combat.gd` — `trait` → `attack_trait`.
+- `strategic_review.gd`, `movement_system.gd` — multi-line match patterns.
+- `day_orchestrator.gd`, `castle_siege_generator.gd`, `garden_system.gd` —
+  `_ =` / `var _ =` discards.
+- `ikebana_system.gd` — implicit string concatenation.
+- `advantage_system.gd` — dead `SHADOWED_HEART` match arm removed;
+  `TOUCH_OF_THE_VOID` dead functions pointed at the real `Disadvantage` enum.
+
+## Remaining (prioritised by cascade size)
+
+Drive this from the GUT run, not from grep (a structural grep can't tell a
+multi-line match pattern from a valid multi-line function signature). Fix a
+root file, re-run `--import` + GUT, watch the pass count climb.
+
+1. **`combat_controller.gd`** — largest cascade (~212 "could not resolve class"
+   + ~170 type-inference failures in dependent tests). Multi-line match
+   patterns + `STANCE_ATTACK`-style member references.
+2. **`day_orchestrator.gd`** — ~15 distinct API/enum-drift errors
+   (`TopicSystem`→`TopicMomentumSystem`, `DispositionSystem` methods that don't
+   exist, `TopicData.Category.SOCIAL`, `roll_and_keep` arg types, `.get()` on a
+   bool, `KnowledgeSource` string assignments, function arg-count mismatches,
+   `Enums.Disadvantage.FORBIDDEN_KNOWLEDGE` wrong enum, "Material" external
+   member). The central orchestrator — fixing it unblocks the most behaviour.
+3. **`individual_combat.gd` / `ascii_map_combat_orchestrator.gd`** — combat-layer
+   member/API drift (`STANCE_ATTACK`, `alert_state` on null, duplicate function
+   definitions — "same name as previously declared function").
+4. **Enum issues** — `Enums.LordRank.NONE`, `Enums.ContextFlag` string
+   assignments, `KnowledgeSource`. Decide enum membership before "fixing"
+   references (some are design-adjacent — see below).
+
+## Items needing an owner decision (do NOT guess)
+
+- **`TOUCH_OF_THE_VOID`** — GDD has both a Phoenix Rank-5 *technique* (s29.5,
+  beneficial) and a *Disadvantage* of the same name (s45/s29.12). The dead
+  `advantage_system` functions conflate them. Decide intended modelling.
+- **`FORBIDDEN_KNOWLEDGE`** — referenced as `Enums.Disadvantage` but defined in
+  the `Advantage` enum. Confirm correct classification.
+- **`TopicData.Category.SOCIAL`** — not a real category; pick the intended one
+  (`POLITICAL` / `PERSONAL` / …) per the topic's meaning.
+
+## Process lesson
+
+The "DONE & tested" status recorded in `CLAUDE.md` for recent work reflects
+**static review only** — most of it was never executed. Keep the GUT loop green
+from now on: run `--import` + GUT before marking anything done.
