@@ -3557,15 +3557,18 @@ static func _process_kolat_writebacks(
 				var category: TopicData.Category = int(entry.get("category", TopicData.Category.POLITICAL)) as TopicData.Category
 				var rid: int = next_topic_id[0]
 				next_topic_id[0] = rid + 1
+				# parties_named is the s54.7h field; first entry is the subject.
+				var parties: Array = entry.get("parties_named", [])
+				var subject_id: int = int(parties[0]) if not parties.is_empty() else -1
 				# Re-enters at its original tier, attributed to "historical records"
 				# rather than to Cloud or the Kolat (s54.7c).
 				var revived: TopicData = TopicMomentumSystem.create_topic(
-					rid, String(entry.get("title", "A recently uncovered document")),
+					rid, String(entry.get("content_summary", "A recently uncovered document")),
 					tier, category, ic_day,
 					TopicMomentumSystem.initial_momentum_for_tier(tier),
 					[], String(entry.get("clan_involved", "")),
 					String(entry.get("family_involved", "")),
-					int(entry.get("subject_character_id", -1)),
+					subject_id,
 					"historical_record", "historical_record",
 				)
 				active_topics.append(revived)

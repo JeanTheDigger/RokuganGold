@@ -163,14 +163,17 @@ func test_archive_topic_requires_topic() -> void:
 
 func test_archive_topic_stores_snapshot() -> void:
 	var cloud := _coin()
-	var r := KolatExecutor.execute("ARCHIVE_TOPIC", cloud, {"topic": _topic(50), "leverage_value": 3}, _dice())
+	var r := KolatExecutor.execute("ARCHIVE_TOPIC", cloud, {"topic": _topic(50), "leverage_value": 3, "ic_day": 200}, _dice())
 	assert_true(r["ok"])
 	assert_eq(r["archived_topic_id"], 50)
-	var archive: Dictionary = cloud.special_data.get("cloud_archive", {})
-	assert_true(archive.has(50))
-	assert_eq(archive[50]["tier"], int(TopicData.Tier.TIER_2))
-	assert_eq(archive[50]["leverage_value"], 3)
-	assert_true(archive[50]["is_archived"])
+	assert_eq(r["archive_id"], "arc_50")
+	# s54.7h cloud_archive: keyed by archive_id, with the locked sub-dict fields.
+	var entry: Dictionary = KolatNetwork.get_archived_topic(cloud, 50)
+	assert_eq(entry["tier"], int(TopicData.Tier.TIER_2))
+	assert_eq(entry["leverage_value"], 3)
+	assert_eq(entry["content_summary"], "Crane scandal")
+	assert_eq(entry["ic_day_archived"], 200)
+	assert_eq(entry["parties_named"], [9])
 
 
 func test_anonymous_tip_requires_org_and_subject() -> void:

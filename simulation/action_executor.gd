@@ -145,6 +145,7 @@ static func execute(
 	# (action.metadata) is enriched with the resolved NPC target where relevant.
 	if action_id in _KOLAT_ACTION_IDS:
 		var kmeta: Dictionary = action.metadata.duplicate()
+		kmeta["ic_day"] = ctx.ic_day
 		if not kmeta.has("target") and action.target_npc_id >= 0:
 			var kt: L5RCharacterData = characters_by_id.get(action.target_npc_id, null)
 			if kt != null:

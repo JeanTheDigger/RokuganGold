@@ -234,26 +234,15 @@ static func _archive_topic(actor: L5RCharacterData, metadata: Dictionary) -> Dic
 	var topic: TopicData = metadata.get("topic", null)
 	if topic == null:
 		return {"ok": false, "reason": "no_topic"}
+	# Delegate to KolatNetwork, which writes the s54.7h cloud_archive schema
+	# (keyed by archive_id, with parties_named / content_summary / original_momentum
+	# / ic_day_archived plus reconstruction extras for RESURRECT_TOPIC).
+	var aid: String = KolatNetwork.archive_topic(
+		actor, topic, int(metadata.get("ic_day", -1)), int(metadata.get("leverage_value", 0))
+	)
 	var archive: Dictionary = actor.special_data.get("cloud_archive", {})
-	# Snapshot the topic's data (s54.7c: tier, parties, content, source, IC day,
-	# original momentum). Stored as a plain Dictionary so it serialises with the
-	# character and survives independent of normal momentum decay.
-	archive[topic.topic_id] = {
-		"topic_id": topic.topic_id,
-		"title": topic.title,
-		"slug": topic.slug,
-		"tier": int(topic.tier),
-		"category": int(topic.category),
-		"subject_character_id": topic.subject_character_id,
-		"clan_involved": topic.clan_involved,
-		"family_involved": topic.family_involved,
-		"momentum": topic.momentum,
-		"ic_day_recorded": topic.ic_day_created,
-		"leverage_value": int(metadata.get("leverage_value", 0)),
-		"is_archived": true,
-	}
-	actor.special_data["cloud_archive"] = archive
-	return {"ok": true, "archived_topic_id": topic.topic_id, "archive_size": archive.size()}
+	return {"ok": true, "archive_id": aid, "archived_topic_id": topic.topic_id,
+		"archive_size": archive.size()}
 
 
 ## ANONYMOUS_TIP (s54.7c). 1 AP, Master Jade. Feeds intelligence to an
@@ -280,11 +269,10 @@ static func _anonymous_tip(metadata: Dictionary) -> Dictionary:
 ## topic is selected by metadata["archive_topic_id"]; the actual re-injection is
 ## applied by the DayOrchestrator Kolat writeback.
 static func _resurrect_topic(actor: L5RCharacterData, metadata: Dictionary, dice: DiceEngine) -> Dictionary:
-	var archive: Dictionary = actor.special_data.get("cloud_archive", {})
 	var tid: int = int(metadata.get("archive_topic_id", -1))
-	if not archive.has(tid):
+	var entry: Dictionary = KolatNetwork.get_archived_topic(actor, tid)
+	if entry.is_empty():
 		return {"ok": false, "reason": "no_archived_topic"}
-	var entry: Dictionary = archive[tid]
 	var roll: Dictionary = SkillResolver.resolve_skill_check(actor, dice, "Calligraphy", 20)
 	var success: bool = bool(roll.get("success", false))
 	var margin: int = int(roll.get("margin", 0))
