@@ -3795,6 +3795,27 @@ static func _process_kolat_writebacks(
 						if di_rec.has(di_cn) and di_rec[di_cn] is Dictionary:
 							di_rec[di_cn]["last_report_ic_day"] = ic_day
 
+			"ARRANGE_PROXY_DUEL":
+				if not effects.get("arranges_duel", false):
+					continue
+				var pd_op: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if pd_op == null or CharacterStats.is_dead(pd_op):
+					continue
+				# Tier 3 confrontation topic — normal social/duel mechanics take over
+				# (s54.7c). Subject is the target whose death is sought.
+				var pd_tid: int = next_topic_id[0]
+				next_topic_id[0] = pd_tid + 1
+				var conf: TopicData = TopicMomentumSystem.create_topic(
+					pd_tid, "A grievance demands satisfaction",
+					TopicData.Tier.TIER_3, TopicData.Category.POLITICAL,
+					ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3),
+					[], "", "", int(effects.get("target_npc_id", -1)),
+					"confrontation", "proxy_duel_grievance",
+				)
+				active_topics.append(conf)
+				# Honor −1.0 for manufacturing a false grievance leading to a death.
+				HonorGlorySystem.apply_honor_change(pd_op, -float(effects.get("honor_loss", 1.0)))
+
 
 # -- Kolat Bribe Upkeep (s54.7c) ----------------------------------------------
 # Seasonal maintenance of standing BRIBE_GARRISON_COMMANDER operations. Each

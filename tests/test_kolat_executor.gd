@@ -342,12 +342,25 @@ func test_distribute_intelligence_returns_delivery_flags() -> void:
 	assert_eq(r["topic_id"], 77)
 
 
+func test_arrange_proxy_duel_requires_target() -> void:
+	var lotus := _coin(1); lotus.kolat_sect = Enums.KolatSect.LOTUS
+	assert_false(KolatExecutor.execute("ARRANGE_PROXY_DUEL", lotus, {}, _dice())["ok"])
+
+
+func test_arrange_proxy_duel_resolves() -> void:
+	var lotus := _coin(1); lotus.kolat_sect = Enums.KolatSect.LOTUS; lotus.skills = {"Courtier": 6}
+	var victim := _coin(2)
+	var r := KolatExecutor.execute("ARRANGE_PROXY_DUEL", lotus, {"target": victim, "proxy_npc_id": 3}, _dice())
+	assert_true(r["ok"])
+	# Either the narrative landed (arranges_duel) or it didn't (narrative_failed).
+	assert_true(r.get("arranges_duel", false) or r.get("narrative_failed", false))
+
+
 func test_topic_spell_actions_deferred() -> void:
 	var coin := _coin()
-	# Still deferred (Tear network / Hidden Temple / patrol-TN / Cloud routing /
-	# proxy-duel decomposition).
+	# Still deferred (Tear network / Hidden Temple / patrol-TN / Cloud routing).
 	for a: String in ["TRANSMIT_VIA_TEAR", "OBSERVE_VIA_EYE", "SUBMIT_KOLAT_REPORT",
-			"RUN_COURIER_ROUTE", "SECURE_ONI_EYE", "CONDUCT_PERIMETER_PATROL", "ARRANGE_PROXY_DUEL"]:
+			"RUN_COURIER_ROUTE", "SECURE_ONI_EYE", "CONDUCT_PERIMETER_PATROL"]:
 		var r := KolatExecutor.execute(a, coin, {}, _dice())
 		assert_false(r["ok"], a + " is deferred")
 		assert_eq(r["reason"], "deferred_system")

@@ -69,6 +69,8 @@ static func execute(
 			r = _use_clouds_eyes(actor, metadata, dice)
 		"DISTRIBUTE_INTELLIGENCE":
 			r = _distribute_intelligence(metadata)
+		"ARRANGE_PROXY_DUEL":
+			r = _arrange_proxy_duel(actor, metadata, dice)
 		"DELIVER_SEALED_LETTER":
 			r = _deliver_sealed_letter(actor, metadata, dice)
 		"ROUTE_ANONYMOUS_INTELLIGENCE":
@@ -248,6 +250,31 @@ static func _rotate_dead_drop(actor: L5RCharacterData, metadata: Dictionary, dic
 		return {"ok": false, "reason": "no_compromised_drop"}
 	var roll: Dictionary = SkillResolver.resolve_skill_check(actor, dice, "Stealth", 10)
 	return {"ok": true, "rotated_operative": rotated, "unnoticed": bool(roll.get("success", false))}
+
+
+# === PROXY DUEL (Lotus, s54.7c) ==============================================
+
+## ARRANGE_PROXY_DUEL. 1 AP, Master Lotus. Engineers a duel against the target via
+## a third party who believes the grievance is real. This handler resolves sub-step
+## 2 (build the narrative): Courtier (Manipulation) + Acting vs TN 20. On success a
+## Tier 3 confrontation topic is generated (writeback) and normal social/duel
+## mechanics take over; Honor −1.0 for manufacturing a false grievance that leads
+## to a death. DEFERRED: sub-step 1 (cultivating a suitable proxy and pushing their
+## disposition toward the target into Rival/Enemy range) is the multi-AP
+## decomposition's job; this handler assumes a proxy is already in place.
+static func _arrange_proxy_duel(actor: L5RCharacterData, metadata: Dictionary, dice: DiceEngine) -> Dictionary:
+	var target: L5RCharacterData = metadata.get("target", null)
+	if target == null:
+		return {"ok": false, "reason": "no_target"}
+	var roll: Dictionary = SkillResolver.resolve_skill_check(actor, dice, "Courtier", 20)
+	if not roll.get("success", false):
+		return {"ok": true, "narrative_failed": true}  # the narrative doesn't land
+	return {
+		"ok": true, "arranges_duel": true,
+		"target_npc_id": target.character_id,
+		"proxy_npc_id": int(metadata.get("proxy_npc_id", -1)),
+		"honor_loss": 1.0,
+	}
 
 
 # === INTELLIGENCE DISTRIBUTION (Silk, s54.7c) ================================
