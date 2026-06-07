@@ -12,14 +12,15 @@ class_name KolatExecutor
 ## do not yet populate end-to-end). All NPC-engine integration is unverified
 ## without a Godot runtime.
 ##
-## ARCHIVE_TOPIC, ANONYMOUS_TIP, RESURRECT_TOPIC, SPONSOR_INSURGENCY, and
-## BRIBE_GARRISON_COMMANDER resolve here and return effect flags the
-## DayOrchestrator Kolat writeback applies to world collections (topic pool,
-## insurgency list, Honor, the standing-bribe registry + its seasonal upkeep).
+## ARCHIVE_TOPIC, ANONYMOUS_TIP, RESURRECT_TOPIC, SPONSOR_INSURGENCY,
+## BRIBE_GARRISON_COMMANDER, DELIVER_SEALED_LETTER, and ROUTE_ANONYMOUS_INTELLIGENCE
+## resolve here and return effect flags the DayOrchestrator Kolat writeback applies
+## to world collections (topic pool, insurgency list, Honor, the standing-bribe
+## registry + seasonal upkeep, the letter pipeline, asset disposition).
 ## ARCHIVE_TOPIC is fully self-contained (writes the Master's cloud_archive).
 ## Actions whose effect still requires a system not wired here (the Cloud's-Eyes
-## spell, Silk intelligence routing / network records) return
-## {ok: false, reason: "deferred_system"}.
+## spell, the Tear network, the Eye at the Hidden Temple, and the Silk/Lotus/Steel
+## network-record lifecycle) return {ok: false, reason: "deferred_system"}.
 
 ## Resolve a Kolat action. `metadata` carries the action's resolved targets
 ## (target, temple, sleeper, amount, concealment, drop, strength, …). Returns a
@@ -60,6 +61,10 @@ static func execute(
 			r = _anonymous_tip(metadata)
 		"RESURRECT_TOPIC":
 			r = _resurrect_topic(actor, metadata, dice)
+		"DELIVER_SEALED_LETTER":
+			r = _deliver_sealed_letter(actor, metadata, dice)
+		"ROUTE_ANONYMOUS_INTELLIGENCE":
+			r = _route_anonymous_intelligence(actor, metadata, dice)
 		_:
 			# Topic/spell/network ActionIDs need systems not callable here.
 			r = {"ok": false, "reason": "deferred_system"}
@@ -290,4 +295,47 @@ static func _resurrect_topic(actor: L5RCharacterData, metadata: Dictionary, dice
 		"ok": true, "resurrects_topic": true, "archive_entry": entry,
 		"traceable": not success, "traceability_reduced": success and margin >= 5,
 		"honor_loss": 0.5,
+	}
+
+
+# === SILK / JADE COURIER ROUTING =============================================
+
+## DELIVER_SEALED_LETTER (s54.7c). 1 AP, Silk operative. Carries a sealed cipher
+## document to a named recipient (the recipient + payload come from the deferred
+## Silk routing as metadata). Roll Sincerity (Deceit) vs TN 10 to appear as
+## ordinary correspondence; failure draws a Tier 4 "a courier was asking after
+## [recipient]" topic. The letter is delivered either way (the operative is at the
+## destination); the DayOrchestrator writeback creates the LetterData + topic.
+static func _deliver_sealed_letter(actor: L5RCharacterData, metadata: Dictionary, dice: DiceEngine) -> Dictionary:
+	var recipient_id: int = int(metadata.get("recipient_id", -1))
+	if recipient_id < 0:
+		return {"ok": false, "reason": "no_recipient"}
+	var roll: Dictionary = SkillResolver.resolve_skill_check(actor, dice, "Sincerity", 10)
+	return {
+		"ok": true, "delivers_letter": true,
+		"recipient_id": recipient_id,
+		"payload_topic_id": int(metadata.get("payload_topic_id", -1)),
+		"courier_noticed": not bool(roll.get("success", false)),
+	}
+
+
+## ROUTE_ANONYMOUS_INTELLIGENCE (s54.7c). 1 AP, Master Jade. Routes a structured
+## threat assessment to a registered jade_asset_network contact (asset_id) through
+## anonymous channels. Roll Calligraphy (Cipher) vs TN 15 to encode securely. On
+## success the asset's disposition toward Jade's cover persona rises +5 (applied by
+## the writeback). Critical failure (margin ≤ -10) leaves a traceable element →
+## Tier 4 personal risk topic. The asset / institutional target comes from the
+## deferred Jade decomposition as metadata.
+static func _route_anonymous_intelligence(actor: L5RCharacterData, metadata: Dictionary, dice: DiceEngine) -> Dictionary:
+	var asset_id: int = int(metadata.get("asset_id", -1))
+	var org: String = String(metadata.get("tip_org", ""))
+	if asset_id < 0 and org.is_empty():
+		return {"ok": false, "reason": "no_target"}
+	var roll: Dictionary = SkillResolver.resolve_skill_check(actor, dice, "Calligraphy", 15)
+	var margin: int = int(roll.get("margin", 0))
+	return {
+		"ok": true, "routes_anon_intel": true,
+		"asset_id": asset_id, "tip_org": org,
+		"asset_disposition_gain": 5 if (asset_id >= 0 and bool(roll.get("success", false))) else 0,
+		"traceable_failure": margin <= -10,
 	}

@@ -349,7 +349,7 @@ static func advance_day(
 	_process_kolat_writebacks(
 		day_result.get("results", []), characters_by_id,
 		active_topics, next_topic_id, insurgencies, next_insurgency_id,
-		ic_day, current_season,
+		ic_day, current_season, pending_letters, next_letter_id,
 	)
 
 	_process_scene_examination_writebacks(
@@ -3499,9 +3499,12 @@ static func _process_scout_detection_topics(
 # -- Kolat Writebacks (s54.7c) ------------------------------------------------
 # Applies the world-effects of the mechanically-resolvable Kolat ActionIDs whose
 # outcome touches world collections the pure KolatExecutor cannot reach:
-#   ANONYMOUS_TIP      → Tier 4 tip topic at the target organisation
-#   RESURRECT_TOPIC    → re-injects an archived topic + applies −0.5 Honor
-#   SPONSOR_INSURGENCY → seeds / strengthens a Ronin Bandit Uprising + detection
+#   ANONYMOUS_TIP              → Tier 4 tip topic at the target organisation
+#   RESURRECT_TOPIC            → re-injects an archived topic + applies −0.5 Honor
+#   SPONSOR_INSURGENCY         → seeds / strengthens a Ronin Bandit Uprising
+#   BRIBE_GARRISON_COMMANDER   → registers the standing bribe + threat topic
+#   DELIVER_SEALED_LETTER      → delivers the sealed letter + courier-seen topic
+#   ROUTE_ANONYMOUS_INTELLIGENCE → +5 asset disposition + traced-document topic
 # The koku funding, the conditioning, dead-drop, and sleeper handlers are fully
 # resolved inside KolatExecutor and need no writeback here.
 
@@ -3514,6 +3517,8 @@ static func _process_kolat_writebacks(
 	next_insurgency_id: Array,
 	ic_day: int,
 	current_season: int,
+	pending_letters: Array = [],
+	next_letter_id: Array = [1],
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
@@ -3635,6 +3640,65 @@ static func _process_kolat_writebacks(
 						"investigation", "bribe_garrison_exposed",
 					)
 					active_topics.append(threat)
+
+			"DELIVER_SEALED_LETTER":
+				if not effects.get("delivers_letter", false):
+					continue
+				var d_recipient: int = int(effects.get("recipient_id", -1))
+				if d_recipient < 0:
+					continue
+				# Deliver the sealed cipher document via the letter pipeline (s54.7c).
+				var dlid: int = next_letter_id[0]
+				next_letter_id[0] = dlid + 1
+				var sealed := LetterData.new()
+				sealed.letter_id = dlid
+				sealed.sender_id = r.get("character_id", -1)
+				sealed.recipient_id = d_recipient
+				sealed.topic = int(effects.get("payload_topic_id", -1))
+				sealed.ic_day_sent = ic_day
+				sealed.ic_day_arrival = ic_day + LetterSystem.calculate_delivery_time(1, 0, 0, 0, false)
+				pending_letters.append(sealed)
+				# Failure: a courier was noticed asking after the recipient (s54.7c).
+				if effects.get("courier_noticed", false):
+					var clid: int = next_topic_id[0]
+					next_topic_id[0] = clid + 1
+					var courier_topic: TopicData = TopicMomentumSystem.create_topic(
+						clid, "A courier was asking after someone",
+						TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
+						ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+						[], "", "", d_recipient,
+						"courier_seen", "sealed_letter_courier",
+					)
+					active_topics.append(courier_topic)
+
+			"ROUTE_ANONYMOUS_INTELLIGENCE":
+				if not effects.get("routes_anon_intel", false):
+					continue
+				# Sustained intelligence improves the asset's disposition toward Jade's
+				# cover persona (s54.7c).
+				var gain: int = int(effects.get("asset_disposition_gain", 0))
+				var asset_id: int = int(effects.get("asset_id", -1))
+				if gain != 0 and asset_id >= 0:
+					var asset: L5RCharacterData = characters_by_id.get(asset_id, null)
+					var jade_id: int = r.get("character_id", -1)
+					if asset != null and not CharacterStats.is_dead(asset) and jade_id >= 0:
+						var cur: int = int(asset.disposition_values.get(jade_id, 0))
+						asset.disposition_values[jade_id] = clampi(cur + gain, -100, 100)
+				# Critical failure leaves a traceable element (s54.7c).
+				if effects.get("traceable_failure", false):
+					var jade: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+					var rloc: int = r.get("target_province_id", -1)
+					var rtid: int = next_topic_id[0]
+					next_topic_id[0] = rtid + 1
+					var risk: TopicData = TopicMomentumSystem.create_topic(
+						rtid, "An anonymous document traced to its courier",
+						TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
+						ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+						([rloc] if rloc >= 0 else []), "", "",
+						(jade.character_id if jade != null else -1),
+						"anon_intel_traced", "route_anon_intel_traced",
+					)
+					active_topics.append(risk)
 
 
 # -- Kolat Bribe Upkeep (s54.7c) ----------------------------------------------

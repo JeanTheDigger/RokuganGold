@@ -214,11 +214,43 @@ func test_sponsor_insurgency_returns_seed_flags() -> void:
 	assert_true(r.has("compromised"))
 
 
+# === Silk / Jade courier routing (s54.7c) ===
+
+func test_deliver_sealed_letter_requires_recipient() -> void:
+	var silk := _coin()
+	assert_false(KolatExecutor.execute("DELIVER_SEALED_LETTER", silk, {}, _dice())["ok"])
+
+
+func test_deliver_sealed_letter_returns_flags() -> void:
+	var silk := _coin(); silk.skills = {"Sincerity": 6}
+	var r := KolatExecutor.execute("DELIVER_SEALED_LETTER", silk,
+		{"recipient_id": 12, "payload_topic_id": 88}, _dice())
+	assert_true(r["ok"])
+	assert_true(r["delivers_letter"])
+	assert_eq(r["recipient_id"], 12)
+	assert_eq(r["payload_topic_id"], 88)
+	assert_true(r.has("courier_noticed"))
+
+
+func test_route_anonymous_intelligence_requires_target() -> void:
+	var jade := _coin()
+	assert_false(KolatExecutor.execute("ROUTE_ANONYMOUS_INTELLIGENCE", jade, {}, _dice())["ok"])
+
+
+func test_route_anonymous_intelligence_asset_gain() -> void:
+	var jade := _coin(); jade.skills = {"Calligraphy": 8}  # easily beats TN 15
+	var r := KolatExecutor.execute("ROUTE_ANONYMOUS_INTELLIGENCE", jade, {"asset_id": 4}, _dice())
+	assert_true(r["ok"])
+	assert_true(r["routes_anon_intel"])
+	assert_eq(r["asset_id"], 4)
+	assert_true(r.has("asset_disposition_gain"))
+
+
 # === Still-deferred actions ===
 
 func test_topic_spell_actions_deferred() -> void:
 	var coin := _coin()
-	for a: String in ["USE_CLOUDS_EYES", "DISTRIBUTE_INTELLIGENCE", "TRANSMIT_VIA_TEAR"]:
+	for a: String in ["USE_CLOUDS_EYES", "DISTRIBUTE_INTELLIGENCE", "TRANSMIT_VIA_TEAR", "OBSERVE_VIA_EYE"]:
 		var r := KolatExecutor.execute(a, coin, {}, _dice())
 		assert_false(r["ok"], a + " is deferred")
 		assert_eq(r["reason"], "deferred_system")
