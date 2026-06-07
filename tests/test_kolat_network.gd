@@ -24,10 +24,10 @@ func _topic(id: int = 70) -> TopicData:
 # === Field mapping ===
 
 func test_network_field_for_sect() -> void:
-	assert_eq(KolatNetwork.network_field_for_sect("kolat_silk"), "silk_network_record")
-	assert_eq(KolatNetwork.network_field_for_sect("kolat_jade"), "jade_asset_network")
-	assert_eq(KolatNetwork.network_field_for_sect("kolat_dream"), "", "Dream uses the sleeper registry, not a network record")
-	assert_eq(KolatNetwork.network_field_for_sect("kolat_roc"), "")
+	assert_eq(KolatNetwork.network_field_for_sect(Enums.KolatSect.SILK), "silk_network_record")
+	assert_eq(KolatNetwork.network_field_for_sect(Enums.KolatSect.JADE), "jade_asset_network")
+	assert_eq(KolatNetwork.network_field_for_sect(Enums.KolatSect.DREAM), "", "Dream uses the sleeper registry, not a network record")
+	assert_eq(KolatNetwork.network_field_for_sect(Enums.KolatSect.ROC), "")
 
 
 # === Registration + capacity ===
@@ -35,19 +35,19 @@ func test_network_field_for_sect() -> void:
 func test_register_silk_operative() -> void:
 	var silk := _master()
 	assert_true(KolatNetwork.register_silk_operative(silk, "Heron", 12, "Lion court courtier", 100))
-	var rec := KolatNetwork.get_network(silk, "kolat_silk")
+	var rec := KolatNetwork.get_network(silk, Enums.KolatSect.SILK)
 	assert_true(rec.has("Heron"))
 	assert_eq(rec["Heron"]["npc_id"], 12)
 	assert_eq(rec["Heron"]["operative_status"], "active")
-	assert_eq(KolatNetwork.find_code_name_by_npc_id(silk, "kolat_silk", 12), "Heron")
+	assert_eq(KolatNetwork.find_code_name_by_npc_id(silk, Enums.KolatSect.SILK, 12), "Heron")
 
 
 func test_capacity_cap_six() -> void:
 	var silk := _master()
 	for i: int in range(KolatNetwork.MAX_AGENTS):
 		assert_true(KolatNetwork.register_silk_operative(silk, "op%d" % i, 100 + i, "merchant", 10))
-	assert_true(KolatNetwork.at_capacity(silk, "kolat_silk"))
-	assert_eq(KolatNetwork.agent_count(silk, "kolat_silk"), 6)
+	assert_true(KolatNetwork.at_capacity(silk, Enums.KolatSect.SILK))
+	assert_eq(KolatNetwork.agent_count(silk, Enums.KolatSect.SILK), 6)
 	# 7th refused.
 	assert_false(KolatNetwork.register_silk_operative(silk, "overflow", 200, "merchant", 10))
 
@@ -58,8 +58,8 @@ func test_burned_excluded_from_capacity() -> void:
 		KolatNetwork.register_silk_operative(silk, "op%d" % i, 100 + i, "merchant", 10)
 	# Burn one — capacity opens up (burned entries do not count, s54.7d).
 	silk.special_data["silk_network_record"]["op0"]["operative_status"] = "burned"
-	assert_eq(KolatNetwork.agent_count(silk, "kolat_silk"), 5)
-	assert_false(KolatNetwork.at_capacity(silk, "kolat_silk"))
+	assert_eq(KolatNetwork.agent_count(silk, Enums.KolatSect.SILK), 5)
+	assert_false(KolatNetwork.at_capacity(silk, Enums.KolatSect.SILK))
 
 
 func test_jade_cap_three() -> void:
@@ -124,7 +124,7 @@ func test_leverage_value_clamped() -> void:
 # === Seasonal silence-detection pass (s54.7d) ===
 
 func test_silence_pass_fires_topic_and_dedups() -> void:
-	var silk := _master(); silk.kolat_sect = "kolat_silk"
+	var silk := _master(); silk.kolat_sect = Enums.KolatSect.SILK
 	KolatNetwork.register_silk_operative(silk, "Heron", 12, "Lion court", 100)
 	var topics: Array = []
 	var nti: Array = [1000]
@@ -139,7 +139,7 @@ func test_silence_pass_fires_topic_and_dedups() -> void:
 
 
 func test_silence_pass_quiet_when_recent() -> void:
-	var silk := _master(); silk.kolat_sect = "kolat_silk"
+	var silk := _master(); silk.kolat_sect = Enums.KolatSect.SILK
 	KolatNetwork.register_silk_operative(silk, "Heron", 12, "Lion court", 100)
 	var topics: Array = []
 	DayOrchestrator._process_kolat_network_seasonal([silk], topics, [1000], 120)  # gap 20 < 30
@@ -149,7 +149,7 @@ func test_silence_pass_quiet_when_recent() -> void:
 func test_silence_pass_skips_non_master() -> void:
 	var agent := L5RCharacterData.new()
 	agent.character_id = 5
-	agent.kolat_sect = "kolat_silk"  # conscious agent, NOT a Master
+	agent.kolat_sect = Enums.KolatSect.SILK  # conscious agent, NOT a Master
 	var topics: Array = []
 	DayOrchestrator._process_kolat_network_seasonal([agent], topics, [1000], 999)
 	assert_eq(topics.size(), 0, "only Masters maintain network records")

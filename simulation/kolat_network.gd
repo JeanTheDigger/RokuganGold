@@ -24,30 +24,32 @@ const SILENCE_THRESHOLD_REMOTE: int = 60  # IC days
 const CAP_COUNTING_STATUS: Array[String] = ["active", "dark", "suspended"]
 
 # Sect → special_data field holding that Sect's network record (s54.7h).
+# kolat_sect is an Enums.KolatSect on the character sheet (the codebase truth),
+# not the Enums.KolatSect.SILK string the GDD prose uses — these helpers key by the enum.
 const SECT_NETWORK_FIELD: Dictionary = {
-	"kolat_silk": "silk_network_record",
-	"kolat_coin": "coin_network_record",
-	"kolat_jade": "jade_asset_network",
-	"kolat_lotus": "lotus_network_record",
-	"kolat_chrysanthemum": "chrysanthemum_network_record",
-	"kolat_steel": "steel_garrison_record",
+	Enums.KolatSect.SILK: "silk_network_record",
+	Enums.KolatSect.COIN: "coin_network_record",
+	Enums.KolatSect.JADE: "jade_asset_network",
+	Enums.KolatSect.LOTUS: "lotus_network_record",
+	Enums.KolatSect.CHRYSANTHEMUM: "chrysanthemum_network_record",
+	Enums.KolatSect.STEEL: "steel_garrison_record",
 }
 
 
 # -- Generic record access ----------------------------------------------------
 
-static func network_field_for_sect(sect: String) -> String:
+static func network_field_for_sect(sect: Enums.KolatSect) -> String:
 	return String(SECT_NETWORK_FIELD.get(sect, ""))
 
 
-static func get_network(master: L5RCharacterData, sect: String) -> Dictionary:
+static func get_network(master: L5RCharacterData, sect: Enums.KolatSect) -> Dictionary:
 	var field: String = network_field_for_sect(sect)
 	if field == "":
 		return {}
 	return master.special_data.get(field, {})
 
 
-static func _store_network(master: L5RCharacterData, sect: String, record: Dictionary) -> void:
+static func _store_network(master: L5RCharacterData, sect: Enums.KolatSect, record: Dictionary) -> void:
 	var field: String = network_field_for_sect(sect)
 	if field != "":
 		master.special_data[field] = record
@@ -56,7 +58,7 @@ static func _store_network(master: L5RCharacterData, sect: String, record: Dicti
 ## Capacity count per s54.7d: active + dark + suspended; burned excluded. Works on
 ## the detailed dict schemas (entry["operative_status"]/["agent_status"]) and the
 ## universal triple form (entry[2]).
-static func agent_count(master: L5RCharacterData, sect: String) -> int:
+static func agent_count(master: L5RCharacterData, sect: Enums.KolatSect) -> int:
 	var record: Dictionary = get_network(master, sect)
 	var n: int = 0
 	for code_name: String in record:
@@ -65,7 +67,7 @@ static func agent_count(master: L5RCharacterData, sect: String) -> int:
 	return n
 
 
-static func at_capacity(master: L5RCharacterData, sect: String) -> bool:
+static func at_capacity(master: L5RCharacterData, sect: Enums.KolatSect) -> bool:
 	return agent_count(master, sect) >= MAX_AGENTS
 
 
@@ -92,7 +94,7 @@ static func _status_of(entry: Variant) -> String:
 	return "active"
 
 
-static func find_code_name_by_npc_id(master: L5RCharacterData, sect: String, npc_id: int) -> String:
+static func find_code_name_by_npc_id(master: L5RCharacterData, sect: Enums.KolatSect, npc_id: int) -> String:
 	var record: Dictionary = get_network(master, sect)
 	for code_name: String in record:
 		var entry: Variant = record[code_name]
@@ -107,16 +109,16 @@ static func find_code_name_by_npc_id(master: L5RCharacterData, sect: String, npc
 static func register_silk_operative(
 	master: L5RCharacterData, code_name: String, npc_id: int, position: String, ic_day: int
 ) -> bool:
-	if at_capacity(master, "kolat_silk"):
+	if at_capacity(master, Enums.KolatSect.SILK):
 		return false
-	var record: Dictionary = get_network(master, "kolat_silk")
+	var record: Dictionary = get_network(master, Enums.KolatSect.SILK)
 	record[code_name] = {
 		"npc_id": npc_id, "position": position, "operative_status": "active",
 		"last_report_ic_day": ic_day, "last_delivery_ic_day": -1,
 		"current_delivery_target": "", "tiger_priority_topics": [],
 		"reposition_in_transit": false,
 	}
-	_store_network(master, "kolat_silk", record)
+	_store_network(master, Enums.KolatSect.SILK, record)
 	return true
 
 
@@ -124,9 +126,9 @@ static func register_coin_operative(
 	master: L5RCharacterData, code_name: String, npc_id: int,
 	cover_role: String, province_base: String, ic_day: int, skim_rate: float = 0.25
 ) -> bool:
-	if at_capacity(master, "kolat_coin"):
+	if at_capacity(master, Enums.KolatSect.COIN):
 		return false
-	var record: Dictionary = get_network(master, "kolat_coin")
+	var record: Dictionary = get_network(master, Enums.KolatSect.COIN)
 	record[code_name] = {
 		"npc_id": npc_id, "cover_role": cover_role, "province_base": province_base,
 		"operative_status": "active", "current_assignment": null,
@@ -135,7 +137,7 @@ static func register_coin_operative(
 		"local_reserve_koku": 0, "skim_rate": skim_rate,
 		"expected_yield_per_season": 0.0,
 	}
-	_store_network(master, "kolat_coin", record)
+	_store_network(master, Enums.KolatSect.COIN, record)
 	return true
 
 
@@ -144,7 +146,7 @@ static func register_jade_asset(
 	institution: String, province_coverage: String
 ) -> bool:
 	# Jade has a tighter cap of 3 (s54.7h).
-	var record: Dictionary = get_network(master, "kolat_jade")
+	var record: Dictionary = get_network(master, Enums.KolatSect.JADE)
 	if record.size() >= 3:
 		return false
 	record[code_name] = {
@@ -152,7 +154,7 @@ static func register_jade_asset(
 		"province_coverage": province_coverage, "last_tip_ic_day": -1,
 		"last_report_ic_day": null, "asset_status": "active",
 	}
-	_store_network(master, "kolat_jade", record)
+	_store_network(master, Enums.KolatSect.JADE, record)
 	return true
 
 
@@ -160,9 +162,9 @@ static func register_lotus_operative(
 	master: L5RCharacterData, code_name: String, npc_id: int,
 	dead_drop_settlement_id: String, confirmation_drop_settlement_id: String
 ) -> bool:
-	if at_capacity(master, "kolat_lotus"):
+	if at_capacity(master, Enums.KolatSect.LOTUS):
 		return false
-	var record: Dictionary = get_network(master, "kolat_lotus")
+	var record: Dictionary = get_network(master, Enums.KolatSect.LOTUS)
 	record[code_name] = {
 		"dead_drop_settlement_id": dead_drop_settlement_id,
 		"dead_drop_compromised": false,
@@ -173,38 +175,65 @@ static func register_lotus_operative(
 		"assignment_in_transit_compromised": false, "assignment_method": null,
 		"abort_count": 0, "npc_id": npc_id,
 	}
-	_store_network(master, "kolat_lotus", record)
+	_store_network(master, Enums.KolatSect.LOTUS, record)
 	return true
 
 
 static func register_chrysanthemum_agent(
 	master: L5RCharacterData, code_name: String, npc_id: int, threshold: int, ic_day: int
 ) -> bool:
-	if at_capacity(master, "kolat_chrysanthemum"):
+	if at_capacity(master, Enums.KolatSect.CHRYSANTHEMUM):
 		return false
-	var record: Dictionary = get_network(master, "kolat_chrysanthemum")
+	var record: Dictionary = get_network(master, Enums.KolatSect.CHRYSANTHEMUM)
 	# Universal triple schema (s54.7h chrysanthemum reference) + npc_id for lookup.
 	record[code_name] = {
 		"npc_id": npc_id, "last_contact": ic_day, "threshold": threshold,
 		"agent_status": "active",
 	}
-	_store_network(master, "kolat_chrysanthemum", record)
+	_store_network(master, Enums.KolatSect.CHRYSANTHEMUM, record)
 	return true
 
 
 static func register_steel_ronin(
 	master: L5RCharacterData, code_name: String, npc_id: int, role: String, ic_day: int
 ) -> bool:
-	if at_capacity(master, "kolat_steel"):
+	if at_capacity(master, Enums.KolatSect.STEEL):
 		return false
-	var record: Dictionary = get_network(master, "kolat_steel")
+	var record: Dictionary = get_network(master, Enums.KolatSect.STEEL)
 	record[code_name] = {
 		"npc_id": npc_id, "role": role, "posting_ic_day": ic_day,
 		"last_paid_ic_day": ic_day, "seasons_unpaid": 0,
 		"morale_status": "loyal", "cover_identity": null,
 	}
-	_store_network(master, "kolat_steel", record)
+	_store_network(master, Enums.KolatSect.STEEL, record)
 	return true
+
+
+## Generic recruitment registration (APPROACH_FOR_RECRUITMENT, s54.7c/d). Adds a
+## newly-recruited conscious agent to the recruiting Master's Sect network record
+## with sensible defaults, dispatching by the Master's kolat_sect. Sects with no
+## agent-network record (Dream sleepers use the registry; Roc/Tiger/Cloud keep no
+## such record) return true without creating an entry — the recruit's kolat_sect
+## is set by the caller regardless. Returns false only when the record is at the
+## capacity cap (s54.7d).
+static func register_recruit(master: L5RCharacterData, npc_id: int, position: String, ic_day: int) -> bool:
+	var sect: Enums.KolatSect = master.kolat_sect
+	var code_name: String = "agent_%d" % npc_id
+	match sect:
+		Enums.KolatSect.SILK:
+			return register_silk_operative(master, code_name, npc_id, position, ic_day)
+		Enums.KolatSect.COIN:
+			return register_coin_operative(master, code_name, npc_id, "recruit", position, ic_day)
+		Enums.KolatSect.JADE:
+			return register_jade_asset(master, code_name, npc_id, "", position)
+		Enums.KolatSect.LOTUS:
+			return register_lotus_operative(master, code_name, npc_id, "", "")
+		Enums.KolatSect.CHRYSANTHEMUM:
+			return register_chrysanthemum_agent(master, code_name, npc_id, SILENCE_THRESHOLD_CITY, ic_day)
+		Enums.KolatSect.STEEL:
+			return register_steel_ronin(master, code_name, npc_id, "garnison", ic_day)
+		_:
+			return true  # Dream/Roc/Tiger/Cloud keep no agent-network record
 
 
 # -- Sleeper registry (Dream, s54.7h) -----------------------------------------

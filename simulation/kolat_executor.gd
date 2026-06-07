@@ -61,6 +61,8 @@ static func execute(
 			r = _anonymous_tip(metadata)
 		"RESURRECT_TOPIC":
 			r = _resurrect_topic(actor, metadata, dice)
+		"APPROACH_FOR_RECRUITMENT":
+			r = _approach_recruitment(actor, metadata, dice)
 		"DELIVER_SEALED_LETTER":
 			r = _deliver_sealed_letter(actor, metadata, dice)
 		"ROUTE_ANONYMOUS_INTELLIGENCE":
@@ -260,6 +262,43 @@ static func _anonymous_tip(metadata: Dictionary) -> Dictionary:
 		"tip_org": org, "tip_subject": subject,
 		"tip_subject_id": int(metadata.get("tip_subject_id", -1)),
 	}
+
+
+## APPROACH_FOR_RECRUITMENT (s54.7c). 1 AP, all Sects. The recruiting agent makes
+## their case; on success the candidate becomes a conscious Kolat agent.
+## Requires the candidate's disposition toward the recruiter ≥ Friend (+31, s12.2).
+## Roll: contested Sincerity vs the target's Willpower. OWNER RULING (2026-06-07):
+## the GDD's "+ (Gi rank × 2)" personality modifier is a mistake — personality
+## affects decisions, not mechanics — so it is NOT applied here. Honor −0.5 on
+## success only. The kolat_sect mutation, network registration, and topics are
+## applied by the DayOrchestrator Kolat writeback.
+static func _approach_recruitment(actor: L5RCharacterData, metadata: Dictionary, dice: DiceEngine) -> Dictionary:
+	var target: L5RCharacterData = metadata.get("target", null)
+	if target == null:
+		return {"ok": false, "reason": "no_target"}
+	if target.kolat_sect != Enums.KolatSect.NONE:
+		return {"ok": false, "reason": "already_kolat"}
+	# Friend-tier disposition gate (s54.7c + s12.2 Friend = +31).
+	var disp: int = int(target.disposition_values.get(actor.character_id, 0))
+	if disp < 31:
+		return {"ok": false, "reason": "disposition_too_low"}
+	var roll: Dictionary = SkillResolver.resolve_contested_check(
+		actor, target, dice, "Sincerity", "", "", "",
+		Enums.Trait.NONE, Enums.Trait.WILLPOWER,
+	)
+	var success: bool = roll.get("winner", "b") == "a"
+	var margin: int = int(roll.get("total_a", 0)) - int(roll.get("total_b", 0))
+	if success:
+		return {
+			"ok": true, "recruits_agent": true,
+			"recruiter_sect": actor.kolat_sect,
+			"target_npc_id": target.character_id, "honor_loss": 0.5,
+		}
+	# Failure: a Tier 4 personal "unusual proposition" topic. Critical failure
+	# (missed by 10+): the target reports the contact — a Tier 3 threat topic.
+	if margin <= -10:
+		return {"ok": true, "creates_threat_topic": true}
+	return {"ok": true, "creates_proposition_topic": true}
 
 
 ## RESURRECT_TOPIC (s54.7c). 1 AP, Master Cloud. Re-injects an archived topic

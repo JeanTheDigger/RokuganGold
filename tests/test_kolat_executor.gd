@@ -249,6 +249,41 @@ func test_route_anonymous_intelligence_asset_gain() -> void:
 	assert_true(r.has("asset_disposition_gain"))
 
 
+# === Recruitment (s54.7c) ===
+
+func test_approach_recruitment_requires_target() -> void:
+	var rec := _coin(1)
+	assert_false(KolatExecutor.execute("APPROACH_FOR_RECRUITMENT", rec, {}, _dice())["ok"])
+
+
+func test_approach_recruitment_disposition_gate() -> void:
+	var rec := _coin(1); rec.kolat_sect = Enums.KolatSect.SILK
+	var tgt := _coin(2); tgt.disposition_values = {1: 10}  # below Friend (+31)
+	var r := KolatExecutor.execute("APPROACH_FOR_RECRUITMENT", rec, {"target": tgt}, _dice())
+	assert_false(r["ok"])
+	assert_eq(r["reason"], "disposition_too_low")
+
+
+func test_approach_recruitment_already_kolat() -> void:
+	var rec := _coin(1); rec.kolat_sect = Enums.KolatSect.SILK
+	var tgt := _coin(2); tgt.kolat_sect = Enums.KolatSect.COIN; tgt.disposition_values = {1: 40}
+	var r := KolatExecutor.execute("APPROACH_FOR_RECRUITMENT", rec, {"target": tgt}, _dice())
+	assert_false(r["ok"])
+	assert_eq(r["reason"], "already_kolat")
+
+
+func test_approach_recruitment_resolves_past_gates() -> void:
+	var rec := _coin(1); rec.kolat_sect = Enums.KolatSect.SILK
+	rec.skills = {"Sincerity": 6}
+	var tgt := _coin(2); tgt.willpower = 1; tgt.disposition_values = {1: 40}
+	var r := KolatExecutor.execute("APPROACH_FOR_RECRUITMENT", rec, {"target": tgt}, _dice())
+	assert_true(r["ok"], "past the gates; outcome is the contested roll")
+	# Exactly one outcome flag is set.
+	var flags := int(r.get("recruits_agent", false)) \
+		+ int(r.get("creates_threat_topic", false)) + int(r.get("creates_proposition_topic", false))
+	assert_eq(flags, 1)
+
+
 # === Still-deferred actions ===
 
 func test_topic_spell_actions_deferred() -> void:

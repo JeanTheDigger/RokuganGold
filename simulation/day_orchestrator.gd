@@ -3645,6 +3645,44 @@ static func _process_kolat_writebacks(
 					)
 					active_topics.append(threat)
 
+			"APPROACH_FOR_RECRUITMENT":
+				var recruiter: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if recruiter == null or CharacterStats.is_dead(recruiter):
+					continue
+				if effects.get("recruits_agent", false):
+					var recruit: L5RCharacterData = characters_by_id.get(r.get("target_npc_id", -1), null)
+					# Never recruit a dead character or a PC (PCs are not NPC-driven).
+					if recruit != null and not CharacterStats.is_dead(recruit) and not recruit.is_pc and recruit.kolat_sect == Enums.KolatSect.NONE:
+						var rs: Enums.KolatSect = effects.get("recruiter_sect", Enums.KolatSect.NONE)
+						recruit.kolat_sect = rs
+						KolatNetwork.register_recruit(recruiter, recruit.character_id, recruit.physical_location, ic_day)
+						# Honor −0.5 on success (s54.7c).
+						HonorGlorySystem.apply_honor_change(recruiter, -float(effects.get("honor_loss", 0.5)))
+				elif effects.get("creates_threat_topic", false):
+					# Critical failure: the candidate reports the approach (s54.7c).
+					var atid: int = next_topic_id[0]
+					next_topic_id[0] = atid + 1
+					var rthreat: TopicData = TopicMomentumSystem.create_topic(
+						atid, "An unusual and suspicious proposition was reported",
+						TopicData.Tier.TIER_3, TopicData.Category.POLITICAL,
+						ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3),
+						[], "", "", recruiter.character_id,
+						"recruitment", "recruitment_reported",
+					)
+					active_topics.append(rthreat)
+				elif effects.get("creates_proposition_topic", false):
+					# Ordinary failure: a Tier 4 personal "unusual proposition" rumour.
+					var ptid: int = next_topic_id[0]
+					next_topic_id[0] = ptid + 1
+					var prop: TopicData = TopicMomentumSystem.create_topic(
+						ptid, "%s made an unusual proposition" % recruiter.character_name,
+						TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
+						ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+						[], "", "", recruiter.character_id,
+						"recruitment", "recruitment_proposition",
+					)
+					active_topics.append(prop)
+
 			"DELIVER_SEALED_LETTER":
 				if not effects.get("delivers_letter", false):
 					continue
