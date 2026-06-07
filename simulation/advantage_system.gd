@@ -611,11 +611,6 @@ static func get_tn_modifier(
 						if sn.begins_with("Lore"):
 							mod += 5
 
-			Enums.Disadvantage.SHADOWED_HEART:
-				# Applied to the ATTACKER trying to read you, not your own roll.
-				# See get_target_detection_tn_bonus().
-				pass
-
 			Enums.Disadvantage.WANDERER:
 				if context.get("is_navigation", false):
 					mod += 15
@@ -1091,16 +1086,20 @@ static func get_die_explosion_cap(character: L5RCharacterData, context: Dictiona
 # TOUCH_OF_THE_VOID: +2k1 instead of +1k1 when spending Void on a roll.
 # Returns the extra kept dice (on top of the normal +1k1 = 1 kept).
 # The roll also requires Willpower TN 30 or Dazed — checked separately.
+# NOTE: dead/forward-wired (no callers). TOUCH_OF_THE_VOID is a Disadvantage per
+# GDD s45/s29.12; the +2k1 Void doubling is actually the Phoenix Rank-5 *technique*
+# of the same name (s29.5). These functions conflate the two — left referencing the
+# real Disadvantage enum so the module compiles, pending owner clarification.
 # ---------------------------------------------------------------------------
 
 static func get_void_spend_bonus(character: L5RCharacterData) -> Dictionary:
-	if has_advantage(character, Enums.Advantage.TOUCH_OF_THE_VOID):
+	if has_disadvantage(character, Enums.Disadvantage.TOUCH_OF_THE_VOID):
 		return {"extra_kept": 1}  # +2k1 total vs normal +1k1
 	return {"extra_kept": 0}
 
 
 static func needs_void_dazed_check(character: L5RCharacterData) -> bool:
-	return has_advantage(character, Enums.Advantage.TOUCH_OF_THE_VOID)
+	return has_disadvantage(character, Enums.Disadvantage.TOUCH_OF_THE_VOID)
 
 
 # ---------------------------------------------------------------------------
