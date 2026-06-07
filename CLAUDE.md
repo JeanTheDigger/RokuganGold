@@ -4546,20 +4546,37 @@ but not executed in this environment.
     recipient_sect for TRANSMIT). Combined with the standing-mandate assignment
     (Tranche 12) and the Phase-2 cascade (E2), Masters now autonomously pursue
     their Sect mandate and the executors receive real inputs end to end.
-- **Still deferred (all 29 executors + their metadata are done) — the upstream
-  NeedType-generation layer and a few data-blocked inputs:** opportunity-scanner
-  self-initiation (RECRUIT_KOLAT_AGENT candidate scan, CONDITION_SLEEPER network-
-  capacity scan, Chrysanthemum shallow-IntelDB / winter-court scanner) and Tiger
-  strategic-directive composition (what directive Tiger sends, via the strategic
-  review); UNDERREPORT_KOKU amount (domain income not in context); ARCHIVE_TOPIC /
-  SUBMIT_KOLAT_REPORT topic object (context carries topic IDs, not TopicData);
-  Kolat-objective completion/recall (slot persists until overwritten);
-  OBSERVE_VIA_EYE contention + all-AP cost; SECURE two-failure auto-report;
-  CONDUCT_PERIMETER_PATROL within-3-provinces range + cover identity; courier
-  patrol-TN scaling; DISTRIBUTE_INTELLIGENCE route-compromise interception; the
-  Conclave + win-condition orchestrator passes (KolatSecrecy data layer exists).
-  These need the opportunity-scanner/strategic-review integration, IntelDB,
-  map-distance data, or action-log state — none buildable without inventing.
+  - **E4 — self-initiated NeedType generation (s54.7d/e).**
+    `simulation/kolat_opportunity_scanner.gd` (KolatOpportunityScanner pure class)
+    produces the opportunistic Kolat objectives a Master pursues beyond the standing
+    Sect mandate, with LOCKED trigger conditions: SECURE_DEAD_DROP_NETWORK (Lotus
+    with a compromised drop — secured before any other Lotus work), CONDITION_SLEEPER
+    (Dream below its `world_start_sleepers` target — picks the co-located non-Kolat
+    candidate with the fewest required sessions = lowest Willpower), RECRUIT_KOLAT_AGENT
+    (agent-network Sect below its capacity cap — Jade 3, others 6 — picks the
+    highest-disposition co-located non-Kolat candidate at Friend tier +31, matching
+    the APPROACH_FOR_RECRUITMENT gate). `should_clear()` gives self-initiated
+    completion/recall: a self-selected slot is retired when its trigger lapses
+    (drop secured / sleeper made / recruit converted / candidate dead / at capacity);
+    Tiger directives (a different `source`) are never disturbed. Wired into
+    DayOrchestrator `_assign_kolat_opportunistic_objectives()` (daily, after the
+    standing assignment, before `_inject_kolat_objective_flags`): fills the Kolat
+    objective slot at priority 2 (precedes standing, yields to a primary or Tiger
+    directive). The slot's `target_npc_id` flows through `_passthrough` → the need →
+    `_build_kolat_metadata` (E3) → the executor end to end, so Masters now grow
+    their networks and create sleepers autonomously. 16 tests in
+    `tests/test_kolat_opportunity_scanner.gd`.
+- **Still deferred (29 executors + metadata + self-init done) — the remaining
+  generation channels and a few data-blocked inputs:** Chrysanthemum shallow-IntelDB /
+  winter-court scanner and Tiger strategic-directive composition (what directive
+  Tiger sends, via the strategic review); UNDERREPORT_KOKU amount (domain income not
+  in context); ARCHIVE_TOPIC / SUBMIT_KOLAT_REPORT topic object (context carries topic
+  IDs, not TopicData); OBSERVE_VIA_EYE contention + all-AP cost; SECURE two-failure
+  auto-report; CONDUCT_PERIMETER_PATROL within-3-provinces range + cover identity;
+  courier patrol-TN scaling; DISTRIBUTE_INTELLIGENCE route-compromise interception;
+  the Conclave + win-condition orchestrator passes (KolatSecrecy data layer exists).
+  These need the strategic-review integration, IntelDB, map-distance data, or
+  action-log state — none buildable without inventing.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`

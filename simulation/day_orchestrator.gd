@@ -150,6 +150,7 @@ static func advance_day(
 	_assign_artisan_standing_objectives(characters, objectives_map)
 	_assign_monk_standing_objectives(characters, objectives_map)
 	_assign_kolat_standing_objectives(characters, objectives_map)
+	_assign_kolat_opportunistic_objectives(characters, objectives_map, characters_by_id)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
 
 	_populate_military_data(military_data, companies)
@@ -7543,6 +7544,47 @@ static func _assign_kolat_standing_objectives(
 			"priority": 4,
 			"auto_assigned": true,
 		}
+
+
+# -- Kolat Opportunistic Objective Assignment (s54.7d/e) ----------------------
+# Beyond the standing Sect mandate, Masters self-select the network-growth tasks
+# (recruit agents, condition sleepers, secure compromised drops) when their
+# trigger conditions hold. These occupy the Kolat objective slot at priority 2
+# (precedes standing, yields to a primary or a Tiger directive). Stale
+# self-selected objectives are cleared when their trigger no longer applies; a
+# Tiger directive in the slot is left untouched.
+
+
+static func _assign_kolat_opportunistic_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+	characters_by_id: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.is_pc or CharacterStats.is_dead(character):
+			continue
+		if not KolatSystem.is_master(character):
+			continue
+
+		var char_id: int = character.character_id
+		var objectives: Dictionary = objectives_map.get(char_id, {})
+		var slot: Dictionary = objectives.get("kolat", {})
+
+		# A Tiger directive (different source) owns the slot — do not disturb it.
+		if not slot.is_empty() and String(slot.get("source", "")) != KolatOpportunityScanner.SOURCE:
+			continue
+
+		# Drop a stale self-selected objective whose trigger no longer holds.
+		if not slot.is_empty() and KolatOpportunityScanner.should_clear(character, slot, characters_by_id):
+			objectives.erase("kolat")
+			slot = {}
+
+		# Fill an empty slot with a fresh opportunity.
+		if slot.is_empty():
+			var opp: Dictionary = KolatOpportunityScanner.scan(character, characters_by_id)
+			if not opp.is_empty():
+				objectives["kolat"] = opp
+				objectives_map[char_id] = objectives
 
 
 # -- FIND_NEW_LORD Standing Objective Assignment (s52.5 Part F) ----------------
