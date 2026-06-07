@@ -464,9 +464,8 @@ static func _scan_artistic_expression(
 	if character.skills.get("Poetry", 0) < 1:
 		return results
 
-	# Condition 2: No active ARTISTIC_EXPRESSION objective already in progress.
-	if character.get("objectives_map", {}).get("primary", {}).get("need_type", "") == "ARTISTIC_EXPRESSION":
-		return results
+	# Condition 2: active-primary filtering is handled by the caller (objectives_map
+	# is world-level, not a field on L5RCharacterData) — no in-scanner check here.
 
 	# Condition 3: No active military/siege/survival NeedType at urgency > 60.
 	# Proxy: character's clan is in an active war (active wars always produce urgency > 60).

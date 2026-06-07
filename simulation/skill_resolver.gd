@@ -432,8 +432,8 @@ static func resolve_skill_check(
 	# CANT_LIE (s45): contested Willpower TN 20 before any Sincerity:Deceit roll.
 	# On failure the roll is automatically treated as failed (returns early).
 	if "Sincerity" in skill_name and context.get("is_deception", false):
-		var cant_lie: Dictionary = AdvantageSystem.check_cant_lie_trigger(character)
-		if cant_lie.get("blocked", false):
+		var cant_lie: Dictionary = AdvantageSystem.check_cant_lie_trigger(character, true)
+		if cant_lie.get("triggered", false):
 			# Roll Willpower TN 20 to override the block.
 			var will_roll: Dictionary = dice_engine.roll_check(
 				character.willpower, character.willpower, 20, 0, 0, true, false

@@ -4,7 +4,7 @@ class_name DayOrchestrator
 ## info events → letter delivery → topic tick →
 ## (season boundary) resource tick + confidence decay.
 
-# Topic initial momentum uses tier-floor values from TopicSystem.TIER_INITIAL_MOMENTUM
+# Topic initial momentum uses tier-floor values from TopicMomentumSystem.TIER_INITIAL_MOMENTUM
 # (locked s16.1). TIER_3 floor = 26.0, TIER_2 floor = 51.0.
 
 
@@ -2957,7 +2957,7 @@ static func _process_horde_rolls(
 		topic.topic_type = "military"
 		topic.category = TopicData.Category.POLITICAL
 		topic.tier = TopicData.Tier.TIER_3
-		topic.momentum = TopicSystem.initial_momentum_for_tier(topic.tier)
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.ic_day_created = ic_day
 		var province: Variant = provinces.get(horde.target_province_id, null)
 		if province is ProvinceData:
@@ -3327,7 +3327,7 @@ static func _process_famine_crises(
 				var tier: int = TopicData.Tier.TIER_3
 				if stage_2 >= ResourceTick.StarvationStage.FAMINE:
 					tier = TopicData.Tier.TIER_2
-				var momentum: float = TopicSystem.initial_momentum_for_tier(tier)
+				var momentum: float = TopicMomentumSystem.initial_momentum_for_tier(tier)
 				var single_cid: int = -1
 				var single_prov: Variant = provinces.get(province_id_2, null)
 				if single_prov is ProvinceData:
@@ -3467,7 +3467,7 @@ static func _create_famine_topic_multi(
 	topic.clan_involved = clan
 	topic.provinces_affected = province_ids.duplicate()
 	topic.ic_day_created = ic_day
-	topic.momentum = TopicSystem.initial_momentum_for_tier(topic.tier)
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	topic.crisis_id = p_crisis_id
 	return topic
 
@@ -5816,7 +5816,7 @@ static func _apply_victim_death(
 ) -> void:
 	var earth: int = CharacterStats.get_ring_value(victim, Enums.Ring.EARTH)
 	var ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
-	if AdvantageSystem.check_great_destiny(victim, ic_year).get("triggered", false):
+	if AdvantageSystem.check_great_destiny(victim, ic_year):
 		var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(victim)
 		victim.wounds_taken = gd_threshold * 6 + 1  # start of DOWN level
 		var gd_adv: AdvantageData = AdvantageSystem.get_advantage(victim, Enums.Advantage.GREAT_DESTINY)
@@ -6686,7 +6686,7 @@ static func _process_brash_reactions(
 		var tn: int = brash_check.get("tn", 25)
 		var brash_wound: int = CharacterStats.get_wound_penalty(target)
 		var roll: DiceResult = dice_engine.roll_and_keep(
-			target.willpower, target.willpower, false, ""
+			target.willpower, target.willpower, false, false
 		)
 		var total: int = roll.total + int(target.honor) + brash_wound
 		if total >= tn:
@@ -6744,7 +6744,7 @@ static func _process_contrary_reactions(
 				continue
 			var tn: int = contrary_check.get("tn", 0)
 			var contrary_wound: int = CharacterStats.get_wound_penalty(c)
-			var roll: DiceResult = dice_engine.roll_and_keep(c.willpower, c.willpower, false, "")
+			var roll: DiceResult = dice_engine.roll_and_keep(c.willpower, c.willpower, false, false)
 			if (roll.total + contrary_wound) >= tn:
 				continue  # Passed — stays composed
 			# Failed: CONTRARY character publicly contradicts the debater.
@@ -9944,7 +9944,7 @@ static func _process_compulsion_on_arrival(
 		var tn: int = trigger.get("tn", 15)
 		var wil: int = character.willpower
 		var compulsion_wound: int = CharacterStats.get_wound_penalty(character)
-		var roll: DiceResult = dice_engine.roll_and_keep(wil, wil, false, "")
+		var roll: DiceResult = dice_engine.roll_and_keep(wil, wil, false, false)
 		if (roll.total + compulsion_wound) < tn:
 			var comp_dis: DisadvantageData = AdvantageSystem.get_disadvantage(
 				character, Enums.Disadvantage.COMPULSION
@@ -10218,8 +10218,8 @@ static func _spy_build_character_fact(
 			var has_dark: bool = AdvantageSystem.has_disadvantage(
 				target, Enums.Disadvantage.DARK_SECRET,
 			)
-			var has_forbidden: bool = AdvantageSystem.has_disadvantage(
-				target, Enums.Disadvantage.FORBIDDEN_KNOWLEDGE,
+			var has_forbidden: bool = AdvantageSystem.has_advantage(
+				target, Enums.Advantage.FORBIDDEN_KNOWLEDGE,
 			)
 			if not has_dark and not has_forbidden:
 				return null
@@ -10231,11 +10231,11 @@ static func _spy_build_character_fact(
 				e.data["secret_type"] = "DARK_SECRET"
 				e.data["description"] = dis.metadata.get("description", "") if dis != null else ""
 			else:
-				var dis: DisadvantageData = AdvantageSystem.get_disadvantage(
-					target, Enums.Disadvantage.FORBIDDEN_KNOWLEDGE,
+				var adv: AdvantageData = AdvantageSystem.get_advantage(
+					target, Enums.Advantage.FORBIDDEN_KNOWLEDGE,
 				)
 				e.data["secret_type"] = "FORBIDDEN_KNOWLEDGE"
-				e.data["description"] = dis.metadata.get("knowledge_type", "") if dis != null else ""
+				e.data["description"] = adv.metadata.get("knowledge_type", "") if adv != null else ""
 		"observed_location":
 			e.entry_type = "observed_location"
 			e.data["location"] = target.physical_location
@@ -11207,7 +11207,7 @@ static func _process_hostage_escapes(
 		elif escape_result.get("executed", false):
 			var lethal: int = CharacterStats.get_ring_value(character, Enums.Ring.EARTH) * 5 * 5
 			var he_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
-			if AdvantageSystem.check_great_destiny(character, he_ic_year).get("triggered", false):
+			if AdvantageSystem.check_great_destiny(character, he_ic_year):
 				var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(character)
 				character.wounds_taken = gd_threshold * 6 + 1
 				var gd_he: AdvantageData = AdvantageSystem.get_advantage(character, Enums.Advantage.GREAT_DESTINY)
@@ -13627,7 +13627,7 @@ static func _create_battle_topic(
 
 	var variant: String = "victory_clean"
 	var tier: TopicData.Tier = TopicData.Tier.TIER_3
-	var momentum: float = TopicSystem.initial_momentum_for_tier(tier)
+	var momentum: float = TopicMomentumSystem.initial_momentum_for_tier(tier)
 
 	var title: String = "Battle at province %d" % province_id
 
@@ -16161,7 +16161,7 @@ static func _generate_naval_battle_topics(
 		topic.slug = "naval_battle_%s_vs_%s_d%d" % [atk_clan.to_lower(), def_clan.to_lower(), ic_day]
 		topic.title = "Naval Battle — %s vs %s" % [atk_clan, def_clan]
 		topic.tier = TopicData.Tier.TIER_3
-		topic.momentum = TopicSystem.initial_momentum_for_tier(topic.tier)
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.category = TopicData.Category.MILITARY
 		topic.ic_day_created = ic_day
 		topic.resolved = false
@@ -16971,7 +16971,7 @@ static func _process_gempukku(
 			var dead_char: L5RCharacterData = characters_by_id[dead_id]
 			var lethal: int = CharacterStats.get_ring_value(dead_char, Enums.Ring.EARTH) * 5 * 5
 			var nd_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
-			if AdvantageSystem.check_great_destiny(dead_char, nd_ic_year).get("triggered", false):
+			if AdvantageSystem.check_great_destiny(dead_char, nd_ic_year):
 				var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(dead_char)
 				dead_char.wounds_taken = gd_threshold * 6 + 1
 				var gd_nd: AdvantageData = AdvantageSystem.get_advantage(dead_char, Enums.Advantage.GREAT_DESTINY)
@@ -19824,7 +19824,7 @@ static func _inject_base_character_context(
 					if CharacterStats.is_dead(rm_c):
 						continue
 					if rm_c.physical_location == rm_loc and rm_c.character_id != c.character_id:
-						max_gr = maxf(max_gr, float(AdvantageSystem.get_glory_rank(rm_c)))
+						max_gr = maxf(max_gr, float(HonorGlorySystem.get_glory_rank(rm_c)))
 				if max_gr > 0.0:
 					ws["rumormonger_max_glory_rank"] = max_gr
 
@@ -21218,7 +21218,7 @@ static func _apply_assassination_outcome(
 ) -> void:
 	var earth: int = CharacterStats.get_ring_value(target, Enums.Ring.EARTH)
 	var ass_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
-	if AdvantageSystem.check_great_destiny(target, ass_ic_year).get("triggered", false):
+	if AdvantageSystem.check_great_destiny(target, ass_ic_year):
 		var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(target)
 		target.wounds_taken = gd_threshold * 6 + 1
 		var gd_ass: AdvantageData = AdvantageSystem.get_advantage(target, Enums.Advantage.GREAT_DESTINY)
@@ -21349,7 +21349,7 @@ static func _process_soft_hearted_kill_penalties(
 		var killer: L5RCharacterData = characters_by_id.get(killer_id)
 		if killer == null or CharacterStats.is_dead(killer):
 			continue
-		var check: Dictionary = AdvantageSystem.check_soft_hearted_trigger(killer)
+		var check: Dictionary = AdvantageSystem.check_soft_hearted_trigger(killer, true)
 		if not check.get("blocked", false):
 			continue
 		# Roll Willpower TN 20 to suppress the penalty.
@@ -22547,7 +22547,7 @@ static func _resolve_scheduled_hunts(
 			if killed != null:
 				var earth: int = CharacterStats.get_ring_value(killed, Enums.Ring.EARTH)
 				var hunt_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
-				if AdvantageSystem.check_great_destiny(killed, hunt_ic_year).get("triggered", false):
+				if AdvantageSystem.check_great_destiny(killed, hunt_ic_year):
 					var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(killed)
 					killed.wounds_taken = gd_threshold * 6 + 1
 					var gd_hunt: AdvantageData = AdvantageSystem.get_advantage(killed, Enums.Advantage.GREAT_DESTINY)
@@ -24182,7 +24182,7 @@ static func _process_ritual_spell_writebacks(
 							province.province_taint_level
 						)
 						var density_entry: KnowledgeEntry = KnowledgeEntry.new()
-						density_entry.source = "spell_detect_presence"
+						density_entry.source = Enums.KnowledgeSource.DIRECT_OBSERVATION
 						density_entry.entry_type = "kansen_density"
 						density_entry.data = {
 							"density_tier": density_tier,
@@ -24235,7 +24235,7 @@ static func _process_ritual_spell_writebacks(
 					)
 					if ward_result.get("taint_revealed", false):
 						var entry: KnowledgeEntry = KnowledgeEntry.new()
-						entry.source = "spell_ward"
+						entry.source = Enums.KnowledgeSource.DIRECT_OBSERVATION
 						entry.entry_type = "taint_detected_self"
 						entry.data = {"taint": character.taint, "spell_id": ritual_spell_id}
 						entry.confidence = Enums.KnowledgeConfidence.FRESH
@@ -25193,7 +25193,7 @@ static func _process_garden_commission_writebacks(
 					topic.topic_id = next_topic_id[0]
 					next_topic_id[0] += 1
 					topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4) as TopicData.Tier
-					topic.category = TopicData.Category.SOCIAL
+					topic.category = TopicData.Category.PERSONAL
 					topic.topic_type = topic_dict.get("topic_type", "garden_completed")
 					topic.title = topic_dict.get("title", "")
 					topic.subject_character_id = record.artisan_id
@@ -25260,7 +25260,7 @@ static func _process_maintain_garden_writebacks(
 				topic.topic_id = next_topic_id[0]
 				next_topic_id[0] += 1
 				topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4) as TopicData.Tier
-				topic.category = TopicData.Category.SOCIAL
+				topic.category = TopicData.Category.PERSONAL
 				topic.topic_type = topic_dict.get("topic_type", "garden_degraded")
 				topic.title = topic_dict.get("title", "")
 				topic.subject_character_id = garden.creator_id
@@ -25525,7 +25525,7 @@ static func _process_garden_seasonal_maintenance(
 				topic.topic_id = next_topic_id[0]
 				next_topic_id[0] += 1
 				topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4) as TopicData.Tier
-				topic.category = TopicData.Category.SOCIAL
+				topic.category = TopicData.Category.PERSONAL
 				topic.topic_type = topic_dict.get("topic_type", "garden_degraded")
 				topic.title = topic_dict.get("title", "")
 				topic.subject_character_id = garden.creator_id
@@ -25795,10 +25795,10 @@ static func _process_display_painting_writebacks(
 
 		# Generate placement topic for quality tier 3+
 		var topic_dict: Dictionary = PaintingSystem.generate_lifecycle_topic(
-			painting, "placement", "", settlement.settlement_type, ic_day,
+			painting, "placement", "", "", ic_day,
 		)
 		if not topic_dict.is_empty() and topic_dict.get("tier", TopicData.Tier.TIER_4) <= TopicData.Tier.TIER_3:
-			_topic_from_dict(topic_dict, active_topics, next_topic_id, ic_day)
+			_topic_from_dict(topic_dict, next_topic_id, ic_day)
 
 
 static func _process_present_emakimono_writebacks(
@@ -25843,11 +25843,11 @@ static func _process_present_emakimono_writebacks(
 			var shift: int = pr.get("disposition_shift", 0)
 			var subject_id: int = painting.subject_id
 			if subject_id >= 0:
-				var current_disp: int = DispositionSystem.get_disposition(recipient, subject_id)
+				var current_disp: int = recipient.disposition_values.get(subject_id, 0)
 				# Positive framing → push positive (add shift if positive, subtract if negative)
 				# Negative framing → push negative (inverse)
 				var applied: int = shift if current_disp >= 0 else -shift
-				DispositionSystem.apply_disposition_change(recipient, subject_id, applied)
+				recipient.disposition_values[subject_id] = clampi(recipient.disposition_values.get(subject_id, 0) + applied, -100, 100)
 			# Deliver linked topics
 			for tid: int in pr.get("topic_ids_delivered", []):
 				if tid not in recipient.topic_pool:
@@ -25944,7 +25944,7 @@ static func _process_painting_visitor_effects(
 			if not neg_result.is_empty():
 				var disp_loss: int = neg_result.get("disposition_change", 0)
 				if disp_loss != 0 and daimyo_id >= 0:
-					DispositionSystem.apply_disposition_change(visitor, daimyo_id, disp_loss)
+					visitor.disposition_values[daimyo_id] = clampi(visitor.disposition_values.get(daimyo_id, 0) + disp_loss, -100, 100)
 
 
 static func _process_painting_seasonal_maintenance(
@@ -26133,7 +26133,7 @@ static func _inject_sculpture_context(
 		# WIP sculpture for this creator
 		var wip: SculptureData = wip_by_creator.get(character.character_id)
 		ws["known_objectives"]["active_sculpture_wip_id"] = wip.sculpture_id if wip != null else -1
-		ws["known_objectives"]["active_sculpture_material"] = wip.material if wip != null else SculptureSystem.Material.WOOD
+		ws["known_objectives"]["active_sculpture_material"] = wip.material if wip != null else SculptureSystem.MaterialType.WOOD
 		ws["known_objectives"]["active_sculpture_format"] = wip.format if wip != null else SculptureSystem.Format.STATUARY
 
 		# Slot availability and worship FRs at current settlement
@@ -26215,7 +26215,7 @@ static func _process_compose_sculpture_writebacks(
 			next_sculpture_id[0] += 1
 			var sculpture: SculptureData = SculptureSystem.declare_composition(
 				effects.get("format", SculptureSystem.Format.STATUARY),
-				effects.get("material", SculptureSystem.Material.WOOD),
+				effects.get("material", SculptureSystem.MaterialType.WOOD),
 				effects.get("subject_type", SculptureSystem.SubjectType.FORTUNE),
 				effects.get("subject_id", -1),
 				effects.get("target_quality_tier", 1),
@@ -26522,7 +26522,7 @@ static func _check_bounty_recognition(
 			# Observer recognises the wanted character — add to met_characters
 			# so they can report through existing topic/investigation channels
 			var bounty_knowledge: KnowledgeEntry = KnowledgeEntry.new()
-			bounty_knowledge.source = "bounty_recognition"
+			bounty_knowledge.source = Enums.KnowledgeSource.PUBLIC_KNOWLEDGE
 			bounty_knowledge.entry_type = "bounty_spotted"
 			bounty_knowledge.data = {
 				"target_id": arriving.character_id,

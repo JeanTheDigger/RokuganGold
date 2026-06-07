@@ -29,7 +29,7 @@ func _make_statuary_wip(
 		sculpture_id: int = 1,
 		quality: int = 2,
 		creator: int = 10,
-		material: int = SculptureSystem.Material.WOOD,
+		material: int = SculptureSystem.MaterialType.WOOD,
 		ic_day: int = 1,
 ) -> SculptureData:
 	return SculptureSystem.declare_composition(
@@ -52,7 +52,7 @@ func _make_guardian_wip(
 ) -> SculptureData:
 	return SculptureSystem.declare_composition(
 		SculptureSystem.Format.GUARDIAN,
-		SculptureSystem.Material.STONE,
+		SculptureSystem.MaterialType.STONE,
 		SculptureSystem.SubjectType.GUARDIAN_SPIRIT,
 		-1,
 		quality,
@@ -70,7 +70,7 @@ func _make_figurine_wip(
 ) -> SculptureData:
 	return SculptureSystem.declare_composition(
 		SculptureSystem.Format.FIGURINE,
-		SculptureSystem.Material.WOOD,
+		SculptureSystem.MaterialType.WOOD,
 		SculptureSystem.SubjectType.ANIMAL,
 		-1,
 		quality,
@@ -123,10 +123,10 @@ func test_mantis_figurine_fr_bonus_is_3() -> void:
 # ---------------------------------------------------------------------------
 
 func test_declare_composition_statuary_sets_wip_fields() -> void:
-	var sc: SculptureData = _make_statuary_wip(1, 2, 10, SculptureSystem.Material.WOOD, 50)
+	var sc: SculptureData = _make_statuary_wip(1, 2, 10, SculptureSystem.MaterialType.WOOD, 50)
 	assert_eq(sc.sculpture_id, 1)
 	assert_eq(sc.format, SculptureSystem.Format.STATUARY)
-	assert_eq(sc.material, SculptureSystem.Material.WOOD)
+	assert_eq(sc.material, SculptureSystem.MaterialType.WOOD)
 	assert_eq(sc.creator_id, 10)
 	assert_eq(sc.target_quality_tier, 2)
 	assert_eq(sc.craft_progress, 0)
@@ -144,7 +144,7 @@ func test_declare_composition_guardian_sets_paired_flag() -> void:
 func test_declare_composition_figurine_sets_theme() -> void:
 	var sc: SculptureData = SculptureSystem.declare_composition(
 		SculptureSystem.Format.FIGURINE,
-		SculptureSystem.Material.WOOD,
+		SculptureSystem.MaterialType.WOOD,
 		SculptureSystem.SubjectType.ANIMAL,
 		-1,
 		1,
@@ -179,14 +179,14 @@ func test_resolve_compose_success_adds_progress() -> void:
 
 
 func test_resolve_compose_stone_increases_tn() -> void:
-	var sc: SculptureData = _make_statuary_wip(1, 1, 10, SculptureSystem.Material.STONE, 1)
+	var sc: SculptureData = _make_statuary_wip(1, 1, 10, SculptureSystem.MaterialType.STONE, 1)
 	# TN = 15 + 5 (stone) = 20; roll 18 → failure
 	var r: Dictionary = SculptureSystem.resolve_compose_sculpture(1, sc, 18, 0, 5)
 	assert_false(r["success"])
 
 
 func test_resolve_compose_stone_success_above_20() -> void:
-	var sc: SculptureData = _make_statuary_wip(1, 1, 10, SculptureSystem.Material.STONE, 1)
+	var sc: SculptureData = _make_statuary_wip(1, 1, 10, SculptureSystem.MaterialType.STONE, 1)
 	var r: Dictionary = SculptureSystem.resolve_compose_sculpture(1, sc, 22, 0, 5)
 	assert_true(r["success"])
 
@@ -195,7 +195,7 @@ func test_resolve_compose_stone_progress_uses_base_tn_not_effective() -> void:
 	# GDD A2: progress = max(1, roll_total - 15). Stone adds +5 TN to check for success
 	# but does NOT reduce progress on a successful roll.
 	# Roll 30 on a stone sculpture (effective TN = 20): base = max(1, 30-15) = 15, not max(1, 30-20) = 10.
-	var sc: SculptureData = _make_statuary_wip(1, 1, 0, SculptureSystem.Material.STONE, 1)
+	var sc: SculptureData = _make_statuary_wip(1, 1, 0, SculptureSystem.MaterialType.STONE, 1)
 	var r: Dictionary = SculptureSystem.resolve_compose_sculpture(1, sc, 30, 0, 5)
 	assert_true(r["success"])
 	assert_eq(r["progress_gained"], 15)  # max(1, 30-15) = 15; not 10 (max(1, 30-20))
@@ -204,14 +204,14 @@ func test_resolve_compose_stone_progress_uses_base_tn_not_effective() -> void:
 func test_resolve_compose_stone_progress_with_raises_uses_base_tn() -> void:
 	# Roll 35 on stone with 2 raises: effective_tn = 20+10=30, success.
 	# Progress = max(1, 35-15) + 2*5 = 20 + 10 = 30. Not max(1, 35-30)+10 = 1+10 = 11.
-	var sc: SculptureData = _make_statuary_wip(2, 2, 0, SculptureSystem.Material.STONE, 1)
+	var sc: SculptureData = _make_statuary_wip(2, 2, 0, SculptureSystem.MaterialType.STONE, 1)
 	var r: Dictionary = SculptureSystem.resolve_compose_sculpture(2, sc, 35, 2, 5)
 	assert_true(r["success"])
 	assert_eq(r["progress_gained"], 30)
 
 
 func test_resolve_compose_skill_gate_blocks_below_rank() -> void:
-	var sc: SculptureData = _make_statuary_wip(1, 3, 10, SculptureSystem.Material.WOOD, 1)
+	var sc: SculptureData = _make_statuary_wip(1, 3, 10, SculptureSystem.MaterialType.WOOD, 1)
 	# quality tier 3 requires rank 3; sculptor rank 2
 	var r: Dictionary = SculptureSystem.resolve_compose_sculpture(2, sc, 100, 0, 5)
 	assert_true(r["blocked"])
@@ -249,7 +249,7 @@ func test_resolve_compose_raises_improve_quality_on_completion() -> void:
 
 
 func test_resolve_compose_updates_last_ap_day() -> void:
-	var sc: SculptureData = _make_statuary_wip(1, 1, 10, SculptureSystem.Material.WOOD, 1)
+	var sc: SculptureData = _make_statuary_wip(1, 1, 10, SculptureSystem.MaterialType.WOOD, 1)
 	SculptureSystem.resolve_compose_sculpture(1, sc, 20, 0, 99)
 	assert_eq(sc.ic_day_last_composition_ap, 99)
 
@@ -274,14 +274,14 @@ func test_degradation_skips_complete_sculpture() -> void:
 
 
 func test_degradation_fires_after_90_days() -> void:
-	var sc: SculptureData = _make_statuary_wip(1, 2, 10, SculptureSystem.Material.WOOD, 1)
+	var sc: SculptureData = _make_statuary_wip(1, 2, 10, SculptureSystem.MaterialType.WOOD, 1)
 	sc.craft_progress = 40
 	SculptureSystem.apply_composition_degradation(sc, 91)
 	assert_eq(sc.craft_progress, 20)  # halved
 
 
 func test_degradation_does_not_fire_before_90_days() -> void:
-	var sc: SculptureData = _make_statuary_wip(1, 2, 10, SculptureSystem.Material.WOOD, 1)
+	var sc: SculptureData = _make_statuary_wip(1, 2, 10, SculptureSystem.MaterialType.WOOD, 1)
 	sc.craft_progress = 40
 	SculptureSystem.apply_composition_degradation(sc, 89)
 	assert_eq(sc.craft_progress, 40)
@@ -480,7 +480,7 @@ func test_no_visitor_effect_for_wip() -> void:
 # ---------------------------------------------------------------------------
 
 func test_wood_guardian_degrades_after_1800_days() -> void:
-	var sc: SculptureData = SculptureSystem.gen_guardian(1, 3, SculptureSystem.Material.WOOD,
+	var sc: SculptureData = SculptureSystem.gen_guardian(1, 3, SculptureSystem.MaterialType.WOOD,
 		SculptureSystem.SubjectType.GUARDIAN_SPIRIT, 200)
 	sc.ic_day_placed_outdoor = 1
 	var new_tier: int = SculptureSystem.apply_outdoor_degradation(sc, 1801)
@@ -488,7 +488,7 @@ func test_wood_guardian_degrades_after_1800_days() -> void:
 
 
 func test_non_wood_guardian_no_degradation() -> void:
-	var sc: SculptureData = SculptureSystem.gen_guardian(1, 3, SculptureSystem.Material.STONE,
+	var sc: SculptureData = SculptureSystem.gen_guardian(1, 3, SculptureSystem.MaterialType.STONE,
 		SculptureSystem.SubjectType.GUARDIAN_SPIRIT, 200)
 	sc.ic_day_placed_outdoor = 1
 	var new_tier: int = SculptureSystem.apply_outdoor_degradation(sc, 5000)
@@ -496,7 +496,7 @@ func test_non_wood_guardian_no_degradation() -> void:
 
 
 func test_degradation_no_fire_before_threshold() -> void:
-	var sc: SculptureData = SculptureSystem.gen_guardian(1, 3, SculptureSystem.Material.WOOD,
+	var sc: SculptureData = SculptureSystem.gen_guardian(1, 3, SculptureSystem.MaterialType.WOOD,
 		SculptureSystem.SubjectType.GUARDIAN_SPIRIT, 200)
 	sc.ic_day_placed_outdoor = 1
 	var new_tier: int = SculptureSystem.apply_outdoor_degradation(sc, 1799)
@@ -557,7 +557,7 @@ func test_sacking_survival_wood_tier1_is_0_30() -> void:
 	var sc: SculptureData = _make_statuary_wip()
 	_complete_sculpture(sc)
 	sc.quality_tier = 1
-	sc.material = SculptureSystem.Material.WOOD
+	sc.material = SculptureSystem.MaterialType.WOOD
 	assert_eq(SculptureSystem.sacking_survival_chance(sc), 0.30)
 
 
@@ -565,20 +565,20 @@ func test_sacking_survival_stone_bonus() -> void:
 	var sc: SculptureData = _make_statuary_wip()
 	_complete_sculpture(sc)
 	sc.quality_tier = 1
-	sc.material = SculptureSystem.Material.STONE
+	sc.material = SculptureSystem.MaterialType.STONE
 	var chance: float = SculptureSystem.sacking_survival_chance(sc)
 	assert_gt(chance, 0.30)
 
 
 func test_zone_destruction_wood_is_0() -> void:
 	var sc: SculptureData = _make_statuary_wip()
-	sc.material = SculptureSystem.Material.WOOD
+	sc.material = SculptureSystem.MaterialType.WOOD
 	assert_eq(SculptureSystem.zone_destruction_survival_chance(sc), 0.0)
 
 
 func test_zone_destruction_bronze_is_0_70() -> void:
 	var sc: SculptureData = _make_statuary_wip()
-	sc.material = SculptureSystem.Material.BRONZE
+	sc.material = SculptureSystem.MaterialType.BRONZE
 	assert_eq(SculptureSystem.zone_destruction_survival_chance(sc), 0.70)
 
 
@@ -588,7 +588,7 @@ func test_zone_destruction_bronze_is_0_70() -> void:
 
 func test_gen_statuary_creates_complete_sculpture() -> void:
 	var sc: SculptureData = SculptureSystem.gen_statuary(
-		10, 3, SculptureSystem.Material.STONE,
+		10, 3, SculptureSystem.MaterialType.STONE,
 		SculptureSystem.SubjectType.FORTUNE, 7, 200)
 	assert_eq(sc.sculpture_id, 10)
 	assert_eq(sc.format, SculptureSystem.Format.STATUARY)
@@ -599,7 +599,7 @@ func test_gen_statuary_creates_complete_sculpture() -> void:
 
 func test_gen_guardian_creates_complete_pair() -> void:
 	var sc: SculptureData = SculptureSystem.gen_guardian(
-		11, 2, SculptureSystem.Material.STONE,
+		11, 2, SculptureSystem.MaterialType.STONE,
 		SculptureSystem.SubjectType.GUARDIAN_SPIRIT, 200)
 	assert_true(sc.paired)
 	assert_true(sc.pair_intact)

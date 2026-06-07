@@ -534,9 +534,7 @@ func _get_swift_bonus(unit_type: String) -> int:
 ## Tile → surface category mapping: structural routing, not a new mechanic.
 func _stealth_tn_for_tile(tile: int) -> int:
 	match tile:
-		Enums.TileType.FLOOR_GRASS, Enums.TileType.FLOOR_MUD,
-		Enums.TileType.FLOOR_SNOW, Enums.TileType.FLOOR_SAND,
-		Enums.TileType.FLOOR_ASH:
+		Enums.TileType.FLOOR_GRASS, Enums.TileType.FLOOR_MUD, Enums.TileType.FLOOR_SNOW, Enums.TileType.FLOOR_SAND, Enums.TileType.FLOOR_ASH:
 			return STEALTH_TN_SOFT  # 10
 		Enums.TileType.RUBBLE, Enums.TileType.CROPS:
 			return STEALTH_TN_NOISY  # 20
