@@ -132,11 +132,83 @@ func test_bribe_garrison() -> void:
 	assert_eq(coin.kolat_koku, 0)
 
 
-# === Deferred actions ===
+# === Cloud archive / topic (s54.7c) ===
+
+func _topic(id: int = 50) -> TopicData:
+	var t := TopicData.new()
+	t.topic_id = id
+	t.title = "Crane scandal"
+	t.tier = TopicData.Tier.TIER_2
+	t.category = TopicData.Category.POLITICAL
+	t.subject_character_id = 9
+	t.momentum = 40.0
+	t.ic_day_created = 100
+	return t
+
+
+func test_archive_topic_requires_topic() -> void:
+	var cloud := _coin()
+	assert_false(KolatExecutor.execute("ARCHIVE_TOPIC", cloud, {}, _dice())["ok"])
+
+
+func test_archive_topic_stores_snapshot() -> void:
+	var cloud := _coin()
+	var r := KolatExecutor.execute("ARCHIVE_TOPIC", cloud, {"topic": _topic(50), "leverage_value": 3}, _dice())
+	assert_true(r["ok"])
+	assert_eq(r["archived_topic_id"], 50)
+	var archive: Dictionary = cloud.special_data.get("cloud_archive", {})
+	assert_true(archive.has(50))
+	assert_eq(archive[50]["tier"], int(TopicData.Tier.TIER_2))
+	assert_eq(archive[50]["leverage_value"], 3)
+	assert_true(archive[50]["is_archived"])
+
+
+func test_anonymous_tip_requires_org_and_subject() -> void:
+	var jade := _coin()
+	assert_false(KolatExecutor.execute("ANONYMOUS_TIP", jade, {}, _dice())["ok"])
+	assert_false(KolatExecutor.execute("ANONYMOUS_TIP", jade, {"tip_org": "Kuni Witch Hunters"}, _dice())["ok"])
+
+
+func test_anonymous_tip_returns_topic_flags() -> void:
+	var jade := _coin()
+	var r := KolatExecutor.execute("ANONYMOUS_TIP", jade,
+		{"tip_org": "Kuni Witch Hunters", "tip_subject": "Asako Tadaji", "tip_subject_id": 7}, _dice())
+	assert_true(r["ok"])
+	assert_true(r["creates_anon_tip"])
+	assert_eq(r["tip_subject_id"], 7)
+
+
+func test_resurrect_topic_requires_archived_entry() -> void:
+	var cloud := _coin()
+	var r := KolatExecutor.execute("RESURRECT_TOPIC", cloud, {"archive_topic_id": 50}, _dice())
+	assert_false(r["ok"], "no archived topic with that id")
+
+
+func test_resurrect_topic_reinjects_and_costs_honor() -> void:
+	var cloud := _coin()
+	cloud.skills = {"Calligraphy": 5}
+	KolatExecutor.execute("ARCHIVE_TOPIC", cloud, {"topic": _topic(50)}, _dice())
+	var r := KolatExecutor.execute("RESURRECT_TOPIC", cloud, {"archive_topic_id": 50}, _dice())
+	assert_true(r["ok"])
+	assert_true(r["resurrects_topic"])
+	assert_eq(r["honor_loss"], 0.5)
+	assert_eq(r["archive_entry"]["topic_id"], 50)
+
+
+func test_sponsor_insurgency_returns_seed_flags() -> void:
+	var coin := _coin(); coin.kolat_koku = 40
+	var r := KolatExecutor.execute("SPONSOR_INSURGENCY", coin, {"strength": 1}, _dice())
+	assert_true(r["ok"])
+	assert_true(r["seeds_insurgency"])
+	assert_true(r.has("routing_detected"))
+	assert_true(r.has("compromised"))
+
+
+# === Still-deferred actions ===
 
 func test_topic_spell_actions_deferred() -> void:
 	var coin := _coin()
-	for a: String in ["ARCHIVE_TOPIC", "RESURRECT_TOPIC", "USE_CLOUDS_EYES", "ANONYMOUS_TIP", "DISTRIBUTE_INTELLIGENCE"]:
+	for a: String in ["USE_CLOUDS_EYES", "DISTRIBUTE_INTELLIGENCE", "TRANSMIT_VIA_TEAR"]:
 		var r := KolatExecutor.execute(a, coin, {}, _dice())
 		assert_false(r["ok"], a + " is deferred")
 		assert_eq(r["reason"], "deferred_system")

@@ -346,6 +346,12 @@ static func advance_day(
 		active_topics, next_topic_id, ic_day,
 	)
 
+	_process_kolat_writebacks(
+		day_result.get("results", []), characters_by_id,
+		active_topics, next_topic_id, insurgencies, next_insurgency_id,
+		ic_day, current_season,
+	)
+
 	_process_scene_examination_writebacks(
 		day_result.get("results", []), objectives_map, world_states,
 		characters_by_id, active_topics, next_topic_id, ic_day, settlements,
@@ -3487,6 +3493,123 @@ static func _process_scout_detection_topics(
 			ic_day, 15.0, [], target_clan, "", -1, "military", "scout_detected",
 		)
 		active_topics.append(topic)
+
+
+# -- Kolat Writebacks (s54.7c) ------------------------------------------------
+# Applies the world-effects of the mechanically-resolvable Kolat ActionIDs whose
+# outcome touches world collections the pure KolatExecutor cannot reach:
+#   ANONYMOUS_TIP      → Tier 4 tip topic at the target organisation
+#   RESURRECT_TOPIC    → re-injects an archived topic + applies −0.5 Honor
+#   SPONSOR_INSURGENCY → seeds / strengthens a Ronin Bandit Uprising + detection
+# The koku funding, the conditioning, dead-drop, and sleeper handlers are fully
+# resolved inside KolatExecutor and need no writeback here.
+
+static func _process_kolat_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	insurgencies: Array,
+	next_insurgency_id: Array,
+	ic_day: int,
+	current_season: int,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var action_id: String = r.get("action_id", "")
+
+		match action_id:
+			"ANONYMOUS_TIP":
+				if not effects.get("creates_anon_tip", false):
+					continue
+				var org: String = String(effects.get("tip_org", ""))
+				var subject: String = String(effects.get("tip_subject", ""))
+				var tid: int = next_topic_id[0]
+				next_topic_id[0] = tid + 1
+				# Tier 4, source not named (s54.7c). Anti-Shadowlands intel → SUPERNATURAL.
+				var tip: TopicData = TopicMomentumSystem.create_topic(
+					tid, "%s has received intelligence on %s" % [org, subject],
+					TopicData.Tier.TIER_4, TopicData.Category.SUPERNATURAL,
+					ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+					[], "", "", int(effects.get("tip_subject_id", -1)),
+					"anonymous_tip", "anonymous_tip",
+				)
+				active_topics.append(tip)
+
+			"RESURRECT_TOPIC":
+				if not effects.get("resurrects_topic", false):
+					continue
+				var entry: Dictionary = effects.get("archive_entry", {})
+				if entry.is_empty():
+					continue
+				var tier: TopicData.Tier = int(entry.get("tier", TopicData.Tier.TIER_4)) as TopicData.Tier
+				var category: TopicData.Category = int(entry.get("category", TopicData.Category.POLITICAL)) as TopicData.Category
+				var rid: int = next_topic_id[0]
+				next_topic_id[0] = rid + 1
+				# Re-enters at its original tier, attributed to "historical records"
+				# rather than to Cloud or the Kolat (s54.7c).
+				var revived: TopicData = TopicMomentumSystem.create_topic(
+					rid, String(entry.get("title", "A recently uncovered document")),
+					tier, category, ic_day,
+					TopicMomentumSystem.initial_momentum_for_tier(tier),
+					[], String(entry.get("clan_involved", "")),
+					String(entry.get("family_involved", "")),
+					int(entry.get("subject_character_id", -1)),
+					"historical_record", "historical_record",
+				)
+				active_topics.append(revived)
+				# Honor −0.5 per use (s54.7c), applied via HonorGlorySystem.
+				var actor: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if actor != null and not CharacterStats.is_dead(actor):
+					HonorGlorySystem.apply_honor_change(actor, -float(effects.get("honor_loss", 0.5)))
+
+			"SPONSOR_INSURGENCY":
+				if not effects.get("seeds_insurgency", false):
+					continue
+				var province_id: int = r.get("target_province_id", -1)
+				if province_id < 0:
+					continue
+				# Strengthen an existing Ronin Bandit Uprising in the province, else seed
+				# a new one at Strength 1 / Concealment 8 (s54.7c).
+				var existing: InsurgencyData = null
+				for ins: InsurgencyData in insurgencies:
+					if ins.province_id == province_id and ins.insurgency_type == Enums.InsurgencyType.RONIN_BANDIT:
+						existing = ins
+						break
+				if existing != null:
+					existing.strength = mini(10, existing.strength + 2)
+				else:
+					var new_ins := InsurgencyData.new()
+					new_ins.insurgency_id = next_insurgency_id[0]
+					next_insurgency_id[0] = new_ins.insurgency_id + 1
+					new_ins.insurgency_type = Enums.InsurgencyType.RONIN_BANDIT
+					new_ins.province_id = province_id
+					new_ins.strength = 1
+					new_ins.concealment = 8
+					new_ins.detected = false
+					new_ins.seasons_active = 0
+					new_ins.season_spawned = current_season
+					insurgencies.append(new_ins)
+				# Failure routed the funds with a detectable trail → Tier 4 topic
+				# naming suspicious merchant activity (s54.7c). Critical failure
+				# (compromised) escalates to MANAGE_COMPROMISED_AGENT — that NeedType
+				# pipeline is deferred, so no world-level effect is applied here.
+				if effects.get("routing_detected", false):
+					var sid: int = next_topic_id[0]
+					next_topic_id[0] = sid + 1
+					var trail: TopicData = TopicMomentumSystem.create_topic(
+						sid, "Suspicious merchant activity funding bandits",
+						TopicData.Tier.TIER_4, TopicData.Category.ECONOMIC,
+						ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+						[province_id], "", "", -1,
+						"investigation", "sponsor_insurgency_trail",
+					)
+					active_topics.append(trail)
 
 
 # -- Scene Examination Writebacks (s11.3.13) -----------------------------------
