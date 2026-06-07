@@ -236,6 +236,31 @@ static func register_recruit(master: L5RCharacterData, npc_id: int, position: St
 			return true  # Dream/Roc/Tiger/Cloud keep no agent-network record
 
 
+## ROTATE_DEAD_DROP support (s54.7c). Finds the first Lotus operative whose dead
+## drop or confirmation drop is flagged compromised, moves it to new_settlement_id,
+## clears the compromised flag, and marks any in-flight package undeliverable.
+## Returns the rotated operative's code name, or "" if none was compromised.
+static func rotate_dead_drop(master: L5RCharacterData, new_settlement_id: String) -> String:
+	var record: Dictionary = get_network(master, Enums.KolatSect.LOTUS)
+	for code_name: String in record:
+		var entry: Variant = record[code_name]
+		if not entry is Dictionary:
+			continue
+		var e: Dictionary = entry
+		if e.get("dead_drop_compromised", false):
+			e["dead_drop_settlement_id"] = new_settlement_id
+			e["dead_drop_compromised"] = false
+			e["assignment_in_transit_compromised"] = true
+			_store_network(master, Enums.KolatSect.LOTUS, record)
+			return code_name
+		if e.get("confirmation_drop_compromised", false):
+			e["confirmation_drop_settlement_id"] = new_settlement_id
+			e["confirmation_drop_compromised"] = false
+			_store_network(master, Enums.KolatSect.LOTUS, record)
+			return code_name
+	return ""
+
+
 # -- Sleeper registry (Dream, s54.7h) -----------------------------------------
 
 static func register_sleeper(

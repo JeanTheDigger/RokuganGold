@@ -284,6 +284,29 @@ func test_approach_recruitment_resolves_past_gates() -> void:
 	assert_eq(flags, 1)
 
 
+# === Dead drop rotation (s54.7c) ===
+
+func test_rotate_dead_drop_requires_compromised() -> void:
+	var lotus := _coin(1); lotus.kolat_sect = Enums.KolatSect.LOTUS
+	KolatNetwork.register_lotus_operative(lotus, "Iris", 9, "old_town", "conf_town")
+	var r := KolatExecutor.execute("ROTATE_DEAD_DROP", lotus, {"settlement_id": "new_town"}, _dice())
+	assert_false(r["ok"], "no drop is compromised yet")
+	assert_eq(r["reason"], "no_compromised_drop")
+
+
+func test_rotate_dead_drop_moves_node() -> void:
+	var lotus := _coin(1); lotus.kolat_sect = Enums.KolatSect.LOTUS; lotus.skills = {"Stealth": 5}
+	KolatNetwork.register_lotus_operative(lotus, "Iris", 9, "old_town", "conf_town")
+	lotus.special_data["lotus_network_record"]["Iris"]["dead_drop_compromised"] = true
+	var r := KolatExecutor.execute("ROTATE_DEAD_DROP", lotus, {"settlement_id": "new_town"}, _dice())
+	assert_true(r["ok"])
+	assert_eq(r["rotated_operative"], "Iris")
+	var entry: Dictionary = lotus.special_data["lotus_network_record"]["Iris"]
+	assert_eq(entry["dead_drop_settlement_id"], "new_town")
+	assert_false(entry["dead_drop_compromised"])
+	assert_true(entry["assignment_in_transit_compromised"])
+
+
 # === Still-deferred actions ===
 
 func test_topic_spell_actions_deferred() -> void:

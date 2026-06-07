@@ -63,6 +63,8 @@ static func execute(
 			r = _resurrect_topic(actor, metadata, dice)
 		"APPROACH_FOR_RECRUITMENT":
 			r = _approach_recruitment(actor, metadata, dice)
+		"ROTATE_DEAD_DROP":
+			r = _rotate_dead_drop(actor, metadata, dice)
 		"DELIVER_SEALED_LETTER":
 			r = _deliver_sealed_letter(actor, metadata, dice)
 		"ROUTE_ANONYMOUS_INTELLIGENCE":
@@ -224,6 +226,24 @@ static func _bribe_garrison(actor: L5RCharacterData, metadata: Dictionary, dice:
 		"bribe_established": success,
 		"creates_threat_topic": margin <= -10,
 	}
+
+
+# === DEAD DROP ROTATION (Lotus, s54.7c) ======================================
+
+## ROTATE_DEAD_DROP. 1 AP, Master Lotus. Replaces a compromised dead-drop node in
+## lotus_network_record with the current settlement. Self-contained (Pattern B):
+## mutates the Master's record directly. Roll Stealth (Sneaking) vs TN 10 to avoid
+## drawing attention; the rotation itself succeeds regardless (the roll only flags
+## whether it was noticed). Requires at least one compromised drop entry.
+static func _rotate_dead_drop(actor: L5RCharacterData, metadata: Dictionary, dice: DiceEngine) -> Dictionary:
+	var settlement_id: String = String(metadata.get("settlement_id", actor.physical_location))
+	if settlement_id == "":
+		return {"ok": false, "reason": "no_settlement"}
+	var rotated: String = KolatNetwork.rotate_dead_drop(actor, settlement_id)
+	if rotated == "":
+		return {"ok": false, "reason": "no_compromised_drop"}
+	var roll: Dictionary = SkillResolver.resolve_skill_check(actor, dice, "Stealth", 10)
+	return {"ok": true, "rotated_operative": rotated, "unnoticed": bool(roll.get("success", false))}
 
 
 # === CLOUD ARCHIVE / TOPIC ===================================================
