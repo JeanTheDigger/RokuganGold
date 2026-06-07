@@ -55,6 +55,29 @@ godot --headless --check-only --script simulation/x.gd
   category; `roll_and_keep()` arg 4 is a `bool`, not a `String`). These need
   per-site analysis — the file was written against an older API and never built.
 
+## Status update (later pass)
+
+The major compile cascades are now **cleared** — `combat_controller.gd`,
+`individual_combat.gd`, `day_orchestrator.gd`, `strategic_review.gd`,
+`sculpture_system.gd`, `movement_system.gd`, `garden_system.gd`,
+`skill_resolver.gd`, `void_system.gd`, `advantage_system.gd` all compile.
+The ~380 "could not resolve class" / "cannot infer type" cascade errors are gone.
+
+Remaining is now **scattered**: ~49 "cannot find member" + assorted single-site
+API/enum drift across individual systems and their test files, plus *runtime*
+bugs surfacing now that code executes (e.g. nonexistent dice methods — fixed
+`roll_d10`/`roll_1d10`). Two non-parse issues of note:
+- **`test_world_bootstrap.gd` is extremely slow** — 62 tests, most calling
+  `bootstrap_world()` which regenerates the *entire* world (142 provinces + full
+  population + military + bloodspeaker + geisha + shide). 62 full-world builds
+  make this file take minutes and stall the headless run before totals print.
+  This is a test-design/perf issue (use `before_all` caching or a smaller
+  fixture), not a parse bug.
+- Last clean measured run before the combat/day_orchestrator fixes:
+  **~7775 passing / ~207 failing**; those fixes cleared the largest cascades,
+  so the passing count is higher now (a full clean total is blocked by the
+  bootstrap-test slowness above).
+
 ## Fixed so far (committed)
 
 - `addons/gut/utils.gd` — GUT `Logger` → `GutLogger` (runner works again).
