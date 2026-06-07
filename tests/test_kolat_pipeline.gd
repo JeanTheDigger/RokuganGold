@@ -287,3 +287,51 @@ func test_kolat_objective_precedes_standing_when_no_primary() -> void:
 	var need := NPCDecisionEngine.resolve_goal(c, ctx, objectives)
 	assert_eq(need.need_type, "MANAGE_KOLAT_FUNDS",
 		"priority-1 Kolat objective precedes the standing objective")
+
+
+# === Decomposition metadata helpers (s54.7c) ===
+
+func _mk_topic(id: int) -> TopicData:
+	var t := TopicData.new()
+	t.topic_id = id
+	t.tier = TopicData.Tier.TIER_2
+	t.category = TopicData.Category.POLITICAL
+	return t
+
+
+func test_pick_highest_leverage_archive() -> void:
+	var cloud := _coin_master(70); cloud.kolat_sect = Enums.KolatSect.CLOUD
+	KolatNetwork.archive_topic(cloud, _mk_topic(10), 5, 1)
+	KolatNetwork.archive_topic(cloud, _mk_topic(11), 5, 3)  # highest leverage
+	KolatNetwork.archive_topic(cloud, _mk_topic(12), 5, 2)
+	assert_eq(NPCDecisionEngine._pick_highest_leverage_archive(cloud), 11)
+
+
+func test_pick_highest_leverage_archive_empty() -> void:
+	var cloud := _coin_master(70); cloud.kolat_sect = Enums.KolatSect.CLOUD
+	assert_eq(NPCDecisionEngine._pick_highest_leverage_archive(cloud), -1)
+
+
+func test_pick_stalest_silk_agent() -> void:
+	var silk := _coin_master(71); silk.kolat_sect = Enums.KolatSect.SILK
+	KolatNetwork.register_silk_operative(silk, "Recent", 1, "court", 100)
+	KolatNetwork.register_silk_operative(silk, "Stale", 2, "court", 10)
+	assert_eq(NPCDecisionEngine._pick_stalest_silk_agent(silk), 2)
+
+
+func test_sect_from_clan_id() -> void:
+	assert_eq(NPCDecisionEngine._sect_from_clan_id("kolat_silk"), Enums.KolatSect.SILK)
+	assert_eq(NPCDecisionEngine._sect_from_clan_id("kolat_tiger"), Enums.KolatSect.TIGER)
+	assert_eq(NPCDecisionEngine._sect_from_clan_id("nonsense"), Enums.KolatSect.NONE)
+
+
+func test_pick_proxy_duelist() -> void:
+	var lotus := _coin_master(72); lotus.kolat_sect = Enums.KolatSect.LOTUS
+	lotus.physical_location = "5"
+	var duelist := L5RCharacterData.new()
+	duelist.character_id = 80; duelist.physical_location = "5"; duelist.skills = {"Kenjutsu": 5}
+	var victim := L5RCharacterData.new()
+	victim.character_id = 81; victim.physical_location = "5"; victim.skills = {"Kenjutsu": 6}
+	var chars := {72: lotus, 80: duelist, 81: victim}
+	# Victim (81) is excluded; the co-located bushi 80 is picked.
+	assert_eq(NPCDecisionEngine._pick_proxy_duelist(lotus, 81, chars), 80)
