@@ -4538,17 +4538,28 @@ but not executed in this environment.
     for field agents.
   - **Owner rulings (second pass):** Hidden Temple designated (not abstract); courier
     TN base 15 + patrol hook; Gi-rank dropped from recruitment (first pass).
-- **Still deferred — NOT executors (all 29 are done), but the layers that feed
-  them:** the 6 Kolat **decomposition functions** that populate executor metadata
-  end-to-end (targets/amounts/drops/topic-ids — most executors are correct but
-  dormant until a decomposition hands them inputs); Kolat-objective
-  completion/recall (the slot persists until overwritten); OBSERVE_VIA_EYE
-  contention (one Master/day) and all-AP cost; SECURE two-failure auto-report;
+  - **E3 — decomposition metadata population.** `_build_kolat_metadata` now fills
+    real executor inputs per ActionID from need fields + the Master's own records
+    using the LOCKED s54.7c selection criteria (highest-leverage archive for
+    RESURRECT, stalest Silk agent for DISTRIBUTE, co-located weapon-4+ proxy for
+    ARRANGE_PROXY_DUEL, tip subject/org for ANONYMOUS_TIP, directive fields +
+    recipient_sect for TRANSMIT). Combined with the standing-mandate assignment
+    (Tranche 12) and the Phase-2 cascade (E2), Masters now autonomously pursue
+    their Sect mandate and the executors receive real inputs end to end.
+- **Still deferred (all 29 executors + their metadata are done) — the upstream
+  NeedType-generation layer and a few data-blocked inputs:** opportunity-scanner
+  self-initiation (RECRUIT_KOLAT_AGENT candidate scan, CONDITION_SLEEPER network-
+  capacity scan, Chrysanthemum shallow-IntelDB / winter-court scanner) and Tiger
+  strategic-directive composition (what directive Tiger sends, via the strategic
+  review); UNDERREPORT_KOKU amount (domain income not in context); ARCHIVE_TOPIC /
+  SUBMIT_KOLAT_REPORT topic object (context carries topic IDs, not TopicData);
+  Kolat-objective completion/recall (slot persists until overwritten);
+  OBSERVE_VIA_EYE contention + all-AP cost; SECURE two-failure auto-report;
   CONDUCT_PERIMETER_PATROL within-3-provinces range + cover identity; courier
   patrol-TN scaling; DISTRIBUTE_INTELLIGENCE route-compromise interception; the
-  Conclave and win-condition orchestrator passes (KolatSecrecy data layer exists).
-  These need the NPC-engine decomposition layer, map-distance data, or action-log
-  state — none buildable without inventing.
+  Conclave + win-condition orchestrator passes (KolatSecrecy data layer exists).
+  These need the opportunity-scanner/strategic-review integration, IntelDB,
+  map-distance data, or action-log state — none buildable without inventing.
 
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
