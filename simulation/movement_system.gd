@@ -11,16 +11,9 @@ enum MoveAction { FREE, SIMPLE, FULL_MOVE }
 ## 0 = impassable, 1 = normal, 2 = difficult (+1 extra budget consumed).
 static func terrain_cost(tile: int) -> int:
 	match tile:
-		Enums.TileType.VOID,
-		Enums.TileType.WALL_STONE, Enums.TileType.WALL_WOOD, Enums.TileType.WALL_PAPER,
-		Enums.TileType.WATER_DEEP,
-		Enums.TileType.TREE_EVERGREEN, Enums.TileType.TREE_DECIDUOUS,
-		Enums.TileType.TREE_CHERRY, Enums.TileType.TREE_DEAD, Enums.TileType.BAMBOO,
-		Enums.TileType.DOOR_SHOJI_CLOSED, Enums.TileType.DOOR_WOOD_CLOSED,
-		Enums.TileType.GATE_CLOSED:
+		Enums.TileType.VOID, Enums.TileType.WALL_STONE, Enums.TileType.WALL_WOOD, Enums.TileType.WALL_PAPER, Enums.TileType.WATER_DEEP, Enums.TileType.TREE_EVERGREEN, Enums.TileType.TREE_DECIDUOUS, Enums.TileType.TREE_CHERRY, Enums.TileType.TREE_DEAD, Enums.TileType.BAMBOO, Enums.TileType.DOOR_SHOJI_CLOSED, Enums.TileType.DOOR_WOOD_CLOSED, Enums.TileType.GATE_CLOSED:
 			return 0
-		Enums.TileType.WATER_SHALLOW, Enums.TileType.WATER_PADDY,
-		Enums.TileType.WATER_RAPID, Enums.TileType.CROPS, Enums.TileType.RUBBLE:
+		Enums.TileType.WATER_SHALLOW, Enums.TileType.WATER_PADDY, Enums.TileType.WATER_RAPID, Enums.TileType.CROPS, Enums.TileType.RUBBLE:
 			return 2
 		_:
 			return 1

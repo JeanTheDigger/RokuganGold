@@ -533,7 +533,7 @@ static func make_destruction_topic(
 ) -> Dictionary:
 	## Returns a topic dict for garden destruction by neglect or maintenance failure (A12).
 	## Tier by original quality_tier (the quality at installation, not current_tier).
-	var _ = creator_alive  # Destruction topics fire regardless of creator status
+	var _creator_alive: bool = creator_alive  # Destruction topics fire regardless of creator status
 
 	var tier: int
 	match garden.quality_tier:
