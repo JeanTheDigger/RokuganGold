@@ -307,11 +307,47 @@ func test_rotate_dead_drop_moves_node() -> void:
 	assert_true(entry["assignment_in_transit_compromised"])
 
 
+# === Cloud's Eyes (s54.7c) ===
+
+func test_clouds_eyes_requires_target_settlement() -> void:
+	var cloud := _coin(1); cloud.kolat_sect = Enums.KolatSect.CLOUD
+	assert_false(KolatExecutor.execute("USE_CLOUDS_EYES", cloud, {}, _dice())["ok"])
+
+
+func test_clouds_eyes_resolves() -> void:
+	var cloud := _coin(1); cloud.kolat_sect = Enums.KolatSect.CLOUD
+	cloud.reflexes = 5; cloud.awareness = 5; cloud.skills = {"Spellcraft": 6}
+	var r := KolatExecutor.execute("USE_CLOUDS_EYES", cloud, {"target_settlement_id": "12"}, _dice())
+	assert_true(r["ok"])
+	assert_true(r.has("observes_settlement"))
+	if r["observes_settlement"]:
+		assert_eq(r["target_settlement_id"], "12")
+		assert_true(int(r["topic_count"]) >= 1)
+
+
 # === Still-deferred actions ===
+
+func test_distribute_intelligence_requires_target_and_topic() -> void:
+	var silk := _coin(1); silk.kolat_sect = Enums.KolatSect.SILK
+	assert_false(KolatExecutor.execute("DISTRIBUTE_INTELLIGENCE", silk, {}, _dice())["ok"])
+
+
+func test_distribute_intelligence_returns_delivery_flags() -> void:
+	var silk := _coin(1); silk.kolat_sect = Enums.KolatSect.SILK
+	var agent := _coin(2)
+	var r := KolatExecutor.execute("DISTRIBUTE_INTELLIGENCE", silk, {"target": agent, "topic_id": 77}, _dice())
+	assert_true(r["ok"])
+	assert_true(r["distributes_intel"])
+	assert_eq(r["agent_npc_id"], 2)
+	assert_eq(r["topic_id"], 77)
+
 
 func test_topic_spell_actions_deferred() -> void:
 	var coin := _coin()
-	for a: String in ["USE_CLOUDS_EYES", "DISTRIBUTE_INTELLIGENCE", "TRANSMIT_VIA_TEAR", "OBSERVE_VIA_EYE"]:
+	# Still deferred (Tear network / Hidden Temple / patrol-TN / Cloud routing /
+	# proxy-duel decomposition).
+	for a: String in ["TRANSMIT_VIA_TEAR", "OBSERVE_VIA_EYE", "SUBMIT_KOLAT_REPORT",
+			"RUN_COURIER_ROUTE", "SECURE_ONI_EYE", "CONDUCT_PERIMETER_PATROL", "ARRANGE_PROXY_DUEL"]:
 		var r := KolatExecutor.execute(a, coin, {}, _dice())
 		assert_false(r["ok"], a + " is deferred")
 		assert_eq(r["reason"], "deferred_system")

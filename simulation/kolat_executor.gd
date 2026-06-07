@@ -65,6 +65,10 @@ static func execute(
 			r = _approach_recruitment(actor, metadata, dice)
 		"ROTATE_DEAD_DROP":
 			r = _rotate_dead_drop(actor, metadata, dice)
+		"USE_CLOUDS_EYES":
+			r = _use_clouds_eyes(actor, metadata, dice)
+		"DISTRIBUTE_INTELLIGENCE":
+			r = _distribute_intelligence(metadata)
 		"DELIVER_SEALED_LETTER":
 			r = _deliver_sealed_letter(actor, metadata, dice)
 		"ROUTE_ANONYMOUS_INTELLIGENCE":
@@ -244,6 +248,55 @@ static func _rotate_dead_drop(actor: L5RCharacterData, metadata: Dictionary, dic
 		return {"ok": false, "reason": "no_compromised_drop"}
 	var roll: Dictionary = SkillResolver.resolve_skill_check(actor, dice, "Stealth", 10)
 	return {"ok": true, "rotated_operative": rotated, "unnoticed": bool(roll.get("success", false))}
+
+
+# === INTELLIGENCE DISTRIBUTION (Silk, s54.7c) ================================
+
+## DISTRIBUTE_INTELLIGENCE. 1 AP, Master Silk. Routes intelligence (a topic) to a
+## registered field agent so they stop acting on outdated assumptions. The delivery
+## itself does not require a success roll (s54.7c gives a roll only for interception
+## on a compromised route). The DayOrchestrator writeback adds the topic to the
+## agent's known_topics and refreshes the agent's last-report timestamp.
+## DEFERRED: the compromised-route interception (Stealth vs the investigator's
+## Investigation) — there is no route-compromise state or investigator selection
+## in the model yet.
+static func _distribute_intelligence(metadata: Dictionary) -> Dictionary:
+	var target: L5RCharacterData = metadata.get("target", null)
+	var topic_id: int = int(metadata.get("topic_id", -1))
+	if target == null or topic_id < 0:
+		return {"ok": false, "reason": "no_target_or_topic"}
+	return {"ok": true, "distributes_intel": true,
+		"agent_npc_id": target.character_id, "topic_id": topic_id}
+
+
+# === CLOUD'S EYES (Cloud, s54.7c) ============================================
+
+## USE_CLOUDS_EYES. 1 AP, Master Cloud. Casts the Kolat spell Master Cloud's Eyes
+## (Air 3) to observe a target settlement in real time. Mechanically a casting
+## roll of Spellcraft + Air Ring vs TN 15; on success 1d3 topics (+1 per Raise)
+## from the settlement's current ambient pool enter the caster's known_topics at
+## high confidence, tagged clouds_eyes, bypassing intelligence travel delay. The
+## actual topic copy is done by the DayOrchestrator Kolat writeback (it has the
+## active topic pool and the settlement→province map).
+## DEFERRED gates (not enforced here): the Air Ring × 10 mile range limit (blocked
+## on map distance data) and the jade-ward/Kuroiban-barrier block (no ward data on
+## settlements). The failure −2k2 Perception penalty is not modelled (no per-AP
+## modifier system).
+static func _use_clouds_eyes(actor: L5RCharacterData, metadata: Dictionary, dice: DiceEngine) -> Dictionary:
+	var settlement_id: String = String(metadata.get("target_settlement_id", ""))
+	if settlement_id == "":
+		return {"ok": false, "reason": "no_target"}
+	var air: int = SpellSystem.get_ring_value(actor, Enums.Ring.AIR)
+	var spellcraft: int = int(actor.skills.get("Spellcraft", 0))
+	var total: int = dice.roll_and_keep(air + spellcraft, maxi(1, air), spellcraft > 0).total
+	if total < 15:
+		return {"ok": true, "observes_settlement": false}  # failed scry, no topics
+	var raises: int = (total - 15) / 5
+	var topic_count: int = dice.rand_int_range(1, 3) + raises
+	return {
+		"ok": true, "observes_settlement": true,
+		"target_settlement_id": settlement_id, "topic_count": topic_count,
+	}
 
 
 # === CLOUD ARCHIVE / TOPIC ===================================================

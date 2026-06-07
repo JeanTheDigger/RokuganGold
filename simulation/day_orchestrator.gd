@@ -349,7 +349,7 @@ static func advance_day(
 	_process_kolat_writebacks(
 		day_result.get("results", []), characters_by_id,
 		active_topics, next_topic_id, insurgencies, next_insurgency_id,
-		ic_day, current_season, pending_letters, next_letter_id,
+		ic_day, current_season, pending_letters, next_letter_id, settlements,
 	)
 
 	_process_scene_examination_writebacks(
@@ -3520,6 +3520,7 @@ static func _process_kolat_writebacks(
 	current_season: int,
 	pending_letters: Array = [],
 	next_letter_id: Array = [1],
+	settlements: Array = [],
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
@@ -3741,6 +3742,58 @@ static func _process_kolat_writebacks(
 						"anon_intel_traced", "route_anon_intel_traced",
 					)
 					active_topics.append(risk)
+
+			"USE_CLOUDS_EYES":
+				if not effects.get("observes_settlement", false):
+					continue
+				var ce_caster: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if ce_caster == null or CharacterStats.is_dead(ce_caster):
+					continue
+				var ce_sid: int = String(effects.get("target_settlement_id", "")).to_int()
+				# settlement → province (s54.7c observes the settlement's ambient pool;
+				# topics are province-level in the model, so match by province).
+				var ce_province: int = -1
+				for sv: Variant in settlements:
+					if sv is SettlementData and (sv as SettlementData).settlement_id == ce_sid:
+						ce_province = (sv as SettlementData).province_id
+						break
+				if ce_province < 0:
+					continue
+				var ce_budget: int = int(effects.get("topic_count", 0))
+				for tv: Variant in active_topics:
+					if ce_budget <= 0:
+						break
+					if not tv is TopicData:
+						continue
+					var ct: TopicData = tv
+					if ct.resolved or not ct.provinces_affected.has(ce_province):
+						continue
+					if ce_caster.topic_pool.has(ct.topic_id):
+						continue
+					# Direct Observation: the topic enters known_topics immediately
+					# (tagged clouds_eyes), bypassing intelligence travel delay.
+					ce_caster.topic_pool.append(ct.topic_id)
+					ce_budget -= 1
+
+			"DISTRIBUTE_INTELLIGENCE":
+				if not effects.get("distributes_intel", false):
+					continue
+				var di_agent: L5RCharacterData = characters_by_id.get(int(effects.get("agent_npc_id", -1)), null)
+				if di_agent == null or CharacterStats.is_dead(di_agent):
+					continue
+				var di_topic: int = int(effects.get("topic_id", -1))
+				if di_topic >= 0 and not di_agent.topic_pool.has(di_topic):
+					di_agent.topic_pool.append(di_topic)
+				# Refresh the agent's last-report timestamp in the Silk record so the
+				# silence-detection pass sees them as freshly contacted (s54.7d).
+				var di_silk: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if di_silk != null and not CharacterStats.is_dead(di_silk):
+					var di_cn: String = KolatNetwork.find_code_name_by_npc_id(
+						di_silk, di_silk.kolat_sect, di_agent.character_id)
+					if di_cn != "":
+						var di_rec: Dictionary = KolatNetwork.get_network(di_silk, di_silk.kolat_sect)
+						if di_rec.has(di_cn) and di_rec[di_cn] is Dictionary:
+							di_rec[di_cn]["last_report_ic_day"] = ic_day
 
 
 # -- Kolat Bribe Upkeep (s54.7c) ----------------------------------------------
