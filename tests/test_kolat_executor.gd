@@ -124,12 +124,22 @@ func test_sponsor_insurgency_from_vault() -> void:
 	assert_eq(temple.temple_vault_koku, 30, "20 drawn from the vault when at-temple")
 
 
-func test_bribe_garrison() -> void:
+func test_bribe_garrison_pays_and_rolls() -> void:
 	var coin := _coin(); coin.kolat_koku = 5
-	var r := KolatExecutor.execute("BRIBE_GARRISON_COMMANDER", coin, {}, _dice())
+	coin.skills = {"Commerce": 8}
+	var commander := _coin(2); commander.willpower = 2  # TN 10
+	var r := KolatExecutor.execute("BRIBE_GARRISON_COMMANDER", coin, {"target": commander}, _dice())
 	assert_true(r["ok"])
 	assert_eq(r["cost"], 5)
-	assert_eq(coin.kolat_koku, 0)
+	assert_eq(coin.kolat_koku, 0, "first installment paid")
+	assert_true(r.has("bribe_established"))
+	assert_true(r.has("creates_threat_topic"))
+
+
+func test_bribe_garrison_requires_commander() -> void:
+	var coin := _coin(); coin.kolat_koku = 5
+	var r := KolatExecutor.execute("BRIBE_GARRISON_COMMANDER", coin, {}, _dice())
+	assert_false(r["ok"], "no commander target")
 
 
 # === Cloud archive / topic (s54.7c) ===

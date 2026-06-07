@@ -1277,6 +1277,7 @@ static func advance_day(
 			world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON),
 			provinces,
 		)
+		_process_kolat_bribes_seasonal(characters, provinces)
 		wall_seasonal_result = _process_wall_seasonal_pressure(
 			settlements, provinces, current_season, season_meta
 		)
@@ -3610,6 +3611,61 @@ static func _process_kolat_writebacks(
 						"investigation", "sponsor_insurgency_trail",
 					)
 					active_topics.append(trail)
+
+			"BRIBE_GARRISON_COMMANDER":
+				var b_province: int = r.get("target_province_id", -1)
+				if effects.get("bribe_established", false) and b_province >= 0:
+					# Register the standing bribe on the Coin Master; the Kolat seasonal
+					# pass applies the −2 under-garrison Stability penalty and the 5
+					# koku/season upkeep, and cancels it when a payment is missed (s54.7c).
+					var coin: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+					if coin != null and not CharacterStats.is_dead(coin):
+						var bribes: Dictionary = coin.special_data.get("active_bribes", {})
+						bribes[b_province] = true
+						coin.special_data["active_bribes"] = bribes
+				if effects.get("creates_threat_topic", false) and b_province >= 0:
+					# Critical failure: the commander reports the approach (s54.7c).
+					var btid: int = next_topic_id[0]
+					next_topic_id[0] = btid + 1
+					var threat: TopicData = TopicMomentumSystem.create_topic(
+						btid, "A merchant contact accused of bribing the garrison",
+						TopicData.Tier.TIER_3, TopicData.Category.POLITICAL,
+						ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3),
+						[b_province], "", "", -1,
+						"investigation", "bribe_garrison_exposed",
+					)
+					active_topics.append(threat)
+
+
+# -- Kolat Bribe Upkeep (s54.7c) ----------------------------------------------
+# Seasonal maintenance of standing BRIBE_GARRISON_COMMANDER operations. Each
+# active bribe costs 5 koku/season (KolatSystem.bribe_garrison_cost_per_season)
+# and sustains the −2 under-garrison Stability penalty (s11.11) in its province.
+# A bribe whose payment cannot be met is cancelled silently — the garrison
+# returns to normal on this tick, no topic fires (s54.7c).
+
+static func _process_kolat_bribes_seasonal(characters: Array, provinces: Dictionary) -> void:
+	var upkeep: int = KolatSystem.bribe_garrison_cost_per_season()
+	for character: L5RCharacterData in characters:
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		var bribes: Dictionary = character.special_data.get("active_bribes", {})
+		if bribes.is_empty():
+			continue
+		var still_active: Dictionary = {}
+		for province_id: int in bribes:
+			if character.kolat_koku < upkeep:
+				continue  # unpaid → bribe lapses, garrison normalises, no topic
+			character.kolat_koku -= upkeep
+			still_active[province_id] = true
+			var province: ProvinceData = provinces.get(province_id, null)
+			if province != null:
+				# −2 under-garrison Stability per season (s11.11, LOCKED).
+				province.stability = maxf(0.0, province.stability - 2.0)
+		if still_active.is_empty():
+			character.special_data.erase("active_bribes")
+		else:
+			character.special_data["active_bribes"] = still_active
 
 
 # -- Scene Examination Writebacks (s11.3.13) -----------------------------------

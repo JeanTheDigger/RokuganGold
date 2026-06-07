@@ -12,13 +12,14 @@ class_name KolatExecutor
 ## do not yet populate end-to-end). All NPC-engine integration is unverified
 ## without a Godot runtime.
 ##
-## ARCHIVE_TOPIC, ANONYMOUS_TIP, RESURRECT_TOPIC, and SPONSOR_INSURGENCY resolve
-## here and (for the latter three) return effect flags the DayOrchestrator Kolat
-## writeback applies to world collections (topic pool, insurgency list, Honor).
+## ARCHIVE_TOPIC, ANONYMOUS_TIP, RESURRECT_TOPIC, SPONSOR_INSURGENCY, and
+## BRIBE_GARRISON_COMMANDER resolve here and return effect flags the
+## DayOrchestrator Kolat writeback applies to world collections (topic pool,
+## insurgency list, Honor, the standing-bribe registry + its seasonal upkeep).
 ## ARCHIVE_TOPIC is fully self-contained (writes the Master's cloud_archive).
 ## Actions whose effect still requires a system not wired here (the Cloud's-Eyes
-## spell, Silk intelligence routing, the seasonal-stability bribe subsystem)
-## return {ok: false, reason: "deferred_system"}.
+## spell, Silk intelligence routing / network records) return
+## {ok: false, reason: "deferred_system"}.
 
 ## Resolve a Kolat action. `metadata` carries the action's resolved targets
 ## (target, temple, sleeper, amount, concealment, drop, strength, …). Returns a
@@ -52,7 +53,7 @@ static func execute(
 		"SPONSOR_INSURGENCY":
 			r = _sponsor_insurgency(actor, metadata, dice)
 		"BRIBE_GARRISON_COMMANDER":
-			r = _bribe_garrison(actor, metadata)
+			r = _bribe_garrison(actor, metadata, dice)
 		"ARCHIVE_TOPIC":
 			r = _archive_topic(actor, metadata)
 		"ANONYMOUS_TIP":
@@ -184,8 +185,15 @@ static func _sponsor_insurgency(actor: L5RCharacterData, metadata: Dictionary, d
 	}
 
 
-static func _bribe_garrison(actor: L5RCharacterData, metadata: Dictionary) -> Dictionary:
+static func _bribe_garrison(actor: L5RCharacterData, metadata: Dictionary, dice: DiceEngine) -> Dictionary:
 	var cost: int = KolatSystem.bribe_garrison_cost_per_season()
+	# A target commander is required (supplied by the deferred Coin decomposition).
+	var commander: L5RCharacterData = metadata.get("target", null)
+	if commander == null:
+		return {"ok": false, "reason": "no_target", "cost": cost}
+	# Pay the first installment (vault if at-temple, else local reserve). The koku is
+	# spent on the attempt regardless of the commander's answer (s54.7c: on refusal the
+	# commander "pockets the money").
 	var temple: SettlementData = metadata.get("temple", null)
 	if temple != null:
 		if temple.temple_vault_koku < cost:
@@ -195,9 +203,20 @@ static func _bribe_garrison(actor: L5RCharacterData, metadata: Dictionary) -> Di
 		if actor.kolat_koku < cost:
 			return {"ok": false, "reason": "insufficient_funds", "cost": cost}
 		actor.kolat_koku -= cost
-	# The Stability penalty application is applied by the InsurgencySystem/Stability
-	# wiring at the next Seasonal Tick (deferred). This handler resolves the payment.
-	return {"ok": true, "cost": cost, "stability_penalty_apply": "deferred"}
+	# Roll Commerce (Appraisal) + trait vs the commander's Willpower × 5 (s54.7c).
+	#   success         → bribe established; the −2 under-garrison Stability penalty
+	#                     (s11.11) is applied each season by the Kolat seasonal pass
+	#   failure         → commander refuses, no topic, no bribe
+	#   critical (≤ -10)→ commander reports the approach; Tier 3 threat topic
+	var tn: int = commander.willpower * 5
+	var roll: Dictionary = SkillResolver.resolve_skill_check(actor, dice, "Commerce", tn)
+	var success: bool = bool(roll.get("success", false))
+	var margin: int = int(roll.get("margin", 0))
+	return {
+		"ok": true, "cost": cost,
+		"bribe_established": success,
+		"creates_threat_topic": margin <= -10,
+	}
 
 
 # === CLOUD ARCHIVE / TOPIC ===================================================
