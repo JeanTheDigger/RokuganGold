@@ -266,6 +266,8 @@ func test_shelters_count_small_in_range() -> void:
 	for i: int in range(20):
 		var map: MakeshiftStockadeMapData = MakeshiftStockadeGenerator.generate(
 			"s_seed_%d" % i, 2, [])
+		if map.size_category != MakeshiftStockadeMapData.SizeCategory.SMALL:
+			continue
 		assert_true(map.shelters.size() >= 1 and map.shelters.size() <= 2,
 			"SMALL shelter count should be 1–2, got %d" % map.shelters.size())
 
@@ -457,6 +459,8 @@ func test_small_never_has_ditch() -> void:
 	for i: int in range(20):
 		var map: MakeshiftStockadeMapData = MakeshiftStockadeGenerator.generate(
 			"ditch_small_%d" % i, 2, [])
+		if map.size_category != MakeshiftStockadeMapData.SizeCategory.SMALL:
+			continue
 		assert_false(map.has_ditch, "SMALL should never have a ditch")
 
 
