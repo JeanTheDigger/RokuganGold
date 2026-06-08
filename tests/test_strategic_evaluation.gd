@@ -345,8 +345,8 @@ func test_fd_personality_reweights_score() -> void:
 	for c: Dictionary in jin_candidates:
 		jin_top_score = maxi(jin_top_score, c.get("score", 0))
 
-	assert_gt(chugi_top_score, jin_top_score,
-		"CHUGI should score DEFEND_TERRITORY higher than JIN (+15 vs 0 pref)")
+	assert_gt(jin_top_score, chugi_top_score,
+		"JIN (+25) scores DEFEND_TERRITORY higher than CHUGI (+15) per GDD s57.54 line 447")
 
 
 # -- get_operational_superior_co_budget ----------------------------------------

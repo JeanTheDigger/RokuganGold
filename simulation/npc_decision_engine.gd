@@ -436,7 +436,9 @@ static func _check_combined_pool(
 	need.need_type = best.get("need_type", "")
 	need.priority = 2
 	need.source = best.get("source", "combined_pool")
-	need.target_clan_id = best.get("target_clan_id", "")
+	# candidate target_clan_id is an int clan id; ImmediateNeed.target_clan_id is a
+	# String clan name — incompatible, so don't assign it here (decomposition/
+	# metadata resolves the target downstream).
 	return need
 
 
