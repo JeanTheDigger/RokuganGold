@@ -1432,9 +1432,9 @@ static func _npc_pick_stance(
 		return {"changed": false}
 
 	var wl: int = CharacterStats.get_wound_level(npc)
-	var desired: int = _npc_desired_stance(state, npc_id, npc, wl, chars_by_id)
+	var desired: Enums.Stance = _npc_desired_stance(state, npc_id, npc, wl, chars_by_id)
 
-	if p.stance == desired as Enums.Stance:
+	if p.stance == desired:
 		return {"changed": false}
 
 	# Only change stance if there's a meaningful reason (not just a marginal preference).

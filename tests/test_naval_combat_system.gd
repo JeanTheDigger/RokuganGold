@@ -718,7 +718,7 @@ func test_collect_escaped_ships_returns_correct_side() -> void:
 
 # -- Captain Survival: Wound Penalty -------------------------------------------
 
-func _make_captain(
+func _make_captain_eb(
 	id: int,
 	earth: int = 3,
 	battle: int = 3,
@@ -738,7 +738,7 @@ func _make_captain(
 
 
 func test_captain_survival_wound_penalty_reduces_total() -> void:
-	var cap := _make_captain(1, 2, 1)
+	var cap := _make_captain_eb(1, 2, 1)
 	var survived_healthy: int = 0
 	var survived_wounded: int = 0
 	for seed_val: int in range(100):

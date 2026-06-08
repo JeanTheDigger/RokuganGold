@@ -1154,7 +1154,7 @@ func test_information_gather_spells_are_in_library() -> void:
 		)
 
 
-func test_look_into_the_soul_is_information_gather() -> void:
+func test_look_into_the_soul_is_information_gather_b() -> void:
 	assert_eq(
 		SpellSystem.SPELL_LIBRARY["look_into_the_soul"]["s"],
 		SpellSystem.SpellSimEffect.INFORMATION_GATHER

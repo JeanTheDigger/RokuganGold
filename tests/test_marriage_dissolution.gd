@@ -332,7 +332,7 @@ func test_auto_dissolve_skips_unmarried():
 
 # -- Pathway 3: Monastic Retirement -------------------------------------------
 
-func test_get_dissolution_topic_variant_pathway_3():
+func test_get_dissolution_topic_variant_pathway_3_b():
 	assert_eq(MarriageSystem.get_dissolution_topic_variant(3), "monastic_retirement")
 
 

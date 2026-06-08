@@ -17,7 +17,7 @@ func _make_char(id: int, calligraphy_rank: int = 3) -> L5RCharacterData:
 	c.action_points_current = 2
 	c.action_points_max = 2
 	c.lord_id = -1
-	c.lord_rank = Enums.LordRank.NONE
+	c.lord_rank = Enums.LordRank.VILLAGE_HEADMAN
 	c.topic_pool = []
 	c.knowledge_pool = []
 	c.disposition_values = {}
@@ -493,7 +493,7 @@ func test_high_rokugani_not_attempted_without_emphasis():
 	sender.emphases = {}  # no High Rokugani emphasis
 
 	var recipient := _make_char(2)
-	recipient.lord_rank = Enums.LordRank.NONE
+	recipient.lord_rank = Enums.LordRank.VILLAGE_HEADMAN
 	recipient.physical_location = "100"
 
 	var settlement: SettlementData = _make_settlement(100, Enums.SettlementType.IMPERIAL_CAPITAL)
@@ -539,7 +539,7 @@ func test_high_rokugani_attempted_at_imperial_capital():
 
 	var recipient := _make_char(2)
 	recipient.physical_location = "300"
-	recipient.lord_rank = Enums.LordRank.NONE
+	recipient.lord_rank = Enums.LordRank.VILLAGE_HEADMAN
 
 	var settlement: SettlementData = _make_settlement(300, Enums.SettlementType.IMPERIAL_CAPITAL)
 	var settlements: Dictionary = {"300": settlement}
@@ -559,7 +559,7 @@ func test_high_rokugani_attempted_at_imperial_capital():
 
 func test_get_high_rokugani_tn_default():
 	var recipient := _make_char(1)
-	recipient.lord_rank = Enums.LordRank.NONE
+	recipient.lord_rank = Enums.LordRank.VILLAGE_HEADMAN
 	assert_eq(LetterSystem._get_high_rokugani_tn(recipient), LetterSystem.HIGH_ROKUGANI_TN_INNER_CITY)
 
 
@@ -586,7 +586,7 @@ func test_high_rokugani_failure_produces_zero_bonus():
 
 	var recipient := _make_char(2)
 	recipient.physical_location = "400"
-	recipient.lord_rank = Enums.LordRank.NONE
+	recipient.lord_rank = Enums.LordRank.VILLAGE_HEADMAN
 
 	var settlement: SettlementData = _make_settlement(400, Enums.SettlementType.IMPERIAL_CAPITAL)
 	var settlements: Dictionary = {"400": settlement}
@@ -624,7 +624,7 @@ func test_high_rokugani_success_produces_nonzero_bonus():
 
 	var recipient := _make_char(2)
 	recipient.physical_location = "500"
-	recipient.lord_rank = Enums.LordRank.NONE
+	recipient.lord_rank = Enums.LordRank.VILLAGE_HEADMAN
 
 	var settlement: SettlementData = _make_settlement(500, Enums.SettlementType.IMPERIAL_CAPITAL)
 	var settlements: Dictionary = {"500": settlement}
@@ -657,7 +657,7 @@ func test_high_rokugani_bonus_maximum_is_four():
 
 	var recipient := _make_char(2)
 	recipient.physical_location = "600"
-	recipient.lord_rank = Enums.LordRank.NONE
+	recipient.lord_rank = Enums.LordRank.VILLAGE_HEADMAN
 
 	var settlement: SettlementData = _make_settlement(600, Enums.SettlementType.IMPERIAL_CAPITAL)
 	var settlements: Dictionary = {"600": settlement}
@@ -684,7 +684,7 @@ func test_high_rokugani_bonus_applied_on_delivery():
 
 	var recipient := _make_char(2)
 	recipient.physical_location = "700"
-	recipient.lord_rank = Enums.LordRank.NONE
+	recipient.lord_rank = Enums.LordRank.VILLAGE_HEADMAN
 
 	var settlement: SettlementData = _make_settlement(700, Enums.SettlementType.IMPERIAL_CAPITAL)
 	var settlements: Dictionary = {"700": settlement}

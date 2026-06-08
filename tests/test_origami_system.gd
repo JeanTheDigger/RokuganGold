@@ -930,7 +930,7 @@ func _make_sb(
 	return sb
 
 
-func _make_present_result(folder_id: int, senbazuru_id: int) -> Dictionary:
+func _make_present_result_b(folder_id: int, senbazuru_id: int) -> Dictionary:
 	return {
 		"action_id": "PRESENT_SENBAZURU",
 		"character_id": folder_id,
@@ -945,7 +945,7 @@ func test_healing_writeback_sets_pending_fr_when_recipient_wounded() -> void:
 	_recipient.pending_healing_fr = 0
 	var sb: SenbazuruData = _make_sb(
 		7, "Healing", _recipient.character_id, GiftGivingSystem.QualityTier.FINE)
-	var results: Array = [_make_present_result(_folder.character_id, 7)]
+	var results: Array = [_make_present_result_b(_folder.character_id, 7)]
 	var chars: Dictionary = {
 		_folder.character_id: _folder,
 		_recipient.character_id: _recipient,
@@ -965,7 +965,7 @@ func test_healing_writeback_sets_pending_fr_when_recipient_tainted() -> void:
 	_recipient.pending_healing_fr = 0
 	var sb: SenbazuruData = _make_sb(
 		8, "Healing", _recipient.character_id, GiftGivingSystem.QualityTier.EXCEPTIONAL)
-	var results: Array = [_make_present_result(_folder.character_id, 8)]
+	var results: Array = [_make_present_result_b(_folder.character_id, 8)]
 	var chars: Dictionary = {
 		_folder.character_id: _folder,
 		_recipient.character_id: _recipient,
@@ -986,7 +986,7 @@ func test_healing_writeback_no_fr_when_recipient_healthy() -> void:
 	_recipient.pending_healing_fr = 0
 	var sb: SenbazuruData = _make_sb(
 		9, "Healing", _recipient.character_id, GiftGivingSystem.QualityTier.FINE)
-	var results: Array = [_make_present_result(_folder.character_id, 9)]
+	var results: Array = [_make_present_result_b(_folder.character_id, 9)]
 	var chars: Dictionary = {
 		_folder.character_id: _folder,
 		_recipient.character_id: _recipient,
@@ -1009,8 +1009,8 @@ func test_healing_writeback_takes_max_fr_not_additive() -> void:
 	var sb2: SenbazuruData = _make_sb(
 		11, "Healing", _recipient.character_id, GiftGivingSystem.QualityTier.EXCEPTIONAL)
 	var results: Array = [
-		_make_present_result(_folder.character_id, 10),
-		_make_present_result(_folder.character_id, 11),
+		_make_present_result_b(_folder.character_id, 10),
+		_make_present_result_b(_folder.character_id, 11),
 	]
 	var chars: Dictionary = {
 		_folder.character_id: _folder,

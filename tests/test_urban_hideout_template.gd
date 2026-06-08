@@ -240,8 +240,8 @@ func test_different_seeds_may_differ() -> void:
 	var m2 := UrbanHideoutGenerator.generate("seed_beta", 5, [])
 	# Different seeds should produce at least one structural difference.
 	# Room count or entrance position should vary.
-	var differs: bool = (m1.rooms.size() != m2.rooms.size()) or
-		(m1.entrance_x != m2.entrance_x) or (m1.entrance_y != m2.entrance_y)
+	var differs: bool = ((m1.rooms.size() != m2.rooms.size()) \
+		or (m1.entrance_x != m2.entrance_x) or (m1.entrance_y != m2.entrance_y))
 	# This is probabilistic but extremely unlikely to fail with two different seeds.
 	assert_true(differs, "Different seeds produced identical map layouts")
 
