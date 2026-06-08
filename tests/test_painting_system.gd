@@ -997,7 +997,7 @@ func test_emakimono_topic_link_requires_two_raises() -> void:
 	var dice: DiceEngine = DiceEngine.new()
 	dice.set_seed(42)
 	# 1 raise declared — below EMAKIMONO_TOPIC_RAISES threshold
-	PaintingSystem.apply_painting_progress(p, _make_character(10), dice, 1, 10)
+	PaintingSystem.resolve_compose_painting(5, p, 5, 1, 10)  # advance one AP (result unused below)
 	# Progress won't complete in one AP; manually close it to check the else branch.
 	p.craft_progress = -1
 	p.topic_ids = []  # simulate completion without topic link

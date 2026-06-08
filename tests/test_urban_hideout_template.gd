@@ -190,7 +190,7 @@ func test_connected_may_have_zombie_positions() -> void:
 
 func test_has_door_guard_slot() -> void:
 	for s in ["pop_sb", "pop_cb", "pop_cat"]:
-		var strength: int = [2, 5, 8][[["pop_sb", "pop_cb", "pop_cat"].find(s)]]
+		var strength: int = [2, 5, 8][["pop_sb", "pop_cb", "pop_cat"].find(s)]
 		var m := UrbanHideoutGenerator.generate(s, strength, [])
 		var found := false
 		for p in m.population_slots:
@@ -201,7 +201,7 @@ func test_has_door_guard_slot() -> void:
 
 func test_has_leader_slot() -> void:
 	for s in ["lea_sb", "lea_cb", "lea_cat"]:
-		var strength: int = [2, 5, 8][[["lea_sb", "lea_cb", "lea_cat"].find(s)]]
+		var strength: int = [2, 5, 8][["lea_sb", "lea_cb", "lea_cat"].find(s)]
 		var m := UrbanHideoutGenerator.generate(s, strength, [])
 		var found := false
 		for p in m.population_slots:

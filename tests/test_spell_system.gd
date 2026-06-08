@@ -1184,7 +1184,7 @@ func test_reflective_pool_is_information_gather() -> void:
 	)
 
 
-func test_dominion_of_suitengu_is_information_gather() -> void:
+func test_dominion_of_suitengu_is_information_gather_b() -> void:
 	assert_eq(
 		SpellSystem.SPELL_LIBRARY["dominion_of_suitengu"]["s"],
 		SpellSystem.SpellSimEffect.INFORMATION_GATHER
@@ -1323,7 +1323,7 @@ func test_echoes_in_the_void_is_information_gather() -> void:
 	)
 
 
-func test_the_final_bond_is_information_gather() -> void:
+func test_the_final_bond_is_information_gather_b() -> void:
 	assert_eq(
 		SpellSystem.SPELL_LIBRARY["the_final_bond"]["s"],
 		SpellSystem.SpellSimEffect.INFORMATION_GATHER

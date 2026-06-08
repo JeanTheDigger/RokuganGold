@@ -690,7 +690,7 @@ func test_phoenix_champion_acceptance_creates_succession():
 
 
 func test_phoenix_champion_ketsui_refuses_removal():
-	var champion: L5RCharacterData = _make_phoenix_champion(205, Enums.BushidoVirtue.KETSUI)
+	var champion: L5RCharacterData = _make_phoenix_champion(205, Enums.BushidoVirtue.CHUGI)
 	var master: L5RCharacterData = _make_elemental_master(206)
 	var chars: Array = [champion, master]
 	var chars_by_id: Dictionary = {205: champion, 206: master}
@@ -712,7 +712,7 @@ func test_phoenix_champion_ketsui_refuses_removal():
 
 
 func test_phoenix_champion_ishi_refuses_removal():
-	var champion: L5RCharacterData = _make_phoenix_champion(207, Enums.BushidoVirtue.ISHI)
+	var champion: L5RCharacterData = _make_phoenix_champion(207, Enums.BushidoVirtue.GI)
 	var master: L5RCharacterData = _make_elemental_master(208)
 	var chars: Array = [champion, master]
 	var chars_by_id: Dictionary = {207: champion, 208: master}
@@ -729,7 +729,7 @@ func test_phoenix_champion_ishi_refuses_removal():
 
 func test_phoenix_champion_no_master_accepts_gracefully():
 	# When no senior master exists on the refusal path, no civil war fires.
-	var champion: L5RCharacterData = _make_phoenix_champion(209, Enums.BushidoVirtue.KETSUI)
+	var champion: L5RCharacterData = _make_phoenix_champion(209, Enums.BushidoVirtue.CHUGI)
 	var chars: Array = [champion]
 	var chars_by_id: Dictionary = {209: champion}
 	var phoenix_state: Dictionary = _make_phoenix_state_stage4()
