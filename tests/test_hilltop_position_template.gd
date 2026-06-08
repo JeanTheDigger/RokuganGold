@@ -71,7 +71,7 @@ func _has_wall_stone_in_slope(map: HilltopPositionMapData) -> bool:
 
 func test_is_ascii_map_data_instance() -> void:
 	var map: HilltopPositionMapData = _make_steep_hill()
-	assert_is(map, AsciiMapData,
+	assert_true(map is AsciiMapData,
 		"HilltopPositionMapData must extend AsciiMapData for FovSystem polymorphism")
 
 

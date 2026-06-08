@@ -60,7 +60,7 @@ func _has_tree_tile(map: ForestApproachCampMapData, y_min: int, y_max: int) -> b
 
 func test_is_ascii_map_data_instance() -> void:
 	var map: ForestApproachCampMapData = _make_medium()
-	assert_is(map, AsciiMapData,
+	assert_true(map is AsciiMapData,
 		"ForestApproachCampMapData must extend AsciiMapData for FovSystem polymorphism")
 
 

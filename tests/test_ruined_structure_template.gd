@@ -51,7 +51,7 @@ func _all_perimeter_tiles_ok(map: RuinedStructureMapData) -> bool:
 # ---------------------------------------------------------------------------
 
 func test_generate_returns_correct_type() -> void:
-	assert_is(_make_small(), RuinedStructureMapData,
+	assert_true(_make_small() is RuinedStructureMapData,
 		"generate() should return RuinedStructureMapData")
 
 

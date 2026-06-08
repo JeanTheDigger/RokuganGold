@@ -33,7 +33,7 @@ func _count_role(map: RavineCampMapData, role: int) -> int:
 # ---------------------------------------------------------------------------
 
 func test_generate_returns_correct_type() -> void:
-	assert_is(_make_small(), RavineCampMapData,
+	assert_true(_make_small() is RavineCampMapData,
 		"generate() should return RavineCampMapData")
 
 

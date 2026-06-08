@@ -131,7 +131,7 @@ func test_generate_returns_oni_data() -> void:
 	var dice := _make_dice(1)
 	var oni := OniGenerator.generate(dice, 1)
 	assert_not_null(oni)
-	assert_is(oni, OniData)
+	assert_true(oni is OniData)
 
 
 func test_generate_records_ic_day() -> void:

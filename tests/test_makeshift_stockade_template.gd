@@ -57,7 +57,7 @@ func _all_perimeter_wall_tiles_are_wall_or_exit(map: MakeshiftStockadeMapData) -
 # ---------------------------------------------------------------------------
 
 func test_generate_returns_correct_type() -> void:
-	assert_is(_make_small(), MakeshiftStockadeMapData,
+	assert_true(_make_small() is MakeshiftStockadeMapData,
 		"generate() should return MakeshiftStockadeMapData")
 
 

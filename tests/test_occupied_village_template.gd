@@ -41,7 +41,7 @@ func _headman_building(map: OccupiedVillageMapData) -> Dictionary:
 
 func test_is_ascii_map_data_instance() -> void:
 	var map: OccupiedVillageMapData = _make_hamlet()
-	assert_is(map, AsciiMapData,
+	assert_true(map is AsciiMapData,
 		"OccupiedVillageMapData must extend AsciiMapData for FovSystem polymorphism")
 
 

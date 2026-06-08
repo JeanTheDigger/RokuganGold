@@ -199,7 +199,7 @@ func test_flow_small_mostly_linear() -> void:
 func test_generate_returns_cave_map_data() -> void:
 	var map: CaveMapData = _gen()
 	assert_not_null(map)
-	assert_is(map, CaveMapData)
+	assert_true(map is CaveMapData)
 
 
 func test_generate_deterministic() -> void:
