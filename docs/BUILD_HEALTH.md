@@ -20,6 +20,34 @@ issues now surfaced by actually executing the code, e.g. wound-penalty not
 reducing roll totals), not compile/parse errors. Those are ordinary test-fixing
 work.
 
+## Runtime-failure cleanup (in progress)
+
+Working the 131 down with a fast per-file loop
+(`-gselect=test_X.gd`). Cleared so far (verified 0 failing each):
+festival, world_state_saver, strategic_evaluation, individual_combat,
+bound_escape, assassination, wind_down, animal_handling, opportunity_scanner,
+and the ASCII-map templates (ravine, makeshift, occupied_village, ruined,
+cave, hilltop, forest — mostly a GUT `assert_is` fix + size-category guards).
+
+**Failure categories found (most are test bugs, some real impl bugs):**
+- **GUT `assert_is(x, Class)`** rejects `class_name` scripts on Godot 4.6 →
+  `assert_true(x is Class)`.
+- **Probabilistic generation** — template tests assumed low strength → smallest
+  variant; guarded by actual `size_category`.
+- **Wound math** — tests used wound counts one level too low, or gave chars
+  Earth 0 (→ DEAD, penalty 0). Impl is GDD-correct.
+- **`var x: Array[String] = dict.get(...)`** silently fails on Godot 4.6
+  (untyped→typed) — a *real impl bug* in strategic_review.
+- **int assigned to a String field** (`target_clan_id`) threw → null — *real
+  impl bug* in `_check_combined_pool`.
+- **GDD-value mismatches** — e.g. painting completion tiers, JIN/CHUGI defend
+  preference; fixed tests to match the LOCKED GDD.
+
+**Remaining (~80, long tail):** painting (3), origami (2), theater (2),
+npc_advancement (2), spell (3), marriage_dissolution (6 — Phoenix-governance
+acceptance), geisha (probabilistic), shide, day_orchestrator, and others —
+mostly 1–6 per file, each needing per-system investigation.
+
 ## How to run the suite
 
 ```bash
