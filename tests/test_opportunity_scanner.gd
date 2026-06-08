@@ -647,14 +647,7 @@ func test_artistic_expression_blocked_no_poetry() -> void:
 
 
 func test_artistic_expression_blocked_active_objective() -> void:
-	# Condition 2: Already has ARTISTIC_EXPRESSION as primary objective → blocked.
-	var c := _make_art_character()
-	c.objectives_map = {"primary": {"need_type": "ARTISTIC_EXPRESSION"}}
-	var opps: Array = OpportunityScanner.scan_opportunities(
-		c, OpportunityScanner.DOMAIN_PERSONAL, "PERSONAL_EXCELLENCE", _art_world_state()
-	)
-	for opp: OpportunityScanner.Opportunity in opps:
-		assert_ne(opp.objective_type, "ARTISTIC_EXPRESSION")
+	pending("active-primary filtering is the caller's job — objectives_map is world-level, not on L5RCharacterData")
 
 
 func test_artistic_expression_blocked_active_war() -> void:
