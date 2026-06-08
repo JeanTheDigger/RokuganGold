@@ -1514,7 +1514,7 @@ static func get_champion_conclusion_needtypes(
 		return result
 	var virtue_key = _get_virtue_key(daimyo)
 	for sc: StrategicConclusionData in clan.clan_strategic_priorities:
-		var need_types: Array[String] = _CONCLUSION_TO_NEEDTYPES.get(sc.conclusion_type, [])
+		var need_types: Array = _CONCLUSION_TO_NEEDTYPES.get(sc.conclusion_type, [])
 		for nt: String in need_types:
 			# Re-weight champion score with Family Daimyo personality preference.
 			var pref: int = _get_preference(virtue_key, sc.conclusion_type)
