@@ -528,11 +528,11 @@ func test_seasonal_rotation_no_replacement_available() -> void:
 func test_lifecycle_topic_completion_tier_legendary() -> void:
 	var p: PaintingData = _make_kakemono(1, 5, 10)  # Legendary
 	var t: Dictionary = PaintingSystem.generate_lifecycle_topic(p, "completion", "Doji Hotaru", "Shiro Doji", 100)
-	assert_eq(t["tier"], 1, "Legendary completion = TIER_2 (enum 1)")
+	assert_eq(t["tier"], 2, "Legendary completion = TIER_3 (enum 2) per GDD s57.27")
 
 
 func test_lifecycle_topic_completion_tier_exceptional() -> void:
-	var p: PaintingData = _make_kakemono(1, 3, 10)  # Exceptional
+	var p: PaintingData = _make_kakemono(1, 4, 10)  # Exceptional (quality 4)
 	var t: Dictionary = PaintingSystem.generate_lifecycle_topic(p, "completion", "Doji Hotaru", "Shiro Doji", 100)
 	assert_eq(t["tier"], 2, "Exceptional completion = TIER_3 (enum 2)")
 
@@ -561,7 +561,7 @@ func test_lifecycle_topic_has_title() -> void:
 # ---------------------------------------------------------------------------
 
 func test_artist_grief_magnitude_by_tier() -> void:
-	var p: PaintingData = _make_kakemono(1, 3, 10)  # Exceptional = quality tier 3
+	var p: PaintingData = _make_kakemono(1, 4, 10)  # Exceptional (quality 4) = quality tier 3
 	var creator: L5RCharacterData = _make_character(10)
 	creator.met_characters = [99]  # knows the destroyer
 	var chars: Dictionary = {10: creator}
