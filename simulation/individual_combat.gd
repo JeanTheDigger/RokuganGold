@@ -19,7 +19,7 @@ const WEAPON_CATALOG: Dictionary = {
 	"bo":         {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Bo",             "size": "Large",  "melee": true,  "trait": "agility"},
 	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms",       "size": "Large",  "melee": true,  "trait": "agility"},
 	"tetsubo":    {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Heavy Weapons",  "size": "Large",  "melee": true,  "trait": "agility"},
-	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",       "size": "Large",  "melee": false, "trait": "agility"},
+	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",       "size": "Large",  "melee": false, "trait": "reflexes"},
 	"unarmed":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu",       "size": "Small",  "melee": true,  "trait": "agility"},
 }
 
@@ -2001,7 +2001,7 @@ static func pick_best_weapon(character: L5RCharacterData) -> String:
 	## Used by the NPC summary roll when no explicit weapon is assigned.
 	## Returns "unarmed" for characters with no weapon skills.
 	var best_weapon: String = "unarmed"
-	var best_score: int = -1
+	var best_score: int = 0
 	for weapon_name: String in WEAPON_CATALOG:
 		var profile: Dictionary = WEAPON_CATALOG[weapon_name]
 		var skill: String = profile.get("skill", "")

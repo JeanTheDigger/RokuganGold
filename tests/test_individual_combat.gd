@@ -1621,7 +1621,7 @@ func _make_wounded_char(id: int, str_val: int, wil_val: int, wounds: int) -> L5R
 func test_disarm_wound_penalty_reduces_attacker_roll() -> void:
 	# Earth 2 → threshold 4. HURT = 9-12 wounds → -10 penalty.
 	var healthy := _make_wounded_char(10, 3, 2, 0)
-	var hurt := _make_wounded_char(11, 3, 2, 10)
+	var hurt := _make_wounded_char(11, 3, 2, 13)
 	assert_eq(CharacterStats.get_wound_penalty(hurt), -10)
 	var dice1 := DiceEngine.new(99)
 	var dice2 := DiceEngine.new(99)
@@ -1632,7 +1632,7 @@ func test_disarm_wound_penalty_reduces_attacker_roll() -> void:
 
 func test_knockdown_wound_penalty_reduces_attacker_roll() -> void:
 	var healthy := _make_wounded_char(10, 3, 2, 0)
-	var hurt := _make_wounded_char(11, 3, 2, 10)
+	var hurt := _make_wounded_char(11, 3, 2, 13)
 	var dice1 := DiceEngine.new(99)
 	var dice2 := DiceEngine.new(99)
 	var r_healthy: Dictionary = IndividualCombat.resolve_knockdown(healthy, _char_b, false, dice1)
@@ -1642,7 +1642,7 @@ func test_knockdown_wound_penalty_reduces_attacker_roll() -> void:
 
 func test_grapple_control_wound_penalty_reduces_rolls() -> void:
 	var healthy := _make_wounded_char(10, 3, 2, 0)
-	var hurt := _make_wounded_char(11, 3, 2, 10)
+	var hurt := _make_wounded_char(11, 3, 2, 13)
 	healthy.skills = {"Jiujutsu": 2}
 	hurt.skills = {"Jiujutsu": 2}
 	var dice1 := DiceEngine.new(99)
@@ -1654,7 +1654,7 @@ func test_grapple_control_wound_penalty_reduces_rolls() -> void:
 
 func test_sumai_bout_wound_penalty_reduces_rolls() -> void:
 	var healthy := _make_wounded_char(10, 3, 2, 0)
-	var hurt := _make_wounded_char(11, 3, 2, 10)
+	var hurt := _make_wounded_char(11, 3, 2, 13)
 	healthy.skills = {"Jiujutsu": 2}
 	hurt.skills = {"Jiujutsu": 2}
 	var dice1 := DiceEngine.new(99)
@@ -1666,7 +1666,7 @@ func test_sumai_bout_wound_penalty_reduces_rolls() -> void:
 
 func test_sumai_stare_down_wound_penalty_reduces_rolls() -> void:
 	var healthy := _make_wounded_char(10, 3, 3, 0)
-	var hurt := _make_wounded_char(11, 3, 3, 10)
+	var hurt := _make_wounded_char(11, 3, 3, 13)
 	# Earth = min(2_stamina, 3_willpower) = 2, threshold 4. 10 wounds = HURT = -10.
 	healthy.skills = {"Intimidation": 2}
 	hurt.skills = {"Intimidation": 2}
@@ -1680,7 +1680,7 @@ func test_sumai_stare_down_wound_penalty_reduces_rolls() -> void:
 func test_iaijutsu_stare_down_wound_penalty_reduces_rolls() -> void:
 	var duel := IndividualCombat.create_duel(10, 20)
 	var healthy := _make_wounded_char(10, 3, 3, 0)
-	var hurt := _make_wounded_char(10, 3, 3, 10)
+	var hurt := _make_wounded_char(10, 3, 3, 13)
 	healthy.skills = {"Intimidation": 2}
 	hurt.skills = {"Intimidation": 2}
 	var dice1 := DiceEngine.new(99)
@@ -1698,7 +1698,7 @@ func test_iaijutsu_stare_down_wound_penalty_reduces_rolls() -> void:
 func test_duel_assessment_wound_penalty_reduces_rolls() -> void:
 	var duel := IndividualCombat.create_duel(10, 20)
 	var healthy := _make_wounded_char(10, 3, 3, 0)
-	var hurt := _make_wounded_char(10, 3, 3, 10)
+	var hurt := _make_wounded_char(10, 3, 3, 13)
 	healthy.skills = {"Iaijutsu": 3}
 	hurt.skills = {"Iaijutsu": 3}
 	var target := _make_wounded_char(20, 2, 2, 0)
@@ -1716,7 +1716,7 @@ func test_duel_assessment_wound_penalty_reduces_rolls() -> void:
 func test_duel_focus_wound_penalty_reduces_rolls() -> void:
 	var duel := IndividualCombat.create_duel(10, 20)
 	var healthy := _make_wounded_char(10, 3, 3, 0)
-	var hurt := _make_wounded_char(10, 3, 3, 10)
+	var hurt := _make_wounded_char(10, 3, 3, 13)
 	healthy.skills = {"Iaijutsu": 3}
 	hurt.skills = {"Iaijutsu": 3}
 	var target := _make_wounded_char(20, 2, 2, 0)
