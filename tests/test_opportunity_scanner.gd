@@ -626,7 +626,6 @@ func _make_art_character(
 	c.shourido_virtue = shourido
 	c.skills = {"Poetry": poetry}
 	c.disposition_values = {42: 20.0}  # strong positive disposition by default
-	c.objectives_map = {}
 	return c
 
 
