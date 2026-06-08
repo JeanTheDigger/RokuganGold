@@ -645,7 +645,9 @@ func test_seed_co_located_contacts_populates_dispositions():
 	var result: Dictionary = WorldPopulationGenerator.generate_world_population(
 		world["provinces"], world["settlements"], dice, next_id,
 	)
-	var chars: Array = result["characters"]
+	# Bounded slice: co-located seeding is O(n²); forcing the whole population to
+	# one location is pathological. 20 characters verifies the behavior.
+	var chars: Array = result["characters"].slice(0, 20)
 	for c: L5RCharacterData in chars:
 		c.physical_location = "100"
 	WorldPopulationGenerator._seed_co_located_contacts(
