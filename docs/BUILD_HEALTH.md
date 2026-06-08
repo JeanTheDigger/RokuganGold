@@ -4,16 +4,21 @@ _Last updated: 2026-06-07_
 
 ## TL;DR
 
-For a long time the project **did not compile and the test suite did not run**.
-The GUT test runner was broken by a Godot 4.6 incompatibility, so there was
-**no compile/test feedback at all** — and parse errors accumulated undetected
-across many "static-review-only" commits. The central integration file
-(`day_orchestrator.gd`) and several recent systems were never compiled.
+**The full test suite now compiles, boots, and runs end-to-end** — for the first
+time. Latest full run: **12940 passing / 131 failing / 13225 tests (224 scripts)**.
+Every test file loads (zero parse errors), the project boots clean (all autoloads
+instantiate), and the suite completes without hanging.
 
-As of this writing the suite **runs again** (GUT fixed + the boot cascade
-cleared). Latest run: **~7775 passing / ~207 failing / ~7982 tests**. The
-remaining failures are concentrated cascades from a handful of never-compiled
-files and are now visible and fixable with the working loop.
+This was not the case before: the GUT runner itself was broken on Godot 4.6, so
+there was **no compile/test feedback at all**, and parse errors + API drift had
+accumulated undetected across many "static-review-only" commits. The whole
+codebase — including `day_orchestrator.gd`, the central integration file — did
+not compile.
+
+The remaining **131 failures are runtime assertion failures** (logic/wiring
+issues now surfaced by actually executing the code, e.g. wound-penalty not
+reducing roll totals), not compile/parse errors. Those are ordinary test-fixing
+work.
 
 ## How to run the suite
 
