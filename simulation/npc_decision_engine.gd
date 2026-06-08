@@ -1202,7 +1202,7 @@ static func _sleeper_command_complete(command: Dictionary, chars_by_id: Dictiona
 		return false
 	var tgt: L5RCharacterData = chars_by_id.get(tid, null)
 	if tgt == null:
-		return true  # target no longer in the world
+		return false  # target not resolvable here — can't confirm death, keep pursuing
 	return CharacterStats.is_dead(tgt)
 
 
@@ -5592,7 +5592,7 @@ static func _build_declare_senbazuru_metadata(
 		var target: L5RCharacterData = chars_by_id.get(need.target_npc_id)
 		if target != null and not CharacterStats.is_dead(target):
 			# Healing if recipient is wounded or tainted; Protection otherwise.
-			if CharacterStats.get_wound_level(target) != Enums.WoundLevel.HEALTHY or target.taint_rank > 0:
+			if CharacterStats.get_wound_level(target) != Enums.WoundLevel.HEALTHY or target.taint > 0.0:
 				return {
 					"dedication_type": "Healing",
 					"recipient_id": need.target_npc_id,

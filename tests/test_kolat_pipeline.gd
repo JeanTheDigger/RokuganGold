@@ -97,14 +97,14 @@ func test_action_executor_routes_launder() -> void:
 	assert_eq(c.dirty_koku, 7)
 
 
-func test_action_executor_deferred_kolat_action() -> void:
+func test_action_executor_archive_topic_needs_topic() -> void:
 	var c := _coin_master(8)
 	var action := NPCDataStructures.ScoredAction.new()
 	action.action_id = "ARCHIVE_TOPIC"
 	var ctx := _ctx_for(c)
 	var res := ActionExecutor.execute(action, c, ctx, DiceEngine.new(1), {})
-	assert_false(res["success"], "topic/spell Kolat actions are deferred")
-	assert_eq(res["reason"], "deferred_system")
+	assert_false(res["success"], "ARCHIVE_TOPIC fails without a topic to archive")
+	assert_eq(res["reason"], "no_topic")
 
 
 # === Tranche 6: metadata + sleeper completion ===
