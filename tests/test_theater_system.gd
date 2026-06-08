@@ -433,7 +433,7 @@ func test_generate_canonized_pieces_crane_has_most() -> void:
 			crane_count += 1
 		elif piece.subject.begins_with("Crab"):
 			crab_count += 1
-	assert_ge(crane_count, crab_count)
+	assert_gte(crane_count, crab_count)
 
 
 # ============================================================================

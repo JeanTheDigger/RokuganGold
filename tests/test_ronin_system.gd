@@ -314,7 +314,7 @@ func test_lord_auto_rejects_treason():
 func test_lord_auto_rejects_maho():
 	var lord := _make_lord()
 	var petitioner := _make_samurai()
-	assert_true(RoninSystem.lord_auto_rejects(lord, petitioner, 5, [Enums.CrimeType.MAHO_USE]))
+	assert_true(RoninSystem.lord_auto_rejects(lord, petitioner, 5, [Enums.CrimeType.MAHO]))
 
 func test_lord_auto_rejects_murder():
 	var lord := _make_lord()

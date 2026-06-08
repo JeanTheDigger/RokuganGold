@@ -1105,7 +1105,7 @@ func test_dual_wield_bonus_returns_zero_when_not_dual_wielding() -> void:
 
 func test_off_hand_attack_small_weapon_penalty_is_five() -> void:
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	p.dual_wielding = true
 	_char_a.skills = {"Kenjutsu": 3}
 	var result: Dictionary = IndividualCombat.resolve_off_hand_attack(
@@ -1117,7 +1117,7 @@ func test_off_hand_attack_small_weapon_penalty_is_five() -> void:
 
 func test_off_hand_attack_medium_weapon_penalty_is_ten() -> void:
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	p.dual_wielding = true
 	_char_a.skills = {"Kenjutsu": 3}
 	var result: Dictionary = IndividualCombat.resolve_off_hand_attack(
@@ -1128,7 +1128,7 @@ func test_off_hand_attack_medium_weapon_penalty_is_ten() -> void:
 
 func test_off_hand_attack_result_has_required_keys() -> void:
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	p.dual_wielding = true
 	_char_a.skills = {"Kenjutsu": 3}
 	var result: Dictionary = IndividualCombat.resolve_off_hand_attack(
@@ -1142,7 +1142,7 @@ func test_off_hand_attack_result_has_required_keys() -> void:
 
 func test_extra_attack_requires_five_raises_normally() -> void:
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	_char_a.skills = {"Kenjutsu": 3}
 	var result: Dictionary = IndividualCombat.resolve_extra_attack(
 		_char_a, p, "katana", 5, _dice
@@ -1152,7 +1152,7 @@ func test_extra_attack_requires_five_raises_normally() -> void:
 
 func test_extra_attack_blocked_after_first_use() -> void:
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	p.extra_attack_used_this_turn = true
 	_char_a.skills = {"Kenjutsu": 3}
 	var result: Dictionary = IndividualCombat.resolve_extra_attack(
@@ -1164,7 +1164,7 @@ func test_extra_attack_blocked_after_first_use() -> void:
 
 func test_extra_attack_with_spinning_blades_kata_dual_wielder_needs_three_raises() -> void:
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	p.dual_wielding = true
 	# Add Spinning Blades kata effect
 	_char_a.katas = ["Spinning Blades Style"]
@@ -1177,7 +1177,7 @@ func test_extra_attack_with_spinning_blades_kata_dual_wielder_needs_three_raises
 
 func test_extra_attack_spinning_blades_single_wielder_still_needs_five() -> void:
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	p.dual_wielding = false
 	_char_a.katas = ["Spinning Blades Style"]
 	_char_a.skills = {"Kenjutsu": 5}
@@ -1240,7 +1240,7 @@ func test_initiative_void_ring_kata_uses_void_ring() -> void:
 	# If character has a kata with use_void_ring effect, initiative uses Void Ring
 	# We test the standard path (no kata) returns reflexes-based roll
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	_char_a.katas = []
 	var score: int = IndividualCombat.roll_initiative(_char_a, p, _dice)
 	assert_true(score > 0)
@@ -1248,7 +1248,7 @@ func test_initiative_void_ring_kata_uses_void_ring() -> void:
 
 func test_initiative_with_weapon_name_param_accepted() -> void:
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	var score: int = IndividualCombat.roll_initiative(_char_a, p, _dice, "naginata")
 	assert_true(score > 0)
 
@@ -1257,7 +1257,7 @@ func test_initiative_with_weapon_name_param_accepted() -> void:
 
 func test_armor_tn_dual_wield_adds_insight_rank() -> void:
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	p.dual_wielding = false
 	var tn_single: int = IndividualCombat.get_armor_tn(_char_a, p, _dice)
 	p.dual_wielding = true
@@ -1271,7 +1271,7 @@ func test_armor_tn_earth_defense_stance_ring_uses_earth() -> void:
 	c.katas = ["Iron in the Mountains Style"]  # has earth_defense_stance_ring effect
 	c.skills = {}
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_DEFENSE
+	p.stance = Enums.Stance.DEFENSE
 	var tn_with_kata: int = IndividualCombat.get_armor_tn(c, p, _dice)
 	# Without kata a Defense stance adds Air ring value
 	c.katas = []
@@ -1284,7 +1284,7 @@ func test_armor_tn_earth_defense_stance_ring_uses_earth() -> void:
 
 func test_resolve_attack_accepts_maneuver_parameter() -> void:
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	_char_a.skills = {"Kenjutsu": 3}
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		_char_a, p, "katana", 5, 0, _dice, false, false, false, "called_shot"
@@ -1296,7 +1296,7 @@ func test_resolve_attack_accepts_maneuver_parameter() -> void:
 
 func test_resolve_damage_with_attacker_p_param_accepted() -> void:
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	_char_a.skills = {"Kenjutsu": 3}
 	var result: Dictionary = IndividualCombat.resolve_damage(_char_a, "katana", 0, 0, _dice, p)
 	assert_true(result.has("raw_damage"))
@@ -1304,7 +1304,7 @@ func test_resolve_damage_with_attacker_p_param_accepted() -> void:
 
 func test_resolve_damage_with_was_feint_param_accepted() -> void:
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	_char_a.skills = {"Kenjutsu": 3}
 	var result: Dictionary = IndividualCombat.resolve_damage(_char_a, "katana", 0, 0, _dice, p, true)
 	assert_true(result.has("raw_damage"))
@@ -1395,10 +1395,10 @@ func test_dual_wielder_dominant_hand_attack_gets_minus_five_flat_penalty() -> vo
 	# takes -5 to the flat roll total (s40).
 	_char_a.skills = {"Kenjutsu": 3}
 	var p_single := IndividualCombat.Participant.new()
-	p_single.stance = IndividualCombat.STANCE_ATTACK
+	p_single.stance = Enums.Stance.ATTACK
 	p_single.dual_wielding = false
 	var p_dual := IndividualCombat.Participant.new()
-	p_dual.stance = IndividualCombat.STANCE_ATTACK
+	p_dual.stance = Enums.Stance.ATTACK
 	p_dual.dual_wielding = true
 	# Use a deterministic dice engine seeded identically for both rolls
 	var dice_single := DiceEngine.new(42)
@@ -1416,7 +1416,7 @@ func test_dual_wielder_dominant_hand_attack_gets_minus_five_flat_penalty() -> vo
 func test_single_wielder_resolve_attack_no_dual_wield_penalty() -> void:
 	_char_a.skills = {"Kenjutsu": 2}
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	p.dual_wielding = false
 	var result: Dictionary = IndividualCombat.resolve_attack(_char_a, p, "katana", 5, 0, _dice)
 	assert_true(result.has("roll"))
@@ -1428,7 +1428,7 @@ func test_begin_round_expires_unconsumed_center_stance_bonus() -> void:
 	# Character was in CENTER stance last round but never attacked (never consumed bonus).
 	# begin_round() should clear void_ring_bonus so initiative can set a fresh one.
 	var data: Array = [
-		{"character_id": _char_a.character_id, "initiative_score": 10, "stance": IndividualCombat.STANCE_CENTER},
+		{"character_id": _char_a.character_id, "initiative_score": 10, "stance": Enums.Stance.CENTER},
 		{"character_id": _char_b.character_id, "initiative_score": 5},
 	]
 	var state: IndividualCombat.CombatState = IndividualCombat.build_combat_state(data)
@@ -1505,7 +1505,7 @@ func test_begin_turn_clears_earth_and_water_trade_amounts() -> void:
 
 func test_extra_attack_spinning_blades_active_flag_true_for_dual_wielder_with_kata() -> void:
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	p.dual_wielding = true
 	_char_a.katas = ["Spinning Blades Style"]
 	_char_a.skills = {"Kenjutsu": 5}
@@ -1515,7 +1515,7 @@ func test_extra_attack_spinning_blades_active_flag_true_for_dual_wielder_with_ka
 
 func test_extra_attack_spinning_blades_active_flag_false_without_kata() -> void:
 	var p := IndividualCombat.Participant.new()
-	p.stance = IndividualCombat.STANCE_ATTACK
+	p.stance = Enums.Stance.ATTACK
 	p.dual_wielding = true
 	_char_a.katas = []
 	_char_a.skills = {"Kenjutsu": 5}

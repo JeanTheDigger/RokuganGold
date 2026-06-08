@@ -26,8 +26,8 @@ func before_each() -> void:
 	_artisan.met_characters = []
 	_artisan.temporary_modifiers = {}
 	_artisan.physical_location = "10"
-	_artisan.bushido_virtue = "Rei"
-	_artisan.shourido_virtue = ""
+	_artisan.bushido_virtue = Enums.BushidoVirtue.REI
+	_artisan.shourido_virtue = Enums.ShouridoVirtue.NONE
 
 	_visitor = L5RCharacterData.new()
 	_visitor.character_id = 2

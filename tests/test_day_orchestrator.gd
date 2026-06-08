@@ -16634,7 +16634,7 @@ func test_brash_reaction_wound_penalty_applied() -> void:
 	target.honor = 5.0
 	target.wounds_taken = 19  # Earth 3 → threshold 6 → HURT = -10
 	var brash_adv := AdvantageData.new()
-	brash_adv.advantage_type = Enums.Advantage.BRASH
+	brash_adv.advantage_type = Enums.Disadvantage.BRASH
 	target.advantages = [brash_adv]
 	target.physical_location = "settlement_1"
 	target.disposition_values = {}

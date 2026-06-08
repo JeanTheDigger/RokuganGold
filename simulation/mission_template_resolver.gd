@@ -42,9 +42,9 @@ static func dispatch(
 	var objs: Array = objectives if not objectives.is_empty() else DEFAULT_OBJECTIVES
 	match template_id:
 		TemplateSelector.CAVE:
-			return CaveMapGenerator.generate(seed_str, strength, objs)
+			return CaveTemplateGenerator.generate(seed_str, strength, objs)
 		TemplateSelector.OCCUPIED_VILLAGE:
-			return OccupiedVillageGenerator.generate(seed_str, strength, objs)
+			return OccupiedVillageTemplateGenerator.generate(seed_str, strength, objs)
 		TemplateSelector.FOREST_APPROACH_CAMP:
 			return ForestApproachCampGenerator.generate(seed_str, strength, objs)
 		TemplateSelector.MAKESHIFT_STOCKADE:
@@ -58,4 +58,4 @@ static func dispatch(
 		_:
 			# Unknown template ID: fall back to Cave (underground is the safest
 			# generic layout for any seed type that doesn't depend on open terrain).
-			return CaveMapGenerator.generate(seed_str, strength, objs)
+			return CaveTemplateGenerator.generate(seed_str, strength, objs)

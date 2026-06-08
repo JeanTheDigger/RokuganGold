@@ -720,7 +720,7 @@ func _make_perf_ctx(season: int) -> NPCDataStructures.ContextSnapshot:
 	ctx.school = "Doji Courtier"
 	ctx.school_type = Enums.SchoolType.COURTIER
 	ctx.is_lord = true
-	ctx.lord_rank = Enums.LordRank.LOCAL_DAIMYO
+	ctx.lord_rank = Enums.LordRank.CITY_DAIMYO
 	ctx.honor = 5.0
 	ctx.glory = 3.0
 	ctx.status = 3.0
