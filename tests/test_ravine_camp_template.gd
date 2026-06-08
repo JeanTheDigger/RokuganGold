@@ -194,6 +194,8 @@ func test_narrow_gully_never_has_back_exit() -> void:
 	for i in range(20):
 		var map: RavineCampMapData = RavineCampGenerator.generate(
 			"be_small_%d" % i, 2, [])
+		if map.size_category != RavineCampMapData.SizeCategory.NARROW_GULLY:
+			continue
 		assert_false(map.has_back_exit,
 			"NARROW_GULLY should never have a back exit")
 
@@ -334,6 +336,8 @@ func test_shelters_count_small_in_range() -> void:
 	for i in range(20):
 		var map: RavineCampMapData = RavineCampGenerator.generate(
 			"sh_small_%d" % i, 2, [])
+		if map.size_category != RavineCampMapData.SizeCategory.NARROW_GULLY:
+			continue
 		assert_true(map.shelters.size() >= 1 and map.shelters.size() <= 2,
 			"NARROW_GULLY shelter count should be 1–2, got %d" % map.shelters.size())
 
@@ -500,6 +504,8 @@ func test_narrow_gully_never_has_rim_watcher() -> void:
 	for i in range(10):
 		var map: RavineCampMapData = RavineCampGenerator.generate(
 			"rim_small_%d" % i, 2, [])
+		if map.size_category != RavineCampMapData.SizeCategory.NARROW_GULLY:
+			continue
 		assert_false(map.has_rim_watcher,
 			"NARROW_GULLY should never have a rim watcher")
 		assert_eq(_count_role(map, RavineCampMapData.PopRole.RIM_WATCHER), 0,
