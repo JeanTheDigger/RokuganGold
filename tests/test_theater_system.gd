@@ -579,7 +579,7 @@ func test_compose_not_at_court_bonus() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.skill_ranks = {"Poetry": 2}
 	ctx.characters_present = [2]  # one other character for audience
 	ctx.known_topic_momentums = {}
@@ -607,7 +607,7 @@ func test_compose_at_court_no_pieces_score_40() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_COURT"
+	ctx.context_flag = Enums.ContextFlag.AT_COURT
 	ctx.skill_ranks = {"Poetry": 2}
 	ctx.characters_present = [2]
 	ctx.known_topic_momentums = {}
@@ -634,7 +634,7 @@ func test_compose_no_audience_penalty() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.skill_ranks = {"Poetry": 2}
 	ctx.characters_present = []  # no audience
 	ctx.known_topic_momentums = {}
@@ -662,7 +662,7 @@ func test_compose_active_topic_subject_clan_match_bonus() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.skill_ranks = {"Poetry": 2}
 	ctx.characters_present = [2]
 	ctx.known_topic_momentums = {77: 45}  # topic 77 momentum 45 > 40
@@ -694,7 +694,7 @@ func test_compose_active_topic_below_threshold_no_bonus() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.skill_ranks = {"Poetry": 2}
 	ctx.characters_present = [2]
 	ctx.known_topic_momentums = {77: 38}  # below threshold
@@ -726,7 +726,7 @@ func test_compose_active_topic_subject_mismatch_no_bonus() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.skill_ranks = {"Poetry": 2}
 	ctx.characters_present = [2]
 	ctx.known_topic_momentums = {77: 50}
@@ -758,7 +758,7 @@ func test_compose_skipped_when_poetry_zero() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.skill_ranks = {"Poetry": 0}
 	ctx.characters_present = [2]
 	ctx.known_topic_momentums = {}
@@ -786,7 +786,7 @@ func test_compose_skipped_for_non_political_need_type() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.skill_ranks = {"Poetry": 3}
 	ctx.characters_present = [2]
 	ctx.known_topic_momentums = {}

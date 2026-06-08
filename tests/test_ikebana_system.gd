@@ -541,7 +541,7 @@ func test_generate_initial_arrangement_has_valid_lifespan() -> void:
 	assert_gt(result.size(), 0)
 	var arr: IkebanaArrangementData = result[0]
 	assert_gt(arr.lifespan_remaining, 0)
-	assert_le(arr.lifespan_remaining, IkebanaSystem.default_lifespan(arr.quality_tier))
+	assert_lte(arr.lifespan_remaining, IkebanaSystem.default_lifespan(arr.quality_tier))
 
 
 # --------------------------------------------------------------------------

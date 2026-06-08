@@ -1585,7 +1585,7 @@ func test_can_be_inducted_permanent_ronin_blocked():
 func test_can_be_inducted_sponsor_rank_too_low():
 	var ronin := _make_inducted_ronin(10)
 	var local_lord := _make_lord_with_family(201, "Crane", "Doji")
-	local_lord.lord_rank = Enums.LordRank.LOCAL_DAIMYO  # too low
+	local_lord.lord_rank = Enums.LordRank.CITY_DAIMYO  # too low
 	var result: Dictionary = RoninSystem.can_be_inducted(ronin, local_lord, 55, [])
 	assert_false(result.get("eligible", false))
 	assert_eq(result.get("reason", ""), "sponsoring_lord_rank_too_low")
@@ -1721,7 +1721,7 @@ func _make_ctx_for_induction(sponsor_id: int, ronin_id: int) -> NPCDataStructure
 
 func test_executor_induction_sponsoring_lord_rank_too_low():
 	var local_lord := _make_lord_with_family(200, "Crane", "Doji")
-	local_lord.lord_rank = Enums.LordRank.LOCAL_DAIMYO
+	local_lord.lord_rank = Enums.LordRank.CITY_DAIMYO
 	local_lord.koku = 20.0
 	var ronin := _make_inducted_ronin(10)
 	var chars: Dictionary = {200: local_lord, 10: ronin}
