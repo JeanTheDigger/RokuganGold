@@ -1717,6 +1717,8 @@ func test_bodyguard_fight_first_wound_penalty_on_initiative() -> void:
 		var healthy: L5RCharacterData = L5RCharacterData.new()
 		healthy.character_id = 80
 		healthy.reflexes = 4
+		healthy.stamina = 3
+		healthy.willpower = 3
 		healthy.skills = {"Stealth": 5, "Kenjutsu": 4}
 		var guard1: L5RCharacterData = L5RCharacterData.new()
 		guard1.character_id = 81
@@ -1731,7 +1733,9 @@ func test_bodyguard_fight_first_wound_penalty_on_initiative() -> void:
 		var wounded: L5RCharacterData = L5RCharacterData.new()
 		wounded.character_id = 82
 		wounded.reflexes = 4
-		wounded.wounds_taken = 50
+		wounded.stamina = 3
+		wounded.willpower = 3
+		wounded.wounds_taken = 20
 		wounded.skills = {"Stealth": 5, "Kenjutsu": 4}
 		var guard2: L5RCharacterData = L5RCharacterData.new()
 		guard2.character_id = 83
