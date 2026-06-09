@@ -1238,11 +1238,13 @@ func _npc_turn(es: EntityState) -> Array:
 
 	# Detect player via FoV (all alert states).
 	var player_seen: bool = _npc_can_see_player(es)
+	var just_became_suspicious: bool = false
 	if player_seen and es.alert_state != AsciiMapEnvironment.AlertState.FLEEING:
 		if es.alert_state == AsciiMapEnvironment.AlertState.UNAWARE:
 			es.alert_state = AsciiMapEnvironment.AlertState.SUSPICIOUS
 			es.phase_rounds_left = SUSPICIOUS_SEARCH_ROUNDS
 			events.append({"type": "player_noticed", "entity_id": es.entity_id, "unit_type": es.unit_type})
+			just_became_suspicious = true
 		elif es.alert_state == AsciiMapEnvironment.AlertState.SUSPICIOUS:
 			es.alert_state = AsciiMapEnvironment.AlertState.ALERT
 			es.alert_rounds_lost = 0
@@ -1251,6 +1253,11 @@ func _npc_turn(es: EntityState) -> Array:
 		if player != null:
 			es.noise_src_x = player.x
 			es.noise_src_y = player.y
+
+	# Becoming suspicious is this turn's action; the investigation (and any
+	# escalation) begins next turn, not the same turn the contact was noticed.
+	if just_became_suspicious:
+		return events
 
 	# Per-state behavior.
 	match es.alert_state:

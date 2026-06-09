@@ -1279,7 +1279,7 @@ func test_body_discovery_events_returned_in_same_round() -> void:
 	var dead_id: int = -1
 	for e: Dictionary in enemies:
 		if e.get("faction") == "enemy":
-			dead_id = e["id"]
+			dead_id = e["entity_id"]
 			break
 	assert_true(dead_id >= 0, "need an enemy to kill")
 
@@ -1288,12 +1288,14 @@ func test_body_discovery_events_returned_in_same_round() -> void:
 	assert_not_null(dead_es)
 	dead_es.is_alive = false
 	dead_es.character.wounds_taken = 99
+	cc._add_corpse(dead_es.x, dead_es.y)  # register the corpse position for discovery
 
-	# Put the surviving enemy in ALERT and adjacent to the body.
+	# Put the surviving enemy UNAWARE and adjacent to the body — body discovery
+	# only fires for non-ALERT enemies (an alerted enemy needn't discover a corpse).
 	for eid: int in cc._entities.keys():
 		var es: CombatController.EntityState = cc._entities[eid]
 		if es.faction == CombatController.FACTION_ENEMY and es.is_alive:
-			es.alert_state = AsciiMapEnvironment.AlertState.ALERT
+			es.alert_state = AsciiMapEnvironment.AlertState.UNAWARE
 			es.x = dead_es.x + 1
 			es.y = dead_es.y
 			break
@@ -2094,7 +2096,9 @@ func test_npc_open_door_noise_originates_at_door_tile() -> void:
 	# Observer at (12,5) is 7 steps from pursuer (5,5) → outside budget  → NOT reached.
 	# Old code emitted from pursuer → observer not reached. New code emits from door → reached.
 	# Observer perception boosted to 6 to guarantee roll success.
-	var session := _make_session(13, 5, [
+	# Player at (19,5) is 7 tiles from the observer (12,5) — outside FoV radius 6 —
+	# so the observer detects via the door NOISE only, not visual contact.
+	var session := _make_session(19, 5, [
 		{"unit_type": "SIMPLE_BANDIT", "x": 5,  "y": 5, "seed": 0},
 		{"unit_type": "SIMPLE_BANDIT", "x": 12, "y": 5, "seed": 1},
 	])
