@@ -4485,6 +4485,28 @@ template generators it depends on. Faithful summary of the fixes that landed:
   highest-affordable-ML spell choice. 14 tests (`test_maho_spell_library.gd` 6,
   `test_maho_seasonal_cast.gd` 8). NOTE: the s43 "cast roll TN" gap in Section D
   is moot — GDD s43 confirms maho has no casting roll.
+- **Spreading the Darkness — first wired Grand-Map spell effect (s43, owner-authorized
+  2026-06-09).** The first maho spell whose *effect* resolves at world-sim scale
+  (the rest remain s40-deferred). When a cell holds a dangerously Tainted member
+  (Taint Rank ≥ 2 — the Channel-3 detection onset, Decision #5), it casts Spreading
+  the Darkness instead of its highest-ML spell, if the caster's Earth supports ML2
+  (`MahoSpellLibrary.can_support_spell`). `_resolve_spreading_the_darkness` moves up
+  to (caster Earth + Insight Rank) Taint off the most-Tainted cult member, never
+  below 1.0 (GDD "cannot remove the last Point"). Two modes (owner decision (c) =
+  both): **PUSH** onto a co-located unwilling named NPC when one is present —
+  preferring an active investigator (`UPHOLD_LAW`/`INVESTIGATE_THREAT` — frame the
+  hunter, who then reads as Tainted to Channel 3), else the highest-Status non-cultist
+  (corrupt a leader) — gated by a contested Willpower roll vs the caster (recipient
+  wins → spell fails); else **DUMP** into a nameless untracked victim (the source's
+  Taint simply drops). A pushed recipient's raised Taint is caught by the daily
+  `_process_taint_rank_changes` pass (mutations / Lost) and feeds Channel-3 detection.
+  `_pick_taint_shed_source`, `_pick_darkness_push_target`, `_is_active_investigator`,
+  `_darkness_higher_status` added. `objectives_map` threaded into
+  `_process_seasonal_maho_casts` (trailing optional param). 10 tests added
+  (`test_maho_seasonal_cast.gd` 8→18). LIMITATION: the cast's *blood cost* still
+  self-bleeds the caster (existing committed model) — switching the blood source to
+  a nameless victim (which lifts the survivability ML cap) is a separate global maho
+  change, not done here.
 - **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
   feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
   the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO

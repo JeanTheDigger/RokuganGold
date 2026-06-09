@@ -82,6 +82,23 @@ static func get_spell(spell_id: String) -> Dictionary:
 	return s
 
 
+## True if `caster` can cast a specific spell right now: their Ring supports the
+## spell's Mastery Level (ring value ≥ ML) and they survive the self-blood cost
+## (2×ML wounds). Used to test one named spell — e.g. the seasonal preference for
+## Spreading the Darkness — rather than the highest-ML auto-selection.
+static func can_support_spell(caster: L5RCharacterData, spell_id: String) -> bool:
+	if caster == null:
+		return false
+	var s: Dictionary = get_spell(spell_id)
+	if s.is_empty():
+		return false
+	var ml: int = int(s["mastery_level"])
+	var remaining: int = CharacterStats.get_total_wound_capacity(caster) - caster.wounds_taken
+	if 2 * ml > remaining:
+		return false
+	return SpellSystem.get_ring_value(caster, int(s["ring"])) >= ml
+
+
 ## All spell ids at a given Mastery Level, in a stable (sorted) order.
 static func spell_ids_by_ml(mastery_level: int) -> Array:
 	var ids: Array = []

@@ -1369,7 +1369,7 @@ static func advance_day(
 		# leaving blood evidence + a MAHO crime record for the detection pipeline.
 		var _maho_cast_results: Array = _process_seasonal_maho_casts(
 			bloodspeaker_cells, provinces, characters, _si_spm,
-			crime_records, next_case_id, dice_engine, ic_day,
+			crime_records, next_case_id, dice_engine, ic_day, objectives_map,
 		)
 		TheaterSystem.process_degradation(theater_pieces, ic_day)
 		_process_doshin_seasonal_recovery(world_states)
@@ -11080,6 +11080,7 @@ static func _process_seasonal_maho_casts(
 	next_case_id: Array,
 	dice_engine: DiceEngine,
 	ic_day: int,
+	objectives_map: Dictionary = {},
 ) -> Array:
 	var casts: Array = []
 	if cells.is_empty():
@@ -11110,7 +11111,19 @@ static func _process_seasonal_maho_casts(
 		var province: Variant = provinces.get(cell.province_id, null)
 		if not province is ProvinceData:
 			continue
-		var spell: Dictionary = MahoSpellLibrary.pick_cast_spell(caster)
+
+		# s43 Spreading the Darkness preference (owner-authorized 2026-06-09): when
+		# a cult member is dangerously Tainted (Rank ≥ 2 — the Channel-3 detection
+		# onset, CLAUDE.md Decision 5), the cell sheds Taint by casting Spreading
+		# the Darkness instead of its highest-ML spell, IF the caster's Earth
+		# supports it. Otherwise it casts its strongest survivable spell as usual.
+		var darkness_source: L5RCharacterData = _pick_taint_shed_source(pool)
+		var spell: Dictionary
+		if darkness_source != null \
+				and MahoSpellLibrary.can_support_spell(caster, "spreading_the_darkness"):
+			spell = MahoSpellLibrary.get_spell("spreading_the_darkness")
+		else:
+			spell = MahoSpellLibrary.pick_cast_spell(caster)
 		if spell.is_empty():
 			continue
 
@@ -11123,6 +11136,12 @@ static func _process_seasonal_maho_casts(
 		if rec is CrimeRecord:
 			crime_records.append(rec)
 
+		# Resolve the Taint-transfer effect when the cell chose Spreading the Darkness.
+		var transfer: Dictionary = {}
+		if spell.get("spell_id", "") == "spreading_the_darkness" and darkness_source != null:
+			transfer = _resolve_spreading_the_darkness(
+				caster, darkness_source, pool, objectives_map, dice_engine)
+
 		casts.append({
 			"caster_id": caster.character_id,
 			"province_id": cell.province_id,
@@ -11130,6 +11149,7 @@ static func _process_seasonal_maho_casts(
 			"mastery_level": int(spell["mastery_level"]),
 			"ptl_delta": cast_result.get("ptl_delta", 0.0),
 			"taint_gained": cast_result.get("taint_gained", 0),
+			"transfer": transfer,
 		})
 
 	return casts
@@ -11155,6 +11175,119 @@ static func _select_or_corrupt_maho_caster(pool: Array) -> L5RCharacterData:
 		best.cult_affiliation = true
 		return best
 	return null
+
+
+## Most-Tainted living cult member in the pool at Taint Rank ≥ 2 (the Channel-3
+## detection onset, CLAUDE.md Decision 5 — the point a member becomes a liability),
+## or null if none. Such a member is what makes a cell reach for Spreading the
+## Darkness this season. Rank ≥ 2 guarantees taint ≥ 2.0, so something is always
+## transferable above the 1.0 floor. Deterministic tiebreak by character_id.
+static func _pick_taint_shed_source(pool: Array) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for c: L5RCharacterData in pool:
+		if not c.cult_affiliation:
+			continue
+		if MutationSystem.get_taint_rank(c.taint) < 2:
+			continue
+		if best == null or c.taint > best.taint \
+				or (c.taint == best.taint and c.character_id < best.character_id):
+			best = c
+	return best
+
+
+## Resolves the Spreading the Darkness transfer (s43, owner-authorized 2026-06-09).
+## Amount = caster's Earth + Insight Rank (GDD), never dropping the source below
+## 1.0 Taint (GDD "cannot remove the last Point"). The cell PUSHES the Taint onto a
+## co-located unwilling named NPC when one is present — preferring an active
+## investigator (UPHOLD_LAW / INVESTIGATE_THREAT — frame the hunter), else the
+## highest-Status non-cultist (corrupt a leader) — resolved by a contested
+## Willpower roll vs the caster (GDD: recipient wins → spell fails). Otherwise it
+## DUMPS into a nameless, untracked victim (the source's Taint simply drops). A
+## pushed recipient's raised Taint is caught by the daily rank-up pass
+## (mutations / Lost) and feeds Channel-3 detection.
+static func _resolve_spreading_the_darkness(
+	caster: L5RCharacterData,
+	source: L5RCharacterData,
+	pool: Array,
+	objectives_map: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var cap: float = float(
+		SpellSystem.get_ring_value(caster, Enums.Ring.EARTH) + caster.insight_rank)
+	var transferable: float = minf(cap, source.taint - 1.0)
+	if transferable <= 0.0:
+		return {"resolved": false}
+
+	var target: L5RCharacterData = _pick_darkness_push_target(
+		caster, source, pool, objectives_map)
+	if target == null:
+		# DUMP into a nameless victim — the source's Taint simply drops.
+		source.taint = maxf(1.0, source.taint - transferable)
+		return {"resolved": true, "mode": "dump", "amount": transferable,
+			"source_id": source.character_id}
+
+	# PUSH onto an unwilling named NPC — contested Willpower vs the caster.
+	var c_pen: int = CharacterStats.get_wound_penalty(caster)
+	var t_pen: int = CharacterStats.get_wound_penalty(target)
+	var caster_roll: int = dice_engine.roll_check(
+		caster.willpower, caster.willpower, 0, 0, c_pen, true)["total"]
+	var target_roll: int = dice_engine.roll_check(
+		target.willpower, target.willpower, 0, 0, t_pen, true)["total"]
+	if target_roll > caster_roll:
+		# Recipient resists — the spell fails (no transfer); the source keeps it.
+		return {"resolved": true, "mode": "push_resisted", "amount": 0.0,
+			"source_id": source.character_id, "target_id": target.character_id}
+	source.taint = maxf(1.0, source.taint - transferable)
+	target.taint += transferable
+	return {"resolved": true, "mode": "push", "amount": transferable,
+		"source_id": source.character_id, "target_id": target.character_id}
+
+
+## Selects the Spreading the Darkness push target: a co-located living, non-PC,
+## non-cultist NPC (never the caster or source). Prefers an active investigator
+## threatening the cell (standing/primary need_type UPHOLD_LAW or
+## INVESTIGATE_THREAT — frame the hunter), highest Status first; otherwise the
+## highest-Status non-cultist (corrupt a leader). Null if the province holds no
+## valid named target (the cast then dumps into a nameless victim).
+static func _pick_darkness_push_target(
+	caster: L5RCharacterData,
+	source: L5RCharacterData,
+	pool: Array,
+	objectives_map: Dictionary,
+) -> L5RCharacterData:
+	var best_investigator: L5RCharacterData = null
+	var best_other: L5RCharacterData = null
+	for c: L5RCharacterData in pool:
+		if c.character_id == caster.character_id or c.character_id == source.character_id:
+			continue
+		if c.is_pc or c.cult_affiliation:
+			continue
+		if _is_active_investigator(c, objectives_map):
+			if best_investigator == null or _darkness_higher_status(c, best_investigator):
+				best_investigator = c
+		elif best_other == null or _darkness_higher_status(c, best_other):
+			best_other = c
+	if best_investigator != null:
+		return best_investigator
+	return best_other
+
+
+## True if the character holds an active UPHOLD_LAW or INVESTIGATE_THREAT objective
+## (primary or standing) — the local law/investigation the cell wants to discredit.
+static func _is_active_investigator(c: L5RCharacterData, objectives_map: Dictionary) -> bool:
+	var obj: Dictionary = objectives_map.get(c.character_id, {})
+	for slot: String in ["primary", "standing"]:
+		var nt: String = (obj.get(slot, {}) as Dictionary).get("need_type", "")
+		if nt == "UPHOLD_LAW" or nt == "INVESTIGATE_THREAT":
+			return true
+	return false
+
+
+## Higher Status wins; ties broken by lower character_id (deterministic).
+static func _darkness_higher_status(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+	if a.status != b.status:
+		return a.status > b.status
+	return a.character_id < b.character_id
 
 
 static func _detect_maho_provinces(

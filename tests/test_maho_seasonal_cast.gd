@@ -136,3 +136,109 @@ func test_cast_then_province_investigation_discovers_blood_evidence() -> void:
 		if t.slug == "blood_evidence_%d" % crime_records[0].case_id:
 			found = true
 	assert_true(found, "co-located magistrate's province investigation discovers the blood evidence")
+
+
+# -- Spreading the Darkness transfer (s43, owner-authorized 2026-06-09) --------
+
+func _cultist(id: int, loc: String, taint: float) -> L5RCharacterData:
+	var c := _char(id, loc, taint)
+	c.cult_affiliation = true
+	return c
+
+
+func test_shed_source_requires_rank2_cult_member() -> void:
+	var low := _cultist(1, "100", 1.5)   # Rank 1 cult member
+	var ok := _cultist(2, "100", 2.0)    # Rank 2 cult member
+	var clean := _char(3, "100", 4.0)    # heavily tainted but not cult
+	assert_null(DayOrchestrator._pick_taint_shed_source([low, clean]),
+		"no Rank-2 cult member → no shed source (non-cult taint ignored)")
+	var src := DayOrchestrator._pick_taint_shed_source([low, ok, clean])
+	assert_eq(src.character_id, 2, "Rank-2 cult member selected")
+
+
+func test_shed_source_picks_most_tainted() -> void:
+	var a := _cultist(1, "100", 2.0)
+	var b := _cultist(2, "100", 4.0)
+	assert_eq(DayOrchestrator._pick_taint_shed_source([a, b]).character_id, 2)
+
+
+func test_dump_when_no_named_target() -> void:
+	var src := _cultist(1, "100", 3.0)
+	var res := DayOrchestrator._resolve_spreading_the_darkness(
+		src, src, [src], {}, DiceEngine.new(7))
+	assert_eq(res["mode"], "dump", "no co-located named target → dump into a victim")
+	# cap = Earth(3) + Insight(1) = 4; transferable = min(4, 3.0-1.0) = 2.0
+	assert_almost_eq(src.taint, 1.0, 0.001, "dump drops the source to the 1.0 floor")
+
+
+func test_dump_respects_floor_partial() -> void:
+	var src := _cultist(1, "100", 1.4)
+	var res := DayOrchestrator._resolve_spreading_the_darkness(
+		src, src, [src], {}, DiceEngine.new(7))
+	assert_eq(res["mode"], "dump")
+	assert_almost_eq(src.taint, 1.0, 0.001, "only 0.4 transferable above the floor")
+
+
+func test_no_transfer_at_floor() -> void:
+	var src := _cultist(1, "100", 1.0)
+	var res := DayOrchestrator._resolve_spreading_the_darkness(
+		src, src, [src], {}, DiceEngine.new(7))
+	assert_false(res["resolved"], "nothing transferable at the 1.0 floor")
+	assert_almost_eq(src.taint, 1.0, 0.001)
+
+
+func test_push_onto_non_cultist_succeeds() -> void:
+	var caster := _cultist(1, "100", 3.0); caster.willpower = 10
+	var victim := _char(2, "100", 0.0); victim.willpower = 1
+	var res := DayOrchestrator._resolve_spreading_the_darkness(
+		caster, caster, [caster, victim], {}, DiceEngine.new(7))
+	assert_eq(res["mode"], "push", "valid named target present → push")
+	assert_eq(res["target_id"], 2)
+	assert_gt(victim.taint, 0.0, "named target receives the pushed Taint")
+	assert_almost_eq(caster.taint, 1.0, 0.001, "source drops to the floor")
+
+
+func test_push_resisted_when_target_wins() -> void:
+	var caster := _cultist(1, "100", 3.0); caster.willpower = 1
+	var victim := _char(2, "100", 0.0); victim.willpower = 10
+	var res := DayOrchestrator._resolve_spreading_the_darkness(
+		caster, caster, [caster, victim], {}, DiceEngine.new(7))
+	assert_eq(res["mode"], "push_resisted", "recipient wins the contested Willpower roll")
+	assert_almost_eq(victim.taint, 0.0, 0.001, "resisted: no Taint pushed")
+	assert_almost_eq(caster.taint, 3.0, 0.001, "resisted: source keeps its Taint")
+
+
+func test_push_prefers_investigator_over_higher_status_leader() -> void:
+	var caster := _cultist(1, "100", 3.0); caster.willpower = 10
+	var lawman := _char(2, "100", 0.0); lawman.willpower = 1; lawman.status = 2.0
+	var lord := _char(3, "100", 0.0); lord.willpower = 1; lord.status = 8.0
+	var omap := {2: {"standing": {"need_type": "UPHOLD_LAW"}}}
+	var res := DayOrchestrator._resolve_spreading_the_darkness(
+		caster, caster, [caster, lawman, lord], omap, DiceEngine.new(7))
+	assert_eq(res["mode"], "push")
+	assert_eq(res["target_id"], 2,
+		"frame the investigator even though the lord has higher Status")
+
+
+func test_push_excludes_pc_and_cultists() -> void:
+	var caster := _cultist(1, "100", 3.0); caster.willpower = 10
+	var pc := _char(2, "100", 0.0, true)
+	var ally := _cultist(3, "100", 0.0)
+	var res := DayOrchestrator._resolve_spreading_the_darkness(
+		caster, caster, [caster, pc, ally], {}, DiceEngine.new(7))
+	assert_eq(res["mode"], "dump", "PCs and cultists are never push targets → dump")
+
+
+func test_seasonal_pass_casts_spreading_and_pushes() -> void:
+	var caster := _char(1, "100", 2.0); caster.willpower = 10  # Rank 2, Earth supports ML2
+	var victim := _char(2, "100", 0.0); victim.willpower = 1
+	var prov := _prov(5)
+	var crime_records: Array = []
+	var casts := DayOrchestrator._process_seasonal_maho_casts(
+		[_cell(5, Enums.BloodspeakerCellState.ACTIVE)], {5: prov}, [caster, victim],
+		{100: 5}, crime_records, [1], DiceEngine.new(7), 10, {})
+	assert_eq(casts.size(), 1)
+	assert_eq(casts[0]["spell_id"], "spreading_the_darkness",
+		"dangerously-tainted member → cell casts Spreading the Darkness")
+	assert_eq(casts[0]["transfer"]["mode"], "push")
+	assert_gt(victim.taint, 0.0, "co-located non-cultist receives the pushed Taint")
