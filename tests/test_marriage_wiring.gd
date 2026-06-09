@@ -451,6 +451,11 @@ func test_cross_clan_marriage_applies_baseline_boosts() -> void:
 
 	var key_clan: String = CollectiveDisposition.make_pair_key("Crane", "Lion")
 	var before_clan: int = int(clan_bl.get(key_clan, 0))
+	# s22.7: marriages add to the decaying marriage_*_boosts layer, NOT the
+	# permanent baselines. Capture the clan boost dict.
+	var marriage_clan_boosts: Dictionary = {}
+	var marriage_family_boosts: Dictionary = {}
+	var before_boost: int = int(marriage_clan_boosts.get(key_clan, 0))
 
 	var effects: Dictionary = {
 		"requires_marriage": true,
@@ -462,11 +467,15 @@ func test_cross_clan_marriage_applies_baseline_boosts() -> void:
 	}
 	DayOrchestrator._apply_marriage(
 		effects, chars_by_id, marriages, 100,
-		clan_bl, family_bl,
+		clan_bl, family_bl, [], [], [1000],
+		marriage_clan_boosts, marriage_family_boosts,
 	)
 
-	var after_clan: int = int(clan_bl.get(key_clan, 0))
-	assert_true(after_clan > before_clan, "Clan baseline should increase after cross-clan marriage")
+	# Permanent baseline must NOT change; the decaying clan boost must.
+	assert_eq(int(clan_bl.get(key_clan, 0)), before_clan,
+		"Permanent clan baseline unchanged (s22.7 uses the decaying layer)")
+	var after_boost: int = int(marriage_clan_boosts.get(key_clan, 0))
+	assert_true(after_boost > before_boost, "Clan marriage boost should increase after cross-clan marriage")
 
 
 func test_within_family_marriage_no_baseline_change() -> void:
