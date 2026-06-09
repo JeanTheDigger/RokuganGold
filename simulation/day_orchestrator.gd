@@ -6450,19 +6450,18 @@ static func _process_training_acceptance_writebacks(
 		var teacher_initiated: bool = event_data.get("teacher_initiated", false)
 		var learn_piece_id: int = event_data.get("learn_piece_id", -1)
 		if teacher_initiated and learn_piece_id >= 0:
-			if not objectives_map.is_empty():
-				if student_id not in objectives_map:
-					objectives_map[student_id] = {}
-				var existing_primary: Dictionary = objectives_map[student_id].get("primary", {})
-				if existing_primary.get("need_type", "") != "ARTISTIC_EXPRESSION":
-					objectives_map[student_id]["primary"] = {
-						"need_type": "ARTISTIC_EXPRESSION",
-						"objective_type": "LEARN_THEATER_PIECE",
-						"target_npc_id": sensei_id,
-						"learn_piece_id": learn_piece_id,
-						"source": "teaching_offer_letter",
-						"priority": 3,
-					}
+			if student_id not in objectives_map:
+				objectives_map[student_id] = {}
+			var existing_primary: Dictionary = objectives_map[student_id].get("primary", {})
+			if existing_primary.get("need_type", "") != "ARTISTIC_EXPRESSION":
+				objectives_map[student_id]["primary"] = {
+					"need_type": "ARTISTIC_EXPRESSION",
+					"objective_type": "LEARN_THEATER_PIECE",
+					"target_npc_id": sensei_id,
+					"learn_piece_id": learn_piece_id,
+					"source": "teaching_offer_letter",
+					"priority": 3,
+				}
 			continue
 		NPCAdvancement.resolve_training_session(sensei, student, skill_name)
 		if student.action_points_current > 0:
@@ -23677,8 +23676,7 @@ static func _inject_poem_context(
 			continue
 		if not ws.has("known_objectives"):
 			ws["known_objectives"] = {}
-		ws["known_objectives"]["available_poem_item_id"] = -1
-		ws["known_objectives"]["available_poem_raises"] = 0
+		# Only inject the keys when a poetry scroll is actually available (no key = no poem).
 		for item: Variant in character.items:
 			if item is Dictionary and \
 					(item as Dictionary).get("item_type", "") == "poetry_scroll":
