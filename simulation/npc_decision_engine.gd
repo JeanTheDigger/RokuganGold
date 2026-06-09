@@ -3496,7 +3496,8 @@ static func _populate_action_metadata(
 		# Pick best shide from inventory (highest quality_tier).
 		var best_shide_id: int = -1
 		var best_tier: int = -1
-		for it: Dictionary in character.items:
+		var shide_items: Array = character.items if character != null else []
+		for it: Dictionary in shide_items:
 			if it.get("item_type", "") == "shide" and it.get("uses_remaining", 0) > 0:
 				var t: int = it.get("quality_tier", 0)
 				if t > best_tier:

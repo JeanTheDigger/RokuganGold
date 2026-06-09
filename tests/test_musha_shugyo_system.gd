@@ -729,7 +729,7 @@ func _make_perf_ctx(season: int) -> NPCDataStructures.ContextSnapshot:
 	ctx.season = season
 	ctx.skill_ranks = {}
 	ctx.disposition_values = {}
-	ctx.topic_pool = []
+	ctx.known_topics = []
 	ctx.province_statuses = []
 	ctx.known_objectives = {}
 	ctx.famine_crisis_province_ids = []
