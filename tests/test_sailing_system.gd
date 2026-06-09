@@ -48,7 +48,11 @@ func test_acting_captain_picks_highest_sailing() -> void:
 
 
 func test_acting_captain_tiebreak_insight() -> void:
-	var a := _char(20, 2); a.intelligence = 5; a.void_ring = 5  # higher insight
+	# Tiebreak is on Insight RANK; push a's rings high enough to outrank b.
+	var a := _char(20, 2)
+	a.intelligence = 5; a.agility = 5  # Fire 5
+	a.stamina = 5; a.willpower = 5      # Earth 5
+	a.void_ring = 5
 	var b := _char(21, 2)
 	assert_eq(SailingSystem.select_acting_captain([b, a]), 20,
 		"ties on Sailing broken by Insight")
