@@ -10858,9 +10858,10 @@ static func _process_insurgencies(
 			ws["is_patrolled"] = true
 		per_province_ws[pid] = ws
 
+	var next_ins_id: int = next_insurgency_id[0] if not next_insurgency_id.is_empty() else 1
 	var result: Dictionary = InsurgencySystem.process_season(
 		insurgencies, provinces, ptls, dice_engine, current_season,
-		next_insurgency_id[0], per_province_ws, worship_maluses,
+		next_ins_id, per_province_ws, worship_maluses,
 	)
 
 	for new_ins: InsurgencyData in result.get("new_insurgencies", []):
@@ -10874,7 +10875,10 @@ static func _process_insurgencies(
 				ipd.crisis_type = "insurgency"
 				next_crisis_id[0] += 1
 
-	next_insurgency_id[0] = result.get("next_id", next_insurgency_id[0])
+	if next_insurgency_id.is_empty():
+		next_insurgency_id.append(result.get("next_id", next_ins_id))
+	else:
+		next_insurgency_id[0] = result.get("next_id", next_ins_id)
 
 	for ins: InsurgencyData in insurgencies:
 		if patrolled.has(ins.province_id) and not ins.detected:
