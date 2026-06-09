@@ -494,9 +494,12 @@ func test_clan_champions_have_role_position() -> void:
 		var champ_id: int = champions[clan]
 		for c: L5RCharacterData in result["characters"]:
 			if c.character_id == champ_id:
-				assert_eq(
-					c.role_position, RoleRegistry.CLAN_CHAMPION,
-					"%s clan champion should have role_position 'Clan Champion'" % clan,
+				# clan_champions includes minor clans, whose champions hold the
+				# "Minor Clan Champion" role rather than "Clan Champion".
+				assert_true(
+					c.role_position == RoleRegistry.CLAN_CHAMPION
+						or c.role_position == RoleRegistry.MINOR_CLAN_CHAMPION,
+					"%s champion should have a champion role_position, got '%s'" % [clan, c.role_position],
 				)
 				break
 
@@ -718,11 +721,15 @@ func test_greater_zones_non_empty() -> void:
 	assert_gt(gzs.size(), 0, "At least one GreaterZoneData should be generated")
 
 
-func test_nav_zones_outnumber_greater_zones() -> void:
+func test_nav_zones_present_but_not_per_settlement() -> void:
+	# Villages skip the Navigation tier (headman interior zones parent directly to
+	# the Greater Zone — GDD s57.36). Only castle-tier settlements get nav zones, so
+	# nav zones exist but do NOT outnumber greater zones (one per settlement).
 	var result: Dictionary = _cached
 	var gzs: Array = result.get("greater_zones", [])
 	var navs: Array = result.get("navigation_zones", [])
-	assert_gt(navs.size(), gzs.size(), "Each settlement has multiple nav zones")
+	assert_gt(navs.size(), 0, "Castle-tier settlements should produce nav zones")
+	assert_true(navs.size() <= gzs.size(), "Nav zones are a subset of settlements")
 
 
 func test_lesser_zones_outnumber_nav_zones() -> void:

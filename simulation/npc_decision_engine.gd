@@ -5410,7 +5410,9 @@ static func _build_induction_metadata(
 	var sponsor: L5RCharacterData = chars_by_id.get(ctx.character_id) as L5RCharacterData
 	if sponsor == null:
 		return {"target_ronin_id": -1}
-	if sponsor.lord_rank < Enums.LordRank.PROVINCIAL_DAIMYO:
+	# Sponsor is the context character; lord rank lives on the context, not on
+	# L5RCharacterData (which has no lord_rank property).
+	if ctx.lord_rank < Enums.LordRank.PROVINCIAL_DAIMYO:
 		return {"target_ronin_id": -1}
 	var best_id: int = -1
 	var best_deeds: int = -1
