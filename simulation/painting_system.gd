@@ -227,7 +227,7 @@ static func declare_composition(
 	p.subject_description = subject_description
 	p.framing = framing
 	p.season_affinity = season_affinity
-	p.target_topic_ids = target_topic_ids
+	p.target_topic_ids.assign(target_topic_ids)
 	p.craft_progress = 0
 	p.ic_day_last_composition_ap = ic_day
 	p.is_original = copy_of_id < 0

@@ -83,7 +83,8 @@ func _make_character(char_id: int = 20) -> L5RCharacterData:
 	c.met_characters = []
 	# wounds_taken = 0 => alive
 	c.wounds_taken = 0
-	c.earth = 2
+	c.stamina = 2
+	c.willpower = 2  # Earth ring = min(stamina, willpower) = 2
 	return c
 
 
@@ -484,10 +485,10 @@ func test_seasonal_rotation_needed_when_affinity_mismatches() -> void:
 	var summer_kakemono: PaintingData = _make_kakemono(5, 2, 10)
 	summer_kakemono.season_affinity = 1  # Summer
 	s.wall_art_slot = 5
-	var paintings: Dictionary = {5: summer_kakemono}
 	var spring_replacement: PaintingData = _make_kakemono(6, 2, 10)
 	spring_replacement.season_affinity = 0  # Spring
 	spring_replacement.display_settlement_id = -1
+	var paintings: Dictionary = {5: summer_kakemono, 6: spring_replacement}
 	var r: Dictionary = PaintingSystem.evaluate_seasonal_rotation(
 		s, paintings, [6], 0  # current season = Spring
 	)
