@@ -1364,6 +1364,13 @@ static func advance_day(
 			characters, characters_by_id, _si_spm,
 			active_topics, next_topic_id, ic_day, next_crisis_id,
 		)
+		# Seasonal maho casts (s43, owner-authorized 2026-06-09): active/propagating
+		# Bloodspeaker cells cast through a cult-affiliated member, raising PTL and
+		# leaving blood evidence + a MAHO crime record for the detection pipeline.
+		var _maho_cast_results: Array = _process_seasonal_maho_casts(
+			bloodspeaker_cells, provinces, characters, _si_spm,
+			crime_records, next_case_id, dice_engine, ic_day,
+		)
 		TheaterSystem.process_degradation(theater_pieces, ic_day)
 		_process_doshin_seasonal_recovery(world_states)
 		_tick_kuni_wards(season_meta)
@@ -11050,6 +11057,101 @@ static func _process_bloodspeaker_network(
 			active_topics.append(topic)
 
 	return result
+
+
+## Seasonal maho cast pass (s43, owner-authorized design 2026-06-09).
+## Each ACTIVE/PROPAGATING Bloodspeaker cell casts one maho spell through a
+## cult-affiliated member co-located in its province. If the cell has no
+## affiliated member, it corrupts the most-Tainted living non-PC there (sets
+## cult_affiliation=true); if nobody is Tainted, the cell casts nothing this
+## season. The caster self-bleeds (GDD: "the caster ... must spill blood"),
+## casting the highest survivable Mastery Level its Ring supports. Applies only
+## the cost/consequence side (blood, Taint, PTL, crime, blood evidence) — spell
+## effects are deferred to s40. Feeds detection Channels 1–3.
+static func _process_seasonal_maho_casts(
+	cells: Array,
+	provinces: Dictionary,
+	characters: Array,
+	settlement_province_map: Dictionary,
+	crime_records: Array,
+	next_case_id: Array,
+	dice_engine: DiceEngine,
+	ic_day: int,
+) -> Array:
+	var casts: Array = []
+	if cells.is_empty():
+		return casts
+
+	# Bucket living characters by province once.
+	var chars_by_province: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		var pid: int = BloodspeakerNetworkSystem._get_character_province(c, settlement_province_map)
+		if pid < 0:
+			continue
+		if not chars_by_province.has(pid):
+			chars_by_province[pid] = []
+		chars_by_province[pid].append(c)
+
+	for cell: BloodspeakerCellData in cells:
+		if cell.state != Enums.BloodspeakerCellState.ACTIVE \
+				and cell.state != Enums.BloodspeakerCellState.PROPAGATING:
+			continue
+		var pool: Array = chars_by_province.get(cell.province_id, [])
+		if pool.is_empty():
+			continue
+		var caster: L5RCharacterData = _select_or_corrupt_maho_caster(pool)
+		if caster == null:
+			continue
+		var province: Variant = provinces.get(cell.province_id, null)
+		if not province is ProvinceData:
+			continue
+		var spell: Dictionary = MahoSpellLibrary.pick_cast_spell(caster)
+		if spell.is_empty():
+			continue
+
+		var cast_result: Dictionary = MahoSystem.resolve_cast(
+			caster, caster, province as ProvinceData,
+			int(spell["mastery_level"]), 0, dice_engine,
+			next_case_id[0], ic_day, caster.physical_location, [])
+		next_case_id[0] += 1
+		var rec: Variant = cast_result.get("crime_record", null)
+		if rec is CrimeRecord:
+			crime_records.append(rec)
+
+		casts.append({
+			"caster_id": caster.character_id,
+			"province_id": cell.province_id,
+			"spell_id": spell.get("spell_id", ""),
+			"mastery_level": int(spell["mastery_level"]),
+			"ptl_delta": cast_result.get("ptl_delta", 0.0),
+			"taint_gained": cast_result.get("taint_gained", 0),
+		})
+
+	return casts
+
+
+## Returns the cult caster for a province pool: an existing living cult-affiliated
+## member if present, otherwise the most-Tainted living non-PC (taint > 0), which
+## the cell corrupts (sets cult_affiliation=true). PCs are never auto-corrupted
+## (s60: cult allegiance is a player choice). Returns null if no caster exists.
+static func _select_or_corrupt_maho_caster(pool: Array) -> L5RCharacterData:
+	for c: L5RCharacterData in pool:
+		if c.cult_affiliation:
+			return c
+	var best: L5RCharacterData = null
+	var best_taint: float = 0.0
+	for c: L5RCharacterData in pool:
+		if c.is_pc:
+			continue
+		if c.taint > best_taint:
+			best_taint = c.taint
+			best = c
+	if best != null and best_taint > 0.0:
+		best.cult_affiliation = true
+		return best
+	return null
 
 
 static func _detect_maho_provinces(

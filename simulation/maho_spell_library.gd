@@ -1,0 +1,122 @@
+class_name MahoSpellLibrary
+## Maho (blood magic) spell catalogue, transcribed from GDD s43.
+##
+## Data only: each entry records the spell's Mastery Level, primary Ring, and a
+## one-line effect summary (the full text lives in s43). The mechanically-relevant
+## fields are mastery_level (drives blood cost = 2×ML and Taint = ML−1) and ring.
+## Spell *effects* are almost entirely s40/undead/oni combat mechanics and are NOT
+## applied yet (owner-authorized scope 2026-06-09: cost/PTL/crime/evidence only).
+##
+## `pick_cast_spell()` is the selector used by the seasonal Bloodspeaker cast pass:
+## the caster takes the highest-Mastery-Level spell whose Ring they can support
+## (ring value ≥ ML) and whose self-blood cost (2×ML wounds) they can survive.
+
+const _A: int = Enums.Ring.AIR
+const _E: int = Enums.Ring.EARTH
+const _F: int = Enums.Ring.FIRE
+const _W: int = Enums.Ring.WATER
+
+## spell_id → {name, mastery_level, ring, effect}
+const MAHO_LIBRARY: Dictionary = {
+	# -- Mastery Level 1 --
+	"bleeding":               {"name": "Bleeding",               "mastery_level": 1, "ring": _F, "effect": "1 Wound/round until bandaged (TN 20) or healed"},
+	"blood_rite":             {"name": "Blood Rite",             "mastery_level": 1, "ring": _E, "effect": "heal 1k1 + one physical Trait +1 Rank; target gains 1k1 Taint"},
+	"blood_and_darkness":     {"name": "Blood and Darkness",     "mastery_level": 1, "ring": _A, "effect": "30' radius blindness, caster excepted"},
+	"disrupt_the_limb":       {"name": "Disrupt the Limb",       "mastery_level": 1, "ring": _W, "effect": "+15 TN to one limb's actions; Lame if a leg"},
+	"heart_of_the_damned":    {"name": "Heart of the Damned",    "mastery_level": 1, "ring": _E, "effect": "consume a fresh corpse; heal 2k2 + restore a reduced Ring/Trait"},
+	"inspire_fear":           {"name": "Inspire Fear",           "mastery_level": 1, "ring": _A, "effect": "target gains a 3-Point Phobia for 1 hour"},
+	"legacy_of_the_dark_one": {"name": "Legacy of the Dark One", "mastery_level": 1, "ring": _A, "effect": "drain 1 Void Point, blocked for the duration"},
+	"purge_the_weak":         {"name": "Purge the Weak",         "mastery_level": 1, "ring": _E, "effect": "ruin food/water; eaters fall severely ill (-3k0) for 2 weeks"},
+	"sinful_dreams":          {"name": "Sinful Dreams",          "mastery_level": 1, "ring": _A, "effect": "Free Raise on Temptation/Intimidation vs target for 24h"},
+	"suck_the_marrow":        {"name": "Suck the Marrow",        "mastery_level": 1, "ring": _E, "effect": "target cannot heal naturally/via Medicine for 1 day"},
+	"summon_undead_champion": {"name": "Summon Undead Champion", "mastery_level": 1, "ring": _E, "effect": "animate a corpse as an obedient zombie for 1 hour"},
+	"symbol_of_blood":        {"name": "Symbol of Blood",        "mastery_level": 1, "ring": _W, "effect": "ward: intruders -2k0 to physical Actions in 30'"},
+	"ward_of_divine_peace":   {"name": "Ward of Divine Peace",   "mastery_level": 1, "ring": _A, "effect": "false calm: -1k0 Awareness/Willpower rolls in 50'"},
+	"written_in_blood":       {"name": "Written in Blood",       "mastery_level": 1, "ring": _F, "effect": "hidden conditional blood-message, undetectable until triggered"},
+	# -- Mastery Level 2 --
+	"caress_of_fu_leng":      {"name": "Caress of Fu Leng",      "mastery_level": 2, "ring": _E, "effect": "instantly corrupt/destroy a jade object"},
+	"curse_of_the_clan":      {"name": "Curse of the Clan",      "mastery_level": 2, "ring": _A, "effect": "exaggerate a samurai's clan stereotype for 1 month"},
+	"curse_of_the_kansen":    {"name": "Curse of the Kansen",    "mastery_level": 2, "ring": _A, "effect": "-1k0 social rolls, -2k0 vs Temptation for 8h"},
+	"curse_unblinking_eye":   {"name": "Curse of the Unblinking Eye", "mastery_level": 2, "ring": _A, "effect": "prevent sleep; Fatigue rolls each night"},
+	"curse_of_weakness":      {"name": "Curse of Weakness",      "mastery_level": 2, "ring": _W, "effect": "+10 TN all rolls, -10 Armor TN for 10 rounds"},
+	"dark_wings":             {"name": "Dark Wings",             "mastery_level": 2, "ring": _W, "effect": "grow bat wings; fly with Swift 3 for 10 minutes"},
+	"drain_the_soul":         {"name": "Drain the Soul",         "mastery_level": 2, "ring": _E, "effect": "reduce target's Stamina Rank by 1"},
+	"eternal_unrest":         {"name": "Eternal Unrest",         "mastery_level": 2, "ring": _E, "effect": "prepare corpses for instant later recall (1 month)"},
+	"gift_of_the_maker":      {"name": "Gift of the Maker",      "mastery_level": 2, "ring": _F, "effect": "grant a Greater Shadowlands Power for 1 hour"},
+	"pain":                   {"name": "Pain",                   "mastery_level": 2, "ring": _E, "effect": "target falls Prone, loses next Turn"},
+	"puppet_master":          {"name": "Puppet Master",          "mastery_level": 2, "ring": _F, "effect": "control undead creatures for 4 hours"},
+	"spreading_the_darkness": {"name": "Spreading the Darkness", "mastery_level": 2, "ring": _E, "effect": "transfer Taint Points from one person to another"},
+	# -- Mastery Level 3 --
+	"armor_of_obsidian":      {"name": "Armor of Obsidian",      "mastery_level": 3, "ring": _F, "effect": "kansen shield negates a Jade-keyword spell"},
+	"dancing_with_demons":    {"name": "Dancing with Demons",    "mastery_level": 3, "ring": _A, "effect": "ritual dance: grant Advantage or inflict Disadvantage"},
+	"death_beyond_life":      {"name": "Death Beyond Life",      "mastery_level": 3, "ring": _E, "effect": "if target dies in 24h, raise them at Down + full Taint Rank"},
+	"essence_of_undeath":     {"name": "Essence of Undeath",     "mastery_level": 3, "ring": _E, "effect": "bind a kansen into a corpse as a lasting revenant"},
+	"hates_heart":            {"name": "Hate's Heart",           "mastery_level": 3, "ring": _A, "effect": "force murderous rage on the target for 3 rounds"},
+	"mists_of_fear":          {"name": "Mists of Fear",          "mastery_level": 3, "ring": _A, "effect": "illusion of the target's worst fear (Fear 5)"},
+	"summon_oni":             {"name": "Summon Oni",             "mastery_level": 3, "ring": _E, "effect": "summon an oni from Jigoku, name and contest to control"},
+	"symbol_of_bloodspeaker": {"name": "Symbol of the Bloodspeaker", "mastery_level": 3, "ring": _A, "effect": "ward: 4k3 green flame to non-cult intruders in 50'"},
+	# -- Mastery Level 4 --
+	"burning_blood":          {"name": "Burning Blood",          "mastery_level": 4, "ring": _F, "effect": "boil the blood: DR = Fire Ring, Prone, Fatigued"},
+	"chains_of_jigoku":       {"name": "Chains of Jigoku",       "mastery_level": 4, "ring": _E, "effect": "iron manacles immobilize the target for 10 minutes"},
+	"no_pure_breaths":        {"name": "No Pure Breaths",        "mastery_level": 4, "ring": _A, "effect": "ravage the lungs: DR kept = Air Ring, +10 TN until healed"},
+	"stealing_the_soul":      {"name": "Stealing the Soul",      "mastery_level": 4, "ring": _E, "effect": "drain a Trait Rank from 1 mile via a token"},
+	"tomb_of_earth":          {"name": "Tomb of Earth",          "mastery_level": 4, "ring": _E, "effect": "immobilize + 2k2/round; petrify on kill"},
+	"truth_is_a_scourge":     {"name": "Truth is a Scourge",     "mastery_level": 4, "ring": _A, "effect": "target cannot lie (Willpower TN 30 to conceal)"},
+	# -- Mastery Level 5 --
+	"blood_armor":            {"name": "Blood Armor",            "mastery_level": 5, "ring": _E, "effect": "caster takes 25% damage, target takes 75%"},
+	"fierce_blood_of_earth":  {"name": "Fierce Blood of the Earth", "mastery_level": 5, "ring": _E, "effect": "kill a helpless victim; full heal + regrow + +1 year"},
+	"possession":             {"name": "Possession",             "mastery_level": 5, "ring": _A, "effect": "possess a victim's body for 1 day via name + blood"},
+	"strength_of_darkness":   {"name": "Strength of Darkness",   "mastery_level": 5, "ring": _F, "effect": "+1 Earth and physical Traits; see through impairments"},
+	"touch_of_death":         {"name": "Touch of Death",         "mastery_level": 5, "ring": _E, "effect": "age target 10 years, 7k7 Wounds"},
+	# -- Mastery Level 6 --
+	"take_the_body":          {"name": "Take the Body",          "mastery_level": 6, "ring": _A, "effect": "permanently leap the caster's soul into another body"},
+}
+
+
+## Returns the spell entry (with "spell_id" added) for the given id, or {} if unknown.
+static func get_spell(spell_id: String) -> Dictionary:
+	if not MAHO_LIBRARY.has(spell_id):
+		return {}
+	var s: Dictionary = (MAHO_LIBRARY[spell_id] as Dictionary).duplicate()
+	s["spell_id"] = spell_id
+	return s
+
+
+## All spell ids at a given Mastery Level, in a stable (sorted) order.
+static func spell_ids_by_ml(mastery_level: int) -> Array:
+	var ids: Array = []
+	for sid: String in MAHO_LIBRARY:
+		if int(MAHO_LIBRARY[sid]["mastery_level"]) == mastery_level:
+			ids.append(sid)
+	ids.sort()
+	return ids
+
+
+## Selects the maho spell a cult caster casts on themselves (self-blood model,
+## GDD s43: "the caster ... must spill blood"). Returns the highest-Mastery-Level
+## spell whose Ring the caster supports (ring value ≥ ML) and whose blood cost
+## (2×ML wounds) the caster survives (wounds_taken + 2×ML ≤ total capacity).
+## Among spells at the chosen ML, picks the one in the caster's strongest such
+## Ring, breaking ties by sorted spell_id. Returns {} if the caster can cast none.
+static func pick_cast_spell(caster: L5RCharacterData) -> Dictionary:
+	if caster == null:
+		return {}
+	var capacity: int = CharacterStats.get_total_wound_capacity(caster)
+	var remaining: int = capacity - caster.wounds_taken
+	# Highest ML first.
+	for ml: int in range(6, 0, -1):
+		if 2 * ml > remaining:
+			continue  # would die from the self-blood cost
+		var best_id: String = ""
+		var best_ring_val: int = -1
+		for sid: String in spell_ids_by_ml(ml):
+			var ring: int = int(MAHO_LIBRARY[sid]["ring"])
+			var rv: int = SpellSystem.get_ring_value(caster, ring)
+			if rv < ml:
+				continue  # ring not strong enough to support this ML
+			if rv > best_ring_val:
+				best_ring_val = rv
+				best_id = sid
+		if best_id != "":
+			return get_spell(best_id)
+	return {}

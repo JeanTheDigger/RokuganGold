@@ -4457,6 +4457,35 @@ template generators it depends on. Faithful summary of the fixes that landed:
   the operation executors that move the scalars exist, and wiring it now would add unverifiable
   plumbing for zero behavior.
 
+### Systems Added 2026-06-09 (s43 Maho — library + CAST_MAHO seasonal trigger)
+- **MahoSpellLibrary** (`simulation/maho_spell_library.gd`) — all 46 s43 maho
+  spells transcribed as data (spell_id → name, mastery_level, ring, one-line
+  effect summary). Pure GDD transcription. `pick_cast_spell(caster)` selects the
+  highest Mastery Level whose Ring the caster supports (ring value ≥ ML) and whose
+  self-blood cost (2×ML wounds) the caster survives (wounds_taken + 2×ML ≤
+  `CharacterStats.get_total_wound_capacity`); ties broken by strongest Ring then
+  sorted spell_id. `get_spell()` / `spell_ids_by_ml()` accessors.
+- **CAST_MAHO seasonal trigger** (owner-authorized design 2026-06-09) —
+  `DayOrchestrator._process_seasonal_maho_casts()` runs in the seasonal block
+  right after `_process_bloodspeaker_network()`. For each ACTIVE/PROPAGATING
+  Bloodspeaker cell, a cult-affiliated member co-located in the cell's province
+  casts one maho spell. `_select_or_corrupt_maho_caster()`: prefers an existing
+  living `cult_affiliation` member; else corrupts the most-Tainted living non-PC
+  in the province (taint > 0 → sets `cult_affiliation = true`); PCs are never
+  auto-corrupted (s60); no caster if nobody is Tainted (cells still raise PTL
+  passively, breeding future corruptibility). Self-blood model (GDD: "the caster
+  ... must spill blood"). Fires `MahoSystem.resolve_cast(caster, caster, …)` →
+  blood wounds, caster Taint, PTL +1, MAHO CrimeRecord (appended to crime_records,
+  next_case_id bumped), blood-evidence concealment roll. **Scope (authorized):**
+  cost/Taint/PTL/crime/evidence only — the ~46 spell *effects* are deferred to
+  s40 (combat/undead/oni-blocked). Activates detection Channels 1–3 (PTL crisis
+  topics, EXAMINE_CRIME_SCENE blood evidence, taint symptoms) per Design Decision
+  #5. Decisions locked with owner: seasonal cell-lifecycle trigger (not a daily-AP
+  ActionID), cult-affiliated-only casters, most-tainted-corruption affiliation,
+  highest-affordable-ML spell choice. 13 tests (`test_maho_spell_library.gd` 6,
+  `test_maho_seasonal_cast.gd` 7). NOTE: the s43 "cast roll TN" gap in Section D
+  is moot — GDD s43 confirms maho has no casting roll.
+
 ### Systems Added 2026-06-07 (Kolat — deferred executors + network records)
 Implemented the Kolat ActionID executors that were stubbed `deferred_system` in
 `kolat_executor.gd`, plus the LOCKED network-record data layer (s54.7h/d). Each
