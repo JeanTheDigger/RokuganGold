@@ -158,6 +158,7 @@ const SCHOOL_DATA: Dictionary = {
 		"wildcards": ["Bugei"],
 		"focus_rings": [Enums.Ring.FIRE, Enums.Ring.AIR],
 		"skill_rank_2": ["Kenjutsu"],
+		"off_hand_weapon": "wakizashi",  # s40 Dragon daisho (Mirumoto Niten)
 	},
 	"Kitsuki Investigator": {
 		"clan": "Dragon", "family": "Kitsuki",
@@ -349,6 +350,7 @@ const SCHOOL_DATA: Dictionary = {
 		"wildcards": ["Skill"],
 		"focus_rings": [Enums.Ring.WATER, Enums.Ring.FIRE],
 		"skill_rank_2": [],
+		"off_hand_weapon": "kama",  # s40 Mantis paired kama (s29.9 Waves Rush to Shore)
 	},
 	"Moshi Shugenja": {
 		"clan": "Mantis", "family": "Moshi",
@@ -747,6 +749,19 @@ static func _assign_weapons(c: L5RCharacterData) -> void:
 
 	if kyujutsu_rank > 0:
 		weapons.append(IndividualCombat.get_weapon_data("yumi"))
+
+	# s40 dual-wield schools: equip the off-hand weapon and record it on the
+	# character so combat setup flags the Participant as dual-wielding.
+	var off_hand: String = SCHOOL_DATA.get(c.school, {}).get("off_hand_weapon", "")
+	if off_hand != "":
+		c.off_hand_weapon = off_hand
+		var have_off_hand: bool = false
+		for w: WeaponData in weapons:
+			if w.weapon_name == off_hand:
+				have_off_hand = true
+				break
+		if not have_off_hand:
+			weapons.append(IndividualCombat.get_weapon_data(off_hand))
 
 	c.weapons = weapons
 

@@ -94,6 +94,11 @@ var spell_void_bonus_used: int = 0
 # -- Equipment & Outfit --------------------------------------------------------
 
 @export var weapons: Array[WeaponData] = []
+# Off-hand weapon name for s40 dual-wield schools (Mirumoto daisho, Yoritomo
+# paired kama, Lion katana-and-war-fan). "" = single weapon. Set at world-gen;
+# AsciiMapCombatOrchestrator.setup_combat reads it to flag the Participant
+# dual_wielding and apply the off-hand / dominant-hand / two-weapon rules.
+@export var off_hand_weapon: String = ""
 @export var armor_worn: ArmorData = null
 @export var armor_tn_bonus: int = 0  # mirrors armor_worn.tn_bonus; kept for fast lookup
 @export var armor_reduction: int = 0

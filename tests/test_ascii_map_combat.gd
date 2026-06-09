@@ -1711,3 +1711,25 @@ func test_npc_in_weapon_grapple_hits_with_weapon_damage() -> void:
 		if a.get("action", "") == "grapple_hit" and a.get("result", {}).get("success", false):
 			saw_hit = true
 	assert_true(saw_hit, "NPC in a weapon grapple deals weapon-damage Hit")
+
+
+# ===========================================================================
+# -- Dual-wield school activation (s40) -------------------------------------
+# ===========================================================================
+
+func test_setup_flags_dual_wielding_from_off_hand_weapon() -> void:
+	var p := _make_char(1)
+	p.off_hand_weapon = "wakizashi"
+	var e := _make_char(2)
+	var state := _make_state(p, e)
+	var pp: IndividualCombat.Participant = state.combat.participants.get(1)
+	assert_true(pp.dual_wielding, "off_hand_weapon flags the Participant dual-wielding")
+	assert_eq(pp.off_hand_weapon, "wakizashi")
+
+
+func test_setup_single_weapon_not_dual_wielding() -> void:
+	var p := _make_char(1)  # no off_hand_weapon
+	var e := _make_char(2)
+	var state := _make_state(p, e)
+	var pp: IndividualCombat.Participant = state.combat.participants.get(1)
+	assert_false(pp.dual_wielding)

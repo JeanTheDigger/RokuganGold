@@ -25,6 +25,11 @@ const WEAPON_CATALOG: Dictionary = {
 	"tetsubo":    {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Heavy Weapons",  "size": "Large",  "melee": true,  "trait": "agility"},
 	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",       "size": "Large",  "melee": false, "trait": "reflexes"},
 	"unarmed":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu",       "size": "Small",  "melee": true,  "trait": "agility"},
+	# Off-hand weapons for the s40 dual-wield combinations (DR from s39 Equipment).
+	# kama: Mantis paired small weapons (s29.9 "Waves Rush to Shore" uses Knives).
+	# war_fan (tessen): Lion katana-and-war-fan (s29.4 "The Commander's Fan").
+	"kama":       {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Knives",         "size": "Small",  "melee": true,  "trait": "agility"},
+	"war_fan":    {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "War Fan",        "size": "Small",  "melee": true,  "trait": "agility"},
 }
 
 const DEFAULT_WEAPON: Dictionary = {

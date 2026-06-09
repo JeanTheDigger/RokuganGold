@@ -1937,3 +1937,13 @@ func test_contested_atemi_smoke() -> void:
 	var t := _atemi_target(); var tp := IndividualCombat.Participant.new()
 	var r := IndividualCombat.resolve_atemi_strike(a, ap, t, tp, "Seven Storm's Fist", DiceEngine.new(3))
 	assert_true(r["ok"], "contested atemi resolves cleanly")
+
+
+func test_kama_and_war_fan_in_catalog() -> void:
+	# s40 dual-wield off-hand weapons, DR from s39 Equipment.
+	var kama := IndividualCombat.get_weapon_profile("kama")
+	assert_eq(kama["skill"], "Knives")
+	assert_eq(kama["size"], "Small")
+	var fan := IndividualCombat.get_weapon_profile("war_fan")
+	assert_eq(fan["skill"], "War Fan")
+	assert_eq(fan["size"], "Small")

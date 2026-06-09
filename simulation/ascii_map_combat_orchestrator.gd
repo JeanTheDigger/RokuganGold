@@ -154,6 +154,11 @@ static func setup_combat(
 		var weapon_name: String = IndividualCombat.pick_best_weapon(c)
 		var init_score: int = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name)
 		p.initiative_score = init_score
+		# s40 dual-wield schools: flag the Participant from the character's off-hand
+		# weapon so the off-hand attack / dominant-hand / two-weapon rules apply.
+		if c.off_hand_weapon != "":
+			p.dual_wielding = true
+			p.off_hand_weapon = c.off_hand_weapon
 
 	# Sort turn order descending by initiative score.
 	mcs.combat.turn_order.sort_custom(func(a: int, b: int) -> bool:
