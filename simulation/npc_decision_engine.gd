@@ -3830,8 +3830,9 @@ static func _build_learn_theater_metadata(
 		if piece == null:
 			continue
 
-		# For private pieces validate teacher still available (chars_by_id may have changed).
-		if not piece.canonized and not chars_by_id.is_empty():
+		# Private (non-canonized) pieces require a co-located willing teacher (§57.22.6).
+		# With no chars_by_id there is no teacher → find_willing_teacher returns -1 → skip.
+		if not piece.canonized:
 			var teacher_id: int = TheaterSystem.find_willing_teacher(
 				ctx.character_id, piece, chars_by_id
 			)
