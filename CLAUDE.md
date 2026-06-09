@@ -4499,6 +4499,27 @@ template generators it depends on. Faithful summary of the fixes that landed:
   roll TN remains deferred to s31 (Sense spell), as documented. Channel 4 — seasonal
   casts pass `witnesses=[]` (covert), so no direct witnesses, by design. No gaps
   introduced and no fixes needed — the new casts' outputs are consumed correctly.
+- **Crab witch-hunter routing verified (s11.11, Decision #5).** Confirmed the
+  topic → action chain that turns a maho-tainted province into a Kuni/Asako
+  investigation: an active insurgency (a Bloodspeaker MAHO_CULT cell already feeds
+  `active_insurgencies`, and PTL ≥ 3 spawns a TAINT_MANIFESTATION insurgency) →
+  `OpportunityScanner` ELIMINATE_SHADOWLANDS opportunity (urgency 80) →
+  `ObjectiveDecomposer._decompose_eliminate_shadowlands` returns INVESTIGATE_THREAT
+  for the province → INVESTIGATE_PROVINCE (objective_alignment 100) → a SHUGENJA
+  running it in the tainted province hits `_process_ptl_detection`, rolling
+  Lore: Shadowlands (Perception) vs PTL×5 with a **+2 Kuni/Asako family bonus**,
+  emitting a "Spiritual corruption detected" SUPERNATURAL topic propagated to the
+  lord. 5 routing tests (`test_crab_hunter_routing.gd`): insurgency→opportunity,
+  ELIMINATE_SHADOWLANDS→INVESTIGATE_THREAT, Kuni shugenja detects, non-shugenja /
+  Lore-less shugenja do not. **Wired now:** lords (strategic-review self-selection)
+  and magistrate-shugenja (UPHOLD_LAW idle patrol, INVESTIGATE_THREAT every 7 days)
+  reach INVESTIGATE_PROVINCE; the +2 Kuni/Asako detection edge applies. **Still
+  blocked (Decision #5, s11.3.5):** dedicated Kuni/Asako/Kuroiban witch-hunter
+  *standing* objectives (autonomous hunting without lordship or magistracy) — not
+  invented here. **Known discrepancy (not changed — needs owner approval):**
+  `_process_ptl_detection` applies the Kuni/Asako bonus as a flat **+2**, while
+  GDD s11.11 specifies **+2k0** (two unkept dice). Pre-existing; flagged, not
+  altered (numeric mechanic change).
 
 ### Systems Added 2026-06-07 (Kolat — deferred executors + network records)
 Implemented the Kolat ActionID executors that were stubbed `deferred_system` in
