@@ -61,12 +61,12 @@ func test_ishi_not_committed_can_escape():
 
 func test_yu_less_likely_captured():
 	var mod := HostageSystem.get_capture_likelihood_modifier(Enums.BushidoVirtue.YU, Enums.ShouridoVirtue.NONE)
-	assert_eq(mod, 0.0)
+	assert_eq(mod, 0.5)  # s22.9a YU_CAPTURE_LIKELIHOOD
 
 
 func test_ishi_less_likely_captured():
 	var mod := HostageSystem.get_capture_likelihood_modifier(Enums.BushidoVirtue.NONE, Enums.ShouridoVirtue.ISHI)
-	assert_eq(mod, 0.0)
+	assert_eq(mod, 0.3)  # s22.9a ISHI_CAPTURE_LIKELIHOOD
 
 
 func test_default_capture_likelihood():
