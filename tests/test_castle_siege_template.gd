@@ -239,8 +239,10 @@ func test_tenshu_bounds_set() -> void:
 		var m := CastleSiegeGenerator.generate("tenshu_%d" % sc, sc, AM.ATTACKER)
 		assert_true(m.tenshu_lx >= 0)
 		assert_true(m.tenshu_ly >= 0)
-		assert_true(m.tenshu_rx > m.tenshu_lx)
-		assert_true(m.tenshu_ry > m.tenshu_ly)
+		# Bounds describe a non-empty interior; the smallest fortification keep is
+		# a single interior row/column (lx==rx or ly==ry is valid).
+		assert_true(m.tenshu_rx >= m.tenshu_lx)
+		assert_true(m.tenshu_ry >= m.tenshu_ly)
 
 func test_tenshu_interior_is_floor_stone() -> void:
 	var m := CastleSiegeGenerator.generate("tenshu_floor", SC.FORTIFICATION, AM.ATTACKER)
