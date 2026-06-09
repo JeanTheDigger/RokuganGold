@@ -336,3 +336,60 @@ func test_seasonal_pass_kill_outranks_shed() -> void:
 	assert_eq(casts[0]["kill"]["mode"], "killed")
 	assert_true(CharacterStats.is_dead(hunter), "the investigating magistrate dies")
 	assert_eq(deaths.size(), 1, "death_event appended for same-season succession")
+
+
+# -- Fierce Blood of the Earth (s43, owner-authorized 2026-06-09) --------------
+
+func test_fierce_blood_benefit_wounded() -> void:
+	var c := _char(1, "100", 0.0); c.wounds_taken = 5
+	assert_true(DayOrchestrator._fierce_blood_has_benefit(c), "healing is a benefit")
+
+
+func test_fierce_blood_no_benefit_young_healthy() -> void:
+	var c := _char(1, "100", 0.0); c.age = 30
+	assert_false(DayOrchestrator._fierce_blood_has_benefit(c),
+		"death chance is 0 under 50 — nothing to buy")
+
+
+func test_fierce_blood_benefit_aging() -> void:
+	var c := _char(1, "100", 0.0); c.age = 60
+	assert_true(DayOrchestrator._fierce_blood_has_benefit(c))
+
+
+func test_fierce_blood_no_benefit_when_extended_below_threshold() -> void:
+	var c := _char(1, "100", 0.0); c.age = 55; c.life_extension_years = 10  # effective 45
+	assert_false(DayOrchestrator._fierce_blood_has_benefit(c),
+		"prior casts already pulled the effective age under the death threshold")
+
+
+func test_resolve_fierce_blood_heals_and_extends() -> void:
+	var c := _char(1, "100", 0.0); c.wounds_taken = 30; c.life_extension_years = 2
+	var res := DayOrchestrator._resolve_fierce_blood(c)
+	assert_eq(c.wounds_taken, 0, "heals all injuries")
+	assert_eq(c.life_extension_years, 3, "buys one more year of life")
+	assert_eq(res["life_extension_years"], 3)
+
+
+func test_life_extension_lowers_natural_death_chance() -> void:
+	var c := _char(1, "100", 0.0); c.age = 90
+	c.life_extension_years = 45  # effective age 45 → death chance 0
+	assert_false(GempukkuSystem.roll_natural_death(c, DiceEngine.new(7)),
+		"maho-bought years drop the effective age below the death-roll threshold")
+
+
+func test_seasonal_pass_fierce_blood_heals_wounded_caster() -> void:
+	var caster := _char(1, "100", 2.0)
+	caster.stamina = 5; caster.willpower = 5  # Earth 5 supports ML5
+	caster.wounds_taken = 12                  # wounded → Fierce Blood benefits
+	var prov := _prov(5)
+	var crime_records: Array = []
+	var deaths: Array = []
+	var topics: Array = []
+	var casts := DayOrchestrator._process_seasonal_maho_casts(
+		[_cell(5, Enums.BloodspeakerCellState.ACTIVE)], {5: prov}, [caster],
+		{100: 5}, crime_records, [1], DiceEngine.new(7), 30,
+		{}, deaths, topics, [500])
+	assert_eq(casts.size(), 1)
+	assert_eq(casts[0]["spell_id"], "fierce_blood_of_earth")
+	assert_eq(caster.wounds_taken, 0, "the victim's life force heals the caster")
+	assert_eq(caster.life_extension_years, 1, "one year of life bought")

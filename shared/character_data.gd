@@ -14,6 +14,9 @@ extends Resource
 @export var school_type: Enums.SchoolType = Enums.SchoolType.BUSHI
 @export var school_rank: int = 1
 @export var age: int = 16
+## Years of unnatural life bought with maho (s43 Fierce Blood of the Earth):
+## the natural-death roll uses age − life_extension_years as the effective age.
+@export var life_extension_years: int = 0
 @export var gender: String = ""
 @export var orientation: String = "straight"
 ## s45 CAST_OUT: Brotherhood of Shinsei sect affiliation ("Shintao", "Fortunist", or "").

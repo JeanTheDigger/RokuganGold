@@ -293,7 +293,9 @@ static func roll_natural_death(
 	dice_engine: DiceEngine,
 	worship_malus: Dictionary = {},
 ) -> bool:
-	var chance: int = get_natural_death_chance(character.age)
+	# s43 Fierce Blood of the Earth: maho-bought years lower the effective age.
+	var effective_age: int = maxi(0, character.age - character.life_extension_years)
+	var chance: int = get_natural_death_chance(effective_age)
 	if worship_malus.get("natural_death_increase", false):
 		chance = ceili(float(chance) * 1.5)
 	if worship_malus.get("aging_accelerated", false):

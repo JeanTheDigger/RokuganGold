@@ -4529,6 +4529,26 @@ template generators it depends on. Faithful summary of the fixes that landed:
   `death_events`/`active_topics`/`next_topic_id` threaded into
   `_process_seasonal_maho_casts` (trailing optional params). 9 tests
   (`test_maho_seasonal_cast.gd` 18→27).
+- **Fierce Blood of the Earth — third wired Grand-Map spell effect (s43,
+  owner-authorized 2026-06-09).** The first maho effect with an always-on payload.
+  Sacrifices a nameless victim (the cast's blood source = a transient
+  `L5RCharacterData`, NOT the caster — faithful to "consumes the victim's life
+  force", and lets a wounded caster survive to heal); the caster heals all injuries
+  (`wounds_taken = 0`) and buys one year of life. **Longevity hook (death-model
+  change):** new `life_extension_years: int` field on L5RCharacterData;
+  `GempukkuSystem.roll_natural_death` now rolls against `effective_age = age −
+  life_extension_years`, so maho-bought years pull the caster back under the
+  50/65/75/85 death-chance brackets. `_resolve_fierce_blood` sets wounds 0 and +1
+  year. `_fierce_blood_has_benefit` gates the cast to a concrete benefit (caster
+  wounded OR effective age ≥ 50 — a young healthy caster wastes no victim).
+  Ring-only gate (`MahoSpellLibrary.supports_spell_ring`) — not bounded by the
+  caster's own survivability since the life cost is the victim's. Spell-selection
+  priority: **kill > Fierce Blood > shed > highest-ML**. Limb/organ regrowth not
+  modeled (no system); mummified-appearance signal skipped (no detection mechanic
+  to hang it on). 7 tests (`test_maho_seasonal_cast.gd` 27→34); gempukku 58/58 (no
+  regression). All three clean Grand-Map maho effects now wired (Spreading the
+  Darkness, Stealing the Soul, Fierce Blood of the Earth); the remaining ~43 spells
+  stay s40/ASCII-deferred.
 - **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
   feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
   the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO

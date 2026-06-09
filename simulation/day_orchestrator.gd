@@ -11117,18 +11117,27 @@ static func _process_seasonal_maho_casts(
 			continue
 
 		# Spell selection priority (owner-authorized 2026-06-09):
-		#   1. Stealing the Soul — finish a co-located, wounded, investigating threat
-		#      (kill opportunity outranks hygiene), if the caster's Earth supports ML4.
-		#   2. Spreading the Darkness — shed Taint off a dangerously Tainted member
-		#      (Rank ≥ 2, the Channel-3 detection onset), if the caster's Earth supports ML2.
-		#   3. Otherwise the cell's strongest survivable spell.
+		#   1. Stealing the Soul (ML4) — finish a co-located, wounded, investigating
+		#      threat (kill opportunity outranks everything else).
+		#   2. Fierce Blood of the Earth (ML5) — sacrifice a victim to heal + buy a
+		#      year of life, when the caster is wounded or aging (effective age ≥ 50).
+		#   3. Spreading the Darkness (ML2) — shed Taint off a dangerously Tainted
+		#      member (Rank ≥ 2, the Channel-3 detection onset).
+		#   4. Otherwise the cell's strongest survivable spell.
 		var kill_target: L5RCharacterData = null
 		if MahoSpellLibrary.can_support_spell(caster, "stealing_the_soul"):
 			kill_target = _pick_soul_steal_target(caster, pool, objectives_map)
+		# Ring-only gate: Fierce Blood's life cost is the victim's, not the caster's,
+		# so it is not bounded by the caster's own survivability (it heals them).
+		var cast_fierce_blood: bool = kill_target == null \
+			and MahoSpellLibrary.supports_spell_ring(caster, "fierce_blood_of_earth") \
+			and _fierce_blood_has_benefit(caster)
 		var darkness_source: L5RCharacterData = null
 		var spell: Dictionary
 		if kill_target != null:
 			spell = MahoSpellLibrary.get_spell("stealing_the_soul")
+		elif cast_fierce_blood:
+			spell = MahoSpellLibrary.get_spell("fierce_blood_of_earth")
 		else:
 			darkness_source = _pick_taint_shed_source(pool)
 			if darkness_source != null \
@@ -11138,9 +11147,16 @@ static func _process_seasonal_maho_casts(
 				spell = MahoSpellLibrary.pick_cast_spell(caster)
 		if spell.is_empty():
 			continue
+		var spell_id: String = spell.get("spell_id", "")
+
+		# Fierce Blood consumes a nameless victim's life force, not the caster's
+		# blood (faithful to s43, and lets a wounded caster survive long enough to heal).
+		var blood_source: L5RCharacterData = caster
+		if spell_id == "fierce_blood_of_earth":
+			blood_source = L5RCharacterData.new()
 
 		var cast_result: Dictionary = MahoSystem.resolve_cast(
-			caster, caster, province as ProvinceData,
+			caster, blood_source, province as ProvinceData,
 			int(spell["mastery_level"]), 0, dice_engine,
 			next_case_id[0], ic_day, caster.physical_location, [])
 		next_case_id[0] += 1
@@ -11149,12 +11165,14 @@ static func _process_seasonal_maho_casts(
 			crime_records.append(rec)
 
 		# Resolve the chosen spell's Grand-Map effect.
-		var spell_id: String = spell.get("spell_id", "")
 		var transfer: Dictionary = {}
 		var kill: Dictionary = {}
+		var fierce_blood: Dictionary = {}
 		if spell_id == "stealing_the_soul" and kill_target != null:
 			kill = _resolve_stealing_the_soul(
 				caster, kill_target, death_events, active_topics, next_topic_id, ic_day)
+		elif spell_id == "fierce_blood_of_earth":
+			fierce_blood = _resolve_fierce_blood(caster)
 		elif spell_id == "spreading_the_darkness" and darkness_source != null:
 			transfer = _resolve_spreading_the_darkness(
 				caster, darkness_source, pool, objectives_map, dice_engine)
@@ -11168,6 +11186,7 @@ static func _process_seasonal_maho_casts(
 			"taint_gained": cast_result.get("taint_gained", 0),
 			"transfer": transfer,
 			"kill": kill,
+			"fierce_blood": fierce_blood,
 		})
 
 	return casts
@@ -11406,6 +11425,28 @@ static func _resolve_stealing_the_soul(
 		topic.slug = "soul_stolen_death_%d" % target.character_id
 		active_topics.append(topic)
 	return {"resolved": true, "mode": "killed", "target_id": target.character_id}
+
+
+## True if Fierce Blood of the Earth (s43) would do something for the caster this
+## season: heal an injury, or shave a year off a death-rollable age. effective_age
+## already nets out years bought by prior casts. A young, healthy caster gains
+## nothing now (death chance is 0 under 50) and does not waste a victim on it.
+static func _fierce_blood_has_benefit(caster: L5RCharacterData) -> bool:
+	if caster.wounds_taken > 0:
+		return true
+	return maxi(0, caster.age - caster.life_extension_years) >= 50
+
+
+## Applies Fierce Blood of the Earth (s43, owner-authorized 2026-06-09): the
+## victim's life force (the cast's nameless blood source) is consumed, the caster
+## heals all injuries and buys one more year of life. The +1 year lowers the
+## effective age used by GempukkuSystem.roll_natural_death. Limb/organ regrowth is
+## not modeled (no such system at world scale).
+static func _resolve_fierce_blood(caster: L5RCharacterData) -> Dictionary:
+	caster.wounds_taken = 0
+	caster.life_extension_years += 1
+	return {"resolved": true, "healed": true,
+		"life_extension_years": caster.life_extension_years}
 
 
 static func _detect_maho_provinces(

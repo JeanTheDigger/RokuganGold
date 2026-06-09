@@ -99,6 +99,18 @@ static func can_support_spell(caster: L5RCharacterData, spell_id: String) -> boo
 	return SpellSystem.get_ring_value(caster, int(s["ring"])) >= ml
 
 
+## True if `caster`'s Ring supports the spell's Mastery Level (ring value ≥ ML),
+## ignoring the self-blood survivability check — for spells whose blood/life cost
+## is paid by a consumed victim, not the caster (s43 Fierce Blood of the Earth).
+static func supports_spell_ring(caster: L5RCharacterData, spell_id: String) -> bool:
+	if caster == null:
+		return false
+	var s: Dictionary = get_spell(spell_id)
+	if s.is_empty():
+		return false
+	return SpellSystem.get_ring_value(caster, int(s["ring"])) >= int(s["mastery_level"])
+
+
 ## All spell ids at a given Mastery Level, in a stable (sorted) order.
 static func spell_ids_by_ml(mastery_level: int) -> Array:
 	var ids: Array = []
