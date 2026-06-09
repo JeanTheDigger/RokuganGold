@@ -17,7 +17,11 @@ const WEAPON_CATALOG: Dictionary = {
 	"wakizashi":  {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",      "size": "Small",  "melee": true,  "trait": "agility"},
 	"tanto":      {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives",         "size": "Small",  "melee": true,  "trait": "agility"},
 	"bo":         {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Bo",             "size": "Large",  "melee": true,  "trait": "agility"},
-	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms",       "size": "Large",  "melee": true,  "trait": "agility"},
+	# can_grapple: s40 "Weapon Grapples" — chain weapons and certain polearms may
+	# initiate Grapples using the weapon skill. The naginata is the catalog's
+	# grapple-capable polearm; chain weapons (e.g. kusarigama) get can_grapple
+	# when added to the catalog with their own DR.
+	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms",       "size": "Large",  "melee": true,  "trait": "agility", "can_grapple": true},
 	"tetsubo":    {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Heavy Weapons",  "size": "Large",  "melee": true,  "trait": "agility"},
 	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",       "size": "Large",  "melee": false, "trait": "reflexes"},
 	"unarmed":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu",       "size": "Small",  "melee": true,  "trait": "agility"},
@@ -145,6 +149,15 @@ class Participant:
 	var water_trade_armor_amount: int = 0      # Armor TN traded for movement (water_trade_armor_for_movement)
 	var guard_kata_bonus: int = 0              # extra Armor TN from void_phoenix_guard_bonus kata
 	var extra_attack_used_this_turn: bool = false  # Extra Attack may only be used once per turn
+	var off_hand_attack_used_this_turn: bool = false  # Off-hand attack may only be made once per turn (s40)
+	# Weapon-grapple state (s40 "Weapon Grapples"): when a character initiates a
+	# grapple with a chain weapon / certain polearm, control rolls use the weapon
+	# skill and Hit deals weapon damage. Empty/"" = ordinary Jiujutsu grapple.
+	var weapon_grapple_skill: String = ""
+	var weapon_grapple_weapon: String = ""
+	# Free Raises the opponent has banked toward a Disarm against this character
+	# (s40: granted when a weapon-grappler loses control of the grapple).
+	var disarm_free_raises_pending: int = 0
 
 
 class CombatState:
@@ -715,6 +728,11 @@ static func get_weapon_profile(weapon_name: String) -> Dictionary:
 	return WEAPON_CATALOG.get(weapon_name.to_lower(), DEFAULT_WEAPON)
 
 
+## True if the named weapon may initiate a Grapple (s40 "Weapon Grapples").
+static func weapon_can_grapple(weapon_name: String) -> bool:
+	return get_weapon_profile(weapon_name).get("can_grapple", false)
+
+
 static func resolve_attack(
 	attacker: L5RCharacterData,
 	attacker_p: Participant,
@@ -1020,6 +1038,7 @@ static func begin_turn(participant: Participant) -> void:
 	## Call this before the character resolves their first action in a round.
 	participant.kata_used_this_turn.clear()
 	participant.extra_attack_used_this_turn = false
+	participant.off_hand_attack_used_this_turn = false
 	participant.earth_trade_amount = 0
 	participant.water_trade_armor_amount = 0
 
@@ -1267,15 +1286,19 @@ static func initiate_grapple(
 	attacker_p: Participant,
 	target_armor_tn: int,
 	dice_engine: DiceEngine,
+	skill_name: String = "Jiujutsu",
 ) -> Dictionary:
-	var jiujutsu: int = attacker.skills.get("Jiujutsu", 0)
+	# s40 "Weapon Grapples": a chain weapon / certain polearm may initiate a
+	# grapple using the Weapon Skill in place of Jiujutsu. Trait stays Agility
+	# (consistent with melee weapon attacks). Default is the unarmed Jiujutsu grapple.
+	var jiujutsu: int = attacker.skills.get(skill_name, 0)
 	var wound_penalty: int = CharacterStats.get_wound_penalty(attacker)
 
-	# Mutation modifiers (s44) and Advantage modifiers (s45) for Jiujutsu
-	var mut_jiu_init: Dictionary = MutationSystem.get_skill_modifiers(attacker, "Jiujutsu")
-	var is_school_jiu_init: bool = NPCAdvancement.get_school_skills(attacker).has("Jiujutsu")
+	# Mutation modifiers (s44) and Advantage modifiers (s45) for the grapple skill
+	var mut_jiu_init: Dictionary = MutationSystem.get_skill_modifiers(attacker, skill_name)
+	var is_school_jiu_init: bool = NPCAdvancement.get_school_skills(attacker).has(skill_name)
 	var adv_jiu_init: Dictionary = AdvantageSystem.get_skill_bonus(
-		attacker, "Jiujutsu", {"is_combat": true, "is_school_skill": is_school_jiu_init}
+		attacker, skill_name, {"is_combat": true, "is_school_skill": is_school_jiu_init}
 	)
 	var adv_jiu_init_tn: int = AdvantageSystem.get_tn_modifier(attacker, {"is_combat": true})
 	var grapple_flat: int = wound_penalty + adv_jiu_init["free_raises"] * 5 - adv_jiu_init_tn
@@ -1299,21 +1322,25 @@ static func resolve_grapple_control(
 	attacker: L5RCharacterData,
 	defender: L5RCharacterData,
 	dice_engine: DiceEngine,
+	att_skill: String = "Jiujutsu",
+	def_skill: String = "Jiujutsu",
 ) -> Dictionary:
 	# Contested Jiujutsu/Strength: roll (Strength + Jiujutsu), keep Strength (s4.5 / s40)
 	# Unskilled (rank 0) rolls do not explode per L5R4e p.78.
-	var att_jiu: int = attacker.skills.get("Jiujutsu", 0)
-	var def_jiu: int = defender.skills.get("Jiujutsu", 0)
+	# s40 "Weapon Grapples": a weapon-grappler uses their Weapon Skill in place of
+	# Jiujutsu for control rolls; each side passes their own grapple skill.
+	var att_jiu: int = attacker.skills.get(att_skill, 0)
+	var def_jiu: int = defender.skills.get(def_skill, 0)
 	# Mutation modifiers (s44), Advantage modifiers (s45), and wound penalties
 	var att_wound: int = CharacterStats.get_wound_penalty(attacker)
 	var def_wound: int = CharacterStats.get_wound_penalty(defender)
-	var att_mut_ctrl: Dictionary = MutationSystem.get_skill_modifiers(attacker, "Jiujutsu")
-	var def_mut_ctrl: Dictionary = MutationSystem.get_skill_modifiers(defender, "Jiujutsu")
-	var att_sch_jiu: bool = NPCAdvancement.get_school_skills(attacker).has("Jiujutsu")
-	var def_sch_jiu: bool = NPCAdvancement.get_school_skills(defender).has("Jiujutsu")
-	var att_adv_ctrl: Dictionary = AdvantageSystem.get_skill_bonus(attacker, "Jiujutsu",
+	var att_mut_ctrl: Dictionary = MutationSystem.get_skill_modifiers(attacker, att_skill)
+	var def_mut_ctrl: Dictionary = MutationSystem.get_skill_modifiers(defender, def_skill)
+	var att_sch_jiu: bool = NPCAdvancement.get_school_skills(attacker).has(att_skill)
+	var def_sch_jiu: bool = NPCAdvancement.get_school_skills(defender).has(def_skill)
+	var att_adv_ctrl: Dictionary = AdvantageSystem.get_skill_bonus(attacker, att_skill,
 		{"is_combat": true, "is_school_skill": att_sch_jiu, "opponent_clan": defender.clan})
-	var def_adv_ctrl: Dictionary = AdvantageSystem.get_skill_bonus(defender, "Jiujutsu",
+	var def_adv_ctrl: Dictionary = AdvantageSystem.get_skill_bonus(defender, def_skill,
 		{"is_combat": true, "is_school_skill": def_sch_jiu, "opponent_clan": attacker.clan})
 	var att_result: DiceResult = dice_engine.roll_and_keep(
 		attacker.strength + att_jiu + att_mut_ctrl["rolled"] + att_adv_ctrl["rolled"],

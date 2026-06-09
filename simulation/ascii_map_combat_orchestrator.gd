@@ -20,6 +20,9 @@ const GUARD_RANGE_TILES: int = 1
 
 ## Ranged attack while within melee range penalty (GDD s40 confirmed).
 const RANGED_IN_MELEE_PENALTY: int = -10
+## s40 "Weapon Grapples": a weapon-grappler who loses control of the grapple
+## hands their opponent 2 Free Raises toward a Disarm Maneuver against them.
+const WEAPON_GRAPPLE_LOSE_CONTROL_DISARM_RAISES: int = 2
 
 ## Faction identifiers.
 const FACTION_PLAYER: String = "player"
@@ -579,6 +582,13 @@ static func execute_melee_attack(
 
 		# Disarm maneuver: contested Strength if hit.
 		if maneuver == "disarm":
+			# Consume any Free Raises banked toward a Disarm against this target
+			# (s40 weapon-grapple lose-control risk). The orchestrator does not gate
+			# Disarm on its 3-Raise requirement, so the raise-reduction is recorded
+			# (and cleared) here for callers; the mechanical benefit is a forward-wire.
+			if a_p.disarm_free_raises_pending > 0:
+				result["disarm_free_raises_used"] = a_p.disarm_free_raises_pending
+				a_p.disarm_free_raises_pending = 0
 			var dr: Dictionary = IndividualCombat.resolve_disarm(attacker, target, dice_engine, weapon_name, a_p)
 			result["disarmed"] = dr["disarmed"]
 			log_entry["disarmed"] = dr["disarmed"]
@@ -741,6 +751,82 @@ static func execute_extra_attack(
 	return result
 
 
+## Off-hand attack (s40 "Off-Hand Weapons & Multiple Attacks"). A dual-wielder
+## may make one additional attack per turn with their off-hand weapon, at the
+## off-hand size penalty (Small -5 / Medium -10 / Large -15). The main attack
+## already carries the -5 dominant-hand penalty (resolve_attack) and the two-
+## weapon +Insight Armor TN bonus (get_armor_tn) while dual_wielding is set.
+static func execute_off_hand_attack(
+	state: MapCombatState,
+	attacker_id: int,
+	target_id: int,
+	attacker: L5RCharacterData,
+	target: L5RCharacterData,
+	dice_engine: DiceEngine,
+	spend_void: bool = false,
+) -> Dictionary:
+	if CharacterStats.is_dead(attacker):
+		return {"success": false, "reason": "character_is_dead"}
+	if CharacterStats.is_dead(target):
+		return {"success": false, "reason": "target_is_dead"}
+	var ts: TurnState = state.turn_states.get(attacker_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+
+	var a_p: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if a_p == null or t_p == null:
+		return {"success": false, "reason": "participant_missing"}
+
+	if not a_p.dual_wielding or a_p.off_hand_weapon == "":
+		return {"success": false, "reason": "not_dual_wielding"}
+	if a_p.off_hand_attack_used_this_turn:
+		return {"success": false, "reason": "off_hand_already_used"}
+
+	var wl: int = CharacterStats.get_wound_level(attacker)
+	if ts.is_down_restricted(wl):
+		return {"success": false, "reason": "down_only_free_actions"}
+
+	# Defense / Full Defense stances may not attack (s40), same as the main attack.
+	if a_p.stance == Enums.Stance.DEFENSE or a_p.stance == Enums.Stance.FULL_DEFENSE:
+		return {"success": false, "reason": "defense_cannot_attack"}
+
+	var apos: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
+	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
+	if apos.x < 0 or tpos.x < 0:
+		return {"success": false, "reason": "position_unknown"}
+	if _chebyshev(apos, tpos) > MELEE_RANGE_TILES:
+		return {"success": false, "reason": "out_of_melee_range"}
+
+	var off_weapon: String = a_p.off_hand_weapon
+	var is_being_guarded: bool = _is_being_guarded(state, target_id)
+	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, true, is_being_guarded, off_weapon)
+
+	var result: Dictionary = IndividualCombat.resolve_off_hand_attack(
+		attacker, a_p, off_weapon, armor_tn, dice_engine, spend_void, {"opponent_clan": target.clan}
+	)
+	a_p.off_hand_attack_used_this_turn = true
+
+	if result.get("hit", false):
+		var dmg_result: Dictionary = _apply_hit(state, attacker, a_p, target, off_weapon, 0, "", result, dice_engine)
+		result["damage"] = dmg_result.get("damage", 0)
+		result["wounds_inflicted"] = dmg_result.get("wounds", 0)
+		result["target_dead"] = dmg_result.get("dead", false)
+
+	if not result.has("reason"):
+		result["success"] = true
+	state.combat_log.append({
+		"type": "off_hand_attack",
+		"round": state.combat.round_number,
+		"attacker_id": attacker_id,
+		"target_id": target_id,
+		"weapon": off_weapon,
+		"hit": result.get("hit", false),
+	})
+	_check_and_mark_over(state, target_id, target)
+	return result
+
+
 ## Guard maneuver: designate an ally to guard. Free action (GDD s40: guard costs 0 Raises).
 static func execute_guard(
 	state: MapCombatState,
@@ -785,6 +871,11 @@ static func execute_guard(
 
 ## Grapple initiation: Jiujutsu/Agility vs target Armor TN (GDD s40).
 ## Costs a Complex action.
+## Initiate a grapple. Costs a Complex action. weapon_name "" = ordinary Jiujutsu
+## grapple; a chain weapon / grapple-capable polearm initiates with the Weapon
+## Skill instead (s40 "Weapon Grapples"): control rolls then use that skill and
+## Hit deals weapon damage. The lose-control penalty (opponent banks 2 Free Raises
+## toward Disarm) is applied in execute_grapple_action's take_control path.
 static func execute_grapple_initiate(
 	state: MapCombatState,
 	attacker_id: int,
@@ -792,6 +883,7 @@ static func execute_grapple_initiate(
 	attacker: L5RCharacterData,
 	target: L5RCharacterData,
 	dice_engine: DiceEngine,
+	weapon_name: String = "",
 ) -> Dictionary:
 	if CharacterStats.is_dead(attacker):
 		return {"success": false, "reason": "character_is_dead"}
@@ -818,10 +910,17 @@ static func execute_grapple_initiate(
 	if a_p == null or t_p == null:
 		return {"success": false, "reason": "participant_missing"}
 
+	# Weapon grapple validation: the named weapon must be grapple-capable (s40).
+	var grapple_skill: String = "Jiujutsu"
+	if weapon_name != "":
+		if not IndividualCombat.weapon_can_grapple(weapon_name):
+			return {"success": false, "reason": "weapon_cannot_grapple"}
+		grapple_skill = IndividualCombat.get_weapon_profile(weapon_name).get("skill", "Jiujutsu")
+
 	# Grapple ignores armor TN bonus — target TN = Reflexes × 5 + 5 (GDD s40).
 	var grapple_tn: int = target.reflexes * 5 + 5
 
-	var result: Dictionary = IndividualCombat.initiate_grapple(attacker, a_p, grapple_tn, dice_engine)
+	var result: Dictionary = IndividualCombat.initiate_grapple(attacker, a_p, grapple_tn, dice_engine, grapple_skill)
 
 	if result.get("apply_grappled_to_target", false):
 		IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_GRAPPLED)
@@ -830,6 +929,15 @@ static func execute_grapple_initiate(
 		# Immediately resolve control (attacker has it on initiation per GDD s40).
 		a_p.grapple_in_control = true
 		t_p.grapple_in_control = false
+		# Record the weapon-grapple so control rolls use the weapon skill and Hit
+		# deals weapon damage; the partner grapples bare-handed (Jiujutsu).
+		if weapon_name != "":
+			a_p.weapon_grapple_skill = grapple_skill
+			a_p.weapon_grapple_weapon = weapon_name
+		else:
+			# Fresh unarmed grapple — clear any stale weapon-grapple state.
+			a_p.weapon_grapple_skill = ""
+			a_p.weapon_grapple_weapon = ""
 
 	ts.consume_complex()
 	state.combat_log.append({
@@ -837,6 +945,7 @@ static func execute_grapple_initiate(
 		"round": state.combat.round_number,
 		"attacker_id": attacker_id,
 		"target_id": target_id,
+		"weapon": weapon_name,
 		"success": result.get("success", false),
 	})
 	return result
@@ -885,9 +994,16 @@ static func execute_grapple_action(
 		"hit":
 			if not c_p.grapple_in_control:
 				return {"success": false, "reason": "not_in_control"}
-			var dmg: Dictionary = IndividualCombat.grapple_hit(character, dice_engine)
-			WoundSystem.apply_damage(target, dmg["damage"])
-			result = {"success": true, "damage": dmg["damage"],
+			var damage_dealt: int = 0
+			if c_p.weapon_grapple_weapon != "":
+				# Weapon grapple: Hit deals weapon damage, no raises (s40).
+				var wdmg: Dictionary = IndividualCombat.resolve_damage(
+					character, c_p.weapon_grapple_weapon, 0, 0, dice_engine, c_p)
+				damage_dealt = wdmg["raw_damage"]
+			else:
+				damage_dealt = IndividualCombat.grapple_hit(character, dice_engine)["damage"]
+			WoundSystem.apply_damage(target, damage_dealt)
+			result = {"success": true, "damage": damage_dealt,
 				"target_dead": CharacterStats.is_dead(target)}
 			_check_and_mark_over(state, partner_id, target)
 
@@ -898,14 +1014,30 @@ static func execute_grapple_action(
 			result = {"success": true, "target_prone": true}
 
 		"take_control":
-			var ctrl: Dictionary = IndividualCombat.resolve_grapple_control(character, target, dice_engine)
+			# Each combatant rolls with their own grapple skill (weapon-grapplers
+			# use their Weapon Skill, s40); bare-handed defaults to Jiujutsu.
+			var att_skill: String = c_p.weapon_grapple_skill if c_p.weapon_grapple_skill != "" else "Jiujutsu"
+			var def_skill: String = t_p.weapon_grapple_skill if t_p.weapon_grapple_skill != "" else "Jiujutsu"
+			var ctrl: Dictionary = IndividualCombat.resolve_grapple_control(
+				character, target, dice_engine, att_skill, def_skill)
+			var prev_in_control: bool = c_p.grapple_in_control
 			if ctrl["attacker_wins"]:
 				c_p.grapple_in_control = true
 				t_p.grapple_in_control = false
 			else:
 				c_p.grapple_in_control = false
 				t_p.grapple_in_control = true
-			result = {"success": ctrl["attacker_wins"], "control_gained": ctrl["attacker_wins"]}
+			# s40 weapon-grapple risk: if a weapon-grappler loses control, their
+			# opponent banks 2 Free Raises toward a Disarm against them.
+			var disarm_raises_granted: bool = false
+			if prev_in_control and not ctrl["attacker_wins"] and c_p.weapon_grapple_weapon != "":
+				t_p.disarm_free_raises_pending = WEAPON_GRAPPLE_LOSE_CONTROL_DISARM_RAISES
+				disarm_raises_granted = true
+			result = {
+				"success": ctrl["attacker_wins"],
+				"control_gained": ctrl["attacker_wins"],
+				"disarm_raises_granted": disarm_raises_granted,
+			}
 
 		_:
 			return {"success": false, "reason": "unknown_grapple_action"}
@@ -1113,6 +1245,55 @@ static func get_current_actor(state: MapCombatState) -> int:
 	return cid
 
 
+## Delay the current actor's Turn (s40): the next-highest character acts now,
+## and the delaying character gets their chance later in the same Round (and may
+## delay again). Turns cannot be saved across Rounds. Returns the new current
+## actor, or {"success": false} if there is no later character to delay to (the
+## lowest-Initiative character must eventually act).
+static func execute_delay(
+	state: MapCombatState,
+	actor_id: int,
+) -> Dictionary:
+	if state.combat.is_over:
+		return {"success": false, "reason": "combat_over"}
+	if get_current_actor(state) != actor_id:
+		return {"success": false, "reason": "not_current_actor"}
+
+	var order: Array = state.combat.turn_order
+	var idx: int = state.combat.current_turn_index
+	# Find the next valid (not fled, not out) actor after the delayer.
+	var j: int = idx + 1
+	while j < order.size():
+		var cand: int = order[j]
+		if cand not in state.fled_ids and not _is_participant_out(state, cand):
+			break
+		j += 1
+	if j >= order.size():
+		# No later character remains this Round — the delayer must act.
+		return {"success": false, "reason": "no_later_actor"}
+
+	# Swap the delayer with that next valid actor: they act now, the delayer
+	# slides to the later slot (where they may act or delay again).
+	var delayer: int = order[idx]
+	order[idx] = order[j]
+	order[j] = delayer
+
+	var dp: IndividualCombat.Participant = state.combat.participants.get(delayer, null)
+	if dp != null:
+		dp.is_delaying = true
+
+	var new_actor: int = get_current_actor(state)
+	if new_actor >= 0:
+		begin_turn(state, new_actor)
+	state.combat_log.append({
+		"type": "delay_turn",
+		"round": state.combat.round_number,
+		"delayer_id": actor_id,
+		"now_acting_id": new_actor,
+	})
+	return {"success": true, "delayer_id": actor_id, "actor": new_actor}
+
+
 ## Advance to the next actor in the turn order.
 ## When all have acted, advance the round.
 static func advance_turn(
@@ -1217,6 +1398,7 @@ static func advance_round(
 		_p.void_roll_pending_kept = 0
 		_p.kata_used_this_round.clear()
 		_p.extra_attack_used_this_turn = false
+		_p.off_hand_attack_used_this_turn = false
 		_p.earth_init_trade_amount = 0
 		if _p.void_ring_bonus > 0 and not _p.center_stance_bonus_used:
 			_p.void_ring_bonus = 0
