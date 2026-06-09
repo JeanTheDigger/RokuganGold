@@ -172,12 +172,13 @@ func test_samurai_noise_by_stealth() -> void:
 
 
 func test_party_noise_sum() -> void:
-	# s57.46.13 worked example: 2 city teams + yoriki(St1) + yojimbo(St0) = 3.0.
+	# s57.46.13 worked example: 2 city teams (0.5+0.5) + yoriki St0 (1.0) +
+	# yojimbo St0 (1.0) = 3.0.
 	var roster: Array = [
 		_comp(CompanionData.CompanionType.CITY_DOSHIN_TEAM),
 		_comp(CompanionData.CompanionType.CITY_DOSHIN_TEAM),
 	]
-	var yoriki := _comp(CompanionData.CompanionType.YORIKI); yoriki.stealth_rank = 1
+	var yoriki := _comp(CompanionData.CompanionType.YORIKI); yoriki.stealth_rank = 0
 	var yojimbo := _comp(CompanionData.CompanionType.YOJIMBO); yojimbo.stealth_rank = 0
 	roster.append(yoriki); roster.append(yojimbo)
 	assert_eq(CompanionSystem.party_noise_contribution(roster), 3.0)

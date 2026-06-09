@@ -480,11 +480,13 @@ func test_fov_pillar_does_not_block_adjacent_tiles() -> void:
 # ---------------------------------------------------------------------------
 
 func test_fov_lookout_radius_adds_bonus() -> void:
-	assert_eq(FovSystem.lookout_radius(3, 0), 5)
+	# LOOKOUT_BONUS = 3 (s4.4.2): perception 3 + 3 = 6.
+	assert_eq(FovSystem.lookout_radius(3, 0), 6)
 
 
 func test_fov_lookout_radius_with_env_modifier() -> void:
-	assert_eq(FovSystem.lookout_radius(3, 2), 3)
+	# 3 + 3 (lookout) − 2 (env) = 4.
+	assert_eq(FovSystem.lookout_radius(3, 2), 4)
 
 
 func test_fov_lookout_radius_minimum_one() -> void:
@@ -599,13 +601,11 @@ func test_fov_destroyed_wall_allows_sight() -> void:
 func test_fov_radius_one_sees_adjacent_only() -> void:
 	var m: AsciiMapData = _make_open_map()
 	var visible: Dictionary = FovSystem.compute_visible(15, 15, 1, m)
-	# All 8 adjacent tiles visible.
-	for dy in range(-1, 2):
-		for dx in range(-1, 2):
-			assert_true(
-				visible.get(Vector2i(15 + dx, 15 + dy), false),
-				"Adjacent (%d,%d) should be visible" % [15 + dx, 15 + dy]
-			)
+	# FOV uses a Euclidean radius (dx²+dy² <= r²). At radius 1 the 4 orthogonal
+	# neighbours are within range; diagonals (dist √2 ≈ 1.41) are not.
+	for d in [Vector2i(15, 14), Vector2i(15, 16), Vector2i(14, 15), Vector2i(16, 15)]:
+		assert_true(visible.get(d, false), "Orthogonal %s should be visible" % d)
+	assert_false(visible.get(Vector2i(14, 14), false), "Diagonal out of radius 1")
 	# 2 tiles away not visible.
 	assert_false(visible.get(Vector2i(15, 13), false))
 	assert_false(visible.get(Vector2i(17, 15), false))
