@@ -157,7 +157,8 @@ func test_clean_succession_auto_confirms() -> void:
 	)
 
 	assert_eq(active_successions.size(), 1)
-	assert_eq(active_successions[0].state, SuccessionData.SuccessionState.CONFIRMED)
+	# A clean succession confirms AND installs the heir in the same day → RESOLVED.
+	assert_eq(active_successions[0].state, SuccessionData.SuccessionState.RESOLVED)
 	assert_eq(active_successions[0].successor_id, 10)
 	assert_eq(successor_map.get(1, -1), 10)
 

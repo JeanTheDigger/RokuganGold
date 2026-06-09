@@ -1079,7 +1079,7 @@ static func advance_day(
 		active_successions, characters, characters_by_id, world_states, clans,
 	)
 
-	_remove_resolved_successions(active_successions)
+	_remove_resolved_successions(active_successions, ic_day)
 
 	var conversation_results: Array = _process_daily_conversations(
 		characters, dice_engine, current_season, active_topics
@@ -22739,7 +22739,7 @@ static func _apply_confirmed_successions(
 	return results
 
 
-static func _remove_resolved_successions(active_successions: Array) -> void:
+static func _remove_resolved_successions(active_successions: Array, current_tick: int = -1) -> void:
 	var i: int = active_successions.size() - 1
 	while i >= 0:
 		var succ: Variant = active_successions[i]
@@ -22747,7 +22747,10 @@ static func _remove_resolved_successions(active_successions: Array) -> void:
 			var s: SuccessionData = succ as SuccessionData
 			if s.state == SuccessionData.SuccessionState.CONFIRMED or \
 				s.state == SuccessionData.SuccessionState.RESOLVED:
-				active_successions.remove_at(i)
+				# Keep a succession that resolved on the tick it was created so
+				# callers can observe the outcome; clean it up the next day.
+				if current_tick < 0 or s.start_tick != current_tick:
+					active_successions.remove_at(i)
 		i -= 1
 
 
