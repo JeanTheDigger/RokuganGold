@@ -4482,9 +4482,23 @@ template generators it depends on. Faithful summary of the fixes that landed:
   topics, EXAMINE_CRIME_SCENE blood evidence, taint symptoms) per Design Decision
   #5. Decisions locked with owner: seasonal cell-lifecycle trigger (not a daily-AP
   ActionID), cult-affiliated-only casters, most-tainted-corruption affiliation,
-  highest-affordable-ML spell choice. 13 tests (`test_maho_spell_library.gd` 6,
-  `test_maho_seasonal_cast.gd` 7). NOTE: the s43 "cast roll TN" gap in Section D
+  highest-affordable-ML spell choice. 14 tests (`test_maho_spell_library.gd` 6,
+  `test_maho_seasonal_cast.gd` 8). NOTE: the s43 "cast roll TN" gap in Section D
   is moot — GDD s43 confirms maho has no casting roll.
+- **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
+  feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
+  the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO
+  CrimeRecord (location = cast settlement, concealment_tn from the Stealth/Agility
+  roll, 90-day evidence window) is consumed by `_process_blood_evidence_discovery`
+  (called in advance_day, line ~392) on both EXAMINE_CRIME_SCENE and
+  INVESTIGATE_PROVINCE results; a co-located magistrate's province investigation
+  rolls Investigation vs the concealment TN and, on success, emits a TIER_3
+  SUPERNATURAL "blood magic discovered" topic that propagates to the investigator's
+  lord — covered by an end-to-end closure test (cast → record → INVESTIGATE_PROVINCE
+  → topic). Channel 3 — caster Taint accrues (ML−1); the Lore: Shadowlands detection
+  roll TN remains deferred to s31 (Sense spell), as documented. Channel 4 — seasonal
+  casts pass `witnesses=[]` (covert), so no direct witnesses, by design. No gaps
+  introduced and no fixes needed — the new casts' outputs are consumed correctly.
 
 ### Systems Added 2026-06-07 (Kolat — deferred executors + network records)
 Implemented the Kolat ActionID executors that were stubbed `deferred_system` in
