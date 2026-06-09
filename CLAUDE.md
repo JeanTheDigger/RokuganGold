@@ -4516,10 +4516,12 @@ template generators it depends on. Faithful summary of the fixes that landed:
   reach INVESTIGATE_PROVINCE; the +2 Kuni/Asako detection edge applies. **Still
   blocked (Decision #5, s11.3.5):** dedicated Kuni/Asako/Kuroiban witch-hunter
   *standing* objectives (autonomous hunting without lordship or magistracy) — not
-  invented here. **Known discrepancy (not changed — needs owner approval):**
-  `_process_ptl_detection` applies the Kuni/Asako bonus as a flat **+2**, while
-  GDD s11.11 specifies **+2k0** (two unkept dice). Pre-existing; flagged, not
-  altered (numeric mechanic change).
+  invented here. **Kuni/Asako bonus confirmed correct (+2k0):** `_process_ptl_detection`
+  passes `family_bonus` (=2) into `resolve_skill_check`'s `bonus_rolled` parameter
+  (8th positional) with `bonus_kept` defaulting to 0 — two extra unkept dice,
+  exactly GDD s11.11's "+2k0". (An earlier note mis-described this as a flat +2;
+  retracted after re-reading the call. A clarifying comment was added at the call
+  site to prevent the same misread.)
 
 ### Systems Added 2026-06-07 (Kolat — deferred executors + network records)
 Implemented the Kolat ActionID executors that were stubbed `deferred_system` in

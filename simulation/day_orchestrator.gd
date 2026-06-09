@@ -5428,6 +5428,9 @@ static func _process_ptl_detection(
 		if lore_rank <= 0:
 			continue
 
+		# Kuni/Asako get +2k0 (s11.11): family_bonus feeds the bonus_rolled
+		# parameter (8th positional), with bonus_kept defaulting to 0 — two
+		# extra unkept dice, not a flat total bonus.
 		var family_bonus: int = 2 if character.family in ["Kuni", "Asako"] else 0
 		var check: Dictionary = SkillResolver.resolve_skill_check(
 			character, dice_engine, "Lore: Shadowlands", ptl_tn,

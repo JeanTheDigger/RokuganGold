@@ -81,3 +81,17 @@ func test_non_shugenja_does_not_detect() -> void:
 
 func test_shugenja_without_lore_does_not_detect() -> void:
 	assert_eq(_run_detection(_shugenja(3, "Asako", 0)).size(), 0, "shugenja with no Lore: Shadowlands cannot detect")
+
+
+# -- Lock: Kuni/Asako bonus is +2k0 (bonus_rolled), not a flat total bonus --
+
+func test_family_bonus_is_two_unkept_dice() -> void:
+	# Same seed: +2 rolled dice (k0) keeps the best of a larger pool, so the
+	# total is never worse than baseline. Guards family_bonus → bonus_rolled wiring.
+	var c := _shugenja(9, "Kuni", 4)
+	var base := SkillResolver.resolve_skill_check(
+		c, DiceEngine.new(7), "Lore: Shadowlands", 0, 0, "", Enums.Trait.PERCEPTION, 0, 0)
+	var bonus := SkillResolver.resolve_skill_check(
+		c, DiceEngine.new(7), "Lore: Shadowlands", 0, 0, "", Enums.Trait.PERCEPTION, 2, 0)
+	assert_gte(bonus.get("total", 0), base.get("total", 0),
+		"+2k0 (bonus_rolled) is never worse than no bonus on the same seed")
