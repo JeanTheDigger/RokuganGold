@@ -24736,7 +24736,7 @@ static func _inject_shide_context(
 		if c == null or CharacterStats.is_dead(c):
 			continue
 		var ws: Dictionary = world_states.get(c.character_id, {})
-		if ws.is_empty():
+		if not world_states.has(c.character_id):
 			continue
 		if not ws.has("known_objectives"):
 			ws["known_objectives"] = {}
