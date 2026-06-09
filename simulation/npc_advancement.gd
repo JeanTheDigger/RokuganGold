@@ -159,12 +159,16 @@ static func _raise_ring(character: L5RCharacterData, ring: Enums.Ring) -> void:
 		character.void_ring += 1
 		character.max_void_points = character.void_ring
 		return
+	# s48: filling the Ring's progress bar raises the Ring by one rank. The Ring
+	# value is min(t1, t2), so raise every underlying trait currently at that
+	# minimum — one trait when uneven, both when equal — so the min rises by 1.
 	var traits: Array = Enums.RING_TRAITS[ring]
 	var t1_val: int = character.get_trait_value(traits[0])
 	var t2_val: int = character.get_trait_value(traits[1])
-	if t1_val <= t2_val:
+	var ring_min: int = mini(t1_val, t2_val)
+	if t1_val == ring_min:
 		character.set_trait_value(traits[0], t1_val + 1)
-	else:
+	if t2_val == ring_min:
 		character.set_trait_value(traits[1], t2_val + 1)
 
 
