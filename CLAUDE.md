@@ -4507,6 +4507,28 @@ template generators it depends on. Faithful summary of the fixes that landed:
   self-bleeds the caster (existing committed model) — switching the blood source to
   a nameless victim (which lifts the survivability ML cap) is a separate global maho
   change, not done here.
+- **Stealing the Soul — second wired Grand-Map spell effect (s43, owner-authorized
+  2026-06-09).** The 1-day Trait drain is inert at world scale, so only the lethal
+  branch resolves: "if this reduces the Earth Ring, their Wounds are lowered,
+  potentially resulting in death." `_soul_steal_would_kill` is side-effect free —
+  it temporarily drops the Earth-setting Trait (lower of Stamina/Willpower) by 1,
+  checks `CharacterStats.is_dead` against the standard wound model, restores. So it
+  only kills a **co-located, already-wounded** target whose wounds exceed the
+  reduced (one-Earth-level-lower) capacity. `_pick_soul_steal_target`
+  (**investigators-only**, owner decision): a co-located living non-PC non-cultist
+  holding an active `UPHOLD_LAW`/`INVESTIGATE_THREAT` objective for whom the drop is
+  lethal, highest Status first; none → the cell doesn't cast it. Spell-selection
+  priority (owner): **kill (Stealing the Soul, ML4/Earth 4) > shed (Spreading the
+  Darkness, ML2) > highest-ML**. `_resolve_stealing_the_soul` honors GREAT_DESTINY
+  (s45 — target cheats death, drops to DOWN), else mirrors `_apply_victim_death`
+  (wounds lethal = Earth×25, suspicious `death_event` with `killer_id`/`is_lord`,
+  Tier 2 LEGAL mysterious-death topic, NEUTRAL subject_role). The seasonal second
+  death pass (after the maho casts) fires succession same-season. Single-caster base
+  drain (no Raises); fetish possession assumed (no fetish inventory tracked). The
+  cast's MAHO crime record is separate; the death shows no obvious cause.
+  `death_events`/`active_topics`/`next_topic_id` threaded into
+  `_process_seasonal_maho_casts` (trailing optional params). 9 tests
+  (`test_maho_seasonal_cast.gd` 18→27).
 - **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
   feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
   the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO

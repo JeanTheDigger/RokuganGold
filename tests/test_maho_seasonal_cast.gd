@@ -242,3 +242,97 @@ func test_seasonal_pass_casts_spreading_and_pushes() -> void:
 		"dangerously-tainted member → cell casts Spreading the Darkness")
 	assert_eq(casts[0]["transfer"]["mode"], "push")
 	assert_gt(victim.taint, 0.0, "co-located non-cultist receives the pushed Taint")
+
+
+# -- Stealing the Soul (s43, owner-authorized 2026-06-09) ----------------------
+
+func _investigator(id: int, loc: String, wounds: int) -> L5RCharacterData:
+	var c := _char(id, loc, 0.0)   # Earth 3 (Stamina/Willpower 3)
+	c.wounds_taken = wounds
+	return c
+
+
+func test_soul_steal_healthy_target_survives() -> void:
+	assert_false(DayOrchestrator._soul_steal_would_kill(_investigator(1, "100", 0)),
+		"a 0-wound target never dies from a capacity reduction")
+
+
+func test_soul_steal_heavily_wounded_is_lethal() -> void:
+	var t := _investigator(1, "100", 40)  # Earth 3 cap 48 (alive); Earth 2 cap 32 → dead
+	assert_true(DayOrchestrator._soul_steal_would_kill(t))
+	assert_eq(t.stamina, 3, "trait restored — check is side-effect free")
+	assert_eq(t.willpower, 3)
+	assert_eq(t.wounds_taken, 40, "wounds untouched by the check")
+
+
+func test_soul_steal_lightly_wounded_survives() -> void:
+	assert_false(DayOrchestrator._soul_steal_would_kill(_investigator(1, "100", 20)),
+		"Earth-2 capacity (32) still holds 20 wounds")
+
+
+func test_soul_steal_earth_floor_cannot_kill() -> void:
+	var t := _investigator(1, "100", 10)
+	t.stamina = 1; t.willpower = 1  # Earth 1 — already at the floor
+	assert_false(DayOrchestrator._soul_steal_would_kill(t))
+
+
+func test_pick_soul_steal_investigator_only() -> void:
+	var caster := _char(1, "100", 2.0); caster.stamina = 4; caster.willpower = 4
+	var hunter := _investigator(2, "100", 40)
+	var civ := _investigator(3, "100", 40)   # wounded but no investigation objective
+	var omap := {2: {"standing": {"need_type": "UPHOLD_LAW"}}}
+	var t := DayOrchestrator._pick_soul_steal_target(caster, [caster, hunter, civ], omap)
+	assert_eq(t.character_id, 2, "only the wounded investigator qualifies")
+
+
+func test_pick_soul_steal_skips_unkillable_investigator() -> void:
+	var caster := _char(1, "100", 2.0); caster.stamina = 4; caster.willpower = 4
+	var hunter := _investigator(2, "100", 10)  # investigator but not lethally wounded
+	var omap := {2: {"primary": {"need_type": "INVESTIGATE_THREAT"}}}
+	assert_null(DayOrchestrator._pick_soul_steal_target(caster, [caster, hunter], omap))
+
+
+func test_pick_soul_steal_skips_pc_and_cultist() -> void:
+	var caster := _char(1, "100", 2.0); caster.stamina = 4; caster.willpower = 4
+	var pc := _char(2, "100", 0.0, true); pc.wounds_taken = 40
+	var cultist := _cultist(3, "100", 0.0); cultist.wounds_taken = 40
+	var omap := {2: {"standing": {"need_type": "UPHOLD_LAW"}},
+		3: {"standing": {"need_type": "UPHOLD_LAW"}}}
+	assert_null(DayOrchestrator._pick_soul_steal_target(caster, [caster, pc, cultist], omap))
+
+
+func test_resolve_stealing_the_soul_kills() -> void:
+	var caster := _char(1, "100", 2.0)
+	var victim := _investigator(2, "100", 40); victim.role_position = "magistrate"
+	var deaths: Array = []
+	var topics: Array = []
+	var res := DayOrchestrator._resolve_stealing_the_soul(
+		caster, victim, deaths, topics, [500], 30)
+	assert_eq(res["mode"], "killed")
+	assert_true(CharacterStats.is_dead(victim), "Earth failure overwhelms the target's wounds")
+	assert_eq(deaths.size(), 1)
+	assert_true(deaths[0]["suspicious_death"], "death shows no obvious cause")
+	assert_eq(deaths[0]["killer_id"], 1)
+	assert_true(deaths[0]["is_lord"], "role_position set → succession triggers")
+	assert_eq(topics.size(), 1)
+	assert_eq(topics[0].tier, TopicData.Tier.TIER_2)
+	assert_eq(topics[0].subject_role, "NEUTRAL", "dead-character topic carries NEUTRAL valence")
+
+
+func test_seasonal_pass_kill_outranks_shed() -> void:
+	var caster := _char(1, "100", 2.0); caster.stamina = 4; caster.willpower = 4  # Earth 4, Rank 2
+	var hunter := _investigator(2, "100", 40); hunter.role_position = "magistrate"
+	var prov := _prov(5)
+	var crime_records: Array = []
+	var deaths: Array = []
+	var topics: Array = []
+	var casts := DayOrchestrator._process_seasonal_maho_casts(
+		[_cell(5, Enums.BloodspeakerCellState.ACTIVE)], {5: prov}, [caster, hunter],
+		{100: 5}, crime_records, [1], DiceEngine.new(7), 30,
+		{2: {"standing": {"need_type": "UPHOLD_LAW"}}}, deaths, topics, [500])
+	assert_eq(casts.size(), 1)
+	assert_eq(casts[0]["spell_id"], "stealing_the_soul",
+		"a kill opportunity outranks taint-shedding")
+	assert_eq(casts[0]["kill"]["mode"], "killed")
+	assert_true(CharacterStats.is_dead(hunter), "the investigating magistrate dies")
+	assert_eq(deaths.size(), 1, "death_event appended for same-season succession")

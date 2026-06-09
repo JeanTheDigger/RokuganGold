@@ -1370,6 +1370,7 @@ static func advance_day(
 		var _maho_cast_results: Array = _process_seasonal_maho_casts(
 			bloodspeaker_cells, provinces, characters, _si_spm,
 			crime_records, next_case_id, dice_engine, ic_day, objectives_map,
+			death_events, active_topics, next_topic_id,
 		)
 		TheaterSystem.process_degradation(theater_pieces, ic_day)
 		_process_doshin_seasonal_recovery(world_states)
@@ -11081,6 +11082,9 @@ static func _process_seasonal_maho_casts(
 	dice_engine: DiceEngine,
 	ic_day: int,
 	objectives_map: Dictionary = {},
+	death_events: Array = [],
+	active_topics: Array = [],
+	next_topic_id: Array = [],
 ) -> Array:
 	var casts: Array = []
 	if cells.is_empty():
@@ -11112,18 +11116,26 @@ static func _process_seasonal_maho_casts(
 		if not province is ProvinceData:
 			continue
 
-		# s43 Spreading the Darkness preference (owner-authorized 2026-06-09): when
-		# a cult member is dangerously Tainted (Rank ≥ 2 — the Channel-3 detection
-		# onset, CLAUDE.md Decision 5), the cell sheds Taint by casting Spreading
-		# the Darkness instead of its highest-ML spell, IF the caster's Earth
-		# supports it. Otherwise it casts its strongest survivable spell as usual.
-		var darkness_source: L5RCharacterData = _pick_taint_shed_source(pool)
+		# Spell selection priority (owner-authorized 2026-06-09):
+		#   1. Stealing the Soul — finish a co-located, wounded, investigating threat
+		#      (kill opportunity outranks hygiene), if the caster's Earth supports ML4.
+		#   2. Spreading the Darkness — shed Taint off a dangerously Tainted member
+		#      (Rank ≥ 2, the Channel-3 detection onset), if the caster's Earth supports ML2.
+		#   3. Otherwise the cell's strongest survivable spell.
+		var kill_target: L5RCharacterData = null
+		if MahoSpellLibrary.can_support_spell(caster, "stealing_the_soul"):
+			kill_target = _pick_soul_steal_target(caster, pool, objectives_map)
+		var darkness_source: L5RCharacterData = null
 		var spell: Dictionary
-		if darkness_source != null \
-				and MahoSpellLibrary.can_support_spell(caster, "spreading_the_darkness"):
-			spell = MahoSpellLibrary.get_spell("spreading_the_darkness")
+		if kill_target != null:
+			spell = MahoSpellLibrary.get_spell("stealing_the_soul")
 		else:
-			spell = MahoSpellLibrary.pick_cast_spell(caster)
+			darkness_source = _pick_taint_shed_source(pool)
+			if darkness_source != null \
+					and MahoSpellLibrary.can_support_spell(caster, "spreading_the_darkness"):
+				spell = MahoSpellLibrary.get_spell("spreading_the_darkness")
+			else:
+				spell = MahoSpellLibrary.pick_cast_spell(caster)
 		if spell.is_empty():
 			continue
 
@@ -11136,20 +11148,26 @@ static func _process_seasonal_maho_casts(
 		if rec is CrimeRecord:
 			crime_records.append(rec)
 
-		# Resolve the Taint-transfer effect when the cell chose Spreading the Darkness.
+		# Resolve the chosen spell's Grand-Map effect.
+		var spell_id: String = spell.get("spell_id", "")
 		var transfer: Dictionary = {}
-		if spell.get("spell_id", "") == "spreading_the_darkness" and darkness_source != null:
+		var kill: Dictionary = {}
+		if spell_id == "stealing_the_soul" and kill_target != null:
+			kill = _resolve_stealing_the_soul(
+				caster, kill_target, death_events, active_topics, next_topic_id, ic_day)
+		elif spell_id == "spreading_the_darkness" and darkness_source != null:
 			transfer = _resolve_spreading_the_darkness(
 				caster, darkness_source, pool, objectives_map, dice_engine)
 
 		casts.append({
 			"caster_id": caster.character_id,
 			"province_id": cell.province_id,
-			"spell_id": spell.get("spell_id", ""),
+			"spell_id": spell_id,
 			"mastery_level": int(spell["mastery_level"]),
 			"ptl_delta": cast_result.get("ptl_delta", 0.0),
 			"taint_gained": cast_result.get("taint_gained", 0),
 			"transfer": transfer,
+			"kill": kill,
 		})
 
 	return casts
@@ -11288,6 +11306,106 @@ static func _darkness_higher_status(a: L5RCharacterData, b: L5RCharacterData) ->
 	if a.status != b.status:
 		return a.status > b.status
 	return a.character_id < b.character_id
+
+
+## Selects the Stealing the Soul kill target (s43, owner decision 2026-06-09 —
+## investigators-only): a co-located living, non-PC, non-cultist NPC holding an
+## active UPHOLD_LAW / INVESTIGATE_THREAT objective (the local hunter closing on
+## the cell) for whom draining the Earth-setting Trait by 1 Rank would be lethal.
+## Highest Status first; null if none — the cell then does not cast Stealing the
+## Soul. (The 1-day Trait drain is inert at world scale; only the kill matters.)
+static func _pick_soul_steal_target(
+	caster: L5RCharacterData,
+	pool: Array,
+	objectives_map: Dictionary,
+) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for c: L5RCharacterData in pool:
+		if c.character_id == caster.character_id:
+			continue
+		if c.is_pc or c.cult_affiliation:
+			continue
+		if not _is_active_investigator(c, objectives_map):
+			continue
+		if not _soul_steal_would_kill(c):
+			continue
+		if best == null or _darkness_higher_status(c, best):
+			best = c
+	return best
+
+
+## True if draining the target's Earth-setting Trait (the lower of Stamina /
+## Willpower) by 1 Rank would drop their wound capacity below their current wounds
+## — the only durable consequence of Stealing the Soul (s43: "if this reduces the
+## Earth Ring, their Wounds are lowered, potentially resulting in death"). A
+## 0-wound target never dies from a capacity reduction. Side-effect free:
+## temporarily reduces the trait, checks death via the standard wound model, restores.
+static func _soul_steal_would_kill(target: L5RCharacterData) -> bool:
+	if CharacterStats.get_earth_ring(target) <= 1:
+		return false  # Earth already at the floor; cannot be reduced
+	if target.wounds_taken <= 0:
+		return false  # a healthy target survives the temporary capacity drop
+	var drain_stamina: bool = target.stamina <= target.willpower
+	var saved: int = target.stamina if drain_stamina else target.willpower
+	if drain_stamina:
+		target.stamina = maxi(1, target.stamina - 1)
+	else:
+		target.willpower = maxi(1, target.willpower - 1)
+	var lethal: bool = CharacterStats.is_dead(target)
+	if drain_stamina:
+		target.stamina = saved
+	else:
+		target.willpower = saved
+	return lethal
+
+
+## Applies the Stealing the Soul kill (s43, owner-authorized 2026-06-09). The
+## picker already confirmed the Earth-drop is lethal. Honors GREAT_DESTINY (s45):
+## a target with an available Great Destiny cheats death, dropping to DOWN. Else
+## sets wounds lethal, appends a suspicious death_event (drives succession /
+## cleanup) with the caster as killer, and seeds a Tier 2 mysterious-death topic
+## (subject_role defaults NEUTRAL per the dead-character rule). The MAHO crime
+## record from the cast is separate; the death itself shows no obvious cause.
+static func _resolve_stealing_the_soul(
+	caster: L5RCharacterData,
+	target: L5RCharacterData,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> Dictionary:
+	var ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+	if AdvantageSystem.check_great_destiny(target, ic_year):
+		var thr: int = CharacterStats.get_wound_threshold_per_level(target)
+		target.wounds_taken = thr * 6 + 1  # survives at the DOWN level
+		var gd: AdvantageData = AdvantageSystem.get_advantage(
+			target, Enums.Advantage.GREAT_DESTINY)
+		if gd != null:
+			gd.metadata["last_triggered_ic_year"] = ic_year
+		return {"resolved": true, "mode": "survived_destiny",
+			"target_id": target.character_id}
+
+	var earth: int = CharacterStats.get_ring_value(target, Enums.Ring.EARTH)
+	target.wounds_taken = earth * 5 * 5  # guaranteed lethal
+	death_events.append({
+		"character_id": target.character_id,
+		"is_lord": target.role_position != "",
+		"cause": "soul_stolen",
+		"suspicious_death": true,
+		"ic_day": ic_day,
+		"killer_id": caster.character_id,
+	})
+	if not next_topic_id.is_empty():
+		var tid: int = next_topic_id[0]
+		next_topic_id[0] = tid + 1
+		var title: String = "Mysterious death of %s at %s" % [
+			target.character_name, target.physical_location]
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			tid, title, TopicData.Tier.TIER_2, TopicData.Category.LEGAL,
+			ic_day, 0.0, [], target.clan, "", target.character_id, "death", "mysterious")
+		topic.slug = "soul_stolen_death_%d" % target.character_id
+		active_topics.append(topic)
+	return {"resolved": true, "mode": "killed", "target_id": target.character_id}
 
 
 static func _detect_maho_provinces(
