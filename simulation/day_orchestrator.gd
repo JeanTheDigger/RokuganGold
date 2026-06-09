@@ -23631,7 +23631,7 @@ static func _inject_poem_context(
 		if CharacterStats.is_dead(character):
 			continue
 		var ws: Dictionary = world_states.get(character.character_id, {})
-		if ws.is_empty():
+		if not world_states.has(character.character_id):
 			continue
 		if not ws.has("known_objectives"):
 			ws["known_objectives"] = {}
@@ -24439,7 +24439,7 @@ static func _inject_ikebana_context(
 		if CharacterStats.is_dead(character):
 			continue
 		var ws: Dictionary = world_states.get(character.character_id, {})
-		if ws.is_empty():
+		if not world_states.has(character.character_id):
 			continue
 		if not ws.has("known_objectives"):
 			ws["known_objectives"] = {}
@@ -25001,7 +25001,7 @@ static func _inject_garden_context(
 		if CharacterStats.is_dead(character):
 			continue
 		var ws: Dictionary = world_states.get(character.character_id, {})
-		if ws.is_empty():
+		if not world_states.has(character.character_id):
 			continue
 		if not ws.has("known_objectives"):
 			ws["known_objectives"] = {}
@@ -25640,7 +25640,7 @@ static func _inject_painting_context(
 		if CharacterStats.is_dead(character):
 			continue
 		var ws: Dictionary = world_states.get(character.character_id, {})
-		if ws.is_empty():
+		if not world_states.has(character.character_id):
 			continue
 		if not ws.has("known_objectives"):
 			ws["known_objectives"] = {}
@@ -26122,7 +26122,7 @@ static func _inject_sculpture_context(
 		if CharacterStats.is_dead(character):
 			continue
 		var ws: Dictionary = world_states.get(character.character_id, {})
-		if ws.is_empty():
+		if not world_states.has(character.character_id):
 			continue
 		if not ws.has("known_objectives"):
 			ws["known_objectives"] = {}
