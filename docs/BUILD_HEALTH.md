@@ -1,13 +1,28 @@
 # Build Health — Compile & Test Status
 
-_Last updated: 2026-06-07_
+_Last updated: 2026-06-09_
 
 ## TL;DR
 
-**The full test suite now compiles, boots, and runs end-to-end** — for the first
-time. Latest full run: **12940 passing / 131 failing / 13225 tests (224 scripts)**.
+**The full test suite is green.** Latest full run:
+**13140 passing / 0 failing / 13226 tests (224 scripts); 86 Risky/Pending.**
 Every test file loads (zero parse errors), the project boots clean (all autoloads
-instantiate), and the suite completes without hanging.
+instantiate), and the suite completes without hanging. The remaining
+Risky/Pending entries are conditional-assert tests and intentional `pending()`
+markers (e.g. INNATE_ABILITY s45 gap, minor-clan roster count awaiting an owner
+decision), not failures.
+
+The runtime-failure cleanup that closed out the last 47 failures surfaced
+several real implementation bugs (not just test drift), e.g.: geisha okiya clan
+lookup using an int key against a string-keyed map (clan tiers never applied in
+production); ring advancement never raising a ring when both underlying traits
+were equal; Phoenix Stage-4 champion removal unreachable below Council quorum;
+MissionPopulator tiering via get_class() (native base) instead of the GDScript
+class_name; multiple induction/letter sites reading a nonexistent `lord_rank`
+property on L5RCharacterData; HIRE_RONIN/induction passing ic_day as the
+resolve_skill_check `raises` arg; PERMANENT_WOUND never reaching NICKED; combat
+stance/dead-check ordering; and a same-tick succession removal that hid
+auto-confirmed successions from callers.
 
 This was not the case before: the GUT runner itself was broken on Godot 4.6, so
 there was **no compile/test feedback at all**, and parse errors + API drift had
