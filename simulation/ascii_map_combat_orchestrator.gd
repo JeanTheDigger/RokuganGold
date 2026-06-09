@@ -518,6 +518,16 @@ static func execute_melee_attack(
 	if not ts.can_use_complex():
 		return {"success": false, "reason": "no_complex_actions_remaining"}
 
+	var a_p: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if a_p == null or t_p == null:
+		return {"success": false, "reason": "participant_missing"}
+
+	# Defense/Full Defense stances prohibit attacking entirely (s40) — this is an
+	# action-legality check, independent of position, so it precedes the range check.
+	if a_p.stance == Enums.Stance.DEFENSE or a_p.stance == Enums.Stance.FULL_DEFENSE:
+		return {"success": false, "reason": "defense_cannot_attack"}
+
 	# Range check.
 	var apos: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
 	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
@@ -525,14 +535,6 @@ static func execute_melee_attack(
 		return {"success": false, "reason": "position_unknown"}
 	if _chebyshev(apos, tpos) > MELEE_RANGE_TILES:
 		return {"success": false, "reason": "out_of_melee_range"}
-
-	var a_p: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
-	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
-	if a_p == null or t_p == null:
-		return {"success": false, "reason": "participant_missing"}
-
-	if a_p.stance == Enums.Stance.DEFENSE or a_p.stance == Enums.Stance.FULL_DEFENSE:
-		return {"success": false, "reason": "defense_cannot_attack"}
 
 	var is_being_guarded: bool = _is_being_guarded(state, target_id)
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, true, is_being_guarded, weapon_name)
@@ -1284,13 +1286,15 @@ static func execute_npc_turn(
 	dice_engine: DiceEngine,
 ) -> Dictionary:
 	var actions_taken: Array = []
+	# A dead NPC is skipped regardless of turn-state registration.
+	if CharacterStats.is_dead(npc):
+		return {"actions": [], "reason": "dead"}
+
 	var ts: TurnState = state.turn_states.get(npc_id, null)
 	if ts == null:
 		return {"actions": [], "reason": "not_in_combat"}
 
 	var wl: int = CharacterStats.get_wound_level(npc)
-	if CharacterStats.is_dead(npc):
-		return {"actions": [], "reason": "dead"}
 
 	var p: IndividualCombat.Participant = state.combat.participants.get(npc_id, null)
 	if p == null:

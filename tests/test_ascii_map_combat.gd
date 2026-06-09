@@ -1173,7 +1173,7 @@ func test_npc_turn_attacks_adjacent_enemy() -> void:
 
 func test_npc_turn_skips_dead_npc() -> void:
 	var npc := _make_char(1, 1, 1)
-	npc.wounds_taken = 9  # DEAD
+	npc.wounds_taken = 20  # Earth 1 (threshold 2) → DEAD past ~17 wounds
 	var player := _make_char(2)
 	var state := _make_state(npc, player)
 	var result := AsciiMapCombatOrchestrator.execute_npc_turn(
