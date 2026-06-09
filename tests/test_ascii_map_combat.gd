@@ -1657,3 +1657,57 @@ func test_weapon_grapple_lose_control_grants_disarm_raises() -> void:
 			AsciiMapCombatOrchestrator.WEAPON_GRAPPLE_LOSE_CONTROL_DISARM_RAISES)
 	else:
 		pass_test("control roll did not flip this seed; banking path is conditional")
+
+
+# ===========================================================================
+# -- NPC AI uses the new maneuvers (s40) ------------------------------------
+# ===========================================================================
+
+func test_npc_dual_wielder_makes_off_hand_swing() -> void:
+	var player := _make_char(1, 5, 5, 1, 1, 1, 1, 1, 1)  # high Earth, survives
+	var enemy := _make_char(2, 5, 5, 5, 5, 5, 5, 5, 5)
+	enemy.skills = {"Kenjutsu": 5}
+	var m := _make_map()
+	var state := AsciiMapCombatOrchestrator.setup_combat(m, [
+		{"char": player, "faction": AsciiMapCombatOrchestrator.FACTION_PLAYER, "x": 1, "y": 1},
+		{"char": enemy,  "faction": AsciiMapCombatOrchestrator.FACTION_ENEMY,  "x": 2, "y": 1},
+	], DiceEngine.new(7))
+	var e_p: IndividualCombat.Participant = state.combat.participants.get(2)
+	e_p.dual_wielding = true
+	e_p.off_hand_weapon = "wakizashi"
+	var r := AsciiMapCombatOrchestrator.execute_npc_turn(state, 2, enemy, {1: player, 2: enemy}, DiceEngine.new(7))
+	var actions: Array = r.get("actions", [])
+	var saw_off_hand := false
+	for a in actions:
+		if a.get("action", "") == "off_hand_attack":
+			saw_off_hand = true
+	assert_true(saw_off_hand, "dual-wielding NPC makes its off-hand swing")
+
+
+func test_npc_in_weapon_grapple_hits_with_weapon_damage() -> void:
+	var player := _make_char(1, 5, 5, 1, 1, 1, 1, 1, 1)  # high Earth, survives the Hit
+	var enemy := _make_char(2, 5, 5, 5, 5, 5, 5, 5, 5)
+	enemy.skills = {"Polearms": 5}
+	var m := _make_map()
+	var state := AsciiMapCombatOrchestrator.setup_combat(m, [
+		{"char": player, "faction": AsciiMapCombatOrchestrator.FACTION_PLAYER, "x": 1, "y": 1},
+		{"char": enemy,  "faction": AsciiMapCombatOrchestrator.FACTION_ENEMY,  "x": 2, "y": 1},
+	], DiceEngine.new(3))
+	# Put the enemy NPC into a weapon grapple, in control of the player.
+	var e_p: IndividualCombat.Participant = state.combat.participants.get(2)
+	var p_p: IndividualCombat.Participant = state.combat.participants.get(1)
+	IndividualCombat.apply_condition(e_p, IndividualCombat.CONDITION_GRAPPLED)
+	IndividualCombat.apply_condition(p_p, IndividualCombat.CONDITION_GRAPPLED)
+	e_p.grapple_partner_id = 1
+	p_p.grapple_partner_id = 2
+	e_p.grapple_in_control = true
+	p_p.grapple_in_control = false
+	e_p.weapon_grapple_skill = "Polearms"
+	e_p.weapon_grapple_weapon = "naginata"
+	var r := AsciiMapCombatOrchestrator.execute_npc_turn(state, 2, enemy, {1: player, 2: enemy}, DiceEngine.new(3))
+	var actions: Array = r.get("actions", [])
+	var saw_hit := false
+	for a in actions:
+		if a.get("action", "") == "grapple_hit" and a.get("result", {}).get("success", false):
+			saw_hit = true
+	assert_true(saw_hit, "NPC in a weapon grapple deals weapon-damage Hit")

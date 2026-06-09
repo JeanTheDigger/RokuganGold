@@ -1586,6 +1586,16 @@ static func execute_npc_turn(
 				var ea: Dictionary = execute_extra_attack(state, npc_id, best_target, npc, target_char, weapon_name, dice_engine)
 				if ea.get("success", false):
 					actions_taken.append({"action": "extra_attack", "result": ea})
+
+			# Off-hand swing (s40): a dual-wielding NPC always makes its free
+			# off-hand attack when adjacent and the target still stands — it is
+			# pure extra damage at the off-hand size penalty.
+			if p.dual_wielding and p.off_hand_weapon != "" and target_in_melee \
+					and not p.off_hand_attack_used_this_turn \
+					and not CharacterStats.is_dead(target_char):
+				var oh: Dictionary = execute_off_hand_attack(state, npc_id, best_target, npc, target_char, dice_engine)
+				if oh.get("success", false):
+					actions_taken.append({"action": "off_hand_attack", "result": oh})
 	elif ts.can_use_free_move() and not ts.is_down_restricted(wl):
 		# Can still use free move to get closer.
 		var free_budget: int = MovementSystem.budget(CharacterStats.get_ring_value(npc, Enums.Ring.WATER), MovementSystem.MoveAction.FREE)
