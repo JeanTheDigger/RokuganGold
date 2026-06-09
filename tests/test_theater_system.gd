@@ -1355,9 +1355,10 @@ func test_piece_selection_kyogen_subject_present_bonus() -> void:
 
 
 func test_piece_selection_kyogen_higher_status_penalty() -> void:
-	# Kyogen: subject has higher Status than performer, no pretext → -40.
-	# With no pretext and subject Status 5 > performer Status 2:
-	# score = 50 - 30 (<3 witnesses) - 40 = -20 ≤ 0 → piece_id -1.
+	# Kyogen, subject present & higher Status, no pretext. Per GDD s57.22 (line 23)
+	# the +25 "subject present" and −40 "social risk" modifiers BOTH apply, plus
+	# +15 high-value witness and −30 (<3 witnesses): 50 +25 +15 −30 −40 = 20 > 0 →
+	# selected. Satirizing the powerful is risky but the +25 offsets it (GDD design).
 	var ctx := _make_perform_ctx()
 	ctx.status = 2.0  # performer status
 
@@ -1376,7 +1377,7 @@ func test_piece_selection_kyogen_higher_status_penalty() -> void:
 	need.need_type = "SEEK_GLORY"
 
 	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
-	assert_eq(result["piece_id"], -1)
+	assert_eq(result["piece_id"], 120, "net score 20 > 0 -> kyogen selected per GDD s57.22 line 23")
 
 
 func test_piece_selection_kyogen_pretext_negates_status_penalty() -> void:
