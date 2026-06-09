@@ -15965,8 +15965,9 @@ func test_inject_poem_context_no_item_leaves_key_absent() -> void:
 	c.items = []
 	var ws: Dictionary = {1: {"known_objectives": {}}}
 	DayOrchestrator._inject_poem_context([c], ws)
-	assert_false(ws[1]["known_objectives"].has("available_poem_item_id"),
-		"No poem scroll = no context key injected")
+	# No scroll writes the -1 sentinel (so any stale value is cleared).
+	assert_eq(ws[1]["known_objectives"].get("available_poem_item_id", 0), -1,
+		"No poem scroll = -1 sentinel")
 
 
 func test_inject_poem_context_skips_dead_characters() -> void:

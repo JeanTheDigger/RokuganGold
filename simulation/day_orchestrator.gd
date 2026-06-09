@@ -23680,7 +23680,10 @@ static func _inject_poem_context(
 			continue
 		if not ws.has("known_objectives"):
 			ws["known_objectives"] = {}
-		# Only inject the keys when a poetry scroll is actually available (no key = no poem).
+		# Always write the keys (default -1/0) so a stale value from a prior scroll
+		# is cleared; overwrite when a poetry scroll is present.
+		ws["known_objectives"]["available_poem_item_id"] = -1
+		ws["known_objectives"]["available_poem_raises"] = 0
 		for item: Variant in character.items:
 			if item is Dictionary and \
 					(item as Dictionary).get("item_type", "") == "poetry_scroll":
