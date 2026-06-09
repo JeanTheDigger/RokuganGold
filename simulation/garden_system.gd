@@ -408,7 +408,11 @@ static func apply_seasonal_auto_degradation(garden: GardenData, ic_season: int) 
 	## Fires when a full IC season passes without any MAINTAIN_GARDEN attempt.
 	## Equivalent to a maintenance failure (s57.23a A5).
 	## Returns: {"degraded": bool, "destroyed": bool}
-	return apply_maintain_result(garden, false, ic_season)
+	var result: Dictionary = apply_maintain_result(garden, false, ic_season)
+	# Stamp the season so the seasonal pass does not auto-degrade this garden
+	# twice in the same season.
+	garden.last_maintained_season = ic_season
+	return result
 
 # ---------------------------------------------------------------------------
 # Removal
