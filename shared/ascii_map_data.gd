@@ -20,6 +20,11 @@ extends Resource
 @export var width: int = 31
 @export var height: int = 31
 
+# Population slots for mission populator (filled by template generators).
+# Each entry: { "x": int, "y": int, "role": int, ... }. Common to all map
+# templates so MissionPopulator can operate on any AsciiMapData uniformly.
+@export var population_slots: Array = []
+
 # Primary flat tile array. Each byte is an Enums.TileType value.
 # Populated by AsciiMapGenerator; read-only after generation.
 @export var tile_types: PackedByteArray = []

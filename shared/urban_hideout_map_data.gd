@@ -103,7 +103,6 @@ const ROOM_COUNT_RANGE: Array[Vector2i] = [
 
 # Enemy combatant slots.
 # Each dict: { x, y, role (PopRole), zone (Zone), room_id }
-@export var population_slots: Array = []
 
 # Objective markers.
 # Each dict: { x, y, obj_type (ObjType), room_id }

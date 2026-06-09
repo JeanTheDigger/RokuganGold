@@ -109,7 +109,6 @@ const SHELTER_RANGE: Array[Vector2i] = [
 # Enemy combatant slots.
 # Each dict: { x, y, role (PopRole) }
 # No zone field — single-zone template; everyone is inside or on the perimeter.
-@export var population_slots: Array = []
 
 # Objective markers.
 # Each dict: { x, y, obj_type (ObjType), shelter_id: int }
