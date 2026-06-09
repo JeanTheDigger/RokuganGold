@@ -2196,13 +2196,15 @@ func test_find_willing_teacher_co_located_willing_teacher_found() -> void:
 	student.character_id = 5
 	student.physical_location = "castle_a"
 	student.wounds_taken = 0
-	student.earth = 2
+	student.stamina = 2
+	student.willpower = 2
 
 	var teacher: L5RCharacterData = L5RCharacterData.new()
 	teacher.character_id = 10
 	teacher.physical_location = "castle_a"
 	teacher.wounds_taken = 0
-	teacher.earth = 2
+	teacher.stamina = 2
+	teacher.willpower = 2
 	teacher.disposition_values = {5: 5}  # positive toward student
 
 	var piece: TheaterPieceData = TheaterSystem.make_single_role_piece(
@@ -2220,13 +2222,15 @@ func test_find_willing_teacher_negative_disposition_returns_minus1() -> void:
 	student.character_id = 5
 	student.physical_location = "castle_a"
 	student.wounds_taken = 0
-	student.earth = 2
+	student.stamina = 2
+	student.willpower = 2
 
 	var teacher: L5RCharacterData = L5RCharacterData.new()
 	teacher.character_id = 10
 	teacher.physical_location = "castle_a"
 	teacher.wounds_taken = 0
-	teacher.earth = 2
+	teacher.stamina = 2
+	teacher.willpower = 2
 	teacher.disposition_values = {5: -5}  # negative toward student
 
 	var piece: TheaterPieceData = TheaterSystem.make_single_role_piece(

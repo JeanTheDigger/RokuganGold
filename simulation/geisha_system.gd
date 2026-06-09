@@ -192,7 +192,8 @@ static func generate_initial_okiya(
 	var result: Array = []
 
 	for s: SettlementData in settlements:
-		var clan: String = clans_by_settlement.get(s.settlement_id, "")
+		# clans_by_settlement is keyed by str(settlement_id) (see WorldBootstrap).
+		var clan: String = clans_by_settlement.get(str(s.settlement_id), "")
 		var okiya_entries: Array = _okiya_entries_for_settlement(s, clan, dice, next_okiya_id)
 		for entry: OkiyaData in okiya_entries:
 			s.infrastructure.append("okiya")
