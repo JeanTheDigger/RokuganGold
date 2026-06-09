@@ -323,11 +323,13 @@ func test_is_shugenja_false_for_bushi() -> void:
 # -- get_spells_by_sim_effect --------------------------------------------------
 
 func test_get_spells_by_sim_effect_returns_matching() -> void:
-	_char.spells_known = ["jurojins_balm", "jade_strike", "sense"]
+	# regrow_the_wound is the library's HEAL_WOUNDS spell; jurojins_balm is a
+	# poison-resist buff (COMBAT_ONLY), jade_strike is offensive.
+	_char.spells_known = ["regrow_the_wound", "jade_strike", "sense"]
 	var healers: Array[String] = SpellSystem.get_spells_by_sim_effect(
 		_char, SpellSystem.SpellSimEffect.HEAL_WOUNDS
 	)
-	assert_true("jurojins_balm" in healers)
+	assert_true("regrow_the_wound" in healers)
 	assert_false("jade_strike" in healers)
 
 
@@ -342,12 +344,12 @@ func test_get_spells_by_sim_effect_empty_when_none() -> void:
 # -- get_best_spell_by_effect --------------------------------------------------
 
 func test_get_best_spell_by_effect_picks_highest_ml() -> void:
-	_char.spells_known = ["jurojins_balm", "wholeness_of_the_world", "drawing_on_the_mountain"]
-	# jurojins_balm=ML1, wholeness=ML2, drawing=ML5 — all HEAL_WOUNDS
+	# Library HEAL_WOUNDS spells: regrow_the_wound (ML3), rise_from_the_ashes (ML6).
+	_char.spells_known = ["regrow_the_wound", "rise_from_the_ashes"]
 	var best: String = SpellSystem.get_best_spell_by_effect(
 		_char, SpellSystem.SpellSimEffect.HEAL_WOUNDS
 	)
-	assert_eq(best, "drawing_on_the_mountain")
+	assert_eq(best, "rise_from_the_ashes")
 
 
 func test_get_best_spell_by_effect_empty_string_when_none() -> void:
@@ -1269,8 +1271,10 @@ func test_get_best_npc_information_spell_ignores_transient_spells() -> void:
 
 
 func test_get_best_npc_information_spell_ignores_unhandled_water_spells() -> void:
-	# waters_sweet_clarity is Water ML6 INFORMATION_GATHER but not Group A/B
-	_char.spells_known = ["waters_sweet_clarity", "the_final_bond", "visions_of_the_future"]
+	# waters_sweet_clarity and visions_of_the_future are INFORMATION_GATHER but
+	# not in Group A/B, so they produce no persistent knowledge and are ignored.
+	# (the_final_bond is a Group B locate spell and is intentionally handled.)
+	_char.spells_known = ["waters_sweet_clarity", "visions_of_the_future"]
 	assert_eq(SpellSystem.get_best_npc_information_spell(_char), "")
 
 
