@@ -5450,7 +5450,7 @@ static func _build_approve_induction_metadata(
 	var fd: L5RCharacterData = chars_by_id.get(ctx.character_id) as L5RCharacterData
 	if fd == null:
 		return {"target_ronin_id": -1}
-	if fd.lord_rank < Enums.LordRank.FAMILY_DAIMYO:
+	if RoleRegistry.lord_rank_from_status(fd.status) < Enums.LordRank.FAMILY_DAIMYO:
 		return {"target_ronin_id": -1}
 	var best_id: int = -1
 	var best_deeds: int = -1

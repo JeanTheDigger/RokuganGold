@@ -155,8 +155,11 @@ static func check_desperation(character: L5RCharacterData, current_season_count:
 	if seasons_no_income >= SEASONS_BEFORE_DESPERATE:
 		return {"state": "desperate", "seasons": seasons_no_income}
 	if seasons_no_income >= SEASONS_BEFORE_DEBT:
-		if not character.disadvantages.has("Debt"):
-			character.disadvantages.append("Debt")
+		# disadvantages is Array[DisadvantageData] — add a typed DEBT entry.
+		if not AdvantageSystem.has_disadvantage(character, Enums.Disadvantage.DEBT):
+			var debt := DisadvantageData.new()
+			debt.disadvantage_type = Enums.Disadvantage.DEBT
+			character.disadvantages.append(debt)
 		return {"state": "debt", "seasons": seasons_no_income}
 
 	return {"state": "stable", "seasons": seasons_no_income}
@@ -389,7 +392,8 @@ static func can_be_inducted(
 ) -> Dictionary:
 	if inductee.permanent_ronin:
 		return {"eligible": false, "reason": "permanent_ronin"}
-	if sponsoring_lord.lord_rank < Enums.LordRank.PROVINCIAL_DAIMYO:
+	# lord_rank is derived from status (no lord_rank property on L5RCharacterData).
+	if RoleRegistry.lord_rank_from_status(sponsoring_lord.status) < Enums.LordRank.PROVINCIAL_DAIMYO:
 		return {"eligible": false, "reason": "sponsoring_lord_rank_too_low"}
 	if sponsoring_lord_disposition < INDUCTION_MIN_DISPOSITION:
 		return {"eligible": false, "reason": "disposition_too_low", "current": sponsoring_lord_disposition}

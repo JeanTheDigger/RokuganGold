@@ -205,7 +205,7 @@ static func write_letter(
 
 
 static func _get_high_rokugani_tn(recipient: L5RCharacterData) -> int:
-	if recipient.lord_rank == Enums.LordRank.IMPERIAL:
+	if CivilianOrderBudget.lord_rank_from_status(recipient.status) == Enums.LordRank.IMPERIAL:
 		return HIGH_ROKUGANI_TN_IMPERIAL_FAMILY
 	# Imperial office holders (Chancellor, Advisor, Herald, Treasurer, Jeweled Champions)
 	# deferred to Imperial office tracking system

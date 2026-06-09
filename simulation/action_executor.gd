@@ -3433,7 +3433,7 @@ static func _execute_hire_ronin(
 
 	# Courtier/Awareness vs TN 10 — confirming the lord can articulate contract terms.
 	var check: Dictionary = SkillResolver.resolve_skill_check(
-		character, dice_engine, "Courtier", 10, ic_day,
+		character, dice_engine, "Courtier", 10, 0, "", Enums.Trait.NONE, 0, 0, 0, ic_day,
 	)
 	if not check.get("success", false):
 		return {
@@ -3472,7 +3472,7 @@ static func _execute_perform_clan_induction(
 	var ronin_id: int = action.metadata.get("target_ronin_id", -1)
 
 	# Only Provincial Daimyo or higher may sponsor induction (s52.7 Part A).
-	if character.lord_rank < Enums.LordRank.PROVINCIAL_DAIMYO:
+	if RoleRegistry.lord_rank_from_status(character.status) < Enums.LordRank.PROVINCIAL_DAIMYO:
 		return {
 			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
 			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
@@ -3518,7 +3518,7 @@ static func _execute_perform_clan_induction(
 
 	# Courtier/Awareness vs TN 20 — ceremony must be performed with proper rites.
 	var check: Dictionary = SkillResolver.resolve_skill_check(
-		character, dice_engine, "Courtier", 20, ic_day,
+		character, dice_engine, "Courtier", 20, 0, "", Enums.Trait.NONE, 0, 0, 0, ic_day,
 	)
 	if not check.get("success", false):
 		return {
@@ -3551,7 +3551,7 @@ static func _execute_approve_clan_induction(
 	var ic_day: int = ctx.ic_day
 	var ronin_id: int = action.metadata.get("target_ronin_id", -1)
 
-	if character.lord_rank < Enums.LordRank.FAMILY_DAIMYO:
+	if RoleRegistry.lord_rank_from_status(character.status) < Enums.LordRank.FAMILY_DAIMYO:
 		return {
 			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
 			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
