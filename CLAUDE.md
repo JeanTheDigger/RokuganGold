@@ -4708,6 +4708,24 @@ template generators it depends on. Faithful summary of the fixes that landed:
   gets UPHOLD_LAW first (magistrate pass runs earlier) — rare dual-role; spread
   uses coverage count, not map distance (no travel-distance data). Parse-checked;
   no tests per the no-test-code policy.
+- **s11.3.5 Witch-Hunter cross-border incident (owner-authorized 2026-06-10).**
+  s11.3.5 calls Kuni Witch-Hunters ignoring clan boundaries a "potential
+  diplomatic incident generator." `_process_witch_hunter_border_incidents` fires
+  on travel arrival: when a **Kuni Witch-Hunter** (`_is_kuni_witch_hunter` —
+  school "Witch-Hunter"/"Witch Hunter" or WITCH_HUNTER_LEADER; Asako Inquisitors
+  are welcomed and Kuroiban are covert, so both are excluded) arrives in a
+  province whose `clan` differs from the hunter's, the host province lord
+  (`_find_province_lord`) takes **−5 disposition toward the hunter**
+  (BORDER_INCIDENT_DISPOSITION, owner-set; clamped) AND the host clan's
+  collective standing toward the hunter's clan ripples down via
+  `CollectiveDisposition.apply_event_ripple` (the ~−2 comes from the existing
+  CLAN_RIPPLE_WEIGHT — not an invented value), plus a **Tier 4 POLITICAL** topic
+  ("Kuni Witch-Hunter operating in <clan> lands", variant `witch_hunter_border`,
+  subject = hunter) seeded to the host lord. Deduped to one live incident per
+  hunter per province (`_find_active_border_topic`); a cooled/resolved topic lets
+  a fresh intrusion re-fire. Dead guards on hunter and host lord. Wired into the
+  arrival block (clan/family baselines ensured in world_states first).
+  Parse-checked; no tests per the no-test-code policy.
 - **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
   feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
   the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO

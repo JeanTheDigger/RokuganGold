@@ -180,6 +180,16 @@ static func advance_day(
 	)
 	_process_lost_love_arrival_trigger(travel_arrivals, characters_by_id, settlements, ic_day)
 
+	if not world_states.has("clan_baselines"):
+		world_states["clan_baselines"] = {}
+	if not world_states.has("family_baselines"):
+		world_states["family_baselines"] = {}
+	_process_witch_hunter_border_incidents(
+		travel_arrivals, characters_by_id, settlements, provinces,
+		active_topics, next_topic_id, ic_day,
+		world_states["clan_baselines"], world_states["family_baselines"],
+	)
+
 	var musha_season_count: int = int(season_meta.get("horde_season_count", 0))
 	var musha_shugyo_results: Array = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map, dice_engine, musha_season_count)
 
@@ -8016,6 +8026,97 @@ static func _process_witch_hunter_self_selection(
 			"source": "witch_hunter_self_selection",
 			"auto_assigned": true,
 		}
+
+
+# -- Witch-Hunter Cross-Border Incident (s11.3.5) -----------------------------
+# Kuni Witch-Hunters ignore clan boundaries (s11.3.5: "potential diplomatic
+# incident generator"). When one arrives uninvited in another clan's province,
+# the host province's lord resents the intrusion (−5 disposition toward the
+# hunter) and the host clan's collective standing toward the hunter's clan
+# ripples down (via the existing CLAN_RIPPLE_WEIGHT), plus a Tier 4 POLITICAL
+# topic. Asako Inquisitors (welcomed) and Kuroiban (covert) generate no incident.
+
+const BORDER_INCIDENT_DISPOSITION: int = 5  # host lord → hunter (owner-set 2026-06-10)
+
+static func _is_kuni_witch_hunter(c: L5RCharacterData) -> bool:
+	if c.school_name.contains("Witch-Hunter") or c.school_name.contains("Witch Hunter"):
+		return true
+	return c.role_position == RoleRegistry.WITCH_HUNTER_LEADER
+
+
+static func _find_active_border_topic(
+	active_topics: Array, hunter_id: int, province_id: int,
+) -> TopicData:
+	for t: Variant in active_topics:
+		if not t is TopicData:
+			continue
+		var topic: TopicData = t
+		if not topic.resolved and topic.variant == "witch_hunter_border" \
+				and topic.subject_character_id == hunter_id \
+				and province_id in topic.provinces_affected:
+			return topic
+	return null
+
+
+static func _process_witch_hunter_border_incidents(
+	arrivals: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	provinces: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	clan_baselines: Dictionary,
+	family_baselines: Dictionary,
+) -> void:
+	var settlement_province: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlement_province[str(s.settlement_id)] = s.province_id
+
+	for arrival: Dictionary in arrivals:
+		var hunter: L5RCharacterData = characters_by_id.get(arrival.get("character_id", -1))
+		if hunter == null or CharacterStats.is_dead(hunter):
+			continue
+		if not _is_kuni_witch_hunter(hunter):
+			continue
+
+		var prov_v: Variant = provinces.get(settlement_province.get(hunter.physical_location, -1))
+		if not prov_v is ProvinceData:
+			continue
+		var province: ProvinceData = prov_v
+		if province.clan.is_empty() or province.clan == hunter.clan:
+			continue  # own clan's land (or unowned) — no incident
+
+		# Dedup: one live incident per hunter per province.
+		if _find_active_border_topic(active_topics, hunter.character_id, province.province_id) != null:
+			continue
+
+		var host_lord: L5RCharacterData = _find_province_lord(province, characters_by_id)
+		if host_lord != null and not CharacterStats.is_dead(host_lord) \
+				and host_lord.character_id != hunter.character_id:
+			# Individual: the host lord resents the uninvited lout.
+			var cur: int = int(host_lord.disposition_values.get(hunter.character_id, 0))
+			host_lord.disposition_values[hunter.character_id] = clampi(
+				cur - BORDER_INCIDENT_DISPOSITION, -100, 100)
+			# Collective: host clan's standing toward the hunter's clan ripples down.
+			CollectiveDisposition.apply_event_ripple(
+				host_lord, hunter, -BORDER_INCIDENT_DISPOSITION,
+				clan_baselines, family_baselines)
+
+		var topic_id: int = next_topic_id[0]
+		next_topic_id[0] += 1
+		var title: String = "Kuni Witch-Hunter operating in %s lands" % province.clan
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			topic_id, title, TopicData.Tier.TIER_4, TopicData.Category.POLITICAL,
+			ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+			[province.province_id], province.clan, "", hunter.character_id,
+			"diplomatic_incident", "witch_hunter_border",
+		)
+		topic.slug = "witch_hunter_border_%d_%d" % [hunter.character_id, province.province_id]
+		active_topics.append(topic)
+		if host_lord != null and not CharacterStats.is_dead(host_lord) \
+				and topic.topic_id not in host_lord.topic_pool:
+			host_lord.topic_pool.append(topic.topic_id)
 
 
 # -- Kaiu Engineer Standing Need (s57.41.2) ------------------------------------
