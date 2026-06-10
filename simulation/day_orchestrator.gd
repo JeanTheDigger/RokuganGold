@@ -7300,6 +7300,13 @@ static func _process_taint_proximity_detection(
 		if not taint_check.get("success", false):
 			continue
 
+		# Dedup: if this suspect already carries a live accusation, a renewed
+		# detection reinforces it rather than spawning a duplicate topic.
+		var existing: TopicData = _find_active_taint_accusation(active_topics, target.character_id)
+		if existing != null:
+			_refresh_taint_accusation(existing, detector, characters_by_id)
+			continue
+
 		var topic_id: int = next_topic_id[0]
 		next_topic_id[0] += 1
 		var title: String = "%s suspected of Taint corruption" % target.character_name
@@ -7331,6 +7338,38 @@ static func _has_corroborated_taint(examiner: L5RCharacterData, topic_id: int) -
 		if entry.entry_type == "taint_corroborated" and int(entry.data.get("topic_id", -1)) == topic_id:
 			return true
 	return false
+
+
+static func _find_active_taint_accusation(active_topics: Array, target_id: int) -> TopicData:
+	for t: Variant in active_topics:
+		if not t is TopicData:
+			continue
+		var topic: TopicData = t
+		if not topic.resolved and topic.variant == "taint_suspected" and topic.subject_character_id == target_id:
+			return topic
+	return null
+
+
+static func _refresh_taint_accusation(
+	topic: TopicData,
+	observer: L5RCharacterData,
+	characters_by_id: Dictionary,
+) -> void:
+	## A renewed detection (passive) or firsthand confirmation (EXAMINE_FOR_TAINT)
+	## sustains a live accusation — restore its momentum to the TIER_3 floor, log a
+	## discussion, and widen its reach to the observer's lord — instead of spawning
+	## a duplicate accusation.
+	if topic == null or topic.resolved:
+		return
+	topic.momentum = maxf(
+		topic.momentum,
+		TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3),
+	)
+	topic.discussion_count_this_day += 1
+	if observer.lord_id >= 0:
+		var lord: L5RCharacterData = characters_by_id.get(observer.lord_id)
+		if lord != null and not CharacterStats.is_dead(lord) and topic.topic_id not in lord.topic_pool:
+			lord.topic_pool.append(topic.topic_id)
 
 
 static func _build_taint_corroboration_targets(
@@ -7405,16 +7444,7 @@ static func _process_taint_examination_writebacks(
 			if t is TopicData and (t as TopicData).topic_id == topic_id:
 				topic = t
 				break
-		if topic != null and not topic.resolved:
-			topic.momentum = maxf(
-				topic.momentum,
-				TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3),
-			)
-			topic.discussion_count_this_day += 1
-			if examiner.lord_id >= 0:
-				var lord: L5RCharacterData = characters_by_id.get(examiner.lord_id)
-				if lord != null and not CharacterStats.is_dead(lord) and topic.topic_id not in lord.topic_pool:
-					lord.topic_pool.append(topic.topic_id)
+		_refresh_taint_accusation(topic, examiner, characters_by_id)
 
 		var entry := KnowledgeEntry.new()
 		entry.entry_type = "taint_corroborated"

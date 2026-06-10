@@ -4639,6 +4639,29 @@ template generators it depends on. Faithful summary of the fixes that landed:
   kami, not kansen). 14 tests in `tests/test_maho_examination.gd`. NOTE: tests
   not executed here — headless GUT fails on the WeaponData cold-boot cascade;
   validated by per-file `--check-only` parse (clean) + static review.
+- **Passive Channel 3 dedup — reinforce instead of re-accuse (2026-06-10).**
+  `_process_taint_proximity_detection()` previously created a fresh
+  `taint_suspected` accusation on every successful detection, so a tainted
+  person who kept drawing witch-hunter attention accumulated duplicate
+  accusation topics. Now, when the suspect already carries a **live** accusation
+  (`_find_active_taint_accusation()` — variant `taint_suspected`, matching
+  subject, not resolved), a renewed detection **reinforces** it via the shared
+  `_refresh_taint_accusation()` helper (momentum restored to the TIER_3 floor,
+  discussion bump, reach widened to the detector's lord) instead of spawning a
+  duplicate; a brand-new accusation is created only when none is active. The
+  EXAMINE_FOR_TAINT writeback was refactored to call the same
+  `_refresh_taint_accusation()` helper, so passive re-detection and active
+  corroboration now sustain a case identically (the active path additionally
+  records its per-examiner dedup KnowledgeEntry). Lifecycle: once the accusation
+  resolves/decays and is removed from `active_topics`, a fresh one can be raised
+  again. Parse-checked; no tests per the no-test-code policy.
+- **EXAMINE_FOR_TAINT scoring/effect — review outcome (2026-06-10).** The two
+  objective_alignment scores (INVESTIGATE_THREAT 85, UPHOLD_LAW 65) and the
+  corroboration effect were reviewed against the sibling investigation actions
+  and judged sound (85 between EXAMINE_LETTER 85 and EXAMINE_CRIME_SCENE 90;
+  65 between SEARCH_PERSON 60 and INVESTIGATE_PROVINCE 70). They remain
+  PROVISIONAL pending an actual live playtest (not runnable in this
+  environment); no numeric change was invented without empirical data.
 - **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
   feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
   the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO
