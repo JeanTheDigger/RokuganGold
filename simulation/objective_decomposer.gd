@@ -52,6 +52,7 @@ const MILITARY_OBJECTIVES: Array[String] = [
 const INVESTIGATION_OBJECTIVES: Array[String] = [
 	"INVESTIGATE_CRIME",
 	"UPHOLD_LAW",
+	"HUNT_MAHO",
 ]
 
 const INFRASTRUCTURE_OBJECTIVES: Array[String] = [
@@ -211,7 +212,29 @@ static func _decompose_investigation(
 		if case_data.is_empty():
 			return _decompose_uphold_law_idle(objective, ctx)
 		return InvestigationDecomposer.decompose(case_data, ctx)
+	if need_type == "HUNT_MAHO":
+		return _decompose_hunt_maho(objective, ctx)
 	return InvestigationDecomposer.decompose(objective, ctx)
+
+
+# -- HUNT_MAHO Decomposition (s11.3.5 — roaming witch-hunters) -----------------
+# Kuni Witch-Hunters / Asako Inquisitors / Kuroiban hunt maho and the Shadowlands.
+# If a target hotspot province is set (roaming self-selection) and the hunter is
+# not there, travel toward it (cross-border is allowed — they ignore clan lines).
+# Once at the target (or with no target — hunt locally), passthrough keeps the
+# HUNT_MAHO NeedType so Phase 5 scores the detection actions (INVESTIGATE_PROVINCE,
+# EXAMINE_FOR_TAINT, EXAMINE_CRIME_SCENE, …) against the HUNT_MAHO alignment table.
+
+static func _decompose_hunt_maho(
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	var target_province: String = objective.get("target_intent", "")
+	if not target_province.is_empty() and not ctx.location_id.begins_with(target_province):
+		return _make_need("TRAVEL_TO", 2, {
+			"target_intent": target_province,
+		})
+	return _passthrough(objective)
 
 
 # -- UPHOLD_LAW Idle Patrol (s55.8, s57.16.9) ----------------------------------

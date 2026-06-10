@@ -149,6 +149,7 @@ static func advance_day(
 	_assign_kaiu_engineer_standing_objectives(characters, objectives_map, settlements)
 	_assign_artisan_standing_objectives(characters, objectives_map)
 	_assign_monk_standing_objectives(characters, objectives_map)
+	_assign_witch_hunter_standing_objectives(characters, objectives_map)
 	_assign_kolat_standing_objectives(characters, objectives_map)
 	_assign_kolat_opportunistic_objectives(characters, objectives_map, characters_by_id)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
@@ -7858,6 +7859,53 @@ static func _assign_monk_standing_objectives(
 		objectives["standing"] = {
 			"need_type": "PERFORM_RITUAL",
 			"priority": 3,
+			"auto_assigned": true,
+		}
+
+
+# -- Witch-Hunter Standing Need (s11.3.5) --------------------------------------
+# Kuni Witch-Hunters, Asako Inquisitors, and the three anti-maho order leaders
+# (Crab/Phoenix/Scorpion) auto-receive HUNT_MAHO as their standing objective if
+# they hold no other standing — so a witch-hunter who is neither a lord nor a
+# magistrate stops falling to REST and actively hunts Taint (province PTL scans,
+# EXAMINE_FOR_TAINT on accused suspects). Kuroiban rank-and-file are a secret
+# order with no clean identifier and are deferred (only the leader qualifies).
+
+static func _is_maho_hunter(c: L5RCharacterData) -> bool:
+	var s: String = c.school_name
+	if s.contains("Witch-Hunter") or s.contains("Witch Hunter") or s.contains("Inquisitor"):
+		return true
+	return c.role_position in [
+		RoleRegistry.WITCH_HUNTER_LEADER,
+		RoleRegistry.INQUISITOR_LEADER,
+		RoleRegistry.KUROIBAN_LEADER,
+	]
+
+
+static func _assign_witch_hunter_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.is_pc:
+			continue
+		if CharacterStats.is_dead(character):
+			continue
+		if not _is_maho_hunter(character):
+			continue
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+		if not standing.is_empty():
+			continue  # do not overwrite an existing standing objective
+
+		objectives["standing"] = {
+			"need_type": "HUNT_MAHO",
+			"priority": 4,
 			"auto_assigned": true,
 		}
 
