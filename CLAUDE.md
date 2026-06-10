@@ -160,8 +160,8 @@ When implementing or auditing a system, go here first:
                                      Plain GDScript classes only (class_name, no extends Node).
 /shared/                           — Data models: CharacterData, ProvinceData, etc.
                                      Use Resource subclasses for serialisable data.
-/tests/                            — GUT unit tests. Mirror the /simulation/ and /shared/
-                                     directory structure inside /tests/.
+/tests/                            — Pre-existing GUT tests. Do NOT add new test files
+                                     here (see "Testing — DO NOT WRITE TEST CODE").
 /scripts/managers/                 — Godot Autoloads / singletons (WorldState, SimScheduler).
                                      Registered in Project Settings. May extend Node.
 /scripts/ui/                       — Player-facing Godot scenes (UI, ASCII map display, etc.).
@@ -185,12 +185,15 @@ When implementing or auditing a system, go here first:
 - Never put simulation logic inside a scene's _ready() or _process().
   Scenes call into /simulation/ — simulation does not call into scenes.
 
-## Testing (GUT)
-- GUT (Godot Unit Testing) is the test framework. Tests live in /tests/.
-- The dice engine must have passing GUT tests before any other system uses it.
-- Every pure simulation function must be testable with no scene tree present.
-- Test file naming: `test_<system_name>.gd` mirroring the source file.
-- Do not couple test setup to Autoloads — pass dependencies explicitly.
+## Testing — DO NOT WRITE TEST CODE
+**Do not write GUT tests or any test files. Write only the real production code
+that will actually run.** When a task is done, deliver the implementation and
+wiring — not a `test_*.gd` file. Validate by re-reading the actual code against
+its GDD section and by parse-checking (`godot --headless --check-only -s <file>`),
+not by authoring tests. Existing tests under `/tests/` may remain, but new work
+does not add to them. (Design intent — keep pure simulation functions callable
+without a scene tree and pass dependencies explicitly — still holds, because it
+keeps the real code clean; it is no longer a directive to write tests.)
 
 ## Hard Constraints — Never Violate Without Asking
 - PC death is permanent. No resurrection mechanic of any kind.
@@ -5409,9 +5412,10 @@ Whenever a task is complete (system implemented, wired, committed, pushed),
 do the following in order before ending the turn:
 1. **Validate twice** — re-read the actual code (not memory) and check it
    against the GDD section it implements. First pass: logic and GDD
-   fidelity. Second pass: tests against implementation, edge cases. State
-   findings explicitly — what's correct, what's a known limitation, what
-   would be a tuning concern.
+   fidelity. Second pass: wiring completeness and edge cases (parse-check
+   with `godot --headless --check-only`, trace each reachability/usage point
+   by hand — do NOT write tests). State findings explicitly — what's correct,
+   what's a known limitation, what would be a tuning concern.
 2. **Suggest a list of next options** — present 3–4 distinct directions
    for what to build next, sized for clarity (small / medium / foundational
    / wiring follow-up). Use AskUserQuestion to let the user pick.
