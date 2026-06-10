@@ -7278,9 +7278,9 @@ static func _process_taint_proximity_detection(
 		if target.clan == "Crab":
 			continue  # innocent explanation: Kaiu Wall service (owner ruling 2026-06-10)
 
-		# Detection eases as corruption manifests: (7 − Taint Rank) × 5 → 25/20/15/10
+		# Detection eases as corruption manifests: (8 − Taint Rank) × 5 → 30/25/20/15
 		# for Rank 2–5 (owner-set, 2026-06-10).
-		var tn: int = (7 - MutationSystem.get_taint_rank(target.taint)) * 5
+		var tn: int = (8 - MutationSystem.get_taint_rank(target.taint)) * 5
 
 		var lore_rank: int = detector.skills.get("Lore: Shadowlands", 0)
 		var is_specialist: bool = detector.family in ["Kuni", "Asako"]

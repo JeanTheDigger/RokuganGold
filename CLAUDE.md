@@ -3320,7 +3320,7 @@ tests in `tests/test_individual_combat.gd`.
   stays 0 (GDD s11.3 specifies provocation flag only, not a disposition value). `INAUSPICIOUS_PENALTY`
   and `TAIAN_BONUS` stay 0 (GDD says rokuyo is not a mechanical modifier for NPC scoring).
   `_RETREAT_DEFAULT_DAYS` stays 0 (blocked on sub-tile army movement s11.7a). `TAINT_DETECTION_PLACEHOLDER_TN`
-  REMOVED 2026-06-10 — Maho Channel 3 now uses the owner-set TN = (7 − Taint Rank) × 5.
+  REMOVED 2026-06-10 — Maho Channel 3 now uses the owner-set TN = (8 − Taint Rank) × 5.
   `get_renege_willingness()` values stay 0 (function
   never called; GDD says "All renege values PROVISIONAL"). `compute_peace_willingness()`
   already returns qualitative dict (correct per GDD s53 "not determined by a single threshold").
@@ -4594,14 +4594,16 @@ template generators it depends on. Faithful summary of the fixes that landed:
   wired + tested) implementing every gate — Taint Rank ≥ 2, Kuni/Asako auto +
   other shugenja at Lore: Shadowlands ≥ 3, +2k0 — but with a **placeholder TN of
   0** and no Crab exemption. Completed it with the owner's values: detection
-  **TN = (7 − Taint Rank) × 5** (25/20/15/10 for Rank 2–5 — eases as corruption
-  manifests; the existing test even anticipated "vs TN 20" for a Rank-3 target),
+  **TN = (8 − Taint Rank) × 5** (30/25/20/15 for Rank 2–5 — eases as corruption
+  manifests; owner revised from (7 − Rank) × 5 to (8 − Rank) × 5 on 2026-06-10),
   and a **Crab-clan exemption** ("innocent explanation" proxy — no Wall-service
   field exists, and Crab legitimately accrue Taint at the Kaiu Wall). Removed
   `TAINT_DETECTION_PLACEHOLDER_TN`. This makes the Taint the new seasonal casters
-  accrue (ML − 1 per cast) actually catchable in proximity. The active "cast Sense
-  on a suspect" ActionID remains an optional follow-up (the passive Lore:
-  Shadowlands check is the wired half). 7 tests (`test_maho_channel3.gd`); full
+  accrue (ML − 1 per cast) actually catchable in proximity. An active, deliberate
+  Lore: Shadowlands examination of a suspect (same (8 − Rank) × 5 TN) remains an
+  optional follow-up; the Sense spell is NOT the tool — canonically it detects
+  elemental kami, not kansen (owner correction 2026-06-10). The passive Lore:
+  Shadowlands check is the wired half. 7 tests (`test_maho_channel3.gd`); full
   suite 13219 passing / 0 failing. Hardening (2026-06-10): added a dead-character
   guard on detector/target — a suspect who died mid-day must not receive a
   PERPETRATOR-valence accusation (hard rule: dead characters carry NEUTRAL
@@ -4617,7 +4619,7 @@ template generators it depends on. Faithful summary of the fixes that landed:
   SUPERNATURAL "blood magic discovered" topic that propagates to the investigator's
   lord — covered by an end-to-end closure test (cast → record → INVESTIGATE_PROVINCE
   → topic). Channel 3 — caster Taint accrues (ML−1); the Lore: Shadowlands detection
-  roll TN remains deferred to s31 (Sense spell), as documented. Channel 4 — seasonal
+  roll is WIRED at TN (8 − Taint Rank) × 5 (owner-set 2026-06-10). Channel 4 — seasonal
   casts pass `witnesses=[]` (covert), so no direct witnesses, by design. No gaps
   introduced and no fixes needed — the new casts' outputs are consumed correctly.
 - **Crab witch-hunter routing verified (s11.11, Decision #5).** Confirmed the
@@ -4933,8 +4935,9 @@ but not executed in this environment.
   `day_orchestrator.gd` resolves `requires_spell_roll=true` executor flags: DETECT_PRESENCE
   creates a SUPERNATURAL TIER_4 taint-detection topic when province PTL > 0; REMOVE_TAINT
   calls `apply_taint_removal`; PURIFY_AREA forward-wired (no spells yet). 11 engine tests.
-  LIMITATIONS: Sense spell TN for Maho Channel 3 detection deferred (blocked on s31 design
-  decision — see D table). `spells_known` field on L5RCharacterData promoted from orphaned
+  LIMITATIONS: Maho Channel 3 detection is a Lore: Shadowlands check (NOT a Sense cast —
+  Sense detects kami, not kansen), WIRED at TN (8 − Taint Rank) × 5 (owner 2026-06-10).
+  `spells_known` field on L5RCharacterData promoted from orphaned
   placeholder to active use. `spell_slots_used` and `spell_void_bonus_used` added as new
   character fields. PURIFY_AREA sim_effect has no library spells yet.
 
@@ -5022,11 +5025,10 @@ exactly:
 
 **Channel 3 — Taint symptoms on the caster (personal, proximity-based)**
 Caster's accumulating Taint is the most direct signal but requires physical
-proximity. Two detection paths, both gated on proximity:
-- **Sense spell** (Section 31, not yet designed): a shugenja present in the
-  same zone may cast Sense to detect kansen residue on a character. TN
-  deferred to Section 31 design.
-- **Lore: Shadowlands check** during any action that puts the detector in
+proximity. Detection is a Lore: Shadowlands check (NOT the Sense spell —
+canonically Sense detects elemental kami, explicitly NOT kansen; owner
+correction 2026-06-10). Two paths, both gated on proximity:
+- **Passive (incidental) Lore: Shadowlands check** during any action that puts the detector in
   social proximity (INVESTIGATE_PROVINCE, court attendance, COMMUNE_WITH_SPIRITS
   near the suspect): Kuni Witch-Hunters and Asako Inquisitors automatically
   attempt this check when their known_topics include a Taint-related event in
@@ -5037,9 +5039,9 @@ proximity. Two detection paths, both gated on proximity:
 - On detection success: generates a **Tier 3 topic** naming the specific
   character as a suspected maho user. This is a direct accusation topic —
   unlike Channel 1 and 2, it names a perpetrator.
-- TN for the Lore: Shadowlands check is deferred to Section 31 / Section 42
-  (Taint consequence design). Do not implement Channel 3's detection roll
-  until those sections are LOCKED.
+- TN for the Lore: Shadowlands check = **(8 − Taint Rank) × 5** (owner-set
+  2026-06-10): 30/25/20/15 for Rank 2–5. The passive (incidental) path is WIRED;
+  an active, deliberate examination at the same TN is an optional follow-up.
 
 **Channel 4 — Direct witnesses (already handled)**
 If `witnesses` is non-empty on the CrimeRecord, those characters carry direct
@@ -5047,9 +5049,11 @@ knowledge. They can testify through the existing court/investigation system.
 No new code. The witness list in CrimeRecord IS the fourth channel.
 
 **What is not yet implementable:**
-- Channel 3 passive Lore: Shadowlands detection roll — WIRED (TN = (7 − Taint
-  Rank) × 5, owner-set 2026-06-10). The active Sense-spell cast path remains an
-  optional follow-up.
+- Channel 3 passive Lore: Shadowlands detection roll — WIRED (TN = (8 − Taint
+  Rank) × 5, owner-set 2026-06-10). An active, deliberate Lore: Shadowlands
+  examination of a suspect (same TN) remains an optional follow-up. NOTE: the
+  Sense spell is NOT the detection tool — canonically Sense detects elemental
+  kami, explicitly NOT kansen (owner correction 2026-06-10).
 - Kuni/Asako/Kuroiban as Named Characters with UPHOLD_LAW standing objectives
   (blocked on s11.3.5 becoming LOCKED — currently PARTIALLY DESIGNED)
 - `CAST_MAHO` as an NPC ActionID (no LOCKED specification exists for maho as
@@ -5057,8 +5061,8 @@ No new code. The witness list in CrimeRecord IS the fourth channel.
 
 **Rationale:** Channels 1 and 2 are wirable now — they use entirely existing
 systems (insurgency topic generation, zone_event_log, EXAMINE_CRIME_SCENE).
-Channel 3 is partially wirable (proximity check) but its TN is a pending design
-gap. This mirrors the GDD's intent: "multiple channels, none reliable alone."
+Channel 3's passive proximity check is WIRED at TN (8 − Taint Rank) × 5.
+This mirrors the GDD's intent: "multiple channels, none reliable alone."
 The caster who casts once in a remote province and leaves quickly may never be
 caught. The one who casts repeatedly in a populated area accumulates risk across
 all four channels simultaneously.
@@ -5318,7 +5322,7 @@ These sections have partial or no GDD spec. **Blocked features MAY be worked on 
 | Section | What's Needed |
 |---------|--------------|
 | s2.4 | `DECLARE_WALL_EMERGENCY` ActionID — s2.4.14 Decision 6: AP cost, agenda topic format, compliance enforcement |
-| s31 | Active Sense-spell cast on a suspect — optional follow-up. (Maho Channel 3 passive Lore: Shadowlands detection is WIRED: TN = (7 − Taint Rank) × 5, owner-set 2026-06-10.) |
+| s31 | Active, deliberate Lore: Shadowlands examination of a suspect — optional follow-up (same TN as passive). NOT a Sense cast (Sense detects kami, not kansen). Maho Channel 3 passive detection is WIRED: TN = (8 − Taint Rank) × 5, owner-set 2026-06-10. |
 | s38 | Kiho system — full design needed |
 | s40 | Individual combat — PARTIAL. WeaponData/ArmorData Resources, NPC summary roll, weapon assignment done. Full PC-facing mechanics (all maneuvers, kata effects, grapple, sumai) blocked on design decisions. |
 | s43 | Maho spell cast roll TN — not specified. Needed for CAST_MAHO NPC ActionID |
@@ -5341,11 +5345,11 @@ These sections have partial or no GDD spec. **Blocked features MAY be worked on 
 | `timed_advantages` and `action_blocks` | Individual school technique implementation (per-school design) |
 | SEEK_PRETEXT ActionID executor | Executor mechanics unspecified in GDD s14 |
 | `eta` community weight in Bloodspeaker cell placement | No `eta` field on ProvinceData/SettlementData |
-| Maho Channel 3 detection TN | s31 Sense spell design decision needed |
+| Maho Channel 3 detection TN | RESOLVED — Lore: Shadowlands check at (8 − Taint Rank) × 5 (owner-set 2026-06-10). Not a Sense cast. |
 | Animal companion ASCII combat | s40/s56 design |
 
 **Sections available for design and implementation (source material exists, design decisions needed before coding):** s38 (kiho), s40 (individual combat — partial, further design decisions needed), s44 (Shadowlands mutations — DONE), s45 (advantages/disadvantages — DONE), s54.7 (Kolat), s57.42–s57.43 (sailing/ship zones), s57.46 (allied NPC companion).
-**Note:** s31–s37 (spells — DONE, one pending value: Sense spell detection TN), s57.23 (garden), s57.24 (bonsai), s57.26 (origami), s57.27 (painting), s57.29 (ikebana), s57.30 (calligraphy), s57.41 (engineering), s57.45 (geisha) are all **DONE**.
+**Note:** s31–s37 (spells — DONE), s57.23 (garden), s57.24 (bonsai), s57.26 (origami), s57.27 (painting), s57.29 (ikebana), s57.30 (calligraphy), s57.41 (engineering), s57.45 (geisha) are all **DONE**.
 
 ---
 

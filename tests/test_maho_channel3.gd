@@ -2,7 +2,7 @@ extends GutTest
 ## Maho Channel 3 — Taint detection on a person (s43 / Design Decision 5,
 ## owner-authorized 2026-06-10). Detection fires when a shugenja's successful
 ## action targets a Rank-2+ suspect; the detector rolls Perception + Lore:
-## Shadowlands vs (7 − Taint Rank) × 5 (Kuni/Asako +2k0).
+## Shadowlands vs (8 − Taint Rank) × 5 (Kuni/Asako +2k0).
 
 func _detector(id: int, family: String, lore: int, per: int = 6) -> L5RCharacterData:
 	var c := L5RCharacterData.new()
@@ -40,7 +40,7 @@ func _run(detector_id: int, target_id: int, chars: Array, seed: int = 42) -> Arr
 
 
 func test_witch_hunter_detects_tainted() -> void:
-	# Rank-5 suspect (taint 5.0) → TN 10; a maxed Kuni clears it easily.
+	# Rank-5 suspect (taint 5.0) → TN 15; a maxed Kuni clears it easily.
 	var topics := _run(30, 40, [_detector(30, "Kuni", 6), _suspect(40, 5.0)])
 	assert_true(topics.size() >= 1, "Kuni detects a Rank-5 maho user")
 	if topics.size() >= 1:
@@ -67,7 +67,7 @@ func test_non_specialist_needs_lore3() -> void:
 
 
 func test_specialist_attempts_at_low_lore() -> void:
-	# Kuni attempts even at Lore 1 (auto); maxed Perception vs TN 10 succeeds.
+	# Kuni attempts even at Lore 1 (auto); maxed Perception vs TN 15 succeeds.
 	assert_true(_run(30, 40, [_detector(30, "Kuni", 1, 7), _suspect(40, 5.0)]).size() >= 1,
 		"Kuni/Asako attempt regardless of Lore rank")
 
