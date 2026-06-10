@@ -21,10 +21,9 @@ The master index is at /gdd/00_INDEX.md — read it before asking what exists.
 Never extrapolate from one system to another (e.g. land combat rules to naval
 combat, one school's technique to another's). If the GDD is silent, stop and ask.
 
-**The GDD design files in /gdd/ MAY be changed — but ONLY with the owner's
-explicit opinion and absolute, prior approval.** GDD design is no longer
-permanently read-only. However, you may NEVER edit, add, remove, or reword any
-design content in /gdd/ on your own initiative. Before touching a GDD design
+**The GDD design files in /gdd/ are NOT read-only — they MAY be edited, but
+every edit requires the owner's explicit, prior permission.** You may NEVER
+edit, add, remove, or reword any design content in /gdd/ on your own initiative. Before touching a GDD design
 file you MUST: (1) state exactly what you propose to change and why, (2) ask
 for the owner's opinion, and (3) receive explicit, unambiguous approval. No
 approval, no edit — silence is not approval, and a general "go ahead" on a
@@ -3072,8 +3071,9 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   §57.49.1 summary table was never updated when s57.49b formally locked the value at
   half the magnitude. Test corrected to assert 4.5. NOTE: §57.49.1's summary table
   (−1.0 Glory, −25 family baseline) remains stale relative to §57.49.6 and s57.49b
-  (−0.5 Glory, −20 family baseline). GDD files are read-only — this is a known GDD
-  internal inconsistency. §57.49.6 and s57.49b are authoritative.
+  (−0.5 Glory, −20 family baseline). This is a known GDD internal inconsistency;
+  it was left unedited (GDD edits require owner permission). §57.49.6 and s57.49b
+  are authoritative.
 
 ### GDD Sections Written 2026-05-28
 
@@ -4695,7 +4695,7 @@ but not executed in this environment.
   or patrol data exists, so it stays deferred. (3) Hidden Temple `temple_vault_koku`
   stays an abstract treasury (no map settlement designated). (4) No world-gen Silk
   seeding — networks populate via recruitment.
-- **GDD note (read-only, not edited):** s54.7d line 39 says Silk/Lotus keep no
+- **GDD note (left unedited — GDD edits require owner permission):** s54.7d line 39 says Silk/Lotus keep no
   network record, but s54.7h defines detailed silk/lotus records. The consolidated
   fields reference (s54.7h) is followed as authoritative.
 - **Tranches D5–E2 (2026-06-07, second pass — owner directive "do ALL of it"):**
