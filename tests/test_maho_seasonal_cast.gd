@@ -393,3 +393,58 @@ func test_seasonal_pass_fierce_blood_heals_wounded_caster() -> void:
 	assert_eq(casts[0]["spell_id"], "fierce_blood_of_earth")
 	assert_eq(caster.wounds_taken, 0, "the victim's life force heals the caster")
 	assert_eq(caster.life_extension_years, 1, "one year of life bought")
+
+
+# -- Caress of Fu Leng (s43, owner-authorized 2026-06-10) ----------------------
+
+func _sett(id: int, jade: float) -> SettlementData:
+	var s := SettlementData.new()
+	s.settlement_id = id
+	s.jade_stockpile = jade
+	return s
+
+
+func test_caster_jade_settlement_found() -> void:
+	var s := DayOrchestrator._caster_jade_settlement(_char(1, "100", 2.0), {100: _sett(100, 20.0)})
+	assert_not_null(s)
+	assert_eq(s.settlement_id, 100)
+
+
+func test_caster_jade_settlement_none_without_jade() -> void:
+	assert_null(DayOrchestrator._caster_jade_settlement(_char(1, "100", 2.0), {100: _sett(100, 0.0)}),
+		"a settlement with no jade is not a Caress target")
+
+
+func test_caster_jade_settlement_none_when_not_co_located() -> void:
+	assert_null(DayOrchestrator._caster_jade_settlement(_char(1, "100", 2.0), {200: _sett(200, 20.0)}),
+		"jade elsewhere is out of range (50' = co-located)")
+
+
+func test_resolve_caress_destroys_three_fingers() -> void:
+	var s := _sett(100, 20.0)
+	var res := DayOrchestrator._resolve_caress_of_fu_leng(s)
+	assert_eq(s.jade_stockpile, 17.0, "one jade object = 3 fingers (owner N)")
+	assert_eq(res["jade_destroyed"], 3.0)
+
+
+func test_resolve_caress_floors_at_zero() -> void:
+	var s := _sett(100, 2.0)
+	DayOrchestrator._resolve_caress_of_fu_leng(s)
+	assert_eq(s.jade_stockpile, 0.0, "cannot destroy more jade than is present")
+
+
+func test_seasonal_pass_casts_caress_on_jade_settlement() -> void:
+	var caster := _char(1, "100", 2.0)  # Earth 3 supports ML2; no kill/Fierce trigger
+	var sett := _sett(100, 20.0)
+	var prov := _prov(5)
+	var crime_records: Array = []
+	var deaths: Array = []
+	var topics: Array = []
+	var casts := DayOrchestrator._process_seasonal_maho_casts(
+		[_cell(5, Enums.BloodspeakerCellState.ACTIVE)], {5: prov}, [caster],
+		{100: 5}, crime_records, [1], DiceEngine.new(7), 30,
+		{}, deaths, topics, [500], [sett])
+	assert_eq(casts.size(), 1)
+	assert_eq(casts[0]["spell_id"], "caress_of_fu_leng", "jade sabotage outranks taint-shed")
+	assert_eq(sett.jade_stockpile, 17.0, "3 fingers of jade destroyed")
+	assert_eq(casts[0]["caress"]["jade_destroyed"], 3.0)

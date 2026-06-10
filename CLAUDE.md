@@ -4564,6 +4564,25 @@ template generators it depends on. Faithful summary of the fixes that landed:
   without senselessly burning their caster toward Lost on an unwired spell (owner
   chose lowest over highest). Returns {} only when no Ring is supported at all.
   4 library tests rewritten (survivability cap removed); seasonal 34/34 unchanged.
+- **Caress of Fu Leng — fourth wired Grand-Map spell effect (s43, owner-authorized
+  2026-06-10).** ML2 Earth jade-sabotage. A cult member co-located at a settlement
+  with `jade_stockpile > 0` (Range 50' = co-located) destroys **N=3 fingers**
+  (owner-set quantity; jade is measured in fingers, 1/warrior per s2.4.15) via
+  `_resolve_caress_of_fu_leng` (floors at 0). The existing Wall pass recomputes
+  `jade_stockpile_critical` next tick → weakens Shadowlands taint-suppression and
+  triggers NPC jade-resupply objectives. `_caster_jade_settlement` resolves the
+  caster's co-located SettlementData (settlements indexed by id; `settlements`
+  threaded into `_process_seasonal_maho_casts` as a trailing param). Spell-selection
+  priority: **kill > Fierce Blood > Caress > shed > lowest-ML fallback**. Taint/PTL/
+  crime apply via the cast (victim-blood). "Cannot affect nemuranai" auto-satisfied
+  (nemuranai not tracked). LIMITATION: `jade_stockpile` is uninitialised (defaults 0)
+  and stocked almost only at Kaiu Wall towers, where Bloodspeaker cells rarely sit —
+  so this fires **rarely** until jade is stockpiled more broadly (temples/Kuni). The
+  companion spell **Purge the Weak** (ML1) stays s40/encounter-deferred: its GDD area
+  is "food/water for up to 5 people" (sub-settlement scale — `rice_stockpile` is a
+  rounding error against it) and its payload is a −3k0 / 2-week illness *condition*
+  with no world-scale condition system to hold it. 6 tests (`test_maho_seasonal_cast.gd`
+  34→40).
 - **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
   feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
   the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO

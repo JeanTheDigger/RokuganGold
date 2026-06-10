@@ -1370,7 +1370,7 @@ static func advance_day(
 		var _maho_cast_results: Array = _process_seasonal_maho_casts(
 			bloodspeaker_cells, provinces, characters, _si_spm,
 			crime_records, next_case_id, dice_engine, ic_day, objectives_map,
-			death_events, active_topics, next_topic_id,
+			death_events, active_topics, next_topic_id, settlements,
 		)
 		TheaterSystem.process_degradation(theater_pieces, ic_day)
 		_process_doshin_seasonal_recovery(world_states)
@@ -11085,10 +11085,18 @@ static func _process_seasonal_maho_casts(
 	death_events: Array = [],
 	active_topics: Array = [],
 	next_topic_id: Array = [],
+	settlements: Array = [],
 ) -> Array:
 	var casts: Array = []
 	if cells.is_empty():
 		return casts
+
+	# Index settlements by id for Caress of Fu Leng (jade sabotage at the caster's
+	# co-located settlement).
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		if s_v is SettlementData:
+			settlements_by_id[(s_v as SettlementData).settlement_id] = s_v
 
 	# Bucket living characters by province once.
 	var chars_by_province: Dictionary = {}
@@ -11123,21 +11131,29 @@ static func _process_seasonal_maho_casts(
 		#      threat (kill opportunity outranks everything else).
 		#   2. Fierce Blood of the Earth (ML5) — sacrifice a victim to heal + buy a
 		#      year of life, when the caster is wounded or aging (effective age ≥ 50).
-		#   3. Spreading the Darkness (ML2) — shed Taint off a dangerously Tainted
+		#   3. Caress of Fu Leng (ML2) — destroy jade at the caster's co-located
+		#      settlement, weakening Shadowlands defense (mostly Kaiu Wall towers).
+		#   4. Spreading the Darkness (ML2) — shed Taint off a dangerously Tainted
 		#      member (Rank ≥ 2, the Channel-3 detection onset).
-		#   4. Otherwise the lowest-ML spell the Ring supports (minimal self-Taint).
+		#   5. Otherwise the lowest-ML spell the Ring supports (minimal self-Taint).
 		var kill_target: L5RCharacterData = null
 		if MahoSpellLibrary.supports_spell_ring(caster, "stealing_the_soul"):
 			kill_target = _pick_soul_steal_target(caster, pool, objectives_map)
 		var cast_fierce_blood: bool = kill_target == null \
 			and MahoSpellLibrary.supports_spell_ring(caster, "fierce_blood_of_earth") \
 			and _fierce_blood_has_benefit(caster)
+		var caress_settlement: SettlementData = null
+		if kill_target == null and not cast_fierce_blood \
+				and MahoSpellLibrary.supports_spell_ring(caster, "caress_of_fu_leng"):
+			caress_settlement = _caster_jade_settlement(caster, settlements_by_id)
 		var darkness_source: L5RCharacterData = null
 		var spell: Dictionary
 		if kill_target != null:
 			spell = MahoSpellLibrary.get_spell("stealing_the_soul")
 		elif cast_fierce_blood:
 			spell = MahoSpellLibrary.get_spell("fierce_blood_of_earth")
+		elif caress_settlement != null:
+			spell = MahoSpellLibrary.get_spell("caress_of_fu_leng")
 		else:
 			darkness_source = _pick_taint_shed_source(pool)
 			if darkness_source != null \
@@ -11167,11 +11183,14 @@ static func _process_seasonal_maho_casts(
 		var transfer: Dictionary = {}
 		var kill: Dictionary = {}
 		var fierce_blood: Dictionary = {}
+		var caress: Dictionary = {}
 		if spell_id == "stealing_the_soul" and kill_target != null:
 			kill = _resolve_stealing_the_soul(
 				caster, kill_target, death_events, active_topics, next_topic_id, ic_day)
 		elif spell_id == "fierce_blood_of_earth":
 			fierce_blood = _resolve_fierce_blood(caster)
+		elif spell_id == "caress_of_fu_leng" and caress_settlement != null:
+			caress = _resolve_caress_of_fu_leng(caress_settlement)
 		elif spell_id == "spreading_the_darkness" and darkness_source != null:
 			transfer = _resolve_spreading_the_darkness(
 				caster, darkness_source, pool, objectives_map, dice_engine)
@@ -11186,6 +11205,7 @@ static func _process_seasonal_maho_casts(
 			"transfer": transfer,
 			"kill": kill,
 			"fierce_blood": fierce_blood,
+			"caress": caress,
 		})
 
 	return casts
@@ -11446,6 +11466,39 @@ static func _resolve_fierce_blood(caster: L5RCharacterData) -> Dictionary:
 	caster.life_extension_years += 1
 	return {"resolved": true, "healed": true,
 		"life_extension_years": caster.life_extension_years}
+
+
+## The caster's co-located settlement if it holds jade to destroy (Caress of Fu
+## Leng, s43, Range 50' = co-located). null otherwise — the cell then casts a
+## different spell. Jade is stocked almost exclusively at Kaiu Wall towers, so
+## this fires rarely.
+static func _caster_jade_settlement(
+	caster: L5RCharacterData,
+	settlements_by_id: Dictionary,
+) -> SettlementData:
+	if not caster.physical_location.is_valid_int():
+		return null
+	var sid: int = int(caster.physical_location)
+	if not settlements_by_id.has(sid):
+		return null
+	var s: SettlementData = settlements_by_id[sid] as SettlementData
+	if s != null and s.jade_stockpile > 0.0:
+		return s
+	return null
+
+
+## Applies Caress of Fu Leng (s43, owner-authorized 2026-06-10): dark kansen
+## corrupt "one jade object" — N=3 fingers of the settlement's jade_stockpile
+## (owner-set quantity; jade is measured in fingers, 1 per warrior per s2.4.15).
+## The Wall pass recomputes jade_stockpile_critical next tick, weakening Shadowlands
+## defense and triggering NPC jade-resupply objectives. Taint/PTL/crime apply via
+## the cast itself.
+static func _resolve_caress_of_fu_leng(settlement: SettlementData) -> Dictionary:
+	const CARESS_JADE_DESTROYED: float = 3.0
+	var before: float = settlement.jade_stockpile
+	settlement.jade_stockpile = maxf(0.0, before - CARESS_JADE_DESTROYED)
+	return {"resolved": true, "settlement_id": settlement.settlement_id,
+		"jade_destroyed": before - settlement.jade_stockpile}
 
 
 static func _detect_maho_provinces(
