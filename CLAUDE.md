@@ -3320,7 +3320,8 @@ tests in `tests/test_individual_combat.gd`.
   stays 0 (GDD s11.3 specifies provocation flag only, not a disposition value). `INAUSPICIOUS_PENALTY`
   and `TAIAN_BONUS` stay 0 (GDD says rokuyo is not a mechanical modifier for NPC scoring).
   `_RETREAT_DEFAULT_DAYS` stays 0 (blocked on sub-tile army movement s11.7a). `TAINT_DETECTION_PLACEHOLDER_TN`
-  stays 0 (blocked on s31 Sense spell). `get_renege_willingness()` values stay 0 (function
+  REMOVED 2026-06-10 — Maho Channel 3 now uses the owner-set TN = (7 − Taint Rank) × 5.
+  `get_renege_willingness()` values stay 0 (function
   never called; GDD says "All renege values PROVISIONAL"). `compute_peace_willingness()`
   already returns qualitative dict (correct per GDD s53 "not determined by a single threshold").
   `get_patrol_detection_chances()` already returns qualitative dict (correct per GDD s11.3.19
@@ -4583,6 +4584,25 @@ template generators it depends on. Faithful summary of the fixes that landed:
   rounding error against it) and its payload is a −3k0 / 2-week illness *condition*
   with no world-scale condition system to hold it. 6 tests (`test_maho_seasonal_cast.gd`
   34→40).
+- **Maho Channel 3 wired — Taint detection on a person (Design Decision 5,
+  owner-authorized 2026-06-10).** Closes the last open maho detection channel: a
+  shugenja whose successful action targets a suspect (PROBE/INVESTIGATE near them,
+  s55.12 proximity) rolls Perception + Lore: Shadowlands; on success a Tier 3
+  SUPERNATURAL topic names the suspect a suspected maho user (subject_role
+  PERPETRATOR), routed to the detector's lord → UPHOLD_LAW → investigation. A
+  results-based **stub already existed** (`_process_taint_proximity_detection`,
+  wired + tested) implementing every gate — Taint Rank ≥ 2, Kuni/Asako auto +
+  other shugenja at Lore: Shadowlands ≥ 3, +2k0 — but with a **placeholder TN of
+  0** and no Crab exemption. Completed it with the owner's values: detection
+  **TN = (7 − Taint Rank) × 5** (25/20/15/10 for Rank 2–5 — eases as corruption
+  manifests; the existing test even anticipated "vs TN 20" for a Rank-3 target),
+  and a **Crab-clan exemption** ("innocent explanation" proxy — no Wall-service
+  field exists, and Crab legitimately accrue Taint at the Kaiu Wall). Removed
+  `TAINT_DETECTION_PLACEHOLDER_TN`. This makes the Taint the new seasonal casters
+  accrue (ML − 1 per cast) actually catchable in proximity. The active "cast Sense
+  on a suspect" ActionID remains an optional follow-up (the passive Lore:
+  Shadowlands check is the wired half). 7 tests (`test_maho_channel3.gd`); full
+  suite 13219 passing / 0 failing.
 - **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
   feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
   the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO
@@ -5024,7 +5044,9 @@ knowledge. They can testify through the existing court/investigation system.
 No new code. The witness list in CrimeRecord IS the fourth channel.
 
 **What is not yet implementable:**
-- Channel 3 detection roll TN (blocked on Section 31 Sense spell design)
+- Channel 3 passive Lore: Shadowlands detection roll — WIRED (TN = (7 − Taint
+  Rank) × 5, owner-set 2026-06-10). The active Sense-spell cast path remains an
+  optional follow-up.
 - Kuni/Asako/Kuroiban as Named Characters with UPHOLD_LAW standing objectives
   (blocked on s11.3.5 becoming LOCKED — currently PARTIALLY DESIGNED)
 - `CAST_MAHO` as an NPC ActionID (no LOCKED specification exists for maho as
@@ -5293,7 +5315,7 @@ These sections have partial or no GDD spec. **Blocked features MAY be worked on 
 | Section | What's Needed |
 |---------|--------------|
 | s2.4 | `DECLARE_WALL_EMERGENCY` ActionID — s2.4.14 Decision 6: AP cost, agenda topic format, compliance enforcement |
-| s31 | Sense spell detection TN — Maho Channel 3 roll TN (core spell system DONE; this one value pending) |
+| s31 | Active Sense-spell cast on a suspect — optional follow-up. (Maho Channel 3 passive Lore: Shadowlands detection is WIRED: TN = (7 − Taint Rank) × 5, owner-set 2026-06-10.) |
 | s38 | Kiho system — full design needed |
 | s40 | Individual combat — PARTIAL. WeaponData/ArmorData Resources, NPC summary roll, weapon assignment done. Full PC-facing mechanics (all maneuvers, kata effects, grapple, sumai) blocked on design decisions. |
 | s43 | Maho spell cast roll TN — not specified. Needed for CAST_MAHO NPC ActionID |

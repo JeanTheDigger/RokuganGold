@@ -7238,8 +7238,7 @@ static func _process_impersonation_detection(
 			}
 
 
-# TN for the check is deferred to Section 31/42 — blocked.
-const TAINT_DETECTION_PLACEHOLDER_TN: int = 0
+# Maho Channel 3 (Design Decision 5): Taint Rank ≥ 2 is the accusation threshold.
 const TAINT_RANK_THRESHOLD: float = 2.0
 
 static func _process_taint_proximity_detection(
@@ -7274,6 +7273,12 @@ static func _process_taint_proximity_detection(
 			continue
 		if target.taint < TAINT_RANK_THRESHOLD:
 			continue
+		if target.clan == "Crab":
+			continue  # innocent explanation: Kaiu Wall service (owner ruling 2026-06-10)
+
+		# Detection eases as corruption manifests: (7 − Taint Rank) × 5 → 25/20/15/10
+		# for Rank 2–5 (owner-set, 2026-06-10).
+		var tn: int = (7 - MutationSystem.get_taint_rank(target.taint)) * 5
 
 		var lore_rank: int = detector.skills.get("Lore: Shadowlands", 0)
 		var is_specialist: bool = detector.family in ["Kuni", "Asako"]
@@ -7282,7 +7287,7 @@ static func _process_taint_proximity_detection(
 
 		var family_bonus: int = 2 if is_specialist else 0
 		var taint_check: Dictionary = SkillResolver.resolve_skill_check(
-			detector, dice_engine, "Lore: Shadowlands", TAINT_DETECTION_PLACEHOLDER_TN,
+			detector, dice_engine, "Lore: Shadowlands", tn,
 			0, "", Enums.Trait.PERCEPTION, family_bonus,
 		)
 		if not taint_check.get("success", false):
