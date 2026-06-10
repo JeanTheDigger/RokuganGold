@@ -43,6 +43,27 @@ static func get_roll_tn(taint_rank: int) -> int:
 	return 5 + (5 * taint_rank)
 
 
+## Maho Channel 3 — minimum Taint Rank at which corruption becomes detectable on
+## a person (Design Decision 5). Below this, the suspect carries no detectable Taint.
+const TAINT_DETECTION_RANK_MIN: int = 2
+
+## Maho Channel 3 — Lore: Shadowlands TN to detect Taint on a suspect, by their
+## Taint Rank: (8 − Rank) × 5 → 30/25/20/15 for Rank 2–5 (owner-set 2026-06-10).
+## Detection eases as the corruption manifests.
+static func taint_detection_tn(taint_rank: int) -> int:
+	return (8 - taint_rank) * 5
+
+## Kuni Witch-Hunters and Asako Inquisitors are Taint-detection specialists —
+## they auto-attempt the check and gain +2k0 (s11.11).
+static func is_taint_specialist_family(family: String) -> bool:
+	return family in ["Kuni", "Asako"]
+
+## A character may detect Taint on a person if they are a specialist family OR
+## hold Lore: Shadowlands 3+ (s11.11 / Design Decision 5).
+static func can_detect_taint(c: L5RCharacterData) -> bool:
+	return is_taint_specialist_family(c.family) or int(c.skills.get("Lore: Shadowlands", 0)) >= 3
+
+
 ## TN for the taint roll when using a Shadowlands Power.
 static func get_power_use_tn(tier: Enums.ShadowlandsPowerTier) -> int:
 	match tier:

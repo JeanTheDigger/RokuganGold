@@ -7243,9 +7243,6 @@ static func _process_impersonation_detection(
 			}
 
 
-# Maho Channel 3 (Design Decision 5): Taint Rank ≥ 2 is the accusation threshold.
-const TAINT_RANK_THRESHOLD: float = 2.0
-
 static func _process_taint_proximity_detection(
 	results: Array,
 	characters_by_id: Dictionary,
@@ -7283,21 +7280,15 @@ static func _process_taint_proximity_detection(
 			continue
 		if CharacterStats.is_dead(detector) or CharacterStats.is_dead(target):
 			continue  # a dead suspect must not receive a PERPETRATOR-valence accusation
-		if target.taint < TAINT_RANK_THRESHOLD:
+		if MutationSystem.get_taint_rank(target.taint) < MutationSystem.TAINT_DETECTION_RANK_MIN:
 			continue
 		if target.clan == "Crab":
 			continue  # innocent explanation: Kaiu Wall service (owner ruling 2026-06-10)
-
-		# Detection eases as corruption manifests: (8 − Taint Rank) × 5 → 30/25/20/15
-		# for Rank 2–5 (owner-set, 2026-06-10).
-		var tn: int = (8 - MutationSystem.get_taint_rank(target.taint)) * 5
-
-		var lore_rank: int = detector.skills.get("Lore: Shadowlands", 0)
-		var is_specialist: bool = detector.family in ["Kuni", "Asako"]
-		if lore_rank < 3 and not is_specialist:
+		if not MutationSystem.can_detect_taint(detector):
 			continue
 
-		var family_bonus: int = 2 if is_specialist else 0
+		var tn: int = MutationSystem.taint_detection_tn(MutationSystem.get_taint_rank(target.taint))
+		var family_bonus: int = 2 if MutationSystem.is_taint_specialist_family(detector.family) else 0
 		var taint_check: Dictionary = SkillResolver.resolve_skill_check(
 			detector, dice_engine, "Lore: Shadowlands", tn,
 			0, "", Enums.Trait.PERCEPTION, family_bonus,
@@ -7399,7 +7390,7 @@ static func _build_taint_corroboration_targets(
 			continue
 		if x.clan == "Crab":
 			continue
-		if MutationSystem.get_taint_rank(x.taint) < 2:
+		if MutationSystem.get_taint_rank(x.taint) < MutationSystem.TAINT_DETECTION_RANK_MIN:
 			continue
 		var loc: String = x.physical_location
 		if loc.is_empty():
@@ -7411,8 +7402,7 @@ static func _build_taint_corroboration_targets(
 				continue
 			if e.physical_location != loc:
 				continue
-			var is_specialist: bool = e.family in ["Kuni", "Asako"]
-			if not is_specialist and int(e.skills.get("Lore: Shadowlands", 0)) < 3:
+			if not MutationSystem.can_detect_taint(e):
 				continue
 			if topic.topic_id not in e.topic_pool:
 				continue

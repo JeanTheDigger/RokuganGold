@@ -2751,13 +2751,13 @@ static func _execute_examine_for_taint(
 		base["reason"] = "crab_exempt"
 		return base
 	var rank: int = MutationSystem.get_taint_rank(target.taint)
-	if rank < 2:
+	if rank < MutationSystem.TAINT_DETECTION_RANK_MIN:
 		# The lead was a false alarm — the suspect carries no detectable Taint.
 		base["reason"] = "no_taint_found"
 		return base
 
-	var tn: int = (8 - rank) * 5
-	var family_bonus: int = 2 if character.family in ["Kuni", "Asako"] else 0
+	var tn: int = MutationSystem.taint_detection_tn(rank)
+	var family_bonus: int = 2 if MutationSystem.is_taint_specialist_family(character.family) else 0
 	var check: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, "Lore: Shadowlands", tn,
 		0, "", Enums.Trait.PERCEPTION, family_bonus,

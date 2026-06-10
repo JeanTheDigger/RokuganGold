@@ -4655,6 +4655,21 @@ template generators it depends on. Faithful summary of the fixes that landed:
   records its per-examiner dedup KnowledgeEntry). Lifecycle: once the accusation
   resolves/decays and is removed from `active_topics`, a fresh one can be raised
   again. Parse-checked; no tests per the no-test-code policy.
+- **Channel 3 review fixes (2026-06-10, post-implementation review).** Two
+  follow-ups from a code-review pass: (1) **Double-processing bug — FIXED.** The
+  passive `_process_taint_proximity_detection()` scans all day results by
+  `success`/`character_id`/`target_npc_id` with no action filter and runs before
+  the dedicated EXAMINE_FOR_TAINT writeback, so a successful examination got a
+  redundant second detection roll + double refresh. The passive pass now skips
+  `action_id == "EXAMINE_FOR_TAINT"` results (the corroboration writeback owns
+  them). (2) **TN/eligibility DRY — the `(8 − Rank) × 5` formula, the Rank-2
+  detection threshold, the Kuni/Asako specialist check, and the
+  specialist-or-Lore≥3 detection gate were duplicated across the passive
+  detector, the pre-pass, and the executor.** Centralized into `MutationSystem`:
+  `TAINT_DETECTION_RANK_MIN` (2), `taint_detection_tn(rank)`,
+  `is_taint_specialist_family(family)`, `can_detect_taint(c)`. All three sites
+  call these now; the orphaned day_orchestrator `TAINT_RANK_THRESHOLD` const was
+  removed. A future TN/gate tweak is a single edit. Parse-checked.
 - **EXAMINE_FOR_TAINT scoring/effect — review outcome (2026-06-10).** The two
   objective_alignment scores (INVESTIGATE_THREAT 85, UPHOLD_LAW 65) and the
   corroboration effect were reviewed against the sibling investigation actions
