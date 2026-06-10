@@ -148,8 +148,10 @@ static func advance_day(
 	_assign_ronin_standing_objectives(characters, objectives_map)
 	_assign_kaiu_engineer_standing_objectives(characters, objectives_map, settlements)
 	_assign_artisan_standing_objectives(characters, objectives_map)
-	_assign_monk_standing_objectives(characters, objectives_map)
+	# Witch-hunters before monks: Kuni Witch-Hunters are [Monk] school_type, so the
+	# monk pass would otherwise stamp them PERFORM_RITUAL before they get HUNT_MAHO.
 	_assign_witch_hunter_standing_objectives(characters, objectives_map)
+	_assign_monk_standing_objectives(characters, objectives_map)
 	_assign_kolat_standing_objectives(characters, objectives_map)
 	_assign_kolat_opportunistic_objectives(characters, objectives_map, characters_by_id)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
@@ -1412,6 +1414,9 @@ static func advance_day(
 		)
 		_assign_phoenix_champion_restore_objective(
 			characters, objectives_map, phoenix_council_state,
+		)
+		_process_witch_hunter_self_selection(
+			characters, objectives_map, provinces,
 		)
 		var cw_season_count: int = int(season_meta.get("horde_season_count", 0))
 		if not togashi_state.is_empty():
@@ -7906,6 +7911,74 @@ static func _assign_witch_hunter_standing_objectives(
 		objectives["standing"] = {
 			"need_type": "HUNT_MAHO",
 			"priority": 4,
+			"auto_assigned": true,
+		}
+
+
+# -- Witch-Hunter Roaming Self-Selection (s11.3.5) ----------------------------
+# Seasonally, an idle witch-hunter self-selects the worst Taint hotspot province
+# (highest province_taint_level at or above the PTL crisis onset) and takes a
+# primary HUNT_MAHO objective targeting a settlement there — the decomposer then
+# travels them cross-border to hunt (witch-hunters ignore clan boundaries,
+# s11.3.5). A self-selected hunt is released once its target province cools below
+# the threshold; a real (lord-assigned) primary always outranks self-selection.
+# LIMITATION: all idle hunters converge on the single worst hotspot (no spread).
+
+const WITCH_HUNT_PTL_MIN: float = 3.0  # PTL crisis onset (s11.11); PROVISIONAL hotspot floor
+
+static func _process_witch_hunter_self_selection(
+	characters: Array,
+	objectives_map: Dictionary,
+	provinces: Dictionary,
+) -> void:
+	var best: ProvinceData = null
+	for p: Variant in provinces.values():
+		if not p is ProvinceData:
+			continue
+		var prov: ProvinceData = p
+		if prov.province_taint_level < WITCH_HUNT_PTL_MIN:
+			continue
+		if prov.settlement_ids.is_empty():
+			continue
+		if best == null or prov.province_taint_level > best.province_taint_level:
+			best = prov
+
+	for character: L5RCharacterData in characters:
+		if character.is_pc:
+			continue
+		if CharacterStats.is_dead(character):
+			continue
+		if not _is_maho_hunter(character):
+			continue
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+		var objectives: Dictionary = objectives_map[char_id]
+		var primary: Dictionary = objectives.get("primary", {})
+
+		if not primary.is_empty():
+			# Only manage our own self-selected hunts; a real primary outranks us.
+			if primary.get("source", "") != "witch_hunter_self_selection":
+				continue
+			# Stay committed while the target is still a hotspot; otherwise release it.
+			var tp: Variant = provinces.get(primary.get("target_province_id", -1))
+			if tp is ProvinceData and (tp as ProvinceData).province_taint_level >= WITCH_HUNT_PTL_MIN:
+				continue
+			objectives.erase("primary")
+
+		if best == null:
+			continue
+		var target_settlement: String = str(best.settlement_ids[0])
+		if character.physical_location == target_settlement:
+			continue  # already at the hotspot — hunt locally via the standing objective
+
+		objectives["primary"] = {
+			"need_type": "HUNT_MAHO",
+			"priority": 5,
+			"target_intent": target_settlement,
+			"target_province_id": best.province_id,
+			"source": "witch_hunter_self_selection",
 			"auto_assigned": true,
 		}
 

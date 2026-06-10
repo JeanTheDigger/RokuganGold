@@ -4677,6 +4677,34 @@ template generators it depends on. Faithful summary of the fixes that landed:
   65 between SEARCH_PERSON 60 and INVESTIGATE_PROVINCE 70). They remain
   PROVISIONAL pending an actual live playtest (not runnable in this
   environment); no numeric change was invented without empirical data.
+- **s11.3.5 Witch-Hunter standing + roaming (owner-authorized 2026-06-10).**
+  Closes the maho hunting loop: Kuni Witch-Hunters, Asako Inquisitors, and the
+  three anti-maho order leaders (Crab/Phoenix/Scorpion) are now autonomous
+  hunters instead of idling when they hold neither a lordship nor a magistracy.
+  **New HUNT_MAHO NeedType** (objective_alignment: INVESTIGATE_PROVINCE 100,
+  EXAMINE_FOR_TAINT 90, EXAMINE_CRIME_SCENE 85, PURIFY_TAINTED_GROUND 70,
+  SEARCH_PERSON 60, PROBE 50 — all PROVISIONAL, calibrated vs INVESTIGATE_THREAT)
+  routed via `ObjectiveDecomposer._decompose_hunt_maho` (in INVESTIGATION_OBJECTIVES):
+  travels toward a target hotspot settlement when one is set, else passthrough to
+  hunt locally. **Standing layer:** `_assign_witch_hunter_standing_objectives`
+  (daily, runs BEFORE the monk pass because Kuni Witch-Hunters are [Monk]
+  school_type — otherwise the monk pass stamps PERFORM_RITUAL first) assigns
+  HUNT_MAHO to idle hunters via `_is_maho_hunter` (school_name contains
+  Witch-Hunter/Witch Hunter/Inquisitor, or the three leader POSITIONs; Kuroiban
+  rank-and-file deferred — secret order, no clean identifier). **Roaming layer:**
+  `_process_witch_hunter_self_selection` (seasonal) finds the worst Taint hotspot
+  (highest `province_taint_level` ≥ WITCH_HUNT_PTL_MIN = 3.0, the PTL crisis
+  onset; PROVISIONAL) and gives idle hunters a primary HUNT_MAHO objective
+  targeting a settlement there — the decomposer then travels them cross-border
+  (witch-hunters ignore clan lines, s11.3.5). A self-selected hunt releases when
+  its target province cools below the floor; a real (lord-assigned) primary
+  outranks it (resolve_goal prefers primary over standing). INVESTIGATE_PROVINCE
+  added to the VISITING context list so a roaming hunter can PTL-scan a foreign
+  province (safe: the Phase-4b allowlist only lets investigation needs select
+  it). LIMITATIONS: all idle hunters converge on the single worst hotspot (no
+  spread); a witch-hunter who also holds a magistracy gets UPHOLD_LAW first
+  (magistrate pass runs earlier) — rare dual-role. Parse-checked; no tests per
+  the no-test-code policy.
 - **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
   feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
   the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO
