@@ -7916,13 +7916,16 @@ static func _assign_witch_hunter_standing_objectives(
 
 
 # -- Witch-Hunter Roaming Self-Selection (s11.3.5) ----------------------------
-# Seasonally, an idle witch-hunter self-selects the worst Taint hotspot province
-# (highest province_taint_level at or above the PTL crisis onset) and takes a
-# primary HUNT_MAHO objective targeting a settlement there — the decomposer then
-# travels them cross-border to hunt (witch-hunters ignore clan boundaries,
-# s11.3.5). A self-selected hunt is released once its target province cools below
-# the threshold; a real (lord-assigned) primary always outranks self-selection.
-# LIMITATION: all idle hunters converge on the single worst hotspot (no spread).
+# Seasonally, idle witch-hunters spread across the Empire's Taint hotspots
+# (provinces with province_taint_level at or above the PTL crisis onset). Each
+# idle hunter takes a primary HUNT_MAHO objective targeting the LEAST-covered
+# hotspot (ties broken toward the highest PTL) so coverage spreads instead of
+# everyone swarming the single worst province; the decomposer then travels them
+# cross-border to hunt (witch-hunters ignore clan boundaries, s11.3.5). Hunters
+# already committed to a still-hot province, or already standing in a hotspot
+# (hunting locally), count toward that province's coverage. A self-selected hunt
+# is released once its target province cools below the floor; a real
+# (lord-assigned) primary always outranks self-selection.
 
 const WITCH_HUNT_PTL_MIN: float = 3.0  # PTL crisis onset (s11.11); PROVISIONAL hotspot floor
 
@@ -7931,26 +7934,43 @@ static func _process_witch_hunter_self_selection(
 	objectives_map: Dictionary,
 	provinces: Dictionary,
 ) -> void:
-	var best: ProvinceData = null
+	# Build the hotspot set + a settlement→province lookup (for "already at a hotspot").
+	var hotspots: Array = []
+	var settlement_to_province: Dictionary = {}
 	for p: Variant in provinces.values():
 		if not p is ProvinceData:
 			continue
 		var prov: ProvinceData = p
-		if prov.province_taint_level < WITCH_HUNT_PTL_MIN:
-			continue
-		if prov.settlement_ids.is_empty():
-			continue
-		if best == null or prov.province_taint_level > best.province_taint_level:
-			best = prov
+		for sid: int in prov.settlement_ids:
+			settlement_to_province[sid] = prov.province_id
+		if prov.province_taint_level >= WITCH_HUNT_PTL_MIN and not prov.settlement_ids.is_empty():
+			hotspots.append(prov)
 
+	# No hotspots anywhere: release any stale self-selected hunts so hunters fall
+	# back to local hunting via their standing objective.
+	if hotspots.is_empty():
+		for character: L5RCharacterData in characters:
+			if character.is_pc or CharacterStats.is_dead(character) or not _is_maho_hunter(character):
+				continue
+			var o: Dictionary = objectives_map.get(character.character_id, {})
+			if o.get("primary", {}).get("source", "") == "witch_hunter_self_selection":
+				o.erase("primary")
+		return
+
+	hotspots.sort_custom(func(a: ProvinceData, b: ProvinceData) -> bool:
+		return a.province_taint_level > b.province_taint_level)
+	var hotspot_by_id: Dictionary = {}
+	var coverage: Dictionary = {}
+	for h: ProvinceData in hotspots:
+		hotspot_by_id[h.province_id] = h
+		coverage[h.province_id] = 0
+
+	# Pass 1: tally coverage from hunters who stay put (committed or already on-site),
+	# release stale hunts, and collect the genuinely idle hunters needing a target.
+	var unassigned: Array = []
 	for character: L5RCharacterData in characters:
-		if character.is_pc:
+		if character.is_pc or CharacterStats.is_dead(character) or not _is_maho_hunter(character):
 			continue
-		if CharacterStats.is_dead(character):
-			continue
-		if not _is_maho_hunter(character):
-			continue
-
 		var char_id: int = character.character_id
 		if not objectives_map.has(char_id):
 			objectives_map[char_id] = {}
@@ -7958,26 +7978,41 @@ static func _process_witch_hunter_self_selection(
 		var primary: Dictionary = objectives.get("primary", {})
 
 		if not primary.is_empty():
-			# Only manage our own self-selected hunts; a real primary outranks us.
 			if primary.get("source", "") != "witch_hunter_self_selection":
-				continue
-			# Stay committed while the target is still a hotspot; otherwise release it.
-			var tp: Variant = provinces.get(primary.get("target_province_id", -1))
-			if tp is ProvinceData and (tp as ProvinceData).province_taint_level >= WITCH_HUNT_PTL_MIN:
-				continue
-			objectives.erase("primary")
+				continue  # a real primary outranks self-selection; leave it alone
+			var tpid: int = primary.get("target_province_id", -1)
+			if hotspot_by_id.has(tpid):
+				coverage[tpid] += 1
+				continue  # still a hotspot — stay committed
+			objectives.erase("primary")  # target cooled — release and re-select below
 
-		if best == null:
+		# Already standing in a hotspot province? Hunt locally; count the coverage.
+		var loc: String = character.physical_location
+		var cur_sid: int = loc.to_int() if loc.is_valid_int() else -1
+		var cur_prov: int = settlement_to_province.get(cur_sid, -1)
+		if hotspot_by_id.has(cur_prov):
+			coverage[cur_prov] += 1
 			continue
-		var target_settlement: String = str(best.settlement_ids[0])
-		if character.physical_location == target_settlement:
-			continue  # already at the hotspot — hunt locally via the standing objective
 
-		objectives["primary"] = {
+		unassigned.append(character)
+
+	# Pass 2: send each idle hunter to the least-covered hotspot (ties → highest PTL,
+	# since hotspots is sorted PTL-descending and we take the first minimum).
+	for character: L5RCharacterData in unassigned:
+		var target: ProvinceData = null
+		var min_cov: int = 0x7FFFFFFF
+		for h: ProvinceData in hotspots:
+			if coverage[h.province_id] < min_cov:
+				min_cov = coverage[h.province_id]
+				target = h
+		if target == null:
+			continue
+		coverage[target.province_id] += 1
+		objectives_map[character.character_id]["primary"] = {
 			"need_type": "HUNT_MAHO",
 			"priority": 5,
-			"target_intent": target_settlement,
-			"target_province_id": best.province_id,
+			"target_intent": str(target.settlement_ids[0]),
+			"target_province_id": target.province_id,
 			"source": "witch_hunter_self_selection",
 			"auto_assigned": true,
 		}

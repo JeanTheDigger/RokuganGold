@@ -4701,10 +4701,13 @@ template generators it depends on. Faithful summary of the fixes that landed:
   outranks it (resolve_goal prefers primary over standing). INVESTIGATE_PROVINCE
   added to the VISITING context list so a roaming hunter can PTL-scan a foreign
   province (safe: the Phase-4b allowlist only lets investigation needs select
-  it). LIMITATIONS: all idle hunters converge on the single worst hotspot (no
-  spread); a witch-hunter who also holds a magistracy gets UPHOLD_LAW first
-  (magistrate pass runs earlier) — rare dual-role. Parse-checked; no tests per
-  the no-test-code policy.
+  it). Idle hunters **spread** across hotspots: each takes the least-covered
+  hotspot (ties → highest PTL), and hunters already committed or already standing
+  in a hotspot count toward its coverage, so they fan out instead of swarming the
+  single worst province. LIMITATIONS: a witch-hunter who also holds a magistracy
+  gets UPHOLD_LAW first (magistrate pass runs earlier) — rare dual-role; spread
+  uses coverage count, not map distance (no travel-distance data). Parse-checked;
+  no tests per the no-test-code policy.
 - **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
   feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
   the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO
