@@ -127,15 +127,16 @@ static func spell_ids_by_ml(mastery_level: int) -> Array:
 ## (2×ML wounds) the caster survives (wounds_taken + 2×ML ≤ total capacity).
 ## Among spells at the chosen ML, picks the one in the caster's strongest such
 ## Ring, breaking ties by sorted spell_id. Returns {} if the caster can cast none.
+## Generic fallback selector for the seasonal Bloodspeaker cast (victim-blood
+## model, owner-authorized 2026-06-10): the cell casts the LOWEST Mastery-Level
+## spell its Ring supports — ticking the province (PTL +1, flat) while minimising
+## the caster's self-Taint (ML − 1 per cast). The 2×ML blood cost is paid by a
+## sacrificed nameless victim, so the caster's own survivability no longer bounds
+## the choice. Returns {} only when no spell's Ring is supported at all.
 static func pick_cast_spell(caster: L5RCharacterData) -> Dictionary:
 	if caster == null:
 		return {}
-	var capacity: int = CharacterStats.get_total_wound_capacity(caster)
-	var remaining: int = capacity - caster.wounds_taken
-	# Highest ML first.
-	for ml: int in range(6, 0, -1):
-		if 2 * ml > remaining:
-			continue  # would die from the self-blood cost
+	for ml: int in range(1, 7):  # lowest ML first
 		var best_id: String = ""
 		var best_ring_val: int = -1
 		for sid: String in spell_ids_by_ml(ml):

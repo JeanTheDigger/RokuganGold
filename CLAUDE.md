@@ -4549,6 +4549,21 @@ template generators it depends on. Faithful summary of the fixes that landed:
   regression). All three clean Grand-Map maho effects now wired (Spreading the
   Darkness, Stealing the Soul, Fierce Blood of the Earth); the remaining ~43 spells
   stay s40/ASCII-deferred.
+- **Seasonal maho casts use the victim-blood model (s43, owner-authorized
+  2026-06-10).** Every seasonal Bloodspeaker cast's 2×ML blood cost is now paid by
+  a sacrificed nameless victim (a transient `L5RCharacterData` blood source), not
+  the caster's self-blood. The 2×ML number is unchanged — only the source moved
+  (owner ruling reinterpreting GDD "the caster must spill blood" as the cell
+  consuming a victim). Consequence: the caster takes no wounds, so the cast is
+  gated **only by Ring support** — all three wired-spell gates switched from
+  `can_support_spell` to `supports_spell_ring`, making the high-ML wired spells
+  (Stealing the Soul ML4, Fierce Blood ML5) reachable by low-wound-capacity casters
+  who couldn't survive the self-blood before. `pick_cast_spell` repurposed to the
+  generic fallback: **lowest** Ring-supported ML (not highest) — same flat PTL +1
+  per cast but minimal caster self-Taint (ML − 1), so cells corrupt the province
+  without senselessly burning their caster toward Lost on an unwired spell (owner
+  chose lowest over highest). Returns {} only when no Ring is supported at all.
+  4 library tests rewritten (survivability cap removed); seasonal 34/34 unchanged.
 - **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
   feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
   the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO

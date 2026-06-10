@@ -11116,19 +11116,19 @@ static func _process_seasonal_maho_casts(
 		if not province is ProvinceData:
 			continue
 
-		# Spell selection priority (owner-authorized 2026-06-09):
+		# Spell selection priority (owner-authorized 2026-06-09 / blood-source
+		# 2026-06-10). All casts are victim-blood, so every gate is Ring-only
+		# (supports_spell_ring) — the caster's survivability never bounds the cast:
 		#   1. Stealing the Soul (ML4) — finish a co-located, wounded, investigating
 		#      threat (kill opportunity outranks everything else).
 		#   2. Fierce Blood of the Earth (ML5) — sacrifice a victim to heal + buy a
 		#      year of life, when the caster is wounded or aging (effective age ≥ 50).
 		#   3. Spreading the Darkness (ML2) — shed Taint off a dangerously Tainted
 		#      member (Rank ≥ 2, the Channel-3 detection onset).
-		#   4. Otherwise the cell's strongest survivable spell.
+		#   4. Otherwise the lowest-ML spell the Ring supports (minimal self-Taint).
 		var kill_target: L5RCharacterData = null
-		if MahoSpellLibrary.can_support_spell(caster, "stealing_the_soul"):
+		if MahoSpellLibrary.supports_spell_ring(caster, "stealing_the_soul"):
 			kill_target = _pick_soul_steal_target(caster, pool, objectives_map)
-		# Ring-only gate: Fierce Blood's life cost is the victim's, not the caster's,
-		# so it is not bounded by the caster's own survivability (it heals them).
 		var cast_fierce_blood: bool = kill_target == null \
 			and MahoSpellLibrary.supports_spell_ring(caster, "fierce_blood_of_earth") \
 			and _fierce_blood_has_benefit(caster)
@@ -11141,7 +11141,7 @@ static func _process_seasonal_maho_casts(
 		else:
 			darkness_source = _pick_taint_shed_source(pool)
 			if darkness_source != null \
-					and MahoSpellLibrary.can_support_spell(caster, "spreading_the_darkness"):
+					and MahoSpellLibrary.supports_spell_ring(caster, "spreading_the_darkness"):
 				spell = MahoSpellLibrary.get_spell("spreading_the_darkness")
 			else:
 				spell = MahoSpellLibrary.pick_cast_spell(caster)
@@ -11149,11 +11149,10 @@ static func _process_seasonal_maho_casts(
 			continue
 		var spell_id: String = spell.get("spell_id", "")
 
-		# Fierce Blood consumes a nameless victim's life force, not the caster's
-		# blood (faithful to s43, and lets a wounded caster survive long enough to heal).
-		var blood_source: L5RCharacterData = caster
-		if spell_id == "fierce_blood_of_earth":
-			blood_source = L5RCharacterData.new()
+		# Victim-blood model (owner-authorized 2026-06-10): every seasonal cast's
+		# 2×ML blood cost is paid by a sacrificed nameless victim, not the caster,
+		# so the caster takes no wounds and the cast is gated only by Ring support.
+		var blood_source: L5RCharacterData = L5RCharacterData.new()
 
 		var cast_result: Dictionary = MahoSystem.resolve_cast(
 			caster, blood_source, province as ProvinceData,
