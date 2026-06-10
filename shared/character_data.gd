@@ -279,6 +279,13 @@ var spell_void_bonus_used: int = 0
 
 @export var cult_affiliation: bool = false
 
+# -- Kuroiban / Black Watch (Section 11.3.5) ----------------------------------
+## True if this character is a secret member of the Scorpion Kuroiban, the
+## covert anti-maho order maintained by the Soshi and Yogo families. Hidden —
+## other characters never learn it from observation ("most samurai are not even
+## aware of its existence", s11.3.5). Selected at world-gen.
+@export var is_kuroiban: bool = false
+
 # -- Hunting (Section 57.38) ---------------------------------------------------
 
 @export var hunt_trophies: Array = []

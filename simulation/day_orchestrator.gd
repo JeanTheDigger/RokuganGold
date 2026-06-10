@@ -7887,6 +7887,8 @@ static func _assign_monk_standing_objectives(
 # order with no clean identifier and are deferred (only the leader qualifies).
 
 static func _is_maho_hunter(c: L5RCharacterData) -> bool:
+	if c.is_kuroiban:
+		return true  # covert Scorpion Black Watch (s11.3.5); roams silently
 	var s: String = c.school_name
 	if s.contains("Witch-Hunter") or s.contains("Witch Hunter") or s.contains("Inquisitor"):
 		return true

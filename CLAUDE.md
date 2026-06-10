@@ -4726,6 +4726,28 @@ template generators it depends on. Faithful summary of the fixes that landed:
   a fresh intrusion re-fire. Dead guards on hunter and host lord. Wired into the
   arrival block (clan/family baselines ensured in world_states first).
   Parse-checked; no tests per the no-test-code policy.
+- **s11.3.5 Kuroiban / Black Watch membership (owner-authorized 2026-06-10).**
+  The Scorpion anti-maho order (s11.3.5: "secretive group maintained by the
+  clan's two shugenja families, the Soshi and the Yogo... operates in the
+  shadows and most samurai are not even aware of its existence"). Because
+  membership is secret and NOT a school (unlike Kuni Witch-Hunters / Asako
+  Inquisitors), it is carried as a hidden flag `is_kuroiban: bool` on
+  L5RCharacterData (mirrors `is_kolat_master` / `cult_affiliation`; @export →
+  persists with the character save). `simulation/kuroiban_selector.gd`
+  (KuroibanSelector pure class) selects members once at world-gen from living
+  Scorpion Soshi/Yogo: the existing `KUROIBAN_LEADER` (assigned by
+  WorldPopulationGenerator) is always flagged, plus top-anti-maho-lore
+  (`Lore: Shadowlands`×2 + `Lore: Theology`) SHUGENJA-school members up to a
+  **fixed small total of 6–10** (`dice.roll_die`, leader counts). Wired into
+  `WorldBootstrap.bootstrap_world` after bloodspeaker generation. **Behavior =
+  "roam silently" (owner choice):** `is_kuroiban` added to `_is_maho_hunter`, so
+  Kuroiban get HUNT_MAHO standing and join the roaming-spread pass like
+  Kuni/Asako — but the cross-border incident keys off `_is_kuni_witch_hunter`
+  (excludes Soshi/Yogo) and the +2k0 PTL detection edge keys off Kuni/Asako
+  family (excludes them), so they roam covertly: no diplomatic incident, no
+  detection bonus. All roster counts PROVISIONAL (GDD gives no size or selection
+  rule). Parse-checked (class registry rebuilt via import scan); no tests per the
+  no-test-code policy.
 - **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
   feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
   the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO

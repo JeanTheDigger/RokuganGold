@@ -438,6 +438,9 @@ static func bootstrap_world(
 		provinces, dice, next_cell_id, 0, next_insurgency_id,
 	)
 
+	# -- Kuroiban / Black Watch membership (s11.3.5) --------------------------
+	KuroibanSelector.select_kuroiban(characters, dice)
+
 	# -- Okiya generation (s57.45) -------------------------------------------
 	# Build settlement → clan lookup from provinces.
 	var settlement_clan_map: Dictionary = {}
