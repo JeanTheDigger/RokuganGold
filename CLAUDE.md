@@ -4599,15 +4599,43 @@ template generators it depends on. Faithful summary of the fixes that landed:
   and a **Crab-clan exemption** ("innocent explanation" proxy — no Wall-service
   field exists, and Crab legitimately accrue Taint at the Kaiu Wall). Removed
   `TAINT_DETECTION_PLACEHOLDER_TN`. This makes the Taint the new seasonal casters
-  accrue (ML − 1 per cast) actually catchable in proximity. An active, deliberate
-  Lore: Shadowlands examination of a suspect (same (8 − Rank) × 5 TN) remains an
-  optional follow-up; the Sense spell is NOT the tool — canonically it detects
-  elemental kami, not kansen (owner correction 2026-06-10). The passive Lore:
-  Shadowlands check is the wired half. 7 tests (`test_maho_channel3.gd`); full
+  accrue (ML − 1 per cast) actually catchable in proximity. The active, deliberate
+  examination is now also WIRED (EXAMINE_FOR_TAINT, see below); the Sense spell is
+  NOT the tool — canonically it detects elemental kami, not kansen (owner
+  correction 2026-06-10). 7 tests (`test_maho_channel3.gd`); full
   suite 13219 passing / 0 failing. Hardening (2026-06-10): added a dead-character
   guard on detector/target — a suspect who died mid-day must not receive a
   PERPETRATOR-valence accusation (hard rule: dead characters carry NEUTRAL
   subject_role). +1 test (8 total).
+- **Maho Channel 3 active examination — EXAMINE_FOR_TAINT (owner-authorized
+  2026-06-10, R2 corroboration).** The deliberate counterpart to the passive
+  proximity check. A new NPC ActionID (1 AP, AT_OWN_HOLDINGS/AT_COURT/VISITING,
+  Lore: Shadowlands/Perception) by which a witch-hunter who already knows an
+  active `taint_suspected` accusation deliberately examines the co-located
+  accused suspect to confirm the corruption firsthand. **R2 corroboration model
+  (owner choice):** the lead IS an existing accusation; the value is independent
+  confirmation. Orchestrator pre-pass `_build_taint_corroboration_targets()`
+  finds, per living examiner (Kuni/Asako OR Lore: Shadowlands ≥ 3), a co-located
+  living non-Crab Rank-2+ suspect named in an active accusation the examiner
+  knows (topic_id in topic_pool) and has NOT yet corroborated (no
+  `taint_corroborated` KnowledgeEntry for that topic) — `examiner_id →
+  {target_id, topic_id}`, injected as `has_taint_corroboration_target` +
+  `known_objectives` target/topic; gated by Phase-4c
+  `_apply_taint_examination_precondition_filter`. Executor
+  `_execute_examine_for_taint()` revalidates (dead/Crab/Rank<2 guards), rolls
+  Lore: Shadowlands (Perception) vs **(8 − Taint Rank) × 5** (Kuni/Asako +2k0 —
+  same formula as the passive check). On success, writeback
+  `_process_taint_examination_writebacks()` refreshes the accusation's momentum
+  to the TIER_3 floor + discussion bump (sustains the case), widens reach to the
+  examiner's lord's topic_pool, and records the dedup KnowledgeEntry. Scoring:
+  objective_alignment INVESTIGATE_THREAT 85 / UPHOLD_LAW 65 (calibrated vs
+  EXAMINE_CRIME_SCENE 90 / SEARCH_PERSON 60–70, PROVISIONAL); action_skill_map
+  Lore: Shadowlands/Perception; added to `_OBSERVATION_ACTIONS`; stale-key
+  `has_taint_corroboration_target`. Dead guards at pre-pass, executor, and
+  writeback (a dead suspect is never accused). NOT a Sense cast (Sense detects
+  kami, not kansen). 14 tests in `tests/test_maho_examination.gd`. NOTE: tests
+  not executed here — headless GUT fails on the WeaponData cold-boot cascade;
+  validated by per-file `--check-only` parse (clean) + static review.
 - **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
   feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
   the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO
@@ -5040,8 +5068,8 @@ correction 2026-06-10). Two paths, both gated on proximity:
   character as a suspected maho user. This is a direct accusation topic —
   unlike Channel 1 and 2, it names a perpetrator.
 - TN for the Lore: Shadowlands check = **(8 − Taint Rank) × 5** (owner-set
-  2026-06-10): 30/25/20/15 for Rank 2–5. The passive (incidental) path is WIRED;
-  an active, deliberate examination at the same TN is an optional follow-up.
+  2026-06-10): 30/25/20/15 for Rank 2–5. Both the passive (incidental) path and
+  the active, deliberate examination (EXAMINE_FOR_TAINT) at the same TN are WIRED.
 
 **Channel 4 — Direct witnesses (already handled)**
 If `witnesses` is non-empty on the CrimeRecord, those characters carry direct
@@ -5051,9 +5079,10 @@ No new code. The witness list in CrimeRecord IS the fourth channel.
 **What is not yet implementable:**
 - Channel 3 passive Lore: Shadowlands detection roll — WIRED (TN = (8 − Taint
   Rank) × 5, owner-set 2026-06-10). An active, deliberate Lore: Shadowlands
-  examination of a suspect (same TN) remains an optional follow-up. NOTE: the
-  Sense spell is NOT the detection tool — canonically Sense detects elemental
-  kami, explicitly NOT kansen (owner correction 2026-06-10).
+  examination (EXAMINE_FOR_TAINT, same TN) is now also WIRED — see "Maho
+  Channel 3 active examination". NOTE: the Sense spell is NOT the detection
+  tool — canonically Sense detects elemental kami, explicitly NOT kansen
+  (owner correction 2026-06-10).
 - Kuni/Asako/Kuroiban as Named Characters with UPHOLD_LAW standing objectives
   (blocked on s11.3.5 becoming LOCKED — currently PARTIALLY DESIGNED)
 - `CAST_MAHO` as an NPC ActionID (no LOCKED specification exists for maho as
@@ -5322,7 +5351,7 @@ These sections have partial or no GDD spec. **Blocked features MAY be worked on 
 | Section | What's Needed |
 |---------|--------------|
 | s2.4 | `DECLARE_WALL_EMERGENCY` ActionID — s2.4.14 Decision 6: AP cost, agenda topic format, compliance enforcement |
-| s31 | Active, deliberate Lore: Shadowlands examination of a suspect — optional follow-up (same TN as passive). NOT a Sense cast (Sense detects kami, not kansen). Maho Channel 3 passive detection is WIRED: TN = (8 − Taint Rank) × 5, owner-set 2026-06-10. |
+| s31 | RESOLVED — Maho Channel 3 both halves WIRED at TN = (8 − Taint Rank) × 5 (owner-set 2026-06-10): passive proximity check + active EXAMINE_FOR_TAINT corroboration. NOT a Sense cast (Sense detects kami, not kansen). |
 | s38 | Kiho system — full design needed |
 | s40 | Individual combat — PARTIAL. WeaponData/ArmorData Resources, NPC summary roll, weapon assignment done. Full PC-facing mechanics (all maneuvers, kata effects, grapple, sumai) blocked on design decisions. |
 | s43 | Maho spell cast roll TN — not specified. Needed for CAST_MAHO NPC ActionID |

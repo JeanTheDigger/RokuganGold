@@ -452,6 +452,11 @@ static func advance_day(
 		active_topics, next_topic_id, ic_day,
 	)
 
+	_process_taint_examination_writebacks(
+		day_result.get("results", []),
+		characters_by_id, active_topics, current_season,
+	)
+
 	_capture_witness_travel_intent(
 		day_result.get("results", []), world_states,
 	)
@@ -7315,6 +7320,107 @@ static func _process_taint_proximity_detection(
 			var lord: L5RCharacterData = characters_by_id.get(detector.lord_id)
 			if lord != null and not CharacterStats.is_dead(lord) and topic.topic_id not in lord.topic_pool:
 				lord.topic_pool.append(topic.topic_id)
+
+
+# -- Maho Channel 3 active examination (EXAMINE_FOR_TAINT, owner 2026-06-10) ----
+# R2 corroboration: a witch-hunter deliberately confirms an accusation they know.
+# These helpers gate availability (pre-pass) and apply the corroboration effect.
+
+static func _has_corroborated_taint(examiner: L5RCharacterData, topic_id: int) -> bool:
+	for entry: KnowledgeEntry in examiner.knowledge_pool:
+		if entry.entry_type == "taint_corroborated" and int(entry.data.get("topic_id", -1)) == topic_id:
+			return true
+	return false
+
+
+static func _build_taint_corroboration_targets(
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+) -> Dictionary:
+	## For each living witch-hunter, find a co-located accused suspect they already
+	## know about (an active taint_suspected accusation in their topic_pool, naming
+	## a still-tainted non-Crab suspect) and have not yet corroborated.
+	## Returns examiner_id -> {target_id, topic_id}; first qualifying match wins.
+	var out: Dictionary = {}
+	for t: Variant in active_topics:
+		if not t is TopicData:
+			continue
+		var topic: TopicData = t
+		if topic.resolved or topic.variant != "taint_suspected":
+			continue
+		var x_id: int = topic.subject_character_id
+		var x: L5RCharacterData = characters_by_id.get(x_id)
+		if x == null or CharacterStats.is_dead(x):
+			continue
+		if x.clan == "Crab":
+			continue
+		if MutationSystem.get_taint_rank(x.taint) < 2:
+			continue
+		var loc: String = x.physical_location
+		if loc.is_empty():
+			continue
+		for e: L5RCharacterData in characters:
+			if out.has(e.character_id):
+				continue
+			if CharacterStats.is_dead(e) or e.character_id == x_id:
+				continue
+			if e.physical_location != loc:
+				continue
+			var is_specialist: bool = e.family in ["Kuni", "Asako"]
+			if not is_specialist and int(e.skills.get("Lore: Shadowlands", 0)) < 3:
+				continue
+			if topic.topic_id not in e.topic_pool:
+				continue
+			if _has_corroborated_taint(e, topic.topic_id):
+				continue
+			out[e.character_id] = {"target_id": x_id, "topic_id": topic.topic_id}
+	return out
+
+
+static func _process_taint_examination_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	current_season: int,
+) -> void:
+	## Apply a successful EXAMINE_FOR_TAINT: refresh the accusation's momentum so
+	## a firsthand confirmation sustains the case, widen its reach to the examiner's
+	## lord, and record a dedup KnowledgeEntry so they won't re-corroborate it.
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var effects: Dictionary = (result as Dictionary).get("effects", {})
+		if not effects.get("requires_taint_corroboration", false):
+			continue
+		var examiner_id: int = (result as Dictionary).get("character_id", -1)
+		var examiner: L5RCharacterData = characters_by_id.get(examiner_id)
+		if examiner == null or CharacterStats.is_dead(examiner):
+			continue
+		var topic_id: int = int(effects.get("taint_topic_id", -1))
+		var target_id: int = int(effects.get("taint_target_id", -1))
+
+		var topic: TopicData = null
+		for t: Variant in active_topics:
+			if t is TopicData and (t as TopicData).topic_id == topic_id:
+				topic = t
+				break
+		if topic != null and not topic.resolved:
+			topic.momentum = maxf(
+				topic.momentum,
+				TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3),
+			)
+			topic.discussion_count_this_day += 1
+			if examiner.lord_id >= 0:
+				var lord: L5RCharacterData = characters_by_id.get(examiner.lord_id)
+				if lord != null and not CharacterStats.is_dead(lord) and topic.topic_id not in lord.topic_pool:
+					lord.topic_pool.append(topic.topic_id)
+
+		var entry := KnowledgeEntry.new()
+		entry.entry_type = "taint_corroborated"
+		entry.data = {"topic_id": topic_id, "target_id": target_id}
+		entry.season_acquired = current_season
+		examiner.knowledge_pool.append(entry)
 
 
 static func _is_character_in_battle(
@@ -15478,6 +15584,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"settlement_type",
 		"champion_conclusion_candidates", "local_tier3_candidates",
 		"has_active_contracts", "has_kolat_objective",
+		"has_taint_corroboration_target",
 		# Lord-specific keys (cleared so ex-lords don't retain stale data after succession)
 		"province_data", "settlements", "clans", "current_season",
 		"characters_by_id", "active_armies", "active_insurgencies",
@@ -20201,6 +20308,11 @@ static func _inject_base_character_context(
 		if _cv.lord_id >= 0 and _cv.supply_ledger.get("contract_end_ic_day", -1) >= 0:
 			g_lords_with_contracts[_cv.lord_id] = true
 
+	# Pre-build per-examiner EXAMINE_FOR_TAINT corroboration targets (Maho Channel 3
+	# active). examiner_id -> {target_id, topic_id}; gates the precondition filter.
+	var g_taint_corroboration: Dictionary = _build_taint_corroboration_targets(
+		characters, characters_by_id, active_topics)
+
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
 			continue
@@ -20214,6 +20326,15 @@ static func _inject_base_character_context(
 		ws["ic_day"] = ic_day
 		ws["season"] = current_season
 		ws["tattoos"] = tattoos
+
+		# Maho Channel 3 active examination target (any examiner, not just lords).
+		var taint_corr: Dictionary = g_taint_corroboration.get(c.character_id, {})
+		if not taint_corr.is_empty():
+			ws["has_taint_corroboration_target"] = true
+			if not ws.has("known_objectives"):
+				ws["known_objectives"] = {}
+			ws["known_objectives"]["taint_corroboration_target_id"] = taint_corr["target_id"]
+			ws["known_objectives"]["taint_corroboration_topic_id"] = taint_corr["topic_id"]
 		ws["trade_routes"] = trade_routes
 		ws["taint_topic_province_ids"] = taint_province_ids
 		ws["unit_training_counts"] = unit_counts.get(c.clan, {})

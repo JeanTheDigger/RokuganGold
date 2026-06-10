@@ -806,6 +806,26 @@ static func _apply_terminate_contract_precondition_filter(
 	return _remove_action(options, "TERMINATE_CONTRACT")
 
 
+# -- Phase 4c: EXAMINE_FOR_TAINT Precondition Filter (Maho Channel 3 active) ---
+# Removes EXAMINE_FOR_TAINT unless the orchestrator found a co-located accused
+# suspect this examiner knows about and has not yet corroborated.
+
+static func _apply_taint_examination_precondition_filter(
+	options: Array,
+	world_state: Dictionary,
+) -> Array:
+	var has_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "EXAMINE_FOR_TAINT":
+			has_action = true
+			break
+	if not has_action:
+		return options
+	if world_state.get("has_taint_corroboration_target", false):
+		return options
+	return _remove_action(options, "EXAMINE_FOR_TAINT")
+
+
 # -- Phase 5: Score All Options ------------------------------------------------
 # Eight components per s55.4.5 / s55.3.3.
 
@@ -1136,6 +1156,7 @@ static func run(
 	options = apply_allowlist_filter(options, need.need_type, scoring_tables)
 	options = _apply_tattoo_precondition_filter(options, character, ctx, chars_by_id, world_state)
 	options = _apply_terminate_contract_precondition_filter(options, world_state)
+	options = _apply_taint_examination_precondition_filter(options, world_state)
 	options = _apply_origami_precondition_filter(options, character, ctx)
 	options = _apply_garden_precondition_filter(options, character, ctx)
 
@@ -1403,7 +1424,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"MENTOR",
 				"TREAT_WOUND",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
-				"EXAMINE_CRIME_SCENE",
+				"EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT",
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
@@ -1459,7 +1480,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"FORGE_IMPERSONATION_LETTER", "FORGE_ORDER",
 				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
-				"EXAMINE_LETTER",
+				"EXAMINE_LETTER", "EXAMINE_FOR_TAINT",
 				"TREAT_WOUND",
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
@@ -1500,7 +1521,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
-				"EXAMINE_CRIME_SCENE",
+				"EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
 				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
@@ -1632,6 +1653,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"CONDUCT_COMMERCE": 1,
 		"PURCHASE_MARKET": 1,
 		"EXAMINE_CRIME_SCENE": 1,
+		"EXAMINE_FOR_TAINT": 1,
 		"ISSUE_DUEL_CHALLENGE": 1,
 		"FORGE_IMPERSONATION_LETTER": 1,
 		"FORGE_ORDER": 1,
@@ -1780,7 +1802,7 @@ const _CHANGE_COURSE_ACTIONS: Array[String] = [
 
 const _OBSERVATION_ACTIONS: Array[String] = [
 	"OBSERVE", "EAVESDROP", "SHADOW_TARGET", "GATHER_INTELLIGENCE",
-	"INVESTIGATE_PROVINCE", "EXAMINE_CRIME_SCENE",
+	"INVESTIGATE_PROVINCE", "EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT",
 ]
 
 
@@ -3165,6 +3187,13 @@ static func _populate_action_metadata(
 		var active_case: Dictionary = ctx.known_objectives.get("active_case", {})
 		option.metadata = {
 			"case_id": active_case.get("case_id", -1),
+		}
+	elif option.action_id == "EXAMINE_FOR_TAINT":
+		# Target + accusation injected by the orchestrator pre-pass (Maho Channel 3
+		# active corroboration; gated by the precondition filter below).
+		option.metadata = {
+			"taint_target_id": ctx.known_objectives.get("taint_corroboration_target_id", -1),
+			"taint_topic_id": ctx.known_objectives.get("taint_corroboration_topic_id", -1),
 		}
 	elif option.action_id == "SEARCH_PERSON":
 		var is_magistrate: bool = ctx.known_objectives.get("standing_need_type", "") == "UPHOLD_LAW"

@@ -320,6 +320,9 @@ static func execute(
 	if action_id == "EXAMINE_CRIME_SCENE":
 		return _execute_examine_crime_scene(action, character, ctx, dice_engine, crime_records)
 
+	if action_id == "EXAMINE_FOR_TAINT":
+		return _execute_examine_for_taint(action, character, ctx, dice_engine, characters_by_id)
+
 	if action_id == "EXAMINE_LETTER":
 		return _execute_examine_letter(action, character, ctx)
 
@@ -2707,6 +2710,70 @@ static func _execute_examine_crime_scene(
 			"roll_total": exam_result.get("roll_total", 0),
 		},
 	}
+
+
+# -- EXAMINE_FOR_TAINT (Maho Channel 3 active, owner-authorized 2026-06-10) -----
+# Active counterpart to the passive Lore: Shadowlands proximity check (R2 —
+# corroboration). A witch-hunter who knows an active taint_suspected accusation
+# deliberately examines the co-located accused suspect to confirm the corruption
+# firsthand. The target + topic are injected by the orchestrator pre-pass and
+# arrive via metadata. On a successful Lore: Shadowlands (Perception) roll vs
+# (8 − Taint Rank) × 5 (Kuni/Asako +2k0), the writeback refreshes the accusation
+# and widens its reach. NOT a Sense cast — Sense detects kami, not kansen.
+
+static func _execute_examine_for_taint(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.metadata.get("taint_target_id", -1)
+	var topic_id: int = action.metadata.get("taint_topic_id", -1)
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+
+	var base: Dictionary = {
+		"success": false,
+		"action_id": "EXAMINE_FOR_TAINT",
+		"character_id": character.character_id,
+		"target_npc_id": target_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {},
+	}
+
+	# Revalidate at execution time — the suspect may have died or been cured
+	# since the pre-pass, and a dead suspect must never be accused (NEUTRAL rule).
+	if target == null or CharacterStats.is_dead(target):
+		base["reason"] = "no_valid_suspect"
+		return base
+	if target.clan == "Crab":
+		base["reason"] = "crab_exempt"
+		return base
+	var rank: int = MutationSystem.get_taint_rank(target.taint)
+	if rank < 2:
+		# The lead was a false alarm — the suspect carries no detectable Taint.
+		base["reason"] = "no_taint_found"
+		return base
+
+	var tn: int = (8 - rank) * 5
+	var family_bonus: int = 2 if character.family in ["Kuni", "Asako"] else 0
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Lore: Shadowlands", tn,
+		0, "", Enums.Trait.PERCEPTION, family_bonus,
+	)
+	if not check.get("success", false):
+		base["reason"] = "examination_inconclusive"
+		return base
+
+	base["success"] = true
+	base["effects"] = {
+		"effect": "taint_corroborated",
+		"requires_taint_corroboration": true,
+		"taint_target_id": target_id,
+		"taint_topic_id": topic_id,
+	}
+	return base
 
 
 static func _find_crime_record(

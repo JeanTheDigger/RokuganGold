@@ -274,6 +274,10 @@
     "primary": "Investigation",
     "secondary": "Perception"
   },
+  "EXAMINE_FOR_TAINT": {
+    "primary": "Lore: Shadowlands",
+    "secondary": "Perception"
+  },
   "EXAMINE_LETTER": {
     "primary": "Investigation",
     "secondary": "Perception"
