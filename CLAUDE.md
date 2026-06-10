@@ -4602,7 +4602,10 @@ template generators it depends on. Faithful summary of the fixes that landed:
   accrue (ML − 1 per cast) actually catchable in proximity. The active "cast Sense
   on a suspect" ActionID remains an optional follow-up (the passive Lore:
   Shadowlands check is the wired half). 7 tests (`test_maho_channel3.gd`); full
-  suite 13219 passing / 0 failing.
+  suite 13219 passing / 0 failing. Hardening (2026-06-10): added a dead-character
+  guard on detector/target — a suspect who died mid-day must not receive a
+  PERPETRATOR-valence accusation (hard rule: dead characters carry NEUTRAL
+  subject_role). +1 test (8 total).
 - **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
   feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
   the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO

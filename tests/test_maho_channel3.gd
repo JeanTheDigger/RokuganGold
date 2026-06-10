@@ -85,3 +85,11 @@ func test_no_target_no_detection() -> void:
 		[{"action_id": "MEDITATE", "success": true, "character_id": 30, "target_npc_id": -1}],
 		by_id, {}, dice, topics, [5000], 100)
 	assert_eq(topics.size(), 0, "an action with no target produces no accusation")
+
+
+func test_dead_suspect_not_accused() -> void:
+	var k := _detector(30, "Kuni", 6)
+	var t := _suspect(40, 5.0)
+	t.wounds_taken = 9999  # died this day
+	assert_eq(_run(30, 40, [k, t]).size(), 0,
+		"a suspect who died gets no PERPETRATOR accusation (dead carries NEUTRAL valence)")

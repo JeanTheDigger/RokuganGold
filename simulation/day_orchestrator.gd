@@ -7271,6 +7271,8 @@ static func _process_taint_proximity_detection(
 		var target: L5RCharacterData = characters_by_id.get(target_id)
 		if detector == null or target == null:
 			continue
+		if CharacterStats.is_dead(detector) or CharacterStats.is_dead(target):
+			continue  # a dead suspect must not receive a PERPETRATOR-valence accusation
 		if target.taint < TAINT_RANK_THRESHOLD:
 			continue
 		if target.clan == "Crab":
