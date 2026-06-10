@@ -7260,6 +7260,11 @@ static func _process_taint_proximity_detection(
 		if not result is Dictionary:
 			continue
 		var r: Dictionary = result as Dictionary
+		# EXAMINE_FOR_TAINT is a deliberate corroboration with its own writeback
+		# (_process_taint_examination_writebacks); the incidental passive detector
+		# must not re-roll and double-refresh the same result.
+		if r.get("action_id", "") == "EXAMINE_FOR_TAINT":
+			continue
 		if not r.get("success", false):
 			continue
 		var detector_id: int = r.get("character_id", -1)
