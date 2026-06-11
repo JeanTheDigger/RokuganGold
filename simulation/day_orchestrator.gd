@@ -1082,7 +1082,7 @@ static func advance_day(
 		death_events, characters,
 	)
 
-	_process_kolat_master_succession(death_events, characters, characters_by_id, dice_engine)
+	_process_kolat_master_succession(death_events, characters, characters_by_id, crime_records, dice_engine)
 	_process_kolat_master_death_recall(death_events, characters_by_id, objectives_map)
 
 	death_events.clear()
@@ -1526,7 +1526,7 @@ static func advance_day(
 			hierarchy_cascade_results.append_array(_process_operational_death_cascade(
 				death_events, characters,
 			))
-			_process_kolat_master_succession(death_events, characters, characters_by_id, dice_engine)
+			_process_kolat_master_succession(death_events, characters, characters_by_id, crime_records, dice_engine)
 			_process_kolat_master_death_recall(death_events, characters_by_id, objectives_map)
 			death_events.clear()
 			_cleanup_dead_character_references(
@@ -7750,9 +7750,26 @@ static func _process_kolat_master_succession(
 	death_events: Array,
 	characters: Array,
 	characters_by_id: Dictionary,
+	crime_records: Array,
 	dice: DiceEngine,
 ) -> Array:
 	var seated: Array = []
+	# s54.7g: an agent under active investigation is compromised and must not be
+	# seated. Gather the perpetrators + known suspects of all UNDER_INVESTIGATION
+	# cases once; the discretionary draw (`_discretionary_select`) excludes them.
+	var under_investigation: Array = []
+	for rv: Variant in crime_records:
+		if not rv is CrimeRecord:
+			continue
+		var rec: CrimeRecord = rv
+		if rec.legal_status != Enums.LegalStatus.UNDER_INVESTIGATION:
+			continue
+		if rec.perpetrator_id >= 0 and rec.perpetrator_id not in under_investigation:
+			under_investigation.append(rec.perpetrator_id)
+		for sv: Variant in rec.known_suspects:
+			var sid: int = int(sv)
+			if sid >= 0 and sid not in under_investigation:
+				under_investigation.append(sid)
 	for ev: Variant in death_events:
 		if not ev is Dictionary:
 			continue
@@ -7761,7 +7778,7 @@ static func _process_kolat_master_succession(
 		if dead == null or not KolatSystem.is_master(dead):
 			continue
 		var new_id: int = KolatMasterSelector.evaluate_succession(
-			dead.kolat_sect, characters, {}, dice)
+			dead.kolat_sect, characters, {}, dice, under_investigation)
 		if new_id >= 0:
 			seated.append({
 				"sect": dead.kolat_sect,

@@ -5040,10 +5040,13 @@ but not executed in this environment.
   freshly-seated Tiger can route that recall (the recall is Tiger-gated). The dead
   Master's `is_kolat_master` flag is left set (dead-guarded everywhere; the resolver
   excludes it via is_dead) so the recall still finds its network. `heir_designations`
-  is passed `{}` and `under_investigation_ids` is empty — the encrypted heir record
-  and its Cloud-archive storage remain deferred, so the cascade always falls to the
-  discretionary draw for now (the ranked-heir path activates automatically when that
-  record is populated — no further wiring). Pure structural wiring of a LOCKED spec,
+  is passed `{}` — the encrypted heir record and its Cloud-archive storage remain
+  deferred, so the cascade always falls to the discretionary draw for now (the
+  ranked-heir path activates automatically when that record is populated — no
+  further wiring). The s54.7g "not under active investigation" gate IS live:
+  `under_investigation_ids` is gathered each death pass from the perpetrators +
+  known suspects of all UNDER_INVESTIGATION CrimeRecords, and `_discretionary_select`
+  excludes them — a compromised Sect agent is never promoted into the seat. Pure structural wiring of a LOCKED spec,
   no new design/numbers. Parse-checked; no tests per the no-test-code policy. TUNING:
   a Sect whose Master dies before any agent is recruited (APPROACH_FOR_RECRUITMENT)
   goes permanently dark — GDD-faithful fragility, but worth watching early-game.
