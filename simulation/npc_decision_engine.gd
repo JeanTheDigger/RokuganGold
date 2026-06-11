@@ -44,6 +44,9 @@ static func build_context(
 		ctx.kolat_positions = character.kolat_positions.duplicate()
 	ctx.lord_rank = CivilianOrderBudget.lord_rank_from_status(character.status)
 	ctx.civilian_orders_remaining = character.civilian_orders_remaining
+	# s2.4.14 D6: the marker persists for the active emergency window (set on
+	# declaration, cleared by the seasonal obligation pass).
+	ctx.wall_emergency_active = character.wall_emergency_obligation_ic_day >= 0
 
 	# Location & situation
 	ctx.location_id = character.physical_location

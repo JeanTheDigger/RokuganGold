@@ -5083,10 +5083,15 @@ but not executed in this environment.
   declaration, then clears the obligation + the forced primary. Two new
   `L5RCharacterData` fields (`wall_emergency_obligation_ic_day`,
   `wall_emergency_contributed`) persist via SaveManager — no WorldStateSaver
-  change. Parse-checked; no tests per the no-test-code policy. LIMITATIONS
-  (not bugs): bounded wasted Champion AP while the shortage persists (decomposer
-  re-fires, writeback dedups to a no-op — clears in a few days once lords
-  garrison; a clean fix needs an emergency-active context flag, deferred);
+  change. **Re-declaration gate (2026-06-11):** `ContextSnapshot.wall_emergency_active`
+  is populated in `build_context` directly from the Champion's own marker
+  (`wall_emergency_obligation_ic_day >= 0`, set on declaration, cleared by the
+  seasonal pass). The decomposer Step 3 skips DECLARE_WALL_EMERGENCY while it is
+  set — the Champion defends the Tower directly (DEFEND_PROVINCE) instead of
+  re-declaring — so the action is never re-produced during the active window
+  (no wasted AP). The writeback dedup remains as belt-and-suspenders. Parse-checked;
+  no tests per the no-test-code policy. LIMITATIONS
+  (not bugs):
   contribution is lenient (any garrison/deploy commit counts, not strictly
   Tower-targeted); "every Crab lord" = CITY_DAIMYO+ (village headmen have no
   garrison to commit); topic elevation requires an active incursion topic

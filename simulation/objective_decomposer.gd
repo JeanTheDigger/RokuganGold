@@ -941,8 +941,10 @@ static func _decompose_strengthen_wall(
 					return _make_need("MAINTAIN_FORTIFICATION", 3, {"target_province_id": w.province_id})
 				# Step 3: courtier refused + critical SI → Wall-wide emergency
 				# declaration (s2.4.14 Decision 6 / s55.23a Step 3). Compels every
-				# Crab lord to respond.
-				if w.garrison_shortage_courtier_refused and w.si < 6:
+				# Crab lord to respond. Skipped while one is already active — the
+				# Champion defends the Tower directly rather than re-declaring.
+				if w.garrison_shortage_courtier_refused and w.si < 6 \
+						and not ctx.wall_emergency_active:
 					return _make_need("DECLARE_WALL_EMERGENCY", 3, {"target_province_id": w.province_id})
 				# Courtier dispatched but not yet refused, or SI not yet critical:
 				# commit reserve armies directly (s2.4.14 Decision 2).

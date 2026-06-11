@@ -82,6 +82,9 @@ class ContextSnapshot:
 	var is_lord: bool = false
 	var lord_rank: Enums.LordRank = Enums.LordRank.VILLAGE_HEADMAN
 	var civilian_orders_remaining: int = 0
+	# s2.4.14 D6: a Wall-wide emergency this Champion declared is still active
+	# (their obligation marker is set). Stops re-declaration in the decomposer.
+	var wall_emergency_active: bool = false
 	# Kolat (s54.7d Phase-3 ActionID unlock).
 	var kolat_sect: Enums.KolatSect = Enums.KolatSect.NONE
 	var is_kolat_master: bool = false
