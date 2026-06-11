@@ -3031,6 +3031,20 @@ static func _populate_action_metadata(
 ) -> void:
 	if option.action_id == "DECLARE_WAR":
 		option.metadata = _build_declare_war_metadata(need, ctx)
+	elif option.action_id == "DISPATCH_COURTIER":
+		# s55.23a: target the receiving Daimyo — the known contact most likely to
+		# answer a Wall reinforcement request (highest garrison personality score),
+		# the same selection the letter step uses. target_province_id (the Tower)
+		# is already set from the need. Without this the executor early-returns
+		# no_target and Step 2 stays inert.
+		var courtier_target: int = -1
+		var courtier_best: float = -999.0
+		for cid: int in ctx.contact_garrison_scores:
+			var gscore: float = ctx.contact_garrison_scores[cid]
+			if gscore > courtier_best:
+				courtier_best = gscore
+				courtier_target = cid
+		option.target_npc_id = courtier_target
 	elif option.action_id == "NEGOTIATE_SURRENDER":
 		option.metadata = _build_negotiate_surrender_metadata(need, ctx)
 	elif option.action_id == "RAID_HARVEST":

@@ -15436,6 +15436,11 @@ static func _apply_garrison_courtier_refusal_writebacks(
 			if s.settlement_type == Enums.SettlementType.WALL_TOWER \
 					and s.province_id == target_province_id:
 				s.garrison_shortage_courtier_refused = true
+				# Mark the courtier as dispatched too, so the decomposer's Step 2
+				# (`not courtier_dispatched`) stops re-firing and Step 3 — which
+				# keys on courtier_refused — becomes reachable. On compliance this
+				# flag is set in _apply_garrison_assignment instead.
+				s.garrison_shortage_courtier_dispatched = true
 				break
 
 

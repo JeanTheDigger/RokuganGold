@@ -5051,6 +5051,35 @@ but not executed in this environment.
   a Sect whose Master dies before any agent is recruited (APPROACH_FOR_RECRUITMENT)
   goes permanently dark — GDD-faithful fragility, but worth watching early-game.
 
+### Known Code Issues (found and fixed 2026-06-11, Wall escalation Daimyo handoff)
+Auditing the receiving-Daimyo response path (s55.23a, LOCKED) after the Step-2
+routing fixes exposed two more gaps that left the DISPATCH_COURTIER path inert —
+it had never been exercised because Step 2 used to route to wall repair. Both
+fixed; the full Step 1 → Step 2 → Step 3 escalation now hands off cleanly:
+- **DISPATCH_COURTIER selected no target Daimyo — executor no-op'd. FIXED.**
+  GDD s55.23a: DISPATCH_COURTIER requires `target_npc_id` (receiving Daimyo) AND
+  `target_province_id` (Tower), both required. The decomposer passes only the
+  province, and `_populate_action_metadata` had no DISPATCH_COURTIER branch, so
+  `target_npc_id = -1` → the executor early-returned `no_target` and did nothing
+  (no Daimyo decision, no flags). Added a metadata branch selecting the known
+  contact with the highest garrison personality score (`ctx.contact_garrison_scores`
+  — the same selection the letter step uses); `target_province_id` is already set
+  from the need. `_populate_action_metadata` already receives `ctx`, so no
+  signature change.
+- **`garrison_shortage_courtier_dispatched` never set on refusal — Step 2 looped. FIXED.**
+  The flag was set only in `_apply_garrison_assignment` (the *compliance* path,
+  which then clears the shortage). On a refusal `_apply_garrison_courtier_refusal_writebacks`
+  set `courtier_refused = true` but left `courtier_dispatched = false`, so the
+  decomposer's Step 2 (`not courtier_dispatched`) kept re-firing DISPATCH_COURTIER
+  every season and Step 3 (which keys on `courtier_refused`) was never reached.
+  Now the refusal writeback also sets `courtier_dispatched = true`. After a
+  refusal: Step 2 is skipped → Step 3 fires DECLARE_WALL_EMERGENCY when SI < 6.
+  Parse-checked; no tests per the no-test-code policy. LIMITATION (not a bug):
+  the model dispatches to a single best-scoring Daimyo; after a *partial*
+  compliance (some PU, still below minimum) the Champion falls through to
+  DEFEND_PROVINCE (direct defense) rather than dispatching to another Daimyo —
+  the existing single-target model, not a regression.
+
 ### Known Code Issues (found and fixed 2026-06-11, Wall escalation Step 2)
 The Champion's garrison-shortage escalation (s55.23a, LOCKED) had its entire
 Step 2 (courtier dispatch) broken three ways — meaning Step 3 (the new
