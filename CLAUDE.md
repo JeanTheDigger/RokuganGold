@@ -5051,6 +5051,45 @@ but not executed in this environment.
   a Sect whose Master dies before any agent is recruited (APPROACH_FOR_RECRUITMENT)
   goes permanently dark — GDD-faithful fragility, but worth watching early-game.
 
+### Known Code Issues (found and fixed 2026-06-11, Wall escalation Step 2)
+The Champion's garrison-shortage escalation (s55.23a, LOCKED) had its entire
+Step 2 (courtier dispatch) broken three ways — meaning Step 3 (the new
+DECLARE_WALL_EMERGENCY) was unreachable in practice. All three fixed:
+- **Step 2 returned the wrong NeedType — `MAINTAIN_FORTIFICATION` (wall repair)
+  instead of dispatching a courtier. FIXED.** `objective_decomposer.gd:941`.
+  GDD s55.23a line 74: "Step 2 — Courtier dispatch: ... fire DISPATCH_COURTIER."
+  History: commit 2cd579c ("Fix 13 decomposer outputs using ActionIDs as
+  NeedTypes") changed the original `DISPATCH_COURTIER` → `MAINTAIN_FORTIFICATION`.
+  The original WAS broken (DISPATCH_COURTIER is an ActionID, not a NeedType →
+  no objective_alignment entry → scores 0 → REST), but the bulk fix swapped in a
+  valid-but-wrong NeedType (MAINTAIN_FORTIFICATION's winner is ORDER_FORTIFY/
+  SEAL_WALL_BREACH 100, not DISPATCH_COURTIER) — so Step 2 routed to wall repair,
+  never dispatching a courtier, so `garrison_shortage_courtier_dispatched` never
+  flipped and the pipeline stalled forever. Fixed via the collision-NeedType
+  pattern (same as DECLARE_WALL_EMERGENCY / PERFORM_RITUAL): added a
+  `DISPATCH_COURTIER` NeedType to objective_alignment.json
+  (`DISPATCH_COURTIER` 100, `ASSIGN_GARRISON` 60 fallback) and routed Step 2 to it.
+- **COMMANDER_RANK_ACTIONS gate locked the Champion out of DISPATCH_COURTIER. FIXED.**
+  The gate (`npc_decision_engine.gd`) blocks DISPATCH_COURTIER unless
+  `military_rank >= SHIREIKAN`, but `POSITION_MILITARY_RANK` assigns a military
+  rank only to RIKUGUNSHOKAN — every Clan Champion has `military_rank = NONE`. GDD
+  s55.23a line 46: DISPATCH_COURTIER is "Available to Champion and Shireikan tier
+  only." Added a Champion carve-out (`lord_rank == CLAN_CHAMPION` passes regardless
+  of military_rank). Without this, even the corrected Step-2 routing would still be
+  blocked.
+- **Step-1→Step-2 timing used cyclic-season subtraction. FIXED.**
+  `ctx.season - garrison_shortage_letter_season >= 1` — but `ctx.season`
+  (`world_state["season"] = time_system.get_season()`) is cyclic 0–3, and
+  `garrison_shortage_letter_season` is set from the same cyclic value. A letter
+  sent in winter (3) gives 0-3 / 1-3 / 2-3 = all < 1 → Step 2 never advances
+  (3 of 4 seasons worked; winter-issued letters silently stalled). Changed to
+  `ctx.season != garrison_shortage_letter_season` ("the season has changed since
+  the letter" = one season elapsed), which is wraparound-safe and equivalent for
+  the working cases. Step 1 (`letter_season < 0`) and the Shireikan path
+  (also `< 0`) are unaffected. Phantom `DEFEND_PROVINCE` fallbacks (a NeedType,
+  not an executable action) in both new wall NeedType blocks replaced with the
+  real `ASSIGN_GARRISON` action. Parse-checked; no tests per the no-test-code policy.
+
 ### Systems Added 2026-06-11 (Wall-Wide Emergency)
 - **s2.4.14 Decision 6 — DECLARE_WALL_EMERGENCY (owner-authorized 2026-06-11).**
   Completes the Kaiu Wall garrison-shortage escalation, replacing the Step-3
@@ -5058,7 +5097,7 @@ but not executed in this environment.
   Champion can make short of war. **Trigger (LOCKED s55.23a Step 3):** Champion
   only, `garrison_shortage_courtier_refused and si < 6`. **Routing:** decomposer
   Step 3 returns NeedType `DECLARE_WALL_EMERGENCY` → objective_alignment
-  (`DECLARE_WALL_EMERGENCY` 100, `DEFEND_PROVINCE` 60 fallback) → 4 context lists
+  (`DECLARE_WALL_EMERGENCY` 100, `ASSIGN_GARRISON` 60 fallback) → 4 context lists
   (AT_OWN_HOLDINGS, AT_COURT, ON_CAMPAIGN, AT_WALL_TOWER) → LORD_ONLY → 1 AP
   (owner) → action_skill_map null/null (auto-success declaration, no roll).
   **Executor** (`_compute_declare_wall_emergency_effects`, ADMINISTRATIVE_ACTIONS):

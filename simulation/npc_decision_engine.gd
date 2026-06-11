@@ -2724,6 +2724,12 @@ static func _is_military_blocked(
 	if COMMANDER_RANK_ACTIONS.has(action_id):
 		if ctx.is_lord and action_id in CivilianOrderBudget.MILITARY_OR_CIVILIAN_ACTIONS:
 			return false
+		# s55.23a: DISPATCH_COURTIER is available to "Champion and Shireikan tier."
+		# Clan Champions carry military_rank NONE, so the rank gate alone would
+		# lock them out of their own Wall-shortage escalation (Step 2).
+		if action_id == "DISPATCH_COURTIER" \
+				and ctx.lord_rank == Enums.LordRank.CLAN_CHAMPION:
+			return false
 		var min_rank: int = COMMANDER_RANK_ACTIONS[action_id]
 		return ctx.military_rank < min_rank
 	return false

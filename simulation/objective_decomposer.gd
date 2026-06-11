@@ -936,9 +936,13 @@ static func _decompose_strengthen_wall(
 			if ctx.lord_rank == Enums.LordRank.CLAN_CHAMPION:
 				if w.garrison_shortage_letter_season < 0:
 					return _make_need("SEND_LETTER", 3, {"target_province_id": w.province_id})
-				if ctx.season - w.garrison_shortage_letter_season >= 1 \
+				# "after one season of letters" — season has changed since the
+				# letter went out. `!=` (not subtraction) because ctx.season is
+				# cyclic 0–3: subtraction wraps and a winter letter would never
+				# advance (0-3 < 1 every following season).
+				if ctx.season != w.garrison_shortage_letter_season \
 						and not w.garrison_shortage_courtier_dispatched:
-					return _make_need("MAINTAIN_FORTIFICATION", 3, {"target_province_id": w.province_id})
+					return _make_need("DISPATCH_COURTIER", 3, {"target_province_id": w.province_id})
 				# Step 3: courtier refused + critical SI → Wall-wide emergency
 				# declaration (s2.4.14 Decision 6 / s55.23a Step 3). Compels every
 				# Crab lord to respond. Skipped while one is already active — the
