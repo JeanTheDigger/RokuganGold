@@ -5025,6 +5025,52 @@ but not executed in this environment.
   These need the surveillance/strategic-review integration, IntelDB, map-distance
   data, or action-log state — none buildable without inventing.
 
+### Systems Added 2026-06-11 (Kaiu Wall — Phase 2: Command roster, owner-authorized)
+- **s2.4 lines 406-414 — the standing Wall command roster stationed at the Towers.**
+  Phase 1 created the 12 Towers but left them unmanned (SI slowly eroded with no one
+  to FORTIFY). Phase 2 generates the GDD command hierarchy at world-gen and stations
+  it at the Towers. `WorldPopulationGenerator._generate_wall_characters()` rewritten
+  (was a 4× `WALL_SEGMENT_COMMANDER` + 1 Hiruma Scout Commander placeholder, not tied
+  to any tower): now creates **2 Shireikan** (Wall Commanders — Southern oversees
+  Towers 1-6 seated at Tower 3, Northern oversees 7-12 seated at Tower 10;
+  `operational_superior_id = -1`, `lord_id = Crab Champion` per s2.4 line 414),
+  **12 Taisa** (Tower Commanders, one per tower, family Hida, `operational_superior_id`
+  = their segment's Shireikan, stationed at their tower), and **per-tower 1 Kaiu
+  Engineer + 1 Kuni Shugenja** (tower staff, `operational_superior_id` = their Tower
+  Commander). The Hiruma Scout Commander is preserved (reports to the Crab
+  Rikugunshokan as before). No Wall Rikugunshokan is created — GDD line 409 makes the
+  Wall Supreme Commander situational/not-at-start; the existing Crab generic
+  Rikugunshokan stays the army commander and the two Shireikan answer to the Champion
+  directly. **Owner decisions (2026-06-11):** Tower Commanders use the existing TAISA
+  position type (GDD-match, `military_rank TAISA`, insight 3, status 3.5) — the
+  pre-existing mismatched `WALL_SEGMENT_COMMANDER` (mil_rank CHUI) is left untouched;
+  new **SHIREIKAN** position type added to RoleRegistry mirroring TAISA's placements
+  (insight 4 per s52a "Wall Cmdr", **status 4.5** owner-set, `military_rank SHIREIKAN`);
+  Engineer + Kuni per tower; Shireikan seated at Towers 3/10. **PROVISIONAL** (s52a
+  world-init category): wall staff insight rank 3 (Engineer needs 3+ to seal a breach,
+  s2.4.16; Kuni needs solid Lore: Shadowlands) and status 2.0 (tower samurai, not
+  lords). **Why this makes towers self-sustaining:** a stationed Kaiu Engineer is
+  co-located at a Tower → `_set_wall_tower_context_flags` gives AT_WALL_TOWER context →
+  the s57.41 MAINTAIN_FORTIFICATION standing fires when any Tower SI < 7 → FORTIFY
+  restores SI. The Phase 1 slow-decay gap is closed: Towers now oscillate in the
+  ~6-10 SI band instead of eroding to 0. **Schema/wiring:** new
+  `SettlementData.wall_tower_number: int = -1` (set by `_create_wall_towers`,
+  persists; drives the 1-6 / 7-12 segment split); `_generate_wall_characters` signature
+  changed to `(next_id, dice, settlements, crab_champion_id, crab_rikugunshokan_id)`,
+  call site passes `settlements` + `clan_champions["Crab"]`; wall NPCs set
+  `physical_location` at generation so `_assign_physical_locations` skips them (stays at
+  the Tower). `operational_superior_id` set per s2.4 line 414 (the GDD explicitly
+  mandates this cross-cutting field for the Wall hierarchy). Verified: Shireikan
+  status 4.5 < the 5.0 `is_lord` gate, so they remain pure military commanders (not
+  lords); `_get_school_for_position(SHIREIKAN)` resolves to a Hida bushi school
+  (SHIREIKAN added to BUSHI_POSITION_TYPES); the ~39 new Crab wall NPCs count toward
+  the Crab RANK_DISTRIBUTION targets so the rank-fill backfills fewer (no population
+  bloat). Two obsolete wall tests updated to the new signature; the
+  segment-commander-count test removed (behavior gone). Parse-checked (4 production
+  files + the test file); no new tests per the no-test-code policy. DEFERRED to
+  Phase 3: unit-type garrison companies (replacing abstract `garrison_pu`) + real
+  horde-combat attrition + re-tuning garrison/SI/jade against a live threat.
+
 ### Systems Added 2026-06-11 (Kaiu Wall — Phase 1: Tower settlements, owner-authorized)
 - **s2.4.2 / s2.3 — the twelve Wall Towers created at world-gen.** Before this,
   no `WALL_TOWER` settlement existed at all — the entire Kaiu Wall mechanical layer

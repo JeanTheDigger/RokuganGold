@@ -30,6 +30,7 @@ enum PositionType {
 	LOCAL_DAIMYO,
 	CLAN_MAGISTRATE,
 	GARRISON_COMMANDER,
+	SHIREIKAN,
 	TAISA,
 	CHUI,
 	TEMPLE_HEAD,
@@ -75,6 +76,7 @@ const PROVINCIAL_DAIMYO: String = "Provincial Daimyo"
 const LOCAL_DAIMYO: String = "Local Daimyo"
 const CLAN_MAGISTRATE: String = "Clan Magistrate"
 const GARRISON_COMMANDER: String = "Garrison Commander"
+const SHIREIKAN: String = "Shireikan"
 const TAISA: String = "Taisa"
 const CHUI: String = "Chui"
 const TEMPLE_HEAD: String = "Temple Head"
@@ -118,6 +120,7 @@ const POSITION_NAMES: Dictionary = {
 	PositionType.LOCAL_DAIMYO: LOCAL_DAIMYO,
 	PositionType.CLAN_MAGISTRATE: CLAN_MAGISTRATE,
 	PositionType.GARRISON_COMMANDER: GARRISON_COMMANDER,
+	PositionType.SHIREIKAN: SHIREIKAN,
 	PositionType.TAISA: TAISA,
 	PositionType.CHUI: CHUI,
 	PositionType.TEMPLE_HEAD: TEMPLE_HEAD,
@@ -163,6 +166,7 @@ const POSITION_RANK: Dictionary = {
 	PositionType.LOCAL_DAIMYO: 2,
 	PositionType.CLAN_MAGISTRATE: 2,
 	PositionType.GARRISON_COMMANDER: 2,
+	PositionType.SHIREIKAN: 4,
 	PositionType.TAISA: 3,
 	PositionType.CHUI: 2,
 	PositionType.TEMPLE_HEAD: 5,
@@ -208,6 +212,7 @@ const POSITION_STATUS: Dictionary = {
 	PositionType.LOCAL_DAIMYO: 4.0,
 	PositionType.CLAN_MAGISTRATE: 3.0,
 	PositionType.GARRISON_COMMANDER: 2.5,
+	PositionType.SHIREIKAN: 4.5,
 	PositionType.TAISA: 3.5,
 	PositionType.CHUI: 2.5,
 	PositionType.TEMPLE_HEAD: 3.5,
@@ -230,6 +235,7 @@ const POSITION_STATUS: Dictionary = {
 
 const POSITION_MILITARY_RANK: Dictionary = {
 	PositionType.RIKUGUNSHOKAN: Enums.MilitaryRank.RIKUGUNSHOKAN,
+	PositionType.SHIREIKAN: Enums.MilitaryRank.SHIREIKAN,
 	PositionType.TAISA: Enums.MilitaryRank.TAISA,
 	PositionType.CHUI: Enums.MilitaryRank.CHUI,
 	PositionType.GARRISON_COMMANDER: Enums.MilitaryRank.GUNSO,
@@ -255,6 +261,7 @@ const BUSHI_POSITION_TYPES: Array[int] = [
 	PositionType.JADE_CHAMPION,
 	PositionType.RIKUGUNSHOKAN,
 	PositionType.GARRISON_COMMANDER,
+	PositionType.SHIREIKAN,
 	PositionType.TAISA,
 	PositionType.CHUI,
 	PositionType.WALL_SEGMENT_COMMANDER,
@@ -311,6 +318,7 @@ const LORD_POSITIONS: Array[String] = [
 	LOCAL_DAIMYO,
 	CLAN_MAGISTRATE,
 	GARRISON_COMMANDER,
+	SHIREIKAN,
 	TAISA,
 	CHUI,
 	TEMPLE_HEAD,

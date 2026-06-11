@@ -388,28 +388,20 @@ func test_minor_clan_senior_has_champion_lord():
 # -- Wall Characters -----------------------------------------------------------
 
 func test_wall_characters_count():
+	# With no Tower settlements only the Hiruma Scout Commander is generated.
 	var next_id: Array = [1]
 	var chars: Array = WorldPopulationGenerator._generate_wall_characters(
-		next_id, dice, -1,
+		next_id, dice, [], -1, -1,
 	)
-	assert_eq(chars.size(), 5)
-
-
-func test_wall_segment_commanders_are_kaiu():
-	var next_id: Array = [1]
-	var chars: Array = WorldPopulationGenerator._generate_wall_characters(
-		next_id, dice, -1,
-	)
-	for i: int in range(4):
-		assert_eq(chars[i].family, "Kaiu")
+	assert_eq(chars.size(), 1)
 
 
 func test_hiruma_scout_commander():
 	var next_id: Array = [1]
 	var chars: Array = WorldPopulationGenerator._generate_wall_characters(
-		next_id, dice, -1,
+		next_id, dice, [], -1, -1,
 	)
-	assert_eq(chars[4].family, "Hiruma")
+	assert_eq(chars[0].family, "Hiruma")
 
 
 # -- Rank Filling --------------------------------------------------------------

@@ -683,6 +683,7 @@ static func _create_wall_towers(
 		tower.settlement_name = "%s Wall Tower" % WALL_TOWER_ORDINALS[tower_number - 1]
 		tower.province_id = host_id
 		tower.settlement_type = Enums.SettlementType.WALL_TOWER
+		tower.wall_tower_number = tower_number
 		tower.population_pu = 0
 		tower.garrison_pu = WALL_TOWER_GARRISON_PU
 		tower.wall_si = WALL_TOWER_START_SI

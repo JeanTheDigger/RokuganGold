@@ -449,24 +449,115 @@ static func _generate_minor_clan_characters(
 	return chars
 
 
-# -- Step 2: Kaiu Wall (s22.8) ------------------------------------------------
+# -- Step 2: Kaiu Wall command roster (s2.4.2, s2.4 lines 406-414) ------------
+# The standing Wall command hierarchy, stationed at the twelve Towers:
+#   2 Shireikan — Southern (Towers 1-6, seated at Tower 3), Northern (Towers
+#     7-12, seated at Tower 10). operational_superior_id = -1, lord = Champion
+#     (s2.4 line 414: "receiving objectives from lord_id = Clan Champion directly").
+#   12 Taisa (Tower Commanders, one per tower) — operational_superior = their
+#     segment's Shireikan, physically stationed at their tower.
+#   12 Kaiu Engineers + 12 Kuni Shugenja (one each per tower) — tower staff,
+#     operational_superior = their Tower Commander. Engineers run the s57.41
+#     MAINTAIN_FORTIFICATION standing (SI upkeep); Kuni do Taint monitoring
+#     (s2.4.11). Plus the Hiruma Scout Commander (scouting arm, preserved).
+# Phase 1 (towers) is a prerequisite; this builds the maintainers (Phase 2).
+
+const WALL_STAFF_RANK: int = 3        # PROVISIONAL: Engineer needs Rank 3+ to seal
+                                      # a breach (s2.4.16); Kuni needs solid Lore.
+const WALL_STAFF_STATUS: float = 2.0  # PROVISIONAL: tower staff samurai, not lords.
 
 static func _generate_wall_characters(
 	next_id: Array,
 	dice: DiceEngine,
+	settlements: Array,
+	crab_champion_id: int,
 	crab_rikugunshokan_id: int,
 ) -> Array:
 	var chars: Array = []
-	for _i: int in range(4):
-		chars.append(_generate_positioned_character(
-			next_id, PositionType.WALL_SEGMENT_COMMANDER,
-			"Crab", "Kaiu", dice, crab_rikugunshokan_id,
-		))
+
+	# Map wall_tower_number (1-12) → its Tower settlement.
+	var towers_by_number: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER and s.wall_tower_number >= 1:
+			towers_by_number[s.wall_tower_number] = s
+
+	# Hiruma Scout Commander (scouting arm — preserved from prior wall generation).
 	chars.append(_generate_positioned_character(
 		next_id, PositionType.HIRUMA_SCOUT_COMMANDER,
 		"Crab", "Hiruma", dice, crab_rikugunshokan_id,
 	))
+
+	if towers_by_number.is_empty():
+		return chars
+
+	# Two Shireikan (Wall Commanders), answering directly to the Champion.
+	var southern: L5RCharacterData = _generate_positioned_character(
+		next_id, PositionType.SHIREIKAN, "Crab", "Hida", dice, crab_champion_id,
+	)
+	southern.operational_superior_id = -1
+	if towers_by_number.has(3):
+		southern.physical_location = str(towers_by_number[3].settlement_id)
+	chars.append(southern)
+
+	var northern: L5RCharacterData = _generate_positioned_character(
+		next_id, PositionType.SHIREIKAN, "Crab", "Hida", dice, crab_champion_id,
+	)
+	northern.operational_superior_id = -1
+	if towers_by_number.has(10):
+		northern.physical_location = str(towers_by_number[10].settlement_id)
+	chars.append(northern)
+
+	# Tower Commanders (Taisa) + per-tower Kaiu Engineer and Kuni Shugenja.
+	for num: int in range(1, 13):
+		if not towers_by_number.has(num):
+			continue
+		var tower: SettlementData = towers_by_number[num]
+		var loc: String = str(tower.settlement_id)
+		var shireikan_id: int = southern.character_id if num <= 6 else northern.character_id
+
+		var taisa: L5RCharacterData = _generate_positioned_character(
+			next_id, PositionType.TAISA, "Crab", "Hida", dice, crab_champion_id,
+		)
+		taisa.operational_superior_id = shireikan_id
+		taisa.physical_location = loc
+		chars.append(taisa)
+
+		chars.append(_make_wall_staff(
+			next_id, dice, "Kaiu", "Kaiu Engineer",
+			crab_champion_id, taisa.character_id, loc,
+		))
+		chars.append(_make_wall_staff(
+			next_id, dice, "Kuni", "Kuni Shugenja",
+			crab_champion_id, taisa.character_id, loc,
+		))
+
 	return chars
+
+
+## Builds one piece of tower support staff (Kaiu Engineer / Kuni Shugenja) with an
+## explicit school, stationed at the tower under the Tower Commander.
+static func _make_wall_staff(
+	next_id: Array,
+	dice: DiceEngine,
+	family: String,
+	school: String,
+	lord_id: int,
+	operational_superior_id: int,
+	location_id: String,
+) -> L5RCharacterData:
+	var gender: String = GempukkuSystem.roll_gender(dice, school)
+	var name: String = GempukkuSystem.generate_name("Crab", gender, dice)
+	var cid: int = next_id[0]
+	next_id[0] += 1
+	var c: L5RCharacterData = WorldGenerator.generate_character(
+		cid, name, "Crab", family, school, WALL_STAFF_RANK, dice, gender,
+	)
+	c.status = WALL_STAFF_STATUS
+	c.lord_id = lord_id
+	c.orientation = GempukkuSystem.roll_orientation(dice)
+	c.operational_superior_id = operational_superior_id
+	c.physical_location = location_id
+	return c
 
 
 # -- Step 3: Rank-Filling Samurai (s52 Trigger 3) ------------------------------
@@ -888,8 +979,9 @@ static func generate_world_population(
 	all_characters.append_array(magistrate_chars)
 
 	var crab_rik_id: int = clan_rikugunshokans.get("Crab", -1)
+	var crab_champion_id: int = clan_champions.get("Crab", -1)
 	var wall_chars: Array = _generate_wall_characters(
-		next_id, dice, crab_rik_id,
+		next_id, dice, settlements, crab_champion_id, crab_rik_id,
 	)
 	all_characters.append_array(wall_chars)
 

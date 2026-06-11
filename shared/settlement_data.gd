@@ -50,6 +50,9 @@ extends Resource
 # True if the most recent courtier was explicitly refused by the Daimyo (s2.4.14).
 # Gates the wall-wide emergency declaration trigger (Decision 6).
 @export var garrison_shortage_courtier_refused: bool = false
+# Wall position: 1 (south-east) to 12 (north-west), per s2.4.2. -1 = not a Tower.
+# Drives wall command-segment assignment (Towers 1-6 Southern, 7-12 Northern).
+@export var wall_tower_number: int = -1
 
 
 # -- Public Record (per GDD s57.50) -------------------------------------------
