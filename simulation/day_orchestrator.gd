@@ -11724,31 +11724,50 @@ static func _process_seasonal_maho_casts(
 			continue
 
 		# Spell selection priority (owner-authorized 2026-06-09 / blood-source
-		# 2026-06-10). All casts are victim-blood, so every gate is Ring-only
-		# (supports_spell_ring) — the caster's survivability never bounds the cast:
+		# 2026-06-10 / Touch+Drain 2026-06-11). All casts are victim-blood, so every
+		# gate is Ring-only (supports_spell_ring) — the caster's survivability never
+		# bounds the cast:
 		#   1. Stealing the Soul (ML4) — finish a co-located, wounded, investigating
-		#      threat (kill opportunity outranks everything else).
-		#   2. Fierce Blood of the Earth (ML5) — sacrifice a victim to heal + buy a
+		#      threat (investigator-defense kill outranks everything else).
+		#   2. Touch of Death (ML5) — the dreaded strike: 7k7 Wounds + permanent age+10
+		#      on the highest-Status co-located non-cultist (owner: "any named NPC").
+		#      Most decisive broad kill; preferred when reachable (Earth ≥ 5).
+		#   3. Drain the Soul (ML2) — Stamina-1 lethal branch finishes a wounded,
+		#      co-located non-cultist (owner: "any named NPC"); the cheap broad kill.
+		#   4. Fierce Blood of the Earth (ML5) — sacrifice a victim to heal + buy a
 		#      year of life, when the caster is wounded or aging (effective age ≥ 50).
-		#   3. Caress of Fu Leng (ML2) — destroy jade at the caster's co-located
+		#   5. Caress of Fu Leng (ML2) — destroy jade at the caster's co-located
 		#      settlement, weakening Shadowlands defense (mostly Kaiu Wall towers).
-		#   4. Spreading the Darkness (ML2) — shed Taint off a dangerously Tainted
+		#   6. Spreading the Darkness (ML2) — shed Taint off a dangerously Tainted
 		#      member (Rank ≥ 2, the Channel-3 detection onset).
-		#   5. Otherwise the lowest-ML spell the Ring supports (minimal self-Taint).
+		#   7. Otherwise the lowest-ML spell the Ring supports (minimal self-Taint).
 		var kill_target: L5RCharacterData = null
 		if MahoSpellLibrary.supports_spell_ring(caster, "stealing_the_soul"):
 			kill_target = _pick_soul_steal_target(caster, pool, objectives_map)
-		var cast_fierce_blood: bool = kill_target == null \
+		var touch_target: L5RCharacterData = null
+		if kill_target == null \
+				and MahoSpellLibrary.supports_spell_ring(caster, "touch_of_death"):
+			touch_target = _pick_touch_of_death_target(caster, pool)
+		var drain_target: L5RCharacterData = null
+		if kill_target == null and touch_target == null \
+				and MahoSpellLibrary.supports_spell_ring(caster, "drain_the_soul"):
+			drain_target = _pick_drain_soul_target(caster, pool)
+		var no_kill: bool = kill_target == null and touch_target == null and drain_target == null
+		var cast_fierce_blood: bool = no_kill \
 			and MahoSpellLibrary.supports_spell_ring(caster, "fierce_blood_of_earth") \
 			and _fierce_blood_has_benefit(caster)
 		var caress_settlement: SettlementData = null
-		if kill_target == null and not cast_fierce_blood \
+		if no_kill and not cast_fierce_blood \
 				and MahoSpellLibrary.supports_spell_ring(caster, "caress_of_fu_leng"):
 			caress_settlement = _caster_jade_settlement(caster, settlements_by_id)
 		var darkness_source: L5RCharacterData = null
 		var spell: Dictionary
 		if kill_target != null:
 			spell = MahoSpellLibrary.get_spell("stealing_the_soul")
+		elif touch_target != null:
+			spell = MahoSpellLibrary.get_spell("touch_of_death")
+		elif drain_target != null:
+			spell = MahoSpellLibrary.get_spell("drain_the_soul")
 		elif cast_fierce_blood:
 			spell = MahoSpellLibrary.get_spell("fierce_blood_of_earth")
 		elif caress_settlement != null:
@@ -11786,6 +11805,15 @@ static func _process_seasonal_maho_casts(
 		if spell_id == "stealing_the_soul" and kill_target != null:
 			kill = _resolve_stealing_the_soul(
 				caster, kill_target, death_events, active_topics, next_topic_id, ic_day)
+		elif spell_id == "touch_of_death" and touch_target != null:
+			kill = _resolve_touch_of_death(
+				caster, touch_target, dice_engine, death_events,
+				active_topics, next_topic_id, ic_day)
+		elif spell_id == "drain_the_soul" and drain_target != null:
+			# Earth-drain kill (Stamina-1 → Earth → fatal); the picker confirmed
+			# lethality. Reuses the Stealing-the-Soul death path (mysterious death).
+			kill = _resolve_stealing_the_soul(
+				caster, drain_target, death_events, active_topics, next_topic_id, ic_day)
 		elif spell_id == "fierce_blood_of_earth":
 			fierce_blood = _resolve_fierce_blood(caster)
 		elif spell_id == "caress_of_fu_leng" and caress_settlement != null:
@@ -12041,6 +12069,125 @@ static func _resolve_stealing_the_soul(
 			tid, title, TopicData.Tier.TIER_2, TopicData.Category.LEGAL,
 			ic_day, 0.0, [], target.clan, "", target.character_id, "death", "mysterious")
 		topic.slug = "soul_stolen_death_%d" % target.character_id
+		active_topics.append(topic)
+	return {"resolved": true, "mode": "killed", "target_id": target.character_id}
+
+
+## Drain the Soul target (s43 Earth 2, owner-authorized 2026-06-11; scope "any
+## named NPC"). Range 50' → co-located. The spell's only durable Grand-Map effect
+## is the lethal branch (the Stamina-1 itself is a 10-minute drain, inert at world
+## scale), so we only target a co-located living non-PC non-cultist whose Stamina
+## drop is fatal — highest Status first. None lethal → don't cast it.
+static func _pick_drain_soul_target(
+	caster: L5RCharacterData,
+	pool: Array,
+) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for c: L5RCharacterData in pool:
+		if c.character_id == caster.character_id:
+			continue
+		if c.is_pc or c.cult_affiliation:
+			continue
+		if c.physical_location.is_empty() or c.physical_location != caster.physical_location:
+			continue
+		if not _drain_stamina_would_kill(c):
+			continue
+		if best == null or _darkness_higher_status(c, best):
+			best = c
+	return best
+
+
+## True if reducing the target's Stamina Rank by 1 (s43 Drain the Soul) would drop
+## their wound capacity below their current wounds. Reducing Stamina lowers Earth
+## only when Stamina is the Earth-setting minimum; the is_dead check captures that
+## naturally. Side-effect free: temporarily drops Stamina, checks death, restores.
+static func _drain_stamina_would_kill(target: L5RCharacterData) -> bool:
+	if target.wounds_taken <= 0:
+		return false  # a healthy target survives the temporary capacity drop
+	if target.stamina <= 1:
+		return false  # Stamina already at the floor; cannot be reduced
+	var saved: int = target.stamina
+	target.stamina = maxi(1, target.stamina - 1)
+	var lethal: bool = CharacterStats.is_dead(target)
+	target.stamina = saved
+	return lethal
+
+
+## Touch of Death target (s43 Earth 5, owner-authorized 2026-06-11; scope "any
+## named NPC"). Range 50' → co-located. No lethality precondition — the 7k7 Wounds
+## and permanent aging always land. Highest-Status co-located living non-PC
+## non-cultist (the cult's most dreaded strike on the most prominent figure).
+static func _pick_touch_of_death_target(
+	caster: L5RCharacterData,
+	pool: Array,
+) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for c: L5RCharacterData in pool:
+		if c.character_id == caster.character_id:
+			continue
+		if c.is_pc or c.cult_affiliation:
+			continue
+		if c.physical_location.is_empty() or c.physical_location != caster.physical_location:
+			continue
+		if best == null or _darkness_higher_status(c, best):
+			best = c
+	return best
+
+
+## Applies Touch of Death (s43 Earth 5, owner-authorized 2026-06-11). GDD: "The
+## victim physically ages 10 years and suffers 7k7 Wounds. Wounds can be healed
+## normally; the aging cannot be reversed." Aging (age += 10) is permanent and
+## raises natural-death odds (GempukkuSystem.roll_natural_death reads age). The
+## 7k7 (exploding) Wounds are applied directly — a curse, no armor/Reduction. If
+## the wounds kill: GREAT_DESTINY (s45) cheats death to DOWN, else a suspicious
+## death_event (drives succession) + Tier 2 mysterious-death topic. If the target
+## survives, they persist wounded and aged. The MAHO crime record is separate.
+static func _resolve_touch_of_death(
+	caster: L5RCharacterData,
+	target: L5RCharacterData,
+	dice: DiceEngine,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> Dictionary:
+	target.age += 10  # permanent, irreversible (GDD)
+	var dmg: int = dice.roll_and_keep(7, 7, true).total
+	target.wounds_taken += dmg
+	if not CharacterStats.is_dead(target):
+		return {"resolved": true, "mode": "wounded_aged",
+			"target_id": target.character_id, "damage": dmg}
+
+	var ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+	if AdvantageSystem.check_great_destiny(target, ic_year):
+		var thr: int = CharacterStats.get_wound_threshold_per_level(target)
+		target.wounds_taken = thr * 6 + 1  # survives at the DOWN level (still aged)
+		var gd: AdvantageData = AdvantageSystem.get_advantage(
+			target, Enums.Advantage.GREAT_DESTINY)
+		if gd != null:
+			gd.metadata["last_triggered_ic_year"] = ic_year
+		return {"resolved": true, "mode": "survived_destiny",
+			"target_id": target.character_id}
+
+	var earth: int = CharacterStats.get_ring_value(target, Enums.Ring.EARTH)
+	target.wounds_taken = earth * 5 * 5  # guaranteed lethal
+	death_events.append({
+		"character_id": target.character_id,
+		"is_lord": target.role_position != "",
+		"cause": "touch_of_death",
+		"suspicious_death": true,
+		"ic_day": ic_day,
+		"killer_id": caster.character_id,
+	})
+	if not next_topic_id.is_empty():
+		var tid: int = next_topic_id[0]
+		next_topic_id[0] = tid + 1
+		var title: String = "Mysterious death of %s at %s" % [
+			target.character_name, target.physical_location]
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			tid, title, TopicData.Tier.TIER_2, TopicData.Category.LEGAL,
+			ic_day, 0.0, [], target.clan, "", target.character_id, "death", "mysterious")
+		topic.slug = "touch_of_death_%d" % target.character_id
 		active_topics.append(topic)
 	return {"resolved": true, "mode": "killed", "target_id": target.character_id}
 

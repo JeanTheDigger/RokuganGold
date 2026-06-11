@@ -4587,6 +4587,31 @@ template generators it depends on. Faithful summary of the fixes that landed:
   rounding error against it) and its payload is a −3k0 / 2-week illness *condition*
   with no world-scale condition system to hold it. 6 tests (`test_maho_seasonal_cast.gd`
   34→40).
+- **Drain the Soul + Touch of Death — fifth and sixth wired Grand-Map spell effects
+  (s43, owner-authorized 2026-06-11).** Two more Earth maho spells now resolve at
+  world scale (target scope = "any named NPC", owner choice — broader than the
+  investigators-only Stealing the Soul). **Drain the Soul (Earth 2):** GDD reduces
+  Stamina Rank by 1 (10-min duration), "can lower the Earth Ring, reducing Wound
+  Ranks." Only the lethal branch is durable at world scale, so `_pick_drain_soul_target`
+  selects a co-located (range 50') living non-PC non-cultist whose Stamina drop is
+  fatal (`_drain_stamina_would_kill`: drop Stamina, check is_dead via Earth =
+  min(Stamina,Willpower) capacity, restore), highest Status; none lethal → not cast.
+  Reuses the Stealing-the-Soul death path (mysterious death). ML2 = far more
+  reachable than Stealing (ML4). **Touch of Death (Earth 5):** GDD "ages 10 years
+  and suffers 7k7 Wounds... aging cannot be reversed." `_resolve_touch_of_death`
+  applies `age += 10` (permanent; feeds `GempukkuSystem.roll_natural_death`) + 7k7
+  exploding Wounds (`roll_and_keep(7,7,true).total`, applied directly — a curse, no
+  armor/Reduction). Kills → GREAT_DESTINY cheats to DOWN (still aged) else suspicious
+  death_event + Tier 2 mysterious-death topic; survives → persists wounded + aged.
+  `_pick_touch_of_death_target` = highest-Status co-located non-cultist (no lethality
+  precondition). **Selection priority** (s43 seasonal cast): Stealing the Soul
+  (investigator finish) → Touch of Death (ML5, most decisive broad kill) → Drain the
+  Soul (ML2, cheap broad kill) → Fierce Blood → Caress → Spreading the Darkness →
+  lowest-ML fallback. Fallback casts of either spell with a null target are guarded
+  (no-op cast, PTL/crime only). Victim-blood cost unchanged. Parse-checked; no tests
+  per the no-test-code policy. TUNING (playtest): "any named NPC" scope lets a
+  high-Earth caster Touch-of-Death the highest-Status co-located figure unprovoked —
+  watch for prominent-noble kills destabilising via succession.
 - **Maho Channel 3 wired — Taint detection on a person (Design Decision 5,
   owner-authorized 2026-06-10).** Closes the last open maho detection channel: a
   shugenja whose successful action targets a suspect (PROBE/INVESTIGATE near them,
