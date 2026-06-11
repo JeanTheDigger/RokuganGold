@@ -939,11 +939,11 @@ static func _decompose_strengthen_wall(
 				if ctx.season - w.garrison_shortage_letter_season >= 1 \
 						and not w.garrison_shortage_courtier_dispatched:
 					return _make_need("MAINTAIN_FORTIFICATION", 3, {"target_province_id": w.province_id})
-				# Step 3: courtier refused + critical SI → Wall-wide emergency.
-				# TODO: replace DEFEND_PROVINCE with DECLARE_WALL_EMERGENCY once
-				# the ActionID is specced in GDD s2.4.14 Decision 6.
+				# Step 3: courtier refused + critical SI → Wall-wide emergency
+				# declaration (s2.4.14 Decision 6 / s55.23a Step 3). Compels every
+				# Crab lord to respond.
 				if w.garrison_shortage_courtier_refused and w.si < 6:
-					return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": w.province_id})
+					return _make_need("DECLARE_WALL_EMERGENCY", 3, {"target_province_id": w.province_id})
 				# Courtier dispatched but not yet refused, or SI not yet critical:
 				# commit reserve armies directly (s2.4.14 Decision 2).
 				return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": w.province_id})

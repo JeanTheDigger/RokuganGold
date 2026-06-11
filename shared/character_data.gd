@@ -346,6 +346,16 @@ var spell_void_bonus_used: int = 0
 # -- Bodyguard / Yojimbo Assignment -------------------------------------------
 @export var assigned_protection_target_id: int = -1
 
+# -- Wall-Wide Emergency obligation (s2.4.14 Decision 6) -----------------------
+# Set on every Crab lord compelled to respond when a Clan Champion declares a
+# Wall-wide emergency. The obligation IC day stamps the declaration (monotonic —
+# seasons cycle, so days are used for the one-season window); `contributed` is
+# set true when the lord commits troops to the Wall (ASSIGN_GARRISON /
+# ORDER_DEPLOY) during the window. A lord still uncontributed one season
+# (90 IC days) after the declaration takes the serious/horde-tier honor loss.
+@export var wall_emergency_obligation_ic_day: int = -1
+@export var wall_emergency_contributed: bool = false
+
 # -- Champion Strategic Evaluation Log (s57.54.4) ------------------------------
 # Full scored candidate list from the last Champion evaluation. Not read by any
 # game system — debugging and audit only.

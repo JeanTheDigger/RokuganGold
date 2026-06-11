@@ -99,6 +99,10 @@
     "primary": null,
     "secondary": null
   },
+  "DECLARE_WALL_EMERGENCY": {
+    "primary": null,
+    "secondary": null
+  },
   "CHANGE_DESTINATION": {
     "primary": null,
     "secondary": null

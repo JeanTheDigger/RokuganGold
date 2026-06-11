@@ -5051,6 +5051,47 @@ but not executed in this environment.
   a Sect whose Master dies before any agent is recruited (APPROACH_FOR_RECRUITMENT)
   goes permanently dark — GDD-faithful fragility, but worth watching early-game.
 
+### Systems Added 2026-06-11 (Wall-Wide Emergency)
+- **s2.4.14 Decision 6 — DECLARE_WALL_EMERGENCY (owner-authorized 2026-06-11).**
+  Completes the Kaiu Wall garrison-shortage escalation, replacing the Step-3
+  DEFEND_PROVINCE stub (`objective_decomposer.gd:945`). The gravest call a Crab
+  Champion can make short of war. **Trigger (LOCKED s55.23a Step 3):** Champion
+  only, `garrison_shortage_courtier_refused and si < 6`. **Routing:** decomposer
+  Step 3 returns NeedType `DECLARE_WALL_EMERGENCY` → objective_alignment
+  (`DECLARE_WALL_EMERGENCY` 100, `DEFEND_PROVINCE` 60 fallback) → 4 context lists
+  (AT_OWN_HOLDINGS, AT_COURT, ON_CAMPAIGN, AT_WALL_TOWER) → LORD_ONLY → 1 AP
+  (owner) → action_skill_map null/null (auto-success declaration, no roll).
+  **Executor** (`_compute_declare_wall_emergency_effects`, ADMINISTRATIVE_ACTIONS):
+  signals `requires_wall_emergency_declaration` + the critical Tower province.
+  **Writeback** (`_apply_wall_emergency_declaration`, in `_process_military_effects`):
+  (1) elevates the active `shadowlands_incursion` topic — preferring the one
+  affecting the Tower, else the most recent — to the Tier-1 momentum floor and
+  broadcasts it into every compelled lord's `topic_pool` (owner choice: elevate
+  existing, not a new topic; gracefully skips if no incursion topic exists yet);
+  (2) compels every living non-PC Crab daimyo (CITY_DAIMYO..FAMILY_DAIMYO, ≠ the
+  Champion) by forcing a `DEFEND_PROVINCE` primary toward the Tower (source
+  `wall_emergency`) — supersedes all priorities per D6 — stamping
+  `wall_emergency_obligation_ic_day`. Deduped: one emergency per 90-day window
+  (the Champion is marked too, `contributed=true`, exempt from penalty, which
+  rate-limits re-declaration). **Compliance (owner: override + penalty):** daily
+  `_process_wall_emergency_contributions` marks a lord `wall_emergency_contributed`
+  when they commit troops (ASSIGN_GARRISON / ORDER_DEPLOY) during the window;
+  seasonal `_process_wall_emergency_obligations` applies −1.0 Honor (the
+  serious/horde tier of the existing s2.4.12 courtier-refusal scale —
+  `action_executor` wall_critical branch, reused not invented) to any
+  non-contributor 90 IC days (= IC_DAYS_PER_YEAR/4, one season) after the
+  declaration, then clears the obligation + the forced primary. Two new
+  `L5RCharacterData` fields (`wall_emergency_obligation_ic_day`,
+  `wall_emergency_contributed`) persist via SaveManager — no WorldStateSaver
+  change. Parse-checked; no tests per the no-test-code policy. LIMITATIONS
+  (not bugs): bounded wasted Champion AP while the shortage persists (decomposer
+  re-fires, writeback dedups to a no-op — clears in a few days once lords
+  garrison; a clean fix needs an emergency-active context flag, deferred);
+  contribution is lenient (any garrison/deploy commit counts, not strictly
+  Tower-targeted); "every Crab lord" = CITY_DAIMYO+ (village headmen have no
+  garrison to commit); topic elevation requires an active incursion topic
+  (the forced objectives + penalty are the operative compulsion regardless).
+
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
   (pure class); `shared/ship_data.gd` gains `owner_id` + `departure_tick`. New system
@@ -5590,7 +5631,7 @@ These sections have partial or no GDD spec. **Blocked features MAY be worked on 
 
 | Section | What's Needed |
 |---------|--------------|
-| s2.4 | `DECLARE_WALL_EMERGENCY` ActionID — s2.4.14 Decision 6: AP cost, agenda topic format, compliance enforcement |
+| s2.4 | `DECLARE_WALL_EMERGENCY` ActionID — RESOLVED (owner-authorized 2026-06-11): 1 AP; elevates the existing `shadowlands_incursion` topic + broadcasts to all Crab lords; compels every Crab daimyo (forced DEFEND_PROVINCE primary) + −1.0 Honor (s2.4.12 serious tier) for non-contributors one season later. See "Systems Added 2026-06-11 (Wall-Wide Emergency)". |
 | s31 | RESOLVED — Maho Channel 3 both halves WIRED at TN = (8 − Taint Rank) × 5 (owner-set 2026-06-10): passive proximity check + active EXAMINE_FOR_TAINT corroboration. NOT a Sense cast (Sense detects kami, not kansen). |
 | s38 | Kiho system — full design needed |
 | s40 | Individual combat — PARTIAL. WeaponData/ArmorData Resources, NPC summary roll, weapon assignment done. Full PC-facing mechanics (all maneuvers, kata effects, grapple, sumai) blocked on design decisions. |

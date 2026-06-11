@@ -49,7 +49,7 @@ const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"ASSIGN_VASSAL_OBJECTIVE", "CALL_COURT", "SEND_INVITATION",
 	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID", "INVESTIGATE_PROVINCE",
 	"INVESTIGATE_RUMOR", "NEGOTIATE_SURRENDER", "CONDUCT_COMMERCE",
-	"DISPATCH_COURTIER",
+	"DISPATCH_COURTIER", "DECLARE_WALL_EMERGENCY",
 	"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 	"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
 	"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION", "DISSOLVE_MARRIAGE",
@@ -1874,7 +1874,26 @@ static func _compute_admin_effects(action_id: String, action: NPCDataStructures.
 			return _compute_send_invitation_effects(action)
 		"CALL_COURT":
 			return _compute_call_court_effects(action)
+		"DECLARE_WALL_EMERGENCY":
+			return _compute_declare_wall_emergency_effects(action)
 	return {"effect": "administrative_action"}
+
+
+## DECLARE_WALL_EMERGENCY (s2.4.14 Decision 6) — the gravest call a Crab Champion
+## can make short of war. An authority declaration, not a contested roll: it
+## auto-succeeds (no skill). The heavy lifting (elevating the incursion topic,
+## compelling every Crab lord, scheduling the non-compliance penalty) is done in
+## the day-orchestrator writeback, which has the world state. Here we only signal
+## the declaration and carry the critical Tower province through.
+static func _compute_declare_wall_emergency_effects(
+	action: NPCDataStructures.ScoredAction,
+) -> Dictionary:
+	var tower_province: int = action.target_province_id if action != null else -1
+	return {
+		"effect": "wall_emergency_declared",
+		"requires_wall_emergency_declaration": true,
+		"target_province_id": tower_province,
+	}
 
 
 static func _compute_assign_vassal_objective_effects(

@@ -503,6 +503,11 @@ static func advance_day(
 		day_result.get("results", []), settlements, characters_by_id
 	)
 
+	# s2.4.14 D6: mark Crab lords who committed troops during a Wall emergency.
+	_process_wall_emergency_contributions(
+		day_result.get("results", []), characters_by_id
+	)
+
 	var wall_engineering_results: Array = _process_wall_engineering_effects(
 		day_result.get("results", []),
 		settlements,
@@ -1312,6 +1317,9 @@ static func advance_day(
 		wall_seasonal_result = _process_wall_seasonal_pressure(
 			settlements, provinces, current_season, season_meta
 		)
+		# s2.4.14 D6: penalise Crab lords who ignored a Wall-wide emergency one
+		# season after the declaration; clears the obligation + forced primary.
+		_process_wall_emergency_obligations(characters, objectives_map, ic_day)
 		# Miya's Blessing follow-up — topic generation, disposition deltas,
 		# suspension penalties. Runs only on Spring transitions when the
 		# blessing actually fired or was suspended.
@@ -13688,6 +13696,13 @@ static func _process_military_effects(
 			if not r_5.is_empty():
 				results.append(r_5)
 
+		if effects.get("requires_wall_emergency_declaration", false):
+			var r_we: Dictionary = _apply_wall_emergency_declaration(
+				applied, characters_by_id, objectives_map, active_topics, ic_day,
+			)
+			if not r_we.is_empty():
+				results.append(r_we)
+
 		if effects.get("requires_court_invitation", false):
 			var r_6: Dictionary = _apply_court_invitation(
 				applied, characters_by_id, courts,
@@ -15128,6 +15143,159 @@ static func _apply_vassal_objective_assignment(
 		"vassal_id": vassal_id,
 		"need_type": need_type,
 	}
+
+
+# -- Wall-Wide Emergency Declaration (s2.4.14 Decision 6) ----------------------
+# One season window for the compliance obligation (IC_DAYS_PER_YEAR / 4 = 90).
+const _WALL_EMERGENCY_WINDOW_DAYS: int = 90
+# Non-compliance honor loss: the serious/horde tier of the s2.4.12 courtier-
+# refusal scale (action_executor wall_critical branch = -1.0). Reused, not new.
+const _WALL_EMERGENCY_NONCOMPLIANCE_HONOR: float = -1.0
+
+
+## Applies a Clan Champion's Wall-wide emergency (s2.4.14 Decision 6). Elevates
+## the active Shadowlands Incursion topic to the Tier-1 momentum floor and
+## broadcasts it into every Crab lord's awareness (owner choice 2026-06-11), and
+## compels every living non-PC Crab daimyo (CITY_DAIMYO..FAMILY_DAIMYO, excluding
+## the declaring Champion) to respond by forcing a DEFEND_PROVINCE primary toward
+## the critical Tower — this supersedes all other clan priorities. Each compelled
+## lord is stamped with the obligation IC day for the non-compliance honor check.
+## Deduped: skips if an emergency is already active within the 90-day window.
+static func _apply_wall_emergency_declaration(
+	applied: Dictionary,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	active_topics: Array,
+	ic_day: int,
+) -> Dictionary:
+	var champion_id: int = applied.get("character_id", -1)
+	var effects: Dictionary = applied.get("effects", {})
+	var tower_province: int = int(effects.get("target_province_id", -1))
+	var champion: L5RCharacterData = characters_by_id.get(champion_id)
+	if champion == null or CharacterStats.is_dead(champion):
+		return {}
+	var clan: String = champion.clan
+
+	# Dedup: only one active Wall-wide emergency at a time (90-day window).
+	for cv: Variant in characters_by_id.values():
+		var c: L5RCharacterData = cv
+		if c == null:
+			continue
+		if c.wall_emergency_obligation_ic_day >= 0 \
+				and ic_day - c.wall_emergency_obligation_ic_day < _WALL_EMERGENCY_WINDOW_DAYS:
+			return {}
+
+	# Elevate the active Shadowlands Incursion topic (prefer the one affecting the
+	# critical Tower; else the most recent). Boost momentum to the Tier-1 floor.
+	var elevated_topic_id: int = -1
+	var best_topic: TopicData = null
+	for tv: Variant in active_topics:
+		if not tv is TopicData:
+			continue
+		var t: TopicData = tv
+		if t.resolved or t.variant != "shadowlands_incursion":
+			continue
+		if best_topic == null \
+				or (tower_province in t.provinces_affected and tower_province not in best_topic.provinces_affected) \
+				or t.ic_day_created > best_topic.ic_day_created:
+			best_topic = t
+	if best_topic != null:
+		best_topic.momentum = maxf(
+			best_topic.momentum,
+			TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_1))
+		elevated_topic_id = best_topic.topic_id
+
+	# Compel every living non-PC Crab daimyo to respond (forced wall-defense
+	# primary). Supersedes all other clan priorities per s2.4.14 Decision 6.
+	var compelled: int = 0
+	for cv2: Variant in characters_by_id.values():
+		var lord: L5RCharacterData = cv2
+		if lord == null or CharacterStats.is_dead(lord) or lord.is_pc:
+			continue
+		if lord.character_id == champion_id or lord.clan != clan:
+			continue
+		if lord.lord_rank < Enums.LordRank.CITY_DAIMYO \
+				or lord.lord_rank >= Enums.LordRank.CLAN_CHAMPION:
+			continue
+		if not objectives_map.has(lord.character_id):
+			objectives_map[lord.character_id] = {}
+		objectives_map[lord.character_id]["primary"] = {
+			"need_type": "DEFEND_PROVINCE",
+			"target_province_id": tower_province,
+			"assigned_by": champion_id,
+			"status": "ACTIVE",
+			"source": "wall_emergency",
+		}
+		lord.wall_emergency_obligation_ic_day = ic_day
+		lord.wall_emergency_contributed = false
+		if elevated_topic_id >= 0 and elevated_topic_id not in lord.topic_pool:
+			lord.topic_pool.append(elevated_topic_id)
+		compelled += 1
+
+	# Mark the declaring Champion too: this dedups re-declaration for the 90-day
+	# window (one emergency per season — the gravest, last-resort call). The
+	# Champion is exempt from the non-compliance penalty (contributed = true);
+	# they lead the response through their own wall-management decomposition.
+	champion.wall_emergency_obligation_ic_day = ic_day
+	champion.wall_emergency_contributed = true
+
+	return {
+		"type": "wall_emergency_declared",
+		"champion_id": champion_id,
+		"tower_province_id": tower_province,
+		"compelled_lords": compelled,
+		"elevated_topic_id": elevated_topic_id,
+	}
+
+
+## Daily: any obligated Crab lord who commits troops (ASSIGN_GARRISON / ORDER_DEPLOY)
+## during the emergency window is marked as having contributed. Lenient by design —
+## a forced DEFEND_PROVINCE primary directs the commitment at the Tower, and
+## committing troops at all is the act of responding the emergency demands.
+static func _process_wall_emergency_contributions(
+	results: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for rv: Variant in results:
+		if not rv is Dictionary:
+			continue
+		var r: Dictionary = rv
+		var aid: String = r.get("action_id", "")
+		if aid != "ASSIGN_GARRISON" and aid != "ORDER_DEPLOY":
+			continue
+		if not r.get("success", true):
+			continue
+		var lord: L5RCharacterData = characters_by_id.get(int(r.get("character_id", -1)))
+		if lord == null or CharacterStats.is_dead(lord):
+			continue
+		if lord.wall_emergency_obligation_ic_day >= 0:
+			lord.wall_emergency_contributed = true
+
+
+## Seasonal: one season (90 IC days) after the declaration, any obligated Crab lord
+## who has not contributed takes the serious/horde-tier honor loss (s2.4.12). The
+## obligation and the forced wall-defense primary are cleared either way, returning
+## the lord to normal objective selection.
+static func _process_wall_emergency_obligations(
+	characters: Array,
+	objectives_map: Dictionary,
+	ic_day: int,
+) -> Array:
+	var penalised: Array = []
+	for c: L5RCharacterData in characters:
+		if c == null or c.wall_emergency_obligation_ic_day < 0:
+			continue
+		if ic_day - c.wall_emergency_obligation_ic_day < _WALL_EMERGENCY_WINDOW_DAYS:
+			continue
+		if not CharacterStats.is_dead(c) and not c.wall_emergency_contributed:
+			HonorGlorySystem.apply_honor_change(c, _WALL_EMERGENCY_NONCOMPLIANCE_HONOR)
+			penalised.append(c.character_id)
+		c.wall_emergency_obligation_ic_day = -1
+		c.wall_emergency_contributed = false
+		var obj: Dictionary = objectives_map.get(c.character_id, {})
+		if obj.get("primary", {}).get("source", "") == "wall_emergency":
+			obj.erase("primary")
+	return penalised
 
 
 static func _apply_court_invitation(
