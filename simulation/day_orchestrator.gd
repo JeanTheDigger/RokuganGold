@@ -319,7 +319,8 @@ static func advance_day(
 	)
 
 	_apply_garrison_shortage_letter_writebacks(
-		letter_pass_results, characters_by_id, settlements, current_season
+		letter_pass_results, characters_by_id, settlements, current_season,
+		day_result.get("results", []), objectives_map,
 	)
 
 	_process_festival_leaves_penalty(
@@ -15452,7 +15453,11 @@ static func _apply_garrison_shortage_letter_writebacks(
 	characters_by_id: Dictionary,
 	settlements: Array,
 	current_season: int,
+	wave_results: Array = [],
+	objectives_map: Dictionary = {},
 ) -> void:
+	# Daily-pass channel: non-lord wall garrison characters whose STRENGTHEN_WALL
+	# letter is tagged with that objective need_type and who are stationed at a Tower.
 	for r: Dictionary in letter_results:
 		if r.get("need_type", "") != "STRENGTHEN_WALL":
 			continue
@@ -15464,6 +15469,34 @@ static func _apply_garrison_shortage_letter_writebacks(
 		for s: SettlementData in settlements:
 			if s.settlement_type == Enums.SettlementType.WALL_TOWER \
 					and str(s.settlement_id) == loc:
+				s.garrison_shortage_letter_season = current_season
+				break
+
+	# AP / Civilian-Order channel (s55.23a Step 1, s2.4.14 Decision 4, s2.4.13
+	# Decision 10): lords (Champion, Shireikan, Rikugunshokan) are excluded from the
+	# daily letter pass (s57.34.7) and fire the garrison-shortage SEND_LETTER through
+	# the wave instead — it decomposes from a STRENGTHEN_WALL objective and executes as
+	# WRITE_LETTER carrying the Tower's province in target_province_id. Without setting
+	# the season flag from this letter, the escalation gate (garrison_shortage_letter_
+	# season < 0) never clears for a lord and the pipeline stalls at Step 1, never
+	# reaching DISPATCH_COURTIER / DECLARE_WALL_EMERGENCY.
+	for r: Dictionary in wave_results:
+		if not r.get("success", false):
+			continue
+		if r.get("action_id", "") != CivilianOrderBudget.WRITE_LETTER:
+			continue
+		var sender_id: int = r.get("character_id", -1)
+		var objs: Dictionary = objectives_map.get(sender_id, {})
+		var need_type: String = objs.get("primary", {}).get("need_type", \
+			objs.get("standing", {}).get("need_type", ""))
+		if need_type != "STRENGTHEN_WALL":
+			continue
+		var pid: int = r.get("target_province_id", -1)
+		if pid < 0:
+			continue
+		for s: SettlementData in settlements:
+			if s.settlement_type == Enums.SettlementType.WALL_TOWER \
+					and s.province_id == pid:
 				s.garrison_shortage_letter_season = current_season
 				break
 

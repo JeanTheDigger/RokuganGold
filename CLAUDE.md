@@ -5051,6 +5051,40 @@ but not executed in this environment.
   a Sect whose Master dies before any agent is recruited (APPROACH_FOR_RECRUITMENT)
   goes permanently dark — GDD-faithful fragility, but worth watching early-game.
 
+### Known Code Issues (found and fixed 2026-06-11, Wall escalation Step-1 season flag)
+- **Garrison-shortage letter-season flag was never set for lords — entire Champion/
+  Shireikan escalation pipeline stalled at Step 1 in live runs. FIXED.**
+  Auditing the Shireikan parallel wall path (s2.4.13 Decision 10) traced the
+  garrison-shortage escalation gate to a dead flag-setter.
+  `_apply_garrison_shortage_letter_writebacks` set `garrison_shortage_letter_season`
+  only from the **daily letter pass**, filtering results with `need_type ==
+  "STRENGTHEN_WALL"`. But (a) `resolve_daily_letter` excludes any character with
+  `civilian_order_budget_max > 0` (s57.34.7), so every lord — Champion (budget 12),
+  Rikugunshokan (8), and any lord-Shireikan — is excluded from that pass, and
+  (b) `STRENGTHEN_WALL` is deliberately decomposer-only with **no
+  `objective_alignment.json` entry** (it always decomposes into action-needs like
+  SEND_LETTER, which carry their own alignment), so `resolve_daily_letter` returns
+  `{}` for it (score 0) regardless. Result: NO daily-pass STRENGTHEN_WALL letter is
+  ever produced, the flag stays −1 forever, and both the Champion (decomposer line
+  937 `if letter_season < 0: SEND_LETTER`) and Shireikan (line 957) return
+  `SEND_LETTER` every season, never reaching DISPATCH_COURTIER or
+  DECLARE_WALL_EMERGENCY. (The DISPATCH_COURTIER/DECLARE_WALL_EMERGENCY tests passed
+  only because they set the flag directly in fixtures.) Fix is structural (no
+  invented numbers) and matches s55.23a line 72 ("no letter sent this season → fire
+  SEND_LETTER"): the writeback now also scans the AP/Civilian-Order wave results
+  (`day_result["results"]`) for a successful `WRITE_LETTER` whose sender holds a
+  STRENGTHEN_WALL objective and whose `target_province_id` (inherited from the
+  decomposer need via npc_decision_engine:497) resolves to a WALL_TOWER, and sets
+  that Tower's `garrison_shortage_letter_season` from the lord's own executed Step-1
+  letter. Pipeline now flows: season X — SEND_LETTER (sets flag) then DEFEND_PROVINCE;
+  season X+1 — DISPATCH_COURTIER; refused + SI<6 — DECLARE_WALL_EMERGENCY.
+  LIMITATIONS (not this bug): (1) the daily-pass loop is now dead but harmless (kept
+  as documented intent for a future budget-0 sub-Shireikan letter channel);
+  (2) sub-Shireikan tower officers (WALL_SEGMENT_COMMANDER / Taisa) still fall to
+  DEFEND_PROVINCE without their own letter campaign — extending the letter step below
+  Shireikan rank is a design expansion (GDD s2.4.12 line 530 "The Taisa or Shireikan
+  writes letters") needing owner direction, separate from this stall fix.
+
 ### Known Code Issues (found and fixed 2026-06-11, Wall escalation Daimyo handoff)
 Auditing the receiving-Daimyo response path (s55.23a, LOCKED) after the Step-2
 routing fixes exposed two more gaps that left the DISPATCH_COURTIER path inert —
