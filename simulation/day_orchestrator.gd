@@ -232,6 +232,10 @@ static func advance_day(
 	_process_shide_permission_grants(settlements, characters, characters_by_id, ic_day)
 	_inject_poem_context(characters, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
+	_process_wall_shireikan_escalation(
+		characters, characters_by_id, objectives_map, settlements, provinces,
+		world_states, current_season,
+	)
 	_set_temple_context_flags(characters, settlements, world_states)
 	_set_dojo_context_flags(characters, settlements, world_states)
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
@@ -16594,6 +16598,109 @@ static func _set_wall_tower_context_flags(
 			existing = existing.duplicate()
 			existing.append(wstat)
 		ws["wall_statuses"] = existing
+
+
+## GDD s2.4.13 Decision 10 / s2.4.14 Decision 4: when a Shireikan's garrison-shortage
+## letter campaign has run a full season without resolving the shortage, the matter
+## escalates to the Clan Champion, who takes over the pipeline (DISPATCH_COURTIER, then
+## DECLARE_WALL_EMERGENCY). The Champion governs from afar and never receives wall_statuses
+## through the location-gated context pass (_set_wall_tower_context_flags), so escalation
+## injects the critical Tower's WallStatus into the Champion's context and force-assigns a
+## STRENGTHEN_WALL primary targeting it (owner-confirmed; mirrors the wall_emergency
+## forced-primary precedent). The season flag (set by the Shireikan's Step-1 letter) is
+## already past, so the Champion's decomposer skips Step 1 and proceeds to courtier dispatch.
+## Trigger (owner-confirmed proxy for GDD "no lord moved to +50 commitment"): Tower still
+## below minimum garrison + Shireikan letter sent + a full season elapsed since that letter.
+## A Tower that recovered (a lord responded) clears the shortage flags via
+## _apply_garrison_assignment and releases the Champion's escalation objective here.
+static func _process_wall_shireikan_escalation(
+	characters: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	settlements: Array,
+	provinces: Dictionary,
+	world_states: Dictionary,
+	current_season: int,
+) -> void:
+	var escalating_champions: Dictionary = {}  # champion_id -> Tower province_id
+	for s: SettlementData in settlements:
+		if s.settlement_type != Enums.SettlementType.WALL_TOWER:
+			continue
+		if not WallSystem.is_garrison_below_minimum(s.garrison_pu):
+			continue
+		if s.garrison_shortage_letter_season < 0:
+			continue
+		if current_season == s.garrison_shortage_letter_season:
+			continue
+		var prov: Variant = provinces.get(s.province_id, null)
+		if not (prov is ProvinceData):
+			continue
+		var champ_id: int = _extrad_find_clan_champion_id((prov as ProvinceData).clan, characters)
+		if champ_id < 0:
+			continue
+		var champion: L5RCharacterData = characters_by_id.get(champ_id)
+		if champion == null or CharacterStats.is_dead(champion) or champion.is_pc:
+			continue
+		_inject_champion_wall_status(champion, s, prov as ProvinceData, world_states)
+		if not escalating_champions.has(champ_id):
+			escalating_champions[champ_id] = s.province_id
+
+	# Force-assign / refresh the STRENGTHEN_WALL primary for each escalated Champion.
+	for champ_id: int in escalating_champions:
+		if not objectives_map.has(champ_id):
+			objectives_map[champ_id] = {}
+		if objectives_map[champ_id].get("primary", {}).get("source", "") == "wall_shireikan_escalation":
+			continue
+		objectives_map[champ_id]["primary"] = {
+			"need_type": "STRENGTHEN_WALL",
+			"target_province_id": escalating_champions[champ_id],
+			"assigned_by": champ_id,
+			"status": "ACTIVE",
+			"source": "wall_shireikan_escalation",
+		}
+
+	# Release: a Champion holding an escalation primary whose Towers have all recovered
+	# (none escalating this pass) drops the objective (mirrors the wall_emergency clear).
+	for cid_v: Variant in objectives_map.keys():
+		var cid: int = cid_v
+		var obj: Dictionary = objectives_map[cid]
+		if obj.get("primary", {}).get("source", "") == "wall_shireikan_escalation" \
+				and not escalating_champions.has(cid):
+			obj.erase("primary")
+
+
+static func _inject_champion_wall_status(
+	champion: L5RCharacterData,
+	tower: SettlementData,
+	prov: ProvinceData,
+	world_states: Dictionary,
+) -> void:
+	var ws: Dictionary = world_states.get(champion.character_id, {})
+	if ws.is_empty():
+		ws = {}
+		world_states[champion.character_id] = ws
+	var existing: Array = ws.get("wall_statuses", [])
+	for e: Variant in existing:
+		if e is NPCDataStructures.WallStatus \
+				and (e as NPCDataStructures.WallStatus).province_id == tower.province_id:
+			return  # already present (e.g. the Champion is physically at the Tower)
+	var wstat := NPCDataStructures.WallStatus.new()
+	wstat.province_id = tower.province_id
+	wstat.si = tower.wall_si
+	wstat.ss = prov.shadowlands_strength
+	wstat.minimum_garrison = int(WallSystem.MINIMUM_GARRISON_PU)
+	wstat.garrison_above_minimum = false
+	wstat.garrison_shortage_letter_season = tower.garrison_shortage_letter_season
+	wstat.garrison_shortage_courtier_dispatched = tower.garrison_shortage_courtier_dispatched
+	wstat.garrison_shortage_courtier_refused = tower.garrison_shortage_courtier_refused
+	var min_jade: float = float(
+		int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
+		* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR
+	)
+	wstat.jade_stockpile_critical = tower.jade_stockpile <= min_jade
+	existing = existing.duplicate()
+	existing.append(wstat)
+	ws["wall_statuses"] = existing
 
 
 static func _set_temple_context_flags(

@@ -5085,6 +5085,46 @@ but not executed in this environment.
   Shireikan rank is a design expansion (GDD s2.4.12 line 530 "The Taisa or Shireikan
   writes letters") needing owner direction, separate from this stall fix.
 
+### Systems Added 2026-06-11 (Wall Shireikan→Champion escalation, owner-authorized)
+- **s2.4.13 Decision 10 / s2.4.14 Decision 4 — Champion tower visibility WIRED.**
+  Closes the deeper half of the garrison-shortage stall. Even with the Step-1 season
+  flag now set (above), the **Champion's** escalation (DISPATCH_COURTIER /
+  DECLARE_WALL_EMERGENCY, gated `lord_rank == CLAN_CHAMPION`) was unreachable in live
+  runs: `wall_statuses` is injected ONLY for characters physically standing at a Tower
+  (`_set_wall_tower_context_flags`, location-gated + cleared daily as a stale key), and a
+  Clan Champion governs from a capital — so the Champion's `ctx.wall_statuses` is always
+  empty and the decomposer's Branch A loops never execute. The GDD models this as the
+  Shireikan **escalating to the Champion** after a failed letter season (Decision 10
+  line 666), so `_process_wall_shireikan_escalation()` (DayOrchestrator, run daily right
+  after `_set_wall_tower_context_flags`) implements that handoff. **Trigger (owner-
+  confirmed proxy for GDD "no lord moved to the +50 commitment threshold," which isn't
+  tracked in state):** Tower still below minimum garrison + Shireikan Step-1 letter sent
+  (`garrison_shortage_letter_season >= 0`) + a full season elapsed (`current_season !=
+  garrison_shortage_letter_season`). On escalation it finds the living non-PC Clan
+  Champion of the Tower's province clan (`_extrad_find_clan_champion_id`), **force-assigns
+  a STRENGTHEN_WALL primary** targeting the Tower (`source: "wall_shireikan_escalation"`,
+  owner choice — mirrors the existing wall_emergency forced-primary precedent), and
+  injects the Tower's WallStatus into the Champion's per-character world_state via
+  `_inject_champion_wall_status()` (built identically to `_set_wall_tower_context_flags`;
+  dedup-guarded if the Champion happens to be at the Tower). The Champion's
+  `province_statuses` (the `ps.garrison_pu < minimum` check at decomposer line 934) is
+  already auto-built for every province from the global `province_data`/`settlements`
+  injected for lords (`_inject_base_character_context` line 21364, which runs before the
+  wave and preserves the injected `wall_statuses`). Because the season flag is already
+  past, the Champion's decomposer skips Step 1 and fires DISPATCH_COURTIER → (refused +
+  SI<6) DECLARE_WALL_EMERGENCY — the full GDD pipeline now runs end to end. **Release:**
+  a Champion holding a `wall_shireikan_escalation` primary whose Towers have all recovered
+  (none escalating that pass) drops the objective (`obj.erase("primary")`, mirrors the
+  wall_emergency clear). Ordering verified: stale-clear (161) → `_set_wall_tower_context_flags`
+  (234) → escalation (235) → `_inject_base_character_context` (294, preserves wall_statuses,
+  adds province_data) → wave (302). Pure structural wiring of LOCKED escalation behavior,
+  no invented numbers. Parse-checked; no tests per the no-test-code policy. LIMITATIONS
+  (not bugs): the Champion holds one STRENGTHEN_WALL primary at a time (decomposer Branch A
+  iterates all injected Tower wall_statuses and acts on the first short one, so multiple
+  short Towers are still serviced, just via one objective slot); DISPATCH_COURTIER target
+  selection relies on the Champion's `contact_garrison_scores` (existing infra from the
+  Daimyo-handoff fix).
+
 ### Known Code Issues (found and fixed 2026-06-11, Wall escalation Daimyo handoff)
 Auditing the receiving-Daimyo response path (s55.23a, LOCKED) after the Step-2
 routing fixes exposed two more gaps that left the DISPATCH_COURTIER path inert —
