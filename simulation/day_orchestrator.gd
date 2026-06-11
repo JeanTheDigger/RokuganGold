@@ -7948,7 +7948,12 @@ static func _assign_witch_hunter_standing_objectives(
 # ordinary spread alongside the Kuni and Asako.
 
 const WITCH_HUNT_PTL_MIN: float = 3.0  # PTL crisis onset (s11.11); PROVISIONAL hotspot floor
-const ROAMING_SOURCES: Array = ["witch_hunter_self_selection", "kuroiban_leader_tasking"]
+const ROAMING_SOURCES: Array = [
+	"witch_hunter_self_selection",
+	"witch_hunter_leader_tasking",
+	"inquisitor_leader_tasking",
+	"kuroiban_leader_tasking",
+]
 
 
 static func _anti_maho_expertise(c: L5RCharacterData) -> int:
@@ -7960,35 +7965,73 @@ static func _process_anti_maho_roaming(
 	objectives_map: Dictionary,
 	provinces: Dictionary,
 ) -> void:
-	var leader_alive: bool = false
+	# Each anti-maho order (Kuni / Asako / Kuroiban) is coordinated by its leader.
+	# When an order's leader is alive, the leader TASKS that order's members (best
+	# hunters → worst hotspots), replacing their autonomous self-selection and
+	# excluding them from the general spread. Orders with no living leader fall back
+	# into the spread alongside everyone else. Indices: 0=Kuni, 1=Asako, 2=Kuroiban.
+	var leader_roles: Array = [
+		RoleRegistry.WITCH_HUNTER_LEADER,
+		RoleRegistry.INQUISITOR_LEADER,
+		RoleRegistry.KUROIBAN_LEADER,
+	]
+	var leader_tags: Array = [
+		"witch_hunter_leader_tasking",
+		"inquisitor_leader_tasking",
+		"kuroiban_leader_tasking",
+	]
+
+	var led: Array = [false, false, false]
 	for ch: Variant in characters:
 		if not ch is L5RCharacterData:
 			continue
 		var lc: L5RCharacterData = ch
-		if not CharacterStats.is_dead(lc) and lc.is_kuroiban \
-				and lc.role_position == RoleRegistry.KUROIBAN_LEADER:
-			leader_alive = true
-			break
+		if CharacterStats.is_dead(lc):
+			continue
+		var idx: int = leader_roles.find(lc.role_position)
+		if idx != -1:
+			led[idx] = true
 
-	# Kuroiban leader tasking — coordinated, best hunters first (replaces their spread).
-	if leader_alive:
-		var kuro: Array = _gather_roaming_members(characters, objectives_map, true, false)
-		kuro.sort_custom(func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+	# Led orders: leader tasks members, best expertise first.
+	for oi in range(3):
+		if not led[oi]:
+			continue
+		var members: Array = _gather_roaming_members(characters, objectives_map, led, oi)
+		members.sort_custom(func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
 			return _anti_maho_expertise(a) > _anti_maho_expertise(b))
-		_assign_hunters_to_hotspots(kuro, objectives_map, provinces, "kuroiban_leader_tasking")
+		_assign_hunters_to_hotspots(members, objectives_map, provinces, leader_tags[oi])
 
-	# Everyone else (and the Kuroiban too, when no leader) self-selects.
-	var spread: Array = _gather_roaming_members(characters, objectives_map, false, leader_alive)
+	# Unled orders self-select in the general spread.
+	var spread: Array = _gather_roaming_members(characters, objectives_map, led, -2)
 	_assign_hunters_to_hotspots(spread, objectives_map, provinces, "witch_hunter_self_selection")
 
 
+static func _is_asako_inquisitor(c: L5RCharacterData) -> bool:
+	if c.school_name.contains("Inquisitor"):
+		return true
+	return c.role_position == RoleRegistry.INQUISITOR_LEADER
+
+
+# Classifies a maho-hunter into its order (0=Kuni, 1=Asako, 2=Kuroiban; -1=none).
+# Orders are mutually exclusive (different clans); checked defensively in order.
+static func _order_of(c: L5RCharacterData) -> int:
+	if c.is_kuroiban:
+		return 2
+	if _is_asako_inquisitor(c):
+		return 1
+	if _is_kuni_witch_hunter(c):
+		return 0
+	return -1
+
+
 # Living non-PC maho-hunters eligible for roaming (no real lord-assigned primary).
-# kuroiban_only restricts to Kuroiban; exclude_kuroiban drops them from the set.
+# order_filter 0..2 → that order only; -2 → the general spread (orders without a
+# living leader, i.e. led[order] is false).
 static func _gather_roaming_members(
 	characters: Array,
 	objectives_map: Dictionary,
-	kuroiban_only: bool,
-	exclude_kuroiban: bool,
+	led: Array,
+	order_filter: int,
 ) -> Array:
 	var out: Array = []
 	for ch: Variant in characters:
@@ -7997,9 +8040,11 @@ static func _gather_roaming_members(
 		var c: L5RCharacterData = ch
 		if c.is_pc or CharacterStats.is_dead(c) or not _is_maho_hunter(c):
 			continue
-		if kuroiban_only and not c.is_kuroiban:
-			continue
-		if exclude_kuroiban and c.is_kuroiban:
+		var ord: int = _order_of(c)
+		if order_filter == -2:
+			if ord != -1 and led[ord]:
+				continue  # a led order — handled by its leader tasking
+		elif ord != order_filter:
 			continue
 		var primary: Dictionary = objectives_map.get(c.character_id, {}).get("primary", {})
 		if not primary.is_empty() and not (primary.get("source", "") in ROAMING_SOURCES):

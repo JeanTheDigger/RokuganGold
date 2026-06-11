@@ -4782,6 +4782,26 @@ template generators it depends on. Faithful summary of the fixes that landed:
   is tasked like a member (hunts too); tasking is abstract central coordination
   (no per-member comms modeled, same abstraction as the spread). Only caller
   (seasonal, line 1434) updated. Parse-checked; no tests per the no-test-code policy.
+- **s11.3.5 Anti-maho leader tasking generalized to all three orders (owner-authorized 2026-06-11).**
+  Extended the Kuroiban leader-tasking pattern symmetrically to the Kuni
+  Witch-Hunters and Asako Inquisitors. `_process_anti_maho_roaming` now indexes
+  the three orders (0=Kuni/WITCH_HUNTER_LEADER, 1=Asako/INQUISITOR_LEADER,
+  2=Kuroiban/KUROIBAN_LEADER): it scans for each order's living leader, and every
+  order WITH a living leader has its members tasked best-expertise-first to the
+  worst hotspots (per-order source tag) and excluded from the general spread;
+  orders with NO living leader fall into the spread together (same "replace when
+  leader alive" rule the owner chose for the Kuroiban). New helpers
+  `_is_asako_inquisitor()` (school "Inquisitor" or INQUISITOR_LEADER role) and
+  `_order_of()` (mutually-exclusive order classification, checked
+  Kuroiban→Asako→Kuni). `_gather_roaming_members()` reworked from the
+  kuroiban_only/exclude_kuroiban flags to an `(led, order_filter)` pair
+  (order_filter 0–2 = that order; -2 = spread = unled orders). ROAMING_SOURCES
+  grew to four tags (self_selection + three per-order leader tags) so handoff
+  re-stamping works when any order's leader dies/revives. Traced equivalent to
+  the prior behavior in the no-leader and Kuroiban-only-leader cases; Kuni/Asako
+  now get the coordination too. Cross-border incidents (Kuni-only) and the +2k0
+  detection edge (Kuni/Asako family) are unaffected — separate systems. Each
+  leader hunts like a member. Parse-checked; no tests per the no-test-code policy.
 - **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
   feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
   the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO
