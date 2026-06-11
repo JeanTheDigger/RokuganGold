@@ -4612,6 +4612,29 @@ template generators it depends on. Faithful summary of the fixes that landed:
   per the no-test-code policy. TUNING (playtest): "any named NPC" scope lets a
   high-Earth caster Touch-of-Death the highest-Status co-located figure unprovoked —
   watch for prominent-noble kills destabilising via succession.
+- **s43 Grand-Map spell sweep COMPLETE (2026-06-11).** Audited all 46 maho spells
+  for world-scale-wirable effects (persistent NPC/province state, no s40 combat or
+  condition layer). **6 are wired** (Spreading the Darkness, Stealing the Soul,
+  Fierce Blood of the Earth, Caress of Fu Leng, Drain the Soul, Touch of Death).
+  **The other 40 are genuinely blocked** — no further wiring warranted. Near-misses
+  checked against the GDD and rejected with cause: **Dancing with Demons** (Air 3) —
+  24-hour Advantage/Disadvantage, inert at daily/seasonal cadence (expires before
+  anything resolves) + Perform: Dance TN 25 gate. **Heart of the Damned** (Earth 1) —
+  heal + restore-a-reduced-Trait, but requires a corpse dead within 1 day and
+  `death_events` is cleared daily (no fresh-corpse registry); strictly dominated by
+  Fierce Blood; restore part usually inert (no persistent trait reduction tracked).
+  **Blood Rite** (Earth 1) — 10-min, trivial 1k1 heal, only durable bit (ally Taint)
+  is counterproductive. **Strength of Darkness** (Fire 5) — 10-round combat buff,
+  lethal-on-expiry is a combat interaction (s40). **Curse of the Clan** (Air 2) —
+  GDD explicitly frames it as a role-playing/GM challenge, no mechanic to attach.
+  Remaining spells: combat rounds (Bleeding, Pain, Burning Blood, Tomb of Earth,
+  Curse of Weakness, No Pure Breaths, Blood Armor…), sub-day conditions/wards
+  (Inspire Fear, Sinful Dreams, Curse of the Kansen, Symbol of Blood, Ward of
+  Divine Peace, Truth is a Scourge…), undead/oni summons (Summon Undead Champion,
+  Eternal Unrest, Puppet Master, Death Beyond Life, Essence of Undeath, Summon Oni…),
+  or no-mechanic utility (Written in Blood, Possession, Take the Body) — all blocked
+  on s40/s54. The wired set is the complete world-scale maho catalog; do not
+  re-audit without the combat/condition/undead layers.
 - **Maho Channel 3 wired — Taint detection on a person (Design Decision 5,
   owner-authorized 2026-06-10).** Closes the last open maho detection channel: a
   shugenja whose successful action targets a suspect (PROBE/INVESTIGATE near them,
