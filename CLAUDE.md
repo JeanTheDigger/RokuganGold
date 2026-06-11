@@ -5025,6 +5025,29 @@ but not executed in this environment.
   These need the surveillance/strategic-review integration, IntelDB, map-distance
   data, or action-log state — none buildable without inventing.
 
+### Systems Added 2026-06-11 (Kolat — succession trigger)
+- **s54.7g Master succession trigger WIRED.** The LOCKED succession resolver
+  `KolatMasterSelector.evaluate_succession()` (Tranche 8, fully built + tested) was
+  defined but never called — a dead Kolat Master left their Sect permanently vacant
+  and that network went dark. `DayOrchestrator._process_kolat_master_succession()`
+  now fires at both death-processing sites (daily + seasonal), BEFORE the field-agent
+  recall, for each dead Master: calls `evaluate_succession(dead.kolat_sect, characters,
+  {}, dice)` which runs the cascade (three ranked heirs → Tiger discretionary draw →
+  chain re-point) and seats a living non-Master Sect agent if one exists, else leaves
+  the Sect vacant (s54.7g: the network cannot always refill). The new Master inherits
+  the Sect standing mandate (`_assign_kolat_standing_objectives`, already wired), so
+  the network keeps functioning. Ordering: succession runs before the recall so a
+  freshly-seated Tiger can route that recall (the recall is Tiger-gated). The dead
+  Master's `is_kolat_master` flag is left set (dead-guarded everywhere; the resolver
+  excludes it via is_dead) so the recall still finds its network. `heir_designations`
+  is passed `{}` and `under_investigation_ids` is empty — the encrypted heir record
+  and its Cloud-archive storage remain deferred, so the cascade always falls to the
+  discretionary draw for now (the ranked-heir path activates automatically when that
+  record is populated — no further wiring). Pure structural wiring of a LOCKED spec,
+  no new design/numbers. Parse-checked; no tests per the no-test-code policy. TUNING:
+  a Sect whose Master dies before any agent is recruited (APPROACH_FOR_RECRUITMENT)
+  goes permanently dark — GDD-faithful fragility, but worth watching early-game.
+
 ### Systems Added 2026-06-06 (Sailing)
 - **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
   (pure class); `shared/ship_data.gd` gains `owner_id` + `departure_tick`. New system

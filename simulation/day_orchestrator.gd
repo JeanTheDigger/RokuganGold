@@ -1082,6 +1082,7 @@ static func advance_day(
 		death_events, characters,
 	)
 
+	_process_kolat_master_succession(death_events, characters, characters_by_id, dice_engine)
 	_process_kolat_master_death_recall(death_events, characters_by_id, objectives_map)
 
 	death_events.clear()
@@ -1525,6 +1526,7 @@ static func advance_day(
 			hierarchy_cascade_results.append_array(_process_operational_death_cascade(
 				death_events, characters,
 			))
+			_process_kolat_master_succession(death_events, characters, characters_by_id, dice_engine)
 			_process_kolat_master_death_recall(death_events, characters_by_id, objectives_map)
 			death_events.clear()
 			_cleanup_dead_character_references(
@@ -7729,6 +7731,44 @@ static func _assign_kolat_standing_objectives(
 # fires that tick (matching the GDD's degraded-coordination state). The
 # operational/elimination directive composition (Stages 1–4) remains blocked on
 # the Master-surveillance/investigation-detection layer.
+
+
+# -- Kolat Master Succession Trigger (s54.7g) ---------------------------------
+# When a Kolat Master dies, the LOCKED succession cascade seats a new Master from
+# the Sect's conscious agents (KolatMasterSelector.evaluate_succession: three
+# ranked heirs, then the Tiger discretionary draw, then chain re-point). The
+# encrypted heir-designation record is not yet populated, so the cascade always
+# falls to the discretionary draw — which seats a living non-Master Sect agent if
+# one exists, else leaves the Sect vacant (s54.7g: the network cannot always
+# refill). The new Master inherits the Sect standing mandate (already wired). The
+# dead Master's seat flag is left set (dead-guarded everywhere, and the resolver
+# excludes it via is_dead) so the field-agent recall below still finds its
+# network. Runs BEFORE the recall so a freshly-seated Tiger can route that recall.
+# under_investigation_ids is left empty (the heir-investigation gate is unused
+# while heir_designations is empty — discretionary draw does not consult it).
+static func _process_kolat_master_succession(
+	death_events: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	dice: DiceEngine,
+) -> Array:
+	var seated: Array = []
+	for ev: Variant in death_events:
+		if not ev is Dictionary:
+			continue
+		var did: int = int((ev as Dictionary).get("character_id", -1))
+		var dead: L5RCharacterData = characters_by_id.get(did, null)
+		if dead == null or not KolatSystem.is_master(dead):
+			continue
+		var new_id: int = KolatMasterSelector.evaluate_succession(
+			dead.kolat_sect, characters, {}, dice)
+		if new_id >= 0:
+			seated.append({
+				"sect": dead.kolat_sect,
+				"former_master_id": did,
+				"new_master_id": new_id,
+			})
+	return seated
 
 
 static func _process_kolat_master_death_recall(
