@@ -470,6 +470,12 @@ static func advance_day(
 		characters_by_id, active_topics, current_season,
 	)
 
+	# Crab–Scorpion cooperation (s11.3.5): the two secret anti-maho orders relay
+	# detections to each other through the letter pipeline.
+	_process_anti_maho_info_sharing(
+		characters, active_topics, pending_letters, next_letter_id, ic_day,
+	)
+
 	_capture_witness_travel_intent(
 		day_result.get("results", []), world_states,
 	)
@@ -1425,7 +1431,7 @@ static func advance_day(
 		_assign_phoenix_champion_restore_objective(
 			characters, objectives_map, phoenix_council_state,
 		)
-		_process_witch_hunter_self_selection(
+		_process_anti_maho_roaming(
 			characters, objectives_map, provinces,
 		)
 		var cw_season_count: int = int(season_meta.get("horde_season_count", 0))
@@ -7927,26 +7933,91 @@ static func _assign_witch_hunter_standing_objectives(
 		}
 
 
-# -- Witch-Hunter Roaming Self-Selection (s11.3.5) ----------------------------
+# -- Anti-Maho Roaming & Kuroiban Leader Tasking (s11.3.5) --------------------
 # Seasonally, idle witch-hunters spread across the Empire's Taint hotspots
-# (provinces with province_taint_level at or above the PTL crisis onset). Each
-# idle hunter takes a primary HUNT_MAHO objective targeting the LEAST-covered
-# hotspot (ties broken toward the highest PTL) so coverage spreads instead of
-# everyone swarming the single worst province; the decomposer then travels them
-# cross-border to hunt (witch-hunters ignore clan boundaries, s11.3.5). Hunters
-# already committed to a still-hot province, or already standing in a hotspot
-# (hunting locally), count toward that province's coverage. A self-selected hunt
-# is released once its target province cools below the floor; a real
-# (lord-assigned) primary always outranks self-selection.
+# (provinces with province_taint_level at or above the PTL crisis onset), each
+# taking a primary HUNT_MAHO objective targeting the LEAST-covered hotspot
+# (ties → highest PTL) so coverage fans out; the decomposer then travels them
+# cross-border to hunt (witch-hunters ignore clan boundaries, s11.3.5). Members
+# already committed to a still-hot province, or already standing in a hotspot,
+# count toward coverage. A real (lord-assigned) primary always outranks roaming.
+#
+# The Scorpion Kuroiban are coordinated by their leader: when a KUROIBAN_LEADER
+# is alive, the leader TASKS members (best hunters → worst hotspots), replacing
+# their autonomous self-selection. If the leader dies, members fall back to the
+# ordinary spread alongside the Kuni and Asako.
 
 const WITCH_HUNT_PTL_MIN: float = 3.0  # PTL crisis onset (s11.11); PROVISIONAL hotspot floor
+const ROAMING_SOURCES: Array = ["witch_hunter_self_selection", "kuroiban_leader_tasking"]
 
-static func _process_witch_hunter_self_selection(
+
+static func _anti_maho_expertise(c: L5RCharacterData) -> int:
+	return int(c.skills.get("Lore: Shadowlands", 0)) * 2 + int(c.skills.get("Lore: Theology", 0))
+
+
+static func _process_anti_maho_roaming(
 	characters: Array,
 	objectives_map: Dictionary,
 	provinces: Dictionary,
 ) -> void:
-	# Build the hotspot set + a settlement→province lookup (for "already at a hotspot").
+	var leader_alive: bool = false
+	for ch: Variant in characters:
+		if not ch is L5RCharacterData:
+			continue
+		var lc: L5RCharacterData = ch
+		if not CharacterStats.is_dead(lc) and lc.is_kuroiban \
+				and lc.role_position == RoleRegistry.KUROIBAN_LEADER:
+			leader_alive = true
+			break
+
+	# Kuroiban leader tasking — coordinated, best hunters first (replaces their spread).
+	if leader_alive:
+		var kuro: Array = _gather_roaming_members(characters, objectives_map, true, false)
+		kuro.sort_custom(func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+			return _anti_maho_expertise(a) > _anti_maho_expertise(b))
+		_assign_hunters_to_hotspots(kuro, objectives_map, provinces, "kuroiban_leader_tasking")
+
+	# Everyone else (and the Kuroiban too, when no leader) self-selects.
+	var spread: Array = _gather_roaming_members(characters, objectives_map, false, leader_alive)
+	_assign_hunters_to_hotspots(spread, objectives_map, provinces, "witch_hunter_self_selection")
+
+
+# Living non-PC maho-hunters eligible for roaming (no real lord-assigned primary).
+# kuroiban_only restricts to Kuroiban; exclude_kuroiban drops them from the set.
+static func _gather_roaming_members(
+	characters: Array,
+	objectives_map: Dictionary,
+	kuroiban_only: bool,
+	exclude_kuroiban: bool,
+) -> Array:
+	var out: Array = []
+	for ch: Variant in characters:
+		if not ch is L5RCharacterData:
+			continue
+		var c: L5RCharacterData = ch
+		if c.is_pc or CharacterStats.is_dead(c) or not _is_maho_hunter(c):
+			continue
+		if kuroiban_only and not c.is_kuroiban:
+			continue
+		if exclude_kuroiban and c.is_kuroiban:
+			continue
+		var primary: Dictionary = objectives_map.get(c.character_id, {}).get("primary", {})
+		if not primary.is_empty() and not (primary.get("source", "") in ROAMING_SOURCES):
+			continue  # a real lord-assigned primary outranks roaming
+		out.append(c)
+	return out
+
+
+# Distributes a pre-ordered member list across the Taint hotspots — each member
+# to the least-covered hotspot (ties → highest PTL). Members already committed to
+# a still-hot province, or already standing in a hotspot, count toward coverage.
+# source_tag stamps the assignment and is transferable between roaming sources.
+static func _assign_hunters_to_hotspots(
+	members: Array,
+	objectives_map: Dictionary,
+	provinces: Dictionary,
+	source_tag: String,
+) -> void:
 	var hotspots: Array = []
 	var settlement_to_province: Dictionary = {}
 	for p: Variant in provinces.values():
@@ -7958,14 +8029,11 @@ static func _process_witch_hunter_self_selection(
 		if prov.province_taint_level >= WITCH_HUNT_PTL_MIN and not prov.settlement_ids.is_empty():
 			hotspots.append(prov)
 
-	# No hotspots anywhere: release any stale self-selected hunts so hunters fall
-	# back to local hunting via their standing objective.
+	# No hotspots: release any stale roaming hunts so members fall back to local hunting.
 	if hotspots.is_empty():
-		for character: L5RCharacterData in characters:
-			if character.is_pc or CharacterStats.is_dead(character) or not _is_maho_hunter(character):
-				continue
-			var o: Dictionary = objectives_map.get(character.character_id, {})
-			if o.get("primary", {}).get("source", "") == "witch_hunter_self_selection":
+		for c: L5RCharacterData in members:
+			var o: Dictionary = objectives_map.get(c.character_id, {})
+			if o.get("primary", {}).get("source", "") in ROAMING_SOURCES:
 				o.erase("primary")
 		return
 
@@ -7977,40 +8045,36 @@ static func _process_witch_hunter_self_selection(
 		hotspot_by_id[h.province_id] = h
 		coverage[h.province_id] = 0
 
-	# Pass 1: tally coverage from hunters who stay put (committed or already on-site),
-	# release stale hunts, and collect the genuinely idle hunters needing a target.
 	var unassigned: Array = []
-	for character: L5RCharacterData in characters:
-		if character.is_pc or CharacterStats.is_dead(character) or not _is_maho_hunter(character):
-			continue
-		var char_id: int = character.character_id
+	for c: L5RCharacterData in members:
+		var char_id: int = c.character_id
 		if not objectives_map.has(char_id):
 			objectives_map[char_id] = {}
 		var objectives: Dictionary = objectives_map[char_id]
 		var primary: Dictionary = objectives.get("primary", {})
 
 		if not primary.is_empty():
-			if primary.get("source", "") != "witch_hunter_self_selection":
-				continue  # a real primary outranks self-selection; leave it alone
+			# Only roaming primaries reach here (caller filtered real lord orders).
 			var tpid: int = primary.get("target_province_id", -1)
 			if hotspot_by_id.has(tpid):
 				coverage[tpid] += 1
-				continue  # still a hotspot — stay committed
-			objectives.erase("primary")  # target cooled — release and re-select below
+				primary["source"] = source_tag  # transfer ownership (leader ↔ self-select)
+				continue
+			objectives.erase("primary")  # target cooled — re-select below
 
 		# Already standing in a hotspot province? Hunt locally; count the coverage.
-		var loc: String = character.physical_location
+		var loc: String = c.physical_location
 		var cur_sid: int = loc.to_int() if loc.is_valid_int() else -1
 		var cur_prov: int = settlement_to_province.get(cur_sid, -1)
 		if hotspot_by_id.has(cur_prov):
 			coverage[cur_prov] += 1
 			continue
 
-		unassigned.append(character)
+		unassigned.append(c)
 
-	# Pass 2: send each idle hunter to the least-covered hotspot (ties → highest PTL,
+	# Send each idle member to the least-covered hotspot (ties → highest PTL,
 	# since hotspots is sorted PTL-descending and we take the first minimum).
-	for character: L5RCharacterData in unassigned:
+	for c: L5RCharacterData in unassigned:
 		var target: ProvinceData = null
 		var min_cov: int = 0x7FFFFFFF
 		for h: ProvinceData in hotspots:
@@ -8020,12 +8084,12 @@ static func _process_witch_hunter_self_selection(
 		if target == null:
 			continue
 		coverage[target.province_id] += 1
-		objectives_map[character.character_id]["primary"] = {
+		objectives_map[c.character_id]["primary"] = {
 			"need_type": "HUNT_MAHO",
 			"priority": 5,
 			"target_intent": str(target.settlement_ids[0]),
 			"target_province_id": target.province_id,
-			"source": "witch_hunter_self_selection",
+			"source": source_tag,
 			"auto_assigned": true,
 		}
 
@@ -8119,6 +8183,99 @@ static func _process_witch_hunter_border_incidents(
 		if host_lord != null and not CharacterStats.is_dead(host_lord) \
 				and topic.topic_id not in host_lord.topic_pool:
 			host_lord.topic_pool.append(topic.topic_id)
+
+
+# -- Anti-Maho Order Information Sharing (s11.3.5) ----------------------------
+# The Kuroiban "share information and resources with the Kuni" (s11.3.5) — a rare
+# Crab-Scorpion cooperation. Maho detections held by either secret order are
+# relayed to the other order's living members through the letter pipeline
+# (delayed delivery). Mutual: Kuni detections reach the Kuroiban and vice versa.
+# On delivery the carried topic enters the recipient's topic_pool, letting them
+# corroborate or hunt the suspect.
+
+const ANTI_MAHO_SHARE_VARIANTS: Array = ["taint_suspected", "blood_evidence"]
+const ANTI_MAHO_SHARE_DISTANCE: int = 3  # PROVISIONAL (blocked on map/adjacency, A16)
+
+static func _process_anti_maho_info_sharing(
+	characters: Array,
+	active_topics: Array,
+	pending_letters: Array,
+	next_letter_id: Array,
+	ic_day: int,
+) -> void:
+	var kuni: Array = []
+	var kuro: Array = []
+	for ch: Variant in characters:
+		if not ch is L5RCharacterData:
+			continue
+		var c: L5RCharacterData = ch
+		if CharacterStats.is_dead(c):
+			continue
+		if c.is_kuroiban:
+			kuro.append(c)
+		elif _is_kuni_witch_hunter(c):
+			kuni.append(c)
+	if kuni.is_empty() or kuro.is_empty():
+		return  # one side has no living members to share with
+
+	# Index pending undelivered letters by (recipient, topic) for dedup.
+	var en_route: Dictionary = {}
+	for lv: Variant in pending_letters:
+		if not lv is LetterData:
+			continue
+		var l: LetterData = lv
+		if not l.delivered and l.topic >= 0:
+			en_route["%d_%d" % [l.recipient_id, l.topic]] = true
+
+	for t: Variant in active_topics:
+		if not t is TopicData:
+			continue
+		var topic: TopicData = t
+		if topic.resolved or not (topic.variant in ANTI_MAHO_SHARE_VARIANTS):
+			continue
+		# Mutual: relay in whichever direction an order already knows it.
+		_relay_detection(topic.topic_id, kuni, kuro, en_route, pending_letters, next_letter_id, ic_day)
+		_relay_detection(topic.topic_id, kuro, kuni, en_route, pending_letters, next_letter_id, ic_day)
+
+
+# A source-order member who knows the topic relays it to dest-order members who
+# don't (and have no letter already en route). Mutates en_route / pending_letters.
+static func _relay_detection(
+	topic_id: int,
+	source_order: Array,
+	dest_order: Array,
+	en_route: Dictionary,
+	pending_letters: Array,
+	next_letter_id: Array,
+	ic_day: int,
+) -> void:
+	var sender: L5RCharacterData = null
+	for c: L5RCharacterData in source_order:
+		if topic_id in c.topic_pool:
+			sender = c
+			break
+	if sender == null:
+		return  # the source order does not know this detection
+
+	for c: L5RCharacterData in dest_order:
+		if topic_id in c.topic_pool:
+			continue  # already knows
+		var key: String = "%d_%d" % [c.character_id, topic_id]
+		if en_route.get(key, false):
+			continue  # a letter is already carrying it
+
+		var lid: int = next_letter_id[0]
+		next_letter_id[0] = lid + 1
+		var letter := LetterData.new()
+		letter.letter_id = lid
+		letter.sender_id = sender.character_id
+		letter.recipient_id = c.character_id
+		letter.topic = topic_id
+		letter.ic_day_sent = ic_day
+		letter.ic_day_arrival = ic_day + LetterSystem.calculate_delivery_time(
+			ANTI_MAHO_SHARE_DISTANCE, 0, 0, 0, false)
+		pending_letters.append(letter)
+		en_route[key] = true
 
 
 # -- Kaiu Engineer Standing Need (s57.41.2) ------------------------------------

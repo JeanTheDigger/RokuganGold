@@ -4748,6 +4748,40 @@ template generators it depends on. Faithful summary of the fixes that landed:
   detection bonus. All roster counts PROVISIONAL (GDD gives no size or selection
   rule). Parse-checked (class registry rebuilt via import scan); no tests per the
   no-test-code policy.
+- **s11.3.5 Crab–Scorpion anti-maho information sharing (owner-authorized 2026-06-11).**
+  s11.3.5: the Kuroiban "share information and resources with the Kuni." Owner
+  chose **mutual** sharing **via the letter pipeline (delayed)**.
+  `_process_anti_maho_info_sharing` runs daily after the maho-detection passes:
+  it gathers living Kuni (`_is_kuni_witch_hunter`) and Kuroiban (`is_kuroiban`),
+  and for each unresolved detection topic (variants `taint_suspected` +
+  `blood_evidence`) relays it from whichever order already knows it to the
+  members of the other order who don't. `_relay_detection` creates a LetterData
+  (sender = a knowing member, recipient = each lacking member, `topic` = the
+  detection topic) entering the normal letter pipeline; on delivery
+  `deliver_letter` appends the topic to the recipient's `topic_pool` (verified).
+  Deduped via `topic_pool` membership + an en-route index of pending undelivered
+  letters; no ping-pong (a recipient only learns the topic on delivery, so the
+  reverse relay finds the source order already knows it). Dead-guarded.
+  ANTI_MAHO_SHARE_DISTANCE = 3 provinces PROVISIONAL (blocked on map adjacency,
+  A16). Parse-checked; no tests per the no-test-code policy.
+- **s11.3.5 Kuroiban leader tasking (owner-authorized 2026-06-11).** Owner chose
+  the leader's tasking to **replace** the autonomous spread when a leader is
+  alive. The seasonal roaming pass was refactored: `_process_witch_hunter_self_selection`
+  → `_process_anti_maho_roaming` (orchestrator) + `_assign_hunters_to_hotspots`
+  (the extracted least-covered distributor, now parameterized by a pre-ordered
+  member list and a `source_tag`) + `_gather_roaming_members` (filter: living,
+  non-PC, maho-hunter, no real lord-assigned primary). When a living
+  `KUROIBAN_LEADER` exists, Kuroiban are gathered, sorted best-expertise-first
+  (`Lore: Shadowlands`×2 + `Lore: Theology`), and tasked via
+  `_assign_hunters_to_hotspots(..., "kuroiban_leader_tasking")` — best hunters to
+  the worst (highest-PTL least-covered) hotspots — and excluded from the general
+  spread; if the leader dies they fall back into it. Kuni/Asako always spread
+  (behavior unchanged, traced equivalent to the prior verified logic). Handoff
+  both directions via `ROAMING_SOURCES` (re-stamps the source on still-hot
+  committed primaries). A real lord primary always outranks roaming. The leader
+  is tasked like a member (hunts too); tasking is abstract central coordination
+  (no per-member comms modeled, same abstraction as the spread). Only caller
+  (seasonal, line 1434) updated. Parse-checked; no tests per the no-test-code policy.
 - **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
   feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
   the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO
