@@ -403,6 +403,10 @@ static func bootstrap_world(
 
 	_wire_adjacencies(provinces, province_name_to_id)
 
+	next_settlement_id = _create_wall_towers(
+		provinces, province_name_to_id, settlements, next_settlement_id,
+	)
+
 	_designate_hidden_temple(settlements, provinces)
 
 	var clans: Dictionary = _create_clan_data(provinces)
@@ -613,6 +617,83 @@ static func _wire_adjacencies(
 			var adj_id: int = name_to_id.get(adj_name, -1)
 			if adj_id >= 0 and not prov.adjacent_province_ids.has(adj_id):
 				prov.adjacent_province_ids.append(adj_id)
+
+
+# -- Kaiu Wall Towers (s2.4.2, s2.3 — Phase 1) --------------------------------
+# The twelve Wall Towers, numbered 1 (south-east) to 12 (north-west).
+# Distribution: Ishibei 1-5 (s2.3: "the five southernmost Wall Towers are
+# garrisoned from this province"); Ishigaki 6-9 and Yoake 10-12 (PROVISIONAL —
+# the wall continues north-west through both Crab provinces). Each entry is
+# [tower_number, province_name].
+const WALL_TOWER_DISTRIBUTION: Array = [
+	[1, "Ishibei"], [2, "Ishibei"], [3, "Ishibei"], [4, "Ishibei"], [5, "Ishibei"],
+	[6, "Ishigaki"], [7, "Ishigaki"], [8, "Ishigaki"], [9, "Ishigaki"],
+	[10, "Yoake"], [11, "Yoake"], [12, "Yoake"],
+]
+
+const WALL_TOWER_ORDINALS: Array = [
+	"First", "Second", "Third", "Fourth", "Fifth", "Sixth",
+	"Seventh", "Eighth", "Ninth", "Tenth", "Eleventh", "Twelfth",
+]
+
+# Per-tower starting state. All PROVISIONAL (owner-approved 2026-06-11,
+# "Pristine/stable"): horde attrition is a stub and Phase 1 ships without
+# maintainers, so towers start pristine + under low Shadowlands pressure and
+# stay stable through the interim until Phase 2 (roster) and Phase 3 (horde
+# spec) tighten the wall toward equilibrium.
+const WALL_TOWER_START_SI: int = 10               # pristine (+12 defense)
+const WALL_TOWER_GARRISON_PU: int = 3             # above MINIMUM_GARRISON_PU (1.0)
+const WALL_TOWER_JADE: float = 5.0                # non-critical (small-sortie min ~0.6)
+const WALL_TOWER_RICE: float = 10.0               # ~6-9 seasons of 0.35/PU drain
+const WALL_PROVINCE_SS: int = 3                   # low tier (no extra SI decay)
+
+
+## Creates the twelve Kaiu Wall Towers and marks their host provinces as wall
+## provinces (shadowlands_strength > 0 so the WallSystem engages). Appends each
+## tower to `settlements` and its province's settlement_ids. Returns the next
+## free settlement id.
+static func _create_wall_towers(
+	provinces: Dictionary,
+	province_name_to_id: Dictionary,
+	settlements: Array[SettlementData],
+	start_settlement_id: int,
+) -> int:
+	var next_id: int = start_settlement_id
+
+	# Mark the three wall provinces as facing the Shadowlands so the WallSystem
+	# (SI decay, sortie targets, horde-roll eligibility) recognises them.
+	for prov_name: String in ["Ishibei", "Ishigaki", "Yoake"]:
+		var pid: int = province_name_to_id.get(prov_name, -1)
+		if pid < 0:
+			continue
+		var province: ProvinceData = provinces[pid]
+		if province.shadowlands_strength <= 0:
+			province.shadowlands_strength = WALL_PROVINCE_SS
+
+	for entry: Array in WALL_TOWER_DISTRIBUTION:
+		var tower_number: int = entry[0]
+		var host_name: String = entry[1]
+		var host_id: int = province_name_to_id.get(host_name, -1)
+		if host_id < 0:
+			continue
+		var host_province: ProvinceData = provinces[host_id]
+
+		var tower := SettlementData.new()
+		tower.settlement_id = next_id
+		tower.settlement_name = "%s Wall Tower" % WALL_TOWER_ORDINALS[tower_number - 1]
+		tower.province_id = host_id
+		tower.settlement_type = Enums.SettlementType.WALL_TOWER
+		tower.population_pu = 0
+		tower.garrison_pu = WALL_TOWER_GARRISON_PU
+		tower.wall_si = WALL_TOWER_START_SI
+		tower.jade_stockpile = WALL_TOWER_JADE
+		tower.rice_stockpile = WALL_TOWER_RICE
+
+		settlements.append(tower)
+		host_province.settlement_ids.append(next_id)
+		next_id += 1
+
+	return next_id
 
 
 static func _create_clan_data(provinces: Dictionary) -> Dictionary:

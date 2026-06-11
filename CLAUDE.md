@@ -5025,6 +5025,43 @@ but not executed in this environment.
   These need the surveillance/strategic-review integration, IntelDB, map-distance
   data, or action-log state — none buildable without inventing.
 
+### Systems Added 2026-06-11 (Kaiu Wall — Phase 1: Tower settlements, owner-authorized)
+- **s2.4.2 / s2.3 — the twelve Wall Towers created at world-gen.** Before this,
+  no `WALL_TOWER` settlement existed at all — the entire Kaiu Wall mechanical layer
+  (SI decay/sortie/garrison-shortage escalation/horde targeting) had nothing to act
+  on. `WorldBootstrap._create_wall_towers()` (post-pass after `_wire_adjacencies`,
+  before `_designate_hidden_temple`) creates 12 `WALL_TOWER` settlements numbered
+  1 (SE) → 12 (NW), distributed: **Ishibei 1-5** (GDD-stated, s2.3: "the five
+  southernmost Wall Towers are garrisoned from this province"), **Ishigaki 6-9** and
+  **Yoake 10-12** (PROVISIONAL — wall continues NW through both Crab provinces;
+  Tower 3 = Southern Shireikan seat in Ishibei, Tower 10 = Northern Shireikan seat in
+  Yoake). The three wall provinces have `shadowlands_strength` set (was 0 — only
+  ungovernable Hiruma provinces got SS) so the WallSystem recognises them as wall
+  provinces. Towers built as `SettlementData` directly (NOT `generate_settlement`,
+  which forces civilian PU distribution + `garrison_pu = maxi(1, pu/20)`). Appended
+  to `settlements` + each host province's `settlement_ids`; ID counter threaded
+  through (`next_settlement_id` return). **Per-tower starting state — all PROVISIONAL,
+  owner-approved "Pristine/stable" (2026-06-11):** `wall_si=10` (pristine, +12
+  defense), `garrison_pu=3` (above `MINIMUM_GARRISON_PU=1.0` so the shortage
+  escalation pipeline stays dormant), `jade_stockpile=5.0` (non-critical; small-sortie
+  min ≈0.6), `rice_stockpile=10.0` (~6-9 seasons of the 0.35/PU garrison drain;
+  towers have `population_pu=0` so produce no rice), `shadowlands_strength=3` on the
+  wall provinces (low tier — no extra SI decay). **Calibration basis (owner directive
+  "analyze the rest of the code first"):** horde combat is a STUB
+  (`HordeSystem._generate_jigoku_companies`/`_generate_undead_companies` return `[]`,
+  "pending GDD spec"), so nothing attritts `garrison_pu` yet — garrison can't be sized
+  against a non-existent threat; the only live tension loop is `wall_si` vs seasonal
+  decay (4/yr base, 6/yr at SS-medium) restored by FORTIFY (+1.0, +0.5/raise). Phase 1
+  ships WITHOUT maintainers (the command roster is Phase 2) and WITHOUT real horde
+  attrition (Phase 3 / GDD spec), so towers start pristine + low-pressure to stay
+  stable through the interim. Placement edge verified: towers appended last →
+  `_assign_physical_locations` picks `target_settlements[0]` (always a civilian
+  settlement) → no civilian is auto-stationed at a tower (correct; Phase 2 stations the
+  garrison command roster). Parse-checked; no tests per the no-test-code policy.
+  DEFERRED: Phase 2 (Shireikan/Rikugunshokan/garrison command roster + engineers as
+  tower-stationed NPCs), Phase 3 (horde composition spec → real garrison attrition →
+  garrison/SI/jade re-tuning against a live threat).
+
 ### Systems Added 2026-06-11 (Kolat — succession trigger)
 - **s54.7g Master succession trigger WIRED.** The LOCKED succession resolver
   `KolatMasterSelector.evaluate_succession()` (Tranche 8, fully built + tested) was
