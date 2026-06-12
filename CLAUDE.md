@@ -3309,6 +3309,29 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 29: Way of the Willow (interrupt) — reaction set complete (2026-06-12)
+**Way of the Willow** (Air, while active): a defender may spend a Void Point to interrupt a
+declared melee attack with an immediate unarmed counterattack (once per Round). Pre-attack
+hook in execute_melee_attack (before resolve_attack): `_maybe_way_of_the_willow` resolves
+the counter directly; if it kills the attacker, the original attack is aborted
+(`interrupted_by_way_of_the_willow`). All GDD-given (VP cost, counterattack). Verified:
+the defender spent a VP and countered (attacker took 6 Wounds) before the attack resolved;
+a 2nd same-Round attack triggered no second interrupt. LIMITATION: the GDD "Move Action
+away" alternative and the "has not yet taken their Turn" gate are approximated — the NPC
+default is the counter, gated once per Round + VP.
+**All 5 reaction kiho are now wired** (Destiny's Strike post-hit, Shadowed Mountain
+pre-attack stance, Earthen Fist deferred-Disarm, Bishamon's Grasp free-grapple, Way of the
+Willow pre-attack interrupt). With this, EVERY kiho that has a tile-combat effect is wired.
+The unwired remainder are: character-level non-combat buffs needing a deferred character-kiho
+system (Steal the Air Dragon, Eye of the Eagle, Earth Needs No Eyes, Harmony in/of the
+Mind/Earth, Wholeness in All, Eight Directions Awareness, Knowledge from Within, The Wind's
+Vision, Cleansing Spirit, The Mind's Fire, Harmony of the Mind, Flee the Darkness); facing-
+blocked arc/cone (Slap the Wave, Inari's Wrath); no-consumer (Dharma Technique spell-defense,
+Striking Through the Void kept-dice damage, Silent Solace, Channel the Fire Dragon); s54-blocked
+(Rebuke of the Heavens, Sever the Dark Lord's Touch); no-biome (Touch the Void Dragon); and
+marginal object/terrain effects (Breaking Blow, Waves in All Things, Song of the World). None
+is blocked on an unknown value.
+
 ### s38 Kiho — effect registry, tranche 28: Bishamon's Grasp (free grapple vs attackers) (2026-06-12)
 **Bishamon's Grasp** (Earth, while active, Defense/Full Defense only): on the caster's
 Turn, free-grapple an opponent who attacked the caster since their last Turn (overrides

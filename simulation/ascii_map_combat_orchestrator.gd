@@ -741,6 +741,12 @@ static func execute_melee_attack(
 	if _chebyshev(apos, tpos) > melee_range:
 		return {"success": false, "reason": "out_of_melee_range"}
 
+	# Way of the Willow (s38 Air): the defender may spend a Void Point to interrupt the
+	# declared attack with an immediate unarmed counterattack (once per Round). If the
+	# counter kills the attacker, the original attack is aborted.
+	if _maybe_way_of_the_willow(state, target, t_p, attacker, a_p, dice_engine):
+		return {"success": true, "interrupted_by_way_of_the_willow": true, "attacker_dead": true}
+
 	# Shadowed Mountain (s38 Earth): a defender with it active may immediately enter Full
 	# Defense Stance just before being attacked (once per activation) — raising this
 	# attack's Armor TN. The stance change is sticky (they remain in Full Defense).
@@ -2067,6 +2073,43 @@ static func _knockback_target(state: MapCombatState, target_id: int, from_pos: V
 		cur = nxt
 	state.positions[target_id] = cur
 	return cur
+
+
+## Way of the Willow (s38 Air): a defender may spend a Void Point to interrupt a declared
+## melee attack with an immediate unarmed counterattack (resolved directly, once per Round).
+## Returns true if the counter killed the attacker (the caller aborts the original attack).
+## LIMITATION: the GDD "Move Action away" alternative and the "has not yet taken their Turn"
+## gate are approximated — the NPC default is the counterattack, gated once per Round + VP.
+static func _maybe_way_of_the_willow(
+	state: MapCombatState,
+	defender: L5RCharacterData,
+	d_p: IndividualCombat.Participant,
+	attacker: L5RCharacterData,
+	a_p: IndividualCombat.Participant,
+	dice_engine: DiceEngine,
+) -> bool:
+	if CharacterStats.is_dead(defender) or CharacterStats.is_dead(attacker):
+		return false
+	if "Way of the Willow" not in d_p.active_kiho:
+		return false
+	if d_p.kata_used_this_round.get("way_of_the_willow", false):
+		return false
+	if defender.current_void_points < 1:
+		return false
+	d_p.kata_used_this_round["way_of_the_willow"] = true
+	defender.current_void_points -= 1
+	var armor_tn: int = IndividualCombat.get_armor_tn(attacker, a_p, dice_engine, true, false, "unarmed")
+	var atk: Dictionary = IndividualCombat.resolve_attack(
+		defender, d_p, "unarmed", armor_tn, 0, dice_engine, false, false, false, "", {"opponent_clan": attacker.clan})
+	if atk.get("hit", false):
+		var dmg: Dictionary = IndividualCombat.resolve_damage(defender, "unarmed", 0, 0, dice_engine, d_p)
+		var red: int = IndividualCombat.total_defender_reduction(attacker, a_p, defender, d_p, "unarmed")
+		WoundSystem.apply_damage(attacker, dmg["raw_damage"], red)
+	state.combat_log.append({
+		"type": "way_of_the_willow_interrupt", "round": state.combat.round_number,
+		"defender_id": defender.character_id, "attacker_id": attacker.character_id,
+		"hit": atk.get("hit", false)})
+	return CharacterStats.is_dead(attacker)
 
 
 ## Destiny's Strike (s38 Fire): when struck by a melee attack, a defender with the kiho
