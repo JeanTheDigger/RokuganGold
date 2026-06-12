@@ -3220,8 +3220,14 @@ selection). Combat effects are now **wired into IndividualCombat** (s40), not st
 `_get_kata_initiative_modifiers`, `_get_kata_armor_tn_bonus`, `_get_kata_attack_modifiers`,
 `_get_kata_damage_modifiers`, `_get_kata_wound_penalty_reduction`, `get_kata_reduction_bonus`,
 `get_kata_opponent_reduction_penalty` resolve effect_ids into Armor TN / attack / damage /
-Initiative / wound-penalty / Reduction modifiers, gated by stance and maneuver. 37 of 42
-distinct kata effect_ids are wired. **`multi_world_empty_void_attack` (The World Is Empty) wired on
+Initiative / wound-penalty / Reduction modifiers, gated by stance and maneuver. 38 of 42
+distinct kata effect_ids are wired. **`multi_standing_heavens_void_reroll` (Standing on the Heavens)
+wired as a defender reaction (2026-06-12):** in `execute_melee_attack`, when an attack hits,
+`_maybe_standing_on_heavens` lets the struck defender spend 1 Void Point (Free Action, once/Round
+via `kata_used_this_round`) to force the attacker to reroll — the reroll's outcome (hit or miss)
+replaces the original. NPC-only auto-use (a defensive reflex when a VP is available); a PC defender
+is skipped (`is_pc` guard) pending the turn-based reaction UI. All values GDD-given (1 VP, reroll).
+**`multi_world_empty_void_attack` (The World Is Empty) wired on
 the timed-modifier layer (2026-06-12, activation cost = Simple Action, owner-set):**
 `AsciiMapCombatOrchestrator.execute_activate_world_is_empty` (Simple action; requires the kata + ≥1
 Void Point; not re-activatable while active) freezes X = current Void Points and adds an
@@ -3261,8 +3267,7 @@ it to the Free-action move budget and is now the single source used by the NPC a
 move paths (the player-facing turn-based move UI should adopt it too). SIMPLE/FULL move budgets
 unchanged (the GDD grants the bonus to the Free action only). Passive — no AI/UI caller needed;
 any NPC/companion bushi or monk in Attack Stance who knows the kata gets the extra tile
-automatically. **5 remain deferred** (each needs a specific hook the core resolve lacks):
-`multi_standing_heavens_void_reroll` (when-struck defender-reaction hook),
+automatically. **4 remain deferred** (each needs infra/AI the core resolve lacks):
 `water_lion_ally_initiative` (Reactions-Stage ally-initiative action), `water_unicorn_mount_bonus`
 (no mount system on the map), `multi_empire_edge_skill_bonus` (needs a stored chosen-skill field),
 `water_stealth_movement` (near-no-op on the tile map — "does not change maximum distance").

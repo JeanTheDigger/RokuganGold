@@ -628,6 +628,42 @@ static func _process_world_is_empty_expiry(
 				c.current_void_points = maxi(0, c.current_void_points - 1)
 
 
+# Standing on the Heavens (s30a, multi_standing_heavens_void_reroll). GDD-given.
+const SOH_USED_KEY: String = "multi_standing_heavens_void_reroll"
+
+## Standing on the Heavens (s30a) defender reaction: once per Round, when struck,
+## the defender may spend 1 Void Point (Free Action) to force the attacker to
+## reroll the attack. NPC-only auto-use (a defensive reflex when a VP is available);
+## a PC defender chooses via the future turn-based reaction UI, so PCs are skipped.
+## Returns {rerolled, result} when the reroll fires, else {}.
+static func _maybe_standing_on_heavens(
+	defender: L5RCharacterData,
+	t_p: IndividualCombat.Participant,
+	attacker: L5RCharacterData,
+	a_p: IndividualCombat.Participant,
+	weapon_name: String,
+	armor_tn: int,
+	raises: int,
+	maneuver: String,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if defender.is_pc:
+		return {}  # PC reactions are an explicit UI choice, not auto-spent
+	if "Standing on the Heavens" not in defender.katas:
+		return {}
+	if t_p.kata_used_this_round.has(SOH_USED_KEY):
+		return {}  # once per Round
+	if not VoidSystem.can_spend(defender):
+		return {}
+	VoidSystem.spend(defender)  # Free Action; spends 1 Void Point
+	t_p.kata_used_this_round[SOH_USED_KEY] = true
+	var new_result: Dictionary = IndividualCombat.resolve_attack(
+		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
+		false, false, false, maneuver, {"opponent_clan": defender.clan}
+	)
+	return {"rerolled": true, "result": new_result}
+
+
 static func execute_melee_attack(
 	state: MapCombatState,
 	attacker_id: int,
@@ -687,6 +723,16 @@ static func execute_melee_attack(
 		{"opponent_clan": target.clan}
 	)
 
+	# Standing on the Heavens (s30a) defender reaction: a struck defender may force
+	# a reroll of the attack (spends 1 VP). The reroll's outcome replaces the original.
+	var soh_rerolled: bool = false
+	if result.get("hit", false):
+		var soh: Dictionary = _maybe_standing_on_heavens(
+			target, t_p, attacker, a_p, weapon_name, armor_tn, raises, maneuver, dice_engine)
+		if soh.get("rerolled", false):
+			result = soh["result"]
+			soh_rerolled = true
+
 	var log_entry: Dictionary = {
 		"type": "melee_attack",
 		"round": state.combat.round_number,
@@ -699,6 +745,8 @@ static func execute_melee_attack(
 		"roll": result.get("roll", 0),
 		"target_tn": armor_tn,
 	}
+	if soh_rerolled:
+		log_entry["standing_heavens_reroll"] = true
 
 	if result.get("hit", false):
 		var dmg_result: Dictionary = _apply_hit(state, attacker, a_p, target, weapon_name, raises, maneuver, result, dice_engine)
