@@ -733,7 +733,12 @@ static func execute_melee_attack(
 	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
 	if apos.x < 0 or tpos.x < 0:
 		return {"success": false, "reason": "position_unknown"}
-	if _chebyshev(apos, tpos) > MELEE_RANGE_TILES:
+	# Strike Through the Wind (s38 Air): unarmed melee attacks reach School Rank ×25 ft
+	# (= ×5 tiles) by transmitting force through the air, while the kiho is active.
+	var melee_range: int = MELEE_RANGE_TILES
+	if (weapon_name == "" or weapon_name == "unarmed") and "Strike Through the Wind" in a_p.active_kiho:
+		melee_range = maxi(MELEE_RANGE_TILES, CharacterStats.get_insight_rank(attacker) * 5)
+	if _chebyshev(apos, tpos) > melee_range:
 		return {"success": false, "reason": "out_of_melee_range"}
 
 	# Shadowed Mountain (s38 Earth): a defender with it active may immediately enter Full

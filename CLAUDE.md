@@ -3309,6 +3309,14 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 24: Strike Through the Wind (extended range) (2026-06-12)
+**Strike Through the Wind** (Air, while active): unarmed melee attacks reach School Rank
+×25 ft (= ×5 tiles) by transmitting force through the air. Wired in execute_melee_attack's
+range check: for an unarmed attack with the kiho active, `melee_range = Insight Rank × 5`
+tiles instead of 1. All GDD-given. Verified: a target 6 tiles away was out of range
+without the kiho, reachable with it (School Rank 3 → 15-tile range). LIMITATION: the GDD
+"Complex Action" qualifier is inherent (melee attacks already cost a Complex action).
+
 ### s38 Kiho — effect registry, tranche 23: Earthen Fist + Root the Mountain (2026-06-12)
 Two reactive/maneuver-layer kiho.
 - **Earthen Fist** (Earth, while active): when an opponent's melee attack against the
