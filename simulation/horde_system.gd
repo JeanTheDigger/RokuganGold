@@ -103,6 +103,15 @@ const ASSAULT_SI_HIT: Dictionary = {
 	Enums.HordeBattleOutcome.DEFENDER_OVERRUN: 4,
 }
 
+## Garrison casualty fraction (health lost / starting health) that distinguishes
+## the s2.4.5 defender-victory SI tiers. The GDD names −1 as "pristine tower barely
+## notices" and −3 as "garrison badly damaged"; garrison damage is therefore the
+## signal. Thresholds owner-set 2026-06-12 ("Light" scheme): <10% → Decisive (−1),
+## 10–33% → Contested (−2), >33% (garrison survives) → Narrow (−3).
+const ASSAULT_DECISIVE_CASUALTY_FRAC: float = 0.10
+const ASSAULT_CONTESTED_CASUALTY_FRAC: float = 0.33
+
+
 
 # -- Horde Frequency Roll (s2.4.4 — LOCKED) ------------------------------------
 
@@ -463,19 +472,33 @@ static func horde_companies_to_battle_states(
 
 # -- Horde Assault Combat (s2.4.5, s2.4.7) ------------------------------------
 
-## Map an ArmyCombatSystem victor string + round data to HordeBattleOutcome.
-## Per s2.4.5: outcome determines SI hit applied after the battle.
-## DISABLED: GDD says "routed quickly" for decisive but does not specify a
-## round threshold. All defender victories map to CONTESTED_BATTLE until
-## GDD specifies the "quickly" criterion.
+## Map an ArmyCombatSystem result to a HordeBattleOutcome (s2.4.5).
+## The garrison is the defender side (resolve_battle(horde, garrison)). A garrison
+## loss/rout is a breach (−4); otherwise the SI tier is chosen by how badly the
+## garrison was mauled (GDD: −1 "pristine tower barely notices", −3 "garrison badly
+## damaged"). This makes the SI hit self-correcting — a healthy tower shrugs off an
+## assault, a battered one bleeds — and matters even when routing-immune Bakemono
+## fight the battle to a "draw" rather than being destroyed.
 static func _map_battle_outcome(battle_result: Dictionary, _rounds: int) -> int:
 	var victor: String = battle_result.get("victor", "draw")
-	if victor == "defender":
-		return Enums.HordeBattleOutcome.CONTESTED_BATTLE
-	elif victor == "attacker":
+	if victor == "attacker":
+		# Garrison destroyed or routed → breach condition.
 		return Enums.HordeBattleOutcome.DEFENDER_OVERRUN
+
+	# Garrison held. Tier by its casualty fraction.
+	var lost: int = 0
+	var total: int = 0
+	for bc: Dictionary in battle_result.get("defender_states", []):
+		total += bc["starting_health"]
+		lost += bc["starting_health"] - bc["current_health"]
+	var frac: float = (float(lost) / float(total)) if total > 0 else 0.0
+
+	if frac < ASSAULT_DECISIVE_CASUALTY_FRAC:
+		return Enums.HordeBattleOutcome.DECISIVE_DEFENDER_VICTORY
+	elif frac < ASSAULT_CONTESTED_CASUALTY_FRAC:
+		return Enums.HordeBattleOutcome.CONTESTED_BATTLE
 	else:
-		# Draw: garrison badly damaged but horde stopped.
+		# Garrison survived but was badly damaged.
 		return Enums.HordeBattleOutcome.ATTACKER_PUSHED_BACK
 
 

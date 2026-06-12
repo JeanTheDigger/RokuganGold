@@ -5118,12 +5118,16 @@ but not executed in this environment.
   gen + sortie scaling correct (Jigoku/Undead Str-2 = 9 companies, Maho-tsukai present; sortie
   SS3→1 / SS6→2 / SS9→3+ogre / SS12→4+ogre). Assault casualties scale with degrading SI (SI10→0
   health, SI6→2, SI3→77, SI0→86; garrison-0 → OVERRUN). Redeployment moved +2 PU from the
-  highest-surplus Tower to a drained one (30% cap). **TUNING FINDING (not a bug, needs owner
-  spec):** every *defended* assault resolves to PUSHED_BACK (SI −3) regardless of garrison
-  strength — DECISIVE (−1) and CONTESTED (−2) are unreachable because routing-immune Bakemono
-  survive the round cap, so the battle is a "draw". A strong garrison only reduces casualties,
-  not the SI hit. Defining the s2.4.5 "routed quickly"/decisive criterion (GDD-undefined — the
-  `_map_battle_outcome` DISABLED note) would let a dominant garrison earn a lighter SI hit.
+  highest-surplus Tower to a drained one (30% cap). **TUNING FINDING — RESOLVED 2026-06-12.**
+  The smoke showed every *defended* assault resolving to PUSHED_BACK (SI −3) regardless of
+  garrison strength, because `_map_battle_outcome` keyed on the `victor` string and routing-immune
+  Bakemono fight to a "draw". Fixed by keying the defender-victory SI tier on **garrison casualty
+  fraction** (the GDD's own "garrison badly damaged" = −3 / "pristine tower barely notices" = −1
+  signal): garrison loss <10% → Decisive (−1), 10–33% → Contested (−2), >33% surviving → Narrow
+  (−3); garrison destroyed/routed → Breach (−4). Thresholds owner-set ("Light" scheme, 2026-06-12)
+  as `HordeSystem.ASSAULT_DECISIVE_CASUALTY_FRAC`/`ASSAULT_CONTESTED_CASUALTY_FRAC`. Now
+  self-correcting and garrison-sensitive — validated: SI10/SI6 → −1, SI3/SI0 → −2, garrison-0 →
+  breach. DECISIVE/CONTESTED are now reachable (were dead).
 
 ### Systems Added 2026-06-12 (Kaiu Wall — Phase 3: live horde combat, owner-authorized PROVISIONAL)
 - **Horde composition un-stubbed + sortie/assault combat made live + Shireikan redeployment.**
