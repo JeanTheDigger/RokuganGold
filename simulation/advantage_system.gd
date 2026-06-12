@@ -113,6 +113,190 @@ static func get_disadvantage(character: L5RCharacterData, type: Enums.Disadvanta
 
 
 # ---------------------------------------------------------------------------
+# Advantage / Disadvantage category + point catalog (transcribed from GDD s45).
+# category ∈ {Mental, Physical, Social, Spiritual, Material, Mystical, Varies,
+# compound "A/B", or "" when s45 gives none — e.g. Wanderer}. points = base point
+# cost (0 = variable; use the held entry's rank). Used by the s38 Disadvantage kiho.
+# ---------------------------------------------------------------------------
+
+const ADVANTAGE_CATALOG: Dictionary = {
+	Enums.Advantage.ABSOLUTE_DIRECTION: {"category": "Mental", "points": 1},
+	Enums.Advantage.ALLIES: {"category": "Social", "points": 0},
+	Enums.Advantage.BALANCE: {"category": "Mental", "points": 2},
+	Enums.Advantage.BATTLE_HEALING: {"category": "Mystical", "points": 5},
+	Enums.Advantage.BLACKMAIL: {"category": "Social", "points": 0},
+	Enums.Advantage.BLAND: {"category": "Physical", "points": 2},
+	Enums.Advantage.BLISSFUL_BETROTHAL: {"category": "Social", "points": 3},
+	Enums.Advantage.BLOOD_OF_OSANO_WO: {"category": "Spiritual", "points": 4},
+	Enums.Advantage.CHOSEN_BY_THE_ORACLES: {"category": "Spiritual", "points": 6},
+	Enums.Advantage.CLEAR_THINKER: {"category": "Mental", "points": 3},
+	Enums.Advantage.CRAB_HANDS: {"category": "Physical", "points": 3},
+	Enums.Advantage.CRAFTY: {"category": "Mental", "points": 3},
+	Enums.Advantage.DANGEROUS_BEAUTY: {"category": "Physical", "points": 3},
+	Enums.Advantage.DAREDEVIL: {"category": "Mental", "points": 3},
+	Enums.Advantage.DARK_PARAGON: {"category": "Mental", "points": 5},
+	Enums.Advantage.DARLING_OF_THE_COURT: {"category": "Social", "points": 2},
+	Enums.Advantage.DIFFERENT_SCHOOL: {"category": "Social", "points": 5},
+	Enums.Advantage.ELEMENTAL_BLESSING: {"category": "Spiritual", "points": 4},
+	Enums.Advantage.ENLIGHTENED: {"category": "Spiritual", "points": 6},
+	Enums.Advantage.FAME: {"category": "Social", "points": 3},
+	Enums.Advantage.FORBIDDEN_KNOWLEDGE: {"category": "Mental", "points": 5},
+	Enums.Advantage.FRIENDLY_KAMI: {"category": "Spiritual", "points": 5},
+	Enums.Advantage.FRIEND_OF_THE_BROTHERHOOD: {"category": "Spiritual", "points": 5},
+	Enums.Advantage.FRIEND_OF_THE_ELEMENTS: {"category": "Spiritual", "points": 4},
+	Enums.Advantage.GAIJIN_GEAR: {"category": "Material", "points": 5},
+	Enums.Advantage.GENTRY: {"category": "Material", "points": 0},
+	Enums.Advantage.GREAT_DESTINY: {"category": "Spiritual", "points": 5},
+	Enums.Advantage.GREAT_POTENTIAL: {"category": "Varies", "points": 5},
+	Enums.Advantage.HANDS_OF_STONE: {"category": "Physical", "points": 6},
+	Enums.Advantage.HEARTLESS: {"category": "Mental", "points": 4},
+	Enums.Advantage.HEART_OF_VENGEANCE: {"category": "Social", "points": 5},
+	Enums.Advantage.HERO_OF_THE_PEOPLE: {"category": "Social", "points": 2},
+	Enums.Advantage.HIGHER_PURPOSE: {"category": "Mental", "points": 3},
+	Enums.Advantage.IMPERIAL_SCRIBE: {"category": "Social", "points": 4},
+	Enums.Advantage.IMPERIAL_SPOUSE: {"category": "Social", "points": 5},
+	Enums.Advantage.INHERITANCE: {"category": "Material", "points": 5},
+	Enums.Advantage.INHERITANCE_ASAHINA_BLADE: {"category": "Material", "points": 9},
+	Enums.Advantage.INHERITANCE_KOBUNE: {"category": "Material", "points": 10},
+	Enums.Advantage.INHERITANCE_TRAINED_FALCON: {"category": "Material", "points": 2},
+	Enums.Advantage.INHERITANCE_WATER_HAMMER_ARMOR: {"category": "Material", "points": 0},
+	Enums.Advantage.INNER_GIFT: {"category": "Spiritual", "points": 7},
+	Enums.Advantage.IRREPROACHABLE: {"category": "Mental", "points": 2},
+	Enums.Advantage.ISHIKEN_DO: {"category": "Spiritual", "points": 8},
+	Enums.Advantage.LANGUAGES: {"category": "Mental", "points": 1},
+	Enums.Advantage.LARGE: {"category": "Physical", "points": 4},
+	Enums.Advantage.MAGIC_RESISTANCE: {"category": "Spiritual", "points": 0},
+	Enums.Advantage.MEDIUM: {"category": "Spiritual", "points": 4},
+	Enums.Advantage.MULTIPLE_SCHOOLS: {"category": "Social", "points": 10},
+	Enums.Advantage.NAGA_ANCESTRY: {"category": "Physical/Spiritual", "points": 7},
+	Enums.Advantage.PARAGON: {"category": "Mental", "points": 7},
+	Enums.Advantage.PERCEIVED_HONOR: {"category": "Social", "points": 0},
+	Enums.Advantage.PRECISE_MEMORY: {"category": "Mental", "points": 3},
+	Enums.Advantage.PRODIGY: {"category": "Physical", "points": 12},
+	Enums.Advantage.QUICK: {"category": "Physical", "points": 6},
+	Enums.Advantage.QUICK_HEALER: {"category": "Physical", "points": 3},
+	Enums.Advantage.READ_LIPS: {"category": "Mental", "points": 4},
+	Enums.Advantage.REINCARNATED: {"category": "Spiritual", "points": 6},
+	Enums.Advantage.SACROSANCT: {"category": "Social", "points": 4},
+	Enums.Advantage.SAGE: {"category": "Mental", "points": 4},
+	Enums.Advantage.SAGE_OF_SWORD_AND_FAN: {"category": "Mental", "points": 7},
+	Enums.Advantage.SENSATION: {"category": "Social", "points": 3},
+	Enums.Advantage.SERVANT: {"category": "Material", "points": 5},
+	Enums.Advantage.SEVEN_FORTUNES_BLESSING: {"category": "Spiritual", "points": 4},
+	Enums.Advantage.SHADOWED_HEART: {"category": "Mental", "points": 5},
+	Enums.Advantage.SILENT: {"category": "Physical", "points": 3},
+	Enums.Advantage.SOCIAL_POSITION: {"category": "Social", "points": 6},
+	Enums.Advantage.SOUL_OF_ARTISTRY: {"category": "Mental", "points": 4},
+	Enums.Advantage.SPY_NETWORK: {"category": "Social", "points": 8},
+	Enums.Advantage.STOLEN_IDENTITY: {"category": "Social", "points": 6},
+	Enums.Advantage.STRATEGIST: {"category": "Mental", "points": 5},
+	Enums.Advantage.STRENGTH_OF_THE_EARTH: {"category": "Physical", "points": 3},
+	Enums.Advantage.STUDENT_OF_SHOURIDO: {"category": "Mental", "points": 9},
+	Enums.Advantage.TACTICIAN: {"category": "Mental", "points": 4},
+	Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS: {"category": "Spiritual", "points": 5},
+	Enums.Advantage.VIRTUOUS: {"category": "Mental", "points": 3},
+	Enums.Advantage.VOICE: {"category": "Physical", "points": 3},
+	Enums.Advantage.VOID_VERSATILITY: {"category": "Spiritual", "points": 4},
+	Enums.Advantage.WARY: {"category": "Mental", "points": 3},
+	Enums.Advantage.WATANU_TRAINED: {"category": "Mental", "points": 1},
+	Enums.Advantage.WAY_OF_THE_LAND: {"category": "Mental", "points": 2},
+	Enums.Advantage.WEALTHY: {"category": "Material", "points": 0},
+	Enums.Advantage.WELL_CONNECTED: {"category": "Social", "points": 0},
+}
+
+const DISADVANTAGE_CATALOG: Dictionary = {
+	Enums.Disadvantage.ANACHRONISM: {"category": "Mental/Social", "points": 2},
+	Enums.Disadvantage.ANTISOCIAL: {"category": "Social", "points": 0},
+	Enums.Disadvantage.ASCETIC: {"category": "Mental", "points": 2},
+	Enums.Disadvantage.BAD_EYESIGHT: {"category": "Physical", "points": 3},
+	Enums.Disadvantage.BAD_FORTUNE: {"category": "Spiritual", "points": 3},
+	Enums.Disadvantage.BAD_HEALTH: {"category": "Physical", "points": 4},
+	Enums.Disadvantage.BITTER_BETROTHAL: {"category": "Social", "points": 2},
+	Enums.Disadvantage.BLACKMAILED: {"category": "Social", "points": 0},
+	Enums.Disadvantage.BLACK_SHEEP: {"category": "Social", "points": 3},
+	Enums.Disadvantage.BLIND: {"category": "Physical", "points": 6},
+	Enums.Disadvantage.BOUNTY: {"category": "Social", "points": 0},
+	Enums.Disadvantage.BRASH: {"category": "Mental", "points": 3},
+	Enums.Disadvantage.CANT_LIE: {"category": "Mental", "points": 2},
+	Enums.Disadvantage.CAST_OUT: {"category": "Social", "points": 0},
+	Enums.Disadvantage.COMPULSION: {"category": "Mental", "points": 2},
+	Enums.Disadvantage.CONSUMED: {"category": "Mental", "points": 0},
+	Enums.Disadvantage.CONTRARY: {"category": "Mental", "points": 3},
+	Enums.Disadvantage.CURSED_BY_THE_REALM: {"category": "Spiritual", "points": 4},
+	Enums.Disadvantage.DARK_SECRET: {"category": "Social", "points": 4},
+	Enums.Disadvantage.DEBT: {"category": "Material/Social", "points": 0},
+	Enums.Disadvantage.DISBELIEVER: {"category": "Mental", "points": 3},
+	Enums.Disadvantage.DISHONORED: {"category": "Social", "points": 5},
+	Enums.Disadvantage.DISTURBING_COUNTENANCE: {"category": "Physical", "points": 3},
+	Enums.Disadvantage.DOUBT: {"category": "Mental", "points": 4},
+	Enums.Disadvantage.ELEMENTAL_IMBALANCE: {"category": "Spiritual", "points": 0},
+	Enums.Disadvantage.EPILEPSY: {"category": "Physical", "points": 4},
+	Enums.Disadvantage.FAILURE_OF_BUSHIDO: {"category": "Mental", "points": 0},
+	Enums.Disadvantage.FORCED_RETIREMENT: {"category": "Social", "points": 4},
+	Enums.Disadvantage.FRAIL_MIND: {"category": "Mental", "points": 3},
+	Enums.Disadvantage.GAIJIN_NAME: {"category": "Social", "points": 1},
+	Enums.Disadvantage.GREEDY: {"category": "Mental", "points": 3},
+	Enums.Disadvantage.GULLIBLE: {"category": "Mental", "points": 4},
+	Enums.Disadvantage.HOSTAGE: {"category": "Social", "points": 3},
+	Enums.Disadvantage.IDEALISTIC: {"category": "Mental", "points": 2},
+	Enums.Disadvantage.INFAMOUS: {"category": "Social", "points": 2},
+	Enums.Disadvantage.INSENSITIVE: {"category": "Mental", "points": 2},
+	Enums.Disadvantage.JEALOUSY: {"category": "Mental", "points": 3},
+	Enums.Disadvantage.LAME: {"category": "Physical", "points": 4},
+	Enums.Disadvantage.LECHERY: {"category": "Social", "points": 2},
+	Enums.Disadvantage.LOST_LOVE: {"category": "Mental", "points": 3},
+	Enums.Disadvantage.LOW_PAIN_THRESHOLD: {"category": "Physical", "points": 4},
+	Enums.Disadvantage.MEMBER_OF_CHRYSANTHEMUM_COURT: {"category": "Social", "points": 5},
+	Enums.Disadvantage.MISSING_LIMB: {"category": "Physical", "points": 6},
+	Enums.Disadvantage.MOMOKU: {"category": "Spiritual", "points": 8},
+	Enums.Disadvantage.OBLIGATION: {"category": "Social", "points": 0},
+	Enums.Disadvantage.OBTUSE: {"category": "Mental", "points": 3},
+	Enums.Disadvantage.OVERCONFIDENT: {"category": "Mental", "points": 3},
+	Enums.Disadvantage.PERMANENT_WOUND: {"category": "Physical", "points": 4},
+	Enums.Disadvantage.PHOBIA: {"category": "Mental", "points": 1},
+	Enums.Disadvantage.RUMORMONGER: {"category": "Social", "points": 4},
+	Enums.Disadvantage.SEVEN_FORTUNES_CURSE: {"category": "Spiritual", "points": 3},
+	Enums.Disadvantage.SHADOWLANDS_TAINT: {"category": "Spiritual", "points": 4},
+	Enums.Disadvantage.SLEEPER_AGENT: {"category": "Mental", "points": 5},
+	Enums.Disadvantage.SMALL: {"category": "Physical", "points": 3},
+	Enums.Disadvantage.SOCIAL_DISADVANTAGE: {"category": "Social", "points": 3},
+	Enums.Disadvantage.SOFT_HEARTED: {"category": "Mental", "points": 2},
+	Enums.Disadvantage.SWORN_ENEMY: {"category": "Social", "points": 3},
+	Enums.Disadvantage.TOUCH_OF_THE_VOID: {"category": "Spiritual", "points": 3},
+	Enums.Disadvantage.TRUE_LOVE: {"category": "Mental", "points": 3},
+	Enums.Disadvantage.UNCENTERED: {"category": "Spiritual", "points": 2},
+	Enums.Disadvantage.WANDERER: {"category": "", "points": 2},
+	Enums.Disadvantage.WEAKNESS: {"category": "Physical", "points": 6},
+	Enums.Disadvantage.WRATH_OF_THE_KAMI: {"category": "Spiritual", "points": 3},
+}
+
+
+## Category string for an Advantage type (s45). "" if unknown.
+static func get_advantage_category(t: Enums.Advantage) -> String:
+	return ADVANTAGE_CATALOG.get(t, {}).get("category", "")
+
+
+## Category string for a Disadvantage type (s45). "" if unknown.
+static func get_disadvantage_category(t: Enums.Disadvantage) -> String:
+	return DISADVANTAGE_CATALOG.get(t, {}).get("category", "")
+
+
+## Effective point value of a held Advantage: the catalog base, or the entry's rank
+## when the catalog lists it as variable (points 0).
+static func get_advantage_points(adv: AdvantageData) -> int:
+	var base: int = int(ADVANTAGE_CATALOG.get(adv.advantage_type, {}).get("points", 0))
+	return base if base > 0 else maxi(1, adv.rank)
+
+
+## Effective point value of a held Disadvantage: the catalog base, or the entry's
+## rank when the catalog lists it as variable (points 0).
+static func get_disadvantage_points(dis: DisadvantageData) -> int:
+	var base: int = int(DISADVANTAGE_CATALOG.get(dis.disadvantage_type, {}).get("points", 0))
+	return base if base > 0 else maxi(1, dis.rank)
+
+
+
+# ---------------------------------------------------------------------------
 # Skill-roll bonus aggregator
 # Returns {rolled: int, kept: int, free_raises: int}.
 # Callers add returned values to their bonus_rolled / bonus_kept / flat_bonus.
