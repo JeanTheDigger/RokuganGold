@@ -1632,6 +1632,51 @@ static func _npc_maybe_activate_kiho(
 	return {}
 
 
+## Thunder's Word (s38 Air, Complex Action): the caster shouts a word of power; every
+## OTHER living combatant capable of hearing (the whole skirmish — a power-word shout)
+## makes a Contested Air Roll against a single caster roll, and those who fail are Dazed.
+## Affects allies too (GDD: "All living beings capable of hearing"). Not auto-used by the
+## NPC offensive hook (it is self-harming). Returns the caster roll + the Dazed ids.
+static func execute_thunders_word(
+	state: MapCombatState,
+	caster_id: int,
+	caster: L5RCharacterData,
+	chars_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(caster):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(caster_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if not caster.kiho.has("Thunder's Word"):
+		return {"success": false, "reason": "kiho_not_known"}
+	if ts.is_down_restricted(CharacterStats.get_wound_level(caster)):
+		return {"success": false, "reason": "down_only_free_actions"}
+	if not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_action"}
+	if not state.combat.participants.has(caster_id):
+		return {"success": false, "reason": "participant_missing"}
+	ts.consume_complex()
+	var air: int = maxi(1, CharacterStats.get_ring_value(caster, Enums.Ring.AIR))
+	var caster_roll: int = dice_engine.roll_and_keep(air, air, true).total
+	var dazed: Array = []
+	for cid: int in state.combat.participants:
+		if cid == caster_id:
+			continue
+		var tc: L5RCharacterData = chars_by_id.get(cid, null)
+		if tc == null or CharacterStats.is_dead(tc):
+			continue
+		var ta: int = maxi(1, CharacterStats.get_ring_value(tc, Enums.Ring.AIR))
+		if dice_engine.roll_and_keep(ta, ta, true).total < caster_roll:
+			IndividualCombat.apply_condition(state.combat.participants[cid], IndividualCombat.CONDITION_DAZED)
+			dazed.append(cid)
+	state.combat_log.append({
+		"type": "thunders_word", "round": state.combat.round_number,
+		"caster_id": caster_id, "caster_roll": caster_roll, "dazed": dazed})
+	return {"success": true, "caster_roll": caster_roll, "dazed": dazed}
+
+
 ## The Body is an Anvil (s38 Fire): on a landed unarmed strike, the anvil-caster's
 ## burning skin deals Fire Ring Wounds to whoever touches them. If the DEFENDER has
 ## it active, the unarmed attacker is burned; if the ATTACKER has it active, the

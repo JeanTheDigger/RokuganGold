@@ -3309,6 +3309,22 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 14: Thunder's Word (AoE Daze) (2026-06-12)
+First AoE kiho — establishes the standalone non-atemi kiho action pattern in the
+orchestrator. **Thunder's Word** (Air, Complex Action): `execute_thunders_word` — the
+caster makes one Air roll; every OTHER living combatant (the whole skirmish — a
+power-word shout is heard by all, allies included per GDD "All living beings capable of
+hearing") makes a Contested Air Roll against it, and those who fail are Dazed. The caster
+is excluded. Consumes the Complex action. Not added to the NPC offensive hook (it is
+self-harming — Dazes allies); reachable via the execute path (PC use / deliberate NPC).
+Reuses the Dazed condition (roll-recovered — the GDD "for Air Ring Rounds" is the known
+flat-vs-timed condition limitation). All GDD-given (Contested Air, Dazed). Verified: an
+Air-6 caster rolled 39; two Air-1 combatants both Dazed, the caster not, Complex consumed.
+DEFERRED — remaining AoE/positional kiho need data the tile layer lacks: Slap the Wave +
+Inari's Wrath need **facing direction** (arc/cone — not tracked); Hurricane Palm needs
+**grid knockback**; the reaction kiho need a true **interrupt mechanism** (advance_round_reactions
+is only a recovery pass).
+
 ### s38 Kiho — effect registry, tranche 13: non-atemi combat buffs (2026-06-12)
 First non-atemi kiho with real tile-combat effects (beyond the 5 passive active-buffs).
 - **Musubi** (Water): while active (staff in motion), Armor TN += Water Ring + Staves
