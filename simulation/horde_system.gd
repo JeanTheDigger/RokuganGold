@@ -131,7 +131,10 @@ static func roll_invasion_type(dice: DiceEngine) -> int:
 
 ## Returns the province_id of the targeted Wall Tower.
 ## last_targeted: province_id of the most recently attacked tower (-1 = none).
-## The last-targeted tower has 2× probability of being selected again.
+## The last-targeted tower has REPEAT_TARGET_WEIGHT× probability of being
+## selected again (s2.4.4 "higher probability" — locked at 2×, the minimal
+## meaningful "higher", owner-approved 2026-06-12).
+const REPEAT_TARGET_WEIGHT: int = 2
 static func select_target_tower(
 	tower_province_ids: Array,
 	last_targeted: int,
@@ -142,12 +145,14 @@ static func select_target_tower(
 	if tower_province_ids.size() == 1:
 		return tower_province_ids[0]
 
-	# DISABLED: GDD s2.4.4 says "higher probability" for repeat targeting
-	# but does not specify the weight factor. Using uniform random until
-	# GDD specifies the weighting.
+	# Weighted pool: every tower once, plus REPEAT_TARGET_WEIGHT-1 extra entries
+	# for the last-targeted tower so it is likelier to be hit again (s2.4.4).
 	var pool: Array = []
 	for pid: int in tower_province_ids:
 		pool.append(pid)
+		if pid == last_targeted:
+			for _w: int in range(REPEAT_TARGET_WEIGHT - 1):
+				pool.append(pid)
 
 	var idx: int = dice.roll_and_keep(1, 1, 0).total % pool.size()
 	return pool[idx]

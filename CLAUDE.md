@@ -5132,8 +5132,12 @@ but not executed in this environment.
   All four parse-checked; no tests per the no-test-code policy. TUNING (playtest): baseline
   compositions and SS/sortie scaling are PROVISIONAL; with Phase-1 garrison_pu=3 a single horde
   assault can overrun a Tower — garrison sizing and horde scale will need joint tuning against a
-  live run. The repeat-targeting weight and scout-detection chance remain undefined (used as
-  uniform-random / no-warning until the owner specifies them).
+  live run. **Repeat-targeting weight LOCKED at 2×** (s2.4.4 "higher probability", owner-approved
+  2026-06-12): `HordeSystem.REPEAT_TARGET_WEIGHT` — the last-targeted tower's province is added
+  REPEAT_TARGET_WEIGHT-1 extra times to the selection pool. The scout-detection chance remains
+  undefined (no-warning) — it has no scout-deployment mechanic to attach to until the scout
+  system exists; not invented. The B–E proposed values (horde baseline compositions, sortie
+  scaling, garrison_pu 3→5) were presented but NOT approved — they stay PROVISIONAL.
 
 ### Taisa AI loop (s2.4.11) — stopping point (2026-06-12, since unblocked under provisional authorization)
 The autonomous build halted at the first **undefined value**, exactly where the GDD stops
