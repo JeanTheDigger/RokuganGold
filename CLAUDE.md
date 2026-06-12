@@ -3309,6 +3309,23 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 31: Song of the World (Initiative) (2026-06-12)
+**Song of the World** (Void, Complex Action): `execute_song_of_the_world` — target an
+opponent within 50 ft (10 tiles), win a Contested Void Roll, and the target's Initiative
+drops 5 while the caster's rises 5. New persistent `Participant.initiative_modifier` added
+into `roll_initiative` — because advance_round RE-ROLLS initiative each round, a one-time
+score change would be overwritten, so the GDD −5/+5 maps to a standing delta (structural
+adaptation; the values are GDD-given). Verified: contested win → caster +5 / foe −5, and
+the caster's re-rolled initiative included the +5 (persists across the round re-roll).
+**The combat kiho set is now exhausted.** The remaining unwired kiho are blocked on
+missing data/systems, not unknown values: Touch the Void Dragon (no combat biome on
+MapCombatState + a broad +1-Ring modifier), Slap the Wave / Inari's Wrath (no facing
+data for arc/cone), Dharma Technique / Silent Solace (no tile-combat spell-cast consumer),
+Rebuke of the Heavens / Sever the Dark Lord's Touch (s54 undead), Breaking Blow / Waves in
+All Things (object/terrain effects with GM-judged/undefined object HP), and the ~12
+out-of-combat character-level buffs (need a character-level active-kiho system + an NPC
+non-combat-kiho activation policy the GDD does not specify).
+
 ### s38 Kiho — effect registry, tranche 30: Striking Through the Void (VP damage) (2026-06-12)
 **Striking Through the Void** (Void, while active): the caster may spend a Void Point on
 an unarmed damage roll for +1k1 (one Void Point per attack). Added an optional

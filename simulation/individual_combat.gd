@@ -152,6 +152,7 @@ class Participant:
 	var taint_benefits_suppressed_expiry: int = -1  # round when Rest, My Brother Taint suppression ends (s38)
 	var shadowed_mountain_used: bool = false  # Shadowed Mountain fired this activation (s38)
 	var attacked_by_ids: Array = []  # who attacked me since my last Turn (Bishamon's Grasp, s38)
+	var initiative_modifier: int = 0  # persistent Initiative delta (Song of the World, s38)
 	var dual_wielding: bool = false            # true when holding an off-hand weapon
 	var off_hand_weapon: String = ""           # name of off-hand weapon ("" = none)
 	var earth_trade_amount: int = 0            # Armor TN traded for damage (earth_trade_armor_for_damage)
@@ -861,6 +862,7 @@ static func roll_initiative(
 		score = result.total + wound_penalty
 	score += kata_init["flat_bonus"] + adv_init["free_raises"] * 5 - adv_init_tn
 	score += _get_kiho_initiative_bonus(character, participant, weapon_name)
+	score += participant.initiative_modifier  # Song of the World (s38), persistent delta
 
 	# Center Stance carry-over adds +10 to Initiative Score for that round only (s40)
 	if participant.stance == Enums.Stance.CENTER and not participant.center_stance_bonus_used:

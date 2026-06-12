@@ -1919,6 +1919,50 @@ static func execute_calling_the_east_wind(
 	return result
 
 
+## Song of the World (s38 Void, Complex Action): target an opponent within 50 ft (10 tiles)
+## and win a Contested Void Roll; on success the target's Initiative Score drops 5 and the
+## caster's rises 5. Applied as a persistent Initiative modifier (the round re-roll model
+## overwrites one-time scores, so the −5/+5 GDD effect maps to a standing delta).
+static func execute_song_of_the_world(
+	state: MapCombatState,
+	caster_id: int,
+	target_id: int,
+	caster: L5RCharacterData,
+	target: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(caster):
+		return {"success": false, "reason": "character_is_dead"}
+	if CharacterStats.is_dead(target):
+		return {"success": false, "reason": "target_is_dead"}
+	var ts: TurnState = state.turn_states.get(caster_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if not caster.kiho.has("Song of the World"):
+		return {"success": false, "reason": "kiho_not_known"}
+	var c_p: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if c_p == null or t_p == null:
+		return {"success": false, "reason": "participant_missing"}
+	if not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_actions_remaining"}
+	var cpos: Vector2i = state.positions.get(caster_id, Vector2i(-1, -1))
+	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
+	if cpos.x < 0 or tpos.x < 0 or _chebyshev(cpos, tpos) > 10:  # 50 ft = 10 tiles
+		return {"success": false, "reason": "out_of_range"}
+	ts.consume_complex()
+	var cv: int = maxi(1, CharacterStats.get_ring_value(caster, Enums.Ring.VOID))
+	var tv: int = maxi(1, CharacterStats.get_ring_value(target, Enums.Ring.VOID))
+	var won: bool = dice_engine.roll_and_keep(cv, cv, true).total >= dice_engine.roll_and_keep(tv, tv, true).total
+	if won:
+		t_p.initiative_modifier -= 5
+		c_p.initiative_modifier += 5
+	state.combat_log.append({
+		"type": "song_of_the_world", "round": state.combat.round_number,
+		"caster_id": caster_id, "target_id": target_id, "won": won})
+	return {"success": true, "won": won}
+
+
 ## Thunder's Word (s38 Air, Complex Action): the caster shouts a word of power; every
 ## OTHER living combatant capable of hearing (the whole skirmish — a power-word shout)
 ## makes a Contested Air Roll against a single caster roll, and those who fail are Dazed.
