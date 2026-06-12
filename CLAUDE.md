@@ -3309,6 +3309,26 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 6: Earth Palm + end-to-end verification (2026-06-12)
+Encoded **Earth Palm** (Earth 6 atemi, Water option: target suffers −4 damage dice
+for Earth Ring Rounds) — extended the `timed` spec with `value_flat` (a fixed value,
+vs `value_mult`×ring) and added a `damage_dice_penalty` timed read in `resolve_damage`
+(the debuffed target's later damage rolls lose 4 dice while active). 15 atemi encoded.
+The Fire option (+2 forced attack Raises) is deferred to a `forced_attack_raises` read
+in resolve_attack; the NPC default is the Water (damage) option. All GDD-given (−4
+dice / Earth Rounds). Verified: Earth Palm hit → target `damage_dice_penalty` −4
+(expiry round + Earth), and the target's subsequent katana damage roll drops 6 → 2.
+**End-to-end pipeline runtime-verified (2026-06-12):** a monk NPC in a real
+`execute_npc_turn` (full setup_combat → stance pick → target select → atemi branch)
+delivered an `atemi` action and the foe ended Dazed — confirming the whole tranche 1–5
+chain (`_npc_pick_atemi` → `execute_atemi_strike` → effect) fires in live combat, not
+just in isolated resolver calls. DEFERRED — 9 atemi still need bespoke subsystems
+(Speed of the Mountains move-budget [multi-site], Rest My Brother Taint, Sever the Dark
+Lord's Touch undead [s54], Chi Protection heal-over-time [needs chars_by_id in
+begin_turn], Banish All Shadows / Spin the Kharmic Wheel Disadvantage, Death Touch
+multi-round, Sense the Balance info, Silent Solace spell-slot) plus Earth Palm's Fire
+option.
+
 ### s38 Kiho — effect registry, tranche 5: action-denial atemi (2026-06-12)
 Encoded **As the Breakers** (Water 4 atemi: "target loses one Simple Action this
 Round; only targets opponents who have not yet acted; once per skirmish") — the first

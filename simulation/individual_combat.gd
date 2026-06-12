@@ -724,10 +724,12 @@ static func resolve_atemi_strike(
 		add_timed_modifier(target_p, "all_rolls", penalty, round_number + dur, wp.get("source", "stain_soul"), "round")
 		result["wound_rank_penalty"] = penalty
 
-	# Generic timed modifier (e.g. Flame Fist: -3 × Fire Ring to all rolls for Fire Rounds).
+	# Generic timed modifier (e.g. Flame Fist: -3 × Fire Ring to all rolls for Fire
+	# Rounds; Earth Palm: -4 damage dice for Earth Rounds). value_flat = a fixed value;
+	# otherwise value_mult × the attacker's value_ring.
 	if spec.has("timed"):
 		var t: Dictionary = spec["timed"]
-		var value: int = int(t.get("value_mult", 1)) * CharacterStats.get_ring_value(attacker, t.get("value_ring", Enums.Ring.FIRE))
+		var value: int = int(t["value_flat"]) if t.has("value_flat") else int(t.get("value_mult", 1)) * CharacterStats.get_ring_value(attacker, t.get("value_ring", Enums.Ring.FIRE))
 		var duration: int = CharacterStats.get_ring_value(attacker, t.get("duration_ring", Enums.Ring.FIRE))
 		add_timed_modifier(target_p, t.get("kind", "all_rolls"), value, round_number + duration, t.get("source", "atemi_kiho"), "round")
 		result["timed_kind"] = t.get("kind", "")
@@ -1137,6 +1139,10 @@ static func resolve_damage(
 
 	# Kata extra unkept dice (water_skilled_weapon_damage, void_honor_damage)
 	rolled += kata_dmg["rolled_bonus"]
+
+	# Timed damage-dice penalty (s38 Earth Palm Water option: -4 damage dice while active).
+	if attacker_p != null:
+		rolled = maxi(0, rolled + get_timed_modifier_total(attacker_p, "damage_dice_penalty"))
 
 	# roll_damage handles the dice pool; we pass strength already absorbed above
 	var result: Dictionary = dice_engine.roll_damage(rolled, kept)

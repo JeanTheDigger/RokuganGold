@@ -52,7 +52,7 @@ const KIHO_DATA: Dictionary = {
 	"Depths of the World":    {"ring": Enums.Ring.EARTH, "mastery": 4, "type": KihoType.INTERNAL},
 	"Earthen Fist":           {"ring": Enums.Ring.EARTH, "mastery": 3, "type": KihoType.INTERNAL},
 	"Earth Needs No Eyes":    {"ring": Enums.Ring.EARTH, "mastery": 3, "type": KihoType.INTERNAL},
-	"Earth Palm":             {"ring": Enums.Ring.EARTH, "mastery": 6, "type": KihoType.MARTIAL, "atemi": true},
+	"Earth Palm":             {"ring": Enums.Ring.EARTH, "mastery": 6, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"timed": {"kind": "damage_dice_penalty", "value_flat": -4, "duration_ring": Enums.Ring.EARTH, "source": "earth_palm"}}},
 	"Embrace the Stone":      {"ring": Enums.Ring.EARTH, "mastery": 5, "type": KihoType.MYSTICAL, "effect_id": "kiho_embrace_stone_reduction"},
 	"Grasp the Earth Dragon": {"ring": Enums.Ring.EARTH, "mastery": 5, "type": KihoType.INTERNAL, "effect_id": "kiho_grasp_earth_dragon_wound"},
 	"Harmony in Earth":       {"ring": Enums.Ring.EARTH, "mastery": 6, "type": KihoType.INTERNAL},
