@@ -4742,6 +4742,21 @@ template generators it depends on. Faithful summary of the fixes that landed:
   65 between SEARCH_PERSON 60 and INVESTIGATE_PROVINCE 70). They remain
   PROVISIONAL pending an actual live playtest (not runnable in this
   environment); no numeric change was invented without empirical data.
+- **Maho Channel 3 — runtime-verified (2026-06-12).** The full Channel-3 detection
+  pipeline (passive `_process_taint_proximity_detection` + active EXAMINE_FOR_TAINT)
+  was exercised end-to-end with a headless SceneTree driver (parse-check/driver path;
+  GUT is non-functional headless and off-policy). Confirmed: TN `(8−rank)×5` =
+  30/25/20/15; `can_detect_taint` gate (Kuni specialist true, Lore: Shadowlands ≥3
+  true, 2 false); passive accusation topic created correctly (TIER_3 / SUPERNATURAL /
+  subject_role PERPETRATOR / variant taint_suspected / propagated to the detector's
+  lord's topic_pool / momentum at the TIER_3 floor); dedup-reinforce (a renewed
+  detection on the same suspect refreshes momentum instead of spawning a duplicate);
+  Crab exemption + dead-suspect guard + Rank-2 threshold all skip correctly; active
+  corroboration target-building, the executor's Lore: Shadowlands roll, the writeback
+  (momentum refresh + taint_corroborated KnowledgeEntry), and the
+  already-corroborated re-exclusion. No bugs found; no code change. Upgrades status
+  from "parse + static review only" to runtime-verified. (The objective_alignment
+  scores remain PROVISIONAL pending a live playtest, as noted above.)
 - **s11.3.5 Witch-Hunter standing + roaming (owner-authorized 2026-06-10).**
   Closes the maho hunting loop: Kuni Witch-Hunters, Asako Inquisitors, and the
   three anti-maho order leaders (Crab/Phoenix/Scorpion) are now autonomous
