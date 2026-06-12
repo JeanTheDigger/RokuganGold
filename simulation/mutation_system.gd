@@ -467,6 +467,8 @@ static func get_skill_modifiers(
 	var dtn: int = 0  # TN delta
 
 	var taint_rank: int = get_taint_rank(character.taint)
+	# Rest, My Brother (s38): suppress the positive Taint benefits (not the penalties).
+	var benefits_on: bool = not character.taint_benefits_suppressed
 	var is_social: bool = _is_social_skill(skill_name)
 	var is_perception_based: bool = _is_perception_based(skill_name)
 	var is_stealth: bool = skill_name == "Stealth"
@@ -499,7 +501,7 @@ static func get_skill_modifiers(
 		dr -= 1
 
 	# EXTRA_EYE: +1k0 Perception / Perception-based (eye must be uncovered)
-	if has_mutation(character, Enums.MutationType.EXTRA_EYE) and is_perception_based:
+	if benefits_on and has_mutation(character, Enums.MutationType.EXTRA_EYE) and is_perception_based:
 		if context.get("extra_eye_uncovered", true):  # uncovered by default for NPC context
 			dr += 1
 
@@ -520,18 +522,18 @@ static func get_skill_modifiers(
 	# --- Powers ---
 
 	# MASTER_OF_SHADOWS: add Taint Rank in unkept dice to Stealth
-	if has_power(character, Enums.ShadowlandsPowerType.MASTER_OF_SHADOWS) and is_stealth:
+	if benefits_on and has_power(character, Enums.ShadowlandsPowerType.MASTER_OF_SHADOWS) and is_stealth:
 		dr += taint_rank
 
 	# MONSTROUS_STRENGTH: -1k0 Social; add Taint Rank unkept to Strength rolls
 	if has_power(character, Enums.ShadowlandsPowerType.MONSTROUS_STRENGTH):
 		if is_social:
 			dr -= 1
-		if is_strength_based:
+		if benefits_on and is_strength_based:
 			dr += taint_rank
 
 	# FATHER_OF_LIES: add Taint Rank in kept dice to Temptation, Intimidation, Sincerity:Deceit
-	if has_power(character, Enums.ShadowlandsPowerType.FATHER_OF_LIES):
+	if benefits_on and has_power(character, Enums.ShadowlandsPowerType.FATHER_OF_LIES):
 		if is_temptation or is_intimidation or is_sincerity_deceit:
 			dk += taint_rank
 
@@ -539,7 +541,7 @@ static func get_skill_modifiers(
 	# mental Traits (Intelligence, Willpower, Awareness, Perception).
 	# "Embrace" path for non-Lost characters is an active narrative choice — not wired
 	# for NPC simulation.
-	if has_power(character, Enums.ShadowlandsPowerType.MIND_OF_DARKNESS) and is_lost(character):
+	if benefits_on and has_power(character, Enums.ShadowlandsPowerType.MIND_OF_DARKNESS) and is_lost(character):
 		var used_trait: Enums.Trait = SkillResolver.get_trait_for_skill(skill_name)
 		if used_trait in [Enums.Trait.INTELLIGENCE, Enums.Trait.WILLPOWER,
 				Enums.Trait.AWARENESS, Enums.Trait.PERCEPTION]:

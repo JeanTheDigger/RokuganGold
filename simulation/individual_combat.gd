@@ -149,6 +149,7 @@ class Participant:
 	var active_kiho: Array = []                 # currently-active kiho names (GDD s38; see KihoSystem)
 	var active_kiho_expiry: Dictionary = {}     # kiho_name → expiry round (for round-duration buffs)
 	var suppressed_disadvantage_expiry: int = -1  # round when Banish All Shadows suppression ends (s38)
+	var taint_benefits_suppressed_expiry: int = -1  # round when Rest, My Brother Taint suppression ends (s38)
 	var dual_wielding: bool = false            # true when holding an off-hand weapon
 	var off_hand_weapon: String = ""           # name of off-hand weapon ("" = none)
 	var earth_trade_amount: int = 0            # Armor TN traded for damage (earth_trade_armor_for_damage)
@@ -687,7 +688,13 @@ static func resolve_atemi_strike(
 	# bonus_ring → +Ring k0 via resolve_damage's raises_for_damage. Normal Reduction.
 	if spec.has("normal_damage"):
 		var nd: Dictionary = spec["normal_damage"]
-		var bonus: int = CharacterStats.get_ring_value(attacker, nd["bonus_ring"]) if nd.has("bonus_ring") else 0
+		# Bonus unkept (rolled) dice: from a caster Ring, or = the target's Taint Rank
+		# (s38 Rest, My Brother: "additional unkept damage dice equal to Taint Rank").
+		var bonus: int = 0
+		if nd.has("bonus_ring"):
+			bonus = CharacterStats.get_ring_value(attacker, nd["bonus_ring"])
+		elif nd.get("bonus_target_taint", false):
+			bonus = MutationSystem.get_taint_rank(target.taint)
 		var ndr: Dictionary = resolve_damage(attacker, "unarmed", bonus, 0, dice_engine, attacker_p)
 		var nhit: Dictionary = WoundSystem.apply_damage(target, ndr["raw_damage"], -1)
 		result["normal_damage"] = nhit["final_damage"]
@@ -748,6 +755,14 @@ static func resolve_atemi_strike(
 		add_timed_modifier(target_p, t.get("kind", "all_rolls"), value, round_number + duration, t.get("source", "atemi_kiho"), "round")
 		result["timed_kind"] = t.get("kind", "")
 		result["timed_value"] = value
+
+	# Rest, My Brother (s38): a human/formerly-uncorrupted target loses all Shadowlands
+	# Taint benefits for caster Earth Ring Rounds. (Oni / inherently-Tainted creatures
+	# are s54 and do not exist in tile combat yet, so the human gate always passes.)
+	if spec.get("suppress_taint_benefits", false):
+		target.taint_benefits_suppressed = true
+		target_p.taint_benefits_suppressed_expiry = round_number + CharacterStats.get_ring_value(attacker, Enums.Ring.EARTH)
+		result["taint_benefits_suppressed"] = true
 
 	# Heal the struck target (Chi Protection: target regains Wounds equal to the
 	# caster's Water Ring — used on a willing ally via auto_hit).

@@ -224,6 +224,10 @@ var spell_void_bonus_used: int = 0
 ## Disadvantage in its combat-roll readers while set. Cleared by the orchestrator's
 ## advance_round at expiry. Not exported — combat-transient state.
 var suppressed_disadvantage_type: int = -1
+## Transient combat suppression of Shadowlands Taint benefits (s38 Rest, My Brother).
+## When true, MutationSystem skips the positive Taint Power/mutation bonuses (not the
+## penalties). Cleared by the orchestrator's advance_round at expiry. Not exported.
+var taint_benefits_suppressed: bool = false
 ## Death Touch affliction (s38 kiho, Void 7). Stamped when a caster lands the 3
 ## consecutive atemi strikes + the post-3rd Void Point. Resolved at the next daily
 ## tick by DayOrchestrator (ring drain → catatonic → 3 Contested Void → death).

@@ -1945,6 +1945,12 @@ static func advance_round(
 			if _sc != null:
 				_sc.suppressed_disadvantage_type = -1
 			_tp.suppressed_disadvantage_expiry = -1
+		# Rest, My Brother suppression ends — restore the Taint benefits.
+		if _tp.taint_benefits_suppressed_expiry >= 0 and _tp.taint_benefits_suppressed_expiry <= state.combat.round_number:
+			var _tc: L5RCharacterData = chars_by_id.get(_tp.character_id, null)
+			if _tc != null:
+				_tc.taint_benefits_suppressed = false
+			_tp.taint_benefits_suppressed_expiry = -1
 
 	# Re-roll initiative for all active participants (L5R 4e: initiative re-rolled each round).
 	# CENTER stance carry-forward: void bonus from last round applies to this roll.

@@ -56,7 +56,7 @@ const KIHO_DATA: Dictionary = {
 	"Embrace the Stone":      {"ring": Enums.Ring.EARTH, "mastery": 5, "type": KihoType.MYSTICAL, "effect_id": "kiho_embrace_stone_reduction", "duration": {"ring": Enums.Ring.EARTH, "mult": 1}},
 	"Grasp the Earth Dragon": {"ring": Enums.Ring.EARTH, "mastery": 5, "type": KihoType.INTERNAL, "effect_id": "kiho_grasp_earth_dragon_wound", "duration": {"ring": Enums.Ring.EARTH, "mult": 1}},
 	"Harmony in Earth":       {"ring": Enums.Ring.EARTH, "mastery": 6, "type": KihoType.INTERNAL},
-	"Rest, My Brother":       {"ring": Enums.Ring.EARTH, "mastery": 5, "type": KihoType.MARTIAL, "atemi": true},
+	"Rest, My Brother":       {"ring": Enums.Ring.EARTH, "mastery": 5, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"normal_damage": {"bonus_target_taint": true}, "suppress_taint_benefits": true}},
 	"Rising Mountain":        {"ring": Enums.Ring.EARTH, "mastery": 6, "type": KihoType.KHARMIC},
 	"The Rolling Avalanche":  {"ring": Enums.Ring.EARTH, "mastery": 5, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"normal_damage": {"bonus_ring": Enums.Ring.EARTH}}},
 	"Root the Mountain":      {"ring": Enums.Ring.EARTH, "mastery": 5, "type": KihoType.INTERNAL},

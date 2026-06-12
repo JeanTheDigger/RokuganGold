@@ -3309,6 +3309,27 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 12: Rest, My Brother (Taint-strip atemi) (2026-06-12)
+Encoded **Rest, My Brother** (Earth 5 atemi): deals normal unarmed damage + additional
+unkept (rolled) damage dice equal to the opponent's Shadowlands Taint Rank, and a
+human/formerly-uncorrupted target loses all Shadowlands Taint **benefits** for caster
+Earth Ring Rounds. 22 atemi encoded. Reuses the suppression pattern (mirrors Banish):
+transient `taint_benefits_suppressed` on the character; `MutationSystem.get_skill_modifiers`
+skips the 5 positive Taint bonuses (EXTRA_EYE, MASTER_OF_SHADOWS, MONSTROUS_STRENGTH
+strength, FATHER_OF_LIES, MIND_OF_DARKNESS) while set — the **penalties** (social −Xk0,
+etc.) remain, per "lose all benefits". `normal_damage` spec extended with
+`bonus_target_taint` (bonus rolled dice = `get_taint_rank(target.taint)`).
+Participant.taint_benefits_suppressed_expiry; advance_round clears it via chars_by_id.
+All GDD-given (Taint Rank dice, Earth Ring duration). The "human/not inherently Tainted"
+gate always passes — oni / inherently-Tainted creatures are s54 and don't exist in tile
+combat. Verified: a Taint-Rank-3 MASTER_OF_SHADOWS target took normal_dmg 8 (incl. +3
+Taint dice); its Stealth Taint benefit +3k0 → 0k0 while suppressed, restored at expiry
+(round 4 = 1 + Earth 3). DEFERRED — 2 atemi remain, both dependency-blocked (not unknown
+values): **Silent Solace** (Void 5, spell-slot tax) has no tile-combat spell-casting
+consumer — the combat orchestrator has no cast-spell action, so the tax would be inert;
+**Sever the Dark Lord's Touch** (Fire 5, instantly destroys unintelligent undead) needs
+s54 undead entities, which don't exist in tile combat. Plus Earth Palm's Fire option.
+
 ### s38 Kiho — effect registry, tranche 11: Disadvantage atemi + s45 catalog (2026-06-12)
 Owner-directed (2026-06-12). Built the AdvantageSystem-in-combat hook and encoded the 3
 Advantage/Disadvantage-manipulation atemi. 21 atemi encoded. **Prerequisite — s45
