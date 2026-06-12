@@ -80,7 +80,7 @@ const KIHO_DATA: Dictionary = {
 	# -- WATER --
 	"As the Breakers":        {"ring": Enums.Ring.WATER, "mastery": 4, "type": KihoType.KHARMIC, "atemi": true, "atemi_effect": {"remove_simple_action": true, "requires_target_not_acted": true, "once_per_skirmish": true}},
 	"Buoyed by the Kami":     {"ring": Enums.Ring.WATER, "mastery": 3, "type": KihoType.MYSTICAL},
-	"Chi Protection":         {"ring": Enums.Ring.WATER, "mastery": 4, "type": KihoType.MARTIAL, "atemi": true},
+	"Chi Protection":         {"ring": Enums.Ring.WATER, "mastery": 4, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"vp_cost": 1, "heal": {"ring": Enums.Ring.WATER}, "ally_auto_hit": true}},
 	"Dharma Technique":       {"ring": Enums.Ring.WATER, "mastery": 7, "type": KihoType.MARTIAL, "staff": true},
 	"Freezing the Lifeblood": {"ring": Enums.Ring.WATER, "mastery": 7, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"condition": "stunned"}},
 	"Musubi":                 {"ring": Enums.Ring.WATER, "mastery": 5, "type": KihoType.INTERNAL, "staff": true},

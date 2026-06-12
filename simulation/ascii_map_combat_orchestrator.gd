@@ -852,6 +852,11 @@ static func execute_atemi_strike(
 	# Orchestrator-level atemi targeting gates (s38). As the Breakers: may only target
 	# an opponent who has not yet acted this Round, and at most once per skirmish.
 	var aspec: Dictionary = KihoSystem.KIHO_DATA.get(kiho_name, {}).get("atemi_effect", {})
+	# Chi Protection cannot be used on oneself.
+	if attacker_id == target_id and aspec.get("ally_auto_hit", false):
+		return {"success": false, "reason": "cannot_target_self"}
+	# A willing ally (same faction) does not resist a heal-atemi → auto-hit.
+	var auto_hit: bool = aspec.get("ally_auto_hit", false) and state.factions.get(attacker_id, "") == state.factions.get(target_id, "")
 	if aspec.get("requires_target_not_acted", false):
 		var tts0: TurnState = state.turn_states.get(target_id, null)
 		if tts0 != null and (tts0.complex_used or tts0.simple_used > 0 or tts0.free_actions_used > 0):
@@ -861,7 +866,7 @@ static func execute_atemi_strike(
 			return {"success": false, "reason": "already_affected_this_skirmish"}
 
 	var r: Dictionary = IndividualCombat.resolve_atemi_strike(
-		attacker, a_p, target, t_p, kiho_name, dice_engine, state.combat.round_number)
+		attacker, a_p, target, t_p, kiho_name, dice_engine, state.combat.round_number, auto_hit)
 	# If the atemi could not be delivered (e.g. insufficient Void for the activation
 	# cost), do not consume the action — the actor can still take a normal attack.
 	if not r.get("ok", false):
@@ -1526,13 +1531,19 @@ static func _npc_maybe_activate_kiho(
 	return {}
 
 
-## First known atemi kiho whose effect is encoded (so the strike actually applies
-## something). Returns "" if the monk knows none. Used by execute_npc_turn.
+## First known OFFENSIVE atemi kiho whose effect is encoded (so the strike actually
+## applies something). Skips ally-targeted (heal) atemi like Chi Protection — those
+## must not be delivered to the enemy best_target. Returns "" if the monk knows none.
+## Used by execute_npc_turn against an enemy target.
 static func _npc_pick_atemi(npc: L5RCharacterData) -> String:
 	for k: String in npc.kiho:
 		var data: Dictionary = KihoSystem.KIHO_DATA.get(k, {})
-		if data.get("atemi", false) and not (data.get("atemi_effect", {}) as Dictionary).is_empty():
-			return k
+		if not data.get("atemi", false):
+			continue
+		var eff: Dictionary = data.get("atemi_effect", {})
+		if eff.is_empty() or eff.get("ally_auto_hit", false):
+			continue
+		return k
 	return ""
 
 

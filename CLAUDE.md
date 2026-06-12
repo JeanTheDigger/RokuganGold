@@ -3309,6 +3309,26 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 8: heal atemi (Chi Protection) (2026-06-12)
+Encoded **Chi Protection** (Water 4 atemi: a touched willing ally regains Wounds equal
+to the caster's Water Ring; 1 VP; cannot target self). Three additions: a `heal` spec
+(`WoundSystem.heal_wounds(target, caster Water Ring)`), an `auto_hit` resolver param
+(a willing ally — same faction — does not resist, so the to-hit is skipped), and the
+`ally_auto_hit` spec flag that the orchestrator turns into auto-hit only for a
+same-faction target plus the self-exclusion guard. `_npc_pick_atemi` now skips
+`ally_auto_hit` atemi so the offensive NPC hook never delivers a heal to its enemy
+target (Chi Protection stays reachable via `execute_atemi_strike` for a future
+ally-healing AI / companion logic). 17 atemi encoded. All GDD-given (heal = Water Ring,
+1 VP). Verified: ally heal (auto-hit, Water Ring 3 wounds, ally 10→7, VP 2→1),
+self-target rejected (cannot_target_self), and `_npc_pick_atemi` excludes Chi Protection
+(picks Flame Fist instead). LIMITATION: only the immediate heal is encoded — the
+over-time portion (Water Ring at the start of each of the target's Turns for Insight
+Rounds) needs `chars_by_id` in `begin_turn` (a signature change), deferred. DEFERRED —
+7 atemi need bespoke/blocked subsystems (Rest My Brother Taint, Sever the Dark Lord's
+Touch undead [s54], Banish All Shadows / Spin the Kharmic Wheel / Sense the Balance
+Advantage-system, Death Touch multi-round, Silent Solace spell-slot) plus Earth Palm's
+Fire option.
+
 ### s38 Kiho — effect registry, tranche 7: movement-denial atemi (2026-06-12)
 Encoded **Speed of the Mountains** (Earth 4 atemi: target's Water Ring counts 2 Ranks
 lower for Move distance, for 2× Earth Rounds). Extended the `timed` spec with

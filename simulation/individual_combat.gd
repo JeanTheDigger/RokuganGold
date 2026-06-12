@@ -633,6 +633,7 @@ static func resolve_atemi_strike(
 	kiho_name: String,
 	dice_engine: DiceEngine,
 	round_number: int = -1,
+	auto_hit: bool = false,
 ) -> Dictionary:
 	if not attacker.kiho.has(kiho_name):
 		return {"ok": false, "reason": "not_known"}
@@ -647,12 +648,13 @@ static func resolve_atemi_strike(
 		if attacker.current_void_points < int(spec["vp_cost"]):
 			return {"ok": false, "reason": "insufficient_void"}
 		attacker.current_void_points -= int(spec["vp_cost"])
-	# Atemi armor TN: the armor's Armor TN bonus is doubled (add it once more).
-	var atemi_tn: int = get_armor_tn(target, target_p, dice_engine) + target.armor_tn_bonus
-	# Some atemi require extra Raises on the to-hit (e.g. Falling Star Strike: 2 Raises).
-	var attack: Dictionary = resolve_attack(attacker, attacker_p, "unarmed", atemi_tn, int(spec.get("attack_raises", 0)), dice_engine)
-	if not attack.get("hit", false):
-		return {"ok": true, "hit": false}
+	# A willing ally (Chi Protection) does not resist — skip the to-hit roll. Otherwise
+	# make the unarmed strike; some atemi require extra Raises (Falling Star: 2 Raises).
+	if not auto_hit:
+		var atemi_tn: int = get_armor_tn(target, target_p, dice_engine) + target.armor_tn_bonus
+		var attack: Dictionary = resolve_attack(attacker, attacker_p, "unarmed", atemi_tn, int(spec.get("attack_raises", 0)), dice_engine)
+		if not attack.get("hit", false):
+			return {"ok": true, "hit": false}
 	# Optional Contested Ring roll after the hit.
 	if spec.has("contest"):
 		var c: Dictionary = spec["contest"]
@@ -734,6 +736,13 @@ static func resolve_atemi_strike(
 		add_timed_modifier(target_p, t.get("kind", "all_rolls"), value, round_number + duration, t.get("source", "atemi_kiho"), "round")
 		result["timed_kind"] = t.get("kind", "")
 		result["timed_value"] = value
+
+	# Heal the struck target (Chi Protection: target regains Wounds equal to the
+	# caster's Water Ring — used on a willing ally via auto_hit).
+	if spec.has("heal"):
+		var hamt: int = CharacterStats.get_ring_value(attacker, spec["heal"].get("ring", Enums.Ring.WATER))
+		var hres: Dictionary = WoundSystem.heal_wounds(target, hamt)
+		result["healed"] = hres["healed"]
 
 	# Caster Void-Point gain (Void Fist: regain VP on a hit; needs a target with VP).
 	# Capped at the caster's Void Ring (max VP).
