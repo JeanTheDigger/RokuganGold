@@ -808,6 +808,11 @@ static func execute_melee_attack(
 			var kd: Dictionary = IndividualCombat.resolve_knockdown(
 				attacker, target, maneuver == "knockdown_quad", dice_engine
 			)
+			# Root the Mountain (s38 Earth): forcing the caster to move requires the
+			# attacker to also win a Contested Earth Roll, or the knockdown is negated.
+			if kd["knocked_down"] and _root_the_mountain_resists(target, t_p, attacker, dice_engine):
+				kd["knocked_down"] = false
+				result["root_the_mountain_resisted"] = true
 			if kd["knocked_down"]:
 				IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_PRONE)
 			result["knocked_down"] = kd["knocked_down"]
@@ -1818,6 +1823,11 @@ static func execute_hurricane_palm(
 		var wd: Dictionary = WoundSystem.apply_damage(target, half, reduction)
 		var air: int = CharacterStats.get_ring_value(attacker, Enums.Ring.AIR)
 		var kb: int = int(2 * air / 5)  # 2× Air Ring feet → tiles (1 tile = 5 ft)
+		# Root the Mountain (s38 Earth): the caster may resist the forced move (knockback)
+		# with a Contested Earth Roll; the strike still leaves them Prone in place.
+		if kb > 0 and _root_the_mountain_resists(target, t_p, attacker, dice_engine):
+			kb = 0
+			result["root_the_mountain_resisted"] = true
 		result["knockback_to"] = _knockback_target(state, target_id, apos, kb)
 		IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_PRONE)
 		result["wounds_inflicted"] = wd.get("final_damage", half)
@@ -1830,6 +1840,21 @@ static func execute_hurricane_palm(
 		"type": "hurricane_palm", "round": state.combat.round_number,
 		"attacker_id": attacker_id, "target_id": target_id, "hit": result.get("hit", false)})
 	return result
+
+
+## Root the Mountain (s38 Earth): a forced-move target with the kiho active resists when
+## it wins a Contested Earth Roll against the attacker. Returns true = the move is negated.
+static func _root_the_mountain_resists(
+	target: L5RCharacterData,
+	t_p: IndividualCombat.Participant,
+	attacker: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> bool:
+	if "Root the Mountain" not in t_p.active_kiho:
+		return false
+	var te: int = maxi(1, CharacterStats.get_ring_value(target, Enums.Ring.EARTH))
+	var ae: int = maxi(1, CharacterStats.get_ring_value(attacker, Enums.Ring.EARTH))
+	return dice_engine.roll_and_keep(te, te, true).total >= dice_engine.roll_and_keep(ae, ae, true).total
 
 
 ## Push a target up to `tiles` tiles directly away from `from_pos`, stopping at a wall,
