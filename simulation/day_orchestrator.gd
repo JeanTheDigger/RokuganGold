@@ -147,6 +147,7 @@ static func advance_day(
 	_assign_magistrate_standing_objectives(characters, objectives_map)
 	_assign_ronin_standing_objectives(characters, objectives_map)
 	_assign_kaiu_engineer_standing_objectives(characters, objectives_map, settlements)
+	_assign_taisa_sortie_standing_objectives(characters, settlements, provinces, objectives_map)
 	_assign_artisan_standing_objectives(characters, objectives_map)
 	# Witch-hunters before monks: Kuni Witch-Hunters are [Monk] school_type, so the
 	# monk pass would otherwise stamp them PERFORM_RITUAL before they get HUNT_MAHO.
@@ -8452,6 +8453,82 @@ static func _assign_kaiu_engineer_standing_objectives(
 				"priority": 2,
 				"auto_assigned": true,
 			}
+
+
+# -- Taisa Sortie Timing — s2.4.11 Decision 2 ---------------------------------
+# A Tower Commander (Taisa) stationed at a Wall Tower orders sorties into the
+# adjacent Shadowlands to manage Shadowlands Strength. The full Decision-2 logic
+# (SS Low -> no sortie / Medium -> Small / High -> Medium; blocked when jade is
+# critical, garrison is below minimum, or SI < 6 while SS is High; Large requires
+# Shireikan) already lives in WallSystem.validate_sortie — this pass just routes
+# the Taisa to it by setting a CONDUCT_SORTIE standing when a sortie is warranted
+# and clearing it (conserve the garrison) when it is not. Self-regulating: each
+# successful sortie reduces SS and consumes jade, so the standing naturally lapses.
+# The other six s2.4.11 demands (supply/jade/tea requests, Taint monitoring) are
+# deferred — they require request pipelines and the named/tracked garrison (Phase 3).
+static func _assign_taisa_sortie_standing_objectives(
+	characters: Array,
+	settlements: Array,
+	provinces: Dictionary,
+	objectives_map: Dictionary,
+) -> void:
+	# settlement_id (as String) -> Wall Tower SettlementData.
+	var wall_towers: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_towers[str(s.settlement_id)] = s
+	if wall_towers.is_empty():
+		return
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.military_rank != Enums.MilitaryRank.TAISA:
+			continue
+		var loc: String = character.physical_location
+		if not wall_towers.has(loc):
+			continue
+
+		var tower: SettlementData = wall_towers[loc] as SettlementData
+		var ss: int = 0
+		var province: Variant = provinces.get(tower.province_id, null)
+		if province is ProvinceData:
+			ss = (province as ProvinceData).shadowlands_strength
+
+		var garrison_above_minimum: bool = not WallSystem.is_garrison_below_minimum(tower.garrison_pu)
+		# Jade-critical threshold mirrors _set_wall_tower_context_flags: enough jade
+		# for one Small sortie's allocation (s2.4.15).
+		var min_jade: float = float(
+			int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
+			* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR
+		)
+		var jade_critical: bool = tower.jade_stockpile <= min_jade
+
+		var validation: Dictionary = WallSystem.validate_sortie(
+			ss, tower.wall_si, garrison_above_minimum, jade_critical, false,
+		)
+		var warranted: bool = validation.get("can_sortie", false)
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+		var st_need: String = standing.get("need_type", "")
+
+		if warranted:
+			# Assign/refresh the sortie standing, but never clobber a different
+			# standing (e.g. a future supply/escalation directive).
+			if standing.is_empty() or st_need == "CONDUCT_SORTIE":
+				objectives["standing"] = {
+					"need_type": "CONDUCT_SORTIE",
+					"priority": 2,
+					"auto_assigned": true,
+				}
+		elif st_need == "CONDUCT_SORTIE":
+			# No longer warranted (SS dropped, jade critical, SI/garrison gate) —
+			# clear our own stale standing so the Taisa conserves the garrison.
+			objectives.erase("standing")
 
 
 # -- ARTISTIC_EXPRESSION Standing Objective Assignment (s49) -------------------

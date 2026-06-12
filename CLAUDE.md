@@ -5071,6 +5071,38 @@ but not executed in this environment.
   Phase 3: unit-type garrison companies (replacing abstract `garrison_pu`) + real
   horde-combat attrition + re-tuning garrison/SI/jade against a live threat.
 
+### Systems Added 2026-06-12 (Kaiu Wall — Taisa sortie timing, s2.4.11 D2, owner-authorized)
+- **s2.4.11 Decision 2 (Sortie Timing) — the Tower Commander now orders sorties.** With the
+  Phase 2 roster stationing a Taisa at every Tower, the Taisa was still falling to generic
+  defense and never sortieing to manage Shadowlands Strength. `_assign_taisa_sortie_standing_objectives()`
+  (DayOrchestrator, daily, beside the Kaiu-engineer pass) gives each living Taisa
+  (`military_rank == TAISA`) stationed at a Wall Tower a `CONDUCT_SORTIE` standing objective
+  when a sortie is warranted, and clears it (conserve the garrison) when it is not. The
+  warrant decision is delegated entirely to the already-LOCKED `WallSystem.validate_sortie(ss,
+  si, garrison_above_minimum, jade_critical, is_shireikan=false)` — which encodes the full D2
+  logic: SS Low -> none / Medium -> Small / High -> Medium (`get_ai_sortie_size`), jade-critical
+  block (D5), garrison-below-minimum block, SI<6-while-SS-High block, and Large-requires-Shireikan.
+  **No new logic or numbers** — the pass is pure routing. The `CONDUCT_SORTIE` need_type is not a
+  decomposer dispatch type, so it falls through `_passthrough` -> scored against
+  `objective_alignment["CONDUCT_SORTIE"]` (100) -> selects the CONDUCT_SORTIE action in the
+  AT_WALL_TOWER context (no rank gate; only DISPATCH_COURTIER/ORDER_LEVY are rank-gated). The
+  executor reads ss/si/garrison/jade from the Taisa's injected wall_status and resolves via
+  `resolve_sortie`. **Self-regulating, no cadence number invented:** each successful sortie
+  reduces province SS and consumes jade, so the standing lapses on its own (SS drops below
+  Medium, or jade goes critical) and the Taisa conserves; it re-arms when SS climbs back. Owns
+  only its own `CONDUCT_SORTIE` standing slot (never clobbers a lord directive or other standing;
+  a lord-assigned primary takes precedence via resolve_goal). Dead-guarded; generic legion Taisa
+  (not stationed at a Tower) are skipped. Parse-checked; no tests per the no-test-code policy.
+  **Scope (owner-authorized 2026-06-12):** D2 only. D1 SI-maintenance is already covered by the
+  stationed engineer's FORTIFY. The other five demands stay DEFERRED: D3 scout coverage needs new
+  persistent scout-tracking; D4 rice/koku requests and D5 jade request need new request pipelines
+  (only the troops path exists, via STRENGTHEN_WALL); **D6 Jade Petal Tea and D7 Taint monitoring
+  are Phase-3-blocked** — both operate on named/tracked garrison soldiers, which don't exist while
+  the garrison is abstract `garrison_pu`. The seven-way triage that is the heart of s2.4.11 is
+  itself Phase-3-gated; this delivers the one fully-buildable decision. LIMITATION: without D5
+  jade resupply, a Tower's sorties stop permanently once its jade depletes (GDD-faithful — D5 says
+  no sortie when jade is critical — but jade never refills until the request pipeline lands).
+
 ### Known Code Issues (found and fixed 2026-06-12, Wall Phase 2 validation)
 - **Stationed Kaiu Engineers never FORTIFY — peacetime art standing latched the slot. FIXED.**
   Phase 2 stations a Kaiu Engineer at every Tower so the s57.41 MAINTAIN_FORTIFICATION
