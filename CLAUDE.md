@@ -3309,6 +3309,17 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 26: Riding the Clouds + The World Disappears (2026-06-12)
+- **Riding the Clouds** (Air, while active): `execute_riding_the_clouds` — a Simple Move
+  Action to leap up to Air Ring ×10 ft (= ×2 tiles) to any free passable tile (ignoring
+  terrain cost — a jump). The kiho is expended after one leap (erased from active_kiho).
+  Verified: an Air-4 monk leaped 6 tiles, then a second leap returned kiho_not_active.
+- **The World Disappears** (Void, while active): the floating caster is immune to
+  Grappling — wired as an early `target_immune_to_grapple` return in
+  execute_grapple_initiate. Verified. LIMITATION: the terrain-ignoring movement (over
+  water/lava) is not wired (only the grapple-immunity); Entangling has no system.
+All GDD-given.
+
 ### s38 Kiho — effect registry, tranche 25: Calling the East Wind (leap-kick) (2026-06-12)
 **Calling the East Wind** (Air, Complex Action): `execute_calling_the_east_wind` — leap up
 to Air Ring ×10 ft (= ×2 tiles) to a free passable tile adjacent to the target, then make

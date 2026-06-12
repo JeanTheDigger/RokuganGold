@@ -1338,6 +1338,10 @@ static func execute_grapple_initiate(
 	if a_p == null or t_p == null:
 		return {"success": false, "reason": "participant_missing"}
 
+	# The World Disappears (s38 Void): the floating caster is immune to Grappling.
+	if "The World Disappears" in t_p.active_kiho:
+		return {"success": false, "reason": "target_immune_to_grapple"}
+
 	# Weapon grapple validation: the named weapon must be grapple-capable (s40).
 	var grapple_skill: String = "Jiujutsu"
 	if weapon_name != "":
@@ -1738,6 +1742,46 @@ static func execute_to_the_last_breath(
 	target.current_void_points = mini(cap, target.current_void_points + 1)
 	state.last_breath_uses[target_id] = int(state.last_breath_uses.get(target_id, 0)) + 1
 	return {"success": true, "target_id": target_id, "vp_before": before, "vp_after": target.current_void_points}
+
+
+## Riding the Clouds (s38 Air, while active): a Simple Move Action to leap up to Air Ring
+## ×10 ft (= ×2 tiles) to any free passable tile (ignoring terrain cost — it is a jump).
+## The kiho is expended after one leap. Returns the new position.
+static func execute_riding_the_clouds(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dest: Vector2i,
+) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p == null:
+		return {"success": false, "reason": "participant_missing"}
+	if "Riding the Clouds" not in p.active_kiho:
+		return {"success": false, "reason": "kiho_not_active"}
+	if not ts.can_use_simple():
+		return {"success": false, "reason": "no_simple_actions_remaining"}
+	var pos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if pos.x < 0:
+		return {"success": false, "reason": "position_unknown"}
+	if _chebyshev(pos, dest) > CharacterStats.get_ring_value(character, Enums.Ring.AIR) * 2:
+		return {"success": false, "reason": "beyond_leap_range"}
+	for cid: int in state.positions:
+		if cid != char_id and state.positions[cid] == dest:
+			return {"success": false, "reason": "tile_occupied"}
+	if state.map != null and not MovementSystem.is_passable(state.map.get_tile(dest.x, dest.y)):
+		return {"success": false, "reason": "tile_impassable"}
+	state.positions[char_id] = dest
+	ts.consume_simple()
+	p.active_kiho.erase("Riding the Clouds")  # expended after one leap
+	state.combat_log.append({
+		"type": "riding_the_clouds", "round": state.combat.round_number,
+		"char_id": char_id, "leaped_to": dest})
+	return {"success": true, "leaped_to": dest}
 
 
 ## Calling the East Wind (s38 Air, Complex Action): leap up to Air Ring ×10 ft (= ×2
