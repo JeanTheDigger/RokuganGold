@@ -3309,6 +3309,27 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 13: non-atemi combat buffs (2026-06-12)
+First non-atemi kiho with real tile-combat effects (beyond the 5 passive active-buffs).
+- **Musubi** (Water): while active (staff in motion), Armor TN += Water Ring + Staves
+  Skill Rank. Wired as `effect_id "kiho_musubi_armor"` in `_get_kiho_armor_tn_bonus`
+  (same hook as Soul of the Four Winds). Verified: +7 Armor TN (Water 3 + Staves 4).
+- **The Body is an Anvil** (Fire): a landed unarmed strike burns whoever touches the
+  anvil-caster — `_apply_body_is_anvil` (called from execute_melee_attack after a hit)
+  deals Fire Ring contact Wounds in either direction (DEFENDER active → the unarmed
+  attacker is burned; ATTACKER active → the struck target takes Fire Ring beyond normal
+  damage). Unarmed-only (the katana gate skips it). Duration 2× Fire Rounds via the
+  active_kiho_expiry layer. Verified: both directions deal Fire 4 contact; armed strike
+  no-ops. All GDD-given. DEFERRED — the remaining ~41 non-atemi kiho need new combat
+  subsystems (reaction/interrupt: Way of the Willow, Destiny's Strike, Shadowed Mountain,
+  Earthen Fist, Bishamon's Grasp; AoE: Thunder's Word, Inari's Wrath, Slap the Wave,
+  Hurricane Palm; movement/leap: Calling the East Wind, Riding the Clouds, Fire's Fleeting
+  Speed, The World Disappears, Strike Through the Wind; grapple-tick: Way of the Earth,
+  Root the Mountain) or are out-of-combat utility (Eye of the Eagle, Earth Needs No Eyes,
+  Harmony in/of the Mind/Earth, Wholeness in All, Eight Directions Awareness, Knowledge
+  from Within, The Wind's Vision, Cleansing Spirit) — none of which reuse the existing
+  buff hooks.
+
 ### s38 Kiho — effect registry, tranche 12: Rest, My Brother (Taint-strip atemi) (2026-06-12)
 Encoded **Rest, My Brother** (Earth 5 atemi): deals normal unarmed damage + additional
 unkept (rolled) damage dice equal to the opponent's Shadowlands Taint Rank, and a

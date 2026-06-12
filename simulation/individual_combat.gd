@@ -566,6 +566,9 @@ static func _get_kiho_armor_tn_bonus(character: L5RCharacterData, participant: P
 		match effect_id:
 			"kiho_soul_four_winds_armor":
 				bonus += insight + air_ring
+			"kiho_musubi_armor":
+				# Musubi (s38 Water): + Water Ring + Staves Skill Rank to Armor TN (staff in motion).
+				bonus += CharacterStats.get_ring_value(character, Enums.Ring.WATER) + int(character.skills.get("Staves", 0))
 	return bonus
 
 

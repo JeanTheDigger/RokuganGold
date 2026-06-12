@@ -776,6 +776,10 @@ static func execute_melee_attack(
 		# target's (and the wielder's own) Armor TN -10 for 3 Rounds.
 		_apply_victory_of_the_river(state, attacker, a_p, t_p, target_id, weapon_name)
 
+		# The Body is an Anvil (s38 Fire): a landed unarmed strike burns whoever touches
+		# the anvil-caster — Fire Ring contact Wounds in either direction.
+		_apply_body_is_anvil(attacker, a_p, target, t_p, weapon_name)
+
 		# Strength of the Spider (s30a): dealing 15+ Wounds (once/Round) gives the
 		# opponent -3 to all rolls during their next Turn.
 		_apply_strength_of_the_spider(attacker, a_p, t_p, dmg_result.get("wounds", 0))
@@ -1626,6 +1630,25 @@ static func _npc_maybe_activate_kiho(
 			continue
 		return execute_activate_kiho(state, npc_id, npc, k, "void_point", dice_engine)
 	return {}
+
+
+## The Body is an Anvil (s38 Fire): on a landed unarmed strike, the anvil-caster's
+## burning skin deals Fire Ring Wounds to whoever touches them. If the DEFENDER has
+## it active, the unarmed attacker is burned; if the ATTACKER has it active, the
+## struck target takes Fire Ring contact Wounds beyond the normal damage. Unarmed only.
+static func _apply_body_is_anvil(
+	attacker: L5RCharacterData,
+	a_p: IndividualCombat.Participant,
+	target: L5RCharacterData,
+	t_p: IndividualCombat.Participant,
+	weapon_name: String,
+) -> void:
+	if weapon_name != "" and weapon_name != "unarmed":
+		return
+	if "The Body is an Anvil" in t_p.active_kiho and not CharacterStats.is_dead(attacker):
+		WoundSystem.apply_damage(attacker, CharacterStats.get_ring_value(target, Enums.Ring.FIRE), 0)
+	if "The Body is an Anvil" in a_p.active_kiho and not CharacterStats.is_dead(target):
+		WoundSystem.apply_damage(target, CharacterStats.get_ring_value(attacker, Enums.Ring.FIRE), 0)
 
 
 ## First known OFFENSIVE atemi kiho whose effect is encoded (so the strike actually

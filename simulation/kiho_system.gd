@@ -65,7 +65,7 @@ const KIHO_DATA: Dictionary = {
 	"Way of the Earth":       {"ring": Enums.Ring.EARTH, "mastery": 4, "type": KihoType.MARTIAL},
 	"Wholeness in All":       {"ring": Enums.Ring.EARTH, "mastery": 6, "type": KihoType.KHARMIC},
 	# -- FIRE --
-	"The Body is an Anvil":   {"ring": Enums.Ring.FIRE, "mastery": 4, "type": KihoType.MYSTICAL},
+	"The Body is an Anvil":   {"ring": Enums.Ring.FIRE, "mastery": 4, "type": KihoType.MYSTICAL, "duration": {"ring": Enums.Ring.FIRE, "mult": 2}},
 	"Breaking Blow":          {"ring": Enums.Ring.FIRE, "mastery": 3, "type": KihoType.MARTIAL},
 	"Channel the Fire Dragon": {"ring": Enums.Ring.FIRE, "mastery": 6, "type": KihoType.INTERNAL},
 	"Dance of the Flames":    {"ring": Enums.Ring.FIRE, "mastery": 6, "type": KihoType.MARTIAL},
@@ -83,7 +83,7 @@ const KIHO_DATA: Dictionary = {
 	"Chi Protection":         {"ring": Enums.Ring.WATER, "mastery": 4, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"vp_cost": 1, "heal": {"ring": Enums.Ring.WATER}, "ally_auto_hit": true}},
 	"Dharma Technique":       {"ring": Enums.Ring.WATER, "mastery": 7, "type": KihoType.MARTIAL, "staff": true},
 	"Freezing the Lifeblood": {"ring": Enums.Ring.WATER, "mastery": 7, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"condition": "stunned"}},
-	"Musubi":                 {"ring": Enums.Ring.WATER, "mastery": 5, "type": KihoType.INTERNAL, "staff": true},
+	"Musubi":                 {"ring": Enums.Ring.WATER, "mastery": 5, "type": KihoType.INTERNAL, "staff": true, "effect_id": "kiho_musubi_armor"},
 	"Partaking the Waters":   {"ring": Enums.Ring.WATER, "mastery": 6, "type": KihoType.INTERNAL, "effect_id": "kiho_partaking_waters_reduction", "duration": {"ring": Enums.Ring.WATER, "mult": 2}},
 	"Ride the Water Dragon":  {"ring": Enums.Ring.WATER, "mastery": 3, "type": KihoType.KHARMIC},
 	"Slap the Wave":          {"ring": Enums.Ring.WATER, "mastery": 7, "type": KihoType.MYSTICAL},
