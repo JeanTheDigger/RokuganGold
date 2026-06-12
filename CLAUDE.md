@@ -3309,6 +3309,22 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 17: Destiny's Strike (post-hit reaction) (2026-06-12)
+First reaction kiho — establishes the post-hit reaction pattern. **Destiny's Strike**
+(Fire, while active): when struck by a melee attack, the defender immediately makes a
+single unarmed counterattack against the attacker. `_maybe_destiny_strike` (called from
+execute_melee_attack after a landed hit) resolves the counter **directly** (resolve_attack
++ resolve_damage + apply_damage, NOT via execute_melee_attack) so it cannot recurse, and
+is gated **once per Round** per defender (kata_used_this_round["destiny_strike"]) +
+melee-range. All GDD-given (unarmed counter, once/Round). Verified: a struck defender
+countered for 9 unarmed damage; a 2nd same-round strike triggered NO second counter (the
+once/round guard prevents recursion even if both combatants hold the kiho). LIMITATION:
+the GDD action-economy nuance ("counts as the Turn if not yet taken, else a Free Action")
+is not modelled — the counter is a free reactive strike. The OTHER reactions need
+different hooks not built here: pre-attack interrupt (Way of the Willow, Shadowed
+Mountain), deferred next-turn effect (Earthen Fist Disarm-on-miss), or grapple tracking
+(Bishamon's Grasp).
+
 ### s38 Kiho — effect registry, tranche 16: utility executes + ceiling (2026-06-12)
 Two more standalone non-atemi kiho executes, exhausting the cleanly-buildable set.
 - **Depths of the World** (Earth, Complex Action): `execute_depths_of_the_world` —

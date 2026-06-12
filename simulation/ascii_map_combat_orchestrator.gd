@@ -782,6 +782,10 @@ static func execute_melee_attack(
 		# the anvil-caster — Fire Ring contact Wounds in either direction.
 		_apply_body_is_anvil(attacker, a_p, target, t_p, weapon_name)
 
+		# Destiny's Strike (s38 Fire): a struck defender with it active immediately makes
+		# a single unarmed counterattack (once per Round).
+		_maybe_destiny_strike(state, target, t_p, attacker, a_p, dice_engine)
+
 		# Strength of the Spider (s30a): dealing 15+ Wounds (once/Round) gives the
 		# opponent -3 to all rolls during their next Turn.
 		_apply_strength_of_the_spider(attacker, a_p, t_p, dmg_result.get("wounds", 0))
@@ -1833,6 +1837,42 @@ static func _knockback_target(state: MapCombatState, target_id: int, from_pos: V
 		cur = nxt
 	state.positions[target_id] = cur
 	return cur
+
+
+## Destiny's Strike (s38 Fire): when struck by a melee attack, a defender with the kiho
+## active immediately makes a single unarmed counterattack against the attacker. Resolved
+## directly (not via execute_melee_attack) so it cannot recurse; once per Round per
+## defender (kata_used_this_round guard). Requires melee range (the attacker just struck).
+static func _maybe_destiny_strike(
+	state: MapCombatState,
+	defender: L5RCharacterData,
+	d_p: IndividualCombat.Participant,
+	attacker: L5RCharacterData,
+	a_p: IndividualCombat.Participant,
+	dice_engine: DiceEngine,
+) -> void:
+	if CharacterStats.is_dead(defender) or CharacterStats.is_dead(attacker):
+		return
+	if "Destiny's Strike" not in d_p.active_kiho:
+		return
+	if d_p.kata_used_this_round.get("destiny_strike", false):
+		return
+	var dpos: Vector2i = state.positions.get(defender.character_id, Vector2i(-1, -1))
+	var apos: Vector2i = state.positions.get(attacker.character_id, Vector2i(-1, -1))
+	if dpos.x < 0 or apos.x < 0 or _chebyshev(dpos, apos) > MELEE_RANGE_TILES:
+		return
+	d_p.kata_used_this_round["destiny_strike"] = true
+	var armor_tn: int = IndividualCombat.get_armor_tn(attacker, a_p, dice_engine, true, false, "unarmed")
+	var atk: Dictionary = IndividualCombat.resolve_attack(
+		defender, d_p, "unarmed", armor_tn, 0, dice_engine, false, false, false, "", {"opponent_clan": attacker.clan})
+	if atk.get("hit", false):
+		var dmg: Dictionary = IndividualCombat.resolve_damage(defender, "unarmed", 0, 0, dice_engine, d_p)
+		var red: int = IndividualCombat.total_defender_reduction(attacker, a_p, defender, d_p, "unarmed")
+		WoundSystem.apply_damage(attacker, dmg["raw_damage"], red)
+	state.combat_log.append({
+		"type": "destiny_strike_counter", "round": state.combat.round_number,
+		"counterattacker_id": defender.character_id, "target_id": attacker.character_id,
+		"hit": atk.get("hit", false)})
 
 
 ## The Body is an Anvil (s38 Fire): on a landed unarmed strike, the anvil-caster's
