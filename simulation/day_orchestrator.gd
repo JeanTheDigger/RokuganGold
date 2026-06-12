@@ -1084,6 +1084,12 @@ static func advance_day(
 	# SOFT_HEARTED (s45): killers must pass Willpower TN 20 or suffer +10 TN until next day.
 	_process_soft_hearted_kill_penalties(death_events, characters_by_id, dice_engine, ic_day)
 
+	# s38 Death Touch: resolve any kiho afflictions from tile combat (ring drain →
+	# catatonic → 3 Contested Void → death). Appends to death_events so a kill triggers
+	# same-tick succession via _process_lord_deaths below.
+	var _death_touch_results: Array = _process_death_touch_afflictions(
+		characters, dice_engine, death_events, active_topics, next_topic_id, ic_day)
+
 	var orphan_results: Array = _process_lord_deaths(
 		death_events, characters, objectives_map, successor_map,
 		active_successions, next_succession_id, characters_by_id, ic_day,
@@ -12379,6 +12385,108 @@ static func _soul_steal_would_kill(target: L5RCharacterData) -> bool:
 ## cleanup) with the caster as killer, and seeds a Tier 2 mysterious-death topic
 ## (subject_role defaults NEUTRAL per the dead-character rule). The MAHO crime
 ## record from the cast is separate; the death itself shows no obvious cause.
+## s38 Death Touch (Void 7) delayed lethal payload. Owner-authorized 2026-06-12:
+## full pipeline / all five Rings / next daily tick. A target stamped with
+## death_touch_affliction in tile combat is resolved here at the next daily tick.
+## The −1/Ring/hour drain (cap = caster's Insight Rank) completes within hours, so if
+## any Ring would reach 0 (the target's lowest Ring ≤ the Insight cap) the target
+## falls catatonic and makes 3 Contested Void Rolls vs the caster; dies if all 3 are
+## lost by 5+. The drain itself is the death-trigger mechanism only — a survivor's
+## Rings are not permanently reduced (GDD gives no recovery rule, so no invented
+## permanent stat loss). Runs before _process_lord_deaths so a kill triggers
+## same-tick succession. caster_void is snapshot at stamp time so it resolves even
+## if the caster has since died.
+static func _process_death_touch_afflictions(
+	characters: Array,
+	dice: DiceEngine,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	for target: L5RCharacterData in characters:
+		if target == null or CharacterStats.is_dead(target):
+			continue
+		var aff: Dictionary = target.death_touch_affliction
+		if aff.is_empty():
+			continue
+		var insight_cap: int = int(aff.get("insight_cap", 0))
+		var caster_void: int = int(aff.get("caster_void", 0))
+		var caster_id: int = int(aff.get("caster_id", -1))
+		target.death_touch_affliction = {}  # resolves this tick regardless of outcome
+		# Lowest Ring ≤ Insight cap → a Ring reaches 0 during the drain → catatonic.
+		if _lowest_ring(target) > insight_cap:
+			results.append({"target_id": target.character_id, "outcome": "survived_drain"})
+			continue
+		# Catatonic → 3 Contested Void Rolls vs the caster; die if all 3 lost by 5+.
+		var t_void: int = maxi(1, CharacterStats.get_ring_value(target, Enums.Ring.VOID))
+		var c_void: int = maxi(1, caster_void)
+		var all_lost_by_5: bool = true
+		for _i in range(3):
+			var t_roll: int = dice.roll_and_keep(t_void, t_void, true).total
+			var c_roll: int = dice.roll_and_keep(c_void, c_void, true).total
+			if c_roll - t_roll < 5:
+				all_lost_by_5 = false
+				break
+		if not all_lost_by_5:
+			results.append({"target_id": target.character_id, "outcome": "survived_contest"})
+			continue
+		results.append(_apply_death_touch_kill(target, caster_id, death_events, active_topics, next_topic_id, ic_day))
+	return results
+
+
+## Lowest Ring value across the five Rings (Death Touch catatonic threshold).
+static func _lowest_ring(c: L5RCharacterData) -> int:
+	var lo: int = 999
+	for ring: Enums.Ring in [Enums.Ring.AIR, Enums.Ring.EARTH, Enums.Ring.FIRE, Enums.Ring.WATER, Enums.Ring.VOID]:
+		lo = mini(lo, CharacterStats.get_ring_value(c, ring))
+	return lo
+
+
+## Death Touch kill — mirrors the maho mysterious-death path (_resolve_stealing_the_soul):
+## GREAT_DESTINY cheats death (survives at DOWN), else lethal wounds + a suspicious
+## death_event (killer = the caster) + a Tier 2 LEGAL mysterious-death topic
+## (NEUTRAL subject_role). The caster may already be dead — only caster_id is needed.
+static func _apply_death_touch_kill(
+	target: L5RCharacterData,
+	caster_id: int,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> Dictionary:
+	var ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+	if AdvantageSystem.check_great_destiny(target, ic_year):
+		var thr: int = CharacterStats.get_wound_threshold_per_level(target)
+		target.wounds_taken = thr * 6 + 1  # survives at the DOWN level
+		var gd: AdvantageData = AdvantageSystem.get_advantage(target, Enums.Advantage.GREAT_DESTINY)
+		if gd != null:
+			gd.metadata["last_triggered_ic_year"] = ic_year
+		return {"target_id": target.character_id, "outcome": "survived_destiny"}
+	var earth: int = CharacterStats.get_ring_value(target, Enums.Ring.EARTH)
+	target.wounds_taken = earth * 5 * 5  # guaranteed lethal
+	death_events.append({
+		"character_id": target.character_id,
+		"is_lord": target.role_position != "",
+		"cause": "death_touch",
+		"suspicious_death": true,
+		"ic_day": ic_day,
+		"killer_id": caster_id,
+	})
+	if not next_topic_id.is_empty():
+		var tid: int = next_topic_id[0]
+		next_topic_id[0] = tid + 1
+		var title: String = "Mysterious death of %s at %s" % [
+			target.character_name, target.physical_location]
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			tid, title, TopicData.Tier.TIER_2, TopicData.Category.LEGAL,
+			ic_day, 0.0, [], target.clan, "", target.character_id, "death", "mysterious")
+		topic.slug = "death_touch_death_%d" % target.character_id
+		active_topics.append(topic)
+	return {"target_id": target.character_id, "outcome": "killed", "killer_id": caster_id}
+
+
 static func _resolve_stealing_the_soul(
 	caster: L5RCharacterData,
 	target: L5RCharacterData,

@@ -115,6 +115,8 @@ class MapCombatState:
 	var companion_started_count: int = 0
 	## Per-skirmish dedup for "once per skirmish" atemi (kiho_name → Array[target_id]).
 	var once_per_skirmish_atemi: Dictionary = {}
+	## Death Touch consecutive-strike chains: "caster_id:target_id" → {count, last_round}.
+	var death_touch_chains: Dictionary = {}
 
 
 # =============================================================================
@@ -884,6 +886,32 @@ static func execute_atemi_strike(
 				state.once_per_skirmish_atemi[kiho_name] = []
 			state.once_per_skirmish_atemi[kiho_name].append(target_id)
 		r["simple_action_removed"] = true
+	# Death Touch (s38 Void 7): 3 atemi strikes on 3 consecutive Rounds, then a Void
+	# Point after the 3rd, stamps a delayed affliction (resolved by the world-sim at
+	# the next daily tick — ring drain → catatonic → 3 Contested Void → death).
+	if aspec.get("death_touch", false):
+		var dkey: String = "%d:%d" % [attacker_id, target_id]
+		if not r.get("hit", false):
+			state.death_touch_chains.erase(dkey)  # a miss breaks the consecutive chain
+		else:
+			var prev: Dictionary = state.death_touch_chains.get(dkey, {})
+			var cnt: int = 1
+			if not prev.is_empty() and int(prev.get("last_round", -99)) == state.combat.round_number - 1:
+				cnt = int(prev.get("count", 0)) + 1
+			state.death_touch_chains[dkey] = {"count": cnt, "last_round": state.combat.round_number}
+			r["death_touch_count"] = cnt
+			if cnt >= 3:
+				if attacker.current_void_points >= 1:
+					attacker.current_void_points -= 1
+					target.death_touch_affliction = {
+						"caster_id": attacker_id,
+						"insight_cap": attacker.insight_rank,
+						"caster_void": CharacterStats.get_ring_value(attacker, Enums.Ring.VOID),
+					}
+					r["death_touch_applied"] = true
+				else:
+					r["death_touch_no_void"] = true
+				state.death_touch_chains.erase(dkey)  # sequence resolved (sealed or failed)
 	state.combat_log.append({
 		"type": "atemi_strike", "round": state.combat.round_number,
 		"attacker_id": attacker_id, "target_id": target_id, "kiho": kiho_name,

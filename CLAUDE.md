@@ -3309,6 +3309,35 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 10: Death Touch (tile-combat → world-sim) (2026-06-12)
+Encoded **Death Touch** (Void 7 atemi) — the first kiho whose effect spans the tile-combat
+layer AND the world-sim. Owner-authorized design (2026-06-12): **full pipeline / all five
+Rings / next daily tick** (the other values are GDD-given). 18 atemi encoded.
+- **In-combat** (`execute_atemi_strike`, `MapCombatState.death_touch_chains`): tracks the
+  3-atemi-on-3-consecutive-Rounds chain (a miss or a non-consecutive round resets it). On
+  the 3rd consecutive strike, spends an additional Void Point and stamps a
+  `death_touch_affliction` Dictionary on the target ({caster_id, insight_cap = caster's
+  Insight Rank, caster_void snapshot}). No VP → `death_touch_no_void`, sequence fails.
+- **World-sim** (`DayOrchestrator._process_death_touch_afflictions`, run before
+  `_process_lord_deaths` for same-tick succession): the −1/Ring/hour drain (cap = Insight
+  Rank) completes within hours = the next daily tick, so if the target's **lowest Ring ≤
+  the Insight cap** a Ring reaches 0 → catatonic → 3 Contested Void Rolls (target vs the
+  snapshot caster Void); dies if all 3 are lost by 5+. Death mirrors the maho
+  mysterious-death path (`_apply_death_touch_kill`: GREAT_DESTINY → DOWN, else lethal
+  wounds + suspicious death_event killer=caster + Tier 2 LEGAL mysterious-death topic,
+  NEUTRAL subject_role). The affliction resolves and clears every tick regardless of
+  outcome. New `@export death_touch_affliction: Dictionary` on L5RCharacterData (persists
+  combat → world-sim, survives the caster's death via the caster_void snapshot).
+  Verified: chain builds 1→2→3 (VP 2→1, stamped on the 3rd); a low-Ring victim is killed
+  (death_event + topic + succession), a high-Ring target survives_drain, afflictions
+  cleared. LIMITATIONS (no invented mechanics): "catatonic" is not a persistent condition
+  (it is the context for the death rolls, resolved at the tick); a survivor's Rings are
+  NOT permanently reduced (GDD gives no recovery rule, so the drain is the death-trigger
+  mechanism only); excommunication is narrative (no mechanic). DEFERRED — 6 atemi need
+  bespoke/blocked subsystems (Rest My Brother Taint, Sever the Dark Lord's Touch undead
+  [s54], Banish All Shadows / Spin the Kharmic Wheel / Sense the Balance Advantage-system,
+  Silent Solace spell-slot) plus Earth Palm's Fire option.
+
 ### s38 Kiho — effect registry, tranche 9: while-active buff round durations (2026-06-12)
 Gave the round-duration while-active buffs proper auto-expiry (they previously persisted
 for the whole skirmish — a real over-buff). New `Participant.active_kiho_expiry`

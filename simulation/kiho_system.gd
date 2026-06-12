@@ -91,7 +91,7 @@ const KIHO_DATA: Dictionary = {
 	"Waves in All Things":    {"ring": Enums.Ring.WATER, "mastery": 4, "type": KihoType.MYSTICAL},
 	# -- VOID --
 	"Banish All Shadows":     {"ring": Enums.Ring.VOID, "mastery": 4, "type": KihoType.KHARMIC, "atemi": true},
-	"Death Touch":            {"ring": Enums.Ring.VOID, "mastery": 7, "type": KihoType.MYSTICAL, "atemi": true},
+	"Death Touch":            {"ring": Enums.Ring.VOID, "mastery": 7, "type": KihoType.MYSTICAL, "atemi": true, "atemi_effect": {"death_touch": true}},
 	"Eight Directions Awareness": {"ring": Enums.Ring.VOID, "mastery": 5, "type": KihoType.MYSTICAL},
 	"Knowledge from Within":  {"ring": Enums.Ring.VOID, "mastery": 4, "type": KihoType.INTERNAL},
 	"Mind/No-Mind":           {"ring": Enums.Ring.VOID, "mastery": 6, "type": KihoType.MYSTICAL, "atemi": true, "atemi_effect": {"condition": "dazed", "contest": {"attacker_ring": Enums.Ring.VOID, "defender_ring": Enums.Ring.FIRE}}},

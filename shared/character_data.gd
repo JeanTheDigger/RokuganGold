@@ -219,6 +219,11 @@ var spell_void_bonus_used: int = 0
 # -- Poison Tracking -----------------------------------------------------------
 
 @export var active_poisons: Array = []
+## Death Touch affliction (s38 kiho, Void 7). Stamped when a caster lands the 3
+## consecutive atemi strikes + the post-3rd Void Point. Resolved at the next daily
+## tick by DayOrchestrator (ring drain → catatonic → 3 Contested Void → death).
+## Keys: caster_id, insight_cap, caster_void. Empty = not afflicted.
+@export var death_touch_affliction: Dictionary = {}
 
 # -- Family Web (Section 22.6) -------------------------------------------------
 # Generation 1 (self), Generation 2 (parents), and any actively-simulated
