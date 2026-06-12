@@ -3309,6 +3309,33 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 16: utility executes + ceiling (2026-06-12)
+Two more standalone non-atemi kiho executes, exhausting the cleanly-buildable set.
+- **Depths of the World** (Earth, Complex Action): `execute_depths_of_the_world` —
+  immediately attempt to recover from a non-permanent Condition that allows a recovery
+  roll (Stunned, then Dazed) via the existing `attempt_recover_stunned/dazed`. Usable
+  even while Stunned (bypasses the can-act restriction). Verified: recovered Dazed.
+- **To the Last Breath** (Void): `execute_to_the_last_breath` — grant a selected ally
+  within 20 ft (4 tiles) one Void Point (capped at their Void Ring — the cap-at-max is
+  the conservative non-invented reading; GDD says "gains one Void Point"). No target may
+  benefit more than twice per skirmish (`MapCombatState.last_breath_uses`). Verified:
+  VP 1→2→3 across two uses, then target_at_use_limit on the third.
+**Kiho combat-effect ceiling reached.** All kiho that reuse the existing hooks (buffs,
+damage, conditions, move, suppression) or have a self-contained execute (AoE Daze,
+knockback, condition recovery, VP grant) are now wired: 22/24 atemi + ~13 non-atemi.
+The remaining ~36 non-atemi kiho are NOT blocked on unknown values — they are blocked on
+(a) being **out-of-combat utility** with no tile-combat effect to implement (Eye of the
+Eagle, Earth Needs No Eyes, Harmony in/of the Mind/Earth, Wholeness in All, Eight
+Directions Awareness, Knowledge from Within, The Wind's Vision, Cleansing Spirit, Channel
+the Fire Dragon, The Mind's Fire, Flee the Darkness), (b) **missing facing data** for
+arc/cone effects (Slap the Wave, Inari's Wrath), or (c) needing a **new combat subsystem**
+— a true reaction/interrupt mechanism with re-entrancy handling (Way of the Willow,
+Destiny's Strike, Shadowed Mountain, Earthen Fist, Bishamon's Grasp), leap/teleport
+movement (Riding the Clouds, The World Disappears, Strike Through the Wind, Calling the
+East Wind), a grapple damage-tick (Way of the Earth), or a per-round Reduction/maneuver
+layer (Rising Mountain, Root the Mountain, Dance of the Flames, Striking Through the Void,
+Touch the Void Dragon, Song of the World, Rebuke of the Heavens, Breaking Blow).
+
 ### s38 Kiho — effect registry, tranche 15: Hurricane Palm (knockback) (2026-06-12)
 **Hurricane Palm** (Air, Complex Action): `execute_hurricane_palm` — an unarmed strike
 that, on a hit, spends a Void Point to deal only HALF normal damage but knock the target

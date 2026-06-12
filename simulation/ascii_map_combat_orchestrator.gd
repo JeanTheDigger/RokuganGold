@@ -119,6 +119,8 @@ class MapCombatState:
 	var death_touch_chains: Dictionary = {}
 	## Sense the Balance reveals: "caster_id:target_id" → Array of revealed Enums ints.
 	var sense_known: Dictionary = {}
+	## To the Last Breath uses this skirmish: target_id → count (max 2 per target).
+	var last_breath_uses: Dictionary = {}
 
 
 # =============================================================================
@@ -1630,6 +1632,71 @@ static func _npc_maybe_activate_kiho(
 			continue
 		return execute_activate_kiho(state, npc_id, npc, k, "void_point", dice_engine)
 	return {}
+
+
+## Depths of the World (s38 Earth, Complex Action): immediately attempt to recover from
+## a non-permanent Condition that allows a recovery roll (Stunned, Dazed). May be used
+## even while Stunned (it bypasses the can-act restriction). Returns the recovered list.
+static func execute_depths_of_the_world(
+	state: MapCombatState,
+	caster_id: int,
+	caster: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(caster):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(caster_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if not caster.kiho.has("Depths of the World"):
+		return {"success": false, "reason": "kiho_not_known"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+	if p == null:
+		return {"success": false, "reason": "participant_missing"}
+	ts.consume_complex()  # Complex Action — usable even while Stunned (s38)
+	var recovered: Array = []
+	if IndividualCombat.CONDITION_STUNNED in p.conditions:
+		if IndividualCombat.attempt_recover_stunned(caster, p, dice_engine):
+			recovered.append("stunned")
+	if IndividualCombat.CONDITION_DAZED in p.conditions:
+		if IndividualCombat.attempt_recover_dazed(caster, p, p.daze_failed_recovery_attempts + 1, dice_engine):
+			recovered.append("dazed")
+	state.combat_log.append({
+		"type": "depths_of_the_world", "round": state.combat.round_number,
+		"caster_id": caster_id, "recovered": recovered})
+	return {"success": true, "recovered": recovered}
+
+
+## To the Last Breath (s38 Void): grant a selected ally within 20 ft (4 tiles) one Void
+## Point (capped at their Void Ring). No target may benefit more than twice per skirmish.
+static func execute_to_the_last_breath(
+	state: MapCombatState,
+	caster_id: int,
+	target_id: int,
+	caster: L5RCharacterData,
+	target: L5RCharacterData,
+) -> Dictionary:
+	if CharacterStats.is_dead(caster):
+		return {"success": false, "reason": "character_is_dead"}
+	if CharacterStats.is_dead(target):
+		return {"success": false, "reason": "target_is_dead"}
+	var ts: TurnState = state.turn_states.get(caster_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if not caster.kiho.has("To the Last Breath"):
+		return {"success": false, "reason": "kiho_not_known"}
+	if int(state.last_breath_uses.get(target_id, 0)) >= 2:
+		return {"success": false, "reason": "target_at_use_limit"}
+	var apos: Vector2i = state.positions.get(caster_id, Vector2i(-1, -1))
+	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
+	if apos.x < 0 or tpos.x < 0 or _chebyshev(apos, tpos) > 4:
+		return {"success": false, "reason": "out_of_range"}
+	ts.consume_complex()
+	var cap: int = CharacterStats.get_ring_value(target, Enums.Ring.VOID)
+	var before: int = target.current_void_points
+	target.current_void_points = mini(cap, target.current_void_points + 1)
+	state.last_breath_uses[target_id] = int(state.last_breath_uses.get(target_id, 0)) + 1
+	return {"success": true, "target_id": target_id, "vp_before": before, "vp_after": target.current_void_points}
 
 
 ## Thunder's Word (s38 Air, Complex Action): the caster shouts a word of power; every
