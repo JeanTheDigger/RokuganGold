@@ -730,7 +730,7 @@ static func resolve_atemi_strike(
 	if spec.has("timed"):
 		var t: Dictionary = spec["timed"]
 		var value: int = int(t["value_flat"]) if t.has("value_flat") else int(t.get("value_mult", 1)) * CharacterStats.get_ring_value(attacker, t.get("value_ring", Enums.Ring.FIRE))
-		var duration: int = CharacterStats.get_ring_value(attacker, t.get("duration_ring", Enums.Ring.FIRE))
+		var duration: int = CharacterStats.get_ring_value(attacker, t.get("duration_ring", Enums.Ring.FIRE)) * int(t.get("duration_mult", 1))
 		add_timed_modifier(target_p, t.get("kind", "all_rolls"), value, round_number + duration, t.get("source", "atemi_kiho"), "round")
 		result["timed_kind"] = t.get("kind", "")
 		result["timed_value"] = value

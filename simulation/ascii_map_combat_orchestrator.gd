@@ -193,12 +193,21 @@ static func setup_combat(
 ## companion AI, and the player-facing turn-based move UI) should use this rather
 ## than MovementSystem.budget(...FREE) directly so the kata is honored uniformly.
 static func free_move_budget(state: MapCombatState, char_id: int, character: L5RCharacterData) -> int:
-	var water: int = CharacterStats.get_ring_value(character, Enums.Ring.WATER)
-	var base: int = MovementSystem.budget(water, MovementSystem.MoveAction.FREE)
 	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	var water: int = _effective_water_ring(p, character)
+	var base: int = MovementSystem.budget(water, MovementSystem.MoveAction.FREE)
 	if p == null:
 		return base
 	return base + IndividualCombat.get_kata_free_move_bonus(character, p)
+
+
+## Water Ring for Move-distance purposes, reduced by any timed move penalty
+## (s38 Speed of the Mountains: −2 Ranks for Move Action distance). Floored at 0.
+static func _effective_water_ring(p: IndividualCombat.Participant, character: L5RCharacterData) -> int:
+	var water: int = CharacterStats.get_ring_value(character, Enums.Ring.WATER)
+	if p == null:
+		return water
+	return maxi(0, water + IndividualCombat.get_timed_modifier_total(p, "move_water_penalty"))
 
 
 ## BFS flood-fill returning all tiles reachable within move_budget steps.
@@ -1984,7 +1993,7 @@ static func execute_npc_turn(
 				target_in_melee = (best_target in melee_targets)
 
 		if not target_in_melee and ts.can_use_simple() and not ts.is_down_restricted(wl):
-			var simple_budget: int = MovementSystem.budget(CharacterStats.get_ring_value(npc, Enums.Ring.WATER), MovementSystem.MoveAction.SIMPLE)
+			var simple_budget: int = MovementSystem.budget(_effective_water_ring(state.combat.participants.get(npc_id, null), npc), MovementSystem.MoveAction.SIMPLE)
 			var move_r: Dictionary = _npc_move_toward(state, npc_id, best_target, npc, simple_budget, "simple", dice_engine)
 			if move_r.get("success", false):
 				actions_taken.append({"action": "simple_move", "result": move_r})

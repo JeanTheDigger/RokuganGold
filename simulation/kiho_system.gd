@@ -61,7 +61,7 @@ const KIHO_DATA: Dictionary = {
 	"The Rolling Avalanche":  {"ring": Enums.Ring.EARTH, "mastery": 5, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"normal_damage": {"bonus_ring": Enums.Ring.EARTH}}},
 	"Root the Mountain":      {"ring": Enums.Ring.EARTH, "mastery": 5, "type": KihoType.INTERNAL},
 	"Shadowed Mountain":      {"ring": Enums.Ring.EARTH, "mastery": 6, "type": KihoType.INTERNAL},
-	"Speed of the Mountains": {"ring": Enums.Ring.EARTH, "mastery": 4, "type": KihoType.KHARMIC, "atemi": true},
+	"Speed of the Mountains": {"ring": Enums.Ring.EARTH, "mastery": 4, "type": KihoType.KHARMIC, "atemi": true, "atemi_effect": {"timed": {"kind": "move_water_penalty", "value_flat": -2, "duration_ring": Enums.Ring.EARTH, "duration_mult": 2, "source": "speed_mountains"}}},
 	"Way of the Earth":       {"ring": Enums.Ring.EARTH, "mastery": 4, "type": KihoType.MARTIAL},
 	"Wholeness in All":       {"ring": Enums.Ring.EARTH, "mastery": 6, "type": KihoType.KHARMIC},
 	# -- FIRE --

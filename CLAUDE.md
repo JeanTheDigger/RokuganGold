@@ -3309,6 +3309,21 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 7: movement-denial atemi (2026-06-12)
+Encoded **Speed of the Mountains** (Earth 4 atemi: target's Water Ring counts 2 Ranks
+lower for Move distance, for 2× Earth Rounds). Extended the `timed` spec with
+`duration_mult` (duration = mult × ring) and added `_effective_water_ring(p, character)`
+— Water Ring minus any timed `move_water_penalty`, floored at 0 — used by both
+orchestrator move-budget sites (`free_move_budget` and the NPC SIMPLE budget). 16 atemi
+encoded. All GDD-given (−2 Ranks / 2× Earth Rounds). Verified: hit → target
+`move_water_penalty` −2 (expiry round + 2× Earth), free move budget 4 → 2. LIMITATION:
+the PC/companion SIMPLE-move UI paths (ascii_map_view) don't read the penalty yet — only
+the orchestrator's own NPC/free moves do. DEFERRED — 8 atemi need bespoke subsystems
+(Rest My Brother Taint, Sever the Dark Lord's Touch undead [s54], Chi Protection
+heal-over-time [needs chars_by_id in begin_turn], Banish All Shadows / Spin the Kharmic
+Wheel Disadvantage, Death Touch multi-round, Sense the Balance info, Silent Solace
+spell-slot) plus Earth Palm's Fire option.
+
 ### s38 Kiho — effect registry, tranche 6: Earth Palm + end-to-end verification (2026-06-12)
 Encoded **Earth Palm** (Earth 6 atemi, Water option: target suffers −4 damage dice
 for Earth Ring Rounds) — extended the `timed` spec with `value_flat` (a fixed value,
