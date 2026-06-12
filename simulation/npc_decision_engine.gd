@@ -1594,6 +1594,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 			return [
 				"FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
 				"CONDUCT_SORTIE",
+				"PURIFY_TAINTED_GROUND",
 				"SCOUT_ENEMY",
 				"ASSESS_PROVINCE_STATUS",
 				"DISPATCH_COURTIER", "DECLARE_WALL_EMERGENCY",

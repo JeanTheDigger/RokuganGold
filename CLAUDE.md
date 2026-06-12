@@ -5071,6 +5071,56 @@ but not executed in this environment.
   Phase 3: unit-type garrison companies (replacing abstract `garrison_pu`) + real
   horde-combat attrition + re-tuning garrison/SI/jade against a live threat.
 
+### Systems Added 2026-06-12 (Kaiu Wall — Kuni province purification, s2.4.17)
+- **s2.4.17 / Taisa AI ninth decision — the stationed Kuni now cleanses the wall province.**
+  Phase 2 stations a Kuni Shugenja at every Tower; this routes them to actually cast
+  PURIFY_TAINTED_GROUND. The full purification stack was already built and wired into the
+  seasonal pass — PURIFY_TAINTED_GROUND executor (TN 15 + PTL×5, −0.5 PTL + −0.25/Raise),
+  the Kuni Ward by rank (R1 −0.1/2s … R5 −0.3/6s) with the overwrite rule, adjacent bleed
+  (s2.4.3 `compute_adjacent_bleed`), and degraded-tower PTL — only the routing was missing.
+  Two changes: (1) added `PURIFY_TAINTED_GROUND` to the AT_WALL_TOWER context list (a Kuni
+  at a Tower is in the wall province and may purify it); (2) `_assign_kuni_purification_standing_objectives()`
+  (DayOrchestrator, daily, beside the Taisa-sortie pass) gives a Kuni Shugenja stationed at a
+  Tower a `MANAGE_TAINT` standing (target = the tower's province) when province PTL exceeds 1.0
+  (priority 1 above the s2.4.17 urgent threshold 3.0, else 2), and clears it when PTL falls back.
+  `MANAGE_TAINT` passes through the decomposer → objective_alignment 95 → PURIFY_TAINTED_GROUND;
+  `target_province_id` flows through `_passthrough` into the executor. Self-regulating: each cast
+  applies −0.5 PTL immediately, so once the ground is clean (PTL ≤ 1.0) the standing clears; the
+  Kuni Ward then holds the bleed down. Kuni Shugenja grants Lore: Shadowlands (rank-2 boosted),
+  so the roll is real, not a no-op. Dead-guarded; only Kuni Shugenja at a Tower; only touches its
+  own `MANAGE_TAINT` standing slot (lord directive takes precedence). Threshold values (1.0/3.0)
+  are GDD-locked (s2.4.17). Parse-checked; no tests per the no-test-code policy. With the engineer
+  (structural / FORTIFY), the Taisa (sortie / SS), and now the Kuni (spiritual / PTL), three of the
+  Wall's four family roles are self-driving at the Tower (the Hida garrison itself is Phase 3).
+
+### Taisa AI loop (s2.4.11) — stopping point reached (2026-06-12)
+The autonomous build halted at the first **undefined value**, exactly where the GDD stops
+specifying. **Built (fully-defined):** D1 SI maintenance (engineer FORTIFY), D2 Sortie timing
+(Taisa, via the LOCKED `validate_sortie`), and the s2.4.17 Kuni province-purification half of D7.
+**Blocked on undefined values / unbuilt dependencies — do NOT implement without owner input or
+the missing spec:**
+- **Horde composition counts — "pending GDD spec".** `HordeSystem._generate_jigoku_companies`,
+  `_generate_undead_companies`, and `_generate_sortie_horde_companies` all `return []`. The horde
+  roll fires (50%/2 seasons) but generates an EMPTY horde, so: horde assaults do nothing, and
+  **sortie combat resolves against an empty horde → 0 casualties → `garrison_pu` never drops from
+  sorties.** D2 still correctly applies SS reduction (defender auto-wins the empty fight), but no
+  attrition occurs until horde composition is defined. This single gap cascades: it blocks real
+  garrison attrition, the whole horde-assault crisis machinery, and any decision keyed on "horde
+  incoming" (Shireikan triage P1/P2, scout detection).
+- **Shireikan reserve Koku/jade pools — "dynamic … not a fixed formula" (s2.4.13 D3).** Explicitly
+  undefined; the Champion→Shireikan koku allocation amount is also unspecified. Blocks D4 (rice/koku
+  requests) and D5 (jade request) — there is no defined supply pipeline or amount to request against.
+- **Jade Petal Tea (D6) — no production/consumption/allocation numbers (s2.4.15).** The mechanic is
+  described qualitatively ("a handful of monasteries," "Brotherhood allocation") with zero values,
+  and it operates on a named/tracked garrison that does not exist (Phase 3).
+- **Garrison Taint roster / watch list (D7) + scout coverage (D3).** Both operate on named garrison
+  soldiers (Phase 3) and/or the empty-horde scout-detection. No persistent scout-deployment mechanic
+  is defined.
+- **Shireikan Troop Redeployment (s2.4.13 D2)** has fully-defined values (30% cap, source rules) and
+  works on abstract `garrison_pu`, but its trigger is garrison shortage — which cannot arise until
+  horde composition is defined (sorties currently inflict 0 casualties). Buildable, but inert until
+  the horde gap is closed; deferred to avoid wiring a trigger that never fires.
+
 ### Systems Added 2026-06-12 (Kaiu Wall — Taisa sortie timing, s2.4.11 D2, owner-authorized)
 - **s2.4.11 Decision 2 (Sortie Timing) — the Tower Commander now orders sorties.** With the
   Phase 2 roster stationing a Taisa at every Tower, the Taisa was still falling to generic

@@ -148,6 +148,7 @@ static func advance_day(
 	_assign_ronin_standing_objectives(characters, objectives_map)
 	_assign_kaiu_engineer_standing_objectives(characters, objectives_map, settlements)
 	_assign_taisa_sortie_standing_objectives(characters, settlements, provinces, objectives_map)
+	_assign_kuni_purification_standing_objectives(characters, settlements, provinces, objectives_map)
 	_assign_artisan_standing_objectives(characters, objectives_map)
 	# Witch-hunters before monks: Kuni Witch-Hunters are [Monk] school_type, so the
 	# monk pass would otherwise stamp them PERFORM_RITUAL before they get HUNT_MAHO.
@@ -8528,6 +8529,65 @@ static func _assign_taisa_sortie_standing_objectives(
 		elif st_need == "CONDUCT_SORTIE":
 			# No longer warranted (SS dropped, jade critical, SI/garrison gate) —
 			# clear our own stale standing so the Taisa conserves the garrison.
+			objectives.erase("standing")
+
+
+# -- Kuni Province Purification — s2.4.17 / Taisa AI ninth decision ------------
+# A Kuni Shugenja stationed at a Wall Tower cleanses the Tainted ground of the
+# wall province. Per s2.4.17 the request fires when the province PTL exceeds 1.0
+# (urgent above 3.0, emergency above 5.0). PURIFY_TAINTED_GROUND, its Kuni Ward,
+# the overwrite rule, and the seasonal bleed are already implemented (s2.4.3/17);
+# this pass routes the stationed Kuni to cast it. Self-regulating: each cast
+# applies -0.5 PTL immediately, so once PTL falls to <= 1.0 the standing clears.
+const KUNI_PURIFY_PTL_THRESHOLD: float = 1.0  # s2.4.17: "PTL exceeds 1.0"
+const KUNI_PURIFY_URGENT_PTL: float = 3.0     # s2.4.17: urgent threshold
+static func _assign_kuni_purification_standing_objectives(
+	characters: Array,
+	settlements: Array,
+	provinces: Dictionary,
+	objectives_map: Dictionary,
+) -> void:
+	var wall_towers: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_towers[str(s.settlement_id)] = s
+	if wall_towers.is_empty():
+		return
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.school != "Kuni Shugenja":
+			continue
+		var loc: String = character.physical_location
+		if not wall_towers.has(loc):
+			continue
+
+		var tower: SettlementData = wall_towers[loc] as SettlementData
+		var ptl: float = 0.0
+		var province: Variant = provinces.get(tower.province_id, null)
+		if province is ProvinceData:
+			ptl = (province as ProvinceData).province_taint_level
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+		var st_need: String = standing.get("need_type", "")
+
+		if ptl > KUNI_PURIFY_PTL_THRESHOLD:
+			# Assign/refresh the purification standing, never clobbering a
+			# different standing (e.g. a lord directive).
+			if standing.is_empty() or st_need == "MANAGE_TAINT":
+				objectives["standing"] = {
+					"need_type": "MANAGE_TAINT",
+					"priority": 1 if ptl > KUNI_PURIFY_URGENT_PTL else 2,
+					"auto_assigned": true,
+					"target_province_id": tower.province_id,
+				}
+		elif st_need == "MANAGE_TAINT":
+			# Ground is clean enough — clear our own stale standing.
 			objectives.erase("standing")
 
 
