@@ -3255,9 +3255,15 @@ per s60.2, so this is the only caller). Validated end-to-end with a headless
 SceneTree driver: void_point activation (VP −1, free action, kiho active),
 slot constraint (2nd Internal → slot_occupied, no cost paid; Martial bypasses),
 Meditation method (action consumed, VP untouched), the monk hook fires, non-monk
-skipped. Parse-checked. NOT yet wired: a player/companion-facing activation UI
-choice (PCs aren't monks; companion monks would need a companion-turn hook) and
-the non-combat character-level kiho buffs (separate deferred infra).
+skipped. Parse-checked. **Monk companion hook added (2026-06-12):** the same
+`_npc_maybe_activate_kiho` is wired into `execute_companion_turn` (after
+begin_turn/decide_action, before movement/attack) so an allied monk companion on
+a PC mission also buffs up — gated on a non-RETREAT command (a retreating/broken
+companion doesn't stop to buff) and an empty slot. Verified end-to-end (a STEADY
+NAMED_ALLY monk companion activates Air Fist via Void Point, buff appears in the
+turn's actions). NOT yet wired: a player-facing activation UI choice (PCs aren't
+monks per s60.2, so no PC monk path exists) and the non-combat character-level
+kiho buffs (separate deferred infra).
 
 ### s38 Kiho — Combat Effects (first tranche wired into s40, 2026-06-06)
 `KihoSystem` effects apply only while a kiho is ACTIVE on a combatant

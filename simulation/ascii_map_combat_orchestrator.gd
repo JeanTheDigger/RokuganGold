@@ -2107,6 +2107,16 @@ static func execute_companion_turn(
 	var cmd: int = CompanionSystem.decide_action(companion)
 	var actions: Array = []
 
+	# -- Monk companion: buff up with a kiho at the start of the fight (s38/s38a).
+	# Free action (Void Point), so it does not consume the move/attack budget; a
+	# retreating/broken companion does not stop to buff. Same gate as NPC monks.
+	if cmd != CompanionData.Command.RETREAT:
+		var cp: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+		if cp != null and cp.active_kiho.is_empty():
+			var kr: Dictionary = _npc_maybe_activate_kiho(state, cid, character, dice_engine)
+			if kr.get("success", false):
+				actions.append(kr)
+
 	# RETREAT / BROKEN-FLEE: move toward the nearest exit; leave if reached.
 	if cmd == CompanionData.Command.RETREAT:
 		var exit_tile: Vector2i = _nearest_exit_tile(state, cid)
