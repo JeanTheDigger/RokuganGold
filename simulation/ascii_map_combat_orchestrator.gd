@@ -731,6 +731,14 @@ static func execute_melee_attack(
 	if _chebyshev(apos, tpos) > MELEE_RANGE_TILES:
 		return {"success": false, "reason": "out_of_melee_range"}
 
+	# Shadowed Mountain (s38 Earth): a defender with it active may immediately enter Full
+	# Defense Stance just before being attacked (once per activation) — raising this
+	# attack's Armor TN. The stance change is sticky (they remain in Full Defense).
+	if "Shadowed Mountain" in t_p.active_kiho and not t_p.shadowed_mountain_used \
+			and t_p.stance != Enums.Stance.FULL_DEFENSE:
+		t_p.stance = Enums.Stance.FULL_DEFENSE
+		t_p.shadowed_mountain_used = true
+
 	var is_being_guarded: bool = _is_being_guarded(state, target_id)
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, true, is_being_guarded, weapon_name)
 
@@ -1599,6 +1607,9 @@ static func execute_activate_kiho(
 	var act: Dictionary = IndividualCombat.activate_kiho(character, p, kiho_name)
 	if not act.get("ok", false):
 		return {"success": false, "reason": act.get("reason", "activation_failed")}
+	# Shadowed Mountain: a fresh activation re-arms its once-per-activation stance switch.
+	if kiho_name == "Shadowed Mountain":
+		p.shadowed_mountain_used = false
 	# Record a round-based expiry for kiho that "Last Rounds equal to [Ring]" (s38).
 	var dur_spec: Dictionary = KihoSystem.KIHO_DATA.get(kiho_name, {}).get("duration", {})
 	if not dur_spec.is_empty():

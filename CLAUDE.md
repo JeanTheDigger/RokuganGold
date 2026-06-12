@@ -3309,6 +3309,20 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 18: Shadowed Mountain (pre-attack reaction) (2026-06-12)
+**Shadowed Mountain** (Earth, while active): a defender may immediately enter Full
+Defense Stance just before being attacked (once per activation), raising that attack's
+Armor TN. Pre-attack hook in execute_melee_attack (before the Armor TN computation): if
+the target holds the kiho, isn't already in Full Defense, and hasn't used it this
+activation → switch `t_p.stance = FULL_DEFENSE` and mark used. The switch is sticky
+(they remain in Full Defense). New `Participant.shadowed_mountain_used`, re-armed by
+`execute_activate_kiho` on a fresh activation. All GDD-given (Full Defense, once/activation).
+Verified: a defender switched ATTACK→FULL_DEFENSE just before being struck (used=true).
+This + Destiny's Strike (tranche 17) cover both reaction-hook shapes (pre-attack stance
+switch / post-hit counter). The 3 remaining reactions need infra not built here:
+deferred next-turn effect (Earthen Fist Disarm-on-miss), interrupt-with-choice + VP
+(Way of the Willow), grapple + attacker tracking (Bishamon's Grasp).
+
 ### s38 Kiho — effect registry, tranche 17: Destiny's Strike (post-hit reaction) (2026-06-12)
 First reaction kiho — establishes the post-hit reaction pattern. **Destiny's Strike**
 (Fire, while active): when struck by a melee attack, the defender immediately makes a
