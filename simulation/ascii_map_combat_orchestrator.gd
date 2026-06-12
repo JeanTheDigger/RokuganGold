@@ -1497,6 +1497,11 @@ static func execute_activate_kiho(
 	var act: Dictionary = IndividualCombat.activate_kiho(character, p, kiho_name)
 	if not act.get("ok", false):
 		return {"success": false, "reason": act.get("reason", "activation_failed")}
+	# Record a round-based expiry for kiho that "Last Rounds equal to [Ring]" (s38).
+	var dur_spec: Dictionary = KihoSystem.KIHO_DATA.get(kiho_name, {}).get("duration", {})
+	if not dur_spec.is_empty():
+		var dur: int = CharacterStats.get_ring_value(character, dur_spec.get("ring", Enums.Ring.EARTH)) * int(dur_spec.get("mult", 1))
+		p.active_kiho_expiry[kiho_name] = state.combat.round_number + dur
 	state.combat_log.append({
 		"type": "kiho_activated", "char_id": char_id, "kiho": kiho_name,
 		"method": method, "round": state.combat.round_number})
@@ -1839,6 +1844,7 @@ static func advance_round(
 	for _tp: IndividualCombat.Participant in state.combat.participants.values():
 		_process_world_is_empty_expiry(state, _tp, chars_by_id)
 		IndividualCombat.expire_timed_modifiers(_tp, state.combat.round_number)
+		IndividualCombat.expire_active_kiho(_tp, state.combat.round_number)
 
 	# Re-roll initiative for all active participants (L5R 4e: initiative re-rolled each round).
 	# CENTER stance carry-forward: void bonus from last round applies to this roll.

@@ -147,6 +147,7 @@ class Participant:
 	var kata_used_this_turn: Dictionary = {}   # tracks once-per-Turn kata uses by effect_id
 	var kata_used_this_round: Dictionary = {}  # tracks once-per-Round kata uses by effect_id
 	var active_kiho: Array = []                 # currently-active kiho names (GDD s38; see KihoSystem)
+	var active_kiho_expiry: Dictionary = {}     # kiho_name → expiry round (for round-duration buffs)
 	var dual_wielding: bool = false            # true when holding an off-hand weapon
 	var off_hand_weapon: String = ""           # name of off-hand weapon ("" = none)
 	var earth_trade_amount: int = 0            # Armor TN traded for damage (earth_trade_armor_for_damage)
@@ -436,6 +437,16 @@ static func expire_timed_modifiers(p: Participant, round_number: int) -> void:
 		elif int(m.get("expires_round", 0)) > round_number:
 			kept.append(m)
 	p.timed_modifiers = kept
+
+
+## Remove active kiho whose round-duration has elapsed (s38: "Lasts Rounds equal to
+## [Ring]"). Kiho with no recorded expiry (Air Fist's "one day", indefinite buffs)
+## persist for the whole skirmish. Called from the orchestrator's advance_round.
+static func expire_active_kiho(p: Participant, round_number: int) -> void:
+	for k: String in p.active_kiho_expiry.keys():
+		if int(p.active_kiho_expiry[k]) <= round_number:
+			p.active_kiho.erase(k)
+			p.active_kiho_expiry.erase(k)
 
 
 ## Remove turn-based ("turn_end") timed modifiers from a participant whose turn is

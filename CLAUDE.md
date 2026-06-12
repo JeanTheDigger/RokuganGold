@@ -3309,6 +3309,21 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 9: while-active buff round durations (2026-06-12)
+Gave the round-duration while-active buffs proper auto-expiry (they previously persisted
+for the whole skirmish — a real over-buff). New `Participant.active_kiho_expiry`
+(kiho_name → expiry round) + `IndividualCombat.expire_active_kiho(p, round)` (mirrors
+`expire_timed_modifiers`), called per participant in `advance_round`. `execute_activate_kiho`
+records the expiry on activation from a new KIHO_DATA `duration` key (`{ring, mult}` →
+round + mult × the activator's ring). Added durations to the 3 round-duration buffs:
+**Embrace the Stone** (Earth Rounds), **Grasp the Earth Dragon** (Earth Rounds),
+**Partaking the Waters** (2× Water Rounds). Indefinite buffs (Air Fist "one day",
+Soul of the Four Winds "while active") have no `duration` key and persist for the skirmish.
+Their Reduction/wound bonuses (read via the `_get_kiho_*` hooks off `active_kiho`) now
+correctly stop once the kiho expires. All GDD-given. Verified: Embrace the Stone activated
+round 1 (expiry 4 = round + Earth 3), removed from `active_kiho` after 3 round-advances
+(round 4) while Air Fist (no duration) persists.
+
 ### s38 Kiho — effect registry, tranche 8: heal atemi (Chi Protection) (2026-06-12)
 Encoded **Chi Protection** (Water 4 atemi: a touched willing ally regains Wounds equal
 to the caster's Water Ring; 1 VP; cannot target self). Three additions: a `heal` spec
