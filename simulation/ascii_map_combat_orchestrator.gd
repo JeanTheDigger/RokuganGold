@@ -1740,6 +1740,82 @@ static func execute_to_the_last_breath(
 	return {"success": true, "target_id": target_id, "vp_before": before, "vp_after": target.current_void_points}
 
 
+## Calling the East Wind (s38 Air, Complex Action): leap up to Air Ring ×10 ft (= ×2
+## tiles) to a free tile adjacent to the target, then make an unarmed kick with +1k0
+## damage (and a Free Raise toward Knockdown, recorded as metadata). Fails if no landing
+## tile is reachable within the leap.
+static func execute_calling_the_east_wind(
+	state: MapCombatState,
+	attacker_id: int,
+	target_id: int,
+	attacker: L5RCharacterData,
+	target: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(attacker):
+		return {"success": false, "reason": "character_is_dead"}
+	if CharacterStats.is_dead(target):
+		return {"success": false, "reason": "target_is_dead"}
+	var ts: TurnState = state.turn_states.get(attacker_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if not attacker.kiho.has("Calling the East Wind"):
+		return {"success": false, "reason": "kiho_not_known"}
+	if ts.is_down_restricted(CharacterStats.get_wound_level(attacker)):
+		return {"success": false, "reason": "down_only_free_actions"}
+	var a_p: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if a_p == null or t_p == null:
+		return {"success": false, "reason": "participant_missing"}
+	if not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_actions_remaining"}
+	var apos: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
+	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
+	if apos.x < 0 or tpos.x < 0:
+		return {"success": false, "reason": "position_unknown"}
+	var leap_tiles: int = CharacterStats.get_ring_value(attacker, Enums.Ring.AIR) * 2  # Air×10 ft
+	var dest: Vector2i = apos
+	if _chebyshev(apos, tpos) > MELEE_RANGE_TILES:
+		dest = Vector2i(-1, -1)
+		var occ: Dictionary = {}
+		for cid: int in state.positions:
+			occ[state.positions[cid]] = true
+		for dx: int in [-1, 0, 1]:
+			for dy: int in [-1, 0, 1]:
+				if dx == 0 and dy == 0:
+					continue
+				var cand: Vector2i = Vector2i(tpos.x + dx, tpos.y + dy)
+				if _chebyshev(apos, cand) > leap_tiles or occ.has(cand):
+					continue
+				if state.map != null and not MovementSystem.is_passable(state.map.get_tile(cand.x, cand.y)):
+					continue
+				dest = cand
+				break
+			if dest.x >= 0:
+				break
+		if dest.x < 0:
+			return {"success": false, "reason": "no_leap_landing"}
+		state.positions[attacker_id] = dest
+	ts.consume_complex()
+	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, true, _is_being_guarded(state, target_id), "unarmed")
+	var result: Dictionary = IndividualCombat.resolve_attack(
+		attacker, a_p, "unarmed", armor_tn, 0, dice_engine, false, false, false, "", {"opponent_clan": target.clan})
+	if result.get("hit", false):
+		var dmg: Dictionary = IndividualCombat.resolve_damage(attacker, "unarmed", 1, 0, dice_engine, a_p)  # +1k0 leap bonus
+		var red: int = IndividualCombat.total_defender_reduction(target, t_p, attacker, a_p, "unarmed")
+		var wd: Dictionary = WoundSystem.apply_damage(target, dmg["raw_damage"], red)
+		result["wounds_inflicted"] = wd.get("final_damage", 0)
+		result["target_dead"] = CharacterStats.is_dead(target)
+	result["leaped_to"] = dest
+	result["knockdown_free_raise"] = true
+	if not result.has("reason"):
+		result["success"] = true
+	state.combat_log.append({
+		"type": "calling_the_east_wind", "round": state.combat.round_number,
+		"attacker_id": attacker_id, "target_id": target_id, "leaped_to": dest, "hit": result.get("hit", false)})
+	return result
+
+
 ## Thunder's Word (s38 Air, Complex Action): the caster shouts a word of power; every
 ## OTHER living combatant capable of hearing (the whole skirmish — a power-word shout)
 ## makes a Contested Air Roll against a single caster roll, and those who fail are Dazed.

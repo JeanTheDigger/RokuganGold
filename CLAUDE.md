@@ -3309,6 +3309,15 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 25: Calling the East Wind (leap-kick) (2026-06-12)
+**Calling the East Wind** (Air, Complex Action): `execute_calling_the_east_wind` — leap up
+to Air Ring ×10 ft (= ×2 tiles) to a free passable tile adjacent to the target, then make
+an unarmed kick with +1k0 damage. Finds the landing tile (adjacent to the target, within
+the leap, unoccupied, passable); fails (`no_leap_landing`) if none is reachable. The
+Knockdown Free Raise is recorded as metadata (the kick is a damage attack, not a separate
+Knockdown maneuver). All GDD-given (Air×10 ft leap, +1k0). Verified: an Air-4 monk 6 tiles
+away leaped to an adjacent tile and the kick landed. Establishes the leap-attack pattern.
+
 ### s38 Kiho — effect registry, tranche 24: Strike Through the Wind (extended range) (2026-06-12)
 **Strike Through the Wind** (Air, while active): unarmed melee attacks reach School Rank
 ×25 ft (= ×5 tiles) by transmitting force through the air. Wired in execute_melee_attack's
