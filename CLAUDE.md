@@ -3309,6 +3309,19 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 15: Hurricane Palm (knockback) (2026-06-12)
+**Hurricane Palm** (Air, Complex Action): `execute_hurricane_palm` — an unarmed strike
+that, on a hit, spends a Void Point to deal only HALF normal damage but knock the target
+back 2× Air Ring feet (= 2×Air/5 tiles) directly away from the attacker and leave them
+Prone (even on 0 Wounds). New `_knockback_target` grid-push helper: steps the target in
+the away-direction (signi of the position delta), stopping at a wall, an occupied tile,
+or the map edge. All GDD-given (half damage, 2×Air ft, Prone). Verified: Air-6 caster,
+VP 2→1, knockback 2 tiles, target pushed (6,5)→(8,5) away from the attacker at (5,5),
+Prone, half damage. Establishes the grid-knockback mechanic (reusable for other push
+effects). DEFERRED — the arc/cone AoE (Slap the Wave, Inari's Wrath) need facing data
+(not tracked); the reaction kiho need a true interrupt mechanism with re-entrancy
+handling (a deliberate subsystem, not built here).
+
 ### s38 Kiho — effect registry, tranche 14: Thunder's Word (AoE Daze) (2026-06-12)
 First AoE kiho — establishes the standalone non-atemi kiho action pattern in the
 orchestrator. **Thunder's Word** (Air, Complex Action): `execute_thunders_word` — the

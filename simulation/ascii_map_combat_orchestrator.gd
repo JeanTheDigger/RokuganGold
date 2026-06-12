@@ -1677,6 +1677,97 @@ static func execute_thunders_word(
 	return {"success": true, "caster_roll": caster_roll, "dazed": dazed}
 
 
+## Hurricane Palm (s38 Air, Complex Action): an unarmed strike that, on a hit, spends a
+## Void Point to deal only HALF normal damage but knock the target back 2× Air Ring feet
+## (= 2×Air/5 tiles) directly away from the attacker and leave them Prone (even on 0
+## Wounds). Stops the knockback at walls / occupied tiles / the map edge.
+static func execute_hurricane_palm(
+	state: MapCombatState,
+	attacker_id: int,
+	target_id: int,
+	attacker: L5RCharacterData,
+	target: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(attacker):
+		return {"success": false, "reason": "character_is_dead"}
+	if CharacterStats.is_dead(target):
+		return {"success": false, "reason": "target_is_dead"}
+	var ts: TurnState = state.turn_states.get(attacker_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if not attacker.kiho.has("Hurricane Palm"):
+		return {"success": false, "reason": "kiho_not_known"}
+	if attacker.current_void_points < 1:
+		return {"success": false, "reason": "no_void_points"}
+	if ts.is_down_restricted(CharacterStats.get_wound_level(attacker)):
+		return {"success": false, "reason": "down_only_free_actions"}
+	var a_p: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if a_p == null or t_p == null:
+		return {"success": false, "reason": "participant_missing"}
+	if a_p.stance == Enums.Stance.DEFENSE or a_p.stance == Enums.Stance.FULL_DEFENSE:
+		return {"success": false, "reason": "defense_cannot_attack"}
+	if not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_actions_remaining"}
+	var apos: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
+	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
+	if apos.x < 0 or tpos.x < 0:
+		return {"success": false, "reason": "position_unknown"}
+	if _chebyshev(apos, tpos) > MELEE_RANGE_TILES:
+		return {"success": false, "reason": "out_of_melee_range"}
+	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, true, _is_being_guarded(state, target_id), "unarmed")
+	var result: Dictionary = IndividualCombat.resolve_attack(
+		attacker, a_p, "unarmed", armor_tn, 0, dice_engine, false, false, false, "", {"opponent_clan": target.clan})
+	ts.consume_complex()
+	if result.get("hit", false):
+		attacker.current_void_points -= 1
+		var dmg: Dictionary = IndividualCombat.resolve_damage(attacker, "unarmed", 0, 0, dice_engine, a_p)
+		var reduction: int = IndividualCombat.total_defender_reduction(target, t_p, attacker, a_p, "unarmed")
+		var half: int = int(dmg["raw_damage"]) / 2  # half normal damage, rounded down
+		var wd: Dictionary = WoundSystem.apply_damage(target, half, reduction)
+		var air: int = CharacterStats.get_ring_value(attacker, Enums.Ring.AIR)
+		var kb: int = int(2 * air / 5)  # 2× Air Ring feet → tiles (1 tile = 5 ft)
+		result["knockback_to"] = _knockback_target(state, target_id, apos, kb)
+		IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_PRONE)
+		result["wounds_inflicted"] = wd.get("final_damage", half)
+		result["knockback_tiles"] = kb
+		result["prone"] = true
+		result["target_dead"] = CharacterStats.is_dead(target)
+	if not result.has("reason"):
+		result["success"] = true
+	state.combat_log.append({
+		"type": "hurricane_palm", "round": state.combat.round_number,
+		"attacker_id": attacker_id, "target_id": target_id, "hit": result.get("hit", false)})
+	return result
+
+
+## Push a target up to `tiles` tiles directly away from `from_pos`, stopping at a wall,
+## an occupied tile, or the map edge. Updates and returns the new position. (s38 knockback.)
+static func _knockback_target(state: MapCombatState, target_id: int, from_pos: Vector2i, tiles: int) -> Vector2i:
+	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
+	if tiles <= 0 or tpos.x < 0:
+		return tpos
+	var dx: int = signi(tpos.x - from_pos.x)
+	var dy: int = signi(tpos.y - from_pos.y)
+	if dx == 0 and dy == 0:
+		return tpos
+	var occupied: Dictionary = {}
+	for cid: int in state.positions:
+		if cid != target_id:
+			occupied[state.positions[cid]] = true
+	var cur: Vector2i = tpos
+	for _n in range(tiles):
+		var nxt: Vector2i = Vector2i(cur.x + dx, cur.y + dy)
+		if state.map == null or not MovementSystem.is_passable(state.map.get_tile(nxt.x, nxt.y)):
+			break
+		if occupied.has(nxt):
+			break
+		cur = nxt
+	state.positions[target_id] = cur
+	return cur
+
+
 ## The Body is an Anvil (s38 Fire): on a landed unarmed strike, the anvil-caster's
 ## burning skin deals Fire Ring Wounds to whoever touches them. If the DEFENDER has
 ## it active, the unarmed attacker is burned; if the ATTACKER has it active, the
