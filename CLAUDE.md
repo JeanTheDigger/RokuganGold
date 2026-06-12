@@ -3220,14 +3220,25 @@ selection). Combat effects are now **wired into IndividualCombat** (s40), not st
 `_get_kata_initiative_modifiers`, `_get_kata_armor_tn_bonus`, `_get_kata_attack_modifiers`,
 `_get_kata_damage_modifiers`, `_get_kata_wound_penalty_reduction`, `get_kata_reduction_bonus`,
 `get_kata_opponent_reduction_penalty` resolve effect_ids into Armor TN / attack / damage /
-Initiative / wound-penalty / Reduction modifiers, gated by stance and maneuver. 33 of 42
-distinct kata effect_ids are wired. **9 remain deferred** (need ASCII-map movement / ally /
-mount / orchestrator context, not the core resolve): `earth_spider_wound_debuff`,
-`multi_empire_edge_skill_bonus`, `multi_standing_heavens_void_reroll`,
-`multi_victory_river_armor_pierce`, `multi_world_empty_void_attack`,
-`water_attack_stance_movement`, `water_lion_ally_initiative`, `water_stealth_movement`,
-`water_unicorn_mount_bonus`. (`get_kata_reduction_bonus` is wired but currently has no
-caller — Reduction is applied via the orchestrator damage path; harmless until consumed.)
+Initiative / wound-penalty / Reduction modifiers, gated by stance and maneuver. 34 of 42
+distinct kata effect_ids are wired. **`water_attack_stance_movement` wired into the ASCII map
+movement layer (2026-06-12):** Striking as Water (s30a) — "In Attack Stance: move 5 additional
+feet as a Free Action" — `IndividualCombat.get_kata_free_move_bonus` returns +1 tile (1 tile =
+5 ft) when the character knows the kata and is in Attack Stance (Attack only, not Full Attack,
+per the GDD text); `AsciiMapCombatOrchestrator.free_move_budget(state, char_id, character)` adds
+it to the Free-action move budget and is now the single source used by the NPC and companion
+move paths (the player-facing turn-based move UI should adopt it too). SIMPLE/FULL move budgets
+unchanged (the GDD grants the bonus to the Free action only). Passive — no AI/UI caller needed;
+any NPC/companion bushi or monk in Attack Stance who knows the kata gets the extra tile
+automatically. **8 remain deferred** (need infra that does not exist yet, not the core resolve):
+`earth_spider_wound_debuff` / `multi_world_empty_void_attack` / `multi_victory_river_armor_pierce`
+(need a timed/duration-condition layer — the round/turn durations are GDD-given, the system is
+not), `multi_standing_heavens_void_reroll` (when-struck defender-reaction hook),
+`water_lion_ally_initiative` (Reactions-Stage ally-initiative action), `water_unicorn_mount_bonus`
+(no mount system on the map), `multi_empire_edge_skill_bonus` (needs a stored chosen-skill field),
+`water_stealth_movement` (near-no-op on the tile map — "does not change maximum distance").
+(`get_kata_reduction_bonus` is wired but currently has no caller — Reduction is applied via the
+orchestrator damage path; harmless until consumed.)
 
 ### s38 Kiho — in-combat activation cost path (2026-06-12)
 `IndividualCombat.activate_kiho` did the known + active-slot validation but

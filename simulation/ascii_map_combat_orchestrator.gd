@@ -186,6 +186,19 @@ static func setup_combat(
 # -- Movement Helpers ---------------------------------------------------------
 # =============================================================================
 
+## Free-action move budget (in tiles) for a combatant, including the Striking as
+## Water kata bonus (s30a: +5 ft = +1 tile in Attack Stance). Callers (NPC AI,
+## companion AI, and the player-facing turn-based move UI) should use this rather
+## than MovementSystem.budget(...FREE) directly so the kata is honored uniformly.
+static func free_move_budget(state: MapCombatState, char_id: int, character: L5RCharacterData) -> int:
+	var water: int = CharacterStats.get_ring_value(character, Enums.Ring.WATER)
+	var base: int = MovementSystem.budget(water, MovementSystem.MoveAction.FREE)
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p == null:
+		return base
+	return base + IndividualCombat.get_kata_free_move_bonus(character, p)
+
+
 ## BFS flood-fill returning all tiles reachable within move_budget steps.
 ## Enemy tiles are treated as impassable (block movement through). Ally tiles
 ## are passable (you can move through an ally's tile).
@@ -1665,7 +1678,7 @@ static func execute_npc_turn(
 		# Move toward target using free move first, then simple if needed.
 		var moved: bool = false
 		if ts.can_use_free_move() and not ts.is_down_restricted(wl):
-			var free_budget: int = MovementSystem.budget(CharacterStats.get_ring_value(npc, Enums.Ring.WATER), MovementSystem.MoveAction.FREE)
+			var free_budget: int = free_move_budget(state, npc_id, npc)
 			var move_r: Dictionary = _npc_move_toward(state, npc_id, best_target, npc, free_budget, "free", dice_engine)
 			if move_r.get("success", false):
 				actions_taken.append({"action": "free_move", "result": move_r})
@@ -1721,7 +1734,7 @@ static func execute_npc_turn(
 					actions_taken.append({"action": "off_hand_attack", "result": oh})
 	elif ts.can_use_free_move() and not ts.is_down_restricted(wl):
 		# Can still use free move to get closer.
-		var free_budget: int = MovementSystem.budget(CharacterStats.get_ring_value(npc, Enums.Ring.WATER), MovementSystem.MoveAction.FREE)
+		var free_budget: int = free_move_budget(state, npc_id, npc)
 		var move_r: Dictionary = _npc_move_toward(state, npc_id, best_target, npc, free_budget, "free", dice_engine)
 		if move_r.get("success", false):
 			actions_taken.append({"action": "free_move_late", "result": move_r})
@@ -2199,11 +2212,10 @@ static func _companion_step_toward(
 	character: L5RCharacterData,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	var water: int = CharacterStats.get_ring_value(character, Enums.Ring.WATER)
 	var path: Array = find_path(state, cid, goal)
 	if path.is_empty():
 		return {"success": false, "reason": "no_path"}
-	var budget: int = MovementSystem.budget(water, MovementSystem.MoveAction.FREE)
+	var budget: int = free_move_budget(state, cid, character)
 	var dest: Vector2i = state.positions.get(cid, Vector2i(-1, -1))
 	var cost: int = 0
 	for step: Vector2i in path:

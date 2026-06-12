@@ -381,6 +381,18 @@ static func _get_kata_wound_penalty_reduction(character: L5RCharacterData) -> in
 	return 0
 
 
+## Striking as Water (s30a, water_attack_stance_movement): "In Attack Stance:
+## move 5 additional feet as a Free Action." One tile = 5 ft (MovementSystem), so
+## this is +1 tile to the Free-action move budget while in Attack Stance. Public —
+## called by the ASCII map orchestrator when computing the Free-move budget.
+static func get_kata_free_move_bonus(character: L5RCharacterData, participant: Participant) -> int:
+	if participant.stance != Enums.Stance.ATTACK:
+		return 0
+	if _has_kata_effect(character, "water_attack_stance_movement"):
+		return 1
+	return 0
+
+
 ## Returns bonus to own Reduction from katas (earth_full_defense, earth_crab variants).
 ## Public — called by WoundSystem context builders.
 static func get_kata_reduction_bonus(
