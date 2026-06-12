@@ -3309,6 +3309,26 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 5: action-denial atemi (2026-06-12)
+Encoded **As the Breakers** (Water 4 atemi: "target loses one Simple Action this
+Round; only targets opponents who have not yet acted; once per skirmish") — the first
+**orchestrator-applied** atemi effect (the denial touches the target's `TurnState`,
+which the resolver can't reach, so the effect is applied in `execute_atemi_strike`,
+same pattern as Censure's disarm flag). Two new spec gates checked in the orchestrator
+before the strike: `requires_target_not_acted` (target's TurnState shows no
+complex/simple/free action used) and `once_per_skirmish` (per-skirmish dedup via a new
+`MapCombatState.once_per_skirmish_atemi` map). On a hit, `remove_simple_action` docks
+the target's `simple_used += 1` (they keep at most one Simple, lose the Complex slot)
+and marks them affected. 14 atemi encoded. All GDD-given (deny 1 Simple, not-acted
+gate, once/skirmish). Verified: hit denies the Simple + marks affected; same-round
+re-attack blocked (target_already_acted, since the denial set simple_used); cross-round
+re-attack blocked (already_affected_this_skirmish, fresh TurnState); a target who has
+already acted is rejected pre-strike. DEFERRED — 10 atemi still need bespoke subsystems
+(Earth Palm forced-raises, Speed of the Mountains movement-budget [multi-site], Rest My
+Brother Taint, Sever the Dark Lord's Touch undead, Chi Protection heal-over-time, Banish
+All Shadows / Spin the Kharmic Wheel Disadvantage, Death Touch multi-round, Sense the
+Balance info, Silent Solace spell-slot).
+
 ### s38 Kiho — effect registry, tranche 4: damaging atemi (2026-06-12)
 Added the normal-unarmed-damage path to the atemi resolver plus three more spec
 components, encoding 2 damaging atemi (13 atemi total). New components: `normal_damage`

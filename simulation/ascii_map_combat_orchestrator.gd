@@ -113,6 +113,8 @@ class MapCombatState:
 	var companion_data: Dictionary = {}
 	## companion_ids who started the mission — denominator for morale casualties.
 	var companion_started_count: int = 0
+	## Per-skirmish dedup for "once per skirmish" atemi (kiho_name → Array[target_id]).
+	var once_per_skirmish_atemi: Dictionary = {}
 
 
 # =============================================================================
@@ -838,6 +840,17 @@ static func execute_atemi_strike(
 	if _chebyshev(apos, tpos) > MELEE_RANGE_TILES:
 		return {"success": false, "reason": "out_of_melee_range"}
 
+	# Orchestrator-level atemi targeting gates (s38). As the Breakers: may only target
+	# an opponent who has not yet acted this Round, and at most once per skirmish.
+	var aspec: Dictionary = KihoSystem.KIHO_DATA.get(kiho_name, {}).get("atemi_effect", {})
+	if aspec.get("requires_target_not_acted", false):
+		var tts0: TurnState = state.turn_states.get(target_id, null)
+		if tts0 != null and (tts0.complex_used or tts0.simple_used > 0 or tts0.free_actions_used > 0):
+			return {"success": false, "reason": "target_already_acted"}
+	if aspec.get("once_per_skirmish", false):
+		if target_id in state.once_per_skirmish_atemi.get(kiho_name, []):
+			return {"success": false, "reason": "already_affected_this_skirmish"}
+
 	var r: Dictionary = IndividualCombat.resolve_atemi_strike(
 		attacker, a_p, target, t_p, kiho_name, dice_engine, state.combat.round_number)
 	# If the atemi could not be delivered (e.g. insufficient Void for the activation
@@ -846,6 +859,17 @@ static func execute_atemi_strike(
 		r["success"] = false
 		return r
 	ts.consume_complex()
+	# Orchestrator-applied effect: deny the target one Simple Action this Round
+	# (As the Breakers). Marks the target affected for the once-per-skirmish gate.
+	if r.get("hit", false) and aspec.get("remove_simple_action", false):
+		var tts: TurnState = state.turn_states.get(target_id, null)
+		if tts != null:
+			tts.simple_used += 1
+		if aspec.get("once_per_skirmish", false):
+			if not state.once_per_skirmish_atemi.has(kiho_name):
+				state.once_per_skirmish_atemi[kiho_name] = []
+			state.once_per_skirmish_atemi[kiho_name].append(target_id)
+		r["simple_action_removed"] = true
 	state.combat_log.append({
 		"type": "atemi_strike", "round": state.combat.round_number,
 		"attacker_id": attacker_id, "target_id": target_id, "kiho": kiho_name,
