@@ -5071,6 +5071,32 @@ but not executed in this environment.
   Phase 3: unit-type garrison companies (replacing abstract `garrison_pu`) + real
   horde-combat attrition + re-tuning garrison/SI/jade against a live threat.
 
+### Known Code Issues (found and fixed 2026-06-12, Wall Phase 2 validation)
+- **Stationed Kaiu Engineers never FORTIFY — peacetime art standing latched the slot. FIXED.**
+  Phase 2 stations a Kaiu Engineer at every Tower so the s57.41 MAINTAIN_FORTIFICATION
+  standing restores SI. But Kaiu Engineer is an ARTISAN school, so on day 1 (Towers at
+  SI 10, healthy) `_assign_kaiu_engineer_standing_objectives` no-ops (min_si >= 7) and the
+  s49 `_assign_artisan_standing_objectives` pass gives every engineer the ARTISTIC_EXPRESSION
+  standing. Standing objectives are sticky (never cleared by SI change), and the Kaiu pass
+  guarded `if not standing.is_empty(): continue` — so once SI later decayed below 7, the
+  Kaiu pass skipped every engineer (slot already filled with art) and none ever FORTIFY'd.
+  Towers would decay to 0 despite being manned — defeating the entire point of Phase 2.
+  Inert before Phase 2 (no engineers were ever stationed at Towers), live once they are.
+  Fixed the guard to override the peacetime ARTISTIC_EXPRESSION standing (and refresh an
+  existing MAINTAIN_FORTIFICATION priority) when SI < 7, while still never clobbering a
+  different standing (e.g. a lord directive). Engineers now latch to wall maintenance once
+  any Tower degrades below SI 7 and keep it restored thereafter (proactive doctrine,
+  s2.4.11). Structural fix, no invented values. Parse-checked.
+- **Persistence verified.** `operational_superior_id` and `physical_location` are @export on
+  L5RCharacterData; `SettlementData.wall_tower_number` is @export. The ~39 wall NPCs are
+  ordinary characters saved by SaveManager and the tower number rides the settlements
+  Resource array — the roster + hierarchy round-trip across restart.
+- **Death cascade verified.** `OperationalHierarchySystem.clear_subordinates_on_death`
+  releases subordinates' `operational_superior_id` to -1 on a superior's death (Taisa dies →
+  its engineer/Kuni released; Shireikan dies → its 6 Taisa released), dead-guarded, no crash.
+  Tower-commander auto-refill on a Taisa's death is deferred to Phase 3 (abstract garrison has
+  no company to promote into) — graceful degradation, not a crash.
+
 ### Systems Added 2026-06-11 (Kaiu Wall — Phase 1: Tower settlements, owner-authorized)
 - **s2.4.2 / s2.3 — the twelve Wall Towers created at world-gen.** Before this,
   no `WALL_TOWER` settlement existed at all — the entire Kaiu Wall mechanical layer

@@ -8428,8 +8428,16 @@ static func _assign_kaiu_engineer_standing_objectives(
 
 		var objectives: Dictionary = objectives_map[char_id]
 		var standing: Dictionary = objectives.get("standing", {})
+		var st_need: String = standing.get("need_type", "")
 
-		if not standing.is_empty():
+		# Wall maintenance overrides the peacetime artistic standing (s49) and
+		# refreshes an existing wall standing's priority, but never clobbers a
+		# different standing (e.g. a lord-directed objective). Without this an
+		# engineer who picked up ARTISTIC_EXPRESSION while SI was healthy would
+		# stay on art and never FORTIFY once the tower degraded below 7.
+		if not standing.is_empty() \
+				and st_need != "ARTISTIC_EXPRESSION" \
+				and st_need != "MAINTAIN_FORTIFICATION":
 			continue
 
 		if breach:
