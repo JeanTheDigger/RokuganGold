@@ -642,9 +642,15 @@ static func resolve_atemi_strike(
 	var spec: Dictionary = kiho.get("atemi_effect", {})
 	if spec.is_empty():
 		return {"ok": false, "reason": "effect_not_wired"}
+	# Activation Void-Point cost (e.g. Falling Star Strike): spent on use (precondition).
+	if spec.has("vp_cost"):
+		if attacker.current_void_points < int(spec["vp_cost"]):
+			return {"ok": false, "reason": "insufficient_void"}
+		attacker.current_void_points -= int(spec["vp_cost"])
 	# Atemi armor TN: the armor's Armor TN bonus is doubled (add it once more).
 	var atemi_tn: int = get_armor_tn(target, target_p, dice_engine) + target.armor_tn_bonus
-	var attack: Dictionary = resolve_attack(attacker, attacker_p, "unarmed", atemi_tn, 0, dice_engine)
+	# Some atemi require extra Raises on the to-hit (e.g. Falling Star Strike: 2 Raises).
+	var attack: Dictionary = resolve_attack(attacker, attacker_p, "unarmed", atemi_tn, int(spec.get("attack_raises", 0)), dice_engine)
 	if not attack.get("hit", false):
 		return {"ok": true, "hit": false}
 	# Optional Contested Ring roll after the hit.
@@ -661,6 +667,17 @@ static func resolve_atemi_strike(
 	# (with optional Void-Point negation), a timed modifier, a wound-rank-equivalent
 	# roll penalty, and/or an instant condition. All values are GDD-given per kiho.
 	var result: Dictionary = {"ok": true, "hit": true, "effect_applied": true}
+
+	# Normal unarmed damage (atemi that deal real damage, e.g. The Rolling Avalanche:
+	# normal unarmed + Earth k0; Falling Star Strike: normal unarmed + a ring component).
+	# bonus_ring → +Ring k0 via resolve_damage's raises_for_damage. Normal Reduction.
+	if spec.has("normal_damage"):
+		var nd: Dictionary = spec["normal_damage"]
+		var bonus: int = CharacterStats.get_ring_value(attacker, nd["bonus_ring"]) if nd.has("bonus_ring") else 0
+		var ndr: Dictionary = resolve_damage(attacker, "unarmed", bonus, 0, dice_engine, attacker_p)
+		var nhit: Dictionary = WoundSystem.apply_damage(target, ndr["raw_damage"], -1)
+		result["normal_damage"] = nhit["final_damage"]
+		result["target_dead"] = nhit["is_dead"]
 
 	# Direct damage (e.g. Censure of Thunder 1k1, bypassing Reduction). Dice may be
 	# fixed (rolled/kept) or ring-scaled (rolled_ring/kept_ring → attacker's ring,
@@ -724,11 +741,21 @@ static func resolve_atemi_strike(
 			attacker.current_void_points = mini(max_vp, attacker.current_void_points + int(spec["caster_vp_gain"]))
 			result["caster_vp_gained"] = int(spec["caster_vp_gain"])
 
-	# Instant condition (Dazed, Stunned, silenced — the last is inert until a
-	# verbal-component system exists; encoded for faithfulness).
+	# Instant condition (Dazed, Stunned, silenced, Blinded). May be gated by its own
+	# Contested Ring roll (condition_contest) that does NOT gate the damage — e.g.
+	# Falling Star Strike: damage always lands, Blinded only on a won Fire contest.
 	if spec.has("condition"):
-		apply_condition(target_p, spec["condition"])
-		result["condition"] = spec["condition"]
+		var apply_cond: bool = true
+		if spec.has("condition_contest"):
+			var cc: Dictionary = spec["condition_contest"]
+			var ca: int = CharacterStats.get_ring_value(attacker, cc["attacker_ring"])
+			var cd: int = CharacterStats.get_ring_value(target, cc["defender_ring"])
+			apply_cond = dice_engine.roll_and_keep(ca, ca, true).total >= dice_engine.roll_and_keep(cd, cd, true).total
+		if apply_cond:
+			apply_condition(target_p, spec["condition"])
+			result["condition"] = spec["condition"]
+		else:
+			result["condition_resisted"] = true
 
 	return result
 

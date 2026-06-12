@@ -840,6 +840,11 @@ static func execute_atemi_strike(
 
 	var r: Dictionary = IndividualCombat.resolve_atemi_strike(
 		attacker, a_p, target, t_p, kiho_name, dice_engine, state.combat.round_number)
+	# If the atemi could not be delivered (e.g. insufficient Void for the activation
+	# cost), do not consume the action — the actor can still take a normal attack.
+	if not r.get("ok", false):
+		r["success"] = false
+		return r
 	ts.consume_complex()
 	state.combat_log.append({
 		"type": "atemi_strike", "round": state.combat.round_number,

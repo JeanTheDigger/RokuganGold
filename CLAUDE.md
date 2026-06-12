@@ -3309,6 +3309,28 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 4: damaging atemi (2026-06-12)
+Added the normal-unarmed-damage path to the atemi resolver plus three more spec
+components, encoding 2 damaging atemi (13 atemi total). New components: `normal_damage`
+({bonus_ring} → `resolve_damage(attacker,"unarmed", Ring, …)`, the full strength/kata
+damage pipeline, normal Reduction), `vp_cost` (Void-Point activation cost spent as a
+precondition), `attack_raises` (extra Raises required on the atemi to-hit), and
+`condition_contest` (a Contested Ring roll gating ONLY the condition, not the damage).
+Encoded **The Rolling Avalanche** (normal unarmed + Earth k0) and **Falling Star
+Strike** (1 VP + 2 to-hit Raises → normal unarmed + Fire k Fire additional + Blinded
+on a won Fire contest). `execute_atemi_strike` now skips consuming the action when the
+atemi can't be delivered (e.g. insufficient Void), so the actor can still take a normal
+attack. All values GDD-given (Rolling Avalanche +Earth k0; Falling Star 1 VP / 2 Raises
+/ normal + Fire k Fire / Blinded contest). Verified with a headless driver: Rolling
+Avalanche (9 damage), Falling Star (VP deducted, normal + ring damage, Blinded), and
+the no-Void gate (insufficient_void, action not consumed). LIMITATION: Falling Star's
+"Blinded for hours" is applied as the instant (roll-recovered) Blinded condition (the
+combat-relevant portion). DEFERRED — 11 atemi still need bespoke subsystems beyond the
+resolver (Earth Palm forced-raises, Speed of the Mountains movement, Rest My Brother
+Taint, Sever the Dark Lord's Touch undead, As the Breakers action-economy, Chi
+Protection heal-over-time, Banish All Shadows / Spin the Kharmic Wheel Disadvantage,
+Death Touch multi-round, Sense the Balance info, Silent Solace spell-slot).
+
 ### s38 Kiho — effect registry, tranche 3: ring-DR damage + caster VP (2026-06-12)
 Extended the composable atemi spec with **ring-scaled damage dice** (`rolled_ring`/
 `kept_ring` → the attacker's ring value; the owner-set "DR equal to [Ring]"
