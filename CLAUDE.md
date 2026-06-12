@@ -3309,6 +3309,18 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 30: Striking Through the Void (VP damage) (2026-06-12)
+**Striking Through the Void** (Void, while active): the caster may spend a Void Point on
+an unarmed damage roll for +1k1 (one Void Point per attack). Added an optional
+`bonus_kept` param to `IndividualCombat.resolve_damage` (backward-compatible, default 0 —
++1k1 from a Void Point is standard L5R, not invented); `_apply_hit` spends 1 VP and passes
+`raises_for_damage + 1` (rolled) and `bonus_kept = 1` (kept) when the attacker holds the
+kiho, is unarmed, and has a Void Point (NPC auto-spends). Verified: unarmed damage 11 → 19
+with the Void spend (VP 2 → 1). The remaining combat-relevant unwired kiho are blocked on
+missing data (Touch the Void Dragon needs a combat biome; Slap the Wave/Inari's Wrath need
+facing), a spell-cast consumer (Dharma Technique, Silent Solace), s54 undead (Rebuke,
+Sever), or are marginal object/terrain effects (Breaking Blow, Waves in All Things).
+
 ### s38 Kiho — effect registry, tranche 29: Way of the Willow (interrupt) — reaction set complete (2026-06-12)
 **Way of the Willow** (Air, while active): a defender may spend a Void Point to interrupt a
 declared melee attack with an immediate unarmed counterattack (once per Round). Pre-attack

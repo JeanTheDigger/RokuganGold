@@ -1150,10 +1150,11 @@ static func resolve_damage(
 	dice_engine: DiceEngine,
 	attacker_p: Participant = null,
 	was_feint: bool = false,
+	bonus_kept: int = 0,
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	var rolled: int = weapon.get("rolled", 2)
-	var kept: int = weapon.get("kept", 1)
+	var kept: int = weapon.get("kept", 1) + bonus_kept
 
 	# Advantage/disadvantage modifiers (s45): HANDS_OF_STONE adds +1 kept for unarmed damage
 	var dmg_skill: String = weapon.get("skill", "Kenjutsu")

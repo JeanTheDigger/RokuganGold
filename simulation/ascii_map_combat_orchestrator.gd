@@ -3303,8 +3303,18 @@ static func _apply_hit(
 	elif maneuver == "increased_damage":
 		raises_for_damage = raises
 
+	# Striking Through the Void (s38 Void): the caster may spend a Void Point on an
+	# unarmed damage roll for +1k1 (one Void Point per attack). NPC auto-spends if able.
+	var stv_rolled: int = 0
+	var stv_kept: int = 0
+	if (weapon_name == "" or weapon_name == "unarmed") and "Striking Through the Void" in a_p.active_kiho \
+			and attacker.current_void_points >= 1:
+		attacker.current_void_points -= 1
+		stv_rolled = 1
+		stv_kept = 1
+
 	var dmg: Dictionary = IndividualCombat.resolve_damage(
-		attacker, weapon_name, raises_for_damage, feint_bonus, dice_engine, a_p, maneuver == "feint"
+		attacker, weapon_name, raises_for_damage + stv_rolled, feint_bonus, dice_engine, a_p, maneuver == "feint", stv_kept
 	)
 	var raw: int = dmg["raw_damage"]
 
