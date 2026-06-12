@@ -96,7 +96,7 @@ const KIHO_DATA: Dictionary = {
 	"Knowledge from Within":  {"ring": Enums.Ring.VOID, "mastery": 4, "type": KihoType.INTERNAL},
 	"Mind/No-Mind":           {"ring": Enums.Ring.VOID, "mastery": 6, "type": KihoType.MYSTICAL, "atemi": true, "atemi_effect": {"condition": "dazed", "contest": {"attacker_ring": Enums.Ring.VOID, "defender_ring": Enums.Ring.FIRE}}},
 	"Rebuke of the Heavens":  {"ring": Enums.Ring.VOID, "mastery": 5, "type": KihoType.KHARMIC, "monks_only": true},
-	"Sense the Balance":      {"ring": Enums.Ring.VOID, "mastery": 6, "type": KihoType.KHARMIC, "atemi": true},
+	"Sense the Balance":      {"ring": Enums.Ring.VOID, "mastery": 6, "type": KihoType.KHARMIC, "atemi": true, "atemi_effect": {"sense_balance": true, "info_only": true}},
 	"Silent Solace":          {"ring": Enums.Ring.VOID, "mastery": 5, "type": KihoType.KHARMIC, "atemi": true},
 	"Song of the World":      {"ring": Enums.Ring.VOID, "mastery": 3, "type": KihoType.KHARMIC},
 	"Spin the Kharmic Wheel": {"ring": Enums.Ring.VOID, "mastery": 8, "type": KihoType.KHARMIC, "atemi": true},

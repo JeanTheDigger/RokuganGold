@@ -117,6 +117,8 @@ class MapCombatState:
 	var once_per_skirmish_atemi: Dictionary = {}
 	## Death Touch consecutive-strike chains: "caster_id:target_id" → {count, last_round}.
 	var death_touch_chains: Dictionary = {}
+	## Sense the Balance reveals: "caster_id:target_id" → Array of revealed Enums ints.
+	var sense_known: Dictionary = {}
 
 
 # =============================================================================
@@ -896,6 +898,30 @@ static func execute_atemi_strike(
 			r["suppressed_disadvantage"] = int(hd.disadvantage_type)
 		else:
 			r["no_suppressable_disadvantage"] = true
+	# Sense the Balance (s38 Void 6): on a hit, spend a Void Point to learn the count of
+	# the target's Spiritual Advantages OR Disadvantages (caster's choice; metadata
+	# sense_choice, NPC default "disadvantage"). On a won Contested Void Roll, also learn
+	# the highest-point not-yet-revealed one; repeat uses reveal more until all known.
+	if r.get("hit", false) and aspec.get("sense_balance", false):
+		if attacker.current_void_points < 1:
+			r["sense_no_void"] = true
+		else:
+			attacker.current_void_points -= 1
+			# "caster's choice" of Advantages OR Disadvantages: default Disadvantages
+			# (the threat-relevant one). A PC-facing choice param can override later.
+			var choice: String = "disadvantage"
+			r["sense_choice"] = choice
+			r["spiritual_count"] = AdvantageSystem.count_spiritual_advantages(target) if choice == "advantage" else AdvantageSystem.count_spiritual_disadvantages(target)
+			var skey: String = "%d:%d" % [attacker_id, target_id]
+			var known: Array = state.sense_known.get(skey, [])
+			var av: int = CharacterStats.get_ring_value(attacker, Enums.Ring.VOID)
+			var tv: int = CharacterStats.get_ring_value(target, Enums.Ring.VOID)
+			if dice_engine.roll_and_keep(maxi(1, av), maxi(1, av), true).total >= dice_engine.roll_and_keep(maxi(1, tv), maxi(1, tv), true).total:
+				var revealed: int = AdvantageSystem.get_highest_spiritual_advantage(target, known) if choice == "advantage" else AdvantageSystem.get_highest_spiritual_disadvantage(target, known)
+				if revealed >= 0:
+					known.append(revealed)
+					state.sense_known[skey] = known
+					r["revealed_type"] = revealed
 	# Death Touch (s38 Void 7): 3 atemi strikes on 3 consecutive Rounds, then a Void
 	# Point after the 3rd, stamps a delayed affliction (resolved by the world-sim at
 	# the next daily tick — ring drain → catatonic → 3 Contested Void → death).
@@ -1584,7 +1610,8 @@ static func _npc_pick_atemi(npc: L5RCharacterData) -> String:
 		if not data.get("atemi", false):
 			continue
 		var eff: Dictionary = data.get("atemi_effect", {})
-		if eff.is_empty() or eff.get("ally_auto_hit", false):
+		# Skip ally-targeted (heal/buff) and pure-info atemi — not for the enemy target.
+		if eff.is_empty() or eff.get("ally_auto_hit", false) or eff.get("info_only", false):
 			continue
 		return k
 	return ""

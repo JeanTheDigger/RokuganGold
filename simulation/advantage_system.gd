@@ -301,6 +301,55 @@ static func _is_suppressed(character: L5RCharacterData, dis_type: Enums.Disadvan
 	return character.suppressed_disadvantage_type == int(dis_type)
 
 
+## Count of Spiritual Advantages / Disadvantages (s38 Sense the Balance).
+static func count_spiritual_advantages(character: L5RCharacterData) -> int:
+	var n: int = 0
+	for adv: AdvantageData in character.advantages:
+		if "Spiritual" in get_advantage_category(adv.advantage_type):
+			n += 1
+	return n
+
+
+static func count_spiritual_disadvantages(character: L5RCharacterData) -> int:
+	var n: int = 0
+	for dis: DisadvantageData in character.disadvantages:
+		if "Spiritual" in get_disadvantage_category(dis.disadvantage_type):
+			n += 1
+	return n
+
+
+## Highest-point Spiritual Advantage / Disadvantage not in exclude_types (s38 Sense
+## the Balance reveal). Returns the Enums int, or −1 when none remain unrevealed.
+static func get_highest_spiritual_advantage(character: L5RCharacterData, exclude_types: Array) -> int:
+	var best: int = -1
+	var best_pts: int = -1
+	for adv: AdvantageData in character.advantages:
+		if "Spiritual" not in get_advantage_category(adv.advantage_type):
+			continue
+		if int(adv.advantage_type) in exclude_types:
+			continue
+		var pts: int = get_advantage_points(adv)
+		if pts > best_pts:
+			best_pts = pts
+			best = int(adv.advantage_type)
+	return best
+
+
+static func get_highest_spiritual_disadvantage(character: L5RCharacterData, exclude_types: Array) -> int:
+	var best: int = -1
+	var best_pts: int = -1
+	for dis: DisadvantageData in character.disadvantages:
+		if "Spiritual" not in get_disadvantage_category(dis.disadvantage_type):
+			continue
+		if int(dis.disadvantage_type) in exclude_types:
+			continue
+		var pts: int = get_disadvantage_points(dis)
+		if pts > best_pts:
+			best_pts = pts
+			best = int(dis.disadvantage_type)
+	return best
+
+
 ## Highest-point Disadvantage that is neither Spiritual nor Social (s38 Banish All
 ## Shadows target selection). null if the character has none.
 static func get_highest_non_spiritual_social_disadvantage(character: L5RCharacterData) -> DisadvantageData:
