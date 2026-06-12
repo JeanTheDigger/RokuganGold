@@ -710,13 +710,18 @@ static func execute_melee_attack(
 	if maneuver == "guard":
 		return execute_guard(state, attacker_id, target_id, attacker, target)
 
-	if not ts.can_use_complex():
-		return {"success": false, "reason": "no_complex_actions_remaining"}
-
 	var a_p: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
 	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
 	if a_p == null or t_p == null:
 		return {"success": false, "reason": "participant_missing"}
+
+	# Dance of the Flames (s38 Fire): unarmed attacks cost a Simple Action, not Complex.
+	var dance_simple: bool = (weapon_name == "" or weapon_name == "unarmed") and "Dance of the Flames" in a_p.active_kiho
+	if dance_simple:
+		if not ts.can_use_simple():
+			return {"success": false, "reason": "no_simple_actions_remaining"}
+	elif not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_actions_remaining"}
 
 	# Defense/Full Defense stances prohibit attacking entirely (s40) — this is an
 	# action-legality check, independent of position, so it precedes the range check.
@@ -821,7 +826,10 @@ static func execute_melee_attack(
 			result["disarmed"] = dr["disarmed"]
 			log_entry["disarmed"] = dr["disarmed"]
 
-	ts.consume_complex()
+	if dance_simple:
+		ts.consume_simple()
+	else:
+		ts.consume_complex()
 	state.combat_log.append(log_entry)
 	_check_and_mark_over(state, target_id, target)
 	return result

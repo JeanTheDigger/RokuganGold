@@ -3309,6 +3309,37 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 19: Dance of the Flames (action-economy) (2026-06-12)
+**Dance of the Flames** (Fire, while active): unarmed attacks cost a Simple Action
+instead of Complex — so a monk can make two unarmed attacks (two Simples) in one Turn.
+execute_melee_attack computes `dance_simple` (unarmed + the kiho active) and switches
+both the action-availability gate (`can_use_simple` vs `can_use_complex`) and the
+consumption (`consume_simple` vs `consume_complex`). All GDD-given. Verified: two unarmed
+attacks landed in one Turn (simple_used 1→2, no Complex), the third blocked
+(no_simple_actions_remaining). LIMITATION: the "must make an unarmed attack every Round
+or the effect ends" maintenance requirement is not modelled (it would need a per-round
+end-of-turn check). Establishes the action-economy modifier pattern.
+
+**Kiho effect registry — session close (19 tranches).** Every kiho category with a clean
+tile-combat implementation is now wired: atemi (22/24 — 2 dependency-blocked on s54
+undead / a combat spell-cast consumer), while-active buffs (Armor TN, Initiative,
+Reduction, wound penalty, move, contact-retaliation, with round durations), AoE Daze
+(Thunder's Word), knockback (Hurricane Palm), condition recovery (Depths of the World),
+ally VP grant (To the Last Breath), post-hit + pre-attack reactions (Destiny's Strike,
+Shadowed Mountain), action-economy (Dance of the Flames), the AdvantageSystem suppression
+hook (Banish All Shadows, Rest My Brother), and the tile→world delayed kill (Death Touch).
+The remaining ~32 non-atemi kiho are NOT blocked on unknown values — each needs new
+infrastructure: a deferred next-turn effect queue (Earthen Fist), grapple-relationship
+tracking (Way of the Earth, Bishamon's Grasp), an interrupt-with-choice + VP (Way of the
+Willow), leap/teleport movement (Riding the Clouds, The World Disappears, Strike Through
+the Wind, Calling the East Wind), facing data for arc/cone (Slap the Wave, Inari's Wrath),
+a per-round dynamic-Reduction layer (Rising Mountain), an environment→Ring boost (Touch
+the Void Dragon), object-destruction-by-attack (Breaking Blow), or are out-of-combat
+utility with no tile-combat effect (~12 kiho: Eye of the Eagle, Earth Needs No Eyes,
+Harmony in/of the Mind/Earth, Wholeness in All, Eight Directions Awareness, Knowledge
+from Within, The Wind's Vision, Cleansing Spirit, Channel the Fire Dragon, The Mind's
+Fire, Flee the Darkness).
+
 ### s38 Kiho — effect registry, tranche 18: Shadowed Mountain (pre-attack reaction) (2026-06-12)
 **Shadowed Mountain** (Earth, while active): a defender may immediately enter Full
 Defense Stance just before being attacked (once per activation), raising that attack's
