@@ -3309,6 +3309,17 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 20: Way of the Earth (grapple damage-tick) (2026-06-12)
+**Way of the Earth** (Earth, while active): each Round, an opponent engaged in a Grapple
+with the caster suffers the caster's Earth Ring in Wounds (Reactions Stage, regardless of
+who controls the grapple). Wired into the advance_round per-participant loop: for a
+participant holding the kiho with `grapple_partner_id >= 0`, the partner takes Earth Ring
+Wounds (using the existing `grapple_partner_id` tracking + chars_by_id). "Minutes equal to
+Earth Ring" >> a skirmish, so it persists (no round duration). All GDD-given. Verified: a
+grappled opponent took Earth 4 Wounds on round advance. Establishes the per-round
+grapple-tick pattern. (Updates the session-close list: grapple damage-tick is now wired;
+Bishamon's Grasp still needs the "who attacked me" tracking + free grapple-attacks layer.)
+
 ### s38 Kiho — effect registry, tranche 19: Dance of the Flames (action-economy) (2026-06-12)
 **Dance of the Flames** (Fire, while active): unarmed attacks cost a Simple Action
 instead of Complex — so a monk can make two unarmed attacks (two Simples) in one Turn.

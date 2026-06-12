@@ -2236,6 +2236,13 @@ static func advance_round(
 			if _tc != null:
 				_tc.taint_benefits_suppressed = false
 			_tp.taint_benefits_suppressed_expiry = -1
+		# Way of the Earth (s38 Earth): each Round, a grappled opponent of the caster
+		# suffers the caster's Earth Ring in Wounds (Reactions Stage).
+		if "Way of the Earth" in _tp.active_kiho and _tp.grapple_partner_id >= 0:
+			var _woe_c: L5RCharacterData = chars_by_id.get(_tp.character_id, null)
+			var _woe_p: L5RCharacterData = chars_by_id.get(_tp.grapple_partner_id, null)
+			if _woe_c != null and _woe_p != null and not CharacterStats.is_dead(_woe_p):
+				WoundSystem.apply_damage(_woe_p, CharacterStats.get_ring_value(_woe_c, Enums.Ring.EARTH), 0)
 
 	# Re-roll initiative for all active participants (L5R 4e: initiative re-rolled each round).
 	# CENTER stance carry-forward: void bonus from last round applies to this roll.
