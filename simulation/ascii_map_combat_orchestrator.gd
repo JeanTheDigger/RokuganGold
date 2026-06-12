@@ -831,6 +831,14 @@ static func execute_melee_attack(
 			result["disarmed"] = dr["disarmed"]
 			log_entry["disarmed"] = dr["disarmed"]
 
+	# Earthen Fist (s38 Earth): if an opponent's melee attack against the caster MISSES,
+	# the caster (who must be in Defense/Full Defense) may attempt a Disarm next Turn for
+	# no Raises — armed here via the existing disarm_free_raises_pending track.
+	if not result.get("hit", false) and "Earthen Fist" in t_p.active_kiho \
+			and (t_p.stance == Enums.Stance.DEFENSE or t_p.stance == Enums.Stance.FULL_DEFENSE):
+		t_p.disarm_free_raises_pending = 3
+		result["earthen_fist_disarm_armed"] = true
+
 	if dance_simple:
 		ts.consume_simple()
 	else:

@@ -3309,6 +3309,21 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 23: Earthen Fist + Root the Mountain (2026-06-12)
+Two reactive/maneuver-layer kiho.
+- **Earthen Fist** (Earth, while active): when an opponent's melee attack against the
+  caster (who must be in Defense/Full Defense) MISSES, the caster may attempt a Disarm
+  next Turn for no Raises. Wired in execute_melee_attack on the miss path: arms the
+  existing `disarm_free_raises_pending = 3` track (consumed by the Disarm maneuver block).
+  Verified: a missed attack against a Full-Defense Earthen-Fist caster set pending=3.
+- **Root the Mountain** (Earth, while active, tranche 22): forcing the caster to move
+  requires the attacker to also win a Contested Earth Roll. `_root_the_mountain_resists`
+  wired into the Knockdown maneuver (negates the knockdown) and Hurricane Palm (negates
+  the knockback distance; the Prone still applies). Verified: a strong-Earth defender
+  resisted a weak-Earth attacker's knockback. LIMITATION: the "Knockdown requires 2 extra
+  Raises" clause is not modelled (resolve_knockdown takes no raises modifier).
+All GDD-given.
+
 ### s38 Kiho — effect registry, tranche 21: Rising Mountain (dynamic Reduction) (2026-06-12)
 **Rising Mountain** (Earth, while active): every time an attacker makes a Raise on an
 offensive combat action against the caster, the caster gains Reduction = 2× the number of
