@@ -1619,6 +1619,10 @@ static func advance_day(
 		active_topics, next_topic_id,
 	)
 
+	# s2.4.13 D2 — Shireikan reinforce below-minimum Towers from surplus Towers.
+	if is_season_boundary:
+		_process_shireikan_troop_redeployment(characters, settlements, provinces)
+
 	# OOC Day Tick — fires every 4 IC days (one real-world day, per GDD s13 /
 	# s57.44.2). Runs Wind-Down selection and Void Point refresh for all
 	# living characters.
@@ -2525,7 +2529,7 @@ static func _process_sortie_results(
 		var garrison_states: Array = []
 		if settlement is SettlementData:
 			var s: SettlementData = settlement as SettlementData
-			committed_pu = int(s.garrison_pu * force_pct)
+			committed_pu = clampi(int(s.garrison_pu * force_pct), 1, s.garrison_pu)
 			garrison_states = _build_garrison_sortie_states(committed_pu)
 
 		# Resolve sortie combat via HordeSystem (s2.4.10).
@@ -2946,6 +2950,39 @@ static func _process_horde_assaults(
 	return results
 
 
+## Resolve a freshly-formed horde's assault combat against its target Tower's
+## garrison (s2.4.5). Sets assault_resolved + battle_outcome and applies garrison
+## PU casualties; the SI hit + breach are applied by _process_horde_assaults.
+static func _resolve_horde_assault_combat(
+	horde: HordeData,
+	settlements: Array,
+	dice: DiceEngine,
+) -> void:
+	# Pick the same tower _process_horde_assaults will (last tower for the province,
+	# matching its wall_by_province map) so casualties and the SI hit land together.
+	var tower: SettlementData = null
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER \
+				and s.province_id == horde.target_province_id:
+			tower = s
+	if tower == null:
+		return
+
+	var garrison_states: Array = _build_garrison_sortie_states(tower.garrison_pu)
+	horde.assault_resolved = true
+	if garrison_states.is_empty():
+		# Undefended Tower (garrison 0) — automatic overrun (breach).
+		horde.battle_outcome = Enums.HordeBattleOutcome.DEFENDER_OVERRUN
+		return
+
+	var combat: Dictionary = HordeSystem.resolve_horde_assault_combat(
+		garrison_states, horde.companies, tower.wall_si, dice,
+	)
+	horde.battle_outcome = int(combat.get("outcome", Enums.HordeBattleOutcome.CONTESTED_BATTLE))
+	var casualties: int = int(combat.get("casualties_health", 0))
+	tower.garrison_pu = maxi(0, tower.garrison_pu - int(casualties / 153.0))
+
+
 # -- Horde Rolls (s2.4.4–s2.4.8 — LOCKED) ------------------------------------
 
 ## Fires every HORDE_ROLL_SEASON_INTERVAL seasons when a season change occurs.
@@ -2999,6 +3036,10 @@ static func _process_horde_rolls(
 			horde.oni_data = OniGenerator.generate(dice, ic_day)
 		last_targeted_province_id[0] = horde.target_province_id
 		active_hordes.append(horde)
+		# Resolve the assault combat now (no scout warning — s2.4.4): the garrison
+		# defends from the Tower. Sets battle_outcome + garrison casualties;
+		# _process_horde_assaults applies the SI hit + breach next tick.
+		_resolve_horde_assault_combat(horde, settlements, dice)
 		# Generate a horde-sighted topic (Tier 3, POLITICAL category,
 		# MILITARY topic_type) for the targeted tower's province.
 		var topic := TopicData.new()
@@ -8589,6 +8630,98 @@ static func _assign_kuni_purification_standing_objectives(
 		elif st_need == "MANAGE_TAINT":
 			# Ground is clean enough — clear our own stale standing.
 			objectives.erase("standing")
+
+
+# -- Shireikan Troop Redeployment — s2.4.13 Decision 2 ------------------------
+# Each Shireikan reinforces below-minimum Towers in their half by pulling
+# garrison from the highest-surplus safe Tower. GDD-LOCKED values: 30% transfer
+# cap per order; never pull from a Tower at SS High or SI < 6; source and target
+# stay at/above the minimum garrison. (The horde-incoming triage priorities P1/P2
+# need scout lead time that does not exist yet, so the redeployment target is the
+# below-minimum shortage Tower — triage P3.) Runs seasonally. Garrison is abstract
+# PU, so this is a direct infrastructure transfer, like the Ashigaru flow.
+const SHIREIKAN_REDEPLOY_CAP_PCT: float = 0.30  # s2.4.13 D2 LOCKED
+static func _process_shireikan_troop_redeployment(
+	characters: Array,
+	settlements: Array,
+	provinces: Dictionary,
+) -> Array:
+	var results: Array = []
+
+	var towers_by_number: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER and s.wall_tower_number >= 1:
+			towers_by_number[s.wall_tower_number] = s
+	if towers_by_number.is_empty():
+		return results
+
+	var min_pu: int = int(WallSystem.MINIMUM_GARRISON_PU)
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.military_rank != Enums.MilitaryRank.SHIREIKAN:
+			continue
+
+		# Seat at Tower 3 → Southern half (1-6); Tower 10 → Northern half (7-12).
+		var seat: int = -1
+		for num: int in towers_by_number:
+			if str((towers_by_number[num] as SettlementData).settlement_id) == character.physical_location:
+				seat = num
+				break
+		var half: Array = range(1, 7) if seat <= 6 else range(7, 13)
+
+		var half_towers: Array = []
+		for num: int in half:
+			if towers_by_number.has(num):
+				half_towers.append(towers_by_number[num])
+
+		# Targets: below-minimum towers, most urgent (lowest garrison) first.
+		var targets: Array = []
+		for t: SettlementData in half_towers:
+			if WallSystem.is_garrison_below_minimum(t.garrison_pu):
+				targets.append(t)
+		targets.sort_custom(func(a: SettlementData, b: SettlementData) -> bool:
+			return a.garrison_pu < b.garrison_pu)
+
+		for target: SettlementData in targets:
+			# Source: highest-garrison safe surplus tower (not the target), not SS
+			# High, not SI < 6, leaving the source at/above minimum.
+			var best_source: SettlementData = null
+			for src: SettlementData in half_towers:
+				if src == target:
+					continue
+				if src.garrison_pu - min_pu < 1:
+					continue
+				if src.wall_si < 6:
+					continue
+				var src_ss: int = 0
+				var src_prov: Variant = provinces.get(src.province_id, null)
+				if src_prov is ProvinceData:
+					src_ss = (src_prov as ProvinceData).shadowlands_strength
+				if WallSystem.get_ss_tier(src_ss) == "high":
+					continue
+				if best_source == null or src.garrison_pu > best_source.garrison_pu:
+					best_source = src
+			if best_source == null:
+				continue
+
+			# Up to 30% of source, floored at one Company (indivisible), capped so
+			# the source stays at/above minimum.
+			var cap30: int = maxi(1, int(best_source.garrison_pu * SHIREIKAN_REDEPLOY_CAP_PCT))
+			var transfer: int = mini(cap30, best_source.garrison_pu - min_pu)
+			if transfer < 1:
+				continue
+			best_source.garrison_pu -= transfer
+			target.garrison_pu += transfer
+			results.append({
+				"shireikan_id": character.character_id,
+				"from_tower": best_source.wall_tower_number,
+				"to_tower": target.wall_tower_number,
+				"transferred_pu": transfer,
+			})
+
+	return results
 
 
 # -- ARTISTIC_EXPRESSION Standing Objective Assignment (s49) -------------------

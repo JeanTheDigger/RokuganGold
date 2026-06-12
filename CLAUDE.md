@@ -5093,7 +5093,49 @@ but not executed in this environment.
   (structural / FORTIFY), the Taisa (sortie / SS), and now the Kuni (spiritual / PTL), three of the
   Wall's four family roles are self-driving at the Tower (the Hida garrison itself is Phase 3).
 
-### Taisa AI loop (s2.4.11) — stopping point reached (2026-06-12)
+### Systems Added 2026-06-12 (Kaiu Wall — Phase 3: live horde combat, owner-authorized PROVISIONAL)
+- **Horde composition un-stubbed + sortie/assault combat made live + Shireikan redeployment.**
+  The owner authorized GDD-consistent PROVISIONAL baseline compositions (the one value s2.4
+  leaves undefined), unblocking the whole Phase-3 combat chain. Four changes:
+  1. **HordeSystem generators un-stubbed.** `_generate_jigoku_companies`, `_generate_undead_companies`,
+     `_generate_sortie_horde_companies` now return real Companies built from the LOCKED unit roster
+     (s2.4.7). PROVISIONAL baselines (`JIGOKU_BASELINE` 4 Bakemono Warrior + 1 Archers + 2 Ogre;
+     `UNDEAD_BASELINE` 3 Zombie + 2 Skeleton + 1 Revenant + **1 Maho-tsukai [GDD-LOCKED: one per
+     legion]**) + the LOCKED +1 Company/Strength bonus (drawn cyclically from each type's pool).
+     Sortie horde scales with SS (~1 Company/3 SS, an Ogre at SS High 9+). All counts marked
+     PROVISIONAL, tunable after playtest.
+  2. **Sortie commitment floor fix.** `committed_pu = int(garrison_pu * force_pct)` rounded a
+     Small sortie (20% of the Phase-1 garrison_pu=3) to **0 companies → empty fight → no SS
+     reduction**, making the D2 sortie a no-op. Companies are indivisible: clamped to
+     `clampi(int(garrison_pu*force_pct), 1, garrison_pu)`. Sorties now commit ≥1 Company → real
+     combat → SS reduction + jade consumption + garrison casualties (when ≥153 health lost).
+  3. **Discrete horde assault combat wired.** The horde roll (50%/2 seasons) already formed a
+     horde + Tier-3 sighting topic, and `_process_horde_assaults` already applied the SI hit +
+     breach→`shadowlands_incursion` crisis (Tier-1 topic, `active_crisis_id`) — but nothing ran
+     the assault *combat*. `HordeSystem.resolve_horde_assault_combat()` (combat-only, no SI hit
+     — `_process_horde_assaults` owns that, so calling the existing `resolve_horde_assault` would
+     double-hit) + `DayOrchestrator._resolve_horde_assault_combat()` resolve the garrison-vs-horde
+     battle on formation (garrison defends from the Tower with the SI fortification bonus +
+     wall-breaker), set `assault_resolved`+`battle_outcome`, apply garrison PU casualties; the SI
+     hit + breach apply next tick. Undefended Tower (garrison 0) → automatic DEFENDER_OVERRUN.
+     The combat helper picks the same province→Tower as `_process_horde_assaults` (last tower
+     wins) so casualties and the SI hit land on the same Tower.
+  4. **Shireikan Troop Redeployment (s2.4.13 D2).** `_process_shireikan_troop_redeployment()`
+     (seasonal): each Shireikan reinforces below-minimum Towers in their half (Southern 1-6 /
+     Northern 7-12) by pulling garrison from the highest-surplus safe Tower. GDD-LOCKED values:
+     30% transfer cap per order, never from an SS-High or SI<6 Tower, source/target stay ≥ minimum
+     (floored at 1 Company for indivisibility). Target = the below-minimum shortage Tower (triage
+     P3; the horde-incoming P1/P2 need scout lead time that doesn't exist yet). Direct garrison_pu
+     transfer (abstract PU, like the Ashigaru flow).
+  Live loop now: Taisa sortie → casualties → garrison attrition; horde roll → assault → SI hit /
+  breach / incursion; Shireikan redeploys to cover shortages; Kuni purifies; engineer FORTIFYs.
+  All four parse-checked; no tests per the no-test-code policy. TUNING (playtest): baseline
+  compositions and SS/sortie scaling are PROVISIONAL; with Phase-1 garrison_pu=3 a single horde
+  assault can overrun a Tower — garrison sizing and horde scale will need joint tuning against a
+  live run. The repeat-targeting weight and scout-detection chance remain undefined (used as
+  uniform-random / no-warning until the owner specifies them).
+
+### Taisa AI loop (s2.4.11) — stopping point (2026-06-12, since unblocked under provisional authorization)
 The autonomous build halted at the first **undefined value**, exactly where the GDD stops
 specifying. **Built (fully-defined):** D1 SI maintenance (engineer FORTIFY), D2 Sortie timing
 (Taisa, via the LOCKED `validate_sortie`), and the s2.4.17 Kuni province-purification half of D7.
