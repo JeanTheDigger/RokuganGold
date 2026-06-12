@@ -219,6 +219,11 @@ var spell_void_bonus_used: int = 0
 # -- Poison Tracking -----------------------------------------------------------
 
 @export var active_poisons: Array = []
+## Transient combat suppression of one Disadvantage's effects (s38 Banish All
+## Shadows). Holds an Enums.Disadvantage int (−1 = none); AdvantageSystem skips this
+## Disadvantage in its combat-roll readers while set. Cleared by the orchestrator's
+## advance_round at expiry. Not exported — combat-transient state.
+var suppressed_disadvantage_type: int = -1
 ## Death Touch affliction (s38 kiho, Void 7). Stamped when a caster lands the 3
 ## consecutive atemi strikes + the post-3rd Void Point. Resolved at the next daily
 ## tick by DayOrchestrator (ring drain → catatonic → 3 Contested Void → death).

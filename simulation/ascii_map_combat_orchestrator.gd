@@ -886,6 +886,16 @@ static func execute_atemi_strike(
 				state.once_per_skirmish_atemi[kiho_name] = []
 			state.once_per_skirmish_atemi[kiho_name].append(target_id)
 		r["simple_action_removed"] = true
+	# Banish All Shadows (s38 Void 4): on a hit, the willing-ally target ignores their
+	# highest-point non-Spiritual/non-Social Disadvantage for caster Void Ring Rounds.
+	if r.get("hit", false) and aspec.get("suppress_disadvantage", false):
+		var hd: DisadvantageData = AdvantageSystem.get_highest_non_spiritual_social_disadvantage(target)
+		if hd != null:
+			target.suppressed_disadvantage_type = int(hd.disadvantage_type)
+			t_p.suppressed_disadvantage_expiry = state.combat.round_number + CharacterStats.get_ring_value(attacker, Enums.Ring.VOID)
+			r["suppressed_disadvantage"] = int(hd.disadvantage_type)
+		else:
+			r["no_suppressable_disadvantage"] = true
 	# Death Touch (s38 Void 7): 3 atemi strikes on 3 consecutive Rounds, then a Void
 	# Point after the 3rd, stamps a delayed affliction (resolved by the world-sim at
 	# the next daily tick — ring drain → catatonic → 3 Contested Void → death).
@@ -1873,6 +1883,12 @@ static func advance_round(
 		_process_world_is_empty_expiry(state, _tp, chars_by_id)
 		IndividualCombat.expire_timed_modifiers(_tp, state.combat.round_number)
 		IndividualCombat.expire_active_kiho(_tp, state.combat.round_number)
+		# Banish All Shadows suppression ends — restore the Disadvantage's effects.
+		if _tp.suppressed_disadvantage_expiry >= 0 and _tp.suppressed_disadvantage_expiry <= state.combat.round_number:
+			var _sc: L5RCharacterData = chars_by_id.get(_tp.character_id, null)
+			if _sc != null:
+				_sc.suppressed_disadvantage_type = -1
+			_tp.suppressed_disadvantage_expiry = -1
 
 	# Re-roll initiative for all active participants (L5R 4e: initiative re-rolled each round).
 	# CENTER stance carry-forward: void bonus from last round applies to this roll.

@@ -90,7 +90,7 @@ const KIHO_DATA: Dictionary = {
 	"Tasaii-Do":              {"ring": Enums.Ring.WATER, "mastery": 6, "type": KihoType.MARTIAL, "staff": true, "atemi": true, "atemi_effect": {"condition": "stunned", "contest": {"attacker_ring": Enums.Ring.WATER, "defender_ring": Enums.Ring.EARTH}}},
 	"Waves in All Things":    {"ring": Enums.Ring.WATER, "mastery": 4, "type": KihoType.MYSTICAL},
 	# -- VOID --
-	"Banish All Shadows":     {"ring": Enums.Ring.VOID, "mastery": 4, "type": KihoType.KHARMIC, "atemi": true},
+	"Banish All Shadows":     {"ring": Enums.Ring.VOID, "mastery": 4, "type": KihoType.KHARMIC, "atemi": true, "atemi_effect": {"ally_auto_hit": true, "suppress_disadvantage": true}},
 	"Death Touch":            {"ring": Enums.Ring.VOID, "mastery": 7, "type": KihoType.MYSTICAL, "atemi": true, "atemi_effect": {"death_touch": true}},
 	"Eight Directions Awareness": {"ring": Enums.Ring.VOID, "mastery": 5, "type": KihoType.MYSTICAL},
 	"Knowledge from Within":  {"ring": Enums.Ring.VOID, "mastery": 4, "type": KihoType.INTERNAL},

@@ -295,6 +295,28 @@ static func get_disadvantage_points(dis: DisadvantageData) -> int:
 	return base if base > 0 else maxi(1, dis.rank)
 
 
+## True when this Disadvantage's combat effects are transiently suppressed (s38
+## Banish All Shadows). Read at the top of the combat-roll disadvantage loops.
+static func _is_suppressed(character: L5RCharacterData, dis_type: Enums.Disadvantage) -> bool:
+	return character.suppressed_disadvantage_type == int(dis_type)
+
+
+## Highest-point Disadvantage that is neither Spiritual nor Social (s38 Banish All
+## Shadows target selection). null if the character has none.
+static func get_highest_non_spiritual_social_disadvantage(character: L5RCharacterData) -> DisadvantageData:
+	var best: DisadvantageData = null
+	var best_pts: int = -1
+	for dis: DisadvantageData in character.disadvantages:
+		var cat: String = get_disadvantage_category(dis.disadvantage_type)
+		if "Spiritual" in cat or "Social" in cat:
+			continue
+		var pts: int = get_disadvantage_points(dis)
+		if pts > best_pts:
+			best_pts = pts
+			best = dis
+	return best
+
+
 
 # ---------------------------------------------------------------------------
 # Skill-roll bonus aggregator
@@ -596,6 +618,8 @@ static func get_skill_bonus(
 
 	# Disadvantage penalties
 	for dis: DisadvantageData in character.disadvantages:
+		if _is_suppressed(character, dis.disadvantage_type):
+			continue
 		match dis.disadvantage_type:
 
 			Enums.Disadvantage.ANTISOCIAL:
@@ -701,6 +725,8 @@ static func get_tn_modifier(
 	var mod: int = 0
 
 	for dis: DisadvantageData in character.disadvantages:
+		if _is_suppressed(character, dis.disadvantage_type):
+			continue
 		match dis.disadvantage_type:
 
 			Enums.Disadvantage.ANACHRONISM:
@@ -945,6 +971,8 @@ static func get_trait_modifier(character: L5RCharacterData, trait_type: Enums.Tr
 	var mod: int = 0
 
 	for dis: DisadvantageData in character.disadvantages:
+		if _is_suppressed(character, dis.disadvantage_type):
+			continue
 		match dis.disadvantage_type:
 
 			Enums.Disadvantage.WEAKNESS:

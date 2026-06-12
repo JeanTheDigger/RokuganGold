@@ -148,6 +148,7 @@ class Participant:
 	var kata_used_this_round: Dictionary = {}  # tracks once-per-Round kata uses by effect_id
 	var active_kiho: Array = []                 # currently-active kiho names (GDD s38; see KihoSystem)
 	var active_kiho_expiry: Dictionary = {}     # kiho_name → expiry round (for round-duration buffs)
+	var suppressed_disadvantage_expiry: int = -1  # round when Banish All Shadows suppression ends (s38)
 	var dual_wielding: bool = false            # true when holding an off-hand weapon
 	var off_hand_weapon: String = ""           # name of off-hand weapon ("" = none)
 	var earth_trade_amount: int = 0            # Armor TN traded for damage (earth_trade_armor_for_damage)
