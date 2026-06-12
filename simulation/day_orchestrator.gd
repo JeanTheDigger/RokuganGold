@@ -8120,7 +8120,7 @@ static func _process_anti_maho_roaming(
 
 
 static func _is_asako_inquisitor(c: L5RCharacterData) -> bool:
-	if c.school_name.contains("Inquisitor"):
+	if c.school.contains("Inquisitor"):
 		return true
 	return c.role_position == RoleRegistry.INQUISITOR_LEADER
 
@@ -8263,7 +8263,7 @@ static func _assign_hunters_to_hotspots(
 const BORDER_INCIDENT_DISPOSITION: int = 5  # host lord → hunter (owner-set 2026-06-10)
 
 static func _is_kuni_witch_hunter(c: L5RCharacterData) -> bool:
-	if c.school_name.contains("Witch-Hunter") or c.school_name.contains("Witch Hunter"):
+	if c.school.contains("Witch-Hunter") or c.school.contains("Witch Hunter"):
 		return true
 	return c.role_position == RoleRegistry.WITCH_HUNTER_LEADER
 

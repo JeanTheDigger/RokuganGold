@@ -2056,7 +2056,7 @@ static func _companion_pick_enemy(
 		var tc: L5RCharacterData = chars_by_id.get(tid, null)
 		if tc == null:
 			continue
-		var is_samurai: bool = tc.school_type != Enums.SchoolType.NINJA and not tc.school_name.is_empty()
+		var is_samurai: bool = tc.school_type != Enums.SchoolType.NINJA and not tc.school.is_empty()
 		if not CompanionSystem.will_engage_samurai(companion, is_samurai, false, false):
 			continue
 		return tid

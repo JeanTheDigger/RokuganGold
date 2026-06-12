@@ -5093,6 +5093,38 @@ but not executed in this environment.
   (structural / FORTIFY), the Taisa (sortie / SS), and now the Kuni (spiritual / PTL), three of the
   Wall's four family roles are self-driving at the Tower (the Hida garrison itself is Phase 3).
 
+### Known Code Issues (found and fixed 2026-06-12, headless wall smoke test)
+- **`school_name` vestigial field — 8 production reads were dead. FIXED.** A headless smoke
+  run of the live Wall loop (fresh-bootstrap driver, since retired) surfaced this. `L5RCharacterData`
+  declares BOTH `school` and `school_name`; `WorldGenerator.generate_character` sets only `c.school`,
+  and **`school_name` is never written anywhere** — it is always `""`. Eight sites read the dead
+  field, so each silently misbehaved: `day_orchestrator._is_asako_inquisitor` (8123) and
+  `_is_kuni_witch_hunter` (8266) always returned false → **the entire s11.3.5 maho-hunter system
+  (HUNT_MAHO standing, roaming, cross-border incidents, Kuroiban leader tasking) was dead**;
+  `kolat_master_selector._is_witch_hunter` (430) never excluded witch-hunters from Kolat draws;
+  `npc_advancement` (546 bushi, 556 monk) gated kata/kiho XP claim on `not school_name.is_empty()`
+  (always false) → **NPC kata AND kiho learning never ran**; `kata_system` (388) and `kiho_system`
+  (182) eligibility treated everyone as school-less; `ascii_map_combat_orchestrator` (2059) computed
+  `is_samurai` as always-false (companion samurai-avoidance). All 8 migrated to the canonical
+  `.school` (44 existing refs, always populated). `school_name` now has zero production readers —
+  left declared for save compat; removal is a future cleanup. Parse-checked all 5 files. NOTE:
+  this re-activates dormant code paths (witch-hunter roaming, NPC kata/kiho learning) that have
+  never actually executed — worth watching in the first live run. The Kaiu/Kuni *standing* passes
+  (`_assign_kaiu_engineer_standing_objectives`, `_assign_kuni_purification_standing_objectives`)
+  already read `.school` correctly, so FORTIFY/purify were unaffected.
+- **Smoke-test observations (live Wall, fresh bootstrap, 3806 chars).** Validated at runtime:
+  12 Towers spawn with the Phase-1 init (SI 10, garrison 3, jade 5, SS 3; Ishibei 1-5 / Ishigaki
+  6-9 / Yoake 10-12). Phase-2 roster stationed (Shireikan 2, Taisa 12, Kuni 12, Kaiu 12). Horde
+  gen + sortie scaling correct (Jigoku/Undead Str-2 = 9 companies, Maho-tsukai present; sortie
+  SS3→1 / SS6→2 / SS9→3+ogre / SS12→4+ogre). Assault casualties scale with degrading SI (SI10→0
+  health, SI6→2, SI3→77, SI0→86; garrison-0 → OVERRUN). Redeployment moved +2 PU from the
+  highest-surplus Tower to a drained one (30% cap). **TUNING FINDING (not a bug, needs owner
+  spec):** every *defended* assault resolves to PUSHED_BACK (SI −3) regardless of garrison
+  strength — DECISIVE (−1) and CONTESTED (−2) are unreachable because routing-immune Bakemono
+  survive the round cap, so the battle is a "draw". A strong garrison only reduces casualties,
+  not the SI hit. Defining the s2.4.5 "routed quickly"/decisive criterion (GDD-undefined — the
+  `_map_battle_outcome` DISABLED note) would let a dominant garrison earn a lighter SI hit.
+
 ### Systems Added 2026-06-12 (Kaiu Wall — Phase 3: live horde combat, owner-authorized PROVISIONAL)
 - **Horde composition un-stubbed + sortie/assault combat made live + Shireikan redeployment.**
   The owner authorized GDD-consistent PROVISIONAL baseline compositions (the one value s2.4

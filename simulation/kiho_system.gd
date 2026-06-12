@@ -179,7 +179,7 @@ static func can_learn(character: L5RCharacterData, kiho_name: String) -> bool:
 		return false
 	if not _is_monk(character):
 		return false
-	if character.school_name.is_empty():
+	if character.school.is_empty():
 		return false
 	# Already known?
 	if character.kiho.has(kiho_name):

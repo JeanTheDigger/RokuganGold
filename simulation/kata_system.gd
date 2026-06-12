@@ -385,7 +385,7 @@ static func can_learn_kata(character: L5RCharacterData, kata_name: String) -> bo
 	# Must be a bushi with an actual school designation.
 	if character.school_type != Enums.SchoolType.BUSHI:
 		return false
-	if character.school_name.is_empty():
+	if character.school.is_empty():
 		return false
 
 	# Must not already know it.

@@ -543,7 +543,7 @@ static func process_seasonal_advancement(characters: Array, world_state: Diction
 		# Bushi claim kata XP before progress bars (s30a).
 		# Progress bars vacuum all remaining XP, so kata spending must come first.
 		var kata_learned: String = ""
-		if character.school_type == Enums.SchoolType.BUSHI and not character.school_name.is_empty():
+		if character.school_type == Enums.SchoolType.BUSHI and not character.school.is_empty():
 			var kata_name: String = KataSystem.select_kata_for_npc(character)
 			if not kata_name.is_empty():
 				if KataSystem.learn_kata(character, kata_name):
@@ -554,7 +554,7 @@ static func process_seasonal_advancement(characters: Array, world_state: Diction
 		# it) but the NPC seasonal pass does not auto-divert their XP from spells.
 		var kiho_learned: String = ""
 		if character.school_type == Enums.SchoolType.MONK \
-				and not character.school_name.is_empty():
+				and not character.school.is_empty():
 			var kiho_name: String = KihoSystem.select_kiho_for_npc(character)
 			if not kiho_name.is_empty():
 				if KihoSystem.learn_kiho(character, kiho_name):

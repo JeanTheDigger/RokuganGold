@@ -427,7 +427,7 @@ static func _is_magistrate(npc: L5RCharacterData) -> bool:
 
 
 static func _is_witch_hunter(npc: L5RCharacterData) -> bool:
-	if npc.school_name.contains("Witch Hunter") or npc.school_name.contains("Witch-Hunter"):
+	if npc.school.contains("Witch Hunter") or npc.school.contains("Witch-Hunter"):
 		return true
 	if npc.role_position.contains("Inquisitor"):
 		return true
