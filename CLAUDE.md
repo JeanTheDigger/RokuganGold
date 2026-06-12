@@ -3309,6 +3309,17 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 21: Rising Mountain (dynamic Reduction) (2026-06-12)
+**Rising Mountain** (Earth, while active): every time an attacker makes a Raise on an
+offensive combat action against the caster, the caster gains Reduction = 2× the number of
+Raises. Wired in `_apply_hit`: when the struck defender holds the kiho, `reduction += 2 *
+raises` before `WoundSystem.apply_damage` (spells excluded — this is the weapon-strike
+path). All GDD-given. Verified: at 2 Raises, damage 16 → 12 (−4 = 2×2 Reduction).
+LIMITATION: the "Insight Rank +1 Rounds" duration is not modelled (my round-duration spec
+keys off a Ring, and Insight is not a Ring) — it persists for the skirmish; and Free
+Raises (per the GDD note) are not separated from called Raises. Establishes the per-attack
+dynamic-Reduction pattern.
+
 ### s38 Kiho — effect registry, tranche 20: Way of the Earth (grapple damage-tick) (2026-06-12)
 **Way of the Earth** (Earth, while active): each Round, an opponent engaged in a Grapple
 with the caster suffers the caster's Earth Ring in Wounds (Reactions Stage, regardless of
