@@ -99,7 +99,7 @@ const KIHO_DATA: Dictionary = {
 	"Sense the Balance":      {"ring": Enums.Ring.VOID, "mastery": 6, "type": KihoType.KHARMIC, "atemi": true, "atemi_effect": {"sense_balance": true, "info_only": true}},
 	"Silent Solace":          {"ring": Enums.Ring.VOID, "mastery": 5, "type": KihoType.KHARMIC, "atemi": true},
 	"Song of the World":      {"ring": Enums.Ring.VOID, "mastery": 3, "type": KihoType.KHARMIC},
-	"Spin the Kharmic Wheel": {"ring": Enums.Ring.VOID, "mastery": 8, "type": KihoType.KHARMIC, "atemi": true},
+	"Spin the Kharmic Wheel": {"ring": Enums.Ring.VOID, "mastery": 8, "type": KihoType.KHARMIC, "atemi": true, "atemi_effect": {"spin_kharmic": true, "non_combat_effect": true}},
 	"Striking Through the Void": {"ring": Enums.Ring.VOID, "mastery": 7, "type": KihoType.MARTIAL},
 	"Touch the Void Dragon":  {"ring": Enums.Ring.VOID, "mastery": 4, "type": KihoType.INTERNAL},
 	"To the Last Breath":     {"ring": Enums.Ring.VOID, "mastery": 3, "type": KihoType.KHARMIC},

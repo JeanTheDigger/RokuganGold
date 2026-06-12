@@ -350,6 +350,38 @@ static func get_highest_spiritual_disadvantage(character: L5RCharacterData, excl
 	return best
 
 
+## Held Disadvantages whose category is Social, Spiritual, or Mental (s38 Spin the
+## Kharmic Wheel — the swappable set).
+static func get_swappable_disadvantages(character: L5RCharacterData) -> Array:
+	var out: Array = []
+	for dis: DisadvantageData in character.disadvantages:
+		var cat: String = get_disadvantage_category(dis.disadvantage_type)
+		if "Social" in cat or "Spiritual" in cat or "Mental" in cat:
+			out.append(dis)
+	return out
+
+
+## A random fixed-point Disadvantage (Social/Spiritual/Mental) of the given point
+## value, excluding types in exclude_types. r ∈ [0,1). −1 if none available. (s38
+## Spin the Kharmic Wheel — the equal-value replacement.)
+static func pick_equal_value_disadvantage(points: int, exclude_types: Array, r: float) -> int:
+	var pool: Array = []
+	for t: int in DISADVANTAGE_CATALOG:
+		var e: Dictionary = DISADVANTAGE_CATALOG[t]
+		if int(e.get("points", 0)) != points:
+			continue
+		var cat: String = e.get("category", "")
+		if not ("Social" in cat or "Spiritual" in cat or "Mental" in cat):
+			continue
+		if t in exclude_types:
+			continue
+		pool.append(t)
+	if pool.is_empty():
+		return -1
+	pool.sort()
+	return int(pool[clampi(int(r * pool.size()), 0, pool.size() - 1)])
+
+
 ## Highest-point Disadvantage that is neither Spiritual nor Social (s38 Banish All
 ## Shadows target selection). null if the character has none.
 static func get_highest_non_spiritual_social_disadvantage(character: L5RCharacterData) -> DisadvantageData:

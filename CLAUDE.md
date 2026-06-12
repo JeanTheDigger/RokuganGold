@@ -3309,6 +3309,47 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 11: Disadvantage atemi + s45 catalog (2026-06-12)
+Owner-directed (2026-06-12). Built the AdvantageSystem-in-combat hook and encoded the 3
+Advantage/Disadvantage-manipulation atemi. 21 atemi encoded. **Prerequisite — s45
+category+points catalog:** the codebase had no category (Mental/Physical/Social/Spiritual/
+Material) or point-value metadata for advantages/disadvantages (DisadvantageData had only
+type + rank), which all 3 kiho need ("highest-point", "excluding Spiritual/Social",
+"equal value", "Spiritual Advantages"). Transcribed from GDD s45 (`**Name [Category]
+(N pts)**`): `AdvantageSystem.ADVANTAGE_CATALOG` (82) + `DISADVANTAGE_CATALOG` (63), each
+Enums value → {category, points} (points 0 = variable → use the held entry's rank; "" =
+s45 gives none, e.g. Wanderer). Helpers: get_advantage/disadvantage_category,
+get_advantage/disadvantage_points. Pure transcription, no invented values.
+- **Banish All Shadows** (Void 4): on a hit, the willing-ally target ignores their
+  highest-point non-Spiritual/non-Social Disadvantage for caster Void Ring Rounds. The
+  combat hook: transient `suppressed_disadvantage_type` on the character, skipped at the
+  top of the 3 combat-roll disadvantage loops (get_skill_bonus, get_tn_modifier,
+  get_trait_modifier); `_is_suppressed`. `get_highest_non_spiritual_social_disadvantage`
+  selects the target (catalog category+points). ally_auto_hit → excluded from the
+  offensive NPC hook. Participant.suppressed_disadvantage_expiry; advance_round clears it.
+  LIMITATION: other disadvantage readers (melee damage penalty, wound TN, void-spend
+  blocks) don't honor the suppression yet — the 3 covered are the primary combat-roll
+  effects. Verified: selection excludes Spiritual; BAD_EYESIGHT −1k1 removed while
+  suppressed; restored at expiry.
+- **Sense the Balance** (Void 6): on a hit, spend a Void Point to learn the count of the
+  target's Spiritual Advantages OR Disadvantages (caster's choice; default Disadvantages,
+  PC-choice param deferred). On a won Contested Void Roll, also learn the highest-point
+  not-yet-revealed one; repeat uses reveal more until all known. count_spiritual_* +
+  get_highest_spiritual_* helpers; `MapCombatState.sense_known` for progressive reveal;
+  VP spent post-hit (conditional on the hit, not the resolver's pre-hit vp_cost).
+  info_only → excluded from the offensive hook. Verified: count + highest-first
+  progressive reveal + all-known + no-VP.
+- **Spin the Kharmic Wheel** (Void 8): expend ALL Void Points; the target loses one random
+  Social/Spiritual/Mental Disadvantage and gains a new random one of equal point value (a
+  permanent character mutation). get_swappable_disadvantages + pick_equal_value_disadvantage
+  (catalog-driven, fixed-point pool, excludes already-held). non_combat_effect → excluded
+  from the offensive hook. Verified: BAD_FORTUNE (Spiritual 3pts) → a Mental 3pt
+  Disadvantage, all VP expended; no-swappable and no-VP gates. LIMITATION: the gained
+  Disadvantage has empty metadata (rank 1) — metadata-dependent ones (e.g. Sworn Enemy)
+  would be inert until populated; benign for combat.
+DEFERRED — 3 atemi remain (Rest My Brother Taint, Sever the Dark Lord's Touch undead
+[s54], Silent Solace spell-slot) plus Earth Palm's Fire option.
+
 ### s38 Kiho — effect registry, tranche 10: Death Touch (tile-combat → world-sim) (2026-06-12)
 Encoded **Death Touch** (Void 7 atemi) — the first kiho whose effect spans the tile-combat
 layer AND the world-sim. Owner-authorized design (2026-06-12): **full pipeline / all five

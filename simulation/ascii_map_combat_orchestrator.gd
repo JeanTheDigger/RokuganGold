@@ -922,6 +922,34 @@ static func execute_atemi_strike(
 					known.append(revealed)
 					state.sense_known[skey] = known
 					r["revealed_type"] = revealed
+	# Spin the Kharmic Wheel (s38 Void 8): expend ALL Void Points; the target loses one
+	# random Social/Spiritual/Mental Disadvantage and gains a new random one of equal
+	# point value (a permanent character change).
+	if r.get("hit", false) and aspec.get("spin_kharmic", false):
+		if attacker.current_void_points < 1:
+			r["spin_no_void"] = true
+		else:
+			attacker.current_void_points = 0  # expend all remaining
+			var swappable: Array = AdvantageSystem.get_swappable_disadvantages(target)
+			if swappable.is_empty():
+				r["no_swappable_disadvantage"] = true
+			else:
+				var old_dis: DisadvantageData = swappable[clampi(int(dice_engine.randf() * swappable.size()), 0, swappable.size() - 1)]
+				var pts: int = AdvantageSystem.get_disadvantage_points(old_dis)
+				var exclude: Array = []
+				for d: DisadvantageData in target.disadvantages:
+					exclude.append(int(d.disadvantage_type))
+				var new_type: int = AdvantageSystem.pick_equal_value_disadvantage(pts, exclude, dice_engine.randf())
+				if new_type < 0:
+					r["no_equal_value_replacement"] = true
+				else:
+					target.disadvantages.erase(old_dis)
+					var nd := DisadvantageData.new()
+					nd.disadvantage_type = new_type
+					nd.rank = 1
+					target.disadvantages.append(nd)
+					r["spin_removed"] = int(old_dis.disadvantage_type)
+					r["spin_gained"] = new_type
 	# Death Touch (s38 Void 7): 3 atemi strikes on 3 consecutive Rounds, then a Void
 	# Point after the 3rd, stamps a delayed affliction (resolved by the world-sim at
 	# the next daily tick — ring drain → catatonic → 3 Contested Void → death).
@@ -1610,8 +1638,9 @@ static func _npc_pick_atemi(npc: L5RCharacterData) -> String:
 		if not data.get("atemi", false):
 			continue
 		var eff: Dictionary = data.get("atemi_effect", {})
-		# Skip ally-targeted (heal/buff) and pure-info atemi — not for the enemy target.
-		if eff.is_empty() or eff.get("ally_auto_hit", false) or eff.get("info_only", false):
+		# Skip ally-targeted (heal/buff), pure-info, and non-combat-effect atemi —
+		# none help win the current fight, so the offensive hook should not pick them.
+		if eff.is_empty() or eff.get("ally_auto_hit", false) or eff.get("info_only", false) or eff.get("non_combat_effect", false):
 			continue
 		return k
 	return ""
