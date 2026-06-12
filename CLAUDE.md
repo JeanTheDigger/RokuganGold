@@ -3220,8 +3220,15 @@ selection). Combat effects are now **wired into IndividualCombat** (s40), not st
 `_get_kata_initiative_modifiers`, `_get_kata_armor_tn_bonus`, `_get_kata_attack_modifiers`,
 `_get_kata_damage_modifiers`, `_get_kata_wound_penalty_reduction`, `get_kata_reduction_bonus`,
 `get_kata_opponent_reduction_penalty` resolve effect_ids into Armor TN / attack / damage /
-Initiative / wound-penalty / Reduction modifiers, gated by stance and maneuver. 38 of 42
-distinct kata effect_ids are wired. **`multi_standing_heavens_void_reroll` (Standing on the Heavens)
+Initiative / wound-penalty / Reduction modifiers, gated by stance and maneuver. 39 of 42
+distinct kata effect_ids are wired. **`multi_empire_edge_skill_bonus` (The Empire Rests on its Edge)
+wired as a passive read (2026-06-12):** `IndividualCombat.get_empire_edge_bonus` returns the
+wielder's highest non-combat High Skill rank (via `AdvantageSystem.is_high_skill`, Bugei excluded)
+when the kata is known; `resolve_attack` adds it to `flat_bonus` for Kenjutsu/Iaijutsu rolls
+(katana/daisho implied by the skill gate). Passive — no caller needed. The GDD's "choose one
+non-combat High Skill at acquisition" is auto-resolved to the highest High Skill (optimal,
+deterministic; no choice-storage field); the "+2 XP per Rank" progression cost is not modelled.
+**`multi_standing_heavens_void_reroll` (Standing on the Heavens)
 wired as a defender reaction (2026-06-12):** in `execute_melee_attack`, when an attack hits,
 `_maybe_standing_on_heavens` lets the struck defender spend 1 Void Point (Free Action, once/Round
 via `kata_used_this_round`) to force the attacker to reroll — the reroll's outcome (hit or miss)
@@ -3267,10 +3274,9 @@ it to the Free-action move budget and is now the single source used by the NPC a
 move paths (the player-facing turn-based move UI should adopt it too). SIMPLE/FULL move budgets
 unchanged (the GDD grants the bonus to the Free action only). Passive — no AI/UI caller needed;
 any NPC/companion bushi or monk in Attack Stance who knows the kata gets the extra tile
-automatically. **4 remain deferred** (each needs infra/AI the core resolve lacks):
-`water_lion_ally_initiative` (Reactions-Stage ally-initiative action), `water_unicorn_mount_bonus`
-(no mount system on the map), `multi_empire_edge_skill_bonus` (needs a stored chosen-skill field),
-`water_stealth_movement` (near-no-op on the tile map — "does not change maximum distance").
+automatically. **3 remain deferred** (each needs infra/AI the core resolve lacks):
+`water_lion_ally_initiative` (Reactions-Stage ally-initiative action + AI caller), `water_unicorn_mount_bonus`
+(no mount system on the map), `water_stealth_movement` (near-no-op on the tile map — "does not change maximum distance").
 (`get_kata_reduction_bonus` is wired but currently has no caller — Reduction is applied via the
 orchestrator damage path; harmless until consumed.)
 

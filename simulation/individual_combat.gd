@@ -460,6 +460,22 @@ static func get_kata_free_move_bonus(character: L5RCharacterData, participant: P
 	return 0
 
 
+## The Empire Rests on its Edge (s30a, multi_empire_edge_skill_bonus): while known,
+## grants a flat bonus to Kenjutsu/Iaijutsu rolls equal to the wielder's Rank in a
+## chosen non-combat High Skill. The GDD picks the skill at acquisition; with no
+## choice UI the system resolves it to the character's highest-ranked High Skill
+## (optimal, deterministic). The "+2 XP per Rank" progression cost is not modelled.
+## Returns the bonus, or 0 if the kata is unknown.
+static func get_empire_edge_bonus(character: L5RCharacterData) -> int:
+	if "The Empire Rests on its Edge" not in character.katas:
+		return 0
+	var best: int = 0
+	for skill_name: String in character.skills:
+		if AdvantageSystem.is_high_skill(skill_name):
+			best = maxi(best, int(character.skills[skill_name]))
+	return best
+
+
 ## Returns bonus to own Reduction from katas (earth_full_defense, earth_crab variants).
 ## Public — called by WoundSystem context builders.
 static func get_kata_reduction_bonus(
@@ -940,6 +956,12 @@ static func resolve_attack(
 	# Timed "all rolls" penalty from s30a Strength of the Spider (-3 next Turn).
 	# Covers attack rolls; broader contested-roll coverage is a forward-wire.
 	flat_bonus += get_timed_modifier_total(attacker_p, "all_rolls")
+
+	# The Empire Rests on its Edge (s30a): +Rank in the chosen non-combat High Skill
+	# to Kenjutsu/Iaijutsu rolls (passive while known). Katana/daisho is implied by
+	# the Kenjutsu/Iaijutsu skill gate.
+	if skill_name == "Kenjutsu" or skill_name == "Iaijutsu":
+		flat_bonus += get_empire_edge_bonus(attacker)
 
 	# Dominant hand attack penalty while holding an off-hand weapon (s40)
 	if attacker_p.dual_wielding:
