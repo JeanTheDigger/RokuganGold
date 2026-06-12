@@ -163,6 +163,13 @@ class Participant:
 	# Free Raises the opponent has banked toward a Disarm against this character
 	# (s40: granted when a weapon-grappler loses control of the grapple).
 	var disarm_free_raises_pending: int = 0
+	# Timed combat modifiers from s30a duration katas (Victory of the River, etc.).
+	# Each entry: {kind:String, value:int, expires_round:int, source:String}.
+	# expires_round is the round at which it is removed (active through the prior round).
+	var timed_modifiers: Array = []
+	# Victory of the River (s30a): the single opponent currently held under the
+	# Armor-TN debuff ("One opponent at a time"); -1 = none.
+	var votr_target_id: int = -1
 
 
 class CombatState:
@@ -379,6 +386,43 @@ static func _get_kata_wound_penalty_reduction(character: L5RCharacterData) -> in
 	if _has_kata_effect(character, "earth_wound_tn_reduce"):
 		return CharacterStats.get_earth_ring(character)
 	return 0
+
+
+# -- Timed combat modifiers (s30a duration katas) -----------------------------
+# Generic round-scoped modifier store on a Participant. Each entry is
+# {kind, value, expires_round, source}. `kind` selects which roll/value the
+# modifier feeds ("armor_tn" today; "all_rolls" / "attack_roll" reserved for the
+# Spider / World Is Empty katas). All values and durations are GDD-given (s30a) —
+# the system carries no balance numbers of its own.
+
+static func add_timed_modifier(p: Participant, kind: String, value: int, expires_round: int, source: String) -> void:
+	p.timed_modifiers.append({"kind": kind, "value": value, "expires_round": expires_round, "source": source})
+
+
+static func get_timed_modifier_total(p: Participant, kind: String) -> int:
+	var total: int = 0
+	for m: Dictionary in p.timed_modifiers:
+		if m.get("kind", "") == kind:
+			total += int(m.get("value", 0))
+	return total
+
+
+static func clear_timed_modifiers_by_source(p: Participant, source: String) -> void:
+	var kept: Array = []
+	for m: Dictionary in p.timed_modifiers:
+		if m.get("source", "") != source:
+			kept.append(m)
+	p.timed_modifiers = kept
+
+
+## Remove round-based timed modifiers whose window has closed. Called once per
+## participant at the start of each new round (after round_number is incremented).
+static func expire_timed_modifiers(p: Participant, round_number: int) -> void:
+	var kept: Array = []
+	for m: Dictionary in p.timed_modifiers:
+		if int(m.get("expires_round", 0)) > round_number:
+			kept.append(m)
+	p.timed_modifiers = kept
 
 
 ## Striking as Water (s30a, water_attack_stance_movement): "In Attack Stance:
@@ -709,7 +753,9 @@ static func get_armor_tn(
 	var kata_bonus: int = _get_kata_armor_tn_bonus(character, participant, weapon_name)
 	var kiho_bonus: int = _get_kiho_armor_tn_bonus(character, participant)
 	var dual_wield_bonus: int = CharacterStats.get_insight_rank(character) if participant.dual_wielding else 0
-	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection + kata_bonus + kiho_bonus + dual_wield_bonus
+	# Timed Armor-TN modifiers from s30a duration katas (Victory of the River: -10).
+	var timed_armor: int = get_timed_modifier_total(participant, "armor_tn")
+	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection + kata_bonus + kiho_bonus + dual_wield_bonus + timed_armor
 
 
 static func roll_full_defense_bonus(

@@ -3220,8 +3220,21 @@ selection). Combat effects are now **wired into IndividualCombat** (s40), not st
 `_get_kata_initiative_modifiers`, `_get_kata_armor_tn_bonus`, `_get_kata_attack_modifiers`,
 `_get_kata_damage_modifiers`, `_get_kata_wound_penalty_reduction`, `get_kata_reduction_bonus`,
 `get_kata_opponent_reduction_penalty` resolve effect_ids into Armor TN / attack / damage /
-Initiative / wound-penalty / Reduction modifiers, gated by stance and maneuver. 34 of 42
-distinct kata effect_ids are wired. **`water_attack_stance_movement` wired into the ASCII map
+Initiative / wound-penalty / Reduction modifiers, gated by stance and maneuver. 35 of 42
+distinct kata effect_ids are wired. **`multi_victory_river_armor_pierce` wired via a new
+timed-modifier layer (2026-06-12):** Victory of the River (s30a) — a landed katana/daisho strike
+drops the target's Armor TN −10 vs all attacks AND the wielder's own Armor TN −10, both for 3
+Rounds, one opponent at a time. New generic round-scoped store on `IndividualCombat.Participant`
+(`timed_modifiers: Array` of `{kind,value,expires_round,source}` + `add/get_total/clear_by_source/
+expire` primitives; `votr_target_id` tracks the held opponent). `get_armor_tn` adds the `"armor_tn"`
+timed total on its main return path; `AsciiMapCombatOrchestrator.advance_round` expires by round
+after the increment; `_apply_victory_of_the_river` fires passively from `execute_melee_attack` on a
+hit (kata + katana/wakizashi gate, switching targets clears the prior debuff, re-striking refreshes
+the window). All values GDD-given (−10, 3 Rounds, daisho-only). Passive — no AI/UI caller. The
+layer's `kind` is generic (`"all_rolls"` / `"attack_roll"` reserved) so the remaining two duration
+katas reuse the store. LIMITATION: the special-state Armor-TN early returns (Grappled/Stunned/
+Blinded) do not include the timed modifier — GDD does not specify that interaction.
+**`water_attack_stance_movement` wired into the ASCII map
 movement layer (2026-06-12):** Striking as Water (s30a) — "In Attack Stance: move 5 additional
 feet as a Free Action" — `IndividualCombat.get_kata_free_move_bonus` returns +1 tile (1 tile =
 5 ft) when the character knows the kata and is in Attack Stance (Attack only, not Full Attack,
@@ -3230,10 +3243,11 @@ it to the Free-action move budget and is now the single source used by the NPC a
 move paths (the player-facing turn-based move UI should adopt it too). SIMPLE/FULL move budgets
 unchanged (the GDD grants the bonus to the Free action only). Passive — no AI/UI caller needed;
 any NPC/companion bushi or monk in Attack Stance who knows the kata gets the extra tile
-automatically. **8 remain deferred** (need infra that does not exist yet, not the core resolve):
-`earth_spider_wound_debuff` / `multi_world_empty_void_attack` / `multi_victory_river_armor_pierce`
-(need a timed/duration-condition layer — the round/turn durations are GDD-given, the system is
-not), `multi_standing_heavens_void_reroll` (when-struck defender-reaction hook),
+automatically. **7 remain deferred** (each needs a specific hook the core resolve lacks):
+`earth_spider_wound_debuff` (the timed-modifier store exists, but this needs an `"all_rolls"` read
+across every roll path + a turn-based "next Turn" expiry variant) and `multi_world_empty_void_attack`
+(needs an `"attack_roll"` read + an activation action + the lose-1-VP-on-expiry side effect — the
+round-based store is ready), `multi_standing_heavens_void_reroll` (when-struck defender-reaction hook),
 `water_lion_ally_initiative` (Reactions-Stage ally-initiative action), `water_unicorn_mount_bonus`
 (no mount system on the map), `multi_empire_edge_skill_bonus` (needs a stored chosen-skill field),
 `water_stealth_movement` (near-no-op on the tile map — "does not change maximum distance").

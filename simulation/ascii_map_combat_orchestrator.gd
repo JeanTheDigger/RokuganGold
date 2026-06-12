@@ -507,6 +507,42 @@ static func execute_move(
 ##           "knockdown_biped" / "knockdown_quad" /
 ##           "called_shot_limb" / "called_shot_hand" / "called_shot_head" /
 ##           "called_shot_small" / "extra_attack" / "guard"
+# Victory of the River (s30a, multi_victory_river_armor_pierce). All values GDD-given.
+const VOTR_SOURCE: String = "victory_of_the_river"
+const VOTR_ARMOR_PENALTY: int = -10
+const VOTR_DURATION_ROUNDS: int = 3
+
+## On a successful katana/daisho strike by a Victory of the River wielder, the
+## target's Armor TN drops -10 vs all attacks AND the wielder's own Armor TN drops
+## -10, both for 3 Rounds. "One opponent at a time": switching targets ends the
+## prior target's debuff. Re-striking the same target refreshes the 3-round window.
+## Passive — fired from execute_melee_attack on hit; no AI/UI caller needed.
+static func _apply_victory_of_the_river(
+	state: MapCombatState,
+	attacker: L5RCharacterData,
+	a_p: IndividualCombat.Participant,
+	t_p: IndividualCombat.Participant,
+	target_id: int,
+	weapon_name: String,
+) -> void:
+	if "Victory of the River" not in attacker.katas:
+		return
+	if weapon_name not in ["katana", "wakizashi"]:  # the daisho blades (s30a "Katana or daisho only")
+		return
+	# One opponent at a time: clear the prior target's debuff if switching.
+	if a_p.votr_target_id >= 0 and a_p.votr_target_id != target_id:
+		var old_t: IndividualCombat.Participant = state.combat.participants.get(a_p.votr_target_id, null)
+		if old_t != null:
+			IndividualCombat.clear_timed_modifiers_by_source(old_t, VOTR_SOURCE)
+	a_p.votr_target_id = target_id
+	var expires: int = state.combat.round_number + VOTR_DURATION_ROUNDS
+	# Refresh (re-apply resets the window) the target debuff and the wielder's own debuff.
+	IndividualCombat.clear_timed_modifiers_by_source(t_p, VOTR_SOURCE)
+	IndividualCombat.add_timed_modifier(t_p, "armor_tn", VOTR_ARMOR_PENALTY, expires, VOTR_SOURCE)
+	IndividualCombat.clear_timed_modifiers_by_source(a_p, VOTR_SOURCE)
+	IndividualCombat.add_timed_modifier(a_p, "armor_tn", VOTR_ARMOR_PENALTY, expires, VOTR_SOURCE)
+
+
 static func execute_melee_attack(
 	state: MapCombatState,
 	attacker_id: int,
@@ -587,6 +623,10 @@ static func execute_melee_attack(
 		result["wounds_inflicted"] = dmg_result.get("wounds", 0)
 		result["target_dead"] = dmg_result.get("dead", false)
 		result["target_wound_level"] = CharacterStats.get_wound_level(target)
+
+		# Victory of the River (s30a): a landed katana/daisho strike drops the
+		# target's (and the wielder's own) Armor TN -10 for 3 Rounds.
+		_apply_victory_of_the_river(state, attacker, a_p, t_p, target_id, weapon_name)
 
 		# Knockdown maneuver: contested Strength if hit.
 		if maneuver in ["knockdown_biped", "knockdown_quad"]:
@@ -1534,6 +1574,10 @@ static func advance_round(
 
 	state.combat.round_number += 1
 	state.combat.current_turn_index = 0
+
+	# Expire round-based timed modifiers (s30a duration katas) for the new round.
+	for _tp: IndividualCombat.Participant in state.combat.participants.values():
+		IndividualCombat.expire_timed_modifiers(_tp, state.combat.round_number)
 
 	# Re-roll initiative for all active participants (L5R 4e: initiative re-rolled each round).
 	# CENTER stance carry-forward: void bonus from last round applies to this roll.
