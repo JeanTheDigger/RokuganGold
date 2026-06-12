@@ -287,7 +287,7 @@ Content has not been modified — only split at section boundaries.
 | File | Section | Size | Status |
 |------|---------|------|--------|
 | `s30_katas.md` | # 30. Katas | 10K | Reference / No tags (source material) |
-| `s30a_katas_locked.md` | # 30a. Katas — Eligibility & Effect Registry | 8K | FULLY LOCKED. 2026-05-30: Eligibility rules, XP cost formula, all 43 katas tabulated, school/clan/ring interpretation, multi-ring chain (Mirumoto/Kakita reduction). 2026-06-06: Combat effects WIRED into IndividualCombat (33/42 effect_ids — Armor TN / attack / damage / Initiative / wound-penalty / Reduction); 9 deferred (need map/ally/mount/orchestrator context). Code: `simulation/kata_system.gd` + `individual_combat.gd`. |
+| `s30a_katas_locked.md` | # 30a. Katas — Eligibility & Effect Registry | 8K | FULLY LOCKED. 2026-05-30: Eligibility rules, XP cost formula, all 43 katas tabulated, school/clan/ring interpretation, multi-ring chain (Mirumoto/Kakita reduction). 2026-06-06: Combat effects WIRED into IndividualCombat (33/42 effect_ids — Armor TN / attack / damage / Initiative / wound-penalty / Reduction). 2026-06-12: `water_attack_stance_movement` (Striking as Water) wired into the ASCII map movement layer (+1 free-move tile in Attack Stance via `free_move_budget`) — 34/42; 8 deferred (need a timed-condition layer / mount system / stored skill-choice field / reaction-stage hooks). Code: `simulation/kata_system.gd` + `individual_combat.gd` + `ascii_map_combat_orchestrator.gd`. |
 
 ### Section 31
 
