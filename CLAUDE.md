@@ -3280,6 +3280,35 @@ automatically. **3 remain deferred** (each needs infra/AI the core resolve lacks
 (`get_kata_reduction_bonus` is wired but currently has no caller — Reduction is applied via the
 orchestrator damage path; harmless until consumed.)
 
+### s38 Kiho — effect registry, tranche 1: atemi delivery + Flame Fist (2026-06-12)
+First tranche of the kiho-effect registry (the larger effort to encode/wire the 73
+kiho's combat effects; only 5 passive active-buffs + 5 encoded-but-unreachable atemi
+existed before). **Key gap found:** `IndividualCombat.resolve_atemi_strike` existed
+and read `KIHO_DATA[kiho]["atemi_effect"]` specs, but **nothing in the orchestrator
+ever called it** — so the entire atemi kiho category (Unbalance the Mind, Freezing
+the Lifeblood, Seven Storm's Fist, Mind/No-Mind, Tasaii-Do) was unreachable in tile
+combat. Added **`AsciiMapCombatOrchestrator.execute_atemi_strike`** — a Complex-action
+unarmed strike (melee range, monk-only by virtue of holding kiho, mirrors
+execute_melee_attack gating) that delivers an atemi: on a hit it applies the kiho's
+`atemi_effect` (an instant condition OR — new — a round-scoped timed modifier).
+`resolve_atemi_strike` gains an optional `round_number` param and a `"timed"` spec
+branch that adds a timed modifier via the existing layer. **Flame Fist** encoded as
+the first new effect: `atemi_effect {"timed": {kind "all_rolls", value −3×Fire Ring,
+duration Fire Ring}}` — on a hit the target takes −3×Fire to all rolls for Fire Ring
+Rounds (expires via the `advance_round` timed sweep; read on the target's attack rolls
+through the Spider `all_rolls` path). A minimal NPC monk hook (`_npc_pick_atemi` +
+a branch in `execute_npc_turn`) makes a monk in melee deliver its first ENCODED atemi
+(skips atemi with no wired effect, e.g. Censure of Thunder) instead of a normal strike;
+atemi kiho are monk-only so there is no PC path. All values GDD-given (Flame Fist
+−3×Fire / Fire Rounds; atemi as a Complex unarmed attack is a reading). Verified with
+a headless driver: Flame Fist timed effect (−12 all_rolls, expiry round+Fire, Complex
+consumed), Unbalance the Mind condition (dazed), the not-atemi/not-known/out-of-range
+gates, and `_npc_pick_atemi` selecting encoded atemi only. DEFERRED (next tranches):
+the remaining ~63 kiho effects (movement/leap, utility/out-of-combat, reactive
+interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
+unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
+and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
+
 ### s38 Kiho — in-combat activation cost path (2026-06-12)
 `IndividualCombat.activate_kiho` did the known + active-slot validation but
 explicitly deferred the s38a *cost* to the orchestrator, so nothing in the tile

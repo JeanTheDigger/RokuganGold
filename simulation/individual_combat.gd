@@ -622,6 +622,9 @@ static func total_defender_reduction(
 ## Ring roll after the hit. Returns {ok, hit, effect_applied, condition, ...}.
 ## Atemi kiho with durations, new condition types, or unique mechanics are not yet
 ## wired (need timed-condition infrastructure) — they return effect_not_wired.
+## round_number enables "timed" atemi effects (s38 kiho that last "Rounds equal to
+## X"); pass the current combat round so the timed modifier gets a round-based
+## expiry. -1 (default) is fine for instant-condition atemi.
 static func resolve_atemi_strike(
 	attacker: L5RCharacterData,
 	attacker_p: Participant,
@@ -629,6 +632,7 @@ static func resolve_atemi_strike(
 	target_p: Participant,
 	kiho_name: String,
 	dice_engine: DiceEngine,
+	round_number: int = -1,
 ) -> Dictionary:
 	if not attacker.kiho.has(kiho_name):
 		return {"ok": false, "reason": "not_known"}
@@ -652,6 +656,15 @@ static func resolve_atemi_strike(
 		var def_roll: DiceResult = dice_engine.roll_and_keep(def_ring, def_ring, true)
 		if atk_roll.total < def_roll.total:
 			return {"ok": true, "hit": true, "effect_applied": false, "contested_lost": true}
+	# Timed atemi effect (s38 kiho "Lasts Rounds equal to ..."): apply a round-scoped
+	# timed modifier (e.g. Flame Fist: -3 × Fire Ring to all rolls for Fire Ring Rounds).
+	if spec.has("timed"):
+		var t: Dictionary = spec["timed"]
+		var value: int = int(t.get("value_mult", 1)) * CharacterStats.get_ring_value(attacker, t.get("value_ring", Enums.Ring.FIRE))
+		var duration: int = CharacterStats.get_ring_value(attacker, t.get("duration_ring", Enums.Ring.FIRE))
+		var expires: int = round_number + duration
+		add_timed_modifier(target_p, t.get("kind", "all_rolls"), value, expires, t.get("source", "atemi_kiho"), "round")
+		return {"ok": true, "hit": true, "effect_applied": true, "timed_kind": t.get("kind", ""), "timed_value": value, "expires_round": expires}
 	apply_condition(target_p, spec["condition"])
 	return {"ok": true, "hit": true, "effect_applied": true, "condition": spec["condition"]}
 

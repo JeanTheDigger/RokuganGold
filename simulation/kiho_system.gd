@@ -72,7 +72,7 @@ const KIHO_DATA: Dictionary = {
 	"Destiny's Strike":       {"ring": Enums.Ring.FIRE, "mastery": 4, "type": KihoType.MARTIAL},
 	"Falling Star Strike":    {"ring": Enums.Ring.FIRE, "mastery": 7, "type": KihoType.MARTIAL, "atemi": true},
 	"Fire's Fleeting Speed":  {"ring": Enums.Ring.FIRE, "mastery": 4, "type": KihoType.KHARMIC},
-	"Flame Fist":             {"ring": Enums.Ring.FIRE, "mastery": 3, "type": KihoType.MARTIAL, "atemi": true},
+	"Flame Fist":             {"ring": Enums.Ring.FIRE, "mastery": 3, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"timed": {"kind": "all_rolls", "value_ring": Enums.Ring.FIRE, "value_mult": -3, "duration_ring": Enums.Ring.FIRE, "source": "flame_fist"}}},
 	"The Mind's Fire":        {"ring": Enums.Ring.FIRE, "mastery": 4, "type": KihoType.INTERNAL},
 	"Seven Storm's Fist":     {"ring": Enums.Ring.FIRE, "mastery": 6, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"condition": "stunned", "contest": {"attacker_ring": Enums.Ring.FIRE, "defender_ring": Enums.Ring.FIRE}}},
 	"Sever the Dark Lord's Touch": {"ring": Enums.Ring.FIRE, "mastery": 5, "type": KihoType.MYSTICAL, "atemi": true, "kuni_reduce": true},

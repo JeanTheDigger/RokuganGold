@@ -795,6 +795,60 @@ static func execute_melee_attack(
 
 
 ## Ranged attack on target_id. Costs a Complex action.
+## Deliver an atemi kiho strike (s38): an unarmed Complex-action attack against an
+## adjacent target that, on a hit, applies the kiho's atemi_effect (an instant
+## condition or a timed modifier) instead of normal damage. Monk-only (only monks
+## hold kiho). The roll, doubled atemi Armor TN, optional contest, and effect
+## application live in IndividualCombat.resolve_atemi_strike.
+static func execute_atemi_strike(
+	state: MapCombatState,
+	attacker_id: int,
+	target_id: int,
+	attacker: L5RCharacterData,
+	target: L5RCharacterData,
+	kiho_name: String,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(attacker):
+		return {"success": false, "reason": "character_is_dead"}
+	if CharacterStats.is_dead(target):
+		return {"success": false, "reason": "target_is_dead"}
+	var ts: TurnState = state.turn_states.get(attacker_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	var a_p: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if a_p == null or t_p == null:
+		return {"success": false, "reason": "participant_missing"}
+	if not attacker.kiho.has(kiho_name):
+		return {"success": false, "reason": "kiho_not_known"}
+	if not KihoSystem.KIHO_DATA.get(kiho_name, {}).get("atemi", false):
+		return {"success": false, "reason": "not_atemi"}
+	var wl: int = CharacterStats.get_wound_level(attacker)
+	if ts.is_down_restricted(wl):
+		return {"success": false, "reason": "down_only_free_actions"}
+	if a_p.stance == Enums.Stance.DEFENSE or a_p.stance == Enums.Stance.FULL_DEFENSE:
+		return {"success": false, "reason": "defense_cannot_attack"}
+	if not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_actions_remaining"}
+	var apos: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
+	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
+	if apos.x < 0 or tpos.x < 0:
+		return {"success": false, "reason": "position_unknown"}
+	if _chebyshev(apos, tpos) > MELEE_RANGE_TILES:
+		return {"success": false, "reason": "out_of_melee_range"}
+
+	var r: Dictionary = IndividualCombat.resolve_atemi_strike(
+		attacker, a_p, target, t_p, kiho_name, dice_engine, state.combat.round_number)
+	ts.consume_complex()
+	state.combat_log.append({
+		"type": "atemi_strike", "round": state.combat.round_number,
+		"attacker_id": attacker_id, "target_id": target_id, "kiho": kiho_name,
+		"hit": r.get("hit", false), "effect_applied": r.get("effect_applied", false)})
+	r["success"] = r.get("ok", false)
+	return r
+
+
 static func execute_ranged_attack(
 	state: MapCombatState,
 	attacker_id: int,
@@ -1434,6 +1488,16 @@ static func _npc_maybe_activate_kiho(
 	return {}
 
 
+## First known atemi kiho whose effect is encoded (so the strike actually applies
+## something). Returns "" if the monk knows none. Used by execute_npc_turn.
+static func _npc_pick_atemi(npc: L5RCharacterData) -> String:
+	for k: String in npc.kiho:
+		var data: Dictionary = KihoSystem.KIHO_DATA.get(k, {})
+		if data.get("atemi", false) and not (data.get("atemi_effect", {}) as Dictionary).is_empty():
+			return k
+	return ""
+
+
 ## Break/destroy a fragile tile (shoji, paper wall, bamboo). Complex action.
 static func execute_destroy_tile(
 	state: MapCombatState,
@@ -1902,6 +1966,20 @@ static func execute_npc_turn(
 	if not target_in_melee:
 		ranged_targets = get_ranged_targets(state, npc_id)
 		target_in_ranged = (best_target in ranged_targets)
+
+	# -- Atemi (s38): a monk in melee delivers a known (encoded) atemi kiho instead
+	# of a normal strike, applying its condition/timed debuff. Basic heuristic (the
+	# GDD gives no NPC atemi policy); the atemi is the turn's Complex action.
+	if target_in_melee and npc.school_type == Enums.SchoolType.MONK:
+		var atemi_name: String = _npc_pick_atemi(npc)
+		if atemi_name != "":
+			var atemi_tgt: L5RCharacterData = chars_by_id.get(best_target, null)
+			if atemi_tgt != null and not CharacterStats.is_dead(atemi_tgt):
+				var atemi_res: Dictionary = execute_atemi_strike(
+					state, npc_id, best_target, npc, atemi_tgt, atemi_name, dice_engine)
+				if atemi_res.get("success", false):
+					actions_taken.append({"action": "atemi", "result": atemi_res})
+					return {"actions": actions_taken}
 
 	# -- Attack ---------------------------------------------------------------
 	if target_in_melee or (not is_melee_weapon and target_in_ranged):
