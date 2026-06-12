@@ -3309,6 +3309,28 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 3: ring-DR damage + caster VP (2026-06-12)
+Extended the composable atemi spec with **ring-scaled damage dice** (`rolled_ring`/
+`kept_ring` → the attacker's ring value; the owner-set "DR equal to [Ring]"
+convention = **Ring k Ring** exploding) and **`caster_vp_gain`** (capped at the
+caster's Void Ring, with an optional `target_vp_required` gate). Encoded 2 more
+atemi: **Touch of the Storm** (`contest` Air → Air k Air damage bypassing Reduction
+— the existing contest gate means damage lands only on a won contest) and **Void
+Fist** (regain 2 Void Points on a hit; no effect on a target without VP). 11 atemi
+now encoded. All values GDD-given (Touch of the Storm DR per the owner's Ring k Ring
+ruling; Void Fist 2 VP). Verified with a headless driver: Touch of the Storm both
+branches (contest won → damage; contest lost → no effect), Void Fist both branches
+(target with VP → caster +2; target without VP → no gain). DEFERRED (13 atemi, each
+needs a bespoke subsystem this layer lacks): Earth Palm (choice forced-raises /
+dice-penalty timed), Rest My Brother (Taint strip), The Rolling Avalanche &
+Falling Star Strike (normal unarmed damage + bonus — the atemi path deals no normal
+damage), Speed of the Mountains (movement-distance debuff), Sever the Dark Lord's
+Touch (undead-only, s54), As the Breakers (action-economy loss), Chi Protection
+(heal-over-time), Banish All Shadows (Disadvantage suppression), Death Touch
+(multi-round Ring drain), Sense the Balance (info read), Silent Solace (spell-slot
+tax), Spin the Kharmic Wheel (Disadvantage swap). Void Fist's "1 Raise to use" gate
+is not modelled (NPC always uses it).
+
 ### s38 Kiho — effect registry, tranche 2: composable atemi effects (2026-06-12)
 Made `resolve_atemi_strike`'s effect application **composable** — an `atemi_effect`
 spec may now combine, in any mix: `damage` ({rolled, kept, bypass_reduction} →

@@ -42,7 +42,7 @@ const KIHO_DATA: Dictionary = {
 	"Stain Upon the Soul":    {"ring": Enums.Ring.AIR, "mastery": 3, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"wound_rank_penalty": {"rank_ring": Enums.Ring.AIR, "duration_rings": [Enums.Ring.AIR], "duration_insight": true, "source": "stain_soul"}}},
 	"Steal the Air Dragon":   {"ring": Enums.Ring.AIR, "mastery": 7, "type": KihoType.KHARMIC},
 	"Strike Through the Wind": {"ring": Enums.Ring.AIR, "mastery": 5, "type": KihoType.MYSTICAL},
-	"Touch of the Storm":     {"ring": Enums.Ring.AIR, "mastery": 6, "type": KihoType.MARTIAL, "atemi": true},
+	"Touch of the Storm":     {"ring": Enums.Ring.AIR, "mastery": 6, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"contest": {"attacker_ring": Enums.Ring.AIR, "defender_ring": Enums.Ring.AIR}, "damage": {"rolled_ring": Enums.Ring.AIR, "kept_ring": Enums.Ring.AIR, "bypass_reduction": true}}},
 	"Thunder's Word":         {"ring": Enums.Ring.AIR, "mastery": 6, "type": KihoType.MYSTICAL},
 	"Way of the Willow":      {"ring": Enums.Ring.AIR, "mastery": 5, "type": KihoType.INTERNAL},
 	"The Wind's Vision":      {"ring": Enums.Ring.AIR, "mastery": 4, "type": KihoType.INTERNAL},
@@ -103,7 +103,7 @@ const KIHO_DATA: Dictionary = {
 	"Striking Through the Void": {"ring": Enums.Ring.VOID, "mastery": 7, "type": KihoType.MARTIAL},
 	"Touch the Void Dragon":  {"ring": Enums.Ring.VOID, "mastery": 4, "type": KihoType.INTERNAL},
 	"To the Last Breath":     {"ring": Enums.Ring.VOID, "mastery": 3, "type": KihoType.KHARMIC},
-	"Void Fist":              {"ring": Enums.Ring.VOID, "mastery": 4, "type": KihoType.MARTIAL, "atemi": true},
+	"Void Fist":              {"ring": Enums.Ring.VOID, "mastery": 4, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"caster_vp_gain": 2, "target_vp_required": true}},
 	"The World Disappears":   {"ring": Enums.Ring.VOID, "mastery": 6, "type": KihoType.INTERNAL},
 }
 

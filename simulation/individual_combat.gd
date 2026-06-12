@@ -662,10 +662,14 @@ static func resolve_atemi_strike(
 	# roll penalty, and/or an instant condition. All values are GDD-given per kiho.
 	var result: Dictionary = {"ok": true, "hit": true, "effect_applied": true}
 
-	# Direct damage (e.g. Censure of Thunder 1k1, bypassing Reduction).
+	# Direct damage (e.g. Censure of Thunder 1k1, bypassing Reduction). Dice may be
+	# fixed (rolled/kept) or ring-scaled (rolled_ring/kept_ring → attacker's ring,
+	# the "DR equal to [Ring]" convention = Ring k Ring exploding, e.g. Touch of the Storm).
 	if spec.has("damage"):
 		var dmg: Dictionary = spec["damage"]
-		var raw: int = dice_engine.roll_and_keep(int(dmg.get("rolled", 1)), int(dmg.get("kept", 1)), true).total
+		var rolled: int = CharacterStats.get_ring_value(attacker, dmg["rolled_ring"]) if dmg.has("rolled_ring") else int(dmg.get("rolled", 1))
+		var kept: int = CharacterStats.get_ring_value(attacker, dmg["kept_ring"]) if dmg.has("kept_ring") else int(dmg.get("kept", 1))
+		var raw: int = dice_engine.roll_and_keep(rolled, kept, true).total
 		var reduction: int = 0 if dmg.get("bypass_reduction", false) else -1
 		var dr: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
 		result["damage"] = dr["final_damage"]
@@ -711,6 +715,14 @@ static func resolve_atemi_strike(
 		add_timed_modifier(target_p, t.get("kind", "all_rolls"), value, round_number + duration, t.get("source", "atemi_kiho"), "round")
 		result["timed_kind"] = t.get("kind", "")
 		result["timed_value"] = value
+
+	# Caster Void-Point gain (Void Fist: regain VP on a hit; needs a target with VP).
+	# Capped at the caster's Void Ring (max VP).
+	if spec.has("caster_vp_gain"):
+		if not spec.get("target_vp_required", false) or target.current_void_points > 0:
+			var max_vp: int = CharacterStats.get_ring_value(attacker, Enums.Ring.VOID)
+			attacker.current_void_points = mini(max_vp, attacker.current_void_points + int(spec["caster_vp_gain"]))
+			result["caster_vp_gained"] = int(spec["caster_vp_gain"])
 
 	# Instant condition (Dazed, Stunned, silenced — the last is inert until a
 	# verbal-component system exists; encoded for faithfulness).
