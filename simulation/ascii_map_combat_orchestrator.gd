@@ -2401,6 +2401,11 @@ static func advance_round(
 			var _woe_p: L5RCharacterData = chars_by_id.get(_tp.grapple_partner_id, null)
 			if _woe_c != null and _woe_p != null and not CharacterStats.is_dead(_woe_p):
 				WoundSystem.apply_damage(_woe_p, CharacterStats.get_ring_value(_woe_c, Enums.Ring.EARTH), 0)
+		# Ride the Water Dragon (s38 Water): recover Water Ring Wounds each Round (Reactions Stage).
+		if "Ride the Water Dragon" in _tp.active_kiho:
+			var _rwd_c: L5RCharacterData = chars_by_id.get(_tp.character_id, null)
+			if _rwd_c != null and not CharacterStats.is_dead(_rwd_c):
+				WoundSystem.heal_wounds(_rwd_c, CharacterStats.get_ring_value(_rwd_c, Enums.Ring.WATER))
 
 	# Re-roll initiative for all active participants (L5R 4e: initiative re-rolled each round).
 	# CENTER stance carry-forward: void bonus from last round applies to this roll.

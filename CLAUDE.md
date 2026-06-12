@@ -3309,6 +3309,16 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 27: Ride the Water Dragon (heal-over-time) (2026-06-12)
+**Ride the Water Dragon** (Water, while active): the caster recovers Water Ring Wounds
+during the Reactions Stage of each Round. Wired into the advance_round per-participant
+loop (beside Way of the Earth): `WoundSystem.heal_wounds(caster, Water Ring)`. All
+GDD-given. Verified: a Water-4 caster healed 4 Wounds on round advance (20 → 16).
+LIMITATION: the "Insight Rank Rounds" duration is not modelled (round-duration spec keys
+off a Ring) — it persists for the skirmish. Establishes the per-round heal-over-time
+pattern. NOTE: with this, every per-round tick shape (grapple damage, self-heal) is now
+covered.
+
 ### s38 Kiho — effect registry, tranche 26: Riding the Clouds + The World Disappears (2026-06-12)
 - **Riding the Clouds** (Air, while active): `execute_riding_the_clouds` — a Simple Move
   Action to leap up to Air Ring ×10 ft (= ×2 tiles) to any free passable tile (ignoring
