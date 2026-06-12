@@ -3220,8 +3220,16 @@ selection). Combat effects are now **wired into IndividualCombat** (s40), not st
 `_get_kata_initiative_modifiers`, `_get_kata_armor_tn_bonus`, `_get_kata_attack_modifiers`,
 `_get_kata_damage_modifiers`, `_get_kata_wound_penalty_reduction`, `get_kata_reduction_bonus`,
 `get_kata_opponent_reduction_penalty` resolve effect_ids into Armor TN / attack / damage /
-Initiative / wound-penalty / Reduction modifiers, gated by stance and maneuver. 35 of 42
-distinct kata effect_ids are wired. **`multi_victory_river_armor_pierce` wired via a new
+Initiative / wound-penalty / Reduction modifiers, gated by stance and maneuver. 36 of 42
+distinct kata effect_ids are wired. **`earth_spider_wound_debuff` (Strength of the Spider) wired
+on the same timed-modifier layer (2026-06-12):** once per Round, a strike dealing 15+ Wounds gives
+the opponent a `"all_rolls"` −3 timed modifier with `"turn_end"` expiry — active through the
+opponent's next Turn, removed when their turn ends (`AsciiMapCombatOrchestrator.advance_turn`
+expires turn-scoped modifiers on the ending actor; round expiry leaves turn modifiers untouched).
+`resolve_attack` adds the `"all_rolls"` total to the attack-roll `flat_bonus` (attack rolls covered;
+broader contested-roll coverage is a forward-wire). Fired passively from `execute_melee_attack` on
+a 15+ Wound hit (`_apply_strength_of_the_spider`, once/Round via `kata_used_this_round`); no AI/UI
+caller. All values GDD-given (15 Wounds, −3, next Turn). **`multi_victory_river_armor_pierce` wired via a new
 timed-modifier layer (2026-06-12):** Victory of the River (s30a) — a landed katana/daisho strike
 drops the target's Armor TN −10 vs all attacks AND the wielder's own Armor TN −10, both for 3
 Rounds, one opponent at a time. New generic round-scoped store on `IndividualCombat.Participant`
@@ -3243,11 +3251,9 @@ it to the Free-action move budget and is now the single source used by the NPC a
 move paths (the player-facing turn-based move UI should adopt it too). SIMPLE/FULL move budgets
 unchanged (the GDD grants the bonus to the Free action only). Passive — no AI/UI caller needed;
 any NPC/companion bushi or monk in Attack Stance who knows the kata gets the extra tile
-automatically. **7 remain deferred** (each needs a specific hook the core resolve lacks):
-`earth_spider_wound_debuff` (the timed-modifier store exists, but this needs an `"all_rolls"` read
-across every roll path + a turn-based "next Turn" expiry variant) and `multi_world_empty_void_attack`
-(needs an `"attack_roll"` read + an activation action + the lose-1-VP-on-expiry side effect — the
-round-based store is ready), `multi_standing_heavens_void_reroll` (when-struck defender-reaction hook),
+automatically. **6 remain deferred** (each needs a specific hook the core resolve lacks):
+`multi_world_empty_void_attack` (needs an `"attack_roll"` read + an activation action + the
+lose-1-VP-on-expiry side effect — the round-based store is ready), `multi_standing_heavens_void_reroll` (when-struck defender-reaction hook),
 `water_lion_ally_initiative` (Reactions-Stage ally-initiative action), `water_unicorn_mount_bonus`
 (no mount system on the map), `multi_empire_edge_skill_bonus` (needs a stored chosen-skill field),
 `water_stealth_movement` (near-no-op on the tile map — "does not change maximum distance").

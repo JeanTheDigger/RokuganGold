@@ -395,8 +395,11 @@ static func _get_kata_wound_penalty_reduction(character: L5RCharacterData) -> in
 # Spider / World Is Empty katas). All values and durations are GDD-given (s30a) —
 # the system carries no balance numbers of its own.
 
-static func add_timed_modifier(p: Participant, kind: String, value: int, expires_round: int, source: String) -> void:
-	p.timed_modifiers.append({"kind": kind, "value": value, "expires_round": expires_round, "source": source})
+## expiry_kind: "round" (removed once round_number reaches expires_round) or
+## "turn_end" (removed at the end of the holder's own next turn — for "next Turn"
+## effects like Strength of the Spider; expires_round is unused for those).
+static func add_timed_modifier(p: Participant, kind: String, value: int, expires_round: int, source: String, expiry_kind: String = "round") -> void:
+	p.timed_modifiers.append({"kind": kind, "value": value, "expires_round": expires_round, "source": source, "expiry_kind": expiry_kind})
 
 
 static func get_timed_modifier_total(p: Participant, kind: String) -> int:
@@ -417,10 +420,23 @@ static func clear_timed_modifiers_by_source(p: Participant, source: String) -> v
 
 ## Remove round-based timed modifiers whose window has closed. Called once per
 ## participant at the start of each new round (after round_number is incremented).
+## Turn-based ("turn_end") modifiers are untouched here.
 static func expire_timed_modifiers(p: Participant, round_number: int) -> void:
 	var kept: Array = []
 	for m: Dictionary in p.timed_modifiers:
-		if int(m.get("expires_round", 0)) > round_number:
+		if m.get("expiry_kind", "round") != "round":
+			kept.append(m)  # turn-based — not expired by round advancement
+		elif int(m.get("expires_round", 0)) > round_number:
+			kept.append(m)
+	p.timed_modifiers = kept
+
+
+## Remove turn-based ("turn_end") timed modifiers from a participant whose turn is
+## ending. Called from the orchestrator's advance_turn for the ending actor.
+static func expire_turn_modifiers(p: Participant) -> void:
+	var kept: Array = []
+	for m: Dictionary in p.timed_modifiers:
+		if m.get("expiry_kind", "round") != "turn_end":
 			kept.append(m)
 	p.timed_modifiers = kept
 
@@ -909,6 +925,10 @@ static func resolve_attack(
 		flat_bonus -= 10
 
 	flat_bonus += kata_atk["flat_bonus"]
+
+	# Timed "all rolls" penalty from s30a Strength of the Spider (-3 next Turn).
+	# Covers attack rolls; broader contested-roll coverage is a forward-wire.
+	flat_bonus += get_timed_modifier_total(attacker_p, "all_rolls")
 
 	# Dominant hand attack penalty while holding an off-hand weapon (s40)
 	if attacker_p.dual_wielding:

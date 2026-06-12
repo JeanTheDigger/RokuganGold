@@ -512,6 +512,30 @@ const VOTR_SOURCE: String = "victory_of_the_river"
 const VOTR_ARMOR_PENALTY: int = -10
 const VOTR_DURATION_ROUNDS: int = 3
 
+# Strength of the Spider (s30a, earth_spider_wound_debuff). All values GDD-given.
+const SPIDER_SOURCE: String = "strength_of_the_spider"
+const SPIDER_WOUND_THRESHOLD: int = 15
+const SPIDER_ROLL_PENALTY: int = -3
+
+## Strength of the Spider (s30a): once per Round, a strike dealing 15+ Wounds
+## leaves the opponent at -3 to all rolls through their next Turn. Passive — fired
+## from execute_melee_attack on a damaging hit; no AI/UI caller needed.
+static func _apply_strength_of_the_spider(
+	attacker: L5RCharacterData,
+	a_p: IndividualCombat.Participant,
+	t_p: IndividualCombat.Participant,
+	wounds: int,
+) -> void:
+	if "Strength of the Spider" not in attacker.katas:
+		return
+	if wounds < SPIDER_WOUND_THRESHOLD:
+		return
+	if a_p.kata_used_this_round.has("earth_spider_wound_debuff"):
+		return  # once per Round
+	a_p.kata_used_this_round["earth_spider_wound_debuff"] = true
+	# turn_end expiry: removed when the opponent's own next turn ends (see advance_turn).
+	IndividualCombat.add_timed_modifier(t_p, "all_rolls", SPIDER_ROLL_PENALTY, 0, SPIDER_SOURCE, "turn_end")
+
 ## On a successful katana/daisho strike by a Victory of the River wielder, the
 ## target's Armor TN drops -10 vs all attacks AND the wielder's own Armor TN drops
 ## -10, both for 3 Rounds. "One opponent at a time": switching targets ends the
@@ -627,6 +651,10 @@ static func execute_melee_attack(
 		# Victory of the River (s30a): a landed katana/daisho strike drops the
 		# target's (and the wielder's own) Armor TN -10 for 3 Rounds.
 		_apply_victory_of_the_river(state, attacker, a_p, t_p, target_id, weapon_name)
+
+		# Strength of the Spider (s30a): dealing 15+ Wounds (once/Round) gives the
+		# opponent -3 to all rolls during their next Turn.
+		_apply_strength_of_the_spider(attacker, a_p, t_p, dmg_result.get("wounds", 0))
 
 		# Knockdown maneuver: contested Strength if hit.
 		if maneuver in ["knockdown_biped", "knockdown_quad"]:
@@ -1470,6 +1498,15 @@ static func advance_turn(
 	chars_by_id: Dictionary,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	# Expire turn-scoped timed modifiers on the actor whose turn is now ending
+	# (s30a Strength of the Spider "next Turn"). The ending actor is the current
+	# index before we advance past it.
+	if state.combat.current_turn_index < state.combat.turn_order.size():
+		var ending_id: int = state.combat.turn_order[state.combat.current_turn_index]
+		var ending_p: IndividualCombat.Participant = state.combat.participants.get(ending_id, null)
+		if ending_p != null:
+			IndividualCombat.expire_turn_modifiers(ending_p)
+
 	state.combat.current_turn_index += 1
 	var order_size: int = state.combat.turn_order.size()
 
