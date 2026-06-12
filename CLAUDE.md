@@ -5112,6 +5112,27 @@ but not executed in this environment.
   never actually executed — worth watching in the first live run. The Kaiu/Kuni *standing* passes
   (`_assign_kaiu_engineer_standing_objectives`, `_assign_kuni_purification_standing_objectives`)
   already read `.school` correctly, so FORTIFY/purify were unaffected.
+- **`school_name` straggler + impact re-assessed (verification run, 2026-06-12).**
+  A focused no-bootstrap verification of the re-activated paths caught a missed 9th
+  read: `_is_maho_hunter` (day_orchestrator:8011) still used `school_name`. Migrated
+  to `.school`. Harmless in practice (see below) but the same dead-field class.
+  Verification findings: (1) **NPC kata/kiho learning was the genuinely-dead path** and
+  is now live — confirmed end-to-end: an Akodo Bushi (80 XP) selects + learns
+  `Strength of the Lion` (katas 0→1), a Togashi Tattooed Order monk (80 XP) selects +
+  learns `Channel the Fire Dragon` (kiho 0→1). Before the fix the `school_name` gate
+  was always-false → kata/kiho were NEVER claimed by any NPC. (2) The maho-hunter
+  predicate migration was OVERSTATED as "entirely dead": `_is_kuni_witch_hunter` /
+  `_is_asako_inquisitor` / `_is_maho_hunter` each have a non-school branch (leader
+  role_position / `is_kuroiban` flag) that always worked, AND no `SCHOOL_DATA` key
+  contains "Witch-Hunter"/"Inquisitor", so the school-string branch matches nothing in
+  a live world either before OR after the fix. Verified the live roster IS detected
+  (WITCH_HUNTER_LEADER→order 0, INQUISITOR_LEADER→1, is_kuroiban→2, all get HUNT_MAHO
+  standing) with no false positive on a regular Akodo Bushi. LIMITATION (world-gen
+  seeding gap, owner decision — do NOT invent): rank-and-file Kuni Witch-Hunters /
+  Asako Inquisitors are never created (no school string, no flag), so the Kuni and
+  Asako orders are effectively single-leader; only the Kuroiban have a real membership.
+  Adding a "Kuni Witch-Hunter" SCHOOL_DATA school or tagging some Kuni Shugenja with
+  the school string would populate them — the predicates are already ready.
 - **Smoke-test observations (live Wall, fresh bootstrap, 3806 chars).** Validated at runtime:
   12 Towers spawn with the Phase-1 init (SI 10, garrison 3, jade 5, SS 3; Ishibei 1-5 / Ishigaki
   6-9 / Yoake 10-12). Phase-2 roster stationed (Shireikan 2, Taisa 12, Kuni 12, Kaiu 12). Horde
