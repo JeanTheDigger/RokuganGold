@@ -410,6 +410,13 @@ static func get_timed_modifier_total(p: Participant, kind: String) -> int:
 	return total
 
 
+static func has_timed_modifier_source(p: Participant, source: String) -> bool:
+	for m: Dictionary in p.timed_modifiers:
+		if m.get("source", "") == source:
+			return true
+	return false
+
+
 static func clear_timed_modifiers_by_source(p: Participant, source: String) -> void:
 	var kept: Array = []
 	for m: Dictionary in p.timed_modifiers:
@@ -870,6 +877,10 @@ static func resolve_attack(
 	# Kata dice bonuses applied after stance
 	rolled += kata_atk["rolled_bonus"]
 	kept += kata_atk["kept_bonus"]
+
+	# The World Is Empty (s30a): +Xk0 to Kenjutsu/Iaijutsu attack rolls while active.
+	if skill_name == "Kenjutsu" or skill_name == "Iaijutsu":
+		rolled += get_timed_modifier_total(attacker_p, "attack_rolled")
 
 	# Mutation modifiers (s44): EXTRA_LIMB non-functional applies -1k0 to weapon skills
 	var mutation_atk: Dictionary = MutationSystem.get_skill_modifiers(attacker, skill_name)

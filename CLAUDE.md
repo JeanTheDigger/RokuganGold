@@ -3220,8 +3220,18 @@ selection). Combat effects are now **wired into IndividualCombat** (s40), not st
 `_get_kata_initiative_modifiers`, `_get_kata_armor_tn_bonus`, `_get_kata_attack_modifiers`,
 `_get_kata_damage_modifiers`, `_get_kata_wound_penalty_reduction`, `get_kata_reduction_bonus`,
 `get_kata_opponent_reduction_penalty` resolve effect_ids into Armor TN / attack / damage /
-Initiative / wound-penalty / Reduction modifiers, gated by stance and maneuver. 36 of 42
-distinct kata effect_ids are wired. **`earth_spider_wound_debuff` (Strength of the Spider) wired
+Initiative / wound-penalty / Reduction modifiers, gated by stance and maneuver. 37 of 42
+distinct kata effect_ids are wired. **`multi_world_empty_void_attack` (The World Is Empty) wired on
+the timed-modifier layer (2026-06-12, activation cost = Simple Action, owner-set):**
+`AsciiMapCombatOrchestrator.execute_activate_world_is_empty` (Simple action; requires the kata + ≥1
+Void Point; not re-activatable while active) freezes X = current Void Points and adds an
+`"attack_rolled"` +X modifier for X Rounds; `resolve_attack` adds the `"attack_rolled"` total to
+`rolled` (not kept) only for Kenjutsu/Iaijutsu (skill-gated = daisho). When it ends, `advance_round`
+deducts 1 Void Point (`_process_world_is_empty_expiry`, before the round-based removal). A minimal
+NPC hook activates it on round 1 (VP≥2, forgoing that turn's attack so the +Xk0 covers the fight —
+basic heuristic, GDD gives no NPC policy; the natural caller is a PC bushi via the future turn-based
+action UI). All non-AI values GDD-given (X = VP, X Rounds, lose 1 VP); the activation cost is the
+single owner-set value. **`earth_spider_wound_debuff` (Strength of the Spider) wired
 on the same timed-modifier layer (2026-06-12):** once per Round, a strike dealing 15+ Wounds gives
 the opponent a `"all_rolls"` −3 timed modifier with `"turn_end"` expiry — active through the
 opponent's next Turn, removed when their turn ends (`AsciiMapCombatOrchestrator.advance_turn`
@@ -3251,9 +3261,8 @@ it to the Free-action move budget and is now the single source used by the NPC a
 move paths (the player-facing turn-based move UI should adopt it too). SIMPLE/FULL move budgets
 unchanged (the GDD grants the bonus to the Free action only). Passive — no AI/UI caller needed;
 any NPC/companion bushi or monk in Attack Stance who knows the kata gets the extra tile
-automatically. **6 remain deferred** (each needs a specific hook the core resolve lacks):
-`multi_world_empty_void_attack` (needs an `"attack_roll"` read + an activation action + the
-lose-1-VP-on-expiry side effect — the round-based store is ready), `multi_standing_heavens_void_reroll` (when-struck defender-reaction hook),
+automatically. **5 remain deferred** (each needs a specific hook the core resolve lacks):
+`multi_standing_heavens_void_reroll` (when-struck defender-reaction hook),
 `water_lion_ally_initiative` (Reactions-Stage ally-initiative action), `water_unicorn_mount_bonus`
 (no mount system on the map), `multi_empire_edge_skill_bonus` (needs a stored chosen-skill field),
 `water_stealth_movement` (near-no-op on the tile map — "does not change maximum distance").

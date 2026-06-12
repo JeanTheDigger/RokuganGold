@@ -567,6 +567,67 @@ static func _apply_victory_of_the_river(
 	IndividualCombat.add_timed_modifier(a_p, "armor_tn", VOTR_ARMOR_PENALTY, expires, VOTR_SOURCE)
 
 
+# The World Is Empty (s30a, multi_world_empty_void_attack). Activation cost =
+# Simple Action (owner-set 2026-06-12). All other values GDD-given.
+const WIE_SOURCE: String = "the_world_is_empty"
+
+## Activate The World Is Empty: a Simple action that grants +Xk0 to Kenjutsu/
+## Iaijutsu attack rolls (X = current Void Points, frozen at activation) for X
+## Rounds; 1 Void Point is lost when it ends (handled in advance_round). Requires
+## the kata known and at least 1 Void Point; not re-activatable while active.
+static func execute_activate_world_is_empty(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p == null:
+		return {"success": false, "reason": "participant_missing"}
+	if "The World Is Empty" not in character.katas:
+		return {"success": false, "reason": "kata_not_known"}
+	if IndividualCombat.has_timed_modifier_source(p, WIE_SOURCE):
+		return {"success": false, "reason": "already_active"}
+	var wl: int = CharacterStats.get_wound_level(character)
+	if ts.is_down_restricted(wl):
+		return {"success": false, "reason": "down_only_free_actions"}
+	if not ts.can_use_simple():
+		return {"success": false, "reason": "no_simple_action"}
+	var x: int = character.current_void_points
+	if x < 1:
+		return {"success": false, "reason": "no_void_points"}
+	ts.consume_simple()
+	var expires: int = state.combat.round_number + x  # active X Rounds (round R .. R+X-1)
+	IndividualCombat.add_timed_modifier(p, "attack_rolled", x, expires, WIE_SOURCE, "round")
+	state.combat_log.append({
+		"type": "kata_world_is_empty", "char_id": char_id,
+		"bonus": x, "expires_round": expires, "round": state.combat.round_number})
+	return {"success": true, "kata": "The World Is Empty", "bonus": x, "expires_round": expires}
+
+
+## Deduct 1 Void Point from a participant whose The World Is Empty modifier is
+## ending this round (s30a "lose 1 Void Point when it ends"). Called in
+## advance_round just before the round-based expiry sweep removes the modifier.
+static func _process_world_is_empty_expiry(
+	state: MapCombatState,
+	p: IndividualCombat.Participant,
+	chars_by_id: Dictionary,
+) -> void:
+	for m: Dictionary in p.timed_modifiers:
+		if m.get("source", "") != WIE_SOURCE:
+			continue
+		if m.get("expiry_kind", "round") != "round":
+			continue
+		if int(m.get("expires_round", 0)) <= state.combat.round_number:
+			var c: L5RCharacterData = chars_by_id.get(p.character_id, null)
+			if c != null and not CharacterStats.is_dead(c):
+				c.current_void_points = maxi(0, c.current_void_points - 1)
+
+
 static func execute_melee_attack(
 	state: MapCombatState,
 	attacker_id: int,
@@ -1613,7 +1674,9 @@ static func advance_round(
 	state.combat.current_turn_index = 0
 
 	# Expire round-based timed modifiers (s30a duration katas) for the new round.
+	# The World Is Empty deducts 1 VP as its modifier ends (before removal).
 	for _tp: IndividualCombat.Participant in state.combat.participants.values():
+		_process_world_is_empty_expiry(state, _tp, chars_by_id)
 		IndividualCombat.expire_timed_modifiers(_tp, state.combat.round_number)
 
 	# Re-roll initiative for all active participants (L5R 4e: initiative re-rolled each round).
@@ -1705,6 +1768,18 @@ static func execute_npc_turn(
 		var kiho_r: Dictionary = _npc_maybe_activate_kiho(state, npc_id, npc, dice_engine)
 		if kiho_r.get("success", false):
 			actions_taken.append(kiho_r)
+
+	# -- The World Is Empty (s30a): a WIE bushi powers up on round 1 (Simple
+	# action), forgoing this turn's attack so the +Xk0 covers the rest of the
+	# fight. Basic heuristic (the GDD gives no NPC activation policy); VP>=2 so the
+	# buff outlasts the turn spent activating it.
+	if state.combat.round_number == 1 and npc.current_void_points >= 2 \
+			and "The World Is Empty" in npc.katas \
+			and not IndividualCombat.has_timed_modifier_source(p, WIE_SOURCE):
+		var wie_r: Dictionary = execute_activate_world_is_empty(state, npc_id, npc)
+		if wie_r.get("success", false):
+			actions_taken.append(wie_r)
+			return {"actions": actions_taken, "activated_world_is_empty": true}
 
 	# -- Handle grapple -------------------------------------------------------
 	if IndividualCombat.has_condition(p, IndividualCombat.CONDITION_GRAPPLED):
