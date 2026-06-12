@@ -151,6 +151,7 @@ class Participant:
 	var suppressed_disadvantage_expiry: int = -1  # round when Banish All Shadows suppression ends (s38)
 	var taint_benefits_suppressed_expiry: int = -1  # round when Rest, My Brother Taint suppression ends (s38)
 	var shadowed_mountain_used: bool = false  # Shadowed Mountain fired this activation (s38)
+	var attacked_by_ids: Array = []  # who attacked me since my last Turn (Bishamon's Grasp, s38)
 	var dual_wielding: bool = false            # true when holding an off-hand weapon
 	var off_hand_weapon: String = ""           # name of off-hand weapon ("" = none)
 	var earth_trade_amount: int = 0            # Armor TN traded for damage (earth_trade_armor_for_damage)

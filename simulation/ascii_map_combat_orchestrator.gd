@@ -844,6 +844,11 @@ static func execute_melee_attack(
 		t_p.disarm_free_raises_pending = 3
 		result["earthen_fist_disarm_armed"] = true
 
+	# Bishamon's Grasp (s38): record this attacker on the defender (who attacked me since
+	# my last Turn) so the defender can free-grapple them on their Turn.
+	if "Bishamon's Grasp" in t_p.active_kiho and attacker_id not in t_p.attacked_by_ids:
+		t_p.attacked_by_ids.append(attacker_id)
+
 	if dance_simple:
 		ts.consume_simple()
 	else:
@@ -1744,6 +1749,54 @@ static func execute_to_the_last_breath(
 	return {"success": true, "target_id": target_id, "vp_before": before, "vp_after": target.current_void_points}
 
 
+## Bishamon's Grasp (s38, while active, Defense/Full Defense only): on the caster's Turn,
+## make a free-action Grapple against the first co-located opponent who attacked the caster
+## since their last Turn (overrides the Defense-stance no-attack restriction). LIMITATION:
+## the single grapple_partner_id models one grapple, so one opponent is grabbed per Turn
+## (the GDD's "one per qualifying opponent" multi-grab needs a multi-partner model).
+static func execute_bishamons_grasp(
+	state: MapCombatState,
+	caster_id: int,
+	caster: L5RCharacterData,
+	chars_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(caster):
+		return {"success": false, "reason": "character_is_dead"}
+	var c_p: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+	if c_p == null:
+		return {"success": false, "reason": "participant_missing"}
+	if "Bishamon's Grasp" not in c_p.active_kiho:
+		return {"success": false, "reason": "kiho_not_active"}
+	if c_p.stance != Enums.Stance.DEFENSE and c_p.stance != Enums.Stance.FULL_DEFENSE:
+		return {"success": false, "reason": "requires_defense_stance"}
+	if c_p.grapple_partner_id >= 0:
+		return {"success": false, "reason": "already_grappling"}
+	var cpos: Vector2i = state.positions.get(caster_id, Vector2i(-1, -1))
+	for opp_id: int in c_p.attacked_by_ids:
+		var opp: L5RCharacterData = chars_by_id.get(opp_id, null)
+		var o_p: IndividualCombat.Participant = state.combat.participants.get(opp_id, null)
+		if opp == null or o_p == null or CharacterStats.is_dead(opp):
+			continue
+		var opos: Vector2i = state.positions.get(opp_id, Vector2i(-1, -1))
+		if cpos.x < 0 or opos.x < 0 or _chebyshev(cpos, opos) > MELEE_RANGE_TILES:
+			continue
+		# Free-action grapple (no Complex consumed) — core mirrors execute_grapple_initiate.
+		var grapple_tn: int = opp.reflexes * 5 + 5
+		var gr: Dictionary = IndividualCombat.initiate_grapple(caster, c_p, grapple_tn, dice_engine, "Jiujutsu")
+		if gr.get("apply_grappled_to_target", false):
+			IndividualCombat.apply_condition(o_p, IndividualCombat.CONDITION_GRAPPLED)
+			o_p.grapple_partner_id = caster_id
+			c_p.grapple_partner_id = opp_id
+			c_p.grapple_in_control = true
+			o_p.grapple_in_control = false
+		state.combat_log.append({
+			"type": "bishamons_grasp", "round": state.combat.round_number,
+			"caster_id": caster_id, "target_id": opp_id, "grappled": gr.get("apply_grappled_to_target", false)})
+		return {"success": true, "target_id": opp_id, "grappled": gr.get("apply_grappled_to_target", false)}
+	return {"success": false, "reason": "no_qualifying_attacker"}
+
+
 ## Riding the Clouds (s38 Air, while active): a Simple Move Action to leap up to Air Ring
 ## ×10 ft (= ×2 tiles) to any free passable tile (ignoring terrain cost — it is a jump).
 ## The kiho is expended after one leap. Returns the new position.
@@ -2177,6 +2230,7 @@ static func begin_turn(state: MapCombatState, char_id: int) -> void:
 	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
 	if p != null:
 		IndividualCombat.begin_turn(p)
+		p.attacked_by_ids.clear()  # "since the last Turn" resets (Bishamon's Grasp, s38)
 	var ts: TurnState = state.turn_states.get(char_id, null)
 	if ts != null:
 		ts.complex_used = false

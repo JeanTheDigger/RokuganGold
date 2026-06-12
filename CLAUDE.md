@@ -3309,6 +3309,21 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 28: Bishamon's Grasp (free grapple vs attackers) (2026-06-12)
+**Bishamon's Grasp** (Earth, while active, Defense/Full Defense only): on the caster's
+Turn, free-grapple an opponent who attacked the caster since their last Turn (overrides
+the Defense-stance no-attack restriction). New `Participant.attacked_by_ids` tracks
+attackers (recorded in execute_melee_attack when the defender holds the kiho, cleared in
+begin_turn = "since the last Turn"). `execute_bishamons_grasp` finds the first co-located
+qualifying attacker and resolves a free-action grapple (core mirrors execute_grapple_initiate,
+no Complex consumed). Verified: an attacker was recorded, then free-grappled on the monk's
+Turn from Full Defense (complex_used stayed false). LIMITATION: the single
+`grapple_partner_id` models one grapple, so one opponent is grabbed per Turn (the GDD's
+"one per qualifying opponent" multi-grab needs a multi-partner model); the Throw-as-Free-Action
+clause is not wired. Completes the combat-relevant reaction set (post-hit / pre-attack /
+deferred-disarm / grapple-attackers); only Way of the Willow's pre-declaration
+interrupt-with-choice remains among reactions.
+
 ### s38 Kiho — effect registry, tranche 27: Ride the Water Dragon (heal-over-time) (2026-06-12)
 **Ride the Water Dragon** (Water, while active): the caster recovers Water Ring Wounds
 during the Reactions Stage of each Round. Wired into the advance_round per-participant
