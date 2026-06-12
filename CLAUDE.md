@@ -3309,6 +3309,29 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 2: composable atemi effects (2026-06-12)
+Made `resolve_atemi_strike`'s effect application **composable** — an `atemi_effect`
+spec may now combine, in any mix: `damage` ({rolled, kept, bypass_reduction} →
+`WoundSystem.apply_damage`), `disarm` (auto-disarm with optional `vp_negate`
+{vp_cost, extra_rolled, extra_kept} — an NPC defender auto-spends VP to keep the
+weapon and take the extra damage; PCs choose via future UI), `wound_rank_penalty`
+({rank_ring, duration_rings, duration_insight} → a timed `all_rolls` penalty =
+`Enums.WOUND_PENALTIES` at WoundLevel = the attacker's ring, for the summed
+duration), `timed` (tranche 1), and `condition` (instant). Encoded 3 Air atemi:
+**Censure of Thunder** (1k1 bypass + auto-Disarm; target may spend 2 VP to negate
+the Disarm and take +2k2 instead), **Stain Upon the Soul** (wound-rank-equivalent
+−penalty as if at Wound Ranks = Air Ring, for Insight + Air Rounds), **The Great
+Silence** (silenced condition). 9 atemi now encoded (5 condition + Flame Fist +
+these 3). All values GDD-given (Censure 1k1/2VP/2k2; Stain via the canonical wound
+table; durations from the GDD). Verified with a headless driver: Censure both
+branches (disarm vs VP-negate + extra damage + VP spent), Stain (−10 all_rolls at
+Air 3, expiry round + Insight + Air), Great Silence (silenced). LIMITATIONS: Stain
+stacks with the target's actual wound penalty (GDD says the worse one supersedes);
+`silenced` is inert (no verbal-component system); the Disarm is a result flag
+(weapon-drop not modelled — no inventory). DEFERRED — **Touch of the Storm**
+("contested Air → damage with DR equal to Air Ring") needs an owner decision on the
+DR interpretation (Air-Ring k Air-Ring vs Air-Ring k0 vs flat), so it is unencoded.
+
 ### s38 Kiho — in-combat activation cost path (2026-06-12)
 `IndividualCombat.activate_kiho` did the known + active-slot validation but
 explicitly deferred the s38a *cost* to the orchestrator, so nothing in the tile

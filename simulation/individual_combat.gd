@@ -656,17 +656,69 @@ static func resolve_atemi_strike(
 		var def_roll: DiceResult = dice_engine.roll_and_keep(def_ring, def_ring, true)
 		if atk_roll.total < def_roll.total:
 			return {"ok": true, "hit": true, "effect_applied": false, "contested_lost": true}
-	# Timed atemi effect (s38 kiho "Lasts Rounds equal to ..."): apply a round-scoped
-	# timed modifier (e.g. Flame Fist: -3 × Fire Ring to all rolls for Fire Ring Rounds).
+
+	# Composable atemi effects (s38): a spec may combine direct damage, an auto-Disarm
+	# (with optional Void-Point negation), a timed modifier, a wound-rank-equivalent
+	# roll penalty, and/or an instant condition. All values are GDD-given per kiho.
+	var result: Dictionary = {"ok": true, "hit": true, "effect_applied": true}
+
+	# Direct damage (e.g. Censure of Thunder 1k1, bypassing Reduction).
+	if spec.has("damage"):
+		var dmg: Dictionary = spec["damage"]
+		var raw: int = dice_engine.roll_and_keep(int(dmg.get("rolled", 1)), int(dmg.get("kept", 1)), true).total
+		var reduction: int = 0 if dmg.get("bypass_reduction", false) else -1
+		var dr: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
+		result["damage"] = dr["final_damage"]
+		result["target_dead"] = dr["is_dead"]
+
+	# Auto-Disarm, with optional VP negation (the defender may spend VP to keep the
+	# weapon, taking extra damage instead — NPC auto-decides to negate if able).
+	if spec.has("disarm"):
+		var negated: bool = false
+		var neg: Dictionary = spec.get("vp_negate", {})
+		if not neg.is_empty() and not target.is_pc and target.current_void_points >= int(neg.get("vp_cost", 99)):
+			target.current_void_points -= int(neg.get("vp_cost", 2))
+			var bypass: bool = spec.get("damage", {}).get("bypass_reduction", false)
+			var raw2: int = dice_engine.roll_and_keep(int(neg.get("extra_rolled", 2)), int(neg.get("extra_kept", 2)), true).total
+			var dr2: Dictionary = WoundSystem.apply_damage(target, raw2, 0 if bypass else -1)
+			result["disarm_negated"] = true
+			result["extra_damage"] = dr2["final_damage"]
+			result["target_dead"] = dr2["is_dead"]
+			negated = true
+		result["disarmed"] = not negated
+
+	# Wound-rank-equivalent timed roll penalty (Stain Upon the Soul: penalty as if at
+	# Wound Ranks = attacker's Air Ring, for Insight + Air Rounds). LIMITATION: stacks
+	# with the target's actual wound penalty (GDD says the worse one supersedes).
+	if spec.has("wound_rank_penalty"):
+		var wp: Dictionary = spec["wound_rank_penalty"]
+		var rank: int = CharacterStats.get_ring_value(attacker, wp.get("rank_ring", Enums.Ring.AIR))
+		var lvl: int = clampi(rank, Enums.WoundLevel.HEALTHY, Enums.WoundLevel.DOWN)
+		var penalty: int = int(Enums.WOUND_PENALTIES.get(lvl, 0))
+		var dur: int = 0
+		for r: int in wp.get("duration_rings", []):
+			dur += CharacterStats.get_ring_value(attacker, r)
+		if wp.get("duration_insight", false):
+			dur += CharacterStats.get_insight_rank(attacker)
+		add_timed_modifier(target_p, "all_rolls", penalty, round_number + dur, wp.get("source", "stain_soul"), "round")
+		result["wound_rank_penalty"] = penalty
+
+	# Generic timed modifier (e.g. Flame Fist: -3 × Fire Ring to all rolls for Fire Rounds).
 	if spec.has("timed"):
 		var t: Dictionary = spec["timed"]
 		var value: int = int(t.get("value_mult", 1)) * CharacterStats.get_ring_value(attacker, t.get("value_ring", Enums.Ring.FIRE))
 		var duration: int = CharacterStats.get_ring_value(attacker, t.get("duration_ring", Enums.Ring.FIRE))
-		var expires: int = round_number + duration
-		add_timed_modifier(target_p, t.get("kind", "all_rolls"), value, expires, t.get("source", "atemi_kiho"), "round")
-		return {"ok": true, "hit": true, "effect_applied": true, "timed_kind": t.get("kind", ""), "timed_value": value, "expires_round": expires}
-	apply_condition(target_p, spec["condition"])
-	return {"ok": true, "hit": true, "effect_applied": true, "condition": spec["condition"]}
+		add_timed_modifier(target_p, t.get("kind", "all_rolls"), value, round_number + duration, t.get("source", "atemi_kiho"), "round")
+		result["timed_kind"] = t.get("kind", "")
+		result["timed_value"] = value
+
+	# Instant condition (Dazed, Stunned, silenced — the last is inert until a
+	# verbal-component system exists; encoded for faithfulness).
+	if spec.has("condition"):
+		apply_condition(target_p, spec["condition"])
+		result["condition"] = spec["condition"]
+
+	return result
 
 
 ## Activate a kiho on a combatant for the current skirmish. Validates the kiho is
