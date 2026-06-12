@@ -3320,11 +3320,16 @@ First non-atemi kiho with real tile-combat effects (beyond the 5 passive active-
   attacker is burned; ATTACKER active → the struck target takes Fire Ring beyond normal
   damage). Unarmed-only (the katana gate skips it). Duration 2× Fire Rounds via the
   active_kiho_expiry layer. Verified: both directions deal Fire 4 contact; armed strike
-  no-ops. All GDD-given. DEFERRED — the remaining ~41 non-atemi kiho need new combat
+  no-ops.
+- **Fire's Fleeting Speed** (Fire): while active, +5 ft (+1 tile) to any Move Action, for
+  Fire Ring Rounds. `IndividualCombat.get_kiho_move_bonus` (checks active_kiho), added to
+  both orchestrator move-budget sites (free_move_budget + the NPC SIMPLE budget). Duration
+  via active_kiho_expiry. Verified: free move budget 3 → 4 while active.
+  All GDD-given. DEFERRED — the remaining ~40 non-atemi kiho need new combat
   subsystems (reaction/interrupt: Way of the Willow, Destiny's Strike, Shadowed Mountain,
   Earthen Fist, Bishamon's Grasp; AoE: Thunder's Word, Inari's Wrath, Slap the Wave,
-  Hurricane Palm; movement/leap: Calling the East Wind, Riding the Clouds, Fire's Fleeting
-  Speed, The World Disappears, Strike Through the Wind; grapple-tick: Way of the Earth,
+  Hurricane Palm; movement/leap: Calling the East Wind, Riding the Clouds,
+  The World Disappears, Strike Through the Wind; grapple-tick: Way of the Earth,
   Root the Mountain) or are out-of-combat utility (Eye of the Eagle, Earth Needs No Eyes,
   Harmony in/of the Mind/Earth, Wholeness in All, Eight Directions Awareness, Knowledge
   from Within, The Wind's Vision, Cleansing Spirit) — none of which reuse the existing

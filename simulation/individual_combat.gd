@@ -473,6 +473,13 @@ static func get_kata_free_move_bonus(character: L5RCharacterData, participant: P
 	return 0
 
 
+## +1 tile (5 ft) to any Move Action while Fire's Fleeting Speed is active (s38 Fire).
+static func get_kiho_move_bonus(_character: L5RCharacterData, participant: Participant) -> int:
+	if participant != null and "Fire's Fleeting Speed" in participant.active_kiho:
+		return 1
+	return 0
+
+
 ## The Empire Rests on its Edge (s30a, multi_empire_edge_skill_bonus): while known,
 ## grants a flat bonus to Kenjutsu/Iaijutsu rolls equal to the wielder's Rank in a
 ## chosen non-combat High Skill. The GDD picks the skill at acquisition; with no

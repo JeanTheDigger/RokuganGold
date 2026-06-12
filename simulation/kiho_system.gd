@@ -71,7 +71,7 @@ const KIHO_DATA: Dictionary = {
 	"Dance of the Flames":    {"ring": Enums.Ring.FIRE, "mastery": 6, "type": KihoType.MARTIAL},
 	"Destiny's Strike":       {"ring": Enums.Ring.FIRE, "mastery": 4, "type": KihoType.MARTIAL},
 	"Falling Star Strike":    {"ring": Enums.Ring.FIRE, "mastery": 7, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"vp_cost": 1, "attack_raises": 2, "normal_damage": {}, "damage": {"rolled_ring": Enums.Ring.FIRE, "kept_ring": Enums.Ring.FIRE}, "condition": "blinded", "condition_contest": {"attacker_ring": Enums.Ring.FIRE, "defender_ring": Enums.Ring.FIRE}}},
-	"Fire's Fleeting Speed":  {"ring": Enums.Ring.FIRE, "mastery": 4, "type": KihoType.KHARMIC},
+	"Fire's Fleeting Speed":  {"ring": Enums.Ring.FIRE, "mastery": 4, "type": KihoType.KHARMIC, "duration": {"ring": Enums.Ring.FIRE, "mult": 1}},
 	"Flame Fist":             {"ring": Enums.Ring.FIRE, "mastery": 3, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"timed": {"kind": "all_rolls", "value_ring": Enums.Ring.FIRE, "value_mult": -3, "duration_ring": Enums.Ring.FIRE, "source": "flame_fist"}}},
 	"The Mind's Fire":        {"ring": Enums.Ring.FIRE, "mastery": 4, "type": KihoType.INTERNAL},
 	"Seven Storm's Fist":     {"ring": Enums.Ring.FIRE, "mastery": 6, "type": KihoType.MARTIAL, "atemi": true, "atemi_effect": {"condition": "stunned", "contest": {"attacker_ring": Enums.Ring.FIRE, "defender_ring": Enums.Ring.FIRE}}},
