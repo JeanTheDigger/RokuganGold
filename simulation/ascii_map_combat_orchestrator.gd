@@ -1133,6 +1133,117 @@ static func execute_void_spend(
 	return {"success": true}
 
 
+## Activate a kiho on a combatant during the skirmish, paying its GDD s38 cost.
+## IndividualCombat.activate_kiho does the known + active-slot validation but
+## leaves the cost to the caller; this is that cost path (s38a, LOCKED). Methods:
+##   "void_point"         — Free action; spends one Void Point (auto-succeeds).
+##   "meditation_complex" — Complex action; Meditation (Void) roll vs TN 15.
+##   "meditation_simple"  — Simple action; Meditation (Void) roll vs TN 30.
+## A failed Meditation roll still spends the action (no activation). Atemi kiho
+## are strikes (resolve_atemi_strike), not slot buffs, and are not activated here.
+static func execute_activate_kiho(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	kiho_name: String,
+	method: String,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p == null:
+		return {"success": false, "reason": "participant_missing"}
+	if not character.kiho.has(kiho_name):
+		return {"success": false, "reason": "kiho_not_known"}
+	# Atemi kiho are delivered as a strike (resolve_atemi_strike), not held as a
+	# slot buff — they are never "activated" into active_kiho.
+	if KihoSystem.activation_options(kiho_name).get("is_atemi", false):
+		return {"success": false, "reason": "atemi_not_activatable"}
+	# Validate the active-slot constraint before paying any cost.
+	var slot: Dictionary = KihoSystem.can_activate(kiho_name, p.active_kiho)
+	if not slot.get("ok", false):
+		return {"success": false, "reason": slot.get("reason", "slot_unavailable")}
+
+	var wl: int = CharacterStats.get_wound_level(character)
+	match method:
+		"void_point":
+			# Free action (s38a): spend one Void Point as the activation cost.
+			if not VoidSystem.can_spend(character):
+				return {"success": false, "reason": "no_void_points"}
+			VoidSystem.spend(character)
+			ts.consume_free()
+		"meditation_complex":
+			if ts.is_down_restricted(wl):
+				return {"success": false, "reason": "down_only_free_actions"}
+			if not ts.can_use_complex():
+				return {"success": false, "reason": "no_complex_action"}
+			var rc: Dictionary = SkillResolver.resolve_skill_check(
+				character, dice_engine, "Meditation", KihoSystem.ACTIVATION_TN_COMPLEX)
+			ts.consume_complex()
+			if not rc.get("success", false):
+				state.combat_log.append({
+					"type": "kiho_activation_failed", "char_id": char_id,
+					"kiho": kiho_name, "round": state.combat.round_number})
+				return {"success": false, "reason": "meditation_failed", "action_spent": true}
+		"meditation_simple":
+			if ts.is_down_restricted(wl):
+				return {"success": false, "reason": "down_only_free_actions"}
+			if not ts.can_use_simple():
+				return {"success": false, "reason": "no_simple_action"}
+			var rs: Dictionary = SkillResolver.resolve_skill_check(
+				character, dice_engine, "Meditation", KihoSystem.ACTIVATION_TN_SIMPLE)
+			ts.consume_simple()
+			if not rs.get("success", false):
+				state.combat_log.append({
+					"type": "kiho_activation_failed", "char_id": char_id,
+					"kiho": kiho_name, "round": state.combat.round_number})
+				return {"success": false, "reason": "meditation_failed", "action_spent": true}
+		_:
+			return {"success": false, "reason": "unknown_method"}
+
+	# Cost paid (and any Meditation roll passed) — install the kiho. activate_kiho
+	# re-checks known + slot, so this cannot occupy a slot it just failed.
+	var act: Dictionary = IndividualCombat.activate_kiho(character, p, kiho_name)
+	if not act.get("ok", false):
+		return {"success": false, "reason": act.get("reason", "activation_failed")}
+	state.combat_log.append({
+		"type": "kiho_activated", "char_id": char_id, "kiho": kiho_name,
+		"method": method, "round": state.combat.round_number})
+	return {"success": true, "kiho": kiho_name, "method": method}
+
+
+## Basic monk AI (structural — mirrors the other _npc_* heuristics; the GDD gives
+## no NPC kiho-activation policy): on its first turn a monk that knows a non-atemi
+## buff kiho and has a Void Point activates one (the s38a Free-action method) so a
+## monk on a PC mission map actually fights with its kiho up. Returns the action
+## dict on activation, else {}.
+static func _npc_maybe_activate_kiho(
+	state: MapCombatState,
+	npc_id: int,
+	npc: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if npc.school_type != Enums.SchoolType.MONK:
+		return {}
+	if npc.kiho.is_empty() or not VoidSystem.can_spend(npc):
+		return {}
+	var p: IndividualCombat.Participant = state.combat.participants.get(npc_id, null)
+	if p == null:
+		return {}
+	for k: String in npc.kiho:
+		var opts: Dictionary = KihoSystem.activation_options(k)
+		if opts.is_empty() or opts.get("is_atemi", false):
+			continue
+		if not KihoSystem.can_activate(k, p.active_kiho).get("ok", false):
+			continue
+		return execute_activate_kiho(state, npc_id, npc, k, "void_point", dice_engine)
+	return {}
+
+
 ## Break/destroy a fragile tile (shoji, paper wall, bamboo). Complex action.
 static func execute_destroy_tile(
 	state: MapCombatState,
@@ -1493,6 +1604,13 @@ static func execute_npc_turn(
 	var stance_result: Dictionary = _npc_pick_stance(state, npc_id, npc, chars_by_id, dice_engine)
 	if stance_result.get("changed", false):
 		actions_taken.append(stance_result)
+
+	# -- Monk: buff up with a kiho at the start of the fight (s38/s38a) --------
+	# Free action (Void Point), so it does not consume the move/attack budget.
+	if p.active_kiho.is_empty():
+		var kiho_r: Dictionary = _npc_maybe_activate_kiho(state, npc_id, npc, dice_engine)
+		if kiho_r.get("success", false):
+			actions_taken.append(kiho_r)
 
 	# -- Handle grapple -------------------------------------------------------
 	if IndividualCombat.has_condition(p, IndividualCombat.CONDITION_GRAPPLED):

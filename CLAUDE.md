@@ -3229,6 +3229,36 @@ mount / orchestrator context, not the core resolve): `earth_spider_wound_debuff`
 `water_unicorn_mount_bonus`. (`get_kata_reduction_bonus` is wired but currently has no
 caller — Reduction is applied via the orchestrator damage path; harmless until consumed.)
 
+### s38 Kiho — in-combat activation cost path (2026-06-12)
+`IndividualCombat.activate_kiho` did the known + active-slot validation but
+explicitly deferred the s38a *cost* to the orchestrator, so nothing in the tile
+loop could actually turn a kiho on with its proper price. Implemented
+`AsciiMapCombatOrchestrator.execute_activate_kiho(state, char_id, character,
+kiho_name, method, dice)` — the LOCKED s38a cost path, no invented values:
+**void_point** = Free action, spends one Void Point (`VoidSystem.spend`), so it
+does NOT consume the move/attack budget; **meditation_complex** = Complex action
++ Meditation (Void) roll vs `KihoSystem.ACTIVATION_TN_COMPLEX` (15);
+**meditation_simple** = Simple action vs `ACTIVATION_TN_SIMPLE` (30). Order of
+checks: dead/turn-state/participant guards → known → **atemi rejection** (atemi
+kiho are strikes via `resolve_atemi_strike`, never slot buffs) → **slot check
+(`KihoSystem.can_activate`) before any cost is paid** → method cost (Meditation
+methods also honor the Down free-actions-only restriction; a failed Meditation
+roll still spends the action, `action_spent:true`) → `IndividualCombat.activate_kiho`
+installs it (re-checks slot). On success the kiho lands in `Participant.active_kiho`,
+so the already-wired effect hooks (Air Fist Initiative, Soul of the Four Winds
+Armor TN, Reduction buffs, etc.) fire on the next roll. Minimal monk-NPC hook
+`_npc_maybe_activate_kiho` (structural AI, mirrors the other `_npc_*` heuristics —
+the GDD gives no NPC activation policy): a MONK with a Void Point and an empty
+slot buffs up with its first known non-atemi kiho via Void Point on its first
+turn (wired into `execute_npc_turn` right after stance pick; PCs can't be monks
+per s60.2, so this is the only caller). Validated end-to-end with a headless
+SceneTree driver: void_point activation (VP −1, free action, kiho active),
+slot constraint (2nd Internal → slot_occupied, no cost paid; Martial bypasses),
+Meditation method (action consumed, VP untouched), the monk hook fires, non-monk
+skipped. Parse-checked. NOT yet wired: a player/companion-facing activation UI
+choice (PCs aren't monks; companion monks would need a companion-turn hook) and
+the non-combat character-level kiho buffs (separate deferred infra).
+
 ### s38 Kiho — Combat Effects (first tranche wired into s40, 2026-06-06)
 `KihoSystem` effects apply only while a kiho is ACTIVE on a combatant
 (`IndividualCombat.Participant.active_kiho`), unlike passive katas.
