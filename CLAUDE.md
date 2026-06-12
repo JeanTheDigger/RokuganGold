@@ -4612,6 +4612,23 @@ template generators it depends on. Faithful summary of the fixes that landed:
   per the no-test-code policy. TUNING (playtest): "any named NPC" scope lets a
   high-Earth caster Touch-of-Death the highest-Status co-located figure unprovoked —
   watch for prominent-noble kills destabilising via succession.
+- **s43 seasonal maho casts — runtime-verified (2026-06-12).** The seasonal
+  Bloodspeaker cast pass (`_process_seasonal_maho_casts`) and its 6 wired Grand-Map
+  spell effects were exercised end-to-end with a headless SceneTree driver (the
+  project's parse-check/driver validation path; GUT is non-functional headless and
+  off-policy). Confirmed across three scenarios in one pass: (1) a most-Tainted
+  non-cultist is corrupted (`cult_affiliation` set) when no cult member is present,
+  then sheds its own Rank-3 taint via Spreading the Darkness (priority #6) —
+  PTL +1, self-taint +1 (ML−1), MAHO crime record appended + case-id bumped;
+  (2) an Earth-5 caster casts Touch of Death on a co-located healthy victim —
+  7k7 Wounds killed (50 dmg), permanent age +10 applied, suspicious death_event +
+  Tier-2 mysterious-death topic created; (3) an Earth-2 caster at a jade settlement
+  casts Caress of Fu Leng — jade_stockpile 5.0→2.0 (−3 fingers). Victim-blood model
+  confirmed (caster takes no wounds; gated only by Ring support). No bugs found; no
+  code change. Upgrades status from "parse + static review only" to runtime-verified.
+  COVERAGE NOTE: the pure lowest-ML fallback (`pick_cast_spell`) was not exercised
+  — a freshly-corrupted caster with taint < 2 and no other tainted member would hit
+  it; here the caster's own Rank-3 taint correctly diverted to the shed path.
 - **s43 Grand-Map spell sweep COMPLETE (2026-06-11).** Audited all 46 maho spells
   for world-scale-wirable effects (persistent NPC/province state, no s40 combat or
   condition layer). **6 are wired** (Spreading the Darkness, Stealing the Soul,
