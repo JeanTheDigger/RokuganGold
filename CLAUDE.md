@@ -5851,6 +5851,29 @@ but not executed in this environment.
   (structural / FORTIFY), the Taisa (sortie / SS), and now the Kuni (spiritual / PTL), three of the
   Wall's four family roles are self-driving at the Tower (the Hida garrison itself is Phase 3).
 
+### Resource/Economy Tick Connectivity Sweep (2026-06-13)
+Produced-vs-consumed sweep of the seasonal resource tick (s4.3). **One real
+computed-but-not-published bug found and fixed; everything else connected.**
+- **Starvation stage never reached the NPC engine. FIXED.** `ResourceTick`'s
+  seasonal pass computes the granular starvation stage (`resolve_starvation_transition`:
+  CLEAR/SHORTAGE/HUNGER/FAMINE, s4.3.6) and persists the state machine in `season_meta`,
+  but `build_province_statuses_from_data` hardcoded `ps.starvation_stage = SHORTAGE`
+  only when `pd.crisis_type == "famine"` (which fires at HUNGER+ onset). So early-SHORTAGE
+  provinces reported CLEAR (NPCs ignored them) and HUNGER/FAMINE flattened to SHORTAGE —
+  the sole consumer (`_extract_starving_province_ids`, > CLEAR) under-detected and
+  under-weighted starvation in war-readiness/feasibility decisions. Fix: `ProvinceData`
+  gains `starvation_stage` (@export, persisted); the tick publishes `prov.starvation_stage`
+  each season; `build_province_statuses_from_data` reads it. Runtime-verified.
+- **Otherwise clean:** all tick field mutations are applied to the data model
+  (rice/koku/iron/arms/population/stability all mutated, not just computed); the
+  under-garrison penalties (rice drain, stability, koku ×0.8 malus, trade drain, s4.3.11)
+  are applied (`_process_koku_generation` / `_process_trade_route_koku` consume the
+  `_garrison` dict); worship maluses (rice/pop/koku via the tick, stability via
+  `_apply_worship_stability_maluses`, s4.3.21) are applied; `season_meta` persists across
+  seasons + restart (WorldStateData field, saved by WorldStateSaver), so the starvation
+  state machine escalates/recovers correctly. ProvinceStatus is fully populated (16/16
+  engine-read fields set) after the starvation fix.
+
 ### NPC Decision Pipeline — Full Connectivity Review (2026-06-13)
 End-to-end audit of the NPC decision pipeline (build_context → resolve_goal →
 generate_options → filters → score_all → select_action → execute → reactive path).
