@@ -153,6 +153,8 @@ class Participant:
 	var shadowed_mountain_used: bool = false  # Shadowed Mountain fired this activation (s38)
 	var attacked_by_ids: Array = []  # who attacked me since my last Turn (Bishamon's Grasp, s38)
 	var initiative_modifier: int = 0  # persistent Initiative delta (Song of the World, s38)
+	var facing: Vector2i = Vector2i(0, 0)  # unit heading; (0,0) = unset (s38 arc/cone kiho)
+	var inari_breath_round: int = -1  # round Inari's Wrath breath was held (s38); -1 = not holding
 	var dual_wielding: bool = false            # true when holding an off-hand weapon
 	var off_hand_weapon: String = ""           # name of off-hand weapon ("" = none)
 	var earth_trade_amount: int = 0            # Armor TN traded for damage (earth_trade_armor_for_damage)

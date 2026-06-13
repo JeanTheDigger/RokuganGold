@@ -501,6 +501,10 @@ static func execute_move(
 
 	var old_pos: Vector2i = state.positions.get(char_id, Vector2i(0, 0))
 	state.positions[char_id] = dest
+	# Facing follows movement (s38 arc/cone kiho).
+	var _fp: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if _fp != null and dest != old_pos:
+		_fp.facing = Vector2i(signi(dest.x - old_pos.x), signi(dest.y - old_pos.y))
 
 	match effective_type:
 		"free":    ts.consume_free_move()
@@ -1917,6 +1921,166 @@ static func execute_calling_the_east_wind(
 		"type": "calling_the_east_wind", "round": state.combat.round_number,
 		"attacker_id": attacker_id, "target_id": target_id, "leaped_to": dest, "hit": result.get("hit", false)})
 	return result
+
+
+## Effective facing of a participant: their tracked heading, or — if unset (0,0) — the
+## direction toward the nearest living enemy (the owner-chosen NPC default, 2026-06-12).
+static func _effective_facing(state: MapCombatState, char_id: int) -> Vector2i:
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p != null and p.facing != Vector2i(0, 0):
+		return p.facing
+	# Face the nearest enemy.
+	var my_faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	var mypos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if mypos.x < 0:
+		return Vector2i(1, 0)
+	var best: Vector2i = Vector2i(1, 0)
+	var best_d: int = 1 << 30
+	for cid: int in state.positions:
+		if cid == char_id or state.factions.get(cid, FACTION_NEUTRAL) == my_faction:
+			continue
+		if _is_participant_out(state, cid):
+			continue
+		var opos: Vector2i = state.positions[cid]
+		var d: int = _chebyshev(mypos, opos)
+		if d < best_d:
+			best_d = d
+			best = Vector2i(signi(opos.x - mypos.x), signi(opos.y - mypos.y))
+	return best if best != Vector2i(0, 0) else Vector2i(1, 0)
+
+
+## True if `target` lies in the forward half-arc of `facing` from `origin`, within range.
+## (Dot product > 0 = in front; Chebyshev distance gates range.)
+static func _in_forward_arc(origin: Vector2i, facing: Vector2i, target: Vector2i, range_tiles: int) -> bool:
+	if origin == target or _chebyshev(origin, target) > range_tiles:
+		return false
+	var d: Vector2i = target - origin
+	return d.x * facing.x + d.y * facing.y > 0
+
+
+## True if `target` lies in a forward cone of the given length that widens linearly to
+## `end_half_width` tiles at its far end (Inari's Wrath geometry, s38).
+static func _in_cone(origin: Vector2i, facing: Vector2i, target: Vector2i, length_tiles: int, end_half_width: float) -> bool:
+	if origin == target or facing == Vector2i(0, 0):
+		return false
+	var d: Vector2i = target - origin
+	# Distance along the facing axis (projection), and perpendicular offset.
+	var along: int = d.x * facing.x + d.y * facing.y  # facing is a unit step (incl. diagonals)
+	if along <= 0 or along > length_tiles:
+		return false
+	var perp: float = abs(float(d.x) * float(facing.y) - float(d.y) * float(facing.x))
+	# Normalize the diagonal facing length (|facing| is √2 for diagonals) so `along`/`perp`
+	# are in tile units, then widen the allowed half-width linearly along the cone.
+	var flen: float = sqrt(float(facing.x * facing.x + facing.y * facing.y))
+	var along_t: float = float(along) / flen
+	var perp_t: float = perp / flen
+	return perp_t <= end_half_width * (along_t / float(length_tiles)) + 0.5
+
+
+## Slap the Wave (s38 Water): spend a Void Point (no roll to activate), then everyone in the
+## caster's forward-facing arc within Water Ring ×5 ft (= Water tiles) makes a Contested
+## Water Roll against the caster or becomes Dazed. Affects all factions in the arc.
+static func execute_slap_the_wave(
+	state: MapCombatState,
+	caster_id: int,
+	caster: L5RCharacterData,
+	chars_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(caster):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(caster_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if not caster.kiho.has("Slap the Wave"):
+		return {"success": false, "reason": "kiho_not_known"}
+	if caster.current_void_points < 1:
+		return {"success": false, "reason": "no_void_points"}
+	if not state.combat.participants.has(caster_id):
+		return {"success": false, "reason": "participant_missing"}
+	caster.current_void_points -= 1
+	var cpos: Vector2i = state.positions.get(caster_id, Vector2i(-1, -1))
+	var facing: Vector2i = _effective_facing(state, caster_id)
+	var rng: int = CharacterStats.get_ring_value(caster, Enums.Ring.WATER)  # ×5 ft = ×1 tile
+	var cw: int = maxi(1, rng)
+	var dazed: Array = []
+	for cid: int in state.combat.participants:
+		if cid == caster_id:
+			continue
+		var tc: L5RCharacterData = chars_by_id.get(cid, null)
+		if tc == null or CharacterStats.is_dead(tc):
+			continue
+		var tpos: Vector2i = state.positions.get(cid, Vector2i(-1, -1))
+		if tpos.x < 0 or not _in_forward_arc(cpos, facing, tpos, rng):
+			continue
+		if dice_engine.roll_and_keep(cw, cw, true).total > dice_engine.roll_and_keep(maxi(1, CharacterStats.get_ring_value(tc, Enums.Ring.WATER)), maxi(1, CharacterStats.get_ring_value(tc, Enums.Ring.WATER)), true).total:
+			IndividualCombat.apply_condition(state.combat.participants[cid], IndividualCombat.CONDITION_DAZED)
+			dazed.append(cid)
+	state.combat_log.append({
+		"type": "slap_the_wave", "round": state.combat.round_number,
+		"caster_id": caster_id, "dazed": dazed})
+	return {"success": true, "dazed": dazed}
+
+
+## Inari's Wrath (s38 Air): Round 1 — spend a Void Point + a Complex Action to hold a deep
+## breath. Round 2 — exhale (Complex Action) a freezing cone (School Rank ×5 ft long, ×2 ft
+## wide at the end), dealing Air-Ring cold damage (Air k Air, bypassing Reduction) to every
+## living creature caught in it. `phase`: "inhale" arms it, "exhale" fires it.
+static func execute_inaris_wrath(
+	state: MapCombatState,
+	caster_id: int,
+	caster: L5RCharacterData,
+	phase: String,
+	chars_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(caster):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(caster_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if not caster.kiho.has("Inari's Wrath"):
+		return {"success": false, "reason": "kiho_not_known"}
+	var c_p: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+	if c_p == null:
+		return {"success": false, "reason": "participant_missing"}
+	if not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_actions_remaining"}
+	if phase == "inhale":
+		if caster.current_void_points < 1:
+			return {"success": false, "reason": "no_void_points"}
+		caster.current_void_points -= 1
+		c_p.inari_breath_round = state.combat.round_number
+		ts.consume_complex()
+		return {"success": true, "phase": "inhale", "held_round": c_p.inari_breath_round}
+	# exhale
+	if c_p.inari_breath_round < 0 or state.combat.round_number <= c_p.inari_breath_round:
+		return {"success": false, "reason": "breath_not_held_prior_round"}
+	c_p.inari_breath_round = -1
+	ts.consume_complex()
+	var cpos: Vector2i = state.positions.get(caster_id, Vector2i(-1, -1))
+	var facing: Vector2i = _effective_facing(state, caster_id)
+	var rank: int = CharacterStats.get_insight_rank(caster)
+	var length_tiles: int = maxi(1, rank)  # School Rank ×5 ft = ×1 tile
+	var end_half_width: float = float(rank) * 0.4 / 2.0  # ×2 ft wide / 5 ft per tile, half-width
+	var air: int = maxi(1, CharacterStats.get_ring_value(caster, Enums.Ring.AIR))
+	var hit: Array = []
+	for cid: int in state.combat.participants:
+		if cid == caster_id:
+			continue
+		var tc: L5RCharacterData = chars_by_id.get(cid, null)
+		if tc == null or CharacterStats.is_dead(tc):
+			continue
+		var tpos: Vector2i = state.positions.get(cid, Vector2i(-1, -1))
+		if tpos.x < 0 or not _in_cone(cpos, facing, tpos, length_tiles, end_half_width):
+			continue
+		var dmg: int = dice_engine.roll_and_keep(air, air, true).total  # cold damage, DR = Air Ring
+		WoundSystem.apply_damage(tc, dmg, 0)  # bypasses Reduction
+		hit.append(cid)
+	state.combat_log.append({
+		"type": "inaris_wrath_exhale", "round": state.combat.round_number,
+		"caster_id": caster_id, "hit": hit})
+	return {"success": true, "phase": "exhale", "hit": hit}
 
 
 ## Song of the World (s38 Void, Complex Action): target an opponent within 50 ft (10 tiles)

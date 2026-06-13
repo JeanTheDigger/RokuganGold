@@ -3309,6 +3309,24 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 32: facing subsystem + Slap the Wave + Inari's Wrath (2026-06-12)
+Owner-directed (2026-06-12). Built a participant facing subsystem to unblock the two
+arc/cone kiho. `Participant.facing` (a unit heading) is updated by execute_move (faces the
+direction moved); `_effective_facing` returns it, or — when unset — the direction toward
+the nearest living enemy (the owner-approved NPC default). `_in_forward_arc` (forward
+half-arc within range, via dot product) and `_in_cone` (forward cone widening linearly to
+the GDD end-width) provide the geometry.
+- **Slap the Wave** (Water): `execute_slap_the_wave` — spend a Void Point (no activation
+  roll), then everyone in the caster's forward arc within Water Ring ×5 ft (= Water tiles)
+  makes a Contested Water Roll or is Dazed. Affects all factions in the arc. Verified: the
+  in-arc enemy was Dazed, the behind enemy was not, VP spent.
+- **Inari's Wrath** (Air): `execute_inaris_wrath(phase)` — Round 1 "inhale" spends a Void
+  Point + Complex Action to hold the breath (`Participant.inari_breath_round`); Round 2
+  "exhale" (Complex Action) fires a freezing cone (School Rank ×5 ft long, ×2 ft wide at
+  the end) dealing Air-Ring cold damage (Air k Air, bypassing Reduction) to every living
+  creature in it. Verified: inhale armed it, the next-round exhale hit the in-cone enemy
+  for 8 cold damage. All values GDD-given (the NPC facing default is owner-approved).
+
 ### s38 Kiho — effect registry, tranche 31: Song of the World (Initiative) (2026-06-12)
 **Song of the World** (Void, Complex Action): `execute_song_of_the_world` — target an
 opponent within 50 ft (10 tiles), win a Contested Void Roll, and the target's Initiative
