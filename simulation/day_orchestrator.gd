@@ -23762,11 +23762,17 @@ static func _attempt_proxy_dispatch(
 			best_vassal = ch
 	if best_vassal == null:
 		return
+	# Proxy fulfillment is arrival at the target settlement (see the proxy arrival
+	# pass + register_proxy below), so the proxy's only job is to travel there.
+	# Use NeedTypes that ARE in objective_alignment.json with BEGIN_TRAVEL as their
+	# top action: ATTEND_COURT (90) for court commitments, TRAVEL_TO (100) for
+	# visit/meeting. The old "VISIT_NPC"/"ATTEND_MEETING" strings were in neither
+	# the scoring table nor the decomposer, so the proxy scored 0 → REST and never
+	# travelled (proxy dispatch was broken for VISIT_PROMISE/MEETING_ARRANGEMENT).
 	var need_type: String = "ATTEND_COURT"
-	if c.commitment_type == Enums.CommitmentType.VISIT_PROMISE:
-		need_type = "VISIT_NPC"
-	elif c.commitment_type == Enums.CommitmentType.MEETING_ARRANGEMENT:
-		need_type = "ATTEND_MEETING"
+	if c.commitment_type == Enums.CommitmentType.VISIT_PROMISE \
+			or c.commitment_type == Enums.CommitmentType.MEETING_ARRANGEMENT:
+		need_type = "TRAVEL_TO"
 	var proxy_obj: Dictionary = {
 		"need_type": need_type,
 		"assigned_by": lord.character_id,
