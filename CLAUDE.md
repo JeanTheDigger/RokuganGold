@@ -5356,6 +5356,28 @@ template generators it depends on. Faithful summary of the fixes that landed:
   or no-mechanic utility (Written in Blood, Possession, Take the Body) — all blocked
   on s40/s54. The wired set is the complete world-scale maho catalog; do not
   re-audit without the combat/condition/undead layers.
+- **s43 Grand-Map spell sweep RE-VERIFIED at GDD-text level (2026-06-13).** Re-ran the
+  sweep against the actual s43 spell text (not the one-line `MahoSpellLibrary` summaries)
+  for the strongest near-misses, since the durations/areas in the full text are decisive.
+  Confirms the 2026-06-11 conclusion: the **same 6 spells are wired** and **no new
+  world-scale slice exists**. GDD-text findings on the borderline cases:
+  **Purge the Weak** (Earth 1) — Duration *Permanent* BUT Area is "food/water for up to
+  5 people" (Raises add +1 person each); destroying ~5 rations is a rounding error against
+  a settlement `rice_stockpile` (hundreds of PU fed), and the teeth — an *incurable*
+  2-week −3k0 illness — is a condition with no world-scale model. (Contrast Caress of Fu
+  Leng: a 3-finger jade hit IS strategically meaningful because jade is scarce/tracked.)
+  **Take the Body** (Air 6) — Duration *Permanent*, true identity transfer, but "Known only
+  to Iuchiban and Yajinden" + needs a full soul-swap mechanic (caster mental stats overwrite
+  victim's, old body dies); named-villain scope, not an anonymous seasonal cult cast.
+  **Possession** (Air 5, *1 day*), **Stealing the Soul** Trait-drain (*1 day*),
+  **Drain the Soul** Stamina (*10 min*), **Suck the Marrow** (*1 day*), **Gift of the Maker**
+  Greater Power (*1 hour*) — all temporary, expire before the seasonal cadence resolves;
+  Stealing/Drain are already wired for their *lethal* Earth-reduction branch (the temporary
+  non-lethal branches stay inert). No combat-round spell (Bleeding/Burning Blood/Tomb of
+  Earth/No Pure Breaths) has a clean lethal/permanent sub-branch — faithfully world-scaling
+  their per-round DR would mean inventing a damage total (forbidden). Conclusion stands: the
+  wired set is complete; do not re-audit a third time without the s40 combat / world-scale
+  condition / s54 undead layers.
 - **Maho Channel 3 wired — Taint detection on a person (Design Decision 5,
   owner-authorized 2026-06-10).** Closes the last open maho detection channel: a
   shugenja whose successful action targets a suspect (PROBE/INVESTIGATE near them,
