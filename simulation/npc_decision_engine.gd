@@ -1192,6 +1192,9 @@ static func _run_sleeper_override(
 	var options := generate_options(ctx, need, character, chars_by_id)
 	# NO personality filter — that is the whole point of conditioning (s54.7e).
 	options = apply_allowlist_filter(options, need.need_type, scoring_tables)
+	# A sleeper command that targets a location (e.g. travel-to-then-act) must still
+	# stop travelling once it arrives, same as the main path.
+	options = _apply_arrived_travel_filter(options, need, ctx)
 	score_all(options, need, ctx, scoring_tables, [], [], character, 0, chars_by_id)
 	var chosen := select_action(options, ctx)
 	var result: Dictionary = execute_action(chosen, character, ctx)
