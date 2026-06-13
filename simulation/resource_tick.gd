@@ -760,6 +760,9 @@ static func _process_starvation_check(
 		)
 		deficit_seasons[pid] = starv["deficit_seasons"]
 		relief_seasons[pid] = starv["relief_seasons"]
+		# Publish the granular stage to the data model so the NPC engine reads the
+		# real severity (Shortage/Hunger/Famine), not a crisis_type proxy (s4.3.6).
+		prov.starvation_stage = int(starv["stage"])
 		if starv["apply_loss"]:
 			apply_starvation_loss_settlements(prov, settlements, starv["pu_loss_rate"])
 		results[pid] = starv
