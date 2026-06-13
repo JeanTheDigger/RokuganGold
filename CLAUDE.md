@@ -3309,6 +3309,43 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — effect registry, tranche 33: Touch the Void Dragon (environmental Ring boost) (2026-06-12)
+Owner-directed (2026-06-12). **Touch the Void Dragon** (Void Internal, while active): one Ring
+and its associated Traits are one Rank higher; the Ring depends on the skirmish terrain
+(mountains=Earth, seashore=Water, plains=Air, desert/volcanic=Fire). Implemented leak-free as a
+**Participant-scoped Ring flag** (`Participant.void_dragon_ring`) read at the combat-roll hooks —
+NOT a trait mutation (combat operates on the live `L5RCharacterData`, so mutating traits would
+persist into the world-sim after the skirmish; the established pattern is transient flags read at
+hooks). `MapCombatState.environment_ring` carries the terrain-derived Ring;
+`environment_ring_for_terrain` maps the four GDD-named terrains (MOUNTAINS/COASTAL/PLAINS/WASTELAND
+→ Earth/Water/Air/Fire) and returns -1 (no boost) for terrains the GDD does not name (forest,
+swamp, hills, river delta — absence of a mechanic, not an invented one).
+`execute_activate_touch_void_dragon` routes the activation through the standard cost/slot path
+(`execute_activate_kiho`), then stamps the Ring on the caster's Participant; it rejects activation
+when the terrain yields no Ring (`no_environmental_ring`). The "+1 Rank to the Ring's Traits"
+manifests via `IndividualCombat.vd_ring_bonus` at four core combat-roll sites: **attack roll**
++1k1 when the attack trait's Ring is boosted (Fire/agility, Air/reflexes, Water/strength-kata),
+**damage** +1 rolled die (Water strength / Fire agility-kata), **Armor TN** +5 (Air/Reflexes ×5),
+**Initiative** +1k1 (Air/Reflexes). NPC monks auto-activate it via `_npc_maybe_activate_kiho` when
+the skirmish has a terrain Ring (else they fall through to their next known kiho). All values
+GDD-given (+1 Rank = +1k1 on rolls; Armor-TN ×5 per Reflexes Rank is the GDD formula). Verified
+with a headless driver: terrain map (mtn→Earth … forest→-1), Armor TN 20→25 for Air (no change for
+Earth), attack mean +6.7 for Fire/agility (+1k1), damage rolled dice 6→7 for Water (no change for
+Air), activation sets the boost + spends a Void Point, no-ring terrain rejected. LIMITATIONS
+(architecture, not unknown values): (1) **Earth (mountains) has minimal combat effect** — the four
+core combat rolls use Reflexes/Agility/Strength but never Stamina/Willpower, and Earth's signature
+combat value, wound capacity, is not hooked (`get_total_wound_capacity` is not Participant-aware,
+and the leak-free constraint forbids mutating the live Earth traits). (2) The caster's own **kiho
+Ring rolls** (e.g. Slap the Wave's Water contest) are not boosted — they read
+`CharacterStats.get_ring_value` directly; retrofitting ~30 kiho Ring reads is out of scope.
+(3) No production caller of `setup_combat` yet — `environment_ring` is forward-wired (default -1);
+the future mission-launch glue passes `environment_ring_for_terrain(province.terrain_type)`. With
+this, **every kiho with a clean tile-combat effect is wired**; the remainder are dependency-blocked
+(Dharma Technique / Silent Solace need a tile-combat spell-cast consumer; Rebuke / Sever need s54
+undead; Breaking Blow / Waves in All Things are GM-judged object/terrain effects) or are the ~12
+out-of-combat character-level buffs (need a character-level active-kiho system + an NPC non-combat
+activation policy the GDD does not specify).
+
 ### s38 Kiho — effect registry, tranche 32: facing subsystem + Slap the Wave + Inari's Wrath (2026-06-12)
 Owner-directed (2026-06-12). Built a participant facing subsystem to unblock the two
 arc/cone kiho. `Participant.facing` (a unit heading) is updated by execute_move (faces the

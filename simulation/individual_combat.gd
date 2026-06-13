@@ -155,6 +155,7 @@ class Participant:
 	var initiative_modifier: int = 0  # persistent Initiative delta (Song of the World, s38)
 	var facing: Vector2i = Vector2i(0, 0)  # unit heading; (0,0) = unset (s38 arc/cone kiho)
 	var inari_breath_round: int = -1  # round Inari's Wrath breath was held (s38); -1 = not holding
+	var void_dragon_ring: int = -1  # Touch the Void Dragon (s38): boosted Ring (Enums.Ring), -1 = inactive
 	var dual_wielding: bool = false            # true when holding an off-hand weapon
 	var off_hand_weapon: String = ""           # name of off-hand weapon ("" = none)
 	var earth_trade_amount: int = 0            # Armor TN traded for damage (earth_trade_armor_for_damage)
@@ -219,6 +220,13 @@ static func _has_kata_effect(character: L5RCharacterData, effect_id: String) -> 
 
 
 ## Returns {flat_bonus, use_void_ring} for initiative kata effects.
+## Touch the Void Dragon (s38): +1 to `ring`'s value when it is the participant's active
+## environmental boost. The +1 Rank to the Ring's associated Traits manifests as +1k1 on
+## attack/initiative rolls and +5 Armor TN / +1 damage die at the call sites below.
+static func vd_ring_bonus(participant: Participant, ring: int) -> int:
+	return 1 if (participant != null and participant.void_dragon_ring == ring) else 0
+
+
 static func _get_kata_initiative_modifiers(character: L5RCharacterData, weapon_name: String) -> Dictionary:
 	var flat_bonus: int = 0
 	var use_void_ring: bool = false
@@ -858,9 +866,11 @@ static func roll_initiative(
 	else:
 		var reflexes: int = character.reflexes
 		var insight_rank: int = CharacterStats.get_insight_rank(character)
+		# Touch the Void Dragon (s38): +1 Rank to Reflexes (Air) = +1k1 Initiative.
+		var vd_init: int = vd_ring_bonus(participant, Enums.Ring.AIR)
 		var result: DiceResult = dice_engine.roll_and_keep(
-			reflexes + insight_rank + adv_init["rolled"],
-			maxi(reflexes + adv_init["kept"], 1), true)
+			reflexes + insight_rank + adv_init["rolled"] + vd_init,
+			maxi(reflexes + adv_init["kept"] + vd_init, 1), true)
 		score = result.total + wound_penalty
 	score += kata_init["flat_bonus"] + adv_init["free_raises"] * 5 - adv_init_tn
 	score += _get_kiho_initiative_bonus(character, participant, weapon_name)
@@ -952,7 +962,9 @@ static func get_armor_tn(
 	var dual_wield_bonus: int = CharacterStats.get_insight_rank(character) if participant.dual_wielding else 0
 	# Timed Armor-TN modifiers from s30a duration katas (Victory of the River: -10).
 	var timed_armor: int = get_timed_modifier_total(participant, "armor_tn")
-	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection + kata_bonus + kiho_bonus + dual_wield_bonus + timed_armor
+	# Touch the Void Dragon (s38): +1 Rank to Reflexes (Air) = +5 Armor TN.
+	var vd_armor: int = vd_ring_bonus(participant, Enums.Ring.AIR) * 5
+	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection + kata_bonus + kiho_bonus + dual_wield_bonus + timed_armor + vd_armor
 
 
 static func roll_full_defense_bonus(
@@ -1026,6 +1038,14 @@ static func resolve_attack(
 	elif kata_atk["use_strength"]:
 		rolled = attacker.strength + skill_rank
 		kept = attacker.strength
+
+	# Touch the Void Dragon (s38): +1 Rank (=+1k1) when the attack trait's Ring is boosted.
+	# Effective trait ring: Air (air-ring kata / reflexes weapon), Water (strength kata),
+	# else Fire (agility weapon).
+	var _vd_atk_ring: int = Enums.Ring.AIR if kata_atk["use_air_ring"] else (Enums.Ring.WATER if kata_atk["use_strength"] else (Enums.Ring.FIRE if trait_name == "agility" else Enums.Ring.AIR))
+	if vd_ring_bonus(attacker_p, _vd_atk_ring) > 0:
+		rolled += 1
+		kept += 1
 
 	# Void spend for +1k1 (or +2k2) on attack roll (RAW). Not valid for Damage Rolls.
 	# Apply either inline spend_void or pre-declared pending bonus from execute_void_spend.
@@ -1183,6 +1203,9 @@ static func resolve_damage(
 			rolled += attacker.agility
 		else:
 			rolled += attacker.strength
+		# Touch the Void Dragon (s38): +1 rolled damage die when the damage trait's Ring is
+		# boosted (Fire for the agility kata, else Water for Strength).
+		rolled += vd_ring_bonus(attacker_p, Enums.Ring.FIRE if kata_dmg["use_agility"] else Enums.Ring.WATER)
 
 	# earth_heavy_weapons_strength kata: +1 extra unkept die of strength (s30a)
 	rolled += kata_dmg["strength_bonus"]

@@ -113,6 +113,8 @@ class MapCombatState:
 	var companion_data: Dictionary = {}
 	## companion_ids who started the mission — denominator for morale casualties.
 	var companion_started_count: int = 0
+	## Touch the Void Dragon (s38): terrain-derived Ring (Enums.Ring) for this skirmish; -1 = none.
+	var environment_ring: int = -1
 	## Per-skirmish dedup for "once per skirmish" atemi (kiho_name → Array[target_id]).
 	var once_per_skirmish_atemi: Dictionary = {}
 	## Death Touch consecutive-strike chains: "caster_id:target_id" → {count, last_round}.
@@ -133,9 +135,11 @@ static func setup_combat(
 	map: AsciiMapData,
 	combatants_data: Array,
 	dice_engine: DiceEngine,
+	environment_ring: int = -1,
 ) -> MapCombatState:
 	var mcs := MapCombatState.new()
 	mcs.map = map
+	mcs.environment_ring = environment_ring  # Touch the Void Dragon (s38)
 
 	var chars_for_combat: Array = []
 	var participant_dicts: Array = []
@@ -1690,6 +1694,10 @@ static func _npc_maybe_activate_kiho(
 			continue
 		if not KihoSystem.can_activate(k, p.active_kiho).get("ok", false):
 			continue
+		if k == "Touch the Void Dragon":
+			if state.environment_ring < 0:
+				continue  # no terrain Ring to boost — try the next known kiho
+			return execute_activate_touch_void_dragon(state, npc_id, npc, "void_point", dice_engine)
 		return execute_activate_kiho(state, npc_id, npc, k, "void_point", dice_engine)
 	return {}
 
@@ -1975,6 +1983,44 @@ static func _in_cone(origin: Vector2i, facing: Vector2i, target: Vector2i, lengt
 	var along_t: float = float(along) / flen
 	var perp_t: float = perp / flen
 	return perp_t <= end_half_width * (along_t / float(length_tiles)) + 0.5
+
+
+## Touch the Void Dragon (s38): maps a TerrainType to the Ring it boosts, per the GDD's
+## environment list — mountains=Earth, seashore=Water, plains=Air, desert/volcanic=Fire.
+## Terrains the GDD does not name (forest, swamp, hills, river delta) yield -1 (no boost).
+static func environment_ring_for_terrain(terrain_type: int) -> int:
+	match terrain_type:
+		Enums.TerrainType.MOUNTAINS: return Enums.Ring.EARTH
+		Enums.TerrainType.COASTAL:   return Enums.Ring.WATER   # seashore
+		Enums.TerrainType.PLAINS:    return Enums.Ring.AIR
+		Enums.TerrainType.WASTELAND: return Enums.Ring.FIRE    # desert
+		_:                           return -1
+
+
+## Touch the Void Dragon (s38 Void Internal): while active, one Ring and its associated Traits
+## are one Rank higher; which Ring depends on the skirmish terrain (set on MapCombatState).
+## Routes through the standard activation cost/slot path, then stamps the boosted Ring on the
+## caster's Participant — read at the combat-roll hooks (attack/damage/Armor TN/Initiative)
+## and by the caster's own kiho Ring rolls.
+static func execute_activate_touch_void_dragon(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	method: String,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if not character.kiho.has("Touch the Void Dragon"):
+		return {"success": false, "reason": "kiho_not_known"}
+	if state.environment_ring < 0:
+		return {"success": false, "reason": "no_environmental_ring"}
+	var act: Dictionary = execute_activate_kiho(state, char_id, character, "Touch the Void Dragon", method, dice_engine)
+	if not act.get("success", false):
+		return act
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p != null:
+		p.void_dragon_ring = state.environment_ring
+	act["boosted_ring"] = state.environment_ring
+	return act
 
 
 ## Slap the Wave (s38 Water): spend a Void Point (no roll to activate), then everyone in the
