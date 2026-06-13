@@ -5851,6 +5851,61 @@ but not executed in this environment.
   (structural / FORTIFY), the Taisa (sortie / SS), and now the Kuni (spiritual / PTL), three of the
   Wall's four family roles are self-driving at the Tower (the Hida garrison itself is Phase 3).
 
+### NPC Decision Pipeline — Full Connectivity Review (2026-06-13)
+End-to-end audit of the NPC decision pipeline (build_context → resolve_goal →
+generate_options → filters → score_all → select_action → execute → reactive path).
+**Every connectivity bug found was in the Phase 2→3 reachability layer; all fixed this
+session. Every other stage audited clean.** Method: programmatic diffs (reads vs writes,
+scored-vs-reachable, injected-vs-handled) + targeted headless probes.
+
+**Bugs found and fixed this session (NeedType / reachability):**
+- **BEGIN_TRAVEL in no context list — NPCs could not initiate travel at all.** The
+  action every travel objective resolves to was absent from every context list (only
+  CHANGE_DESTINATION existed, TRAVELING-only). Confirmed via probe: a stationary NPC with
+  a TRAVEL_TO need → survivors `[DO_NOTHING]`. Every travel NeedType (TRAVEL_TO,
+  ATTEND_COURT, SEEK_MAGISTRATE, LOCATE_CHARACTER, FIND_NEW_LORD, …) and all decomposer
+  TRAVEL_TO sub-needs (HUNT_MAHO roaming, UPHOLD_LAW jurisdiction travel, witness→magistrate,
+  musha-shugyo return, commitment proxies) collapsed to DO_NOTHING — autonomous NPCs never
+  relocated. FIXED: added BEGIN_TRAVEL to all 9 non-TRAVELING context branches (owner-approved
+  "every context"). Allowlist gates it to travel NeedTypes (verified RAISE_DISPOSITION does
+  not surface it).
+- **Arrived-at-target guard.** `_apply_arrived_travel_filter` (Phase 4) drops BEGIN_TRAVEL
+  once the NPC is at the need's target so the at-destination action wins (or REST) instead
+  of a no-op "already_there" travel. Wired into both run() and the sleeper-override path.
+- **Commitment-proxy dispatch (VISIT_PROMISE / MEETING_ARRANGEMENT) scored 0.** Proxies
+  used need_types VISIT_NPC / ATTEND_MEETING, in neither the scoring table nor the decomposer
+  → proxy RESTed instead of travelling. FIXED: routed to TRAVEL_TO (unblocked by the travel fix).
+- **Bribery/extortion reactive menus never generated.** SUPPRESS_INVESTIGATION (bribery_eval)
+  and EXTORT_ACCUSED (extortion_opportunity) reactive needs had no generate_options override
+  (unlike RESPOND_TO_SEPPUKU), so BRIBE_WITNESS / INTIMIDATE_WITNESS / KILL_WITNESS /
+  FLEE_JURISDICTION / EXTORT_ACCUSED (in no context list) were never generated → crime
+  responses collapsed to DO_NOTHING. FIXED: added the two need.source overrides; personality
+  filter gates the aggressive options.
+- **Dead refs removed:** `make_reassess_need()` (never called), `RAISE_ARMY` classification
+  entries (never emitted).
+
+**Stages audited CLEAN (no changes needed):**
+- **Scoring tables (8/8):** objective_alignment, personality_lean, competence_table,
+  disposition_tiers, urgency_rules, topic_position_alignment, action_skill_map, filter_data
+  (bushido/shourido) — all loaded by WorldStateData and all invoked live by score_all.
+- **ContextSnapshot fields (96/96):** all populated in build_context (incl. `.append`/dict
+  forms); every world_state key the engine reads is written somewhere (festival flags via
+  `ws.merge(g_festival)` at the per-character injection; `province_statuses` via the
+  `build_province_statuses_from_data` fallback; naval/court keys injected without prefix).
+- **Executor coverage:** all 171 selectable actions (context lists ∪ Kolat pool ∪ overrides)
+  have a handler reference in ActionExecutor — zero silent no-ops.
+- **Reverse reachability:** the objective_alignment scored-action diff returns zero UNKNOWN —
+  every scored ActionID is reachable (context/Kolat/letter-pass/reactive override) or a
+  documented forward-wired/blocked action (s11.7a sub-tile, s11.9 coordinate, Kolat-no-executor,
+  reactive non-AP-loop, GDD-blocked SEEK_*/tattoo).
+- **Reactive event coverage:** every type injected into a character's `pending_events` has a
+  handler — 5 `reactive_type` events (ACCEPT_TRAINING, CONTRACT_OFFERED, COURT_INVITATION,
+  DUEL_CHALLENGE_RECEIVED, FAVOR_REQUESTED) route to ReactiveDecisions match arms; the `type`
+  events (bribery_eval, extortion_opportunity, provocation, seppuku_offered,
+  witness_report_motivated, + performance/tend-wounded handlers) route to
+  `_decompose_reactive_event`; `need_type` events (HONOR_COMMITMENT, RESPOND_TO_EDICT) are
+  valid NeedTypes that decompose normally.
+
 ### Known Code Issues (found and fixed 2026-06-12, headless wall smoke test)
 - **`school_name` vestigial field — 8 production reads were dead. FIXED.** A headless smoke
   run of the live Wall loop (fresh-bootstrap driver, since retired) surfaced this. `L5RCharacterData`
