@@ -5926,6 +5926,25 @@ scored-vs-reachable, injected-vs-handled) + targeted headless probes.
 - **Bribery/extortion menus generate:** SUPPRESS_INVESTIGATION (bribery_eval) surfaces all five
   suppression actions; EXTORT_ACCUSED (extortion_opportunity) surfaces EXTORT_ACCUSED.
 
+**Objective-decomposer / objective-producer trees audited CLEAN:**
+- All 37 distinct sub-needs the decomposers emit (objective_decomposer, musha_shugyo,
+  monk_objective) are valid — each is in objective_alignment or has its own decompose case.
+- Both `_make_need("TRAVEL_TO")` emission sites (HUNT_MAHO, UPHOLD_LAW idle) are inside
+  at-target guards (`location_id.begins_with(target)`), so they emit travel only when away and
+  passthrough to the local action on arrival. All other travel-class needs (ATTEND_COURT,
+  SEEK_MAGISTRATE, …) rely on the global `_apply_arrived_travel_filter`.
+- All 14 high-level primary objectives the OpportunityScanner / strategic_review / decomposer
+  produce (MILITARY_DOMINANCE, MAXIMIZE_PROSPERITY, MAINTAIN_PEACE, EXPAND_TERRITORY,
+  DEFEND_TERRITORY, CONTROL_TRADE, BUILD_STRONGEST_FORCE, ELIMINATE_SHADOWLANDS, HONOR_ANCESTORS,
+  SEEK_VENGEANCE, STRENGTHEN_WALL, ADVANCE_FAMILY, ACCUMULATE_LEVERAGE, BREAK_ALLIANCE) route to
+  a decompose tree (one of 7 dispatch arrays — POLITICAL/ECONOMIC/PERSONAL/MILITARY/
+  INVESTIGATION/INFRASTRUCTURE/GOVERNANCE — or PrimaryObjectiveDecomposer's 13-tree match),
+  decomposing to reachable sub-needs rather than passthrough.
+- Every `objective_type` the OpportunityScanner can emit routes (dispatch array / primary /
+  alignment). One orphan: `PROTECT_TERRITORY` exists only as a `STANDING_OBJECTIVE_DOMAIN`
+  classification key, never emitted as an objective — benign dead map entry (forward-wired),
+  not a REST path.
+
 ### Known Code Issues (found and fixed 2026-06-12, headless wall smoke test)
 - **`school_name` vestigial field — 8 production reads were dead. FIXED.** A headless smoke
   run of the live Wall loop (fresh-bootstrap driver, since retired) surfaced this. `L5RCharacterData`
