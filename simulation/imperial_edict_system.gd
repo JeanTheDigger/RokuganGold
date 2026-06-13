@@ -590,6 +590,13 @@ static func process_daily_compliance(
 			if not applied.is_empty():
 				results.append(applied)
 			deactivate_edict(edict)
+		elif deadline_passed:
+			# Compliance window closed at the deadline — every clan has now responded
+			# (compliant, or just marked defiant above). Deactivate so a defied edict
+			# stops re-processing daily and is no longer a live RESPOND_TO_EDICT target.
+			# Previously only the all-compliant branch deactivated, so any defied edict
+			# leaked as is_active forever.
+			deactivate_edict(edict)
 
 	return results
 
