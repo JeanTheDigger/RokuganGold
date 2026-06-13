@@ -1162,6 +1162,7 @@ static func run(
 	options = _apply_taint_examination_precondition_filter(options, world_state)
 	options = _apply_origami_precondition_filter(options, character, ctx)
 	options = _apply_garden_precondition_filter(options, character, ctx)
+	options = _apply_arrived_travel_filter(options, need, ctx)
 
 	# Phase 5
 	score_all(options, need, ctx, scoring_tables,
@@ -1198,6 +1199,48 @@ static func _run_sleeper_override(
 	result["sleeper_override"] = true
 	result["memory_suppressed"] = true
 	return result
+
+
+# -- Phase 4: Arrived-at-target travel filter ----------------------------------
+# The travel-class passthrough NeedTypes (TRAVEL_TO, ATTEND_COURT, SEEK_MAGISTRATE,
+# LOCATE_CHARACTER, CONVENE_KOLAT_CONCLAVE, …) score BEGIN_TRAVEL as their top action
+# regardless of position. Once the NPC has reached the need's target location,
+# BEGIN_TRAVEL would only no-op ("already_there", wasting the AP) and crowd out the
+# at-destination action. Drop it on arrival so the next-best action wins (e.g. CHARM
+# at the court) or, if travel was the whole point (pure TRAVEL_TO), the NPC falls to
+# REST while the owning objective is cleared by its arrival handler. Only BEGIN_TRAVEL
+# is removed, and it survives the allowlist only for travel NeedTypes, so this is a
+# no-op for every non-travel need.
+static func _apply_arrived_travel_filter(
+	options: Array,
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	if not _is_at_travel_target(need, ctx):
+		return options
+	var filtered: Array = []
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "BEGIN_TRAVEL":
+			continue
+		filtered.append(option)
+	return filtered
+
+
+## True if the NPC's current location already satisfies the need's travel target.
+## Mirrors the arrival conventions used elsewhere: exact settlement-id match, or
+## province containment via the begins_with check used by the HUNT_MAHO / UPHOLD_LAW
+## decompose guards.
+static func _is_at_travel_target(
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	if need.target_settlement_id >= 0 and ctx.location_id == str(need.target_settlement_id):
+		return true
+	if not need.target_intent.is_empty() and ctx.location_id.begins_with(need.target_intent):
+		return true
+	if need.target_province_id >= 0 and ctx.location_id.begins_with(str(need.target_province_id)):
+		return true
+	return false
 
 
 ## Build an ImmediateNeed from a stored sleeper command Dictionary.
