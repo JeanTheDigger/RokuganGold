@@ -1398,6 +1398,15 @@ static func advance_day(
 			next_insurgency_id, world_states, worship_maluses,
 			season_meta, next_crisis_id,
 		)
+		# Resolve crisis topics tied to defeated insurgencies. Tier 1-3 topics never
+		# decay, so without this the topic of a suppressed insurgency leaks forever as
+		# a phantom active crisis (growing momentum, still broadcast to NPCs).
+		var _ins_resolved_crises: Array = insurgency_results.get("resolved_crisis_ids", [])
+		if not _ins_resolved_crises.is_empty():
+			for _itv: Variant in active_topics:
+				if _itv is TopicData and not (_itv as TopicData).resolved \
+						and (_itv as TopicData).crisis_id in _ins_resolved_crises:
+					TopicMomentumSystem.resolve_topic(_itv as TopicData)
 		spiritual_insurgency_results = _process_spiritual_insurgency(
 			worship_state, spiritual_insurgency_events,
 			next_spiritual_event_id, current_season, dice_engine,
@@ -11854,16 +11863,22 @@ static func _process_insurgencies(
 	for ins: InsurgencyData in insurgencies:
 		if ins.strength <= 0:
 			removed.append(ins)
+	var resolved_crisis_ids: Array = []
 	for ins: InsurgencyData in removed:
 		insurgencies.erase(ins)
 		var rem_prov: Variant = provinces.get(ins.province_id, null)
 		if rem_prov is ProvinceData:
 			var rpd: ProvinceData = rem_prov as ProvinceData
+			# Capture the crisis_id before clearing so the caller can resolve the
+			# crisis topic tied to this insurgency (Tier 1-3 topics never decay).
+			if rpd.active_crisis_id >= 0:
+				resolved_crisis_ids.append(rpd.active_crisis_id)
 			rpd.active_crisis_id = -1
 			rpd.crisis_type = ""
 			if rpd.active_insurgency_id == ins.insurgency_id:
 				rpd.active_insurgency_id = -1
 
+	result["resolved_crisis_ids"] = resolved_crisis_ids
 	return result
 
 
