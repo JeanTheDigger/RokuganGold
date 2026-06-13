@@ -613,7 +613,7 @@ Content has not been modified — only split at section boundaries.
 
 ## Code Implementation Status
 
-Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, some sub-features still need work | **NOT STARTED** = GDD section is LOCKED but no simulation code written | **REFERENCE** = source material available, design decisions needed before implementation
+Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, some sub-features still need work | **NOT STARTED** = GDD section is LOCKED but no simulation code written | **TO BE IMPLEMENTED** = source material available, design decisions needed before implementation
 
 > **All sections are now open for implementation.** Before making any game design decisions (new mechanics, numeric values, behavioral rules not already in the GDD), you must get explicit owner approval first. See CLAUDE.md for details.
 
@@ -632,7 +632,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s11.7b Event Durations | **DONE** | EventDurations constants |
 | s11.8 Regional Price Modifiers | **DONE** | RegionalPriceModifiers |
 | s11.9 Ship Types & Naval | **PARTIAL** | NavalSystem, NavalCombatSystem done. Tortoise Escape Attempt wired into battle round. Ship movement initiation needs coordinate system. Weather is global per day (coordinate placeholder). Naval blockade needs coordinate system (military unit per sub-tile — one sentence spec, genuinely blocked on world map). |
-| s11.10 Way of the Daimyo | **REFERENCE** | Lore reference, no design to implement |
+| s11.10 Way of the Daimyo | **TO BE IMPLEMENTED** | Lore reference; no simulation mechanics specified yet |
 | s11.11 Insurgency System | **DONE** | InsurgencySystem |
 | s12.1 Diplomacy Framework | **DONE** | Architecture only — wired into all other systems |
 | s12.2 Disposition System | **DONE** | DispositionSystem |
