@@ -5925,6 +5925,13 @@ scored-vs-reachable, injected-vs-handled) + targeted headless probes.
   an arrived ATTEND_COURT resolves to a court action (CHARM/DELIVER_GIFT), not no-op travel.
 - **Bribery/extortion menus generate:** SUPPRESS_INVESTIGATION (bribery_eval) surfaces all five
   suppression actions; EXTORT_ACCUSED (extortion_opportunity) surfaces EXTORT_ACCUSED.
+- **Wave-resolver integration path** (the production execution step, not a hand-built action):
+  `NPCDecisionEngine.run()` → decision dict → `NPCWaveResolver._execute_decision` (reconstructs
+  the ScoredAction from the decision, target_settlement_id intact) → `ActionExecutor.execute`
+  → `TravelSystem.begin_travel`. Verified for a TRAVEL_TO primary (decision BEGIN_TRAVEL/target
+  200 → travel_started → arrives at 200 after one tick) AND an ATTEND_COURT primary not at the
+  court (decision BEGIN_TRAVEL → traveling toward the court settlement). Both relocate through
+  the real orchestration step — the world-freezing travel bug is resolved at the integration level.
 
 **Objective-decomposer / objective-producer trees audited CLEAN:**
 - All 37 distinct sub-needs the decomposers emit (objective_decomposer, musha_shugyo,
