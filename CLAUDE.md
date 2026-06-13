@@ -5932,6 +5932,14 @@ scored-vs-reachable, injected-vs-handled) + targeted headless probes.
   200 → travel_started → arrives at 200 after one tick) AND an ATTEND_COURT primary not at the
   court (decision BEGIN_TRAVEL → traveling toward the court settlement). Both relocate through
   the real orchestration step — the world-freezing travel bug is resolved at the integration level.
+- **Reactive crime path through `run()`:** a character with a `bribery_eval` pending event
+  (low-honor/KETSUI accused under investigation) resolves to need SUPPRESS_INVESTIGATION and
+  decision `BRIBE_WITNESS` — a witness-tampering action that was previously unreachable (the
+  reactive crime response used to collapse to DO_NOTHING). A `extortion_opportunity` event
+  (corrupt magistrate) resolves to decision `EXTORT_ACCUSED`. Both confirm the new
+  generate_options override fires inside the full reactive `run()` flow (resolve_goal →
+  override → personality filter → scoring → execute). An honourable NPC's personality filter
+  would block the aggressive options → DO_NOTHING, which is the intended gating.
 
 **Objective-decomposer / objective-producer trees audited CLEAN:**
 - All 37 distinct sub-needs the decomposers emit (objective_decomposer, musha_shugyo,
