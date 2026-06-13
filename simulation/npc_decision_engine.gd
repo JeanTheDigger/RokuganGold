@@ -470,6 +470,20 @@ static func generate_options(
 
 	if need.need_type == "RESPOND_TO_SEPPUKU":
 		available_actions = ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"]
+	elif need.source == "bribery_eval":
+		# Investigation-suppression reactive menu (s11.3.13 / s12.9). The
+		# witness-tampering and flight actions are in no context list, so — like the
+		# seppuku override above — present them directly for the bribery_eval need.
+		# The allowlist (SUPPRESS_INVESTIGATION) keeps them and the personality
+		# filter gates the aggressive ones (an honourable NPC won't kill a witness).
+		available_actions = [
+			"BRIBE_FOR_INFO", "BRIBE_WITNESS", "INTIMIDATE_WITNESS",
+			"KILL_WITNESS", "FLEE_JURISDICTION",
+		]
+	elif need.source == "extortion_opportunity":
+		# Corrupt-magistrate extortion reactive menu (s11.3.13). EXTORT_ACCUSED is
+		# in no context list; a magistrate who declines falls through to DO_NOTHING.
+		available_actions = ["EXTORT_ACCUSED"]
 
 	for action_id: String in available_actions:
 		if _is_zone_blocked(action_id, ctx.zone_flags):
