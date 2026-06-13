@@ -533,6 +533,15 @@ static func _resolve_civilian_order(
 	if order_options.is_empty():
 		return {}
 
+	# Match run()'s Phase-4 precondition gating for order actions. TERMINATE_CONTRACT
+	# is the only precondition-gated civilian order: without this, a lord with no
+	# active contracts could select it via an order, no-op in the executor, and waste
+	# the civilian order. (The other precondition-gated actions are AP-only, never
+	# order_options, so the terminate-contract filter is the only one that applies here.)
+	order_options = NPCDecisionEngine._apply_terminate_contract_precondition_filter(order_options, world_state)
+	if order_options.is_empty():
+		return {}
+
 	NPCDecisionEngine.score_all(order_options, need, ctx, scoring_tables,
 		approach_penalties, commitments, character, travel_redirects, characters_by_id)
 	var chosen: NPCDataStructures.ScoredAction = NPCDecisionEngine.select_action(order_options, ctx)
