@@ -5945,6 +5945,15 @@ scored-vs-reachable, injected-vs-handled) + targeted headless probes.
   classification key, never emitted as an objective — benign dead map entry (forward-wired),
   not a REST path.
 
+**Reactive-decision OUTPUT side audited CLEAN:** the 5 reactive handlers emit 10 distinct
+`action` responses; 8 have orchestrator writeback consumers (ACCEPT_DUEL/DECLINE_DUEL,
+HONOR_FAVOR/DECLINE_FAVOR, ATTEND_COURT, ACCEPT_TRAINING, ACCEPT_CONTRACT/DECLINE_CONTRACT).
+The 2 without consumers (DECLINE_INVITATION, DECLINE_TRAINING) are intentional no-ops — a
+decline is the *absence* of the accept-path action and carries no separate consequence (a
+court decline leaves the COURT_ATTENDANCE commitment to break later via s55.31; a training
+decline simply yields no progress). Both the input side (every injected event type has a
+handler) and the output side (every consequential response has a consumer) are wired.
+
 ### Known Code Issues (found and fixed 2026-06-12, headless wall smoke test)
 - **`school_name` vestigial field — 8 production reads were dead. FIXED.** A headless smoke
   run of the live Wall loop (fresh-bootstrap driver, since retired) surfaced this. `L5RCharacterData`
