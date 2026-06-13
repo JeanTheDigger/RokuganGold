@@ -3058,7 +3058,7 @@ static func _populate_action_metadata(
 		var target_lord_id: int = need.target_npc_id_secondary
 		var favor: int = _get_favor_tier_held_against(ctx, target_lord_id)
 		var mil_need: bool = need.need_type in [
-			"SECURE_ALLIANCE", "RAISE_ARMY", "DEFEND_PROVINCE",
+			"SECURE_ALLIANCE", "DEFEND_PROVINCE",
 		]
 		option.metadata = {
 			"candidate_id": need.target_npc_id,
@@ -5446,7 +5446,7 @@ static func _build_hire_ronin_metadata(
 	# Pick contract type from need context: military need → MILITARY_SERVICE, etc.
 	var contract_type: String = "PROVINCE_DEFENSE"
 	var need_type: String = ctx.known_objectives.get("primary", {}).get("need_type", "")
-	if need_type == "LEVY_TROOPS" or need_type == "RAISE_ARMY":
+	if need_type == "LEVY_TROOPS":
 		contract_type = "MILITARY_SERVICE"
 	elif need_type == "UPHOLD_LAW" or need_type == "INVESTIGATE_THREAT":
 		contract_type = "MAGISTRATE_AIDE"

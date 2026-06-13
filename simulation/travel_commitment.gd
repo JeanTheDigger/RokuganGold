@@ -3,7 +3,7 @@ class_name TravelCommitment
 ## Three subsystems:
 ##   1. Travel frustration counter — penalizes repeated redirects
 ##   2. Sublocation access — gates entry to courts/private/restricted areas
-##   3. Objective stall detection — fires REASSESS_OBJECTIVE on stalled goals
+##   3. Objective stall detection — flags stalled goals for reassessment
 
 
 # =============================================================================
@@ -174,13 +174,3 @@ static func is_stalled(
 			return false
 
 	return seasons >= threshold
-
-
-static func make_reassess_need(
-	objective: Dictionary,
-) -> NPCDataStructures.ImmediateNeed:
-	var need := NPCDataStructures.ImmediateNeed.new()
-	need.need_type = "REASSESS_OBJECTIVE"
-	need.source = "stall_detection"
-	need.target_intent = objective.get("need_type", "")
-	return need
