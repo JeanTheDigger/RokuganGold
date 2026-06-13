@@ -1405,6 +1405,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 	match context_flag:
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
 			return [
+				"BEGIN_TRAVEL",
 				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
 				"PROBE", "READ_CHARACTER", "PUBLIC_DEBATE",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
@@ -1466,6 +1467,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 			]
 		Enums.ContextFlag.AT_COURT:
 			return [
+				"BEGIN_TRAVEL",
 				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
 				"PROBE", "READ_CHARACTER", "LISTEN_REFLECT", "IMPRESS",
 				"PUBLIC_DEBATE", "PUBLIC_INSULT", "PUBLIC_DECLARATION",
@@ -1509,6 +1511,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 			]
 		Enums.ContextFlag.VISITING:
 			return [
+				"BEGIN_TRAVEL",
 				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
 				"PROBE", "READ_CHARACTER", "LISTEN_REFLECT",
 				"DELIVER_GIFT", "OFFER_FAVOR", "DISCERN_NEED",
@@ -1552,6 +1555,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 			]
 		Enums.ContextFlag.ON_CAMPAIGN:
 			return [
+				"BEGIN_TRAVEL",
 				"ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST",
 				"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
 				"SCOUT_ENEMY",
@@ -1564,6 +1568,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 			]
 		Enums.ContextFlag.UNDER_SIEGE:
 			return [
+				"BEGIN_TRAVEL",
 				"CONDUCT_SORTIE", "CONDUCT_STORM_ASSAULT",
 				"NEGOTIATE_SURRENDER", "MAINTAIN_SIEGE",
 				"TREAT_WOUND",
@@ -1571,11 +1576,13 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 			]
 		Enums.ContextFlag.IN_EXILE:
 			return [
+				"BEGIN_TRAVEL",
 				"TRAIN", "MEDITATE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_TEMPLE:
 			return [
+				"BEGIN_TRAVEL",
 				"PERFORM_RITUAL", "PERFORM_WORSHIP", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"PUBLIC_ATONEMENT", "TRAIN",
 				"CHARM", "PROBE", "READ_CHARACTER",
@@ -1585,6 +1592,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 			]
 		Enums.ContextFlag.AT_DOJO:
 			return [
+				"BEGIN_TRAVEL",
 				"TRAIN", "MENTOR", "DRILL_TROOPS",
 				"CHARM", "PROBE",
 				"TREAT_WOUND",
@@ -1592,6 +1600,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 			]
 		Enums.ContextFlag.AT_WALL_TOWER:
 			return [
+				"BEGIN_TRAVEL",
 				"FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
 				"CONDUCT_SORTIE",
 				"PURIFY_TAINTED_GROUND",
