@@ -5905,6 +5905,26 @@ scored-vs-reachable, injected-vs-handled) + targeted headless probes.
   witness_report_motivated, + performance/tend-wounded handlers) route to
   `_decompose_reactive_event`; `need_type` events (HONOR_COMMITMENT, RESPOND_TO_EDICT) are
   valid NeedTypes that decompose normally.
+- **Effect-key consumption:** diffed the 409 effect keys ActionExecutor emits against
+  EffectApplicator + day_orchestrator + wave_resolver consumers. Only 3 undocumented-unconsumed
+  effect-like keys, all benign: `effective_total` (craft roll total, informational),
+  `koku_amount` (TRANSFER_KOKU result echo — the transfer is pre-applied Pattern B,
+  `character.koku -= amount; recipient.koku += amount`), `performance_applied` (Pattern B flag).
+  No dropped effects.
+
+**Runtime-verified (headless drivers):**
+- **Full travel chain executes end-to-end.** `run()` chooses BEGIN_TRAVEL carrying
+  target_settlement_id (verified through build_context → resolve_goal → _passthrough →
+  generate_options); the decision dict propagates target_settlement_id; the wave resolver's
+  `_execute_decision` reconstructs the action; `ActionExecutor.execute` fires
+  `TravelSystem.begin_travel` (started=true, origin→destination, days=1); `process_travel_tick`
+  arrives the character at the destination. (NPCDecisionEngine.execute_action only spends
+  AP/orders and returns the decision — actual effects run via ActionExecutor in the wave
+  resolver, which is why a bare `run()` shows started=false.)
+- **Arrived-target guard:** an arrived TRAVEL_TO resolves to DO_NOTHING (BEGIN_TRAVEL filtered);
+  an arrived ATTEND_COURT resolves to a court action (CHARM/DELIVER_GIFT), not no-op travel.
+- **Bribery/extortion menus generate:** SUPPRESS_INVESTIGATION (bribery_eval) surfaces all five
+  suppression actions; EXTORT_ACCUSED (extortion_opportunity) surfaces EXTORT_ACCUSED.
 
 ### Known Code Issues (found and fixed 2026-06-12, headless wall smoke test)
 - **`school_name` vestigial field — 8 production reads were dead. FIXED.** A headless smoke
