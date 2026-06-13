@@ -5851,6 +5851,36 @@ but not executed in this environment.
   (structural / FORTIFY), the Taisa (sortie / SS), and now the Kuni (spiritual / PTL), three of the
   Wall's four family roles are self-driving at the Tower (the Hida garrison itself is Phase 3).
 
+### Topic/Information Propagation Connectivity Sweep (2026-06-13)
+Produced-vs-consumed sweep of the topic-momentum / information system (s16). **Two
+unbounded-growth leaks found and fixed; one deferred (needs a GDD resolution condition).**
+- **Tier-4 topics never purged after decay. FIXED.** `process_daily_tick` appended
+  decayed Tier-4 topics to `expired_topic_ids` but never set `topic.resolved`, and the
+  orchestrator never consumed `expired_topic_ids` — so `_remove_resolved_topics` (which
+  removes only `resolved == true`) never purged them. Every gossip/minor topic that
+  decayed to momentum 0 lingered in `active_topics` forever as a zombie, re-iterated each
+  tick by `process_daily_tick` and every topic consumer. Fix: `process_daily_tick` now
+  calls `resolve_topic(topic)` when `is_topic_expired`. (The changelog had claimed this
+  was already done — it wasn't.)
+- **Insurgency crisis topics never resolved on defeat. FIXED.** Tier 1-3 crisis topics
+  never decay (`advance_crisis_momentum` only increases; `is_topic_expired` is Tier-4-only),
+  so they leak unless their crisis end resolves them. `_process_insurgencies` cleared the
+  province `active_crisis_id` on suppression but never resolved the topic → a defeated
+  insurgency's Tier 1-3 topic lingered as a phantom active crisis (growing momentum, still
+  broadcast to NPCs). Fix: `_process_insurgencies` returns `resolved_crisis_ids`; the caller
+  resolves matching `active_topics` by `crisis_id`. Famine recovery already resolved its
+  topic (line ~3469); this brings insurgency/taint/bloodspeaker crises to parity.
+- **DEFERRED — Shadowlands incursion crisis never resolved.** The `shadowlands_incursion`
+  Tier-1 topic + `crisis_type`/`active_crisis_id` are set on a wall breach (SI=0 +
+  DEFENDER_OVERRUN) but never cleared anywhere — the two `active_crisis_id = -1` sites are
+  famine + insurgency only; the incursion passes (15602 elevate, 21659 broadcast) don't
+  resolve it. So a breached province stays in permanent crisis with a leaking Tier-1 topic.
+  Unlike the two fixed leaks, the incursion has no GDD-defined "breach over" resolution
+  condition in code, and choosing one (SI recovery threshold / horde defeated / N seasons)
+  is design — blocked on the Wall Phase 3 horde-combat lifecycle (s2.4). Low frequency
+  (only on catastrophic wall failures). Needs an owner-specified resolution condition; not
+  inventing one.
+
 ### Resource/Economy Tick Connectivity Sweep (2026-06-13)
 Produced-vs-consumed sweep of the seasonal resource tick (s4.3). **One real
 computed-but-not-published bug found and fixed; everything else connected.**
