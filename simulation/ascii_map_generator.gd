@@ -977,6 +977,20 @@ static func _gen_dojo(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
 	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
 
 
+# Draws a small walled service room with one door opening into the courtyard.
+# Used for the castle compound's functional spaces (GDD s57.36.2: kitchen,
+# armoury, storehouse, stables, barracks, prison are tile-clusters within the
+# courtyard zone, not separate Lesser Zones).
+static func _service_room(
+	map: AsciiMapData,
+	x1: int, y1: int, x2: int, y2: int,
+	door_x: int, door_y: int,
+) -> void:
+	_draw_wood_box(map, x1, y1, x2, y2)
+	_fill_rect(map, x1 + 1, y1 + 1, x2 - 1, y2 - 1, Enums.TileType.FLOOR_WOOD)
+	map.set_tile(door_x, door_y, Enums.TileType.DOOR_WOOD_OPEN)
+
+
 # OUTER_COURTYARD (Castle Outer Courtyard): large open outdoor space,
 # stone paving, mustering point, bonsai display areas, garden edges.
 static func _gen_outer_courtyard(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
@@ -1005,16 +1019,55 @@ static func _gen_outer_courtyard(map: AsciiMapData, rng: RandomNumberGenerator) 
 		if map.get_tile(bx, by) == Enums.TileType.FLOOR_GRASS:
 			map.set_tile(bx, by, Enums.TileType.BUSH)
 
-	# Muster yard: a well, weapon racks along the east side, supply crates, and
-	# clan banners — clear of the north–south gate line.
-	map.set_tile(10, 15, Enums.TileType.FURNITURE_WELL)
-	map.set_tile(22, 10, Enums.TileType.FURNITURE_WEAPON_STAND)
-	map.set_tile(22, 13, Enums.TileType.FURNITURE_WEAPON_STAND)
-	map.set_tile(22, 16, Enums.TileType.FURNITURE_WEAPON_STAND)
-	map.set_tile(8, 18, Enums.TileType.FURNITURE_CRATE)
-	map.set_tile(9, 18, Enums.TileType.FURNITURE_CRATE)
-	map.set_tile(7, 5, Enums.TileType.FURNITURE_BANNER)
-	map.set_tile(23, 5, Enums.TileType.FURNITURE_BANNER)
+	# Functional service rooms line the compound, leaving the central muster lane
+	# (cols 12–18, incl. the N–S gate column) open. GDD s57.36.2: kitchen, armoury,
+	# storehouse, stables, barracks and a holding cell are tile-clusters here, not
+	# separate zones. Each room has one door opening into the yard.
+	# Kitchen (NW): kamado stoves, a utensil shelf, water jar, supplies.
+	_service_room(map, 5, 5, 11, 10, 11, 7)
+	map.set_tile(6, 6, Enums.TileType.FURNITURE_STOVE)
+	map.set_tile(7, 6, Enums.TileType.FURNITURE_STOVE)
+	map.set_tile(10, 6, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(6, 9, Enums.TileType.FURNITURE_JAR)
+	map.set_tile(10, 9, Enums.TileType.FURNITURE_CRATE)
+	# Armoury (NE): weapon and armour racks, a shelf, crates.
+	_service_room(map, 19, 5, 25, 10, 19, 7)
+	for ax in [20, 21, 22, 23]:
+		map.set_tile(ax, 6, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(24, 6, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(20, 9, Enums.TileType.FURNITURE_CRATE)
+	map.set_tile(24, 9, Enums.TileType.FURNITURE_CRATE)
+	# Storehouse / kura (W): stacked crates and shelving.
+	_service_room(map, 5, 12, 11, 18, 11, 15)
+	for cpos in [Vector2i(6, 13), Vector2i(7, 13), Vector2i(6, 14), Vector2i(7, 14)]:
+		map.set_tile(cpos.x, cpos.y, Enums.TileType.FURNITURE_CRATE)
+	map.set_tile(10, 13, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(10, 14, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(6, 17, Enums.TileType.FURNITURE_JAR)
+	# Stables (E): water troughs and feed crates along the far wall, clear of the
+	# west door so the stalls stay reachable.
+	_service_room(map, 19, 12, 25, 18, 19, 15)
+	map.set_tile(23, 13, Enums.TileType.FURNITURE_JAR)
+	map.set_tile(23, 14, Enums.TileType.FURNITURE_CRATE)
+	map.set_tile(23, 16, Enums.TileType.FURNITURE_CRATE)
+	map.set_tile(23, 17, Enums.TileType.FURNITURE_JAR)
+	# Barracks (SW): garrison bedding, a chest, weapon stand, brazier.
+	_service_room(map, 5, 20, 11, 24, 11, 22)
+	for fpos in [Vector2i(6, 21), Vector2i(7, 21), Vector2i(6, 22), Vector2i(7, 22)]:
+		map.set_tile(fpos.x, fpos.y, Enums.TileType.FURNITURE_FUTON)
+	map.set_tile(10, 21, Enums.TileType.FURNITURE_CHEST)
+	map.set_tile(10, 23, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(8, 23, Enums.TileType.FURNITURE_BRAZIER)
+	# Holding cell / prison (SE): a bare straw mat and a confiscation chest.
+	_service_room(map, 19, 20, 25, 24, 19, 22)
+	map.set_tile(20, 21, Enums.TileType.FURNITURE_FUTON)
+	map.set_tile(24, 21, Enums.TileType.FURNITURE_CHEST)
+
+	# A well in the muster lane (off the gate column) and clan banners flanking
+	# the north gate approach.
+	map.set_tile(17, 12, Enums.TileType.FURNITURE_WELL)
+	map.set_tile(13, 5, Enums.TileType.FURNITURE_BANNER)
+	map.set_tile(17, 5, Enums.TileType.FURNITURE_BANNER)
 
 	# Gate on south wall.
 	map.set_tile(MID - 1, S - 1, Enums.TileType.GATE_OPEN)
