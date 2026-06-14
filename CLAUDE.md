@@ -4796,6 +4796,34 @@ tests in `tests/test_individual_combat.gd`.
   don't auto-spawn peasant homes yet — separate integration). Other furnishable interiors
   (OHIROMA, CHASHITSU, AUDIENCE_CHAMBER, GUEST_WING) not yet furnished. The s4.4 GDD file
   was left unedited (design-file edits need separate owner approval).
+- **s4.4 Furnishings tranche 2 (public / worship / commerce / martial spaces,
+  owner-authorized all four areas 2026-06-14).** 16 new object `TileType` values
+  (43–58) — DAIS `⊓`, BANNER `╤` (passable decorative), WEAPON_STAND `Ψ`, ALTAR `⊥`,
+  OFFERING_BOX `▣`, INCENSE `§`, STATUE `☗` (blocks move+LOS), PRAYER_MAT `▭`
+  (passable), STALL `╦`, CRATE `▧`, NET `╳` (passable, blocks LOS), WELL `◉`,
+  DUMMY `‡` (makiwara), SHELF `▤` (blocks move+LOS), STOVE `◫` (kamado), BENCH `╨`
+  (passable). All wired into `MovementSystem.terrain_cost`, `AsciiMapData.is_passable`/
+  `blocks_los`/`grants_cover`, and the renderer glyph/colour tables (statue/net/shelf
+  block LOS; DAIS/WEAPON_STAND/ALTAR/OFFERING_BOX/STATUE/STALL/CRATE/WELL/DUMMY/SHELF
+  grant the +5 cover bonus). **Furnished generators:** ōhiroma (dais + weapon stands +
+  banners + braziers + petitioner cushions), enkai_hall (per-pad banquet tables +
+  cushions), audience_chamber (host seat/table/screen/weapon stand), war_council
+  (real strategy TABLE replacing the stone-floor fake; wall racks → WEAPON_STAND),
+  guest_wing (futon + chest per room), temple_grounds + castle_shrine + shrine_clearing
+  (altar, offering box, incense, komainu/Fortune statues, prayer mats), market_street
+  (vendor STALL + CRATE replacing the wood-wall fakes — the existing passage-clearing
+  pass still keeps every road approach open), docks_waterfront (quay crates/barrels +
+  drying nets), dojo (real weapon racks + training dummies), chashitsu (ro hearth +
+  mizuya shelf), pleasure_quarter (entertaining tables/cushions/screens/braziers per
+  house), government_quarter (magistrate DAIS + yoriki weapon stands + petitioner
+  cushions + accused's kneeling mat + archive shelves + document chests),
+  peasant_dwelling (kamado STOVE). Verified: generator parses clean; every furnished
+  zone renders correctly and stays fully connected across 3 seeds (the only
+  regression-flag is MOUNTAIN_PASS — an **untouched** generator with a pre-existing
+  seed-specific stranded-tile/exit quirk, out of scope here). DEFERRED: BANNER/BENCH/
+  WELL are wired but lightly used (no generator places a WELL yet); zone-flag-matrix
+  entries for PEASANT_DWELLING and the furnished zones still use the ALL_FALSE default;
+  no hazard mechanic for stove/incense/brazier. The s4.4 GDD file remains unedited.
 
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
