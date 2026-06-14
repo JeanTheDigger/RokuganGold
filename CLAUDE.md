@@ -4892,9 +4892,15 @@ tests in `tests/test_individual_combat.gd`.
   the Ohiroma+Outer Courtyard compound plus Farmland/Dwelling/Dwelling/Shrine fill with
   intact exit wiring + unique ids; coastal appends Docks; the minka generator still renders
   iso=0. Castle-seat villages (CITY_DAIMYO+ over tiny pu) trim to Farmland only (no peasant
-  homes in a castle seat — correct); military/religious settlements unaffected. LIMITATION:
-  PEASANT_DWELLING still has no ZoneFlagMatrix entry (ALL_FALSE default) — homes are
-  enterable/navigable (movement + FOV are tile-level) but expose no zone-specific actions.
+  homes in a castle seat — correct); military/religious settlements unaffected.
+  **PEASANT_DWELLING now has an explicit ZoneFlagMatrix entry (2026-06-14):** all-false,
+  closing the last "no entry" gap (verified: 0 of 26 subtypes missing). Behavior-neutral —
+  `get_flags()` already returned ALL_FALSE and `_is_zone_blocked` treats explicit-all-false
+  identically to the default. All-false is the *correct* set: every one of the 8 flags is a
+  noble art / tea / garden / bonsai / worship affordance a humble minka lacks (the village
+  shrine is the separate SHRINE_CLEARING zone), identical to RESIDENTIAL_QUARTER /
+  POOR_QUARTER. Homes remain enterable/navigable — movement, FOV, conversation and combat
+  are tile-level, never matrix-gated.
 
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
