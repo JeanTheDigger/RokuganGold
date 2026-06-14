@@ -5870,16 +5870,20 @@ unbounded-growth leaks found and fixed; one deferred (needs a GDD resolution con
   broadcast to NPCs). Fix: `_process_insurgencies` returns `resolved_crisis_ids`; the caller
   resolves matching `active_topics` by `crisis_id`. Famine recovery already resolved its
   topic (line ~3469); this brings insurgency/taint/bloodspeaker crises to parity.
-- **DEFERRED — Shadowlands incursion crisis never resolved.** The `shadowlands_incursion`
-  Tier-1 topic + `crisis_type`/`active_crisis_id` are set on a wall breach (SI=0 +
-  DEFENDER_OVERRUN) but never cleared anywhere — the two `active_crisis_id = -1` sites are
-  famine + insurgency only; the incursion passes (15602 elevate, 21659 broadcast) don't
-  resolve it. So a breached province stays in permanent crisis with a leaking Tier-1 topic.
-  Unlike the two fixed leaks, the incursion has no GDD-defined "breach over" resolution
-  condition in code, and choosing one (SI recovery threshold / horde defeated / N seasons)
-  is design — blocked on the Wall Phase 3 horde-combat lifecycle (s2.4). Low frequency
-  (only on catastrophic wall failures). Needs an owner-specified resolution condition; not
-  inventing one.
+- **Shadowlands incursion crisis never resolved. FIXED (owner decision 2026-06-14).**
+  The `shadowlands_incursion` Tier-1 topic + `crisis_type`/`active_crisis_id` are set on a
+  wall breach (SI=0 + DEFENDER_OVERRUN) but were never cleared anywhere (the two
+  `active_crisis_id = -1` sites were famine + insurgency only), so a breached province stayed
+  in permanent crisis with a leaking Tier-1 topic. The GDD is silent on the crisis-resolution
+  threshold, so the owner chose: **the incursion clears once the breached province's wall is
+  resealed — `wall_si` restored above 0** (GDD s2.4: SEAL_WALL_BREACH restores SI; the breach
+  was set at SI=0). `_process_horde_assaults` now runs a resolution pass each tick (it runs
+  unconditionally) before the assault loop: a province stays breached while ANY of its
+  WALL_TOWER settlements is at `wall_si <= 0`; once all are resealed, it clears
+  `active_crisis_id`/`crisis_type` and resolves the matching Tier-1 topic (by `crisis_id`),
+  which `_remove_resolved_topics` then purges. Placed before the breach loop so a fresh
+  breach the same tick re-fires the crisis. Runtime-verified (SI=0 → persists; SI>0 →
+  cleared + topic resolved).
 
 ### Resource/Economy Tick Connectivity Sweep (2026-06-13)
 Produced-vs-consumed sweep of the seasonal resource tick (s4.3). **One real

@@ -2900,6 +2900,33 @@ static func _process_horde_assaults(
 		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
 			wall_by_province[s.province_id] = s
 
+	# Shadowlands incursion resolution (owner decision 2026-06-14): a breach crisis
+	# clears once the breached province's wall is resealed — wall_si restored above 0
+	# (GDD s2.4: SEAL_WALL_BREACH restores SI; the breach was set at SI=0). A province
+	# stays breached while ANY of its wall towers is at SI<=0. Runs before this tick's
+	# assaults, so a fresh breach below re-fires the crisis (active_crisis_id<0 again).
+	var province_breached: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER and s.wall_si <= 0:
+			province_breached[s.province_id] = true
+	for pid_v: Variant in provinces:
+		var prov_r: Variant = provinces[pid_v]
+		if not prov_r is ProvinceData:
+			continue
+		var pdr: ProvinceData = prov_r as ProvinceData
+		if pdr.crisis_type != "shadowlands_incursion":
+			continue
+		if province_breached.has(pdr.province_id):
+			continue  # still breached — at least one tower at SI<=0
+		var cleared_crisis: int = pdr.active_crisis_id
+		pdr.active_crisis_id = -1
+		pdr.crisis_type = ""
+		if cleared_crisis >= 0:
+			for tv_r: Variant in active_topics:
+				if tv_r is TopicData and not (tv_r as TopicData).resolved \
+						and (tv_r as TopicData).crisis_id == cleared_crisis:
+					TopicMomentumSystem.resolve_topic(tv_r as TopicData)
+
 	for horde: HordeData in active_hordes:
 		if not horde.assault_resolved:
 			continue
