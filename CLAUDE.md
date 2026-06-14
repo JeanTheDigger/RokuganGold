@@ -4838,6 +4838,25 @@ tests in `tests/test_individual_combat.gd`.
   stay fully connected across 3 seeds (wall_tower's iso=4 is the pre-existing corner
   battlement crenellations on the outer wall, not the furnished interior). The WELL tile
   now has a producer (courtyard + tsuboniwa). The s4.4 GDD file remains unedited.
+- **s4.4/s57.36.2 Castle service rooms (manor-completeness audit + build, 2026-06-14).**
+  Audited the manor/castle room set against GDD s57.36. Verdict: the **11 Castle
+  Interior Lesser Zone subtypes** (s57.36.3 — OHIROMA, ENKAI_HALL, AUDIENCE_CHAMBER,
+  CHASHITSU, GUEST_WING, LORD_QUARTERS, WAR_COUNCIL_ROOM, DOJO, OUTER_COURTYARD,
+  TSUBONIWA, CASTLE_SHRINE) are **all implemented and furnished** — nothing missing at
+  the room/zone level; the rank-scaling tiers (s57.36.2) draw only from these. GDD
+  s57.36.2 line 49 is explicit that the **functional spaces (BARRACKS, ARMORY, KITCHEN,
+  STOREROOM, PRISON, STABLES) are NOT separate Lesser Zones** — they are tile-clusters
+  within whichever zone they occupy. The courtyard previously had none, so added them:
+  new `_service_room()` helper draws a small walled room with one yard-facing door, and
+  `_gen_outer_courtyard` now lines the compound with six rooms (kitchen=kamado stoves +
+  shelf + jar; armoury=weapon racks + shelf + crates; storehouse/kura=crates + shelving;
+  stables=troughs + feed; barracks=futons + chest + weapon stand + brazier; holding
+  cell=straw mat + chest) around an open central muster lane (cols 12–18, incl. the N–S
+  gate column) with a well + banners. GDD does NOT model a bath (furo) or genkan as
+  either a zone or a cluster, so those are out of scope, not gaps. Verified iso=0 and
+  both gates reachable across 3 seeds (fixed two build-time seals: a trough on the
+  stables door tile, and feed crates boxing the far corners). The s4.4/s57.36 GDD files
+  remain unedited.
 
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
