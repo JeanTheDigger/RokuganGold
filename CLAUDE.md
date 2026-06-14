@@ -4761,6 +4761,42 @@ tests in `tests/test_individual_combat.gd`.
   for shugenja, katana+wakizashi fallback for all others; yumi added when Kyujutsu trained.
   14 tests in `tests/test_individual_combat.gd`.
 
+### Systems Added 2026-06-14 (Furniture / furnishings for lived-in interiors)
+- **s4.4 Furnishings & Objects (first tranche — residential interiors, owner-authorized
+  2026-06-14).** Implements the s4.4 "Remaining Tile Categories: *furnishings and
+  objects*" for lived-in spaces (peasant + noble), following the locked rendering
+  principles (symbol=type, colour=context, low visual weight). The GDD s4.4 line 121
+  anticipates this category but leaves the specific tiles/properties to be "defined
+  during engine development"; the owner approved the specific tile set, properties, and
+  placement (did NOT authorize editing the /gdd/ s4.4 file — this is an implementation
+  record only). **Eight new `TileType` values** (35–42), each with
+  movement/LOS/cover properties: FURNITURE_FUTON `▬` (passable), FURNITURE_HEARTH `▦`
+  (blocks move), FURNITURE_CHEST `▥` (blocks move + LOS, cover), FURNITURE_TABLE `╥`
+  (blocks move, cover), FURNITURE_JAR `◍` (blocks move, cover), FURNITURE_SCREEN `║`
+  (byōbu — passable, blocks LOS), FURNITURE_BRAZIER `†` (blocks move), FURNITURE_CUSHION
+  `▫` (passable). **Wiring:** `MovementSystem.terrain_cost` + `AsciiMapData.is_passable`
+  (blocking furniture impassable — pathfinding routes around it); `AsciiMapData.blocks_los`
+  (chest + screen block sight for FOV/stealth); new `AsciiMapData.grants_cover()` +
+  `AsciiMapCombatOrchestrator._cover_bonus()` wired into melee AND ranged resolution —
+  a defender shielded by a cover-granting furnishing on the tile toward the attacker
+  gains `COVER_ARMOR_TN_BONUS = +5` Armor TN (reuses the s40 ruined-structure cover
+  value); `AsciiMapGenerator.get_glyph`/`get_fg_color` tables for the renderer.
+  **Content:** new `ZoneSubtype.PEASANT_DWELLING` (43) + `_gen_peasant_dwelling` — a
+  single-room minka with an earthen doma entry, central irori hearth + flanking
+  cushions, sleeping mats, a tansu, a water jar, and a low table; `_gen_lord_quarters`
+  furnished (writing table + cushions, byōbu screen, brazier, tansu in the main
+  chamber; desk + chest in the study; futons + chest + brazier in the sleeping
+  chamber). Verified: all 8 tiles match the approved passable/LOS/cover table; peasant
+  dwelling (898/898) and furnished lord quarters (679/679) render correctly and stay
+  fully connected (furniture never seals a room); all 26 zones pass the exit-reachability
+  regression. LIMITATIONS / DEFERRED: "hazard" furniture (hearth/brazier) blocks
+  movement but has no burn-damage mechanic (no hazard system; not invented). Cover is a
+  simple one-tile-toward-attacker check (no multi-tile line-of-cover math). PEASANT_DWELLING
+  is generatable + renderable but not yet wired into `SettlementZoneBuilder` (villages
+  don't auto-spawn peasant homes yet — separate integration). Other furnishable interiors
+  (OHIROMA, CHASHITSU, AUDIENCE_CHAMBER, GUEST_WING) not yet furnished. The s4.4 GDD file
+  was left unedited (design-file edits need separate owner approval).
+
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
 via headless largest-connected-component analysis + per-exit reachability check
