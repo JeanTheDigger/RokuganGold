@@ -829,6 +829,23 @@ enum TileType {
 	FURNITURE_SCREEN  = 40,  # ║  byōbu folding screen — passable, blocks LOS
 	FURNITURE_BRAZIER = 41,  # †  brazier / lantern stand — blocks move
 	FURNITURE_CUSHION = 42,  # ▫  zabuton cushion — passable, no LOS block
+	# Furnishings, tranche 2 — public / worship / commerce / martial spaces.
+	FURNITURE_DAIS         = 43,  # ⊓  raised seat of authority — blocks move, cover
+	FURNITURE_BANNER       = 44,  # ╤  hanging banner / noren — passable, decorative
+	FURNITURE_WEAPON_STAND = 45,  # Ψ  katana-kake / weapon / armor rack — blocks move, cover
+	FURNITURE_ALTAR        = 46,  # ⊥  shrine altar — blocks move, cover
+	FURNITURE_OFFERING_BOX = 47,  # ▣  saisen offering box — blocks move, cover
+	FURNITURE_INCENSE      = 48,  # §  incense burner / censer — blocks move
+	FURNITURE_STATUE       = 49,  # ☗  idol / komainu / Fortune statue — blocks move + LOS, cover
+	FURNITURE_PRAYER_MAT   = 50,  # ▭  prayer mat — passable
+	FURNITURE_STALL        = 51,  # ╦  market stall / vendor counter — blocks move, cover
+	FURNITURE_CRATE        = 52,  # ▧  crate / barrel / sacks / baskets — blocks move, cover
+	FURNITURE_NET          = 53,  # ╳  fishing net / drying rack — passable, blocks LOS
+	FURNITURE_WELL         = 54,  # ◉  well — blocks move, cover
+	FURNITURE_DUMMY        = 55,  # ‡  training dummy / makiwara — blocks move, cover
+	FURNITURE_SHELF        = 56,  # ▤  shelf / cupboard / mizuya — blocks move + LOS, cover
+	FURNITURE_STOVE        = 57,  # ◫  kamado cooking stove — blocks move
+	FURNITURE_BENCH        = 58,  # ╨  bench / stool — passable
 }
 
 # -- s45 Advantages ------------------------------------------------------------

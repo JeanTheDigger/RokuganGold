@@ -104,7 +104,19 @@ static func is_passable(tile: int) -> bool:
 		Enums.TileType.FURNITURE_CHEST, \
 		Enums.TileType.FURNITURE_TABLE, \
 		Enums.TileType.FURNITURE_JAR, \
-		Enums.TileType.FURNITURE_BRAZIER:
+		Enums.TileType.FURNITURE_BRAZIER, \
+		Enums.TileType.FURNITURE_DAIS, \
+		Enums.TileType.FURNITURE_WEAPON_STAND, \
+		Enums.TileType.FURNITURE_ALTAR, \
+		Enums.TileType.FURNITURE_OFFERING_BOX, \
+		Enums.TileType.FURNITURE_INCENSE, \
+		Enums.TileType.FURNITURE_STATUE, \
+		Enums.TileType.FURNITURE_STALL, \
+		Enums.TileType.FURNITURE_CRATE, \
+		Enums.TileType.FURNITURE_WELL, \
+		Enums.TileType.FURNITURE_DUMMY, \
+		Enums.TileType.FURNITURE_SHELF, \
+		Enums.TileType.FURNITURE_STOVE:
 			return false
 		_:
 			return true
@@ -125,7 +137,10 @@ static func blocks_los(tile: int) -> bool:
 		Enums.TileType.GATE_CLOSED, \
 		Enums.TileType.FIRE, \
 		Enums.TileType.FURNITURE_CHEST, \
-		Enums.TileType.FURNITURE_SCREEN:
+		Enums.TileType.FURNITURE_SCREEN, \
+		Enums.TileType.FURNITURE_STATUE, \
+		Enums.TileType.FURNITURE_NET, \
+		Enums.TileType.FURNITURE_SHELF:
 			return true
 		_:
 			return false
@@ -138,7 +153,17 @@ static func grants_cover(tile: int) -> bool:
 	match tile:
 		Enums.TileType.FURNITURE_CHEST, \
 		Enums.TileType.FURNITURE_TABLE, \
-		Enums.TileType.FURNITURE_JAR:
+		Enums.TileType.FURNITURE_JAR, \
+		Enums.TileType.FURNITURE_DAIS, \
+		Enums.TileType.FURNITURE_WEAPON_STAND, \
+		Enums.TileType.FURNITURE_ALTAR, \
+		Enums.TileType.FURNITURE_OFFERING_BOX, \
+		Enums.TileType.FURNITURE_STATUE, \
+		Enums.TileType.FURNITURE_STALL, \
+		Enums.TileType.FURNITURE_CRATE, \
+		Enums.TileType.FURNITURE_WELL, \
+		Enums.TileType.FURNITURE_DUMMY, \
+		Enums.TileType.FURNITURE_SHELF:
 			return true
 		_:
 			return false
