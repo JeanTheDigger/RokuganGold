@@ -246,6 +246,16 @@ static func _gen_market_street(map: AsciiMapData, rng: RandomNumberGenerator) ->
 		map.set_tile(i, 18, Enums.TileType.WALL_WOOD)
 		map.set_tile(i + 1, 18, Enums.TileType.WALL_WOOD)
 
+	# Vendor stalls must never seal a passage to the road. Wherever an open tile
+	# (a shop door or an inter-shop alley gap) sits directly above row 12 or
+	# below row 18, clear the stall in front of it so every passage reaches the
+	# central road band. Stalls in front of solid shop walls remain.
+	for x in range(1, S - 1):
+		if _is_passable_floor(map.get_tile(x, 11)):
+			map.set_tile(x, 12, Enums.TileType.FLOOR_STONE)
+		if _is_passable_floor(map.get_tile(x, 19)):
+			map.set_tile(x, 18, Enums.TileType.FLOOR_STONE)
+
 	# Zone exits: openings in west and east perimeter walls on the road centre row.
 	map.set_tile(0, MID, Enums.TileType.ZONE_EXIT)
 	map.set_tile(S - 1, MID, Enums.TileType.ZONE_EXIT)
@@ -394,11 +404,14 @@ static func _gen_forest_path(map: AsciiMapData, rng: RandomNumberGenerator) -> v
 			if side >= 0 and side < S:
 				map.set_tile(side, y, Enums.TileType.BUSH)
 
-	# Zone exits.
-	map.set_tile(MID, 0, Enums.TileType.ZONE_EXIT)
+	# Zone exits sit on the path where it meets each edge. The south end is
+	# always at MID (the loop starts there); the north end follows the drifted
+	# path_x so the exit never lands in the trees.
+	var north_x: int = path_x
+	map.set_tile(north_x, 0, Enums.TileType.ZONE_EXIT)
 	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
 	map.exits = [
-		{x = MID, y = 0, direction = "north", target_zone_id = ""},
+		{x = north_x, y = 0, direction = "north", target_zone_id = ""},
 		{x = MID, y = S - 1, direction = "south", target_zone_id = ""},
 	]
 
@@ -455,9 +468,15 @@ static func _gen_residential_quarter(
 			_fill_rect(map, ox + 1, oy + 1,
 				ox + plot_w - 2, oy + plot_h - 2,
 				Enums.TileType.FLOOR_WOOD)
-			# Door on south face.
+			# Door faces the adjacent alley. South face when an alley lies below;
+			# bottom-row plots open north instead so the door never abuts the
+			# perimeter wall (which would seal the interior).
 			var door_x: int = ox + plot_w / 2
-			map.set_tile(door_x, oy + plot_h - 1, Enums.TileType.DOOR_WOOD_OPEN)
+			var south_row: int = oy + plot_h - 1
+			if south_row + 1 <= S - 2:
+				map.set_tile(door_x, south_row, Enums.TileType.DOOR_WOOD_OPEN)
+			else:
+				map.set_tile(door_x, oy, Enums.TileType.DOOR_WOOD_OPEN)
 
 	# Small shrine in south-east corner (overwriting one house plot).
 	var sx: int = 1 + 2 * (plot_w + 1)
@@ -465,14 +484,24 @@ static func _gen_residential_quarter(
 	if sx + 7 < S and sy + 7 < S:
 		_fill_rect(map, sx, sy, sx + plot_w - 1, sy + plot_h - 1, Enums.TileType.FLOOR_STONE)
 		_draw_stone_border(map, sx, sy, sx + plot_w - 1, sy + plot_h - 1)
-		map.set_tile(sx + plot_w / 2, sy + plot_h - 1, Enums.TileType.DOOR_SHOJI_OPEN)
+		# North face — the shrine sits in the bottom-right plot, whose south wall
+		# abuts the perimeter; opening north reaches the y=20 alley.
+		var shrine_south: int = sy + plot_h - 1
+		if shrine_south + 1 <= S - 2:
+			map.set_tile(sx + plot_w / 2, shrine_south, Enums.TileType.DOOR_SHOJI_OPEN)
+		else:
+			map.set_tile(sx + plot_w / 2, sy, Enums.TileType.DOOR_SHOJI_OPEN)
 
-	# Zone exits.
-	map.set_tile(0, MID, Enums.TileType.ZONE_EXIT)
-	map.set_tile(S - 1, MID, Enums.TileType.ZONE_EXIT)
+	# Zone exits sit on the open inter-plot alleys (y=10 and y=20), not the map
+	# mid-row — MID lands on the middle row of houses, which would wall the exit
+	# off from the interior.
+	var west_exit_y: int = 1 + plot_h  # 10: alley between plot rows 0 and 1
+	var east_exit_y: int = 1 + 2 * plot_h + 1  # 20: alley between rows 1 and 2
+	map.set_tile(0, west_exit_y, Enums.TileType.ZONE_EXIT)
+	map.set_tile(S - 1, east_exit_y, Enums.TileType.ZONE_EXIT)
 	map.exits = [
-		{x = 0, y = MID, direction = "west", target_zone_id = ""},
-		{x = S - 1, y = MID, direction = "east", target_zone_id = ""},
+		{x = 0, y = west_exit_y, direction = "west", target_zone_id = ""},
+		{x = S - 1, y = east_exit_y, direction = "east", target_zone_id = ""},
 	]
 
 
@@ -790,7 +819,9 @@ static func _gen_dojo(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
 	map.set_tile(5, S - 6, Enums.TileType.WALL_WOOD)
 	map.set_tile(S - 6, S - 6, Enums.TileType.WALL_WOOD)
 
-	# Entrance south.
+	# Entrance south. Clear any weapon rack on the threshold tile so the exit
+	# connects to the training floor.
+	map.set_tile(MID, S - 2, Enums.TileType.FLOOR_WOOD)
 	map.set_tile(MID, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
 	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
 	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
@@ -887,6 +918,9 @@ static func _gen_tsuboniwa(map: AsciiMapData, rng: RandomNumberGenerator) -> voi
 	map.set_tile(MID, S - 4, Enums.TileType.DOOR_SHOJI_OPEN)
 	_fill_rect(map, 3, S - 3, S - 4, S - 3, Enums.TileType.FLOOR_WOOD)
 
+	# Carve the threshold (S-2 row is otherwise the surrounding wall) so the
+	# exit connects through the veranda to the garden.
+	map.set_tile(MID, S - 2, Enums.TileType.FLOOR_WOOD)
 	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
 	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
 
@@ -1040,12 +1074,14 @@ static func _gen_poor_quarter(map: AsciiMapData, rng: RandomNumberGenerator) -> 
 		if map.get_tile(mx, my) == Enums.TileType.FLOOR_DIRT:
 			map.set_tile(mx, my, Enums.TileType.FLOOR_MUD)
 
-	# Zone exits east and west.
-	map.set_tile(0, MID, Enums.TileType.ZONE_EXIT)
-	map.set_tile(S - 1, MID, Enums.TileType.ZONE_EXIT)
+	# Zone exits east and west, placed on the open alley between shack rows
+	# (MID itself lands on a shack row, which would wall the exit off).
+	var alley_y: int = 1 + 2 * (plot_h + 1) - 1
+	map.set_tile(0, alley_y, Enums.TileType.ZONE_EXIT)
+	map.set_tile(S - 1, alley_y, Enums.TileType.ZONE_EXIT)
 	map.exits = [
-		{x = 0, y = MID, direction = "west", target_zone_id = ""},
-		{x = S - 1, y = MID, direction = "east", target_zone_id = ""},
+		{x = 0, y = alley_y, direction = "west", target_zone_id = ""},
+		{x = S - 1, y = alley_y, direction = "east", target_zone_id = ""},
 	]
 
 
@@ -1322,3 +1358,17 @@ static func _str_to_seed(s: String) -> int:
 		h = h ^ s.unicode_at(i)
 		h = (h * 0x01000193) & 0xFFFFFFFF
 	return h
+
+
+# True for floor/open-door tiles that a walker can stand on (used by generators
+# to detect passages that must not be sealed by decorative features).
+static func _is_passable_floor(t: int) -> bool:
+	match t:
+		Enums.TileType.FLOOR_GRASS, Enums.TileType.FLOOR_DIRT, \
+		Enums.TileType.FLOOR_WOOD, Enums.TileType.FLOOR_TATAMI, \
+		Enums.TileType.FLOOR_STONE, Enums.TileType.FLOOR_MUD, \
+		Enums.TileType.FLOOR_SNOW, Enums.TileType.FLOOR_SAND, \
+		Enums.TileType.DOOR_SHOJI_OPEN, Enums.TileType.DOOR_WOOD_OPEN, \
+		Enums.TileType.GATE_OPEN, Enums.TileType.ZONE_EXIT:
+			return true
+	return false
