@@ -2446,7 +2446,21 @@ costs, or forward-wiring. Do not treat as bugs.
   `hierarchy_cascade_results` arrays.
 
 ### Known Technical Notes
-- **AT_DOJO context flag unassigned.** Dojos exist as ZoneSubtype.DOJO (sub-settlement). The zone system data is in place; the `_set_dojo_context_flag()` pass needs to be written once a dojo's settlement presence is queryable. Monk dojo paths currently fall through to AT_OWN_HOLDINGS.
+- **AT_DOJO / AT_TEMPLE / AT_WALL_TOWER context — WIRED (verified 2026-06-14).** All
+  three single-purpose zone contexts set BOTH `context_flag` AND `zone_subtype` in
+  per-character world_states, so the ZoneFlagMatrix gates actions there. `_set_dojo_context_flags`
+  keys on `SettlementData.has_dojo` (set at world gen on each Great Clan champion's family
+  castle — consistent with the zone builder, which grants a DOJO Lesser Zone only at the
+  inferred CLAN_CHAMPION/IMPERIAL rank) plus the Imperial Capital; `_set_temple_context_flags`
+  keys on RELIGIOUS_SETTLEMENT_TYPES → TEMPLE_GROUNDS; `_set_wall_tower_context_flags` →
+  WALL_TOWER. Precedence: AT_COURT > AT_WALL_TOWER > AT_TEMPLE > AT_DOJO. Runtime-verified
+  end to end: a monk at a champion-castle dojo gets AT_DOJO + DOJO zone_subtype → PERFORM_RITUAL
+  and PUBLIC_PERFORMANCE are zone-blocked (a dojo has no shrine/performance space); a monk at a
+  temple gets AT_TEMPLE + TEMPLE_GROUNDS → both allowed (the 4 gated actions are the
+  performance/worship pair). The multi-zone contexts (AT_OWN_HOLDINGS / AT_COURT / VISITING)
+  intentionally leave `zone_subtype` unset so those actions are NOT zone-gated — a character at
+  a castle could be in any of its zones (shrine, garden, chashitsu), so gating to one sub-zone
+  would wrongly block actions the settlement supports. Permissive is the correct NPC abstraction.
 - **ON_CAMPAIGN, UNDER_SIEGE, IN_EXILE context flags unassigned.** These require sub-tile army position tracking from s11.7a. Characters in these states currently fall through to AT_OWN_HOLDINGS or VISITING. Implement when army movement data is available.
 - **Unbounded array growth.** `crime_records`, `pending_letters`, `active_secrets` grow monotonically. Retention window design decisions needed before adding automatic purges beyond the existing seasonal cleanups.
 
