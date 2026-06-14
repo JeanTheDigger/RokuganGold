@@ -4761,6 +4761,46 @@ tests in `tests/test_individual_combat.gd`.
   for shugenja, katana+wakizashi fallback for all others; yumi added when Kyujutsu trained.
   14 tests in `tests/test_individual_combat.gd`.
 
+### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
+Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
+via headless largest-connected-component analysis + per-exit reachability check
+(two/three seeds each, closed doors treated as traversable). Six generators were
+producing maps where passable space was sealed off or a zone exit could not be
+reached from the interior — a walker entering via that exit would be stranded.
+Determinism was already perfect (FNV-1a seed) and unaffected by the fixes.
+- **MARKET_STREET (67%→100%). FIXED.** Vendor stalls placed on the road edges
+  (rows 12/18) AFTER the shops sealed shop doors AND the inter-shop alley gaps
+  whenever a stall landed in front of an open passage. The door-only clear was
+  insufficient (it missed the vertical alleys between shops). Now clears the
+  stall in front of ANY open tile on rows 11/19 (door or alley) via a new
+  `_is_passable_floor()` helper.
+- **RESIDENTIAL_QUARTER (73%→100%). FIXED.** Two bugs: (1) bottom-row house
+  doors (and the shrine door) opened onto the row-30 perimeter wall, sealing
+  those interiors — doors now face the adjacent alley (north face when the
+  south face abuts the perimeter); (2) the west/east exits sat at y=MID=15,
+  which lands on the middle house row, so each exit tile was walled off from
+  the interior — exits moved onto the open inter-plot alley rows (y=10, y=20).
+- **POOR_QUARTER. FIXED.** Same MID-on-a-shack-row exit bug as residential;
+  exits moved to the open alley row (y=14).
+- **DOJO. FIXED.** The south exit at (15,30) was blocked by a weapon rack the
+  rack loop (`range(3, S-3, 3)`) placed at (15,29). Threshold tile cleared.
+- **TSUBONIWA. FIXED.** The south exit was separated from the veranda by the
+  surrounding-wall row (S-2); the engawa only reached S-3. Threshold carved.
+- **FOREST_PATH. FIXED.** The north exit was hard-coded at (MID,0) but the
+  dirt path meanders via per-row `path_x` drift, so the exit landed in the
+  trees on seeds where the path drifted off-centre. The exit now follows the
+  path's actual top tile (`path_x` after the loop); the south end is always MID
+  (the loop starts there).
+- **ROAD — not a bug (left as designed).** Its ~23–40 "isolated" passable
+  tiles are roadside grass scattered within the intentional dense tree
+  shoulders (cols 0–2 / 28–30, 2/3 trees). The road corridor (cols 5–25) and
+  both exits are fully reachable; the trapped grass is inaccessible scenery,
+  the same pattern as FOREST_PATH's tree field. No change.
+- **Cosmetic note (not fixed — no invented behavior).** RESIDENTIAL_QUARTER and
+  DOJO generators call no `rng` for structure, so every instance is identical
+  regardless of seed (still deterministic, just seed-invariant). Adding layout
+  variation would be new behavior; left for a future authorized pass.
+
 ### Known Code Issues (found and fixed 2026-06-06, ASCII map combat sweep)
 Post-implementation bug sweeps across the new ASCII map combat layer and the
 template generators it depends on. Faithful summary of the fixes that landed:
