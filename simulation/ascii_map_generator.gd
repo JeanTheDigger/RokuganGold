@@ -853,6 +853,16 @@ static func _gen_guest_wing(map: AsciiMapData, rng: RandomNumberGenerator) -> vo
 		map.set_tile(ox + room_w - 2, MID + 3, Enums.TileType.FURNITURE_CHEST)
 		map.set_tile(ox + room_w / 2, MID + 2, Enums.TileType.DOOR_SHOJI_OPEN)
 
+	# Furo (communal bath house): the south-east guest room is a bath rather than
+	# bedding. Wood floor, a sunken soaking tub, a washing bench and rinse jar, and
+	# a kama (stove) heating the bath water. Overwrites that room's futon/chest.
+	var fox: int = 2 + 2 * (room_w + 2)
+	_fill_rect(map, fox + 1, MID + 3, fox + room_w - 2, S - 3, Enums.TileType.FLOOR_WOOD)
+	_fill_rect(map, fox + 3, S - 5, fox + 5, S - 4, Enums.TileType.WATER_SHALLOW)
+	map.set_tile(fox + 1, S - 5, Enums.TileType.FURNITURE_BENCH)
+	map.set_tile(fox + 1, S - 3, Enums.TileType.FURNITURE_JAR)
+	map.set_tile(fox + room_w - 2, S - 4, Enums.TileType.FURNITURE_STOVE)
+
 	# Entrance on west.
 	map.set_tile(0, MID, Enums.TileType.DOOR_WOOD_OPEN)
 	map.set_tile(0, MID, Enums.TileType.ZONE_EXIT)
@@ -900,6 +910,13 @@ static func _gen_lord_quarters(map: AsciiMapData, rng: RandomNumberGenerator) ->
 	map.set_tile(8, 22, Enums.TileType.FURNITURE_FUTON)
 	map.set_tile(11, 27, Enums.TileType.FURNITURE_CHEST)
 	map.set_tile(4, 27, Enums.TileType.FURNITURE_BRAZIER)
+
+	# Genkan (entrance vestibule): a lowered stone doma just inside the west door
+	# where footwear is removed, with a getabako (footwear shelf) and a bench to
+	# sit on. The raised wood corridor begins beyond it.
+	_fill_rect(map, 1, MID - 1, 2, MID + 1, Enums.TileType.FLOOR_STONE)
+	map.set_tile(2, MID - 2, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(1, MID - 2, Enums.TileType.FURNITURE_BENCH)
 
 	# Entrance on west wall.
 	map.set_tile(0, MID, Enums.TileType.DOOR_WOOD_OPEN)
