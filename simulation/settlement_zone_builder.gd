@@ -21,6 +21,11 @@ const PU_TOWN: int = 500
 const PU_CITY: int = 2000
 const PU_MAJOR: int = 5000
 
+# Number of enterable peasant-home (minka) Lesser Zones a village spawns. A
+# representation choice — village population_pu is a small abstract number, so
+# this is a fixed structural count (not a GDD value), like the other pool sizes.
+const VILLAGE_PEASANT_HOMES: int = 2
+
 # Castle interior zone subtype lists by lord rank (s57.36.2 LOCKED).
 # Array index == Enums.LordRank enum value (0 = VILLAGE_HEADMAN … 5 = IMPERIAL).
 const CASTLE_SUBTYPES_BY_RANK: Array = [
@@ -248,8 +253,12 @@ static func _civilian_pool(stype: int, pu: int, is_coastal: bool) -> Array:
 			mp.append(Enums.ZoneSubtype.TEMPLE_GROUNDS)
 		return mp
 
-	if pu < PU_TOWN:  # Village: 2–3 total zones
-		var p: Array = [Enums.ZoneSubtype.FARMLAND, Enums.ZoneSubtype.SHRINE_CLEARING]
+	if pu < PU_TOWN:  # Village: farmland + peasant homes + shrine (+ docks if coastal)
+		var p: Array = [Enums.ZoneSubtype.FARMLAND]
+		# Enterable peasant homes (minka) — the village's living quarters.
+		for _h: int in range(VILLAGE_PEASANT_HOMES):
+			p.append(Enums.ZoneSubtype.PEASANT_DWELLING)
+		p.append(Enums.ZoneSubtype.SHRINE_CLEARING)
 		if is_coastal:
 			p.append(Enums.ZoneSubtype.DOCKS_WATERFRONT)
 		return p
@@ -375,4 +384,5 @@ static func _urban_name(subtype: int) -> String:
 		Enums.ZoneSubtype.GOVERNMENT_QUARTER:  return "Government Quarter"
 		Enums.ZoneSubtype.FARMLAND:            return "Farmland"
 		Enums.ZoneSubtype.SHRINE_CLEARING:     return "Shrine Clearing"
+		Enums.ZoneSubtype.PEASANT_DWELLING:    return "Peasant Dwelling"
 		_:                                      return "Zone"
