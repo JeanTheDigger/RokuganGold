@@ -4879,6 +4879,22 @@ tests in `tests/test_individual_combat.gd`.
   furnished — the audit's only two genuine gaps are closed. Remaining furniture-bare zones
   (road, forest_path, farmland, river_crossing, mountain_pass) are outdoor wilderness and
   correctly bare. s4.4/s57.36 GDD files remain unedited.
+- **s4.4 PEASANT_DWELLING wired into the village zone builder (2026-06-14).** The
+  PEASANT_DWELLING minka generator existed but `SettlementZoneBuilder` never placed it —
+  villages spawned only Farmland + Shrine Clearing (no homes). The village civilian pool
+  now includes enterable peasant-home Lesser Zones: a village's fill is Farmland →
+  Peasant Dwelling ×`VILLAGE_PEASANT_HOMES` (=2, a structural representation count — village
+  population_pu is a small abstract number, so no meaningful scaling; documented non-GDD
+  like the other pool sizes) → Shrine Clearing (+ Docks if coastal), each home a unique
+  zone_id chained by exits. `_urban_name()` names PEASANT_DWELLING ("Peasant Dwelling")
+  instead of the "Zone" fallback. Live at world gen (`SettlementZoneBuilder.build` runs per
+  settlement in `world_bootstrap.gd:917`). Verified: parses clean; headman village builds
+  the Ohiroma+Outer Courtyard compound plus Farmland/Dwelling/Dwelling/Shrine fill with
+  intact exit wiring + unique ids; coastal appends Docks; the minka generator still renders
+  iso=0. Castle-seat villages (CITY_DAIMYO+ over tiny pu) trim to Farmland only (no peasant
+  homes in a castle seat — correct); military/religious settlements unaffected. LIMITATION:
+  PEASANT_DWELLING still has no ZoneFlagMatrix entry (ALL_FALSE default) — homes are
+  enterable/navigable (movement + FOV are tile-level) but expose no zone-specific actions.
 
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
