@@ -4868,6 +4868,17 @@ tests in `tests/test_individual_combat.gd`.
   water; the other five rooms remain bedrooms. Verified: both zones iso=0 with reachable
   exits across 3 seeds; full all-zone regression = 0 unreachable exits. s4.4/s57.36 GDD
   files remain unedited.
+- **s4.4 Ōhiroma genkan + dojo kamiza (manor polish, owner-authorized 2026-06-14).**
+  Follow-up audit found the genkan was only at the private lord's quarters; the grandest
+  formal genkan belongs at the ŌHIROMA (great hall — the castle's ceremonial public
+  entrance). Added a lowered stone doma vestibule inside the great hall's south doors,
+  framed by getabako shelves + waiting benches. Also furnished the DOJO's kamiza (it
+  existed as a bare stone alcove): a kamidana (ALTAR) flanked by INCENSE with a PRAYER_MAT
+  before it. Verified: both zones iso=0 with reachable exits across 3 seeds; full all-zone
+  regression = 0 unreachable exits. With this the manor interior set is complete and
+  furnished — the audit's only two genuine gaps are closed. Remaining furniture-bare zones
+  (road, forest_path, farmland, river_crossing, mountain_pass) are outdoor wilderness and
+  correctly bare. s4.4/s57.36 GDD files remain unedited.
 
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
