@@ -103,6 +103,15 @@ const ASSAULT_SI_HIT: Dictionary = {
 	Enums.HordeBattleOutcome.DEFENDER_OVERRUN: 4,
 }
 
+## Garrison casualty fraction (health lost / starting health) that distinguishes
+## the s2.4.5 defender-victory SI tiers. The GDD names −1 as "pristine tower barely
+## notices" and −3 as "garrison badly damaged"; garrison damage is therefore the
+## signal. Thresholds owner-set 2026-06-12 ("Light" scheme): <10% → Decisive (−1),
+## 10–33% → Contested (−2), >33% (garrison survives) → Narrow (−3).
+const ASSAULT_DECISIVE_CASUALTY_FRAC: float = 0.10
+const ASSAULT_CONTESTED_CASUALTY_FRAC: float = 0.33
+
+
 
 # -- Horde Frequency Roll (s2.4.4 — LOCKED) ------------------------------------
 
@@ -131,7 +140,10 @@ static func roll_invasion_type(dice: DiceEngine) -> int:
 
 ## Returns the province_id of the targeted Wall Tower.
 ## last_targeted: province_id of the most recently attacked tower (-1 = none).
-## The last-targeted tower has 2× probability of being selected again.
+## The last-targeted tower has REPEAT_TARGET_WEIGHT× probability of being
+## selected again (s2.4.4 "higher probability" — locked at 2×, the minimal
+## meaningful "higher", owner-approved 2026-06-12).
+const REPEAT_TARGET_WEIGHT: int = 2
 static func select_target_tower(
 	tower_province_ids: Array,
 	last_targeted: int,
@@ -142,12 +154,14 @@ static func select_target_tower(
 	if tower_province_ids.size() == 1:
 		return tower_province_ids[0]
 
-	# DISABLED: GDD s2.4.4 says "higher probability" for repeat targeting
-	# but does not specify the weight factor. Using uniform random until
-	# GDD specifies the weighting.
+	# Weighted pool: every tower once, plus REPEAT_TARGET_WEIGHT-1 extra entries
+	# for the last-targeted tower so it is likelier to be hit again (s2.4.4).
 	var pool: Array = []
 	for pid: int in tower_province_ids:
 		pool.append(pid)
+		if pid == last_targeted:
+			for _w: int in range(REPEAT_TARGET_WEIGHT - 1):
+				pool.append(pid)
 
 	var idx: int = dice.roll_and_keep(1, 1, 0).total % pool.size()
 	return pool[idx]
@@ -165,22 +179,82 @@ static func get_unit_stats(unit_type: int) -> Dictionary:
 	return stats
 
 
-## Generate horde companies for a JIGOKU_HORDE assault.
-## DISABLED: GDD s2.4.6 describes unit types (Bakemono, Ogres) but not counts.
-## Base composition and strength bonus counts pending GDD spec.
+# -- Baseline Horde Composition (PROVISIONAL — owner-authorized 2026-06-12) ----
+# GDD s2.4.6/2.4.7 lock the unit stat blocks, the +1 Company/Strength bonus
+# (s2.4.4), and the invasion weighting — but NOT the baseline army composition.
+# These counts are PROVISIONAL stand-ins (owner-authorized, tunable after
+# playtest), traced to the GDD's flavor: a Jigoku Horde is "Bakemono in large
+# numbers, supported by Ogres as wall-breakers"; an Undead Legion is
+# Zombies/Skeletons with a Revenant elite and exactly one Maho-tsukai commander
+# (that last count is GDD-LOCKED — "One per Undead Legion invasion" — not
+# provisional). Strength bonus units are drawn from each type's normal pool.
+const JIGOKU_BASELINE: Dictionary = {
+	Enums.ShadowlandsUnitType.BAKEMONO_WARRIOR: 4,
+	Enums.ShadowlandsUnitType.BAKEMONO_ARCHERS: 1,
+	Enums.ShadowlandsUnitType.OGRE_WARRIOR: 2,
+}
+const UNDEAD_BASELINE: Dictionary = {
+	Enums.ShadowlandsUnitType.ZOMBIE: 3,
+	Enums.ShadowlandsUnitType.SKELETON_WARRIOR: 2,
+	Enums.ShadowlandsUnitType.UNDEAD_REVENANT: 1,
+	Enums.ShadowlandsUnitType.MAHO_TSUKAI: 1,  # GDD-LOCKED: exactly one per legion.
+}
+const JIGOKU_STRENGTH_POOL: Array = [
+	Enums.ShadowlandsUnitType.BAKEMONO_WARRIOR,
+	Enums.ShadowlandsUnitType.BAKEMONO_WARRIOR,
+	Enums.ShadowlandsUnitType.OGRE_WARRIOR,
+]
+const UNDEAD_STRENGTH_POOL: Array = [
+	Enums.ShadowlandsUnitType.ZOMBIE,
+	Enums.ShadowlandsUnitType.SKELETON_WARRIOR,
+]
+# A sortie meets a Jigoku Horde scaled to SS (s2.4.10 "proportional to current
+# SS"). PROVISIONAL: ~one Company per 3 SS, Bakemono-heavy, an Ogre joining once
+# SS reaches High (9+, per s2.4.13 D9).
+const SORTIE_HORDE_SS_PER_COMPANY: int = 3
+const SORTIE_HORDE_OGRE_SS_THRESHOLD: int = 9
+
+
+## Build `count` identical Companies of the given unit type.
+static func _make_companies(unit_type: int, count: int) -> Array:
+	var out: Array = []
+	for _i: int in range(maxi(0, count)):
+		out.append(get_unit_stats(unit_type))
+	return out
+
+
+## Build the baseline army from a {unit_type: count} dictionary.
+static func _build_baseline(baseline: Dictionary) -> Array:
+	var out: Array = []
+	for unit_type: int in baseline:
+		out.append_array(_make_companies(unit_type, baseline[unit_type]))
+	return out
+
+
+## Append `strength` extra Companies drawn cyclically from `pool` (s2.4.4).
+static func _add_strength_companies(out: Array, strength: int, pool: Array) -> void:
+	if pool.is_empty():
+		return
+	for i: int in range(maxi(0, strength)):
+		out.append(get_unit_stats(pool[i % pool.size()]))
+
+
+## Generate horde companies for a JIGOKU_HORDE assault (baseline + Strength).
 static func _generate_jigoku_companies(
-	_strength: int, _dice: DiceEngine
+	strength: int, _dice: DiceEngine
 ) -> Array:
-	return []
+	var out: Array = _build_baseline(JIGOKU_BASELINE)
+	_add_strength_companies(out, strength, JIGOKU_STRENGTH_POOL)
+	return out
 
 
-## Generate horde companies for an UNDEAD_LEGION assault.
-## DISABLED: GDD s2.4.6 describes unit types (Zombie, Skeleton, Revenant, Maho-tsukai)
-## but not counts. Base composition and strength bonus counts pending GDD spec.
+## Generate horde companies for an UNDEAD_LEGION assault (baseline + Strength).
 static func _generate_undead_companies(
-	_strength: int, _dice: DiceEngine
+	strength: int, _dice: DiceEngine
 ) -> Array:
-	return []
+	var out: Array = _build_baseline(UNDEAD_BASELINE)
+	_add_strength_companies(out, strength, UNDEAD_STRENGTH_POOL)
+	return out
 
 
 ## Generate horde companies for an ONI_LED or ONI_LED_SPAWN assault.
@@ -398,19 +472,33 @@ static func horde_companies_to_battle_states(
 
 # -- Horde Assault Combat (s2.4.5, s2.4.7) ------------------------------------
 
-## Map an ArmyCombatSystem victor string + round data to HordeBattleOutcome.
-## Per s2.4.5: outcome determines SI hit applied after the battle.
-## DISABLED: GDD says "routed quickly" for decisive but does not specify a
-## round threshold. All defender victories map to CONTESTED_BATTLE until
-## GDD specifies the "quickly" criterion.
+## Map an ArmyCombatSystem result to a HordeBattleOutcome (s2.4.5).
+## The garrison is the defender side (resolve_battle(horde, garrison)). A garrison
+## loss/rout is a breach (−4); otherwise the SI tier is chosen by how badly the
+## garrison was mauled (GDD: −1 "pristine tower barely notices", −3 "garrison badly
+## damaged"). This makes the SI hit self-correcting — a healthy tower shrugs off an
+## assault, a battered one bleeds — and matters even when routing-immune Bakemono
+## fight the battle to a "draw" rather than being destroyed.
 static func _map_battle_outcome(battle_result: Dictionary, _rounds: int) -> int:
 	var victor: String = battle_result.get("victor", "draw")
-	if victor == "defender":
-		return Enums.HordeBattleOutcome.CONTESTED_BATTLE
-	elif victor == "attacker":
+	if victor == "attacker":
+		# Garrison destroyed or routed → breach condition.
 		return Enums.HordeBattleOutcome.DEFENDER_OVERRUN
+
+	# Garrison held. Tier by its casualty fraction.
+	var lost: int = 0
+	var total: int = 0
+	for bc: Dictionary in battle_result.get("defender_states", []):
+		total += bc["starting_health"]
+		lost += bc["starting_health"] - bc["current_health"]
+	var frac: float = (float(lost) / float(total)) if total > 0 else 0.0
+
+	if frac < ASSAULT_DECISIVE_CASUALTY_FRAC:
+		return Enums.HordeBattleOutcome.DECISIVE_DEFENDER_VICTORY
+	elif frac < ASSAULT_CONTESTED_CASUALTY_FRAC:
+		return Enums.HordeBattleOutcome.CONTESTED_BATTLE
 	else:
-		# Draw: garrison badly damaged but horde stopped.
+		# Garrison survived but was badly damaged.
 		return Enums.HordeBattleOutcome.ATTACKER_PUSHED_BACK
 
 
@@ -458,16 +546,53 @@ static func resolve_horde_assault(
 	}
 
 
+## Resolve the assault COMBAT only — battle outcome + garrison casualties, WITHOUT
+## applying the SI hit (the caller's _process_horde_assaults pass owns the SI hit,
+## breach detection, and incursion crisis/topic, so all of that stays in one
+## place — calling resolve_horde_assault here would double-apply the SI hit). s2.4.5.
+static func resolve_horde_assault_combat(
+	garrison_states: Array,
+	horde_companies: Array,
+	si: int,
+	dice: DiceEngine,
+) -> Dictionary:
+	var fortification_bonus: int = WallSystem.get_si_defense_bonus(si)
+	var horde_states: Array = horde_companies_to_battle_states(
+		horde_companies, "attacker", 5000, true,
+	)
+	var battle_result: Dictionary = ArmyCombatSystem.resolve_battle(
+		horde_states, garrison_states, Enums.BattleTerrainType.PLAINS,
+		dice, false, fortification_bonus,
+	)
+	var outcome: int = _map_battle_outcome(battle_result, battle_result.get("rounds", 0))
+	var casualties_health: int = 0
+	for bc: Dictionary in battle_result.get("defender_states", []):
+		casualties_health += bc["starting_health"] - bc["current_health"]
+	return {
+		"outcome": outcome,
+		"casualties_health": casualties_health,
+		"battle_result": battle_result,
+	}
+
+
 # -- Sortie Combat (s2.4.10) ---------------------------------------------------
 
 ## Generate a Jigoku Horde scaled to the current SS for a sortie engagement.
-## DISABLED: GDD s2.4.10 says "proportional to current SS" but does not
-## specify company counts or composition per SS tier. Pending GDD spec.
+## PROVISIONAL (owner-authorized 2026-06-12): GDD s2.4.10 says "proportional to
+## current SS" without specifying counts — ~one Company per SORTIE_HORDE_SS_PER_COMPANY
+## SS, Bakemono-heavy, with an Ogre once SS reaches High. Tunable after playtest.
 static func _generate_sortie_horde_companies(
-	_ss: int,
+	ss: int,
 	_dice: DiceEngine,
 ) -> Array:
-	return []
+	var count: int = maxi(1, int(ss / float(SORTIE_HORDE_SS_PER_COMPANY)))
+	var out: Array = []
+	for i: int in range(count):
+		if ss >= SORTIE_HORDE_OGRE_SS_THRESHOLD and i == count - 1:
+			out.append(get_unit_stats(Enums.ShadowlandsUnitType.OGRE_WARRIOR))
+		else:
+			out.append(get_unit_stats(Enums.ShadowlandsUnitType.BAKEMONO_WARRIOR))
+	return out
 
 
 ## Resolve a sortie's combat against a scaled Jigoku Horde (s2.4.10).

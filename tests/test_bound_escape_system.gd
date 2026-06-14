@@ -448,6 +448,8 @@ func test_break_chains_wound_penalty_reduces_total() -> void:
 		var healthy: L5RCharacterData = L5RCharacterData.new()
 		healthy.character_id = 50
 		healthy.strength = 5
+		healthy.stamina = 3
+		healthy.willpower = 3
 		var s1: Dictionary = BoundEscapeSystem.create_bound_state(1, 3, BoundEscapeSystem.BindingMaterial.CHAINS, 100)
 		var r1: Dictionary = BoundEscapeSystem.free_ally_chains(healthy, s1, false, true, d1)
 		healthy_total += r1.get("roll_total", 0)
@@ -456,7 +458,9 @@ func test_break_chains_wound_penalty_reduces_total() -> void:
 		var wounded: L5RCharacterData = L5RCharacterData.new()
 		wounded.character_id = 51
 		wounded.strength = 5
-		wounded.wounds_taken = 50
+		wounded.stamina = 3
+		wounded.willpower = 3
+		wounded.wounds_taken = 20
 		var s2: Dictionary = BoundEscapeSystem.create_bound_state(1, 3, BoundEscapeSystem.BindingMaterial.CHAINS, 100)
 		var r2: Dictionary = BoundEscapeSystem.free_ally_chains(wounded, s2, false, true, d2)
 		wounded_total += r2.get("roll_total", 0)

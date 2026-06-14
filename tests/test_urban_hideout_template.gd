@@ -190,7 +190,7 @@ func test_connected_may_have_zombie_positions() -> void:
 
 func test_has_door_guard_slot() -> void:
 	for s in ["pop_sb", "pop_cb", "pop_cat"]:
-		var strength: int = [2, 5, 8][[["pop_sb", "pop_cb", "pop_cat"].find(s)]]
+		var strength: int = [2, 5, 8][["pop_sb", "pop_cb", "pop_cat"].find(s)]
 		var m := UrbanHideoutGenerator.generate(s, strength, [])
 		var found := false
 		for p in m.population_slots:
@@ -201,7 +201,7 @@ func test_has_door_guard_slot() -> void:
 
 func test_has_leader_slot() -> void:
 	for s in ["lea_sb", "lea_cb", "lea_cat"]:
-		var strength: int = [2, 5, 8][[["lea_sb", "lea_cb", "lea_cat"].find(s)]]
+		var strength: int = [2, 5, 8][["lea_sb", "lea_cb", "lea_cat"].find(s)]
 		var m := UrbanHideoutGenerator.generate(s, strength, [])
 		var found := false
 		for p in m.population_slots:
@@ -236,13 +236,13 @@ func test_same_seed_same_layout() -> void:
 	assert_eq(m1.ritual_space_room_id, m2.ritual_space_room_id)
 
 func test_different_seeds_may_differ() -> void:
-	var m1 := UrbanHideoutGenerator.generate("seed_alpha", 5, [])
-	var m2 := UrbanHideoutGenerator.generate("seed_beta", 5, [])
-	# Different seeds should produce at least one structural difference.
-	# Room count or entrance position should vary.
-	var differs: bool = (m1.rooms.size() != m2.rooms.size()) or
-		(m1.entrance_x != m2.entrance_x) or (m1.entrance_y != m2.entrance_y)
-	# This is probabilistic but extremely unlikely to fail with two different seeds.
+	# Seed variance for CONNECTED_BASEMENTS is the room count (3–5). These two
+	# seeds hash to different counts (3 vs 5); positions are deterministic given
+	# the count, so room count is the structural indicator that varies by seed.
+	var m1 := UrbanHideoutGenerator.generate("seed_gamma", 5, [])
+	var m2 := UrbanHideoutGenerator.generate("seed_delta", 5, [])
+	var differs: bool = ((m1.rooms.size() != m2.rooms.size()) \
+		or (m1.entrance_x != m2.entrance_x) or (m1.entrance_y != m2.entrance_y))
 	assert_true(differs, "Different seeds produced identical map layouts")
 
 # -- Room data structure -------------------------------------------------------

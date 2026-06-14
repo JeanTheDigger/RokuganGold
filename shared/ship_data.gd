@@ -15,6 +15,13 @@ extends Resource
 ## Character ID of the current captain (-1 = no captain).
 @export var captain_id: int = -1
 
+## Character ID of the owner-patron (-1 = clan/command-appointment ownership;
+## ownership then follows owning_clan). Distinct from captain_id (s57.42.2).
+@export var owner_id: int = -1
+
+## IC day this ship sails from its current port (-1 = not scheduled). s57.42.7.
+@export var departure_tick: int = -1
+
 ## Province ID where this ship is currently located.
 @export var current_province_id: int = -1
 

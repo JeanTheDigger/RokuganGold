@@ -819,6 +819,9 @@ const HARD_BLOCK: int = -9999
 # Columns match ConclusionType enum order:
 #   AGG LNC SUP SHD DEF ALL PEA UND CRT EDC RES INF DMG WOR SPC CUL
 
+## Shourido virtue keys are offset so they never collide with Bushido
+## enum values (both enums start at 0) in the shared _PREF_MATRIX dict.
+const _SHOURIDO_KEY_OFFSET: int = 1000
 const _PREF_MATRIX: Dictionary = {
 	# Bushido
 	Enums.BushidoVirtue.JIN:   [-15, -15,  15,  25,  25,  25,  25, -15,  15,  15,  15,  15,  25,  15,  15,   0],
@@ -829,13 +832,13 @@ const _PREF_MATRIX: Dictionary = {
 	Enums.BushidoVirtue.MEIYO: [  0,   0,  15,  15,  15,   0,   0, -15,  15,  15,   0,   0,   0,  15,   0,  15],
 	Enums.BushidoVirtue.MAKOTO:[  0,   0,   0,   0,  15,  15,  15, HARD_BLOCK,  15,  15,   0,   0,  15,  15,   0,  15],
 	# Shourido
-	Enums.ShouridoVirtue.DOSATSU:  [ 15,   0,  15,   0,   0,  15,   0,  25,  15,   0,  15,   0,   0,   0,  15,   0],
-	Enums.ShouridoVirtue.KYORYOKU: [ 25,  25,  15,  15,  15, -15, -15, -15, -15,   0,   0,   0,   0,   0,  15, -15],
-	Enums.ShouridoVirtue.KANPEKI:  [  0,   0,  15,   0,   0,  15,   0,  15,  25,  15,   0,  15,  15,  15,   0,  25],
-	Enums.ShouridoVirtue.SEIGYO:   [ 15,   0,  25,   0,  15,  15,   0,  25,  15, -15,  25,  15,   0,   0,   0,  15],
-	Enums.ShouridoVirtue.CHISHIKI: [  0,   0,   0,  15,   0,   0,   0,  15,   0,   0,  15,  15,   0,  25,  25,  15],
-	Enums.ShouridoVirtue.KETSUI:   [ 15,  15,  15,  15,  15,   0, -15,   0,   0,   0,  15,   0,  15,   0,   0,   0],
-	Enums.ShouridoVirtue.ISHI:     [ 15,  15,  15,   0,  15, -15, -15,  15,   0, -15,  15,   0,   0,   0,   0, -15],
+	_SHOURIDO_KEY_OFFSET + Enums.ShouridoVirtue.DOSATSU:  [ 15,   0,  15,   0,   0,  15,   0,  25,  15,   0,  15,   0,   0,   0,  15,   0],
+	_SHOURIDO_KEY_OFFSET + Enums.ShouridoVirtue.KYORYOKU: [ 25,  25,  15,  15,  15, -15, -15, -15, -15,   0,   0,   0,   0,   0,  15, -15],
+	_SHOURIDO_KEY_OFFSET + Enums.ShouridoVirtue.KANPEKI:  [  0,   0,  15,   0,   0,  15,   0,  15,  25,  15,   0,  15,  15,  15,   0,  25],
+	_SHOURIDO_KEY_OFFSET + Enums.ShouridoVirtue.SEIGYO:   [ 15,   0,  25,   0,  15,  15,   0,  25,  15, -15,  25,  15,   0,   0,   0,  15],
+	_SHOURIDO_KEY_OFFSET + Enums.ShouridoVirtue.CHISHIKI: [  0,   0,   0,  15,   0,   0,   0,  15,   0,   0,  15,  15,   0,  25,  25,  15],
+	_SHOURIDO_KEY_OFFSET + Enums.ShouridoVirtue.KETSUI:   [ 15,  15,  15,  15,  15,   0, -15,   0,   0,   0,  15,   0,  15,   0,   0,   0],
+	_SHOURIDO_KEY_OFFSET + Enums.ShouridoVirtue.ISHI:     [ 15,  15,  15,   0,  15, -15, -15,  15,   0, -15,  15,   0,   0,   0,   0, -15],
 }
 
 # Domain for each ConclusionType (index matches enum ordinal).
@@ -891,9 +894,9 @@ const _REQUIRES_TARGET_CLAN: Array[StrategicConclusionData.ConclusionType] = [
 
 # Personality base slot counts (s57.54 Step 4).
 const _PERSONALITY_BASE_SLOTS: Dictionary = {
-	Enums.ShouridoVirtue.KETSUI:  2,
+	_SHOURIDO_KEY_OFFSET + Enums.ShouridoVirtue.KETSUI:  2,
 	Enums.BushidoVirtue.YU:       2,
-	Enums.ShouridoVirtue.KYORYOKU: 2,
+	_SHOURIDO_KEY_OFFSET + Enums.ShouridoVirtue.KYORYOKU: 2,
 }
 const _DEFAULT_SLOT_COUNT: int = 3
 
@@ -1049,7 +1052,7 @@ static func run_priority_resolved(
 
 	# Ketsui immediately refills (s57.54.1 Trigger 3).
 	var virtue_key = _get_virtue_key(champion)
-	if virtue_key == Enums.ShouridoVirtue.KETSUI:
+	if virtue_key == _SHOURIDO_KEY_OFFSET + Enums.ShouridoVirtue.KETSUI:
 		return run_clan_champion_evaluation(
 			champion, clan, active_topics_by_id, active_wars, active_edicts,
 			characters_by_id, objectives_map, current_season, dice_engine,
@@ -1218,8 +1221,7 @@ static func _scan_topic_for_candidates(
 				_make_with_source(clan, StrategicConclusionData.ConclusionType.SECURE_RESOURCE,
 					current_season, [topic.topic_id]),
 			)
-		"art_removal_slight", "art_removal_minor", "legendary_artisan_completion",
-		"masterful_performance":
+		"art_removal_slight", "art_removal_minor", "legendary_artisan_completion", "masterful_performance":
 			_add_candidate_if_new(
 				candidates, forced_types,
 				_make_with_source(clan, StrategicConclusionData.ConclusionType.BUILD_CULTURAL_PRESTIGE,
@@ -1386,7 +1388,7 @@ static func _step3_score(
 static func _continuation_bonus(virtue_key) -> int:
 	if virtue_key == Enums.BushidoVirtue.MAKOTO:
 		return _CONTINUATION_BONUS_MAKOTO
-	if virtue_key == Enums.ShouridoVirtue.KETSUI:
+	if virtue_key == _SHOURIDO_KEY_OFFSET + Enums.ShouridoVirtue.KETSUI:
 		return _CONTINUATION_BONUS_KETSUI
 	return _CONTINUATION_BONUS_BASE
 
@@ -1512,7 +1514,7 @@ static func get_champion_conclusion_needtypes(
 		return result
 	var virtue_key = _get_virtue_key(daimyo)
 	for sc: StrategicConclusionData in clan.clan_strategic_priorities:
-		var need_types: Array[String] = _CONCLUSION_TO_NEEDTYPES.get(sc.conclusion_type, [])
+		var need_types: Array = _CONCLUSION_TO_NEEDTYPES.get(sc.conclusion_type, [])
 		for nt: String in need_types:
 			# Re-weight champion score with Family Daimyo personality preference.
 			var pref: int = _get_preference(virtue_key, sc.conclusion_type)
@@ -1639,8 +1641,8 @@ static func _add_candidate_if_new(
 
 static func _get_virtue_key(character: L5RCharacterData):
 	if character.shourido_virtue != Enums.ShouridoVirtue.NONE:
-		return character.shourido_virtue
-	return character.bushido_virtue
+		return _SHOURIDO_KEY_OFFSET + int(character.shourido_virtue)
+	return int(character.bushido_virtue)
 
 
 static func _get_preference(virtue_key, ct: StrategicConclusionData.ConclusionType) -> int:

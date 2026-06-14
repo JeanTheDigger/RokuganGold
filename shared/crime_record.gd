@@ -24,3 +24,6 @@ extends Resource
 @export var skimming_amount: float = 0.0
 @export var commissioner_id: int = -1
 @export var low_skill_glory_applied: bool = false
+# Optional tag identifying the originating event (e.g. "dismissal_disgrace" for
+# the permanent-ronin five-disgrace count, s52.5 Part E).
+@export var source_action: String = ""

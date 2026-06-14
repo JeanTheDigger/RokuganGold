@@ -6460,6 +6460,8 @@ func test_impersonation_detection_no_duped_criminal_when_deadline_before_order()
 	var next_topic_id: Array = [500]
 	var objectives_map: Dictionary = {}
 	var initial_honor: float = victim.honor
+	# get_duped_disloyal_honor is rank-scaled — capture it at the pre-mutation rank.
+	var disloyal_cost: float = CrimeSystem.get_duped_disloyal_honor(victim)
 
 	DayOrchestrator._process_impersonation_detection(
 		pending_letters, characters_by_id, active_topics,
@@ -6468,7 +6470,6 @@ func test_impersonation_detection_no_duped_criminal_when_deadline_before_order()
 
 	# DUPED_DISLOYAL fires (order was applied), but not DUPED_CRIMINAL
 	# because commitment deadline (10) is before forged order arrival (20)
-	var disloyal_cost: float = CrimeSystem.get_duped_disloyal_honor(victim)
 	assert_almost_eq(victim.honor, initial_honor + disloyal_cost, 0.01,
 		"Only DUPED_DISLOYAL should fire — commitment pre-dates the order")
 
@@ -15964,8 +15965,9 @@ func test_inject_poem_context_no_item_leaves_key_absent() -> void:
 	c.items = []
 	var ws: Dictionary = {1: {"known_objectives": {}}}
 	DayOrchestrator._inject_poem_context([c], ws)
-	assert_false(ws[1]["known_objectives"].has("available_poem_item_id"),
-		"No poem scroll = no context key injected")
+	# No scroll writes the -1 sentinel (so any stale value is cleared).
+	assert_eq(ws[1]["known_objectives"].get("available_poem_item_id", 0), -1,
+		"No poem scroll = -1 sentinel")
 
 
 func test_inject_poem_context_skips_dead_characters() -> void:
@@ -16301,7 +16303,8 @@ func test_detect_presence_success_adds_density_knowledge_entry() -> void:
 	if active_topics.size() > 0:
 		assert_eq(density_entries.size(), 1)
 		var de: KnowledgeEntry = density_entries[0]
-		assert_eq(de.source, "spell_detect_presence")
+		# source is a KnowledgeSource enum; the entry_type is "kansen_density".
+		assert_eq(de.source, Enums.KnowledgeSource.DIRECT_OBSERVATION)
 		assert_eq(de.data.get("density_tier"), AsciiMapEnvironment.KansenDensity.MODERATE)
 		assert_eq(de.data.get("province_id"), 9)
 		assert_true(de.data.get("ptl") > 0.0)
@@ -16633,9 +16636,9 @@ func test_brash_reaction_wound_penalty_applied() -> void:
 	target.stamina = 3
 	target.honor = 5.0
 	target.wounds_taken = 19  # Earth 3 → threshold 6 → HURT = -10
-	var brash_adv := AdvantageData.new()
-	brash_adv.advantage_type = Enums.Advantage.BRASH
-	target.advantages = [brash_adv]
+	var brash_adv := DisadvantageData.new()
+	brash_adv.disadvantage_type = Enums.Disadvantage.BRASH
+	target.disadvantages = [brash_adv]
 	target.physical_location = "settlement_1"
 	target.disposition_values = {}
 	target.met_characters = []

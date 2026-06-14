@@ -154,12 +154,14 @@ const SACKING_SURVIVAL_BY_TIER: Dictionary = {1: 0.20, 2: 0.30, 3: 0.40, 4: 0.50
 
 ## Settlement types that support interior art slots (s57.27.4 — zone proxy).
 const ELIGIBLE_SETTLEMENT_TYPES: Array = [
-	"FAMILY_CASTLE", "CASTLE", "KEEP", "CITY",
-	"TEMPLE", "SHINDEN", "MONASTERY",
+	Enums.SettlementType.FAMILY_CASTLE, Enums.SettlementType.CASTLE,
+	Enums.SettlementType.KEEP, Enums.SettlementType.CITY,
+	Enums.SettlementType.TEMPLE, Enums.SettlementType.SHINDEN,
+	Enums.SettlementType.MONASTERY,
 ]
 
 ## Only these settlement types support the displayed_art_slot (prestige byōbu venues).
-const BYOBU_ELIGIBLE_TYPES: Array = ["FAMILY_CASTLE", "CASTLE", "CITY"]
+const BYOBU_ELIGIBLE_TYPES: Array = [Enums.SettlementType.FAMILY_CASTLE, Enums.SettlementType.CASTLE, Enums.SettlementType.CITY]
 
 ## Gold leaf Status perception modifier (s57.27.7). Displayed while byōbu in slot.
 const GOLD_LEAF_STATUS_BONUS: float = 0.5
@@ -225,7 +227,7 @@ static func declare_composition(
 	p.subject_description = subject_description
 	p.framing = framing
 	p.season_affinity = season_affinity
-	p.target_topic_ids = target_topic_ids
+	p.target_topic_ids.assign(target_topic_ids)
 	p.craft_progress = 0
 	p.ic_day_last_composition_ap = ic_day
 	p.is_original = copy_of_id < 0
@@ -878,7 +880,7 @@ static func generate_world_start_paintings(
 		results.append(p)
 		# Major settlements also get a byōbu.
 		if s.settlement_type in BYOBU_ELIGIBLE_TYPES:
-			var elevated_chance: int = 80 if s.settlement_type == "FAMILY_CASTLE" else 50
+			var elevated_chance: int = 80 if s.settlement_type == Enums.SettlementType.FAMILY_CASTLE else 50
 			if dice.roll_die(100) <= elevated_chance:
 				var bq: int = mini(4, tier_floor + (1 if dice.roll_die(4) == 4 else 0))
 				var bp: PaintingData = PaintingData.new()
@@ -901,20 +903,20 @@ static func generate_world_start_paintings(
 	return results
 
 
-static func _world_gen_kakemono_tier(settlement_type: String, elevated_clan: bool) -> int:
+static func _world_gen_kakemono_tier(settlement_type: Enums.SettlementType, elevated_clan: bool) -> int:
 	var base: int = 0
 	match settlement_type:
-		"FAMILY_CASTLE":
+		Enums.SettlementType.FAMILY_CASTLE:
 			base = 3  # Exceptional minimum
-		"CASTLE":
+		Enums.SettlementType.CASTLE:
 			base = 2  # Fine minimum
-		"CITY":
+		Enums.SettlementType.CITY:
 			base = 2
-		"KEEP":
+		Enums.SettlementType.KEEP:
 			base = 1
-		"TEMPLE", "SHINDEN":
+		Enums.SettlementType.TEMPLE, Enums.SettlementType.SHINDEN:
 			base = 1  # Temples/shinden always seed one painting.
-		"MONASTERY":
+		Enums.SettlementType.MONASTERY:
 			base = 1
 	if elevated_clan and base > 0:
 		base = mini(5, base + 1)

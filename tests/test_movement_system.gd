@@ -82,8 +82,12 @@ func test_is_closed_door_true_for_closed() -> void:
 func test_is_closed_door_false_for_others() -> void:
 	assert_false(MovementSystem.is_closed_door(Enums.TileType.DOOR_SHOJI_OPEN))
 	assert_false(MovementSystem.is_closed_door(Enums.TileType.DOOR_WOOD_OPEN))
-	assert_false(MovementSystem.is_closed_door(Enums.TileType.GATE_CLOSED))
 	assert_false(MovementSystem.is_closed_door(Enums.TileType.WALL_WOOD))
+
+
+func test_is_closed_door_true_for_gate() -> void:
+	# Gates are bump-openable like doors (open_door/close_door both handle GATE).
+	assert_true(MovementSystem.is_closed_door(Enums.TileType.GATE_CLOSED))
 
 
 # ── open_door / close_door ───────────────────────────────────────────────────

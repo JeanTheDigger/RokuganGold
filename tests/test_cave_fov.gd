@@ -38,7 +38,7 @@ func _open_room_map() -> Array:
 
 func test_cave_map_is_ascii_map_data_instance() -> void:
 	var map: CaveMapData = _make_cave()
-	assert_is(map, AsciiMapData,
+	assert_true(map is AsciiMapData,
 		"CaveMapData must be an AsciiMapData for FovSystem polymorphism")
 
 

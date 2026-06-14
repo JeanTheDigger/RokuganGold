@@ -2373,7 +2373,7 @@ func test_horde_oni_generated_when_has_oni() -> void:
 	dice.set_seed(42)
 	horde.oni_data = OniGenerator.generate(dice, 1)
 	assert_not_null(horde.oni_data, "oni_data must be populated when has_oni is true")
-	assert_is(horde.oni_data, OniData)
+	assert_true(horde.oni_data is OniData)
 
 
 func test_last_targeted_province_updated_after_formation() -> void:

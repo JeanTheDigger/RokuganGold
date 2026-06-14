@@ -52,6 +52,7 @@ const MILITARY_OBJECTIVES: Array[String] = [
 const INVESTIGATION_OBJECTIVES: Array[String] = [
 	"INVESTIGATE_CRIME",
 	"UPHOLD_LAW",
+	"HUNT_MAHO",
 ]
 
 const INFRASTRUCTURE_OBJECTIVES: Array[String] = [
@@ -211,7 +212,29 @@ static func _decompose_investigation(
 		if case_data.is_empty():
 			return _decompose_uphold_law_idle(objective, ctx)
 		return InvestigationDecomposer.decompose(case_data, ctx)
+	if need_type == "HUNT_MAHO":
+		return _decompose_hunt_maho(objective, ctx)
 	return InvestigationDecomposer.decompose(objective, ctx)
+
+
+# -- HUNT_MAHO Decomposition (s11.3.5 — roaming witch-hunters) -----------------
+# Kuni Witch-Hunters / Asako Inquisitors / Kuroiban hunt maho and the Shadowlands.
+# If a target hotspot province is set (roaming self-selection) and the hunter is
+# not there, travel toward it (cross-border is allowed — they ignore clan lines).
+# Once at the target (or with no target — hunt locally), passthrough keeps the
+# HUNT_MAHO NeedType so Phase 5 scores the detection actions (INVESTIGATE_PROVINCE,
+# EXAMINE_FOR_TAINT, EXAMINE_CRIME_SCENE, …) against the HUNT_MAHO alignment table.
+
+static func _decompose_hunt_maho(
+	objective: Dictionary,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> NPCDataStructures.ImmediateNeed:
+	var target_province: String = objective.get("target_intent", "")
+	if not target_province.is_empty() and not ctx.location_id.begins_with(target_province):
+		return _make_need("TRAVEL_TO", 2, {
+			"target_intent": target_province,
+		})
+	return _passthrough(objective)
 
 
 # -- UPHOLD_LAW Idle Patrol (s55.8, s57.16.9) ----------------------------------
@@ -913,14 +936,20 @@ static func _decompose_strengthen_wall(
 			if ctx.lord_rank == Enums.LordRank.CLAN_CHAMPION:
 				if w.garrison_shortage_letter_season < 0:
 					return _make_need("SEND_LETTER", 3, {"target_province_id": w.province_id})
-				if ctx.season - w.garrison_shortage_letter_season >= 1 \
+				# "after one season of letters" — season has changed since the
+				# letter went out. `!=` (not subtraction) because ctx.season is
+				# cyclic 0–3: subtraction wraps and a winter letter would never
+				# advance (0-3 < 1 every following season).
+				if ctx.season != w.garrison_shortage_letter_season \
 						and not w.garrison_shortage_courtier_dispatched:
-					return _make_need("MAINTAIN_FORTIFICATION", 3, {"target_province_id": w.province_id})
-				# Step 3: courtier refused + critical SI → Wall-wide emergency.
-				# TODO: replace DEFEND_PROVINCE with DECLARE_WALL_EMERGENCY once
-				# the ActionID is specced in GDD s2.4.14 Decision 6.
-				if w.garrison_shortage_courtier_refused and w.si < 6:
-					return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": w.province_id})
+					return _make_need("DISPATCH_COURTIER", 3, {"target_province_id": w.province_id})
+				# Step 3: courtier refused + critical SI → Wall-wide emergency
+				# declaration (s2.4.14 Decision 6 / s55.23a Step 3). Compels every
+				# Crab lord to respond. Skipped while one is already active — the
+				# Champion defends the Tower directly rather than re-declaring.
+				if w.garrison_shortage_courtier_refused and w.si < 6 \
+						and not ctx.wall_emergency_active:
+					return _make_need("DECLARE_WALL_EMERGENCY", 3, {"target_province_id": w.province_id})
 				# Courtier dispatched but not yet refused, or SI not yet critical:
 				# commit reserve armies directly (s2.4.14 Decision 2).
 				return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": w.province_id})

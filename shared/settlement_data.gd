@@ -50,6 +50,9 @@ extends Resource
 # True if the most recent courtier was explicitly refused by the Daimyo (s2.4.14).
 # Gates the wall-wide emergency declaration trigger (Decision 6).
 @export var garrison_shortage_courtier_refused: bool = false
+# Wall position: 1 (south-east) to 12 (north-west), per s2.4.2. -1 = not a Tower.
+# Drives wall command-segment assignment (Towers 1-6 Southern, 7-12 Northern).
+@export var wall_tower_number: int = -1
 
 
 # -- Public Record (per GDD s57.50) -------------------------------------------
@@ -114,6 +117,20 @@ extends Resource
 @export var shrine_shide_permission: int = -1     ## character_id with placement permission
 @export var shrine_custodian_id: int = -1         ## shugenja custodian; -1 = unstaffed
 @export var shrine_permission_grace_until_ic_day: int = -1  ## -1 = no grace active
+
+## Hidden Kolat treasury held at the Hidden Temple settlement (s54.7h). Hidden;
+## not visible in normal settlement inspection. -1 = this is not the Hidden Temple.
+@export var temple_vault_koku: int = -1
+
+## True on the single settlement designated as the Kolat Hidden Temple at world
+## generation (s54.7h). Gates the at-temple Kolat actions (OBSERVE_VIA_EYE,
+## SECURE_ONI_EYE, SUBMIT_KOLAT_REPORT, CONDUCT_PERIMETER_PATROL range origin).
+@export var is_hidden_temple: bool = false
+
+## Master copy of the Cloud archive, physically held at the Hidden Temple under
+## Steel guard (s54.7h). Keyed by archive_id, same schema as Master Cloud's working
+## copy. Only the Hidden Temple settlement uses this.
+@export var temple_cloud_archive: Dictionary = {}
 
 
 func has_shrine_slot() -> bool:

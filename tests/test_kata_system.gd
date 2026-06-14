@@ -216,7 +216,8 @@ func test_multiring_kata_fire_qualifies() -> void:
 
 
 func test_multiring_kata_both_too_low_blocked() -> void:
-	var c: L5RCharacterData = _make_bushi("Kakita Bushi", "Crane", 2, 2, 2)
+	# Use a non-reducing school (Akodo); Kakita/Mirumoto would reduce the req to 2.
+	var c: L5RCharacterData = _make_bushi("Akodo Bushi", "Lion", 2, 2, 2)
 	assert_false(KataSystem.can_learn_kata(c, "The Empire Rests on its Edge"))
 
 

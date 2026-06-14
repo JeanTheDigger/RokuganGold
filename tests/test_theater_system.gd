@@ -433,7 +433,7 @@ func test_generate_canonized_pieces_crane_has_most() -> void:
 			crane_count += 1
 		elif piece.subject.begins_with("Crab"):
 			crab_count += 1
-	assert_ge(crane_count, crab_count)
+	assert_gte(crane_count, crab_count)
 
 
 # ============================================================================
@@ -579,7 +579,7 @@ func test_compose_not_at_court_bonus() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.skill_ranks = {"Poetry": 2}
 	ctx.characters_present = [2]  # one other character for audience
 	ctx.known_topic_momentums = {}
@@ -607,7 +607,7 @@ func test_compose_at_court_no_pieces_score_40() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_COURT"
+	ctx.context_flag = Enums.ContextFlag.AT_COURT
 	ctx.skill_ranks = {"Poetry": 2}
 	ctx.characters_present = [2]
 	ctx.known_topic_momentums = {}
@@ -634,7 +634,7 @@ func test_compose_no_audience_penalty() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.skill_ranks = {"Poetry": 2}
 	ctx.characters_present = []  # no audience
 	ctx.known_topic_momentums = {}
@@ -662,7 +662,7 @@ func test_compose_active_topic_subject_clan_match_bonus() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.skill_ranks = {"Poetry": 2}
 	ctx.characters_present = [2]
 	ctx.known_topic_momentums = {77: 45}  # topic 77 momentum 45 > 40
@@ -694,7 +694,7 @@ func test_compose_active_topic_below_threshold_no_bonus() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.skill_ranks = {"Poetry": 2}
 	ctx.characters_present = [2]
 	ctx.known_topic_momentums = {77: 38}  # below threshold
@@ -726,7 +726,7 @@ func test_compose_active_topic_subject_mismatch_no_bonus() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.skill_ranks = {"Poetry": 2}
 	ctx.characters_present = [2]
 	ctx.known_topic_momentums = {77: 50}
@@ -758,7 +758,7 @@ func test_compose_skipped_when_poetry_zero() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.skill_ranks = {"Poetry": 0}
 	ctx.characters_present = [2]
 	ctx.known_topic_momentums = {}
@@ -786,7 +786,7 @@ func test_compose_skipped_for_non_political_need_type() -> void:
 	var ctx: NPCDataStructures.ContextSnapshot = NPCDataStructures.ContextSnapshot.new()
 	ctx.character_id = 1
 	ctx.clan = "Crane"
-	ctx.context_flag = "AT_OWN_HOLDINGS"
+	ctx.context_flag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	ctx.skill_ranks = {"Poetry": 3}
 	ctx.characters_present = [2]
 	ctx.known_topic_momentums = {}
@@ -1355,9 +1355,10 @@ func test_piece_selection_kyogen_subject_present_bonus() -> void:
 
 
 func test_piece_selection_kyogen_higher_status_penalty() -> void:
-	# Kyogen: subject has higher Status than performer, no pretext → -40.
-	# With no pretext and subject Status 5 > performer Status 2:
-	# score = 50 - 30 (<3 witnesses) - 40 = -20 ≤ 0 → piece_id -1.
+	# Kyogen, subject present & higher Status, no pretext. Per GDD s57.22 (line 23)
+	# the +25 "subject present" and −40 "social risk" modifiers BOTH apply, plus
+	# +15 high-value witness and −30 (<3 witnesses): 50 +25 +15 −30 −40 = 20 > 0 →
+	# selected. Satirizing the powerful is risky but the +25 offsets it (GDD design).
 	var ctx := _make_perform_ctx()
 	ctx.status = 2.0  # performer status
 
@@ -1376,7 +1377,7 @@ func test_piece_selection_kyogen_higher_status_penalty() -> void:
 	need.need_type = "SEEK_GLORY"
 
 	var result: Dictionary = NPCDecisionEngine._build_perform_theater_metadata(ctx, need, chars_by_id)
-	assert_eq(result["piece_id"], -1)
+	assert_eq(result["piece_id"], 120, "net score 20 > 0 -> kyogen selected per GDD s57.22 line 23")
 
 
 func test_piece_selection_kyogen_pretext_negates_status_penalty() -> void:
@@ -2195,13 +2196,15 @@ func test_find_willing_teacher_co_located_willing_teacher_found() -> void:
 	student.character_id = 5
 	student.physical_location = "castle_a"
 	student.wounds_taken = 0
-	student.earth = 2
+	student.stamina = 2
+	student.willpower = 2
 
 	var teacher: L5RCharacterData = L5RCharacterData.new()
 	teacher.character_id = 10
 	teacher.physical_location = "castle_a"
 	teacher.wounds_taken = 0
-	teacher.earth = 2
+	teacher.stamina = 2
+	teacher.willpower = 2
 	teacher.disposition_values = {5: 5}  # positive toward student
 
 	var piece: TheaterPieceData = TheaterSystem.make_single_role_piece(
@@ -2219,13 +2222,15 @@ func test_find_willing_teacher_negative_disposition_returns_minus1() -> void:
 	student.character_id = 5
 	student.physical_location = "castle_a"
 	student.wounds_taken = 0
-	student.earth = 2
+	student.stamina = 2
+	student.willpower = 2
 
 	var teacher: L5RCharacterData = L5RCharacterData.new()
 	teacher.character_id = 10
 	teacher.physical_location = "castle_a"
 	teacher.wounds_taken = 0
-	teacher.earth = 2
+	teacher.stamina = 2
+	teacher.willpower = 2
 	teacher.disposition_values = {5: -5}  # negative toward student
 
 	var piece: TheaterPieceData = TheaterSystem.make_single_role_piece(

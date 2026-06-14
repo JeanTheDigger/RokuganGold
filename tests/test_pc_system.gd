@@ -335,3 +335,32 @@ func test_close_bubble_scene_not_found() -> void:
 	var scenes: Array[Dictionary] = []
 	var result := PcSystem.close_bubble_scene(99, scenes, {})
 	assert_false(result["success"])
+
+
+# === Character creation constraints (s60.2) ===
+
+func test_pc_cannot_be_monk_school_type() -> void:
+	assert_false(PcSystem.is_school_type_allowed_for_pc(Enums.SchoolType.MONK),
+		"PCs may not be monks (s60.2)")
+	assert_true(PcSystem.is_school_type_allowed_for_pc(Enums.SchoolType.BUSHI),
+		"Bushi PC allowed")
+	assert_true(PcSystem.is_school_type_allowed_for_pc(Enums.SchoolType.SHUGENJA),
+		"Shugenja PC allowed")
+	assert_true(PcSystem.is_school_type_allowed_for_pc(Enums.SchoolType.COURTIER),
+		"Courtier PC allowed")
+
+
+func test_is_valid_pc_rejects_monk() -> void:
+	var c := L5RCharacterData.new()
+	c.is_pc = true
+	c.school_type = Enums.SchoolType.MONK
+	assert_false(PcSystem.is_valid_pc(c), "Monk PC is invalid")
+	c.school_type = Enums.SchoolType.BUSHI
+	assert_true(PcSystem.is_valid_pc(c), "Bushi PC is valid")
+
+
+func test_is_valid_pc_requires_is_pc() -> void:
+	var c := L5RCharacterData.new()
+	c.is_pc = false
+	c.school_type = Enums.SchoolType.BUSHI
+	assert_false(PcSystem.is_valid_pc(c), "Non-PC is not a valid PC")

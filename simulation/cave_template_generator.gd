@@ -475,6 +475,13 @@ static func _place_entry_points(map: CaveMapData, rng: RandomNumberGenerator) ->
 	var ex: int = clamp(entry_room["cx"], 1, map.width - 2)
 	var ey: int = map.height - 2  # south edge
 
+	# Carve a vertical access tunnel from the entry room down to the south-edge
+	# exit. The entry room centres near (but not always on) the bottom row, so
+	# without this the exit tile can be sealed off from the cave by rock.
+	var ery: int = entry_room["cy"]
+	for ty: int in range(mini(ery, ey), maxi(ery, ey) + 1):
+		map.set_tile(ex, ty, Enums.TileType.FLOOR_STONE)
+
 	map.set_tile(ex, ey, Enums.TileType.ZONE_EXIT)
 	map.entry_points.append({ "x": ex, "y": ey, "is_main": true })
 
@@ -494,6 +501,11 @@ static func _add_secondary_entrance(map: CaveMapData) -> void:
 	var deep_room: Dictionary = map.rooms[map.rooms.size() - 1]
 	var sx: int = clamp(deep_room["cx"], 1, map.width - 2)
 	var sy: int = 1  # north edge
+	# Carve a vertical access tunnel up from the deep chamber to the north-edge
+	# exit so the secondary entrance always connects.
+	var dry: int = deep_room["cy"]
+	for ty: int in range(mini(dry, sy), maxi(dry, sy) + 1):
+		map.set_tile(sx, ty, Enums.TileType.FLOOR_STONE)
 	map.set_tile(sx, sy, Enums.TileType.ZONE_EXIT)
 	map.entry_points.append({ "x": sx, "y": sy, "is_main": false })
 

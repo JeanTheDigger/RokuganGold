@@ -406,6 +406,8 @@ func test_training_roll_wound_penalty_reduces_total() -> void:
 		var healthy: L5RCharacterData = L5RCharacterData.new()
 		healthy.character_id = 90
 		healthy.awareness = 3
+		healthy.stamina = 3
+		healthy.willpower = 3
 		healthy.skills = {"Animal Handling": 3}
 		healthy.trained_companions = []
 		var r1: Dictionary = AnimalHandlingSystem.make_training_roll(healthy, "DOG", d1)
@@ -415,9 +417,11 @@ func test_training_roll_wound_penalty_reduces_total() -> void:
 		var wounded: L5RCharacterData = L5RCharacterData.new()
 		wounded.character_id = 91
 		wounded.awareness = 3
+		wounded.stamina = 3
+		wounded.willpower = 3
 		wounded.skills = {"Animal Handling": 3}
 		wounded.trained_companions = []
-		wounded.wounds_taken = 50
+		wounded.wounds_taken = 20
 		var r2: Dictionary = AnimalHandlingSystem.make_training_roll(wounded, "DOG", d2)
 		wounded_total += r2.get("roll_total", 0)
 

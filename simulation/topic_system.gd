@@ -211,6 +211,10 @@ static func process_daily_tick(topics: Array) -> Dictionary:
 		if topic.tier == TopicData.Tier.TIER_4:
 			change = decay_tier4_topic(topic)
 			if is_topic_expired(topic):
+				# Mark resolved so the caller's _remove_resolved_topics() purges it.
+				# Without this, decayed Tier-4 topics linger at momentum 0 forever,
+				# growing active_topics unboundedly and re-iterated every tick.
+				resolve_topic(topic)
 				expired.append(topic.topic_id)
 		else:
 			change = advance_crisis_momentum(topic)

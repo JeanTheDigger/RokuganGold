@@ -48,7 +48,8 @@ func test_greater_zone_id_is_deterministic() -> void:
 func test_greater_zone_settlement_id_stored() -> void:
 	var r: Dictionary = _build(7, "Foo", Enums.SettlementType.VILLAGE, 200)
 	var gz: GreaterZoneData = r["greater_zone"]
-	assert_eq(gz.settlement_id, "7")
+	# settlement_id is int (matches SettlementData.settlement_id).
+	assert_eq(gz.settlement_id, 7)
 
 
 func test_greater_zone_name_matches_settlement_name() -> void:
@@ -245,8 +246,10 @@ func test_village_has_farmland_and_shrine() -> void:
 func test_village_total_zone_count_in_range() -> void:
 	var r: Dictionary = _build(40, "Mura", Enums.SettlementType.VILLAGE, 300)
 	var total: int = r["lesser_zones"].size()
-	assert_true(total >= 2 and total <= 3,
-		"Village zone count %d not in 2–3 range" % total)
+	# GDD s57.36: village headman = 1–2 interior zones (OHIROMA + COURTYARD) plus
+	# the district-level Lesser Zones every settlement gets. Total 2–4.
+	assert_true(total >= 2 and total <= 4,
+		"Village zone count %d not in 2–4 range" % total)
 
 
 func test_town_has_market_street_and_residential() -> void:

@@ -68,3 +68,27 @@ func test_unknown_event_type_returns_empty() -> void:
 	var h := _hud()
 	var line: String = h._format_event({"type": "completely_unknown_type"})
 	assert_true(line.is_empty(), "unknown event type must return empty string")
+
+
+# =============================================================================
+# -- 4. End Combat events (GDD s40.x) -----------------------------------------
+# =============================================================================
+
+func test_end_combat_blocked_reports_count() -> void:
+	var h := _hud()
+	var line: String = h._format_event({"type": "end_combat_blocked", "count": 2})
+	assert_false(line.is_empty(), "end_combat_blocked must produce a HUD line")
+	assert_true(line.contains("2"), "blocked line names the active hostile count")
+
+
+func test_end_combat_awaiting_reports_count() -> void:
+	var h := _hud()
+	var line: String = h._format_event({"type": "end_combat_awaiting", "count": 3})
+	assert_false(line.is_empty(), "end_combat_awaiting must produce a HUD line")
+	assert_true(line.contains("3"), "awaiting line names the pending PC count")
+
+
+func test_end_combat_resolved_returns_non_empty() -> void:
+	var h := _hud()
+	var line: String = h._format_event({"type": "end_combat_resolved"})
+	assert_false(line.is_empty(), "end_combat_resolved must produce a HUD line")

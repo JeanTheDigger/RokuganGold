@@ -26,6 +26,10 @@ extends Resource
 @export var stability: float = 100.0
 @export var active_crisis_id: int = -1
 @export var crisis_type: String = ""
+## Current starvation stage (ResourceTick.StarvationStage: 0 CLEAR / 1 SHORTAGE /
+## 2 HUNGER / 3 FAMINE), published each seasonal tick by ResourceTick. The NPC
+## engine reads this for the real severity instead of a crisis_type proxy.
+@export var starvation_stage: int = 0
 @export var active_insurgency_id: int = -1
 @export var province_taint_level: float = 0.0
 @export var last_report_ic_day: int = -1

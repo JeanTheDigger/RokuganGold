@@ -362,99 +362,18 @@ func test_ohiroma_not_wall_zone():
 
 
 # =============================================================================
-# AT_DOJO context flag assignment (s57.36.2 settlement-level proxy)
+# Context flag assignment (settlement-level proxies).
+# NOTE: AT_DOJO is intentionally NOT assigned at the settlement level — a dojo is
+# one Lesser Zone of a multi-zone castle, so pinning every resident to it wrongly
+# stripped governance/court/worship. The former _set_dojo_context_flags pass and
+# its tests were removed; AT_DOJO is reserved for future per-character zone tracking.
 # =============================================================================
-
-func _make_dojo_settlement(id: int, has_dojo_flag: bool) -> SettlementData:
-	var s: SettlementData = SettlementData.new()
-	s.settlement_id = id
-	s.settlement_type = Enums.SettlementType.FAMILY_CASTLE
-	s.has_dojo = has_dojo_flag
-	return s
-
 
 func _make_char_at(char_id: int, loc_id: int) -> L5RCharacterData:
 	var c: L5RCharacterData = L5RCharacterData.new()
 	c.character_id = char_id
 	c.physical_location = str(loc_id)
 	return c
-
-
-func test_set_dojo_flags_assigns_at_dojo() -> void:
-	var settlements: Array = [_make_dojo_settlement(10, true)]
-	var character: L5RCharacterData = _make_char_at(1, 10)
-	var world_states: Dictionary = {}
-	DayOrchestrator._set_dojo_context_flags([character], settlements, world_states)
-	assert_eq(
-		world_states.get(1, {}).get("context_flag", -1),
-		Enums.ContextFlag.AT_DOJO,
-		"character at dojo settlement gets AT_DOJO",
-	)
-
-
-func test_set_dojo_flags_skips_non_dojo_settlement() -> void:
-	var settlements: Array = [_make_dojo_settlement(10, false)]
-	var character: L5RCharacterData = _make_char_at(1, 10)
-	var world_states: Dictionary = {}
-	DayOrchestrator._set_dojo_context_flags([character], settlements, world_states)
-	assert_ne(
-		world_states.get(1, {}).get("context_flag", -1),
-		Enums.ContextFlag.AT_DOJO,
-		"character at non-dojo settlement does not get AT_DOJO",
-	)
-
-
-func test_set_dojo_flags_imperial_capital_has_dojo() -> void:
-	var s: SettlementData = SettlementData.new()
-	s.settlement_id = 20
-	s.settlement_type = Enums.SettlementType.IMPERIAL_CAPITAL
-	s.has_dojo = false
-	var character: L5RCharacterData = _make_char_at(2, 20)
-	var world_states: Dictionary = {}
-	DayOrchestrator._set_dojo_context_flags([character], [s], world_states)
-	assert_eq(
-		world_states.get(2, {}).get("context_flag", -1),
-		Enums.ContextFlag.AT_DOJO,
-		"IMPERIAL_CAPITAL always has a dojo regardless of has_dojo flag",
-	)
-
-
-func test_set_dojo_flags_at_court_takes_priority() -> void:
-	var settlements: Array = [_make_dojo_settlement(10, true)]
-	var character: L5RCharacterData = _make_char_at(1, 10)
-	var world_states: Dictionary = {1: {"context_flag": Enums.ContextFlag.AT_COURT}}
-	DayOrchestrator._set_dojo_context_flags([character], settlements, world_states)
-	assert_eq(
-		world_states.get(1, {}).get("context_flag", -1),
-		Enums.ContextFlag.AT_COURT,
-		"AT_COURT is not overwritten by AT_DOJO",
-	)
-
-
-func test_set_dojo_flags_at_temple_takes_priority() -> void:
-	var settlements: Array = [_make_dojo_settlement(10, true)]
-	var character: L5RCharacterData = _make_char_at(1, 10)
-	var world_states: Dictionary = {1: {"context_flag": Enums.ContextFlag.AT_TEMPLE}}
-	DayOrchestrator._set_dojo_context_flags([character], settlements, world_states)
-	assert_eq(
-		world_states.get(1, {}).get("context_flag", -1),
-		Enums.ContextFlag.AT_TEMPLE,
-		"AT_TEMPLE is not overwritten by AT_DOJO",
-	)
-
-
-func test_set_dojo_flags_skips_dead() -> void:
-	var settlements: Array = [_make_dojo_settlement(10, true)]
-	var character: L5RCharacterData = _make_char_at(1, 10)
-	WoundSystem.apply_damage(character, 1000, 0)
-	assert_true(CharacterStats.is_dead(character), "pre-condition: character is dead")
-	var world_states: Dictionary = {}
-	DayOrchestrator._set_dojo_context_flags([character], settlements, world_states)
-	assert_ne(
-		world_states.get(1, {}).get("context_flag", -1),
-		Enums.ContextFlag.AT_DOJO,
-		"dead character does not get AT_DOJO",
-	)
 
 
 func test_world_bootstrap_sets_has_dojo_for_champion_seat() -> void:
@@ -465,7 +384,8 @@ func test_world_bootstrap_sets_has_dojo_for_champion_seat() -> void:
 	var seat_province: String = WorldBootstrap.FAMILY_SEAT_PROVINCES.get(champion_family, "")
 	assert_eq(seat_province, "Kyoukan", "sanity-check: Hida seat is Kyoukan")
 	# The bootstrap function marks the castle when family == champion family.
-	# Indirectly verified: has_dojo flag concept is tested through _set_dojo_context_flags above.
+	# has_dojo still drives zone structure (champion seats get the DOJO + WAR_COUNCIL
+	# Lesser Zones via _infer_lord_rank_for_zones); it no longer drives a context flag.
 
 
 func test_world_bootstrap_does_not_set_has_dojo_for_non_champion_family() -> void:
@@ -516,43 +436,6 @@ func test_temple_context_sets_zone_subtype_temple_grounds() -> void:
 		ws.get("zone_subtype", -1),
 		Enums.ZoneSubtype.TEMPLE_GROUNDS,
 		"temple context sets zone_subtype to TEMPLE_GROUNDS",
-	)
-
-
-func test_dojo_context_sets_zone_subtype_dojo() -> void:
-	var settlements: Array = [_make_dojo_settlement(10, true)]
-	var character: L5RCharacterData = _make_char_at(4, 10)
-	var world_states: Dictionary = {}
-	DayOrchestrator._set_dojo_context_flags([character], settlements, world_states)
-	var ws: Dictionary = world_states.get(4, {})
-	assert_eq(
-		ws.get("context_flag", -1),
-		Enums.ContextFlag.AT_DOJO,
-		"pre-condition: AT_DOJO flag set",
-	)
-	assert_eq(
-		ws.get("zone_subtype", -1),
-		Enums.ZoneSubtype.DOJO,
-		"dojo context sets zone_subtype to DOJO",
-	)
-
-
-func test_temple_priority_blocks_dojo_zone_subtype() -> void:
-	# A character at a dojo settlement that also has a temple context should
-	# retain TEMPLE_GROUNDS, not be overwritten with DOJO.
-	var dojo_s: SettlementData = _make_dojo_settlement(50, true)
-	var character: L5RCharacterData = _make_char_at(5, 50)
-	var world_states: Dictionary = {
-		5: {
-			"context_flag": Enums.ContextFlag.AT_TEMPLE,
-			"zone_subtype": Enums.ZoneSubtype.TEMPLE_GROUNDS,
-		},
-	}
-	DayOrchestrator._set_dojo_context_flags([character], [dojo_s], world_states)
-	assert_eq(
-		world_states.get(5, {}).get("zone_subtype", -1),
-		Enums.ZoneSubtype.TEMPLE_GROUNDS,
-		"AT_TEMPLE zone_subtype not overwritten by dojo pass",
 	)
 
 

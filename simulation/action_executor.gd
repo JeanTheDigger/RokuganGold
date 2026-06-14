@@ -49,7 +49,7 @@ const ADMINISTRATIVE_ACTIONS: Array[String] = [
 	"ASSIGN_VASSAL_OBJECTIVE", "CALL_COURT", "SEND_INVITATION",
 	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID", "INVESTIGATE_PROVINCE",
 	"INVESTIGATE_RUMOR", "NEGOTIATE_SURRENDER", "CONDUCT_COMMERCE",
-	"DISPATCH_COURTIER",
+	"DISPATCH_COURTIER", "DECLARE_WALL_EMERGENCY",
 	"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 	"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
 	"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION", "DISSOLVE_MARRIAGE",
@@ -66,6 +66,19 @@ const SELF_ACTIONS: Array[String] = [
 	"WRITE_LETTER", "PERFORM_RITUAL", "PERFORM_WORSHIP",
 	"PUBLIC_ATONEMENT", "MENTOR", "BEGIN_TRAVEL",
 	"OBSERVE_COURT_ATTENDEES",
+]
+
+# Kolat ActionIDs routed to KolatExecutor (s54.7c). Mechanically-resolvable ones
+# act; topic/spell/network ones return deferred_system from KolatExecutor.
+const _KOLAT_ACTION_IDS: Array[String] = [
+	"TRANSMIT_VIA_TEAR", "OBSERVE_VIA_EYE", "SUBMIT_KOLAT_REPORT", "RUN_COURIER_ROUTE",
+	"DISTRIBUTE_INTELLIGENCE", "ESTABLISH_DEAD_DROP", "UNDERREPORT_KOKU", "LAUNDER_KOKU",
+	"TRANSFER_KOLAT_FUNDS", "ANONYMOUS_TIP", "CONDUCT_CONDITIONING", "MAINTAIN_SLEEPER_CONTACT",
+	"ACTIVATE_SLEEPER", "SECURE_ONI_EYE", "APPROACH_FOR_RECRUITMENT", "ROUTE_VIA_DEAD_DROP",
+	"CHECK_DEAD_DROP", "ROTATE_DEAD_DROP", "ARRANGE_PROXY_DUEL", "CHECK_CONFIRMATION_DROP",
+	"ROUTE_ANONYMOUS_INTELLIGENCE", "SPONSOR_INSURGENCY", "BRIBE_GARRISON_COMMANDER",
+	"CONTRIBUTE_TO_RESERVE", "CONDUCT_PERIMETER_PATROL", "ARCHIVE_TOPIC", "RESURRECT_TOPIC",
+	"USE_CLOUDS_EYES", "DELIVER_SEALED_LETTER",
 ]
 
 const NO_ROLL_ACTIONS: Array[String] = [
@@ -127,6 +140,29 @@ static func execute(
 				"reason": "hostage_restricted",
 				"effects": {},
 			}
+
+	# Kolat actions route to KolatExecutor (s54.7c). Metadata from the decomposition
+	# (action.metadata) is enriched with the resolved NPC target where relevant.
+	if action_id in _KOLAT_ACTION_IDS:
+		var kmeta: Dictionary = action.metadata.duplicate()
+		kmeta["ic_day"] = ctx.ic_day
+		if not kmeta.has("target") and action.target_npc_id >= 0:
+			var kt: L5RCharacterData = characters_by_id.get(action.target_npc_id, null)
+			if kt != null:
+				kmeta["target"] = kt
+				kmeta["sleeper"] = kt
+		var keff: Dictionary = KolatExecutor.execute(action_id, character, kmeta, dice_engine)
+		return {
+			"success": keff.get("ok", false),
+			"action_id": action_id,
+			"character_id": ctx.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": keff.get("reason", ""),
+			"effects": keff,
+		}
 
 	if action_id == "DELIVER_GIFT":
 		var gift_result: Dictionary = _try_execute_deliver_gift(
@@ -283,6 +319,9 @@ static func execute(
 
 	if action_id == "EXAMINE_CRIME_SCENE":
 		return _execute_examine_crime_scene(action, character, ctx, dice_engine, crime_records)
+
+	if action_id == "EXAMINE_FOR_TAINT":
+		return _execute_examine_for_taint(action, character, ctx, dice_engine, characters_by_id)
 
 	if action_id == "EXAMINE_LETTER":
 		return _execute_examine_letter(action, character, ctx)
@@ -1599,7 +1638,7 @@ static func _apply_effects(
 		elif action_id in INTELLIGENCE_ACTIONS:
 			effects = _compute_intelligence_effects(action_id, result.get("margin", 0))
 		else:
-			effects = _compute_self_effects(action_id)
+			effects = _compute_self_effects(action_id, action, _character)
 	else:
 		effects = _compute_failure_effects(action_id, result.get("margin", 0))
 
@@ -1835,7 +1874,26 @@ static func _compute_admin_effects(action_id: String, action: NPCDataStructures.
 			return _compute_send_invitation_effects(action)
 		"CALL_COURT":
 			return _compute_call_court_effects(action)
+		"DECLARE_WALL_EMERGENCY":
+			return _compute_declare_wall_emergency_effects(action)
 	return {"effect": "administrative_action"}
+
+
+## DECLARE_WALL_EMERGENCY (s2.4.14 Decision 6) — the gravest call a Crab Champion
+## can make short of war. An authority declaration, not a contested roll: it
+## auto-succeeds (no skill). The heavy lifting (elevating the incursion topic,
+## compelling every Crab lord, scheduling the non-compliance penalty) is done in
+## the day-orchestrator writeback, which has the world state. Here we only signal
+## the declaration and carry the critical Tower province through.
+static func _compute_declare_wall_emergency_effects(
+	action: NPCDataStructures.ScoredAction,
+) -> Dictionary:
+	var tower_province: int = action.target_province_id if action != null else -1
+	return {
+		"effect": "wall_emergency_declared",
+		"requires_wall_emergency_declaration": true,
+		"target_province_id": tower_province,
+	}
 
 
 static func _compute_assign_vassal_objective_effects(
@@ -2474,7 +2532,7 @@ static func _execute_purify_tainted_ground(
 	}
 
 
-static func _compute_self_effects(action_id: String) -> Dictionary:
+static func _compute_self_effects(action_id: String, action: NPCDataStructures.ScoredAction, character: L5RCharacterData) -> Dictionary:
 	match action_id:
 		"TRAIN":
 			return {"effect": "skill_practiced"}
@@ -2671,6 +2729,70 @@ static func _execute_examine_crime_scene(
 			"roll_total": exam_result.get("roll_total", 0),
 		},
 	}
+
+
+# -- EXAMINE_FOR_TAINT (Maho Channel 3 active, owner-authorized 2026-06-10) -----
+# Active counterpart to the passive Lore: Shadowlands proximity check (R2 —
+# corroboration). A witch-hunter who knows an active taint_suspected accusation
+# deliberately examines the co-located accused suspect to confirm the corruption
+# firsthand. The target + topic are injected by the orchestrator pre-pass and
+# arrive via metadata. On a successful Lore: Shadowlands (Perception) roll vs
+# (8 − Taint Rank) × 5 (Kuni/Asako +2k0), the writeback refreshes the accusation
+# and widens its reach. NOT a Sense cast — Sense detects kami, not kansen.
+
+static func _execute_examine_for_taint(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var target_id: int = action.metadata.get("taint_target_id", -1)
+	var topic_id: int = action.metadata.get("taint_topic_id", -1)
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+
+	var base: Dictionary = {
+		"success": false,
+		"action_id": "EXAMINE_FOR_TAINT",
+		"character_id": character.character_id,
+		"target_npc_id": target_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {},
+	}
+
+	# Revalidate at execution time — the suspect may have died or been cured
+	# since the pre-pass, and a dead suspect must never be accused (NEUTRAL rule).
+	if target == null or CharacterStats.is_dead(target):
+		base["reason"] = "no_valid_suspect"
+		return base
+	if target.clan == "Crab":
+		base["reason"] = "crab_exempt"
+		return base
+	var rank: int = MutationSystem.get_taint_rank(target.taint)
+	if rank < MutationSystem.TAINT_DETECTION_RANK_MIN:
+		# The lead was a false alarm — the suspect carries no detectable Taint.
+		base["reason"] = "no_taint_found"
+		return base
+
+	var tn: int = MutationSystem.taint_detection_tn(rank)
+	var family_bonus: int = 2 if MutationSystem.is_taint_specialist_family(character.family) else 0
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Lore: Shadowlands", tn,
+		0, "", Enums.Trait.PERCEPTION, family_bonus,
+	)
+	if not check.get("success", false):
+		base["reason"] = "examination_inconclusive"
+		return base
+
+	base["success"] = true
+	base["effects"] = {
+		"effect": "taint_corroborated",
+		"requires_taint_corroboration": true,
+		"taint_target_id": target_id,
+		"taint_topic_id": topic_id,
+	}
+	return base
 
 
 static func _find_crime_record(
@@ -3397,7 +3519,7 @@ static func _execute_hire_ronin(
 
 	# Courtier/Awareness vs TN 10 — confirming the lord can articulate contract terms.
 	var check: Dictionary = SkillResolver.resolve_skill_check(
-		character, dice_engine, "Courtier", 10, ic_day,
+		character, dice_engine, "Courtier", 10, 0, "", Enums.Trait.NONE, 0, 0, 0, ic_day,
 	)
 	if not check.get("success", false):
 		return {
@@ -3436,7 +3558,7 @@ static func _execute_perform_clan_induction(
 	var ronin_id: int = action.metadata.get("target_ronin_id", -1)
 
 	# Only Provincial Daimyo or higher may sponsor induction (s52.7 Part A).
-	if character.lord_rank < Enums.LordRank.PROVINCIAL_DAIMYO:
+	if RoleRegistry.lord_rank_from_status(character.status) < Enums.LordRank.PROVINCIAL_DAIMYO:
 		return {
 			"success": false, "action_id": "PERFORM_CLAN_INDUCTION",
 			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
@@ -3482,7 +3604,7 @@ static func _execute_perform_clan_induction(
 
 	# Courtier/Awareness vs TN 20 — ceremony must be performed with proper rites.
 	var check: Dictionary = SkillResolver.resolve_skill_check(
-		character, dice_engine, "Courtier", 20, ic_day,
+		character, dice_engine, "Courtier", 20, 0, "", Enums.Trait.NONE, 0, 0, 0, ic_day,
 	)
 	if not check.get("success", false):
 		return {
@@ -3515,7 +3637,7 @@ static func _execute_approve_clan_induction(
 	var ic_day: int = ctx.ic_day
 	var ronin_id: int = action.metadata.get("target_ronin_id", -1)
 
-	if character.lord_rank < Enums.LordRank.FAMILY_DAIMYO:
+	if RoleRegistry.lord_rank_from_status(character.status) < Enums.LordRank.FAMILY_DAIMYO:
 		return {
 			"success": false, "action_id": "APPROVE_CLAN_INDUCTION",
 			"character_id": character.character_id, "ic_day": ic_day, "season": ctx.season,
@@ -6617,7 +6739,7 @@ static func _execute_compose_sculpture(
 			"effects": {
 				"is_new_sculpture": true,
 				"format": meta.get("format", SculptureSystem.Format.STATUARY),
-				"material": meta.get("material", SculptureSystem.Material.WOOD),
+				"material": meta.get("material", SculptureSystem.MaterialType.WOOD),
 				"target_quality_tier": target_quality,
 				"subject_type": meta.get("subject_type", SculptureSystem.SubjectType.FORTUNE),
 				"subject_id": meta.get("subject_id", -1),
@@ -6628,12 +6750,12 @@ static func _execute_compose_sculpture(
 
 	# Advance existing WIP.
 	var raises_declared: int = meta.get("raises", 0)
-	var material: int = meta.get("material", SculptureSystem.Material.WOOD)
+	var material: int = meta.get("material", SculptureSystem.MaterialType.WOOD)
 	var sc_format: int = meta.get("format", SculptureSystem.Format.STATUARY)
-	var stone_penalty: int = SculptureSystem.STONE_TN_PENALTY if material == SculptureSystem.Material.STONE else 0
+	var stone_penalty: int = SculptureSystem.STONE_TN_PENALTY if material == SculptureSystem.MaterialType.STONE else 0
 	# GDD A5: bronze +1 FR requires a foundry in the province. Defaults false until foundry data modeled.
 	var has_foundry: bool = ctx.known_objectives.get("foundry_in_province", false)
-	var bronze_fr: int = 1 if (material == SculptureSystem.Material.BRONZE and has_foundry) else 0
+	var bronze_fr: int = 1 if (material == SculptureSystem.MaterialType.BRONZE and has_foundry) else 0
 	# Yoritomo Sculptor: +1k1 on figurine rolls (GDD section N).
 	var yoritomo_bonus_dice: int = 0
 	var yoritomo_bonus_keep: int = 0

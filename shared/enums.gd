@@ -266,6 +266,8 @@ enum ZoneSubtype {
 	SHRINE_CLEARING,
 	# Wall / Military
 	WALL_TOWER,
+	# Dwelling interiors (s4.4 lived-in spaces)
+	PEASANT_DWELLING,
 }
 
 # Three-tier zone hierarchy — Greater Zone is the top container.
@@ -397,6 +399,9 @@ enum KolatSect {
 	LOTUS,
 	SILK,
 	TIGER,
+	JADE,
+	ROC,
+	STEEL,
 }
 
 enum BloodspeakerCellState {
@@ -813,6 +818,34 @@ enum TileType {
 	FLOOR_ASH      = 32,  # ,  dark grey (burned-out tile, s56.6)
 	FIRE           = 33,  # ^  orange/red (actively burning, s56.6)
 	RUBBLE         = 34,  # ;  grey (destroyed wall remains)
+	# Furnishings & objects (s4.4 "Remaining Tile Categories") — lived-in interiors.
+	# Properties are enforced by MovementSystem (passability), AsciiMapData.blocks_los
+	# (sight) and AsciiMapData.grants_cover (combat). Low visual weight per s4.4.
+	FURNITURE_FUTON   = 35,  # ▬  sleeping mat — passable, no LOS block, no cover
+	FURNITURE_HEARTH  = 36,  # ▦  irori firepit — blocks move, no LOS block
+	FURNITURE_CHEST   = 37,  # ▥  chest / tansu — blocks move, blocks LOS, cover
+	FURNITURE_TABLE   = 38,  # ╥  low table / writing desk — blocks move, cover
+	FURNITURE_JAR     = 39,  # ◍  water jar / barrel — blocks move, cover
+	FURNITURE_SCREEN  = 40,  # ║  byōbu folding screen — passable, blocks LOS
+	FURNITURE_BRAZIER = 41,  # †  brazier / lantern stand — blocks move
+	FURNITURE_CUSHION = 42,  # ▫  zabuton cushion — passable, no LOS block
+	# Furnishings, tranche 2 — public / worship / commerce / martial spaces.
+	FURNITURE_DAIS         = 43,  # ⊓  raised seat of authority — blocks move, cover
+	FURNITURE_BANNER       = 44,  # ╤  hanging banner / noren — passable, decorative
+	FURNITURE_WEAPON_STAND = 45,  # Ψ  katana-kake / weapon / armor rack — blocks move, cover
+	FURNITURE_ALTAR        = 46,  # ⊥  shrine altar — blocks move, cover
+	FURNITURE_OFFERING_BOX = 47,  # ▣  saisen offering box — blocks move, cover
+	FURNITURE_INCENSE      = 48,  # §  incense burner / censer — blocks move
+	FURNITURE_STATUE       = 49,  # ☗  idol / komainu / Fortune statue — blocks move + LOS, cover
+	FURNITURE_PRAYER_MAT   = 50,  # ▭  prayer mat — passable
+	FURNITURE_STALL        = 51,  # ╦  market stall / vendor counter — blocks move, cover
+	FURNITURE_CRATE        = 52,  # ▧  crate / barrel / sacks / baskets — blocks move, cover
+	FURNITURE_NET          = 53,  # ╳  fishing net / drying rack — passable, blocks LOS
+	FURNITURE_WELL         = 54,  # ◉  well — blocks move, cover
+	FURNITURE_DUMMY        = 55,  # ‡  training dummy / makiwara — blocks move, cover
+	FURNITURE_SHELF        = 56,  # ▤  shelf / cupboard / mizuya — blocks move + LOS, cover
+	FURNITURE_STOVE        = 57,  # ◫  kamado cooking stove — blocks move
+	FURNITURE_BENCH        = 58,  # ╨  bench / stool — passable
 }
 
 # -- s45 Advantages ------------------------------------------------------------

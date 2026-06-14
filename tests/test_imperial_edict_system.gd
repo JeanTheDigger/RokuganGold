@@ -1686,7 +1686,10 @@ func test_commitment_seasonal_edict_renege_tier_2_topic():
 		commitments, log, 250, chars_by_id, topics, next_id,
 	)
 	assert_eq(topics[0].tier, TopicData.Tier.TIER_3, "Edict renege should produce Tier 3 topic")
-	assert_eq(topics[0].momentum, TopicMomentumSystem.MOMENTUM_MINOR_FLOOR, "Tier 3 topic gets minor momentum")
+	# Renege topics now seed at the tier's initial momentum floor (s16.1).
+	assert_eq(topics[0].momentum,
+		TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3),
+		"Tier 3 topic gets its tier-floor momentum")
 
 func test_commitment_seasonal_next_topic_id_increments():
 	var lord := _make_attendee(10, "Crane", 5.0)

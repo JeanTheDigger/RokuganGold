@@ -33,8 +33,8 @@ static func spend(character: L5RCharacterData) -> bool:
 ## HOTEI'S BLESSING protection variant (s45): contested Void vs TN 10.
 ## On success, the VP is NOT consumed. Returns {success, protected}.
 static func try_spend_protected(character: L5RCharacterData, dice_engine: DiceEngine) -> Dictionary:
-	var protection: Dictionary = AdvantageSystem.check_hotei_void_protection(character)
-	if not protection.get("protected", false):
+	var protection: bool = AdvantageSystem.check_hotei_void_protection(character)
+	if not protection:
 		var spent: bool = spend(character)
 		return {"success": spent, "protected": false}
 	# Contested Void roll vs TN 10.

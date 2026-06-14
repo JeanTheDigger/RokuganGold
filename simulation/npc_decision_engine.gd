@@ -3,6 +3,19 @@ class_name NPCDecisionEngine
 ## Runs identically for every named NPC regardless of context.
 ## Pure data — no Node inheritance, no scene tree dependency.
 
+# Kolat ActionID pool unlocked in Phase 3 for Kolat agents (s54.7c/d). The
+# Phase-4b allowlist (objective_alignment) narrows this to the active NeedType.
+const KOLAT_ACTION_POOL: Array[String] = [
+	"TRANSMIT_VIA_TEAR", "OBSERVE_VIA_EYE", "SUBMIT_KOLAT_REPORT", "RUN_COURIER_ROUTE",
+	"DISTRIBUTE_INTELLIGENCE", "ESTABLISH_DEAD_DROP", "UNDERREPORT_KOKU", "LAUNDER_KOKU",
+	"TRANSFER_KOLAT_FUNDS", "ANONYMOUS_TIP", "CONDUCT_CONDITIONING", "MAINTAIN_SLEEPER_CONTACT",
+	"ACTIVATE_SLEEPER", "SECURE_ONI_EYE", "APPROACH_FOR_RECRUITMENT", "ROUTE_VIA_DEAD_DROP",
+	"CHECK_DEAD_DROP", "ROTATE_DEAD_DROP", "ARRANGE_PROXY_DUEL", "CHECK_CONFIRMATION_DROP",
+	"ROUTE_ANONYMOUS_INTELLIGENCE", "SPONSOR_INSURGENCY", "BRIBE_GARRISON_COMMANDER",
+	"CONTRIBUTE_TO_RESERVE", "CONDUCT_PERIMETER_PATROL", "ARCHIVE_TOPIC", "RESURRECT_TOPIC",
+	"USE_CLOUDS_EYES", "DELIVER_SEALED_LETTER",
+]
+
 
 # -- Phase 1: Build Context ----------------------------------------------------
 
@@ -22,8 +35,18 @@ static func build_context(
 	ctx.school_type = character.school_type
 	ctx.is_lord = world_state.get("is_lord", false)
 	ctx.is_hostage = character.captive_status != ""
+	# Kolat agent context (s54.7d Phase-3 ActionID unlock).
+	ctx.kolat_sect = character.kolat_sect
+	ctx.is_kolat_master = character.is_kolat_master
+	ctx.has_kolat_objective = bool(world_state.get("has_kolat_objective", false))
+	# Dual-stance positions exist only for conscious Kolat agents (s54.7f).
+	if character.kolat_sect != Enums.KolatSect.NONE:
+		ctx.kolat_positions = character.kolat_positions.duplicate()
 	ctx.lord_rank = CivilianOrderBudget.lord_rank_from_status(character.status)
 	ctx.civilian_orders_remaining = character.civilian_orders_remaining
+	# s2.4.14 D6: the marker persists for the active emergency window (set on
+	# declaration, cleared by the seasonal obligation pass).
+	ctx.wall_emergency_active = character.wall_emergency_obligation_ic_day >= 0
 
 	# Location & situation
 	ctx.location_id = character.physical_location
@@ -303,6 +326,11 @@ static func resolve_goal(
 	if crisis_need != null:
 		return crisis_need
 
+	# Kolat objective — priority 3 fires before the primary (s54.7d cascade).
+	var kolat_hi := _decompose_kolat_objective(ctx, objectives, true)
+	if kolat_hi != null:
+		return kolat_hi
+
 	# Family Daimyo tier: Combined Pool (Champion conclusions + local Tier 3 needs)
 	# replaces the Primary Objective step per s57.54.10b. Only FAMILY_DAIMYO uses
 	# this pool — Champion/Imperial have no conclusions injected and use the
@@ -329,6 +357,12 @@ static func resolve_goal(
 			if primary_need != null:
 				return primary_need
 
+	# Kolat objective — priority 1–2 yields to the primary but precedes standing
+	# (s54.7d cascade).
+	var kolat_lo := _decompose_kolat_objective(ctx, objectives, false)
+	if kolat_lo != null:
+		return kolat_lo
+
 	# Standing objective fallback
 	var standing: Dictionary = objectives.get("standing", {})
 	if standing.size() > 0:
@@ -348,6 +382,27 @@ static func resolve_goal(
 	fallback.need_type = "REST"
 	fallback.priority = 3
 	return fallback
+
+
+## Kolat objective slot (s54.7d). The third objective slot, active only when a
+## Master has assigned a task through the Kolat delivery channel. It enters the
+## Phase-2 cascade at two points: priority 3 fires before the primary, priority 1–2
+## yields to the primary but precedes the standing objective. high_priority_only
+## selects which pass this call is. Decomposes exactly like any other objective.
+static func _decompose_kolat_objective(
+	ctx: NPCDataStructures.ContextSnapshot,
+	objectives: Dictionary,
+	high_priority_only: bool,
+) -> NPCDataStructures.ImmediateNeed:
+	var kolat: Dictionary = objectives.get("kolat", {})
+	if kolat.is_empty():
+		return null
+	var priority: int = int(kolat.get("priority", 2))
+	if high_priority_only and priority < 3:
+		return null
+	if not high_priority_only and priority >= 3:
+		return null
+	return _decompose_objective(kolat, ctx)
 
 
 ## Combined pool for lord-tier characters (s57.54.10b).
@@ -384,7 +439,9 @@ static func _check_combined_pool(
 	need.need_type = best.get("need_type", "")
 	need.priority = 2
 	need.source = best.get("source", "combined_pool")
-	need.target_clan_id = best.get("target_clan_id", "")
+	# candidate target_clan_id is an int clan id; ImmediateNeed.target_clan_id is a
+	# String clan name — incompatible, so don't assign it here (decomposition/
+	# metadata resolves the target downstream).
 	return need
 
 
@@ -401,8 +458,32 @@ static func generate_options(
 	var available_actions: Array = _get_actions_for_context(ctx.context_flag)
 	var has_mil_rank: bool = ctx.military_rank > Enums.MilitaryRank.NONE
 
+	# Kolat Phase-3 ActionID unlock (s54.7d): Masters always have the full Sect
+	# pool; conscious agents unlock it when a Kolat objective is active. The
+	# Phase-4b allowlist (objective_alignment) then narrows the pool to the
+	# actions aligned with the current Kolat NeedType.
+	if ctx.is_kolat_master or (ctx.kolat_sect != Enums.KolatSect.NONE and ctx.has_kolat_objective):
+		available_actions = available_actions.duplicate()
+		for ka: String in KOLAT_ACTION_POOL:
+			if ka not in available_actions:
+				available_actions.append(ka)
+
 	if need.need_type == "RESPOND_TO_SEPPUKU":
 		available_actions = ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"]
+	elif need.source == "bribery_eval":
+		# Investigation-suppression reactive menu (s11.3.13 / s12.9). The
+		# witness-tampering and flight actions are in no context list, so — like the
+		# seppuku override above — present them directly for the bribery_eval need.
+		# The allowlist (SUPPRESS_INVESTIGATION) keeps them and the personality
+		# filter gates the aggressive ones (an honourable NPC won't kill a witness).
+		available_actions = [
+			"BRIBE_FOR_INFO", "BRIBE_WITNESS", "INTIMIDATE_WITNESS",
+			"KILL_WITNESS", "FLEE_JURISDICTION",
+		]
+	elif need.source == "extortion_opportunity":
+		# Corrupt-magistrate extortion reactive menu (s11.3.13). EXTORT_ACCUSED is
+		# in no context list; a magistrate who declines falls through to DO_NOTHING.
+		available_actions = ["EXTORT_ACCUSED"]
 
 	for action_id: String in available_actions:
 		if _is_zone_blocked(action_id, ctx.zone_flags):
@@ -742,6 +823,26 @@ static func _apply_terminate_contract_precondition_filter(
 	return _remove_action(options, "TERMINATE_CONTRACT")
 
 
+# -- Phase 4c: EXAMINE_FOR_TAINT Precondition Filter (Maho Channel 3 active) ---
+# Removes EXAMINE_FOR_TAINT unless the orchestrator found a co-located accused
+# suspect this examiner knows about and has not yet corroborated.
+
+static func _apply_taint_examination_precondition_filter(
+	options: Array,
+	world_state: Dictionary,
+) -> Array:
+	var has_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "EXAMINE_FOR_TAINT":
+			has_action = true
+			break
+	if not has_action:
+		return options
+	if world_state.get("has_taint_corroboration_target", false):
+		return options
+	return _remove_action(options, "EXAMINE_FOR_TAINT")
+
+
 # -- Phase 5: Score All Options ------------------------------------------------
 # Eight components per s55.4.5 / s55.3.3.
 
@@ -1050,6 +1151,17 @@ static func run(
 	# Phase 1
 	var ctx := build_context(character, world_state, chars_by_id)
 
+	# Sleeper override (s54.7e): an activated sleeper bypasses Phase 2 goal
+	# resolution AND the Phase-4 personality filter, pursuing the installed
+	# command at maximum weight through the normal action system until it
+	# completes or they die. Completion clears the command and returns the
+	# sleeper to ordinary behavior on the same AP.
+	if not character.active_sleeper_command.is_empty():
+		if _sleeper_command_complete(character.active_sleeper_command, chars_by_id):
+			character.active_sleeper_command = {}
+		else:
+			return _run_sleeper_override(character, ctx, scoring_tables, chars_by_id)
+
 	# Phase 2
 	var need := resolve_goal(character, ctx, objectives)
 
@@ -1061,8 +1173,10 @@ static func run(
 	options = apply_allowlist_filter(options, need.need_type, scoring_tables)
 	options = _apply_tattoo_precondition_filter(options, character, ctx, chars_by_id, world_state)
 	options = _apply_terminate_contract_precondition_filter(options, world_state)
+	options = _apply_taint_examination_precondition_filter(options, world_state)
 	options = _apply_origami_precondition_filter(options, character, ctx)
 	options = _apply_garden_precondition_filter(options, character, ctx)
+	options = _apply_arrived_travel_filter(options, need, ctx)
 
 	# Phase 5
 	score_all(options, need, ctx, scoring_tables,
@@ -1076,6 +1190,106 @@ static func run(
 	result["need_source"] = need.source
 	result["need_type"] = need.need_type
 	return result
+
+
+## Sleeper override loop (s54.7e): decompose the installed command as an
+## ImmediateNeed and pursue it through the normal action pipeline, but WITHOUT the
+## personality filter (the conditioning overrides virtues/honor). Actions are
+## tagged memory_suppressed so the sleeper cannot recall them.
+static func _run_sleeper_override(
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	scoring_tables: Dictionary,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	var need := _need_from_command(character.active_sleeper_command)
+	var options := generate_options(ctx, need, character, chars_by_id)
+	# NO personality filter — that is the whole point of conditioning (s54.7e).
+	options = apply_allowlist_filter(options, need.need_type, scoring_tables)
+	# A sleeper command that targets a location (e.g. travel-to-then-act) must still
+	# stop travelling once it arrives, same as the main path.
+	options = _apply_arrived_travel_filter(options, need, ctx)
+	score_all(options, need, ctx, scoring_tables, [], [], character, 0, chars_by_id)
+	var chosen := select_action(options, ctx)
+	var result: Dictionary = execute_action(chosen, character, ctx)
+	result["need_type"] = need.need_type
+	result["sleeper_override"] = true
+	result["memory_suppressed"] = true
+	return result
+
+
+# -- Phase 4: Arrived-at-target travel filter ----------------------------------
+# The travel-class passthrough NeedTypes (TRAVEL_TO, ATTEND_COURT, SEEK_MAGISTRATE,
+# LOCATE_CHARACTER, CONVENE_KOLAT_CONCLAVE, …) score BEGIN_TRAVEL as their top action
+# regardless of position. Once the NPC has reached the need's target location,
+# BEGIN_TRAVEL would only no-op ("already_there", wasting the AP) and crowd out the
+# at-destination action. Drop it on arrival so the next-best action wins (e.g. CHARM
+# at the court) or, if travel was the whole point (pure TRAVEL_TO), the NPC falls to
+# REST while the owning objective is cleared by its arrival handler. Only BEGIN_TRAVEL
+# is removed, and it survives the allowlist only for travel NeedTypes, so this is a
+# no-op for every non-travel need.
+static func _apply_arrived_travel_filter(
+	options: Array,
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	if not _is_at_travel_target(need, ctx):
+		return options
+	var filtered: Array = []
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "BEGIN_TRAVEL":
+			continue
+		filtered.append(option)
+	return filtered
+
+
+## True if the NPC's current location already satisfies the need's travel target.
+## Mirrors the arrival conventions used elsewhere: exact settlement-id match, or
+## province containment via the begins_with check used by the HUNT_MAHO / UPHOLD_LAW
+## decompose guards.
+static func _is_at_travel_target(
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	if need.target_settlement_id >= 0 and ctx.location_id == str(need.target_settlement_id):
+		return true
+	if not need.target_intent.is_empty() and ctx.location_id.begins_with(need.target_intent):
+		return true
+	if need.target_province_id >= 0 and ctx.location_id.begins_with(str(need.target_province_id)):
+		return true
+	return false
+
+
+## Build an ImmediateNeed from a stored sleeper command Dictionary.
+static func _need_from_command(command: Dictionary) -> NPCDataStructures.ImmediateNeed:
+	var need := NPCDataStructures.ImmediateNeed.new()
+	need.need_type = String(command.get("need_type", command.get("need", "")))
+	need.priority = 3
+	need.target_npc_id = int(command.get("target_npc_id", -1))
+	need.target_settlement_id = int(command.get("target_settlement_id", -1))
+	need.target_province_id = int(command.get("target_province_id", -1))
+	need.target_topic_id = int(command.get("target_topic_id", -1))
+	need.source = "sleeper_command"
+	return need
+
+
+## Sleeper-command completion (s54.7e). The only completion signal the engine can
+## read faithfully is target death for elimination-type commands: once the named
+## target is dead (or no longer exists), the kill order is fulfilled. Commands
+## without a death condition have no engine-detectable completion — the sleeper
+## keeps acting until they die, per s54.7e — so this returns false for them.
+static func _sleeper_command_complete(command: Dictionary, chars_by_id: Dictionary) -> bool:
+	const ELIMINATION_NEEDS := ["ELIMINATE_CHARACTER", "ASSASSINATE"]
+	var nt: String = String(command.get("need_type", command.get("need", "")))
+	if nt not in ELIMINATION_NEEDS:
+		return false
+	var tid: int = int(command.get("target_npc_id", -1))
+	if tid < 0:
+		return false
+	var tgt: L5RCharacterData = chars_by_id.get(tid, null)
+	if tgt == null:
+		return false  # target not resolvable here — can't confirm death, keep pursuing
+	return CharacterStats.is_dead(tgt)
 
 
 # -- Comparison for Phase 6 tiebreakers ---------------------------------------
@@ -1251,6 +1465,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 	match context_flag:
 		Enums.ContextFlag.AT_OWN_HOLDINGS:
 			return [
+				"BEGIN_TRAVEL",
 				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
 				"PROBE", "READ_CHARACTER", "PUBLIC_DEBATE",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
@@ -1273,7 +1488,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"MENTOR",
 				"TREAT_WOUND",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
-				"EXAMINE_CRIME_SCENE",
+				"EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT",
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
@@ -1284,6 +1499,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"ASSIGN_GARRISON", "ORDER_LEVY",
 				"ORDER_DEPLOY", "ORDER_FORTIFY",
 				"SEND_INVITATION", "CALL_COURT",
+				"DECLARE_WALL_EMERGENCY",
 				"COMMISSION_ASSASSINATION",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
@@ -1311,6 +1527,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 			]
 		Enums.ContextFlag.AT_COURT:
 			return [
+				"BEGIN_TRAVEL",
 				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
 				"PROBE", "READ_CHARACTER", "LISTEN_REFLECT", "IMPRESS",
 				"PUBLIC_DEBATE", "PUBLIC_INSULT", "PUBLIC_DECLARATION",
@@ -1329,7 +1546,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"FORGE_IMPERSONATION_LETTER", "FORGE_ORDER",
 				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
-				"EXAMINE_LETTER",
+				"EXAMINE_LETTER", "EXAMINE_FOR_TAINT",
 				"TREAT_WOUND",
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
@@ -1340,6 +1557,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
 				"REQUEST_ALLIED_AID",
 				"TRANSFER_KOKU",
+				"DECLARE_WALL_EMERGENCY",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
 				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
@@ -1353,6 +1571,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 			]
 		Enums.ContextFlag.VISITING:
 			return [
+				"BEGIN_TRAVEL",
 				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
 				"PROBE", "READ_CHARACTER", "LISTEN_REFLECT",
 				"DELIVER_GIFT", "OFFER_FAVOR", "DISCERN_NEED",
@@ -1370,7 +1589,8 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
-				"EXAMINE_CRIME_SCENE",
+				"EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT",
+				"INVESTIGATE_PROVINCE",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
 				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
@@ -1395,6 +1615,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 			]
 		Enums.ContextFlag.ON_CAMPAIGN:
 			return [
+				"BEGIN_TRAVEL",
 				"ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST",
 				"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
 				"SCOUT_ENEMY",
@@ -1402,11 +1623,12 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"TREAT_WOUND",
 				"TRAIN",
 				"ORDER_DEPLOY", "ORDER_FORTIFY", "ORDER_RETREAT",
-				"ASSIGN_GARRISON",
+				"ASSIGN_GARRISON", "DECLARE_WALL_EMERGENCY",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.UNDER_SIEGE:
 			return [
+				"BEGIN_TRAVEL",
 				"CONDUCT_SORTIE", "CONDUCT_STORM_ASSAULT",
 				"NEGOTIATE_SURRENDER", "MAINTAIN_SIEGE",
 				"TREAT_WOUND",
@@ -1414,11 +1636,13 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 			]
 		Enums.ContextFlag.IN_EXILE:
 			return [
+				"BEGIN_TRAVEL",
 				"TRAIN", "MEDITATE",
 				"DO_NOTHING", "REST",
 			]
 		Enums.ContextFlag.AT_TEMPLE:
 			return [
+				"BEGIN_TRAVEL",
 				"PERFORM_RITUAL", "PERFORM_WORSHIP", "MEDITATE", "CONDUCT_TEA_CEREMONY",
 				"PUBLIC_ATONEMENT", "TRAIN",
 				"CHARM", "PROBE", "READ_CHARACTER",
@@ -1428,6 +1652,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 			]
 		Enums.ContextFlag.AT_DOJO:
 			return [
+				"BEGIN_TRAVEL",
 				"TRAIN", "MENTOR", "DRILL_TROOPS",
 				"CHARM", "PROBE",
 				"TREAT_WOUND",
@@ -1435,11 +1660,13 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 			]
 		Enums.ContextFlag.AT_WALL_TOWER:
 			return [
+				"BEGIN_TRAVEL",
 				"FORTIFY_WALL_SECTION", "SEAL_WALL_BREACH",
 				"CONDUCT_SORTIE",
+				"PURIFY_TAINTED_GROUND",
 				"SCOUT_ENEMY",
 				"ASSESS_PROVINCE_STATUS",
-				"DISPATCH_COURTIER",
+				"DISPATCH_COURTIER", "DECLARE_WALL_EMERGENCY",
 				"TREAT_WOUND",
 				"TRAIN",
 				"DO_NOTHING", "REST",
@@ -1498,10 +1725,12 @@ static func _get_ap_cost(action_id: String) -> int:
 		"SEARCH_QUARTERS": 1,
 		"BEGIN_TRAVEL": 1,
 		"DISPATCH_COURTIER": 1,
+		"DECLARE_WALL_EMERGENCY": 1,
 		"SCOUT_ENEMY": 1,
 		"CONDUCT_COMMERCE": 1,
 		"PURCHASE_MARKET": 1,
 		"EXAMINE_CRIME_SCENE": 1,
+		"EXAMINE_FOR_TAINT": 1,
 		"ISSUE_DUEL_CHALLENGE": 1,
 		"FORGE_IMPERSONATION_LETTER": 1,
 		"FORGE_ORDER": 1,
@@ -1556,6 +1785,11 @@ static func _get_ap_cost(action_id: String) -> int:
 		"DISPLAY_PAINTING": 1,
 		"PRESENT_EMAKIMONO": 1,
 		"COMPOSE_SCULPTURE": 1,
+		# Kolat (s54.7c): most are 1 AP (default); these two are 0-AP auto-actions.
+		# OBSERVE_VIA_EYE is "all AP for the day" — needs full-day special handling
+		# in the engine/executor (deferred), not a fixed cost here.
+		"ARCHIVE_TOPIC": 0,
+		"CONTRIBUTE_TO_RESERVE": 0,
 	}
 	return costs.get(action_id, 1)
 
@@ -1645,7 +1879,7 @@ const _CHANGE_COURSE_ACTIONS: Array[String] = [
 
 const _OBSERVATION_ACTIONS: Array[String] = [
 	"OBSERVE", "EAVESDROP", "SHADOW_TARGET", "GATHER_INTELLIGENCE",
-	"INVESTIGATE_PROVINCE", "EXAMINE_CRIME_SCENE",
+	"INVESTIGATE_PROVINCE", "EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT",
 ]
 
 
@@ -2369,7 +2603,13 @@ static func _compute_topic_position_modifier(
 			var tt: String = ctx.known_topic_types.get(topic_id, "")
 			if not tt.is_empty() and tt not in type_filter:
 				continue
-		var position: float = float(ctx.known_positions.get(topic_id, 0))
+		# Dual stance (s54.7f): a conscious Kolat agent uses their kolat_positions
+		# entry for a topic when one exists, falling back to known_positions.
+		var position: float
+		if ctx.kolat_positions.has(topic_id):
+			position = float(ctx.kolat_positions[topic_id])
+		else:
+			position = float(ctx.known_positions.get(topic_id, 0))
 		if invert:
 			position = -position
 		var modifier: float = _interpolate_topic_position(position, need_entry)
@@ -2520,7 +2760,7 @@ const LORD_ONLY_ACTIONS: Array[String] = [
 	"SET_TAX_RATE", "SET_STIPEND_RATE",
 	"REQUEST_ART", "REQUEST_PERFORMANCE",
 	"ASSIGN_VASSAL_OBJECTIVE", "ASSIGN_TO_MILITARY_SERVICE",
-	"SEND_INVITATION", "CALL_COURT",
+	"SEND_INVITATION", "CALL_COURT", "DECLARE_WALL_EMERGENCY",
 	"COMMISSION_ASSASSINATION",
 	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID",
 	"TRANSFER_KOKU", "SHARE_SUPPLIES",
@@ -2553,6 +2793,12 @@ static func _is_military_blocked(
 		return ctx.commanded_unit_id < 0
 	if COMMANDER_RANK_ACTIONS.has(action_id):
 		if ctx.is_lord and action_id in CivilianOrderBudget.MILITARY_OR_CIVILIAN_ACTIONS:
+			return false
+		# s55.23a: DISPATCH_COURTIER is available to "Champion and Shireikan tier."
+		# Clan Champions carry military_rank NONE, so the rank gate alone would
+		# lock them out of their own Wall-shortage escalation (Step 2).
+		if action_id == "DISPATCH_COURTIER" \
+				and ctx.lord_rank == Enums.LordRank.CLAN_CHAMPION:
 			return false
 		var min_rank: int = COMMANDER_RANK_ACTIONS[action_id]
 		return ctx.military_rank < min_rank
@@ -2826,8 +3072,7 @@ static func build_province_statuses_from_data(
 		ps.last_report_ic_day = pd.last_report_ic_day
 		ps.province_taint_level = pd.province_taint_level
 		ps.is_wall_province = pd.shadowlands_strength > 0
-		if pd.crisis_type == "famine":
-			ps.starvation_stage = ResourceTick.StarvationStage.SHORTAGE
+		ps.starvation_stage = pd.starvation_stage
 		ps.garrison_pu = settlement_garrison.get(pd.province_id, 0)
 		ps.total_settlement_pu = settlement_total_pu.get(pd.province_id, 0)
 		ps.rice_stockpile = settlement_rice.get(pd.province_id, 0.0)
@@ -2855,6 +3100,20 @@ static func _populate_action_metadata(
 ) -> void:
 	if option.action_id == "DECLARE_WAR":
 		option.metadata = _build_declare_war_metadata(need, ctx)
+	elif option.action_id == "DISPATCH_COURTIER":
+		# s55.23a: target the receiving Daimyo — the known contact most likely to
+		# answer a Wall reinforcement request (highest garrison personality score),
+		# the same selection the letter step uses. target_province_id (the Tower)
+		# is already set from the need. Without this the executor early-returns
+		# no_target and Step 2 stays inert.
+		var courtier_target: int = -1
+		var courtier_best: float = -999.0
+		for cid: int in ctx.contact_garrison_scores:
+			var gscore: float = ctx.contact_garrison_scores[cid]
+			if gscore > courtier_best:
+				courtier_best = gscore
+				courtier_target = cid
+		option.target_npc_id = courtier_target
 	elif option.action_id == "NEGOTIATE_SURRENDER":
 		option.metadata = _build_negotiate_surrender_metadata(need, ctx)
 	elif option.action_id == "RAID_HARVEST":
@@ -2867,7 +3126,7 @@ static func _populate_action_metadata(
 		var target_lord_id: int = need.target_npc_id_secondary
 		var favor: int = _get_favor_tier_held_against(ctx, target_lord_id)
 		var mil_need: bool = need.need_type in [
-			"SECURE_ALLIANCE", "RAISE_ARMY", "DEFEND_PROVINCE",
+			"SECURE_ALLIANCE", "DEFEND_PROVINCE",
 		]
 		option.metadata = {
 			"candidate_id": need.target_npc_id,
@@ -3024,6 +3283,13 @@ static func _populate_action_metadata(
 		var active_case: Dictionary = ctx.known_objectives.get("active_case", {})
 		option.metadata = {
 			"case_id": active_case.get("case_id", -1),
+		}
+	elif option.action_id == "EXAMINE_FOR_TAINT":
+		# Target + accusation injected by the orchestrator pre-pass (Maho Channel 3
+		# active corroboration; gated by the precondition filter below).
+		option.metadata = {
+			"taint_target_id": ctx.known_objectives.get("taint_corroboration_target_id", -1),
+			"taint_topic_id": ctx.known_objectives.get("taint_corroboration_topic_id", -1),
 		}
 	elif option.action_id == "SEARCH_PERSON":
 		var is_magistrate: bool = ctx.known_objectives.get("standing_need_type", "") == "UPHOLD_LAW"
@@ -3345,7 +3611,7 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"sculpture_id": wip_sc_id,
 			"format": sc_format,
-			"material": SculptureSystem.Material.WOOD,
+			"material": SculptureSystem.MaterialType.WOOD,
 			"target_quality_tier": target_quality,
 			"subject_id": sc_subject_id,
 			"display_settlement_id": loc_sid,
@@ -3355,7 +3621,8 @@ static func _populate_action_metadata(
 		# Pick best shide from inventory (highest quality_tier).
 		var best_shide_id: int = -1
 		var best_tier: int = -1
-		for it: Dictionary in character.items:
+		var shide_items: Array = character.items if character != null else []
+		for it: Dictionary in shide_items:
 			if it.get("item_type", "") == "shide" and it.get("uses_remaining", 0) > 0:
 				var t: int = it.get("quality_tier", 0)
 				if t > best_tier:
@@ -3364,6 +3631,144 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"shide_item_id": best_shide_id,
 		}
+	elif option.action_id in KOLAT_ACTION_POOL:
+		option.metadata = _build_kolat_metadata(option, need, ctx, chars_by_id)
+
+
+## Kolat action metadata (s54.7c). The ActionExecutor dispatch already injects
+## `target`/`sleeper` from `target_npc_id` and KolatExecutor defaults amount /
+## strength / concealment, so this only populates what the engine can derive
+## faithfully and the dispatch cannot: the trigger phrase the activating Dream
+## Master speaks (ACTIVATE_SLEEPER), and the resolved sleeper/target objects.
+static func _build_kolat_metadata(
+	option: NPCDataStructures.ScoredAction,
+	need: NPCDataStructures.ImmediateNeed,
+	ctx: NPCDataStructures.ContextSnapshot,
+	chars_by_id: Dictionary,
+) -> Dictionary:
+	var meta: Dictionary = {"target_npc_id": need.target_npc_id}
+	var tgt: L5RCharacterData = chars_by_id.get(need.target_npc_id, null) if need.target_npc_id >= 0 else null
+	if tgt != null:
+		meta["target"] = tgt
+		meta["sleeper"] = tgt
+	var master: L5RCharacterData = chars_by_id.get(ctx.character_id, null)
+	var aid: String = option.action_id
+
+	# Structural need-field → metadata mappings (the NeedType carries these when it
+	# was generated by the scanner / strategic review / Tiger directive).
+	if need.target_settlement_id >= 0:
+		meta["target_settlement_id"] = str(need.target_settlement_id)
+	if need.target_topic_id >= 0:
+		meta["topic_id"] = need.target_topic_id
+
+	match aid:
+		"ACTIVATE_SLEEPER":
+			# The conditioning Master knows the phrase they installed (s54.7c).
+			if tgt != null:
+				meta["spoken_phrase"] = tgt.trigger_phrase
+		"ANONYMOUS_TIP", "ROUTE_ANONYMOUS_INTELLIGENCE":
+			# Feed an anti-Shadowlands institution about the threat the need names.
+			meta["tip_subject"] = need.target_intent
+			meta["tip_subject_id"] = need.target_npc_id
+			meta["tip_org"] = need.target_clan_id if not need.target_clan_id.is_empty() else "Kuni Witch Hunters"
+			meta["asset_id"] = need.target_npc_id
+		"RESURRECT_TOPIC":
+			# Select the highest-leverage archived topic (s54.7c: leverage 2–3).
+			if master != null:
+				meta["archive_topic_id"] = _pick_highest_leverage_archive(master)
+		"ARRANGE_PROXY_DUEL":
+			# Scan for a duel-capable proxy: a co-located bushi with weapon skill 4+
+			# who is not the target (s54.7c sub-step 1 criterion).
+			if master != null:
+				meta["proxy_npc_id"] = _pick_proxy_duelist(master, need.target_npc_id, chars_by_id)
+		"DISTRIBUTE_INTELLIGENCE":
+			# Route to the stalest active Silk agent (s54.7c: agents without recent
+			# intelligence make outdated assumptions). Topic from the Master's pool.
+			if master != null:
+				var agent_id: int = _pick_stalest_silk_agent(master)
+				if agent_id >= 0:
+					meta["target"] = chars_by_id.get(agent_id, null)
+					meta["target_npc_id"] = agent_id
+				if not meta.has("topic_id") and not master.topic_pool.is_empty():
+					meta["topic_id"] = int(master.topic_pool[0])
+		"TRANSMIT_VIA_TEAR":
+			# Tiger composes directives; the receiving Sect is carried in target_clan_id
+			# and the directive content in target_intent (s54.7c SEND_KOLAT_DIRECTIVE).
+			meta["directive_need_type"] = need.target_intent
+			meta["directive_target_npc_id"] = need.target_npc_id_secondary
+			meta["directive_target_province_id"] = need.target_province_id
+			meta["directive_priority"] = need.priority
+			meta["recipient_sect"] = _sect_from_clan_id(need.target_clan_id)
+			meta["recipient_npc_id"] = need.target_npc_id
+		"ARCHIVE_TOPIC", "SUBMIT_KOLAT_REPORT":
+			# These need a TopicData object, which the NPC context does not carry
+			# (only topic IDs). Autonomous population is left to the Cloud decomposition
+			# that holds the topic; meta["topic_id"] is set above for reference.
+			pass
+		"SPONSOR_INSURGENCY":
+			meta["strength"] = maxi(1, int(need.threshold))
+	return meta
+
+
+## Highest leverage_value archived topic in the Master's cloud_archive (s54.7c).
+## Returns the original topic_id, or -1 if the archive is empty.
+static func _pick_highest_leverage_archive(master: L5RCharacterData) -> int:
+	var archive: Dictionary = master.special_data.get("cloud_archive", {})
+	var best_tid: int = -1
+	var best_lev: int = -1
+	for k: Variant in archive:
+		var e: Variant = archive[k]
+		if e is Dictionary and int((e as Dictionary).get("leverage_value", 0)) > best_lev:
+			best_lev = int((e as Dictionary).get("leverage_value", 0))
+			best_tid = int((e as Dictionary).get("topic_id", -1))
+	return best_tid
+
+
+## A co-located bushi with Kenjutsu/Iaijutsu 4+ (not the target) to fight the proxy
+## duel (s54.7c sub-step 1). Returns npc_id or -1.
+static func _pick_proxy_duelist(master: L5RCharacterData, target_id: int, chars_by_id: Dictionary) -> int:
+	for cid: Variant in chars_by_id:
+		var c: L5RCharacterData = chars_by_id[cid]
+		if c == null or c.character_id == master.character_id or c.character_id == target_id:
+			continue
+		if CharacterStats.is_dead(c) or c.physical_location != master.physical_location:
+			continue
+		if int(c.skills.get("Kenjutsu", 0)) >= 4 or int(c.skills.get("Iaijutsu", 0)) >= 4:
+			return c.character_id
+	return -1
+
+
+## Stalest active operative in the Master's Silk record (s54.7c). Returns npc_id or -1.
+static func _pick_stalest_silk_agent(master: L5RCharacterData) -> int:
+	var rec: Dictionary = master.special_data.get("silk_network_record", {})
+	var stalest: int = -1
+	var oldest: int = 1 << 30
+	for cn: Variant in rec:
+		var e: Variant = rec[cn]
+		if not e is Dictionary or String((e as Dictionary).get("operative_status", "")) != "active":
+			continue
+		var lr: int = int((e as Dictionary).get("last_report_ic_day", -1))
+		if lr < oldest:
+			oldest = lr
+			stalest = int((e as Dictionary).get("npc_id", -1))
+	return stalest
+
+
+## Maps a GDD Sect string ("kolat_silk") to the Enums.KolatSect value, for the
+## destination Sect carried in a Tiger directive's target_clan_id (s54.7c).
+static func _sect_from_clan_id(clan_id: String) -> int:
+	match clan_id:
+		"kolat_tiger": return Enums.KolatSect.TIGER
+		"kolat_chrysanthemum": return Enums.KolatSect.CHRYSANTHEMUM
+		"kolat_silk": return Enums.KolatSect.SILK
+		"kolat_coin": return Enums.KolatSect.COIN
+		"kolat_cloud": return Enums.KolatSect.CLOUD
+		"kolat_jade": return Enums.KolatSect.JADE
+		"kolat_dream": return Enums.KolatSect.DREAM
+		"kolat_lotus": return Enums.KolatSect.LOTUS
+		"kolat_roc": return Enums.KolatSect.ROC
+		"kolat_steel": return Enums.KolatSect.STEEL
+		_: return Enums.KolatSect.NONE
 
 
 static func _build_compose_theater_metadata(
@@ -3551,8 +3956,9 @@ static func _build_learn_theater_metadata(
 		if piece == null:
 			continue
 
-		# For private pieces validate teacher still available (chars_by_id may have changed).
-		if not piece.canonized and not chars_by_id.is_empty():
+		# Private (non-canonized) pieces require a co-located willing teacher (§57.22.6).
+		# With no chars_by_id there is no teacher → find_willing_teacher returns -1 → skip.
+		if not piece.canonized:
 			var teacher_id: int = TheaterSystem.find_willing_teacher(
 				ctx.character_id, piece, chars_by_id
 			)
@@ -5108,7 +5514,7 @@ static func _build_hire_ronin_metadata(
 	# Pick contract type from need context: military need → MILITARY_SERVICE, etc.
 	var contract_type: String = "PROVINCE_DEFENSE"
 	var need_type: String = ctx.known_objectives.get("primary", {}).get("need_type", "")
-	if need_type == "LEVY_TROOPS" or need_type == "RAISE_ARMY":
+	if need_type == "LEVY_TROOPS":
 		contract_type = "MILITARY_SERVICE"
 	elif need_type == "UPHOLD_LAW" or need_type == "INVESTIGATE_THREAT":
 		contract_type = "MAGISTRATE_AIDE"
@@ -5130,7 +5536,9 @@ static func _build_induction_metadata(
 	var sponsor: L5RCharacterData = chars_by_id.get(ctx.character_id) as L5RCharacterData
 	if sponsor == null:
 		return {"target_ronin_id": -1}
-	if sponsor.lord_rank < Enums.LordRank.PROVINCIAL_DAIMYO:
+	# Sponsor is the context character; lord rank lives on the context, not on
+	# L5RCharacterData (which has no lord_rank property).
+	if ctx.lord_rank < Enums.LordRank.PROVINCIAL_DAIMYO:
 		return {"target_ronin_id": -1}
 	var best_id: int = -1
 	var best_deeds: int = -1
@@ -5168,7 +5576,7 @@ static func _build_approve_induction_metadata(
 	var fd: L5RCharacterData = chars_by_id.get(ctx.character_id) as L5RCharacterData
 	if fd == null:
 		return {"target_ronin_id": -1}
-	if fd.lord_rank < Enums.LordRank.FAMILY_DAIMYO:
+	if RoleRegistry.lord_rank_from_status(fd.status) < Enums.LordRank.FAMILY_DAIMYO:
 		return {"target_ronin_id": -1}
 	var best_id: int = -1
 	var best_deeds: int = -1
@@ -5315,7 +5723,7 @@ static func _build_declare_senbazuru_metadata(
 		var target: L5RCharacterData = chars_by_id.get(need.target_npc_id)
 		if target != null and not CharacterStats.is_dead(target):
 			# Healing if recipient is wounded or tainted; Protection otherwise.
-			if CharacterStats.is_wounded(target) or target.taint_rank > 0:
+			if CharacterStats.get_wound_level(target) != Enums.WoundLevel.HEALTHY or target.taint > 0.0:
 				return {
 					"dedication_type": "Healing",
 					"recipient_id": need.target_npc_id,

@@ -584,7 +584,7 @@ func test_rumormonger_wound_penalty_applied_to_willpower_check() -> void:
 		ch.wounds_taken = 0
 		var d1 := DiceEngine.new()
 		d1.set_seed(seed_val)
-		var roll1: DiceResult = d1.roll_and_keep(ch.willpower, ch.willpower, false, "")
+		var roll1: DiceResult = d1.roll_and_keep(ch.willpower, ch.willpower, false, false)
 		var wound1: int = CharacterStats.get_wound_penalty(ch)
 		if (roll1.total + wound1) < 15:
 			healthy_fails += 1
@@ -596,7 +596,7 @@ func test_rumormonger_wound_penalty_applied_to_willpower_check() -> void:
 		cw.wounds_taken = 13  # Earth 2 → threshold 4 → HURT = -10
 		var d2 := DiceEngine.new()
 		d2.set_seed(seed_val)
-		var roll2: DiceResult = d2.roll_and_keep(cw.willpower, cw.willpower, false, "")
+		var roll2: DiceResult = d2.roll_and_keep(cw.willpower, cw.willpower, false, false)
 		var wound2: int = CharacterStats.get_wound_penalty(cw)
 		if (roll2.total + wound2) < 15:
 			wounded_fails += 1

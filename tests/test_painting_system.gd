@@ -83,7 +83,8 @@ func _make_character(char_id: int = 20) -> L5RCharacterData:
 	c.met_characters = []
 	# wounds_taken = 0 => alive
 	c.wounds_taken = 0
-	c.earth = 2
+	c.stamina = 2
+	c.willpower = 2  # Earth ring = min(stamina, willpower) = 2
 	return c
 
 
@@ -484,10 +485,10 @@ func test_seasonal_rotation_needed_when_affinity_mismatches() -> void:
 	var summer_kakemono: PaintingData = _make_kakemono(5, 2, 10)
 	summer_kakemono.season_affinity = 1  # Summer
 	s.wall_art_slot = 5
-	var paintings: Dictionary = {5: summer_kakemono}
 	var spring_replacement: PaintingData = _make_kakemono(6, 2, 10)
 	spring_replacement.season_affinity = 0  # Spring
 	spring_replacement.display_settlement_id = -1
+	var paintings: Dictionary = {5: summer_kakemono, 6: spring_replacement}
 	var r: Dictionary = PaintingSystem.evaluate_seasonal_rotation(
 		s, paintings, [6], 0  # current season = Spring
 	)
@@ -528,11 +529,11 @@ func test_seasonal_rotation_no_replacement_available() -> void:
 func test_lifecycle_topic_completion_tier_legendary() -> void:
 	var p: PaintingData = _make_kakemono(1, 5, 10)  # Legendary
 	var t: Dictionary = PaintingSystem.generate_lifecycle_topic(p, "completion", "Doji Hotaru", "Shiro Doji", 100)
-	assert_eq(t["tier"], 1, "Legendary completion = TIER_2 (enum 1)")
+	assert_eq(t["tier"], 2, "Legendary completion = TIER_3 (enum 2) per GDD s57.27")
 
 
 func test_lifecycle_topic_completion_tier_exceptional() -> void:
-	var p: PaintingData = _make_kakemono(1, 3, 10)  # Exceptional
+	var p: PaintingData = _make_kakemono(1, 4, 10)  # Exceptional (quality 4)
 	var t: Dictionary = PaintingSystem.generate_lifecycle_topic(p, "completion", "Doji Hotaru", "Shiro Doji", 100)
 	assert_eq(t["tier"], 2, "Exceptional completion = TIER_3 (enum 2)")
 
@@ -561,7 +562,7 @@ func test_lifecycle_topic_has_title() -> void:
 # ---------------------------------------------------------------------------
 
 func test_artist_grief_magnitude_by_tier() -> void:
-	var p: PaintingData = _make_kakemono(1, 3, 10)  # Exceptional = quality tier 3
+	var p: PaintingData = _make_kakemono(1, 4, 10)  # Exceptional (quality 4) = quality tier 3
 	var creator: L5RCharacterData = _make_character(10)
 	creator.met_characters = [99]  # knows the destroyer
 	var chars: Dictionary = {10: creator}
@@ -997,7 +998,7 @@ func test_emakimono_topic_link_requires_two_raises() -> void:
 	var dice: DiceEngine = DiceEngine.new()
 	dice.set_seed(42)
 	# 1 raise declared — below EMAKIMONO_TOPIC_RAISES threshold
-	PaintingSystem.apply_painting_progress(p, _make_character(10), dice, 1, 10)
+	PaintingSystem.resolve_compose_painting(5, p, 5, 1, 10)  # advance one AP (result unused below)
 	# Progress won't complete in one AP; manually close it to check the else branch.
 	p.craft_progress = -1
 	p.topic_ids = []  # simulate completion without topic link

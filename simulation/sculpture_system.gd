@@ -10,7 +10,7 @@ class_name SculptureSystem
 
 enum Format { STATUARY = 0, GUARDIAN = 1, FIGURINE = 2 }
 
-enum Material { WOOD = 0, STONE = 1, BRONZE = 2 }
+enum MaterialType { WOOD = 0, STONE = 1, BRONZE = 2 }  # 'Material' shadows Godot 4.6 native class
 
 enum SubjectType {
 	FORTUNE       = 0,  # butsuzo/devotional
@@ -205,7 +205,7 @@ static func resolve_compose_sculpture(
 
 	# Effective TN: base + raises_cost + material modifier.
 	var effective_tn: int = COMPOSE_TN
-	if sculpture.material == Material.STONE:
+	if sculpture.material == MaterialType.STONE:
 		effective_tn += STONE_TN_PENALTY
 	var tn_with_raises: int = effective_tn + raises_declared * 5
 
@@ -304,7 +304,7 @@ static func place_sculpture(
 		sculpture.display_settlement_id = settlement.settlement_id
 		sculpture.display_slot = DisplaySlot.GUARDIAN_SLOT
 		# Wood guardians are outdoors.
-		if sculpture.material == Material.WOOD:
+		if sculpture.material == MaterialType.WOOD:
 			sculpture.ic_day_placed_outdoor = ic_day
 		return {"success": true, "displaced_sculpture_id": displaced_g, "slot": DisplaySlot.GUARDIAN_SLOT}
 
@@ -438,7 +438,7 @@ static func apply_visitor_effect(
 static func apply_outdoor_degradation(sculpture: SculptureData, ic_day: int) -> int:
 	if sculpture.format != Format.GUARDIAN:
 		return sculpture.quality_tier
-	if sculpture.material != Material.WOOD:
+	if sculpture.material != MaterialType.WOOD:
 		return sculpture.quality_tier
 	if sculpture.ic_day_placed_outdoor < 0:
 		return sculpture.quality_tier
@@ -533,18 +533,18 @@ static func generate_lifecycle_topic(
 ## Returns survival probability (0.0–1.0) for a statuary/guardian during sacking.
 static func sacking_survival_chance(sculpture: SculptureData) -> float:
 	var base: float = SACKING_SURVIVAL_WOOD.get(sculpture.quality_tier, 0.3)
-	if sculpture.material == Material.STONE:
+	if sculpture.material == MaterialType.STONE:
 		base += SACKING_SURVIVAL_STONE_BONUS
-	elif sculpture.material == Material.BRONZE:
+	elif sculpture.material == MaterialType.BRONZE:
 		base += SACKING_SURVIVAL_BRONZE_BONUS
 	return minf(1.0, base)
 
 
 ## Returns survival probability during zone destruction.
 static func zone_destruction_survival_chance(sculpture: SculptureData) -> float:
-	if sculpture.material == Material.WOOD:
+	if sculpture.material == MaterialType.WOOD:
 		return 0.0
-	if sculpture.material == Material.STONE:
+	if sculpture.material == MaterialType.STONE:
 		return DESTRUCTION_SURVIVAL_STONE
 	return DESTRUCTION_SURVIVAL_BRONZE  # BRONZE
 
@@ -602,7 +602,7 @@ static func gen_guardian(
 	s.date_completed = -1
 	s.display_settlement_id = settlement_id
 	s.display_slot = DisplaySlot.GUARDIAN_SLOT
-	if material == Material.WOOD:
+	if material == MaterialType.WOOD:
 		# Ancient pieces assumed to have degraded to Normal already; no further tracking.
 		s.ic_day_placed_outdoor = -1
 	return s
@@ -623,7 +623,7 @@ static func gen_figurine(
 	s.quality_tier = quality_tier
 	s.target_quality_tier = quality_tier
 	s.target_format = Format.FIGURINE
-	s.material = Material.WOOD
+	s.material = MaterialType.WOOD
 	s.subject_type = subject_type
 	s.subject_id = owner_id  # Owned by; tracked through inventory
 	s.theme = theme
@@ -652,9 +652,9 @@ static func _quality_name(tier: int) -> String:
 
 static func _material_name(mat: int) -> String:
 	match mat:
-		Material.WOOD: return "wood"
-		Material.STONE: return "stone"
-		Material.BRONZE: return "bronze"
+		MaterialType.WOOD: return "wood"
+		MaterialType.STONE: return "stone"
+		MaterialType.BRONZE: return "bronze"
 	return "unknown"
 
 

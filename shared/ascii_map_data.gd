@@ -20,6 +20,11 @@ extends Resource
 @export var width: int = 31
 @export var height: int = 31
 
+# Population slots for mission populator (filled by template generators).
+# Each entry: { "x": int, "y": int, "role": int, ... }. Common to all map
+# templates so MissionPopulator can operate on any AsciiMapData uniformly.
+@export var population_slots: Array = []
+
 # Primary flat tile array. Each byte is an Enums.TileType value.
 # Populated by AsciiMapGenerator; read-only after generation.
 @export var tile_types: PackedByteArray = []
@@ -94,7 +99,24 @@ static func is_passable(tile: int) -> bool:
 		Enums.TileType.DOOR_SHOJI_CLOSED, \
 		Enums.TileType.DOOR_WOOD_CLOSED, \
 		Enums.TileType.GATE_CLOSED, \
-		Enums.TileType.VOID:
+		Enums.TileType.VOID, \
+		Enums.TileType.FURNITURE_HEARTH, \
+		Enums.TileType.FURNITURE_CHEST, \
+		Enums.TileType.FURNITURE_TABLE, \
+		Enums.TileType.FURNITURE_JAR, \
+		Enums.TileType.FURNITURE_BRAZIER, \
+		Enums.TileType.FURNITURE_DAIS, \
+		Enums.TileType.FURNITURE_WEAPON_STAND, \
+		Enums.TileType.FURNITURE_ALTAR, \
+		Enums.TileType.FURNITURE_OFFERING_BOX, \
+		Enums.TileType.FURNITURE_INCENSE, \
+		Enums.TileType.FURNITURE_STATUE, \
+		Enums.TileType.FURNITURE_STALL, \
+		Enums.TileType.FURNITURE_CRATE, \
+		Enums.TileType.FURNITURE_WELL, \
+		Enums.TileType.FURNITURE_DUMMY, \
+		Enums.TileType.FURNITURE_SHELF, \
+		Enums.TileType.FURNITURE_STOVE:
 			return false
 		_:
 			return true
@@ -113,7 +135,35 @@ static func blocks_los(tile: int) -> bool:
 		Enums.TileType.DOOR_SHOJI_CLOSED, \
 		Enums.TileType.DOOR_WOOD_CLOSED, \
 		Enums.TileType.GATE_CLOSED, \
-		Enums.TileType.FIRE:
+		Enums.TileType.FIRE, \
+		Enums.TileType.FURNITURE_CHEST, \
+		Enums.TileType.FURNITURE_SCREEN, \
+		Enums.TileType.FURNITURE_STATUE, \
+		Enums.TileType.FURNITURE_NET, \
+		Enums.TileType.FURNITURE_SHELF:
+			return true
+		_:
+			return false
+
+
+# Furnishings that grant combat cover — a defender sheltering behind one gets
+# +COVER_ARMOR_TN_BONUS Armor TN (s4.4 furnishings category; reuses the s40
+# cover convention). Solid waist-to-chest-height objects only.
+static func grants_cover(tile: int) -> bool:
+	match tile:
+		Enums.TileType.FURNITURE_CHEST, \
+		Enums.TileType.FURNITURE_TABLE, \
+		Enums.TileType.FURNITURE_JAR, \
+		Enums.TileType.FURNITURE_DAIS, \
+		Enums.TileType.FURNITURE_WEAPON_STAND, \
+		Enums.TileType.FURNITURE_ALTAR, \
+		Enums.TileType.FURNITURE_OFFERING_BOX, \
+		Enums.TileType.FURNITURE_STATUE, \
+		Enums.TileType.FURNITURE_STALL, \
+		Enums.TileType.FURNITURE_CRATE, \
+		Enums.TileType.FURNITURE_WELL, \
+		Enums.TileType.FURNITURE_DUMMY, \
+		Enums.TileType.FURNITURE_SHELF:
 			return true
 		_:
 			return false

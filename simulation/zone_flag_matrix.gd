@@ -291,6 +291,21 @@ const ZONE_FLAGS: Dictionary = {
 		"garden_eligible": false,
 		"shrine_eligible": false,
 	},
+
+	# s4.4 dwelling interior — a humble peasant home (minka). No noble-art,
+	# performance, garden, bonsai, or shrine affordances (the village shrine is
+	# the separate SHRINE_CLEARING zone). Identical to RESIDENTIAL_QUARTER /
+	# POOR_QUARTER; listed explicitly so every zone subtype is enumerated.
+	Enums.ZoneSubtype.PEASANT_DWELLING: {
+		"performance_permitted": false,
+		"wall_art_slot": false,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
 }
 
 

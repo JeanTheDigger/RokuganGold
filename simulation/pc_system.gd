@@ -8,6 +8,11 @@ class_name PcSystem
 const BANKED_AP_CAP_MULTIPLIER: int = 4
 const OFFLINE_EVENT_QUEUE_CAP: int = 30
 
+# School types a player character may NOT take (s60.2, owner-locked 2026-06-06).
+# Monk is excluded — kiho/monastic play is NPC-only, so PCs can never be monks
+# (and therefore can never learn kiho, which is monk-only per s38a).
+const DISALLOWED_PC_SCHOOL_TYPES: Array = [Enums.SchoolType.MONK]
+
 const DEFAULT_OFFLINE_POLICIES: Dictionary = {
 	"DUEL_CHALLENGE_RECEIVED": "QUEUE",
 	"FAVOR_REQUESTED": "HONOR",
@@ -16,11 +21,48 @@ const DEFAULT_OFFLINE_POLICIES: Dictionary = {
 	"CONTRACT_OFFERED": "QUEUE",
 }
 
+# -- Character creation constraints (s60.2) -----------------------------------
+
+## True if `school_type` is a valid choice for a player character (s60.2).
+## PCs may not be monks. The character-creation flow must reject disallowed types.
+static func is_school_type_allowed_for_pc(school_type: Enums.SchoolType) -> bool:
+	return not (school_type in DISALLOWED_PC_SCHOOL_TYPES)
+
+
+## True if `character` is a valid PC (s60.2): flagged is_pc and not a disallowed
+## school type. Use at the end of character creation to validate the build.
+static func is_valid_pc(character: L5RCharacterData) -> bool:
+	if character == null or not character.is_pc:
+		return false
+	return is_school_type_allowed_for_pc(character.school_type)
+
+
 # -- AP Banking (s60.5) -------------------------------------------------------
 
 static func bank_daily_ap(character: L5RCharacterData, daily_ap: int) -> void:
 	var cap: int = daily_ap * BANKED_AP_CAP_MULTIPLIER
 	character.banked_ap = mini(character.banked_ap + daily_ap, cap)
+
+
+## True if the PC has at least `cost` banked AP to spend (s60.5).
+static func can_spend_banked_ap(character: L5RCharacterData, cost: int) -> bool:
+	return cost > 0 and character.banked_ap >= cost
+
+
+## Spend `cost` from the PC's banked AP pool (s60.5). Returns
+## {success, remaining} or {success:false, reason, available, required}.
+static func spend_banked_ap(character: L5RCharacterData, cost: int) -> Dictionary:
+	if cost <= 0:
+		return {"success": false, "reason": "invalid_cost"}
+	if character.banked_ap < cost:
+		return {
+			"success": false,
+			"reason": "insufficient_ap",
+			"available": character.banked_ap,
+			"required": cost,
+		}
+	character.banked_ap -= cost
+	return {"success": true, "remaining": character.banked_ap, "spent": cost}
 
 
 # -- Presence (s60.3 / s60.4) -------------------------------------------------

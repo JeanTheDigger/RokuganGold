@@ -113,7 +113,6 @@ const LAYER_COUNT: Array[int] = [2, 3, 4]
 
 # Enemy combatant slots.
 # Each dict: { x, y, role (PopRole), zone (Zone), layer_idx }
-@export var population_slots: Array = []
 
 # Objective markers.
 # Each dict: { x, y, zone (Zone), layer_idx }

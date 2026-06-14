@@ -253,8 +253,8 @@ func test_hotei_protection_wound_penalty_applied() -> void:
 		ch.wounds_taken = 0
 		# Give Hotei's Blessing protection advantage
 		var adv := AdvantageData.new()
-		adv.advantage_type = Enums.Advantage.HOTEI_BLESSING
-		adv.metadata = {"curse_variant": false}
+		adv.advantage_type = Enums.Advantage.SEVEN_FORTUNES_BLESSING
+		adv.metadata = {"fortune": "Hotei"}
 		ch.advantages = [adv]
 		var d1 := DiceEngine.new()
 		d1.set_seed(seed_val)
@@ -271,8 +271,8 @@ func test_hotei_protection_wound_penalty_applied() -> void:
 		cw.willpower = 2
 		cw.wounds_taken = 13
 		var adv2 := AdvantageData.new()
-		adv2.advantage_type = Enums.Advantage.HOTEI_BLESSING
-		adv2.metadata = {"curse_variant": false}
+		adv2.advantage_type = Enums.Advantage.SEVEN_FORTUNES_BLESSING
+		adv2.metadata = {"fortune": "Hotei"}
 		cw.advantages = [adv2]
 		var d2 := DiceEngine.new()
 		d2.set_seed(seed_val)

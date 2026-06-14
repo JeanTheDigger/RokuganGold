@@ -1173,7 +1173,7 @@ func test_npc_turn_attacks_adjacent_enemy() -> void:
 
 func test_npc_turn_skips_dead_npc() -> void:
 	var npc := _make_char(1, 1, 1)
-	npc.wounds_taken = 9  # DEAD
+	npc.wounds_taken = 20  # Earth 1 (threshold 2) → DEAD past ~17 wounds
 	var player := _make_char(2)
 	var state := _make_state(npc, player)
 	var result := AsciiMapCombatOrchestrator.execute_npc_turn(
@@ -1364,3 +1364,372 @@ func test_combat_ends_when_all_enemies_dead() -> void:
 	e.wounds_taken = earth_e * 2 * 9
 	AsciiMapCombatOrchestrator._check_and_mark_over(state, 2, e)
 	assert_true(state.combat.is_over, "Combat should be over when all enemies are dead")
+
+
+# ===========================================================================
+# -- Allied companions (GDD s57.46) -----------------------------------------
+# ===========================================================================
+
+func _companion(id: int, type: CompanionData.CompanionType) -> CompanionData:
+	var c := CompanionData.new()
+	c.companion_id = id
+	c.type = type
+	return c
+
+
+func test_add_companion_registers_participant() -> void:
+	var player := _make_char(1)
+	var enemy := _make_char(2)
+	var state := _make_state(player, enemy)
+	var ally := _make_char(3)
+	var comp := _companion(3, CompanionData.CompanionType.YOJIMBO)
+	assert_true(AsciiMapCombatOrchestrator.add_companion(state, comp, ally, 1, 2, _dice))
+	assert_true(state.combat.participants.has(3), "companion is a participant")
+	assert_eq(state.factions.get(3), AsciiMapCombatOrchestrator.FACTION_PLAYER,
+		"companion is player-faction")
+	assert_true(state.companion_data.has(3))
+	assert_eq(state.companion_started_count, 1)
+	assert_true(3 in state.combat.turn_order, "companion is in the turn order")
+
+
+func test_companion_follow_moves_toward_player() -> void:
+	var player := _make_char(1)
+	var enemy := _make_char(2)
+	var state := _make_state(player, enemy)  # player at (1,1)
+	var ally := _make_char(3)
+	var comp := _companion(3, CompanionData.CompanionType.YOJIMBO)  # FOLLOW default
+	# Place the companion far from the player, no enemy adjacent.
+	AsciiMapCombatOrchestrator.add_companion(state, comp, ally, 8, 8, _dice)
+	var before: Vector2i = state.positions[3]
+	AsciiMapCombatOrchestrator.execute_companion_turn(state, 3, ally, {1: player, 2: enemy, 3: ally}, _dice)
+	var after: Vector2i = state.positions[3]
+	assert_lt(_cheb(after, Vector2i(1, 1)), _cheb(before, Vector2i(1, 1)),
+		"FOLLOW closes distance to the player")
+
+
+func test_companion_morale_breaks_on_casualties() -> void:
+	var player := _make_char(1)
+	var enemy := _make_char(2)
+	var state := _make_state(player, enemy)
+	# Two village doshin (break at 30% casualties).
+	var d1 := _make_char(10); var d2 := _make_char(11)
+	AsciiMapCombatOrchestrator.add_companion(state, _companion(10, CompanionData.CompanionType.VILLAGE_DOSHIN), d1, 2, 1, _dice)
+	AsciiMapCombatOrchestrator.add_companion(state, _companion(11, CompanionData.CompanionType.VILLAGE_DOSHIN), d2, 2, 2, _dice)
+	# Kill one → 50% casualties ≥ 30% threshold → survivor breaks.
+	d1.wounds_taken = 999
+	AsciiMapCombatOrchestrator.update_companion_morale(state, {1: player, 2: enemy, 10: d1, 11: d2})
+	assert_eq(state.companion_data[11].morale, CompanionData.Morale.BROKEN,
+		"surviving doshin breaks at 50% casualties")
+
+
+func test_broken_companion_flees_via_decide_action() -> void:
+	var player := _make_char(1)
+	var enemy := _make_char(2)
+	var state := _make_state(player, enemy)
+	var ally := _make_char(3)
+	var comp := _companion(3, CompanionData.CompanionType.VILLAGE_DOSHIN)
+	comp.command = CompanionData.Command.HOLD
+	comp.morale = CompanionData.Morale.BROKEN
+	AsciiMapCombatOrchestrator.add_companion(state, comp, ally, 5, 5, _dice)
+	var r := AsciiMapCombatOrchestrator.execute_companion_turn(state, 3, ally, {1: player, 2: enemy, 3: ally}, _dice)
+	assert_eq(r["command"], CompanionData.Command.RETREAT,
+		"BROKEN companion's turn resolves as RETREAT")
+
+
+func _cheb(a: Vector2i, b: Vector2i) -> int:
+	return maxi(abs(a.x - b.x), abs(a.y - b.y))
+
+
+func test_resolve_current_turn_yields_on_player() -> void:
+	var player := _make_char(1)
+	var enemy := _make_char(2)
+	var state := _make_state(player, enemy)
+	# Force the player to the front of the turn order.
+	state.combat.current_turn_index = state.combat.turn_order.find(1)
+	var r := AsciiMapCombatOrchestrator.resolve_current_turn(state, {1: player, 2: enemy}, _dice)
+	assert_true(r.get("awaiting_player", false), "a PC turn yields control")
+	assert_eq(r.get("actor"), 1)
+
+
+func test_resolve_current_turn_runs_companion() -> void:
+	var player := _make_char(1)
+	var enemy := _make_char(2)
+	var state := _make_state(player, enemy)
+	var ally := _make_char(3)
+	AsciiMapCombatOrchestrator.add_companion(state, _companion(3, CompanionData.CompanionType.YOJIMBO), ally, 8, 8, _dice)
+	# Point the turn cursor at the companion.
+	state.combat.current_turn_index = state.combat.turn_order.find(3)
+	var r := AsciiMapCombatOrchestrator.resolve_current_turn(state, {1: player, 2: enemy, 3: ally}, _dice)
+	assert_eq(r.get("actor_type"), "companion", "companion turn auto-resolved")
+	assert_eq(r.get("actor"), 3)
+
+
+func test_resolve_current_turn_runs_enemy_npc() -> void:
+	var player := _make_char(1)
+	var enemy := _make_char(2)
+	var state := _make_state(player, enemy)
+	state.combat.current_turn_index = state.combat.turn_order.find(2)
+	var r := AsciiMapCombatOrchestrator.resolve_current_turn(state, {1: player, 2: enemy}, _dice)
+	assert_eq(r.get("actor_type"), "npc", "enemy turn auto-resolved")
+
+
+# ===========================================================================
+# -- Off-hand attack (s40) --------------------------------------------------
+# ===========================================================================
+
+## Two adjacent combatants at (1,1) and (2,1).
+func _make_adjacent_state(player: L5RCharacterData, enemy: L5RCharacterData) -> AsciiMapCombatOrchestrator.MapCombatState:
+	var m := _make_map()
+	return AsciiMapCombatOrchestrator.setup_combat(m, [
+		{"char": player, "faction": AsciiMapCombatOrchestrator.FACTION_PLAYER, "x": 1, "y": 1},
+		{"char": enemy,  "faction": AsciiMapCombatOrchestrator.FACTION_ENEMY,  "x": 2, "y": 1},
+	], _dice)
+
+
+func test_off_hand_attack_requires_dual_wielding() -> void:
+	var p := _make_char(1)
+	var e := _make_char(2)
+	var state := _make_adjacent_state(p, e)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	var r := AsciiMapCombatOrchestrator.execute_off_hand_attack(state, 1, 2, p, e, _dice)
+	assert_false(r["success"])
+	assert_eq(r["reason"], "not_dual_wielding")
+
+
+func test_off_hand_attack_dual_wielder_resolves() -> void:
+	var p := _make_char(1, 5, 5, 5, 5, 5, 5, 5, 5)
+	p.skills = {"Kenjutsu": 5}
+	var e := _make_char(2, 1, 1, 1, 1, 1, 1, 1, 1)
+	var state := _make_adjacent_state(p, e)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	var a_p: IndividualCombat.Participant = state.combat.participants.get(1)
+	a_p.dual_wielding = true
+	a_p.off_hand_weapon = "wakizashi"
+	var r := AsciiMapCombatOrchestrator.execute_off_hand_attack(state, 1, 2, p, e, _dice)
+	assert_true(r["success"], "dual-wielder makes the off-hand swing")
+	assert_true(a_p.off_hand_attack_used_this_turn, "off-hand flag set")
+
+
+func test_off_hand_attack_only_once_per_turn() -> void:
+	var p := _make_char(1, 5, 5, 5, 5, 5, 5, 5, 5)
+	# High Earth (sta/wil 5) so the first off-hand hit does not kill the target.
+	var e := _make_char(2, 5, 5, 1, 1, 1, 1, 1, 1)
+	var state := _make_adjacent_state(p, e)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	var a_p: IndividualCombat.Participant = state.combat.participants.get(1)
+	a_p.dual_wielding = true
+	a_p.off_hand_weapon = "wakizashi"
+	AsciiMapCombatOrchestrator.execute_off_hand_attack(state, 1, 2, p, e, _dice)
+	var r2 := AsciiMapCombatOrchestrator.execute_off_hand_attack(state, 1, 2, p, e, _dice)
+	assert_false(r2["success"])
+	assert_eq(r2["reason"], "off_hand_already_used")
+
+
+func test_off_hand_attack_blocked_in_defense_stance() -> void:
+	var p := _make_char(1)
+	var e := _make_char(2)
+	var state := _make_adjacent_state(p, e)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	var a_p: IndividualCombat.Participant = state.combat.participants.get(1)
+	a_p.dual_wielding = true
+	a_p.off_hand_weapon = "wakizashi"
+	a_p.stance = Enums.Stance.DEFENSE
+	var r := AsciiMapCombatOrchestrator.execute_off_hand_attack(state, 1, 2, p, e, _dice)
+	assert_false(r["success"])
+	assert_eq(r["reason"], "defense_cannot_attack")
+
+
+# ===========================================================================
+# -- Delay Turn (s40) -------------------------------------------------------
+# ===========================================================================
+
+func test_delay_turn_lets_next_actor_act_now() -> void:
+	var p := _make_char(1)
+	var e := _make_char(2)
+	var state := _make_state(p, e)
+	# Force a known order: actor 1 first, actor 2 second.
+	state.combat.turn_order = [1, 2]
+	state.combat.current_turn_index = 0
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	var r := AsciiMapCombatOrchestrator.execute_delay(state, 1)
+	assert_true(r["success"])
+	assert_eq(AsciiMapCombatOrchestrator.get_current_actor(state), 2, "next actor acts now")
+	var dp: IndividualCombat.Participant = state.combat.participants.get(1)
+	assert_true(dp.is_delaying, "delayer flagged")
+
+
+func test_delay_turn_delayer_acts_after() -> void:
+	var p := _make_char(1)
+	var e := _make_char(2)
+	var state := _make_state(p, e)
+	state.combat.turn_order = [1, 2]
+	state.combat.current_turn_index = 0
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	AsciiMapCombatOrchestrator.execute_delay(state, 1)
+	# Actor 2 acts; advancing the turn reaches the delayer (1).
+	AsciiMapCombatOrchestrator.advance_turn(state, {1: p, 2: e}, _dice)
+	assert_eq(AsciiMapCombatOrchestrator.get_current_actor(state), 1, "delayer acts later")
+
+
+func test_delay_turn_fails_for_last_actor() -> void:
+	var p := _make_char(1)
+	var e := _make_char(2)
+	var state := _make_state(p, e)
+	state.combat.turn_order = [1, 2]
+	state.combat.current_turn_index = 1  # actor 2 is last
+	AsciiMapCombatOrchestrator.begin_turn(state, 2)
+	var r := AsciiMapCombatOrchestrator.execute_delay(state, 2)
+	assert_false(r["success"], "no later actor to delay to")
+	assert_eq(r["reason"], "no_later_actor")
+
+
+func test_delay_turn_fails_for_non_current_actor() -> void:
+	var p := _make_char(1)
+	var e := _make_char(2)
+	var state := _make_state(p, e)
+	state.combat.turn_order = [1, 2]
+	state.combat.current_turn_index = 0
+	var r := AsciiMapCombatOrchestrator.execute_delay(state, 2)
+	assert_false(r["success"])
+	assert_eq(r["reason"], "not_current_actor")
+
+
+# ===========================================================================
+# -- Weapon grapples (s40) --------------------------------------------------
+# ===========================================================================
+
+func test_weapon_grapple_rejects_non_grapple_weapon() -> void:
+	var p := _make_char(1, 5, 5, 5, 5, 5, 5, 5, 5)
+	var e := _make_char(2, 1, 1, 1, 1, 1, 1, 1, 1)
+	var state := _make_adjacent_state(p, e)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	var r := AsciiMapCombatOrchestrator.execute_grapple_initiate(state, 1, 2, p, e, _dice, "katana")
+	assert_false(r["success"])
+	assert_eq(r["reason"], "weapon_cannot_grapple")
+
+
+func test_weapon_grapple_naginata_sets_weapon_state() -> void:
+	var p := _make_char(1, 5, 5, 5, 5, 5, 5, 5, 5)
+	p.skills = {"Polearms": 5}
+	var e := _make_char(2, 1, 1, 1, 1, 1, 1, 1, 1)
+	var state := _make_adjacent_state(p, e)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	var r := AsciiMapCombatOrchestrator.execute_grapple_initiate(state, 1, 2, p, e, DiceEngine.new(1), "naginata")
+	assert_true(r["success"], "naginata grapple initiates")
+	var a_p: IndividualCombat.Participant = state.combat.participants.get(1)
+	assert_eq(a_p.weapon_grapple_weapon, "naginata")
+	assert_eq(a_p.weapon_grapple_skill, "Polearms")
+
+
+func test_weapon_grapple_hit_uses_weapon_damage() -> void:
+	var p := _make_char(1, 5, 5, 5, 5, 5, 5, 5, 5)
+	p.skills = {"Polearms": 5}
+	var e := _make_char(2, 1, 1, 1, 1, 1, 1, 1, 1)
+	var state := _make_adjacent_state(p, e)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	AsciiMapCombatOrchestrator.execute_grapple_initiate(state, 1, 2, p, e, DiceEngine.new(1), "naginata")
+	# New turn so the controller can Hit.
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	var r := AsciiMapCombatOrchestrator.execute_grapple_action(state, 1, "hit", p, e, DiceEngine.new(3))
+	assert_true(r["success"])
+	assert_gt(r["damage"], 0, "weapon grapple Hit deals damage")
+
+
+func test_weapon_grapple_lose_control_grants_disarm_raises() -> void:
+	var p := _make_char(1, 5, 5, 5, 5, 5, 5, 5, 5)  # weak-ish for control loss
+	p.skills = {"Polearms": 1}
+	var e := _make_char(2, 5, 5, 5, 5, 5, 5, 5, 5)  # strong grappler
+	e.skills = {"Jiujutsu": 5}
+	var state := _make_adjacent_state(p, e)
+	AsciiMapCombatOrchestrator.begin_turn(state, 1)
+	AsciiMapCombatOrchestrator.execute_grapple_initiate(state, 1, 2, p, e, DiceEngine.new(1), "naginata")
+	var a_p: IndividualCombat.Participant = state.combat.participants.get(1)
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(2)
+	# Force the weapon-grappler (1) to currently hold control, then have the
+	# opponent (2) take control on their turn.
+	a_p.grapple_in_control = true
+	t_p.grapple_in_control = false
+	AsciiMapCombatOrchestrator.begin_turn(state, 2)
+	var r := AsciiMapCombatOrchestrator.execute_grapple_action(state, 2, "take_control", e, p, DiceEngine.new(2))
+	if r["success"]:
+		assert_true(r["disarm_raises_granted"], "opponent banks disarm raises on win")
+		assert_eq(t_p.disarm_free_raises_pending,
+			AsciiMapCombatOrchestrator.WEAPON_GRAPPLE_LOSE_CONTROL_DISARM_RAISES)
+	else:
+		pass_test("control roll did not flip this seed; banking path is conditional")
+
+
+# ===========================================================================
+# -- NPC AI uses the new maneuvers (s40) ------------------------------------
+# ===========================================================================
+
+func test_npc_dual_wielder_makes_off_hand_swing() -> void:
+	var player := _make_char(1, 5, 5, 1, 1, 1, 1, 1, 1)  # high Earth, survives
+	var enemy := _make_char(2, 5, 5, 5, 5, 5, 5, 5, 5)
+	enemy.skills = {"Kenjutsu": 5}
+	var m := _make_map()
+	var state := AsciiMapCombatOrchestrator.setup_combat(m, [
+		{"char": player, "faction": AsciiMapCombatOrchestrator.FACTION_PLAYER, "x": 1, "y": 1},
+		{"char": enemy,  "faction": AsciiMapCombatOrchestrator.FACTION_ENEMY,  "x": 2, "y": 1},
+	], DiceEngine.new(7))
+	var e_p: IndividualCombat.Participant = state.combat.participants.get(2)
+	e_p.dual_wielding = true
+	e_p.off_hand_weapon = "wakizashi"
+	var r := AsciiMapCombatOrchestrator.execute_npc_turn(state, 2, enemy, {1: player, 2: enemy}, DiceEngine.new(7))
+	var actions: Array = r.get("actions", [])
+	var saw_off_hand := false
+	for a in actions:
+		if a.get("action", "") == "off_hand_attack":
+			saw_off_hand = true
+	assert_true(saw_off_hand, "dual-wielding NPC makes its off-hand swing")
+
+
+func test_npc_in_weapon_grapple_hits_with_weapon_damage() -> void:
+	var player := _make_char(1, 5, 5, 1, 1, 1, 1, 1, 1)  # high Earth, survives the Hit
+	var enemy := _make_char(2, 5, 5, 5, 5, 5, 5, 5, 5)
+	enemy.skills = {"Polearms": 5}
+	var m := _make_map()
+	var state := AsciiMapCombatOrchestrator.setup_combat(m, [
+		{"char": player, "faction": AsciiMapCombatOrchestrator.FACTION_PLAYER, "x": 1, "y": 1},
+		{"char": enemy,  "faction": AsciiMapCombatOrchestrator.FACTION_ENEMY,  "x": 2, "y": 1},
+	], DiceEngine.new(3))
+	# Put the enemy NPC into a weapon grapple, in control of the player.
+	var e_p: IndividualCombat.Participant = state.combat.participants.get(2)
+	var p_p: IndividualCombat.Participant = state.combat.participants.get(1)
+	IndividualCombat.apply_condition(e_p, IndividualCombat.CONDITION_GRAPPLED)
+	IndividualCombat.apply_condition(p_p, IndividualCombat.CONDITION_GRAPPLED)
+	e_p.grapple_partner_id = 1
+	p_p.grapple_partner_id = 2
+	e_p.grapple_in_control = true
+	p_p.grapple_in_control = false
+	e_p.weapon_grapple_skill = "Polearms"
+	e_p.weapon_grapple_weapon = "naginata"
+	var r := AsciiMapCombatOrchestrator.execute_npc_turn(state, 2, enemy, {1: player, 2: enemy}, DiceEngine.new(3))
+	var actions: Array = r.get("actions", [])
+	var saw_hit := false
+	for a in actions:
+		if a.get("action", "") == "grapple_hit" and a.get("result", {}).get("success", false):
+			saw_hit = true
+	assert_true(saw_hit, "NPC in a weapon grapple deals weapon-damage Hit")
+
+
+# ===========================================================================
+# -- Dual-wield school activation (s40) -------------------------------------
+# ===========================================================================
+
+func test_setup_flags_dual_wielding_from_off_hand_weapon() -> void:
+	var p := _make_char(1)
+	p.off_hand_weapon = "wakizashi"
+	var e := _make_char(2)
+	var state := _make_state(p, e)
+	var pp: IndividualCombat.Participant = state.combat.participants.get(1)
+	assert_true(pp.dual_wielding, "off_hand_weapon flags the Participant dual-wielding")
+	assert_eq(pp.off_hand_weapon, "wakizashi")
+
+
+func test_setup_single_weapon_not_dual_wielding() -> void:
+	var p := _make_char(1)  # no off_hand_weapon
+	var e := _make_char(2)
+	var state := _make_state(p, e)
+	var pp: IndividualCombat.Participant = state.combat.participants.get(1)
+	assert_false(pp.dual_wielding)

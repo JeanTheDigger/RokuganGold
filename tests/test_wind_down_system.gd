@@ -496,6 +496,7 @@ func test_go_parlor_wound_penalty_reduces_contest_roll() -> void:
 		healthy.clan = "Crane"
 		healthy.honor = 5.0
 		healthy.willpower = 2
+		healthy.stamina = 2
 		healthy.intelligence = 4
 		healthy.skills = {"Games: Go": 4}
 		var r1: Dictionary = WindDownSystem.apply_wind_down(
@@ -508,9 +509,10 @@ func test_go_parlor_wound_penalty_reduces_contest_roll() -> void:
 		wounded.clan = "Crane"
 		wounded.honor = 5.0
 		wounded.willpower = 2
+		wounded.stamina = 2
 		wounded.intelligence = 4
 		wounded.skills = {"Games: Go": 4}
-		wounded.wounds_taken = 50
+		wounded.wounds_taken = 13
 		var r2: Dictionary = WindDownSystem.apply_wind_down(
 			wounded, WindDownSystem.Method.GO_PARLOR, d2,
 			[7], -1, opponent, -1)

@@ -424,7 +424,7 @@ static func _resolve_character_wave_full(
 		if rm_check.get("triggered", false):
 			var rm_wound: int = CharacterStats.get_wound_penalty(character)
 			var rm_roll: DiceResult = dice_engine.roll_and_keep(
-				character.willpower, character.willpower, false, ""
+				character.willpower, character.willpower, false, false
 			)
 			if (rm_roll.total + rm_wound) < rm_check.get("tn", 0):
 				var rm_targets: Dictionary = _pick_rumormonger_targets(character, characters_by_id)
@@ -530,6 +530,15 @@ static func _resolve_civilian_order(
 		return {}
 
 	order_options = NPCDecisionEngine.apply_allowlist_filter(order_options, need.need_type, scoring_tables)
+	if order_options.is_empty():
+		return {}
+
+	# Match run()'s Phase-4 precondition gating for order actions. TERMINATE_CONTRACT
+	# is the only precondition-gated civilian order: without this, a lord with no
+	# active contracts could select it via an order, no-op in the executor, and waste
+	# the civilian order. (The other precondition-gated actions are AP-only, never
+	# order_options, so the terminate-contract filter is the only one that applies here.)
+	order_options = NPCDecisionEngine._apply_terminate_contract_precondition_filter(order_options, world_state)
 	if order_options.is_empty():
 		return {}
 

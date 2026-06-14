@@ -408,7 +408,11 @@ static func apply_seasonal_auto_degradation(garden: GardenData, ic_season: int) 
 	## Fires when a full IC season passes without any MAINTAIN_GARDEN attempt.
 	## Equivalent to a maintenance failure (s57.23a A5).
 	## Returns: {"degraded": bool, "destroyed": bool}
-	return apply_maintain_result(garden, false, ic_season)
+	var result: Dictionary = apply_maintain_result(garden, false, ic_season)
+	# Stamp the season so the seasonal pass does not auto-degrade this garden
+	# twice in the same season.
+	garden.last_maintained_season = ic_season
+	return result
 
 # ---------------------------------------------------------------------------
 # Removal
@@ -533,7 +537,7 @@ static func make_destruction_topic(
 ) -> Dictionary:
 	## Returns a topic dict for garden destruction by neglect or maintenance failure (A12).
 	## Tier by original quality_tier (the quality at installation, not current_tier).
-	var _ = creator_alive  # Destruction topics fire regardless of creator status
+	var _creator_alive: bool = creator_alive  # Destruction topics fire regardless of creator status
 
 	var tier: int
 	match garden.quality_tier:

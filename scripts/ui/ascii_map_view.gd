@@ -30,6 +30,10 @@ signal combat_event(event: Dictionary)
 signal player_died()
 signal mission_complete()
 signal stealth_mode_changed(enabled: bool)
+## Fired when the zone flips between real-time and turn-based combat (GDD s40.x).
+signal combat_mode_changed(turn_based: bool)
+## Fired when a successful End Combat returns the zone to real-time (GDD s40.x).
+signal combat_ended()
 
 const VIEWPORT_SIZE: int = 31
 const CELL_SIZE: int = 20
@@ -207,9 +211,70 @@ func clear_combat_controller() -> void:
 	_look_mode = false
 
 
-## Returns true when a CombatController is active.
+## Returns true when a combat mission is loaded (a CombatController is attached).
+## NOTE: this is NOT the same as being in active combat. A mission can be loaded
+## while the zone is still in real-time exploration. Use is_turn_based() to ask
+## whether the zone is actively in turn-based combat (GDD s40.x).
 func is_in_combat() -> bool:
 	return _combat_controller != null
+
+
+## Returns true when the active zone is in turn-based combat mode (GDD s40.x).
+## False while in real-time exploration. False when no CombatController is loaded.
+func is_turn_based() -> bool:
+	if _combat_controller == null:
+		return false
+	return _combat_controller.is_turn_based()
+
+
+## Propose ending combat (GDD s40.x). Delegates to the CombatController.
+## Blocked while aware hostiles remain; otherwise opens a present-PC consent poll.
+## Returns the controller's result dict (or {} if no mission is loaded).
+func request_end_combat() -> Dictionary:
+	if _combat_controller == null:
+		return {}
+	return _combat_controller.request_end_combat()
+
+
+## Record a present PC's consent to an open End Combat poll (GDD s40.x).
+## On unanimous consent with the field clear, the zone returns to real-time and
+## combat_ended + combat_mode_changed(false) fire. Returns the controller result.
+func submit_end_combat_consent(pc_id: int, agree: bool) -> Dictionary:
+	if _combat_controller == null:
+		return {}
+	var result: Dictionary = _combat_controller.register_end_combat_consent(pc_id, agree)
+	if result.get("ended", false):
+		combat_ended.emit()
+		# Route the mode signal through the shared latch so the next NPC-turn poll
+		# does not re-emit the same real-time transition.
+		_emit_mode_change_if_any()
+	return result
+
+
+## Player-initiated End Combat from input (GDD s40.x). Only meaningful in
+## turn-based mode. Blocked while aware hostiles remain (emits end_combat_blocked
+## with the hostile count). When the field is clear, the local PC consents by
+## requesting; any other present PCs must still agree before combat ends
+## (multi-PC consent collection is out of scope for local play). Emits a
+## combat_event describing the outcome for the HUD log.
+func _handle_end_combat_input() -> void:
+	if not _combat_controller.is_turn_based():
+		return  # Nothing to end in real-time exploration.
+	var req: Dictionary = request_end_combat()
+	if not req.get("ok", false):
+		var hostiles: Array = req.get("hostiles", [])
+		combat_event.emit({"type": "end_combat_blocked", "count": hostiles.size()})
+		return
+	# Field is clear — the local player consents by requesting.
+	var player: CombatController.EntityState = _combat_controller.get_player()
+	if player == null:
+		return
+	var res: Dictionary = submit_end_combat_consent(player.entity_id, true)
+	if res.get("ended", false):
+		combat_event.emit({"type": "end_combat_resolved"})
+	else:
+		var remaining: Array = res.get("remaining", [])
+		combat_event.emit({"type": "end_combat_awaiting", "count": remaining.size()})
 
 
 ## Returns true when stealth mode is active.
@@ -249,11 +314,23 @@ func _run_npc_turns_and_sync() -> void:
 		# Flatten morale events nested inside npc_attacked results.
 		for mev: Dictionary in ev.get("attack_result", {}).get("morale_events", []):
 			combat_event.emit(mev)
+	# Combat mode transition (real-time ↔ turn-based) detected this action.
+	_emit_mode_change_if_any()
 	# Check terminal states — signals only; combat_event already emitted in the loop above.
 	if _combat_controller.is_player_dead():
 		player_died.emit()
 	elif _combat_controller.is_mission_complete():
 		mission_complete.emit()
+
+
+## Fire combat_mode_changed once if the zone's real-time ↔ turn-based mode flipped
+## since the last check. Single source of truth for the mode signal (consumes the
+## controller's transition latch), so callers never double-emit.
+func _emit_mode_change_if_any() -> void:
+	if _combat_controller == null:
+		return
+	if _combat_controller.poll_mode_changed():
+		combat_mode_changed.emit(_combat_controller.is_turn_based())
 
 
 ## Process the Dictionary returned by CombatController's player action methods.
@@ -410,6 +487,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		_stealth_mode = not _stealth_mode
 		stealth_mode_changed.emit(_stealth_mode)
 		queue_redraw()
+		get_viewport().set_input_as_handled()
+		return
+
+	# X key requests End Combat (turn-based only) — GDD s40.x.
+	if key.keycode == KEY_X and not key.echo and _combat_controller != null:
+		_handle_end_combat_input()
 		get_viewport().set_input_as_handled()
 		return
 

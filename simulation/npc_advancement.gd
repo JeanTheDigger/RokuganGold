@@ -159,12 +159,16 @@ static func _raise_ring(character: L5RCharacterData, ring: Enums.Ring) -> void:
 		character.void_ring += 1
 		character.max_void_points = character.void_ring
 		return
+	# s48: filling the Ring's progress bar raises the Ring by one rank. The Ring
+	# value is min(t1, t2), so raise every underlying trait currently at that
+	# minimum — one trait when uneven, both when equal — so the min rises by 1.
 	var traits: Array = Enums.RING_TRAITS[ring]
 	var t1_val: int = character.get_trait_value(traits[0])
 	var t2_val: int = character.get_trait_value(traits[1])
-	if t1_val <= t2_val:
+	var ring_min: int = mini(t1_val, t2_val)
+	if t1_val == ring_min:
 		character.set_trait_value(traits[0], t1_val + 1)
-	else:
+	if t2_val == ring_min:
 		character.set_trait_value(traits[1], t2_val + 1)
 
 
@@ -539,11 +543,22 @@ static func process_seasonal_advancement(characters: Array, world_state: Diction
 		# Bushi claim kata XP before progress bars (s30a).
 		# Progress bars vacuum all remaining XP, so kata spending must come first.
 		var kata_learned: String = ""
-		if character.school_type == Enums.SchoolType.BUSHI and not character.school_name.is_empty():
+		if character.school_type == Enums.SchoolType.BUSHI and not character.school.is_empty():
 			var kata_name: String = KataSystem.select_kata_for_npc(character)
 			if not kata_name.is_empty():
 				if KataSystem.learn_kata(character, kata_name):
 					kata_learned = kata_name
+
+		# Monks claim kiho XP before progress bars (s38), same as bushi claim kata.
+		# Kiho is the monk's signature; shugenja MAY learn kiho (KihoSystem supports
+		# it) but the NPC seasonal pass does not auto-divert their XP from spells.
+		var kiho_learned: String = ""
+		if character.school_type == Enums.SchoolType.MONK \
+				and not character.school.is_empty():
+			var kiho_name: String = KihoSystem.select_kiho_for_npc(character)
+			if not kiho_name.is_empty():
+				if KihoSystem.learn_kiho(character, kiho_name):
+					kiho_learned = kiho_name
 
 		# Spend remaining accumulated XP on skill/ring progress bars.
 		var spend_result: Dictionary = spend_accumulated_xp(character)
@@ -551,7 +566,8 @@ static func process_seasonal_advancement(characters: Array, world_state: Diction
 		var new_rank: int = CharacterStats.get_insight_rank(character)
 		var ranked_up: bool = new_rank > old_rank
 
-		if ranked_up or spend_result["advancements"].size() > 0 or not kata_learned.is_empty():
+		if ranked_up or spend_result["advancements"].size() > 0 \
+				or not kata_learned.is_empty() or not kiho_learned.is_empty():
 			var entry: Dictionary = {
 				"character_id": character.character_id,
 				"xp_earned_season": season_xp,
@@ -561,6 +577,8 @@ static func process_seasonal_advancement(characters: Array, world_state: Diction
 			}
 			if not kata_learned.is_empty():
 				entry["kata_learned"] = kata_learned
+			if not kiho_learned.is_empty():
+				entry["kiho_learned"] = kiho_learned
 			if ranked_up:
 				entry["old_rank"] = old_rank
 				entry["new_rank"] = new_rank

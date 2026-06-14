@@ -2824,7 +2824,7 @@ func test_contested_court_charm_mutation_modifier_reduces_attacker_roll() -> voi
 			ctx_l.character_id = 1
 			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
 			var r: Dictionary = ActionExecutor._execute_contested_court_action(
-				action, "CHARM", ch, ctx_l, dice, _action_skill_map, chars_by_id)
+				action, ch, ctx_l, dice, _action_skill_map, chars_by_id)
 			return r.get("roll_total", 0),
 		func(dice: DiceEngine) -> int:
 			var cm := _make_mutated_char(2)
@@ -2834,7 +2834,7 @@ func test_contested_court_charm_mutation_modifier_reduces_attacker_roll() -> voi
 			ctx_l.character_id = 2
 			ctx_l.context_flag = Enums.ContextFlag.AT_COURT
 			var r: Dictionary = ActionExecutor._execute_contested_court_action(
-				action, "CHARM", cm, ctx_l, dice, _action_skill_map, chars_by_id)
+				action, cm, ctx_l, dice, _action_skill_map, chars_by_id)
 			return r.get("roll_total", 0),
 		"Mutated charmer (FOUL_ODOR) should have lower roll totals")
 

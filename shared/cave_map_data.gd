@@ -95,7 +95,6 @@ const ROOM_RANGE: Array[Vector2i] = [
 # -- Placement data -----------------------------------------------------------
 
 # Each slot dict: { x:int, y:int, role:int (PopRole), room_id:int }
-@export var population_slots: Array = []
 
 # Each slot dict: { x:int, y:int, obj_type:int (ObjType), room_id:int }
 @export var objective_slots: Array = []

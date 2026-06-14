@@ -684,7 +684,7 @@ func test_tend_bonsai_3_missed_at_mundane_dies() -> void:
 	# consecutive_missed_months becomes 3, quality_tier is already Mundane → die
 	assert_true(b.is_dead, "Bonsai dies at 3 consecutive misses while Mundane")
 	# No degradation below Mundane (already at floor)
-	_ = result  # result not checked for degraded since tier is already 0
+	var _unused_result := result  # tier already 0
 
 
 # ---------------------------------------------------------------------------

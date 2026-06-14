@@ -706,9 +706,9 @@ func test_mind_of_darkness_lost_adds_taint_rank_to_intelligence_skill() -> void:
 
 
 func test_mind_of_darkness_lost_adds_taint_rank_to_willpower_skill() -> void:
-	# Meditation uses Willpower.
+	# Intimidation uses Willpower (Meditation is a Void skill, not Willpower).
 	var c := _char_with_mind_of_darkness(5.0, true)
-	var mod: Dictionary = MutationSystem.get_skill_modifiers(c, "Meditation")
+	var mod: Dictionary = MutationSystem.get_skill_modifiers(c, "Intimidation")
 	assert_eq(mod.get("tn", 0), 5)
 
 

@@ -332,7 +332,7 @@ func test_auto_dissolve_skips_unmarried():
 
 # -- Pathway 3: Monastic Retirement -------------------------------------------
 
-func test_get_dissolution_topic_variant_pathway_3():
+func test_get_dissolution_topic_variant_pathway_3_b():
 	assert_eq(MarriageSystem.get_dissolution_topic_variant(3), "monastic_retirement")
 
 
@@ -690,7 +690,8 @@ func test_phoenix_champion_acceptance_creates_succession():
 
 
 func test_phoenix_champion_ketsui_refuses_removal():
-	var champion: L5RCharacterData = _make_phoenix_champion(205, Enums.BushidoVirtue.KETSUI)
+	# YU is a refusing virtue (accept = Meiyo/Chugi/Rei; everything else refuses).
+	var champion: L5RCharacterData = _make_phoenix_champion(205, Enums.BushidoVirtue.YU)
 	var master: L5RCharacterData = _make_elemental_master(206)
 	var chars: Array = [champion, master]
 	var chars_by_id: Dictionary = {205: champion, 206: master}
@@ -712,7 +713,7 @@ func test_phoenix_champion_ketsui_refuses_removal():
 
 
 func test_phoenix_champion_ishi_refuses_removal():
-	var champion: L5RCharacterData = _make_phoenix_champion(207, Enums.BushidoVirtue.ISHI)
+	var champion: L5RCharacterData = _make_phoenix_champion(207, Enums.BushidoVirtue.GI)
 	var master: L5RCharacterData = _make_elemental_master(208)
 	var chars: Array = [champion, master]
 	var chars_by_id: Dictionary = {207: champion, 208: master}
@@ -729,7 +730,8 @@ func test_phoenix_champion_ishi_refuses_removal():
 
 func test_phoenix_champion_no_master_accepts_gracefully():
 	# When no senior master exists on the refusal path, no civil war fires.
-	var champion: L5RCharacterData = _make_phoenix_champion(209, Enums.BushidoVirtue.KETSUI)
+	# YU is a refusing virtue (accept = Meiyo/Chugi/Rei).
+	var champion: L5RCharacterData = _make_phoenix_champion(209, Enums.BushidoVirtue.YU)
 	var chars: Array = [champion]
 	var chars_by_id: Dictionary = {209: champion}
 	var phoenix_state: Dictionary = _make_phoenix_state_stage4()

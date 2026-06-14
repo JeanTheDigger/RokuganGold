@@ -77,12 +77,12 @@ static func get_wound_level(character: L5RCharacterData) -> Enums.WoundLevel:
 	if threshold <= 0:
 		return Enums.WoundLevel.DEAD
 
-	# PERMANENT_WOUND (s45): first wound box is always occupied — minimum NICKED.
-	var effective_wounds: int = character.wounds_taken
-	if effective_wounds <= 0 and AdvantageSystem.has_permanent_wound(character):
-		effective_wounds = 1
+	var has_permanent_wound: bool = AdvantageSystem.has_permanent_wound(character)
 
-	if effective_wounds <= 0:
+	if character.wounds_taken <= 0:
+		# PERMANENT_WOUND (s45): first wound box is always occupied — minimum NICKED.
+		if has_permanent_wound:
+			return Enums.WoundLevel.NICKED
 		return Enums.WoundLevel.HEALTHY
 
 	var levels: Array = [
@@ -100,9 +100,13 @@ static func get_wound_level(character: L5RCharacterData) -> Enums.WoundLevel:
 	# Each level holds `threshold` wound boxes. Wounds 1–threshold fill Healthy,
 	# threshold+1 through threshold*2 fill Nicked, etc. The penalty applies once
 	# wounds spill into a new level.
-	var level_index: int = int((effective_wounds - 1) / threshold)
+	var level_index: int = int((character.wounds_taken - 1) / threshold)
 	level_index = mini(level_index, levels.size() - 1)
-	return levels[level_index]
+	var level: Enums.WoundLevel = levels[level_index]
+	# PERMANENT_WOUND floors the wound level at NICKED.
+	if has_permanent_wound and level == Enums.WoundLevel.HEALTHY:
+		return Enums.WoundLevel.NICKED
+	return level
 
 
 static func get_wound_penalty(character: L5RCharacterData) -> int:

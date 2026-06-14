@@ -17,10 +17,19 @@ const WEAPON_CATALOG: Dictionary = {
 	"wakizashi":  {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",      "size": "Small",  "melee": true,  "trait": "agility"},
 	"tanto":      {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives",         "size": "Small",  "melee": true,  "trait": "agility"},
 	"bo":         {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Bo",             "size": "Large",  "melee": true,  "trait": "agility"},
-	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms",       "size": "Large",  "melee": true,  "trait": "agility"},
+	# can_grapple: s40 "Weapon Grapples" — chain weapons and certain polearms may
+	# initiate Grapples using the weapon skill. The naginata is the catalog's
+	# grapple-capable polearm; chain weapons (e.g. kusarigama) get can_grapple
+	# when added to the catalog with their own DR.
+	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms",       "size": "Large",  "melee": true,  "trait": "agility", "can_grapple": true},
 	"tetsubo":    {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Heavy Weapons",  "size": "Large",  "melee": true,  "trait": "agility"},
-	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",       "size": "Large",  "melee": false, "trait": "agility"},
+	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",       "size": "Large",  "melee": false, "trait": "reflexes"},
 	"unarmed":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu",       "size": "Small",  "melee": true,  "trait": "agility"},
+	# Off-hand weapons for the s40 dual-wield combinations (DR from s39 Equipment).
+	# kama: Mantis paired small weapons (s29.9 "Waves Rush to Shore" uses Knives).
+	# war_fan (tessen): Lion katana-and-war-fan (s29.4 "The Commander's Fan").
+	"kama":       {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Knives",         "size": "Small",  "melee": true,  "trait": "agility"},
+	"war_fan":    {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "War Fan",        "size": "Small",  "melee": true,  "trait": "agility"},
 }
 
 const DEFAULT_WEAPON: Dictionary = {
@@ -137,6 +146,16 @@ class Participant:
 	var void_roll_pending_kept: int = 0      # pending +N kept dice from pre-declared Void spend (GDD s40)
 	var kata_used_this_turn: Dictionary = {}   # tracks once-per-Turn kata uses by effect_id
 	var kata_used_this_round: Dictionary = {}  # tracks once-per-Round kata uses by effect_id
+	var active_kiho: Array = []                 # currently-active kiho names (GDD s38; see KihoSystem)
+	var active_kiho_expiry: Dictionary = {}     # kiho_name → expiry round (for round-duration buffs)
+	var suppressed_disadvantage_expiry: int = -1  # round when Banish All Shadows suppression ends (s38)
+	var taint_benefits_suppressed_expiry: int = -1  # round when Rest, My Brother Taint suppression ends (s38)
+	var shadowed_mountain_used: bool = false  # Shadowed Mountain fired this activation (s38)
+	var attacked_by_ids: Array = []  # who attacked me since my last Turn (Bishamon's Grasp, s38)
+	var initiative_modifier: int = 0  # persistent Initiative delta (Song of the World, s38)
+	var facing: Vector2i = Vector2i(0, 0)  # unit heading; (0,0) = unset (s38 arc/cone kiho)
+	var inari_breath_round: int = -1  # round Inari's Wrath breath was held (s38); -1 = not holding
+	var void_dragon_ring: int = -1  # Touch the Void Dragon (s38): boosted Ring (Enums.Ring), -1 = inactive
 	var dual_wielding: bool = false            # true when holding an off-hand weapon
 	var off_hand_weapon: String = ""           # name of off-hand weapon ("" = none)
 	var earth_trade_amount: int = 0            # Armor TN traded for damage (earth_trade_armor_for_damage)
@@ -144,6 +163,22 @@ class Participant:
 	var water_trade_armor_amount: int = 0      # Armor TN traded for movement (water_trade_armor_for_movement)
 	var guard_kata_bonus: int = 0              # extra Armor TN from void_phoenix_guard_bonus kata
 	var extra_attack_used_this_turn: bool = false  # Extra Attack may only be used once per turn
+	var off_hand_attack_used_this_turn: bool = false  # Off-hand attack may only be made once per turn (s40)
+	# Weapon-grapple state (s40 "Weapon Grapples"): when a character initiates a
+	# grapple with a chain weapon / certain polearm, control rolls use the weapon
+	# skill and Hit deals weapon damage. Empty/"" = ordinary Jiujutsu grapple.
+	var weapon_grapple_skill: String = ""
+	var weapon_grapple_weapon: String = ""
+	# Free Raises the opponent has banked toward a Disarm against this character
+	# (s40: granted when a weapon-grappler loses control of the grapple).
+	var disarm_free_raises_pending: int = 0
+	# Timed combat modifiers from s30a duration katas (Victory of the River, etc.).
+	# Each entry: {kind:String, value:int, expires_round:int, source:String}.
+	# expires_round is the round at which it is removed (active through the prior round).
+	var timed_modifiers: Array = []
+	# Victory of the River (s30a): the single opponent currently held under the
+	# Armor-TN debuff ("One opponent at a time"); -1 = none.
+	var votr_target_id: int = -1
 
 
 class CombatState:
@@ -185,6 +220,13 @@ static func _has_kata_effect(character: L5RCharacterData, effect_id: String) -> 
 
 
 ## Returns {flat_bonus, use_void_ring} for initiative kata effects.
+## Touch the Void Dragon (s38): +1 to `ring`'s value when it is the participant's active
+## environmental boost. The +1 Rank to the Ring's associated Traits manifests as +1k1 on
+## attack/initiative rolls and +5 Armor TN / +1 damage die at the call sites below.
+static func vd_ring_bonus(participant: Participant, ring: int) -> int:
+	return 1 if (participant != null and participant.void_dragon_ring == ring) else 0
+
+
 static func _get_kata_initiative_modifiers(character: L5RCharacterData, weapon_name: String) -> Dictionary:
 	var flat_bonus: int = 0
 	var use_void_ring: bool = false
@@ -362,6 +404,111 @@ static func _get_kata_wound_penalty_reduction(character: L5RCharacterData) -> in
 	return 0
 
 
+# -- Timed combat modifiers (s30a duration katas) -----------------------------
+# Generic round-scoped modifier store on a Participant. Each entry is
+# {kind, value, expires_round, source}. `kind` selects which roll/value the
+# modifier feeds ("armor_tn" today; "all_rolls" / "attack_roll" reserved for the
+# Spider / World Is Empty katas). All values and durations are GDD-given (s30a) —
+# the system carries no balance numbers of its own.
+
+## expiry_kind: "round" (removed once round_number reaches expires_round) or
+## "turn_end" (removed at the end of the holder's own next turn — for "next Turn"
+## effects like Strength of the Spider; expires_round is unused for those).
+static func add_timed_modifier(p: Participant, kind: String, value: int, expires_round: int, source: String, expiry_kind: String = "round") -> void:
+	p.timed_modifiers.append({"kind": kind, "value": value, "expires_round": expires_round, "source": source, "expiry_kind": expiry_kind})
+
+
+static func get_timed_modifier_total(p: Participant, kind: String) -> int:
+	var total: int = 0
+	for m: Dictionary in p.timed_modifiers:
+		if m.get("kind", "") == kind:
+			total += int(m.get("value", 0))
+	return total
+
+
+static func has_timed_modifier_source(p: Participant, source: String) -> bool:
+	for m: Dictionary in p.timed_modifiers:
+		if m.get("source", "") == source:
+			return true
+	return false
+
+
+static func clear_timed_modifiers_by_source(p: Participant, source: String) -> void:
+	var kept: Array = []
+	for m: Dictionary in p.timed_modifiers:
+		if m.get("source", "") != source:
+			kept.append(m)
+	p.timed_modifiers = kept
+
+
+## Remove round-based timed modifiers whose window has closed. Called once per
+## participant at the start of each new round (after round_number is incremented).
+## Turn-based ("turn_end") modifiers are untouched here.
+static func expire_timed_modifiers(p: Participant, round_number: int) -> void:
+	var kept: Array = []
+	for m: Dictionary in p.timed_modifiers:
+		if m.get("expiry_kind", "round") != "round":
+			kept.append(m)  # turn-based — not expired by round advancement
+		elif int(m.get("expires_round", 0)) > round_number:
+			kept.append(m)
+	p.timed_modifiers = kept
+
+
+## Remove active kiho whose round-duration has elapsed (s38: "Lasts Rounds equal to
+## [Ring]"). Kiho with no recorded expiry (Air Fist's "one day", indefinite buffs)
+## persist for the whole skirmish. Called from the orchestrator's advance_round.
+static func expire_active_kiho(p: Participant, round_number: int) -> void:
+	for k: String in p.active_kiho_expiry.keys():
+		if int(p.active_kiho_expiry[k]) <= round_number:
+			p.active_kiho.erase(k)
+			p.active_kiho_expiry.erase(k)
+
+
+## Remove turn-based ("turn_end") timed modifiers from a participant whose turn is
+## ending. Called from the orchestrator's advance_turn for the ending actor.
+static func expire_turn_modifiers(p: Participant) -> void:
+	var kept: Array = []
+	for m: Dictionary in p.timed_modifiers:
+		if m.get("expiry_kind", "round") != "turn_end":
+			kept.append(m)
+	p.timed_modifiers = kept
+
+
+## Striking as Water (s30a, water_attack_stance_movement): "In Attack Stance:
+## move 5 additional feet as a Free Action." One tile = 5 ft (MovementSystem), so
+## this is +1 tile to the Free-action move budget while in Attack Stance. Public —
+## called by the ASCII map orchestrator when computing the Free-move budget.
+static func get_kata_free_move_bonus(character: L5RCharacterData, participant: Participant) -> int:
+	if participant.stance != Enums.Stance.ATTACK:
+		return 0
+	if _has_kata_effect(character, "water_attack_stance_movement"):
+		return 1
+	return 0
+
+
+## +1 tile (5 ft) to any Move Action while Fire's Fleeting Speed is active (s38 Fire).
+static func get_kiho_move_bonus(_character: L5RCharacterData, participant: Participant) -> int:
+	if participant != null and "Fire's Fleeting Speed" in participant.active_kiho:
+		return 1
+	return 0
+
+
+## The Empire Rests on its Edge (s30a, multi_empire_edge_skill_bonus): while known,
+## grants a flat bonus to Kenjutsu/Iaijutsu rolls equal to the wielder's Rank in a
+## chosen non-combat High Skill. The GDD picks the skill at acquisition; with no
+## choice UI the system resolves it to the character's highest-ranked High Skill
+## (optimal, deterministic). The "+2 XP per Rank" progression cost is not modelled.
+## Returns the bonus, or 0 if the kata is unknown.
+static func get_empire_edge_bonus(character: L5RCharacterData) -> int:
+	if "The Empire Rests on its Edge" not in character.katas:
+		return 0
+	var best: int = 0
+	for skill_name: String in character.skills:
+		if AdvantageSystem.is_high_skill(skill_name):
+			best = maxi(best, int(character.skills[skill_name]))
+	return best
+
+
 ## Returns bonus to own Reduction from katas (earth_full_defense, earth_crab variants).
 ## Public — called by WoundSystem context builders.
 static func get_kata_reduction_bonus(
@@ -411,6 +558,288 @@ static func get_kata_opponent_reduction_penalty(
 
 
 # =============================================================================
+# -- Kiho Effect Modifiers (s38 → s40) -----------------------------------------
+# =============================================================================
+# Kiho effects apply only while the kiho is ACTIVE (participant.active_kiho),
+# unlike katas (passive once known). First wired tranche: persistent passive
+# buffs that map onto the existing kata modifier hooks (Armor TN, Initiative,
+# wound-penalty). Atemi-delivered, contested-roll, and unique kiho remain
+# deferred. Kiho is monk-only (s38a A0).
+
+## effect_ids of the combatant's currently-active kiho (skips kiho with no wired effect).
+static func _active_kiho_effect_ids(participant: Participant) -> Array:
+	var ids: Array = []
+	for kiho_name: String in participant.active_kiho:
+		if KihoSystem.KIHO_DATA.has(kiho_name):
+			var eid: String = KihoSystem.KIHO_DATA[kiho_name].get("effect_id", "")
+			if eid != "":
+				ids.append(eid)
+	return ids
+
+
+## Armor TN bonus from active kiho. Soul of the Four Winds: +Insight + Air Ring.
+static func _get_kiho_armor_tn_bonus(character: L5RCharacterData, participant: Participant) -> int:
+	var bonus: int = 0
+	var air_ring: int = CharacterStats.get_ring_value(character, Enums.Ring.AIR)
+	var insight: int = CharacterStats.get_insight_rank(character)
+	for effect_id: String in _active_kiho_effect_ids(participant):
+		match effect_id:
+			"kiho_soul_four_winds_armor":
+				bonus += insight + air_ring
+			"kiho_musubi_armor":
+				# Musubi (s38 Water): + Water Ring + Staves Skill Rank to Armor TN (staff in motion).
+				bonus += CharacterStats.get_ring_value(character, Enums.Ring.WATER) + int(character.skills.get("Staves", 0))
+	return bonus
+
+
+## Initiative flat bonus from active kiho. Air Fist: +5 while only unarmed.
+static func _get_kiho_initiative_bonus(
+	character: L5RCharacterData,
+	participant: Participant,
+	weapon_name: String,
+) -> int:
+	var bonus: int = 0
+	for effect_id: String in _active_kiho_effect_ids(participant):
+		match effect_id:
+			"kiho_air_fist_initiative":
+				if weapon_name == "" or weapon_name == "unarmed":
+					bonus += 5
+	return bonus
+
+
+## Wound-penalty TN reduction from active kiho. Grasp the Earth Dragon: −Earth Ring.
+static func _get_kiho_wound_penalty_reduction(character: L5RCharacterData, participant: Participant) -> int:
+	var reduction: int = 0
+	var earth_ring: int = CharacterStats.get_earth_ring(character)
+	for effect_id: String in _active_kiho_effect_ids(participant):
+		match effect_id:
+			"kiho_grasp_earth_dragon_wound":
+				reduction += earth_ring
+	return reduction
+
+
+## Reduction bonus from active kiho. Embrace the Stone: 2× Earth; Partaking the
+## Waters: Water Ring.
+static func _get_kiho_reduction_bonus(character: L5RCharacterData, participant: Participant) -> int:
+	var bonus: int = 0
+	var earth_ring: int = CharacterStats.get_earth_ring(character)
+	var water_ring: int = CharacterStats.get_ring_value(character, Enums.Ring.WATER)
+	for effect_id: String in _active_kiho_effect_ids(participant):
+		match effect_id:
+			"kiho_embrace_stone_reduction":
+				bonus += 2 * earth_ring
+			"kiho_partaking_waters_reduction":
+				bonus += water_ring
+	return bonus
+
+
+## Total Reduction the defender has against this attack: base armor Reduction +
+## kata + active-kiho Reduction, minus the attacker's Reduction-piercing effects,
+## floored at 0. Feed this into WoundSystem.apply_damage. (Wires the kata/kiho
+## Reduction modifiers, which were computed but never passed into damage before.)
+static func total_defender_reduction(
+	defender: L5RCharacterData,
+	defender_p: Participant,
+	attacker: L5RCharacterData,
+	attacker_p: Participant,
+	weapon_name: String,
+) -> int:
+	var base: int = defender.armor_reduction
+	var kata: int = get_kata_reduction_bonus(defender, defender_p, weapon_name)
+	var kiho: int = _get_kiho_reduction_bonus(defender, defender_p)
+	var pierce: int = get_kata_opponent_reduction_penalty(attacker, attacker_p, weapon_name)
+	return maxi(0, base + kata + kiho - pierce)
+
+
+## Resolve an atemi-delivered kiho strike (GDD s38). Atemi deal no normal damage —
+## only the kiho effect occurs, and armor's Armor TN bonus is DOUBLED against atemi.
+## Covers atemi kiho whose effect is an instant, roll-recoverable condition
+## (Dazed / Stunned, per the existing s40 condition model). Some require a Contested
+## Ring roll after the hit. Returns {ok, hit, effect_applied, condition, ...}.
+## Atemi kiho with durations, new condition types, or unique mechanics are not yet
+## wired (need timed-condition infrastructure) — they return effect_not_wired.
+## round_number enables "timed" atemi effects (s38 kiho that last "Rounds equal to
+## X"); pass the current combat round so the timed modifier gets a round-based
+## expiry. -1 (default) is fine for instant-condition atemi.
+static func resolve_atemi_strike(
+	attacker: L5RCharacterData,
+	attacker_p: Participant,
+	target: L5RCharacterData,
+	target_p: Participant,
+	kiho_name: String,
+	dice_engine: DiceEngine,
+	round_number: int = -1,
+	auto_hit: bool = false,
+) -> Dictionary:
+	if not attacker.kiho.has(kiho_name):
+		return {"ok": false, "reason": "not_known"}
+	var kiho: Dictionary = KihoSystem.KIHO_DATA.get(kiho_name, {})
+	if not kiho.get("atemi", false):
+		return {"ok": false, "reason": "not_atemi"}
+	var spec: Dictionary = kiho.get("atemi_effect", {})
+	if spec.is_empty():
+		return {"ok": false, "reason": "effect_not_wired"}
+	# Activation Void-Point cost (e.g. Falling Star Strike): spent on use (precondition).
+	if spec.has("vp_cost"):
+		if attacker.current_void_points < int(spec["vp_cost"]):
+			return {"ok": false, "reason": "insufficient_void"}
+		attacker.current_void_points -= int(spec["vp_cost"])
+	# A willing ally (Chi Protection) does not resist — skip the to-hit roll. Otherwise
+	# make the unarmed strike; some atemi require extra Raises (Falling Star: 2 Raises).
+	if not auto_hit:
+		var atemi_tn: int = get_armor_tn(target, target_p, dice_engine) + target.armor_tn_bonus
+		var attack: Dictionary = resolve_attack(attacker, attacker_p, "unarmed", atemi_tn, int(spec.get("attack_raises", 0)), dice_engine)
+		if not attack.get("hit", false):
+			return {"ok": true, "hit": false}
+	# Optional Contested Ring roll after the hit.
+	if spec.has("contest"):
+		var c: Dictionary = spec["contest"]
+		var atk_ring: int = CharacterStats.get_ring_value(attacker, c["attacker_ring"])
+		var def_ring: int = CharacterStats.get_ring_value(target, c["defender_ring"])
+		var atk_roll: DiceResult = dice_engine.roll_and_keep(atk_ring, atk_ring, true)
+		var def_roll: DiceResult = dice_engine.roll_and_keep(def_ring, def_ring, true)
+		if atk_roll.total < def_roll.total:
+			return {"ok": true, "hit": true, "effect_applied": false, "contested_lost": true}
+
+	# Composable atemi effects (s38): a spec may combine direct damage, an auto-Disarm
+	# (with optional Void-Point negation), a timed modifier, a wound-rank-equivalent
+	# roll penalty, and/or an instant condition. All values are GDD-given per kiho.
+	var result: Dictionary = {"ok": true, "hit": true, "effect_applied": true}
+
+	# Normal unarmed damage (atemi that deal real damage, e.g. The Rolling Avalanche:
+	# normal unarmed + Earth k0; Falling Star Strike: normal unarmed + a ring component).
+	# bonus_ring → +Ring k0 via resolve_damage's raises_for_damage. Normal Reduction.
+	if spec.has("normal_damage"):
+		var nd: Dictionary = spec["normal_damage"]
+		# Bonus unkept (rolled) dice: from a caster Ring, or = the target's Taint Rank
+		# (s38 Rest, My Brother: "additional unkept damage dice equal to Taint Rank").
+		var bonus: int = 0
+		if nd.has("bonus_ring"):
+			bonus = CharacterStats.get_ring_value(attacker, nd["bonus_ring"])
+		elif nd.get("bonus_target_taint", false):
+			bonus = MutationSystem.get_taint_rank(target.taint)
+		var ndr: Dictionary = resolve_damage(attacker, "unarmed", bonus, 0, dice_engine, attacker_p)
+		var nhit: Dictionary = WoundSystem.apply_damage(target, ndr["raw_damage"], -1)
+		result["normal_damage"] = nhit["final_damage"]
+		result["target_dead"] = nhit["is_dead"]
+
+	# Direct damage (e.g. Censure of Thunder 1k1, bypassing Reduction). Dice may be
+	# fixed (rolled/kept) or ring-scaled (rolled_ring/kept_ring → attacker's ring,
+	# the "DR equal to [Ring]" convention = Ring k Ring exploding, e.g. Touch of the Storm).
+	if spec.has("damage"):
+		var dmg: Dictionary = spec["damage"]
+		var rolled: int = CharacterStats.get_ring_value(attacker, dmg["rolled_ring"]) if dmg.has("rolled_ring") else int(dmg.get("rolled", 1))
+		var kept: int = CharacterStats.get_ring_value(attacker, dmg["kept_ring"]) if dmg.has("kept_ring") else int(dmg.get("kept", 1))
+		var raw: int = dice_engine.roll_and_keep(rolled, kept, true).total
+		var reduction: int = 0 if dmg.get("bypass_reduction", false) else -1
+		var dr: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
+		result["damage"] = dr["final_damage"]
+		result["target_dead"] = dr["is_dead"]
+
+	# Auto-Disarm, with optional VP negation (the defender may spend VP to keep the
+	# weapon, taking extra damage instead — NPC auto-decides to negate if able).
+	if spec.has("disarm"):
+		var negated: bool = false
+		var neg: Dictionary = spec.get("vp_negate", {})
+		if not neg.is_empty() and not target.is_pc and target.current_void_points >= int(neg.get("vp_cost", 99)):
+			target.current_void_points -= int(neg.get("vp_cost", 2))
+			var bypass: bool = spec.get("damage", {}).get("bypass_reduction", false)
+			var raw2: int = dice_engine.roll_and_keep(int(neg.get("extra_rolled", 2)), int(neg.get("extra_kept", 2)), true).total
+			var dr2: Dictionary = WoundSystem.apply_damage(target, raw2, 0 if bypass else -1)
+			result["disarm_negated"] = true
+			result["extra_damage"] = dr2["final_damage"]
+			result["target_dead"] = dr2["is_dead"]
+			negated = true
+		result["disarmed"] = not negated
+
+	# Wound-rank-equivalent timed roll penalty (Stain Upon the Soul: penalty as if at
+	# Wound Ranks = attacker's Air Ring, for Insight + Air Rounds). LIMITATION: stacks
+	# with the target's actual wound penalty (GDD says the worse one supersedes).
+	if spec.has("wound_rank_penalty"):
+		var wp: Dictionary = spec["wound_rank_penalty"]
+		var rank: int = CharacterStats.get_ring_value(attacker, wp.get("rank_ring", Enums.Ring.AIR))
+		var lvl: int = clampi(rank, Enums.WoundLevel.HEALTHY, Enums.WoundLevel.DOWN)
+		var penalty: int = int(Enums.WOUND_PENALTIES.get(lvl, 0))
+		var dur: int = 0
+		for r: int in wp.get("duration_rings", []):
+			dur += CharacterStats.get_ring_value(attacker, r)
+		if wp.get("duration_insight", false):
+			dur += CharacterStats.get_insight_rank(attacker)
+		add_timed_modifier(target_p, "all_rolls", penalty, round_number + dur, wp.get("source", "stain_soul"), "round")
+		result["wound_rank_penalty"] = penalty
+
+	# Generic timed modifier (e.g. Flame Fist: -3 × Fire Ring to all rolls for Fire
+	# Rounds; Earth Palm: -4 damage dice for Earth Rounds). value_flat = a fixed value;
+	# otherwise value_mult × the attacker's value_ring.
+	if spec.has("timed"):
+		var t: Dictionary = spec["timed"]
+		var value: int = int(t["value_flat"]) if t.has("value_flat") else int(t.get("value_mult", 1)) * CharacterStats.get_ring_value(attacker, t.get("value_ring", Enums.Ring.FIRE))
+		var duration: int = CharacterStats.get_ring_value(attacker, t.get("duration_ring", Enums.Ring.FIRE)) * int(t.get("duration_mult", 1))
+		add_timed_modifier(target_p, t.get("kind", "all_rolls"), value, round_number + duration, t.get("source", "atemi_kiho"), "round")
+		result["timed_kind"] = t.get("kind", "")
+		result["timed_value"] = value
+
+	# Rest, My Brother (s38): a human/formerly-uncorrupted target loses all Shadowlands
+	# Taint benefits for caster Earth Ring Rounds. (Oni / inherently-Tainted creatures
+	# are s54 and do not exist in tile combat yet, so the human gate always passes.)
+	if spec.get("suppress_taint_benefits", false):
+		target.taint_benefits_suppressed = true
+		target_p.taint_benefits_suppressed_expiry = round_number + CharacterStats.get_ring_value(attacker, Enums.Ring.EARTH)
+		result["taint_benefits_suppressed"] = true
+
+	# Heal the struck target (Chi Protection: target regains Wounds equal to the
+	# caster's Water Ring — used on a willing ally via auto_hit).
+	if spec.has("heal"):
+		var hamt: int = CharacterStats.get_ring_value(attacker, spec["heal"].get("ring", Enums.Ring.WATER))
+		var hres: Dictionary = WoundSystem.heal_wounds(target, hamt)
+		result["healed"] = hres["healed"]
+
+	# Caster Void-Point gain (Void Fist: regain VP on a hit; needs a target with VP).
+	# Capped at the caster's Void Ring (max VP).
+	if spec.has("caster_vp_gain"):
+		if not spec.get("target_vp_required", false) or target.current_void_points > 0:
+			var max_vp: int = CharacterStats.get_ring_value(attacker, Enums.Ring.VOID)
+			attacker.current_void_points = mini(max_vp, attacker.current_void_points + int(spec["caster_vp_gain"]))
+			result["caster_vp_gained"] = int(spec["caster_vp_gain"])
+
+	# Instant condition (Dazed, Stunned, silenced, Blinded). May be gated by its own
+	# Contested Ring roll (condition_contest) that does NOT gate the damage — e.g.
+	# Falling Star Strike: damage always lands, Blinded only on a won Fire contest.
+	if spec.has("condition"):
+		var apply_cond: bool = true
+		if spec.has("condition_contest"):
+			var cc: Dictionary = spec["condition_contest"]
+			var ca: int = CharacterStats.get_ring_value(attacker, cc["attacker_ring"])
+			var cd: int = CharacterStats.get_ring_value(target, cc["defender_ring"])
+			apply_cond = dice_engine.roll_and_keep(ca, ca, true).total >= dice_engine.roll_and_keep(cd, cd, true).total
+		if apply_cond:
+			apply_condition(target_p, spec["condition"])
+			result["condition"] = spec["condition"]
+		else:
+			result["condition_resisted"] = true
+
+	return result
+
+
+## Activate a kiho on a combatant for the current skirmish. Validates the kiho is
+## known and the active-slot constraint (one Internal/Kharmic/Mystical, unlimited
+## Martial — GDD s38). Returns {ok, reason}. The activation cost (Void Point /
+## Meditation roll) is the caller's responsibility (orchestrator / NPC AI).
+static func activate_kiho(
+	character: L5RCharacterData,
+	participant: Participant,
+	kiho_name: String,
+) -> Dictionary:
+	if not character.kiho.has(kiho_name):
+		return {"ok": false, "reason": "not_known"}
+	var slot: Dictionary = KihoSystem.can_activate(kiho_name, participant.active_kiho)
+	if not slot.get("ok", false):
+		return slot
+	participant.active_kiho.append(kiho_name)
+	return {"ok": true}
+
+
+# =============================================================================
 # -- Initiative (s40 Stage 1) --------------------------------------------------
 # =============================================================================
 
@@ -437,11 +866,15 @@ static func roll_initiative(
 	else:
 		var reflexes: int = character.reflexes
 		var insight_rank: int = CharacterStats.get_insight_rank(character)
+		# Touch the Void Dragon (s38): +1 Rank to Reflexes (Air) = +1k1 Initiative.
+		var vd_init: int = vd_ring_bonus(participant, Enums.Ring.AIR)
 		var result: DiceResult = dice_engine.roll_and_keep(
-			reflexes + insight_rank + adv_init["rolled"],
-			maxi(reflexes + adv_init["kept"], 1), true)
+			reflexes + insight_rank + adv_init["rolled"] + vd_init,
+			maxi(reflexes + adv_init["kept"] + vd_init, 1), true)
 		score = result.total + wound_penalty
 	score += kata_init["flat_bonus"] + adv_init["free_raises"] * 5 - adv_init_tn
+	score += _get_kiho_initiative_bonus(character, participant, weapon_name)
+	score += participant.initiative_modifier  # Song of the World (s38), persistent delta
 
 	# Center Stance carry-over adds +10 to Initiative Score for that round only (s40)
 	if participant.stance == Enums.Stance.CENTER and not participant.center_stance_bonus_used:
@@ -525,8 +958,13 @@ static func get_armor_tn(
 
 	# Kata armor TN bonuses (s30a) and dual-wield bonus (+InsightRank, s40)
 	var kata_bonus: int = _get_kata_armor_tn_bonus(character, participant, weapon_name)
+	var kiho_bonus: int = _get_kiho_armor_tn_bonus(character, participant)
 	var dual_wield_bonus: int = CharacterStats.get_insight_rank(character) if participant.dual_wielding else 0
-	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection + kata_bonus + dual_wield_bonus
+	# Timed Armor-TN modifiers from s30a duration katas (Victory of the River: -10).
+	var timed_armor: int = get_timed_modifier_total(participant, "armor_tn")
+	# Touch the Void Dragon (s38): +1 Rank to Reflexes (Air) = +5 Armor TN.
+	var vd_armor: int = vd_ring_bonus(participant, Enums.Ring.AIR) * 5
+	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection + kata_bonus + kiho_bonus + dual_wield_bonus + timed_armor + vd_armor
 
 
 static func roll_full_defense_bonus(
@@ -560,6 +998,11 @@ static func roll_full_defense_bonus(
 
 static func get_weapon_profile(weapon_name: String) -> Dictionary:
 	return WEAPON_CATALOG.get(weapon_name.to_lower(), DEFAULT_WEAPON)
+
+
+## True if the named weapon may initiate a Grapple (s40 "Weapon Grapples").
+static func weapon_can_grapple(weapon_name: String) -> bool:
+	return get_weapon_profile(weapon_name).get("can_grapple", false)
 
 
 static func resolve_attack(
@@ -596,6 +1039,14 @@ static func resolve_attack(
 		rolled = attacker.strength + skill_rank
 		kept = attacker.strength
 
+	# Touch the Void Dragon (s38): +1 Rank (=+1k1) when the attack trait's Ring is boosted.
+	# Effective trait ring: Air (air-ring kata / reflexes weapon), Water (strength kata),
+	# else Fire (agility weapon).
+	var _vd_atk_ring: int = Enums.Ring.AIR if kata_atk["use_air_ring"] else (Enums.Ring.WATER if kata_atk["use_strength"] else (Enums.Ring.FIRE if trait_name == "agility" else Enums.Ring.AIR))
+	if vd_ring_bonus(attacker_p, _vd_atk_ring) > 0:
+		rolled += 1
+		kept += 1
+
 	# Void spend for +1k1 (or +2k2) on attack roll (RAW). Not valid for Damage Rolls.
 	# Apply either inline spend_void or pre-declared pending bonus from execute_void_spend.
 	var void_used: bool = false
@@ -620,6 +1071,10 @@ static func resolve_attack(
 	# Kata dice bonuses applied after stance
 	rolled += kata_atk["rolled_bonus"]
 	kept += kata_atk["kept_bonus"]
+
+	# The World Is Empty (s30a): +Xk0 to Kenjutsu/Iaijutsu attack rolls while active.
+	if skill_name == "Kenjutsu" or skill_name == "Iaijutsu":
+		rolled += get_timed_modifier_total(attacker_p, "attack_rolled")
 
 	# Mutation modifiers (s44): EXTRA_LIMB non-functional applies -1k0 to weapon skills
 	var mutation_atk: Dictionary = MutationSystem.get_skill_modifiers(attacker, skill_name)
@@ -657,9 +1112,10 @@ static func resolve_attack(
 		else:
 			rolled = maxi(0, rolled - 2)
 
-	# earth_wound_tn_reduce kata reduces wound penalty on attack rolls (s30a)
+	# earth_wound_tn_reduce kata + Grasp the Earth Dragon kiho reduce wound penalty (s30a/s38)
 	var kata_wound_reduction: int = _get_kata_wound_penalty_reduction(attacker)
-	var effective_wound_penalty: int = mini(0, wound_penalty + kata_wound_reduction)
+	var kiho_wound_reduction: int = _get_kiho_wound_penalty_reduction(attacker, attacker_p)
+	var effective_wound_penalty: int = mini(0, wound_penalty + kata_wound_reduction + kiho_wound_reduction)
 
 	# Center Stance carry-over: +1k1 + Void Ring on the first roll of the turn (s40)
 	var flat_bonus: int = effective_wound_penalty - get_condition_roll_penalty(attacker_p)
@@ -674,6 +1130,16 @@ static func resolve_attack(
 		flat_bonus -= 10
 
 	flat_bonus += kata_atk["flat_bonus"]
+
+	# Timed "all rolls" penalty from s30a Strength of the Spider (-3 next Turn).
+	# Covers attack rolls; broader contested-roll coverage is a forward-wire.
+	flat_bonus += get_timed_modifier_total(attacker_p, "all_rolls")
+
+	# The Empire Rests on its Edge (s30a): +Rank in the chosen non-combat High Skill
+	# to Kenjutsu/Iaijutsu rolls (passive while known). Katana/daisho is implied by
+	# the Kenjutsu/Iaijutsu skill gate.
+	if skill_name == "Kenjutsu" or skill_name == "Iaijutsu":
+		flat_bonus += get_empire_edge_bonus(attacker)
 
 	# Dominant hand attack penalty while holding an off-hand weapon (s40)
 	if attacker_p.dual_wielding:
@@ -708,10 +1174,11 @@ static func resolve_damage(
 	dice_engine: DiceEngine,
 	attacker_p: Participant = null,
 	was_feint: bool = false,
+	bonus_kept: int = 0,
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	var rolled: int = weapon.get("rolled", 2)
-	var kept: int = weapon.get("kept", 1)
+	var kept: int = weapon.get("kept", 1) + bonus_kept
 
 	# Advantage/disadvantage modifiers (s45): HANDS_OF_STONE adds +1 kept for unarmed damage
 	var dmg_skill: String = weapon.get("skill", "Kenjutsu")
@@ -736,6 +1203,9 @@ static func resolve_damage(
 			rolled += attacker.agility
 		else:
 			rolled += attacker.strength
+		# Touch the Void Dragon (s38): +1 rolled damage die when the damage trait's Ring is
+		# boosted (Fire for the agility kata, else Water for Strength).
+		rolled += vd_ring_bonus(attacker_p, Enums.Ring.FIRE if kata_dmg["use_agility"] else Enums.Ring.WATER)
 
 	# earth_heavy_weapons_strength kata: +1 extra unkept die of strength (s30a)
 	rolled += kata_dmg["strength_bonus"]
@@ -745,6 +1215,10 @@ static func resolve_damage(
 
 	# Kata extra unkept dice (water_skilled_weapon_damage, void_honor_damage)
 	rolled += kata_dmg["rolled_bonus"]
+
+	# Timed damage-dice penalty (s38 Earth Palm Water option: -4 damage dice while active).
+	if attacker_p != null:
+		rolled = maxi(0, rolled + get_timed_modifier_total(attacker_p, "damage_dice_penalty"))
 
 	# roll_damage handles the dice pool; we pass strength already absorbed above
 	var result: Dictionary = dice_engine.roll_damage(rolled, kept)
@@ -866,6 +1340,7 @@ static func begin_turn(participant: Participant) -> void:
 	## Call this before the character resolves their first action in a round.
 	participant.kata_used_this_turn.clear()
 	participant.extra_attack_used_this_turn = false
+	participant.off_hand_attack_used_this_turn = false
 	participant.earth_trade_amount = 0
 	participant.water_trade_armor_amount = 0
 
@@ -1113,15 +1588,19 @@ static func initiate_grapple(
 	attacker_p: Participant,
 	target_armor_tn: int,
 	dice_engine: DiceEngine,
+	skill_name: String = "Jiujutsu",
 ) -> Dictionary:
-	var jiujutsu: int = attacker.skills.get("Jiujutsu", 0)
+	# s40 "Weapon Grapples": a chain weapon / certain polearm may initiate a
+	# grapple using the Weapon Skill in place of Jiujutsu. Trait stays Agility
+	# (consistent with melee weapon attacks). Default is the unarmed Jiujutsu grapple.
+	var jiujutsu: int = attacker.skills.get(skill_name, 0)
 	var wound_penalty: int = CharacterStats.get_wound_penalty(attacker)
 
-	# Mutation modifiers (s44) and Advantage modifiers (s45) for Jiujutsu
-	var mut_jiu_init: Dictionary = MutationSystem.get_skill_modifiers(attacker, "Jiujutsu")
-	var is_school_jiu_init: bool = NPCAdvancement.get_school_skills(attacker).has("Jiujutsu")
+	# Mutation modifiers (s44) and Advantage modifiers (s45) for the grapple skill
+	var mut_jiu_init: Dictionary = MutationSystem.get_skill_modifiers(attacker, skill_name)
+	var is_school_jiu_init: bool = NPCAdvancement.get_school_skills(attacker).has(skill_name)
 	var adv_jiu_init: Dictionary = AdvantageSystem.get_skill_bonus(
-		attacker, "Jiujutsu", {"is_combat": true, "is_school_skill": is_school_jiu_init}
+		attacker, skill_name, {"is_combat": true, "is_school_skill": is_school_jiu_init}
 	)
 	var adv_jiu_init_tn: int = AdvantageSystem.get_tn_modifier(attacker, {"is_combat": true})
 	var grapple_flat: int = wound_penalty + adv_jiu_init["free_raises"] * 5 - adv_jiu_init_tn
@@ -1145,21 +1624,25 @@ static func resolve_grapple_control(
 	attacker: L5RCharacterData,
 	defender: L5RCharacterData,
 	dice_engine: DiceEngine,
+	att_skill: String = "Jiujutsu",
+	def_skill: String = "Jiujutsu",
 ) -> Dictionary:
 	# Contested Jiujutsu/Strength: roll (Strength + Jiujutsu), keep Strength (s4.5 / s40)
 	# Unskilled (rank 0) rolls do not explode per L5R4e p.78.
-	var att_jiu: int = attacker.skills.get("Jiujutsu", 0)
-	var def_jiu: int = defender.skills.get("Jiujutsu", 0)
+	# s40 "Weapon Grapples": a weapon-grappler uses their Weapon Skill in place of
+	# Jiujutsu for control rolls; each side passes their own grapple skill.
+	var att_jiu: int = attacker.skills.get(att_skill, 0)
+	var def_jiu: int = defender.skills.get(def_skill, 0)
 	# Mutation modifiers (s44), Advantage modifiers (s45), and wound penalties
 	var att_wound: int = CharacterStats.get_wound_penalty(attacker)
 	var def_wound: int = CharacterStats.get_wound_penalty(defender)
-	var att_mut_ctrl: Dictionary = MutationSystem.get_skill_modifiers(attacker, "Jiujutsu")
-	var def_mut_ctrl: Dictionary = MutationSystem.get_skill_modifiers(defender, "Jiujutsu")
-	var att_sch_jiu: bool = NPCAdvancement.get_school_skills(attacker).has("Jiujutsu")
-	var def_sch_jiu: bool = NPCAdvancement.get_school_skills(defender).has("Jiujutsu")
-	var att_adv_ctrl: Dictionary = AdvantageSystem.get_skill_bonus(attacker, "Jiujutsu",
+	var att_mut_ctrl: Dictionary = MutationSystem.get_skill_modifiers(attacker, att_skill)
+	var def_mut_ctrl: Dictionary = MutationSystem.get_skill_modifiers(defender, def_skill)
+	var att_sch_jiu: bool = NPCAdvancement.get_school_skills(attacker).has(att_skill)
+	var def_sch_jiu: bool = NPCAdvancement.get_school_skills(defender).has(def_skill)
+	var att_adv_ctrl: Dictionary = AdvantageSystem.get_skill_bonus(attacker, att_skill,
 		{"is_combat": true, "is_school_skill": att_sch_jiu, "opponent_clan": defender.clan})
-	var def_adv_ctrl: Dictionary = AdvantageSystem.get_skill_bonus(defender, "Jiujutsu",
+	var def_adv_ctrl: Dictionary = AdvantageSystem.get_skill_bonus(defender, def_skill,
 		{"is_combat": true, "is_school_skill": def_sch_jiu, "opponent_clan": attacker.clan})
 	var att_result: DiceResult = dice_engine.roll_and_keep(
 		attacker.strength + att_jiu + att_mut_ctrl["rolled"] + att_adv_ctrl["rolled"],
@@ -1838,7 +2321,7 @@ static func get_weapon_data(weapon_name: String) -> WeaponData:
 	wd.skill = profile.get("skill", DEFAULT_WEAPON["skill"])
 	wd.size = profile.get("size", DEFAULT_WEAPON["size"])
 	wd.melee = profile.get("melee", true)
-	wd.trait = profile.get("trait", DEFAULT_WEAPON["trait"])
+	wd.attack_trait = profile.get("trait", DEFAULT_WEAPON["trait"])
 	return wd
 
 
@@ -1847,7 +2330,7 @@ static func pick_best_weapon(character: L5RCharacterData) -> String:
 	## Used by the NPC summary roll when no explicit weapon is assigned.
 	## Returns "unarmed" for characters with no weapon skills.
 	var best_weapon: String = "unarmed"
-	var best_score: int = -1
+	var best_score: int = 0
 	for weapon_name: String in WEAPON_CATALOG:
 		var profile: Dictionary = WEAPON_CATALOG[weapon_name]
 		var skill: String = profile.get("skill", "")
@@ -1900,11 +2383,13 @@ static func resolve_npc_summary_combat(
 
 	if att_attack.get("hit", false):
 		att_damage = resolve_damage(attacker, att_wname, 0, 0, dice_engine, att_p)
-		def_wounds = WoundSystem.apply_damage(defender, att_damage.get("raw_damage", 0), defender.armor_reduction)
+		var def_reduction: int = total_defender_reduction(defender, def_p, attacker, att_p, att_wname)
+		def_wounds = WoundSystem.apply_damage(defender, att_damage.get("raw_damage", 0), def_reduction)
 
 	if def_attack.get("hit", false):
 		def_damage = resolve_damage(defender, def_wname, 0, 0, dice_engine, def_p)
-		att_wounds = WoundSystem.apply_damage(attacker, def_damage.get("raw_damage", 0), attacker.armor_reduction)
+		var att_reduction: int = total_defender_reduction(attacker, att_p, defender, def_p, def_wname)
+		att_wounds = WoundSystem.apply_damage(attacker, def_damage.get("raw_damage", 0), att_reduction)
 
 	var att_dead: bool = CharacterStats.is_dead(attacker)
 	var def_dead: bool = CharacterStats.is_dead(defender)

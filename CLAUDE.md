@@ -21,6 +21,18 @@ The master index is at /gdd/00_INDEX.md — read it before asking what exists.
 Never extrapolate from one system to another (e.g. land combat rules to naval
 combat, one school's technique to another's). If the GDD is silent, stop and ask.
 
+**The GDD design files in /gdd/ are NOT read-only — they MAY be edited, but
+every edit requires the owner's explicit, prior permission.** You may NEVER
+edit, add, remove, or reword any design content in /gdd/ on your own initiative. Before touching a GDD design
+file you MUST: (1) state exactly what you propose to change and why, (2) ask
+for the owner's opinion, and (3) receive explicit, unambiguous approval. No
+approval, no edit — silence is not approval, and a general "go ahead" on a
+task does not extend to GDD design changes. The owner's opinion governs the
+final wording. Updating the Code Implementation Status table in
+/gdd/00_INDEX.md to reflect what code now exists does NOT require approval
+(it records implementation status, not design); changing design intent,
+mechanics, or numeric values anywhere in /gdd/ always does.
+
 When implementing any system, read its LOCKED section directly from /gdd/.
 Do not rely on summaries, cross-references, or inference. LOCKED sections win.
 
@@ -139,14 +151,17 @@ When implementing or auditing a system, go here first:
 
 ## Directory Structure
 ```
-/gdd/                              — GDD markdown files (read-only reference, never edit)
+/gdd/                              — GDD markdown files (design source; edit ONLY with the
+                                     owner's explicit prior approval — see "The GDD Is the
+                                     Authoritative Source". 00_INDEX.md status table is the
+                                     one exception: status updates need no approval)
 /simulation/                       — Headless simulation logic: NPC engine, resource tick,
                                      world event resolution. NO Node inheritance here.
                                      Plain GDScript classes only (class_name, no extends Node).
 /shared/                           — Data models: CharacterData, ProvinceData, etc.
                                      Use Resource subclasses for serialisable data.
-/tests/                            — GUT unit tests. Mirror the /simulation/ and /shared/
-                                     directory structure inside /tests/.
+/tests/                            — Pre-existing GUT tests. Do NOT add new test files
+                                     here (see "Testing — DO NOT WRITE TEST CODE").
 /scripts/managers/                 — Godot Autoloads / singletons (WorldState, SimScheduler).
                                      Registered in Project Settings. May extend Node.
 /scripts/ui/                       — Player-facing Godot scenes (UI, ASCII map display, etc.).
@@ -170,12 +185,15 @@ When implementing or auditing a system, go here first:
 - Never put simulation logic inside a scene's _ready() or _process().
   Scenes call into /simulation/ — simulation does not call into scenes.
 
-## Testing (GUT)
-- GUT (Godot Unit Testing) is the test framework. Tests live in /tests/.
-- The dice engine must have passing GUT tests before any other system uses it.
-- Every pure simulation function must be testable with no scene tree present.
-- Test file naming: `test_<system_name>.gd` mirroring the source file.
-- Do not couple test setup to Autoloads — pass dependencies explicitly.
+## Testing — DO NOT WRITE TEST CODE
+**Do not write GUT tests or any test files. Write only the real production code
+that will actually run.** When a task is done, deliver the implementation and
+wiring — not a `test_*.gd` file. Validate by re-reading the actual code against
+its GDD section and by parse-checking (`godot --headless --check-only -s <file>`),
+not by authoring tests. Existing tests under `/tests/` may remain, but new work
+does not add to them. (Design intent — keep pure simulation functions callable
+without a scene tree and pass dependencies explicitly — still holds, because it
+keeps the real code clean; it is no longer a directive to write tests.)
 
 ## Hard Constraints — Never Violate Without Asking
 - PC death is permanent. No resurrection mechanic of any kind.
@@ -184,6 +202,10 @@ When implementing or auditing a system, go here first:
 - The simulation does not pause for absent players.
 - NPCs never use the ASCII map unless a PC is personally present.
   NPC-only resolution goes through the dice engine, not map generation.
+  (NPC-vs-NPC fights resolve via summary roll, not tile-by-tile — GDD s40.x.)
+- ASCII map movement is real-time when no combat is active in a zone; the
+  zone switches to turn-based (Initiative/Round/Turn) only when combat is
+  initiated, and returns to real-time when combat resolves. See GDD s40.x.
 - CrimeRecord exists at world level. The system always knows who committed
   the crime. Investigation is players discovering what the system knows.
 - met_characters, hostile tag, provocation flag, zone_event_log,
@@ -2424,7 +2446,22 @@ costs, or forward-wiring. Do not treat as bugs.
   `hierarchy_cascade_results` arrays.
 
 ### Known Technical Notes
-- **AT_DOJO context flag unassigned.** Dojos exist as ZoneSubtype.DOJO (sub-settlement). The zone system data is in place; the `_set_dojo_context_flag()` pass needs to be written once a dojo's settlement presence is queryable. Monk dojo paths currently fall through to AT_OWN_HOLDINGS.
+- **AT_TEMPLE / AT_WALL_TOWER context — WIRED (verified 2026-06-14).** These two
+  single-purpose settlement contexts set BOTH `context_flag` AND `zone_subtype` in
+  per-character world_states, so the ZoneFlagMatrix gates actions there.
+  `_set_temple_context_flags` keys on RELIGIOUS_SETTLEMENT_TYPES → TEMPLE_GROUNDS;
+  `_set_wall_tower_context_flags` → WALL_TOWER. Runtime-verified: a monk at a temple gets
+  AT_TEMPLE + TEMPLE_GROUNDS → PERFORM_RITUAL/performance allowed. These are correct because
+  the settlement IS single-purpose (a temple is religious grounds; a wall tower is a tower).
+- **AT_DOJO — intentionally NOT assigned at the settlement level (fixed 2026-06-14, see
+  Known Code Issues below).** `has_dojo` settlements are multi-zone CASTLES (champion seats +
+  Imperial Capital), and a dojo is one of their Lesser Zones — so the former settlement-level
+  blanket was a bug (stripped governance/court/worship). The multi-zone contexts
+  (AT_OWN_HOLDINGS / AT_COURT / VISITING) intentionally leave `zone_subtype` unset so those
+  actions are NOT zone-gated — a character at a castle could be in any of its zones (shrine,
+  garden, chashitsu, dojo), so gating to one sub-zone would wrongly block supported actions.
+  AT_DOJO is reserved for future per-character zone-position tracking (a PC standing in the
+  dojo zone); the AT_DOJO context list + decomposer branches remain as forward-wiring.
 - **ON_CAMPAIGN, UNDER_SIEGE, IN_EXILE context flags unassigned.** These require sub-tile army position tracking from s11.7a. Characters in these states currently fall through to AT_OWN_HOLDINGS or VISITING. Implement when army movement data is available.
 - **Unbounded array growth.** `crime_records`, `pending_letters`, `active_secrets` grow monotonically. Retention window design decisions needed before adding automatic purges beyond the existing seasonal cleanups.
 
@@ -3052,8 +3089,9 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   §57.49.1 summary table was never updated when s57.49b formally locked the value at
   half the magnitude. Test corrected to assert 4.5. NOTE: §57.49.1's summary table
   (−1.0 Glory, −25 family baseline) remains stale relative to §57.49.6 and s57.49b
-  (−0.5 Glory, −20 family baseline). GDD files are read-only — this is a known GDD
-  internal inconsistency. §57.49.6 and s57.49b are authoritative.
+  (−0.5 Glory, −20 family baseline). This is a known GDD internal inconsistency;
+  it was left unedited (GDD edits require owner permission). §57.49.6 and s57.49b
+  are authoritative.
 
 ### GDD Sections Written 2026-05-28
 
@@ -3191,11 +3229,758 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   seppuku option, Imperial jurisdiction). Wired into full crime/investigation pipeline
   and Winter Court Emperor's Peace enforcement (v624).
 
-### s30 / s30a Katas — Combat Effects Pending s40
-`simulation/kata_system.gd` contains all 43 katas, eligibility (ring/school/clan checks),
-XP deduction, NPC selection logic, and stub effect registry. Combat effects (Armor TN,
-attack bonuses, Initiative, stances, maneuver modifiers) are registered as stubs — no
-mechanical change is applied until s40 individual combat is implemented.
+### s30 / s30a Katas — Combat Effects WIRED into s40 (2026-06-06)
+`simulation/kata_system.gd` contains all 43 katas (eligibility, XP deduction, NPC
+selection). Combat effects are now **wired into IndividualCombat** (s40), not stubs:
+`_get_kata_initiative_modifiers`, `_get_kata_armor_tn_bonus`, `_get_kata_attack_modifiers`,
+`_get_kata_damage_modifiers`, `_get_kata_wound_penalty_reduction`, `get_kata_reduction_bonus`,
+`get_kata_opponent_reduction_penalty` resolve effect_ids into Armor TN / attack / damage /
+Initiative / wound-penalty / Reduction modifiers, gated by stance and maneuver. 39 of 42
+distinct kata effect_ids are wired. **`multi_empire_edge_skill_bonus` (The Empire Rests on its Edge)
+wired as a passive read (2026-06-12):** `IndividualCombat.get_empire_edge_bonus` returns the
+wielder's highest non-combat High Skill rank (via `AdvantageSystem.is_high_skill`, Bugei excluded)
+when the kata is known; `resolve_attack` adds it to `flat_bonus` for Kenjutsu/Iaijutsu rolls
+(katana/daisho implied by the skill gate). Passive — no caller needed. The GDD's "choose one
+non-combat High Skill at acquisition" is auto-resolved to the highest High Skill (optimal,
+deterministic; no choice-storage field); the "+2 XP per Rank" progression cost is not modelled.
+**`multi_standing_heavens_void_reroll` (Standing on the Heavens)
+wired as a defender reaction (2026-06-12):** in `execute_melee_attack`, when an attack hits,
+`_maybe_standing_on_heavens` lets the struck defender spend 1 Void Point (Free Action, once/Round
+via `kata_used_this_round`) to force the attacker to reroll — the reroll's outcome (hit or miss)
+replaces the original. NPC-only auto-use (a defensive reflex when a VP is available); a PC defender
+is skipped (`is_pc` guard) pending the turn-based reaction UI. All values GDD-given (1 VP, reroll).
+**`multi_world_empty_void_attack` (The World Is Empty) wired on
+the timed-modifier layer (2026-06-12, activation cost = Simple Action, owner-set):**
+`AsciiMapCombatOrchestrator.execute_activate_world_is_empty` (Simple action; requires the kata + ≥1
+Void Point; not re-activatable while active) freezes X = current Void Points and adds an
+`"attack_rolled"` +X modifier for X Rounds; `resolve_attack` adds the `"attack_rolled"` total to
+`rolled` (not kept) only for Kenjutsu/Iaijutsu (skill-gated = daisho). When it ends, `advance_round`
+deducts 1 Void Point (`_process_world_is_empty_expiry`, before the round-based removal). A minimal
+NPC hook activates it on round 1 (VP≥2, forgoing that turn's attack so the +Xk0 covers the fight —
+basic heuristic, GDD gives no NPC policy; the natural caller is a PC bushi via the future turn-based
+action UI). All non-AI values GDD-given (X = VP, X Rounds, lose 1 VP); the activation cost is the
+single owner-set value. **`earth_spider_wound_debuff` (Strength of the Spider) wired
+on the same timed-modifier layer (2026-06-12):** once per Round, a strike dealing 15+ Wounds gives
+the opponent a `"all_rolls"` −3 timed modifier with `"turn_end"` expiry — active through the
+opponent's next Turn, removed when their turn ends (`AsciiMapCombatOrchestrator.advance_turn`
+expires turn-scoped modifiers on the ending actor; round expiry leaves turn modifiers untouched).
+`resolve_attack` adds the `"all_rolls"` total to the attack-roll `flat_bonus` (attack rolls covered;
+broader contested-roll coverage is a forward-wire). Fired passively from `execute_melee_attack` on
+a 15+ Wound hit (`_apply_strength_of_the_spider`, once/Round via `kata_used_this_round`); no AI/UI
+caller. All values GDD-given (15 Wounds, −3, next Turn). **`multi_victory_river_armor_pierce` wired via a new
+timed-modifier layer (2026-06-12):** Victory of the River (s30a) — a landed katana/daisho strike
+drops the target's Armor TN −10 vs all attacks AND the wielder's own Armor TN −10, both for 3
+Rounds, one opponent at a time. New generic round-scoped store on `IndividualCombat.Participant`
+(`timed_modifiers: Array` of `{kind,value,expires_round,source}` + `add/get_total/clear_by_source/
+expire` primitives; `votr_target_id` tracks the held opponent). `get_armor_tn` adds the `"armor_tn"`
+timed total on its main return path; `AsciiMapCombatOrchestrator.advance_round` expires by round
+after the increment; `_apply_victory_of_the_river` fires passively from `execute_melee_attack` on a
+hit (kata + katana/wakizashi gate, switching targets clears the prior debuff, re-striking refreshes
+the window). All values GDD-given (−10, 3 Rounds, daisho-only). Passive — no AI/UI caller. The
+layer's `kind` is generic (`"all_rolls"` / `"attack_roll"` reserved) so the remaining two duration
+katas reuse the store. LIMITATION: the special-state Armor-TN early returns (Grappled/Stunned/
+Blinded) do not include the timed modifier — GDD does not specify that interaction.
+**`water_attack_stance_movement` wired into the ASCII map
+movement layer (2026-06-12):** Striking as Water (s30a) — "In Attack Stance: move 5 additional
+feet as a Free Action" — `IndividualCombat.get_kata_free_move_bonus` returns +1 tile (1 tile =
+5 ft) when the character knows the kata and is in Attack Stance (Attack only, not Full Attack,
+per the GDD text); `AsciiMapCombatOrchestrator.free_move_budget(state, char_id, character)` adds
+it to the Free-action move budget and is now the single source used by the NPC and companion
+move paths (the player-facing turn-based move UI should adopt it too). SIMPLE/FULL move budgets
+unchanged (the GDD grants the bonus to the Free action only). Passive — no AI/UI caller needed;
+any NPC/companion bushi or monk in Attack Stance who knows the kata gets the extra tile
+automatically. **3 remain deferred** (each needs infra/AI the core resolve lacks):
+`water_lion_ally_initiative` (Reactions-Stage ally-initiative action + AI caller), `water_unicorn_mount_bonus`
+(no mount system on the map), `water_stealth_movement` (near-no-op on the tile map — "does not change maximum distance").
+(`get_kata_reduction_bonus` is wired but currently has no caller — Reduction is applied via the
+orchestrator damage path; harmless until consumed.)
+
+### s38 Kiho — effect registry, tranche 1: atemi delivery + Flame Fist (2026-06-12)
+First tranche of the kiho-effect registry (the larger effort to encode/wire the 73
+kiho's combat effects; only 5 passive active-buffs + 5 encoded-but-unreachable atemi
+existed before). **Key gap found:** `IndividualCombat.resolve_atemi_strike` existed
+and read `KIHO_DATA[kiho]["atemi_effect"]` specs, but **nothing in the orchestrator
+ever called it** — so the entire atemi kiho category (Unbalance the Mind, Freezing
+the Lifeblood, Seven Storm's Fist, Mind/No-Mind, Tasaii-Do) was unreachable in tile
+combat. Added **`AsciiMapCombatOrchestrator.execute_atemi_strike`** — a Complex-action
+unarmed strike (melee range, monk-only by virtue of holding kiho, mirrors
+execute_melee_attack gating) that delivers an atemi: on a hit it applies the kiho's
+`atemi_effect` (an instant condition OR — new — a round-scoped timed modifier).
+`resolve_atemi_strike` gains an optional `round_number` param and a `"timed"` spec
+branch that adds a timed modifier via the existing layer. **Flame Fist** encoded as
+the first new effect: `atemi_effect {"timed": {kind "all_rolls", value −3×Fire Ring,
+duration Fire Ring}}` — on a hit the target takes −3×Fire to all rolls for Fire Ring
+Rounds (expires via the `advance_round` timed sweep; read on the target's attack rolls
+through the Spider `all_rolls` path). A minimal NPC monk hook (`_npc_pick_atemi` +
+a branch in `execute_npc_turn`) makes a monk in melee deliver its first ENCODED atemi
+(skips atemi with no wired effect, e.g. Censure of Thunder) instead of a normal strike;
+atemi kiho are monk-only so there is no PC path. All values GDD-given (Flame Fist
+−3×Fire / Fire Rounds; atemi as a Complex unarmed attack is a reading). Verified with
+a headless driver: Flame Fist timed effect (−12 all_rolls, expiry round+Fire, Complex
+consumed), Unbalance the Mind condition (dazed), the not-atemi/not-known/out-of-range
+gates, and `_npc_pick_atemi` selecting encoded atemi only. DEFERRED (next tranches):
+the remaining ~63 kiho effects (movement/leap, utility/out-of-combat, reactive
+interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
+unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
+and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
+
+### s38 Kiho — effect registry, tranche 33: Touch the Void Dragon (environmental Ring boost) (2026-06-12)
+Owner-directed (2026-06-12). **Touch the Void Dragon** (Void Internal, while active): one Ring
+and its associated Traits are one Rank higher; the Ring depends on the skirmish terrain
+(mountains=Earth, seashore=Water, plains=Air, desert/volcanic=Fire). Implemented leak-free as a
+**Participant-scoped Ring flag** (`Participant.void_dragon_ring`) read at the combat-roll hooks —
+NOT a trait mutation (combat operates on the live `L5RCharacterData`, so mutating traits would
+persist into the world-sim after the skirmish; the established pattern is transient flags read at
+hooks). `MapCombatState.environment_ring` carries the terrain-derived Ring;
+`environment_ring_for_terrain` maps the four GDD-named terrains (MOUNTAINS/COASTAL/PLAINS/WASTELAND
+→ Earth/Water/Air/Fire) and returns -1 (no boost) for terrains the GDD does not name (forest,
+swamp, hills, river delta — absence of a mechanic, not an invented one).
+`execute_activate_touch_void_dragon` routes the activation through the standard cost/slot path
+(`execute_activate_kiho`), then stamps the Ring on the caster's Participant; it rejects activation
+when the terrain yields no Ring (`no_environmental_ring`). The "+1 Rank to the Ring's Traits"
+manifests via `IndividualCombat.vd_ring_bonus` at four core combat-roll sites: **attack roll**
++1k1 when the attack trait's Ring is boosted (Fire/agility, Air/reflexes, Water/strength-kata),
+**damage** +1 rolled die (Water strength / Fire agility-kata), **Armor TN** +5 (Air/Reflexes ×5),
+**Initiative** +1k1 (Air/Reflexes). NPC monks auto-activate it via `_npc_maybe_activate_kiho` when
+the skirmish has a terrain Ring (else they fall through to their next known kiho). All values
+GDD-given (+1 Rank = +1k1 on rolls; Armor-TN ×5 per Reflexes Rank is the GDD formula). Verified
+with a headless driver: terrain map (mtn→Earth … forest→-1), Armor TN 20→25 for Air (no change for
+Earth), attack mean +6.7 for Fire/agility (+1k1), damage rolled dice 6→7 for Water (no change for
+Air), activation sets the boost + spends a Void Point, no-ring terrain rejected. LIMITATIONS
+(architecture, not unknown values): (1) **Earth (mountains) has minimal combat effect** — the four
+core combat rolls use Reflexes/Agility/Strength but never Stamina/Willpower, and Earth's signature
+combat value, wound capacity, is not hooked (`get_total_wound_capacity` is not Participant-aware,
+and the leak-free constraint forbids mutating the live Earth traits). (2) The caster's own **kiho
+Ring rolls** (e.g. Slap the Wave's Water contest) are not boosted — they read
+`CharacterStats.get_ring_value` directly; retrofitting ~30 kiho Ring reads is out of scope.
+(3) No production caller of `setup_combat` yet — `environment_ring` is forward-wired (default -1);
+the future mission-launch glue passes `environment_ring_for_terrain(province.terrain_type)`. With
+this, **every kiho with a clean tile-combat effect is wired**; the remainder are dependency-blocked
+(Dharma Technique / Silent Solace need a tile-combat spell-cast consumer; Rebuke / Sever need s54
+undead; Breaking Blow / Waves in All Things are GM-judged object/terrain effects) or are the ~12
+out-of-combat character-level buffs (need a character-level active-kiho system + an NPC non-combat
+activation policy the GDD does not specify).
+
+### s38 Kiho — effect registry, tranche 32: facing subsystem + Slap the Wave + Inari's Wrath (2026-06-12)
+Owner-directed (2026-06-12). Built a participant facing subsystem to unblock the two
+arc/cone kiho. `Participant.facing` (a unit heading) is updated by execute_move (faces the
+direction moved); `_effective_facing` returns it, or — when unset — the direction toward
+the nearest living enemy (the owner-approved NPC default). `_in_forward_arc` (forward
+half-arc within range, via dot product) and `_in_cone` (forward cone widening linearly to
+the GDD end-width) provide the geometry.
+- **Slap the Wave** (Water): `execute_slap_the_wave` — spend a Void Point (no activation
+  roll), then everyone in the caster's forward arc within Water Ring ×5 ft (= Water tiles)
+  makes a Contested Water Roll or is Dazed. Affects all factions in the arc. Verified: the
+  in-arc enemy was Dazed, the behind enemy was not, VP spent.
+- **Inari's Wrath** (Air): `execute_inaris_wrath(phase)` — Round 1 "inhale" spends a Void
+  Point + Complex Action to hold the breath (`Participant.inari_breath_round`); Round 2
+  "exhale" (Complex Action) fires a freezing cone (School Rank ×5 ft long, ×2 ft wide at
+  the end) dealing Air-Ring cold damage (Air k Air, bypassing Reduction) to every living
+  creature in it. Verified: inhale armed it, the next-round exhale hit the in-cone enemy
+  for 8 cold damage. All values GDD-given (the NPC facing default is owner-approved).
+
+### s38 Kiho — effect registry, tranche 31: Song of the World (Initiative) (2026-06-12)
+**Song of the World** (Void, Complex Action): `execute_song_of_the_world` — target an
+opponent within 50 ft (10 tiles), win a Contested Void Roll, and the target's Initiative
+drops 5 while the caster's rises 5. New persistent `Participant.initiative_modifier` added
+into `roll_initiative` — because advance_round RE-ROLLS initiative each round, a one-time
+score change would be overwritten, so the GDD −5/+5 maps to a standing delta (structural
+adaptation; the values are GDD-given). Verified: contested win → caster +5 / foe −5, and
+the caster's re-rolled initiative included the +5 (persists across the round re-roll).
+**The combat kiho set is now exhausted.** The remaining unwired kiho are blocked on
+missing data/systems, not unknown values: Touch the Void Dragon (no combat biome on
+MapCombatState + a broad +1-Ring modifier), Slap the Wave / Inari's Wrath (no facing
+data for arc/cone), Dharma Technique / Silent Solace (no tile-combat spell-cast consumer),
+Rebuke of the Heavens / Sever the Dark Lord's Touch (s54 undead), Breaking Blow / Waves in
+All Things (object/terrain effects with GM-judged/undefined object HP), and the ~12
+out-of-combat character-level buffs (need a character-level active-kiho system + an NPC
+non-combat-kiho activation policy the GDD does not specify).
+
+### s38 Kiho — effect registry, tranche 30: Striking Through the Void (VP damage) (2026-06-12)
+**Striking Through the Void** (Void, while active): the caster may spend a Void Point on
+an unarmed damage roll for +1k1 (one Void Point per attack). Added an optional
+`bonus_kept` param to `IndividualCombat.resolve_damage` (backward-compatible, default 0 —
++1k1 from a Void Point is standard L5R, not invented); `_apply_hit` spends 1 VP and passes
+`raises_for_damage + 1` (rolled) and `bonus_kept = 1` (kept) when the attacker holds the
+kiho, is unarmed, and has a Void Point (NPC auto-spends). Verified: unarmed damage 11 → 19
+with the Void spend (VP 2 → 1). The remaining combat-relevant unwired kiho are blocked on
+missing data (Touch the Void Dragon needs a combat biome; Slap the Wave/Inari's Wrath need
+facing), a spell-cast consumer (Dharma Technique, Silent Solace), s54 undead (Rebuke,
+Sever), or are marginal object/terrain effects (Breaking Blow, Waves in All Things).
+
+### s38 Kiho — effect registry, tranche 29: Way of the Willow (interrupt) — reaction set complete (2026-06-12)
+**Way of the Willow** (Air, while active): a defender may spend a Void Point to interrupt a
+declared melee attack with an immediate unarmed counterattack (once per Round). Pre-attack
+hook in execute_melee_attack (before resolve_attack): `_maybe_way_of_the_willow` resolves
+the counter directly; if it kills the attacker, the original attack is aborted
+(`interrupted_by_way_of_the_willow`). All GDD-given (VP cost, counterattack). Verified:
+the defender spent a VP and countered (attacker took 6 Wounds) before the attack resolved;
+a 2nd same-Round attack triggered no second interrupt. LIMITATION: the GDD "Move Action
+away" alternative and the "has not yet taken their Turn" gate are approximated — the NPC
+default is the counter, gated once per Round + VP.
+**All 5 reaction kiho are now wired** (Destiny's Strike post-hit, Shadowed Mountain
+pre-attack stance, Earthen Fist deferred-Disarm, Bishamon's Grasp free-grapple, Way of the
+Willow pre-attack interrupt). With this, EVERY kiho that has a tile-combat effect is wired.
+The unwired remainder are: character-level non-combat buffs needing a deferred character-kiho
+system (Steal the Air Dragon, Eye of the Eagle, Earth Needs No Eyes, Harmony in/of the
+Mind/Earth, Wholeness in All, Eight Directions Awareness, Knowledge from Within, The Wind's
+Vision, Cleansing Spirit, The Mind's Fire, Harmony of the Mind, Flee the Darkness); facing-
+blocked arc/cone (Slap the Wave, Inari's Wrath); no-consumer (Dharma Technique spell-defense,
+Striking Through the Void kept-dice damage, Silent Solace, Channel the Fire Dragon); s54-blocked
+(Rebuke of the Heavens, Sever the Dark Lord's Touch); no-biome (Touch the Void Dragon); and
+marginal object/terrain effects (Breaking Blow, Waves in All Things, Song of the World). None
+is blocked on an unknown value.
+
+### s38 Kiho — effect registry, tranche 28: Bishamon's Grasp (free grapple vs attackers) (2026-06-12)
+**Bishamon's Grasp** (Earth, while active, Defense/Full Defense only): on the caster's
+Turn, free-grapple an opponent who attacked the caster since their last Turn (overrides
+the Defense-stance no-attack restriction). New `Participant.attacked_by_ids` tracks
+attackers (recorded in execute_melee_attack when the defender holds the kiho, cleared in
+begin_turn = "since the last Turn"). `execute_bishamons_grasp` finds the first co-located
+qualifying attacker and resolves a free-action grapple (core mirrors execute_grapple_initiate,
+no Complex consumed). Verified: an attacker was recorded, then free-grappled on the monk's
+Turn from Full Defense (complex_used stayed false). LIMITATION: the single
+`grapple_partner_id` models one grapple, so one opponent is grabbed per Turn (the GDD's
+"one per qualifying opponent" multi-grab needs a multi-partner model); the Throw-as-Free-Action
+clause is not wired. Completes the combat-relevant reaction set (post-hit / pre-attack /
+deferred-disarm / grapple-attackers); only Way of the Willow's pre-declaration
+interrupt-with-choice remains among reactions.
+
+### s38 Kiho — effect registry, tranche 27: Ride the Water Dragon (heal-over-time) (2026-06-12)
+**Ride the Water Dragon** (Water, while active): the caster recovers Water Ring Wounds
+during the Reactions Stage of each Round. Wired into the advance_round per-participant
+loop (beside Way of the Earth): `WoundSystem.heal_wounds(caster, Water Ring)`. All
+GDD-given. Verified: a Water-4 caster healed 4 Wounds on round advance (20 → 16).
+LIMITATION: the "Insight Rank Rounds" duration is not modelled (round-duration spec keys
+off a Ring) — it persists for the skirmish. Establishes the per-round heal-over-time
+pattern. NOTE: with this, every per-round tick shape (grapple damage, self-heal) is now
+covered.
+
+### s38 Kiho — effect registry, tranche 26: Riding the Clouds + The World Disappears (2026-06-12)
+- **Riding the Clouds** (Air, while active): `execute_riding_the_clouds` — a Simple Move
+  Action to leap up to Air Ring ×10 ft (= ×2 tiles) to any free passable tile (ignoring
+  terrain cost — a jump). The kiho is expended after one leap (erased from active_kiho).
+  Verified: an Air-4 monk leaped 6 tiles, then a second leap returned kiho_not_active.
+- **The World Disappears** (Void, while active): the floating caster is immune to
+  Grappling — wired as an early `target_immune_to_grapple` return in
+  execute_grapple_initiate. Verified. LIMITATION: the terrain-ignoring movement (over
+  water/lava) is not wired (only the grapple-immunity); Entangling has no system.
+All GDD-given.
+
+### s38 Kiho — effect registry, tranche 25: Calling the East Wind (leap-kick) (2026-06-12)
+**Calling the East Wind** (Air, Complex Action): `execute_calling_the_east_wind` — leap up
+to Air Ring ×10 ft (= ×2 tiles) to a free passable tile adjacent to the target, then make
+an unarmed kick with +1k0 damage. Finds the landing tile (adjacent to the target, within
+the leap, unoccupied, passable); fails (`no_leap_landing`) if none is reachable. The
+Knockdown Free Raise is recorded as metadata (the kick is a damage attack, not a separate
+Knockdown maneuver). All GDD-given (Air×10 ft leap, +1k0). Verified: an Air-4 monk 6 tiles
+away leaped to an adjacent tile and the kick landed. Establishes the leap-attack pattern.
+
+### s38 Kiho — effect registry, tranche 24: Strike Through the Wind (extended range) (2026-06-12)
+**Strike Through the Wind** (Air, while active): unarmed melee attacks reach School Rank
+×25 ft (= ×5 tiles) by transmitting force through the air. Wired in execute_melee_attack's
+range check: for an unarmed attack with the kiho active, `melee_range = Insight Rank × 5`
+tiles instead of 1. All GDD-given. Verified: a target 6 tiles away was out of range
+without the kiho, reachable with it (School Rank 3 → 15-tile range). LIMITATION: the GDD
+"Complex Action" qualifier is inherent (melee attacks already cost a Complex action).
+
+### s38 Kiho — effect registry, tranche 23: Earthen Fist + Root the Mountain (2026-06-12)
+Two reactive/maneuver-layer kiho.
+- **Earthen Fist** (Earth, while active): when an opponent's melee attack against the
+  caster (who must be in Defense/Full Defense) MISSES, the caster may attempt a Disarm
+  next Turn for no Raises. Wired in execute_melee_attack on the miss path: arms the
+  existing `disarm_free_raises_pending = 3` track (consumed by the Disarm maneuver block).
+  Verified: a missed attack against a Full-Defense Earthen-Fist caster set pending=3.
+- **Root the Mountain** (Earth, while active, tranche 22): forcing the caster to move
+  requires the attacker to also win a Contested Earth Roll. `_root_the_mountain_resists`
+  wired into the Knockdown maneuver (negates the knockdown) and Hurricane Palm (negates
+  the knockback distance; the Prone still applies). Verified: a strong-Earth defender
+  resisted a weak-Earth attacker's knockback. LIMITATION: the "Knockdown requires 2 extra
+  Raises" clause is not modelled (resolve_knockdown takes no raises modifier).
+All GDD-given.
+
+### s38 Kiho — effect registry, tranche 21: Rising Mountain (dynamic Reduction) (2026-06-12)
+**Rising Mountain** (Earth, while active): every time an attacker makes a Raise on an
+offensive combat action against the caster, the caster gains Reduction = 2× the number of
+Raises. Wired in `_apply_hit`: when the struck defender holds the kiho, `reduction += 2 *
+raises` before `WoundSystem.apply_damage` (spells excluded — this is the weapon-strike
+path). All GDD-given. Verified: at 2 Raises, damage 16 → 12 (−4 = 2×2 Reduction).
+LIMITATION: the "Insight Rank +1 Rounds" duration is not modelled (my round-duration spec
+keys off a Ring, and Insight is not a Ring) — it persists for the skirmish; and Free
+Raises (per the GDD note) are not separated from called Raises. Establishes the per-attack
+dynamic-Reduction pattern.
+
+### s38 Kiho — effect registry, tranche 20: Way of the Earth (grapple damage-tick) (2026-06-12)
+**Way of the Earth** (Earth, while active): each Round, an opponent engaged in a Grapple
+with the caster suffers the caster's Earth Ring in Wounds (Reactions Stage, regardless of
+who controls the grapple). Wired into the advance_round per-participant loop: for a
+participant holding the kiho with `grapple_partner_id >= 0`, the partner takes Earth Ring
+Wounds (using the existing `grapple_partner_id` tracking + chars_by_id). "Minutes equal to
+Earth Ring" >> a skirmish, so it persists (no round duration). All GDD-given. Verified: a
+grappled opponent took Earth 4 Wounds on round advance. Establishes the per-round
+grapple-tick pattern. (Updates the session-close list: grapple damage-tick is now wired;
+Bishamon's Grasp still needs the "who attacked me" tracking + free grapple-attacks layer.)
+
+### s38 Kiho — effect registry, tranche 19: Dance of the Flames (action-economy) (2026-06-12)
+**Dance of the Flames** (Fire, while active): unarmed attacks cost a Simple Action
+instead of Complex — so a monk can make two unarmed attacks (two Simples) in one Turn.
+execute_melee_attack computes `dance_simple` (unarmed + the kiho active) and switches
+both the action-availability gate (`can_use_simple` vs `can_use_complex`) and the
+consumption (`consume_simple` vs `consume_complex`). All GDD-given. Verified: two unarmed
+attacks landed in one Turn (simple_used 1→2, no Complex), the third blocked
+(no_simple_actions_remaining). LIMITATION: the "must make an unarmed attack every Round
+or the effect ends" maintenance requirement is not modelled (it would need a per-round
+end-of-turn check). Establishes the action-economy modifier pattern.
+
+**Kiho effect registry — session close (19 tranches).** Every kiho category with a clean
+tile-combat implementation is now wired: atemi (22/24 — 2 dependency-blocked on s54
+undead / a combat spell-cast consumer), while-active buffs (Armor TN, Initiative,
+Reduction, wound penalty, move, contact-retaliation, with round durations), AoE Daze
+(Thunder's Word), knockback (Hurricane Palm), condition recovery (Depths of the World),
+ally VP grant (To the Last Breath), post-hit + pre-attack reactions (Destiny's Strike,
+Shadowed Mountain), action-economy (Dance of the Flames), the AdvantageSystem suppression
+hook (Banish All Shadows, Rest My Brother), and the tile→world delayed kill (Death Touch).
+The remaining ~32 non-atemi kiho are NOT blocked on unknown values — each needs new
+infrastructure: a deferred next-turn effect queue (Earthen Fist), grapple-relationship
+tracking (Way of the Earth, Bishamon's Grasp), an interrupt-with-choice + VP (Way of the
+Willow), leap/teleport movement (Riding the Clouds, The World Disappears, Strike Through
+the Wind, Calling the East Wind), facing data for arc/cone (Slap the Wave, Inari's Wrath),
+a per-round dynamic-Reduction layer (Rising Mountain), an environment→Ring boost (Touch
+the Void Dragon), object-destruction-by-attack (Breaking Blow), or are out-of-combat
+utility with no tile-combat effect (~12 kiho: Eye of the Eagle, Earth Needs No Eyes,
+Harmony in/of the Mind/Earth, Wholeness in All, Eight Directions Awareness, Knowledge
+from Within, The Wind's Vision, Cleansing Spirit, Channel the Fire Dragon, The Mind's
+Fire, Flee the Darkness).
+
+### s38 Kiho — effect registry, tranche 18: Shadowed Mountain (pre-attack reaction) (2026-06-12)
+**Shadowed Mountain** (Earth, while active): a defender may immediately enter Full
+Defense Stance just before being attacked (once per activation), raising that attack's
+Armor TN. Pre-attack hook in execute_melee_attack (before the Armor TN computation): if
+the target holds the kiho, isn't already in Full Defense, and hasn't used it this
+activation → switch `t_p.stance = FULL_DEFENSE` and mark used. The switch is sticky
+(they remain in Full Defense). New `Participant.shadowed_mountain_used`, re-armed by
+`execute_activate_kiho` on a fresh activation. All GDD-given (Full Defense, once/activation).
+Verified: a defender switched ATTACK→FULL_DEFENSE just before being struck (used=true).
+This + Destiny's Strike (tranche 17) cover both reaction-hook shapes (pre-attack stance
+switch / post-hit counter). The 3 remaining reactions need infra not built here:
+deferred next-turn effect (Earthen Fist Disarm-on-miss), interrupt-with-choice + VP
+(Way of the Willow), grapple + attacker tracking (Bishamon's Grasp).
+
+### s38 Kiho — effect registry, tranche 17: Destiny's Strike (post-hit reaction) (2026-06-12)
+First reaction kiho — establishes the post-hit reaction pattern. **Destiny's Strike**
+(Fire, while active): when struck by a melee attack, the defender immediately makes a
+single unarmed counterattack against the attacker. `_maybe_destiny_strike` (called from
+execute_melee_attack after a landed hit) resolves the counter **directly** (resolve_attack
++ resolve_damage + apply_damage, NOT via execute_melee_attack) so it cannot recurse, and
+is gated **once per Round** per defender (kata_used_this_round["destiny_strike"]) +
+melee-range. All GDD-given (unarmed counter, once/Round). Verified: a struck defender
+countered for 9 unarmed damage; a 2nd same-round strike triggered NO second counter (the
+once/round guard prevents recursion even if both combatants hold the kiho). LIMITATION:
+the GDD action-economy nuance ("counts as the Turn if not yet taken, else a Free Action")
+is not modelled — the counter is a free reactive strike. The OTHER reactions need
+different hooks not built here: pre-attack interrupt (Way of the Willow, Shadowed
+Mountain), deferred next-turn effect (Earthen Fist Disarm-on-miss), or grapple tracking
+(Bishamon's Grasp).
+
+### s38 Kiho — effect registry, tranche 16: utility executes + ceiling (2026-06-12)
+Two more standalone non-atemi kiho executes, exhausting the cleanly-buildable set.
+- **Depths of the World** (Earth, Complex Action): `execute_depths_of_the_world` —
+  immediately attempt to recover from a non-permanent Condition that allows a recovery
+  roll (Stunned, then Dazed) via the existing `attempt_recover_stunned/dazed`. Usable
+  even while Stunned (bypasses the can-act restriction). Verified: recovered Dazed.
+- **To the Last Breath** (Void): `execute_to_the_last_breath` — grant a selected ally
+  within 20 ft (4 tiles) one Void Point (capped at their Void Ring — the cap-at-max is
+  the conservative non-invented reading; GDD says "gains one Void Point"). No target may
+  benefit more than twice per skirmish (`MapCombatState.last_breath_uses`). Verified:
+  VP 1→2→3 across two uses, then target_at_use_limit on the third.
+**Kiho combat-effect ceiling reached.** All kiho that reuse the existing hooks (buffs,
+damage, conditions, move, suppression) or have a self-contained execute (AoE Daze,
+knockback, condition recovery, VP grant) are now wired: 22/24 atemi + ~13 non-atemi.
+The remaining ~36 non-atemi kiho are NOT blocked on unknown values — they are blocked on
+(a) being **out-of-combat utility** with no tile-combat effect to implement (Eye of the
+Eagle, Earth Needs No Eyes, Harmony in/of the Mind/Earth, Wholeness in All, Eight
+Directions Awareness, Knowledge from Within, The Wind's Vision, Cleansing Spirit, Channel
+the Fire Dragon, The Mind's Fire, Flee the Darkness), (b) **missing facing data** for
+arc/cone effects (Slap the Wave, Inari's Wrath), or (c) needing a **new combat subsystem**
+— a true reaction/interrupt mechanism with re-entrancy handling (Way of the Willow,
+Destiny's Strike, Shadowed Mountain, Earthen Fist, Bishamon's Grasp), leap/teleport
+movement (Riding the Clouds, The World Disappears, Strike Through the Wind, Calling the
+East Wind), a grapple damage-tick (Way of the Earth), or a per-round Reduction/maneuver
+layer (Rising Mountain, Root the Mountain, Dance of the Flames, Striking Through the Void,
+Touch the Void Dragon, Song of the World, Rebuke of the Heavens, Breaking Blow).
+
+### s38 Kiho — effect registry, tranche 15: Hurricane Palm (knockback) (2026-06-12)
+**Hurricane Palm** (Air, Complex Action): `execute_hurricane_palm` — an unarmed strike
+that, on a hit, spends a Void Point to deal only HALF normal damage but knock the target
+back 2× Air Ring feet (= 2×Air/5 tiles) directly away from the attacker and leave them
+Prone (even on 0 Wounds). New `_knockback_target` grid-push helper: steps the target in
+the away-direction (signi of the position delta), stopping at a wall, an occupied tile,
+or the map edge. All GDD-given (half damage, 2×Air ft, Prone). Verified: Air-6 caster,
+VP 2→1, knockback 2 tiles, target pushed (6,5)→(8,5) away from the attacker at (5,5),
+Prone, half damage. Establishes the grid-knockback mechanic (reusable for other push
+effects). DEFERRED — the arc/cone AoE (Slap the Wave, Inari's Wrath) need facing data
+(not tracked); the reaction kiho need a true interrupt mechanism with re-entrancy
+handling (a deliberate subsystem, not built here).
+
+### s38 Kiho — effect registry, tranche 14: Thunder's Word (AoE Daze) (2026-06-12)
+First AoE kiho — establishes the standalone non-atemi kiho action pattern in the
+orchestrator. **Thunder's Word** (Air, Complex Action): `execute_thunders_word` — the
+caster makes one Air roll; every OTHER living combatant (the whole skirmish — a
+power-word shout is heard by all, allies included per GDD "All living beings capable of
+hearing") makes a Contested Air Roll against it, and those who fail are Dazed. The caster
+is excluded. Consumes the Complex action. Not added to the NPC offensive hook (it is
+self-harming — Dazes allies); reachable via the execute path (PC use / deliberate NPC).
+Reuses the Dazed condition (roll-recovered — the GDD "for Air Ring Rounds" is the known
+flat-vs-timed condition limitation). All GDD-given (Contested Air, Dazed). Verified: an
+Air-6 caster rolled 39; two Air-1 combatants both Dazed, the caster not, Complex consumed.
+DEFERRED — remaining AoE/positional kiho need data the tile layer lacks: Slap the Wave +
+Inari's Wrath need **facing direction** (arc/cone — not tracked); Hurricane Palm needs
+**grid knockback**; the reaction kiho need a true **interrupt mechanism** (advance_round_reactions
+is only a recovery pass).
+
+### s38 Kiho — effect registry, tranche 13: non-atemi combat buffs (2026-06-12)
+First non-atemi kiho with real tile-combat effects (beyond the 5 passive active-buffs).
+- **Musubi** (Water): while active (staff in motion), Armor TN += Water Ring + Staves
+  Skill Rank. Wired as `effect_id "kiho_musubi_armor"` in `_get_kiho_armor_tn_bonus`
+  (same hook as Soul of the Four Winds). Verified: +7 Armor TN (Water 3 + Staves 4).
+- **The Body is an Anvil** (Fire): a landed unarmed strike burns whoever touches the
+  anvil-caster — `_apply_body_is_anvil` (called from execute_melee_attack after a hit)
+  deals Fire Ring contact Wounds in either direction (DEFENDER active → the unarmed
+  attacker is burned; ATTACKER active → the struck target takes Fire Ring beyond normal
+  damage). Unarmed-only (the katana gate skips it). Duration 2× Fire Rounds via the
+  active_kiho_expiry layer. Verified: both directions deal Fire 4 contact; armed strike
+  no-ops.
+- **Fire's Fleeting Speed** (Fire): while active, +5 ft (+1 tile) to any Move Action, for
+  Fire Ring Rounds. `IndividualCombat.get_kiho_move_bonus` (checks active_kiho), added to
+  both orchestrator move-budget sites (free_move_budget + the NPC SIMPLE budget). Duration
+  via active_kiho_expiry. Verified: free move budget 3 → 4 while active.
+  All GDD-given. DEFERRED — the remaining ~40 non-atemi kiho need new combat
+  subsystems (reaction/interrupt: Way of the Willow, Destiny's Strike, Shadowed Mountain,
+  Earthen Fist, Bishamon's Grasp; AoE: Thunder's Word, Inari's Wrath, Slap the Wave,
+  Hurricane Palm; movement/leap: Calling the East Wind, Riding the Clouds,
+  The World Disappears, Strike Through the Wind; grapple-tick: Way of the Earth,
+  Root the Mountain) or are out-of-combat utility (Eye of the Eagle, Earth Needs No Eyes,
+  Harmony in/of the Mind/Earth, Wholeness in All, Eight Directions Awareness, Knowledge
+  from Within, The Wind's Vision, Cleansing Spirit) — none of which reuse the existing
+  buff hooks.
+
+### s38 Kiho — effect registry, tranche 12: Rest, My Brother (Taint-strip atemi) (2026-06-12)
+Encoded **Rest, My Brother** (Earth 5 atemi): deals normal unarmed damage + additional
+unkept (rolled) damage dice equal to the opponent's Shadowlands Taint Rank, and a
+human/formerly-uncorrupted target loses all Shadowlands Taint **benefits** for caster
+Earth Ring Rounds. 22 atemi encoded. Reuses the suppression pattern (mirrors Banish):
+transient `taint_benefits_suppressed` on the character; `MutationSystem.get_skill_modifiers`
+skips the 5 positive Taint bonuses (EXTRA_EYE, MASTER_OF_SHADOWS, MONSTROUS_STRENGTH
+strength, FATHER_OF_LIES, MIND_OF_DARKNESS) while set — the **penalties** (social −Xk0,
+etc.) remain, per "lose all benefits". `normal_damage` spec extended with
+`bonus_target_taint` (bonus rolled dice = `get_taint_rank(target.taint)`).
+Participant.taint_benefits_suppressed_expiry; advance_round clears it via chars_by_id.
+All GDD-given (Taint Rank dice, Earth Ring duration). The "human/not inherently Tainted"
+gate always passes — oni / inherently-Tainted creatures are s54 and don't exist in tile
+combat. Verified: a Taint-Rank-3 MASTER_OF_SHADOWS target took normal_dmg 8 (incl. +3
+Taint dice); its Stealth Taint benefit +3k0 → 0k0 while suppressed, restored at expiry
+(round 4 = 1 + Earth 3). DEFERRED — 2 atemi remain, both dependency-blocked (not unknown
+values): **Silent Solace** (Void 5, spell-slot tax) has no tile-combat spell-casting
+consumer — the combat orchestrator has no cast-spell action, so the tax would be inert;
+**Sever the Dark Lord's Touch** (Fire 5, instantly destroys unintelligent undead) needs
+s54 undead entities, which don't exist in tile combat. Plus Earth Palm's Fire option.
+
+### s38 Kiho — effect registry, tranche 11: Disadvantage atemi + s45 catalog (2026-06-12)
+Owner-directed (2026-06-12). Built the AdvantageSystem-in-combat hook and encoded the 3
+Advantage/Disadvantage-manipulation atemi. 21 atemi encoded. **Prerequisite — s45
+category+points catalog:** the codebase had no category (Mental/Physical/Social/Spiritual/
+Material) or point-value metadata for advantages/disadvantages (DisadvantageData had only
+type + rank), which all 3 kiho need ("highest-point", "excluding Spiritual/Social",
+"equal value", "Spiritual Advantages"). Transcribed from GDD s45 (`**Name [Category]
+(N pts)**`): `AdvantageSystem.ADVANTAGE_CATALOG` (82) + `DISADVANTAGE_CATALOG` (63), each
+Enums value → {category, points} (points 0 = variable → use the held entry's rank; "" =
+s45 gives none, e.g. Wanderer). Helpers: get_advantage/disadvantage_category,
+get_advantage/disadvantage_points. Pure transcription, no invented values.
+- **Banish All Shadows** (Void 4): on a hit, the willing-ally target ignores their
+  highest-point non-Spiritual/non-Social Disadvantage for caster Void Ring Rounds. The
+  combat hook: transient `suppressed_disadvantage_type` on the character, skipped at the
+  top of the 3 combat-roll disadvantage loops (get_skill_bonus, get_tn_modifier,
+  get_trait_modifier); `_is_suppressed`. `get_highest_non_spiritual_social_disadvantage`
+  selects the target (catalog category+points). ally_auto_hit → excluded from the
+  offensive NPC hook. Participant.suppressed_disadvantage_expiry; advance_round clears it.
+  LIMITATION: other disadvantage readers (melee damage penalty, wound TN, void-spend
+  blocks) don't honor the suppression yet — the 3 covered are the primary combat-roll
+  effects. Verified: selection excludes Spiritual; BAD_EYESIGHT −1k1 removed while
+  suppressed; restored at expiry.
+- **Sense the Balance** (Void 6): on a hit, spend a Void Point to learn the count of the
+  target's Spiritual Advantages OR Disadvantages (caster's choice; default Disadvantages,
+  PC-choice param deferred). On a won Contested Void Roll, also learn the highest-point
+  not-yet-revealed one; repeat uses reveal more until all known. count_spiritual_* +
+  get_highest_spiritual_* helpers; `MapCombatState.sense_known` for progressive reveal;
+  VP spent post-hit (conditional on the hit, not the resolver's pre-hit vp_cost).
+  info_only → excluded from the offensive hook. Verified: count + highest-first
+  progressive reveal + all-known + no-VP.
+- **Spin the Kharmic Wheel** (Void 8): expend ALL Void Points; the target loses one random
+  Social/Spiritual/Mental Disadvantage and gains a new random one of equal point value (a
+  permanent character mutation). get_swappable_disadvantages + pick_equal_value_disadvantage
+  (catalog-driven, fixed-point pool, excludes already-held). non_combat_effect → excluded
+  from the offensive hook. Verified: BAD_FORTUNE (Spiritual 3pts) → a Mental 3pt
+  Disadvantage, all VP expended; no-swappable and no-VP gates. LIMITATION: the gained
+  Disadvantage has empty metadata (rank 1) — metadata-dependent ones (e.g. Sworn Enemy)
+  would be inert until populated; benign for combat.
+DEFERRED — 3 atemi remain (Rest My Brother Taint, Sever the Dark Lord's Touch undead
+[s54], Silent Solace spell-slot) plus Earth Palm's Fire option.
+
+### s38 Kiho — effect registry, tranche 10: Death Touch (tile-combat → world-sim) (2026-06-12)
+Encoded **Death Touch** (Void 7 atemi) — the first kiho whose effect spans the tile-combat
+layer AND the world-sim. Owner-authorized design (2026-06-12): **full pipeline / all five
+Rings / next daily tick** (the other values are GDD-given). 18 atemi encoded.
+- **In-combat** (`execute_atemi_strike`, `MapCombatState.death_touch_chains`): tracks the
+  3-atemi-on-3-consecutive-Rounds chain (a miss or a non-consecutive round resets it). On
+  the 3rd consecutive strike, spends an additional Void Point and stamps a
+  `death_touch_affliction` Dictionary on the target ({caster_id, insight_cap = caster's
+  Insight Rank, caster_void snapshot}). No VP → `death_touch_no_void`, sequence fails.
+- **World-sim** (`DayOrchestrator._process_death_touch_afflictions`, run before
+  `_process_lord_deaths` for same-tick succession): the −1/Ring/hour drain (cap = Insight
+  Rank) completes within hours = the next daily tick, so if the target's **lowest Ring ≤
+  the Insight cap** a Ring reaches 0 → catatonic → 3 Contested Void Rolls (target vs the
+  snapshot caster Void); dies if all 3 are lost by 5+. Death mirrors the maho
+  mysterious-death path (`_apply_death_touch_kill`: GREAT_DESTINY → DOWN, else lethal
+  wounds + suspicious death_event killer=caster + Tier 2 LEGAL mysterious-death topic,
+  NEUTRAL subject_role). The affliction resolves and clears every tick regardless of
+  outcome. New `@export death_touch_affliction: Dictionary` on L5RCharacterData (persists
+  combat → world-sim, survives the caster's death via the caster_void snapshot).
+  Verified: chain builds 1→2→3 (VP 2→1, stamped on the 3rd); a low-Ring victim is killed
+  (death_event + topic + succession), a high-Ring target survives_drain, afflictions
+  cleared. LIMITATIONS (no invented mechanics): "catatonic" is not a persistent condition
+  (it is the context for the death rolls, resolved at the tick); a survivor's Rings are
+  NOT permanently reduced (GDD gives no recovery rule, so the drain is the death-trigger
+  mechanism only); excommunication is narrative (no mechanic). DEFERRED — 6 atemi need
+  bespoke/blocked subsystems (Rest My Brother Taint, Sever the Dark Lord's Touch undead
+  [s54], Banish All Shadows / Spin the Kharmic Wheel / Sense the Balance Advantage-system,
+  Silent Solace spell-slot) plus Earth Palm's Fire option.
+
+### s38 Kiho — effect registry, tranche 9: while-active buff round durations (2026-06-12)
+Gave the round-duration while-active buffs proper auto-expiry (they previously persisted
+for the whole skirmish — a real over-buff). New `Participant.active_kiho_expiry`
+(kiho_name → expiry round) + `IndividualCombat.expire_active_kiho(p, round)` (mirrors
+`expire_timed_modifiers`), called per participant in `advance_round`. `execute_activate_kiho`
+records the expiry on activation from a new KIHO_DATA `duration` key (`{ring, mult}` →
+round + mult × the activator's ring). Added durations to the 3 round-duration buffs:
+**Embrace the Stone** (Earth Rounds), **Grasp the Earth Dragon** (Earth Rounds),
+**Partaking the Waters** (2× Water Rounds). Indefinite buffs (Air Fist "one day",
+Soul of the Four Winds "while active") have no `duration` key and persist for the skirmish.
+Their Reduction/wound bonuses (read via the `_get_kiho_*` hooks off `active_kiho`) now
+correctly stop once the kiho expires. All GDD-given. Verified: Embrace the Stone activated
+round 1 (expiry 4 = round + Earth 3), removed from `active_kiho` after 3 round-advances
+(round 4) while Air Fist (no duration) persists.
+
+### s38 Kiho — effect registry, tranche 8: heal atemi (Chi Protection) (2026-06-12)
+Encoded **Chi Protection** (Water 4 atemi: a touched willing ally regains Wounds equal
+to the caster's Water Ring; 1 VP; cannot target self). Three additions: a `heal` spec
+(`WoundSystem.heal_wounds(target, caster Water Ring)`), an `auto_hit` resolver param
+(a willing ally — same faction — does not resist, so the to-hit is skipped), and the
+`ally_auto_hit` spec flag that the orchestrator turns into auto-hit only for a
+same-faction target plus the self-exclusion guard. `_npc_pick_atemi` now skips
+`ally_auto_hit` atemi so the offensive NPC hook never delivers a heal to its enemy
+target (Chi Protection stays reachable via `execute_atemi_strike` for a future
+ally-healing AI / companion logic). 17 atemi encoded. All GDD-given (heal = Water Ring,
+1 VP). Verified: ally heal (auto-hit, Water Ring 3 wounds, ally 10→7, VP 2→1),
+self-target rejected (cannot_target_self), and `_npc_pick_atemi` excludes Chi Protection
+(picks Flame Fist instead). LIMITATION: only the immediate heal is encoded — the
+over-time portion (Water Ring at the start of each of the target's Turns for Insight
+Rounds) needs `chars_by_id` in `begin_turn` (a signature change), deferred. DEFERRED —
+7 atemi need bespoke/blocked subsystems (Rest My Brother Taint, Sever the Dark Lord's
+Touch undead [s54], Banish All Shadows / Spin the Kharmic Wheel / Sense the Balance
+Advantage-system, Death Touch multi-round, Silent Solace spell-slot) plus Earth Palm's
+Fire option.
+
+### s38 Kiho — effect registry, tranche 7: movement-denial atemi (2026-06-12)
+Encoded **Speed of the Mountains** (Earth 4 atemi: target's Water Ring counts 2 Ranks
+lower for Move distance, for 2× Earth Rounds). Extended the `timed` spec with
+`duration_mult` (duration = mult × ring) and added `_effective_water_ring(p, character)`
+— Water Ring minus any timed `move_water_penalty`, floored at 0 — used by both
+orchestrator move-budget sites (`free_move_budget` and the NPC SIMPLE budget). 16 atemi
+encoded. All GDD-given (−2 Ranks / 2× Earth Rounds). Verified: hit → target
+`move_water_penalty` −2 (expiry round + 2× Earth), free move budget 4 → 2. LIMITATION:
+the PC/companion SIMPLE-move UI paths (ascii_map_view) don't read the penalty yet — only
+the orchestrator's own NPC/free moves do. DEFERRED — 8 atemi need bespoke subsystems
+(Rest My Brother Taint, Sever the Dark Lord's Touch undead [s54], Chi Protection
+heal-over-time [needs chars_by_id in begin_turn], Banish All Shadows / Spin the Kharmic
+Wheel Disadvantage, Death Touch multi-round, Sense the Balance info, Silent Solace
+spell-slot) plus Earth Palm's Fire option.
+
+### s38 Kiho — effect registry, tranche 6: Earth Palm + end-to-end verification (2026-06-12)
+Encoded **Earth Palm** (Earth 6 atemi, Water option: target suffers −4 damage dice
+for Earth Ring Rounds) — extended the `timed` spec with `value_flat` (a fixed value,
+vs `value_mult`×ring) and added a `damage_dice_penalty` timed read in `resolve_damage`
+(the debuffed target's later damage rolls lose 4 dice while active). 15 atemi encoded.
+The Fire option (+2 forced attack Raises) is deferred to a `forced_attack_raises` read
+in resolve_attack; the NPC default is the Water (damage) option. All GDD-given (−4
+dice / Earth Rounds). Verified: Earth Palm hit → target `damage_dice_penalty` −4
+(expiry round + Earth), and the target's subsequent katana damage roll drops 6 → 2.
+**End-to-end pipeline runtime-verified (2026-06-12):** a monk NPC in a real
+`execute_npc_turn` (full setup_combat → stance pick → target select → atemi branch)
+delivered an `atemi` action and the foe ended Dazed — confirming the whole tranche 1–5
+chain (`_npc_pick_atemi` → `execute_atemi_strike` → effect) fires in live combat, not
+just in isolated resolver calls. DEFERRED — 9 atemi still need bespoke subsystems
+(Speed of the Mountains move-budget [multi-site], Rest My Brother Taint, Sever the Dark
+Lord's Touch undead [s54], Chi Protection heal-over-time [needs chars_by_id in
+begin_turn], Banish All Shadows / Spin the Kharmic Wheel Disadvantage, Death Touch
+multi-round, Sense the Balance info, Silent Solace spell-slot) plus Earth Palm's Fire
+option.
+
+### s38 Kiho — effect registry, tranche 5: action-denial atemi (2026-06-12)
+Encoded **As the Breakers** (Water 4 atemi: "target loses one Simple Action this
+Round; only targets opponents who have not yet acted; once per skirmish") — the first
+**orchestrator-applied** atemi effect (the denial touches the target's `TurnState`,
+which the resolver can't reach, so the effect is applied in `execute_atemi_strike`,
+same pattern as Censure's disarm flag). Two new spec gates checked in the orchestrator
+before the strike: `requires_target_not_acted` (target's TurnState shows no
+complex/simple/free action used) and `once_per_skirmish` (per-skirmish dedup via a new
+`MapCombatState.once_per_skirmish_atemi` map). On a hit, `remove_simple_action` docks
+the target's `simple_used += 1` (they keep at most one Simple, lose the Complex slot)
+and marks them affected. 14 atemi encoded. All GDD-given (deny 1 Simple, not-acted
+gate, once/skirmish). Verified: hit denies the Simple + marks affected; same-round
+re-attack blocked (target_already_acted, since the denial set simple_used); cross-round
+re-attack blocked (already_affected_this_skirmish, fresh TurnState); a target who has
+already acted is rejected pre-strike. DEFERRED — 10 atemi still need bespoke subsystems
+(Earth Palm forced-raises, Speed of the Mountains movement-budget [multi-site], Rest My
+Brother Taint, Sever the Dark Lord's Touch undead, Chi Protection heal-over-time, Banish
+All Shadows / Spin the Kharmic Wheel Disadvantage, Death Touch multi-round, Sense the
+Balance info, Silent Solace spell-slot).
+
+### s38 Kiho — effect registry, tranche 4: damaging atemi (2026-06-12)
+Added the normal-unarmed-damage path to the atemi resolver plus three more spec
+components, encoding 2 damaging atemi (13 atemi total). New components: `normal_damage`
+({bonus_ring} → `resolve_damage(attacker,"unarmed", Ring, …)`, the full strength/kata
+damage pipeline, normal Reduction), `vp_cost` (Void-Point activation cost spent as a
+precondition), `attack_raises` (extra Raises required on the atemi to-hit), and
+`condition_contest` (a Contested Ring roll gating ONLY the condition, not the damage).
+Encoded **The Rolling Avalanche** (normal unarmed + Earth k0) and **Falling Star
+Strike** (1 VP + 2 to-hit Raises → normal unarmed + Fire k Fire additional + Blinded
+on a won Fire contest). `execute_atemi_strike` now skips consuming the action when the
+atemi can't be delivered (e.g. insufficient Void), so the actor can still take a normal
+attack. All values GDD-given (Rolling Avalanche +Earth k0; Falling Star 1 VP / 2 Raises
+/ normal + Fire k Fire / Blinded contest). Verified with a headless driver: Rolling
+Avalanche (9 damage), Falling Star (VP deducted, normal + ring damage, Blinded), and
+the no-Void gate (insufficient_void, action not consumed). LIMITATION: Falling Star's
+"Blinded for hours" is applied as the instant (roll-recovered) Blinded condition (the
+combat-relevant portion). DEFERRED — 11 atemi still need bespoke subsystems beyond the
+resolver (Earth Palm forced-raises, Speed of the Mountains movement, Rest My Brother
+Taint, Sever the Dark Lord's Touch undead, As the Breakers action-economy, Chi
+Protection heal-over-time, Banish All Shadows / Spin the Kharmic Wheel Disadvantage,
+Death Touch multi-round, Sense the Balance info, Silent Solace spell-slot).
+
+### s38 Kiho — effect registry, tranche 3: ring-DR damage + caster VP (2026-06-12)
+Extended the composable atemi spec with **ring-scaled damage dice** (`rolled_ring`/
+`kept_ring` → the attacker's ring value; the owner-set "DR equal to [Ring]"
+convention = **Ring k Ring** exploding) and **`caster_vp_gain`** (capped at the
+caster's Void Ring, with an optional `target_vp_required` gate). Encoded 2 more
+atemi: **Touch of the Storm** (`contest` Air → Air k Air damage bypassing Reduction
+— the existing contest gate means damage lands only on a won contest) and **Void
+Fist** (regain 2 Void Points on a hit; no effect on a target without VP). 11 atemi
+now encoded. All values GDD-given (Touch of the Storm DR per the owner's Ring k Ring
+ruling; Void Fist 2 VP). Verified with a headless driver: Touch of the Storm both
+branches (contest won → damage; contest lost → no effect), Void Fist both branches
+(target with VP → caster +2; target without VP → no gain). DEFERRED (13 atemi, each
+needs a bespoke subsystem this layer lacks): Earth Palm (choice forced-raises /
+dice-penalty timed), Rest My Brother (Taint strip), The Rolling Avalanche &
+Falling Star Strike (normal unarmed damage + bonus — the atemi path deals no normal
+damage), Speed of the Mountains (movement-distance debuff), Sever the Dark Lord's
+Touch (undead-only, s54), As the Breakers (action-economy loss), Chi Protection
+(heal-over-time), Banish All Shadows (Disadvantage suppression), Death Touch
+(multi-round Ring drain), Sense the Balance (info read), Silent Solace (spell-slot
+tax), Spin the Kharmic Wheel (Disadvantage swap). Void Fist's "1 Raise to use" gate
+is not modelled (NPC always uses it).
+
+### s38 Kiho — effect registry, tranche 2: composable atemi effects (2026-06-12)
+Made `resolve_atemi_strike`'s effect application **composable** — an `atemi_effect`
+spec may now combine, in any mix: `damage` ({rolled, kept, bypass_reduction} →
+`WoundSystem.apply_damage`), `disarm` (auto-disarm with optional `vp_negate`
+{vp_cost, extra_rolled, extra_kept} — an NPC defender auto-spends VP to keep the
+weapon and take the extra damage; PCs choose via future UI), `wound_rank_penalty`
+({rank_ring, duration_rings, duration_insight} → a timed `all_rolls` penalty =
+`Enums.WOUND_PENALTIES` at WoundLevel = the attacker's ring, for the summed
+duration), `timed` (tranche 1), and `condition` (instant). Encoded 3 Air atemi:
+**Censure of Thunder** (1k1 bypass + auto-Disarm; target may spend 2 VP to negate
+the Disarm and take +2k2 instead), **Stain Upon the Soul** (wound-rank-equivalent
+−penalty as if at Wound Ranks = Air Ring, for Insight + Air Rounds), **The Great
+Silence** (silenced condition). 9 atemi now encoded (5 condition + Flame Fist +
+these 3). All values GDD-given (Censure 1k1/2VP/2k2; Stain via the canonical wound
+table; durations from the GDD). Verified with a headless driver: Censure both
+branches (disarm vs VP-negate + extra damage + VP spent), Stain (−10 all_rolls at
+Air 3, expiry round + Insight + Air), Great Silence (silenced). LIMITATIONS: Stain
+stacks with the target's actual wound penalty (GDD says the worse one supersedes);
+`silenced` is inert (no verbal-component system); the Disarm is a result flag
+(weapon-drop not modelled — no inventory). DEFERRED — **Touch of the Storm**
+("contested Air → damage with DR equal to Air Ring") needs an owner decision on the
+DR interpretation (Air-Ring k Air-Ring vs Air-Ring k0 vs flat), so it is unencoded.
+
+### s38 Kiho — in-combat activation cost path (2026-06-12)
+`IndividualCombat.activate_kiho` did the known + active-slot validation but
+explicitly deferred the s38a *cost* to the orchestrator, so nothing in the tile
+loop could actually turn a kiho on with its proper price. Implemented
+`AsciiMapCombatOrchestrator.execute_activate_kiho(state, char_id, character,
+kiho_name, method, dice)` — the LOCKED s38a cost path, no invented values:
+**void_point** = Free action, spends one Void Point (`VoidSystem.spend`), so it
+does NOT consume the move/attack budget; **meditation_complex** = Complex action
++ Meditation (Void) roll vs `KihoSystem.ACTIVATION_TN_COMPLEX` (15);
+**meditation_simple** = Simple action vs `ACTIVATION_TN_SIMPLE` (30). Order of
+checks: dead/turn-state/participant guards → known → **atemi rejection** (atemi
+kiho are strikes via `resolve_atemi_strike`, never slot buffs) → **slot check
+(`KihoSystem.can_activate`) before any cost is paid** → method cost (Meditation
+methods also honor the Down free-actions-only restriction; a failed Meditation
+roll still spends the action, `action_spent:true`) → `IndividualCombat.activate_kiho`
+installs it (re-checks slot). On success the kiho lands in `Participant.active_kiho`,
+so the already-wired effect hooks (Air Fist Initiative, Soul of the Four Winds
+Armor TN, Reduction buffs, etc.) fire on the next roll. Minimal monk-NPC hook
+`_npc_maybe_activate_kiho` (structural AI, mirrors the other `_npc_*` heuristics —
+the GDD gives no NPC activation policy): a MONK with a Void Point and an empty
+slot buffs up with its first known non-atemi kiho via Void Point on its first
+turn (wired into `execute_npc_turn` right after stance pick; PCs can't be monks
+per s60.2, so this is the only caller). Validated end-to-end with a headless
+SceneTree driver: void_point activation (VP −1, free action, kiho active),
+slot constraint (2nd Internal → slot_occupied, no cost paid; Martial bypasses),
+Meditation method (action consumed, VP untouched), the monk hook fires, non-monk
+skipped. Parse-checked. **Monk companion hook added (2026-06-12):** the same
+`_npc_maybe_activate_kiho` is wired into `execute_companion_turn` (after
+begin_turn/decide_action, before movement/attack) so an allied monk companion on
+a PC mission also buffs up — gated on a non-RETREAT command (a retreating/broken
+companion doesn't stop to buff) and an empty slot. Verified end-to-end (a STEADY
+NAMED_ALLY monk companion activates Air Fist via Void Point, buff appears in the
+turn's actions). NOT yet wired: a player-facing activation UI choice (PCs aren't
+monks per s60.2, so no PC monk path exists) and the non-combat character-level
+kiho buffs (separate deferred infra).
+
+### s38 Kiho — Combat Effects (first tranche wired into s40, 2026-06-06)
+`KihoSystem` effects apply only while a kiho is ACTIVE on a combatant
+(`IndividualCombat.Participant.active_kiho`), unlike passive katas.
+**Wired so far:**
+- Passive active-buffs via the kata modifier hooks: **Soul of the Four Winds**
+  (Armor TN += Insight + Air ring), **Air Fist** (+5 Initiative while unarmed),
+  **Grasp the Earth Dragon** (wound-penalty TN −Earth ring), **Embrace the Stone**
+  (Reduction += 2× Earth), **Partaking the Waters** (Reduction += Water).
+  `_get_kiho_armor_tn_bonus` / `_get_kiho_initiative_bonus` /
+  `_get_kiho_wound_penalty_reduction` / `_get_kiho_reduction_bonus` are called
+  alongside the kata equivalents in `get_armor_tn` / `roll_initiative` / the
+  attack-roll wound path / `total_defender_reduction`.
+- **Reduction pipeline** (`total_defender_reduction`): base armor + kata + kiho
+  Reduction − attacker piercing, now fed into `WoundSystem.apply_damage` at the
+  summary-combat and orchestrator hit sites. This also activated the previously-
+  dead kata Reduction (earth_full_defense, earth_crab, water_ignore_reduction,
+  water_small_weapon).
+- **Atemi resolver** (`resolve_atemi_strike`): atemi attack with doubled armor TN;
+  optional Contested Ring roll; applies an instant, roll-recoverable condition on
+  hit. Wired: **Unbalance the Mind** (Dazed), **Freezing the Lifeblood** (Stunned),
+  **Seven Storm's Fist** (contested Fire → Stunned), **Mind/No-Mind** (contested
+  Void vs Fire → Dazed), **Tasaii-Do** (contested Water vs Earth → Stunned).
+`activate_kiho()` validates known + the active-slot rule (one Internal/Kharmic/
+Mystical, unlimited Martial). **Deferred (need infrastructure that doesn't exist
+yet):** the activation COST path (Void Point / Meditation roll integrated into the
+turn loop); **timed/duration conditions** (s40 conditions are flat + roll-recovered,
+so "for N Rounds" effects, silenced, flat-TN-penalty, paralysis-with-no-move aren't
+modeled); **character-level active kiho** for non-combat buffs (Stealth, Intelligence,
+vision, water-walking — active_kiho is combat-Participant-scoped); **ASCII-map
+movement** kiho (Riding the Clouds, Buoyed by the Kami, leaps); **ally/mount** kiho;
+**healing-over-time** (per-round regen); and **unique** mechanics (Death Touch ring
+drain, Spin the Kharmic Wheel disadvantage swap, Void Fist VP refund). 24 kiho-effect
+tests in `tests/test_individual_combat.gd`.
 
 ### Pending Redesign
 (None currently pending.)
@@ -3257,7 +4042,8 @@ mechanical change is applied until s40 individual combat is implemented.
   stays 0 (GDD s11.3 specifies provocation flag only, not a disposition value). `INAUSPICIOUS_PENALTY`
   and `TAIAN_BONUS` stay 0 (GDD says rokuyo is not a mechanical modifier for NPC scoring).
   `_RETREAT_DEFAULT_DAYS` stays 0 (blocked on sub-tile army movement s11.7a). `TAINT_DETECTION_PLACEHOLDER_TN`
-  stays 0 (blocked on s31 Sense spell). `get_renege_willingness()` values stay 0 (function
+  REMOVED 2026-06-10 — Maho Channel 3 now uses the owner-set TN = (8 − Taint Rank) × 5.
+  `get_renege_willingness()` values stay 0 (function
   never called; GDD says "All renege values PROVISIONAL"). `compute_peace_willingness()`
   already returns qualitative dict (correct per GDD s53 "not determined by a single threshold").
   `get_patrol_detection_chances()` already returns qualitative dict (correct per GDD s11.3.19
@@ -3990,6 +4776,2020 @@ mechanical change is applied until s40 individual combat is implemented.
   for shugenja, katana+wakizashi fallback for all others; yumi added when Kyujutsu trained.
   14 tests in `tests/test_individual_combat.gd`.
 
+### Systems Added 2026-06-14 (Furniture / furnishings for lived-in interiors)
+- **s4.4 Furnishings & Objects (first tranche — residential interiors, owner-authorized
+  2026-06-14).** Implements the s4.4 "Remaining Tile Categories: *furnishings and
+  objects*" for lived-in spaces (peasant + noble), following the locked rendering
+  principles (symbol=type, colour=context, low visual weight). The GDD s4.4 line 121
+  anticipates this category but leaves the specific tiles/properties to be "defined
+  during engine development"; the owner approved the specific tile set, properties, and
+  placement (did NOT authorize editing the /gdd/ s4.4 file — this is an implementation
+  record only). **Eight new `TileType` values** (35–42), each with
+  movement/LOS/cover properties: FURNITURE_FUTON `▬` (passable), FURNITURE_HEARTH `▦`
+  (blocks move), FURNITURE_CHEST `▥` (blocks move + LOS, cover), FURNITURE_TABLE `╥`
+  (blocks move, cover), FURNITURE_JAR `◍` (blocks move, cover), FURNITURE_SCREEN `║`
+  (byōbu — passable, blocks LOS), FURNITURE_BRAZIER `†` (blocks move), FURNITURE_CUSHION
+  `▫` (passable). **Wiring:** `MovementSystem.terrain_cost` + `AsciiMapData.is_passable`
+  (blocking furniture impassable — pathfinding routes around it); `AsciiMapData.blocks_los`
+  (chest + screen block sight for FOV/stealth); new `AsciiMapData.grants_cover()` +
+  `AsciiMapCombatOrchestrator._cover_bonus()` wired into melee AND ranged resolution —
+  a defender shielded by a cover-granting furnishing on the tile toward the attacker
+  gains `COVER_ARMOR_TN_BONUS = +5` Armor TN (reuses the s40 ruined-structure cover
+  value); `AsciiMapGenerator.get_glyph`/`get_fg_color` tables for the renderer.
+  **Content:** new `ZoneSubtype.PEASANT_DWELLING` (43) + `_gen_peasant_dwelling` — a
+  single-room minka with an earthen doma entry, central irori hearth + flanking
+  cushions, sleeping mats, a tansu, a water jar, and a low table; `_gen_lord_quarters`
+  furnished (writing table + cushions, byōbu screen, brazier, tansu in the main
+  chamber; desk + chest in the study; futons + chest + brazier in the sleeping
+  chamber). Verified: all 8 tiles match the approved passable/LOS/cover table; peasant
+  dwelling (898/898) and furnished lord quarters (679/679) render correctly and stay
+  fully connected (furniture never seals a room); all 26 zones pass the exit-reachability
+  regression. LIMITATIONS / DEFERRED: "hazard" furniture (hearth/brazier) blocks
+  movement but has no burn-damage mechanic (no hazard system; not invented). Cover is a
+  simple one-tile-toward-attacker check (no multi-tile line-of-cover math). PEASANT_DWELLING
+  is generatable + renderable but not yet wired into `SettlementZoneBuilder` (villages
+  don't auto-spawn peasant homes yet — separate integration). Other furnishable interiors
+  (OHIROMA, CHASHITSU, AUDIENCE_CHAMBER, GUEST_WING) not yet furnished. The s4.4 GDD file
+  was left unedited (design-file edits need separate owner approval).
+- **s4.4 Furnishings tranche 2 (public / worship / commerce / martial spaces,
+  owner-authorized all four areas 2026-06-14).** 16 new object `TileType` values
+  (43–58) — DAIS `⊓`, BANNER `╤` (passable decorative), WEAPON_STAND `Ψ`, ALTAR `⊥`,
+  OFFERING_BOX `▣`, INCENSE `§`, STATUE `☗` (blocks move+LOS), PRAYER_MAT `▭`
+  (passable), STALL `╦`, CRATE `▧`, NET `╳` (passable, blocks LOS), WELL `◉`,
+  DUMMY `‡` (makiwara), SHELF `▤` (blocks move+LOS), STOVE `◫` (kamado), BENCH `╨`
+  (passable). All wired into `MovementSystem.terrain_cost`, `AsciiMapData.is_passable`/
+  `blocks_los`/`grants_cover`, and the renderer glyph/colour tables (statue/net/shelf
+  block LOS; DAIS/WEAPON_STAND/ALTAR/OFFERING_BOX/STATUE/STALL/CRATE/WELL/DUMMY/SHELF
+  grant the +5 cover bonus). **Furnished generators:** ōhiroma (dais + weapon stands +
+  banners + braziers + petitioner cushions), enkai_hall (per-pad banquet tables +
+  cushions), audience_chamber (host seat/table/screen/weapon stand), war_council
+  (real strategy TABLE replacing the stone-floor fake; wall racks → WEAPON_STAND),
+  guest_wing (futon + chest per room), temple_grounds + castle_shrine + shrine_clearing
+  (altar, offering box, incense, komainu/Fortune statues, prayer mats), market_street
+  (vendor STALL + CRATE replacing the wood-wall fakes — the existing passage-clearing
+  pass still keeps every road approach open), docks_waterfront (quay crates/barrels +
+  drying nets), dojo (real weapon racks + training dummies), chashitsu (ro hearth +
+  mizuya shelf), pleasure_quarter (entertaining tables/cushions/screens/braziers per
+  house), government_quarter (magistrate DAIS + yoriki weapon stands + petitioner
+  cushions + accused's kneeling mat + archive shelves + document chests),
+  peasant_dwelling (kamado STOVE). Verified: generator parses clean; every furnished
+  zone renders correctly and stays fully connected across 3 seeds (the only
+  regression-flag is MOUNTAIN_PASS — an **untouched** generator with a pre-existing
+  seed-specific stranded-tile/exit quirk, out of scope here). DEFERRED: BANNER/BENCH/
+  WELL are wired but lightly used (no generator places a WELL yet); zone-flag-matrix
+  entries for PEASANT_DWELLING and the furnished zones still use the ALL_FALSE default;
+  no hazard mechanic for stove/incense/brazier. The s4.4 GDD file remains unedited.
+- **s4.4 Furnishings tranche 3 (garrison / yard / homes / contemplation garden,
+  owner-authorized 2026-06-14).** Reuses the tranche-2 object tiles (no new tiles),
+  furnishing five more generators: **wall_tower** (inner-wall weapon racks were
+  wood-wall segments → WEAPON_STAND; garrison futons, supply crates, braziers inside
+  the connected tower ring), **outer_courtyard** (first WELL placement as a yard well,
+  east-side muster weapon racks, supply crates, clan banners — clear of the N–S gate
+  line), **residential_quarter** (each commoner home gets an irori hearth + sleeping
+  mat + water jar in the corners, clear of the door column), **poor_quarter** (each
+  shack gets a corner hearth + water jar), **tsuboniwa** (tsukubai stone basin via WELL,
+  a stone lantern, two veranda meditation benches placed after the veranda floor is laid
+  so they survive the overwrite). Verified: parses clean; all five render correctly and
+  stay fully connected across 3 seeds (wall_tower's iso=4 is the pre-existing corner
+  battlement crenellations on the outer wall, not the furnished interior). The WELL tile
+  now has a producer (courtyard + tsuboniwa). The s4.4 GDD file remains unedited.
+- **s4.4/s57.36.2 Castle service rooms (manor-completeness audit + build, 2026-06-14).**
+  Audited the manor/castle room set against GDD s57.36. Verdict: the **11 Castle
+  Interior Lesser Zone subtypes** (s57.36.3 — OHIROMA, ENKAI_HALL, AUDIENCE_CHAMBER,
+  CHASHITSU, GUEST_WING, LORD_QUARTERS, WAR_COUNCIL_ROOM, DOJO, OUTER_COURTYARD,
+  TSUBONIWA, CASTLE_SHRINE) are **all implemented and furnished** — nothing missing at
+  the room/zone level; the rank-scaling tiers (s57.36.2) draw only from these. GDD
+  s57.36.2 line 49 is explicit that the **functional spaces (BARRACKS, ARMORY, KITCHEN,
+  STOREROOM, PRISON, STABLES) are NOT separate Lesser Zones** — they are tile-clusters
+  within whichever zone they occupy. The courtyard previously had none, so added them:
+  new `_service_room()` helper draws a small walled room with one yard-facing door, and
+  `_gen_outer_courtyard` now lines the compound with six rooms (kitchen=kamado stoves +
+  shelf + jar; armoury=weapon racks + shelf + crates; storehouse/kura=crates + shelving;
+  stables=troughs + feed; barracks=futons + chest + weapon stand + brazier; holding
+  cell=straw mat + chest) around an open central muster lane (cols 12–18, incl. the N–S
+  gate column) with a well + banners. GDD does NOT model a bath (furo) or genkan as
+  either a zone or a cluster, so those are out of scope, not gaps. Verified iso=0 and
+  both gates reachable across 3 seeds (fixed two build-time seals: a trough on the
+  stables door tile, and feed crates boxing the far corners). The s4.4/s57.36 GDD files
+  remain unedited.
+- **s4.4 Genkan + Furo (manor completeness, owner-authorized 2026-06-14).** The audit
+  noted the GDD models neither a bath (furo) nor a formal entrance (genkan) as a zone or
+  cluster; the owner directed adding both as ASCII clusters (same latitude as the prior
+  furniture tranches — NOT a GDD edit). **Genkan** (lord_quarters west entrance): a
+  lowered stone doma just inside the door where footwear is removed, a getabako (footwear
+  shelf), and a bench — the raised wood corridor begins beyond it. **Furo** (guest_wing):
+  the south-east guest room is now a communal bath house — wood floor, a sunken soaking
+  tub (WATER_SHALLOW), a washing bench + rinse jar, and a kama (STOVE) heating the bath
+  water; the other five rooms remain bedrooms. Verified: both zones iso=0 with reachable
+  exits across 3 seeds; full all-zone regression = 0 unreachable exits. s4.4/s57.36 GDD
+  files remain unedited.
+- **s4.4 Ōhiroma genkan + dojo kamiza (manor polish, owner-authorized 2026-06-14).**
+  Follow-up audit found the genkan was only at the private lord's quarters; the grandest
+  formal genkan belongs at the ŌHIROMA (great hall — the castle's ceremonial public
+  entrance). Added a lowered stone doma vestibule inside the great hall's south doors,
+  framed by getabako shelves + waiting benches. Also furnished the DOJO's kamiza (it
+  existed as a bare stone alcove): a kamidana (ALTAR) flanked by INCENSE with a PRAYER_MAT
+  before it. Verified: both zones iso=0 with reachable exits across 3 seeds; full all-zone
+  regression = 0 unreachable exits. With this the manor interior set is complete and
+  furnished — the audit's only two genuine gaps are closed. Remaining furniture-bare zones
+  (road, forest_path, farmland, river_crossing, mountain_pass) are outdoor wilderness and
+  correctly bare. s4.4/s57.36 GDD files remain unedited.
+- **s4.4 PEASANT_DWELLING wired into the village zone builder (2026-06-14).** The
+  PEASANT_DWELLING minka generator existed but `SettlementZoneBuilder` never placed it —
+  villages spawned only Farmland + Shrine Clearing (no homes). The village civilian pool
+  now includes enterable peasant-home Lesser Zones: a village's fill is Farmland →
+  Peasant Dwelling ×`VILLAGE_PEASANT_HOMES` (=2, a structural representation count — village
+  population_pu is a small abstract number, so no meaningful scaling; documented non-GDD
+  like the other pool sizes) → Shrine Clearing (+ Docks if coastal), each home a unique
+  zone_id chained by exits. `_urban_name()` names PEASANT_DWELLING ("Peasant Dwelling")
+  instead of the "Zone" fallback. Live at world gen (`SettlementZoneBuilder.build` runs per
+  settlement in `world_bootstrap.gd:917`). Verified: parses clean; headman village builds
+  the Ohiroma+Outer Courtyard compound plus Farmland/Dwelling/Dwelling/Shrine fill with
+  intact exit wiring + unique ids; coastal appends Docks; the minka generator still renders
+  iso=0. Castle-seat villages (CITY_DAIMYO+ over tiny pu) trim to Farmland only (no peasant
+  homes in a castle seat — correct); military/religious settlements unaffected.
+  **PEASANT_DWELLING now has an explicit ZoneFlagMatrix entry (2026-06-14):** all-false,
+  closing the last "no entry" gap (verified: 0 of 26 subtypes missing). Behavior-neutral —
+  `get_flags()` already returned ALL_FALSE and `_is_zone_blocked` treats explicit-all-false
+  identically to the default. All-false is the *correct* set: every one of the 8 flags is a
+  noble art / tea / garden / bonsai / worship affordance a humble minka lacks (the village
+  shrine is the separate SHRINE_CLEARING zone), identical to RESIDENTIAL_QUARTER /
+  POOR_QUARTER. Homes remain enterable/navigable — movement, FOV, conversation and combat
+  are tile-level, never matrix-gated.
+
+### Known Code Issues (found and fixed 2026-06-14, AT_DOJO context blanket)
+- **AT_DOJO blanket-pinned everyone at champion castles, stripping governance. FIXED.**
+  `_set_dojo_context_flags` set `context_flag = AT_DOJO` for every non-traveling character
+  at a `has_dojo` settlement. But `has_dojo` settlements are the 9 Great Clan champion
+  family castles + the Imperial Capital — all multi-zone CASTLES, not single-purpose dojos.
+  The AT_DOJO action list has only training/social actions (TRAIN, MENTOR, DRILL_TROOPS,
+  CHARM, PROBE, TREAT_WOUND) — no governance, court, or worship. So a clan champion governing
+  from their own seat (whenever not mid-court) was pinned to AT_DOJO and lost ALL lord actions
+  (SET_TAX_RATE, ASSIGN_VASSAL_OBJECTIVE, CALL_COURT, military orders, etc.); cross-clan
+  visitors lost VISITING; and a monk's PERFORM_RITUAL standing dead-ended (a dojo is not
+  shrine_eligible). Runtime-confirmed: a courtier champion at a `has_dojo` castle got
+  context_flag=8 (AT_DOJO) with SET_TAX_RATE absent. Root cause is the multi-zone category
+  error: a dojo is one Lesser Zone of a castle, and AT_OWN_HOLDINGS already permits
+  TRAIN/MENTOR/MEDITATE/PERFORM_RITUAL, so the dojo blanket added nothing. Fix (owner-approved):
+  removed the settlement-level AT_DOJO assignment (`_set_dojo_context_flags` deleted, call
+  removed) — characters at champion castles now fall to AT_OWN_HOLDINGS (residents → full
+  lord + training actions) or VISITING (outsiders). AT_TEMPLE / AT_WALL_TOWER unchanged (those
+  ARE single-purpose settlements). AT_DOJO context list + decomposer branches kept as
+  forward-wiring for future per-character zone tracking. `has_dojo` still drives zone structure
+  (champion seats get DOJO + WAR_COUNCIL Lesser Zones). Removed the 8 tests asserting the buggy
+  behavior. Runtime-verified: champion → AT_OWN_HOLDINGS (SET_TAX_RATE + TRAIN both present);
+  monk at temple → AT_TEMPLE (PERFORM_RITUAL present).
+
+### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
+Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
+via headless largest-connected-component analysis + per-exit reachability check
+(two/three seeds each, closed doors treated as traversable). Six generators were
+producing maps where passable space was sealed off or a zone exit could not be
+reached from the interior — a walker entering via that exit would be stranded.
+Determinism was already perfect (FNV-1a seed) and unaffected by the fixes.
+- **MARKET_STREET (67%→100%). FIXED.** Vendor stalls placed on the road edges
+  (rows 12/18) AFTER the shops sealed shop doors AND the inter-shop alley gaps
+  whenever a stall landed in front of an open passage. The door-only clear was
+  insufficient (it missed the vertical alleys between shops). Now clears the
+  stall in front of ANY open tile on rows 11/19 (door or alley) via a new
+  `_is_passable_floor()` helper.
+- **RESIDENTIAL_QUARTER (73%→100%). FIXED.** Two bugs: (1) bottom-row house
+  doors (and the shrine door) opened onto the row-30 perimeter wall, sealing
+  those interiors — doors now face the adjacent alley (north face when the
+  south face abuts the perimeter); (2) the west/east exits sat at y=MID=15,
+  which lands on the middle house row, so each exit tile was walled off from
+  the interior — exits moved onto the open inter-plot alley rows (y=10, y=20).
+- **POOR_QUARTER. FIXED.** Same MID-on-a-shack-row exit bug as residential;
+  exits moved to the open alley row (y=14).
+- **DOJO. FIXED.** The south exit at (15,30) was blocked by a weapon rack the
+  rack loop (`range(3, S-3, 3)`) placed at (15,29). Threshold tile cleared.
+- **TSUBONIWA. FIXED.** The south exit was separated from the veranda by the
+  surrounding-wall row (S-2); the engawa only reached S-3. Threshold carved.
+- **FOREST_PATH. FIXED.** The north exit was hard-coded at (MID,0) but the
+  dirt path meanders via per-row `path_x` drift, so the exit landed in the
+  trees on seeds where the path drifted off-centre. The exit now follows the
+  path's actual top tile (`path_x` after the loop); the south end is always MID
+  (the loop starts there).
+- **ROAD — not a bug (left as designed).** Its ~23–40 "isolated" passable
+  tiles are roadside grass scattered within the intentional dense tree
+  shoulders (cols 0–2 / 28–30, 2/3 trees). The road corridor (cols 5–25) and
+  both exits are fully reachable; the trapped grass is inaccessible scenery,
+  the same pattern as FOREST_PATH's tree field. No change.
+- **Cosmetic note (not fixed — no invented behavior).** RESIDENTIAL_QUARTER and
+  DOJO generators call no `rng` for structure, so every instance is identical
+  regardless of seed (still deterministic, just seed-invariant). Adding layout
+  variation would be new behavior; left for a future authorized pass.
+
+Extended the same audit to the 10 s56 mission template generators (slot-level
+invariant: every objective_slot and primary entry must be passable AND in the
+main connected component; population slots may be on walls for elevated/cover
+units). One real defect found and fixed:
+- **CAVE main + secondary entrance sealed off. FIXED.** Both entrances stamped
+  a ZONE_EXIT at a fixed map edge (main at height-2, secondary at row 1) with
+  no guaranteed connecting passage. The entry room centres near — not always
+  on — the bottom edge, so on many seeds rock sealed the only entrance from the
+  cave (a player would spawn stranded on the exit tile; the prior "ISO=0" floor
+  check missed it because it measured the floor network, not the entry marker
+  tile). Both entrances now carve a vertical access tunnel from the room centre
+  to the edge exit. Deterministic (no rng added).
+- **RAVINE rim entries — not a bug.** Its 6 isolated critical slots are exactly
+  the `is_rim` entry vectors on the cliff plateau (cliffs are impassable
+  WALL_STONE; rim→floor descent is blocked on s40 elevation). Verified every
+  objective_slot and the mouth/back entrances are reachable.
+- **OCCUPIED_VILLAGE / FOREST_APPROACH_CAMP population-on-wall — not a bug.**
+  Those are sentry-tower / elevated placements (population slots, not objective
+  or entry). Castle-siege, hilltop, stockade, ruined-structure, urban-hideout,
+  ship-boarding all clean (objectives + entries reachable).
+
+### Known Code Issues (found and fixed 2026-06-06, ASCII map combat sweep)
+Post-implementation bug sweeps across the new ASCII map combat layer and the
+template generators it depends on. Faithful summary of the fixes that landed:
+- **Combat system bugs (multiple rounds).** Stance restriction enforcement, FoV
+  lookout-bonus application, dead-character guards in combat resolution, duel
+  winner/loser assignment, gate (open/closed door) handling in melee, stealth-combat
+  flag transitions, morale break thresholds, Down-state attack Void-bonus application,
+  and missing `failed` keys on failed-action effect dicts.
+- **`AsciiMapCombatOrchestrator` bug fixes.** Several rounds against the orchestrator
+  itself (initiative/turn-order, target selection, noise-event propagation from player
+  attack paths, ZONE_EXIT step ordering, door noise origin).
+- **Raw int topic tier values.** Painting, sculpture, and insurgency-relocation systems
+  assigned raw ints to `TopicData.Tier` enum fields (same bug class as the legal-pipeline
+  fixes) — corrected to enum references.
+- **Template generator hardening.** Cave room-population loop break-in-match-arm,
+  castle siege wall fill, murder-hole guard positions, ruined-structure stairwell,
+  shelter bounds inversion, kansen/shrine bound errors, and several zone-test type
+  mismatches across the s56 template generators.
+
+### Systems Added 2026-06-06
+- **s40 ASCII Map Combat — full tile-based skirmish layer.** Two pure-simulation
+  classes tie IndividualCombat mechanics to the AsciiMapData tile grid (no Node
+  inheritance). One tile = 5 feet (MovementSystem); melee range = Chebyshev distance
+  ≤ 1 (adjacent 8 directions).
+  - **`simulation/ascii_map_combat_orchestrator.gd` (AsciiMapCombatOrchestrator, 1815
+    lines).** Turn/action-budget skirmish driver for player-present combat. Inner
+    classes: `TurnState` (per-character action budget — 1 Complex OR 2 Simple + Free +
+    Free Move per turn; stance change costs a Simple; Down-restricted move handling) and
+    `MapCombatState` (full state: tile positions, factions, turn order, round counter).
+    Setup: `setup_combat()`. Movement: `get_reachable_tiles()`, `find_path()` (A*),
+    `get_melee_targets()`, `get_ranged_targets()`, `is_in_melee_range_of_enemy()`.
+    Execute actions: `execute_stance_change`, `execute_move`, `execute_melee_attack`,
+    `execute_ranged_attack` (RANGED_IN_MELEE_PENALTY −10, GDD-confirmed),
+    `execute_extra_attack`, `execute_guard` (Guard maneuver, within-5-feet = 1 tile),
+    `execute_grapple_initiate`, `execute_grapple_action`, `execute_stand_up` (Simple
+    action from Prone), `execute_void_spend`, `execute_destroy_tile` (shoji cut-through,
+    GDD s4.4, 0 Raises), `execute_flee`. Turn management: `begin_turn`,
+    `get_current_actor`, `advance_turn`, `advance_round`. Full NPC AI turn:
+    `execute_npc_turn` with `_npc_pick_stance`/`_npc_desired_stance` (contextual stance
+    by wound level and threat), `_npc_pick_target`, `_npc_move_toward`,
+    `_npc_execute_attack`. Down-state attack (`_execute_down_attack`) requires a Void
+    Point per GDD s40. All damage routes through `_apply_hit` →
+    `IndividualCombat.resolve_damage()` with a Participant (kata/mutation/advantage
+    modifiers honored). PROVISIONAL: ranged weapon ranges not specified in GDD s40
+    (Equipment section blocked) — any enemy in LOS is a valid ranged target.
+    97 tests in `tests/test_ascii_map_combat.gd`.
+  - **`simulation/combat_controller.gd` (CombatController) — expanded.** Roguelike /
+    Dwarf Fortress Adventure Mode stealth-combat model per s40/s56.6.3/s54.8/s54.9.
+    Enemy alert state machine (Unaware/Suspicious/Alert/Fleeing; LOCKED round counts
+    SUSPICIOUS_SEARCH=3, SUSPICIOUS_RETURN=3, ALERT_ALARM=5). Noise detection
+    (QUIET/MODERATE/LOUD/VERY_LOUD; automatic detection on VERY_LOUD, contested
+    Perception+Investigation otherwise). Stealth movement and stealth kills (flat-footed
+    ATN = 5 + armor_tn_bonus; Quiet noise on kill, Loud on survival). Bump-to-attack.
+    NPC behavior (patrol, three investigate styles, pursue+attack, flee). Caller style
+    (BAKEMONO_SHAMAN sounds alarm immediately). Creature wound thresholds (s54.9
+    `wounds_dead` override). Swift movement (s54.9). Morale (s54.8: BANDIT_RABBLE 40%,
+    REBEL_PEASANT/THUG 60%, REBEL_ASHIGARU 70%, MORALE_UNBREAKABLE for REBEL_LEADER).
+    Individual variance (s56.10.0a). 17 LOCKED unit types. 154 tests in
+    `tests/test_combat_controller.gd`.
+  - **`scripts/ui/combat_hud.gd` (CombatHUD, CanvasLayer overlay).** Player-facing combat
+    HUD for AsciiMapView: round number, wound level + penalty (color-coded by WoundLevel),
+    movement budget, stealth/normal mode indicator, scrolling combat-event log
+    (MAX_LOG_LINES=8). `update_from_cc()`, `push_event()`, `set_mode()`. 7 tests in
+    `tests/test_combat_hud.gd`.
+- **`shared/role_registry.gd` (RoleRegistry) — centralized role/position definitions.**
+  All role string constants, `PositionType` enum, POSITION_NAMES / POSITION_RANK
+  lookups, and lord-rank helpers consolidated into one file (previously scattered across
+  world_population_generator, day_orchestrator, and others). Behavior-preserving refactor.
+- **s44/s45 combat-roll wiring sweep.** AdvantageSystem and MutationSystem modifiers, plus
+  wound penalties, were wired into every combat and contested dice-roll site that was
+  previously skipping them. Coverage: 8 contested roll functions in individual_combat.gd,
+  3 combat roll sites missing both wound + mutation, 4 non-combat roll sites, 12
+  non-SkillResolver roll sites, 20 additional roll sites, and 17 mutation-modifier sites.
+  Kata damage modifiers fixed: `resolve_damage()` calls were missing the Participant
+  argument, silently skipping kata damage bonuses — Participant now threaded through all
+  call sites (including the ASCII map orchestrator's `_apply_hit`).
+- **Contextual NPC stance selection for wounded combatants.** `_npc_desired_stance()` now
+  factors wound level and threat type — wounded NPCs favor Defense/Full Defense, healthy
+  aggressors favor Attack, ranged-threatened NPCs adjust accordingly.
+- **Real-time ↔ turn-based combat mode + End Combat (GDD s40.x, owner-approved design).**
+  Implemented on `CombatController`. A zone is **real-time** during exploration and latches
+  into **turn-based** the instant a hostile contact occurs (any living enemy reaches the
+  ALERT state). `is_turn_based()` lazily evaluates and latches the engage trigger; the
+  ASCII map view exposes a passthrough `is_turn_based()` and the CombatHUD renders a
+  REAL-TIME / TURN-BASED indicator. The zone only returns to real-time through a successful
+  **End Combat**: `request_end_combat()` is **blocked while any aware hostile remains**
+  (`get_active_hostiles()` = alive enemies at Suspicious or Alert; Unaware/Fleeing/dead do
+  not block); when the field is clear it opens a consent poll requiring **unanimous consent
+  of all present living PCs** (`get_present_pc_ids()`). `register_end_combat_consent(pc_id,
+  agree)` tallies votes — a single decline cancels the proposal; unanimous agreement calls
+  `try_finalize_end_combat()`, which re-checks for re-engaged hostiles before flipping the
+  zone back to real-time. The consent gate is pure decision logic over present PC entity IDs
+  — no networking/RPC is scaffolded (out of scope); the actual prompting is the UI/future
+  multiplayer layer's job. 12 tests in `tests/test_combat_controller.gd`.
+- **Event-driven combat-mode signals + view passthroughs (s40.x follow-up).**
+  `CombatController.poll_mode_changed()` reports the real-time↔turn-based transition
+  exactly once per change (compares current `is_turn_based()` against a last-reported
+  latch, so it is correct regardless of call order — no per-frame polling needed).
+  `AsciiMapView` fires two new signals: `combat_mode_changed(turn_based)` (emitted from
+  `_run_npc_turns_and_sync()` after each action when the mode flips) and `combat_ended()`.
+  View End Combat passthroughs added: `request_end_combat()` and
+  `submit_end_combat_consent(pc_id, agree)` (the latter emits `combat_ended` +
+  `combat_mode_changed(false)` on a successful end). `is_in_combat()` semantics
+  reconciled: it now explicitly means "a combat mission is loaded" (controller attached),
+  NOT active combat — `is_turn_based()` is the engagement query. 4 tests
+  (`test_combat_controller.gd`, 166→170).
+- **Player-facing End Combat input (s40.x follow-up).** `AsciiMapView` binds **X** (in
+  turn-based mode) to `_handle_end_combat_input()`: requests End Combat, and on a clear
+  field auto-submits the local PC's consent (the player consents by requesting). Feedback
+  via `combat_event`: `end_combat_blocked` (with active-hostile count), `end_combat_awaiting`
+  (other present PCs still to agree — multi-PC collection out of scope for local play), and
+  `end_combat_resolved`. CombatHUD formats all three and shows `X=end` in the controls hint.
+  3 HUD format tests (`test_combat_hud.gd`, 7→10).
+- **`scripts/ui/combat_screen.gd` (CombatScreen) — mission connective layer.** Previously
+  the entire ASCII combat layer was only ever wired together in tests — no production code
+  created a `CombatController` or booted a mission, and the view/HUD were in no scene.
+  CombatScreen (extends Control) is the missing glue: `start_mission(session, player, dice)`
+  creates the controller from a `MissionSession`, binds it to a child `AsciiMapView`
+  (`set_map` + `set_combat_controller`), wires a child `CombatHUD`, and connects the view's
+  signals. It refreshes the HUD after each action (combat_event/moved/waited/mode change)
+  and relays `mission_complete`, `player_died`, `zone_exit_reached`, `combat_mode_changed`,
+  and `combat_ended` up to the mission owner. `end_mission()` detaches the controller,
+  hides the HUD, and disconnects all relays. The world-map → mission **entry point** (which
+  builds the session and calls `start_mission`) remains design-pending (PC mission
+  initiation, s56/s60); CombatScreen makes that a one-call hookup. 9 tests in
+  `tests/test_combat_screen.gd`.
+- **s56.19 Mission Entry Policy (LOCKED, owner-approved).** `simulation/mission_entry_policy.gd`
+  (MissionEntryPolicy) classifies each quest-seed type as **AUTO** (the threat comes to the PC
+  or erupts where they stand — launches on contact: Road Encounter, Ronin/Bandit, Oni
+  Manifestation, Taint Manifestation) or **PLAYER_INITIATED** (a known, located threat the PC
+  chooses to assault: Maho Cult, Urban Criminal Network, Nezumi Infestation, Peasant Revolt,
+  Wall Sortie). Unknown seeds default to PLAYER_INITIATED (never auto-launch on contact).
+  `entry_mode_for()`, `is_auto()`, `is_player_initiated()`. Locked in
+  `gdd/s56.19_mission_entry_policy_locked.md`. 4 tests.
+- **s56.19 Mission entry mechanism (LOCKED, owner-approved).** PC-only — NPCs never use the
+  ASCII map and PCs never run the NPC engine (s60), so this is NOT an NPC ActionID and does
+  not touch the NPC pipeline. `simulation/mission_entry_controller.gd` (MissionEntryController):
+  AUTO seeds launch **on PC province arrival** (`get_auto_launch_seeds`); PLAYER_INITIATED
+  seeds launch via **`ENGAGE_MISSION`, 1 AP** (`engage_mission`, `ENGAGE_MISSION_AP_COST = 1`),
+  spent from the PC's banked-AP pool. `PcSystem.can_spend_banked_ap()` / `spend_banked_ap()`
+  added (s60.5). `engage_mission` validates PC actor + player-initiated seed + AP, spends 1
+  banked AP, returns a launch request the UI consumes. 10 tests
+  (`test_mission_entry_controller.gd`).
+- **`simulation/mission_launcher.gd` (MissionLauncher) — headless launch bridge.**
+  `build_session(seed, province, province_history, seed_str, player)` turns a launch request
+  into a ready `MissionSession` via `MissionBuilder.assemble` + `MissionSession.from_builder`
+  (Water Ring = min(Strength, Perception); FoV from Perception). Returns null when the roster
+  is not ready or the session is invalid. 4 tests. This completes the headless pipeline
+  (classify → validate/AP → build session). The ONLY remaining step is UI/session glue
+  (unverified without Godot): on PC province arrival, query
+  `MissionEntryController.get_auto_launch_seeds()`, call `MissionLauncher.build_session()`,
+  then `CombatScreen.start_mission()`; plus a PC-arrival event source and zone-level AUTO
+  triggering (deferred, s4.4/s60).
+- **`scripts/ui/mission_flow.gd` (MissionFlow) — UI/session glue. ⚠ UNVERIFIED (no Godot
+  runtime — written, never executed/scene-tested).** Extends Node, owns a `CombatScreen`.
+  `on_pc_arrived(pc, province, province_history, active_seeds, seed_str)` auto-launches the
+  first AUTO seed and returns engageable PLAYER_INITIATED seeds; `engage(pc, seed, …)` fires
+  ENGAGE_MISSION (spends 1 banked AP) and launches. Builds the session via `MissionLauncher`,
+  calls `CombatScreen.start_mission()`, guards one-mission-at-a-time (`is_busy()`), exposes
+  `end_mission()` (owner calls it after a mission resolves to free the screen for the next
+  launch), relays mission_complete/player_died/mission_blocked. 6 tests (written, not executed).
+  This is the integration point the future PC world-map travel system will call. The ONLY
+  remaining dependency is that **PC world-map travel / province-arrival event source** (and
+  supplying the province's seeds via `QuestSeedSelector.select_province_seeds`) — PC world-map
+  navigation doesn't exist yet and the arrival trigger is undesigned (s60). **PC world-map
+  travel is ON HOLD per owner (2026-06-06)** — deferred, not built. With it, the combat loop
+  is end-to-end.
+
+### Known Code Issues (found and fixed 2026-06-06, combat layer audit)
+- **CombatScreen.start_mission crashed if called before _ready. FIXED.**
+  `_view`/`_hud` were built only in `_ready()`, but `start_mission()` dereferenced
+  them — a caller starting a mission before the node entered the tree hit a null.
+  Extracted `_ensure_ui()` (builds the children if absent) and call it from both
+  `_ready()` and the top of `start_mission()`.
+- **combat_mode_changed double-emitted on End Combat. FIXED.**
+  `submit_end_combat_consent()` emitted `combat_mode_changed(false)` directly but did
+  not sync the controller's `_last_reported_mode`; the next `_run_npc_turns_and_sync()`
+  poll saw the stale `true` and emitted the same false transition again. Added
+  `AsciiMapView._emit_mode_change_if_any()` as the single source of truth (consumes the
+  controller's transition latch via `poll_mode_changed`) and routed both the NPC-turn
+  path and the End-Combat path through it. Now fires exactly once per transition.
+- **MissionFlow.engage() burned AP on a blocked launch. FIXED.**
+  `engage()` called `MissionEntryController.engage_mission()` (which spends 1 banked AP)
+  before `_launch()` checked `is_busy()`/`_screen` — so firing ENGAGE_MISSION while
+  already in a mission (or with no screen) spent the PC's AP for nothing. Moved the
+  no-screen / already-in-mission guards ahead of the AP spend. +1 regression test.
+
+### Systems Added 2026-06-06 (Kolat — Tranche 1)
+- **s54.7 The Kolat (Tranche 1)** — `simulation/kolat_system.gd` (pure class). The
+  Kolat is a huge multi-tranche system; this is the headless mechanical core (locked
+  s54.7j). Was REFERENCE. Data model: `KolatSect` enum completed (+JADE/ROC/STEEL);
+  hidden `L5RCharacterData` fields (`is_kolat_master`, `special_data`, sleeper fields
+  `trigger_phrase`/`sleeper_command`/`conditioning_stability`/`active_sleeper_command`/
+  `sleeper_contact_overdue`, koku fields `kolat_koku`/`dirty_koku`/`operational_koku`);
+  `SettlementData.temple_vault_koku`. Subsystems with explicit s54.7c/e/h numbers:
+  **sleeper conditioning** (`sessions_required` = Willpower×3, `resolve_conditioning_session`
+  = 3-in-a-row contested Willpower vs Temptation+Intelligence, `complete_conditioning`
+  installs the 4 hidden fields + applies −3.0 Honor to the Dream Master,
+  `degrade_sleeper_seasonal` −5/season, `maintain_sleeper_contact` +10 capped,
+  `can_activate_sleeper`/`activate_sleeper` gated on dormant + stability > 50 + phrase
+  match, `is_valid_command_phrase` ≤5 words); **koku pipeline** (`add_dirty_koku`,
+  `launder_koku` ≤5/AP dirty→kolat, `transfer_to_vault` kolat→vault, `allocate_from_vault`
+  vault→operational, `vault_below_threshold` 50); **disruption** (`sponsor_insurgency_cost`
+  10/strength, `bribe_garrison_cost_per_season` 5, `can_fund_disruption`); **dead-drop
+  concealment** (`make_dead_drop`/`register_dead_drop_visit` −1 past 3 visits/season,
+  0=abandoned/`reset_dead_drop_season`); **Eye contention** (`resolve_eye_contention`
+  priority→Tiger→Status). 21 tests. DEFERRED (later tranches): master selection at
+  world-gen (10 fuzzy sect profiles), the 6 NeedTypes + 29 ActionIDs as live pipeline
+  entries (scoring JSON + decomposition + executors), the sleeper override loop,
+  dual-stance topic positions, succession, win-condition pipeline, the Conclave, Tiger
+  Tear routing, per-Master network-record lifecycle.
+- **s54.7 The Kolat (Tranche 2 — Master selection)** — `simulation/kolat_master_selector.gd`
+  (pure class; locked s54.7j2). World-generation Master selection per s54.7a:
+  `select_masters(npcs, dice)` applies universal filters (Insight ≥ 3, not Emperor, one
+  seat/NPC), per-Sect minimums, a weighted-tier draw (T1 ×5 / T2 ×2 / T3 ×1), the fixed
+  processing order as conflict resolution (Tiger→…→Steel), Sect skill boosts (max rule),
+  and stamps the hidden Master fields (`is_kolat_master`, `kolat_sect`, `kolat_superior_id`
+  — Tiger → -1, others → Tiger). Returns KolatSect → npc_id (-1 = vacant).
+  `get_special_rule_flags()` surfaces Coin 2d10×10 hidden koku / Dream 1d6+2 sleepers /
+  Silk 1d6+2 contacts for the world generator. Role-based tier criteria mapped to queryable
+  fields (clan/family/school_name/role_position/skills/status/glory/school_type; lord-tier
+  via role_position); Dream and Steel T1 relaxed to skill/glory thresholds (PROVISIONAL — no
+  institutional-access field). 9 tests.
+- **s54.7 The Kolat (Tranche 3 — scoring/data pipeline)** — completed the NPC-engine
+  scoring data for the Kolat ActionIDs/NeedTypes (s54.7c). objective_alignment.json already
+  carried the 6 Kolat NeedTypes (forward-wired); added all **29 Kolat ActionID skill
+  mappings** to `action_skill_map.json` (exact s54.7c primary/secondary), AP costs in
+  `_get_ap_cost` (1-AP default covers most; ARCHIVE_TOPIC / CONTRIBUTE_TO_RESERVE = 0;
+  OBSERVE_VIA_EYE "all AP for the day" needs full-day special handling — deferred), and the
+  Gi block on APPROACH_FOR_RECRUITMENT in `personality_filter.json` (other Kolat covert
+  actions were already in Gi.always_blocked). 3 scoring-table tests. DEFERRED (deep engine,
+  needs Godot): the 29 **executors** + 6 **decomposition functions** + **Phase-3 context-list
+  unlock** (Kolat ActionIDs gated on `kolat_sect`/`kolat_objective`), the sleeper override
+  loop, dual-stance topic positions, succession, win-condition pipeline, the Conclave, Tiger
+  Tear routing, and special-rule world mutation.
+- **s54.7 The Kolat (Tranche 4 — executor layer)** — `simulation/kolat_executor.gd` (pure
+  class). Headless `execute(action_id, actor, metadata, dice)` handlers for the
+  KolatSystem-backed ActionIDs: LAUNDER_KOKU / UNDERREPORT_KOKU / TRANSFER_KOLAT_FUNDS /
+  CONTRIBUTE_TO_RESERVE (koku pipeline), CONDUCT_CONDITIONING (single session; cumulative
+  progress + completion driven by the deferred decomposition), MAINTAIN_SLEEPER_CONTACT
+  (+ Medicine/Perception TN 20 degradation read), ACTIVATE_SLEEPER, ESTABLISH_DEAD_DROP /
+  CHECK_DEAD_DROP / ROUTE_VIA_DEAD_DROP / CHECK_CONFIRMATION_DROP, SPONSOR_INSURGENCY +
+  BRIBE_GARRISON_COMMANDER (funding from vault-if-at-temple else kolat_koku; the insurgency
+  seed / Stability penalty application is deferred to InsurgencySystem wiring). Topic/spell/
+  network ActionIDs (ARCHIVE_TOPIC, RESURRECT_TOPIC, USE_CLOUDS_EYES, ANONYMOUS_TIP,
+  DISTRIBUTE_INTELLIGENCE, …) return `{ok:false, reason:"deferred_system"}`. Wired into the
+  main ActionExecutor dispatch and the Phase-3 context unlock in Tranche 5 (below). 12 tests.
+- **s54.7 The Kolat (Tranche 5 — NPC-engine pipeline wiring)** — connects the executor and
+  scoring data into the live decision loop (s54.7d/e; deep engine, unverified without Godot).
+  `ContextSnapshot` gains `kolat_sect` / `is_kolat_master` / `has_kolat_objective`;
+  `build_context()` populates them (sect + master flag from the hidden character fields,
+  the objective flag from `world_state["has_kolat_objective"]`). **Phase-3 ActionID unlock:**
+  `NPCDecisionEngine.KOLAT_ACTION_POOL` (29 IDs) is appended to the available-action list in
+  `generate_options()` when `is_kolat_master` OR (`kolat_sect != NONE` AND
+  `has_kolat_objective`) — Masters always carry the full Sect pool, conscious agents unlock it
+  only while a Kolat objective is active. The Phase-4b allowlist (objective_alignment.json)
+  then narrows the pool to the actions aligned with the current Kolat NeedType, so the Kolat
+  NeedTypes (forward-wired in objective_alignment.json) need no bespoke decomposition — they
+  fall through `ObjectiveDecomposer._passthrough` and are scored normally. **Sleeper override loop:** `run()` short-circuits to
+  `_run_sleeper_override()` whenever `character.active_sleeper_command` is non-empty —
+  it bypasses Phase-2 goal resolution AND the Phase-4 personality filter (conditioning
+  overrides virtues/honor), decomposes the installed command via `_need_from_command()`, scores
+  through the normal pipeline, and tags the result `sleeper_override` + `memory_suppressed`.
+  **ActionExecutor dispatch:** `_KOLAT_ACTION_IDS` routes any Kolat ActionID to
+  `KolatExecutor.execute()`, enriching `action.metadata` with the resolved NPC target; the
+  result is wrapped into the standard executor result dict (`success` from `ok`, `reason`
+  passthrough). `_get_ap_cost` sets ARCHIVE_TOPIC / CONTRIBUTE_TO_RESERVE = 0 AP. action_skill_map
+  (29 IDs, Tranche 3) and personality_filter Gi-block (Tranche 3) already cover scoring.
+  6 pipeline tests in `tests/test_kolat_pipeline.gd`. DEFERRED: full per-action metadata
+  population by the 6 decomposition functions (targets/amounts/drops), dual-stance topic
+  positions, Master succession, win-condition pipeline, the Conclave, Tiger Tear routing,
+  per-Master network-record lifecycle, special-rule world mutation, and the
+  topic/spell/insurgency-dependent executors.
+- **s54.7 The Kolat (Tranche 6 — Kolat metadata + sleeper completion)** — fills the two
+  faithful gaps left after Tranche 5. **Metadata:** `_build_kolat_metadata()` in
+  `npc_decision_engine.gd` populates the resolved `target`/`sleeper` object plus
+  `target_npc_id` for any Kolat ActionID, and — for ACTIVATE_SLEEPER — the `spoken_phrase`
+  read from the sleeper's installed `trigger_phrase` (the conditioning Master knows the
+  phrase, s54.7c). KolatExecutor still defaults amount/strength/concealment, and TRANSFER/
+  SPONSOR/BRIBE temple resolution remains deferred (no SettlementData in NPC context).
+  **Sleeper completion (s54.7e):** `run()` now checks `_sleeper_command_complete()` before
+  entering the override — for elimination-type commands (ELIMINATE_CHARACTER / ASSASSINATE)
+  the order is fulfilled once the named target is dead or no longer exists, at which point
+  `active_sleeper_command` is cleared and the sleeper returns to ordinary behavior on the
+  same AP. Non-elimination commands have no engine-detectable completion (the sleeper keeps
+  acting until they die, per s54.7e) and are left untouched. +3 tests (9 total in
+  `test_kolat_pipeline.gd`). DEFERRED unchanged minus completion detection: amount/temple
+  metadata population, dual-stance topic positions, Master succession, win-condition
+  pipeline, the Conclave, Tiger Tear routing, per-Master network-record lifecycle,
+  special-rule world mutation, and the topic/spell/insurgency-dependent executors.
+- **s54.7 The Kolat (Tranche 7 — special-rule world mutation)** — `KolatMasterSelector`
+  now acts on the Sect special rules at selection time (`_apply_special_rules`, called per
+  selected Master in `select_masters`). The Coin reserve (2d10×10) is applied directly to the
+  Master's `kolat_koku`. The Dream sleeper count (1d6+2) and Silk contact count (1d6+2) are
+  stamped into `special_data["world_start_sleepers"]` / `["preplaced_contacts"]` so the
+  deferred network-creation pass knows the target counts without inventing which NPCs become
+  sleepers/contacts (that selection is the per-Master network-record lifecycle, still
+  deferred). `get_special_rule_flags()` retained as the pure descriptor. +3 tests (12 total in
+  `test_kolat_master_selector.gd`). DEFERRED: amount/temple metadata, dual-stance topic
+  positions, Master succession, win-condition pipeline, the Conclave, Tiger Tear routing, the
+  network-record lifecycle (actual sleeper/contact NPC selection + conditioning), and the
+  topic/spell/insurgency-dependent executors.
+- **s54.7 The Kolat (Tranche 8 — Master succession)** — `KolatMasterSelector.evaluate_succession()`
+  implements the s54.7g cascade (LOCKED, no new design). Pure resolver: takes the vacant
+  `sect`, the npc pool, the decrypted `heir_designations` record (Dictionary[sect →
+  Array[3 ranked npc_ids]]), and an `under_investigation_ids` array the caller supplies (the
+  one heir condition the pure selector cannot read from character data). Runs the three-heir
+  cascade — `_heir_valid()` checks alive / conscious agent in the Sect / not already a Master /
+  not Broken (`special_data["kolat_broken"]`) / not under investigation — then falls back to
+  `_discretionary_select()` (the s54.7a weighted tier draw restricted to conscious Sect agents)
+  when all three heirs are unavailable. Elevation applies boosts + hidden fields but NOT the
+  world-gen special-rule reserves (succession is inheritance, not a fresh seed) and clears the
+  Kolat objective slot ("orientation, not inherited tasks", s54.7g). `_repoint_chain_after_succession()`
+  re-points the chain: a new non-Tiger Master reports to the living Tiger; a new Tiger reports
+  to no one and every other living Master re-points to them. Returns the new Master's npc_id or
+  -1 (Sect unfillable). +6 tests (18 total in `test_kolat_master_selector.gd`). DEFERRED: the
+  EVALUATE_SUCCESSION trigger wiring (death→IntelDB confirmation, heir_designations_key /
+  tiger_succession_key hidden fields + Cloud-archive storage, the follow-on Tear/report AP
+  actions), plus amount/temple metadata, dual-stance topic positions, win-condition pipeline,
+  the Conclave, Tiger Tear routing, the network-record lifecycle, and the
+  topic/spell/insurgency-dependent executors.
+- **s54.7 The Kolat (Tranche 9 — dual-stance topic positions)** — `kolat_positions` (s54.7f,
+  LOCKED): a hidden second topic-position dictionary on L5RCharacterData (topic_id →
+  −100..+100), present only for conscious Kolat agents. ContextSnapshot gains `kolat_positions`;
+  `build_context()` populates it from the character field only when `kolat_sect != NONE` (empty
+  for everyone else). **Phase-5 substitution:** `_compute_topic_position_modifier()` now reads
+  `ctx.kolat_positions` first for each scored topic and uses that stance when an entry exists,
+  falling back to `known_positions` otherwise — so a Silk merchant whose public stance on an
+  investigator topic is a mild −15 but whose true Kolat stance is −100 scores covert responses
+  at full urgency, while the personality filter still constrains *which* actions the agent may
+  take (the other six score components are unchanged). Topic-removal cleanup stays symmetric
+  with `known_positions` (orphaned entries on resolved topics are benign — no separate pass,
+  matching the existing `topic_positions` behavior). +3 tests (12 total in
+  `test_kolat_pipeline.gd`). DEFERRED: the three population channels (Master/Tiger directive
+  delivery, DISTRIBUTE_INTELLIGENCE stance push, direct-observation generation), plus
+  amount/temple metadata, win-condition pipeline, the Conclave, Tiger Tear routing, the
+  network-record lifecycle, and the topic/spell/insurgency-dependent executors.
+- **s54.7 The Kolat (Tranche 10 — secrecy, Imperial counter-response, win condition)** —
+  `simulation/kolat_secrecy.gd` (pure class, s54.7i LOCKED). Two world-state scalars added to
+  WorldStateData (`kolat_exposure_level`, `imperial_awareness_level`, both 0–100, start 0) and
+  persisted via WorldStateSaver JSON state. All deltas verbatim from s54.7i: exposure
+  +5 traced merchant net / +10 cover-identity-criminal / +15 org-attributed assassination /
+  +10–25 PC publish / −5 Lotus / −3 Coin bribe / −5 Cloud resurrect / −2 per season natural;
+  awareness +5 Jade internal / +10–30 PC evidence / +20 Master interrogated / +40 key found.
+  `apply_delta()` clamps 0–100; `apply_seasonal_exposure_decay()` applies −2/season (Imperial
+  suppression above the response threshold uses the same numeric — s54.7i gives no extra
+  amount, none invented). `is_response_active()` (awareness ≥ 30) and `response_tier()` map to
+  the six s54.7i tiers (Unaware/Suspicious/Confirmed/PartiallyMapped/SignificantlyMapped/
+  FullKnowledge at 0/30/50/70/90/100). `check_win_condition()` fires when the primary candidate
+  (a) holds an Imperial-proximity role (Regent/Imperial Advisor/Voice of the Emperor/Imperial
+  Chancellor), (b) has held it ≥ one full IC year (`TimeSystem.IC_DAYS_PER_YEAR`), and (c)
+  awareness < 70 — and not while the candidate's pipeline stage is "compromised" or they are
+  dead. 11 tests in `test_kolat_secrecy.gd`. DEFERRED (NPC-engine/orchestrator wiring, needs
+  Godot): the event hooks that raise/lower the scalars at real operation/investigation points,
+  Imperial-response NPC behaviors (expanded magistrate mandates, Hidden Guard reassignment,
+  candidate protection), Tiger's candidate-pipeline fields + OVERSEE_KOLAT_NETWORK cultivation,
+  and the win-condition world-state event emission. Plus the prior deferred items (population
+  channels, metadata, Conclave, Tiger Tear routing, network-record lifecycle, dependent
+  executors).
+- **s54.7 The Kolat (Tranche 11 — Bushido virtue hard blocks)** — fixes a real gap: the
+  Master selector never enforced the s54.7b personality hard-block table, so virtue-ineligible
+  NPCs could be drawn into forbidden Sects. `KolatMasterSelector.BUSHIDO_HARD_BLOCKS` encodes
+  the locked table (Gi → Tiger/Silk/Coin/Dream/Lotus; Makoto → Tiger/Silk/Dream/Lotus; Rei →
+  Dream; Jin → Dream/Lotus; Chugi → Tiger). `_personality_permits()` is checked inside
+  `_meets_minimums()`, so the block applies to both world-gen selection AND the Tranche 8
+  discretionary succession path (which routes through `_meets_minimums`). Shourido virtues and
+  NONE never block (they shape pursuit, not eligibility, per s54.7b). +5 tests (23 total in
+  `test_kolat_master_selector.gd`). NOTE: the Sect→standing-objective NeedType mapping (s54.7b)
+  is only pinned explicitly for Silk (MAINTAIN_KOLAT_NETWORK), Coin (MANAGE_KOLAT_FUNDS), and
+  Dream (MAINTAIN_SLEEPER); the GDD gives the other seven Sects' standing mandates as prose
+  without NeedType identifiers, so standing-objective assignment is a genuine design gap
+  (owner must supply the remaining Sect→NeedType mappings) rather than something to invent.
+- **s54.7 The Kolat (Tranche 12 — Sect standing-objective mandate)** — when a character holds
+  a Master seat their standing objective becomes the Kolat mandate for their Sect (s54.7b).
+  `KolatSystem.SECT_STANDING_NEEDTYPE` maps eight Sects: three pinned explicitly by s54.7c
+  (Silk→MAINTAIN_KOLAT_NETWORK, Coin→MANAGE_KOLAT_FUNDS, Dream→MAINTAIN_SLEEPER) and five
+  structural name-matches where the s54.7b mandate sentence restates one already-defined
+  objective_alignment NeedType (Tiger→MONITOR_KOLAT_SECURITY, Chrysanthemum→MONITOR_IMPERIAL_COURT,
+  Cloud→MAINTAIN_CLOUD_ARCHIVE, Jade→ASSESS_SUPERNATURAL_THREAT, Steel→MONITOR_TEMPLE_PERIMETER).
+  Roc → "" (inactive at launch, s54.7b). **Lotus → MAINTAIN_DEAD_DROP_SCHEDULE (owner
+  decision 2026-06-06):** Lotus is reactive — it executes Tiger's dead-drop elimination
+  assignments — so its self-generated standing is keeping that assignment channel ready.
+  All 9 active Sects are now mapped (Roc alone is empty, by GDD). `standing_needtype_for_sect()`
+  returns the mapping; `DayOrchestrator._assign_kolat_standing_objectives()` (wired into the
+  daily standing-assignment block beside magistrate/monk/ronin) writes the mandate into
+  `objectives_map[id]["standing"]` for living non-PC Masters, never overwriting an existing
+  standing objective, skipping Roc (empty mandate). +6 tests (18 total in
+  `test_kolat_pipeline.gd`). DEFERRED (need Godot runtime / other live systems): the three
+  kolat_positions population channels, amount/temple metadata, scalar event hooks +
+  Imperial-response NPC behaviors + Tiger candidate pipeline + win-condition event emission,
+  the Conclave, Tiger Tear routing, the network-record lifecycle, CONTRIBUTE_TO_RESERVE→
+  local_reserve_koku correct routing, and the topic/spell/insurgency-dependent executors.
+- **s54.7 The Kolat (Tranche 13 — secrecy event→delta dispatch)** — `KolatSecrecy` gains
+  `ExposureEvent`/`AwarenessEvent` enums and `exposure_delta()`/`awareness_delta()` dispatchers,
+  the single tested entry point the future operation/investigation executors call instead of
+  hand-coding s54.7i deltas. Fixed-value events return their constant; the two GDD ranges
+  (player-publish +10..+25, player-evidence +10..+30) interpolate by a 0–1 `scope` via
+  `_scope_lerp`. Composes with `apply_delta` (clamp 0–100). All values verbatim from s54.7i —
+  no invention. +5 tests (16 total in `test_kolat_secrecy.gd`). The seasonal orchestrator pass
+  that calls these at real operation points (and applies natural decay + recomputes
+  `imperial_response_active` + checks the win condition) remains deferred — it is inert until
+  the operation executors that move the scalars exist, and wiring it now would add unverifiable
+  plumbing for zero behavior.
+
+### Systems Added 2026-06-09 (s43 Maho — library + CAST_MAHO seasonal trigger)
+- **MahoSpellLibrary** (`simulation/maho_spell_library.gd`) — all 46 s43 maho
+  spells transcribed as data (spell_id → name, mastery_level, ring, one-line
+  effect summary). Pure GDD transcription. `pick_cast_spell(caster)` selects the
+  highest Mastery Level whose Ring the caster supports (ring value ≥ ML) and whose
+  self-blood cost (2×ML wounds) the caster survives (wounds_taken + 2×ML ≤
+  `CharacterStats.get_total_wound_capacity`); ties broken by strongest Ring then
+  sorted spell_id. `get_spell()` / `spell_ids_by_ml()` accessors.
+- **CAST_MAHO seasonal trigger** (owner-authorized design 2026-06-09) —
+  `DayOrchestrator._process_seasonal_maho_casts()` runs in the seasonal block
+  right after `_process_bloodspeaker_network()`. For each ACTIVE/PROPAGATING
+  Bloodspeaker cell, a cult-affiliated member co-located in the cell's province
+  casts one maho spell. `_select_or_corrupt_maho_caster()`: prefers an existing
+  living `cult_affiliation` member; else corrupts the most-Tainted living non-PC
+  in the province (taint > 0 → sets `cult_affiliation = true`); PCs are never
+  auto-corrupted (s60); no caster if nobody is Tainted (cells still raise PTL
+  passively, breeding future corruptibility). Self-blood model (GDD: "the caster
+  ... must spill blood"). Fires `MahoSystem.resolve_cast(caster, caster, …)` →
+  blood wounds, caster Taint, PTL +1, MAHO CrimeRecord (appended to crime_records,
+  next_case_id bumped), blood-evidence concealment roll. **Scope (authorized):**
+  cost/Taint/PTL/crime/evidence only — the ~46 spell *effects* are deferred to
+  s40 (combat/undead/oni-blocked). Activates detection Channels 1–3 (PTL crisis
+  topics, EXAMINE_CRIME_SCENE blood evidence, taint symptoms) per Design Decision
+  #5. Decisions locked with owner: seasonal cell-lifecycle trigger (not a daily-AP
+  ActionID), cult-affiliated-only casters, most-tainted-corruption affiliation,
+  highest-affordable-ML spell choice. 14 tests (`test_maho_spell_library.gd` 6,
+  `test_maho_seasonal_cast.gd` 8). NOTE: the s43 "cast roll TN" gap in Section D
+  is moot — GDD s43 confirms maho has no casting roll.
+- **Spreading the Darkness — first wired Grand-Map spell effect (s43, owner-authorized
+  2026-06-09).** The first maho spell whose *effect* resolves at world-sim scale
+  (the rest remain s40-deferred). When a cell holds a dangerously Tainted member
+  (Taint Rank ≥ 2 — the Channel-3 detection onset, Decision #5), it casts Spreading
+  the Darkness instead of its highest-ML spell, if the caster's Earth supports ML2
+  (`MahoSpellLibrary.can_support_spell`). `_resolve_spreading_the_darkness` moves up
+  to (caster Earth + Insight Rank) Taint off the most-Tainted cult member, never
+  below 1.0 (GDD "cannot remove the last Point"). Two modes (owner decision (c) =
+  both): **PUSH** onto a co-located unwilling named NPC when one is present —
+  preferring an active investigator (`UPHOLD_LAW`/`INVESTIGATE_THREAT` — frame the
+  hunter, who then reads as Tainted to Channel 3), else the highest-Status non-cultist
+  (corrupt a leader) — gated by a contested Willpower roll vs the caster (recipient
+  wins → spell fails); else **DUMP** into a nameless untracked victim (the source's
+  Taint simply drops). A pushed recipient's raised Taint is caught by the daily
+  `_process_taint_rank_changes` pass (mutations / Lost) and feeds Channel-3 detection.
+  `_pick_taint_shed_source`, `_pick_darkness_push_target`, `_is_active_investigator`,
+  `_darkness_higher_status` added. `objectives_map` threaded into
+  `_process_seasonal_maho_casts` (trailing optional param). 10 tests added
+  (`test_maho_seasonal_cast.gd` 8→18). LIMITATION: the cast's *blood cost* still
+  self-bleeds the caster (existing committed model) — switching the blood source to
+  a nameless victim (which lifts the survivability ML cap) is a separate global maho
+  change, not done here.
+- **Stealing the Soul — second wired Grand-Map spell effect (s43, owner-authorized
+  2026-06-09).** The 1-day Trait drain is inert at world scale, so only the lethal
+  branch resolves: "if this reduces the Earth Ring, their Wounds are lowered,
+  potentially resulting in death." `_soul_steal_would_kill` is side-effect free —
+  it temporarily drops the Earth-setting Trait (lower of Stamina/Willpower) by 1,
+  checks `CharacterStats.is_dead` against the standard wound model, restores. So it
+  only kills a **co-located, already-wounded** target whose wounds exceed the
+  reduced (one-Earth-level-lower) capacity. `_pick_soul_steal_target`
+  (**investigators-only**, owner decision): a co-located living non-PC non-cultist
+  holding an active `UPHOLD_LAW`/`INVESTIGATE_THREAT` objective for whom the drop is
+  lethal, highest Status first; none → the cell doesn't cast it. Spell-selection
+  priority (owner): **kill (Stealing the Soul, ML4/Earth 4) > shed (Spreading the
+  Darkness, ML2) > highest-ML**. `_resolve_stealing_the_soul` honors GREAT_DESTINY
+  (s45 — target cheats death, drops to DOWN), else mirrors `_apply_victim_death`
+  (wounds lethal = Earth×25, suspicious `death_event` with `killer_id`/`is_lord`,
+  Tier 2 LEGAL mysterious-death topic, NEUTRAL subject_role). The seasonal second
+  death pass (after the maho casts) fires succession same-season. Single-caster base
+  drain (no Raises); fetish possession assumed (no fetish inventory tracked). The
+  cast's MAHO crime record is separate; the death shows no obvious cause.
+  `death_events`/`active_topics`/`next_topic_id` threaded into
+  `_process_seasonal_maho_casts` (trailing optional params). 9 tests
+  (`test_maho_seasonal_cast.gd` 18→27).
+- **Fierce Blood of the Earth — third wired Grand-Map spell effect (s43,
+  owner-authorized 2026-06-09).** The first maho effect with an always-on payload.
+  Sacrifices a nameless victim (the cast's blood source = a transient
+  `L5RCharacterData`, NOT the caster — faithful to "consumes the victim's life
+  force", and lets a wounded caster survive to heal); the caster heals all injuries
+  (`wounds_taken = 0`) and buys one year of life. **Longevity hook (death-model
+  change):** new `life_extension_years: int` field on L5RCharacterData;
+  `GempukkuSystem.roll_natural_death` now rolls against `effective_age = age −
+  life_extension_years`, so maho-bought years pull the caster back under the
+  50/65/75/85 death-chance brackets. `_resolve_fierce_blood` sets wounds 0 and +1
+  year. `_fierce_blood_has_benefit` gates the cast to a concrete benefit (caster
+  wounded OR effective age ≥ 50 — a young healthy caster wastes no victim).
+  Ring-only gate (`MahoSpellLibrary.supports_spell_ring`) — not bounded by the
+  caster's own survivability since the life cost is the victim's. Spell-selection
+  priority: **kill > Fierce Blood > shed > highest-ML**. Limb/organ regrowth not
+  modeled (no system); mummified-appearance signal skipped (no detection mechanic
+  to hang it on). 7 tests (`test_maho_seasonal_cast.gd` 27→34); gempukku 58/58 (no
+  regression). All three clean Grand-Map maho effects now wired (Spreading the
+  Darkness, Stealing the Soul, Fierce Blood of the Earth); the remaining ~43 spells
+  stay s40/ASCII-deferred.
+- **Seasonal maho casts use the victim-blood model (s43, owner-authorized
+  2026-06-10).** Every seasonal Bloodspeaker cast's 2×ML blood cost is now paid by
+  a sacrificed nameless victim (a transient `L5RCharacterData` blood source), not
+  the caster's self-blood. The 2×ML number is unchanged — only the source moved
+  (owner ruling reinterpreting GDD "the caster must spill blood" as the cell
+  consuming a victim). Consequence: the caster takes no wounds, so the cast is
+  gated **only by Ring support** — all three wired-spell gates switched from
+  `can_support_spell` to `supports_spell_ring`, making the high-ML wired spells
+  (Stealing the Soul ML4, Fierce Blood ML5) reachable by low-wound-capacity casters
+  who couldn't survive the self-blood before. `pick_cast_spell` repurposed to the
+  generic fallback: **lowest** Ring-supported ML (not highest) — same flat PTL +1
+  per cast but minimal caster self-Taint (ML − 1), so cells corrupt the province
+  without senselessly burning their caster toward Lost on an unwired spell (owner
+  chose lowest over highest). Returns {} only when no Ring is supported at all.
+  4 library tests rewritten (survivability cap removed); seasonal 34/34 unchanged.
+- **Caress of Fu Leng — fourth wired Grand-Map spell effect (s43, owner-authorized
+  2026-06-10).** ML2 Earth jade-sabotage. A cult member co-located at a settlement
+  with `jade_stockpile > 0` (Range 50' = co-located) destroys **N=3 fingers**
+  (owner-set quantity; jade is measured in fingers, 1/warrior per s2.4.15) via
+  `_resolve_caress_of_fu_leng` (floors at 0). The existing Wall pass recomputes
+  `jade_stockpile_critical` next tick → weakens Shadowlands taint-suppression and
+  triggers NPC jade-resupply objectives. `_caster_jade_settlement` resolves the
+  caster's co-located SettlementData (settlements indexed by id; `settlements`
+  threaded into `_process_seasonal_maho_casts` as a trailing param). Spell-selection
+  priority: **kill > Fierce Blood > Caress > shed > lowest-ML fallback**. Taint/PTL/
+  crime apply via the cast (victim-blood). "Cannot affect nemuranai" auto-satisfied
+  (nemuranai not tracked). LIMITATION: `jade_stockpile` is uninitialised (defaults 0)
+  and stocked almost only at Kaiu Wall towers, where Bloodspeaker cells rarely sit —
+  so this fires **rarely** until jade is stockpiled more broadly (temples/Kuni). The
+  companion spell **Purge the Weak** (ML1) stays s40/encounter-deferred: its GDD area
+  is "food/water for up to 5 people" (sub-settlement scale — `rice_stockpile` is a
+  rounding error against it) and its payload is a −3k0 / 2-week illness *condition*
+  with no world-scale condition system to hold it. 6 tests (`test_maho_seasonal_cast.gd`
+  34→40).
+- **Drain the Soul + Touch of Death — fifth and sixth wired Grand-Map spell effects
+  (s43, owner-authorized 2026-06-11).** Two more Earth maho spells now resolve at
+  world scale (target scope = "any named NPC", owner choice — broader than the
+  investigators-only Stealing the Soul). **Drain the Soul (Earth 2):** GDD reduces
+  Stamina Rank by 1 (10-min duration), "can lower the Earth Ring, reducing Wound
+  Ranks." Only the lethal branch is durable at world scale, so `_pick_drain_soul_target`
+  selects a co-located (range 50') living non-PC non-cultist whose Stamina drop is
+  fatal (`_drain_stamina_would_kill`: drop Stamina, check is_dead via Earth =
+  min(Stamina,Willpower) capacity, restore), highest Status; none lethal → not cast.
+  Reuses the Stealing-the-Soul death path (mysterious death). ML2 = far more
+  reachable than Stealing (ML4). **Touch of Death (Earth 5):** GDD "ages 10 years
+  and suffers 7k7 Wounds... aging cannot be reversed." `_resolve_touch_of_death`
+  applies `age += 10` (permanent; feeds `GempukkuSystem.roll_natural_death`) + 7k7
+  exploding Wounds (`roll_and_keep(7,7,true).total`, applied directly — a curse, no
+  armor/Reduction). Kills → GREAT_DESTINY cheats to DOWN (still aged) else suspicious
+  death_event + Tier 2 mysterious-death topic; survives → persists wounded + aged.
+  `_pick_touch_of_death_target` = highest-Status co-located non-cultist (no lethality
+  precondition). **Selection priority** (s43 seasonal cast): Stealing the Soul
+  (investigator finish) → Touch of Death (ML5, most decisive broad kill) → Drain the
+  Soul (ML2, cheap broad kill) → Fierce Blood → Caress → Spreading the Darkness →
+  lowest-ML fallback. Fallback casts of either spell with a null target are guarded
+  (no-op cast, PTL/crime only). Victim-blood cost unchanged. Parse-checked; no tests
+  per the no-test-code policy. TUNING (playtest): "any named NPC" scope lets a
+  high-Earth caster Touch-of-Death the highest-Status co-located figure unprovoked —
+  watch for prominent-noble kills destabilising via succession.
+- **s43 seasonal maho casts — runtime-verified (2026-06-12).** The seasonal
+  Bloodspeaker cast pass (`_process_seasonal_maho_casts`) and its 6 wired Grand-Map
+  spell effects were exercised end-to-end with a headless SceneTree driver (the
+  project's parse-check/driver validation path; GUT is non-functional headless and
+  off-policy). Confirmed across three scenarios in one pass: (1) a most-Tainted
+  non-cultist is corrupted (`cult_affiliation` set) when no cult member is present,
+  then sheds its own Rank-3 taint via Spreading the Darkness (priority #6) —
+  PTL +1, self-taint +1 (ML−1), MAHO crime record appended + case-id bumped;
+  (2) an Earth-5 caster casts Touch of Death on a co-located healthy victim —
+  7k7 Wounds killed (50 dmg), permanent age +10 applied, suspicious death_event +
+  Tier-2 mysterious-death topic created; (3) an Earth-2 caster at a jade settlement
+  casts Caress of Fu Leng — jade_stockpile 5.0→2.0 (−3 fingers). Victim-blood model
+  confirmed (caster takes no wounds; gated only by Ring support). No bugs found; no
+  code change. Upgrades status from "parse + static review only" to runtime-verified.
+  COVERAGE NOTE: the pure lowest-ML fallback (`pick_cast_spell`) was not exercised
+  — a freshly-corrupted caster with taint < 2 and no other tainted member would hit
+  it; here the caster's own Rank-3 taint correctly diverted to the shed path.
+- **s43 Grand-Map spell sweep COMPLETE (2026-06-11).** Audited all 46 maho spells
+  for world-scale-wirable effects (persistent NPC/province state, no s40 combat or
+  condition layer). **6 are wired** (Spreading the Darkness, Stealing the Soul,
+  Fierce Blood of the Earth, Caress of Fu Leng, Drain the Soul, Touch of Death).
+  **The other 40 are genuinely blocked** — no further wiring warranted. Near-misses
+  checked against the GDD and rejected with cause: **Dancing with Demons** (Air 3) —
+  24-hour Advantage/Disadvantage, inert at daily/seasonal cadence (expires before
+  anything resolves) + Perform: Dance TN 25 gate. **Heart of the Damned** (Earth 1) —
+  heal + restore-a-reduced-Trait, but requires a corpse dead within 1 day and
+  `death_events` is cleared daily (no fresh-corpse registry); strictly dominated by
+  Fierce Blood; restore part usually inert (no persistent trait reduction tracked).
+  **Blood Rite** (Earth 1) — 10-min, trivial 1k1 heal, only durable bit (ally Taint)
+  is counterproductive. **Strength of Darkness** (Fire 5) — 10-round combat buff,
+  lethal-on-expiry is a combat interaction (s40). **Curse of the Clan** (Air 2) —
+  GDD explicitly frames it as a role-playing/GM challenge, no mechanic to attach.
+  Remaining spells: combat rounds (Bleeding, Pain, Burning Blood, Tomb of Earth,
+  Curse of Weakness, No Pure Breaths, Blood Armor…), sub-day conditions/wards
+  (Inspire Fear, Sinful Dreams, Curse of the Kansen, Symbol of Blood, Ward of
+  Divine Peace, Truth is a Scourge…), undead/oni summons (Summon Undead Champion,
+  Eternal Unrest, Puppet Master, Death Beyond Life, Essence of Undeath, Summon Oni…),
+  or no-mechanic utility (Written in Blood, Possession, Take the Body) — all blocked
+  on s40/s54. The wired set is the complete world-scale maho catalog; do not
+  re-audit without the combat/condition/undead layers.
+- **s43 Grand-Map spell sweep RE-VERIFIED at GDD-text level (2026-06-13).** Re-ran the
+  sweep against the actual s43 spell text (not the one-line `MahoSpellLibrary` summaries)
+  for the strongest near-misses, since the durations/areas in the full text are decisive.
+  Confirms the 2026-06-11 conclusion: the **same 6 spells are wired** and **no new
+  world-scale slice exists**. GDD-text findings on the borderline cases:
+  **Purge the Weak** (Earth 1) — Duration *Permanent* BUT Area is "food/water for up to
+  5 people" (Raises add +1 person each); destroying ~5 rations is a rounding error against
+  a settlement `rice_stockpile` (hundreds of PU fed), and the teeth — an *incurable*
+  2-week −3k0 illness — is a condition with no world-scale model. (Contrast Caress of Fu
+  Leng: a 3-finger jade hit IS strategically meaningful because jade is scarce/tracked.)
+  **Take the Body** (Air 6) — Duration *Permanent*, true identity transfer, but "Known only
+  to Iuchiban and Yajinden" + needs a full soul-swap mechanic (caster mental stats overwrite
+  victim's, old body dies); named-villain scope, not an anonymous seasonal cult cast.
+  **Possession** (Air 5, *1 day*), **Stealing the Soul** Trait-drain (*1 day*),
+  **Drain the Soul** Stamina (*10 min*), **Suck the Marrow** (*1 day*), **Gift of the Maker**
+  Greater Power (*1 hour*) — all temporary, expire before the seasonal cadence resolves;
+  Stealing/Drain are already wired for their *lethal* Earth-reduction branch (the temporary
+  non-lethal branches stay inert). No combat-round spell (Bleeding/Burning Blood/Tomb of
+  Earth/No Pure Breaths) has a clean lethal/permanent sub-branch — faithfully world-scaling
+  their per-round DR would mean inventing a damage total (forbidden). Conclusion stands: the
+  wired set is complete; do not re-audit a third time without the s40 combat / world-scale
+  condition / s54 undead layers.
+- **Maho Channel 3 wired — Taint detection on a person (Design Decision 5,
+  owner-authorized 2026-06-10).** Closes the last open maho detection channel: a
+  shugenja whose successful action targets a suspect (PROBE/INVESTIGATE near them,
+  s55.12 proximity) rolls Perception + Lore: Shadowlands; on success a Tier 3
+  SUPERNATURAL topic names the suspect a suspected maho user (subject_role
+  PERPETRATOR), routed to the detector's lord → UPHOLD_LAW → investigation. A
+  results-based **stub already existed** (`_process_taint_proximity_detection`,
+  wired + tested) implementing every gate — Taint Rank ≥ 2, Kuni/Asako auto +
+  other shugenja at Lore: Shadowlands ≥ 3, +2k0 — but with a **placeholder TN of
+  0** and no Crab exemption. Completed it with the owner's values: detection
+  **TN = (8 − Taint Rank) × 5** (30/25/20/15 for Rank 2–5 — eases as corruption
+  manifests; owner revised from (7 − Rank) × 5 to (8 − Rank) × 5 on 2026-06-10),
+  and a **Crab-clan exemption** ("innocent explanation" proxy — no Wall-service
+  field exists, and Crab legitimately accrue Taint at the Kaiu Wall). Removed
+  `TAINT_DETECTION_PLACEHOLDER_TN`. This makes the Taint the new seasonal casters
+  accrue (ML − 1 per cast) actually catchable in proximity. The active, deliberate
+  examination is now also WIRED (EXAMINE_FOR_TAINT, see below); the Sense spell is
+  NOT the tool — canonically it detects elemental kami, not kansen (owner
+  correction 2026-06-10). 7 tests (`test_maho_channel3.gd`); full
+  suite 13219 passing / 0 failing. Hardening (2026-06-10): added a dead-character
+  guard on detector/target — a suspect who died mid-day must not receive a
+  PERPETRATOR-valence accusation (hard rule: dead characters carry NEUTRAL
+  subject_role). +1 test (8 total).
+- **Maho Channel 3 active examination — EXAMINE_FOR_TAINT (owner-authorized
+  2026-06-10, R2 corroboration).** The deliberate counterpart to the passive
+  proximity check. A new NPC ActionID (1 AP, AT_OWN_HOLDINGS/AT_COURT/VISITING,
+  Lore: Shadowlands/Perception) by which a witch-hunter who already knows an
+  active `taint_suspected` accusation deliberately examines the co-located
+  accused suspect to confirm the corruption firsthand. **R2 corroboration model
+  (owner choice):** the lead IS an existing accusation; the value is independent
+  confirmation. Orchestrator pre-pass `_build_taint_corroboration_targets()`
+  finds, per living examiner (Kuni/Asako OR Lore: Shadowlands ≥ 3), a co-located
+  living non-Crab Rank-2+ suspect named in an active accusation the examiner
+  knows (topic_id in topic_pool) and has NOT yet corroborated (no
+  `taint_corroborated` KnowledgeEntry for that topic) — `examiner_id →
+  {target_id, topic_id}`, injected as `has_taint_corroboration_target` +
+  `known_objectives` target/topic; gated by Phase-4c
+  `_apply_taint_examination_precondition_filter`. Executor
+  `_execute_examine_for_taint()` revalidates (dead/Crab/Rank<2 guards), rolls
+  Lore: Shadowlands (Perception) vs **(8 − Taint Rank) × 5** (Kuni/Asako +2k0 —
+  same formula as the passive check). On success, writeback
+  `_process_taint_examination_writebacks()` refreshes the accusation's momentum
+  to the TIER_3 floor + discussion bump (sustains the case), widens reach to the
+  examiner's lord's topic_pool, and records the dedup KnowledgeEntry. Scoring:
+  objective_alignment INVESTIGATE_THREAT 85 / UPHOLD_LAW 65 (calibrated vs
+  EXAMINE_CRIME_SCENE 90 / SEARCH_PERSON 60–70, PROVISIONAL); action_skill_map
+  Lore: Shadowlands/Perception; added to `_OBSERVATION_ACTIONS`; stale-key
+  `has_taint_corroboration_target`. Dead guards at pre-pass, executor, and
+  writeback (a dead suspect is never accused). NOT a Sense cast (Sense detects
+  kami, not kansen). 14 tests in `tests/test_maho_examination.gd`. NOTE: tests
+  not executed here — headless GUT fails on the WeaponData cold-boot cascade;
+  validated by per-file `--check-only` parse (clean) + static review.
+- **Passive Channel 3 dedup — reinforce instead of re-accuse (2026-06-10).**
+  `_process_taint_proximity_detection()` previously created a fresh
+  `taint_suspected` accusation on every successful detection, so a tainted
+  person who kept drawing witch-hunter attention accumulated duplicate
+  accusation topics. Now, when the suspect already carries a **live** accusation
+  (`_find_active_taint_accusation()` — variant `taint_suspected`, matching
+  subject, not resolved), a renewed detection **reinforces** it via the shared
+  `_refresh_taint_accusation()` helper (momentum restored to the TIER_3 floor,
+  discussion bump, reach widened to the detector's lord) instead of spawning a
+  duplicate; a brand-new accusation is created only when none is active. The
+  EXAMINE_FOR_TAINT writeback was refactored to call the same
+  `_refresh_taint_accusation()` helper, so passive re-detection and active
+  corroboration now sustain a case identically (the active path additionally
+  records its per-examiner dedup KnowledgeEntry). Lifecycle: once the accusation
+  resolves/decays and is removed from `active_topics`, a fresh one can be raised
+  again. Parse-checked; no tests per the no-test-code policy.
+- **Channel 3 review fixes (2026-06-10, post-implementation review).** Two
+  follow-ups from a code-review pass: (1) **Double-processing bug — FIXED.** The
+  passive `_process_taint_proximity_detection()` scans all day results by
+  `success`/`character_id`/`target_npc_id` with no action filter and runs before
+  the dedicated EXAMINE_FOR_TAINT writeback, so a successful examination got a
+  redundant second detection roll + double refresh. The passive pass now skips
+  `action_id == "EXAMINE_FOR_TAINT"` results (the corroboration writeback owns
+  them). (2) **TN/eligibility DRY — the `(8 − Rank) × 5` formula, the Rank-2
+  detection threshold, the Kuni/Asako specialist check, and the
+  specialist-or-Lore≥3 detection gate were duplicated across the passive
+  detector, the pre-pass, and the executor.** Centralized into `MutationSystem`:
+  `TAINT_DETECTION_RANK_MIN` (2), `taint_detection_tn(rank)`,
+  `is_taint_specialist_family(family)`, `can_detect_taint(c)`. All three sites
+  call these now; the orphaned day_orchestrator `TAINT_RANK_THRESHOLD` const was
+  removed. A future TN/gate tweak is a single edit. Parse-checked.
+- **EXAMINE_FOR_TAINT scoring/effect — review outcome (2026-06-10).** The two
+  objective_alignment scores (INVESTIGATE_THREAT 85, UPHOLD_LAW 65) and the
+  corroboration effect were reviewed against the sibling investigation actions
+  and judged sound (85 between EXAMINE_LETTER 85 and EXAMINE_CRIME_SCENE 90;
+  65 between SEARCH_PERSON 60 and INVESTIGATE_PROVINCE 70). They remain
+  PROVISIONAL pending an actual live playtest (not runnable in this
+  environment); no numeric change was invented without empirical data.
+- **Maho Channel 3 — runtime-verified (2026-06-12).** The full Channel-3 detection
+  pipeline (passive `_process_taint_proximity_detection` + active EXAMINE_FOR_TAINT)
+  was exercised end-to-end with a headless SceneTree driver (parse-check/driver path;
+  GUT is non-functional headless and off-policy). Confirmed: TN `(8−rank)×5` =
+  30/25/20/15; `can_detect_taint` gate (Kuni specialist true, Lore: Shadowlands ≥3
+  true, 2 false); passive accusation topic created correctly (TIER_3 / SUPERNATURAL /
+  subject_role PERPETRATOR / variant taint_suspected / propagated to the detector's
+  lord's topic_pool / momentum at the TIER_3 floor); dedup-reinforce (a renewed
+  detection on the same suspect refreshes momentum instead of spawning a duplicate);
+  Crab exemption + dead-suspect guard + Rank-2 threshold all skip correctly; active
+  corroboration target-building, the executor's Lore: Shadowlands roll, the writeback
+  (momentum refresh + taint_corroborated KnowledgeEntry), and the
+  already-corroborated re-exclusion. No bugs found; no code change. Upgrades status
+  from "parse + static review only" to runtime-verified. (The objective_alignment
+  scores remain PROVISIONAL pending a live playtest, as noted above.)
+- **s11.3.5 Witch-Hunter standing + roaming (owner-authorized 2026-06-10).**
+  Closes the maho hunting loop: Kuni Witch-Hunters, Asako Inquisitors, and the
+  three anti-maho order leaders (Crab/Phoenix/Scorpion) are now autonomous
+  hunters instead of idling when they hold neither a lordship nor a magistracy.
+  **New HUNT_MAHO NeedType** (objective_alignment: INVESTIGATE_PROVINCE 100,
+  EXAMINE_FOR_TAINT 90, EXAMINE_CRIME_SCENE 85, PURIFY_TAINTED_GROUND 70,
+  SEARCH_PERSON 60, PROBE 50 — all PROVISIONAL, calibrated vs INVESTIGATE_THREAT)
+  routed via `ObjectiveDecomposer._decompose_hunt_maho` (in INVESTIGATION_OBJECTIVES):
+  travels toward a target hotspot settlement when one is set, else passthrough to
+  hunt locally. **Standing layer:** `_assign_witch_hunter_standing_objectives`
+  (daily, runs BEFORE the monk pass because Kuni Witch-Hunters are [Monk]
+  school_type — otherwise the monk pass stamps PERFORM_RITUAL first) assigns
+  HUNT_MAHO to idle hunters via `_is_maho_hunter` (school_name contains
+  Witch-Hunter/Witch Hunter/Inquisitor, or the three leader POSITIONs; Kuroiban
+  rank-and-file deferred — secret order, no clean identifier). **Roaming layer:**
+  `_process_witch_hunter_self_selection` (seasonal) finds the worst Taint hotspot
+  (highest `province_taint_level` ≥ WITCH_HUNT_PTL_MIN = 3.0, the PTL crisis
+  onset; PROVISIONAL) and gives idle hunters a primary HUNT_MAHO objective
+  targeting a settlement there — the decomposer then travels them cross-border
+  (witch-hunters ignore clan lines, s11.3.5). A self-selected hunt releases when
+  its target province cools below the floor; a real (lord-assigned) primary
+  outranks it (resolve_goal prefers primary over standing). INVESTIGATE_PROVINCE
+  added to the VISITING context list so a roaming hunter can PTL-scan a foreign
+  province (safe: the Phase-4b allowlist only lets investigation needs select
+  it). Idle hunters **spread** across hotspots: each takes the least-covered
+  hotspot (ties → highest PTL), and hunters already committed or already standing
+  in a hotspot count toward its coverage, so they fan out instead of swarming the
+  single worst province. LIMITATIONS: a witch-hunter who also holds a magistracy
+  gets UPHOLD_LAW first (magistrate pass runs earlier) — rare dual-role; spread
+  uses coverage count, not map distance (no travel-distance data). Parse-checked;
+  no tests per the no-test-code policy.
+- **s11.3.5 Witch-Hunter cross-border incident (owner-authorized 2026-06-10).**
+  s11.3.5 calls Kuni Witch-Hunters ignoring clan boundaries a "potential
+  diplomatic incident generator." `_process_witch_hunter_border_incidents` fires
+  on travel arrival: when a **Kuni Witch-Hunter** (`_is_kuni_witch_hunter` —
+  school "Witch-Hunter"/"Witch Hunter" or WITCH_HUNTER_LEADER; Asako Inquisitors
+  are welcomed and Kuroiban are covert, so both are excluded) arrives in a
+  province whose `clan` differs from the hunter's, the host province lord
+  (`_find_province_lord`) takes **−5 disposition toward the hunter**
+  (BORDER_INCIDENT_DISPOSITION, owner-set; clamped) AND the host clan's
+  collective standing toward the hunter's clan ripples down via
+  `CollectiveDisposition.apply_event_ripple` (the ~−2 comes from the existing
+  CLAN_RIPPLE_WEIGHT — not an invented value), plus a **Tier 4 POLITICAL** topic
+  ("Kuni Witch-Hunter operating in <clan> lands", variant `witch_hunter_border`,
+  subject = hunter) seeded to the host lord. Deduped to one live incident per
+  hunter per province (`_find_active_border_topic`); a cooled/resolved topic lets
+  a fresh intrusion re-fire. Dead guards on hunter and host lord. Wired into the
+  arrival block (clan/family baselines ensured in world_states first).
+  Parse-checked; no tests per the no-test-code policy.
+- **s11.3.5 Kuroiban / Black Watch membership (owner-authorized 2026-06-10).**
+  The Scorpion anti-maho order (s11.3.5: "secretive group maintained by the
+  clan's two shugenja families, the Soshi and the Yogo... operates in the
+  shadows and most samurai are not even aware of its existence"). Because
+  membership is secret and NOT a school (unlike Kuni Witch-Hunters / Asako
+  Inquisitors), it is carried as a hidden flag `is_kuroiban: bool` on
+  L5RCharacterData (mirrors `is_kolat_master` / `cult_affiliation`; @export →
+  persists with the character save). `simulation/kuroiban_selector.gd`
+  (KuroibanSelector pure class) selects members once at world-gen from living
+  Scorpion Soshi/Yogo: the existing `KUROIBAN_LEADER` (assigned by
+  WorldPopulationGenerator) is always flagged, plus top-anti-maho-lore
+  (`Lore: Shadowlands`×2 + `Lore: Theology`) SHUGENJA-school members up to a
+  **fixed small total of 6–10** (`dice.roll_die`, leader counts). Wired into
+  `WorldBootstrap.bootstrap_world` after bloodspeaker generation. **Behavior =
+  "roam silently" (owner choice):** `is_kuroiban` added to `_is_maho_hunter`, so
+  Kuroiban get HUNT_MAHO standing and join the roaming-spread pass like
+  Kuni/Asako — but the cross-border incident keys off `_is_kuni_witch_hunter`
+  (excludes Soshi/Yogo) and the +2k0 PTL detection edge keys off Kuni/Asako
+  family (excludes them), so they roam covertly: no diplomatic incident, no
+  detection bonus. All roster counts PROVISIONAL (GDD gives no size or selection
+  rule). Parse-checked (class registry rebuilt via import scan); no tests per the
+  no-test-code policy.
+- **s11.3.5 Crab–Scorpion anti-maho information sharing (owner-authorized 2026-06-11).**
+  s11.3.5: the Kuroiban "share information and resources with the Kuni." Owner
+  chose **mutual** sharing **via the letter pipeline (delayed)**.
+  `_process_anti_maho_info_sharing` runs daily after the maho-detection passes:
+  it gathers living Kuni (`_is_kuni_witch_hunter`) and Kuroiban (`is_kuroiban`),
+  and for each unresolved detection topic (variants `taint_suspected` +
+  `blood_evidence`) relays it from whichever order already knows it to the
+  members of the other order who don't. `_relay_detection` creates a LetterData
+  (sender = a knowing member, recipient = each lacking member, `topic` = the
+  detection topic) entering the normal letter pipeline; on delivery
+  `deliver_letter` appends the topic to the recipient's `topic_pool` (verified).
+  Deduped via `topic_pool` membership + an en-route index of pending undelivered
+  letters; no ping-pong (a recipient only learns the topic on delivery, so the
+  reverse relay finds the source order already knows it). Dead-guarded.
+  ANTI_MAHO_SHARE_DISTANCE = 3 provinces PROVISIONAL (blocked on map adjacency,
+  A16). Parse-checked; no tests per the no-test-code policy.
+- **s11.3.5 Kuroiban leader tasking (owner-authorized 2026-06-11).** Owner chose
+  the leader's tasking to **replace** the autonomous spread when a leader is
+  alive. The seasonal roaming pass was refactored: `_process_witch_hunter_self_selection`
+  → `_process_anti_maho_roaming` (orchestrator) + `_assign_hunters_to_hotspots`
+  (the extracted least-covered distributor, now parameterized by a pre-ordered
+  member list and a `source_tag`) + `_gather_roaming_members` (filter: living,
+  non-PC, maho-hunter, no real lord-assigned primary). When a living
+  `KUROIBAN_LEADER` exists, Kuroiban are gathered, sorted best-expertise-first
+  (`Lore: Shadowlands`×2 + `Lore: Theology`), and tasked via
+  `_assign_hunters_to_hotspots(..., "kuroiban_leader_tasking")` — best hunters to
+  the worst (highest-PTL least-covered) hotspots — and excluded from the general
+  spread; if the leader dies they fall back into it. Kuni/Asako always spread
+  (behavior unchanged, traced equivalent to the prior verified logic). Handoff
+  both directions via `ROAMING_SOURCES` (re-stamps the source on still-hot
+  committed primaries). A real lord primary always outranks roaming. The leader
+  is tasked like a member (hunts too); tasking is abstract central coordination
+  (no per-member comms modeled, same abstraction as the spread). Only caller
+  (seasonal, line 1434) updated. Parse-checked; no tests per the no-test-code policy.
+- **s11.3.5 Anti-maho leader tasking generalized to all three orders (owner-authorized 2026-06-11).**
+  Extended the Kuroiban leader-tasking pattern symmetrically to the Kuni
+  Witch-Hunters and Asako Inquisitors. `_process_anti_maho_roaming` now indexes
+  the three orders (0=Kuni/WITCH_HUNTER_LEADER, 1=Asako/INQUISITOR_LEADER,
+  2=Kuroiban/KUROIBAN_LEADER): it scans for each order's living leader, and every
+  order WITH a living leader has its members tasked best-expertise-first to the
+  worst hotspots (per-order source tag) and excluded from the general spread;
+  orders with NO living leader fall into the spread together (same "replace when
+  leader alive" rule the owner chose for the Kuroiban). New helpers
+  `_is_asako_inquisitor()` (school "Inquisitor" or INQUISITOR_LEADER role) and
+  `_order_of()` (mutually-exclusive order classification, checked
+  Kuroiban→Asako→Kuni). `_gather_roaming_members()` reworked from the
+  kuroiban_only/exclude_kuroiban flags to an `(led, order_filter)` pair
+  (order_filter 0–2 = that order; -2 = spread = unled orders). ROAMING_SOURCES
+  grew to four tags (self_selection + three per-order leader tags) so handoff
+  re-stamping works when any order's leader dies/revives. Traced equivalent to
+  the prior behavior in the no-leader and Kuroiban-only-leader cases; Kuni/Asako
+  now get the coordination too. Cross-border incidents (Kuni-only) and the +2k0
+  detection edge (Kuni/Asako family) are unaffected — separate systems. Each
+  leader hunts like a member. Parse-checked; no tests per the no-test-code policy.
+- **Detection loop verified (Design Decision #5).** Confirmed the seasonal casts
+  feed the existing detection machinery end to end: Channel 1 — the PTL +1 drives
+  the s11.11 crisis topics at PTL 3/6/9 (passive, pre-wired). Channel 2 — the MAHO
+  CrimeRecord (location = cast settlement, concealment_tn from the Stealth/Agility
+  roll, 90-day evidence window) is consumed by `_process_blood_evidence_discovery`
+  (called in advance_day, line ~392) on both EXAMINE_CRIME_SCENE and
+  INVESTIGATE_PROVINCE results; a co-located magistrate's province investigation
+  rolls Investigation vs the concealment TN and, on success, emits a TIER_3
+  SUPERNATURAL "blood magic discovered" topic that propagates to the investigator's
+  lord — covered by an end-to-end closure test (cast → record → INVESTIGATE_PROVINCE
+  → topic). Channel 3 — caster Taint accrues (ML−1); the Lore: Shadowlands detection
+  roll is WIRED at TN (8 − Taint Rank) × 5 (owner-set 2026-06-10). Channel 4 — seasonal
+  casts pass `witnesses=[]` (covert), so no direct witnesses, by design. No gaps
+  introduced and no fixes needed — the new casts' outputs are consumed correctly.
+- **Crab witch-hunter routing verified (s11.11, Decision #5).** Confirmed the
+  topic → action chain that turns a maho-tainted province into a Kuni/Asako
+  investigation: an active insurgency (a Bloodspeaker MAHO_CULT cell already feeds
+  `active_insurgencies`, and PTL ≥ 3 spawns a TAINT_MANIFESTATION insurgency) →
+  `OpportunityScanner` ELIMINATE_SHADOWLANDS opportunity (urgency 80) →
+  `ObjectiveDecomposer._decompose_eliminate_shadowlands` returns INVESTIGATE_THREAT
+  for the province → INVESTIGATE_PROVINCE (objective_alignment 100) → a SHUGENJA
+  running it in the tainted province hits `_process_ptl_detection`, rolling
+  Lore: Shadowlands (Perception) vs PTL×5 with a **+2 Kuni/Asako family bonus**,
+  emitting a "Spiritual corruption detected" SUPERNATURAL topic propagated to the
+  lord. 5 routing tests (`test_crab_hunter_routing.gd`): insurgency→opportunity,
+  ELIMINATE_SHADOWLANDS→INVESTIGATE_THREAT, Kuni shugenja detects, non-shugenja /
+  Lore-less shugenja do not. **Wired now:** lords (strategic-review self-selection)
+  and magistrate-shugenja (UPHOLD_LAW idle patrol, INVESTIGATE_THREAT every 7 days)
+  reach INVESTIGATE_PROVINCE; the +2 Kuni/Asako detection edge applies. **Still
+  blocked (Decision #5, s11.3.5):** dedicated Kuni/Asako/Kuroiban witch-hunter
+  *standing* objectives (autonomous hunting without lordship or magistracy) — not
+  invented here. **Kuni/Asako bonus confirmed correct (+2k0):** `_process_ptl_detection`
+  passes `family_bonus` (=2) into `resolve_skill_check`'s `bonus_rolled` parameter
+  (8th positional) with `bonus_kept` defaulting to 0 — two extra unkept dice,
+  exactly GDD s11.11's "+2k0". (An earlier note mis-described this as a flat +2;
+  retracted after re-reading the call. A clarifying comment was added at the call
+  site to prevent the same misread.)
+
+### Systems Added 2026-06-07 (Kolat — deferred executors + network records)
+Implemented the Kolat ActionID executors that were stubbed `deferred_system` in
+`kolat_executor.gd`, plus the LOCKED network-record data layer (s54.7h/d). Each
+executor returns effect flags consumed by `DayOrchestrator._process_kolat_writebacks()`
+(topic pool / insurgency list / Honor / network records); ARCHIVE_TOPIC and the
+koku/dead-drop handlers are self-contained Pattern B. **Verification note:** GUT
+cannot run headlessly here (the `WeaponData` cold-boot class-resolution cascade
+fails the whole dependency graph, which also masks type errors in the import
+parse-check), so all of this was validated by static review only. Tests written
+but not executed in this environment.
+- **Tranche A** — ARCHIVE_TOPIC (writes the s54.7h cloud_archive), ANONYMOUS_TIP
+  (Tier 4 org tip topic), RESURRECT_TOPIC (Calligraphy+Int vs TN 20, re-injects an
+  archived topic as "historical records", −0.5 Honor), SPONSOR_INSURGENCY
+  (Commerce+trait vs TN 20; seeds a Ronin Bandit Uprising Str 1/Conceal 8 or +2
+  cap 10; failure fires the province investigation topic).
+- **Tranche B** — BRIBE_GARRISON_COMMANDER (Commerce+trait vs commander
+  Willpower×5; registers a standing bribe on the Coin Master). New
+  `_process_kolat_bribes_seasonal`: 5 koku/season upkeep + the −2 under-garrison
+  Stability penalty (s11.11) per bribed province, cancelled silently when a
+  payment is missed.
+- **Tranche C** — DELIVER_SEALED_LETTER (Sincerity Deceit vs TN 10; LetterData via
+  the letter pipeline; Tier 4 "courier asking after X" topic on a noticed
+  delivery), ROUTE_ANONYMOUS_INTELLIGENCE (Calligraphy vs TN 15; +5 disposition to
+  a registered jade asset; Tier 4 traced-document topic on critical failure).
+- **Tranche D1/D2** — `simulation/kolat_network.gd` (KolatNetwork pure class): the
+  per-Sect network-record schemas from s54.7h (silk/coin/jade/lotus/chrysanthemum/
+  steel records, dream_sleeper_registry, cloud_archive) keyed by `Enums.KolatSect`
+  (the character-sheet truth — the GDD's "kolat_silk" prose strings are NOT used).
+  Registration helpers, capacity cap (6 agents, burned excluded — s54.7d), Jade
+  cap 3, silence detection (30 city / 60 remote). `_process_kolat_network_seasonal`:
+  per-Master per-agent silence check → Tier 4 concern topic, deduped via a
+  `silence_flagged` per-entry guard. cloud_archive reconciled to the s54.7h schema
+  (archive_id keys; parties_named / content_summary / original_momentum /
+  ic_day_archived + reconstruction extras).
+- **Tranche D3** — APPROACH_FOR_RECRUITMENT (Friend-tier +31 disposition gate;
+  contested Sincerity vs the target's Willpower; on success sets `kolat_sect`,
+  registers the recruit in the Master's Sect record via
+  `KolatNetwork.register_recruit`, −0.5 Honor; failure/critical-failure topics;
+  never converts dead characters or PCs). This is how networks populate during
+  play (no world-gen seeding, per owner ruling).
+- **Tranche D4** — ROTATE_DEAD_DROP (Stealth vs TN 10; moves the first compromised
+  drop in lotus_network_record to the current settlement). Closes the network
+  loop: records are created by recruitment, maintained by the silence pass, and
+  consumed here.
+- **Owner rulings (2026-06-07):** (1) APPROACH_FOR_RECRUITMENT's GDD roll
+  "Willpower + (Gi rank ×2)" is a mistake — personality drives decisions, not
+  mechanics — so the Gi modifier is dropped (contest is vs Willpower only).
+  (2) RUN_COURIER_ROUTE's TN should scale with conditions like patrols; no formula
+  or patrol data exists, so it stays deferred. (3) Hidden Temple `temple_vault_koku`
+  stays an abstract treasury (no map settlement designated). (4) No world-gen Silk
+  seeding — networks populate via recruitment.
+- **GDD note (left unedited — GDD edits require owner permission):** s54.7d line 39 says Silk/Lotus keep no
+  network record, but s54.7h defines detailed silk/lotus records. The consolidated
+  fields reference (s54.7h) is followed as authoritative.
+- **Tranches D5–E2 (2026-06-07, second pass — owner directive "do ALL of it"):**
+  the remaining deferred executors, completing **all 29 Kolat ActionIDs**.
+  - **D5** — USE_CLOUDS_EYES (Spellcraft + Air vs TN 15; copies 1d3+Raises ambient
+    topics from the target settlement's province into known_topics) and
+    DISTRIBUTE_INTELLIGENCE (delivers a topic to a registered Silk agent + refreshes
+    their last-report; interception layer deferred — no route-compromise model).
+  - **D6** — ARRANGE_PROXY_DUEL (Courtier vs TN 20 narrative build → Tier 3
+    confrontation topic, −1.0 Honor; sub-step-1 proxy cultivation deferred).
+  - **E1** — Hidden Temple designated at world-gen (owner reversed the abstract
+    ruling): SettlementData.is_hidden_temple + temple_cloud_archive;
+    WorldBootstrap._designate_hidden_temple (deterministic lowest-id mountain
+    VILLAGE); KolatNetwork.find_hidden_temple/is_at_hidden_temple. Executors:
+    RUN_COURIER_ROUTE (Stealth TN 15 base + patrol hook +0, owner ruling),
+    OBSERVE_VIA_EYE (at-temple full-fidelity ambient-topic copy), SECURE_ONI_EYE
+    (Investigation+Perception TN 20), CONDUCT_PERIMETER_PATROL (Stealth TN 15;
+    failure → Tier 4 topic), SUBMIT_KOLAT_REPORT (at-temple; archives into the
+    Temple's master Cloud archive — sidesteps cross-Master identity routing).
+  - **E2** — TRANSMIT_VIA_TEAR + the Tear network. holds_tear field;
+    KolatMasterSelector stamps holds_tear + populates Tiger's
+    kolat_master_identities. **Phase-2 cascade (s54.7d):** the Kolat objective slot
+    now enters resolve_goal at priority 3 (before primary) and priority 1-2 (after
+    primary, before standing); a no-op for non-Kolat characters. Tear writeback
+    installs the directive as the recipient's Kolat objective (Tiger routes by Sect,
+    others route to Tiger). _inject_kolat_objective_flags drives the Phase-3 unlock
+    for field agents.
+  - **Owner rulings (second pass):** Hidden Temple designated (not abstract); courier
+    TN base 15 + patrol hook; Gi-rank dropped from recruitment (first pass).
+  - **E3 — decomposition metadata population.** `_build_kolat_metadata` now fills
+    real executor inputs per ActionID from need fields + the Master's own records
+    using the LOCKED s54.7c selection criteria (highest-leverage archive for
+    RESURRECT, stalest Silk agent for DISTRIBUTE, co-located weapon-4+ proxy for
+    ARRANGE_PROXY_DUEL, tip subject/org for ANONYMOUS_TIP, directive fields +
+    recipient_sect for TRANSMIT). Combined with the standing-mandate assignment
+    (Tranche 12) and the Phase-2 cascade (E2), Masters now autonomously pursue
+    their Sect mandate and the executors receive real inputs end to end.
+  - **E4 — self-initiated NeedType generation (s54.7d/e).**
+    `simulation/kolat_opportunity_scanner.gd` (KolatOpportunityScanner pure class)
+    produces the opportunistic Kolat objectives a Master pursues beyond the standing
+    Sect mandate, with LOCKED trigger conditions: SECURE_DEAD_DROP_NETWORK (Lotus
+    with a compromised drop — secured before any other Lotus work), CONDITION_SLEEPER
+    (Dream below its `world_start_sleepers` target — picks the co-located non-Kolat
+    candidate with the fewest required sessions = lowest Willpower), RECRUIT_KOLAT_AGENT
+    (agent-network Sect below its capacity cap — Jade 3, others 6 — picks the
+    highest-disposition co-located non-Kolat candidate at Friend tier +31, matching
+    the APPROACH_FOR_RECRUITMENT gate). `should_clear()` gives self-initiated
+    completion/recall: a self-selected slot is retired when its trigger lapses
+    (drop secured / sleeper made / recruit converted / candidate dead / at capacity);
+    Tiger directives (a different `source`) are never disturbed. Wired into
+    DayOrchestrator `_assign_kolat_opportunistic_objectives()` (daily, after the
+    standing assignment, before `_inject_kolat_objective_flags`): fills the Kolat
+    objective slot at priority 2 (precedes standing, yields to a primary or Tiger
+    directive). The slot's `target_npc_id` flows through `_passthrough` → the need →
+    `_build_kolat_metadata` (E3) → the executor end to end, so Masters now grow
+    their networks and create sleepers autonomously. 16 tests in
+    `tests/test_kolat_opportunity_scanner.gd`.
+  - **E5 — Tiger Stage-5 damage-assessment recall (s54.7).** When a Kolat Master
+    is eliminated, `DayOrchestrator._process_kolat_master_death_recall()` (run at
+    both death-processing sites before `death_events.clear()`) fires the recall
+    sweep: a living Tiger (the routing node) issues recall directives through the
+    Kolat channels, so every field agent who had contact with the compromised
+    Master halts their Kolat objective and treats it as abandoned — their
+    `kolat_objective` slot is cleared. `KolatNetwork.collect_field_agent_ids()`
+    enumerates the dead Master's own Sect-record agents. A living Tiger is required
+    (if Tiger itself is the dead Master with no successor yet seated, no recall
+    fires — the organisation is briefly blind, matching the GDD degraded state).
+    3 tests. The operational/elimination directive composition (Stages 1–4:
+    Broken-Master surveillance detection, Tiger threat assessment, Lotus
+    elimination contracts) remains blocked — it needs the
+    Master-surveillance/investigation-detection layer and the GDD's "low/medium/
+    high threat" thresholds, which are not numerically specified (cannot invent).
+- **Still deferred (29 executors + metadata + self-init + Stage-5 recall done) —
+  the remaining generation channels and a few data-blocked inputs:** Chrysanthemum
+  shallow-IntelDB / winter-court scanner; Tiger operational/elimination directive
+  composition (Stages 1–4, blocked on the surveillance-detection layer + unspecified
+  threat thresholds); UNDERREPORT_KOKU amount (domain income not in context);
+  ARCHIVE_TOPIC / SUBMIT_KOLAT_REPORT topic object (context carries topic IDs, not
+  TopicData); OBSERVE_VIA_EYE contention + all-AP cost; SECURE two-failure
+  auto-report; CONDUCT_PERIMETER_PATROL within-3-provinces range + cover identity;
+  courier patrol-TN scaling; DISTRIBUTE_INTELLIGENCE route-compromise interception;
+  the Conclave + win-condition orchestrator passes (KolatSecrecy data layer exists).
+  These need the surveillance/strategic-review integration, IntelDB, map-distance
+  data, or action-log state — none buildable without inventing.
+
+### Systems Added 2026-06-11 (Kaiu Wall — Phase 2: Command roster, owner-authorized)
+- **s2.4 lines 406-414 — the standing Wall command roster stationed at the Towers.**
+  Phase 1 created the 12 Towers but left them unmanned (SI slowly eroded with no one
+  to FORTIFY). Phase 2 generates the GDD command hierarchy at world-gen and stations
+  it at the Towers. `WorldPopulationGenerator._generate_wall_characters()` rewritten
+  (was a 4× `WALL_SEGMENT_COMMANDER` + 1 Hiruma Scout Commander placeholder, not tied
+  to any tower): now creates **2 Shireikan** (Wall Commanders — Southern oversees
+  Towers 1-6 seated at Tower 3, Northern oversees 7-12 seated at Tower 10;
+  `operational_superior_id = -1`, `lord_id = Crab Champion` per s2.4 line 414),
+  **12 Taisa** (Tower Commanders, one per tower, family Hida, `operational_superior_id`
+  = their segment's Shireikan, stationed at their tower), and **per-tower 1 Kaiu
+  Engineer + 1 Kuni Shugenja** (tower staff, `operational_superior_id` = their Tower
+  Commander). The Hiruma Scout Commander is preserved (reports to the Crab
+  Rikugunshokan as before). No Wall Rikugunshokan is created — GDD line 409 makes the
+  Wall Supreme Commander situational/not-at-start; the existing Crab generic
+  Rikugunshokan stays the army commander and the two Shireikan answer to the Champion
+  directly. **Owner decisions (2026-06-11):** Tower Commanders use the existing TAISA
+  position type (GDD-match, `military_rank TAISA`, insight 3, status 3.5) — the
+  pre-existing mismatched `WALL_SEGMENT_COMMANDER` (mil_rank CHUI) is left untouched;
+  new **SHIREIKAN** position type added to RoleRegistry mirroring TAISA's placements
+  (insight 4 per s52a "Wall Cmdr", **status 4.5** owner-set, `military_rank SHIREIKAN`);
+  Engineer + Kuni per tower; Shireikan seated at Towers 3/10. **PROVISIONAL** (s52a
+  world-init category): wall staff insight rank 3 (Engineer needs 3+ to seal a breach,
+  s2.4.16; Kuni needs solid Lore: Shadowlands) and status 2.0 (tower samurai, not
+  lords). **Why this makes towers self-sustaining:** a stationed Kaiu Engineer is
+  co-located at a Tower → `_set_wall_tower_context_flags` gives AT_WALL_TOWER context →
+  the s57.41 MAINTAIN_FORTIFICATION standing fires when any Tower SI < 7 → FORTIFY
+  restores SI. The Phase 1 slow-decay gap is closed: Towers now oscillate in the
+  ~6-10 SI band instead of eroding to 0. **Schema/wiring:** new
+  `SettlementData.wall_tower_number: int = -1` (set by `_create_wall_towers`,
+  persists; drives the 1-6 / 7-12 segment split); `_generate_wall_characters` signature
+  changed to `(next_id, dice, settlements, crab_champion_id, crab_rikugunshokan_id)`,
+  call site passes `settlements` + `clan_champions["Crab"]`; wall NPCs set
+  `physical_location` at generation so `_assign_physical_locations` skips them (stays at
+  the Tower). `operational_superior_id` set per s2.4 line 414 (the GDD explicitly
+  mandates this cross-cutting field for the Wall hierarchy). Verified: Shireikan
+  status 4.5 < the 5.0 `is_lord` gate, so they remain pure military commanders (not
+  lords); `_get_school_for_position(SHIREIKAN)` resolves to a Hida bushi school
+  (SHIREIKAN added to BUSHI_POSITION_TYPES); the ~39 new Crab wall NPCs count toward
+  the Crab RANK_DISTRIBUTION targets so the rank-fill backfills fewer (no population
+  bloat). Two obsolete wall tests updated to the new signature; the
+  segment-commander-count test removed (behavior gone). Parse-checked (4 production
+  files + the test file); no new tests per the no-test-code policy. DEFERRED to
+  Phase 3: unit-type garrison companies (replacing abstract `garrison_pu`) + real
+  horde-combat attrition + re-tuning garrison/SI/jade against a live threat.
+
+### Systems Added 2026-06-12 (Kaiu Wall — Kuni province purification, s2.4.17)
+- **s2.4.17 / Taisa AI ninth decision — the stationed Kuni now cleanses the wall province.**
+  Phase 2 stations a Kuni Shugenja at every Tower; this routes them to actually cast
+  PURIFY_TAINTED_GROUND. The full purification stack was already built and wired into the
+  seasonal pass — PURIFY_TAINTED_GROUND executor (TN 15 + PTL×5, −0.5 PTL + −0.25/Raise),
+  the Kuni Ward by rank (R1 −0.1/2s … R5 −0.3/6s) with the overwrite rule, adjacent bleed
+  (s2.4.3 `compute_adjacent_bleed`), and degraded-tower PTL — only the routing was missing.
+  Two changes: (1) added `PURIFY_TAINTED_GROUND` to the AT_WALL_TOWER context list (a Kuni
+  at a Tower is in the wall province and may purify it); (2) `_assign_kuni_purification_standing_objectives()`
+  (DayOrchestrator, daily, beside the Taisa-sortie pass) gives a Kuni Shugenja stationed at a
+  Tower a `MANAGE_TAINT` standing (target = the tower's province) when province PTL exceeds 1.0
+  (priority 1 above the s2.4.17 urgent threshold 3.0, else 2), and clears it when PTL falls back.
+  `MANAGE_TAINT` passes through the decomposer → objective_alignment 95 → PURIFY_TAINTED_GROUND;
+  `target_province_id` flows through `_passthrough` into the executor. Self-regulating: each cast
+  applies −0.5 PTL immediately, so once the ground is clean (PTL ≤ 1.0) the standing clears; the
+  Kuni Ward then holds the bleed down. Kuni Shugenja grants Lore: Shadowlands (rank-2 boosted),
+  so the roll is real, not a no-op. Dead-guarded; only Kuni Shugenja at a Tower; only touches its
+  own `MANAGE_TAINT` standing slot (lord directive takes precedence). Threshold values (1.0/3.0)
+  are GDD-locked (s2.4.17). Parse-checked; no tests per the no-test-code policy. With the engineer
+  (structural / FORTIFY), the Taisa (sortie / SS), and now the Kuni (spiritual / PTL), three of the
+  Wall's four family roles are self-driving at the Tower (the Hida garrison itself is Phase 3).
+
+### Topic/Information Propagation Connectivity Sweep (2026-06-13)
+Produced-vs-consumed sweep of the topic-momentum / information system (s16). **Two
+unbounded-growth leaks found and fixed; one deferred (needs a GDD resolution condition).**
+- **Tier-4 topics never purged after decay. FIXED.** `process_daily_tick` appended
+  decayed Tier-4 topics to `expired_topic_ids` but never set `topic.resolved`, and the
+  orchestrator never consumed `expired_topic_ids` — so `_remove_resolved_topics` (which
+  removes only `resolved == true`) never purged them. Every gossip/minor topic that
+  decayed to momentum 0 lingered in `active_topics` forever as a zombie, re-iterated each
+  tick by `process_daily_tick` and every topic consumer. Fix: `process_daily_tick` now
+  calls `resolve_topic(topic)` when `is_topic_expired`. (The changelog had claimed this
+  was already done — it wasn't.)
+- **Insurgency crisis topics never resolved on defeat. FIXED.** Tier 1-3 crisis topics
+  never decay (`advance_crisis_momentum` only increases; `is_topic_expired` is Tier-4-only),
+  so they leak unless their crisis end resolves them. `_process_insurgencies` cleared the
+  province `active_crisis_id` on suppression but never resolved the topic → a defeated
+  insurgency's Tier 1-3 topic lingered as a phantom active crisis (growing momentum, still
+  broadcast to NPCs). Fix: `_process_insurgencies` returns `resolved_crisis_ids`; the caller
+  resolves matching `active_topics` by `crisis_id`. Famine recovery already resolved its
+  topic (line ~3469); this brings insurgency/taint/bloodspeaker crises to parity.
+- **Shadowlands incursion crisis never resolved. FIXED (owner decision 2026-06-14).**
+  The `shadowlands_incursion` Tier-1 topic + `crisis_type`/`active_crisis_id` are set on a
+  wall breach (SI=0 + DEFENDER_OVERRUN) but were never cleared anywhere (the two
+  `active_crisis_id = -1` sites were famine + insurgency only), so a breached province stayed
+  in permanent crisis with a leaking Tier-1 topic. The GDD is silent on the crisis-resolution
+  threshold, so the owner chose: **the incursion clears once the breached province's wall is
+  resealed — `wall_si` restored above 0** (GDD s2.4: SEAL_WALL_BREACH restores SI; the breach
+  was set at SI=0). `_process_horde_assaults` now runs a resolution pass each tick (it runs
+  unconditionally) before the assault loop: a province stays breached while ANY of its
+  WALL_TOWER settlements is at `wall_si <= 0`; once all are resealed, it clears
+  `active_crisis_id`/`crisis_type` and resolves the matching Tier-1 topic (by `crisis_id`),
+  which `_remove_resolved_topics` then purges. Placed before the breach loop so a fresh
+  breach the same tick re-fires the crisis. Runtime-verified (SI=0 → persists; SI>0 →
+  cleared + topic resolved).
+
+### Resource/Economy Tick Connectivity Sweep (2026-06-13)
+Produced-vs-consumed sweep of the seasonal resource tick (s4.3). **One real
+computed-but-not-published bug found and fixed; everything else connected.**
+- **Starvation stage never reached the NPC engine. FIXED.** `ResourceTick`'s
+  seasonal pass computes the granular starvation stage (`resolve_starvation_transition`:
+  CLEAR/SHORTAGE/HUNGER/FAMINE, s4.3.6) and persists the state machine in `season_meta`,
+  but `build_province_statuses_from_data` hardcoded `ps.starvation_stage = SHORTAGE`
+  only when `pd.crisis_type == "famine"` (which fires at HUNGER+ onset). So early-SHORTAGE
+  provinces reported CLEAR (NPCs ignored them) and HUNGER/FAMINE flattened to SHORTAGE —
+  the sole consumer (`_extract_starving_province_ids`, > CLEAR) under-detected and
+  under-weighted starvation in war-readiness/feasibility decisions. Fix: `ProvinceData`
+  gains `starvation_stage` (@export, persisted); the tick publishes `prov.starvation_stage`
+  each season; `build_province_statuses_from_data` reads it. Runtime-verified.
+- **Otherwise clean:** all tick field mutations are applied to the data model
+  (rice/koku/iron/arms/population/stability all mutated, not just computed); the
+  under-garrison penalties (rice drain, stability, koku ×0.8 malus, trade drain, s4.3.11)
+  are applied (`_process_koku_generation` / `_process_trade_route_koku` consume the
+  `_garrison` dict); worship maluses (rice/pop/koku via the tick, stability via
+  `_apply_worship_stability_maluses`, s4.3.21) are applied; `season_meta` persists across
+  seasons + restart (WorldStateData field, saved by WorldStateSaver), so the starvation
+  state machine escalates/recovers correctly. ProvinceStatus is fully populated (16/16
+  engine-read fields set) after the starvation fix.
+
+### NPC Decision Pipeline — Full Connectivity Review (2026-06-13)
+End-to-end audit of the NPC decision pipeline (build_context → resolve_goal →
+generate_options → filters → score_all → select_action → execute → reactive path).
+**Every connectivity bug found was in the Phase 2→3 reachability layer; all fixed this
+session. Every other stage audited clean.** Method: programmatic diffs (reads vs writes,
+scored-vs-reachable, injected-vs-handled) + targeted headless probes.
+
+**Bugs found and fixed this session (NeedType / reachability):**
+- **BEGIN_TRAVEL in no context list — NPCs could not initiate travel at all.** The
+  action every travel objective resolves to was absent from every context list (only
+  CHANGE_DESTINATION existed, TRAVELING-only). Confirmed via probe: a stationary NPC with
+  a TRAVEL_TO need → survivors `[DO_NOTHING]`. Every travel NeedType (TRAVEL_TO,
+  ATTEND_COURT, SEEK_MAGISTRATE, LOCATE_CHARACTER, FIND_NEW_LORD, …) and all decomposer
+  TRAVEL_TO sub-needs (HUNT_MAHO roaming, UPHOLD_LAW jurisdiction travel, witness→magistrate,
+  musha-shugyo return, commitment proxies) collapsed to DO_NOTHING — autonomous NPCs never
+  relocated. FIXED: added BEGIN_TRAVEL to all 9 non-TRAVELING context branches (owner-approved
+  "every context"). Allowlist gates it to travel NeedTypes (verified RAISE_DISPOSITION does
+  not surface it).
+- **Arrived-at-target guard.** `_apply_arrived_travel_filter` (Phase 4) drops BEGIN_TRAVEL
+  once the NPC is at the need's target so the at-destination action wins (or REST) instead
+  of a no-op "already_there" travel. Wired into both run() and the sleeper-override path.
+- **Commitment-proxy dispatch (VISIT_PROMISE / MEETING_ARRANGEMENT) scored 0.** Proxies
+  used need_types VISIT_NPC / ATTEND_MEETING, in neither the scoring table nor the decomposer
+  → proxy RESTed instead of travelling. FIXED: routed to TRAVEL_TO (unblocked by the travel fix).
+- **Bribery/extortion reactive menus never generated.** SUPPRESS_INVESTIGATION (bribery_eval)
+  and EXTORT_ACCUSED (extortion_opportunity) reactive needs had no generate_options override
+  (unlike RESPOND_TO_SEPPUKU), so BRIBE_WITNESS / INTIMIDATE_WITNESS / KILL_WITNESS /
+  FLEE_JURISDICTION / EXTORT_ACCUSED (in no context list) were never generated → crime
+  responses collapsed to DO_NOTHING. FIXED: added the two need.source overrides; personality
+  filter gates the aggressive options.
+- **Dead refs removed:** `make_reassess_need()` (never called), `RAISE_ARMY` classification
+  entries (never emitted).
+
+**Stages audited CLEAN (no changes needed):**
+- **Scoring tables (8/8):** objective_alignment, personality_lean, competence_table,
+  disposition_tiers, urgency_rules, topic_position_alignment, action_skill_map, filter_data
+  (bushido/shourido) — all loaded by WorldStateData and all invoked live by score_all.
+- **ContextSnapshot fields (96/96):** all populated in build_context (incl. `.append`/dict
+  forms); every world_state key the engine reads is written somewhere (festival flags via
+  `ws.merge(g_festival)` at the per-character injection; `province_statuses` via the
+  `build_province_statuses_from_data` fallback; naval/court keys injected without prefix).
+- **Executor coverage:** all 171 selectable actions (context lists ∪ Kolat pool ∪ overrides)
+  have a handler reference in ActionExecutor — zero silent no-ops.
+- **Reverse reachability:** the objective_alignment scored-action diff returns zero UNKNOWN —
+  every scored ActionID is reachable (context/Kolat/letter-pass/reactive override) or a
+  documented forward-wired/blocked action (s11.7a sub-tile, s11.9 coordinate, Kolat-no-executor,
+  reactive non-AP-loop, GDD-blocked SEEK_*/tattoo).
+- **Reactive event coverage:** every type injected into a character's `pending_events` has a
+  handler — 5 `reactive_type` events (ACCEPT_TRAINING, CONTRACT_OFFERED, COURT_INVITATION,
+  DUEL_CHALLENGE_RECEIVED, FAVOR_REQUESTED) route to ReactiveDecisions match arms; the `type`
+  events (bribery_eval, extortion_opportunity, provocation, seppuku_offered,
+  witness_report_motivated, + performance/tend-wounded handlers) route to
+  `_decompose_reactive_event`; `need_type` events (HONOR_COMMITMENT, RESPOND_TO_EDICT) are
+  valid NeedTypes that decompose normally.
+- **Effect-key consumption:** diffed the 409 effect keys ActionExecutor emits against
+  EffectApplicator + day_orchestrator + wave_resolver consumers. Only 3 undocumented-unconsumed
+  effect-like keys, all benign: `effective_total` (craft roll total, informational),
+  `koku_amount` (TRANSFER_KOKU result echo — the transfer is pre-applied Pattern B,
+  `character.koku -= amount; recipient.koku += amount`), `performance_applied` (Pattern B flag).
+  No dropped effects.
+
+**Runtime-verified (headless drivers):**
+- **Full travel chain executes end-to-end.** `run()` chooses BEGIN_TRAVEL carrying
+  target_settlement_id (verified through build_context → resolve_goal → _passthrough →
+  generate_options); the decision dict propagates target_settlement_id; the wave resolver's
+  `_execute_decision` reconstructs the action; `ActionExecutor.execute` fires
+  `TravelSystem.begin_travel` (started=true, origin→destination, days=1); `process_travel_tick`
+  arrives the character at the destination. (NPCDecisionEngine.execute_action only spends
+  AP/orders and returns the decision — actual effects run via ActionExecutor in the wave
+  resolver, which is why a bare `run()` shows started=false.)
+- **Arrived-target guard:** an arrived TRAVEL_TO resolves to DO_NOTHING (BEGIN_TRAVEL filtered);
+  an arrived ATTEND_COURT resolves to a court action (CHARM/DELIVER_GIFT), not no-op travel.
+- **Bribery/extortion menus generate:** SUPPRESS_INVESTIGATION (bribery_eval) surfaces all five
+  suppression actions; EXTORT_ACCUSED (extortion_opportunity) surfaces EXTORT_ACCUSED.
+- **Wave-resolver integration path** (the production execution step, not a hand-built action):
+  `NPCDecisionEngine.run()` → decision dict → `NPCWaveResolver._execute_decision` (reconstructs
+  the ScoredAction from the decision, target_settlement_id intact) → `ActionExecutor.execute`
+  → `TravelSystem.begin_travel`. Verified for a TRAVEL_TO primary (decision BEGIN_TRAVEL/target
+  200 → travel_started → arrives at 200 after one tick) AND an ATTEND_COURT primary not at the
+  court (decision BEGIN_TRAVEL → traveling toward the court settlement). Both relocate through
+  the real orchestration step — the world-freezing travel bug is resolved at the integration level.
+- **Reactive crime path through `run()`:** a character with a `bribery_eval` pending event
+  (low-honor/KETSUI accused under investigation) resolves to need SUPPRESS_INVESTIGATION and
+  decision `BRIBE_WITNESS` — a witness-tampering action that was previously unreachable (the
+  reactive crime response used to collapse to DO_NOTHING). A `extortion_opportunity` event
+  (corrupt magistrate) resolves to decision `EXTORT_ACCUSED`. Both confirm the new
+  generate_options override fires inside the full reactive `run()` flow (resolve_goal →
+  override → personality filter → scoring → execute). An honourable NPC's personality filter
+  would block the aggressive options → DO_NOTHING, which is the intended gating.
+
+**Objective-decomposer / objective-producer trees audited CLEAN:**
+- All 37 distinct sub-needs the decomposers emit (objective_decomposer, musha_shugyo,
+  monk_objective) are valid — each is in objective_alignment or has its own decompose case.
+- Both `_make_need("TRAVEL_TO")` emission sites (HUNT_MAHO, UPHOLD_LAW idle) are inside
+  at-target guards (`location_id.begins_with(target)`), so they emit travel only when away and
+  passthrough to the local action on arrival. All other travel-class needs (ATTEND_COURT,
+  SEEK_MAGISTRATE, …) rely on the global `_apply_arrived_travel_filter`.
+- All 14 high-level primary objectives the OpportunityScanner / strategic_review / decomposer
+  produce (MILITARY_DOMINANCE, MAXIMIZE_PROSPERITY, MAINTAIN_PEACE, EXPAND_TERRITORY,
+  DEFEND_TERRITORY, CONTROL_TRADE, BUILD_STRONGEST_FORCE, ELIMINATE_SHADOWLANDS, HONOR_ANCESTORS,
+  SEEK_VENGEANCE, STRENGTHEN_WALL, ADVANCE_FAMILY, ACCUMULATE_LEVERAGE, BREAK_ALLIANCE) route to
+  a decompose tree (one of 7 dispatch arrays — POLITICAL/ECONOMIC/PERSONAL/MILITARY/
+  INVESTIGATION/INFRASTRUCTURE/GOVERNANCE — or PrimaryObjectiveDecomposer's 13-tree match),
+  decomposing to reachable sub-needs rather than passthrough.
+- Every `objective_type` the OpportunityScanner can emit routes (dispatch array / primary /
+  alignment). One orphan: `PROTECT_TERRITORY` exists only as a `STANDING_OBJECTIVE_DOMAIN`
+  classification key, never emitted as an objective — benign dead map entry (forward-wired),
+  not a REST path.
+
+**Reactive-decision OUTPUT side audited CLEAN:** the 5 reactive handlers emit 10 distinct
+`action` responses; 8 have orchestrator writeback consumers (ACCEPT_DUEL/DECLINE_DUEL,
+HONOR_FAVOR/DECLINE_FAVOR, ATTEND_COURT, ACCEPT_TRAINING, ACCEPT_CONTRACT/DECLINE_CONTRACT).
+The 2 without consumers (DECLINE_INVITATION, DECLINE_TRAINING) are intentional no-ops — a
+decline is the *absence* of the accept-path action and carries no separate consequence (a
+court decline leaves the COURT_ATTENDANCE commitment to break later via s55.31; a training
+decline simply yields no progress). Both the input side (every injected event type has a
+handler) and the output side (every consequential response has a consumer) are wired.
+
+### Known Code Issues (found and fixed 2026-06-12, headless wall smoke test)
+- **`school_name` vestigial field — 8 production reads were dead. FIXED.** A headless smoke
+  run of the live Wall loop (fresh-bootstrap driver, since retired) surfaced this. `L5RCharacterData`
+  declares BOTH `school` and `school_name`; `WorldGenerator.generate_character` sets only `c.school`,
+  and **`school_name` is never written anywhere** — it is always `""`. Eight sites read the dead
+  field, so each silently misbehaved: `day_orchestrator._is_asako_inquisitor` (8123) and
+  `_is_kuni_witch_hunter` (8266) always returned false → **the entire s11.3.5 maho-hunter system
+  (HUNT_MAHO standing, roaming, cross-border incidents, Kuroiban leader tasking) was dead**;
+  `kolat_master_selector._is_witch_hunter` (430) never excluded witch-hunters from Kolat draws;
+  `npc_advancement` (546 bushi, 556 monk) gated kata/kiho XP claim on `not school_name.is_empty()`
+  (always false) → **NPC kata AND kiho learning never ran**; `kata_system` (388) and `kiho_system`
+  (182) eligibility treated everyone as school-less; `ascii_map_combat_orchestrator` (2059) computed
+  `is_samurai` as always-false (companion samurai-avoidance). All 8 migrated to the canonical
+  `.school` (44 existing refs, always populated). `school_name` now has zero production readers —
+  left declared for save compat; removal is a future cleanup. Parse-checked all 5 files. NOTE:
+  this re-activates dormant code paths (witch-hunter roaming, NPC kata/kiho learning) that have
+  never actually executed — worth watching in the first live run. The Kaiu/Kuni *standing* passes
+  (`_assign_kaiu_engineer_standing_objectives`, `_assign_kuni_purification_standing_objectives`)
+  already read `.school` correctly, so FORTIFY/purify were unaffected.
+- **`school_name` straggler + impact re-assessed (verification run, 2026-06-12).**
+  A focused no-bootstrap verification of the re-activated paths caught a missed 9th
+  read: `_is_maho_hunter` (day_orchestrator:8011) still used `school_name`. Migrated
+  to `.school`. Harmless in practice (see below) but the same dead-field class.
+  Verification findings: (1) **NPC kata/kiho learning was the genuinely-dead path** and
+  is now live — confirmed end-to-end: an Akodo Bushi (80 XP) selects + learns
+  `Strength of the Lion` (katas 0→1), a Togashi Tattooed Order monk (80 XP) selects +
+  learns `Channel the Fire Dragon` (kiho 0→1). Before the fix the `school_name` gate
+  was always-false → kata/kiho were NEVER claimed by any NPC. (2) The maho-hunter
+  predicate migration was OVERSTATED as "entirely dead": `_is_kuni_witch_hunter` /
+  `_is_asako_inquisitor` / `_is_maho_hunter` each have a non-school branch (leader
+  role_position / `is_kuroiban` flag) that always worked, AND no `SCHOOL_DATA` key
+  contains "Witch-Hunter"/"Inquisitor", so the school-string branch matches nothing in
+  a live world either before OR after the fix. Verified the live roster IS detected
+  (WITCH_HUNTER_LEADER→order 0, INQUISITOR_LEADER→1, is_kuroiban→2, all get HUNT_MAHO
+  standing) with no false positive on a regular Akodo Bushi. LIMITATION (world-gen
+  seeding gap, owner decision — do NOT invent): rank-and-file Kuni Witch-Hunters /
+  Asako Inquisitors are never created (no school string, no flag), so the Kuni and
+  Asako orders are effectively single-leader; only the Kuroiban have a real membership.
+  Adding a "Kuni Witch-Hunter" SCHOOL_DATA school or tagging some Kuni Shugenja with
+  the school string would populate them — the predicates are already ready.
+- **Smoke-test observations (live Wall, fresh bootstrap, 3806 chars).** Validated at runtime:
+  12 Towers spawn with the Phase-1 init (SI 10, garrison 3, jade 5, SS 3; Ishibei 1-5 / Ishigaki
+  6-9 / Yoake 10-12). Phase-2 roster stationed (Shireikan 2, Taisa 12, Kuni 12, Kaiu 12). Horde
+  gen + sortie scaling correct (Jigoku/Undead Str-2 = 9 companies, Maho-tsukai present; sortie
+  SS3→1 / SS6→2 / SS9→3+ogre / SS12→4+ogre). Assault casualties scale with degrading SI (SI10→0
+  health, SI6→2, SI3→77, SI0→86; garrison-0 → OVERRUN). Redeployment moved +2 PU from the
+  highest-surplus Tower to a drained one (30% cap). **TUNING FINDING — RESOLVED 2026-06-12.**
+  The smoke showed every *defended* assault resolving to PUSHED_BACK (SI −3) regardless of
+  garrison strength, because `_map_battle_outcome` keyed on the `victor` string and routing-immune
+  Bakemono fight to a "draw". Fixed by keying the defender-victory SI tier on **garrison casualty
+  fraction** (the GDD's own "garrison badly damaged" = −3 / "pristine tower barely notices" = −1
+  signal): garrison loss <10% → Decisive (−1), 10–33% → Contested (−2), >33% surviving → Narrow
+  (−3); garrison destroyed/routed → Breach (−4). Thresholds owner-set ("Light" scheme, 2026-06-12)
+  as `HordeSystem.ASSAULT_DECISIVE_CASUALTY_FRAC`/`ASSAULT_CONTESTED_CASUALTY_FRAC`. Now
+  self-correcting and garrison-sensitive — validated: SI10/SI6 → −1, SI3/SI0 → −2, garrison-0 →
+  breach. DECISIVE/CONTESTED are now reachable (were dead).
+
+### Systems Added 2026-06-12 (Kaiu Wall — Phase 3: live horde combat, owner-authorized PROVISIONAL)
+- **Horde composition un-stubbed + sortie/assault combat made live + Shireikan redeployment.**
+  The owner authorized GDD-consistent PROVISIONAL baseline compositions (the one value s2.4
+  leaves undefined), unblocking the whole Phase-3 combat chain. Four changes:
+  1. **HordeSystem generators un-stubbed.** `_generate_jigoku_companies`, `_generate_undead_companies`,
+     `_generate_sortie_horde_companies` now return real Companies built from the LOCKED unit roster
+     (s2.4.7). PROVISIONAL baselines (`JIGOKU_BASELINE` 4 Bakemono Warrior + 1 Archers + 2 Ogre;
+     `UNDEAD_BASELINE` 3 Zombie + 2 Skeleton + 1 Revenant + **1 Maho-tsukai [GDD-LOCKED: one per
+     legion]**) + the LOCKED +1 Company/Strength bonus (drawn cyclically from each type's pool).
+     Sortie horde scales with SS (~1 Company/3 SS, an Ogre at SS High 9+). All counts marked
+     PROVISIONAL, tunable after playtest.
+  2. **Sortie commitment floor fix.** `committed_pu = int(garrison_pu * force_pct)` rounded a
+     Small sortie (20% of the Phase-1 garrison_pu=3) to **0 companies → empty fight → no SS
+     reduction**, making the D2 sortie a no-op. Companies are indivisible: clamped to
+     `clampi(int(garrison_pu*force_pct), 1, garrison_pu)`. Sorties now commit ≥1 Company → real
+     combat → SS reduction + jade consumption + garrison casualties (when ≥153 health lost).
+  3. **Discrete horde assault combat wired.** The horde roll (50%/2 seasons) already formed a
+     horde + Tier-3 sighting topic, and `_process_horde_assaults` already applied the SI hit +
+     breach→`shadowlands_incursion` crisis (Tier-1 topic, `active_crisis_id`) — but nothing ran
+     the assault *combat*. `HordeSystem.resolve_horde_assault_combat()` (combat-only, no SI hit
+     — `_process_horde_assaults` owns that, so calling the existing `resolve_horde_assault` would
+     double-hit) + `DayOrchestrator._resolve_horde_assault_combat()` resolve the garrison-vs-horde
+     battle on formation (garrison defends from the Tower with the SI fortification bonus +
+     wall-breaker), set `assault_resolved`+`battle_outcome`, apply garrison PU casualties; the SI
+     hit + breach apply next tick. Undefended Tower (garrison 0) → automatic DEFENDER_OVERRUN.
+     The combat helper picks the same province→Tower as `_process_horde_assaults` (last tower
+     wins) so casualties and the SI hit land on the same Tower.
+  4. **Shireikan Troop Redeployment (s2.4.13 D2).** `_process_shireikan_troop_redeployment()`
+     (seasonal): each Shireikan reinforces below-minimum Towers in their half (Southern 1-6 /
+     Northern 7-12) by pulling garrison from the highest-surplus safe Tower. GDD-LOCKED values:
+     30% transfer cap per order, never from an SS-High or SI<6 Tower, source/target stay ≥ minimum
+     (floored at 1 Company for indivisibility). Target = the below-minimum shortage Tower (triage
+     P3; the horde-incoming P1/P2 need scout lead time that doesn't exist yet). Direct garrison_pu
+     transfer (abstract PU, like the Ashigaru flow).
+  Live loop now: Taisa sortie → casualties → garrison attrition; horde roll → assault → SI hit /
+  breach / incursion; Shireikan redeploys to cover shortages; Kuni purifies; engineer FORTIFYs.
+  All four parse-checked; no tests per the no-test-code policy. TUNING (playtest): baseline
+  compositions and SS/sortie scaling are PROVISIONAL; with Phase-1 garrison_pu=3 a single horde
+  assault can overrun a Tower — garrison sizing and horde scale will need joint tuning against a
+  live run. **Repeat-targeting weight LOCKED at 2×** (s2.4.4 "higher probability", owner-approved
+  2026-06-12): `HordeSystem.REPEAT_TARGET_WEIGHT` — the last-targeted tower's province is added
+  REPEAT_TARGET_WEIGHT-1 extra times to the selection pool. The scout-detection chance remains
+  undefined (no-warning) — it has no scout-deployment mechanic to attach to until the scout
+  system exists; not invented. The B–E proposed values (horde baseline compositions, sortie
+  scaling, garrison_pu 3→5) were presented but NOT approved — they stay PROVISIONAL.
+
+### Taisa AI loop (s2.4.11) — stopping point (2026-06-12, since unblocked under provisional authorization)
+The autonomous build halted at the first **undefined value**, exactly where the GDD stops
+specifying. **Built (fully-defined):** D1 SI maintenance (engineer FORTIFY), D2 Sortie timing
+(Taisa, via the LOCKED `validate_sortie`), and the s2.4.17 Kuni province-purification half of D7.
+**Blocked on undefined values / unbuilt dependencies — do NOT implement without owner input or
+the missing spec:**
+- **Horde composition counts — "pending GDD spec".** `HordeSystem._generate_jigoku_companies`,
+  `_generate_undead_companies`, and `_generate_sortie_horde_companies` all `return []`. The horde
+  roll fires (50%/2 seasons) but generates an EMPTY horde, so: horde assaults do nothing, and
+  **sortie combat resolves against an empty horde → 0 casualties → `garrison_pu` never drops from
+  sorties.** D2 still correctly applies SS reduction (defender auto-wins the empty fight), but no
+  attrition occurs until horde composition is defined. This single gap cascades: it blocks real
+  garrison attrition, the whole horde-assault crisis machinery, and any decision keyed on "horde
+  incoming" (Shireikan triage P1/P2, scout detection).
+- **Shireikan reserve Koku/jade pools — "dynamic … not a fixed formula" (s2.4.13 D3).** Explicitly
+  undefined; the Champion→Shireikan koku allocation amount is also unspecified. Blocks D4 (rice/koku
+  requests) and D5 (jade request) — there is no defined supply pipeline or amount to request against.
+- **Jade Petal Tea (D6) — no production/consumption/allocation numbers (s2.4.15).** The mechanic is
+  described qualitatively ("a handful of monasteries," "Brotherhood allocation") with zero values,
+  and it operates on a named/tracked garrison that does not exist (Phase 3).
+- **Garrison Taint roster / watch list (D7) + scout coverage (D3).** Both operate on named garrison
+  soldiers (Phase 3) and/or the empty-horde scout-detection. No persistent scout-deployment mechanic
+  is defined.
+- **Shireikan Troop Redeployment (s2.4.13 D2)** has fully-defined values (30% cap, source rules) and
+  works on abstract `garrison_pu`, but its trigger is garrison shortage — which cannot arise until
+  horde composition is defined (sorties currently inflict 0 casualties). Buildable, but inert until
+  the horde gap is closed; deferred to avoid wiring a trigger that never fires.
+
+### Systems Added 2026-06-12 (Kaiu Wall — Taisa sortie timing, s2.4.11 D2, owner-authorized)
+- **s2.4.11 Decision 2 (Sortie Timing) — the Tower Commander now orders sorties.** With the
+  Phase 2 roster stationing a Taisa at every Tower, the Taisa was still falling to generic
+  defense and never sortieing to manage Shadowlands Strength. `_assign_taisa_sortie_standing_objectives()`
+  (DayOrchestrator, daily, beside the Kaiu-engineer pass) gives each living Taisa
+  (`military_rank == TAISA`) stationed at a Wall Tower a `CONDUCT_SORTIE` standing objective
+  when a sortie is warranted, and clears it (conserve the garrison) when it is not. The
+  warrant decision is delegated entirely to the already-LOCKED `WallSystem.validate_sortie(ss,
+  si, garrison_above_minimum, jade_critical, is_shireikan=false)` — which encodes the full D2
+  logic: SS Low -> none / Medium -> Small / High -> Medium (`get_ai_sortie_size`), jade-critical
+  block (D5), garrison-below-minimum block, SI<6-while-SS-High block, and Large-requires-Shireikan.
+  **No new logic or numbers** — the pass is pure routing. The `CONDUCT_SORTIE` need_type is not a
+  decomposer dispatch type, so it falls through `_passthrough` -> scored against
+  `objective_alignment["CONDUCT_SORTIE"]` (100) -> selects the CONDUCT_SORTIE action in the
+  AT_WALL_TOWER context (no rank gate; only DISPATCH_COURTIER/ORDER_LEVY are rank-gated). The
+  executor reads ss/si/garrison/jade from the Taisa's injected wall_status and resolves via
+  `resolve_sortie`. **Self-regulating, no cadence number invented:** each successful sortie
+  reduces province SS and consumes jade, so the standing lapses on its own (SS drops below
+  Medium, or jade goes critical) and the Taisa conserves; it re-arms when SS climbs back. Owns
+  only its own `CONDUCT_SORTIE` standing slot (never clobbers a lord directive or other standing;
+  a lord-assigned primary takes precedence via resolve_goal). Dead-guarded; generic legion Taisa
+  (not stationed at a Tower) are skipped. Parse-checked; no tests per the no-test-code policy.
+  **Scope (owner-authorized 2026-06-12):** D2 only. D1 SI-maintenance is already covered by the
+  stationed engineer's FORTIFY. The other five demands stay DEFERRED: D3 scout coverage needs new
+  persistent scout-tracking; D4 rice/koku requests and D5 jade request need new request pipelines
+  (only the troops path exists, via STRENGTHEN_WALL); **D6 Jade Petal Tea and D7 Taint monitoring
+  are Phase-3-blocked** — both operate on named/tracked garrison soldiers, which don't exist while
+  the garrison is abstract `garrison_pu`. The seven-way triage that is the heart of s2.4.11 is
+  itself Phase-3-gated; this delivers the one fully-buildable decision. LIMITATION: without D5
+  jade resupply, a Tower's sorties stop permanently once its jade depletes (GDD-faithful — D5 says
+  no sortie when jade is critical — but jade never refills until the request pipeline lands).
+
+### Known Code Issues (found and fixed 2026-06-12, Wall Phase 2 validation)
+- **Stationed Kaiu Engineers never FORTIFY — peacetime art standing latched the slot. FIXED.**
+  Phase 2 stations a Kaiu Engineer at every Tower so the s57.41 MAINTAIN_FORTIFICATION
+  standing restores SI. But Kaiu Engineer is an ARTISAN school, so on day 1 (Towers at
+  SI 10, healthy) `_assign_kaiu_engineer_standing_objectives` no-ops (min_si >= 7) and the
+  s49 `_assign_artisan_standing_objectives` pass gives every engineer the ARTISTIC_EXPRESSION
+  standing. Standing objectives are sticky (never cleared by SI change), and the Kaiu pass
+  guarded `if not standing.is_empty(): continue` — so once SI later decayed below 7, the
+  Kaiu pass skipped every engineer (slot already filled with art) and none ever FORTIFY'd.
+  Towers would decay to 0 despite being manned — defeating the entire point of Phase 2.
+  Inert before Phase 2 (no engineers were ever stationed at Towers), live once they are.
+  Fixed the guard to override the peacetime ARTISTIC_EXPRESSION standing (and refresh an
+  existing MAINTAIN_FORTIFICATION priority) when SI < 7, while still never clobbering a
+  different standing (e.g. a lord directive). Engineers now latch to wall maintenance once
+  any Tower degrades below SI 7 and keep it restored thereafter (proactive doctrine,
+  s2.4.11). Structural fix, no invented values. Parse-checked.
+- **Persistence verified.** `operational_superior_id` and `physical_location` are @export on
+  L5RCharacterData; `SettlementData.wall_tower_number` is @export. The ~39 wall NPCs are
+  ordinary characters saved by SaveManager and the tower number rides the settlements
+  Resource array — the roster + hierarchy round-trip across restart.
+- **Death cascade verified.** `OperationalHierarchySystem.clear_subordinates_on_death`
+  releases subordinates' `operational_superior_id` to -1 on a superior's death (Taisa dies →
+  its engineer/Kuni released; Shireikan dies → its 6 Taisa released), dead-guarded, no crash.
+  Tower-commander auto-refill on a Taisa's death is deferred to Phase 3 (abstract garrison has
+  no company to promote into) — graceful degradation, not a crash.
+
+### Systems Added 2026-06-11 (Kaiu Wall — Phase 1: Tower settlements, owner-authorized)
+- **s2.4.2 / s2.3 — the twelve Wall Towers created at world-gen.** Before this,
+  no `WALL_TOWER` settlement existed at all — the entire Kaiu Wall mechanical layer
+  (SI decay/sortie/garrison-shortage escalation/horde targeting) had nothing to act
+  on. `WorldBootstrap._create_wall_towers()` (post-pass after `_wire_adjacencies`,
+  before `_designate_hidden_temple`) creates 12 `WALL_TOWER` settlements numbered
+  1 (SE) → 12 (NW), distributed: **Ishibei 1-5** (GDD-stated, s2.3: "the five
+  southernmost Wall Towers are garrisoned from this province"), **Ishigaki 6-9** and
+  **Yoake 10-12** (PROVISIONAL — wall continues NW through both Crab provinces;
+  Tower 3 = Southern Shireikan seat in Ishibei, Tower 10 = Northern Shireikan seat in
+  Yoake). The three wall provinces have `shadowlands_strength` set (was 0 — only
+  ungovernable Hiruma provinces got SS) so the WallSystem recognises them as wall
+  provinces. Towers built as `SettlementData` directly (NOT `generate_settlement`,
+  which forces civilian PU distribution + `garrison_pu = maxi(1, pu/20)`). Appended
+  to `settlements` + each host province's `settlement_ids`; ID counter threaded
+  through (`next_settlement_id` return). **Per-tower starting state — all PROVISIONAL,
+  owner-approved "Pristine/stable" (2026-06-11):** `wall_si=10` (pristine, +12
+  defense), `garrison_pu=3` (above `MINIMUM_GARRISON_PU=1.0` so the shortage
+  escalation pipeline stays dormant), `jade_stockpile=5.0` (non-critical; small-sortie
+  min ≈0.6), `rice_stockpile=10.0` (~6-9 seasons of the 0.35/PU garrison drain;
+  towers have `population_pu=0` so produce no rice), `shadowlands_strength=3` on the
+  wall provinces (low tier — no extra SI decay). **Calibration basis (owner directive
+  "analyze the rest of the code first"):** horde combat is a STUB
+  (`HordeSystem._generate_jigoku_companies`/`_generate_undead_companies` return `[]`,
+  "pending GDD spec"), so nothing attritts `garrison_pu` yet — garrison can't be sized
+  against a non-existent threat; the only live tension loop is `wall_si` vs seasonal
+  decay (4/yr base, 6/yr at SS-medium) restored by FORTIFY (+1.0, +0.5/raise). Phase 1
+  ships WITHOUT maintainers (the command roster is Phase 2) and WITHOUT real horde
+  attrition (Phase 3 / GDD spec), so towers start pristine + low-pressure to stay
+  stable through the interim. Placement edge verified: towers appended last →
+  `_assign_physical_locations` picks `target_settlements[0]` (always a civilian
+  settlement) → no civilian is auto-stationed at a tower (correct; Phase 2 stations the
+  garrison command roster). Parse-checked; no tests per the no-test-code policy.
+  DEFERRED: Phase 2 (Shireikan/Rikugunshokan/garrison command roster + engineers as
+  tower-stationed NPCs), Phase 3 (horde composition spec → real garrison attrition →
+  garrison/SI/jade re-tuning against a live threat).
+
+### Systems Added 2026-06-11 (Kolat — succession trigger)
+- **s54.7g Master succession trigger WIRED.** The LOCKED succession resolver
+  `KolatMasterSelector.evaluate_succession()` (Tranche 8, fully built + tested) was
+  defined but never called — a dead Kolat Master left their Sect permanently vacant
+  and that network went dark. `DayOrchestrator._process_kolat_master_succession()`
+  now fires at both death-processing sites (daily + seasonal), BEFORE the field-agent
+  recall, for each dead Master: calls `evaluate_succession(dead.kolat_sect, characters,
+  {}, dice)` which runs the cascade (three ranked heirs → Tiger discretionary draw →
+  chain re-point) and seats a living non-Master Sect agent if one exists, else leaves
+  the Sect vacant (s54.7g: the network cannot always refill). The new Master inherits
+  the Sect standing mandate (`_assign_kolat_standing_objectives`, already wired), so
+  the network keeps functioning. Ordering: succession runs before the recall so a
+  freshly-seated Tiger can route that recall (the recall is Tiger-gated). The dead
+  Master's `is_kolat_master` flag is left set (dead-guarded everywhere; the resolver
+  excludes it via is_dead) so the recall still finds its network. `heir_designations`
+  is passed `{}` — the encrypted heir record and its Cloud-archive storage remain
+  deferred, so the cascade always falls to the discretionary draw for now (the
+  ranked-heir path activates automatically when that record is populated — no
+  further wiring). The s54.7g "not under active investigation" gate IS live:
+  `under_investigation_ids` is gathered each death pass from the perpetrators +
+  known suspects of all UNDER_INVESTIGATION CrimeRecords, and `_discretionary_select`
+  excludes them — a compromised Sect agent is never promoted into the seat. Pure structural wiring of a LOCKED spec,
+  no new design/numbers. Parse-checked; no tests per the no-test-code policy. TUNING:
+  a Sect whose Master dies before any agent is recruited (APPROACH_FOR_RECRUITMENT)
+  goes permanently dark — GDD-faithful fragility, but worth watching early-game.
+
+### Known Code Issues (found and fixed 2026-06-11, Wall escalation Step-1 season flag)
+- **Garrison-shortage letter-season flag was never set for lords — entire Champion/
+  Shireikan escalation pipeline stalled at Step 1 in live runs. FIXED.**
+  Auditing the Shireikan parallel wall path (s2.4.13 Decision 10) traced the
+  garrison-shortage escalation gate to a dead flag-setter.
+  `_apply_garrison_shortage_letter_writebacks` set `garrison_shortage_letter_season`
+  only from the **daily letter pass**, filtering results with `need_type ==
+  "STRENGTHEN_WALL"`. But (a) `resolve_daily_letter` excludes any character with
+  `civilian_order_budget_max > 0` (s57.34.7), so every lord — Champion (budget 12),
+  Rikugunshokan (8), and any lord-Shireikan — is excluded from that pass, and
+  (b) `STRENGTHEN_WALL` is deliberately decomposer-only with **no
+  `objective_alignment.json` entry** (it always decomposes into action-needs like
+  SEND_LETTER, which carry their own alignment), so `resolve_daily_letter` returns
+  `{}` for it (score 0) regardless. Result: NO daily-pass STRENGTHEN_WALL letter is
+  ever produced, the flag stays −1 forever, and both the Champion (decomposer line
+  937 `if letter_season < 0: SEND_LETTER`) and Shireikan (line 957) return
+  `SEND_LETTER` every season, never reaching DISPATCH_COURTIER or
+  DECLARE_WALL_EMERGENCY. (The DISPATCH_COURTIER/DECLARE_WALL_EMERGENCY tests passed
+  only because they set the flag directly in fixtures.) Fix is structural (no
+  invented numbers) and matches s55.23a line 72 ("no letter sent this season → fire
+  SEND_LETTER"): the writeback now also scans the AP/Civilian-Order wave results
+  (`day_result["results"]`) for a successful `WRITE_LETTER` whose sender holds a
+  STRENGTHEN_WALL objective and whose `target_province_id` (inherited from the
+  decomposer need via npc_decision_engine:497) resolves to a WALL_TOWER, and sets
+  that Tower's `garrison_shortage_letter_season` from the lord's own executed Step-1
+  letter. Pipeline now flows: season X — SEND_LETTER (sets flag) then DEFEND_PROVINCE;
+  season X+1 — DISPATCH_COURTIER; refused + SI<6 — DECLARE_WALL_EMERGENCY.
+  LIMITATIONS (not this bug): (1) the daily-pass loop is now dead but harmless (kept
+  as documented intent for a future budget-0 sub-Shireikan letter channel);
+  (2) sub-Shireikan tower officers (WALL_SEGMENT_COMMANDER / Taisa) still fall to
+  DEFEND_PROVINCE without their own letter campaign — extending the letter step below
+  Shireikan rank is a design expansion (GDD s2.4.12 line 530 "The Taisa or Shireikan
+  writes letters") needing owner direction, separate from this stall fix.
+
+### Systems Added 2026-06-11 (Wall Shireikan→Champion escalation, owner-authorized)
+- **s2.4.13 Decision 10 / s2.4.14 Decision 4 — Champion tower visibility WIRED.**
+  Closes the deeper half of the garrison-shortage stall. Even with the Step-1 season
+  flag now set (above), the **Champion's** escalation (DISPATCH_COURTIER /
+  DECLARE_WALL_EMERGENCY, gated `lord_rank == CLAN_CHAMPION`) was unreachable in live
+  runs: `wall_statuses` is injected ONLY for characters physically standing at a Tower
+  (`_set_wall_tower_context_flags`, location-gated + cleared daily as a stale key), and a
+  Clan Champion governs from a capital — so the Champion's `ctx.wall_statuses` is always
+  empty and the decomposer's Branch A loops never execute. The GDD models this as the
+  Shireikan **escalating to the Champion** after a failed letter season (Decision 10
+  line 666), so `_process_wall_shireikan_escalation()` (DayOrchestrator, run daily right
+  after `_set_wall_tower_context_flags`) implements that handoff. **Trigger (owner-
+  confirmed proxy for GDD "no lord moved to the +50 commitment threshold," which isn't
+  tracked in state):** Tower still below minimum garrison + Shireikan Step-1 letter sent
+  (`garrison_shortage_letter_season >= 0`) + a full season elapsed (`current_season !=
+  garrison_shortage_letter_season`). On escalation it finds the living non-PC Clan
+  Champion of the Tower's province clan (`_extrad_find_clan_champion_id`), **force-assigns
+  a STRENGTHEN_WALL primary** targeting the Tower (`source: "wall_shireikan_escalation"`,
+  owner choice — mirrors the existing wall_emergency forced-primary precedent), and
+  injects the Tower's WallStatus into the Champion's per-character world_state via
+  `_inject_champion_wall_status()` (built identically to `_set_wall_tower_context_flags`;
+  dedup-guarded if the Champion happens to be at the Tower). The Champion's
+  `province_statuses` (the `ps.garrison_pu < minimum` check at decomposer line 934) is
+  already auto-built for every province from the global `province_data`/`settlements`
+  injected for lords (`_inject_base_character_context` line 21364, which runs before the
+  wave and preserves the injected `wall_statuses`). Because the season flag is already
+  past, the Champion's decomposer skips Step 1 and fires DISPATCH_COURTIER → (refused +
+  SI<6) DECLARE_WALL_EMERGENCY — the full GDD pipeline now runs end to end. **Release:**
+  a Champion holding a `wall_shireikan_escalation` primary whose Towers have all recovered
+  (none escalating that pass) drops the objective (`obj.erase("primary")`, mirrors the
+  wall_emergency clear). Ordering verified: stale-clear (161) → `_set_wall_tower_context_flags`
+  (234) → escalation (235) → `_inject_base_character_context` (294, preserves wall_statuses,
+  adds province_data) → wave (302). Pure structural wiring of LOCKED escalation behavior,
+  no invented numbers. Parse-checked; no tests per the no-test-code policy. LIMITATIONS
+  (not bugs): the Champion holds one STRENGTHEN_WALL primary at a time (decomposer Branch A
+  iterates all injected Tower wall_statuses and acts on the first short one, so multiple
+  short Towers are still serviced, just via one objective slot); DISPATCH_COURTIER target
+  selection relies on the Champion's `contact_garrison_scores` (existing infra from the
+  Daimyo-handoff fix).
+
+### Known Code Issues (found and fixed 2026-06-11, Wall escalation Daimyo handoff)
+Auditing the receiving-Daimyo response path (s55.23a, LOCKED) after the Step-2
+routing fixes exposed two more gaps that left the DISPATCH_COURTIER path inert —
+it had never been exercised because Step 2 used to route to wall repair. Both
+fixed; the full Step 1 → Step 2 → Step 3 escalation now hands off cleanly:
+- **DISPATCH_COURTIER selected no target Daimyo — executor no-op'd. FIXED.**
+  GDD s55.23a: DISPATCH_COURTIER requires `target_npc_id` (receiving Daimyo) AND
+  `target_province_id` (Tower), both required. The decomposer passes only the
+  province, and `_populate_action_metadata` had no DISPATCH_COURTIER branch, so
+  `target_npc_id = -1` → the executor early-returned `no_target` and did nothing
+  (no Daimyo decision, no flags). Added a metadata branch selecting the known
+  contact with the highest garrison personality score (`ctx.contact_garrison_scores`
+  — the same selection the letter step uses); `target_province_id` is already set
+  from the need. `_populate_action_metadata` already receives `ctx`, so no
+  signature change.
+- **`garrison_shortage_courtier_dispatched` never set on refusal — Step 2 looped. FIXED.**
+  The flag was set only in `_apply_garrison_assignment` (the *compliance* path,
+  which then clears the shortage). On a refusal `_apply_garrison_courtier_refusal_writebacks`
+  set `courtier_refused = true` but left `courtier_dispatched = false`, so the
+  decomposer's Step 2 (`not courtier_dispatched`) kept re-firing DISPATCH_COURTIER
+  every season and Step 3 (which keys on `courtier_refused`) was never reached.
+  Now the refusal writeback also sets `courtier_dispatched = true`. After a
+  refusal: Step 2 is skipped → Step 3 fires DECLARE_WALL_EMERGENCY when SI < 6.
+  Parse-checked; no tests per the no-test-code policy. LIMITATION (not a bug):
+  the model dispatches to a single best-scoring Daimyo; after a *partial*
+  compliance (some PU, still below minimum) the Champion falls through to
+  DEFEND_PROVINCE (direct defense) rather than dispatching to another Daimyo —
+  the existing single-target model, not a regression.
+
+### Known Code Issues (found and fixed 2026-06-11, Wall escalation Step 2)
+The Champion's garrison-shortage escalation (s55.23a, LOCKED) had its entire
+Step 2 (courtier dispatch) broken three ways — meaning Step 3 (the new
+DECLARE_WALL_EMERGENCY) was unreachable in practice. All three fixed:
+- **Step 2 returned the wrong NeedType — `MAINTAIN_FORTIFICATION` (wall repair)
+  instead of dispatching a courtier. FIXED.** `objective_decomposer.gd:941`.
+  GDD s55.23a line 74: "Step 2 — Courtier dispatch: ... fire DISPATCH_COURTIER."
+  History: commit 2cd579c ("Fix 13 decomposer outputs using ActionIDs as
+  NeedTypes") changed the original `DISPATCH_COURTIER` → `MAINTAIN_FORTIFICATION`.
+  The original WAS broken (DISPATCH_COURTIER is an ActionID, not a NeedType →
+  no objective_alignment entry → scores 0 → REST), but the bulk fix swapped in a
+  valid-but-wrong NeedType (MAINTAIN_FORTIFICATION's winner is ORDER_FORTIFY/
+  SEAL_WALL_BREACH 100, not DISPATCH_COURTIER) — so Step 2 routed to wall repair,
+  never dispatching a courtier, so `garrison_shortage_courtier_dispatched` never
+  flipped and the pipeline stalled forever. Fixed via the collision-NeedType
+  pattern (same as DECLARE_WALL_EMERGENCY / PERFORM_RITUAL): added a
+  `DISPATCH_COURTIER` NeedType to objective_alignment.json
+  (`DISPATCH_COURTIER` 100, `ASSIGN_GARRISON` 60 fallback) and routed Step 2 to it.
+- **COMMANDER_RANK_ACTIONS gate locked the Champion out of DISPATCH_COURTIER. FIXED.**
+  The gate (`npc_decision_engine.gd`) blocks DISPATCH_COURTIER unless
+  `military_rank >= SHIREIKAN`, but `POSITION_MILITARY_RANK` assigns a military
+  rank only to RIKUGUNSHOKAN — every Clan Champion has `military_rank = NONE`. GDD
+  s55.23a line 46: DISPATCH_COURTIER is "Available to Champion and Shireikan tier
+  only." Added a Champion carve-out (`lord_rank == CLAN_CHAMPION` passes regardless
+  of military_rank). Without this, even the corrected Step-2 routing would still be
+  blocked.
+- **Step-1→Step-2 timing used cyclic-season subtraction. FIXED.**
+  `ctx.season - garrison_shortage_letter_season >= 1` — but `ctx.season`
+  (`world_state["season"] = time_system.get_season()`) is cyclic 0–3, and
+  `garrison_shortage_letter_season` is set from the same cyclic value. A letter
+  sent in winter (3) gives 0-3 / 1-3 / 2-3 = all < 1 → Step 2 never advances
+  (3 of 4 seasons worked; winter-issued letters silently stalled). Changed to
+  `ctx.season != garrison_shortage_letter_season` ("the season has changed since
+  the letter" = one season elapsed), which is wraparound-safe and equivalent for
+  the working cases. Step 1 (`letter_season < 0`) and the Shireikan path
+  (also `< 0`) are unaffected. Phantom `DEFEND_PROVINCE` fallbacks (a NeedType,
+  not an executable action) in both new wall NeedType blocks replaced with the
+  real `ASSIGN_GARRISON` action. Parse-checked; no tests per the no-test-code policy.
+
+### Systems Added 2026-06-11 (Wall-Wide Emergency)
+- **s2.4.14 Decision 6 — DECLARE_WALL_EMERGENCY (owner-authorized 2026-06-11).**
+  Completes the Kaiu Wall garrison-shortage escalation, replacing the Step-3
+  DEFEND_PROVINCE stub (`objective_decomposer.gd:945`). The gravest call a Crab
+  Champion can make short of war. **Trigger (LOCKED s55.23a Step 3):** Champion
+  only, `garrison_shortage_courtier_refused and si < 6`. **Routing:** decomposer
+  Step 3 returns NeedType `DECLARE_WALL_EMERGENCY` → objective_alignment
+  (`DECLARE_WALL_EMERGENCY` 100, `ASSIGN_GARRISON` 60 fallback) → 4 context lists
+  (AT_OWN_HOLDINGS, AT_COURT, ON_CAMPAIGN, AT_WALL_TOWER) → LORD_ONLY → 1 AP
+  (owner) → action_skill_map null/null (auto-success declaration, no roll).
+  **Executor** (`_compute_declare_wall_emergency_effects`, ADMINISTRATIVE_ACTIONS):
+  signals `requires_wall_emergency_declaration` + the critical Tower province.
+  **Writeback** (`_apply_wall_emergency_declaration`, in `_process_military_effects`):
+  (1) elevates the active `shadowlands_incursion` topic — preferring the one
+  affecting the Tower, else the most recent — to the Tier-1 momentum floor and
+  broadcasts it into every compelled lord's `topic_pool` (owner choice: elevate
+  existing, not a new topic; gracefully skips if no incursion topic exists yet);
+  (2) compels every living non-PC Crab daimyo (CITY_DAIMYO..FAMILY_DAIMYO, ≠ the
+  Champion) by forcing a `DEFEND_PROVINCE` primary toward the Tower (source
+  `wall_emergency`) — supersedes all priorities per D6 — stamping
+  `wall_emergency_obligation_ic_day`. Deduped: one emergency per 90-day window
+  (the Champion is marked too, `contributed=true`, exempt from penalty, which
+  rate-limits re-declaration). **Compliance (owner: override + penalty):** daily
+  `_process_wall_emergency_contributions` marks a lord `wall_emergency_contributed`
+  when they commit troops (ASSIGN_GARRISON / ORDER_DEPLOY) during the window;
+  seasonal `_process_wall_emergency_obligations` applies −1.0 Honor (the
+  serious/horde tier of the existing s2.4.12 courtier-refusal scale —
+  `action_executor` wall_critical branch, reused not invented) to any
+  non-contributor 90 IC days (= IC_DAYS_PER_YEAR/4, one season) after the
+  declaration, then clears the obligation + the forced primary. Two new
+  `L5RCharacterData` fields (`wall_emergency_obligation_ic_day`,
+  `wall_emergency_contributed`) persist via SaveManager — no WorldStateSaver
+  change. **Re-declaration gate (2026-06-11):** `ContextSnapshot.wall_emergency_active`
+  is populated in `build_context` directly from the Champion's own marker
+  (`wall_emergency_obligation_ic_day >= 0`, set on declaration, cleared by the
+  seasonal pass). The decomposer Step 3 skips DECLARE_WALL_EMERGENCY while it is
+  set — the Champion defends the Tower directly (DEFEND_PROVINCE) instead of
+  re-declaring — so the action is never re-produced during the active window
+  (no wasted AP). The writeback dedup remains as belt-and-suspenders. Parse-checked;
+  no tests per the no-test-code policy. LIMITATIONS
+  (not bugs):
+  contribution is lenient (any garrison/deploy commit counts, not strictly
+  Tower-targeted); "every Crab lord" = CITY_DAIMYO+ (village headmen have no
+  garrison to commit); topic elevation requires an active incursion topic
+  (the forced objectives + penalty are the operative compulsion regardless).
+
+### Systems Added 2026-06-06 (Sailing)
+- **s57.42 / s57.43 Sailing, Captains & Passage** — `simulation/sailing_system.gd`
+  (pure class); `shared/ship_data.gd` gains `owner_id` + `departure_tick`. New system
+  (was REFERENCE; locked s57.42a). Headless core faithful to s57.42/43:
+  captain Sailing minimums (`min_sailing_for_class`: 1 small / 3 oceangoing / 4 heavy;
+  TORTOISE_OCEANGOING = 3 PROVISIONAL), `captain_meets_requirement`, `self_captain_penalty`
+  (−2k0 under-qualified). Captain succession (`select_acting_captain`: highest Sailing,
+  tiebreak Insight Rank → Status; -1 = catastrophic peril; skips dead). REQUEST_PASSAGE
+  acceptance (`evaluate_passage_request`): standing-orders + schedule-incompatible hard
+  refuses; Acquaintance+ (disposition ≥ 11) rides free; below that koku + personality lean
+  must bridge the gap (Jin +5 / Seigyo +3 koku-offered / Rei +2 high-Status[≥4.0] or polite);
+  `refusal_disposition_shift` (0 polite / −1..−3 rude). Throttle/cooldown
+  (`can_request_passage`: 2/IC day, 1-IC-day per-captain refusal cooldown). Embarkation
+  (`board_passengers` sets `aboard_ship_id` for accepted passengers co-located at the port
+  when `departure_tick` fires; `disembark` clears + places). Owner-granted passage =
+  3-point Obligation. s57.43 voyage formulas: `pirate_interception_chance` (Strength × 10%),
+  `interception_resolution` (4+ → naval mass battle, 1–3 → deck skirmish),
+  `shipwreck_landfall_chance` (10/25/40/60, Mantis day-1 30%, 6-day ceiling).
+  DEFERRED (UI / NPC-engine, needs Godot): ship ASCII Lesser Zone (SHIP_INTERIOR) + voyage
+  play map, AT_SHIP context + action allow/block list, voyage-event resolution + arrival
+  route-disruption, passenger-manifest generation, REQUEST_PASSAGE/JUMP_OVERBOARD/
+  INTERVENE_CAPTAIN as live ActionIDs, named-crew REPORT_TO_SHIP, owner-override letter flow.
+  Locked in `gdd/s57.42a_sailing_captains_passage_locked.md`. 20 tests.
+
+### Systems Added 2026-06-06 (Allied NPC Companion)
+- **s57.46 Allied NPC Companion** — `simulation/companion_system.gd` (pure class),
+  `shared/companion_data.gd` (Resource). New system (was REFERENCE; locked s57.46a).
+  Headless core faithful to s57.46: `CompanionType` (village/city-team/headman doshin,
+  yojimbo, yoriki, named ally), `Command` (FOLLOW/HOLD/MOVE_TO/RETREAT + GUARD_EXIT/
+  IDENTIFY/SEARCH_AREA/PROTECT/INVESTIGATE), `Morale` (STEADY/SHAKEN/BROKEN).
+  6-slot hard cap (doshin team = 1 slot). `available_commands()` gates type-specific
+  commands; `can_assign_command()` blocks orders to BROKEN companions and limits SHAKEN
+  to RETREAT. `decide_action()` is the AI priority stack (SURVIVAL→PLAYER_COMMAND→DEFAULT;
+  BROKEN forces RETREAT). `morale_threshold()` per type (village .30/city .40/headman .50/
+  yojimbo never; yoriki .30–.50 by school+Yu; named .20–.50 by Yu); `update_morale()`
+  (SHAKEN at half threshold, BROKEN at threshold, no un-break), `relieve_shaken()`,
+  `combat_penalty()` (−5 SHAKEN). `noise_contribution()` (doshin baked-in bases;
+  others Stealth-reduced) + `party_noise_contribution()`. `teamwork_grapple_bonus()`
+  (+5 city team 2+), `will_engage_samurai()` (warrant + headman gates),
+  `guard_exit_penalty()` (−10 vs samurai). `death_consequences()` (doshin_losses
+  increment / named vacancy + Tier 4 topic). DEFERRED to UI/orchestrator (needs Godot,
+  same boundary as the combat layer): grid rendering, TAB command menu, A* path
+  execution, turn-loop integration into AsciiMapCombatOrchestrator, mission-launch
+  selection screen, local-knowledge prompts, live IDENTIFY/SEARCH/INVESTIGATE rolls.
+  Locked in `gdd/s57.46a_allied_npc_companion_locked.md`. 25 tests in
+  `tests/test_companion_system.gd`.
+- **Companion ↔ orchestrator integration (s57.46, 2026-06-06).**
+  `AsciiMapCombatOrchestrator` now hosts companions as FACTION_PLAYER participants:
+  `add_companion()` (rolls initiative, inserts into turn order, registers
+  CompanionData + started count); `execute_companion_turn()` (runs
+  `CompanionSystem.decide_action`, then translates the command to grid behavior —
+  RETREAT/BROKEN → move to nearest ZONE_EXIT and leave, else engage an adjacent
+  enemy with doshin samurai-avoidance, else move toward the command's goal tile:
+  FOLLOW→player, MOVE_TO/GUARD_EXIT→tile, PROTECT→protected char; reuses
+  find_path/execute_move/get_melee_targets/_npc_execute_attack);
+  `update_companion_morale()` (recomputes from allied-casualty fraction);
+  `resolve_current_turn()` (turn-loop dispatcher — auto-resolves enemy NPCs and
+  companions on their initiative, refreshes companion morale first, yields
+  `awaiting_player` on a PC turn).
+  `MapCombatState` gains `companion_data` + `companion_started_count`. Live UI
+  (grid tokens, TAB menu, mission-launch screen, local-knowledge prompts,
+  IDENTIFY/SEARCH/INVESTIGATE live rolls) still deferred (needs Godot). 4
+  integration tests in `tests/test_ascii_map_combat.gd`.
+
+### Systems Added 2026-06-06 (Kiho)
+- **s38 Kiho** — `simulation/kiho_system.gd` (pure class). New system (was REFERENCE).
+  Full 73-kiho catalog faithful to s38 (Air 18 / Earth 17 / Fire 12 / Water 11 /
+  Void 15): each entry has ring, mastery, `KihoType` (INTERNAL/KHARMIC/MARTIAL/MYSTICAL),
+  and atemi/staff flags. **MONK-ONLY (s38a A0 owner override 2026-06-06):** only MONK
+  characters may learn kiho — shugenja are excluded (overrides s38's shugenja-at-2×
+  provision); PCs may not be monks (s60.2, `PcSystem.is_school_type_allowed_for_pc`/
+  `is_valid_pc`), so PCs never learn kiho. Eligibility (`meets_mastery`): a monk meets a
+  kiho if `school_rank + relevant_ring ≥ mastery`. Cost multiplier (`cost_multiplier`):
+  Brotherhood monk ×1.0, non-Brotherhood monk ×1.5; `learn_cost = ceil(mastery × multiplier)`
+  (base mirrors KataSystem's `xp_cost = mastery`). Knowledge cap (`knowledge_cap`/
+  `at_knowledge_cap`): non-Brotherhood monks ≤ school rank; Brotherhood uncapped (-1).
+  Acquisition (`can_learn`/`can_afford`/`learn_kiho`) consumes the existing `kiho` character
+  field and deducts XP. NPC selection (`select_kiho_for_npc`): highest affordable+eligible
+  mastery, alpha tie-break. Activation (`activation_options`): Void Point = Free, Meditation
+  TN 15 = Complex / TN 30 = Simple, atemi free. Active-slot constraint (`can_activate`): one
+  Internal + one Kharmic + one Mystical active, Martial unlimited. Wired into NPCAdvancement:
+  monks claim kiho XP before progress bars (parity with bushi/kata). Locked in
+  `gdd/s38a_kiho_locked.md` (A0–A10). 20 tests + 3 PcSystem PC-school tests.
+
 ### Systems Added 2026-06-04
 - **s44 Shadowlands Mutations & Powers** — `simulation/mutation_system.gd` (pure class),
   `shared/mutation_data.gd`, `shared/shadowlands_power_data.gd`. Full catalog from GDD s44.
@@ -4058,8 +6858,9 @@ mechanical change is applied until s40 individual combat is implemented.
   `day_orchestrator.gd` resolves `requires_spell_roll=true` executor flags: DETECT_PRESENCE
   creates a SUPERNATURAL TIER_4 taint-detection topic when province PTL > 0; REMOVE_TAINT
   calls `apply_taint_removal`; PURIFY_AREA forward-wired (no spells yet). 11 engine tests.
-  LIMITATIONS: Sense spell TN for Maho Channel 3 detection deferred (blocked on s31 design
-  decision — see D table). `spells_known` field on L5RCharacterData promoted from orphaned
+  LIMITATIONS: Maho Channel 3 detection is a Lore: Shadowlands check (NOT a Sense cast —
+  Sense detects kami, not kansen), WIRED at TN (8 − Taint Rank) × 5 (owner 2026-06-10).
+  `spells_known` field on L5RCharacterData promoted from orphaned
   placeholder to active use. `spell_slots_used` and `spell_void_bonus_used` added as new
   character fields. PURIFY_AREA sim_effect has no library spells yet.
 
@@ -4147,11 +6948,10 @@ exactly:
 
 **Channel 3 — Taint symptoms on the caster (personal, proximity-based)**
 Caster's accumulating Taint is the most direct signal but requires physical
-proximity. Two detection paths, both gated on proximity:
-- **Sense spell** (Section 31, not yet designed): a shugenja present in the
-  same zone may cast Sense to detect kansen residue on a character. TN
-  deferred to Section 31 design.
-- **Lore: Shadowlands check** during any action that puts the detector in
+proximity. Detection is a Lore: Shadowlands check (NOT the Sense spell —
+canonically Sense detects elemental kami, explicitly NOT kansen; owner
+correction 2026-06-10). Two paths, both gated on proximity:
+- **Passive (incidental) Lore: Shadowlands check** during any action that puts the detector in
   social proximity (INVESTIGATE_PROVINCE, court attendance, COMMUNE_WITH_SPIRITS
   near the suspect): Kuni Witch-Hunters and Asako Inquisitors automatically
   attempt this check when their known_topics include a Taint-related event in
@@ -4162,9 +6962,9 @@ proximity. Two detection paths, both gated on proximity:
 - On detection success: generates a **Tier 3 topic** naming the specific
   character as a suspected maho user. This is a direct accusation topic —
   unlike Channel 1 and 2, it names a perpetrator.
-- TN for the Lore: Shadowlands check is deferred to Section 31 / Section 42
-  (Taint consequence design). Do not implement Channel 3's detection roll
-  until those sections are LOCKED.
+- TN for the Lore: Shadowlands check = **(8 − Taint Rank) × 5** (owner-set
+  2026-06-10): 30/25/20/15 for Rank 2–5. Both the passive (incidental) path and
+  the active, deliberate examination (EXAMINE_FOR_TAINT) at the same TN are WIRED.
 
 **Channel 4 — Direct witnesses (already handled)**
 If `witnesses` is non-empty on the CrimeRecord, those characters carry direct
@@ -4172,7 +6972,12 @@ knowledge. They can testify through the existing court/investigation system.
 No new code. The witness list in CrimeRecord IS the fourth channel.
 
 **What is not yet implementable:**
-- Channel 3 detection roll TN (blocked on Section 31 Sense spell design)
+- Channel 3 passive Lore: Shadowlands detection roll — WIRED (TN = (8 − Taint
+  Rank) × 5, owner-set 2026-06-10). An active, deliberate Lore: Shadowlands
+  examination (EXAMINE_FOR_TAINT, same TN) is now also WIRED — see "Maho
+  Channel 3 active examination". NOTE: the Sense spell is NOT the detection
+  tool — canonically Sense detects elemental kami, explicitly NOT kansen
+  (owner correction 2026-06-10).
 - Kuni/Asako/Kuroiban as Named Characters with UPHOLD_LAW standing objectives
   (blocked on s11.3.5 becoming LOCKED — currently PARTIALLY DESIGNED)
 - `CAST_MAHO` as an NPC ActionID (no LOCKED specification exists for maho as
@@ -4180,8 +6985,8 @@ No new code. The witness list in CrimeRecord IS the fourth channel.
 
 **Rationale:** Channels 1 and 2 are wirable now — they use entirely existing
 systems (insurgency topic generation, zone_event_log, EXAMINE_CRIME_SCENE).
-Channel 3 is partially wirable (proximity check) but its TN is a pending design
-gap. This mirrors the GDD's intent: "multiple channels, none reliable alone."
+Channel 3's passive proximity check is WIRED at TN (8 − Taint Rank) × 5.
+This mirrors the GDD's intent: "multiple channels, none reliable alone."
 The caster who casts once in a remote province and leaves quickly may never be
 caught. The one who casts repeatedly in a populated area accumulates risk across
 all four channels simultaneously.
@@ -4236,11 +7041,17 @@ mechanical code changes to implement them.
   InformationSystem methods from dict access to property access. Updated all
   test files.
 
-## Decisions Needed and Blocked Items
+## Decisions Needed and To-Be-Implemented Items
 
 Everything below needs a decision, a GDD spec, or a dependency before dev
-can proceed. Items are grouped by what's blocking them. Each entry says
+can proceed. Items are grouped by what they're waiting on. Each entry says
 what the code currently does, what it needs, and where the answer lives.
+
+**Policy:** To-be-implemented features are no longer off-limits by default. Any item
+here MAY be implemented once the owner gives explicit, prior authorization
+for that specific feature (see Section D). Items waiting purely on a missing
+dependency (e.g. sub-tile map data in Section C) still cannot proceed until
+that dependency exists, regardless of authorization.
 
 ---
 
@@ -4428,14 +7239,14 @@ These features are structurally complete but cannot resolve without sub-tile arm
 
 ---
 
-### D. Areas Needing Design Decisions (Owner Approval Required)
+### D. Areas Needing Design Decisions (Owner Authorization Required)
 
-These sections have partial or no GDD spec. **Do not implement any of these without explicit owner approval first.** The design decisions are the owner's to make.
+These sections have partial or no GDD spec. **To-be-implemented features MAY be worked on — but only with the owner's explicit, prior authorization for that specific feature.** Authorization is per-feature and per-occasion: a general "go ahead" or approval on one to-be-implemented feature does NOT extend to any other. Before starting any item below you MUST (1) state exactly what you propose to build and the design choices it requires, (2) ask the owner, and (3) receive explicit, unambiguous authorization. No authorization, no code — silence is not authorization. Once authorized, the design decisions still trace to the owner's stated intent; you may not invent mechanics, numeric values, or behavioral rules beyond what the owner authorizes (the "Do not invent mechanics" hard constraint still applies).
 
 | Section | What's Needed |
 |---------|--------------|
-| s2.4 | `DECLARE_WALL_EMERGENCY` ActionID — s2.4.14 Decision 6: AP cost, agenda topic format, compliance enforcement |
-| s31 | Sense spell detection TN — Maho Channel 3 roll TN (core spell system DONE; this one value pending) |
+| s2.4 | `DECLARE_WALL_EMERGENCY` ActionID — RESOLVED (owner-authorized 2026-06-11): 1 AP; elevates the existing `shadowlands_incursion` topic + broadcasts to all Crab lords; compels every Crab daimyo (forced DEFEND_PROVINCE primary) + −1.0 Honor (s2.4.12 serious tier) for non-contributors one season later. See "Systems Added 2026-06-11 (Wall-Wide Emergency)". |
+| s31 | RESOLVED — Maho Channel 3 both halves WIRED at TN = (8 − Taint Rank) × 5 (owner-set 2026-06-10): passive proximity check + active EXAMINE_FOR_TAINT corroboration. NOT a Sense cast (Sense detects kami, not kansen). |
 | s38 | Kiho system — full design needed |
 | s40 | Individual combat — PARTIAL. WeaponData/ArmorData Resources, NPC summary roll, weapon assignment done. Full PC-facing mechanics (all maneuvers, kata effects, grapple, sumai) blocked on design decisions. |
 | s43 | Maho spell cast roll TN — not specified. Needed for CAST_MAHO NPC ActionID |
@@ -4458,11 +7269,11 @@ These sections have partial or no GDD spec. **Do not implement any of these with
 | `timed_advantages` and `action_blocks` | Individual school technique implementation (per-school design) |
 | SEEK_PRETEXT ActionID executor | Executor mechanics unspecified in GDD s14 |
 | `eta` community weight in Bloodspeaker cell placement | No `eta` field on ProvinceData/SettlementData |
-| Maho Channel 3 detection TN | s31 Sense spell design decision needed |
+| Maho Channel 3 detection TN | RESOLVED — Lore: Shadowlands check at (8 − Taint Rank) × 5 (owner-set 2026-06-10). Not a Sense cast. |
 | Animal companion ASCII combat | s40/s56 design |
 
 **Sections available for design and implementation (source material exists, design decisions needed before coding):** s38 (kiho), s40 (individual combat — partial, further design decisions needed), s44 (Shadowlands mutations — DONE), s45 (advantages/disadvantages — DONE), s54.7 (Kolat), s57.42–s57.43 (sailing/ship zones), s57.46 (allied NPC companion).
-**Note:** s31–s37 (spells — DONE, one pending value: Sense spell detection TN), s57.23 (garden), s57.24 (bonsai), s57.26 (origami), s57.27 (painting), s57.29 (ikebana), s57.30 (calligraphy), s57.41 (engineering), s57.45 (geisha) are all **DONE**.
+**Note:** s31–s37 (spells — DONE), s57.23 (garden), s57.24 (bonsai), s57.26 (origami), s57.27 (painting), s57.29 (ikebana), s57.30 (calligraphy), s57.41 (engineering), s57.45 (geisha) are all **DONE**.
 
 ---
 
@@ -4493,9 +7304,10 @@ Whenever a task is complete (system implemented, wired, committed, pushed),
 do the following in order before ending the turn:
 1. **Validate twice** — re-read the actual code (not memory) and check it
    against the GDD section it implements. First pass: logic and GDD
-   fidelity. Second pass: tests against implementation, edge cases. State
-   findings explicitly — what's correct, what's a known limitation, what
-   would be a tuning concern.
+   fidelity. Second pass: wiring completeness and edge cases (parse-check
+   with `godot --headless --check-only`, trace each reachability/usage point
+   by hand — do NOT write tests). State findings explicitly — what's correct,
+   what's a known limitation, what would be a tuning concern.
 2. **Suggest a list of next options** — present 3–4 distinct directions
    for what to build next, sized for clarity (small / medium / foundational
    / wiring follow-up). Use AskUserQuestion to let the user pick.

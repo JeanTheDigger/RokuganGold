@@ -14,6 +14,9 @@ extends Resource
 @export var school_type: Enums.SchoolType = Enums.SchoolType.BUSHI
 @export var school_rank: int = 1
 @export var age: int = 16
+## Years of unnatural life bought with maho (s43 Fierce Blood of the Earth):
+## the natural-death roll uses age − life_extension_years as the effective age.
+@export var life_extension_years: int = 0
 @export var gender: String = ""
 @export var orientation: String = "straight"
 ## s45 CAST_OUT: Brotherhood of Shinsei sect affiliation ("Shintao", "Fortunist", or "").
@@ -94,6 +97,11 @@ var spell_void_bonus_used: int = 0
 # -- Equipment & Outfit --------------------------------------------------------
 
 @export var weapons: Array[WeaponData] = []
+# Off-hand weapon name for s40 dual-wield schools (Mirumoto daisho, Yoritomo
+# paired kama, Lion katana-and-war-fan). "" = single weapon. Set at world-gen;
+# AsciiMapCombatOrchestrator.setup_combat reads it to flag the Participant
+# dual_wielding and apply the off-hand / dominant-hand / two-weapon rules.
+@export var off_hand_weapon: String = ""
 @export var armor_worn: ArmorData = null
 @export var armor_tn_bonus: int = 0  # mirrors armor_worn.tn_bonus; kept for fast lookup
 @export var armor_reduction: int = 0
@@ -211,6 +219,20 @@ var spell_void_bonus_used: int = 0
 # -- Poison Tracking -----------------------------------------------------------
 
 @export var active_poisons: Array = []
+## Transient combat suppression of one Disadvantage's effects (s38 Banish All
+## Shadows). Holds an Enums.Disadvantage int (−1 = none); AdvantageSystem skips this
+## Disadvantage in its combat-roll readers while set. Cleared by the orchestrator's
+## advance_round at expiry. Not exported — combat-transient state.
+var suppressed_disadvantage_type: int = -1
+## Transient combat suppression of Shadowlands Taint benefits (s38 Rest, My Brother).
+## When true, MutationSystem skips the positive Taint Power/mutation bonuses (not the
+## penalties). Cleared by the orchestrator's advance_round at expiry. Not exported.
+var taint_benefits_suppressed: bool = false
+## Death Touch affliction (s38 kiho, Void 7). Stamped when a caster lands the 3
+## consecutive atemi strikes + the post-3rd Void Point. Resolved at the next daily
+## tick by DayOrchestrator (ring drain → catatonic → 3 Contested Void → death).
+## Keys: caster_id, insight_cap, caster_void. Empty = not afflicted.
+@export var death_touch_affliction: Dictionary = {}
 
 # -- Family Web (Section 22.6) -------------------------------------------------
 # Generation 1 (self), Generation 2 (parents), and any actively-simulated
@@ -235,10 +257,48 @@ var spell_void_bonus_used: int = 0
 
 @export var kolat_superior_id: int = -1
 @export var kolat_sect: Enums.KolatSect = Enums.KolatSect.NONE
+## True on elevation to a Master seat (s54.7a/h). Hidden.
+@export var is_kolat_master: bool = false
+## True if this agent carries a Tear of the Oni's Eye — enables TRANSMIT_VIA_TEAR
+## (s54.7c/d). All Masters hold a Tear; senior agents may also. Hidden.
+@export var holds_tear: bool = false
+## Per-Master record dictionaries, koku fields, cover personas, etc. (s54.7h). Hidden.
+@export var special_data: Dictionary = {}
+
+# -- Kolat sleeper hidden fields (Section 54.7e/h; installed by conditioning) --
+## Spoken phrase that activates the sleeper ("" = not a sleeper).
+@export var trigger_phrase: String = ""
+## Engine-readable command the sleeper executes on activation ({} = none).
+@export var sleeper_command: Dictionary = {}
+## 0–100 conditioning stability; -1.0 = not a sleeper. Degrades 5/season untended.
+@export var conditioning_stability: float = -1.0
+## Populated from sleeper_command when ACTIVATE_SLEEPER fires; {} = dormant.
+@export var active_sleeper_command: Dictionary = {}
+## IC days since last MAINTAIN_SLEEPER_CONTACT (-1 = not a sleeper).
+@export var sleeper_contact_overdue: int = -1
+
+# -- Kolat koku fields (Section 54.7h; Coin/Master use, stored hidden) ---------
+## Laundered, untraceable working reserve (Master Coin).
+@export var kolat_koku: int = 0
+## Collected-but-unlaundered koku (Master Coin).
+@export var dirty_koku: int = 0
+## Tiger-allocated operational budget for this Master's Sect.
+@export var operational_koku: int = 0
+## Hidden dual-stance topic positions for conscious Kolat agents (Section 54.7f):
+## topic_id → position (−100..+100). Substituted for topic_positions in Phase 5
+## scoring when an entry exists. Empty for non-Kolat characters.
+@export var kolat_positions: Dictionary = {}
 
 # -- Bloodspeaker Cult (Section 56.14) ----------------------------------------
 
 @export var cult_affiliation: bool = false
+
+# -- Kuroiban / Black Watch (Section 11.3.5) ----------------------------------
+## True if this character is a secret member of the Scorpion Kuroiban, the
+## covert anti-maho order maintained by the Soshi and Yogo families. Hidden —
+## other characters never learn it from observation ("most samurai are not even
+## aware of its existence", s11.3.5). Selected at world-gen.
+@export var is_kuroiban: bool = false
 
 # -- Hunting (Section 57.38) ---------------------------------------------------
 
@@ -299,6 +359,16 @@ var spell_void_bonus_used: int = 0
 
 # -- Bodyguard / Yojimbo Assignment -------------------------------------------
 @export var assigned_protection_target_id: int = -1
+
+# -- Wall-Wide Emergency obligation (s2.4.14 Decision 6) -----------------------
+# Set on every Crab lord compelled to respond when a Clan Champion declares a
+# Wall-wide emergency. The obligation IC day stamps the declaration (monotonic —
+# seasons cycle, so days are used for the one-season window); `contributed` is
+# set true when the lord commits troops to the Wall (ASSIGN_GARRISON /
+# ORDER_DEPLOY) during the window. A lord still uncontributed one season
+# (90 IC days) after the declaration takes the serious/horde-tier honor loss.
+@export var wall_emergency_obligation_ic_day: int = -1
+@export var wall_emergency_contributed: bool = false
 
 # -- Champion Strategic Evaluation Log (s57.54.4) ------------------------------
 # Full scored candidate list from the last Champion evaluation. Not read by any

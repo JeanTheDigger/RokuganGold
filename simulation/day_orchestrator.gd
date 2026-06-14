@@ -4,7 +4,7 @@ class_name DayOrchestrator
 ## info events → letter delivery → topic tick →
 ## (season boundary) resource tick + confidence decay.
 
-# Topic initial momentum uses tier-floor values from TopicSystem.TIER_INITIAL_MOMENTUM
+# Topic initial momentum uses tier-floor values from TopicMomentumSystem.TIER_INITIAL_MOMENTUM
 # (locked s16.1). TIER_3 floor = 26.0, TIER_2 floor = 51.0.
 
 
@@ -147,13 +147,21 @@ static func advance_day(
 	_assign_magistrate_standing_objectives(characters, objectives_map)
 	_assign_ronin_standing_objectives(characters, objectives_map)
 	_assign_kaiu_engineer_standing_objectives(characters, objectives_map, settlements)
+	_assign_taisa_sortie_standing_objectives(characters, settlements, provinces, objectives_map)
+	_assign_kuni_purification_standing_objectives(characters, settlements, provinces, objectives_map)
 	_assign_artisan_standing_objectives(characters, objectives_map)
+	# Witch-hunters before monks: Kuni Witch-Hunters are [Monk] school_type, so the
+	# monk pass would otherwise stamp them PERFORM_RITUAL before they get HUNT_MAHO.
+	_assign_witch_hunter_standing_objectives(characters, objectives_map)
 	_assign_monk_standing_objectives(characters, objectives_map)
+	_assign_kolat_standing_objectives(characters, objectives_map)
+	_assign_kolat_opportunistic_objectives(characters, objectives_map, characters_by_id)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
 
 	_populate_military_data(military_data, companies)
 
 	_clear_stale_context_flags(world_states)
+	_inject_kolat_objective_flags(world_states, objectives_map)
 	_expire_province_weather(provinces, ic_day)
 
 	var festival_results: Dictionary = _process_festivals(ic_day, world_states)
@@ -173,6 +181,16 @@ static func advance_day(
 		travel_arrivals, characters_by_id, settlements, world_states, dice_engine,
 	)
 	_process_lost_love_arrival_trigger(travel_arrivals, characters_by_id, settlements, ic_day)
+
+	if not world_states.has("clan_baselines"):
+		world_states["clan_baselines"] = {}
+	if not world_states.has("family_baselines"):
+		world_states["family_baselines"] = {}
+	_process_witch_hunter_border_incidents(
+		travel_arrivals, characters_by_id, settlements, provinces,
+		active_topics, next_topic_id, ic_day,
+		world_states["clan_baselines"], world_states["family_baselines"],
+	)
 
 	var musha_season_count: int = int(season_meta.get("horde_season_count", 0))
 	var musha_shugyo_results: Array = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map, dice_engine, musha_season_count)
@@ -216,8 +234,16 @@ static func advance_day(
 	_process_shide_permission_grants(settlements, characters, characters_by_id, ic_day)
 	_inject_poem_context(characters, world_states)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
+	_process_wall_shireikan_escalation(
+		characters, characters_by_id, objectives_map, settlements, provinces,
+		world_states, current_season,
+	)
 	_set_temple_context_flags(characters, settlements, world_states)
-	_set_dojo_context_flags(characters, settlements, world_states)
+	# NOTE: AT_DOJO is intentionally NOT assigned at the settlement level. A dojo is
+	# one Lesser Zone of a multi-zone castle (has_dojo seats are CLAN_CHAMPION/IMPERIAL
+	# castles), so pinning every resident to the dojo sub-zone wrongly stripped them of
+	# governance/court/worship (AT_OWN_HOLDINGS already permits TRAIN/MENTOR). AT_DOJO is
+	# reserved for future per-character zone-position tracking (a PC standing in the dojo).
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
 	_inject_settlement_type(characters, settlements, world_states)
 	_pickup_ambient_public_records(characters, settlements, ic_day)
@@ -303,7 +329,8 @@ static func advance_day(
 	)
 
 	_apply_garrison_shortage_letter_writebacks(
-		letter_pass_results, characters_by_id, settlements, current_season
+		letter_pass_results, characters_by_id, settlements, current_season,
+		day_result.get("results", []), objectives_map,
 	)
 
 	_process_festival_leaves_penalty(
@@ -343,6 +370,13 @@ static func advance_day(
 	_process_scout_detection_topics(
 		day_result.get("results", []), characters_by_id,
 		active_topics, next_topic_id, ic_day,
+	)
+
+	_process_kolat_writebacks(
+		day_result.get("results", []), characters_by_id,
+		active_topics, next_topic_id, insurgencies, next_insurgency_id,
+		ic_day, current_season, pending_letters, next_letter_id, settlements,
+		objectives_map,
 	)
 
 	_process_scene_examination_writebacks(
@@ -442,6 +476,17 @@ static func advance_day(
 		active_topics, next_topic_id, ic_day,
 	)
 
+	_process_taint_examination_writebacks(
+		day_result.get("results", []),
+		characters_by_id, active_topics, current_season,
+	)
+
+	# Crab–Scorpion cooperation (s11.3.5): the two secret anti-maho orders relay
+	# detections to each other through the letter pipeline.
+	_process_anti_maho_info_sharing(
+		characters, active_topics, pending_letters, next_letter_id, ic_day,
+	)
+
 	_capture_witness_travel_intent(
 		day_result.get("results", []), world_states,
 	)
@@ -467,6 +512,11 @@ static func advance_day(
 
 	_apply_garrison_courtier_refusal_writebacks(
 		day_result.get("results", []), settlements, characters_by_id
+	)
+
+	# s2.4.14 D6: mark Crab lords who committed troops during a Wall emergency.
+	_process_wall_emergency_contributions(
+		day_result.get("results", []), characters_by_id
 	)
 
 	var wall_engineering_results: Array = _process_wall_engineering_effects(
@@ -1038,6 +1088,12 @@ static func advance_day(
 	# SOFT_HEARTED (s45): killers must pass Willpower TN 20 or suffer +10 TN until next day.
 	_process_soft_hearted_kill_penalties(death_events, characters_by_id, dice_engine, ic_day)
 
+	# s38 Death Touch: resolve any kiho afflictions from tile combat (ring drain →
+	# catatonic → 3 Contested Void → death). Appends to death_events so a kill triggers
+	# same-tick succession via _process_lord_deaths below.
+	var _death_touch_results: Array = _process_death_touch_afflictions(
+		characters, dice_engine, death_events, active_topics, next_topic_id, ic_day)
+
 	var orphan_results: Array = _process_lord_deaths(
 		death_events, characters, objectives_map, successor_map,
 		active_successions, next_succession_id, characters_by_id, ic_day,
@@ -1047,6 +1103,9 @@ static func advance_day(
 	var hierarchy_cascade_results: Array = _process_operational_death_cascade(
 		death_events, characters,
 	)
+
+	_process_kolat_master_succession(death_events, characters, characters_by_id, crime_records, dice_engine)
+	_process_kolat_master_death_recall(death_events, characters_by_id, objectives_map)
 
 	death_events.clear()
 
@@ -1067,7 +1126,7 @@ static func advance_day(
 		active_successions, characters, characters_by_id, world_states, clans,
 	)
 
-	_remove_resolved_successions(active_successions)
+	_remove_resolved_successions(active_successions, ic_day)
 
 	var conversation_results: Array = _process_daily_conversations(
 		characters, dice_engine, current_season, active_topics
@@ -1270,9 +1329,14 @@ static func advance_day(
 			world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON),
 			provinces,
 		)
+		_process_kolat_bribes_seasonal(characters, provinces)
+		_process_kolat_network_seasonal(characters, active_topics, next_topic_id, ic_day)
 		wall_seasonal_result = _process_wall_seasonal_pressure(
 			settlements, provinces, current_season, season_meta
 		)
+		# s2.4.14 D6: penalise Crab lords who ignored a Wall-wide emergency one
+		# season after the declaration; clears the obligation + forced primary.
+		_process_wall_emergency_obligations(characters, objectives_map, ic_day)
 		# Miya's Blessing follow-up — topic generation, disposition deltas,
 		# suspension penalties. Runs only on Spring transitions when the
 		# blessing actually fired or was suspended.
@@ -1338,6 +1402,15 @@ static func advance_day(
 			next_insurgency_id, world_states, worship_maluses,
 			season_meta, next_crisis_id,
 		)
+		# Resolve crisis topics tied to defeated insurgencies. Tier 1-3 topics never
+		# decay, so without this the topic of a suppressed insurgency leaks forever as
+		# a phantom active crisis (growing momentum, still broadcast to NPCs).
+		var _ins_resolved_crises: Array = insurgency_results.get("resolved_crisis_ids", [])
+		if not _ins_resolved_crises.is_empty():
+			for _itv: Variant in active_topics:
+				if _itv is TopicData and not (_itv as TopicData).resolved \
+						and (_itv as TopicData).crisis_id in _ins_resolved_crises:
+					TopicMomentumSystem.resolve_topic(_itv as TopicData)
 		spiritual_insurgency_results = _process_spiritual_insurgency(
 			worship_state, spiritual_insurgency_events,
 			next_spiritual_event_id, current_season, dice_engine,
@@ -1349,6 +1422,14 @@ static func advance_day(
 			next_insurgency_id, dice_engine, current_season, next_cell_id,
 			characters, characters_by_id, _si_spm,
 			active_topics, next_topic_id, ic_day, next_crisis_id,
+		)
+		# Seasonal maho casts (s43, owner-authorized 2026-06-09): active/propagating
+		# Bloodspeaker cells cast through a cult-affiliated member, raising PTL and
+		# leaving blood evidence + a MAHO crime record for the detection pipeline.
+		var _maho_cast_results: Array = _process_seasonal_maho_casts(
+			bloodspeaker_cells, provinces, characters, _si_spm,
+			crime_records, next_case_id, dice_engine, ic_day, objectives_map,
+			death_events, active_topics, next_topic_id, settlements,
 		)
 		TheaterSystem.process_degradation(theater_pieces, ic_day)
 		_process_doshin_seasonal_recovery(world_states)
@@ -1384,6 +1465,9 @@ static func advance_day(
 		)
 		_assign_phoenix_champion_restore_objective(
 			characters, objectives_map, phoenix_council_state,
+		)
+		_process_anti_maho_roaming(
+			characters, objectives_map, provinces,
 		)
 		var cw_season_count: int = int(season_meta.get("horde_season_count", 0))
 		if not togashi_state.is_empty():
@@ -1476,6 +1560,8 @@ static func advance_day(
 			hierarchy_cascade_results.append_array(_process_operational_death_cascade(
 				death_events, characters,
 			))
+			_process_kolat_master_succession(death_events, characters, characters_by_id, crime_records, dice_engine)
+			_process_kolat_master_death_recall(death_events, characters_by_id, objectives_map)
 			death_events.clear()
 			_cleanup_dead_character_references(
 				characters, characters_by_id, active_courts, entanglements,
@@ -1551,6 +1637,10 @@ static func advance_day(
 		settlements, provinces, dice_engine, ic_day, season_meta,
 		active_topics, next_topic_id,
 	)
+
+	# s2.4.13 D2 — Shireikan reinforce below-minimum Towers from surplus Towers.
+	if is_season_boundary:
+		_process_shireikan_troop_redeployment(characters, settlements, provinces)
 
 	# OOC Day Tick — fires every 4 IC days (one real-world day, per GDD s13 /
 	# s57.44.2). Runs Wind-Down selection and Void Point refresh for all
@@ -2458,7 +2548,7 @@ static func _process_sortie_results(
 		var garrison_states: Array = []
 		if settlement is SettlementData:
 			var s: SettlementData = settlement as SettlementData
-			committed_pu = int(s.garrison_pu * force_pct)
+			committed_pu = clampi(int(s.garrison_pu * force_pct), 1, s.garrison_pu)
 			garrison_states = _build_garrison_sortie_states(committed_pu)
 
 		# Resolve sortie combat via HordeSystem (s2.4.10).
@@ -2814,6 +2904,33 @@ static func _process_horde_assaults(
 		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
 			wall_by_province[s.province_id] = s
 
+	# Shadowlands incursion resolution (owner decision 2026-06-14): a breach crisis
+	# clears once the breached province's wall is resealed — wall_si restored above 0
+	# (GDD s2.4: SEAL_WALL_BREACH restores SI; the breach was set at SI=0). A province
+	# stays breached while ANY of its wall towers is at SI<=0. Runs before this tick's
+	# assaults, so a fresh breach below re-fires the crisis (active_crisis_id<0 again).
+	var province_breached: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER and s.wall_si <= 0:
+			province_breached[s.province_id] = true
+	for pid_v: Variant in provinces:
+		var prov_r: Variant = provinces[pid_v]
+		if not prov_r is ProvinceData:
+			continue
+		var pdr: ProvinceData = prov_r as ProvinceData
+		if pdr.crisis_type != "shadowlands_incursion":
+			continue
+		if province_breached.has(pdr.province_id):
+			continue  # still breached — at least one tower at SI<=0
+		var cleared_crisis: int = pdr.active_crisis_id
+		pdr.active_crisis_id = -1
+		pdr.crisis_type = ""
+		if cleared_crisis >= 0:
+			for tv_r: Variant in active_topics:
+				if tv_r is TopicData and not (tv_r as TopicData).resolved \
+						and (tv_r as TopicData).crisis_id == cleared_crisis:
+					TopicMomentumSystem.resolve_topic(tv_r as TopicData)
+
 	for horde: HordeData in active_hordes:
 		if not horde.assault_resolved:
 			continue
@@ -2879,6 +2996,39 @@ static func _process_horde_assaults(
 	return results
 
 
+## Resolve a freshly-formed horde's assault combat against its target Tower's
+## garrison (s2.4.5). Sets assault_resolved + battle_outcome and applies garrison
+## PU casualties; the SI hit + breach are applied by _process_horde_assaults.
+static func _resolve_horde_assault_combat(
+	horde: HordeData,
+	settlements: Array,
+	dice: DiceEngine,
+) -> void:
+	# Pick the same tower _process_horde_assaults will (last tower for the province,
+	# matching its wall_by_province map) so casualties and the SI hit land together.
+	var tower: SettlementData = null
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER \
+				and s.province_id == horde.target_province_id:
+			tower = s
+	if tower == null:
+		return
+
+	var garrison_states: Array = _build_garrison_sortie_states(tower.garrison_pu)
+	horde.assault_resolved = true
+	if garrison_states.is_empty():
+		# Undefended Tower (garrison 0) — automatic overrun (breach).
+		horde.battle_outcome = Enums.HordeBattleOutcome.DEFENDER_OVERRUN
+		return
+
+	var combat: Dictionary = HordeSystem.resolve_horde_assault_combat(
+		garrison_states, horde.companies, tower.wall_si, dice,
+	)
+	horde.battle_outcome = int(combat.get("outcome", Enums.HordeBattleOutcome.CONTESTED_BATTLE))
+	var casualties: int = int(combat.get("casualties_health", 0))
+	tower.garrison_pu = maxi(0, tower.garrison_pu - int(casualties / 153.0))
+
+
 # -- Horde Rolls (s2.4.4–s2.4.8 — LOCKED) ------------------------------------
 
 ## Fires every HORDE_ROLL_SEASON_INTERVAL seasons when a season change occurs.
@@ -2932,6 +3082,10 @@ static func _process_horde_rolls(
 			horde.oni_data = OniGenerator.generate(dice, ic_day)
 		last_targeted_province_id[0] = horde.target_province_id
 		active_hordes.append(horde)
+		# Resolve the assault combat now (no scout warning — s2.4.4): the garrison
+		# defends from the Tower. Sets battle_outcome + garrison casualties;
+		# _process_horde_assaults applies the SI hit + breach next tick.
+		_resolve_horde_assault_combat(horde, settlements, dice)
 		# Generate a horde-sighted topic (Tier 3, POLITICAL category,
 		# MILITARY topic_type) for the targeted tower's province.
 		var topic := TopicData.new()
@@ -2942,7 +3096,7 @@ static func _process_horde_rolls(
 		topic.topic_type = "military"
 		topic.category = TopicData.Category.POLITICAL
 		topic.tier = TopicData.Tier.TIER_3
-		topic.momentum = TopicSystem.initial_momentum_for_tier(topic.tier)
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.ic_day_created = ic_day
 		var province: Variant = provinces.get(horde.target_province_id, null)
 		if province is ProvinceData:
@@ -3312,7 +3466,7 @@ static func _process_famine_crises(
 				var tier: int = TopicData.Tier.TIER_3
 				if stage_2 >= ResourceTick.StarvationStage.FAMINE:
 					tier = TopicData.Tier.TIER_2
-				var momentum: float = TopicSystem.initial_momentum_for_tier(tier)
+				var momentum: float = TopicMomentumSystem.initial_momentum_for_tier(tier)
 				var single_cid: int = -1
 				var single_prov: Variant = provinces.get(province_id_2, null)
 				if single_prov is ProvinceData:
@@ -3452,7 +3606,7 @@ static func _create_famine_topic_multi(
 	topic.clan_involved = clan
 	topic.provinces_affected = province_ids.duplicate()
 	topic.ic_day_created = ic_day
-	topic.momentum = TopicSystem.initial_momentum_for_tier(topic.tier)
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 	topic.crisis_id = p_crisis_id
 	return topic
 
@@ -3486,6 +3640,531 @@ static func _process_scout_detection_topics(
 			ic_day, 15.0, [], target_clan, "", -1, "military", "scout_detected",
 		)
 		active_topics.append(topic)
+
+
+# -- Kolat Writebacks (s54.7c) ------------------------------------------------
+# Applies the world-effects of the mechanically-resolvable Kolat ActionIDs whose
+# outcome touches world collections the pure KolatExecutor cannot reach:
+#   ANONYMOUS_TIP              → Tier 4 tip topic at the target organisation
+#   RESURRECT_TOPIC            → re-injects an archived topic + applies −0.5 Honor
+#   SPONSOR_INSURGENCY         → seeds / strengthens a Ronin Bandit Uprising
+#   BRIBE_GARRISON_COMMANDER   → registers the standing bribe + threat topic
+#   DELIVER_SEALED_LETTER      → delivers the sealed letter + courier-seen topic
+#   ROUTE_ANONYMOUS_INTELLIGENCE → +5 asset disposition + traced-document topic
+# The koku funding, the conditioning, dead-drop, and sleeper handlers are fully
+# resolved inside KolatExecutor and need no writeback here.
+
+## settlement_id (int) → province_id, scanning the settlements array. -1 if absent.
+static func _kolat_settlement_province(settlements: Array, settlement_id: int) -> int:
+	for sv: Variant in settlements:
+		if sv is SettlementData and (sv as SettlementData).settlement_id == settlement_id:
+			return (sv as SettlementData).province_id
+	return -1
+
+
+static func _process_kolat_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	insurgencies: Array,
+	next_insurgency_id: Array,
+	ic_day: int,
+	current_season: int,
+	pending_letters: Array = [],
+	next_letter_id: Array = [1],
+	settlements: Array = [],
+	objectives_map: Dictionary = {},
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result as Dictionary
+		if not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var action_id: String = r.get("action_id", "")
+
+		match action_id:
+			"ANONYMOUS_TIP":
+				if not effects.get("creates_anon_tip", false):
+					continue
+				var org: String = String(effects.get("tip_org", ""))
+				var subject: String = String(effects.get("tip_subject", ""))
+				var tid: int = next_topic_id[0]
+				next_topic_id[0] = tid + 1
+				# Tier 4, source not named (s54.7c). Anti-Shadowlands intel → SUPERNATURAL.
+				var tip: TopicData = TopicMomentumSystem.create_topic(
+					tid, "%s has received intelligence on %s" % [org, subject],
+					TopicData.Tier.TIER_4, TopicData.Category.SUPERNATURAL,
+					ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+					[], "", "", int(effects.get("tip_subject_id", -1)),
+					"anonymous_tip", "anonymous_tip",
+				)
+				active_topics.append(tip)
+
+			"RESURRECT_TOPIC":
+				if not effects.get("resurrects_topic", false):
+					continue
+				var entry: Dictionary = effects.get("archive_entry", {})
+				if entry.is_empty():
+					continue
+				var tier: TopicData.Tier = int(entry.get("tier", TopicData.Tier.TIER_4)) as TopicData.Tier
+				var category: TopicData.Category = int(entry.get("category", TopicData.Category.POLITICAL)) as TopicData.Category
+				var rid: int = next_topic_id[0]
+				next_topic_id[0] = rid + 1
+				# parties_named is the s54.7h field; first entry is the subject.
+				var parties: Array = entry.get("parties_named", [])
+				var subject_id: int = int(parties[0]) if not parties.is_empty() else -1
+				# Re-enters at its original tier, attributed to "historical records"
+				# rather than to Cloud or the Kolat (s54.7c).
+				var revived: TopicData = TopicMomentumSystem.create_topic(
+					rid, String(entry.get("content_summary", "A recently uncovered document")),
+					tier, category, ic_day,
+					TopicMomentumSystem.initial_momentum_for_tier(tier),
+					[], String(entry.get("clan_involved", "")),
+					String(entry.get("family_involved", "")),
+					subject_id,
+					"historical_record", "historical_record",
+				)
+				active_topics.append(revived)
+				# Honor −0.5 per use (s54.7c), applied via HonorGlorySystem.
+				var actor: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if actor != null and not CharacterStats.is_dead(actor):
+					HonorGlorySystem.apply_honor_change(actor, -float(effects.get("honor_loss", 0.5)))
+
+			"SPONSOR_INSURGENCY":
+				if not effects.get("seeds_insurgency", false):
+					continue
+				var province_id: int = r.get("target_province_id", -1)
+				if province_id < 0:
+					continue
+				# Strengthen an existing Ronin Bandit Uprising in the province, else seed
+				# a new one at Strength 1 / Concealment 8 (s54.7c).
+				var existing: InsurgencyData = null
+				for ins: InsurgencyData in insurgencies:
+					if ins.province_id == province_id and ins.insurgency_type == Enums.InsurgencyType.RONIN_BANDIT:
+						existing = ins
+						break
+				if existing != null:
+					existing.strength = mini(10, existing.strength + 2)
+				else:
+					var new_ins := InsurgencyData.new()
+					new_ins.insurgency_id = next_insurgency_id[0]
+					next_insurgency_id[0] = new_ins.insurgency_id + 1
+					new_ins.insurgency_type = Enums.InsurgencyType.RONIN_BANDIT
+					new_ins.province_id = province_id
+					new_ins.strength = 1
+					new_ins.concealment = 8
+					new_ins.detected = false
+					new_ins.seasons_active = 0
+					new_ins.season_spawned = current_season
+					insurgencies.append(new_ins)
+				# Failure routed the funds with a detectable trail → Tier 4 topic
+				# naming suspicious merchant activity (s54.7c). Critical failure
+				# (compromised) escalates to MANAGE_COMPROMISED_AGENT — that NeedType
+				# pipeline is deferred, so no world-level effect is applied here.
+				if effects.get("routing_detected", false):
+					var sid: int = next_topic_id[0]
+					next_topic_id[0] = sid + 1
+					var trail: TopicData = TopicMomentumSystem.create_topic(
+						sid, "Suspicious merchant activity funding bandits",
+						TopicData.Tier.TIER_4, TopicData.Category.ECONOMIC,
+						ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+						[province_id], "", "", -1,
+						"investigation", "sponsor_insurgency_trail",
+					)
+					active_topics.append(trail)
+
+			"BRIBE_GARRISON_COMMANDER":
+				var b_province: int = r.get("target_province_id", -1)
+				if effects.get("bribe_established", false) and b_province >= 0:
+					# Register the standing bribe on the Coin Master; the Kolat seasonal
+					# pass applies the −2 under-garrison Stability penalty and the 5
+					# koku/season upkeep, and cancels it when a payment is missed (s54.7c).
+					var coin: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+					if coin != null and not CharacterStats.is_dead(coin):
+						var bribes: Dictionary = coin.special_data.get("active_bribes", {})
+						bribes[b_province] = true
+						coin.special_data["active_bribes"] = bribes
+				if effects.get("creates_threat_topic", false) and b_province >= 0:
+					# Critical failure: the commander reports the approach (s54.7c).
+					var btid: int = next_topic_id[0]
+					next_topic_id[0] = btid + 1
+					var threat: TopicData = TopicMomentumSystem.create_topic(
+						btid, "A merchant contact accused of bribing the garrison",
+						TopicData.Tier.TIER_3, TopicData.Category.POLITICAL,
+						ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3),
+						[b_province], "", "", -1,
+						"investigation", "bribe_garrison_exposed",
+					)
+					active_topics.append(threat)
+
+			"APPROACH_FOR_RECRUITMENT":
+				var recruiter: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if recruiter == null or CharacterStats.is_dead(recruiter):
+					continue
+				if effects.get("recruits_agent", false):
+					var recruit: L5RCharacterData = characters_by_id.get(r.get("target_npc_id", -1), null)
+					# Never recruit a dead character or a PC (PCs are not NPC-driven).
+					if recruit != null and not CharacterStats.is_dead(recruit) and not recruit.is_pc and recruit.kolat_sect == Enums.KolatSect.NONE:
+						var rs: Enums.KolatSect = effects.get("recruiter_sect", Enums.KolatSect.NONE)
+						recruit.kolat_sect = rs
+						KolatNetwork.register_recruit(recruiter, recruit.character_id, recruit.physical_location, ic_day)
+						# Honor −0.5 on success (s54.7c).
+						HonorGlorySystem.apply_honor_change(recruiter, -float(effects.get("honor_loss", 0.5)))
+				elif effects.get("creates_threat_topic", false):
+					# Critical failure: the candidate reports the approach (s54.7c).
+					var atid: int = next_topic_id[0]
+					next_topic_id[0] = atid + 1
+					var rthreat: TopicData = TopicMomentumSystem.create_topic(
+						atid, "An unusual and suspicious proposition was reported",
+						TopicData.Tier.TIER_3, TopicData.Category.POLITICAL,
+						ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3),
+						[], "", "", recruiter.character_id,
+						"recruitment", "recruitment_reported",
+					)
+					active_topics.append(rthreat)
+				elif effects.get("creates_proposition_topic", false):
+					# Ordinary failure: a Tier 4 personal "unusual proposition" rumour.
+					var ptid: int = next_topic_id[0]
+					next_topic_id[0] = ptid + 1
+					var prop: TopicData = TopicMomentumSystem.create_topic(
+						ptid, "%s made an unusual proposition" % recruiter.character_name,
+						TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
+						ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+						[], "", "", recruiter.character_id,
+						"recruitment", "recruitment_proposition",
+					)
+					active_topics.append(prop)
+
+			"DELIVER_SEALED_LETTER":
+				if not effects.get("delivers_letter", false):
+					continue
+				var d_recipient: int = int(effects.get("recipient_id", -1))
+				if d_recipient < 0:
+					continue
+				# Deliver the sealed cipher document via the letter pipeline (s54.7c).
+				var dlid: int = next_letter_id[0]
+				next_letter_id[0] = dlid + 1
+				var sealed := LetterData.new()
+				sealed.letter_id = dlid
+				sealed.sender_id = r.get("character_id", -1)
+				sealed.recipient_id = d_recipient
+				sealed.topic = int(effects.get("payload_topic_id", -1))
+				sealed.ic_day_sent = ic_day
+				sealed.ic_day_arrival = ic_day + LetterSystem.calculate_delivery_time(1, 0, 0, 0, false)
+				pending_letters.append(sealed)
+				# Failure: a courier was noticed asking after the recipient (s54.7c).
+				if effects.get("courier_noticed", false):
+					var clid: int = next_topic_id[0]
+					next_topic_id[0] = clid + 1
+					var courier_topic: TopicData = TopicMomentumSystem.create_topic(
+						clid, "A courier was asking after someone",
+						TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
+						ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+						[], "", "", d_recipient,
+						"courier_seen", "sealed_letter_courier",
+					)
+					active_topics.append(courier_topic)
+
+			"ROUTE_ANONYMOUS_INTELLIGENCE":
+				if not effects.get("routes_anon_intel", false):
+					continue
+				# Sustained intelligence improves the asset's disposition toward Jade's
+				# cover persona (s54.7c).
+				var gain: int = int(effects.get("asset_disposition_gain", 0))
+				var asset_id: int = int(effects.get("asset_id", -1))
+				if gain != 0 and asset_id >= 0:
+					var asset: L5RCharacterData = characters_by_id.get(asset_id, null)
+					var jade_id: int = r.get("character_id", -1)
+					if asset != null and not CharacterStats.is_dead(asset) and jade_id >= 0:
+						var cur: int = int(asset.disposition_values.get(jade_id, 0))
+						asset.disposition_values[jade_id] = clampi(cur + gain, -100, 100)
+				# Critical failure leaves a traceable element (s54.7c).
+				if effects.get("traceable_failure", false):
+					var jade: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+					var rloc: int = r.get("target_province_id", -1)
+					var rtid: int = next_topic_id[0]
+					next_topic_id[0] = rtid + 1
+					var risk: TopicData = TopicMomentumSystem.create_topic(
+						rtid, "An anonymous document traced to its courier",
+						TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
+						ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+						([rloc] if rloc >= 0 else []), "", "",
+						(jade.character_id if jade != null else -1),
+						"anon_intel_traced", "route_anon_intel_traced",
+					)
+					active_topics.append(risk)
+
+			"USE_CLOUDS_EYES":
+				if not effects.get("observes_settlement", false):
+					continue
+				var ce_caster: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if ce_caster == null or CharacterStats.is_dead(ce_caster):
+					continue
+				var ce_sid: int = String(effects.get("target_settlement_id", "")).to_int()
+				# settlement → province (s54.7c observes the settlement's ambient pool;
+				# topics are province-level in the model, so match by province).
+				var ce_province: int = -1
+				for sv: Variant in settlements:
+					if sv is SettlementData and (sv as SettlementData).settlement_id == ce_sid:
+						ce_province = (sv as SettlementData).province_id
+						break
+				if ce_province < 0:
+					continue
+				var ce_budget: int = int(effects.get("topic_count", 0))
+				for tv: Variant in active_topics:
+					if ce_budget <= 0:
+						break
+					if not tv is TopicData:
+						continue
+					var ct: TopicData = tv
+					if ct.resolved or not ct.provinces_affected.has(ce_province):
+						continue
+					if ce_caster.topic_pool.has(ct.topic_id):
+						continue
+					# Direct Observation: the topic enters known_topics immediately
+					# (tagged clouds_eyes), bypassing intelligence travel delay.
+					ce_caster.topic_pool.append(ct.topic_id)
+					ce_budget -= 1
+
+			"DISTRIBUTE_INTELLIGENCE":
+				if not effects.get("distributes_intel", false):
+					continue
+				var di_agent: L5RCharacterData = characters_by_id.get(int(effects.get("agent_npc_id", -1)), null)
+				if di_agent == null or CharacterStats.is_dead(di_agent):
+					continue
+				var di_topic: int = int(effects.get("topic_id", -1))
+				if di_topic >= 0 and not di_agent.topic_pool.has(di_topic):
+					di_agent.topic_pool.append(di_topic)
+				# Refresh the agent's last-report timestamp in the Silk record so the
+				# silence-detection pass sees them as freshly contacted (s54.7d).
+				var di_silk: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if di_silk != null and not CharacterStats.is_dead(di_silk):
+					var di_cn: String = KolatNetwork.find_code_name_by_npc_id(
+						di_silk, di_silk.kolat_sect, di_agent.character_id)
+					if di_cn != "":
+						var di_rec: Dictionary = KolatNetwork.get_network(di_silk, di_silk.kolat_sect)
+						if di_rec.has(di_cn) and di_rec[di_cn] is Dictionary:
+							di_rec[di_cn]["last_report_ic_day"] = ic_day
+
+			"ARRANGE_PROXY_DUEL":
+				if not effects.get("arranges_duel", false):
+					continue
+				var pd_op: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if pd_op == null or CharacterStats.is_dead(pd_op):
+					continue
+				# Tier 3 confrontation topic — normal social/duel mechanics take over
+				# (s54.7c). Subject is the target whose death is sought.
+				var pd_tid: int = next_topic_id[0]
+				next_topic_id[0] = pd_tid + 1
+				var conf: TopicData = TopicMomentumSystem.create_topic(
+					pd_tid, "A grievance demands satisfaction",
+					TopicData.Tier.TIER_3, TopicData.Category.POLITICAL,
+					ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3),
+					[], "", "", int(effects.get("target_npc_id", -1)),
+					"confrontation", "proxy_duel_grievance",
+				)
+				active_topics.append(conf)
+				# Honor −1.0 for manufacturing a false grievance leading to a death.
+				HonorGlorySystem.apply_honor_change(pd_op, -float(effects.get("honor_loss", 1.0)))
+
+			"OBSERVE_VIA_EYE":
+				if not effects.get("observes_via_eye", false):
+					continue
+				var oe_caster: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if oe_caster == null or CharacterStats.is_dead(oe_caster):
+					continue
+				# At-Hidden-Temple gate (s54.7c — VISITING the Eye only).
+				var oe_temple: SettlementData = KolatNetwork.find_hidden_temple(settlements)
+				if not KolatNetwork.is_at_hidden_temple(oe_caster, oe_temple):
+					continue
+				var oe_province: int = _kolat_settlement_province(
+					settlements, String(effects.get("target_settlement_id", "")).to_int())
+				if oe_province < 0:
+					continue
+				# Full-fidelity Direct Observation: every ambient topic enters
+				# known_topics (no count limit, unlike Clouds Eyes). Contention (one
+				# Master/day) is not enforced here (no action-log gate).
+				for tv2: Variant in active_topics:
+					if not tv2 is TopicData:
+						continue
+					var ot: TopicData = tv2
+					if ot.resolved or not ot.provinces_affected.has(oe_province):
+						continue
+					if not oe_caster.topic_pool.has(ot.topic_id):
+						oe_caster.topic_pool.append(ot.topic_id)
+
+			"CONDUCT_PERIMETER_PATROL":
+				if effects.get("patrol_unnoticed", true):
+					continue  # clean patrol, no signal
+				var pp_scout: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if pp_scout == null or CharacterStats.is_dead(pp_scout):
+					continue
+				var pp_province: int = _kolat_settlement_province(
+					settlements, pp_scout.physical_location.to_int())
+				var pp_tid: int = next_topic_id[0]
+				next_topic_id[0] = pp_tid + 1
+				var pp_topic: TopicData = TopicMomentumSystem.create_topic(
+					pp_tid, "A stranger was seen watching the road",
+					TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
+					ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+					([pp_province] if pp_province >= 0 else []), "", "", -1,
+					"patrol_seen", "perimeter_patrol_noticed",
+				)
+				active_topics.append(pp_topic)
+
+			"RUN_COURIER_ROUTE":
+				if effects.get("route_clean", true):
+					continue
+				# Failure flags route integrity (s54.7c) — a hint that elevates the
+				# Silk Master's network-maintenance priority. Stored as a flag on the
+				# Master until the segment is repaired.
+				var rc_master: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if rc_master != null and not CharacterStats.is_dead(rc_master):
+					rc_master.special_data["route_integrity_reduced"] = true
+
+			"SUBMIT_KOLAT_REPORT":
+				if not effects.get("submits_report", false):
+					continue
+				var sr_master: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if sr_master == null or CharacterStats.is_dead(sr_master):
+					continue
+				var sr_temple: SettlementData = KolatNetwork.find_hidden_temple(settlements)
+				if not KolatNetwork.is_at_hidden_temple(sr_master, sr_temple):
+					continue  # full report requires physical presence at the Temple
+				# Archive the report topic into the Temple's master Cloud archive.
+				var sr_tid: int = int(effects.get("report_topic_id", -1))
+				for tv3: Variant in active_topics:
+					if not tv3 is TopicData:
+						continue
+					var st: TopicData = tv3
+					if st.topic_id != sr_tid:
+						continue
+					var aid: String = KolatNetwork.archive_id_for(st.topic_id)
+					sr_temple.temple_cloud_archive[aid] = {
+						"topic_id": st.topic_id, "tier": int(st.tier),
+						"parties_named": ([st.subject_character_id] if st.subject_character_id >= 0 else []),
+						"content_summary": st.title, "source": "kolat_report",
+						"original_momentum": int(st.momentum), "ic_day_archived": ic_day,
+						"leverage_value": 0,
+					}
+					break
+
+			"TRANSMIT_VIA_TEAR":
+				if not effects.get("transmits_directive", false):
+					continue
+				var tr_sender: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
+				if tr_sender == null or CharacterStats.is_dead(tr_sender):
+					continue
+				# Resolve recipient: Tiger routes to any Master by Sect via its identity
+				# map; any other Master routes only to Tiger (lateral-comms constraint,
+				# s54.7d).
+				var recipient_id: int = -1
+				if tr_sender.kolat_sect == Enums.KolatSect.TIGER:
+					var ids: Dictionary = tr_sender.special_data.get("kolat_master_identities", {})
+					var rsect: int = int(effects.get("recipient_sect", Enums.KolatSect.NONE))
+					recipient_id = int(ids.get(rsect, effects.get("recipient_npc_id", -1)))
+				else:
+					recipient_id = tr_sender.kolat_superior_id  # to Tiger
+				if recipient_id < 0:
+					continue
+				var recipient: L5RCharacterData = characters_by_id.get(recipient_id, null)
+				if recipient == null or CharacterStats.is_dead(recipient) or recipient.is_pc:
+					continue
+				# Install as the recipient's Kolat objective, replacing any existing one
+				# (Tiger directive override, s54.7d).
+				if not objectives_map.has(recipient_id):
+					objectives_map[recipient_id] = {}
+				objectives_map[recipient_id]["kolat"] = {
+					"need_type": String(effects.get("directive_need_type", "")),
+					"target_npc_id": int(effects.get("directive_target_npc_id", -1)),
+					"target_province_id": int(effects.get("directive_target_province_id", -1)),
+					"priority": int(effects.get("directive_priority", 2)),
+					"kolat_objective": true,
+					"source": "tear",
+				}
+
+
+# -- Kolat Bribe Upkeep (s54.7c) ----------------------------------------------
+# Seasonal maintenance of standing BRIBE_GARRISON_COMMANDER operations. Each
+# active bribe costs 5 koku/season (KolatSystem.bribe_garrison_cost_per_season)
+# and sustains the −2 under-garrison Stability penalty (s11.11) in its province.
+# A bribe whose payment cannot be met is cancelled silently — the garrison
+# returns to normal on this tick, no topic fires (s54.7c).
+
+static func _process_kolat_bribes_seasonal(characters: Array, provinces: Dictionary) -> void:
+	var upkeep: int = KolatSystem.bribe_garrison_cost_per_season()
+	for character: L5RCharacterData in characters:
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		var bribes: Dictionary = character.special_data.get("active_bribes", {})
+		if bribes.is_empty():
+			continue
+		var still_active: Dictionary = {}
+		for province_id: int in bribes:
+			if character.kolat_koku < upkeep:
+				continue  # unpaid → bribe lapses, garrison normalises, no topic
+			character.kolat_koku -= upkeep
+			still_active[province_id] = true
+			var province: ProvinceData = provinces.get(province_id, null)
+			if province != null:
+				# −2 under-garrison Stability per season (s11.11, LOCKED).
+				province.stability = maxf(0.0, province.stability - 2.0)
+		if still_active.is_empty():
+			character.special_data.erase("active_bribes")
+		else:
+			character.special_data["active_bribes"] = still_active
+
+
+# -- Kolat Network Maintenance (s54.7d) ---------------------------------------
+# Seasonal silence detection across every Master's agent-network record. When an
+# agent's gap since last contact exceeds its threshold, a Tier 4 personal concern
+# topic fires in the Master's known_topics (s54.7d). A per-entry silence_flagged
+# guard prevents re-firing every season for the same lapse. (The accompanying
+# LOCATE_CHARACTER priority-2 objective and the MANAGE_COMPROMISED_AGENT response
+# route through the engine's NeedType pipeline and are not generated here.)
+
+static func _process_kolat_network_seasonal(
+	characters: Array, active_topics: Array, next_topic_id: Array, ic_day: int
+) -> void:
+	for master: L5RCharacterData in characters:
+		if master == null or CharacterStats.is_dead(master):
+			continue
+		if not master.is_kolat_master:
+			continue
+		var field: String = KolatNetwork.network_field_for_sect(master.kolat_sect)
+		if field == "":
+			continue
+		var record: Dictionary = master.special_data.get(field, {})
+		for code_name: String in record:
+			var entry: Variant = record[code_name]
+			if not entry is Dictionary:
+				continue
+			var e: Dictionary = entry
+			if KolatNetwork.status_of(e) == "burned":
+				continue
+			if KolatNetwork.silence_overdue(e, ic_day):
+				if e.get("silence_flagged", false):
+					continue
+				e["silence_flagged"] = true
+				var tid: int = next_topic_id[0]
+				next_topic_id[0] = tid + 1
+				var topic: TopicData = TopicMomentumSystem.create_topic(
+					tid, "%s has not reported in some time" % code_name,
+					TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
+					ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+					[], "", "", int(e.get("npc_id", -1)),
+					"kolat_silence", "kolat_agent_silence",
+				)
+				active_topics.append(topic)
+				if not master.topic_pool.has(tid):
+					master.topic_pool.append(tid)
+			else:
+				# Contact within threshold — clear any stale silence flag.
+				if e.get("silence_flagged", false):
+					e["silence_flagged"] = false
 
 
 # -- Scene Examination Writebacks (s11.3.13) -----------------------------------
@@ -4881,6 +5560,9 @@ static func _process_ptl_detection(
 		if lore_rank <= 0:
 			continue
 
+		# Kuni/Asako get +2k0 (s11.11): family_bonus feeds the bonus_rolled
+		# parameter (8th positional), with bonus_kept defaulting to 0 — two
+		# extra unkept dice, not a flat total bonus.
 		var family_bonus: int = 2 if character.family in ["Kuni", "Asako"] else 0
 		var check: Dictionary = SkillResolver.resolve_skill_check(
 			character, dice_engine, "Lore: Shadowlands", ptl_tn,
@@ -5276,7 +5958,7 @@ static func _apply_victim_death(
 ) -> void:
 	var earth: int = CharacterStats.get_ring_value(victim, Enums.Ring.EARTH)
 	var ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
-	if AdvantageSystem.check_great_destiny(victim, ic_year).get("triggered", false):
+	if AdvantageSystem.check_great_destiny(victim, ic_year):
 		var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(victim)
 		victim.wounds_taken = gd_threshold * 6 + 1  # start of DOWN level
 		var gd_adv: AdvantageData = AdvantageSystem.get_advantage(victim, Enums.Advantage.GREAT_DESTINY)
@@ -5910,19 +6592,18 @@ static func _process_training_acceptance_writebacks(
 		var teacher_initiated: bool = event_data.get("teacher_initiated", false)
 		var learn_piece_id: int = event_data.get("learn_piece_id", -1)
 		if teacher_initiated and learn_piece_id >= 0:
-			if not objectives_map.is_empty():
-				if student_id not in objectives_map:
-					objectives_map[student_id] = {}
-				var existing_primary: Dictionary = objectives_map[student_id].get("primary", {})
-				if existing_primary.get("need_type", "") != "ARTISTIC_EXPRESSION":
-					objectives_map[student_id]["primary"] = {
-						"need_type": "ARTISTIC_EXPRESSION",
-						"objective_type": "LEARN_THEATER_PIECE",
-						"target_npc_id": sensei_id,
-						"learn_piece_id": learn_piece_id,
-						"source": "teaching_offer_letter",
-						"priority": 3,
-					}
+			if student_id not in objectives_map:
+				objectives_map[student_id] = {}
+			var existing_primary: Dictionary = objectives_map[student_id].get("primary", {})
+			if existing_primary.get("need_type", "") != "ARTISTIC_EXPRESSION":
+				objectives_map[student_id]["primary"] = {
+					"need_type": "ARTISTIC_EXPRESSION",
+					"objective_type": "LEARN_THEATER_PIECE",
+					"target_npc_id": sensei_id,
+					"learn_piece_id": learn_piece_id,
+					"source": "teaching_offer_letter",
+					"priority": 3,
+				}
 			continue
 		NPCAdvancement.resolve_training_session(sensei, student, skill_name)
 		if student.action_points_current > 0:
@@ -6146,7 +6827,7 @@ static func _process_brash_reactions(
 		var tn: int = brash_check.get("tn", 25)
 		var brash_wound: int = CharacterStats.get_wound_penalty(target)
 		var roll: DiceResult = dice_engine.roll_and_keep(
-			target.willpower, target.willpower, false, ""
+			target.willpower, target.willpower, false, false
 		)
 		var total: int = roll.total + int(target.honor) + brash_wound
 		if total >= tn:
@@ -6204,7 +6885,7 @@ static func _process_contrary_reactions(
 				continue
 			var tn: int = contrary_check.get("tn", 0)
 			var contrary_wound: int = CharacterStats.get_wound_penalty(c)
-			var roll: DiceResult = dice_engine.roll_and_keep(c.willpower, c.willpower, false, "")
+			var roll: DiceResult = dice_engine.roll_and_keep(c.willpower, c.willpower, false, false)
 			if (roll.total + contrary_wound) >= tn:
 				continue  # Passed — stays composed
 			# Failed: CONTRARY character publicly contradicts the debater.
@@ -6688,10 +7369,6 @@ static func _process_impersonation_detection(
 			}
 
 
-# TN for the check is deferred to Section 31/42 — blocked.
-const TAINT_DETECTION_PLACEHOLDER_TN: int = 0
-const TAINT_RANK_THRESHOLD: float = 2.0
-
 static func _process_taint_proximity_detection(
 	results: Array,
 	characters_by_id: Dictionary,
@@ -6706,6 +7383,11 @@ static func _process_taint_proximity_detection(
 		if not result is Dictionary:
 			continue
 		var r: Dictionary = result as Dictionary
+		# EXAMINE_FOR_TAINT is a deliberate corroboration with its own writeback
+		# (_process_taint_examination_writebacks); the incidental passive detector
+		# must not re-roll and double-refresh the same result.
+		if r.get("action_id", "") == "EXAMINE_FOR_TAINT":
+			continue
 		if not r.get("success", false):
 			continue
 		var detector_id: int = r.get("character_id", -1)
@@ -6722,20 +7404,29 @@ static func _process_taint_proximity_detection(
 		var target: L5RCharacterData = characters_by_id.get(target_id)
 		if detector == null or target == null:
 			continue
-		if target.taint < TAINT_RANK_THRESHOLD:
+		if CharacterStats.is_dead(detector) or CharacterStats.is_dead(target):
+			continue  # a dead suspect must not receive a PERPETRATOR-valence accusation
+		if MutationSystem.get_taint_rank(target.taint) < MutationSystem.TAINT_DETECTION_RANK_MIN:
+			continue
+		if target.clan == "Crab":
+			continue  # innocent explanation: Kaiu Wall service (owner ruling 2026-06-10)
+		if not MutationSystem.can_detect_taint(detector):
 			continue
 
-		var lore_rank: int = detector.skills.get("Lore: Shadowlands", 0)
-		var is_specialist: bool = detector.family in ["Kuni", "Asako"]
-		if lore_rank < 3 and not is_specialist:
-			continue
-
-		var family_bonus: int = 2 if is_specialist else 0
+		var tn: int = MutationSystem.taint_detection_tn(MutationSystem.get_taint_rank(target.taint))
+		var family_bonus: int = 2 if MutationSystem.is_taint_specialist_family(detector.family) else 0
 		var taint_check: Dictionary = SkillResolver.resolve_skill_check(
-			detector, dice_engine, "Lore: Shadowlands", TAINT_DETECTION_PLACEHOLDER_TN,
+			detector, dice_engine, "Lore: Shadowlands", tn,
 			0, "", Enums.Trait.PERCEPTION, family_bonus,
 		)
 		if not taint_check.get("success", false):
+			continue
+
+		# Dedup: if this suspect already carries a live accusation, a renewed
+		# detection reinforces it rather than spawning a duplicate topic.
+		var existing: TopicData = _find_active_taint_accusation(active_topics, target.character_id)
+		if existing != null:
+			_refresh_taint_accusation(existing, detector, characters_by_id)
 			continue
 
 		var topic_id: int = next_topic_id[0]
@@ -6758,6 +7449,129 @@ static func _process_taint_proximity_detection(
 			var lord: L5RCharacterData = characters_by_id.get(detector.lord_id)
 			if lord != null and not CharacterStats.is_dead(lord) and topic.topic_id not in lord.topic_pool:
 				lord.topic_pool.append(topic.topic_id)
+
+
+# -- Maho Channel 3 active examination (EXAMINE_FOR_TAINT, owner 2026-06-10) ----
+# R2 corroboration: a witch-hunter deliberately confirms an accusation they know.
+# These helpers gate availability (pre-pass) and apply the corroboration effect.
+
+static func _has_corroborated_taint(examiner: L5RCharacterData, topic_id: int) -> bool:
+	for entry: KnowledgeEntry in examiner.knowledge_pool:
+		if entry.entry_type == "taint_corroborated" and int(entry.data.get("topic_id", -1)) == topic_id:
+			return true
+	return false
+
+
+static func _find_active_taint_accusation(active_topics: Array, target_id: int) -> TopicData:
+	for t: Variant in active_topics:
+		if not t is TopicData:
+			continue
+		var topic: TopicData = t
+		if not topic.resolved and topic.variant == "taint_suspected" and topic.subject_character_id == target_id:
+			return topic
+	return null
+
+
+static func _refresh_taint_accusation(
+	topic: TopicData,
+	observer: L5RCharacterData,
+	characters_by_id: Dictionary,
+) -> void:
+	## A renewed detection (passive) or firsthand confirmation (EXAMINE_FOR_TAINT)
+	## sustains a live accusation — restore its momentum to the TIER_3 floor, log a
+	## discussion, and widen its reach to the observer's lord — instead of spawning
+	## a duplicate accusation.
+	if topic == null or topic.resolved:
+		return
+	topic.momentum = maxf(
+		topic.momentum,
+		TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3),
+	)
+	topic.discussion_count_this_day += 1
+	if observer.lord_id >= 0:
+		var lord: L5RCharacterData = characters_by_id.get(observer.lord_id)
+		if lord != null and not CharacterStats.is_dead(lord) and topic.topic_id not in lord.topic_pool:
+			lord.topic_pool.append(topic.topic_id)
+
+
+static func _build_taint_corroboration_targets(
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+) -> Dictionary:
+	## For each living witch-hunter, find a co-located accused suspect they already
+	## know about (an active taint_suspected accusation in their topic_pool, naming
+	## a still-tainted non-Crab suspect) and have not yet corroborated.
+	## Returns examiner_id -> {target_id, topic_id}; first qualifying match wins.
+	var out: Dictionary = {}
+	for t: Variant in active_topics:
+		if not t is TopicData:
+			continue
+		var topic: TopicData = t
+		if topic.resolved or topic.variant != "taint_suspected":
+			continue
+		var x_id: int = topic.subject_character_id
+		var x: L5RCharacterData = characters_by_id.get(x_id)
+		if x == null or CharacterStats.is_dead(x):
+			continue
+		if x.clan == "Crab":
+			continue
+		if MutationSystem.get_taint_rank(x.taint) < MutationSystem.TAINT_DETECTION_RANK_MIN:
+			continue
+		var loc: String = x.physical_location
+		if loc.is_empty():
+			continue
+		for e: L5RCharacterData in characters:
+			if out.has(e.character_id):
+				continue
+			if CharacterStats.is_dead(e) or e.character_id == x_id:
+				continue
+			if e.physical_location != loc:
+				continue
+			if not MutationSystem.can_detect_taint(e):
+				continue
+			if topic.topic_id not in e.topic_pool:
+				continue
+			if _has_corroborated_taint(e, topic.topic_id):
+				continue
+			out[e.character_id] = {"target_id": x_id, "topic_id": topic.topic_id}
+	return out
+
+
+static func _process_taint_examination_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	current_season: int,
+) -> void:
+	## Apply a successful EXAMINE_FOR_TAINT: refresh the accusation's momentum so
+	## a firsthand confirmation sustains the case, widen its reach to the examiner's
+	## lord, and record a dedup KnowledgeEntry so they won't re-corroborate it.
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var effects: Dictionary = (result as Dictionary).get("effects", {})
+		if not effects.get("requires_taint_corroboration", false):
+			continue
+		var examiner_id: int = (result as Dictionary).get("character_id", -1)
+		var examiner: L5RCharacterData = characters_by_id.get(examiner_id)
+		if examiner == null or CharacterStats.is_dead(examiner):
+			continue
+		var topic_id: int = int(effects.get("taint_topic_id", -1))
+		var target_id: int = int(effects.get("taint_target_id", -1))
+
+		var topic: TopicData = null
+		for t: Variant in active_topics:
+			if t is TopicData and (t as TopicData).topic_id == topic_id:
+				topic = t
+				break
+		_refresh_taint_accusation(topic, examiner, characters_by_id)
+
+		var entry := KnowledgeEntry.new()
+		entry.entry_type = "taint_corroborated"
+		entry.data = {"topic_id": topic_id, "target_id": target_id}
+		entry.season_acquired = current_season
+		examiner.knowledge_pool.append(entry)
 
 
 static func _is_character_in_battle(
@@ -6968,6 +7782,187 @@ static func _assign_magistrate_standing_objectives(
 		}
 
 
+# -- Kolat Master Standing Objectives (s54.7b) --------------------------------
+# When a character is elevated to a Master seat their standing objective is the
+# Kolat mandate for their Sect (s54.7b). Eight Sects have a mapped NeedType;
+# Roc is inactive and Lotus has no pinned identifier (KolatSystem returns "").
+# A Master keeps their Sect mandate; it is never overwritten once set.
+
+
+static func _assign_kolat_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.is_pc:
+			continue
+		if not KolatSystem.is_master(character):
+			continue
+		if CharacterStats.is_dead(character):
+			continue
+
+		var mandate: String = KolatSystem.standing_needtype_for_sect(character.kolat_sect)
+		if mandate.is_empty():
+			continue  # Roc inactive / Lotus identifier pending owner decision
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+		if standing.get("need_type", "") == mandate:
+			continue
+		if not standing.is_empty():
+			continue  # do not overwrite an existing standing objective
+
+		objectives["standing"] = {
+			"need_type": mandate,
+			"priority": 4,
+			"auto_assigned": true,
+		}
+
+
+# -- Kolat Stage-5 Damage-Assessment Recall (s54.7) ---------------------------
+# When a Kolat Master is eliminated, Tiger (the routing node) issues recall
+# directives through the Kolat delivery channels: the agents who had contact with
+# the compromised Master halt their Kolat objective immediately and treat it as
+# abandoned (their kolat_objective slot is cleared, GDD s54.7 Stage 5). A living
+# Tiger is required to route the recall; if Tiger itself is the dead Master and
+# no successor is yet seated, the organisation is briefly blind and no recall
+# fires that tick (matching the GDD's degraded-coordination state). The
+# operational/elimination directive composition (Stages 1–4) remains blocked on
+# the Master-surveillance/investigation-detection layer.
+
+
+# -- Kolat Master Succession Trigger (s54.7g) ---------------------------------
+# When a Kolat Master dies, the LOCKED succession cascade seats a new Master from
+# the Sect's conscious agents (KolatMasterSelector.evaluate_succession: three
+# ranked heirs, then the Tiger discretionary draw, then chain re-point). The
+# encrypted heir-designation record is not yet populated, so the cascade always
+# falls to the discretionary draw — which seats a living non-Master Sect agent if
+# one exists, else leaves the Sect vacant (s54.7g: the network cannot always
+# refill). The new Master inherits the Sect standing mandate (already wired). The
+# dead Master's seat flag is left set (dead-guarded everywhere, and the resolver
+# excludes it via is_dead) so the field-agent recall below still finds its
+# network. Runs BEFORE the recall so a freshly-seated Tiger can route that recall.
+# under_investigation_ids is left empty (the heir-investigation gate is unused
+# while heir_designations is empty — discretionary draw does not consult it).
+static func _process_kolat_master_succession(
+	death_events: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	crime_records: Array,
+	dice: DiceEngine,
+) -> Array:
+	var seated: Array = []
+	# s54.7g: an agent under active investigation is compromised and must not be
+	# seated. Gather the perpetrators + known suspects of all UNDER_INVESTIGATION
+	# cases once; the discretionary draw (`_discretionary_select`) excludes them.
+	var under_investigation: Array = []
+	for rv: Variant in crime_records:
+		if not rv is CrimeRecord:
+			continue
+		var rec: CrimeRecord = rv
+		if rec.legal_status != Enums.LegalStatus.UNDER_INVESTIGATION:
+			continue
+		if rec.perpetrator_id >= 0 and rec.perpetrator_id not in under_investigation:
+			under_investigation.append(rec.perpetrator_id)
+		for sv: Variant in rec.known_suspects:
+			var sid: int = int(sv)
+			if sid >= 0 and sid not in under_investigation:
+				under_investigation.append(sid)
+	for ev: Variant in death_events:
+		if not ev is Dictionary:
+			continue
+		var did: int = int((ev as Dictionary).get("character_id", -1))
+		var dead: L5RCharacterData = characters_by_id.get(did, null)
+		if dead == null or not KolatSystem.is_master(dead):
+			continue
+		var new_id: int = KolatMasterSelector.evaluate_succession(
+			dead.kolat_sect, characters, {}, dice, under_investigation)
+		if new_id >= 0:
+			seated.append({
+				"sect": dead.kolat_sect,
+				"former_master_id": did,
+				"new_master_id": new_id,
+			})
+	return seated
+
+
+static func _process_kolat_master_death_recall(
+	death_events: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+) -> int:
+	var tiger_alive: bool = false
+	for cid: Variant in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.is_kolat_master and c.kolat_sect == Enums.KolatSect.TIGER:
+			tiger_alive = true
+			break
+	if not tiger_alive:
+		return 0
+
+	var recalled: int = 0
+	for ev: Variant in death_events:
+		if not ev is Dictionary:
+			continue
+		var did: int = int((ev as Dictionary).get("character_id", -1))
+		var dead: L5RCharacterData = characters_by_id.get(did, null)
+		if dead == null or not KolatSystem.is_master(dead):
+			continue
+		for aid: int in KolatNetwork.collect_field_agent_ids(dead):
+			var obj: Dictionary = objectives_map.get(aid, {})
+			if obj.has("kolat"):
+				obj.erase("kolat")
+				recalled += 1
+	return recalled
+
+
+# -- Kolat Opportunistic Objective Assignment (s54.7d/e) ----------------------
+# Beyond the standing Sect mandate, Masters self-select the network-growth tasks
+# (recruit agents, condition sleepers, secure compromised drops) when their
+# trigger conditions hold. These occupy the Kolat objective slot at priority 2
+# (precedes standing, yields to a primary or a Tiger directive). Stale
+# self-selected objectives are cleared when their trigger no longer applies; a
+# Tiger directive in the slot is left untouched.
+
+
+static func _assign_kolat_opportunistic_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+	characters_by_id: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.is_pc or CharacterStats.is_dead(character):
+			continue
+		if not KolatSystem.is_master(character):
+			continue
+
+		var char_id: int = character.character_id
+		var objectives: Dictionary = objectives_map.get(char_id, {})
+		var slot: Dictionary = objectives.get("kolat", {})
+
+		# A Tiger directive (different source) owns the slot — do not disturb it.
+		if not slot.is_empty() and String(slot.get("source", "")) != KolatOpportunityScanner.SOURCE:
+			continue
+
+		# Drop a stale self-selected objective whose trigger no longer holds.
+		if not slot.is_empty() and KolatOpportunityScanner.should_clear(character, slot, characters_by_id):
+			objectives.erase("kolat")
+			slot = {}
+
+		# Fill an empty slot with a fresh opportunity.
+		if slot.is_empty():
+			var opp: Dictionary = KolatOpportunityScanner.scan(character, characters_by_id)
+			if not opp.is_empty():
+				objectives["kolat"] = opp
+				objectives_map[char_id] = objectives
+
+
 # -- FIND_NEW_LORD Standing Objective Assignment (s52.5 Part F) ----------------
 # Ronin NPCs automatically receive FIND_NEW_LORD as their standing objective
 # so they participate in the petition pipeline without requiring lord directives.
@@ -7048,6 +8043,445 @@ static func _assign_monk_standing_objectives(
 		}
 
 
+# -- Witch-Hunter Standing Need (s11.3.5) --------------------------------------
+# Kuni Witch-Hunters, Asako Inquisitors, and the three anti-maho order leaders
+# (Crab/Phoenix/Scorpion) auto-receive HUNT_MAHO as their standing objective if
+# they hold no other standing — so a witch-hunter who is neither a lord nor a
+# magistrate stops falling to REST and actively hunts Taint (province PTL scans,
+# EXAMINE_FOR_TAINT on accused suspects). Kuroiban rank-and-file are a secret
+# order with no clean identifier and are deferred (only the leader qualifies).
+
+static func _is_maho_hunter(c: L5RCharacterData) -> bool:
+	if c.is_kuroiban:
+		return true  # covert Scorpion Black Watch (s11.3.5); roams silently
+	var s: String = c.school
+	if s.contains("Witch-Hunter") or s.contains("Witch Hunter") or s.contains("Inquisitor"):
+		return true
+	return c.role_position in [
+		RoleRegistry.WITCH_HUNTER_LEADER,
+		RoleRegistry.INQUISITOR_LEADER,
+		RoleRegistry.KUROIBAN_LEADER,
+	]
+
+
+static func _assign_witch_hunter_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.is_pc:
+			continue
+		if CharacterStats.is_dead(character):
+			continue
+		if not _is_maho_hunter(character):
+			continue
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+		if not standing.is_empty():
+			continue  # do not overwrite an existing standing objective
+
+		objectives["standing"] = {
+			"need_type": "HUNT_MAHO",
+			"priority": 4,
+			"auto_assigned": true,
+		}
+
+
+# -- Anti-Maho Roaming & Kuroiban Leader Tasking (s11.3.5) --------------------
+# Seasonally, idle witch-hunters spread across the Empire's Taint hotspots
+# (provinces with province_taint_level at or above the PTL crisis onset), each
+# taking a primary HUNT_MAHO objective targeting the LEAST-covered hotspot
+# (ties → highest PTL) so coverage fans out; the decomposer then travels them
+# cross-border to hunt (witch-hunters ignore clan boundaries, s11.3.5). Members
+# already committed to a still-hot province, or already standing in a hotspot,
+# count toward coverage. A real (lord-assigned) primary always outranks roaming.
+#
+# The Scorpion Kuroiban are coordinated by their leader: when a KUROIBAN_LEADER
+# is alive, the leader TASKS members (best hunters → worst hotspots), replacing
+# their autonomous self-selection. If the leader dies, members fall back to the
+# ordinary spread alongside the Kuni and Asako.
+
+const WITCH_HUNT_PTL_MIN: float = 3.0  # PTL crisis onset (s11.11); PROVISIONAL hotspot floor
+const ROAMING_SOURCES: Array = [
+	"witch_hunter_self_selection",
+	"witch_hunter_leader_tasking",
+	"inquisitor_leader_tasking",
+	"kuroiban_leader_tasking",
+]
+
+
+static func _anti_maho_expertise(c: L5RCharacterData) -> int:
+	return int(c.skills.get("Lore: Shadowlands", 0)) * 2 + int(c.skills.get("Lore: Theology", 0))
+
+
+static func _process_anti_maho_roaming(
+	characters: Array,
+	objectives_map: Dictionary,
+	provinces: Dictionary,
+) -> void:
+	# Each anti-maho order (Kuni / Asako / Kuroiban) is coordinated by its leader.
+	# When an order's leader is alive, the leader TASKS that order's members (best
+	# hunters → worst hotspots), replacing their autonomous self-selection and
+	# excluding them from the general spread. Orders with no living leader fall back
+	# into the spread alongside everyone else. Indices: 0=Kuni, 1=Asako, 2=Kuroiban.
+	var leader_roles: Array = [
+		RoleRegistry.WITCH_HUNTER_LEADER,
+		RoleRegistry.INQUISITOR_LEADER,
+		RoleRegistry.KUROIBAN_LEADER,
+	]
+	var leader_tags: Array = [
+		"witch_hunter_leader_tasking",
+		"inquisitor_leader_tasking",
+		"kuroiban_leader_tasking",
+	]
+
+	var led: Array = [false, false, false]
+	for ch: Variant in characters:
+		if not ch is L5RCharacterData:
+			continue
+		var lc: L5RCharacterData = ch
+		if CharacterStats.is_dead(lc):
+			continue
+		var idx: int = leader_roles.find(lc.role_position)
+		if idx != -1:
+			led[idx] = true
+
+	# Led orders: leader tasks members, best expertise first.
+	for oi in range(3):
+		if not led[oi]:
+			continue
+		var members: Array = _gather_roaming_members(characters, objectives_map, led, oi)
+		members.sort_custom(func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+			return _anti_maho_expertise(a) > _anti_maho_expertise(b))
+		_assign_hunters_to_hotspots(members, objectives_map, provinces, leader_tags[oi])
+
+	# Unled orders self-select in the general spread.
+	var spread: Array = _gather_roaming_members(characters, objectives_map, led, -2)
+	_assign_hunters_to_hotspots(spread, objectives_map, provinces, "witch_hunter_self_selection")
+
+
+static func _is_asako_inquisitor(c: L5RCharacterData) -> bool:
+	if c.school.contains("Inquisitor"):
+		return true
+	return c.role_position == RoleRegistry.INQUISITOR_LEADER
+
+
+# Classifies a maho-hunter into its order (0=Kuni, 1=Asako, 2=Kuroiban; -1=none).
+# Orders are mutually exclusive (different clans); checked defensively in order.
+static func _order_of(c: L5RCharacterData) -> int:
+	if c.is_kuroiban:
+		return 2
+	if _is_asako_inquisitor(c):
+		return 1
+	if _is_kuni_witch_hunter(c):
+		return 0
+	return -1
+
+
+# Living non-PC maho-hunters eligible for roaming (no real lord-assigned primary).
+# order_filter 0..2 → that order only; -2 → the general spread (orders without a
+# living leader, i.e. led[order] is false).
+static func _gather_roaming_members(
+	characters: Array,
+	objectives_map: Dictionary,
+	led: Array,
+	order_filter: int,
+) -> Array:
+	var out: Array = []
+	for ch: Variant in characters:
+		if not ch is L5RCharacterData:
+			continue
+		var c: L5RCharacterData = ch
+		if c.is_pc or CharacterStats.is_dead(c) or not _is_maho_hunter(c):
+			continue
+		var ord: int = _order_of(c)
+		if order_filter == -2:
+			if ord != -1 and led[ord]:
+				continue  # a led order — handled by its leader tasking
+		elif ord != order_filter:
+			continue
+		var primary: Dictionary = objectives_map.get(c.character_id, {}).get("primary", {})
+		if not primary.is_empty() and not (primary.get("source", "") in ROAMING_SOURCES):
+			continue  # a real lord-assigned primary outranks roaming
+		out.append(c)
+	return out
+
+
+# Distributes a pre-ordered member list across the Taint hotspots — each member
+# to the least-covered hotspot (ties → highest PTL). Members already committed to
+# a still-hot province, or already standing in a hotspot, count toward coverage.
+# source_tag stamps the assignment and is transferable between roaming sources.
+static func _assign_hunters_to_hotspots(
+	members: Array,
+	objectives_map: Dictionary,
+	provinces: Dictionary,
+	source_tag: String,
+) -> void:
+	var hotspots: Array = []
+	var settlement_to_province: Dictionary = {}
+	for p: Variant in provinces.values():
+		if not p is ProvinceData:
+			continue
+		var prov: ProvinceData = p
+		for sid: int in prov.settlement_ids:
+			settlement_to_province[sid] = prov.province_id
+		if prov.province_taint_level >= WITCH_HUNT_PTL_MIN and not prov.settlement_ids.is_empty():
+			hotspots.append(prov)
+
+	# No hotspots: release any stale roaming hunts so members fall back to local hunting.
+	if hotspots.is_empty():
+		for c: L5RCharacterData in members:
+			var o: Dictionary = objectives_map.get(c.character_id, {})
+			if o.get("primary", {}).get("source", "") in ROAMING_SOURCES:
+				o.erase("primary")
+		return
+
+	hotspots.sort_custom(func(a: ProvinceData, b: ProvinceData) -> bool:
+		return a.province_taint_level > b.province_taint_level)
+	var hotspot_by_id: Dictionary = {}
+	var coverage: Dictionary = {}
+	for h: ProvinceData in hotspots:
+		hotspot_by_id[h.province_id] = h
+		coverage[h.province_id] = 0
+
+	var unassigned: Array = []
+	for c: L5RCharacterData in members:
+		var char_id: int = c.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+		var objectives: Dictionary = objectives_map[char_id]
+		var primary: Dictionary = objectives.get("primary", {})
+
+		if not primary.is_empty():
+			# Only roaming primaries reach here (caller filtered real lord orders).
+			var tpid: int = primary.get("target_province_id", -1)
+			if hotspot_by_id.has(tpid):
+				coverage[tpid] += 1
+				primary["source"] = source_tag  # transfer ownership (leader ↔ self-select)
+				continue
+			objectives.erase("primary")  # target cooled — re-select below
+
+		# Already standing in a hotspot province? Hunt locally; count the coverage.
+		var loc: String = c.physical_location
+		var cur_sid: int = loc.to_int() if loc.is_valid_int() else -1
+		var cur_prov: int = settlement_to_province.get(cur_sid, -1)
+		if hotspot_by_id.has(cur_prov):
+			coverage[cur_prov] += 1
+			continue
+
+		unassigned.append(c)
+
+	# Send each idle member to the least-covered hotspot (ties → highest PTL,
+	# since hotspots is sorted PTL-descending and we take the first minimum).
+	for c: L5RCharacterData in unassigned:
+		var target: ProvinceData = null
+		var min_cov: int = 0x7FFFFFFF
+		for h: ProvinceData in hotspots:
+			if coverage[h.province_id] < min_cov:
+				min_cov = coverage[h.province_id]
+				target = h
+		if target == null:
+			continue
+		coverage[target.province_id] += 1
+		objectives_map[c.character_id]["primary"] = {
+			"need_type": "HUNT_MAHO",
+			"priority": 5,
+			"target_intent": str(target.settlement_ids[0]),
+			"target_province_id": target.province_id,
+			"source": source_tag,
+			"auto_assigned": true,
+		}
+
+
+# -- Witch-Hunter Cross-Border Incident (s11.3.5) -----------------------------
+# Kuni Witch-Hunters ignore clan boundaries (s11.3.5: "potential diplomatic
+# incident generator"). When one arrives uninvited in another clan's province,
+# the host province's lord resents the intrusion (−5 disposition toward the
+# hunter) and the host clan's collective standing toward the hunter's clan
+# ripples down (via the existing CLAN_RIPPLE_WEIGHT), plus a Tier 4 POLITICAL
+# topic. Asako Inquisitors (welcomed) and Kuroiban (covert) generate no incident.
+
+const BORDER_INCIDENT_DISPOSITION: int = 5  # host lord → hunter (owner-set 2026-06-10)
+
+static func _is_kuni_witch_hunter(c: L5RCharacterData) -> bool:
+	if c.school.contains("Witch-Hunter") or c.school.contains("Witch Hunter"):
+		return true
+	return c.role_position == RoleRegistry.WITCH_HUNTER_LEADER
+
+
+static func _find_active_border_topic(
+	active_topics: Array, hunter_id: int, province_id: int,
+) -> TopicData:
+	for t: Variant in active_topics:
+		if not t is TopicData:
+			continue
+		var topic: TopicData = t
+		if not topic.resolved and topic.variant == "witch_hunter_border" \
+				and topic.subject_character_id == hunter_id \
+				and province_id in topic.provinces_affected:
+			return topic
+	return null
+
+
+static func _process_witch_hunter_border_incidents(
+	arrivals: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	provinces: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	clan_baselines: Dictionary,
+	family_baselines: Dictionary,
+) -> void:
+	var settlement_province: Dictionary = {}
+	for s: SettlementData in settlements:
+		settlement_province[str(s.settlement_id)] = s.province_id
+
+	for arrival: Dictionary in arrivals:
+		var hunter: L5RCharacterData = characters_by_id.get(arrival.get("character_id", -1))
+		if hunter == null or CharacterStats.is_dead(hunter):
+			continue
+		if not _is_kuni_witch_hunter(hunter):
+			continue
+
+		var prov_v: Variant = provinces.get(settlement_province.get(hunter.physical_location, -1))
+		if not prov_v is ProvinceData:
+			continue
+		var province: ProvinceData = prov_v
+		if province.clan.is_empty() or province.clan == hunter.clan:
+			continue  # own clan's land (or unowned) — no incident
+
+		# Dedup: one live incident per hunter per province.
+		if _find_active_border_topic(active_topics, hunter.character_id, province.province_id) != null:
+			continue
+
+		var host_lord: L5RCharacterData = _find_province_lord(province, characters_by_id)
+		if host_lord != null and not CharacterStats.is_dead(host_lord) \
+				and host_lord.character_id != hunter.character_id:
+			# Individual: the host lord resents the uninvited lout.
+			var cur: int = int(host_lord.disposition_values.get(hunter.character_id, 0))
+			host_lord.disposition_values[hunter.character_id] = clampi(
+				cur - BORDER_INCIDENT_DISPOSITION, -100, 100)
+			# Collective: host clan's standing toward the hunter's clan ripples down.
+			CollectiveDisposition.apply_event_ripple(
+				host_lord, hunter, -BORDER_INCIDENT_DISPOSITION,
+				clan_baselines, family_baselines)
+
+		var topic_id: int = next_topic_id[0]
+		next_topic_id[0] += 1
+		var title: String = "Kuni Witch-Hunter operating in %s lands" % province.clan
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			topic_id, title, TopicData.Tier.TIER_4, TopicData.Category.POLITICAL,
+			ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+			[province.province_id], province.clan, "", hunter.character_id,
+			"diplomatic_incident", "witch_hunter_border",
+		)
+		topic.slug = "witch_hunter_border_%d_%d" % [hunter.character_id, province.province_id]
+		active_topics.append(topic)
+		if host_lord != null and not CharacterStats.is_dead(host_lord) \
+				and topic.topic_id not in host_lord.topic_pool:
+			host_lord.topic_pool.append(topic.topic_id)
+
+
+# -- Anti-Maho Order Information Sharing (s11.3.5) ----------------------------
+# The Kuroiban "share information and resources with the Kuni" (s11.3.5) — a rare
+# Crab-Scorpion cooperation. Maho detections held by either secret order are
+# relayed to the other order's living members through the letter pipeline
+# (delayed delivery). Mutual: Kuni detections reach the Kuroiban and vice versa.
+# On delivery the carried topic enters the recipient's topic_pool, letting them
+# corroborate or hunt the suspect.
+
+const ANTI_MAHO_SHARE_VARIANTS: Array = ["taint_suspected", "blood_evidence"]
+const ANTI_MAHO_SHARE_DISTANCE: int = 3  # PROVISIONAL (blocked on map/adjacency, A16)
+
+static func _process_anti_maho_info_sharing(
+	characters: Array,
+	active_topics: Array,
+	pending_letters: Array,
+	next_letter_id: Array,
+	ic_day: int,
+) -> void:
+	var kuni: Array = []
+	var kuro: Array = []
+	for ch: Variant in characters:
+		if not ch is L5RCharacterData:
+			continue
+		var c: L5RCharacterData = ch
+		if CharacterStats.is_dead(c):
+			continue
+		if c.is_kuroiban:
+			kuro.append(c)
+		elif _is_kuni_witch_hunter(c):
+			kuni.append(c)
+	if kuni.is_empty() or kuro.is_empty():
+		return  # one side has no living members to share with
+
+	# Index pending undelivered letters by (recipient, topic) for dedup.
+	var en_route: Dictionary = {}
+	for lv: Variant in pending_letters:
+		if not lv is LetterData:
+			continue
+		var l: LetterData = lv
+		if not l.delivered and l.topic >= 0:
+			en_route["%d_%d" % [l.recipient_id, l.topic]] = true
+
+	for t: Variant in active_topics:
+		if not t is TopicData:
+			continue
+		var topic: TopicData = t
+		if topic.resolved or not (topic.variant in ANTI_MAHO_SHARE_VARIANTS):
+			continue
+		# Mutual: relay in whichever direction an order already knows it.
+		_relay_detection(topic.topic_id, kuni, kuro, en_route, pending_letters, next_letter_id, ic_day)
+		_relay_detection(topic.topic_id, kuro, kuni, en_route, pending_letters, next_letter_id, ic_day)
+
+
+# A source-order member who knows the topic relays it to dest-order members who
+# don't (and have no letter already en route). Mutates en_route / pending_letters.
+static func _relay_detection(
+	topic_id: int,
+	source_order: Array,
+	dest_order: Array,
+	en_route: Dictionary,
+	pending_letters: Array,
+	next_letter_id: Array,
+	ic_day: int,
+) -> void:
+	var sender: L5RCharacterData = null
+	for c: L5RCharacterData in source_order:
+		if topic_id in c.topic_pool:
+			sender = c
+			break
+	if sender == null:
+		return  # the source order does not know this detection
+
+	for c: L5RCharacterData in dest_order:
+		if topic_id in c.topic_pool:
+			continue  # already knows
+		var key: String = "%d_%d" % [c.character_id, topic_id]
+		if en_route.get(key, false):
+			continue  # a letter is already carrying it
+
+		var lid: int = next_letter_id[0]
+		next_letter_id[0] = lid + 1
+		var letter := LetterData.new()
+		letter.letter_id = lid
+		letter.sender_id = sender.character_id
+		letter.recipient_id = c.character_id
+		letter.topic = topic_id
+		letter.ic_day_sent = ic_day
+		letter.ic_day_arrival = ic_day + LetterSystem.calculate_delivery_time(
+			ANTI_MAHO_SHARE_DISTANCE, 0, 0, 0, false)
+		pending_letters.append(letter)
+		en_route[key] = true
+
+
 # -- Kaiu Engineer Standing Need (s57.41.2) ------------------------------------
 # Kaiu Engineers auto-receive MAINTAIN_FORTIFICATION or SEAL_WALL_BREACH
 # when Wall Tower SI thresholds are breached, without requiring a lord directive.
@@ -7083,8 +8517,16 @@ static func _assign_kaiu_engineer_standing_objectives(
 
 		var objectives: Dictionary = objectives_map[char_id]
 		var standing: Dictionary = objectives.get("standing", {})
+		var st_need: String = standing.get("need_type", "")
 
-		if not standing.is_empty():
+		# Wall maintenance overrides the peacetime artistic standing (s49) and
+		# refreshes an existing wall standing's priority, but never clobbers a
+		# different standing (e.g. a lord-directed objective). Without this an
+		# engineer who picked up ARTISTIC_EXPRESSION while SI was healthy would
+		# stay on art and never FORTIFY once the tower degraded below 7.
+		if not standing.is_empty() \
+				and st_need != "ARTISTIC_EXPRESSION" \
+				and st_need != "MAINTAIN_FORTIFICATION":
 			continue
 
 		if breach:
@@ -7099,6 +8541,233 @@ static func _assign_kaiu_engineer_standing_objectives(
 				"priority": 2,
 				"auto_assigned": true,
 			}
+
+
+# -- Taisa Sortie Timing — s2.4.11 Decision 2 ---------------------------------
+# A Tower Commander (Taisa) stationed at a Wall Tower orders sorties into the
+# adjacent Shadowlands to manage Shadowlands Strength. The full Decision-2 logic
+# (SS Low -> no sortie / Medium -> Small / High -> Medium; blocked when jade is
+# critical, garrison is below minimum, or SI < 6 while SS is High; Large requires
+# Shireikan) already lives in WallSystem.validate_sortie — this pass just routes
+# the Taisa to it by setting a CONDUCT_SORTIE standing when a sortie is warranted
+# and clearing it (conserve the garrison) when it is not. Self-regulating: each
+# successful sortie reduces SS and consumes jade, so the standing naturally lapses.
+# The other six s2.4.11 demands (supply/jade/tea requests, Taint monitoring) are
+# deferred — they require request pipelines and the named/tracked garrison (Phase 3).
+static func _assign_taisa_sortie_standing_objectives(
+	characters: Array,
+	settlements: Array,
+	provinces: Dictionary,
+	objectives_map: Dictionary,
+) -> void:
+	# settlement_id (as String) -> Wall Tower SettlementData.
+	var wall_towers: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_towers[str(s.settlement_id)] = s
+	if wall_towers.is_empty():
+		return
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.military_rank != Enums.MilitaryRank.TAISA:
+			continue
+		var loc: String = character.physical_location
+		if not wall_towers.has(loc):
+			continue
+
+		var tower: SettlementData = wall_towers[loc] as SettlementData
+		var ss: int = 0
+		var province: Variant = provinces.get(tower.province_id, null)
+		if province is ProvinceData:
+			ss = (province as ProvinceData).shadowlands_strength
+
+		var garrison_above_minimum: bool = not WallSystem.is_garrison_below_minimum(tower.garrison_pu)
+		# Jade-critical threshold mirrors _set_wall_tower_context_flags: enough jade
+		# for one Small sortie's allocation (s2.4.15).
+		var min_jade: float = float(
+			int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
+			* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR
+		)
+		var jade_critical: bool = tower.jade_stockpile <= min_jade
+
+		var validation: Dictionary = WallSystem.validate_sortie(
+			ss, tower.wall_si, garrison_above_minimum, jade_critical, false,
+		)
+		var warranted: bool = validation.get("can_sortie", false)
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+		var st_need: String = standing.get("need_type", "")
+
+		if warranted:
+			# Assign/refresh the sortie standing, but never clobber a different
+			# standing (e.g. a future supply/escalation directive).
+			if standing.is_empty() or st_need == "CONDUCT_SORTIE":
+				objectives["standing"] = {
+					"need_type": "CONDUCT_SORTIE",
+					"priority": 2,
+					"auto_assigned": true,
+				}
+		elif st_need == "CONDUCT_SORTIE":
+			# No longer warranted (SS dropped, jade critical, SI/garrison gate) —
+			# clear our own stale standing so the Taisa conserves the garrison.
+			objectives.erase("standing")
+
+
+# -- Kuni Province Purification — s2.4.17 / Taisa AI ninth decision ------------
+# A Kuni Shugenja stationed at a Wall Tower cleanses the Tainted ground of the
+# wall province. Per s2.4.17 the request fires when the province PTL exceeds 1.0
+# (urgent above 3.0, emergency above 5.0). PURIFY_TAINTED_GROUND, its Kuni Ward,
+# the overwrite rule, and the seasonal bleed are already implemented (s2.4.3/17);
+# this pass routes the stationed Kuni to cast it. Self-regulating: each cast
+# applies -0.5 PTL immediately, so once PTL falls to <= 1.0 the standing clears.
+const KUNI_PURIFY_PTL_THRESHOLD: float = 1.0  # s2.4.17: "PTL exceeds 1.0"
+const KUNI_PURIFY_URGENT_PTL: float = 3.0     # s2.4.17: urgent threshold
+static func _assign_kuni_purification_standing_objectives(
+	characters: Array,
+	settlements: Array,
+	provinces: Dictionary,
+	objectives_map: Dictionary,
+) -> void:
+	var wall_towers: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_towers[str(s.settlement_id)] = s
+	if wall_towers.is_empty():
+		return
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.school != "Kuni Shugenja":
+			continue
+		var loc: String = character.physical_location
+		if not wall_towers.has(loc):
+			continue
+
+		var tower: SettlementData = wall_towers[loc] as SettlementData
+		var ptl: float = 0.0
+		var province: Variant = provinces.get(tower.province_id, null)
+		if province is ProvinceData:
+			ptl = (province as ProvinceData).province_taint_level
+
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+		var st_need: String = standing.get("need_type", "")
+
+		if ptl > KUNI_PURIFY_PTL_THRESHOLD:
+			# Assign/refresh the purification standing, never clobbering a
+			# different standing (e.g. a lord directive).
+			if standing.is_empty() or st_need == "MANAGE_TAINT":
+				objectives["standing"] = {
+					"need_type": "MANAGE_TAINT",
+					"priority": 1 if ptl > KUNI_PURIFY_URGENT_PTL else 2,
+					"auto_assigned": true,
+					"target_province_id": tower.province_id,
+				}
+		elif st_need == "MANAGE_TAINT":
+			# Ground is clean enough — clear our own stale standing.
+			objectives.erase("standing")
+
+
+# -- Shireikan Troop Redeployment — s2.4.13 Decision 2 ------------------------
+# Each Shireikan reinforces below-minimum Towers in their half by pulling
+# garrison from the highest-surplus safe Tower. GDD-LOCKED values: 30% transfer
+# cap per order; never pull from a Tower at SS High or SI < 6; source and target
+# stay at/above the minimum garrison. (The horde-incoming triage priorities P1/P2
+# need scout lead time that does not exist yet, so the redeployment target is the
+# below-minimum shortage Tower — triage P3.) Runs seasonally. Garrison is abstract
+# PU, so this is a direct infrastructure transfer, like the Ashigaru flow.
+const SHIREIKAN_REDEPLOY_CAP_PCT: float = 0.30  # s2.4.13 D2 LOCKED
+static func _process_shireikan_troop_redeployment(
+	characters: Array,
+	settlements: Array,
+	provinces: Dictionary,
+) -> Array:
+	var results: Array = []
+
+	var towers_by_number: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER and s.wall_tower_number >= 1:
+			towers_by_number[s.wall_tower_number] = s
+	if towers_by_number.is_empty():
+		return results
+
+	var min_pu: int = int(WallSystem.MINIMUM_GARRISON_PU)
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.military_rank != Enums.MilitaryRank.SHIREIKAN:
+			continue
+
+		# Seat at Tower 3 → Southern half (1-6); Tower 10 → Northern half (7-12).
+		var seat: int = -1
+		for num: int in towers_by_number:
+			if str((towers_by_number[num] as SettlementData).settlement_id) == character.physical_location:
+				seat = num
+				break
+		var half: Array = range(1, 7) if seat <= 6 else range(7, 13)
+
+		var half_towers: Array = []
+		for num: int in half:
+			if towers_by_number.has(num):
+				half_towers.append(towers_by_number[num])
+
+		# Targets: below-minimum towers, most urgent (lowest garrison) first.
+		var targets: Array = []
+		for t: SettlementData in half_towers:
+			if WallSystem.is_garrison_below_minimum(t.garrison_pu):
+				targets.append(t)
+		targets.sort_custom(func(a: SettlementData, b: SettlementData) -> bool:
+			return a.garrison_pu < b.garrison_pu)
+
+		for target: SettlementData in targets:
+			# Source: highest-garrison safe surplus tower (not the target), not SS
+			# High, not SI < 6, leaving the source at/above minimum.
+			var best_source: SettlementData = null
+			for src: SettlementData in half_towers:
+				if src == target:
+					continue
+				if src.garrison_pu - min_pu < 1:
+					continue
+				if src.wall_si < 6:
+					continue
+				var src_ss: int = 0
+				var src_prov: Variant = provinces.get(src.province_id, null)
+				if src_prov is ProvinceData:
+					src_ss = (src_prov as ProvinceData).shadowlands_strength
+				if WallSystem.get_ss_tier(src_ss) == "high":
+					continue
+				if best_source == null or src.garrison_pu > best_source.garrison_pu:
+					best_source = src
+			if best_source == null:
+				continue
+
+			# Up to 30% of source, floored at one Company (indivisible), capped so
+			# the source stays at/above minimum.
+			var cap30: int = maxi(1, int(best_source.garrison_pu * SHIREIKAN_REDEPLOY_CAP_PCT))
+			var transfer: int = mini(cap30, best_source.garrison_pu - min_pu)
+			if transfer < 1:
+				continue
+			best_source.garrison_pu -= transfer
+			target.garrison_pu += transfer
+			results.append({
+				"shireikan_id": character.character_id,
+				"from_tower": best_source.wall_tower_number,
+				"to_tower": target.wall_tower_number,
+				"transferred_pu": transfer,
+			})
+
+	return results
 
 
 # -- ARTISTIC_EXPRESSION Standing Objective Assignment (s49) -------------------
@@ -7511,7 +9180,7 @@ static func _process_clan_induction_writebacks(
 		if daimyo == null or CharacterStats.is_dead(daimyo):
 			continue
 
-		var induction_result: Dictionary = RoninSystem.perform_induction(inductee, daimyo)
+		var _induction_result: Dictionary = RoninSystem.perform_induction(inductee, daimyo)
 
 		# Clear FIND_NEW_LORD standing objective.
 		if objectives_map.has(inductee_id):
@@ -7551,7 +9220,6 @@ static func _process_clan_induction_writebacks(
 				if not c.topic_pool.has(topic.topic_id):
 					c.topic_pool.append(topic.topic_id)
 
-		_ = induction_result  # result used for side-effects; data available for callers
 
 
 static func _assign_phoenix_champion_restore_objective(
@@ -9279,7 +10947,7 @@ static func _process_compulsion_on_arrival(
 		var tn: int = trigger.get("tn", 15)
 		var wil: int = character.willpower
 		var compulsion_wound: int = CharacterStats.get_wound_penalty(character)
-		var roll: DiceResult = dice_engine.roll_and_keep(wil, wil, false, "")
+		var roll: DiceResult = dice_engine.roll_and_keep(wil, wil, false, false)
 		if (roll.total + compulsion_wound) < tn:
 			var comp_dis: DisadvantageData = AdvantageSystem.get_disadvantage(
 				character, Enums.Disadvantage.COMPULSION
@@ -9553,8 +11221,8 @@ static func _spy_build_character_fact(
 			var has_dark: bool = AdvantageSystem.has_disadvantage(
 				target, Enums.Disadvantage.DARK_SECRET,
 			)
-			var has_forbidden: bool = AdvantageSystem.has_disadvantage(
-				target, Enums.Disadvantage.FORBIDDEN_KNOWLEDGE,
+			var has_forbidden: bool = AdvantageSystem.has_advantage(
+				target, Enums.Advantage.FORBIDDEN_KNOWLEDGE,
 			)
 			if not has_dark and not has_forbidden:
 				return null
@@ -9566,11 +11234,11 @@ static func _spy_build_character_fact(
 				e.data["secret_type"] = "DARK_SECRET"
 				e.data["description"] = dis.metadata.get("description", "") if dis != null else ""
 			else:
-				var dis: DisadvantageData = AdvantageSystem.get_disadvantage(
-					target, Enums.Disadvantage.FORBIDDEN_KNOWLEDGE,
+				var adv: AdvantageData = AdvantageSystem.get_advantage(
+					target, Enums.Advantage.FORBIDDEN_KNOWLEDGE,
 				)
 				e.data["secret_type"] = "FORBIDDEN_KNOWLEDGE"
-				e.data["description"] = dis.metadata.get("knowledge_type", "") if dis != null else ""
+				e.data["description"] = adv.metadata.get("knowledge_type", "") if adv != null else ""
 		"observed_location":
 			e.entry_type = "observed_location"
 			e.data["location"] = target.physical_location
@@ -10194,9 +11862,10 @@ static func _process_insurgencies(
 			ws["is_patrolled"] = true
 		per_province_ws[pid] = ws
 
+	var next_ins_id: int = next_insurgency_id[0] if not next_insurgency_id.is_empty() else 1
 	var result: Dictionary = InsurgencySystem.process_season(
 		insurgencies, provinces, ptls, dice_engine, current_season,
-		next_insurgency_id[0], per_province_ws, worship_maluses,
+		next_ins_id, per_province_ws, worship_maluses,
 	)
 
 	for new_ins: InsurgencyData in result.get("new_insurgencies", []):
@@ -10210,7 +11879,10 @@ static func _process_insurgencies(
 				ipd.crisis_type = "insurgency"
 				next_crisis_id[0] += 1
 
-	next_insurgency_id[0] = result.get("next_id", next_insurgency_id[0])
+	if next_insurgency_id.is_empty():
+		next_insurgency_id.append(result.get("next_id", next_ins_id))
+	else:
+		next_insurgency_id[0] = result.get("next_id", next_ins_id)
 
 	for ins: InsurgencyData in insurgencies:
 		if patrolled.has(ins.province_id) and not ins.detected:
@@ -10222,16 +11894,22 @@ static func _process_insurgencies(
 	for ins: InsurgencyData in insurgencies:
 		if ins.strength <= 0:
 			removed.append(ins)
+	var resolved_crisis_ids: Array = []
 	for ins: InsurgencyData in removed:
 		insurgencies.erase(ins)
 		var rem_prov: Variant = provinces.get(ins.province_id, null)
 		if rem_prov is ProvinceData:
 			var rpd: ProvinceData = rem_prov as ProvinceData
+			# Capture the crisis_id before clearing so the caller can resolve the
+			# crisis topic tied to this insurgency (Tier 1-3 topics never decay).
+			if rpd.active_crisis_id >= 0:
+				resolved_crisis_ids.append(rpd.active_crisis_id)
 			rpd.active_crisis_id = -1
 			rpd.crisis_type = ""
 			if rpd.active_insurgency_id == ins.insurgency_id:
 				rpd.active_insurgency_id = -1
 
+	result["resolved_crisis_ids"] = resolved_crisis_ids
 	return result
 
 
@@ -10382,6 +12060,693 @@ static func _process_bloodspeaker_network(
 			active_topics.append(topic)
 
 	return result
+
+
+## Seasonal maho cast pass (s43, owner-authorized design 2026-06-09).
+## Each ACTIVE/PROPAGATING Bloodspeaker cell casts one maho spell through a
+## cult-affiliated member co-located in its province. If the cell has no
+## affiliated member, it corrupts the most-Tainted living non-PC there (sets
+## cult_affiliation=true); if nobody is Tainted, the cell casts nothing this
+## season. The caster self-bleeds (GDD: "the caster ... must spill blood"),
+## casting the highest survivable Mastery Level its Ring supports. Applies only
+## the cost/consequence side (blood, Taint, PTL, crime, blood evidence) — spell
+## effects are deferred to s40. Feeds detection Channels 1–3.
+static func _process_seasonal_maho_casts(
+	cells: Array,
+	provinces: Dictionary,
+	characters: Array,
+	settlement_province_map: Dictionary,
+	crime_records: Array,
+	next_case_id: Array,
+	dice_engine: DiceEngine,
+	ic_day: int,
+	objectives_map: Dictionary = {},
+	death_events: Array = [],
+	active_topics: Array = [],
+	next_topic_id: Array = [],
+	settlements: Array = [],
+) -> Array:
+	var casts: Array = []
+	if cells.is_empty():
+		return casts
+
+	# Index settlements by id for Caress of Fu Leng (jade sabotage at the caster's
+	# co-located settlement).
+	var settlements_by_id: Dictionary = {}
+	for s_v: Variant in settlements:
+		if s_v is SettlementData:
+			settlements_by_id[(s_v as SettlementData).settlement_id] = s_v
+
+	# Bucket living characters by province once.
+	var chars_by_province: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		var pid: int = BloodspeakerNetworkSystem._get_character_province(c, settlement_province_map)
+		if pid < 0:
+			continue
+		if not chars_by_province.has(pid):
+			chars_by_province[pid] = []
+		chars_by_province[pid].append(c)
+
+	for cell: BloodspeakerCellData in cells:
+		if cell.state != Enums.BloodspeakerCellState.ACTIVE \
+				and cell.state != Enums.BloodspeakerCellState.PROPAGATING:
+			continue
+		var pool: Array = chars_by_province.get(cell.province_id, [])
+		if pool.is_empty():
+			continue
+		var caster: L5RCharacterData = _select_or_corrupt_maho_caster(pool)
+		if caster == null:
+			continue
+		var province: Variant = provinces.get(cell.province_id, null)
+		if not province is ProvinceData:
+			continue
+
+		# Spell selection priority (owner-authorized 2026-06-09 / blood-source
+		# 2026-06-10 / Touch+Drain 2026-06-11). All casts are victim-blood, so every
+		# gate is Ring-only (supports_spell_ring) — the caster's survivability never
+		# bounds the cast:
+		#   1. Stealing the Soul (ML4) — finish a co-located, wounded, investigating
+		#      threat (investigator-defense kill outranks everything else).
+		#   2. Touch of Death (ML5) — the dreaded strike: 7k7 Wounds + permanent age+10
+		#      on the highest-Status co-located non-cultist (owner: "any named NPC").
+		#      Most decisive broad kill; preferred when reachable (Earth ≥ 5).
+		#   3. Drain the Soul (ML2) — Stamina-1 lethal branch finishes a wounded,
+		#      co-located non-cultist (owner: "any named NPC"); the cheap broad kill.
+		#   4. Fierce Blood of the Earth (ML5) — sacrifice a victim to heal + buy a
+		#      year of life, when the caster is wounded or aging (effective age ≥ 50).
+		#   5. Caress of Fu Leng (ML2) — destroy jade at the caster's co-located
+		#      settlement, weakening Shadowlands defense (mostly Kaiu Wall towers).
+		#   6. Spreading the Darkness (ML2) — shed Taint off a dangerously Tainted
+		#      member (Rank ≥ 2, the Channel-3 detection onset).
+		#   7. Otherwise the lowest-ML spell the Ring supports (minimal self-Taint).
+		var kill_target: L5RCharacterData = null
+		if MahoSpellLibrary.supports_spell_ring(caster, "stealing_the_soul"):
+			kill_target = _pick_soul_steal_target(caster, pool, objectives_map)
+		var touch_target: L5RCharacterData = null
+		if kill_target == null \
+				and MahoSpellLibrary.supports_spell_ring(caster, "touch_of_death"):
+			touch_target = _pick_touch_of_death_target(caster, pool)
+		var drain_target: L5RCharacterData = null
+		if kill_target == null and touch_target == null \
+				and MahoSpellLibrary.supports_spell_ring(caster, "drain_the_soul"):
+			drain_target = _pick_drain_soul_target(caster, pool)
+		var no_kill: bool = kill_target == null and touch_target == null and drain_target == null
+		var cast_fierce_blood: bool = no_kill \
+			and MahoSpellLibrary.supports_spell_ring(caster, "fierce_blood_of_earth") \
+			and _fierce_blood_has_benefit(caster)
+		var caress_settlement: SettlementData = null
+		if no_kill and not cast_fierce_blood \
+				and MahoSpellLibrary.supports_spell_ring(caster, "caress_of_fu_leng"):
+			caress_settlement = _caster_jade_settlement(caster, settlements_by_id)
+		var darkness_source: L5RCharacterData = null
+		var spell: Dictionary
+		if kill_target != null:
+			spell = MahoSpellLibrary.get_spell("stealing_the_soul")
+		elif touch_target != null:
+			spell = MahoSpellLibrary.get_spell("touch_of_death")
+		elif drain_target != null:
+			spell = MahoSpellLibrary.get_spell("drain_the_soul")
+		elif cast_fierce_blood:
+			spell = MahoSpellLibrary.get_spell("fierce_blood_of_earth")
+		elif caress_settlement != null:
+			spell = MahoSpellLibrary.get_spell("caress_of_fu_leng")
+		else:
+			darkness_source = _pick_taint_shed_source(pool)
+			if darkness_source != null \
+					and MahoSpellLibrary.supports_spell_ring(caster, "spreading_the_darkness"):
+				spell = MahoSpellLibrary.get_spell("spreading_the_darkness")
+			else:
+				spell = MahoSpellLibrary.pick_cast_spell(caster)
+		if spell.is_empty():
+			continue
+		var spell_id: String = spell.get("spell_id", "")
+
+		# Victim-blood model (owner-authorized 2026-06-10): every seasonal cast's
+		# 2×ML blood cost is paid by a sacrificed nameless victim, not the caster,
+		# so the caster takes no wounds and the cast is gated only by Ring support.
+		var blood_source: L5RCharacterData = L5RCharacterData.new()
+
+		var cast_result: Dictionary = MahoSystem.resolve_cast(
+			caster, blood_source, province as ProvinceData,
+			int(spell["mastery_level"]), 0, dice_engine,
+			next_case_id[0], ic_day, caster.physical_location, [])
+		next_case_id[0] += 1
+		var rec: Variant = cast_result.get("crime_record", null)
+		if rec is CrimeRecord:
+			crime_records.append(rec)
+
+		# Resolve the chosen spell's Grand-Map effect.
+		var transfer: Dictionary = {}
+		var kill: Dictionary = {}
+		var fierce_blood: Dictionary = {}
+		var caress: Dictionary = {}
+		if spell_id == "stealing_the_soul" and kill_target != null:
+			kill = _resolve_stealing_the_soul(
+				caster, kill_target, death_events, active_topics, next_topic_id, ic_day)
+		elif spell_id == "touch_of_death" and touch_target != null:
+			kill = _resolve_touch_of_death(
+				caster, touch_target, dice_engine, death_events,
+				active_topics, next_topic_id, ic_day)
+		elif spell_id == "drain_the_soul" and drain_target != null:
+			# Earth-drain kill (Stamina-1 → Earth → fatal); the picker confirmed
+			# lethality. Reuses the Stealing-the-Soul death path (mysterious death).
+			kill = _resolve_stealing_the_soul(
+				caster, drain_target, death_events, active_topics, next_topic_id, ic_day)
+		elif spell_id == "fierce_blood_of_earth":
+			fierce_blood = _resolve_fierce_blood(caster)
+		elif spell_id == "caress_of_fu_leng" and caress_settlement != null:
+			caress = _resolve_caress_of_fu_leng(caress_settlement)
+		elif spell_id == "spreading_the_darkness" and darkness_source != null:
+			transfer = _resolve_spreading_the_darkness(
+				caster, darkness_source, pool, objectives_map, dice_engine)
+
+		casts.append({
+			"caster_id": caster.character_id,
+			"province_id": cell.province_id,
+			"spell_id": spell_id,
+			"mastery_level": int(spell["mastery_level"]),
+			"ptl_delta": cast_result.get("ptl_delta", 0.0),
+			"taint_gained": cast_result.get("taint_gained", 0),
+			"transfer": transfer,
+			"kill": kill,
+			"fierce_blood": fierce_blood,
+			"caress": caress,
+		})
+
+	return casts
+
+
+## Returns the cult caster for a province pool: an existing living cult-affiliated
+## member if present, otherwise the most-Tainted living non-PC (taint > 0), which
+## the cell corrupts (sets cult_affiliation=true). PCs are never auto-corrupted
+## (s60: cult allegiance is a player choice). Returns null if no caster exists.
+static func _select_or_corrupt_maho_caster(pool: Array) -> L5RCharacterData:
+	for c: L5RCharacterData in pool:
+		if c.cult_affiliation:
+			return c
+	var best: L5RCharacterData = null
+	var best_taint: float = 0.0
+	for c: L5RCharacterData in pool:
+		if c.is_pc:
+			continue
+		if c.taint > best_taint:
+			best_taint = c.taint
+			best = c
+	if best != null and best_taint > 0.0:
+		best.cult_affiliation = true
+		return best
+	return null
+
+
+## Most-Tainted living cult member in the pool at Taint Rank ≥ 2 (the Channel-3
+## detection onset, CLAUDE.md Decision 5 — the point a member becomes a liability),
+## or null if none. Such a member is what makes a cell reach for Spreading the
+## Darkness this season. Rank ≥ 2 guarantees taint ≥ 2.0, so something is always
+## transferable above the 1.0 floor. Deterministic tiebreak by character_id.
+static func _pick_taint_shed_source(pool: Array) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for c: L5RCharacterData in pool:
+		if not c.cult_affiliation:
+			continue
+		if MutationSystem.get_taint_rank(c.taint) < 2:
+			continue
+		if best == null or c.taint > best.taint \
+				or (c.taint == best.taint and c.character_id < best.character_id):
+			best = c
+	return best
+
+
+## Resolves the Spreading the Darkness transfer (s43, owner-authorized 2026-06-09).
+## Amount = caster's Earth + Insight Rank (GDD), never dropping the source below
+## 1.0 Taint (GDD "cannot remove the last Point"). The cell PUSHES the Taint onto a
+## co-located unwilling named NPC when one is present — preferring an active
+## investigator (UPHOLD_LAW / INVESTIGATE_THREAT — frame the hunter), else the
+## highest-Status non-cultist (corrupt a leader) — resolved by a contested
+## Willpower roll vs the caster (GDD: recipient wins → spell fails). Otherwise it
+## DUMPS into a nameless, untracked victim (the source's Taint simply drops). A
+## pushed recipient's raised Taint is caught by the daily rank-up pass
+## (mutations / Lost) and feeds Channel-3 detection.
+static func _resolve_spreading_the_darkness(
+	caster: L5RCharacterData,
+	source: L5RCharacterData,
+	pool: Array,
+	objectives_map: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var cap: float = float(
+		SpellSystem.get_ring_value(caster, Enums.Ring.EARTH) + caster.insight_rank)
+	var transferable: float = minf(cap, source.taint - 1.0)
+	if transferable <= 0.0:
+		return {"resolved": false}
+
+	var target: L5RCharacterData = _pick_darkness_push_target(
+		caster, source, pool, objectives_map)
+	if target == null:
+		# DUMP into a nameless victim — the source's Taint simply drops.
+		source.taint = maxf(1.0, source.taint - transferable)
+		return {"resolved": true, "mode": "dump", "amount": transferable,
+			"source_id": source.character_id}
+
+	# PUSH onto an unwilling named NPC — contested Willpower vs the caster.
+	var c_pen: int = CharacterStats.get_wound_penalty(caster)
+	var t_pen: int = CharacterStats.get_wound_penalty(target)
+	var caster_roll: int = dice_engine.roll_check(
+		caster.willpower, caster.willpower, 0, 0, c_pen, true)["total"]
+	var target_roll: int = dice_engine.roll_check(
+		target.willpower, target.willpower, 0, 0, t_pen, true)["total"]
+	if target_roll > caster_roll:
+		# Recipient resists — the spell fails (no transfer); the source keeps it.
+		return {"resolved": true, "mode": "push_resisted", "amount": 0.0,
+			"source_id": source.character_id, "target_id": target.character_id}
+	source.taint = maxf(1.0, source.taint - transferable)
+	target.taint += transferable
+	return {"resolved": true, "mode": "push", "amount": transferable,
+		"source_id": source.character_id, "target_id": target.character_id}
+
+
+## Selects the Spreading the Darkness push target: a co-located living, non-PC,
+## non-cultist NPC (never the caster or source). Prefers an active investigator
+## threatening the cell (standing/primary need_type UPHOLD_LAW or
+## INVESTIGATE_THREAT — frame the hunter), highest Status first; otherwise the
+## highest-Status non-cultist (corrupt a leader). Null if the province holds no
+## valid named target (the cast then dumps into a nameless victim).
+static func _pick_darkness_push_target(
+	caster: L5RCharacterData,
+	source: L5RCharacterData,
+	pool: Array,
+	objectives_map: Dictionary,
+) -> L5RCharacterData:
+	var best_investigator: L5RCharacterData = null
+	var best_other: L5RCharacterData = null
+	for c: L5RCharacterData in pool:
+		if c.character_id == caster.character_id or c.character_id == source.character_id:
+			continue
+		if c.is_pc or c.cult_affiliation:
+			continue
+		if _is_active_investigator(c, objectives_map):
+			if best_investigator == null or _darkness_higher_status(c, best_investigator):
+				best_investigator = c
+		elif best_other == null or _darkness_higher_status(c, best_other):
+			best_other = c
+	if best_investigator != null:
+		return best_investigator
+	return best_other
+
+
+## True if the character holds an active UPHOLD_LAW or INVESTIGATE_THREAT objective
+## (primary or standing) — the local law/investigation the cell wants to discredit.
+static func _is_active_investigator(c: L5RCharacterData, objectives_map: Dictionary) -> bool:
+	var obj: Dictionary = objectives_map.get(c.character_id, {})
+	for slot: String in ["primary", "standing"]:
+		var nt: String = (obj.get(slot, {}) as Dictionary).get("need_type", "")
+		if nt == "UPHOLD_LAW" or nt == "INVESTIGATE_THREAT":
+			return true
+	return false
+
+
+## Higher Status wins; ties broken by lower character_id (deterministic).
+static func _darkness_higher_status(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+	if a.status != b.status:
+		return a.status > b.status
+	return a.character_id < b.character_id
+
+
+## Selects the Stealing the Soul kill target (s43, owner decision 2026-06-09 —
+## investigators-only): a co-located living, non-PC, non-cultist NPC holding an
+## active UPHOLD_LAW / INVESTIGATE_THREAT objective (the local hunter closing on
+## the cell) for whom draining the Earth-setting Trait by 1 Rank would be lethal.
+## Highest Status first; null if none — the cell then does not cast Stealing the
+## Soul. (The 1-day Trait drain is inert at world scale; only the kill matters.)
+static func _pick_soul_steal_target(
+	caster: L5RCharacterData,
+	pool: Array,
+	objectives_map: Dictionary,
+) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for c: L5RCharacterData in pool:
+		if c.character_id == caster.character_id:
+			continue
+		if c.is_pc or c.cult_affiliation:
+			continue
+		if not _is_active_investigator(c, objectives_map):
+			continue
+		if not _soul_steal_would_kill(c):
+			continue
+		if best == null or _darkness_higher_status(c, best):
+			best = c
+	return best
+
+
+## True if draining the target's Earth-setting Trait (the lower of Stamina /
+## Willpower) by 1 Rank would drop their wound capacity below their current wounds
+## — the only durable consequence of Stealing the Soul (s43: "if this reduces the
+## Earth Ring, their Wounds are lowered, potentially resulting in death"). A
+## 0-wound target never dies from a capacity reduction. Side-effect free:
+## temporarily reduces the trait, checks death via the standard wound model, restores.
+static func _soul_steal_would_kill(target: L5RCharacterData) -> bool:
+	if CharacterStats.get_earth_ring(target) <= 1:
+		return false  # Earth already at the floor; cannot be reduced
+	if target.wounds_taken <= 0:
+		return false  # a healthy target survives the temporary capacity drop
+	var drain_stamina: bool = target.stamina <= target.willpower
+	var saved: int = target.stamina if drain_stamina else target.willpower
+	if drain_stamina:
+		target.stamina = maxi(1, target.stamina - 1)
+	else:
+		target.willpower = maxi(1, target.willpower - 1)
+	var lethal: bool = CharacterStats.is_dead(target)
+	if drain_stamina:
+		target.stamina = saved
+	else:
+		target.willpower = saved
+	return lethal
+
+
+## Applies the Stealing the Soul kill (s43, owner-authorized 2026-06-09). The
+## picker already confirmed the Earth-drop is lethal. Honors GREAT_DESTINY (s45):
+## a target with an available Great Destiny cheats death, dropping to DOWN. Else
+## sets wounds lethal, appends a suspicious death_event (drives succession /
+## cleanup) with the caster as killer, and seeds a Tier 2 mysterious-death topic
+## (subject_role defaults NEUTRAL per the dead-character rule). The MAHO crime
+## record from the cast is separate; the death itself shows no obvious cause.
+## s38 Death Touch (Void 7) delayed lethal payload. Owner-authorized 2026-06-12:
+## full pipeline / all five Rings / next daily tick. A target stamped with
+## death_touch_affliction in tile combat is resolved here at the next daily tick.
+## The −1/Ring/hour drain (cap = caster's Insight Rank) completes within hours, so if
+## any Ring would reach 0 (the target's lowest Ring ≤ the Insight cap) the target
+## falls catatonic and makes 3 Contested Void Rolls vs the caster; dies if all 3 are
+## lost by 5+. The drain itself is the death-trigger mechanism only — a survivor's
+## Rings are not permanently reduced (GDD gives no recovery rule, so no invented
+## permanent stat loss). Runs before _process_lord_deaths so a kill triggers
+## same-tick succession. caster_void is snapshot at stamp time so it resolves even
+## if the caster has since died.
+static func _process_death_touch_afflictions(
+	characters: Array,
+	dice: DiceEngine,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	for target: L5RCharacterData in characters:
+		if target == null or CharacterStats.is_dead(target):
+			continue
+		var aff: Dictionary = target.death_touch_affliction
+		if aff.is_empty():
+			continue
+		var insight_cap: int = int(aff.get("insight_cap", 0))
+		var caster_void: int = int(aff.get("caster_void", 0))
+		var caster_id: int = int(aff.get("caster_id", -1))
+		target.death_touch_affliction = {}  # resolves this tick regardless of outcome
+		# Lowest Ring ≤ Insight cap → a Ring reaches 0 during the drain → catatonic.
+		if _lowest_ring(target) > insight_cap:
+			results.append({"target_id": target.character_id, "outcome": "survived_drain"})
+			continue
+		# Catatonic → 3 Contested Void Rolls vs the caster; die if all 3 lost by 5+.
+		var t_void: int = maxi(1, CharacterStats.get_ring_value(target, Enums.Ring.VOID))
+		var c_void: int = maxi(1, caster_void)
+		var all_lost_by_5: bool = true
+		for _i in range(3):
+			var t_roll: int = dice.roll_and_keep(t_void, t_void, true).total
+			var c_roll: int = dice.roll_and_keep(c_void, c_void, true).total
+			if c_roll - t_roll < 5:
+				all_lost_by_5 = false
+				break
+		if not all_lost_by_5:
+			results.append({"target_id": target.character_id, "outcome": "survived_contest"})
+			continue
+		results.append(_apply_death_touch_kill(target, caster_id, death_events, active_topics, next_topic_id, ic_day))
+	return results
+
+
+## Lowest Ring value across the five Rings (Death Touch catatonic threshold).
+static func _lowest_ring(c: L5RCharacterData) -> int:
+	var lo: int = 999
+	for ring: Enums.Ring in [Enums.Ring.AIR, Enums.Ring.EARTH, Enums.Ring.FIRE, Enums.Ring.WATER, Enums.Ring.VOID]:
+		lo = mini(lo, CharacterStats.get_ring_value(c, ring))
+	return lo
+
+
+## Death Touch kill — mirrors the maho mysterious-death path (_resolve_stealing_the_soul):
+## GREAT_DESTINY cheats death (survives at DOWN), else lethal wounds + a suspicious
+## death_event (killer = the caster) + a Tier 2 LEGAL mysterious-death topic
+## (NEUTRAL subject_role). The caster may already be dead — only caster_id is needed.
+static func _apply_death_touch_kill(
+	target: L5RCharacterData,
+	caster_id: int,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> Dictionary:
+	var ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+	if AdvantageSystem.check_great_destiny(target, ic_year):
+		var thr: int = CharacterStats.get_wound_threshold_per_level(target)
+		target.wounds_taken = thr * 6 + 1  # survives at the DOWN level
+		var gd: AdvantageData = AdvantageSystem.get_advantage(target, Enums.Advantage.GREAT_DESTINY)
+		if gd != null:
+			gd.metadata["last_triggered_ic_year"] = ic_year
+		return {"target_id": target.character_id, "outcome": "survived_destiny"}
+	var earth: int = CharacterStats.get_ring_value(target, Enums.Ring.EARTH)
+	target.wounds_taken = earth * 5 * 5  # guaranteed lethal
+	death_events.append({
+		"character_id": target.character_id,
+		"is_lord": target.role_position != "",
+		"cause": "death_touch",
+		"suspicious_death": true,
+		"ic_day": ic_day,
+		"killer_id": caster_id,
+	})
+	if not next_topic_id.is_empty():
+		var tid: int = next_topic_id[0]
+		next_topic_id[0] = tid + 1
+		var title: String = "Mysterious death of %s at %s" % [
+			target.character_name, target.physical_location]
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			tid, title, TopicData.Tier.TIER_2, TopicData.Category.LEGAL,
+			ic_day, 0.0, [], target.clan, "", target.character_id, "death", "mysterious")
+		topic.slug = "death_touch_death_%d" % target.character_id
+		active_topics.append(topic)
+	return {"target_id": target.character_id, "outcome": "killed", "killer_id": caster_id}
+
+
+static func _resolve_stealing_the_soul(
+	caster: L5RCharacterData,
+	target: L5RCharacterData,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> Dictionary:
+	var ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+	if AdvantageSystem.check_great_destiny(target, ic_year):
+		var thr: int = CharacterStats.get_wound_threshold_per_level(target)
+		target.wounds_taken = thr * 6 + 1  # survives at the DOWN level
+		var gd: AdvantageData = AdvantageSystem.get_advantage(
+			target, Enums.Advantage.GREAT_DESTINY)
+		if gd != null:
+			gd.metadata["last_triggered_ic_year"] = ic_year
+		return {"resolved": true, "mode": "survived_destiny",
+			"target_id": target.character_id}
+
+	var earth: int = CharacterStats.get_ring_value(target, Enums.Ring.EARTH)
+	target.wounds_taken = earth * 5 * 5  # guaranteed lethal
+	death_events.append({
+		"character_id": target.character_id,
+		"is_lord": target.role_position != "",
+		"cause": "soul_stolen",
+		"suspicious_death": true,
+		"ic_day": ic_day,
+		"killer_id": caster.character_id,
+	})
+	if not next_topic_id.is_empty():
+		var tid: int = next_topic_id[0]
+		next_topic_id[0] = tid + 1
+		var title: String = "Mysterious death of %s at %s" % [
+			target.character_name, target.physical_location]
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			tid, title, TopicData.Tier.TIER_2, TopicData.Category.LEGAL,
+			ic_day, 0.0, [], target.clan, "", target.character_id, "death", "mysterious")
+		topic.slug = "soul_stolen_death_%d" % target.character_id
+		active_topics.append(topic)
+	return {"resolved": true, "mode": "killed", "target_id": target.character_id}
+
+
+## Drain the Soul target (s43 Earth 2, owner-authorized 2026-06-11; scope "any
+## named NPC"). Range 50' → co-located. The spell's only durable Grand-Map effect
+## is the lethal branch (the Stamina-1 itself is a 10-minute drain, inert at world
+## scale), so we only target a co-located living non-PC non-cultist whose Stamina
+## drop is fatal — highest Status first. None lethal → don't cast it.
+static func _pick_drain_soul_target(
+	caster: L5RCharacterData,
+	pool: Array,
+) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for c: L5RCharacterData in pool:
+		if c.character_id == caster.character_id:
+			continue
+		if c.is_pc or c.cult_affiliation:
+			continue
+		if c.physical_location.is_empty() or c.physical_location != caster.physical_location:
+			continue
+		if not _drain_stamina_would_kill(c):
+			continue
+		if best == null or _darkness_higher_status(c, best):
+			best = c
+	return best
+
+
+## True if reducing the target's Stamina Rank by 1 (s43 Drain the Soul) would drop
+## their wound capacity below their current wounds. Reducing Stamina lowers Earth
+## only when Stamina is the Earth-setting minimum; the is_dead check captures that
+## naturally. Side-effect free: temporarily drops Stamina, checks death, restores.
+static func _drain_stamina_would_kill(target: L5RCharacterData) -> bool:
+	if target.wounds_taken <= 0:
+		return false  # a healthy target survives the temporary capacity drop
+	if target.stamina <= 1:
+		return false  # Stamina already at the floor; cannot be reduced
+	var saved: int = target.stamina
+	target.stamina = maxi(1, target.stamina - 1)
+	var lethal: bool = CharacterStats.is_dead(target)
+	target.stamina = saved
+	return lethal
+
+
+## Touch of Death target (s43 Earth 5, owner-authorized 2026-06-11; scope "any
+## named NPC"). Range 50' → co-located. No lethality precondition — the 7k7 Wounds
+## and permanent aging always land. Highest-Status co-located living non-PC
+## non-cultist (the cult's most dreaded strike on the most prominent figure).
+static func _pick_touch_of_death_target(
+	caster: L5RCharacterData,
+	pool: Array,
+) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for c: L5RCharacterData in pool:
+		if c.character_id == caster.character_id:
+			continue
+		if c.is_pc or c.cult_affiliation:
+			continue
+		if c.physical_location.is_empty() or c.physical_location != caster.physical_location:
+			continue
+		if best == null or _darkness_higher_status(c, best):
+			best = c
+	return best
+
+
+## Applies Touch of Death (s43 Earth 5, owner-authorized 2026-06-11). GDD: "The
+## victim physically ages 10 years and suffers 7k7 Wounds. Wounds can be healed
+## normally; the aging cannot be reversed." Aging (age += 10) is permanent and
+## raises natural-death odds (GempukkuSystem.roll_natural_death reads age). The
+## 7k7 (exploding) Wounds are applied directly — a curse, no armor/Reduction. If
+## the wounds kill: GREAT_DESTINY (s45) cheats death to DOWN, else a suspicious
+## death_event (drives succession) + Tier 2 mysterious-death topic. If the target
+## survives, they persist wounded and aged. The MAHO crime record is separate.
+static func _resolve_touch_of_death(
+	caster: L5RCharacterData,
+	target: L5RCharacterData,
+	dice: DiceEngine,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> Dictionary:
+	target.age += 10  # permanent, irreversible (GDD)
+	var dmg: int = dice.roll_and_keep(7, 7, true).total
+	target.wounds_taken += dmg
+	if not CharacterStats.is_dead(target):
+		return {"resolved": true, "mode": "wounded_aged",
+			"target_id": target.character_id, "damage": dmg}
+
+	var ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+	if AdvantageSystem.check_great_destiny(target, ic_year):
+		var thr: int = CharacterStats.get_wound_threshold_per_level(target)
+		target.wounds_taken = thr * 6 + 1  # survives at the DOWN level (still aged)
+		var gd: AdvantageData = AdvantageSystem.get_advantage(
+			target, Enums.Advantage.GREAT_DESTINY)
+		if gd != null:
+			gd.metadata["last_triggered_ic_year"] = ic_year
+		return {"resolved": true, "mode": "survived_destiny",
+			"target_id": target.character_id}
+
+	var earth: int = CharacterStats.get_ring_value(target, Enums.Ring.EARTH)
+	target.wounds_taken = earth * 5 * 5  # guaranteed lethal
+	death_events.append({
+		"character_id": target.character_id,
+		"is_lord": target.role_position != "",
+		"cause": "touch_of_death",
+		"suspicious_death": true,
+		"ic_day": ic_day,
+		"killer_id": caster.character_id,
+	})
+	if not next_topic_id.is_empty():
+		var tid: int = next_topic_id[0]
+		next_topic_id[0] = tid + 1
+		var title: String = "Mysterious death of %s at %s" % [
+			target.character_name, target.physical_location]
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			tid, title, TopicData.Tier.TIER_2, TopicData.Category.LEGAL,
+			ic_day, 0.0, [], target.clan, "", target.character_id, "death", "mysterious")
+		topic.slug = "touch_of_death_%d" % target.character_id
+		active_topics.append(topic)
+	return {"resolved": true, "mode": "killed", "target_id": target.character_id}
+
+
+## True if Fierce Blood of the Earth (s43) would do something for the caster this
+## season: heal an injury, or shave a year off a death-rollable age. effective_age
+## already nets out years bought by prior casts. A young, healthy caster gains
+## nothing now (death chance is 0 under 50) and does not waste a victim on it.
+static func _fierce_blood_has_benefit(caster: L5RCharacterData) -> bool:
+	if caster.wounds_taken > 0:
+		return true
+	return maxi(0, caster.age - caster.life_extension_years) >= 50
+
+
+## Applies Fierce Blood of the Earth (s43, owner-authorized 2026-06-09): the
+## victim's life force (the cast's nameless blood source) is consumed, the caster
+## heals all injuries and buys one more year of life. The +1 year lowers the
+## effective age used by GempukkuSystem.roll_natural_death. Limb/organ regrowth is
+## not modeled (no such system at world scale).
+static func _resolve_fierce_blood(caster: L5RCharacterData) -> Dictionary:
+	caster.wounds_taken = 0
+	caster.life_extension_years += 1
+	return {"resolved": true, "healed": true,
+		"life_extension_years": caster.life_extension_years}
+
+
+## The caster's co-located settlement if it holds jade to destroy (Caress of Fu
+## Leng, s43, Range 50' = co-located). null otherwise — the cell then casts a
+## different spell. Jade is stocked almost exclusively at Kaiu Wall towers, so
+## this fires rarely.
+static func _caster_jade_settlement(
+	caster: L5RCharacterData,
+	settlements_by_id: Dictionary,
+) -> SettlementData:
+	if not caster.physical_location.is_valid_int():
+		return null
+	var sid: int = int(caster.physical_location)
+	if not settlements_by_id.has(sid):
+		return null
+	var s: SettlementData = settlements_by_id[sid] as SettlementData
+	if s != null and s.jade_stockpile > 0.0:
+		return s
+	return null
+
+
+## Applies Caress of Fu Leng (s43, owner-authorized 2026-06-10): dark kansen
+## corrupt "one jade object" — N=3 fingers of the settlement's jade_stockpile
+## (owner-set quantity; jade is measured in fingers, 1 per warrior per s2.4.15).
+## The Wall pass recomputes jade_stockpile_critical next tick, weakening Shadowlands
+## defense and triggering NPC jade-resupply objectives. Taint/PTL/crime apply via
+## the cast itself.
+static func _resolve_caress_of_fu_leng(settlement: SettlementData) -> Dictionary:
+	const CARESS_JADE_DESTROYED: float = 3.0
+	var before: float = settlement.jade_stockpile
+	settlement.jade_stockpile = maxf(0.0, before - CARESS_JADE_DESTROYED)
+	return {"resolved": true, "settlement_id": settlement.settlement_id,
+		"jade_destroyed": before - settlement.jade_stockpile}
 
 
 static func _detect_maho_provinces(
@@ -10542,7 +12907,7 @@ static func _process_hostage_escapes(
 		elif escape_result.get("executed", false):
 			var lethal: int = CharacterStats.get_ring_value(character, Enums.Ring.EARTH) * 5 * 5
 			var he_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
-			if AdvantageSystem.check_great_destiny(character, he_ic_year).get("triggered", false):
+			if AdvantageSystem.check_great_destiny(character, he_ic_year):
 				var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(character)
 				character.wounds_taken = gd_threshold * 6 + 1
 				var gd_he: AdvantageData = AdvantageSystem.get_advantage(character, Enums.Advantage.GREAT_DESTINY)
@@ -11768,6 +14133,13 @@ static func _process_military_effects(
 			if not r_5.is_empty():
 				results.append(r_5)
 
+		if effects.get("requires_wall_emergency_declaration", false):
+			var r_we: Dictionary = _apply_wall_emergency_declaration(
+				applied, characters_by_id, objectives_map, active_topics, ic_day,
+			)
+			if not r_we.is_empty():
+				results.append(r_we)
+
 		if effects.get("requires_court_invitation", false):
 			var r_6: Dictionary = _apply_court_invitation(
 				applied, characters_by_id, courts,
@@ -12962,7 +15334,7 @@ static func _create_battle_topic(
 
 	var variant: String = "victory_clean"
 	var tier: TopicData.Tier = TopicData.Tier.TIER_3
-	var momentum: float = TopicSystem.initial_momentum_for_tier(tier)
+	var momentum: float = TopicMomentumSystem.initial_momentum_for_tier(tier)
 
 	var title: String = "Battle at province %d" % province_id
 
@@ -13210,6 +15582,159 @@ static func _apply_vassal_objective_assignment(
 	}
 
 
+# -- Wall-Wide Emergency Declaration (s2.4.14 Decision 6) ----------------------
+# One season window for the compliance obligation (IC_DAYS_PER_YEAR / 4 = 90).
+const _WALL_EMERGENCY_WINDOW_DAYS: int = 90
+# Non-compliance honor loss: the serious/horde tier of the s2.4.12 courtier-
+# refusal scale (action_executor wall_critical branch = -1.0). Reused, not new.
+const _WALL_EMERGENCY_NONCOMPLIANCE_HONOR: float = -1.0
+
+
+## Applies a Clan Champion's Wall-wide emergency (s2.4.14 Decision 6). Elevates
+## the active Shadowlands Incursion topic to the Tier-1 momentum floor and
+## broadcasts it into every Crab lord's awareness (owner choice 2026-06-11), and
+## compels every living non-PC Crab daimyo (CITY_DAIMYO..FAMILY_DAIMYO, excluding
+## the declaring Champion) to respond by forcing a DEFEND_PROVINCE primary toward
+## the critical Tower — this supersedes all other clan priorities. Each compelled
+## lord is stamped with the obligation IC day for the non-compliance honor check.
+## Deduped: skips if an emergency is already active within the 90-day window.
+static func _apply_wall_emergency_declaration(
+	applied: Dictionary,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	active_topics: Array,
+	ic_day: int,
+) -> Dictionary:
+	var champion_id: int = applied.get("character_id", -1)
+	var effects: Dictionary = applied.get("effects", {})
+	var tower_province: int = int(effects.get("target_province_id", -1))
+	var champion: L5RCharacterData = characters_by_id.get(champion_id)
+	if champion == null or CharacterStats.is_dead(champion):
+		return {}
+	var clan: String = champion.clan
+
+	# Dedup: only one active Wall-wide emergency at a time (90-day window).
+	for cv: Variant in characters_by_id.values():
+		var c: L5RCharacterData = cv
+		if c == null:
+			continue
+		if c.wall_emergency_obligation_ic_day >= 0 \
+				and ic_day - c.wall_emergency_obligation_ic_day < _WALL_EMERGENCY_WINDOW_DAYS:
+			return {}
+
+	# Elevate the active Shadowlands Incursion topic (prefer the one affecting the
+	# critical Tower; else the most recent). Boost momentum to the Tier-1 floor.
+	var elevated_topic_id: int = -1
+	var best_topic: TopicData = null
+	for tv: Variant in active_topics:
+		if not tv is TopicData:
+			continue
+		var t: TopicData = tv
+		if t.resolved or t.variant != "shadowlands_incursion":
+			continue
+		if best_topic == null \
+				or (tower_province in t.provinces_affected and tower_province not in best_topic.provinces_affected) \
+				or t.ic_day_created > best_topic.ic_day_created:
+			best_topic = t
+	if best_topic != null:
+		best_topic.momentum = maxf(
+			best_topic.momentum,
+			TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_1))
+		elevated_topic_id = best_topic.topic_id
+
+	# Compel every living non-PC Crab daimyo to respond (forced wall-defense
+	# primary). Supersedes all other clan priorities per s2.4.14 Decision 6.
+	var compelled: int = 0
+	for cv2: Variant in characters_by_id.values():
+		var lord: L5RCharacterData = cv2
+		if lord == null or CharacterStats.is_dead(lord) or lord.is_pc:
+			continue
+		if lord.character_id == champion_id or lord.clan != clan:
+			continue
+		if lord.lord_rank < Enums.LordRank.CITY_DAIMYO \
+				or lord.lord_rank >= Enums.LordRank.CLAN_CHAMPION:
+			continue
+		if not objectives_map.has(lord.character_id):
+			objectives_map[lord.character_id] = {}
+		objectives_map[lord.character_id]["primary"] = {
+			"need_type": "DEFEND_PROVINCE",
+			"target_province_id": tower_province,
+			"assigned_by": champion_id,
+			"status": "ACTIVE",
+			"source": "wall_emergency",
+		}
+		lord.wall_emergency_obligation_ic_day = ic_day
+		lord.wall_emergency_contributed = false
+		if elevated_topic_id >= 0 and elevated_topic_id not in lord.topic_pool:
+			lord.topic_pool.append(elevated_topic_id)
+		compelled += 1
+
+	# Mark the declaring Champion too: this dedups re-declaration for the 90-day
+	# window (one emergency per season — the gravest, last-resort call). The
+	# Champion is exempt from the non-compliance penalty (contributed = true);
+	# they lead the response through their own wall-management decomposition.
+	champion.wall_emergency_obligation_ic_day = ic_day
+	champion.wall_emergency_contributed = true
+
+	return {
+		"type": "wall_emergency_declared",
+		"champion_id": champion_id,
+		"tower_province_id": tower_province,
+		"compelled_lords": compelled,
+		"elevated_topic_id": elevated_topic_id,
+	}
+
+
+## Daily: any obligated Crab lord who commits troops (ASSIGN_GARRISON / ORDER_DEPLOY)
+## during the emergency window is marked as having contributed. Lenient by design —
+## a forced DEFEND_PROVINCE primary directs the commitment at the Tower, and
+## committing troops at all is the act of responding the emergency demands.
+static func _process_wall_emergency_contributions(
+	results: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for rv: Variant in results:
+		if not rv is Dictionary:
+			continue
+		var r: Dictionary = rv
+		var aid: String = r.get("action_id", "")
+		if aid != "ASSIGN_GARRISON" and aid != "ORDER_DEPLOY":
+			continue
+		if not r.get("success", true):
+			continue
+		var lord: L5RCharacterData = characters_by_id.get(int(r.get("character_id", -1)))
+		if lord == null or CharacterStats.is_dead(lord):
+			continue
+		if lord.wall_emergency_obligation_ic_day >= 0:
+			lord.wall_emergency_contributed = true
+
+
+## Seasonal: one season (90 IC days) after the declaration, any obligated Crab lord
+## who has not contributed takes the serious/horde-tier honor loss (s2.4.12). The
+## obligation and the forced wall-defense primary are cleared either way, returning
+## the lord to normal objective selection.
+static func _process_wall_emergency_obligations(
+	characters: Array,
+	objectives_map: Dictionary,
+	ic_day: int,
+) -> Array:
+	var penalised: Array = []
+	for c: L5RCharacterData in characters:
+		if c == null or c.wall_emergency_obligation_ic_day < 0:
+			continue
+		if ic_day - c.wall_emergency_obligation_ic_day < _WALL_EMERGENCY_WINDOW_DAYS:
+			continue
+		if not CharacterStats.is_dead(c) and not c.wall_emergency_contributed:
+			HonorGlorySystem.apply_honor_change(c, _WALL_EMERGENCY_NONCOMPLIANCE_HONOR)
+			penalised.append(c.character_id)
+		c.wall_emergency_obligation_ic_day = -1
+		c.wall_emergency_contributed = false
+		var obj: Dictionary = objectives_map.get(c.character_id, {})
+		if obj.get("primary", {}).get("source", "") == "wall_emergency":
+			obj.erase("primary")
+	return penalised
+
+
 static func _apply_court_invitation(
 	applied: Dictionary,
 	characters_by_id: Dictionary,
@@ -13348,6 +15873,11 @@ static func _apply_garrison_courtier_refusal_writebacks(
 			if s.settlement_type == Enums.SettlementType.WALL_TOWER \
 					and s.province_id == target_province_id:
 				s.garrison_shortage_courtier_refused = true
+				# Mark the courtier as dispatched too, so the decomposer's Step 2
+				# (`not courtier_dispatched`) stops re-firing and Step 3 — which
+				# keys on courtier_refused — becomes reachable. On compliance this
+				# flag is set in _apply_garrison_assignment instead.
+				s.garrison_shortage_courtier_dispatched = true
 				break
 
 
@@ -13359,7 +15889,11 @@ static func _apply_garrison_shortage_letter_writebacks(
 	characters_by_id: Dictionary,
 	settlements: Array,
 	current_season: int,
+	wave_results: Array = [],
+	objectives_map: Dictionary = {},
 ) -> void:
+	# Daily-pass channel: non-lord wall garrison characters whose STRENGTHEN_WALL
+	# letter is tagged with that objective need_type and who are stationed at a Tower.
 	for r: Dictionary in letter_results:
 		if r.get("need_type", "") != "STRENGTHEN_WALL":
 			continue
@@ -13371,6 +15905,34 @@ static func _apply_garrison_shortage_letter_writebacks(
 		for s: SettlementData in settlements:
 			if s.settlement_type == Enums.SettlementType.WALL_TOWER \
 					and str(s.settlement_id) == loc:
+				s.garrison_shortage_letter_season = current_season
+				break
+
+	# AP / Civilian-Order channel (s55.23a Step 1, s2.4.14 Decision 4, s2.4.13
+	# Decision 10): lords (Champion, Shireikan, Rikugunshokan) are excluded from the
+	# daily letter pass (s57.34.7) and fire the garrison-shortage SEND_LETTER through
+	# the wave instead — it decomposes from a STRENGTHEN_WALL objective and executes as
+	# WRITE_LETTER carrying the Tower's province in target_province_id. Without setting
+	# the season flag from this letter, the escalation gate (garrison_shortage_letter_
+	# season < 0) never clears for a lord and the pipeline stalls at Step 1, never
+	# reaching DISPATCH_COURTIER / DECLARE_WALL_EMERGENCY.
+	for r: Dictionary in wave_results:
+		if not r.get("success", false):
+			continue
+		if r.get("action_id", "") != CivilianOrderBudget.WRITE_LETTER:
+			continue
+		var sender_id: int = r.get("character_id", -1)
+		var objs: Dictionary = objectives_map.get(sender_id, {})
+		var need_type: String = objs.get("primary", {}).get("need_type", \
+			objs.get("standing", {}).get("need_type", ""))
+		if need_type != "STRENGTHEN_WALL":
+			continue
+		var pid: int = r.get("target_province_id", -1)
+		if pid < 0:
+			continue
+		for s: SettlementData in settlements:
+			if s.settlement_type == Enums.SettlementType.WALL_TOWER \
+					and s.province_id == pid:
 				s.garrison_shortage_letter_season = current_season
 				break
 
@@ -14324,6 +16886,24 @@ static func _expire_province_weather(provinces: Dictionary, ic_day: int) -> void
 			province.province_weather_expires_ic_day = -1
 
 
+## Sets has_kolat_objective on each character whose objectives_map carries a
+## non-empty Kolat objective slot (s54.7d). Conscious Kolat agents need this flag
+## for the Phase-3 ActionID unlock; Masters unlock unconditionally via
+## is_kolat_master, so this matters mainly for field agents handed a Tear directive.
+static func _inject_kolat_objective_flags(world_states: Dictionary, objectives_map: Dictionary) -> void:
+	for char_id: Variant in objectives_map:
+		if not char_id is int:
+			continue
+		var objs: Variant = objectives_map[char_id]
+		if not objs is Dictionary:
+			continue
+		var kolat: Variant = (objs as Dictionary).get("kolat", {})
+		if kolat is Dictionary and not (kolat as Dictionary).is_empty():
+			if not world_states.has(char_id) or not world_states[char_id] is Dictionary:
+				world_states[char_id] = {}
+			world_states[char_id]["has_kolat_objective"] = true
+
+
 static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 	# Top-level ws keys that are set conditionally and must be erased each day.
 	var stale_keys: Array = [
@@ -14335,7 +16915,8 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"is_patrolled", "phoenix_champion_authority",
 		"settlement_type",
 		"champion_conclusion_candidates", "local_tier3_candidates",
-		"has_active_contracts",
+		"has_active_contracts", "has_kolat_objective",
+		"has_taint_corroboration_target",
 		# Lord-specific keys (cleared so ex-lords don't retain stale data after succession)
 		"province_data", "settlements", "clans", "current_season",
 		"characters_by_id", "active_armies", "active_insurgencies",
@@ -14451,6 +17032,109 @@ static func _set_wall_tower_context_flags(
 		ws["wall_statuses"] = existing
 
 
+## GDD s2.4.13 Decision 10 / s2.4.14 Decision 4: when a Shireikan's garrison-shortage
+## letter campaign has run a full season without resolving the shortage, the matter
+## escalates to the Clan Champion, who takes over the pipeline (DISPATCH_COURTIER, then
+## DECLARE_WALL_EMERGENCY). The Champion governs from afar and never receives wall_statuses
+## through the location-gated context pass (_set_wall_tower_context_flags), so escalation
+## injects the critical Tower's WallStatus into the Champion's context and force-assigns a
+## STRENGTHEN_WALL primary targeting it (owner-confirmed; mirrors the wall_emergency
+## forced-primary precedent). The season flag (set by the Shireikan's Step-1 letter) is
+## already past, so the Champion's decomposer skips Step 1 and proceeds to courtier dispatch.
+## Trigger (owner-confirmed proxy for GDD "no lord moved to +50 commitment"): Tower still
+## below minimum garrison + Shireikan letter sent + a full season elapsed since that letter.
+## A Tower that recovered (a lord responded) clears the shortage flags via
+## _apply_garrison_assignment and releases the Champion's escalation objective here.
+static func _process_wall_shireikan_escalation(
+	characters: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	settlements: Array,
+	provinces: Dictionary,
+	world_states: Dictionary,
+	current_season: int,
+) -> void:
+	var escalating_champions: Dictionary = {}  # champion_id -> Tower province_id
+	for s: SettlementData in settlements:
+		if s.settlement_type != Enums.SettlementType.WALL_TOWER:
+			continue
+		if not WallSystem.is_garrison_below_minimum(s.garrison_pu):
+			continue
+		if s.garrison_shortage_letter_season < 0:
+			continue
+		if current_season == s.garrison_shortage_letter_season:
+			continue
+		var prov: Variant = provinces.get(s.province_id, null)
+		if not (prov is ProvinceData):
+			continue
+		var champ_id: int = _extrad_find_clan_champion_id((prov as ProvinceData).clan, characters)
+		if champ_id < 0:
+			continue
+		var champion: L5RCharacterData = characters_by_id.get(champ_id)
+		if champion == null or CharacterStats.is_dead(champion) or champion.is_pc:
+			continue
+		_inject_champion_wall_status(champion, s, prov as ProvinceData, world_states)
+		if not escalating_champions.has(champ_id):
+			escalating_champions[champ_id] = s.province_id
+
+	# Force-assign / refresh the STRENGTHEN_WALL primary for each escalated Champion.
+	for champ_id: int in escalating_champions:
+		if not objectives_map.has(champ_id):
+			objectives_map[champ_id] = {}
+		if objectives_map[champ_id].get("primary", {}).get("source", "") == "wall_shireikan_escalation":
+			continue
+		objectives_map[champ_id]["primary"] = {
+			"need_type": "STRENGTHEN_WALL",
+			"target_province_id": escalating_champions[champ_id],
+			"assigned_by": champ_id,
+			"status": "ACTIVE",
+			"source": "wall_shireikan_escalation",
+		}
+
+	# Release: a Champion holding an escalation primary whose Towers have all recovered
+	# (none escalating this pass) drops the objective (mirrors the wall_emergency clear).
+	for cid_v: Variant in objectives_map.keys():
+		var cid: int = cid_v
+		var obj: Dictionary = objectives_map[cid]
+		if obj.get("primary", {}).get("source", "") == "wall_shireikan_escalation" \
+				and not escalating_champions.has(cid):
+			obj.erase("primary")
+
+
+static func _inject_champion_wall_status(
+	champion: L5RCharacterData,
+	tower: SettlementData,
+	prov: ProvinceData,
+	world_states: Dictionary,
+) -> void:
+	var ws: Dictionary = world_states.get(champion.character_id, {})
+	if ws.is_empty():
+		ws = {}
+		world_states[champion.character_id] = ws
+	var existing: Array = ws.get("wall_statuses", [])
+	for e: Variant in existing:
+		if e is NPCDataStructures.WallStatus \
+				and (e as NPCDataStructures.WallStatus).province_id == tower.province_id:
+			return  # already present (e.g. the Champion is physically at the Tower)
+	var wstat := NPCDataStructures.WallStatus.new()
+	wstat.province_id = tower.province_id
+	wstat.si = tower.wall_si
+	wstat.ss = prov.shadowlands_strength
+	wstat.minimum_garrison = int(WallSystem.MINIMUM_GARRISON_PU)
+	wstat.garrison_above_minimum = false
+	wstat.garrison_shortage_letter_season = tower.garrison_shortage_letter_season
+	wstat.garrison_shortage_courtier_dispatched = tower.garrison_shortage_courtier_dispatched
+	wstat.garrison_shortage_courtier_refused = tower.garrison_shortage_courtier_refused
+	var min_jade: float = float(
+		int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
+		* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR
+	)
+	wstat.jade_stockpile_critical = tower.jade_stockpile <= min_jade
+	existing = existing.duplicate()
+	existing.append(wstat)
+	ws["wall_statuses"] = existing
+
+
 static func _set_temple_context_flags(
 	characters: Array,
 	settlements: Array,
@@ -14482,42 +17166,6 @@ static func _set_temple_context_flags(
 			continue
 		ws["context_flag"] = Enums.ContextFlag.AT_TEMPLE
 		ws["zone_subtype"] = Enums.ZoneSubtype.TEMPLE_GROUNDS
-
-
-static func _set_dojo_context_flags(
-	characters: Array,
-	settlements: Array,
-	world_states: Dictionary,
-) -> void:
-	var dojo_locs: Dictionary = {}
-	for s: SettlementData in settlements:
-		if s.has_dojo or s.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
-			dojo_locs[str(s.settlement_id)] = true
-
-	if dojo_locs.is_empty():
-		return
-
-	for character: L5RCharacterData in characters:
-		if CharacterStats.is_dead(character):
-			continue
-		var loc: String = character.physical_location
-		if not dojo_locs.has(loc):
-			continue
-		if TravelSystem.is_traveling(character):
-			continue
-		var ws: Dictionary = world_states.get(character.character_id, {})
-		if ws.is_empty():
-			ws = {}
-			world_states[character.character_id] = ws
-		var current_flag: int = ws.get("context_flag", -1)
-		if current_flag == Enums.ContextFlag.AT_COURT:
-			continue
-		if current_flag == Enums.ContextFlag.AT_WALL_TOWER:
-			continue
-		if current_flag == Enums.ContextFlag.AT_TEMPLE:
-			continue
-		ws["context_flag"] = Enums.ContextFlag.AT_DOJO
-		ws["zone_subtype"] = Enums.ZoneSubtype.DOJO
 
 
 static func _set_visiting_context_flags(
@@ -15478,7 +18126,7 @@ static func _generate_naval_battle_topics(
 		topic.slug = "naval_battle_%s_vs_%s_d%d" % [atk_clan.to_lower(), def_clan.to_lower(), ic_day]
 		topic.title = "Naval Battle — %s vs %s" % [atk_clan, def_clan]
 		topic.tier = TopicData.Tier.TIER_3
-		topic.momentum = TopicSystem.initial_momentum_for_tier(topic.tier)
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
 		topic.category = TopicData.Category.MILITARY
 		topic.ic_day_created = ic_day
 		topic.resolved = false
@@ -15921,7 +18569,20 @@ static func _process_phoenix_council_gating(
 
 	var living_masters: Array = _find_living_elemental_masters(characters)
 	if not PhoenixCouncil.can_council_self_govern(living_masters):
-		return {"skipped": true, "reason": "council_below_quorum"}
+		# Voting on new directives needs quorum, but an already-active Stage-4
+		# unfit declaration must still be answered by the Champion (s55.10.3.5/.7).
+		var quorum_result: Dictionary = {
+			"skipped": true, "reason": "council_below_quorum",
+			"defiance_stage": int(phoenix_state.get("defiance_stage", 0)),
+			"living_masters_count": living_masters.size(),
+		}
+		_resolve_phoenix_champion_unfit(
+			phoenix_state, shiba_champion, living_masters, characters,
+			characters_by_id, objectives_map, active_civil_wars,
+			active_topics, next_topic_id, ic_day, current_season,
+			active_successions, next_succession_id, quorum_result,
+		)
+		return quorum_result
 
 	var master_virtues: Dictionary = _build_master_virtues(living_masters, characters_by_id)
 	var dispositions_to_champion: Dictionary = _build_master_dispositions(
@@ -16075,52 +18736,78 @@ static func _process_phoenix_council_gating(
 			result_dict["civil_war_triggered"] = cw_result
 
 	# Champion Defiance Path — Stage 4 removal (s55.10.3.5, s55.10.3.7).
-	# Champion's virtue determines whether they accept removal or refuse and trigger schism.
-	# PROVISIONAL personality rule (user-approved): Meiyo/Chugi/Rei → accept (retire);
-	# Ketsui/Ishi/Seigyo or unset → refuse (civil war).
-	if PhoenixCouncil.is_unfit_declaration_active(phoenix_state):
-		var accepting_virtues: Array = [
-			Enums.BushidoVirtue.MEIYO,
-			Enums.BushidoVirtue.CHUGI,
-			Enums.BushidoVirtue.REI,
-		]
-		var champion_accepts: bool = shiba_champion.bushido_virtue in accepting_virtues
-		if champion_accepts:
-			# Accept removal: retire monastically, create succession vacancy, reset defiance.
-			shiba_champion.is_retired_monastic = true
-			if next_succession_id.size() > 0:
-				var succession := SuccessionSystem.trigger_succession(
-					shiba_champion, SuccessionData.VacancyCause.RETIREMENT,
-					Enums.LordRank.CLAN_CHAMPION, ic_day,
-				)
-				succession.succession_id = next_succession_id[0]
-				next_succession_id[0] += 1
-				var candidates := SuccessionSystem.get_candidates(shiba_champion, characters_by_id)
-				for cand: Dictionary in candidates:
-					succession.candidate_ids.append(cand["id"])
-				succession.confirming_authority_id = SuccessionSystem.find_confirming_authority(
-					Enums.LordRank.CLAN_CHAMPION, "Phoenix", characters_by_id
-				)
-				active_successions.append(succession)
-			phoenix_state["defiance_stage"] = 0
-			result_dict["champion_accepted_removal"] = true
-		else:
-			# Refuse removal: schism / civil war.
-			# Rebel = Champion (defied Council 4 times), Authority = Senior Master.
-			# Standard −0.3 Honor/season hemorrhage applies to the Champion (suppress_hemorrhage = false).
-			var senior_master_id_2: int = _find_senior_elemental_master_id(living_masters, characters_by_id)
-			if senior_master_id_2 >= 0:
-				var cw_result_2: Dictionary = _trigger_civil_war(
-					shiba_champion.character_id, senior_master_id_2,
-					"Phoenix", "champion defiance",
-					characters, characters_by_id, objectives_map,
-					active_civil_wars, active_topics, next_topic_id,
-					ic_day, current_season,
-					false, "defiance",
-				)
-				result_dict["champion_defiance_civil_war_triggered"] = cw_result_2
+	_resolve_phoenix_champion_unfit(
+		phoenix_state, shiba_champion, living_masters, characters,
+		characters_by_id, objectives_map, active_civil_wars,
+		active_topics, next_topic_id, ic_day, current_season,
+		active_successions, next_succession_id, result_dict,
+	)
 
 	return result_dict
+
+
+# Champion's virtue determines whether they accept Stage-4 removal or refuse and
+# trigger schism (s55.10.3.5, s55.10.3.7). PROVISIONAL personality rule
+# (user-approved): Meiyo/Chugi/Rei → accept (retire); Ketsui/Ishi/Seigyo or unset
+# → refuse (civil war). Mutates result_dict. No-op unless the declaration is active.
+static func _resolve_phoenix_champion_unfit(
+	phoenix_state: Dictionary,
+	shiba_champion: L5RCharacterData,
+	living_masters: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	active_civil_wars: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	current_season: int,
+	active_successions: Array,
+	next_succession_id: Array,
+	result_dict: Dictionary,
+) -> void:
+	if not PhoenixCouncil.is_unfit_declaration_active(phoenix_state):
+		return
+	var accepting_virtues: Array = [
+		Enums.BushidoVirtue.MEIYO,
+		Enums.BushidoVirtue.CHUGI,
+		Enums.BushidoVirtue.REI,
+	]
+	var champion_accepts: bool = shiba_champion.bushido_virtue in accepting_virtues
+	if champion_accepts:
+		# Accept removal: retire monastically, create succession vacancy, reset defiance.
+		shiba_champion.is_retired_monastic = true
+		if next_succession_id.size() > 0:
+			var succession := SuccessionSystem.trigger_succession(
+				shiba_champion, SuccessionData.VacancyCause.RETIREMENT,
+				Enums.LordRank.CLAN_CHAMPION, ic_day,
+			)
+			succession.succession_id = next_succession_id[0]
+			next_succession_id[0] += 1
+			var candidates := SuccessionSystem.get_candidates(shiba_champion, characters_by_id)
+			for cand: Dictionary in candidates:
+				succession.candidate_ids.append(cand["id"])
+			succession.confirming_authority_id = SuccessionSystem.find_confirming_authority(
+				Enums.LordRank.CLAN_CHAMPION, "Phoenix", characters_by_id
+			)
+			active_successions.append(succession)
+		phoenix_state["defiance_stage"] = 0
+		result_dict["champion_accepted_removal"] = true
+	else:
+		# Refuse removal: schism / civil war.
+		# Rebel = Champion (defied Council 4 times), Authority = Senior Master.
+		# Standard −0.3 Honor/season hemorrhage applies to the Champion (suppress_hemorrhage = false).
+		var senior_master_id_2: int = _find_senior_elemental_master_id(living_masters, characters_by_id)
+		if senior_master_id_2 >= 0:
+			var cw_result_2: Dictionary = _trigger_civil_war(
+				shiba_champion.character_id, senior_master_id_2,
+				"Phoenix", "champion defiance",
+				characters, characters_by_id, objectives_map,
+				active_civil_wars, active_topics, next_topic_id,
+				ic_day, current_season,
+				false, "defiance",
+			)
+			result_dict["champion_defiance_civil_war_triggered"] = cw_result_2
 
 
 static func _find_shiba_champion(characters: Array) -> L5RCharacterData:
@@ -16288,7 +18975,7 @@ static func _process_gempukku(
 			var dead_char: L5RCharacterData = characters_by_id[dead_id]
 			var lethal: int = CharacterStats.get_ring_value(dead_char, Enums.Ring.EARTH) * 5 * 5
 			var nd_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
-			if AdvantageSystem.check_great_destiny(dead_char, nd_ic_year).get("triggered", false):
+			if AdvantageSystem.check_great_destiny(dead_char, nd_ic_year):
 				var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(dead_char)
 				dead_char.wounds_taken = gd_threshold * 6 + 1
 				var gd_nd: AdvantageData = AdvantageSystem.get_advantage(dead_char, Enums.Advantage.GREAT_DESTINY)
@@ -19020,6 +21707,11 @@ static func _inject_base_character_context(
 		if _cv.lord_id >= 0 and _cv.supply_ledger.get("contract_end_ic_day", -1) >= 0:
 			g_lords_with_contracts[_cv.lord_id] = true
 
+	# Pre-build per-examiner EXAMINE_FOR_TAINT corroboration targets (Maho Channel 3
+	# active). examiner_id -> {target_id, topic_id}; gates the precondition filter.
+	var g_taint_corroboration: Dictionary = _build_taint_corroboration_targets(
+		characters, characters_by_id, active_topics)
+
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
 			continue
@@ -19033,6 +21725,15 @@ static func _inject_base_character_context(
 		ws["ic_day"] = ic_day
 		ws["season"] = current_season
 		ws["tattoos"] = tattoos
+
+		# Maho Channel 3 active examination target (any examiner, not just lords).
+		var taint_corr: Dictionary = g_taint_corroboration.get(c.character_id, {})
+		if not taint_corr.is_empty():
+			ws["has_taint_corroboration_target"] = true
+			if not ws.has("known_objectives"):
+				ws["known_objectives"] = {}
+			ws["known_objectives"]["taint_corroboration_target_id"] = taint_corr["target_id"]
+			ws["known_objectives"]["taint_corroboration_topic_id"] = taint_corr["topic_id"]
 		ws["trade_routes"] = trade_routes
 		ws["taint_topic_province_ids"] = taint_province_ids
 		ws["unit_training_counts"] = unit_counts.get(c.clan, {})
@@ -19141,7 +21842,7 @@ static func _inject_base_character_context(
 					if CharacterStats.is_dead(rm_c):
 						continue
 					if rm_c.physical_location == rm_loc and rm_c.character_id != c.character_id:
-						max_gr = maxf(max_gr, float(AdvantageSystem.get_glory_rank(rm_c)))
+						max_gr = maxf(max_gr, float(HonorGlorySystem.get_glory_rank(rm_c)))
 				if max_gr > 0.0:
 					ws["rumormonger_max_glory_rank"] = max_gr
 
@@ -20535,7 +23236,7 @@ static func _apply_assassination_outcome(
 ) -> void:
 	var earth: int = CharacterStats.get_ring_value(target, Enums.Ring.EARTH)
 	var ass_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
-	if AdvantageSystem.check_great_destiny(target, ass_ic_year).get("triggered", false):
+	if AdvantageSystem.check_great_destiny(target, ass_ic_year):
 		var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(target)
 		target.wounds_taken = gd_threshold * 6 + 1
 		var gd_ass: AdvantageData = AdvantageSystem.get_advantage(target, Enums.Advantage.GREAT_DESTINY)
@@ -20666,7 +23367,7 @@ static func _process_soft_hearted_kill_penalties(
 		var killer: L5RCharacterData = characters_by_id.get(killer_id)
 		if killer == null or CharacterStats.is_dead(killer):
 			continue
-		var check: Dictionary = AdvantageSystem.check_soft_hearted_trigger(killer)
+		var check: Dictionary = AdvantageSystem.check_soft_hearted_trigger(killer, true)
 		if not check.get("blocked", false):
 			continue
 		# Roll Willpower TN 20 to suppress the penalty.
@@ -21071,11 +23772,17 @@ static func _attempt_proxy_dispatch(
 			best_vassal = ch
 	if best_vassal == null:
 		return
+	# Proxy fulfillment is arrival at the target settlement (see the proxy arrival
+	# pass + register_proxy below), so the proxy's only job is to travel there.
+	# Use NeedTypes that ARE in objective_alignment.json with BEGIN_TRAVEL as their
+	# top action: ATTEND_COURT (90) for court commitments, TRAVEL_TO (100) for
+	# visit/meeting. The old "VISIT_NPC"/"ATTEND_MEETING" strings were in neither
+	# the scoring table nor the decomposer, so the proxy scored 0 → REST and never
+	# travelled (proxy dispatch was broken for VISIT_PROMISE/MEETING_ARRANGEMENT).
 	var need_type: String = "ATTEND_COURT"
-	if c.commitment_type == Enums.CommitmentType.VISIT_PROMISE:
-		need_type = "VISIT_NPC"
-	elif c.commitment_type == Enums.CommitmentType.MEETING_ARRANGEMENT:
-		need_type = "ATTEND_MEETING"
+	if c.commitment_type == Enums.CommitmentType.VISIT_PROMISE \
+			or c.commitment_type == Enums.CommitmentType.MEETING_ARRANGEMENT:
+		need_type = "TRAVEL_TO"
 	var proxy_obj: Dictionary = {
 		"need_type": need_type,
 		"assigned_by": lord.character_id,
@@ -21864,7 +24571,7 @@ static func _resolve_scheduled_hunts(
 			if killed != null:
 				var earth: int = CharacterStats.get_ring_value(killed, Enums.Ring.EARTH)
 				var hunt_ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
-				if AdvantageSystem.check_great_destiny(killed, hunt_ic_year).get("triggered", false):
+				if AdvantageSystem.check_great_destiny(killed, hunt_ic_year):
 					var gd_threshold: int = CharacterStats.get_wound_threshold_per_level(killed)
 					killed.wounds_taken = gd_threshold * 6 + 1
 					var gd_hunt: AdvantageData = AdvantageSystem.get_advantage(killed, Enums.Advantage.GREAT_DESTINY)
@@ -22017,7 +24724,7 @@ static func _apply_confirmed_successions(
 	return results
 
 
-static func _remove_resolved_successions(active_successions: Array) -> void:
+static func _remove_resolved_successions(active_successions: Array, current_tick: int = -1) -> void:
 	var i: int = active_successions.size() - 1
 	while i >= 0:
 		var succ: Variant = active_successions[i]
@@ -22025,7 +24732,10 @@ static func _remove_resolved_successions(active_successions: Array) -> void:
 			var s: SuccessionData = succ as SuccessionData
 			if s.state == SuccessionData.SuccessionState.CONFIRMED or \
 				s.state == SuccessionData.SuccessionState.RESOLVED:
-				active_successions.remove_at(i)
+				# Keep a succession that resolved on the tick it was created so
+				# callers can observe the outcome; clean it up the next day.
+				if current_tick < 0 or s.start_tick != current_tick:
+					active_successions.remove_at(i)
 		i -= 1
 
 
@@ -22948,10 +25658,12 @@ static func _inject_poem_context(
 		if CharacterStats.is_dead(character):
 			continue
 		var ws: Dictionary = world_states.get(character.character_id, {})
-		if ws.is_empty():
+		if not world_states.has(character.character_id):
 			continue
 		if not ws.has("known_objectives"):
 			ws["known_objectives"] = {}
+		# Always write the keys (default -1/0) so a stale value from a prior scroll
+		# is cleared; overwrite when a poetry scroll is present.
 		ws["known_objectives"]["available_poem_item_id"] = -1
 		ws["known_objectives"]["available_poem_raises"] = 0
 		for item: Variant in character.items:
@@ -23499,7 +26211,7 @@ static func _process_ritual_spell_writebacks(
 							province.province_taint_level
 						)
 						var density_entry: KnowledgeEntry = KnowledgeEntry.new()
-						density_entry.source = "spell_detect_presence"
+						density_entry.source = Enums.KnowledgeSource.DIRECT_OBSERVATION
 						density_entry.entry_type = "kansen_density"
 						density_entry.data = {
 							"density_tier": density_tier,
@@ -23552,7 +26264,7 @@ static func _process_ritual_spell_writebacks(
 					)
 					if ward_result.get("taint_revealed", false):
 						var entry: KnowledgeEntry = KnowledgeEntry.new()
-						entry.source = "spell_ward"
+						entry.source = Enums.KnowledgeSource.DIRECT_OBSERVATION
 						entry.entry_type = "taint_detected_self"
 						entry.data = {"taint": character.taint, "spell_id": ritual_spell_id}
 						entry.confidence = Enums.KnowledgeConfidence.FRESH
@@ -23756,7 +26468,7 @@ static func _inject_ikebana_context(
 		if CharacterStats.is_dead(character):
 			continue
 		var ws: Dictionary = world_states.get(character.character_id, {})
-		if ws.is_empty():
+		if not world_states.has(character.character_id):
 			continue
 		if not ws.has("known_objectives"):
 			ws["known_objectives"] = {}
@@ -24053,7 +26765,7 @@ static func _inject_shide_context(
 		if c == null or CharacterStats.is_dead(c):
 			continue
 		var ws: Dictionary = world_states.get(c.character_id, {})
-		if ws.is_empty():
+		if not world_states.has(c.character_id):
 			continue
 		if not ws.has("known_objectives"):
 			ws["known_objectives"] = {}
@@ -24318,7 +27030,7 @@ static func _inject_garden_context(
 		if CharacterStats.is_dead(character):
 			continue
 		var ws: Dictionary = world_states.get(character.character_id, {})
-		if ws.is_empty():
+		if not world_states.has(character.character_id):
 			continue
 		if not ws.has("known_objectives"):
 			ws["known_objectives"] = {}
@@ -24510,7 +27222,7 @@ static func _process_garden_commission_writebacks(
 					topic.topic_id = next_topic_id[0]
 					next_topic_id[0] += 1
 					topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4) as TopicData.Tier
-					topic.category = TopicData.Category.SOCIAL
+					topic.category = TopicData.Category.PERSONAL
 					topic.topic_type = topic_dict.get("topic_type", "garden_completed")
 					topic.title = topic_dict.get("title", "")
 					topic.subject_character_id = record.artisan_id
@@ -24577,7 +27289,7 @@ static func _process_maintain_garden_writebacks(
 				topic.topic_id = next_topic_id[0]
 				next_topic_id[0] += 1
 				topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4) as TopicData.Tier
-				topic.category = TopicData.Category.SOCIAL
+				topic.category = TopicData.Category.PERSONAL
 				topic.topic_type = topic_dict.get("topic_type", "garden_degraded")
 				topic.title = topic_dict.get("title", "")
 				topic.subject_character_id = garden.creator_id
@@ -24842,7 +27554,7 @@ static func _process_garden_seasonal_maintenance(
 				topic.topic_id = next_topic_id[0]
 				next_topic_id[0] += 1
 				topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4) as TopicData.Tier
-				topic.category = TopicData.Category.SOCIAL
+				topic.category = TopicData.Category.PERSONAL
 				topic.topic_type = topic_dict.get("topic_type", "garden_degraded")
 				topic.title = topic_dict.get("title", "")
 				topic.subject_character_id = garden.creator_id
@@ -24957,7 +27669,7 @@ static func _inject_painting_context(
 		if CharacterStats.is_dead(character):
 			continue
 		var ws: Dictionary = world_states.get(character.character_id, {})
-		if ws.is_empty():
+		if not world_states.has(character.character_id):
 			continue
 		if not ws.has("known_objectives"):
 			ws["known_objectives"] = {}
@@ -25112,10 +27824,10 @@ static func _process_display_painting_writebacks(
 
 		# Generate placement topic for quality tier 3+
 		var topic_dict: Dictionary = PaintingSystem.generate_lifecycle_topic(
-			painting, "placement", "", settlement.settlement_type, ic_day,
+			painting, "placement", "", "", ic_day,
 		)
 		if not topic_dict.is_empty() and topic_dict.get("tier", TopicData.Tier.TIER_4) <= TopicData.Tier.TIER_3:
-			_topic_from_dict(topic_dict, active_topics, next_topic_id, ic_day)
+			_topic_from_dict(topic_dict, next_topic_id, ic_day)
 
 
 static func _process_present_emakimono_writebacks(
@@ -25160,11 +27872,11 @@ static func _process_present_emakimono_writebacks(
 			var shift: int = pr.get("disposition_shift", 0)
 			var subject_id: int = painting.subject_id
 			if subject_id >= 0:
-				var current_disp: int = DispositionSystem.get_disposition(recipient, subject_id)
+				var current_disp: int = recipient.disposition_values.get(subject_id, 0)
 				# Positive framing → push positive (add shift if positive, subtract if negative)
 				# Negative framing → push negative (inverse)
 				var applied: int = shift if current_disp >= 0 else -shift
-				DispositionSystem.apply_disposition_change(recipient, subject_id, applied)
+				recipient.disposition_values[subject_id] = clampi(recipient.disposition_values.get(subject_id, 0) + applied, -100, 100)
 			# Deliver linked topics
 			for tid: int in pr.get("topic_ids_delivered", []):
 				if tid not in recipient.topic_pool:
@@ -25261,7 +27973,7 @@ static func _process_painting_visitor_effects(
 			if not neg_result.is_empty():
 				var disp_loss: int = neg_result.get("disposition_change", 0)
 				if disp_loss != 0 and daimyo_id >= 0:
-					DispositionSystem.apply_disposition_change(visitor, daimyo_id, disp_loss)
+					visitor.disposition_values[daimyo_id] = clampi(visitor.disposition_values.get(daimyo_id, 0) + disp_loss, -100, 100)
 
 
 static func _process_painting_seasonal_maintenance(
@@ -25439,7 +28151,7 @@ static func _inject_sculpture_context(
 		if CharacterStats.is_dead(character):
 			continue
 		var ws: Dictionary = world_states.get(character.character_id, {})
-		if ws.is_empty():
+		if not world_states.has(character.character_id):
 			continue
 		if not ws.has("known_objectives"):
 			ws["known_objectives"] = {}
@@ -25450,7 +28162,7 @@ static func _inject_sculpture_context(
 		# WIP sculpture for this creator
 		var wip: SculptureData = wip_by_creator.get(character.character_id)
 		ws["known_objectives"]["active_sculpture_wip_id"] = wip.sculpture_id if wip != null else -1
-		ws["known_objectives"]["active_sculpture_material"] = wip.material if wip != null else SculptureSystem.Material.WOOD
+		ws["known_objectives"]["active_sculpture_material"] = wip.material if wip != null else SculptureSystem.MaterialType.WOOD
 		ws["known_objectives"]["active_sculpture_format"] = wip.format if wip != null else SculptureSystem.Format.STATUARY
 
 		# Slot availability and worship FRs at current settlement
@@ -25532,7 +28244,7 @@ static func _process_compose_sculpture_writebacks(
 			next_sculpture_id[0] += 1
 			var sculpture: SculptureData = SculptureSystem.declare_composition(
 				effects.get("format", SculptureSystem.Format.STATUARY),
-				effects.get("material", SculptureSystem.Material.WOOD),
+				effects.get("material", SculptureSystem.MaterialType.WOOD),
 				effects.get("subject_type", SculptureSystem.SubjectType.FORTUNE),
 				effects.get("subject_id", -1),
 				effects.get("target_quality_tier", 1),
@@ -25839,7 +28551,7 @@ static func _check_bounty_recognition(
 			# Observer recognises the wanted character — add to met_characters
 			# so they can report through existing topic/investigation channels
 			var bounty_knowledge: KnowledgeEntry = KnowledgeEntry.new()
-			bounty_knowledge.source = "bounty_recognition"
+			bounty_knowledge.source = Enums.KnowledgeSource.PUBLIC_KNOWLEDGE
 			bounty_knowledge.entry_type = "bounty_spotted"
 			bounty_knowledge.data = {
 				"target_id": arriving.character_id,

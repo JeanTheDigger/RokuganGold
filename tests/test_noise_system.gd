@@ -147,12 +147,13 @@ func test_loud_does_not_reach_tile_at_distance_13() -> void:
 # ---------------------------------------------------------------------------
 
 func test_wall_blocks_propagation() -> void:
-	# Source at (5, 5), wall at (6, 5), target at (7, 5) — should not be reached.
-	var m: AsciiMapData = _open_map()
-	m.set_tile(6, 5, _T.WALL_STONE)
+	# In a 1-wide EW corridor (floor on row 2, walls above/below), a wall in the
+	# corridor at (6,2) is the only path east — noise cannot route around it.
+	var m: AsciiMapData = _ew_corridor_map()
+	m.set_tile(6, 2, _T.WALL_STONE)
 	var reaches: Array[Vector2i] = NoiseSystem.compute_noise_reaches(
-			m, 5, 5, _NL.LOUD, _WS.CLEAR, false)
-	assert_false(reaches.has(Vector2i(7, 5)))
+			m, 5, 2, _NL.LOUD, _WS.CLEAR, false)
+	assert_false(reaches.has(Vector2i(7, 2)))
 
 func test_wall_does_not_block_perpendicular_path() -> void:
 	# Wall at (6, 5) blocks east, but north path (5,4 → 5,3 …) is unobstructed.

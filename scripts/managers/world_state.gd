@@ -132,6 +132,12 @@ var next_spiritual_event_id: Array[int] = [1]
 var bloodspeaker_cells: Array[BloodspeakerCellData] = []
 var next_cell_id: Array[int] = [1]
 
+# -- Kolat secrecy & Imperial counter-response (s54.7i) ----------------------
+## Public/PC knowledge of the conspiracy (0–100). Starts at 0 — nobody knows.
+var kolat_exposure_level: int = 0
+## Private Imperial knowledge of the conspiracy (0–100). Tracked separately.
+var imperial_awareness_level: int = 0
+
 # -- Artisan & Crafting (s49) -------------------------------------------------
 var crafted_items: Array[ArtisanItemData] = []
 var next_item_id: Array[int] = [1]

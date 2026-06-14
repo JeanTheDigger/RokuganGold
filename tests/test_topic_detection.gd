@@ -439,10 +439,10 @@ func test_behavioral_anomaly_fires_after_gap_with_3_prior_letters():
 	var c := _make_char(1, "Correspondent", "Lion")
 	c.lord_id = -1
 
-	# 3 old letters (beyond the 90-day window at ic_day=100)
+	# 3 old letters (all sent before day 10 = ic_day 100 − 90-day window)
 	var l1 := _make_letter(1, 1, 1)
-	var l2 := _make_letter(2, 1, 10)
-	var l3 := _make_letter(3, 1, 20)
+	var l2 := _make_letter(2, 1, 4)
+	var l3 := _make_letter(3, 1, 7)
 
 	var topics: Array = []
 	var next_id: Array = [10]

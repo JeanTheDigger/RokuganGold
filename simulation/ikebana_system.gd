@@ -183,15 +183,15 @@ static func select_season_materials(
 
 	# Determine personality lean (s57.29.6a step 2)
 	var preferred: Array[String] = []
-	var virtue: String = artisan.bushido_virtue
-	var shourido: String = artisan.shourido_virtue
-	if virtue == "Rei" or shourido == "Rei":
+	var virtue: Enums.BushidoVirtue = artisan.bushido_virtue
+	var shourido: Enums.ShouridoVirtue = artisan.shourido_virtue
+	if virtue == Enums.BushidoVirtue.REI:
 		preferred = Array(PERSONALITY_LEAN_MATERIALS.get("Rei", []), TYPE_STRING, "", null)
-	elif virtue == "Jin":
+	elif virtue == Enums.BushidoVirtue.JIN:
 		preferred = Array(PERSONALITY_LEAN_MATERIALS.get("Jin", []), TYPE_STRING, "", null)
-	elif shourido == "Ketsui":
+	elif shourido == Enums.ShouridoVirtue.KETSUI:
 		preferred = Array(PERSONALITY_LEAN_MATERIALS.get("Ketsui", []), TYPE_STRING, "", null)
-	elif shourido == "Ishi" or shourido == "Ketsui":
+	elif shourido == Enums.ShouridoVirtue.ISHI:
 		preferred = Array(PERSONALITY_LEAN_MATERIALS.get("Ishi", []), TYPE_STRING, "", null)
 
 	# Build candidate list: preferred materials that are in season come first.
@@ -268,7 +268,7 @@ static func generate_composition_description(
 		if has_all_three:
 			return (
 				"A shōchikubai arrangement of pine (matsu), bamboo (take), and "
-				"plum (ume) in a %s — the Three Friends of Winter, auspicious for the new year."
+				+ "plum (ume) in a %s — the Three Friends of Winter, auspicious for the new year."
 			) % vessel
 		return "%s of %s in a %s, the composition speaking of %s." % [
 			tier_phrase, mat_list, vessel, season_name,

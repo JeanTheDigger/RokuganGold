@@ -20,7 +20,7 @@ func before_each() -> void:
 	_folder.clan = "Crane"
 	_folder.awareness = 3
 	_folder.void_ring = 3
-	_folder.void_points = 1
+	_folder.current_void_points = 1
 	_folder.honor = 5.0
 	_folder.glory = 5.0
 	_folder.skills = {"Artisan: Origami": 4}
@@ -790,6 +790,8 @@ func _make_ctx_with_origami(
 
 
 func test_filter_removes_craft_if_no_origami_skill() -> void:
+	# The filter reads character.skills, not ctx — strip the origami skill.
+	_folder.skills = {}
 	var ctx: NPCDataStructures.ContextSnapshot = _make_ctx_with_origami(0, -1, false)
 	var options: Array = [_make_option("CRAFT"), _make_option("DECLARE_SENBAZURU")]
 	var filtered: Array = NPCDecisionEngine._apply_origami_precondition_filter(
@@ -930,12 +932,15 @@ func _make_sb(
 	return sb
 
 
-func _make_present_result(folder_id: int, senbazuru_id: int) -> Dictionary:
+func _make_present_result_b(folder_id: int, senbazuru_id: int) -> Dictionary:
 	return {
 		"action_id": "PRESENT_SENBAZURU",
 		"character_id": folder_id,
 		"success": true,
-		"effects": {"senbazuru_id": senbazuru_id},
+		"effects": {
+			"senbazuru_id": senbazuru_id,
+			"requires_senbazuru_presentation": true,
+		},
 	}
 
 
@@ -945,7 +950,7 @@ func test_healing_writeback_sets_pending_fr_when_recipient_wounded() -> void:
 	_recipient.pending_healing_fr = 0
 	var sb: SenbazuruData = _make_sb(
 		7, "Healing", _recipient.character_id, GiftGivingSystem.QualityTier.FINE)
-	var results: Array = [_make_present_result(_folder.character_id, 7)]
+	var results: Array = [_make_present_result_b(_folder.character_id, 7)]
 	var chars: Dictionary = {
 		_folder.character_id: _folder,
 		_recipient.character_id: _recipient,
@@ -965,7 +970,7 @@ func test_healing_writeback_sets_pending_fr_when_recipient_tainted() -> void:
 	_recipient.pending_healing_fr = 0
 	var sb: SenbazuruData = _make_sb(
 		8, "Healing", _recipient.character_id, GiftGivingSystem.QualityTier.EXCEPTIONAL)
-	var results: Array = [_make_present_result(_folder.character_id, 8)]
+	var results: Array = [_make_present_result_b(_folder.character_id, 8)]
 	var chars: Dictionary = {
 		_folder.character_id: _folder,
 		_recipient.character_id: _recipient,
@@ -986,7 +991,7 @@ func test_healing_writeback_no_fr_when_recipient_healthy() -> void:
 	_recipient.pending_healing_fr = 0
 	var sb: SenbazuruData = _make_sb(
 		9, "Healing", _recipient.character_id, GiftGivingSystem.QualityTier.FINE)
-	var results: Array = [_make_present_result(_folder.character_id, 9)]
+	var results: Array = [_make_present_result_b(_folder.character_id, 9)]
 	var chars: Dictionary = {
 		_folder.character_id: _folder,
 		_recipient.character_id: _recipient,
@@ -1009,8 +1014,8 @@ func test_healing_writeback_takes_max_fr_not_additive() -> void:
 	var sb2: SenbazuruData = _make_sb(
 		11, "Healing", _recipient.character_id, GiftGivingSystem.QualityTier.EXCEPTIONAL)
 	var results: Array = [
-		_make_present_result(_folder.character_id, 10),
-		_make_present_result(_folder.character_id, 11),
+		_make_present_result_b(_folder.character_id, 10),
+		_make_present_result_b(_folder.character_id, 11),
 	]
 	var chars: Dictionary = {
 		_folder.character_id: _folder,

@@ -50,6 +50,7 @@ var _wounds_taken: int = 0
 var _water_ring: int = 3
 var _in_stealth: bool = false
 var _enemy_count: int = 0
+var _turn_based: bool = false
 var _log_lines: Array[String] = []
 
 
@@ -72,6 +73,8 @@ func update_from_cc(cc: CombatController, water_ring: int = 3) -> void:
 	for e: Dictionary in cc.get_entity_display_data():
 		if e.get("faction") == "enemy" and e.get("is_alive", false):
 			_enemy_count += 1
+
+	_turn_based = cc.is_turn_based()
 
 	queue_redraw()
 
@@ -107,6 +110,7 @@ func reset(water_ring: int = 3) -> void:
 	_water_ring = water_ring
 	_in_stealth = false
 	_enemy_count = 0
+	_turn_based = false
 	_log_lines.clear()
 	queue_redraw()
 
@@ -121,7 +125,7 @@ func _draw() -> void:
 
 	# ── Status panel (top-left) ────────────────────────────────────────────────
 	var status_w: int = 200
-	var status_h: int = line_h * 5 + padding * 2
+	var status_h: int = line_h * 6 + padding * 2
 	draw_rect(Rect2(Vector2.ZERO, Vector2(status_w, status_h)), HUD_BG)
 
 	var x0: float = padding
@@ -153,7 +157,13 @@ func _draw() -> void:
 		"Enemies: %d" % _enemy_count, enemy_color)
 	y += line_h
 
-	# Mode indicator
+	# Combat-mode indicator (real-time vs turn-based, GDD s40.x)
+	var combat_str: String = "[TURN-BASED]" if _turn_based else "[REAL-TIME]"
+	var combat_color: Color = Color(1.0, 0.6, 0.3) if _turn_based else Color(0.4, 0.9, 0.6)
+	_draw_text(font, fs, x0, y, combat_str, combat_color)
+	y += line_h
+
+	# Stealth/normal indicator
 	var mode_str: String = "[STEALTH]" if _in_stealth else "[NORMAL]"
 	var mode_color: Color = Color(0.5, 0.8, 1.0) if _in_stealth else Color(0.9, 0.9, 0.3)
 	_draw_text(font, fs, x0, y, mode_str, mode_color)
@@ -161,7 +171,7 @@ func _draw() -> void:
 	# ── Controls hint (bottom of status panel) ─────────────────────────────────
 	var hint_y: float = float(status_h) - line_h * 0.5
 	_draw_text(font, fs - 2, x0, hint_y,
-		"S=stealth  .=wait  L=look", Color(0.5, 0.5, 0.5))
+		"S=stealth  .=wait  L=look  X=end", Color(0.5, 0.5, 0.5))
 
 	# ── Event log panel (bottom-left) ─────────────────────────────────────────
 	if _log_lines.is_empty():
@@ -245,6 +255,17 @@ func _format_event(ev: Dictionary) -> String:
 
 		"player_died":
 			return "You have fallen."
+
+		"end_combat_blocked":
+			var n: int = ev.get("count", 0)
+			return "Cannot end combat — %d enemy still active." % n
+
+		"end_combat_awaiting":
+			var n: int = ev.get("count", 0)
+			return "End combat: awaiting %d other PC(s)…" % n
+
+		"end_combat_resolved":
+			return "Combat ended — the field is yours."
 
 		_:
 			return ""

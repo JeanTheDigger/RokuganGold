@@ -3325,7 +3325,8 @@ func test_treat_wound_raises_by_medicine_rank() -> void:
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "TREAT_WOUND"
 	NPCDecisionEngine._populate_action_metadata(option, need, ctx)
-	assert_eq(option.metadata.get("raises", -1), 2)
+	# s57.31a: Medicine 5+ declares 3 Raises (no 2-Raise tier).
+	assert_eq(option.metadata.get("raises", -1), 3)
 
 
 func test_treat_wound_no_medicine_zero_raises() -> void:
@@ -4073,16 +4074,17 @@ func test_perform_ritual_metadata_empty_for_non_shugenja() -> void:
 
 
 func test_treat_wound_metadata_includes_healing_spell_for_shugenja() -> void:
-	# jurojins_balm is HEAL_WOUNDS — should be picked as healing_spell_id.
+	# regrow_the_wound is the library's HEAL_WOUNDS spell (jurojins_balm is a
+	# poison-resist buff, not healing).
 	var shugen := _make_shugenja()
-	shugen.spells_known = ["jurojins_balm", "commune"]
+	shugen.spells_known = ["regrow_the_wound", "commune"]
 	var ctx := _make_metadata_ctx()
 	ctx.skill_ranks["Medicine"] = 3
 	var option := NPCDataStructures.ScoredAction.new()
 	option.action_id = "TREAT_WOUND"
 	var need := _make_metadata_need()
 	NPCDecisionEngine._populate_action_metadata(option, need, ctx, shugen)
-	assert_eq(option.metadata.get("healing_spell_id", ""), "jurojins_balm",
+	assert_eq(option.metadata.get("healing_spell_id", ""), "regrow_the_wound",
 		"TREAT_WOUND should pick best HEAL_WOUNDS spell for shugenja")
 	assert_true(option.metadata.has("raises"),
 		"TREAT_WOUND metadata should still include raises key")

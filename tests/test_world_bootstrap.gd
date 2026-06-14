@@ -3,6 +3,15 @@ extends GutTest
 const _WB := preload("res://simulation/world_bootstrap.gd")
 
 var _dice: DiceEngine
+var _cached: Dictionary
+
+
+func before_all() -> void:
+	# Generate the deterministic (seed 1120) world ONCE and share it across the
+	# read-only assertion tests instead of regenerating it per test (was ~55x).
+	var d := DiceEngine.new()
+	d.set_seed(1120)
+	_cached = _WB.bootstrap_world(d)
 
 
 func before_each() -> void:
@@ -74,37 +83,37 @@ func test_every_family_seat_references_valid_province() -> void:
 # -- Bootstrap Result Structure -----------------------------------------------
 
 func test_bootstrap_returns_provinces() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	assert_true(result.has("provinces"), "Result should have provinces key")
 	assert_true(result["provinces"].size() > 0, "Should create at least one province")
 
 
 func test_bootstrap_returns_settlements() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	assert_true(result.has("settlements"), "Result should have settlements key")
 	assert_true(result["settlements"].size() > 0, "Should create at least one settlement")
 
 
 func test_bootstrap_returns_characters() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	assert_true(result.has("characters"), "Result should have characters key")
 	assert_true(result["characters"].size() > 0, "Should create at least one character")
 
 
 func test_bootstrap_returns_clans() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	assert_true(result.has("clans"), "Result should have clans key")
 	for clan: String in ["Crab", "Crane", "Dragon", "Lion", "Phoenix", "Scorpion", "Unicorn"]:
 		assert_true(result["clans"].has(clan), "Should have clan: %s" % clan)
 
 
 func test_bootstrap_returns_emperor_id() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	assert_true(result["emperor_id"] >= 0, "Emperor ID should be non-negative")
 
 
 func test_bootstrap_returns_military_data() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	assert_true(result.has("military_data"), "Result should have military_data key")
 	var mil: Dictionary = result["military_data"]
 	assert_true(mil.has("companies"), "Military data should have companies")
@@ -114,12 +123,12 @@ func test_bootstrap_returns_military_data() -> void:
 # -- Province Creation ---------------------------------------------------------
 
 func test_bootstrap_creates_142_provinces() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	assert_eq(result["provinces"].size(), 142, "Should create 142 provinces")
 
 
 func test_ungovernable_provinces_have_taint() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var found_ungovernable: bool = false
 	for pid: Variant in result["provinces"]:
 		var prov: ProvinceData = result["provinces"][pid]
@@ -137,7 +146,7 @@ func test_ungovernable_provinces_have_taint() -> void:
 
 
 func test_provinces_have_correct_clan_assignments() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var clan_counts: Dictionary = {}
 	for pid: Variant in result["provinces"]:
 		var prov: ProvinceData = result["provinces"][pid]
@@ -150,7 +159,7 @@ func test_provinces_have_correct_clan_assignments() -> void:
 # -- Settlement Creation -------------------------------------------------------
 
 func test_ungovernable_provinces_have_no_settlements() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	for pid: Variant in result["provinces"]:
 		var prov: ProvinceData = result["provinces"][pid]
 		if prov.family == "Hiruma":
@@ -161,7 +170,7 @@ func test_ungovernable_provinces_have_no_settlements() -> void:
 
 
 func test_toshi_ranbo_is_a_city() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var found: bool = false
 	for s: SettlementData in result["settlements"]:
 		if s.settlement_name == "Toshi Ranbo":
@@ -172,7 +181,7 @@ func test_toshi_ranbo_is_a_city() -> void:
 
 
 func test_family_seats_get_castles() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var castle_names: Array[String] = []
 	for s: SettlementData in result["settlements"]:
 		if s.settlement_type == Enums.SettlementType.FAMILY_CASTLE:
@@ -185,7 +194,7 @@ func test_family_seats_get_castles() -> void:
 
 
 func test_island_provinces_get_ports() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var mantis_settlements: Array[SettlementData] = []
 	for s: SettlementData in result["settlements"]:
 		for pid: Variant in result["provinces"]:
@@ -199,7 +208,7 @@ func test_island_provinces_get_ports() -> void:
 # -- Adjacency Wiring ---------------------------------------------------------
 
 func test_adjacencies_wired_to_province_ids() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var toshi_ranbo: ProvinceData = null
 	for pid: Variant in result["provinces"]:
 		var prov: ProvinceData = result["provinces"][pid]
@@ -216,7 +225,7 @@ func test_adjacencies_wired_to_province_ids() -> void:
 # -- Physical Locations --------------------------------------------------------
 
 func test_all_characters_have_physical_locations() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var chars: Array = result["characters"]
 	var without_location: int = 0
 	for c: L5RCharacterData in chars:
@@ -228,14 +237,14 @@ func test_all_characters_have_physical_locations() -> void:
 # -- Clan Data -----------------------------------------------------------------
 
 func test_clan_data_has_province_ids() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var crab: ClanData = result["clans"]["Crab"]
 	assert_true(crab.province_ids.size() > 0, "Crab should have province IDs")
 	assert_eq(crab.clan_name, "Crab")
 
 
 func test_minor_clans_have_clan_data() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	assert_true(result["clans"].has("Mantis"), "Should have Mantis clan data")
 	assert_true(result["clans"].has("Fox"), "Should have Fox clan data")
 	assert_true(result["clans"].has("Bat"), "Should have Bat clan data")
@@ -246,7 +255,7 @@ func test_minor_clans_have_clan_data() -> void:
 # -- Military Company Fields ---------------------------------------------------
 
 func test_military_companies_have_correct_field_names() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var mil: Dictionary = result["military_data"]
 	var companies: Array = mil["companies"]
 	assert_true(companies.size() > 0, "Should create at least one company")
@@ -262,7 +271,7 @@ func test_military_companies_have_correct_field_names() -> void:
 
 
 func test_military_companies_created_for_ranked_officers() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var mil: Dictionary = result["military_data"]
 	var companies: Array = mil["companies"]
 	var chars: Array = result["characters"]
@@ -285,7 +294,7 @@ func test_military_companies_created_for_ranked_officers() -> void:
 
 
 func test_military_rank_assigned_to_positioned_characters() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var chars: Array = result["characters"]
 	var found_ranked: int = 0
 	for c: L5RCharacterData in chars:
@@ -301,7 +310,7 @@ func test_military_rank_assigned_to_positioned_characters() -> void:
 # -- Worship Locations ---------------------------------------------------------
 
 func test_settlements_have_worship_locations() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var setts: Array = result["settlements"]
 	var with_worship: int = 0
 	for s: SettlementData in setts:
@@ -314,7 +323,7 @@ func test_settlements_have_worship_locations() -> void:
 
 
 func test_family_castle_has_shrine_worship() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	for s: SettlementData in result["settlements"]:
 		if s.settlement_type == Enums.SettlementType.FAMILY_CASTLE:
 			assert_true(
@@ -334,7 +343,7 @@ func test_family_castle_has_shrine_worship() -> void:
 # -- Co-located Contacts -------------------------------------------------------
 
 func test_co_located_characters_are_mutual_contacts() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var chars: Array = result["characters"]
 	var by_location: Dictionary = {}
 	for c: L5RCharacterData in chars:
@@ -367,7 +376,7 @@ func test_co_located_characters_are_mutual_contacts() -> void:
 # -- Next Character ID ---------------------------------------------------------
 
 func test_next_character_id_exceeds_all_character_ids() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var next_id: int = result["next_character_id"]
 	var max_id: int = 0
 	for c: L5RCharacterData in result["characters"]:
@@ -405,7 +414,7 @@ func test_bootstrap_is_deterministic() -> void:
 # -- Minor Clan Data Gaps (Bat, Oriole, Tortoise) ----------------------------
 
 func test_bat_clan_characters_created() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var bat_count: int = 0
 	for c: L5RCharacterData in result["characters"]:
 		if c.clan == "Bat":
@@ -414,7 +423,7 @@ func test_bat_clan_characters_created() -> void:
 
 
 func test_oriole_clan_characters_created() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var oriole_count: int = 0
 	for c: L5RCharacterData in result["characters"]:
 		if c.clan == "Oriole":
@@ -423,7 +432,7 @@ func test_oriole_clan_characters_created() -> void:
 
 
 func test_bat_characters_have_physical_locations() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	for c: L5RCharacterData in result["characters"]:
 		if c.clan == "Bat":
 			assert_false(
@@ -435,7 +444,7 @@ func test_bat_characters_have_physical_locations() -> void:
 
 
 func test_oriole_characters_have_physical_locations() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	for c: L5RCharacterData in result["characters"]:
 		if c.clan == "Oriole":
 			assert_false(
@@ -447,7 +456,7 @@ func test_oriole_characters_have_physical_locations() -> void:
 
 
 func test_tortoise_has_adjacencies() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	for pid: Variant in result["provinces"]:
 		var prov: ProvinceData = result["provinces"][pid]
 		if prov.province_name == "Tortoise Clan Lands":
@@ -460,7 +469,7 @@ func test_tortoise_has_adjacencies() -> void:
 
 
 func test_extinct_clans_not_in_population() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	for c: L5RCharacterData in result["characters"]:
 		assert_ne(c.clan, "Boar", "Boar clan is extinct — should not create characters")
 		assert_ne(c.clan, "Snake", "Snake clan is extinct — should not create characters")
@@ -469,7 +478,7 @@ func test_extinct_clans_not_in_population() -> void:
 # -- Role Position Assignment --------------------------------------------------
 
 func test_emperor_has_role_position() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var emperor_id: int = result["emperor_id"]
 	for c: L5RCharacterData in result["characters"]:
 		if c.character_id == emperor_id:
@@ -479,21 +488,24 @@ func test_emperor_has_role_position() -> void:
 
 
 func test_clan_champions_have_role_position() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var champions: Dictionary = result["clan_champions"]
 	for clan: String in champions:
 		var champ_id: int = champions[clan]
 		for c: L5RCharacterData in result["characters"]:
 			if c.character_id == champ_id:
-				assert_eq(
-					c.role_position, RoleRegistry.CLAN_CHAMPION,
-					"%s clan champion should have role_position 'Clan Champion'" % clan,
+				# clan_champions includes minor clans, whose champions hold the
+				# "Minor Clan Champion" role rather than "Clan Champion".
+				assert_true(
+					c.role_position == RoleRegistry.CLAN_CHAMPION
+						or c.role_position == RoleRegistry.MINOR_CLAN_CHAMPION,
+					"%s champion should have a champion role_position, got '%s'" % [clan, c.role_position],
 				)
 				break
 
 
 func test_positioned_characters_have_nonempty_role_position() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var high_status_empty: Array[String] = []
 	for c: L5RCharacterData in result["characters"]:
 		if c.status >= 4.0 and c.role_position.is_empty():
@@ -507,12 +519,12 @@ func test_positioned_characters_have_nonempty_role_position() -> void:
 # -- Herald / Miya Representative -----------------------------------------------
 
 func test_bootstrap_returns_herald_id() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	assert_true(result["herald_id"] >= 0, "Herald ID should be non-negative")
 
 
 func test_herald_is_imperial_miya() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var herald_id: int = result["herald_id"]
 	for c: L5RCharacterData in result["characters"]:
 		if c.character_id == herald_id:
@@ -526,7 +538,7 @@ func test_herald_is_imperial_miya() -> void:
 # -- Phoenix Elemental Masters --------------------------------------------------
 
 func test_phoenix_has_five_elemental_masters() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var master_elements: Dictionary = {}
 	for c: L5RCharacterData in result["characters"]:
 		if c.role_position.begins_with("Master of "):
@@ -540,7 +552,7 @@ func test_phoenix_has_five_elemental_masters() -> void:
 
 
 func test_elemental_masters_are_phoenix_isawa_shugenja() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	for c: L5RCharacterData in result["characters"]:
 		if c.role_position.begins_with("Master of "):
 			assert_eq(c.clan, "Phoenix", "Elemental Master should be Phoenix")
@@ -552,14 +564,14 @@ func test_elemental_masters_are_phoenix_isawa_shugenja() -> void:
 
 
 func test_mantis_has_clan_champion() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var champs: Dictionary = result.get("clan_champions", {})
 	assert_true(champs.has("Mantis"), "Mantis should have a clan champion")
 	assert_gt(champs["Mantis"], 0, "Mantis champion ID should be positive")
 
 
 func test_mantis_has_family_daimyos() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var fd_count: int = 0
 	for c: L5RCharacterData in result["characters"]:
 		if c.clan == "Mantis" and c.role_position == RoleRegistry.FAMILY_DAIMYO:
@@ -568,7 +580,7 @@ func test_mantis_has_family_daimyos() -> void:
 
 
 func test_all_samurai_have_lord_id() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var lordless: int = 0
 	for c: L5RCharacterData in result["characters"]:
 		if c.lord_id < 0 and c.role_position.is_empty():
@@ -579,7 +591,7 @@ func test_all_samurai_have_lord_id() -> void:
 # -- Initial Koku (s22.4 Step 6) -----------------------------------------------
 
 func test_koku_includes_stipend_component() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	for c: L5RCharacterData in result["characters"]:
 		if c.role_position.is_empty() and c.lord_id >= 0:
 			assert_true(c.koku >= 2.0, "Rank-filling samurai should have koku >= 2.0 (stipend base)")
@@ -588,7 +600,7 @@ func test_koku_includes_stipend_component() -> void:
 
 
 func test_koku_scales_with_rank() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var r1_total: float = 0.0
 	var r1_count: int = 0
 	var r5_total: float = 0.0
@@ -610,7 +622,7 @@ func test_koku_scales_with_rank() -> void:
 # -- Military Company Integration -------------------------------------------------
 
 func test_military_companies_have_source_province_id() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var mil: Dictionary = result["military_data"]
 	var companies: Array = mil["companies"]
 	var with_source: int = 0
@@ -624,7 +636,7 @@ func test_military_companies_have_source_province_id() -> void:
 
 
 func test_military_companies_have_army_id_key() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var mil: Dictionary = result["military_data"]
 	var companies: Array = mil["companies"]
 	assert_true(companies.size() > 0, "Should have companies")
@@ -635,7 +647,7 @@ func test_military_companies_have_army_id_key() -> void:
 # -- Known Contacts By Clan ----------------------------------------------------
 
 func test_co_located_contacts_populate_known_contacts_by_clan() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var chars: Array = result["characters"]
 	var tested: int = 0
 	for c: L5RCharacterData in chars:
@@ -653,7 +665,7 @@ func test_co_located_contacts_populate_known_contacts_by_clan() -> void:
 # -- Hiruma Fallback Placement --------------------------------------------------
 
 func test_hiruma_characters_placed_in_crab_settlements() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	for c: L5RCharacterData in result["characters"]:
 		if c.family == "Hiruma":
 			assert_false(
@@ -665,14 +677,14 @@ func test_hiruma_characters_placed_in_crab_settlements() -> void:
 # -- Bloodspeaker Cells -------------------------------------------------------
 
 func test_bloodspeaker_cells_generated_at_bootstrap() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var cells: Array = result.get("bloodspeaker_cells", [])
 	assert_gte(cells.size(), 25, "Should have at least 25 initial cells")
 	assert_lte(cells.size(), 35, "Should have at most 35 initial cells")
 
 
 func test_bloodspeaker_cells_mostly_dormant() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var cells: Array = result.get("bloodspeaker_cells", [])
 	var dormant: int = 0
 	for cell: BloodspeakerCellData in cells:
@@ -683,7 +695,7 @@ func test_bloodspeaker_cells_mostly_dormant() -> void:
 
 
 func test_bloodspeaker_active_cells_have_insurgencies() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var cells: Array = result.get("bloodspeaker_cells", [])
 	var insurgencies: Array = result.get("bloodspeaker_insurgencies", [])
 	var active: int = 0
@@ -697,34 +709,38 @@ func test_bloodspeaker_active_cells_have_insurgencies() -> void:
 # -- Zone Graph ---------------------------------------------------------------
 
 func test_zone_keys_present_in_bootstrap_result() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	assert_true(result.has("greater_zones"), "bootstrap result has greater_zones key")
 	assert_true(result.has("navigation_zones"), "bootstrap result has navigation_zones key")
 	assert_true(result.has("lesser_zones"), "bootstrap result has lesser_zones key")
 
 
 func test_greater_zones_non_empty() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var gzs: Array = result.get("greater_zones", [])
 	assert_gt(gzs.size(), 0, "At least one GreaterZoneData should be generated")
 
 
-func test_nav_zones_outnumber_greater_zones() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+func test_nav_zones_present_but_not_per_settlement() -> void:
+	# Villages skip the Navigation tier (headman interior zones parent directly to
+	# the Greater Zone — GDD s57.36). Only castle-tier settlements get nav zones, so
+	# nav zones exist but do NOT outnumber greater zones (one per settlement).
+	var result: Dictionary = _cached
 	var gzs: Array = result.get("greater_zones", [])
 	var navs: Array = result.get("navigation_zones", [])
-	assert_gt(navs.size(), gzs.size(), "Each settlement has multiple nav zones")
+	assert_gt(navs.size(), 0, "Castle-tier settlements should produce nav zones")
+	assert_true(navs.size() <= gzs.size(), "Nav zones are a subset of settlements")
 
 
 func test_lesser_zones_outnumber_nav_zones() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var navs: Array = result.get("navigation_zones", [])
 	var lzs: Array = result.get("lesser_zones", [])
 	assert_gt(lzs.size(), navs.size(), "Each nav zone has multiple lesser zones")
 
 
 func test_greater_zone_ids_are_unique() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var seen: Dictionary = {}
 	for gz: GreaterZoneData in result.get("greater_zones", []):
 		assert_false(seen.has(gz.zone_id), "Duplicate GreaterZoneData zone_id: %s" % gz.zone_id)
@@ -732,7 +748,7 @@ func test_greater_zone_ids_are_unique() -> void:
 
 
 func test_each_settlement_has_exactly_one_greater_zone() -> void:
-	var result: Dictionary = _WB.bootstrap_world(_dice)
+	var result: Dictionary = _cached
 	var settlements: Array = result.get("settlements", [])
 	var gzs: Array = result.get("greater_zones", [])
 	var gz_count: Dictionary = {}

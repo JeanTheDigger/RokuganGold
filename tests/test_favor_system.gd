@@ -352,7 +352,8 @@ func test_normal_favor_no_exposure_risk():
 # -- Dispute witness disposition tests ----------------------------------------
 
 func test_dispute_witness_creditor_wins():
-	assert_eq(FavorSystem.get_dispute_witness_disposition(true), 0)
+	# Locked +2 in s12.10a (witnesses gain disposition toward the vindicated creditor).
+	assert_eq(FavorSystem.get_dispute_witness_disposition(true), 2)
 
 
 func test_dispute_witness_debtor_wins():

@@ -507,6 +507,10 @@ func _save_json_state(ws: Node, base: String) -> bool:
 
 		# Disposition snapshots
 		"disposition_snapshots": ws.disposition_snapshots,
+
+		# Kolat secrecy & Imperial counter-response (s54.7i)
+		"kolat_exposure_level": ws.kolat_exposure_level,
+		"imperial_awareness_level": ws.imperial_awareness_level,
 	}
 
 	var path: String = base + "state.json"
@@ -577,6 +581,10 @@ func _load_json_state(ws: Node, base: String) -> void:
 	ws.emperor_settlement_id = int(state.get("emperor_settlement_id", -1))
 	ws.emperor_archetype = int(state.get("emperor_archetype", 0))
 	ws.miya_representative_id = int(state.get("miya_representative_id", -1))
+
+	# Kolat secrecy & Imperial counter-response (s54.7i)
+	ws.kolat_exposure_level = int(state.get("kolat_exposure_level", 0))
+	ws.imperial_awareness_level = int(state.get("imperial_awareness_level", 0))
 
 	# NPC engine
 	# JSON serialises int dict keys as strings — convert back to int keys on load.

@@ -171,6 +171,23 @@ var _objective_slots: Array = []
 var _mission_complete_notified: bool = false
 var _player_died_notified: bool = false
 
+## Combat mode latch (GDD s40.x). False = real-time exploration; true =
+## turn-based combat. Latches true on first hostile contact (an enemy reaching
+## the ALERT state) and only returns to false through a successful End Combat
+## (no aware hostiles remaining + unanimous consent of present PCs).
+var _turn_based: bool = false
+
+## End Combat consent state (GDD s40.x). When a PC proposes ending combat and
+## no aware hostiles remain, every present, living PC must agree before the
+## zone returns to real-time. Keyed by PC entity_id → true (agreed).
+var _end_combat_pending: bool = false
+var _end_combat_consent: Dictionary = {}
+
+## Last combat mode reported by poll_mode_changed(). Lets the view fire a
+## combat_mode_changed signal on the real-time ↔ turn-based transition instead
+## of polling every frame.
+var _last_reported_mode: bool = false
+
 
 # =============================================================================
 # -- Factory ------------------------------------------------------------------
@@ -517,9 +534,7 @@ func _get_swift_bonus(unit_type: String) -> int:
 ## Tile → surface category mapping: structural routing, not a new mechanic.
 func _stealth_tn_for_tile(tile: int) -> int:
 	match tile:
-		Enums.TileType.FLOOR_GRASS, Enums.TileType.FLOOR_MUD,
-		Enums.TileType.FLOOR_SNOW, Enums.TileType.FLOOR_SAND,
-		Enums.TileType.FLOOR_ASH:
+		Enums.TileType.FLOOR_GRASS, Enums.TileType.FLOOR_MUD, Enums.TileType.FLOOR_SNOW, Enums.TileType.FLOOR_SAND, Enums.TileType.FLOOR_ASH:
 			return STEALTH_TN_SOFT  # 10
 		Enums.TileType.RUBBLE, Enums.TileType.CROPS:
 			return STEALTH_TN_NOISY  # 20
@@ -625,6 +640,127 @@ func _count_living_enemies() -> int:
 		if es.faction == FACTION_ENEMY and es.is_alive and not _is_entity_dead(es):
 			count += 1
 	return count
+
+
+# =============================================================================
+# -- Combat mode & End Combat (GDD s40.x) -------------------------------------
+# =============================================================================
+
+## True when the zone is in turn-based combat mode, false when in real-time
+## exploration. Per GDD s40.x, the zone latches into turn-based mode the instant
+## a hostile contact occurs (any living enemy reaching the ALERT state) and stays
+## there until a successful End Combat. Reading this lazily latches the engage
+## trigger so callers never have to poll a separate refresh step.
+func is_turn_based() -> bool:
+	if _turn_based:
+		return true
+	for es: EntityState in _entities.values():
+		if es.faction == FACTION_ENEMY and es.is_alive and not _is_entity_dead(es) \
+				and es.alert_state == AsciiMapEnvironment.AlertState.ALERT:
+			_turn_based = true
+			return true
+	return false
+
+
+## Returns true exactly once after the combat mode (real-time ↔ turn-based)
+## changes value. Evaluates the current mode (forcing the engage latch) and
+## compares it to the last reported value, so it is correct regardless of call
+## order. The view calls this after each action to fire combat_mode_changed on
+## the transition rather than polling every frame.
+func poll_mode_changed() -> bool:
+	var current: bool = is_turn_based()
+	if current == _last_reported_mode:
+		return false
+	_last_reported_mode = current
+	return true
+
+
+## Entity IDs of enemies that count as "still hostile" for End Combat (GDD s40.x):
+## alive and aware (Suspicious or Alert). Unaware, Fleeing, and dead enemies do
+## not block ending.
+func get_active_hostiles() -> Array[int]:
+	var out: Array[int] = []
+	for es: EntityState in _entities.values():
+		if es.faction != FACTION_ENEMY or not es.is_alive or _is_entity_dead(es):
+			continue
+		if es.alert_state == AsciiMapEnvironment.AlertState.SUSPICIOUS \
+				or es.alert_state == AsciiMapEnvironment.AlertState.ALERT:
+			out.append(es.entity_id)
+	return out
+
+
+## True if any aware hostile enemy remains (End Combat is blocked while true).
+func has_active_hostiles() -> bool:
+	return not get_active_hostiles().is_empty()
+
+
+## Entity IDs of present (living) player-characters. These are the PCs whose
+## unanimous consent is required to End Combat. Offline/absent PCs are not on
+## the map and so are naturally excluded.
+func get_present_pc_ids() -> Array[int]:
+	var out: Array[int] = []
+	for es: EntityState in _entities.values():
+		if es.faction == FACTION_PLAYER and es.is_alive and not _is_entity_dead(es):
+			out.append(es.entity_id)
+	return out
+
+
+## A PC proposes ending combat. Blocked while aware hostiles remain (GDD s40.x).
+## On success, opens a consent poll; every present PC must then agree via
+## register_end_combat_consent(). Returns:
+##   {"ok": false, "reason": "hostiles_remain", "hostiles": [ids]}  — blocked
+##   {"ok": true, "awaiting_consent": [pc_ids]}                     — poll open
+func request_end_combat() -> Dictionary:
+	var hostiles: Array[int] = get_active_hostiles()
+	if not hostiles.is_empty():
+		return {"ok": false, "reason": "hostiles_remain", "hostiles": hostiles}
+	_end_combat_consent.clear()
+	_end_combat_pending = true
+	return {"ok": true, "awaiting_consent": get_present_pc_ids()}
+
+
+## Record a present PC's response to an open End Combat poll. A single decline
+## cancels the proposal outright (combat continues). An agreement is tallied and,
+## if it completes unanimous present-PC consent with the field still clear,
+## finalizes the end of combat. Returns the result of try_finalize_end_combat()
+## on agreement, or a cancellation dict on decline.
+func register_end_combat_consent(pc_id: int, agree: bool) -> Dictionary:
+	if not _end_combat_pending:
+		return {"ended": false, "reason": "no_pending_request"}
+	if not agree:
+		_end_combat_pending = false
+		_end_combat_consent.clear()
+		return {"ended": false, "cancelled": true, "declined_by": pc_id}
+	_end_combat_consent[pc_id] = true
+	return try_finalize_end_combat()
+
+
+## Attempt to finalize an open End Combat poll. Ends combat (returns the zone to
+## real-time) only when no aware hostiles remain AND every present PC has agreed.
+## If hostiles re-engaged since the request, the poll is cancelled. Returns:
+##   {"ended": true}                                            — combat ended
+##   {"ended": false, "reason": "no_pending_request"}
+##   {"ended": false, "reason": "hostiles_remain"}              — poll cancelled
+##   {"ended": false, "reason": "awaiting_consent", "remaining": [pc_ids]}
+func try_finalize_end_combat() -> Dictionary:
+	if not _end_combat_pending:
+		return {"ended": false, "reason": "no_pending_request"}
+	if has_active_hostiles():
+		_end_combat_pending = false
+		_end_combat_consent.clear()
+		return {"ended": false, "reason": "hostiles_remain"}
+	var remaining: Array[int] = []
+	for pc_id: int in get_present_pc_ids():
+		if not _end_combat_consent.get(pc_id, false):
+			remaining.append(pc_id)
+	if not remaining.is_empty():
+		return {"ended": false, "reason": "awaiting_consent", "remaining": remaining}
+	# Unanimous consent, field clear → return the zone to real-time. The
+	# transition is reported by poll_mode_changed()'s last-reported compare.
+	_turn_based = false
+	_end_combat_pending = false
+	_end_combat_consent.clear()
+	return {"ended": true}
 
 
 func _is_adjacent(ax: int, ay: int, bx: int, by: int) -> bool:
@@ -1102,11 +1238,13 @@ func _npc_turn(es: EntityState) -> Array:
 
 	# Detect player via FoV (all alert states).
 	var player_seen: bool = _npc_can_see_player(es)
+	var just_became_suspicious: bool = false
 	if player_seen and es.alert_state != AsciiMapEnvironment.AlertState.FLEEING:
 		if es.alert_state == AsciiMapEnvironment.AlertState.UNAWARE:
 			es.alert_state = AsciiMapEnvironment.AlertState.SUSPICIOUS
 			es.phase_rounds_left = SUSPICIOUS_SEARCH_ROUNDS
 			events.append({"type": "player_noticed", "entity_id": es.entity_id, "unit_type": es.unit_type})
+			just_became_suspicious = true
 		elif es.alert_state == AsciiMapEnvironment.AlertState.SUSPICIOUS:
 			es.alert_state = AsciiMapEnvironment.AlertState.ALERT
 			es.alert_rounds_lost = 0
@@ -1115,6 +1253,11 @@ func _npc_turn(es: EntityState) -> Array:
 		if player != null:
 			es.noise_src_x = player.x
 			es.noise_src_y = player.y
+
+	# Becoming suspicious is this turn's action; the investigation (and any
+	# escalation) begins next turn, not the same turn the contact was noticed.
+	if just_became_suspicious:
+		return events
 
 	# Per-state behavior.
 	match es.alert_state:

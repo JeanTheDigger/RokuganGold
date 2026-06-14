@@ -85,6 +85,8 @@ static func generate(
 			_gen_mountain_pass(map, rng)
 		Enums.ZoneSubtype.WALL_TOWER:
 			_gen_wall_tower(map, rng)
+		Enums.ZoneSubtype.PEASANT_DWELLING:
+			_gen_peasant_dwelling(map, rng)
 		_:
 			_gen_default(map, rng)
 
@@ -144,6 +146,30 @@ static func get_glyph(
 		Enums.TileType.FLOOR_ASH:         return ","
 		Enums.TileType.FIRE:              return "^"
 		Enums.TileType.RUBBLE:            return ";"
+		Enums.TileType.FURNITURE_FUTON:   return "▬"
+		Enums.TileType.FURNITURE_HEARTH:  return "▦"
+		Enums.TileType.FURNITURE_CHEST:   return "▥"
+		Enums.TileType.FURNITURE_TABLE:   return "╥"
+		Enums.TileType.FURNITURE_JAR:     return "◍"
+		Enums.TileType.FURNITURE_SCREEN:  return "║"
+		Enums.TileType.FURNITURE_BRAZIER: return "†"
+		Enums.TileType.FURNITURE_CUSHION: return "▫"
+		Enums.TileType.FURNITURE_DAIS:         return "⊓"
+		Enums.TileType.FURNITURE_BANNER:       return "╤"
+		Enums.TileType.FURNITURE_WEAPON_STAND: return "Ψ"
+		Enums.TileType.FURNITURE_ALTAR:        return "⊥"
+		Enums.TileType.FURNITURE_OFFERING_BOX: return "▣"
+		Enums.TileType.FURNITURE_INCENSE:      return "§"
+		Enums.TileType.FURNITURE_STATUE:       return "☗"
+		Enums.TileType.FURNITURE_PRAYER_MAT:   return "▭"
+		Enums.TileType.FURNITURE_STALL:        return "╦"
+		Enums.TileType.FURNITURE_CRATE:        return "▧"
+		Enums.TileType.FURNITURE_NET:          return "╳"
+		Enums.TileType.FURNITURE_WELL:         return "◉"
+		Enums.TileType.FURNITURE_DUMMY:        return "‡"
+		Enums.TileType.FURNITURE_SHELF:        return "▤"
+		Enums.TileType.FURNITURE_STOVE:        return "◫"
+		Enums.TileType.FURNITURE_BENCH:        return "╨"
 	return "?"
 
 
@@ -185,6 +211,30 @@ static func get_fg_color(tile: int) -> Color:
 		Enums.TileType.FLOOR_ASH:         return Color(0.35, 0.35, 0.35)
 		Enums.TileType.FIRE:              return Color(1.0, 0.4, 0.0)
 		Enums.TileType.RUBBLE:            return Color(0.45, 0.4, 0.35)
+		Enums.TileType.FURNITURE_FUTON:   return Color(0.6, 0.6, 0.75)
+		Enums.TileType.FURNITURE_HEARTH:  return Color(0.8, 0.4, 0.1)
+		Enums.TileType.FURNITURE_CHEST:   return Color(0.5, 0.35, 0.2)
+		Enums.TileType.FURNITURE_TABLE:   return Color(0.55, 0.4, 0.25)
+		Enums.TileType.FURNITURE_JAR:     return Color(0.6, 0.45, 0.35)
+		Enums.TileType.FURNITURE_SCREEN:  return Color(0.85, 0.8, 0.7)
+		Enums.TileType.FURNITURE_BRAZIER: return Color(0.9, 0.6, 0.2)
+		Enums.TileType.FURNITURE_CUSHION: return Color(0.6, 0.3, 0.35)
+		Enums.TileType.FURNITURE_DAIS:         return Color(0.6, 0.15, 0.2)
+		Enums.TileType.FURNITURE_BANNER:       return Color(0.75, 0.2, 0.25)
+		Enums.TileType.FURNITURE_WEAPON_STAND: return Color(0.55, 0.4, 0.25)
+		Enums.TileType.FURNITURE_ALTAR:        return Color(0.7, 0.65, 0.5)
+		Enums.TileType.FURNITURE_OFFERING_BOX: return Color(0.8, 0.65, 0.25)
+		Enums.TileType.FURNITURE_INCENSE:      return Color(0.85, 0.7, 0.5)
+		Enums.TileType.FURNITURE_STATUE:       return Color(0.55, 0.55, 0.55)
+		Enums.TileType.FURNITURE_PRAYER_MAT:   return Color(0.6, 0.5, 0.6)
+		Enums.TileType.FURNITURE_STALL:        return Color(0.6, 0.42, 0.22)
+		Enums.TileType.FURNITURE_CRATE:        return Color(0.55, 0.4, 0.2)
+		Enums.TileType.FURNITURE_NET:          return Color(0.7, 0.7, 0.55)
+		Enums.TileType.FURNITURE_WELL:         return Color(0.5, 0.5, 0.55)
+		Enums.TileType.FURNITURE_DUMMY:        return Color(0.6, 0.45, 0.3)
+		Enums.TileType.FURNITURE_SHELF:        return Color(0.5, 0.35, 0.2)
+		Enums.TileType.FURNITURE_STOVE:        return Color(0.45, 0.4, 0.4)
+		Enums.TileType.FURNITURE_BENCH:        return Color(0.55, 0.4, 0.25)
 	return Color.WHITE
 
 
@@ -239,12 +289,22 @@ static func _gen_market_street(map: AsciiMapData, rng: RandomNumberGenerator) ->
 	# Road strip (rows 12–18) is plain stone floor — overwrite any walls.
 	_fill_rect(map, 1, 12, S - 2, 18, Enums.TileType.FLOOR_STONE)
 
-	# Vendor stalls along road edges: pairs of wood tiles on rows 12 and 18.
+	# Vendor stalls along road edges: a counter + a crate of goods on rows 12/18.
 	for i in range(2, S - 3, 4):
-		map.set_tile(i, 12, Enums.TileType.WALL_WOOD)
-		map.set_tile(i + 1, 12, Enums.TileType.WALL_WOOD)
-		map.set_tile(i, 18, Enums.TileType.WALL_WOOD)
-		map.set_tile(i + 1, 18, Enums.TileType.WALL_WOOD)
+		map.set_tile(i, 12, Enums.TileType.FURNITURE_STALL)
+		map.set_tile(i + 1, 12, Enums.TileType.FURNITURE_CRATE)
+		map.set_tile(i, 18, Enums.TileType.FURNITURE_STALL)
+		map.set_tile(i + 1, 18, Enums.TileType.FURNITURE_CRATE)
+
+	# Vendor stalls must never seal a passage to the road. Wherever an open tile
+	# (a shop door or an inter-shop alley gap) sits directly above row 12 or
+	# below row 18, clear the stall in front of it so every passage reaches the
+	# central road band. Stalls in front of solid shop walls remain.
+	for x in range(1, S - 1):
+		if _is_passable_floor(map.get_tile(x, 11)):
+			map.set_tile(x, 12, Enums.TileType.FLOOR_STONE)
+		if _is_passable_floor(map.get_tile(x, 19)):
+			map.set_tile(x, 18, Enums.TileType.FLOOR_STONE)
 
 	# Zone exits: openings in west and east perimeter walls on the road centre row.
 	map.set_tile(0, MID, Enums.TileType.ZONE_EXIT)
@@ -281,6 +341,20 @@ static func _gen_temple_grounds(map: AsciiMapData, rng: RandomNumberGenerator) -
 	map.set_tile(14, 13, Enums.TileType.DOOR_WOOD_OPEN)
 	map.set_tile(15, 13, Enums.TileType.DOOR_WOOD_OPEN)
 	map.set_tile(16, 13, Enums.TileType.DOOR_WOOD_OPEN)
+
+	# Sanctum: altar with offering box, incense burners, flanking Fortune statues,
+	# prayer mats for worshippers.
+	map.set_tile(MID, 5, Enums.TileType.FURNITURE_ALTAR)
+	map.set_tile(MID, 7, Enums.TileType.FURNITURE_OFFERING_BOX)
+	map.set_tile(13, 6, Enums.TileType.FURNITURE_INCENSE)
+	map.set_tile(17, 6, Enums.TileType.FURNITURE_INCENSE)
+	map.set_tile(11, 5, Enums.TileType.FURNITURE_STATUE)
+	map.set_tile(19, 5, Enums.TileType.FURNITURE_STATUE)
+	map.set_tile(14, 11, Enums.TileType.FURNITURE_PRAYER_MAT)
+	map.set_tile(16, 11, Enums.TileType.FURNITURE_PRAYER_MAT)
+	# Komainu guardian statues flanking the courtyard approach.
+	map.set_tile(11, 18, Enums.TileType.FURNITURE_STATUE)
+	map.set_tile(19, 18, Enums.TileType.FURNITURE_STATUE)
 
 	# Torii gate at south entrance (rows 27–28, columns 13–17).
 	map.set_tile(13, 28, Enums.TileType.WALL_WOOD)
@@ -337,6 +411,13 @@ static func _gen_shrine_clearing(map: AsciiMapData, rng: RandomNumberGenerator) 
 	_draw_wood_box(map, 12, 10, 18, 16)
 	_fill_rect(map, 13, 11, 17, 15, Enums.TileType.FLOOR_TATAMI)
 	map.set_tile(MID, 16, Enums.TileType.DOOR_WOOD_OPEN)
+	# Altar with offering box and a prayer mat inside; komainu guardians in the
+	# clearing flank the path to the torii (clear of the door column).
+	map.set_tile(MID, 11, Enums.TileType.FURNITURE_ALTAR)
+	map.set_tile(16, 12, Enums.TileType.FURNITURE_OFFERING_BOX)
+	map.set_tile(MID, 14, Enums.TileType.FURNITURE_PRAYER_MAT)
+	map.set_tile(13, 19, Enums.TileType.FURNITURE_STATUE)
+	map.set_tile(17, 19, Enums.TileType.FURNITURE_STATUE)
 
 	# Torii gate at south of clearing.
 	map.set_tile(13, 22, Enums.TileType.WALL_WOOD)
@@ -394,11 +475,14 @@ static func _gen_forest_path(map: AsciiMapData, rng: RandomNumberGenerator) -> v
 			if side >= 0 and side < S:
 				map.set_tile(side, y, Enums.TileType.BUSH)
 
-	# Zone exits.
-	map.set_tile(MID, 0, Enums.TileType.ZONE_EXIT)
+	# Zone exits sit on the path where it meets each edge. The south end is
+	# always at MID (the loop starts there); the north end follows the drifted
+	# path_x so the exit never lands in the trees.
+	var north_x: int = path_x
+	map.set_tile(north_x, 0, Enums.TileType.ZONE_EXIT)
 	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
 	map.exits = [
-		{x = MID, y = 0, direction = "north", target_zone_id = ""},
+		{x = north_x, y = 0, direction = "north", target_zone_id = ""},
 		{x = MID, y = S - 1, direction = "south", target_zone_id = ""},
 	]
 
@@ -455,9 +539,20 @@ static func _gen_residential_quarter(
 			_fill_rect(map, ox + 1, oy + 1,
 				ox + plot_w - 2, oy + plot_h - 2,
 				Enums.TileType.FLOOR_WOOD)
-			# Door on south face.
+			# Commoner home: irori hearth, sleeping mat, water jar — placed in the
+			# corners, clear of the central door column (ox + plot_w / 2).
+			map.set_tile(ox + 2, oy + 2, Enums.TileType.FURNITURE_HEARTH)
+			map.set_tile(ox + plot_w - 3, oy + plot_h - 3, Enums.TileType.FURNITURE_FUTON)
+			map.set_tile(ox + 2, oy + plot_h - 3, Enums.TileType.FURNITURE_JAR)
+			# Door faces the adjacent alley. South face when an alley lies below;
+			# bottom-row plots open north instead so the door never abuts the
+			# perimeter wall (which would seal the interior).
 			var door_x: int = ox + plot_w / 2
-			map.set_tile(door_x, oy + plot_h - 1, Enums.TileType.DOOR_WOOD_OPEN)
+			var south_row: int = oy + plot_h - 1
+			if south_row + 1 <= S - 2:
+				map.set_tile(door_x, south_row, Enums.TileType.DOOR_WOOD_OPEN)
+			else:
+				map.set_tile(door_x, oy, Enums.TileType.DOOR_WOOD_OPEN)
 
 	# Small shrine in south-east corner (overwriting one house plot).
 	var sx: int = 1 + 2 * (plot_w + 1)
@@ -465,14 +560,24 @@ static func _gen_residential_quarter(
 	if sx + 7 < S and sy + 7 < S:
 		_fill_rect(map, sx, sy, sx + plot_w - 1, sy + plot_h - 1, Enums.TileType.FLOOR_STONE)
 		_draw_stone_border(map, sx, sy, sx + plot_w - 1, sy + plot_h - 1)
-		map.set_tile(sx + plot_w / 2, sy + plot_h - 1, Enums.TileType.DOOR_SHOJI_OPEN)
+		# North face — the shrine sits in the bottom-right plot, whose south wall
+		# abuts the perimeter; opening north reaches the y=20 alley.
+		var shrine_south: int = sy + plot_h - 1
+		if shrine_south + 1 <= S - 2:
+			map.set_tile(sx + plot_w / 2, shrine_south, Enums.TileType.DOOR_SHOJI_OPEN)
+		else:
+			map.set_tile(sx + plot_w / 2, sy, Enums.TileType.DOOR_SHOJI_OPEN)
 
-	# Zone exits.
-	map.set_tile(0, MID, Enums.TileType.ZONE_EXIT)
-	map.set_tile(S - 1, MID, Enums.TileType.ZONE_EXIT)
+	# Zone exits sit on the open inter-plot alleys (y=10 and y=20), not the map
+	# mid-row — MID lands on the middle row of houses, which would wall the exit
+	# off from the interior.
+	var west_exit_y: int = 1 + plot_h  # 10: alley between plot rows 0 and 1
+	var east_exit_y: int = 1 + 2 * plot_h + 1  # 20: alley between rows 1 and 2
+	map.set_tile(0, west_exit_y, Enums.TileType.ZONE_EXIT)
+	map.set_tile(S - 1, east_exit_y, Enums.TileType.ZONE_EXIT)
 	map.exits = [
-		{x = 0, y = MID, direction = "west", target_zone_id = ""},
-		{x = S - 1, y = MID, direction = "east", target_zone_id = ""},
+		{x = 0, y = west_exit_y, direction = "west", target_zone_id = ""},
+		{x = S - 1, y = east_exit_y, direction = "east", target_zone_id = ""},
 	]
 
 
@@ -556,6 +661,18 @@ static func _gen_ohiroma(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
 
 	# Dais at north: raised stone platform rows 2–5.
 	_fill_rect(map, 4, 2, S - 5, 5, Enums.TileType.FLOOR_STONE)
+	# Lord's seat of authority centred on the dais, flanked by weapon stands;
+	# banners on the wall behind, braziers and petitioner cushions in the hall.
+	map.set_tile(MID, 3, Enums.TileType.FURNITURE_DAIS)
+	map.set_tile(6, 3, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(S - 7, 3, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(8, 2, Enums.TileType.FURNITURE_BANNER)
+	map.set_tile(S - 9, 2, Enums.TileType.FURNITURE_BANNER)
+	map.set_tile(6, 9, Enums.TileType.FURNITURE_BRAZIER)
+	map.set_tile(S - 7, 9, Enums.TileType.FURNITURE_BRAZIER)
+	for cy in [11, 14]:
+		for cx in [10, 12, 18, 20]:
+			map.set_tile(cx, cy, Enums.TileType.FURNITURE_CUSHION)
 
 	# Columns along sides (wood wall pillars).
 	for y in range(6, S - 4, 4):
@@ -567,6 +684,15 @@ static func _gen_ohiroma(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
 	_fill_rect(map, S - 2, 6, S - 2, S - 6, Enums.TileType.WALL_PAPER)
 	map.set_tile(1, MID, Enums.TileType.DOOR_SHOJI_OPEN)
 	map.set_tile(S - 2, MID, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# Genkan: a lowered stone doma vestibule just inside the south doors where
+	# guests remove footwear before stepping up to the tatami hall, framed by
+	# getabako (footwear shelves) and waiting benches — the castle's formal entry.
+	_fill_rect(map, MID - 1, S - 3, MID + 1, S - 2, Enums.TileType.FLOOR_STONE)
+	map.set_tile(MID - 2, S - 2, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(MID + 2, S - 2, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(MID - 2, S - 3, Enums.TileType.FURNITURE_BENCH)
+	map.set_tile(MID + 2, S - 3, Enums.TileType.FURNITURE_BENCH)
 
 	# Entrance doors south face.
 	map.set_tile(MID - 1, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
@@ -594,10 +720,20 @@ static func _gen_enkai_hall(map: AsciiMapData, rng: RandomNumberGenerator) -> vo
 			if ox + pad_w - 1 < S - 2 and oy + pad_h - 1 < S - 2:
 				_fill_rect(map, ox, oy, ox + pad_w - 1, oy + pad_h - 1,
 					Enums.TileType.FLOOR_TATAMI)
+				# Low banquet table on each pad, cushions flanking it.
+				var tx: int = ox + pad_w / 2
+				var ty: int = oy + pad_h / 2
+				map.set_tile(tx, ty, Enums.TileType.FURNITURE_TABLE)
+				map.set_tile(tx - 1, ty, Enums.TileType.FURNITURE_CUSHION)
+				map.set_tile(tx + 1, ty, Enums.TileType.FURNITURE_CUSHION)
 
 	# Paper screens along north wall for serving area.
 	_fill_rect(map, 4, 1, S - 5, 1, Enums.TileType.WALL_PAPER)
 	map.set_tile(MID, 1, Enums.TileType.DOOR_SHOJI_OPEN)
+	# Serving banners and a brazier lighting the feasting aisles.
+	map.set_tile(5, 2, Enums.TileType.FURNITURE_BANNER)
+	map.set_tile(S - 6, 2, Enums.TileType.FURNITURE_BANNER)
+	map.set_tile(MID, 13, Enums.TileType.FURNITURE_BRAZIER)
 
 	# Entrance doors south face.
 	map.set_tile(MID - 1, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
@@ -621,6 +757,15 @@ static func _gen_audience_chamber(map: AsciiMapData, rng: RandomNumberGenerator)
 	_fill_rect(map, 12, 3, 18, 5, Enums.TileType.FLOOR_TATAMI)
 	_draw_wood_border(map, 12, 3, 18, 5)
 	map.set_tile(MID, 5, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# Host seat with low table and guest cushion, a byōbu screen, weapon stand,
+	# and a brazier — placed clear of the MID approach to the tokonoma.
+	map.set_tile(12, 8, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(12, 10, Enums.TileType.FURNITURE_TABLE)
+	map.set_tile(12, 12, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(18, 10, Enums.TileType.FURNITURE_SCREEN)
+	map.set_tile(23, 7, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(8, 8, Enums.TileType.FURNITURE_BRAZIER)
 
 	# Fusuma dividers creating ante-room at south.
 	_fill_rect(map, 6, S - 10, S - 7, S - 10, Enums.TileType.WALL_PAPER)
@@ -657,6 +802,14 @@ static func _gen_chashitsu(map: AsciiMapData, rng: RandomNumberGenerator) -> voi
 	_fill_rect(map, 13, 6, 17, 8, Enums.TileType.FLOOR_TATAMI)
 	_draw_wood_border(map, 13, 6, 17, 8)
 	map.set_tile(MID, 8, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# Sunken ro hearth at the heart of the room, guest cushions around it, and a
+	# mizuya utensil shelf in the corner.
+	map.set_tile(MID, 12, Enums.TileType.FURNITURE_HEARTH)
+	map.set_tile(13, 12, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(17, 12, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(MID, 14, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(18, 9, Enums.TileType.FURNITURE_SHELF)
 
 	# Nijiriguchi (small entrance) on south face — single shoji.
 	map.set_tile(MID, 16, Enums.TileType.DOOR_SHOJI_OPEN)
@@ -696,13 +849,28 @@ static func _gen_guest_wing(map: AsciiMapData, rng: RandomNumberGenerator) -> vo
 		_draw_wood_border(map, ox, 1, ox + room_w - 1, MID - 2)
 		_fill_rect(map, ox + 1, 2, ox + room_w - 2, MID - 3,
 			Enums.TileType.FLOOR_TATAMI)
+		# Guest bedding and a small chest.
+		map.set_tile(ox + 1, 2, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(ox + room_w - 2, 2, Enums.TileType.FURNITURE_CHEST)
 		# Shoji dividers between rooms.
 		map.set_tile(ox + room_w / 2, MID - 2, Enums.TileType.DOOR_SHOJI_OPEN)
 		# South rooms.
 		_draw_wood_border(map, ox, MID + 2, ox + room_w - 1, S - 2)
 		_fill_rect(map, ox + 1, MID + 3, ox + room_w - 2, S - 3,
 			Enums.TileType.FLOOR_TATAMI)
+		map.set_tile(ox + 1, MID + 3, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(ox + room_w - 2, MID + 3, Enums.TileType.FURNITURE_CHEST)
 		map.set_tile(ox + room_w / 2, MID + 2, Enums.TileType.DOOR_SHOJI_OPEN)
+
+	# Furo (communal bath house): the south-east guest room is a bath rather than
+	# bedding. Wood floor, a sunken soaking tub, a washing bench and rinse jar, and
+	# a kama (stove) heating the bath water. Overwrites that room's futon/chest.
+	var fox: int = 2 + 2 * (room_w + 2)
+	_fill_rect(map, fox + 1, MID + 3, fox + room_w - 2, S - 3, Enums.TileType.FLOOR_WOOD)
+	_fill_rect(map, fox + 3, S - 5, fox + 5, S - 4, Enums.TileType.WATER_SHALLOW)
+	map.set_tile(fox + 1, S - 5, Enums.TileType.FURNITURE_BENCH)
+	map.set_tile(fox + 1, S - 3, Enums.TileType.FURNITURE_JAR)
+	map.set_tile(fox + room_w - 2, S - 4, Enums.TileType.FURNITURE_STOVE)
 
 	# Entrance on west.
 	map.set_tile(0, MID, Enums.TileType.DOOR_WOOD_OPEN)
@@ -734,6 +902,31 @@ static func _gen_lord_quarters(map: AsciiMapData, rng: RandomNumberGenerator) ->
 	_fill_rect(map, 3, MID + 3, MID - 3, S - 3, Enums.TileType.FLOOR_TATAMI)
 	map.set_tile(MID - 2, MID + 5, Enums.TileType.DOOR_SHOJI_OPEN)
 
+	# Furnishings (noble). Placed clear of the three doorways and the corridor.
+	# Main chamber: writing table with cushions, a byōbu screen, brazier, tansu.
+	map.set_tile(8, 6, Enums.TileType.FURNITURE_TABLE)
+	map.set_tile(7, 6, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(9, 6, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(11, 9, Enums.TileType.FURNITURE_SCREEN)
+	map.set_tile(24, 5, Enums.TileType.FURNITURE_BRAZIER)
+	map.set_tile(25, 12, Enums.TileType.FURNITURE_CHEST)
+	# Study (SE): writing desk + cushion + chest.
+	map.set_tile(22, 22, Enums.TileType.FURNITURE_TABLE)
+	map.set_tile(22, 23, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(27, 19, Enums.TileType.FURNITURE_CHEST)
+	# Sleeping chamber (SW): futons, tansu, brazier.
+	map.set_tile(6, 22, Enums.TileType.FURNITURE_FUTON)
+	map.set_tile(8, 22, Enums.TileType.FURNITURE_FUTON)
+	map.set_tile(11, 27, Enums.TileType.FURNITURE_CHEST)
+	map.set_tile(4, 27, Enums.TileType.FURNITURE_BRAZIER)
+
+	# Genkan (entrance vestibule): a lowered stone doma just inside the west door
+	# where footwear is removed, with a getabako (footwear shelf) and a bench to
+	# sit on. The raised wood corridor begins beyond it.
+	_fill_rect(map, 1, MID - 1, 2, MID + 1, Enums.TileType.FLOOR_STONE)
+	map.set_tile(2, MID - 2, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(1, MID - 2, Enums.TileType.FURNITURE_BENCH)
+
 	# Entrance on west wall.
 	map.set_tile(0, MID, Enums.TileType.DOOR_WOOD_OPEN)
 	map.set_tile(0, MID, Enums.TileType.ZONE_EXIT)
@@ -748,13 +941,21 @@ static func _gen_war_council_room(map: AsciiMapData, rng: RandomNumberGenerator)
 
 	# Room interior stays wood floor (military, not ceremonial).
 
-	# Central map table: stone tiles in a rectangle.
+	# Command platform: raised stone floor with a real strategy table at its
+	# centre, ringed by cushions for the commanders.
 	_fill_rect(map, 10, 10, 20, 20, Enums.TileType.FLOOR_STONE)
+	_fill_rect(map, 14, 14, 16, 15, Enums.TileType.FURNITURE_TABLE)
+	map.set_tile(13, 14, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(17, 14, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(13, 15, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(17, 15, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(MID, 13, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(MID, 16, Enums.TileType.FURNITURE_CUSHION)
 
-	# Weapon/map racks along walls (wood wall segments).
+	# Weapon and map racks along the side walls.
 	for y in range(3, S - 3, 5):
-		map.set_tile(2, y, Enums.TileType.WALL_WOOD)
-		map.set_tile(S - 3, y, Enums.TileType.WALL_WOOD)
+		map.set_tile(2, y, Enums.TileType.FURNITURE_WEAPON_STAND)
+		map.set_tile(S - 3, y, Enums.TileType.FURNITURE_WEAPON_STAND)
 
 	# Support pillars.
 	map.set_tile(8, 8, Enums.TileType.WALL_WOOD)
@@ -778,11 +979,20 @@ static func _gen_dojo(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
 
 	# Weapon racks along north and south inner walls.
 	for x in range(3, S - 3, 3):
-		map.set_tile(x, 1, Enums.TileType.WALL_WOOD)
-		map.set_tile(x, S - 2, Enums.TileType.WALL_WOOD)
+		map.set_tile(x, 1, Enums.TileType.FURNITURE_WEAPON_STAND)
+		map.set_tile(x, S - 2, Enums.TileType.FURNITURE_WEAPON_STAND)
 
-	# Kamiza (spirit seat / shrine alcove) at north-centre.
+	# Kamiza (spirit seat / shrine alcove) at north-centre: a kamidana god-shelf
+	# flanked by incense, with a prayer mat before it where students bow in.
 	_fill_rect(map, 13, 1, 17, 1, Enums.TileType.FLOOR_STONE)
+	map.set_tile(MID, 1, Enums.TileType.FURNITURE_ALTAR)
+	map.set_tile(MID - 1, 1, Enums.TileType.FURNITURE_INCENSE)
+	map.set_tile(MID + 1, 1, Enums.TileType.FURNITURE_INCENSE)
+	map.set_tile(MID, 3, Enums.TileType.FURNITURE_PRAYER_MAT)
+
+	# Training dummies (makiwara) in the practice area, clear of the centre lane.
+	for dpos in [Vector2i(8, 12), Vector2i(S - 9, 12), Vector2i(8, 18), Vector2i(S - 9, 18)]:
+		map.set_tile(dpos.x, dpos.y, Enums.TileType.FURNITURE_DUMMY)
 
 	# Support pillars defining the training rectangle.
 	map.set_tile(5, 5, Enums.TileType.WALL_WOOD)
@@ -790,10 +1000,26 @@ static func _gen_dojo(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
 	map.set_tile(5, S - 6, Enums.TileType.WALL_WOOD)
 	map.set_tile(S - 6, S - 6, Enums.TileType.WALL_WOOD)
 
-	# Entrance south.
+	# Entrance south. Clear any weapon rack on the threshold tile so the exit
+	# connects to the training floor.
+	map.set_tile(MID, S - 2, Enums.TileType.FLOOR_WOOD)
 	map.set_tile(MID, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
 	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
 	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# Draws a small walled service room with one door opening into the courtyard.
+# Used for the castle compound's functional spaces (GDD s57.36.2: kitchen,
+# armoury, storehouse, stables, barracks, prison are tile-clusters within the
+# courtyard zone, not separate Lesser Zones).
+static func _service_room(
+	map: AsciiMapData,
+	x1: int, y1: int, x2: int, y2: int,
+	door_x: int, door_y: int,
+) -> void:
+	_draw_wood_box(map, x1, y1, x2, y2)
+	_fill_rect(map, x1 + 1, y1 + 1, x2 - 1, y2 - 1, Enums.TileType.FLOOR_WOOD)
+	map.set_tile(door_x, door_y, Enums.TileType.DOOR_WOOD_OPEN)
 
 
 # OUTER_COURTYARD (Castle Outer Courtyard): large open outdoor space,
@@ -823,6 +1049,56 @@ static func _gen_outer_courtyard(map: AsciiMapData, rng: RandomNumberGenerator) 
 		var by: int = 1 + rng.randi() % (S - 2)
 		if map.get_tile(bx, by) == Enums.TileType.FLOOR_GRASS:
 			map.set_tile(bx, by, Enums.TileType.BUSH)
+
+	# Functional service rooms line the compound, leaving the central muster lane
+	# (cols 12–18, incl. the N–S gate column) open. GDD s57.36.2: kitchen, armoury,
+	# storehouse, stables, barracks and a holding cell are tile-clusters here, not
+	# separate zones. Each room has one door opening into the yard.
+	# Kitchen (NW): kamado stoves, a utensil shelf, water jar, supplies.
+	_service_room(map, 5, 5, 11, 10, 11, 7)
+	map.set_tile(6, 6, Enums.TileType.FURNITURE_STOVE)
+	map.set_tile(7, 6, Enums.TileType.FURNITURE_STOVE)
+	map.set_tile(10, 6, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(6, 9, Enums.TileType.FURNITURE_JAR)
+	map.set_tile(10, 9, Enums.TileType.FURNITURE_CRATE)
+	# Armoury (NE): weapon and armour racks, a shelf, crates.
+	_service_room(map, 19, 5, 25, 10, 19, 7)
+	for ax in [20, 21, 22, 23]:
+		map.set_tile(ax, 6, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(24, 6, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(20, 9, Enums.TileType.FURNITURE_CRATE)
+	map.set_tile(24, 9, Enums.TileType.FURNITURE_CRATE)
+	# Storehouse / kura (W): stacked crates and shelving.
+	_service_room(map, 5, 12, 11, 18, 11, 15)
+	for cpos in [Vector2i(6, 13), Vector2i(7, 13), Vector2i(6, 14), Vector2i(7, 14)]:
+		map.set_tile(cpos.x, cpos.y, Enums.TileType.FURNITURE_CRATE)
+	map.set_tile(10, 13, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(10, 14, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(6, 17, Enums.TileType.FURNITURE_JAR)
+	# Stables (E): water troughs and feed crates along the far wall, clear of the
+	# west door so the stalls stay reachable.
+	_service_room(map, 19, 12, 25, 18, 19, 15)
+	map.set_tile(23, 13, Enums.TileType.FURNITURE_JAR)
+	map.set_tile(23, 14, Enums.TileType.FURNITURE_CRATE)
+	map.set_tile(23, 16, Enums.TileType.FURNITURE_CRATE)
+	map.set_tile(23, 17, Enums.TileType.FURNITURE_JAR)
+	# Barracks (SW): garrison bedding, a chest, weapon stand, brazier.
+	_service_room(map, 5, 20, 11, 24, 11, 22)
+	for fpos in [Vector2i(6, 21), Vector2i(7, 21), Vector2i(6, 22), Vector2i(7, 22)]:
+		map.set_tile(fpos.x, fpos.y, Enums.TileType.FURNITURE_FUTON)
+	map.set_tile(10, 21, Enums.TileType.FURNITURE_CHEST)
+	map.set_tile(10, 23, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(8, 23, Enums.TileType.FURNITURE_BRAZIER)
+	# Holding cell / prison (SE): a bare straw mat and a confiscation chest.
+	_service_room(map, 19, 20, 25, 24, 19, 22)
+	map.set_tile(20, 21, Enums.TileType.FURNITURE_FUTON)
+	map.set_tile(24, 21, Enums.TileType.FURNITURE_CHEST)
+
+	# A well in the muster lane (off the gate column) and clan banners flanking
+	# the north gate approach.
+	map.set_tile(17, 12, Enums.TileType.FURNITURE_WELL)
+	map.set_tile(13, 5, Enums.TileType.FURNITURE_BANNER)
+	map.set_tile(17, 5, Enums.TileType.FURNITURE_BANNER)
 
 	# Gate on south wall.
 	map.set_tile(MID - 1, S - 1, Enums.TileType.GATE_OPEN)
@@ -882,11 +1158,23 @@ static func _gen_tsuboniwa(map: AsciiMapData, rng: RandomNumberGenerator) -> voi
 		if map.get_tile(fx, fy) == Enums.TileType.FLOOR_GRASS:
 			map.set_tile(fx, fy, Enums.TileType.FLOWERS)
 
+	# Tsukubai stone water basin and a stone lantern in the garden; meditation
+	# benches on the veranda. The garden interior stays open grass, so the
+	# stepping path is unaffected.
+	map.set_tile(9, 10, Enums.TileType.FURNITURE_WELL)
+	map.set_tile(22, 11, Enums.TileType.FURNITURE_BRAZIER)
+
 	# Engawa (veranda) access on south wall — shoji doors.
 	_fill_rect(map, 3, S - 4, S - 4, S - 4, Enums.TileType.WALL_PAPER)
 	map.set_tile(MID, S - 4, Enums.TileType.DOOR_SHOJI_OPEN)
 	_fill_rect(map, 3, S - 3, S - 4, S - 3, Enums.TileType.FLOOR_WOOD)
+	# Meditation benches on the veranda (after the veranda floor is laid).
+	map.set_tile(9, S - 3, Enums.TileType.FURNITURE_BENCH)
+	map.set_tile(21, S - 3, Enums.TileType.FURNITURE_BENCH)
 
+	# Carve the threshold (S-2 row is otherwise the surrounding wall) so the
+	# exit connects through the veranda to the garden.
+	map.set_tile(MID, S - 2, Enums.TileType.FLOOR_WOOD)
 	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
 	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
 
@@ -906,8 +1194,17 @@ static func _gen_castle_shrine(map: AsciiMapData, rng: RandomNumberGenerator) ->
 	_fill_rect(map, 11, 4, 19, 9, Enums.TileType.FLOOR_TATAMI)
 	map.set_tile(MID, 10, Enums.TileType.DOOR_WOOD_OPEN)
 
-	# Altar stone in front of shrine.
+	# Altar stone in front of shrine, with offering box, incense, prayer mats,
+	# and komainu guardians flanking the approach path.
 	_fill_rect(map, 13, 11, 17, 11, Enums.TileType.FLOOR_STONE)
+	map.set_tile(MID, 7, Enums.TileType.FURNITURE_ALTAR)
+	map.set_tile(16, 11, Enums.TileType.FURNITURE_OFFERING_BOX)
+	map.set_tile(13, 11, Enums.TileType.FURNITURE_INCENSE)
+	map.set_tile(17, 11, Enums.TileType.FURNITURE_INCENSE)
+	map.set_tile(14, 8, Enums.TileType.FURNITURE_PRAYER_MAT)
+	map.set_tile(16, 8, Enums.TileType.FURNITURE_PRAYER_MAT)
+	map.set_tile(12, 14, Enums.TileType.FURNITURE_STATUE)
+	map.set_tile(18, 14, Enums.TileType.FURNITURE_STATUE)
 
 	# Torii gate at south approach.
 	map.set_tile(13, 24, Enums.TileType.WALL_WOOD)
@@ -950,6 +1247,13 @@ static func _gen_pleasure_quarter(map: AsciiMapData, rng: RandomNumberGenerator)
 		if oy + bh < S - 1:
 			_draw_wood_border(map, 1, oy, MID - 4, oy + bh)
 			_fill_rect(map, 2, oy + 1, MID - 5, oy + bh - 1, Enums.TileType.FLOOR_TATAMI)
+			# Entertaining set: low table with cushions, a byōbu screen, a brazier.
+			map.set_tile(6, oy + 3, Enums.TileType.FURNITURE_TABLE)
+			map.set_tile(5, oy + 3, Enums.TileType.FURNITURE_CUSHION)
+			map.set_tile(7, oy + 3, Enums.TileType.FURNITURE_CUSHION)
+			map.set_tile(6, oy + 4, Enums.TileType.FURNITURE_CUSHION)
+			map.set_tile(9, oy + 2, Enums.TileType.FURNITURE_SCREEN)
+			map.set_tile(3, oy + 6, Enums.TileType.FURNITURE_BRAZIER)
 			map.set_tile(MID - 4, oy + bh / 2, Enums.TileType.DOOR_SHOJI_OPEN)
 
 	# East block: 3 buildings (sake houses).
@@ -958,6 +1262,13 @@ static func _gen_pleasure_quarter(map: AsciiMapData, rng: RandomNumberGenerator)
 		if oy + bh < S - 1:
 			_draw_wood_border(map, MID + 4, oy, S - 2, oy + bh)
 			_fill_rect(map, MID + 5, oy + 1, S - 3, oy + bh - 1, Enums.TileType.FLOOR_TATAMI)
+			# Sake-house set: low table with cushions, screen, brazier.
+			map.set_tile(24, oy + 3, Enums.TileType.FURNITURE_TABLE)
+			map.set_tile(23, oy + 3, Enums.TileType.FURNITURE_CUSHION)
+			map.set_tile(25, oy + 3, Enums.TileType.FURNITURE_CUSHION)
+			map.set_tile(24, oy + 4, Enums.TileType.FURNITURE_CUSHION)
+			map.set_tile(27, oy + 2, Enums.TileType.FURNITURE_SCREEN)
+			map.set_tile(21, oy + 6, Enums.TileType.FURNITURE_BRAZIER)
 			map.set_tile(MID + 4, oy + bh / 2, Enums.TileType.DOOR_SHOJI_OPEN)
 
 	# Zone exits north and south on main street.
@@ -997,6 +1308,13 @@ static func _gen_docks_waterfront(map: AsciiMapData, rng: RandomNumberGenerator)
 	for px in range(4, S - 4, 8):
 		_fill_rect(map, px, 15, px + 1, S - 4, Enums.TileType.FLOOR_WOOD)
 
+	# Cargo crates and barrels stacked on the quay, fishing nets drying on the
+	# land. Placed clear of the warehouse doors, pier mouths and zone exits.
+	for cpos in [Vector2i(6, 13), Vector2i(7, 13), Vector2i(14, 13), Vector2i(15, 13), Vector2i(22, 13), Vector2i(23, 13)]:
+		map.set_tile(cpos.x, cpos.y, Enums.TileType.FURNITURE_CRATE)
+	for npos in [Vector2i(9, 10), Vector2i(17, 10), Vector2i(25, 10)]:
+		map.set_tile(npos.x, npos.y, Enums.TileType.FURNITURE_NET)
+
 	# Zone exits east and west along land edge.
 	map.set_tile(0, 8, Enums.TileType.ZONE_EXIT)
 	map.set_tile(S - 1, 8, Enums.TileType.ZONE_EXIT)
@@ -1024,6 +1342,9 @@ static func _gen_poor_quarter(map: AsciiMapData, rng: RandomNumberGenerator) -> 
 			_draw_wood_box(map, ox, oy, ox + plot_w - 1, oy + plot_h - 1)
 			_fill_rect(map, ox + 1, oy + 1, ox + plot_w - 2, oy + plot_h - 2,
 				Enums.TileType.FLOOR_WOOD)
+			# Bare shack: a small hearth and a water jar in opposite corners.
+			map.set_tile(ox + 1, oy + 1, Enums.TileType.FURNITURE_HEARTH)
+			map.set_tile(ox + plot_w - 2, oy + 1, Enums.TileType.FURNITURE_JAR)
 			# Random door placement.
 			var door_side: int = rng.randi() % 2
 			if door_side == 0:
@@ -1040,12 +1361,14 @@ static func _gen_poor_quarter(map: AsciiMapData, rng: RandomNumberGenerator) -> 
 		if map.get_tile(mx, my) == Enums.TileType.FLOOR_DIRT:
 			map.set_tile(mx, my, Enums.TileType.FLOOR_MUD)
 
-	# Zone exits east and west.
-	map.set_tile(0, MID, Enums.TileType.ZONE_EXIT)
-	map.set_tile(S - 1, MID, Enums.TileType.ZONE_EXIT)
+	# Zone exits east and west, placed on the open alley between shack rows
+	# (MID itself lands on a shack row, which would wall the exit off).
+	var alley_y: int = 1 + 2 * (plot_h + 1) - 1
+	map.set_tile(0, alley_y, Enums.TileType.ZONE_EXIT)
+	map.set_tile(S - 1, alley_y, Enums.TileType.ZONE_EXIT)
 	map.exits = [
-		{x = 0, y = MID, direction = "west", target_zone_id = ""},
-		{x = S - 1, y = MID, direction = "east", target_zone_id = ""},
+		{x = 0, y = alley_y, direction = "west", target_zone_id = ""},
+		{x = S - 1, y = alley_y, direction = "east", target_zone_id = ""},
 	]
 
 
@@ -1060,17 +1383,32 @@ static func _gen_government_quarter(map: AsciiMapData, rng: RandomNumberGenerato
 	_draw_stone_border(map, 3, 2, S - 4, 11)
 	_fill_rect(map, 4, 3, S - 5, 10, Enums.TileType.FLOOR_TATAMI)
 	map.set_tile(MID, 11, Enums.TileType.DOOR_WOOD_OPEN)
+	# Magistrate's dais flanked by yoriki weapon stands; petitioner cushions and a
+	# kneeling mat for the accused; a document shelf.
+	map.set_tile(MID, 4, Enums.TileType.FURNITURE_DAIS)
+	map.set_tile(5, 4, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(S - 6, 4, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(13, 8, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(17, 8, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(MID, 8, Enums.TileType.FURNITURE_PRAYER_MAT)
+	map.set_tile(24, 9, Enums.TileType.FURNITURE_SHELF)
 
 	# South building (record hall).
 	_draw_stone_border(map, 3, 19, S - 4, S - 3)
 	_fill_rect(map, 4, 20, S - 5, S - 4, Enums.TileType.FLOOR_TATAMI)
 	map.set_tile(MID, 19, Enums.TileType.DOOR_WOOD_OPEN)
+	# Archive shelving along the back wall, document chests.
+	for sx in [5, 9, 21, 25]:
+		map.set_tile(sx, S - 4, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(13, 21, Enums.TileType.FURNITURE_CHEST)
+	map.set_tile(17, 21, Enums.TileType.FURNITURE_CHEST)
 
 	# Central plaza between buildings (stone floor, already set).
 	# Guard post (small stone structure) in plaza.
 	_draw_stone_border(map, 13, 13, 17, 17)
 	_fill_rect(map, 14, 14, 16, 16, Enums.TileType.FLOOR_WOOD)
 	map.set_tile(MID, 17, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(14, 14, Enums.TileType.FURNITURE_WEAPON_STAND)
 
 	# Zone exits east and west.
 	map.set_tile(0, MID, Enums.TileType.ZONE_EXIT)
@@ -1180,14 +1518,65 @@ static func _gen_wall_tower(map: AsciiMapData, rng: RandomNumberGenerator) -> vo
 	map.set_tile(8, MID, Enums.TileType.DOOR_WOOD_OPEN)
 	map.set_tile(22, MID, Enums.TileType.DOOR_WOOD_OPEN)
 
-	# Weapon racks inside (wood wall segments).
+	# Weapon racks lining the inner walls; garrison bedding, a supply crate stack,
+	# and braziers — placed clear of the four doors and the central stairwell.
 	for y in range(10, 13):
-		map.set_tile(9, y, Enums.TileType.WALL_WOOD)
-		map.set_tile(21, y, Enums.TileType.WALL_WOOD)
+		map.set_tile(9, y, Enums.TileType.FURNITURE_WEAPON_STAND)
+		map.set_tile(21, y, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(10, 19, Enums.TileType.FURNITURE_FUTON)
+	map.set_tile(11, 19, Enums.TileType.FURNITURE_FUTON)
+	map.set_tile(19, 19, Enums.TileType.FURNITURE_CRATE)
+	map.set_tile(20, 19, Enums.TileType.FURNITURE_CRATE)
+	map.set_tile(10, 10, Enums.TileType.FURNITURE_BRAZIER)
+	map.set_tile(20, 20, Enums.TileType.FURNITURE_BRAZIER)
 
 	# Exit south (connects to wall walkway).
 	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
 	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# PEASANT_DWELLING (minka): a single-room commoner home in a small yard.
+# Earthen-entry (doma) at the door, raised plank living floor, a central irori
+# hearth, sleeping mats, storage chests, a water jar and a low table. Furniture
+# is placed clear of the door→interior path so the room stays traversable.
+static func _gen_peasant_dwelling(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	# Yard: packed earth.
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_DIRT)
+
+	# House footprint (wood walls), interior raised plank floor.
+	var lx: int = 7
+	var rx: int = 23
+	var ty: int = 7
+	var by: int = 21
+	_draw_wood_box(map, lx, ty, rx, by)
+	_fill_rect(map, lx + 1, ty + 1, rx - 1, by - 1, Enums.TileType.FLOOR_WOOD)
+
+	# Doma (earthen entry strip) just inside the south door.
+	_fill_rect(map, lx + 1, by - 2, rx - 1, by - 1, Enums.TileType.FLOOR_DIRT)
+
+	# South door + exit (with a dirt path across the yard).
+	map.set_tile(MID, by, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+	# Central irori hearth (single tile; column kept clear of the door path edges).
+	var hearth_x: int = MID + (1 if rng.randi() % 2 == 0 else -1)
+	map.set_tile(hearth_x, 14, Enums.TileType.FURNITURE_HEARTH)
+	# Cushions flanking the hearth.
+	map.set_tile(hearth_x - 1, 15, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(hearth_x + 1, 15, Enums.TileType.FURNITURE_CUSHION)
+
+	# Sleeping mats along the north wall (1-2).
+	map.set_tile(lx + 2, ty + 1, Enums.TileType.FURNITURE_FUTON)
+	if rng.randi() % 2 == 0:
+		map.set_tile(lx + 4, ty + 1, Enums.TileType.FURNITURE_FUTON)
+
+	# Storage chest in a corner; water jar by the doma; low table near the hearth;
+	# a kamado cooking stove against the wall by the earthen entry.
+	map.set_tile(rx - 1, ty + 1, Enums.TileType.FURNITURE_CHEST)
+	map.set_tile(lx + 1, by - 2, Enums.TileType.FURNITURE_JAR)
+	map.set_tile(MID, 17, Enums.TileType.FURNITURE_TABLE)
+	map.set_tile(rx - 1, by - 2, Enums.TileType.FURNITURE_STOVE)
 
 
 # Default fallback: flat grass with stone perimeter (zone type not yet designed).
@@ -1322,3 +1711,17 @@ static func _str_to_seed(s: String) -> int:
 		h = h ^ s.unicode_at(i)
 		h = (h * 0x01000193) & 0xFFFFFFFF
 	return h
+
+
+# True for floor/open-door tiles that a walker can stand on (used by generators
+# to detect passages that must not be sealed by decorative features).
+static func _is_passable_floor(t: int) -> bool:
+	match t:
+		Enums.TileType.FLOOR_GRASS, Enums.TileType.FLOOR_DIRT, \
+		Enums.TileType.FLOOR_WOOD, Enums.TileType.FLOOR_TATAMI, \
+		Enums.TileType.FLOOR_STONE, Enums.TileType.FLOOR_MUD, \
+		Enums.TileType.FLOOR_SNOW, Enums.TileType.FLOOR_SAND, \
+		Enums.TileType.DOOR_SHOJI_OPEN, Enums.TileType.DOOR_WOOD_OPEN, \
+		Enums.TileType.GATE_OPEN, Enums.TileType.ZONE_EXIT:
+			return true
+	return false

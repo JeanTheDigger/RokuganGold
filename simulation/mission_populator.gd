@@ -240,7 +240,11 @@ static func populate_sortie(
 # Returns the tier map for the given map's class name.
 # Falls back to treating all roles as TIER_BULK for unknown templates.
 static func _build_tier_map(map: AsciiMapData) -> Dictionary:
-	return _TEMPLATE_TIERS.get(map.get_class(), {})
+	# get_class() returns the native base ("Resource"); use the GDScript
+	# class_name via the script's global name to match _TEMPLATE_TIERS keys.
+	var script: Script = map.get_script() as Script
+	var class_key: String = script.get_global_name() if script != null else ""
+	return _TEMPLATE_TIERS.get(class_key, {})
 
 
 # Groups population_slots Array by tier.

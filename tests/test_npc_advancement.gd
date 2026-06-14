@@ -906,7 +906,7 @@ func test_void_ring_available_to_courtier() -> void:
 	var c: L5RCharacterData = _make_courtier()
 	# Max focus rings (Air, Water) and all school skills
 	c.reflexes = 5; c.awareness = 5  # Air ring maxed
-	c.stamina = 5; c.perception = 5  # Water ring maxed
+	c.strength = 5; c.perception = 5  # Water ring maxed (Water = min(strength, perception))
 	for sk: String in NPCAdvancement.get_school_skills(c):
 		c.skills[sk] = 5
 	# Void ring 2->3 = 12000 progress = 60 XP

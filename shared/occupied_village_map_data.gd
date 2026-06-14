@@ -89,7 +89,6 @@ const BUILDING_RANGE: Array[Vector2i] = [
 
 # Enemy combatant slots.
 # Each dict: { x:int, y:int, role:int (PopRole), building_id:int }
-@export var population_slots: Array = []
 
 # Objective markers.
 # Each dict: { x:int, y:int, obj_type:int (ObjType), building_id:int }
