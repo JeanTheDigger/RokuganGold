@@ -99,7 +99,12 @@ static func is_passable(tile: int) -> bool:
 		Enums.TileType.DOOR_SHOJI_CLOSED, \
 		Enums.TileType.DOOR_WOOD_CLOSED, \
 		Enums.TileType.GATE_CLOSED, \
-		Enums.TileType.VOID:
+		Enums.TileType.VOID, \
+		Enums.TileType.FURNITURE_HEARTH, \
+		Enums.TileType.FURNITURE_CHEST, \
+		Enums.TileType.FURNITURE_TABLE, \
+		Enums.TileType.FURNITURE_JAR, \
+		Enums.TileType.FURNITURE_BRAZIER:
 			return false
 		_:
 			return true
@@ -118,7 +123,22 @@ static func blocks_los(tile: int) -> bool:
 		Enums.TileType.DOOR_SHOJI_CLOSED, \
 		Enums.TileType.DOOR_WOOD_CLOSED, \
 		Enums.TileType.GATE_CLOSED, \
-		Enums.TileType.FIRE:
+		Enums.TileType.FIRE, \
+		Enums.TileType.FURNITURE_CHEST, \
+		Enums.TileType.FURNITURE_SCREEN:
+			return true
+		_:
+			return false
+
+
+# Furnishings that grant combat cover — a defender sheltering behind one gets
+# +COVER_ARMOR_TN_BONUS Armor TN (s4.4 furnishings category; reuses the s40
+# cover convention). Solid waist-to-chest-height objects only.
+static func grants_cover(tile: int) -> bool:
+	match tile:
+		Enums.TileType.FURNITURE_CHEST, \
+		Enums.TileType.FURNITURE_TABLE, \
+		Enums.TileType.FURNITURE_JAR:
 			return true
 		_:
 			return false

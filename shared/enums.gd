@@ -266,6 +266,8 @@ enum ZoneSubtype {
 	SHRINE_CLEARING,
 	# Wall / Military
 	WALL_TOWER,
+	# Dwelling interiors (s4.4 lived-in spaces)
+	PEASANT_DWELLING,
 }
 
 # Three-tier zone hierarchy — Greater Zone is the top container.
@@ -816,6 +818,17 @@ enum TileType {
 	FLOOR_ASH      = 32,  # ,  dark grey (burned-out tile, s56.6)
 	FIRE           = 33,  # ^  orange/red (actively burning, s56.6)
 	RUBBLE         = 34,  # ;  grey (destroyed wall remains)
+	# Furnishings & objects (s4.4 "Remaining Tile Categories") — lived-in interiors.
+	# Properties are enforced by MovementSystem (passability), AsciiMapData.blocks_los
+	# (sight) and AsciiMapData.grants_cover (combat). Low visual weight per s4.4.
+	FURNITURE_FUTON   = 35,  # ▬  sleeping mat — passable, no LOS block, no cover
+	FURNITURE_HEARTH  = 36,  # ▦  irori firepit — blocks move, no LOS block
+	FURNITURE_CHEST   = 37,  # ▥  chest / tansu — blocks move, blocks LOS, cover
+	FURNITURE_TABLE   = 38,  # ╥  low table / writing desk — blocks move, cover
+	FURNITURE_JAR     = 39,  # ◍  water jar / barrel — blocks move, cover
+	FURNITURE_SCREEN  = 40,  # ║  byōbu folding screen — passable, blocks LOS
+	FURNITURE_BRAZIER = 41,  # †  brazier / lantern stand — blocks move
+	FURNITURE_CUSHION = 42,  # ▫  zabuton cushion — passable, no LOS block
 }
 
 # -- s45 Advantages ------------------------------------------------------------

@@ -20,6 +20,11 @@ const GUARD_RANGE_TILES: int = 1
 
 ## Ranged attack while within melee range penalty (GDD s40 confirmed).
 const RANGED_IN_MELEE_PENALTY: int = -10
+
+# Cover: a defender sheltering behind a cover-granting furnishing (s4.4) gains
+# +5 Armor TN against attacks coming from the covered side. Reuses the s40 cover
+# convention (the ruined-structure +5 cover value).
+const COVER_ARMOR_TN_BONUS: int = 5
 ## s40 "Weapon Grapples": a weapon-grappler who loses control of the grapple
 ## hands their opponent 2 Free Raises toward a Disarm Maneuver against them.
 const WEAPON_GRAPPLE_LOSE_CONTROL_DISARM_RAISES: int = 2
@@ -765,6 +770,7 @@ static func execute_melee_attack(
 
 	var is_being_guarded: bool = _is_being_guarded(state, target_id)
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, true, is_being_guarded, weapon_name)
+	armor_tn += _cover_bonus(state, tpos, apos)
 
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
@@ -1101,6 +1107,7 @@ static func execute_ranged_attack(
 
 	var is_being_guarded: bool = _is_being_guarded(state, target_id)
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, false, is_being_guarded, weapon_name)
+	armor_tn += _cover_bonus(state, tpos, apos)
 
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
@@ -3622,6 +3629,23 @@ static func _is_participant_out(state: MapCombatState, char_id: int) -> bool:
 ## Chebyshev (chessboard) distance: max(|dx|, |dy|).
 static func _chebyshev(a: Vector2i, b: Vector2i) -> int:
 	return maxi(abs(a.x - b.x), abs(a.y - b.y))
+
+
+## Cover bonus to Armor TN: a defender shielded by a cover-granting furnishing
+## (s4.4) on the tile immediately toward the attacker gains +COVER_ARMOR_TN_BONUS.
+## tpos = target position, apos = attacker position.
+static func _cover_bonus(state: MapCombatState, tpos: Vector2i, apos: Vector2i) -> int:
+	var dx: int = signi(apos.x - tpos.x)
+	var dy: int = signi(apos.y - tpos.y)
+	if dx == 0 and dy == 0:
+		return 0
+	var cx: int = tpos.x + dx
+	var cy: int = tpos.y + dy
+	if cx < 0 or cy < 0 or cx >= state.map.width or cy >= state.map.height:
+		return 0
+	if AsciiMapData.grants_cover(state.map.get_tile(cx, cy)):
+		return COVER_ARMOR_TN_BONUS
+	return 0
 
 
 ## Bresenham line-of-sight check.
