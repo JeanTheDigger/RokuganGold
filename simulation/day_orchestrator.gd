@@ -239,7 +239,11 @@ static func advance_day(
 		world_states, current_season,
 	)
 	_set_temple_context_flags(characters, settlements, world_states)
-	_set_dojo_context_flags(characters, settlements, world_states)
+	# NOTE: AT_DOJO is intentionally NOT assigned at the settlement level. A dojo is
+	# one Lesser Zone of a multi-zone castle (has_dojo seats are CLAN_CHAMPION/IMPERIAL
+	# castles), so pinning every resident to the dojo sub-zone wrongly stripped them of
+	# governance/court/worship (AT_OWN_HOLDINGS already permits TRAIN/MENTOR). AT_DOJO is
+	# reserved for future per-character zone-position tracking (a PC standing in the dojo).
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
 	_inject_settlement_type(characters, settlements, world_states)
 	_pickup_ambient_public_records(characters, settlements, ic_day)
@@ -17162,42 +17166,6 @@ static func _set_temple_context_flags(
 			continue
 		ws["context_flag"] = Enums.ContextFlag.AT_TEMPLE
 		ws["zone_subtype"] = Enums.ZoneSubtype.TEMPLE_GROUNDS
-
-
-static func _set_dojo_context_flags(
-	characters: Array,
-	settlements: Array,
-	world_states: Dictionary,
-) -> void:
-	var dojo_locs: Dictionary = {}
-	for s: SettlementData in settlements:
-		if s.has_dojo or s.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
-			dojo_locs[str(s.settlement_id)] = true
-
-	if dojo_locs.is_empty():
-		return
-
-	for character: L5RCharacterData in characters:
-		if CharacterStats.is_dead(character):
-			continue
-		var loc: String = character.physical_location
-		if not dojo_locs.has(loc):
-			continue
-		if TravelSystem.is_traveling(character):
-			continue
-		var ws: Dictionary = world_states.get(character.character_id, {})
-		if ws.is_empty():
-			ws = {}
-			world_states[character.character_id] = ws
-		var current_flag: int = ws.get("context_flag", -1)
-		if current_flag == Enums.ContextFlag.AT_COURT:
-			continue
-		if current_flag == Enums.ContextFlag.AT_WALL_TOWER:
-			continue
-		if current_flag == Enums.ContextFlag.AT_TEMPLE:
-			continue
-		ws["context_flag"] = Enums.ContextFlag.AT_DOJO
-		ws["zone_subtype"] = Enums.ZoneSubtype.DOJO
 
 
 static func _set_visiting_context_flags(
