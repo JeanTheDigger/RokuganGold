@@ -685,6 +685,15 @@ static func _gen_ohiroma(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
 	map.set_tile(1, MID, Enums.TileType.DOOR_SHOJI_OPEN)
 	map.set_tile(S - 2, MID, Enums.TileType.DOOR_SHOJI_OPEN)
 
+	# Genkan: a lowered stone doma vestibule just inside the south doors where
+	# guests remove footwear before stepping up to the tatami hall, framed by
+	# getabako (footwear shelves) and waiting benches — the castle's formal entry.
+	_fill_rect(map, MID - 1, S - 3, MID + 1, S - 2, Enums.TileType.FLOOR_STONE)
+	map.set_tile(MID - 2, S - 2, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(MID + 2, S - 2, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(MID - 2, S - 3, Enums.TileType.FURNITURE_BENCH)
+	map.set_tile(MID + 2, S - 3, Enums.TileType.FURNITURE_BENCH)
+
 	# Entrance doors south face.
 	map.set_tile(MID - 1, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
 	map.set_tile(MID, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
@@ -973,8 +982,13 @@ static func _gen_dojo(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
 		map.set_tile(x, 1, Enums.TileType.FURNITURE_WEAPON_STAND)
 		map.set_tile(x, S - 2, Enums.TileType.FURNITURE_WEAPON_STAND)
 
-	# Kamiza (spirit seat / shrine alcove) at north-centre.
+	# Kamiza (spirit seat / shrine alcove) at north-centre: a kamidana god-shelf
+	# flanked by incense, with a prayer mat before it where students bow in.
 	_fill_rect(map, 13, 1, 17, 1, Enums.TileType.FLOOR_STONE)
+	map.set_tile(MID, 1, Enums.TileType.FURNITURE_ALTAR)
+	map.set_tile(MID - 1, 1, Enums.TileType.FURNITURE_INCENSE)
+	map.set_tile(MID + 1, 1, Enums.TileType.FURNITURE_INCENSE)
+	map.set_tile(MID, 3, Enums.TileType.FURNITURE_PRAYER_MAT)
 
 	# Training dummies (makiwara) in the practice area, clear of the centre lane.
 	for dpos in [Vector2i(8, 12), Vector2i(S - 9, 12), Vector2i(8, 18), Vector2i(S - 9, 18)]:
