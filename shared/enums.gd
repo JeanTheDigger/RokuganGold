@@ -300,6 +300,17 @@ enum NavigationZoneType {
 	MOUNTAIN_APPROACH,  # route through mountain terrain with pass and cave entrances
 }
 
+# Concentric access tiers of Otosan Uchi, the Imperial Capital (s2.3.23).
+# Each tier is a gate check against a character flag:
+#   TOSHISOTO       — open to all; no flag required.
+#   EKOHIKEI        — requires ekohikei_access flag (Sentaku Tribunal grant).
+#   FORBIDDEN_CITY  — requires forbidden_city_access flag (Emperor/Champion/Tribunal grant).
+enum AccessLayer {
+	TOSHISOTO,
+	EKOHIKEI,
+	FORBIDDEN_CITY,
+}
+
 enum LordRank {
 	VILLAGE_HEADMAN,
 	CITY_DAIMYO,

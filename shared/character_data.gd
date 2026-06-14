@@ -133,6 +133,13 @@ var spell_void_bonus_used: int = 0
 @export var travel_days_remaining: int = 0
 @export var travel_origin: String = ""
 @export var role_position: String = ""
+# Otosan Uchi Governor link (s2.3.23): zone_id of the district this character
+# governs; "" = not a Governor. Bidirectional with NavigationZoneData.zone_lord_id.
+@export var governed_zone_id: String = ""
+# Otosan Uchi access flags (s2.3.23). Standing grants for Imperial residents and
+# Tribunal members; otherwise set by the Sentaku access-petition pipeline.
+@export var ekohikei_access: bool = false
+@export var forbidden_city_access: bool = false
 @export var designated_heir_id: int = -1
 @export var disposition_values: Dictionary = {}
 @export var historical_modifiers: Dictionary = {}

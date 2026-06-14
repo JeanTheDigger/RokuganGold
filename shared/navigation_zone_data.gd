@@ -31,6 +31,26 @@ const EVENT_LOG_RETENTION_DAYS: int = 90
 # Each entry: {direction: String, target_zone_id: String}
 @export var exits: Array = []
 
+# -- Otosan Uchi district governance (s2.3.23) -------------------------------
+# These fields are only meaningful for the Imperial Capital's district zones
+# (CITY_DISTRICT / EKOHIKEI_DISTRICT / FORBIDDEN_CITY). They stay inert
+# (default sentinels) for every other Navigation Zone in the world.
+
+# Population units allocated to this district; generates Koku independently
+# (s2.3.23 District Economics). 0 = not an Otosan Uchi district.
+@export var district_pu: int = 0
+# Permanent internal district identifier (Sentaku name). Governors may rename a
+# Toshisoto district for flavour, but this name never changes (s2.3.23).
+@export var sentaku_name: String = ""
+# Enums.AccessLayer (TOSHISOTO / EKOHIKEI / FORBIDDEN_CITY). -1 = not gated.
+@export var access_layer: int = -1
+# Governor clan-preference convention for appointments (s2.3.23). Not a hard gate.
+@export var clan_preference: Array[String] = []
+# Current Governor's character_id; -1 = vacant (district under Sentaku authority).
+@export var zone_lord_id: int = -1
+# Per-district Stability (Governor scope) — distinct from province-wide stability.
+@export var district_stability: float = 100.0
+
 # -- ASCII map (optional) ----------------------------------------------------
 
 # True for walkable outdoor spaces (streets, plazas). False for pure MUD containers.

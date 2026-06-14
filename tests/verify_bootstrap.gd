@@ -17,7 +17,7 @@ func _init() -> void:
 	var mil: Dictionary = result.get("military_data", {})
 	var companies: Array = mil.get("companies", [])
 
-	print("Provinces: %d (expect 142)" % provinces.size())
+	print("Provinces: %d (expect 143)" % provinces.size())
 	print("Settlements: %d" % settlements.size())
 	print("Characters: %d" % characters.size())
 	print("Companies: %d" % companies.size())
@@ -25,8 +25,8 @@ func _init() -> void:
 	print("Next char ID: %d" % result.get("next_character_id", -1))
 	print("Next settlement ID: %d" % result.get("next_settlement_id", -1))
 
-	# Province table integrity
-	assert(provinces.size() == 142, "Expected 142 provinces")
+	# Province table integrity (142 + Imperial Lands for Otosan Uchi, s2.3.23)
+	assert(provinces.size() == 143, "Expected 143 provinces")
 
 	# Every province has adjacencies
 	var missing_adj: int = 0
@@ -251,6 +251,74 @@ func _init() -> void:
 	assert(bs_cells.size() <= 35, "Should have at most 35 initial cells")
 	assert(dormant_count > active_count, "Majority of cells should be dormant")
 	assert(bs_ins.size() == active_count, "Each active cell should have an insurgency")
+
+	# --- Otosan Uchi foundation (s2.3.23) ---
+	var otosan: SettlementData = null
+	for s6: SettlementData in settlements:
+		if s6.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			otosan = s6
+			break
+	assert(otosan != null, "Otosan Uchi (IMPERIAL_CAPITAL) should exist")
+	assert(otosan.settlement_name == "Otosan Uchi", "Capital name mismatch")
+	assert(otosan.population_pu == 100, "Otosan Uchi should be 100 PU")
+	print("Otosan Uchi: id=%d, PU=%d" % [otosan.settlement_id, otosan.population_pu])
+
+	# Emperor relocated to the capital (Miya's Blessing reads this PU)
+	for c6: L5RCharacterData in characters:
+		if c6.character_id == emperor_id:
+			assert(c6.physical_location == str(otosan.settlement_id),
+				"Emperor should reside at Otosan Uchi")
+			assert(c6.forbidden_city_access, "Emperor should hold forbidden_city_access")
+			break
+
+	# District navigation zones + PU subdivision
+	var nav_zones: Array = result.get("navigation_zones", [])
+	var districts: Array = []
+	var district_pu_sum: int = 0
+	for nz_v: Variant in nav_zones:
+		var nz: NavigationZoneData = nz_v as NavigationZoneData
+		if nz != null and nz.parent_zone_id == ("%d_gz" % otosan.settlement_id):
+			districts.append(nz)
+			district_pu_sum += nz.district_pu
+	print("Otosan Uchi districts: %d (PU sum %d)" % [districts.size(), district_pu_sum])
+	assert(districts.size() == 16, "Otosan Uchi should have 16 district zones")
+	assert(district_pu_sum == 100, "District PU should sum to 100")
+
+	# Governance roster
+	var tribunal: int = 0
+	var chairs: int = 0
+	var governors: int = 0
+	for c7: L5RCharacterData in characters:
+		if c7.role_position == RoleRegistry.SENTAKU_TRIBUNAL_CHAIR:
+			chairs += 1
+			tribunal += 1
+		elif c7.role_position == RoleRegistry.SENTAKU_TRIBUNAL_MEMBER:
+			tribunal += 1
+		elif c7.role_position == RoleRegistry.GOVERNOR_OTOSAN_UCHI:
+			governors += 1
+	print("Sentaku Tribunal: %d (chairs %d), Governors: %d" % [tribunal, chairs, governors])
+	assert(tribunal == 5, "Sentaku Tribunal should have 5 members")
+	assert(chairs == 1, "Exactly one Tribunal Chair")
+	assert(governors == 15, "Should have 15 Governors")
+
+	# Governor↔district zone bidirectional linkage
+	var zone_by_id: Dictionary = {}
+	for nz_v2: Variant in nav_zones:
+		var nz2: NavigationZoneData = nz_v2 as NavigationZoneData
+		if nz2 != null:
+			zone_by_id[nz2.zone_id] = nz2
+	var linked: int = 0
+	for c8: L5RCharacterData in characters:
+		if c8.role_position != RoleRegistry.GOVERNOR_OTOSAN_UCHI:
+			continue
+		assert(not c8.governed_zone_id.is_empty(), "Governor missing governed_zone_id")
+		var gz2: NavigationZoneData = zone_by_id.get(c8.governed_zone_id)
+		assert(gz2 != null, "Governor's district zone not found")
+		assert(gz2.zone_lord_id == c8.character_id, "District zone_lord_id not linked to Governor")
+		assert(c8.lord_id == emperor_id, "Governor lord_id should be the Emperor")
+		linked += 1
+	assert(linked == 15, "All 15 Governors should be linked to their district zone")
+	print("Governor↔district links verified: %d" % linked)
 
 	print("\n--- ALL CHECKS PASSED ---")
 	quit()

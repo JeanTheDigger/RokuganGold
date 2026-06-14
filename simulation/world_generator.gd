@@ -853,6 +853,14 @@ static func _default_infrastructure(
 				"theater", "okiya", "pleasure_quarter", "forge",
 			]
 
+		Enums.SettlementType.IMPERIAL_CAPITAL:
+			# Otosan Uchi (s2.3.23) — every amenity the Empire offers.
+			return [
+				"shrine", "temple", "sake_house", "inn", "tea_house",
+				"market", "garrison", "game_house", "bathhouse",
+				"theater", "okiya", "pleasure_quarter", "forge", "library",
+			]
+
 		Enums.SettlementType.FORTIFICATION:
 			return ["garrison"]
 
@@ -899,7 +907,7 @@ static func _default_worship_locations(
 			return [{"type": "village_shrine", "dedicated": false, "fortune": -1}]
 		Enums.SettlementType.TOWN:
 			return [{"type": "local_shrine", "dedicated": false, "fortune": -1}]
-		Enums.SettlementType.CITY:
+		Enums.SettlementType.CITY, Enums.SettlementType.IMPERIAL_CAPITAL:
 			return [
 				{"type": "local_shrine", "dedicated": false, "fortune": -1},
 				{"type": "temple", "dedicated": false, "fortune": -1},
