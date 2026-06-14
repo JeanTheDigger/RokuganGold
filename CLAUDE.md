@@ -2446,21 +2446,22 @@ costs, or forward-wiring. Do not treat as bugs.
   `hierarchy_cascade_results` arrays.
 
 ### Known Technical Notes
-- **AT_DOJO / AT_TEMPLE / AT_WALL_TOWER context — WIRED (verified 2026-06-14).** All
-  three single-purpose zone contexts set BOTH `context_flag` AND `zone_subtype` in
-  per-character world_states, so the ZoneFlagMatrix gates actions there. `_set_dojo_context_flags`
-  keys on `SettlementData.has_dojo` (set at world gen on each Great Clan champion's family
-  castle — consistent with the zone builder, which grants a DOJO Lesser Zone only at the
-  inferred CLAN_CHAMPION/IMPERIAL rank) plus the Imperial Capital; `_set_temple_context_flags`
-  keys on RELIGIOUS_SETTLEMENT_TYPES → TEMPLE_GROUNDS; `_set_wall_tower_context_flags` →
-  WALL_TOWER. Precedence: AT_COURT > AT_WALL_TOWER > AT_TEMPLE > AT_DOJO. Runtime-verified
-  end to end: a monk at a champion-castle dojo gets AT_DOJO + DOJO zone_subtype → PERFORM_RITUAL
-  and PUBLIC_PERFORMANCE are zone-blocked (a dojo has no shrine/performance space); a monk at a
-  temple gets AT_TEMPLE + TEMPLE_GROUNDS → both allowed (the 4 gated actions are the
-  performance/worship pair). The multi-zone contexts (AT_OWN_HOLDINGS / AT_COURT / VISITING)
-  intentionally leave `zone_subtype` unset so those actions are NOT zone-gated — a character at
-  a castle could be in any of its zones (shrine, garden, chashitsu), so gating to one sub-zone
-  would wrongly block actions the settlement supports. Permissive is the correct NPC abstraction.
+- **AT_TEMPLE / AT_WALL_TOWER context — WIRED (verified 2026-06-14).** These two
+  single-purpose settlement contexts set BOTH `context_flag` AND `zone_subtype` in
+  per-character world_states, so the ZoneFlagMatrix gates actions there.
+  `_set_temple_context_flags` keys on RELIGIOUS_SETTLEMENT_TYPES → TEMPLE_GROUNDS;
+  `_set_wall_tower_context_flags` → WALL_TOWER. Runtime-verified: a monk at a temple gets
+  AT_TEMPLE + TEMPLE_GROUNDS → PERFORM_RITUAL/performance allowed. These are correct because
+  the settlement IS single-purpose (a temple is religious grounds; a wall tower is a tower).
+- **AT_DOJO — intentionally NOT assigned at the settlement level (fixed 2026-06-14, see
+  Known Code Issues below).** `has_dojo` settlements are multi-zone CASTLES (champion seats +
+  Imperial Capital), and a dojo is one of their Lesser Zones — so the former settlement-level
+  blanket was a bug (stripped governance/court/worship). The multi-zone contexts
+  (AT_OWN_HOLDINGS / AT_COURT / VISITING) intentionally leave `zone_subtype` unset so those
+  actions are NOT zone-gated — a character at a castle could be in any of its zones (shrine,
+  garden, chashitsu, dojo), so gating to one sub-zone would wrongly block supported actions.
+  AT_DOJO is reserved for future per-character zone-position tracking (a PC standing in the
+  dojo zone); the AT_DOJO context list + decomposer branches remain as forward-wiring.
 - **ON_CAMPAIGN, UNDER_SIEGE, IN_EXILE context flags unassigned.** These require sub-tile army position tracking from s11.7a. Characters in these states currently fall through to AT_OWN_HOLDINGS or VISITING. Implement when army movement data is available.
 - **Unbounded array growth.** `crime_records`, `pending_letters`, `active_secrets` grow monotonically. Retention window design decisions needed before adding automatic purges beyond the existing seasonal cleanups.
 
@@ -4915,6 +4916,29 @@ tests in `tests/test_individual_combat.gd`.
   shrine is the separate SHRINE_CLEARING zone), identical to RESIDENTIAL_QUARTER /
   POOR_QUARTER. Homes remain enterable/navigable — movement, FOV, conversation and combat
   are tile-level, never matrix-gated.
+
+### Known Code Issues (found and fixed 2026-06-14, AT_DOJO context blanket)
+- **AT_DOJO blanket-pinned everyone at champion castles, stripping governance. FIXED.**
+  `_set_dojo_context_flags` set `context_flag = AT_DOJO` for every non-traveling character
+  at a `has_dojo` settlement. But `has_dojo` settlements are the 9 Great Clan champion
+  family castles + the Imperial Capital — all multi-zone CASTLES, not single-purpose dojos.
+  The AT_DOJO action list has only training/social actions (TRAIN, MENTOR, DRILL_TROOPS,
+  CHARM, PROBE, TREAT_WOUND) — no governance, court, or worship. So a clan champion governing
+  from their own seat (whenever not mid-court) was pinned to AT_DOJO and lost ALL lord actions
+  (SET_TAX_RATE, ASSIGN_VASSAL_OBJECTIVE, CALL_COURT, military orders, etc.); cross-clan
+  visitors lost VISITING; and a monk's PERFORM_RITUAL standing dead-ended (a dojo is not
+  shrine_eligible). Runtime-confirmed: a courtier champion at a `has_dojo` castle got
+  context_flag=8 (AT_DOJO) with SET_TAX_RATE absent. Root cause is the multi-zone category
+  error: a dojo is one Lesser Zone of a castle, and AT_OWN_HOLDINGS already permits
+  TRAIN/MENTOR/MEDITATE/PERFORM_RITUAL, so the dojo blanket added nothing. Fix (owner-approved):
+  removed the settlement-level AT_DOJO assignment (`_set_dojo_context_flags` deleted, call
+  removed) — characters at champion castles now fall to AT_OWN_HOLDINGS (residents → full
+  lord + training actions) or VISITING (outsiders). AT_TEMPLE / AT_WALL_TOWER unchanged (those
+  ARE single-purpose settlements). AT_DOJO context list + decomposer branches kept as
+  forward-wiring for future per-character zone tracking. `has_dojo` still drives zone structure
+  (champion seats get DOJO + WAR_COUNCIL Lesser Zones). Removed the 8 tests asserting the buggy
+  behavior. Runtime-verified: champion → AT_OWN_HOLDINGS (SET_TAX_RATE + TRAIN both present);
+  monk at temple → AT_TEMPLE (PERFORM_RITUAL present).
 
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
