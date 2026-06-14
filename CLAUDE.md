@@ -4801,6 +4801,27 @@ Determinism was already perfect (FNV-1a seed) and unaffected by the fixes.
   regardless of seed (still deterministic, just seed-invariant). Adding layout
   variation would be new behavior; left for a future authorized pass.
 
+Extended the same audit to the 10 s56 mission template generators (slot-level
+invariant: every objective_slot and primary entry must be passable AND in the
+main connected component; population slots may be on walls for elevated/cover
+units). One real defect found and fixed:
+- **CAVE main + secondary entrance sealed off. FIXED.** Both entrances stamped
+  a ZONE_EXIT at a fixed map edge (main at height-2, secondary at row 1) with
+  no guaranteed connecting passage. The entry room centres near — not always
+  on — the bottom edge, so on many seeds rock sealed the only entrance from the
+  cave (a player would spawn stranded on the exit tile; the prior "ISO=0" floor
+  check missed it because it measured the floor network, not the entry marker
+  tile). Both entrances now carve a vertical access tunnel from the room centre
+  to the edge exit. Deterministic (no rng added).
+- **RAVINE rim entries — not a bug.** Its 6 isolated critical slots are exactly
+  the `is_rim` entry vectors on the cliff plateau (cliffs are impassable
+  WALL_STONE; rim→floor descent is blocked on s40 elevation). Verified every
+  objective_slot and the mouth/back entrances are reachable.
+- **OCCUPIED_VILLAGE / FOREST_APPROACH_CAMP population-on-wall — not a bug.**
+  Those are sentry-tower / elevated placements (population slots, not objective
+  or entry). Castle-siege, hilltop, stockade, ruined-structure, urban-hideout,
+  ship-boarding all clean (objectives + entries reachable).
+
 ### Known Code Issues (found and fixed 2026-06-06, ASCII map combat sweep)
 Post-implementation bug sweeps across the new ASCII map combat layer and the
 template generators it depends on. Faithful summary of the fixes that landed:
