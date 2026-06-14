@@ -4857,6 +4857,17 @@ tests in `tests/test_individual_combat.gd`.
   both gates reachable across 3 seeds (fixed two build-time seals: a trough on the
   stables door tile, and feed crates boxing the far corners). The s4.4/s57.36 GDD files
   remain unedited.
+- **s4.4 Genkan + Furo (manor completeness, owner-authorized 2026-06-14).** The audit
+  noted the GDD models neither a bath (furo) nor a formal entrance (genkan) as a zone or
+  cluster; the owner directed adding both as ASCII clusters (same latitude as the prior
+  furniture tranches — NOT a GDD edit). **Genkan** (lord_quarters west entrance): a
+  lowered stone doma just inside the door where footwear is removed, a getabako (footwear
+  shelf), and a bench — the raised wood corridor begins beyond it. **Furo** (guest_wing):
+  the south-east guest room is now a communal bath house — wood floor, a sunken soaking
+  tub (WATER_SHALLOW), a washing bench + rinse jar, and a kama (STOVE) heating the bath
+  water; the other five rooms remain bedrooms. Verified: both zones iso=0 with reachable
+  exits across 3 seeds; full all-zone regression = 0 unreachable exits. s4.4/s57.36 GDD
+  files remain unedited.
 
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
