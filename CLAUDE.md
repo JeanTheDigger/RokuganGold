@@ -4824,6 +4824,20 @@ tests in `tests/test_individual_combat.gd`.
   WELL are wired but lightly used (no generator places a WELL yet); zone-flag-matrix
   entries for PEASANT_DWELLING and the furnished zones still use the ALL_FALSE default;
   no hazard mechanic for stove/incense/brazier. The s4.4 GDD file remains unedited.
+- **s4.4 Furnishings tranche 3 (garrison / yard / homes / contemplation garden,
+  owner-authorized 2026-06-14).** Reuses the tranche-2 object tiles (no new tiles),
+  furnishing five more generators: **wall_tower** (inner-wall weapon racks were
+  wood-wall segments → WEAPON_STAND; garrison futons, supply crates, braziers inside
+  the connected tower ring), **outer_courtyard** (first WELL placement as a yard well,
+  east-side muster weapon racks, supply crates, clan banners — clear of the N–S gate
+  line), **residential_quarter** (each commoner home gets an irori hearth + sleeping
+  mat + water jar in the corners, clear of the door column), **poor_quarter** (each
+  shack gets a corner hearth + water jar), **tsuboniwa** (tsukubai stone basin via WELL,
+  a stone lantern, two veranda meditation benches placed after the veranda floor is laid
+  so they survive the overwrite). Verified: parses clean; all five render correctly and
+  stay fully connected across 3 seeds (wall_tower's iso=4 is the pre-existing corner
+  battlement crenellations on the outer wall, not the furnished interior). The WELL tile
+  now has a producer (courtyard + tsuboniwa). The s4.4 GDD file remains unedited.
 
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
