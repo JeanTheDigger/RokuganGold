@@ -60,6 +60,17 @@ const EVENT_LOG_RETENTION_DAYS: int = 90
 # (district economics). 0 = no incidents this season.
 @export var district_crime_count: int = 0
 
+# Consecutive IC seasons this district's Stability has stayed below the revolt
+# crisis floor (s2.3.23 district unrest → s11.11 PEASANT_REVOLT). Reset to 0 the
+# moment Stability recovers above the floor, or when a revolt spawns. Owner-locked
+# 2026-06-15: 3 consecutive seasons below 25 breeds a revolt.
+@export var district_unrest_seasons: int = 0
+# insurgency_id of this district's currently-active PEASANT_REVOLT, or -1. Used to
+# dedup (one active district revolt at a time); cleared once that revolt is
+# suppressed (no longer present/strong in active_insurgencies).
+@export var district_revolt_insurgency_id: int = -1
+
+
 # -- ASCII map (optional) ----------------------------------------------------
 
 # True for walkable outdoor spaces (streets, plazas). False for pure MUD containers.

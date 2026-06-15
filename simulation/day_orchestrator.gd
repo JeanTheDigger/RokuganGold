@@ -1376,6 +1376,7 @@ static func advance_day(
 			navigation_zones, characters_by_id, settlements,
 			crime_records, season_meta, ic_day, dice_engine,
 			active_topics, next_topic_id,
+			insurgencies, next_insurgency_id, current_season,
 		)
 		_apply_tyrant_stability_penalty(
 			world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON),
@@ -10620,6 +10621,12 @@ const _DISTRICT_BASELINE_LOW: float = 85.0
 const _DISTRICT_STABILITY_DRIFT: float = 0.25
 const _DISTRICT_CRIME_STABILITY_PENALTY: float = 3.0
 const _DISTRICT_GOVERNANCE_RECOVERY_PER_RANK: float = 3.0
+# District unrest → revolt (s2.3.23 → s11.11). Owner-locked 2026-06-15: a district
+# in deep crisis (Stability below the floor) for this many consecutive seasons
+# breeds a PEASANT_REVOLT. The floor (25) is the Tribunal's near-automatic-dismissal
+# level, so a revolt is a DEEPER failure than ordinary Governor turnover (<50).
+const _DISTRICT_REVOLT_FLOOR: float = 25.0
+const _DISTRICT_REVOLT_SEASONS: int = 3
 
 
 # Stability baseline a district drifts toward, by chaos tier.
@@ -10651,6 +10658,23 @@ static func _roll_ambient_district_crime(sentaku: String, dice: DiceEngine) -> i
 	return dice.rand_int_range(0, 1)
 
 
+# True when the district's recorded revolt is still an active insurgency (present
+# in the array with strength > 0). A suppressed revolt is removed (or drained to 0),
+# so this returns false and a fresh revolt may eventually spawn. Clears the stale
+# id as a side effect when the revolt is gone.
+static func _district_revolt_active(nz: NavigationZoneData, insurgencies: Array) -> bool:
+	if nz.district_revolt_insurgency_id < 0:
+		return false
+	for i: Variant in insurgencies:
+		var ins: InsurgencyData = i as InsurgencyData
+		if ins != null and ins.insurgency_id == nz.district_revolt_insurgency_id:
+			if ins.strength > 0:
+				return true
+			break
+	nz.district_revolt_insurgency_id = -1
+	return false
+
+
 static func _process_district_stability_crime(
 	navigation_zones: Array,
 	characters_by_id: Dictionary,
@@ -10661,13 +10685,18 @@ static func _process_district_stability_crime(
 	dice: DiceEngine,
 	active_topics: Array,
 	next_topic_id: Array,
+	insurgencies: Array,
+	next_insurgency_id: Array,
+	current_season: int,
 ) -> void:
 	if navigation_zones.is_empty():
 		return
 	# Capital crimes are located by physical_location == str(settlement_id).
 	var capital_loc: String = ""
+	var capital: SettlementData = null
 	for s: SettlementData in settlements:
 		if s.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			capital = s
 			capital_loc = str(s.settlement_id)
 			break
 
@@ -10754,6 +10783,38 @@ static func _process_district_stability_crime(
 					sentaku, gov.character_name
 				]
 				active_topics.append(topic)
+
+		# District unrest → s11.11 PEASANT_REVOLT. A district whose Stability stays
+		# in deep crisis (below the revolt floor) for DISTRICT_REVOLT_SEASONS
+		# consecutive seasons breeds an open peasant revolt (owner-locked 2026-06-15:
+		# 3 seasons below 25). The insurgency system is settlement/province-scoped
+		# (no zone granularity), so the revolt registers in the capital settlement /
+		# Imperial Lands province, tagged back to the district for dedup. Applies to
+		# governed AND vacant districts (a leaderless district collapses too).
+		if nz.district_stability < _DISTRICT_REVOLT_FLOOR:
+			nz.district_unrest_seasons += 1
+		else:
+			nz.district_unrest_seasons = 0
+		if nz.district_unrest_seasons >= _DISTRICT_REVOLT_SEASONS \
+				and capital != null \
+				and not _district_revolt_active(nz, insurgencies):
+			var revolt := InsurgencyData.new()
+			revolt.insurgency_id = next_insurgency_id[0]
+			next_insurgency_id[0] += 1
+			revolt.insurgency_type = Enums.InsurgencyType.PEASANT_REVOLT
+			revolt.province_id = capital.province_id
+			revolt.settlement_id = capital.settlement_id
+			revolt.strength = 1
+			revolt.concealment = InsurgencySystem.BASE_CONCEALMENT.get(
+				Enums.InsurgencyType.PEASANT_REVOLT, 3)
+			revolt.detected = false
+			revolt.seasons_active = 0
+			revolt.season_spawned = current_season
+			insurgencies.append(revolt)
+			nz.district_revolt_insurgency_id = revolt.insurgency_id
+			# Reset the buildup; another revolt requires a fresh 3-season crisis after
+			# this one is suppressed (dedup blocks a second while it is active).
+			nz.district_unrest_seasons = 0
 
 
 # s2.3.23 District Economics. Each Otosan Uchi district generates koku from its own
