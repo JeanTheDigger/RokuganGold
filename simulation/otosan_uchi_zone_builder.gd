@@ -228,7 +228,7 @@ const LANDMARKS: Dictionary = {
 	15: [  # Forbidden City
 		# Imperial Palace — 10+ interior sub-zones (s2.3.23 / s57.36). The grandest
 		# structure in the Empire carries the full castle-interior set.
-		{"n": "Imperial Palace — Throne Room", "s": _ZS.OHIROMA},
+		{"n": "Imperial Palace — Throne Room", "s": _ZS.THRONE_ROOM},
 		{"n": "Imperial Palace — Imperial Court Chambers", "s": _ZS.AUDIENCE_CHAMBER},
 		{"n": "Imperial Palace — Banquet Hall", "s": _ZS.ENKAI_HALL},
 		{"n": "Imperial Palace — Tea Pavilion", "s": _ZS.CHASHITSU},

@@ -317,6 +317,18 @@ const ZONE_FLAGS: Dictionary = {
 		"garden_eligible": false,
 		"shrine_eligible": false,
 	},
+	# Imperial throne room (s2.3.23) — the grandest audience/court hall; mirrors
+	# OHIROMA's court/art affordances (the landmark was repointed off OHIROMA).
+	Enums.ZoneSubtype.THRONE_ROOM: {
+		"performance_permitted": true,
+		"wall_art_slot": true,
+		"displayed_art_slot": true,
+		"fusuma_slot": true,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
 }
 
 

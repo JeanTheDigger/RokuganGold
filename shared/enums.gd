@@ -270,6 +270,8 @@ enum ZoneSubtype {
 	PEASANT_DWELLING,
 	# Subterranean (s2.3.23 Otosan Uchi named landmark)
 	UNDERGROUND_LAKE,
+	# Imperial throne room (s2.3.23 / s57.36 — the Chrysanthemum Throne hall)
+	THRONE_ROOM,
 }
 
 # Three-tier zone hierarchy — Greater Zone is the top container.

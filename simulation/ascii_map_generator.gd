@@ -89,6 +89,8 @@ static func generate(
 			_gen_peasant_dwelling(map, rng)
 		Enums.ZoneSubtype.UNDERGROUND_LAKE:
 			_gen_underground_lake(map, rng)
+		Enums.ZoneSubtype.THRONE_ROOM:
+			_gen_throne_room(map, rng)
 		_:
 			_gen_default(map, rng)
 
@@ -729,6 +731,70 @@ static func _gen_underground_lake(map: AsciiMapData, rng: RandomNumberGenerator)
 	map.exits = [
 		{x = MID, y = 0, direction = "north", target_zone_id = ""},
 	]
+
+
+# THRONE_ROOM (s2.3.23 / s57.36): the Imperial Palace's grandest hall, seat of
+# the Chrysanthemum Throne. A raised two-step dais at the head bears the throne
+# (no one may sit higher than the Son of Heaven), flanked by Imperial banners and
+# Seppun guards. The Road of the Most High enters as a central processional aisle
+# kept clear from the south doors to the throne. The assembled court kneels in
+# ranked cushion rows flanking the aisle — front rows nearest the throne are the
+# highest precedence. A colonnade lines the hall; a formal genkan frames the
+# south entrance. Deterministic from the caller's seeded rng. Grander than a
+# daimyo's OHIROMA: deeper dais, double guard, full ranked court.
+static func _gen_throne_room(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_WOOD)
+	_draw_wood_border(map, 0, 0, S - 1, S - 1)
+
+	# Formal tatami hall.
+	_fill_rect(map, 2, 2, S - 3, S - 3, Enums.TileType.FLOOR_TATAMI)
+
+	# Two-step dais at the north — wide lower step (rows 2–6) and a raised throne
+	# step (rows 2–4) — so the Chrysanthemum Throne sits above all.
+	_fill_rect(map, 3, 2, S - 4, 6, Enums.TileType.FLOOR_STONE)
+	_fill_rect(map, 6, 2, S - 7, 4, Enums.TileType.FLOOR_STONE)
+	# The Chrysanthemum Throne, centred and elevated.
+	map.set_tile(MID, 3, Enums.TileType.FURNITURE_DAIS)
+	# Imperial banners on the wall behind the throne.
+	map.set_tile(MID - 3, 2, Enums.TileType.FURNITURE_BANNER)
+	map.set_tile(MID + 3, 2, Enums.TileType.FURNITURE_BANNER)
+	map.set_tile(8, 2, Enums.TileType.FURNITURE_BANNER)
+	map.set_tile(S - 9, 2, Enums.TileType.FURNITURE_BANNER)
+	# Seppun guards flanking the throne (weapon stands).
+	map.set_tile(MID - 2, 3, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(MID + 2, 3, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(7, 5, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(S - 8, 5, Enums.TileType.FURNITURE_WEAPON_STAND)
+	# Braziers lighting the dais front.
+	map.set_tile(6, 8, Enums.TileType.FURNITURE_BRAZIER)
+	map.set_tile(S - 7, 8, Enums.TileType.FURNITURE_BRAZIER)
+
+	# Ranked court: cushion rows flanking the central processional aisle. The aisle
+	# (columns MID-1..MID+1) is kept clear from the dais front to the south doors.
+	# Front rows (nearest the throne) seat the highest precedence.
+	for ry in [10, 13, 16, 19, 22]:
+		for cx in [MID - 5, MID - 4, MID - 3, MID + 3, MID + 4, MID + 5]:
+			if map.get_tile(cx, ry) == Enums.TileType.FLOOR_TATAMI:
+				map.set_tile(cx, ry, Enums.TileType.FURNITURE_CUSHION)
+
+	# Colonnade — wood pillars down each side, clear of the cushion blocks and aisle.
+	for y in range(9, S - 4, 3):
+		map.set_tile(2, y, Enums.TileType.WALL_WOOD)
+		map.set_tile(S - 3, y, Enums.TileType.WALL_WOOD)
+
+	# Genkan: lowered stone vestibule inside the south doors, framed by getabako
+	# (footwear shelves) and waiting benches — the formal Imperial entry.
+	_fill_rect(map, MID - 1, S - 3, MID + 1, S - 2, Enums.TileType.FLOOR_STONE)
+	map.set_tile(MID - 2, S - 2, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(MID + 2, S - 2, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(MID - 2, S - 3, Enums.TileType.FURNITURE_BENCH)
+	map.set_tile(MID + 2, S - 3, Enums.TileType.FURNITURE_BENCH)
+
+	# Grand south entrance doors + the single zone exit (the Road of the Most High).
+	map.set_tile(MID - 1, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(MID + 1, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
 
 
 # OHIROMA (Great Hall): large formal hall with dais, tatami floor, wood-framed
