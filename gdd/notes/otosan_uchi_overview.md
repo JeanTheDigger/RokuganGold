@@ -5,6 +5,8 @@
 > table, PU, Governor tiers, clan preferences, handcrafted landmarks) and the
 > `OtosanUchiZoneBuilder.DISTRICTS` table. It introduces no new design content.
 > The authoritative source is always /gdd/s02.3 §2.3.23.
+> Per-district ASCII map styles are rendered in
+> [`otosan_uchi_district_maps.md`](otosan_uchi_district_maps.md).
 
 Increasing indentation = deeper access tier (Toshisoto → Ekohikei → Forbidden City).
 
