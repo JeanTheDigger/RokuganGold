@@ -329,6 +329,39 @@ const ZONE_FLAGS: Dictionary = {
 		"garden_eligible": false,
 		"shrine_eligible": false,
 	},
+	# Subterranean tunnel maze (s2.3.23) — no noble-art/worship/court affordances.
+	Enums.ZoneSubtype.LABYRINTH: {
+		"performance_permitted": false,
+		"wall_art_slot": false,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
+	# Earthquake crevice (s2.3.23) — no noble-art/worship/court affordances.
+	Enums.ZoneSubtype.ONI_WARAI: {
+		"performance_permitted": false,
+		"wall_art_slot": false,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
+	# Collapsed/haunted ruin (s2.3.23) — no noble-art/worship/court affordances.
+	Enums.ZoneSubtype.RUINED_STRUCTURE: {
+		"performance_permitted": false,
+		"wall_art_slot": false,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
 }
 
 

@@ -102,7 +102,7 @@ const LANDMARKS: Dictionary = {
 	0: [  # Tsai — Brutal Flame
 		{"n": "Zankoku Hon'O (lighthouse)", "s": _ZS.WALL_TOWER},
 		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
-		{"n": "Bayushi's Mask (okiya)", "s": _ZS.ENKAI_HALL},
+		{"n": "Bayushi's Mask (okiya)", "s": _ZS.PLEASURE_QUARTER},
 		{"n": "Leaves of Shosuro (tea house)", "s": _ZS.CHASHITSU},
 		{"n": "The Tear (theater)", "s": _ZS.ENKAI_HALL},
 		{"n": "Shrine of Hofukushu", "s": _ZS.CASTLE_SHRINE},
@@ -110,13 +110,13 @@ const LANDMARKS: Dictionary = {
 		{"n": "Dragon's Mists (hospital)", "s": _ZS.GUEST_WING},
 		{"n": "Life's Waterfall (sake house)", "s": _ZS.ENKAI_HALL},
 		{"n": "Light as the Wind (kite shop)", "s": _ZS.MARKET_STREET},
-		{"n": "Abandoned waterway houses", "s": _ZS.POOR_QUARTER},
+		{"n": "Abandoned waterway houses", "s": _ZS.RUINED_STRUCTURE},
 	],
 	1: [  # Hidari — Emperor's Road
 		{"n": "Road of the Most High", "s": _ZS.ROAD},
 		{"n": "Jade torii arches", "s": _ZS.CASTLE_SHRINE},
 		{"n": "Emerald Coin (market plaza)", "s": _ZS.MARKET_STREET},
-		{"n": "Doji's Children (okiya)", "s": _ZS.ENKAI_HALL},
+		{"n": "Doji's Children (okiya)", "s": _ZS.PLEASURE_QUARTER},
 		{"n": "Inn of the Last Rite", "s": _ZS.GUEST_WING},
 		{"n": "Light from Above (dining house)", "s": _ZS.ENKAI_HALL},
 		{"n": "Soshiuchi / House of Loss", "s": _ZS.LORD_QUARTERS},
@@ -125,7 +125,7 @@ const LANDMARKS: Dictionary = {
 	],
 	2: [  # Juramashi
 		{"n": "Craftsman's Quarter", "s": _ZS.MARKET_STREET},
-		{"n": "Bright Wind (geisha house)", "s": _ZS.ENKAI_HALL},
+		{"n": "Bright Wind (geisha house)", "s": _ZS.PLEASURE_QUARTER},
 		{"n": "Natsu-Togumara Shrine", "s": _ZS.CASTLE_SHRINE},
 		{"n": "Juramashi District Meeting Hall", "s": _ZS.OHIROMA},
 		{"n": "Maratu's Origata (gift shop)", "s": _ZS.MARKET_STREET},
@@ -137,7 +137,7 @@ const LANDMARKS: Dictionary = {
 		{"n": "Temple of Daikoku", "s": _ZS.TEMPLE_GROUNDS},
 		{"n": "Temple of Ebisu", "s": _ZS.TEMPLE_GROUNDS},
 		{"n": "Temple of Benten", "s": _ZS.TEMPLE_GROUNDS},
-		{"n": "Simple Pleasures (okiya)", "s": _ZS.ENKAI_HALL},
+		{"n": "Simple Pleasures (okiya)", "s": _ZS.PLEASURE_QUARTER},
 		{"n": "Seppun's Path", "s": _ZS.TSUBONIWA},
 		{"n": "Meditation gardens", "s": _ZS.TSUBONIWA},
 		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
@@ -167,12 +167,12 @@ const LANDMARKS: Dictionary = {
 	7: [  # Toyotomi — Prison/Moon
 		{"n": "Kyuden Kokai (prison)", "s": _ZS.GOVERNMENT_QUARTER},
 		{"n": "Magistrate station", "s": _ZS.GOVERNMENT_QUARTER},
-		{"n": "Jumping Frog (okiya)", "s": _ZS.ENKAI_HALL},
-		{"n": "The Moon (gambling quarter)", "s": _ZS.ENKAI_HALL},
+		{"n": "Jumping Frog (okiya)", "s": _ZS.PLEASURE_QUARTER},
+		{"n": "The Moon (gambling quarter)", "s": _ZS.PLEASURE_QUARTER},
 		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
 	],
 	8: [  # Meiyoko — Tenari's Ruin
-		{"n": "Tenari's ruins", "s": _ZS.POOR_QUARTER},
+		{"n": "Tenari's ruins", "s": _ZS.RUINED_STRUCTURE},
 		{"n": "Hana Garden", "s": _ZS.TSUBONIWA},
 		{"n": "Gokenin quarters", "s": _ZS.RESIDENTIAL_QUARTER},
 		{"n": "Criminal refuge areas", "s": _ZS.POOR_QUARTER},
@@ -182,7 +182,7 @@ const LANDMARKS: Dictionary = {
 		{"n": "Morning Star Wharves", "s": _ZS.DOCKS_WATERFRONT},
 		{"n": "Takeo Library", "s": _ZS.AUDIENCE_CHAMBER},
 		{"n": "Imperial Guard kaisha (barracks)", "s": _ZS.WAR_COUNCIL_ROOM},
-		{"n": "Pleasure houses", "s": _ZS.ENKAI_HALL},
+		{"n": "Pleasure houses", "s": _ZS.PLEASURE_QUARTER},
 		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
 	],
 	10: [  # Kosuga — South Dock
@@ -212,7 +212,7 @@ const LANDMARKS: Dictionary = {
 	],
 	13: [  # Karada — Ekohikei
 		{"n": "Crab Embassy", "s": _ZS.AUDIENCE_CHAMBER},
-		{"n": "Oni Warai (the Oni's Smile)", "s": _ZS.MOUNTAIN_PASS},
+		{"n": "Oni Warai (the Oni's Smile)", "s": _ZS.ONI_WARAI},
 		{"n": "Yasuki Trading Grounds", "s": _ZS.MARKET_STREET},
 		{"n": "Lower-caste residential quarters", "s": _ZS.POOR_QUARTER},
 		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
@@ -256,7 +256,7 @@ const LANDMARKS: Dictionary = {
 		{"n": "Imperial Gardens", "s": _ZS.TSUBONIWA},
 		{"n": "Seppun Guard barracks", "s": _ZS.WAR_COUNCIL_ROOM},
 		{"n": "Emperor's Chosen quarters", "s": _ZS.LORD_QUARTERS},
-		{"n": "Emperor's Labyrinth (tunnels)", "s": _ZS.MOUNTAIN_PASS},
+		{"n": "Emperor's Labyrinth (tunnels)", "s": _ZS.LABYRINTH},
 	],
 }
 

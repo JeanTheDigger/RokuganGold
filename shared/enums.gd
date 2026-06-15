@@ -272,6 +272,12 @@ enum ZoneSubtype {
 	UNDERGROUND_LAKE,
 	# Imperial throne room (s2.3.23 / s57.36 — the Chrysanthemum Throne hall)
 	THRONE_ROOM,
+	# Subterranean tunnel maze (s2.3.23 — the Emperor's Labyrinth)
+	LABYRINTH,
+	# Earthquake crevice / descending chasm (s2.3.23 — the Oni Warai)
+	ONI_WARAI,
+	# Collapsed / haunted building (s2.3.23 ruins; mirrors the s56 ruined template)
+	RUINED_STRUCTURE,
 }
 
 # Three-tier zone hierarchy — Greater Zone is the top container.

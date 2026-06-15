@@ -91,6 +91,12 @@ static func generate(
 			_gen_underground_lake(map, rng)
 		Enums.ZoneSubtype.THRONE_ROOM:
 			_gen_throne_room(map, rng)
+		Enums.ZoneSubtype.LABYRINTH:
+			_gen_labyrinth(map, rng)
+		Enums.ZoneSubtype.ONI_WARAI:
+			_gen_oni_warai(map, rng)
+		Enums.ZoneSubtype.RUINED_STRUCTURE:
+			_gen_ruined_structure(map, rng)
 		_:
 			_gen_default(map, rng)
 
@@ -731,6 +737,128 @@ static func _gen_underground_lake(map: AsciiMapData, rng: RandomNumberGenerator)
 	map.exits = [
 		{x = MID, y = 0, direction = "north", target_zone_id = ""},
 	]
+
+
+# LABYRINTH (s2.3.23): the Emperor's Labyrinth — a maze of tunnels beneath the
+# Forbidden City. Ancient Scorpion wards leave anyone without Hantei blood
+# "hopelessly lost," so the layout is a true perfect maze (a randomized
+# depth-first spanning tree over a cell grid: full connectivity, many dead ends).
+# Two exits: the hidden palace entrance (north) and the escape route to the shore
+# of the Bay of the Golden Sun (south). Deterministic from the caller's seeded rng.
+static func _gen_labyrinth(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.WALL_STONE)
+
+	# Maze cells sit on odd tile coordinates; walls between them on even ones.
+	var cols: int = (S - 1) / 2  # 15 cells per axis
+	var rows: int = (S - 1) / 2
+	var visited: Dictionary = {}
+	var stack: Array[Vector2i] = []
+	var start: Vector2i = Vector2i(0, 0)
+	map.set_tile(1, 1, Enums.TileType.FLOOR_STONE)
+	visited["0_0"] = true
+	stack.append(start)
+	var dirs: Array[Vector2i] = [
+		Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)
+	]
+	while not stack.is_empty():
+		var c: Vector2i = stack[stack.size() - 1]
+		var unvisited: Array[Vector2i] = []
+		for d in dirs:
+			var ni: int = c.x + d.x
+			var nj: int = c.y + d.y
+			if ni >= 0 and ni < cols and nj >= 0 and nj < rows \
+					and not visited.has(str(ni) + "_" + str(nj)):
+				unvisited.append(Vector2i(ni, nj))
+		if unvisited.is_empty():
+			stack.pop_back()
+			continue
+		var n: Vector2i = unvisited[rng.randi() % unvisited.size()]
+		# Carve the wall between c and n, and the n cell itself.
+		var cx: int = 2 * c.x + 1
+		var cy: int = 2 * c.y + 1
+		var nx: int = 2 * n.x + 1
+		var ny: int = 2 * n.y + 1
+		map.set_tile((cx + nx) / 2, (cy + ny) / 2, Enums.TileType.FLOOR_STONE)
+		map.set_tile(nx, ny, Enums.TileType.FLOOR_STONE)
+		visited[str(n.x) + "_" + str(n.y)] = true
+		stack.append(n)
+
+	# Two exits, both opening onto carved cells (the maze is fully connected).
+	map.set_tile(MID, 0, Enums.TileType.ZONE_EXIT)          # hidden palace entrance
+	map.set_tile(MID, 1, Enums.TileType.FLOOR_STONE)
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)      # escape to the Bay
+	map.set_tile(MID, S - 2, Enums.TileType.FLOOR_STONE)
+	map.exits = [
+		{x = MID, y = 0, direction = "north", target_zone_id = ""},
+		{x = MID, y = S - 1, direction = "south", target_zone_id = ""},
+	]
+
+
+# ONI_WARAI (s2.3.23): the Oni's Smile — a massive earthquake crevice. Walkable
+# rock ledges flank a bottomless VOID chasm (the deadly depths: explorers return
+# blind, mad, or not at all). A treacherous rubble rock-bridge crosses near the
+# middle. One surface exit (north); the chasm is a dead-end abyss, not a through
+# route. Deterministic from the caller's seeded rng.
+static func _gen_oni_warai(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.WALL_STONE)
+
+	# The chasm: a bottomless gash down the centre (impassable VOID).
+	_fill_rect(map, 7, 2, S - 8, S - 3, Enums.TileType.VOID)
+	# Walkable rock ledges on each side of the gash.
+	_fill_rect(map, 3, 2, 6, S - 3, Enums.TileType.FLOOR_STONE)
+	_fill_rect(map, S - 7, 2, S - 4, S - 3, Enums.TileType.FLOOR_STONE)
+	# Jagged broken rock along the ledge edges.
+	for y in range(2, S - 2):
+		if rng.randi() % 3 == 0:
+			map.set_tile(6, y, Enums.TileType.RUBBLE)
+		if rng.randi() % 3 == 0:
+			map.set_tile(S - 7, y, Enums.TileType.RUBBLE)
+	# A treacherous rubble bridge crossing the chasm near the middle.
+	_fill_rect(map, 7, MID, S - 8, MID, Enums.TileType.RUBBLE)
+
+	# Single surface entrance at the top of the left ledge.
+	map.set_tile(4, 0, Enums.TileType.ZONE_EXIT)
+	map.set_tile(4, 1, Enums.TileType.FLOOR_STONE)
+	map.exits = [{x = 4, y = 0, direction = "north", target_zone_id = ""}]
+
+
+# RUINED_STRUCTURE (s2.3.23): a collapsed, haunted building (e.g. Tenari's ruins,
+# an earthquake-destroyed estate). An original floor plan with ~35% of its walls
+# collapsed into rubble and debris strewn across the floors; a few rooms remain
+# intact. A cleared spine guarantees the entrance reaches the interior. Mirrors
+# the s56 ruined-structure approach on the zone tile grid. Deterministic.
+static func _gen_ruined_structure(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_DIRT)  # overgrown grounds
+
+	# Original building shell + interior cross-walls (four rooms).
+	var x1: int = 4
+	var y1: int = 4
+	var x2: int = S - 5
+	var y2: int = S - 5
+	_fill_rect(map, x1 + 1, y1 + 1, x2 - 1, y2 - 1, Enums.TileType.FLOOR_WOOD)
+	_draw_stone_border(map, x1, y1, x2, y2)
+	for y in range(y1, y2 + 1):
+		map.set_tile(MID, y, Enums.TileType.WALL_STONE)
+	for x in range(x1, x2 + 1):
+		map.set_tile(x, MID, Enums.TileType.WALL_STONE)
+
+	# Collapse: ~35% of wall tiles fall to rubble; ~12% of floors gather debris.
+	for y in range(y1, y2 + 1):
+		for x in range(x1, x2 + 1):
+			var t: int = map.get_tile(x, y)
+			if t == Enums.TileType.WALL_STONE and rng.randi() % 100 < 35:
+				map.set_tile(x, y, Enums.TileType.RUBBLE)
+			elif t == Enums.TileType.FLOOR_WOOD and rng.randi() % 100 < 12:
+				map.set_tile(x, y, Enums.TileType.RUBBLE)
+
+	# A guaranteed clear path from the south entrance through the building.
+	for y in range(MID, S - 1):
+		map.set_tile(MID, y, Enums.TileType.FLOOR_WOOD)
+	map.set_tile(MID, y2, Enums.TileType.FLOOR_WOOD)  # gap in the south wall
+
+	# South entrance + exit.
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
 
 
 # THRONE_ROOM (s2.3.23 / s57.36): the Imperial Palace's grandest hall, seat of
