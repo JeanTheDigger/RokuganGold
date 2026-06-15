@@ -21170,10 +21170,24 @@ static func _populate_vacancy_intelligence(
 
 	# Otosan Uchi Governor vacancies (s2.3.23): every governed district zone whose
 	# seat is empty (zone_lord_id < 0) is a vacancy on the Emperor. The Emperor's
-	# FILL_VACANCY decomposition appoints from his met_characters pool, weighted by
-	# the district's clan preference and Status appropriateness.
+	# FILL_VACANCY decomposition appoints from the candidate pool, weighted by the
+	# district's clan preference and Status appropriateness.
+	#
+	# Archetype routing (s2.3.23): a Cunning or Warlike Emperor delegates Governor
+	# vetting to the Imperial Advisor — the candidate is selected from the Advisor's
+	# met_characters pool, scored on disposition toward the Advisor, with base clan
+	# weight (no archetype modifier). Ambitious samurai must court the Advisor too.
+	# If the Advisor seat is vacant, even a Cunning/Warlike Emperor vets personally.
 	if emperor_id >= 0:
 		var emperor_char: L5RCharacterData = characters_by_id.get(emperor_id) as L5RCharacterData
+		var gov_authority: L5RCharacterData = emperor_char
+		var gov_base_weights: bool = false
+		if emperor_archetype == StrategicReview.EmperorArchetype.CUNNING \
+				or emperor_archetype == StrategicReview.EmperorArchetype.WARLIKE:
+			var advisor: L5RCharacterData = _find_imperial_advisor(characters)
+			if advisor != null:
+				gov_authority = advisor
+				gov_base_weights = true
 		for z: Variant in navigation_zones:
 			var gz: NavigationZoneData = z as NavigationZoneData
 			if gz == null or not gz.has_governor:
@@ -21181,7 +21195,7 @@ static func _populate_vacancy_intelligence(
 			if gz.zone_lord_id >= 0:
 				continue  # seat already filled
 			var gov_cand: int = _find_governor_candidate(
-				emperor_char, gz, characters, emperor_archetype,
+				gov_authority, gz, characters, emperor_archetype, gov_base_weights,
 			)
 			if not lord_vacancies.has(emperor_id):
 				lord_vacancies[emperor_id] = []
@@ -21320,39 +21334,57 @@ const GOV_STATUS_HIGH: float = 5.0
 const GOV_SKILL_NORM: float = 14.0
 const GOV_STATUS_NORM: float = 3.0
 
+# The living Imperial Advisor (Emperor's Chosen, s11.5), or null. Used for
+# Cunning/Warlike Governor-appointment delegation (s2.3.23 Archetype Routing).
+static func _find_imperial_advisor(characters: Array) -> L5RCharacterData:
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.role_position == RoleRegistry.IMPERIAL_ADVISOR:
+			return c
+	return null
+
+
 static func _find_governor_candidate(
-	emperor: L5RCharacterData,
+	authority: L5RCharacterData,
 	zone: NavigationZoneData,
 	characters: Array,
 	archetype: int,
+	use_base_weights: bool = false,
 ) -> int:
-	if emperor == null or emperor.met_characters.is_empty():
+	if authority == null or authority.met_characters.is_empty():
 		return -1
-	# Archetype-modified candidate-evaluation weights (s2.3.23, GDD-specified).
-	var w_skill_map: Dictionary = {
-		StrategicReview.EmperorArchetype.BENEVOLENT: 15.0,
-		StrategicReview.EmperorArchetype.IRON: 25.0,
-		StrategicReview.EmperorArchetype.CUNNING: 15.0,
-		StrategicReview.EmperorArchetype.WARLIKE: 15.0,
-		StrategicReview.EmperorArchetype.TYRANT: 5.0,
-	}
-	var w_disp_map: Dictionary = {
-		StrategicReview.EmperorArchetype.BENEVOLENT: 15.0,
-		StrategicReview.EmperorArchetype.IRON: 10.0,
-		StrategicReview.EmperorArchetype.CUNNING: 15.0,
-		StrategicReview.EmperorArchetype.WARLIKE: 15.0,
-		StrategicReview.EmperorArchetype.TYRANT: 30.0,
-	}
-	var w_clan_map: Dictionary = {
-		StrategicReview.EmperorArchetype.BENEVOLENT: 20.0,
-		StrategicReview.EmperorArchetype.IRON: 20.0,
-		StrategicReview.EmperorArchetype.CUNNING: 10.0,
-		StrategicReview.EmperorArchetype.WARLIKE: 20.0,
-		StrategicReview.EmperorArchetype.TYRANT: 0.0,
-	}
-	var w_skill: float = w_skill_map.get(archetype, 15.0)
-	var w_disp: float = w_disp_map.get(archetype, 15.0)
-	var w_clan: float = w_clan_map.get(archetype, 20.0)
+	# Candidate-evaluation weights (s2.3.23, GDD-specified). When the Emperor
+	# delegates to the Imperial Advisor (use_base_weights), the Advisor evaluates
+	# with the base weights — no Emperor archetype modifier applies (s2.3.23 note).
+	var w_skill: float = 15.0
+	var w_disp: float = 15.0
+	var w_clan: float = 20.0
+	if not use_base_weights:
+		var w_skill_map: Dictionary = {
+			StrategicReview.EmperorArchetype.BENEVOLENT: 15.0,
+			StrategicReview.EmperorArchetype.IRON: 25.0,
+			StrategicReview.EmperorArchetype.CUNNING: 15.0,
+			StrategicReview.EmperorArchetype.WARLIKE: 15.0,
+			StrategicReview.EmperorArchetype.TYRANT: 5.0,
+		}
+		var w_disp_map: Dictionary = {
+			StrategicReview.EmperorArchetype.BENEVOLENT: 15.0,
+			StrategicReview.EmperorArchetype.IRON: 10.0,
+			StrategicReview.EmperorArchetype.CUNNING: 15.0,
+			StrategicReview.EmperorArchetype.WARLIKE: 15.0,
+			StrategicReview.EmperorArchetype.TYRANT: 30.0,
+		}
+		var w_clan_map: Dictionary = {
+			StrategicReview.EmperorArchetype.BENEVOLENT: 20.0,
+			StrategicReview.EmperorArchetype.IRON: 20.0,
+			StrategicReview.EmperorArchetype.CUNNING: 10.0,
+			StrategicReview.EmperorArchetype.WARLIKE: 20.0,
+			StrategicReview.EmperorArchetype.TYRANT: 0.0,
+		}
+		w_skill = w_skill_map.get(archetype, 15.0)
+		w_disp = w_disp_map.get(archetype, 15.0)
+		w_clan = w_clan_map.get(archetype, 20.0)
 	var prefs: Array = zone.clan_preference
 
 	var best_id: int = -1
@@ -21360,14 +21392,15 @@ static func _find_governor_candidate(
 	for c: L5RCharacterData in characters:
 		if CharacterStats.is_dead(c):
 			continue
-		if c.character_id == emperor.character_id:
+		if c.character_id == authority.character_id:
 			continue
 		if c.is_pc:
 			continue
-		# Available: not already holding a position, and known to the Emperor.
+		# Available: not already holding a position, and known to the appointing
+		# authority (the Emperor, or the Advisor when delegation applies).
 		if not c.role_position.is_empty():
 			continue
-		if not emperor.met_characters.has(c.character_id):
+		if not authority.met_characters.has(c.character_id):
 			continue
 
 		# Skill relevance (Courtier primary; Commerce / Investigation / Lore: Law /
@@ -21381,8 +21414,8 @@ static func _find_governor_candidate(
 		)
 		var skill_score: float = clampf(skill_raw / GOV_SKILL_NORM, 0.0, 1.0) * w_skill
 
-		# Disposition toward the appointing Emperor.
-		var disp: float = float(c.disposition_values.get(emperor.character_id, 0))
+		# Disposition toward the appointing authority (Emperor, or delegated Advisor).
+		var disp: float = float(c.disposition_values.get(authority.character_id, 0))
 		var disp_score: float = clampf((disp + 50.0) / 100.0, 0.0, 1.0) * w_disp
 
 		# District clan preference (a convention, not a hard gate).
