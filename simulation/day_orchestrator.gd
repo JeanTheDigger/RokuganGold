@@ -1375,6 +1375,7 @@ static func advance_day(
 		_process_district_stability_crime(
 			navigation_zones, characters_by_id, settlements,
 			crime_records, season_meta, ic_day, dice_engine,
+			active_topics, next_topic_id,
 		)
 		_apply_tyrant_stability_penalty(
 			world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON),
@@ -10658,6 +10659,8 @@ static func _process_district_stability_crime(
 	season_meta: Dictionary,
 	ic_day: int,
 	dice: DiceEngine,
+	active_topics: Array,
+	next_topic_id: Array,
 ) -> void:
 	if navigation_zones.is_empty():
 		return
@@ -10716,13 +10719,41 @@ static func _process_district_stability_crime(
 		var stab: float = nz.district_stability
 		stab += (baseline - stab) * _DISTRICT_STABILITY_DRIFT
 		stab -= float(crime) * _DISTRICT_CRIME_STABILITY_PENALTY
+		var gov: L5RCharacterData = null
 		if nz.has_governor and nz.zone_lord_id >= 0:
-			var gov: L5RCharacterData = characters_by_id.get(nz.zone_lord_id) as L5RCharacterData
+			gov = characters_by_id.get(nz.zone_lord_id) as L5RCharacterData
 			if gov != null and not CharacterStats.is_dead(gov) \
 					and gov.physical_location == capital_loc:
 				var courtier: int = int(gov.skills.get("Courtier", 0))
 				stab += float(courtier) * _DISTRICT_GOVERNANCE_RECOVERY_PER_RANK
 		nz.district_stability = clampf(stab, 0.0, 100.0)
+
+		# A district failing by the Tribunal's OWN standard (Stability below
+		# REVIEW_STABILITY_TRIGGER or crime above REVIEW_CRIME_TRIGGER — reusing the
+		# review constants, no new number) embarrasses its Governor: generate a
+		# Tier-3 NEGATIVE political topic. This IS the review's third dismissal
+		# trigger (_governor_has_negative_topic), which had no producer. One live
+		# topic per Governor — re-raised only after the prior one decays/resolves.
+		if gov != null and not CharacterStats.is_dead(gov):
+			var failing: bool = nz.district_stability < SentakuTribunalSystem.REVIEW_STABILITY_TRIGGER \
+					or crime > SentakuTribunalSystem.REVIEW_CRIME_TRIGGER
+			if failing and not _governor_has_negative_topic(gov.character_id, active_topics):
+				var topic := TopicData.new()
+				topic.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				topic.tier = TopicData.Tier.TIER_3
+				topic.category = TopicData.Category.POLITICAL
+				topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+				topic.subject_character_id = gov.character_id
+				topic.subject_role = "NEGATIVE"
+				topic.ic_day_created = ic_day
+				topic.variant = "governor_failure"
+				topic.topic_type = "governor_failure"
+				topic.slug = "governor_failure_%d" % gov.character_id
+				topic.title = "Disorder in the %s district under Governor %s" % [
+					sentaku, gov.character_name
+				]
+				active_topics.append(topic)
 
 
 # s2.3.23 District Economics. Each Otosan Uchi district generates koku from its own
