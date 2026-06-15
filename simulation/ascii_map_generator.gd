@@ -87,6 +87,8 @@ static func generate(
 			_gen_wall_tower(map, rng)
 		Enums.ZoneSubtype.PEASANT_DWELLING:
 			_gen_peasant_dwelling(map, rng)
+		Enums.ZoneSubtype.UNDERGROUND_LAKE:
+			_gen_underground_lake(map, rng)
 		_:
 			_gen_default(map, rng)
 
@@ -647,6 +649,85 @@ static func _gen_river_crossing(map: AsciiMapData, rng: RandomNumberGenerator) -
 	map.exits = [
 		{x = MID, y = 0, direction = "north", target_zone_id = ""},
 		{x = MID, y = S - 1, direction = "south", target_zone_id = ""},
+	]
+
+
+# UNDERGROUND_LAKE (s2.3.23): the small subterranean lake beneath the Juramashi
+# District. A hidden tunnel from the ground level above descends (the single zone
+# exit) to a stone shore; the deep water is impassable, so a treacherous wadeable
+# causeway is the only approach to a central island ringed by sharp coral (RUBBLE,
+# difficult + cover) and jagged rocks (WALL_STONE, impassable). On the island sits
+# the criminal trading post (a small wooden hut). A bed of Naga eggs lies hidden
+# within the coral — lore only; no spawn/encounter mechanic until the s56 quest
+# layer. Deterministic from the caller's seeded rng.
+static func _gen_underground_lake(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	# Solid cavern rock.
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.WALL_STONE)
+
+	# Carve the lake: an ellipse of deep water, leaving a rock rim at the edges.
+	var cx: int = MID
+	var cy: int = MID + 1
+	var rx: int = 12
+	var ry: int = 10
+	for y in range(1, S - 1):
+		for x in range(1, S - 1):
+			var ex: float = float(x - cx) / float(rx)
+			var ey: float = float(y - cy) / float(ry)
+			if ex * ex + ey * ey <= 1.0:
+				map.set_tile(x, y, Enums.TileType.WATER_DEEP)
+
+	# Hidden entrance tunnel down from Juramashi + a small stone shore landing.
+	for y in range(0, 4):
+		map.set_tile(MID, y, Enums.TileType.FLOOR_STONE)
+	_fill_rect(map, MID - 2, 3, MID + 2, 4, Enums.TileType.FLOOR_STONE)
+
+	# Central island (the criminal trading post stands here).
+	var ix: int = cx
+	var iy: int = cy
+	for y in range(iy - 3, iy + 4):
+		for x in range(ix - 3, ix + 4):
+			if x < 1 or x >= S - 1 or y < 1 or y >= S - 1:
+				continue
+			var dx: float = float(x - ix) / 3.0
+			var dy: float = float(y - iy) / 3.0
+			if dx * dx + dy * dy <= 1.0:
+				map.set_tile(x, y, Enums.TileType.FLOOR_STONE)
+
+	# Coral + jagged-rock ring (annulus) around the island. North column is left
+	# clear for the causeway approach. The Naga egg bed hides within this coral.
+	for y in range(iy - 5, iy + 6):
+		for x in range(ix - 5, ix + 6):
+			if x < 1 or x >= S - 1 or y < 1 or y >= S - 1:
+				continue
+			var ed: float = pow(float(x - ix) / 5.0, 2.0) + pow(float(y - iy) / 5.0, 2.0)
+			if ed > 1.0 or ed < 0.5:
+				continue
+			if map.get_tile(x, y) == Enums.TileType.FLOOR_STONE:
+				continue
+			if x >= ix - 1 and x <= ix + 1 and y < iy:
+				continue  # north gap for the causeway
+			if rng.randi() % 4 == 0:
+				map.set_tile(x, y, Enums.TileType.WALL_STONE)  # jagged rock
+			else:
+				map.set_tile(x, y, Enums.TileType.RUBBLE)       # sharp coral
+
+	# Causeway: a wadeable shallow path from the shore across the deep water to the
+	# island — the only safe approach (the rest of the lake is impassable).
+	for y in range(4, iy - 2):
+		map.set_tile(MID, y, Enums.TileType.WATER_SHALLOW)
+
+	# Criminal trading post: a small wooden hut on the island, door facing the causeway.
+	_fill_rect(map, ix - 1, iy - 1, ix + 1, iy + 1, Enums.TileType.FLOOR_WOOD)
+	map.set_tile(ix - 1, iy - 1, Enums.TileType.WALL_WOOD)
+	map.set_tile(ix + 1, iy - 1, Enums.TileType.WALL_WOOD)
+	map.set_tile(ix - 1, iy + 1, Enums.TileType.WALL_WOOD)
+	map.set_tile(ix + 1, iy + 1, Enums.TileType.WALL_WOOD)
+	map.set_tile(ix, iy - 1, Enums.TileType.DOOR_WOOD_CLOSED)
+
+	# Single zone exit — the hidden tunnel back up to the Juramashi District.
+	map.set_tile(MID, 0, Enums.TileType.ZONE_EXIT)
+	map.exits = [
+		{x = MID, y = 0, direction = "north", target_zone_id = ""},
 	]
 
 

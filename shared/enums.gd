@@ -268,6 +268,8 @@ enum ZoneSubtype {
 	WALL_TOWER,
 	# Dwelling interiors (s4.4 lived-in spaces)
 	PEASANT_DWELLING,
+	# Subterranean (s2.3.23 Otosan Uchi named landmark)
+	UNDERGROUND_LAKE,
 }
 
 # Three-tier zone hierarchy — Greater Zone is the top container.

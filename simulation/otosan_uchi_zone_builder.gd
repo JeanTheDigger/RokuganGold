@@ -130,6 +130,7 @@ const LANDMARKS: Dictionary = {
 		{"n": "Juramashi District Meeting Hall", "s": _ZS.OHIROMA},
 		{"n": "Maratu's Origata (gift shop)", "s": _ZS.MARKET_STREET},
 		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
+		{"n": "Underground Lake", "s": _ZS.UNDERGROUND_LAKE},
 	],
 	3: [  # Ochiyo — Spiritual
 		{"n": "Temple of the Sun Goddess", "s": _ZS.TEMPLE_GROUNDS},
