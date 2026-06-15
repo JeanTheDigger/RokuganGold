@@ -1370,6 +1370,12 @@ static func advance_day(
 		# own PU (the capital is carved out of the standard koku tick to avoid
 		# double-counting); each Governor retains 30%, the rest flows to the Emperor.
 		_process_district_economics(navigation_zones, characters_by_id, settlements)
+		# s2.3.23 District Stability & Crime: drive district_stability / district_crime_count
+		# (read by the Governor review below). Runs before the review, which resets crime.
+		_process_district_stability_crime(
+			navigation_zones, characters_by_id, settlements,
+			crime_records, season_meta, ic_day, dice_engine,
+		)
 		_apply_tyrant_stability_penalty(
 			world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON),
 			provinces,
@@ -10580,6 +10586,143 @@ static func _apply_governor_dismissal(governor: L5RCharacterData, zone: Navigati
 	governor.operational_superior_id = -1
 	governor.appointed_ic_day = -1
 	zone.zone_lord_id = -1
+
+
+# s2.3.23 District Stability & Crime driver. The Governor Performance Review reads
+# district_stability and district_crime_count, but the GDD gives no formula for what
+# moves them (it states only the intent: chaotic districts generate frequent Stability
+# drops and crime). This driver supplies that — owner-authorized model + values
+# (2026-06-15). Each district carries a chaos tier classified from the GDD's own
+# district descriptions: chaotic/criminal districts trend toward a low Stability
+# baseline and generate frequent crime (producing the canon Juramashi turnover);
+# orderly/affluent districts stay stable. Runs once per season, BEFORE the Governor
+# review (which reads then zeroes district_crime_count). ALL numeric values PROVISIONAL.
+#
+# Chaos tiers — classified from GDD s2.3.23 district prose, NOT invented:
+#   HIGH: Juramashi ("no Governor lasts six months"), Brutal Flame/Tsai (criminal
+#     element), Prison/Moon/Toyotomi (prison, gambling), Tenari's Ruin/Meiyoko
+#     (criminal refuge), Eta's Island/Hinjaku (outcasts).
+#   MODERATE: South Dock/Kosuga + North Dock/Higshikawa (never-sleeps trade, pleasure
+#     houses), Kanjo (main entry, embassies), Karada (lower caste, Oni Warai).
+#   LOW: everything else — Rich Crescent/Hojize, Gilded Hill/Hayasu, Emperor's
+#     Road/Hidari, Spiritual/Ochiyo, Chisei, Hito (affluent / orderly / patrolled).
+const _DISTRICT_CHAOS_HIGH: PackedStringArray = [
+	"Juramashi", "Tsai", "Toyotomi", "Meiyoko", "Hinjaku",
+]
+const _DISTRICT_CHAOS_MODERATE: PackedStringArray = [
+	"Kosuga", "Higshikawa", "Kanjo", "Karada",
+]
+# PROVISIONAL — calibrated to the GDD review triggers (Stability < 50, crime > 3/season).
+const _DISTRICT_BASELINE_HIGH: float = 40.0
+const _DISTRICT_BASELINE_MODERATE: float = 65.0
+const _DISTRICT_BASELINE_LOW: float = 85.0
+const _DISTRICT_STABILITY_DRIFT: float = 0.25
+const _DISTRICT_CRIME_STABILITY_PENALTY: float = 3.0
+const _DISTRICT_GOVERNANCE_RECOVERY_PER_RANK: float = 3.0
+
+
+# Stability baseline a district drifts toward, by chaos tier.
+static func _district_chaos_baseline(sentaku: String) -> float:
+	if sentaku in _DISTRICT_CHAOS_HIGH:
+		return _DISTRICT_BASELINE_HIGH
+	if sentaku in _DISTRICT_CHAOS_MODERATE:
+		return _DISTRICT_BASELINE_MODERATE
+	return _DISTRICT_BASELINE_LOW
+
+
+# Expected crimes/season for a district — also the weight used to attribute real
+# capital crimes across districts. PROVISIONAL.
+static func _district_crime_weight(sentaku: String) -> float:
+	if sentaku in _DISTRICT_CHAOS_HIGH:
+		return 4.0
+	if sentaku in _DISTRICT_CHAOS_MODERATE:
+		return 2.0
+	return 0.5
+
+
+# Ambient crime incidents this season, an integer roll centered on the tier weight
+# (HIGH avg 4, MODERATE avg 2, LOW avg 0.5). PROVISIONAL.
+static func _roll_ambient_district_crime(sentaku: String, dice: DiceEngine) -> int:
+	if sentaku in _DISTRICT_CHAOS_HIGH:
+		return dice.rand_int_range(2, 6)
+	if sentaku in _DISTRICT_CHAOS_MODERATE:
+		return dice.rand_int_range(1, 3)
+	return dice.rand_int_range(0, 1)
+
+
+static func _process_district_stability_crime(
+	navigation_zones: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	crime_records: Array,
+	season_meta: Dictionary,
+	ic_day: int,
+	dice: DiceEngine,
+) -> void:
+	if navigation_zones.is_empty():
+		return
+	# Capital crimes are located by physical_location == str(settlement_id).
+	var capital_loc: String = ""
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			capital_loc = str(s.settlement_id)
+			break
+
+	# Real capital crimes committed since the last district scan (non-overlapping
+	# window — no double-count, no per-crime plumbing). s2.3.23 "Both" crime source.
+	var last_scan: int = int(season_meta.get("last_district_crime_scan_day", -1))
+	var capital_crimes: int = 0
+	# First activation (no prior scan): establish the window without counting the
+	# historical backlog as one spike.
+	if not capital_loc.is_empty() and last_scan >= 0:
+		for r: Variant in crime_records:
+			var cr: CrimeRecord = r as CrimeRecord
+			if cr == null:
+				continue
+			if cr.location == capital_loc \
+					and cr.ic_day_committed > last_scan \
+					and cr.ic_day_committed <= ic_day:
+				capital_crimes += 1
+	season_meta["last_district_crime_scan_day"] = ic_day
+
+	# Gather districts + total crime weight (for proportional real-crime attribution).
+	var districts: Array = []
+	var weight_sum: float = 0.0
+	for z: Variant in navigation_zones:
+		var nz: NavigationZoneData = z as NavigationZoneData
+		if nz == null or nz.sentaku_name.is_empty():
+			continue
+		districts.append(nz)
+		weight_sum += _district_crime_weight(nz.sentaku_name)
+	if districts.is_empty():
+		return
+	if weight_sum <= 0.0:
+		weight_sum = 1.0
+
+	for nz: NavigationZoneData in districts:
+		var sentaku: String = nz.sentaku_name
+		# Crime = ambient roll + this district's share of real capital crimes.
+		var ambient: int = _roll_ambient_district_crime(sentaku, dice)
+		var attributed: int = int(round(
+			float(capital_crimes) * _district_crime_weight(sentaku) / weight_sum
+		))
+		var crime: int = ambient + attributed
+		nz.district_crime_count = crime
+
+		# Stability: drift toward the chaos baseline, minus this season's crime drag,
+		# plus governance recovery from a present, living Governor (Courtier = the
+		# primary governance skill per the s2.3.23 candidate-evaluation weights).
+		var baseline: float = _district_chaos_baseline(sentaku)
+		var stab: float = nz.district_stability
+		stab += (baseline - stab) * _DISTRICT_STABILITY_DRIFT
+		stab -= float(crime) * _DISTRICT_CRIME_STABILITY_PENALTY
+		if nz.has_governor and nz.zone_lord_id >= 0:
+			var gov: L5RCharacterData = characters_by_id.get(nz.zone_lord_id) as L5RCharacterData
+			if gov != null and not CharacterStats.is_dead(gov) \
+					and gov.physical_location == capital_loc:
+				var courtier: int = int(gov.skills.get("Courtier", 0))
+				stab += float(courtier) * _DISTRICT_GOVERNANCE_RECOVERY_PER_RANK
+		nz.district_stability = clampf(stab, 0.0, 100.0)
 
 
 # s2.3.23 District Economics. Each Otosan Uchi district generates koku from its own
