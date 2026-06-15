@@ -97,6 +97,8 @@ static func generate(
 			_gen_oni_warai(map, rng)
 		Enums.ZoneSubtype.RUINED_STRUCTURE:
 			_gen_ruined_structure(map, rng)
+		Enums.ZoneSubtype.BARRACKS:
+			_gen_barracks(map, rng)
 		_:
 			_gen_default(map, rng)
 
@@ -857,6 +859,55 @@ static func _gen_ruined_structure(map: AsciiMapData, rng: RandomNumberGenerator)
 	map.set_tile(MID, y2, Enums.TileType.FLOOR_WOOD)  # gap in the south wall
 
 	# South entrance + exit.
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# BARRACKS (s2.3.23): soldier housing (a guard kaisha or embassy garrison hall).
+# Rows of futon sleeping bays with foot-chests flank a clear central aisle; an
+# arms rack lines the north wall; a mess corner (tables, benches, a stove) sits
+# near the south entrance, with braziers for warmth. Deterministic from the
+# caller's seeded rng. Distinct from WAR_COUNCIL_ROOM (a strategy-table room).
+static func _gen_barracks(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_WOOD)
+	_draw_wood_border(map, 0, 0, S - 1, S - 1)
+
+	# Arms rack along the north wall (skipping the central aisle's north end).
+	for x in range(3, S - 3, 2):
+		if x < MID - 1 or x > MID + 1:
+			map.set_tile(x, 2, Enums.TileType.FURNITURE_WEAPON_STAND)
+
+	# Sleeping bays: paired futons down each side with a foot-chest at the wall.
+	# The central aisle (columns MID-1..MID+1) is kept clear.
+	for by in [5, 8, 11, 14, 17]:
+		# Left bay.
+		map.set_tile(3, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(4, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(6, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(7, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(2, by, Enums.TileType.FURNITURE_CHEST)
+		# Right bay.
+		map.set_tile(S - 4, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(S - 5, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(S - 7, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(S - 8, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(S - 3, by, Enums.TileType.FURNITURE_CHEST)
+
+	# Braziers for warmth/light, clear of the aisle.
+	map.set_tile(9, 11, Enums.TileType.FURNITURE_BRAZIER)
+	map.set_tile(S - 10, 11, Enums.TileType.FURNITURE_BRAZIER)
+
+	# Mess corner near the south entrance: long tables + benches and a cook stove.
+	map.set_tile(MID - 4, S - 4, Enums.TileType.FURNITURE_TABLE)
+	map.set_tile(MID - 4, S - 5, Enums.TileType.FURNITURE_BENCH)
+	map.set_tile(MID - 4, S - 3, Enums.TileType.FURNITURE_BENCH)
+	map.set_tile(MID + 4, S - 4, Enums.TileType.FURNITURE_TABLE)
+	map.set_tile(MID + 4, S - 5, Enums.TileType.FURNITURE_BENCH)
+	map.set_tile(MID + 4, S - 3, Enums.TileType.FURNITURE_BENCH)
+	map.set_tile(3, S - 3, Enums.TileType.FURNITURE_STOVE)
+
+	# South entrance + zone exit.
+	map.set_tile(MID, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
 	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
 	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
 

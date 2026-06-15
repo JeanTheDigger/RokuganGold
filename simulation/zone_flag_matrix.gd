@@ -362,6 +362,18 @@ const ZONE_FLAGS: Dictionary = {
 		"garden_eligible": false,
 		"shrine_eligible": false,
 	},
+	# Soldier barracks (s2.3.23) — no noble-art/worship/court affordances
+	# (= the WAR_COUNCIL_ROOM it replaces).
+	Enums.ZoneSubtype.BARRACKS: {
+		"performance_permitted": false,
+		"wall_art_slot": false,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
 }
 
 

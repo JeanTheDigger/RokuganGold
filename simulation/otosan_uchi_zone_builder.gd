@@ -181,7 +181,7 @@ const LANDMARKS: Dictionary = {
 	9: [  # Higshikawa — North Dock
 		{"n": "Morning Star Wharves", "s": _ZS.DOCKS_WATERFRONT},
 		{"n": "Takeo Library", "s": _ZS.AUDIENCE_CHAMBER},
-		{"n": "Imperial Guard kaisha (barracks)", "s": _ZS.WAR_COUNCIL_ROOM},
+		{"n": "Imperial Guard kaisha (barracks)", "s": _ZS.BARRACKS},
 		{"n": "Pleasure houses", "s": _ZS.PLEASURE_QUARTER},
 		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
 	],
@@ -218,7 +218,7 @@ const LANDMARKS: Dictionary = {
 		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
 	],
 	14: [  # Hito — Ekohikei
-		{"n": "Lion Embassy (barracks)", "s": _ZS.WAR_COUNCIL_ROOM},
+		{"n": "Lion Embassy (barracks)", "s": _ZS.BARRACKS},
 		{"n": "Unicorn Embassy", "s": _ZS.AUDIENCE_CHAMBER},
 		{"n": "Fox Embassy", "s": _ZS.AUDIENCE_CHAMBER},
 		{"n": "Road of Fast Hopes", "s": _ZS.ROAD},
@@ -254,7 +254,7 @@ const LANDMARKS: Dictionary = {
 		# Shrines, gardens, guard, and the tunnel complex.
 		{"n": "Shrine of the First Hantei", "s": _ZS.CASTLE_SHRINE},
 		{"n": "Imperial Gardens", "s": _ZS.TSUBONIWA},
-		{"n": "Seppun Guard barracks", "s": _ZS.WAR_COUNCIL_ROOM},
+		{"n": "Seppun Guard barracks", "s": _ZS.BARRACKS},
 		{"n": "Emperor's Chosen quarters", "s": _ZS.LORD_QUARTERS},
 		{"n": "Emperor's Labyrinth (tunnels)", "s": _ZS.LABYRINTH},
 	],

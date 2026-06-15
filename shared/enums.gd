@@ -278,6 +278,8 @@ enum ZoneSubtype {
 	ONI_WARAI,
 	# Collapsed / haunted building (s2.3.23 ruins; mirrors the s56 ruined template)
 	RUINED_STRUCTURE,
+	# Soldier housing (s2.3.23 barracks / kaisha — bunks, arms racks, mess)
+	BARRACKS,
 }
 
 # Three-tier zone hierarchy — Greater Zone is the top container.
