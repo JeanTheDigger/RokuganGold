@@ -12,8 +12,10 @@ class_name OtosanUchiZoneBuilder
 ## graph is built. Both sides join on the deterministic zone_id, so the district
 ## table never has to be duplicated.
 ##
-## Tier-1 handcrafted interior maps (Section 4.3.4) are out of scope: these
-## districts are pure MUD-navigation containers (has_ascii_map = false) for now.
+## Each district Navigation Zone carries a thematic zone_subtype and has_ascii_map
+## = true (s4.4 procedural tier, owner-approved 2026-06-15), so AsciiMapGenerator
+## renders a deterministic street-level map per district on entry. The fully
+## handcrafted per-building Lesser Zones (Section 4.3.4) remain a future content task.
 ##
 ## PU subdivision sums to the canonical 100 (Toshisoto 82 + Ekohikei 15 +
 ## Forbidden 3), matching the settlement's population_pu.
@@ -30,42 +32,60 @@ const FORBIDDEN := Enums.AccessLayer.FORBIDDEN_CITY
 #   pu       — district population units (s2.3.23 District Economics)
 #   pref     — Governor clan-preference convention (not a hard gate)
 #   governor — true if the district has a Governor (Forbidden City has none)
+#   subtype  — ZoneSubtype the AsciiMapGenerator renders for the district's
+#              street-level map (owner-approved 2026-06-15; see s2.3.23 landmarks)
 const DISTRICTS: Array = [
 	# -- Toshisoto (Outer City) — 11 districts, 82 PU, Governor Status 4.5 -----
 	{"sentaku": "Tsai", "name": "Brutal Flame District", "layer": TOSHISOTO,
-		"pu": 5, "pref": ["Scorpion", "Crab", "Tortoise"], "governor": true},
+		"pu": 5, "pref": ["Scorpion", "Crab", "Tortoise"], "governor": true,
+		"subtype": Enums.ZoneSubtype.PLEASURE_QUARTER},
 	{"sentaku": "Hidari", "name": "Emperor's Road District", "layer": TOSHISOTO,
-		"pu": 7, "pref": ["Crane", "Imperial"], "governor": true},
+		"pu": 7, "pref": ["Crane", "Imperial"], "governor": true,
+		"subtype": Enums.ZoneSubtype.MARKET_STREET},
 	{"sentaku": "Juramashi", "name": "Juramashi District", "layer": TOSHISOTO,
-		"pu": 15, "pref": [], "governor": true},
+		"pu": 15, "pref": [], "governor": true,
+		"subtype": Enums.ZoneSubtype.MARKET_STREET},
 	{"sentaku": "Ochiyo", "name": "Spiritual District", "layer": TOSHISOTO,
-		"pu": 6, "pref": ["Imperial", "Phoenix", "Lion"], "governor": true},
+		"pu": 6, "pref": ["Imperial", "Phoenix", "Lion"], "governor": true,
+		"subtype": Enums.ZoneSubtype.TEMPLE_GROUNDS},
 	{"sentaku": "Hayasu", "name": "Gilded Hill District", "layer": TOSHISOTO,
-		"pu": 8, "pref": ["Crane", "Imperial"], "governor": true},
+		"pu": 8, "pref": ["Crane", "Imperial"], "governor": true,
+		"subtype": Enums.ZoneSubtype.RESIDENTIAL_QUARTER},
 	{"sentaku": "Hojize", "name": "Rich Crescent District", "layer": TOSHISOTO,
-		"pu": 10, "pref": ["Lion", "Imperial"], "governor": true},
+		"pu": 10, "pref": ["Lion", "Imperial"], "governor": true,
+		"subtype": Enums.ZoneSubtype.DOCKS_WATERFRONT},
 	{"sentaku": "Hinjaku", "name": "Eta's Island District", "layer": TOSHISOTO,
-		"pu": 3, "pref": ["Crab"], "governor": true},
+		"pu": 3, "pref": ["Crab"], "governor": true,
+		"subtype": Enums.ZoneSubtype.POOR_QUARTER},
 	{"sentaku": "Toyotomi", "name": "Prison/Moon District", "layer": TOSHISOTO,
-		"pu": 5, "pref": ["Scorpion", "Crab", "Lion"], "governor": true},
+		"pu": 5, "pref": ["Scorpion", "Crab", "Lion"], "governor": true,
+		"subtype": Enums.ZoneSubtype.GOVERNMENT_QUARTER},
 	{"sentaku": "Meiyoko", "name": "Tenari's Ruin District", "layer": TOSHISOTO,
-		"pu": 5, "pref": ["Scorpion", "Lion", "Crab"], "governor": true},
+		"pu": 5, "pref": ["Scorpion", "Lion", "Crab"], "governor": true,
+		"subtype": Enums.ZoneSubtype.RESIDENTIAL_QUARTER},
 	{"sentaku": "Higshikawa", "name": "North Dock District", "layer": TOSHISOTO,
-		"pu": 6, "pref": ["Lion", "Crab", "Unicorn"], "governor": true},
+		"pu": 6, "pref": ["Lion", "Crab", "Unicorn"], "governor": true,
+		"subtype": Enums.ZoneSubtype.DOCKS_WATERFRONT},
 	{"sentaku": "Kosuga", "name": "South Dock District", "layer": TOSHISOTO,
-		"pu": 12, "pref": ["Crab", "Unicorn", "Imperial"], "governor": true},
+		"pu": 12, "pref": ["Crab", "Unicorn", "Imperial"], "governor": true,
+		"subtype": Enums.ZoneSubtype.DOCKS_WATERFRONT},
 	# -- Ekohikei (Inner City) — 4 districts, 15 PU, Governor Status 5.0 -------
 	{"sentaku": "Kanjo", "name": "Kanjo District", "layer": EKOHIKEI,
-		"pu": 5, "pref": ["Imperial"], "governor": true},
+		"pu": 5, "pref": ["Imperial"], "governor": true,
+		"subtype": Enums.ZoneSubtype.GOVERNMENT_QUARTER},
 	{"sentaku": "Chisei", "name": "Chisei District", "layer": EKOHIKEI,
-		"pu": 4, "pref": ["Crane"], "governor": true},
+		"pu": 4, "pref": ["Crane"], "governor": true,
+		"subtype": Enums.ZoneSubtype.RESIDENTIAL_QUARTER},
 	{"sentaku": "Karada", "name": "Karada District", "layer": EKOHIKEI,
-		"pu": 3, "pref": ["Crab"], "governor": true},
+		"pu": 3, "pref": ["Crab"], "governor": true,
+		"subtype": Enums.ZoneSubtype.POOR_QUARTER},
 	{"sentaku": "Hito", "name": "Hito District", "layer": EKOHIKEI,
-		"pu": 3, "pref": ["Lion"], "governor": true},
+		"pu": 3, "pref": ["Lion"], "governor": true,
+		"subtype": Enums.ZoneSubtype.RESIDENTIAL_QUARTER},
 	# -- Forbidden City — 1 district, 3 PU, no Governor (Emperor's domain) -----
 	{"sentaku": "Forbidden City", "name": "Forbidden City", "layer": FORBIDDEN,
-		"pu": 3, "pref": [], "governor": false},
+		"pu": 3, "pref": [], "governor": false,
+		"subtype": Enums.ZoneSubtype.AUDIENCE_CHAMBER},
 ]
 
 
@@ -118,6 +138,9 @@ static func build(settlement: SettlementData) -> Dictionary:
 		nz.clan_preference = pref
 		nz.has_governor = d.get("governor", false)
 		nz.zone_lord_id = -1  # linked to a Governor after the population pass
+		# Thematic street-level ASCII map per district (s4.4 procedural tier).
+		nz.zone_subtype = d.get("subtype", Enums.ZoneSubtype.MARKET_STREET)
+		nz.has_ascii_map = true
 		nav_zones.append(nz)
 		gz.add_child_zone(nz.zone_id)
 
