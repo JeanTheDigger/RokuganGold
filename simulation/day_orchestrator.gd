@@ -10757,15 +10757,17 @@ static func _process_district_stability_crime(
 				stab += float(courtier) * _DISTRICT_GOVERNANCE_RECOVERY_PER_RANK
 		nz.district_stability = clampf(stab, 0.0, 100.0)
 
-		# A district failing by the Tribunal's OWN standard (Stability below
-		# REVIEW_STABILITY_TRIGGER or crime above REVIEW_CRIME_TRIGGER — reusing the
-		# review constants, no new number) embarrasses its Governor: generate a
-		# Tier-3 NEGATIVE political topic. This IS the review's third dismissal
-		# trigger (_governor_has_negative_topic), which had no producer. One live
-		# topic per Governor — re-raised only after the prior one decays/resolves.
+		# A district whose Stability has fallen below the Tribunal's review floor
+		# (REVIEW_STABILITY_TRIGGER — reusing the review constant, no new number)
+		# embarrasses its Governor: generate a Tier-3 NEGATIVE political topic.
+		# This IS the review's third dismissal trigger (_governor_has_negative_topic),
+		# which had no producer. Stability ONLY — crime > REVIEW_CRIME_TRIGGER remains
+		# a review trigger (worth checking on) but does NOT brand the Governor, since
+		# a chaotic district's inherent crime would otherwise permanently embarrass
+		# even a competent Governor holding Stability up (owner-tuned 2026-06-15). One
+		# live topic per Governor — re-raised only after the prior one decays/resolves.
 		if gov != null and not CharacterStats.is_dead(gov):
-			var failing: bool = nz.district_stability < SentakuTribunalSystem.REVIEW_STABILITY_TRIGGER \
-					or crime > SentakuTribunalSystem.REVIEW_CRIME_TRIGGER
+			var failing: bool = nz.district_stability < SentakuTribunalSystem.REVIEW_STABILITY_TRIGGER
 			if failing and not _governor_has_negative_topic(gov.character_id, active_topics):
 				var topic := TopicData.new()
 				topic.topic_id = next_topic_id[0]
