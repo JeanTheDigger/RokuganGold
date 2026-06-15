@@ -10574,6 +10574,17 @@ static func _process_governor_reviews(
 		"emperor_archetype", StrategicReview.EmperorArchetype.IRON
 	))
 
+	# Dismissal is an Imperial act — "the Tribunal can petition the Emperor to
+	# dismiss a Governor, but cannot dismiss directly" (s2.3.23 line 2481). During
+	# an interregnum (no living Emperor) the Tribunal may still review and produce a
+	# recommendation, but no dismissal can be applied until a successor is seated.
+	# Mirrors the appointment guard in _populate_vacancy_intelligence.
+	var review_emperor_id: int = int(world_states.get("emperor_id", -1))
+	var living_emperor: bool = false
+	if review_emperor_id >= 0:
+		var em: L5RCharacterData = characters_by_id.get(review_emperor_id) as L5RCharacterData
+		living_emperor = em != null and not CharacterStats.is_dead(em)
+
 	for z: Variant in navigation_zones:
 		var zone: NavigationZoneData = z as NavigationZoneData
 		if zone == null:
@@ -10624,10 +10635,13 @@ static func _process_governor_reviews(
 		}
 
 		if review["recommend_dismiss"]:
-			var emperor_agrees: bool = _emperor_dismisses_governor(
+			# No living Emperor → the recommendation stands but cannot be acted on
+			# (the Tribunal cannot dismiss directly, s2.3.23 line 2481).
+			var emperor_agrees: bool = living_emperor and _emperor_dismisses_governor(
 				emperor_archetype, zone.district_stability, crime_count
 			)
 			entry["emperor_agrees"] = emperor_agrees
+			entry["interregnum"] = not living_emperor
 			if emperor_agrees:
 				_apply_governor_dismissal(governor, zone)
 				entry["dismissed"] = true
