@@ -1298,6 +1298,12 @@ static func advance_day(
 		pending_letters, characters_by_id, theater_pieces,
 	)
 
+	# s2.3.23: a delivered Governor solicitation prompts the recipient Clan Champion
+	# to recommend a vassal (added to the soliciting authority's met_characters).
+	_process_governor_solicitation_delivery(
+		pending_letters, characters, characters_by_id,
+	)
+
 	var reply_letters: Array = []
 	if dice_engine != null:
 		var reply_next_id: Array = [next_letter_id[0]]
@@ -1504,6 +1510,13 @@ static func advance_day(
 		governor_review_results = _process_governor_reviews(
 			navigation_zones, characters, characters_by_id,
 			active_topics, world_states, ic_day,
+		)
+		# s2.3.23 solicitation fallback: for any Governor seat the Emperor (or
+		# delegated Advisor) cannot fill from their own pool, write to the preferred
+		# clans' Champions requesting a candidate recommendation.
+		_process_governor_solicitations(
+			navigation_zones, characters, characters_by_id, world_states,
+			pending_letters, next_letter_id, active_topics, next_topic_id, ic_day,
 		)
 		var cw_season_count: int = int(season_meta.get("horde_season_count", 0))
 		if not togashi_state.is_empty():
@@ -21333,6 +21346,192 @@ const GOV_STATUS_HIGH: float = 5.0
 # PROVISIONAL normalization ceilings (linear-to-weight, mirroring other scorers).
 const GOV_SKILL_NORM: float = 14.0
 const GOV_STATUS_NORM: float = 3.0
+
+# Candidate Solicitation Fallback (s2.3.23): when the appointing authority's
+# met_characters pool yields no Governor candidate for a vacant district, the
+# authority writes to the Clan Champion(s) of the district's preferred clans
+# (Juramashi → the clan with the highest disposition toward the Emperor),
+# requesting a recommendation. Uses existing infrastructure only (WRITE_LETTER +
+# a Tier-4 vacancy topic). Runs seasonally; dedup against in-flight solicitations.
+static func _process_governor_solicitations(
+	navigation_zones: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	pending_letters: Array,
+	next_letter_id: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	if navigation_zones.is_empty():
+		return
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	if emperor_id < 0:
+		return
+	var emperor_char: L5RCharacterData = characters_by_id.get(emperor_id) as L5RCharacterData
+	if emperor_char == null or CharacterStats.is_dead(emperor_char):
+		return
+	var emperor_archetype: int = int(world_states.get(
+		"emperor_archetype", StrategicReview.EmperorArchetype.IRON
+	))
+	# Appointing authority (Emperor, or delegated Advisor) — mirrors the vacancy pass.
+	var authority: L5RCharacterData = emperor_char
+	var base_weights: bool = false
+	if emperor_archetype == StrategicReview.EmperorArchetype.CUNNING \
+			or emperor_archetype == StrategicReview.EmperorArchetype.WARLIKE:
+		var advisor: L5RCharacterData = _find_imperial_advisor(characters)
+		if advisor != null:
+			authority = advisor
+			base_weights = true
+
+	for z: Variant in navigation_zones:
+		var gz: NavigationZoneData = z as NavigationZoneData
+		if gz == null or not gz.has_governor or gz.zone_lord_id >= 0:
+			continue
+		# Solicit only when the authority's own pool has no suitable candidate.
+		if _find_governor_candidate(authority, gz, characters, emperor_archetype, base_weights) >= 0:
+			continue
+		# Target clans: district preference, or (Juramashi, no preference) the clan
+		# whose Champion most favours the Emperor (s2.3.23 Juramashi special case).
+		var target_clans: Array = gz.clan_preference.duplicate()
+		if target_clans.is_empty():
+			var best_clan: String = _highest_disposition_clan_toward(emperor_id, characters)
+			if not best_clan.is_empty():
+				target_clans = [best_clan]
+		for clan_name: Variant in target_clans:
+			var champ_id: int = _extrad_find_clan_champion_id(str(clan_name), characters)
+			if champ_id < 0 or champ_id == authority.character_id:
+				continue
+			if _has_pending_solicitation(pending_letters, gz.zone_id, champ_id):
+				continue
+			# Tier-4 vacancy topic carried by the letter.
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			topic.slug = "governor_vacancy_%s" % gz.zone_id
+			topic.title = "Governor vacancy in %s" % gz.sentaku_name
+			topic.variant = "governor_vacancy"
+			topic.topic_type = "governor_vacancy"
+			topic.tier = TopicData.Tier.TIER_4
+			topic.category = TopicData.Category.POLITICAL
+			topic.ic_day_created = ic_day
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+			active_topics.append(topic)
+
+			var lid: int = next_letter_id[0]
+			next_letter_id[0] = lid + 1
+			var letter := LetterData.new()
+			letter.letter_id = lid
+			letter.sender_id = authority.character_id
+			letter.recipient_id = champ_id
+			letter.topic = topic.topic_id
+			letter.ic_day_sent = ic_day
+			# Distance PROVISIONAL (3 provinces) — map adjacency data not yet available.
+			letter.ic_day_arrival = ic_day + LetterSystem.calculate_delivery_time(3, 0, 0, 0, false)
+			letter.governor_solicitation_zone_id = gz.zone_id
+			pending_letters.append(letter)
+
+
+# True when an undelivered solicitation letter for this district zone is already
+# en route to the given Champion (dedup against re-soliciting each season).
+static func _has_pending_solicitation(
+	pending_letters: Array, zone_id: String, champion_id: int
+) -> bool:
+	for letter: Variant in pending_letters:
+		var l: LetterData = letter as LetterData
+		if l == null or l.delivered:
+			continue
+		if l.governor_solicitation_zone_id == zone_id and l.recipient_id == champion_id:
+			return true
+	return false
+
+
+# The clan whose Clan Champion most favours the given character (Juramashi
+# solicitation target, s2.3.23). "" if no living champion is found.
+static func _highest_disposition_clan_toward(target_id: int, characters: Array) -> String:
+	var best_clan: String = ""
+	var best_disp: int = -2147483648
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.role_position != RoleRegistry.CLAN_CHAMPION:
+			continue
+		var disp: int = c.disposition_values.get(target_id, 0)
+		if disp > best_disp:
+			best_disp = disp
+			best_clan = c.clan
+	return best_clan
+
+
+# On delivery of a solicitation letter, the recipient Clan Champion recommends
+# their best eligible vassal for the vacant Governor post — modelled as adding
+# that vassal to the soliciting authority's met_characters pool (s2.3.23 step 5:
+# the recommendation enters the pool via the letter's topic exchange). The next
+# vacancy pass then evaluates and appoints. Processes each letter once.
+static func _process_governor_solicitation_delivery(
+	pending_letters: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for letter: Variant in pending_letters:
+		var l: LetterData = letter as LetterData
+		if l == null or not l.delivered:
+			continue
+		if l.governor_solicitation_zone_id.is_empty():
+			continue
+		var champion: L5RCharacterData = characters_by_id.get(l.recipient_id) as L5RCharacterData
+		var authority: L5RCharacterData = characters_by_id.get(l.sender_id) as L5RCharacterData
+		# Mark processed regardless — a dead/missing party yields no recommendation.
+		l.governor_solicitation_zone_id = ""
+		if champion == null or CharacterStats.is_dead(champion):
+			continue
+		if authority == null or CharacterStats.is_dead(authority):
+			continue
+		var recommended: int = _find_champion_recommendation(champion, characters)
+		if recommended < 0:
+			continue
+		var rec_char: L5RCharacterData = characters_by_id.get(recommended) as L5RCharacterData
+		if rec_char == null:
+			continue
+		InformationSystem.add_contact(authority, recommended, rec_char.clan, rec_char)
+
+
+# A Clan Champion's best Governor recommendation from among their own vassals:
+# an available (position-less), living, non-PC samurai, scored by Governor-relevant
+# skill and Status appropriateness (4.0–5.0 band). -1 if the Champion has none.
+static func _find_champion_recommendation(
+	champion: L5RCharacterData, characters: Array
+) -> int:
+	var best_id: int = -1
+	var best_score: float = -1.0
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.lord_id != champion.character_id:
+			continue
+		if not c.role_position.is_empty():
+			continue
+		var skill_raw: float = (
+			2.0 * float(c.skills.get("Courtier", 0))
+			+ float(c.skills.get("Commerce", 0))
+			+ float(c.skills.get("Investigation", 0))
+			+ float(c.skills.get("Lore: Law", 0))
+			+ float(c.skills.get("Battle", 0))
+		)
+		var skill_score: float = clampf(skill_raw / GOV_SKILL_NORM, 0.0, 1.0) * 15.0
+		var dist: float = 0.0
+		if c.status < GOV_STATUS_LOW:
+			dist = GOV_STATUS_LOW - c.status
+		elif c.status > GOV_STATUS_HIGH:
+			dist = c.status - GOV_STATUS_HIGH
+		var status_score: float = GOV_W_STATUS * clampf(1.0 - dist / GOV_STATUS_NORM, 0.0, 1.0)
+		var total: float = skill_score + status_score
+		if total > best_score:
+			best_score = total
+			best_id = c.character_id
+	return best_id
+
 
 # The living Imperial Advisor (Emperor's Chosen, s11.5), or null. Used for
 # Cunning/Warlike Governor-appointment delegation (s2.3.23 Archetype Routing).
