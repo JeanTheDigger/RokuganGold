@@ -1366,6 +1366,10 @@ static func advance_day(
 			emperor_tax_cfg, trade_routes,
 		)
 		_apply_worship_stability_maluses(worship_maluses, provinces)
+		# s2.3.23 District Economics: Otosan Uchi districts generate koku from their
+		# own PU (the capital is carved out of the standard koku tick to avoid
+		# double-counting); each Governor retains 30%, the rest flows to the Emperor.
+		_process_district_economics(navigation_zones, characters_by_id, settlements)
 		_apply_tyrant_stability_penalty(
 			world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON),
 			provinces,
@@ -10576,6 +10580,55 @@ static func _apply_governor_dismissal(governor: L5RCharacterData, zone: Navigati
 	governor.operational_superior_id = -1
 	governor.appointed_ic_day = -1
 	zone.zone_lord_id = -1
+
+
+# s2.3.23 District Economics. Each Otosan Uchi district generates koku from its own
+# PU via the standard s4.3.9 rate (district_pu × KOKU_PER_TOWN_PU_PER_SEASON). The
+# cascade is Governor → Emperor only (no intermediate tier): a governed district's
+# Governor retains GOVERNOR_DISTRICT_TAX_RETENTION (the s4.3.7 provincial-tier 30%,
+# owner-authorized 2026-06-15) into their personal koku; the remainder flows to the
+# Emperor's stockpile (the Imperial Capital settlement's koku_stockpile). The
+# Forbidden City and any vacant governed seat have no Governor to retain a share, so
+# all of their koku goes to the Emperor. Runs once per season.
+const GOVERNOR_DISTRICT_TAX_RETENTION: float = 0.30
+
+static func _process_district_economics(
+	navigation_zones: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+) -> void:
+	if navigation_zones.is_empty():
+		return
+	# The Imperial stockpile lives at the Otosan Uchi (Imperial Capital) settlement.
+	var capital: SettlementData = null
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			capital = s
+			break
+	if capital == null:
+		return
+	for z: Variant in navigation_zones:
+		var nz: NavigationZoneData = z as NavigationZoneData
+		if nz == null or nz.district_pu <= 0:
+			continue
+		# Only Otosan Uchi districts carry a sentaku_name / district_pu economy.
+		if nz.sentaku_name.is_empty():
+			continue
+		var koku: float = float(nz.district_pu) * ResourceTick.KOKU_PER_TOWN_PU_PER_SEASON
+		if koku <= 0.0:
+			continue
+		var governor: L5RCharacterData = null
+		if nz.has_governor and nz.zone_lord_id >= 0:
+			governor = characters_by_id.get(nz.zone_lord_id) as L5RCharacterData
+			if governor != null and CharacterStats.is_dead(governor):
+				governor = null
+		if governor != null:
+			var retained: float = koku * GOVERNOR_DISTRICT_TAX_RETENTION
+			governor.koku += retained
+			capital.koku_stockpile += koku - retained
+		else:
+			# Forbidden City or a vacant governed seat — all koku to the Emperor.
+			capital.koku_stockpile += koku
 
 
 # The NavigationZone with the given zone_id, or null.
