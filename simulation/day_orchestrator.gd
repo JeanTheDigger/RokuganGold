@@ -21693,33 +21693,39 @@ static func _populate_vacancy_intelligence(
 	# If the Advisor seat is vacant, even a Cunning/Warlike Emperor vets personally.
 	if emperor_id >= 0:
 		var emperor_char: L5RCharacterData = characters_by_id.get(emperor_id) as L5RCharacterData
-		var gov_authority: L5RCharacterData = emperor_char
-		var gov_base_weights: bool = false
-		if emperor_archetype == StrategicReview.EmperorArchetype.CUNNING \
-				or emperor_archetype == StrategicReview.EmperorArchetype.WARLIKE:
-			var advisor: L5RCharacterData = _find_imperial_advisor(characters)
-			if advisor != null:
-				gov_authority = advisor
-				gov_base_weights = true
-		for z: Variant in navigation_zones:
-			var gz: NavigationZoneData = z as NavigationZoneData
-			if gz == null or not gz.has_governor:
-				continue
-			if gz.zone_lord_id >= 0:
-				continue  # seat already filled
-			var gov_cand: int = _find_governor_candidate(
-				gov_authority, gz, characters, emperor_archetype, gov_base_weights,
-			)
-			if not lord_vacancies.has(emperor_id):
-				lord_vacancies[emperor_id] = []
-			lord_vacancies[emperor_id].append({
-				"position_type": RoleRegistry.GOVERNOR_OTOSAN_UCHI,
-				"priority": 2,
-				"province_id": -1,
-				"zone_id": gz.zone_id,
-				"candidate_id": gov_cand,
-				"seasons_vacant": 0,
-			})
+		# Interregnum guard: no living Emperor means no Imperial Governor appointments
+		# — mirrors _process_governor_solicitations, which abstains on a dead/missing
+		# Emperor. The district runs under Tribunal authority until a new Emperor is
+		# seated (dead characters persist in characters_by_id, so is_dead must be checked
+		# explicitly — emperor_char is non-null but may be dead during an interregnum).
+		if emperor_char != null and not CharacterStats.is_dead(emperor_char):
+			var gov_authority: L5RCharacterData = emperor_char
+			var gov_base_weights: bool = false
+			if emperor_archetype == StrategicReview.EmperorArchetype.CUNNING \
+					or emperor_archetype == StrategicReview.EmperorArchetype.WARLIKE:
+				var advisor: L5RCharacterData = _find_imperial_advisor(characters)
+				if advisor != null:
+					gov_authority = advisor
+					gov_base_weights = true
+			for z: Variant in navigation_zones:
+				var gz: NavigationZoneData = z as NavigationZoneData
+				if gz == null or not gz.has_governor:
+					continue
+				if gz.zone_lord_id >= 0:
+					continue  # seat already filled
+				var gov_cand: int = _find_governor_candidate(
+					gov_authority, gz, characters, emperor_archetype, gov_base_weights,
+				)
+				if not lord_vacancies.has(emperor_id):
+					lord_vacancies[emperor_id] = []
+				lord_vacancies[emperor_id].append({
+					"position_type": RoleRegistry.GOVERNOR_OTOSAN_UCHI,
+					"priority": 2,
+					"province_id": -1,
+					"zone_id": gz.zone_id,
+					"candidate_id": gov_cand,
+					"seasons_vacant": 0,
+				})
 
 	# Inherit seasons_vacant from persistent registry
 	var registry: Dictionary = season_meta.get("vacancy_registry", {})
@@ -22051,7 +22057,7 @@ static func _find_governor_candidate(
 	archetype: int,
 	use_base_weights: bool = false,
 ) -> int:
-	if authority == null or authority.met_characters.is_empty():
+	if authority == null or CharacterStats.is_dead(authority) or authority.met_characters.is_empty():
 		return -1
 	# Candidate-evaluation weights (s2.3.23, GDD-specified). When the Emperor
 	# delegates to the Imperial Advisor (use_base_weights), the Advisor evaluates
