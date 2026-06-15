@@ -4455,11 +4455,19 @@ tests in `tests/test_individual_combat.gd`.
   Perception trait. Environmental modifiers: forest −2, darkness −3, fog/mist −3, rain −2,
   storm −4, snow −2. Lookout position bonus: +3 radius on WALL_STONE or elevated tile.
   Stacks with environmental modifiers (minimum 1 tile). `simulation/ascii_map_generator.gd`
-  (AsciiMapGenerator, 1318 lines): deterministic procedural generation for all 25 ZoneSubtype
-  values (MARKET_STREET, TEMPLE_GROUNDS, SHRINE_CLEARING, FOREST_PATH, ROAD,
-  RESIDENTIAL_QUARTER, FARMLAND, RIVER_CROSSING, OHIROMA, ENKAI_HALL, AUDIENCE_CHAMBER,
-  CHASHITSU, GARDENS, TRAINING_GROUNDS, ARMORY, FORGE, DUNGEON, DOJO, STABLE, GRANARY,
-  HARBOR, WALL_TOWER, BARRACKS, GATEHOUSE, WILDERNESS). Each generator places walls, floors,
+  (AsciiMapGenerator, ~2155 lines): deterministic procedural generation for all ZoneSubtype
+  values — the enum and the generator's dispatch are 1:1 (every subtype has a generator).
+  As of the s2.3.23 Otosan Uchi landmark pass the set is **35**: 11 castle-interior
+  (OHIROMA, ENKAI_HALL, AUDIENCE_CHAMBER, CHASHITSU, GUEST_WING, LORD_QUARTERS,
+  WAR_COUNCIL_ROOM, DOJO, OUTER_COURTYARD, TSUBONIWA, CASTLE_SHRINE), 7 urban-district
+  (MARKET_STREET, RESIDENTIAL_QUARTER, TEMPLE_GROUNDS, PLEASURE_QUARTER, DOCKS_WATERFRONT,
+  POOR_QUARTER, GOVERNMENT_QUARTER), 6 wilderness (ROAD, FOREST_PATH, MOUNTAIN_PASS,
+  RIVER_CROSSING, FARMLAND, SHRINE_CLEARING), 1 wall (WALL_TOWER), 1 dwelling
+  (PEASANT_DWELLING), and 9 s2.3.23 named-landmark subtypes (UNDERGROUND_LAKE, THRONE_ROOM,
+  LABYRINTH, ONI_WARAI, RUINED_STRUCTURE, BARRACKS, LIBRARY, TOMB, TREASURY_VAULT). The
+  earlier "25 (… GARDENS/ARMORY/FORGE/GATEHOUSE/WILDERNESS)" list in this entry was a
+  pre-reorganization artifact — those names are not in the committed enum. Each generator
+  places walls, floors,
   features, and zone exits using a fixed seed (settlement_name + zone_name + zone_type string).
   Same inputs always produce the same layout; only physical deltas (destroyed walls, new
   construction) are persisted between sessions. Zone graph wired into world bootstrap and
@@ -4939,6 +4947,37 @@ tests in `tests/test_individual_combat.gd`.
   (champion seats get DOJO + WAR_COUNCIL Lesser Zones). Removed the 8 tests asserting the buggy
   behavior. Runtime-verified: champion → AT_OWN_HOLDINGS (SET_TAX_RATE + TRAIN both present);
   monk at temple → AT_TEMPLE (PERFORM_RITUAL present).
+
+### Systems Added 2026-06-15 (s2.3.23 Otosan Uchi named-landmark zone generators)
+Nine bespoke `AsciiMapGenerator` ZoneSubtype generators so the Imperial Capital's
+named landmarks render as their own spaces instead of falling back to a generic
+district map. New `Enums.ZoneSubtype` values (29–37) + a generator + a
+`ZoneFlagMatrix` entry for each: **UNDERGROUND_LAKE** (subterranean cavern + water
+body, 1 exit), **THRONE_ROOM** (the Chrysanthemum Throne hall — raised dais,
+flanking braziers/banners, petitioner floor), **LABYRINTH** (the Emperor's
+Labyrinth — subterranean tunnel maze, 2 exits), **ONI_WARAI** (the Oni's Smile —
+earthquake crevice / descending chasm), **RUINED_STRUCTURE** (collapsed/haunted
+building, rubble overlay; mirrors the s56 ruined template), **BARRACKS** (soldier
+kaisha — futon bays, arms racks, mess + stove), **LIBRARY** (Takeo Library — book
+stacks in aisles + reading desks), **TOMB** (funerary chamber — memorial altar +
+burial coffers), **TREASURY_VAULT** (Imperial Treasury — locked coffers in guarded
+vault bays). Wired in `simulation/otosan_uchi_zone_builder.gd` (the district
+landmark table maps each named landmark to its subtype via `{"n": …, "s": _ZS.…}`):
+Abandoned waterway houses + Tenari's ruins → RUINED_STRUCTURE; Underground Lake →
+UNDERGROUND_LAKE; Kinjiren Tombs + Seppun Hill → TOMB; Takeo Library → LIBRARY;
+Imperial Guard kaisha + Lion Embassy + Seppun Guard → BARRACKS; Imperial Treasury →
+TREASURY_VAULT; Oni Warai → ONI_WARAI; Imperial Palace Throne Room → THRONE_ROOM.
+Each generator places walls/floors/features/exits from the standard FNV-1a seed
+(deterministic). **Render-verified 2026-06-15 (Godot 4.6.1 headless driver — the
+project's parse-check/driver path; GUT is non-functional headless and off-policy):**
+all 9 maps rendered and an 8-directional flood-fill from each declared exit reached
+100% of passable tiles — UNREACHABLE=0 for every generator (LIBRARY 657/657, TOMB
+803/803, TREASURY_VAULT 794/794, BARRACKS 815/815, RUINED_STRUCTURE 883/883,
+ONI_WARAI 235/235, LABYRINTH 451/451 across both exits, UNDERGROUND_LAKE 73/73,
+THRONE_ROOM 823/823). No stranded interior tiles; every exit is reachable from the
+interior and vice-versa. Commits 98334e4 / 0a777fa / 72c4bd2. No tests per the
+no-test-code policy. (These three commits shipped without CLAUDE.md changelog
+entries; this entry backfills them and records the render-verify.)
 
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
