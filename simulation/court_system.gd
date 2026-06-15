@@ -69,6 +69,9 @@ static func get_default_duration(court_type: CourtSessionData.CourtType) -> int:
 			return PROVINCIAL_COURT_MAX_DURATION
 		CourtSessionData.CourtType.PEACE_COURT:
 			return PEACE_COURT_MAX_DURATION
+		CourtSessionData.CourtType.IMPERIAL_COURT:
+			# Standing Imperial Court — reuses the high-court duration (s2.3.23).
+			return CLAN_COURT_MAX_DURATION
 		_:
 			return PROVINCIAL_COURT_MAX_DURATION
 
@@ -83,6 +86,8 @@ static func _get_prestige(court_type: CourtSessionData.CourtType) -> int:
 			return PRESTIGE_PROVINCIAL
 		CourtSessionData.CourtType.PEACE_COURT:
 			return PRESTIGE_CLAN
+		CourtSessionData.CourtType.IMPERIAL_COURT:
+			return PRESTIGE_IMPERIAL
 		_:
 			return PRESTIGE_PROVINCIAL
 

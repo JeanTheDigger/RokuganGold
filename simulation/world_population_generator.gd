@@ -914,7 +914,10 @@ static func _generate_otosan_uchi_governance(
 			next_id, spec[0], "Imperial", spec[1], dice, emperor_id,
 		)
 		t.physical_location = loc
+		# Tribunal members are Imperial-family courtiers (Otomo/Seppun/Miya) — they
+		# hold standing access to both inner tiers (s2.3.23 Imperial-family grant).
 		t.ekohikei_access = true
+		t.forbidden_city_access = true
 		chars.append(t)
 		if spec[0] == PositionType.SENTAKU_TRIBUNAL_CHAIR:
 			chair_id = t.character_id

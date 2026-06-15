@@ -210,11 +210,18 @@ static func advance_day(
 	)
 	_apply_hostage_escape_family_honor(hostage_escape_results, characters_by_id)
 
+	# Standing Imperial Court at Otosan Uchi (s2.3.23) — the consumer that makes
+	# forbidden_city_access matter: the Emperor holds court in the Forbidden City.
+	_process_imperial_court(
+		active_courts, characters_by_id, settlements, next_court_id, ic_day, world_states,
+	)
 	var crisis_courts: Array = _process_crisis_court_calls(
 		characters, active_courts, active_topics, world_states, next_court_id, ic_day,
 	)
 	var court_openings: Array = _process_court_openings(active_courts, ic_day)
-	var court_attendance: Array = _process_court_attendance(active_courts, characters, characters_by_id)
+	var court_attendance: Array = _process_court_attendance(
+		active_courts, characters, characters_by_id, objectives_map,
+	)
 	_apply_well_connected_court_bonus(court_attendance, active_courts, characters_by_id)
 	var court_results: Array = _process_active_courts(
 		active_courts, active_topics, next_topic_id, ic_day,
@@ -17370,6 +17377,7 @@ static func _process_court_attendance(
 	active_courts: Array,
 	characters: Array,
 	characters_by_id: Dictionary = {},
+	objectives_map: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 	for court_entry_2: Variant in active_courts:
@@ -17379,12 +17387,22 @@ static func _process_court_attendance(
 		if not CourtSystem.is_active(court):
 			continue
 		var settlement_str: String = str(court.host_settlement_id)
+		# The Imperial Court sits in the Forbidden City — entry requires
+		# forbidden_city_access (s2.3.23). Gate guards turn away the rest.
+		var requires_forbidden: bool = (
+			court.court_type == CourtSessionData.CourtType.IMPERIAL_COURT
+		)
 		for c: L5RCharacterData in characters:
 			if CharacterStats.is_dead(c):
 				continue
 			var at_settlement: bool = c.physical_location == settlement_str
 			var is_attending: bool = c.character_id in court.attendee_ids
 			if at_settlement and not is_attending:
+				if requires_forbidden and not c.forbidden_city_access \
+						and c.character_id != court.host_lord_id:
+					# Blocked at the gate — an idle samurai seeks access by petition.
+					_seek_imperial_court_access(c, court, objectives_map)
+					continue
 				CourtSystem.add_attendee(court, c.character_id)
 				results.append({
 					"court_id": court.court_id,
@@ -17399,6 +17417,76 @@ static func _process_court_attendance(
 				departure["action"] = "departed"
 				results.append(departure)
 	return results
+
+
+# Ensures the Emperor holds a standing Imperial Court at Otosan Uchi while he is
+# in residence (s2.3.23). Creates and opens one when none is active; it persists
+# via the normal court lifecycle and is recreated when it ends. This is the live
+# consumer of forbidden_city_access — the court sits in the Forbidden City.
+static func _process_imperial_court(
+	active_courts: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	next_court_id: Array,
+	ic_day: int,
+	world_states: Dictionary,
+) -> void:
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	if emperor_id < 0:
+		return
+	var emperor: L5RCharacterData = characters_by_id.get(emperor_id)
+	if emperor == null or CharacterStats.is_dead(emperor):
+		return
+
+	var capital_id: int = -1
+	for s_v: Variant in settlements:
+		var sd: SettlementData = s_v as SettlementData
+		if sd != null and sd.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			capital_id = sd.settlement_id
+			break
+	if capital_id < 0:
+		return
+	# No standing court while the Emperor is away (e.g., at Winter Court).
+	if emperor.physical_location != str(capital_id):
+		return
+
+	for ce_v: Variant in active_courts:
+		var ce: CourtSessionData = ce_v as CourtSessionData
+		if ce != null and CourtSystem.is_active(ce) \
+				and ce.court_type == CourtSessionData.CourtType.IMPERIAL_COURT:
+			return  # already in session
+
+	var court: CourtSessionData = CourtSystem.create_court(
+		next_court_id[0], CourtSessionData.CourtType.IMPERIAL_COURT,
+		emperor_id, capital_id, "Imperial", ic_day, -1, true,
+	)
+	next_court_id[0] += 1
+	CourtSystem.open_court(court, ic_day)
+	CourtSystem.add_attendee(court, emperor_id)
+	active_courts.append(court)
+
+
+# An idle samurai blocked from the Imperial Court is drawn to seek access: they
+# acquire an ATTEND_COURT objective so the Sentaku petition pipeline fires. Never
+# overrides a character already pursuing an active objective.
+static func _seek_imperial_court_access(
+	c: L5RCharacterData,
+	court: CourtSessionData,
+	objectives_map: Dictionary,
+) -> void:
+	var existing: Dictionary = objectives_map.get(c.character_id, {}).get("primary", {})
+	if not existing.is_empty() and String(existing.get("status", "")) == "ACTIVE":
+		return
+	if not objectives_map.has(c.character_id):
+		objectives_map[c.character_id] = {}
+	objectives_map[c.character_id]["primary"] = {
+		"need_type": "ATTEND_COURT",
+		"priority": 5,
+		"source": "imperial_court_access",
+		"assigned_by": court.host_lord_id,
+		"status": "ACTIVE",
+		"target_settlement_id": court.host_settlement_id,
+	}
 
 
 ## Applies the WELL_CONNECTED +10 mutual disposition bonus on first arrival at a

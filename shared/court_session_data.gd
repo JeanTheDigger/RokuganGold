@@ -8,6 +8,10 @@ enum CourtType {
 	CLAN_CHAMPION_COURT,
 	PROVINCIAL_FAMILY_COURT,
 	PEACE_COURT,
+	# Standing court the Emperor holds at Otosan Uchi, in the Forbidden City
+	# (s2.3.23). Attendance requires forbidden_city_access. Appended last to keep
+	# existing enum values stable across saves.
+	IMPERIAL_COURT,
 }
 
 enum CourtPhase {
