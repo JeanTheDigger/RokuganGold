@@ -120,6 +120,16 @@ static func _cascade_downward(
 		var rank: Enums.LordRank = CivilianOrderBudget.lord_rank_from_status(c.status)
 		if rank == Enums.LordRank.CLAN_CHAMPION:
 			champion_map[c.clan] = c.character_id
+		elif rank == Enums.LordRank.IMPERIAL and c.lord_id < 0:
+			# The Imperial families (Seppun/Miya/Otomo) have no Clan Champion — they
+			# serve the Emperor directly. The Emperor (the apex, lord_id < 0) therefore
+			# heads the "Imperial" clan's koku cascade: their pool flows Emperor ->
+			# family daimyo -> retainers, with the Emperor retaining the apex (clan-
+			# champion-tier) share to his personal koku. Without this the Imperial pool
+			# has no apex and is skipped (lost) in Phase 2, silently unfunding Imperial-
+			# family retainer stipends. The capital itself is separately exempt from
+			# Phase 1 pooling (s2.3.23 District Economics). Owner decision 2026-06-15.
+			champion_map[c.clan] = c.character_id
 
 	for clan_name: String in clan_pools:
 		var pool: float = clan_pools[clan_name]
