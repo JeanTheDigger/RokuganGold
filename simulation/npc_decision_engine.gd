@@ -3175,6 +3175,7 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"target_npc_id": need.target_npc_id,
 			"position": need.target_intent,
+			"governed_zone_id": need.target_zone_id,
 		}
 	elif option.action_id == "PERFORM_RITUAL":
 		if need.need_type == "GATHER_INTELLIGENCE" and character != null and SpellSystem.is_shugenja(character):

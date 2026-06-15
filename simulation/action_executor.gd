@@ -3784,6 +3784,9 @@ static func _execute_appoint_to_position(
 ) -> Dictionary:
 	var target_id: int = action.metadata.get("target_npc_id", action.target_npc_id)
 	var position: String = action.metadata.get("position", "")
+	# Otosan Uchi Governor appointments carry the district zone the appointee will
+	# govern; "" for every other position (s2.3.23).
+	var governed_zone_id: String = action.metadata.get("governed_zone_id", "")
 	return {
 		"success": target_id >= 0,
 		"action_id": "APPOINT_TO_POSITION",
@@ -3796,6 +3799,7 @@ static func _execute_appoint_to_position(
 			"appointing_lord_id": ctx.character_id,
 			"appointee_id": target_id,
 			"position": position,
+			"governed_zone_id": governed_zone_id,
 		},
 	}
 

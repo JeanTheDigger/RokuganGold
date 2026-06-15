@@ -1221,6 +1221,7 @@ static func _make_need(
 	need.target_resource = extras.get("target_resource", "")
 	need.target_army_id = extras.get("target_army_id", -1)
 	need.target_intent = extras.get("target_intent", "")
+	need.target_zone_id = extras.get("target_zone_id", "")
 	need.threshold = extras.get("threshold", 0.0)
 	need.threshold_type = extras.get("threshold_type", "")
 	return need
@@ -1668,4 +1669,5 @@ static func _decompose_fill_vacancy(
 		"target_npc_id": best_vacancy.get("candidate_id", -1),
 		"target_intent": best_vacancy.get("position_type", ""),
 		"target_province_id": best_vacancy.get("province_id", -1),
+		"target_zone_id": best_vacancy.get("zone_id", ""),
 	})

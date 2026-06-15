@@ -48,6 +48,10 @@ const EVENT_LOG_RETENTION_DAYS: int = 90
 @export var clan_preference: Array[String] = []
 # Current Governor's character_id; -1 = vacant (district under Sentaku authority).
 @export var zone_lord_id: int = -1
+# True for the 15 governed Otosan Uchi districts (Toshisoto + Ekohikei); false for
+# the Forbidden City (no Governor) and every non-capital zone. Distinguishes a
+# vacant governed seat from a district that simply never has a Governor (s2.3.23).
+@export var has_governor: bool = false
 # Per-district Stability (Governor scope) — distinct from province-wide stability.
 @export var district_stability: float = 100.0
 # Crime incidents recorded in this district during the current IC season. Drives

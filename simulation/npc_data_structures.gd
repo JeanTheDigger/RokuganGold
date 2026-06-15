@@ -15,6 +15,8 @@ class ImmediateNeed:
 	var target_resource: String = ""
 	var target_army_id: int = -1
 	var target_intent: String = ""
+	# Otosan Uchi Governor appointment: zone_id of the district to govern (s2.3.23).
+	var target_zone_id: String = ""
 	var threshold: float = 0.0
 	var threshold_type: String = ""
 	var source: String = ""

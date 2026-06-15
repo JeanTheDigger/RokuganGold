@@ -116,6 +116,7 @@ static func build(settlement: SettlementData) -> Dictionary:
 		var pref: Array[String] = []
 		pref.assign(d["pref"])
 		nz.clan_preference = pref
+		nz.has_governor = d.get("governor", false)
 		nz.zone_lord_id = -1  # linked to a Governor after the population pass
 		nav_zones.append(nz)
 		gz.add_child_zone(nz.zone_id)

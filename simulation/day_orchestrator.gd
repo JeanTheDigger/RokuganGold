@@ -142,7 +142,7 @@ static func advance_day(
 				character_province_map[_cpm_c.character_id] = _pid
 
 	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
-	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
+	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta, navigation_zones)
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
 	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
 	_assign_magistrate_standing_objectives(characters, objectives_map)
@@ -632,7 +632,7 @@ static func advance_day(
 
 	# Refresh vacancy intelligence after daily construction creates new settlements
 	if not construction_results.is_empty():
-		_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
+		_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta, navigation_zones)
 
 	_process_tattoo_creation(
 		day_result.get("results", []),
@@ -714,6 +714,13 @@ static func advance_day(
 		favors,
 		active_topics,
 		next_topic_id,
+	)
+
+	# s2.3.23: complete the district link for any Governor just appointed (sets
+	# lord_id, Status, governed_zone_id, zone_lord_id, Chair as superior, date).
+	_process_governor_appointment_writebacks(
+		governance_results.get("appointments", []),
+		navigation_zones, characters_by_id, characters, world_states, ic_day,
 	)
 
 	_process_seduction_entanglements(
@@ -1466,7 +1473,7 @@ static func advance_day(
 		)
 		# Refresh vacancy intelligence after construction completions and organic villages
 		# so newly created settlements (temples, monasteries, forts) trigger vacancy detection
-		_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
+		_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta, navigation_zones)
 		gempukku_results = _process_gempukku(
 			children, characters, characters_by_id, next_character_id,
 			dice_engine, ic_day, active_topics, next_topic_id, objectives_map,
@@ -10437,8 +10444,8 @@ static func _process_governor_reviews(
 		var zone: NavigationZoneData = z as NavigationZoneData
 		if zone == null:
 			continue
-		# A governed Otosan Uchi district: has a permanent Sentaku name and a Governor.
-		if zone.sentaku_name == "" or zone.zone_lord_id < 0:
+		# A governed Otosan Uchi district whose seat is currently filled.
+		if not zone.has_governor or zone.zone_lord_id < 0:
 			continue
 
 		var crime_count: int = zone.district_crime_count
@@ -19557,6 +19564,7 @@ static func _apply_appointment(
 		"appointee_id": appointee_id,
 		"position": position,
 		"lord_id": lord_id,
+		"governed_zone_id": effects.get("governed_zone_id", ""),
 	}
 
 
@@ -20933,6 +20941,7 @@ static func _populate_vacancy_intelligence(
 	settlements: Array = [],
 	provinces: Dictionary = {},
 	season_meta: Dictionary = {},
+	navigation_zones: Array = [],
 ) -> void:
 	var lord_vacancies: Dictionary = {}
 
@@ -21159,6 +21168,32 @@ static func _populate_vacancy_intelligence(
 			filled_positions[lord_id_5] = []
 		filled_positions[lord_id_5].append(family_key)
 
+	# Otosan Uchi Governor vacancies (s2.3.23): every governed district zone whose
+	# seat is empty (zone_lord_id < 0) is a vacancy on the Emperor. The Emperor's
+	# FILL_VACANCY decomposition appoints from his met_characters pool, weighted by
+	# the district's clan preference and Status appropriateness.
+	if emperor_id >= 0:
+		var emperor_char: L5RCharacterData = characters_by_id.get(emperor_id) as L5RCharacterData
+		for z: Variant in navigation_zones:
+			var gz: NavigationZoneData = z as NavigationZoneData
+			if gz == null or not gz.has_governor:
+				continue
+			if gz.zone_lord_id >= 0:
+				continue  # seat already filled
+			var gov_cand: int = _find_governor_candidate(
+				emperor_char, gz, characters, emperor_archetype,
+			)
+			if not lord_vacancies.has(emperor_id):
+				lord_vacancies[emperor_id] = []
+			lord_vacancies[emperor_id].append({
+				"position_type": RoleRegistry.GOVERNOR_OTOSAN_UCHI,
+				"priority": 2,
+				"province_id": -1,
+				"zone_id": gz.zone_id,
+				"candidate_id": gov_cand,
+				"seasons_vacant": 0,
+			})
+
 	# Inherit seasons_vacant from persistent registry
 	var registry: Dictionary = season_meta.get("vacancy_registry", {})
 	var new_registry: Dictionary = {}
@@ -21184,8 +21219,11 @@ static func _vacancy_key(lord_id: int, v: Dictionary) -> String:
 	var family: String = v.get("family", "")
 	var settlement_id: int = v.get("settlement_id", -1)
 	var unit_id: int = v.get("unit_id", -1)
+	var zone_id: String = v.get("zone_id", "")
 	if not family.is_empty():
 		return "%d_%s_%s" % [lord_id, pos_type, family]
+	if not zone_id.is_empty():
+		return "%d_%s_z%s" % [lord_id, pos_type, zone_id]
 	if settlement_id >= 0:
 		return "%d_%s_s%d" % [lord_id, pos_type, settlement_id]
 	if unit_id >= 0:
@@ -21265,6 +21303,159 @@ static func _find_vacancy_candidate(
 			best_score = score
 			best_id = c.character_id
 	return best_id
+
+
+# Governor candidate selection (s2.3.23 Candidate Evaluation Weights). Unlike the
+# generic vacancy candidate, Governors are drawn from the Emperor's met_characters
+# pool (not just direct vassals) and weighted by the district's clan preference and
+# Status appropriateness. Weights and archetype modifiers are GDD-specified; the
+# per-component normalization curves are PROVISIONAL ("All weight values pending
+# balancing"). Returns the best candidate's character_id, or -1 if none qualifies
+# (the solicitation fallback to Clan Champions then applies — future increment).
+const GOV_W_STATUS: float = 10.0
+# Governor is a Status 4.0–5.0 position (s2.3.23).
+const GOV_STATUS_LOW: float = 4.0
+const GOV_STATUS_HIGH: float = 5.0
+# PROVISIONAL normalization ceilings (linear-to-weight, mirroring other scorers).
+const GOV_SKILL_NORM: float = 14.0
+const GOV_STATUS_NORM: float = 3.0
+
+static func _find_governor_candidate(
+	emperor: L5RCharacterData,
+	zone: NavigationZoneData,
+	characters: Array,
+	archetype: int,
+) -> int:
+	if emperor == null or emperor.met_characters.is_empty():
+		return -1
+	# Archetype-modified candidate-evaluation weights (s2.3.23, GDD-specified).
+	var w_skill_map: Dictionary = {
+		StrategicReview.EmperorArchetype.BENEVOLENT: 15.0,
+		StrategicReview.EmperorArchetype.IRON: 25.0,
+		StrategicReview.EmperorArchetype.CUNNING: 15.0,
+		StrategicReview.EmperorArchetype.WARLIKE: 15.0,
+		StrategicReview.EmperorArchetype.TYRANT: 5.0,
+	}
+	var w_disp_map: Dictionary = {
+		StrategicReview.EmperorArchetype.BENEVOLENT: 15.0,
+		StrategicReview.EmperorArchetype.IRON: 10.0,
+		StrategicReview.EmperorArchetype.CUNNING: 15.0,
+		StrategicReview.EmperorArchetype.WARLIKE: 15.0,
+		StrategicReview.EmperorArchetype.TYRANT: 30.0,
+	}
+	var w_clan_map: Dictionary = {
+		StrategicReview.EmperorArchetype.BENEVOLENT: 20.0,
+		StrategicReview.EmperorArchetype.IRON: 20.0,
+		StrategicReview.EmperorArchetype.CUNNING: 10.0,
+		StrategicReview.EmperorArchetype.WARLIKE: 20.0,
+		StrategicReview.EmperorArchetype.TYRANT: 0.0,
+	}
+	var w_skill: float = w_skill_map.get(archetype, 15.0)
+	var w_disp: float = w_disp_map.get(archetype, 15.0)
+	var w_clan: float = w_clan_map.get(archetype, 20.0)
+	var prefs: Array = zone.clan_preference
+
+	var best_id: int = -1
+	var best_score: float = -1.0
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.character_id == emperor.character_id:
+			continue
+		if c.is_pc:
+			continue
+		# Available: not already holding a position, and known to the Emperor.
+		if not c.role_position.is_empty():
+			continue
+		if not emperor.met_characters.has(c.character_id):
+			continue
+
+		# Skill relevance (Courtier primary; Commerce / Investigation / Lore: Law /
+		# Battle secondary) per s2.3.23.
+		var skill_raw: float = (
+			2.0 * float(c.skills.get("Courtier", 0))
+			+ float(c.skills.get("Commerce", 0))
+			+ float(c.skills.get("Investigation", 0))
+			+ float(c.skills.get("Lore: Law", 0))
+			+ float(c.skills.get("Battle", 0))
+		)
+		var skill_score: float = clampf(skill_raw / GOV_SKILL_NORM, 0.0, 1.0) * w_skill
+
+		# Disposition toward the appointing Emperor.
+		var disp: float = float(c.disposition_values.get(emperor.character_id, 0))
+		var disp_score: float = clampf((disp + 50.0) / 100.0, 0.0, 1.0) * w_disp
+
+		# District clan preference (a convention, not a hard gate).
+		var clan_score: float = w_clan if c.clan in prefs else 0.0
+
+		# Status appropriateness: in-band scores full; distance from the 4.0–5.0
+		# band (too junior, or a senior who would see it as a demotion) scores less.
+		var dist: float = 0.0
+		if c.status < GOV_STATUS_LOW:
+			dist = GOV_STATUS_LOW - c.status
+		elif c.status > GOV_STATUS_HIGH:
+			dist = c.status - GOV_STATUS_HIGH
+		var status_score: float = GOV_W_STATUS * clampf(1.0 - dist / GOV_STATUS_NORM, 0.0, 1.0)
+
+		var total: float = skill_score + disp_score + clan_score + status_score
+		if total > best_score:
+			best_score = total
+			best_id = c.character_id
+	return best_id
+
+
+# Completes a Governor appointment's district link (s2.3.23). _apply_appointment
+# sets role_position; this pass sets the Governor-specific fields the generic path
+# can't: lord_id = Emperor, Status by district layer, governed_zone_id, the zone's
+# zone_lord_id, operational_superior_id = Sentaku Chair, and appointment date.
+static func _process_governor_appointment_writebacks(
+	appointment_results: Array,
+	navigation_zones: Array,
+	characters_by_id: Dictionary,
+	characters: Array,
+	world_states: Dictionary,
+	ic_day: int,
+) -> void:
+	if appointment_results.is_empty():
+		return
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	# The Sentaku Chair is every Governor's operational superior (s2.3.23).
+	var chair_id: int = -1
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.role_position == RoleRegistry.SENTAKU_TRIBUNAL_CHAIR:
+			chair_id = c.character_id
+			break
+
+	for r: Variant in appointment_results:
+		if not (r is Dictionary):
+			continue
+		var rd: Dictionary = r
+		if not rd.get("applied", false):
+			continue
+		if rd.get("position", "") != RoleRegistry.GOVERNOR_OTOSAN_UCHI:
+			continue
+		var zone_id: String = rd.get("governed_zone_id", "")
+		if zone_id.is_empty():
+			continue
+		var appointee: L5RCharacterData = characters_by_id.get(rd.get("appointee_id", -1)) as L5RCharacterData
+		if appointee == null or CharacterStats.is_dead(appointee):
+			continue
+		var zone: NavigationZoneData = null
+		for z: Variant in navigation_zones:
+			var nz: NavigationZoneData = z as NavigationZoneData
+			if nz != null and nz.zone_id == zone_id:
+				zone = nz
+				break
+		if zone == null:
+			continue
+		appointee.lord_id = emperor_id
+		appointee.governed_zone_id = zone_id
+		appointee.operational_superior_id = chair_id
+		appointee.appointed_ic_day = ic_day
+		appointee.status = OtosanUchiZoneBuilder.governor_status_for_layer(zone.access_layer)
+		zone.zone_lord_id = appointee.character_id
 
 
 static func _compute_clan_position_counts(
