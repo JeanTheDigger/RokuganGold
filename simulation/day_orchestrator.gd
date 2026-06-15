@@ -215,6 +215,9 @@ static func advance_day(
 	_process_imperial_court(
 		active_courts, characters_by_id, settlements, next_court_id, ic_day, world_states,
 	)
+	_process_imperial_court_invitations(
+		active_courts, characters, characters_by_id, world_states, time_system,
+	)
 	var crisis_courts: Array = _process_crisis_court_calls(
 		characters, active_courts, active_topics, world_states, next_court_id, ic_day,
 	)
@@ -17487,6 +17490,99 @@ static func _seek_imperial_court_access(
 		"status": "ACTIVE",
 		"target_settlement_id": court.host_settlement_id,
 	}
+
+
+# Imperial Court invitations (s2.3.23): each non-winter season the Emperor draws a
+# small batch of mid-tier courtiers/lords to his standing court at Otosan Uchi.
+# They travel in, petition the Sentaku for access, and attend. The great Clan
+# Champions are NOT drawn here — they attend the separate Winter Court (hosted at
+# a Great Clan castle, never the capital). PROVISIONAL (GDD gives no count/cadence):
+# up to 3 invitees per season, status band 4.0–6.5 (Champions excluded; commoners
+# below the Imperial audience).
+const IMPERIAL_INVITE_COUNT: int = 3
+const IMPERIAL_INVITE_STATUS_MIN: float = 4.0
+const IMPERIAL_INVITE_STATUS_MAX: float = 6.5
+
+static func _process_imperial_court_invitations(
+	active_courts: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	time_system: TimeSystem,
+) -> void:
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	if emperor_id < 0:
+		return
+	var emperor: L5RCharacterData = characters_by_id.get(emperor_id)
+	if emperor == null or CharacterStats.is_dead(emperor):
+		return
+
+	# The standing Imperial Court (absent while the Emperor is at Winter Court).
+	var court: CourtSessionData = null
+	for ce_v: Variant in active_courts:
+		var ce: CourtSessionData = ce_v as CourtSessionData
+		if ce != null and CourtSystem.is_active(ce) \
+				and ce.court_type == CourtSessionData.CourtType.IMPERIAL_COURT:
+			court = ce
+			break
+	if court == null:
+		return
+
+	# Once per season.
+	var season_index: int = _petition_season_index(time_system)
+	if int(world_states.get("last_imperial_invite_season", -1)) == season_index:
+		return
+	world_states["last_imperial_invite_season"] = season_index
+
+	var capital_loc: String = str(court.host_settlement_id)
+
+	# Candidate pool: mid-tier courtiers/lords away from the capital.
+	var scored: Array = []
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.character_id == emperor_id or c.clan == "Imperial":
+			continue
+		if c.status < IMPERIAL_INVITE_STATUS_MIN or c.status > IMPERIAL_INVITE_STATUS_MAX:
+			continue
+		if c.physical_location == capital_loc or TravelSystem.is_traveling(c):
+			continue
+		if c.character_id in court.personal_invitation_ids:
+			continue
+		scored.append({
+			"id": c.character_id,
+			"disp": float(emperor.disposition_values.get(c.character_id, 0)),
+			"status": c.status,
+		})
+
+	scored.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a["disp"] != b["disp"]:
+			return a["disp"] > b["disp"]
+		return a["status"] > b["status"]
+	)
+
+	var count: int = 0
+	for entry: Dictionary in scored:
+		if count >= IMPERIAL_INVITE_COUNT:
+			break
+		var inv_id: int = entry["id"]
+		court.personal_invitation_ids.append(inv_id)
+		var inv_ws: Dictionary = world_states.get(inv_id, {})
+		var inv_pending: Array = inv_ws.get("pending_events", [])
+		inv_pending.append({
+			"reactive_type": "COURT_INVITATION",
+			"host_id": emperor_id,
+			"settlement_id": court.host_settlement_id,
+			"court_id": court.court_id,
+			"prestige": court.prestige,
+			# An invitation from the Son of Heaven is a summons — auto-accepted
+			# (s2.3.23: "an explicit Imperial summons … bypasses the vote"; one does
+			# not refuse the Emperor). Drives the invitee to travel and petition.
+			"is_imperial_summons": true,
+		})
+		inv_ws["pending_events"] = inv_pending
+		world_states[inv_id] = inv_ws
+		count += 1
 
 
 ## Applies the WELL_CONNECTED +10 mutual disposition bonus on first arrival at a
