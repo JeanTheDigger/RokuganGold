@@ -1852,7 +1852,14 @@ static func _compute_allied_aid_effects(
 
 static func _compute_admin_effects(action_id: String, action: NPCDataStructures.ScoredAction = null) -> Dictionary:
 	match action_id:
-		"SET_TAX_RATE", "SET_STIPEND_RATE":
+		"SET_TAX_RATE":
+			# Governor's chosen district retention (s2.3.23). -1 = unset → the
+			# writeback derives it (NPC: Honor-inverse). A PC sets it via metadata.
+			var tax_retention: float = -1.0
+			if action != null:
+				tax_retention = float(action.metadata.get("tax_retention", -1.0))
+			return {"effect": "rate_adjusted", "tax_retention": tax_retention}
+		"SET_STIPEND_RATE":
 			return {"effect": "rate_adjusted"}
 		"PURCHASE_MARKET":
 			return {"effect": "transaction_completed", "koku_cost": PURCHASE_KOKU_COST}

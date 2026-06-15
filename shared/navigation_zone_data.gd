@@ -70,6 +70,12 @@ const EVENT_LOG_RETENTION_DAYS: int = 90
 # suppressed (no longer present/strong in active_insurgencies).
 @export var district_revolt_insurgency_id: int = -1
 
+# Fraction of this district's seasonal Koku the Governor retains (the remainder
+# flows to the Emperor's stockpile), set via SET_TAX_RATE per GDD s2.3.23. Defaults
+# to 0.30 (the s4.3.7 provincial 30%); clamped to [0.10, 0.50] when a Governor sets
+# it. Persists on the district across Governors.
+@export var district_tax_retention: float = 0.30
+
 
 # -- ASCII map (optional) ----------------------------------------------------
 

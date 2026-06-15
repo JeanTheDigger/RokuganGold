@@ -841,6 +841,10 @@ static func advance_day(
 		day_result.get("results", []), characters_by_id, active_secrets,
 	)
 
+	_process_set_tax_rate_writebacks(
+		day_result.get("results", []), characters_by_id, navigation_zones,
+	)
+
 	_process_protecting_clan_honor_writebacks(
 		day_result.get("results", []), characters_by_id, provinces,
 	)
@@ -10839,6 +10843,10 @@ static func _process_district_stability_crime(
 # Forbidden City and any vacant governed seat have no Governor to retain a share, so
 # all of their koku goes to the Emperor. Runs once per season.
 const GOVERNOR_DISTRICT_TAX_RETENTION: float = 0.30
+# Bounds a Governor may set their district retention to via SET_TAX_RATE (s2.3.23,
+# owner-locked 2026-06-15). The Emperor always receives at least half.
+const DISTRICT_TAX_RETENTION_MIN: float = 0.10
+const DISTRICT_TAX_RETENTION_MAX: float = 0.50
 
 static func _process_district_economics(
 	navigation_zones: Array,
@@ -10871,7 +10879,8 @@ static func _process_district_economics(
 			if governor != null and CharacterStats.is_dead(governor):
 				governor = null
 		if governor != null:
-			var retained: float = koku * GOVERNOR_DISTRICT_TAX_RETENTION
+			# Governor-set retention (SET_TAX_RATE, s2.3.23); defaults to 0.30.
+			var retained: float = koku * nz.district_tax_retention
 			governor.koku += retained
 			capital.koku_stockpile += koku - retained
 		else:
@@ -24629,6 +24638,43 @@ static func _process_kindness_honor_writebacks(
 			HonorGlorySystem.apply_honor_change(
 				actor, CrimeSystem.get_kindness_below_station_honor(actor)
 			)
+
+
+# SET_TAX_RATE writeback (s2.3.23): a Governor sets their own district's Koku
+# retention. Only fires for an Otosan Uchi district Governor (governed_zone_id maps
+# to a sentaku district) — for an ordinary provincial lord SET_TAX_RATE remains a
+# no-op (province-wide taxation is a separate, unbuilt system). The rate is the
+# PC-set metadata value if present, else derived Honor-inverse for an NPC Governor
+# (high Honor → near the 10% minimum, low Honor → near the 50% maximum, since a
+# Governor is an appointed official and Honor is the loyalty/corruption axis).
+# Clamped to [MIN, MAX]; persists on the district.
+static func _process_set_tax_rate_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	navigation_zones: Array,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "SET_TAX_RATE":
+			continue
+		if not result.get("success", false):
+			continue
+		var actor_id: int = result.get("character_id", -1)
+		var actor: L5RCharacterData = characters_by_id.get(actor_id)
+		if actor == null or CharacterStats.is_dead(actor):
+			continue
+		if actor.governed_zone_id.is_empty():
+			continue
+		var zone: NavigationZoneData = _find_nav_zone_by_id(
+			navigation_zones, actor.governed_zone_id)
+		if zone == null or zone.sentaku_name.is_empty():
+			continue
+		var rate: float = float(result.get("effects", {}).get("tax_retention", -1.0))
+		if rate < 0.0:
+			# NPC Governor: Honor-inverse (Honor 0 → 0.50, 10 → 0.10, 5 → 0.30).
+			rate = DISTRICT_TAX_RETENTION_MAX \
+				- (DISTRICT_TAX_RETENTION_MAX - DISTRICT_TAX_RETENTION_MIN) * (actor.honor / 10.0)
+		zone.district_tax_retention = clampf(
+			rate, DISTRICT_TAX_RETENTION_MIN, DISTRICT_TAX_RETENTION_MAX)
 
 
 static func _process_truthful_report_honor_writebacks(
