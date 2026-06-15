@@ -5005,6 +5005,29 @@ found across the entire map layer.**
   elevation descent (its `is_rim` entry vectors), exactly as documented.
 No production code touched — verification only. Drivers were temporary and removed.
 
+### Otosan Uchi zone GRAPH — wiring verification (2026-06-15)
+Audited the inter-zone graph built by `OtosanUchiZoneBuilder.build()` (the layer
+above per-zone tile connectivity) at runtime under Godot 4.6.1. **CLEAN — no bugs.**
+Built the capital (1 GreaterZone, **16 districts**, **122 landmark Lesser Zones**,
+139 unique zone_ids, zero duplicates) and verified:
+- **District chain:** 16/16 districts reachable via `exits` from district 0; every
+  consecutive pair is bidirectional (N forward / S back). Linear chain by design —
+  access-tier gating (Toshisoto→Ekohikei→Forbidden) is enforced by the petition
+  flag system, not the graph.
+- **Landmark links:** 122/122 clean — each Lesser Zone's `parent_zone_id` resolves
+  to a real district, its `"up"` exit targets that parent, and the district's
+  `child_zone_ids` contains it (reciprocal containment). Descent is containment-based
+  (`parent_zone_id`/`child_zone_ids`), so the landmark's single one-way `"up"` exit
+  is correct — not a missing reciprocal exit.
+- **No dangling exit targets** across GreaterZone / NavigationZone / LesserZone.
+- **ZoneRegistry indexing:** `get_nav_zones_for_settlement`=16,
+  `get_all_lesser_zones_for_settlement`=122, `get_lesser_zones_for_nav` joins 16/16
+  via `parent_zone_id`.
+- **Governor join:** 15/15 governor districts flagged (Forbidden City correctly has
+  none), and every district `zone_id` equals the deterministic `district_zone_id(sid, i)`
+  the world-population generator joins Governors on — so the roster↔zone link is sound.
+No production code touched — verification only. Driver was temporary and removed.
+
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
 via headless largest-connected-component analysis + per-exit reachability check
