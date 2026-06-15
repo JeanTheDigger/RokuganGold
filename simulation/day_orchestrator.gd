@@ -192,6 +192,10 @@ static func advance_day(
 		active_topics, next_topic_id, ic_day,
 		world_states["clan_baselines"], world_states["family_baselines"],
 	)
+	_process_southern_gate_taint_detection(
+		travel_arrivals, characters_by_id, settlements,
+		active_topics, next_topic_id, ic_day,
+	)
 
 	var musha_season_count: int = int(season_meta.get("horde_season_count", 0))
 	var musha_shugyo_results: Array = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map, dice_engine, musha_season_count)
@@ -7564,6 +7568,101 @@ static func _refresh_taint_accusation(
 		var lord: L5RCharacterData = characters_by_id.get(observer.lord_id)
 		if lord != null and not CharacterStats.is_dead(lord) and topic.topic_id not in lord.topic_pool:
 			lord.topic_pool.append(topic.topic_id)
+
+
+# -- Southern Gate jade torii Taint detection (s2.3.23, owner-confirmed 2026-06-15)
+# The Ekohikei Southern Gate is surmounted by a jade/crystal torii that "will glow
+# in the presence of the Shadowlands Taint" (s2.3.23). When a character with Taint
+# Rank >= 2 enters Otosan Uchi holding ekohikei_access or forbidden_city_access —
+# i.e. they passed through a restricted-layer gate — the glow triggers an immediate
+# Seppun Hidden Guard investigation. Modeled by reusing the Channel-3 taint_suspected
+# accusation pipeline, seeded to the co-located Seppun Hidden Guard / Imperial
+# authority. Automatic detection (no roll — the torii is a magic ward, not a skilled
+# observer). No Crab exemption: s2.3.23 says "any character ... above this threshold,"
+# and the Imperial capital is not the Kaiu Wall where Crab Taint has an innocent
+# explanation. Threshold (Taint Rank 2+) is GDD-given (PROVISIONAL per s2.3.23).
+static func _process_southern_gate_taint_detection(
+	arrivals: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	var capital_id: int = -1
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			capital_id = s.settlement_id
+			break
+	if capital_id < 0:
+		return
+	var cap_str: String = str(capital_id)
+
+	for arrival: Dictionary in arrivals:
+		var char_id: int = arrival.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		if character.physical_location != cap_str:
+			continue
+		# Must have passed through a restricted-layer gate (Southern or Necessary).
+		if not character.ekohikei_access and not character.forbidden_city_access:
+			continue
+		if MutationSystem.get_taint_rank(character.taint) < MutationSystem.TAINT_DETECTION_RANK_MIN:
+			continue
+
+		# Automatic glow — no roll. Reuse the Channel-3 accusation pipeline; a
+		# live accusation is reinforced rather than duplicated.
+		var existing: TopicData = _find_active_taint_accusation(active_topics, character.character_id)
+		if existing != null:
+			existing.momentum = maxf(
+				existing.momentum,
+				TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3),
+			)
+			existing.discussion_count_this_day += 1
+			_seed_southern_gate_accusation(existing, character, characters_by_id, cap_str)
+			continue
+
+		var topic_id: int = next_topic_id[0]
+		next_topic_id[0] += 1
+		var title: String = "%s suspected of Taint corruption" % character.character_name
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			topic_id, title,
+			TopicData.Tier.TIER_3,
+			TopicData.Category.SUPERNATURAL,
+			ic_day, 30.0,
+			[], character.clan, character.family,
+			character.character_id,
+			"accusation", "taint_suspected",
+		)
+		topic.slug = "taint_suspected_%d" % character.character_id
+		topic.subject_role = "PERPETRATOR"
+		active_topics.append(topic)
+		_seed_southern_gate_accusation(topic, character, characters_by_id, cap_str)
+
+
+static func _seed_southern_gate_accusation(
+	topic: TopicData,
+	suspect: L5RCharacterData,
+	characters_by_id: Dictionary,
+	cap_str: String,
+) -> void:
+	## Seed the accusation to the Seppun Hidden Guard — co-located Seppun-family /
+	## Imperial-clan characters at the capital (the personal defenders of the
+	## Imperial line, s2.3.23) — so their UPHOLD_LAW objective picks it up.
+	## Skips the suspect and the dead.
+	for cid: Variant in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.character_id == suspect.character_id:
+			continue
+		if c.physical_location != cap_str:
+			continue
+		if c.family != "Seppun" and c.clan != "Imperial":
+			continue
+		if topic.topic_id not in c.topic_pool:
+			c.topic_pool.append(topic.topic_id)
 
 
 static func _build_taint_corroboration_targets(
