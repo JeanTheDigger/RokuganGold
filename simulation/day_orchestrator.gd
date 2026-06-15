@@ -22898,8 +22898,12 @@ static func _inject_base_character_context(
 			ws = {}
 			world_states[c.character_id] = ws
 
-		var char_is_lord: bool = c.status >= 5.0 or c.lord_id == -1
+		# s2.3.23 Zone-Level Lord Authority: a Governor is a lord of their district
+		# regardless of Status (Toshisoto Governors sit at 4.5, below the 5.0 gate).
+		var is_governor: bool = not c.governed_zone_id.is_empty()
+		var char_is_lord: bool = c.status >= 5.0 or c.lord_id == -1 or is_governor
 		ws["is_lord"] = char_is_lord
+		ws["is_otosan_governor"] = is_governor
 		ws["ic_day"] = ic_day
 		ws["season"] = current_season
 		ws["tattoos"] = tattoos

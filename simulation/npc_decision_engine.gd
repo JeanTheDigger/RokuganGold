@@ -34,6 +34,9 @@ static func build_context(
 	ctx.school = character.school
 	ctx.school_type = character.school_type
 	ctx.is_lord = world_state.get("is_lord", false)
+	# Otosan Uchi Governor — conditional district lord (s2.3.23). Gates the
+	# Governor ActionID blocklist in generate_options().
+	ctx.is_otosan_governor = bool(world_state.get("is_otosan_governor", false))
 	ctx.is_hostage = character.captive_status != ""
 	# Kolat agent context (s54.7d Phase-3 ActionID unlock).
 	ctx.kolat_sect = character.kolat_sect
@@ -491,6 +494,10 @@ static func generate_options(
 		if _is_military_blocked(action_id, ctx):
 			continue
 		if _is_lord_only_blocked(action_id, ctx):
+			continue
+		# Otosan Uchi Governors are conditional district lords — daimyo/military
+		# actions are removed from their pool (s2.3.23 Zone-Level Lord Authority).
+		if _is_governor_blocked(action_id, ctx):
 			continue
 		if ctx.is_ceasefire_day and _is_ceasefire_blocked(action_id):
 			continue
@@ -2805,6 +2812,36 @@ static func _is_lord_only_blocked(
 	if action_id in LORD_ONLY_ACTIONS:
 		return not ctx.is_lord
 	return false
+
+
+# Otosan Uchi Governor blocklist (s2.3.23 Zone-Level Lord Authority, verbatim).
+# A Governor is a conditional district lord — zone-level authority grants lord-tier
+# ActionIDs within their district, but these daimyo/Imperial-scale and military
+# actions are explicitly forbidden: they "simply do not appear in their Phase 5
+# scoring pool." Governors cannot raise armies, conduct sieges, found settlements,
+# arrange marriages, or wage economic warfare.
+const GOVERNOR_BLOCKED_ACTIONS: Array[String] = [
+	# Category 7 — military
+	"ORDER_LEVY", "ORDER_DEPLOY", "ORDER_BATTLE", "ORDER_RETREAT", "ORDER_FORTIFY",
+	"DRILL_TROOPS", "FORCE_MARCH", "BLOCKADE_TRADE_ROUTE", "EVALUATE_CLAN_STRENGTH",
+	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID", "CONDUCT_RAID", "RAID_HARVEST",
+	"EVALUATE_WAR_READINESS",
+	# Category 8 — siege
+	"MAINTAIN_SIEGE", "CONDUCT_STORM_ASSAULT", "NEGOTIATE_SURRENDER", "CONDUCT_SORTIE",
+	# Imperial-scale construction
+	"FOUND_VILLAGE", "BUILD_FORTIFICATION", "COMMISSION_SHIP",
+	# Family Daimyo+ religious construction
+	"FOUND_TEMPLE", "FOUND_MONASTERY",
+	# Above their station
+	"ARRANGE_MARRIAGE", "IMPOSE_EMBARGO",
+]
+
+
+static func _is_governor_blocked(
+	action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	return ctx.is_otosan_governor and action_id in GOVERNOR_BLOCKED_ACTIONS
 
 
 static func _is_military_blocked(
