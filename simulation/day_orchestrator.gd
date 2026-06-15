@@ -233,6 +233,10 @@ static func advance_day(
 	_inject_shide_context(settlements, characters, world_states)
 	_process_shide_permission_grants(settlements, characters, characters_by_id, ic_day)
 	_inject_poem_context(characters, world_states)
+	# Sentaku access (s2.3.23): clear lapsed Forbidden City visits, then surface
+	# PETITION_ACCESS to capital visitors who still lack a tier and aren't cooling down.
+	_process_forbidden_access_expiry(characters, ic_day)
+	_inject_petition_context(world_states, characters_by_id, settlements, time_system)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_process_wall_shireikan_escalation(
 		characters, characters_by_id, objectives_map, settlements, provinces,
@@ -889,6 +893,12 @@ static func advance_day(
 	)
 
 	_remove_resolved_hunts(active_hunts)
+
+	_process_access_petitions(
+		day_result.get("results", []),
+		characters, characters_by_id, objectives_map, world_states,
+		active_wars, ic_day, time_system,
+	)
 
 	_process_petition_writebacks(
 		day_result.get("results", []),
@@ -24351,6 +24361,164 @@ static func _inject_hunt_context(
 					break
 
 		ws["known_objectives"] = known_objs
+
+
+# -- Sentaku access petitions (s2.3.23) --------------------------------------
+
+# Absolute season index (year × 4 + season ordinal) — used for the 1-IC-season
+# resubmission cooldown ("resubmit after 1 IC season; same season auto-denied").
+static func _petition_season_index(time_system: TimeSystem) -> int:
+	return time_system.get_ic_year() * 4 + int(time_system.get_season())
+
+
+# Clears Forbidden City access whose per-visit duration has elapsed. Standing
+# grants (Imperial residents) carry expiry -1 and never expire.
+static func _process_forbidden_access_expiry(characters: Array, ic_day: int) -> void:
+	for c: L5RCharacterData in characters:
+		if not c.forbidden_city_access:
+			continue
+		if c.forbidden_city_access_expiry_ic_day < 0:
+			continue
+		if ic_day >= c.forbidden_city_access_expiry_ic_day:
+			c.forbidden_city_access = false
+			c.forbidden_city_access_expiry_ic_day = -1
+
+
+# Surfaces PETITION_ACCESS to living non-PC visitors physically at Otosan Uchi
+# who still lack an access tier and aren't within a resubmission cooldown.
+static func _inject_petition_context(
+	world_states: Dictionary,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	time_system: TimeSystem,
+) -> void:
+	var capital_loc: String = ""
+	for s_v: Variant in settlements:
+		var sd: SettlementData = s_v as SettlementData
+		if sd != null and sd.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			capital_loc = str(sd.settlement_id)
+			break
+	if capital_loc == "":
+		return
+	var season_index: int = _petition_season_index(time_system)
+	for char_id: Variant in world_states:
+		if char_id is not int:
+			continue
+		var c: L5RCharacterData = characters_by_id.get(char_id)
+		if c == null or CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.physical_location != capital_loc:
+			continue
+		var ptype: String = ""
+		if not c.ekohikei_access:
+			ptype = SentakuTribunalSystem.PETITION_EKOHIKEI
+		elif not c.forbidden_city_access:
+			ptype = SentakuTribunalSystem.PETITION_FORBIDDEN
+		if ptype == "":
+			continue
+		if int(c.access_petition_denied_season.get(ptype, -1)) >= season_index:
+			continue
+		var ws: Dictionary = world_states[char_id]
+		var ko: Dictionary = ws.get("known_objectives", {})
+		ko["petition_eligible_type"] = ptype
+		if ptype == SentakuTribunalSystem.PETITION_FORBIDDEN:
+			ko["petition_duration"] = SentakuTribunalSystem.FORBIDDEN_MAX_DURATION_DAYS
+		ws["known_objectives"] = ko
+
+
+# Resolves submitted PETITION_ACCESS actions via the 5-member Tribunal vote.
+# On grant, sets the access flag (Forbidden City with a per-visit expiry); on
+# denial, records the season so the petitioner cannot resubmit until it changes.
+static func _process_access_petitions(
+	results: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	world_states: Dictionary,
+	active_wars: Array,
+	ic_day: int,
+	time_system: TimeSystem,
+) -> void:
+	var has_petition: bool = false
+	for r: Dictionary in results:
+		if r.get("action_id", "") == "PETITION_ACCESS" \
+				and r.get("effects", {}).get("requires_petition_resolution", false):
+			has_petition = true
+			break
+	if not has_petition:
+		return
+
+	# Gather the living Tribunal (Chair + members).
+	var members: Array = []
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.role_position == RoleRegistry.SENTAKU_TRIBUNAL_CHAIR \
+				or c.role_position == RoleRegistry.SENTAKU_TRIBUNAL_MEMBER:
+			members.append(c)
+	if members.is_empty():
+		return
+
+	var clan_baselines: Dictionary = world_states.get("clan_baselines", {})
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	var season_index: int = _petition_season_index(time_system)
+
+	for r: Dictionary in results:
+		if r.get("action_id", "") != "PETITION_ACCESS":
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		if not effects.get("requires_petition_resolution", false):
+			continue
+		var petitioner: L5RCharacterData = characters_by_id.get(r.get("character_id", -1))
+		if petitioner == null or CharacterStats.is_dead(petitioner):
+			continue
+		var ptype: String = effects.get("petition_type", SentakuTribunalSystem.PETITION_EKOHIKEI)
+
+		# Resubmission within the same season is auto-denied without a vote.
+		if int(petitioner.access_petition_denied_season.get(ptype, -1)) >= season_index:
+			continue
+
+		# Political climate: the Tribunal disfavours belligerents (s2.3.23) — true
+		# unless the petitioner's clan is a belligerent in any active war.
+		var political_ok: bool = not _clan_is_belligerent(petitioner.clan, active_wars)
+
+		# Imperial summons bypasses the vote (objective assigned by the Emperor).
+		var is_summons: bool = false
+		var primary: Dictionary = objectives_map.get(petitioner.character_id, {}).get("primary", {})
+		if emperor_id >= 0 and int(primary.get("assigned_by", -1)) == emperor_id:
+			is_summons = true
+
+		var clan_disps: Array = []
+		var pol_oks: Array = []
+		for m: L5RCharacterData in members:
+			clan_disps.append(CollectiveDisposition.get_clan_baseline(
+				m.clan, petitioner.clan, clan_baselines))
+			pol_oks.append(political_ok)
+
+		var outcome: Dictionary = SentakuTribunalSystem.resolve_petition(
+			members, petitioner, ptype, clan_disps, pol_oks, is_summons)
+
+		if outcome.get("granted", false):
+			if ptype == SentakuTribunalSystem.PETITION_FORBIDDEN:
+				petitioner.forbidden_city_access = true
+				var dur: int = SentakuTribunalSystem.clamp_forbidden_duration(
+					int(effects.get("petition_duration", SentakuTribunalSystem.FORBIDDEN_MAX_DURATION_DAYS)))
+				petitioner.forbidden_city_access_expiry_ic_day = ic_day + dur
+			else:
+				petitioner.ekohikei_access = true
+		else:
+			petitioner.access_petition_denied_season[ptype] = season_index
+
+
+# True when the clan is a belligerent (clan_a or clan_b) in any active war.
+static func _clan_is_belligerent(clan: String, active_wars: Array) -> bool:
+	for w_v: Variant in active_wars:
+		var w: WarData = w_v as WarData
+		if w == null or not w.is_active:
+			continue
+		if w.clan_a == clan or w.clan_b == clan:
+			return true
+	return false
 
 
 static func _process_announce_hunt_writebacks(

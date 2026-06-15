@@ -140,6 +140,13 @@ var spell_void_bonus_used: int = 0
 # Tribunal members; otherwise set by the Sentaku access-petition pipeline.
 @export var ekohikei_access: bool = false
 @export var forbidden_city_access: bool = false
+# forbidden_city_access is per-visit: the IC day it auto-clears. -1 = none or a
+# standing (permanent) grant that never expires (Imperial residents).
+@export var forbidden_city_access_expiry_ic_day: int = -1
+# Petition cooldown: petition_type ("ekohikei"/"forbidden_city") → season index of
+# the last denial. A resubmission is auto-denied while still in that same season
+# (s2.3.23: "resubmit after 1 IC season").
+@export var access_petition_denied_season: Dictionary = {}
 @export var designated_heir_id: int = -1
 @export var disposition_values: Dictionary = {}
 @export var historical_modifiers: Dictionary = {}

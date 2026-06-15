@@ -843,6 +843,27 @@ static func _apply_taint_examination_precondition_filter(
 	return _remove_action(options, "EXAMINE_FOR_TAINT")
 
 
+# -- Phase 4c: PETITION_ACCESS Precondition Filter (s2.3.23) ------------------
+# Surfaces PETITION_ACCESS only when the orchestrator has injected a non-empty
+# petition_eligible_type for this character (at Otosan Uchi, lacking the relevant
+# access flag, and not currently in resubmission cooldown).
+static func _apply_petition_precondition_filter(
+	options: Array,
+	world_state: Dictionary,
+) -> Array:
+	var has_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "PETITION_ACCESS":
+			has_action = true
+			break
+	if not has_action:
+		return options
+	var ko: Dictionary = world_state.get("known_objectives", {})
+	if String(ko.get("petition_eligible_type", "")) != "":
+		return options
+	return _remove_action(options, "PETITION_ACCESS")
+
+
 # -- Phase 5: Score All Options ------------------------------------------------
 # Eight components per s55.4.5 / s55.3.3.
 
@@ -1174,6 +1195,7 @@ static func run(
 	options = _apply_tattoo_precondition_filter(options, character, ctx, chars_by_id, world_state)
 	options = _apply_terminate_contract_precondition_filter(options, world_state)
 	options = _apply_taint_examination_precondition_filter(options, world_state)
+	options = _apply_petition_precondition_filter(options, world_state)
 	options = _apply_origami_precondition_filter(options, character, ctx)
 	options = _apply_garden_precondition_filter(options, character, ctx)
 	options = _apply_arrived_travel_filter(options, need, ctx)
@@ -1560,6 +1582,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"DECLARE_WALL_EMERGENCY",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
+				"PETITION_ACCESS",
 				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
 				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
 				"APPROVE_CLAN_INDUCTION",
@@ -1593,6 +1616,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"INVESTIGATE_PROVINCE",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
+				"PETITION_ACCESS",
 				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
 				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
 				"PETITION_RONIN",
@@ -1696,6 +1720,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"PUBLIC_PERFORMANCE": 1,
 		"DELIVER_GIFT": 1,
 		"OFFER_FAVOR": 1,
+		"PETITION_ACCESS": 1,
 		"PERFORM_FOR": 1,
 		"DISCLOSE": 1,
 		"ASK_FOR_INTRODUCTION": 1,
@@ -3114,6 +3139,15 @@ static func _populate_action_metadata(
 				courtier_best = gscore
 				courtier_target = cid
 		option.target_npc_id = courtier_target
+	elif option.action_id == "PETITION_ACCESS":
+		# s2.3.23: petition type + (for Forbidden City) requested visit duration,
+		# injected by the orchestrator into known_objectives.
+		option.metadata = {
+			"petition_type": ctx.known_objectives.get(
+				"petition_eligible_type", SentakuTribunalSystem.PETITION_EKOHIKEI),
+			"petition_duration": int(ctx.known_objectives.get(
+				"petition_duration", SentakuTribunalSystem.FORBIDDEN_MAX_DURATION_DAYS)),
+		}
 	elif option.action_id == "NEGOTIATE_SURRENDER":
 		option.metadata = _build_negotiate_surrender_metadata(need, ctx)
 	elif option.action_id == "RAID_HARVEST":

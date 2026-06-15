@@ -164,6 +164,30 @@ static func execute(
 			"effects": keff,
 		}
 
+	# Sentaku access petition (s2.3.23). Auto-submits; the 5-member Tribunal vote
+	# is resolved by the orchestrator. No skill roll — the Tribunal decides.
+	if action_id == "PETITION_ACCESS":
+		var ptype: String = action.metadata.get(
+			"petition_type", SentakuTribunalSystem.PETITION_EKOHIKEI
+		)
+		var pdur: int = int(action.metadata.get(
+			"petition_duration", SentakuTribunalSystem.FORBIDDEN_MAX_DURATION_DAYS
+		))
+		return {
+			"success": true,
+			"action_id": action_id,
+			"character_id": ctx.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {
+				"requires_petition_resolution": true,
+				"petition_type": ptype,
+				"petition_duration": pdur,
+			},
+		}
+
 	if action_id == "DELIVER_GIFT":
 		var gift_result: Dictionary = _try_execute_deliver_gift(
 			action, character, ctx, dice_engine, characters_by_id
