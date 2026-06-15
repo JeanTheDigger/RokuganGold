@@ -14,8 +14,10 @@ class_name OtosanUchiZoneBuilder
 ##
 ## Each district Navigation Zone carries a thematic zone_subtype and has_ascii_map
 ## = true (s4.4 procedural tier, owner-approved 2026-06-15), so AsciiMapGenerator
-## renders a deterministic street-level map per district on entry. The fully
-## handcrafted per-building Lesser Zones (Section 4.3.4) remain a future content task.
+## renders a deterministic street-level map per district on entry. Each district
+## also contains child Lesser Zones for its s2.3.23 named landmarks (LANDMARKS),
+## each rendering via the nearest existing interior generator (reuse approach,
+## owner-approved 2026-06-15) — bespoke per-archetype generators can swap in later.
 ##
 ## PU subdivision sums to the canonical 100 (Toshisoto 82 + Ekohikei 15 +
 ## Forbidden 3), matching the settlement's population_pu.
@@ -89,6 +91,151 @@ const DISTRICTS: Array = [
 ]
 
 
+# Handcrafted landmark Lesser Zones per district (s2.3.23 "Handcrafted map
+# landmarks" + s4.4 District Nav Zone → building Lesser Zones). Keyed by DISTRICTS
+# index. Each entry: n = display name (verbatim from s2.3.23), s = the nearest
+# existing AsciiMapGenerator ZoneSubtype for its interior (reuse approach,
+# owner-approved 2026-06-15 — bespoke per-archetype generators are a future swap).
+# Only GDD-named landmarks become zones; no invented buildings.
+const _ZS := Enums.ZoneSubtype
+const LANDMARKS: Dictionary = {
+	0: [  # Tsai — Brutal Flame
+		{"n": "Zankoku Hon'O (lighthouse)", "s": _ZS.WALL_TOWER},
+		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
+		{"n": "Bayushi's Mask (okiya)", "s": _ZS.ENKAI_HALL},
+		{"n": "Leaves of Shosuro (tea house)", "s": _ZS.CHASHITSU},
+		{"n": "The Tear (theater)", "s": _ZS.ENKAI_HALL},
+		{"n": "Shrine of Hofukushu", "s": _ZS.CASTLE_SHRINE},
+		{"n": "Bayushi's Bane (hospital)", "s": _ZS.GUEST_WING},
+		{"n": "Dragon's Mists (hospital)", "s": _ZS.GUEST_WING},
+		{"n": "Life's Waterfall (sake house)", "s": _ZS.ENKAI_HALL},
+		{"n": "Light as the Wind (kite shop)", "s": _ZS.MARKET_STREET},
+		{"n": "Abandoned waterway houses", "s": _ZS.POOR_QUARTER},
+	],
+	1: [  # Hidari — Emperor's Road
+		{"n": "Road of the Most High", "s": _ZS.ROAD},
+		{"n": "Jade torii arches", "s": _ZS.CASTLE_SHRINE},
+		{"n": "Emerald Coin (market plaza)", "s": _ZS.MARKET_STREET},
+		{"n": "Doji's Children (okiya)", "s": _ZS.ENKAI_HALL},
+		{"n": "Inn of the Last Rite", "s": _ZS.GUEST_WING},
+		{"n": "Light from Above (dining house)", "s": _ZS.ENKAI_HALL},
+		{"n": "Soshiuchi / House of Loss", "s": _ZS.LORD_QUARTERS},
+		{"n": "Origami shop", "s": _ZS.MARKET_STREET},
+		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
+	],
+	2: [  # Juramashi
+		{"n": "Craftsman's Quarter", "s": _ZS.MARKET_STREET},
+		{"n": "Bright Wind (geisha house)", "s": _ZS.ENKAI_HALL},
+		{"n": "Natsu-Togumara Shrine", "s": _ZS.CASTLE_SHRINE},
+		{"n": "Juramashi District Meeting Hall", "s": _ZS.OHIROMA},
+		{"n": "Maratu's Origata (gift shop)", "s": _ZS.MARKET_STREET},
+		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
+	],
+	3: [  # Ochiyo — Spiritual
+		{"n": "Temple of the Sun Goddess", "s": _ZS.TEMPLE_GROUNDS},
+		{"n": "Temple of Daikoku", "s": _ZS.TEMPLE_GROUNDS},
+		{"n": "Temple of Ebisu", "s": _ZS.TEMPLE_GROUNDS},
+		{"n": "Temple of Benten", "s": _ZS.TEMPLE_GROUNDS},
+		{"n": "Simple Pleasures (okiya)", "s": _ZS.ENKAI_HALL},
+		{"n": "Seppun's Path", "s": _ZS.TSUBONIWA},
+		{"n": "Meditation gardens", "s": _ZS.TSUBONIWA},
+		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
+	],
+	4: [  # Hayasu — Gilded Hill
+		{"n": "Shining Square", "s": _ZS.MARKET_STREET},
+		{"n": "Riverside Merchant Plaza", "s": _ZS.MARKET_STREET},
+		{"n": "Cherry Blossom Row", "s": _ZS.TSUBONIWA},
+		{"n": "Chirping Crickets Neighborhood", "s": _ZS.RESIDENTIAL_QUARTER},
+		{"n": "Governor's residence (hilltop)", "s": _ZS.LORD_QUARTERS},
+		{"n": "Farms outside the walls", "s": _ZS.FARMLAND},
+	],
+	5: [  # Hojize — Rich Crescent
+		{"n": "Wharves", "s": _ZS.DOCKS_WATERFRONT},
+		{"n": "Clan Guide Houses (inn)", "s": _ZS.GUEST_WING},
+		{"n": "Kinjiren Tombs", "s": _ZS.CASTLE_SHRINE},
+		{"n": "Chiken / Bloodhawk Bridge", "s": _ZS.RIVER_CROSSING},
+		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
+		{"n": "Koku Seal office", "s": _ZS.GOVERNMENT_QUARTER},
+	],
+	6: [  # Hinjaku — Eta's Island
+		{"n": "Takusanno Sakanaya (fishery)", "s": _ZS.DOCKS_WATERFRONT},
+		{"n": "Shizukomen (residential)", "s": _ZS.POOR_QUARTER},
+		{"n": "Eta quarter", "s": _ZS.POOR_QUARTER},
+		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
+	],
+	7: [  # Toyotomi — Prison/Moon
+		{"n": "Kyuden Kokai (prison)", "s": _ZS.GOVERNMENT_QUARTER},
+		{"n": "Magistrate station", "s": _ZS.GOVERNMENT_QUARTER},
+		{"n": "Jumping Frog (okiya)", "s": _ZS.ENKAI_HALL},
+		{"n": "The Moon (gambling quarter)", "s": _ZS.ENKAI_HALL},
+		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
+	],
+	8: [  # Meiyoko — Tenari's Ruin
+		{"n": "Tenari's ruins", "s": _ZS.POOR_QUARTER},
+		{"n": "Hana Garden", "s": _ZS.TSUBONIWA},
+		{"n": "Gokenin quarters", "s": _ZS.RESIDENTIAL_QUARTER},
+		{"n": "Criminal refuge areas", "s": _ZS.POOR_QUARTER},
+		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
+	],
+	9: [  # Higshikawa — North Dock
+		{"n": "Morning Star Wharves", "s": _ZS.DOCKS_WATERFRONT},
+		{"n": "Takeo Library", "s": _ZS.AUDIENCE_CHAMBER},
+		{"n": "Imperial Guard kaisha (barracks)", "s": _ZS.WAR_COUNCIL_ROOM},
+		{"n": "Pleasure houses", "s": _ZS.ENKAI_HALL},
+		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
+	],
+	10: [  # Kosuga — South Dock
+		{"n": "Primary trade port", "s": _ZS.DOCKS_WATERFRONT},
+		{"n": "Flooded Merchant Bazaar", "s": _ZS.MARKET_STREET},
+		{"n": "Daikoku Arch", "s": _ZS.CASTLE_SHRINE},
+		{"n": "Yatoshin warehouse district", "s": _ZS.DOCKS_WATERFRONT},
+		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
+		{"n": "Koku Seal inspection point", "s": _ZS.GOVERNMENT_QUARTER},
+	],
+	11: [  # Kanjo — Ekohikei
+		{"n": "Lion Embassy (south)", "s": _ZS.AUDIENCE_CHAMBER},
+		{"n": "Phoenix Embassy", "s": _ZS.AUDIENCE_CHAMBER},
+		{"n": "Scorpion Embassy", "s": _ZS.AUDIENCE_CHAMBER},
+		{"n": "Sorrow's Fall", "s": _ZS.TSUBONIWA},
+		{"n": "Sentaku Tribunal Hall", "s": _ZS.OHIROMA},
+		{"n": "Imperial Treasury", "s": _ZS.GOVERNMENT_QUARTER},
+		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
+	],
+	12: [  # Chisei — Ekohikei
+		{"n": "Seppun Hill", "s": _ZS.TEMPLE_GROUNDS},
+		{"n": "Crane Embassy (Storyhouse)", "s": _ZS.AUDIENCE_CHAMBER},
+		{"n": "Phoenix secondary embassy", "s": _ZS.AUDIENCE_CHAMBER},
+		{"n": "Minor Clan embassy row", "s": _ZS.AUDIENCE_CHAMBER},
+		{"n": "Art galleries & performance halls", "s": _ZS.ENKAI_HALL},
+		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
+	],
+	13: [  # Karada — Ekohikei
+		{"n": "Crab Embassy", "s": _ZS.AUDIENCE_CHAMBER},
+		{"n": "Oni Warai (the Oni's Smile)", "s": _ZS.MOUNTAIN_PASS},
+		{"n": "Yasuki Trading Grounds", "s": _ZS.MARKET_STREET},
+		{"n": "Lower-caste residential quarters", "s": _ZS.POOR_QUARTER},
+		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
+	],
+	14: [  # Hito — Ekohikei
+		{"n": "Lion Embassy (barracks)", "s": _ZS.WAR_COUNCIL_ROOM},
+		{"n": "Unicorn Embassy", "s": _ZS.AUDIENCE_CHAMBER},
+		{"n": "Fox Embassy", "s": _ZS.AUDIENCE_CHAMBER},
+		{"n": "Road of Fast Hopes", "s": _ZS.ROAD},
+		{"n": "Samurai residential compounds", "s": _ZS.RESIDENTIAL_QUARTER},
+		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
+	],
+	15: [  # Forbidden City
+		{"n": "Imperial Palace (throne room)", "s": _ZS.OHIROMA},
+		{"n": "Imperial Court chambers", "s": _ZS.OHIROMA},
+		{"n": "Emperor's Labyrinth (tunnels)", "s": _ZS.MOUNTAIN_PASS},
+		{"n": "Imperial Gardens", "s": _ZS.TSUBONIWA},
+		{"n": "Seppun Guard barracks", "s": _ZS.WAR_COUNCIL_ROOM},
+		{"n": "Imperial family residences", "s": _ZS.LORD_QUARTERS},
+		{"n": "Emperor's Chosen quarters", "s": _ZS.LORD_QUARTERS},
+	],
+}
+
+
 # Governor Status by access tier (s2.3.23 Mechanical Notes).
 static func governor_status_for_layer(layer: int) -> float:
 	return 5.0 if layer == EKOHIKEI else 4.5
@@ -122,6 +269,7 @@ static func build(settlement: SettlementData) -> Dictionary:
 	gz.settlement_id = sid
 
 	var nav_zones: Array = []
+	var lesser_zones: Array = []
 	for i: int in range(DISTRICTS.size()):
 		var d: Dictionary = DISTRICTS[i]
 		var layer: int = d["layer"]
@@ -143,6 +291,18 @@ static func build(settlement: SettlementData) -> Dictionary:
 		nz.has_ascii_map = true
 		nav_zones.append(nz)
 		gz.add_child_zone(nz.zone_id)
+		# Handcrafted landmark buildings: one child Lesser Zone each (s4.4 tier).
+		var lms: Array = LANDMARKS.get(i, [])
+		for j: int in range(lms.size()):
+			var lm: Dictionary = lms[j]
+			var lz: LesserZoneData = LesserZoneData.new()
+			lz.zone_id = "%s_lz_%d" % [nz.zone_id, j]
+			lz.zone_name = "%s — %s" % [d["name"], lm["n"]]
+			lz.zone_subtype = lm["s"]
+			lz.parent_zone_id = nz.zone_id
+			lz.add_exit("up", nz.zone_id)
+			nz.add_child_zone(lz.zone_id)
+			lesser_zones.append(lz)
 
 	# Wire a connected navigation chain across all districts (N forward / S back).
 	# Access-tier gating is enforced by the petition flag system, not the graph.
@@ -155,5 +315,5 @@ static func build(settlement: SettlementData) -> Dictionary:
 	return {
 		"greater_zone": gz,
 		"navigation_zones": nav_zones,
-		"lesser_zones": [],
+		"lesser_zones": lesser_zones,
 	}
