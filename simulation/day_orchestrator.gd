@@ -10627,6 +10627,10 @@ const _DISTRICT_GOVERNANCE_RECOVERY_PER_RANK: float = 3.0
 # level, so a revolt is a DEEPER failure than ordinary Governor turnover (<50).
 const _DISTRICT_REVOLT_FLOOR: float = 25.0
 const _DISTRICT_REVOLT_SEASONS: int = 3
+# Extra Stability lost per season per point of an active revolt's strength
+# (owner-locked 2026-06-15). Compounds as the s11.11 system grows the revolt;
+# weakening/suppressing it directly eases the drag — suppression matters.
+const _DISTRICT_REVOLT_STABILITY_DRAG_PER_STRENGTH: float = 3.0
 
 
 # Stability baseline a district drifts toward, by chaos tier.
@@ -10658,21 +10662,22 @@ static func _roll_ambient_district_crime(sentaku: String, dice: DiceEngine) -> i
 	return dice.rand_int_range(0, 1)
 
 
-# True when the district's recorded revolt is still an active insurgency (present
-# in the array with strength > 0). A suppressed revolt is removed (or drained to 0),
-# so this returns false and a fresh revolt may eventually spawn. Clears the stale
-# id as a side effect when the revolt is gone.
-static func _district_revolt_active(nz: NavigationZoneData, insurgencies: Array) -> bool:
+# The district's currently-active revolt (the recorded insurgency, present in the
+# array with strength > 0), or null. A suppressed revolt is removed (or drained to
+# 0), so this returns null and a fresh revolt may eventually spawn. Clears the stale
+# id as a side effect when the revolt is gone. Used both to apply the revolt's
+# Stability drag and to dedup spawning.
+static func _get_district_active_revolt(nz: NavigationZoneData, insurgencies: Array) -> InsurgencyData:
 	if nz.district_revolt_insurgency_id < 0:
-		return false
+		return null
 	for i: Variant in insurgencies:
 		var ins: InsurgencyData = i as InsurgencyData
 		if ins != null and ins.insurgency_id == nz.district_revolt_insurgency_id:
 			if ins.strength > 0:
-				return true
+				return ins
 			break
 	nz.district_revolt_insurgency_id = -1
-	return false
+	return null
 
 
 static func _process_district_stability_crime(
@@ -10741,6 +10746,10 @@ static func _process_district_stability_crime(
 		var crime: int = ambient + attributed
 		nz.district_crime_count = crime
 
+		# An active revolt deepens the disorder it feeds on (compounding spiral).
+		# Looked up once here; reused below for spawn dedup.
+		var active_revolt: InsurgencyData = _get_district_active_revolt(nz, insurgencies)
+
 		# Stability: drift toward the chaos baseline, minus this season's crime drag,
 		# plus governance recovery from a present, living Governor (Courtier = the
 		# primary governance skill per the s2.3.23 candidate-evaluation weights).
@@ -10748,6 +10757,8 @@ static func _process_district_stability_crime(
 		var stab: float = nz.district_stability
 		stab += (baseline - stab) * _DISTRICT_STABILITY_DRIFT
 		stab -= float(crime) * _DISTRICT_CRIME_STABILITY_PENALTY
+		if active_revolt != null:
+			stab -= float(active_revolt.strength) * _DISTRICT_REVOLT_STABILITY_DRAG_PER_STRENGTH
 		var gov: L5RCharacterData = null
 		if nz.has_governor and nz.zone_lord_id >= 0:
 			gov = characters_by_id.get(nz.zone_lord_id) as L5RCharacterData
@@ -10799,7 +10810,7 @@ static func _process_district_stability_crime(
 			nz.district_unrest_seasons = 0
 		if nz.district_unrest_seasons >= _DISTRICT_REVOLT_SEASONS \
 				and capital != null \
-				and not _district_revolt_active(nz, insurgencies):
+				and active_revolt == null:
 			var revolt := InsurgencyData.new()
 			revolt.insurgency_id = next_insurgency_id[0]
 			next_insurgency_id[0] += 1
