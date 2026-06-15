@@ -50,6 +50,11 @@ const EVENT_LOG_RETENTION_DAYS: int = 90
 @export var zone_lord_id: int = -1
 # Per-district Stability (Governor scope) — distinct from province-wide stability.
 @export var district_stability: float = 100.0
+# Crime incidents recorded in this district during the current IC season. Drives
+# the Sentaku Governor performance review's crime-rate weight (s2.3.23). Reset at
+# each seasonal review; incremented when crime attribution to districts is wired
+# (district economics). 0 = no incidents this season.
+@export var district_crime_count: int = 0
 
 # -- ASCII map (optional) ----------------------------------------------------
 

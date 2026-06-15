@@ -136,6 +136,11 @@ var spell_void_bonus_used: int = 0
 # Otosan Uchi Governor link (s2.3.23): zone_id of the district this character
 # governs; "" = not a Governor. Bidirectional with NavigationZoneData.zone_lord_id.
 @export var governed_zone_id: String = ""
+# IC day this character was appointed to their current position. Drives the
+# Sentaku Governor performance review's time-in-office weight (s2.3.23). Set at
+# world generation for the initial roster and on APPOINT_TO_POSITION. -1 = never
+# appointed / not tracked.
+@export var appointed_ic_day: int = -1
 # Otosan Uchi access flags (s2.3.23). Standing grants for Imperial residents and
 # Tribunal members; otherwise set by the Sentaku access-petition pipeline.
 @export var ekohikei_access: bool = false

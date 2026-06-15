@@ -940,6 +940,9 @@ static func _generate_otosan_uchi_governance(
 		g.operational_superior_id = chair_id
 		g.governed_zone_id = OtosanUchiZoneBuilder.district_zone_id(otosan_sid, i)
 		g.physical_location = loc
+		# Initial roster is appointed at world start (IC day 0); tenure accrues from
+		# there for the Sentaku Governor performance review (s2.3.23 time-in-office).
+		g.appointed_ic_day = 0
 		if d["layer"] == Enums.AccessLayer.EKOHIKEI:
 			g.ekohikei_access = true
 		chars.append(g)

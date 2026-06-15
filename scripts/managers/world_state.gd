@@ -385,6 +385,7 @@ func advance_one_day() -> Dictionary:
 		next_sculpture_id,
 		active_okiyas,
 		next_okiya_id,
+		navigation_zones,
 	)
 	_apply_succession_updates(result)
 	return result

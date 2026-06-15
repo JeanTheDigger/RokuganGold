@@ -107,6 +107,7 @@ static func advance_day(
 	next_sculpture_id: Array = [1],
 	active_okiyas: Array = [],
 	next_okiya_id: Array = [1],
+	navigation_zones: Array = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -1321,6 +1322,7 @@ static func advance_day(
 	var phoenix_council_results: Dictionary = {}
 	var spiritual_insurgency_results: Dictionary = {}
 	var bloodspeaker_results: Dictionary = {}
+	var governor_review_results: Array = []
 	var is_season_boundary: bool = current_season != prev_season or ic_day <= 1
 	if is_season_boundary:
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
@@ -1488,6 +1490,13 @@ static func advance_day(
 		)
 		_process_anti_maho_roaming(
 			characters, objectives_map, provinces,
+		)
+		# Sentaku Governor performance review (s2.3.23): the Tribunal evaluates each
+		# Otosan Uchi Governor and may petition the Emperor for dismissal; the
+		# Emperor's archetype decides. Seasonal crime counters reset here.
+		governor_review_results = _process_governor_reviews(
+			navigation_zones, characters, characters_by_id,
+			active_topics, world_states, ic_day,
 		)
 		var cw_season_count: int = int(season_meta.get("horde_season_count", 0))
 		if not togashi_state.is_empty():
@@ -1697,6 +1706,7 @@ static func advance_day(
 		"orphan_results": orphan_results,
 		"hierarchy_cascade_results": hierarchy_cascade_results,
 		"strategic_results": strategic_results,
+		"governor_review_results": governor_review_results,
 		"festival_results": festival_results,
 		"favor_results": favor_results,
 		"travel_arrivals": travel_arrivals,
@@ -10390,6 +10400,156 @@ static func _get_season_days(season: int) -> int:
 		TimeSystem.Season.AUTUMN: return TimeSystem.AUTUMN_DAYS
 		TimeSystem.Season.WINTER: return TimeSystem.WINTER_DAYS
 	return 90
+
+
+# -- Sentaku Governor Performance Review (s2.3.23) -----------------------------
+
+# Seasonal: the Sentaku Tribunal evaluates every Otosan Uchi Governor. A review
+# fires only for a troubled district (SentakuTribunalSystem.should_review_governor);
+# when 3 of 5 members vote to petition the Emperor, the Emperor's archetype decides
+# whether to dismiss. District crime counters reset each season.
+static func _process_governor_reviews(
+	navigation_zones: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	world_states: Dictionary,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	if navigation_zones.is_empty():
+		return results
+
+	# Gather the living 5-member Tribunal once.
+	var members: Array = []
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.role_position == RoleRegistry.SENTAKU_TRIBUNAL_CHAIR \
+				or c.role_position == RoleRegistry.SENTAKU_TRIBUNAL_MEMBER:
+			members.append(c)
+
+	var emperor_archetype: int = int(world_states.get(
+		"emperor_archetype", StrategicReview.EmperorArchetype.IRON
+	))
+
+	for z: Variant in navigation_zones:
+		var zone: NavigationZoneData = z as NavigationZoneData
+		if zone == null:
+			continue
+		# A governed Otosan Uchi district: has a permanent Sentaku name and a Governor.
+		if zone.sentaku_name == "" or zone.zone_lord_id < 0:
+			continue
+
+		var crime_count: int = zone.district_crime_count
+		# Crime counter is seasonal — reset it after capturing this season's tally.
+		zone.district_crime_count = 0
+
+		var governor: L5RCharacterData = characters_by_id.get(zone.zone_lord_id) as L5RCharacterData
+		if governor == null or CharacterStats.is_dead(governor):
+			# Dead/missing Governors are handled by succession + vacancy detection.
+			continue
+
+		# Tenure in (approximate) IC seasons — quarters of the 360-day year.
+		# PROVISIONAL: seasons are uneven (90/90/60/120); a /90 quarter count is a
+		# coarse tenure measure, adequate for the review's coarse weight.
+		var in_office_seasons: int = 0
+		if governor.appointed_ic_day >= 0:
+			in_office_seasons = maxi(0, (ic_day - governor.appointed_ic_day) / 90)
+
+		var is_juramashi: bool = zone.sentaku_name == "Juramashi"
+		var stability_dropped: bool = zone.district_stability < 100.0
+		var has_negative_topic: bool = _governor_has_negative_topic(
+			governor.character_id, active_topics
+		)
+
+		if not SentakuTribunalSystem.should_review_governor(
+				zone.district_stability, crime_count, has_negative_topic,
+				in_office_seasons, stability_dropped):
+			continue
+
+		var review: Dictionary = SentakuTribunalSystem.resolve_governor_review(
+			members, governor, zone.district_stability, crime_count,
+			in_office_seasons, is_juramashi
+		)
+
+		var entry: Dictionary = {
+			"governor_id": governor.character_id,
+			"zone_id": zone.zone_id,
+			"sentaku_name": zone.sentaku_name,
+			"recommend_dismiss": review["recommend_dismiss"],
+			"yes_votes": review["yes_votes"],
+			"dismissed": false,
+		}
+
+		if review["recommend_dismiss"]:
+			var emperor_agrees: bool = _emperor_dismisses_governor(
+				emperor_archetype, zone.district_stability, crime_count
+			)
+			entry["emperor_agrees"] = emperor_agrees
+			if emperor_agrees:
+				_apply_governor_dismissal(governor, zone)
+				entry["dismissed"] = true
+
+		results.append(entry)
+
+	return results
+
+
+# True when an unresolved Tier 3+ topic casts the Governor in a negative light
+# (s2.3.23 review trigger "generated a negative Tier 3+ topic"). PERPETRATOR and
+# NEGATIVE subject roles are the Governor-blaming valences; VICTIM is sympathetic.
+static func _governor_has_negative_topic(governor_id: int, active_topics: Array) -> bool:
+	for t: Variant in active_topics:
+		var topic: TopicData = t as TopicData
+		if topic == null or topic.resolved:
+			continue
+		if topic.subject_character_id != governor_id:
+			continue
+		# Tier enum: TIER_1=0 .. TIER_4=3. "Tier 3+" = at least Tier 3 = value <= TIER_3.
+		if topic.tier > TopicData.Tier.TIER_3:
+			continue
+		if topic.subject_role == "PERPETRATOR" or topic.subject_role == "NEGATIVE":
+			return true
+	return false
+
+
+# The Emperor's archetype response to a Tribunal dismissal recommendation
+# (s2.3.23 Governor Performance Review). Districts carry no military-readiness
+# metric, so the Warlike Emperor (who dismisses only on military impact) declines.
+static func _emperor_dismisses_governor(
+	archetype: int, district_stability: float, crime_count: int
+) -> bool:
+	match archetype:
+		StrategicReview.EmperorArchetype.TYRANT:
+			# Treats the recommendation as a loyalty test — fires anyone named.
+			return true
+		StrategicReview.EmperorArchetype.IRON:
+			# Evaluates the district metrics himself before agreeing.
+			return district_stability < SentakuTribunalSystem.REVIEW_STABILITY_TRIGGER \
+				or crime_count > SentakuTribunalSystem.REVIEW_CRIME_TRIGGER
+		StrategicReview.EmperorArchetype.BENEVOLENT:
+			# Gives second chances.
+			return false
+		StrategicReview.EmperorArchetype.CUNNING:
+			# May keep a failing Governor to create political tension.
+			return false
+		StrategicReview.EmperorArchetype.WARLIKE:
+			# Ignores purely civilian failures (no military-readiness impact modelled).
+			return false
+	return false
+
+
+# Clears a dismissed Governor's position links and vacates the district zone
+# (s2.3.23). The district then operates under the Sentaku Tribunal's general
+# authority until a new Governor is appointed. lord_id and status are left
+# unchanged (GDD specifies neither for dismissal).
+static func _apply_governor_dismissal(governor: L5RCharacterData, zone: NavigationZoneData) -> void:
+	governor.role_position = ""
+	governor.governed_zone_id = ""
+	governor.operational_superior_id = -1
+	governor.appointed_ic_day = -1
+	zone.zone_lord_id = -1
 
 
 # -- Strategic Review (s55.10) -------------------------------------------------
