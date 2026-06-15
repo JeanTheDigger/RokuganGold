@@ -99,6 +99,12 @@ static func generate(
 			_gen_ruined_structure(map, rng)
 		Enums.ZoneSubtype.BARRACKS:
 			_gen_barracks(map, rng)
+		Enums.ZoneSubtype.LIBRARY:
+			_gen_library(map, rng)
+		Enums.ZoneSubtype.TOMB:
+			_gen_tomb(map, rng)
+		Enums.ZoneSubtype.TREASURY_VAULT:
+			_gen_treasury_vault(map, rng)
 		_:
 			_gen_default(map, rng)
 
@@ -859,6 +865,102 @@ static func _gen_ruined_structure(map: AsciiMapData, rng: RandomNumberGenerator)
 	map.set_tile(MID, y2, Enums.TileType.FLOOR_WOOD)  # gap in the south wall
 
 	# South entrance + exit.
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# LIBRARY (s2.3.23): a scholarly reading hall (the Takeo Library). Vertical book
+# stacks separated by 1-tile walking aisles fill the north two-thirds; an open
+# reading hall with study desks sits at the south near the entrance. A clear
+# central aisle plus clear north/south cross-aisles keep every stack reachable.
+static func _gen_library(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_WOOD)
+	_draw_wood_border(map, 0, 0, S - 1, S - 1)
+
+	# Book stacks: vertical shelf runs with a 1-tile aisle between each, stopping
+	# short of the south reading hall (y < S-9) and the north cross-aisle (y > 3).
+	# The central aisle (MID-1..MID+1) is kept clear top to bottom.
+	for sx in [4, 6, 8, 10, 12, S - 13, S - 11, S - 9, S - 7, S - 5]:
+		if sx >= MID - 1 and sx <= MID + 1:
+			continue
+		for sy in range(4, S - 9):
+			map.set_tile(sx, sy, Enums.TileType.FURNITURE_SHELF)
+
+	# Scroll chests against the north wall, in the top cross-aisle.
+	map.set_tile(2, 2, Enums.TileType.FURNITURE_CHEST)
+	map.set_tile(S - 3, 2, Enums.TileType.FURNITURE_CHEST)
+
+	# South reading hall: study desks with cushions, an incense burner by the wall.
+	for dx in [MID - 5, MID + 5]:
+		map.set_tile(dx, S - 5, Enums.TileType.FURNITURE_TABLE)
+		map.set_tile(dx, S - 6, Enums.TileType.FURNITURE_CUSHION)
+		map.set_tile(dx, S - 4, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(3, S - 3, Enums.TileType.FURNITURE_INCENSE)
+
+	# South entrance + zone exit.
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# TOMB (s2.3.23): a solemn funerary chamber (the Kinjiren Tombs; the Hantei
+# burial ground of Seppun Hill). A central processional aisle runs from the south
+# entrance to a memorial altar at the north; memorial statues and offering boxes
+# flank the aisle, with stone burial coffers in the side bays. Stone throughout.
+static func _gen_tomb(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_STONE)
+	_draw_stone_border(map, 0, 0, S - 1, S - 1)
+
+	# Memorial altar at the north terminus, flanked by incense, with a prayer mat.
+	map.set_tile(MID, 2, Enums.TileType.FURNITURE_ALTAR)
+	map.set_tile(MID - 1, 2, Enums.TileType.FURNITURE_INCENSE)
+	map.set_tile(MID + 1, 2, Enums.TileType.FURNITURE_INCENSE)
+	map.set_tile(MID, 4, Enums.TileType.FURNITURE_PRAYER_MAT)
+
+	# Flanking memorial statues + offering boxes down each side of the aisle
+	# (columns MID±3, clear of the MID-2..MID+2 processional aisle).
+	for sy in [7, 11, 15, 19, 23]:
+		map.set_tile(MID - 3, sy, Enums.TileType.FURNITURE_STATUE)
+		map.set_tile(MID + 3, sy, Enums.TileType.FURNITURE_STATUE)
+		map.set_tile(MID - 3, sy + 1, Enums.TileType.FURNITURE_OFFERING_BOX)
+		map.set_tile(MID + 3, sy + 1, Enums.TileType.FURNITURE_OFFERING_BOX)
+
+	# Burial coffers (stone caskets) in the side bays against the walls.
+	for cy in [8, 12, 16, 20]:
+		map.set_tile(2, cy, Enums.TileType.FURNITURE_CHEST)
+		map.set_tile(3, cy, Enums.TileType.FURNITURE_CHEST)
+		map.set_tile(S - 3, cy, Enums.TileType.FURNITURE_CHEST)
+		map.set_tile(S - 4, cy, Enums.TileType.FURNITURE_CHEST)
+
+	# South entrance + zone exit.
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# TREASURY_VAULT (s2.3.23): the Imperial Treasury — a guarded stone strongroom.
+# A single south entrance with a guard post opens onto a clear central aisle;
+# coffer banks (against the side walls, with even-row gaps), sealed jars, ledger
+# shelves and crates line the vault bays.
+static func _gen_treasury_vault(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_STONE)
+	_draw_stone_border(map, 0, 0, S - 1, S - 1)
+
+	# Coffer banks against the side walls, on odd rows only (even rows = access
+	# gaps), clear of the central aisle.
+	for cy in [3, 5, 7, 9, 11, 13]:
+		for cx in [2, 3, 4, S - 5, S - 4, S - 3]:
+			map.set_tile(cx, cy, Enums.TileType.FURNITURE_CHEST)
+	# Sealed valuables and ledger shelves deeper in (isolated obstacles).
+	for vx in [7, 9, S - 10, S - 8]:
+		map.set_tile(vx, 3, Enums.TileType.FURNITURE_JAR)
+		map.set_tile(vx, 5, Enums.TileType.FURNITURE_CRATE)
+	map.set_tile(MID - 3, 3, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(MID + 3, 3, Enums.TileType.FURNITURE_SHELF)
+
+	# Guard post at the entrance: a weapon stand and a brazier, flanking the aisle.
+	map.set_tile(MID - 2, S - 3, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(MID + 2, S - 3, Enums.TileType.FURNITURE_BRAZIER)
+
+	# Single guarded south entrance + zone exit.
 	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
 	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
 

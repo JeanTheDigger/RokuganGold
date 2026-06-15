@@ -153,7 +153,7 @@ const LANDMARKS: Dictionary = {
 	5: [  # Hojize — Rich Crescent
 		{"n": "Wharves", "s": _ZS.DOCKS_WATERFRONT},
 		{"n": "Clan Guide Houses (inn)", "s": _ZS.GUEST_WING},
-		{"n": "Kinjiren Tombs", "s": _ZS.CASTLE_SHRINE},
+		{"n": "Kinjiren Tombs", "s": _ZS.TOMB},
 		{"n": "Chiken / Bloodhawk Bridge", "s": _ZS.RIVER_CROSSING},
 		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
 		{"n": "Koku Seal office", "s": _ZS.GOVERNMENT_QUARTER},
@@ -180,7 +180,7 @@ const LANDMARKS: Dictionary = {
 	],
 	9: [  # Higshikawa — North Dock
 		{"n": "Morning Star Wharves", "s": _ZS.DOCKS_WATERFRONT},
-		{"n": "Takeo Library", "s": _ZS.AUDIENCE_CHAMBER},
+		{"n": "Takeo Library", "s": _ZS.LIBRARY},
 		{"n": "Imperial Guard kaisha (barracks)", "s": _ZS.BARRACKS},
 		{"n": "Pleasure houses", "s": _ZS.PLEASURE_QUARTER},
 		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
@@ -199,11 +199,11 @@ const LANDMARKS: Dictionary = {
 		{"n": "Scorpion Embassy", "s": _ZS.AUDIENCE_CHAMBER},
 		{"n": "Sorrow's Fall", "s": _ZS.TSUBONIWA},
 		{"n": "Sentaku Tribunal Hall", "s": _ZS.OHIROMA},
-		{"n": "Imperial Treasury", "s": _ZS.GOVERNMENT_QUARTER},
+		{"n": "Imperial Treasury", "s": _ZS.TREASURY_VAULT},
 		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
 	],
 	12: [  # Chisei — Ekohikei
-		{"n": "Seppun Hill", "s": _ZS.TEMPLE_GROUNDS},
+		{"n": "Seppun Hill", "s": _ZS.TOMB},
 		{"n": "Crane Embassy (Storyhouse)", "s": _ZS.AUDIENCE_CHAMBER},
 		{"n": "Phoenix secondary embassy", "s": _ZS.AUDIENCE_CHAMBER},
 		{"n": "Minor Clan embassy row", "s": _ZS.AUDIENCE_CHAMBER},

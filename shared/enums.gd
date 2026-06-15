@@ -280,6 +280,12 @@ enum ZoneSubtype {
 	RUINED_STRUCTURE,
 	# Soldier housing (s2.3.23 barracks / kaisha — bunks, arms racks, mess)
 	BARRACKS,
+	# Scholarly reading hall (s2.3.23 — book stacks + reading desks)
+	LIBRARY,
+	# Funerary chamber / burial ground (s2.3.23 — memorial altar, coffers)
+	TOMB,
+	# Guarded strongroom (s2.3.23 — locked coffers in vault bays)
+	TREASURY_VAULT,
 }
 
 # Three-tier zone hierarchy — Greater Zone is the top container.

@@ -374,6 +374,42 @@ const ZONE_FLAGS: Dictionary = {
 		"garden_eligible": false,
 		"shrine_eligible": false,
 	},
+	# Scholarly library (s2.3.23) — wall calligraphy + a scholar's alcove only;
+	# not a court venue (drops the AUDIENCE_CHAMBER displayed-art/fusuma slots).
+	Enums.ZoneSubtype.LIBRARY: {
+		"performance_permitted": false,
+		"wall_art_slot": true,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": true,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
+	# Funerary tomb / burial ground (s2.3.23) — ancestor veneration (shrine) +
+	# memorial calligraphy; solemn, so no performance/garden (preserves worship
+	# at both the CASTLE_SHRINE and TEMPLE_GROUNDS sites it replaces).
+	Enums.ZoneSubtype.TOMB: {
+		"performance_permitted": false,
+		"wall_art_slot": true,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": true,
+	},
+	# Treasury strongroom (s2.3.23) — no noble-art/worship/court affordances.
+	Enums.ZoneSubtype.TREASURY_VAULT: {
+		"performance_permitted": false,
+		"wall_art_slot": false,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
 }
 
 
