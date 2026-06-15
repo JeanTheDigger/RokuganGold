@@ -27,6 +27,10 @@
     "primary": "Courtier",
     "secondary": "Awareness"
   },
+  "DISMISS_FROM_POSITION": {
+    "primary": "Courtier",
+    "secondary": "Awareness"
+  },
   "APPROACH_FOR_RECRUITMENT": {
     "primary": "Sincerity (Temptation)",
     "secondary": "Courtier (Manipulation)"

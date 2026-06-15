@@ -305,6 +305,9 @@ static func execute(
 	if action_id == "APPOINT_TO_POSITION":
 		return _execute_appoint_to_position(action, character, ctx)
 
+	if action_id == "DISMISS_FROM_POSITION":
+		return _execute_dismiss_from_position(action, character, ctx)
+
 	if action_id == "ARRANGE_MARRIAGE":
 		return _execute_arrange_marriage(action, character, ctx, dice_engine, characters_by_id)
 
@@ -3800,6 +3803,32 @@ static func _execute_appoint_to_position(
 			"appointee_id": target_id,
 			"position": position,
 			"governed_zone_id": governed_zone_id,
+		},
+	}
+
+
+# DISMISS_FROM_POSITION (s2.3.23 / s57.47). Removes a position-holder from office.
+# The appointing authority (a position's lord), the Emperor, or the Emerald
+# Champion may dismiss; criminal conviction auto-dismisses. target_npc_id is the
+# office-holder to remove. The orchestrator's _apply_dismissal performs the field
+# clears (and vacates the district zone for a Governor).
+static func _execute_dismiss_from_position(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var target_id: int = action.metadata.get("target_npc_id", action.target_npc_id)
+	return {
+		"success": target_id >= 0,
+		"action_id": "DISMISS_FROM_POSITION",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_dismissal": true,
+			"dismisser_id": ctx.character_id,
+			"dismissed_id": target_id,
 		},
 	}
 

@@ -714,6 +714,7 @@ static func advance_day(
 		favors,
 		active_topics,
 		next_topic_id,
+		navigation_zones,
 	)
 
 	# s2.3.23: complete the district link for any Governor just appointed (sets
@@ -1254,6 +1255,11 @@ static func advance_day(
 
 	_process_magistrate_conviction_cascade(
 		conviction_results, crime_records, characters_by_id, objectives_map,
+	)
+
+	# s2.3.23 / s57.47: a Governor convicted of a crime is automatically dismissed.
+	_process_conviction_dismissals(
+		conviction_results, crime_records, characters_by_id, navigation_zones,
 	)
 
 	var info_results: Array = _process_info_events(
@@ -10572,6 +10578,84 @@ static func _apply_governor_dismissal(governor: L5RCharacterData, zone: Navigati
 	zone.zone_lord_id = -1
 
 
+# The NavigationZone with the given zone_id, or null.
+static func _find_nav_zone_by_id(navigation_zones: Array, zone_id: String) -> NavigationZoneData:
+	for z: Variant in navigation_zones:
+		var nz: NavigationZoneData = z as NavigationZoneData
+		if nz != null and nz.zone_id == zone_id:
+			return nz
+	return null
+
+
+# DISMISS_FROM_POSITION executor effect (s2.3.23 / s57.47). Removes the named
+# office-holder. A Governor (governed_zone_id set) also vacates their district
+# zone via the shared _apply_governor_dismissal core; any other position-holder
+# simply loses their role and superior link.
+static func _apply_dismissal(
+	effects: Dictionary,
+	characters_by_id: Dictionary,
+	navigation_zones: Array,
+) -> Dictionary:
+	var dismissed_id: int = effects.get("dismissed_id", -1)
+	var dismissed: L5RCharacterData = characters_by_id.get(dismissed_id) as L5RCharacterData
+	if dismissed == null or CharacterStats.is_dead(dismissed):
+		return {"applied": false, "reason": "no_target", "dismissed_id": dismissed_id}
+	var was_governor: bool = not dismissed.governed_zone_id.is_empty()
+	if was_governor:
+		var zone: NavigationZoneData = _find_nav_zone_by_id(navigation_zones, dismissed.governed_zone_id)
+		if zone != null:
+			_apply_governor_dismissal(dismissed, zone)
+		else:
+			dismissed.role_position = ""
+			dismissed.governed_zone_id = ""
+			dismissed.operational_superior_id = -1
+			dismissed.appointed_ic_day = -1
+	else:
+		dismissed.role_position = ""
+		dismissed.operational_superior_id = -1
+	return {"applied": true, "dismissed_id": dismissed_id, "was_governor": was_governor}
+
+
+# s2.3.23 / s57.47: a Governor convicted of a crime is automatically dismissed.
+# Fires for each guilty verdict this tick whose convicted character still governs
+# a district. Self-limiting — once dismissed, governed_zone_id is empty and the
+# character is skipped on subsequent ticks.
+static func _process_conviction_dismissals(
+	conviction_results: Array,
+	crime_records: Array,
+	characters_by_id: Dictionary,
+	navigation_zones: Array,
+) -> void:
+	for conv: Variant in conviction_results:
+		if not (conv is Dictionary):
+			continue
+		if (conv as Dictionary).get("outcome", "") != "convicted":
+			continue
+		var case_id: int = (conv as Dictionary).get("case_id", -1)
+		if case_id < 0:
+			continue
+		var perp_id: int = -1
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				perp_id = r.perpetrator_id
+				break
+		if perp_id < 0:
+			continue
+		var gov: L5RCharacterData = characters_by_id.get(perp_id) as L5RCharacterData
+		if gov == null or CharacterStats.is_dead(gov):
+			continue
+		if gov.governed_zone_id.is_empty():
+			continue
+		var zone: NavigationZoneData = _find_nav_zone_by_id(navigation_zones, gov.governed_zone_id)
+		if zone != null:
+			_apply_governor_dismissal(gov, zone)
+		else:
+			gov.role_position = ""
+			gov.governed_zone_id = ""
+			gov.operational_superior_id = -1
+			gov.appointed_ic_day = -1
+
+
 # -- Strategic Review (s55.10) -------------------------------------------------
 
 static func _run_strategic_reviews(
@@ -19503,10 +19587,12 @@ static func _process_governance_effects(
 	favors: Array = [],
 	active_topics: Array = [],
 	next_topic_id: Array = [1000],
+	navigation_zones: Array = [],
 ) -> Dictionary:
 	var appointment_results: Array = []
 	var marriage_results: Array = []
 	var dissolution_results: Array = []
+	var dismissal_results: Array = []
 
 	var clan_baselines: Dictionary = world_states.get("clan_baselines", {})
 	var family_baselines: Dictionary = world_states.get("family_baselines", {})
@@ -19522,6 +19608,10 @@ static func _process_governance_effects(
 		if effects.get("requires_appointment", false):
 			var ar: Dictionary = _apply_appointment(effects, characters_by_id)
 			appointment_results.append(ar)
+
+		if effects.get("requires_dismissal", false):
+			var dis: Dictionary = _apply_dismissal(effects, characters_by_id, navigation_zones)
+			dismissal_results.append(dis)
 
 		if effects.get("requires_marriage", false):
 			var wm: Dictionary = world_states.get("_worship_maluses", {})
@@ -19554,6 +19644,7 @@ static func _process_governance_effects(
 		"appointments": appointment_results,
 		"marriages": marriage_results,
 		"dissolutions": dissolution_results,
+		"dismissals": dismissal_results,
 	}
 
 
