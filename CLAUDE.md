@@ -4979,6 +4979,32 @@ interior and vice-versa. Commits 98334e4 / 0a777fa / 72c4bd2. No tests per the
 no-test-code policy. (These three commits shipped without CLAUDE.md changelog
 entries; this entry backfills them and records the render-verify.)
 
+### Map-generation layer — full flood-fill connectivity verification (2026-06-15)
+Ran the actual generators under Godot 4.6.1 (headless `-s` drivers — parse/driver
+path; GUT is non-functional headless and off-policy) with an 8-directional
+flood-fill matching MovementSystem (the game's diagonal movement). **No new bugs
+found across the entire map layer.**
+- **All 35 `AsciiMapGenerator` ZoneSubtypes connected.** The 9 s2.3.23 landmarks:
+  UNREACHABLE=0 (exit-reachability). The 26 base subtypes across 43 seeds (3 named
+  + 40 numbered): every passable tile reachable from the exit(s) except ROAD's
+  ~15 roadside-grass tiles, which are the documented by-design inaccessible scenery
+  inside the dense tree shoulders (same pattern as FOREST_PATH).
+- **MOUNTAIN_PASS flag RESOLVED — not a gameplay bug.** The 2026-06-14 audit
+  flagged a "seed-specific stranded-tile/exit quirk," but across 43 seeds it is
+  UNREACHABLE=0 under 8-directional movement. The prior flag was a 4-connectivity
+  artifact in the older largest-connected-component metric; the game uses
+  8-directional movement (AsciiMapView numpad/WASD diagonals), so MOUNTAIN_PASS is
+  fully navigable. No code change.
+- **All 10 s56 mission templates connected.** Per the changelog's own invariant
+  (every objective_slot + ground-level entry must lie in the largest connected
+  component; population slots may sit on walls for elevated/cover units): all 10
+  pass across 3 seeds with closed doors/gates treated as traversable (bump-to-open).
+  CAVE's entrance fix confirmed holding. RAVINE_CAMP's LCC is ~69.5% of passable
+  tiles — by design: the gameplay area (objectives + mouth entry) is fully
+  connected, and the stranded ~30% is the cliff-top rim reachable only by s40
+  elevation descent (its `is_rim` entry vectors), exactly as documented.
+No production code touched — verification only. Drivers were temporary and removed.
+
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
 via headless largest-connected-component analysis + per-exit reachability check
