@@ -250,7 +250,7 @@ static func advance_day(
 	_inject_poem_context(characters, world_states)
 	# Sentaku access (s2.3.23): clear lapsed Forbidden City visits, then surface
 	# PETITION_ACCESS to capital visitors who still lack a tier and aren't cooling down.
-	_process_forbidden_access_expiry(characters, ic_day)
+	_process_forbidden_access_expiry(characters, ic_day, active_courts, crime_records, next_case_id)
 	_inject_petition_context(world_states, characters_by_id, settlements, time_system)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_process_wall_shireikan_escalation(
@@ -25701,7 +25701,13 @@ static func _petition_season_index(time_system: TimeSystem) -> int:
 
 # Clears Forbidden City access whose per-visit duration has elapsed. Standing
 # grants (Imperial residents) carry expiry -1 and never expire.
-static func _process_forbidden_access_expiry(characters: Array, ic_day: int) -> void:
+static func _process_forbidden_access_expiry(
+	characters: Array,
+	ic_day: int,
+	active_courts: Array = [],
+	crime_records: Array = [],
+	next_case_id: Array = [1],
+) -> void:
 	for c: L5RCharacterData in characters:
 		if not c.forbidden_city_access:
 			continue
@@ -25710,6 +25716,47 @@ static func _process_forbidden_access_expiry(characters: Array, ic_day: int) -> 
 		if ic_day >= c.forbidden_city_access_expiry_ic_day:
 			c.forbidden_city_access = false
 			c.forbidden_city_access_expiry_ic_day = -1
+			# s2.3.23: "Overstaying is trespassing — a criminal offense per Section
+			# 11.3." Detection is action-triggered (owner decision 2026-06-15): a
+			# character who is an active Imperial Court attendee when their pass
+			# expires is, by definition, still inside the Forbidden City — that is
+			# the overstay. (The arrival/departure gate in _process_court_attendance
+			# never fires on an in-place expiry, so without this the unauthorized
+			# attendee would silently keep their seat.) Lawful petitioners are not
+			# attendees, so this is false-positive-free with no zone tracking.
+			# Crime: DISHONORABLE_CONDUCT / MODERATE (owner decision). Witnessed by
+			# the court (open offense) → concealment 0, UNDER_INVESTIGATION; the
+			# guards eject the trespasser (remove_attendee). The conviction pipeline
+			# applies consequences — no honor numbers invented here.
+			if CharacterStats.is_dead(c):
+				continue
+			for court_v: Variant in active_courts:
+				var court: CourtSessionData = court_v as CourtSessionData
+				if court == null or not CourtSystem.is_active(court):
+					continue
+				if court.court_type != CourtSessionData.CourtType.IMPERIAL_COURT:
+					continue
+				if c.character_id not in court.attendee_ids:
+					continue
+				var record := CrimeRecord.new()
+				record.case_id = next_case_id[0]
+				next_case_id[0] += 1
+				record.crime_type = Enums.CrimeType.DISHONORABLE_CONDUCT
+				record.severity = Enums.CrimeSeverity.MODERATE
+				record.perpetrator_id = c.character_id
+				record.victim_id = -1
+				record.ic_day_committed = ic_day
+				record.concealment_tn = 0
+				record.location = str(court.host_settlement_id)
+				record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+				# Witnessed in the act by the court guards — the suspect is known, so
+				# the investigation pipeline can identify and accuse them (mirrors the
+				# forgery detection pattern). Without this the record would stall at
+				# UNDER_INVESTIGATION (process_accused_cases acts only on ACCUSED).
+				record.known_suspects.append(c.character_id)
+				crime_records.append(record)
+				CourtSystem.remove_attendee(court, c.character_id)
+				break
 
 
 # Surfaces PETITION_ACCESS to living non-PC visitors physically at Otosan Uchi
