@@ -90,6 +90,16 @@ static func _pool_upward(
 		for s: SettlementData in settlements:
 			if s.province_id not in cd.province_ids:
 				continue
+			# The Imperial Capital's koku_stockpile is the Emperor's stockpile, fed by
+			# the s2.3.23 District Economics cascade (Governor -> Emperor only, no clan
+			# intermediate tier). It must NOT be pooled upward to a clan champion — the
+			# capital sits in the "Imperial Lands" province (clan "Imperial"), so without
+			# this exemption the Emperor's district-tax take is drained every month into
+			# an Imperial-clan pool that has no champion to receive it (the Emperor is
+			# IMPERIAL rank, not CLAN_CHAMPION) and is silently lost. Mirrors the
+			# resource_tick.gd carve-out that excludes the capital from standard koku.
+			if s.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+				continue
 			var monthly_share: float = s.koku_stockpile / divisor
 			s.koku_stockpile -= monthly_share
 			clan_total += monthly_share
