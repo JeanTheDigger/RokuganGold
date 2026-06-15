@@ -334,11 +334,12 @@ south & east.
 ===============>===============
 ```
 
+
 ---
 
 ## Landmark Lesser Zones (handcrafted layer)
 
-Each district contains child Lesser Zones for its s2.3.23 named landmarks (**102 zones** total), each rendering via the nearest existing interior generator (reuse approach — bespoke generators can swap in later). Names are verbatim from s2.3.23; only GDD-named landmarks become zones.
+Each district contains child Lesser Zones for its s2.3.23 named landmarks (**121 zones** total), each rendering via the nearest existing interior generator (reuse approach — bespoke generators can swap in later). Names are verbatim from s2.3.23; only GDD-named landmarks become zones. The Forbidden City's Imperial Palace is expanded to its full s57.36 interior set (11 sub-zones), per the s2.3.23 cross-ref "Imperial Palace ... contains 10+ interior sub-zones per Section 57.36."
 
 **Tsai — Brutal Flame District** (Toshisoto) — 11 zones
 
@@ -510,15 +511,34 @@ Each district contains child Lesser Zones for its s2.3.23 named landmarks (**102
 | Samurai residential compounds | `RESIDENTIAL_QUARTER` |
 | Governor's residence | `LORD_QUARTERS` |
 
-**Forbidden City — Forbidden City** (Forbidden City) — 7 zones
+**Forbidden City — Forbidden City** (Forbidden City) — 26 zones
 
 | Landmark | Interior subtype |
 |---|---|
-| Imperial Palace (throne room) | `OHIROMA` |
-| Imperial Court chambers | `OHIROMA` |
-| Emperor's Labyrinth (tunnels) | `MOUNTAIN_PASS` |
+| Imperial Palace — Throne Room | `OHIROMA` |
+| Imperial Palace — Imperial Court Chambers | `AUDIENCE_CHAMBER` |
+| Imperial Palace — Banquet Hall | `ENKAI_HALL` |
+| Imperial Palace — Tea Pavilion | `CHASHITSU` |
+| Imperial Palace — Guest Wing | `GUEST_WING` |
+| Imperial Palace — Emperor's Private Chambers | `LORD_QUARTERS` |
+| Imperial Palace — War Council Room | `WAR_COUNCIL_ROOM` |
+| Imperial Palace — Dojo | `DOJO` |
+| Imperial Palace — Outer Courtyard | `OUTER_COURTYARD` |
+| Imperial Palace — Inner Garden | `TSUBONIWA` |
+| Imperial Palace — Palace Shrine | `CASTLE_SHRINE` |
+| Otomo Palace | `LORD_QUARTERS` |
+| Seppun Palace | `LORD_QUARTERS` |
+| Miya Palace | `LORD_QUARTERS` |
+| Guest Home — Crab Clan | `GUEST_WING` |
+| Guest Home — Crane Clan | `GUEST_WING` |
+| Guest Home — Dragon Clan | `GUEST_WING` |
+| Guest Home — Lion Clan | `GUEST_WING` |
+| Guest Home — Phoenix Clan | `GUEST_WING` |
+| Guest Home — Scorpion Clan | `GUEST_WING` |
+| Guest Home — Unicorn Clan | `GUEST_WING` |
+| Shrine of the First Hantei | `CASTLE_SHRINE` |
 | Imperial Gardens | `TSUBONIWA` |
 | Seppun Guard barracks | `WAR_COUNCIL_ROOM` |
-| Imperial family residences | `LORD_QUARTERS` |
 | Emperor's Chosen quarters | `LORD_QUARTERS` |
+| Emperor's Labyrinth (tunnels) | `MOUNTAIN_PASS` |
 

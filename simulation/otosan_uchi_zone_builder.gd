@@ -225,13 +225,37 @@ const LANDMARKS: Dictionary = {
 		{"n": "Governor's residence", "s": _ZS.LORD_QUARTERS},
 	],
 	15: [  # Forbidden City
-		{"n": "Imperial Palace (throne room)", "s": _ZS.OHIROMA},
-		{"n": "Imperial Court chambers", "s": _ZS.OHIROMA},
-		{"n": "Emperor's Labyrinth (tunnels)", "s": _ZS.MOUNTAIN_PASS},
+		# Imperial Palace — 10+ interior sub-zones (s2.3.23 / s57.36). The grandest
+		# structure in the Empire carries the full castle-interior set.
+		{"n": "Imperial Palace — Throne Room", "s": _ZS.OHIROMA},
+		{"n": "Imperial Palace — Imperial Court Chambers", "s": _ZS.AUDIENCE_CHAMBER},
+		{"n": "Imperial Palace — Banquet Hall", "s": _ZS.ENKAI_HALL},
+		{"n": "Imperial Palace — Tea Pavilion", "s": _ZS.CHASHITSU},
+		{"n": "Imperial Palace — Guest Wing", "s": _ZS.GUEST_WING},
+		{"n": "Imperial Palace — Emperor's Private Chambers", "s": _ZS.LORD_QUARTERS},
+		{"n": "Imperial Palace — War Council Room", "s": _ZS.WAR_COUNCIL_ROOM},
+		{"n": "Imperial Palace — Dojo", "s": _ZS.DOJO},
+		{"n": "Imperial Palace — Outer Courtyard", "s": _ZS.OUTER_COURTYARD},
+		{"n": "Imperial Palace — Inner Garden", "s": _ZS.TSUBONIWA},
+		{"n": "Imperial Palace — Palace Shrine", "s": _ZS.CASTLE_SHRINE},
+		# Other palaces and grounds named in s2.3.23.
+		{"n": "Otomo Palace", "s": _ZS.LORD_QUARTERS},
+		{"n": "Seppun Palace", "s": _ZS.LORD_QUARTERS},
+		{"n": "Miya Palace", "s": _ZS.LORD_QUARTERS},
+		# Guest Homes — one per Great Clan (s2.3.23).
+		{"n": "Guest Home — Crab Clan", "s": _ZS.GUEST_WING},
+		{"n": "Guest Home — Crane Clan", "s": _ZS.GUEST_WING},
+		{"n": "Guest Home — Dragon Clan", "s": _ZS.GUEST_WING},
+		{"n": "Guest Home — Lion Clan", "s": _ZS.GUEST_WING},
+		{"n": "Guest Home — Phoenix Clan", "s": _ZS.GUEST_WING},
+		{"n": "Guest Home — Scorpion Clan", "s": _ZS.GUEST_WING},
+		{"n": "Guest Home — Unicorn Clan", "s": _ZS.GUEST_WING},
+		# Shrines, gardens, guard, and the tunnel complex.
+		{"n": "Shrine of the First Hantei", "s": _ZS.CASTLE_SHRINE},
 		{"n": "Imperial Gardens", "s": _ZS.TSUBONIWA},
 		{"n": "Seppun Guard barracks", "s": _ZS.WAR_COUNCIL_ROOM},
-		{"n": "Imperial family residences", "s": _ZS.LORD_QUARTERS},
 		{"n": "Emperor's Chosen quarters", "s": _ZS.LORD_QUARTERS},
+		{"n": "Emperor's Labyrinth (tunnels)", "s": _ZS.MOUNTAIN_PASS},
 	],
 }
 
