@@ -62,42 +62,13 @@ Deterministic from seed. Template-appropriate: cave **dead-ends** + chokepoints,
 
 ---
 
-## 2. LOCKS & KEYS
+## 2. LOCKS & KEYS  — ❌ DROPPED (owner decision 2026-06-16)
 
-### Concept
-Locked doors/containers that gate progress, reward exploration, and tie combat to access (the key is
-on the leader). Extends the existing door model (`MovementSystem` open/closed, GATE_CLOSED, bump-to-open).
-
-### Data model
-New on `AsciiMapData`:
-```
-@export var locks: Array = []   # each: {x, y, lock_tn, force_tn, key_id, state}
-```
-`state`: LOCKED → (UNLOCKED | FORCED | BROKEN). `key_id` = -1 means "no key exists, pick or force only".
-
-### Three ways past (any one works)
-1. **Pick** — adjacent: **Sleight of Hand** vs `lock_tn`; takes an action; miss by `‹P›10+` jams it (lock_tn +`‹P›5`, retryable). Quiet.
-2. **Key** — a small **key item** placed elsewhere on the map (on the leader, a guard, or in a room). Requires a **minimal on-map item-pickup for keys only** (NOT general loot — keys are functional gating, consistent with "no loot"). Using the matching key auto-opens.
-3. **Force** — adjacent: **Strength/Athletics** vs `force_tn`; **LOUD** noise (NoiseSystem → AlertState); may damage the door (→ destroyed_tiles). Fast but wakes the dungeon.
-
-### Lock tiers `‹P›`
-simple 15 / good 20 / superior 25 / masterwork 30 (lock_tn). force_tn typically lock_tn `‹P›`+5.
-
-### Gating purpose
-Lock the **objective room**, an evidence/contraband room (urban hideout "concealed wealth funding the
-cult", s56.15), or a shortcut. Putting the **key on the leader** makes "kill the boss" also "open the
-vault" — a clean combat↔access link with no loot tables.
-
-### Integration points
-`MovementSystem.check_step` gains `is_locked` (blocks until resolved; bump becomes pick/force/key
-attempt). `AsciiMapCombatOrchestrator` gets PICK_LOCK / FORCE_DOOR actions. Key pickup = a tiny item
-layer (`map.keys: Array` of `{x,y,key_id}` + a held-keys set on the session) — keys only.
-
-### OWNER DECISIONS NEEDED
-- Pick skill = Sleight of Hand? (or a dedicated Locksmith-style skill?)
-- Lock TN tiers + force TN formula.
-- Are keys in scope (needs the tiny key-pickup layer), or **pick/force only** (no item layer at all)?
-- Should force-breaking a door always alarm enemies?
+**Cut.** Rokugan's interior doors are sliding paper/wood screens (shōji/fusuma) — opened or cut, never
+locked/picked. Authentic locks exist only on kura/vaults/strongboxes/cells/gates, and with loot already
+cut the feature was judged too marginal. Gated areas are reached via combat / destroy-tile instead.
+No lock data model, no key item layer, no PICK/FORCE actions will be built. (Original proposal retained
+in git history.)
 
 ---
 
