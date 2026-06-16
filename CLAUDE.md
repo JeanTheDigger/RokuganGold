@@ -5077,6 +5077,20 @@ Ran the REAL `WorldBootstrap.bootstrap_world()` under Godot 4.6.1 (3816 chars,
   is sound in situ.
 No production code touched — verification only. Driver was temporary and removed.
 
+### ZoneFlagMatrix coverage + schema audit (2026-06-16)
+Runtime audit of `ZoneFlagMatrix.ZONE_FLAGS` (the per-ZoneSubtype action-gating
+table, s57.36) under Godot 4.6.1. **CLEAN.** All 35 `ZoneSubtype` enum members
+have an explicit `ZONE_FLAGS` entry — nothing silently falls to the `ALL_FALSE`
+default via `get_flags`. Every entry's key set matches `ALL_FALSE` exactly (all
+8 flags present — no missing key reading `false` as an unintended gate, no typo'd
+key that is never read), and there are no non-enum keys. The 9 s2.3.23 landmark
+subtypes and PEASANT_DWELLING all have entries (all-false where appropriate —
+a tomb/treasury/peasant-home grants no noble-art/tea/garden affordances).
+With this, the zone system is verified at every layer: builders (structure),
+tile connectivity (35 subtypes + 10 mission templates), zone graphs (capital +
+all settlement types), live-world Governor↔zone join (1251 zones), and the
+action-gating matrix. No production code touched — verification only. Driver removed.
+
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
 via headless largest-connected-component analysis + per-exit reachability check
