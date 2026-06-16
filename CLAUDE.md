@@ -4237,6 +4237,31 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   tiles, possession, paralysis_venom, deceptive_weight, phantom_battle tile damage, invisibility,
   shapeshift disguise, and mob_frenzy/rally group counts. Validated by static review + parse-trace
   (SpiritCreatureData.has_tag/.reduction, minf/maxf confirmed; no external deps).
+- **s56.16 live-combat adapter (tranche 7, owner-approved 2026-06-16).**
+  `simulation/spirit_combatant.gd` (SpiritCombatant, pure) — the foundational adapter for the live
+  ASCII spiritual encounter: `to_character_data(creature, instance_id)` converts a SpiritCreatureData
+  stat block into a combat-ready L5RCharacterData "puppet" the AsciiMapCombatOrchestrator consumes
+  as a participant (the orchestrator is character_id-keyed over L5RCharacterData, so creatures need
+  this wrapper). `catalog_for_realm()` + `spawn(realm, creature_id, instance_id)` instantiate puppets
+  on demand (escalation, s56.16.5e). New inert field `L5RCharacterData.spirit_creature: SpiritCreatureData`
+  (null for real characters) stores the source so the ability/override layer can read it.
+  **FAITHFUL** (the existing combat math reads these directly): the four Rings (via paired traits,
+  ring = min of pair), named-trait overrides (Reflexes/Agility/Strength/… drive init/attack/damage),
+  Armor TN (back-calc into armor_tn_bonus so get_armor_tn = Reflexes×5+5+bonus returns the creature's
+  value), natural Reduction (armor_reduction), and the natural-weapon DAMAGE dice (strength_adds=false).
+  Void Ring forced to 0 (spirits have none). **APPROXIMATED until the orchestrator override layer**
+  (the next, runtime-verifiable tranche): the to-HIT roll (PC trait+skill vs the creature's fixed
+  Xk Y — stored on spirit_creature.attack_rolled/kept for the override) and the WOUND track (PC
+  Earth-derived capacity vs the creature's explicit wounds_dead/thresholds — also on spirit_creature).
+  Special abilities apply via SpiritAbilitySystem (tranche 6) off the tags. **Scope/risk note:** the
+  live turn loop (spawning creatures into setup_combat with escalating threats, the bushi-defends-
+  shugenja loop driving ritual+exposure+abilities per round, encounter outcome) AND the exact
+  attack/wound overrides modify the core combat orchestrator and are NOT runtime-verifiable in this
+  environment (no Godot binary) — deferred to a tranche that can be driver-verified, to avoid pushing
+  a large unverified change into core combat. This adapter is isolated (new file + one inert field;
+  orchestrator/IndividualCombat untouched) and validated by static review + parse-trace
+  (character_name/void_ring/armor_reduction/armor_tn_bonus/weapons[WeaponData] fields, get_armor_tn
+  formula, WeaponData fields, SpiritBestiary catalogues all confirmed).
 
 ### Pending Redesign
 (None currently pending.)

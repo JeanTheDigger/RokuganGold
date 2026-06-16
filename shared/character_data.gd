@@ -110,6 +110,10 @@ var spell_void_bonus_used: int = 0
 @export var armor_tn_bonus: int = 0  # mirrors armor_worn.tn_bonus; kept for fast lookup
 @export var armor_reduction: int = 0
 @export var outfit: Array = []
+# s56.16 spirit-encounter puppet source: set when this character is a SpiritCombatant
+# wrapper for a SpiritCreatureData (the live ASCII spiritual encounter). null for
+# all real characters. Lets the combat ability/override layer read the creature.
+@export var spirit_creature: SpiritCreatureData = null
 @export var koku: float = 0.0
 @export var months_without_stipend: int = 0
 
