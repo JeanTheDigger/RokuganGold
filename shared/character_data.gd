@@ -58,6 +58,10 @@ var spell_void_bonus_used: int = 0
 @export var techniques: Array = []
 @export var kiho: Array = []
 @export var katas: Array = []
+# s38 out-of-combat kiho buffs: kiho_name -> ic_day it was last activated.
+# Just-in-time per-tick activation (SkillResolver); an entry == current ic_day
+# means the buff is active for that tick. Stale entries are ignored/overwritten.
+@export var active_kiho_buffs: Dictionary = {}
 
 # -- Spells (shugenja only) ----------------------------------------------------
 

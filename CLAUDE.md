@@ -3324,6 +3324,42 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — out-of-combat character-level buffs, tranche 1 (2026-06-16, owner-authorized + scoped)
+First out-of-combat (non-combat) kiho buffs, wired into `SkillResolver` (kiho are
+monk-only; PCs can't be monks per s60.2, so an NPC activation policy is REQUIRED or
+the system is inert — owner chose **just-in-time per tick**, scope **only the 2
+buffs with a real world-sim consumer**, 2026-06-16). GDD analysis showed only 2 of
+the ~13 out-of-combat kiho have a consumer the headless sim can read; the other 11
+depend on systems that don't exist (poison/disease, long-range vision/ambush,
+nemuranai/spell-effect detection, fatigue, heat/cold damage typing) and would be
+no-ops, so they were left unwired (documented blocked-on-missing-consumer).
+- **The Mind's Fire** (Fire 4, Internal): +2k2 on Intelligence-based skill rolls
+  (GDD exact). Huge consumer surface via SkillResolver (courtier/investigation/lore).
+- **Steal the Air Dragon** (Air 7, Kharmic): +Air Ring rolled & kept on Stealth
+  rolls (GDD exact). Consumed by covert systems (assassination access, SHADOW_TARGET,
+  conceal, eavesdrop, escape — many contested).
+**Mechanism:** new `L5RCharacterData.active_kiho_buffs: Dictionary` (kiho_name →
+ic_day last activated; @export, persists, stale entries ignored).
+`SkillResolver._get_kiho_buff_bonus()` runs at the universal roll chokepoint (same
+place as the `from_the_ashes` / mutation hooks) in BOTH `resolve_skill_check` and
+`resolve_contested_check` (per side). On the first qualifying roll of the IC day a
+monk who knows the kiho and has a Void Point spends 1 VP (s38a Void Point = Free
+Action) to activate; later qualifying rolls the same tick reuse it (no extra VP),
+tracked by the active_kiho_buffs marker == current ic_day. No effect when ic_day < 0
+(can't dedup → never risks draining VP on untracked calls) or for non-monks (gated
+on `character.kiho.has(...)`). Additive — zero effect for existing non-monk callers.
+Runtime-verified (8 scenarios): VP accounting, per-tick dedup, next-tick reactivate,
+VP-exhaustion no-op, ic_day<0 gate, non-monk skip, contested both-sides (only the
+Stealth side spends, not the Perception side). LIMITATIONS: Mind's Fire's GDD
+"Fatigued when it ends" downside is not modeled (no fatigue system) — buff has no
+cost beyond the VP; durations ("minutes"/"while active") are modeled as per-tick
+(the documented sub-day→tick compromise); the s38a active-slot rule is moot (the two
+buffs are different types and no other out-of-combat buff is wired). TUNING: a monk
+auto-spends a VP on its first Int/Stealth roll each tick regardless of the roll's
+importance (the literal just-in-time policy) — watch for VP over-drain in a live run.
+The other 11 out-of-combat kiho remain unwired (blocked on missing consumer systems),
+and the combat-kiho set was already exhausted (tranches 1–33).
+
 ### s38 Kiho — effect registry, tranche 33: Touch the Void Dragon (environmental Ring boost) (2026-06-12)
 Owner-directed (2026-06-12). **Touch the Void Dragon** (Void Internal, while active): one Ring
 and its associated Traits are one Rank higher; the Ring depends on the skirmish terrain
