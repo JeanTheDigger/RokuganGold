@@ -405,6 +405,17 @@ func _apply_player_result(result: Dictionary) -> void:
 		return
 
 
+# ── Spiritual overlap palette (s56.16.1b) ─────────────────────────────────────
+
+## The tile to render at (mx,my). On a spiritual-overlap map the tile shifts with
+## the depth-driven intensity gradient (SpiritualPalette); otherwise the base
+## tile. No-op for every non-spiritual map (has_overlap() is false).
+func _display_tile(mx: int, my: int) -> int:
+	if _map.has_overlap():
+		return SpiritualPalette.display_tile(_map, mx, my)
+	return _map.get_tile(mx, my)
+
+
 # ── Traps (s56.20) ────────────────────────────────────────────────────────────
 
 ## Surfaces trap spring / passive-detection results (merged into a move result by
@@ -715,7 +726,7 @@ func _draw() -> void:
 				if not _seen.get(grid_pos, false):
 					draw_rect(Rect2(cell_pos, Vector2(CELL_SIZE, CELL_SIZE)), HIDDEN_BG)
 				else:
-					var rem_tile: int = _map.get_tile(mx, my)
+					var rem_tile: int = _display_tile(mx, my)
 					var rem_bg: Color = AsciiMapGenerator.get_bg_color(rem_tile)
 					if rem_bg.a > 0.01:
 						draw_rect(Rect2(cell_pos, Vector2(CELL_SIZE, CELL_SIZE)),
@@ -731,7 +742,7 @@ func _draw() -> void:
 							rem_glyph, HORIZONTAL_ALIGNMENT_LEFT, CELL_SIZE, font_size, dfg)
 				continue
 
-			var tile: int = _map.get_tile(mx, my)
+			var tile: int = _display_tile(mx, my)
 			var bg: Color = AsciiMapGenerator.get_bg_color(tile)
 			if bg.a > 0.01:
 				draw_rect(Rect2(cell_pos, Vector2(CELL_SIZE, CELL_SIZE)), bg)

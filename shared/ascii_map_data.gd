@@ -45,6 +45,19 @@ extends Resource
 # consumers (MissionPopulator) fall back to depth-agnostic behavior.
 @export var depth_grid: PackedInt32Array = []
 
+# -- Spiritual overlap (s56.16.1b) --------------------------------------------
+# Per-tile overlap intensity 0.0..1.0 (entry 0.0, heart 1.0). index = y*width+x.
+# Empty (size != width*height) = no overlap on this map. Base tiles are NOT
+# mutated — SpiritualPalette substitutes the *display* tile from base + intensity,
+# so the overlap reverts (s56.16 "the world heals in real time") simply by
+# raising restoration_progress (healing spreads outward from the heart).
+@export var overlap_intensity: PackedFloat32Array = []
+@export var spiritual_realm: int = Enums.SpiritRealm.GAKI_DO   # active iff event_type set
+@export var spiritual_element: int = Enums.Ring.NONE
+@export var spiritual_event_type: int = -1   # Enums.SpiritualEventType, -1 = no overlap
+@export var overlap_max_depth: int = 0       # heart depth, for healing-from-heart
+@export var restoration_progress: float = 0.0  # 0..1 ritual healing, heart outward
+
 # -- Zone connections ---------------------------------------------------------
 
 # Each entry: {x:int, y:int, direction:String, target_zone_id:String}
@@ -304,6 +317,22 @@ func depth_at(x: int, y: int) -> int:
 
 func has_depth_grid() -> bool:
 	return depth_grid.size() == width * height
+
+
+# True when a spiritual overlap has been applied to this map (s56.16.1b).
+func has_overlap() -> bool:
+	return spiritual_event_type >= 0 and overlap_intensity.size() == width * height
+
+
+# Raw stored overlap intensity at (x,y), 0.0 if no overlap or out of bounds.
+# This is the un-healed gradient — use SpiritualPalette.current_intensity_at for
+# the value after restoration_progress healing.
+func intensity_at(x: int, y: int) -> float:
+	if x < 0 or x >= width or y < 0 or y >= height:
+		return 0.0
+	if overlap_intensity.size() != width * height:
+		return 0.0
+	return overlap_intensity[y * width + x]
 
 
 # Floods 8-directional BFS from the entry tile over walkable tiles (passable

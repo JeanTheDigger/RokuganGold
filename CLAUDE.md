@@ -4055,8 +4055,41 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   `MissionPopulator._gather_candidates()` orders candidate slots deepest-first when the grid is
   present, so stronger roles (processed first) and the leader occupy deeper regions. Backward-
   compatible: `populate()` on a map without a computed grid keeps prior behavior. Spiritual-map
-  palette shift with depth remains s56.16's concern (the grid is available to it). Headless
+  palette shift with depth is now implemented (see s56.16.1b below). Headless
   (generation/population only).
+
+### Systems Added 2026-06-16 (s56.16.1b Spiritual Overlap Palette — depth-driven, owner-approved)
+- **s56.16.1b The Gradient — Visual Transformation (LOCKED).** `simulation/spiritual_palette.gd`
+  (SpiritualPalette, pure class) implements the depth-driven palette shift the s56.21 lock named
+  as "s56.16's concern" — the last depth-gradient consumer. A spirit realm overlaps Ningen-do;
+  the deeper the player walks (toward the heart = the deepest reachable tile), the less the map
+  looks like the mortal realm. Each tile carries an **overlap intensity 0.0..1.0** = `depth /
+  max_depth` from `AsciiMapData.depth_grid` (entry 0.0 → heart 1.0; unreachable −1 → 0.0).
+  **Non-destructive (owner-approved):** base tiles are never mutated — `display_tile(map,x,y)`
+  derives the shown tile from base + intensity, so the LOCKED reversion ("the world heals in real
+  time, spreading outward from the heart") is just raising `restoration_progress`
+  (`current_intensity_at` heals tiles with intensity ≥ 1−progress first, i.e. the heart outward).
+  **Three bands** (owner-approved cutoffs `MIDDLE_BAND=0.33`, `HEART_BAND=0.66`) matching the GDD
+  outer/middle/heart prose. **Per-realm/element tile table (owner-approved 2026-06-16, PROVISIONAL
+  — GDD specifies the flavour, the tile vocabulary is mortal-realm only):** Gaki-do → TREE_DEAD +
+  FLOOR_ASH/RUBBLE (decaying); Toshigoku → TREE_DEAD + RUBBLE (battlefield); Chikushudo →
+  BUSH/TREE_DECIDUOUS → TREE_EVERGREEN/BAMBOO (forest thickens); Meido → TREE_DEAD + FLOOR_SNOW/
+  FLOOR_ASH (cold/grey); Fire → FLOOR_ASH/TREE_DEAD → FIRE; Water → WATER_SHALLOW → WATER_DEEP;
+  Earth → RUBBLE; **Sakkaku/Yume-do/Air/Void → no tile change** (illusion/perceptual/mechanical
+  per GDD, not a terrain palette). New `AsciiMapData` fields (all default-inert so every normal
+  map is unaffected): `overlap_intensity: PackedFloat32Array`, `spiritual_realm`,
+  `spiritual_element`, `spiritual_event_type` (−1 = none), `overlap_max_depth`,
+  `restoration_progress`; helpers `has_overlap()`, `intensity_at()`. **Render hook wired:**
+  `AsciiMapView._display_tile()` routes both visible and remembered tiles through
+  `SpiritualPalette.display_tile` when `_map.has_overlap()` — a no-op for every non-spiritual map.
+  Uses the canonical `Enums.SpiritRealm` / `Enums.Ring` / `Enums.SpiritualEventType` (no new
+  enums). **Scope (owner: palette layer only):** the transform module + render hook only; NOT
+  wired into a spiritual mission pipeline (no QuestSeedSelector spiritual seed / no realm threaded
+  through MissionBuilder — that larger s56.16 ASCII-encounter effort stays blocked). `apply_overlap`
+  is the ready API for that future pipeline; the render hook is live (gated), so the layer is
+  consumable, not dead code. LIMITATIONS: rubble-sprinkle fraction (1/4) PROVISIONAL; Meido's
+  "colors drain" is carried by tile substitution only (no separate desaturation pass — GDD gives
+  no colour-shift values); Godot/GUT unavailable here — validated by static review + parse-trace.
 
 ### Pending Redesign
 (None currently pending.)
