@@ -38,6 +38,15 @@ extends Resource
 # Key: "x,y", Value: Enums.TileType int. Stored between sessions.
 @export var deltas: Dictionary = {}
 
+# Active fire layer (s56.6.6). Key: y*width+x int, Value: rounds_left int.
+# A tile in this dict is set to FIRE; FireSystem ticks it down to Burned Out
+# (ash) and spreads it. Empty on every non-fire mission.
+@export var burning_tiles: Dictionary = {}
+
+# Wind bearing for fire/smoke spread (s56.6.6), a unit Vector2i (e.g. (0,-1)=N).
+# ZERO = no wind (Clear weather); fixed for the mission, assigned at generation.
+@export var wind_dir: Vector2i = Vector2i.ZERO
+
 # -- Depth gradient (s56.21) --------------------------------------------------
 # Per-tile path-distance from the player entry tile (8-directional, over
 # passable + door tiles). index = y * width + x. -1 = unreachable.

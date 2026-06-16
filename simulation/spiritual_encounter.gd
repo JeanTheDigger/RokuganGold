@@ -12,11 +12,19 @@ class_name SpiritualEncounter
 ## Godot-equipped session. DEFERRED: mid-combat threat escalation (adding creature
 ## participants to a live MapCombatState — the risky orchestrator-internal insertion),
 ## the exact creature to-HIT roll and WOUND-track overrides (PC approximation stands,
-## see SpiritCombatant), and the positional abilities (hunger-pull, wail-as-action,
-## fire-trail, possession) which the creature turn loop will fire.
+## see SpiritCombatant), and the remaining positional abilities (paralysis_venom,
+## phantom_battle, possession). Hunger-pull, engulf, wail, and fire (Fire Trail +
+## Everything Burns, via FireSystem s56.6.6) are wired.
 
 const EXPOSURE_RADIUS_TILES: int = 5   # creatures within this range stack Willpower TN
 const FIRST_INSTANCE_ID: int = -10001  # puppet ids count down from here (no real collision)
+
+# Fire Trail (s54.10): the creature's own tile + 8 neighbours, each a 50% ignite.
+const _FIRE_TRAIL_TILES: Array[Vector2i] = [
+	Vector2i(0, 0),
+	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+	Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
+]
 
 
 class EncounterState:
@@ -37,6 +45,7 @@ class EncounterState:
 	var _zone_idx: Dictionary = {}                      # pool zone → next un-spawned index
 	var _prev_wounds: Dictionary = {}                   # shugenja_id → wounds_taken last round
 	var engulfed: Dictionary = {}                       # pc_id → captor creature_id (engulf/swarm grab)
+	var weather: int = AsciiMapEnvironment.WeatherState.CLEAR  # drives FireSystem spread (s56.6.6)
 	var resolved: bool = false
 
 
@@ -119,6 +128,11 @@ static func process_round(es: EncounterState, dice: DiceEngine) -> Dictionary:
 	#     each round until they escape (attempt_engulf_escape) or the captor dies.
 	_apply_engulf_crush(es, dice)
 
+	# 0c. Fire damage (s56.6.6 / s54.10) — a PC standing on a burning tile, or set on
+	#     fire by Everything Burns, takes 1k1 at the start of the round (armour does
+	#     not reduce). Both can stack.
+	_apply_fire_damage(es, dice)
+
 	# 1. Restoration ritual — each living shugenja contributes a round. A shugenja
 	#    who took damage since last round has their round interrupted (s56.16.5b).
 	for sid in es.shugenja_ids:
@@ -152,6 +166,11 @@ static func process_round(es: EncounterState, dice: DiceEngine) -> Dictionary:
 				continue
 			var extra: int = _co_located_willpower_tn(es, pid)
 			SpiritualExposureSystem.roll_periodic_check(pc, es.exposure[pid], dice, extra)
+
+	# 4. End-of-round fire tick (s56.6.6) — spread to flammable neighbours, then
+	#    burn-duration decrement and Burned Out conversion (weather-gated).
+	if es.mcs != null and es.mcs.map != null and not es.mcs.map.burning_tiles.is_empty():
+		FireSystem.process_round_end(es.mcs.map, es.weather, dice)
 
 	var alive: bool = _any_shugenja_alive(es)
 	return {
@@ -208,7 +227,13 @@ static func creature_turn(es: EncounterState, cid: int, dice: DiceEngine) -> Dic
 				SpiritualExposureSystem.apply_willpower_loss(es.exposure[pid], int(wail["wp_loss"]))
 				affected.append(pid)
 		return {"actions": [{"type": "wail", "by": cid, "affected": affected}], "ability": "wail"}
-	return AsciiMapCombatOrchestrator.execute_npc_turn(es.mcs, cid, c, es.chars_by_id, dice)
+	var result: Dictionary = AsciiMapCombatOrchestrator.execute_npc_turn(es.mcs, cid, c, es.chars_by_id, dice)
+	# Fire Trail + Burning Hunger (s54.10 Kagaki): each tile it passes / bites has a
+	# 50% chance to ignite if flammable. The encounter does not track the exact path,
+	# so ignite flammable tiles adjacent to its post-move position at 50% each.
+	if c.spirit_creature.has_tag("fire_trail"):
+		_apply_fire_trail(es, cid, dice)
+	return result
 
 
 ## PC attempts to break an engulf/swarm grab (a PC action, s54.10). Fukuregaki
@@ -238,6 +263,21 @@ static func attempt_engulf_escape(es: EncounterState, pc_id: int, dice: DiceEngi
 		es.engulfed.erase(pc_id)
 		return {"ok": true, "captor": captor, "method": "contested_strength"}
 	return {"ok": false, "captor": captor, "reason": "lost_contest"}
+
+
+## PC spends a Simple Action to extinguish the Everything Burns fire on themselves
+## (s54.10). Clears the on_fire flag on their combat Participant and consumes the
+## Simple Action. Returns {ok, reason}.
+static func attempt_extinguish(es: EncounterState, pc_id: int) -> Dictionary:
+	var p: IndividualCombat.Participant = es.mcs.combat.participants.get(pc_id, null)
+	if p == null or not p.on_fire:
+		return {"ok": false, "reason": "not_on_fire"}
+	var ts = es.mcs.turn_states.get(pc_id, null)
+	if ts == null or not ts.can_use_simple():
+		return {"ok": false, "reason": "no_simple_action"}
+	ts.consume_simple()
+	p.on_fire = false
+	return {"ok": true}
 
 
 ## Spawns the next un-spawned creature from `zone` into the live encounter, on a
@@ -394,6 +434,44 @@ static func _apply_engulf_crush(es: EncounterState, dice: DiceEngine) -> void:
 		WoundSystem.apply_damage(pc, dmg)
 		if CharacterStats.is_dead(pc):
 			es.engulfed.erase(pid)
+
+
+## Start-of-round fire damage (s56.6.6 / s54.10): a PC standing on a burning tile
+## and/or set on fire (Everything Burns) each takes 1k1, armour does not reduce.
+static func _apply_fire_damage(es: EncounterState, dice: DiceEngine) -> void:
+	var map: AsciiMapData = es.mcs.map
+	for pid in es.pc_ids:
+		var pc: L5RCharacterData = es.chars_by_id.get(pid, null)
+		if pc == null or CharacterStats.is_dead(pc):
+			continue
+		var ppos: Vector2i = es.mcs.positions.get(pid, Vector2i(-9999, -9999))
+		if map != null and FireSystem.is_burning(map, ppos.x, ppos.y):
+			WoundSystem.apply_damage(pc, FireSystem.standing_damage(dice), 0)
+			if CharacterStats.is_dead(pc):
+				continue
+		var p: IndividualCombat.Participant = es.mcs.combat.participants.get(pid, null)
+		if p != null and p.on_fire:
+			WoundSystem.apply_damage(pc, FireSystem.standing_damage(dice), 0)
+
+
+## Fire Trail + Burning Hunger (s54.10 Kagaki): each flammable tile on/adjacent to
+## the creature's post-move position has a 50% chance to ignite this turn.
+static func _apply_fire_trail(es: EncounterState, cid: int, dice: DiceEngine) -> void:
+	var map: AsciiMapData = es.mcs.map
+	if map == null:
+		return
+	var cpos: Vector2i = es.mcs.positions.get(cid, Vector2i(-9999, -9999))
+	if cpos.x < -9000:
+		return
+	for off: Vector2i in _FIRE_TRAIL_TILES:
+		var fx: int = cpos.x + off.x
+		var fy: int = cpos.y + off.y
+		if fx < 0 or fy < 0 or fx >= map.width or fy >= map.height:
+			continue
+		if not AsciiMapData.is_flammable(map.get_tile(fx, fy)):
+			continue
+		if dice.randf() < 0.5:  # s54.10 Fire Trail: 50% per flammable tile (LOCKED)
+			FireSystem.ignite(map, fx, fy)
 
 
 static func _co_located_willpower_tn(es: EncounterState, pc_id: int) -> int:

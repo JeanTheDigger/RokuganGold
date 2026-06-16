@@ -4370,6 +4370,33 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   safe erase-during-iteration confirmed). DEFERRED unchanged: fire_trail/Everything Burns,
   paralysis_venom, phantom_battle, possession/shapeshift/invisibility/mob_frenzy/rally. Static-only
   — needs a Godot runtime to driver-verify.
+- **s56.6.6 Fire Propagation + s54.10 Kagaki fire (tranche 13, owner-approved 2026-06-16, static-only).**
+  Builds the tile-fire layer (s56.6.6, all values PROVISIONAL per the GDD — none invented) and wires
+  the Kagaki's fire abilities. **`simulation/fire_system.gd`** (FireSystem, pure) over a new
+  AsciiMapData fire layer (`burning_tiles: Dictionary` idx→rounds_left, `wind_dir: Vector2i`):
+  `ignite(map,x,y)` (flammable + not-already-burning → set FIRE tile + fuel duration);
+  `process_round_end(map, weather, dice)` — the end-of-round tick: Storm/Blizzard extinguish all,
+  Rain forces a 1-round burnout + no spread, Snow no spread; otherwise spread to flammable
+  neighbours at `spread_chance` (Clear/Mist 30% uniform; Wind 60% downwind / 15% lateral / 0%
+  upwind, classified by dot-product with `wind_dir`), then decrement durations and convert burned-out
+  tiles to FLOOR_ASH (new ignitions applied after the tick so they don't cascade/decrement the same
+  round); `standing_damage` 1k1 / `passthrough_damage` 0k1 (armour does not reduce); `fuel_rounds`
+  (grass/leaves 3, crops 4, undergrowth/light-wood 5). **Encounter wiring** (SpiritualEncounter):
+  `_apply_fire_damage` (process_round step 0c) deals 1k1 to a PC standing on a burning tile AND/OR
+  set on fire; `FireSystem.process_round_end` runs at round end (gated to non-empty fire); `creature_turn`
+  fires `_apply_fire_trail` for `fire_trail` creatures (Kagaki Fire Trail + Burning Hunger — own tile
+  + 8 neighbours, 50% ignite per flammable tile, LOCKED s54.10); `attempt_extinguish(es, pc_id)` PC
+  action spends a Simple to clear the on-fire flag. **Everything Burns** (s54.10, LOCKED): new
+  `Participant.on_fire`; a guarded hook in the orchestrator's `_apply_hit` (tranche-8-consistent) sets
+  the target on fire when a `fire_trail` spirit lands a hit (Kagaki is melee-only). Static-validated only
+  (AsciiMapData.is_flammable/set_delta, WeatherState members, SpiritCreatureData.has_tag,
+  Participant.on_fire, mcs.combat.participants access, roll_and_keep(0,1)=0 no-crash, .keys()-copy
+  safe erase confirmed). LIMITATIONS: weather/wind not yet threaded from the mission into the encounter
+  (`es.weather` defaults CLEAR / no wind — spiritual overlaps reuse the terrain template); smoke/coughing
+  + ignition/burning noise (s56.6.6) not modelled; grass is non-flammable here because AsciiMapData's
+  `_BURN_MAP` (the flammability definition) excludes FLOOR_GRASS (dry/green not tile-distinguishable).
+  DEFERRED unchanged: paralysis_venom, phantom_battle, possession/shapeshift/invisibility/mob_frenzy/rally.
+  Static-only — needs a Godot runtime to driver-verify.
 
 ### Pending Redesign
 (None currently pending.)

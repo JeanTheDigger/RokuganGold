@@ -179,6 +179,9 @@ class Participant:
 	# Victory of the River (s30a): the single opponent currently held under the
 	# Armor-TN debuff ("One opponent at a time"); -1 = none.
 	var votr_target_id: int = -1
+	# On fire (s54.10 Everything Burns / s56.6.6): set by a fire creature's melee
+	# hit; takes 1k1 at the start of each round until a Simple Action extinguishes it.
+	var on_fire: bool = false
 
 
 class CombatState:

@@ -3645,6 +3645,13 @@ static func _apply_hit(
 		if heal > 0:
 			WoundSystem.heal_wounds(attacker, heal)
 
+	# Everything Burns (s54.10 Kagaki): a successful melee hit by a fire creature
+	# sets the target on fire — 1k1 at the start of each round (SpiritualEncounter
+	# applies it) until a Simple Action extinguishes it. fire_trail tags the Kagaki,
+	# whose only attack is the melee Flame Bite (no ranged fire creature exists).
+	if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("fire_trail") and t_p != null:
+		t_p.on_fire = true
+
 	return {
 		"damage": wd_result.get("final_damage", raw),
 		"wounds": wd_result.get("final_damage", raw),
