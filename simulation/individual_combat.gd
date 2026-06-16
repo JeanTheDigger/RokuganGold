@@ -1029,6 +1029,13 @@ static func resolve_attack(
 	var rolled: int = trait_value + skill_rank
 	var kept: int = trait_value
 
+	# s56.16: a spirit creature attacks with its fixed stat-block roll (XkY), not the
+	# PC trait+skill formula. Applied before kata/void modifiers (creatures have none).
+	# Inert for real characters (spirit_creature == null).
+	if attacker.spirit_creature != null and attacker.spirit_creature.attack_rolled > 0:
+		rolled = attacker.spirit_creature.attack_rolled
+		kept = attacker.spirit_creature.attack_kept
+
 	# Kata attack modifiers (s30a): trait substitution applied before void/stance
 	var kata_atk: Dictionary = _get_kata_attack_modifiers(attacker, attacker_p, weapon_name, maneuver)
 	if kata_atk["use_air_ring"]:

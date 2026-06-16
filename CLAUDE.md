@@ -4308,6 +4308,25 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   (hunger-pull, wail-as-action, fire-trail, possession). With escalation, the live s56.16 encounter
   loop is complete in shape (setup → per-round ritual+escalation+exposure → resolution); only the
   per-creature combat fidelity + positional-ability turns remain, both needing a Godot runtime.
+- **s56.16 exact creature combat fidelity (tranche 10, owner-approved 2026-06-16, static-only).**
+  Replaces the SpiritCombatant to-hit/wound approximation with the stat-block values, via two
+  minimal guarded hooks (both inert for real characters — `spirit_creature == null`):
+  (1) **Wound track** — `CharacterStats.get_wound_level` and `get_total_wound_capacity` honor the
+  creature's explicit `wounds_dead` + per-level `wound_thresholds` instead of the PC Earth×2 formula.
+  New `_spirit_wound_level()`: DEAD at `wounds_dead`; otherwise the level index = how many cumulative
+  `wound_thresholds` the wounds have exceeded (proportional fallback if a creature has no thresholds).
+  This propagates everywhere automatically (is_dead, wound penalty, damage clamp) since it is the
+  single wound-level source. (2) **To-hit roll** — `IndividualCombat.resolve_attack` uses the
+  creature's fixed `attack_rolled k attack_kept` instead of the PC trait+skill roll, applied before
+  the kata/void modifiers (creatures have none). Combined with the already-faithful damage
+  (WeaponData rolled/kept, strength_adds=false), Armor TN (back-calc), and Reduction, spirit combat
+  is now stat-faithful for to-hit, damage, defense, AND death. Static-validated only (SpiritCreatureData
+  attack_rolled/attack_kept/wounds_dead/wound_thresholds fields, the wound-level chain, and resolve_attack
+  roll construction confirmed). REMAINING approximations (minor, documented): initiative still uses the
+  puppet's Reflexes+Insight (not the creature's initiative_rolled/kept), and weapon-material detection
+  (jade/crystal vs the damage filter) awaits a WeaponData material field. Plus the creature-turn firing
+  of positional abilities (hunger-pull, wail-as-action, fire-trail, possession). All of tranches 7–10
+  are static-only and need a Godot runtime to driver-verify.
 
 ### Pending Redesign
 (None currently pending.)
