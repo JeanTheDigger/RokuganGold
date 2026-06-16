@@ -24,6 +24,9 @@ const W_WATER: String = "water"
 
 const WAIL_TN: int = 20            # s54.10 Haraigaki Wail of the Starving
 const WAIL_WP_LOSS: int = 1        # -1 Willpower Rank on a failed Wail save
+const HUNGER_PULL_RADIUS: int = 4  # s54.10 Fukuregaki Hunger Pull: within 4 tiles
+const HUNGER_PULL_TN: int = 15     # Earth roll to resist the pull
+const HUNGER_PULL_DIST: int = 1    # tiles dragged toward the creature on a failed resist
 const SWARM_PRESENCE_TN: int = 1   # s54.10 Muzai-gaki: +1 Willpower-TN per creature
 const BONE_RATTLE_TN: int = 2      # s56.16.6a Gashadokuro: +2 erosion TN
 const LIFE_DRAIN_HEAL: int = 5     # s54.10 O-Toyo Destroyer of Life: +5 Wounds per hit
@@ -167,3 +170,13 @@ static func wail_effect(creature: SpiritCreatureData) -> Dictionary:
 	if not creature.has_tag("wail"):
 		return {}
 	return {"tn": WAIL_TN, "wp_loss": WAIL_WP_LOSS, "radius_tiles": 5, "lose_next_simple": true}
+
+
+## Fukuregaki Hunger Pull (s54.10, Passive, always active): every character within
+## 4 tiles is dragged 1 tile toward the creature at the start of each round unless
+## they pass an Earth roll vs TN 15. Returns {} for non-pullers. The combat loop
+## rolls Earth per nearby character and, on failure, slides them one tile closer.
+static func hunger_pull_effect(creature: SpiritCreatureData) -> Dictionary:
+	if not creature.has_tag("hunger_pull"):
+		return {}
+	return {"radius_tiles": HUNGER_PULL_RADIUS, "resist_tn": HUNGER_PULL_TN, "pull": HUNGER_PULL_DIST}

@@ -4327,6 +4327,30 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   (jade/crystal vs the damage filter) awaits a WeaponData material field. Plus the creature-turn firing
   of positional abilities (hunger-pull, wail-as-action, fire-trail, possession). All of tranches 7–10
   are static-only and need a Godot runtime to driver-verify.
+- **s56.16 creature positional abilities, tranche 1 (tranche 11, owner-approved 2026-06-16, static-only).**
+  The last functional s56.16 gap — creatures now use their grid/AoE abilities, not just plain attacks.
+  Two of the s54.10 positional abilities wired (both fully numeric in the locked stat blocks, no
+  invented values): (1) **Hunger Pull** (Fukuregaki, Passive) — `SpiritualEncounter._apply_hunger_pull`
+  runs at the START of each round (a new step 0 in `process_round`): every living PC within
+  `HUNGER_PULL_RADIUS` (4) tiles of a `hunger_pull` creature rolls Earth vs `HUNGER_PULL_TN` (15);
+  on failure they are dragged 1 tile toward the creature (8-dir step, blocked by the creature's own
+  tile / another occupant / a map edge / an impassable tile). (2) **Wail of the Starving** (Haraigaki)
+  — new public `SpiritualEncounter.creature_turn(es, cid, dice)`: a `wail` creature spends its
+  Complex action so every PC within 5 tiles rolls Willpower vs `WAIL_TN` (20), and failure costs a
+  Willpower Rank via `SpiritualExposureSystem.apply_willpower_loss` on the PC's exposure state; any
+  other creature delegates to the standard NPC AI turn (`execute_npc_turn`). The encounter caller
+  routes ENEMY turns through `creature_turn` (instead of `execute_npc_turn` directly) so the
+  AoE/positional abilities fire. New ability-layer helpers `SpiritAbilitySystem.hunger_pull_effect`
+  + `HUNGER_PULL_*` constants (mirrors the existing `wail_effect`). Static-validated only
+  (`apply_willpower_loss`/`new_state`, `execute_npc_turn` 5-arg signature, `get_earth_ring`,
+  `roll_and_keep(...).total`, TurnState `can_use_complex`/`consume_complex` via untyped dynamic call
+  to dodge the inner-class type-resolution hazard, `pc_ids`/`exposure` populated in `start`, the
+  Fukuregaki/Haraigaki tags confirmed). DEFERRED (need grab-state / tile-fire / condition / illusion /
+  possession systems the core lacks, OR are GM-judged): engulf-on-adjacent grab (Fukuregaki/Usai swarm),
+  fire_trail + Everything Burns (Kagaki — needs tile-fire spread + an on-fire condition), paralysis_venom
+  (Konak Jiji — needs a Stunned-for-minutes condition), phantom_battle tile damage (environmental
+  3×3–5×5 hazard that shifts), possession / shapeshift / invisibility / mob_frenzy / rally. As with
+  tranches 7–10, static-only — needs a Godot runtime to driver-verify.
 
 ### Pending Redesign
 (None currently pending.)

@@ -109,6 +109,11 @@ static func process_round(es: EncounterState, dice: DiceEngine) -> Dictionary:
 	es.round_number += 1
 	var needed: int = SpiritualRitualSystem.rounds_remaining(es.event)
 
+	# 0. Passive positional abilities (s56.16 / s54.10) — fired at the start of the
+	#    round. Hunger Pull (Fukuregaki): each character within 4 tiles is dragged
+	#    1 tile toward the creature unless they pass an Earth roll vs TN 15.
+	_apply_hunger_pull(es, dice)
+
 	# 1. Restoration ritual — each living shugenja contributes a round. A shugenja
 	#    who took damage since last round has their round interrupted (s56.16.5b).
 	for sid in es.shugenja_ids:
@@ -164,6 +169,38 @@ static func resolve(es: EncounterState, current_season: int = -1) -> Dictionary:
 	return SpiritualRitualSystem.apply_resolution(es.event, es.ritual_progress, alive, map, current_season)
 
 
+## Drive one creature's turn. A wail-capable creature (Haraigaki) spends its Complex
+## action on the Wail of the Starving (s54.10 / s56.16.6e): every PC within 5 tiles
+## rolls Willpower vs TN 20, and failure costs a Willpower Rank via the exposure
+## state. Any other creature delegates to the standard NPC AI turn (move + attack).
+## The encounter caller routes enemy (creature) turns through this so the AoE/
+## positional abilities fire. Returns the action descriptor.
+static func creature_turn(es: EncounterState, cid: int, dice: DiceEngine) -> Dictionary:
+	var c: L5RCharacterData = es.chars_by_id.get(cid, null)
+	if c == null or c.spirit_creature == null or CharacterStats.is_dead(c):
+		return {"actions": [], "reason": "not_creature"}
+	var ts = es.mcs.turn_states.get(cid, null)
+	var wail: Dictionary = SpiritAbilitySystem.wail_effect(c.spirit_creature)
+	if not wail.is_empty() and ts != null and ts.can_use_complex():
+		ts.consume_complex()
+		var cpos: Vector2i = es.mcs.positions.get(cid, Vector2i.ZERO)
+		var radius: int = int(wail["radius_tiles"])
+		var affected: Array = []
+		for pid in es.pc_ids:
+			var pc: L5RCharacterData = es.chars_by_id.get(pid, null)
+			if pc == null or CharacterStats.is_dead(pc):
+				continue
+			var ppos: Vector2i = es.mcs.positions.get(pid, Vector2i(9999, 9999))
+			if maxi(absi(ppos.x - cpos.x), absi(ppos.y - cpos.y)) > radius:
+				continue
+			var roll: int = dice.roll_and_keep(pc.willpower, pc.willpower, true).total
+			if roll < int(wail["tn"]) and es.exposure.has(pid):
+				SpiritualExposureSystem.apply_willpower_loss(es.exposure[pid], int(wail["wp_loss"]))
+				affected.append(pid)
+		return {"actions": [{"type": "wail", "by": cid, "affected": affected}], "ability": "wail"}
+	return AsciiMapCombatOrchestrator.execute_npc_turn(es.mcs, cid, c, es.chars_by_id, dice)
+
+
 ## Spawns the next un-spawned creature from `zone` into the live encounter, on a
 ## free tile near the heart. Returns false if the zone is exhausted, the catalogue
 ## lacks the id, or no free tile is available. Called by the escalation waves.
@@ -185,6 +222,46 @@ static func spawn_threat(es: EncounterState, zone: String, dice: DiceEngine) -> 
 
 
 # ── internal ──────────────────────────────────────────────────────────────────
+
+## Hunger Pull (s54.10 Fukuregaki): each living PC within a puller's radius is
+## dragged 1 tile toward it unless they pass an Earth roll vs the resist TN. The
+## drag is blocked by the creature's own tile, another occupant, a map edge, or an
+## impassable tile (the engulf-on-adjacent grab is deferred — no creature grab state).
+static func _apply_hunger_pull(es: EncounterState, dice: DiceEngine) -> void:
+	for cid in es.chars_by_id:
+		var c: L5RCharacterData = es.chars_by_id[cid]
+		if c.spirit_creature == null or CharacterStats.is_dead(c):
+			continue
+		var hp: Dictionary = SpiritAbilitySystem.hunger_pull_effect(c.spirit_creature)
+		if hp.is_empty():
+			continue
+		var cpos: Vector2i = es.mcs.positions.get(cid, Vector2i(9999, 9999))
+		var radius: int = int(hp["radius_tiles"])
+		var tn: int = int(hp["resist_tn"])
+		var occupied: Dictionary = {}
+		for v in es.mcs.positions.values():
+			occupied[v] = true
+		for pid in es.pc_ids:
+			var pc: L5RCharacterData = es.chars_by_id.get(pid, null)
+			if pc == null or CharacterStats.is_dead(pc):
+				continue
+			var ppos: Vector2i = es.mcs.positions.get(pid, Vector2i(9999, 9999))
+			var d: int = maxi(absi(ppos.x - cpos.x), absi(ppos.y - cpos.y))
+			if d == 0 or d > radius:
+				continue
+			var earth: int = CharacterStats.get_earth_ring(pc)
+			if dice.roll_and_keep(earth, earth, true).total >= tn:
+				continue  # resisted the pull
+			var dest := ppos + Vector2i(signi(cpos.x - ppos.x), signi(cpos.y - ppos.y))
+			if dest == cpos or occupied.has(dest):
+				continue
+			if dest.x < 0 or dest.y < 0 or dest.x >= es.mcs.map.width or dest.y >= es.mcs.map.height:
+				continue
+			if not MovementSystem.is_passable(es.mcs.map.get_tile(dest.x, dest.y)):
+				continue
+			occupied.erase(ppos)
+			occupied[dest] = true
+			es.mcs.positions[pid] = dest
 
 ## The weakest creature tier present (initial spawn).
 static func _initial_zone(pool: Dictionary) -> String:
