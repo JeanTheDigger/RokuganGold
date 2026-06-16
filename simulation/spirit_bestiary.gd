@@ -271,7 +271,8 @@ static func chikushudo_catalog() -> Dictionary:
 	c["kitsune"] = _make("kitsune", "Kitsune", SpiritCreatureData.Tier.MID,
 		2, 2, 2, 1, {"reflexes": 5, "perception": 4},
 		6, 5, "Claws", 2, 2, 2, 1, 25, 0, [15, 30], 45, 0,
-		["spirit", "shapeshifter", "trickster", "negotiator", "may_not_be_hostile", "swift"], R)
+		["spirit", "shapeshifter", "trickster", "negotiator", "may_not_be_hostile", "swift",
+			"ephemeral_form", "protection_of_yomi"], R)
 
 	c["kitsune_tsuki"] = _make("kitsune_tsuki", "Kitsune-tsuki", SpiritCreatureData.Tier.HEAVY,
 		2, 2, 3, 4, {"reflexes": 4, "intelligence": 4},

@@ -196,6 +196,29 @@ static func is_toshigoku_musha(creature: SpiritCreatureData) -> bool:
 	return creature.realm == Enums.SpiritRealm.TOSHIGOKU
 
 
+# ── Shapeshifter / illusion abilities (s54.10) ────────────────────────────────
+# Invisibility / intangibility make a creature untargetable by attacks ("can only
+# be wounded if it chooses to be tangible or is caught by surprise"). The
+# orchestrator computes targetability from these classifiers + reveal-on-act.
+
+const EPHEMERAL_FORM_ROUNDS: int = 10        # Major Shapeshifter Ephemeral Form: insubstantial 10 Rounds
+const PROTECTION_OF_YOMI_REDUCTION: int = 5  # Major Shapeshifter Protection of Yomi: Reduction 5
+
+## At-will hidden: Mujina Ghostly Form (intangible at will) / Invisibility (at will).
+## Persistent — the creature is untargetable whenever it has not just acted.
+static func is_at_will_hidden(creature: SpiritCreatureData) -> bool:
+	return creature.has_tag("ghostly_form") or creature.has_tag("invisibility")
+
+## Ephemeral Form (Major Shapeshifter): once-per-day, body insubstantial for 10
+## Rounds (passes through objects). Activated, not at-will (e.g. Kitsune).
+static func has_ephemeral_form(creature: SpiritCreatureData) -> bool:
+	return creature.has_tag("ephemeral_form")
+
+## Protection of Yomi (Major Shapeshifter): Reduction 5, stacks with natural sources.
+static func protection_of_yomi_reduction(creature: SpiritCreatureData) -> int:
+	return PROTECTION_OF_YOMI_REDUCTION if creature.has_tag("protection_of_yomi") else 0
+
+
 # ── Exposure-feed contributions (consumed by SpiritualExposureSystem) ─────────
 
 ## A creature's contribution to the Willpower-resistance TN of co-located

@@ -4542,6 +4542,40 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   Ranged spirit auras not hooked (only melee — Bow Ashigaru use Volley, a separate unwired ability).
   Static-validated only (symbol resolution + GDD spec confirmed; no Godot runtime — driver-verify later,
   consistent with the rest of the s56.16 combat layer).
+- **s54.10 Shapeshifter / illusion subsystem — invisibility & intangibility (owner-directed "do all",
+  2026-06-16, static-only).** First slice of the s54.10 Shapeshifter system: the combat-defining
+  illusion mechanic — an invisible (Mujina) or insubstantial (Ephemeral Form) creature cannot be
+  targeted by attacks. GDD: "can only be wounded if it chooses to be tangible or is caught by surprise."
+  The one GDD-silent value (the spot/reveal rule) is resolved as **reveal-on-act** (owner-chosen "do all";
+  picked because it needs NO invented TN — deterministic, faithful). **Wired:** (1) **Untargetability** —
+  `_is_targetable(state, cid)` computes hidden state from creature tags + reveal window: Mujina
+  `ghostly_form`/`invisibility` are at-will (persistent untargetable); `ephemeral_form` (Kitsune) is a
+  10-round activated window. `get_melee_targets`/`get_ranged_targets` exclude hidden creatures (so NPC
+  AND PC attackers never select them — `_npc_pick_target` draws from those lists), and
+  `execute_melee_attack`/`execute_ranged_attack` early-return `target_hidden`. (2) **Reveal-on-act**
+  (`_reveal_if_hidden`) — a hidden creature that attacks/shoots becomes targetable through its next turn
+  (`Participant.untargetable_revealed_until = round + 1`). Mujina have Attack:None ("do not actually
+  fight"), so they never reveal → permanently elusive (faithful to "extremely difficult to kill /
+  Immortal"; the spiritual encounter resolves by ritual progress, not by killing, so a lingering Mujina
+  doesn't block resolution). (3) **Ephemeral Form** — NPC auto-activates (`_npc_maybe_activate_ephemeral_form`,
+  Free Action, once per encounter) when an enemy is adjacent; sets a 10-round insubstantial window
+  (`Participant.ephemeral_form_expiry`/`ephemeral_form_used`). (4) **Protection of Yomi** (Major
+  Shapeshifter): Reduction 5, stacking with natural, added to a spirit target's reduction in `_apply_hit`.
+  New: `Participant.untargetable_revealed_until`/`ephemeral_form_expiry`/`ephemeral_form_used`;
+  SpiritAbilitySystem `is_at_will_hidden`/`has_ephemeral_form`/`protection_of_yomi_reduction` +
+  `EPHEMERAL_FORM_ROUNDS=10`/`PROTECTION_OF_YOMI_REDUCTION=5` (GDD-LOCKED). Kitsune given its two
+  combat-relevant GDD-listed abilities (`ephemeral_form`, `protection_of_yomi`); Mujina already carried
+  `ghostly_form`/`invisibility`. **STILL DEFERRED (need their own layers, not invented):** Mimic / A
+  Panther's Moves (disguise + Stealth — combat is faction-keyed, not identity/perception-keyed; Stealth
+  is the separate CombatController layer); Possession (Major Shapeshifter + Kitsune-tsuki/Shozai/Buruburu
+  — control-transfer layer + cross-encounter affliction timer); Mujina illusion spellcasting (Mists of
+  Illusion / Way of Deception — needs a tile-combat spell-cast consumer); lure (Konak Jiji / Mujina
+  social trap — pickup/lure interaction); wall-phasing movement for intangible creatures (movement
+  is_passable has no creature context); Bakeneko / Hengeyokai specific shapeshifter abilities (the GDD
+  enumerates only the Kitsune's set — choosing theirs would be invention). Piercing Howl (Fear 2),
+  Legendary Healing, Speed of a Predator, Strength of Jade, Protection of Tengoku are classifiable but
+  not on the encoded creatures' GDD-given sets (no consumer yet). Static-validated only (symbol
+  resolution + GDD spec confirmed; no Godot runtime — driver-verify later).
 
 ### Pending Redesign
 (None currently pending.)

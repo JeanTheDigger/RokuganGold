@@ -382,6 +382,8 @@ static func get_melee_targets(state: MapCombatState, attacker_id: int) -> Array:
 		var tf: String = state.factions.get(cid, FACTION_NEUTRAL)
 		if not _are_enemies(faction, tf):
 			continue
+		if not _is_targetable(state, cid):
+			continue
 		var tp: Vector2i = state.positions[cid]
 		if _chebyshev(pos, tp) <= MELEE_RANGE_TILES:
 			targets.append(cid)
@@ -401,6 +403,8 @@ static func get_ranged_targets(state: MapCombatState, attacker_id: int) -> Array
 			continue
 		var tf: String = state.factions.get(cid, FACTION_NEUTRAL)
 		if not _are_enemies(faction, tf):
+			continue
+		if not _is_targetable(state, cid):
 			continue
 		var tp: Vector2i = state.positions[cid]
 		if _chebyshev(pos, tp) > MELEE_RANGE_TILES and _has_los(state.map, pos, tp):
@@ -723,6 +727,9 @@ static func execute_melee_attack(
 		return {"success": false, "reason": "character_is_dead"}
 	if CharacterStats.is_dead(target):
 		return {"success": false, "reason": "target_is_dead"}
+	# s54.10: an invisible/intangible target cannot be struck (Mujina / Ephemeral Form).
+	if not _is_targetable(state, target_id):
+		return {"success": false, "reason": "target_hidden"}
 	var ts: TurnState = state.turn_states.get(attacker_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}
@@ -789,6 +796,9 @@ static func execute_melee_attack(
 	# attacker's per-attack rolled-die bonuses (always reset to the freshly-computed
 	# value so nothing lingers; 0 for non-spirits).
 	_set_spirit_attack_auras(state, attacker, a_p, target_id)
+	# s54.10: a hidden creature (Mujina / Ephemeral Form) that attacks reveals itself —
+	# it is targetable through its next turn.
+	_reveal_if_hidden(state, attacker_id, a_p)
 
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
@@ -1098,6 +1108,9 @@ static func execute_ranged_attack(
 	var wl: int = CharacterStats.get_wound_level(attacker)
 	if ts.is_down_restricted(wl):
 		return {"success": false, "reason": "down_only_free_actions"}
+	# s54.10: an invisible/intangible target cannot be shot (Mujina / Ephemeral Form).
+	if not _is_targetable(state, target_id):
+		return {"success": false, "reason": "target_hidden"}
 
 	if not ts.can_use_complex():
 		return {"success": false, "reason": "no_complex_actions_remaining"}
@@ -1124,6 +1137,9 @@ static func execute_ranged_attack(
 		return {"success": false, "reason": "defense_cannot_attack"}
 	if a_p.stance == Enums.Stance.FULL_ATTACK:
 		return {"success": false, "reason": "full_attack_cannot_ranged_attack"}
+
+	# s54.10: a hidden attacker (Mujina / Ephemeral Form) reveals itself when it shoots.
+	_reveal_if_hidden(state, attacker_id, a_p)
 
 	# -10 penalty if attacker is within melee range of any enemy (GDD s40).
 	var in_melee: bool = is_in_melee_range_of_enemy(state, attacker_id)
@@ -2891,6 +2907,10 @@ static func execute_npc_turn(
 
 	begin_turn(state, npc_id)
 
+	# -- Shapeshifter: turn insubstantial when threatened (s54.10 Ephemeral Form) --
+	# Free Action; once per encounter. No-op for creatures without the ability.
+	_npc_maybe_activate_ephemeral_form(state, npc, p)
+
 	# -- Pick optimal stance -----------------------------------------------
 	var stance_result: Dictionary = _npc_pick_stance(state, npc_id, npc, chars_by_id, dice_engine)
 	if stance_result.get("changed", false):
@@ -3701,6 +3721,65 @@ static func _ally_lookup(state: MapCombatState, cid: int) -> L5RCharacterData:
 	return state.combatants.get(cid, null)
 
 
+## s54.10 invisibility/intangibility: an invisible (Mujina) or insubstantial
+## (Ephemeral Form) creature cannot be targeted by attacks unless it has just acted
+## (revealed itself) — "can only be wounded if it chooses to be tangible or is caught
+## by surprise." Returns true for everyone else (inert for real characters).
+static func _is_targetable(state: MapCombatState, cid: int) -> bool:
+	var c: L5RCharacterData = state.combatants.get(cid, null)
+	if c == null or c.spirit_creature == null:
+		return true
+	var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+	if p == null:
+		return true
+	var rnd: int = state.combat.round_number
+	if p.untargetable_revealed_until >= rnd:
+		return true  # acted/became tangible this round — targetable until its next turn
+	if SpiritAbilitySystem.is_at_will_hidden(c.spirit_creature):
+		return false  # Mujina: invisible/intangible at will, persistent
+	if SpiritAbilitySystem.has_ephemeral_form(c.spirit_creature) and p.ephemeral_form_expiry >= rnd:
+		return false  # within the 10-round Ephemeral Form window
+	return true
+
+
+## s54.10: a hidden creature that takes an offensive action becomes targetable until
+## its next turn (revealed_until = current round + 1). No-op for non-hidden creatures.
+static func _reveal_if_hidden(state: MapCombatState, cid: int, p: IndividualCombat.Participant) -> void:
+	var c: L5RCharacterData = state.combatants.get(cid, null)
+	if c == null or c.spirit_creature == null or p == null:
+		return
+	var rnd: int = state.combat.round_number
+	var hidden: bool = SpiritAbilitySystem.is_at_will_hidden(c.spirit_creature) \
+		or (SpiritAbilitySystem.has_ephemeral_form(c.spirit_creature) and p.ephemeral_form_expiry >= rnd)
+	if hidden:
+		p.untargetable_revealed_until = rnd + 1
+
+
+## s54.10 Ephemeral Form (Kitsune etc.): a threatened shapeshifter turns insubstantial
+## for 10 Rounds, once per encounter. NPC auto-activation (Free Action) at the start of
+## its turn when an enemy is adjacent. No-op for creatures without the ability.
+static func _npc_maybe_activate_ephemeral_form(state: MapCombatState, character: L5RCharacterData, p: IndividualCombat.Participant) -> void:
+	if character.spirit_creature == null or p == null:
+		return
+	if not SpiritAbilitySystem.has_ephemeral_form(character.spirit_creature) or p.ephemeral_form_used:
+		return
+	# Threatened: any living enemy adjacent.
+	var apos: Vector2i = state.positions.get(character.character_id, Vector2i(-9999, -9999))
+	var faction: String = state.factions.get(character.character_id, FACTION_NEUTRAL)
+	var threatened: bool = false
+	for cid: int in state.positions.keys():
+		if cid == character.character_id:
+			continue
+		if not _are_enemies(faction, state.factions.get(cid, FACTION_NEUTRAL)):
+			continue
+		if _chebyshev(apos, state.positions[cid]) <= MELEE_RANGE_TILES:
+			threatened = true
+			break
+	if threatened:
+		p.ephemeral_form_expiry = state.combat.round_number + SpiritAbilitySystem.EPHEMERAL_FORM_ROUNDS
+		p.ephemeral_form_used = true
+
+
 ## Apply a successful hit: resolve damage and apply wounds.
 static func _apply_hit(
 	state: MapCombatState,
@@ -3769,6 +3848,8 @@ static func _apply_hit(
 		# attack already bypasses Reduction (reduction zeroed above).
 		if reduction > 0:
 			reduction = SpiritAbilitySystem.reduction_for_kind(target.spirit_creature, w_kind)
+		# Protection of Yomi (Major Shapeshifter, s54.10): Reduction 5, stacks with natural.
+		reduction += SpiritAbilitySystem.protection_of_yomi_reduction(target.spirit_creature)
 		var filt: Dictionary = SpiritAbilitySystem.incoming_damage(target.spirit_creature, w_kind)
 		raw = 0 if filt["heals"] else int(round(float(raw) * float(filt["multiplier"])))
 	var wd_result: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
