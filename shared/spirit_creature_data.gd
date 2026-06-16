@@ -1,0 +1,49 @@
+class_name SpiritCreatureData
+extends Resource
+## A spirit-realm creature stat block (GDD s54.10 / s54.2), used by the s56.16
+## Spiritual Insurgency encounter roster. Pure transcription of LOCKED bestiary
+## stats — no invented values. Combat consumption (special abilities, the live
+## ASCII-map encounter) is a later tranche; this is the data layer.
+
+## Roster tier per the per-realm roster sections (e.g. s56.16.6b Gaki-do Roster).
+enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
+
+@export var id: String = ""
+@export var display_name: String = ""
+@export var realm: Enums.SpiritRealm = Enums.SpiritRealm.GAKI_DO
+@export var tier: Tier = Tier.MID
+
+# Rings.
+@export var air: int = 1
+@export var earth: int = 1
+@export var fire: int = 1
+@export var water: int = 1
+
+# Named traits the stat block lists above its Rings (trait_name → rank).
+@export var traits: Dictionary = {}
+
+# Combat line.
+@export var initiative_rolled: int = 0
+@export var initiative_kept: int = 0
+@export var attack_name: String = ""
+@export var attack_rolled: int = 0
+@export var attack_kept: int = 0
+@export var damage_rolled: int = 0
+@export var damage_kept: int = 0
+@export var armor_tn: int = 10
+@export var reduction: int = 0
+
+# Wound track. wound_thresholds = the penalty-step thresholds (+5/+10…);
+# wounds_dead = the terminal threshold (Dead/Dispersed). 0 = not statted.
+@export var wound_thresholds: Array[int] = []
+@export var wounds_dead: int = 0
+
+@export var fear: int = 0
+
+# Special-ability tags for the future combat layer (e.g. "incorporeal",
+# "swarm_presence", "wail", "hunger_pull", "fire_trail", "famine_only").
+@export var tags: Array[String] = []
+
+
+func has_tag(t: String) -> bool:
+	return tags.has(t)

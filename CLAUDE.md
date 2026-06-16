@@ -4091,6 +4091,52 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   "colors drain" is carried by tile substitution only (no separate desaturation pass — GDD gives
   no colour-shift values); Godot/GUT unavailable here — validated by static review + parse-trace.
 
+### Systems Added 2026-06-16 (s56.16 Spiritual encounter — ritual loop + Gaki-do roster data, owner-approved)
+- **s56.16.5b–5f Restoration Ritual + s56.16.6b Gaki-do roster (tranche 1).** Two pure
+  simulation classes + one data Resource, all faithful transcriptions of the LOCKED s56.16 /
+  s54.10 / s54.2 specs. Scope confirmed with owner 2026-06-16: ritual-loop resolution + Gaki-do
+  bestiary/roster data; **live ASCII creature combat, exposure mechanics, and the other five
+  realms' rosters are deferred** to follow-up tranches (the special-ability combat is substantial
+  s40 work).
+  - **`shared/spirit_creature_data.gd`** (SpiritCreatureData Resource) — a spirit stat block:
+    rings, named traits, initiative/attack/damage, Armor TN, Reduction, wound thresholds +
+    `wounds_dead`, Fear, `Tier` (SWARM/MID/HEAVY/BOSS/TERRAIN/POST_ENCOUNTER), and special-ability
+    `tags` for the future combat layer.
+  - **`simulation/spirit_bestiary.gd`** (SpiritBestiary, pure) — `gaki_do_catalog()` transcribes
+    all 11 Gaki-do roster creatures from s54.10 (Muzai-gaki, Usai-gaki Swarm, Jikininki, Haraigaki,
+    Fukuregaki, Kagaki, Gashadokuro, O-Toyo, Mokumokuren, Buruburu) + Shozai-Gaki from s54.2 — exact
+    stat lines, no invented values. `gaki_do_pool(terrain, famine, settlement)` returns the
+    zone→creature-id pool per the Encounter Flow (s56.16.6c) with the LOCKED availability gates
+    (Gashadokuro famine-only, O-Toyo forest-only, Mokumokuren settlement-only). The roster is a
+    threat *pool* (the GDD's escalation model is emergent, not fixed headcounts — so no counts are
+    invented).
+  - **`simulation/spiritual_ritual_system.gd`** (SpiritualRitualSystem, pure) — the shugenja-side
+    Restoration Ritual: `DURATION_BY_SEVERITY` 10/20/30/50 (LOCKED), `REALM_TRAIT` and
+    `ELEMENT_COUNTER` tables (LOCKED s56.16.5c/5d), `diagnose()` (Perception + Lore: Theology vs
+    TN 15), `resolve_ritual_round()` (Lore: Theology + realm-trait OR + counter-Ring vs the ritual
+    TN; damage-this-round auto-fails the round, prior progress preserved; wrong/undeclared
+    elemental counter yields no progress), `run_summary_ritual()` (multi-shugenja stacking +
+    optional per-round interruption set — the headless/abstract path; the live turn loop will call
+    resolve_ritual_round per round), `classify_outcome()` + `apply_resolution()` (the s56.16.5f
+    spectrum: FULL→resolved + overlay fully reverts via SpiritualPalette.advance_restoration(1.0);
+    PARTIAL→banks cumulative progress + proportional revert; RETREAT/FAILURE→one-season intensity
+    spike, no progress banked), and `post_resolution_affliction_check()` (Catastrophic-only
+    Willpower vs TN 20). **The one number the GDD leaves open — the per-round ritual TN — is
+    owner-set to flat 15** (matches the diagnosis roll; recorded as `RITUAL_TN`). PC-only: NPCs
+    never use the ASCII map, so there is NO NPC auto-resolver (the prior invented one was removed
+    2026-05-26). Two `SpiritualInsurgencyData` fields added (`ritual_rounds_completed` for
+    cross-mission progress persistence per s56.16.5f, `intensity_spike_until_season` for the
+    retreat/failure spike); both default-inert and persist via WorldStateSaver's Resource array.
+  - **Wiring:** these are pure, callable systems — the live consumer is the deferred ASCII combat
+    turn loop. No orchestrator/seasonal wiring this tranche (NPCs don't resolve these; the
+    intensity-spike decay in the seasonal pass is forward-wired with no producer yet). Godot/GUT
+    unavailable here — validated by static review + parse-trace (DiceResult.total, Enums.Trait /
+    Ring / TerrainType members, CharacterStats.is_dead, SpellSystem.get_ring_value,
+    SkillResolver.resolve_skill_check signatures all confirmed). DEFERRED: live creature combat
+    + special abilities (incorporeal/swarm/wail/hunger-pull/fire-trail), the Gaki-do exposure
+    mechanic (Willpower erosion / Willpower-0 transformation / Buruburu attachment / Jigoku-
+    corrupted Shozai-gaki), and the Chikushudo/Toshigoku/Sakkaku/Meido/Yume-do rosters + rituals.
+
 ### Pending Redesign
 (None currently pending.)
 
