@@ -54,11 +54,19 @@ Deterministic from seed. Template-appropriate: cave **dead-ends** + chokepoints,
 ### Integration points
 `MovementSystem.check_step` (trigger), `FovSystem` (detect gating), `CombatController` (ALARM→AlertState), `MissionPopulator`/generators (placement), `AsciiMapCombatOrchestrator` (SEARCH/DISARM as actions).
 
-### OWNER DECISIONS NEEDED
-- Trap-type list (the 5 above? add/cut?), all TNs, all damage rolls.
-- Detection model: passive-per-turn vs require an explicit SEARCH action vs both.
-- Disarm skill: Hunting (Traps) only, or also Sleight of Hand?
-- Does a sprung non-alarm trap also make noise (→ AlertState)?
+### OWNER DECISIONS — ALL RESOLVED 2026-06-16
+- **Decision 1: full set of 5** (Pit, Dart/Arrow, Snare, Alarm/Tripwire, Deadfall).
+- **Decision 2: passive per-turn detection.** Each turn, hidden traps within 2 tiles AND in FOV roll
+  vs passive Perception + Hunting; success → DETECTED (route around or disarm). No action cost.
+  (No explicit SEARCH action; no always-visible mode.)
+- **Decision 3: mechanics + numbers (all PROVISIONAL until playtest).**
+  - Disarm = better of **Hunting (Traps) or Sleight of Hand** vs disarm_tn (adjacent + DETECTED;
+    miss by 10+ springs it). Non-Crane PCs can still defuse via Sleight of Hand.
+  - **Sprung-noise = loud traps only:** Pit + Deadfall raise nearby AlertState when sprung;
+    Dart + Snare are silent; Alarm/Tripwire always alerts (its whole purpose).
+  - **Values:** Pit 2k2 (Athletics TN 15 to halve), Dart/Arrow 2k2 vs flat-footed Armor TN (5+armor),
+    Deadfall 3k2 + rubble→destroyed_tiles, Snare → Entangled (escape TN 20, oni-web parity s54.5).
+    Detect/disarm TN tiers: crude 15 / set 20 / concealed 25 / master 30.
 
 ---
 
