@@ -13,8 +13,8 @@ class_name SpiritualEncounter
 ## participants to a live MapCombatState — the risky orchestrator-internal insertion),
 ## the exact creature to-HIT roll and WOUND-track overrides (PC approximation stands,
 ## see SpiritCombatant), and the remaining positional abilities (paralysis_venom,
-## phantom_battle, possession). Hunger-pull, engulf, wail, and fire (Fire Trail +
-## Everything Burns, via FireSystem s56.6.6) are wired.
+## possession). Hunger-pull, engulf, wail, Phantom Battle (Toshigoku area hazard),
+## and fire (Fire Trail + Everything Burns, via FireSystem s56.6.6) are wired.
 
 const EXPOSURE_RADIUS_TILES: int = 5   # creatures within this range stack Willpower TN
 const FIRST_INSTANCE_ID: int = -10001  # puppet ids count down from here (no real collision)
@@ -22,6 +22,12 @@ const FIRST_INSTANCE_ID: int = -10001  # puppet ids count down from here (no rea
 # Fire Trail (s54.10): the creature's own tile + 8 neighbours, each a 50% ignite.
 const _FIRE_TRAIL_TILES: Array[Vector2i] = [
 	Vector2i(0, 0),
+	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+	Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
+]
+
+# 8 non-zero directions for Phantom Battle drift (s54.10 "flows across the terrain").
+const _DIRS8: Array[Vector2i] = [
 	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
 	Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
 ]
@@ -45,6 +51,7 @@ class EncounterState:
 	var _zone_idx: Dictionary = {}                      # pool zone → next un-spawned index
 	var _prev_wounds: Dictionary = {}                   # shugenja_id → wounds_taken last round
 	var engulfed: Dictionary = {}                       # pc_id → captor creature_id (engulf/swarm grab)
+	var phantom_battles: Array = []                     # Toshigoku area hazards (s54.10): {center,radius,last_shift,drift,rolled,kept}
 	var resolved: bool = false
 
 
@@ -109,6 +116,10 @@ static func start(
 	es._zone_idx[init_zone] = t
 
 	es.mcs = AsciiMapCombatOrchestrator.setup_combat(map, combatants, dice, -1, weather)
+	# Phantom Battle (s54.10) — the ambient Toshigoku hazard ("background noise of
+	# Toshigoku made visible"); always present in a Toshigoku overlap.
+	if realm == Enums.SpiritRealm.TOSHIGOKU:
+		_seed_phantom_battle(es, dice)
 	return es
 
 
@@ -127,6 +138,10 @@ static func process_round(es: EncounterState, dice: DiceEngine) -> Dictionary:
 	# 0b. Engulf crush (s54.10) — an engulfed PC takes the captor's crushing damage
 	#     each round until they escape (attempt_engulf_escape) or the captor dies.
 	_apply_engulf_crush(es, dice)
+
+	# 0d. Phantom Battle (s54.10 Toshigoku) — a PC standing in a phantom-battle area
+	#     at round start takes 2k2 spiritual damage; the area shifts every 5 rounds.
+	_apply_phantom_battles(es, dice)
 
 	# (Fire damage + spread tick are owned by AsciiMapCombatOrchestrator.advance_round
 	#  — the shared per-round turn machinery — so the live loop applies them once per
@@ -283,6 +298,12 @@ static func spawn_threat(es: EncounterState, zone: String, dice: DiceEngine) -> 
 	if idx >= ids.size():
 		return false
 	es._zone_idx[zone] = idx + 1
+	# Environmental hazards (Phantom Battle) are tile-area effects, never combat
+	# participants — they are seeded/managed separately (see _seed_phantom_battle).
+	var cat: Dictionary = SpiritCombatant.catalog_for_realm(es.realm)
+	var sc: SpiritCreatureData = cat.get(String(ids[idx]), null)
+	if sc != null and sc.has_tag("not_creature"):
+		return false
 	var puppet: L5RCharacterData = SpiritCombatant.spawn(es.realm, String(ids[idx]), es.next_instance_id)
 	if puppet == null:
 		return false
@@ -448,6 +469,65 @@ static func _apply_fire_trail(es: EncounterState, cid: int, dice: DiceEngine) ->
 			continue
 		if dice.randf() < 0.5:  # s54.10 Fire Trail: 50% per flammable tile (LOCKED)
 			FireSystem.ignite(map, fx, fy)
+
+
+## Seeds one ambient Phantom Battle hazard (s54.10): a 3×3 or 5×5 area near the
+## heart that deals 2k2 spiritual damage per round-start and drifts every 5 rounds.
+static func _seed_phantom_battle(es: EncounterState, dice: DiceEngine) -> void:
+	var pb: SpiritCreatureData = SpiritBestiary.toshigoku_catalog().get("phantom_battle", null)
+	if pb == null:
+		return
+	var radius: int = 1 if dice.randf() < 0.5 else 2          # 3×3 / 5×5 (s54.10)
+	var center: Vector2i = _free_tile_near(es.mcs.map, es.heart_pos, es.mcs.positions)
+	if center.x < 0:
+		center = es.heart_pos
+	es.phantom_battles.append({
+		"center": center,
+		"radius": radius,
+		"last_shift": 0,
+		"drift": _DIRS8[absi(int(dice.randf() * 1000)) % _DIRS8.size()],
+		"rolled": pb.damage_rolled,
+		"kept": pb.damage_kept,
+	})
+
+
+## Phantom Battle per-round (s54.10): shift the area every 5 rounds, then deal 2k2
+## spiritual damage to each PC standing within it (moving off avoids it).
+static func _apply_phantom_battles(es: EncounterState, dice: DiceEngine) -> void:
+	for pb in es.phantom_battles:
+		if es.round_number - int(pb["last_shift"]) >= 5:
+			_shift_phantom_battle(es, pb)
+			pb["last_shift"] = es.round_number
+		var center: Vector2i = pb["center"]
+		var r: int = int(pb["radius"])
+		for pid in es.pc_ids:
+			var pc: L5RCharacterData = es.chars_by_id.get(pid, null)
+			if pc == null or CharacterStats.is_dead(pc):
+				continue
+			var ppos: Vector2i = es.mcs.positions.get(pid, Vector2i(9999, 9999))
+			if maxi(absi(ppos.x - center.x), absi(ppos.y - center.y)) <= r:
+				WoundSystem.apply_damage(pc, dice.roll_and_keep(int(pb["rolled"]), int(pb["kept"]), true).total)
+
+
+## Drift a Phantom Battle one block in its flow direction, clamped to the map; on
+## hitting an edge the drift reverses so it flows back across the terrain (s54.10).
+static func _shift_phantom_battle(es: EncounterState, pb: Dictionary) -> void:
+	var map: AsciiMapData = es.mcs.map
+	if map == null:
+		return
+	var r: int = int(pb["radius"])
+	var drift: Vector2i = pb["drift"]
+	var c: Vector2i = pb["center"]
+	var nx: int = c.x + drift.x * (r + 1)
+	var ny: int = c.y + drift.y * (r + 1)
+	if nx < 0 or nx >= map.width:
+		drift.x = -drift.x
+		nx = clampi(c.x + drift.x * (r + 1), 0, map.width - 1)
+	if ny < 0 or ny >= map.height:
+		drift.y = -drift.y
+		ny = clampi(c.y + drift.y * (r + 1), 0, map.height - 1)
+	pb["center"] = Vector2i(nx, ny)
+	pb["drift"] = drift
 
 
 static func _co_located_willpower_tn(es: EncounterState, pc_id: int) -> int:

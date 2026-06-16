@@ -4419,6 +4419,23 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   the production glue that calls `setup_combat` for a non-encounter mission with `MissionSession.weather()`
   is still deferred (CombatScreen uses the CombatController stealth layer; the turn-based-orchestrator live
   mission entry is the deferred piece); smoke/coughing/noise still not modelled.
+- **s54.10 Phantom Battle (tranche 15, owner-approved 2026-06-16, static-only).**
+  The ambient Toshigoku environmental hazard ("the background noise of Toshigoku made visible") — a
+  moving tile-AREA effect, NOT a combat participant. `EncounterState.phantom_battles` (Array of
+  {center, radius, last_shift, drift, rolled, kept}). `_seed_phantom_battle` fires in `start()` for a
+  TOSHIGOKU realm: one 3×3 (radius 1) or 5×5 (radius 2) area near the heart, damage 2k2 read from the
+  `phantom_battle` catalog entry. `_apply_phantom_battles` (process_round step 0d): every PC within the
+  Chebyshev area at round start takes 2k2 spiritual damage (normal armour — GDD silent on bypass, not
+  invented; moving off avoids it); `_shift_phantom_battle` drifts the area one block in its flow
+  direction every 5 rounds, reversing drift at a map edge (s54.10: "shift position every 5 rounds as the
+  ghostly battle flows across the terrain"). `spawn_threat` now guards `not_creature` catalog entries so
+  an environmental hazard can never be added as a combat participant (it lives only in the "terrain" pool
+  zone, which the escalation waves don't draw — the hazard is seeded at start instead). All values
+  GDD-LOCKED (2k2, 3×3–5×5, 5-round shift, unfightable). Static-validated only (toshigoku_catalog /
+  catalog_for_realm / has_tag / damage_rolled-kept / _free_tile_near / in-place Dict mutation over the
+  array confirmed). LIMITATIONS: drift is random-per-mission, not battle-historically directed (GDD gives
+  no path); even radii (4×4) not used — the 3×3/5×5 endpoints stand in for the range. DEFERRED unchanged:
+  paralysis_venom, possession/shapeshift/invisibility/mob_frenzy/rally. Static-only — driver-verify in Godot.
 
 ### Pending Redesign
 (None currently pending.)
