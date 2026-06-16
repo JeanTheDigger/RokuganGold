@@ -22,6 +22,19 @@ const _OBJECTIVES_BY_SEED: Dictionary = {
 	QuestSeedSelector.SEED_ROAD_ENCOUNTER:               [0],       # road encounters use RONIN_BANDIT seed_type in practice
 }
 
+# Eight compass-bearing unit vectors for wind assignment (s56.6.6): N, NE, E, SE,
+# S, SW, W, NW. y- is north (matches the tile grid's top-origin).
+const _WIND_BEARINGS: Array[Vector2i] = [
+	Vector2i(0, -1), Vector2i(1, -1), Vector2i(1, 0), Vector2i(1, 1),
+	Vector2i(0, 1), Vector2i(-1, 1), Vector2i(-1, 0), Vector2i(-1, -1),
+]
+
+
+## s56.6.6: wind direction is assigned randomly at map generation and fixed for the
+## mission (only mechanically relevant during Wind/Rain/Storm). Deterministic from seed.
+static func _assign_wind(map: AsciiMapData, seed_str: String) -> void:
+	map.wind_dir = _WIND_BEARINGS[absi(hash(seed_str + "_wind")) % _WIND_BEARINGS.size()]
+
 
 ## Returns the player's starting tile for a newly-entered mission map.
 ## Dispatches by which entry field the map subclass exposes (duck-typed via Object.get).
@@ -136,6 +149,7 @@ static func assemble(
 	# leader into deeper regions.
 	var entry: Vector2i = get_player_entry(map)
 	map.compute_depth_grid(entry.x, entry.y)
+	_assign_wind(map, seed_str)  # s56.6.6 fire/smoke wind bearing
 
 	if seed_type == RosterCompositionSystem.SEED_WALL_SORTIE:
 		placements = MissionPopulator.populate_sortie(map, roster, pop_seed)
@@ -182,6 +196,7 @@ static func _assemble_spiritual(
 	# Depth gradient first (s56.21), then derive the overlap intensity from it.
 	var entry: Vector2i = get_player_entry(map)
 	map.compute_depth_grid(entry.x, entry.y)
+	_assign_wind(map, seed_str)  # s56.6.6 fire/smoke wind bearing
 	SpiritualPalette.apply_overlap(map, event_type, realm, element)
 
 	var roster_pool: Dictionary = _spiritual_roster_pool(event_type, realm, province)

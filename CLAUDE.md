@@ -4397,6 +4397,28 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   `_BURN_MAP` (the flammability definition) excludes FLOOR_GRASS (dry/green not tile-distinguishable).
   DEFERRED unchanged: paralysis_venom, phantom_battle, possession/shapeshift/invisibility/mob_frenzy/rally.
   Static-only — needs a Godot runtime to driver-verify.
+- **s56.6.6 weather/wind wiring + fire ownership move (tranche 14, owner-approved 2026-06-16, static-only).**
+  Threads mission weather + wind into the fire layer and relocates fire damage/spread to the shared
+  turn machinery so it works for ALL combat (arson, fire spells), not just the spirit encounter.
+  **Wind:** `MissionBuilder._assign_wind` stamps a deterministic random 8-bearing (`_WIND_BEARINGS`,
+  seed-derived) onto `map.wind_dir` at both `assemble` and `_assemble_spiritual` (s56.6.6: random at
+  gen, fixed for the mission, only relevant during Wind). **Weather:** `MapCombatState.weather` +
+  a defaulted `weather` param on `setup_combat` (all existing callers/tests unaffected);
+  `MissionSession.weather()` accessor (mirrors `fov_modifier()`) for the future mission→orchestrator
+  glue. **Ownership move (avoids a double-apply foot-gun):** fire damage (1k1 standing + 1k1 on-fire,
+  armour-ignoring, `flame_immune` creatures exempt — Kagaki) and the end-of-round
+  `FireSystem.process_round_end` spread/extinguish tick now run in `AsciiMapCombatOrchestrator.advance_round`
+  (the shared per-round machinery, alongside the existing Way-of-the-Earth / Ride-the-Water-Dragon
+  per-round effects). The tranche-13 encounter-local fire damage + tick (`_apply_fire_damage`, the
+  process_round_end call, `es.weather`) were REMOVED — the encounter keeps only Kagaki Fire Trail
+  ignition (`_apply_fire_trail` in `creature_turn`) and the PC `attempt_extinguish`. `SpiritualEncounter.start`
+  gains a `weather` param threaded into `setup_combat`. Net: when the (deferred) live encounter loop is
+  wired it drives `advance_round` for turn machinery, so fire applies once per round with no duplication;
+  general skirmishes get fire for free. Static-validated only (setup_combat arity back-compat, wind dot-product
+  classification, flame_immune guard, no dangling es.weather/_apply_fire_damage refs confirmed). LIMITATIONS:
+  the production glue that calls `setup_combat` for a non-encounter mission with `MissionSession.weather()`
+  is still deferred (CombatScreen uses the CombatController stealth layer; the turn-based-orchestrator live
+  mission entry is the deferred piece); smoke/coughing/noise still not modelled.
 
 ### Pending Redesign
 (None currently pending.)

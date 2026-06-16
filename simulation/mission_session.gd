@@ -26,6 +26,13 @@ func fov_modifier() -> int:
 	return environment.get("fov_modifier", 0)
 
 
+## Mission weather (AsciiMapEnvironment.WeatherState) — pass to
+## AsciiMapCombatOrchestrator.setup_combat() so FireSystem spread is directional
+## (wind bearing rides on map.wind_dir, assigned by MissionBuilder). s56.6.6.
+func weather() -> int:
+	return environment.get("weather", AsciiMapEnvironment.WeatherState.CLEAR)
+
+
 func is_sortie() -> bool:
 	return placements is Dictionary and placements.has("friendly")
 

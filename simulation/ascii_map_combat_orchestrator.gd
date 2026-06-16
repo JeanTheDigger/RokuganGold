@@ -118,6 +118,9 @@ class MapCombatState:
 	var companion_data: Dictionary = {}
 	## companion_ids who started the mission — denominator for morale casualties.
 	var companion_started_count: int = 0
+	## Mission weather (AsciiMapEnvironment.WeatherState) — drives FireSystem spread
+	## and extinguish at round end (s56.6.6). Wind bearing lives on map.wind_dir.
+	var weather: int = AsciiMapEnvironment.WeatherState.CLEAR
 	## Touch the Void Dragon (s38): terrain-derived Ring (Enums.Ring) for this skirmish; -1 = none.
 	var environment_ring: int = -1
 	## Per-skirmish dedup for "once per skirmish" atemi (kiho_name → Array[target_id]).
@@ -141,10 +144,12 @@ static func setup_combat(
 	combatants_data: Array,
 	dice_engine: DiceEngine,
 	environment_ring: int = -1,
+	weather: int = AsciiMapEnvironment.WeatherState.CLEAR,
 ) -> MapCombatState:
 	var mcs := MapCombatState.new()
 	mcs.map = map
 	mcs.environment_ring = environment_ring  # Touch the Void Dragon (s38)
+	mcs.weather = weather  # FireSystem spread/extinguish (s56.6.6)
 
 	var chars_for_combat: Array = []
 	var participant_dicts: Array = []
@@ -2764,6 +2769,21 @@ static func advance_round(
 			var _rwd_c: L5RCharacterData = chars_by_id.get(_tp.character_id, null)
 			if _rwd_c != null and not CharacterStats.is_dead(_rwd_c):
 				WoundSystem.heal_wounds(_rwd_c, CharacterStats.get_ring_value(_rwd_c, Enums.Ring.WATER))
+		# Fire (s56.6.6 / s54.10 Everything Burns): a participant standing on a burning
+		# tile and/or set on fire takes 1k1 each round; armour does not reduce.
+		# flame_immune spirit creatures (Kagaki) take no fire damage.
+		var _fc: L5RCharacterData = chars_by_id.get(_tp.character_id, null)
+		if _fc != null and not CharacterStats.is_dead(_fc) \
+				and not (_fc.spirit_creature != null and _fc.spirit_creature.has_tag("flame_immune")):
+			var _fpos: Vector2i = state.positions.get(_tp.character_id, Vector2i(-9999, -9999))
+			if FireSystem.is_burning(state.map, _fpos.x, _fpos.y):
+				WoundSystem.apply_damage(_fc, FireSystem.standing_damage(dice_engine), 0)
+			if _tp.on_fire and not CharacterStats.is_dead(_fc):
+				WoundSystem.apply_damage(_fc, FireSystem.standing_damage(dice_engine), 0)
+
+	# End-of-round fire spread/extinguish (s56.6.6) — no-op when nothing is burning.
+	if not state.map.burning_tiles.is_empty():
+		FireSystem.process_round_end(state.map, state.weather, dice_engine)
 
 	# Re-roll initiative for all active participants (L5R 4e: initiative re-rolled each round).
 	# CENTER stance carry-forward: void bonus from last round applies to this roll.

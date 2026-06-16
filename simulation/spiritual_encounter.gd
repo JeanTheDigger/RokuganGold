@@ -45,7 +45,6 @@ class EncounterState:
 	var _zone_idx: Dictionary = {}                      # pool zone → next un-spawned index
 	var _prev_wounds: Dictionary = {}                   # shugenja_id → wounds_taken last round
 	var engulfed: Dictionary = {}                       # pc_id → captor creature_id (engulf/swarm grab)
-	var weather: int = AsciiMapEnvironment.WeatherState.CLEAR  # drives FireSystem spread (s56.6.6)
 	var resolved: bool = false
 
 
@@ -64,7 +63,8 @@ static func start(
 		pool: Dictionary,
 		entry_pos: Vector2i,
 		heart_pos: Vector2i,
-		dice: DiceEngine) -> EncounterState:
+		dice: DiceEngine,
+		weather: int = AsciiMapEnvironment.WeatherState.CLEAR) -> EncounterState:
 	var es := EncounterState.new()
 	es.realm = realm
 	es.severity = severity
@@ -108,7 +108,7 @@ static func start(
 		t += 1
 	es._zone_idx[init_zone] = t
 
-	es.mcs = AsciiMapCombatOrchestrator.setup_combat(map, combatants, dice)
+	es.mcs = AsciiMapCombatOrchestrator.setup_combat(map, combatants, dice, -1, weather)
 	return es
 
 
@@ -128,10 +128,9 @@ static func process_round(es: EncounterState, dice: DiceEngine) -> Dictionary:
 	#     each round until they escape (attempt_engulf_escape) or the captor dies.
 	_apply_engulf_crush(es, dice)
 
-	# 0c. Fire damage (s56.6.6 / s54.10) — a PC standing on a burning tile, or set on
-	#     fire by Everything Burns, takes 1k1 at the start of the round (armour does
-	#     not reduce). Both can stack.
-	_apply_fire_damage(es, dice)
+	# (Fire damage + spread tick are owned by AsciiMapCombatOrchestrator.advance_round
+	#  — the shared per-round turn machinery — so the live loop applies them once per
+	#  round. Kagaki Fire Trail ignition fires from creature_turn; see _apply_fire_trail.)
 
 	# 1. Restoration ritual — each living shugenja contributes a round. A shugenja
 	#    who took damage since last round has their round interrupted (s56.16.5b).
@@ -166,11 +165,6 @@ static func process_round(es: EncounterState, dice: DiceEngine) -> Dictionary:
 				continue
 			var extra: int = _co_located_willpower_tn(es, pid)
 			SpiritualExposureSystem.roll_periodic_check(pc, es.exposure[pid], dice, extra)
-
-	# 4. End-of-round fire tick (s56.6.6) — spread to flammable neighbours, then
-	#    burn-duration decrement and Burned Out conversion (weather-gated).
-	if es.mcs != null and es.mcs.map != null and not es.mcs.map.burning_tiles.is_empty():
-		FireSystem.process_round_end(es.mcs.map, es.weather, dice)
 
 	var alive: bool = _any_shugenja_alive(es)
 	return {
@@ -434,24 +428,6 @@ static func _apply_engulf_crush(es: EncounterState, dice: DiceEngine) -> void:
 		WoundSystem.apply_damage(pc, dmg)
 		if CharacterStats.is_dead(pc):
 			es.engulfed.erase(pid)
-
-
-## Start-of-round fire damage (s56.6.6 / s54.10): a PC standing on a burning tile
-## and/or set on fire (Everything Burns) each takes 1k1, armour does not reduce.
-static func _apply_fire_damage(es: EncounterState, dice: DiceEngine) -> void:
-	var map: AsciiMapData = es.mcs.map
-	for pid in es.pc_ids:
-		var pc: L5RCharacterData = es.chars_by_id.get(pid, null)
-		if pc == null or CharacterStats.is_dead(pc):
-			continue
-		var ppos: Vector2i = es.mcs.positions.get(pid, Vector2i(-9999, -9999))
-		if map != null and FireSystem.is_burning(map, ppos.x, ppos.y):
-			WoundSystem.apply_damage(pc, FireSystem.standing_damage(dice), 0)
-			if CharacterStats.is_dead(pc):
-				continue
-		var p: IndividualCombat.Participant = es.mcs.combat.participants.get(pid, null)
-		if p != null and p.on_fire:
-			WoundSystem.apply_damage(pc, FireSystem.standing_damage(dice), 0)
 
 
 ## Fire Trail + Burning Hunger (s54.10 Kagaki): each flammable tile on/adjacent to
