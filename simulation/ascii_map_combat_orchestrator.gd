@@ -3588,7 +3588,27 @@ static func _apply_hit(
 		# Raises on this offensive action (spells excluded — this is a weapon strike).
 		if "Rising Mountain" in t_p.active_kiho and raises > 0:
 			reduction += 2 * raises
+
+	# s56.16 spirit-encounter hooks (inert for real characters):
+	#  - A spirit attacker whose attack bypasses armor (Shozai Claw / spirit_strike /
+	#    gaze) ignores the target's Reduction.
+	#  - A spirit TARGET filters incoming damage by weapon kind (incorporeal /
+	#    partial-invuln / Pekkle-half / Kagaki fire-immune). Material detection
+	#    (jade/crystal/magic) awaits a WeaponData material field; default mundane —
+	#    faithful, since physical weapons do not permanently destroy spirits (the
+	#    ritual is the win condition, not killing them).
+	if attacker.spirit_creature != null and SpiritAbilitySystem.attack_bypasses_armor(attacker.spirit_creature):
+		reduction = 0
+	if target.spirit_creature != null:
+		var filt: Dictionary = SpiritAbilitySystem.incoming_damage(target.spirit_creature, SpiritAbilitySystem.W_MUNDANE)
+		raw = 0 if filt["heals"] else int(round(float(raw) * float(filt["multiplier"])))
 	var wd_result: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
+
+	# Spirit attacker on-hit self-heal (O-Toyo Destroyer of Life, s54.10).
+	if attacker.spirit_creature != null and raw > 0:
+		var heal: int = SpiritAbilitySystem.on_hit_self_heal(attacker.spirit_creature)
+		if heal > 0:
+			WoundSystem.heal_wounds(attacker, heal)
 
 	return {
 		"damage": wd_result.get("final_damage", raw),

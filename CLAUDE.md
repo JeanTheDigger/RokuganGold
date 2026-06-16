@@ -4262,6 +4262,32 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   orchestrator/IndividualCombat untouched) and validated by static review + parse-trace
   (character_name/void_ring/armor_reduction/armor_tn_bonus/weapons[WeaponData] fields, get_armor_tn
   formula, WeaponData fields, SpiritBestiary catalogues all confirmed).
+- **s56.16 live encounter driver + combat hook (tranche 8, owner-approved 2026-06-16, static-only).**
+  Owner chose to build the live integration now despite no Godot runtime here (driver-verify later).
+  Two pieces: (1) **`simulation/spiritual_encounter.gd`** (SpiritualEncounter, pure) — the per-round
+  SPIRITUAL layer on top of AsciiMapCombatOrchestrator. `start()` builds the encounter (PCs at the
+  entry, initial heart-zone creatures placed on the heart ring via SpiritCombatant.spawn, exposure
+  states per PC) and calls `setup_combat`. `process_round()` (called per combat round) runs the
+  Restoration Ritual (each living shugenja contributes a round; interrupted if they took damage since
+  last round — wounds-delta tracked), the periodic Exposure check (timer per realm interval, with
+  `extra_tn` = co-located creature swarm/rattle stacking via SpiritAbilitySystem), and reports
+  ritual progress/completion + shugenja-alive. `resolve()` applies the s56.16.5f outcome to the event
+  + map overlay (idempotent). The orchestrator owns movement/turn-order/attack resolution (the player
+  drives PC+bushi turns; creatures act via execute_npc_turn). (2) **`_apply_hit` spirit hooks** in
+  AsciiMapCombatOrchestrator (guarded by `spirit_creature != null`, inert for real characters): a
+  spirit TARGET filters incoming damage by weapon kind (SpiritAbilitySystem.incoming_damage —
+  incorporeal/partial-invuln/Pekkle-half/Kagaki fire; weapon kind defaults mundane, which is
+  faithful — physical weapons don't permanently destroy spirits, the ritual is the win condition); a
+  spirit ATTACKER that bypasses armor (Shozai/spirit_strike/gaze) ignores Reduction; a spirit
+  attacker with life_drain self-heals on hit. Static-validated only (heal_wounds/incoming_damage/
+  attack_bypasses_armor/setup_combat/MapCombatState fields/MovementSystem.is_passable confirmed; the
+  _ORC class-alias-const and inner-class outer-const-default hazards were removed). DEFERRED (need
+  Godot driver-verify and/or more orchestrator work): mid-combat threat ESCALATION (adding creature
+  participants to a live MapCombatState — the risky internal insertion), the exact creature to-HIT
+  roll and WOUND-track overrides (the SpiritCombatant PC-approximation stands), weapon-material
+  detection for jade/crystal damage (no WeaponData material field), and the creature-turn firing of
+  positional abilities (hunger-pull, wail-as-action, fire-trail, possession). With this the s56.16
+  encounter is wired end-to-end in shape; the live turn loop needs runtime verification before relying on it.
 
 ### Pending Redesign
 (None currently pending.)
