@@ -33,6 +33,13 @@ extends Resource
 # Key: "x,y", Value: Enums.TileType int. Stored between sessions.
 @export var deltas: Dictionary = {}
 
+# -- Depth gradient (s56.21) --------------------------------------------------
+# Per-tile path-distance from the player entry tile (8-directional, over
+# passable + door tiles). index = y * width + x. -1 = unreachable.
+# Empty (size != width*height) means depth has not been computed for this map;
+# consumers (MissionPopulator) fall back to depth-agnostic behavior.
+@export var depth_grid: PackedInt32Array = []
+
 # -- Zone connections ---------------------------------------------------------
 
 # Each entry: {x:int, y:int, direction:String, target_zone_id:String}
@@ -269,6 +276,62 @@ func extinguish(x: int, y: int) -> bool:
 		return false
 	set_delta(x, y, Enums.TileType.FLOOR_ASH)
 	return true
+
+
+# -- Depth gradient (s56.21) --------------------------------------------------
+
+# 8-directional neighbor offsets for the depth BFS (matches MovementSystem's
+# diagonal movement model).
+const _DEPTH_NEIGHBORS: Array[Vector2i] = [
+	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+	Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
+]
+
+# Path-distance from (x,y) to the entry tile, or -1 if depth is uncomputed or
+# the tile is unreachable.
+func depth_at(x: int, y: int) -> int:
+	if x < 0 or x >= width or y < 0 or y >= height:
+		return -1
+	if depth_grid.size() != width * height:
+		return -1
+	return depth_grid[y * width + x]
+
+
+func has_depth_grid() -> bool:
+	return depth_grid.size() == width * height
+
+
+# Floods 8-directional BFS from the entry tile over walkable tiles (passable
+# tiles, plus doors — closed doors are traversable by bump-to-open, matching
+# the connectivity model). Fills depth_grid with path-distance; unreachable
+# tiles stay -1. Deterministic (BFS order is fixed). s56.21.
+func compute_depth_grid(entry_x: int, entry_y: int) -> void:
+	var count: int = width * height
+	depth_grid.resize(count)
+	for i in range(count):
+		depth_grid[i] = -1
+	if entry_x < 0 or entry_x >= width or entry_y < 0 or entry_y >= height:
+		return
+	var frontier: Array[Vector2i] = [Vector2i(entry_x, entry_y)]
+	depth_grid[entry_y * width + entry_x] = 0
+	var head: int = 0
+	while head < frontier.size():
+		var cur: Vector2i = frontier[head]
+		head += 1
+		var d: int = depth_grid[cur.y * width + cur.x]
+		for n: Vector2i in _DEPTH_NEIGHBORS:
+			var nx: int = cur.x + n.x
+			var ny: int = cur.y + n.y
+			if nx < 0 or nx >= width or ny < 0 or ny >= height:
+				continue
+			var idx: int = ny * width + nx
+			if depth_grid[idx] != -1:
+				continue
+			var tile: int = get_tile(nx, ny)
+			if not (is_passable(tile) or is_door(tile)):
+				continue
+			depth_grid[idx] = d + 1
+			frontier.append(Vector2i(nx, ny))
 
 
 # -- Rectangle fill -----------------------------------------------------------

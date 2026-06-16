@@ -119,14 +119,19 @@ static func assemble(
 	if seed_type == RosterCompositionSystem.SEED_URBAN_CRIMINAL_NETWORK:
 		# UrbanHideout is absent from every TemplateSelector terrain pool — call directly.
 		map = UrbanHideoutGenerator.generate(seed_str, strength, objectives)
-		placements = MissionPopulator.populate(map, roster, pop_seed)
-	elif seed_type == RosterCompositionSystem.SEED_WALL_SORTIE:
-		map = MissionTemplateResolver.select_and_generate(
-			province, province_history, seed_dict, objectives, seed_str)
-		placements = MissionPopulator.populate_sortie(map, roster, pop_seed)
 	else:
 		map = MissionTemplateResolver.select_and_generate(
 			province, province_history, seed_dict, objectives, seed_str)
+
+	# Depth gradient (s56.21): tag tiles with path-distance from the player
+	# entry BEFORE population so the populator can bias stronger units / the
+	# leader into deeper regions.
+	var entry: Vector2i = get_player_entry(map)
+	map.compute_depth_grid(entry.x, entry.y)
+
+	if seed_type == RosterCompositionSystem.SEED_WALL_SORTIE:
+		placements = MissionPopulator.populate_sortie(map, roster, pop_seed)
+	else:
 		placements = MissionPopulator.populate(map, roster, pop_seed)
 
 	var biome: int        = biome_for_province(province)
@@ -148,7 +153,7 @@ static func assemble(
 		"objective_slots": map.objective_slots,
 		"seed_dict":       seed_dict,
 		"roster":          roster,
-		"entry_pos":       get_player_entry(map),
+		"entry_pos":       entry,
 		"environment": {
 			"biome":        biome,
 			"weather":      weather,
