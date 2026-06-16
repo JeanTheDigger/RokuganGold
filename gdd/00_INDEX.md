@@ -633,7 +633,7 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s11.7b Event Durations | **DONE** | EventDurations constants |
 | s11.8 Regional Price Modifiers | **DONE** | RegionalPriceModifiers |
 | s11.9 Ship Types & Naval | **PARTIAL** | NavalSystem, NavalCombatSystem done. Tortoise Escape Attempt wired into battle round. Ship movement initiation needs coordinate system. Weather is global per day (coordinate placeholder). Naval blockade needs coordinate system (military unit per sub-tile — one sentence spec, genuinely blocked on world map). |
-| s11.10 Way of the Daimyo | **TO BE IMPLEMENTED** | Lore reference; no simulation mechanics specified yet |
+| s11.10 Way of the Daimyo | **N/A — CUT** | RESOLVED — CUT in the GDD source (s11.10): the six positions (Ambassador, Governor, Keeper of the Temple, Master Sensei, Merchant Patron, Warlord) are NOT designed as formal mechanical roles. Every function is already covered by existing systems — feudal hierarchy + taxation (s4.3) + magistrates (s11.3) = Governor; court/diplomacy (s15) = Ambassador; Temple Head + worship (s4.3.21) = Keeper; MENTOR/training (s48) + unit generation = Master Sensei; commerce (s57.40) = Merchant Patron; military hierarchy + war (s11.7/s53) = Warlord. Retained as lore flavor only. No code required. |
 | s11.11 Insurgency System | **DONE** | InsurgencySystem |
 | s12.1 Diplomacy Framework | **DONE** | Architecture only — wired into all other systems |
 | s12.2 Disposition System | **DONE** | DispositionSystem |
