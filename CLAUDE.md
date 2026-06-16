@@ -4152,6 +4152,24 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   could be added when that's resolved). **Meido and Yume-do** have NO roster/encounter section in
   s56.16 (only the 56.16.5c restoration approach) — nothing to transcribe; blocked on GDD content.
   Plus the live creature combat + exposure mechanic from tranche 1.
+- **s56.16.7b Chikushudo roster (tranche 3, owner-approved 2026-06-16).** Completes the four
+  statted realms. The territorial-defender spirit animals are NOT new species — the LOCKED
+  "Chikushudo Spirit Animal Overlay" (s54.10) is fully specified (**all Rings +2 over the s54.1
+  base, cascading to derived stats; Swift +1; Spirit; no Fear; Taint 0**), so the owner question
+  about a "general buff" was moot (the bear's "+2 Earth" was just an instance of the +2 rule).
+  To avoid inventing re-derived numbers, `chikushudo_catalog()` stores the **s54.1 base** stat
+  block verbatim for the 7 spirit animals (Wolf/Boar/Bear/Stag/Eagle/Hawk[=Falcon]/Snake[=Asp]),
+  tags each `chikushudo_spirit`, and exposes the overlay as documented constants
+  (`CHIKUSHUDO_RING_BONUS=2`, `CHIKUSHUDO_SWIFT_BONUS=1`) for the deferred combat layer to apply.
+  The three named denizens (Kitsune, Kitsune-tsuki, Hengeyokai Spirit Lord) have explicit s54.10
+  blocks — stored as-is. `chikushudo_pool()` follows the 7b/7f zone flow. NOTE (GDD inconsistency,
+  left unedited): s56.16.7b's bear example says "Earth 4 base becomes Earth 6," but the actual
+  s54.1 Bear is Earth 6 — s54.10's overlay section is explicit that the base comes from s54.1, so
+  the stored base is Earth 6 (overlay → 8). **Now done: all four realms that HAVE rosters in
+  s56.16** (Gaki-do, Toshigoku, Sakkaku, Chikushudo). **Meido and Yume-do remain blocked** — s56.16
+  gives them no roster/encounter section at all (only the 56.16.5c restoration approach), so there
+  is nothing to transcribe without inventing. Still deferred: the live ASCII creature combat +
+  special abilities, and the per-realm exposure mechanics.
 
 ### Pending Redesign
 (None currently pending.)

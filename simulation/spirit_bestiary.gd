@@ -211,6 +211,99 @@ static func sakkaku_pool() -> Dictionary:
 	}
 
 
+# ── Chikushudo (s56.16.7b roster, s54.10 + s54.1 base animals) ────────────────
+#
+# The territorial-defender spirit animals are NOT new species: they are the
+# s54.1 base animals with the LOCKED "Chikushudo Spirit Animal Overlay" (s54.10):
+# all Rings +2 (cascading to derived stats — Attack/damage/Armor TN/Wounds),
+# Swift +1, the Spirit trait, no Fear, Taint 0. To avoid inventing re-derived
+# numbers, the catalogue stores the s54.1 BASE stat block verbatim, tags it
+# "chikushudo_spirit", and the overlay is applied by the (deferred) combat layer
+# via these documented constants. The three non-animal denizens (Kitsune,
+# Kitsune-tsuki, Hengeyokai Spirit Lord) have explicit s54.10 blocks — stored as-is.
+const CHIKUSHUDO_RING_BONUS: int = 2     # s54.10 overlay: all Rings +2 over base
+const CHIKUSHUDO_SWIFT_BONUS: int = 1    # s54.10 overlay: Swift +1 over base
+
+## Chikushudo (Realm of Animals) creature catalogue, keyed by id. Spirit-animal
+## entries are s54.1 base stats tagged "chikushudo_spirit" (apply the overlay
+## constants); the three named denizens are full s54.10 blocks.
+static func chikushudo_catalog() -> Dictionary:
+	var R: int = Enums.SpiritRealm.CHIKUSHUDO
+	var c: Dictionary = {}
+
+	# Territorial defenders (s54.1 base + chikushudo_spirit overlay tag).
+	c["spirit_wolf"] = _make("spirit_wolf", "Spirit Wolf", SpiritCreatureData.Tier.SWARM,
+		1, 3, 2, 3, {"reflexes": 3, "agility": 3, "perception": 4},
+		4, 3, "Bite", 4, 3, 5, 2, 20, 3, [18], 36, 0,
+		["spirit", "chikushudo_spirit", "pack", "flanking", "territorial"], R)
+
+	c["spirit_boar"] = _make("spirit_boar", "Spirit Boar", SpiritCreatureData.Tier.MID,
+		1, 5, 1, 2, {"reflexes": 3, "agility": 3, "strength": 4},
+		4, 3, "Tusks", 5, 3, 5, 2, 20, 12, [30], 75, 0,
+		["spirit", "chikushudo_spirit", "disembowel", "goring_charge", "chokepoint", "huge"], R)
+
+	c["spirit_bear"] = _make("spirit_bear", "Spirit Bear", SpiritCreatureData.Tier.HEAVY,
+		1, 6, 1, 2, {"reflexes": 3, "agility": 4, "strength": 7},
+		4, 3, "Claws", 6, 4, 7, 3, 20, 9, [30, 60], 90, 2,
+		["spirit", "chikushudo_spirit", "heavy_hitter", "huge"], R)
+
+	c["spirit_stag"] = _make("spirit_stag", "Spirit Stag", SpiritCreatureData.Tier.MID,
+		2, 1, 1, 2, {"reflexes": 5, "stamina": 3, "agility": 3, "strength": 4},
+		5, 5, "Gore", 3, 3, 4, 2, 30, 3, [12, 24], 36, 0,
+		["spirit", "chikushudo_spirit", "field_commander", "antler_charge", "fast"], R)
+
+	c["spirit_eagle"] = _make("spirit_eagle", "Spirit Eagle", SpiritCreatureData.Tier.SWARM,
+		1, 1, 1, 2, {"reflexes": 5, "agility": 4, "perception": 4},
+		5, 5, "Beak/Talons", 5, 4, 2, 2, 30, 0, [7], 15, 0,
+		["spirit", "chikushudo_spirit", "flying", "dive", "aerial"], R)
+
+	c["spirit_hawk"] = _make("spirit_hawk", "Spirit Hawk", SpiritCreatureData.Tier.SWARM,
+		1, 1, 1, 1, {"reflexes": 4, "agility": 4, "perception": 3},
+		5, 5, "Claw/Beak", 5, 4, 3, 2, 30, 0, [5], 10, 0,
+		["spirit", "chikushudo_spirit", "flying", "dive", "aerial"], R)
+
+	c["spirit_snake"] = _make("spirit_snake", "Spirit Snake", SpiritCreatureData.Tier.MID,
+		1, 2, 1, 1, {"reflexes": 3, "agility": 3, "perception": 2},
+		3, 3, "Bite", 3, 3, 1, 1, 20, 0, [6], 12, 0,
+		["spirit", "chikushudo_spirit", "ambush", "venom", "concealment"], R)
+
+	# Named denizens (full s54.10 blocks — no overlay).
+	c["kitsune"] = _make("kitsune", "Kitsune", SpiritCreatureData.Tier.MID,
+		2, 2, 2, 1, {"reflexes": 5, "perception": 4},
+		6, 5, "Claws", 2, 2, 2, 1, 25, 0, [15, 30], 45, 0,
+		["spirit", "shapeshifter", "trickster", "negotiator", "may_not_be_hostile", "swift"], R)
+
+	c["kitsune_tsuki"] = _make("kitsune_tsuki", "Kitsune-tsuki", SpiritCreatureData.Tier.HEAVY,
+		2, 2, 3, 4, {"reflexes": 4, "intelligence": 4},
+		7, 4, "Claws", 6, 3, 4, 2, 20, 5, [15, 30, 45], 60, 0,
+		["spirit", "hostile", "partial_invuln", "possession", "spirit_strike"], R)
+
+	c["hengeyokai_spirit_lord"] = _make("hengeyokai_spirit_lord", "Hengeyokai Spirit Lord",
+		SpiritCreatureData.Tier.BOSS,
+		4, 5, 4, 5, {"reflexes": 6, "agility": 5, "strength": 7, "awareness": 6,
+			"perception": 6, "willpower": 7},
+		8, 6, "Natural Weapon", 10, 5, 7, 4, 35, 10,
+		[25, 50, 75, 100, 125, 150, 175], 200, 4,
+		["spirit", "boss", "massive", "shapeshifter", "partial_invuln",
+			"commanding_presence", "negotiable"], R)
+
+	return c
+
+
+## Chikushudo zone → creature-id pool (s56.16.7b/7f). Spirit animals defend
+## territory; the Hengeyokai Spirit Lord holds the heart. No terrain/famine gating
+## (the spirit-lord FORM varies by terrain, but the roster does not).
+static func chikushudo_pool() -> Dictionary:
+	return {
+		"outer":   ["spirit_wolf", "spirit_stag"],
+		"middle":  ["spirit_boar", "spirit_snake", "spirit_eagle", "spirit_hawk", "kitsune"],
+		"heart":   ["spirit_bear", "kitsune_tsuki"],
+		"boss":    ["hengeyokai_spirit_lord"],
+		"terrain": [],
+		"post":    [],
+	}
+
+
 # -- internal -----------------------------------------------------------------
 
 static func _make(
