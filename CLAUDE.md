@@ -4219,6 +4219,24 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   AsciiMapData depth API all confirmed). With this, the headless s56.16 pipeline is end-to-end: a
   spiritual seed → map + overlay + roster pool + ritual/exposure/heart metadata, ready for the
   combat turn loop to drive.
+- **s56.16/s54.10 creature special abilities (tranche 6, owner-approved 2026-06-16).**
+  `simulation/spirit_ability_system.gd` (SpiritAbilitySystem, pure) — the reusable mechanic layer
+  the deferred ASCII combat loop hooks into, keyed on `SpiritCreatureData.tags`. All values from
+  the LOCKED s54 stat blocks. **Damage filter** (`incoming_damage(creature, weapon_kind)` →
+  {multiplier, heals, no_explode}): incorporeal (physical→0, magic/crystal→1), superior_invuln
+  (only magic/jade), partial_invuln (mundane→0), Pekkle half+no-explode, Kagaki fire-immune/heals
+  + water-double; lowest-multiplier-wins compose. `is_immune()`, `reduction_for_kind()` (Usai-gaki
+  Reduction-10-vs-normal). **Attack-side:** `attack_bypasses_armor()` (Shozai ignores_armor /
+  Kitsune-tsuki spirit_strike / Mokumokuren gaze), `deals_unhealable_spiritual_damage()` (gaze),
+  `on_hit_self_heal()` (O-Toyo +5), `has_regeneration()` / `reforms_on_death()`. **Exposure feeds**
+  (consumed by SpiritualExposureSystem): `willpower_tn_contribution()` / `total_willpower_tn()`
+  (Muzai swarm +1 each, Gashadokuro Bone Rattle +2 → the `extra_tn` for periodic checks),
+  `wail_effect()` (Haraigaki: within 5 tiles, Willpower TN 20 → -1 Rank + lose next Simple). Pure,
+  returns descriptors/modifiers, mutates nothing. DEFERRED to the combat-loop tranche (need live
+  grid/turn-state): the positional/turn abilities — hunger_pull, engulf, fire_trail spread, illusion
+  tiles, possession, paralysis_venom, deceptive_weight, phantom_battle tile damage, invisibility,
+  shapeshift disguise, and mob_frenzy/rally group counts. Validated by static review + parse-trace
+  (SpiritCreatureData.has_tag/.reduction, minf/maxf confirmed; no external deps).
 
 ### Pending Redesign
 (None currently pending.)
