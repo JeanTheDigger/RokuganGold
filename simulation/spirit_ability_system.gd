@@ -172,6 +172,16 @@ static func wail_effect(creature: SpiritCreatureData) -> Dictionary:
 	return {"tn": WAIL_TN, "wp_loss": WAIL_WP_LOSS, "radius_tiles": 5, "lose_next_simple": true}
 
 
+## Konak Jiji Paralysis Venom (s54.10): a successful hit Stuns the target for a
+## number of minutes equal to the creature's Water Ring (no save — the venom runs
+## its course). Returns 0 for non-venomous creatures. The combat loop applies a
+## timed Stunned condition for stun_rounds (= Water × IndividualCombat.ROUNDS_PER_MINUTE).
+static func paralysis_venom_minutes(creature: SpiritCreatureData) -> int:
+	if not creature.has_tag("paralysis_venom"):
+		return 0
+	return creature.water
+
+
 ## Fukuregaki Hunger Pull (s54.10, Passive, always active): every character within
 ## 4 tiles is dragged 1 tile toward the creature at the start of each round unless
 ## they pass an Earth roll vs TN 15. Returns {} for non-pullers. The combat loop

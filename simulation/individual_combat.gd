@@ -132,6 +132,7 @@ class Participant:
 	var is_delaying: bool = false
 	var actions_remaining: int = 0   # 0 = not their turn yet / done
 	var conditions: Array = []
+	var timed_conditions: Dictionary = {}  # condition -> expiry round (auto-cleared, not roll-recovered)
 	var guarding_id: int = -1        # character_id they're guarding, -1 if none
 	var full_defense_bonus: int = 0  # bonus from Full Defense Stance roll
 	var grapple_partner_id: int = -1
@@ -1547,6 +1548,34 @@ static func has_condition(participant: Participant, condition: String) -> bool:
 	return condition in participant.conditions
 
 
+# Project convention (s56.16 exposure layer): ~10 combat Rounds per minute.
+const ROUNDS_PER_MINUTE: int = 10
+
+
+## Timed condition layer: a condition that runs for a fixed number of Rounds and is
+## auto-cleared on expiry, NOT shed by a recovery roll (e.g. Paralysis Venom). The
+## condition is also placed in `conditions` so all existing gates (Armor TN, attack
+## penalty, can-act) fire unchanged. Keeps the longer of an existing/new timer.
+static func apply_timed_condition(participant: Participant, condition: String, expiry_round: int) -> void:
+	apply_condition(participant, condition)
+	var cur: int = int(participant.timed_conditions.get(condition, -1))
+	if expiry_round > cur:
+		participant.timed_conditions[condition] = expiry_round
+
+
+static func is_condition_timed(participant: Participant, condition: String) -> bool:
+	return participant.timed_conditions.has(condition)
+
+
+## Sweep timed conditions whose expiry Round has been reached (called from
+## advance_round, beside expire_timed_modifiers / expire_active_kiho).
+static func expire_timed_conditions(participant: Participant, round_number: int) -> void:
+	for cond: String in participant.timed_conditions.keys():
+		if round_number >= int(participant.timed_conditions[cond]):
+			participant.timed_conditions.erase(cond)
+			remove_condition(participant, cond)
+
+
 static func get_condition_roll_penalty(participant: Participant) -> int:
 	if CONDITION_FATIGUED in participant.conditions:
 		return 5 + participant.fatigue_days * 5
@@ -2274,16 +2303,17 @@ static func advance_round_reactions(
 		var c: L5RCharacterData = characters_by_id.get(cid)
 		if c == null:
 			continue
-		# Dazed recovery attempt — TN starts at 20, decreases by 5 per prior failure (s40)
-		if CONDITION_DAZED in p.conditions:
+		# Dazed recovery attempt — TN starts at 20, decreases by 5 per prior failure (s40).
+		# A timed condition (e.g. venom) runs its full duration and is not rolled off.
+		if CONDITION_DAZED in p.conditions and not is_condition_timed(p, CONDITION_DAZED):
 			var recovered: bool = attempt_recover_dazed(c, p, p.daze_failed_recovery_attempts + 1, dice_engine)
 			if recovered:
 				p.daze_failed_recovery_attempts = 0
 				events.append({"type": "condition_cleared", "condition": CONDITION_DAZED, "character_id": cid})
 			else:
 				p.daze_failed_recovery_attempts += 1
-		# Stunned recovery
-		if CONDITION_STUNNED in p.conditions:
+		# Stunned recovery (timed Stun, e.g. Paralysis Venom, is not rolled off)
+		if CONDITION_STUNNED in p.conditions and not is_condition_timed(p, CONDITION_STUNNED):
 			var recovered: bool = attempt_recover_stunned(c, p, dice_engine)
 			if recovered:
 				events.append({"type": "condition_cleared", "condition": CONDITION_STUNNED, "character_id": cid})

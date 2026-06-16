@@ -4437,6 +4437,29 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   no path); even radii (4×4) not used — the 3×3/5×5 endpoints stand in for the range. DEFERRED unchanged:
   paralysis_venom, possession/shapeshift/invisibility/mob_frenzy/rally. Static-only — driver-verify in Godot.
 
+- **Timed-condition layer + s54.10 Paralysis Venom (tranche 16, owner-approved 2026-06-16, static-only).**
+  Adds the first *timed* (duration-based, auto-expiring, not roll-recovered) condition to s40 combat —
+  reusable infra for any "Condition for N Rounds" effect — and wires Konak Jiji Paralysis Venom on it.
+  **Layer:** new `IndividualCombat.Participant.timed_conditions` (condition → expiry Round) +
+  `apply_timed_condition` (adds the condition to `conditions` so every existing gate — Armor TN 5,
+  attack penalties, can-act — fires unchanged; keeps the longer of an existing/new timer),
+  `is_condition_timed`, and `expire_timed_conditions` (sweep at `round_number >= expiry`, wired into
+  `AsciiMapCombatOrchestrator.advance_round` beside `expire_timed_modifiers`/`expire_active_kiho`,
+  after the `round_number += 1`). The Stunned/Dazed recovery rolls in `advance_round_reactions` now
+  skip a *timed* condition (`not is_condition_timed`), so venom runs its full duration instead of being
+  shed by an Earth roll. **Paralysis Venom (s54.10 Konak Jiji):** `SpiritAbilitySystem.paralysis_venom_minutes`
+  returns the creature's Water Ring for `paralysis_venom`-tagged spirits (0 otherwise); `_apply_hit`'s
+  spirit-attacker block (beside on-fire/life-drain) applies a timed Stunned for `Water × ROUNDS_PER_MINUTE`
+  on a hit against a non-spirit target (Konak Jiji Water 2 → 20 rounds = 2 minutes). No save (the GDD
+  gives none — the venom runs its course). `IndividualCombat.ROUNDS_PER_MINUTE = 10` matches the
+  established s56.16 exposure-layer convention (~10 rounds/minute), so the minutes→rounds conversion is
+  not a new invented value. Fires through the standard NPC attack path (Konak Jiji is a normal Sakkaku
+  combatant), so no encounter-level change is needed. All values GDD-given (Stunned, Water minutes).
+  Static-validated only (timed_conditions field, the recovery-guard sites, advance_round increment-then-sweep
+  ordering, SpiritCreatureData.water, `.keys()`-copy erase-safety, konak_jiji's paralysis_venom tag confirmed).
+  DEFERRED: Konak Jiji deceptive_weight (auto-hit-when-picked-up + TN-40 pin — needs a grab/pin model)
+  and lure; possession/shapeshift/invisibility/mob_frenzy/rally. Static-only — driver-verify in Godot.
+
 ### Pending Redesign
 (None currently pending.)
 

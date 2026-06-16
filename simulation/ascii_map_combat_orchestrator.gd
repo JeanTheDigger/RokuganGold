@@ -2745,6 +2745,7 @@ static func advance_round(
 		_process_world_is_empty_expiry(state, _tp, chars_by_id)
 		IndividualCombat.expire_timed_modifiers(_tp, state.combat.round_number)
 		IndividualCombat.expire_active_kiho(_tp, state.combat.round_number)
+		IndividualCombat.expire_timed_conditions(_tp, state.combat.round_number)
 		# Banish All Shadows suppression ends — restore the Disadvantage's effects.
 		if _tp.suppressed_disadvantage_expiry >= 0 and _tp.suppressed_disadvantage_expiry <= state.combat.round_number:
 			var _sc: L5RCharacterData = chars_by_id.get(_tp.character_id, null)
@@ -3671,6 +3672,15 @@ static func _apply_hit(
 	# whose only attack is the melee Flame Bite (no ranged fire creature exists).
 	if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("fire_trail") and t_p != null:
 		t_p.on_fire = true
+
+	# Paralysis Venom (s54.10 Konak Jiji): a successful hit Stuns the target for
+	# Water minutes (no save), modelled as a timed Stunned condition that expires
+	# rather than being rolled off. Skip if the target is itself a spirit.
+	if attacker.spirit_creature != null and t_p != null and target.spirit_creature == null:
+		var venom_min: int = SpiritAbilitySystem.paralysis_venom_minutes(attacker.spirit_creature)
+		if venom_min > 0:
+			var expiry: int = state.combat.round_number + venom_min * IndividualCombat.ROUNDS_PER_MINUTE
+			IndividualCombat.apply_timed_condition(t_p, IndividualCombat.CONDITION_STUNNED, expiry)
 
 	return {
 		"damage": wd_result.get("final_damage", raw),
