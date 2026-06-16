@@ -4468,10 +4468,9 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   armor-bypass (spirit_strike / ignores_armor / gaze_attack), life_drain self-heal (O-Toyo),
   swarm+bone_rattle Willpower-TN exposure stacking, wail (Haraigaki), hunger_pull (Fukuregaki),
   engulf+swarm grab/crush, fire_trail+everything_burns (Kagaki, via FireSystem), immobile turn-skip,
-  paralysis_venom (Konak Jiji). **ENCODED but not consumed (documented, not wired):** `is_immune`
-  (redundant — `incoming_damage` already composes it); `reduction_for_kind` (Usai-gaki Reduction-10
-  vs normal weapons — a minor unapplied DEFENSIVE gap; the orchestrator computes reduction via
-  `IndividualCombat.total_defender_reduction`, which doesn't read spirit reduction); `deals_unhealable_spiritual_damage`
+  paralysis_venom (Konak Jiji), Usai-gaki kind-gated Reduction (`reduction_for_kind`, wired
+  2026-06-16 — see below). **ENCODED but not consumed (documented, not wired):** `is_immune`
+  (redundant — `incoming_damage` already composes it); `deals_unhealable_spiritual_damage`
   (Mokumokuren gaze — Wounds untreatable by Medicine; blocked on per-wound source tracking, which the
   wound model lacks); `has_regeneration` (Gashadokuro recovers 10 Wounds/round — NOT trivially
   wirable: the GDD's "pushing past a Wound threshold collapses a section, stopping regen 3 rounds"
@@ -4491,9 +4490,22 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   regen-suppression timer, respawn timer, illusion/possession/disguise, group-buff AI) and a couple of
   boss-bespoke escalation mechanics — none blocked on an unknown GDD value. The 5 encoded-but-dead funcs
   are kept as forward-wiring (their blockers are infra, not design). DEFERRED follow-up candidates, in
-  rough order of cheapness: Usai `reduction_for_kind` (smallest — thread spirit reduction into the
-  reduction calc), then Gashadokuro regeneration (needs the suppression timer), then the boss reforms /
+  rough order of cheapness: Gashadokuro regeneration (needs the suppression timer), then the boss reforms /
   Tactical-Mastery, then the illusion/possession/group-AI cluster.
+- **s56.16 Usai-gaki kind-gated Reduction wired (2026-06-16, owner-directed).** Routed a spirit
+  TARGET's Reduction through `SpiritAbilitySystem.reduction_for_kind()` in `_apply_hit` (one shared
+  `w_kind` local with the existing incoming-damage filter, so the material-detection limitation —
+  default mundane until a WeaponData material field exists — lives in ONE place). Closes the encoded-
+  but-dead `reduction_for_kind`. **Zero behavior change today** (all weapons are mundane, so the swarm
+  keeps its Reduction 10 — `reduction_for_kind(swarm, mundane) == creature.reduction == armor_reduction`,
+  the value `total_defender_reduction` already returned via the puppet); the gain is closing a **latent
+  double-Reduction-vs-magic bug** — `total_defender_reduction` would keep the +10 against jade/crystal/
+  magic once material detection lands, whereas the GDD (s54.10: "Reduction 10 against normal weapons")
+  drops it to 0, which `reduction_for_kind(swarm, non-mundane) == 0` now enforces. Guarded by
+  `reduction > 0` so the attack-bypasses-armor path (Shozai/spirit_strike/gaze, already zeroed) is
+  untouched. For a non-swarm spirit it equals the creature's Reduction stat (drops the currently-zero
+  kata/pierce terms — documented as "a spirit's Reduction is its creature stat, not armor mechanics").
+  Static-validated only (W_MUNDANE const + reduction_for_kind signature confirmed; no Godot runtime here).
 
 ### Pending Redesign
 (None currently pending.)

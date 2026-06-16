@@ -3649,14 +3649,23 @@ static func _apply_hit(
 	#  - A spirit attacker whose attack bypasses armor (Shozai Claw / spirit_strike /
 	#    gaze) ignores the target's Reduction.
 	#  - A spirit TARGET filters incoming damage by weapon kind (incorporeal /
-	#    partial-invuln / Pekkle-half / Kagaki fire-immune). Material detection
-	#    (jade/crystal/magic) awaits a WeaponData material field; default mundane —
+	#    partial-invuln / Pekkle-half / Kagaki fire-immune) AND uses its kind-gated
+	#    Reduction (Usai-gaki Swarm: Reduction 10 vs normal weapons only — magic/
+	#    jade/crystal bypass it). Material detection (jade/crystal/magic) awaits a
+	#    WeaponData material field; default mundane (the single w_kind local) —
 	#    faithful, since physical weapons do not permanently destroy spirits (the
 	#    ritual is the win condition, not killing them).
 	if attacker.spirit_creature != null and SpiritAbilitySystem.attack_bypasses_armor(attacker.spirit_creature):
 		reduction = 0
 	if target.spirit_creature != null:
-		var filt: Dictionary = SpiritAbilitySystem.incoming_damage(target.spirit_creature, SpiritAbilitySystem.W_MUNDANE)
+		var w_kind: String = SpiritAbilitySystem.W_MUNDANE
+		# A spirit's Reduction is its creature stat, kind-gated — not armor mechanics.
+		# reduction_for_kind() == armor_reduction for mundane (matches the puppet's
+		# value) and 0 for a swarm struck by a non-mundane weapon. Skip when the
+		# attack already bypasses Reduction (reduction zeroed above).
+		if reduction > 0:
+			reduction = SpiritAbilitySystem.reduction_for_kind(target.spirit_creature, w_kind)
+		var filt: Dictionary = SpiritAbilitySystem.incoming_damage(target.spirit_creature, w_kind)
 		raw = 0 if filt["heals"] else int(round(float(raw) * float(filt["multiplier"])))
 	var wd_result: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
 
