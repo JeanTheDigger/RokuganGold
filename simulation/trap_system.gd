@@ -220,16 +220,21 @@ static func trigger(
 
 # -- Placement gate (PROVISIONAL — pending owner confirmation) ----------------
 
-# Roster unit_type strings whose archetype canonically lays traps. The roster
-# groups carry no skill data, so this allowlist is the implementation's stand-in
-# for "the roster contains a Hunting:Traps unit." PROVISIONAL — the exact unit
-# set is a GDD-silent design call; the current conservative list (scouts) is
-# wired live in MissionBuilder but awaits owner confirmation/expansion.
-# String literals mirror RosterCompositionSystem.HIRUMA_SCOUT / NEZUMI_SCOUT
-# (hardcoded to avoid a cross-class const-in-const initializer).
+# Roster unit_type strings whose archetype canonically lays traps: experienced
+# human ambushers (skilled bandits, their lord, ronin enforcers) plus scouts.
+# The roster groups carry no per-unit skill data, so this allowlist is the
+# implementation's stand-in for "the roster contains a Hunting:Traps unit."
+# Owner-confirmed 2026-06-16 (expand to bandits/ambushers); rabble/peasant/undead
+# units are excluded (no trap-craft). "Crane defensive" units are N/A — these are
+# enemy rosters and the player's own clan has no enemy unit type.
+# String literals mirror RosterCompositionSystem constants (hardcoded to avoid a
+# cross-class const-in-const initializer).
 const TRAP_LAYER_UNIT_TYPES: Array = [
 	"HIRUMA_SCOUT",
 	"NEZUMI_SCOUT",
+	"EXPERIENCED_BANDIT",
+	"BANDIT_LORD",
+	"RONIN_ENFORCER",
 ]
 
 ## True if any roster group is a trap-laying unit type. Handles both the standard

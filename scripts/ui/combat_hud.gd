@@ -171,7 +171,7 @@ func _draw() -> void:
 	# ── Controls hint (bottom of status panel) ─────────────────────────────────
 	var hint_y: float = float(status_h) - line_h * 0.5
 	_draw_text(font, fs - 2, x0, hint_y,
-		"S=stealth  .=wait  L=look  X=end", Color(0.5, 0.5, 0.5))
+		"S=stealth  .=wait  L=look  K=disarm  X=end", Color(0.5, 0.5, 0.5))
 
 	# ── Event log panel (bottom-left) ─────────────────────────────────────────
 	if _log_lines.is_empty():
@@ -266,6 +266,32 @@ func _format_event(ev: Dictionary) -> String:
 
 		"end_combat_resolved":
 			return "Combat ended — the field is yours."
+
+		"trap_sprung":
+			var trap: Dictionary = ev.get("trap", {})
+			var dmg: int = trap.get("damage", 0)
+			if trap.get("entangled", false):
+				return "★ Snare! You are entangled."
+			if dmg > 0:
+				return "★ A trap springs — %d damage!" % dmg
+			return "★ A trap springs!"
+
+		"traps_detected":
+			var n: int = ev.get("count", 0)
+			if n == 1:
+				return "You spot a hidden trap (^)."
+			return "You spot %d hidden traps (^)." % n
+
+		"trap_disarm":
+			var r: Dictionary = ev.get("result", {})
+			if r.get("disarmed", false):
+				return "Trap disarmed."
+			if r.get("sprung", false):
+				return "★ The trap springs as you fumble it!"
+			return "You fail to disarm the trap."
+
+		"no_trap_to_disarm":
+			return "No detected trap within reach."
 
 		_:
 			return ""

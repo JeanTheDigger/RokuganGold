@@ -4040,9 +4040,13 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   detect/disarm TN tiers 15/20/25/30). **Placement gate PROVISIONAL** — the roster carries no
   per-unit skill data, so `TRAP_LAYER_UNIT_TYPES` (scout units) stands in for "a Hunting:Traps
   unit is present"; the exact trap-laying unit set awaits owner confirmation. Setting basis:
-  Crane Daidoji Hunting:Traps (s29.2/s11.7). Player-facing DISARM input + DETECTED-trap
-  rendering land with the combat UI. Godot/GUT not run in this environment — validated by
-  static review + parse-trace.
+  Crane Daidoji Hunting:Traps (s29.2/s11.7). Placement gate owner-confirmed 2026-06-16 =
+  experienced ambushers + scouts (HIRUMA_SCOUT, NEZUMI_SCOUT, EXPERIENCED_BANDIT, BANDIT_LORD,
+  RONIN_ENFORCER). **Player-facing UI wired (2026-06-16):** AsciiMapView renders DETECTED traps
+  as a yellow `^` (HIDDEN never render), `K` disarms an adjacent DETECTED trap via
+  `try_disarm_trap` (a turn → NPCs act), and spring/detect/disarm results surface as
+  combat_events in CombatHUD's log (`K=disarm` added to the controls hint). Godot/GUT not run in
+  this environment — validated by static review + parse-trace.
 - **s56.21 Within-Map Depth Gradient** (`gdd/s56.21_within_map_depth_gradient_locked.md`).
   Depth = within-map difficulty gradient (path-distance from the player entry), NOT stacked
   floors (Option B explicitly not built). `AsciiMapData.depth_grid: PackedInt32Array` +
