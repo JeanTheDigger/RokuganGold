@@ -4351,6 +4351,25 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   (Konak Jiji — needs a Stunned-for-minutes condition), phantom_battle tile damage (environmental
   3×3–5×5 hazard that shifts), possession / shapeshift / invisibility / mob_frenzy / rally. As with
   tranches 7–10, static-only — needs a Godot runtime to driver-verify.
+- **s56.16 engulf grab state (tranche 12, owner-approved 2026-06-16, static-only).**
+  Builds the creature grab state and wires Fukuregaki Engulf + the Usai swarm grab (s54.10).
+  New `EncounterState.engulfed` (pc_id → captor creature_id). **Auto-grab:** `_apply_hunger_pull`
+  now seizes a non-engulfed PC who is (or is dragged) adjacent to an `engulf`-tagged creature;
+  engulfed PCs are skipped by the pull (held in place). **Crush tick:** new `_apply_engulf_crush`
+  (process_round step 0b) applies the captor's crushing damage (creature `damage_rolled k
+  damage_kept`, exploding) to each engulfed PC every round via `WoundSystem.apply_damage`; the
+  grab releases if the captor dies, the PC dies, or the captor is no longer adjacent. **Escape:**
+  new public PC-action `attempt_engulf_escape(es, pc_id, dice, full_move=false)` — Fukuregaki
+  (engulf) = Contested Strength vs the captor's `traits["strength"]`; Usai swarm = release if the
+  PC's Water Ring is 3+ OR a Full Move is spent. **Immobile guard:** `creature_turn` now returns
+  early for `immobile` creatures (Fukuregaki) so the generic AI can't walk the engulfer off and
+  release its own grab — its threat is the passive pull/crush. All values from the locked s54.10
+  stat blocks (Fukuregaki 3k3 crushing / Strength 5; swarm Water 3+/Full Move). Static-validated
+  only (engulf/swarm/immobile tags on the creatures, `damage_rolled/kept` + `traits["strength"]`
+  + `water` fields, `WoundSystem.apply_damage(char, int)`, `get_ring_value(WATER)`, `.keys()`-copy
+  safe erase-during-iteration confirmed). DEFERRED unchanged: fire_trail/Everything Burns,
+  paralysis_venom, phantom_battle, possession/shapeshift/invisibility/mob_frenzy/rally. Static-only
+  — needs a Godot runtime to driver-verify.
 
 ### Pending Redesign
 (None currently pending.)

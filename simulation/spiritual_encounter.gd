@@ -36,6 +36,7 @@ class EncounterState:
 	var _waves_done: int = 0                            # escalation waves triggered
 	var _zone_idx: Dictionary = {}                      # pool zone → next un-spawned index
 	var _prev_wounds: Dictionary = {}                   # shugenja_id → wounds_taken last round
+	var engulfed: Dictionary = {}                       # pc_id → captor creature_id (engulf/swarm grab)
 	var resolved: bool = false
 
 
@@ -114,6 +115,10 @@ static func process_round(es: EncounterState, dice: DiceEngine) -> Dictionary:
 	#    1 tile toward the creature unless they pass an Earth roll vs TN 15.
 	_apply_hunger_pull(es, dice)
 
+	# 0b. Engulf crush (s54.10) — an engulfed PC takes the captor's crushing damage
+	#     each round until they escape (attempt_engulf_escape) or the captor dies.
+	_apply_engulf_crush(es, dice)
+
 	# 1. Restoration ritual — each living shugenja contributes a round. A shugenja
 	#    who took damage since last round has their round interrupted (s56.16.5b).
 	for sid in es.shugenja_ids:
@@ -179,6 +184,11 @@ static func creature_turn(es: EncounterState, cid: int, dice: DiceEngine) -> Dic
 	var c: L5RCharacterData = es.chars_by_id.get(cid, null)
 	if c == null or c.spirit_creature == null or CharacterStats.is_dead(c):
 		return {"actions": [], "reason": "not_creature"}
+	# Immobile creatures (s54.10 Fukuregaki) do not take an active turn — their threat
+	# is the passive Hunger Pull + Engulf crush (process_round). Keeps the engulfer put
+	# so the generic AI can't wander it off and release its own grab.
+	if c.spirit_creature.has_tag("immobile"):
+		return {"actions": [], "reason": "immobile"}
 	var ts = es.mcs.turn_states.get(cid, null)
 	var wail: Dictionary = SpiritAbilitySystem.wail_effect(c.spirit_creature)
 	if not wail.is_empty() and ts != null and ts.can_use_complex():
@@ -199,6 +209,35 @@ static func creature_turn(es: EncounterState, cid: int, dice: DiceEngine) -> Dic
 				affected.append(pid)
 		return {"actions": [{"type": "wail", "by": cid, "affected": affected}], "ability": "wail"}
 	return AsciiMapCombatOrchestrator.execute_npc_turn(es.mcs, cid, c, es.chars_by_id, dice)
+
+
+## PC attempts to break an engulf/swarm grab (a PC action, s54.10). Fukuregaki
+## (engulf): a Contested Strength roll vs the captor's Strength. Usai swarm: escape
+## if the PC's Water Ring is 3+ OR they spend a Full Move (`full_move`). On success
+## the grab is released. Returns {ok, captor, method}.
+static func attempt_engulf_escape(es: EncounterState, pc_id: int, dice: DiceEngine, full_move: bool = false) -> Dictionary:
+	if not es.engulfed.has(pc_id):
+		return {"ok": false, "reason": "not_engulfed"}
+	var captor: int = int(es.engulfed[pc_id])
+	var pc: L5RCharacterData = es.chars_by_id.get(pc_id, null)
+	var cre: L5RCharacterData = es.chars_by_id.get(captor, null)
+	if pc == null or CharacterStats.is_dead(pc) or cre == null or CharacterStats.is_dead(cre):
+		es.engulfed.erase(pc_id)
+		return {"ok": true, "captor": captor, "method": "captor_gone"}
+	if cre.spirit_creature.has_tag("swarm"):
+		var water: int = CharacterStats.get_ring_value(pc, Enums.Ring.WATER)
+		if water >= 3 or full_move:
+			es.engulfed.erase(pc_id)
+			return {"ok": true, "captor": captor, "method": ("water_ring" if water >= 3 else "full_move")}
+		return {"ok": false, "captor": captor, "reason": "need_water3_or_full_move"}
+	# Engulf (Fukuregaki): Contested Strength vs the captor's Strength trait.
+	var cre_str: int = int(cre.spirit_creature.traits.get("strength", cre.spirit_creature.water))
+	var pc_roll: int = dice.roll_and_keep(pc.strength, pc.strength, true).total
+	var cre_roll: int = dice.roll_and_keep(cre_str, cre_str, true).total
+	if pc_roll >= cre_roll:
+		es.engulfed.erase(pc_id)
+		return {"ok": true, "captor": captor, "method": "contested_strength"}
+	return {"ok": false, "captor": captor, "reason": "lost_contest"}
 
 
 ## Spawns the next un-spawned creature from `zone` into the live encounter, on a
@@ -241,13 +280,20 @@ static func _apply_hunger_pull(es: EncounterState, dice: DiceEngine) -> void:
 		var occupied: Dictionary = {}
 		for v in es.mcs.positions.values():
 			occupied[v] = true
+		var engulfer: bool = c.spirit_creature.has_tag("engulf")
 		for pid in es.pc_ids:
 			var pc: L5RCharacterData = es.chars_by_id.get(pid, null)
-			if pc == null or CharacterStats.is_dead(pc):
-				continue
+			if pc == null or CharacterStats.is_dead(pc) or es.engulfed.has(pid):
+				continue  # an engulfed PC is held — not pulled again
 			var ppos: Vector2i = es.mcs.positions.get(pid, Vector2i(9999, 9999))
 			var d: int = maxi(absi(ppos.x - cpos.x), absi(ppos.y - cpos.y))
 			if d == 0 or d > radius:
+				continue
+			# Auto-grab (s54.10): a character already adjacent to an engulf creature is
+			# seized; otherwise resist the pull, and a failed resist drags them 1 tile in.
+			if d <= 1:
+				if engulfer:
+					es.engulfed[pid] = cid
 				continue
 			var earth: int = CharacterStats.get_earth_ring(pc)
 			if dice.roll_and_keep(earth, earth, true).total >= tn:
@@ -262,6 +308,9 @@ static func _apply_hunger_pull(es: EncounterState, dice: DiceEngine) -> void:
 			occupied.erase(ppos)
 			occupied[dest] = true
 			es.mcs.positions[pid] = dest
+			# Dragged adjacent → seized automatically.
+			if engulfer and maxi(absi(dest.x - cpos.x), absi(dest.y - cpos.y)) <= 1:
+				es.engulfed[pid] = cid
 
 ## The weakest creature tier present (initial spawn).
 static func _initial_zone(pool: Dictionary) -> String:
@@ -324,6 +373,29 @@ static func _any_shugenja_alive(es: EncounterState) -> bool:
 
 ## Sum of Willpower-TN contributions (swarm presence / bone rattle) from spirit
 ## creatures within EXPOSURE_RADIUS_TILES of the PC (s56.16.6a stacking).
+## Engulf crush (s54.10): each engulfed PC takes the captor's crushing damage
+## (creature damage XkY) per round. The grab releases if the captor dies, the PC
+## dies, or the captor is no longer adjacent (e.g. a mobile swarm has moved off).
+static func _apply_engulf_crush(es: EncounterState, dice: DiceEngine) -> void:
+	for pid in es.engulfed.keys():
+		var captor: int = int(es.engulfed[pid])
+		var pc: L5RCharacterData = es.chars_by_id.get(pid, null)
+		var cre: L5RCharacterData = es.chars_by_id.get(captor, null)
+		if pc == null or CharacterStats.is_dead(pc) or cre == null or CharacterStats.is_dead(cre):
+			es.engulfed.erase(pid)
+			continue
+		var ppos: Vector2i = es.mcs.positions.get(pid, Vector2i(9999, 9999))
+		var cpos: Vector2i = es.mcs.positions.get(captor, Vector2i(-9999, -9999))
+		if maxi(absi(ppos.x - cpos.x), absi(ppos.y - cpos.y)) > 1:
+			es.engulfed.erase(pid)  # captor no longer adjacent
+			continue
+		var cr: SpiritCreatureData = cre.spirit_creature
+		var dmg: int = dice.roll_and_keep(cr.damage_rolled, cr.damage_kept, true).total
+		WoundSystem.apply_damage(pc, dmg)
+		if CharacterStats.is_dead(pc):
+			es.engulfed.erase(pid)
+
+
 static func _co_located_willpower_tn(es: EncounterState, pc_id: int) -> int:
 	var pc_pos: Vector2i = es.mcs.positions.get(pc_id, Vector2i.ZERO)
 	var near: Array = []
