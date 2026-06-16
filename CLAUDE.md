@@ -4459,6 +4459,41 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   ordering, SpiritCreatureData.water, `.keys()`-copy erase-safety, konak_jiji's paralysis_venom tag confirmed).
   DEFERRED: Konak Jiji deceptive_weight (auto-hit-when-picked-up + TN-40 pin — needs a grab/pin model)
   and lure; possession/shapeshift/invisibility/mob_frenzy/rally. Static-only — driver-verify in Godot.
+- **s56.16 creature ability set — close-out + blocker audit (2026-06-16, owner-directed).**
+  Audited every special-ability tag across the four statted realms (Gaki-do / Toshigoku / Sakkaku /
+  Chikushudo) against `SpiritAbilitySystem` + the encounter/orchestrator. Most tags are flavour/role
+  descriptors (real_threat, elite, boss, pack, formation, tactical, swift, flying, territorial,
+  negotiator, …) needing no combat code. **WIRED & applied (13 mechanics):** the incoming-damage
+  filter (incorporeal / partial_invuln / superior_invuln / Pekkle-half / no_explode / water_vulnerable),
+  armor-bypass (spirit_strike / ignores_armor / gaze_attack), life_drain self-heal (O-Toyo),
+  swarm+bone_rattle Willpower-TN exposure stacking, wail (Haraigaki), hunger_pull (Fukuregaki),
+  engulf+swarm grab/crush, fire_trail+everything_burns (Kagaki, via FireSystem), immobile turn-skip,
+  paralysis_venom (Konak Jiji). **ENCODED but not consumed (documented, not wired):** `is_immune`
+  (redundant — `incoming_damage` already composes it); `reduction_for_kind` (Usai-gaki Reduction-10
+  vs normal weapons — a minor unapplied DEFENSIVE gap; the orchestrator computes reduction via
+  `IndividualCombat.total_defender_reduction`, which doesn't read spirit reduction); `deals_unhealable_spiritual_damage`
+  (Mokumokuren gaze — Wounds untreatable by Medicine; blocked on per-wound source tracking, which the
+  wound model lacks); `has_regeneration` (Gashadokuro recovers 10 Wounds/round — NOT trivially
+  wirable: the GDD's "pushing past a Wound threshold collapses a section, stopping regen 3 rounds"
+  needs threshold-cross detection + a suppression timer; a plain per-round heal would make it
+  unkillable = unfaithful); `reforms_on_death` (Ancient General Undying — reforms once 200 rounds
+  later at the heart at full Wounds; needs a respawn-at-heart timer + once-flag). **HARD-BLOCKED (not
+  encoded — each needs a subsystem the core lacks):** possession + shapeshifter/retains_identity
+  (Bakeneko disguise — needs a control/illusion layer), lure/lure_child (Konak Jiji/Mujina social
+  trap — needs an NPC-lure mechanic), deceptive_weight (Konak Jiji auto-hit-on-pickup + TN-40
+  Athletics pin — needs a pickup/pin model), mob_frenzy/rally + Supreme-Commander aura (+1k0 to
+  nearby Musha — group-buff AI), time_thief (action-economy theft), duel_offer (Ancient General
+  Duelist's Challenge — in-combat formal duel + others cease-fire), concealment/invisibility (Mujina),
+  adapts/Tactical-Mastery (Ancient General's per-character escalating +1k0/+2k0 after 3/6 rounds —
+  boss-specific accumulation). **Verdict: the s56.16 creature ability set is complete-for-now** — every
+  ability with a clean path through the existing combat/exposure/fire/grab/timed-condition layers is
+  wired (tranches 6–16); the remainder are blocked on five named subsystems (per-wound source tracking,
+  regen-suppression timer, respawn timer, illusion/possession/disguise, group-buff AI) and a couple of
+  boss-bespoke escalation mechanics — none blocked on an unknown GDD value. The 5 encoded-but-dead funcs
+  are kept as forward-wiring (their blockers are infra, not design). DEFERRED follow-up candidates, in
+  rough order of cheapness: Usai `reduction_for_kind` (smallest — thread spirit reduction into the
+  reduction calc), then Gashadokuro regeneration (needs the suppression timer), then the boss reforms /
+  Tactical-Mastery, then the illusion/possession/group-AI cluster.
 
 ### Pending Redesign
 (None currently pending.)
