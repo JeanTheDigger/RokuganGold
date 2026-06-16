@@ -134,6 +134,10 @@ static func assemble(
 	else:
 		placements = MissionPopulator.populate(map, roster, pop_seed)
 
+	# Traps (s56.20): placed only when the roster carries a trap-laying unit
+	# (PROVISIONAL gate — see TrapSystem.TRAP_LAYER_UNIT_TYPES). No-op otherwise.
+	TrapSystem.place_traps(map, roster, strength, hash(seed_str + "_traps"))
+
 	var biome: int        = biome_for_province(province)
 	# Use spell-induced province weather when active (s31-37a), otherwise fall back to
 	# seed_dict default (CLEAR if not specified by caller).

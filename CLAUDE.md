@@ -4018,6 +4018,42 @@ movement** kiho (Riding the Clouds, Buoyed by the Kami, leaps); **ally/mount** k
 drain, Spin the Kharmic Wheel disadvantage swap, Void Fist VP refund). 24 kiho-effect
 tests in `tests/test_individual_combat.gd`.
 
+### Systems Added 2026-06-16 (Dungeon content — Traps + Depth Gradient, owner-approved)
+Two new dungeon-content systems for ASCII-map missions, decided via owner Q&A and
+locked before coding (proposal in `DUNGEON_CONTENT_PROPOSAL.md`; a third feature,
+Locks & Keys, was DROPPED — interior doors are paper screens and loot was already cut).
+- **s56.20 Dungeon Traps** (`gdd/s56.20_dungeon_traps_locked.md`, `simulation/trap_system.gd`).
+  Full set of 5 (Pit, Dart/Arrow, Snare→Entangled, Alarm/Tripwire, Deadfall) as a DATA
+  layer (`AsciiMapData.traps`), not tiles — HIDDEN traps never render. `TrapSystem` (pure):
+  `make_trap`, `is_loud`/`alerts_on_spring`, `trap_at`, `attempt_detect` (passive per-turn,
+  Perception+Hunting vs detect_tn, within 2 tiles + FOV → DETECTED), `attempt_disarm` (better
+  of Hunting:Traps or Sleight of Hand vs disarm_tn; miss by ≥10 springs it), `trigger`
+  (Pit 2k2 + Athletics TN 15 to halve / Dart 2k2 vs flat-footed ATN 5+armor / Snare→Entangled
+  escape TN 20 (s54.5 parity) / Alarm alert-only / Deadfall 3k2 + RUBBLE delta), and placement
+  (`place_traps`, `roster_has_trap_layer`, `quality_for_strength`). Wired into `CombatController`
+  (the exploration/stealth layer): springs a trap on the tile the player enters, runs passive
+  detection each turn (`detect_traps`), and exposes `try_disarm_trap`; loud/alarm springs route
+  through `_emit_noise`→AlertState (Pit/Deadfall LOUD, Alarm map-wide, Dart/Snare silent).
+  **All trap paths no-op when `map.traps` is empty**, so trap-free missions (every existing
+  template instance/test) are unaffected. `MissionBuilder.assemble()` calls `place_traps`
+  after population. **All numbers PROVISIONAL** (GDD describes the mechanic, not the values;
+  detect/disarm TN tiers 15/20/25/30). **Placement gate PROVISIONAL** — the roster carries no
+  per-unit skill data, so `TRAP_LAYER_UNIT_TYPES` (scout units) stands in for "a Hunting:Traps
+  unit is present"; the exact trap-laying unit set awaits owner confirmation. Setting basis:
+  Crane Daidoji Hunting:Traps (s29.2/s11.7). Player-facing DISARM input + DETECTED-trap
+  rendering land with the combat UI. Godot/GUT not run in this environment — validated by
+  static review + parse-trace.
+- **s56.21 Within-Map Depth Gradient** (`gdd/s56.21_within_map_depth_gradient_locked.md`).
+  Depth = within-map difficulty gradient (path-distance from the player entry), NOT stacked
+  floors (Option B explicitly not built). `AsciiMapData.depth_grid: PackedInt32Array` +
+  `compute_depth_grid(entry)` (8-dir BFS over passable + door tiles; unreachable = -1),
+  `depth_at`/`has_depth_grid`. `MissionBuilder.assemble()` fills the grid before population;
+  `MissionPopulator._gather_candidates()` orders candidate slots deepest-first when the grid is
+  present, so stronger roles (processed first) and the leader occupy deeper regions. Backward-
+  compatible: `populate()` on a map without a computed grid keeps prior behavior. Spiritual-map
+  palette shift with depth remains s56.16's concern (the grid is available to it). Headless
+  (generation/population only).
+
 ### Pending Redesign
 (None currently pending.)
 

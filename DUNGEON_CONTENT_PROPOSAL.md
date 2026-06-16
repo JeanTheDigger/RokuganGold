@@ -54,7 +54,10 @@ Deterministic from seed. Template-appropriate: cave **dead-ends** + chokepoints,
 ### Integration points
 `MovementSystem.check_step` (trigger), `FovSystem` (detect gating), `CombatController` (ALARM→AlertState), `MissionPopulator`/generators (placement), `AsciiMapCombatOrchestrator` (SEARCH/DISARM as actions).
 
-### OWNER DECISIONS — ALL RESOLVED 2026-06-16
+### OWNER DECISIONS — ALL RESOLVED + IMPLEMENTED 2026-06-16
+Locked in `gdd/s56.20_dungeon_traps_locked.md`; coded in `simulation/trap_system.gd` +
+`AsciiMapData.traps` + `CombatController` + `MissionBuilder`. Placement gate (which roster
+units lay traps) is PROVISIONAL pending owner confirmation.
 - **Decision 1: full set of 5** (Pit, Dart/Arrow, Snare, Alarm/Tripwire, Deadfall).
 - **Decision 2: passive per-turn detection.** Each turn, hidden traps within 2 tiles AND in FOV roll
   vs passive Perception + Hunting; success → DETECTED (route around or disarm). No action cost.
@@ -110,7 +113,9 @@ everywhere). **Reserve Option B** as an opt-in flag on 2–3 specific templates 
 multi-floor crawls there. This avoids rebuilding the whole mission pipeline for a feature the GDD only
 implies, while still giving true descent where it matters.
 
-### OWNER DECISIONS — RESOLVED 2026-06-16
+### OWNER DECISIONS — RESOLVED + IMPLEMENTED 2026-06-16
+Locked in `gdd/s56.21_within_map_depth_gradient_locked.md`; coded in `AsciiMapData.depth_grid`
++ `MissionBuilder` + `MissionPopulator`.
 - **Option A only — within-map depth gradient.** Tag each tile/region with `depth` = path-distance from
   `entry_pos`; `MissionPopulator` weights stronger roster units (and the leader) into higher-depth
   regions; spiritual maps shift tile palette with depth (s56.16). GDD-aligned, reuses the single-map

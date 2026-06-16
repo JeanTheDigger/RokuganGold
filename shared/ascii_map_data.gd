@@ -25,6 +25,11 @@ extends Resource
 # templates so MissionPopulator can operate on any AsciiMapData uniformly.
 @export var population_slots: Array = []
 
+# Hidden hazards placed by trap-laying defenders (s56.20). A data layer, not
+# tiles — a HIDDEN trap renders as normal floor. Each entry is a TrapSystem
+# trap dict: { "x", "y", "type", "quality", "state", "detect_tn", "disarm_tn" }.
+@export var traps: Array = []
+
 # Primary flat tile array. Each byte is an Enums.TileType value.
 # Populated by AsciiMapGenerator; read-only after generation.
 @export var tile_types: PackedByteArray = []
