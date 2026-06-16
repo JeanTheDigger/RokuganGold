@@ -4288,6 +4288,26 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   detection for jade/crystal damage (no WeaponData material field), and the creature-turn firing of
   positional abilities (hunger-pull, wail-as-action, fire-trail, possession). With this the s56.16
   encounter is wired end-to-end in shape; the live turn loop needs runtime verification before relying on it.
+- **s56.16 mid-combat threat escalation (tranche 9, owner-approved 2026-06-16, static-only).**
+  Closes the largest deferred piece of tranche 8. New `AsciiMapCombatOrchestrator.add_enemy()`
+  adds a creature participant to a LIVE MapCombatState (initiative roll, turn-order re-sort,
+  TurnState) — mirrors `add_companion`'s insertion exactly, FACTION_ENEMY, no companion
+  bookkeeping. `SpiritualEncounter.spawn_threat(es, zone, dice)` spawns the next un-spawned pool
+  creature of a zone tier on a free tile near the heart (`_free_tile_near` expanding-ring search,
+  unoccupied + passable). `process_round` now drives escalation: the initial spawn is the weakest
+  tier (outer / Sakkaku deceptions) on the heart ring; deeper tiers appear as the ritual
+  progresses, with waves triggered at the **LOCKED** depth-band cutoffs (`SpiritualPalette.MIDDLE_BAND`
+  0.33 → middle, `HEART_BAND` 0.66 → heart; Sakkaku reveals real_threats at the 0.5 midpoint) —
+  reusing locked values, NOT an invented schedule. One creature per wave, bounded by pool size
+  (`_zone_idx` per-zone cursor; `_waves_done` caps at ≤2, no runaway spawning). The escalation
+  fraction = ritual_progress / rounds_remaining, so threats deepen in lockstep with the shugenja's
+  progress. Static-validated only (add_enemy mirrors add_companion; SpiritualPalette band consts,
+  pool zone keys, MovementSystem.is_passable, Vector2i dict keys confirmed). STILL DEFERRED to a
+  runtime tranche: exact creature to-HIT/wound overrides (SpiritCombatant approximation stands),
+  weapon-material detection (jade/crystal), and the creature-turn firing of positional abilities
+  (hunger-pull, wail-as-action, fire-trail, possession). With escalation, the live s56.16 encounter
+  loop is complete in shape (setup → per-round ritual+escalation+exposure → resolution); only the
+  per-creature combat fidelity + positional-ability turns remain, both needing a Godot runtime.
 
 ### Pending Redesign
 (None currently pending.)

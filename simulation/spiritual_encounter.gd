@@ -32,6 +32,9 @@ class EncounterState:
 	var ritual_progress: int = 0                        # rounds achieved THIS mission
 	var round_number: int = 0
 	var next_instance_id: int = -10001  # = SpiritualEncounter.FIRST_INSTANCE_ID
+	var heart_pos: Vector2i = Vector2i.ZERO
+	var _waves_done: int = 0                            # escalation waves triggered
+	var _zone_idx: Dictionary = {}                      # pool zone → next un-spawned index
 	var _prev_wounds: Dictionary = {}                   # shugenja_id → wounds_taken last round
 	var resolved: bool = false
 
@@ -74,12 +77,15 @@ static func start(
 		i += 1
 	for sid in shugenja_ids:
 		es.shugenja_ids.append(int(sid))
+	es.heart_pos = heart_pos
 
-	# Initial creatures: heart-zone guardians at the heart, outer-zone near the entry.
-	var heart_ids: Array = pool.get("heart", pool.get("real_threats", []))
+	# Initial creatures: the weakest (outer / deception) tier, placed on the heart
+	# ring. Escalation brings the deeper tiers as the ritual progresses (s56.16.5e).
+	var init_zone: String = _initial_zone(es.pool)
+	var init_ids: Array = es.pool.get(init_zone, [])
 	var spawn_tiles: Array[Vector2i] = _ring_tiles(map, heart_pos)
 	var t: int = 0
-	for cid_str in heart_ids:
+	for cid_str in init_ids:
 		if t >= spawn_tiles.size():
 			break
 		var puppet: L5RCharacterData = SpiritCombatant.spawn(realm, String(cid_str), es.next_instance_id)
@@ -90,6 +96,7 @@ static func start(
 		combatants.append({"char": puppet, "faction": AsciiMapCombatOrchestrator.FACTION_ENEMY,
 			"x": spawn_tiles[t].x, "y": spawn_tiles[t].y, "stance": Enums.Stance.ATTACK})
 		t += 1
+	es._zone_idx[init_zone] = t
 
 	es.mcs = AsciiMapCombatOrchestrator.setup_combat(map, combatants, dice)
 	return es
@@ -115,7 +122,17 @@ static func process_round(es: EncounterState, dice: DiceEngine) -> Dictionary:
 		var rr: Dictionary = SpiritualRitualSystem.resolve_ritual_round(sh, es.event, dice, hit)
 		es.ritual_progress += int(rr.get("progress", 0))
 
-	# 2. Exposure — the passive periodic timer (creature-driven pressure fires from
+	# 2. Escalation (s56.16.5e) — deeper threats appear as the ritual progresses.
+	#    Waves trigger at the LOCKED depth-band cutoffs (SpiritualPalette.MIDDLE_BAND/
+	#    HEART_BAND), reusing locked values rather than an invented schedule; one
+	#    creature per wave, bounded by the pool.
+	var waves: Array = _escalation_waves(es.pool)
+	var frac: float = float(es.ritual_progress) / float(maxi(1, needed))
+	while es._waves_done < waves.size() and frac >= float(waves[es._waves_done]["threshold"]):
+		spawn_threat(es, String(waves[es._waves_done]["zone"]), dice)
+		es._waves_done += 1
+
+	# 3. Exposure — the passive periodic timer (creature-driven pressure fires from
 	#    the creature turn loop). extra_tn = co-located creature stacking (swarm/rattle).
 	var interval: int = int(SpiritualExposureSystem.CHECK_INTERVAL_ROUNDS.get(es.realm, 100))
 	if interval > 0 and es.round_number % interval == 0:
@@ -147,7 +164,78 @@ static func resolve(es: EncounterState, current_season: int = -1) -> Dictionary:
 	return SpiritualRitualSystem.apply_resolution(es.event, es.ritual_progress, alive, map, current_season)
 
 
+## Spawns the next un-spawned creature from `zone` into the live encounter, on a
+## free tile near the heart. Returns false if the zone is exhausted, the catalogue
+## lacks the id, or no free tile is available. Called by the escalation waves.
+static func spawn_threat(es: EncounterState, zone: String, dice: DiceEngine) -> bool:
+	var ids: Array = es.pool.get(zone, [])
+	var idx: int = int(es._zone_idx.get(zone, 0))
+	if idx >= ids.size():
+		return false
+	es._zone_idx[zone] = idx + 1
+	var puppet: L5RCharacterData = SpiritCombatant.spawn(es.realm, String(ids[idx]), es.next_instance_id)
+	if puppet == null:
+		return false
+	var tile: Vector2i = _free_tile_near(es.mcs.map, es.heart_pos, es.mcs.positions)
+	if tile.x < 0:
+		return false
+	es.next_instance_id -= 1
+	es.chars_by_id[puppet.character_id] = puppet
+	return AsciiMapCombatOrchestrator.add_enemy(es.mcs, puppet, tile.x, tile.y, dice)
+
+
 # ── internal ──────────────────────────────────────────────────────────────────
+
+## The weakest creature tier present (initial spawn).
+static func _initial_zone(pool: Dictionary) -> String:
+	if pool.has("outer") and not (pool["outer"] as Array).is_empty():
+		return "outer"
+	if pool.has("deceptions") and not (pool["deceptions"] as Array).is_empty():
+		return "deceptions"
+	for k in pool:
+		if not (pool[k] as Array).is_empty():
+			return String(k)
+	return ""
+
+
+## Escalation waves [{zone, threshold}] keyed to the LOCKED depth bands. Depth
+## pools (outer/middle/heart) escalate at MIDDLE_BAND then HEART_BAND; Sakkaku
+## (deceptions→real_threats) reveals the real threats at the midpoint.
+static func _escalation_waves(pool: Dictionary) -> Array:
+	if pool.has("outer"):
+		var w: Array = []
+		if pool.has("middle") and not (pool["middle"] as Array).is_empty():
+			w.append({"zone": "middle", "threshold": SpiritualPalette.MIDDLE_BAND})
+		if pool.has("heart") and not (pool["heart"] as Array).is_empty():
+			w.append({"zone": "heart", "threshold": SpiritualPalette.HEART_BAND})
+		return w
+	if pool.has("real_threats") and not (pool["real_threats"] as Array).is_empty():
+		return [{"zone": "real_threats", "threshold": 0.5}]
+	return []
+
+
+## Nearest free (passable, unoccupied) tile to `center`, searched in expanding
+## rings. Returns Vector2i(-1, -1) if none within 6 tiles.
+static func _free_tile_near(map: AsciiMapData, center: Vector2i, positions: Dictionary) -> Vector2i:
+	var occupied: Dictionary = {}
+	for v in positions.values():
+		occupied[v] = true
+	for r in range(0, 7):
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				if maxi(absi(dx), absi(dy)) != r:
+					continue  # only the current ring's perimeter
+				var x: int = center.x + dx
+				var y: int = center.y + dy
+				if x < 0 or y < 0 or x >= map.width or y >= map.height:
+					continue
+				var tile := Vector2i(x, y)
+				if occupied.has(tile):
+					continue
+				if MovementSystem.is_passable(map.get_tile(x, y)):
+					return tile
+	return Vector2i(-1, -1)
+
 
 static func _any_shugenja_alive(es: EncounterState) -> bool:
 	for sid in es.shugenja_ids:

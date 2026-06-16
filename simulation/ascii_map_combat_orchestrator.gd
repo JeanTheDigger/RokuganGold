@@ -3338,6 +3338,41 @@ static func add_companion(
 	return true
 
 
+## Add an enemy combatant to a LIVE encounter (mid-combat spawn — e.g. s56.16
+## spirit-threat escalation). Mirrors add_companion's participant insertion
+## (initiative roll, turn-order re-sort, TurnState) but FACTION_ENEMY with no
+## companion bookkeeping. Returns false if the id is already a participant.
+static func add_enemy(
+	state: MapCombatState,
+	character: L5RCharacterData,
+	x: int, y: int,
+	dice_engine: DiceEngine,
+) -> bool:
+	var cid: int = character.character_id
+	if state.combat.participants.has(cid):
+		return false
+	state.positions[cid] = Vector2i(x, y)
+	state.factions[cid] = FACTION_ENEMY
+	var p := IndividualCombat.Participant.new()
+	p.character_id = cid
+	p.stance = Enums.Stance.ATTACK
+	p.initiative_score = IndividualCombat.roll_initiative(
+		character, p, dice_engine, IndividualCombat.pick_best_weapon(character))
+	state.combat.participants[cid] = p
+	state.combat.turn_order.append(cid)
+	state.combat.turn_order.sort_custom(func(a: int, b: int) -> bool:
+		var pa: IndividualCombat.Participant = state.combat.participants.get(a, null)
+		var pb: IndividualCombat.Participant = state.combat.participants.get(b, null)
+		var ia: int = pa.initiative_score if pa != null else 0
+		var ib: int = pb.initiative_score if pb != null else 0
+		return ia > ib
+	)
+	var ts := TurnState.new()
+	ts.char_id = cid
+	state.turn_states[cid] = ts
+	return true
+
+
 ## Recompute morale for every companion from the allied-casualty fraction
 ## (companions dead or fled ÷ companions who started). Call after casualties.
 static func update_companion_morale(state: MapCombatState, chars_by_id: Dictionary) -> void:
