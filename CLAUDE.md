@@ -5057,6 +5057,26 @@ The graph is fully navigable; the asymmetry only matters to the future
 zone-transition UI (it must offer containment ascent, not a directional exit).
 No production code touched — verification only. Driver was temporary and removed.
 
+### Live world Governor↔zone join + world-wide zone-graph sweep (2026-06-16)
+Ran the REAL `WorldBootstrap.bootstrap_world()` under Godot 4.6.1 (3816 chars,
+151 settlements / GreaterZones, 72 NavigationZones, 1028 LesserZones = 1251 zones,
+~4.6s) and audited the cross-system Governor↔zone join plus the full live graph.
+**CLEAN — no bugs.**
+- **Governor↔zone join (s2.3.23):** all 15/15 Otosan Uchi governor districts have
+  `zone_lord_id` → a living `GOVERNOR_OTOSAN_UCHI` whose `governed_zone_id` points
+  back (bidirectional), with `lord_id == Emperor`. 15 governor characters, all
+  back-linked. The 1 non-governor Otosan district (Forbidden City) correctly stays
+  unlinked (`zone_lord_id == -1`). Confirms both halves of the join — population
+  pass (`world_population_generator` sets `governed_zone_id` from the deterministic
+  `district_zone_id`) and bootstrap back-fill (`_link_otosan_uchi_governors` sets
+  `zone_lord_id`) — agree at runtime.
+- **World-wide structural sweep** over all 1251 live zones: 0 duplicate zone_ids,
+  0 dangling exit targets, 0 containment-reciprocity breaks. Confirms the
+  representative-matrix SettlementZoneBuilder audit holds against the actual
+  generated world (every real settlement), and the Otosan Uchi handcrafted graph
+  is sound in situ.
+No production code touched — verification only. Driver was temporary and removed.
+
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
 via headless largest-connected-component analysis + per-exit reachability check
