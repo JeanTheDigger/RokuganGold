@@ -8,6 +8,7 @@ class_name QuestSeedSelector
 # -- Extended seed type constants (beyond RosterCompositionSystem 0-5, 100) ------
 const SEED_ONI_MANIFESTATION: int = 101  # s56.1.2: Named Oni boss encounter
 const SEED_ROAD_ENCOUNTER:    int = 102  # s56.1.5: Travel hazard (15% chance)
+const SEED_SPIRITUAL_OVERLAP: int = 103  # s56.16: spirit-realm / elemental overlap (palette only)
 
 # -- Trigger thresholds ---------------------------------------------------------
 const PTL_TAINT_TRIGGER:      float = 3.0   # s56.1.1: Taint Manifestation fires at PTL >= 3
@@ -40,7 +41,8 @@ static func select_province_seeds(
 		insurgencies: Array,
 		wall_statuses: Dictionary,
 		bloodspeaker_cells: Array,
-		seed: int) -> Array:
+		seed: int,
+		spiritual_events: Array = []) -> Array:
 	var results: Array = []
 
 	# 1. Insurgency-sourced seeds (detected only).
@@ -87,6 +89,18 @@ static func select_province_seeds(
 		var size_lower: String = WallSystem.get_ai_sortie_size(ss)
 		if size_lower != "none":
 			results.append(_wall_sortie_seed(size_lower, ws))
+
+	# 5. Spiritual overlap (s56.16) — one seed per active unresolved spiritual
+	#    insurgency event in the province. Palette-only: spirit rosters and the
+	#    ritual encounter loop are stubbed, so roster_ready = false.
+	for ev in spiritual_events:
+		if not ev is SpiritualInsurgencyData:
+			continue
+		if ev.resolved:
+			continue
+		if ev.province_id != province.province_id:
+			continue
+		results.append(_spiritual_seed(ev))
 
 	return results
 
@@ -216,6 +230,30 @@ static func _oni_seed_entry(source_insurgency_id: int) -> Dictionary:
 		"strength":              10,
 		"options":               {},
 		"source_insurgency_id":  source_insurgency_id,
+		"roster_ready":          false,
+	}
+
+
+## Spiritual overlap (s56.16). REALM_OVERLAP or ELEMENTAL_IMBALANCE carried in
+## options.event_type (with realm/element). roster_ready = false: the encounter
+## loop and spirit rosters are blocked on the larger s56.16 ASCII design — the
+## seed exists to drive map generation + the SpiritualPalette depth gradient.
+## strength = severity tier + 1 (1..4) — structural map-scale input, not a game value.
+static func _spiritual_seed(ev: SpiritualInsurgencyData) -> Dictionary:
+	var is_realm: bool = ev.event_type == Enums.SpiritualEventType.REALM_OVERLAP
+	return {
+		"seed_type":             SEED_SPIRITUAL_OVERLAP,
+		"seed_label":            "REALM_OVERLAP" if is_realm else "ELEMENTAL_IMBALANCE",
+		"source":                "spiritual_insurgency",
+		"strength":              int(ev.severity) + 1,
+		"options":               {
+			"event_type": ev.event_type,
+			"realm":      ev.realm,
+			"element":    ev.element,
+			"severity":   int(ev.severity),
+		},
+		"source_insurgency_id":  -1,
+		"spiritual_event_id":    ev.event_id,
 		"roster_ready":          false,
 	}
 

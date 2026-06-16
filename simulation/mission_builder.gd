@@ -94,12 +94,20 @@ static func biome_for_province(province: ProvinceData) -> int:
 ##   "seed_dict"       → input seed_dict unchanged
 ##   "roster"          → Dictionary from RosterCompositionSystem.compose_roster()
 ##
-## Returns {} when roster_ready is false (encounter design blocked on future GDD sections).
+## Returns {} when roster_ready is false (encounter design blocked on future GDD sections),
+## EXCEPT SEED_SPIRITUAL_OVERLAP, which is assembled palette-only (map + overlay, no roster).
 static func assemble(
 		province: ProvinceData,
 		province_history: Array,
 		seed_dict: Dictionary,
 		seed_str: String) -> Dictionary:
+	# Spiritual overlap (s56.16): palette-layer mission — generate the terrain map
+	# and apply the depth-driven SpiritualPalette gradient. Spirit rosters and the
+	# ritual encounter loop are stubbed, so this bypasses the roster_ready gate
+	# (the seed is intentionally roster_ready=false) and population.
+	if seed_dict.get("seed_type", -1) == QuestSeedSelector.SEED_SPIRITUAL_OVERLAP:
+		return _assemble_spiritual(province, province_history, seed_dict, seed_str)
+
 	if not seed_dict.get("roster_ready", true):
 		return {}
 
@@ -138,9 +146,63 @@ static func assemble(
 	# (PROVISIONAL gate — see TrapSystem.TRAP_LAYER_UNIT_TYPES). No-op otherwise.
 	TrapSystem.place_traps(map, roster, strength, hash(seed_str + "_traps"))
 
+	return {
+		"map":             map,
+		"placements":      placements,
+		"objective_slots": map.objective_slots,
+		"seed_dict":       seed_dict,
+		"roster":          roster,
+		"entry_pos":       entry,
+		"environment":     _build_environment(province, seed_dict),
+	}
+
+
+## Spiritual overlap (s56.16) mission package. Reuses the province terrain template
+## (the realm overlaps the mortal map — MissionTemplateResolver selects by terrain,
+## not seed_type), tags the depth gradient, and applies the SpiritualPalette overlay.
+## Population is stubbed: placements/roster empty (spirit rosters + the ritual
+## encounter loop are blocked on the larger s56.16 ASCII design). The map's default
+## KILL_LEADER objective slot is left unfilled — inert until the encounter loop exists.
+static func _assemble_spiritual(
+		province: ProvinceData,
+		province_history: Array,
+		seed_dict: Dictionary,
+		seed_str: String) -> Dictionary:
+	var options: Dictionary = seed_dict.get("options", {})
+	var event_type: int = int(options.get("event_type", Enums.SpiritualEventType.REALM_OVERLAP))
+	var realm: int      = int(options.get("realm", Enums.SpiritRealm.GAKI_DO))
+	var element: int    = int(options.get("element", Enums.Ring.NONE))
+
+	var map: AsciiMapData = MissionTemplateResolver.select_and_generate(
+		province, province_history, seed_dict, [], seed_str)
+
+	# Depth gradient first (s56.21), then derive the overlap intensity from it.
+	var entry: Vector2i = get_player_entry(map)
+	map.compute_depth_grid(entry.x, entry.y)
+	SpiritualPalette.apply_overlap(map, event_type, realm, element)
+
+	var environment: Dictionary = _build_environment(province, seed_dict)
+	environment["spiritual"] = {
+		"event_type": event_type,
+		"realm":      realm,
+		"element":    element,
+	}
+	return {
+		"map":             map,
+		"placements":      [],
+		"objective_slots": map.objective_slots,
+		"seed_dict":       seed_dict,
+		"roster":          {},
+		"entry_pos":       entry,
+		"environment":     environment,
+	}
+
+
+## Builds the environment metadata dict (biome + resolved weather + FoV modifier).
+## Uses spell-induced province weather when active (s31-37a), else the seed_dict
+## default (CLEAR), then applies biome/season conversion (s56.6).
+static func _build_environment(province: ProvinceData, seed_dict: Dictionary) -> Dictionary:
 	var biome: int        = biome_for_province(province)
-	# Use spell-induced province weather when active (s31-37a), otherwise fall back to
-	# seed_dict default (CLEAR if not specified by caller).
 	var spell_weather: int = province.province_weather_state \
 		if province.province_weather_state > 0 else AsciiMapEnvironment.WeatherState.CLEAR
 	var seed_base: int    = seed_dict.get("weather", AsciiMapEnvironment.WeatherState.CLEAR)
@@ -149,19 +211,9 @@ static func assemble(
 	var season: int       = seed_dict.get("season", TimeSystem.Season.SPRING)
 	var weather: int      = AsciiMapEnvironment.apply_biome_weather_conversion(
 		base_weather, biome, season)
-	var fov_mod: int      = AsciiMapEnvironment.weather_to_fov_modifier(weather)
-
 	return {
-		"map":             map,
-		"placements":      placements,
-		"objective_slots": map.objective_slots,
-		"seed_dict":       seed_dict,
-		"roster":          roster,
-		"entry_pos":       entry,
-		"environment": {
-			"biome":        biome,
-			"weather":      weather,
-			"fov_modifier": fov_mod,
-			"weather_data": AsciiMapEnvironment.get_weather_data(weather),
-		},
+		"biome":        biome,
+		"weather":      weather,
+		"fov_modifier": AsciiMapEnvironment.weather_to_fov_modifier(weather),
+		"weather_data": AsciiMapEnvironment.get_weather_data(weather),
 	}
