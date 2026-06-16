@@ -5028,6 +5028,35 @@ Built the capital (1 GreaterZone, **16 districts**, **122 landmark Lesser Zones*
   the world-population generator joins Governors on — so the roster↔zone link is sound.
 No production code touched — verification only. Driver was temporary and removed.
 
+### SettlementZoneBuilder zone GRAPH — wiring verification (2026-06-16)
+Audited the zone graph built by `SettlementZoneBuilder.build()` (the non-capital
+settlement layer) at runtime under Godot 4.6.1 across a 17-case matrix covering
+every builder branch. **CLEAN — no bugs (17/17).** Cases: villages (headman,
+no-nav-tier; +coastal), towns (with/without castle nav), cities + major cities
+(provincial/family/champion rank; +coastal), all military types (family castle,
+castle, keep, wall tower, fortification), all religious types (temple +coastal,
+shinden, monastery). Each verified for:
+- **ID uniqueness** within the settlement (castle `_lz_castle_N` vs fill `_lz_N`
+  vs `_gz` / `_nav_castle` patterns never collide; cross-settlement safe via sid).
+- **No dangling exit targets** across GreaterZone / NavigationZone / LesserZone.
+- **Containment reciprocity** both directions: every `child_zone_ids` entry
+  resolves and points back via `parent_zone_id`, and every nav/lz `parent_zone_id`
+  resolves to a container that lists it as a child.
+- **Within-tier exit connectivity:** castle Lesser Zones (hub-and-spoke from
+  OHIROMA) all reachable; fill Lesser Zones (sequential N/E/S/W chain) all
+  reachable. Headman villages/towns (nav tier skipped) wire their 2 interior LZs
+  hub-and-spoke directly under the GreaterZone — verified connected.
+- **ZoneRegistry indexing:** `get_zone` and `get_all_lesser_zones_for_settlement`
+  resolve correctly for every case.
+OBSERVATION (not a bug): SettlementZoneBuilder Lesser Zones carry NO `"up"` exit
+to their parent, unlike OtosanUchiZoneBuilder's landmarks. Vertical movement is
+containment-based (`parent_zone_id`) — which BOTH builders rely on for gz→child
+descent (a GreaterZone never has "down" exits to its children in either builder),
+so the Otosan Uchi `"up"` exit is the redundant one, not the required mechanism.
+The graph is fully navigable; the asymmetry only matters to the future
+zone-transition UI (it must offer containment ascent, not a directional exit).
+No production code touched — verification only. Driver was temporary and removed.
+
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
 via headless largest-connected-component analysis + per-exit reachability check
