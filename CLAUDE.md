@@ -5091,6 +5091,22 @@ tile connectivity (35 subtypes + 10 mission templates), zone graphs (capital +
 all settlement types), live-world Governor↔zone join (1251 zones), and the
 action-gating matrix. No production code touched — verification only. Driver removed.
 
+### WorldStateSaver save/load round-trip — live world (2026-06-16)
+Round-tripped the REAL bootstrapped world through `WorldStateSaver` under Godot
+4.6.1 (fresh `WorldStateData` instances + a temp `BASE_DIR`, so the real `user://`
+save and the scheduler autoload were untouched). **CLEAN — no data loss.**
+- **All 10 major collections round-trip with exact counts:** characters 3814,
+  provinces 143, settlements 151, clans 22, greater_zones 151, navigation_zones
+  72, lesser_zones 1028, military_companies 643, bloodspeaker_cells 31,
+  insurgencies 7. Confirms the documented "typed-array `.assign` on load" bug
+  class stays fixed for the live world.
+- **Field fidelity spot-checks:** the Governor↔zone link survives (`zone_lord_id`
+  + the character's `governed_zone_id` back-link + role both round-trip); the
+  int-keyed `provinces` dict is preserved (lookup by `int` key 120 succeeded — no
+  JSON int-key corruption); settlement and province scalar fields intact.
+So the verified zone graph + Governor join also persist correctly across
+save/load. No production code touched — verification only. Driver removed.
+
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)
 via headless largest-connected-component analysis + per-exit reachability check
