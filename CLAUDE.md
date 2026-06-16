@@ -4170,6 +4170,37 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   gives them no roster/encounter section at all (only the 56.16.5c restoration approach), so there
   is nothing to transcribe without inventing. Still deferred: the live ASCII creature combat +
   special abilities, and the per-realm exposure mechanics.
+- **s56.16 per-realm Exposure mechanics (tranche 4, owner-approved 2026-06-16).**
+  `simulation/spiritual_exposure_system.gd` (SpiritualExposureSystem, pure) — the "being
+  somewhere you do not belong erodes you" resolver for all four encounter realms, operating on a
+  per-character exposure-state Dictionary (`new_state(realm, base_willpower)`) the deferred combat
+  turn loop owns. PC-only. All values LOCKED. **Periodic check** (`roll_periodic_check`): per-realm
+  interval (Chikushudo per-minute ≈ 10 rounds; others per-10-min ≈ 100), starting TN
+  (Gaki 10 / Toshigoku 15 / Sakkaku 10 / Chikushudo 10) rising by step (Sakkaku +2, others +1);
+  Sakkaku rolls max(Awareness, Willpower), the rest Willpower; supports creature-stacking
+  `extra_tn` (Gaki Muzai swarm / Gashadokuro Bone Rattle), Toshigoku crystal `+2k0`, and an
+  `advance_tn=false` mode for the Toshigoku per-combat trigger (`toshigoku_combat_trigger`).
+  **Per-realm failure effects:** Gaki/Toshigoku lose a Willpower Rank (→ Muzai-gaki / slaughter
+  transformation at 0; `lowest_wp_seen` tracked); Sakkaku accrues Compulsion failures (flags any
+  failure at TN ≥ 20); Chikushudo accrues pacification failures (-1 Init / -1k0 vs spirit animals
+  each, pacified at 5). **Toshigoku 8b thresholds:** `toshigoku_combat_modifier` (-1k0 Social /
+  +1k0 damage at -2 Ranks), `toshigoku_must_roll_to_retreat` / `_attacks_indiscriminately`
+  (reduced TO 2 / TO 1), and the TN-15 disengage / TN-20 regain-control rolls. **Chikushudo
+  `chikushudo_snap_out`** (ally Contested Willpower removes one failure level). **Recovery**
+  (`recover_outside`): Gaki/Toshigoku +1 Rank/10 min, Sakkaku -1 failure/hour, Chikushudo
+  immediate. **Post-encounter:** `gaki_buruburu_check` (25% if lowest WP < 2, s56.16.6e),
+  `toshigoku_post_consequences` (Brash / Brash+Overconfident by lowest WP, permanent if rescued
+  from WP 0, s56.16.8c), `sakkaku_post_consequences` (Obtuse one season at 4+ failures; 25%
+  permanent minor Disadvantage if any failure at TN 20+, s56.16.9a). **Jigoku-corrupted Shozai
+  (s56.16.6d):** `corrupted_shozai_chance(ptl)` (5/15/30/50% by PTL) + `corrupted_shozai_taint_check`
+  (Earth vs TN 15 per melee hit). Haraigaki Wail direct loss via `apply_willpower_loss`. Returns
+  consequence descriptors (disadvantage name strings, flags) for the combat/world layer to apply;
+  does not mutate the character (consistent with the ritual system). No NPC path (PC-only). Godot/
+  GUT unavailable here — validated by static review + parse-trace (DiceEngine.randf/roll_die/
+  roll_and_keep.total, SpellSystem.get_ring_value, character.awareness/willpower confirmed).
+  DEFERRED: wiring into the live ASCII turn loop (combat tranche), and the slow "left-behind →
+  permanent transformation" timers (Gaki-do 6f one-hour soul-return, Chikushudo 7a multi-day
+  animal transformation) which need a cross-session timer the encounter layer will own.
 
 ### Pending Redesign
 (None currently pending.)
