@@ -110,18 +110,21 @@ everywhere). **Reserve Option B** as an opt-in flag on 2–3 specific templates 
 multi-floor crawls there. This avoids rebuilding the whole mission pipeline for a feature the GDD only
 implies, while still giving true descent where it matters.
 
-### OWNER DECISIONS NEEDED
-- A, B, or hybrid (A everywhere + B on flagged templates)?
-- If B/hybrid: which templates get true floors, how many floors, and roster scaling per floor?
-- Does descending ever **prevent return** (one-way deeper), or is ascend always allowed?
+### OWNER DECISIONS — RESOLVED 2026-06-16
+- **Option A only — within-map depth gradient.** Tag each tile/region with `depth` = path-distance from
+  `entry_pos`; `MissionPopulator` weights stronger roster units (and the leader) into higher-depth
+  regions; spiritual maps shift tile palette with depth (s56.16). GDD-aligned, reuses the single-map
+  pipeline. **Option B (true stacked floors) is NOT built** — no multi-level MissionSession, no
+  DOWN_STAIR generation, no cross-level persistence. The one-way-vs-ascend question is therefore moot.
 
 ---
 
-## Suggested sequencing (after approval + GDD lock)
-1. **Locks & keys** — smallest, extends the existing door model, immediate gameplay value (gated objectives).
-2. **Traps** — self-contained data layer + detection/disarm/trigger; strong synergy with the stealth model (ALARM).
-3. **Multilevel (Option A)** — a depth field + populator weighting; cheap and broadly applicable.
-4. **Multilevel (Option B)** — only if you want true floors; largest lift, do last.
+## Suggested sequencing (after GDD lock)
+1. **Traps** — self-contained data layer + passive detect / disarm / trigger; strong synergy with the
+   stealth model (ALARM). Build first (fully specced above).
+2. **Multilevel depth gradient (Option A)** — a `depth` field on the map + `MissionPopulator` weighting;
+   cheap, broadly applicable, no pipeline rebuild.
+   *(Locks & Keys — dropped, see §2.)*
 
 ## Open cross-cutting question
 Detection/disarm/pick all imply **player actions in the turn-based combat layer**, which is built
