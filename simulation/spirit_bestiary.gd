@@ -5,9 +5,14 @@ class_name SpiritBestiary
 ## invented values. The zone pools follow the LOCKED Gaki-do Roster (s56.16.6b)
 ## and Encounter Flow (s56.16.6c).
 ##
-## Scope (tranche 1, owner-approved 2026-06-16): Gaki-do roster data only. The
-## other realms' rosters (Chikushudo/Toshigoku/Sakkaku/Meido/Yume-do, s56.16.7+)
-## and the live ASCII-map creature combat (special abilities) are later tranches.
+## Scope (owner-approved 2026-06-16): roster DATA for the realms whose stat blocks
+## are fully LOCKED — Gaki-do (s56.16.6b), Toshigoku (s56.16.8e), Sakkaku
+## (s56.16.9c). DEFERRED: Chikushudo (s56.16.7b) — its territorial defenders are
+## natural-animal bases (s54.1) with only the bear's +2-Earth overlay documented,
+## so a faithful transcription needs the natural-creature stats + the overlay
+## rule; and Meido / Yume-do — s56.16 gives them NO roster or encounter section
+## (only the 56.16.5c restoration approach), so there is nothing to transcribe.
+## Live ASCII-map creature combat (special abilities) is a later tranche.
 
 ## Builds and returns the Gaki-do creature catalogue keyed by id.
 ## Fresh instances each call (Resources are mutable — callers may stamp variants
@@ -95,6 +100,117 @@ static func gaki_do_pool(terrain_type: int, famine: bool, settlement: bool) -> D
 	}
 
 
+# ── Toshigoku (s56.16.8e roster, s54.10 Spirits of Toshigoku) ─────────────────
+
+## Toshigoku (Realm of Slaughter) creature catalogue, keyed by id. All stats from
+## s54.10 (full explicit blocks). Fresh instances each call.
+static func toshigoku_catalog() -> Dictionary:
+	var R: int = Enums.SpiritRealm.TOSHIGOKU
+	var c: Dictionary = {}
+
+	c["musha_recruit"] = _make("musha_recruit", "Musha Recruit", SpiritCreatureData.Tier.SWARM,
+		2, 2, 2, 2, {"reflexes": 3, "agility": 3},
+		4, 3, "Ghostly Weapon", 5, 3, 4, 2, 20, 3, [8, 16, 24], 32, 0,
+		["spirit", "cannon_fodder", "retains_identity"], R)
+
+	c["ashigaru_musha_spear"] = _make("ashigaru_musha_spear", "Ashigaru Musha (Spear)",
+		SpiritCreatureData.Tier.SWARM,
+		2, 2, 2, 2, {"agility": 3, "strength": 3},
+		3, 2, "Ghostly Yari", 4, 2, 4, 2, 15, 2, [8, 16, 24], 32, 0,
+		["spirit", "cannon_fodder", "mob_frenzy", "formation"], R)
+
+	c["bow_ashigaru_musha"] = _make("bow_ashigaru_musha", "Bow Ashigaru Musha",
+		SpiritCreatureData.Tier.SWARM,
+		2, 2, 2, 2, {"perception": 3},
+		3, 2, "Ghostly Yumi", 4, 2, 3, 2, 10, 0, [8, 16, 24], 32, 0,
+		["spirit", "ranged", "high_ground", "range_12"], R)
+
+	c["musha_soldier"] = _make("musha_soldier", "Musha Soldier", SpiritCreatureData.Tier.MID,
+		2, 3, 3, 3, {"reflexes": 3, "agility": 3, "strength": 4},
+		5, 3, "Ghostly Weapon", 6, 3, 5, 3, 25, 5, [12, 24, 36], 48, 0,
+		["spirit", "standard", "simple_action"], R)
+
+	c["musha_commander"] = _make("musha_commander", "Musha Commander", SpiritCreatureData.Tier.HEAVY,
+		3, 4, 4, 3, {"reflexes": 4, "agility": 4, "strength": 5, "willpower": 5},
+		6, 4, "Ghostly Weapon", 8, 4, 6, 3, 30, 8, [16, 32, 48], 64, 0,
+		["spirit", "elite", "rally", "tactical", "cannot_be_flanked", "simple_action"], R)
+
+	c["ancient_general_toshigoku"] = _make("ancient_general_toshigoku", "Ancient General",
+		SpiritCreatureData.Tier.BOSS,
+		4, 5, 5, 4, {"reflexes": 6, "agility": 5, "strength": 7, "willpower": 7,
+			"awareness": 5, "perception": 5},
+		8, 6, "Ancestral Weapon", 10, 5, 8, 4, 35, 12,
+		[25, 50, 75, 100, 125, 150, 175], 200, 0,
+		["spirit", "boss", "partial_invuln", "adapts", "reforms_once", "duel_offer", "simple_action"], R)
+
+	c["phantom_battle"] = _make("phantom_battle", "Phantom Battle", SpiritCreatureData.Tier.TERRAIN,
+		0, 0, 0, 0, {},
+		0, 0, "", 0, 0, 2, 2, 0, 0, [], 0, 0,
+		["environmental_hazard", "not_creature", "spiritual_damage", "shifts", "cannot_be_fought"], R)
+
+	return c
+
+
+## Toshigoku zone → creature-id pool (s56.16.8e/8f). No terrain/famine gating;
+## the Phantom Battle hazard pervades the overlap.
+static func toshigoku_pool() -> Dictionary:
+	return {
+		"outer":   ["musha_recruit"],
+		"middle":  ["musha_soldier", "ashigaru_musha_spear", "bow_ashigaru_musha"],
+		"heart":   ["musha_soldier", "musha_commander"],
+		"boss":    ["ancient_general_toshigoku"],
+		"terrain": ["phantom_battle"],
+		"post":    [],
+	}
+
+
+# ── Sakkaku (s56.16.9c roster, s54.10 Spirits of Sakkaku; Kappa s54.2) ─────────
+
+## Sakkaku (Realm of Mischief) creature catalogue, keyed by id. Real-threat
+## creatures + the Mujina illusion-engine. All stats from s54.10 (Kappa from s54.2).
+static func sakkaku_catalog() -> Dictionary:
+	var R: int = Enums.SpiritRealm.SAKKAKU
+	var c: Dictionary = {}
+
+	c["kappa"] = _make("kappa", "Kappa", SpiritCreatureData.Tier.HEAVY,
+		3, 2, 2, 3, {"intelligence": 3},
+		4, 3, "Claws", 4, 2, 3, 2, 20, 15, [12, 24], 36, 0,
+		["spirit", "real_threat", "aquatic", "ambush", "grapple", "water_of_life", "trickery"], R)
+
+	c["bakeneko"] = _make("bakeneko", "Bakeneko", SpiritCreatureData.Tier.MID,
+		2, 2, 2, 2, {},
+		3, 2, "Claws", 3, 2, 2, 2, 10, 5, [10, 20], 30, 0,
+		["spirit", "real_threat", "shapeshifter", "deceiver", "vindictive"], R)
+
+	c["konak_jiji"] = _make("konak_jiji", "Konak Jiji", SpiritCreatureData.Tier.MID,
+		1, 2, 3, 2, {"awareness": 4},
+		3, 2, "Claws", 5, 3, 2, 1, 10, 3, [10, 20], 30, 0,
+		["spirit", "real_threat", "lethal_trap", "deceptive_weight", "paralysis_venom", "lure"], R)
+
+	c["mujina"] = _make("mujina", "Mujina", SpiritCreatureData.Tier.TERRAIN,
+		3, 3, 3, 3, {},
+		6, 3, "", 0, 0, 1, 1, 15, 0, [], 50, 0,
+		["spirit", "illusion_engine", "ghostly_form", "immortal", "invisibility",
+			"magic_resist", "spellcaster", "swift"], R)
+
+	c["pekkle"] = _make("pekkle", "Pekkle", SpiritCreatureData.Tier.HEAVY,
+		5, 4, 2, 1, {"awareness": 7, "willpower": 8},
+		5, 5, "Claws", 4, 2, 1, 1, 15, 3, [15, 30, 45], 60, 0,
+		["spirit", "time_thief", "partial_invuln_half_damage", "no_explode", "lure_child"], R)
+
+	return c
+
+
+## Sakkaku roster split (s56.16.9c): real threats vs the Mujina-created deceptions.
+## The GDD organises Sakkaku by threat-reality, not by zone tier, so this pool
+## follows that structure rather than inventing outer/middle/heart placement.
+static func sakkaku_pool() -> Dictionary:
+	return {
+		"real_threats": ["kappa", "bakeneko", "konak_jiji", "pekkle"],
+		"deceptions":   ["mujina"],
+	}
+
+
 # -- internal -----------------------------------------------------------------
 
 static func _make(
@@ -103,11 +219,11 @@ static func _make(
 		init_r: int, init_k: int,
 		atk_name: String, atk_r: int, atk_k: int, dmg_r: int, dmg_k: int,
 		atn: int, reduction: int, thresholds: Array, dead: int, fear: int,
-		tags: Array) -> SpiritCreatureData:
+		tags: Array, realm: int = Enums.SpiritRealm.GAKI_DO) -> SpiritCreatureData:
 	var s := SpiritCreatureData.new()
 	s.id = id
 	s.display_name = name
-	s.realm = Enums.SpiritRealm.GAKI_DO
+	s.realm = realm
 	s.tier = tier
 	s.air = air
 	s.earth = earth

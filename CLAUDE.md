@@ -4135,7 +4135,23 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
     SkillResolver.resolve_skill_check signatures all confirmed). DEFERRED: live creature combat
     + special abilities (incorporeal/swarm/wail/hunger-pull/fire-trail), the Gaki-do exposure
     mechanic (Willpower erosion / Willpower-0 transformation / Buruburu attachment / Jigoku-
-    corrupted Shozai-gaki), and the Chikushudo/Toshigoku/Sakkaku/Meido/Yume-do rosters + rituals.
+    corrupted Shozai-gaki).
+- **s56.16.8e / 9c Toshigoku + Sakkaku rosters (tranche 2, owner-approved 2026-06-16).**
+  Extended `SpiritBestiary` with two more fully-LOCKED rosters. `_make` gained a trailing
+  `realm` param (defaults Gaki-do; existing calls untouched). **Toshigoku** (`toshigoku_catalog()`
+  + `toshigoku_pool()`): all 7 creatures from s54.10 — Musha Recruit, Ashigaru Musha (Spear),
+  Bow Ashigaru Musha, Musha Soldier, Musha Commander, Ancient General (boss), Phantom Battle
+  (environmental hazard, not_creature). **Sakkaku** (`sakkaku_catalog()` + `sakkaku_pool()`):
+  Kappa (s54.2), Bakeneko, Konak Jiji, Mujina (illusion engine), Pekkle (s54.10) — pool follows
+  the GDD's real-threats/deceptions split (s56.16.9c) rather than inventing zone tiers.
+  All stat lines are exact transcriptions — no invented values or headcounts. **Still DEFERRED:**
+  **Chikushudo** (s56.16.7b) — its territorial defenders (spirit wolves/boars/bears/stags/
+  eagles/snakes) are natural-animal bases (s54.1) and the GDD documents only the bear's +2-Earth
+  overlay, so a faithful transcription needs the s54.1 natural stats + the overlay rule (the 3
+  explicit creatures — Kitsune, Kitsune-tsuki, Hengeyokai Spirit Lord — ARE fully statted and
+  could be added when that's resolved). **Meido and Yume-do** have NO roster/encounter section in
+  s56.16 (only the 56.16.5c restoration approach) — nothing to transcribe; blocked on GDD content.
+  Plus the live creature combat + exposure mechanic from tranche 1.
 
 ### Pending Redesign
 (None currently pending.)
