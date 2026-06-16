@@ -4201,6 +4201,24 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   DEFERRED: wiring into the live ASCII turn loop (combat tranche), and the slow "left-behind →
   permanent transformation" timers (Gaki-do 6f one-hour soul-return, Chikushudo 7a multi-day
   animal transformation) which need a cross-session timer the encounter layer will own.
+- **s56.16 MissionBuilder spiritual wiring (tranche 5, owner-approved 2026-06-16).**
+  `MissionBuilder._assemble_spiritual()` now enriches the spiritual mission package with the data
+  the (deferred) ritual/exposure combat loop consumes — the connective layer between the headless
+  data/math systems and the future turn loop. Added to `environment["spiritual"]` (+ a top-level
+  `roster_pool`): the **roster pool** via `_spiritual_roster_pool()` (realm overlaps → the realm's
+  zone→creature-id pool with gates: Gaki-do uses `province.starvation_stage>0 || crisis_type=="famine"`
+  for the Gashadokuro famine gate, `province.terrain_type` for O-Toyo forest, settlement=false since
+  the overlap reuses the terrain template not a settlement map; elemental imbalances + Meido/Yume-do
+  → `{}`); the **ritual metadata** via `_spiritual_ritual_meta()` (duration by severity, RITUAL_TN 15,
+  and the approach — realm trait for overlaps, counter Ring for imbalances); the **exposure realm**
+  (the combat layer calls `SpiritualExposureSystem.new_state(realm, pc.willpower)`); and the **heart
+  tile** via `_find_heart_tile()` (deepest reachable depth-grid tile, s56.16.5a). Purely additive —
+  existing keys unchanged, `placements`/`roster` still empty (live creature combat remains the next
+  tranche). Validated by static review + parse-trace (SpiritBestiary pool fns, SpiritualRitualSystem
+  DURATION_BY_SEVERITY/RITUAL_TN/counter_ring/REALM_TRAIT, ProvinceData.starvation_stage/crisis_type,
+  AsciiMapData depth API all confirmed). With this, the headless s56.16 pipeline is end-to-end: a
+  spiritual seed → map + overlay + roster pool + ritual/exposure/heart metadata, ready for the
+  combat turn loop to drive.
 
 ### Pending Redesign
 (None currently pending.)

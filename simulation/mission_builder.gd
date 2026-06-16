@@ -160,9 +160,11 @@ static func assemble(
 ## Spiritual overlap (s56.16) mission package. Reuses the province terrain template
 ## (the realm overlaps the mortal map — MissionTemplateResolver selects by terrain,
 ## not seed_type), tags the depth gradient, and applies the SpiritualPalette overlay.
-## Population is stubbed: placements/roster empty (spirit rosters + the ritual
-## encounter loop are blocked on the larger s56.16 ASCII design). The map's default
-## KILL_LEADER objective slot is left unfilled — inert until the encounter loop exists.
+## Enriches the package with the data the (deferred) ritual/exposure combat loop
+## consumes: the spirit roster pool (s56.16.6b/8e/9c/7b), the Restoration Ritual
+## metadata (s56.16.5b/5c/5d), the exposure realm (s56.16.6a/7a/8a/9a), and the
+## heart tile. Population is still stubbed: placements/roster empty (the live
+## creature combat is a later tranche), so the map's KILL_LEADER slot stays unfilled.
 static func _assemble_spiritual(
 		province: ProvinceData,
 		province_history: Array,
@@ -172,6 +174,7 @@ static func _assemble_spiritual(
 	var event_type: int = int(options.get("event_type", Enums.SpiritualEventType.REALM_OVERLAP))
 	var realm: int      = int(options.get("realm", Enums.SpiritRealm.GAKI_DO))
 	var element: int    = int(options.get("element", Enums.Ring.NONE))
+	var severity: int   = int(options.get("severity", Enums.SpiritualSeverity.MILD))
 
 	var map: AsciiMapData = MissionTemplateResolver.select_and_generate(
 		province, province_history, seed_dict, [], seed_str)
@@ -181,11 +184,19 @@ static func _assemble_spiritual(
 	map.compute_depth_grid(entry.x, entry.y)
 	SpiritualPalette.apply_overlap(map, event_type, realm, element)
 
+	var roster_pool: Dictionary = _spiritual_roster_pool(event_type, realm, province)
+
 	var environment: Dictionary = _build_environment(province, seed_dict)
 	environment["spiritual"] = {
-		"event_type": event_type,
-		"realm":      realm,
-		"element":    element,
+		"event_type":     event_type,
+		"realm":          realm,
+		"element":        element,
+		"severity":       severity,
+		"roster_pool":    roster_pool,        # zone → creature-id arrays ({} for elemental/Meido/Yume-do)
+		"roster_realm":   realm if not roster_pool.is_empty() else -1,
+		"exposure_realm": realm,              # SpiritExposureSystem.new_state(realm, pc.willpower)
+		"ritual":         _spiritual_ritual_meta(event_type, realm, element, severity),
+		"heart_pos":      _find_heart_tile(map),
 	}
 	return {
 		"map":             map,
@@ -193,9 +204,62 @@ static func _assemble_spiritual(
 		"objective_slots": map.objective_slots,
 		"seed_dict":       seed_dict,
 		"roster":          {},
+		"roster_pool":     roster_pool,
 		"entry_pos":       entry,
 		"environment":     environment,
 	}
+
+
+## Spirit roster pool for a spiritual overlap. Realm overlaps return the realm's
+## zone→creature-id pool (s56.16.6b/8e/9c/7b) with availability gates; elemental
+## imbalances and realms with no GDD roster (Meido/Yume-do) return {}.
+static func _spiritual_roster_pool(event_type: int, realm: int, province: ProvinceData) -> Dictionary:
+	if event_type != Enums.SpiritualEventType.REALM_OVERLAP:
+		return {}  # elemental imbalances have no creature roster (counter-ritual encounter)
+	match realm:
+		Enums.SpiritRealm.GAKI_DO:
+			var famine: bool = province.starvation_stage > 0 or province.crisis_type == "famine"
+			# settlement=false: the overlap reuses the terrain template, not a settlement map,
+			# so the settlement-only Mokumokuren does not appear here.
+			return SpiritBestiary.gaki_do_pool(province.terrain_type, famine, false)
+		Enums.SpiritRealm.TOSHIGOKU:
+			return SpiritBestiary.toshigoku_pool()
+		Enums.SpiritRealm.SAKKAKU:
+			return SpiritBestiary.sakkaku_pool()
+		Enums.SpiritRealm.CHIKUSHUDO:
+			return SpiritBestiary.chikushudo_pool()
+		_:
+			return {}  # Meido / Yume-do: no roster in s56.16
+
+
+## Restoration Ritual metadata (s56.16.5b/5c/5d) for the combat loop: duration,
+## per-round TN, and the approach (realm trait, or elemental counter Ring).
+static func _spiritual_ritual_meta(event_type: int, realm: int, element: int, severity: int) -> Dictionary:
+	var meta: Dictionary = {
+		"duration_rounds": SpiritualRitualSystem.DURATION_BY_SEVERITY.get(severity, 10),
+		"ritual_tn":       SpiritualRitualSystem.RITUAL_TN,
+	}
+	if event_type == Enums.SpiritualEventType.ELEMENTAL_IMBALANCE:
+		meta["counter_ring"] = SpiritualRitualSystem.counter_ring(element)  # NONE = Void: any Ring
+	else:
+		meta["approach_trait"] = SpiritualRitualSystem.REALM_TRAIT.get(realm, Enums.Trait.AWARENESS)
+	return meta
+
+
+## The heart tile: the deepest reachable tile on the depth grid (s56.16.5a — the
+## overlap intensity peaks at the heart). Falls back to map centre if ungraded.
+static func _find_heart_tile(map: AsciiMapData) -> Vector2i:
+	if not map.has_depth_grid():
+		return Vector2i(map.width / 2, map.height / 2)
+	var best_d: int = -1
+	var best: Vector2i = Vector2i(map.width / 2, map.height / 2)
+	for y in range(map.height):
+		for x in range(map.width):
+			var d: int = map.depth_at(x, y)
+			if d > best_d:
+				best_d = d
+				best = Vector2i(x, y)
+	return best
 
 
 ## Builds the environment metadata dict (biome + resolved weather + FoV modifier).
