@@ -4506,6 +4506,42 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   untouched. For a non-swarm spirit it equals the creature's Reduction stat (drops the currently-zero
   kata/pierce terms — documented as "a spirit's Reduction is its creature stat, not armor mechanics").
   Static-validated only (W_MUNDANE const + reduction_for_kind signature confirmed; no Godot runtime here).
+- **s56.16 creature abilities — final wiring tranche (5 abilities, owner-directed "do all", 2026-06-16,
+  static-only).** Wired every remaining creature ability with a clean combat-layer path; the rest are
+  genuinely blocked on named subsystems or are pure flavour (see below). Five abilities:
+  (1) **Gashadokuro Regeneration** (s54.10): +10 Wounds at the start of each round, suppressed 3 rounds
+  when a Wound threshold is crossed. Per-round heal added to `advance_round` beside Ride-the-Water-Dragon;
+  `_apply_hit` sets `Participant.spirit_regen_suppressed_until = round+3` when a hit's `levels_crossed > 0`.
+  (`SpiritAbilitySystem.regeneration_amount`/`REGEN_SUPPRESS_ROUNDS`.) (2) **Ancient General Undying /
+  reforms_once** (s54.10): a slain General reforms ONCE, 200 rounds later, at the heart at full Wounds;
+  a second death stays down. Handled in `SpiritualEncounter._process_undying_reform` (the encounter owns
+  the heart tile): schedules via `MapCombatState.reform_pending`, respawns a fresh puppet through
+  `add_enemy`, dedups per creature id via `EncounterState._reformed_ids`. (3) **Mokumokuren Gaze
+  unhealable spiritual damage** (s54.10): new `L5RCharacterData.spiritual_wounds` (@export, default 0,
+  always ≤ wounds_taken); `_apply_hit` tags the gaze portion; `MedicineSystem.treat_wound` caps healing
+  to the physical portion (`wounds_taken − spiritual_wounds`); `WoundSystem.heal_wounds` (magic/natural)
+  clamps the spiritual portion down with total. (4) **Toshigoku group auras** (s54.10): Mob Aggression
+  (3+ mob_frenzy within 5 tiles → +1k0 Attack), Rally (Musha Soldier within 10 of a Commander → +1k0
+  Attack), Supreme Commander (any Musha within 20 of the Ancient General → +1k0 Attack AND +1k0 Damage).
+  (5) **Tactical Mastery / adapts** (s54.10): the General gains +1k0 vs a target after 3 rounds engaged,
+  +2k0 after 6 (tracked in `MapCombatState.tactical_engaged`). Auras + Tactical computed in the orchestrator
+  (`_set_spirit_attack_auras`, positional) and applied as +N rolled attack/damage dice via two new
+  additive, spirit-gated `Participant` fields (`spirit_attack_rolled_bonus`/`spirit_damage_rolled_bonus`)
+  read in `resolve_attack`/`resolve_damage` (inert 0 for everyone else; reset after each melee so they
+  never leak to an extra/off-hand/ranged strike). Infra added: `MapCombatState.combatants` (id →
+  L5RCharacterData, populated by setup_combat/add_enemy/add_companion) for ally lookup at attack time.
+  All values GDD-LOCKED (10/3 regen, 200 reform, 5/10/20 radii, 3/6 tactical, +1k0/+2k0). **STILL
+  BLOCKED (each needs a subsystem the core lacks; not invented):** Duelist's Challenge (duel_offer —
+  needs a PC turn-based accept/decline UI + ceasefire handshake); possession (Kitsune-tsuki in-combat
+  control transfer; Shozai-gaki/Buruburu are slow world-sim afflictions over days/weeks — need a
+  control/possession layer + cross-encounter affliction timer); shapeshifter/disguise/illusion/
+  invisibility (Bakeneko, Kitsune, Hengeyokai, Mujina — need an illusion/disguise/perception layer);
+  Konak Jiji deceptive_weight + lure (need a pickup/lure interaction model). **FLAVOUR-ONLY (no
+  mechanical ability in the stat block, no code):** Pekkle lure_child/time_thief (stat block lists only
+  Partial Invulnerability), spirit-animal field_commander/concealment, deceiver/vindictive/trickster.
+  Ranged spirit auras not hooked (only melee — Bow Ashigaru use Volley, a separate unwired ability).
+  Static-validated only (symbol resolution + GDD spec confirmed; no Godot runtime — driver-verify later,
+  consistent with the rest of the s56.16 combat layer).
 
 ### Pending Redesign
 (None currently pending.)

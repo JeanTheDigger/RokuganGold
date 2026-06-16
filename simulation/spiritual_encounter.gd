@@ -52,6 +52,7 @@ class EncounterState:
 	var _prev_wounds: Dictionary = {}                   # shugenja_id → wounds_taken last round
 	var engulfed: Dictionary = {}                       # pc_id → captor creature_id (engulf/swarm grab)
 	var phantom_battles: Array = []                     # Toshigoku area hazards (s54.10): {center,radius,last_shift,drift,rolled,kept}
+	var _reformed_ids: Array = []                        # s54.10 Undying General: creature ids already scheduled to reform once
 	var resolved: bool = false
 
 
@@ -169,6 +170,10 @@ static func process_round(es: EncounterState, dice: DiceEngine) -> Dictionary:
 	while es._waves_done < waves.size() and frac >= float(waves[es._waves_done]["threshold"]):
 		spawn_threat(es, String(waves[es._waves_done]["zone"]), dice)
 		es._waves_done += 1
+
+	# 2b. Undying General (s54.10 reforms_once): a slain Ancient General reforms ONCE,
+	#     200 rounds later, at the heart at full Wounds.
+	_process_undying_reform(es, dice)
 
 	# 3. Exposure — the passive periodic timer (creature-driven pressure fires from
 	#    the creature turn loop). extra_tn = co-located creature stacking (swarm/rattle).
@@ -313,6 +318,40 @@ static func spawn_threat(es: EncounterState, zone: String, dice: DiceEngine) -> 
 	es.next_instance_id -= 1
 	es.chars_by_id[puppet.character_id] = puppet
 	return AsciiMapCombatOrchestrator.add_enemy(es.mcs, puppet, tile.x, tile.y, dice)
+
+
+## s54.10 Undying General: a slain creature carrying reforms_once respawns ONCE at
+## the heart, 200 rounds after death, at full Wounds. A second death stays down.
+static func _process_undying_reform(es: EncounterState, dice: DiceEngine) -> void:
+	# Fire any reform that has come due.
+	for key: String in es.mcs.reform_pending.keys():
+		if es.round_number < int(es.mcs.reform_pending[key]):
+			continue
+		es.mcs.reform_pending.erase(key)
+		var puppet: L5RCharacterData = SpiritCombatant.spawn(es.realm, key, es.next_instance_id)
+		if puppet == null:
+			continue
+		var tile: Vector2i = _free_tile_near(es.mcs.map, es.heart_pos, es.mcs.positions)
+		if tile.x < 0:
+			continue
+		es.next_instance_id -= 1
+		es.chars_by_id[puppet.character_id] = puppet
+		AsciiMapCombatOrchestrator.add_enemy(es.mcs, puppet, tile.x, tile.y, dice)
+
+	# Schedule a reform for a freshly-slain reforms_once creature (once per creature id).
+	for cid: int in es.mcs.combatants.keys():
+		var c: L5RCharacterData = es.mcs.combatants[cid]
+		if c == null or c.spirit_creature == null:
+			continue
+		if not SpiritAbilitySystem.reforms_once(c.spirit_creature):
+			continue
+		if not CharacterStats.is_dead(c):
+			continue
+		var rid: String = c.spirit_creature.id
+		if rid in es._reformed_ids or es.mcs.reform_pending.has(rid):
+			continue  # already reformed/scheduled once — a second death stays down
+		es.mcs.reform_pending[rid] = es.round_number + SpiritAbilitySystem.REFORM_DELAY_ROUNDS
+		es._reformed_ids.append(rid)
 
 
 # ── internal ──────────────────────────────────────────────────────────────────

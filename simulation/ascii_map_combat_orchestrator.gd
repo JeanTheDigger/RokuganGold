@@ -104,6 +104,8 @@ class MapCombatState:
 	var combat: IndividualCombat.CombatState
 	## The ASCII tile map for this encounter.
 	var map: AsciiMapData
+	## Combatant objects by id (id → L5RCharacterData), for ally lookups at attack time.
+	var combatants: Dictionary = {}
 	## Character tile positions. Key: int (character_id), Value: Vector2i.
 	var positions: Dictionary = {}
 	## Character factions. Key: int (character_id), Value: String (FACTION_*).
@@ -131,6 +133,11 @@ class MapCombatState:
 	var sense_known: Dictionary = {}
 	## To the Last Breath uses this skirmish: target_id → count (max 2 per target).
 	var last_breath_uses: Dictionary = {}
+	## s54.10 Ancient General Tactical Mastery: "generalid:targetid" → {count, last_round}
+	## (distinct rounds the General has attacked that character; drives the +1k0/+2k0).
+	var tactical_engaged: Dictionary = {}
+	## s54.10 Ancient General Undying: spawn-key → reform-due round (reforms once).
+	var reform_pending: Dictionary = {}
 
 
 # =============================================================================
@@ -158,6 +165,7 @@ static func setup_combat(
 		if CharacterStats.is_dead(c):
 			continue
 		chars_for_combat.append(c)
+		mcs.combatants[c.character_id] = c
 		mcs.positions[c.character_id] = Vector2i(entry.get("x", 0), entry.get("y", 0))
 		mcs.factions[c.character_id] = entry.get("faction", FACTION_NEUTRAL)
 		participant_dicts.append({
@@ -777,6 +785,11 @@ static func execute_melee_attack(
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, true, is_being_guarded, weapon_name)
 	armor_tn += _cover_bonus(state, tpos, apos)
 
+	# s54.10 Toshigoku auras + Ancient General Tactical Mastery: set the spirit
+	# attacker's per-attack rolled-die bonuses (always reset to the freshly-computed
+	# value so nothing lingers; 0 for non-spirits).
+	_set_spirit_attack_auras(state, attacker, a_p, target_id)
+
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
 		false, spend_void, false, maneuver,
@@ -873,6 +886,11 @@ static func execute_melee_attack(
 	# my last Turn) so the defender can free-grapple them on their Turn.
 	if "Bishamon's Grasp" in t_p.active_kiho and attacker_id not in t_p.attacked_by_ids:
 		t_p.attacked_by_ids.append(attacker_id)
+
+	# Clear the spirit aura/tactical bonuses so they never leak to a later attack
+	# (e.g. an extra-attack or off-hand strike this turn that does not recompute them).
+	a_p.spirit_attack_rolled_bonus = 0
+	a_p.spirit_damage_rolled_bonus = 0
 
 	if dance_simple:
 		ts.consume_simple()
@@ -2770,6 +2788,15 @@ static func advance_round(
 			var _rwd_c: L5RCharacterData = chars_by_id.get(_tp.character_id, null)
 			if _rwd_c != null and not CharacterStats.is_dead(_rwd_c):
 				WoundSystem.heal_wounds(_rwd_c, CharacterStats.get_ring_value(_rwd_c, Enums.Ring.WATER))
+		# Gashadokuro Regeneration (s54.10): recover 10 Wounds at the start of each round,
+		# UNLESS a Wound threshold was crossed within the last 3 rounds (a section
+		# collapsed — _apply_hit set spirit_regen_suppressed_until).
+		var _rg_c: L5RCharacterData = state.combatants.get(_tp.character_id, null)
+		if _rg_c != null and _rg_c.spirit_creature != null and not CharacterStats.is_dead(_rg_c) \
+				and _tp.spirit_regen_suppressed_until < state.combat.round_number:
+			var _rg_amt: int = SpiritAbilitySystem.regeneration_amount(_rg_c.spirit_creature)
+			if _rg_amt > 0:
+				WoundSystem.heal_wounds(_rg_c, _rg_amt)
 		# Fire (s56.6.6 / s54.10 Everything Burns): a participant standing on a burning
 		# tile and/or set on fire takes 1k1 each round; armour does not reduce.
 		# flame_immune spirit creatures (Kagaki) take no fire damage.
@@ -3335,6 +3362,7 @@ static func add_companion(
 	var cid: int = character.character_id
 	if state.combat.participants.has(cid):
 		return false
+	state.combatants[cid] = character
 	state.positions[cid] = Vector2i(x, y)
 	state.factions[cid] = FACTION_PLAYER
 	var p := IndividualCombat.Participant.new()
@@ -3372,6 +3400,7 @@ static func add_enemy(
 	var cid: int = character.character_id
 	if state.combat.participants.has(cid):
 		return false
+	state.combatants[cid] = character
 	state.positions[cid] = Vector2i(x, y)
 	state.factions[cid] = FACTION_ENEMY
 	var p := IndividualCombat.Participant.new()
@@ -3597,6 +3626,81 @@ static func _away_from_enemies_tile(state: MapCombatState, cid: int) -> Vector2i
 # -- Internal Helpers ---------------------------------------------------------
 # =============================================================================
 
+## s54.10 Toshigoku group auras + Ancient General Tactical Mastery. Computes the
+## spirit attacker's per-attack rolled-die bonuses (attack and damage) from its
+## co-located allies and rounds engaged, and stamps them on a_p. Always sets a
+## fresh value (0 for non-spirits) so nothing lingers across attacks.
+static func _set_spirit_attack_auras(
+	state: MapCombatState,
+	attacker: L5RCharacterData,
+	a_p: IndividualCombat.Participant,
+	target_id: int,
+) -> void:
+	a_p.spirit_attack_rolled_bonus = 0
+	a_p.spirit_damage_rolled_bonus = 0
+	var cr: SpiritCreatureData = attacker.spirit_creature
+	if cr == null:
+		return
+	var apos: Vector2i = state.positions.get(attacker.character_id, Vector2i(-9999, -9999))
+	var faction: String = state.factions.get(attacker.character_id, FACTION_NEUTRAL)
+	var atk_bonus: int = 0
+	var dmg_bonus: int = 0
+
+	# Count co-faction living spirit allies within the various aura radii.
+	var mob_count: int = 1 if SpiritAbilitySystem.has_mob_aggression(cr) else 0
+	var rally_in_range: bool = false
+	var supreme_in_range: bool = false
+	for cid: int in state.combat.participants:
+		if cid == attacker.character_id:
+			continue
+		if state.factions.get(cid, FACTION_NEUTRAL) != faction:
+			continue
+		var ally: L5RCharacterData = _ally_lookup(state, cid)
+		if ally == null or ally.spirit_creature == null or CharacterStats.is_dead(ally):
+			continue
+		var d: int = _chebyshev(apos, state.positions.get(cid, Vector2i(-9999, -9999)))
+		if mob_count > 0 and d <= SpiritAbilitySystem.MOB_RADIUS \
+				and SpiritAbilitySystem.has_mob_aggression(ally.spirit_creature):
+			mob_count += 1
+		if d <= SpiritAbilitySystem.RALLY_RADIUS and SpiritAbilitySystem.is_rally_source(ally.spirit_creature):
+			rally_in_range = true
+		if d <= SpiritAbilitySystem.SUPREME_COMMANDER_RADIUS \
+				and SpiritAbilitySystem.is_supreme_commander(ally.spirit_creature):
+			supreme_in_range = true
+
+	# Mob Aggression: 3+ mob_frenzy creatures within 5 tiles → +1k0 Attack each.
+	if SpiritAbilitySystem.has_mob_aggression(cr) and mob_count >= SpiritAbilitySystem.MOB_MIN_COUNT:
+		atk_bonus += 1
+	# Rally: a Musha Soldier within 10 tiles of a rallying Commander → +1k0 Attack.
+	if rally_in_range and cr.id == "musha_soldier":
+		atk_bonus += 1
+	# Supreme Commander: any Musha within 20 tiles of the Ancient General → +1k0 Attack
+	# AND +1k0 Damage (the General's own attacks are not self-buffed).
+	if supreme_in_range and SpiritAbilitySystem.is_toshigoku_musha(cr):
+		atk_bonus += 1
+		dmg_bonus += 1
+	# Tactical Mastery (the Ancient General itself, adapts): +1k0 after 3 rounds vs a
+	# target, +2k0 after 6. Track distinct rounds engaged against this target.
+	if cr.has_tag("adapts") and target_id >= 0:
+		var key: String = "%d:%d" % [attacker.character_id, target_id]
+		var rec: Dictionary = state.tactical_engaged.get(key, {"count": 0, "last_round": -1})
+		if int(rec["last_round"]) != state.combat.round_number:
+			rec["count"] = int(rec["count"]) + 1
+			rec["last_round"] = state.combat.round_number
+			state.tactical_engaged[key] = rec
+		atk_bonus += SpiritAbilitySystem.tactical_mastery_bonus(cr, int(rec["count"]))
+
+	a_p.spirit_attack_rolled_bonus = atk_bonus
+	a_p.spirit_damage_rolled_bonus = dmg_bonus
+
+
+## Look up a combatant L5RCharacterData by id from the state's combatants map
+## (populated by setup_combat / add_enemy / add_companion). Used to resolve a
+## spirit attacker's co-located allies at attack time.
+static func _ally_lookup(state: MapCombatState, cid: int) -> L5RCharacterData:
+	return state.combatants.get(cid, null)
+
+
 ## Apply a successful hit: resolve damage and apply wounds.
 static func _apply_hit(
 	state: MapCombatState,
@@ -3668,6 +3772,22 @@ static func _apply_hit(
 		var filt: Dictionary = SpiritAbilitySystem.incoming_damage(target.spirit_creature, w_kind)
 		raw = 0 if filt["heals"] else int(round(float(raw) * float(filt["multiplier"])))
 	var wd_result: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
+
+	# Mokumokuren Gaze (s54.10): the Wounds it inflicts are spiritual — untreatable by
+	# Medicine (magic/natural healing cure them normally). Tag the dealt portion.
+	if attacker.spirit_creature != null and target.spirit_creature == null \
+			and SpiritAbilitySystem.deals_unhealable_spiritual_damage(attacker.spirit_creature):
+		var sp_dealt: int = wd_result.get("final_damage", 0)
+		if sp_dealt > 0:
+			target.spiritual_wounds = mini(target.wounds_taken, target.spiritual_wounds + sp_dealt)
+
+	# Gashadokuro Regeneration (s54.10): pushing the creature past a Wound threshold
+	# collapses a section, stopping its per-round regen for 3 rounds. levels_crossed > 0
+	# means a threshold was crossed by this hit.
+	if target.spirit_creature != null and t_p != null \
+			and SpiritAbilitySystem.has_regeneration(target.spirit_creature) \
+			and int(wd_result.get("levels_crossed", 0)) > 0:
+		t_p.spirit_regen_suppressed_until = state.combat.round_number + SpiritAbilitySystem.REGEN_SUPPRESS_ROUNDS
 
 	# Spirit attacker on-hit self-heal (O-Toyo Destroyer of Life, s54.10).
 	if attacker.spirit_creature != null and raw > 0:

@@ -34,6 +34,12 @@ static func heal_wounds(character: L5RCharacterData, amount: int) -> Dictionary:
 	character.wounds_taken = maxi(0, character.wounds_taken - amount)
 	var actual_healed: int = old_wounds - character.wounds_taken
 
+	# s56.16 spiritual wounds (Mokumokuren Gaze) are cured normally by magic and
+	# natural healing (this generic heal path); clamp the spiritual portion so it can
+	# never exceed total wounds. Inert when spiritual_wounds == 0.
+	if character.spiritual_wounds > 0:
+		character.spiritual_wounds = mini(character.spiritual_wounds, character.wounds_taken)
+
 	return {
 		"healed": actual_healed,
 		"wound_level": CharacterStats.get_wound_level(character),

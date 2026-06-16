@@ -86,6 +86,10 @@ var spell_void_bonus_used: int = 0
 # Total wounds taken. Wound levels derived from Earth ring at query time.
 
 @export var wounds_taken: int = 0
+## s56.16/s54.10 Mokumokuren Gaze: the portion of wounds_taken that is spiritual and
+## cannot be treated with Medicine (magic and natural healing cure them normally).
+## Default 0 = inert for everyone. Always <= wounds_taken (clamped on heal).
+@export var spiritual_wounds: int = 0
 # Senbazuru Healing Free Raises pending consumption (s57.26.17). Cleared after
 # the next Medicine/treat_wound roll fires against this character.
 @export var pending_healing_fr: int = 0

@@ -156,6 +156,9 @@ class Participant:
 	var initiative_modifier: int = 0  # persistent Initiative delta (Song of the World, s38)
 	var facing: Vector2i = Vector2i(0, 0)  # unit heading; (0,0) = unset (s38 arc/cone kiho)
 	var inari_breath_round: int = -1  # round Inari's Wrath breath was held (s38); -1 = not holding
+	var spirit_regen_suppressed_until: int = -1  # s54.10 Gashadokuro: regen off until this round
+	var spirit_attack_rolled_bonus: int = 0  # s54.10 Toshigoku auras/Tactical Mastery: +N rolled attack dice (orchestrator sets per-attack, spirit-only)
+	var spirit_damage_rolled_bonus: int = 0  # s54.10 Supreme Commander: +N rolled damage dice (spirit-only)
 	var void_dragon_ring: int = -1  # Touch the Void Dragon (s38): boosted Ring (Enums.Ring), -1 = inactive
 	var dual_wielding: bool = false            # true when holding an off-hand weapon
 	var off_hand_weapon: String = ""           # name of off-hand weapon ("" = none)
@@ -1039,6 +1042,10 @@ static func resolve_attack(
 	if attacker.spirit_creature != null and attacker.spirit_creature.attack_rolled > 0:
 		rolled = attacker.spirit_creature.attack_rolled
 		kept = attacker.spirit_creature.attack_kept
+		# s54.10 Toshigoku auras (Mob Aggression / Rally / Supreme Commander) and the
+		# Ancient General's Tactical Mastery — +N rolled attack dice the orchestrator
+		# computed from co-located allies / rounds-engaged. Inert (0) for everyone else.
+		rolled += attacker_p.spirit_attack_rolled_bonus
 
 	# Kata attack modifiers (s30a): trait substitution applied before void/stance
 	var kata_atk: Dictionary = _get_kata_attack_modifiers(attacker, attacker_p, weapon_name, maneuver)
@@ -1190,6 +1197,11 @@ static func resolve_damage(
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	var rolled: int = weapon.get("rolled", 2)
 	var kept: int = weapon.get("kept", 1) + bonus_kept
+
+	# s54.10 Supreme Commander aura: +N rolled damage dice the orchestrator set on the
+	# spirit attacker (Musha within 20 tiles of the Ancient General). Inert (0) otherwise.
+	if attacker_p != null:
+		rolled += attacker_p.spirit_damage_rolled_bonus
 
 	# Advantage/disadvantage modifiers (s45): HANDS_OF_STONE adds +1 kept for unarmed damage
 	var dmg_skill: String = weapon.get("skill", "Kenjutsu")

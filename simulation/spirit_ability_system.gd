@@ -31,6 +31,15 @@ const SWARM_PRESENCE_TN: int = 1   # s54.10 Muzai-gaki: +1 Willpower-TN per crea
 const BONE_RATTLE_TN: int = 2      # s56.16.6a Gashadokuro: +2 erosion TN
 const LIFE_DRAIN_HEAL: int = 5     # s54.10 O-Toyo Destroyer of Life: +5 Wounds per hit
 const BLOOD_DRAIN_WOUNDS: int = 12 # s54.2 Shozai-gaki Blood Draining (alt attack)
+const REGEN_WOUNDS_PER_ROUND: int = 10  # s54.10 Gashadokuro: recovers 10 Wounds/round
+const REGEN_SUPPRESS_ROUNDS: int = 3    # ...stopped 3 rounds when a Wound threshold is crossed
+const REFORM_DELAY_ROUNDS: int = 200    # s54.10 Ancient General Undying: reforms 200 rounds later
+const SUPREME_COMMANDER_RADIUS: int = 20  # s54.10 Ancient General: Musha within 20 tiles
+const RALLY_RADIUS: int = 10              # s54.10 Musha Commander: Musha Soldiers within 10
+const MOB_RADIUS: int = 5                 # s54.10 Ashigaru Musha: 3+ within 5 tiles
+const MOB_MIN_COUNT: int = 3             # ...the mob bonus needs 3 or more in range
+const TACTICAL_ROUNDS_T1: int = 3        # s54.10 Tactical Mastery: +1k0 after 3 rounds vs a target
+const TACTICAL_ROUNDS_T2: int = 6        # ...+2k0 after 6 rounds
 
 
 # ── Defensive damage filter (the make-or-break mechanic) ──────────────────────
@@ -132,10 +141,59 @@ static func has_regeneration(creature: SpiritCreatureData) -> bool:
 	return creature.has_tag("regeneration")
 
 
+## Wounds the creature recovers at the start of each round (s54.10 Gashadokuro).
+## 0 for non-regenerators. The combat loop heals this in advance_round unless the
+## creature's regen is suppressed (a Wound threshold was crossed within 3 rounds).
+static func regeneration_amount(creature: SpiritCreatureData) -> int:
+	return REGEN_WOUNDS_PER_ROUND if creature.has_tag("regeneration") else 0
+
+
 ## A spirit reduced to its wound cap is not permanently destroyed — it reforms in
 ## its realm; only closing the overlap stops manifestation (s54.10 universal rule).
 static func reforms_on_death(creature: SpiritCreatureData) -> bool:
 	return creature.has_tag("spirit")
+
+
+## Ancient General Undying (s54.10): reforms ONCE, 200 rounds after death, at the
+## heart of the overlap at full Wounds. True only for the boss carrying reforms_once.
+static func reforms_once(creature: SpiritCreatureData) -> bool:
+	return creature.has_tag("reforms_once")
+
+
+# ── Toshigoku group auras (positional; the orchestrator supplies co-located allies) ─
+# The Toshigoku slaughter spirits buff one another by proximity (s54.10). These are
+# passive, attack-time auras (+1k0 = +1 rolled die). The orchestrator counts the
+# qualifying co-faction creatures within range and calls these classifiers.
+
+## Mob Aggression (Ashigaru Musha Spear): a creature gains +1k0 Attack when 3+
+## mob_frenzy creatures are within 5 tiles of each other.
+static func has_mob_aggression(creature: SpiritCreatureData) -> bool:
+	return creature.has_tag("mob_frenzy")
+
+## Rally (Musha Commander): Musha Soldiers within 10 tiles gain +1k0 Attack.
+static func is_rally_source(creature: SpiritCreatureData) -> bool:
+	return creature.has_tag("rally")
+
+## Supreme Commander (Ancient General): all Musha within 20 tiles gain +1k0 Attack
+## AND +1k0 Damage. The source is the boss carrying the duel_offer/reforms_once kit.
+static func is_supreme_commander(creature: SpiritCreatureData) -> bool:
+	return creature.has_tag("reforms_once")  # the Ancient General; Supreme Commander is its aura
+
+## Tactical Mastery (Ancient General, adapts): attack bonus vs a single character
+## by rounds engaged — +1k0 after 3 rounds, +2k0 after 6. Returns the rolled-die bonus.
+static func tactical_mastery_bonus(creature: SpiritCreatureData, rounds_engaged: int) -> int:
+	if not creature.has_tag("adapts"):
+		return 0
+	if rounds_engaged >= TACTICAL_ROUNDS_T2:
+		return 2
+	if rounds_engaged >= TACTICAL_ROUNDS_T1:
+		return 1
+	return 0
+
+## A Toshigoku slaughter spirit (Musha/Ashigaru/General) — the set that the Supreme
+## Commander / Rally auras buff ("all Musha").
+static func is_toshigoku_musha(creature: SpiritCreatureData) -> bool:
+	return creature.realm == Enums.SpiritRealm.TOSHIGOKU
 
 
 # ── Exposure-feed contributions (consumed by SpiritualExposureSystem) ─────────
