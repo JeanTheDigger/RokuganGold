@@ -4802,8 +4802,8 @@ Moves, Piercing Howl, Legendary Healing, Eyes of the Owl, Strength of Jade.
 ### Systems Added 2026-06-17 (s54 bestiary transcription + unified spawn glue)
 - **s54.11 Undead, s54.12 Additional Creatures + Elemental Terrors, s54.6 Five Ancient
   Races — transcribed.** Three new bestiaries reusing SpiritCreatureData (faithful, no
-  invented values): `undead_bestiary.gd` (17 — physical undead/gaki/slaughter spirit/named
-  villains), `additional_creatures_bestiary.gd` (~32 — the 10 Greater+Lesser Elemental
+  invented values): `undead_bestiary.gd` (16 — physical undead/gaki/slaughter spirit/named
+  villains), `additional_creatures_bestiary.gd` (37 — the 10 Greater+Lesser Elemental
   Terrors of all five elements, Chikushudo spirits, Shadowlands jinmenju, Children of the
   Last Wish, Yamato no Orochi, Nure-Onna, Hinotama, Wanyudo, Furaribi, legendary giants,
   mundane animals), `ancient_races_bestiary.gd` (10 — Kenku/Ningyo/Kitsu/Tsuno/Zokujin).
@@ -4829,8 +4829,18 @@ Moves, Piercing Howl, Legendary Healing, Eyes of the Owl, Strength of Jade.
   The oni/creature-UNIQUE abilities (Plague Bearer, Swallow Whole, Burning Blood, spawn-on-death,
   Taint Affliction, the differing regen rates, Spell Mastery, the Elemental-Terror powers,
   etc.) carry DESCRIPTIVE tags and are the next runtime-verifiable wiring tranche — done the
-  way the s56.16 creature abilities were (combat-consumable subset first), once a Godot
-  runtime is available. All of this session's combat/bestiary work is static-only (no Godot).
+  way the s56.16 creature abilities were (combat-consumable subset first).
+- **RUNTIME-VERIFIED (2026-06-17).** Godot 4.6.2-stable was installed in-session and a
+  headless driver run (in a minimal autoload-free copy of `simulation/`+`shared/`, since the
+  full project's Node/scene/scheduler autoloads stall a `--script` run): all four bestiaries
+  load (oni 35, undead 16, additional 37, ancient 10 = 98 creatures, zero duplicate ids); the
+  **damage-path fix is confirmed working** — an Arugai puppet averages 39.7 damage over 40
+  rolls (its 10k4 stat line), vs ~5 for the old "unarmed" fallback; multi-attack `attack2`
+  data is populated; `SpiritCombatant.spawn_by_id()` resolves across every bestiary and
+  returns null for unknown ids; `catalog_for_realm(JIGOKU)` is empty (s56.16 unaffected). All
+  9 touched files pass `--check-only`. This upgrades the session's work from static-only to
+  runtime-verified for the data + damage path; the deferred ability/multi-attack-turn wiring
+  is still the next tranche.
 
 ### Pending Redesign
 (None currently pending.)
