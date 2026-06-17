@@ -5200,6 +5200,27 @@ the same actor without proper turn advancement.
 - **DEFERRED:** Ox Furious-Charge rage (no Ox creature is transcribed — no consumer), stag antler
   charge (GDD value unconfirmed). These need new transcription, not wiring.
 
+### Systems Added 2026-06-17 (s2/s54.11/s54.12 Fatigue subsystem — owner-approved, runtime-verified)
+- **Fatigue applied + Full-Attack gate (the effect was already wired).** GDD locks Fatigued =
+  +5 TN to all rolls (+5 per extra day) + may not take Full Attack stance (s2 line 181). The
+  combat roll penalty (−5, escalating via `fatigue_days`) was ALREADY implemented in
+  `IndividualCombat.get_condition_roll_penalty` and consumed by resolve_attack — but nothing
+  APPLIED CONDITION_FATIGUED and the Full-Attack block was unenforced. Added: (1) **Full-Attack
+  block** in `execute_stance_change` (reason `fatigued_no_full_attack`) + the charge's direct
+  stance entry (a Fatigued creature cannot charge). (2) **Aura of Heat (Taki-bi)** — a
+  non-Fatigued character within 10' (2 tiles) of an `aura_of_heat` creature becomes Fatigued by
+  heatstroke (applied in apply_fear_checks at turn start; persists — heatstroke is not cleared
+  by stepping away). (3) **Abominable Stench (Nuppeppo)** — `_apply_abominable_stench` in
+  execute_melee_attack: when struck by an armed melee weapon, every living mortal within 20'
+  (4 tiles) rolls Stamina TN 20 or is Fatigued. RUNTIME-VERIFIED (Godot 4.6.2): Fatigued →
+  Full Attack blocked (allowed when rested); Aura of Heat fatigues within 2 tiles, not far;
+  striking the Nuppeppo fatigues a low-Stamina attacker. APPROXIMATIONS/LIMITATIONS:
+  "bladed/piercing" = any armed (non-unarmed) melee weapon (no weapon damage-type field);
+  Fatigue is combat-scoped (Participant condition — no cross-encounter Fatigue state, so the
+  out-of-combat "+5 TN to all Skill rolls" is not applied via SkillResolver); Aura of Heat's
+  "first Round" and Stench's "until you move 20 ft away" clearing are not modelled (Fatigue
+  persists for the skirmish).
+
 ### Pending Redesign
 (None currently pending.)
 

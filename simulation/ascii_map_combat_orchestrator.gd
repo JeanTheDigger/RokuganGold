@@ -459,6 +459,10 @@ static func execute_stance_change(
 	if not ts.can_use_simple():
 		return {"success": false, "reason": "no_actions_remaining"}
 
+	# A Fatigued character may not take the Full Attack Stance (GDD s2 Fatigue rules).
+	if new_stance == Enums.Stance.FULL_ATTACK and IndividualCombat.CONDITION_FATIGUED in p.conditions:
+		return {"success": false, "reason": "fatigued_no_full_attack"}
+
 	p.stance = new_stance as Enums.Stance
 
 	# Full Defense stance: roll Defense now for full_defense_bonus (GDD s40).
@@ -891,6 +895,10 @@ static func execute_melee_attack(
 		# Wreathed in Flames (s54.5 Daku): striking the burning oni in melee automatically
 		# burns the attacker by weapon size (no save).
 		_apply_wreathed_in_flames(attacker, target, weapon_name, dice_engine)
+
+		# Abominable Stench (s54.11 Nuppeppo): struck by an armed melee weapon → every living
+		# mortal within 20' (4 tiles) rolls Stamina TN 20 or is Fatigued.
+		_apply_abominable_stench(state, target, weapon_name, dice_engine)
 
 		# Burning Touch (s54.12 Taki-bi etc.): touching a burning-touch creature in melee
 		# sets the toucher on fire ("touches or is touched"). The attack-side direction is
@@ -2663,6 +2671,35 @@ static func execute_creature_aoe_attack(
 	return {"ok": true, "hit": true, "targets_struck": struck}
 
 
+## Abominable Stench (s54.11 Nuppeppo): when struck by a bladed/piercing weapon (approximated
+## as any armed melee weapon — no weapon damage-type field), the nuppeppo erupts: every living
+## mortal within 20' (4 tiles) rolls Stamina TN 20 or is Fatigued. Inert unless the struck
+## TARGET is an abominable_stench creature. Returns the number newly Fatigued.
+static func _apply_abominable_stench(state: MapCombatState, target: L5RCharacterData, weapon_name: String, dice: DiceEngine) -> int:
+	if target.spirit_creature == null or not target.spirit_creature.has_tag("abominable_stench"):
+		return 0
+	var wp: Dictionary = IndividualCombat.get_weapon_profile(weapon_name)
+	if not wp.get("melee", true) or weapon_name == "" or weapon_name == "unarmed":
+		return 0  # bladed/piercing approximated as an armed melee strike
+	var center: Vector2i = state.positions.get(target.character_id, Vector2i(-9999, -9999))
+	if center.x < -9000:
+		return 0
+	var hit: int = 0
+	for cid: int in state.positions.keys():
+		if cid == target.character_id or _chebyshev(center, state.positions[cid]) > 4:
+			continue
+		var c: L5RCharacterData = state.combatants.get(cid, null)
+		if c == null or CharacterStats.is_dead(c) or c.spirit_creature != null:
+			continue  # living mortals only
+		var cp: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+		if cp == null or IndividualCombat.CONDITION_FATIGUED in cp.conditions:
+			continue
+		if dice.roll_and_keep(maxi(1, c.stamina), maxi(1, c.stamina), true).total < 20:
+			IndividualCombat.apply_condition(cp, IndividualCombat.CONDITION_FATIGUED)
+			hit += 1
+	return hit
+
+
 ## Wreathed in Flames (s54.5 Daku): anyone striking the burning oni in melee automatically
 ## (no save) takes Wounds by weapon size — unarmed/Small 3k2, Medium 2k1, Large/ranged 0.
 ## Inert unless the struck TARGET has the wreathed_in_flames tag. Returns damage dealt.
@@ -4264,6 +4301,20 @@ static func apply_fear_checks(
 				and _chebyshev(cpos, state.positions.get(oid, Vector2i(-9999, -9999))) <= TREMBLING_EARTH_TILES:
 			tremor = true
 			break
+	# Aura of Heat (s54.12 Taki-bi): a non-Fatigued character within 10' (2 tiles) of an
+	# aura_of_heat creature becomes Fatigued by heatstroke (persists — not cleared by leaving).
+	if IndividualCombat.CONDITION_FATIGUED not in p.conditions:
+		for oid: int in state.combat.participants:
+			if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+				continue
+			var hs: L5RCharacterData = state.combatants.get(oid, null)
+			if hs == null or CharacterStats.is_dead(hs) or hs.spirit_creature == null:
+				continue
+			if hs.spirit_creature.has_tag("aura_of_heat") \
+					and _chebyshev(cpos, state.positions.get(oid, Vector2i(-9999, -9999))) <= 2:
+				IndividualCombat.apply_condition(p, IndividualCombat.CONDITION_FATIGUED)
+				break
+
 	# Fear: highest Fear among enemy combatants whose range covers this character. A Fear
 	# source is a creature's stat-block Fear OR a character's own fear_rating (s22.3 Terrible
 	# Appearance etc.). Range = Fear × 5 ft = Fear tiles. Immune-to-Fear (s29.4) skips this.
@@ -4334,9 +4385,10 @@ static func execute_charge(
 	# already adjacent (use normal attack) or too far to reach even with the charge → no charge.
 	if dist <= MELEE_RANGE_TILES or dist > charge_tiles + MELEE_RANGE_TILES:
 		return {}
-	# Enter Full Attack stance — only if able this turn (the GDD gate).
+	# Enter Full Attack stance — only if able this turn (the GDD gate); a Fatigued creature
+	# may not take Full Attack, so it cannot charge.
 	if p.stance != Enums.Stance.FULL_ATTACK:
-		if not ts.can_use_simple():
+		if not ts.can_use_simple() or IndividualCombat.CONDITION_FATIGUED in p.conditions:
 			return {}
 		p.stance = Enums.Stance.FULL_ATTACK
 		ts.consume_simple()
