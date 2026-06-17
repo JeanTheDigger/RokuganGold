@@ -5221,6 +5221,18 @@ the same actor without proper turn advancement.
   "first Round" and Stench's "until you move 20 ft away" clearing are not modelled (Fatigue
   persists for the skirmish).
 
+### Systems Added 2026-06-17 (s54.5 Shikage Demon Silk — runtime-verified, web reuse)
+- **Demon Silk wired (Shikage no Oni).** Two reuses of the entangle layer (data + a small
+  retaliation): the ranged web → `ranged_entangle` (7k4 to-hit, no damage, Entangle, range 20'
+  = 4 tiles, data-only); and the touch-retaliation — a melee attacker who strikes the
+  web-covered oni is instantly Entangled (beside the Burning Touch retaliation in
+  execute_melee_attack; escape TN simplified to the standard 20 vs the GDD's TN15-escalating).
+  RUNTIME-VERIFIED (Godot 4.6.2): Shikage webs a target at range → Entangled; a katana-strike
+  on Shikage entangles the attacker. DEFERRED: Shikage's Mind-Breaking Poison (Willpower drain)
+  and Paralyzing Poison (Reflexes drain) — per-round escalating Trait drains (Stamina TN20 each
+  Round until a save or the Trait hits 0 → mind-controlled / paralyzed), a poison-system
+  extension beyond the current immediate-drain-with-next-tick-restore model.
+
 ### Pending Redesign
 (None currently pending.)
 

@@ -165,6 +165,11 @@ static func catalog() -> Dictionary:
 		8, 4, "Claws", 7, 5, 5, 3, 30, 8, [24, 48, 72], 96, 3,
 		["oni", "demon_silk", "entangle", "partial_invuln", "mind_breaking_poison",
 			"paralyzing_poison", "poison_constitution", "wall_climbing", "multi_attack"]), "Tongue-Stinger", 8, 5, 4, 2)
+	# Demon Silk: shoot webbing as a ranged attack 7k4 → Entangle (no damage), range 20' (4 tiles) (s54.5).
+	c["shikage_no_oni"].ranged_attack_rolled = 7
+	c["shikage_no_oni"].ranged_attack_kept = 4
+	c["shikage_no_oni"].ranged_entangle = true
+	c["shikage_no_oni"].ranged_range_tiles = 4
 
 	# --- Shokansuru's Brood (s54.5) -----------------------------------------
 	c["hasaiki_no_oni"] = _with2(_make("hasaiki_no_oni", "Hasaiki no Oni, the Burning Sea", SpiritCreatureData.Tier.BOSS,

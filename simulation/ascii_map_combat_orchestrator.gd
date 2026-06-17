@@ -907,6 +907,13 @@ static func execute_melee_attack(
 				and a_p != null and IndividualCombat.get_weapon_profile(weapon_name).get("melee", true):
 			a_p.on_fire = true
 
+		# Demon Silk (s54.5 Shikage): a creature who touches the web-covered oni in melee is
+		# instantly Entangled (escape TN simplified to the standard 20).
+		if target.spirit_creature != null and target.spirit_creature.has_tag("demon_silk") \
+				and a_p != null and attacker.spirit_creature == null \
+				and IndividualCombat.get_weapon_profile(weapon_name).get("melee", true):
+			IndividualCombat.apply_condition(a_p, IndividualCombat.CONDITION_ENTANGLED)
+
 		# Destiny's Strike (s38 Fire): a struck defender with it active immediately makes
 		# a single unarmed counterattack (once per Round).
 		_maybe_destiny_strike(state, target, t_p, attacker, a_p, dice_engine)
