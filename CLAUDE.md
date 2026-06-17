@@ -4962,6 +4962,26 @@ Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next cand
   extreme_heat remain blocked/redundant — fire-element weapon detection, and Furu's
   arrow-immunity is already covered by superior_invuln.)
 
+### Systems Added 2026-06-17 (s54.5 creature ranged attacks — runtime-verified)
+- **Creature ranged-attack path wired (Flaming Bark, Hurl Flaming Blood).** A reusable
+  thrown/spat attack layer for the whole bestiary. New SpiritCreatureData fields
+  `ranged_attack_name/_rolled/_kept`, `ranged_damage_rolled/_kept`, `ranged_range_tiles`,
+  `ranged_fire`. `execute_creature_ranged_attack` (Complex action): the creature's fixed
+  ranged to-hit (ranged_attack_rolled k _kept) vs the target's Armor TN (get_armor_tn,
+  ranged mode), dealing ranged_damage_rolled k _kept reduced by the target's armour; on a hit
+  `ranged_fire` sets the target on fire (FireSystem 1k1/round — the GDD "2k2 next Round" burn
+  approximated by the standard on-fire layer). Range-gated by ranged_range_tiles. NPC-turn
+  integration: in execute_npc_turn, after the move-toward block, a creature with a ranged
+  attack fires at a target that is in LOS + range but not in melee reach (before the melee
+  attack block). Populated Daku (Flaming Bark 6k3 / DR 3k2 / 30 ft / fire) and Furu (Hurl
+  Flaming Blood 10k9 / 4k4 / 30 ft / fire). RUNTIME-VERIFIED (Godot 4.6.2): Flaming Bark hits
+  a low-Reflexes mortal in range and ignites it; a target beyond range → out_of_range;
+  execute_npc_turn fires creature_ranged when the target is at range; Furu's profile loads.
+  LIMITATIONS: ranged is Complex (Hurl's GDD Simple-action economy not modelled); the AI
+  fires when at range rather than always closing to its (often stronger) melee primary —
+  a tuning choice, not a bug. Daku flaming_regeneration / fire_resist_mundane still blocked
+  (fire-element weapon detection).
+
 ### Pending Redesign
 (None currently pending.)
 

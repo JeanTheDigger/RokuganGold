@@ -70,6 +70,17 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 @export var swallow_damage_kept: int = 0
 @export var swallow_taint: bool = false
 
+## Creature ranged attack (s54.5 Daku Flaming Bark, Furu Hurl Flaming Blood, etc.): a
+## thrown/spat attack option used when an enemy is out of melee but within ranged_range_tiles.
+## 0 rolled = the creature has no ranged attack. ranged_fire = sets the target on fire on hit.
+@export var ranged_attack_name: String = ""
+@export var ranged_attack_rolled: int = 0
+@export var ranged_attack_kept: int = 0
+@export var ranged_damage_rolled: int = 0
+@export var ranged_damage_kept: int = 0
+@export var ranged_range_tiles: int = 0
+@export var ranged_fire: bool = false
+
 ## Spawn-on-death (s54.5 Tasu releases spawn; Wakeru splits). On death, add
 ## death_spawn_count copies of death_spawn_id (another bestiary id) to the live combat.
 ## "" / 0 = no death spawn. (Tasu's "2k2 spawn" and Wakeru's recursive halving are

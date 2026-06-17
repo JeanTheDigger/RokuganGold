@@ -2526,6 +2526,51 @@ static func _apply_burning_blood(
 	return dmg
 
 
+## Creature ranged attack (s54.5 Flaming Bark / Hurl Flaming Blood): a Complex-action thrown
+## attack using the creature's fixed ranged to-hit (ranged_attack_rolled k _kept) vs the
+## target's Armor TN, dealing ranged_damage_rolled k _kept (reduced by the target's armour).
+## On a hit, ranged_fire sets the target on fire (FireSystem 1k1/round until extinguished —
+## the GDD's exact "2k2 next Round" burn is approximated by the standard on-fire layer).
+## Range-gated by ranged_range_tiles (caller already ensured LOS via target_in_ranged).
+static func execute_creature_ranged_attack(
+	state: MapCombatState,
+	attacker_id: int,
+	target_id: int,
+	attacker: L5RCharacterData,
+	target: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var cr: SpiritCreatureData = attacker.spirit_creature
+	if cr == null or cr.ranged_attack_rolled <= 0:
+		return {"ok": false, "reason": "no_ranged_attack"}
+	var ts: TurnState = state.turn_states.get(attacker_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {"ok": false, "reason": "no_action"}
+	var ap: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
+	var tp_pos: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
+	if ap.x < 0 or tp_pos.x < 0 or _chebyshev(ap, tp_pos) > cr.ranged_range_tiles:
+		return {"ok": false, "reason": "out_of_range"}
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if t_p == null:
+		return {"ok": false, "reason": "no_target"}
+	ts.consume_complex()
+	var to_hit: int = dice.roll_and_keep(cr.ranged_attack_rolled, cr.ranged_attack_kept, true).total
+	var atn: int = IndividualCombat.get_armor_tn(target, t_p, dice, false, false, "")
+	if to_hit < atn:
+		return {"ok": true, "hit": false, "roll": to_hit, "armor_tn": atn}
+	# Damage: spirit ranged damage filtered by the target's armour (mundane reduction).
+	var raw: int = dice.roll_and_keep(cr.ranged_damage_rolled, cr.ranged_damage_kept, true).total
+	var reduction: int = 0 if target.spirit_creature != null else maxi(0, target.armor_reduction)
+	var wd: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
+	if cr.ranged_fire and target.spirit_creature == null:
+		t_p.on_fire = true
+	return {
+		"ok": true, "hit": true, "roll": to_hit, "armor_tn": atn,
+		"wounds": wd.get("final_damage", raw), "set_on_fire": cr.ranged_fire,
+		"dead": CharacterStats.is_dead(target),
+	}
+
+
 ## Wreathed in Flames (s54.5 Daku): anyone striking the burning oni in melee automatically
 ## (no save) takes Wounds by weapon size — unarmed/Small 3k2, Medium 2k1, Large/ranged 0.
 ## Inert unless the struck TARGET has the wreathed_in_flames tag. Returns damage dealt.
@@ -3203,6 +3248,17 @@ static func execute_npc_turn(
 	if not target_in_melee:
 		ranged_targets = get_ranged_targets(state, npc_id)
 		target_in_ranged = (best_target in ranged_targets)
+
+	# -- Creature ranged attack (s54.5 Flaming Bark / Hurl Flaming Blood): a creature with
+	# a thrown/spat attack fires at a target that is in LOS + range but not in melee reach.
+	if npc.spirit_creature != null and npc.spirit_creature.ranged_attack_rolled > 0 \
+			and not target_in_melee and target_in_ranged:
+		var rtgt: L5RCharacterData = chars_by_id.get(best_target, state.combatants.get(best_target, null))
+		if rtgt != null and not CharacterStats.is_dead(rtgt):
+			var rr: Dictionary = execute_creature_ranged_attack(state, npc_id, best_target, npc, rtgt, dice_engine)
+			if rr.get("ok", false):
+				actions_taken.append({"action": "creature_ranged", "result": rr})
+				return {"actions": actions_taken}
 
 	# -- Lure (s54.10 Konak Jiji): a disguised "baby" waits; if a victim is adjacent it
 	# springs the deceptive-weight trap (auto-hit + pin + venom) or is seen through. Either

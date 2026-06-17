@@ -45,6 +45,13 @@ static func catalog() -> Dictionary:
 		6, 3, "Claws", 6, 4, 5, 2, 25, 8, [32, 48], 72, 2,
 		["oni", "eyeless", "flaming_bark", "flaming_regeneration", "wreathed_in_flames",
 			"fire_resist_mundane"])
+	c["daku_no_oni"].ranged_attack_name = "Flaming Bark"  # 6k3 to-hit, DR 3k2, 30 ft (s54.5)
+	c["daku_no_oni"].ranged_attack_rolled = 6
+	c["daku_no_oni"].ranged_attack_kept = 3
+	c["daku_no_oni"].ranged_damage_rolled = 3
+	c["daku_no_oni"].ranged_damage_kept = 2
+	c["daku_no_oni"].ranged_range_tiles = 6
+	c["daku_no_oni"].ranged_fire = true
 
 	c["furu_no_oni"] = _make("furu_no_oni", "Furu no Oni, Serpent of Flames", SpiritCreatureData.Tier.BOSS,
 		6, 8, 8, 6, {"awareness": 7, "intelligence": 9, "strength": 8},
@@ -55,6 +62,13 @@ static func catalog() -> Dictionary:
 	c["furu_no_oni"].burning_blood_rolled = 5  # 5k5 splatter, save TN 40 (s54.5)
 	c["furu_no_oni"].burning_blood_kept = 5
 	c["furu_no_oni"].burning_blood_tn = 40
+	c["furu_no_oni"].ranged_attack_name = "Hurl Flaming Blood"  # 10k9 to-hit, 4k4 fire, 30 ft (s54.5)
+	c["furu_no_oni"].ranged_attack_rolled = 10
+	c["furu_no_oni"].ranged_attack_kept = 9
+	c["furu_no_oni"].ranged_damage_rolled = 4
+	c["furu_no_oni"].ranged_damage_kept = 4
+	c["furu_no_oni"].ranged_range_tiles = 6
+	c["furu_no_oni"].ranged_fire = true
 
 	c["furu_no_oni_spawn"] = _make("furu_no_oni_spawn", "Furu no Oni Spawn", SpiritCreatureData.Tier.HEAVY,
 		4, 4, 6, 4, {"strength": 5},
