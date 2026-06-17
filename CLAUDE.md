@@ -4982,6 +4982,23 @@ Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next cand
   a tuning choice, not a bug. Daku flaming_regeneration / fire_resist_mundane still blocked
   (fire-element weapon detection).
 
+### Systems Added 2026-06-17 (s54.11/s54.12 undead + Elemental Terror abilities — runtime-verified)
+- **Burning Touch wired (Taki-bi no Oni etc.).** "Anyone who touches or is touched by" a
+  burning-touch creature is set on fire (1k1/round via the FireSystem on-fire layer until
+  extinguished). Both directions: a `burning_touch` creature's melee hit sets the TARGET on
+  fire (extended the _apply_hit fire_trail block), and a melee attacker who strikes a
+  burning_touch creature is set on fire (new retaliation beside Wreathed in Flames, using a_p).
+  Tag was present on Taki-bi / Moetechi / Wanyudo but unconsumed. RUNTIME-VERIFIED (Godot 4.6.2):
+  a katana-wielder striking Taki-bi catches fire; Taki-bi's Flaming Fist sets a mortal alight.
+- **Life Drain — confirmed already wired (no change).** The `life_drain` tag (Yosuchi no Oni
+  Lesser Elemental Terror of Air, and a forest spirit) is already consumed by
+  SpiritAbilitySystem.on_hit_self_heal, which `_apply_hit` calls for every spirit attacker —
+  so life-drain creatures already self-heal on a wounding hit. No wiring needed.
+- **Disease — confirmed already populated.** Shikko-gaki (`diseased_touch`) and the plague
+  zombie (`plague_carrier`) already carry the disease ability tags consumed by the
+  `_apply_disease_on_hit` contraction wired earlier this session — so the undead disease
+  carriers are live. No change.
+
 ### Pending Redesign
 (None currently pending.)
 

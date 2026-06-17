@@ -877,6 +877,13 @@ static func execute_melee_attack(
 		# burns the attacker by weapon size (no save).
 		_apply_wreathed_in_flames(attacker, target, weapon_name, dice_engine)
 
+		# Burning Touch (s54.12 Taki-bi etc.): touching a burning-touch creature in melee
+		# sets the toucher on fire ("touches or is touched"). The attack-side direction is
+		# handled in _apply_hit; this is the strike-it-in-melee direction.
+		if target.spirit_creature != null and target.spirit_creature.has_tag("burning_touch") \
+				and a_p != null and IndividualCombat.get_weapon_profile(weapon_name).get("melee", true):
+			a_p.on_fire = true
+
 		# Destiny's Strike (s38 Fire): a struck defender with it active immediately makes
 		# a single unarmed counterattack (once per Round).
 		_maybe_destiny_strike(state, target, t_p, attacker, a_p, dice_engine)
@@ -4547,7 +4554,8 @@ static func _apply_hit(
 	# sets the target on fire — 1k1 at the start of each round (SpiritualEncounter
 	# applies it) until a Simple Action extinguishes it. fire_trail tags the Kagaki,
 	# whose only attack is the melee Flame Bite (no ranged fire creature exists).
-	if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("fire_trail") and t_p != null:
+	if attacker.spirit_creature != null and t_p != null \
+			and (attacker.spirit_creature.has_tag("fire_trail") or attacker.spirit_creature.has_tag("burning_touch")):
 		t_p.on_fire = true
 
 	# Paralysis Venom (s54.10 Konak Jiji): a successful hit Stuns the target for
