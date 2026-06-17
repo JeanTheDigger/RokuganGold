@@ -80,6 +80,9 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 @export var ranged_damage_kept: int = 0
 @export var ranged_range_tiles: int = 0
 @export var ranged_fire: bool = false
+## Web (s54.12 Dokufu/Kumo): the ranged attack Entangles the target on a hit instead of
+## dealing damage (escape = Strength TN 20/Round). ranged_damage_rolled is the to-hit dice.
+@export var ranged_entangle: bool = false
 
 ## AoE ranged variant (s54.11 Cauldron Belch, s54.12 Gout of Flame): when ranged_aoe_radius
 ## > 0, the ranged attack damages every enemy within that radius of the impact tile.

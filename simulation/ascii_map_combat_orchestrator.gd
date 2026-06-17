@@ -497,6 +497,10 @@ static func execute_move(
 	if p == null:
 		return {"success": false, "reason": "not_in_combat"}
 
+	# Entangled (s54.12 Web / s56.20 Snare): cannot move until broken free (Strength TN 20).
+	if IndividualCombat.CONDITION_ENTANGLED in p.conditions:
+		return {"success": false, "reason": "entangled"}
+
 	var wl: int = CharacterStats.get_wound_level(character)
 	if ts.is_down_restricted(wl):
 		return {"success": false, "reason": "down_only_free_actions"}
@@ -2554,7 +2558,7 @@ static func execute_creature_ranged_attack(
 	dice: DiceEngine,
 ) -> Dictionary:
 	var cr: SpiritCreatureData = attacker.spirit_creature
-	if cr == null or cr.ranged_damage_rolled <= 0:
+	if cr == null or (cr.ranged_damage_rolled <= 0 and not cr.ranged_entangle):
 		return {"ok": false, "reason": "no_ranged_attack"}
 	var ts: TurnState = state.turn_states.get(attacker_id, null)
 	if ts == null or not ts.can_use_complex():
@@ -2574,6 +2578,10 @@ static func execute_creature_ranged_attack(
 		var atn: int = IndividualCombat.get_armor_tn(target, t_p, dice, false, false, "")
 		if to_hit < atn:
 			return {"ok": true, "hit": false, "roll": to_hit, "armor_tn": atn}
+	# Web (s54.12): the ranged hit Entangles instead of dealing damage.
+	if cr.ranged_entangle and t_p != null and target.spirit_creature == null:
+		IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_ENTANGLED)
+		return {"ok": true, "hit": true, "entangled": true}
 	# Damage: spirit ranged damage filtered by the target's armour (mundane reduction).
 	var raw: int = dice.roll_and_keep(cr.ranged_damage_rolled, cr.ranged_damage_kept, true).total
 	var reduction: int = 0 if target.spirit_creature != null else maxi(0, target.armor_reduction)
@@ -2733,6 +2741,19 @@ static func attempt_swallow_escape(state: MapCombatState, victim_id: int, victim
 		cp.grapple_partner_id = -1
 		cp.grapple_in_control = false
 	return {"success": true, "roll": v_roll}
+
+
+## Break free of Entangled (s54.12 Web / s56.20 Snare): a Strength roll vs TN 20. On success
+## the condition is removed. Public for the PC turn path; NPCs auto-attempt via execute_npc_turn.
+static func attempt_entangle_escape(state: MapCombatState, char_id: int, character: L5RCharacterData, dice: DiceEngine) -> Dictionary:
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p == null or IndividualCombat.CONDITION_ENTANGLED not in p.conditions:
+		return {"success": false, "reason": "not_entangled"}
+	var roll: int = dice.roll_and_keep(maxi(1, character.strength), maxi(1, character.strength), true).total
+	if roll >= 20:
+		p.conditions.erase(IndividualCombat.CONDITION_ENTANGLED)
+		return {"success": true, "roll": roll}
+	return {"success": false, "roll": roll}
 
 
 ## First known OFFENSIVE atemi kiho whose effect is encoded (so the strike actually
@@ -3297,6 +3318,13 @@ static func execute_npc_turn(
 	var target_in_melee: bool = (best_target in melee_targets)
 	var target_in_ranged: bool = (best_target in ranged_targets)
 
+	# Entangled (s54.12 Web / s56.20 Snare): an entangled NPC that can't reach a target
+	# struggles to break free (Strength TN 20) instead of a futile move.
+	if IndividualCombat.CONDITION_ENTANGLED in p.conditions and not target_in_melee:
+		var eesc: Dictionary = attempt_entangle_escape(state, npc_id, npc, dice_engine)
+		actions_taken.append({"action": "entangle_escape", "result": eesc})
+		return {"actions": actions_taken}
+
 	if not target_in_melee and not target_in_ranged:
 		# Move toward target using free move first, then simple if needed.
 		var moved: bool = false
@@ -3335,7 +3363,8 @@ static func execute_npc_turn(
 
 	# -- Creature ranged attack (s54.5 Flaming Bark / Hurl Flaming Blood): a creature with
 	# a thrown/spat attack fires at a target that is in LOS + range but not in melee reach.
-	if npc.spirit_creature != null and npc.spirit_creature.ranged_damage_rolled > 0 \
+	if npc.spirit_creature != null \
+			and (npc.spirit_creature.ranged_damage_rolled > 0 or npc.spirit_creature.ranged_entangle) \
 			and npc.spirit_creature.ranged_aoe_radius == 0 \
 			and not target_in_melee and target_in_ranged:
 		var rtgt: L5RCharacterData = chars_by_id.get(best_target, state.combatants.get(best_target, null))

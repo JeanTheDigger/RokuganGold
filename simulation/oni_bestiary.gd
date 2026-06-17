@@ -27,6 +27,11 @@ static func catalog() -> Dictionary:
 		3, 4, 1, 4, {"agility": 4},
 		4, 3, "Claws", 6, 4, 4, 4, 20, 5, [25, 50], 75, 0,
 		["oni", "spinnerets", "web_traps", "entangle", "multi_attack"]), "Bite", 4, 4, 6, 4)
+	# Spinnerets: Complex web attack 6k4, no damage, target Entangled (escape Strength TN 20).
+	c["akaru_no_oni"].ranged_attack_rolled = 6  # 6k4 to-hit (s54.5)
+	c["akaru_no_oni"].ranged_attack_kept = 4
+	c["akaru_no_oni"].ranged_entangle = true
+	c["akaru_no_oni"].ranged_range_tiles = 6  # PROVISIONAL (Spinnerets range unspecified)
 
 	c["arugai_no_oni"] = _with2(_make("arugai_no_oni", "Arugai no Oni, Immortal Engine of Destruction", SpiritCreatureData.Tier.BOSS,
 		4, 7, 2, 6, {"stamina": 8, "agility": 5, "strength": 8},

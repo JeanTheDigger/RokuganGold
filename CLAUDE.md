@@ -5131,6 +5131,20 @@ the same actor without proper turn advancement.
   (wyrm 16→44, nure_onna 14→29, pennaggolan 12→21). The snake/serpent shapechange and the
   Pennaggolan flying-head head-detach are not modelled (the combat-relevant grab/crush is).
 
+### Systems Added 2026-06-17 (s54.5 Web/Entangle + s56.20 snare fix — runtime-verified)
+- **Entangle made functional (cross-system).** `CONDITION_ENTANGLED` was SET by the snare trap
+  (s56.20) but never consumed — inert. Now `execute_move` rejects movement while entangled
+  (reason "entangled"), `attempt_entangle_escape` breaks free on a Strength TN 20 roll, and an
+  entangled NPC out of melee auto-attempts the escape in execute_npc_turn (instead of a futile
+  move). This fixes the previously-inert **snare trap** AND enables web attacks.
+- **Akaru no Oni Spinnerets (web) wired.** New SpiritCreatureData `ranged_entangle`: a ranged
+  attack that Entangles on a hit instead of dealing damage (the ranged guards/branches accept
+  damage-less entangle attacks). Akaru populated: Spinnerets 6k4 to-hit, no damage, Entangle
+  TN 20 (range 6 tiles PROVISIONAL — Spinnerets range unspecified in s54.5). RUNTIME-VERIFIED
+  (Godot 4.6.2): Akaru webs a target at range → Entangled → movement blocked → Strength-12
+  escape (TN 20) → movement restored. (Dokufu/Kumo ranged webs are forward-wired for when those
+  spiders are transcribed; demon_silk likewise.)
+
 ### Pending Redesign
 (None currently pending.)
 
