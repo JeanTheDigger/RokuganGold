@@ -4609,6 +4609,27 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   attachment uses the in-combat attempt as its seed (it has no separate stealth-attach mechanic).
   Static-validated only (symbol resolution + GDD spec confirmed; no Godot runtime — driver-verify later).
 
+### s22.3/s02.4 Fear mechanic — wired into tile combat (2026-06-16, static-only)
+Activates the `fear` stat that every creature (oni Fear 2-5, gaki/musha Fear 1-5,
+spirits) already carried but was dead in combat. **Rule (s22.3 LOCKED):** a Fear
+Rating forces nearby characters to roll Willpower vs **TN = 5 + Fear Rank × 5** or
+suffer **−1k0 to all rolls** while in range (Fear × 5 ft = Fear tiles). New
+`IndividualCombat.CONDITION_AFRAID` (−1 rolled die in `resolve_attack`, beside the
+Dazed −3k0). `AsciiMapCombatOrchestrator.apply_fear_checks(state, char_id, character,
+dice)` runs at the start of each actor's turn (wired into `execute_npc_turn` and
+`execute_companion_turn`; public for the PC turn path): finds the highest-Fear enemy
+creature whose range covers the actor, rolls Willpower vs 5+Fear×5, and adds/clears the
+AFRAID condition (resisting OR leaving every Fear source's range clears it — proximity-
+driven, re-checked each turn). **GDD CONFLICT (left unresolved, flagged for owner):**
+s02.4 states the TN as **10 + Fear × 5** while s22.3 (the LOCKED character-sheet Fear
+definition) says **5 + Fear × 5** — implemented per s22.3; owner should adjudicate.
+LIMITATIONS: "all rolls" is applied to attack rolls (the in-combat roll; defense is a
+passive Armor TN, not a roll); Fear-immunity (s29.4 "Immune-to-Fear", s29.14 Strength of
+Indra +1 Willpower Rank to resist, Lion Matsu's Fury immune check) is not modelled (no
+immunity flag yet); the PC turn path must call `apply_fear_checks` itself (UI-deferred).
+Piercing Howl (Minor Shapeshifter Fear 2) remains unwired — no encoded creature carries
+it in its GDD-given set, so it has no consumer. Static-validated only (no Godot runtime).
+
 ### Pending Redesign
 (None currently pending.)
 

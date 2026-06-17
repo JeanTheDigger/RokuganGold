@@ -113,6 +113,7 @@ const CONDITION_GRAPPLED:  String = "grappled"
 const CONDITION_MOUNTED:   String = "mounted"
 const CONDITION_PRONE:     String = "prone"
 const CONDITION_STUNNED:   String = "stunned"
+const CONDITION_AFRAID:     String = "afraid"   # s22.3/s02.4 Fear: -1k0 to all rolls while in range
 
 # GDD s40 describes striking after first blood as dishonorable and conceding
 # a death duel as shameful, but specifies no numeric honor/glory values.
@@ -1120,6 +1121,9 @@ static func resolve_attack(
 	# Conditional modifiers: -3k0 Dazed, -1k1 or -3k3 Blinded, Prone restrictions
 	if CONDITION_DAZED in attacker_p.conditions:
 		rolled = maxi(0, rolled - 3)
+	# Fear (s22.3/s02.4): a frightened combatant suffers -1k0 to all rolls while in range.
+	if CONDITION_AFRAID in attacker_p.conditions:
+		rolled = maxi(0, rolled - 1)
 	if CONDITION_BLINDED in attacker_p.conditions:
 		if weapon.get("melee", true):
 			rolled = maxi(0, rolled - 1)

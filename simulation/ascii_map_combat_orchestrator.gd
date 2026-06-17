@@ -2907,6 +2907,9 @@ static func execute_npc_turn(
 
 	begin_turn(state, npc_id)
 
+	# -- Fear (s22.3/s02.4): resist nearby Fear sources or fight afraid (-1k0). --
+	apply_fear_checks(state, npc_id, npc, dice_engine)
+
 	# -- Shapeshifter: turn insubstantial when threatened (s54.10 Ephemeral Form) --
 	# Free Action; once per encounter. No-op for creatures without the ability.
 	_npc_maybe_activate_ephemeral_form(state, npc, p)
@@ -3487,6 +3490,8 @@ static func execute_companion_turn(
 		return {"actions": [], "reason": "not_in_combat"}
 
 	begin_turn(state, cid)
+	# Fear (s22.3/s02.4): a companion near an enemy Fear source resists or fights afraid.
+	apply_fear_checks(state, cid, character, dice_engine)
 	var cmd: int = CompanionSystem.decide_action(companion)
 	var actions: Array = []
 
@@ -3749,6 +3754,52 @@ static func _is_targetable(state: MapCombatState, cid: int) -> bool:
 	if SpiritAbilitySystem.has_ephemeral_form(c.spirit_creature) and p.ephemeral_form_expiry >= rnd:
 		return false  # within the 10-round Ephemeral Form window
 	return true
+
+
+## Fear (s22.3 LOCKED / s02.4): at the start of a combatant's turn, the scariest enemy
+## creature whose Fear range (Fear × 5 ft = Fear tiles) covers them forces a Willpower
+## check vs TN = 5 + Fear × 5 (s22.3 character-sheet definition). On failure the
+## combatant gains the AFRAID condition (-1k0 to all rolls); resisting or leaving every
+## Fear source's range clears it. Public so the PC turn path may call it too.
+## NOTE: s02.4 states the TN as 10 + Fear × 5; this implements the LOCKED s22.3 value
+## (5 + Fear × 5) and flags the discrepancy for owner adjudication. Fear-immunity
+## (s29.4 "Immune-to-Fear", s29.14 Strength of Indra) is not yet modelled (no flag).
+static func apply_fear_checks(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> void:
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p == null or character == null or CharacterStats.is_dead(character):
+		return
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-9999, -9999))
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	# Highest Fear among enemy creatures whose range covers this character.
+	var max_fear: int = 0
+	for oid: int in state.combat.participants:
+		if oid == char_id:
+			continue
+		if not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		var src: L5RCharacterData = state.combatants.get(oid, null)
+		if src == null or src.spirit_creature == null or CharacterStats.is_dead(src):
+			continue
+		var f: int = src.spirit_creature.fear
+		if f <= 0:
+			continue
+		if _chebyshev(cpos, state.positions.get(oid, Vector2i(-9999, -9999))) <= f:
+			max_fear = maxi(max_fear, f)
+	if max_fear <= 0:
+		# Out of every Fear source's range — no longer afraid.
+		p.conditions.erase(IndividualCombat.CONDITION_AFRAID)
+		return
+	var wp: int = maxi(1, character.willpower)
+	var tn: int = 5 + max_fear * 5
+	if dice.roll_and_keep(wp, wp, true).total >= tn:
+		p.conditions.erase(IndividualCombat.CONDITION_AFRAID)  # resisted this turn
+	elif IndividualCombat.CONDITION_AFRAID not in p.conditions:
+		p.conditions.append(IndividualCombat.CONDITION_AFRAID)
 
 
 ## s54.10/s54.2 Possession: a possessing spirit (Shozai-gaki / Buruburu / Kitsune-tsuki)
