@@ -252,6 +252,20 @@ static func check_from_the_ashes_expiry(
 const KIHO_MINDS_FIRE: String = "The Mind's Fire"
 const KIHO_STEAL_AIR_DRAGON: String = "Steal the Air Dragon"
 
+
+## s54.10 Buruburu Descent into Terror: after 3 consecutive failed nightly Willpower
+## tests, the victim suffers +5 TN on all rolls, +5 more each consecutive day after.
+## Returned as a negative roll penalty (DiceEngine.roll_check adds `bonus` to the roll).
+## The nightmare-resist roll itself is exempt (it does not route through SkillResolver).
+static func _get_possession_terror_penalty(character: L5RCharacterData) -> int:
+	if String(character.possession_affliction.get("kind", "")) != "buruburu":
+		return 0
+	var fails: int = int(character.possession_affliction.get("consecutive_fails", 0))
+	if fails < 3:
+		return 0
+	return -5 * (fails - 2)
+
+
 static func _get_kiho_buff_bonus(
 	character: L5RCharacterData, skill_name: String, trait_used: Enums.Trait, ic_day: int
 ) -> Dictionary:
@@ -515,7 +529,8 @@ static func resolve_skill_check(
 	)
 	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
 		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn \
-		+ mutation_mod.get("tn", 0) + soft_hearted_tn + darling_bonus
+		+ mutation_mod.get("tn", 0) + soft_hearted_tn + darling_bonus \
+		+ _get_possession_terror_penalty(character)
 
 	# Unskilled: no explosions
 	var explodes: bool = skill_rank > 0
@@ -668,9 +683,11 @@ static func resolve_contested_check(
 	)
 
 	var total_a: int = roll_a.total + flat_bonus_a + wp_a + (tfr_a * FREE_RAISE_VALUE) \
-		+ (adv_a.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_a
+		+ (adv_a.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_a \
+		+ _get_possession_terror_penalty(char_a)
 	var total_b: int = roll_b.total + flat_bonus_b + wp_b + (tfr_b * FREE_RAISE_VALUE) \
-		+ (adv_b.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_b
+		+ (adv_b.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_b \
+		+ _get_possession_terror_penalty(char_b)
 
 	var winner: String = "a"
 	if total_b > total_a:

@@ -4602,8 +4602,10 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   Kitsune-tsuki — faithful to "loss of agency," but the possessor does not drive the victim's specific
   actions: that needs a faction/control-transfer layer + the PC turn-based UI); the cure spells
   (Ward of Purity / Bonds of Ningen-do drive out Shozai — no tile-combat spell consumer); Buruburu's
-  "+5 TN escalating on all rolls after 3 consecutive nightmares" (the death timer + shake are wired;
-  the escalating roll penalty needs a SkillResolver world-sim hook). Buruburu's invisible out-of-combat
+  "+5 TN escalating on all rolls after 3 consecutive nightmares" is **WIRED** (2026-06-16): once the
+  Descent-into-Terror consecutive-fail counter reaches 3, `SkillResolver._get_possession_terror_penalty`
+  applies a −5×(fails−2) roll penalty to all the victim's skill/contested rolls (the nightmare-resist
+  roll is exempt — it does not route through SkillResolver). Buruburu's invisible out-of-combat
   attachment uses the in-combat attempt as its seed (it has no separate stealth-attach mechanic).
   Static-validated only (symbol resolution + GDD spec confirmed; no Godot runtime — driver-verify later).
 
