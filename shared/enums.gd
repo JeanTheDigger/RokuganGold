@@ -737,6 +737,7 @@ enum SpiritRealm {
 	SAKKAKU,
 	MEIDO,
 	YUME_DO,
+	JIGOKU,  # the Realm of Evil — origin of oni (s54.5); not a spiritual-insurgency overlap realm
 }
 
 

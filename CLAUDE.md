@@ -4737,6 +4737,39 @@ spirit-animal field_commander/concealment, deceiver/vindictive/trickster, musha
 retains_identity. No-consumer (GDD rule exists but no encoded creature uses it): A Panther's
 Moves, Piercing Howl, Legendary Healing, Eyes of the Owl, Strength of Jade.
 
+### Systems Added 2026-06-17 (s54.5 Oni of the Shadowlands — bestiary data tranche, owner-approved)
+- **s54.5 oni roster transcribed.** `simulation/oni_bestiary.gd` (OniBestiary, pure class) —
+  all **35** oni stat blocks from s54.5 as `SpiritCreatureData` (faithful transcription, no
+  invented values): the 20 core oni (Akaru/Arugai/Byoki/Daku/Furu + spawn/Gagoze/Genso/Ianwa/
+  Kamu/Kommei/Manesuru/Morei/Muduro/Nairu/Nosloc/Pekkle/Quiet Death/Ryokaku/Shikage), the 4
+  Shokansuru's Brood (Hasaiki/Munemitsu/Sentei/Yojireju), 6 further oni (Sodatsu/Tasu/Utogu/
+  Uzaki/Wakeru/Wanizame), and 5 Oni Lord Spawn (Akuma/Kyoso/Shikibu/Tsuburu/Yuhmi). `catalog()`
+  (id → fresh instance), `oni_ids()`, `get_oni(id)`. New `Enums.SpiritRealm.JIGOKU` (the Realm
+  of Evil — keeps `SpiritCreatureData.realm` honest for oni; it is NOT a spiritual-insurgency
+  overlap realm, and `SpiritCombatant.catalog_for_realm(JIGOKU)` returns `{}` via the existing
+  `_:` wildcard, so the s56.16 spirit-encounter pipeline is unaffected). Reusing
+  `SpiritCreatureData` means oni are **combat-ready for free** via `SpiritCombatant.to_character_data()`
+  (realm-agnostic conversion) — the same adapter the spirit roster uses.
+  **Immediate combat win:** oni "Invulnerability" maps to the already-wired `partial_invuln`
+  tag (mundane weapons do nothing; only jade/crystal/magic hurt), and "Superior Invulnerability"
+  → `superior_invuln` + `flame_immune` — so every Invulnerable oni is correctly mundane-resistant
+  in tile combat the moment it is spawned. Fear/Swift ride the dedicated fields (Arugai Swift 2,
+  Furu 4, Nairu 3, Furu/Shikibu spawn 2). Multi-attack oni store their primary representative
+  attack (the single-attack limitation shared with the spirit roster; second attacks are a
+  combat-layer refinement, tagged `multi_attack`). DELIBERATELY-DESCRIPTIVE (unwired) tags for
+  oni-specific abilities so the combat layer never mis-applies them: Plague Bearer, Splatter,
+  Swallow Whole/Devour, Burning Blood, Fiery Impalement, Spawn-on-death, Endless Horde (split),
+  Corpse/Soul Absorption, Taint Affliction, Shapeshifting (soul-steal vs human-form), Shugenja's
+  Bane, Teleport, the various regens (per-round vs hourly vs flaming — distinct from the wired
+  Gashadokuro `regeneration` amount, so NOT blanket-tagged), and element-nuanced immunities
+  (Daku's normal-flame-only / Furu-spawn's fire-only get `fire_resist_mundane`/`flame_immune`
+  rather than the mundane-weapon `partial_invuln`). NOT wired this tranche; subsequent tranches
+  wire the oni-specific abilities the way the s56.16 creature abilities were done (the combat-
+  consumable subset first). NO spawn/encounter glue yet — the future Shadowlands / Kaiu-Wall-horde
+  consumer calls `OniBestiary.get_oni(id)` → `SpiritCombatant.to_character_data()`. Static-validated
+  only (no Godot runtime — parse-traced + GDD-checked; wound tracks incl. Out→Dead boundaries and
+  the single-threshold Wakeru verified against the stat blocks).
+
 ### Pending Redesign
 (None currently pending.)
 
