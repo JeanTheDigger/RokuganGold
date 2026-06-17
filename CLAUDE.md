@@ -4790,14 +4790,21 @@ Moves, Piercing Howl, Legendary Healing, Eyes of the Owl, Strength of Jade.
   damage2_rolled/damage2_kept` + `has_second_attack()`. Populated for all 13 multi-attack
   oni (Akaru Bite, Arugai Tail, Genso Talons, Kamu Bite, Muduro Bite, Ryokaku Claws,
   Shikage Tongue-Stinger, Hasaiki Bite, Munemitsu Gore, Sentei Bite, Utogu Bite, Uzaki
-  Claws, Yuhmi Mai Chong) via `OniBestiary._with2()`. DATA layer only this tranche.
-  LIVE two-attacks-per-turn wiring DEFERRED: `execute_melee_attack` requires + consumes a
-  Complex action and the first attack consumes it, so a faithful second strike needs the
-  Simple-cost-for-multi-attack action economy (GDD s54.5: multi-attack oni attack as a
-  Simple Action) + a two-strike turn loop — action-economy surgery that needs a Godot
-  runtime to verify. The combined damage-path fix means the puppet field-swap approach
-  (temporarily set attack_rolled/kept + damage_rolled/kept to the attack2 values) will work
-  for the second strike once the action economy is reconciled; the data is ready.
+  Claws, Yuhmi Mai Chong) via `OniBestiary._with2()`, plus Harionago/Pennaggolan (undead)
+  and Yamato no Orochi (additional).
+- **Multi-attack LIVE wiring — DONE + runtime-verified (2026-06-17).** A `multi_attack`
+  creature with a second attack now makes BOTH strikes in its Turn. `execute_npc_turn`
+  fires the second strike right after the primary (and any off-hand): it field-swaps the
+  creature's primary attack/damage to the attack2 values (so the to-hit AND damage spirit
+  overrides both read the secondary profile), calls `execute_melee_attack(..., bonus_attack=true)`,
+  then restores. `bonus_attack` (new optional param, default false → zero change for every
+  existing caller) makes the strike a free bonus that neither requires nor consumes an
+  action — like the off-hand attack — so it fires regardless of whether the AI spent a
+  Simple on a stance change (the action-economy interaction that made the naive
+  Simple-cost approach drop the second attack). Driver-verified in a headless skirmish:
+  Akaru (Claws + Bite) produces `[stance, attack, multi_attack]` and the target takes both
+  hits; the primary profile is restored after the swap (no permanent mutation of the shared
+  stat block); a single-attack creature (Byoki) gets exactly one strike (regression).
 
 ### Systems Added 2026-06-17 (s54 bestiary transcription + unified spawn glue)
 - **s54.11 Undead, s54.12 Additional Creatures + Elemental Terrors, s54.6 Five Ancient

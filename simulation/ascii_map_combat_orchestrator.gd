@@ -729,6 +729,7 @@ static func execute_melee_attack(
 	dice_engine: DiceEngine,
 	maneuver: String = "",
 	spend_void: bool = false,
+	bonus_attack: bool = false,
 ) -> Dictionary:
 	if CharacterStats.is_dead(attacker):
 		return {"success": false, "reason": "character_is_dead"}
@@ -757,11 +758,14 @@ static func execute_melee_attack(
 
 	# Dance of the Flames (s38 Fire): unarmed attacks cost a Simple Action, not Complex.
 	var dance_simple: bool = (weapon_name == "" or weapon_name == "unarmed") and "Dance of the Flames" in a_p.active_kiho
-	if dance_simple:
-		if not ts.can_use_simple():
-			return {"success": false, "reason": "no_simple_actions_remaining"}
-	elif not ts.can_use_complex():
-		return {"success": false, "reason": "no_complex_actions_remaining"}
+	# bonus_attack (GDD s54.5 multi-attack second strike, like an off-hand attack): a free
+	# extra attack that neither requires nor consumes an action.
+	if not bonus_attack:
+		if dance_simple:
+			if not ts.can_use_simple():
+				return {"success": false, "reason": "no_simple_actions_remaining"}
+		elif not ts.can_use_complex():
+			return {"success": false, "reason": "no_complex_actions_remaining"}
 
 	# Defense/Full Defense stances prohibit attacking entirely (s40) — this is an
 	# action-legality check, independent of position, so it precedes the range check.
@@ -909,10 +913,11 @@ static func execute_melee_attack(
 	a_p.spirit_attack_rolled_bonus = 0
 	a_p.spirit_damage_rolled_bonus = 0
 
-	if dance_simple:
-		ts.consume_simple()
-	else:
-		ts.consume_complex()
+	if not bonus_attack:
+		if dance_simple:
+			ts.consume_simple()
+		else:
+			ts.consume_complex()
 	state.combat_log.append(log_entry)
 	_check_and_mark_over(state, target_id, target)
 	return result
@@ -3115,6 +3120,31 @@ static func execute_npc_turn(
 				var oh: Dictionary = execute_off_hand_attack(state, npc_id, best_target, npc, target_char, dice_engine)
 				if oh.get("success", false):
 					actions_taken.append({"action": "off_hand_attack", "result": oh})
+
+			# Multi-attack (s54.5): an oni/creature with two attacks makes its second
+			# Simple strike with the secondary profile. Field-swap so the to-hit AND
+			# damage overrides (both read spirit_creature) use attack2, then restore.
+			var mcr: SpiritCreatureData = npc.spirit_creature
+			if mcr != null and mcr.has_tag("multi_attack") and mcr.has_second_attack() \
+					and target_in_melee and not CharacterStats.is_dead(target_char):
+				var s_ar: int = mcr.attack_rolled
+				var s_ak: int = mcr.attack_kept
+				var s_dr: int = mcr.damage_rolled
+				var s_dk: int = mcr.damage_kept
+				mcr.attack_rolled = mcr.attack2_rolled
+				mcr.attack_kept = mcr.attack2_kept
+				mcr.damage_rolled = mcr.damage2_rolled
+				mcr.damage_kept = mcr.damage2_kept
+				# bonus_attack=true: a free second strike (no action gate/consume),
+				# the way the off-hand attack above is a bonus.
+				var atk2: Dictionary = execute_melee_attack(
+					state, npc_id, best_target, npc, target_char, weapon_name,
+					0, dice_engine, "", false, true)
+				mcr.attack_rolled = s_ar
+				mcr.attack_kept = s_ak
+				mcr.damage_rolled = s_dr
+				mcr.damage_kept = s_dk
+				actions_taken.append({"action": "multi_attack", "result": atk2})
 	elif ts.can_use_free_move() and not ts.is_down_restricted(wl):
 		# Can still use free move to get closer.
 		var free_budget: int = free_move_budget(state, npc_id, npc)
