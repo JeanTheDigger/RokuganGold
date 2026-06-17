@@ -4261,7 +4261,7 @@ static func _apply_hit(
 	# collapses a section, stopping its per-round regen for 3 rounds. levels_crossed > 0
 	# means a threshold was crossed by this hit.
 	if target.spirit_creature != null and t_p != null \
-			and SpiritAbilitySystem.has_regeneration(target.spirit_creature) \
+			and SpiritAbilitySystem.regen_suppressible(target.spirit_creature) \
 			and int(wd_result.get("levels_crossed", 0)) > 0:
 		t_p.spirit_regen_suppressed_until = state.combat.round_number + SpiritAbilitySystem.REGEN_SUPPRESS_ROUNDS
 

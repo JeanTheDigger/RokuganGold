@@ -138,14 +138,23 @@ static func on_hit_self_heal(creature: SpiritCreatureData) -> int:
 ## True if the creature reforms during the encounter unless the overlap is closed
 ## (Gashadokuro / Ancient General regeneration; all Spirits reform in their realm).
 static func has_regeneration(creature: SpiritCreatureData) -> bool:
-	return creature.has_tag("regeneration")
+	return creature.regen_wounds > 0 or creature.has_tag("regeneration")
 
 
-## Wounds the creature recovers at the start of each round (s54.10 Gashadokuro).
-## 0 for non-regenerators. The combat loop heals this in advance_round unless the
-## creature's regen is suppressed (a Wound threshold was crossed within 3 rounds).
+## Wounds the creature recovers at the start of each round. The explicit regen_wounds
+## field (Arugai 10, Hasaiki 5) wins; otherwise the Gashadokuro "regeneration" tag = 10.
+## 0 for non-regenerators. advance_round heals this each round (the Gashadokuro tag is
+## additionally gated by the threshold-cross suppression set in _apply_hit).
 static func regeneration_amount(creature: SpiritCreatureData) -> int:
+	if creature.regen_wounds > 0:
+		return creature.regen_wounds
 	return REGEN_WOUNDS_PER_ROUND if creature.has_tag("regeneration") else 0
+
+
+## True only for the Gashadokuro-style regen that pauses 3 rounds when a Wound threshold
+## is crossed (s54.10). Field-based unconditional regens (Arugai/Hasaiki) do NOT suppress.
+static func regen_suppressible(creature: SpiritCreatureData) -> bool:
+	return creature.has_tag("regeneration")
 
 
 ## A spirit reduced to its wound cap is not permanently destroyed — it reforms in

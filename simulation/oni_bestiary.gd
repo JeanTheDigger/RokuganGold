@@ -33,6 +33,7 @@ static func catalog() -> Dictionary:
 		9, 4, "Claws", 10, 5, 10, 4, 25, 20, [50, 100, 150], 200, 5,
 		["oni", "huge", "superior_invuln", "flame_immune", "regen_per_round", "heart_kill",
 			"tail_knockdown", "multi_attack"], 2), "Tail", 10, 5, 10, 3)
+	c["arugai_no_oni"].regen_wounds = 10  # Nearly Immortal: regenerates 10 Wounds/Round (s54.5)
 
 	c["byoki_no_oni"] = _make("byoki_no_oni", "Byoki no Oni, Harbinger of Pestilence", SpiritCreatureData.Tier.HEAVY,
 		2, 5, 2, 3, {"agility": 3},
@@ -138,6 +139,7 @@ static func catalog() -> Dictionary:
 		3, 3, "Stomp", 7, 3, 8, 6, 20, 5, [32, 48, 64, 100], 200, 3,
 		["oni", "huge", "partial_invuln", "brood", "mortal", "leaping", "regen_per_round",
 			"acid_vomit", "multi_attack"]), "Bite", 7, 7, 6, 6)
+	c["hasaiki_no_oni"].regen_wounds = 5  # Regeneration: heals 5 Wounds/Round until dead (s54.5)
 
 	c["munemitsu_no_oni"] = _with2(_make("munemitsu_no_oni", "Munemitsu no Oni, the Earth Breaker", SpiritCreatureData.Tier.BOSS,
 		2, 7, 1, 5, {"reflexes": 4, "agility": 4, "strength": 8},

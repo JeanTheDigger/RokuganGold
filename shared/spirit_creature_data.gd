@@ -48,6 +48,12 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 @export var wound_thresholds: Array[int] = []
 @export var wounds_dead: int = 0
 
+## Per-round Wound regeneration (Reactions Stage). 0 = none. Distinct from the
+## "regeneration" tag (Gashadokuro, 10/round WITH threshold-cross suppression); this is
+## unconditional per-round regen (e.g. Arugai 10, Hasaiki 5 — s54.5 "Nearly Immortal" /
+## "Regeneration"). Hourly regens (Sentei) are negligible in a skirmish → left 0.
+@export var regen_wounds: int = 0
+
 @export var fear: int = 0
 ## Swift rating (L5R keyword the GDD invokes by name, e.g. "Swift 6"). Converted to
 ## a tile move-budget bonus via the project's fixed 1 tile = 5 ft (MovementSystem):

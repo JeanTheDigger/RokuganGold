@@ -4849,6 +4849,20 @@ Moves, Piercing Howl, Legendary Healing, Eyes of the Owl, Strength of Jade.
   runtime-verified for the data + damage path; the deferred ability/multi-attack-turn wiring
   is still the next tranche.
 
+### Systems Added 2026-06-17 (s54.5 creature ability wiring — regeneration, runtime-verified)
+- **Per-round regeneration with variable amounts — DONE + runtime-verified.** The regen
+  loop in `advance_round` already healed `SpiritAbilitySystem.regeneration_amount()`, but
+  oni used descriptive tags so they regenerated nothing. Added `SpiritCreatureData.regen_wounds`
+  (0 = none): `regeneration_amount()` returns it when > 0, else the Gashadokuro `regeneration`
+  tag's 10. Populated Arugai (10/round, "Nearly Immortal") and Hasaiki (5/round). New
+  `SpiritAbilitySystem.regen_suppressible()` (tag-only) so the threshold-cross 3-round
+  suppression stays Gashadokuro-specific while Arugai/Hasaiki regen UNCONDITIONALLY (faithful
+  to s54.5). Sentei's hourly regen is negligible per-round → left 0. Driver-verified: Arugai
+  50→40, Hasaiki 30→25 per `advance_round`, regen floors at 0, a non-regenerator (Byoki)
+  heals nothing. The remaining creature-unique abilities (Swallow Whole/Devour, Plague
+  Bearer, Burning Blood [needs per-creature 5k5/2k2 + save data], spawn-on-death) are the
+  next wiring candidates.
+
 ### Pending Redesign
 (None currently pending.)
 
