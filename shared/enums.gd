@@ -738,6 +738,7 @@ enum SpiritRealm {
 	MEIDO,
 	YUME_DO,
 	JIGOKU,  # the Realm of Evil — origin of oni (s54.5); not a spiritual-insurgency overlap realm
+	NINGEN_DO,  # the Mortal Realm — natural animals and mortal-world creatures (s54.12 / s54.1)
 }
 
 
