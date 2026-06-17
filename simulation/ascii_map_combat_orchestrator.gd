@@ -140,6 +140,11 @@ class MapCombatState:
 	var tactical_engaged: Dictionary = {}
 	## s54.10 Ancient General Undying: spawn-key → reform-due round (reforms once).
 	var reform_pending: Dictionary = {}
+	## s54.10 Ancient General Duelist's Challenge: the active formal duel (other Musha
+	## cease attacking while it stands). -1 = no duel; duel_offered = once-per-encounter.
+	var duel_challenger_id: int = -1
+	var duel_target_id: int = -1
+	var duel_offered: bool = false
 
 
 # =============================================================================
@@ -2912,6 +2917,17 @@ static func execute_npc_turn(
 	# -- Fear (s22.3/s02.4): resist nearby Fear sources or fight afraid (-1k0). --
 	apply_fear_checks(state, npc_id, npc, dice_engine)
 
+	# -- Duelist's Challenge (s54.10): lift a finished duel, let the General issue one
+	# (free), and make ceasefire-bound Musha hold their attacks while a duel stands.
+	_clear_duel_if_over(state, chars_by_id)
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("duel_offer"):
+		var duel_r: Dictionary = _npc_maybe_offer_duel(state, npc_id, npc)
+		if not duel_r.is_empty():
+			actions_taken.append({"action": "duel_challenge", "result": duel_r})
+	if _duel_ceasefire_blocks(state, npc_id, npc):
+		actions_taken.append({"action": "duel_ceasefire_hold"})
+		return {"actions": actions_taken}
+
 	# -- Shapeshifter: turn insubstantial when threatened (s54.10 Ephemeral Form) --
 	# Free Action; once per encounter. No-op for creatures without the ability.
 	_npc_maybe_activate_ephemeral_form(state, npc, p)
@@ -2982,6 +2998,10 @@ static func execute_npc_turn(
 	var melee_targets: Array = get_melee_targets(state, npc_id)
 	var ranged_targets: Array = get_ranged_targets(state, npc_id)
 	var best_target: int = _npc_pick_target(state, npc_id, melee_targets + ranged_targets, chars_by_id)
+
+	# Duelist's Challenge (s54.10): the challenger focuses its chosen opponent when in reach.
+	if npc_id == state.duel_challenger_id and state.duel_target_id in (melee_targets + ranged_targets):
+		best_target = state.duel_target_id
 
 	if best_target < 0:
 		# No visible target — do nothing (or wait).
@@ -3945,6 +3965,66 @@ static func _npc_maybe_mimic(
 	ts.consume_complex()
 	p.mimic_expiry = state.combat.round_number + MIMIC_DISGUISE_ROUNDS
 	return {"success": true, "action": "mimic", "char_id": char_id, "expiry": p.mimic_expiry}
+
+
+## s54.10 Ancient General Duelist's Challenge (duel_offer): once per encounter the
+## General challenges one enemy to formal combat; while the duel stands, all OTHER
+## Toshigoku Musha (the General's faction allies) cease attacking. A free declaration at
+## the start of its turn. Returns the challenge info, or {} if not offered.
+static func _npc_maybe_offer_duel(state: MapCombatState, char_id: int, character: L5RCharacterData) -> Dictionary:
+	var cr: SpiritCreatureData = character.spirit_creature
+	if cr == null or not cr.has_tag("duel_offer") or state.duel_offered:
+		return {}
+	if state.duel_challenger_id >= 0:
+		return {}  # a duel is already running
+	var apos: Vector2i = state.positions.get(char_id, Vector2i(-9999, -9999))
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	# Challenge the nearest living enemy in line of sight.
+	var best: int = -1
+	var best_d: int = 1 << 30
+	for oid: int in state.combat.participants:
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		var v: L5RCharacterData = state.combatants.get(oid, null)
+		if v == null or CharacterStats.is_dead(v):
+			continue
+		var d: int = _chebyshev(apos, state.positions.get(oid, Vector2i(9999, 9999)))
+		if d < best_d:
+			best_d = d
+			best = oid
+	if best < 0:
+		return {}
+	state.duel_challenger_id = char_id
+	state.duel_target_id = best
+	state.duel_offered = true
+	return {"challenger_id": char_id, "target_id": best}
+
+
+## True if an active duel forbids `char_id` from attacking: a Toshigoku Musha on the
+## challenger's faction that is neither the challenger nor the challenged target ceases
+## attacking while the duel stands (s54.10).
+static func _duel_ceasefire_blocks(state: MapCombatState, char_id: int, character: L5RCharacterData) -> bool:
+	if state.duel_challenger_id < 0:
+		return false
+	if char_id == state.duel_challenger_id or char_id == state.duel_target_id:
+		return false
+	if character.spirit_creature == null or not SpiritAbilitySystem.is_toshigoku_musha(character.spirit_creature):
+		return false
+	# Only the challenger's own faction holds (the challenged side fights freely).
+	return state.factions.get(char_id, FACTION_NEUTRAL) == state.factions.get(state.duel_challenger_id, FACTION_NEUTRAL)
+
+
+## Clears the active duel when either duelist is dead/out or has fled (ceasefire lifts).
+static func _clear_duel_if_over(state: MapCombatState, chars_by_id: Dictionary) -> void:
+	if state.duel_challenger_id < 0:
+		return
+	var a: L5RCharacterData = chars_by_id.get(state.duel_challenger_id, state.combatants.get(state.duel_challenger_id, null))
+	var b: L5RCharacterData = chars_by_id.get(state.duel_target_id, state.combatants.get(state.duel_target_id, null))
+	var a_done: bool = a == null or CharacterStats.is_dead(a) or state.duel_challenger_id in state.fled_ids
+	var b_done: bool = b == null or CharacterStats.is_dead(b) or state.duel_target_id in state.fled_ids
+	if a_done or b_done:
+		state.duel_challenger_id = -1
+		state.duel_target_id = -1
 
 
 ## s54.10 Konak Jiji Lure + Deceptive Weight. While disguised (lure_sprung == false) the

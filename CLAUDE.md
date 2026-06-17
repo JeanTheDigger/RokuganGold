@@ -4700,6 +4700,43 @@ single-character (GDD allows cooperative — deferred); a pinned **companion** d
 auto-escape (companion turn path doesn't call the escape; NPC victims and the PC do).
 Static-validated only (no Godot runtime).
 
+### s54.10 Ancient General Duelist's Challenge — wired into tile combat (2026-06-16, static-only)
+The boss's `duel_offer` ability: once per encounter the Ancient General challenges one
+enemy to formal combat, and "all other Musha in the area cease attacking for the
+duration." Wired as a battlefield ceasefire (no PC accept-prompt needed — the mechanical
+effect is the General's army standing down). New `MapCombatState.duel_challenger_id` /
+`duel_target_id` / `duel_offered`. In `execute_npc_turn`: `_clear_duel_if_over` lifts the
+duel when either duelist is dead/out/fled; `_npc_maybe_offer_duel` (free declaration at
+turn start) makes the General challenge the nearest living enemy, once per encounter;
+`_duel_ceasefire_blocks` makes every OTHER Toshigoku Musha on the challenger's faction
+**hold its attack** (returns a `duel_ceasefire_hold`) while the duel stands; and the
+challenger **focuses** the challenged target (best_target override when it is in reach).
+The challenged side fights freely (attacking the General is the implicit "accept"; the
+ceasefire is the General's side honoring the duel). LIMITATION: the formal PC
+accept/decline prompt is UI-deferred — the battlefield ceasefire + focus are the live,
+faithful mechanic. Static-validated only (no Godot runtime).
+
+### s54.10 creature ability set — final status (2026-06-16)
+With Duelist's Challenge wired, **every encoded creature ability that has BOTH a GDD-stated
+rule AND a creature that uses it is now implemented.** The two genuinely-remaining items
+have no GDD content to transcribe and cannot be built without inventing:
+- **Mujina illusion spells** (By the Light of the Moon, Mists of Illusion, Way of Deception,
+  Mask of Wind, Nature's Touch, Token of Memory): none are in the SpellSystem library and
+  none have a statted tile-combat effect, AND there is no creature spell-cast path in the
+  orchestrator. Building them needs the owner to define each spell's combat effect. (The
+  Mujina is already fully functional as the GDD describes it: an untargetable, non-fighting,
+  immortal trickster.)
+- **Major-Shapeshifter full puppeteering** (the "controls his actions until sunrise" clause):
+  NO encoded creature has Major-Shapeshifter Possession in its GDD-given ability set (the
+  Kitsune's set is Mimic / A Panther's Moves / Protection of Yomi / Ephemeral Form; Bakeneko
+  and Hengeyokai picks are unspecified), so assigning it would invent that creature's
+  abilities. The three GDD-designated possessors (Kitsune-tsuki / Shozai-gaki / Buruburu) are
+  already wired (control = 0-AP agency loss / 1k1-feed / Descent into Terror).
+Pure flavour (no stat-block mechanic, correctly no code): Pekkle lure_child/time_thief,
+spirit-animal field_commander/concealment, deceiver/vindictive/trickster, musha
+retains_identity. No-consumer (GDD rule exists but no encoded creature uses it): A Panther's
+Moves, Piercing Howl, Legendary Healing, Eyes of the Owl, Strength of Jade.
+
 ### Pending Redesign
 (None currently pending.)
 
