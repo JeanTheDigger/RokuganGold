@@ -84,6 +84,8 @@ static func catalog() -> Dictionary:
 		2, 5, 2, 3, {"reflexes": 3, "agility": 4, "strength": 6},
 		3, 3, "Claw", 7, 4, 6, 3, 25, 5, [50, 75, 100, 125], 150, 4,
 		["oni", "devour", "partial_invuln", "multi_attack"]), "Bite", 4, 4, 7, 5)
+	c["kamu_no_oni"].swallow_damage_rolled = 7  # Devour: swallowed victim suffers bite damage (s54.5)
+	c["kamu_no_oni"].swallow_damage_kept = 5
 
 	c["kommei_no_oni"] = _make("kommei_no_oni", "Kommei no Oni, Demon of Confusion", SpiritCreatureData.Tier.BOSS,
 		5, 5, 3, 3, {"awareness": 6, "strength": 4},
@@ -106,6 +108,9 @@ static func catalog() -> Dictionary:
 		3, 7, 2, 4, {"agility": 3, "strength": 8},
 		6, 3, "Claws", 7, 3, 10, 3, 15, 20, [100, 150], 200, 4,
 		["oni", "huge", "partial_invuln", "swallow_whole", "multi_attack"]), "Bite", 8, 3, 10, 5)
+	c["muduro_no_oni"].swallow_damage_rolled = 3  # Swallow Whole 3k3 + 1 Taint/round (s54.5)
+	c["muduro_no_oni"].swallow_damage_kept = 3
+	c["muduro_no_oni"].swallow_taint = true
 
 	c["nairu_no_oni"] = _make("nairu_no_oni", "Nairu no Oni, Scourge of the Skies", SpiritCreatureData.Tier.HEAVY,
 		3, 2, 2, 2, {"agility": 4, "strength": 4},
@@ -177,6 +182,8 @@ static func catalog() -> Dictionary:
 		2, 5, 1, 5, {"agility": 4},
 		3, 2, "Trample", 4, 4, 5, 3, 20, 8, [60, 90], 120, 3,
 		["oni", "huge", "partial_invuln", "charge", "devour", "trample_prone", "multi_attack"]), "Bite", 6, 4, 5, 5)
+	c["utogu_no_oni"].swallow_damage_rolled = 5  # Devour 5k5/round (s54.5)
+	c["utogu_no_oni"].swallow_damage_kept = 5
 
 	c["uzaki_no_oni"] = _with2(_make("uzaki_no_oni", "Uzaki no Oni, the Demon Commander", SpiritCreatureData.Tier.BOSS,
 		5, 5, 5, 5, {"awareness": 6, "intelligence": 6, "perception": 6},
@@ -215,6 +222,9 @@ static func catalog() -> Dictionary:
 		1, 1, 3, 1, {"stamina": 7, "strength": 7},
 		4, 1, "Grab", 8, 3, 7, 2, 15, 15, [40, 80, 120], 160, 5,
 		["oni", "huge", "partial_invuln", "oni_lord_spawn", "swallow_whole", "teleport"])
+	c["tsuburu_no_oni_spawn"].swallow_damage_rolled = 2  # Swallow Whole 2k2 + 1 Taint/round (s54.5)
+	c["tsuburu_no_oni_spawn"].swallow_damage_kept = 2
+	c["tsuburu_no_oni_spawn"].swallow_taint = true
 
 	c["yuhmi_no_oni"] = _with2(_make("yuhmi_no_oni", "Yuhmi no Oni, Flesh of the Dark Lord", SpiritCreatureData.Tier.BOSS,
 		2, 4, 2, 3, {"reflexes": 4, "agility": 4, "strength": 6},

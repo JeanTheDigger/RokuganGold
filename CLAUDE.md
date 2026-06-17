@@ -4863,6 +4863,26 @@ Moves, Piercing Howl, Legendary Healing, Eyes of the Owl, Strength of Jade.
   Bearer, Burning Blood [needs per-creature 5k5/2k2 + save data], spawn-on-death) are the
   next wiring candidates.
 
+### Systems Added 2026-06-17 (s54.5 Swallow Whole / Devour — runtime-verified)
+- **Swallow Whole / Devour wired (Muduro/Kamu/Tsuburu/Utogu).** On a wounding melee hit a
+  swallow creature wins a Contested Strength (creature vs victim) to engulf the victim:
+  `_apply_swallow_whole` (fired from execute_melee_attack beside Burning Blood) sets
+  `Participant.swallowed_by_id` + Grapple state (creature in control). Each Round the
+  swallowed victim takes the creature's `swallow_damage_rolled k _kept` (advance_round, +1
+  Taint if `swallow_taint`), released if the captor dies. Escape: `attempt_swallow_escape`
+  (Contested Strength vs the captor) — auto-attempted by a swallowed NPC in the grappled-turn
+  handler, public for the PC path. New SpiritCreatureData fields
+  `swallow_damage_rolled/_kept/swallow_taint`; populated Muduro (3k3 +Taint), Tsuburu (2k2
+  +Taint), Utogu (5k5), Kamu (7k5 bite; the GDD "swallowed → dies next Round" instant-death
+  is approximated by high per-round damage). **BUG caught by runtime test:** the initial
+  `swallowed_by_id >= 0` "is-swallowed" check was wrong — spirit-puppet captor ids are
+  NEGATIVE, so `>= 0` excluded them; switched to the `!= -1` sentinel everywhere. (The
+  pre-existing grapple_partner_id `>= 0` checks may share this latent issue for negative
+  captors — noted for a future pass; not touched here.)
+  RUNTIME-VERIFIED (Godot 4.6.2): Muduro swallows a low-Strength victim, per-round 3k3 + 1
+  Taint applied, a weak victim fails to escape 6/6, a strong victim escapes and the state
+  clears.
+
 ### Pending Redesign
 (None currently pending.)
 

@@ -864,6 +864,11 @@ static func execute_melee_attack(
 		if int(dmg_result.get("wounds", 0)) > 0:
 			_apply_burning_blood(attacker, target, weapon_name, dice_engine)
 
+		# Swallow Whole / Devour (s54.5): a wounding melee hit by a swallow creature wins a
+		# Contested Strength to engulf the victim (per-round damage applied in advance_round).
+		if int(dmg_result.get("wounds", 0)) > 0:
+			_apply_swallow_whole(state, attacker, attacker_id, target, target_id, weapon_name, dice_engine)
+
 		# Destiny's Strike (s38 Fire): a struck defender with it active immediately makes
 		# a single unarmed counterattack (once per Round).
 		_maybe_destiny_strike(state, target, t_p, attacker, a_p, dice_engine)
@@ -2513,6 +2518,67 @@ static func _apply_burning_blood(
 	return dmg
 
 
+## Swallow Whole / Devour (s54.5 Muduro/Kamu/Tsuburu/Utogu): on a wounding melee hit the
+## swallow creature wins a Contested Strength (creature vs victim) to engulf the victim —
+## who is Grappled (creature in control) and takes swallow damage each Round (advance_round)
+## until they escape. Inert unless the ATTACKER is a swallow creature. Returns true if
+## the victim was newly swallowed.
+static func _apply_swallow_whole(
+	state: MapCombatState,
+	attacker: L5RCharacterData,
+	attacker_id: int,
+	target: L5RCharacterData,
+	target_id: int,
+	weapon_name: String,
+	dice: DiceEngine,
+) -> bool:
+	if attacker.spirit_creature == null or attacker.spirit_creature.swallow_damage_rolled <= 0:
+		return false
+	if not IndividualCombat.get_weapon_profile(weapon_name).get("melee", true):
+		return false
+	if CharacterStats.is_dead(target):
+		return false
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if t_p == null or t_p.swallowed_by_id != -1:
+		return false
+	# Contested Strength: creature vs victim. The victim resists on a tie.
+	var cs: int = dice.roll_and_keep(maxi(1, attacker.strength), maxi(1, attacker.strength), true).total
+	var vs: int = dice.roll_and_keep(maxi(1, target.strength), maxi(1, target.strength), true).total
+	if cs <= vs:
+		return false
+	t_p.swallowed_by_id = attacker_id
+	IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_GRAPPLED)
+	t_p.grapple_partner_id = attacker_id
+	var a_p: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
+	if a_p != null:
+		a_p.grapple_partner_id = target_id
+		a_p.grapple_in_control = true
+	return true
+
+
+## A swallowed victim breaks free with a Contested Strength roll vs the captor (s54.5).
+## On success the swallow/grapple state clears for both sides. Public for the PC turn path.
+static func attempt_swallow_escape(state: MapCombatState, victim_id: int, victim: L5RCharacterData, dice: DiceEngine) -> Dictionary:
+	var vp: IndividualCombat.Participant = state.combat.participants.get(victim_id, null)
+	if vp == null or vp.swallowed_by_id == -1:
+		return {"success": false, "reason": "not_swallowed"}
+	var captor_id: int = vp.swallowed_by_id
+	var captor: L5RCharacterData = state.combatants.get(captor_id, null)
+	var c_str: int = maxi(1, captor.strength) if captor != null else 1
+	var v_roll: int = dice.roll_and_keep(maxi(1, victim.strength), maxi(1, victim.strength), true).total
+	var c_roll: int = dice.roll_and_keep(c_str, c_str, true).total
+	if v_roll <= c_roll:
+		return {"success": false, "reason": "still_swallowed", "roll": v_roll}
+	vp.swallowed_by_id = -1
+	vp.grapple_partner_id = -1
+	vp.conditions.erase(IndividualCombat.CONDITION_GRAPPLED)
+	var cp: IndividualCombat.Participant = state.combat.participants.get(captor_id, null)
+	if cp != null:
+		cp.grapple_partner_id = -1
+		cp.grapple_in_control = false
+	return {"success": true, "roll": v_roll}
+
+
 ## First known OFFENSIVE atemi kiho whose effect is encoded (so the strike actually
 ## applies something). Skips ally-targeted (heal) atemi like Chi Protection — those
 ## must not be delivered to the enemy best_target. Returns "" if the monk knows none.
@@ -2859,6 +2925,22 @@ static func advance_round(
 			var _rg_amt: int = SpiritAbilitySystem.regeneration_amount(_rg_c.spirit_creature)
 			if _rg_amt > 0:
 				WoundSystem.heal_wounds(_rg_c, _rg_amt)
+		# Swallow Whole / Devour (s54.5): a swallowed victim takes the captor's swallow
+		# damage each Round (+1 Taint if swallow_taint); released if the captor dies.
+		if _tp.swallowed_by_id != -1:
+			var _sv: L5RCharacterData = state.combatants.get(_tp.character_id, null)
+			var _cap: L5RCharacterData = state.combatants.get(_tp.swallowed_by_id, null)
+			if _sv == null or CharacterStats.is_dead(_sv) or _cap == null or CharacterStats.is_dead(_cap):
+				_tp.swallowed_by_id = -1
+				_tp.grapple_partner_id = -1
+				_tp.conditions.erase(IndividualCombat.CONDITION_GRAPPLED)
+			elif _cap.spirit_creature != null:
+				var _sd: int = dice_engine.roll_and_keep(
+					_cap.spirit_creature.swallow_damage_rolled,
+					_cap.spirit_creature.swallow_damage_kept, true).total
+				WoundSystem.apply_damage(_sv, _sd, 0)
+				if _cap.spirit_creature.swallow_taint:
+					_sv.taint = minf(100.0, _sv.taint + 1.0)
 		# Fire (s56.6.6 / s54.10 Everything Burns): a participant standing on a burning
 		# tile and/or set on fire takes 1k1 each round; armour does not reduce.
 		# flame_immune spirit creatures (Kagaki) take no fire damage.
@@ -3002,6 +3084,11 @@ static func execute_npc_turn(
 		if p.deceptive_weight_pinned and not p.grapple_in_control:
 			var esc: Dictionary = attempt_deceptive_weight_escape(state, npc_id, npc, dice_engine)
 			actions_taken.append({"action": "deceptive_weight_escape", "result": esc})
+			return {"actions": actions_taken}
+		# s54.5 Swallow Whole/Devour: a swallowed victim struggles free (Contested Strength).
+		if p.swallowed_by_id != -1:
+			var sesc: Dictionary = attempt_swallow_escape(state, npc_id, npc, dice_engine)
+			actions_taken.append({"action": "swallow_escape", "result": sesc})
 			return {"actions": actions_taken}
 		if p.grapple_in_control:
 			# In control: try to hit or throw.

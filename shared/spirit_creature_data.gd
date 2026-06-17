@@ -62,6 +62,14 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 @export var burning_blood_kept: int = 0
 @export var burning_blood_tn: int = 0
 
+## Swallow Whole / Devour (s54.5 Muduro/Kamu/Tsuburu/Utogu): on a wounding melee hit the
+## creature wins a Contested Strength to swallow the victim, who then takes
+## swallow_damage_rolled k _kept each Round (+1 Taint if swallow_taint) until they escape.
+## 0 rolled = the creature has no swallow attack.
+@export var swallow_damage_rolled: int = 0
+@export var swallow_damage_kept: int = 0
+@export var swallow_taint: bool = false
+
 @export var fear: int = 0
 ## Swift rating (L5R keyword the GDD invokes by name, e.g. "Swift 6"). Converted to
 ## a tile move-budget bonus via the project's fixed 1 tile = 5 ft (MovementSystem):
