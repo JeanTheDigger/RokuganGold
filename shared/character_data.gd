@@ -170,6 +170,15 @@ var spell_void_bonus_used: int = 0
 @export var temporary_modifiers: Dictionary = {}
 @export var cohabitation_days: Dictionary = {}
 @export var fear_rating: int = 0
+## s22.3/s02.4 Fear resistance. immune_to_fear: never affected (s29.4 Matsu's Fury
+## "Immune-to-Fear targets" — forward-wired; no granting source yet). The resist
+## bonuses are set by Kshatriya Warrior techniques (s29.14): Strength of Indra (R1)
+## raises Willpower one Rank vs Fear (willpower_bonus 1); Courage of Shiva (R5) grants
+## +1k1 (rolled/kept bonus 1). Read by AsciiMapCombatOrchestrator.apply_fear_checks.
+@export var immune_to_fear: bool = false
+@export var fear_resist_willpower_bonus: int = 0
+@export var fear_resist_rolled_bonus: int = 0
+@export var fear_resist_kept_bonus: int = 0
 @export var captive_status: String = ""
 @export var is_retired_monastic: bool = false
 @export var topic_pool: Array = []

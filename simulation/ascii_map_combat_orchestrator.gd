@@ -3773,9 +3773,15 @@ static func apply_fear_checks(
 	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
 	if p == null or character == null or CharacterStats.is_dead(character):
 		return
+	# Immune-to-Fear (s29.4) — never affected; ensure no lingering AFRAID condition.
+	if character.immune_to_fear:
+		p.conditions.erase(IndividualCombat.CONDITION_AFRAID)
+		return
 	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-9999, -9999))
 	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
-	# Highest Fear among enemy creatures whose range covers this character.
+	# Highest Fear among enemy combatants whose range covers this character. A Fear
+	# source is a creature's stat-block Fear OR a character's own fear_rating (s22.3
+	# Terrible Appearance etc.). Range = Fear × 5 ft = Fear tiles.
 	var max_fear: int = 0
 	for oid: int in state.combat.participants:
 		if oid == char_id:
@@ -3783,9 +3789,9 @@ static func apply_fear_checks(
 		if not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
 			continue
 		var src: L5RCharacterData = state.combatants.get(oid, null)
-		if src == null or src.spirit_creature == null or CharacterStats.is_dead(src):
+		if src == null or CharacterStats.is_dead(src):
 			continue
-		var f: int = src.spirit_creature.fear
+		var f: int = maxi(src.fear_rating, src.spirit_creature.fear if src.spirit_creature != null else 0)
 		if f <= 0:
 			continue
 		if _chebyshev(cpos, state.positions.get(oid, Vector2i(-9999, -9999))) <= f:
@@ -3794,9 +3800,13 @@ static func apply_fear_checks(
 		# Out of every Fear source's range — no longer afraid.
 		p.conditions.erase(IndividualCombat.CONDITION_AFRAID)
 		return
-	var wp: int = maxi(1, character.willpower)
+	# Resist: Willpower (+ Kshatriya Strength of Indra rank bonus) keep Willpower, plus
+	# Courage of Shiva's +1k1, vs TN 5 + Fear × 5 (s22.3 LOCKED).
+	var wp: int = maxi(1, character.willpower + character.fear_resist_willpower_bonus)
+	var resist: int = dice.roll_and_keep(
+		wp + character.fear_resist_rolled_bonus, wp + character.fear_resist_kept_bonus, true).total
 	var tn: int = 5 + max_fear * 5
-	if dice.roll_and_keep(wp, wp, true).total >= tn:
+	if resist >= tn:
 		p.conditions.erase(IndividualCombat.CONDITION_AFRAID)  # resisted this turn
 	elif IndividualCombat.CONDITION_AFRAID not in p.conditions:
 		p.conditions.append(IndividualCombat.CONDITION_AFRAID)

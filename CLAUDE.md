@@ -4623,12 +4623,21 @@ AFRAID condition (resisting OR leaving every Fear source's range clears it — p
 driven, re-checked each turn). **GDD CONFLICT (left unresolved, flagged for owner):**
 s02.4 states the TN as **10 + Fear × 5** while s22.3 (the LOCKED character-sheet Fear
 definition) says **5 + Fear × 5** — implemented per s22.3; owner should adjudicate.
-LIMITATIONS: "all rolls" is applied to attack rolls (the in-combat roll; defense is a
-passive Armor TN, not a roll); Fear-immunity (s29.4 "Immune-to-Fear", s29.14 Strength of
-Indra +1 Willpower Rank to resist, Lion Matsu's Fury immune check) is not modelled (no
-immunity flag yet); the PC turn path must call `apply_fear_checks` itself (UI-deferred).
-Piercing Howl (Minor Shapeshifter Fear 2) remains unwired — no encoded creature carries
-it in its GDD-given set, so it has no consumer. Static-validated only (no Godot runtime).
+A Fear source is any enemy combatant's stat-block `fear` OR a character's own
+`fear_rating` (s22.3 Terrible Appearance etc.), so Fear projects from characters too,
+not just spirit creatures. **Fear resistance/immunity WIRED:** `L5RCharacterData`
+gains `immune_to_fear` (skips the check — s29.4 "Immune-to-Fear", forward-wired with no
+granting source yet) and the Kshatriya Warrior (Ivory Kingdoms, s29.14) resist bonuses
+set in `SkillResolver.apply_technique_flags` — Strength of Indra R1 (`fear_resist_willpower_bonus`
+= +1 Willpower Rank) and Courage of Shiva R5 (`fear_resist_rolled_bonus`/`_kept_bonus`
+= +1k1) — applied to the resist roll in `apply_fear_checks`. **GDD CONFLICT (left unresolved,
+flagged for owner):** s02.4 states the TN as **10 + Fear × 5** while s22.3 (the LOCKED
+character-sheet Fear definition) says **5 + Fear × 5** — implemented per s22.3; owner should
+adjudicate. LIMITATIONS: "all rolls" is applied to attack rolls (the in-combat roll;
+defense is a passive Armor TN, not a roll); the PC turn path must call `apply_fear_checks`
+itself (UI-deferred); Piercing Howl (Minor Shapeshifter Fear 2) remains unwired — no encoded
+creature carries it in its GDD-given set, so it has no consumer. Static-validated only (no
+Godot runtime).
 
 ### Pending Redesign
 (None currently pending.)

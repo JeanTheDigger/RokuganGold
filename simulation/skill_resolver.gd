@@ -134,6 +134,14 @@ static func apply_technique_flags(character: L5RCharacterData) -> void:
 		character.precise_memory = true
 	if character.school.begins_with("Doji Courtier") and rank >= 2:
 		character.cadence_trained = true
+	# Kshatriya Warrior (Ivory Kingdoms, s29.14) Fear resistance: Strength of Indra (R1)
+	# raises Willpower one Rank vs Fear; Courage of Shiva (R5) adds +1k1 to resist Fear.
+	if character.school.begins_with("Kshatriya Warrior"):
+		if rank >= 1:
+			character.fear_resist_willpower_bonus = 1
+		if rank >= 5:
+			character.fear_resist_rolled_bonus = 1
+			character.fear_resist_kept_bonus = 1
 	if rank >= 1:
 		var all_schools: Array = [character.school]
 		for path: String in character.school_paths:
