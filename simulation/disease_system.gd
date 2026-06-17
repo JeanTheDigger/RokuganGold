@@ -89,6 +89,56 @@ static func process_daily(victim: L5RCharacterData, ic_day: int, dice: DiceEngin
 	return {"type": t}
 
 
+## --- Poison / venom (s54.11/s54.12) -----------------------------------------------------
+## An immediate Trait drain per hit (Strength for stingers, Stamina for bites), restored in
+## the world-sim. GDD recovery is sub-day (1hr/dose) to 24h, which collapses to a next-tick
+## full restore at the daily granularity. One poison trait at a time per victim (stacks).
+static func apply_poison(victim: L5RCharacterData, trait_name: String, ranks: int = 1) -> void:
+	var a: Dictionary = victim.poison_affliction
+	if a.is_empty():
+		a = {"trait": trait_name, "drained": 0}
+	elif str(a.get("trait", "")) != trait_name:
+		return  # already poisoned with a different trait — ignore the second toxin
+	for _i in range(ranks):
+		if _get_trait(victim, trait_name) > 0:  # only count ranks actually removed
+			_drain(victim, [trait_name], 1)
+			a["drained"] = int(a.get("drained", 0)) + 1
+	victim.poison_affliction = a
+
+
+## Daily world-sim restore: returns the drained Traits (recovery < 1 day). Clears the poison.
+static func process_poison_daily(victim: L5RCharacterData) -> Dictionary:
+	if victim.poison_affliction.is_empty():
+		return {}
+	var a: Dictionary = victim.poison_affliction
+	var n: int = int(a.get("drained", 0))
+	var tr: String = str(a.get("trait", ""))
+	_restore(victim, tr, n)
+	victim.poison_affliction = {}
+	return {"recovered": n, "trait": tr}
+
+
+static func is_poisoned(victim: L5RCharacterData) -> bool:
+	return not victim.poison_affliction.is_empty()
+
+
+static func _get_trait(victim: L5RCharacterData, trait_name: String) -> int:
+	match trait_name:
+		"stamina":  return victim.stamina
+		"reflexes": return victim.reflexes
+		"agility":  return victim.agility
+		"strength": return victim.strength
+	return 0
+
+
+static func _restore(victim: L5RCharacterData, trait_name: String, amount: int) -> void:
+	match trait_name:
+		"stamina":  victim.stamina += amount
+		"reflexes": victim.reflexes += amount
+		"agility":  victim.agility += amount
+		"strength": victim.strength += amount
+
+
 ## Drains the listed Traits by `amount`, floored at 0.
 static func _drain(victim: L5RCharacterData, traits: Array, amount: int) -> void:
 	for tr in traits:

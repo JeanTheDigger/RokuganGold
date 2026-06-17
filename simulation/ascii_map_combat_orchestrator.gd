@@ -4599,6 +4599,20 @@ static func _apply_hit(
 			and not CharacterStats.is_dead(target):
 		_apply_disease_on_hit(attacker, target, int(wd_result.get("final_damage", 0)), dice_engine)
 
+	# Poison / venom (s54.11/s54.12): a hit by a poison creature drains a Trait (Strength for
+	# stingers, Stamina for bites). poison_bite (komodo) allows a Stamina TN 20 save; the
+	# stinger poisons (Gakimushi) have no save. Cross-encounter restore in the world-sim.
+	if attacker.spirit_creature != null and target.spirit_creature == null and raw > 0 \
+			and not CharacterStats.is_dead(target):
+		var pc: SpiritCreatureData = attacker.spirit_creature
+		if pc.has_tag("poisonous_stinger") or pc.has_tag("poison_stinger"):
+			DiseaseSystem.apply_poison(target, "strength")
+		elif pc.has_tag("poison_stamina"):
+			DiseaseSystem.apply_poison(target, "stamina")
+		elif pc.has_tag("poison_bite"):
+			if dice_engine.roll_and_keep(maxi(1, target.stamina), maxi(1, target.stamina), true).total < 20:
+				DiseaseSystem.apply_poison(target, "stamina")
+
 	# Spawn-on-death (s54.5): Tasu releases spawn, Wakeru splits into lesser copies when
 	# slain. Fires once, when this hit kills a death_spawn creature.
 	if t_p != null and target.spirit_creature != null \

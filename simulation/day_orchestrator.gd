@@ -1141,6 +1141,11 @@ static func advance_day(
 	# a Byoki/Shikko/plague-zombie hit; a lethal Plague-Carrier drain dies (→ death_events).
 	_process_disease_afflictions(characters, dice_engine, death_events, ic_day)
 
+	# s54.11/s54.12 Poison/venom: restore Traits drained by a stinger/bite (recovery < 1 day).
+	for _pv: L5RCharacterData in characters:
+		if _pv != null and not CharacterStats.is_dead(_pv) and not _pv.poison_affliction.is_empty():
+			DiseaseSystem.process_poison_daily(_pv)
+
 	var orphan_results: Array = _process_lord_deaths(
 		death_events, characters, objectives_map, successor_map,
 		active_successions, next_succession_id, characters_by_id, ic_day,

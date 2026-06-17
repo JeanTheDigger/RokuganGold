@@ -281,6 +281,10 @@ var taint_benefits_suppressed: bool = false
 ## Traits over days/weeks until cured. {type:int (DiseaseSystem.Type), source_id,
 ## last_tick, cures (consecutive Earth saves), onset}. Empty = healthy.
 @export var disease_affliction: Dictionary = {}
+## s54.11/s54.12 poison/venom (Gakimushi stinger → Strength, komodo/jinmenju → Stamina):
+## an immediate Trait drain per hit, restored in the world-sim (sub-day/24h recovery
+## collapses to the next daily tick). {trait:String, drained:int}. Empty = unpoisoned.
+@export var poison_affliction: Dictionary = {}
 
 # -- Family Web (Section 22.6) -------------------------------------------------
 # Generation 1 (self), Generation 2 (parents), and any actively-simulated

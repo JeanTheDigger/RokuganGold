@@ -5022,6 +5022,20 @@ Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next cand
   Rolls + Spell Casting" is the same -1k0); Fear and tremor do not stack (both = the single
   -1k0 AFRAID).
 
+### Systems Added 2026-06-17 (s54.11/s54.12 poison / venom — runtime-verified)
+- **Poison stat-drain wired (Gakimushi stinger, komodo/jinmenju bite, aquatic stinger).** A
+  cross-encounter Trait drain (like disease/possession). New `L5RCharacterData.poison_affliction`
+  {trait, drained}. DiseaseSystem.apply_poison drains a Trait immediately on hit (Strength for
+  `poisonous_stinger`/`poison_stinger`, Stamina for `poison_stamina`/`poison_bite`), stacking
+  per hit; process_poison_daily restores all drained Ranks (the GDD sub-day/24h recovery
+  collapses to a next-tick full restore at daily granularity). Combat hook in `_apply_hit`:
+  stinger poisons have no save, `poison_bite` (komodo) allows a Stamina TN 20 save. Wired into
+  DayOrchestrator daily (beside disease). RUNTIME-VERIFIED (Godot 4.6.2): Gakimushi stinger
+  drains Strength 5→3 over 2 hits (drained=2, poisoned), the world-sim restores it fully (→5,
+  cleared); komodo resolves. LIMITATIONS: paralysis at Trait 0 is the drained state (no
+  separate paralyzed condition); the exact multi-day Komodo cadence and Gakimushi 1hr/dose
+  timing collapse to a single next-day restore.
+
 ### Pending Redesign
 (None currently pending.)
 
