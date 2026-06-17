@@ -5086,6 +5086,19 @@ Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next cand
   Void Strike (the stolen-Void beam needing full 7 VP) remains deferred — Akeru accumulating
   beyond its starting Void Rank is not modelled.
 
+### Systems Added 2026-06-17 (s54.12 Breathe Flames + Burning Saliva — runtime-verified)
+- **Auto-hit breath weapons + Basan Breathe Flames.** Extended the creature ranged path:
+  `ranged_attack_rolled` 0 now means an auto-hit breath/blast (no to-hit roll) for the
+  single-target path too (the AoE path already had this). The ranged guards key on
+  `ranged_damage_rolled` (a ranged attack is defined by its damage); the single-target NPC
+  branch is gated to `ranged_aoe_radius == 0` so AoE creatures only use the AoE path. Basan
+  Breathe Flames populated: Complex, auto-hit one target within 15' (3 tiles), DR 4k3.
+  RUNTIME-VERIFIED (Godot 4.6.2): Breathe Flames auto-hits a Reflexes-8 target (17 wounds);
+  range-gated (5 tiles → out_of_range).
+- **Burning Saliva wired (Akuma no Oni spawn).** Added `burning_saliva` to the on-fire hook —
+  the spawn's tongue hits set the target on fire (the GDD 10-round / vinegar-wash specifics
+  collapse to the standard on-fire layer). RUNTIME-VERIFIED: Akuma spawn melee hit ignites.
+
 ### Pending Redesign
 (None currently pending.)
 

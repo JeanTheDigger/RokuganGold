@@ -126,6 +126,11 @@ static func catalog() -> Dictionary:
 		1, 1, 2, 1, {"reflexes": 3},
 		3, 3, "Spur", 4, 2, 2, 1, 20, 3, [10], 20, 0,
 		["spirit", "breathe_flames", "plumage_camouflage"], 3, _C)
+	# Breathe Flames: Complex, auto-hits one target within 15' (3 tiles), DR 4k3 (s54.12).
+	c["basan"].ranged_attack_rolled = 0  # auto-hit
+	c["basan"].ranged_damage_rolled = 4
+	c["basan"].ranged_damage_kept = 3
+	c["basan"].ranged_range_tiles = 3
 
 	c["furaribi"] = _make("furaribi", "Furaribi", SpiritCreatureData.Tier.MID,
 		0, 1, 1, 0, {"reflexes": 3, "agility": 3, "perception": 2},

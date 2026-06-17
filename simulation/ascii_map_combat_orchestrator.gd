@@ -2554,7 +2554,7 @@ static func execute_creature_ranged_attack(
 	dice: DiceEngine,
 ) -> Dictionary:
 	var cr: SpiritCreatureData = attacker.spirit_creature
-	if cr == null or cr.ranged_attack_rolled <= 0:
+	if cr == null or cr.ranged_damage_rolled <= 0:
 		return {"ok": false, "reason": "no_ranged_attack"}
 	var ts: TurnState = state.turn_states.get(attacker_id, null)
 	if ts == null or not ts.can_use_complex():
@@ -2567,10 +2567,13 @@ static func execute_creature_ranged_attack(
 	if t_p == null:
 		return {"ok": false, "reason": "no_target"}
 	ts.consume_complex()
-	var to_hit: int = dice.roll_and_keep(cr.ranged_attack_rolled, cr.ranged_attack_kept, true).total
-	var atn: int = IndividualCombat.get_armor_tn(target, t_p, dice, false, false, "")
-	if to_hit < atn:
-		return {"ok": true, "hit": false, "roll": to_hit, "armor_tn": atn}
+	# ranged_attack_rolled 0 = an auto-hit breath/blast (s54.12 Basan Breathe Flames); else
+	# a normal to-hit roll vs Armor TN.
+	if cr.ranged_attack_rolled > 0:
+		var to_hit: int = dice.roll_and_keep(cr.ranged_attack_rolled, cr.ranged_attack_kept, true).total
+		var atn: int = IndividualCombat.get_armor_tn(target, t_p, dice, false, false, "")
+		if to_hit < atn:
+			return {"ok": true, "hit": false, "roll": to_hit, "armor_tn": atn}
 	# Damage: spirit ranged damage filtered by the target's armour (mundane reduction).
 	var raw: int = dice.roll_and_keep(cr.ranged_damage_rolled, cr.ranged_damage_kept, true).total
 	var reduction: int = 0 if target.spirit_creature != null else maxi(0, target.armor_reduction)
@@ -2578,7 +2581,7 @@ static func execute_creature_ranged_attack(
 	if cr.ranged_fire and target.spirit_creature == null:
 		t_p.on_fire = true
 	return {
-		"ok": true, "hit": true, "roll": to_hit, "armor_tn": atn,
+		"ok": true, "hit": true,
 		"wounds": wd.get("final_damage", raw), "set_on_fire": cr.ranged_fire,
 		"dead": CharacterStats.is_dead(target),
 	}
@@ -3332,7 +3335,8 @@ static func execute_npc_turn(
 
 	# -- Creature ranged attack (s54.5 Flaming Bark / Hurl Flaming Blood): a creature with
 	# a thrown/spat attack fires at a target that is in LOS + range but not in melee reach.
-	if npc.spirit_creature != null and npc.spirit_creature.ranged_attack_rolled > 0 \
+	if npc.spirit_creature != null and npc.spirit_creature.ranged_damage_rolled > 0 \
+			and npc.spirit_creature.ranged_aoe_radius == 0 \
 			and not target_in_melee and target_in_ranged:
 		var rtgt: L5RCharacterData = chars_by_id.get(best_target, state.combatants.get(best_target, null))
 		if rtgt != null and not CharacterStats.is_dead(rtgt):
@@ -4692,7 +4696,8 @@ static func _apply_hit(
 	# applies it) until a Simple Action extinguishes it. fire_trail tags the Kagaki,
 	# whose only attack is the melee Flame Bite (no ranged fire creature exists).
 	if attacker.spirit_creature != null and t_p != null \
-			and (attacker.spirit_creature.has_tag("fire_trail") or attacker.spirit_creature.has_tag("burning_touch")):
+			and (attacker.spirit_creature.has_tag("fire_trail") or attacker.spirit_creature.has_tag("burning_touch") \
+				or attacker.spirit_creature.has_tag("burning_saliva")):
 		t_p.on_fire = true
 
 	# Soul Touch (s54.12 Furaribi): a touched character cannot spend Void Points (the GDD
