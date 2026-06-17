@@ -5105,6 +5105,22 @@ Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next cand
   `feed_upon_soul` tag + a mortal kill). RUNTIME-VERIFIED (Godot 4.6.2): a kill healed the
   Kyoso spawn by 5 (= 5 × the rank-1 test victim's computed Insight Rank).
 
+### s54.5/s54.11/s54.12 creature ability layer — integration validation (2026-06-17)
+Ran a full integration smoke (Godot 4.6.2): all 22 representative creatures
+(ghul/daku/furu/taki-bi/kwaku/gagoze/pekkle/jimen/furaribi/wanyudo/akeru/basan/byoki/
+gakimushi/muduro/tasu/kyoso-spawn/hinotama/kukanchi/arugai/shikko/wakeru) take a real
+`execute_npc_turn` against a hero party with **zero crashes** (22 ok, 0 missing); melee +
+multi-attack fire. **Finding (not a bug):** the creature-turn Complex abilities (taint_gaze,
+scream, possession, AoE, ranged) defer past a turn-1 stance change — `_npc_pick_stance`
+spends a Simple to enter ATTACK on turn 1, and under the "1 Complex OR 2 Simple" economy a
+spent Simple blocks a Complex the same turn, so the signature gaze/scream fires from turn 2
+onward (verified: Gagoze turn 0 = [stance, attack], turn 1 = [taint_gaze] → victim +1.0
+Taint). This is faithful action economy; the GDD gives no NPC stance-vs-ability priority, so
+no change was made. Two test-harness pitfalls noted for future drivers: (1) always copy BOTH
+simulation/ AND shared/ into the headless test project (a stale shared/ silently breaks a
+bestiary catalog mid-build → null spawns → hangs); (2) do not re-call execute_npc_turn for
+the same actor without proper turn advancement.
+
 ### Pending Redesign
 (None currently pending.)
 
