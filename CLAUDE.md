@@ -4799,6 +4799,39 @@ Moves, Piercing Howl, Legendary Healing, Eyes of the Owl, Strength of Jade.
   (temporarily set attack_rolled/kept + damage_rolled/kept to the attack2 values) will work
   for the second strike once the action economy is reconciled; the data is ready.
 
+### Systems Added 2026-06-17 (s54 bestiary transcription + unified spawn glue)
+- **s54.11 Undead, s54.12 Additional Creatures + Elemental Terrors, s54.6 Five Ancient
+  Races — transcribed.** Three new bestiaries reusing SpiritCreatureData (faithful, no
+  invented values): `undead_bestiary.gd` (17 — physical undead/gaki/slaughter spirit/named
+  villains), `additional_creatures_bestiary.gd` (~32 — the 10 Greater+Lesser Elemental
+  Terrors of all five elements, Chikushudo spirits, Shadowlands jinmenju, Children of the
+  Last Wish, Yamato no Orochi, Nure-Onna, Hinotama, Wanyudo, Furaribi, legendary giants,
+  mundane animals), `ancient_races_bestiary.gd` (10 — Kenku/Ningyo/Kitsu/Tsuno/Zokujin).
+  New `Enums.SpiritRealm.NINGEN_DO` (Mortal Realm) for natural animals + mortal-world
+  spirits. Realm assignment: Elemental Terrors/oni/Tainted → JIGOKU, gaki → GAKI_DO,
+  slaughter spirits/Tsuno → TOSHIGOKU, Chikushudo bird/animal spirits → CHIKUSHUDO, Sakkaku
+  water spirits → SAKKAKU, mortal → NINGEN_DO. Tag mapping: "Invulnerability" (resists
+  mundane weapons) → wired `partial_invuln`; "Superior Invulnerability"/"Insubstantial"
+  (only magic/jade harm) → wired `superior_invuln`; gaki "Superior Invulnerability"
+  (illusion+mind immunity, NOT mundane) → descriptive `immune_illusion`/`immune_mind`.
+  "human-type Wound Ranks" → `wounds_dead = 0` so the PC Earth-derived track applies
+  (faithful for the human-type races, not a gap). Multi-attack creatures (Harionago,
+  Pennaggolan, Yamato no Orochi) carry attack2.
+- **Unified spawn-by-id glue (s54 / #2).** `SpiritCombatant.find_creature(id)` searches
+  EVERY bestiary (spirit realms + oni + undead + additional/terrors + ancient races) and
+  `spawn_by_id(id, instance_id)` builds the combat puppet — the realm-agnostic API the
+  future Shadowlands / Kaiu-Wall-horde / mission consumer uses to drop any transcribed s54
+  creature into the orchestrator without knowing which bestiary holds it. Pure, additive.
+- **Combat status (#1 ability wiring).** With the damage-path fix (above), the SHARED
+  ability layer already makes most oni/undead/terrors combat-functional NOW: real stat-block
+  damage, `partial_invuln`/`superior_invuln` (mundane-weapon resistance), Fear (apply_fear_checks),
+  Swift (move budget), `flame_immune`/`water_vulnerable` (fire/damage filter), engulf grab.
+  The oni/creature-UNIQUE abilities (Plague Bearer, Swallow Whole, Burning Blood, spawn-on-death,
+  Taint Affliction, the differing regen rates, Spell Mastery, the Elemental-Terror powers,
+  etc.) carry DESCRIPTIVE tags and are the next runtime-verifiable wiring tranche — done the
+  way the s56.16 creature abilities were (combat-consumable subset first), once a Godot
+  runtime is available. All of this session's combat/bestiary work is static-only (no Godot).
+
 ### Pending Redesign
 (None currently pending.)
 

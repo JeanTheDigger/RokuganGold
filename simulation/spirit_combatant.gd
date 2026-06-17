@@ -92,6 +92,34 @@ static func spawn(realm: int, creature_id: String, instance_id: int) -> L5RChara
 	return to_character_data(cr, instance_id)
 
 
+## Finds a creature by id across EVERY bestiary (spirit realms, oni, undead, elemental
+## terrors + additional creatures, the Five Ancient Races). Returns a fresh
+## SpiritCreatureData instance, or null if no bestiary holds the id. The realm-agnostic
+## lookup the Shadowlands / Kaiu-Wall-horde / mission consumers use — every transcribed
+## s54 creature is spawnable by id without knowing which bestiary it lives in.
+static func find_creature(creature_id: String) -> SpiritCreatureData:
+	for realm: int in [Enums.SpiritRealm.GAKI_DO, Enums.SpiritRealm.TOSHIGOKU,
+			Enums.SpiritRealm.SAKKAKU, Enums.SpiritRealm.CHIKUSHUDO]:
+		var cr: SpiritCreatureData = catalog_for_realm(realm).get(creature_id, null)
+		if cr != null:
+			return cr
+	for cat: Dictionary in [OniBestiary.catalog(), UndeadBestiary.catalog(),
+			AdditionalCreaturesBestiary.catalog(), AncientRacesBestiary.catalog()]:
+		var cr2: SpiritCreatureData = cat.get(creature_id, null)
+		if cr2 != null:
+			return cr2
+	return null
+
+
+## Spawns a combat puppet for any creature id from any bestiary (see find_creature).
+## Returns null if the id is unknown. instance_id MUST be unique negative (by convention).
+static func spawn_by_id(creature_id: String, instance_id: int) -> L5RCharacterData:
+	var cr: SpiritCreatureData = find_creature(creature_id)
+	if cr == null:
+		return null
+	return to_character_data(cr, instance_id)
+
+
 # ── internal ──────────────────────────────────────────────────────────────────
 
 static func _set_trait(c: L5RCharacterData, tname: String, value: int) -> void:
