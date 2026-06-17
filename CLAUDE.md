@@ -4676,6 +4676,30 @@ until it strikes) rather than as a second hook in CombatController — there is 
 Mimic to gate there until spirit creatures flow through that layer. Re-castable (no
 once-per-encounter limit; GDD allows recasting). Static-validated only (no Godot runtime).
 
+### s54.10 Konak Jiji Lure + Deceptive Weight — wired into tile combat (2026-06-16, owner-approved, static-only)
+Owner decisions (2026-06-16): trigger = **adjacency + resist roll**; pin = **grapple state**
+(escape Athletics/Strength TN 40). The GDD gives the spring (auto-hit + 400 lb pin, TN 40
+to move, cooperative allowed) and the venom (already wired); the open piece was the
+tile-combat pickup trigger. **Wired:** the Konak Jiji starts disguised as a harmless
+abandoned baby — `lure`-tagged + `lure_sprung == false` makes it untargetable in
+`_is_targetable` (reuses the Mimic/invisibility targeting path). On its turn while
+disguised it does **nothing** unless a living non-spirit enemy is adjacent (has reached
+for the babe); then `_npc_maybe_spring_lure` runs a **Contested Willpower (victim) vs
+Awareness (creature)** roll — no invented TN, both stat-block values: success sees through
+it (`lure_sprung = true`, now revealed/targetable, fights normally with Claws 5k3); failure
+**springs the trap** — an automatic claw hit (no attack roll, `damage_rolled k damage_kept`),
+a pin via the existing grapple state (`CONDITION_GRAPPLED` + `grapple_partner_id`, creature
+in control, `deceptive_weight_pinned = true`), and the paralysis venom (timed Stunned for
+Water minutes). **Escape:** `attempt_deceptive_weight_escape` rolls Strength + Athletics vs
+`DECEPTIVE_WEIGHT_ESCAPE_TN = 40` (GDD-stated); on success the grapple/pin clears both
+sides. A pinned NPC victim auto-attempts it via a new branch in the grappled-turn handler
+(before the normal take-control); the PC path calls the public fn (UI-deferred). New
+`Participant.lure_sprung` / `deceptive_weight_pinned`. Konak Jiji already carried the
+`lure`/`deceptive_weight`/`paralysis_venom` tags. LIMITATIONS: cooperative escape is
+single-character (GDD allows cooperative — deferred); a pinned **companion** doesn't
+auto-escape (companion turn path doesn't call the escape; NPC victims and the PC do).
+Static-validated only (no Godot runtime).
+
 ### Pending Redesign
 (None currently pending.)
 

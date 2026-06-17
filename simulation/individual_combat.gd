@@ -162,6 +162,8 @@ class Participant:
 	var ephemeral_form_expiry: int = -1  # s54.10 Ephemeral Form: round the 10-round insubstantial window ends
 	var ephemeral_form_used: bool = false  # Ephemeral Form is once-per-encounter (once/day)
 	var mimic_expiry: int = -1  # s54.10 Mimic: round the 5-round disguise (untargetable) window ends; broken on attack
+	var lure_sprung: bool = false  # s54.10 Konak Jiji lure: false = still disguised as a harmless baby (untargetable)
+	var deceptive_weight_pinned: bool = false  # s54.10 Deceptive Weight: pinned (escape = Athletics/Strength TN 40)
 	var spirit_attack_rolled_bonus: int = 0  # s54.10 Toshigoku auras/Tactical Mastery: +N rolled attack dice (orchestrator sets per-attack, spirit-only)
 	var spirit_damage_rolled_bonus: int = 0  # s54.10 Supreme Commander: +N rolled damage dice (spirit-only)
 	var void_dragon_ring: int = -1  # Touch the Void Dragon (s38): boosted Ring (Enums.Ring), -1 = inactive

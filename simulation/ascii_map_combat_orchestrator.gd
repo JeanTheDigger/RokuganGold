@@ -15,6 +15,7 @@ class_name AsciiMapCombatOrchestrator
 ## Melee reach: adjacent 8 tiles (1 tile = 5 feet; "within 5 feet" = adjacent).
 const MELEE_RANGE_TILES: int = 1
 const MIMIC_DISGUISE_ROUNDS: int = 5  # s54.10 Mimic: "lasts ... 5 Rounds in battle"
+const DECEPTIVE_WEIGHT_ESCAPE_TN: int = 40  # s54.10 Konak Jiji: Athletics/Strength TN 40 to move it
 
 ## Guard maneuver range: "within 5 feet" = 1 tile (GDD s40).
 const GUARD_RANGE_TILES: int = 1
@@ -2941,6 +2942,12 @@ static func execute_npc_turn(
 
 	# -- Handle grapple -------------------------------------------------------
 	if IndividualCombat.has_condition(p, IndividualCombat.CONDITION_GRAPPLED):
+		# s54.10 Deceptive Weight: a pinned victim struggles free with Athletics/Strength
+		# vs TN 40 (not the normal grapple contest).
+		if p.deceptive_weight_pinned and not p.grapple_in_control:
+			var esc: Dictionary = attempt_deceptive_weight_escape(state, npc_id, npc, dice_engine)
+			actions_taken.append({"action": "deceptive_weight_escape", "result": esc})
+			return {"actions": actions_taken}
 		if p.grapple_in_control:
 			# In control: try to hit or throw.
 			var partner_id: int = p.grapple_partner_id
@@ -3012,6 +3019,16 @@ static func execute_npc_turn(
 	if not target_in_melee:
 		ranged_targets = get_ranged_targets(state, npc_id)
 		target_in_ranged = (best_target in ranged_targets)
+
+	# -- Lure (s54.10 Konak Jiji): a disguised "baby" waits; if a victim is adjacent it
+	# springs the deceptive-weight trap (auto-hit + pin + venom) or is seen through. Either
+	# way the disguised creature's turn ends here (it does nothing else while luring).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("lure") \
+			and not p.lure_sprung:
+		var lure_r: Dictionary = _npc_maybe_spring_lure(state, npc_id, npc, chars_by_id, dice_engine)
+		if not lure_r.is_empty():
+			actions_taken.append({"action": "lure", "result": lure_r})
+			return {"actions": actions_taken}
 
 	# -- Mimic (s54.10): a hurt shapeshifter (Kitsune/Bakeneko) assumes another form to
 	# escape — untargetable for 5 Rounds or until it attacks. The disguise is the turn's
@@ -3765,6 +3782,8 @@ static func _is_targetable(state: MapCombatState, cid: int) -> bool:
 		return false  # within the 10-round Ephemeral Form window
 	if c.spirit_creature.has_tag("mimic") and p.mimic_expiry >= rnd:
 		return false  # disguised (Mimic) — reads as one of the enemy's own
+	if c.spirit_creature.has_tag("lure") and not p.lure_sprung:
+		return false  # Konak Jiji disguised as a harmless abandoned baby
 	return true
 
 
@@ -3926,6 +3945,99 @@ static func _npc_maybe_mimic(
 	ts.consume_complex()
 	p.mimic_expiry = state.combat.round_number + MIMIC_DISGUISE_ROUNDS
 	return {"success": true, "action": "mimic", "char_id": char_id, "expiry": p.mimic_expiry}
+
+
+## s54.10 Konak Jiji Lure + Deceptive Weight. While disguised (lure_sprung == false) the
+## creature is an untargetable "abandoned baby" and does nothing on its turn UNLESS a
+## living non-spirit enemy is adjacent (has approached/reached for it). Then the victim
+## rolls Willpower vs the creature's Awareness (Contested — no invented TN): success sees
+## through it (creature revealed, targetable, fights normally); failure springs the trap —
+## an automatic claw hit (no attack roll), a 400 lb pin (grapple, escape Athletics/Strength
+## TN 40), and the paralysis venom (Stunned for Water minutes). Returns {} if not a lure.
+static func _npc_maybe_spring_lure(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	chars_by_id: Dictionary,
+	dice: DiceEngine,
+) -> Dictionary:
+	var cr: SpiritCreatureData = character.spirit_creature
+	if cr == null or not cr.has_tag("lure"):
+		return {}
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p == null or p.lure_sprung:
+		return {}  # already sprung/revealed — behaves as a normal combatant
+	# Find an adjacent living non-spirit enemy (someone who reached for the babe).
+	var apos: Vector2i = state.positions.get(char_id, Vector2i(-9999, -9999))
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	var victim_id: int = -1
+	for oid: int in state.positions.keys():
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		var v: L5RCharacterData = state.combatants.get(oid, null)
+		if v == null or v.spirit_creature != null or CharacterStats.is_dead(v):
+			continue
+		if _chebyshev(apos, state.positions[oid]) <= MELEE_RANGE_TILES:
+			victim_id = oid
+			break
+	if victim_id < 0:
+		return {"waited": true}  # stays disguised; the passive baby does nothing this turn
+	var victim: L5RCharacterData = chars_by_id.get(victim_id, state.combatants.get(victim_id, null))
+	if victim == null:
+		return {"waited": true}
+	# Contested: victim Willpower vs creature Awareness (stat-block values; no invented TN).
+	var vw: int = maxi(1, victim.willpower)
+	var caw: int = maxi(1, int(cr.traits.get("awareness", cr.air)))
+	if dice.roll_and_keep(vw, vw, true).total >= dice.roll_and_keep(caw, caw, true).total:
+		p.lure_sprung = true  # saw through it — now a revealed, targetable combatant
+		return {"sprung": false, "resisted": true, "victim_id": victim_id}
+	# Trap springs: auto-hit (no roll) + pin + venom.
+	p.lure_sprung = true
+	var dmg: int = dice.roll_and_keep(cr.damage_rolled, cr.damage_kept, true).total
+	WoundSystem.apply_damage(victim, dmg, victim.armor_reduction)
+	var vp: IndividualCombat.Participant = state.combat.participants.get(victim_id, null)
+	if vp != null:
+		IndividualCombat.apply_condition(vp, IndividualCombat.CONDITION_GRAPPLED)
+		vp.grapple_partner_id = char_id
+		vp.deceptive_weight_pinned = true
+		p.grapple_partner_id = victim_id
+		p.grapple_in_control = true
+		var venom_min: int = SpiritAbilitySystem.paralysis_venom_minutes(cr)
+		if venom_min > 0:
+			IndividualCombat.apply_timed_condition(
+				vp, IndividualCombat.CONDITION_STUNNED,
+				state.combat.round_number + venom_min * IndividualCombat.ROUNDS_PER_MINUTE)
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts != null:
+		ts.consume_complex()
+	return {"sprung": true, "victim_id": victim_id, "damage": dmg}
+
+
+## s54.10 Deceptive Weight escape: a pinned victim breaks free with an Athletics/Strength
+## roll vs TN 40 (Strength trait + Athletics skill; cooperative allowed — single-character
+## here). On success the grapple/pin clears for both sides. Public for the PC turn path.
+static func attempt_deceptive_weight_escape(
+	state: MapCombatState,
+	victim_id: int,
+	victim: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var vp: IndividualCombat.Participant = state.combat.participants.get(victim_id, null)
+	if vp == null or not vp.deceptive_weight_pinned:
+		return {"success": false, "reason": "not_pinned"}
+	var roll: int = dice.roll_and_keep(
+		victim.strength + victim.skills.get("Athletics", 0), victim.strength, true).total
+	if roll < DECEPTIVE_WEIGHT_ESCAPE_TN:
+		return {"success": false, "reason": "still_pinned", "roll": roll}
+	var captor_id: int = vp.grapple_partner_id
+	vp.deceptive_weight_pinned = false
+	vp.grapple_partner_id = -1
+	vp.conditions.erase(IndividualCombat.CONDITION_GRAPPLED)
+	var cp: IndividualCombat.Participant = state.combat.participants.get(captor_id, null)
+	if cp != null:
+		cp.grapple_partner_id = -1
+		cp.grapple_in_control = false
+	return {"success": true, "roll": roll}
 
 
 ## s54.10 Ephemeral Form (Kitsune etc.): a threatened shapeshifter turns insubstantial
