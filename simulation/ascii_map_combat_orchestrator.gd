@@ -4660,6 +4660,24 @@ static func _apply_hit(
 			var expiry: int = state.combat.round_number + venom_min * IndividualCombat.ROUNDS_PER_MINUTE
 			IndividualCombat.apply_timed_condition(t_p, IndividualCombat.CONDITION_STUNNED, expiry)
 
+	# Stunning Jolt (s54.12 Hinotama): a touch forces a Stamina TN 20 roll — Dazed on success,
+	# Stunned on failure (both roll-recoverable).
+	if attacker.spirit_creature != null and t_p != null and target.spirit_creature == null \
+			and attacker.spirit_creature.has_tag("stunning_jolt"):
+		if dice_engine.roll_and_keep(maxi(1, target.stamina), maxi(1, target.stamina), true).total >= 20:
+			IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_DAZED)
+		else:
+			IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_STUNNED)
+
+	# Void Leech (s54.12 Kukanchi no Kansen): a wounding hit drains 1 Void Point from the
+	# victim and heals the creature 15 Wounds. (The GDD "if a damage die explodes" gate is
+	# simplified to any wounding hit — the exploding-die detail is internal to the roll.)
+	if attacker.spirit_creature != null and target.spirit_creature == null and raw > 0 \
+			and attacker.spirit_creature.has_tag("void_leech"):
+		if target.current_void_points > 0:
+			target.current_void_points -= 1
+		WoundSystem.heal_wounds(attacker, 15)
+
 	# Throat Attack / follow-up (s54.11 Ghul): a melee hit dealing followup_wound_threshold+
 	# Wounds triggers a free bonus attack. Applied directly (does not recurse into _apply_hit).
 	if attacker.spirit_creature != null and attacker.spirit_creature.followup_wound_threshold > 0 \

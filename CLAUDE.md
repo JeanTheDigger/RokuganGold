@@ -5060,6 +5060,17 @@ Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next cand
   Stamina rolls vs sickness/poison for 24h" clause are not modelled — only the in-combat
   Void lockout (the combat-relevant effect).
 
+### Systems Added 2026-06-17 (s54.12 Stunning Jolt + Void Leech — runtime-verified)
+- **Stunning Jolt wired (Hinotama).** A touch forces a Stamina TN 20 roll — Dazed on success,
+  Stunned on failure (both roll-recoverable conditions). `_apply_hit` hook gated on the
+  `stunning_jolt` tag + a mortal target. RUNTIME-VERIFIED (Godot 4.6.2): a low-Stamina victim
+  is Dazed/Stunned by the touch.
+- **Void Leech wired (Kukanchi no Kansen).** A wounding hit drains 1 Void Point from the
+  victim and heals the creature 15 Wounds. `_apply_hit` hook gated on the `void_leech` tag.
+  RUNTIME-VERIFIED: hero VP 3→2, creature wounds 20→5. SIMPLIFICATION: the GDD "if a damage
+  die explodes" gate is reduced to any wounding hit (the exploding-die detail is internal to
+  the damage roll, not surfaced).
+
 ### Pending Redesign
 (None currently pending.)
 
