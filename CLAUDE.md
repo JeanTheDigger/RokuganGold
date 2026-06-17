@@ -5121,6 +5121,16 @@ simulation/ AND shared/ into the headless test project (a stale shared/ silently
 bestiary catalog mid-build → null spawns → hangs); (2) do not re-call execute_npc_turn for
 the same actor without proper turn advancement.
 
+### Systems Added 2026-06-17 (s54.11/s54.12 constriction — runtime-verified, data-only)
+- **Constriction wired (Wyrm, Nure-Onna, Pennaggolan).** Constriction is mechanically
+  identical to the swallow grapple-crush (grab on a wounding hit via Contested Strength →
+  per-round crush damage in advance_round → Contested-Strength escape), so it reuses the
+  existing swallow layer with **data only** — `swallow_damage_rolled/_kept` populated per
+  GDD: Wyrm Constrict 5k5, Nure-Onna 4k2, Pennaggolan Entrail Constriction 3k1. No new code.
+  RUNTIME-VERIFIED (Godot 4.6.2): all three grab a low-Strength victim and crush per round
+  (wyrm 16→44, nure_onna 14→29, pennaggolan 12→21). The snake/serpent shapechange and the
+  Pennaggolan flying-head head-detach are not modelled (the combat-relevant grab/crush is).
+
 ### Pending Redesign
 (None currently pending.)
 

@@ -48,6 +48,8 @@ static func catalog() -> Dictionary:
 		3, 4, 1, 3, {"reflexes": 5, "agility": 4, "strength": 5},
 		5, 5, "Bite", 6, 4, 7, 2, 35, 6, [32, 64], 96, 5,
 		["huge", "constriction_attack"], 2, _N)
+	c["wyrm"].swallow_damage_rolled = 5  # Constrict 5k5/round, escape via Contested Strength (s54.12)
+	c["wyrm"].swallow_damage_kept = 5
 
 	# --- New supernatural creatures (s54.12) --------------------------------
 	c["kodama"] = _make("kodama", "Kodama", SpiritCreatureData.Tier.MID,
@@ -196,6 +198,8 @@ static func catalog() -> Dictionary:
 		3, 3, 2, 3, {"awareness": 4, "agility": 4, "strength": 4},
 		4, 3, "Constriction Grapple", 8, 4, 4, 2, 30, 10, [24, 48], 72, 4,
 		["spirit", "huge", "constricting_attack", "shapechanging"], 0, _S)
+	c["nure_onna"].swallow_damage_rolled = 4  # Constrict 4k2/round, escape via Contested Strength (s54.12)
+	c["nure_onna"].swallow_damage_kept = 2
 
 	c["yamato_no_orochi"] = _with2(_make("yamato_no_orochi", "Yamato no Orochi (the Eight-Forked Serpent)", SpiritCreatureData.Tier.BOSS,
 		1, 5, 2, 6, {"reflexes": 6, "agility": 5, "strength": 9},

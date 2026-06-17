@@ -63,6 +63,8 @@ static func catalog() -> Dictionary:
 		["undead", "partial_invuln", "deceptive_taint", "entrail_constriction", "flying_head",
 			"vulnerable_body", "reduction_vs_jade_crystal", "multi_attack"], 2),
 		"Entrails", 9, 4, 3, 1)
+	c["pennaggolan"].swallow_damage_rolled = 3  # Entrail Constriction 3k1/round, escape via Strength (s54.11)
+	c["pennaggolan"].swallow_damage_kept = 1
 
 	c["plague_zombie"] = _make("plague_zombie", "Plague Zombie", SpiritCreatureData.Tier.MID,
 		0, 3, 0, 1, {"reflexes": 1, "stamina": 4, "agility": 2, "strength": 3},
