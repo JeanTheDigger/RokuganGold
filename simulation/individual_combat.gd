@@ -168,6 +168,7 @@ class Participant:
 	var death_spawn_done: bool = false  # s54.5 spawn-on-death fired (guards against double-spawn)
 	var ranged_aoe_used: bool = false  # s54.11 Cauldron Belch etc. once-per-skirmish AoE fired
 	var void_locked: bool = false  # s54.12 Furaribi Soul Touch: cannot spend Void Points
+	var scream_used: bool = false  # s54.12 Wanyudo Strength of the Dead: once-per-skirmish scream
 	var spirit_attack_rolled_bonus: int = 0  # s54.10 Toshigoku auras/Tactical Mastery: +N rolled attack dice (orchestrator sets per-attack, spirit-only)
 	var spirit_damage_rolled_bonus: int = 0  # s54.10 Supreme Commander: +N rolled damage dice (spirit-only)
 	var void_dragon_ring: int = -1  # Touch the Void Dragon (s38): boosted Ring (Enums.Ring), -1 = inactive

@@ -37,7 +37,10 @@ static func to_character_data(creature: SpiritCreatureData, instance_id: int) ->
 	c.intelligence = creature.fire
 	c.strength = creature.water
 	c.perception = creature.water
-	c.void_ring = 0          # spirits have no Void Ring
+	# Spirits have no Void Ring, except the rare Void users (s54.12 Akeru no Oni) whose
+	# stat block sets void_rank.
+	c.void_ring = creature.void_rank
+	c.current_void_points = creature.void_rank
 
 	# Named-trait overrides from the stat block (always ≥ their Ring in s54.10, so the
 	# Ring stays the min of its pair while the named trait drives attack/init/damage).

@@ -165,6 +165,7 @@ static func catalog() -> Dictionary:
 		9, 4, "Claws", 9, 4, 3, 3, 30, 6, [32, 64], 128, 5,
 		["elemental_terror", "huge", "partial_invuln", "reduction_bypassed_jade_crystal_obsidian",
 			"magic_resistance", "sap_the_void", "telepathy", "void_strike", "walk_through_nothing"], 0, _J)
+	c["akeru_no_oni"].void_rank = 1  # default Void Rank 1, accumulates to 7 via Sap the Void (s54.12)
 
 	c["kukanchi_no_kansen"] = _make("kukanchi_no_kansen", "Kukanchi no Kansen (Lesser Terror of Void)", SpiritCreatureData.Tier.HEAVY,
 		2, 2, 2, 2, {"reflexes": 4, "agility": 3, "perception": 3},

@@ -105,6 +105,10 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 @export var death_spawn_id: String = ""
 @export var death_spawn_count: int = 0
 
+## Void Rank for the rare Void-using creatures (s54.12 Akeru no Oni: default 1, max 7).
+## 0 = no Void (every other creature). Drives the combat puppet's Void Ring + points.
+@export var void_rank: int = 0
+
 @export var fear: int = 0
 ## Swift rating (L5R keyword the GDD invokes by name, e.g. "Swift 6"). Converted to
 ## a tile move-budget bonus via the project's fixed 1 tile = 5 ft (MovementSystem):

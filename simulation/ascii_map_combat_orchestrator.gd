@@ -3369,6 +3369,14 @@ static func execute_npc_turn(
 			actions_taken.append({"action": "possession", "result": poss})
 			return {"actions": actions_taken}
 
+	# -- Strength of the Dead (s54.12 Wanyudo): a once-per-skirmish scream that Stuns nearby
+	# mortal enemies (Contested Willpower).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("strength_of_the_dead") and not p.scream_used:
+		var scr: Dictionary = _npc_maybe_scream(state, npc_id, npc, dice_engine)
+		if scr.get("success", false):
+			actions_taken.append({"action": "scream", "result": scr})
+			return {"actions": actions_taken}
+
 	# -- Taint Affliction (s54.5 Gagoze): a Complex-action burning gaze that, on a won
 	# Contested Willpower, inflicts 1 full Rank of Taint on a mortal enemy (once each).
 	if npc.spirit_creature != null and npc.spirit_creature.has_tag("taint_affliction"):
@@ -4212,6 +4220,49 @@ static func apply_fear_checks(
 ## s54.10/s54.2 Possession: a possessing spirit (Shozai-gaki / Buruburu / Kitsune-tsuki)
 ## adjacent to a valid victim spends a Complex action to attempt possession. Kitsune-tsuki
 ## requires the victim sleeping or Down/Out (TN-25 Willpower or possessed); Shozai/Buruburu
+## Strength of the Dead (s54.12 Wanyudo): a Complex-action scream — every mortal enemy within
+## 50' (10 tiles) rolls Contested Willpower vs the creature or is Stunned. Once per skirmish.
+static func _npc_maybe_scream(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p == null or p.scream_used:
+		return {}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	# Need at least one mortal enemy in range to be worth screaming.
+	var in_range: Array = []
+	for oid: int in state.positions.keys():
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		var v: L5RCharacterData = state.combatants.get(oid, null)
+		if v == null or CharacterStats.is_dead(v) or v.spirit_creature != null:
+			continue
+		if _chebyshev(cpos, state.positions[oid]) <= 10:
+			in_range.append(oid)
+	if in_range.is_empty():
+		return {}
+	ts.consume_complex()
+	p.scream_used = true
+	var cw: int = maxi(1, character.willpower)
+	var stunned: int = 0
+	for oid: int in in_range:
+		var v: L5RCharacterData = state.combatants.get(oid, null)
+		var vw: int = maxi(1, v.willpower)
+		if dice.roll_and_keep(cw, cw, true).total > dice.roll_and_keep(vw, vw, true).total:
+			var vp: IndividualCombat.Participant = state.combat.participants.get(oid, null)
+			if vp != null:
+				IndividualCombat.apply_condition(vp, IndividualCombat.CONDITION_STUNNED)
+				stunned += 1
+	return {"success": true, "stunned": stunned}
+
+
 ## Taint Affliction (s54.5 Gagoze): a Complex-action burning gaze. Picks the nearest mortal
 ## enemy not yet gazed; Contested Willpower (oni vs victim). Oni wins → victim gains 1 full
 ## Rank of Taint (feeds the MutationSystem periodic-taint + Channel-3 detection pipelines).
@@ -4677,6 +4728,16 @@ static func _apply_hit(
 		if target.current_void_points > 0:
 			target.current_void_points -= 1
 		WoundSystem.heal_wounds(attacker, 15)
+
+	# Sap the Void (s54.12 Akeru no Oni): on a Claw hit, an Opposed Void Roll saps 1 Void Point
+	# from the target, which the Akeru adds to its own pool (max = its Void Ring).
+	if attacker.spirit_creature != null and target.spirit_creature == null and raw > 0 \
+			and attacker.spirit_creature.has_tag("sap_the_void") and target.current_void_points > 0:
+		var av: int = maxi(1, attacker.void_ring)
+		var tv: int = maxi(1, target.void_ring)
+		if dice_engine.roll_and_keep(av, av, true).total > dice_engine.roll_and_keep(tv, tv, true).total:
+			target.current_void_points -= 1
+			attacker.current_void_points = mini(attacker.void_ring, attacker.current_void_points + 1)
 
 	# Throat Attack / follow-up (s54.11 Ghul): a melee hit dealing followup_wound_threshold+
 	# Wounds triggers a free bonus attack. Applied directly (does not recurse into _apply_hit).

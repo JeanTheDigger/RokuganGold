@@ -5071,6 +5071,21 @@ Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next cand
   die explodes" gate is reduced to any wounding hit (the exploding-die detail is internal to
   the damage roll, not surfaced).
 
+### Systems Added 2026-06-17 (s54.12 Strength of the Dead + Sap the Void — runtime-verified)
+- **Strength of the Dead wired (Wanyudo).** A once-per-skirmish Complex-action scream: every
+  mortal enemy within 50' (10 tiles) rolls Contested Willpower vs the creature or is Stunned.
+  `_npc_maybe_scream` creature-turn hook (before the attack block) + Participant `scream_used`.
+  RUNTIME-VERIFIED (Godot 4.6.2): scream Stuns nearby low-Willpower mortals; the second scream
+  is blocked (once per skirmish).
+- **Sap the Void wired (Akeru no Oni).** On a Claw hit, an Opposed Void Roll (creature vs
+  target) saps 1 Void Point from the target, added to the Akeru's pool (capped at its Void
+  Ring). Required giving Void-using creatures a real Void Ring: new SpiritCreatureData
+  `void_rank` (0 for all but Akeru = 1, GDD default), wired through SpiritCombatant
+  (puppet void_ring + current_void_points = void_rank; 0 keeps every other spirit Void-less).
+  RUNTIME-VERIFIED: Akeru Claw saps hero VP 3→2; Akeru holds at its Void-Rank cap.
+  Void Strike (the stolen-Void beam needing full 7 VP) remains deferred — Akeru accumulating
+  beyond its starting Void Rank is not modelled.
+
 ### Pending Redesign
 (None currently pending.)
 
