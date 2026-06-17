@@ -5051,6 +5051,15 @@ Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next cand
   (already_used). LIMITATION: "3 targets within 10' of each other" is modelled as 3 nearest
   within the radius of the impact.
 
+### Systems Added 2026-06-17 (s54.12 Furaribi Soul Touch — runtime-verified)
+- **Soul Touch wired (Furaribi).** A character touched by a `soul_touch` creature cannot spend
+  Void Points (new Participant `void_locked`, set in `_apply_hit`, checked in execute_void_spend).
+  Armor bypass is free (Furaribi already carries `ignores_armor` → attack_bypasses_armor).
+  RUNTIME-VERIFIED (Godot 4.6.2): hero spends Void before the touch, locked out (reason
+  void_locked) after. LIMITATION: the GDD 24h cross-encounter duration + the "cannot make
+  Stamina rolls vs sickness/poison for 24h" clause are not modelled — only the in-combat
+  Void lockout (the combat-relevant effect).
+
 ### Pending Redesign
 (None currently pending.)
 

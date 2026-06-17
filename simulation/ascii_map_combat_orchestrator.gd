@@ -1645,6 +1645,10 @@ static func execute_void_spend(
 	if p.void_spent_this_round:
 		return {"success": false, "reason": "void_already_spent_this_round"}
 
+	# s54.12 Furaribi Soul Touch: a touched character cannot spend Void Points.
+	if p.void_locked:
+		return {"success": false, "reason": "void_locked"}
+
 	# Spend VP for +1k1 on next roll (GDD s40). Must check success BEFORE
 	# marking the once-per-round slot consumed.
 	var result: Dictionary = VoidSystem.spend_for_roll(character)
@@ -4639,6 +4643,13 @@ static func _apply_hit(
 	if attacker.spirit_creature != null and t_p != null \
 			and (attacker.spirit_creature.has_tag("fire_trail") or attacker.spirit_creature.has_tag("burning_touch")):
 		t_p.on_fire = true
+
+	# Soul Touch (s54.12 Furaribi): a touched character cannot spend Void Points (the GDD
+	# 24h duration / Stamina-roll lockout is the cross-encounter portion, not modelled — this
+	# is the in-combat lockout). Inert unless the ATTACKER is a soul_touch creature.
+	if attacker.spirit_creature != null and t_p != null and target.spirit_creature == null \
+			and attacker.spirit_creature.has_tag("soul_touch"):
+		t_p.void_locked = true
 
 	# Paralysis Venom (s54.10 Konak Jiji): a successful hit Stuns the target for
 	# Water minutes (no save), modelled as a timed Stunned condition that expires
