@@ -4944,6 +4944,24 @@ Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next cand
   meaningful outcome. Spell Mastery (Gagoze casting elemental spells) remains blocked — no
   creature spell-cast consumer in the orchestrator.
 
+### Systems Added 2026-06-17 (s54.5 Wreathed in Flames + Retributive Taint — runtime-verified)
+- **Wreathed in Flames wired (Daku).** Striking the burning oni in melee automatically (no
+  save) burns the attacker by weapon size: unarmed/Small 3k2, Medium 2k1, Large/ranged 0
+  (s54.5, exact). `_apply_wreathed_in_flames` fires from execute_melee_attack on a landed
+  melee hit beside Burning Blood; reads the weapon's `size` from get_weapon_profile. Inert
+  unless the struck TARGET has the `wreathed_in_flames` tag. (Distinct from Burning Blood —
+  no Defense save, size-scaled; Daku carries wreathed_in_flames, not burning_blood, so no
+  conflict.) RUNTIME-VERIFIED: unarmed striker auto-burned, tetsubo (Large) striker takes 0.
+- **Retributive Taint wired (Pekkle).** A slain Pekkle bursts in a 10-ft (2-tile) radius:
+  every living mortal in the area rolls Earth TN 30 or gains 1–10 points of Taint (s54.5,
+  exact). `_apply_retributive_taint` fires from the _apply_hit death hook (beside
+  spawn-on-death, guarded once via death_spawn_done) when a `retributive_taint` creature
+  dies. The Taint feeds the MutationSystem periodic-taint + maho Channel-3 pipelines.
+  RUNTIME-VERIFIED: nearby Earth-1 mortal gains 7 Taint on the death burst, a mortal beyond
+  2 tiles is unaffected. (Daku flaming_regeneration / fire_resist_mundane and Furu
+  extreme_heat remain blocked/redundant — fire-element weapon detection, and Furu's
+  arrow-immunity is already covered by superior_invuln.)
+
 ### Pending Redesign
 (None currently pending.)
 

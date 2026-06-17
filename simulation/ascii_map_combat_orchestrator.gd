@@ -873,6 +873,10 @@ static func execute_melee_attack(
 		if int(dmg_result.get("wounds", 0)) > 0:
 			_apply_swallow_whole(state, attacker, attacker_id, target, target_id, weapon_name, dice_engine)
 
+		# Wreathed in Flames (s54.5 Daku): striking the burning oni in melee automatically
+		# burns the attacker by weapon size (no save).
+		_apply_wreathed_in_flames(attacker, target, weapon_name, dice_engine)
+
 		# Destiny's Strike (s38 Fire): a struck defender with it active immediately makes
 		# a single unarmed counterattack (once per Round).
 		_maybe_destiny_strike(state, target, t_p, attacker, a_p, dice_engine)
@@ -2518,6 +2522,36 @@ static func _apply_burning_blood(
 	if save >= cr.burning_blood_tn:
 		return 0  # dodged the splatter
 	var dmg: int = dice.roll_and_keep(cr.burning_blood_rolled, cr.burning_blood_kept, true).total
+	WoundSystem.apply_damage(attacker, dmg, 0)
+	return dmg
+
+
+## Wreathed in Flames (s54.5 Daku): anyone striking the burning oni in melee automatically
+## (no save) takes Wounds by weapon size — unarmed/Small 3k2, Medium 2k1, Large/ranged 0.
+## Inert unless the struck TARGET has the wreathed_in_flames tag. Returns damage dealt.
+static func _apply_wreathed_in_flames(
+	attacker: L5RCharacterData,
+	target: L5RCharacterData,
+	weapon_name: String,
+	dice: DiceEngine,
+) -> int:
+	if target.spirit_creature == null or not target.spirit_creature.has_tag("wreathed_in_flames"):
+		return 0
+	if CharacterStats.is_dead(attacker):
+		return 0
+	var wp: Dictionary = IndividualCombat.get_weapon_profile(weapon_name)
+	if not wp.get("melee", true):
+		return 0  # ranged attacks cause no Wounds
+	var size: String = str(wp.get("size", "Medium"))
+	var rolled: int = 0
+	var kept: int = 0
+	if weapon_name == "" or weapon_name == "unarmed" or size == "Small":
+		rolled = 3; kept = 2
+	elif size == "Large":
+		return 0  # Large weapons cause no Wounds
+	else:  # Medium (and any unspecified size)
+		rolled = 2; kept = 1
+	var dmg: int = dice.roll_and_keep(rolled, kept, true).total
 	WoundSystem.apply_damage(attacker, dmg, 0)
 	return dmg
 
@@ -4483,6 +4517,14 @@ static func _apply_hit(
 		t_p.death_spawn_done = true
 		_spawn_on_death(state, target, dice_engine)
 
+	# Retributive Taint (s54.5 Pekkle): a slain Pekkle bursts in a 10-ft (2-tile) radius —
+	# every living mortal in the area rolls Earth TN 30 or gains 1–10 points of Taint.
+	if t_p != null and target.spirit_creature != null \
+			and target.spirit_creature.has_tag("retributive_taint") \
+			and not t_p.death_spawn_done and CharacterStats.is_dead(target):
+		t_p.death_spawn_done = true
+		_apply_retributive_taint(state, target, dice_engine)
+
 	return {
 		"damage": wd_result.get("final_damage", raw),
 		"wounds": wd_result.get("final_damage", raw),
@@ -4536,6 +4578,28 @@ static func _spawn_on_death(state: MapCombatState, dead_creature: L5RCharacterDa
 			state.factions[inst_id] = faction
 			made += 1
 	return made
+
+
+## Retributive Taint (s54.5 Pekkle): on death, every living mortal within 2 tiles (10 ft)
+## rolls Earth TN 30 or gains 1–10 points of Taint. Returns the number of victims tainted.
+static func _apply_retributive_taint(state: MapCombatState, dead_creature: L5RCharacterData, dice: DiceEngine) -> int:
+	var center: Vector2i = state.positions.get(dead_creature.character_id, Vector2i(-1, -1))
+	if center.x < 0:
+		return 0
+	var tainted: int = 0
+	for cid: int in state.positions.keys():
+		if cid == dead_creature.character_id:
+			continue
+		if _chebyshev(center, state.positions[cid]) > 2:
+			continue
+		var c: L5RCharacterData = state.combatants.get(cid, null)
+		if c == null or CharacterStats.is_dead(c) or c.spirit_creature != null:
+			continue
+		var earth: int = mini(c.stamina, c.willpower)
+		if dice.roll_and_keep(maxi(1, earth), maxi(1, earth), true).total < 30:
+			c.taint = minf(100.0, c.taint + float(dice.roll_die(10)))
+			tainted += 1
+	return tainted
 
 
 ## Nearest free (passable, unoccupied) tile to `center` via expanding-ring search.
