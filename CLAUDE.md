@@ -4928,6 +4928,22 @@ damage-source (creatures dealt unarmed damage) and the `swallowed_by_id >= 0` se
 failing for negative puppet ids. Remaining creature abilities (Taint Affliction, Spell
 Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next candidates.
 
+### Systems Added 2026-06-17 (s54.5 Gagoze Taint Affliction — runtime-verified)
+- **Taint Affliction wired (Gagoze).** The Gagoze's burning gaze (s54.5): a Complex Action,
+  Contested Willpower (oni vs victim) — oni wins → the victim gains 1 full Rank of Shadowlands
+  Taint; once per individual ever. `_npc_maybe_taint_gaze` (creature-turn hook in
+  execute_npc_turn, before the atemi/attack block, gated on the `taint_affliction` tag + an
+  available Complex action) picks the nearest mortal (non-spirit) living enemy not yet gazed
+  (tracked per-gazer in `MapCombatState.taint_gaze_used`), spends the Complex action, rolls the
+  contest, and on a win does `victim.taint += 1.0`. The +1 Taint feeds the EXISTING consumers:
+  MutationSystem periodic-taint rolls (rank-up mutations/powers) and maho Channel-3 detection
+  (witch-hunter accusation). RUNTIME-VERIFIED (Godot 4.6.2): low-Willpower mortal gains 1 Taint
+  on a non-melee gaze, once-per-individual (no repeat on the same victim), a spirit/oni target
+  is skipped (Taint affects mortals only). LIMITATION: the victim-win 24h Fire/Earth Ring
+  penalty is not modelled (no cross-encounter Ring-debuff layer) — the averted Taint is the
+  meaningful outcome. Spell Mastery (Gagoze casting elemental spells) remains blocked — no
+  creature spell-cast consumer in the orchestrator.
+
 ### Pending Redesign
 (None currently pending.)
 

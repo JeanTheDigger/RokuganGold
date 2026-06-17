@@ -147,6 +147,8 @@ class MapCombatState:
 	var duel_offered: bool = false
 	## s54.5 spawn-on-death: monotonic counter for unique negative spawn instance ids.
 	var spawn_counter: int = 0
+	## s54.5 Gagoze Taint Affliction: per-gazer set of victim ids already gazed (once each).
+	var taint_gaze_used: Dictionary = {}
 
 
 # =============================================================================
@@ -3196,6 +3198,14 @@ static func execute_npc_turn(
 			actions_taken.append({"action": "possession", "result": poss})
 			return {"actions": actions_taken}
 
+	# -- Taint Affliction (s54.5 Gagoze): a Complex-action burning gaze that, on a won
+	# Contested Willpower, inflicts 1 full Rank of Taint on a mortal enemy (once each).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("taint_affliction"):
+		var gaze: Dictionary = _npc_maybe_taint_gaze(state, npc_id, npc, chars_by_id, dice_engine)
+		if gaze.get("success", false):
+			actions_taken.append({"action": "taint_gaze", "result": gaze})
+			return {"actions": actions_taken}
+
 	# -- Atemi (s38): a monk in melee delivers a known (encoded) atemi kiho instead
 	# of a normal strike, applying its condition/timed debuff. Basic heuristic (the
 	# GDD gives no NPC atemi policy); the atemi is the turn's Complex action.
@@ -4019,6 +4029,55 @@ static func apply_fear_checks(
 ## s54.10/s54.2 Possession: a possessing spirit (Shozai-gaki / Buruburu / Kitsune-tsuki)
 ## adjacent to a valid victim spends a Complex action to attempt possession. Kitsune-tsuki
 ## requires the victim sleeping or Down/Out (TN-25 Willpower or possessed); Shozai/Buruburu
+## Taint Affliction (s54.5 Gagoze): a Complex-action burning gaze. Picks the nearest mortal
+## enemy not yet gazed; Contested Willpower (oni vs victim). Oni wins → victim gains 1 full
+## Rank of Taint (feeds the MutationSystem periodic-taint + Channel-3 detection pipelines).
+## Victim wins → Taint averted (the GDD 24h Fire/Earth Ring penalty is not modelled — no
+## cross-encounter Ring-debuff layer). Once per individual ever. Returns {} if not attempted.
+static func _npc_maybe_taint_gaze(
+	state: MapCombatState,
+	gazer_id: int,
+	gazer: L5RCharacterData,
+	chars_by_id: Dictionary,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(gazer_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var used: Dictionary = state.taint_gaze_used.get(gazer_id, {})
+	var faction: String = state.factions.get(gazer_id, FACTION_NEUTRAL)
+	var pos: Vector2i = state.positions.get(gazer_id, Vector2i(-1, -1))
+	if pos.x < 0:
+		return {}
+	# nearest mortal (non-spirit) living enemy not yet gazed
+	var victim_id: int = -1
+	var best_d: int = 1 << 30
+	for cid: int in state.positions.keys():
+		if cid == gazer_id or used.has(cid):
+			continue
+		if not _are_enemies(faction, state.factions.get(cid, FACTION_NEUTRAL)):
+			continue
+		var vc: L5RCharacterData = state.combatants.get(cid, chars_by_id.get(cid, null))
+		if vc == null or CharacterStats.is_dead(vc) or vc.spirit_creature != null:
+			continue
+		var d: int = _chebyshev(pos, state.positions[cid])
+		if d < best_d:
+			best_d = d
+			victim_id = cid
+	if victim_id < 0:
+		return {}
+	var victim: L5RCharacterData = state.combatants.get(victim_id, chars_by_id.get(victim_id, null))
+	ts.consume_complex()
+	used[victim_id] = true
+	state.taint_gaze_used[gazer_id] = used
+	var ow: int = dice.roll_and_keep(maxi(1, gazer.willpower), maxi(1, gazer.willpower), true).total
+	var vw: int = dice.roll_and_keep(maxi(1, victim.willpower), maxi(1, victim.willpower), true).total
+	if ow > vw:
+		victim.taint = minf(100.0, victim.taint + 1.0)
+		return {"success": true, "victim": victim_id, "tainted": true}
+	return {"success": true, "victim": victim_id, "tainted": false}
+
+
 ## roll Contested Willpower. On success a cross-encounter possession_affliction is seeded on
 ## the victim (resolved in the world-sim by DayOrchestrator). Returns {} if not attempted.
 static func _npc_maybe_possess(
