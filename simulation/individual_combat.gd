@@ -171,6 +171,8 @@ class Participant:
 	var scream_used: bool = false  # s54.12 Wanyudo Strength of the Dead: once-per-skirmish scream
 	var spirit_attack_rolled_bonus: int = 0  # s54.10 Toshigoku auras/Tactical Mastery: +N rolled attack dice (orchestrator sets per-attack, spirit-only)
 	var spirit_damage_rolled_bonus: int = 0  # s54.10 Supreme Commander: +N rolled damage dice (spirit-only)
+	var spirit_attack_kept_bonus: int = 0  # s54.5 Charge: +N kept attack dice (the kept half of a +NkN charge bonus)
+	var spirit_damage_kept_bonus: int = 0  # s54.5 Charge: +N kept damage dice
 	var void_dragon_ring: int = -1  # Touch the Void Dragon (s38): boosted Ring (Enums.Ring), -1 = inactive
 	var dual_wielding: bool = false            # true when holding an off-hand weapon
 	var off_hand_weapon: String = ""           # name of off-hand weapon ("" = none)
@@ -1066,6 +1068,7 @@ static func resolve_attack(
 		# Ancient General's Tactical Mastery — +N rolled attack dice the orchestrator
 		# computed from co-located allies / rounds-engaged. Inert (0) for everyone else.
 		rolled += attacker_p.spirit_attack_rolled_bonus
+		kept += attacker_p.spirit_attack_kept_bonus
 
 	# Kata attack modifiers (s30a): trait substitution applied before void/stance
 	var kata_atk: Dictionary = _get_kata_attack_modifiers(attacker, attacker_p, weapon_name, maneuver)
@@ -1236,6 +1239,7 @@ static func resolve_damage(
 	# spirit attacker (Musha within 20 tiles of the Ancient General). Inert (0) otherwise.
 	if attacker_p != null:
 		rolled += attacker_p.spirit_damage_rolled_bonus
+		kept += attacker_p.spirit_damage_kept_bonus
 
 	# Advantage/disadvantage modifiers (s45): HANDS_OF_STONE adds +1 kept for unarmed damage
 	var dmg_skill: String = weapon.get("skill", "Kenjutsu")

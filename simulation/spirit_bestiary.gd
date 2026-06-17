@@ -242,6 +242,10 @@ static func chikushudo_catalog() -> Dictionary:
 		1, 5, 1, 2, {"reflexes": 3, "agility": 3, "strength": 4},
 		4, 3, "Tusks", 5, 3, 5, 2, 20, 12, [30], 75, 0,
 		["spirit", "chikushudo_spirit", "disembowel", "goring_charge", "chokepoint", "huge"], R)
+	c["spirit_boar"].charge_simple = true  # Goring Charge: Full Attack, attack as Simple + +1k1 atk/dmg (s54.1)
+	c["spirit_boar"].charge_atk_bonus = 1
+	c["spirit_boar"].charge_dmg_bonus = 1
+	c["spirit_boar"].charge_move_mult = 10  # PROVISIONAL: Goring Charge move distance unspecified (general charge convention)
 
 	c["spirit_bear"] = _make("spirit_bear", "Spirit Bear", SpiritCreatureData.Tier.HEAVY,
 		1, 6, 1, 2, {"reflexes": 3, "agility": 4, "strength": 7},

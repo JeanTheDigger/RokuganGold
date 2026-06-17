@@ -135,6 +135,9 @@ static func catalog() -> Dictionary:
 		3, 2, 2, 2, {"agility": 4, "strength": 4},
 		4, 3, "Talons", 6, 4, 4, 4, 20, 4, [20, 40, 60], 80, 2,
 		["oni", "diving_attack", "partial_invuln", "flying"], 3)  # Swift 3 when flying
+	c["nairu_no_oni"].charge_move_mult = 10  # Diving Attack: +1k1, then grounded/Prone (s54.5)
+	c["nairu_no_oni"].charge_diving = true
+	c["nairu_no_oni"].charge_atk_bonus = 1
 
 	c["nosloc_no_oni"] = _make("nosloc_no_oni", "Nosloc no Oni, Vassals of the Demon Lords", SpiritCreatureData.Tier.HEAVY,
 		2, 4, 3, 4, {"reflexes": 3, "agility": 4},
@@ -175,6 +178,7 @@ static func catalog() -> Dictionary:
 		2, 7, 1, 5, {"reflexes": 4, "agility": 4, "strength": 8},
 		4, 2, "Trample", 4, 4, 6, 4, 25, 6, [32, 64, 96, 128, 160], 224, 3,
 		["oni", "huge", "partial_invuln", "brood", "mortal", "gore", "trample_prone", "multi_attack"]), "Gore", 6, 4, 8, 6)
+	c["munemitsu_no_oni"].trample_prone = true  # Trample renders the target Prone (s54.5)
 
 	c["sentei_no_oni"] = _with2(_make("sentei_no_oni", "Sentei no Oni, the Many-Legged Death", SpiritCreatureData.Tier.BOSS,
 		2, 6, 4, 4, {"reflexes": 4},
@@ -209,6 +213,9 @@ static func catalog() -> Dictionary:
 		2, 5, 1, 5, {"agility": 4},
 		3, 2, "Trample", 4, 4, 5, 3, 20, 8, [60, 90], 120, 3,
 		["oni", "huge", "partial_invuln", "charge", "devour", "trample_prone", "multi_attack"]), "Bite", 6, 4, 5, 5)
+	c["utogu_no_oni"].charge_move_mult = 10  # Charge: Full Attack, move Water×10 ft then attack (s54.12)
+	c["utogu_no_oni"].trample_prone = true  # Trample: Prone, +Dazed if attack beats Armor TN by 10
+	c["utogu_no_oni"].trample_daze_margin = 10
 	c["utogu_no_oni"].swallow_damage_rolled = 5  # Devour 5k5/round (s54.5)
 	c["utogu_no_oni"].swallow_damage_kept = 5
 

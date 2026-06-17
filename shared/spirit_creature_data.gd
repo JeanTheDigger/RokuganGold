@@ -110,6 +110,21 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 
 ## Void Rank for the rare Void-using creatures (s54.12 Akeru no Oni: default 1, max 7).
 ## 0 = no Void (every other creature). Drives the combat puppet's Void Ring + points.
+## Charge (s54.5/s54.12): in Full Attack stance, a charge-capable creature closes up to
+## Water Ring × charge_move_mult feet and attacks in one turn. charge_simple = the attack is
+## a Simple action (elephant/boar/war-dog); charge_atk/dmg_bonus_* = bonus dice (boar +1k1);
+## charge_diving = airborne dive (+ the bonus, then self-Prone after). 0 mult = no charge.
+@export var charge_move_mult: int = 0
+@export var charge_simple: bool = false
+@export var charge_atk_bonus: int = 0  # +N k N to the charge attack roll (boar/diving +1k1)
+@export var charge_dmg_bonus: int = 0  # +N k N to the charge damage roll (boar +1k1)
+@export var charge_diving: bool = false
+
+## Trample (s54.5/s54.12): a melee hit renders the target Prone; if trample_daze_margin > 0
+## and the attack beats Armor TN by that margin, also Dazed.
+@export var trample_prone: bool = false
+@export var trample_daze_margin: int = 0
+
 @export var void_rank: int = 0
 
 @export var fear: int = 0

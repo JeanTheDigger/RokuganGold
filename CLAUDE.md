@@ -5145,6 +5145,31 @@ the same actor without proper turn advancement.
   escape (TN 20) → movement restored. (Dokufu/Kumo ranged webs are forward-wired for when those
   spiders are transcribed; demon_silk likewise.)
 
+### Systems Added 2026-06-17 (s54.5/s54.12 Charge attacks — owner-approved, runtime-verified)
+- **Charge subsystem (tranche 1).** A charge-capable creature, out of melee but within charge
+  range, **enters Full Attack stance (only if able that turn — the GDD gate) and closes +
+  strikes in one turn**. `execute_charge`: range = Water Ring × `charge_move_mult` ft (÷5 =
+  tiles); moves toward the target (free move) then attacks. `charge_simple` makes the attack a
+  Simple action (boar/elephant economy — stance-Simple + attack-Simple both fit a turn);
+  `charge_atk_bonus`/`charge_dmg_bonus` add +NkN; `charge_diving` ends the creature Prone after
+  the dive. Charge fires only when it closes a gap (already-adjacent → normal attack). Owner
+  decisions (2026-06-17): enter Full Attack only if able; charge when it reaches; propose-approve.
+- **Charge bonus plumbing.** execute_melee_attack gains `charge_atk_bonus`/`charge_dmg_bonus`
+  (+NkN, stacks on auras) + `as_simple` (Simple-economy attack). New Participant
+  `spirit_attack_kept_bonus`/`spirit_damage_kept_bonus` (the kept half of +NkN) read in
+  resolve_attack/resolve_damage and reset alongside the rolled aura bonuses.
+- **Trample (on-hit).** A melee hit by a `trample_prone` creature renders the target Prone;
+  `trample_daze_margin` (Utogu 10) adds Dazed when the attack beats Armor TN by that margin.
+  Wired in _apply_hit (reads attack_result.margin).
+- **Populated:** Utogu (charge ×10 + trample Prone/Daze-10), Nairu + night heron (diving +1k1
+  → self-Prone), Munemitsu (trample Prone), spirit boar (goring charge: Simple + +1k1 atk/dmg,
+  move ×10 PROVISIONAL — GDD silent on goring move distance). RUNTIME-VERIFIED (Godot 4.6.2):
+  Utogu closes 6→1 tiles + target Prone; boar enters Full Attack + Simple-attacks same turn;
+  Nairu dives + ends self-Prone; an adjacent target yields no charge (normal attack).
+  DEFERRED (tranche 2): Gore-stick (Munemitsu), Ox Furious-Charge rage, Rhino Furious-Charge
+  Knockdown-maneuver + Free Raise, Rhino's vs-Prone special trample (8k4/10k4), stag antler
+  charge (GDD value unconfirmed).
+
 ### Pending Redesign
 (None currently pending.)
 

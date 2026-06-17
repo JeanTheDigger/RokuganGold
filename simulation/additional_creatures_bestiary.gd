@@ -38,6 +38,9 @@ static func catalog() -> Dictionary:
 		2, 2, 2, 2, {"reflexes": 5, "agility": 4, "perception": 3},
 		6, 5, "Claw/Beak", 6, 4, 4, 2, 30, 3, [15], 30, 0,
 		["spirit", "diving_attack"], 2, _C)
+	c["night_heron"].charge_move_mult = 10  # Diving Attack: +1k1, then grounded/Prone (s54.5)
+	c["night_heron"].charge_diving = true
+	c["night_heron"].charge_atk_bonus = 1
 
 	c["tsuru"] = _make("tsuru", "Tsuru, Spirit of Chikushudo", SpiritCreatureData.Tier.MID,
 		4, 2, 2, 1, {"agility": 3, "perception": 4},

@@ -740,6 +740,9 @@ static func execute_melee_attack(
 	maneuver: String = "",
 	spend_void: bool = false,
 	bonus_attack: bool = false,
+	charge_atk_bonus: int = 0,
+	charge_dmg_bonus: int = 0,
+	as_simple: bool = false,
 ) -> Dictionary:
 	if CharacterStats.is_dead(attacker):
 		return {"success": false, "reason": "character_is_dead"}
@@ -767,7 +770,8 @@ static func execute_melee_attack(
 		return {"success": false, "reason": "participant_missing"}
 
 	# Dance of the Flames (s38 Fire): unarmed attacks cost a Simple Action, not Complex.
-	var dance_simple: bool = (weapon_name == "" or weapon_name == "unarmed") and "Dance of the Flames" in a_p.active_kiho
+	# Simple-cost attack: Dance of the Flames (unarmed kiho) OR a Simple-economy Charge (s54.5).
+	var dance_simple: bool = as_simple or ((weapon_name == "" or weapon_name == "unarmed") and "Dance of the Flames" in a_p.active_kiho)
 	# bonus_attack (GDD s54.5 multi-attack second strike, like an off-hand attack): a free
 	# extra attack that neither requires nor consumes an action.
 	if not bonus_attack:
@@ -817,6 +821,11 @@ static func execute_melee_attack(
 	# attacker's per-attack rolled-die bonuses (always reset to the freshly-computed
 	# value so nothing lingers; 0 for non-spirits).
 	_set_spirit_attack_auras(state, attacker, a_p, target_id)
+	# Charge bonus (s54.5 Goring Charge / Diving Attack): +NkN, stacks on any aura bonus.
+	a_p.spirit_attack_rolled_bonus += charge_atk_bonus
+	a_p.spirit_attack_kept_bonus += charge_atk_bonus
+	a_p.spirit_damage_rolled_bonus += charge_dmg_bonus
+	a_p.spirit_damage_kept_bonus += charge_dmg_bonus
 	# s54.10: a hidden creature (Mujina / Ephemeral Form) that attacks reveals itself —
 	# it is targetable through its next turn.
 	_reveal_if_hidden(state, attacker_id, a_p)
@@ -943,6 +952,8 @@ static func execute_melee_attack(
 	# (e.g. an extra-attack or off-hand strike this turn that does not recompute them).
 	a_p.spirit_attack_rolled_bonus = 0
 	a_p.spirit_damage_rolled_bonus = 0
+	a_p.spirit_attack_kept_bonus = 0
+	a_p.spirit_damage_kept_bonus = 0
 
 	if not bonus_attack:
 		if dance_simple:
@@ -3318,6 +3329,16 @@ static func execute_npc_turn(
 	var target_in_melee: bool = (best_target in melee_targets)
 	var target_in_ranged: bool = (best_target in ranged_targets)
 
+	# Charge (s54.5/s54.12): a charge-capable creature out of melee but within charge range
+	# enters Full Attack (if able) and closes + strikes in one turn.
+	if npc.spirit_creature != null and npc.spirit_creature.charge_move_mult > 0 \
+			and not target_in_melee \
+			and IndividualCombat.CONDITION_ENTANGLED not in p.conditions:
+		var chg: Dictionary = execute_charge(state, npc_id, best_target, npc, chars_by_id.get(best_target, state.combatants.get(best_target, null)), dice_engine)
+		if chg.get("charged", false):
+			actions_taken.append({"action": "charge", "result": chg})
+			return {"actions": actions_taken}
+
 	# Entangled (s54.12 Web / s56.20 Snare): an entangled NPC that can't reach a target
 	# struggles to break free (Strength TN 20) instead of a futile move.
 	if IndividualCombat.CONDITION_ENTANGLED in p.conditions and not target_in_melee:
@@ -4094,6 +4115,8 @@ static func _set_spirit_attack_auras(
 ) -> void:
 	a_p.spirit_attack_rolled_bonus = 0
 	a_p.spirit_damage_rolled_bonus = 0
+	a_p.spirit_attack_kept_bonus = 0
+	a_p.spirit_damage_kept_bonus = 0
 	var cr: SpiritCreatureData = attacker.spirit_creature
 	if cr == null:
 		return
@@ -4253,6 +4276,63 @@ static func apply_fear_checks(
 ## s54.10/s54.2 Possession: a possessing spirit (Shozai-gaki / Buruburu / Kitsune-tsuki)
 ## adjacent to a valid victim spends a Complex action to attempt possession. Kitsune-tsuki
 ## requires the victim sleeping or Down/Out (TN-25 Willpower or possessed); Shozai/Buruburu
+## Charge (s54.5/s54.12): a charge-capable creature in Full Attack stance closes up to
+## Water Ring × charge_move_mult feet (÷5 = tiles) toward a target and attacks in one turn.
+## Enters Full Attack only if able (action economy); a charge_simple attack costs a Simple,
+## else a Complex; charge_atk/dmg_bonus add +NkN; a diving charger ends Prone. Returns {} if
+## it cannot/should not charge (caller falls back to a normal approach). Charge fires only
+## when the target is beyond melee reach but within charge range (closing the gap is the point).
+static func execute_charge(
+	state: MapCombatState,
+	npc_id: int,
+	target_id: int,
+	npc: L5RCharacterData,
+	target: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var cr: SpiritCreatureData = npc.spirit_creature
+	if cr == null or cr.charge_move_mult <= 0:
+		return {}
+	var ts: TurnState = state.turn_states.get(npc_id, null)
+	var p: IndividualCombat.Participant = state.combat.participants.get(npc_id, null)
+	if ts == null or p == null:
+		return {}
+	var ap: Vector2i = state.positions.get(npc_id, Vector2i(-1, -1))
+	var tp: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
+	if ap.x < 0 or tp.x < 0:
+		return {}
+	var charge_tiles: int = int(CharacterStats.get_ring_value(npc, Enums.Ring.WATER) * cr.charge_move_mult / 5.0)
+	if charge_tiles < 1:
+		return {}
+	var dist: int = _chebyshev(ap, tp)
+	# already adjacent (use normal attack) or too far to reach even with the charge → no charge.
+	if dist <= MELEE_RANGE_TILES or dist > charge_tiles + MELEE_RANGE_TILES:
+		return {}
+	# Enter Full Attack stance — only if able this turn (the GDD gate).
+	if p.stance != Enums.Stance.FULL_ATTACK:
+		if not ts.can_use_simple():
+			return {}
+		p.stance = Enums.Stance.FULL_ATTACK
+		ts.consume_simple()
+	# The charge attack must be affordable after the (possible) stance change.
+	if cr.charge_simple:
+		if not ts.can_use_simple():
+			return {}
+	elif not ts.can_use_complex():
+		return {}
+	# Charge move toward the target (free move, up to the charge distance).
+	_npc_move_toward(state, npc_id, target_id, npc, charge_tiles, "free", dice)
+	if not (target_id in get_melee_targets(state, npc_id)):
+		return {"ok": true, "charged": true, "reached": false}
+	var res: Dictionary = execute_melee_attack(
+		state, npc_id, target_id, npc, target, IndividualCombat.pick_best_weapon(npc), 0, dice,
+		"", false, false, cr.charge_atk_bonus, cr.charge_dmg_bonus, cr.charge_simple)
+	# Diving Attack (s54.5 Nairu): after the dive the creature is no longer flying → Prone.
+	if cr.charge_diving:
+		IndividualCombat.apply_condition(p, IndividualCombat.CONDITION_PRONE)
+	return {"ok": true, "charged": true, "reached": true, "attack": res, "diving": cr.charge_diving}
+
+
 ## Strength of the Dead (s54.12 Wanyudo): a Complex-action scream — every mortal enemy within
 ## 50' (10 tiles) rolls Contested Willpower vs the creature or is Stunned. Once per skirmish.
 static func _npc_maybe_scream(
@@ -4744,6 +4824,16 @@ static func _apply_hit(
 		if venom_min > 0:
 			var expiry: int = state.combat.round_number + venom_min * IndividualCombat.ROUNDS_PER_MINUTE
 			IndividualCombat.apply_timed_condition(t_p, IndividualCombat.CONDITION_STUNNED, expiry)
+
+	# Trample (s54.5/s54.12): a melee hit renders the target Prone; +Dazed if the attack beat
+	# the target's Armor TN by trample_daze_margin (Utogu 10).
+	if attacker.spirit_creature != null and t_p != null and target.spirit_creature == null \
+			and attacker.spirit_creature.trample_prone \
+			and IndividualCombat.get_weapon_profile(weapon_name).get("melee", true):
+		IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_PRONE)
+		var _tdm: int = attacker.spirit_creature.trample_daze_margin
+		if _tdm > 0 and int(attack_result.get("margin", 0)) >= _tdm:
+			IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_DAZED)
 
 	# Stunning Jolt (s54.12 Hinotama): a touch forces a Stamina TN 20 roll — Dazed on success,
 	# Stunned on failure (both roll-recoverable).
