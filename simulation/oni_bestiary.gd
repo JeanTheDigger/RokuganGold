@@ -179,6 +179,8 @@ static func catalog() -> Dictionary:
 		4, 2, "Trample", 4, 4, 6, 4, 25, 6, [32, 64, 96, 128, 160], 224, 3,
 		["oni", "huge", "partial_invuln", "brood", "mortal", "gore", "trample_prone", "multi_attack"]), "Gore", 6, 4, 8, 6)
 	c["munemitsu_no_oni"].trample_prone = true  # Trample renders the target Prone (s54.5)
+	c["munemitsu_no_oni"].gore_escape_rolled = 3  # Gore: stuck on tusks; pull free (Str TN20) = +3k2 (s54.5)
+	c["munemitsu_no_oni"].gore_escape_kept = 2
 
 	c["sentei_no_oni"] = _with2(_make("sentei_no_oni", "Sentei no Oni, the Many-Legged Death", SpiritCreatureData.Tier.BOSS,
 		2, 6, 4, 4, {"reflexes": 4},

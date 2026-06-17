@@ -2763,7 +2763,14 @@ static func attempt_entangle_escape(state: MapCombatState, char_id: int, charact
 	var roll: int = dice.roll_and_keep(maxi(1, character.strength), maxi(1, character.strength), true).total
 	if roll >= 20:
 		p.conditions.erase(IndividualCombat.CONDITION_ENTANGLED)
-		return {"success": true, "roll": roll}
+		# Gore (s54.5): pulling free of the tusks deals the gore-escape damage.
+		var gore_dmg: int = 0
+		if p.gore_escape_rolled > 0:
+			gore_dmg = dice.roll_and_keep(p.gore_escape_rolled, p.gore_escape_kept, true).total
+			WoundSystem.apply_damage(character, gore_dmg, maxi(0, character.armor_reduction))
+			p.gore_escape_rolled = 0
+			p.gore_escape_kept = 0
+		return {"success": true, "roll": roll, "gore_damage": gore_dmg}
 	return {"success": false, "roll": roll}
 
 
@@ -3452,6 +3459,25 @@ static func execute_npc_turn(
 				if atemi_res.get("success", false):
 					actions_taken.append({"action": "atemi", "result": atemi_res})
 					return {"actions": actions_taken}
+
+	# -- vs-Prone Trample (s54.12 Rhino): a special Simple attack used only against a Prone
+	# target (8k4 / 10k4), via a temporary profile swap (like the multi-attack second strike).
+	if target_in_melee and npc.spirit_creature != null and npc.spirit_creature.vs_prone_atk_rolled > 0:
+		var ptc: L5RCharacterData = chars_by_id.get(best_target, null)
+		var ptp: IndividualCombat.Participant = state.combat.participants.get(best_target, null)
+		if ptc != null and ptp != null and not CharacterStats.is_dead(ptc) \
+				and IndividualCombat.CONDITION_PRONE in ptp.conditions and ts.can_use_simple():
+			var sc: SpiritCreatureData = npc.spirit_creature
+			var _oar: int = sc.attack_rolled; var _oak: int = sc.attack_kept
+			var _odr: int = sc.damage_rolled; var _odk: int = sc.damage_kept
+			sc.attack_rolled = sc.vs_prone_atk_rolled; sc.attack_kept = sc.vs_prone_atk_kept
+			sc.damage_rolled = sc.vs_prone_dmg_rolled; sc.damage_kept = sc.vs_prone_dmg_kept
+			var tr: Dictionary = execute_melee_attack(
+				state, npc_id, best_target, npc, ptc, IndividualCombat.pick_best_weapon(npc), 0, dice_engine,
+				"", false, false, 0, 0, true)
+			sc.attack_rolled = _oar; sc.attack_kept = _oak; sc.damage_rolled = _odr; sc.damage_kept = _odk
+			actions_taken.append({"action": "vs_prone_trample", "result": tr})
+			return {"actions": actions_taken}
 
 	# -- Attack ---------------------------------------------------------------
 	if target_in_melee or (not is_melee_weapon and target_in_ranged):
@@ -4834,6 +4860,24 @@ static func _apply_hit(
 		var _tdm: int = attacker.spirit_creature.trample_daze_margin
 		if _tdm > 0 and int(attack_result.get("margin", 0)) >= _tdm:
 			IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_DAZED)
+
+	# Furious Charge Knockdown (s54.12 Rhino): a Full-Attack melee hit attempts a Knockdown
+	# (Contested Strength, quadruped, + a Free Raise = +5) → target Prone.
+	if attacker.spirit_creature != null and attacker.spirit_creature.charge_knockdown and t_p != null \
+			and target.spirit_creature == null and a_p.stance == Enums.Stance.FULL_ATTACK \
+			and IndividualCombat.get_weapon_profile(weapon_name).get("melee", true):
+		var _kd: Dictionary = IndividualCombat.resolve_knockdown(attacker, target, true, dice_engine, 5)
+		if _kd.get("knocked_down", false):
+			IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_PRONE)
+
+	# Gore (s54.5 Munemitsu): a melee hit sticks the victim on the tusks (Entangled); pulling
+	# free later deals extra damage (applied in attempt_entangle_escape).
+	if attacker.spirit_creature != null and t_p != null and target.spirit_creature == null \
+			and attacker.spirit_creature.gore_escape_rolled > 0 \
+			and IndividualCombat.get_weapon_profile(weapon_name).get("melee", true):
+		IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_ENTANGLED)
+		t_p.gore_escape_rolled = attacker.spirit_creature.gore_escape_rolled
+		t_p.gore_escape_kept = attacker.spirit_creature.gore_escape_kept
 
 	# Stunning Jolt (s54.12 Hinotama): a touch forces a Stamina TN 20 roll — Dazed on success,
 	# Stunned on failure (both roll-recoverable).

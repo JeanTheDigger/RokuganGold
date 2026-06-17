@@ -38,9 +38,9 @@ static func catalog() -> Dictionary:
 		2, 2, 2, 2, {"reflexes": 5, "agility": 4, "perception": 3},
 		6, 5, "Claw/Beak", 6, 4, 4, 2, 30, 3, [15], 30, 0,
 		["spirit", "diving_attack"], 2, _C)
-	c["night_heron"].charge_move_mult = 10  # Diving Attack: +1k1, then grounded/Prone (s54.5)
-	c["night_heron"].charge_diving = true
-	c["night_heron"].charge_atk_bonus = 1
+	c["nue"].charge_move_mult = 10  # Diving Attack: +1k1, then grounded/Prone (s54.5)
+	c["nue"].charge_diving = true
+	c["nue"].charge_atk_bonus = 1
 
 	c["tsuru"] = _make("tsuru", "Tsuru, Spirit of Chikushudo", SpiritCreatureData.Tier.MID,
 		4, 2, 2, 1, {"agility": 3, "perception": 4},
@@ -125,6 +125,14 @@ static func catalog() -> Dictionary:
 		1, 5, 1, 2, {"reflexes": 3, "agility": 3, "strength": 6},
 		4, 3, "Gore", 6, 3, 7, 2, 25, 6, [30, 60, 90], 120, 2,
 		["animal", "huge", "furious_charge", "trample_prone"], 2, _N)
+	# Furious Charge: Full Attack → Knockdown maneuver + Free Raise (s54.12).
+	c["rhinoceros"].charge_move_mult = 10  # PROVISIONAL: Furious-Charge move distance unspecified (general charge convention)
+	c["rhinoceros"].charge_knockdown = true
+	# vs-Prone Trample: a Prone foe is trampled as a Simple action, 8k4 / 10k4 (s54.12).
+	c["rhinoceros"].vs_prone_atk_rolled = 8
+	c["rhinoceros"].vs_prone_atk_kept = 4
+	c["rhinoceros"].vs_prone_dmg_rolled = 10
+	c["rhinoceros"].vs_prone_dmg_kept = 4
 
 	# --- Additional supernatural creatures (s54.12) -------------------------
 	c["basan"] = _make("basan", "Basan", SpiritCreatureData.Tier.MID,

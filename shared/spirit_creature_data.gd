@@ -125,6 +125,21 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 @export var trample_prone: bool = false
 @export var trample_daze_margin: int = 0
 
+## Gore (s54.5 Munemitsu): a melee hit sticks the victim on the tusks (Entangled); pulling
+## free (Strength TN 20) deals gore_escape_rolled k _kept extra damage. 0 = no gore-stick.
+@export var gore_escape_rolled: int = 0
+@export var gore_escape_kept: int = 0
+
+## Furious Charge Knockdown (s54.12 Rhino): a charge hit attempts a Knockdown (Contested
+## Strength, quadruped, + a Free Raise) → target Prone.
+@export var charge_knockdown: bool = false
+
+## vs-Prone Trample (s54.12 Rhino): a special Simple attack used only against a Prone target.
+@export var vs_prone_atk_rolled: int = 0
+@export var vs_prone_atk_kept: int = 0
+@export var vs_prone_dmg_rolled: int = 0
+@export var vs_prone_dmg_kept: int = 0
+
 @export var void_rank: int = 0
 
 @export var fear: int = 0

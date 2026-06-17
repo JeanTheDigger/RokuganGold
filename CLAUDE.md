@@ -5161,7 +5161,7 @@ the same actor without proper turn advancement.
 - **Trample (on-hit).** A melee hit by a `trample_prone` creature renders the target Prone;
   `trample_daze_margin` (Utogu 10) adds Dazed when the attack beats Armor TN by that margin.
   Wired in _apply_hit (reads attack_result.margin).
-- **Populated:** Utogu (charge ×10 + trample Prone/Daze-10), Nairu + night heron (diving +1k1
+- **Populated:** Utogu (charge ×10 + trample Prone/Daze-10), Nairu + Nue (diving +1k1
   → self-Prone), Munemitsu (trample Prone), spirit boar (goring charge: Simple + +1k1 atk/dmg,
   move ×10 PROVISIONAL — GDD silent on goring move distance). RUNTIME-VERIFIED (Godot 4.6.2):
   Utogu closes 6→1 tiles + target Prone; boar enters Full Attack + Simple-attacks same turn;
@@ -5169,6 +5169,36 @@ the same actor without proper turn advancement.
   DEFERRED (tranche 2): Gore-stick (Munemitsu), Ox Furious-Charge rage, Rhino Furious-Charge
   Knockdown-maneuver + Free Raise, Rhino's vs-Prone special trample (8k4/10k4), stag antler
   charge (GDD value unconfirmed).
+
+### Known Code Issues (found and fixed 2026-06-17, charge tranche 1 catalog bug)
+- **AdditionalCreaturesBestiary.catalog() emptied at runtime — wrong dict key. FIXED.**
+  The charge tranche-1 commit attached the diving-charge fields to `c["night_heron"]`, but
+  the diving creature at that spot is the **Nue** (`c["nue"]`), and a separate `night_heron`
+  (eye_strike, not diving) is created LATER in the same function. So `c["night_heron"].charge_* = …`
+  ran before that key existed → "Invalid access to key 'night_heron'" → catalog() aborted and
+  returned an effectively EMPTY dict. Every additional-bestiary creature (rhinoceros, Taki-bi,
+  Furaribi, Kukanchi, Hinotama, Wyrm, Nure-Onna, Jimen, Yosuchi, etc.) then failed to spawn
+  (spawn_by_id → null). Parse-check/import did NOT catch it (runtime error, not parse). Changed
+  the key to `c["nue"]`. RUNTIME-VERIFIED: catalog rebuilt to 37; integration smoke green again
+  (22 ok, 0 missing). LESSON: a per-file `--check-only` parse does not exercise catalog runtime;
+  spawn/integration drivers are required to catch dict-key errors.
+
+### Systems Added 2026-06-17 (s54.5/s54.12 Charge tranche 2 — runtime-verified)
+- **Gore-stick (Munemitsu).** A melee hit sticks the victim (Entangled, reusing the entangle
+  layer); pulling free (Strength TN 20 via attempt_entangle_escape) deals the creature's
+  `gore_escape_rolled k _kept` extra damage (Munemitsu 3k2). New SpiritCreatureData
+  gore_escape_rolled/_kept + Participant gore_escape_rolled/_kept. RUNTIME-VERIFIED: stuck →
+  escape deals +3k2.
+- **Rhino Furious Charge (Knockdown).** A Full-Attack melee hit by a `charge_knockdown` creature
+  attempts a Knockdown (Contested Strength, quadruped, +5 = the Free Raise) → target Prone.
+  Wired in _apply_hit (covers charging AND adjacent); resolve_knockdown gains a bonus_to_attacker
+  param. RUNTIME-VERIFIED: rhino knocks the target Prone.
+- **Rhino vs-Prone Trample.** When the target is Prone, the rhino uses a special Simple attack
+  (8k4 / 10k4) via a temporary stat-profile swap (like the multi-attack second strike). New
+  vs_prone_atk/dmg_rolled/_kept fields + an execute_npc_turn branch. RUNTIME-VERIFIED: Prone
+  target → vs_prone_trample fires (10k4, +36 damage in the test).
+- **DEFERRED:** Ox Furious-Charge rage (no Ox creature is transcribed — no consumer), stag antler
+  charge (GDD value unconfirmed). These need new transcription, not wiring.
 
 ### Pending Redesign
 (None currently pending.)

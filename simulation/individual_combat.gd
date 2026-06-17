@@ -169,6 +169,8 @@ class Participant:
 	var ranged_aoe_used: bool = false  # s54.11 Cauldron Belch etc. once-per-skirmish AoE fired
 	var void_locked: bool = false  # s54.12 Furaribi Soul Touch: cannot spend Void Points
 	var scream_used: bool = false  # s54.12 Wanyudo Strength of the Dead: once-per-skirmish scream
+	var gore_escape_rolled: int = 0  # s54.5 Gore: extra damage dealt when pulling free of the tusks (0 = not gored)
+	var gore_escape_kept: int = 0
 	var spirit_attack_rolled_bonus: int = 0  # s54.10 Toshigoku auras/Tactical Mastery: +N rolled attack dice (orchestrator sets per-attack, spirit-only)
 	var spirit_damage_rolled_bonus: int = 0  # s54.10 Supreme Commander: +N rolled damage dice (spirit-only)
 	var spirit_attack_kept_bonus: int = 0  # s54.5 Charge: +N kept attack dice (the kept half of a +NkN charge bonus)
@@ -1350,6 +1352,7 @@ static func resolve_knockdown(
 	defender: L5RCharacterData,
 	is_quadruped: bool,
 	dice_engine: DiceEngine,
+	bonus_to_attacker: int = 0,  # s54.12 Rhino Furious Charge: +5 = the Free Raise
 ) -> Dictionary:
 	# Advantage/disadvantage modifiers (s45) + wound penalties
 	var att_wound: int = CharacterStats.get_wound_penalty(attacker)
@@ -1364,7 +1367,7 @@ static func resolve_knockdown(
 	var def_kept_kd: int = maxi(defender.strength + def_adv_kd["kept"], 1)
 	var att_r: DiceResult = dice_engine.roll_and_keep(att_rolled_kd, att_kept_kd, false)
 	var def_r: DiceResult = dice_engine.roll_and_keep(def_rolled_kd, def_kept_kd, false)
-	var att_total_kd: int = att_r.total + (att_adv_kd["free_raises"] * 5) - att_tn_kd + att_wound
+	var att_total_kd: int = att_r.total + (att_adv_kd["free_raises"] * 5) - att_tn_kd + att_wound + bonus_to_attacker
 	var def_total_kd: int = def_r.total + (def_adv_kd["free_raises"] * 5) - def_tn_kd + def_wound + (4 if is_quadruped else 0)
 	return {
 		"attacker_strength_roll": att_total_kd,
