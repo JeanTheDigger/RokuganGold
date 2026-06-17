@@ -161,6 +161,7 @@ class Participant:
 	var untargetable_revealed_until: int = -1  # s54.10 invisibility/intangibility: targetable through this round after acting
 	var ephemeral_form_expiry: int = -1  # s54.10 Ephemeral Form: round the 10-round insubstantial window ends
 	var ephemeral_form_used: bool = false  # Ephemeral Form is once-per-encounter (once/day)
+	var mimic_expiry: int = -1  # s54.10 Mimic: round the 5-round disguise (untargetable) window ends; broken on attack
 	var spirit_attack_rolled_bonus: int = 0  # s54.10 Toshigoku auras/Tactical Mastery: +N rolled attack dice (orchestrator sets per-attack, spirit-only)
 	var spirit_damage_rolled_bonus: int = 0  # s54.10 Supreme Commander: +N rolled damage dice (spirit-only)
 	var void_dragon_ring: int = -1  # Touch the Void Dragon (s38): boosted Ring (Enums.Ring), -1 = inactive

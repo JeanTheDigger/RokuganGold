@@ -180,7 +180,7 @@ static func sakkaku_catalog() -> Dictionary:
 	c["bakeneko"] = _make("bakeneko", "Bakeneko", SpiritCreatureData.Tier.MID,
 		2, 2, 2, 2, {},
 		3, 2, "Claws", 3, 2, 2, 2, 10, 5, [10, 20], 30, 0,
-		["spirit", "real_threat", "shapeshifter", "deceiver", "vindictive"], R)
+		["spirit", "real_threat", "shapeshifter", "deceiver", "vindictive", "mimic"], R)
 
 	c["konak_jiji"] = _make("konak_jiji", "Konak Jiji", SpiritCreatureData.Tier.MID,
 		1, 2, 3, 2, {"awareness": 4},
@@ -273,7 +273,7 @@ static func chikushudo_catalog() -> Dictionary:
 		2, 2, 2, 1, {"reflexes": 5, "perception": 4},
 		6, 5, "Claws", 2, 2, 2, 1, 25, 0, [15, 30], 45, 0,
 		["spirit", "shapeshifter", "trickster", "negotiator", "may_not_be_hostile", "swift",
-			"ephemeral_form", "protection_of_yomi"], R)
+			"ephemeral_form", "protection_of_yomi", "mimic"], R)
 	c["kitsune"].swift = 3  # s54.10 "Swift 3"
 
 	c["kitsune_tsuki"] = _make("kitsune_tsuki", "Kitsune-tsuki", SpiritCreatureData.Tier.HEAVY,

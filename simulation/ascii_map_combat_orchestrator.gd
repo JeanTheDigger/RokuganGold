@@ -14,6 +14,7 @@ class_name AsciiMapCombatOrchestrator
 
 ## Melee reach: adjacent 8 tiles (1 tile = 5 feet; "within 5 feet" = adjacent).
 const MELEE_RANGE_TILES: int = 1
+const MIMIC_DISGUISE_ROUNDS: int = 5  # s54.10 Mimic: "lasts ... 5 Rounds in battle"
 
 ## Guard maneuver range: "within 5 feet" = 1 tile (GDD s40).
 const GUARD_RANGE_TILES: int = 1
@@ -3012,6 +3013,15 @@ static func execute_npc_turn(
 		ranged_targets = get_ranged_targets(state, npc_id)
 		target_in_ranged = (best_target in ranged_targets)
 
+	# -- Mimic (s54.10): a hurt shapeshifter (Kitsune/Bakeneko) assumes another form to
+	# escape — untargetable for 5 Rounds or until it attacks. The disguise is the turn's
+	# Complex action.
+	if npc.spirit_creature != null:
+		var mim: Dictionary = _npc_maybe_mimic(state, npc_id, npc)
+		if mim.get("success", false):
+			actions_taken.append({"action": "mimic", "result": mim})
+			return {"actions": actions_taken}
+
 	# -- Possession (s54.10/s54.2): a possessing spirit in melee with a valid victim
 	# seeds a cross-encounter possession affliction (resolved in the world-sim) instead
 	# of attacking. Kitsune-tsuki requires a Down/Out victim; Shozai/Buruburu may try any.
@@ -3753,6 +3763,8 @@ static func _is_targetable(state: MapCombatState, cid: int) -> bool:
 		return false  # Mujina: invisible/intangible at will, persistent
 	if SpiritAbilitySystem.has_ephemeral_form(c.spirit_creature) and p.ephemeral_form_expiry >= rnd:
 		return false  # within the 10-round Ephemeral Form window
+	if c.spirit_creature.has_tag("mimic") and p.mimic_expiry >= rnd:
+		return false  # disguised (Mimic) — reads as one of the enemy's own
 	return true
 
 
@@ -3872,10 +3884,48 @@ static func _reveal_if_hidden(state: MapCombatState, cid: int, p: IndividualComb
 	if c == null or c.spirit_creature == null or p == null:
 		return
 	var rnd: int = state.combat.round_number
+	# Mimic: attacking blows the disguise permanently (until recast).
+	if c.spirit_creature.has_tag("mimic") and p.mimic_expiry >= rnd:
+		p.mimic_expiry = -1
 	var hidden: bool = SpiritAbilitySystem.is_at_will_hidden(c.spirit_creature) \
 		or (SpiritAbilitySystem.has_ephemeral_form(c.spirit_creature) and p.ephemeral_form_expiry >= rnd)
 	if hidden:
 		p.untargetable_revealed_until = rnd + 1
+
+
+## s54.10 Mimic (Kitsune / Bakeneko): a wounded shapeshifter assumes another form
+## (Complex Action) and reads as one of the enemy's own — untargetable for 5 Rounds or
+## until it attacks. NPC auto-activation when threatened, hurt, and not already disguised.
+## No-op for creatures without the ability. Returns {} if not attempted.
+static func _npc_maybe_mimic(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+) -> Dictionary:
+	if character.spirit_creature == null or not character.spirit_creature.has_tag("mimic"):
+		return {}
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if p == null or ts == null or not ts.can_use_complex():
+		return {}
+	if p.mimic_expiry >= state.combat.round_number:
+		return {}  # already disguised
+	if CharacterStats.get_wound_level(character) < Enums.WoundLevel.HURT:
+		return {}  # only disguises to escape once hurt
+	var apos: Vector2i = state.positions.get(char_id, Vector2i(-9999, -9999))
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	var threatened: bool = false
+	for oid: int in state.positions.keys():
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		if _chebyshev(apos, state.positions[oid]) <= MELEE_RANGE_TILES:
+			threatened = true
+			break
+	if not threatened:
+		return {}
+	ts.consume_complex()
+	p.mimic_expiry = state.combat.round_number + MIMIC_DISGUISE_ROUNDS
+	return {"success": true, "action": "mimic", "char_id": char_id, "expiry": p.mimic_expiry}
 
 
 ## s54.10 Ephemeral Form (Kitsune etc.): a threatened shapeshifter turns insubstantial

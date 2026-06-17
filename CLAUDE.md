@@ -4653,6 +4653,29 @@ two encoded creatures whose stat blocks state a Swift value: Mujina 6, Kitsune 3
 creatures keep swift 0 until their stat-block values are transcribed (the mechanism is
 live; population is incremental). Static-validated only (no Godot runtime).
 
+### s54.10 Mimic / disguise — wired into tile combat (2026-06-16, owner-approved, static-only)
+Owner decisions (2026-06-16): Mimic effect = **both layers** (untargetable in active
+combat AND blends in out of active fighting); creatures = **Kitsune + Bakeneko**. The GDD
+gives the duration (5 Rounds in battle) but not the combat effect; the owner's rule:
+a disguised creature reads as one of the enemy's own → untargetable, until it attacks.
+**Wired in the orchestrator** (the one combat system that processes spirit puppets, and
+which handles BOTH the real-time approach phase and turn-based combat in one MapCombatState):
+new `IndividualCombat.Participant.mimic_expiry`; `_is_targetable` treats a `mimic`-tagged
+creature inside its 5-round window as untargetable (so enemies — NPC via `_npc_pick_target`
+and PC via `get_*_targets` — cannot select it while it moves among them); `_reveal_if_hidden`
+**breaks** the disguise outright on attack (`mimic_expiry = -1`, unlike invisibility's
+1-turn flicker — you can't keep a disguise while striking); `_npc_maybe_mimic` (Complex
+action, `MIMIC_DISGUISE_ROUNDS = 5`) auto-activates when the shapeshifter is hurt
+(>= HURT), threatened, and not already disguised — a wounded trickster vanishes into
+another form to escape. `mimic` tag added to Kitsune (its GDD-listed set) and Bakeneko
+(owner-approved; the GDD doesn't enumerate Bakeneko's 3 picks). LIMITATION: the separate
+roguelike **CombatController stealth/alert layer** has no spirit-creature consumer (spirits
+fight via the orchestrator, not CombatController), so the "blends in" half is realised
+**within the orchestrator skirmish** (untargetable movement during approach + untargetable
+until it strikes) rather than as a second hook in CombatController — there is nothing for
+Mimic to gate there until spirit creatures flow through that layer. Re-castable (no
+once-per-encounter limit; GDD allows recasting). Static-validated only (no Godot runtime).
+
 ### Pending Redesign
 (None currently pending.)
 
