@@ -5009,6 +5009,19 @@ Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next cand
   RUNTIME-VERIFIED (Godot 4.6.2): over 30 attacks, all 19 of the 15+ Wound claw hits fired
   the follow-up bite (extra damage beyond the claw), and sub-threshold hits did not.
 
+### Systems Added 2026-06-17 (s54.12 Jimen no Oni Trembling Earth — runtime-verified)
+- **Trembling Earth wired (Jimen no Oni).** A `trembling_earth` enemy within 50' (10 tiles)
+  imposes -1k0 to all rolls (no save) — modelled with the same AFRAID -1k0 condition as Fear,
+  but it is NOT a Fear effect (physical shaking) so it bypasses Immune-to-Fear.
+  `apply_fear_checks` rewritten to compute fear-afraid and tremor independently, then set/clear
+  the AFRAID condition once (afraid-roll-failed OR tremor-source-near). The exact Fear logic is
+  preserved. New const TREMBLING_EARTH_TILES = 10. RUNTIME-VERIFIED (Godot 4.6.2): a fear-immune
+  hero within 8 tiles of Jimen is AFRAID (proves it is the tremor, not Fear), clears beyond 16
+  tiles; Fear regression intact (near low-Willpower hero afraid, far clears, fear-immune
+  unaffected by Fear). LIMITATION: AFRAID covers attack rolls in combat (the GDD "all Skill
+  Rolls + Spell Casting" is the same -1k0); Fear and tremor do not stack (both = the single
+  -1k0 AFRAID).
+
 ### Pending Redesign
 (None currently pending.)
 

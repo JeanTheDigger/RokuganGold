@@ -14,6 +14,8 @@ class_name AsciiMapCombatOrchestrator
 
 ## Melee reach: adjacent 8 tiles (1 tile = 5 feet; "within 5 feet" = adjacent).
 const MELEE_RANGE_TILES: int = 1
+## s54.12 Jimen no Oni Trembling Earth: -1k0 to all rolls within 50' (10 tiles).
+const TREMBLING_EARTH_TILES: int = 10
 const MIMIC_DISGUISE_ROUNDS: int = 5  # s54.10 Mimic: "lasts ... 5 Rounds in battle"
 const DECEPTIVE_WEIGHT_ESCAPE_TN: int = 40  # s54.10 Konak Jiji: Athletics/Strength TN 40 to move it
 
@@ -4084,43 +4086,55 @@ static func apply_fear_checks(
 	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
 	if p == null or character == null or CharacterStats.is_dead(character):
 		return
-	# Immune-to-Fear (s29.4) — never affected; ensure no lingering AFRAID condition.
-	if character.immune_to_fear:
-		p.conditions.erase(IndividualCombat.CONDITION_AFRAID)
-		return
 	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-9999, -9999))
 	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
-	# Highest Fear among enemy combatants whose range covers this character. A Fear
-	# source is a creature's stat-block Fear OR a character's own fear_rating (s22.3
-	# Terrible Appearance etc.). Range = Fear × 5 ft = Fear tiles.
-	var max_fear: int = 0
+	# Trembling Earth (s54.12 Jimen no Oni): a trembling_earth enemy within 50' (10 tiles)
+	# imposes -1k0 to all rolls (no save). NOT a Fear effect — physical, so it bypasses
+	# Immune-to-Fear. Modelled with the same AFRAID -1k0 condition as Fear.
+	var tremor: bool = false
 	for oid: int in state.combat.participants:
-		if oid == char_id:
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
 			continue
-		if not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+		var ts: L5RCharacterData = state.combatants.get(oid, null)
+		if ts == null or CharacterStats.is_dead(ts) or ts.spirit_creature == null:
 			continue
-		var src: L5RCharacterData = state.combatants.get(oid, null)
-		if src == null or CharacterStats.is_dead(src):
-			continue
-		var f: int = maxi(src.fear_rating, src.spirit_creature.fear if src.spirit_creature != null else 0)
-		if f <= 0:
-			continue
-		if _chebyshev(cpos, state.positions.get(oid, Vector2i(-9999, -9999))) <= f:
-			max_fear = maxi(max_fear, f)
-	if max_fear <= 0:
-		# Out of every Fear source's range — no longer afraid.
+		if ts.spirit_creature.has_tag("trembling_earth") \
+				and _chebyshev(cpos, state.positions.get(oid, Vector2i(-9999, -9999))) <= TREMBLING_EARTH_TILES:
+			tremor = true
+			break
+	# Fear: highest Fear among enemy combatants whose range covers this character. A Fear
+	# source is a creature's stat-block Fear OR a character's own fear_rating (s22.3 Terrible
+	# Appearance etc.). Range = Fear × 5 ft = Fear tiles. Immune-to-Fear (s29.4) skips this.
+	var afraid: bool = false
+	if not character.immune_to_fear:
+		var max_fear: int = 0
+		for oid: int in state.combat.participants:
+			if oid == char_id:
+				continue
+			if not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+				continue
+			var src: L5RCharacterData = state.combatants.get(oid, null)
+			if src == null or CharacterStats.is_dead(src):
+				continue
+			var f: int = maxi(src.fear_rating, src.spirit_creature.fear if src.spirit_creature != null else 0)
+			if f <= 0:
+				continue
+			if _chebyshev(cpos, state.positions.get(oid, Vector2i(-9999, -9999))) <= f:
+				max_fear = maxi(max_fear, f)
+		if max_fear > 0:
+			# Resist: Willpower (+ Kshatriya Strength of Indra rank bonus) keep Willpower,
+			# plus Courage of Shiva's +1k1, vs TN 5 + Fear × 5 (s22.3 LOCKED).
+			var wp: int = maxi(1, character.willpower + character.fear_resist_willpower_bonus)
+			var resist: int = dice.roll_and_keep(
+				wp + character.fear_resist_rolled_bonus, wp + character.fear_resist_kept_bonus, true).total
+			if resist < 5 + max_fear * 5:
+				afraid = true
+	# Single set/clear: AFRAID if the Fear roll failed this turn OR a tremor source is near.
+	if afraid or tremor:
+		if IndividualCombat.CONDITION_AFRAID not in p.conditions:
+			p.conditions.append(IndividualCombat.CONDITION_AFRAID)
+	else:
 		p.conditions.erase(IndividualCombat.CONDITION_AFRAID)
-		return
-	# Resist: Willpower (+ Kshatriya Strength of Indra rank bonus) keep Willpower, plus
-	# Courage of Shiva's +1k1, vs TN 5 + Fear × 5 (s22.3 LOCKED).
-	var wp: int = maxi(1, character.willpower + character.fear_resist_willpower_bonus)
-	var resist: int = dice.roll_and_keep(
-		wp + character.fear_resist_rolled_bonus, wp + character.fear_resist_kept_bonus, true).total
-	var tn: int = 5 + max_fear * 5
-	if resist >= tn:
-		p.conditions.erase(IndividualCombat.CONDITION_AFRAID)  # resisted this turn
-	elif IndividualCombat.CONDITION_AFRAID not in p.conditions:
-		p.conditions.append(IndividualCombat.CONDITION_AFRAID)
 
 
 ## s54.10/s54.2 Possession: a possessing spirit (Shozai-gaki / Buruburu / Kitsune-tsuki)
