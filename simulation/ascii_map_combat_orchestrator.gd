@@ -859,6 +859,11 @@ static func execute_melee_attack(
 		# the anvil-caster — Fire Ring contact Wounds in either direction.
 		_apply_body_is_anvil(attacker, a_p, target, t_p, weapon_name)
 
+		# Burning Blood (s54.5 Furu): a melee attacker who wounds the oni rolls Reflexes
+		# (Defense) vs its TN or is splattered for the oni's burning-blood damage.
+		if int(dmg_result.get("wounds", 0)) > 0:
+			_apply_burning_blood(attacker, target, weapon_name, dice_engine)
+
 		# Destiny's Strike (s38 Fire): a struck defender with it active immediately makes
 		# a single unarmed counterattack (once per Round).
 		_maybe_destiny_strike(state, target, t_p, attacker, a_p, dice_engine)
@@ -2477,6 +2482,35 @@ static func _apply_body_is_anvil(
 		WoundSystem.apply_damage(attacker, CharacterStats.get_ring_value(target, Enums.Ring.FIRE), 0)
 	if "The Body is an Anvil" in a_p.active_kiho and not CharacterStats.is_dead(target):
 		WoundSystem.apply_damage(target, CharacterStats.get_ring_value(attacker, Enums.Ring.FIRE), 0)
+
+
+## Burning Blood (s54.5 Furu / Furu spawn): when a MELEE attacker wounds a burning-blood
+## creature, the attacker rolls Reflexes (Defense) vs the creature's burning_blood_tn or is
+## splattered for burning_blood_rolled k _kept damage (armour does not reduce splatter; the
+## GDD Taint-exposure roll is a separate system, not applied here). Inert unless the struck
+## TARGET is a burning-blood creature. Returns the damage dealt to the attacker (0 = none).
+static func _apply_burning_blood(
+	attacker: L5RCharacterData,
+	target: L5RCharacterData,
+	weapon_name: String,
+	dice: DiceEngine,
+) -> int:
+	if target.spirit_creature == null or target.spirit_creature.burning_blood_rolled <= 0:
+		return 0
+	if CharacterStats.is_dead(attacker):
+		return 0
+	# Ranged attackers are not splattered (must be in melee contact).
+	var wp: Dictionary = IndividualCombat.get_weapon_profile(weapon_name)
+	if not wp.get("melee", true):
+		return 0
+	var cr: SpiritCreatureData = target.spirit_creature
+	var save: int = dice.roll_and_keep(
+		attacker.reflexes + attacker.skills.get("Defense", 0), attacker.reflexes, true).total
+	if save >= cr.burning_blood_tn:
+		return 0  # dodged the splatter
+	var dmg: int = dice.roll_and_keep(cr.burning_blood_rolled, cr.burning_blood_kept, true).total
+	WoundSystem.apply_damage(attacker, dmg, 0)
+	return dmg
 
 
 ## First known OFFENSIVE atemi kiho whose effect is encoded (so the strike actually

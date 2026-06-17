@@ -52,12 +52,18 @@ static func catalog() -> Dictionary:
 		["oni", "unique", "burning_blood", "create_spawn_naga", "extreme_heat", "fiery_impalement",
 			"flame_sight", "hurl_flaming_blood", "many_tentacles", "pearl_vulnerability",
 			"superior_invuln", "flame_immune"], 4)
+	c["furu_no_oni"].burning_blood_rolled = 5  # 5k5 splatter, save TN 40 (s54.5)
+	c["furu_no_oni"].burning_blood_kept = 5
+	c["furu_no_oni"].burning_blood_tn = 40
 
 	c["furu_no_oni_spawn"] = _make("furu_no_oni_spawn", "Furu no Oni Spawn", SpiritCreatureData.Tier.HEAVY,
 		4, 4, 6, 4, {"strength": 5},
 		8, 5, "Tentacles", 8, 6, 6, 3, 30, 10, [24, 48, 72], 96, 3,
 		["oni", "burning_blood", "fiery_impalement", "hurl_flaming_blood", "many_tentacles",
 			"pearl_vulnerability", "flame_immune"], 2)
+	c["furu_no_oni_spawn"].burning_blood_rolled = 2  # 2k2 splatter, save TN 25 (s54.5)
+	c["furu_no_oni_spawn"].burning_blood_kept = 2
+	c["furu_no_oni_spawn"].burning_blood_tn = 25
 
 	c["gagoze_no_oni"] = _make("gagoze_no_oni", "Gagoze no Oni, Plague of the Forest", SpiritCreatureData.Tier.BOSS,
 		3, 4, 5, 4, {"reflexes": 4},

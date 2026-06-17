@@ -54,6 +54,14 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 ## "Regeneration"). Hourly regens (Sentei) are negligible in a skirmish → left 0.
 @export var regen_wounds: int = 0
 
+## Burning Blood (s54.5 Furu / Furu spawn): a melee attacker who WOUNDS this creature
+## rolls Reflexes (Defense) vs burning_blood_tn or takes burning_blood_rolled k _kept
+## damage. 0 rolled = no burning blood. (Weapon-size TN variation is not modelled — the
+## stored TN is the unarmed/Small value, the worst case.)
+@export var burning_blood_rolled: int = 0
+@export var burning_blood_kept: int = 0
+@export var burning_blood_tn: int = 0
+
 @export var fear: int = 0
 ## Swift rating (L5R keyword the GDD invokes by name, e.g. "Swift 6"). Converted to
 ## a tile move-budget bonus via the project's fixed 1 tile = 5 ft (MovementSystem):
