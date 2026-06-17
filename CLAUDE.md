@@ -5099,6 +5099,12 @@ Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next cand
   the spawn's tongue hits set the target on fire (the GDD 10-round / vinegar-wash specifics
   collapse to the standard on-fire layer). RUNTIME-VERIFIED: Akuma spawn melee hit ignites.
 
+### Systems Added 2026-06-17 (s54.12 Feed Upon the Soul — runtime-verified)
+- **Feed Upon the Soul wired (Kyoso no Oni spawn).** Killing a foe instantly heals the
+  creature 5 × the slain enemy's Insight Rank (`_apply_hit` death hook, gated on the
+  `feed_upon_soul` tag + a mortal kill). RUNTIME-VERIFIED (Godot 4.6.2): a kill healed the
+  Kyoso spawn by 5 (= 5 × the rank-1 test victim's computed Insight Rank).
+
 ### Pending Redesign
 (None currently pending.)
 

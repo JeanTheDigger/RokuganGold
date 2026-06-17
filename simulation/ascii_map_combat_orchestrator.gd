@@ -4776,6 +4776,12 @@ static func _apply_hit(
 			if dice_engine.roll_and_keep(maxi(1, target.stamina), maxi(1, target.stamina), true).total < 20:
 				DiseaseSystem.apply_poison(target, "stamina")
 
+	# Feed Upon the Soul (s54.12 Kyoso no Oni spawn): killing a foe instantly heals the
+	# creature 5 × the slain enemy's Insight Rank.
+	if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("feed_upon_soul") \
+			and target.spirit_creature == null and CharacterStats.is_dead(target):
+		WoundSystem.heal_wounds(attacker, 5 * CharacterStats.get_insight_rank(target))
+
 	# Spawn-on-death (s54.5): Tasu releases spawn, Wakeru splits into lesser copies when
 	# slain. Fires once, when this hit kills a death_spawn creature.
 	if t_p != null and target.spirit_creature != null \
