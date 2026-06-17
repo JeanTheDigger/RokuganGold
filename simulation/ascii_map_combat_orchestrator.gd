@@ -145,6 +145,8 @@ class MapCombatState:
 	var duel_challenger_id: int = -1
 	var duel_target_id: int = -1
 	var duel_offered: bool = false
+	## s54.5 spawn-on-death: monotonic counter for unique negative spawn instance ids.
+	var spawn_counter: int = 0
 
 
 # =============================================================================
@@ -4408,11 +4410,68 @@ static func _apply_hit(
 			var expiry: int = state.combat.round_number + venom_min * IndividualCombat.ROUNDS_PER_MINUTE
 			IndividualCombat.apply_timed_condition(t_p, IndividualCombat.CONDITION_STUNNED, expiry)
 
+	# Spawn-on-death (s54.5): Tasu releases spawn, Wakeru splits into lesser copies when
+	# slain. Fires once, when this hit kills a death_spawn creature.
+	if t_p != null and target.spirit_creature != null \
+			and target.spirit_creature.death_spawn_id != "" \
+			and not t_p.death_spawn_done and CharacterStats.is_dead(target):
+		t_p.death_spawn_done = true
+		_spawn_on_death(state, target, dice_engine)
+
 	return {
 		"damage": wd_result.get("final_damage", raw),
 		"wounds": wd_result.get("final_damage", raw),
 		"dead": CharacterStats.is_dead(target),
 	}
+
+
+## Spawn-on-death (s54.5): adds death_spawn_count copies of death_spawn_id near the slain
+## creature's tile, on the same faction, via add_enemy. The spawn ids are unique negative
+## (state.spawn_counter). Tasu → tasu_spawn ×N; Wakeru → wakeru_lesser ×N (the lesser copy
+## has no further death_spawn_id, so the split is one generation — full recursive halving
+## is not modelled). Returns the number spawned.
+static func _spawn_on_death(state: MapCombatState, dead_creature: L5RCharacterData, dice: DiceEngine) -> int:
+	var cr: SpiritCreatureData = dead_creature.spirit_creature
+	var faction: String = state.factions.get(dead_creature.character_id, FACTION_ENEMY)
+	var center: Vector2i = state.positions.get(dead_creature.character_id, Vector2i(0, 0))
+	var made: int = 0
+	for i in range(maxi(0, cr.death_spawn_count)):
+		var tile: Vector2i = _free_tile_near(state, center)
+		if tile.x < 0:
+			break
+		state.spawn_counter += 1
+		var inst_id: int = -900000 - state.spawn_counter
+		var pup: L5RCharacterData = SpiritCombatant.spawn_by_id(cr.death_spawn_id, inst_id)
+		if pup == null:
+			break
+		if add_enemy(state, pup, tile.x, tile.y, dice):
+			# keep the offspring on the parent's faction (Wakeru split, Tasu brood)
+			state.factions[inst_id] = faction
+			made += 1
+	return made
+
+
+## Nearest free (passable, unoccupied) tile to `center` via expanding-ring search.
+## Returns (-1,-1) if none within a small radius.
+static func _free_tile_near(state: MapCombatState, center: Vector2i) -> Vector2i:
+	for r in range(1, 5):
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				if absi(dx) != r and absi(dy) != r:
+					continue
+				var t := Vector2i(center.x + dx, center.y + dy)
+				if t.x < 0 or t.y < 0 or t.x >= state.map.width or t.y >= state.map.height:
+					continue
+				if not MovementSystem.is_passable(state.map.get_tile(t.x, t.y)):
+					continue
+				var occupied := false
+				for pos: Vector2i in state.positions.values():
+					if pos == t:
+						occupied = true
+						break
+				if not occupied:
+					return t
+	return Vector2i(-1, -1)
 
 
 ## Check if a character is dead, erase them from the map, and mark combat over

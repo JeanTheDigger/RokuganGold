@@ -70,6 +70,13 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 @export var swallow_damage_kept: int = 0
 @export var swallow_taint: bool = false
 
+## Spawn-on-death (s54.5 Tasu releases spawn; Wakeru splits). On death, add
+## death_spawn_count copies of death_spawn_id (another bestiary id) to the live combat.
+## "" / 0 = no death spawn. (Tasu's "2k2 spawn" and Wakeru's recursive halving are
+## reduced to a small fixed count for skirmish playability — PROVISIONAL.)
+@export var death_spawn_id: String = ""
+@export var death_spawn_count: int = 0
+
 @export var fear: int = 0
 ## Swift rating (L5R keyword the GDD invokes by name, e.g. "Swift 6"). Converted to
 ## a tile move-budget bonus via the project's fixed 1 tile = 5 ft (MovementSystem):

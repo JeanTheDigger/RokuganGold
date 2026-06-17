@@ -165,6 +165,7 @@ class Participant:
 	var lure_sprung: bool = false  # s54.10 Konak Jiji lure: false = still disguised as a harmless baby (untargetable)
 	var deceptive_weight_pinned: bool = false  # s54.10 Deceptive Weight: pinned (escape = Athletics/Strength TN 40)
 	var swallowed_by_id: int = -1  # s54.5 Swallow Whole/Devour: creature id that swallowed me (-1 = none)
+	var death_spawn_done: bool = false  # s54.5 spawn-on-death fired (guards against double-spawn)
 	var spirit_attack_rolled_bonus: int = 0  # s54.10 Toshigoku auras/Tactical Mastery: +N rolled attack dice (orchestrator sets per-attack, spirit-only)
 	var spirit_damage_rolled_bonus: int = 0  # s54.10 Supreme Commander: +N rolled damage dice (spirit-only)
 	var void_dragon_ring: int = -1  # Touch the Void Dragon (s38): boosted Ring (Enums.Ring), -1 = inactive

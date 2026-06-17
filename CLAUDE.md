@@ -4883,6 +4883,21 @@ Moves, Piercing Howl, Legendary Healing, Eyes of the Owl, Strength of Jade.
   Taint applied, a weak victim fails to escape 6/6, a strong victim escapes and the state
   clears.
 
+### Systems Added 2026-06-17 (s54.5 Spawn-on-death — runtime-verified)
+- **Spawn-on-death wired (Tasu, Wakeru).** When a hit KILLS a `death_spawn_id` creature,
+  `_apply_hit` calls `_spawn_on_death`, which adds `death_spawn_count` copies of the spawn id
+  to the live combat via `add_enemy` at free tiles near the corpse, on the dying creature's
+  faction. New SpiritCreatureData `death_spawn_id`/`death_spawn_count`; new
+  `MapCombatState.spawn_counter` (unique negative spawn instance ids) + `Participant.death_spawn_done`
+  guard (fires once). Tasu → 2× `tasu_spawn` (Rings 1, ATN 15, 12 wounds); Wakeru → 2×
+  `wakeru_lesser` (physical traits −1, Wounds −5, ATN +5, attack/damage −1k1). Both spawn ids
+  are real catalogue entries (so `SpiritCombatant.spawn_by_id` resolves them; `OniBestiary.catalog()`
+  is now 37 = 35 oni + the 2 spawn-only blocks). `wakeru_lesser` has no further `death_spawn_id`,
+  so the split is ONE generation (Tasu's "2k2 spawn" and Wakeru's recursive halving are reduced
+  to a fixed count of 2 for skirmish playability — PROVISIONAL). RUNTIME-VERIFIED (Godot 4.6.2):
+  killing a near-dead Tasu adds 2 tasu_spawn (participants 2→4) on the enemy faction; Wakeru
+  splits into 2 wakeru_lesser; the lesser copy carries no death_spawn (no infinite split).
+
 ### Pending Redesign
 (None currently pending.)
 

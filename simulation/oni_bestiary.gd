@@ -177,6 +177,14 @@ static func catalog() -> Dictionary:
 		1, 3, 1, 3, {"reflexes": 3, "agility": 4},
 		3, 3, "Leg", 4, 4, 3, 2, 20, 5, [20, 40], 60, 3,
 		["oni", "spawn_on_death"])
+	c["tasu_no_oni"].death_spawn_id = "tasu_spawn"  # releases spawn on death (s54.5; count capped)
+	c["tasu_no_oni"].death_spawn_count = 2
+
+	# Tasu newborn (s54.5): foot-long, all Rings 1, ATN 15, 12 wounds, little defense.
+	c["tasu_spawn"] = _make("tasu_spawn", "Tasu Spawn", SpiritCreatureData.Tier.SWARM,
+		1, 1, 1, 1, {},
+		1, 1, "Bite", 1, 1, 1, 1, 15, 0, [], 12, 0,
+		["oni", "newborn", "scatter"])
 
 	c["utogu_no_oni"] = _with2(_make("utogu_no_oni", "Utogu no Oni, the Endless Hunger", SpiritCreatureData.Tier.BOSS,
 		2, 5, 1, 5, {"agility": 4},
@@ -195,6 +203,15 @@ static func catalog() -> Dictionary:
 		2, 5, 2, 2, {"reflexes": 5, "agility": 5, "strength": 5},
 		8, 5, "Claws", 6, 5, 6, 2, 20, 5, [], 50, 2,
 		["oni", "endless_horde", "heedless_rage"])
+	c["wakeru_no_oni"].death_spawn_id = "wakeru_lesser"  # splits into two lesser copies on death (s54.5)
+	c["wakeru_no_oni"].death_spawn_count = 2
+
+	# Wakeru lesser copy (s54.5): physical traits -1, Wounds -5, Armor TN +5, attack/damage
+	# -1k1. No further death_spawn_id — the split is modelled as one generation.
+	c["wakeru_lesser"] = _make("wakeru_lesser", "Wakeru no Oni (Lesser)", SpiritCreatureData.Tier.MID,
+		2, 5, 2, 2, {"reflexes": 4, "agility": 4, "strength": 4},
+		7, 4, "Claws", 5, 4, 5, 1, 25, 5, [], 45, 2,
+		["oni", "endless_horde", "heedless_rage", "lesser"])
 
 	c["wanizame_no_oni"] = _make("wanizame_no_oni", "Wanizame no Oni, the Finned Maw", SpiritCreatureData.Tier.HEAVY,
 		2, 2, 1, 4, {"reflexes": 4, "agility": 4},
