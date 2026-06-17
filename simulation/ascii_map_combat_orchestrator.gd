@@ -226,7 +226,7 @@ static func free_move_budget(state: MapCombatState, char_id: int, character: L5R
 	var base: int = MovementSystem.budget(water, MovementSystem.MoveAction.FREE)
 	if p == null:
 		return base
-	return base + IndividualCombat.get_kata_free_move_bonus(character, p) + IndividualCombat.get_kiho_move_bonus(character, p)
+	return base + IndividualCombat.get_kata_free_move_bonus(character, p) + IndividualCombat.get_kiho_move_bonus(character, p) + IndividualCombat.get_creature_swift_bonus(character)
 
 
 ## Water Ring for Move-distance purposes, reduced by any timed move penalty
@@ -3000,7 +3000,7 @@ static func execute_npc_turn(
 				target_in_melee = (best_target in melee_targets)
 
 		if not target_in_melee and ts.can_use_simple() and not ts.is_down_restricted(wl):
-			var simple_budget: int = MovementSystem.budget(_effective_water_ring(state.combat.participants.get(npc_id, null), npc), MovementSystem.MoveAction.SIMPLE) + IndividualCombat.get_kiho_move_bonus(npc, state.combat.participants.get(npc_id, null))
+			var simple_budget: int = MovementSystem.budget(_effective_water_ring(state.combat.participants.get(npc_id, null), npc), MovementSystem.MoveAction.SIMPLE) + IndividualCombat.get_kiho_move_bonus(npc, state.combat.participants.get(npc_id, null)) + IndividualCombat.get_creature_swift_bonus(npc)
 			var move_r: Dictionary = _npc_move_toward(state, npc_id, best_target, npc, simple_budget, "simple", dice_engine)
 			if move_r.get("success", false):
 				actions_taken.append({"action": "simple_move", "result": move_r})

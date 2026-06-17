@@ -192,6 +192,7 @@ static func sakkaku_catalog() -> Dictionary:
 		6, 3, "", 0, 0, 1, 1, 15, 0, [], 50, 0,
 		["spirit", "illusion_engine", "ghostly_form", "immortal", "invisibility",
 			"magic_resist", "spellcaster", "swift"], R)
+	c["mujina"].swift = 6  # s54.10 "Swift 6 (when flying)"
 
 	c["pekkle"] = _make("pekkle", "Pekkle", SpiritCreatureData.Tier.HEAVY,
 		5, 4, 2, 1, {"awareness": 7, "willpower": 8},
@@ -273,6 +274,7 @@ static func chikushudo_catalog() -> Dictionary:
 		6, 5, "Claws", 2, 2, 2, 1, 25, 0, [15, 30], 45, 0,
 		["spirit", "shapeshifter", "trickster", "negotiator", "may_not_be_hostile", "swift",
 			"ephemeral_form", "protection_of_yomi"], R)
+	c["kitsune"].swift = 3  # s54.10 "Swift 3"
 
 	c["kitsune_tsuki"] = _make("kitsune_tsuki", "Kitsune-tsuki", SpiritCreatureData.Tier.HEAVY,
 		2, 2, 3, 4, {"reflexes": 4, "intelligence": 4},

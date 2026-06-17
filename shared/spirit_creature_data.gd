@@ -39,6 +39,10 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 @export var wounds_dead: int = 0
 
 @export var fear: int = 0
+## Swift rating (L5R keyword the GDD invokes by name, e.g. "Swift 6"). Converted to
+## a tile move-budget bonus via the project's fixed 1 tile = 5 ft (MovementSystem):
+## Swift N = +N tiles. PROVISIONAL — the GDD names the keyword but states no conversion.
+@export var swift: int = 0
 
 # Special-ability tags for the future combat layer (e.g. "incorporeal",
 # "swarm_presence", "wail", "hunger_pull", "fire_trail", "famine_only").

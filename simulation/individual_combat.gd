@@ -504,6 +504,14 @@ static func get_kiho_move_bonus(_character: L5RCharacterData, participant: Parti
 	return 0
 
 
+## s54.x Swift: a spirit creature's Swift rating as a tile move-budget bonus
+## (Swift N = +N tiles; 1 tile = 5 ft). 0 for non-spirits / no Swift. PROVISIONAL.
+static func get_creature_swift_bonus(character: L5RCharacterData) -> int:
+	if character != null and character.spirit_creature != null:
+		return character.spirit_creature.swift
+	return 0
+
+
 ## The Empire Rests on its Edge (s30a, multi_empire_edge_skill_bonus): while known,
 ## grants a flat bonus to Kenjutsu/Iaijutsu rolls equal to the wielder's Rank in a
 ## chosen non-combat High Skill. The GDD picks the skill at acquisition; with no

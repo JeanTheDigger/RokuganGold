@@ -4639,6 +4639,20 @@ itself (UI-deferred); Piercing Howl (Minor Shapeshifter Fear 2) remains unwired 
 creature carries it in its GDD-given set, so it has no consumer. Static-validated only (no
 Godot runtime).
 
+### s54.x Swift — wired into tile-combat movement (2026-06-16, static-only, PROVISIONAL)
+The GDD invokes "Swift N" as a named keyword (Mujina "Swift 6", Kitsune "Swift 3",
+Chikushudo "+1 over base", oni Swift 2-4) but never states its numeric effect. The
+project fixes 1 tile = 5 ft (MovementSystem), so Swift N = +N tiles to the move budget
+is the faithful reading of the keyword via the project's own constant (PROVISIONAL —
+flagged for owner confirmation; the +5 ft/Rank conversion is the L5R Swift definition
+the GDD's keyword references). New `SpiritCreatureData.swift` (@export, default 0);
+`IndividualCombat.get_creature_swift_bonus(character)` returns it for spirit puppets
+(0 otherwise), added beside the kata/kiho move bonuses in
+`AsciiMapCombatOrchestrator.free_move_budget` and the NPC SIMPLE-move budget. Set on the
+two encoded creatures whose stat blocks state a Swift value: Mujina 6, Kitsune 3. Other
+creatures keep swift 0 until their stat-block values are transcribed (the mechanism is
+live; population is incremental). Static-validated only (no Godot runtime).
+
 ### Pending Redesign
 (None currently pending.)
 
