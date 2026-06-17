@@ -4770,6 +4770,35 @@ Moves, Piercing Howl, Legendary Healing, Eyes of the Owl, Strength of Jade.
   only (no Godot runtime — parse-traced + GDD-checked; wound tracks incl. Out→Dead boundaries and
   the single-threshold Wakeru verified against the stat blocks).
 
+### Known Code Issues (found and fixed 2026-06-17, spirit/oni damage path)
+- **Spirit/oni creatures never dealt their stat-block damage — used "unarmed". FIXED.**
+  `SpiritCombatant.to_character_data()` builds the creature's damage onto `c.weapons[0]`
+  (a WeaponData) but sets no `c.skills`; the orchestrator's NPC attack path picks the
+  weapon via `IndividualCombat.pick_best_weapon()` → `WEAPON_CATALOG` (returns "unarmed"
+  for a skill-less puppet), and `resolve_damage()` reads `get_weapon_profile(weapon_name)`
+  — so every spirit/oni dealt generic unarmed damage, and the WeaponData on `c.weapons[0]`
+  was dead. The to-HIT override (resolve_attack) already read `spirit_creature.attack_rolled`,
+  but there was no matching DAMAGE override. Added one in `resolve_damage`: when
+  `attacker.spirit_creature.damage_rolled > 0`, base damage = the creature's fixed
+  `damage_rolled k damage_kept` (Strength-add block guarded off — spirit damage is fixed
+  per s54), with the Supreme Commander aura still adding on top. Mirrors the to-hit override
+  exactly; additive, inert for real characters (spirit_creature == null). Now every spirit
+  AND oni deals its real stat-block damage. Static-only (no Godot runtime).
+
+### Systems Added 2026-06-17 (s54.5 multi-attack data + spirit damage fix)
+- **SpiritCreatureData multi-attack fields.** `attack2_name/attack2_rolled/attack2_kept/
+  damage2_rolled/damage2_kept` + `has_second_attack()`. Populated for all 13 multi-attack
+  oni (Akaru Bite, Arugai Tail, Genso Talons, Kamu Bite, Muduro Bite, Ryokaku Claws,
+  Shikage Tongue-Stinger, Hasaiki Bite, Munemitsu Gore, Sentei Bite, Utogu Bite, Uzaki
+  Claws, Yuhmi Mai Chong) via `OniBestiary._with2()`. DATA layer only this tranche.
+  LIVE two-attacks-per-turn wiring DEFERRED: `execute_melee_attack` requires + consumes a
+  Complex action and the first attack consumes it, so a faithful second strike needs the
+  Simple-cost-for-multi-attack action economy (GDD s54.5: multi-attack oni attack as a
+  Simple Action) + a two-strike turn loop — action-economy surgery that needs a Godot
+  runtime to verify. The combined damage-path fix means the puppet field-swap approach
+  (temporarily set attack_rolled/kept + damage_rolled/kept to the attack2 values) will work
+  for the second strike once the action economy is reconciled; the data is ready.
+
 ### Pending Redesign
 (None currently pending.)
 

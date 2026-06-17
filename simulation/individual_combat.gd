@@ -1216,6 +1216,17 @@ static func resolve_damage(
 	var rolled: int = weapon.get("rolled", 2)
 	var kept: int = weapon.get("kept", 1) + bonus_kept
 
+	# s54: a spirit/oni creature deals its FIXED stat-block damage (XkY), not the named
+	# weapon profile nor Strength-augmented dice. Mirrors the to-hit override in
+	# resolve_attack — the orchestrator picks "unarmed" from WEAPON_CATALOG for puppets
+	# (SpiritCombatant sets no skills), so without this the creature's real damage
+	# (e.g. 10k4) was never used. Inert for real characters (spirit_creature == null).
+	var spirit_fixed_damage: bool = false
+	if attacker != null and attacker.spirit_creature != null and attacker.spirit_creature.damage_rolled > 0:
+		rolled = attacker.spirit_creature.damage_rolled
+		kept = attacker.spirit_creature.damage_kept + bonus_kept
+		spirit_fixed_damage = true
+
 	# s54.10 Supreme Commander aura: +N rolled damage dice the orchestrator set on the
 	# spirit attacker (Musha within 20 tiles of the Ancient General). Inert (0) otherwise.
 	if attacker_p != null:
@@ -1239,7 +1250,7 @@ static func resolve_damage(
 
 	# Strength adds to rolled dice for melee weapons (s40: "add Strength to first number")
 	# fire_agility_for_damage kata: use Agility instead of Strength (s30a)
-	if weapon.get("strength_adds", true) and weapon.get("melee", true):
+	if weapon.get("strength_adds", true) and weapon.get("melee", true) and not spirit_fixed_damage:
 		if kata_dmg["use_agility"]:
 			rolled += attacker.agility
 		else:

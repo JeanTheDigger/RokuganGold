@@ -33,6 +33,16 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 @export var armor_tn: int = 10
 @export var reduction: int = 0
 
+# Optional second attack (multi-attack creatures, e.g. Claws + Bite). 0 rolled = none.
+# The combat layer makes this as a second strike when the creature is tagged
+# "multi_attack" and has the action budget (GDD s54.5: multi-attack oni attack as a
+# Simple Action, so two Simple attacks per Turn).
+@export var attack2_name: String = ""
+@export var attack2_rolled: int = 0
+@export var attack2_kept: int = 0
+@export var damage2_rolled: int = 0
+@export var damage2_kept: int = 0
+
 # Wound track. wound_thresholds = the penalty-step thresholds (+5/+10…);
 # wounds_dead = the terminal threshold (Dead/Dispersed). 0 = not statted.
 @export var wound_thresholds: Array[int] = []
@@ -51,3 +61,7 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 
 func has_tag(t: String) -> bool:
 	return tags.has(t)
+
+
+func has_second_attack() -> bool:
+	return attack2_rolled > 0

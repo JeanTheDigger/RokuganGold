@@ -23,16 +23,16 @@ static func catalog() -> Dictionary:
 	var c: Dictionary = {}
 
 	# --- Core oni (alphabetical, s54.5) -------------------------------------
-	c["akaru_no_oni"] = _make("akaru_no_oni", "Akaru no Oni, the Web Lord", SpiritCreatureData.Tier.HEAVY,
+	c["akaru_no_oni"] = _with2(_make("akaru_no_oni", "Akaru no Oni, the Web Lord", SpiritCreatureData.Tier.HEAVY,
 		3, 4, 1, 4, {"agility": 4},
 		4, 3, "Claws", 6, 4, 4, 4, 20, 5, [25, 50], 75, 0,
-		["oni", "spinnerets", "web_traps", "entangle", "multi_attack"])
+		["oni", "spinnerets", "web_traps", "entangle", "multi_attack"]), "Bite", 4, 4, 6, 4)
 
-	c["arugai_no_oni"] = _make("arugai_no_oni", "Arugai no Oni, Immortal Engine of Destruction", SpiritCreatureData.Tier.BOSS,
+	c["arugai_no_oni"] = _with2(_make("arugai_no_oni", "Arugai no Oni, Immortal Engine of Destruction", SpiritCreatureData.Tier.BOSS,
 		4, 7, 2, 6, {"stamina": 8, "agility": 5, "strength": 8},
 		9, 4, "Claws", 10, 5, 10, 4, 25, 20, [50, 100, 150], 200, 5,
 		["oni", "huge", "superior_invuln", "flame_immune", "regen_per_round", "heart_kill",
-			"tail_knockdown", "multi_attack"], 2)
+			"tail_knockdown", "multi_attack"], 2), "Tail", 10, 5, 10, 3)
 
 	c["byoki_no_oni"] = _make("byoki_no_oni", "Byoki no Oni, Harbinger of Pestilence", SpiritCreatureData.Tier.HEAVY,
 		2, 5, 2, 3, {"agility": 3},
@@ -63,20 +63,20 @@ static func catalog() -> Dictionary:
 		4, 4, "Claws", 5, 5, 4, 4, 25, 5, [25, 50, 75, 125], 150, 3,
 		["oni", "huge", "partial_invuln", "spell_mastery_r3", "taint_affliction"])
 
-	c["genso_no_oni"] = _make("genso_no_oni", "Genso no Oni, Dark Warrior", SpiritCreatureData.Tier.BOSS,
+	c["genso_no_oni"] = _with2(_make("genso_no_oni", "Genso no Oni, Dark Warrior", SpiritCreatureData.Tier.BOSS,
 		3, 4, 4, 4, {"reflexes": 5},
 		5, 5, "Obsidian Katana", 9, 4, 7, 2, 30, 4, [40, 80, 120, 160, 200], 240, 3,
-		["oni", "obsidian_daisho", "no_disarm", "taunts", "multi_attack"])
+		["oni", "obsidian_daisho", "no_disarm", "taunts", "multi_attack"]), "Talons", 8, 4, 4, 4)
 
 	c["ianwa_no_oni"] = _make("ianwa_no_oni", "Ianwa no Oni, Dark Bargainer", SpiritCreatureData.Tier.HEAVY,
 		3, 3, 2, 3, {"awareness": 5, "intelligence": 6, "perception": 6},
 		3, 3, "Claw", 2, 2, 3, 3, 20, 3, [12, 24, 36], 48, 5,
 		["oni", "dark_demands", "fear_enhancement", "partial_invuln", "teleport", "coward"])
 
-	c["kamu_no_oni"] = _make("kamu_no_oni", "Kamu no Oni, the Killing Maw", SpiritCreatureData.Tier.BOSS,
+	c["kamu_no_oni"] = _with2(_make("kamu_no_oni", "Kamu no Oni, the Killing Maw", SpiritCreatureData.Tier.BOSS,
 		2, 5, 2, 3, {"reflexes": 3, "agility": 4, "strength": 6},
 		3, 3, "Claw", 7, 4, 6, 3, 25, 5, [50, 75, 100, 125], 150, 4,
-		["oni", "devour", "partial_invuln", "multi_attack"])
+		["oni", "devour", "partial_invuln", "multi_attack"]), "Bite", 4, 4, 7, 5)
 
 	c["kommei_no_oni"] = _make("kommei_no_oni", "Kommei no Oni, Demon of Confusion", SpiritCreatureData.Tier.BOSS,
 		5, 5, 3, 3, {"awareness": 6, "strength": 4},
@@ -95,10 +95,10 @@ static func catalog() -> Dictionary:
 		3, 2, "Claws", 3, 2, 3, 1, 15, 10, [12, 24], 36, 0,
 		["oni", "immobile", "seed_spawn"])
 
-	c["muduro_no_oni"] = _make("muduro_no_oni", "Muduro no Oni, the Corrupted Mountain", SpiritCreatureData.Tier.BOSS,
+	c["muduro_no_oni"] = _with2(_make("muduro_no_oni", "Muduro no Oni, the Corrupted Mountain", SpiritCreatureData.Tier.BOSS,
 		3, 7, 2, 4, {"agility": 3, "strength": 8},
 		6, 3, "Claws", 7, 3, 10, 3, 15, 20, [100, 150], 200, 4,
-		["oni", "huge", "partial_invuln", "swallow_whole", "multi_attack"])
+		["oni", "huge", "partial_invuln", "swallow_whole", "multi_attack"]), "Bite", 8, 3, 10, 5)
 
 	c["nairu_no_oni"] = _make("nairu_no_oni", "Nairu no Oni, Scourge of the Skies", SpiritCreatureData.Tier.HEAVY,
 		3, 2, 2, 2, {"agility": 4, "strength": 4},
@@ -120,34 +120,34 @@ static func catalog() -> Dictionary:
 		3, 3, "Touch", 4, 4, 4, 1, 20, 10, [30, 60], 120, 0,
 		["oni", "amorphous", "suffocation", "fire_susceptible", "reduction_vs_cutting"])
 
-	c["ryokaku_no_oni"] = _make("ryokaku_no_oni", "Ryokaku no Oni, the Demon of Purity", SpiritCreatureData.Tier.BOSS,
+	c["ryokaku_no_oni"] = _with2(_make("ryokaku_no_oni", "Ryokaku no Oni, the Demon of Purity", SpiritCreatureData.Tier.BOSS,
 		4, 4, 4, 4, {},
 		8, 4, "Katana", 9, 4, 7, 2, 25, 8, [16, 32, 48], 72, 3,
 		["oni", "duel_bound", "insidious_beauty", "partial_invuln", "black_fog_of_purity",
-			"reduction_vs_crystal", "multi_attack"])
+			"reduction_vs_crystal", "multi_attack"]), "Claws", 7, 4, 4, 2)
 
-	c["shikage_no_oni"] = _make("shikage_no_oni", "Shikage no Oni, Many-Armed Death", SpiritCreatureData.Tier.BOSS,
+	c["shikage_no_oni"] = _with2(_make("shikage_no_oni", "Shikage no Oni, Many-Armed Death", SpiritCreatureData.Tier.BOSS,
 		4, 4, 4, 4, {"willpower": 5, "agility": 5, "perception": 6},
 		8, 4, "Claws", 7, 5, 5, 3, 30, 8, [24, 48, 72], 96, 3,
 		["oni", "demon_silk", "entangle", "partial_invuln", "mind_breaking_poison",
-			"paralyzing_poison", "poison_constitution", "wall_climbing", "multi_attack"])
+			"paralyzing_poison", "poison_constitution", "wall_climbing", "multi_attack"]), "Tongue-Stinger", 8, 5, 4, 2)
 
 	# --- Shokansuru's Brood (s54.5) -----------------------------------------
-	c["hasaiki_no_oni"] = _make("hasaiki_no_oni", "Hasaiki no Oni, the Burning Sea", SpiritCreatureData.Tier.BOSS,
+	c["hasaiki_no_oni"] = _with2(_make("hasaiki_no_oni", "Hasaiki no Oni, the Burning Sea", SpiritCreatureData.Tier.BOSS,
 		3, 6, 2, 3, {"agility": 3, "strength": 6},
 		3, 3, "Stomp", 7, 3, 8, 6, 20, 5, [32, 48, 64, 100], 200, 3,
 		["oni", "huge", "partial_invuln", "brood", "mortal", "leaping", "regen_per_round",
-			"acid_vomit", "multi_attack"])
+			"acid_vomit", "multi_attack"]), "Bite", 7, 7, 6, 6)
 
-	c["munemitsu_no_oni"] = _make("munemitsu_no_oni", "Munemitsu no Oni, the Earth Breaker", SpiritCreatureData.Tier.BOSS,
+	c["munemitsu_no_oni"] = _with2(_make("munemitsu_no_oni", "Munemitsu no Oni, the Earth Breaker", SpiritCreatureData.Tier.BOSS,
 		2, 7, 1, 5, {"reflexes": 4, "agility": 4, "strength": 8},
 		4, 2, "Trample", 4, 4, 6, 4, 25, 6, [32, 64, 96, 128, 160], 224, 3,
-		["oni", "huge", "partial_invuln", "brood", "mortal", "gore", "trample_prone", "multi_attack"])
+		["oni", "huge", "partial_invuln", "brood", "mortal", "gore", "trample_prone", "multi_attack"]), "Gore", 6, 4, 8, 6)
 
-	c["sentei_no_oni"] = _make("sentei_no_oni", "Sentei no Oni, the Many-Legged Death", SpiritCreatureData.Tier.BOSS,
+	c["sentei_no_oni"] = _with2(_make("sentei_no_oni", "Sentei no Oni, the Many-Legged Death", SpiritCreatureData.Tier.BOSS,
 		2, 6, 4, 4, {"reflexes": 4},
 		6, 4, "Talons", 4, 4, 4, 4, 25, 5, [30, 60, 120], 180, 4,
-		["oni", "huge", "partial_invuln", "brood", "mortal", "superior_regeneration", "multi_attack"])
+		["oni", "huge", "partial_invuln", "brood", "mortal", "superior_regeneration", "multi_attack"]), "Bite", 6, 4, 5, 5)
 
 	c["yojireju_no_oni"] = _make("yojireju_no_oni", "Yojireju no Oni, the Soul Drinker", SpiritCreatureData.Tier.BOSS,
 		3, 3, 3, 3, {"reflexes": 5, "agility": 5},
@@ -165,16 +165,16 @@ static func catalog() -> Dictionary:
 		3, 3, "Leg", 4, 4, 3, 2, 20, 5, [20, 40], 60, 3,
 		["oni", "spawn_on_death"])
 
-	c["utogu_no_oni"] = _make("utogu_no_oni", "Utogu no Oni, the Endless Hunger", SpiritCreatureData.Tier.BOSS,
+	c["utogu_no_oni"] = _with2(_make("utogu_no_oni", "Utogu no Oni, the Endless Hunger", SpiritCreatureData.Tier.BOSS,
 		2, 5, 1, 5, {"agility": 4},
 		3, 2, "Trample", 4, 4, 5, 3, 20, 8, [60, 90], 120, 3,
-		["oni", "huge", "partial_invuln", "charge", "devour", "trample_prone", "multi_attack"])
+		["oni", "huge", "partial_invuln", "charge", "devour", "trample_prone", "multi_attack"]), "Bite", 6, 4, 5, 5)
 
-	c["uzaki_no_oni"] = _make("uzaki_no_oni", "Uzaki no Oni, the Demon Commander", SpiritCreatureData.Tier.BOSS,
+	c["uzaki_no_oni"] = _with2(_make("uzaki_no_oni", "Uzaki no Oni, the Demon Commander", SpiritCreatureData.Tier.BOSS,
 		5, 5, 5, 5, {"awareness": 6, "intelligence": 6, "perception": 6},
 		9, 5, "Obsidian Katana", 10, 5, 9, 3, 30, 8, [16, 32, 48], 72, 3,
 		["oni", "huge", "partial_invuln", "flaming_weapon", "commanders_voice", "eternal_enmity",
-			"leader_of_oni", "tactician", "multi_attack"])
+			"leader_of_oni", "tactician", "multi_attack"]), "Claws", 9, 5, 6, 2)
 
 	c["wakeru_no_oni"] = _make("wakeru_no_oni", "Wakeru no Oni, the Endless Horde", SpiritCreatureData.Tier.HEAVY,
 		2, 5, 2, 2, {"reflexes": 5, "agility": 5, "strength": 5},
@@ -208,10 +208,10 @@ static func catalog() -> Dictionary:
 		4, 1, "Grab", 8, 3, 7, 2, 15, 15, [40, 80, 120], 160, 5,
 		["oni", "huge", "partial_invuln", "oni_lord_spawn", "swallow_whole", "teleport"])
 
-	c["yuhmi_no_oni"] = _make("yuhmi_no_oni", "Yuhmi no Oni, Flesh of the Dark Lord", SpiritCreatureData.Tier.BOSS,
+	c["yuhmi_no_oni"] = _with2(_make("yuhmi_no_oni", "Yuhmi no Oni, Flesh of the Dark Lord", SpiritCreatureData.Tier.BOSS,
 		2, 4, 2, 3, {"reflexes": 4, "agility": 4, "strength": 6},
 		4, 3, "Claw", 6, 4, 6, 2, 25, 5, [40, 80, 120], 160, 4,
-		["oni", "huge", "partial_invuln", "unique", "mai_chong", "singular_spawn", "multi_attack"])
+		["oni", "huge", "partial_invuln", "unique", "mai_chong", "singular_spawn", "multi_attack"]), "Mai Chong", 8, 4, 6, 3)
 
 	return c
 
@@ -225,6 +225,17 @@ static func oni_ids() -> Array:
 static func get_oni(id: String) -> SpiritCreatureData:
 	var c: Dictionary = catalog()
 	return c.get(id, null)
+
+
+## Attaches a second attack profile to a multi-attack creature (GDD s54.5: oni with two
+## attacks, e.g. Claws + Bite). Returns the same instance for chaining.
+static func _with2(s: SpiritCreatureData, name: String, ar: int, ak: int, dr: int, dk: int) -> SpiritCreatureData:
+	s.attack2_name = name
+	s.attack2_rolled = ar
+	s.attack2_kept = ak
+	s.damage2_rolled = dr
+	s.damage2_kept = dk
+	return s
 
 
 static func _make(
