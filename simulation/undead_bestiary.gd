@@ -25,6 +25,11 @@ static func catalog() -> Dictionary:
 		1, 2, 1, 2, {"reflexes": 3, "stamina": 4, "agility": 3, "strength": 4},
 		4, 3, "Claw", 4, 3, 5, 2, 20, 5, [], 72, 3,
 		["undead", "throat_attack", "pack_hunter"])
+	c["ghul"].followup_wound_threshold = 15  # Throat Attack: 15+ Wound claw -> free bite (s54.11)
+	c["ghul"].followup_rolled = 5
+	c["ghul"].followup_kept = 3
+	c["ghul"].followup_dmg_rolled = 4
+	c["ghul"].followup_dmg_kept = 1
 
 	c["harionago"] = _with2(_make("harionago", "Harionago", SpiritCreatureData.Tier.MID,
 		3, 3, 3, 3, {"willpower": 5, "agility": 4, "perception": 4},

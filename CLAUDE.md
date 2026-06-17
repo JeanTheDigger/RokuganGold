@@ -4999,6 +4999,16 @@ Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next cand
   `_apply_disease_on_hit` contraction wired earlier this session — so the undead disease
   carriers are live. No change.
 
+### Systems Added 2026-06-17 (s54.11 Ghul Throat Attack — runtime-verified)
+- **Throat Attack / follow-up-on-big-hit wired (Ghul).** A generic "big hit → free bonus
+  attack" layer: new SpiritCreatureData fields `followup_wound_threshold` +
+  `followup_rolled/_kept` + `followup_dmg_rolled/_kept`. In `_apply_hit`, a melee hit dealing
+  `followup_wound_threshold`+ Wounds triggers a free bonus attack (to-hit vs the target's
+  Armor TN, on hit applies the follow-up damage), applied directly (no recursion into
+  _apply_hit). Populated Ghul: 15+ Wound claw → free bite 5k3 / 4k1 (s54.11, exact).
+  RUNTIME-VERIFIED (Godot 4.6.2): over 30 attacks, all 19 of the 15+ Wound claw hits fired
+  the follow-up bite (extra damage beyond the claw), and sub-threshold hits did not.
+
 ### Pending Redesign
 (None currently pending.)
 

@@ -81,6 +81,15 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 @export var ranged_range_tiles: int = 0
 @export var ranged_fire: bool = false
 
+## Follow-up attack on a big hit (s54.11 Ghul Throat Attack): if a melee hit deals
+## followup_wound_threshold+ Wounds, the creature makes a free bonus attack
+## (followup_rolled k _kept to-hit, followup_dmg_rolled k _kept). 0 threshold = none.
+@export var followup_wound_threshold: int = 0
+@export var followup_rolled: int = 0
+@export var followup_kept: int = 0
+@export var followup_dmg_rolled: int = 0
+@export var followup_dmg_kept: int = 0
+
 ## Spawn-on-death (s54.5 Tasu releases spawn; Wakeru splits). On death, add
 ## death_spawn_count copies of death_spawn_id (another bestiary id) to the live combat.
 ## "" / 0 = no death spawn. (Tasu's "2k2 spawn" and Wakeru's recursive halving are

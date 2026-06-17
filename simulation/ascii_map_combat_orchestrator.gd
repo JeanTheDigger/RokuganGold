@@ -4567,6 +4567,18 @@ static func _apply_hit(
 			var expiry: int = state.combat.round_number + venom_min * IndividualCombat.ROUNDS_PER_MINUTE
 			IndividualCombat.apply_timed_condition(t_p, IndividualCombat.CONDITION_STUNNED, expiry)
 
+	# Throat Attack / follow-up (s54.11 Ghul): a melee hit dealing followup_wound_threshold+
+	# Wounds triggers a free bonus attack. Applied directly (does not recurse into _apply_hit).
+	if attacker.spirit_creature != null and attacker.spirit_creature.followup_wound_threshold > 0 \
+			and not CharacterStats.is_dead(target) \
+			and IndividualCombat.get_weapon_profile(weapon_name).get("melee", true) \
+			and int(wd_result.get("final_damage", 0)) >= attacker.spirit_creature.followup_wound_threshold:
+		var fc: SpiritCreatureData = attacker.spirit_creature
+		var fhit: int = dice_engine.roll_and_keep(fc.followup_rolled, fc.followup_kept, true).total
+		if fhit >= IndividualCombat.get_armor_tn(target, t_p, dice_engine, true, false, ""):
+			var fred: int = 0 if target.spirit_creature != null else maxi(0, target.armor_reduction)
+			WoundSystem.apply_damage(target, dice_engine.roll_and_keep(fc.followup_dmg_rolled, fc.followup_dmg_kept, true).total, fred)
+
 	# Disease (s54.5/s54.11): a wounding hit by Byoki/Shikko/plague-zombie can infect a
 	# mortal target (cross-encounter drain resolved in the world-sim).
 	if attacker.spirit_creature != null and target.spirit_creature == null and raw > 0 \
