@@ -4576,6 +4576,36 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
   Legendary Healing, Speed of a Predator, Strength of Jade, Protection of Tengoku are classifiable but
   not on the encoded creatures' GDD-given sets (no consumer yet). Static-validated only (symbol
   resolution + GDD spec confirmed; no Godot runtime — driver-verify later).
+- **s54.10/s54.2 Possession — combat attempt → cross-encounter affliction (owner-directed "do all",
+  2026-06-16, static-only).** Possession is seeded by a tile-combat attempt and resolved over the
+  world-sim days, mirroring the proven `death_touch_affliction` pattern. New
+  `L5RCharacterData.possession_affliction: Dictionary` (@export, persists; empty = none). **Combat
+  attempt** (`AsciiMapCombatOrchestrator._npc_maybe_possess`, wired into `execute_npc_turn` before the
+  atemi/attack block): a possessing spirit (Shozai-gaki / Buruburu / Kitsune-tsuki, by the `possession`
+  tag) adjacent to a valid non-spirit, un-possessed victim spends a Complex action to attempt it.
+  Kitsune-tsuki requires the victim Down/Out (`get_wound_level >= DOWN`) and rolls victim Willpower vs
+  TN 25 (possessed on failure); Shozai/Buruburu roll Contested Willpower (possessor vs victim). On
+  success it stamps `{kind, possessor_id, possessor_willpower}` on the victim. **World-sim**
+  (`DayOrchestrator._process_possession_afflictions`, run beside `_process_death_touch_afflictions`,
+  before `_process_lord_deaths` for same-tick succession; timing fields init on first processing so the
+  combat layer needs no ic_day): **Shozai** feeds 1k1 Wounds/day (lethal → `_apply_possession_kill`);
+  **Buruburu** runs Descent into Terror — nightly Willpower vs TN 20 (consecutive-fail counter),
+  death after 20 consecutive failures, weekly (7-day) Contested Willpower to shake off (clears);
+  **Kitsune-tsuki** controls for a 24h window then releases — the controlled victim gets **0 AP** via a
+  guard in `ActionPointSystem.reset_daily_ap` (mirrors the dead-char/PC 0-AP guards), so they are inert
+  for the day. `_apply_possession_kill` mirrors the maho/death-touch mysterious-death path (GREAT_DESTINY
+  cheats to DOWN; else lethal wounds + suspicious death_event with `killer_id` + Tier-2 LEGAL
+  mysterious-death topic, NEUTRAL subject_role). All values LOCKED in the stat blocks (TN 25, 1k1/day,
+  TN 20, 20 fails, weekly shake, 24h). SpiritAbilitySystem: `possession_kind`,
+  `possession_requires_incapacitated`, + the constants. **DEFERRED (need infra/consumers, not invented):**
+  the Major-Shapeshifter "controls his actions" full puppeteering (modelled here as 0-AP inert for
+  Kitsune-tsuki — faithful to "loss of agency," but the possessor does not drive the victim's specific
+  actions: that needs a faction/control-transfer layer + the PC turn-based UI); the cure spells
+  (Ward of Purity / Bonds of Ningen-do drive out Shozai — no tile-combat spell consumer); Buruburu's
+  "+5 TN escalating on all rolls after 3 consecutive nightmares" (the death timer + shake are wired;
+  the escalating roll penalty needs a SkillResolver world-sim hook). Buruburu's invisible out-of-combat
+  attachment uses the in-combat attempt as its seed (it has no separate stealth-attach mechanic).
+  Static-validated only (symbol resolution + GDD spec confirmed; no Godot runtime — driver-verify later).
 
 ### Pending Redesign
 (None currently pending.)

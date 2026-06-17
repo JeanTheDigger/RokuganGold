@@ -3009,6 +3009,15 @@ static func execute_npc_turn(
 		ranged_targets = get_ranged_targets(state, npc_id)
 		target_in_ranged = (best_target in ranged_targets)
 
+	# -- Possession (s54.10/s54.2): a possessing spirit in melee with a valid victim
+	# seeds a cross-encounter possession affliction (resolved in the world-sim) instead
+	# of attacking. Kitsune-tsuki requires a Down/Out victim; Shozai/Buruburu may try any.
+	if target_in_melee and npc.spirit_creature != null:
+		var poss: Dictionary = _npc_maybe_possess(state, npc_id, best_target, npc, chars_by_id, dice_engine)
+		if poss.get("success", false):
+			actions_taken.append({"action": "possession", "result": poss})
+			return {"actions": actions_taken}
+
 	# -- Atemi (s38): a monk in melee delivers a known (encoded) atemi kiho instead
 	# of a normal strike, applying its condition/timed debuff. Basic heuristic (the
 	# GDD gives no NPC atemi policy); the atemi is the turn's Complex action.
@@ -3740,6 +3749,59 @@ static func _is_targetable(state: MapCombatState, cid: int) -> bool:
 	if SpiritAbilitySystem.has_ephemeral_form(c.spirit_creature) and p.ephemeral_form_expiry >= rnd:
 		return false  # within the 10-round Ephemeral Form window
 	return true
+
+
+## s54.10/s54.2 Possession: a possessing spirit (Shozai-gaki / Buruburu / Kitsune-tsuki)
+## adjacent to a valid victim spends a Complex action to attempt possession. Kitsune-tsuki
+## requires the victim sleeping or Down/Out (TN-25 Willpower or possessed); Shozai/Buruburu
+## roll Contested Willpower. On success a cross-encounter possession_affliction is seeded on
+## the victim (resolved in the world-sim by DayOrchestrator). Returns {} if not attempted.
+static func _npc_maybe_possess(
+	state: MapCombatState,
+	attacker_id: int,
+	target_id: int,
+	attacker: L5RCharacterData,
+	chars_by_id: Dictionary,
+	dice: DiceEngine,
+) -> Dictionary:
+	var cr: SpiritCreatureData = attacker.spirit_creature
+	if cr == null:
+		return {}
+	var kind: String = SpiritAbilitySystem.possession_kind(cr)
+	if kind == "":
+		return {}
+	var ts: TurnState = state.turn_states.get(attacker_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var victim: L5RCharacterData = chars_by_id.get(target_id, null)
+	if victim == null or CharacterStats.is_dead(victim):
+		return {}
+	if victim.spirit_creature != null:
+		return {}  # spirits are not possessed
+	if not victim.possession_affliction.is_empty():
+		return {}  # already possessed
+	if SpiritAbilitySystem.possession_requires_incapacitated(cr) \
+			and CharacterStats.get_wound_level(victim) < Enums.WoundLevel.DOWN:
+		return {}
+	ts.consume_complex()
+	var possessed: bool = false
+	if kind == "kitsune_tsuki":
+		# Victim resists with Willpower vs TN 25; possessed if they fail (s54.10).
+		var vw: int = maxi(1, victim.willpower)
+		possessed = dice.roll_and_keep(vw, vw, true).total < SpiritAbilitySystem.KITSUNE_TSUKI_POSSESS_TN
+	else:
+		# Contested Willpower: possessor vs victim.
+		var aw: int = maxi(1, attacker.willpower)
+		var vw2: int = maxi(1, victim.willpower)
+		possessed = dice.roll_and_keep(aw, aw, true).total > dice.roll_and_keep(vw2, vw2, true).total
+	if not possessed:
+		return {"success": true, "possessed": false, "target_id": target_id, "kind": kind}
+	victim.possession_affliction = {
+		"kind": kind,
+		"possessor_id": attacker_id,
+		"possessor_willpower": maxi(1, attacker.willpower),
+	}
+	return {"success": true, "possessed": true, "target_id": target_id, "kind": kind}
 
 
 ## s54.10: a hidden creature that takes an offensive action becomes targetable until

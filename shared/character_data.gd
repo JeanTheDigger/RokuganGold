@@ -264,6 +264,10 @@ var taint_benefits_suppressed: bool = false
 ## tick by DayOrchestrator (ring drain → catatonic → 3 Contested Void → death).
 ## Keys: caster_id, insight_cap, caster_void. Empty = not afflicted.
 @export var death_touch_affliction: Dictionary = {}
+## s54.10/s54.2 spirit possession seeded by a tile-combat attempt, resolved in the
+## world-sim over days. {kind: "shozai"/"buruburu"/"kitsune_tsuki", possessor_id,
+## ic_day_start, expires_ic_day, consecutive_fails, last_shake_day}. Empty = none.
+@export var possession_affliction: Dictionary = {}
 
 # -- Family Web (Section 22.6) -------------------------------------------------
 # Generation 1 (self), Generation 2 (parents), and any actively-simulated

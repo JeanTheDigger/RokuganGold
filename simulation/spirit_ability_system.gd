@@ -219,6 +219,36 @@ static func protection_of_yomi_reduction(creature: SpiritCreatureData) -> int:
 	return PROTECTION_OF_YOMI_REDUCTION if creature.has_tag("protection_of_yomi") else 0
 
 
+# ── Possession (s54.10 / s54.2) ───────────────────────────────────────────────
+# A combat possession attempt seeds a cross-encounter affliction resolved in the
+# world-sim. Three kinds: Shozai-gaki (feeds 1k1 Wounds/day), Buruburu (Descent into
+# Terror — nightly Willpower TN 20, lethal after 20 consecutive fails), Kitsune-tsuki
+# (controls a Down/Out victim for 24h). All values LOCKED in the stat blocks.
+
+const KITSUNE_TSUKI_POSSESS_TN: int = 25  # s54.10: victim Willpower vs TN 25
+const SHOZAI_FEED_ROLLED: int = 1         # s54.2: 1k1 Wounds/day while possessed
+const SHOZAI_FEED_KEPT: int = 1
+const BURUBURU_NIGHTMARE_TN: int = 20     # s54.10: nightly Willpower vs TN 20
+const BURUBURU_DEATH_FAILS: int = 20      # ...dies after 20 consecutive failures
+const BURUBURU_SHAKE_INTERVAL: int = 7    # ...weekly Contested Willpower to shake off
+const KITSUNE_TSUKI_CONTROL_DAYS: int = 1 # 24h control window
+
+## The possession kind a creature inflicts, or "" if it does not possess.
+static func possession_kind(creature: SpiritCreatureData) -> String:
+	if not creature.has_tag("possession"):
+		return ""
+	if creature.id == "kitsune_tsuki":
+		return "kitsune_tsuki"
+	if creature.id == "buruburu":
+		return "buruburu"
+	return "shozai"  # Shozai-gaki and Major-Shapeshifter Possession both feed/control via Contested Willpower
+
+## Kitsune-tsuki may only possess a victim who is sleeping or in the Down/Out Wound
+## Ranks (s54.10). Shozai/Buruburu may attempt against any target (Contested Willpower).
+static func possession_requires_incapacitated(creature: SpiritCreatureData) -> bool:
+	return creature.id == "kitsune_tsuki"
+
+
 # ── Exposure-feed contributions (consumed by SpiritualExposureSystem) ─────────
 
 ## A creature's contribution to the Willpower-resistance TN of co-located

@@ -1131,6 +1131,12 @@ static func advance_day(
 	var _death_touch_results: Array = _process_death_touch_afflictions(
 		characters, dice_engine, death_events, active_topics, next_topic_id, ic_day)
 
+	# s54.10/s54.2 Possession: resolve any spirit possession seeded in tile combat
+	# (Shozai feed 1k1/day, Buruburu Descent into Terror, Kitsune-tsuki 24h control).
+	# Appends to death_events so a lethal drain triggers same-tick succession below.
+	var _possession_results: Array = _process_possession_afflictions(
+		characters, dice_engine, death_events, active_topics, next_topic_id, ic_day)
+
 	var orphan_results: Array = _process_lord_deaths(
 		death_events, characters, objectives_map, successor_map,
 		active_successions, next_succession_id, characters_by_id, ic_day,
@@ -13195,6 +13201,122 @@ static func _lowest_ring(c: L5RCharacterData) -> int:
 	for ring: Enums.Ring in [Enums.Ring.AIR, Enums.Ring.EARTH, Enums.Ring.FIRE, Enums.Ring.WATER, Enums.Ring.VOID]:
 		lo = mini(lo, CharacterStats.get_ring_value(c, ring))
 	return lo
+
+
+## s54.10/s54.2 Possession: a possession_affliction seeded in tile combat is resolved
+## here over the world-sim days. Shozai-gaki feeds 1k1 Wounds/day; Buruburu runs the
+## Descent into Terror (nightly Willpower TN 20; lethal after 20 consecutive failures;
+## weekly Contested Willpower to shake off); Kitsune-tsuki controls for a 24h window
+## (the victim gets 0 AP via ActionPointSystem) then releases. Timing fields are
+## initialised on first processing so the combat layer needs no ic_day.
+static func _process_possession_afflictions(
+	characters: Array,
+	dice: DiceEngine,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	for target: L5RCharacterData in characters:
+		if target == null or CharacterStats.is_dead(target):
+			continue
+		var aff: Dictionary = target.possession_affliction
+		if aff.is_empty():
+			continue
+		var kind: String = String(aff.get("kind", ""))
+		if not aff.has("ic_day_start"):
+			aff["ic_day_start"] = ic_day
+			aff["last_shake_day"] = ic_day
+			aff["consecutive_fails"] = 0
+			target.possession_affliction = aff
+		var possessor_id: int = int(aff.get("possessor_id", -1))
+		match kind:
+			"shozai":
+				var dmg: int = dice.roll_and_keep(
+					SpiritAbilitySystem.SHOZAI_FEED_ROLLED, SpiritAbilitySystem.SHOZAI_FEED_KEPT, true).total
+				WoundSystem.apply_damage(target, dmg, 0)
+				if CharacterStats.is_dead(target):
+					target.possession_affliction = {}
+					results.append(_apply_possession_kill(
+						target, possessor_id, "shozai", death_events, active_topics, next_topic_id, ic_day))
+				else:
+					results.append({"target_id": target.character_id, "kind": "shozai", "outcome": "fed", "wounds": dmg})
+			"kitsune_tsuki":
+				if ic_day - int(aff.get("ic_day_start", ic_day)) >= SpiritAbilitySystem.KITSUNE_TSUKI_CONTROL_DAYS:
+					target.possession_affliction = {}
+					results.append({"target_id": target.character_id, "kind": "kitsune_tsuki", "outcome": "released"})
+				else:
+					results.append({"target_id": target.character_id, "kind": "kitsune_tsuki", "outcome": "controlled"})
+			"buruburu":
+				# Weekly Contested Willpower to shake off (s54.10).
+				if ic_day - int(aff.get("last_shake_day", ic_day)) >= SpiritAbilitySystem.BURUBURU_SHAKE_INTERVAL:
+					aff["last_shake_day"] = ic_day
+					var vw: int = maxi(1, target.willpower)
+					var pw: int = maxi(1, int(aff.get("possessor_willpower", 4)))  # Buruburu Willpower 4 (stat block)
+					if dice.roll_and_keep(vw, vw, true).total > dice.roll_and_keep(pw, pw, true).total:
+						target.possession_affliction = {}
+						results.append({"target_id": target.character_id, "kind": "buruburu", "outcome": "shaken_off"})
+						continue
+				# Nightly Descent into Terror: Willpower vs TN 20; track consecutive failures.
+				var nw: int = maxi(1, target.willpower)
+				if dice.roll_and_keep(nw, nw, true).total < SpiritAbilitySystem.BURUBURU_NIGHTMARE_TN:
+					aff["consecutive_fails"] = int(aff.get("consecutive_fails", 0)) + 1
+				else:
+					aff["consecutive_fails"] = 0
+				target.possession_affliction = aff
+				if int(aff.get("consecutive_fails", 0)) >= SpiritAbilitySystem.BURUBURU_DEATH_FAILS:
+					target.possession_affliction = {}
+					results.append(_apply_possession_kill(
+						target, possessor_id, "buruburu", death_events, active_topics, next_topic_id, ic_day))
+				else:
+					results.append({"target_id": target.character_id, "kind": "buruburu", "outcome": "nightmare", "fails": int(aff.get("consecutive_fails", 0))})
+			_:
+				target.possession_affliction = {}
+	return results
+
+
+## Possession kill — mirrors the maho/death-touch mysterious-death path: GREAT_DESTINY
+## cheats death (survives at DOWN), else lethal wounds + a suspicious death_event +
+## Tier-2 LEGAL mysterious-death topic (NEUTRAL subject_role per the dead-character rule).
+static func _apply_possession_kill(
+	target: L5RCharacterData,
+	possessor_id: int,
+	kind: String,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> Dictionary:
+	var ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+	if AdvantageSystem.check_great_destiny(target, ic_year):
+		var thr: int = CharacterStats.get_wound_threshold_per_level(target)
+		target.wounds_taken = thr * 6 + 1
+		var gd: AdvantageData = AdvantageSystem.get_advantage(target, Enums.Advantage.GREAT_DESTINY)
+		if gd != null:
+			gd.metadata["last_triggered_ic_year"] = ic_year
+		return {"target_id": target.character_id, "kind": kind, "outcome": "survived_destiny"}
+	var earth: int = CharacterStats.get_ring_value(target, Enums.Ring.EARTH)
+	target.wounds_taken = earth * 5 * 5
+	death_events.append({
+		"character_id": target.character_id,
+		"is_lord": target.role_position != "",
+		"cause": "possession_" + kind,
+		"suspicious_death": true,
+		"ic_day": ic_day,
+		"killer_id": possessor_id,
+	})
+	if not next_topic_id.is_empty():
+		var tid: int = next_topic_id[0]
+		next_topic_id[0] = tid + 1
+		var title: String = "Mysterious death of %s at %s" % [
+			target.character_name, target.physical_location]
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			tid, title, TopicData.Tier.TIER_2, TopicData.Category.LEGAL,
+			ic_day, 0.0, [], target.clan, "", target.character_id, "death", "mysterious")
+		topic.slug = "possession_death_%d" % target.character_id
+		active_topics.append(topic)
+	return {"target_id": target.character_id, "kind": kind, "outcome": "killed", "killer_id": possessor_id}
 
 
 ## Death Touch kill — mirrors the maho mysterious-death path (_resolve_stealing_the_soul):
