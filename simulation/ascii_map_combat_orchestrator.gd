@@ -2580,6 +2580,63 @@ static func execute_creature_ranged_attack(
 	}
 
 
+## AoE ranged attack (s54.11 Cauldron Belch, s54.12 Gout of Flame): a Complex-action blast
+## centred on the target tile, damaging every enemy within ranged_aoe_radius. ranged_attack_rolled
+## 0 = auto-hit explosion; otherwise one to-hit roll vs the primary's Armor TN gates the whole
+## blast. Caps at ranged_aoe_max_targets (0 = unlimited); once-per-skirmish if ranged_aoe_once.
+static func execute_creature_aoe_attack(
+	state: MapCombatState,
+	attacker_id: int,
+	target_id: int,
+	attacker: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var cr: SpiritCreatureData = attacker.spirit_creature
+	if cr == null or cr.ranged_aoe_radius <= 0:
+		return {"ok": false, "reason": "no_aoe"}
+	var ts: TurnState = state.turn_states.get(attacker_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {"ok": false, "reason": "no_action"}
+	var a_p: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
+	if a_p != null and cr.ranged_aoe_once and a_p.ranged_aoe_used:
+		return {"ok": false, "reason": "already_used"}
+	var ap: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
+	var impact: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
+	if ap.x < 0 or impact.x < 0 or _chebyshev(ap, impact) > cr.ranged_range_tiles:
+		return {"ok": false, "reason": "out_of_range"}
+	ts.consume_complex()
+	if a_p != null:
+		a_p.ranged_aoe_used = true
+	# A to-hit roll (if any) vs the primary target gates the whole blast.
+	if cr.ranged_attack_rolled > 0:
+		var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+		var atn: int = IndividualCombat.get_armor_tn(attacker, a_p, dice, false, false, "") if t_p == null \
+			else IndividualCombat.get_armor_tn(state.combatants.get(target_id, attacker), t_p, dice, false, false, "")
+		if dice.roll_and_keep(cr.ranged_attack_rolled, cr.ranged_attack_kept, true).total < atn:
+			return {"ok": true, "hit": false}
+	# Damage every enemy within the radius (capped).
+	var faction: String = state.factions.get(attacker_id, FACTION_NEUTRAL)
+	var struck: int = 0
+	for cid: int in state.positions.keys():
+		if cid == attacker_id or not _are_enemies(faction, state.factions.get(cid, FACTION_NEUTRAL)):
+			continue
+		if _chebyshev(impact, state.positions[cid]) > cr.ranged_aoe_radius:
+			continue
+		if cr.ranged_aoe_max_targets > 0 and struck >= cr.ranged_aoe_max_targets:
+			break
+		var victim: L5RCharacterData = state.combatants.get(cid, null)
+		if victim == null or CharacterStats.is_dead(victim):
+			continue
+		var red: int = 0 if victim.spirit_creature != null else maxi(0, victim.armor_reduction)
+		WoundSystem.apply_damage(victim, dice.roll_and_keep(cr.ranged_damage_rolled, cr.ranged_damage_kept, true).total, red)
+		if cr.ranged_fire and victim.spirit_creature == null:
+			var vp: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+			if vp != null:
+				vp.on_fire = true
+		struck += 1
+	return {"ok": true, "hit": true, "targets_struck": struck}
+
+
 ## Wreathed in Flames (s54.5 Daku): anyone striking the burning oni in melee automatically
 ## (no save) takes Wounds by weapon size — unarmed/Small 3k2, Medium 2k1, Large/ranged 0.
 ## Inert unless the struck TARGET has the wreathed_in_flames tag. Returns damage dealt.
@@ -3257,6 +3314,17 @@ static func execute_npc_turn(
 	if not target_in_melee:
 		ranged_targets = get_ranged_targets(state, npc_id)
 		target_in_ranged = (best_target in ranged_targets)
+
+	# -- Creature AoE attack (s54.11 Cauldron Belch / s54.12 Gout of Flame): a fire blast
+	# centred on a target in LOS + range, damaging everyone nearby. Preferred over a single
+	# strike when available (and not yet used, for once-per-skirmish blasts).
+	if npc.spirit_creature != null and npc.spirit_creature.ranged_aoe_radius > 0 \
+			and not target_in_melee and target_in_ranged \
+			and not (npc.spirit_creature.ranged_aoe_once and p.ranged_aoe_used):
+		var aoe: Dictionary = execute_creature_aoe_attack(state, npc_id, best_target, npc, dice_engine)
+		if aoe.get("ok", false):
+			actions_taken.append({"action": "creature_aoe", "result": aoe})
+			return {"actions": actions_taken}
 
 	# -- Creature ranged attack (s54.5 Flaming Bark / Hurl Flaming Blood): a creature with
 	# a thrown/spat attack fires at a target that is in LOS + range but not in melee reach.

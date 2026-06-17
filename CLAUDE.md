@@ -5036,6 +5036,21 @@ Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next cand
   separate paralyzed condition); the exact multi-day Komodo cadence and Gakimushi 1hr/dose
   timing collapse to a single next-day restore.
 
+### Systems Added 2026-06-17 (s54.11/s54.12 AoE fire blasts — runtime-verified)
+- **AoE ranged attack wired (Cauldron Belch, Gout of Flame).** Extends the creature ranged
+  path with a blast radius. New SpiritCreatureData `ranged_aoe_radius` / `ranged_aoe_max_targets`
+  / `ranged_aoe_once` + Participant `ranged_aoe_used`. `execute_creature_aoe_attack` (Complex):
+  centred on the target tile, damages every enemy within ranged_aoe_radius (capped at
+  max_targets); ranged_attack_rolled 0 = auto-hit explosion (Gout), >0 = a single to-hit roll
+  vs the primary gates the blast (Cauldron); ranged_fire ignites each victim. NPC-turn branch
+  prefers AoE when available and not used. Populated Taki-bi Gout of Flame (auto-hit 5k4,
+  radius 2, at-will) and Kwaku-shin Gaki Cauldron Belch (6k3 / 4k4, radius 2, max 3 targets,
+  once per skirmish). `ignores_armor` confirmed already wired (Taki-bi bypasses armor via
+  attack_bypasses_armor). RUNTIME-VERIFIED (Godot 4.6.2): Gout strikes 2 clustered heroes
+  (far one outside radius spared, primary set on fire); Cauldron Belch fires once then blocks
+  (already_used). LIMITATION: "3 targets within 10' of each other" is modelled as 3 nearest
+  within the radius of the impact.
+
 ### Pending Redesign
 (None currently pending.)
 

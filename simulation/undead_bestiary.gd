@@ -82,6 +82,17 @@ static func catalog() -> Dictionary:
 		4, 3, "Slam", 6, 4, 4, 3, 20, 5, [32, 64], 96, 3,
 		["undead", "gaki", "spirit", "gaki_immortality", "immune_illusion", "immune_mind",
 			"cauldron_belch", "flame_immune", "water_vulnerable"], 0, _GAKI)
+	# Cauldron Belch: once per skirmish, 6k3 to attack, up to 3 targets within 10' (2 tiles)
+	# of each other, 4k4 fire, ignites (s54.11).
+	c["kwaku_shin_gaki"].ranged_attack_rolled = 6
+	c["kwaku_shin_gaki"].ranged_attack_kept = 3
+	c["kwaku_shin_gaki"].ranged_damage_rolled = 4
+	c["kwaku_shin_gaki"].ranged_damage_kept = 4
+	c["kwaku_shin_gaki"].ranged_range_tiles = 6
+	c["kwaku_shin_gaki"].ranged_fire = true
+	c["kwaku_shin_gaki"].ranged_aoe_radius = 2
+	c["kwaku_shin_gaki"].ranged_aoe_max_targets = 3
+	c["kwaku_shin_gaki"].ranged_aoe_once = true
 
 	c["shikko_gaki"] = _make("shikko_gaki", "Gaki, Shikko-gaki", SpiritCreatureData.Tier.MID,
 		2, 3, 2, 2, {"reflexes": 3, "stamina": 5, "agility": 3, "strength": 4},

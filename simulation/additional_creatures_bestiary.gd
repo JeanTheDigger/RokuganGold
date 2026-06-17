@@ -139,6 +139,13 @@ static func catalog() -> Dictionary:
 		6, 4, "Flaming Fist", 7, 7, 4, 1, 25, 10, [30, 60], 90, 4,
 		["elemental_terror", "partial_invuln", "flame_immune", "aura_of_heat", "burning_touch",
 			"ignores_armor", "flying", "gout_of_flame"], 2, _J)
+	# Gout of Flame: hurl a fireball (long range), 5k4 fire to everyone within 10' (2 tiles)
+	# of impact; an explosion (auto-hit, no dodge), at-will (s54.12).
+	c["taki_bi_no_oni"].ranged_damage_rolled = 5
+	c["taki_bi_no_oni"].ranged_damage_kept = 4
+	c["taki_bi_no_oni"].ranged_range_tiles = 20
+	c["taki_bi_no_oni"].ranged_fire = true
+	c["taki_bi_no_oni"].ranged_aoe_radius = 2
 
 	c["moetechi_no_oni"] = _make("moetechi_no_oni", "Moetechi no Oni (Lesser Terror of Fire)", SpiritCreatureData.Tier.HEAVY,
 		2, 2, 4, 1, {"reflexes": 3},

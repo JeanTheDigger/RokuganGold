@@ -81,6 +81,14 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 @export var ranged_range_tiles: int = 0
 @export var ranged_fire: bool = false
 
+## AoE ranged variant (s54.11 Cauldron Belch, s54.12 Gout of Flame): when ranged_aoe_radius
+## > 0, the ranged attack damages every enemy within that radius of the impact tile.
+## ranged_attack_rolled 0 = auto-hit (an explosion, no dodge). ranged_aoe_max_targets 0 =
+## unlimited. ranged_aoe_once = once per skirmish.
+@export var ranged_aoe_radius: int = 0
+@export var ranged_aoe_max_targets: int = 0
+@export var ranged_aoe_once: bool = false
+
 ## Follow-up attack on a big hit (s54.11 Ghul Throat Attack): if a melee hit deals
 ## followup_wound_threshold+ Wounds, the creature makes a free bonus attack
 ## (followup_rolled k _kept to-hit, followup_dmg_rolled k _kept). 0 threshold = none.
