@@ -1137,6 +1137,10 @@ static func advance_day(
 	var _possession_results: Array = _process_possession_afflictions(
 		characters, dice_engine, death_events, active_topics, next_topic_id, ic_day)
 
+	# s54.5/s54.11 Disease: drain physical Traits over days/weeks for characters infected by
+	# a Byoki/Shikko/plague-zombie hit; a lethal Plague-Carrier drain dies (→ death_events).
+	_process_disease_afflictions(characters, dice_engine, death_events, ic_day)
+
 	var orphan_results: Array = _process_lord_deaths(
 		death_events, characters, objectives_map, successor_map,
 		active_successions, next_succession_id, characters_by_id, ic_day,
@@ -13209,6 +13213,35 @@ static func _lowest_ring(c: L5RCharacterData) -> int:
 ## weekly Contested Willpower to shake off); Kitsune-tsuki controls for a 24h window
 ## (the victim gets 0 AP via ActionPointSystem) then releases. Timing fields are
 ## initialised on first processing so the combat layer needs no ic_day.
+## s54.5/s54.11 Disease daily processing: drain physical Traits per DiseaseSystem; a lethal
+## Plague-Carrier drain (Stamina 0) appends a death_event for same-tick succession.
+static func _process_disease_afflictions(
+	characters: Array,
+	dice: DiceEngine,
+	death_events: Array,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	for victim: L5RCharacterData in characters:
+		if victim == null or CharacterStats.is_dead(victim) or victim.disease_affliction.is_empty():
+			continue
+		var r: Dictionary = DiseaseSystem.process_daily(victim, ic_day, dice)
+		if r.is_empty():
+			continue
+		if r.get("died", false):
+			victim.wounds_taken = CharacterStats.get_total_wound_capacity(victim) + 1
+			DiseaseSystem.cure(victim)
+			death_events.append({
+				"character_id": victim.character_id,
+				"is_lord": victim.role_position != "",
+				"suspicious_death": false,
+				"killer_id": -1,
+				"cause": "disease",
+			})
+		results.append({"character_id": victim.character_id, "result": r})
+	return results
+
+
 static func _process_possession_afflictions(
 	characters: Array,
 	dice: DiceEngine,

@@ -277,6 +277,10 @@ var taint_benefits_suppressed: bool = false
 ## world-sim over days. {kind: "shozai"/"buruburu"/"kitsune_tsuki", possessor_id,
 ## ic_day_start, expires_ic_day, consecutive_fails, last_shake_day}. Empty = none.
 @export var possession_affliction: Dictionary = {}
+## s54.5/s54.11 disease seeded by a Byoki/Shikko/plague-zombie hit, draining physical
+## Traits over days/weeks until cured. {type:int (DiseaseSystem.Type), source_id,
+## last_tick, cures (consecutive Earth saves), onset}. Empty = healthy.
+@export var disease_affliction: Dictionary = {}
 
 # -- Family Web (Section 22.6) -------------------------------------------------
 # Generation 1 (self), Generation 2 (parents), and any actively-simulated

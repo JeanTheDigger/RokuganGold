@@ -4898,6 +4898,36 @@ Moves, Piercing Howl, Legendary Healing, Eyes of the Owl, Strength of Jade.
   killing a near-dead Tasu adds 2 tasu_spawn (participants 2→4) on the enemy faction; Wakeru
   splits into 2 wakeru_lesser; the lesser copy carries no death_spawn (no infinite split).
 
+### Systems Added 2026-06-17 (s54.5/s54.11 Disease — runtime-verified)
+- **Plague / disease wired (Byoki, Shikko-gaki, plague-zombie).** `simulation/disease_system.gd`
+  (DiseaseSystem, pure): contagious diseases that drain physical Traits over days/weeks,
+  seeded on a creature's hit and resolved in the world-sim (cross-encounter, like the
+  possession affliction). Three types: PLAGUE_BEARER (Byoki — daily Earth TN 15 or lose 1
+  Rank in ALL physical Traits; 3 consecutive saves cure), DISEASED_TOUCH (Shikko — weekly
+  Stamina TN 20, fail = −1 Stamina + −1 Strength, success recovers), PLAGUE_CARRIER
+  (plague-zombie — automatic weekly Stamina −1 until cured or Stamina 0 → dies). New
+  `L5RCharacterData.disease_affliction`. Combat contraction (`_apply_hit` → `_apply_disease_on_hit`):
+  a wounding hit on a mortal by a `plague_bearer`/`diseased_touch`/`plague_carrier` creature
+  rolls the per-type check (Byoki Contested Earth, Shikko Stamina-vs-wounds, zombie 1-in-5)
+  and seeds the disease (ic_day −1; the world-sim anchors the cadence clock on the first
+  `process_daily`). Daily world-sim processing: `DayOrchestrator._process_disease_afflictions`
+  (beside possession) drains per type; a lethal Plague-Carrier drain appends a death_event
+  for same-tick succession (plague-zombie reanimation deferred). RUNTIME-VERIFIED (Godot
+  4.6.2): low-Earth victim drains over days, high-Earth victim cures in 3 saves, Plague
+  Carrier kills via weekly Stamina drain to 0, Byoki infects a low-Earth victim on a
+  wounding hit (type = PLAGUE_BEARER). Medicine has no effect on Byoki plague (magic-only,
+  GDD); the cure() hook is for the magic/Medicine systems to call.
+
+### s54.5 creature-unique abilities — status (2026-06-17)
+All four owner-selected abilities are wired AND runtime-verified with headless drivers
+(Godot 4.6.2, installed via the SessionStart hook): **multi-attack** second strike,
+**Burning Blood** retaliation, **Swallow Whole / Devour**, **spawn-on-death / split**, and
+**Plague / disease** — plus the foundational **spirit/oni damage-path fix** and **variable
+regeneration**. Testing caught two real bugs that static review missed: the wrong
+damage-source (creatures dealt unarmed damage) and the `swallowed_by_id >= 0` sentinel
+failing for negative puppet ids. Remaining creature abilities (Taint Affliction, Spell
+Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next candidates.
+
 ### Pending Redesign
 (None currently pending.)
 

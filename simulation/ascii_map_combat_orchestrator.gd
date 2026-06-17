@@ -4410,6 +4410,12 @@ static func _apply_hit(
 			var expiry: int = state.combat.round_number + venom_min * IndividualCombat.ROUNDS_PER_MINUTE
 			IndividualCombat.apply_timed_condition(t_p, IndividualCombat.CONDITION_STUNNED, expiry)
 
+	# Disease (s54.5/s54.11): a wounding hit by Byoki/Shikko/plague-zombie can infect a
+	# mortal target (cross-encounter drain resolved in the world-sim).
+	if attacker.spirit_creature != null and target.spirit_creature == null and raw > 0 \
+			and not CharacterStats.is_dead(target):
+		_apply_disease_on_hit(attacker, target, int(wd_result.get("final_damage", 0)), dice_engine)
+
 	# Spawn-on-death (s54.5): Tasu releases spawn, Wakeru splits into lesser copies when
 	# slain. Fires once, when this hit kills a death_spawn creature.
 	if t_p != null and target.spirit_creature != null \
@@ -4423,6 +4429,28 @@ static func _apply_hit(
 		"wounds": wd_result.get("final_damage", raw),
 		"dead": CharacterStats.is_dead(target),
 	}
+
+
+## Disease contraction (s54.5/s54.11): a wounding hit by a disease creature may infect a
+## mortal target. Byoki Plague Bearer — Contested Earth (oni vs victim). Shikko Diseased
+## Touch — victim Stamina roll vs wounds inflicted. Plague zombie Plague Carrier — 1-in-5.
+## Seeds DiseaseSystem.contract on success (ic_day -1; the world-sim anchors the clock).
+static func _apply_disease_on_hit(attacker: L5RCharacterData, target: L5RCharacterData, wounds: int, dice: DiceEngine) -> void:
+	var cr: SpiritCreatureData = attacker.spirit_creature
+	if DiseaseSystem.is_diseased(target):
+		return
+	if cr.has_tag("plague_bearer"):
+		var oe: int = mini(attacker.stamina, attacker.willpower)
+		var ve: int = mini(target.stamina, target.willpower)
+		if dice.roll_and_keep(maxi(1, oe), maxi(1, oe), true).total > dice.roll_and_keep(maxi(1, ve), maxi(1, ve), true).total:
+			DiseaseSystem.contract(target, DiseaseSystem.Type.PLAGUE_BEARER, attacker.character_id)
+	elif cr.has_tag("diseased_touch"):
+		# Victim resists with a Stamina roll vs the wounds inflicted; failure → infection.
+		if dice.roll_and_keep(maxi(1, target.stamina), maxi(1, target.stamina), true).total < wounds:
+			DiseaseSystem.contract(target, DiseaseSystem.Type.DISEASED_TOUCH, attacker.character_id)
+	elif cr.has_tag("plague_carrier"):
+		if dice.roll_die(5) == 1:  # 1-in-5 chance
+			DiseaseSystem.contract(target, DiseaseSystem.Type.PLAGUE_CARRIER, attacker.character_id)
 
 
 ## Spawn-on-death (s54.5): adds death_spawn_count copies of death_spawn_id near the slain
