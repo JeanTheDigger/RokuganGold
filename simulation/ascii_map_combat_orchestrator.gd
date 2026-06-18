@@ -18,6 +18,8 @@ const MELEE_RANGE_TILES: int = 1
 const TREMBLING_EARTH_TILES: int = 10
 const MIMIC_DISGUISE_ROUNDS: int = 5  # s54.10 Mimic: "lasts ... 5 Rounds in battle"
 const DECEPTIVE_WEIGHT_ESCAPE_TN: int = 40  # s54.10 Konak Jiji: Athletics/Strength TN 40 to move it
+const HEART_LOCATE_TN: int = 30  # s54.5 Arugai: Investigation/Perception TN 30 to find the heart
+const HEART_WOUNDS: int = 10     # s54.5 Arugai: the exposed heart sustains 10 Wounds
 
 ## Guard maneuver range: "within 5 feet" = 1 tile (GDD s40).
 const GUARD_RANGE_TILES: int = 1
@@ -1672,6 +1674,55 @@ static func execute_stand_up(
 	return {"success": true}
 
 
+## Arugai "Nearly Immortal" counter-play (s54.5): a Complex Action to tear open a
+## regenerating heart_kill oni's chest and locate its tiny heart — Investigation
+## (Perception) vs TN 30, requires melee adjacency. On success the heart is exposed
+## (heart_located) so subsequent strikes accrue against its 10-Wound track (see _apply_hit).
+static func execute_locate_heart(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	target_id: int,
+	target: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if target == null or target.spirit_creature == null \
+			or not target.spirit_creature.has_tag("heart_kill"):
+		return {"success": false, "reason": "no_heart"}
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if t_p == null:
+		return {"success": false, "reason": "target_missing"}
+	if t_p.heart_destroyed:
+		return {"success": false, "reason": "already_dead"}
+	if t_p.heart_located:
+		return {"success": false, "reason": "already_located"}
+	if _chebyshev(state.positions.get(char_id, Vector2i(-999, -999)),
+			state.positions.get(target_id, Vector2i(999, 999))) > MELEE_RANGE_TILES:
+		return {"success": false, "reason": "out_of_range"}
+	if not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_action"}
+	ts.consume_complex()
+	var rc: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Investigation", HEART_LOCATE_TN, 0, "",
+		Enums.Trait.PERCEPTION)
+	var found: bool = rc.get("success", false)
+	if found:
+		t_p.heart_located = true
+	state.combat_log.append({
+		"type": "locate_heart",
+		"round": state.combat.round_number,
+		"char_id": char_id,
+		"target_id": target_id,
+		"success": found,
+	})
+	return {"success": found, "heart_located": found, "roll": rc.get("total", 0)}
+
+
 ## Spend a Void Point to add +1k1 to next attack/defense roll (GDD s40).
 ## Free action.
 static func execute_void_spend(
@@ -3221,6 +3272,7 @@ static func advance_round(
 		# collapsed — _apply_hit set spirit_regen_suppressed_until).
 		var _rg_c: L5RCharacterData = state.combatants.get(_tp.character_id, null)
 		if _rg_c != null and _rg_c.spirit_creature != null and not CharacterStats.is_dead(_rg_c) \
+				and not _tp.heart_destroyed \
 				and _tp.spirit_regen_suppressed_until < state.combat.round_number:
 			var _rg_amt: int = SpiritAbilitySystem.regeneration_amount(_rg_c.spirit_creature)
 			if _rg_amt > 0:
@@ -5114,6 +5166,28 @@ static func _apply_hit(
 		var filt: Dictionary = SpiritAbilitySystem.incoming_damage(target.spirit_creature, w_kind)
 		raw = 0 if filt["heals"] else int(round(float(raw) * float(filt["multiplier"])))
 	var wd_result: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
+
+	# Arugai "Nearly Immortal" / heart_kill (s54.5): the oni's wounds heal almost instantly,
+	# so body damage can never slay it — only destroying its heart can. While the heart is
+	# hidden, body Wounds are clamped just below Dead (regen heals them). Once a character has
+	# torn the chest open (execute_locate_heart, Investigation/Perception TN 30), strikes hit
+	# the exposed heart instead; after it sustains 10 Wounds the oni dies for good.
+	if t_p != null and target.spirit_creature != null \
+			and target.spirit_creature.has_tag("heart_kill") and not t_p.heart_destroyed:
+		var fd: int = int(wd_result.get("final_damage", 0))
+		if t_p.heart_located:
+			# Strikes land on the exposed heart; the body wound is irrelevant (undo it). The
+			# heart is an exposed organ, not shielded by the oni's hide, so it takes the strike's
+			# pre-Reduction Wounds (otherwise a Reduction-20 heart would be unkillable, defeating
+			# the "only the heart can slay it" rule — the one reading consistent with GDD intent).
+			target.wounds_taken = maxi(0, target.wounds_taken - fd)
+			t_p.heart_wounds += maxi(0, raw)
+			if t_p.heart_wounds >= HEART_WOUNDS:
+				t_p.heart_destroyed = true
+				target.wounds_taken = maxi(target.wounds_taken, target.spirit_creature.wounds_dead)
+		elif target.spirit_creature.wounds_dead > 0:
+			# Heart hidden: cannot die. Hold body just below Dead (regen restores it).
+			target.wounds_taken = mini(target.wounds_taken, target.spirit_creature.wounds_dead - 1)
 
 	# Mokumokuren Gaze (s54.10): the Wounds it inflicts are spiritual — untreatable by
 	# Medicine (magic/natural healing cure them normally). Tag the dealt portion.

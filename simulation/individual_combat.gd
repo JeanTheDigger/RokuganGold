@@ -158,6 +158,12 @@ class Participant:
 	var facing: Vector2i = Vector2i(0, 0)  # unit heading; (0,0) = unset (s38 arc/cone kiho)
 	var inari_breath_round: int = -1  # round Inari's Wrath breath was held (s38); -1 = not holding
 	var spirit_regen_suppressed_until: int = -1  # s54.10 Gashadokuro: regen off until this round
+	# s54.5 Arugai "Nearly Immortal" / heart_kill: a regenerating oni that can only be truly
+	# slain by destroying its heart. Locating it requires Investigation/Perception TN 30 (tearing
+	# the chest open); the exposed heart sustains 10 Wounds before the oni dies for good.
+	var heart_located: bool = false
+	var heart_wounds: int = 0
+	var heart_destroyed: bool = false
 	var untargetable_revealed_until: int = -1  # s54.10 invisibility/intangibility: targetable through this round after acting
 	var ephemeral_form_expiry: int = -1  # s54.10 Ephemeral Form: round the 10-round insubstantial window ends
 	var ephemeral_form_used: bool = false  # Ephemeral Form is once-per-encounter (once/day)
