@@ -199,6 +199,8 @@ static func sakkaku_catalog() -> Dictionary:
 		5, 5, "Claws", 4, 2, 1, 1, 15, 3, [15, 30, 45], 60, 0,
 		["spirit", "time_thief", "partial_invuln_half_damage", "no_explode", "lure_child"], R)
 
+	c["mujina"].spell_tn_bonus = 6  # s54.10 Magic Resistance (+6 to Spell Casting TNs)
+
 	return c
 
 

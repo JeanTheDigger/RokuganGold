@@ -38,6 +38,11 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 @export var reduction_jade: int = -1
 @export var reduction_crystal: int = -1
 @export var reduction_obsidian: int = -1
+# s54.10/s54.12 Magic Resistance: +TN to spells cast at this creature. spell_tn_bonus_element
+# (Enums.Ring, -1 = all elements) restricts it (e.g. Jimen no Oni Earth-only). Consumed by
+# SpellSystem.resolve_cast.
+@export var spell_tn_bonus: int = 0
+@export var spell_tn_bonus_element: int = -1
 
 # Optional second attack (multi-attack creatures, e.g. Claws + Bite). 0 rolled = none.
 # The combat layer makes this as a second strike when the creature is tagged

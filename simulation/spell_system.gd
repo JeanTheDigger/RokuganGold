@@ -514,6 +514,12 @@ static func resolve_cast(character: L5RCharacterData, spell_id: String,
 	# MAGIC_RESISTANCE (s45): target's advantage adds +3 TN per rank to spells targeting them.
 	var magic_resist_tn: int = AdvantageSystem.get_magic_resistance_tn(target) if target != null else 0
 	var tn: int = get_casting_tn(ml) + (raises * 5) - (wrath_bonus * 5) + magic_resist_tn
+	# Creature Magic Resistance (s54.10/s54.12): +TN to spells cast at a spirit/oni, element-gated.
+	if target != null and target.spirit_creature != null \
+			and target.spirit_creature.spell_tn_bonus > 0 \
+			and (target.spirit_creature.spell_tn_bonus_element < 0 \
+				or target.spirit_creature.spell_tn_bonus_element == cast_ring):
+		tn += target.spirit_creature.spell_tn_bonus
 	# MASTER_OF_BLOOD (s44 line 117): all non-maho spells suffer +10 TN for the caster.
 	# Every SpellSystem spell is non-maho, so the check is unconditional.
 	if MutationSystem.has_power(character, Enums.ShadowlandsPowerType.MASTER_OF_BLOOD):

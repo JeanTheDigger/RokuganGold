@@ -20,6 +20,11 @@ const MIMIC_DISGUISE_ROUNDS: int = 5  # s54.10 Mimic: "lasts ... 5 Rounds in bat
 const DECEPTIVE_WEIGHT_ESCAPE_TN: int = 40  # s54.10 Konak Jiji: Athletics/Strength TN 40 to move it
 const HEART_LOCATE_TN: int = 30  # s54.5 Arugai: Investigation/Perception TN 30 to find the heart
 const HEART_WOUNDS: int = 10     # s54.5 Arugai: the exposed heart sustains 10 Wounds
+const BANE_BOLT_RANGE_TILES: int = 10  # s54.5 Sodatsu bolt range 50 ft = 10 tiles
+const BANE_BOLT_ROLLED: int = 4        # s54.5 Sodatsu bolt attack roll 4k4
+const BANE_BOLT_KEPT: int = 4
+const BANE_BOLT_DR_KEPT: int = 2       # PROVISIONAL: "DR equal to Mastery Level" -> ML k 2 (kept unstated)
+const BANE_ARMOR_ROUNDS: int = 3       # s54.5 Sodatsu armor mode lasts 3 rounds
 
 ## Guard maneuver range: "within 5 feet" = 1 tile (GDD s40).
 const GUARD_RANGE_TILES: int = 1
@@ -1721,6 +1726,95 @@ static func execute_locate_heart(
 		"success": found,
 	})
 	return {"success": found, "heart_located": found, "roll": rc.get("total", 0)}
+
+
+## Tile-combat spellcasting (s31–s37 via SpellSystem). A Complex Action: validates the
+## caster can cast (known / rank / slot / Ishiken), spends the slot, and resolves the cast
+## roll vs TN (incl. creature Magic Resistance, s54). Range is LOS-only for now (GDD spell
+## ranges are blocked on map-distance data, like ranged weapons). The per-spell offensive
+## EFFECT on success is Phase 2 (the library carries no damage/AoE data yet); Phase 1 wires
+## the reactions that fire off the act of casting — Sodatsu's Bane and Magic Resistance.
+static func execute_cast_spell(
+	state: MapCombatState,
+	caster_id: int,
+	caster: L5RCharacterData,
+	spell_id: String,
+	target_id: int,
+	target: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(caster):
+		return {"success": false, "reason": "caster_dead"}
+	var ts: TurnState = state.turn_states.get(caster_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if not SpellSystem.can_cast(caster, spell_id):
+		return {"success": false, "reason": "cannot_cast"}
+	if not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_action"}
+	ts.consume_complex()
+	var ml: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("m", 1)
+	# Sodatsu's Bane (s54.5): a spell cast AT a shugenjas_bane creature is absorbed — it has
+	# no effect, the caster's slot is still spent, and the oni instantly retaliates.
+	if target != null and target.spirit_creature != null \
+			and target.spirit_creature.has_tag("shugenjas_bane"):
+		SpellSystem.consume_slot(caster, SpellSystem.get_best_cast_ring(caster, spell_id))
+		var retal: Dictionary = _sodatsu_bane_retaliate(
+			state, target_id, target, caster_id, caster, ml, dice_engine)
+		state.combat_log.append({
+			"type": "spell_absorbed", "round": state.combat.round_number,
+			"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
+			"mastery": ml, "retaliation": retal,
+		})
+		return {"success": false, "absorbed": true, "spell_id": spell_id,
+			"mastery": ml, "retaliation": retal}
+	var res: Dictionary = SpellSystem.resolve_cast(caster, spell_id, dice_engine, 0, target)
+	res["spell_id"] = spell_id
+	# Per-spell offensive/buff effects on success are Phase 2 (not yet encoded in the library).
+	state.combat_log.append({
+		"type": "spell_cast", "round": state.combat.round_number,
+		"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
+		"success": res.get("success", false),
+	})
+	return res
+
+
+## Sodatsu no Oni Shugenja's Bane retaliation (s54.5): a Free Action picking one of three
+## modes with the absorbed spell's energy. NPC heuristic: heal if wounded, else bolt the
+## caster if it is a reachable enemy, else harden its membrane.
+static func _sodatsu_bane_retaliate(
+	state: MapCombatState,
+	sodatsu_id: int,
+	sodatsu: L5RCharacterData,
+	caster_id: int,
+	caster: L5RCharacterData,
+	ml: int,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var s_p: IndividualCombat.Participant = state.combat.participants.get(sodatsu_id, null)
+	# (1) Heal 3 × ML Wounds if injured.
+	if sodatsu.wounds_taken > 0:
+		WoundSystem.heal_wounds(sodatsu, 3 * ml)
+		return {"mode": "heal", "wounds_healed": 3 * ml}
+	# (2) Bolt the caster: 4k4 attack vs Armor TN, DR = ML (k2 PROVISIONAL), within 50 ft.
+	var enemy: bool = state.factions.get(caster_id, FACTION_NEUTRAL) \
+			!= state.factions.get(sodatsu_id, FACTION_ENEMY)
+	var in_range: bool = _chebyshev(state.positions.get(sodatsu_id, Vector2i(-999, -999)),
+			state.positions.get(caster_id, Vector2i(999, 999))) <= BANE_BOLT_RANGE_TILES
+	if enemy and in_range and not CharacterStats.is_dead(caster):
+		var c_p: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+		var atk: int = dice_engine.roll_and_keep(BANE_BOLT_ROLLED, BANE_BOLT_KEPT, true).total
+		var atn: int = IndividualCombat.get_armor_tn(caster, c_p, dice_engine, false)
+		if atk >= atn:
+			var dmg: int = dice_engine.roll_and_keep(ml, BANE_BOLT_DR_KEPT, true).total
+			WoundSystem.apply_damage(caster, dmg, maxi(0, caster.armor_reduction))
+			return {"mode": "bolt", "hit": true, "damage": dmg, "target_id": caster_id}
+		return {"mode": "bolt", "hit": false, "target_id": caster_id}
+	# (3) Harden membrane: +3 × ML Armor TN for 3 rounds (stacks).
+	if s_p != null:
+		IndividualCombat.add_timed_modifier(s_p, "armor_tn", 3 * ml,
+			state.combat.round_number + BANE_ARMOR_ROUNDS, "shugenjas_bane")
+	return {"mode": "armor", "armor_bonus": 3 * ml, "rounds": BANE_ARMOR_ROUNDS}
 
 
 ## Spend a Void Point to add +1k1 to next attack/defense roll (GDD s40).

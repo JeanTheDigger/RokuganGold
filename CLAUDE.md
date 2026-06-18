@@ -5261,6 +5261,34 @@ the same actor without proper turn advancement.
   destroyed by combat" already holds. The `gaki_immortality` tag remains descriptive; no
   combat change.
 
+### Systems Added 2026-06-18 (s31–s37 tile-combat spellcasting — Phase 1, owner-approved "Full")
+- **Cast framework + the two blocked reaction consumers.** New
+  `AsciiMapCombatOrchestrator.execute_cast_spell()` — a Complex Action that validates
+  `SpellSystem.can_cast` (known / insight rank / slot / Ishiken), spends the slot, and
+  resolves the cast roll vs TN. Range is LOS-only for now (GDD spell ranges blocked on
+  map-distance data, same as ranged weapons). **Sodatsu's Bane (s54.5)** fully wired:
+  a spell cast AT a `shugenjas_bane` creature is absorbed (no effect, slot still spent)
+  and the oni instantly retaliates (`_sodatsu_bane_retaliate`) in one of the three GDD
+  modes — heal 3×ML if wounded, else bolt the caster (4k4 attack vs Armor TN, DR ML k2
+  [BANE_BOLT_DR_KEPT PROVISIONAL — GDD "DR equal to the Mastery Level" leaves kept dice
+  unstated], 50 ft = 10 tiles), else harden +3×ML Armor TN for 3 rounds (timed modifier,
+  stacks). **Creature Magic Resistance (s54.10/s54.12)**: new
+  `SpiritCreatureData.spell_tn_bonus` (+ `spell_tn_bonus_element`, -1 = all) added into
+  `SpellSystem.resolve_cast`'s TN, element-gated. Populated Mujina +6 and Yamato no Orochi
+  +6 (the two creatures with an explicit GDD "+6 to Spell Casting TNs"). The "N Ranks of
+  Magic Resistance" creatures (Jimen 3/Earth, Akeru 3/Void, Moetechi 3/Fire, kodama 2,
+  Toichi 1/Earth, Hinotama 2/Earth+Void) are NOT populated — the GDD gives no uniform
+  Rank→TN conversion, so wiring them would invent a number (deferred, framework ready).
+  Runtime-verified 9/9 (MR +6 vs Mujina; Sodatsu absorb + slot spent + all three modes +
+  Armor TN raised). LIMITATION: a generic successful cast has no offensive/buff EFFECT yet
+  — the library entries are `{element, mastery, sim_effect}` with no damage/range/AoE, so
+  per-spell combat effects are **Phase 2** (faithful transcription from s31–s37, the bulk
+  of the work). Phase 1 delivers the casting plumbing + the reactions that fire off the act
+  of casting (the original #1 unblock: Shugenja's Bane + magic_resistance).
+  Also fixed: a misplaced `c["mujina"].spell_tn_bonus` injection had landed in
+  `chikushudo_catalog()` (spirit_bestiary has one catalog per realm) instead of
+  `sakkaku_catalog()` — caught at runtime (mujina spawn crashed), relocated.
+
 ### Pending Redesign
 (None currently pending.)
 

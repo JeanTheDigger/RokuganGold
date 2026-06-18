@@ -304,6 +304,7 @@ static func catalog() -> Dictionary:
 	c["akeru_no_oni"].reduction_obsidian = 0
 	c["mizu_no_oni"].reduction_jade = 10
 	c["mizu_no_oni"].reduction_crystal = 10
+	c["yamato_no_orochi"].spell_tn_bonus = 6  # s54.10 Magic Resistance (+6 to Spell Casting TNs)
 	return c
 
 
