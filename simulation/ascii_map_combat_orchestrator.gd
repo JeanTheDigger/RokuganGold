@@ -3180,6 +3180,20 @@ static func advance_round(
 				WoundSystem.apply_damage(_sv, _sd, 0)
 				if _cap.spirit_creature.swallow_taint:
 					_sv.taint = minf(100.0, _sv.taint + 1.0)
+		# Escalating poison (s54.5 Shikage Mind-Breaking / Paralyzing): per-Round Stamina
+		# TN 20 (+5/dose) or drain another Rank, until the victim saves or the Trait hits 0
+		# (Willpower 0 → mind-controlled, Reflexes 0 → paralyzed = incapacitated for the skirmish).
+		if not _tp.escalating_poison.is_empty():
+			var _ep_v: L5RCharacterData = chars_by_id.get(_tp.character_id, state.combatants.get(_tp.character_id, null))
+			if _ep_v == null or CharacterStats.is_dead(_ep_v):
+				_tp.escalating_poison = {}
+			else:
+				var _ep_trait: String = str(_tp.escalating_poison.get("trait", ""))
+				var _ep_res: Dictionary = DiseaseSystem.escalating_tick(_ep_v, _tp.escalating_poison, dice_engine)
+				if bool(_ep_res.get("incapacitated", false)):
+					_apply_escalating_incapacitation(state, _tp, _ep_v, _ep_trait)
+				if bool(_ep_res.get("ended", false)):
+					_tp.escalating_poison = {}
 		# Fire (s56.6.6 / s54.10 Everything Burns): a participant standing on a burning
 		# tile and/or set on fire takes 1k1 each round; armour does not reduce.
 		# flame_immune spirit creatures (Kagaki) take no fire damage.
@@ -4997,6 +5011,21 @@ static func _apply_hit(
 		elif pc.has_tag("poison_bite"):
 			if dice_engine.roll_and_keep(maxi(1, target.stamina), maxi(1, target.stamina), true).total < 20:
 				DiseaseSystem.apply_poison(target, "stamina")
+		# Escalating poison (s54.5 Shikage): −1 Rank now + a per-Round Stamina TN 20 (+5/dose)
+		# drain until the victim saves or the Trait hits 0 (Willpower 0 → mind-controlled,
+		# Reflexes 0 → paralyzed). Each sting stacks a dose. The per-Round tick runs in
+		# advance_round. The creature delivers its mind-breaking poison (Willpower); paralyzing
+		# (Reflexes) is the alternate. A target already paralyzed/mind-controlled is skipped.
+		var esc_trait: String = ""
+		if pc.has_tag("mind_breaking_poison"):
+			esc_trait = "willpower"
+		elif pc.has_tag("paralyzing_poison"):
+			esc_trait = "reflexes"
+		if esc_trait != "" and t_p != null and not t_p.conditions.has(IndividualCombat.CONDITION_STUNNED):
+			t_p.escalating_poison = DiseaseSystem.escalating_apply(target, t_p.escalating_poison, esc_trait)
+			if DiseaseSystem._get_trait(target, esc_trait) <= 0:
+				# Immediate collapse to 0 on the application — incapacitate now.
+				_apply_escalating_incapacitation(state, t_p, target, esc_trait)
 
 	# Feed Upon the Soul (s54.12 Kyoso no Oni spawn): killing a foe instantly heals the
 	# creature 5 × the slain enemy's Insight Rank.
@@ -5047,6 +5076,17 @@ static func _apply_disease_on_hit(attacker: L5RCharacterData, target: L5RCharact
 	elif cr.has_tag("plague_carrier"):
 		if dice.roll_die(5) == 1:  # 1-in-5 chance
 			DiseaseSystem.contract(target, DiseaseSystem.Type.PLAGUE_CARRIER, attacker.character_id)
+
+
+## s54.5 Shikage escalating-poison end state: the Trait reached 0. Willpower 0 → mind-controlled
+## (obeys commands, even suicidal — 24h); Reflexes 0 → paralyzed (12h). Both are modelled as a
+## timed Stunned condition (can't act, does NOT roll off — expires by duration) for the GDD
+## duration, effectively the rest of the skirmish. The full mind-control puppeteering (the
+## possessor directing the victim's actions) is not modelled — the victim is incapacitated.
+static func _apply_escalating_incapacitation(state: MapCombatState, t_p: IndividualCombat.Participant, _victim: L5RCharacterData, trait_name: String) -> void:
+	var minutes: int = 1440 if trait_name == "willpower" else 720  # 24h mind-control / 12h paralysis
+	var expiry: int = state.combat.round_number + minutes * IndividualCombat.ROUNDS_PER_MINUTE
+	IndividualCombat.apply_timed_condition(t_p, IndividualCombat.CONDITION_STUNNED, expiry)
 
 
 ## Spawn-on-death (s54.5): adds death_spawn_count copies of death_spawn_id near the slain

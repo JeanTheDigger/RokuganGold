@@ -122,28 +122,97 @@ static func is_poisoned(victim: L5RCharacterData) -> bool:
 	return not victim.poison_affliction.is_empty()
 
 
+## --- Escalating poison (s54.5 Shikage no Oni) ------------------------------------------
+## Mind-Breaking (Willpower) and Paralyzing (Reflexes) poisons: an immediate −1 Rank, then
+## a per-Round Stamina TN 20 roll (+5/extra dose) that drains another Rank on a failure until
+## the Stamina roll SUCCEEDS or the Trait reaches 0 (Willpower 0 → mind-controlled, Reflexes 0
+## → paralyzed). The combat layer owns the `state` dict (one per victim) and applies the
+## end-state incapacitation; this class runs the roll/drain math. Drained Ranks are banked into
+## poison_affliction for the world-sim restore (GDD 24h/12h → next-tick restore).
+const ESCALATING_POISON_TN: int = 20  # Shikage: per-Round Stamina roll
+const ESCALATING_DOSE_TN: int = 5     # +5 TN per additional dose
+
+## Initial application on a hit. `trait_name` = "willpower" (Mind-Breaking) or "reflexes"
+## (Paralyzing). Drains 1 Rank now and stacks the dose. Returns the updated escalating state
+## {trait, doses, drained}. A second toxin of a different trait is ignored (single slot).
+static func escalating_apply(victim: L5RCharacterData, state: Dictionary, trait_name: String) -> Dictionary:
+	if not state.is_empty() and str(state.get("trait", "")) != trait_name:
+		return state  # already suffering a different escalating poison — ignore
+	if state.is_empty():
+		state = {"trait": trait_name, "doses": 0, "drained": 0}
+	state["doses"] = int(state.get("doses", 0)) + 1
+	if _get_trait(victim, trait_name) > 0:
+		_drain(victim, [trait_name], 1)
+		state["drained"] = int(state.get("drained", 0)) + 1
+	return state
+
+
+## Per-Round Reactions-Stage tick. Rolls Stamina vs TN 20 + 5×(doses−1). On success the drain
+## STOPS (banks the drained Ranks for restore, returns ended); on failure drains 1 more Rank,
+## and at Trait 0 the victim is incapacitated (mind-controlled / paralyzed) and the drain ends.
+## Returns {ended, drained_more, incapacitated, trait}. `state` is cleared on end (caller drops it).
+static func escalating_tick(victim: L5RCharacterData, state: Dictionary, dice: DiceEngine) -> Dictionary:
+	if state.is_empty():
+		return {"ended": true}
+	var trait_name: String = str(state.get("trait", ""))
+	var doses: int = int(state.get("doses", 1))
+	if _get_trait(victim, trait_name) <= 0:
+		# Already at 0 from a prior tick/application — incapacitated, end the drain.
+		_bank_escalating_drain(victim, state)
+		return {"ended": true, "incapacitated": true, "trait": trait_name}
+	var tn: int = ESCALATING_POISON_TN + (doses - 1) * ESCALATING_DOSE_TN
+	var roll: int = dice.roll_and_keep(maxi(1, victim.stamina), maxi(1, victim.stamina), true).total
+	if roll >= tn:
+		_bank_escalating_drain(victim, state)  # fought it off — drained Ranks recover in the world-sim
+		return {"ended": true, "trait": trait_name}
+	_drain(victim, [trait_name], 1)
+	state["drained"] = int(state.get("drained", 0)) + 1
+	if _get_trait(victim, trait_name) <= 0:
+		_bank_escalating_drain(victim, state)
+		return {"ended": true, "drained_more": true, "incapacitated": true, "trait": trait_name}
+	return {"drained_more": true, "trait": trait_name}
+
+
+## Banks an ended escalating poison's drained Ranks into poison_affliction so the world-sim
+## daily restore returns them (single trait slot; merges if same trait, skips if another holds it).
+static func _bank_escalating_drain(victim: L5RCharacterData, state: Dictionary) -> void:
+	var trait_name: String = str(state.get("trait", ""))
+	var n: int = int(state.get("drained", 0))
+	if n <= 0:
+		return
+	var a: Dictionary = victim.poison_affliction
+	if a.is_empty():
+		victim.poison_affliction = {"trait": trait_name, "drained": n}
+	elif str(a.get("trait", "")) == trait_name:
+		a["drained"] = int(a.get("drained", 0)) + n
+		victim.poison_affliction = a
+
+
 static func _get_trait(victim: L5RCharacterData, trait_name: String) -> int:
 	match trait_name:
-		"stamina":  return victim.stamina
-		"reflexes": return victim.reflexes
-		"agility":  return victim.agility
-		"strength": return victim.strength
+		"stamina":   return victim.stamina
+		"reflexes":  return victim.reflexes
+		"agility":   return victim.agility
+		"strength":  return victim.strength
+		"willpower": return victim.willpower
 	return 0
 
 
 static func _restore(victim: L5RCharacterData, trait_name: String, amount: int) -> void:
 	match trait_name:
-		"stamina":  victim.stamina += amount
-		"reflexes": victim.reflexes += amount
-		"agility":  victim.agility += amount
-		"strength": victim.strength += amount
+		"stamina":   victim.stamina += amount
+		"reflexes":  victim.reflexes += amount
+		"agility":   victim.agility += amount
+		"strength":  victim.strength += amount
+		"willpower": victim.willpower += amount
 
 
 ## Drains the listed Traits by `amount`, floored at 0.
 static func _drain(victim: L5RCharacterData, traits: Array, amount: int) -> void:
 	for tr in traits:
 		match tr:
-			"stamina":  victim.stamina = maxi(0, victim.stamina - amount)
-			"reflexes": victim.reflexes = maxi(0, victim.reflexes - amount)
-			"agility":  victim.agility = maxi(0, victim.agility - amount)
-			"strength": victim.strength = maxi(0, victim.strength - amount)
+			"stamina":   victim.stamina = maxi(0, victim.stamina - amount)
+			"reflexes":  victim.reflexes = maxi(0, victim.reflexes - amount)
+			"agility":   victim.agility = maxi(0, victim.agility - amount)
+			"strength":  victim.strength = maxi(0, victim.strength - amount)
+			"willpower": victim.willpower = maxi(0, victim.willpower - amount)
