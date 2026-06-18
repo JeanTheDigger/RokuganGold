@@ -497,6 +497,7 @@ static func _generate_wall_characters(
 	southern.operational_superior_id = -1
 	if towers_by_number.has(3):
 		southern.physical_location = str(towers_by_number[3].settlement_id)
+	WorldGenerator.equip_jade_weapons(southern)  # Kaiu Wall garrison carries jade (owner 2026-06-18)
 	chars.append(southern)
 
 	var northern: L5RCharacterData = _generate_positioned_character(
@@ -505,6 +506,7 @@ static func _generate_wall_characters(
 	northern.operational_superior_id = -1
 	if towers_by_number.has(10):
 		northern.physical_location = str(towers_by_number[10].settlement_id)
+	WorldGenerator.equip_jade_weapons(northern)  # Kaiu Wall garrison carries jade (owner 2026-06-18)
 	chars.append(northern)
 
 	# Tower Commanders (Taisa) + per-tower Kaiu Engineer and Kuni Shugenja.
@@ -520,6 +522,7 @@ static func _generate_wall_characters(
 		)
 		taisa.operational_superior_id = shireikan_id
 		taisa.physical_location = loc
+		WorldGenerator.equip_jade_weapons(taisa)  # Kaiu Wall garrison carries jade (owner 2026-06-18)
 		chars.append(taisa)
 
 		chars.append(_make_wall_staff(

@@ -765,6 +765,22 @@ static func _assign_weapons(c: L5RCharacterData) -> void:
 
 	c.weapons = weapons
 
+	# Jade weapons (owner decision 2026-06-18; grounded in s47 "jade-equipped defenders" /
+	# s11.3.5): the Kuni family (Witch-Hunters and Shugenja) — the Crab's anti-Shadowlands
+	# specialists — carry jade-edged weapons so they can wound Tainted/invulnerable creatures.
+	# The Kaiu Wall garrison roster is handled separately in the world population generator.
+	if c.family == "Kuni":
+		equip_jade_weapons(c)
+
+
+## Sets every melee weapon's material to "jade" so the s54 spirit/oni damage filter treats
+## the wielder's strikes as jade (pierces partial/superior invulnerability; +damage vs Taint).
+## Ranged weapons (yumi) are left mundane. Owner-approved for Kuni + Kaiu Wall garrison.
+static func equip_jade_weapons(c: L5RCharacterData) -> void:
+	for w: WeaponData in c.weapons:
+		if w != null and w.melee:
+			w.material = "jade"
+
 
 # =============================================================================
 # PROVINCE GENERATION
