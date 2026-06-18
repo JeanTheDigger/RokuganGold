@@ -5371,10 +5371,18 @@ static func _weapon_kind(attacker: L5RCharacterData, weapon_name: String) -> Str
 ## Fire damage for a character this round: base standing damage (1k1) plus the s54.5/s54.12
 ## fire_susceptible bonus (+2k2 — Quiet Death's flesh combusts) for any fire source.
 static func _fire_damage_for(c: L5RCharacterData, dice: DiceEngine) -> int:
-	var dmg: int = FireSystem.standing_damage(dice)
-	if c.spirit_creature != null and c.spirit_creature.has_tag("fire_susceptible"):
-		dmg += dice.roll_and_keep(2, 2, true).total
-	return dmg
+	# Base per-round burn is 1k1 (FireSystem.standing_damage). Fire vulnerabilities add
+	# extra dice to that roll (folded into the pool — "+NkM", not a separate roll, so a
+	# "+1k0" actually grants an extra rolled die rather than rolling 1-keep-0 = nothing).
+	var rolled: int = 1
+	var kept: int = 1
+	if c.spirit_creature != null:
+		if c.spirit_creature.has_tag("fire_susceptible"):
+			rolled += 2  # +2k2 (s54.5 Quiet Death: "additional +2k2 from fire")
+			kept += 2
+		elif c.spirit_creature.has_tag("water_vulnerable_fire"):
+			rolled += 1  # +1k0 mundane fire (s54.12 Mizu no Oni / Oyuchi no Kansen)
+	return dice.roll_and_keep(rolled, kept, true).total
 
 
 ## Spawn-on-death (s54.5): adds death_spawn_count copies of death_spawn_id near the slain
