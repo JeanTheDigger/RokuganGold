@@ -53,21 +53,21 @@ const TACTICAL_ROUNDS_T2: int = 6        # ...+2k0 after 6 rounds
 ## then Pekkle half-damage, then Kagaki fire/water. Multiple filters compose by
 ## taking the most protective (lowest multiplier) — the GDD never stacks two on one
 ## creature, so order is academic, but lowest-wins is the safe rule.
-static func incoming_damage(creature: SpiritCreatureData, weapon_kind: String) -> Dictionary:
+static func incoming_damage(creature: SpiritCreatureData, weapon_kind: String, is_magic: bool = false) -> Dictionary:
 	var mult: float = 1.0
 	var heals: bool = false
 	var no_explode: bool = false
 
 	# Incorporeal (Muzai-gaki): only magic and crystal harm it; physical passes through.
 	if creature.has_tag("incorporeal"):
-		if weapon_kind == W_MAGIC or weapon_kind == W_CRYSTAL:
+		if is_magic or weapon_kind == W_MAGIC or weapon_kind == W_CRYSTAL:
 			mult = minf(mult, 1.0)
 		else:
 			mult = 0.0
 
 	# Superior Invulnerability (Mokumokuren): only magic and jade deal Wounds.
 	if creature.has_tag("superior_invuln"):
-		if weapon_kind == W_MAGIC or weapon_kind == W_JADE:
+		if is_magic or weapon_kind == W_MAGIC or weapon_kind == W_JADE:
 			mult = minf(mult, 1.0)
 		else:
 			mult = 0.0

@@ -38,6 +38,35 @@ const JADE_CRYSTAL_PROPERTY_SPELLS: Dictionary = {"jade_strike": true}
 static func has_jade_or_crystal_property(spell_id: String) -> bool:
 	return JADE_CRYSTAL_PROPERTY_SPELLS.get(spell_id, false)
 
+## Phase 2 — per-spell combat effects (s31–s37), transcribed from the GDD. Keyed by spell_id.
+## Only the unambiguous direct-damage spells are encoded in this tranche (Fire). Fields:
+##   kind        : "damage"
+##   dr_rolled / dr_kept : damage roll dice; 0/0 means "DR = caster's Fire Ring" (Ring k Ring)
+##   range_tiles : single-target reach in tiles (1 tile = 5 ft); 0 = self-centered AoE
+##   aoe_radius  : 0 = single target; >0 = radius in tiles (Chebyshev), centered on the caster
+##   aoe_hits    : "enemies" (foes only) or "all" (friend + foe)
+##   caster_exempt : AoE never damages the caster
+##   is_magic    : routes through the invuln filter as magic (fire spells read as magic + fire)
+## Range/area converted from GDD feet at 5 ft = 1 tile. Multi-round channels (Breath of the
+## Fire Dragon) are applied as a single immediate blast — the 4-round channel is deferred.
+const SPELL_COMBAT_EFFECTS: Dictionary = {
+	# Fire 1 (Thunder), Range 300', single target, 5k2 (weather bonus deferred; outdoors check deferred)
+	"fury_of_osano_wo": {"kind": "damage", "dr_rolled": 5, "dr_kept": 2,
+		"range_tiles": 60, "aoe_radius": 0, "is_magic": true},
+	# Fire 3, Personal, 15'x5' cone, DR = Fire Ring — modeled as a self-centered radius-3 enemy blast
+	"breath_of_the_fire_dragon": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
+		"range_tiles": 0, "aoe_radius": 3, "aoe_hits": "enemies", "caster_exempt": true, "is_magic": true},
+	# Fire 5, Personal, 25' radius, 7k7 to all (friend + foe), caster exempt
+	"destructive_wave": {"kind": "damage", "dr_rolled": 7, "dr_kept": 7,
+		"range_tiles": 0, "aoe_radius": 5, "aoe_hits": "all", "caster_exempt": true, "is_magic": true},
+	# Fire 6, Range 200', single target, 10k10
+	"beam_of_the_inferno": {"kind": "damage", "dr_rolled": 10, "dr_kept": 10,
+		"range_tiles": 40, "aoe_radius": 0, "is_magic": true},
+}
+
+static func get_combat_effect(spell_id: String) -> Dictionary:
+	return SPELL_COMBAT_EFFECTS.get(spell_id, {})
+
 
 const SPELL_LIBRARY: Dictionary = {
 	# === UNIVERSAL (s32) — available to all shugenja ===

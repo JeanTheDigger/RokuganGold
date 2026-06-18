@@ -5294,6 +5294,35 @@ the same actor without proper turn advancement.
   Also fixed: a misplaced `c["mujina"].spell_tn_bonus` injection had landed in
   `chikushudo_catalog()` (spirit_bestiary has one catalog per realm) instead of
   `sakkaku_catalog()` — caught at runtime (mujina spawn crashed), relocated.
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 1: direct-damage Fire spells
+  (owner-authorized 2026-06-18).** First per-spell combat EFFECTS layer on top of the Phase 1
+  casting plumbing. New additive `SpellSystem.SPELL_COMBAT_EFFECTS` dict + `get_combat_effect()`
+  — a per-spell GDD-transcribed combat-effect schema (`kind/dr_rolled/dr_kept/range_tiles/
+  aoe_radius/aoe_hits/caster_exempt/is_magic`), kept separate from the `{e,m,s}` library so it
+  stays clean. Four unambiguous direct-damage Fire spells encoded (s35, exact GDD values, 5 ft =
+  1 tile): **Fury of Osano-Wo** (5k2 single, 300'→60-tile = LOS), **Beam of the Inferno** (10k10
+  single, 200'→40-tile), **Breath of the Fire Dragon** (DR = caster's Fire Ring, self-centered,
+  enemies-only — the 15'×5' cone modeled as a radius-3 blast, caster exempt), **Destructive Wave**
+  (7k7, 25'→radius-5, friend+foe, caster exempt). `AsciiMapCombatOrchestrator.execute_cast_spell`
+  gains a damage branch (after the Furaribi-retreat block, gated on success + a `"damage"` effect)
+  → `_apply_spell_combat_damage()`: resolves single-target (with a range check that fizzles an
+  out-of-range cast, slot already spent) or self-centered AoE (Chebyshev radius; enemies-only via
+  faction, or all; caster always exempt), rolls the DR per target (exploding; DR = Fire Ring when
+  `dr_*` is 0), and applies it through `WoundSystem.apply_damage(…, 0)` (elemental fire bypasses
+  armor). Spirit targets route through `SpiritAbilitySystem.incoming_damage(creature, W_FIRE,
+  is_magic=true)` — a new backward-compatible `is_magic` param so a fire SPELL reads as **magic**
+  for the invuln tags (incorporeal/superior_invuln/partial_invuln let it through) AND as **fire**
+  for `flame_immune` (Kagaki/Taki-bi take 0 and HEAL) and `water_vulnerable`. Returns a per-target
+  `{id, damage|healed, dead}` report (on `res["spell_damage"]` + combat log). Also fixed: the AoE
+  faction comparison used `int(...)` but `FACTION_*` are Strings (caught at runtime). Runtime-verified
+  6/6 (beam single, fury single, AoE-all hits both ally+enemy, caster exempt = 0 wounds, breath
+  enemies-only spares the ally, flame_immune spirit heals from the fire spell). DEFERRED (next
+  tranches): the buff/aura Fire spells (Fires of Purity wreath, Katana of Fire, weapon enhancers —
+  need persistent buff state + a melee retaliation hook), terrain-ignition (Fiery Wrath → FireSystem),
+  instant-kill edge cases (Death of Flame's reciprocal self-damage), multi-round channels (Breath's
+  4-round Simple-action repeat), weather damage bonuses (Fury's storm 6k2/6k3), targeting
+  restrictions (Dragon's Talon Insight ≤2), and the other four elements + Universal (Air/Earth/Water/
+  Void direct-damage + utility). The schema generalizes to those; this tranche proves the pipeline.
 
 ### Pending Redesign
 (None currently pending.)

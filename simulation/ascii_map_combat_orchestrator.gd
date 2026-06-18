@@ -1783,13 +1783,84 @@ static func execute_cast_spell(
 			"type": "spirit_repelled", "round": state.combat.round_number,
 			"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
 		})
-	# Other per-spell offensive/buff effects on success are Phase 2 (not yet encoded).
+	# Phase 2 — per-spell direct-damage effects (s31–s37, currently Fire tranche).
+	var eff: Dictionary = SpellSystem.get_combat_effect(spell_id)
+	if res.get("success", false) and eff.get("kind", "") == "damage" \
+			and not res.get("spirit_retreated", false):
+		res["spell_damage"] = _apply_spell_combat_damage(
+			state, caster_id, caster, target_id, target, eff, dice_engine)
+		state.combat_log.append({
+			"type": "spell_damage", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "hits": res["spell_damage"],
+		})
 	state.combat_log.append({
 		"type": "spell_cast", "round": state.combat.round_number,
 		"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
 		"success": res.get("success", false),
 	})
 	return res
+
+
+## Apply a damage-type spell's combat effect (Phase 2). Single-target or self-centered AoE.
+## One damage roll per affected target; spirit targets routed through the incoming-damage
+## filter as fire+magic (flame_immune blocks/heals; invuln tags let magic through). Returns
+## an Array of per-target {id, damage|healed, dead} reports.
+static func _apply_spell_combat_damage(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary,
+	dice_engine: DiceEngine,
+) -> Array:
+	var hits: Array = []
+	var radius: int = eff.get("aoe_radius", 0)
+	var targets: Array = []
+	if radius <= 0:
+		if target == null:
+			return hits
+		var rng: int = eff.get("range_tiles", 0)
+		if rng > 0 and state.positions.has(caster_id) and state.positions.has(target_id):
+			var cp: Vector2i = state.positions[caster_id]
+			var tp: Vector2i = state.positions[target_id]
+			if maxi(absi(cp.x - tp.x), absi(cp.y - tp.y)) > rng:
+				return hits  # out of range — the cast fizzles (slot already spent)
+		targets.append({"id": target_id, "char": target})
+	else:
+		var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+		var hits_all: bool = eff.get("aoe_hits", "enemies") == "all"
+		var cf: String = state.factions.get(caster_id, FACTION_PLAYER)
+		for cid in state.positions.keys():
+			if cid == caster_id:
+				continue
+			var pos: Vector2i = state.positions[cid]
+			if maxi(absi(center.x - pos.x), absi(center.y - pos.y)) > radius:
+				continue
+			if not hits_all and String(state.factions.get(cid, "")) == cf:
+				continue
+			var ch = state.combatants.get(cid, null)
+			if ch == null or CharacterStats.is_dead(ch):
+				continue
+			targets.append({"id": cid, "char": ch})
+	var fr: int = SpellSystem.get_ring_value(caster, Enums.Ring.FIRE)
+	var rolled: int = eff.get("dr_rolled", 0)
+	if rolled <= 0:
+		rolled = fr
+	var kept: int = eff.get("dr_kept", 0)
+	if kept <= 0:
+		kept = fr
+	var is_magic: bool = eff.get("is_magic", false)
+	for t in targets:
+		var ch: L5RCharacterData = t["char"]
+		var dmg: int = dice_engine.roll_and_keep(rolled, kept, true).total
+		if ch.spirit_creature != null:
+			var filt: Dictionary = SpiritAbilitySystem.incoming_damage(
+				ch.spirit_creature, SpiritAbilitySystem.W_FIRE, is_magic)
+			if filt.get("heals", false):
+				WoundSystem.heal_wounds(ch, dmg)
+				hits.append({"id": t["id"], "healed": dmg})
+				continue
+			dmg = int(round(dmg * filt.get("multiplier", 1.0)))
+		WoundSystem.apply_damage(ch, dmg, 0)
+		hits.append({"id": t["id"], "damage": dmg, "dead": CharacterStats.is_dead(ch)})
+	return hits
 
 
 ## Sodatsu no Oni Shugenja's Bane retaliation (s54.5): a Free Action picking one of three
