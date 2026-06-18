@@ -39,29 +39,56 @@ static func has_jade_or_crystal_property(spell_id: String) -> bool:
 	return JADE_CRYSTAL_PROPERTY_SPELLS.get(spell_id, false)
 
 ## Phase 2 — per-spell combat effects (s31–s37), transcribed from the GDD. Keyed by spell_id.
-## Only the unambiguous direct-damage spells are encoded in this tranche (Fire). Fields:
+## Direct-damage spells across all five rings. Fields:
 ##   kind        : "damage"
-##   dr_rolled / dr_kept : damage roll dice; 0/0 means "DR = caster's Fire Ring" (Ring k Ring)
-##   range_tiles : single-target reach in tiles (1 tile = 5 ft); 0 = self-centered AoE
-##   aoe_radius  : 0 = single target; >0 = radius in tiles (Chebyshev), centered on the caster
+##   dr_rolled / dr_kept : damage roll dice; 0 means "use the spell's element Ring"
+##   dr_rolled_bonus : added to the rolled count after the ring substitution (Slayer's Knives: ring+2)
+##   range_tiles : single-target reach, OR cast range to an AoE center, in tiles (1 tile = 5 ft); 0 = self-centered
+##   aoe_radius  : 0 = single target; >0 = radius in tiles (Chebyshev). Centered on the target tile when
+##                 range_tiles>0 (targeted blast), else on the caster (self-centered cone/burst)
 ##   aoe_hits    : "enemies" (foes only) or "all" (friend + foe)
 ##   caster_exempt : AoE never damages the caster
-##   is_magic    : routes through the invuln filter as magic (fire spells read as magic + fire)
-## Range/area converted from GDD feet at 5 ft = 1 tile. Multi-round channels (Breath of the
-## Fire Dragon) are applied as a single immediate blast — the 4-round channel is deferred.
+##   requires_taint : 0 damage to a target with Taint Rank < 1 (Jade Strike)
+## DR routes through the invuln filter as magic (always) + the spell's element kind (fire/water), so
+## flame_immune blocks/heals fire spells and water_vulnerable doubles water spells. Cones/diameters are
+## modeled as Chebyshev radii (length-or-diameter ÷ 5 = tiles) — an over-application behind the caster,
+## since facing is not tracked (same compromise as the kiho cone layer). Multi-round channels, Knockdown/
+## Fatigue/Daze riders, and weather damage bonuses are deferred to later tranches.
 const SPELL_COMBAT_EFFECTS: Dictionary = {
-	# Fire 1 (Thunder), Range 300', single target, 5k2 (weather bonus deferred; outdoors check deferred)
+	# --- Fire (s35) ---
 	"fury_of_osano_wo": {"kind": "damage", "dr_rolled": 5, "dr_kept": 2,
-		"range_tiles": 60, "aoe_radius": 0, "is_magic": true},
-	# Fire 3, Personal, 15'x5' cone, DR = Fire Ring — modeled as a self-centered radius-3 enemy blast
+		"range_tiles": 60, "aoe_radius": 0},
 	"breath_of_the_fire_dragon": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
-		"range_tiles": 0, "aoe_radius": 3, "aoe_hits": "enemies", "caster_exempt": true, "is_magic": true},
-	# Fire 5, Personal, 25' radius, 7k7 to all (friend + foe), caster exempt
+		"range_tiles": 0, "aoe_radius": 3, "aoe_hits": "enemies", "caster_exempt": true},
 	"destructive_wave": {"kind": "damage", "dr_rolled": 7, "dr_kept": 7,
-		"range_tiles": 0, "aoe_radius": 5, "aoe_hits": "all", "caster_exempt": true, "is_magic": true},
-	# Fire 6, Range 200', single target, 10k10
+		"range_tiles": 0, "aoe_radius": 5, "aoe_hits": "all", "caster_exempt": true},
 	"beam_of_the_inferno": {"kind": "damage", "dr_rolled": 10, "dr_kept": 10,
-		"range_tiles": 40, "aoe_radius": 0, "is_magic": true},
+		"range_tiles": 40, "aoe_radius": 0},
+	# --- Air (s33) ---
+	# Tempest of Air: Personal, 75' cone, 1k1 (Knockdown rider deferred)
+	"tempest_of_air": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1,
+		"range_tiles": 0, "aoe_radius": 15, "aoe_hits": "enemies", "caster_exempt": true},
+	# Howl of Isora: Range 100', 40' diameter burst, 3k2 to all (Fatigue rider deferred)
+	"howl_of_isora": {"kind": "damage", "dr_rolled": 3, "dr_kept": 2,
+		"range_tiles": 20, "aoe_radius": 4, "aoe_hits": "all", "caster_exempt": true},
+	# Slayer's Knives: Range 30' corridor, DR = Air Ring +2k0 (Knockdown rider deferred)
+	"slayers_knives": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0, "dr_rolled_bonus": 2,
+		"range_tiles": 0, "aoe_radius": 6, "aoe_hits": "enemies", "caster_exempt": true},
+	# --- Earth (s34) ---
+	# Jade Strike: Range 100', single, DR 3k3 ONLY vs Taint Rank 1+ (also a jade-property spell)
+	"jade_strike": {"kind": "damage", "dr_rolled": 3, "dr_kept": 3,
+		"range_tiles": 20, "aoe_radius": 0, "requires_taint": true},
+	# --- Water (s36) ---
+	# Strike of the Tsunami: Range 25' cone, 3k3 (Knockdown rider deferred)
+	"strike_of_the_tsunami": {"kind": "damage", "dr_rolled": 3, "dr_kept": 3,
+		"range_tiles": 0, "aoe_radius": 5, "aoe_hits": "enemies", "caster_exempt": true},
+	# --- Void (s37, Ishiken-only) ---
+	# Touch the Emptiness: Range 30', single, 1k1 (Daze rider deferred)
+	"touch_the_emptiness": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1,
+		"range_tiles": 6, "aoe_radius": 0},
+	# Void Strike: Range 50', single, DR = caster's Void Ring
+	"void_strike": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
+		"range_tiles": 10, "aoe_radius": 0},
 }
 
 static func get_combat_effect(spell_id: String) -> Dictionary:

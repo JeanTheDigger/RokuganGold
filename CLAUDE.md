@@ -5323,6 +5323,27 @@ the same actor without proper turn advancement.
   4-round Simple-action repeat), weather damage bonuses (Fury's storm 6k2/6k3), targeting
   restrictions (Dragon's Talon Insight ≤2), and the other four elements + Universal (Air/Earth/Water/
   Void direct-damage + utility). The schema generalizes to those; this tranche proves the pipeline.
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 2: other-element direct damage
+  (owner-authorized 2026-06-18).** Extends the tranche-1 schema across the remaining four rings
+  (exact GDD values). New schema fields: `dr_rolled_bonus` (added after the ring substitution —
+  Slayer's Knives DR = Air Ring +2k0) and `requires_taint` (0 damage to a target with Taint Rank
+  < 1 — Jade Strike). `_apply_spell_combat_damage` rewritten element-aware: DR=0 now uses the
+  spell's **element** Ring (not always Fire); the spirit-damage filter kind is derived from the
+  element (Fire→W_FIRE so flame_immune heals, Water→W_WATER so water_vulnerable doubles, else
+  W_MAGIC), always `is_magic=true`; AoE centers on the **target tile** when ranged (targeted blast
+  — Howl of Isora) and on the caster when self-centered (cones/bursts). Seven spells encoded:
+  **Air** — Tempest of Air (1k1, 75' cone), Howl of Isora (3k2, 40'-diameter targeted burst, all),
+  Slayer's Knives (Air+2 k Air, 30' corridor); **Earth** — Jade Strike (3k3, single, taint-gated,
+  also the jade-property repel from Phase 1); **Water** — Strike of the Tsunami (3k3, 25' cone);
+  **Void** (Ishiken-only) — Touch the Emptiness (1k1, single), Void Strike (Void-Ring DR, single).
+  Cones/diameters modeled as Chebyshev radii (length÷5 = tiles) — over-applies behind the caster
+  (no facing, same compromise as the kiho cone layer). Runtime-verified 7/7 (jade_strike damages
+  tainted / 0 vs non-tainted; void_strike Ishiken + Void-Ring DR; slayers_knives Air+2 DR;
+  howl_of_isora centers on the aim point + hits all near it, spares the distant caster;
+  strike_of_the_tsunami enemies-only). DEFERRED (riders/edge cases, later tranches): Knockdown
+  (Tempest/Slayer's/Tsunami), Fatigue (Howl), Daze (Touch the Emptiness), weather bonuses,
+  earthquake/pit structure-and-terrain spells, multi-round transforms (Tomb of Jade), and the
+  buff/weapon/condition spell families.
 
 ### Pending Redesign
 (None currently pending.)

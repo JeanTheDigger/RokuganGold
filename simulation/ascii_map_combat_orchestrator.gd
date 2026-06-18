@@ -1788,7 +1788,7 @@ static func execute_cast_spell(
 	if res.get("success", false) and eff.get("kind", "") == "damage" \
 			and not res.get("spirit_retreated", false):
 		res["spell_damage"] = _apply_spell_combat_damage(
-			state, caster_id, caster, target_id, target, eff, dice_engine)
+			state, caster_id, caster, target_id, target, eff, spell_id, dice_engine)
 		state.combat_log.append({
 			"type": "spell_damage", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "hits": res["spell_damage"],
@@ -1807,16 +1807,17 @@ static func execute_cast_spell(
 ## an Array of per-target {id, damage|healed, dead} reports.
 static func _apply_spell_combat_damage(
 	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
-	target_id: int, target: L5RCharacterData, eff: Dictionary,
+	target_id: int, target: L5RCharacterData, eff: Dictionary, spell_id: String,
 	dice_engine: DiceEngine,
 ) -> Array:
 	var hits: Array = []
 	var radius: int = eff.get("aoe_radius", 0)
+	var rng: int = eff.get("range_tiles", 0)
 	var targets: Array = []
 	if radius <= 0:
+		# Single target.
 		if target == null:
 			return hits
-		var rng: int = eff.get("range_tiles", 0)
 		if rng > 0 and state.positions.has(caster_id) and state.positions.has(target_id):
 			var cp: Vector2i = state.positions[caster_id]
 			var tp: Vector2i = state.positions[target_id]
@@ -1824,7 +1825,14 @@ static func _apply_spell_combat_damage(
 				return hits  # out of range — the cast fizzles (slot already spent)
 		targets.append({"id": target_id, "char": target})
 	else:
+		# AoE: centered on the target tile when ranged (targeted blast), else on the caster.
 		var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+		if rng > 0 and state.positions.has(target_id):
+			var caster_pos: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+			var aim: Vector2i = state.positions[target_id]
+			if maxi(absi(caster_pos.x - aim.x), absi(caster_pos.y - aim.y)) > rng:
+				return hits  # aim point out of cast range
+			center = aim
 		var hits_all: bool = eff.get("aoe_hits", "enemies") == "all"
 		var cf: String = state.factions.get(caster_id, FACTION_PLAYER)
 		for cid in state.positions.keys():
@@ -1839,20 +1847,31 @@ static func _apply_spell_combat_damage(
 			if ch == null or CharacterStats.is_dead(ch):
 				continue
 			targets.append({"id": cid, "char": ch})
-	var fr: int = SpellSystem.get_ring_value(caster, Enums.Ring.FIRE)
+	# DR uses the spell's element Ring when dr_* is 0; spirit damage filter keyed on that element.
+	var element: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("e", Enums.Ring.FIRE)
+	var ering: int = SpellSystem.get_ring_value(caster, element)
 	var rolled: int = eff.get("dr_rolled", 0)
 	if rolled <= 0:
-		rolled = fr
+		rolled = ering
+	rolled += int(eff.get("dr_rolled_bonus", 0))
 	var kept: int = eff.get("dr_kept", 0)
 	if kept <= 0:
-		kept = fr
-	var is_magic: bool = eff.get("is_magic", false)
+		kept = ering
+	var kind: String = SpiritAbilitySystem.W_MAGIC
+	if element == Enums.Ring.FIRE:
+		kind = SpiritAbilitySystem.W_FIRE
+	elif element == Enums.Ring.WATER:
+		kind = SpiritAbilitySystem.W_WATER
+	var needs_taint: bool = eff.get("requires_taint", false)
 	for t in targets:
 		var ch: L5RCharacterData = t["char"]
+		if needs_taint and MutationSystem.get_taint_rank(ch.taint) < 1:
+			hits.append({"id": t["id"], "damage": 0, "immune_no_taint": true})
+			continue
 		var dmg: int = dice_engine.roll_and_keep(rolled, kept, true).total
 		if ch.spirit_creature != null:
 			var filt: Dictionary = SpiritAbilitySystem.incoming_damage(
-				ch.spirit_creature, SpiritAbilitySystem.W_FIRE, is_magic)
+				ch.spirit_creature, kind, true)  # spells always read as magic for invuln tags
 			if filt.get("heals", false):
 				WoundSystem.heal_wounds(ch, dmg)
 				hits.append({"id": t["id"], "healed": dmg})
