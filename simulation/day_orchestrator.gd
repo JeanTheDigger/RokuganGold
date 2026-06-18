@@ -3901,6 +3901,7 @@ static func _process_kolat_writebacks(
 					if recruit != null and not CharacterStats.is_dead(recruit) and not recruit.is_pc and recruit.kolat_sect == Enums.KolatSect.NONE:
 						var rs: Enums.KolatSect = effects.get("recruiter_sect", Enums.KolatSect.NONE)
 						recruit.kolat_sect = rs
+						WorldGenerator.equip_crystal_weapons(recruit)  # s54.7 Kolat crystal weapons (owner 2026-06-18)
 						KolatNetwork.register_recruit(recruiter, recruit.character_id, recruit.physical_location, ic_day)
 						# Honor −0.5 on success (s54.7c).
 						HonorGlorySystem.apply_honor_change(recruiter, -float(effects.get("honor_loss", 0.5)))

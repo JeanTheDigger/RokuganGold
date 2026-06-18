@@ -343,6 +343,7 @@ static func _apply_master(npc: L5RCharacterData, sect: int) -> void:
 		return
 	npc.is_kolat_master = true
 	npc.kolat_sect = sect
+	WorldGenerator.equip_crystal_weapons(npc)  # s54.7 Kolat crystal weapons (owner 2026-06-18)
 	# Apply Sect skill boosts (max rule — never lower).
 	for skill_name: String in SECT_BOOSTS.get(sect, {}).keys():
 		var boosted: int = SECT_BOOSTS[sect][skill_name]

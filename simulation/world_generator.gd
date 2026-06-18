@@ -782,6 +782,17 @@ static func equip_jade_weapons(c: L5RCharacterData) -> void:
 			w.material = "jade"
 
 
+## Sets every melee weapon's material to "crystal" so the s54 spirit/oni damage filter
+## treats the wielder's strikes as crystal (pierces partial/superior invulnerability, like
+## jade). Ranged weapons left mundane. Owner-approved for Kolat Masters/agents (s54.7:
+## "agents with crystal weapons" purged the Shadowspawn). Does not overwrite jade (a Kuni
+## drawn into the Kolat keeps the more anti-Shadowlands material).
+static func equip_crystal_weapons(c: L5RCharacterData) -> void:
+	for w: WeaponData in c.weapons:
+		if w != null and w.melee and w.material != "jade":
+			w.material = "crystal"
+
+
 # =============================================================================
 # PROVINCE GENERATION
 # =============================================================================
