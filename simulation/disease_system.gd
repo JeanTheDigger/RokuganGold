@@ -92,34 +92,43 @@ static func process_daily(victim: L5RCharacterData, ic_day: int, dice: DiceEngin
 ## --- Poison / venom (s54.11/s54.12) -----------------------------------------------------
 ## An immediate Trait drain per hit (Strength for stingers, Stamina for bites), restored in
 ## the world-sim. GDD recovery is sub-day (1hr/dose) to 24h, which collapses to a next-tick
-## full restore at the daily granularity. One poison trait at a time per victim (stacks).
+## full restore at the daily granularity. Multiple toxins coexist: poison_affliction holds a
+## per-Trait drained-Rank tally `{"traits": {trait: count}}`, so a stinger (Strength) and an
+## escalating Shikage poison (Willpower/Reflexes) each get restored independently.
 static func apply_poison(victim: L5RCharacterData, trait_name: String, ranks: int = 1) -> void:
-	var a: Dictionary = victim.poison_affliction
-	if a.is_empty():
-		a = {"trait": trait_name, "drained": 0}
-	elif str(a.get("trait", "")) != trait_name:
-		return  # already poisoned with a different trait — ignore the second toxin
 	for _i in range(ranks):
 		if _get_trait(victim, trait_name) > 0:  # only count ranks actually removed
 			_drain(victim, [trait_name], 1)
-			a["drained"] = int(a.get("drained", 0)) + 1
-	victim.poison_affliction = a
+			_bank_poison(victim, trait_name, 1)
 
 
 ## Daily world-sim restore: returns the drained Traits (recovery < 1 day). Clears the poison.
 static func process_poison_daily(victim: L5RCharacterData) -> Dictionary:
 	if victim.poison_affliction.is_empty():
 		return {}
-	var a: Dictionary = victim.poison_affliction
-	var n: int = int(a.get("drained", 0))
-	var tr: String = str(a.get("trait", ""))
-	_restore(victim, tr, n)
+	var by: Dictionary = victim.poison_affliction.get("traits", {})
+	var recovered: Dictionary = {}
+	for tr in by.keys():
+		var n: int = int(by[tr])
+		_restore(victim, str(tr), n)
+		recovered[tr] = n
 	victim.poison_affliction = {}
-	return {"recovered": n, "trait": tr}
+	return {"recovered": recovered}
 
 
 static func is_poisoned(victim: L5RCharacterData) -> bool:
 	return not victim.poison_affliction.is_empty()
+
+
+## Banks `n` drained Ranks of `trait_name` into poison_affliction for the world-sim restore.
+static func _bank_poison(victim: L5RCharacterData, trait_name: String, n: int) -> void:
+	if n <= 0:
+		return
+	var a: Dictionary = victim.poison_affliction
+	var by: Dictionary = a.get("traits", {})
+	by[trait_name] = int(by.get(trait_name, 0)) + n
+	a["traits"] = by
+	victim.poison_affliction = a
 
 
 ## --- Escalating poison (s54.5 Shikage no Oni) ------------------------------------------
@@ -174,18 +183,9 @@ static func escalating_tick(victim: L5RCharacterData, state: Dictionary, dice: D
 
 
 ## Banks an ended escalating poison's drained Ranks into poison_affliction so the world-sim
-## daily restore returns them (single trait slot; merges if same trait, skips if another holds it).
+## daily restore returns them (per-Trait tally — coexists with any stinger/bite poison).
 static func _bank_escalating_drain(victim: L5RCharacterData, state: Dictionary) -> void:
-	var trait_name: String = str(state.get("trait", ""))
-	var n: int = int(state.get("drained", 0))
-	if n <= 0:
-		return
-	var a: Dictionary = victim.poison_affliction
-	if a.is_empty():
-		victim.poison_affliction = {"trait": trait_name, "drained": n}
-	elif str(a.get("trait", "")) == trait_name:
-		a["drained"] = int(a.get("drained", 0)) + n
-		victim.poison_affliction = a
+	_bank_poison(victim, str(state.get("trait", "")), int(state.get("drained", 0)))
 
 
 static func _get_trait(victim: L5RCharacterData, trait_name: String) -> int:

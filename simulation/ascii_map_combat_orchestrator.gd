@@ -3202,9 +3202,9 @@ static func advance_round(
 				and not (_fc.spirit_creature != null and _fc.spirit_creature.has_tag("flame_immune")):
 			var _fpos: Vector2i = state.positions.get(_tp.character_id, Vector2i(-9999, -9999))
 			if FireSystem.is_burning(state.map, _fpos.x, _fpos.y):
-				WoundSystem.apply_damage(_fc, FireSystem.standing_damage(dice_engine), 0)
+				WoundSystem.apply_damage(_fc, _fire_damage_for(_fc, dice_engine), 0)
 			if _tp.on_fire and not CharacterStats.is_dead(_fc):
-				WoundSystem.apply_damage(_fc, FireSystem.standing_damage(dice_engine), 0)
+				WoundSystem.apply_damage(_fc, _fire_damage_for(_fc, dice_engine), 0)
 
 	# End-of-round fire spread/extinguish (s56.6.6) — no-op when nothing is burning.
 	if not state.map.burning_tiles.is_empty():
@@ -3595,6 +3595,16 @@ static func execute_npc_turn(
 				mcr.damage_rolled = s_dr
 				mcr.damage_kept = s_dk
 				actions_taken.append({"action": "multi_attack", "result": atk2})
+				# Tail Swipe (s54.5 Arugai): the tail (second) attack may Knockdown with a
+				# Free Raise. Contested Strength (+5 = the Free Raise); on a hit → Prone.
+				if mcr.has_tag("tail_knockdown") and atk2.get("hit", false) \
+						and not CharacterStats.is_dead(target_char):
+					var _tk_p: IndividualCombat.Participant = state.combat.participants.get(best_target, null)
+					if _tk_p != null:
+						var _tk: Dictionary = IndividualCombat.resolve_knockdown(npc, target_char, false, dice_engine, 5)
+						if _tk.get("knocked_down", false):
+							IndividualCombat.apply_condition(_tk_p, IndividualCombat.CONDITION_PRONE)
+							actions_taken.append({"action": "tail_swipe_knockdown", "target": best_target})
 	elif ts.can_use_free_move() and not ts.is_down_restricted(wl):
 		# Can still use free move to get closer.
 		var free_budget: int = free_move_budget(state, npc_id, npc)
@@ -4857,14 +4867,14 @@ static func _apply_hit(
 	#  - A spirit TARGET filters incoming damage by weapon kind (incorporeal /
 	#    partial-invuln / Pekkle-half / Kagaki fire-immune) AND uses its kind-gated
 	#    Reduction (Usai-gaki Swarm: Reduction 10 vs normal weapons only — magic/
-	#    jade/crystal bypass it). Material detection (jade/crystal/magic) awaits a
-	#    WeaponData material field; default mundane (the single w_kind local) —
-	#    faithful, since physical weapons do not permanently destroy spirits (the
-	#    ritual is the win condition, not killing them).
+	#    jade/crystal bypass it). Weapon kind is read from the attacker's WeaponData
+	#    .material via _weapon_kind() (steel/"" = mundane, the common case); only
+	#    jade/crystal/magic weapons pierce invulnerability, so an ordinary blade
+	#    still cannot permanently destroy a spirit (the ritual is the win condition).
 	if attacker.spirit_creature != null and SpiritAbilitySystem.attack_bypasses_armor(attacker.spirit_creature):
 		reduction = 0
 	if target.spirit_creature != null:
-		var w_kind: String = SpiritAbilitySystem.W_MUNDANE
+		var w_kind: String = _weapon_kind(attacker, weapon_name)
 		# A spirit's Reduction is its creature stat, kind-gated — not armor mechanics.
 		# reduction_for_kind() == armor_reduction for mundane (matches the puppet's
 		# value) and 0 for a swarm struck by a non-mundane weapon. Skip when the
@@ -5087,6 +5097,36 @@ static func _apply_escalating_incapacitation(state: MapCombatState, t_p: Individ
 	var minutes: int = 1440 if trait_name == "willpower" else 720  # 24h mind-control / 12h paralysis
 	var expiry: int = state.combat.round_number + minutes * IndividualCombat.ROUNDS_PER_MINUTE
 	IndividualCombat.apply_timed_condition(t_p, IndividualCombat.CONDITION_STUNNED, expiry)
+
+
+## Maps the attacker's equipped weapon material to a SpiritAbilitySystem weapon kind for the
+## s54 spirit/oni damage filter (incorporeal, invulnerability, kind-gated Reduction). Reads
+## the matching WeaponData in attacker.weapons by name; "" / "steel" -> mundane (the common
+## case, faithful — ordinary weapons cannot pierce a spirit's invulnerability). Recognised
+## materials: jade, crystal, obsidian, magic, fire, water.
+static func _weapon_kind(attacker: L5RCharacterData, weapon_name: String) -> String:
+	if attacker == null:
+		return SpiritAbilitySystem.W_MUNDANE
+	for w: WeaponData in attacker.weapons:
+		if w != null and w.weapon_name == weapon_name:
+			match w.material.to_lower():
+				"jade":     return SpiritAbilitySystem.W_JADE
+				"crystal":  return SpiritAbilitySystem.W_CRYSTAL
+				"obsidian": return SpiritAbilitySystem.W_OBSIDIAN
+				"magic":    return SpiritAbilitySystem.W_MAGIC
+				"fire":     return SpiritAbilitySystem.W_FIRE
+				"water":    return SpiritAbilitySystem.W_WATER
+			break
+	return SpiritAbilitySystem.W_MUNDANE
+
+
+## Fire damage for a character this round: base standing damage (1k1) plus the s54.5/s54.12
+## fire_susceptible bonus (+2k2 — Quiet Death's flesh combusts) for any fire source.
+static func _fire_damage_for(c: L5RCharacterData, dice: DiceEngine) -> int:
+	var dmg: int = FireSystem.standing_damage(dice)
+	if c.spirit_creature != null and c.spirit_creature.has_tag("fire_susceptible"):
+		dmg += dice.roll_and_keep(2, 2, true).total
+	return dmg
 
 
 ## Spawn-on-death (s54.5): adds death_spawn_count copies of death_spawn_id near the slain
