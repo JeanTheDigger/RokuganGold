@@ -892,6 +892,11 @@ static func execute_melee_attack(
 		if int(dmg_result.get("wounds", 0)) > 0:
 			_apply_swallow_whole(state, attacker, attacker_id, target, target_id, weapon_name, dice_engine)
 
+		# Suffocation (s54.5 Quiet Death): a melee hit by a suffocation creature attempts a
+		# Grapple (8k4 to initiate); on control the victim takes escalating crush damage
+		# (3k3, +1k1 each Round) applied in advance_round, reusing the swallow grapple state.
+		_apply_suffocation(state, attacker, attacker_id, target, target_id, weapon_name, dice_engine)
+
 		# Wreathed in Flames (s54.5 Daku): striking the burning oni in melee automatically
 		# burns the attacker by weapon size (no save).
 		_apply_wreathed_in_flames(attacker, target, weapon_name, dice_engine)
@@ -2668,7 +2673,7 @@ static func execute_creature_aoe_attack(
 		var victim: L5RCharacterData = state.combatants.get(cid, null)
 		if victim == null or CharacterStats.is_dead(victim):
 			continue
-		var red: int = 0 if victim.spirit_creature != null else maxi(0, victim.armor_reduction)
+		var red: int = 0 if (victim.spirit_creature != null or cr.ranged_aoe_ignores_armor) else maxi(0, victim.armor_reduction)
 		WoundSystem.apply_damage(victim, dice.roll_and_keep(cr.ranged_damage_rolled, cr.ranged_damage_kept, true).total, red)
 		if cr.ranged_fire and victim.spirit_creature == null:
 			var vp: IndividualCombat.Participant = state.combat.participants.get(cid, null)
@@ -2742,6 +2747,45 @@ static func _apply_wreathed_in_flames(
 ## who is Grappled (creature in control) and takes swallow damage each Round (advance_round)
 ## until they escape. Inert unless the ATTACKER is a swallow creature. Returns true if
 ## the victim was newly swallowed.
+## Suffocation (s54.5 Quiet Death): a melee hit by a `suffocation` creature attempts to
+## Grapple the victim (the creature rolls 8k4 to initiate, vs the victim's Strength). On
+## control, the victim is engulfed (reuses the swallow grapple state, swallowed_by_id); the
+## per-Round escalating crush (3k3 +1k1/Round) is applied in advance_round and resets when
+## control is lost (suffocation_escalation -> 0 on escape). Skips a spirit target.
+static func _apply_suffocation(
+	state: MapCombatState,
+	attacker: L5RCharacterData,
+	attacker_id: int,
+	target: L5RCharacterData,
+	target_id: int,
+	weapon_name: String,
+	dice: DiceEngine,
+) -> bool:
+	if attacker.spirit_creature == null or not attacker.spirit_creature.has_tag("suffocation"):
+		return false
+	if not IndividualCombat.get_weapon_profile(weapon_name).get("melee", true):
+		return false
+	if target.spirit_creature != null or CharacterStats.is_dead(target):
+		return false
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if t_p == null or t_p.swallowed_by_id != -1:
+		return false
+	# Grapple roll 8k4 (the creature's grapple) vs the victim's Strength; victim resists on a tie.
+	var cs: int = dice.roll_and_keep(8, 4, true).total
+	var vs: int = dice.roll_and_keep(maxi(1, target.strength), maxi(1, target.strength), true).total
+	if cs <= vs:
+		return false
+	t_p.swallowed_by_id = attacker_id
+	t_p.suffocation_escalation = 0
+	IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_GRAPPLED)
+	t_p.grapple_partner_id = attacker_id
+	var a_p: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
+	if a_p != null:
+		a_p.grapple_partner_id = target_id
+		a_p.grapple_in_control = true
+	return true
+
+
 static func _apply_swallow_whole(
 	state: MapCombatState,
 	attacker: L5RCharacterData,
@@ -2783,13 +2827,19 @@ static func attempt_swallow_escape(state: MapCombatState, victim_id: int, victim
 		return {"success": false, "reason": "not_swallowed"}
 	var captor_id: int = vp.swallowed_by_id
 	var captor: L5RCharacterData = state.combatants.get(captor_id, null)
-	var c_str: int = maxi(1, captor.strength) if captor != null else 1
 	var v_roll: int = dice.roll_and_keep(maxi(1, victim.strength), maxi(1, victim.strength), true).total
-	var c_roll: int = dice.roll_and_keep(c_str, c_str, true).total
+	# Suffocation (Quiet Death) contests with the creature's 8k4 grapple; swallow uses Strength.
+	var c_roll: int
+	if captor != null and captor.spirit_creature != null and captor.spirit_creature.has_tag("suffocation"):
+		c_roll = dice.roll_and_keep(8, 4, true).total
+	else:
+		var c_str: int = maxi(1, captor.strength) if captor != null else 1
+		c_roll = dice.roll_and_keep(c_str, c_str, true).total
 	if v_roll <= c_roll:
 		return {"success": false, "reason": "still_swallowed", "roll": v_roll}
 	vp.swallowed_by_id = -1
 	vp.grapple_partner_id = -1
+	vp.suffocation_escalation = 0  # re-grapple restarts crush at 3k3 (s54.5)
 	vp.conditions.erase(IndividualCombat.CONDITION_GRAPPLED)
 	var cp: IndividualCombat.Participant = state.combat.participants.get(captor_id, null)
 	if cp != null:
@@ -3167,12 +3217,19 @@ static func advance_round(
 		# Swallow Whole / Devour (s54.5): a swallowed victim takes the captor's swallow
 		# damage each Round (+1 Taint if swallow_taint); released if the captor dies.
 		if _tp.swallowed_by_id != -1:
-			var _sv: L5RCharacterData = state.combatants.get(_tp.character_id, null)
+			var _sv: L5RCharacterData = chars_by_id.get(_tp.character_id, state.combatants.get(_tp.character_id, null))
 			var _cap: L5RCharacterData = state.combatants.get(_tp.swallowed_by_id, null)
 			if _sv == null or CharacterStats.is_dead(_sv) or _cap == null or CharacterStats.is_dead(_cap):
 				_tp.swallowed_by_id = -1
 				_tp.grapple_partner_id = -1
+				_tp.suffocation_escalation = 0
 				_tp.conditions.erase(IndividualCombat.CONDITION_GRAPPLED)
+			elif _cap.spirit_creature != null and _cap.spirit_creature.has_tag("suffocation"):
+				# Quiet Death: escalating crush 3k3, +1k1 each successive Round of control.
+				var _esc: int = _tp.suffocation_escalation
+				var _sfd: int = dice_engine.roll_and_keep(3 + _esc, 3 + _esc, true).total
+				WoundSystem.apply_damage(_sv, _sfd, 0)
+				_tp.suffocation_escalation += 1
 			elif _cap.spirit_creature != null:
 				var _sd: int = dice_engine.roll_and_keep(
 					_cap.spirit_creature.swallow_damage_rolled,
@@ -3194,6 +3251,21 @@ static func advance_round(
 					_apply_escalating_incapacitation(state, _tp, _ep_v, _ep_trait)
 				if bool(_ep_res.get("ended", false)):
 					_tp.escalating_poison = {}
+		# Spirit Leeching (s54.5 Kommei): per-Round Stamina TN 25 to hold breath; on a failure,
+		# Willpower TN 25, and two total Willpower failures devour the soul (instant death).
+		if not _tp.spirit_leech.is_empty():
+			var _sl_v: L5RCharacterData = chars_by_id.get(_tp.character_id, state.combatants.get(_tp.character_id, null))
+			if _sl_v == null or CharacterStats.is_dead(_sl_v) or state.combat.round_number >= int(_tp.spirit_leech.get("expiry", 0)):
+				_tp.spirit_leech = {}
+			else:
+				var _sl_sta: int = maxi(1, _sl_v.stamina)
+				if dice_engine.roll_and_keep(_sl_sta, _sl_sta, true).total < 25:
+					var _sl_wp: int = maxi(1, _sl_v.willpower)
+					if dice_engine.roll_and_keep(_sl_wp, _sl_wp, true).total < 25:
+						_tp.spirit_leech["failures"] = int(_tp.spirit_leech.get("failures", 0)) + 1
+						if int(_tp.spirit_leech["failures"]) >= 2:
+							WoundSystem.apply_damage(_sl_v, 9999, 0)  # soul devoured -> instant death
+							_tp.spirit_leech = {}
 		# Fire (s56.6.6 / s54.10 Everything Burns): a participant standing on a burning
 		# tile and/or set on fire takes 1k1 each round; armour does not reduce.
 		# flame_immune spirit creatures (Kagaki) take no fire damage.
@@ -3436,10 +3508,22 @@ static func execute_npc_turn(
 		ranged_targets = get_ranged_targets(state, npc_id)
 		target_in_ranged = (best_target in ranged_targets)
 
+	# -- Creature melee multi-target attack (s54.12 blue whale Tail Smash / Yamato no Orochi
+	# Torso Bludgeon): strikes the primary target + everyone within ranged_aoe_radius of it
+	# when adjacent. Reuses execute_creature_aoe_attack (range gate = ranged_range_tiles = 1).
+	if npc.spirit_creature != null and npc.spirit_creature.melee_aoe \
+			and npc.spirit_creature.ranged_aoe_radius > 0 and target_in_melee \
+			and not (npc.spirit_creature.ranged_aoe_once and p.ranged_aoe_used):
+		var maoe: Dictionary = execute_creature_aoe_attack(state, npc_id, best_target, npc, dice_engine)
+		if maoe.get("ok", false):
+			actions_taken.append({"action": "creature_melee_aoe", "result": maoe})
+			return {"actions": actions_taken}
+
 	# -- Creature AoE attack (s54.11 Cauldron Belch / s54.12 Gout of Flame): a fire blast
 	# centred on a target in LOS + range, damaging everyone nearby. Preferred over a single
 	# strike when available (and not yet used, for once-per-skirmish blasts).
 	if npc.spirit_creature != null and npc.spirit_creature.ranged_aoe_radius > 0 \
+			and not npc.spirit_creature.melee_aoe \
 			and not target_in_melee and target_in_ranged \
 			and not (npc.spirit_creature.ranged_aoe_once and p.ranged_aoe_used):
 		var aoe: Dictionary = execute_creature_aoe_attack(state, npc_id, best_target, npc, dice_engine)
@@ -3502,6 +3586,14 @@ static func execute_npc_turn(
 		var gaze: Dictionary = _npc_maybe_taint_gaze(state, npc_id, npc, chars_by_id, dice_engine)
 		if gaze.get("success", false):
 			actions_taken.append({"action": "taint_gaze", "result": gaze})
+			return {"actions": actions_taken}
+
+	# -- Spirit Leeching (s54.5 Kommei): a Simple-action soul-fog on adjacent mortal enemies;
+	# the per-Round Stamina/Willpower death resolution runs in advance_round.
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("spirit_leeching"):
+		var fog: Dictionary = _npc_maybe_spirit_leech(state, npc_id, npc, dice_engine)
+		if fog.get("success", false):
+			actions_taken.append({"action": "spirit_leech", "result": fog})
 			return {"actions": actions_taken}
 
 	# -- Atemi (s38): a monk in melee delivers a known (encoded) atemi kiho instead
@@ -4483,6 +4575,44 @@ static func _npc_maybe_scream(
 				IndividualCombat.apply_condition(vp, IndividualCombat.CONDITION_STUNNED)
 				stunned += 1
 	return {"success": true, "stunned": stunned}
+
+
+## Spirit Leeching (s54.5 Kommei): a Simple-action soul-fog. Marks each mortal enemy within
+## 5 ft (1 tile) with a spirit_leech affliction lasting the oni's Air Ring in Rounds. Each
+## Round (advance_round) the victim rolls Stamina TN 25 to hold their breath; on a failure
+## (inhale) a Willpower TN 25 roll, and two total Willpower failures devour the soul -> death.
+## (The shapeshift-into-victim and Spirit Trading body-swap are blocked on the disguise layer.)
+static func _npc_maybe_spirit_leech(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	_dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null or not ts.can_use_simple():
+		return {}
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	var air: int = CharacterStats.get_ring_value(character, Enums.Ring.AIR)
+	var expiry: int = state.combat.round_number + maxi(1, air)
+	var caught: int = 0
+	for oid: int in state.positions.keys():
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		var v: L5RCharacterData = state.combatants.get(oid, null)
+		if v == null or CharacterStats.is_dead(v) or v.spirit_creature != null:
+			continue
+		if _chebyshev(cpos, state.positions[oid]) > 1:
+			continue
+		var vp: IndividualCombat.Participant = state.combat.participants.get(oid, null)
+		if vp == null or not vp.spirit_leech.is_empty():
+			continue
+		vp.spirit_leech = {"failures": 0, "expiry": expiry}
+		caught += 1
+	if caught == 0:
+		return {}
+	ts.consume_simple()
+	return {"success": true, "caught": caught}
 
 
 ## Taint Affliction (s54.5 Gagoze): a Complex-action burning gaze. Picks the nearest mortal

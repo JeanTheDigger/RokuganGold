@@ -91,6 +91,12 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 @export var ranged_aoe_radius: int = 0
 @export var ranged_aoe_max_targets: int = 0
 @export var ranged_aoe_once: bool = false
+## AoE armour bypass (s54.12 Yamato no Orochi Torso Bludgeon): the blast ignores armour Reduction.
+@export var ranged_aoe_ignores_armor: bool = false
+## Melee multi-target attack (s54.12 blue whale Tail Smash, Yamato no Orochi Torso Bludgeon):
+## when true, the AoE attack is initiated in melee (set ranged_range_tiles = 1) rather than at
+## range — the creature strikes the primary target and everyone within ranged_aoe_radius of it.
+@export var melee_aoe: bool = false
 
 ## Follow-up attack on a big hit (s54.11 Ghul Throat Attack): if a melee hit deals
 ## followup_wound_threshold+ Wounds, the creature makes a free bonus attack

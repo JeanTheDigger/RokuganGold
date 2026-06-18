@@ -217,6 +217,18 @@ static func catalog() -> Dictionary:
 		8, 6, "Bite", 8, 5, 9, 4, 40, 15, [40, 80, 120], 200, 5,
 		["aquatic", "huge", "multi_attack", "torso_bludgeon"], 4, _N),
 		"Torso Bludgeon", 10, 6, 9, 2)
+	# Torso Bludgeon (s54.12): a melee multi-target attack striking up to 6 targets within 30'
+	# (6 tiles), 9k2 ignoring armour (to-hit 10k6); cannot Bite the same Turn (the melee-AoE
+	# branch returns, so it replaces the Bite). Aquatic — reachable only in a water scenario.
+	c["yamato_no_orochi"].melee_aoe = true
+	c["yamato_no_orochi"].ranged_aoe_radius = 6
+	c["yamato_no_orochi"].ranged_aoe_max_targets = 6
+	c["yamato_no_orochi"].ranged_range_tiles = 1
+	c["yamato_no_orochi"].ranged_aoe_ignores_armor = true
+	c["yamato_no_orochi"].ranged_attack_rolled = 10
+	c["yamato_no_orochi"].ranged_attack_kept = 6
+	c["yamato_no_orochi"].ranged_damage_rolled = 9
+	c["yamato_no_orochi"].ranged_damage_kept = 2
 
 	# --- Elemental Terrors of Water (s54.12) --------------------------------
 	c["mizu_no_oni"] = _make("mizu_no_oni", "Mizu no Oni (Greater Terror of Water)", SpiritCreatureData.Tier.BOSS,
@@ -246,6 +258,16 @@ static func catalog() -> Dictionary:
 		2, 7, 2, 4, {"agility": 3},
 		2, 2, "Tail Smash", 6, 3, 4, 4, 20, 0, [30, 60], 90, 0,
 		["animal", "aquatic", "huge", "tail_smash"], 0, _N)
+	# Tail Smash (s54.12): a melee multi-target attack striking up to 4 targets within 15' (3
+	# tiles) of each other, 4k4 (to-hit 6k3). Aquatic — reachable only in a water-combat scenario.
+	c["blue_whale"].melee_aoe = true
+	c["blue_whale"].ranged_aoe_radius = 3
+	c["blue_whale"].ranged_aoe_max_targets = 4
+	c["blue_whale"].ranged_range_tiles = 1
+	c["blue_whale"].ranged_attack_rolled = 6
+	c["blue_whale"].ranged_attack_kept = 3
+	c["blue_whale"].ranged_damage_rolled = 4
+	c["blue_whale"].ranged_damage_kept = 4
 
 	c["killer_whale"] = _make("killer_whale", "Killer Whale (Blackfish)", SpiritCreatureData.Tier.HEAVY,
 		3, 4, 2, 3, {"agility": 4, "perception": 4},

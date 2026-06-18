@@ -169,6 +169,8 @@ class Participant:
 	var ranged_aoe_used: bool = false  # s54.11 Cauldron Belch etc. once-per-skirmish AoE fired
 	var void_locked: bool = false  # s54.12 Furaribi Soul Touch: cannot spend Void Points
 	var escalating_poison: Dictionary = {}  # s54.5 Shikage Mind-Breaking/Paralyzing poison {trait,doses,drained}
+	var suffocation_escalation: int = 0  # s54.5 Quiet Death Suffocation: per-Round crush damage step (3k3 +1k1/round)
+	var spirit_leech: Dictionary = {}  # s54.5 Kommei Spirit Leeching fog {failures, expiry_round}
 	var scream_used: bool = false  # s54.12 Wanyudo Strength of the Dead: once-per-skirmish scream
 	var gore_escape_rolled: int = 0  # s54.5 Gore: extra damage dealt when pulling free of the tusks (0 = not gored)
 	var gore_escape_kept: int = 0
