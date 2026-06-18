@@ -153,6 +153,9 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 ## a tile move-budget bonus via the project's fixed 1 tile = 5 ft (MovementSystem):
 ## Swift N = +N tiles. PROVISIONAL — the GDD names the keyword but states no conversion.
 @export var swift: int = 0
+## Shadowlands Taint Rank (s54). Most consumers don't need it; used by s54.5 Manesuru
+## Spawn Dark Mirror (max duplicates = Taint Rank, and the mirror inherits this Taint).
+@export var taint_rank: int = 0
 
 # Special-ability tags for the future combat layer (e.g. "incorporeal",
 # "swarm_presence", "wail", "hunger_pull", "fire_trail", "famine_only").

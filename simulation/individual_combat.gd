@@ -171,6 +171,9 @@ class Participant:
 	var escalating_poison: Dictionary = {}  # s54.5 Shikage Mind-Breaking/Paralyzing poison {trait,doses,drained}
 	var suffocation_escalation: int = 0  # s54.5 Quiet Death Suffocation: per-Round crush damage step (3k3 +1k1/round)
 	var spirit_leech: Dictionary = {}  # s54.5 Kommei Spirit Leeching fog {failures, expiry_round}
+	var insight_study_target: int = -1  # s54.5 Manesuru Uncanny Insight: id being studied
+	var insight_study_rounds: int = 0   # consecutive Complex Actions spent studying that target
+	var mirror_origin_id: int = -1      # s54.5 Dark Mirror duplicate: the creature it copied (attacks it first)
 	var scream_used: bool = false  # s54.12 Wanyudo Strength of the Dead: once-per-skirmish scream
 	var gore_escape_rolled: int = 0  # s54.5 Gore: extra damage dealt when pulling free of the tusks (0 = not gored)
 	var gore_escape_kept: int = 0

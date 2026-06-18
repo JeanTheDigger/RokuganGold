@@ -117,6 +117,7 @@ static func catalog() -> Dictionary:
 		4, 1, "Pseudopod", 4, 3, 4, 1, 10, 8, [12, 24, 36], 48, 0,
 		["oni", "malleable_form", "magic_resistance", "spawn_dark_mirror", "uncanny_insight",
 			"ambush"])
+	c["manesuru_no_oni"].taint_rank = 6  # s54.5: max Dark Mirror duplicates = Taint Rank
 
 	c["morei_no_oni"] = _make("morei_no_oni", "Morei no Oni, the Grain Demon", SpiritCreatureData.Tier.MID,
 		2, 2, 1, 1, {"strength": 2},

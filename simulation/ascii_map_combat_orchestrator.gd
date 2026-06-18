@@ -149,6 +149,10 @@ class MapCombatState:
 	var duel_offered: bool = false
 	## s54.5 spawn-on-death: monotonic counter for unique negative spawn instance ids.
 	var spawn_counter: int = 0
+	## s54.5 Manesuru Dark Mirror: target ids fully studied, target ids already mirrored, count spawned.
+	var mirror_studied: Dictionary = {}
+	var mirror_spawned: Dictionary = {}
+	var mirrors_count: int = 0
 	## s54.5 Gagoze Taint Affliction: per-gazer set of victim ids already gazed (once each).
 	var taint_gaze_used: Dictionary = {}
 
@@ -3511,9 +3515,12 @@ static func execute_npc_turn(
 	# -- Creature melee multi-target attack (s54.12 blue whale Tail Smash / Yamato no Orochi
 	# Torso Bludgeon): strikes the primary target + everyone within ranged_aoe_radius of it
 	# when adjacent. Reuses execute_creature_aoe_attack (range gate = ranged_range_tiles = 1).
+	# Only fires when 2+ enemies cluster near the primary — otherwise it falls through to the
+	# normal attack (e.g. the Orochi bites instead of bludgeoning a lone foe, per GDD choice).
 	if npc.spirit_creature != null and npc.spirit_creature.melee_aoe \
 			and npc.spirit_creature.ranged_aoe_radius > 0 and target_in_melee \
-			and not (npc.spirit_creature.ranged_aoe_once and p.ranged_aoe_used):
+			and not (npc.spirit_creature.ranged_aoe_once and p.ranged_aoe_used) \
+			and _enemies_within(state, npc_id, best_target, npc.spirit_creature.ranged_aoe_radius) >= 2:
 		var maoe: Dictionary = execute_creature_aoe_attack(state, npc_id, best_target, npc, dice_engine)
 		if maoe.get("ok", false):
 			actions_taken.append({"action": "creature_melee_aoe", "result": maoe})
@@ -3594,6 +3601,14 @@ static func execute_npc_turn(
 		var fog: Dictionary = _npc_maybe_spirit_leech(state, npc_id, npc, dice_engine)
 		if fog.get("success", false):
 			actions_taken.append({"action": "spirit_leech", "result": fog})
+			return {"actions": actions_taken}
+
+	# -- Dark Mirror (s54.5 Manesuru): study an enemy across two consecutive Complex Actions
+	# (Uncanny Insight), then spawn a duplicate of it (Spawn Dark Mirror). Its MO over attacking.
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("spawn_dark_mirror") and best_target >= 0:
+		var dm: Dictionary = _npc_maybe_dark_mirror(state, npc_id, best_target, npc, dice_engine)
+		if dm.get("success", false):
+			actions_taken.append({"action": dm.get("kind", "dark_mirror"), "result": dm})
 			return {"actions": actions_taken}
 
 	# -- Atemi (s38): a monk in melee delivers a known (encoded) atemi kiho instead
@@ -3841,6 +3856,12 @@ static func _npc_pick_target(
 	candidate_ids: Array,
 	chars_by_id: Dictionary,
 ) -> int:
+	# Dark Mirror (s54.5 Manesuru): a duplicate attacks the creature it copied first, while alive.
+	var self_p: IndividualCombat.Participant = state.combat.participants.get(npc_id, null)
+	if self_p != null and self_p.mirror_origin_id >= 0 and self_p.mirror_origin_id in candidate_ids:
+		var origin: L5RCharacterData = chars_by_id.get(self_p.mirror_origin_id, null)
+		if origin != null and not CharacterStats.is_dead(origin):
+			return self_p.mirror_origin_id
 	var best_id: int = -1
 	var best_wounds: int = -1
 	for cid: int in candidate_ids:
@@ -4615,6 +4636,71 @@ static func _npc_maybe_spirit_leech(
 	return {"success": true, "caught": caught}
 
 
+## Dark Mirror (s54.5 Manesuru). Two-stage: Uncanny Insight (study a target across two
+## consecutive Complex Actions) then Spawn Dark Mirror (a Complex Action that creates a
+## duplicate of a fully-studied target). The duplicate is a deep copy of the target with no
+## Void (cannot use Void techniques/spells) and the Manesuru's Taint Rank; it joins the enemy
+## faction and attacks its original first. Capped at the Manesuru's Taint Rank, once per
+## target. Returns {success, kind} ("uncanny_insight" while studying, "spawn_dark_mirror" on
+## a spawn) or {} if neither could act.
+static func _npc_maybe_dark_mirror(
+	state: MapCombatState,
+	char_id: int,
+	best_target: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p == null:
+		return {}
+	var cap: int = maxi(1, character.spirit_creature.taint_rank)
+	# 1) Spawn from any fully-studied, not-yet-mirrored target while under the Taint-Rank cap.
+	if state.mirrors_count < cap:
+		for sid_key in state.mirror_studied.keys():
+			var sid: int = int(sid_key)
+			if state.mirror_spawned.has(sid):
+				continue
+			var orig: L5RCharacterData = state.combatants.get(sid, null)
+			if orig == null or CharacterStats.is_dead(orig):
+				continue
+			var center: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+			var tile: Vector2i = _free_tile_near(state, center)
+			if tile.x < 0:
+				continue
+			var dup: L5RCharacterData = orig.duplicate(true)
+			state.spawn_counter += 1
+			dup.character_id = -900000 - state.spawn_counter
+			dup.is_pc = false
+			dup.void_ring = 0
+			dup.current_void_points = 0
+			dup.taint = float(cap)
+			if not add_enemy(state, dup, tile.x, tile.y, dice):
+				continue
+			var dp: IndividualCombat.Participant = state.combat.participants.get(dup.character_id, null)
+			if dp != null:
+				dp.mirror_origin_id = sid
+			state.mirror_spawned[sid] = true
+			state.mirrors_count += 1
+			ts.consume_complex()
+			return {"success": true, "kind": "spawn_dark_mirror", "mirror_id": dup.character_id, "origin_id": sid}
+	# 2) Otherwise study the current target (Complex). Two consecutive rounds completes it.
+	if best_target < 0 or state.mirror_studied.has(best_target):
+		return {}
+	if p.insight_study_target == best_target:
+		p.insight_study_rounds += 1
+	else:
+		p.insight_study_target = best_target
+		p.insight_study_rounds = 1
+	ts.consume_complex()
+	var done: bool = p.insight_study_rounds >= 2
+	if done:
+		state.mirror_studied[best_target] = true
+	return {"success": true, "kind": "uncanny_insight", "studied": done, "target": best_target}
+
+
 ## Taint Affliction (s54.5 Gagoze): a Complex-action burning gaze. Picks the nearest mortal
 ## enemy not yet gazed; Contested Willpower (oni vs victim). Oni wins → victim gains 1 full
 ## Rank of Taint (feeds the MutationSystem periodic-taint + Channel-3 detection pipelines).
@@ -5227,6 +5313,26 @@ static func _apply_escalating_incapacitation(state: MapCombatState, t_p: Individ
 	var minutes: int = 1440 if trait_name == "willpower" else 720  # 24h mind-control / 12h paralysis
 	var expiry: int = state.combat.round_number + minutes * IndividualCombat.ROUNDS_PER_MINUTE
 	IndividualCombat.apply_timed_condition(t_p, IndividualCombat.CONDITION_STUNNED, expiry)
+
+
+## Counts living enemies of `attacker_id` within `radius` (Chebyshev) of the center tile,
+## including a co-located primary at center_id. Used to gate melee multi-target AoE (only
+## worth it against a cluster).
+static func _enemies_within(state: MapCombatState, attacker_id: int, center_id: int, radius: int) -> int:
+	var center: Vector2i = state.positions.get(center_id, Vector2i(-9999, -9999))
+	if center.x < -9000:
+		return 0
+	var faction: String = state.factions.get(attacker_id, FACTION_NEUTRAL)
+	var n: int = 0
+	for cid: int in state.positions.keys():
+		if cid == attacker_id or not _are_enemies(faction, state.factions.get(cid, FACTION_NEUTRAL)):
+			continue
+		var v: L5RCharacterData = state.combatants.get(cid, null)
+		if v == null or CharacterStats.is_dead(v):
+			continue
+		if _chebyshev(center, state.positions[cid]) <= radius:
+			n += 1
+	return n
 
 
 ## Maps the attacker's equipped weapon material to a SpiritAbilitySystem weapon kind for the
