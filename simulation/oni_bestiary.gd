@@ -284,6 +284,7 @@ static func catalog() -> Dictionary:
 
 	# s54.5 sacred-material Reduction (vulnerable) — exact GDD value
 	c["ryokaku_no_oni"].reduction_crystal = 4
+	c["manesuru_no_oni"].spell_tn_bonus = 10  # s54.5 Magic Resistance Advantage, 2 Ranks (all elements)
 	return c
 
 

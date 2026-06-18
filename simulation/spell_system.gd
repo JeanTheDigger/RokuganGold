@@ -30,6 +30,15 @@ enum SpellSimEffect {
 ## SpellSimEffect ints: 0=COMBAT_ONLY, 1=HEAL, 2=REMOVE_TAINT, 3=DETECT, 4=COMMUNE,
 ##   5=SUMMON, 6=COMMAND, 7=TRANSMUTE, 8=PURIFY, 9=REVEAL, 10=WARD, 11=TRAVEL,
 ##   12=PRESERVE, 13=DISPEL, 14=BIND, 15=RITUAL, 16=WEATHER, 17=INFO
+## Spells carrying the Jade/Crystal property (s31–s37). A jade/crystal-property spell cast at
+## a superior_invuln spirit repels it (s54.12 Furaribi rule). PARTIAL — jade_strike is the
+## certain entry; the full property list is Phase 2 transcription.
+const JADE_CRYSTAL_PROPERTY_SPELLS: Dictionary = {"jade_strike": true}
+
+static func has_jade_or_crystal_property(spell_id: String) -> bool:
+	return JADE_CRYSTAL_PROPERTY_SPELLS.get(spell_id, false)
+
+
 const SPELL_LIBRARY: Dictionary = {
 	# === UNIVERSAL (s32) — available to all shugenja ===
 	"sense":     {"e": -1, "m": 1, "s": 3,  "u": true},

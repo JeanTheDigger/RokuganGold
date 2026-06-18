@@ -5275,12 +5275,18 @@ the same actor without proper turn advancement.
   stacks). **Creature Magic Resistance (s54.10/s54.12)**: new
   `SpiritCreatureData.spell_tn_bonus` (+ `spell_tn_bonus_element`, -1 = all) added into
   `SpellSystem.resolve_cast`'s TN, element-gated. Populated Mujina +6 and Yamato no Orochi
-  +6 (the two creatures with an explicit GDD "+6 to Spell Casting TNs"). The "N Ranks of
-  Magic Resistance" creatures (Jimen 3/Earth, Akeru 3/Void, Moetechi 3/Fire, kodama 2,
-  Toichi 1/Earth, Hinotama 2/Earth+Void) are NOT populated — the GDD gives no uniform
-  Rank→TN conversion, so wiring them would invent a number (deferred, framework ready).
-  Runtime-verified 9/9 (MR +6 vs Mujina; Sodatsu absorb + slot spent + all three modes +
-  Armor TN raised). LIMITATION: a generic successful cast has no offensive/buff EFFECT yet
+  +6 (explicit GDD "+6"). The "N Ranks of Magic Resistance" creatures use +5 TN/Rank (owner
+  ruling 2026-06-18), element-gated: Jimen +15/Earth, Akeru +15/Void, Moetechi +15/Fire,
+  Toichi +5/Earth, kodama +10/all, Manesuru +10/all. DEFERRED: Hinotama (2 Ranks Earth+Void
+  — the single element field can't express dual-element, and it also has full Fire/Air/Water
+  immunity which isn't modelled) and Kaze no Oni (Spell-Filching is absorb/redirect, not +TN).
+  **jade/crystal-property spells** (third consumer): `SpellSystem.has_jade_or_crystal_property()`
+  + the Furaribi rule (s54.12) — a jade-property spell successfully cast at a `superior_invuln`
+  spirit does not harm it but repels it (removed from positions + added to fled_ids). Property
+  list seeded with jade_strike (certain); the full Jade/Crystal-property list is Phase 2.
+  Runtime-verified 18/18 across two passes (MR flat-+6 + N-Rank element-gating; Sodatsu absorb
+  + slot spent + all three modes + Armor TN raised; jade_strike repels Furaribi, not a
+  non-superior_invuln creature). LIMITATION: a generic successful cast has no offensive/buff EFFECT yet
   — the library entries are `{element, mastery, sim_effect}` with no damage/range/AoE, so
   per-spell combat effects are **Phase 2** (faithful transcription from s31–s37, the bulk
   of the work). Phase 1 delivers the casting plumbing + the reactions that fire off the act

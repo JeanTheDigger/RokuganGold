@@ -305,6 +305,16 @@ static func catalog() -> Dictionary:
 	c["mizu_no_oni"].reduction_jade = 10
 	c["mizu_no_oni"].reduction_crystal = 10
 	c["yamato_no_orochi"].spell_tn_bonus = 6  # s54.10 Magic Resistance (+6 to Spell Casting TNs)
+	# s54.12 Magic Resistance: +5 TN/Rank (owner ruling), element-gated where the GDD restricts it
+	c["kodama"].spell_tn_bonus = 10                                  # 2 Ranks (all elements)
+	c["jimen_no_oni"].spell_tn_bonus = 15
+	c["jimen_no_oni"].spell_tn_bonus_element = Enums.Ring.EARTH       # 3 Ranks vs Earth only
+	c["toichi_no_kansen"].spell_tn_bonus = 5
+	c["toichi_no_kansen"].spell_tn_bonus_element = Enums.Ring.EARTH   # 1 Rank vs Earth only
+	c["moetechi_no_oni"].spell_tn_bonus = 15
+	c["moetechi_no_oni"].spell_tn_bonus_element = Enums.Ring.FIRE     # 3 Ranks vs Fire only
+	c["akeru_no_oni"].spell_tn_bonus = 15
+	c["akeru_no_oni"].spell_tn_bonus_element = Enums.Ring.VOID        # 3 Ranks vs Void only
 	return c
 
 

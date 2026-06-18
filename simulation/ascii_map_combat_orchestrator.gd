@@ -1770,7 +1770,20 @@ static func execute_cast_spell(
 			"mastery": ml, "retaliation": retal}
 	var res: Dictionary = SpellSystem.resolve_cast(caster, spell_id, dice_engine, 0, target)
 	res["spell_id"] = spell_id
-	# Per-spell offensive/buff effects on success are Phase 2 (not yet encoded in the library).
+	# Furaribi rule (s54.12): a jade/crystal-property spell does not harm a superior_invuln
+	# spirit but repels it — it retreats from the area (leaves the encounter).
+	if res.get("success", false) and SpellSystem.has_jade_or_crystal_property(spell_id) \
+			and target != null and target.spirit_creature != null \
+			and target.spirit_creature.has_tag("superior_invuln"):
+		state.positions.erase(target_id)
+		if target_id not in state.fled_ids:
+			state.fled_ids.append(target_id)
+		res["spirit_retreated"] = true
+		state.combat_log.append({
+			"type": "spirit_repelled", "round": state.combat.round_number,
+			"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
+		})
+	# Other per-spell offensive/buff effects on success are Phase 2 (not yet encoded).
 	state.combat_log.append({
 		"type": "spell_cast", "round": state.combat.round_number,
 		"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
