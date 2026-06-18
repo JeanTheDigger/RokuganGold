@@ -285,6 +285,25 @@ static func catalog() -> Dictionary:
 		2, 2, "Spur", 3, 2, 1, 1, 15, 0, [5], 10, 0,
 		["animal"], 1, _N)
 
+	# s54.12 sacred-material Reduction (vulnerable) — exact GDD values (0 = bypassed)
+	c["kaze_no_oni"].reduction_jade = 0
+	c["kaze_no_oni"].reduction_crystal = 0
+	c["kaze_no_oni"].reduction_obsidian = 0
+	c["yobuko"].reduction_crystal = 0
+	c["jinmenju"].reduction_jade = 10
+	c["jinmenju"].reduction_crystal = 5
+	c["jinmenju"].reduction_obsidian = 5
+	c["jimen_no_oni"].reduction_crystal = 4
+	c["jimen_no_oni"].reduction_obsidian = 4
+	c["toichi_no_kansen"].reduction_crystal = 0
+	c["toichi_no_kansen"].reduction_obsidian = 0
+	c["wanyudo"].reduction_crystal = 5
+	c["wanyudo"].reduction_obsidian = 5
+	c["akeru_no_oni"].reduction_jade = 0
+	c["akeru_no_oni"].reduction_crystal = 0
+	c["akeru_no_oni"].reduction_obsidian = 0
+	c["mizu_no_oni"].reduction_jade = 10
+	c["mizu_no_oni"].reduction_crystal = 10
 	return c
 
 

@@ -132,6 +132,18 @@ static func catalog() -> Dictionary:
 		["undead", "named", "lost", "shugenja_r5", "reduction_vs_jade_crystal",
 			"shadowlands_powers"])
 
+	# s54.11 sacred-material Reduction (vulnerable) — exact GDD values
+	c["harionago"].reduction_jade = 5
+	c["nuppeppo"].reduction_jade = 5
+	c["nuppeppo"].reduction_crystal = 5
+	c["pennaggolan"].reduction_jade = 10
+	c["pennaggolan"].reduction_crystal = 10
+	c["gakimushi"].reduction_jade = 5
+	c["gakimushi"].reduction_crystal = 5
+	c["kitsune_gohei"].reduction_jade = 8
+	c["kitsune_gohei"].reduction_crystal = 8
+	c["yogo_junzo"].reduction_jade = 5
+	c["yogo_junzo"].reduction_crystal = 5
 	return c
 
 

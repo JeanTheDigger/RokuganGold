@@ -32,6 +32,12 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 @export var damage_kept: int = 0
 @export var armor_tn: int = 10
 @export var reduction: int = 0
+# s54.5/s54.11/s54.12 "Reduction X (Y against jade/crystal/obsidian)": juggernaut-type
+# creatures whose thick hide is LESS effective vs sacred materials. -1 = use base reduction;
+# 0 = bypassed entirely. Consumed by SpiritAbilitySystem.reduction_for_kind().
+@export var reduction_jade: int = -1
+@export var reduction_crystal: int = -1
+@export var reduction_obsidian: int = -1
 
 # Optional second attack (multi-attack creatures, e.g. Claws + Bite). 0 rolled = none.
 # The combat layer makes this as a second strike when the creature is tagged

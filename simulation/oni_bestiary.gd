@@ -282,6 +282,8 @@ static func catalog() -> Dictionary:
 		4, 3, "Claw", 6, 4, 6, 2, 25, 5, [40, 80, 120], 160, 4,
 		["oni", "huge", "partial_invuln", "unique", "mai_chong", "singular_spawn", "multi_attack"]), "Mai Chong", 8, 4, 6, 3)
 
+	# s54.5 sacred-material Reduction (vulnerable) — exact GDD value
+	c["ryokaku_no_oni"].reduction_crystal = 4
 	return c
 
 

@@ -105,6 +105,18 @@ static func is_immune(creature: SpiritCreatureData, weapon_kind: String) -> bool
 static func reduction_for_kind(creature: SpiritCreatureData, weapon_kind: String) -> int:
 	if creature.has_tag("swarm") and weapon_kind != W_MUNDANE:
 		return 0  # "Reduction 10 against normal weapons" — non-mundane ignores it
+	# s54.5/s54.11/s54.12: sacred materials cut through juggernaut hide ("Y against jade/
+	# crystal/obsidian"). Per-creature, per-material values transcribed onto the stat block.
+	match weapon_kind:
+		W_JADE:
+			if creature.reduction_jade >= 0:
+				return creature.reduction_jade
+		W_CRYSTAL:
+			if creature.reduction_crystal >= 0:
+				return creature.reduction_crystal
+		W_OBSIDIAN:
+			if creature.reduction_obsidian >= 0:
+				return creature.reduction_obsidian
 	return creature.reduction
 
 

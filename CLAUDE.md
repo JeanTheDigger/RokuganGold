@@ -5233,6 +5233,34 @@ the same actor without proper turn advancement.
   Round until a save or the Trait hits 0 → mind-controlled / paralyzed), a poison-system
   extension beyond the current immediate-drain-with-next-tick-restore model.
 
+### Systems Added 2026-06-18 (s54 sacred-material Reduction + s54.5 heart_kill, owner-approved)
+- **s54.5/s54.11/s54.12 Vulnerable-to-sacred-materials Reduction (owner ruling: vulnerable).**
+  Juggernaut-type creatures whose thick hide is LESS effective vs jade/crystal/obsidian
+  ("Reduction X (Y against jade/crystal/obsidian)") now take reduced Reduction from those
+  weapons. New `SpiritCreatureData.reduction_jade/_crystal/_obsidian` (-1 = base, 0 =
+  bypassed); `SpiritAbilitySystem.reduction_for_kind()` consults them (after the swarm
+  rule), wired into `_apply_hit` (already the single reduction-resolution site for spirit
+  targets). **Exact per-creature, per-material GDD values transcribed** for 15 creatures —
+  undead: harionago (j5), nuppeppo (j5/c5), pennaggolan (j10/c10), gakimushi (j5/c5),
+  kitsune_gohei (j8/c8), yogo_junzo (j5/c5); additional: kaze_no_oni (0/0/0), yobuko (c0),
+  jinmenju (j10/c5/o5), jimen_no_oni (c4/o4), toichi_no_kansen (c0/o0), wanyudo (c5/o5),
+  akeru_no_oni (0/0/0), mizu_no_oni (j10/c10); oni: ryokaku_no_oni (c4). The coarse
+  `reduction_vs_jade_crystal*` tags are left as descriptive (superseded by the data). Fire
+  resists (Wanyudo "20 vs magical fire") not wired — no magical-fire weapon path exists.
+  Runtime-verified 23/23 (mundane=base, sacred=exact reduced value, control creature
+  unaffected, vulnerable direction holds). All numbers GDD-exact — no invention.
+- **s54.5 Arugai heart_kill (the unkillable-boss fix).** See commit 9ff521c: regenerating
+  heart_kill oni can only be slain by locating (Investigation/Perception TN 30,
+  `execute_locate_heart`) and destroying its 10-Wound heart; body Wounds are held below
+  Dead while the heart is hidden. Runtime-verified 8/8.
+- **gaki_immortality — RESOLVED: already-handled (owner decision, no code).** GDD ("reform
+  in Gaki-do") gives no tile-combat reform delay/location (unlike the General's explicit
+  200-rounds-at-heart), so an explicit on-map reform would require invented numbers. Treated
+  as emergent: the Restoration Ritual is the encounter win condition (not killing) and the
+  s56.16 escalation spawner re-manifests gaki from the realm pool, so "cannot be permanently
+  destroyed by combat" already holds. The `gaki_immortality` tag remains descriptive; no
+  combat change.
+
 ### Pending Redesign
 (None currently pending.)
 
