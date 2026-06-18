@@ -909,6 +909,13 @@ static func execute_melee_attack(
 		# mortal within 20' (4 tiles) rolls Stamina TN 20 or is Fatigued.
 		_apply_abominable_stench(state, target, weapon_name, dice_engine)
 
+		# Splatter (s54.5 Byoki): a wounding melee blow against the plague-oni splashes its
+		# contagion onto a mortal attacker, who risks the creature's disease (reuses the
+		# disease-contraction roll with attacker and creature roles swapped).
+		if int(dmg_result.get("wounds", 0)) > 0 and attacker.spirit_creature == null \
+				and target.spirit_creature != null and target.spirit_creature.has_tag("splatter"):
+			_apply_disease_on_hit(target, attacker, int(dmg_result.get("wounds", 0)), dice_engine)
+
 		# Burning Touch (s54.12 Taki-bi etc.): touching a burning-touch creature in melee
 		# sets the toucher on fire ("touches or is touched"). The attack-side direction is
 		# handled in _apply_hit; this is the strike-it-in-melee direction.
@@ -4674,8 +4681,13 @@ static func _npc_maybe_dark_mirror(
 			state.spawn_counter += 1
 			dup.character_id = -900000 - state.spawn_counter
 			dup.is_pc = false
+			# duplicate(true) deep-copies Traits, Skills, techniques/katas/kiho and Wounds
+			# (GDD: "all the target's ... Skills ... and School/Path Techniques"). The mirror
+			# has no Void (so it cannot cast spells / use Void techniques) and the Manesuru's
+			# Taint; spells_known is cleared explicitly (GDD: "cannot cast spells").
 			dup.void_ring = 0
 			dup.current_void_points = 0
+			dup.spells_known = []
 			dup.taint = float(cap)
 			if not add_enemy(state, dup, tile.x, tile.y, dice):
 				continue
