@@ -1857,6 +1857,56 @@ static func resolve_sumai_bout(
 	}
 
 
+# Resolve a single sumai MATCH between two wrestlers: repeated Contested Jiujutsu(Sumai)/
+# Strength bouts until one wins by 5+ (GDD s40 "SUMAI TOURNAMENTS"). Returns the winner.
+# A safety cap (rare repeated <5 margins) decides by the last bout's higher roll. No size
+# bonus is applied in tournament pairing (the s45 Large advantage is a forward-wire — the
+# bout still contests Strength + Jiujutsu, which captures wrestler quality).
+static func resolve_sumai_match(
+	w1: L5RCharacterData,
+	w2: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> L5RCharacterData:
+	for _i in 40:
+		var r: Dictionary = resolve_sumai_bout(w1, w2, false, dice_engine)
+		if r["bout_over"]:
+			return w1 if r["winner_wrestler1"] else w2
+	# Cap reached (persistent near-ties): decide by one more roll's higher total.
+	var f: Dictionary = resolve_sumai_bout(w1, w2, false, dice_engine)
+	return w1 if f["wrestler1_roll"] >= f["wrestler2_roll"] else w2
+
+
+# Single-elimination sumai TOURNAMENT (GDD s40 / s27.9 Badger Great Games). Pairs the
+# entrants, runs each match to a 5+ decision, advances winners; an odd entrant gets a bye.
+# Returns {champion_id, participant_count, rounds} ({} for fewer than 2 entrants).
+static func resolve_sumai_tournament(
+	participants: Array,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if participants.size() < 2:
+		return {}
+	var bracket: Array = participants.duplicate()
+	var rounds: int = 0
+	while bracket.size() > 1:
+		rounds += 1
+		var next_round: Array = []
+		var i: int = 0
+		while i < bracket.size():
+			if i + 1 >= bracket.size():
+				next_round.append(bracket[i])  # bye
+				i += 1
+				continue
+			next_round.append(resolve_sumai_match(bracket[i], bracket[i + 1], dice_engine))
+			i += 2
+		bracket = next_round
+	var champ: L5RCharacterData = bracket[0]
+	return {
+		"champion_id": champ.character_id,
+		"participant_count": participants.size(),
+		"rounds": rounds,
+	}
+
+
 static func resolve_sumai_stare_down(
 	wrestler1: L5RCharacterData,
 	wrestler2: L5RCharacterData,

@@ -5564,6 +5564,26 @@ now **breaks free** to return to its weapon next turn, instead of endlessly cont
 a dedicated grappler still contests. Runtime-verified 5/5 (break frees both, partner not prone;
 pass = free action retaining grapple+control; NPC swordsman breaks free; NPC grappler contests).
 
+### s40/s27.9 Sumai Tournaments + Badger Great Games (2026-06-19)
+`IndividualCombat.resolve_sumai_bout` was built but had **zero callers** — sumai wrestling
+was unreachable. Added `resolve_sumai_match` (repeated bouts until one wins by 5+, GDD s40
+"SUMAI TOURNAMENTS"; safety cap decides persistent near-ties by the last roll) and
+`resolve_sumai_tournament` (single-elimination bracket; odd entrant gets a bye; returns
+`{champion_id, participant_count, rounds}`). No size bonus applied in pairing (the s45 Large
+advantage is a forward-wire; the bout still contests Strength + Jiujutsu). Wired the **annual
+Badger Great Games** (s27.9): `DayOrchestrator._process_badger_great_games` fires once per IC
+year on the year boundary (the GDD fixes the "once per year" cadence, not the day), gathers
+living non-PC wrestlers (Jiujutsu ≥ 1) physically present in the Badger province, runs the
+bracket, and gives the champion a **named reputation** (TIER_4 PERSONAL topic, subject =
+champion, added to active_topics + the champion's topic_pool). Runtime-verified 9/9 (8-entrant
+3-round bracket; strongest wins 20/20; <2 entrants no-op; odd-entrant bye; Great Games excludes
+PCs and out-of-province characters; TIER_4 champion topic created and pooled; no-Badger no-op).
+LIMITATION (no GDD value, deferred): s27.9 says the champion "gains Glory" but specifies no
+number — the Glory award is NOT applied (the named-reputation topic is the deliverable);
+"disposition shifts between factions present" likewise deferred (needs an event-attendance
+model + values). DEFERRED elsewhere: the Imperial Championship resolver (`resolve_championship`)
+is also still unwired (annual/vacancy trigger + winner Glory unspecified).
+
 ### Pending Redesign
 (None currently pending.)
 

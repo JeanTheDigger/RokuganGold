@@ -656,6 +656,13 @@ static func advance_day(
 		death_events, active_topics, next_topic_id, world_states,
 	)
 
+	# s27.9 Badger Great Games: an annual sumai tournament at Shiro Ichiro. Fires once per
+	# IC year on the year boundary (the GDD fixes the cadence, not the day).
+	if ic_day > 0 and ic_day % TimeSystem.IC_DAYS_PER_YEAR == 0:
+		_process_badger_great_games(
+			characters_by_id, provinces, settlements, active_topics, next_topic_id, ic_day, dice_engine,
+		)
+
 	_process_voluntary_declarations(
 		day_result.get("results", []),
 		active_courts, active_topics, court_commitments,
@@ -26195,6 +26202,70 @@ static func _process_cancel_hunt_writebacks(
 
 
 # -- Hunt Resolution (s57.38.6) -----------------------------------------------
+
+## s27.9 Badger Great Games — annual sumai tournament at Shiro Ichiro. Gathers the living
+## non-PC wrestlers (Jiujutsu >= 1) present in the Badger province, runs a single-elimination
+## bracket (IndividualCombat.resolve_sumai_tournament, GDD s40 rule), and gives the champion a
+## named reputation (TIER_4 PERSONAL topic). Champion Glory is deferred — s27.9 says "gains
+## Glory" but specifies no value (do not invent).
+static func _process_badger_great_games(
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	_settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	# Find the Badger province and its settlement ids.
+	var badger_sids: Dictionary = {}
+	for pid in provinces.keys():
+		var pv: Variant = provinces[pid]
+		if pv is ProvinceData and (pv as ProvinceData).clan == "Badger":
+			for sid in (pv as ProvinceData).settlement_ids:
+				badger_sids[str(sid)] = true
+	if badger_sids.is_empty():
+		return {}
+	# Gather present, living, non-PC wrestlers.
+	var entrants: Array = []
+	for cid in characters_by_id.keys():
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.skills.get("Jiujutsu", 0) < 1:
+			continue
+		if badger_sids.has(c.physical_location):
+			entrants.append(c)
+	if entrants.size() < 2:
+		return {}
+	var result: Dictionary = IndividualCombat.resolve_sumai_tournament(entrants, dice_engine)
+	var champ_id: int = result.get("champion_id", -1)
+	var champ: L5RCharacterData = characters_by_id.get(champ_id, null)
+	if champ == null:
+		return {}
+	# Named reputation: a TIER_4 PERSONAL topic about the champion.
+	var topic := TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.slug = "great_games_champion_%d_d%d" % [champ_id, ic_day]
+	topic.title = "%s wins the Badger Great Games" % champ.character_name
+	topic.topic_type = "tournament"
+	topic.category = TopicData.Category.PERSONAL
+	topic.tier = TopicData.Tier.TIER_4
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+	topic.ic_day_created = ic_day
+	topic.subject_character_id = champ_id
+	topic.clan_involved = champ.clan
+	active_topics.append(topic)
+	if topic.topic_id not in champ.topic_pool:
+		champ.topic_pool.append(topic.topic_id)
+	return {
+		"champion_id": champ_id,
+		"participant_count": result.get("participant_count", 0),
+		"rounds": result.get("rounds", 0),
+		"topic_id": topic.topic_id,
+	}
+
 
 static func _resolve_scheduled_hunts(
 	active_hunts: Array,
