@@ -1802,6 +1802,19 @@ static func grapple_throw(controller_p: Participant, target_p: Participant) -> v
 	controller_p.grapple_in_control = false              # Bug 8 FIX
 
 
+# Break (s40, Simple Action): the actor removes themselves from the Grapple. A grapple
+# is a two-person bind, so both participants are freed (neither remains Grappled to a
+# partner who left). Neither is left Prone (unlike Throw).
+static func grapple_break(actor_p: Participant, partner_p: Participant) -> void:
+	remove_condition(actor_p, CONDITION_GRAPPLED)
+	actor_p.grapple_partner_id = -1
+	actor_p.grapple_in_control = false
+	if partner_p != null:
+		remove_condition(partner_p, CONDITION_GRAPPLED)
+		partner_p.grapple_partner_id = -1
+		partner_p.grapple_in_control = false
+
+
 # =============================================================================
 # -- Sumai (s40) --------------------------------------------------------------
 # =============================================================================

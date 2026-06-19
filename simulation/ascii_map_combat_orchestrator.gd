@@ -1642,6 +1642,27 @@ static func execute_grapple_action(
 			IndividualCombat.grapple_throw(c_p, t_p)
 			result = {"success": true, "target_prone": true}
 
+		"break":
+			# Break (Simple Action, s40): remove yourself from the Grapple (both freed).
+			if not ts.can_use_simple():
+				return {"success": false, "reason": "no_simple_actions_remaining"}
+			IndividualCombat.grapple_break(c_p, t_p)
+			ts.consume_simple()
+			state.combat_log.append({
+				"type": "grapple_action", "round": state.combat.round_number,
+				"char_id": char_id, "action": "break", "result": {"success": true},
+			})
+			return {"success": true, "broke_free": true}
+
+		"pass":
+			# Pass (Free Action, s40): do nothing, maintain the Grapple and retain control.
+			ts.consume_free()
+			state.combat_log.append({
+				"type": "grapple_action", "round": state.combat.round_number,
+				"char_id": char_id, "action": "pass", "result": {"success": true},
+			})
+			return {"success": true, "passed": true}
+
 		"take_control":
 			# Each combatant rolls with their own grapple skill (weapon-grapplers
 			# use their Weapon Skill, s40); bare-handed defaults to Jiujutsu.
@@ -4142,12 +4163,17 @@ static func execute_npc_turn(
 				var ga: Dictionary = execute_grapple_action(state, npc_id, "hit", npc, partner, dice_engine)
 				actions_taken.append({"action": "grapple_hit", "result": ga})
 		else:
-			# Not in control: try to take control.
+			# Not in control: a dedicated grappler contests control; a weapon-fighter who
+			# got grabbed breaks free (Simple, s40) to return to its weapon next turn.
 			var partner_id: int = p.grapple_partner_id
 			var partner: L5RCharacterData = chars_by_id.get(partner_id, null)
 			if partner != null and not CharacterStats.is_dead(partner):
-				var gc: Dictionary = execute_grapple_action(state, npc_id, "take_control", npc, partner, dice_engine)
-				actions_taken.append({"action": "grapple_control", "result": gc})
+				if _npc_should_grapple(npc):
+					var gc: Dictionary = execute_grapple_action(state, npc_id, "take_control", npc, partner, dice_engine)
+					actions_taken.append({"action": "grapple_control", "result": gc})
+				else:
+					var gb: Dictionary = execute_grapple_action(state, npc_id, "break", npc, partner, dice_engine)
+					actions_taken.append({"action": "grapple_break", "result": gb})
 		return {"actions": actions_taken}
 
 	# -- Stand up if prone ----------------------------------------------------

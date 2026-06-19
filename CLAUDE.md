@@ -5553,6 +5553,17 @@ fires before the engage-adjacent-enemy block. Runtime-verified 3/3 (guards a thr
 adjacent charge and forgoes attack; no guard for an unthreatened charge; repositions
 instead of guarding when too far from the charge).
 
+### s40 Grapple sub-actions — Break + Pass completed (2026-06-19)
+GDD s40 specifies four grapple sub-actions (Hit, Throw, Break, Pass); `execute_grapple_action`
+only had Hit/Throw/take_control. Added the two missing: **Break** (Simple Action — the actor
+removes itself from the grapple; `IndividualCombat.grapple_break` frees BOTH participants since
+a grapple is a two-person bind, neither left Prone unlike Throw) and **Pass** (Free Action —
+do nothing, maintain the grapple and retain control). NPC use: a grappled non-controller who
+is NOT a dedicated grappler (`_npc_should_grapple` false — a weapon-fighter who got grabbed)
+now **breaks free** to return to its weapon next turn, instead of endlessly contesting control;
+a dedicated grappler still contests. Runtime-verified 5/5 (break frees both, partner not prone;
+pass = free action retaining grapple+control; NPC swordsman breaks free; NPC grappler contests).
+
 ### Pending Redesign
 (None currently pending.)
 
