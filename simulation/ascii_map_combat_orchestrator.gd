@@ -776,7 +776,7 @@ static func execute_melee_attack(
 		# Down: only free actions + must spend Void (GDD s40).
 		return _execute_down_attack(state, attacker_id, target_id, attacker, target, weapon_name, dice_engine)
 
-	# Special maneuver: Guard (free action — does not consume complex budget).
+	# Special maneuver: Guard (Simple Action, GDD s40 — resolved by execute_guard).
 	if maneuver == "guard":
 		return execute_guard(state, attacker_id, target_id, attacker, target)
 
@@ -1469,6 +1469,13 @@ static func execute_guard(
 	if g_p.stance == Enums.Stance.FULL_ATTACK:
 		return {"success": false, "reason": "full_attack_cannot_guard"}
 
+	# Guard is a Simple Action (GDD s40).
+	var wl: int = CharacterStats.get_wound_level(guardian)
+	if ts.is_down_restricted(wl):
+		return {"success": false, "reason": "down_only_free_actions"}
+	if not ts.can_use_simple():
+		return {"success": false, "reason": "no_simple_actions_remaining"}
+
 	# Must be within 5 feet (1 tile) (GDD s40).
 	var gpos: Vector2i = state.positions.get(guardian_id, Vector2i(-1, -1))
 	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
@@ -1476,7 +1483,7 @@ static func execute_guard(
 		return {"success": false, "reason": "target_too_far"}
 
 	IndividualCombat.resolve_guard(g_p, target_id, guardian, t_p)
-	ts.consume_free()
+	ts.consume_simple()
 
 	state.combat_log.append({
 		"type": "guard",
@@ -4079,6 +4086,17 @@ static func execute_npc_turn(
 			actions_taken.append({"action": "cast_spell", "result": cast_r})
 			return {"actions": actions_taken}
 
+	# -- Guard a wounded, threatened adjacent ally (s40, Simple Action) -------
+	# Bodyguard reflex: raise a hurt ally's Armor TN (+10) at -5 to its own. Runs before
+	# the stance pick — Guard is a Simple Action, so the NPC commits its turn to protecting
+	# the ally and forgoes its own attack. Skipped while grappled or prone (handled below).
+	if not IndividualCombat.has_condition(p, IndividualCombat.CONDITION_GRAPPLED) \
+			and not IndividualCombat.has_condition(p, IndividualCombat.CONDITION_PRONE):
+		var guard_r: Dictionary = _npc_maybe_guard(state, npc_id, npc, chars_by_id)
+		if not guard_r.is_empty():
+			actions_taken.append({"action": "guard", "result": guard_r})
+			return {"actions": actions_taken}
+
 	# -- Pick optimal stance -----------------------------------------------
 	var stance_result: Dictionary = _npc_pick_stance(state, npc_id, npc, chars_by_id, dice_engine)
 	if stance_result.get("changed", false):
@@ -4144,13 +4162,6 @@ static func execute_npc_turn(
 		var rw: Dictionary = execute_recover_weapon(state, npc_id, npc)
 		if rw.get("success", false):
 			actions_taken.append({"action": "recover_weapon", "result": rw})
-
-	# -- Guard a wounded, threatened adjacent ally (s40, free action) ---------
-	# A bodyguard reflex: raise a hurt ally's Armor TN (+10) at the cost of -5 to its own.
-	# Free action, so the NPC still takes its stance/attack afterward.
-	var guard_r: Dictionary = _npc_maybe_guard(state, npc_id, npc, chars_by_id)
-	if not guard_r.is_empty():
-		actions_taken.append({"action": "guard", "result": guard_r})
 
 	# -- Defensive stance: hold and turtle ------------------------------------
 	# Defense / Full Defense Stance cannot attack (GDD s40). A wounded NPC that

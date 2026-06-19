@@ -5516,10 +5516,19 @@ bodyguard reflex that Guards (free action, +10 ally Armor TN / −5 own) a wound
 (HURT+) adjacent ally who has an adjacent enemy, then still takes its stance/attack.
 Runtime-verified 11/11 (gate insufficient/sufficient; forced-unarmed; recover clears;
 NPC disarms armed-high-threat but not unarmed; NPC recovers; NPC guards wounded-
-threatened but not healthy ally). NOTE: `execute_guard` consumes a **free** action
-(pre-existing code choice; GDD s40 says Guard is a Simple Action) — left unchanged
-(mechanic change needs owner approval). Feint NPC use still deliberately skipped
+threatened but not healthy ally). Feint NPC use still deliberately skipped
 (≈ increased_damage for AI).
+
+### s40 Guard cost — GDD compliance (2026-06-19)
+`execute_guard` consumed a **free** action; GDD s40 (LOCKED) says "Guard (0 Raises) —
+**Simple Action**." LOCKED wins, so Guard now consumes a Simple (with the standard
+`can_use_simple` + down-restriction guards). Consequence: a guarding bodyguard forgoes
+its own attack that turn (1 Complex OR 2 Simple — a Simple spent on Guard blocks the
+Complex attack), which is the intended GDD tradeoff. `_npc_maybe_guard` was moved
+before the stance pick and now **returns** on a successful guard (the NPC commits its
+turn to protecting the ally). Runtime-verified 4/4 (Guard consumes a Simple → no
+Complex attack; NPC bodyguard guards a wounded threatened ally and forgoes its attack;
+no guard for a healthy ally).
 
 ### Pending Redesign
 (None currently pending.)
