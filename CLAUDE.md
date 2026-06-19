@@ -5478,6 +5478,26 @@ the same actor without proper turn advancement.
   spell with a clean combat effect is reachable by every NPC/companion combatant in a PC-present
   skirmish; PC casting remains the future turn-based UI.
 
+### s40 Combat Maneuvers — audit + NPC Knockdown (2026-06-19)
+Audited the s40 maneuver set against the tile orchestrator. **All maneuver executors
+are wired**: Guard (0 Raises, free action), Knockdown (biped/quad, Contested Strength →
+Prone), Disarm (Contested Strength + the weapon-grapple free-raise track), Feint
+(margin → damage bonus), Increased Damage (+1k0/Raise), Extra Attack (5 Raises), and
+the full Grapple sub-action set. **Called Shot** has no dedicated handling and needs
+none — GDD s40 says it has "no universal mechanical effect" (GM-ruled sever), and its
+Raises are already consumed via the attack's `raises` param. **Disarm's 3-Raise
+requirement is not gated** (documented forward-wire; no consumer needs it yet).
+**Gap filled — NPC tactical Knockdown:** `_npc_execute_attack` previously only ever
+chose `increased_damage`/extra_attack, so NPCs never knocked a dangerous foe Prone.
+Added `_npc_should_knockdown` (structural AI, GDD-silent on NPC maneuver policy, same
+class as the other `_npc_*` heuristics): a melee attacker with skill ≥ 4 (so the 2-Raise
+TN bump is affordable) uses Knockdown against a STANDING target whose best melee skill
+(`_NPC_KNOCKDOWN_SKILLS`) is ≥ 3 — a competent fighter worth disrupting; a Prone or
+weak target falls through to `increased_damage`. Runtime-verified 5/5 (skilled vs
+competent → Knockdown chosen + lands to Prone; skilled vs weak → no Knockdown; skilled
+vs already-prone → no Knockdown; skill < 4 → no Knockdown). Disarm/Feint NPC use is a
+deliberate non-fill (Disarm 3 Raises rarely worth it; Feint ≈ increased_damage for AI).
+
 ### Pending Redesign
 (None currently pending.)
 

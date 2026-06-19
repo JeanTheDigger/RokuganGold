@@ -4572,6 +4572,19 @@ static func _npc_move_toward(
 ## Execute NPC attack with smart raise selection (GDD s40 maneuvers).
 ## When use_extra_attack is true, declares 5 Raises for Extra Attack (GDD s40:
 ## "These Raises confer no other benefits"), precluding Increased Damage.
+# Knockdown is worthwhile only against a STANDING, competent melee fighter (dropping a
+# weakling Prone wastes the 2 Raises). Structural AI heuristic — the GDD gives no NPC policy.
+const _NPC_KNOCKDOWN_SKILLS: Array = ["Kenjutsu", "Iaijutsu", "Jiujutsu", "Polearms", "Heavy Weapons", "Knives"]
+static func _npc_should_knockdown(state: MapCombatState, target_id: int, target: L5RCharacterData) -> bool:
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if t_p == null or IndividualCombat.has_condition(t_p, IndividualCombat.CONDITION_PRONE):
+		return false  # already Prone — nothing to gain
+	var best: int = 0
+	for sk: String in _NPC_KNOCKDOWN_SKILLS:
+		best = maxi(best, int(target.skills.get(sk, 0)))
+	return best >= 3  # a competent melee opponent worth disrupting
+
+
 static func _npc_execute_attack(
 	state: MapCombatState,
 	attacker_id: int,
@@ -4594,6 +4607,13 @@ static func _npc_execute_attack(
 	if use_extra_attack:
 		# 5 Raises dedicated to Extra Attack; no other raise benefit (GDD s40).
 		raises = 5
+	elif (is_melee or target_in_melee) and skill_rank >= 4 \
+			and _npc_should_knockdown(state, target_id, target):
+		# Knockdown (2 Raises, biped): a capable attacker drops a standing melee threat
+		# Prone (normal damage + Contested Strength). Structural AI — the GDD gives no NPC
+		# maneuver policy. Gated on skill 4+ so the 2-Raise TN bump is affordable.
+		raises = 2
+		maneuver = "knockdown_biped"
 	elif skill_rank >= 3:
 		# 1 Raise for Increased Damage (GDD s40 maneuvers).
 		raises = 1
