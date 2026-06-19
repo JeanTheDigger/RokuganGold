@@ -5498,6 +5498,29 @@ competent → Knockdown chosen + lands to Prone; skilled vs weak → no Knockdow
 vs already-prone → no Knockdown; skill < 4 → no Knockdown). Disarm/Feint NPC use is a
 deliberate non-fill (Disarm 3 Raises rarely worth it; Feint ≈ increased_damage for AI).
 
+### s40 Combat Maneuvers — Disarm consequence + NPC Disarm/Guard (2026-06-19)
+Extends the maneuver tactics. **(A) Disarm 3-Raise gate.** The disarm block in
+`execute_melee_attack` now enforces GDD s40's 3-Raise cost (`DISARM_RAISES = 3`):
+the maneuver only resolves when `called_raises + banked_disarm_free_raises >= 3`
+(Earthen Fist / weapon-grapple free raises still reduce it); otherwise
+`disarm_insufficient_raises`. **(B) Disarm now has a real consequence.** New
+`Participant.disarmed` flag — a disarmed character's weapon is on the ground, so
+`execute_melee_attack` forces their attacks to `unarmed` (verified: mean damage 4.1
+vs 16.8 armed) until they recover it. `execute_recover_weapon` (a Simple action)
+picks it back up. **(C) NPC tactical maneuvers.** Three structural-AI hooks (GDD
+gives no NPC maneuver policy): `_npc_should_disarm` — a skill-5+ attacker strips a
+still-armed HIGH-threat foe (best melee skill ≥ 4; skips unarmed fighters), taking
+priority over Knockdown; a disarmed NPC recovers its weapon on its turn (Simple, so
+no Complex attack that turn — the Disarm's tempo cost); `_npc_maybe_guard` — a
+bodyguard reflex that Guards (free action, +10 ally Armor TN / −5 own) a wounded
+(HURT+) adjacent ally who has an adjacent enemy, then still takes its stance/attack.
+Runtime-verified 11/11 (gate insufficient/sufficient; forced-unarmed; recover clears;
+NPC disarms armed-high-threat but not unarmed; NPC recovers; NPC guards wounded-
+threatened but not healthy ally). NOTE: `execute_guard` consumes a **free** action
+(pre-existing code choice; GDD s40 says Guard is a Simple Action) — left unchanged
+(mechanic change needs owner approval). Feint NPC use still deliberately skipped
+(≈ increased_damage for AI).
+
 ### Pending Redesign
 (None currently pending.)
 

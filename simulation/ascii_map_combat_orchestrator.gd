@@ -28,6 +28,7 @@ const BANE_ARMOR_ROUNDS: int = 3       # s54.5 Sodatsu armor mode lasts 3 rounds
 
 ## Guard maneuver range: "within 5 feet" = 1 tile (GDD s40).
 const GUARD_RANGE_TILES: int = 1
+const DISARM_RAISES: int = 3  # s40: Disarm requires 3 Raises (banked Free Raises reduce it)
 
 ## Ranged attack while within melee range penalty (GDD s40 confirmed).
 const RANGED_IN_MELEE_PENALTY: int = -10
@@ -784,6 +785,11 @@ static func execute_melee_attack(
 	if a_p == null or t_p == null:
 		return {"success": false, "reason": "participant_missing"}
 
+	# Disarmed (s40): the attacker's weapon is on the ground — they swing unarmed until
+	# they recover it (execute_recover_weapon), regardless of the weapon the caller passed.
+	if a_p.disarmed and weapon_name != "" and weapon_name != "unarmed":
+		weapon_name = "unarmed"
+
 	# Dance of the Flames (s38 Fire): unarmed attacks cost a Simple Action, not Complex.
 	# Simple-cost attack: Dance of the Flames (unarmed kiho) OR a Simple-economy Charge (s54.5).
 	var dance_simple: bool = as_simple or ((weapon_name == "" or weapon_name == "unarmed") and "Dance of the Flames" in a_p.active_kiho)
@@ -981,18 +987,24 @@ static func execute_melee_attack(
 			result["knocked_down"] = kd["knocked_down"]
 			log_entry["knocked_down"] = kd["knocked_down"]
 
-		# Disarm maneuver: contested Strength if hit.
+		# Disarm maneuver (s40, 3 Raises; banked Free Raises reduce the requirement). On a
+		# won Contested Strength the target's weapon hits the ground (persistent disarmed
+		# state — they fight unarmed until they recover it).
 		if maneuver == "disarm":
 			# Consume any Free Raises banked toward a Disarm against this target
-			# (s40 weapon-grapple lose-control risk). The orchestrator does not gate
-			# Disarm on its 3-Raise requirement, so the raise-reduction is recorded
-			# (and cleared) here for callers; the mechanical benefit is a forward-wire.
+			# (s40 weapon-grapple lose-control risk / Earthen Fist).
+			var disarm_free: int = a_p.disarm_free_raises_pending
 			if a_p.disarm_free_raises_pending > 0:
 				result["disarm_free_raises_used"] = a_p.disarm_free_raises_pending
 				a_p.disarm_free_raises_pending = 0
-			var dr: Dictionary = IndividualCombat.resolve_disarm(attacker, target, dice_engine, weapon_name, a_p)
-			result["disarmed"] = dr["disarmed"]
-			log_entry["disarmed"] = dr["disarmed"]
+			if raises + disarm_free >= DISARM_RAISES:
+				var dr: Dictionary = IndividualCombat.resolve_disarm(attacker, target, dice_engine, weapon_name, a_p)
+				result["disarmed"] = dr["disarmed"]
+				log_entry["disarmed"] = dr["disarmed"]
+				if dr["disarmed"] and t_p != null:
+					t_p.disarmed = true
+			else:
+				result["disarm_insufficient_raises"] = true
 
 	# Earthen Fist (s38 Earth): if an opponent's melee attack against the caster MISSES,
 	# the caster (who must be in Defense/Full Defense) may attempt a Disarm next Turn for
@@ -1694,6 +1706,38 @@ static func execute_stand_up(
 
 	state.combat_log.append({
 		"type": "stand_up",
+		"round": state.combat.round_number,
+		"char_id": char_id,
+	})
+	return {"success": true}
+
+
+## Recover a dropped weapon after a Disarm (s40): a Simple Action that picks the weapon
+## back up (it lies at the character's feet — no movement needed). Clears the disarmed state.
+static func execute_recover_weapon(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p == null:
+		return {"success": false, "reason": "participant_missing"}
+	if not p.disarmed:
+		return {"success": false, "reason": "not_disarmed"}
+	var wl: int = CharacterStats.get_wound_level(character)
+	if ts.is_down_restricted(wl):
+		return {"success": false, "reason": "down_only_free_actions"}
+	if not ts.can_use_simple():
+		return {"success": false, "reason": "no_simple_actions_remaining"}
+	p.disarmed = false
+	ts.consume_simple()
+	state.combat_log.append({
+		"type": "recover_weapon",
 		"round": state.combat.round_number,
 		"char_id": char_id,
 	})
@@ -4094,6 +4138,20 @@ static func execute_npc_turn(
 			var su: Dictionary = execute_stand_up(state, npc_id, npc)
 			actions_taken.append({"action": "stand_up", "result": su})
 
+	# -- Recover a disarmed weapon (s40): pick it back up (Simple) rather than fight
+	# unarmed. Spends the Simple, so no Complex attack this turn — the Disarm's tempo cost.
+	if p.disarmed and not ts.is_down_restricted(wl) and ts.can_use_simple():
+		var rw: Dictionary = execute_recover_weapon(state, npc_id, npc)
+		if rw.get("success", false):
+			actions_taken.append({"action": "recover_weapon", "result": rw})
+
+	# -- Guard a wounded, threatened adjacent ally (s40, free action) ---------
+	# A bodyguard reflex: raise a hurt ally's Armor TN (+10) at the cost of -5 to its own.
+	# Free action, so the NPC still takes its stance/attack afterward.
+	var guard_r: Dictionary = _npc_maybe_guard(state, npc_id, npc, chars_by_id)
+	if not guard_r.is_empty():
+		actions_taken.append({"action": "guard", "result": guard_r})
+
 	# -- Defensive stance: hold and turtle ------------------------------------
 	# Defense / Full Defense Stance cannot attack (GDD s40). A wounded NPC that
 	# committed to a defensive stance holds position (it already gained the
@@ -4585,6 +4643,66 @@ static func _npc_should_knockdown(state: MapCombatState, target_id: int, target:
 	return best >= 3  # a competent melee opponent worth disrupting
 
 
+# Disarm is worthwhile only against a still-armed, HIGH-threat melee fighter (best melee
+# skill >= 4). A weapon strip neutralizes them for a turn (recovery costs an action) and
+# leaves them fighting unarmed. Structural AI heuristic — the GDD gives no NPC policy.
+static func _npc_should_disarm(state: MapCombatState, target_id: int, target: L5RCharacterData) -> bool:
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if t_p == null or t_p.disarmed:
+		return false  # already weaponless
+	if IndividualCombat.pick_best_weapon(target) == "unarmed":
+		return false  # nothing to disarm (unarmed fighter)
+	var best: int = 0
+	for sk: String in _NPC_KNOCKDOWN_SKILLS:
+		best = maxi(best, int(target.skills.get(sk, 0)))
+	return best >= 4  # a dangerous armed opponent worth stripping
+
+
+# True if a living enemy of `faction` is adjacent (within 1 tile) to the character at `who_id`.
+static func _enemy_adjacent_to(state: MapCombatState, who_id: int, faction: String) -> bool:
+	var wpos: Vector2i = state.positions.get(who_id, Vector2i(-9999, -9999))
+	for eid in state.positions.keys():
+		if String(state.factions.get(eid, "")) == faction:
+			continue
+		var ech = state.combatants.get(eid, null)
+		if ech == null or CharacterStats.is_dead(ech):
+			continue
+		if _chebyshev(wpos, state.positions[eid]) <= MELEE_RANGE_TILES:
+			return true
+	return false
+
+
+# Guard a wounded, threatened adjacent ally (s40, free action). Picks the first living
+# same-faction ally within Guard range (1 tile) at wound level HURT+ who has an adjacent
+# enemy. Returns {guarded, result} or {}. Structural AI — the GDD gives no NPC policy.
+static func _npc_maybe_guard(
+	state: MapCombatState, npc_id: int, npc: L5RCharacterData, chars_by_id: Dictionary,
+) -> Dictionary:
+	var p: IndividualCombat.Participant = state.combat.participants.get(npc_id, null)
+	if p == null:
+		return {}
+	if p.stance == Enums.Stance.FULL_ATTACK:
+		return {}  # cannot Guard in Full Attack Stance (GDD s40)
+	var cf: String = String(state.factions.get(npc_id, ""))
+	var npos: Vector2i = state.positions.get(npc_id, Vector2i(-9999, -9999))
+	for aid in state.positions.keys():
+		if aid == npc_id or String(state.factions.get(aid, "")) != cf:
+			continue
+		var ach = chars_by_id.get(aid, state.combatants.get(aid, null))
+		if ach == null or CharacterStats.is_dead(ach):
+			continue
+		if CharacterStats.get_wound_level(ach) < Enums.WoundLevel.HURT:
+			continue
+		if _chebyshev(npos, state.positions[aid]) > GUARD_RANGE_TILES:
+			continue
+		if not _enemy_adjacent_to(state, aid, cf):
+			continue
+		var g: Dictionary = execute_guard(state, npc_id, aid, npc, ach)
+		if g.get("success", false):
+			return {"guarded": aid, "result": g}
+	return {}
+
+
 static func _npc_execute_attack(
 	state: MapCombatState,
 	attacker_id: int,
@@ -4607,6 +4725,13 @@ static func _npc_execute_attack(
 	if use_extra_attack:
 		# 5 Raises dedicated to Extra Attack; no other raise benefit (GDD s40).
 		raises = 5
+	elif (is_melee or target_in_melee) and skill_rank >= 5 \
+			and _npc_should_disarm(state, target_id, target):
+		# Disarm (3 Raises): a very skilled attacker strips a dangerous ARMED foe's weapon
+		# (persistent — they fight unarmed until they recover it). Gated on skill 5+ so the
+		# 3-Raise (+15 TN) bump is affordable. Structural AI (GDD gives no NPC policy).
+		raises = 3
+		maneuver = "disarm"
 	elif (is_melee or target_in_melee) and skill_rank >= 4 \
 			and _npc_should_knockdown(state, target_id, target):
 		# Knockdown (2 Raises, biped): a capable attacker drops a standing melee threat

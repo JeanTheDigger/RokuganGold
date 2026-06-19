@@ -212,6 +212,9 @@ class Participant:
 	# Reversal of Fortunes (s36): the round in which this participant last used its
 	# re-roll charge (1/round). -1 = never used this skirmish.
 	var reversal_used_round: int = -1
+	# Disarm maneuver (s40): the character's weapon is on the ground — they fight unarmed
+	# until they spend an action to recover it. Cleared by execute_recover_weapon.
+	var disarmed: bool = false
 	# Victory of the River (s30a): the single opponent currently held under the
 	# Armor-TN debuff ("One opponent at a time"); -1 = none.
 	var votr_target_id: int = -1
