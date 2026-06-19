@@ -5344,6 +5344,23 @@ the same actor without proper turn advancement.
   (Tempest/Slayer's/Tsunami), Fatigue (Howl), Daze (Touch the Emptiness), weather bonuses,
   earthquake/pit structure-and-terrain spells, multi-round transforms (Tomb of Jade), and the
   buff/weapon/condition spell families.
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 3: damage-spell condition riders
+  (owner-authorized 2026-06-18).** Adds the GDD condition riders to the wired damage spells via a
+  new optional `rider` sub-dict on `SPELL_COMBAT_EFFECTS` ({condition, save, save_tn,
+  duration_rounds}) + `_apply_spell_rider` in the orchestrator (applied per surviving damaged
+  target after damage). Four save types: `none` (auto), `earth_flat` / `stamina_flat` (Ring/Trait
+  roll vs TN), `earth_contested_air` (target Earth vs caster Air, ties to the target). Five riders
+  wired to existing consumed conditions: **Prone** — Tempest of Air (Contested Earth vs Air),
+  Slayer's Knives (Earth TN 20), Strike of the Tsunami (Earth TN 15); **Dazed** — Touch the
+  Emptiness (no save); **Fatigued** — Howl of Isora (Earth TN 30). New `CONDITION_DEAFENED`
+  constant added (forward-wired) but Fury of Osano-Wo's Deafen is **deferred**: it is a bystander
+  AoE within 10' of the *target* (not a rider on the damaged target, who usually dies to 5k2
+  first) and Deafened has no combat effect yet — needs a sub-AoE + a hearing mechanic. The timed-
+  rider path (`duration_rounds`>0) remains forward-wired (no rider currently uses it). All values
+  GDD-exact. Runtime-verified 5/5 (Dazed auto; Prone on weak-Earth via contested + flat saves;
+  strong-Earth target resists Slayer's Knives = rider "resisted"; Fatigued on Howl; Fury now
+  riderless). DEFERRED unchanged: Fury Deafen bystander-AoE, weather bonuses, earthquake/pit
+  terrain spells, multi-round transforms, buff/weapon/condition spell families.
 
 ### Pending Redesign
 (None currently pending.)

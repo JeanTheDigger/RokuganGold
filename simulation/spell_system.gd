@@ -49,13 +49,20 @@ static func has_jade_or_crystal_property(spell_id: String) -> bool:
 ##   aoe_hits    : "enemies" (foes only) or "all" (friend + foe)
 ##   caster_exempt : AoE never damages the caster
 ##   requires_taint : 0 damage to a target with Taint Rank < 1 (Jade Strike)
+##   rider       : optional condition applied to each damaged target —
+##                 {condition: "prone"/"dazed"/"fatigued"/"deafened",
+##                  save: "none"/"earth_flat"/"stamina_flat"/"earth_contested_air",
+##                  save_tn: int (flat saves), duration_rounds: int (0 = roll-recovered/instant)}
 ## DR routes through the invuln filter as magic (always) + the spell's element kind (fire/water), so
 ## flame_immune blocks/heals fire spells and water_vulnerable doubles water spells. Cones/diameters are
 ## modeled as Chebyshev radii (length-or-diameter ÷ 5 = tiles) — an over-application behind the caster,
-## since facing is not tracked (same compromise as the kiho cone layer). Multi-round channels, Knockdown/
-## Fatigue/Daze riders, and weather damage bonuses are deferred to later tranches.
+## since facing is not tracked (same compromise as the kiho cone layer). Multi-round channels and
+## weather damage bonuses are deferred to later tranches.
 const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# --- Fire (s35) ---
+	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
+	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
+	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.
 	"fury_of_osano_wo": {"kind": "damage", "dr_rolled": 5, "dr_kept": 2,
 		"range_tiles": 60, "aoe_radius": 0},
 	"breath_of_the_fire_dragon": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
@@ -65,27 +72,32 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"beam_of_the_inferno": {"kind": "damage", "dr_rolled": 10, "dr_kept": 10,
 		"range_tiles": 40, "aoe_radius": 0},
 	# --- Air (s33) ---
-	# Tempest of Air: Personal, 75' cone, 1k1 (Knockdown rider deferred)
+	# Tempest of Air: Personal, 75' cone, 1k1 + Knockdown (Contested Earth vs caster Air)
 	"tempest_of_air": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1,
-		"range_tiles": 0, "aoe_radius": 15, "aoe_hits": "enemies", "caster_exempt": true},
-	# Howl of Isora: Range 100', 40' diameter burst, 3k2 to all (Fatigue rider deferred)
+		"range_tiles": 0, "aoe_radius": 15, "aoe_hits": "enemies", "caster_exempt": true,
+		"rider": {"condition": "prone", "save": "earth_contested_air"}},
+	# Howl of Isora: Range 100', 40' diameter burst, 3k2 to all + Fatigue (Earth TN 30)
 	"howl_of_isora": {"kind": "damage", "dr_rolled": 3, "dr_kept": 2,
-		"range_tiles": 20, "aoe_radius": 4, "aoe_hits": "all", "caster_exempt": true},
-	# Slayer's Knives: Range 30' corridor, DR = Air Ring +2k0 (Knockdown rider deferred)
+		"range_tiles": 20, "aoe_radius": 4, "aoe_hits": "all", "caster_exempt": true,
+		"rider": {"condition": "fatigued", "save": "earth_flat", "save_tn": 30}},
+	# Slayer's Knives: Range 30' corridor, DR = Air Ring +2k0 + Knockdown (Earth TN 20)
 	"slayers_knives": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0, "dr_rolled_bonus": 2,
-		"range_tiles": 0, "aoe_radius": 6, "aoe_hits": "enemies", "caster_exempt": true},
+		"range_tiles": 0, "aoe_radius": 6, "aoe_hits": "enemies", "caster_exempt": true,
+		"rider": {"condition": "prone", "save": "earth_flat", "save_tn": 20}},
 	# --- Earth (s34) ---
 	# Jade Strike: Range 100', single, DR 3k3 ONLY vs Taint Rank 1+ (also a jade-property spell)
 	"jade_strike": {"kind": "damage", "dr_rolled": 3, "dr_kept": 3,
 		"range_tiles": 20, "aoe_radius": 0, "requires_taint": true},
 	# --- Water (s36) ---
-	# Strike of the Tsunami: Range 25' cone, 3k3 (Knockdown rider deferred)
+	# Strike of the Tsunami: Range 25' cone, 3k3 + Knockdown (Earth TN 15)
 	"strike_of_the_tsunami": {"kind": "damage", "dr_rolled": 3, "dr_kept": 3,
-		"range_tiles": 0, "aoe_radius": 5, "aoe_hits": "enemies", "caster_exempt": true},
+		"range_tiles": 0, "aoe_radius": 5, "aoe_hits": "enemies", "caster_exempt": true,
+		"rider": {"condition": "prone", "save": "earth_flat", "save_tn": 15}},
 	# --- Void (s37, Ishiken-only) ---
-	# Touch the Emptiness: Range 30', single, 1k1 (Daze rider deferred)
+	# Touch the Emptiness: Range 30', single, 1k1 + Dazed (no save)
 	"touch_the_emptiness": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1,
-		"range_tiles": 6, "aoe_radius": 0},
+		"range_tiles": 6, "aoe_radius": 0,
+		"rider": {"condition": "dazed", "save": "none"}},
 	# Void Strike: Range 50', single, DR = caster's Void Ring
 	"void_strike": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
 		"range_tiles": 10, "aoe_radius": 0},

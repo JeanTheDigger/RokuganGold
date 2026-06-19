@@ -1878,8 +1878,52 @@ static func _apply_spell_combat_damage(
 				continue
 			dmg = int(round(dmg * filt.get("multiplier", 1.0)))
 		WoundSystem.apply_damage(ch, dmg, 0)
-		hits.append({"id": t["id"], "damage": dmg, "dead": CharacterStats.is_dead(ch)})
+		var dead: bool = CharacterStats.is_dead(ch)
+		var h: Dictionary = {"id": t["id"], "damage": dmg, "dead": dead}
+		# Rider condition (Knockdown/Daze/Fatigue/Deafen) — only on a surviving damaged target.
+		var rider: Dictionary = eff.get("rider", {})
+		if not rider.is_empty() and not dead:
+			h["rider"] = _apply_spell_rider(state, caster, ch, int(t["id"]), rider, dice_engine)
+		hits.append(h)
 	return hits
+
+
+# Resolves a damage-spell's condition rider (s31–s37). Returns the applied condition string,
+# "resisted" on a successful save, or "" when the target has no Participant.
+static func _apply_spell_rider(
+	state: MapCombatState, caster: L5RCharacterData, ch: L5RCharacterData,
+	cid: int, rider: Dictionary, dice_engine: DiceEngine,
+) -> String:
+	var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+	if p == null:
+		return ""
+	var save: String = rider.get("save", "none")
+	var tn: int = rider.get("save_tn", 0)
+	var resisted: bool = false
+	match save:
+		"earth_flat":
+			var e: int = SpellSystem.get_ring_value(ch, Enums.Ring.EARTH)
+			resisted = dice_engine.roll_and_keep(e, e, true).total >= tn
+		"stamina_flat":
+			var sta: int = maxi(1, ch.stamina)
+			resisted = dice_engine.roll_and_keep(sta, sta, true).total >= tn
+		"earth_contested_air":
+			var te: int = SpellSystem.get_ring_value(ch, Enums.Ring.EARTH)
+			var ca: int = SpellSystem.get_ring_value(caster, Enums.Ring.AIR)
+			# Contested: the target must beat the caster's Air roll to avoid Knockdown.
+			resisted = dice_engine.roll_and_keep(te, te, true).total \
+				>= dice_engine.roll_and_keep(ca, ca, true).total
+		_:
+			resisted = false  # "none" — auto-apply
+	if resisted:
+		return "resisted"
+	var cond: String = rider.get("condition", "")
+	var dur: int = rider.get("duration_rounds", 0)
+	if dur > 0:
+		IndividualCombat.apply_timed_condition(p, cond, state.combat.round_number + dur)
+	else:
+		IndividualCombat.apply_condition(p, cond)
+	return cond
 
 
 ## Sodatsu no Oni Shugenja's Bane retaliation (s54.5): a Free Action picking one of three

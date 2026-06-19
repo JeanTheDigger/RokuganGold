@@ -114,6 +114,7 @@ const CONDITION_MOUNTED:   String = "mounted"
 const CONDITION_PRONE:     String = "prone"
 const CONDITION_STUNNED:   String = "stunned"
 const CONDITION_AFRAID:     String = "afraid"   # s22.3/s02.4 Fear: -1k0 to all rolls while in range
+const CONDITION_DEAFENED:   String = "deafened" # s35 Fury of Osano-Wo rider; combat effect deferred (no verbal/hearing mechanic)
 
 # GDD s40 describes striking after first blood as dishonorable and conceding
 # a death duel as shameful, but specifies no numeric honor/glory values.
