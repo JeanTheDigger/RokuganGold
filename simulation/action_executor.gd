@@ -100,6 +100,7 @@ const BASE_TN: Dictionary = {
 
 const SOCIAL_BASE_TN: int = 0
 const COVERT_BASE_TN: int = 0
+const COMPLIANCE_COURT_TN_PENALTY: int = 10  # s12.9: +10 TN on a compliant character's court action toward their intimidator
 const MILITARY_BASE_TN: int = 0
 const ADMIN_BASE_TN: int = 0
 
@@ -4194,6 +4195,22 @@ static func _execute_contested_court_action(
 	if action_id == "OFFER_FAVOR":
 		var honor_mod: int = HonorGlorySystem.get_court_honor_modifier(character)
 		attacker_roll += honor_mod * 5
+
+	# s15.4a session TN reductions: accumulated this court session (success-gated, per target)
+	# but never consumed until now. Negotiate is eased by the Negotiate/Impress pool plus the
+	# Listen/Reflect pool; Persuade is eased by the Listen/Reflect pool. Lowering the defender
+	# roll = lowering the TN. Compliance (s12.9) raises it: a character complying under duress
+	# faces +10 on any court action toward the intimidator they are complying with.
+	if target_id >= 0 and not ctx.court_session_state.is_empty():
+		var sess: Dictionary = ctx.court_session_state
+		var tn_pool: int = int(sess.get("tn_reductions", {}).get(target_id, 0))
+		var persuade_pool: int = int(sess.get("persuade_tn_reductions", {}).get(target_id, 0))
+		if action_id == "NEGOTIATE":
+			defender_roll = maxi(0, defender_roll - tn_pool - persuade_pool)
+		elif action_id == "PERSUADE":
+			defender_roll = maxi(0, defender_roll - persuade_pool)
+	if target_id in ctx.compliance_intimidators:
+		defender_roll += COMPLIANCE_COURT_TN_PENALTY
 
 	var margin: int = attacker_roll - defender_roll
 	var raises: int = maxi(int(margin / 5.0), 0)

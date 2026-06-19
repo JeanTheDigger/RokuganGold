@@ -5681,9 +5681,20 @@ callers and there was no persistent state. Built end-to-end:
 Values are GDD-exact (pushback TN 15 + Intimidation rank; Friend threshold 31). Runtime-verified
 9/9 (creation + grace; hostile-vs-intimidator blocked while other/friendly allowed; all four
 end-conditions; low-WP persists vs strong intimidator 20/20; high-WP breaks free; injection).
-LIMITATIONS (deferred): the s12.9 line-35 court-action +10-TN effect (the court session-TN
-*consumption* path doesn't exist yet) and the "on compliance end, immediately make the
-suppressed Public Declaration" nuance — both need court-resolution integration.
+The s12.9 line-35 court +10-TN effect is now ALSO wired (see below). Deferred: the "on
+compliance end, immediately make the suppressed Public Declaration" nuance.
+
+### s15.4a court session-TN reductions consumed + s12.9 court compliance penalty (2026-06-19)
+The court session-TN reduction mechanic (s15.4a, LOCKED) was inert: successful Negotiate/Impress
+(−5) and Listen/Reflect (−10) correctly ACCUMULATED a per-target reduction pool in the court
+session_state (success-gated), but `_execute_contested_court_action` never CONSUMED it, so
+repeated court persuasion never got easier. Wired the consumption: a Negotiate's defender roll is
+lowered by the Negotiate/Impress pool + the Listen/Reflect pool; a Persuade's by the Listen/Reflect
+pool (floored at 0). Same site now applies the s12.9 court compliance penalty: a character complying
+under duress faces +10 (`COMPLIANCE_COURT_TN_PENALTY`) on any court action toward the intimidator
+they comply with (`ctx.compliance_intimidators`) — covering non-hostile court opposition the
+Phase-4 hostile filter doesn't. Runtime-verified 3/3 (accumulated reduction lifts Negotiate
+success 44→79/80; compliance +10 drops it 44→18/80; Persuade eased only by the persuade pool).
 
 ### Pending Redesign
 (None currently pending.)
