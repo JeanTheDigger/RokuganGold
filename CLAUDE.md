@@ -5647,6 +5647,18 @@ per-character modifier with the LOCKED family-baseline ripple. Traced assassinat
 the vengeance pipeline). **All s12.2b collective Event-Ripple functions are now wired** (clan:
 war/peace; family: duel-death, rice-sharing, lord-raid, betrayal). Runtime-verified 10/10.
 
+### s55.22b Otomo Seiyaku detection wired (2026-06-19)
+`OtomoSeiyakuSystem.apply_detection` was dead — the §6.1 detection/counterplay against Otomo
+alliance-suppression never fired. `DayOrchestrator._process_seiyaku_detection` (seasonal, before
+the seiyaku review) lets a co-located non-Otomo character detect each active suppression directive
+via a contested Courtier/Awareness roll; on success `apply_detection` halves the operative's
+effectiveness for the season (consumed by estimate_seasonal_effect) and a Tier-4 "Otomo
+Manipulation Detected — A/B Targeted" topic seeds to the detector. effectiveness_halved is reset
+each season (the per-court-session window). Values GDD-exact (halved effectiveness). Runtime-verified
+5/5 (strong detector halves + topic + learns; Otomo courtier excluded; runs vs strong operative).
+LIMITATION: the diffuse "+5 sympathy toward the targeted clans from all who learn" is deferred
+(no per-clan sympathy field).
+
 ### Pending Redesign
 (None currently pending.)
 

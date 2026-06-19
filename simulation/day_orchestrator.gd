@@ -1640,7 +1640,7 @@ static func advance_day(
 			seiyaku_results = _process_seiyaku_review(
 				seiyaku_state, characters, characters_by_id,
 				emperor_archetype, active_wars, active_topics,
-				next_topic_id, ic_day,
+				next_topic_id, ic_day, dice_engine,
 			)
 		var season_count: int = int(season_meta.get("horde_season_count", 0))
 		ronin_results = _process_seasonal_ronin(characters, season_count)
@@ -19295,6 +19295,67 @@ static func _process_musha_shugyo(
 
 # -- Otomo Seiyaku Review ------------------------------------------------------
 
+## s55.22b §6.1 Otomo manipulation detection. For each active suppression directive, a
+## co-located non-Otomo character may detect the operative via a contested Courtier/Awareness
+## roll; on success the operative's effectiveness is halved for the season (apply_detection)
+## and a Tier-4 "Otomo Manipulation Detected" topic seeds to the detector. effectiveness_halved
+## is reset each season (the per-court-session window).
+static func _process_seiyaku_detection(
+	seiyaku_state: Dictionary,
+	characters: Array,
+	characters_by_id: Dictionary,
+	otomo_courtiers: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> void:
+	var directives: Dictionary = seiyaku_state.get("active_directives", {})
+	if directives.is_empty():
+		return
+	# Group living co-located candidates by location for quick lookup.
+	for pair_key: Variant in directives.keys():
+		var directive: Dictionary = directives[pair_key]
+		directive["effectiveness_halved"] = false  # reset the per-season window
+		var op_id: int = directive.get("operative_id", -1)
+		var operative: L5RCharacterData = characters_by_id.get(op_id)
+		if operative == null or CharacterStats.is_dead(operative) or operative.physical_location.is_empty():
+			continue
+		var loc: String = operative.physical_location
+		var op_pool: int = maxi(operative.awareness + operative.skills.get("Courtier", 0), 1)
+		for c_v: Variant in characters:
+			var c: L5RCharacterData = c_v as L5RCharacterData
+			if c == null or c.character_id == op_id or CharacterStats.is_dead(c):
+				continue
+			if c.physical_location != loc or c.is_pc or c.character_id in otomo_courtiers:
+				continue
+			if c.skills.get("Courtier", 0) < 1:
+				continue
+			var det_pool: int = maxi(c.awareness + c.skills.get("Courtier", 0), 1)
+			var det_roll: int = dice_engine.roll_and_keep(det_pool, maxi(c.awareness, 1), true).total
+			var op_roll: int = dice_engine.roll_and_keep(op_pool, maxi(operative.awareness, 1), true).total
+			if det_roll <= op_roll:
+				continue
+			# Detected.
+			OtomoSeiyakuSystem.apply_detection(seiyaku_state, pair_key)
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			topic.slug = "otomo_manip_detected_%s_%d" % [str(pair_key), ic_day]
+			topic.title = "Otomo Manipulation Detected — %s / %s Targeted" % [
+				directive.get("clan_a", ""), directive.get("clan_b", "")]
+			topic.topic_type = "political"
+			topic.variant = "otomo_detected"
+			topic.tier = TopicData.Tier.TIER_4
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+			topic.category = TopicData.Category.POLITICAL
+			topic.ic_day_created = ic_day
+			active_topics.append(topic)
+			if topic.topic_id not in c.topic_pool:
+				c.topic_pool.append(topic.topic_id)
+			break  # one detection halves the directive for the season
+
+
 static func _process_seiyaku_review(
 	seiyaku_state: Dictionary,
 	characters: Array,
@@ -19304,9 +19365,22 @@ static func _process_seiyaku_review(
 	active_topics: Array,
 	next_topic_id: Array,
 	ic_day: int,
+	dice_engine: DiceEngine = null,
 ) -> Dictionary:
 	var champion_dispositions: Dictionary = _build_champion_dispositions(characters, characters_by_id)
 	var otomo_courtiers: Array = _get_otomo_courtier_ids(characters)
+
+	# s55.22b §6.1 Detection: characters co-located with an active Otomo operative may
+	# detect the manipulation (contested Courtier/Awareness). Success halves the operative's
+	# effectiveness for the season and seeds a Tier-4 detection topic. Effectiveness is reset
+	# each season (the "court session" window). The diffuse +5 sympathy "from all who learn"
+	# is deferred (no per-clan sympathy field).
+	if dice_engine != null:
+		_process_seiyaku_detection(
+			seiyaku_state, characters, characters_by_id, otomo_courtiers,
+			active_topics, next_topic_id, ic_day, dice_engine,
+		)
+
 	var war_context: Array = []
 	for w: WarData in active_wars:
 		war_context.append(WarSystem.to_context_dict(w))
