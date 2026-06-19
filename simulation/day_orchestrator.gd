@@ -601,6 +601,8 @@ static func advance_day(
 		season_meta,
 		active_wars,
 		next_war_id,
+		provinces,
+		world_states.get("family_baselines", {}),
 	)
 
 	var supply_sharing_results: Array = _process_supply_sharing(
@@ -15075,6 +15077,8 @@ static func _process_starvation_warfare_effects(
 	season_meta: Dictionary,
 	active_wars: Array,
 	next_war_id: Array,
+	provinces: Dictionary = {},
+	family_baselines: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 
@@ -15085,6 +15089,7 @@ static func _process_starvation_warfare_effects(
 			var r: Dictionary = _apply_harvest_destruction(
 				effects, characters_by_id, active_topics,
 				next_topic_id, ic_day, season_meta,
+				applied.get("character_id", -1), provinces, family_baselines,
 			)
 			if not r.is_empty():
 				results.append(r)
@@ -15106,6 +15111,9 @@ static func _apply_harvest_destruction(
 	next_topic_id: Array,
 	ic_day: int,
 	season_meta: Dictionary,
+	raider_lord_id: int = -1,
+	provinces: Dictionary = {},
+	family_baselines: Dictionary = {},
 ) -> Dictionary:
 	var province_id: int = effects.get("province_id", -1)
 	var ordering_clan: String = effects.get("ordering_clan", "")
@@ -15120,6 +15128,18 @@ static func _apply_harvest_destruction(
 		ordering_clan, province_id, next_topic_id, ic_day,
 	)
 	active_topics.append(topic)
+
+	# s12.2b Event Ripple: a harvest raid sours the raiding lord's family against the
+	# raided province's family (replaces the removed-as-invented `destroyed_harvest`
+	# per-character modifier with the LOCKED family-baseline ripple).
+	var raider: L5RCharacterData = characters_by_id.get(raider_lord_id)
+	var raided_prov: Variant = provinces.get(province_id, null)
+	if raider != null and raider.family != "" and raided_prov is ProvinceData:
+		var target_family: String = (raided_prov as ProvinceData).family
+		if target_family != "":
+			CollectiveDisposition.apply_family_lord_raid(
+				raider.family, target_family, family_baselines,
+			)
 
 	for id: Variant in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[id] as L5RCharacterData
