@@ -5584,6 +5584,26 @@ number — the Glory award is NOT applied (the named-reputation topic is the del
 model + values). DEFERRED elsewhere: the Imperial Championship resolver (`resolve_championship`)
 is also still unwired (annual/vacancy trigger + winner Glory unspecified).
 
+### s11.5 Topaz Championship wired + resolve_championship latent bug fixed (2026-06-19)
+`FestivalSystem.resolve_championship` was built but had **zero production callers** (tests only).
+Wired the annual **Topaz Championship** (s11.5 LOCKED): `DayOrchestrator._process_topaz_championship`
+fires once per IC year (year boundary, alongside the Great Games). Eligible entrants are that
+year's new graduates — Insight Rank 1 living non-PC samurai (the "graduated this year" proxy; no
+gempukku-year marker exists); each clan sends up to 3 of its finest by Topaz-stage competence
+(Athletics + best(Kenjutsu/Iaijutsu) + best(Etiquette/Lore: History)). Resolved via
+`resolve_championship`; the winner is **declared Topaz Champion for one year** — `role_position`
+set to RoleRegistry.TOPAZ_CHAMPION, the prior holder simply loses the title (s11.5) — and gains a
+named reputation (TIER_4 PERSONAL topic, pooled). **Latent bug fixed:** `resolve_championship`'s
+`stage["skill"] == "elemental_ring"` crashed ("Invalid operands Array and String") whenever a
+stage skill was an Array (Topaz `["Kenjutsu","Iaijutsu"]`, Amethyst/Topaz Lore options) — GUT
+never caught it (non-functional headless); this wiring is the first real execution. Guarded with
+`is String`. Runtime-verified 10/10 (eligible Rank-1 winner; title transfer; prior holder loses it;
+TIER_4 topic pooled; ≤3/clan cap; <2/no-Rank-1 no-op; Jade elemental_ring no longer crashes).
+LIMITATIONS (deferred): the title's Status/Glory change (s46 lists Status 4, RoleRegistry 5.0 — a
+GDD/code conflict, not resolved); vacancy-triggered championships (Emerald/Jade/Amethyst/Ruby/
+Turquoise — need vacancy detection + clan nomination + Emperor-call timing, s11.5); the
+"offered Emerald Magistrate" appointment.
+
 ### Pending Redesign
 (None currently pending.)
 

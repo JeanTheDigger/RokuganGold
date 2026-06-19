@@ -662,6 +662,11 @@ static func advance_day(
 		_process_badger_great_games(
 			characters_by_id, provinces, settlements, active_topics, next_topic_id, ic_day, dice_engine,
 		)
+		# s11.5 Topaz Championship: the annual gempukku tournament at Tsuma. The winner holds
+		# the Topaz Champion title for one year, displacing the prior holder.
+		_process_topaz_championship(
+			characters_by_id, active_topics, next_topic_id, ic_day, dice_engine,
+		)
 
 	_process_voluntary_declarations(
 		day_result.get("results", []),
@@ -26202,6 +26207,95 @@ static func _process_cancel_hunt_writebacks(
 
 
 # -- Hunt Resolution (s57.38.6) -----------------------------------------------
+
+## s11.5 Topaz Championship — the annual gempukku tournament at Tsuma (Crane lands). Eligible
+## entrants are that year's new graduates (Insight Rank 1 living non-PC samurai); each clan
+## sends up to 3 of its finest (highest Topaz-stage competence). Resolved via
+## FestivalSystem.resolve_championship (multi-stage Athletics / Kenjutsu·Iaijutsu /
+## Etiquette·Lore). The winner is declared Topaz Champion for one year — the prior holder
+## simply loses the title (s11.5) — and gains a named reputation (TIER_4 topic). The title's
+## Status/Glory adjustment is deferred (s46 lists Status 4 vs RoleRegistry 5.0 — a GDD/code
+## conflict; not resolved here). Eligibility uses insight_rank == 1 as the "graduated this year"
+## proxy (no gempukku-year marker exists).
+static func _process_topaz_championship(
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	# Gather Insight Rank 1 graduates, grouped by clan.
+	var by_clan: Dictionary = {}
+	for cid in characters_by_id.keys():
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.insight_rank != 1 or c.clan == "":
+			continue
+		by_clan.get_or_add(c.clan, []).append(c)
+	# Each clan sends up to 3 of its finest (by Topaz-stage skill competence).
+	var candidates: Array = []
+	for clan in by_clan.keys():
+		var roster: Array = by_clan[clan]
+		roster.sort_custom(func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+			return _topaz_competence(a) > _topaz_competence(b))
+		for i in mini(3, roster.size()):
+			var c: L5RCharacterData = roster[i]
+			candidates.append({
+				"character_id": c.character_id,
+				"championship": FestivalSystem.ChampionshipType.TOPAZ,
+				"skill_ranks": c.skills,
+				"traits": {
+					"reflexes": c.reflexes, "awareness": c.awareness, "agility": c.agility,
+					"intelligence": c.intelligence, "strength": c.strength, "perception": c.perception,
+					"stamina": c.stamina, "willpower": c.willpower, "void_ring": c.void_ring,
+				},
+				"honor": c.honor,
+			})
+	if candidates.size() < 2:
+		return {}
+	var result: Dictionary = FestivalSystem.resolve_championship(candidates, dice_engine)
+	var champ_id: int = result.get("winner_id", -1)
+	var champ: L5RCharacterData = characters_by_id.get(champ_id, null)
+	if champ == null:
+		return {}
+	# Transfer the title: the prior holder loses it (s11.5).
+	for cid in characters_by_id.keys():
+		var holder: L5RCharacterData = characters_by_id[cid]
+		if holder != null and holder.role_position == RoleRegistry.TOPAZ_CHAMPION and holder.character_id != champ_id:
+			holder.role_position = ""
+	champ.role_position = RoleRegistry.TOPAZ_CHAMPION
+	# Named reputation: a TIER_4 PERSONAL topic about the new champion.
+	var topic := TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.slug = "topaz_champion_%d_d%d" % [champ_id, ic_day]
+	topic.title = "%s is named Topaz Champion" % champ.character_name
+	topic.topic_type = "tournament"
+	topic.category = TopicData.Category.PERSONAL
+	topic.tier = TopicData.Tier.TIER_4
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+	topic.ic_day_created = ic_day
+	topic.subject_character_id = champ_id
+	topic.clan_involved = champ.clan
+	active_topics.append(topic)
+	if topic.topic_id not in champ.topic_pool:
+		champ.topic_pool.append(topic.topic_id)
+	return {
+		"champion_id": champ_id,
+		"candidate_count": candidates.size(),
+		"topic_id": topic.topic_id,
+	}
+
+
+## Topaz-stage competence proxy for clan-roster ranking (s11.5 stages: Athletics,
+## Kenjutsu/Iaijutsu, Etiquette/Lore: History).
+static func _topaz_competence(c: L5RCharacterData) -> int:
+	var athletics: int = c.skills.get("Athletics", 0)
+	var blade: int = maxi(c.skills.get("Kenjutsu", 0), c.skills.get("Iaijutsu", 0))
+	var social: int = maxi(c.skills.get("Etiquette", 0), c.skills.get("Lore: History", 0))
+	return athletics + blade + social
+
 
 ## s27.9 Badger Great Games — annual sumai tournament at Shiro Ichiro. Gathers the living
 ## non-PC wrestlers (Jiujutsu >= 1) present in the Badger province, runs a single-elimination
