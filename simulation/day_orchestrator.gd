@@ -1293,6 +1293,7 @@ static func advance_day(
 	_apply_assassination_vengeance(
 		conviction_results, crime_records, characters_by_id,
 		objectives_map, active_topics, next_topic_id, ic_day,
+		world_states.get("family_baselines", {}),
 	)
 
 	_seed_conviction_topics_to_victim_lords(
@@ -10426,6 +10427,7 @@ static func _apply_assassination_vengeance(
 	active_topics: Array,
 	next_topic_id: Array,
 	ic_day: int,
+	family_baselines: Dictionary = {},
 ) -> void:
 	for conv: Dictionary in conviction_results:
 		if conv.get("outcome", "") != "convicted":
@@ -10454,6 +10456,14 @@ static func _apply_assassination_vengeance(
 			characters_by_id, objectives_map,
 			active_topics, next_topic_id, ic_day,
 		)
+
+		# s12.2b Event Ripple: a traced assassination is a betrayal souring the
+		# commissioner's family against the victim's family.
+		var commissioner: L5RCharacterData = characters_by_id.get(record.commissioner_id)
+		if commissioner != null and commissioner.family != "" and victim.family != "":
+			CollectiveDisposition.apply_family_betrayal(
+				commissioner.family, victim.family, family_baselines,
+			)
 
 
 # -- Conviction Topic Seeding to Victim's Lord --------------------------------

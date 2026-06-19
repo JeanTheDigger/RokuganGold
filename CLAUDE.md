@@ -5643,8 +5643,9 @@ shifts the victim's and killer's family collective baseline (−5, existing s12.
 duel fatality (same-family duels skipped). Intra-clan rice sharing now warms the giver's and recipient's family baseline (+2, same-clan
 different-family, in `_process_supply_sharing`). Harvest raids now sour the raiding lord's family against the raided province's family (−3,
 in `_apply_harvest_destruction`) — replacing the removed-as-invented `destroyed_harvest`
-per-character modifier with the LOCKED family-baseline ripple. One family ripple remains
-unwired (apply_family_betrayal). Runtime-verified 8/8.
+per-character modifier with the LOCKED family-baseline ripple. Traced assassinations now sour the commissioner's family against the victim's family (−10, in
+the vengeance pipeline). **All s12.2b collective Event-Ripple functions are now wired** (clan:
+war/peace; family: duel-death, rice-sharing, lord-raid, betrayal). Runtime-verified 10/10.
 
 ### Pending Redesign
 (None currently pending.)
