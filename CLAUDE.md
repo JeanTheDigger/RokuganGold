@@ -5361,6 +5361,24 @@ the same actor without proper turn advancement.
   strong-Earth target resists Slayer's Knives = rider "resisted"; Fatigued on Howl; Fury now
   riderless). DEFERRED unchanged: Fury Deafen bystander-AoE, weather bonuses, earthquake/pit
   terrain spells, multi-round transforms, buff/weapon/condition spell families.
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 4: in-combat healing (s36 Water,
+  owner-authorized 2026-06-18).** Adds a `"heal"` kind to `SPELL_COMBAT_EFFECTS` + a `heal` branch
+  in `execute_cast_spell` → `_apply_spell_heal`. Heals a living ally (or self) within reach via
+  `WoundSystem.heal_wounds`; an Out-but-alive ally can be restored, the dead cannot. Three library
+  healers (all Touch/single-target, GDD-exact): **Path to Inner Peace** (heal = cast roll margin
+  over TN), **Regrow the Wound** (Water Ring + effective School Rank, one Round), **Peace of the
+  Kami** (full heal — all Wounds). `heal` field selects the amount; `range_tiles 1` = Touch
+  (caster adjacent, self always allowed). Gates: same-faction only (cannot heal an enemy →
+  `not_an_ally`), Touch range (`out_of_range`), `target_dead`. Runtime-verified 6/6 (margin heal,
+  Water+Rank heal, full heal → 0 wounds, enemy rejected, out-of-range rejected, self-heal).
+  **Correction:** Reversal of Fortunes — listed in the original menu as a healer — is actually a
+  re-roll BUFF (GDD s36: "may re-roll any one roll per round, 3 rounds"), so it is NOT in this
+  tranche; it belongs to the buff/weapon tranche. DEFERRED: rise_from_the_ashes (Void 6 Ishiken,
+  8-hour time-window regression — needs per-time injury/disease/poison/taint tracking; combat-
+  relevant slice would be a full heal but the undo-window semantics are not modeled); multi-round
+  maintained healing (Regrow applies one Round per cast); the AoE/per-round Water heals
+  (Heaven's Tears, Sanctuary of the Waves). Multi-target heal is not needed — all three wired
+  healers are single-target.
 
 ### Pending Redesign
 (None currently pending.)

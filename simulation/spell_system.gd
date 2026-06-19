@@ -101,6 +101,16 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Void Strike: Range 50', single, DR = caster's Void Ring
 	"void_strike": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
 		"range_tiles": 10, "aoe_radius": 0},
+	# --- Heal spells (s36 Water) ---
+	# kind "heal": restores Wounds to an ally (or self) within reach. heal field:
+	#   "margin"          = Wounds equal to the cast roll's margin over TN (Path to Inner Peace)
+	#   "water_plus_rank" = Water Ring + effective School Rank, one Round (Regrow the Wound)
+	#   "full"            = all Wounds healed (Peace of the Kami)
+	# range_tiles 1 = Touch (caster adjacent to the ally; self always allowed). Heals a living
+	# ally only (an Out-but-alive target can be restored; the dead cannot).
+	"path_to_inner_peace": {"kind": "heal", "heal": "margin", "range_tiles": 1},
+	"regrow_the_wound":    {"kind": "heal", "heal": "water_plus_rank", "range_tiles": 1},
+	"peace_of_the_kami":   {"kind": "heal", "heal": "full", "range_tiles": 1},
 }
 
 static func get_combat_effect(spell_id: String) -> Dictionary:

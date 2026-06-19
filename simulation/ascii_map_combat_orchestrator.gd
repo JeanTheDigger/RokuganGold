@@ -1793,12 +1793,55 @@ static func execute_cast_spell(
 			"type": "spell_damage", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "hits": res["spell_damage"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "heal":
+		res["spell_heal"] = _apply_spell_heal(
+			state, caster_id, caster, target_id, target, eff, res)
+		state.combat_log.append({
+			"type": "spell_heal", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "heal": res["spell_heal"],
+		})
 	state.combat_log.append({
 		"type": "spell_cast", "round": state.combat.round_number,
 		"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
 		"success": res.get("success", false),
 	})
 	return res
+
+
+## Apply a heal-type spell's combat effect (s36 Water). Heals a living ally (or self) within
+## reach (Touch = adjacent, or self). Returns {id, healed} or {reason} when it cannot apply.
+static func _apply_spell_heal(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary, res: Dictionary,
+) -> Dictionary:
+	# Default to self when no target was named.
+	var heal_target: L5RCharacterData = target if target != null else caster
+	var heal_id: int = target_id if target != null else caster_id
+	# Must be a living ally (same faction); cannot heal an enemy or the dead.
+	if String(state.factions.get(heal_id, "")) != String(state.factions.get(caster_id, "")):
+		return {"reason": "not_an_ally"}
+	if CharacterStats.is_dead(heal_target):
+		return {"reason": "target_dead"}
+	# Touch range: caster adjacent to the ally (self exempt).
+	var rng: int = eff.get("range_tiles", 1)
+	if heal_id != caster_id and state.positions.has(caster_id) and state.positions.has(heal_id):
+		var cp: Vector2i = state.positions[caster_id]
+		var tp: Vector2i = state.positions[heal_id]
+		if maxi(absi(cp.x - tp.x), absi(cp.y - tp.y)) > rng:
+			return {"reason": "out_of_range"}
+	var amount: int = 0
+	match eff.get("heal", ""):
+		"margin":
+			amount = maxi(0, int(res.get("margin", 0)))
+		"water_plus_rank":
+			amount = SpellSystem.get_ring_value(caster, Enums.Ring.WATER) \
+				+ SpellSystem.get_effective_school_rank(caster, Enums.Ring.WATER)
+		"full":
+			amount = heal_target.wounds_taken
+	if amount <= 0:
+		return {"id": heal_id, "healed": 0}
+	WoundSystem.heal_wounds(heal_target, amount)
+	return {"id": heal_id, "healed": amount}
 
 
 ## Apply a damage-type spell's combat effect (Phase 2). Single-target or self-centered AoE.
