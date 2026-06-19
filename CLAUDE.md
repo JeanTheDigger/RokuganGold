@@ -5466,6 +5466,17 @@ the same actor without proper turn advancement.
   ANY one roll per round" across damage/contested/Initiative rolls is forward-wired (each roll site
   would need the same guarded re-roll); Fires of Purity's ally-target option is deferred (NPC
   self-buff path only installs self-target buffs).
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 9: companion-shugenja cast
+  (owner-authorized 2026-06-19).** Closes the last spell-reachability gap — wires the same
+  `_npc_maybe_cast_spell` hook into `execute_companion_turn` so an allied shugenja companion on a
+  PC mission casts too (parity with the kiho companion hook). Placed after the companion kiho
+  block, before the melee engage; gated `cmd != RETREAT` (a retreating/broken companion does not
+  stop to cast), `ts.can_use_complex()`, non-empty spells_known, and not grappled. Same priority
+  (offense at an enemy → heal self/wounded ally → self-buff); companions are FACTION_PLAYER so
+  heals target the PC side. Runtime-verified 3/3 (companion casts beam at an enemy for 81; heals a
+  wounded PC ally 20→0; a non-caster bushi companion takes no cast_spell action). With this, every
+  spell with a clean combat effect is reachable by every NPC/companion combatant in a PC-present
+  skirmish; PC casting remains the future turn-based UI.
 
 ### Pending Redesign
 (None currently pending.)

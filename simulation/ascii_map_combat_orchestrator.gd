@@ -4808,6 +4808,20 @@ static func execute_companion_turn(
 			if kr.get("success", false):
 				actions.append(kr)
 
+	# -- Shugenja companion: cast a spell (offense at an enemy, heal/buff otherwise)
+	# before melee. Casting is the turn's Complex action; a grappled caster is skipped.
+	# A retreating/broken companion does not stop to cast.
+	if cmd != CompanionData.Command.RETREAT and not character.spells_known.is_empty():
+		var scp: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+		if ts.can_use_complex() and scp != null \
+				and not IndividualCombat.has_condition(scp, IndividualCombat.CONDITION_GRAPPLED):
+			var cbest: int = _npc_pick_target(
+				state, cid, get_melee_targets(state, cid) + get_ranged_targets(state, cid), chars_by_id)
+			var cast_r: Dictionary = _npc_maybe_cast_spell(state, cid, character, cbest, chars_by_id, dice_engine)
+			if cast_r.get("cast", false):
+				actions.append({"action": "cast_spell", "result": cast_r})
+				return {"actions": actions, "command": cmd}
+
 	# RETREAT / BROKEN-FLEE: move toward the nearest exit; leave if reached.
 	if cmd == CompanionData.Command.RETREAT:
 		var exit_tile: Vector2i = _nearest_exit_tile(state, cid)
