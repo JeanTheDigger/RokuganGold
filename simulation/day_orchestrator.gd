@@ -1379,6 +1379,13 @@ static func advance_day(
 	var governor_review_results: Array = []
 	var is_season_boundary: bool = current_season != prev_season or ic_day <= 1
 	if is_season_boundary:
+		# s11.5 Jeweled Championships: when a vacancy-triggered Jeweled Champion seat
+		# (Emerald/Jade/Amethyst/Ruby/Turquoise) is empty, the Emperor calls a championship
+		# to fill it. Checked each season.
+		if ic_day > 1:
+			_process_jeweled_championships(
+				characters_by_id, active_topics, next_topic_id, ic_day, dice_engine,
+			)
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
 		# stays consistent. Year is computed from the time system's tick count.
 		var spring_inputs: Dictionary = miya_inputs.duplicate()
@@ -26208,7 +26215,7 @@ static func _process_cancel_hunt_writebacks(
 
 # -- Hunt Resolution (s57.38.6) -----------------------------------------------
 
-## s11.5 Topaz Championship — the annual gempukku tournament at Tsuma (Crane lands). Eligible
+## s11.5 Topaz Championship — the annual gempukku tournament at Tsuma (Crane lands).
 ## entrants are that year's new graduates (Insight Rank 1 living non-PC samurai); each clan
 ## sends up to 3 of its finest (highest Topaz-stage competence). Resolved via
 ## FestivalSystem.resolve_championship (multi-stage Athletics / Kenjutsu·Iaijutsu /
@@ -26217,6 +26224,121 @@ static func _process_cancel_hunt_writebacks(
 ## Status/Glory adjustment is deferred (s46 lists Status 4 vs RoleRegistry 5.0 — a GDD/code
 ## conflict; not resolved here). Eligibility uses insight_rank == 1 as the "graduated this year"
 ## proxy (no gempukku-year marker exists).
+## s11.5 vacancy-triggered Jeweled Championships. Maps each ChampionshipType to its title
+## (RoleRegistry constant) and the school the championship favors (-1 = none / Amethyst).
+const _JEWELED_CHAMP_ROLE: Dictionary = {
+	FestivalSystem.ChampionshipType.EMERALD: RoleRegistry.EMERALD_CHAMPION,
+	FestivalSystem.ChampionshipType.JADE: RoleRegistry.JADE_CHAMPION,
+	FestivalSystem.ChampionshipType.AMETHYST: RoleRegistry.AMETHYST_CHAMPION,
+	FestivalSystem.ChampionshipType.RUBY: RoleRegistry.RUBY_CHAMPION,
+	FestivalSystem.ChampionshipType.TURQUOISE: RoleRegistry.TURQUOISE_CHAMPION,
+}
+const _IMPERIAL_FAMILIES: Array = ["Seppun", "Otomo", "Miya"]
+
+## When a vacancy-triggered Jeweled Champion seat is empty, hold a championship to fill it.
+## Each Great Clan nominates its finest eligible candidate (Amethyst: the Imperial families,
+## s11.5 exception); the winner takes the title. The 1–3 season Emperor-call gap and the full
+## weighted clan-nomination eval are deferred (no values / Emperor-priority model); a
+## competence proxy selects each clan's nominee. Returns a {type: result} map.
+static func _process_jeweled_championships(
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var outcomes: Dictionary = {}
+	for ctype in _JEWELED_CHAMP_ROLE.keys():
+		var role: String = _JEWELED_CHAMP_ROLE[ctype]
+		# Skip if the seat is already filled by a living holder.
+		var filled: bool = false
+		for cid in characters_by_id.keys():
+			var h: L5RCharacterData = characters_by_id[cid]
+			if h != null and not CharacterStats.is_dead(h) and h.role_position == role:
+				filled = true
+				break
+		if filled:
+			continue
+		var pref: int = FestivalSystem.CHAMPIONSHIP_SCHOOL_PREFERENCE.get(ctype, -1)
+		var stages: Array = FestivalSystem.CHAMPIONSHIP_STAGES.get(ctype, [])
+		# Build the nominee pool: best eligible candidate per nominating group.
+		var best_by_group: Dictionary = {}  # group key -> L5RCharacterData
+		for cid in characters_by_id.keys():
+			var c: L5RCharacterData = characters_by_id[cid]
+			if c == null or CharacterStats.is_dead(c) or c.is_pc or c.clan == "":
+				continue
+			if pref != -1 and c.school_type != pref:
+				continue
+			var group: String
+			if ctype == FestivalSystem.ChampionshipType.AMETHYST:
+				if c.family not in _IMPERIAL_FAMILIES:
+					continue  # Amethyst: Imperial families only (s11.5)
+				group = c.family
+			else:
+				if c.clan not in OtomoSeiyakuSystem.GREAT_CLANS:
+					continue  # one nominee per Great Clan
+				group = c.clan
+			var cur: L5RCharacterData = best_by_group.get(group, null)
+			if cur == null or _championship_competence(c, stages) > _championship_competence(cur, stages):
+				best_by_group[group] = c
+		if best_by_group.size() < 2:
+			continue  # cannot hold a championship with fewer than 2 nominees
+		var candidates: Array = []
+		for g in best_by_group.keys():
+			var c: L5RCharacterData = best_by_group[g]
+			candidates.append({
+				"character_id": c.character_id,
+				"championship": ctype,
+				"skill_ranks": c.skills,
+				"traits": {
+					"reflexes": c.reflexes, "awareness": c.awareness, "agility": c.agility,
+					"intelligence": c.intelligence, "strength": c.strength, "perception": c.perception,
+					"stamina": c.stamina, "willpower": c.willpower, "void_ring": c.void_ring,
+				},
+				"honor": c.honor,
+			})
+		var result: Dictionary = FestivalSystem.resolve_championship(candidates, dice_engine)
+		var champ_id: int = result.get("winner_id", -1)
+		var champ: L5RCharacterData = characters_by_id.get(champ_id, null)
+		if champ == null:
+			continue
+		champ.role_position = role
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "jeweled_champion_%d_%d_d%d" % [ctype, champ_id, ic_day]
+		topic.title = "%s is named %s" % [champ.character_name, role]
+		topic.topic_type = "tournament"
+		topic.category = TopicData.Category.POLITICAL
+		topic.tier = TopicData.Tier.TIER_3
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		topic.ic_day_created = ic_day
+		topic.subject_character_id = champ_id
+		topic.clan_involved = champ.clan
+		active_topics.append(topic)
+		if topic.topic_id not in champ.topic_pool:
+			champ.topic_pool.append(topic.topic_id)
+		outcomes[ctype] = {"champion_id": champ_id, "nominee_count": candidates.size(), "topic_id": topic.topic_id}
+	return outcomes
+
+
+## Championship competence proxy: sum of the candidate's best skill rank for each stage.
+static func _championship_competence(c: L5RCharacterData, stages: Array) -> int:
+	var total: int = 0
+	for stage in stages:
+		var sk: Variant = stage.get("skill", "")
+		if sk is Array:
+			var best: int = 0
+			for s in sk:
+				best = maxi(best, c.skills.get(s, 0))
+			total += best
+		elif sk == "elemental_ring":
+			total += maxi(c.intelligence, maxi(c.willpower, maxi(c.agility, c.strength)))
+		else:
+			total += c.skills.get(str(sk), 0)
+	return total
+
+
 static func _process_topaz_championship(
 	characters_by_id: Dictionary,
 	active_topics: Array,
