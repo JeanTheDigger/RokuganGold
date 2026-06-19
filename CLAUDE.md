@@ -5600,7 +5600,7 @@ never caught it (non-functional headless); this wiring is the first real executi
 `is String`. Runtime-verified 10/10 (eligible Rank-1 winner; title transfer; prior holder loses it;
 TIER_4 topic pooled; ≤3/clan cap; <2/no-Rank-1 no-op; Jade elemental_ring no longer crashes).
 LIMITATIONS (deferred): the title's Status/Glory change (s46 lists Status 4, RoleRegistry 5.0 — a
-GDD/code conflict, not resolved); the "offered Emerald Magistrate" appointment.
+GDD/code conflict, not resolved); the offer/refusal model. The displaced Topaz Champion is now appointed an Emerald Magistrate (s11.5/s02.1 "Topaz Magistrates"; deterministic per "most frequently").
 
 ### s11.5 Vacancy-triggered Jeweled Championships wired (2026-06-19)
 `DayOrchestrator._process_jeweled_championships` (seasonal) fills an empty Jeweled Champion

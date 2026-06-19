@@ -26381,11 +26381,15 @@ static func _process_topaz_championship(
 	var champ: L5RCharacterData = characters_by_id.get(champ_id, null)
 	if champ == null:
 		return {}
-	# Transfer the title: the prior holder loses it (s11.5).
+	# Transfer the title: the prior holder loses it (s11.5) and — as is most frequent for a
+	# former Topaz Champion (s11.5 / s02.1 "Topaz Magistrates") — is appointed an Emerald
+	# Magistrate. Deterministic appointment ("most frequently"); the offer/refusal model is
+	# deferred (no values).
 	for cid in characters_by_id.keys():
 		var holder: L5RCharacterData = characters_by_id[cid]
-		if holder != null and holder.role_position == RoleRegistry.TOPAZ_CHAMPION and holder.character_id != champ_id:
-			holder.role_position = ""
+		if holder != null and not CharacterStats.is_dead(holder) \
+				and holder.role_position == RoleRegistry.TOPAZ_CHAMPION and holder.character_id != champ_id:
+			holder.role_position = RoleRegistry.EMERALD_MAGISTRATE
 	champ.role_position = RoleRegistry.TOPAZ_CHAMPION
 	# Named reputation: a TIER_4 PERSONAL topic about the new champion.
 	var topic := TopicData.new()
