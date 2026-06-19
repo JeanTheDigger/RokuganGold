@@ -75,6 +75,7 @@ static func build_context(
 	ctx.known_npc_locations = world_state.get("known_npc_locations", {})
 	ctx.court_session_state = world_state.get("court_session_state", {})
 	ctx.court_settlement_id = world_state.get("court_settlement_id", -1)
+	ctx.compliance_intimidators = world_state.get("compliance_intimidators", [])
 
 	# Stats
 	ctx.skill_ranks = character.skills.duplicate()
@@ -547,6 +548,23 @@ static func apply_personality_filter(
 			continue
 		filtered.append(option)
 
+	return filtered
+
+
+# -- s12.9 Compliance Filter --------------------------------------------------
+# A character "complying under duress" cannot select a hostile action against the
+# intimidator they are complying with (the suppression ends only when compliance ends).
+static func _apply_compliance_filter(
+	options: Array,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	if ctx.compliance_intimidators.is_empty():
+		return options
+	var filtered: Array = []
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id in HOSTILE_ACTIONS and option.target_npc_id in ctx.compliance_intimidators:
+			continue
+		filtered.append(option)
 	return filtered
 
 
@@ -1206,6 +1224,7 @@ static func run(
 	options = _apply_origami_precondition_filter(options, character, ctx)
 	options = _apply_garden_precondition_filter(options, character, ctx)
 	options = _apply_arrived_travel_filter(options, need, ctx)
+	options = _apply_compliance_filter(options, ctx)
 
 	# Phase 5
 	score_all(options, need, ctx, scoring_tables,

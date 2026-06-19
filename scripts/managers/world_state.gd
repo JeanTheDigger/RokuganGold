@@ -124,6 +124,11 @@ var next_tattoo_id: Array[int] = [1]
 var active_hunts: Array[Dictionary] = []
 var next_hunt_id: Array[int] = [1]
 
+# -- Intimidation compliance (s12.9) -----------------------------------------
+# Active "complying under duress" relationships. Each entry:
+# {intimidator_id, target_id, leverage_secret_id (-1 = in-person), established_ic_day}.
+var active_intimidations: Array[Dictionary] = []
+
 # -- Spiritual Insurgency (s56.16) -------------------------------------------
 var spiritual_insurgency_events: Array = []
 var next_spiritual_event_id: Array[int] = [1]
@@ -361,6 +366,7 @@ func advance_one_day() -> Dictionary:
 		next_tattoo_id,
 		active_hunts,
 		next_hunt_id,
+		active_intimidations,
 		spiritual_insurgency_events,
 		next_spiritual_event_id,
 		bloodspeaker_cells,

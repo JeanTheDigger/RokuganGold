@@ -143,6 +143,8 @@ class ContextSnapshot:
 	var met_characters: Array = []
 	var knowledge_pool: Array = []
 	var known_secrets: Array = []
+	# s12.9: intimidator ids this character is currently "complying under duress" toward.
+	var compliance_intimidators: Array = []
 
 	# Lord-tier fields
 	var resource_stockpiles: Dictionary = {}

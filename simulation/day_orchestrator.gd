@@ -83,6 +83,7 @@ static func advance_day(
 	next_tattoo_id: Array = [1],
 	active_hunts: Array = [],
 	next_hunt_id: Array = [1],
+	active_intimidations: Array = [],
 	spiritual_insurgency_events: Array = [],
 	next_spiritual_event_id: Array = [1],
 	bloodspeaker_cells: Array = [],
@@ -239,6 +240,7 @@ static func advance_day(
 	)
 	_set_court_context_flags(active_courts, world_states)
 	_inject_hunt_context(active_hunts, world_states, active_topics)
+	_inject_compliance_context(active_intimidations, world_states)
 	_inject_theater_context(theater_pieces, characters, world_states)
 	_inject_senbazuru_context(active_senbazurus, characters, world_states)
 	_inject_ikebana_context(active_arrangements, settlements, characters, world_states, active_gardens)
@@ -465,6 +467,13 @@ static func advance_day(
 	_process_expose_secret_writebacks(
 		day_result.get("results", []),
 		active_secrets, characters_by_id,
+	)
+
+	# s12.9 intimidation compliance: create new "complying under duress" relationships from
+	# this day's successful intimidations and end any whose conditions no longer hold.
+	_process_intimidation_compliance(
+		active_intimidations, day_result.get("results", []),
+		characters_by_id, active_secrets, ic_day, dice_engine,
 	)
 
 	_process_fabricate_secret_writebacks(
@@ -17854,7 +17863,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"settlement_type",
 		"champion_conclusion_candidates", "local_tier3_candidates",
 		"has_active_contracts", "has_kolat_objective",
-		"has_taint_corroboration_target",
+		"has_taint_corroboration_target", "compliance_intimidators",
 		# Lord-specific keys (cleared so ex-lords don't retain stale data after succession)
 		"province_data", "settlements", "clans", "current_season",
 		"characters_by_id", "active_armies", "active_insurgencies",
@@ -25965,6 +25974,103 @@ static func _process_tattoo_creation(
 
 
 # -- Hunt Writebacks (s57.38) -------------------------------------------------
+
+## s12.9 compliance: inject, per compliant target, the list of intimidator ids they are
+## "complying under duress" toward, so the NPC engine can block hostile actions against them.
+static func _inject_compliance_context(
+	active_intimidations: Array,
+	world_states: Dictionary,
+) -> void:
+	if active_intimidations.is_empty():
+		return
+	var by_target: Dictionary = {}
+	for entry_v: Variant in active_intimidations:
+		var entry: Dictionary = entry_v as Dictionary
+		var tid: int = entry.get("target_id", -1)
+		var iid: int = entry.get("intimidator_id", -1)
+		if tid < 0 or iid < 0:
+			continue
+		by_target.get_or_add(tid, []).append(iid)
+	for tid: Variant in by_target.keys():
+		if world_states.has(tid) and world_states[tid] is Dictionary:
+			world_states[tid]["compliance_intimidators"] = by_target[tid]
+
+
+## s12.9 compliance lifecycle: create "complying under duress" relationships from successful
+## intimidations this day, and end existing ones per the four GDD end-conditions (intimidator
+## dead, intimidator befriends the target, leverage removed, or the target pushes back).
+static func _process_intimidation_compliance(
+	active_intimidations: Array,
+	day_results: Array,
+	characters_by_id: Dictionary,
+	active_secrets: Array,
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> void:
+	# -- Creation: successful INTIMIDATE with active compliance.
+	for r_v: Variant in day_results:
+		var r: Dictionary = r_v as Dictionary
+		if r.get("action_id", "") != "INTIMIDATE" or not r.get("success", false):
+			continue
+		if not r.get("effects", {}).get("compliance_active", false):
+			continue
+		var iid: int = r.get("character_id", -1)
+		var tid: int = r.get("target_npc_id", -1)
+		if iid < 0 or tid < 0 or iid == tid:
+			continue
+		var secret_id: int = r.get("effects", {}).get("secret_id", -1)
+		var found: bool = false
+		for e_v: Variant in active_intimidations:
+			var e: Dictionary = e_v as Dictionary
+			if e.get("intimidator_id", -1) == iid and e.get("target_id", -1) == tid:
+				e["established_ic_day"] = ic_day  # re-intimidation sustains
+				found = true
+				break
+		if not found:
+			active_intimidations.append({
+				"intimidator_id": iid, "target_id": tid,
+				"leverage_secret_id": secret_id, "established_ic_day": ic_day,
+			})
+
+	# -- Maintenance: drop ended relationships.
+	var survivors: Array = []
+	for e_v: Variant in active_intimidations:
+		var e: Dictionary = e_v as Dictionary
+		var iid: int = e.get("intimidator_id", -1)
+		var tid: int = e.get("target_id", -1)
+		# Freshly established (or re-intimidated) this tick: survives its first day, no pushback yet.
+		if e.get("established_ic_day", -1) == ic_day:
+			survivors.append(e)
+			continue
+		var intimidator: L5RCharacterData = characters_by_id.get(iid)
+		var target: L5RCharacterData = characters_by_id.get(tid)
+		if intimidator == null or target == null \
+				or CharacterStats.is_dead(intimidator) or CharacterStats.is_dead(target):
+			continue  # intimidator (or target) gone — compliance ends
+		# Friendship: intimidator's disposition toward target crosses into Friend range.
+		if IntimidationSystem.can_compliance_end(intimidator.disposition_values.get(tid, 0)):
+			continue
+		# Leverage removed: the blackmail secret has been exposed (no longer leverage).
+		var secret_id: int = e.get("leverage_secret_id", -1)
+		if secret_id >= 0 and _secret_is_exposed(secret_id, active_secrets):
+			continue
+		# Pushback: the target rolls Willpower vs TN 15 + intimidator's Intimidation rank.
+		var wp_roll: int = dice_engine.roll_and_keep(maxi(target.willpower, 1), maxi(target.willpower, 1), true).total
+		var pushback: Dictionary = IntimidationSystem.resolve_pushback(
+			wp_roll, intimidator.skills.get("Intimidation", 0))
+		if pushback.get("success", false):
+			continue  # target broke free
+		survivors.append(e)
+	active_intimidations.assign(survivors)
+
+
+static func _secret_is_exposed(secret_id: int, active_secrets: Array) -> bool:
+	for s_v: Variant in active_secrets:
+		var s: SecretData = s_v as SecretData
+		if s != null and s.secret_id == secret_id:
+			return s.exposed or s.exposed_publicly
+	return true  # secret no longer exists — leverage gone
+
 
 static func _inject_hunt_context(
 	active_hunts: Array,

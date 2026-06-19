@@ -486,6 +486,7 @@ func _save_json_state(ws: Node, base: String) -> bool:
 		"precedent_modifiers": ws.precedent_modifiers,
 		"approach_penalties": ws.approach_penalties,
 		"active_hunts": ws.active_hunts,
+		"active_intimidations": ws.active_intimidations,
 		"active_hostages": ws.active_hostages,
 		"active_bubble_scenes": ws.active_bubble_scenes,
 		"next_bubble_scene_id": ws.next_bubble_scene_id[0],
@@ -613,6 +614,7 @@ func _load_json_state(ws: Node, base: String) -> void:
 	ws.precedent_modifiers = state.get("precedent_modifiers", {})
 	ws.approach_penalties.assign(state.get("approach_penalties", []))
 	ws.active_hunts.assign(state.get("active_hunts", []))
+	ws.active_intimidations.assign(state.get("active_intimidations", []))
 	ws.active_hostages.assign(state.get("active_hostages", []))
 	ws.active_bubble_scenes.assign(state.get("active_bubble_scenes", []))
 	_restore_counter(ws.next_bubble_scene_id, state, "next_bubble_scene_id")

@@ -5659,6 +5659,32 @@ each season (the per-court-session window). Values GDD-exact (halved effectivene
 LIMITATION: the diffuse "+5 sympathy toward the targeted clans from all who learn" is deferred
 (no per-clan sympathy field).
 
+### s12.9 Intimidation Compliance Tracker wired (2026-06-19)
+The "complying under duress" relationship (s12.9 Compliance Tracker, LOCKED) was entirely
+unwired — the five compliance helpers (resolve_pushback, can_compliance_end, etc.) had no
+callers and there was no persistent state. Built end-to-end:
+- **State:** `WorldState.active_intimidations: Array[Dictionary]` (intimidator_id, target_id,
+  leverage_secret_id, established_ic_day), persisted via WorldStateSaver state.json; threaded
+  through advance_one_day → advance_day.
+- **Creation** (`_process_intimidation_compliance`, post-wave): a successful INTIMIDATE with
+  `compliance_active` creates/refreshes an entry (re-intimidation resets the clock).
+- **Maintenance** (same pass): the four GDD end-conditions — intimidator (or target) dead;
+  intimidator's disposition toward target reaches Friend range (`can_compliance_end`); the
+  blackmail leverage secret is exposed; or the target pushes back (Willpower vs TN 15 +
+  intimidator Intimidation rank, `resolve_pushback`, rolled each later tick). A freshly
+  established entry has a one-tick grace (no pushback the day it lands).
+- **Effect** (`_apply_compliance_filter`, NPC engine Phase 4): a compliant character cannot
+  select a HOSTILE action against an intimidator they are complying with (per-character
+  `compliance_intimidators` injected into world_states, read into ContextSnapshot, cleared
+  by the stale-key pass; sleeper-override path exempt). Non-hostile actions and hostile
+  actions vs other targets are unaffected.
+Values are GDD-exact (pushback TN 15 + Intimidation rank; Friend threshold 31). Runtime-verified
+9/9 (creation + grace; hostile-vs-intimidator blocked while other/friendly allowed; all four
+end-conditions; low-WP persists vs strong intimidator 20/20; high-WP breaks free; injection).
+LIMITATIONS (deferred): the s12.9 line-35 court-action +10-TN effect (the court session-TN
+*consumption* path doesn't exist yet) and the "on compliance end, immediately make the
+suppressed Public Declaration" nuance — both need court-resolution integration.
+
 ### Pending Redesign
 (None currently pending.)
 
