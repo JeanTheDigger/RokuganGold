@@ -5542,6 +5542,17 @@ their own engulf/swallow grabs) and skipped while already grappled. Runtime-veri
 polearm-primary excluded). Feint NPC use remains a deliberate non-fill (margin/2 ≈
 increased_damage's +1k0 for AI, not worth the extra Raise).
 
+### s57.46/s40 Companion PROTECT → Guard (2026-06-19)
+Companions already inherit the attack maneuvers (Disarm/Knockdown) via `_npc_execute_attack`,
+but a PROTECT-commanded yojimbo never used the s40 **Guard** maneuver on its charge. Added
+to `execute_companion_turn`: a companion on the PROTECT command, adjacent (≤1 tile) to its
+`command_target_id` charge that is threatened by an adjacent enemy, interposes —
+`execute_guard` raises the charge's Armor TN +10 (−5 to its own). Guard is a Simple Action,
+so the yojimbo forgoes its attack to ward the charge (the canonical bodyguard tradeoff);
+fires before the engage-adjacent-enemy block. Runtime-verified 3/3 (guards a threatened
+adjacent charge and forgoes attack; no guard for an unthreatened charge; repositions
+instead of guarding when too far from the charge).
+
 ### Pending Redesign
 (None currently pending.)
 

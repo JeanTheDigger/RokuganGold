@@ -5019,6 +5019,21 @@ static func execute_companion_turn(
 			actions.append({"action": "retreat_move", "result": mv})
 		return {"actions": actions, "command": cmd}
 
+	# PROTECT (s57.46) -> Guard (s40): a yojimbo commanded to protect a charge interposes,
+	# raising the charge's Armor TN (+10, -5 to its own) when adjacent and the charge is
+	# threatened by an enemy. Guard is a Simple Action, so the yojimbo forgoes its attack.
+	if cmd == CompanionData.Command.PROTECT and ts.can_use_simple():
+		var ward_id: int = companion.command_target_id
+		var ward: L5RCharacterData = chars_by_id.get(ward_id, state.combatants.get(ward_id, null))
+		if ward != null and not CharacterStats.is_dead(ward) \
+				and _chebyshev(state.positions.get(cid, Vector2i(-9999, -9999)),
+					state.positions.get(ward_id, Vector2i(-9999, -9999))) <= GUARD_RANGE_TILES \
+				and _enemy_adjacent_to(state, ward_id, String(state.factions.get(cid, ""))):
+			var gw: Dictionary = execute_guard(state, cid, ward_id, character, ward)
+			if gw.get("success", false):
+				actions.append({"action": "guard", "result": gw})
+				return {"actions": actions, "command": cmd}
+
 	# Engage an adjacent enemy (REACT / fight-through), unless doshin samurai-avoidance.
 	var melee: Array = get_melee_targets(state, cid)
 	if not melee.is_empty():
