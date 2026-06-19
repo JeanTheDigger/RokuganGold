@@ -3835,6 +3835,105 @@ static func advance_round(
 
 ## Execute a full NPC turn using the GDD s40 combat decision model.
 ## Returns a Dictionary of all actions taken this turn.
+# True if a spell with this combat effect can reach the target tile from the caster.
+# Ranged single / aimed AoE: distance <= range_tiles. Self-centered AoE: distance <= radius.
+static func _spell_reaches(
+	state: MapCombatState, caster_id: int, target_id: int, eff: Dictionary,
+) -> bool:
+	if not state.positions.has(caster_id) or not state.positions.has(target_id):
+		return false
+	var cp: Vector2i = state.positions[caster_id]
+	var tp: Vector2i = state.positions[target_id]
+	var d: int = maxi(absi(cp.x - tp.x), absi(cp.y - tp.y))
+	var rng: int = eff.get("range_tiles", 0)
+	var rad: int = eff.get("aoe_radius", 0)
+	if rng > 0:
+		return d <= rng
+	if rad > 0:
+		return d <= rad
+	return d <= 1
+
+
+## NPC shugenja spell-cast hook (PC-present skirmish). Structural AI — the GDD gives no NPC
+## combat spell policy (same class as _npc_pick_atemi / _npc_maybe_activate_kiho). Priority:
+## (1) offensive damage/status at best_target if a known castable spell reaches it (highest ML);
+## (2) heal self when HURT+, else an adjacent wounded ally; (3) self-buff if not already buffed.
+## Casting is a Complex action; execute_cast_spell spends it + the slot. Returns {cast, ...}.
+static func _npc_maybe_cast_spell(
+	state: MapCombatState, npc_id: int, npc: L5RCharacterData,
+	best_target: int, chars_by_id: Dictionary, dice_engine: DiceEngine,
+) -> Dictionary:
+	if npc.spells_known.is_empty():
+		return {}
+	var p: IndividualCombat.Participant = state.combat.participants.get(npc_id, null)
+	if p == null:
+		return {}
+	# (1) Offensive: best castable damage/status spell that reaches the chosen enemy.
+	if best_target >= 0:
+		var best_off: String = ""
+		var best_ml: int = -1
+		for sid in npc.spells_known:
+			var eff: Dictionary = SpellSystem.get_combat_effect(sid)
+			var k: String = eff.get("kind", "")
+			if k != "damage" and k != "status":
+				continue
+			if not SpellSystem.can_cast(npc, sid):
+				continue
+			if not _spell_reaches(state, npc_id, best_target, eff):
+				continue
+			var ml: int = SpellSystem.SPELL_LIBRARY.get(sid, {}).get("m", 1)
+			if ml > best_ml:
+				best_ml = ml
+				best_off = sid
+		if best_off != "":
+			var tc: L5RCharacterData = chars_by_id.get(best_target, state.combatants.get(best_target, null))
+			var r: Dictionary = execute_cast_spell(state, npc_id, npc, best_off, best_target, tc, dice_engine)
+			r["cast"] = r.get("success", false) or r.get("absorbed", false)
+			r["spell_id"] = best_off
+			return r
+	# (2) Heal: self when HURT or worse, else an adjacent wounded ally.
+	var heal_id: int = -1
+	if CharacterStats.get_wound_level(npc) >= Enums.WoundLevel.HURT:
+		heal_id = npc_id
+	else:
+		var cf: String = String(state.factions.get(npc_id, ""))
+		var cpos: Vector2i = state.positions.get(npc_id, Vector2i.ZERO)
+		for aid in state.positions.keys():
+			if aid == npc_id or String(state.factions.get(aid, "")) != cf:
+				continue
+			var ach = state.combatants.get(aid, null)
+			if ach == null or CharacterStats.is_dead(ach) or ach.wounds_taken <= 0:
+				continue
+			var apos: Vector2i = state.positions[aid]
+			if maxi(absi(cpos.x - apos.x), absi(cpos.y - apos.y)) <= 1:
+				heal_id = aid
+				break
+	if heal_id >= 0:
+		for sid in npc.spells_known:
+			if SpellSystem.get_combat_effect(sid).get("kind", "") != "heal":
+				continue
+			if not SpellSystem.can_cast(npc, sid):
+				continue
+			var hc: L5RCharacterData = npc if heal_id == npc_id else chars_by_id.get(heal_id, state.combatants.get(heal_id, null))
+			var hr: Dictionary = execute_cast_spell(state, npc_id, npc, sid, heal_id, hc, dice_engine)
+			hr["cast"] = hr.get("success", false)
+			hr["spell_id"] = sid
+			return hr
+	# (3) Self-buff if not already buffed.
+	if not IndividualCombat.has_timed_modifier_source(p, "spell_buff"):
+		for sid in npc.spells_known:
+			var eff2: Dictionary = SpellSystem.get_combat_effect(sid)
+			if eff2.get("kind", "") != "buff" or eff2.get("target", "self") != "self":
+				continue
+			if not SpellSystem.can_cast(npc, sid):
+				continue
+			var br: Dictionary = execute_cast_spell(state, npc_id, npc, sid, npc_id, npc, dice_engine)
+			br["cast"] = br.get("success", false)
+			br["spell_id"] = sid
+			return br
+	return {}
+
+
 static func execute_npc_turn(
 	state: MapCombatState,
 	npc_id: int,
@@ -3876,6 +3975,19 @@ static func execute_npc_turn(
 	# -- Shapeshifter: turn insubstantial when threatened (s54.10 Ephemeral Form) --
 	# Free Action; once per encounter. No-op for creatures without the ability.
 	_npc_maybe_activate_ephemeral_form(state, npc, p)
+
+	# -- Shugenja: cast a spell (offense at the target, heal/buff otherwise) -----
+	# Structural AI — runs BEFORE the stance pick because casting is the turn's Complex
+	# action: a Simple spent on a stance change would forbid the Complex (1 Complex OR
+	# 2 Simple). A grappled caster can't gesture; prone casting is allowed (no stand needed).
+	if not npc.spells_known.is_empty() and ts.can_use_complex() \
+			and not IndividualCombat.has_condition(p, IndividualCombat.CONDITION_GRAPPLED):
+		var cast_best: int = _npc_pick_target(
+			state, npc_id, get_melee_targets(state, npc_id) + get_ranged_targets(state, npc_id), chars_by_id)
+		var cast_r: Dictionary = _npc_maybe_cast_spell(state, npc_id, npc, cast_best, chars_by_id, dice_engine)
+		if cast_r.get("cast", false):
+			actions_taken.append({"action": "cast_spell", "result": cast_r})
+			return {"actions": actions_taken}
 
 	# -- Pick optimal stance -----------------------------------------------
 	var stance_result: Dictionary = _npc_pick_stance(state, npc_id, npc, chars_by_id, dice_engine)

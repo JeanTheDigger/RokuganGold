@@ -5425,6 +5425,27 @@ the same actor without proper turn advancement.
   Wreathed-in-Flames hook), Force of Will (+2 Wounds/Rank with expiry-damage — needs a wound-capacity
   buff), the elemental weapon-conjuration spells (need an inventory weapon), and the Fear-resist
   buffs (Strength of the Crab etc. — need a Fear-resist modifier in `apply_fear_checks`).
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 7: NPC cast pipeline
+  (owner-authorized 2026-06-19).** Closes the loop — before this, every spell combat effect
+  (damage/riders/heal/status/cleanse/buff) was only reachable by a direct `execute_cast_spell`
+  call; no NPC combatant ever cast. `_npc_maybe_cast_spell` is the NPC shugenja combat-cast hook
+  in `execute_npc_turn` (PC-present skirmishes only — NPCs use the orchestrator solely when a PC
+  is in the fight; PC casting is still the future turn-based UI). Structural AI, same class as
+  `_npc_pick_atemi` / `_npc_maybe_activate_kiho` (the GDD gives no NPC combat-spell policy).
+  Priority: (1) the best castable **damage/status** spell (highest ML) that **reaches** the
+  AI-chosen enemy (`_spell_reaches`: ranged single/aimed-AoE → distance ≤ range_tiles;
+  self-centered AoE → ≤ radius); (2) **heal** — self when wound level ≥ HURT, else an adjacent
+  wounded ally (heal spells are Touch); (3) **self-buff** if not already buffed. Placed BEFORE
+  the stance pick because casting is the turn's **Complex** action and a Simple spent on a stance
+  change forbids the Complex (1 Complex OR 2 Simple); a grappled caster is skipped (can't gesture),
+  prone casting is allowed. On a successful cast the turn ends. Runtime-verified 6/6 (casts beam at
+  the PC for 60; self-heal at wl 5 ≥ HURT 70→55; full-heal an adjacent ally 18→0; self-buffs Cloak
+  of the Miya; offense chosen over self-buff when both available; a non-caster bushi takes no
+  cast_spell action and falls through to melee). LIMITATION: a wounded support shugenja still
+  prefers offense when any enemy is reachable (heal is priority 2) — a deliberate aggressive
+  heuristic, tunable after a live run; AoE friendly-fire avoidance in target selection is not
+  modeled (the cast aims at the AI's single best_target; self-centered AoE "all" spells can catch
+  allies, faithful to the GDD but worth watching).
 
 ### Pending Redesign
 (None currently pending.)
