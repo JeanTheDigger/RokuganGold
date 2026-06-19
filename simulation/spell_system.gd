@@ -111,6 +111,20 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"path_to_inner_peace": {"kind": "heal", "heal": "margin", "range_tiles": 1},
 	"regrow_the_wound":    {"kind": "heal", "heal": "water_plus_rank", "range_tiles": 1},
 	"peace_of_the_kami":   {"kind": "heal", "heal": "full", "range_tiles": 1},
+	# --- Status / control (s33/s34/s35) — inflict a condition, no save (GDD: automatic) ---
+	# kind "status": applies a condition to each affected target (single or AoE). duration_rounds
+	# 0 = persistent/roll-recovered via apply_condition; >0 = timed (auto-expires). Optional save.
+	"wind_born_slumbers": {"kind": "status", "condition": "fatigued", "save": "none",
+		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 0},  # Air 2: active target Fatigued
+	"whispering_flames": {"kind": "status", "condition": "dazed", "save": "none",
+		"range_tiles": 10, "aoe_radius": 2, "aoe_hits": "all", "duration_rounds": 0},  # Fire 3: 10' Daze (all gazers; roll-recovered; immunity not modeled)
+	"eyes_of_the_phoenix": {"kind": "status", "condition": "blinded", "save": "none",
+		"range_tiles": 5, "aoe_radius": 0, "duration_rounds": 0},  # Fire 4: Blind (allies' Fear-3 burst deferred)
+	"wooden_prison": {"kind": "status", "condition": "entangled", "save": "none",
+		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 0},  # Earth 3: Entangle (escape via standard entangle layer)
+	# --- Cleanse (s36) ---
+	# kind "cleanse": free up to Water Rank living allies in range from Fatigued+Dazed + heal Water Rank.
+	"typhoons_surge": {"kind": "cleanse", "range_tiles": 10},  # Water 3
 }
 
 static func get_combat_effect(spell_id: String) -> Dictionary:

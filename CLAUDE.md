@@ -5379,6 +5379,28 @@ the same actor without proper turn advancement.
   maintained healing (Regrow applies one Round per cast); the AoE/per-round Water heals
   (Heaven's Tears, Sanctuary of the Waves). Multi-target heal is not needed — all three wired
   healers are single-target.
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 5: status/control + cleanse spells
+  (owner-authorized 2026-06-19).** Adds two new `SPELL_COMBAT_EFFECTS` kinds. **`status`** inflicts
+  a condition on each affected target (single or AoE), mapping to the existing consumed combat
+  conditions, with an optional save (the rider save-types, extracted into a shared
+  `_spell_save_resisted`); target-gathering extracted into a shared `_gather_spell_targets` used by
+  both damage and status. **`cleanse`** (`_apply_spell_cleanse`) frees allies of conditions and
+  heals them. Five spells (exact GDD): **Wind-Born Slumbers** (Air 2 → Fatigued; an active combat
+  target gets Fatigue, the "asleep" branch needs no combat condition), **Whispering Flames**
+  (Fire 3 → 10' AoE Dazed on all gazers, roll-recovered), **Eyes of the Phoenix** (Fire 4 → single
+  Blinded), **Wooden Prison** (Earth 3 → single Entangled, escape via the standard entangle layer),
+  **Typhoon's Surge** (Water 3 → up to Water Rank nearest living allies in range, free Fatigued+Dazed
+  + heal Water Rank each). All saves "none" per GDD (these apply automatically); the save path is
+  forward-wired. `duration_rounds` 0 = persistent/roll-recovered via apply_condition (all five; GDD
+  durations exceed a skirmish or are escape/roll-gated). Runtime-verified 7/7 (Fatigued; AoE Dazed
+  near-yes/far-no; Blinded; out-of-range fizzle; Entangled; Typhoon's cleanse+heal of two allies
+  20→14 / 15→9). DEFERRED: **Reversal of Fortunes** (Water 1 re-roll buff — needs a per-Participant
+  re-roll-grant state read by the roll sites) and **The Soul's Blade** (Fire 6 weapon enchant,
+  auto-Stun on hit — needs a weapon-enchant state in `_apply_hit`) → weapon/buff tranche; Eyes of
+  the Phoenix's allies' Fear-3 burst (one-shot AoE Fear, not a proximity source); Whispering Flames'
+  gaijin/nonhuman immunity + exact Willpower=Fire×10 recovery TN (uses the default Dazed recovery);
+  Wooden Prison's Contested-Strength-vs-4 escape (uses the standard TN-20 entangle escape) + its
+  terrain restrictions.
 
 ### Pending Redesign
 (None currently pending.)

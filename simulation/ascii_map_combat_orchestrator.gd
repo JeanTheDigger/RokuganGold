@@ -1800,6 +1800,19 @@ static func execute_cast_spell(
 			"type": "spell_heal", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "heal": res["spell_heal"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "status":
+		res["spell_status"] = _apply_spell_status(
+			state, caster_id, caster, target_id, target, eff, dice_engine)
+		state.combat_log.append({
+			"type": "spell_status", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "status": res["spell_status"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "cleanse":
+		res["spell_cleanse"] = _apply_spell_cleanse(state, caster_id, caster, eff)
+		state.combat_log.append({
+			"type": "spell_cleanse", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "cleanse": res["spell_cleanse"],
+		})
 	state.combat_log.append({
 		"type": "spell_cast", "round": state.combat.round_number,
 		"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
@@ -1854,42 +1867,7 @@ static func _apply_spell_combat_damage(
 	dice_engine: DiceEngine,
 ) -> Array:
 	var hits: Array = []
-	var radius: int = eff.get("aoe_radius", 0)
-	var rng: int = eff.get("range_tiles", 0)
-	var targets: Array = []
-	if radius <= 0:
-		# Single target.
-		if target == null:
-			return hits
-		if rng > 0 and state.positions.has(caster_id) and state.positions.has(target_id):
-			var cp: Vector2i = state.positions[caster_id]
-			var tp: Vector2i = state.positions[target_id]
-			if maxi(absi(cp.x - tp.x), absi(cp.y - tp.y)) > rng:
-				return hits  # out of range — the cast fizzles (slot already spent)
-		targets.append({"id": target_id, "char": target})
-	else:
-		# AoE: centered on the target tile when ranged (targeted blast), else on the caster.
-		var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
-		if rng > 0 and state.positions.has(target_id):
-			var caster_pos: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
-			var aim: Vector2i = state.positions[target_id]
-			if maxi(absi(caster_pos.x - aim.x), absi(caster_pos.y - aim.y)) > rng:
-				return hits  # aim point out of cast range
-			center = aim
-		var hits_all: bool = eff.get("aoe_hits", "enemies") == "all"
-		var cf: String = state.factions.get(caster_id, FACTION_PLAYER)
-		for cid in state.positions.keys():
-			if cid == caster_id:
-				continue
-			var pos: Vector2i = state.positions[cid]
-			if maxi(absi(center.x - pos.x), absi(center.y - pos.y)) > radius:
-				continue
-			if not hits_all and String(state.factions.get(cid, "")) == cf:
-				continue
-			var ch = state.combatants.get(cid, null)
-			if ch == null or CharacterStats.is_dead(ch):
-				continue
-			targets.append({"id": cid, "char": ch})
+	var targets: Array = _gather_spell_targets(state, caster_id, target_id, target, eff)
 	# DR uses the spell's element Ring when dr_* is 0; spirit damage filter keyed on that element.
 	var element: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("e", Enums.Ring.FIRE)
 	var ering: int = SpellSystem.get_ring_value(caster, element)
@@ -1931,6 +1909,114 @@ static func _apply_spell_combat_damage(
 	return hits
 
 
+# Shared target gatherer for damage/status spells. Single-target (aoe_radius 0) or AoE
+# (radius>0; centered on the target tile when ranged, else on the caster). Returns an Array of
+# {id, char}; empty when an out-of-range single/aim fizzles. AoE always excludes the caster and
+# the dead; "enemies"/"all" honored via aoe_hits.
+static func _gather_spell_targets(
+	state: MapCombatState, caster_id: int, target_id: int,
+	target: L5RCharacterData, eff: Dictionary,
+) -> Array:
+	var radius: int = eff.get("aoe_radius", 0)
+	var rng: int = eff.get("range_tiles", 0)
+	var targets: Array = []
+	if radius <= 0:
+		if target == null:
+			return targets
+		if rng > 0 and state.positions.has(caster_id) and state.positions.has(target_id):
+			var cp: Vector2i = state.positions[caster_id]
+			var tp: Vector2i = state.positions[target_id]
+			if maxi(absi(cp.x - tp.x), absi(cp.y - tp.y)) > rng:
+				return targets  # out of range — the cast fizzles (slot already spent)
+		targets.append({"id": target_id, "char": target})
+		return targets
+	# AoE: centered on the target tile when ranged (targeted blast), else on the caster.
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	if rng > 0 and state.positions.has(target_id):
+		var caster_pos: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+		var aim: Vector2i = state.positions[target_id]
+		if maxi(absi(caster_pos.x - aim.x), absi(caster_pos.y - aim.y)) > rng:
+			return targets  # aim point out of cast range
+		center = aim
+	var hits_all: bool = eff.get("aoe_hits", "enemies") == "all"
+	var cf: String = state.factions.get(caster_id, FACTION_PLAYER)
+	for cid in state.positions.keys():
+		if cid == caster_id:
+			continue
+		var pos: Vector2i = state.positions[cid]
+		if maxi(absi(center.x - pos.x), absi(center.y - pos.y)) > radius:
+			continue
+		if not hits_all and String(state.factions.get(cid, "")) == cf:
+			continue
+		var ch = state.combatants.get(cid, null)
+		if ch == null or CharacterStats.is_dead(ch):
+			continue
+		targets.append({"id": cid, "char": ch})
+	return targets
+
+
+## Apply a status/control spell (s33/s34/s35): inflict a condition on each affected target.
+## Conditions map to the existing combat-condition layer (Blinded/Dazed/Fatigued/Entangled).
+## duration_rounds 0 = persistent/roll-recovered via apply_condition; >0 = timed (auto-expire).
+## An optional save (rider save-types) lets the target resist. Returns per-target {id, status}.
+static func _apply_spell_status(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary, dice_engine: DiceEngine,
+) -> Array:
+	var out: Array = []
+	var cond: String = eff.get("condition", "")
+	var dur: int = eff.get("duration_rounds", 0)
+	var save: String = eff.get("save", "none")
+	var tn: int = eff.get("save_tn", 0)
+	for t in _gather_spell_targets(state, caster_id, target_id, target, eff):
+		var p: IndividualCombat.Participant = state.combat.participants.get(int(t["id"]), null)
+		if p == null:
+			continue
+		if save != "none" and _spell_save_resisted(state, caster, t["char"], save, tn, dice_engine):
+			out.append({"id": t["id"], "status": "resisted"})
+			continue
+		if dur > 0:
+			IndividualCombat.apply_timed_condition(p, cond, state.combat.round_number + dur)
+		else:
+			IndividualCombat.apply_condition(p, cond)
+		out.append({"id": t["id"], "status": cond})
+	return out
+
+
+## Apply a cleanse spell (s36 Typhoon's Surge): free up to Water Rank living allies within range
+## of the caster from Fatigued + Dazed and heal each Water Rank Wounds. Nearest allies first.
+static func _apply_spell_cleanse(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData, eff: Dictionary,
+) -> Array:
+	var out: Array = []
+	var rng: int = eff.get("range_tiles", 10)
+	var cap: int = SpellSystem.get_ring_value(caster, Enums.Ring.WATER)
+	var cf: String = String(state.factions.get(caster_id, ""))
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var cands: Array = []
+	for cid in state.positions.keys():
+		if String(state.factions.get(cid, "")) != cf:
+			continue
+		var ch = state.combatants.get(cid, null)
+		if ch == null or CharacterStats.is_dead(ch):
+			continue
+		var pos: Vector2i = state.positions[cid]
+		var d: int = maxi(absi(center.x - pos.x), absi(center.y - pos.y))
+		if d > rng:
+			continue
+		cands.append({"id": cid, "char": ch, "d": d})
+	cands.sort_custom(func(a, b): return a["d"] < b["d"])
+	for i in mini(cap, cands.size()):
+		var c: Dictionary = cands[i]
+		var p: IndividualCombat.Participant = state.combat.participants.get(int(c["id"]), null)
+		if p != null:
+			IndividualCombat.remove_condition(p, IndividualCombat.CONDITION_FATIGUED)
+			IndividualCombat.remove_condition(p, IndividualCombat.CONDITION_DAZED)
+		WoundSystem.heal_wounds(c["char"], cap)
+		out.append({"id": c["id"], "cleansed": true, "healed": cap})
+	return out
+
+
 # Resolves a damage-spell's condition rider (s31–s37). Returns the applied condition string,
 # "resisted" on a successful save, or "" when the target has no Participant.
 static func _apply_spell_rider(
@@ -1940,25 +2026,8 @@ static func _apply_spell_rider(
 	var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
 	if p == null:
 		return ""
-	var save: String = rider.get("save", "none")
-	var tn: int = rider.get("save_tn", 0)
-	var resisted: bool = false
-	match save:
-		"earth_flat":
-			var e: int = SpellSystem.get_ring_value(ch, Enums.Ring.EARTH)
-			resisted = dice_engine.roll_and_keep(e, e, true).total >= tn
-		"stamina_flat":
-			var sta: int = maxi(1, ch.stamina)
-			resisted = dice_engine.roll_and_keep(sta, sta, true).total >= tn
-		"earth_contested_air":
-			var te: int = SpellSystem.get_ring_value(ch, Enums.Ring.EARTH)
-			var ca: int = SpellSystem.get_ring_value(caster, Enums.Ring.AIR)
-			# Contested: the target must beat the caster's Air roll to avoid Knockdown.
-			resisted = dice_engine.roll_and_keep(te, te, true).total \
-				>= dice_engine.roll_and_keep(ca, ca, true).total
-		_:
-			resisted = false  # "none" — auto-apply
-	if resisted:
+	if _spell_save_resisted(state, caster, ch, rider.get("save", "none"),
+			rider.get("save_tn", 0), dice_engine):
 		return "resisted"
 	var cond: String = rider.get("condition", "")
 	var dur: int = rider.get("duration_rounds", 0)
@@ -1967,6 +2036,31 @@ static func _apply_spell_rider(
 	else:
 		IndividualCombat.apply_condition(p, cond)
 	return cond
+
+
+# Resolves a spell save (rider or status). Returns true if the target resists. Save types:
+# "none" (never resists — auto-apply), "earth_flat"/"stamina_flat" (Ring/Trait roll vs save_tn),
+# "earth_contested_air" (target Earth vs caster Air; ties go to the target).
+static func _spell_save_resisted(
+	state: MapCombatState, caster: L5RCharacterData, ch: L5RCharacterData,
+	save: String, tn: int, dice_engine: DiceEngine,
+) -> bool:
+	match save:
+		"earth_flat":
+			var e: int = SpellSystem.get_ring_value(ch, Enums.Ring.EARTH)
+			return dice_engine.roll_and_keep(e, e, true).total >= tn
+		"stamina_flat":
+			var sta: int = maxi(1, ch.stamina)
+			return dice_engine.roll_and_keep(sta, sta, true).total >= tn
+		"earth_contested_air":
+			var te: int = SpellSystem.get_ring_value(ch, Enums.Ring.EARTH)
+			var ca: int = SpellSystem.get_ring_value(caster, Enums.Ring.AIR)
+			# Contested: the target must beat the caster's Air roll to avoid the effect.
+			return dice_engine.roll_and_keep(te, te, true).total \
+				>= dice_engine.roll_and_keep(ca, ca, true).total
+		_:
+			return false  # "none" — auto-apply
+	return false
 
 
 ## Sodatsu no Oni Shugenja's Bane retaliation (s54.5): a Free Action picking one of three
