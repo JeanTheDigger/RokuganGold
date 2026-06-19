@@ -854,6 +854,7 @@ static func advance_day(
 		day_result.get("results", []),
 		death_events, characters_by_id,
 		active_topics, next_topic_id, ic_day,
+		world_states.get("family_baselines", {}),
 	)
 
 	_process_kindness_honor_writebacks(
@@ -24878,6 +24879,7 @@ static func _process_duel_death_writebacks(
 	active_topics: Array,
 	next_topic_id: Array,
 	ic_day: int,
+	family_baselines: Dictionary = {},
 ) -> void:
 	for result: Dictionary in results:
 		if result.get("action_id", "") != "ISSUE_DUEL_CHALLENGE":
@@ -24928,6 +24930,13 @@ static func _process_duel_death_writebacks(
 			topic.subject_role = "NEUTRAL"
 			topic.ic_day_created = ic_day
 			active_topics.append(topic)
+
+			# s12.2b Event Ripple: a duel death sours the two families' collective baseline.
+			var killer: L5RCharacterData = characters_by_id.get(killer_id)
+			if killer != null and dead_char.family != "" and killer.family != "":
+				CollectiveDisposition.apply_family_duel_death(
+					dead_char.family, killer.family, family_baselines,
+				)
 
 
 static func _process_kindness_honor_writebacks(
