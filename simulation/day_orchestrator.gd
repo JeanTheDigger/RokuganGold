@@ -813,6 +813,13 @@ static func advance_day(
 		ic_day,
 	)
 
+	# s12.2b Event Ripple: war declarations and peace settlements shift the two clans'
+	# collective baseline (annihilation is not a treaty — the loser is gone, so skip it).
+	_apply_war_collective_disposition(
+		war_declarations, war_termination_results, active_wars,
+		world_states.get("clan_baselines", {}),
+	)
+
 	_release_war_hostages(war_termination_results, active_hostages, characters_by_id, ic_day)
 
 	_remove_resolved_hostages(active_hostages)
@@ -29505,6 +29512,36 @@ static func _process_garden_visitor_effects(
 ## gain a disposition bonus toward the bonsai's owner, duplicate-guarded (per visitor per
 ## bonsai) and expiring after VISITOR_BONUS_DURATION_DAYS. Bonsai entries in
 ## active_garden_bonuses carry kind:"bonsai" so they never collide with garden ids.
+## s12.2b: apply collective-disposition ripples for war declarations (clans worsen) and
+## peace settlements (clans improve). Annihilation is excluded — there is no treaty.
+static func _apply_war_collective_disposition(
+	war_declarations: Array,
+	war_termination_results: Array,
+	active_wars: Array,
+	clan_baselines: Dictionary,
+) -> void:
+	for d_v: Variant in war_declarations:
+		var d: Dictionary = d_v as Dictionary
+		if d.get("event", "") != "war_declared":
+			continue
+		CollectiveDisposition.apply_clan_war_declared(
+			d.get("declaring_clan", ""), d.get("target_clan", ""), clan_baselines,
+		)
+	for r_v: Variant in war_termination_results:
+		var r: Dictionary = r_v as Dictionary
+		var res: String = r.get("resolution", "")
+		if res == WarTermination.RESOLUTION_NAMES[WarTermination.ResolutionType.ANNIHILATION]:
+			continue  # one clan destroyed — no peace treaty
+		var war_id: int = r.get("war_id", -1)
+		if war_id < 0:
+			continue
+		for w_v: Variant in active_wars:
+			var w: WarData = w_v as WarData
+			if w != null and w.war_id == war_id:
+				CollectiveDisposition.apply_clan_peace_treaty(w.clan_a, w.clan_b, clan_baselines)
+				break
+
+
 static func _process_bonsai_visitor_effects(
 	active_bonsai: Array,
 	characters: Array,

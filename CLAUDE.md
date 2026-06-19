@@ -5628,6 +5628,15 @@ Runtime-verified 6/6 (tier-3 bonus; far/owner excluded; duplicate guard; garden#
 bonsai#7; undisplayed no-op). Glory ticks not applied (apply_bonsai_visitor returns 0 — bonsai
 have no visitor-count field, unlike gardens).
 
+### s12.2b war/peace collective-disposition ripple wired (2026-06-19)
+`CollectiveDisposition.apply_clan_war_declared` / `apply_clan_peace_treaty` were built but never
+called — declaring war or making peace never shifted the two clans' collective baseline (the
+single most significant inter-clan event did nothing to collective standing). `_apply_war_collective_disposition`
+(advance_day, after war declaration + termination) applies the Event-Ripple deltas: war declared
+−10, negotiated/surrender peace +5 (existing s12.2b constants). Annihilation is excluded (no
+treaty — the loser is gone); already-active re-declarations apply nothing; peace clans resolved
+from the war_id via active_wars. Runtime-verified 4/4.
+
 ### Pending Redesign
 (None currently pending.)
 
