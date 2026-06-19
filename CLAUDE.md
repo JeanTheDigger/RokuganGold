@@ -5446,6 +5446,26 @@ the same actor without proper turn advancement.
   heuristic, tunable after a live run; AoE friendly-fire avoidance in target selection is not
   modeled (the cast aims at the AI's single best_target; self-centered AoE "all" spells can catch
   allies, faithful to the GDD but worth watching).
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 8: hooked buff spells
+  (owner-authorized 2026-06-19).** The three deferred buffs whose effect is a combat-hook read,
+  not a passive stat total. All cast via the `buff` kind (target self) installing a timed modifier;
+  the effect fires in `_apply_hit` / `execute_melee_attack`. (1) **The Soul's Blade** (Fire 6,
+  `weapon_stun`): every target the enchanted weapon hits is Stunned (`_apply_hit` applies
+  CONDITION_STUNNED on a hit) AND the weapon overcomes Invulnerability (the spirit-damage filter
+  reads the weapon as `W_MAGIC` when the enchant is active, so invuln tags let it through —
+  verified 0→18 damage vs a superior_invuln spirit). (2) **Fires of Purity** (Fire 1,
+  `flame_shroud`): a melee attacker striking the shrouded character takes 2k2, and the shrouded
+  character's own melee hits deal an extra 2k2 (`_apply_fires_of_purity`, both directions; ranged
+  bypasses via the melee gate; ally-targeting deferred — cast target is self). (3) **Reversal of
+  Fortunes** (Water 1, `reroll`): a buffed attacker may re-roll a missed attack once per round,
+  keeping the better result (`execute_melee_attack` re-rolls on a miss when
+  `get_timed_modifier_total(a_p,"reroll")>0` and `reversal_used_round != round`; new
+  `Participant.reversal_used_round`). Runtime-verified 4/4 (Stun on hit; overcome-invuln 0→18;
+  Fires of Purity cast installs + burns attacker for 10; Reversal raises hit rate 121→146/200).
+  LIMITATION: Reversal covers the **attack roll** only (the primary combat roll) — "may re-roll
+  ANY one roll per round" across damage/contested/Initiative rolls is forward-wired (each roll site
+  would need the same guarded re-roll); Fires of Purity's ally-target option is deferred (NPC
+  self-buff path only installs self-target buffs).
 
 ### Pending Redesign
 (None currently pending.)

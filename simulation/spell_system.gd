@@ -140,6 +140,13 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_attack_kept", "value": 1}]},  # Fire 1: melee attack +1k1 (mounted/larger +2k2 deferred)
 	"warning_flame": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 10,
 		"mods": [{"kind": "initiative_rolled", "value": 1}]},  # Fire 1: +1k0 Initiative (immune-surprise + Reactions +3 deferred)
+	# Hooked buffs (effect read in _apply_hit / execute_melee_attack, not a stat total):
+	"the_souls_blade": {"kind": "buff", "target": "self", "duration_rounds": 5,
+		"mods": [{"kind": "weapon_stun", "value": 1}]},  # Fire 6: weapon auto-Stuns + overcomes Invulnerability
+	"fires_of_purity": {"kind": "buff", "target": "self", "duration_rounds": 10,
+		"mods": [{"kind": "flame_shroud", "value": 1}]},  # Fire 1: melee attacker takes 2k2; the shrouded one's strikes deal +2k2 (ranged bypasses; ally-target deferred)
+	"reversal_of_fortunes": {"kind": "buff", "target": "self", "duration_rounds": 3,
+		"mods": [{"kind": "reroll", "value": 1}]},  # Water 1: re-roll one missed attack/round (broader re-rolls forward-wired)
 }
 
 static func get_combat_effect(spell_id: String) -> Dictionary:

@@ -851,6 +851,21 @@ static func execute_melee_attack(
 		{"opponent_clan": target.clan}
 	)
 
+	# Reversal of Fortunes (s36): a buffed attacker may re-roll a missed attack once per
+	# round, keeping the better result.
+	var reversal_rerolled: bool = false
+	if not result.get("hit", false) \
+			and IndividualCombat.get_timed_modifier_total(a_p, "reroll") > 0 \
+			and a_p.reversal_used_round != state.combat.round_number:
+		a_p.reversal_used_round = state.combat.round_number
+		var rr: Dictionary = IndividualCombat.resolve_attack(
+			attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
+			false, spend_void, false, maneuver, {"opponent_clan": target.clan})
+		# Keep the better result (a hit wins; otherwise the higher roll).
+		if rr.get("hit", false) or int(rr.get("roll", 0)) > int(result.get("roll", 0)):
+			result = rr
+		reversal_rerolled = true
+
 	# Standing on the Heavens (s30a) defender reaction: a struck defender may force
 	# a reroll of the attack (spends 1 VP). The reroll's outcome replaces the original.
 	var soh_rerolled: bool = false
@@ -875,6 +890,8 @@ static func execute_melee_attack(
 	}
 	if soh_rerolled:
 		log_entry["standing_heavens_reroll"] = true
+	if reversal_rerolled:
+		log_entry["reversal_reroll"] = true
 
 	if result.get("hit", false):
 		var dmg_result: Dictionary = _apply_hit(state, attacker, a_p, target, weapon_name, raises, maneuver, result, dice_engine)
@@ -911,6 +928,10 @@ static func execute_melee_attack(
 		# Wreathed in Flames (s54.5 Daku): striking the burning oni in melee automatically
 		# burns the attacker by weapon size (no save).
 		_apply_wreathed_in_flames(attacker, target, weapon_name, dice_engine)
+
+		# Fires of Purity (s35 Fire): flame shroud. A shrouded DEFENDER burns its melee
+		# attacker (2k2); a shrouded ATTACKER's melee hit burns the target for an extra 2k2.
+		_apply_fires_of_purity(attacker, a_p, target, t_p, weapon_name, dice_engine)
 
 		# Abominable Stench (s54.11 Nuppeppo): struck by an armed melee weapon → every living
 		# mortal within 20' (4 tiles) rolls Stamina TN 20 or is Fatigued.
@@ -3041,6 +3062,31 @@ static func _apply_body_is_anvil(
 		WoundSystem.apply_damage(attacker, CharacterStats.get_ring_value(target, Enums.Ring.FIRE), 0)
 	if "The Body is an Anvil" in a_p.active_kiho and not CharacterStats.is_dead(target):
 		WoundSystem.apply_damage(target, CharacterStats.get_ring_value(attacker, Enums.Ring.FIRE), 0)
+
+
+## Fires of Purity (s35 Fire): the flame-shrouded character burns anyone in melee contact —
+## 2k2 to whoever strikes them (DEFENDER shrouded) and an extra 2k2 to whoever they strike
+## (ATTACKER shrouded). Ranged attacks bypass the shroud (handled by the melee gate).
+const FIRES_OF_PURITY_ROLLED: int = 2
+const FIRES_OF_PURITY_KEPT: int = 2
+static func _apply_fires_of_purity(
+	attacker: L5RCharacterData,
+	a_p: IndividualCombat.Participant,
+	target: L5RCharacterData,
+	t_p: IndividualCombat.Participant,
+	weapon_name: String,
+	dice_engine: DiceEngine,
+) -> void:
+	if not IndividualCombat.get_weapon_profile(weapon_name).get("melee", true):
+		return
+	if t_p != null and IndividualCombat.get_timed_modifier_total(t_p, "flame_shroud") > 0 \
+			and not CharacterStats.is_dead(attacker):
+		WoundSystem.apply_damage(attacker,
+			dice_engine.roll_and_keep(FIRES_OF_PURITY_ROLLED, FIRES_OF_PURITY_KEPT, true).total, 0)
+	if a_p != null and IndividualCombat.get_timed_modifier_total(a_p, "flame_shroud") > 0 \
+			and not CharacterStats.is_dead(target):
+		WoundSystem.apply_damage(target,
+			dice_engine.roll_and_keep(FIRES_OF_PURITY_ROLLED, FIRES_OF_PURITY_KEPT, true).total, 0)
 
 
 ## Burning Blood (s54.5 Furu / Furu spawn): when a MELEE attacker wounds a burning-blood
@@ -5703,6 +5749,10 @@ static func _apply_hit(
 		reduction = 0
 	if target.spirit_creature != null:
 		var w_kind: String = _weapon_kind(attacker, weapon_name)
+		# The Soul's Blade (s35 Fire 6): the enchanted weapon overcomes Invulnerability —
+		# read it as magic so the invuln tags let the damage through.
+		if IndividualCombat.get_timed_modifier_total(a_p, "weapon_stun") > 0:
+			w_kind = SpiritAbilitySystem.W_MAGIC
 		# A spirit's Reduction is its creature stat, kind-gated — not armor mechanics.
 		# reduction_for_kind() == armor_reduction for mundane (matches the puppet's
 		# value) and 0 for a swarm struck by a non-mundane weapon. Skip when the
@@ -5714,6 +5764,11 @@ static func _apply_hit(
 		var filt: Dictionary = SpiritAbilitySystem.incoming_damage(target.spirit_creature, w_kind)
 		raw = 0 if filt["heals"] else int(round(float(raw) * float(filt["multiplier"])))
 	var wd_result: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
+
+	# The Soul's Blade (s35 Fire 6): every target hit by the enchanted weapon is Stunned.
+	if t_p != null and IndividualCombat.get_timed_modifier_total(a_p, "weapon_stun") > 0 \
+			and not CharacterStats.is_dead(target):
+		IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_STUNNED)
 
 	# Arugai "Nearly Immortal" / heart_kill (s54.5): the oni's wounds heal almost instantly,
 	# so body damage can never slay it — only destroying its heart can. While the heart is

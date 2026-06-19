@@ -209,6 +209,9 @@ class Participant:
 	# Each entry: {kind:String, value:int, expires_round:int, source:String}.
 	# expires_round is the round at which it is removed (active through the prior round).
 	var timed_modifiers: Array = []
+	# Reversal of Fortunes (s36): the round in which this participant last used its
+	# re-roll charge (1/round). -1 = never used this skirmish.
+	var reversal_used_round: int = -1
 	# Victory of the River (s30a): the single opponent currently held under the
 	# Armor-TN debuff ("One opponent at a time"); -1 = none.
 	var votr_target_id: int = -1
