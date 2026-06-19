@@ -5530,6 +5530,18 @@ turn to protecting the ally). Runtime-verified 4/4 (Guard consumes a Simple → 
 Complex attack; NPC bodyguard guards a wounded threatened ally and forgoes its attack;
 no guard for a healthy ally).
 
+### s40 Combat Maneuvers — NPC Grapple initiation (2026-06-19)
+The grappled-state loop (hit / take_control / escape) already ran on later turns, but no
+NPC ever *initiated* a Grapple. `_npc_should_grapple` (structural AI, GDD-silent on NPC
+policy): a dedicated grappler — Jiujutsu ≥ 4 AND Jiujutsu ≥ its best weapon skill
+(`_NPC_WEAPON_SKILLS`, so a katana-5/jiujutsu-4 samurai keeps the sword) — seizes an
+adjacent enemy (Complex Action via `execute_grapple_initiate`) instead of striking; the
+existing grapple loop takes over next turn. Gated to non-spirit attackers (spirits have
+their own engulf/swallow grabs) and skipped while already grappled. Runtime-verified 5/5
+(pure grappler initiates; sword-primary samurai attacks instead; Jiujutsu < 4 no grapple;
+polearm-primary excluded). Feint NPC use remains a deliberate non-fill (margin/2 ≈
+increased_damage's +1k0 for AI, not worth the extra Raise).
+
 ### Pending Redesign
 (None currently pending.)
 

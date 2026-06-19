@@ -4366,6 +4366,18 @@ static func execute_npc_turn(
 			actions_taken.append({"action": "vs_prone_trample", "result": tr})
 			return {"actions": actions_taken}
 
+	# -- Grapple initiation (s40): a dedicated Jiujutsu grappler seizes an adjacent enemy
+	# (Complex Action) instead of striking — the grappled-state loop (hit/take_control/
+	# escape) is handled on later turns. Structural AI; the GDD gives no NPC policy.
+	if target_in_melee and npc.spirit_creature == null and ts.can_use_complex() \
+			and not IndividualCombat.has_condition(p, IndividualCombat.CONDITION_GRAPPLED) \
+			and _npc_should_grapple(npc):
+		var gtgt: L5RCharacterData = chars_by_id.get(best_target, null)
+		if gtgt != null and not CharacterStats.is_dead(gtgt):
+			var gi: Dictionary = execute_grapple_initiate(state, npc_id, best_target, npc, gtgt, dice_engine)
+			actions_taken.append({"action": "grapple_initiate", "result": gi})
+			return {"actions": actions_taken}
+
 	# -- Attack ---------------------------------------------------------------
 	if target_in_melee or (not is_melee_weapon and target_in_ranged):
 		var target_char: L5RCharacterData = chars_by_id.get(best_target, null)
@@ -4667,6 +4679,20 @@ static func _npc_should_disarm(state: MapCombatState, target_id: int, target: L5
 	for sk: String in _NPC_KNOCKDOWN_SKILLS:
 		best = maxi(best, int(target.skills.get(sk, 0)))
 	return best >= 4  # a dangerous armed opponent worth stripping
+
+
+# A dedicated grappler initiates a Grapple only when Jiujutsu is its best combat skill
+# (a katana-5/jiujutsu-4 samurai keeps the sword). Jiujutsu >= 4 so the grapple roll holds.
+# Structural AI heuristic — the GDD gives no NPC policy.
+const _NPC_WEAPON_SKILLS: Array = ["Kenjutsu", "Iaijutsu", "Polearms", "Heavy Weapons", "Knives", "Kyujutsu", "War Fan"]
+static func _npc_should_grapple(npc: L5RCharacterData) -> bool:
+	var jj: int = int(npc.skills.get("Jiujutsu", 0))
+	if jj < 4:
+		return false
+	var best_weapon: int = 0
+	for sk: String in _NPC_WEAPON_SKILLS:
+		best_weapon = maxi(best_weapon, int(npc.skills.get(sk, 0)))
+	return jj >= best_weapon
 
 
 # True if a living enemy of `faction` is adjacent (within 1 tile) to the character at `who_id`.
