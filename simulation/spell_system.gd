@@ -125,6 +125,21 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# --- Cleanse (s36) ---
 	# kind "cleanse": free up to Water Rank living allies in range from Fatigued+Dazed + heal Water Rank.
 	"typhoons_surge": {"kind": "cleanse", "range_tiles": 10},  # Water 3
+	# --- Buffs (s34/s35/s36) — persistent stat bonuses via the round-scoped timed-modifier layer ---
+	# kind "buff": target "self" (range ignored) or "ally" (Touch/range). Each mod {kind, value};
+	# value = int OR a formula ("water_plus_rank"/"earth_plus_rank"). duration_rounds = GDD rounds
+	# (minutes × 10 via the ROUNDS_PER_MINUTE convention). Mod kinds map to the combat roll sites:
+	# armor_tn, reduction, spell_attack_rolled/_kept, spell_damage_rolled/_kept, initiative_rolled.
+	"armor_of_earth": {"kind": "buff", "target": "self", "duration_rounds": 10,
+		"mods": [{"kind": "reduction", "value": "earth_plus_rank"}]},  # Earth 1: Reduction = Earth + School Rank
+	"cloak_of_the_miya": {"kind": "buff", "target": "self", "duration_rounds": 5,
+		"mods": [{"kind": "armor_tn", "value": "water_plus_rank"}]},  # Water 2: Armor TN += Water + School Rank
+	"biting_steel": {"kind": "buff", "target": "self", "duration_rounds": 10,
+		"mods": [{"kind": "spell_damage_rolled", "value": 1}, {"kind": "spell_damage_kept", "value": 1}]},  # Fire 1: DR +1k1
+	"burning_kiss_of_steel": {"kind": "buff", "target": "self", "duration_rounds": 50,
+		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_attack_kept", "value": 1}]},  # Fire 1: melee attack +1k1 (mounted/larger +2k2 deferred)
+	"warning_flame": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 10,
+		"mods": [{"kind": "initiative_rolled", "value": 1}]},  # Fire 1: +1k0 Initiative (immune-surprise + Reactions +3 deferred)
 }
 
 static func get_combat_effect(spell_id: String) -> Dictionary:

@@ -1813,6 +1813,12 @@ static func execute_cast_spell(
 			"type": "spell_cleanse", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "cleanse": res["spell_cleanse"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "buff":
+		res["spell_buff"] = _apply_spell_buff(state, caster_id, caster, target_id, target, eff)
+		state.combat_log.append({
+			"type": "spell_buff", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "buff": res["spell_buff"],
+		})
 	state.combat_log.append({
 		"type": "spell_cast", "round": state.combat.round_number,
 		"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
@@ -2015,6 +2021,58 @@ static func _apply_spell_cleanse(
 		WoundSystem.heal_wounds(c["char"], cap)
 		out.append({"id": c["id"], "cleansed": true, "healed": cap})
 	return out
+
+
+## Apply a buff spell (s34/s35/s36): persistent stat bonuses installed on the target's Participant
+## via the round-scoped timed-modifier layer (auto-expires in advance_round). target "self" buffs
+## the caster (range ignored); "ally" buffs a living same-faction target within Touch/range.
+## Each mod is {kind, value} where value is an int or a formula string resolved against the caster.
+static func _apply_spell_buff(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary,
+) -> Dictionary:
+	var to_self: bool = eff.get("target", "self") == "self"
+	var bid: int = caster_id if to_self else target_id
+	var bch: L5RCharacterData = caster if to_self else target
+	if bch == null:
+		bid = caster_id
+		bch = caster
+	if not to_self:
+		if String(state.factions.get(bid, "")) != String(state.factions.get(caster_id, "")):
+			return {"reason": "not_an_ally"}
+		if CharacterStats.is_dead(bch):
+			return {"reason": "target_dead"}
+		var rng: int = eff.get("range_tiles", 1)
+		if bid != caster_id and state.positions.has(caster_id) and state.positions.has(bid):
+			var cp: Vector2i = state.positions[caster_id]
+			var tp: Vector2i = state.positions[bid]
+			if maxi(absi(cp.x - tp.x), absi(cp.y - tp.y)) > rng:
+				return {"reason": "out_of_range"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(bid, null)
+	if p == null:
+		return {"reason": "not_in_combat"}
+	var expiry: int = state.combat.round_number + int(eff.get("duration_rounds", 5))
+	var applied: Array = []
+	for mod in eff.get("mods", []):
+		var val: int = _resolve_buff_value(caster, mod.get("value", 0))
+		IndividualCombat.add_timed_modifier(p, mod.get("kind", ""), val, expiry, "spell_buff")
+		applied.append({"kind": mod.get("kind", ""), "value": val})
+	return {"id": bid, "applied": applied, "expires_round": expiry}
+
+
+# Resolve a buff mod value: a raw int, or a GDD formula keyed off the caster's rings/school rank.
+static func _resolve_buff_value(caster: L5RCharacterData, value) -> int:
+	if value is String:
+		match value:
+			"water_plus_rank":
+				return SpellSystem.get_ring_value(caster, Enums.Ring.WATER) \
+					+ SpellSystem.get_effective_school_rank(caster, Enums.Ring.WATER)
+			"earth_plus_rank":
+				return SpellSystem.get_ring_value(caster, Enums.Ring.EARTH) \
+					+ SpellSystem.get_effective_school_rank(caster, Enums.Ring.EARTH)
+			_:
+				return 0
+	return int(value)
 
 
 # Resolves a damage-spell's condition rider (s31–s37). Returns the applied condition string,

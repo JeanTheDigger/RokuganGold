@@ -5401,6 +5401,30 @@ the same actor without proper turn advancement.
   gaijin/nonhuman immunity + exact Willpower=Fire×10 recovery TN (uses the default Dazed recovery);
   Wooden Prison's Contested-Strength-vs-4 escape (uses the standard TN-20 entangle escape) + its
   terrain restrictions.
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 6: defensive/weapon buff spells
+  (owner-authorized 2026-06-19).** Adds a `buff` kind: persistent stat bonuses installed on the
+  target's Participant via the existing round-scoped `timed_modifiers` layer (auto-expires in
+  `advance_round`). `_apply_spell_buff` resolves each `{kind, value}` mod (value = int OR a GDD
+  formula `water_plus_rank`/`earth_plus_rank` via `_resolve_buff_value`); `target` "self" (range
+  ignored) or "ally" (Touch/range, living same-faction gate). `duration_rounds` = GDD rounds
+  (minutes × 10 via the ROUNDS_PER_MINUTE convention). Five new read sites wired in
+  `individual_combat.gd` — `reduction` (`total_defender_reduction`), `armor_tn` (already read by
+  `get_armor_tn`), `spell_attack_rolled`/`_kept` (`resolve_attack`, ungated — distinct from the
+  Kenjutsu/Iaijutsu-gated World-Is-Empty `attack_rolled`), `spell_damage_rolled`/`_kept`
+  (`resolve_damage`), `initiative_rolled` (added to the rolled-dice count in `roll_initiative`, NOT
+  a flat score add — Warning Flame is +1k0). Five spells (exact GDD): **Armor of Earth** (Earth 1
+  → Reduction = Earth + School Rank), **Cloak of the Miya** (Water 2 → Armor TN += Water + School
+  Rank), **Biting Steel** (Fire 1 → DR +1k1), **Burning Kiss of Steel** (Fire 1 → melee attack
+  +1k1; the mounted/larger +2k2 deferred), **Warning Flame** (Fire 1 → +1k0 Initiative; the
+  immune-surprise + Reactions-Stage +3 deferred). Runtime-verified 6/6 (Reduction +12, Armor TN
+  +12, damage +1k1 r9→10 k2→3, attack +1k1 mean 49→56, ally Init +1k0 58→61, expiry via
+  `expire_timed_modifiers`). DEFERRED (each needs a distinct hook): **Reversal of Fortunes**
+  (Water 1 — a per-Participant re-roll-grant read by every roll site), **The Soul's Blade** (Fire 6
+  — a weapon-enchant Participant state in `_apply_hit` that auto-Stuns + overcomes Invulnerability),
+  Fires of Purity flame-shroud (a melee-attacker retaliation on a character, like the creature
+  Wreathed-in-Flames hook), Force of Will (+2 Wounds/Rank with expiry-damage — needs a wound-capacity
+  buff), the elemental weapon-conjuration spells (need an inventory weapon), and the Fear-resist
+  buffs (Strength of the Crab etc. — need a Fear-resist modifier in `apply_fear_checks`).
 
 ### Pending Redesign
 (None currently pending.)

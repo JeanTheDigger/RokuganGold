@@ -691,8 +691,9 @@ static func total_defender_reduction(
 	var base: int = defender.armor_reduction
 	var kata: int = get_kata_reduction_bonus(defender, defender_p, weapon_name)
 	var kiho: int = _get_kiho_reduction_bonus(defender, defender_p)
+	var spell: int = get_timed_modifier_total(defender_p, "reduction")  # s34 Armor of Earth etc.
 	var pierce: int = get_kata_opponent_reduction_penalty(attacker, attacker_p, weapon_name)
-	return maxi(0, base + kata + kiho - pierce)
+	return maxi(0, base + kata + kiho + spell - pierce)
 
 
 ## Resolve an atemi-delivered kiho strike (GDD s38). Atemi deal no normal damage —
@@ -895,6 +896,8 @@ static func roll_initiative(
 ) -> int:
 	var kata_init: Dictionary = _get_kata_initiative_modifiers(character, weapon_name)
 	var wound_penalty: int = CharacterStats.get_wound_penalty(character)
+	# Spell Initiative buff (s35 Warning Flame: +1k0 to Initiative rolls).
+	var spell_init_rolled: int = get_timed_modifier_total(participant, "initiative_rolled")
 	# Advantage/disadvantage modifiers (s45): CONSUMED Perfection (-5 to score), TOUCH_OF_THE_SPIRIT_REALMS, etc.
 	var adv_init: Dictionary = AdvantageSystem.get_skill_bonus(character, "", {"is_combat": true})
 	var adv_init_tn: int = AdvantageSystem.get_tn_modifier(character, {"is_combat": true})
@@ -904,7 +907,7 @@ static func roll_initiative(
 		var void_rank: int = character.void_ring
 		var insight_rank: int = CharacterStats.get_insight_rank(character)
 		var result: DiceResult = dice_engine.roll_and_keep(
-			void_rank + insight_rank + adv_init["rolled"],
+			void_rank + insight_rank + adv_init["rolled"] + spell_init_rolled,
 			maxi(void_rank + adv_init["kept"], 1))
 		score = result.total + wound_penalty
 	else:
@@ -913,7 +916,7 @@ static func roll_initiative(
 		# Touch the Void Dragon (s38): +1 Rank to Reflexes (Air) = +1k1 Initiative.
 		var vd_init: int = vd_ring_bonus(participant, Enums.Ring.AIR)
 		var result: DiceResult = dice_engine.roll_and_keep(
-			reflexes + insight_rank + adv_init["rolled"] + vd_init,
+			reflexes + insight_rank + adv_init["rolled"] + vd_init + spell_init_rolled,
 			maxi(reflexes + adv_init["kept"] + vd_init, 1), true)
 		score = result.total + wound_penalty
 	score += kata_init["flat_bonus"] + adv_init["free_raises"] * 5 - adv_init_tn
@@ -1128,6 +1131,10 @@ static func resolve_attack(
 	rolled += kata_atk["rolled_bonus"]
 	kept += kata_atk["kept_bonus"]
 
+	# Spell weapon-buff attack bonus (s35 Burning Kiss of Steel etc.) — applies to any attack.
+	rolled += get_timed_modifier_total(attacker_p, "spell_attack_rolled")
+	kept += get_timed_modifier_total(attacker_p, "spell_attack_kept")
+
 	# The World Is Empty (s30a): +Xk0 to Kenjutsu/Iaijutsu attack rolls while active.
 	if skill_name == "Kenjutsu" or skill_name == "Iaijutsu":
 		rolled += get_timed_modifier_total(attacker_p, "attack_rolled")
@@ -1295,6 +1302,9 @@ static func resolve_damage(
 	# Timed damage-dice penalty (s38 Earth Palm Water option: -4 damage dice while active).
 	if attacker_p != null:
 		rolled = maxi(0, rolled + get_timed_modifier_total(attacker_p, "damage_dice_penalty"))
+		# Spell weapon-buff damage bonus (s35 Biting Steel +1k1 etc.).
+		rolled += get_timed_modifier_total(attacker_p, "spell_damage_rolled")
+		kept += get_timed_modifier_total(attacker_p, "spell_damage_kept")
 
 	# roll_damage handles the dice pool; we pass strength already absorbed above
 	var result: Dictionary = dice_engine.roll_damage(rolled, kept)
