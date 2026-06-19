@@ -5640,9 +5640,9 @@ from the war_id via active_wars. Runtime-verified 4/4.
 ### s12.2b duel-death family ripple wired (2026-06-19)
 `CollectiveDisposition.apply_family_duel_death` was dead. `_process_duel_death_writebacks` now
 shifts the victim's and killer's family collective baseline (−5, existing s12.2b constant) on a
-duel fatality (same-family duels skipped). Three more family ripples remain unwired
-(apply_family_betrayal, apply_family_lord_raid, apply_intra_clan_rice_sharing) — each needs its
-own trigger site. Runtime-verified 3/3.
+duel fatality (same-family duels skipped). Intra-clan rice sharing now warms the giver's and recipient's family baseline (+2, same-clan
+different-family, in `_process_supply_sharing`). Two family ripples remain unwired
+(apply_family_betrayal, apply_family_lord_raid). Runtime-verified 6/6.
 
 ### Pending Redesign
 (None currently pending.)

@@ -608,6 +608,7 @@ static func advance_day(
 		characters_by_id,
 		settlements,
 		provinces,
+		world_states.get("family_baselines", {}),
 	)
 
 	var worship_accumulation_results: Array = _process_worship_accumulation(
@@ -15199,6 +15200,7 @@ static func _process_supply_sharing(
 	characters_by_id: Dictionary,
 	settlements: Array,
 	provinces: Dictionary,
+	family_baselines: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 
@@ -15247,6 +15249,13 @@ static func _process_supply_sharing(
 				"honor_gain": share_result.get("honor_gain", 0.0),
 				"resolves_famine": share_result.get("resolves_famine", false),
 			})
+			# s12.2b Event Ripple: intra-clan rice sharing warms the two families' baseline.
+			var recipient: L5RCharacterData = characters_by_id.get(receiver_settlement.lord_character_id)
+			if recipient != null and recipient.clan == character.clan \
+					and character.family != "" and recipient.family != "":
+				CollectiveDisposition.apply_intra_clan_rice_sharing(
+					character.family, recipient.family, family_baselines,
+				)
 
 	return results
 
