@@ -5617,6 +5617,17 @@ DEFERRED (no values / model): the 1–3 season Emperor-call gap (fires the seaso
 is seen), the full weighted clan-nomination eval (a competence proxy picks each nominee), the
 extraordinary-championship path (Tier 2), and the Emerald-Magistrate appointment.
 
+### s57.24 displayed-bonsai visitor effect wired (2026-06-19)
+`GardenSystem.apply_bonsai_visitor` was built but never called — displayed bonsai gave no
+visitor effect (gardens do). `DayOrchestrator._process_bonsai_visitor_effects` (daily, beside
+the garden pass) gives co-located living characters a disposition bonus toward the bonsai's
+owner (by quality tier), duplicate-guarded per visitor per bonsai and expiring after
+VISITOR_BONUS_DURATION_DAYS. Bonsai guard entries carry `kind:"bonsai"` so they never collide
+with garden ids in `active_garden_bonuses`. Owner excluded, dead/undisplayed bonsai skipped.
+Runtime-verified 6/6 (tier-3 bonus; far/owner excluded; duplicate guard; garden#7 doesn't block
+bonsai#7; undisplayed no-op). Glory ticks not applied (apply_bonsai_visitor returns 0 — bonsai
+have no visitor-count field, unlike gardens).
+
 ### Pending Redesign
 (None currently pending.)
 

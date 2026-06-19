@@ -1070,6 +1070,10 @@ static func advance_day(
 		active_gardens, characters, characters_by_id, settlements, ic_day,
 	)
 
+	_process_bonsai_visitor_effects(
+		active_bonsai, characters, characters_by_id, ic_day,
+	)
+
 	_process_compose_painting_writebacks(
 		day_result.get("results", []),
 		active_paintings, next_painting_id, ic_day,
@@ -29495,6 +29499,67 @@ static func _process_garden_visitor_effects(
 				var daimyo: L5RCharacterData = characters_by_id.get(daimyo_id)
 				if daimyo != null and not CharacterStats.is_dead(daimyo):
 					HonorGlorySystem.apply_glory_change(daimyo, visit_result.get("daimyo_glory", 0.0))
+
+
+## s57.24 displayed-bonsai visitor effect (parallel to gardens): co-located living characters
+## gain a disposition bonus toward the bonsai's owner, duplicate-guarded (per visitor per
+## bonsai) and expiring after VISITOR_BONUS_DURATION_DAYS. Bonsai entries in
+## active_garden_bonuses carry kind:"bonsai" so they never collide with garden ids.
+static func _process_bonsai_visitor_effects(
+	active_bonsai: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	if active_bonsai.is_empty():
+		return
+	var chars_at: Dictionary = {}
+	for char_v: Variant in characters:
+		var c: L5RCharacterData = char_v as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c) or c.physical_location.is_empty():
+			continue
+		chars_at.get_or_add(c.physical_location, []).append(c)
+
+	for b_v: Variant in active_bonsai:
+		if not b_v is BonsaiData:
+			continue
+		var bonsai: BonsaiData = b_v as BonsaiData
+		if bonsai.is_dead or bonsai.display_settlement_id < 0:
+			continue
+		var present: Array = chars_at.get(str(bonsai.display_settlement_id), [])
+		for char_v: Variant in present:
+			var visitor: L5RCharacterData = char_v as L5RCharacterData
+			if visitor.character_id == bonsai.owner_id:
+				continue
+			# Duplicate guard (per visitor per bonsai).
+			var already: bool = false
+			for e_v: Variant in visitor.active_garden_bonuses:
+				var e: Dictionary = e_v as Dictionary
+				if e.get("kind", "") == "bonsai" and e.get("garden_id", -1) == bonsai.bonsai_id \
+						and e.get("expires_ic_day", 0) > ic_day:
+					already = true
+					break
+			if already:
+				continue
+			var visit: Dictionary = GardenSystem.apply_bonsai_visitor(
+				bonsai, visitor.character_id, bonsai.owner_id, ic_day,
+			)
+			if visit.get("bonus", 0) <= 0:
+				continue
+			var bucket: Array = visitor.temporary_modifiers.get(bonsai.owner_id, [])
+			bucket.append({
+				"event_type": "bonsai_visitor",
+				"value": visit["bonus"],
+				"created_ic_day": ic_day,
+				"duration": GardenSystem.VISITOR_BONUS_DURATION_DAYS,
+			})
+			visitor.temporary_modifiers[bonsai.owner_id] = bucket
+			visitor.active_garden_bonuses.append({
+				"kind": "bonsai",
+				"garden_id": bonsai.bonsai_id,
+				"creator_id": bonsai.owner_id,
+				"expires_ic_day": ic_day + GardenSystem.VISITOR_BONUS_DURATION_DAYS,
+			})
 
 
 static func _process_garden_seasonal_maintenance(
