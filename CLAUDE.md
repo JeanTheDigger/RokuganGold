@@ -6094,16 +6094,41 @@ attack/non-attack constraints are honored by WHICH function checks WHICH pool (n
 GDD durations (2-Round / "this Round") aren't enforced (pools persist until used); no NPC-AI policy uses
 these (PC-deliberate / future turn UI). Water 17 / Fire 12 this session.
 
+### Spell coverage — modifier-zone subsystem, batch 10 (2026-06-20, runtime-verified 14/14, owner-approved)
+A reusable **modifier zone** layer: an area whose roll modifiers apply to whoever currently STANDS in it,
+read at roll time (so movement in/out is honored — unlike a one-time timed modifier). New `modifier`
+zone kind in `state.spell_zones` (`mods` dict + radius + center + expiry; survives the per-round tick
+with no per-round effect), installed by `_apply_spell_modifier_zone` (centered on the caster
+[self_centered] or a designated target tile), and summed at roll sites by `_zone_modifier_total(state,
+char_id, mod_key)`. Wired into three to-hit sites: `execute_melee_attack` and `execute_ranged_attack`
+add `attack_roll_penalty`/`ranged_attack_penalty` (the shooter's position) to `atk_pen`, and
+`execute_ranged_attack` adds `ranged_armor_tn` (the target's position) to the Armor TN. Two spells:
+- **Blessed Wind of Lady Sun** (Air 2) → self-centered `attack_roll_penalty: -1` ("all hostile actions
+  suffer -1k0"; the +1k0 Void/Awareness and -2k0 Awareness-hostile halves are out-of-combat). 10 sq ft →
+  radius-1 bubble PROVISIONAL.
+- **Summoning the Gale** (Air 3) → target-centered anti-ranged bubble (30' radius / 50' range):
+  `ranged_armor_tn: +15` (shots INTO the bubble) + `ranged_attack_penalty: -3` (shots FROM it; the -3
+  KEPT half is not modeled — the rolled penalty + +15 Armor TN together suppress ranged in the bubble).
+Both Concentration ≈ skirmish (9999). Runtime-verified 14/14 (stable across 3 runs): the helper returns
+the correct modifier for in-radius / out-of-radius / caster-self / a character MOVED in then out, and the
+zone survives advance_round; the Gale's +15 Armor TN deterministically reaches the to-hit (logged
+target_tn 25→40); a crafted large penalty makes an in-zone melee attacker reliably miss (0/25 vs 22-24/25
+no-zone), proving the melee atk_pen plumbing reads the zone. **No regression** — all 7 prior batch drivers
+re-pass. (The actual -1k0 Blessed Wind value is too small to assert on hit-rate — at 7k4 it barely moves
+the kept roll — so it's verified by the helper + identical wiring to the deterministically-proven Gale
+path.) Air 13 this session.
+
 ### Spell coverage session summary (2026-06-20, running)
-This session has wired **~55 combat spells across all 5 elements** (initial all-element pass + clean-wins
+This session has wired **~57 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
 forced-stance batch 5 + purify-zone batch 6 + guided-auto-hit batch 7 + AoE-mobility batch 8 +
-action-economy batch 9) + **1 world-sim spell** (Legacy of Kaze-no-Kami spirit-bird letters) + **2
-pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty` was also the hook reused by
-Suitengu's Curse), all runtime-verified via headless drivers (full project import 0 parse errors
-throughout). Combat-effect total rose ~76 → ~131. New reusable infra built: the `TurnState` bonus-action
-pools (batch 9 — granted attack/simple, cast-as-simple, free-casts), the one-shot `ranged_auto_hit` buff
-(batch 7), the `purify_zone`
+action-economy batch 9 + modifier-zone batch 10) + **1 world-sim spell** (Legacy of Kaze-no-Kami
+spirit-bird letters) + **2 pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty`
+was also the hook reused by Suitengu's Curse), all runtime-verified via headless drivers (full project
+import 0 parse errors throughout). Combat-effect total rose ~76 → ~133. New reusable infra built: the
+`modifier_zone` subsystem (batch 10 — roll modifiers by live zone membership), the `TurnState`
+bonus-action pools (batch 9 — granted attack/simple, cast-as-simple, free-casts), the one-shot
+`ranged_auto_hit` buff (batch 7), the `purify_zone`
 soul-state zone (batch 6), the `stance_locked` forced-Full-Attack debuff + `willpower_contested_caster_fire`
 save (batch 5), the shared `instant_kill` effect + `earth_contested_void` save (batch 4), the
 `no_magic_heal` block + `free_move_tiles` buff (batch 3), the `incapacitated` turn-gate

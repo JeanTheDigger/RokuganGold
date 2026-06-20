@@ -342,6 +342,11 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "cast_as_simple", "value": 1}]},  # Fire 2: the next Fire ML<=3 cast costs a Simple instead of a Complex (the -4-Rounds casting-time reduction collapses to "Simple-cost" for ML<=3; ML4+ partial reduction not modeled)
 	"the_elements_fury": {"kind": "buff", "target": "self", "duration_rounds": 1,
 		"mods": [{"kind": "free_casts", "value": "fire_ring"}]},  # Fire 6: cast Fire-Ring Fire ML<=4 spells, each as a Free Action (slots + rolls still required)
+	# Coverage clean-wins batch 10 (2026-06-20): modifier-zone subsystem (roll modifiers by zone membership).
+	"blessed_wind_of_lady_sun": {"kind": "modifier_zone", "self_centered": true, "aoe_radius": 1,
+		"duration_rounds": 9999, "mods": {"attack_roll_penalty": -1}},  # Air 2: hostile actions in the area suffer -1k0 (combat slice; the +1k0 Void/Awareness + the -2k0 Awareness-hostile are out-of-combat). 10 sq ft -> radius-1 bubble PROVISIONAL. Concentration = skirmish.
+	"summoning_the_gale": {"kind": "modifier_zone", "range_tiles": 10, "aoe_radius": 6,
+		"duration_rounds": 9999, "mods": {"ranged_armor_tn": 15, "ranged_attack_penalty": -3}},  # Air 3: anti-ranged bubble around a target (30' radius / 50' range) — +15 Armor TN vs ranged (shots in) and -3k0 to ranged attack rolls (shots out; the -3 KEPT half not modeled). Concentration = skirmish.
 	"severed_from_the_stream": {"kind": "debuff", "target": "enemy", "range_tiles": 5, "duration_rounds": 9999,
 		"mods": [{"kind": "void_locked", "value": 1}]},  # Void 2: target cannot spend Void Points (the per-spend Contested-Void roll is simplified to a full lock via execute_void_spend; 5 rounds ≈ skirmish)
 	# --- Heal spells (s36 Water) ---

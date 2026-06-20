@@ -914,7 +914,9 @@ static func execute_melee_attack(
 			armor_tn -= 5
 		armor_tn = maxi(5, armor_tn)
 	# s33 Castle of Air: a defender's attacker_penalty buff imposes a -Xk0 attack-roll penalty.
-	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty")
+	# s33 Blessed Wind of Lady Sun: a modifier zone penalizes hostile actions made from inside it.
+	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty") \
+		+ _zone_modifier_total(state, attacker_id, "attack_roll_penalty")
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
 		false, spend_void, false, maneuver,
@@ -1355,7 +1357,9 @@ static func execute_ranged_attack(
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, false, is_being_guarded, weapon_name)
 	armor_tn += _cover_bonus(state, tpos, apos)
 	# s33 Blessed Wind: +Armor TN vs non-magical ranged attacks only (ranged path).
-	armor_tn += IndividualCombat.get_timed_modifier_total(t_p, "ranged_armor_tn")
+	# s33 Summoning the Gale: a target inside an anti-ranged zone is harder to shoot (+15 Armor TN).
+	armor_tn += IndividualCombat.get_timed_modifier_total(t_p, "ranged_armor_tn") \
+		+ _zone_modifier_total(state, target_id, "ranged_armor_tn")
 	# s36 Strike of the Flowing Waters: a buffed attacker ignores the target's worn-armor Armor TN
 	# (and an extra -5 vs non-human creatures). Does NOT negate Reduction or Defense-stance bonuses.
 	if IndividualCombat.get_timed_modifier_total(a_p, "armor_bypass") > 0:
@@ -1371,7 +1375,11 @@ static func execute_ranged_attack(
 		and IndividualCombat.get_timed_modifier_total(a_p, "ranged_auto_hit") > 0
 	var shot_raises: int = 0 if auto_hit else raises
 	# s33 Castle of Air: a defender's attacker_penalty buff imposes a -Xk0 attack-roll penalty.
-	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty")
+	# s33 Blessed Wind of Lady Sun (hostile -1k0) + Summoning the Gale (ranged -3k0 from inside the
+	# bubble; the -3 KEPT half is not modeled) penalize a shot fired from within a modifier zone.
+	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty") \
+		+ _zone_modifier_total(state, attacker_id, "attack_roll_penalty") \
+		+ _zone_modifier_total(state, attacker_id, "ranged_attack_penalty")
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, shot_raises, dice_engine,
 		in_melee, spend_void, false, "",
@@ -2101,6 +2109,12 @@ static func execute_cast_spell(
 			"type": "spell_purify_zone", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "zone": res["purify_zone"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "modifier_zone":
+		res["modifier_zone"] = _apply_spell_modifier_zone(state, caster_id, target_id, target, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_modifier_zone", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "zone": res["modifier_zone"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "gain_void":
 		var gained: int = SpellSystem.get_effective_school_rank(caster, Enums.Ring.VOID) + 1
 		caster.current_void_points += gained  # over-cap allowed (s37 Drawing the Void)
@@ -2648,6 +2662,57 @@ static func _apply_spell_purify_zone(
 		"expiry_round": zone["expiry_round"]}
 
 
+## Install a modifier zone (s33 Blessed Wind of Lady Sun / Summoning the Gale): a persistent area
+## whose roll modifiers apply to whoever currently STANDS in it (read at roll time via
+## _zone_modifier_total, so movement in/out is honored — unlike a one-time timed modifier). Centered
+## on the caster (self_centered) or on a designated target tile (range_tiles). The zone is fixed once
+## cast (does not follow the caster). Concentration ≈ skirmish (duration_rounds 9999).
+static func _apply_spell_modifier_zone(
+	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData,
+	eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	if not eff.get("self_centered", false) and target != null and state.positions.has(target_id):
+		center = state.positions[target_id]
+	var radius: int = int(eff.get("aoe_radius", 1))
+	var dur: int = int(eff.get("duration_rounds", 9999))
+	var zone: Dictionary = {
+		"center": center, "radius": radius, "kind": "modifier",
+		"mods": eff.get("mods", {}),
+		"hits": String(eff.get("hits", "all")),
+		"faction": String(state.factions.get(caster_id, FACTION_PLAYER)),
+		"expiry_round": state.combat.round_number + dur,
+		"spell_id": spell_id, "caster_id": caster_id,
+	}
+	state.spell_zones.append(zone)
+	return {"center": center, "radius": radius, "mods": zone["mods"],
+		"expiry_round": zone["expiry_round"]}
+
+
+## Sum a modifier-zone roll modifier (mod_key) over every modifier zone the character currently
+## stands in. hits == "enemies" restricts a zone to non-caster-faction occupants; "all" affects
+## anyone in the radius. Returns 0 when the character is in no relevant zone (the common case).
+static func _zone_modifier_total(state: MapCombatState, char_id: int, mod_key: String) -> int:
+	if state.spell_zones.is_empty() or not state.positions.has(char_id):
+		return 0
+	var pos: Vector2i = state.positions[char_id]
+	var total: int = 0
+	for zone in state.spell_zones:
+		if String(zone.get("kind", "")) != "modifier":
+			continue
+		var mods: Dictionary = zone.get("mods", {})
+		if not mods.has(mod_key):
+			continue
+		var center: Vector2i = zone["center"]
+		if maxi(absi(center.x - pos.x), absi(center.y - pos.y)) > int(zone.get("radius", 1)):
+			continue
+		if String(zone.get("hits", "all")) == "enemies" \
+				and String(state.factions.get(char_id, "")) == String(zone.get("faction", "")):
+			continue
+		total += int(mods[mod_key])
+	return total
+
+
 ## Per-round spell-zone processing (called from advance_round). Every living combatant standing in
 ## a damage zone takes the zone's per-round DR (element ring when dr_* is 0; spirit damage filter
 ## honored). Expired zones are dropped. The zone owner's faction is exempt when hits == "enemies".
@@ -2656,6 +2721,11 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 	for zone in state.spell_zones:
 		if int(zone.get("expiry_round", -1)) >= 0 \
 				and state.combat.round_number >= int(zone["expiry_round"]):
+			continue
+		# s33 modifier zones (Blessed Wind of Lady Sun / Summoning the Gale) have no per-round effect
+		# — their modifiers are read at roll time by _zone_modifier_total. Keep them until they expire.
+		if String(zone.get("kind", "damage_zone")) == "modifier":
+			surviving.append(zone)
 			continue
 		# s36 Heaven's Tears: a purify field — heal the pure of soul, harm the Tainted, by soul
 		# state (all factions). Pure = no Taint AND Honor 4.0+; Tainted/corrupted = Taint Rank 1+.
