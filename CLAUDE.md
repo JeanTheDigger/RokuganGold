@@ -5787,6 +5787,33 @@ Dragon's Talon hits Insight-1/2 foes and spares an Insight-5 foe). The remaining
 spells without combat effects are mostly utility, conjured-weapon, or need mechanics the schema
 lacks (weapon replacement, terrain pits with save-negates-damage, conditional-expiry buffs).
 
+### s33 Spell combat coverage — Air batch 1 (2026-06-20, "do all spells" session)
+Full audit of the spell gap: 287 library spells, 76 with combat effects; the COMBAT_ONLY
+(s=0) no-effect gap is 141 (Air 48 / Earth 25 / Fire 18 / Water 31 / Void 19). First Air
+tranche wired (5 spells, all GDD-exact values, reusing existing machinery):
+- **Soul of Kaze-no-Kami** (Air 3): buff `fear_resist_rolled/_kept` +2 (the +2k2-resist-Fear
+  half, read in `apply_fear_checks`); the Social-resist + -2k0-Awareness halves are out-of-combat.
+- **Your Heart's Enemy** (Air 3): `status` AFRAID on one target with a new `willpower_flat` save
+  at TN 25 (= 5 + Fear 4 × 5, s22.3). New save type mirrors `stamina_flat`.
+- **Whispers of the Forgotten** (Air 4): `debuff` `all_rolls` -5 (one wasted Raise = +5 effective
+  TN) for 50 rounds; the 3+-Disadvantage 2-Raise scaling + haunting-past immunity deferred.
+- **Gift of Wind** (Air 4): self **invisibility** via a new `invisible` buff mod — `_is_targetable`
+  now gates character invisibility (before the spirit-only path), and `_reveal_if_hidden` clears
+  the dedicated `spell_invisible` source on attack (GDD: attacking ends the spell). Reuses the
+  Mujina/mimic targeting machinery; excludes invisible characters from NPC/PC target lists.
+- **Defender From Beyond** (Air 5, Kitsu): `summon` a shiryo via new `_build_shiryo` (Spirit, all
+  Rings 3, attack Ring 3 + Skill 4, human wound track) — reuses the kami/clay-soldier summon path.
+Runtime-verified 10/10 (headless driver in /tmp minimal project: fear-resist mods, all_rolls -5,
+low-WP afraid / high-WP resists, invisibility untargetable + cleared-on-attack + enemy still
+targetable, shiryo summoned on the caster's side). Full project import: 0 parse errors.
+DEFERRED (Air, documented for the next tranches): essence_of_air (insubstantial — needs a
+can't-act downside to be faithful), legion_of_the_moon (AoE-ally invisibility — needs an AoE-buff
+path), facing_your_devils (ring-changing — Pending Redesign), castle_of_air/blessed_wind/
+summoning_the_gale/blessed_wind_of_lady_sun (incoming-attack / ranged-suppression wards — new
+hook), arrows_flight (ranged auto-hit hook), draw_back_the_shadow (dispel infra), wrath_of_kaze_
+no_kami (minute-scale AoE — per-round scaling decision), and the large illusion/disguise/
+perception/mind-reading/telekinesis/communication utility set (no combat consumer).
+
 "### Pending Redesign
 - **Ring-changing combat spells (essence_of_earth, the_wolfs_mercy, strike_at_the_roots, and
   Water ring-down spells) — participant-scoped wound threading (owner-chosen 2026-06-20).**

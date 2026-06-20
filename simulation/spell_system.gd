@@ -202,6 +202,16 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"slayers_knives": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0, "dr_rolled_bonus": 2,
 		"range_tiles": 0, "aoe_radius": 6, "aoe_hits": "enemies", "caster_exempt": true,
 		"rider": {"condition": "prone", "save": "earth_flat", "save_tn": 20}},
+	# Air coverage extension (2026-06-20): fear-resist buff, fear status, mind hex, invisibility, summon.
+	"soul_of_kaze_no_kami": {"kind": "buff", "target": "ally", "range_tiles": 4, "duration_rounds": 100,
+		"mods": [{"kind": "fear_resist_rolled", "value": 2}, {"kind": "fear_resist_kept", "value": 2}]},  # Air 3: +2k2 resist Fear (Social-resist + Awareness -2k0 downside out-of-combat, deferred)
+	"your_hearts_enemy": {"kind": "status", "condition": "afraid", "save": "willpower_flat", "save_tn": 25,
+		"range_tiles": 5, "aoe_radius": 0, "duration_rounds": 5},  # Air 3: Fear 4 illusion (TN 5+4×5=25 per s22.3)
+	"whispers_of_the_forgotten": {"kind": "debuff", "target": "enemy", "range_tiles": 10, "duration_rounds": 50,
+		"mods": [{"kind": "all_rolls", "value": -5}]},  # Air 4: must call 1 Raise (=+5 TN) on all rolls (disadvantage-count 2-Raise scaling + haunting-past immunity deferred)
+	"gift_of_wind": {"kind": "buff", "target": "self", "duration_rounds": 50,
+		"mods": [{"kind": "invisible", "value": 1}]},  # Air 4: invisible to non-magical vision; attacking ends it
+	"defender_from_beyond": {"kind": "summon", "summon_kind": "shiryo", "count": 1},  # Air 5 (Kitsu): summon a shiryo ancestor (all Rings 3, Rank 4 skills)
 	# --- Earth (s34) ---
 	# Jade Strike: Range 100', single, DR 3k3 ONLY vs Taint Rank 1+ (also a jade-property spell)
 	"jade_strike": {"kind": "damage", "dr_rolled": 3, "dr_kept": 3,

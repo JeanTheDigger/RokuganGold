@@ -2236,6 +2236,10 @@ static func _apply_spell_buff(
 		if mkind == "absorb_pool":
 			# s34 Power of the Earth Dragon: a depleting damage-absorption pool (participant field).
 			p.absorb_pool = maxi(p.absorb_pool, val)
+		elif mkind == "invisible":
+			# s33 Gift of Wind / Legion of the Moon: a dedicated source so attacking can clear
+			# just this modifier (_reveal_if_hidden) without dropping other spell buffs.
+			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_invisible")
 		else:
 			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff")
 		applied.append({"kind": mkind, "value": val})
@@ -2473,8 +2477,11 @@ static func _apply_spell_summon(
 			break
 		state.spawn_counter += 1
 		var sid: int = -200000 - state.spawn_counter  # unique negative id for summons
-		var creature: SpiritCreatureData = (_build_clay_soldier(ring)
-			if summon_kind == "clay_soldier" else _build_kami_creature(element, ring))
+		var creature: SpiritCreatureData
+		match summon_kind:
+			"clay_soldier": creature = _build_clay_soldier(ring)
+			"shiryo": creature = _build_shiryo()
+			_: creature = _build_kami_creature(element, ring)
 		var puppet: L5RCharacterData = SpiritCombatant.to_character_data(creature, sid)
 		if faction == FACTION_ENEMY:
 			add_enemy(state, puppet, tile.x, tile.y, dice_engine)
@@ -2513,6 +2520,29 @@ static func _build_clay_soldier(earth_ring: int) -> SpiritCreatureData:
 	cr.armor_tn = earth_ring * 5 + 5
 	cr.reduction = earth_ring * 2
 	cr.wounds_dead = 0
+	return cr
+
+
+## Build a shiryo ancestor spirit (s33 Defender From Beyond, Kitsu only): the GDD "typical shiryo"
+## has the Spirit trait, all Rings at 3, and Rank 4 in relevant Skills. Attacks as Ring 3 + Skill 4
+## (keep Ring); katana-equivalent damage; standard human wound track from Earth 3. Not Invulnerable.
+static func _build_shiryo() -> SpiritCreatureData:
+	var cr := SpiritCreatureData.new()
+	cr.id = "shiryo"
+	cr.display_name = "Ancestral Shiryo"
+	cr.realm = Enums.SpiritRealm.NINGEN_DO  # a Yomi spirit manifesting to aid in Ningen-do
+	cr.air = 3
+	cr.earth = 3
+	cr.fire = 3
+	cr.water = 3
+	cr.attack_name = "Spirit Blade"
+	cr.attack_rolled = 3 + 4  # Ring 3 + Rank 4 relevant Skill, keep Ring
+	cr.attack_kept = 3
+	cr.damage_rolled = 3      # katana-equivalent
+	cr.damage_kept = 2
+	cr.armor_tn = 3 * 5 + 5   # Reflexes (= Air Ring 3) × 5 + 5
+	cr.reduction = 0
+	cr.wounds_dead = 0        # standard human wound track from Earth 3
 	return cr
 
 
@@ -2612,6 +2642,10 @@ static func _spell_save_resisted(
 		"stamina_flat":
 			var sta: int = maxi(1, ch.stamina)
 			return dice_engine.roll_and_keep(sta, sta, true).total >= tn
+		"willpower_flat":
+			# s33 Your Heart's Enemy: a Willpower roll vs the Fear TN avoids the AFRAID condition.
+			var wil: int = maxi(1, ch.willpower)
+			return dice_engine.roll_and_keep(wil, wil, true).total >= tn
 		"earth_contested_air":
 			var te: int = SpellSystem.get_ring_value(ch, Enums.Ring.EARTH)
 			var ca: int = SpellSystem.get_ring_value(caster, Enums.Ring.AIR)
@@ -5740,12 +5774,19 @@ static func _ally_lookup(state: MapCombatState, cid: int) -> L5RCharacterData:
 ## by surprise." Returns true for everyone else (inert for real characters).
 static func _is_targetable(state: MapCombatState, cid: int) -> bool:
 	var c: L5RCharacterData = state.combatants.get(cid, null)
-	if c == null or c.spirit_creature == null:
+	if c == null:
 		return true
 	var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
 	if p == null:
 		return true
 	var rnd: int = state.combat.round_number
+	# Character invisibility (s33 Gift of Wind / Legion of the Moon): untargetable while the
+	# invisible buff holds. Attacking clears the buff (_reveal_if_hidden), so it ends on offense.
+	if IndividualCombat.get_timed_modifier_total(p, "invisible") > 0 \
+			and p.untargetable_revealed_until < rnd:
+		return false
+	if c.spirit_creature == null:
+		return true
 	if p.untargetable_revealed_until >= rnd:
 		return true  # acted/became tangible this round — targetable until its next turn
 	if SpiritAbilitySystem.is_at_will_hidden(c.spirit_creature):
@@ -6159,8 +6200,13 @@ static func _npc_maybe_possess(
 ## s54.10: a hidden creature that takes an offensive action becomes targetable until
 ## its next turn (revealed_until = current round + 1). No-op for non-hidden creatures.
 static func _reveal_if_hidden(state: MapCombatState, cid: int, p: IndividualCombat.Participant) -> void:
+	if p == null:
+		return
+	# Character invisibility (s33 Gift of Wind): attacking another person ends the spell entirely.
+	if IndividualCombat.get_timed_modifier_total(p, "invisible") > 0:
+		IndividualCombat.clear_timed_modifiers_by_source(p, "spell_invisible")
 	var c: L5RCharacterData = state.combatants.get(cid, null)
-	if c == null or c.spirit_creature == null or p == null:
+	if c == null or c.spirit_creature == null:
 		return
 	var rnd: int = state.combat.round_number
 	# Mimic: attacking blows the disguise permanently (until recast).
