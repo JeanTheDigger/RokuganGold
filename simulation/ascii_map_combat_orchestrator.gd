@@ -2557,7 +2557,14 @@ static func _apply_spell_debuff(
 	var applied: Array = []
 	for mod in eff.get("mods", []):
 		var mkind: String = String(mod.get("kind", ""))
-		var val: int = _resolve_buff_value(caster, mod.get("value", 0))
+		var raw_val = mod.get("value", 0)
+		var val: int
+		if raw_val is String and raw_val == "neg_target_social_spiritual_disadv":
+			# s36 Judgment of Yomi: −1k0 to physical Skill checks (attack rolls) per Social or
+			# Spiritual Disadvantage the TARGET possesses (computed from the target, not the caster).
+			val = -_count_social_spiritual_disadvantages(target)
+		else:
+			val = _resolve_buff_value(caster, raw_val)
 		# s35 Haze of Battle: the target is forced into Full Attack Stance immediately and the
 		# `stance_locked` timed modifier prevents switching away (execute_stance_change blocks it,
 		# _npc_pick_stance short-circuits) until it expires.
@@ -2566,6 +2573,20 @@ static func _apply_spell_debuff(
 		IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_debuff")
 		applied.append({"kind": mkind, "value": val})
 	return {"id": target_id, "applied": applied, "expires_round": expiry}
+
+
+# s36 Judgment of Yomi: count a character's Social + Spiritual Disadvantages (s45 category catalog).
+static func _count_social_spiritual_disadvantages(c: L5RCharacterData) -> int:
+	if c == null:
+		return 0
+	var n: int = 0
+	for dd in c.disadvantages:
+		if dd == null:
+			continue
+		var cat: String = AdvantageSystem.get_disadvantage_category(dd.disadvantage_type)
+		if cat == "Social" or cat == "Spiritual":
+			n += 1
+	return n
 
 
 # Resolve a buff mod value: a raw int, or a GDD formula keyed off the caster's rings/school rank.
@@ -2580,6 +2601,9 @@ static func _resolve_buff_value(caster: L5RCharacterData, value) -> int:
 					+ SpellSystem.get_effective_school_rank(caster, Enums.Ring.EARTH)
 			"earth_ring":
 				return SpellSystem.get_ring_value(caster, Enums.Ring.EARTH)
+			"air_ring":
+				# s33 Air Kami's Blessing: +Air Ring to Armor TN (the combat slice).
+				return SpellSystem.get_ring_value(caster, Enums.Ring.AIR)
 			"fire_ring":
 				return SpellSystem.get_ring_value(caster, Enums.Ring.FIRE)
 			"water_half":

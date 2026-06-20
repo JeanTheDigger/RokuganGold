@@ -365,6 +365,13 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Coverage clean-wins batch 16 (2026-06-20): anti-spell ward (per-target casting-roll penalty).
 	"the_kamis_will": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 10,
 		"mods": [{"kind": "kamis_will", "value": "earth_ring"}]},  # Earth 5: a warded character — all spells (friend or foe) cast AT them suffer -(Earth Ring)k(Earth Ring) to the casting roll. (The +Willpower and -Social-roll halves are out-of-combat, deferred.)
+	# Coverage clean-wins batch 17 (2026-06-20): Armor TN buff + attack buff/debuff (striking_the_storm already wired above).
+	"air_kamis_blessing": {"kind": "buff", "target": "self", "duration_rounds": 9999,
+		"mods": [{"kind": "armor_tn", "value": "air_ring"}]},  # Air 3: +Air Ring to Armor TN (the combat slice; the +Air-Ring-to-Awareness-rolls half is out-of-combat). 8-hour morning-meditation buff ~ persists the skirmish.
+	"wisdom_of_the_kami": {"kind": "buff", "target": "self", "duration_rounds": 10,
+		"mods": [{"kind": "spell_attack_rolled", "value": 1}]},  # Air 4: +1 Rank in all Skills -> +1 rolled attack die (the combat slice; the broad +1-all-skills out-of-combat utility is not modeled). 1-minute ~ 10 Rounds.
+	"judgment_of_yomi": {"kind": "debuff", "target": "enemy", "range_tiles": 10, "duration_rounds": 9999,
+		"mods": [{"kind": "spell_attack_rolled", "value": "neg_target_social_spiritual_disadv"}]},  # Water 2: the target takes -1k0 to physical Skill checks (attack rolls) per Social/Spiritual Disadvantage they possess (inert if they have none). Concentration ~ skirmish. (The "Honor TN 20 or cannot move closer" repel is deferred — movement gate.)
 	"severed_from_the_stream": {"kind": "debuff", "target": "enemy", "range_tiles": 5, "duration_rounds": 9999,
 		"mods": [{"kind": "void_locked", "value": 1}]},  # Void 2: target cannot spend Void Points (the per-spend Contested-Void roll is simplified to a full lock via execute_void_spend; 5 rounds ≈ skirmish)
 	# --- Heal spells (s36 Water) ---

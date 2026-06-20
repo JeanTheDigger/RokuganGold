@@ -6223,11 +6223,27 @@ into near-certain failures; the 1k1 floor keeps a weak caster's roll positive. N
 roll halves are out-of-combat (deferred). Situational value (only vs enemy spellcasters, uncommon in
 tile combat) but a faithful completion of the anti-spell ward family. Earth 5 this continuation.
 
+### Spell coverage — Armor TN buffs + attack buff/debuff batch 17 (2026-06-20, runtime-verified 8/8)
+Three more spells (striking_the_storm was already wired — Armor TN +20 — confirmed, not re-added):
+**Air Kami's Blessing** (Air 3) → self `armor_tn` += Air Ring (the combat slice; the +Air-Ring-to-
+Awareness-rolls half is out-of-combat; an 8-hour morning-meditation buff ~ persists the skirmish; new
+`air_ring` value formula). **Wisdom of the Kami** (Air 4) → self `spell_attack_rolled` +1 (the combat
+slice of "+1 Rank in all Skills" — a skill rank is a rolled attack die; the broad out-of-combat
++1-all-skills utility is not modeled; 1-minute ~ 10 Rounds). **Judgment of Yomi** (Water 2) → a
+**target-aware** `debuff`: the target takes −1k0 to physical Skill checks (attack rolls) per Social or
+Spiritual Disadvantage they possess, computed in `_apply_spell_debuff` via a new
+`_count_social_spiritual_disadvantages()` (reads the s45 `DISADVANTAGE_CATALOG` categories) when the mod
+value is `neg_target_social_spiritual_disadv` — inert (0) vs a target with no such disadvantages, which
+is faithful (the spell's bite scales with the target's flaws). The "Honor TN 20 or cannot move closer"
+repel is deferred (movement gate). Runtime-verified: armor_tn +Air-Ring (5); attack +1; −2 vs a foe with
+2 Social/Spiritual disadvantages, 0 vs a clean foe. No regression (debuff path unchanged for caster-only
+values). Air 16 / Water 20 this session.
+
 ### Spell coverage session summary (2026-06-20, running)
-This session has wired **~65 combat spells across all 5 elements** (initial all-element pass + clean-wins
+This session has wired **~68 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
 forced-stance batch 5 + purify-zone batch 6 + guided-auto-hit batch 7 + AoE-mobility batch 8 +
-action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11 + fog batch 12 + per-die-reduction batch 13 + illusion-dispel batch 14 + conjured-terrain batch 15 + anti-spell-ward batch 16) + **1 world-sim spell** (Legacy of Kaze-no-Kami
+action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11 + fog batch 12 + per-die-reduction batch 13 + illusion-dispel batch 14 + conjured-terrain batch 15 + anti-spell-ward batch 16 + Armor-TN/attack batch 17) + **1 world-sim spell** (Legacy of Kaze-no-Kami
 spirit-bird letters) + **2 pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty`
 was also the hook reused by Suitengu's Curse), all runtime-verified via headless drivers (full project
 import 0 parse errors throughout). Combat-effect total rose ~76 → ~133. New reusable infra built: the
