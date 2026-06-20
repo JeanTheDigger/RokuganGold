@@ -140,6 +140,21 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "spell_attack_rolled", "value": "fire_ring"}]},  # Fire 1: +Fire to rolls (conditional expiry deferred)
 	"defense_of_the_firestorm": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
 		"mods": [{"kind": "armor_tn", "value": 20}]},  # Fire 4: +20 Armor TN flame aura (wooden-weapon burn deferred)
+	# Coverage extension batch 12 (2026-06-20): save-negates AoE + sun zone/buff.
+	"murmur_of_earth": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1, "range_tiles": 0,
+		"aoe_radius": 20, "aoe_hits": "all", "caster_exempt": true,
+		"save": "agility_flat", "save_tn": 20, "save_negates": true,
+		"rider": {"condition": "prone", "save": "none"}},  # Earth 3: Agility TN 20 or 1k1 + Prone (Dazed deferred)
+	"maw_of_the_earth": {"kind": "damage", "dr_rolled": 3, "dr_kept": 2, "range_tiles": 8,
+		"aoe_radius": 2, "aoe_hits": "all", "caster_exempt": true,
+		"save": "reflexes_contested_earth", "save_negates": true,
+		"rider": {"condition": "entangled", "save": "none"}},  # Earth 4: Reflexes vs Earth or fall in (3k2 + trapped)
+	"the_fires_that_cleanse": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0, "range_tiles": 0,
+		"aoe_radius": 6, "aoe_hits": "all", "caster_exempt": true},  # Fire 1: DR=Fire Ring to all in 30' (caster-half deferred)
+	"light_of_the_sun": {"kind": "damage_zone", "dr_rolled": 2, "dr_kept": 2, "range_tiles": 20,
+		"aoe_radius": 6, "aoe_hits": "all", "duration_rounds": 10},  # Fire 5: 2k2/round in 30' (honor/taint bonus deferred)
+	"blessing_of_the_sun": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 3,
+		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Fire 4: ignore Fatigue/Wound penalties (Fire-roll scope + cost deferred)
 	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
 	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
 	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.

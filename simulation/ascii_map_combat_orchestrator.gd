@@ -2026,6 +2026,13 @@ static func _apply_spell_combat_damage(
 		if needs_taint and MutationSystem.get_taint_rank(ch.taint) < 1:
 			hits.append({"id": t["id"], "damage": 0, "immune_no_taint": true})
 			continue
+		# save_negates (s34 Murmur of Earth / Maw of the Earth): a successful save avoids ALL of
+		# the spell's damage and rider for this target.
+		if eff.get("save_negates", false) \
+				and _spell_save_resisted(state, caster, ch, String(eff.get("save", "none")),
+					int(eff.get("save_tn", 0)), dice_engine):
+			hits.append({"id": t["id"], "damage": 0, "saved": true})
+			continue
 		# Area ward damage reduction (s34 Earth's Protection): a warded-element spell striking a
 		# creature inside an enemy ward loses dice (min 1k1).
 		var er: int = rolled
@@ -2549,6 +2556,16 @@ static func _spell_save_resisted(
 			var ce: int = SpellSystem.get_ring_value(caster, Enums.Ring.EARTH)
 			return dice_engine.roll_and_keep(ts, ts, true).total \
 				>= dice_engine.roll_and_keep(ce, ce, true).total
+		"agility_flat":
+			# s34 Murmur of Earth: Agility roll vs a flat TN.
+			var ag: int = maxi(1, ch.agility)
+			return dice_engine.roll_and_keep(ag, ag, true).total >= tn
+		"reflexes_contested_earth":
+			# s34 Maw of the Earth: Reflexes vs the caster's Earth to avoid falling in.
+			var tr: int = maxi(1, ch.reflexes)
+			var me: int = SpellSystem.get_ring_value(caster, Enums.Ring.EARTH)
+			return dice_engine.roll_and_keep(tr, tr, true).total \
+				>= dice_engine.roll_and_keep(me, me, true).total
 		_:
 			return false  # "none" — auto-apply
 	return false

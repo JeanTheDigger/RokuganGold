@@ -5696,7 +5696,7 @@ they comply with (`ctx.compliance_intimidators`) — covering non-hostile court 
 Phase-4 hostile filter doesn't. Runtime-verified 3/3 (accumulated reduction lifts Negotiate
 success 44→79/80; compliance +10 drops it 44→18/80; Persuade eased only by the persuade pool).
 
-### s31-37 spell combat coverage — extension batches 1–11 (2026-06-20)
+### s31-37 spell combat coverage — extension batches 1–12 (2026-06-20)
 Added combat effects for 4 more library spells (the library has 287 spells; only ~28 had combat
 effects). All values transcribed exactly from s34/s35: **tail_of_the_fire_dragon** (Fire 2,
 single damage DR=Fire Ring, 30'), **ravenous_swarms** (Fire 3, 5k3 bolt, 30' — the fire-spell-
@@ -5737,7 +5737,12 @@ via a generalized summon: `_apply_spell_summon` now takes `count` + `summon_kind
 `_build_clay_soldier` (traits = Earth Ring, Kenjutsu-4 jade sword, Reduction 2×Earth, standard
 wound track — not Invulnerable)). New buff-value formulas `fire_ring` + `be_the_mountain_reduction`.
 `relentless_heat` deferred (attempt-trigger needs a pre-roll hook). 62 spells now have combat
-effects (from 28 at session start). Two new
+effects. **Batch 12** adds a `save_negates` flag to the damage path (a successful save avoids ALL
+damage + rider) + two save types (`agility_flat`, `reflexes_contested_earth`), unlocking
+`murmur_of_earth` (Earth 3, Agility TN 20 or 1k1 + Prone) and `maw_of_the_earth` (Earth 4, Reflexes
+vs Earth or fall in: 3k2 + Entangled). Also `the_fires_that_cleanse` (Fire 1, DR=Fire Ring AoE,
+caster exempt), `light_of_the_sun` (Fire 5, 2k2/round zone), `blessing_of_the_sun` (Fire 4,
+negate wound penalty). 67 spells now have combat effects (from 28 at session start). Two new
 `_gather_spell_targets` fields support Dragon's Talon: `target_max_insight` (skip stronger foes)
 and `aoe_max_targets` (cap struck count). Runtime-verified 5/5 (damage lands; grasp entangles;
 Dragon's Talon hits Insight-1/2 foes and spares an Insight-5 foe). The remaining ~255 library
