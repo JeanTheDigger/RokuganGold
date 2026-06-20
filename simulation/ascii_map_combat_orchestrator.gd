@@ -2553,6 +2553,13 @@ static func _resolve_buff_value(caster: L5RCharacterData, value) -> int:
 				return SpellSystem.get_ring_value(caster, Enums.Ring.EARTH)
 			"fire_ring":
 				return SpellSystem.get_ring_value(caster, Enums.Ring.FIRE)
+			"water_half":
+				# s36 Strength of the Tsunami: +half the caster's Water Ring (rounded down) Strength
+				# Rank, which adds exactly that many rolled damage dice (Strength → first-number).
+				return int(SpellSystem.get_ring_value(caster, Enums.Ring.WATER) / 2)
+			"neg_fire_ring":
+				# s35 Death of Flame: −Fire Ring to the target's Agility (its attack-roll slice).
+				return -SpellSystem.get_ring_value(caster, Enums.Ring.FIRE)
 			"be_the_mountain_reduction":
 				return mini(20, 5 * SpellSystem.get_effective_school_rank(caster, Enums.Ring.EARTH))
 			_:
@@ -3191,6 +3198,12 @@ static func _spell_save_resisted(
 			var ucv: int = SpellSystem.get_ring_value(caster, Enums.Ring.VOID)
 			return dice_engine.roll_and_keep(maxi(1, ute), maxi(1, ute), true).total \
 				>= dice_engine.roll_and_keep(maxi(1, ucv), maxi(1, ucv), true).total
+		"fire_contested":
+			# s35 Death of Flame: target Fire vs caster Fire; the target resists if it wins.
+			var fte: int = SpellSystem.get_ring_value(ch, Enums.Ring.FIRE)
+			var fce: int = SpellSystem.get_ring_value(caster, Enums.Ring.FIRE)
+			return dice_engine.roll_and_keep(maxi(1, fte), maxi(1, fte), true).total \
+				>= dice_engine.roll_and_keep(maxi(1, fce), maxi(1, fce), true).total
 		"void_contested":
 			# s37 Essence of Void: target Void vs caster Void; the target resists if it wins.
 			var tv: int = SpellSystem.get_ring_value(ch, Enums.Ring.VOID)

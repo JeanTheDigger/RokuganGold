@@ -6118,11 +6118,34 @@ re-pass. (The actual -1k0 Blessed Wind value is too small to assert on hit-rate 
 the kept roll — so it's verified by the helper + identical wiring to the deterministically-proven Gale
 path.) Air 13 this session.
 
+### Spell coverage — trait→combat-roll batch 11 (2026-06-20, runtime-verified 9/9)
+A small batch of trait-changing spells whose COMBAT effect maps **faithfully to existing buff hooks
+without the Earth-ring wound refactor** (the Pending Redesign stays for the genuine ring-changers). Key
+insight: Strength adds *exactly* to rolled damage dice in `resolve_damage` ("Strength → first number"),
+and Agility to attack-roll dice — so a `spell_damage_rolled` / `spell_attack_rolled` buff is the faithful
+combat slice of a Strength/Agility change (same pattern already used for Surging Soul / The Breath of
+Battle). Two new value formulas: `water_half` (floor(Water/2)), `neg_fire_ring` (−Fire). Three spells:
+- **Strength of the Tsunami** (Water 2, ally buff) → `spell_damage_rolled: floor(Water/2)` (Strength
+  +half Water Ring). Faithful for the damage slice; Strength-skill rolls + the "cap at 9" not modeled.
+- **Master of the Rolling River** (Water 4) → its previously-deferred **+1 Strength** half is now wired
+  (`spell_damage_rolled: 1`) alongside the batch-8 move buff, so the AoE unit buff is fully covered (only
+  the Mass Battle general bonus stays deferred).
+- **Death of Flame** (Fire 4, enemy debuff, new `fire_contested` save) → `spell_attack_rolled: −Fire`
+  (the −Agility attack-roll slice; the −Intelligence spell-suppression half is deferred; the per-Round
+  re-resist is simplified to one contested-Fire gate at cast).
+Runtime-verified: tsunami adds +2 rolled damage dice (katana 8→10) and sets the modifier to floor(Water/2);
+rolling_river gives an ally +1 effective move AND +1 rolled damage die (enemy unaffected); death_of_flame
+lands −8 on a weak-Fire foe and a Fire-9 target resists a weak caster 10/10. No regression (key drivers
+re-pass, driver19 3/3 stable). Water 19 / Fire 13 this session. NOTE: the genuine Earth-RING spells
+(essence_of_earth, the_wolfs_mercy, strike_at_the_roots, facing_your_devils) still need the
+wound-capacity threading refactor (Pending Redesign) — they change wound capacity, which a roll-bonus
+hook cannot represent.
+
 ### Spell coverage session summary (2026-06-20, running)
-This session has wired **~57 combat spells across all 5 elements** (initial all-element pass + clean-wins
+This session has wired **~60 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
 forced-stance batch 5 + purify-zone batch 6 + guided-auto-hit batch 7 + AoE-mobility batch 8 +
-action-economy batch 9 + modifier-zone batch 10) + **1 world-sim spell** (Legacy of Kaze-no-Kami
+action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11) + **1 world-sim spell** (Legacy of Kaze-no-Kami
 spirit-bird letters) + **2 pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty`
 was also the hook reused by Suitengu's Curse), all runtime-verified via headless drivers (full project
 import 0 parse errors throughout). Combat-effect total rose ~76 → ~133. New reusable infra built: the

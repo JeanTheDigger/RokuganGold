@@ -331,7 +331,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"ebb_and_flow_of_battle": {"kind": "buff", "target": "ally", "aoe_radius": 10, "duration_rounds": 5,
 		"mods": [{"kind": "free_move_tiles", "value": 1}]},  # Water 4: chosen allies within 50' make a Free Move of Water Ring ×10' (= +Water tiles; was a Simple Action)
 	"master_of_the_rolling_river": {"kind": "buff", "target": "ally", "aoe_radius": 20, "duration_rounds": 5,
-		"mods": [{"kind": "move_water_penalty", "value": 1}]},  # Water 4: a unit (≤25 allies) within 100' moves as Water 1 Rank higher (the +1 Strength Rank + Mass Battle general bonus are deferred — trait-change)
+		"mods": [{"kind": "move_water_penalty", "value": 1}, {"kind": "spell_damage_rolled", "value": 1}]},  # Water 4: a unit (≤25 allies) within 100' moves as Water 1 Rank higher AND Strength 1 Rank higher (+1 rolled damage die); the Mass Battle general bonus is deferred
 	# Coverage clean-wins batch 9 (2026-06-20): action-economy (one-shot bonus-action pools on TurnState).
 	# Reactions-Stage timing modeled as "an extra action on the recipient's next turn" (persists until used).
 	"spirit_of_the_water": {"kind": "buff", "target": "ally", "range_tiles": 4, "duration_rounds": 1,
@@ -347,6 +347,12 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"duration_rounds": 9999, "mods": {"attack_roll_penalty": -1}},  # Air 2: hostile actions in the area suffer -1k0 (combat slice; the +1k0 Void/Awareness + the -2k0 Awareness-hostile are out-of-combat). 10 sq ft -> radius-1 bubble PROVISIONAL. Concentration = skirmish.
 	"summoning_the_gale": {"kind": "modifier_zone", "range_tiles": 10, "aoe_radius": 6,
 		"duration_rounds": 9999, "mods": {"ranged_armor_tn": 15, "ranged_attack_penalty": -3}},  # Air 3: anti-ranged bubble around a target (30' radius / 50' range) — +15 Armor TN vs ranged (shots in) and -3k0 to ranged attack rolls (shots out; the -3 KEPT half not modeled). Concentration = skirmish.
+	# Coverage clean-wins batch 11 (2026-06-20): trait→combat-roll buffs/debuffs via EXISTING hooks
+	# (Strength → rolled damage dice, Agility → attack-roll dice). NOT the Earth-ring wound refactor.
+	"strength_of_the_tsunami": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 3,
+		"mods": [{"kind": "spell_damage_rolled", "value": "water_half"}]},  # Water 2: Strength +half Water Ring → +that many rolled damage dice (faithful for the damage slice; Strength-skill rolls + the "cap at 9" not modeled)
+	"death_of_flame": {"kind": "debuff", "target": "enemy", "range_tiles": 20, "duration_rounds": 5,
+		"contested": "fire_contested", "mods": [{"kind": "spell_attack_rolled", "value": "neg_fire_ring"}]},  # Fire 4: -Fire Ring Agility (its attack-roll slice; the -Fire Intelligence / spell-suppression half is deferred). Per-Round re-resist simplified to one contested-Fire gate at cast.
 	"severed_from_the_stream": {"kind": "debuff", "target": "enemy", "range_tiles": 5, "duration_rounds": 9999,
 		"mods": [{"kind": "void_locked", "value": 1}]},  # Void 2: target cannot spend Void Points (the per-spend Contested-Void roll is simplified to a full lock via execute_void_spend; 5 rounds ≈ skirmish)
 	# --- Heal spells (s36 Water) ---
