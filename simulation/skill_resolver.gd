@@ -134,6 +134,14 @@ static func apply_technique_flags(character: L5RCharacterData) -> void:
 		character.precise_memory = true
 	if character.school.begins_with("Doji Courtier") and rank >= 2:
 		character.cadence_trained = true
+	# Kshatriya Warrior (Ivory Kingdoms, s29.14) Fear resistance: Strength of Indra (R1)
+	# raises Willpower one Rank vs Fear; Courage of Shiva (R5) adds +1k1 to resist Fear.
+	if character.school.begins_with("Kshatriya Warrior"):
+		if rank >= 1:
+			character.fear_resist_willpower_bonus = 1
+		if rank >= 5:
+			character.fear_resist_rolled_bonus = 1
+			character.fear_resist_kept_bonus = 1
 	if rank >= 1:
 		var all_schools: Array = [character.school]
 		for path: String in character.school_paths:
@@ -239,6 +247,64 @@ static func check_from_the_ashes_expiry(
 	if expires > ic_day:
 		return {"action": "still_active", "expires_ic_day": expires}
 	return activate_from_the_ashes(character, dice_engine, location_id, ic_day)
+
+
+# -- s38 out-of-combat kiho buffs (monk-only) ---------------------------------
+# Two effects have real world-sim consumers (s38, scope owner-approved 2026-06-16):
+#   The Mind's Fire (Fire 4): +2k2 on Intelligence-based skill rolls.
+#   Steal the Air Dragon (Air 7): +Air Ring rolled & kept on Stealth rolls.
+# Just-in-time per tick: the first qualifying roll of the IC day spends 1 Void
+# Point (s38a Void Point activation = Free Action) to turn the buff on; later
+# qualifying rolls the same tick reuse it (no extra VP). No effect when ic_day < 0
+# (can't dedup, so we never risk draining Void Points on untracked calls).
+const KIHO_MINDS_FIRE: String = "The Mind's Fire"
+const KIHO_STEAL_AIR_DRAGON: String = "Steal the Air Dragon"
+
+
+## s54.10 Buruburu Descent into Terror: after 3 consecutive failed nightly Willpower
+## tests, the victim suffers +5 TN on all rolls, +5 more each consecutive day after.
+## Returned as a negative roll penalty (DiceEngine.roll_check adds `bonus` to the roll).
+## The nightmare-resist roll itself is exempt (it does not route through SkillResolver).
+static func _get_possession_terror_penalty(character: L5RCharacterData) -> int:
+	if String(character.possession_affliction.get("kind", "")) != "buruburu":
+		return 0
+	var fails: int = int(character.possession_affliction.get("consecutive_fails", 0))
+	if fails < 3:
+		return 0
+	return -5 * (fails - 2)
+
+
+static func _get_kiho_buff_bonus(
+	character: L5RCharacterData, skill_name: String, trait_used: Enums.Trait, ic_day: int
+) -> Dictionary:
+	if ic_day < 0 or character.kiho.is_empty():
+		return {"rolled": 0, "kept": 0}
+	var rolled: int = 0
+	var kept: int = 0
+	if trait_used == Enums.Trait.INTELLIGENCE and character.kiho.has(KIHO_MINDS_FIRE):
+		if _activate_kiho_buff(character, KIHO_MINDS_FIRE, ic_day):
+			rolled += 2
+			kept += 2
+	if character.kiho.has(KIHO_STEAL_AIR_DRAGON):
+		var base: String = skill_name
+		var colon: int = skill_name.find(":")
+		if colon != -1:
+			base = skill_name.substr(0, colon).strip_edges()
+		if base == "Stealth" and _activate_kiho_buff(character, KIHO_STEAL_AIR_DRAGON, ic_day):
+			var air: int = CharacterStats.get_ring_value(character, Enums.Ring.AIR)
+			rolled += air
+			kept += air
+	return {"rolled": rolled, "kept": kept}
+
+
+static func _activate_kiho_buff(character: L5RCharacterData, kiho_name: String, ic_day: int) -> bool:
+	if character.active_kiho_buffs.get(kiho_name, -1) == ic_day:
+		return true  # already active this tick
+	if not VoidSystem.can_spend(character):
+		return false
+	VoidSystem.spend(character)
+	character.active_kiho_buffs[kiho_name] = ic_day
+	return true
 
 
 # -- Doji R3: The Perfect Gift (s29.15.4) — one-shot disposition modifier ------
@@ -454,19 +520,25 @@ static func resolve_skill_check(
 			character, context.get("court_settlement_id", -1)
 		) * 5  # 1 Status rank ≈ 1 Free Raise ≈ +5 effective bonus — PROVISIONAL
 
+	# s38 out-of-combat kiho buffs (Mind's Fire / Steal the Air Dragon)
+	var kiho_mod: Dictionary = _get_kiho_buff_bonus(character, skill_name, trait_used, ic_day)
+
 	# Build the pool: (trait + skill + bonus_rolled) k (trait + bonus_kept)
 	var rolled: int = (
 		trait_value + skill_rank + bonus_rolled + ashes_bonus
 		+ adv_skill.get("rolled", 0) + mutation_mod.get("rolled", 0)
 		+ imbalance_mod.get("rolled", 0) + inheritance_mod.get("rolled", 0)
+		+ kiho_mod.get("rolled", 0)
 	)
 	var kept: int = (
 		trait_value + bonus_kept + adv_skill.get("kept", 0) + mutation_mod.get("kept", 0)
 		+ imbalance_mod.get("kept", 0) + inheritance_mod.get("kept", 0)
+		+ kiho_mod.get("kept", 0)
 	)
 	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
 		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn \
-		+ mutation_mod.get("tn", 0) + soft_hearted_tn + darling_bonus
+		+ mutation_mod.get("tn", 0) + soft_hearted_tn + darling_bonus \
+		+ _get_possession_terror_penalty(character)
 
 	# Unskilled: no explosions
 	var explodes: bool = skill_rank > 0
@@ -605,19 +677,25 @@ static func resolve_contested_check(
 	var imb_a: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(char_a, is_social_a, ic_day)
 	var imb_b: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(char_b, is_social_b, ic_day)
 
+	# s38 out-of-combat kiho buffs (Mind's Fire / Steal the Air Dragon), per side.
+	var kiho_a: Dictionary = _get_kiho_buff_bonus(char_a, skill_a, trait_a, ic_day)
+	var kiho_b: Dictionary = _get_kiho_buff_bonus(char_b, skill_b, trait_b, ic_day)
+
 	var roll_a: DiceResult = dice_engine.roll_and_keep(
-		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0),
-		tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0), sr_a > 0, emph_a
+		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0) + kiho_a.get("rolled", 0),
+		tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0) + kiho_a.get("kept", 0), sr_a > 0, emph_a
 	)
 	var roll_b: DiceResult = dice_engine.roll_and_keep(
-		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0),
-		tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0), sr_b > 0, emph_b
+		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0),
+		tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0) + kiho_b.get("kept", 0), sr_b > 0, emph_b
 	)
 
 	var total_a: int = roll_a.total + flat_bonus_a + wp_a + (tfr_a * FREE_RAISE_VALUE) \
-		+ (adv_a.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_a
+		+ (adv_a.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_a \
+		+ _get_possession_terror_penalty(char_a)
 	var total_b: int = roll_b.total + flat_bonus_b + wp_b + (tfr_b * FREE_RAISE_VALUE) \
-		+ (adv_b.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_b
+		+ (adv_b.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_b \
+		+ _get_possession_terror_penalty(char_b)
 
 	var winner: String = "a"
 	if total_b > total_a:

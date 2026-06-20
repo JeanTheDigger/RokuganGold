@@ -47,6 +47,11 @@ const BLINK_INTERVAL: float = 0.5
 const CORPSE_GLYPH: String = "%"
 const CORPSE_COLOR: Color   = Color(0.5, 0.1, 0.1, 1.0)
 
+# Detected-trap overlay (s56.20). HIDDEN traps never render; DETECTED traps show
+# this marker so the player can route around or disarm them.
+const TRAP_GLYPH: String = "^"
+const TRAP_COLOR: Color  = Color(1.0, 0.85, 0.1, 1.0)
+
 # Alert state color tints applied on top of the unit's base color.
 # Key = AsciiMapEnvironment.AlertState value.
 const ALERT_TINTS: Dictionary = {
@@ -360,6 +365,7 @@ func _apply_player_result(result: Dictionary) -> void:
 		_recompute_fov()
 		queue_redraw()
 		moved.emit(_player_x, _player_y)
+		_emit_trap_events(result)
 		_run_npc_turns_and_sync()
 		return
 
@@ -397,6 +403,53 @@ func _apply_player_result(result: Dictionary) -> void:
 		waited.emit()
 		_run_npc_turns_and_sync()
 		return
+
+
+# ── Spiritual overlap palette (s56.16.1b) ─────────────────────────────────────
+
+## The tile to render at (mx,my). On a spiritual-overlap map the tile shifts with
+## the depth-driven intensity gradient (SpiritualPalette); otherwise the base
+## tile. No-op for every non-spiritual map (has_overlap() is false).
+func _display_tile(mx: int, my: int) -> int:
+	if _map.has_overlap():
+		return SpiritualPalette.display_tile(_map, mx, my)
+	return _map.get_tile(mx, my)
+
+
+# ── Traps (s56.20) ────────────────────────────────────────────────────────────
+
+## Surfaces trap spring / passive-detection results (merged into a move result by
+## CombatController) to the HUD via combat_event.
+func _emit_trap_events(result: Dictionary) -> void:
+	if result.has("trap"):
+		combat_event.emit({"type": "trap_sprung", "trap": result["trap"]})
+	var det: Array = result.get("traps_detected", [])
+	if not det.is_empty():
+		combat_event.emit({"type": "traps_detected", "count": det.size()})
+
+
+## Disarms a DETECTED trap on an adjacent tile (or the player's own tile). Scans
+## the 3×3 around the player for the first DETECTED trap and routes the delta to
+## CombatController.try_disarm_trap. A disarm attempt is a turn (NPCs then act).
+func _handle_disarm_input() -> void:
+	if _combat_controller == null or _map == null:
+		return
+	for dy: int in [0, -1, 1]:
+		for dx: int in [0, -1, 1]:
+			var trap: Dictionary = TrapSystem.trap_at(_map, _player_x + dx, _player_y + dy)
+			if trap.is_empty() or trap.get("state", 0) != TrapSystem.TrapState.DETECTED:
+				continue
+			var result: Dictionary = _combat_controller.try_disarm_trap(dx, dy)
+			combat_event.emit({"type": "trap_disarm", "result": result})
+			_recompute_fov()
+			queue_redraw()
+			if result.get("sprung", false) and _combat_controller.is_player_dead():
+				combat_event.emit({"type": "player_died"})
+				player_died.emit()
+				return
+			_run_npc_turns_and_sync()
+			return
+	combat_event.emit({"type": "no_trap_to_disarm"})
 
 
 # ── Entity layer (non-combat) ─────────────────────────────────────────────────
@@ -493,6 +546,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	# X key requests End Combat (turn-based only) — GDD s40.x.
 	if key.keycode == KEY_X and not key.echo and _combat_controller != null:
 		_handle_end_combat_input()
+		get_viewport().set_input_as_handled()
+		return
+
+	# K key disarms an adjacent DETECTED trap (combat only) — s56.20.
+	if key.keycode == KEY_K and not key.echo and _combat_controller != null:
+		_handle_disarm_input()
 		get_viewport().set_input_as_handled()
 		return
 
@@ -667,7 +726,7 @@ func _draw() -> void:
 				if not _seen.get(grid_pos, false):
 					draw_rect(Rect2(cell_pos, Vector2(CELL_SIZE, CELL_SIZE)), HIDDEN_BG)
 				else:
-					var rem_tile: int = _map.get_tile(mx, my)
+					var rem_tile: int = _display_tile(mx, my)
 					var rem_bg: Color = AsciiMapGenerator.get_bg_color(rem_tile)
 					if rem_bg.a > 0.01:
 						draw_rect(Rect2(cell_pos, Vector2(CELL_SIZE, CELL_SIZE)),
@@ -683,7 +742,7 @@ func _draw() -> void:
 							rem_glyph, HORIZONTAL_ALIGNMENT_LEFT, CELL_SIZE, font_size, dfg)
 				continue
 
-			var tile: int = _map.get_tile(mx, my)
+			var tile: int = _display_tile(mx, my)
 			var bg: Color = AsciiMapGenerator.get_bg_color(tile)
 			if bg.a > 0.01:
 				draw_rect(Rect2(cell_pos, Vector2(CELL_SIZE, CELL_SIZE)), bg)
@@ -708,6 +767,22 @@ func _draw() -> void:
 			var ccell: Vector2 = Vector2(cvx * CELL_SIZE, cvy * CELL_SIZE)
 			draw_string(font, Vector2(ccell.x + 2, ccell.y + font.get_ascent(font_size)),
 				CORPSE_GLYPH, HORIZONTAL_ALIGNMENT_LEFT, CELL_SIZE, font_size, CORPSE_COLOR)
+
+	# ── Trap layer (s56.20) ────────────────────────────────────────────────────
+	# Only DETECTED traps render; HIDDEN ones stay invisible. Visible tiles only.
+	for t: Dictionary in _map.traps:
+		if t.get("state", 0) != TrapSystem.TrapState.DETECTED:
+			continue
+		var tpos: Vector2i = Vector2i(t.get("x", -1), t.get("y", -1))
+		if not _visible.get(tpos, false):
+			continue
+		var tvx: int = tpos.x - _camera_x
+		var tvy: int = tpos.y - _camera_y
+		if tvx < 0 or tvx >= VIEWPORT_SIZE or tvy < 0 or tvy >= VIEWPORT_SIZE:
+			continue
+		var tcell: Vector2 = Vector2(tvx * CELL_SIZE, tvy * CELL_SIZE)
+		draw_string(font, Vector2(tcell.x + 2, tcell.y + font.get_ascent(font_size)),
+			TRAP_GLYPH, HORIZONTAL_ALIGNMENT_LEFT, CELL_SIZE, font_size, TRAP_COLOR)
 
 	# ── Entity layer ───────────────────────────────────────────────────────────
 	if _blink_visible:

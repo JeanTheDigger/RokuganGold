@@ -15,6 +15,8 @@ class ImmediateNeed:
 	var target_resource: String = ""
 	var target_army_id: int = -1
 	var target_intent: String = ""
+	# Otosan Uchi Governor appointment: zone_id of the district to govern (s2.3.23).
+	var target_zone_id: String = ""
 	var threshold: float = 0.0
 	var threshold_type: String = ""
 	var source: String = ""
@@ -80,6 +82,11 @@ class ContextSnapshot:
 	var school: String = ""
 	var school_type: Enums.SchoolType = Enums.SchoolType.BUSHI
 	var is_lord: bool = false
+	# Otosan Uchi Governor acting as a conditional district lord (s2.3.23 Zone-Level
+	# Lord Authority). True when the character holds a Governor seat (governed_zone_id
+	# set). Gates the Governor ActionID blocklist — daimyo/military actions are
+	# removed from their scoring pool even though zone-lord authority makes them is_lord.
+	var is_otosan_governor: bool = false
 	var lord_rank: Enums.LordRank = Enums.LordRank.VILLAGE_HEADMAN
 	var civilian_orders_remaining: int = 0
 	# s2.4.14 D6: a Wall-wide emergency this Champion declared is still active
@@ -136,6 +143,8 @@ class ContextSnapshot:
 	var met_characters: Array = []
 	var knowledge_pool: Array = []
 	var known_secrets: Array = []
+	# s12.9: intimidator ids this character is currently "complying under duress" toward.
+	var compliance_intimidators: Array = []
 
 	# Lord-tier fields
 	var resource_stockpiles: Dictionary = {}

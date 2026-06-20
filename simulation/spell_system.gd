@@ -30,6 +30,247 @@ enum SpellSimEffect {
 ## SpellSimEffect ints: 0=COMBAT_ONLY, 1=HEAL, 2=REMOVE_TAINT, 3=DETECT, 4=COMMUNE,
 ##   5=SUMMON, 6=COMMAND, 7=TRANSMUTE, 8=PURIFY, 9=REVEAL, 10=WARD, 11=TRAVEL,
 ##   12=PRESERVE, 13=DISPEL, 14=BIND, 15=RITUAL, 16=WEATHER, 17=INFO
+## Spells carrying the Jade/Crystal property (s31–s37). A jade/crystal-property spell cast at
+## a superior_invuln spirit repels it (s54.12 Furaribi rule). PARTIAL — jade_strike is the
+## certain entry; the full property list is Phase 2 transcription.
+const JADE_CRYSTAL_PROPERTY_SPELLS: Dictionary = {"jade_strike": true}
+
+static func has_jade_or_crystal_property(spell_id: String) -> bool:
+	return JADE_CRYSTAL_PROPERTY_SPELLS.get(spell_id, false)
+
+## Phase 2 — per-spell combat effects (s31–s37), transcribed from the GDD. Keyed by spell_id.
+## Direct-damage spells across all five rings. Fields:
+##   kind        : "damage"
+##   dr_rolled / dr_kept : damage roll dice; 0 means "use the spell's element Ring"
+##   dr_rolled_bonus : added to the rolled count after the ring substitution (Slayer's Knives: ring+2)
+##   range_tiles : single-target reach, OR cast range to an AoE center, in tiles (1 tile = 5 ft); 0 = self-centered
+##   aoe_radius  : 0 = single target; >0 = radius in tiles (Chebyshev). Centered on the target tile when
+##                 range_tiles>0 (targeted blast), else on the caster (self-centered cone/burst)
+##   aoe_hits    : "enemies" (foes only) or "all" (friend + foe)
+##   caster_exempt : AoE never damages the caster
+##   requires_taint : 0 damage to a target with Taint Rank < 1 (Jade Strike)
+##   rider       : optional condition applied to each damaged target —
+##                 {condition: "prone"/"dazed"/"fatigued"/"deafened",
+##                  save: "none"/"earth_flat"/"stamina_flat"/"earth_contested_air",
+##                  save_tn: int (flat saves), duration_rounds: int (0 = roll-recovered/instant)}
+## DR routes through the invuln filter as magic (always) + the spell's element kind (fire/water), so
+## flame_immune blocks/heals fire spells and water_vulnerable doubles water spells. Cones/diameters are
+## modeled as Chebyshev radii (length-or-diameter ÷ 5 = tiles) — an over-application behind the caster,
+## since facing is not tracked (same compromise as the kiho cone layer). Multi-round channels and
+## weather damage bonuses are deferred to later tranches.
+const SPELL_COMBAT_EFFECTS: Dictionary = {
+	# --- Fire (s35) ---
+	# Coverage extension (2026-06-20): tendril/swarm/dragon-talon damage + Earth grasp.
+	"tail_of_the_fire_dragon": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
+		"range_tiles": 6, "aoe_radius": 0},  # Fire 2: DR = caster Fire Ring, 30'
+	"ravenous_swarms": {"kind": "damage", "dr_rolled": 5, "dr_kept": 3,
+		"range_tiles": 6, "aoe_radius": 0},  # Fire 3: 5k3 bolt, 30' (fire-disrupt rider deferred)
+	"the_dragons_talon": {"kind": "damage", "dr_rolled": 8, "dr_kept": 6,
+		"range_tiles": 20, "aoe_radius": 20, "aoe_hits": "enemies", "caster_exempt": true,
+		"target_max_insight": 2, "aoe_max_targets": 10},  # Fire 5: 8k6, up to 10 weak foes, 100'
+	"grasp_of_earth": {"kind": "status", "condition": "entangled", "save": "none",
+		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 0},  # Earth 2: stony grip, 50'
+	# Coverage extension batch 2 (2026-06-20).
+	"envious_flames": {"kind": "damage", "dr_rolled": 2, "dr_kept": 2,
+		"range_tiles": 6, "aoe_radius": 0},  # Fire 1: 2k2 unerring lance, 30' (cast-disrupt rider deferred)
+	"the_fires_from_within": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
+		"range_tiles": 20, "aoe_radius": 0},  # Fire 2: the classic fireball, DR = Fire Ring, 100'
+	"the_fist_of_osano_wo": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
+		"range_tiles": 10, "aoe_radius": 4, "aoe_hits": "all", "caster_exempt": true},  # Fire 3: DR=Fire Ring, 20' radius
+	"earthquake": {"kind": "damage", "dr_rolled": 2, "dr_kept": 1,
+		"range_tiles": 0, "aoe_radius": 99, "aoe_hits": "all", "caster_exempt": true,
+		"rider": {"condition": "prone", "save": "none"}},  # Earth 5: 2k1 + Prone, caster exempt
+	# Coverage extension batch 3 (2026-06-20).
+	"striking_the_storm": {"kind": "buff", "target": "self", "duration_rounds": 3,
+		"mods": [{"kind": "armor_tn", "value": 20}]},  # Air 3: +20 Armor TN cocoon (deafens self — deferred)
+	"sapphire_strike": {"kind": "damage", "dr_rolled": 4, "dr_kept": 4, "requires_taint": true,
+		"range_tiles": 10, "aoe_radius": 0},  # Earth 4: 4k4 vs jade/crystal-vulnerable only, 50'
+	# Coverage extension batch 4 (2026-06-20): conjured elemental weapons (5 min = 50 rounds).
+	# Wielder uses effective School Rank for the weapon skill; per-spell Honor/Free-Raise extras deferred.
+	"katana_of_fire": {"kind": "conjure_weapon", "dr_rolled": 2, "dr_kept": 2,
+		"skill": "Kenjutsu", "duration_rounds": 50},  # Fire 1: DR 2k2 fire blade
+	"tetsubo_of_earth": {"kind": "conjure_weapon", "dr_rolled": 2, "dr_kept": 2,
+		"skill": "Heavy Weapons", "duration_rounds": 50},  # Earth 1: DR 2k2 stone tetsubo
+	"yari_of_air": {"kind": "conjure_weapon", "dr_rolled": 1, "dr_kept": 1,
+		"skill": "Spears", "duration_rounds": 50},  # Air 1: DR 1k1 air spear
+	"bo_of_water": {"kind": "conjure_weapon", "dr_rolled": 1, "dr_kept": 2,
+		"skill": "Staves", "duration_rounds": 50},  # Water 1: DR 1k2 water staff
+	# Coverage extension batch 5 (2026-06-20): wound-ward + fortify buffs.
+	"the_kamis_strength": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 5,
+		"mods": [{"kind": "reduction", "value": 20},
+			{"kind": "spell_damage_rolled", "value": "earth_ring"}]},  # Earth 5: Reduction 20 + Strength boost (no-Simple-Move deferred)
+	"near_to_ice": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
+		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Water 3: Wound Penalties negated
+	"force_of_will": {"kind": "buff", "target": "ally", "range_tiles": 10, "duration_rounds": 2,
+		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Earth 2: penalties negated (death-immunity deferred)
+	# Coverage extension batch 6 (2026-06-20).
+	"dart_of_void": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
+		"range_tiles": 20, "aoe_radius": 0},  # Void 4: DR = Void Ring, ignores Invuln/Reduction (magic path), 100'
+	"earthen_wave": {"kind": "status", "condition": "prone", "save": "strength_contested_earth",
+		"range_tiles": 0, "aoe_radius": 5, "aoe_hits": "enemies", "caster_exempt": true,
+		"duration_rounds": 0},  # Earth 3: shockwave Knockdown in a line, Contested Strength vs Earth
+	"shining_light": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 10,
+		"mods": [{"kind": "shining_light", "value": 1}]},  # Fire 3: armor flares — melee attacker takes 2k2 + Blinded
+	# Coverage extension batch 8 (2026-06-20): persistent damage zones (per-round standing damage).
+	"wall_of_fire": {"kind": "damage_zone", "dr_rolled": 6, "dr_kept": 6, "aoe_radius": 1,
+		"range_tiles": 20, "aoe_hits": "all", "duration_rounds": 50},  # Fire 4: 6k6/round, 100'
+	"castle_of_fire": {"kind": "damage_zone", "dr_rolled": 6, "dr_kept": 6, "aoe_radius": 6,
+		"range_tiles": 0, "aoe_hits": "enemies", "duration_rounds": 10},  # Fire 5: fiery castle, enemies burn
+	"enticing_the_dance_of_flame": {"kind": "damage_zone", "dr_rolled": 2, "dr_kept": 1,
+		"impact_rolled": 3, "impact_kept": 2, "aoe_radius": 4, "range_tiles": 10,
+		"aoe_hits": "all", "duration_rounds": 2},  # Fire 2: 3k2 impact + 2k1/round, 20' radius
+	"follow_the_flame": {"kind": "damage", "dr_rolled": 6, "dr_kept": 5,
+		"range_tiles": 60, "aoe_radius": 0},  # Fire 5: 6k5 stream of fire, 300' (persistent burn deferred)
+	# Coverage extension batch 9 (2026-06-20): area wards (enemy-cast TN penalty + spell DR reduction).
+	"earths_protection": {"kind": "ward", "aoe_radius": 2, "duration_rounds": 10,
+		"ward_elements": [0, 2, 3], "cast_tn_penalty": 10,
+		"dr_reduction_rolled": 1, "dr_reduction_kept": 1},  # Earth 3: +10 TN & -1k1 vs Air/Fire/Water in 10'
+	"ward_of_thunder": {"kind": "ward", "aoe_radius": 3, "duration_rounds": 50,
+		"ward_elements": [2], "cast_tn_penalty": 20},  # Fire 4: +20 TN to hostile Fire within 15'
+	# Coverage extension batch 10 (2026-06-20): summoned elemental kami (autonomous ally combatant).
+	"rise_air": {"kind": "summon"},    # Air 5: kami, all Physical Traits = Air Ring, Invulnerable
+	"rise_earth": {"kind": "summon"},  # Earth 5: kami, all Physical Traits = Earth Ring, Invulnerable
+	"rise_fire": {"kind": "summon"},   # Fire 5: kami, Fire Ring traits + sets struck targets on fire
+	"rise_water": {"kind": "summon"},  # Water 5: kami, all Physical Traits = Water Ring, Invulnerable
+	# Coverage extension batch 11 (2026-06-20).
+	"soldiers_of_clay": {"kind": "summon", "summon_kind": "clay_soldier", "count": 10},  # Earth 6: 10 stone warriors
+	"be_the_mountain": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 4,
+		"mods": [{"kind": "reduction", "value": "be_the_mountain_reduction"}]},  # Earth 2: Reduction 5×rank (max 20)
+	"never_alone": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
+		"mods": [{"kind": "spell_attack_rolled", "value": "fire_ring"}]},  # Fire 1: +Fire to rolls (conditional expiry deferred)
+	"defense_of_the_firestorm": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
+		"mods": [{"kind": "armor_tn", "value": 20}]},  # Fire 4: +20 Armor TN flame aura (wooden-weapon burn deferred)
+	# === EARTH WAVE A (2026-06-20): debuff path + fear/knockdown resist ===
+	"courage_of_the_seven_thunders": {"kind": "buff", "target": "ally", "range_tiles": 6,
+		"duration_rounds": 100, "mods": [{"kind": "fear_resist_rolled", "value": 5}]},  # Earth 1: +5k0 Fear resist (minor-clan +3k0 + group + Taint clause deferred)
+	"the_mountains_feet": {"kind": "buff", "target": "ally", "range_tiles": 4, "duration_rounds": 50,
+		"mods": [{"kind": "knockdown_resist_rolled", "value": 3}]},  # Earth 2: +3k0 resist Knockdown
+	"strike_as_stone": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 30,
+		"mods": [{"kind": "spell_damage_rolled", "value": 2}]},  # Earth 3: unarmed DR +2k0 (unarmed-only scope approximated)
+	"earths_stagnation": {"kind": "debuff", "target": "enemy", "range_tiles": 10, "duration_rounds": 6,
+		"mods": [{"kind": "spell_attack_rolled", "value": -2}, {"kind": "move_water_penalty", "value": 1}]},  # Earth 1: -2k0 Agility + -1 Rank movement
+	"earth_becomes_sky": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0, "range_tiles": 20,
+		"aoe_radius": 0},  # Earth 2: hurled boulders, DR = Earth Ring (multi-target -1k1 simplified to single)
+	# === EARTH WAVE B (2026-06-20): absorption shield + debuff immunity ===
+	"power_of_the_earth_dragon": {"kind": "buff", "target": "ally", "range_tiles": 10,
+		"duration_rounds": 100, "mods": [{"kind": "absorb_pool", "value": 100}]},  # Earth 6: absorbs 100 Wounds then ends
+	"wholeness_of_the_world": {"kind": "buff", "target": "ally", "range_tiles": 4, "duration_rounds": 100,
+		"mods": [{"kind": "immune_trait_change", "value": 1}]},  # Earth 2: immune to Trait/Ring-altering effects
+	# Coverage extension batch 12 (2026-06-20): save-negates AoE + sun zone/buff.
+	"murmur_of_earth": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1, "range_tiles": 0,
+		"aoe_radius": 20, "aoe_hits": "all", "caster_exempt": true,
+		"save": "agility_flat", "save_tn": 20, "save_negates": true,
+		"rider": {"condition": "prone", "save": "none"}},  # Earth 3: Agility TN 20 or 1k1 + Prone (Dazed deferred)
+	"maw_of_the_earth": {"kind": "damage", "dr_rolled": 3, "dr_kept": 2, "range_tiles": 8,
+		"aoe_radius": 2, "aoe_hits": "all", "caster_exempt": true,
+		"save": "reflexes_contested_earth", "save_negates": true,
+		"rider": {"condition": "entangled", "save": "none"}},  # Earth 4: Reflexes vs Earth or fall in (3k2 + trapped)
+	"the_fires_that_cleanse": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0, "range_tiles": 0,
+		"aoe_radius": 6, "aoe_hits": "all", "caster_exempt": true},  # Fire 1: DR=Fire Ring to all in 30' (caster-half deferred)
+	"light_of_the_sun": {"kind": "damage_zone", "dr_rolled": 2, "dr_kept": 2, "range_tiles": 20,
+		"aoe_radius": 6, "aoe_hits": "all", "duration_rounds": 10},  # Fire 5: 2k2/round in 30' (honor/taint bonus deferred)
+	"blessing_of_the_sun": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 3,
+		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Fire 4: ignore Fatigue/Wound penalties (Fire-roll scope + cost deferred)
+	# Coverage extension batch 13 (2026-06-20).
+	"oath_of_the_heavens": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
+		"mods": [{"kind": "spell_attack_rolled", "value": 2}]},  # Fire 3: +2k0 Fire rolls (2-target link + shared conditions deferred)
+	"balance_of_elements": {"kind": "heal", "heal": "dice", "heal_rolled": 3, "heal_kept": 3,
+		"range_tiles": 1},  # Void 4 (Ishiken): heal 3k3 (disadvantage negation deferred)
+	"relentless_heat": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 10,
+		"mods": [{"kind": "relentless_heat", "value": 1}]},  # Fire 2: melee attacker Fatigued on attempt + Full Attack->Attack
+	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
+	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
+	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.
+	"fury_of_osano_wo": {"kind": "damage", "dr_rolled": 5, "dr_kept": 2,
+		"range_tiles": 60, "aoe_radius": 0},
+	"breath_of_the_fire_dragon": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
+		"range_tiles": 0, "aoe_radius": 3, "aoe_hits": "enemies", "caster_exempt": true},
+	"destructive_wave": {"kind": "damage", "dr_rolled": 7, "dr_kept": 7,
+		"range_tiles": 0, "aoe_radius": 5, "aoe_hits": "all", "caster_exempt": true},
+	"beam_of_the_inferno": {"kind": "damage", "dr_rolled": 10, "dr_kept": 10,
+		"range_tiles": 40, "aoe_radius": 0},
+	# --- Air (s33) ---
+	# Tempest of Air: Personal, 75' cone, 1k1 + Knockdown (Contested Earth vs caster Air)
+	"tempest_of_air": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1,
+		"range_tiles": 0, "aoe_radius": 15, "aoe_hits": "enemies", "caster_exempt": true,
+		"rider": {"condition": "prone", "save": "earth_contested_air"}},
+	# Howl of Isora: Range 100', 40' diameter burst, 3k2 to all + Fatigue (Earth TN 30)
+	"howl_of_isora": {"kind": "damage", "dr_rolled": 3, "dr_kept": 2,
+		"range_tiles": 20, "aoe_radius": 4, "aoe_hits": "all", "caster_exempt": true,
+		"rider": {"condition": "fatigued", "save": "earth_flat", "save_tn": 30}},
+	# Slayer's Knives: Range 30' corridor, DR = Air Ring +2k0 + Knockdown (Earth TN 20)
+	"slayers_knives": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0, "dr_rolled_bonus": 2,
+		"range_tiles": 0, "aoe_radius": 6, "aoe_hits": "enemies", "caster_exempt": true,
+		"rider": {"condition": "prone", "save": "earth_flat", "save_tn": 20}},
+	# --- Earth (s34) ---
+	# Jade Strike: Range 100', single, DR 3k3 ONLY vs Taint Rank 1+ (also a jade-property spell)
+	"jade_strike": {"kind": "damage", "dr_rolled": 3, "dr_kept": 3,
+		"range_tiles": 20, "aoe_radius": 0, "requires_taint": true},
+	# --- Water (s36) ---
+	# Strike of the Tsunami: Range 25' cone, 3k3 + Knockdown (Earth TN 15)
+	"strike_of_the_tsunami": {"kind": "damage", "dr_rolled": 3, "dr_kept": 3,
+		"range_tiles": 0, "aoe_radius": 5, "aoe_hits": "enemies", "caster_exempt": true,
+		"rider": {"condition": "prone", "save": "earth_flat", "save_tn": 15}},
+	# --- Void (s37, Ishiken-only) ---
+	# Touch the Emptiness: Range 30', single, 1k1 + Dazed (no save)
+	"touch_the_emptiness": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1,
+		"range_tiles": 6, "aoe_radius": 0,
+		"rider": {"condition": "dazed", "save": "none"}},
+	# Void Strike: Range 50', single, DR = caster's Void Ring
+	"void_strike": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
+		"range_tiles": 10, "aoe_radius": 0},
+	# --- Heal spells (s36 Water) ---
+	# kind "heal": restores Wounds to an ally (or self) within reach. heal field:
+	#   "margin"          = Wounds equal to the cast roll's margin over TN (Path to Inner Peace)
+	#   "water_plus_rank" = Water Ring + effective School Rank, one Round (Regrow the Wound)
+	#   "full"            = all Wounds healed (Peace of the Kami)
+	# range_tiles 1 = Touch (caster adjacent to the ally; self always allowed). Heals a living
+	# ally only (an Out-but-alive target can be restored; the dead cannot).
+	"path_to_inner_peace": {"kind": "heal", "heal": "margin", "range_tiles": 1},
+	"regrow_the_wound":    {"kind": "heal", "heal": "water_plus_rank", "range_tiles": 1},
+	"peace_of_the_kami":   {"kind": "heal", "heal": "full", "range_tiles": 1},
+	# --- Status / control (s33/s34/s35) — inflict a condition, no save (GDD: automatic) ---
+	# kind "status": applies a condition to each affected target (single or AoE). duration_rounds
+	# 0 = persistent/roll-recovered via apply_condition; >0 = timed (auto-expires). Optional save.
+	"wind_born_slumbers": {"kind": "status", "condition": "fatigued", "save": "none",
+		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 0},  # Air 2: active target Fatigued
+	"whispering_flames": {"kind": "status", "condition": "dazed", "save": "none",
+		"range_tiles": 10, "aoe_radius": 2, "aoe_hits": "all", "duration_rounds": 0},  # Fire 3: 10' Daze (all gazers; roll-recovered; immunity not modeled)
+	"eyes_of_the_phoenix": {"kind": "status", "condition": "blinded", "save": "none",
+		"range_tiles": 5, "aoe_radius": 0, "duration_rounds": 0},  # Fire 4: Blind (allies' Fear-3 burst deferred)
+	"wooden_prison": {"kind": "status", "condition": "entangled", "save": "none",
+		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 0},  # Earth 3: Entangle (escape via standard entangle layer)
+	# --- Cleanse (s36) ---
+	# kind "cleanse": free up to Water Rank living allies in range from Fatigued+Dazed + heal Water Rank.
+	"typhoons_surge": {"kind": "cleanse", "range_tiles": 10},  # Water 3
+	# --- Buffs (s34/s35/s36) — persistent stat bonuses via the round-scoped timed-modifier layer ---
+	# kind "buff": target "self" (range ignored) or "ally" (Touch/range). Each mod {kind, value};
+	# value = int OR a formula ("water_plus_rank"/"earth_plus_rank"). duration_rounds = GDD rounds
+	# (minutes × 10 via the ROUNDS_PER_MINUTE convention). Mod kinds map to the combat roll sites:
+	# armor_tn, reduction, spell_attack_rolled/_kept, spell_damage_rolled/_kept, initiative_rolled.
+	"armor_of_earth": {"kind": "buff", "target": "self", "duration_rounds": 10,
+		"mods": [{"kind": "reduction", "value": "earth_plus_rank"}]},  # Earth 1: Reduction = Earth + School Rank
+	"cloak_of_the_miya": {"kind": "buff", "target": "self", "duration_rounds": 5,
+		"mods": [{"kind": "armor_tn", "value": "water_plus_rank"}]},  # Water 2: Armor TN += Water + School Rank
+	"biting_steel": {"kind": "buff", "target": "self", "duration_rounds": 10,
+		"mods": [{"kind": "spell_damage_rolled", "value": 1}, {"kind": "spell_damage_kept", "value": 1}]},  # Fire 1: DR +1k1
+	"burning_kiss_of_steel": {"kind": "buff", "target": "self", "duration_rounds": 50,
+		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_attack_kept", "value": 1}]},  # Fire 1: melee attack +1k1 (mounted/larger +2k2 deferred)
+	"warning_flame": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 10,
+		"mods": [{"kind": "initiative_rolled", "value": 1}]},  # Fire 1: +1k0 Initiative (immune-surprise + Reactions +3 deferred)
+	# Hooked buffs (effect read in _apply_hit / execute_melee_attack, not a stat total):
+	"the_souls_blade": {"kind": "buff", "target": "self", "duration_rounds": 5,
+		"mods": [{"kind": "weapon_stun", "value": 1}]},  # Fire 6: weapon auto-Stuns + overcomes Invulnerability
+	"fires_of_purity": {"kind": "buff", "target": "self", "duration_rounds": 10,
+		"mods": [{"kind": "flame_shroud", "value": 1}]},  # Fire 1: melee attacker takes 2k2; the shrouded one's strikes deal +2k2 (ranged bypasses; ally-target deferred)
+	"reversal_of_fortunes": {"kind": "buff", "target": "self", "duration_rounds": 3,
+		"mods": [{"kind": "reroll", "value": 1}]},  # Water 1: re-roll one missed attack/round (broader re-rolls forward-wired)
+}
+
+static func get_combat_effect(spell_id: String) -> Dictionary:
+	return SPELL_COMBAT_EFFECTS.get(spell_id, {})
+
+
 const SPELL_LIBRARY: Dictionary = {
 	# === UNIVERSAL (s32) — available to all shugenja ===
 	"sense":     {"e": -1, "m": 1, "s": 3,  "u": true},
@@ -500,7 +741,7 @@ static func can_cast(character: L5RCharacterData, spell_id: String) -> bool:
 ## Returns: {success, total, tn, margin, spell_id, sim_effect, cast_ring, raises, imbalance_overflow}
 static func resolve_cast(character: L5RCharacterData, spell_id: String,
 		dice: DiceEngine, raises: int = 0,
-		target: L5RCharacterData = null, ic_day: int = -1) -> Dictionary:
+		target: L5RCharacterData = null, ic_day: int = -1, extra_tn: int = 0) -> Dictionary:
 	if not SPELL_LIBRARY.has(spell_id):
 		return {"success": false, "error": "unknown_spell"}
 	var spell: Dictionary = SPELL_LIBRARY[spell_id]
@@ -513,7 +754,15 @@ static func resolve_cast(character: L5RCharacterData, spell_id: String,
 	var wrath_bonus: int = AdvantageSystem.get_wrath_of_kami_bonus(target, cast_ring) if target != null else 0
 	# MAGIC_RESISTANCE (s45): target's advantage adds +3 TN per rank to spells targeting them.
 	var magic_resist_tn: int = AdvantageSystem.get_magic_resistance_tn(target) if target != null else 0
-	var tn: int = get_casting_tn(ml) + (raises * 5) - (wrath_bonus * 5) + magic_resist_tn
+	# extra_tn: environmental ward penalty (s34 Earth's Protection / s35 Ward of Thunder), applied
+	# by the orchestrator when a hostile spell is cast inside an enemy ward of the matching element.
+	var tn: int = get_casting_tn(ml) + (raises * 5) - (wrath_bonus * 5) + magic_resist_tn + extra_tn
+	# Creature Magic Resistance (s54.10/s54.12): +TN to spells cast at a spirit/oni, element-gated.
+	if target != null and target.spirit_creature != null \
+			and target.spirit_creature.spell_tn_bonus > 0 \
+			and (target.spirit_creature.spell_tn_bonus_element < 0 \
+				or target.spirit_creature.spell_tn_bonus_element == cast_ring):
+		tn += target.spirit_creature.spell_tn_bonus
 	# MASTER_OF_BLOOD (s44 line 117): all non-maho spells suffer +10 TN for the caster.
 	# Every SpellSystem spell is non-maho, so the check is unconditional.
 	if MutationSystem.has_power(character, Enums.ShadowlandsPowerType.MASTER_OF_BLOOD):

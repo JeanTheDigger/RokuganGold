@@ -306,6 +306,110 @@ const ZONE_FLAGS: Dictionary = {
 		"garden_eligible": false,
 		"shrine_eligible": false,
 	},
+	# Subterranean criminal lake (s2.3.23) — no noble-art/worship/court affordances.
+	Enums.ZoneSubtype.UNDERGROUND_LAKE: {
+		"performance_permitted": false,
+		"wall_art_slot": false,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
+	# Imperial throne room (s2.3.23) — the grandest audience/court hall; mirrors
+	# OHIROMA's court/art affordances (the landmark was repointed off OHIROMA).
+	Enums.ZoneSubtype.THRONE_ROOM: {
+		"performance_permitted": true,
+		"wall_art_slot": true,
+		"displayed_art_slot": true,
+		"fusuma_slot": true,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
+	# Subterranean tunnel maze (s2.3.23) — no noble-art/worship/court affordances.
+	Enums.ZoneSubtype.LABYRINTH: {
+		"performance_permitted": false,
+		"wall_art_slot": false,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
+	# Earthquake crevice (s2.3.23) — no noble-art/worship/court affordances.
+	Enums.ZoneSubtype.ONI_WARAI: {
+		"performance_permitted": false,
+		"wall_art_slot": false,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
+	# Collapsed/haunted ruin (s2.3.23) — no noble-art/worship/court affordances.
+	Enums.ZoneSubtype.RUINED_STRUCTURE: {
+		"performance_permitted": false,
+		"wall_art_slot": false,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
+	# Soldier barracks (s2.3.23) — no noble-art/worship/court affordances
+	# (= the WAR_COUNCIL_ROOM it replaces).
+	Enums.ZoneSubtype.BARRACKS: {
+		"performance_permitted": false,
+		"wall_art_slot": false,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
+	# Scholarly library (s2.3.23) — wall calligraphy + a scholar's alcove only;
+	# not a court venue (drops the AUDIENCE_CHAMBER displayed-art/fusuma slots).
+	Enums.ZoneSubtype.LIBRARY: {
+		"performance_permitted": false,
+		"wall_art_slot": true,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": true,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
+	# Funerary tomb / burial ground (s2.3.23) — ancestor veneration (shrine) +
+	# memorial calligraphy; solemn, so no performance/garden (preserves worship
+	# at both the CASTLE_SHRINE and TEMPLE_GROUNDS sites it replaces).
+	Enums.ZoneSubtype.TOMB: {
+		"performance_permitted": false,
+		"wall_art_slot": true,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": true,
+	},
+	# Treasury strongroom (s2.3.23) — no noble-art/worship/court affordances.
+	Enums.ZoneSubtype.TREASURY_VAULT: {
+		"performance_permitted": false,
+		"wall_art_slot": false,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
 }
 
 

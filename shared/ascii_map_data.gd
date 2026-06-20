@@ -25,6 +25,11 @@ extends Resource
 # templates so MissionPopulator can operate on any AsciiMapData uniformly.
 @export var population_slots: Array = []
 
+# Hidden hazards placed by trap-laying defenders (s56.20). A data layer, not
+# tiles — a HIDDEN trap renders as normal floor. Each entry is a TrapSystem
+# trap dict: { "x", "y", "type", "quality", "state", "detect_tn", "disarm_tn" }.
+@export var traps: Array = []
+
 # Primary flat tile array. Each byte is an Enums.TileType value.
 # Populated by AsciiMapGenerator; read-only after generation.
 @export var tile_types: PackedByteArray = []
@@ -32,6 +37,35 @@ extends Resource
 # Persistent overrides applied on top of the generated base map.
 # Key: "x,y", Value: Enums.TileType int. Stored between sessions.
 @export var deltas: Dictionary = {}
+
+# Active fire layer (s56.6.6). Key: y*width+x int, Value: rounds_left int.
+# A tile in this dict is set to FIRE; FireSystem ticks it down to Burned Out
+# (ash) and spreads it. Empty on every non-fire mission.
+@export var burning_tiles: Dictionary = {}
+
+# Wind bearing for fire/smoke spread (s56.6.6), a unit Vector2i (e.g. (0,-1)=N).
+# ZERO = no wind (Clear weather); fixed for the mission, assigned at generation.
+@export var wind_dir: Vector2i = Vector2i.ZERO
+
+# -- Depth gradient (s56.21) --------------------------------------------------
+# Per-tile path-distance from the player entry tile (8-directional, over
+# passable + door tiles). index = y * width + x. -1 = unreachable.
+# Empty (size != width*height) means depth has not been computed for this map;
+# consumers (MissionPopulator) fall back to depth-agnostic behavior.
+@export var depth_grid: PackedInt32Array = []
+
+# -- Spiritual overlap (s56.16.1b) --------------------------------------------
+# Per-tile overlap intensity 0.0..1.0 (entry 0.0, heart 1.0). index = y*width+x.
+# Empty (size != width*height) = no overlap on this map. Base tiles are NOT
+# mutated — SpiritualPalette substitutes the *display* tile from base + intensity,
+# so the overlap reverts (s56.16 "the world heals in real time") simply by
+# raising restoration_progress (healing spreads outward from the heart).
+@export var overlap_intensity: PackedFloat32Array = []
+@export var spiritual_realm: int = Enums.SpiritRealm.GAKI_DO   # active iff event_type set
+@export var spiritual_element: int = Enums.Ring.NONE
+@export var spiritual_event_type: int = -1   # Enums.SpiritualEventType, -1 = no overlap
+@export var overlap_max_depth: int = 0       # heart depth, for healing-from-heart
+@export var restoration_progress: float = 0.0  # 0..1 ritual healing, heart outward
 
 # -- Zone connections ---------------------------------------------------------
 
@@ -269,6 +303,78 @@ func extinguish(x: int, y: int) -> bool:
 		return false
 	set_delta(x, y, Enums.TileType.FLOOR_ASH)
 	return true
+
+
+# -- Depth gradient (s56.21) --------------------------------------------------
+
+# 8-directional neighbor offsets for the depth BFS (matches MovementSystem's
+# diagonal movement model).
+const _DEPTH_NEIGHBORS: Array[Vector2i] = [
+	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+	Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
+]
+
+# Path-distance from (x,y) to the entry tile, or -1 if depth is uncomputed or
+# the tile is unreachable.
+func depth_at(x: int, y: int) -> int:
+	if x < 0 or x >= width or y < 0 or y >= height:
+		return -1
+	if depth_grid.size() != width * height:
+		return -1
+	return depth_grid[y * width + x]
+
+
+func has_depth_grid() -> bool:
+	return depth_grid.size() == width * height
+
+
+# True when a spiritual overlap has been applied to this map (s56.16.1b).
+func has_overlap() -> bool:
+	return spiritual_event_type >= 0 and overlap_intensity.size() == width * height
+
+
+# Raw stored overlap intensity at (x,y), 0.0 if no overlap or out of bounds.
+# This is the un-healed gradient — use SpiritualPalette.current_intensity_at for
+# the value after restoration_progress healing.
+func intensity_at(x: int, y: int) -> float:
+	if x < 0 or x >= width or y < 0 or y >= height:
+		return 0.0
+	if overlap_intensity.size() != width * height:
+		return 0.0
+	return overlap_intensity[y * width + x]
+
+
+# Floods 8-directional BFS from the entry tile over walkable tiles (passable
+# tiles, plus doors — closed doors are traversable by bump-to-open, matching
+# the connectivity model). Fills depth_grid with path-distance; unreachable
+# tiles stay -1. Deterministic (BFS order is fixed). s56.21.
+func compute_depth_grid(entry_x: int, entry_y: int) -> void:
+	var count: int = width * height
+	depth_grid.resize(count)
+	for i in range(count):
+		depth_grid[i] = -1
+	if entry_x < 0 or entry_x >= width or entry_y < 0 or entry_y >= height:
+		return
+	var frontier: Array[Vector2i] = [Vector2i(entry_x, entry_y)]
+	depth_grid[entry_y * width + entry_x] = 0
+	var head: int = 0
+	while head < frontier.size():
+		var cur: Vector2i = frontier[head]
+		head += 1
+		var d: int = depth_grid[cur.y * width + cur.x]
+		for n: Vector2i in _DEPTH_NEIGHBORS:
+			var nx: int = cur.x + n.x
+			var ny: int = cur.y + n.y
+			if nx < 0 or nx >= width or ny < 0 or ny >= height:
+				continue
+			var idx: int = ny * width + nx
+			if depth_grid[idx] != -1:
+				continue
+			var tile: int = get_tile(nx, ny)
+			if not (is_passable(tile) or is_door(tile)):
+				continue
+			depth_grid[idx] = d + 1
+			frontier.append(Vector2i(nx, ny))
 
 
 # -- Rectangle fill -----------------------------------------------------------

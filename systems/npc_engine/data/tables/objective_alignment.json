@@ -103,6 +103,7 @@
     "CHARM": 50,
     "DELIVER_GIFT": 45,
     "DO_NOTHING": 0,
+    "PETITION_ACCESS": 95,
     "WRITE_LETTER": 30
   },
   "BLOCKADE_TRADE_ROUTE": {

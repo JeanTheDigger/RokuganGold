@@ -13,7 +13,8 @@ class_name MissionEntryPolicy
 ## collide across the two namespaces.
 ##
 ## LOCKED table (s56.19):
-##   AUTO             : ROAD_ENCOUNTER, RONIN_BANDIT, ONI_MANIFESTATION, TAINT_MANIFESTATION
+##   AUTO             : ROAD_ENCOUNTER, RONIN_BANDIT, ONI_MANIFESTATION, TAINT_MANIFESTATION,
+##                      SPIRITUAL_OVERLAP (s56.16 — the realm erupts where the PC stands)
 ##   PLAYER_INITIATED : MAHO_CULT, URBAN_CRIMINAL_NETWORK, NEZUMI_INFESTATION,
 ##                      PEASANT_REVOLT, WALL_SORTIE
 
@@ -28,7 +29,8 @@ static func entry_mode_for(seed_type: int) -> EntryMode:
 		RosterCompositionSystem.SEED_RONIN_BANDIT, \
 		RosterCompositionSystem.SEED_TAINT_MANIFESTATION, \
 		QuestSeedSelector.SEED_ONI_MANIFESTATION, \
-		QuestSeedSelector.SEED_ROAD_ENCOUNTER:
+		QuestSeedSelector.SEED_ROAD_ENCOUNTER, \
+		QuestSeedSelector.SEED_SPIRITUAL_OVERLAP:
 			return EntryMode.AUTO
 		_:
 			return EntryMode.PLAYER_INITIATED

@@ -83,6 +83,7 @@ static func advance_day(
 	next_tattoo_id: Array = [1],
 	active_hunts: Array = [],
 	next_hunt_id: Array = [1],
+	active_intimidations: Array = [],
 	spiritual_insurgency_events: Array = [],
 	next_spiritual_event_id: Array = [1],
 	bloodspeaker_cells: Array = [],
@@ -107,6 +108,7 @@ static func advance_day(
 	next_sculpture_id: Array = [1],
 	active_okiyas: Array = [],
 	next_okiya_id: Array = [1],
+	navigation_zones: Array = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -141,7 +143,7 @@ static func advance_day(
 				character_province_map[_cpm_c.character_id] = _pid
 
 	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
-	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
+	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta, navigation_zones)
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
 	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
 	_assign_magistrate_standing_objectives(characters, objectives_map)
@@ -191,6 +193,10 @@ static func advance_day(
 		active_topics, next_topic_id, ic_day,
 		world_states["clan_baselines"], world_states["family_baselines"],
 	)
+	_process_southern_gate_taint_detection(
+		travel_arrivals, characters_by_id, settlements,
+		active_topics, next_topic_id, ic_day,
+	)
 
 	var musha_season_count: int = int(season_meta.get("horde_season_count", 0))
 	var musha_shugyo_results: Array = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map, dice_engine, musha_season_count)
@@ -210,11 +216,21 @@ static func advance_day(
 	)
 	_apply_hostage_escape_family_honor(hostage_escape_results, characters_by_id)
 
+	# Standing Imperial Court at Otosan Uchi (s2.3.23) — the consumer that makes
+	# forbidden_city_access matter: the Emperor holds court in the Forbidden City.
+	_process_imperial_court(
+		active_courts, characters_by_id, settlements, next_court_id, ic_day, world_states,
+	)
+	_process_imperial_court_invitations(
+		active_courts, characters, characters_by_id, world_states, time_system,
+	)
 	var crisis_courts: Array = _process_crisis_court_calls(
 		characters, active_courts, active_topics, world_states, next_court_id, ic_day,
 	)
 	var court_openings: Array = _process_court_openings(active_courts, ic_day)
-	var court_attendance: Array = _process_court_attendance(active_courts, characters, characters_by_id)
+	var court_attendance: Array = _process_court_attendance(
+		active_courts, characters, characters_by_id, objectives_map,
+	)
 	_apply_well_connected_court_bonus(court_attendance, active_courts, characters_by_id)
 	var court_results: Array = _process_active_courts(
 		active_courts, active_topics, next_topic_id, ic_day,
@@ -224,6 +240,7 @@ static func advance_day(
 	)
 	_set_court_context_flags(active_courts, world_states)
 	_inject_hunt_context(active_hunts, world_states, active_topics)
+	_inject_compliance_context(active_intimidations, world_states)
 	_inject_theater_context(theater_pieces, characters, world_states)
 	_inject_senbazuru_context(active_senbazurus, characters, world_states)
 	_inject_ikebana_context(active_arrangements, settlements, characters, world_states, active_gardens)
@@ -233,6 +250,10 @@ static func advance_day(
 	_inject_shide_context(settlements, characters, world_states)
 	_process_shide_permission_grants(settlements, characters, characters_by_id, ic_day)
 	_inject_poem_context(characters, world_states)
+	# Sentaku access (s2.3.23): clear lapsed Forbidden City visits, then surface
+	# PETITION_ACCESS to capital visitors who still lack a tier and aren't cooling down.
+	_process_forbidden_access_expiry(characters, ic_day, active_courts, crime_records, next_case_id)
+	_inject_petition_context(world_states, characters_by_id, settlements, time_system)
 	_set_wall_tower_context_flags(characters, settlements, provinces, world_states)
 	_process_wall_shireikan_escalation(
 		characters, characters_by_id, objectives_map, settlements, provinces,
@@ -448,6 +469,13 @@ static func advance_day(
 		active_secrets, characters_by_id,
 	)
 
+	# s12.9 intimidation compliance: create new "complying under duress" relationships from
+	# this day's successful intimidations and end any whose conditions no longer hold.
+	_process_intimidation_compliance(
+		active_intimidations, day_result.get("results", []),
+		characters_by_id, active_secrets, ic_day, dice_engine,
+	)
+
 	_process_fabricate_secret_writebacks(
 		day_result.get("results", []),
 		active_secrets, next_secret_id,
@@ -582,6 +610,8 @@ static func advance_day(
 		season_meta,
 		active_wars,
 		next_war_id,
+		provinces,
+		world_states.get("family_baselines", {}),
 	)
 
 	var supply_sharing_results: Array = _process_supply_sharing(
@@ -589,6 +619,7 @@ static func advance_day(
 		characters_by_id,
 		settlements,
 		provinces,
+		world_states.get("family_baselines", {}),
 	)
 
 	var worship_accumulation_results: Array = _process_worship_accumulation(
@@ -617,7 +648,7 @@ static func advance_day(
 
 	# Refresh vacancy intelligence after daily construction creates new settlements
 	if not construction_results.is_empty():
-		_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
+		_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta, navigation_zones)
 
 	_process_tattoo_creation(
 		day_result.get("results", []),
@@ -636,6 +667,18 @@ static func advance_day(
 		active_hunts, characters_by_id, provinces, dice_engine, ic_day,
 		death_events, active_topics, next_topic_id, world_states,
 	)
+
+	# s27.9 Badger Great Games: an annual sumai tournament at Shiro Ichiro. Fires once per
+	# IC year on the year boundary (the GDD fixes the cadence, not the day).
+	if ic_day > 0 and ic_day % TimeSystem.IC_DAYS_PER_YEAR == 0:
+		_process_badger_great_games(
+			characters_by_id, provinces, settlements, active_topics, next_topic_id, ic_day, dice_engine,
+		)
+		# s11.5 Topaz Championship: the annual gempukku tournament at Tsuma. The winner holds
+		# the Topaz Champion title for one year, displacing the prior holder.
+		_process_topaz_championship(
+			characters_by_id, active_topics, next_topic_id, ic_day, dice_engine,
+		)
 
 	_process_voluntary_declarations(
 		day_result.get("results", []),
@@ -699,6 +742,14 @@ static func advance_day(
 		favors,
 		active_topics,
 		next_topic_id,
+		navigation_zones,
+	)
+
+	# s2.3.23: complete the district link for any Governor just appointed (sets
+	# lord_id, Status, governed_zone_id, zone_lord_id, Chair as superior, date).
+	_process_governor_appointment_writebacks(
+		governance_results.get("appointments", []),
+		navigation_zones, characters_by_id, characters, world_states, ic_day,
 	)
 
 	_process_seduction_entanglements(
@@ -774,6 +825,13 @@ static func advance_day(
 		ic_day,
 	)
 
+	# s12.2b Event Ripple: war declarations and peace settlements shift the two clans'
+	# collective baseline (annihilation is not a treaty — the loser is gone, so skip it).
+	_apply_war_collective_disposition(
+		war_declarations, war_termination_results, active_wars,
+		world_states.get("clan_baselines", {}),
+	)
+
 	_release_war_hostages(war_termination_results, active_hostages, characters_by_id, ic_day)
 
 	_remove_resolved_hostages(active_hostages)
@@ -808,6 +866,7 @@ static func advance_day(
 		day_result.get("results", []),
 		death_events, characters_by_id,
 		active_topics, next_topic_id, ic_day,
+		world_states.get("family_baselines", {}),
 	)
 
 	_process_kindness_honor_writebacks(
@@ -816,6 +875,10 @@ static func advance_day(
 
 	_process_truthful_report_honor_writebacks(
 		day_result.get("results", []), characters_by_id, active_secrets,
+	)
+
+	_process_set_tax_rate_writebacks(
+		day_result.get("results", []), characters_by_id, navigation_zones,
 	)
 
 	_process_protecting_clan_honor_writebacks(
@@ -889,6 +952,12 @@ static func advance_day(
 	)
 
 	_remove_resolved_hunts(active_hunts)
+
+	_process_access_petitions(
+		day_result.get("results", []),
+		characters, characters_by_id, objectives_map, world_states,
+		active_wars, ic_day, time_system,
+	)
 
 	_process_petition_writebacks(
 		day_result.get("results", []),
@@ -1021,6 +1090,10 @@ static func advance_day(
 		active_gardens, characters, characters_by_id, settlements, ic_day,
 	)
 
+	_process_bonsai_visitor_effects(
+		active_bonsai, characters, characters_by_id, ic_day,
+	)
+
 	_process_compose_painting_writebacks(
 		day_result.get("results", []),
 		active_paintings, next_painting_id, ic_day,
@@ -1093,6 +1166,21 @@ static func advance_day(
 	# same-tick succession via _process_lord_deaths below.
 	var _death_touch_results: Array = _process_death_touch_afflictions(
 		characters, dice_engine, death_events, active_topics, next_topic_id, ic_day)
+
+	# s54.10/s54.2 Possession: resolve any spirit possession seeded in tile combat
+	# (Shozai feed 1k1/day, Buruburu Descent into Terror, Kitsune-tsuki 24h control).
+	# Appends to death_events so a lethal drain triggers same-tick succession below.
+	var _possession_results: Array = _process_possession_afflictions(
+		characters, dice_engine, death_events, active_topics, next_topic_id, ic_day)
+
+	# s54.5/s54.11 Disease: drain physical Traits over days/weeks for characters infected by
+	# a Byoki/Shikko/plague-zombie hit; a lethal Plague-Carrier drain dies (→ death_events).
+	_process_disease_afflictions(characters, dice_engine, death_events, ic_day)
+
+	# s54.11/s54.12 Poison/venom: restore Traits drained by a stinger/bite (recovery < 1 day).
+	for _pv: L5RCharacterData in characters:
+		if _pv != null and not CharacterStats.is_dead(_pv) and not _pv.poison_affliction.is_empty():
+			DiseaseSystem.process_poison_daily(_pv)
 
 	var orphan_results: Array = _process_lord_deaths(
 		death_events, characters, objectives_map, successor_map,
@@ -1214,6 +1302,7 @@ static func advance_day(
 	_apply_assassination_vengeance(
 		conviction_results, crime_records, characters_by_id,
 		objectives_map, active_topics, next_topic_id, ic_day,
+		world_states.get("family_baselines", {}),
 	)
 
 	_seed_conviction_topics_to_victim_lords(
@@ -1226,6 +1315,11 @@ static func advance_day(
 
 	_process_magistrate_conviction_cascade(
 		conviction_results, crime_records, characters_by_id, objectives_map,
+	)
+
+	# s2.3.23 / s57.47: a Governor convicted of a crime is automatically dismissed.
+	_process_conviction_dismissals(
+		conviction_results, crime_records, characters_by_id, navigation_zones,
 	)
 
 	var info_results: Array = _process_info_events(
@@ -1270,6 +1364,12 @@ static func advance_day(
 		pending_letters, characters_by_id, theater_pieces,
 	)
 
+	# s2.3.23: a delivered Governor solicitation prompts the recipient Clan Champion
+	# to recommend a vassal (added to the soliciting authority's met_characters).
+	_process_governor_solicitation_delivery(
+		pending_letters, characters, characters_by_id,
+	)
+
 	var reply_letters: Array = []
 	if dice_engine != null:
 		var reply_next_id: Array = [next_letter_id[0]]
@@ -1301,8 +1401,16 @@ static func advance_day(
 	var phoenix_council_results: Dictionary = {}
 	var spiritual_insurgency_results: Dictionary = {}
 	var bloodspeaker_results: Dictionary = {}
+	var governor_review_results: Array = []
 	var is_season_boundary: bool = current_season != prev_season or ic_day <= 1
 	if is_season_boundary:
+		# s11.5 Jeweled Championships: when a vacancy-triggered Jeweled Champion seat
+		# (Emerald/Jade/Amethyst/Ruby/Turquoise) is empty, the Emperor calls a championship
+		# to fill it. Checked each season.
+		if ic_day > 1:
+			_process_jeweled_championships(
+				characters_by_id, active_topics, next_topic_id, ic_day, dice_engine,
+			)
 		# Add the IC year to miya_inputs so per-province blessed-year tracking
 		# stays consistent. Year is computed from the time system's tick count.
 		var spring_inputs: Dictionary = miya_inputs.duplicate()
@@ -1325,6 +1433,18 @@ static func advance_day(
 			emperor_tax_cfg, trade_routes,
 		)
 		_apply_worship_stability_maluses(worship_maluses, provinces)
+		# s2.3.23 District Economics: Otosan Uchi districts generate koku from their
+		# own PU (the capital is carved out of the standard koku tick to avoid
+		# double-counting); each Governor retains 30%, the rest flows to the Emperor.
+		_process_district_economics(navigation_zones, characters_by_id, settlements)
+		# s2.3.23 District Stability & Crime: drive district_stability / district_crime_count
+		# (read by the Governor review below). Runs before the review, which resets crime.
+		_process_district_stability_crime(
+			navigation_zones, characters_by_id, settlements,
+			crime_records, season_meta, ic_day, dice_engine,
+			active_topics, next_topic_id,
+			insurgencies, next_insurgency_id, current_season,
+		)
 		_apply_tyrant_stability_penalty(
 			world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON),
 			provinces,
@@ -1444,7 +1564,7 @@ static func advance_day(
 		)
 		# Refresh vacancy intelligence after construction completions and organic villages
 		# so newly created settlements (temples, monasteries, forts) trigger vacancy detection
-		_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta)
+		_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta, navigation_zones)
 		gempukku_results = _process_gempukku(
 			children, characters, characters_by_id, next_character_id,
 			dice_engine, ic_day, active_topics, next_topic_id, objectives_map,
@@ -1468,6 +1588,20 @@ static func advance_day(
 		)
 		_process_anti_maho_roaming(
 			characters, objectives_map, provinces,
+		)
+		# Sentaku Governor performance review (s2.3.23): the Tribunal evaluates each
+		# Otosan Uchi Governor and may petition the Emperor for dismissal; the
+		# Emperor's archetype decides. Seasonal crime counters reset here.
+		governor_review_results = _process_governor_reviews(
+			navigation_zones, characters, characters_by_id,
+			active_topics, world_states, ic_day,
+		)
+		# s2.3.23 solicitation fallback: for any Governor seat the Emperor (or
+		# delegated Advisor) cannot fill from their own pool, write to the preferred
+		# clans' Champions requesting a candidate recommendation.
+		_process_governor_solicitations(
+			navigation_zones, characters, characters_by_id, world_states,
+			pending_letters, next_letter_id, active_topics, next_topic_id, ic_day,
 		)
 		var cw_season_count: int = int(season_meta.get("horde_season_count", 0))
 		if not togashi_state.is_empty():
@@ -1515,7 +1649,7 @@ static func advance_day(
 			seiyaku_results = _process_seiyaku_review(
 				seiyaku_state, characters, characters_by_id,
 				emperor_archetype, active_wars, active_topics,
-				next_topic_id, ic_day,
+				next_topic_id, ic_day, dice_engine,
 			)
 		var season_count: int = int(season_meta.get("horde_season_count", 0))
 		ronin_results = _process_seasonal_ronin(characters, season_count)
@@ -1677,6 +1811,7 @@ static func advance_day(
 		"orphan_results": orphan_results,
 		"hierarchy_cascade_results": hierarchy_cascade_results,
 		"strategic_results": strategic_results,
+		"governor_review_results": governor_review_results,
 		"festival_results": festival_results,
 		"favor_results": favor_results,
 		"travel_arrivals": travel_arrivals,
@@ -3810,6 +3945,7 @@ static func _process_kolat_writebacks(
 					if recruit != null and not CharacterStats.is_dead(recruit) and not recruit.is_pc and recruit.kolat_sect == Enums.KolatSect.NONE:
 						var rs: Enums.KolatSect = effects.get("recruiter_sect", Enums.KolatSect.NONE)
 						recruit.kolat_sect = rs
+						WorldGenerator.equip_crystal_weapons(recruit)  # s54.7 Kolat crystal weapons (owner 2026-06-18)
 						KolatNetwork.register_recruit(recruiter, recruit.character_id, recruit.physical_location, ic_day)
 						# Honor −0.5 on success (s54.7c).
 						HonorGlorySystem.apply_honor_change(recruiter, -float(effects.get("honor_loss", 0.5)))
@@ -7494,6 +7630,101 @@ static func _refresh_taint_accusation(
 			lord.topic_pool.append(topic.topic_id)
 
 
+# -- Southern Gate jade torii Taint detection (s2.3.23, owner-confirmed 2026-06-15)
+# The Ekohikei Southern Gate is surmounted by a jade/crystal torii that "will glow
+# in the presence of the Shadowlands Taint" (s2.3.23). When a character with Taint
+# Rank >= 2 enters Otosan Uchi holding ekohikei_access or forbidden_city_access —
+# i.e. they passed through a restricted-layer gate — the glow triggers an immediate
+# Seppun Hidden Guard investigation. Modeled by reusing the Channel-3 taint_suspected
+# accusation pipeline, seeded to the co-located Seppun Hidden Guard / Imperial
+# authority. Automatic detection (no roll — the torii is a magic ward, not a skilled
+# observer). No Crab exemption: s2.3.23 says "any character ... above this threshold,"
+# and the Imperial capital is not the Kaiu Wall where Crab Taint has an innocent
+# explanation. Threshold (Taint Rank 2+) is GDD-given (PROVISIONAL per s2.3.23).
+static func _process_southern_gate_taint_detection(
+	arrivals: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	var capital_id: int = -1
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			capital_id = s.settlement_id
+			break
+	if capital_id < 0:
+		return
+	var cap_str: String = str(capital_id)
+
+	for arrival: Dictionary in arrivals:
+		var char_id: int = arrival.get("character_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		if character.physical_location != cap_str:
+			continue
+		# Must have passed through a restricted-layer gate (Southern or Necessary).
+		if not character.ekohikei_access and not character.forbidden_city_access:
+			continue
+		if MutationSystem.get_taint_rank(character.taint) < MutationSystem.TAINT_DETECTION_RANK_MIN:
+			continue
+
+		# Automatic glow — no roll. Reuse the Channel-3 accusation pipeline; a
+		# live accusation is reinforced rather than duplicated.
+		var existing: TopicData = _find_active_taint_accusation(active_topics, character.character_id)
+		if existing != null:
+			existing.momentum = maxf(
+				existing.momentum,
+				TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_3),
+			)
+			existing.discussion_count_this_day += 1
+			_seed_southern_gate_accusation(existing, character, characters_by_id, cap_str)
+			continue
+
+		var topic_id: int = next_topic_id[0]
+		next_topic_id[0] += 1
+		var title: String = "%s suspected of Taint corruption" % character.character_name
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			topic_id, title,
+			TopicData.Tier.TIER_3,
+			TopicData.Category.SUPERNATURAL,
+			ic_day, 30.0,
+			[], character.clan, character.family,
+			character.character_id,
+			"accusation", "taint_suspected",
+		)
+		topic.slug = "taint_suspected_%d" % character.character_id
+		topic.subject_role = "PERPETRATOR"
+		active_topics.append(topic)
+		_seed_southern_gate_accusation(topic, character, characters_by_id, cap_str)
+
+
+static func _seed_southern_gate_accusation(
+	topic: TopicData,
+	suspect: L5RCharacterData,
+	characters_by_id: Dictionary,
+	cap_str: String,
+) -> void:
+	## Seed the accusation to the Seppun Hidden Guard — co-located Seppun-family /
+	## Imperial-clan characters at the capital (the personal defenders of the
+	## Imperial line, s2.3.23) — so their UPHOLD_LAW objective picks it up.
+	## Skips the suspect and the dead.
+	for cid: Variant in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.character_id == suspect.character_id:
+			continue
+		if c.physical_location != cap_str:
+			continue
+		if c.family != "Seppun" and c.clan != "Imperial":
+			continue
+		if topic.topic_id not in c.topic_pool:
+			c.topic_pool.append(topic.topic_id)
+
+
 static func _build_taint_corroboration_targets(
 	characters: Array,
 	characters_by_id: Dictionary,
@@ -10205,6 +10436,7 @@ static func _apply_assassination_vengeance(
 	active_topics: Array,
 	next_topic_id: Array,
 	ic_day: int,
+	family_baselines: Dictionary = {},
 ) -> void:
 	for conv: Dictionary in conviction_results:
 		if conv.get("outcome", "") != "convicted":
@@ -10233,6 +10465,14 @@ static func _apply_assassination_vengeance(
 			characters_by_id, objectives_map,
 			active_topics, next_topic_id, ic_day,
 		)
+
+		# s12.2b Event Ripple: a traced assassination is a betrayal souring the
+		# commissioner's family against the victim's family.
+		var commissioner: L5RCharacterData = characters_by_id.get(record.commissioner_id)
+		if commissioner != null and commissioner.family != "" and victim.family != "":
+			CollectiveDisposition.apply_family_betrayal(
+				commissioner.family, victim.family, family_baselines,
+			)
 
 
 # -- Conviction Topic Seeding to Victim's Lord --------------------------------
@@ -10370,6 +10610,542 @@ static func _get_season_days(season: int) -> int:
 		TimeSystem.Season.AUTUMN: return TimeSystem.AUTUMN_DAYS
 		TimeSystem.Season.WINTER: return TimeSystem.WINTER_DAYS
 	return 90
+
+
+# -- Sentaku Governor Performance Review (s2.3.23) -----------------------------
+
+# Seasonal: the Sentaku Tribunal evaluates every Otosan Uchi Governor. A review
+# fires only for a troubled district (SentakuTribunalSystem.should_review_governor);
+# when 3 of 5 members vote to petition the Emperor, the Emperor's archetype decides
+# whether to dismiss. District crime counters reset each season.
+static func _process_governor_reviews(
+	navigation_zones: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	world_states: Dictionary,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	if navigation_zones.is_empty():
+		return results
+
+	# Gather the living 5-member Tribunal once.
+	var members: Array = []
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.role_position == RoleRegistry.SENTAKU_TRIBUNAL_CHAIR \
+				or c.role_position == RoleRegistry.SENTAKU_TRIBUNAL_MEMBER:
+			members.append(c)
+
+	var emperor_archetype: int = int(world_states.get(
+		"emperor_archetype", StrategicReview.EmperorArchetype.IRON
+	))
+
+	# Dismissal is an Imperial act — "the Tribunal can petition the Emperor to
+	# dismiss a Governor, but cannot dismiss directly" (s2.3.23 line 2481). During
+	# an interregnum (no living Emperor) the Tribunal may still review and produce a
+	# recommendation, but no dismissal can be applied until a successor is seated.
+	# Mirrors the appointment guard in _populate_vacancy_intelligence.
+	var review_emperor_id: int = int(world_states.get("emperor_id", -1))
+	var living_emperor: bool = false
+	if review_emperor_id >= 0:
+		var em: L5RCharacterData = characters_by_id.get(review_emperor_id) as L5RCharacterData
+		living_emperor = em != null and not CharacterStats.is_dead(em)
+
+	for z: Variant in navigation_zones:
+		var zone: NavigationZoneData = z as NavigationZoneData
+		if zone == null:
+			continue
+		# A governed Otosan Uchi district whose seat is currently filled.
+		if not zone.has_governor or zone.zone_lord_id < 0:
+			continue
+
+		var crime_count: int = zone.district_crime_count
+		# Crime counter is seasonal — reset it after capturing this season's tally.
+		zone.district_crime_count = 0
+
+		var governor: L5RCharacterData = characters_by_id.get(zone.zone_lord_id) as L5RCharacterData
+		if governor == null or CharacterStats.is_dead(governor):
+			# Dead/missing Governors are handled by succession + vacancy detection.
+			continue
+
+		# Tenure in (approximate) IC seasons — quarters of the 360-day year.
+		# PROVISIONAL: seasons are uneven (90/90/60/120); a /90 quarter count is a
+		# coarse tenure measure, adequate for the review's coarse weight.
+		var in_office_seasons: int = 0
+		if governor.appointed_ic_day >= 0:
+			in_office_seasons = maxi(0, (ic_day - governor.appointed_ic_day) / 90)
+
+		var is_juramashi: bool = zone.sentaku_name == "Juramashi"
+		var stability_dropped: bool = zone.district_stability < 100.0
+		var has_negative_topic: bool = _governor_has_negative_topic(
+			governor.character_id, active_topics
+		)
+
+		if not SentakuTribunalSystem.should_review_governor(
+				zone.district_stability, crime_count, has_negative_topic,
+				in_office_seasons, stability_dropped):
+			continue
+
+		var review: Dictionary = SentakuTribunalSystem.resolve_governor_review(
+			members, governor, zone.district_stability, crime_count,
+			in_office_seasons, is_juramashi
+		)
+
+		var entry: Dictionary = {
+			"governor_id": governor.character_id,
+			"zone_id": zone.zone_id,
+			"sentaku_name": zone.sentaku_name,
+			"recommend_dismiss": review["recommend_dismiss"],
+			"yes_votes": review["yes_votes"],
+			"dismissed": false,
+		}
+
+		if review["recommend_dismiss"]:
+			# No living Emperor → the recommendation stands but cannot be acted on
+			# (the Tribunal cannot dismiss directly, s2.3.23 line 2481).
+			var emperor_agrees: bool = living_emperor and _emperor_dismisses_governor(
+				emperor_archetype, zone.district_stability, crime_count
+			)
+			entry["emperor_agrees"] = emperor_agrees
+			entry["interregnum"] = not living_emperor
+			if emperor_agrees:
+				_apply_governor_dismissal(governor, zone)
+				entry["dismissed"] = true
+
+		results.append(entry)
+
+	return results
+
+
+# True when an unresolved Tier 3+ topic casts the Governor in a negative light
+# (s2.3.23 review trigger "generated a negative Tier 3+ topic"). PERPETRATOR and
+# NEGATIVE subject roles are the Governor-blaming valences; VICTIM is sympathetic.
+static func _governor_has_negative_topic(governor_id: int, active_topics: Array) -> bool:
+	for t: Variant in active_topics:
+		var topic: TopicData = t as TopicData
+		if topic == null or topic.resolved:
+			continue
+		if topic.subject_character_id != governor_id:
+			continue
+		# Tier enum: TIER_1=0 .. TIER_4=3. "Tier 3+" = at least Tier 3 = value <= TIER_3.
+		if topic.tier > TopicData.Tier.TIER_3:
+			continue
+		if topic.subject_role == "PERPETRATOR" or topic.subject_role == "NEGATIVE":
+			return true
+	return false
+
+
+# The Emperor's archetype response to a Tribunal dismissal recommendation
+# (s2.3.23 Governor Performance Review). Districts carry no military-readiness
+# metric, so the Warlike Emperor (who dismisses only on military impact) declines.
+static func _emperor_dismisses_governor(
+	archetype: int, district_stability: float, crime_count: int
+) -> bool:
+	match archetype:
+		StrategicReview.EmperorArchetype.TYRANT:
+			# Treats the recommendation as a loyalty test — fires anyone named.
+			return true
+		StrategicReview.EmperorArchetype.IRON:
+			# Evaluates the district metrics himself before agreeing.
+			return district_stability < SentakuTribunalSystem.REVIEW_STABILITY_TRIGGER \
+				or crime_count > SentakuTribunalSystem.REVIEW_CRIME_TRIGGER
+		StrategicReview.EmperorArchetype.BENEVOLENT:
+			# Gives second chances.
+			return false
+		StrategicReview.EmperorArchetype.CUNNING:
+			# May keep a failing Governor to create political tension.
+			return false
+		StrategicReview.EmperorArchetype.WARLIKE:
+			# Ignores purely civilian failures (no military-readiness impact modelled).
+			return false
+	return false
+
+
+# Clears a dismissed Governor's position links and vacates the district zone
+# (s2.3.23). The district then operates under the Sentaku Tribunal's general
+# authority until a new Governor is appointed. lord_id and status are left
+# unchanged (GDD specifies neither for dismissal).
+static func _apply_governor_dismissal(governor: L5RCharacterData, zone: NavigationZoneData) -> void:
+	governor.role_position = ""
+	governor.governed_zone_id = ""
+	governor.operational_superior_id = -1
+	governor.appointed_ic_day = -1
+	zone.zone_lord_id = -1
+
+
+# s2.3.23 District Stability & Crime driver. The Governor Performance Review reads
+# district_stability and district_crime_count, but the GDD gives no formula for what
+# moves them (it states only the intent: chaotic districts generate frequent Stability
+# drops and crime). This driver supplies that — owner-authorized model + values
+# (2026-06-15). Each district carries a chaos tier classified from the GDD's own
+# district descriptions: chaotic/criminal districts trend toward a low Stability
+# baseline and generate frequent crime (producing the canon Juramashi turnover);
+# orderly/affluent districts stay stable. Runs once per season, BEFORE the Governor
+# review (which reads then zeroes district_crime_count). ALL numeric values PROVISIONAL.
+#
+# Chaos tiers — classified from GDD s2.3.23 district prose, NOT invented:
+#   HIGH: Juramashi ("no Governor lasts six months"), Brutal Flame/Tsai (criminal
+#     element), Prison/Moon/Toyotomi (prison, gambling), Tenari's Ruin/Meiyoko
+#     (criminal refuge), Eta's Island/Hinjaku (outcasts).
+#   MODERATE: South Dock/Kosuga + North Dock/Higshikawa (never-sleeps trade, pleasure
+#     houses), Kanjo (main entry, embassies), Karada (lower caste, Oni Warai).
+#   LOW: everything else — Rich Crescent/Hojize, Gilded Hill/Hayasu, Emperor's
+#     Road/Hidari, Spiritual/Ochiyo, Chisei, Hito (affluent / orderly / patrolled).
+const _DISTRICT_CHAOS_HIGH: PackedStringArray = [
+	"Juramashi", "Tsai", "Toyotomi", "Meiyoko", "Hinjaku",
+]
+const _DISTRICT_CHAOS_MODERATE: PackedStringArray = [
+	"Kosuga", "Higshikawa", "Kanjo", "Karada",
+]
+# PROVISIONAL — calibrated to the GDD review triggers (Stability < 50, crime > 3/season).
+const _DISTRICT_BASELINE_HIGH: float = 40.0
+const _DISTRICT_BASELINE_MODERATE: float = 65.0
+const _DISTRICT_BASELINE_LOW: float = 85.0
+const _DISTRICT_STABILITY_DRIFT: float = 0.25
+const _DISTRICT_CRIME_STABILITY_PENALTY: float = 3.0
+const _DISTRICT_GOVERNANCE_RECOVERY_PER_RANK: float = 3.0
+# District unrest → revolt (s2.3.23 → s11.11). Owner-locked 2026-06-15: a district
+# in deep crisis (Stability below the floor) for this many consecutive seasons
+# breeds a PEASANT_REVOLT. The floor (25) is the Tribunal's near-automatic-dismissal
+# level, so a revolt is a DEEPER failure than ordinary Governor turnover (<50).
+const _DISTRICT_REVOLT_FLOOR: float = 25.0
+const _DISTRICT_REVOLT_SEASONS: int = 3
+# Extra Stability lost per season per point of an active revolt's strength
+# (owner-locked 2026-06-15). Compounds as the s11.11 system grows the revolt;
+# weakening/suppressing it directly eases the drag — suppression matters.
+const _DISTRICT_REVOLT_STABILITY_DRAG_PER_STRENGTH: float = 3.0
+
+
+# Stability baseline a district drifts toward, by chaos tier.
+static func _district_chaos_baseline(sentaku: String) -> float:
+	if sentaku in _DISTRICT_CHAOS_HIGH:
+		return _DISTRICT_BASELINE_HIGH
+	if sentaku in _DISTRICT_CHAOS_MODERATE:
+		return _DISTRICT_BASELINE_MODERATE
+	return _DISTRICT_BASELINE_LOW
+
+
+# Expected crimes/season for a district — also the weight used to attribute real
+# capital crimes across districts. PROVISIONAL.
+static func _district_crime_weight(sentaku: String) -> float:
+	if sentaku in _DISTRICT_CHAOS_HIGH:
+		return 4.0
+	if sentaku in _DISTRICT_CHAOS_MODERATE:
+		return 2.0
+	return 0.5
+
+
+# Ambient crime incidents this season, an integer roll centered on the tier weight
+# (HIGH avg 4, MODERATE avg 2, LOW avg 0.5). PROVISIONAL.
+static func _roll_ambient_district_crime(sentaku: String, dice: DiceEngine) -> int:
+	if sentaku in _DISTRICT_CHAOS_HIGH:
+		return dice.rand_int_range(2, 6)
+	if sentaku in _DISTRICT_CHAOS_MODERATE:
+		return dice.rand_int_range(1, 3)
+	return dice.rand_int_range(0, 1)
+
+
+# The district's currently-active revolt (the recorded insurgency, present in the
+# array with strength > 0), or null. A suppressed revolt is removed (or drained to
+# 0), so this returns null and a fresh revolt may eventually spawn. Clears the stale
+# id as a side effect when the revolt is gone. Used both to apply the revolt's
+# Stability drag and to dedup spawning.
+static func _get_district_active_revolt(nz: NavigationZoneData, insurgencies: Array) -> InsurgencyData:
+	if nz.district_revolt_insurgency_id < 0:
+		return null
+	for i: Variant in insurgencies:
+		var ins: InsurgencyData = i as InsurgencyData
+		if ins != null and ins.insurgency_id == nz.district_revolt_insurgency_id:
+			if ins.strength > 0:
+				return ins
+			break
+	nz.district_revolt_insurgency_id = -1
+	return null
+
+
+static func _process_district_stability_crime(
+	navigation_zones: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	crime_records: Array,
+	season_meta: Dictionary,
+	ic_day: int,
+	dice: DiceEngine,
+	active_topics: Array,
+	next_topic_id: Array,
+	insurgencies: Array,
+	next_insurgency_id: Array,
+	current_season: int,
+) -> void:
+	if navigation_zones.is_empty():
+		return
+	# Capital crimes are located by physical_location == str(settlement_id).
+	var capital_loc: String = ""
+	var capital: SettlementData = null
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			capital = s
+			capital_loc = str(s.settlement_id)
+			break
+
+	# Real capital crimes committed since the last district scan (non-overlapping
+	# window — no double-count, no per-crime plumbing). s2.3.23 "Both" crime source.
+	var last_scan: int = int(season_meta.get("last_district_crime_scan_day", -1))
+	var capital_crimes: int = 0
+	# First activation (no prior scan): establish the window without counting the
+	# historical backlog as one spike.
+	if not capital_loc.is_empty() and last_scan >= 0:
+		for r: Variant in crime_records:
+			var cr: CrimeRecord = r as CrimeRecord
+			if cr == null:
+				continue
+			if cr.location == capital_loc \
+					and cr.ic_day_committed > last_scan \
+					and cr.ic_day_committed <= ic_day:
+				capital_crimes += 1
+	season_meta["last_district_crime_scan_day"] = ic_day
+
+	# Gather districts + total crime weight (for proportional real-crime attribution).
+	var districts: Array = []
+	var weight_sum: float = 0.0
+	for z: Variant in navigation_zones:
+		var nz: NavigationZoneData = z as NavigationZoneData
+		if nz == null or nz.sentaku_name.is_empty():
+			continue
+		districts.append(nz)
+		weight_sum += _district_crime_weight(nz.sentaku_name)
+	if districts.is_empty():
+		return
+	if weight_sum <= 0.0:
+		weight_sum = 1.0
+
+	for nz: NavigationZoneData in districts:
+		var sentaku: String = nz.sentaku_name
+		# Crime = ambient roll + this district's share of real capital crimes.
+		var ambient: int = _roll_ambient_district_crime(sentaku, dice)
+		var attributed: int = int(round(
+			float(capital_crimes) * _district_crime_weight(sentaku) / weight_sum
+		))
+		var crime: int = ambient + attributed
+		nz.district_crime_count = crime
+
+		# An active revolt deepens the disorder it feeds on (compounding spiral).
+		# Looked up once here; reused below for spawn dedup.
+		var active_revolt: InsurgencyData = _get_district_active_revolt(nz, insurgencies)
+
+		# Stability: drift toward the chaos baseline, minus this season's crime drag,
+		# plus governance recovery from a present, living Governor (Courtier = the
+		# primary governance skill per the s2.3.23 candidate-evaluation weights).
+		var baseline: float = _district_chaos_baseline(sentaku)
+		var stab: float = nz.district_stability
+		stab += (baseline - stab) * _DISTRICT_STABILITY_DRIFT
+		stab -= float(crime) * _DISTRICT_CRIME_STABILITY_PENALTY
+		if active_revolt != null:
+			stab -= float(active_revolt.strength) * _DISTRICT_REVOLT_STABILITY_DRAG_PER_STRENGTH
+		var gov: L5RCharacterData = null
+		if nz.has_governor and nz.zone_lord_id >= 0:
+			gov = characters_by_id.get(nz.zone_lord_id) as L5RCharacterData
+			if gov != null and not CharacterStats.is_dead(gov) \
+					and gov.physical_location == capital_loc:
+				var courtier: int = int(gov.skills.get("Courtier", 0))
+				stab += float(courtier) * _DISTRICT_GOVERNANCE_RECOVERY_PER_RANK
+		nz.district_stability = clampf(stab, 0.0, 100.0)
+
+		# A district whose Stability has fallen below the Tribunal's review floor
+		# (REVIEW_STABILITY_TRIGGER — reusing the review constant, no new number)
+		# embarrasses its Governor: generate a Tier-3 NEGATIVE political topic.
+		# This IS the review's third dismissal trigger (_governor_has_negative_topic),
+		# which had no producer. Stability ONLY — crime > REVIEW_CRIME_TRIGGER remains
+		# a review trigger (worth checking on) but does NOT brand the Governor, since
+		# a chaotic district's inherent crime would otherwise permanently embarrass
+		# even a competent Governor holding Stability up (owner-tuned 2026-06-15). One
+		# live topic per Governor — re-raised only after the prior one decays/resolves.
+		if gov != null and not CharacterStats.is_dead(gov):
+			var failing: bool = nz.district_stability < SentakuTribunalSystem.REVIEW_STABILITY_TRIGGER
+			if failing and not _governor_has_negative_topic(gov.character_id, active_topics):
+				var topic := TopicData.new()
+				topic.topic_id = next_topic_id[0]
+				next_topic_id[0] += 1
+				topic.tier = TopicData.Tier.TIER_3
+				topic.category = TopicData.Category.POLITICAL
+				topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+				topic.subject_character_id = gov.character_id
+				topic.subject_role = "NEGATIVE"
+				topic.ic_day_created = ic_day
+				topic.variant = "governor_failure"
+				topic.topic_type = "governor_failure"
+				topic.slug = "governor_failure_%d" % gov.character_id
+				topic.title = "Disorder in the %s district under Governor %s" % [
+					sentaku, gov.character_name
+				]
+				active_topics.append(topic)
+
+		# District unrest → s11.11 PEASANT_REVOLT. A district whose Stability stays
+		# in deep crisis (below the revolt floor) for DISTRICT_REVOLT_SEASONS
+		# consecutive seasons breeds an open peasant revolt (owner-locked 2026-06-15:
+		# 3 seasons below 25). The insurgency system is settlement/province-scoped
+		# (no zone granularity), so the revolt registers in the capital settlement /
+		# Imperial Lands province, tagged back to the district for dedup. Applies to
+		# governed AND vacant districts (a leaderless district collapses too).
+		if nz.district_stability < _DISTRICT_REVOLT_FLOOR:
+			nz.district_unrest_seasons += 1
+		else:
+			nz.district_unrest_seasons = 0
+		if nz.district_unrest_seasons >= _DISTRICT_REVOLT_SEASONS \
+				and capital != null \
+				and active_revolt == null:
+			var revolt := InsurgencyData.new()
+			revolt.insurgency_id = next_insurgency_id[0]
+			next_insurgency_id[0] += 1
+			revolt.insurgency_type = Enums.InsurgencyType.PEASANT_REVOLT
+			revolt.province_id = capital.province_id
+			revolt.settlement_id = capital.settlement_id
+			revolt.strength = 1
+			revolt.concealment = InsurgencySystem.BASE_CONCEALMENT.get(
+				Enums.InsurgencyType.PEASANT_REVOLT, 3)
+			revolt.detected = false
+			revolt.seasons_active = 0
+			revolt.season_spawned = current_season
+			insurgencies.append(revolt)
+			nz.district_revolt_insurgency_id = revolt.insurgency_id
+			# Reset the buildup; another revolt requires a fresh 3-season crisis after
+			# this one is suppressed (dedup blocks a second while it is active).
+			nz.district_unrest_seasons = 0
+
+
+# s2.3.23 District Economics. Each Otosan Uchi district generates koku from its own
+# PU via the standard s4.3.9 rate (district_pu × KOKU_PER_TOWN_PU_PER_SEASON). The
+# cascade is Governor → Emperor only (no intermediate tier): a governed district's
+# Governor retains GOVERNOR_DISTRICT_TAX_RETENTION (the s4.3.7 provincial-tier 30%,
+# owner-authorized 2026-06-15) into their personal koku; the remainder flows to the
+# Emperor's stockpile (the Imperial Capital settlement's koku_stockpile). The
+# Forbidden City and any vacant governed seat have no Governor to retain a share, so
+# all of their koku goes to the Emperor. Runs once per season.
+const GOVERNOR_DISTRICT_TAX_RETENTION: float = 0.30
+# Bounds a Governor may set their district retention to via SET_TAX_RATE (s2.3.23,
+# owner-locked 2026-06-15). The Emperor always receives at least half.
+const DISTRICT_TAX_RETENTION_MIN: float = 0.10
+const DISTRICT_TAX_RETENTION_MAX: float = 0.50
+
+static func _process_district_economics(
+	navigation_zones: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+) -> void:
+	if navigation_zones.is_empty():
+		return
+	# The Imperial stockpile lives at the Otosan Uchi (Imperial Capital) settlement.
+	var capital: SettlementData = null
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			capital = s
+			break
+	if capital == null:
+		return
+	for z: Variant in navigation_zones:
+		var nz: NavigationZoneData = z as NavigationZoneData
+		if nz == null or nz.district_pu <= 0:
+			continue
+		# Only Otosan Uchi districts carry a sentaku_name / district_pu economy.
+		if nz.sentaku_name.is_empty():
+			continue
+		var koku: float = float(nz.district_pu) * ResourceTick.KOKU_PER_TOWN_PU_PER_SEASON
+		if koku <= 0.0:
+			continue
+		var governor: L5RCharacterData = null
+		if nz.has_governor and nz.zone_lord_id >= 0:
+			governor = characters_by_id.get(nz.zone_lord_id) as L5RCharacterData
+			if governor != null and CharacterStats.is_dead(governor):
+				governor = null
+		if governor != null:
+			# Governor-set retention (SET_TAX_RATE, s2.3.23); defaults to 0.30.
+			var retained: float = koku * nz.district_tax_retention
+			governor.koku += retained
+			capital.koku_stockpile += koku - retained
+		else:
+			# Forbidden City or a vacant governed seat — all koku to the Emperor.
+			capital.koku_stockpile += koku
+
+
+# The NavigationZone with the given zone_id, or null.
+static func _find_nav_zone_by_id(navigation_zones: Array, zone_id: String) -> NavigationZoneData:
+	for z: Variant in navigation_zones:
+		var nz: NavigationZoneData = z as NavigationZoneData
+		if nz != null and nz.zone_id == zone_id:
+			return nz
+	return null
+
+
+# DISMISS_FROM_POSITION executor effect (s2.3.23 / s57.47). Removes the named
+# office-holder. A Governor (governed_zone_id set) also vacates their district
+# zone via the shared _apply_governor_dismissal core; any other position-holder
+# simply loses their role and superior link.
+static func _apply_dismissal(
+	effects: Dictionary,
+	characters_by_id: Dictionary,
+	navigation_zones: Array,
+) -> Dictionary:
+	var dismissed_id: int = effects.get("dismissed_id", -1)
+	var dismissed: L5RCharacterData = characters_by_id.get(dismissed_id) as L5RCharacterData
+	if dismissed == null or CharacterStats.is_dead(dismissed):
+		return {"applied": false, "reason": "no_target", "dismissed_id": dismissed_id}
+	var was_governor: bool = not dismissed.governed_zone_id.is_empty()
+	if was_governor:
+		var zone: NavigationZoneData = _find_nav_zone_by_id(navigation_zones, dismissed.governed_zone_id)
+		if zone != null:
+			_apply_governor_dismissal(dismissed, zone)
+		else:
+			dismissed.role_position = ""
+			dismissed.governed_zone_id = ""
+			dismissed.operational_superior_id = -1
+			dismissed.appointed_ic_day = -1
+	else:
+		dismissed.role_position = ""
+		dismissed.operational_superior_id = -1
+	return {"applied": true, "dismissed_id": dismissed_id, "was_governor": was_governor}
+
+
+# s2.3.23 / s57.47: a Governor convicted of a crime is automatically dismissed.
+# Fires for each guilty verdict this tick whose convicted character still governs
+# a district. Self-limiting — once dismissed, governed_zone_id is empty and the
+# character is skipped on subsequent ticks.
+static func _process_conviction_dismissals(
+	conviction_results: Array,
+	crime_records: Array,
+	characters_by_id: Dictionary,
+	navigation_zones: Array,
+) -> void:
+	for conv: Variant in conviction_results:
+		if not (conv is Dictionary):
+			continue
+		if (conv as Dictionary).get("outcome", "") != "convicted":
+			continue
+		var case_id: int = (conv as Dictionary).get("case_id", -1)
+		if case_id < 0:
+			continue
+		var perp_id: int = -1
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				perp_id = r.perpetrator_id
+				break
+		if perp_id < 0:
+			continue
+		var gov: L5RCharacterData = characters_by_id.get(perp_id) as L5RCharacterData
+		if gov == null or CharacterStats.is_dead(gov):
+			continue
+		if gov.governed_zone_id.is_empty():
+			continue
+		var zone: NavigationZoneData = _find_nav_zone_by_id(navigation_zones, gov.governed_zone_id)
+		if zone != null:
+			_apply_governor_dismissal(gov, zone)
+		else:
+			gov.role_position = ""
+			gov.governed_zone_id = ""
+			gov.operational_superior_id = -1
+			gov.appointed_ic_day = -1
 
 
 # -- Strategic Review (s55.10) -------------------------------------------------
@@ -12490,6 +13266,151 @@ static func _lowest_ring(c: L5RCharacterData) -> int:
 	return lo
 
 
+## s54.10/s54.2 Possession: a possession_affliction seeded in tile combat is resolved
+## here over the world-sim days. Shozai-gaki feeds 1k1 Wounds/day; Buruburu runs the
+## Descent into Terror (nightly Willpower TN 20; lethal after 20 consecutive failures;
+## weekly Contested Willpower to shake off); Kitsune-tsuki controls for a 24h window
+## (the victim gets 0 AP via ActionPointSystem) then releases. Timing fields are
+## initialised on first processing so the combat layer needs no ic_day.
+## s54.5/s54.11 Disease daily processing: drain physical Traits per DiseaseSystem; a lethal
+## Plague-Carrier drain (Stamina 0) appends a death_event for same-tick succession.
+static func _process_disease_afflictions(
+	characters: Array,
+	dice: DiceEngine,
+	death_events: Array,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	for victim: L5RCharacterData in characters:
+		if victim == null or CharacterStats.is_dead(victim) or victim.disease_affliction.is_empty():
+			continue
+		var r: Dictionary = DiseaseSystem.process_daily(victim, ic_day, dice)
+		if r.is_empty():
+			continue
+		if r.get("died", false):
+			victim.wounds_taken = CharacterStats.get_total_wound_capacity(victim) + 1
+			DiseaseSystem.cure(victim)
+			death_events.append({
+				"character_id": victim.character_id,
+				"is_lord": victim.role_position != "",
+				"suspicious_death": false,
+				"killer_id": -1,
+				"cause": "disease",
+			})
+		results.append({"character_id": victim.character_id, "result": r})
+	return results
+
+
+static func _process_possession_afflictions(
+	characters: Array,
+	dice: DiceEngine,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	for target: L5RCharacterData in characters:
+		if target == null or CharacterStats.is_dead(target):
+			continue
+		var aff: Dictionary = target.possession_affliction
+		if aff.is_empty():
+			continue
+		var kind: String = String(aff.get("kind", ""))
+		if not aff.has("ic_day_start"):
+			aff["ic_day_start"] = ic_day
+			aff["last_shake_day"] = ic_day
+			aff["consecutive_fails"] = 0
+			target.possession_affliction = aff
+		var possessor_id: int = int(aff.get("possessor_id", -1))
+		match kind:
+			"shozai":
+				var dmg: int = dice.roll_and_keep(
+					SpiritAbilitySystem.SHOZAI_FEED_ROLLED, SpiritAbilitySystem.SHOZAI_FEED_KEPT, true).total
+				WoundSystem.apply_damage(target, dmg, 0)
+				if CharacterStats.is_dead(target):
+					target.possession_affliction = {}
+					results.append(_apply_possession_kill(
+						target, possessor_id, "shozai", death_events, active_topics, next_topic_id, ic_day))
+				else:
+					results.append({"target_id": target.character_id, "kind": "shozai", "outcome": "fed", "wounds": dmg})
+			"kitsune_tsuki":
+				if ic_day - int(aff.get("ic_day_start", ic_day)) >= SpiritAbilitySystem.KITSUNE_TSUKI_CONTROL_DAYS:
+					target.possession_affliction = {}
+					results.append({"target_id": target.character_id, "kind": "kitsune_tsuki", "outcome": "released"})
+				else:
+					results.append({"target_id": target.character_id, "kind": "kitsune_tsuki", "outcome": "controlled"})
+			"buruburu":
+				# Weekly Contested Willpower to shake off (s54.10).
+				if ic_day - int(aff.get("last_shake_day", ic_day)) >= SpiritAbilitySystem.BURUBURU_SHAKE_INTERVAL:
+					aff["last_shake_day"] = ic_day
+					var vw: int = maxi(1, target.willpower)
+					var pw: int = maxi(1, int(aff.get("possessor_willpower", 4)))  # Buruburu Willpower 4 (stat block)
+					if dice.roll_and_keep(vw, vw, true).total > dice.roll_and_keep(pw, pw, true).total:
+						target.possession_affliction = {}
+						results.append({"target_id": target.character_id, "kind": "buruburu", "outcome": "shaken_off"})
+						continue
+				# Nightly Descent into Terror: Willpower vs TN 20; track consecutive failures.
+				var nw: int = maxi(1, target.willpower)
+				if dice.roll_and_keep(nw, nw, true).total < SpiritAbilitySystem.BURUBURU_NIGHTMARE_TN:
+					aff["consecutive_fails"] = int(aff.get("consecutive_fails", 0)) + 1
+				else:
+					aff["consecutive_fails"] = 0
+				target.possession_affliction = aff
+				if int(aff.get("consecutive_fails", 0)) >= SpiritAbilitySystem.BURUBURU_DEATH_FAILS:
+					target.possession_affliction = {}
+					results.append(_apply_possession_kill(
+						target, possessor_id, "buruburu", death_events, active_topics, next_topic_id, ic_day))
+				else:
+					results.append({"target_id": target.character_id, "kind": "buruburu", "outcome": "nightmare", "fails": int(aff.get("consecutive_fails", 0))})
+			_:
+				target.possession_affliction = {}
+	return results
+
+
+## Possession kill — mirrors the maho/death-touch mysterious-death path: GREAT_DESTINY
+## cheats death (survives at DOWN), else lethal wounds + a suspicious death_event +
+## Tier-2 LEGAL mysterious-death topic (NEUTRAL subject_role per the dead-character rule).
+static func _apply_possession_kill(
+	target: L5RCharacterData,
+	possessor_id: int,
+	kind: String,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> Dictionary:
+	var ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+	if AdvantageSystem.check_great_destiny(target, ic_year):
+		var thr: int = CharacterStats.get_wound_threshold_per_level(target)
+		target.wounds_taken = thr * 6 + 1
+		var gd: AdvantageData = AdvantageSystem.get_advantage(target, Enums.Advantage.GREAT_DESTINY)
+		if gd != null:
+			gd.metadata["last_triggered_ic_year"] = ic_year
+		return {"target_id": target.character_id, "kind": kind, "outcome": "survived_destiny"}
+	var earth: int = CharacterStats.get_ring_value(target, Enums.Ring.EARTH)
+	target.wounds_taken = earth * 5 * 5
+	death_events.append({
+		"character_id": target.character_id,
+		"is_lord": target.role_position != "",
+		"cause": "possession_" + kind,
+		"suspicious_death": true,
+		"ic_day": ic_day,
+		"killer_id": possessor_id,
+	})
+	if not next_topic_id.is_empty():
+		var tid: int = next_topic_id[0]
+		next_topic_id[0] = tid + 1
+		var title: String = "Mysterious death of %s at %s" % [
+			target.character_name, target.physical_location]
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			tid, title, TopicData.Tier.TIER_2, TopicData.Category.LEGAL,
+			ic_day, 0.0, [], target.clan, "", target.character_id, "death", "mysterious")
+		topic.slug = "possession_death_%d" % target.character_id
+		active_topics.append(topic)
+	return {"target_id": target.character_id, "kind": kind, "outcome": "killed", "killer_id": possessor_id}
+
+
 ## Death Touch kill — mirrors the maho mysterious-death path (_resolve_stealing_the_soul):
 ## GREAT_DESTINY cheats death (survives at DOWN), else lethal wounds + a suspicious
 ## death_event (killer = the caster) + a Tier 2 LEGAL mysterious-death topic
@@ -14175,6 +15096,8 @@ static func _process_starvation_warfare_effects(
 	season_meta: Dictionary,
 	active_wars: Array,
 	next_war_id: Array,
+	provinces: Dictionary = {},
+	family_baselines: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 
@@ -14185,6 +15108,7 @@ static func _process_starvation_warfare_effects(
 			var r: Dictionary = _apply_harvest_destruction(
 				effects, characters_by_id, active_topics,
 				next_topic_id, ic_day, season_meta,
+				applied.get("character_id", -1), provinces, family_baselines,
 			)
 			if not r.is_empty():
 				results.append(r)
@@ -14206,6 +15130,9 @@ static func _apply_harvest_destruction(
 	next_topic_id: Array,
 	ic_day: int,
 	season_meta: Dictionary,
+	raider_lord_id: int = -1,
+	provinces: Dictionary = {},
+	family_baselines: Dictionary = {},
 ) -> Dictionary:
 	var province_id: int = effects.get("province_id", -1)
 	var ordering_clan: String = effects.get("ordering_clan", "")
@@ -14220,6 +15147,18 @@ static func _apply_harvest_destruction(
 		ordering_clan, province_id, next_topic_id, ic_day,
 	)
 	active_topics.append(topic)
+
+	# s12.2b Event Ripple: a harvest raid sours the raiding lord's family against the
+	# raided province's family (replaces the removed-as-invented `destroyed_harvest`
+	# per-character modifier with the LOCKED family-baseline ripple).
+	var raider: L5RCharacterData = characters_by_id.get(raider_lord_id)
+	var raided_prov: Variant = provinces.get(province_id, null)
+	if raider != null and raider.family != "" and raided_prov is ProvinceData:
+		var target_family: String = (raided_prov as ProvinceData).family
+		if target_family != "":
+			CollectiveDisposition.apply_family_lord_raid(
+				raider.family, target_family, family_baselines,
+			)
 
 	for id: Variant in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[id] as L5RCharacterData
@@ -14300,6 +15239,7 @@ static func _process_supply_sharing(
 	characters_by_id: Dictionary,
 	settlements: Array,
 	provinces: Dictionary,
+	family_baselines: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 
@@ -14348,6 +15288,13 @@ static func _process_supply_sharing(
 				"honor_gain": share_result.get("honor_gain", 0.0),
 				"resolves_famine": share_result.get("resolves_famine", false),
 			})
+			# s12.2b Event Ripple: intra-clan rice sharing warms the two families' baseline.
+			var recipient: L5RCharacterData = characters_by_id.get(receiver_settlement.lord_character_id)
+			if recipient != null and recipient.clan == character.clan \
+					and character.family != "" and recipient.family != "":
+				CollectiveDisposition.apply_intra_clan_rice_sharing(
+					character.family, recipient.family, family_baselines,
+				)
 
 	return results
 
@@ -16916,7 +17863,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"settlement_type",
 		"champion_conclusion_candidates", "local_tier3_candidates",
 		"has_active_contracts", "has_kolat_objective",
-		"has_taint_corroboration_target",
+		"has_taint_corroboration_target", "compliance_intimidators",
 		# Lord-specific keys (cleared so ex-lords don't retain stale data after succession)
 		"province_data", "settlements", "clans", "current_season",
 		"characters_by_id", "active_armies", "active_insurgencies",
@@ -17360,6 +18307,7 @@ static func _process_court_attendance(
 	active_courts: Array,
 	characters: Array,
 	characters_by_id: Dictionary = {},
+	objectives_map: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 	for court_entry_2: Variant in active_courts:
@@ -17369,12 +18317,22 @@ static func _process_court_attendance(
 		if not CourtSystem.is_active(court):
 			continue
 		var settlement_str: String = str(court.host_settlement_id)
+		# The Imperial Court sits in the Forbidden City — entry requires
+		# forbidden_city_access (s2.3.23). Gate guards turn away the rest.
+		var requires_forbidden: bool = (
+			court.court_type == CourtSessionData.CourtType.IMPERIAL_COURT
+		)
 		for c: L5RCharacterData in characters:
 			if CharacterStats.is_dead(c):
 				continue
 			var at_settlement: bool = c.physical_location == settlement_str
 			var is_attending: bool = c.character_id in court.attendee_ids
 			if at_settlement and not is_attending:
+				if requires_forbidden and not c.forbidden_city_access \
+						and c.character_id != court.host_lord_id:
+					# Blocked at the gate — an idle samurai seeks access by petition.
+					_seek_imperial_court_access(c, court, objectives_map)
+					continue
 				CourtSystem.add_attendee(court, c.character_id)
 				results.append({
 					"court_id": court.court_id,
@@ -17389,6 +18347,169 @@ static func _process_court_attendance(
 				departure["action"] = "departed"
 				results.append(departure)
 	return results
+
+
+# Ensures the Emperor holds a standing Imperial Court at Otosan Uchi while he is
+# in residence (s2.3.23). Creates and opens one when none is active; it persists
+# via the normal court lifecycle and is recreated when it ends. This is the live
+# consumer of forbidden_city_access — the court sits in the Forbidden City.
+static func _process_imperial_court(
+	active_courts: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	next_court_id: Array,
+	ic_day: int,
+	world_states: Dictionary,
+) -> void:
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	if emperor_id < 0:
+		return
+	var emperor: L5RCharacterData = characters_by_id.get(emperor_id)
+	if emperor == null or CharacterStats.is_dead(emperor):
+		return
+
+	var capital_id: int = -1
+	for s_v: Variant in settlements:
+		var sd: SettlementData = s_v as SettlementData
+		if sd != null and sd.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			capital_id = sd.settlement_id
+			break
+	if capital_id < 0:
+		return
+	# No standing court while the Emperor is away (e.g., at Winter Court).
+	if emperor.physical_location != str(capital_id):
+		return
+
+	for ce_v: Variant in active_courts:
+		var ce: CourtSessionData = ce_v as CourtSessionData
+		if ce != null and CourtSystem.is_active(ce) \
+				and ce.court_type == CourtSessionData.CourtType.IMPERIAL_COURT:
+			return  # already in session
+
+	var court: CourtSessionData = CourtSystem.create_court(
+		next_court_id[0], CourtSessionData.CourtType.IMPERIAL_COURT,
+		emperor_id, capital_id, "Imperial", ic_day, -1, true,
+	)
+	next_court_id[0] += 1
+	CourtSystem.open_court(court, ic_day)
+	CourtSystem.add_attendee(court, emperor_id)
+	active_courts.append(court)
+
+
+# An idle samurai blocked from the Imperial Court is drawn to seek access: they
+# acquire an ATTEND_COURT objective so the Sentaku petition pipeline fires. Never
+# overrides a character already pursuing an active objective.
+static func _seek_imperial_court_access(
+	c: L5RCharacterData,
+	court: CourtSessionData,
+	objectives_map: Dictionary,
+) -> void:
+	var existing: Dictionary = objectives_map.get(c.character_id, {}).get("primary", {})
+	if not existing.is_empty() and String(existing.get("status", "")) == "ACTIVE":
+		return
+	if not objectives_map.has(c.character_id):
+		objectives_map[c.character_id] = {}
+	objectives_map[c.character_id]["primary"] = {
+		"need_type": "ATTEND_COURT",
+		"priority": 5,
+		"source": "imperial_court_access",
+		"assigned_by": court.host_lord_id,
+		"status": "ACTIVE",
+		"target_settlement_id": court.host_settlement_id,
+	}
+
+
+# Imperial Court invitations (s2.3.23): each non-winter season the Emperor draws a
+# small batch of mid-tier courtiers/lords to his standing court at Otosan Uchi.
+# They travel in, petition the Sentaku for access, and attend. The great Clan
+# Champions are NOT drawn here — they attend the separate Winter Court (hosted at
+# a Great Clan castle, never the capital). PROVISIONAL (GDD gives no count/cadence):
+# up to 3 invitees per season, status band 4.0–6.5 (Champions excluded; commoners
+# below the Imperial audience).
+const IMPERIAL_INVITE_COUNT: int = 3
+const IMPERIAL_INVITE_STATUS_MIN: float = 4.0
+const IMPERIAL_INVITE_STATUS_MAX: float = 6.5
+
+static func _process_imperial_court_invitations(
+	active_courts: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	time_system: TimeSystem,
+) -> void:
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	if emperor_id < 0:
+		return
+	var emperor: L5RCharacterData = characters_by_id.get(emperor_id)
+	if emperor == null or CharacterStats.is_dead(emperor):
+		return
+
+	# The standing Imperial Court (absent while the Emperor is at Winter Court).
+	var court: CourtSessionData = null
+	for ce_v: Variant in active_courts:
+		var ce: CourtSessionData = ce_v as CourtSessionData
+		if ce != null and CourtSystem.is_active(ce) \
+				and ce.court_type == CourtSessionData.CourtType.IMPERIAL_COURT:
+			court = ce
+			break
+	if court == null:
+		return
+
+	# Once per season.
+	var season_index: int = _petition_season_index(time_system)
+	if int(world_states.get("last_imperial_invite_season", -1)) == season_index:
+		return
+	world_states["last_imperial_invite_season"] = season_index
+
+	var capital_loc: String = str(court.host_settlement_id)
+
+	# Candidate pool: mid-tier courtiers/lords away from the capital.
+	var scored: Array = []
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.character_id == emperor_id or c.clan == "Imperial":
+			continue
+		if c.status < IMPERIAL_INVITE_STATUS_MIN or c.status > IMPERIAL_INVITE_STATUS_MAX:
+			continue
+		if c.physical_location == capital_loc or TravelSystem.is_traveling(c):
+			continue
+		if c.character_id in court.personal_invitation_ids:
+			continue
+		scored.append({
+			"id": c.character_id,
+			"disp": float(emperor.disposition_values.get(c.character_id, 0)),
+			"status": c.status,
+		})
+
+	scored.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a["disp"] != b["disp"]:
+			return a["disp"] > b["disp"]
+		return a["status"] > b["status"]
+	)
+
+	var count: int = 0
+	for entry: Dictionary in scored:
+		if count >= IMPERIAL_INVITE_COUNT:
+			break
+		var inv_id: int = entry["id"]
+		court.personal_invitation_ids.append(inv_id)
+		var inv_ws: Dictionary = world_states.get(inv_id, {})
+		var inv_pending: Array = inv_ws.get("pending_events", [])
+		inv_pending.append({
+			"reactive_type": "COURT_INVITATION",
+			"host_id": emperor_id,
+			"settlement_id": court.host_settlement_id,
+			"court_id": court.court_id,
+			"prestige": court.prestige,
+			# An invitation from the Son of Heaven is a summons — auto-accepted
+			# (s2.3.23: "an explicit Imperial summons … bypasses the vote"; one does
+			# not refuse the Emperor). Drives the invitee to travel and petition.
+			"is_imperial_summons": true,
+		})
+		inv_ws["pending_events"] = inv_pending
+		world_states[inv_id] = inv_ws
+		count += 1
 
 
 ## Applies the WELL_CONNECTED +10 mutual disposition bonus on first arrival at a
@@ -18183,6 +19304,67 @@ static func _process_musha_shugyo(
 
 # -- Otomo Seiyaku Review ------------------------------------------------------
 
+## s55.22b §6.1 Otomo manipulation detection. For each active suppression directive, a
+## co-located non-Otomo character may detect the operative via a contested Courtier/Awareness
+## roll; on success the operative's effectiveness is halved for the season (apply_detection)
+## and a Tier-4 "Otomo Manipulation Detected" topic seeds to the detector. effectiveness_halved
+## is reset each season (the per-court-session window).
+static func _process_seiyaku_detection(
+	seiyaku_state: Dictionary,
+	characters: Array,
+	characters_by_id: Dictionary,
+	otomo_courtiers: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> void:
+	var directives: Dictionary = seiyaku_state.get("active_directives", {})
+	if directives.is_empty():
+		return
+	# Group living co-located candidates by location for quick lookup.
+	for pair_key: Variant in directives.keys():
+		var directive: Dictionary = directives[pair_key]
+		directive["effectiveness_halved"] = false  # reset the per-season window
+		var op_id: int = directive.get("operative_id", -1)
+		var operative: L5RCharacterData = characters_by_id.get(op_id)
+		if operative == null or CharacterStats.is_dead(operative) or operative.physical_location.is_empty():
+			continue
+		var loc: String = operative.physical_location
+		var op_pool: int = maxi(operative.awareness + operative.skills.get("Courtier", 0), 1)
+		for c_v: Variant in characters:
+			var c: L5RCharacterData = c_v as L5RCharacterData
+			if c == null or c.character_id == op_id or CharacterStats.is_dead(c):
+				continue
+			if c.physical_location != loc or c.is_pc or c.character_id in otomo_courtiers:
+				continue
+			if c.skills.get("Courtier", 0) < 1:
+				continue
+			var det_pool: int = maxi(c.awareness + c.skills.get("Courtier", 0), 1)
+			var det_roll: int = dice_engine.roll_and_keep(det_pool, maxi(c.awareness, 1), true).total
+			var op_roll: int = dice_engine.roll_and_keep(op_pool, maxi(operative.awareness, 1), true).total
+			if det_roll <= op_roll:
+				continue
+			# Detected.
+			OtomoSeiyakuSystem.apply_detection(seiyaku_state, pair_key)
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			topic.slug = "otomo_manip_detected_%s_%d" % [str(pair_key), ic_day]
+			topic.title = "Otomo Manipulation Detected — %s / %s Targeted" % [
+				directive.get("clan_a", ""), directive.get("clan_b", "")]
+			topic.topic_type = "political"
+			topic.variant = "otomo_detected"
+			topic.tier = TopicData.Tier.TIER_4
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+			topic.category = TopicData.Category.POLITICAL
+			topic.ic_day_created = ic_day
+			active_topics.append(topic)
+			if topic.topic_id not in c.topic_pool:
+				c.topic_pool.append(topic.topic_id)
+			break  # one detection halves the directive for the season
+
+
 static func _process_seiyaku_review(
 	seiyaku_state: Dictionary,
 	characters: Array,
@@ -18192,9 +19374,22 @@ static func _process_seiyaku_review(
 	active_topics: Array,
 	next_topic_id: Array,
 	ic_day: int,
+	dice_engine: DiceEngine = null,
 ) -> Dictionary:
 	var champion_dispositions: Dictionary = _build_champion_dispositions(characters, characters_by_id)
 	var otomo_courtiers: Array = _get_otomo_courtier_ids(characters)
+
+	# s55.22b §6.1 Detection: characters co-located with an active Otomo operative may
+	# detect the manipulation (contested Courtier/Awareness). Success halves the operative's
+	# effectiveness for the season and seeds a Tier-4 detection topic. Effectiveness is reset
+	# each season (the "court session" window). The diffuse +5 sympathy "from all who learn"
+	# is deferred (no per-clan sympathy field).
+	if dice_engine != null:
+		_process_seiyaku_detection(
+			seiyaku_state, characters, characters_by_id, otomo_courtiers,
+			active_topics, next_topic_id, ic_day, dice_engine,
+		)
+
 	var war_context: Array = []
 	for w: WarData in active_wars:
 		war_context.append(WarSystem.to_context_dict(w))
@@ -19129,10 +20324,12 @@ static func _process_governance_effects(
 	favors: Array = [],
 	active_topics: Array = [],
 	next_topic_id: Array = [1000],
+	navigation_zones: Array = [],
 ) -> Dictionary:
 	var appointment_results: Array = []
 	var marriage_results: Array = []
 	var dissolution_results: Array = []
+	var dismissal_results: Array = []
 
 	var clan_baselines: Dictionary = world_states.get("clan_baselines", {})
 	var family_baselines: Dictionary = world_states.get("family_baselines", {})
@@ -19148,6 +20345,10 @@ static func _process_governance_effects(
 		if effects.get("requires_appointment", false):
 			var ar: Dictionary = _apply_appointment(effects, characters_by_id)
 			appointment_results.append(ar)
+
+		if effects.get("requires_dismissal", false):
+			var dis: Dictionary = _apply_dismissal(effects, characters_by_id, navigation_zones)
+			dismissal_results.append(dis)
 
 		if effects.get("requires_marriage", false):
 			var wm: Dictionary = world_states.get("_worship_maluses", {})
@@ -19180,6 +20381,7 @@ static func _process_governance_effects(
 		"appointments": appointment_results,
 		"marriages": marriage_results,
 		"dissolutions": dissolution_results,
+		"dismissals": dismissal_results,
 	}
 
 
@@ -19203,6 +20405,7 @@ static func _apply_appointment(
 		"appointee_id": appointee_id,
 		"position": position,
 		"lord_id": lord_id,
+		"governed_zone_id": effects.get("governed_zone_id", ""),
 	}
 
 
@@ -20579,6 +21782,7 @@ static func _populate_vacancy_intelligence(
 	settlements: Array = [],
 	provinces: Dictionary = {},
 	season_meta: Dictionary = {},
+	navigation_zones: Array = [],
 ) -> void:
 	var lord_vacancies: Dictionary = {}
 
@@ -20805,6 +22009,52 @@ static func _populate_vacancy_intelligence(
 			filled_positions[lord_id_5] = []
 		filled_positions[lord_id_5].append(family_key)
 
+	# Otosan Uchi Governor vacancies (s2.3.23): every governed district zone whose
+	# seat is empty (zone_lord_id < 0) is a vacancy on the Emperor. The Emperor's
+	# FILL_VACANCY decomposition appoints from the candidate pool, weighted by the
+	# district's clan preference and Status appropriateness.
+	#
+	# Archetype routing (s2.3.23): a Cunning or Warlike Emperor delegates Governor
+	# vetting to the Imperial Advisor — the candidate is selected from the Advisor's
+	# met_characters pool, scored on disposition toward the Advisor, with base clan
+	# weight (no archetype modifier). Ambitious samurai must court the Advisor too.
+	# If the Advisor seat is vacant, even a Cunning/Warlike Emperor vets personally.
+	if emperor_id >= 0:
+		var emperor_char: L5RCharacterData = characters_by_id.get(emperor_id) as L5RCharacterData
+		# Interregnum guard: no living Emperor means no Imperial Governor appointments
+		# — mirrors _process_governor_solicitations, which abstains on a dead/missing
+		# Emperor. The district runs under Tribunal authority until a new Emperor is
+		# seated (dead characters persist in characters_by_id, so is_dead must be checked
+		# explicitly — emperor_char is non-null but may be dead during an interregnum).
+		if emperor_char != null and not CharacterStats.is_dead(emperor_char):
+			var gov_authority: L5RCharacterData = emperor_char
+			var gov_base_weights: bool = false
+			if emperor_archetype == StrategicReview.EmperorArchetype.CUNNING \
+					or emperor_archetype == StrategicReview.EmperorArchetype.WARLIKE:
+				var advisor: L5RCharacterData = _find_imperial_advisor(characters)
+				if advisor != null:
+					gov_authority = advisor
+					gov_base_weights = true
+			for z: Variant in navigation_zones:
+				var gz: NavigationZoneData = z as NavigationZoneData
+				if gz == null or not gz.has_governor:
+					continue
+				if gz.zone_lord_id >= 0:
+					continue  # seat already filled
+				var gov_cand: int = _find_governor_candidate(
+					gov_authority, gz, characters, emperor_archetype, gov_base_weights,
+				)
+				if not lord_vacancies.has(emperor_id):
+					lord_vacancies[emperor_id] = []
+				lord_vacancies[emperor_id].append({
+					"position_type": RoleRegistry.GOVERNOR_OTOSAN_UCHI,
+					"priority": 2,
+					"province_id": -1,
+					"zone_id": gz.zone_id,
+					"candidate_id": gov_cand,
+					"seasons_vacant": 0,
+				})
+
 	# Inherit seasons_vacant from persistent registry
 	var registry: Dictionary = season_meta.get("vacancy_registry", {})
 	var new_registry: Dictionary = {}
@@ -20830,8 +22080,11 @@ static func _vacancy_key(lord_id: int, v: Dictionary) -> String:
 	var family: String = v.get("family", "")
 	var settlement_id: int = v.get("settlement_id", -1)
 	var unit_id: int = v.get("unit_id", -1)
+	var zone_id: String = v.get("zone_id", "")
 	if not family.is_empty():
 		return "%d_%s_%s" % [lord_id, pos_type, family]
+	if not zone_id.is_empty():
+		return "%d_%s_z%s" % [lord_id, pos_type, zone_id]
 	if settlement_id >= 0:
 		return "%d_%s_s%d" % [lord_id, pos_type, settlement_id]
 	if unit_id >= 0:
@@ -20911,6 +22164,364 @@ static func _find_vacancy_candidate(
 			best_score = score
 			best_id = c.character_id
 	return best_id
+
+
+# Governor candidate selection (s2.3.23 Candidate Evaluation Weights). Unlike the
+# generic vacancy candidate, Governors are drawn from the Emperor's met_characters
+# pool (not just direct vassals) and weighted by the district's clan preference and
+# Status appropriateness. Weights and archetype modifiers are GDD-specified; the
+# per-component normalization curves are PROVISIONAL ("All weight values pending
+# balancing"). Returns the best candidate's character_id, or -1 if none qualifies
+# (the solicitation fallback to Clan Champions then applies — future increment).
+const GOV_W_STATUS: float = 10.0
+# Governor is a Status 4.0–5.0 position (s2.3.23).
+const GOV_STATUS_LOW: float = 4.0
+const GOV_STATUS_HIGH: float = 5.0
+# PROVISIONAL normalization ceilings (linear-to-weight, mirroring other scorers).
+const GOV_SKILL_NORM: float = 14.0
+const GOV_STATUS_NORM: float = 3.0
+
+# Candidate Solicitation Fallback (s2.3.23): when the appointing authority's
+# met_characters pool yields no Governor candidate for a vacant district, the
+# authority writes to the Clan Champion(s) of the district's preferred clans
+# (Juramashi → the clan with the highest disposition toward the Emperor),
+# requesting a recommendation. Uses existing infrastructure only (WRITE_LETTER +
+# a Tier-4 vacancy topic). Runs seasonally; dedup against in-flight solicitations.
+static func _process_governor_solicitations(
+	navigation_zones: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+	pending_letters: Array,
+	next_letter_id: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	if navigation_zones.is_empty():
+		return
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	if emperor_id < 0:
+		return
+	var emperor_char: L5RCharacterData = characters_by_id.get(emperor_id) as L5RCharacterData
+	if emperor_char == null or CharacterStats.is_dead(emperor_char):
+		return
+	var emperor_archetype: int = int(world_states.get(
+		"emperor_archetype", StrategicReview.EmperorArchetype.IRON
+	))
+	# Appointing authority (Emperor, or delegated Advisor) — mirrors the vacancy pass.
+	var authority: L5RCharacterData = emperor_char
+	var base_weights: bool = false
+	if emperor_archetype == StrategicReview.EmperorArchetype.CUNNING \
+			or emperor_archetype == StrategicReview.EmperorArchetype.WARLIKE:
+		var advisor: L5RCharacterData = _find_imperial_advisor(characters)
+		if advisor != null:
+			authority = advisor
+			base_weights = true
+
+	for z: Variant in navigation_zones:
+		var gz: NavigationZoneData = z as NavigationZoneData
+		if gz == null or not gz.has_governor or gz.zone_lord_id >= 0:
+			continue
+		# Solicit only when the authority's own pool has no suitable candidate.
+		if _find_governor_candidate(authority, gz, characters, emperor_archetype, base_weights) >= 0:
+			continue
+		# Target clans: district preference, or (Juramashi, no preference) the clan
+		# whose Champion most favours the Emperor (s2.3.23 Juramashi special case).
+		var target_clans: Array = gz.clan_preference.duplicate()
+		if target_clans.is_empty():
+			var best_clan: String = _highest_disposition_clan_toward(emperor_id, characters)
+			if not best_clan.is_empty():
+				target_clans = [best_clan]
+		for clan_name: Variant in target_clans:
+			var champ_id: int = _extrad_find_clan_champion_id(str(clan_name), characters)
+			if champ_id < 0 or champ_id == authority.character_id:
+				continue
+			if _has_pending_solicitation(pending_letters, gz.zone_id, champ_id):
+				continue
+			# Tier-4 vacancy topic carried by the letter.
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			topic.slug = "governor_vacancy_%s" % gz.zone_id
+			topic.title = "Governor vacancy in %s" % gz.sentaku_name
+			topic.variant = "governor_vacancy"
+			topic.topic_type = "governor_vacancy"
+			topic.tier = TopicData.Tier.TIER_4
+			topic.category = TopicData.Category.POLITICAL
+			topic.ic_day_created = ic_day
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+			active_topics.append(topic)
+
+			var lid: int = next_letter_id[0]
+			next_letter_id[0] = lid + 1
+			var letter := LetterData.new()
+			letter.letter_id = lid
+			letter.sender_id = authority.character_id
+			letter.recipient_id = champ_id
+			letter.topic = topic.topic_id
+			letter.ic_day_sent = ic_day
+			# Distance PROVISIONAL (3 provinces) — map adjacency data not yet available.
+			letter.ic_day_arrival = ic_day + LetterSystem.calculate_delivery_time(3, 0, 0, 0, false)
+			letter.governor_solicitation_zone_id = gz.zone_id
+			pending_letters.append(letter)
+
+
+# True when an undelivered solicitation letter for this district zone is already
+# en route to the given Champion (dedup against re-soliciting each season).
+static func _has_pending_solicitation(
+	pending_letters: Array, zone_id: String, champion_id: int
+) -> bool:
+	for letter: Variant in pending_letters:
+		var l: LetterData = letter as LetterData
+		if l == null or l.delivered:
+			continue
+		if l.governor_solicitation_zone_id == zone_id and l.recipient_id == champion_id:
+			return true
+	return false
+
+
+# The clan whose Clan Champion most favours the given character (Juramashi
+# solicitation target, s2.3.23). "" if no living champion is found.
+static func _highest_disposition_clan_toward(target_id: int, characters: Array) -> String:
+	var best_clan: String = ""
+	var best_disp: int = -2147483648
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.role_position != RoleRegistry.CLAN_CHAMPION:
+			continue
+		var disp: int = c.disposition_values.get(target_id, 0)
+		if disp > best_disp:
+			best_disp = disp
+			best_clan = c.clan
+	return best_clan
+
+
+# On delivery of a solicitation letter, the recipient Clan Champion recommends
+# their best eligible vassal for the vacant Governor post — modelled as adding
+# that vassal to the soliciting authority's met_characters pool (s2.3.23 step 5:
+# the recommendation enters the pool via the letter's topic exchange). The next
+# vacancy pass then evaluates and appoints. Processes each letter once.
+static func _process_governor_solicitation_delivery(
+	pending_letters: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for letter: Variant in pending_letters:
+		var l: LetterData = letter as LetterData
+		if l == null or not l.delivered:
+			continue
+		if l.governor_solicitation_zone_id.is_empty():
+			continue
+		var champion: L5RCharacterData = characters_by_id.get(l.recipient_id) as L5RCharacterData
+		var authority: L5RCharacterData = characters_by_id.get(l.sender_id) as L5RCharacterData
+		# Mark processed regardless — a dead/missing party yields no recommendation.
+		l.governor_solicitation_zone_id = ""
+		if champion == null or CharacterStats.is_dead(champion):
+			continue
+		if authority == null or CharacterStats.is_dead(authority):
+			continue
+		var recommended: int = _find_champion_recommendation(champion, characters)
+		if recommended < 0:
+			continue
+		var rec_char: L5RCharacterData = characters_by_id.get(recommended) as L5RCharacterData
+		if rec_char == null:
+			continue
+		InformationSystem.add_contact(authority, recommended, rec_char.clan, rec_char)
+
+
+# A Clan Champion's best Governor recommendation from among their own vassals:
+# an available (position-less), living, non-PC samurai, scored by Governor-relevant
+# skill and Status appropriateness (4.0–5.0 band). -1 if the Champion has none.
+static func _find_champion_recommendation(
+	champion: L5RCharacterData, characters: Array
+) -> int:
+	var best_id: int = -1
+	var best_score: float = -1.0
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.lord_id != champion.character_id:
+			continue
+		if not c.role_position.is_empty():
+			continue
+		var skill_raw: float = (
+			2.0 * float(c.skills.get("Courtier", 0))
+			+ float(c.skills.get("Commerce", 0))
+			+ float(c.skills.get("Investigation", 0))
+			+ float(c.skills.get("Lore: Law", 0))
+			+ float(c.skills.get("Battle", 0))
+		)
+		var skill_score: float = clampf(skill_raw / GOV_SKILL_NORM, 0.0, 1.0) * 15.0
+		var dist: float = 0.0
+		if c.status < GOV_STATUS_LOW:
+			dist = GOV_STATUS_LOW - c.status
+		elif c.status > GOV_STATUS_HIGH:
+			dist = c.status - GOV_STATUS_HIGH
+		var status_score: float = GOV_W_STATUS * clampf(1.0 - dist / GOV_STATUS_NORM, 0.0, 1.0)
+		var total: float = skill_score + status_score
+		if total > best_score:
+			best_score = total
+			best_id = c.character_id
+	return best_id
+
+
+# The living Imperial Advisor (Emperor's Chosen, s11.5), or null. Used for
+# Cunning/Warlike Governor-appointment delegation (s2.3.23 Archetype Routing).
+static func _find_imperial_advisor(characters: Array) -> L5RCharacterData:
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.role_position == RoleRegistry.IMPERIAL_ADVISOR:
+			return c
+	return null
+
+
+static func _find_governor_candidate(
+	authority: L5RCharacterData,
+	zone: NavigationZoneData,
+	characters: Array,
+	archetype: int,
+	use_base_weights: bool = false,
+) -> int:
+	if authority == null or CharacterStats.is_dead(authority) or authority.met_characters.is_empty():
+		return -1
+	# Candidate-evaluation weights (s2.3.23, GDD-specified). When the Emperor
+	# delegates to the Imperial Advisor (use_base_weights), the Advisor evaluates
+	# with the base weights — no Emperor archetype modifier applies (s2.3.23 note).
+	var w_skill: float = 15.0
+	var w_disp: float = 15.0
+	var w_clan: float = 20.0
+	if not use_base_weights:
+		var w_skill_map: Dictionary = {
+			StrategicReview.EmperorArchetype.BENEVOLENT: 15.0,
+			StrategicReview.EmperorArchetype.IRON: 25.0,
+			StrategicReview.EmperorArchetype.CUNNING: 15.0,
+			StrategicReview.EmperorArchetype.WARLIKE: 15.0,
+			StrategicReview.EmperorArchetype.TYRANT: 5.0,
+		}
+		var w_disp_map: Dictionary = {
+			StrategicReview.EmperorArchetype.BENEVOLENT: 15.0,
+			StrategicReview.EmperorArchetype.IRON: 10.0,
+			StrategicReview.EmperorArchetype.CUNNING: 15.0,
+			StrategicReview.EmperorArchetype.WARLIKE: 15.0,
+			StrategicReview.EmperorArchetype.TYRANT: 30.0,
+		}
+		var w_clan_map: Dictionary = {
+			StrategicReview.EmperorArchetype.BENEVOLENT: 20.0,
+			StrategicReview.EmperorArchetype.IRON: 20.0,
+			StrategicReview.EmperorArchetype.CUNNING: 10.0,
+			StrategicReview.EmperorArchetype.WARLIKE: 20.0,
+			StrategicReview.EmperorArchetype.TYRANT: 0.0,
+		}
+		w_skill = w_skill_map.get(archetype, 15.0)
+		w_disp = w_disp_map.get(archetype, 15.0)
+		w_clan = w_clan_map.get(archetype, 20.0)
+	var prefs: Array = zone.clan_preference
+
+	var best_id: int = -1
+	var best_score: float = -1.0
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.character_id == authority.character_id:
+			continue
+		if c.is_pc:
+			continue
+		# Available: not already holding a position, and known to the appointing
+		# authority (the Emperor, or the Advisor when delegation applies).
+		if not c.role_position.is_empty():
+			continue
+		if not authority.met_characters.has(c.character_id):
+			continue
+
+		# Skill relevance (Courtier primary; Commerce / Investigation / Lore: Law /
+		# Battle secondary) per s2.3.23.
+		var skill_raw: float = (
+			2.0 * float(c.skills.get("Courtier", 0))
+			+ float(c.skills.get("Commerce", 0))
+			+ float(c.skills.get("Investigation", 0))
+			+ float(c.skills.get("Lore: Law", 0))
+			+ float(c.skills.get("Battle", 0))
+		)
+		var skill_score: float = clampf(skill_raw / GOV_SKILL_NORM, 0.0, 1.0) * w_skill
+
+		# Disposition toward the appointing authority (Emperor, or delegated Advisor).
+		var disp: float = float(c.disposition_values.get(authority.character_id, 0))
+		var disp_score: float = clampf((disp + 50.0) / 100.0, 0.0, 1.0) * w_disp
+
+		# District clan preference (a convention, not a hard gate).
+		var clan_score: float = w_clan if c.clan in prefs else 0.0
+
+		# Status appropriateness: in-band scores full; distance from the 4.0–5.0
+		# band (too junior, or a senior who would see it as a demotion) scores less.
+		var dist: float = 0.0
+		if c.status < GOV_STATUS_LOW:
+			dist = GOV_STATUS_LOW - c.status
+		elif c.status > GOV_STATUS_HIGH:
+			dist = c.status - GOV_STATUS_HIGH
+		var status_score: float = GOV_W_STATUS * clampf(1.0 - dist / GOV_STATUS_NORM, 0.0, 1.0)
+
+		var total: float = skill_score + disp_score + clan_score + status_score
+		if total > best_score:
+			best_score = total
+			best_id = c.character_id
+	return best_id
+
+
+# Completes a Governor appointment's district link (s2.3.23). _apply_appointment
+# sets role_position; this pass sets the Governor-specific fields the generic path
+# can't: lord_id = Emperor, Status by district layer, governed_zone_id, the zone's
+# zone_lord_id, operational_superior_id = Sentaku Chair, and appointment date.
+static func _process_governor_appointment_writebacks(
+	appointment_results: Array,
+	navigation_zones: Array,
+	characters_by_id: Dictionary,
+	characters: Array,
+	world_states: Dictionary,
+	ic_day: int,
+) -> void:
+	if appointment_results.is_empty():
+		return
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	# The Sentaku Chair is every Governor's operational superior (s2.3.23).
+	var chair_id: int = -1
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.role_position == RoleRegistry.SENTAKU_TRIBUNAL_CHAIR:
+			chair_id = c.character_id
+			break
+
+	for r: Variant in appointment_results:
+		if not (r is Dictionary):
+			continue
+		var rd: Dictionary = r
+		if not rd.get("applied", false):
+			continue
+		if rd.get("position", "") != RoleRegistry.GOVERNOR_OTOSAN_UCHI:
+			continue
+		var zone_id: String = rd.get("governed_zone_id", "")
+		if zone_id.is_empty():
+			continue
+		var appointee: L5RCharacterData = characters_by_id.get(rd.get("appointee_id", -1)) as L5RCharacterData
+		if appointee == null or CharacterStats.is_dead(appointee):
+			continue
+		var zone: NavigationZoneData = null
+		for z: Variant in navigation_zones:
+			var nz: NavigationZoneData = z as NavigationZoneData
+			if nz != null and nz.zone_id == zone_id:
+				zone = nz
+				break
+		if zone == null:
+			continue
+		appointee.lord_id = emperor_id
+		appointee.governed_zone_id = zone_id
+		appointee.operational_superior_id = chair_id
+		appointee.appointed_ic_day = ic_day
+		appointee.status = OtosanUchiZoneBuilder.governor_status_for_layer(zone.access_layer)
+		zone.zone_lord_id = appointee.character_id
 
 
 static func _compute_clan_position_counts(
@@ -21720,8 +23331,12 @@ static func _inject_base_character_context(
 			ws = {}
 			world_states[c.character_id] = ws
 
-		var char_is_lord: bool = c.status >= 5.0 or c.lord_id == -1
+		# s2.3.23 Zone-Level Lord Authority: a Governor is a lord of their district
+		# regardless of Status (Toshisoto Governors sit at 4.5, below the 5.0 gate).
+		var is_governor: bool = not c.governed_zone_id.is_empty()
+		var char_is_lord: bool = c.status >= 5.0 or c.lord_id == -1 or is_governor
 		ws["is_lord"] = char_is_lord
+		ws["is_otosan_governor"] = is_governor
 		ws["ic_day"] = ic_day
 		ws["season"] = current_season
 		ws["tattoos"] = tattoos
@@ -23386,6 +25001,7 @@ static func _process_duel_death_writebacks(
 	active_topics: Array,
 	next_topic_id: Array,
 	ic_day: int,
+	family_baselines: Dictionary = {},
 ) -> void:
 	for result: Dictionary in results:
 		if result.get("action_id", "") != "ISSUE_DUEL_CHALLENGE":
@@ -23437,6 +25053,13 @@ static func _process_duel_death_writebacks(
 			topic.ic_day_created = ic_day
 			active_topics.append(topic)
 
+			# s12.2b Event Ripple: a duel death sours the two families' collective baseline.
+			var killer: L5RCharacterData = characters_by_id.get(killer_id)
+			if killer != null and dead_char.family != "" and killer.family != "":
+				CollectiveDisposition.apply_family_duel_death(
+					dead_char.family, killer.family, family_baselines,
+				)
+
 
 static func _process_kindness_honor_writebacks(
 	results: Array,
@@ -23460,6 +25083,43 @@ static func _process_kindness_honor_writebacks(
 			HonorGlorySystem.apply_honor_change(
 				actor, CrimeSystem.get_kindness_below_station_honor(actor)
 			)
+
+
+# SET_TAX_RATE writeback (s2.3.23): a Governor sets their own district's Koku
+# retention. Only fires for an Otosan Uchi district Governor (governed_zone_id maps
+# to a sentaku district) — for an ordinary provincial lord SET_TAX_RATE remains a
+# no-op (province-wide taxation is a separate, unbuilt system). The rate is the
+# PC-set metadata value if present, else derived Honor-inverse for an NPC Governor
+# (high Honor → near the 10% minimum, low Honor → near the 50% maximum, since a
+# Governor is an appointed official and Honor is the loyalty/corruption axis).
+# Clamped to [MIN, MAX]; persists on the district.
+static func _process_set_tax_rate_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	navigation_zones: Array,
+) -> void:
+	for result: Dictionary in results:
+		if result.get("action_id", "") != "SET_TAX_RATE":
+			continue
+		if not result.get("success", false):
+			continue
+		var actor_id: int = result.get("character_id", -1)
+		var actor: L5RCharacterData = characters_by_id.get(actor_id)
+		if actor == null or CharacterStats.is_dead(actor):
+			continue
+		if actor.governed_zone_id.is_empty():
+			continue
+		var zone: NavigationZoneData = _find_nav_zone_by_id(
+			navigation_zones, actor.governed_zone_id)
+		if zone == null or zone.sentaku_name.is_empty():
+			continue
+		var rate: float = float(result.get("effects", {}).get("tax_retention", -1.0))
+		if rate < 0.0:
+			# NPC Governor: Honor-inverse (Honor 0 → 0.50, 10 → 0.10, 5 → 0.30).
+			rate = DISTRICT_TAX_RETENTION_MAX \
+				- (DISTRICT_TAX_RETENTION_MAX - DISTRICT_TAX_RETENTION_MIN) * (actor.honor / 10.0)
+		zone.district_tax_retention = clampf(
+			rate, DISTRICT_TAX_RETENTION_MIN, DISTRICT_TAX_RETENTION_MAX)
 
 
 static func _process_truthful_report_honor_writebacks(
@@ -24315,6 +25975,103 @@ static func _process_tattoo_creation(
 
 # -- Hunt Writebacks (s57.38) -------------------------------------------------
 
+## s12.9 compliance: inject, per compliant target, the list of intimidator ids they are
+## "complying under duress" toward, so the NPC engine can block hostile actions against them.
+static func _inject_compliance_context(
+	active_intimidations: Array,
+	world_states: Dictionary,
+) -> void:
+	if active_intimidations.is_empty():
+		return
+	var by_target: Dictionary = {}
+	for entry_v: Variant in active_intimidations:
+		var entry: Dictionary = entry_v as Dictionary
+		var tid: int = entry.get("target_id", -1)
+		var iid: int = entry.get("intimidator_id", -1)
+		if tid < 0 or iid < 0:
+			continue
+		by_target.get_or_add(tid, []).append(iid)
+	for tid: Variant in by_target.keys():
+		if world_states.has(tid) and world_states[tid] is Dictionary:
+			world_states[tid]["compliance_intimidators"] = by_target[tid]
+
+
+## s12.9 compliance lifecycle: create "complying under duress" relationships from successful
+## intimidations this day, and end existing ones per the four GDD end-conditions (intimidator
+## dead, intimidator befriends the target, leverage removed, or the target pushes back).
+static func _process_intimidation_compliance(
+	active_intimidations: Array,
+	day_results: Array,
+	characters_by_id: Dictionary,
+	active_secrets: Array,
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> void:
+	# -- Creation: successful INTIMIDATE with active compliance.
+	for r_v: Variant in day_results:
+		var r: Dictionary = r_v as Dictionary
+		if r.get("action_id", "") != "INTIMIDATE" or not r.get("success", false):
+			continue
+		if not r.get("effects", {}).get("compliance_active", false):
+			continue
+		var iid: int = r.get("character_id", -1)
+		var tid: int = r.get("target_npc_id", -1)
+		if iid < 0 or tid < 0 or iid == tid:
+			continue
+		var secret_id: int = r.get("effects", {}).get("secret_id", -1)
+		var found: bool = false
+		for e_v: Variant in active_intimidations:
+			var e: Dictionary = e_v as Dictionary
+			if e.get("intimidator_id", -1) == iid and e.get("target_id", -1) == tid:
+				e["established_ic_day"] = ic_day  # re-intimidation sustains
+				found = true
+				break
+		if not found:
+			active_intimidations.append({
+				"intimidator_id": iid, "target_id": tid,
+				"leverage_secret_id": secret_id, "established_ic_day": ic_day,
+			})
+
+	# -- Maintenance: drop ended relationships.
+	var survivors: Array = []
+	for e_v: Variant in active_intimidations:
+		var e: Dictionary = e_v as Dictionary
+		var iid: int = e.get("intimidator_id", -1)
+		var tid: int = e.get("target_id", -1)
+		# Freshly established (or re-intimidated) this tick: survives its first day, no pushback yet.
+		if e.get("established_ic_day", -1) == ic_day:
+			survivors.append(e)
+			continue
+		var intimidator: L5RCharacterData = characters_by_id.get(iid)
+		var target: L5RCharacterData = characters_by_id.get(tid)
+		if intimidator == null or target == null \
+				or CharacterStats.is_dead(intimidator) or CharacterStats.is_dead(target):
+			continue  # intimidator (or target) gone — compliance ends
+		# Friendship: intimidator's disposition toward target crosses into Friend range.
+		if IntimidationSystem.can_compliance_end(intimidator.disposition_values.get(tid, 0)):
+			continue
+		# Leverage removed: the blackmail secret has been exposed (no longer leverage).
+		var secret_id: int = e.get("leverage_secret_id", -1)
+		if secret_id >= 0 and _secret_is_exposed(secret_id, active_secrets):
+			continue
+		# Pushback: the target rolls Willpower vs TN 15 + intimidator's Intimidation rank.
+		var wp_roll: int = dice_engine.roll_and_keep(maxi(target.willpower, 1), maxi(target.willpower, 1), true).total
+		var pushback: Dictionary = IntimidationSystem.resolve_pushback(
+			wp_roll, intimidator.skills.get("Intimidation", 0))
+		if pushback.get("success", false):
+			continue  # target broke free
+		survivors.append(e)
+	active_intimidations.assign(survivors)
+
+
+static func _secret_is_exposed(secret_id: int, active_secrets: Array) -> bool:
+	for s_v: Variant in active_secrets:
+		var s: SecretData = s_v as SecretData
+		if s != null and s.secret_id == secret_id:
+			return s.exposed or s.exposed_publicly
+	return true  # secret no longer exists — leverage gone
+
+
 static func _inject_hunt_context(
 	active_hunts: Array,
 	world_states: Dictionary,
@@ -24351,6 +26108,211 @@ static func _inject_hunt_context(
 					break
 
 		ws["known_objectives"] = known_objs
+
+
+# -- Sentaku access petitions (s2.3.23) --------------------------------------
+
+# Absolute season index (year × 4 + season ordinal) — used for the 1-IC-season
+# resubmission cooldown ("resubmit after 1 IC season; same season auto-denied").
+static func _petition_season_index(time_system: TimeSystem) -> int:
+	return time_system.get_ic_year() * 4 + int(time_system.get_season())
+
+
+# Clears Forbidden City access whose per-visit duration has elapsed. Standing
+# grants (Imperial residents) carry expiry -1 and never expire.
+static func _process_forbidden_access_expiry(
+	characters: Array,
+	ic_day: int,
+	active_courts: Array = [],
+	crime_records: Array = [],
+	next_case_id: Array = [1],
+) -> void:
+	for c: L5RCharacterData in characters:
+		if not c.forbidden_city_access:
+			continue
+		if c.forbidden_city_access_expiry_ic_day < 0:
+			continue
+		if ic_day >= c.forbidden_city_access_expiry_ic_day:
+			c.forbidden_city_access = false
+			c.forbidden_city_access_expiry_ic_day = -1
+			# s2.3.23: "Overstaying is trespassing — a criminal offense per Section
+			# 11.3." Detection is action-triggered (owner decision 2026-06-15): a
+			# character who is an active Imperial Court attendee when their pass
+			# expires is, by definition, still inside the Forbidden City — that is
+			# the overstay. (The arrival/departure gate in _process_court_attendance
+			# never fires on an in-place expiry, so without this the unauthorized
+			# attendee would silently keep their seat.) Lawful petitioners are not
+			# attendees, so this is false-positive-free with no zone tracking.
+			# Crime: DISHONORABLE_CONDUCT / MODERATE (owner decision). Witnessed by
+			# the court (open offense) → concealment 0, UNDER_INVESTIGATION; the
+			# guards eject the trespasser (remove_attendee). The conviction pipeline
+			# applies consequences — no honor numbers invented here.
+			if CharacterStats.is_dead(c):
+				continue
+			for court_v: Variant in active_courts:
+				var court: CourtSessionData = court_v as CourtSessionData
+				if court == null or not CourtSystem.is_active(court):
+					continue
+				if court.court_type != CourtSessionData.CourtType.IMPERIAL_COURT:
+					continue
+				if c.character_id not in court.attendee_ids:
+					continue
+				var record := CrimeRecord.new()
+				record.case_id = next_case_id[0]
+				next_case_id[0] += 1
+				record.crime_type = Enums.CrimeType.DISHONORABLE_CONDUCT
+				record.severity = Enums.CrimeSeverity.MODERATE
+				record.perpetrator_id = c.character_id
+				record.victim_id = -1
+				record.ic_day_committed = ic_day
+				record.concealment_tn = 0
+				record.location = str(court.host_settlement_id)
+				record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+				# Witnessed in the act by the court guards — the suspect is known, so
+				# the investigation pipeline can identify and accuse them (mirrors the
+				# forgery detection pattern). Without this the record would stall at
+				# UNDER_INVESTIGATION (process_accused_cases acts only on ACCUSED).
+				record.known_suspects.append(c.character_id)
+				crime_records.append(record)
+				CourtSystem.remove_attendee(court, c.character_id)
+				break
+
+
+# Surfaces PETITION_ACCESS to living non-PC visitors physically at Otosan Uchi
+# who still lack an access tier and aren't within a resubmission cooldown.
+static func _inject_petition_context(
+	world_states: Dictionary,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	time_system: TimeSystem,
+) -> void:
+	var capital_loc: String = ""
+	for s_v: Variant in settlements:
+		var sd: SettlementData = s_v as SettlementData
+		if sd != null and sd.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			capital_loc = str(sd.settlement_id)
+			break
+	if capital_loc == "":
+		return
+	var season_index: int = _petition_season_index(time_system)
+	for char_id: Variant in world_states:
+		if char_id is not int:
+			continue
+		var c: L5RCharacterData = characters_by_id.get(char_id)
+		if c == null or CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.physical_location != capital_loc:
+			continue
+		var ptype: String = ""
+		if not c.ekohikei_access:
+			ptype = SentakuTribunalSystem.PETITION_EKOHIKEI
+		elif not c.forbidden_city_access:
+			ptype = SentakuTribunalSystem.PETITION_FORBIDDEN
+		if ptype == "":
+			continue
+		if int(c.access_petition_denied_season.get(ptype, -1)) >= season_index:
+			continue
+		var ws: Dictionary = world_states[char_id]
+		var ko: Dictionary = ws.get("known_objectives", {})
+		ko["petition_eligible_type"] = ptype
+		if ptype == SentakuTribunalSystem.PETITION_FORBIDDEN:
+			ko["petition_duration"] = SentakuTribunalSystem.FORBIDDEN_MAX_DURATION_DAYS
+		ws["known_objectives"] = ko
+
+
+# Resolves submitted PETITION_ACCESS actions via the 5-member Tribunal vote.
+# On grant, sets the access flag (Forbidden City with a per-visit expiry); on
+# denial, records the season so the petitioner cannot resubmit until it changes.
+static func _process_access_petitions(
+	results: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	world_states: Dictionary,
+	active_wars: Array,
+	ic_day: int,
+	time_system: TimeSystem,
+) -> void:
+	var has_petition: bool = false
+	for r: Dictionary in results:
+		if r.get("action_id", "") == "PETITION_ACCESS" \
+				and r.get("effects", {}).get("requires_petition_resolution", false):
+			has_petition = true
+			break
+	if not has_petition:
+		return
+
+	# Gather the living Tribunal (Chair + members).
+	var members: Array = []
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.role_position == RoleRegistry.SENTAKU_TRIBUNAL_CHAIR \
+				or c.role_position == RoleRegistry.SENTAKU_TRIBUNAL_MEMBER:
+			members.append(c)
+	if members.is_empty():
+		return
+
+	var clan_baselines: Dictionary = world_states.get("clan_baselines", {})
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	var season_index: int = _petition_season_index(time_system)
+
+	for r: Dictionary in results:
+		if r.get("action_id", "") != "PETITION_ACCESS":
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		if not effects.get("requires_petition_resolution", false):
+			continue
+		var petitioner: L5RCharacterData = characters_by_id.get(r.get("character_id", -1))
+		if petitioner == null or CharacterStats.is_dead(petitioner):
+			continue
+		var ptype: String = effects.get("petition_type", SentakuTribunalSystem.PETITION_EKOHIKEI)
+
+		# Resubmission within the same season is auto-denied without a vote.
+		if int(petitioner.access_petition_denied_season.get(ptype, -1)) >= season_index:
+			continue
+
+		# Political climate: the Tribunal disfavours belligerents (s2.3.23) — true
+		# unless the petitioner's clan is a belligerent in any active war.
+		var political_ok: bool = not _clan_is_belligerent(petitioner.clan, active_wars)
+
+		# Imperial summons bypasses the vote (objective assigned by the Emperor).
+		var is_summons: bool = false
+		var primary: Dictionary = objectives_map.get(petitioner.character_id, {}).get("primary", {})
+		if emperor_id >= 0 and int(primary.get("assigned_by", -1)) == emperor_id:
+			is_summons = true
+
+		var clan_disps: Array = []
+		var pol_oks: Array = []
+		for m: L5RCharacterData in members:
+			clan_disps.append(CollectiveDisposition.get_clan_baseline(
+				m.clan, petitioner.clan, clan_baselines))
+			pol_oks.append(political_ok)
+
+		var outcome: Dictionary = SentakuTribunalSystem.resolve_petition(
+			members, petitioner, ptype, clan_disps, pol_oks, is_summons)
+
+		if outcome.get("granted", false):
+			if ptype == SentakuTribunalSystem.PETITION_FORBIDDEN:
+				petitioner.forbidden_city_access = true
+				var dur: int = SentakuTribunalSystem.clamp_forbidden_duration(
+					int(effects.get("petition_duration", SentakuTribunalSystem.FORBIDDEN_MAX_DURATION_DAYS)))
+				petitioner.forbidden_city_access_expiry_ic_day = ic_day + dur
+			else:
+				petitioner.ekohikei_access = true
+		else:
+			petitioner.access_petition_denied_season[ptype] = season_index
+
+
+# True when the clan is a belligerent (clan_a or clan_b) in any active war.
+static func _clan_is_belligerent(clan: String, active_wars: Array) -> bool:
+	for w_v: Variant in active_wars:
+		var w: WarData = w_v as WarData
+		if w == null or not w.is_active:
+			continue
+		if w.clan_a == clan or w.clan_b == clan:
+			return true
+	return false
 
 
 static func _process_announce_hunt_writebacks(
@@ -24491,6 +26453,278 @@ static func _process_cancel_hunt_writebacks(
 
 
 # -- Hunt Resolution (s57.38.6) -----------------------------------------------
+
+## s11.5 Topaz Championship — the annual gempukku tournament at Tsuma (Crane lands).
+## entrants are that year's new graduates (Insight Rank 1 living non-PC samurai); each clan
+## sends up to 3 of its finest (highest Topaz-stage competence). Resolved via
+## FestivalSystem.resolve_championship (multi-stage Athletics / Kenjutsu·Iaijutsu /
+## Etiquette·Lore). The winner is declared Topaz Champion for one year — the prior holder
+## simply loses the title (s11.5) — and gains a named reputation (TIER_4 topic). The title's
+## Status/Glory adjustment is deferred (s46 lists Status 4 vs RoleRegistry 5.0 — a GDD/code
+## conflict; not resolved here). Eligibility uses insight_rank == 1 as the "graduated this year"
+## proxy (no gempukku-year marker exists).
+## s11.5 vacancy-triggered Jeweled Championships. Maps each ChampionshipType to its title
+## (RoleRegistry constant) and the school the championship favors (-1 = none / Amethyst).
+const _JEWELED_CHAMP_ROLE: Dictionary = {
+	FestivalSystem.ChampionshipType.EMERALD: RoleRegistry.EMERALD_CHAMPION,
+	FestivalSystem.ChampionshipType.JADE: RoleRegistry.JADE_CHAMPION,
+	FestivalSystem.ChampionshipType.AMETHYST: RoleRegistry.AMETHYST_CHAMPION,
+	FestivalSystem.ChampionshipType.RUBY: RoleRegistry.RUBY_CHAMPION,
+	FestivalSystem.ChampionshipType.TURQUOISE: RoleRegistry.TURQUOISE_CHAMPION,
+}
+const _IMPERIAL_FAMILIES: Array = ["Seppun", "Otomo", "Miya"]
+
+## When a vacancy-triggered Jeweled Champion seat is empty, hold a championship to fill it.
+## Each Great Clan nominates its finest eligible candidate (Amethyst: the Imperial families,
+## s11.5 exception); the winner takes the title. The 1–3 season Emperor-call gap and the full
+## weighted clan-nomination eval are deferred (no values / Emperor-priority model); a
+## competence proxy selects each clan's nominee. Returns a {type: result} map.
+static func _process_jeweled_championships(
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var outcomes: Dictionary = {}
+	for ctype in _JEWELED_CHAMP_ROLE.keys():
+		var role: String = _JEWELED_CHAMP_ROLE[ctype]
+		# Skip if the seat is already filled by a living holder.
+		var filled: bool = false
+		for cid in characters_by_id.keys():
+			var h: L5RCharacterData = characters_by_id[cid]
+			if h != null and not CharacterStats.is_dead(h) and h.role_position == role:
+				filled = true
+				break
+		if filled:
+			continue
+		var pref: int = FestivalSystem.CHAMPIONSHIP_SCHOOL_PREFERENCE.get(ctype, -1)
+		var stages: Array = FestivalSystem.CHAMPIONSHIP_STAGES.get(ctype, [])
+		# Build the nominee pool: best eligible candidate per nominating group.
+		var best_by_group: Dictionary = {}  # group key -> L5RCharacterData
+		for cid in characters_by_id.keys():
+			var c: L5RCharacterData = characters_by_id[cid]
+			if c == null or CharacterStats.is_dead(c) or c.is_pc or c.clan == "":
+				continue
+			if pref != -1 and c.school_type != pref:
+				continue
+			var group: String
+			if ctype == FestivalSystem.ChampionshipType.AMETHYST:
+				if c.family not in _IMPERIAL_FAMILIES:
+					continue  # Amethyst: Imperial families only (s11.5)
+				group = c.family
+			else:
+				if c.clan not in OtomoSeiyakuSystem.GREAT_CLANS:
+					continue  # one nominee per Great Clan
+				group = c.clan
+			var cur: L5RCharacterData = best_by_group.get(group, null)
+			if cur == null or _championship_competence(c, stages) > _championship_competence(cur, stages):
+				best_by_group[group] = c
+		if best_by_group.size() < 2:
+			continue  # cannot hold a championship with fewer than 2 nominees
+		var candidates: Array = []
+		for g in best_by_group.keys():
+			var c: L5RCharacterData = best_by_group[g]
+			candidates.append({
+				"character_id": c.character_id,
+				"championship": ctype,
+				"skill_ranks": c.skills,
+				"traits": {
+					"reflexes": c.reflexes, "awareness": c.awareness, "agility": c.agility,
+					"intelligence": c.intelligence, "strength": c.strength, "perception": c.perception,
+					"stamina": c.stamina, "willpower": c.willpower, "void_ring": c.void_ring,
+				},
+				"honor": c.honor,
+			})
+		var result: Dictionary = FestivalSystem.resolve_championship(candidates, dice_engine)
+		var champ_id: int = result.get("winner_id", -1)
+		var champ: L5RCharacterData = characters_by_id.get(champ_id, null)
+		if champ == null:
+			continue
+		champ.role_position = role
+		var topic := TopicData.new()
+		topic.topic_id = next_topic_id[0]
+		next_topic_id[0] += 1
+		topic.slug = "jeweled_champion_%d_%d_d%d" % [ctype, champ_id, ic_day]
+		topic.title = "%s is named %s" % [champ.character_name, role]
+		topic.topic_type = "tournament"
+		topic.category = TopicData.Category.POLITICAL
+		topic.tier = TopicData.Tier.TIER_3
+		topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+		topic.ic_day_created = ic_day
+		topic.subject_character_id = champ_id
+		topic.clan_involved = champ.clan
+		active_topics.append(topic)
+		if topic.topic_id not in champ.topic_pool:
+			champ.topic_pool.append(topic.topic_id)
+		outcomes[ctype] = {"champion_id": champ_id, "nominee_count": candidates.size(), "topic_id": topic.topic_id}
+	return outcomes
+
+
+## Championship competence proxy: sum of the candidate's best skill rank for each stage.
+static func _championship_competence(c: L5RCharacterData, stages: Array) -> int:
+	var total: int = 0
+	for stage in stages:
+		var sk: Variant = stage.get("skill", "")
+		if sk is Array:
+			var best: int = 0
+			for s in sk:
+				best = maxi(best, c.skills.get(s, 0))
+			total += best
+		elif sk == "elemental_ring":
+			total += maxi(c.intelligence, maxi(c.willpower, maxi(c.agility, c.strength)))
+		else:
+			total += c.skills.get(str(sk), 0)
+	return total
+
+
+static func _process_topaz_championship(
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	# Gather Insight Rank 1 graduates, grouped by clan.
+	var by_clan: Dictionary = {}
+	for cid in characters_by_id.keys():
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.insight_rank != 1 or c.clan == "":
+			continue
+		by_clan.get_or_add(c.clan, []).append(c)
+	# Each clan sends up to 3 of its finest (by Topaz-stage skill competence).
+	var candidates: Array = []
+	for clan in by_clan.keys():
+		var roster: Array = by_clan[clan]
+		roster.sort_custom(func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+			return _topaz_competence(a) > _topaz_competence(b))
+		for i in mini(3, roster.size()):
+			var c: L5RCharacterData = roster[i]
+			candidates.append({
+				"character_id": c.character_id,
+				"championship": FestivalSystem.ChampionshipType.TOPAZ,
+				"skill_ranks": c.skills,
+				"traits": {
+					"reflexes": c.reflexes, "awareness": c.awareness, "agility": c.agility,
+					"intelligence": c.intelligence, "strength": c.strength, "perception": c.perception,
+					"stamina": c.stamina, "willpower": c.willpower, "void_ring": c.void_ring,
+				},
+				"honor": c.honor,
+			})
+	if candidates.size() < 2:
+		return {}
+	var result: Dictionary = FestivalSystem.resolve_championship(candidates, dice_engine)
+	var champ_id: int = result.get("winner_id", -1)
+	var champ: L5RCharacterData = characters_by_id.get(champ_id, null)
+	if champ == null:
+		return {}
+	# Transfer the title: the prior holder loses it (s11.5) and — as is most frequent for a
+	# former Topaz Champion (s11.5 / s02.1 "Topaz Magistrates") — is appointed an Emerald
+	# Magistrate. Deterministic appointment ("most frequently"); the offer/refusal model is
+	# deferred (no values).
+	for cid in characters_by_id.keys():
+		var holder: L5RCharacterData = characters_by_id[cid]
+		if holder != null and not CharacterStats.is_dead(holder) \
+				and holder.role_position == RoleRegistry.TOPAZ_CHAMPION and holder.character_id != champ_id:
+			holder.role_position = RoleRegistry.EMERALD_MAGISTRATE
+	champ.role_position = RoleRegistry.TOPAZ_CHAMPION
+	# Named reputation: a TIER_4 PERSONAL topic about the new champion.
+	var topic := TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.slug = "topaz_champion_%d_d%d" % [champ_id, ic_day]
+	topic.title = "%s is named Topaz Champion" % champ.character_name
+	topic.topic_type = "tournament"
+	topic.category = TopicData.Category.PERSONAL
+	topic.tier = TopicData.Tier.TIER_4
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+	topic.ic_day_created = ic_day
+	topic.subject_character_id = champ_id
+	topic.clan_involved = champ.clan
+	active_topics.append(topic)
+	if topic.topic_id not in champ.topic_pool:
+		champ.topic_pool.append(topic.topic_id)
+	return {
+		"champion_id": champ_id,
+		"candidate_count": candidates.size(),
+		"topic_id": topic.topic_id,
+	}
+
+
+## Topaz-stage competence proxy for clan-roster ranking (s11.5 stages: Athletics,
+## Kenjutsu/Iaijutsu, Etiquette/Lore: History).
+static func _topaz_competence(c: L5RCharacterData) -> int:
+	var athletics: int = c.skills.get("Athletics", 0)
+	var blade: int = maxi(c.skills.get("Kenjutsu", 0), c.skills.get("Iaijutsu", 0))
+	var social: int = maxi(c.skills.get("Etiquette", 0), c.skills.get("Lore: History", 0))
+	return athletics + blade + social
+
+
+## s27.9 Badger Great Games — annual sumai tournament at Shiro Ichiro. Gathers the living
+## non-PC wrestlers (Jiujutsu >= 1) present in the Badger province, runs a single-elimination
+## bracket (IndividualCombat.resolve_sumai_tournament, GDD s40 rule), and gives the champion a
+## named reputation (TIER_4 PERSONAL topic). Champion Glory is deferred — s27.9 says "gains
+## Glory" but specifies no value (do not invent).
+static func _process_badger_great_games(
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	_settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	# Find the Badger province and its settlement ids.
+	var badger_sids: Dictionary = {}
+	for pid in provinces.keys():
+		var pv: Variant = provinces[pid]
+		if pv is ProvinceData and (pv as ProvinceData).clan == "Badger":
+			for sid in (pv as ProvinceData).settlement_ids:
+				badger_sids[str(sid)] = true
+	if badger_sids.is_empty():
+		return {}
+	# Gather present, living, non-PC wrestlers.
+	var entrants: Array = []
+	for cid in characters_by_id.keys():
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.skills.get("Jiujutsu", 0) < 1:
+			continue
+		if badger_sids.has(c.physical_location):
+			entrants.append(c)
+	if entrants.size() < 2:
+		return {}
+	var result: Dictionary = IndividualCombat.resolve_sumai_tournament(entrants, dice_engine)
+	var champ_id: int = result.get("champion_id", -1)
+	var champ: L5RCharacterData = characters_by_id.get(champ_id, null)
+	if champ == null:
+		return {}
+	# Named reputation: a TIER_4 PERSONAL topic about the champion.
+	var topic := TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.slug = "great_games_champion_%d_d%d" % [champ_id, ic_day]
+	topic.title = "%s wins the Badger Great Games" % champ.character_name
+	topic.topic_type = "tournament"
+	topic.category = TopicData.Category.PERSONAL
+	topic.tier = TopicData.Tier.TIER_4
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+	topic.ic_day_created = ic_day
+	topic.subject_character_id = champ_id
+	topic.clan_involved = champ.clan
+	active_topics.append(topic)
+	if topic.topic_id not in champ.topic_pool:
+		champ.topic_pool.append(topic.topic_id)
+	return {
+		"champion_id": champ_id,
+		"participant_count": result.get("participant_count", 0),
+		"rounds": result.get("rounds", 0),
+		"topic_id": topic.topic_id,
+	}
+
 
 static func _resolve_scheduled_hunts(
 	active_hunts: Array,
@@ -27500,6 +29734,97 @@ static func _process_garden_visitor_effects(
 				var daimyo: L5RCharacterData = characters_by_id.get(daimyo_id)
 				if daimyo != null and not CharacterStats.is_dead(daimyo):
 					HonorGlorySystem.apply_glory_change(daimyo, visit_result.get("daimyo_glory", 0.0))
+
+
+## s57.24 displayed-bonsai visitor effect (parallel to gardens): co-located living characters
+## gain a disposition bonus toward the bonsai's owner, duplicate-guarded (per visitor per
+## bonsai) and expiring after VISITOR_BONUS_DURATION_DAYS. Bonsai entries in
+## active_garden_bonuses carry kind:"bonsai" so they never collide with garden ids.
+## s12.2b: apply collective-disposition ripples for war declarations (clans worsen) and
+## peace settlements (clans improve). Annihilation is excluded — there is no treaty.
+static func _apply_war_collective_disposition(
+	war_declarations: Array,
+	war_termination_results: Array,
+	active_wars: Array,
+	clan_baselines: Dictionary,
+) -> void:
+	for d_v: Variant in war_declarations:
+		var d: Dictionary = d_v as Dictionary
+		if d.get("event", "") != "war_declared":
+			continue
+		CollectiveDisposition.apply_clan_war_declared(
+			d.get("declaring_clan", ""), d.get("target_clan", ""), clan_baselines,
+		)
+	for r_v: Variant in war_termination_results:
+		var r: Dictionary = r_v as Dictionary
+		var res: String = r.get("resolution", "")
+		if res == WarTermination.RESOLUTION_NAMES[WarTermination.ResolutionType.ANNIHILATION]:
+			continue  # one clan destroyed — no peace treaty
+		var war_id: int = r.get("war_id", -1)
+		if war_id < 0:
+			continue
+		for w_v: Variant in active_wars:
+			var w: WarData = w_v as WarData
+			if w != null and w.war_id == war_id:
+				CollectiveDisposition.apply_clan_peace_treaty(w.clan_a, w.clan_b, clan_baselines)
+				break
+
+
+static func _process_bonsai_visitor_effects(
+	active_bonsai: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> void:
+	if active_bonsai.is_empty():
+		return
+	var chars_at: Dictionary = {}
+	for char_v: Variant in characters:
+		var c: L5RCharacterData = char_v as L5RCharacterData
+		if c == null or CharacterStats.is_dead(c) or c.physical_location.is_empty():
+			continue
+		chars_at.get_or_add(c.physical_location, []).append(c)
+
+	for b_v: Variant in active_bonsai:
+		if not b_v is BonsaiData:
+			continue
+		var bonsai: BonsaiData = b_v as BonsaiData
+		if bonsai.is_dead or bonsai.display_settlement_id < 0:
+			continue
+		var present: Array = chars_at.get(str(bonsai.display_settlement_id), [])
+		for char_v: Variant in present:
+			var visitor: L5RCharacterData = char_v as L5RCharacterData
+			if visitor.character_id == bonsai.owner_id:
+				continue
+			# Duplicate guard (per visitor per bonsai).
+			var already: bool = false
+			for e_v: Variant in visitor.active_garden_bonuses:
+				var e: Dictionary = e_v as Dictionary
+				if e.get("kind", "") == "bonsai" and e.get("garden_id", -1) == bonsai.bonsai_id \
+						and e.get("expires_ic_day", 0) > ic_day:
+					already = true
+					break
+			if already:
+				continue
+			var visit: Dictionary = GardenSystem.apply_bonsai_visitor(
+				bonsai, visitor.character_id, bonsai.owner_id, ic_day,
+			)
+			if visit.get("bonus", 0) <= 0:
+				continue
+			var bucket: Array = visitor.temporary_modifiers.get(bonsai.owner_id, [])
+			bucket.append({
+				"event_type": "bonsai_visitor",
+				"value": visit["bonus"],
+				"created_ic_day": ic_day,
+				"duration": GardenSystem.VISITOR_BONUS_DURATION_DAYS,
+			})
+			visitor.temporary_modifiers[bonsai.owner_id] = bucket
+			visitor.active_garden_bonuses.append({
+				"kind": "bonsai",
+				"garden_id": bonsai.bonsai_id,
+				"creator_id": bonsai.owner_id,
+				"expires_ic_day": ic_day + GardenSystem.VISITOR_BONUS_DURATION_DAYS,
+			})
 
 
 static func _process_garden_seasonal_maintenance(

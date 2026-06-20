@@ -12,3 +12,8 @@ extends Resource
 @export var size: String = "Medium"  # "Small" / "Medium" / "Large" (affects off-hand penalties, Prone)
 @export var melee: bool = true
 @export var attack_trait: String = "agility"  # "agility"/"reflexes" ('trait' is reserved in Godot 4.6)
+## Weapon material for the s54 spirit/oni damage filter (incorporeal, invulnerability,
+## kind-gated Reduction). "" / "steel" = mundane; "jade"/"crystal"/"obsidian"/"magic"/
+## "fire"/"water" map to the SpiritAbilitySystem.W_* weapon kinds. Most weapons are
+## mundane — only enchanted/blessed/elemental weapons set this.
+@export var material: String = ""

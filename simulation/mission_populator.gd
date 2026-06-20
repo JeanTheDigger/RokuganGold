@@ -166,7 +166,7 @@ static func populate(map: AsciiMapData, roster: Dictionary, seed: int) -> Array:
 
 		var tier_order: Array = _ROLE_TIERS.get(role_str,
 			[TIER_BULK, TIER_PATROL, TIER_GUARD, TIER_LEADER])
-		var candidate_slots: Array = _gather_candidates(slots_by_tier, tier_order)
+		var candidate_slots: Array = _gather_candidates(slots_by_tier, tier_order, map)
 
 		var variance_chance: float = roster.get("individual_variance_chance",
 			RosterCompositionSystem.INDIVIDUAL_VARIANCE_CHANCE_MIN)
@@ -221,7 +221,8 @@ static func populate_sortie(
 		map.population_slots,
 		"friendly",
 		rng,
-		variance_chance
+		variance_chance,
+		map
 	)
 	var enemy_placements: Array = _place_group_list(
 		_sort_groups(roster.get("enemy_groups", [])),
@@ -229,7 +230,8 @@ static func populate_sortie(
 		map.population_slots,
 		"enemy",
 		rng,
-		variance_chance
+		variance_chance,
+		map
 	)
 
 	return {"friendly": friendly_placements, "enemy": enemy_placements}
@@ -264,12 +266,21 @@ static func _bucket_slots(slots: Array, tier_map: Dictionary) -> Dictionary:
 
 
 # Returns slots from slots_by_tier in tier_order priority; earlier tiers first.
+# When the map carries a computed depth grid (s56.21), slots within the gathered
+# candidate set are ordered deepest-first (highest path-distance from entry) so
+# that earlier-processed (stronger) roles and the leader take the deepest slots.
+# Falls back to tier order alone when depth is uncomputed (e.g. unit tests that
+# call populate() on a raw generated map).
 static func _gather_candidates(
-		slots_by_tier: Dictionary, tier_order: Array) -> Array:
+		slots_by_tier: Dictionary, tier_order: Array, map: AsciiMapData) -> Array:
 	var result: Array = []
 	for tier in tier_order:
 		var bucket: Array = slots_by_tier.get(tier, [])
 		result.append_array(bucket)
+	if map != null and map.has_depth_grid() and result.size() > 1:
+		result.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return map.depth_at(a.get("x", 0), a.get("y", 0)) \
+				> map.depth_at(b.get("x", 0), b.get("y", 0)))
 	return result
 
 
@@ -313,7 +324,8 @@ static func _place_group_list(
 		all_slots: Array,
 		side: String,
 		rng: RandomNumberGenerator,
-		variance_chance: float) -> Array:
+		variance_chance: float,
+		map: AsciiMapData) -> Array:
 	var placements: Array = []
 	for group: Dictionary in sorted_groups:
 		var role_str: String  = group.get("role", "")
@@ -323,7 +335,7 @@ static func _place_group_list(
 			continue
 		var tier_order: Array    = _ROLE_TIERS.get(role_str,
 			[TIER_BULK, TIER_PATROL, TIER_GUARD, TIER_LEADER])
-		var candidates: Array    = _gather_candidates(slots_by_tier, tier_order)
+		var candidates: Array    = _gather_candidates(slots_by_tier, tier_order, map)
 		for i in range(count):
 			var slot_dict: Dictionary = _pick_slot(candidates, all_slots, i)
 			var entry: Dictionary = {

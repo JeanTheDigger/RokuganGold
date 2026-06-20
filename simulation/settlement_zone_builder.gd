@@ -83,6 +83,11 @@ static func build(
 	is_coastal: bool,
 	lord_rank: int,
 ) -> Dictionary:
+	# Otosan Uchi, the Imperial Capital, has a hand-defined 16-district graph
+	# rather than procedural city fill (s2.3.23).
+	if settlement.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+		return OtosanUchiZoneBuilder.build(settlement)
+
 	var sid: int = settlement.settlement_id
 	var sname: String = settlement.settlement_name
 	var stype: int = settlement.settlement_type

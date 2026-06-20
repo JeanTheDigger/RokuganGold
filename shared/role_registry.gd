@@ -46,6 +46,11 @@ enum PositionType {
 	WALL_SEGMENT_COMMANDER,
 	HIRUMA_SCOUT_COMMANDER,
 	SAMURAI,
+	# Otosan Uchi governance (s2.3.23) — appended last to keep existing enum
+	# values stable across saves.
+	SENTAKU_TRIBUNAL_CHAIR,
+	SENTAKU_TRIBUNAL_MEMBER,
+	GOVERNOR_OTOSAN_UCHI,
 }
 
 
@@ -91,6 +96,11 @@ const MINOR_CLAN_CHAMPION: String = "Minor Clan Champion"
 const MINOR_CLAN_SENIOR: String = "Minor Clan Senior"
 const WALL_SEGMENT_COMMANDER: String = "Wall Segment Commander"
 const HIRUMA_SCOUT_COMMANDER: String = "Hiruma Scout Commander"
+const SENTAKU_TRIBUNAL_CHAIR: String = "Sentaku Tribunal Chair"
+const SENTAKU_TRIBUNAL_MEMBER: String = "Sentaku Tribunal Member"
+# All 15 Otosan Uchi Governors share role_position "Governor"; the district they
+# rule is distinguished by L5RCharacterData.governed_zone_id (s2.3.23).
+const GOVERNOR_OTOSAN_UCHI: String = "Governor"
 
 
 # -- Enum ↔ String Mapping -----------------------------------------------------
@@ -136,6 +146,9 @@ const POSITION_NAMES: Dictionary = {
 	PositionType.WALL_SEGMENT_COMMANDER: WALL_SEGMENT_COMMANDER,
 	PositionType.HIRUMA_SCOUT_COMMANDER: HIRUMA_SCOUT_COMMANDER,
 	PositionType.SAMURAI: "",
+	PositionType.SENTAKU_TRIBUNAL_CHAIR: SENTAKU_TRIBUNAL_CHAIR,
+	PositionType.SENTAKU_TRIBUNAL_MEMBER: SENTAKU_TRIBUNAL_MEMBER,
+	PositionType.GOVERNOR_OTOSAN_UCHI: GOVERNOR_OTOSAN_UCHI,
 }
 
 
@@ -182,6 +195,12 @@ const POSITION_RANK: Dictionary = {
 	PositionType.WALL_SEGMENT_COMMANDER: 4,
 	PositionType.HIRUMA_SCOUT_COMMANDER: 4,
 	PositionType.SAMURAI: 1,
+	# PROVISIONAL (s52a world-init category): insight ranks mirror comparable
+	# positions (Imperial Family Daimyo 4 / Senior Courtier 3). GDD s2.3.23 gives
+	# Status but not insight rank for these.
+	PositionType.SENTAKU_TRIBUNAL_CHAIR: 4,
+	PositionType.SENTAKU_TRIBUNAL_MEMBER: 3,
+	PositionType.GOVERNOR_OTOSAN_UCHI: 3,
 }
 
 
@@ -228,6 +247,11 @@ const POSITION_STATUS: Dictionary = {
 	PositionType.WALL_SEGMENT_COMMANDER: 3.5,
 	PositionType.HIRUMA_SCOUT_COMMANDER: 3.5,
 	PositionType.SAMURAI: 1.0,
+	# s2.3.23: Chair 6.5, members 6.0. Governor default 4.5 (Toshisoto); Ekohikei
+	# Governors are raised to 5.0 at creation (rarer honour).
+	PositionType.SENTAKU_TRIBUNAL_CHAIR: 6.5,
+	PositionType.SENTAKU_TRIBUNAL_MEMBER: 6.0,
+	PositionType.GOVERNOR_OTOSAN_UCHI: 4.5,
 }
 
 
@@ -277,6 +301,10 @@ const COURTIER_POSITION_TYPES: Array[int] = [
 	PositionType.VOICE_OF_EMPEROR,
 	PositionType.SENIOR_COURTIER,
 	PositionType.EMERALD_MAGISTRATE,
+	# Otosan Uchi governance is politics (s2.3.23: "Courtier — primary").
+	PositionType.SENTAKU_TRIBUNAL_CHAIR,
+	PositionType.SENTAKU_TRIBUNAL_MEMBER,
+	PositionType.GOVERNOR_OTOSAN_UCHI,
 ]
 
 const SHUGENJA_POSITION_TYPES: Array[int] = [

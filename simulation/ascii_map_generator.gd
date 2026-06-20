@@ -87,6 +87,24 @@ static func generate(
 			_gen_wall_tower(map, rng)
 		Enums.ZoneSubtype.PEASANT_DWELLING:
 			_gen_peasant_dwelling(map, rng)
+		Enums.ZoneSubtype.UNDERGROUND_LAKE:
+			_gen_underground_lake(map, rng)
+		Enums.ZoneSubtype.THRONE_ROOM:
+			_gen_throne_room(map, rng)
+		Enums.ZoneSubtype.LABYRINTH:
+			_gen_labyrinth(map, rng)
+		Enums.ZoneSubtype.ONI_WARAI:
+			_gen_oni_warai(map, rng)
+		Enums.ZoneSubtype.RUINED_STRUCTURE:
+			_gen_ruined_structure(map, rng)
+		Enums.ZoneSubtype.BARRACKS:
+			_gen_barracks(map, rng)
+		Enums.ZoneSubtype.LIBRARY:
+			_gen_library(map, rng)
+		Enums.ZoneSubtype.TOMB:
+			_gen_tomb(map, rng)
+		Enums.ZoneSubtype.TREASURY_VAULT:
+			_gen_treasury_vault(map, rng)
 		_:
 			_gen_default(map, rng)
 
@@ -648,6 +666,416 @@ static func _gen_river_crossing(map: AsciiMapData, rng: RandomNumberGenerator) -
 		{x = MID, y = 0, direction = "north", target_zone_id = ""},
 		{x = MID, y = S - 1, direction = "south", target_zone_id = ""},
 	]
+
+
+# UNDERGROUND_LAKE (s2.3.23): the small subterranean lake beneath the Juramashi
+# District. A hidden tunnel from the ground level above descends (the single zone
+# exit) to a stone shore; the deep water is impassable, so a treacherous wadeable
+# causeway is the only approach to a central island ringed by sharp coral (RUBBLE,
+# difficult + cover) and jagged rocks (WALL_STONE, impassable). On the island sits
+# the criminal trading post (a small wooden hut). A bed of Naga eggs lies hidden
+# within the coral — lore only; no spawn/encounter mechanic until the s56 quest
+# layer. Deterministic from the caller's seeded rng.
+static func _gen_underground_lake(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	# Solid cavern rock.
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.WALL_STONE)
+
+	# Carve the lake: an ellipse of deep water, leaving a rock rim at the edges.
+	var cx: int = MID
+	var cy: int = MID + 1
+	var rx: int = 12
+	var ry: int = 10
+	for y in range(1, S - 1):
+		for x in range(1, S - 1):
+			var ex: float = float(x - cx) / float(rx)
+			var ey: float = float(y - cy) / float(ry)
+			if ex * ex + ey * ey <= 1.0:
+				map.set_tile(x, y, Enums.TileType.WATER_DEEP)
+
+	# Hidden entrance tunnel down from Juramashi + a small stone shore landing.
+	for y in range(0, 4):
+		map.set_tile(MID, y, Enums.TileType.FLOOR_STONE)
+	_fill_rect(map, MID - 2, 3, MID + 2, 4, Enums.TileType.FLOOR_STONE)
+
+	# Central island (the criminal trading post stands here).
+	var ix: int = cx
+	var iy: int = cy
+	for y in range(iy - 3, iy + 4):
+		for x in range(ix - 3, ix + 4):
+			if x < 1 or x >= S - 1 or y < 1 or y >= S - 1:
+				continue
+			var dx: float = float(x - ix) / 3.0
+			var dy: float = float(y - iy) / 3.0
+			if dx * dx + dy * dy <= 1.0:
+				map.set_tile(x, y, Enums.TileType.FLOOR_STONE)
+
+	# Coral + jagged-rock ring (annulus) around the island. North column is left
+	# clear for the causeway approach. The Naga egg bed hides within this coral.
+	for y in range(iy - 5, iy + 6):
+		for x in range(ix - 5, ix + 6):
+			if x < 1 or x >= S - 1 or y < 1 or y >= S - 1:
+				continue
+			var ed: float = pow(float(x - ix) / 5.0, 2.0) + pow(float(y - iy) / 5.0, 2.0)
+			if ed > 1.0 or ed < 0.5:
+				continue
+			if map.get_tile(x, y) == Enums.TileType.FLOOR_STONE:
+				continue
+			if x >= ix - 1 and x <= ix + 1 and y < iy:
+				continue  # north gap for the causeway
+			if rng.randi() % 4 == 0:
+				map.set_tile(x, y, Enums.TileType.WALL_STONE)  # jagged rock
+			else:
+				map.set_tile(x, y, Enums.TileType.RUBBLE)       # sharp coral
+
+	# Causeway: a wadeable shallow path from the shore across the deep water to the
+	# island — the only safe approach (the rest of the lake is impassable).
+	for y in range(4, iy - 2):
+		map.set_tile(MID, y, Enums.TileType.WATER_SHALLOW)
+
+	# Criminal trading post: a small wooden hut on the island, door facing the causeway.
+	_fill_rect(map, ix - 1, iy - 1, ix + 1, iy + 1, Enums.TileType.FLOOR_WOOD)
+	map.set_tile(ix - 1, iy - 1, Enums.TileType.WALL_WOOD)
+	map.set_tile(ix + 1, iy - 1, Enums.TileType.WALL_WOOD)
+	map.set_tile(ix - 1, iy + 1, Enums.TileType.WALL_WOOD)
+	map.set_tile(ix + 1, iy + 1, Enums.TileType.WALL_WOOD)
+	map.set_tile(ix, iy - 1, Enums.TileType.DOOR_WOOD_CLOSED)
+
+	# Single zone exit — the hidden tunnel back up to the Juramashi District.
+	map.set_tile(MID, 0, Enums.TileType.ZONE_EXIT)
+	map.exits = [
+		{x = MID, y = 0, direction = "north", target_zone_id = ""},
+	]
+
+
+# LABYRINTH (s2.3.23): the Emperor's Labyrinth — a maze of tunnels beneath the
+# Forbidden City. Ancient Scorpion wards leave anyone without Hantei blood
+# "hopelessly lost," so the layout is a true perfect maze (a randomized
+# depth-first spanning tree over a cell grid: full connectivity, many dead ends).
+# Two exits: the hidden palace entrance (north) and the escape route to the shore
+# of the Bay of the Golden Sun (south). Deterministic from the caller's seeded rng.
+static func _gen_labyrinth(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.WALL_STONE)
+
+	# Maze cells sit on odd tile coordinates; walls between them on even ones.
+	var cols: int = (S - 1) / 2  # 15 cells per axis
+	var rows: int = (S - 1) / 2
+	var visited: Dictionary = {}
+	var stack: Array[Vector2i] = []
+	var start: Vector2i = Vector2i(0, 0)
+	map.set_tile(1, 1, Enums.TileType.FLOOR_STONE)
+	visited["0_0"] = true
+	stack.append(start)
+	var dirs: Array[Vector2i] = [
+		Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)
+	]
+	while not stack.is_empty():
+		var c: Vector2i = stack[stack.size() - 1]
+		var unvisited: Array[Vector2i] = []
+		for d in dirs:
+			var ni: int = c.x + d.x
+			var nj: int = c.y + d.y
+			if ni >= 0 and ni < cols and nj >= 0 and nj < rows \
+					and not visited.has(str(ni) + "_" + str(nj)):
+				unvisited.append(Vector2i(ni, nj))
+		if unvisited.is_empty():
+			stack.pop_back()
+			continue
+		var n: Vector2i = unvisited[rng.randi() % unvisited.size()]
+		# Carve the wall between c and n, and the n cell itself.
+		var cx: int = 2 * c.x + 1
+		var cy: int = 2 * c.y + 1
+		var nx: int = 2 * n.x + 1
+		var ny: int = 2 * n.y + 1
+		map.set_tile((cx + nx) / 2, (cy + ny) / 2, Enums.TileType.FLOOR_STONE)
+		map.set_tile(nx, ny, Enums.TileType.FLOOR_STONE)
+		visited[str(n.x) + "_" + str(n.y)] = true
+		stack.append(n)
+
+	# Two exits, both opening onto carved cells (the maze is fully connected).
+	map.set_tile(MID, 0, Enums.TileType.ZONE_EXIT)          # hidden palace entrance
+	map.set_tile(MID, 1, Enums.TileType.FLOOR_STONE)
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)      # escape to the Bay
+	map.set_tile(MID, S - 2, Enums.TileType.FLOOR_STONE)
+	map.exits = [
+		{x = MID, y = 0, direction = "north", target_zone_id = ""},
+		{x = MID, y = S - 1, direction = "south", target_zone_id = ""},
+	]
+
+
+# ONI_WARAI (s2.3.23): the Oni's Smile — a massive earthquake crevice. Walkable
+# rock ledges flank a bottomless VOID chasm (the deadly depths: explorers return
+# blind, mad, or not at all). A treacherous rubble rock-bridge crosses near the
+# middle. One surface exit (north); the chasm is a dead-end abyss, not a through
+# route. Deterministic from the caller's seeded rng.
+static func _gen_oni_warai(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.WALL_STONE)
+
+	# The chasm: a bottomless gash down the centre (impassable VOID).
+	_fill_rect(map, 7, 2, S - 8, S - 3, Enums.TileType.VOID)
+	# Walkable rock ledges on each side of the gash.
+	_fill_rect(map, 3, 2, 6, S - 3, Enums.TileType.FLOOR_STONE)
+	_fill_rect(map, S - 7, 2, S - 4, S - 3, Enums.TileType.FLOOR_STONE)
+	# Jagged broken rock along the ledge edges.
+	for y in range(2, S - 2):
+		if rng.randi() % 3 == 0:
+			map.set_tile(6, y, Enums.TileType.RUBBLE)
+		if rng.randi() % 3 == 0:
+			map.set_tile(S - 7, y, Enums.TileType.RUBBLE)
+	# A treacherous rubble bridge crossing the chasm near the middle.
+	_fill_rect(map, 7, MID, S - 8, MID, Enums.TileType.RUBBLE)
+
+	# Single surface entrance at the top of the left ledge.
+	map.set_tile(4, 0, Enums.TileType.ZONE_EXIT)
+	map.set_tile(4, 1, Enums.TileType.FLOOR_STONE)
+	map.exits = [{x = 4, y = 0, direction = "north", target_zone_id = ""}]
+
+
+# RUINED_STRUCTURE (s2.3.23): a collapsed, haunted building (e.g. Tenari's ruins,
+# an earthquake-destroyed estate). An original floor plan with ~35% of its walls
+# collapsed into rubble and debris strewn across the floors; a few rooms remain
+# intact. A cleared spine guarantees the entrance reaches the interior. Mirrors
+# the s56 ruined-structure approach on the zone tile grid. Deterministic.
+static func _gen_ruined_structure(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_DIRT)  # overgrown grounds
+
+	# Original building shell + interior cross-walls (four rooms).
+	var x1: int = 4
+	var y1: int = 4
+	var x2: int = S - 5
+	var y2: int = S - 5
+	_fill_rect(map, x1 + 1, y1 + 1, x2 - 1, y2 - 1, Enums.TileType.FLOOR_WOOD)
+	_draw_stone_border(map, x1, y1, x2, y2)
+	for y in range(y1, y2 + 1):
+		map.set_tile(MID, y, Enums.TileType.WALL_STONE)
+	for x in range(x1, x2 + 1):
+		map.set_tile(x, MID, Enums.TileType.WALL_STONE)
+
+	# Collapse: ~35% of wall tiles fall to rubble; ~12% of floors gather debris.
+	for y in range(y1, y2 + 1):
+		for x in range(x1, x2 + 1):
+			var t: int = map.get_tile(x, y)
+			if t == Enums.TileType.WALL_STONE and rng.randi() % 100 < 35:
+				map.set_tile(x, y, Enums.TileType.RUBBLE)
+			elif t == Enums.TileType.FLOOR_WOOD and rng.randi() % 100 < 12:
+				map.set_tile(x, y, Enums.TileType.RUBBLE)
+
+	# A guaranteed clear path from the south entrance through the building.
+	for y in range(MID, S - 1):
+		map.set_tile(MID, y, Enums.TileType.FLOOR_WOOD)
+	map.set_tile(MID, y2, Enums.TileType.FLOOR_WOOD)  # gap in the south wall
+
+	# South entrance + exit.
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# LIBRARY (s2.3.23): a scholarly reading hall (the Takeo Library). Vertical book
+# stacks separated by 1-tile walking aisles fill the north two-thirds; an open
+# reading hall with study desks sits at the south near the entrance. A clear
+# central aisle plus clear north/south cross-aisles keep every stack reachable.
+static func _gen_library(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_WOOD)
+	_draw_wood_border(map, 0, 0, S - 1, S - 1)
+
+	# Book stacks: vertical shelf runs with a 1-tile aisle between each, stopping
+	# short of the south reading hall (y < S-9) and the north cross-aisle (y > 3).
+	# The central aisle (MID-1..MID+1) is kept clear top to bottom.
+	for sx in [4, 6, 8, 10, 12, S - 13, S - 11, S - 9, S - 7, S - 5]:
+		if sx >= MID - 1 and sx <= MID + 1:
+			continue
+		for sy in range(4, S - 9):
+			map.set_tile(sx, sy, Enums.TileType.FURNITURE_SHELF)
+
+	# Scroll chests against the north wall, in the top cross-aisle.
+	map.set_tile(2, 2, Enums.TileType.FURNITURE_CHEST)
+	map.set_tile(S - 3, 2, Enums.TileType.FURNITURE_CHEST)
+
+	# South reading hall: study desks with cushions, an incense burner by the wall.
+	for dx in [MID - 5, MID + 5]:
+		map.set_tile(dx, S - 5, Enums.TileType.FURNITURE_TABLE)
+		map.set_tile(dx, S - 6, Enums.TileType.FURNITURE_CUSHION)
+		map.set_tile(dx, S - 4, Enums.TileType.FURNITURE_CUSHION)
+	map.set_tile(3, S - 3, Enums.TileType.FURNITURE_INCENSE)
+
+	# South entrance + zone exit.
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# TOMB (s2.3.23): a solemn funerary chamber (the Kinjiren Tombs; the Hantei
+# burial ground of Seppun Hill). A central processional aisle runs from the south
+# entrance to a memorial altar at the north; memorial statues and offering boxes
+# flank the aisle, with stone burial coffers in the side bays. Stone throughout.
+static func _gen_tomb(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_STONE)
+	_draw_stone_border(map, 0, 0, S - 1, S - 1)
+
+	# Memorial altar at the north terminus, flanked by incense, with a prayer mat.
+	map.set_tile(MID, 2, Enums.TileType.FURNITURE_ALTAR)
+	map.set_tile(MID - 1, 2, Enums.TileType.FURNITURE_INCENSE)
+	map.set_tile(MID + 1, 2, Enums.TileType.FURNITURE_INCENSE)
+	map.set_tile(MID, 4, Enums.TileType.FURNITURE_PRAYER_MAT)
+
+	# Flanking memorial statues + offering boxes down each side of the aisle
+	# (columns MID±3, clear of the MID-2..MID+2 processional aisle).
+	for sy in [7, 11, 15, 19, 23]:
+		map.set_tile(MID - 3, sy, Enums.TileType.FURNITURE_STATUE)
+		map.set_tile(MID + 3, sy, Enums.TileType.FURNITURE_STATUE)
+		map.set_tile(MID - 3, sy + 1, Enums.TileType.FURNITURE_OFFERING_BOX)
+		map.set_tile(MID + 3, sy + 1, Enums.TileType.FURNITURE_OFFERING_BOX)
+
+	# Burial coffers (stone caskets) in the side bays against the walls.
+	for cy in [8, 12, 16, 20]:
+		map.set_tile(2, cy, Enums.TileType.FURNITURE_CHEST)
+		map.set_tile(3, cy, Enums.TileType.FURNITURE_CHEST)
+		map.set_tile(S - 3, cy, Enums.TileType.FURNITURE_CHEST)
+		map.set_tile(S - 4, cy, Enums.TileType.FURNITURE_CHEST)
+
+	# South entrance + zone exit.
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# TREASURY_VAULT (s2.3.23): the Imperial Treasury — a guarded stone strongroom.
+# A single south entrance with a guard post opens onto a clear central aisle;
+# coffer banks (against the side walls, with even-row gaps), sealed jars, ledger
+# shelves and crates line the vault bays.
+static func _gen_treasury_vault(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_STONE)
+	_draw_stone_border(map, 0, 0, S - 1, S - 1)
+
+	# Coffer banks against the side walls, on odd rows only (even rows = access
+	# gaps), clear of the central aisle.
+	for cy in [3, 5, 7, 9, 11, 13]:
+		for cx in [2, 3, 4, S - 5, S - 4, S - 3]:
+			map.set_tile(cx, cy, Enums.TileType.FURNITURE_CHEST)
+	# Sealed valuables and ledger shelves deeper in (isolated obstacles).
+	for vx in [7, 9, S - 10, S - 8]:
+		map.set_tile(vx, 3, Enums.TileType.FURNITURE_JAR)
+		map.set_tile(vx, 5, Enums.TileType.FURNITURE_CRATE)
+	map.set_tile(MID - 3, 3, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(MID + 3, 3, Enums.TileType.FURNITURE_SHELF)
+
+	# Guard post at the entrance: a weapon stand and a brazier, flanking the aisle.
+	map.set_tile(MID - 2, S - 3, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(MID + 2, S - 3, Enums.TileType.FURNITURE_BRAZIER)
+
+	# Single guarded south entrance + zone exit.
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# BARRACKS (s2.3.23): soldier housing (a guard kaisha or embassy garrison hall).
+# Rows of futon sleeping bays with foot-chests flank a clear central aisle; an
+# arms rack lines the north wall; a mess corner (tables, benches, a stove) sits
+# near the south entrance, with braziers for warmth. Deterministic from the
+# caller's seeded rng. Distinct from WAR_COUNCIL_ROOM (a strategy-table room).
+static func _gen_barracks(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_WOOD)
+	_draw_wood_border(map, 0, 0, S - 1, S - 1)
+
+	# Arms rack along the north wall (skipping the central aisle's north end).
+	for x in range(3, S - 3, 2):
+		if x < MID - 1 or x > MID + 1:
+			map.set_tile(x, 2, Enums.TileType.FURNITURE_WEAPON_STAND)
+
+	# Sleeping bays: paired futons down each side with a foot-chest at the wall.
+	# The central aisle (columns MID-1..MID+1) is kept clear.
+	for by in [5, 8, 11, 14, 17]:
+		# Left bay.
+		map.set_tile(3, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(4, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(6, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(7, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(2, by, Enums.TileType.FURNITURE_CHEST)
+		# Right bay.
+		map.set_tile(S - 4, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(S - 5, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(S - 7, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(S - 8, by, Enums.TileType.FURNITURE_FUTON)
+		map.set_tile(S - 3, by, Enums.TileType.FURNITURE_CHEST)
+
+	# Braziers for warmth/light, clear of the aisle.
+	map.set_tile(9, 11, Enums.TileType.FURNITURE_BRAZIER)
+	map.set_tile(S - 10, 11, Enums.TileType.FURNITURE_BRAZIER)
+
+	# Mess corner near the south entrance: long tables + benches and a cook stove.
+	map.set_tile(MID - 4, S - 4, Enums.TileType.FURNITURE_TABLE)
+	map.set_tile(MID - 4, S - 5, Enums.TileType.FURNITURE_BENCH)
+	map.set_tile(MID - 4, S - 3, Enums.TileType.FURNITURE_BENCH)
+	map.set_tile(MID + 4, S - 4, Enums.TileType.FURNITURE_TABLE)
+	map.set_tile(MID + 4, S - 5, Enums.TileType.FURNITURE_BENCH)
+	map.set_tile(MID + 4, S - 3, Enums.TileType.FURNITURE_BENCH)
+	map.set_tile(3, S - 3, Enums.TileType.FURNITURE_STOVE)
+
+	# South entrance + zone exit.
+	map.set_tile(MID, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+
+# THRONE_ROOM (s2.3.23 / s57.36): the Imperial Palace's grandest hall, seat of
+# the Chrysanthemum Throne. A raised two-step dais at the head bears the throne
+# (no one may sit higher than the Son of Heaven), flanked by Imperial banners and
+# Seppun guards. The Road of the Most High enters as a central processional aisle
+# kept clear from the south doors to the throne. The assembled court kneels in
+# ranked cushion rows flanking the aisle — front rows nearest the throne are the
+# highest precedence. A colonnade lines the hall; a formal genkan frames the
+# south entrance. Deterministic from the caller's seeded rng. Grander than a
+# daimyo's OHIROMA: deeper dais, double guard, full ranked court.
+static func _gen_throne_room(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
+	_fill_rect(map, 0, 0, S - 1, S - 1, Enums.TileType.FLOOR_WOOD)
+	_draw_wood_border(map, 0, 0, S - 1, S - 1)
+
+	# Formal tatami hall.
+	_fill_rect(map, 2, 2, S - 3, S - 3, Enums.TileType.FLOOR_TATAMI)
+
+	# Two-step dais at the north — wide lower step (rows 2–6) and a raised throne
+	# step (rows 2–4) — so the Chrysanthemum Throne sits above all.
+	_fill_rect(map, 3, 2, S - 4, 6, Enums.TileType.FLOOR_STONE)
+	_fill_rect(map, 6, 2, S - 7, 4, Enums.TileType.FLOOR_STONE)
+	# The Chrysanthemum Throne, centred and elevated.
+	map.set_tile(MID, 3, Enums.TileType.FURNITURE_DAIS)
+	# Imperial banners on the wall behind the throne.
+	map.set_tile(MID - 3, 2, Enums.TileType.FURNITURE_BANNER)
+	map.set_tile(MID + 3, 2, Enums.TileType.FURNITURE_BANNER)
+	map.set_tile(8, 2, Enums.TileType.FURNITURE_BANNER)
+	map.set_tile(S - 9, 2, Enums.TileType.FURNITURE_BANNER)
+	# Seppun guards flanking the throne (weapon stands).
+	map.set_tile(MID - 2, 3, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(MID + 2, 3, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(7, 5, Enums.TileType.FURNITURE_WEAPON_STAND)
+	map.set_tile(S - 8, 5, Enums.TileType.FURNITURE_WEAPON_STAND)
+	# Braziers lighting the dais front.
+	map.set_tile(6, 8, Enums.TileType.FURNITURE_BRAZIER)
+	map.set_tile(S - 7, 8, Enums.TileType.FURNITURE_BRAZIER)
+
+	# Ranked court: cushion rows flanking the central processional aisle. The aisle
+	# (columns MID-1..MID+1) is kept clear from the dais front to the south doors.
+	# Front rows (nearest the throne) seat the highest precedence.
+	for ry in [10, 13, 16, 19, 22]:
+		for cx in [MID - 5, MID - 4, MID - 3, MID + 3, MID + 4, MID + 5]:
+			if map.get_tile(cx, ry) == Enums.TileType.FLOOR_TATAMI:
+				map.set_tile(cx, ry, Enums.TileType.FURNITURE_CUSHION)
+
+	# Colonnade — wood pillars down each side, clear of the cushion blocks and aisle.
+	for y in range(9, S - 4, 3):
+		map.set_tile(2, y, Enums.TileType.WALL_WOOD)
+		map.set_tile(S - 3, y, Enums.TileType.WALL_WOOD)
+
+	# Genkan: lowered stone vestibule inside the south doors, framed by getabako
+	# (footwear shelves) and waiting benches — the formal Imperial entry.
+	_fill_rect(map, MID - 1, S - 3, MID + 1, S - 2, Enums.TileType.FLOOR_STONE)
+	map.set_tile(MID - 2, S - 2, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(MID + 2, S - 2, Enums.TileType.FURNITURE_SHELF)
+	map.set_tile(MID - 2, S - 3, Enums.TileType.FURNITURE_BENCH)
+	map.set_tile(MID + 2, S - 3, Enums.TileType.FURNITURE_BENCH)
+
+	# Grand south entrance doors + the single zone exit (the Road of the Most High).
+	map.set_tile(MID - 1, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(MID + 1, S - 1, Enums.TileType.DOOR_WOOD_OPEN)
+	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
+	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
 
 
 # OHIROMA (Great Hall): large formal hall with dais, tatami floor, wood-framed

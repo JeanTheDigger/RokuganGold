@@ -765,6 +765,33 @@ static func _assign_weapons(c: L5RCharacterData) -> void:
 
 	c.weapons = weapons
 
+	# Jade weapons (owner decision 2026-06-18; grounded in s47 "jade-equipped defenders" /
+	# s11.3.5): the Kuni family (Witch-Hunters and Shugenja) — the Crab's anti-Shadowlands
+	# specialists — carry jade-edged weapons so they can wound Tainted/invulnerable creatures.
+	# The Kaiu Wall garrison roster is handled separately in the world population generator.
+	if c.family == "Kuni":
+		equip_jade_weapons(c)
+
+
+## Sets every melee weapon's material to "jade" so the s54 spirit/oni damage filter treats
+## the wielder's strikes as jade (pierces partial/superior invulnerability; +damage vs Taint).
+## Ranged weapons (yumi) are left mundane. Owner-approved for Kuni + Kaiu Wall garrison.
+static func equip_jade_weapons(c: L5RCharacterData) -> void:
+	for w: WeaponData in c.weapons:
+		if w != null and w.melee:
+			w.material = "jade"
+
+
+## Sets every melee weapon's material to "crystal" so the s54 spirit/oni damage filter
+## treats the wielder's strikes as crystal (pierces partial/superior invulnerability, like
+## jade). Ranged weapons left mundane. Owner-approved for Kolat Masters/agents (s54.7:
+## "agents with crystal weapons" purged the Shadowspawn). Does not overwrite jade (a Kuni
+## drawn into the Kolat keeps the more anti-Shadowlands material).
+static func equip_crystal_weapons(c: L5RCharacterData) -> void:
+	for w: WeaponData in c.weapons:
+		if w != null and w.melee and w.material != "jade":
+			w.material = "crystal"
+
 
 # =============================================================================
 # PROVINCE GENERATION
@@ -853,6 +880,14 @@ static func _default_infrastructure(
 				"theater", "okiya", "pleasure_quarter", "forge",
 			]
 
+		Enums.SettlementType.IMPERIAL_CAPITAL:
+			# Otosan Uchi (s2.3.23) — every amenity the Empire offers.
+			return [
+				"shrine", "temple", "sake_house", "inn", "tea_house",
+				"market", "garrison", "game_house", "bathhouse",
+				"theater", "okiya", "pleasure_quarter", "forge", "library",
+			]
+
 		Enums.SettlementType.FORTIFICATION:
 			return ["garrison"]
 
@@ -899,7 +934,7 @@ static func _default_worship_locations(
 			return [{"type": "village_shrine", "dedicated": false, "fortune": -1}]
 		Enums.SettlementType.TOWN:
 			return [{"type": "local_shrine", "dedicated": false, "fortune": -1}]
-		Enums.SettlementType.CITY:
+		Enums.SettlementType.CITY, Enums.SettlementType.IMPERIAL_CAPITAL:
 			return [
 				{"type": "local_shrine", "dedicated": false, "fortune": -1},
 				{"type": "temple", "dedicated": false, "fortune": -1},

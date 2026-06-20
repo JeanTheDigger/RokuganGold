@@ -1154,6 +1154,10 @@ static func _process_koku_generation(
 	for s: SettlementData in settlements:
 		if s.town_pu <= 0:
 			continue
+		# Otosan Uchi is taxed per-district via DayOrchestrator._process_district_economics
+		# (s2.3.23) — exclude it here so its PU is not double-counted.
+		if s.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			continue
 		var loc_mod: float = location_mods.get(s.settlement_id, location_mods.get(s.province_id, 1.0))
 		var koku: float = float(s.town_pu) * KOKU_PER_TOWN_PU_PER_SEASON * loc_mod
 		var g: Dictionary = garrison_data.get(s.province_id, {})

@@ -58,6 +58,10 @@ var spell_void_bonus_used: int = 0
 @export var techniques: Array = []
 @export var kiho: Array = []
 @export var katas: Array = []
+# s38 out-of-combat kiho buffs: kiho_name -> ic_day it was last activated.
+# Just-in-time per-tick activation (SkillResolver); an entry == current ic_day
+# means the buff is active for that tick. Stale entries are ignored/overwritten.
+@export var active_kiho_buffs: Dictionary = {}
 
 # -- Spells (shugenja only) ----------------------------------------------------
 
@@ -82,6 +86,10 @@ var spell_void_bonus_used: int = 0
 # Total wounds taken. Wound levels derived from Earth ring at query time.
 
 @export var wounds_taken: int = 0
+## s56.16/s54.10 Mokumokuren Gaze: the portion of wounds_taken that is spiritual and
+## cannot be treated with Medicine (magic and natural healing cure them normally).
+## Default 0 = inert for everyone. Always <= wounds_taken (clamped on heal).
+@export var spiritual_wounds: int = 0
 # Senbazuru Healing Free Raises pending consumption (s57.26.17). Cleared after
 # the next Medicine/treat_wound roll fires against this character.
 @export var pending_healing_fr: int = 0
@@ -106,6 +114,10 @@ var spell_void_bonus_used: int = 0
 @export var armor_tn_bonus: int = 0  # mirrors armor_worn.tn_bonus; kept for fast lookup
 @export var armor_reduction: int = 0
 @export var outfit: Array = []
+# s56.16 spirit-encounter puppet source: set when this character is a SpiritCombatant
+# wrapper for a SpiritCreatureData (the live ASCII spiritual encounter). null for
+# all real characters. Lets the combat ability/override layer read the creature.
+@export var spirit_creature: SpiritCreatureData = null
 @export var koku: float = 0.0
 @export var months_without_stipend: int = 0
 
@@ -133,12 +145,40 @@ var spell_void_bonus_used: int = 0
 @export var travel_days_remaining: int = 0
 @export var travel_origin: String = ""
 @export var role_position: String = ""
+# Otosan Uchi Governor link (s2.3.23): zone_id of the district this character
+# governs; "" = not a Governor. Bidirectional with NavigationZoneData.zone_lord_id.
+@export var governed_zone_id: String = ""
+# IC day this character was appointed to their current position. Drives the
+# Sentaku Governor performance review's time-in-office weight (s2.3.23). Set at
+# world generation for the initial roster and on APPOINT_TO_POSITION. -1 = never
+# appointed / not tracked.
+@export var appointed_ic_day: int = -1
+# Otosan Uchi access flags (s2.3.23). Standing grants for Imperial residents and
+# Tribunal members; otherwise set by the Sentaku access-petition pipeline.
+@export var ekohikei_access: bool = false
+@export var forbidden_city_access: bool = false
+# forbidden_city_access is per-visit: the IC day it auto-clears. -1 = none or a
+# standing (permanent) grant that never expires (Imperial residents).
+@export var forbidden_city_access_expiry_ic_day: int = -1
+# Petition cooldown: petition_type ("ekohikei"/"forbidden_city") → season index of
+# the last denial. A resubmission is auto-denied while still in that same season
+# (s2.3.23: "resubmit after 1 IC season").
+@export var access_petition_denied_season: Dictionary = {}
 @export var designated_heir_id: int = -1
 @export var disposition_values: Dictionary = {}
 @export var historical_modifiers: Dictionary = {}
 @export var temporary_modifiers: Dictionary = {}
 @export var cohabitation_days: Dictionary = {}
 @export var fear_rating: int = 0
+## s22.3/s02.4 Fear resistance. immune_to_fear: never affected (s29.4 Matsu's Fury
+## "Immune-to-Fear targets" — forward-wired; no granting source yet). The resist
+## bonuses are set by Kshatriya Warrior techniques (s29.14): Strength of Indra (R1)
+## raises Willpower one Rank vs Fear (willpower_bonus 1); Courage of Shiva (R5) grants
+## +1k1 (rolled/kept bonus 1). Read by AsciiMapCombatOrchestrator.apply_fear_checks.
+@export var immune_to_fear: bool = false
+@export var fear_resist_willpower_bonus: int = 0
+@export var fear_resist_rolled_bonus: int = 0
+@export var fear_resist_kept_bonus: int = 0
 @export var captive_status: String = ""
 @export var is_retired_monastic: bool = false
 @export var topic_pool: Array = []
@@ -233,6 +273,18 @@ var taint_benefits_suppressed: bool = false
 ## tick by DayOrchestrator (ring drain → catatonic → 3 Contested Void → death).
 ## Keys: caster_id, insight_cap, caster_void. Empty = not afflicted.
 @export var death_touch_affliction: Dictionary = {}
+## s54.10/s54.2 spirit possession seeded by a tile-combat attempt, resolved in the
+## world-sim over days. {kind: "shozai"/"buruburu"/"kitsune_tsuki", possessor_id,
+## ic_day_start, expires_ic_day, consecutive_fails, last_shake_day}. Empty = none.
+@export var possession_affliction: Dictionary = {}
+## s54.5/s54.11 disease seeded by a Byoki/Shikko/plague-zombie hit, draining physical
+## Traits over days/weeks until cured. {type:int (DiseaseSystem.Type), source_id,
+## last_tick, cures (consecutive Earth saves), onset}. Empty = healthy.
+@export var disease_affliction: Dictionary = {}
+## s54.11/s54.12 poison/venom (Gakimushi stinger → Strength, komodo/jinmenju → Stamina):
+## an immediate Trait drain per hit, restored in the world-sim (sub-day/24h recovery
+## collapses to the next daily tick). {trait:String, drained:int}. Empty = unpoisoned.
+@export var poison_affliction: Dictionary = {}
 
 # -- Family Web (Section 22.6) -------------------------------------------------
 # Generation 1 (self), Generation 2 (parents), and any actively-simulated

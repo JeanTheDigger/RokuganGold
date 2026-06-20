@@ -113,6 +113,8 @@ const CONDITION_GRAPPLED:  String = "grappled"
 const CONDITION_MOUNTED:   String = "mounted"
 const CONDITION_PRONE:     String = "prone"
 const CONDITION_STUNNED:   String = "stunned"
+const CONDITION_AFRAID:     String = "afraid"   # s22.3/s02.4 Fear: -1k0 to all rolls while in range
+const CONDITION_DEAFENED:   String = "deafened" # s35 Fury of Osano-Wo rider; combat effect deferred (no verbal/hearing mechanic)
 
 # GDD s40 describes striking after first blood as dishonorable and conceding
 # a death duel as shameful, but specifies no numeric honor/glory values.
@@ -132,6 +134,7 @@ class Participant:
 	var is_delaying: bool = false
 	var actions_remaining: int = 0   # 0 = not their turn yet / done
 	var conditions: Array = []
+	var timed_conditions: Dictionary = {}  # condition -> expiry round (auto-cleared, not roll-recovered)
 	var guarding_id: int = -1        # character_id they're guarding, -1 if none
 	var full_defense_bonus: int = 0  # bonus from Full Defense Stance roll
 	var grapple_partner_id: int = -1
@@ -155,7 +158,43 @@ class Participant:
 	var initiative_modifier: int = 0  # persistent Initiative delta (Song of the World, s38)
 	var facing: Vector2i = Vector2i(0, 0)  # unit heading; (0,0) = unset (s38 arc/cone kiho)
 	var inari_breath_round: int = -1  # round Inari's Wrath breath was held (s38); -1 = not holding
+	var spirit_regen_suppressed_until: int = -1  # s54.10 Gashadokuro: regen off until this round
+	# s54.5 Arugai "Nearly Immortal" / heart_kill: a regenerating oni that can only be truly
+	# slain by destroying its heart. Locating it requires Investigation/Perception TN 30 (tearing
+	# the chest open); the exposed heart sustains 10 Wounds before the oni dies for good.
+	var heart_located: bool = false
+	var heart_wounds: int = 0
+	var heart_destroyed: bool = false
+	var untargetable_revealed_until: int = -1  # s54.10 invisibility/intangibility: targetable through this round after acting
+	var ephemeral_form_expiry: int = -1  # s54.10 Ephemeral Form: round the 10-round insubstantial window ends
+	var ephemeral_form_used: bool = false  # Ephemeral Form is once-per-encounter (once/day)
+	var mimic_expiry: int = -1  # s54.10 Mimic: round the 5-round disguise (untargetable) window ends; broken on attack
+	var lure_sprung: bool = false  # s54.10 Konak Jiji lure: false = still disguised as a harmless baby (untargetable)
+	var deceptive_weight_pinned: bool = false  # s54.10 Deceptive Weight: pinned (escape = Athletics/Strength TN 40)
+	var swallowed_by_id: int = -1  # s54.5 Swallow Whole/Devour: creature id that swallowed me (-1 = none)
+	var death_spawn_done: bool = false  # s54.5 spawn-on-death fired (guards against double-spawn)
+	var ranged_aoe_used: bool = false  # s54.11 Cauldron Belch etc. once-per-skirmish AoE fired
+	var void_locked: bool = false  # s54.12 Furaribi Soul Touch: cannot spend Void Points
+	var escalating_poison: Dictionary = {}  # s54.5 Shikage Mind-Breaking/Paralyzing poison {trait,doses,drained}
+	var suffocation_escalation: int = 0  # s54.5 Quiet Death Suffocation: per-Round crush damage step (3k3 +1k1/round)
+	var spirit_leech: Dictionary = {}  # s54.5 Kommei Spirit Leeching fog {failures, expiry_round}
+	var insight_study_target: int = -1  # s54.5 Manesuru Uncanny Insight: id being studied
+	var insight_study_rounds: int = 0   # consecutive Complex Actions spent studying that target
+	var mirror_origin_id: int = -1      # s54.5 Dark Mirror duplicate: the creature it copied (attacks it first)
+	var scream_used: bool = false  # s54.12 Wanyudo Strength of the Dead: once-per-skirmish scream
+	var gore_escape_rolled: int = 0  # s54.5 Gore: extra damage dealt when pulling free of the tusks (0 = not gored)
+	var gore_escape_kept: int = 0
+	var spirit_attack_rolled_bonus: int = 0  # s54.10 Toshigoku auras/Tactical Mastery: +N rolled attack dice (orchestrator sets per-attack, spirit-only)
+	var spirit_damage_rolled_bonus: int = 0  # s54.10 Supreme Commander: +N rolled damage dice (spirit-only)
+	var spirit_attack_kept_bonus: int = 0  # s54.5 Charge: +N kept attack dice (the kept half of a +NkN charge bonus)
+	var spirit_damage_kept_bonus: int = 0  # s54.5 Charge: +N kept damage dice
 	var void_dragon_ring: int = -1  # Touch the Void Dragon (s38): boosted Ring (Enums.Ring), -1 = inactive
+	# s35/s34/s33/s36 conjured elemental weapons (Katana of Fire, Tetsubo of Earth, Yari of Air,
+	# Bo of Water). {} = none; {rolled,kept,skill,trait,school_rank} = a created weapon the wielder
+	# uses with their effective School Rank in place of the weapon skill. Read in resolve_attack/
+	# resolve_damage; expired in advance_round at conjured_weapon_expiry.
+	var conjured_weapon: Dictionary = {}
+	var conjured_weapon_expiry: int = -1
 	var dual_wielding: bool = false            # true when holding an off-hand weapon
 	var off_hand_weapon: String = ""           # name of off-hand weapon ("" = none)
 	var earth_trade_amount: int = 0            # Armor TN traded for damage (earth_trade_armor_for_damage)
@@ -176,9 +215,19 @@ class Participant:
 	# Each entry: {kind:String, value:int, expires_round:int, source:String}.
 	# expires_round is the round at which it is removed (active through the prior round).
 	var timed_modifiers: Array = []
+	# Reversal of Fortunes (s36): the round in which this participant last used its
+	# re-roll charge (1/round). -1 = never used this skirmish.
+	var reversal_used_round: int = -1
+	# Disarm maneuver (s40): the character's weapon is on the ground — they fight unarmed
+	# until they spend an action to recover it. Cleared by execute_recover_weapon.
+	var disarmed: bool = false
 	# Victory of the River (s30a): the single opponent currently held under the
 	# Armor-TN debuff ("One opponent at a time"); -1 = none.
 	var votr_target_id: int = -1
+	# On fire (s54.10 Everything Burns / s56.6.6): set by a fire creature's melee
+	# hit; takes 1k1 at the start of each round until a Simple Action extinguishes it.
+	var on_fire: bool = false
+	var absorb_pool: int = 0  # s34 Power of the Earth Dragon: remaining Wounds the ward absorbs (0 = none)
 
 
 class CombatState:
@@ -493,6 +542,14 @@ static func get_kiho_move_bonus(_character: L5RCharacterData, participant: Parti
 	return 0
 
 
+## s54.x Swift: a spirit creature's Swift rating as a tile move-budget bonus
+## (Swift N = +N tiles; 1 tile = 5 ft). 0 for non-spirits / no Swift. PROVISIONAL.
+static func get_creature_swift_bonus(character: L5RCharacterData) -> int:
+	if character != null and character.spirit_creature != null:
+		return character.spirit_creature.swift
+	return 0
+
+
 ## The Empire Rests on its Edge (s30a, multi_empire_edge_skill_bonus): while known,
 ## grants a flat bonus to Kenjutsu/Iaijutsu rolls equal to the wielder's Rank in a
 ## chosen non-combat High Skill. The GDD picks the skill at acquisition; with no
@@ -647,8 +704,9 @@ static func total_defender_reduction(
 	var base: int = defender.armor_reduction
 	var kata: int = get_kata_reduction_bonus(defender, defender_p, weapon_name)
 	var kiho: int = _get_kiho_reduction_bonus(defender, defender_p)
+	var spell: int = get_timed_modifier_total(defender_p, "reduction")  # s34 Armor of Earth etc.
 	var pierce: int = get_kata_opponent_reduction_penalty(attacker, attacker_p, weapon_name)
-	return maxi(0, base + kata + kiho - pierce)
+	return maxi(0, base + kata + kiho + spell - pierce)
 
 
 ## Resolve an atemi-delivered kiho strike (GDD s38). Atemi deal no normal damage —
@@ -851,6 +909,8 @@ static func roll_initiative(
 ) -> int:
 	var kata_init: Dictionary = _get_kata_initiative_modifiers(character, weapon_name)
 	var wound_penalty: int = CharacterStats.get_wound_penalty(character)
+	# Spell Initiative buff (s35 Warning Flame: +1k0 to Initiative rolls).
+	var spell_init_rolled: int = get_timed_modifier_total(participant, "initiative_rolled")
 	# Advantage/disadvantage modifiers (s45): CONSUMED Perfection (-5 to score), TOUCH_OF_THE_SPIRIT_REALMS, etc.
 	var adv_init: Dictionary = AdvantageSystem.get_skill_bonus(character, "", {"is_combat": true})
 	var adv_init_tn: int = AdvantageSystem.get_tn_modifier(character, {"is_combat": true})
@@ -860,7 +920,7 @@ static func roll_initiative(
 		var void_rank: int = character.void_ring
 		var insight_rank: int = CharacterStats.get_insight_rank(character)
 		var result: DiceResult = dice_engine.roll_and_keep(
-			void_rank + insight_rank + adv_init["rolled"],
+			void_rank + insight_rank + adv_init["rolled"] + spell_init_rolled,
 			maxi(void_rank + adv_init["kept"], 1))
 		score = result.total + wound_penalty
 	else:
@@ -869,7 +929,7 @@ static func roll_initiative(
 		# Touch the Void Dragon (s38): +1 Rank to Reflexes (Air) = +1k1 Initiative.
 		var vd_init: int = vd_ring_bonus(participant, Enums.Ring.AIR)
 		var result: DiceResult = dice_engine.roll_and_keep(
-			reflexes + insight_rank + adv_init["rolled"] + vd_init,
+			reflexes + insight_rank + adv_init["rolled"] + vd_init + spell_init_rolled,
 			maxi(reflexes + adv_init["kept"] + vd_init, 1), true)
 		score = result.total + wound_penalty
 	score += kata_init["flat_bonus"] + adv_init["free_raises"] * 5 - adv_init_tn
@@ -1019,15 +1079,38 @@ static func resolve_attack(
 	adv_context: Dictionary = {},
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
+	# Conjured elemental weapon (s33-s36): override the wielded profile. The created weapon's
+	# skill may be replaced by the caster's effective School Rank ("uses School Rank in place of
+	# [skill]"); take the better of the two. Inert for everyone else (conjured_weapon == {}).
+	if attacker_p != null and not attacker_p.conjured_weapon.is_empty():
+		weapon = attacker_p.conjured_weapon
 	var skill_name: String = weapon.get("skill", "Kenjutsu")
 	var skill_rank: int = attacker.skills.get(skill_name, 0)
+	if attacker_p != null and not attacker_p.conjured_weapon.is_empty():
+		skill_rank = maxi(skill_rank, int(attacker_p.conjured_weapon.get("school_rank", 0)))
 	var wound_penalty: int = CharacterStats.get_wound_penalty(attacker)
+	# s36 Near to Ice / s34 Force of Will: Wound Penalties are negated for the duration (rides the
+	# timed-modifier layer, auto-expires). Inert when the buff is absent.
+	if attacker_p != null and get_timed_modifier_total(attacker_p, "negate_wound_penalty") > 0:
+		wound_penalty = 0
 
 	# Attack roll: Trait + Skill rolled, keep Trait (s4.5 "Agility for attacks").
 	var trait_name: String = weapon.get("trait", "agility")
 	var trait_value: int = attacker.reflexes if trait_name == "reflexes" else attacker.agility
 	var rolled: int = trait_value + skill_rank
 	var kept: int = trait_value
+
+	# s56.16: a spirit creature attacks with its fixed stat-block roll (XkY), not the
+	# PC trait+skill formula. Applied before kata/void modifiers (creatures have none).
+	# Inert for real characters (spirit_creature == null).
+	if attacker.spirit_creature != null and attacker.spirit_creature.attack_rolled > 0:
+		rolled = attacker.spirit_creature.attack_rolled
+		kept = attacker.spirit_creature.attack_kept
+		# s54.10 Toshigoku auras (Mob Aggression / Rally / Supreme Commander) and the
+		# Ancient General's Tactical Mastery — +N rolled attack dice the orchestrator
+		# computed from co-located allies / rounds-engaged. Inert (0) for everyone else.
+		rolled += attacker_p.spirit_attack_rolled_bonus
+		kept += attacker_p.spirit_attack_kept_bonus
 
 	# Kata attack modifiers (s30a): trait substitution applied before void/stance
 	var kata_atk: Dictionary = _get_kata_attack_modifiers(attacker, attacker_p, weapon_name, maneuver)
@@ -1072,6 +1155,10 @@ static func resolve_attack(
 	rolled += kata_atk["rolled_bonus"]
 	kept += kata_atk["kept_bonus"]
 
+	# Spell weapon-buff attack bonus (s35 Burning Kiss of Steel etc.) — applies to any attack.
+	rolled += get_timed_modifier_total(attacker_p, "spell_attack_rolled")
+	kept += get_timed_modifier_total(attacker_p, "spell_attack_kept")
+
 	# The World Is Empty (s30a): +Xk0 to Kenjutsu/Iaijutsu attack rolls while active.
 	if skill_name == "Kenjutsu" or skill_name == "Iaijutsu":
 		rolled += get_timed_modifier_total(attacker_p, "attack_rolled")
@@ -1099,6 +1186,9 @@ static func resolve_attack(
 	# Conditional modifiers: -3k0 Dazed, -1k1 or -3k3 Blinded, Prone restrictions
 	if CONDITION_DAZED in attacker_p.conditions:
 		rolled = maxi(0, rolled - 3)
+	# Fear (s22.3/s02.4): a frightened combatant suffers -1k0 to all rolls while in range.
+	if CONDITION_AFRAID in attacker_p.conditions:
+		rolled = maxi(0, rolled - 1)
 	if CONDITION_BLINDED in attacker_p.conditions:
 		if weapon.get("melee", true):
 			rolled = maxi(0, rolled - 1)
@@ -1177,8 +1267,28 @@ static func resolve_damage(
 	bonus_kept: int = 0,
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
+	# Conjured elemental weapon (s33-s36): fixed DR, no Strength bonus. Inert otherwise.
+	if attacker_p != null and not attacker_p.conjured_weapon.is_empty():
+		weapon = attacker_p.conjured_weapon
 	var rolled: int = weapon.get("rolled", 2)
 	var kept: int = weapon.get("kept", 1) + bonus_kept
+
+	# s54: a spirit/oni creature deals its FIXED stat-block damage (XkY), not the named
+	# weapon profile nor Strength-augmented dice. Mirrors the to-hit override in
+	# resolve_attack — the orchestrator picks "unarmed" from WEAPON_CATALOG for puppets
+	# (SpiritCombatant sets no skills), so without this the creature's real damage
+	# (e.g. 10k4) was never used. Inert for real characters (spirit_creature == null).
+	var spirit_fixed_damage: bool = false
+	if attacker != null and attacker.spirit_creature != null and attacker.spirit_creature.damage_rolled > 0:
+		rolled = attacker.spirit_creature.damage_rolled
+		kept = attacker.spirit_creature.damage_kept + bonus_kept
+		spirit_fixed_damage = true
+
+	# s54.10 Supreme Commander aura: +N rolled damage dice the orchestrator set on the
+	# spirit attacker (Musha within 20 tiles of the Ancient General). Inert (0) otherwise.
+	if attacker_p != null:
+		rolled += attacker_p.spirit_damage_rolled_bonus
+		kept += attacker_p.spirit_damage_kept_bonus
 
 	# Advantage/disadvantage modifiers (s45): HANDS_OF_STONE adds +1 kept for unarmed damage
 	var dmg_skill: String = weapon.get("skill", "Kenjutsu")
@@ -1198,7 +1308,7 @@ static func resolve_damage(
 
 	# Strength adds to rolled dice for melee weapons (s40: "add Strength to first number")
 	# fire_agility_for_damage kata: use Agility instead of Strength (s30a)
-	if weapon.get("strength_adds", true) and weapon.get("melee", true):
+	if weapon.get("strength_adds", true) and weapon.get("melee", true) and not spirit_fixed_damage:
 		if kata_dmg["use_agility"]:
 			rolled += attacker.agility
 		else:
@@ -1219,6 +1329,9 @@ static func resolve_damage(
 	# Timed damage-dice penalty (s38 Earth Palm Water option: -4 damage dice while active).
 	if attacker_p != null:
 		rolled = maxi(0, rolled + get_timed_modifier_total(attacker_p, "damage_dice_penalty"))
+		# Spell weapon-buff damage bonus (s35 Biting Steel +1k1 etc.).
+		rolled += get_timed_modifier_total(attacker_p, "spell_damage_rolled")
+		kept += get_timed_modifier_total(attacker_p, "spell_damage_kept")
 
 	# roll_damage handles the dice pool; we pass strength already absorbed above
 	var result: Dictionary = dice_engine.roll_damage(rolled, kept)
@@ -1289,6 +1402,9 @@ static func resolve_knockdown(
 	defender: L5RCharacterData,
 	is_quadruped: bool,
 	dice_engine: DiceEngine,
+	bonus_to_attacker: int = 0,  # s54.12 Rhino Furious Charge: +5 = the Free Raise
+	def_rolled_bonus: int = 0,  # s34 The Mountain's Feet: +Nk0 knockdown resist (extra rolled dice)
+	def_kept_bonus: int = 0,
 ) -> Dictionary:
 	# Advantage/disadvantage modifiers (s45) + wound penalties
 	var att_wound: int = CharacterStats.get_wound_penalty(attacker)
@@ -1298,12 +1414,12 @@ static func resolve_knockdown(
 	var att_tn_kd: int = AdvantageSystem.get_tn_modifier(attacker, {"is_combat": true, "is_contested": true})
 	var def_tn_kd: int = AdvantageSystem.get_tn_modifier(defender, {"is_combat": true, "is_contested": true})
 	var att_rolled_kd: int = maxi(attacker.strength + att_adv_kd["rolled"], 1)
-	var def_rolled_kd: int = maxi(defender.strength + def_adv_kd["rolled"], 1)
+	var def_rolled_kd: int = maxi(defender.strength + def_adv_kd["rolled"] + def_rolled_bonus, 1)
 	var att_kept_kd: int = maxi(attacker.strength + att_adv_kd["kept"], 1)
-	var def_kept_kd: int = maxi(defender.strength + def_adv_kd["kept"], 1)
+	var def_kept_kd: int = maxi(defender.strength + def_adv_kd["kept"] + def_kept_bonus, 1)
 	var att_r: DiceResult = dice_engine.roll_and_keep(att_rolled_kd, att_kept_kd, false)
 	var def_r: DiceResult = dice_engine.roll_and_keep(def_rolled_kd, def_kept_kd, false)
-	var att_total_kd: int = att_r.total + (att_adv_kd["free_raises"] * 5) - att_tn_kd + att_wound
+	var att_total_kd: int = att_r.total + (att_adv_kd["free_raises"] * 5) - att_tn_kd + att_wound + bonus_to_attacker
 	var def_total_kd: int = def_r.total + (def_adv_kd["free_raises"] * 5) - def_tn_kd + def_wound + (4 if is_quadruped else 0)
 	return {
 		"attacker_strength_roll": att_total_kd,
@@ -1537,6 +1653,34 @@ static func has_condition(participant: Participant, condition: String) -> bool:
 	return condition in participant.conditions
 
 
+# Project convention (s56.16 exposure layer): ~10 combat Rounds per minute.
+const ROUNDS_PER_MINUTE: int = 10
+
+
+## Timed condition layer: a condition that runs for a fixed number of Rounds and is
+## auto-cleared on expiry, NOT shed by a recovery roll (e.g. Paralysis Venom). The
+## condition is also placed in `conditions` so all existing gates (Armor TN, attack
+## penalty, can-act) fire unchanged. Keeps the longer of an existing/new timer.
+static func apply_timed_condition(participant: Participant, condition: String, expiry_round: int) -> void:
+	apply_condition(participant, condition)
+	var cur: int = int(participant.timed_conditions.get(condition, -1))
+	if expiry_round > cur:
+		participant.timed_conditions[condition] = expiry_round
+
+
+static func is_condition_timed(participant: Participant, condition: String) -> bool:
+	return participant.timed_conditions.has(condition)
+
+
+## Sweep timed conditions whose expiry Round has been reached (called from
+## advance_round, beside expire_timed_modifiers / expire_active_kiho).
+static func expire_timed_conditions(participant: Participant, round_number: int) -> void:
+	for cond: String in participant.timed_conditions.keys():
+		if round_number >= int(participant.timed_conditions[cond]):
+			participant.timed_conditions.erase(cond)
+			remove_condition(participant, cond)
+
+
 static func get_condition_roll_penalty(participant: Participant) -> int:
 	if CONDITION_FATIGUED in participant.conditions:
 		return 5 + participant.fatigue_days * 5
@@ -1681,6 +1825,19 @@ static func grapple_throw(controller_p: Participant, target_p: Participant) -> v
 	controller_p.grapple_in_control = false              # Bug 8 FIX
 
 
+# Break (s40, Simple Action): the actor removes themselves from the Grapple. A grapple
+# is a two-person bind, so both participants are freed (neither remains Grappled to a
+# partner who left). Neither is left Prone (unlike Throw).
+static func grapple_break(actor_p: Participant, partner_p: Participant) -> void:
+	remove_condition(actor_p, CONDITION_GRAPPLED)
+	actor_p.grapple_partner_id = -1
+	actor_p.grapple_in_control = false
+	if partner_p != null:
+		remove_condition(partner_p, CONDITION_GRAPPLED)
+		partner_p.grapple_partner_id = -1
+		partner_p.grapple_in_control = false
+
+
 # =============================================================================
 # -- Sumai (s40) --------------------------------------------------------------
 # =============================================================================
@@ -1720,6 +1877,56 @@ static func resolve_sumai_bout(
 		"winner_wrestler2": w2_total > w1_total and bout_over,
 		"bout_over": bout_over,
 		"continue": not bout_over,
+	}
+
+
+# Resolve a single sumai MATCH between two wrestlers: repeated Contested Jiujutsu(Sumai)/
+# Strength bouts until one wins by 5+ (GDD s40 "SUMAI TOURNAMENTS"). Returns the winner.
+# A safety cap (rare repeated <5 margins) decides by the last bout's higher roll. No size
+# bonus is applied in tournament pairing (the s45 Large advantage is a forward-wire — the
+# bout still contests Strength + Jiujutsu, which captures wrestler quality).
+static func resolve_sumai_match(
+	w1: L5RCharacterData,
+	w2: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> L5RCharacterData:
+	for _i in 40:
+		var r: Dictionary = resolve_sumai_bout(w1, w2, false, dice_engine)
+		if r["bout_over"]:
+			return w1 if r["winner_wrestler1"] else w2
+	# Cap reached (persistent near-ties): decide by one more roll's higher total.
+	var f: Dictionary = resolve_sumai_bout(w1, w2, false, dice_engine)
+	return w1 if f["wrestler1_roll"] >= f["wrestler2_roll"] else w2
+
+
+# Single-elimination sumai TOURNAMENT (GDD s40 / s27.9 Badger Great Games). Pairs the
+# entrants, runs each match to a 5+ decision, advances winners; an odd entrant gets a bye.
+# Returns {champion_id, participant_count, rounds} ({} for fewer than 2 entrants).
+static func resolve_sumai_tournament(
+	participants: Array,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if participants.size() < 2:
+		return {}
+	var bracket: Array = participants.duplicate()
+	var rounds: int = 0
+	while bracket.size() > 1:
+		rounds += 1
+		var next_round: Array = []
+		var i: int = 0
+		while i < bracket.size():
+			if i + 1 >= bracket.size():
+				next_round.append(bracket[i])  # bye
+				i += 1
+				continue
+			next_round.append(resolve_sumai_match(bracket[i], bracket[i + 1], dice_engine))
+			i += 2
+		bracket = next_round
+	var champ: L5RCharacterData = bracket[0]
+	return {
+		"champion_id": champ.character_id,
+		"participant_count": participants.size(),
+		"rounds": rounds,
 	}
 
 
@@ -2264,16 +2471,17 @@ static func advance_round_reactions(
 		var c: L5RCharacterData = characters_by_id.get(cid)
 		if c == null:
 			continue
-		# Dazed recovery attempt — TN starts at 20, decreases by 5 per prior failure (s40)
-		if CONDITION_DAZED in p.conditions:
+		# Dazed recovery attempt — TN starts at 20, decreases by 5 per prior failure (s40).
+		# A timed condition (e.g. venom) runs its full duration and is not rolled off.
+		if CONDITION_DAZED in p.conditions and not is_condition_timed(p, CONDITION_DAZED):
 			var recovered: bool = attempt_recover_dazed(c, p, p.daze_failed_recovery_attempts + 1, dice_engine)
 			if recovered:
 				p.daze_failed_recovery_attempts = 0
 				events.append({"type": "condition_cleared", "condition": CONDITION_DAZED, "character_id": cid})
 			else:
 				p.daze_failed_recovery_attempts += 1
-		# Stunned recovery
-		if CONDITION_STUNNED in p.conditions:
+		# Stunned recovery (timed Stun, e.g. Paralysis Venom, is not rolled off)
+		if CONDITION_STUNNED in p.conditions and not is_condition_timed(p, CONDITION_STUNNED):
 			var recovered: bool = attempt_recover_stunned(c, p, dice_engine)
 			if recovered:
 				events.append({"type": "condition_cleared", "condition": CONDITION_STUNNED, "character_id": cid})

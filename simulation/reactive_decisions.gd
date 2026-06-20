@@ -222,6 +222,11 @@ static func _evaluate_court_invitation(
 
 	var attend: bool = court_prestige >= 3 or disposition >= 15.0
 
+	# An Imperial summons (the Emperor's standing court at Otosan Uchi) is not
+	# declined — one does not refuse the Son of Heaven (s2.3.23).
+	if event.get("is_imperial_summons", false):
+		attend = true
+
 	if character.bushido_virtue == Enums.BushidoVirtue.REI:
 		attend = true
 	if character.shourido_virtue == Enums.ShouridoVirtue.ISHI:

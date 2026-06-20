@@ -1,3 +1,9 @@
 # Godot 4.x editor cache
 .godot/
-.claude/
+
+# Claude local state is ignored, except the shared test-setup hook (committed so
+# parse-checks / test drivers work in every session).
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+!.claude/hooks/setup_godot.sh

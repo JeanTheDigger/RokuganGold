@@ -205,6 +205,10 @@ const PROVINCE_TABLE: Array[Array] = [
 	["Seppun Province", "Imperial", "Seppun", true, false, false],
 	["Yogasha Heigen", "Imperial", "Seppun", false, false, false],
 	["Miya Province", "Imperial", "Miya", false, false, false],
+	# Otosan Uchi, the Imperial Capital, sits in the Imperial Lands province
+	# (s2.3.23). No family seat — administered by the Sentaku Tribunal under the
+	# Emperor. Coastal (Bay of the Golden Sun).
+	["Imperial Lands", "Imperial", "", true, false, false],
 ]
 
 
@@ -326,6 +330,11 @@ const BASE_PU_FAMILY_SEAT: int = 20
 const BASE_PU_GREAT_CLAN: int = 10
 const BASE_PU_MINOR_CLAN: int = 5
 const BASE_PU_UNGOVERNABLE: int = 1
+
+# Otosan Uchi total PU (canon ~50,000 people, s2.3.23). Subdivided across the
+# 16 districts (Toshisoto 82 + Ekohikei 15 + Forbidden 3 = 100) by the zone
+# builder; the settlement-level total drives the resource tick and Miya's Blessing.
+const OTOSAN_UCHI_PU: int = 100
 
 
 ## Designates one settlement as the Kolat Hidden Temple (s54.7h, owner-approved
@@ -464,6 +473,11 @@ static func bootstrap_world(
 	# -- Zone graph generation (s4.4.1) ---------------------------------------
 	var zone_result: Dictionary = _build_all_zones(settlements, provinces)
 
+	# Link each Otosan Uchi Governor to the district zone it rules (s2.3.23).
+	# Governors were created during the population pass with governed_zone_id set
+	# to the deterministic district zone_id; the zone graph exists only now.
+	_link_otosan_uchi_governors(characters, zone_result["navigation_zones"])
+
 	return {
 		"provinces": provinces,
 		"settlements": settlements,
@@ -553,6 +567,14 @@ static func _create_province_settlements(
 			Enums.SettlementType.CITY, 30, terrain, true,
 		)
 		result.append(capital)
+		return result
+
+	if prov_name == "Imperial Lands":
+		var otosan: SettlementData = WorldGenerator.generate_settlement(
+			next_id, "Otosan Uchi", province,
+			Enums.SettlementType.IMPERIAL_CAPITAL, OTOSAN_UCHI_PU, terrain, true,
+		)
+		result.append(otosan)
 		return result
 
 	if is_seat:
@@ -926,6 +948,25 @@ static func _build_all_zones(
 	}
 
 
+# Sets zone_lord_id on each Otosan Uchi district zone to its Governor's
+# character_id, completing the bidirectional Governor↔district link (s2.3.23).
+static func _link_otosan_uchi_governors(
+	characters: Array,
+	navigation_zones: Array,
+) -> void:
+	var zone_by_id: Dictionary = {}
+	for nz_v: Variant in navigation_zones:
+		var nz: NavigationZoneData = nz_v as NavigationZoneData
+		if nz != null:
+			zone_by_id[nz.zone_id] = nz
+	for c: L5RCharacterData in characters:
+		if c.governed_zone_id.is_empty():
+			continue
+		var zone: NavigationZoneData = zone_by_id.get(c.governed_zone_id)
+		if zone != null:
+			zone.zone_lord_id = c.character_id
+
+
 # Infer zone structure lord rank from settlement type and has_dojo flag.
 # This determines castle interior zone count — not the actual ruling lord's rank.
 static func _infer_lord_rank_for_zones(settlement: SettlementData) -> int:
@@ -953,7 +994,8 @@ static func _infer_lord_rank_for_zones(settlement: SettlementData) -> int:
 # Maps province names to arrays of adjacent province names.
 # Derived from GDD s2.3.90 Adjacency Index.
 # Only same-table province names included (external references like
-# "Shadowlands", "unaligned", "Imperial Lands" are omitted).
+# "Shadowlands" and "unaligned" are omitted). "Imperial Lands" (Otosan Uchi) is
+# now a real province in PROVINCE_TABLE and IS included below.
 
 const ADJACENCY_TABLE: Dictionary = {
 	# --- Crab ---
@@ -1113,8 +1155,10 @@ const ADJACENCY_TABLE: Dictionary = {
 
 	# --- Imperial ---
 	"Toshi Ranbo": ["Enjaku", "Kokoro", "Oiku", "Hub Villages"],
-	"Hub Villages": ["Toshi Ranbo", "Seppun Province", "Yogasha Heigen", "Tortoise Clan Lands"],
+	"Hub Villages": ["Toshi Ranbo", "Seppun Province", "Yogasha Heigen", "Tortoise Clan Lands", "Imperial Lands"],
 	"Seppun Province": ["Hub Villages", "Yogasha Heigen", "Valley of the Centipede", "Tortoise Clan Lands"],
 	"Yogasha Heigen": ["Hub Villages", "Seppun Province"],
+	# The Hub Villages surround Otosan Uchi, which sits at the centre (s2.3.24c).
+	"Imperial Lands": ["Hub Villages"],
 	"Miya Province": ["Eijitsu", "Kaihi"],
 }

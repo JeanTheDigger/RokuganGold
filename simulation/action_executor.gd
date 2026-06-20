@@ -100,6 +100,7 @@ const BASE_TN: Dictionary = {
 
 const SOCIAL_BASE_TN: int = 0
 const COVERT_BASE_TN: int = 0
+const COMPLIANCE_COURT_TN_PENALTY: int = 10  # s12.9: +10 TN on a compliant character's court action toward their intimidator
 const MILITARY_BASE_TN: int = 0
 const ADMIN_BASE_TN: int = 0
 
@@ -162,6 +163,30 @@ static func execute(
 			"season": ctx.season,
 			"reason": keff.get("reason", ""),
 			"effects": keff,
+		}
+
+	# Sentaku access petition (s2.3.23). Auto-submits; the 5-member Tribunal vote
+	# is resolved by the orchestrator. No skill roll — the Tribunal decides.
+	if action_id == "PETITION_ACCESS":
+		var ptype: String = action.metadata.get(
+			"petition_type", SentakuTribunalSystem.PETITION_EKOHIKEI
+		)
+		var pdur: int = int(action.metadata.get(
+			"petition_duration", SentakuTribunalSystem.FORBIDDEN_MAX_DURATION_DAYS
+		))
+		return {
+			"success": true,
+			"action_id": action_id,
+			"character_id": ctx.character_id,
+			"target_npc_id": action.target_npc_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"effects": {
+				"requires_petition_resolution": true,
+				"petition_type": ptype,
+				"petition_duration": pdur,
+			},
 		}
 
 	if action_id == "DELIVER_GIFT":
@@ -280,6 +305,9 @@ static func execute(
 
 	if action_id == "APPOINT_TO_POSITION":
 		return _execute_appoint_to_position(action, character, ctx)
+
+	if action_id == "DISMISS_FROM_POSITION":
+		return _execute_dismiss_from_position(action, character, ctx)
 
 	if action_id == "ARRANGE_MARRIAGE":
 		return _execute_arrange_marriage(action, character, ctx, dice_engine, characters_by_id)
@@ -1825,7 +1853,14 @@ static func _compute_allied_aid_effects(
 
 static func _compute_admin_effects(action_id: String, action: NPCDataStructures.ScoredAction = null) -> Dictionary:
 	match action_id:
-		"SET_TAX_RATE", "SET_STIPEND_RATE":
+		"SET_TAX_RATE":
+			# Governor's chosen district retention (s2.3.23). -1 = unset → the
+			# writeback derives it (NPC: Honor-inverse). A PC sets it via metadata.
+			var tax_retention: float = -1.0
+			if action != null:
+				tax_retention = float(action.metadata.get("tax_retention", -1.0))
+			return {"effect": "rate_adjusted", "tax_retention": tax_retention}
+		"SET_STIPEND_RATE":
 			return {"effect": "rate_adjusted"}
 		"PURCHASE_MARKET":
 			return {"effect": "transaction_completed", "koku_cost": PURCHASE_KOKU_COST}
@@ -3760,6 +3795,9 @@ static func _execute_appoint_to_position(
 ) -> Dictionary:
 	var target_id: int = action.metadata.get("target_npc_id", action.target_npc_id)
 	var position: String = action.metadata.get("position", "")
+	# Otosan Uchi Governor appointments carry the district zone the appointee will
+	# govern; "" for every other position (s2.3.23).
+	var governed_zone_id: String = action.metadata.get("governed_zone_id", "")
 	return {
 		"success": target_id >= 0,
 		"action_id": "APPOINT_TO_POSITION",
@@ -3772,6 +3810,33 @@ static func _execute_appoint_to_position(
 			"appointing_lord_id": ctx.character_id,
 			"appointee_id": target_id,
 			"position": position,
+			"governed_zone_id": governed_zone_id,
+		},
+	}
+
+
+# DISMISS_FROM_POSITION (s2.3.23 / s57.47). Removes a position-holder from office.
+# The appointing authority (a position's lord), the Emperor, or the Emerald
+# Champion may dismiss; criminal conviction auto-dismisses. target_npc_id is the
+# office-holder to remove. The orchestrator's _apply_dismissal performs the field
+# clears (and vacates the district zone for a Governor).
+static func _execute_dismiss_from_position(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var target_id: int = action.metadata.get("target_npc_id", action.target_npc_id)
+	return {
+		"success": target_id >= 0,
+		"action_id": "DISMISS_FROM_POSITION",
+		"character_id": ctx.character_id,
+		"target_npc_id": target_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"requires_dismissal": true,
+			"dismisser_id": ctx.character_id,
+			"dismissed_id": target_id,
 		},
 	}
 
@@ -4130,6 +4195,22 @@ static func _execute_contested_court_action(
 	if action_id == "OFFER_FAVOR":
 		var honor_mod: int = HonorGlorySystem.get_court_honor_modifier(character)
 		attacker_roll += honor_mod * 5
+
+	# s15.4a session TN reductions: accumulated this court session (success-gated, per target)
+	# but never consumed until now. Negotiate is eased by the Negotiate/Impress pool plus the
+	# Listen/Reflect pool; Persuade is eased by the Listen/Reflect pool. Lowering the defender
+	# roll = lowering the TN. Compliance (s12.9) raises it: a character complying under duress
+	# faces +10 on any court action toward the intimidator they are complying with.
+	if target_id >= 0 and not ctx.court_session_state.is_empty():
+		var sess: Dictionary = ctx.court_session_state
+		var tn_pool: int = int(sess.get("tn_reductions", {}).get(target_id, 0))
+		var persuade_pool: int = int(sess.get("persuade_tn_reductions", {}).get(target_id, 0))
+		if action_id == "NEGOTIATE":
+			defender_roll = maxi(0, defender_roll - tn_pool - persuade_pool)
+		elif action_id == "PERSUADE":
+			defender_roll = maxi(0, defender_roll - persuade_pool)
+	if target_id in ctx.compliance_intimidators:
+		defender_roll += COMPLIANCE_COURT_TN_PENALTY
 
 	var margin: int = attacker_roll - defender_roll
 	var raises: int = maxi(int(margin / 5.0), 0)

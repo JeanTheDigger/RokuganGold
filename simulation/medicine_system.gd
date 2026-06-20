@@ -260,6 +260,12 @@ static func treat_wound(
 	var healing_dice: int = 1 + mastery_bonus + raises + stamina_bonus
 	var heal_roll: int = dice.roll_and_keep(healing_dice, 1).total
 
+	# s56.16/s54.10 Mokumokuren Gaze: spiritual wounds cannot be treated with Medicine
+	# (only magic and natural healing). Cap the treatment to the physical portion.
+	# Inert when spiritual_wounds == 0.
+	if target.spiritual_wounds > 0:
+		heal_roll = mini(heal_roll, maxi(0, target.wounds_taken - target.spiritual_wounds))
+
 	var heal_result: Dictionary = WoundSystem.heal_wounds(target, heal_roll)
 	result["wounds_healed"] = heal_result["healed"]
 	result["wound_level_after"] = heal_result["wound_level"]

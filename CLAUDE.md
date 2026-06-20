@@ -3324,6 +3324,42 @@ interrupts, AoE contested, grapple-tick, retaliation, healing-over-time, the
 unencoded atemi like Censure/Touch of the Storm/Great Silence/Stain Upon the Soul,
 and proper "Lasts N Rounds" auto-expiry for the 5 while-active buffs).
 
+### s38 Kiho — out-of-combat character-level buffs, tranche 1 (2026-06-16, owner-authorized + scoped)
+First out-of-combat (non-combat) kiho buffs, wired into `SkillResolver` (kiho are
+monk-only; PCs can't be monks per s60.2, so an NPC activation policy is REQUIRED or
+the system is inert — owner chose **just-in-time per tick**, scope **only the 2
+buffs with a real world-sim consumer**, 2026-06-16). GDD analysis showed only 2 of
+the ~13 out-of-combat kiho have a consumer the headless sim can read; the other 11
+depend on systems that don't exist (poison/disease, long-range vision/ambush,
+nemuranai/spell-effect detection, fatigue, heat/cold damage typing) and would be
+no-ops, so they were left unwired (documented blocked-on-missing-consumer).
+- **The Mind's Fire** (Fire 4, Internal): +2k2 on Intelligence-based skill rolls
+  (GDD exact). Huge consumer surface via SkillResolver (courtier/investigation/lore).
+- **Steal the Air Dragon** (Air 7, Kharmic): +Air Ring rolled & kept on Stealth
+  rolls (GDD exact). Consumed by covert systems (assassination access, SHADOW_TARGET,
+  conceal, eavesdrop, escape — many contested).
+**Mechanism:** new `L5RCharacterData.active_kiho_buffs: Dictionary` (kiho_name →
+ic_day last activated; @export, persists, stale entries ignored).
+`SkillResolver._get_kiho_buff_bonus()` runs at the universal roll chokepoint (same
+place as the `from_the_ashes` / mutation hooks) in BOTH `resolve_skill_check` and
+`resolve_contested_check` (per side). On the first qualifying roll of the IC day a
+monk who knows the kiho and has a Void Point spends 1 VP (s38a Void Point = Free
+Action) to activate; later qualifying rolls the same tick reuse it (no extra VP),
+tracked by the active_kiho_buffs marker == current ic_day. No effect when ic_day < 0
+(can't dedup → never risks draining VP on untracked calls) or for non-monks (gated
+on `character.kiho.has(...)`). Additive — zero effect for existing non-monk callers.
+Runtime-verified (8 scenarios): VP accounting, per-tick dedup, next-tick reactivate,
+VP-exhaustion no-op, ic_day<0 gate, non-monk skip, contested both-sides (only the
+Stealth side spends, not the Perception side). LIMITATIONS: Mind's Fire's GDD
+"Fatigued when it ends" downside is not modeled (no fatigue system) — buff has no
+cost beyond the VP; durations ("minutes"/"while active") are modeled as per-tick
+(the documented sub-day→tick compromise); the s38a active-slot rule is moot (the two
+buffs are different types and no other out-of-combat buff is wired). TUNING: a monk
+auto-spends a VP on its first Int/Stealth roll each tick regardless of the roll's
+importance (the literal just-in-time policy) — watch for VP over-drain in a live run.
+The other 11 out-of-combat kiho remain unwired (blocked on missing consumer systems),
+and the combat-kiho set was already exhausted (tranches 1–33).
+
 ### s38 Kiho — effect registry, tranche 33: Touch the Void Dragon (environmental Ring boost) (2026-06-12)
 Owner-directed (2026-06-12). **Touch the Void Dragon** (Void Internal, while active): one Ring
 and its associated Traits are one Rank higher; the Ring depends on the skirmish terrain
@@ -3982,8 +4018,1811 @@ movement** kiho (Riding the Clouds, Buoyed by the Kami, leaps); **ally/mount** k
 drain, Spin the Kharmic Wheel disadvantage swap, Void Fist VP refund). 24 kiho-effect
 tests in `tests/test_individual_combat.gd`.
 
-### Pending Redesign
-(None currently pending.)
+### Systems Added 2026-06-16 (Dungeon content — Traps + Depth Gradient, owner-approved)
+Two new dungeon-content systems for ASCII-map missions, decided via owner Q&A and
+locked before coding (proposal in `DUNGEON_CONTENT_PROPOSAL.md`; a third feature,
+Locks & Keys, was DROPPED — interior doors are paper screens and loot was already cut).
+- **s56.20 Dungeon Traps** (`gdd/s56.20_dungeon_traps_locked.md`, `simulation/trap_system.gd`).
+  Full set of 5 (Pit, Dart/Arrow, Snare→Entangled, Alarm/Tripwire, Deadfall) as a DATA
+  layer (`AsciiMapData.traps`), not tiles — HIDDEN traps never render. `TrapSystem` (pure):
+  `make_trap`, `is_loud`/`alerts_on_spring`, `trap_at`, `attempt_detect` (passive per-turn,
+  Perception+Hunting vs detect_tn, within 2 tiles + FOV → DETECTED), `attempt_disarm` (better
+  of Hunting:Traps or Sleight of Hand vs disarm_tn; miss by ≥10 springs it), `trigger`
+  (Pit 2k2 + Athletics TN 15 to halve / Dart 2k2 vs flat-footed ATN 5+armor / Snare→Entangled
+  escape TN 20 (s54.5 parity) / Alarm alert-only / Deadfall 3k2 + RUBBLE delta), and placement
+  (`place_traps`, `roster_has_trap_layer`, `quality_for_strength`). Wired into `CombatController`
+  (the exploration/stealth layer): springs a trap on the tile the player enters, runs passive
+  detection each turn (`detect_traps`), and exposes `try_disarm_trap`; loud/alarm springs route
+  through `_emit_noise`→AlertState (Pit/Deadfall LOUD, Alarm map-wide, Dart/Snare silent).
+  **All trap paths no-op when `map.traps` is empty**, so trap-free missions (every existing
+  template instance/test) are unaffected. `MissionBuilder.assemble()` calls `place_traps`
+  after population. **All numbers PROVISIONAL** (GDD describes the mechanic, not the values;
+  detect/disarm TN tiers 15/20/25/30). **Placement gate PROVISIONAL** — the roster carries no
+  per-unit skill data, so `TRAP_LAYER_UNIT_TYPES` (scout units) stands in for "a Hunting:Traps
+  unit is present"; the exact trap-laying unit set awaits owner confirmation. Setting basis:
+  Crane Daidoji Hunting:Traps (s29.2/s11.7). Placement gate owner-confirmed 2026-06-16 =
+  experienced ambushers + scouts (HIRUMA_SCOUT, NEZUMI_SCOUT, EXPERIENCED_BANDIT, BANDIT_LORD,
+  RONIN_ENFORCER). **Player-facing UI wired (2026-06-16):** AsciiMapView renders DETECTED traps
+  as a yellow `^` (HIDDEN never render), `K` disarms an adjacent DETECTED trap via
+  `try_disarm_trap` (a turn → NPCs act), and spring/detect/disarm results surface as
+  combat_events in CombatHUD's log (`K=disarm` added to the controls hint). Godot/GUT not run in
+  this environment — validated by static review + parse-trace.
+- **s56.21 Within-Map Depth Gradient** (`gdd/s56.21_within_map_depth_gradient_locked.md`).
+  Depth = within-map difficulty gradient (path-distance from the player entry), NOT stacked
+  floors (Option B explicitly not built). `AsciiMapData.depth_grid: PackedInt32Array` +
+  `compute_depth_grid(entry)` (8-dir BFS over passable + door tiles; unreachable = -1),
+  `depth_at`/`has_depth_grid`. `MissionBuilder.assemble()` fills the grid before population;
+  `MissionPopulator._gather_candidates()` orders candidate slots deepest-first when the grid is
+  present, so stronger roles (processed first) and the leader occupy deeper regions. Backward-
+  compatible: `populate()` on a map without a computed grid keeps prior behavior. Spiritual-map
+  palette shift with depth is now implemented (see s56.16.1b below). Headless
+  (generation/population only).
+
+### Systems Added 2026-06-16 (s56.16.1b Spiritual Overlap Palette — depth-driven, owner-approved)
+- **s56.16.1b The Gradient — Visual Transformation (LOCKED).** `simulation/spiritual_palette.gd`
+  (SpiritualPalette, pure class) implements the depth-driven palette shift the s56.21 lock named
+  as "s56.16's concern" — the last depth-gradient consumer. A spirit realm overlaps Ningen-do;
+  the deeper the player walks (toward the heart = the deepest reachable tile), the less the map
+  looks like the mortal realm. Each tile carries an **overlap intensity 0.0..1.0** = `depth /
+  max_depth` from `AsciiMapData.depth_grid` (entry 0.0 → heart 1.0; unreachable −1 → 0.0).
+  **Non-destructive (owner-approved):** base tiles are never mutated — `display_tile(map,x,y)`
+  derives the shown tile from base + intensity, so the LOCKED reversion ("the world heals in real
+  time, spreading outward from the heart") is just raising `restoration_progress`
+  (`current_intensity_at` heals tiles with intensity ≥ 1−progress first, i.e. the heart outward).
+  **Three bands** (owner-approved cutoffs `MIDDLE_BAND=0.33`, `HEART_BAND=0.66`) matching the GDD
+  outer/middle/heart prose. **Per-realm/element tile table (owner-approved 2026-06-16, PROVISIONAL
+  — GDD specifies the flavour, the tile vocabulary is mortal-realm only):** Gaki-do → TREE_DEAD +
+  FLOOR_ASH/RUBBLE (decaying); Toshigoku → TREE_DEAD + RUBBLE (battlefield); Chikushudo →
+  BUSH/TREE_DECIDUOUS → TREE_EVERGREEN/BAMBOO (forest thickens); Meido → TREE_DEAD + FLOOR_SNOW/
+  FLOOR_ASH (cold/grey); Fire → FLOOR_ASH/TREE_DEAD → FIRE; Water → WATER_SHALLOW → WATER_DEEP;
+  Earth → RUBBLE; **Sakkaku/Yume-do/Air/Void → no tile change** (illusion/perceptual/mechanical
+  per GDD, not a terrain palette). New `AsciiMapData` fields (all default-inert so every normal
+  map is unaffected): `overlap_intensity: PackedFloat32Array`, `spiritual_realm`,
+  `spiritual_element`, `spiritual_event_type` (−1 = none), `overlap_max_depth`,
+  `restoration_progress`; helpers `has_overlap()`, `intensity_at()`. **Render hook wired:**
+  `AsciiMapView._display_tile()` routes both visible and remembered tiles through
+  `SpiritualPalette.display_tile` when `_map.has_overlap()` — a no-op for every non-spiritual map.
+  Uses the canonical `Enums.SpiritRealm` / `Enums.Ring` / `Enums.SpiritualEventType` (no new
+  enums). **Scope (owner: palette layer only):** the transform module + render hook only; NOT
+  wired into a spiritual mission pipeline (no QuestSeedSelector spiritual seed / no realm threaded
+  through MissionBuilder — that larger s56.16 ASCII-encounter effort stays blocked). `apply_overlap`
+  is the ready API for that future pipeline; the render hook is live (gated), so the layer is
+  consumable, not dead code. LIMITATIONS: rubble-sprinkle fraction (1/4) PROVISIONAL; Meido's
+  "colors drain" is carried by tile substitution only (no separate desaturation pass — GDD gives
+  no colour-shift values); Godot/GUT unavailable here — validated by static review + parse-trace.
+
+### Systems Added 2026-06-16 (s56.16 Spiritual encounter — ritual loop + Gaki-do roster data, owner-approved)
+- **s56.16.5b–5f Restoration Ritual + s56.16.6b Gaki-do roster (tranche 1).** Two pure
+  simulation classes + one data Resource, all faithful transcriptions of the LOCKED s56.16 /
+  s54.10 / s54.2 specs. Scope confirmed with owner 2026-06-16: ritual-loop resolution + Gaki-do
+  bestiary/roster data; **live ASCII creature combat, exposure mechanics, and the other five
+  realms' rosters are deferred** to follow-up tranches (the special-ability combat is substantial
+  s40 work).
+  - **`shared/spirit_creature_data.gd`** (SpiritCreatureData Resource) — a spirit stat block:
+    rings, named traits, initiative/attack/damage, Armor TN, Reduction, wound thresholds +
+    `wounds_dead`, Fear, `Tier` (SWARM/MID/HEAVY/BOSS/TERRAIN/POST_ENCOUNTER), and special-ability
+    `tags` for the future combat layer.
+  - **`simulation/spirit_bestiary.gd`** (SpiritBestiary, pure) — `gaki_do_catalog()` transcribes
+    all 11 Gaki-do roster creatures from s54.10 (Muzai-gaki, Usai-gaki Swarm, Jikininki, Haraigaki,
+    Fukuregaki, Kagaki, Gashadokuro, O-Toyo, Mokumokuren, Buruburu) + Shozai-Gaki from s54.2 — exact
+    stat lines, no invented values. `gaki_do_pool(terrain, famine, settlement)` returns the
+    zone→creature-id pool per the Encounter Flow (s56.16.6c) with the LOCKED availability gates
+    (Gashadokuro famine-only, O-Toyo forest-only, Mokumokuren settlement-only). The roster is a
+    threat *pool* (the GDD's escalation model is emergent, not fixed headcounts — so no counts are
+    invented).
+  - **`simulation/spiritual_ritual_system.gd`** (SpiritualRitualSystem, pure) — the shugenja-side
+    Restoration Ritual: `DURATION_BY_SEVERITY` 10/20/30/50 (LOCKED), `REALM_TRAIT` and
+    `ELEMENT_COUNTER` tables (LOCKED s56.16.5c/5d), `diagnose()` (Perception + Lore: Theology vs
+    TN 15), `resolve_ritual_round()` (Lore: Theology + realm-trait OR + counter-Ring vs the ritual
+    TN; damage-this-round auto-fails the round, prior progress preserved; wrong/undeclared
+    elemental counter yields no progress), `run_summary_ritual()` (multi-shugenja stacking +
+    optional per-round interruption set — the headless/abstract path; the live turn loop will call
+    resolve_ritual_round per round), `classify_outcome()` + `apply_resolution()` (the s56.16.5f
+    spectrum: FULL→resolved + overlay fully reverts via SpiritualPalette.advance_restoration(1.0);
+    PARTIAL→banks cumulative progress + proportional revert; RETREAT/FAILURE→one-season intensity
+    spike, no progress banked), and `post_resolution_affliction_check()` (Catastrophic-only
+    Willpower vs TN 20). **The one number the GDD leaves open — the per-round ritual TN — is
+    owner-set to flat 15** (matches the diagnosis roll; recorded as `RITUAL_TN`). PC-only: NPCs
+    never use the ASCII map, so there is NO NPC auto-resolver (the prior invented one was removed
+    2026-05-26). Two `SpiritualInsurgencyData` fields added (`ritual_rounds_completed` for
+    cross-mission progress persistence per s56.16.5f, `intensity_spike_until_season` for the
+    retreat/failure spike); both default-inert and persist via WorldStateSaver's Resource array.
+  - **Wiring:** these are pure, callable systems — the live consumer is the deferred ASCII combat
+    turn loop. No orchestrator/seasonal wiring this tranche (NPCs don't resolve these; the
+    intensity-spike decay in the seasonal pass is forward-wired with no producer yet). Godot/GUT
+    unavailable here — validated by static review + parse-trace (DiceResult.total, Enums.Trait /
+    Ring / TerrainType members, CharacterStats.is_dead, SpellSystem.get_ring_value,
+    SkillResolver.resolve_skill_check signatures all confirmed). DEFERRED: live creature combat
+    + special abilities (incorporeal/swarm/wail/hunger-pull/fire-trail), the Gaki-do exposure
+    mechanic (Willpower erosion / Willpower-0 transformation / Buruburu attachment / Jigoku-
+    corrupted Shozai-gaki).
+- **s56.16.8e / 9c Toshigoku + Sakkaku rosters (tranche 2, owner-approved 2026-06-16).**
+  Extended `SpiritBestiary` with two more fully-LOCKED rosters. `_make` gained a trailing
+  `realm` param (defaults Gaki-do; existing calls untouched). **Toshigoku** (`toshigoku_catalog()`
+  + `toshigoku_pool()`): all 7 creatures from s54.10 — Musha Recruit, Ashigaru Musha (Spear),
+  Bow Ashigaru Musha, Musha Soldier, Musha Commander, Ancient General (boss), Phantom Battle
+  (environmental hazard, not_creature). **Sakkaku** (`sakkaku_catalog()` + `sakkaku_pool()`):
+  Kappa (s54.2), Bakeneko, Konak Jiji, Mujina (illusion engine), Pekkle (s54.10) — pool follows
+  the GDD's real-threats/deceptions split (s56.16.9c) rather than inventing zone tiers.
+  All stat lines are exact transcriptions — no invented values or headcounts. **Still DEFERRED:**
+  **Chikushudo** (s56.16.7b) — its territorial defenders (spirit wolves/boars/bears/stags/
+  eagles/snakes) are natural-animal bases (s54.1) and the GDD documents only the bear's +2-Earth
+  overlay, so a faithful transcription needs the s54.1 natural stats + the overlay rule (the 3
+  explicit creatures — Kitsune, Kitsune-tsuki, Hengeyokai Spirit Lord — ARE fully statted and
+  could be added when that's resolved). **Meido and Yume-do** have NO roster/encounter section in
+  s56.16 (only the 56.16.5c restoration approach) — nothing to transcribe; blocked on GDD content.
+  Plus the live creature combat + exposure mechanic from tranche 1.
+- **s56.16.7b Chikushudo roster (tranche 3, owner-approved 2026-06-16).** Completes the four
+  statted realms. The territorial-defender spirit animals are NOT new species — the LOCKED
+  "Chikushudo Spirit Animal Overlay" (s54.10) is fully specified (**all Rings +2 over the s54.1
+  base, cascading to derived stats; Swift +1; Spirit; no Fear; Taint 0**), so the owner question
+  about a "general buff" was moot (the bear's "+2 Earth" was just an instance of the +2 rule).
+  To avoid inventing re-derived numbers, `chikushudo_catalog()` stores the **s54.1 base** stat
+  block verbatim for the 7 spirit animals (Wolf/Boar/Bear/Stag/Eagle/Hawk[=Falcon]/Snake[=Asp]),
+  tags each `chikushudo_spirit`, and exposes the overlay as documented constants
+  (`CHIKUSHUDO_RING_BONUS=2`, `CHIKUSHUDO_SWIFT_BONUS=1`) for the deferred combat layer to apply.
+  The three named denizens (Kitsune, Kitsune-tsuki, Hengeyokai Spirit Lord) have explicit s54.10
+  blocks — stored as-is. `chikushudo_pool()` follows the 7b/7f zone flow. NOTE (GDD inconsistency,
+  left unedited): s56.16.7b's bear example says "Earth 4 base becomes Earth 6," but the actual
+  s54.1 Bear is Earth 6 — s54.10's overlay section is explicit that the base comes from s54.1, so
+  the stored base is Earth 6 (overlay → 8). **Now done: all four realms that HAVE rosters in
+  s56.16** (Gaki-do, Toshigoku, Sakkaku, Chikushudo). **Meido and Yume-do remain blocked** — s56.16
+  gives them no roster/encounter section at all (only the 56.16.5c restoration approach), so there
+  is nothing to transcribe without inventing. Still deferred: the live ASCII creature combat +
+  special abilities, and the per-realm exposure mechanics.
+- **s56.16 per-realm Exposure mechanics (tranche 4, owner-approved 2026-06-16).**
+  `simulation/spiritual_exposure_system.gd` (SpiritualExposureSystem, pure) — the "being
+  somewhere you do not belong erodes you" resolver for all four encounter realms, operating on a
+  per-character exposure-state Dictionary (`new_state(realm, base_willpower)`) the deferred combat
+  turn loop owns. PC-only. All values LOCKED. **Periodic check** (`roll_periodic_check`): per-realm
+  interval (Chikushudo per-minute ≈ 10 rounds; others per-10-min ≈ 100), starting TN
+  (Gaki 10 / Toshigoku 15 / Sakkaku 10 / Chikushudo 10) rising by step (Sakkaku +2, others +1);
+  Sakkaku rolls max(Awareness, Willpower), the rest Willpower; supports creature-stacking
+  `extra_tn` (Gaki Muzai swarm / Gashadokuro Bone Rattle), Toshigoku crystal `+2k0`, and an
+  `advance_tn=false` mode for the Toshigoku per-combat trigger (`toshigoku_combat_trigger`).
+  **Per-realm failure effects:** Gaki/Toshigoku lose a Willpower Rank (→ Muzai-gaki / slaughter
+  transformation at 0; `lowest_wp_seen` tracked); Sakkaku accrues Compulsion failures (flags any
+  failure at TN ≥ 20); Chikushudo accrues pacification failures (-1 Init / -1k0 vs spirit animals
+  each, pacified at 5). **Toshigoku 8b thresholds:** `toshigoku_combat_modifier` (-1k0 Social /
+  +1k0 damage at -2 Ranks), `toshigoku_must_roll_to_retreat` / `_attacks_indiscriminately`
+  (reduced TO 2 / TO 1), and the TN-15 disengage / TN-20 regain-control rolls. **Chikushudo
+  `chikushudo_snap_out`** (ally Contested Willpower removes one failure level). **Recovery**
+  (`recover_outside`): Gaki/Toshigoku +1 Rank/10 min, Sakkaku -1 failure/hour, Chikushudo
+  immediate. **Post-encounter:** `gaki_buruburu_check` (25% if lowest WP < 2, s56.16.6e),
+  `toshigoku_post_consequences` (Brash / Brash+Overconfident by lowest WP, permanent if rescued
+  from WP 0, s56.16.8c), `sakkaku_post_consequences` (Obtuse one season at 4+ failures; 25%
+  permanent minor Disadvantage if any failure at TN 20+, s56.16.9a). **Jigoku-corrupted Shozai
+  (s56.16.6d):** `corrupted_shozai_chance(ptl)` (5/15/30/50% by PTL) + `corrupted_shozai_taint_check`
+  (Earth vs TN 15 per melee hit). Haraigaki Wail direct loss via `apply_willpower_loss`. Returns
+  consequence descriptors (disadvantage name strings, flags) for the combat/world layer to apply;
+  does not mutate the character (consistent with the ritual system). No NPC path (PC-only). Godot/
+  GUT unavailable here — validated by static review + parse-trace (DiceEngine.randf/roll_die/
+  roll_and_keep.total, SpellSystem.get_ring_value, character.awareness/willpower confirmed).
+  DEFERRED: wiring into the live ASCII turn loop (combat tranche), and the slow "left-behind →
+  permanent transformation" timers (Gaki-do 6f one-hour soul-return, Chikushudo 7a multi-day
+  animal transformation) which need a cross-session timer the encounter layer will own.
+- **s56.16 MissionBuilder spiritual wiring (tranche 5, owner-approved 2026-06-16).**
+  `MissionBuilder._assemble_spiritual()` now enriches the spiritual mission package with the data
+  the (deferred) ritual/exposure combat loop consumes — the connective layer between the headless
+  data/math systems and the future turn loop. Added to `environment["spiritual"]` (+ a top-level
+  `roster_pool`): the **roster pool** via `_spiritual_roster_pool()` (realm overlaps → the realm's
+  zone→creature-id pool with gates: Gaki-do uses `province.starvation_stage>0 || crisis_type=="famine"`
+  for the Gashadokuro famine gate, `province.terrain_type` for O-Toyo forest, settlement=false since
+  the overlap reuses the terrain template not a settlement map; elemental imbalances + Meido/Yume-do
+  → `{}`); the **ritual metadata** via `_spiritual_ritual_meta()` (duration by severity, RITUAL_TN 15,
+  and the approach — realm trait for overlaps, counter Ring for imbalances); the **exposure realm**
+  (the combat layer calls `SpiritualExposureSystem.new_state(realm, pc.willpower)`); and the **heart
+  tile** via `_find_heart_tile()` (deepest reachable depth-grid tile, s56.16.5a). Purely additive —
+  existing keys unchanged, `placements`/`roster` still empty (live creature combat remains the next
+  tranche). Validated by static review + parse-trace (SpiritBestiary pool fns, SpiritualRitualSystem
+  DURATION_BY_SEVERITY/RITUAL_TN/counter_ring/REALM_TRAIT, ProvinceData.starvation_stage/crisis_type,
+  AsciiMapData depth API all confirmed). With this, the headless s56.16 pipeline is end-to-end: a
+  spiritual seed → map + overlay + roster pool + ritual/exposure/heart metadata, ready for the
+  combat turn loop to drive.
+- **s56.16/s54.10 creature special abilities (tranche 6, owner-approved 2026-06-16).**
+  `simulation/spirit_ability_system.gd` (SpiritAbilitySystem, pure) — the reusable mechanic layer
+  the deferred ASCII combat loop hooks into, keyed on `SpiritCreatureData.tags`. All values from
+  the LOCKED s54 stat blocks. **Damage filter** (`incoming_damage(creature, weapon_kind)` →
+  {multiplier, heals, no_explode}): incorporeal (physical→0, magic/crystal→1), superior_invuln
+  (only magic/jade), partial_invuln (mundane→0), Pekkle half+no-explode, Kagaki fire-immune/heals
+  + water-double; lowest-multiplier-wins compose. `is_immune()`, `reduction_for_kind()` (Usai-gaki
+  Reduction-10-vs-normal). **Attack-side:** `attack_bypasses_armor()` (Shozai ignores_armor /
+  Kitsune-tsuki spirit_strike / Mokumokuren gaze), `deals_unhealable_spiritual_damage()` (gaze),
+  `on_hit_self_heal()` (O-Toyo +5), `has_regeneration()` / `reforms_on_death()`. **Exposure feeds**
+  (consumed by SpiritualExposureSystem): `willpower_tn_contribution()` / `total_willpower_tn()`
+  (Muzai swarm +1 each, Gashadokuro Bone Rattle +2 → the `extra_tn` for periodic checks),
+  `wail_effect()` (Haraigaki: within 5 tiles, Willpower TN 20 → -1 Rank + lose next Simple). Pure,
+  returns descriptors/modifiers, mutates nothing. DEFERRED to the combat-loop tranche (need live
+  grid/turn-state): the positional/turn abilities — hunger_pull, engulf, fire_trail spread, illusion
+  tiles, possession, paralysis_venom, deceptive_weight, phantom_battle tile damage, invisibility,
+  shapeshift disguise, and mob_frenzy/rally group counts. Validated by static review + parse-trace
+  (SpiritCreatureData.has_tag/.reduction, minf/maxf confirmed; no external deps).
+- **s56.16 live-combat adapter (tranche 7, owner-approved 2026-06-16).**
+  `simulation/spirit_combatant.gd` (SpiritCombatant, pure) — the foundational adapter for the live
+  ASCII spiritual encounter: `to_character_data(creature, instance_id)` converts a SpiritCreatureData
+  stat block into a combat-ready L5RCharacterData "puppet" the AsciiMapCombatOrchestrator consumes
+  as a participant (the orchestrator is character_id-keyed over L5RCharacterData, so creatures need
+  this wrapper). `catalog_for_realm()` + `spawn(realm, creature_id, instance_id)` instantiate puppets
+  on demand (escalation, s56.16.5e). New inert field `L5RCharacterData.spirit_creature: SpiritCreatureData`
+  (null for real characters) stores the source so the ability/override layer can read it.
+  **FAITHFUL** (the existing combat math reads these directly): the four Rings (via paired traits,
+  ring = min of pair), named-trait overrides (Reflexes/Agility/Strength/… drive init/attack/damage),
+  Armor TN (back-calc into armor_tn_bonus so get_armor_tn = Reflexes×5+5+bonus returns the creature's
+  value), natural Reduction (armor_reduction), and the natural-weapon DAMAGE dice (strength_adds=false).
+  Void Ring forced to 0 (spirits have none). **APPROXIMATED until the orchestrator override layer**
+  (the next, runtime-verifiable tranche): the to-HIT roll (PC trait+skill vs the creature's fixed
+  Xk Y — stored on spirit_creature.attack_rolled/kept for the override) and the WOUND track (PC
+  Earth-derived capacity vs the creature's explicit wounds_dead/thresholds — also on spirit_creature).
+  Special abilities apply via SpiritAbilitySystem (tranche 6) off the tags. **Scope/risk note:** the
+  live turn loop (spawning creatures into setup_combat with escalating threats, the bushi-defends-
+  shugenja loop driving ritual+exposure+abilities per round, encounter outcome) AND the exact
+  attack/wound overrides modify the core combat orchestrator and are NOT runtime-verifiable in this
+  environment (no Godot binary) — deferred to a tranche that can be driver-verified, to avoid pushing
+  a large unverified change into core combat. This adapter is isolated (new file + one inert field;
+  orchestrator/IndividualCombat untouched) and validated by static review + parse-trace
+  (character_name/void_ring/armor_reduction/armor_tn_bonus/weapons[WeaponData] fields, get_armor_tn
+  formula, WeaponData fields, SpiritBestiary catalogues all confirmed).
+- **s56.16 live encounter driver + combat hook (tranche 8, owner-approved 2026-06-16, static-only).**
+  Owner chose to build the live integration now despite no Godot runtime here (driver-verify later).
+  Two pieces: (1) **`simulation/spiritual_encounter.gd`** (SpiritualEncounter, pure) — the per-round
+  SPIRITUAL layer on top of AsciiMapCombatOrchestrator. `start()` builds the encounter (PCs at the
+  entry, initial heart-zone creatures placed on the heart ring via SpiritCombatant.spawn, exposure
+  states per PC) and calls `setup_combat`. `process_round()` (called per combat round) runs the
+  Restoration Ritual (each living shugenja contributes a round; interrupted if they took damage since
+  last round — wounds-delta tracked), the periodic Exposure check (timer per realm interval, with
+  `extra_tn` = co-located creature swarm/rattle stacking via SpiritAbilitySystem), and reports
+  ritual progress/completion + shugenja-alive. `resolve()` applies the s56.16.5f outcome to the event
+  + map overlay (idempotent). The orchestrator owns movement/turn-order/attack resolution (the player
+  drives PC+bushi turns; creatures act via execute_npc_turn). (2) **`_apply_hit` spirit hooks** in
+  AsciiMapCombatOrchestrator (guarded by `spirit_creature != null`, inert for real characters): a
+  spirit TARGET filters incoming damage by weapon kind (SpiritAbilitySystem.incoming_damage —
+  incorporeal/partial-invuln/Pekkle-half/Kagaki fire; weapon kind defaults mundane, which is
+  faithful — physical weapons don't permanently destroy spirits, the ritual is the win condition); a
+  spirit ATTACKER that bypasses armor (Shozai/spirit_strike/gaze) ignores Reduction; a spirit
+  attacker with life_drain self-heals on hit. Static-validated only (heal_wounds/incoming_damage/
+  attack_bypasses_armor/setup_combat/MapCombatState fields/MovementSystem.is_passable confirmed; the
+  _ORC class-alias-const and inner-class outer-const-default hazards were removed). DEFERRED (need
+  Godot driver-verify and/or more orchestrator work): mid-combat threat ESCALATION (adding creature
+  participants to a live MapCombatState — the risky internal insertion), the exact creature to-HIT
+  roll and WOUND-track overrides (the SpiritCombatant PC-approximation stands), weapon-material
+  detection for jade/crystal damage (no WeaponData material field), and the creature-turn firing of
+  positional abilities (hunger-pull, wail-as-action, fire-trail, possession). With this the s56.16
+  encounter is wired end-to-end in shape; the live turn loop needs runtime verification before relying on it.
+- **s56.16 mid-combat threat escalation (tranche 9, owner-approved 2026-06-16, static-only).**
+  Closes the largest deferred piece of tranche 8. New `AsciiMapCombatOrchestrator.add_enemy()`
+  adds a creature participant to a LIVE MapCombatState (initiative roll, turn-order re-sort,
+  TurnState) — mirrors `add_companion`'s insertion exactly, FACTION_ENEMY, no companion
+  bookkeeping. `SpiritualEncounter.spawn_threat(es, zone, dice)` spawns the next un-spawned pool
+  creature of a zone tier on a free tile near the heart (`_free_tile_near` expanding-ring search,
+  unoccupied + passable). `process_round` now drives escalation: the initial spawn is the weakest
+  tier (outer / Sakkaku deceptions) on the heart ring; deeper tiers appear as the ritual
+  progresses, with waves triggered at the **LOCKED** depth-band cutoffs (`SpiritualPalette.MIDDLE_BAND`
+  0.33 → middle, `HEART_BAND` 0.66 → heart; Sakkaku reveals real_threats at the 0.5 midpoint) —
+  reusing locked values, NOT an invented schedule. One creature per wave, bounded by pool size
+  (`_zone_idx` per-zone cursor; `_waves_done` caps at ≤2, no runaway spawning). The escalation
+  fraction = ritual_progress / rounds_remaining, so threats deepen in lockstep with the shugenja's
+  progress. Static-validated only (add_enemy mirrors add_companion; SpiritualPalette band consts,
+  pool zone keys, MovementSystem.is_passable, Vector2i dict keys confirmed). STILL DEFERRED to a
+  runtime tranche: exact creature to-HIT/wound overrides (SpiritCombatant approximation stands),
+  weapon-material detection (jade/crystal), and the creature-turn firing of positional abilities
+  (hunger-pull, wail-as-action, fire-trail, possession). With escalation, the live s56.16 encounter
+  loop is complete in shape (setup → per-round ritual+escalation+exposure → resolution); only the
+  per-creature combat fidelity + positional-ability turns remain, both needing a Godot runtime.
+- **s56.16 exact creature combat fidelity (tranche 10, owner-approved 2026-06-16, static-only).**
+  Replaces the SpiritCombatant to-hit/wound approximation with the stat-block values, via two
+  minimal guarded hooks (both inert for real characters — `spirit_creature == null`):
+  (1) **Wound track** — `CharacterStats.get_wound_level` and `get_total_wound_capacity` honor the
+  creature's explicit `wounds_dead` + per-level `wound_thresholds` instead of the PC Earth×2 formula.
+  New `_spirit_wound_level()`: DEAD at `wounds_dead`; otherwise the level index = how many cumulative
+  `wound_thresholds` the wounds have exceeded (proportional fallback if a creature has no thresholds).
+  This propagates everywhere automatically (is_dead, wound penalty, damage clamp) since it is the
+  single wound-level source. (2) **To-hit roll** — `IndividualCombat.resolve_attack` uses the
+  creature's fixed `attack_rolled k attack_kept` instead of the PC trait+skill roll, applied before
+  the kata/void modifiers (creatures have none). Combined with the already-faithful damage
+  (WeaponData rolled/kept, strength_adds=false), Armor TN (back-calc), and Reduction, spirit combat
+  is now stat-faithful for to-hit, damage, defense, AND death. Static-validated only (SpiritCreatureData
+  attack_rolled/attack_kept/wounds_dead/wound_thresholds fields, the wound-level chain, and resolve_attack
+  roll construction confirmed). REMAINING approximations (minor, documented): initiative still uses the
+  puppet's Reflexes+Insight (not the creature's initiative_rolled/kept), and weapon-material detection
+  (jade/crystal vs the damage filter) awaits a WeaponData material field. Plus the creature-turn firing
+  of positional abilities (hunger-pull, wail-as-action, fire-trail, possession). All of tranches 7–10
+  are static-only and need a Godot runtime to driver-verify.
+- **s56.16 creature positional abilities, tranche 1 (tranche 11, owner-approved 2026-06-16, static-only).**
+  The last functional s56.16 gap — creatures now use their grid/AoE abilities, not just plain attacks.
+  Two of the s54.10 positional abilities wired (both fully numeric in the locked stat blocks, no
+  invented values): (1) **Hunger Pull** (Fukuregaki, Passive) — `SpiritualEncounter._apply_hunger_pull`
+  runs at the START of each round (a new step 0 in `process_round`): every living PC within
+  `HUNGER_PULL_RADIUS` (4) tiles of a `hunger_pull` creature rolls Earth vs `HUNGER_PULL_TN` (15);
+  on failure they are dragged 1 tile toward the creature (8-dir step, blocked by the creature's own
+  tile / another occupant / a map edge / an impassable tile). (2) **Wail of the Starving** (Haraigaki)
+  — new public `SpiritualEncounter.creature_turn(es, cid, dice)`: a `wail` creature spends its
+  Complex action so every PC within 5 tiles rolls Willpower vs `WAIL_TN` (20), and failure costs a
+  Willpower Rank via `SpiritualExposureSystem.apply_willpower_loss` on the PC's exposure state; any
+  other creature delegates to the standard NPC AI turn (`execute_npc_turn`). The encounter caller
+  routes ENEMY turns through `creature_turn` (instead of `execute_npc_turn` directly) so the
+  AoE/positional abilities fire. New ability-layer helpers `SpiritAbilitySystem.hunger_pull_effect`
+  + `HUNGER_PULL_*` constants (mirrors the existing `wail_effect`). Static-validated only
+  (`apply_willpower_loss`/`new_state`, `execute_npc_turn` 5-arg signature, `get_earth_ring`,
+  `roll_and_keep(...).total`, TurnState `can_use_complex`/`consume_complex` via untyped dynamic call
+  to dodge the inner-class type-resolution hazard, `pc_ids`/`exposure` populated in `start`, the
+  Fukuregaki/Haraigaki tags confirmed). DEFERRED (need grab-state / tile-fire / condition / illusion /
+  possession systems the core lacks, OR are GM-judged): engulf-on-adjacent grab (Fukuregaki/Usai swarm),
+  fire_trail + Everything Burns (Kagaki — needs tile-fire spread + an on-fire condition), paralysis_venom
+  (Konak Jiji — needs a Stunned-for-minutes condition), phantom_battle tile damage (environmental
+  3×3–5×5 hazard that shifts), possession / shapeshift / invisibility / mob_frenzy / rally. As with
+  tranches 7–10, static-only — needs a Godot runtime to driver-verify.
+- **s56.16 engulf grab state (tranche 12, owner-approved 2026-06-16, static-only).**
+  Builds the creature grab state and wires Fukuregaki Engulf + the Usai swarm grab (s54.10).
+  New `EncounterState.engulfed` (pc_id → captor creature_id). **Auto-grab:** `_apply_hunger_pull`
+  now seizes a non-engulfed PC who is (or is dragged) adjacent to an `engulf`-tagged creature;
+  engulfed PCs are skipped by the pull (held in place). **Crush tick:** new `_apply_engulf_crush`
+  (process_round step 0b) applies the captor's crushing damage (creature `damage_rolled k
+  damage_kept`, exploding) to each engulfed PC every round via `WoundSystem.apply_damage`; the
+  grab releases if the captor dies, the PC dies, or the captor is no longer adjacent. **Escape:**
+  new public PC-action `attempt_engulf_escape(es, pc_id, dice, full_move=false)` — Fukuregaki
+  (engulf) = Contested Strength vs the captor's `traits["strength"]`; Usai swarm = release if the
+  PC's Water Ring is 3+ OR a Full Move is spent. **Immobile guard:** `creature_turn` now returns
+  early for `immobile` creatures (Fukuregaki) so the generic AI can't walk the engulfer off and
+  release its own grab — its threat is the passive pull/crush. All values from the locked s54.10
+  stat blocks (Fukuregaki 3k3 crushing / Strength 5; swarm Water 3+/Full Move). Static-validated
+  only (engulf/swarm/immobile tags on the creatures, `damage_rolled/kept` + `traits["strength"]`
+  + `water` fields, `WoundSystem.apply_damage(char, int)`, `get_ring_value(WATER)`, `.keys()`-copy
+  safe erase-during-iteration confirmed). DEFERRED unchanged: fire_trail/Everything Burns,
+  paralysis_venom, phantom_battle, possession/shapeshift/invisibility/mob_frenzy/rally. Static-only
+  — needs a Godot runtime to driver-verify.
+- **s56.6.6 Fire Propagation + s54.10 Kagaki fire (tranche 13, owner-approved 2026-06-16, static-only).**
+  Builds the tile-fire layer (s56.6.6, all values PROVISIONAL per the GDD — none invented) and wires
+  the Kagaki's fire abilities. **`simulation/fire_system.gd`** (FireSystem, pure) over a new
+  AsciiMapData fire layer (`burning_tiles: Dictionary` idx→rounds_left, `wind_dir: Vector2i`):
+  `ignite(map,x,y)` (flammable + not-already-burning → set FIRE tile + fuel duration);
+  `process_round_end(map, weather, dice)` — the end-of-round tick: Storm/Blizzard extinguish all,
+  Rain forces a 1-round burnout + no spread, Snow no spread; otherwise spread to flammable
+  neighbours at `spread_chance` (Clear/Mist 30% uniform; Wind 60% downwind / 15% lateral / 0%
+  upwind, classified by dot-product with `wind_dir`), then decrement durations and convert burned-out
+  tiles to FLOOR_ASH (new ignitions applied after the tick so they don't cascade/decrement the same
+  round); `standing_damage` 1k1 / `passthrough_damage` 0k1 (armour does not reduce); `fuel_rounds`
+  (grass/leaves 3, crops 4, undergrowth/light-wood 5). **Encounter wiring** (SpiritualEncounter):
+  `_apply_fire_damage` (process_round step 0c) deals 1k1 to a PC standing on a burning tile AND/OR
+  set on fire; `FireSystem.process_round_end` runs at round end (gated to non-empty fire); `creature_turn`
+  fires `_apply_fire_trail` for `fire_trail` creatures (Kagaki Fire Trail + Burning Hunger — own tile
+  + 8 neighbours, 50% ignite per flammable tile, LOCKED s54.10); `attempt_extinguish(es, pc_id)` PC
+  action spends a Simple to clear the on-fire flag. **Everything Burns** (s54.10, LOCKED): new
+  `Participant.on_fire`; a guarded hook in the orchestrator's `_apply_hit` (tranche-8-consistent) sets
+  the target on fire when a `fire_trail` spirit lands a hit (Kagaki is melee-only). Static-validated only
+  (AsciiMapData.is_flammable/set_delta, WeatherState members, SpiritCreatureData.has_tag,
+  Participant.on_fire, mcs.combat.participants access, roll_and_keep(0,1)=0 no-crash, .keys()-copy
+  safe erase confirmed). LIMITATIONS: weather/wind not yet threaded from the mission into the encounter
+  (`es.weather` defaults CLEAR / no wind — spiritual overlaps reuse the terrain template); smoke/coughing
+  + ignition/burning noise (s56.6.6) not modelled; grass is non-flammable here because AsciiMapData's
+  `_BURN_MAP` (the flammability definition) excludes FLOOR_GRASS (dry/green not tile-distinguishable).
+  DEFERRED unchanged: paralysis_venom, phantom_battle, possession/shapeshift/invisibility/mob_frenzy/rally.
+  Static-only — needs a Godot runtime to driver-verify.
+- **s56.6.6 weather/wind wiring + fire ownership move (tranche 14, owner-approved 2026-06-16, static-only).**
+  Threads mission weather + wind into the fire layer and relocates fire damage/spread to the shared
+  turn machinery so it works for ALL combat (arson, fire spells), not just the spirit encounter.
+  **Wind:** `MissionBuilder._assign_wind` stamps a deterministic random 8-bearing (`_WIND_BEARINGS`,
+  seed-derived) onto `map.wind_dir` at both `assemble` and `_assemble_spiritual` (s56.6.6: random at
+  gen, fixed for the mission, only relevant during Wind). **Weather:** `MapCombatState.weather` +
+  a defaulted `weather` param on `setup_combat` (all existing callers/tests unaffected);
+  `MissionSession.weather()` accessor (mirrors `fov_modifier()`) for the future mission→orchestrator
+  glue. **Ownership move (avoids a double-apply foot-gun):** fire damage (1k1 standing + 1k1 on-fire,
+  armour-ignoring, `flame_immune` creatures exempt — Kagaki) and the end-of-round
+  `FireSystem.process_round_end` spread/extinguish tick now run in `AsciiMapCombatOrchestrator.advance_round`
+  (the shared per-round machinery, alongside the existing Way-of-the-Earth / Ride-the-Water-Dragon
+  per-round effects). The tranche-13 encounter-local fire damage + tick (`_apply_fire_damage`, the
+  process_round_end call, `es.weather`) were REMOVED — the encounter keeps only Kagaki Fire Trail
+  ignition (`_apply_fire_trail` in `creature_turn`) and the PC `attempt_extinguish`. `SpiritualEncounter.start`
+  gains a `weather` param threaded into `setup_combat`. Net: when the (deferred) live encounter loop is
+  wired it drives `advance_round` for turn machinery, so fire applies once per round with no duplication;
+  general skirmishes get fire for free. Static-validated only (setup_combat arity back-compat, wind dot-product
+  classification, flame_immune guard, no dangling es.weather/_apply_fire_damage refs confirmed). LIMITATIONS:
+  the production glue that calls `setup_combat` for a non-encounter mission with `MissionSession.weather()`
+  is still deferred (CombatScreen uses the CombatController stealth layer; the turn-based-orchestrator live
+  mission entry is the deferred piece); smoke/coughing/noise still not modelled.
+- **s54.10 Phantom Battle (tranche 15, owner-approved 2026-06-16, static-only).**
+  The ambient Toshigoku environmental hazard ("the background noise of Toshigoku made visible") — a
+  moving tile-AREA effect, NOT a combat participant. `EncounterState.phantom_battles` (Array of
+  {center, radius, last_shift, drift, rolled, kept}). `_seed_phantom_battle` fires in `start()` for a
+  TOSHIGOKU realm: one 3×3 (radius 1) or 5×5 (radius 2) area near the heart, damage 2k2 read from the
+  `phantom_battle` catalog entry. `_apply_phantom_battles` (process_round step 0d): every PC within the
+  Chebyshev area at round start takes 2k2 spiritual damage (normal armour — GDD silent on bypass, not
+  invented; moving off avoids it); `_shift_phantom_battle` drifts the area one block in its flow
+  direction every 5 rounds, reversing drift at a map edge (s54.10: "shift position every 5 rounds as the
+  ghostly battle flows across the terrain"). `spawn_threat` now guards `not_creature` catalog entries so
+  an environmental hazard can never be added as a combat participant (it lives only in the "terrain" pool
+  zone, which the escalation waves don't draw — the hazard is seeded at start instead). All values
+  GDD-LOCKED (2k2, 3×3–5×5, 5-round shift, unfightable). Static-validated only (toshigoku_catalog /
+  catalog_for_realm / has_tag / damage_rolled-kept / _free_tile_near / in-place Dict mutation over the
+  array confirmed). LIMITATIONS: drift is random-per-mission, not battle-historically directed (GDD gives
+  no path); even radii (4×4) not used — the 3×3/5×5 endpoints stand in for the range. DEFERRED unchanged:
+  paralysis_venom, possession/shapeshift/invisibility/mob_frenzy/rally. Static-only — driver-verify in Godot.
+
+- **Timed-condition layer + s54.10 Paralysis Venom (tranche 16, owner-approved 2026-06-16, static-only).**
+  Adds the first *timed* (duration-based, auto-expiring, not roll-recovered) condition to s40 combat —
+  reusable infra for any "Condition for N Rounds" effect — and wires Konak Jiji Paralysis Venom on it.
+  **Layer:** new `IndividualCombat.Participant.timed_conditions` (condition → expiry Round) +
+  `apply_timed_condition` (adds the condition to `conditions` so every existing gate — Armor TN 5,
+  attack penalties, can-act — fires unchanged; keeps the longer of an existing/new timer),
+  `is_condition_timed`, and `expire_timed_conditions` (sweep at `round_number >= expiry`, wired into
+  `AsciiMapCombatOrchestrator.advance_round` beside `expire_timed_modifiers`/`expire_active_kiho`,
+  after the `round_number += 1`). The Stunned/Dazed recovery rolls in `advance_round_reactions` now
+  skip a *timed* condition (`not is_condition_timed`), so venom runs its full duration instead of being
+  shed by an Earth roll. **Paralysis Venom (s54.10 Konak Jiji):** `SpiritAbilitySystem.paralysis_venom_minutes`
+  returns the creature's Water Ring for `paralysis_venom`-tagged spirits (0 otherwise); `_apply_hit`'s
+  spirit-attacker block (beside on-fire/life-drain) applies a timed Stunned for `Water × ROUNDS_PER_MINUTE`
+  on a hit against a non-spirit target (Konak Jiji Water 2 → 20 rounds = 2 minutes). No save (the GDD
+  gives none — the venom runs its course). `IndividualCombat.ROUNDS_PER_MINUTE = 10` matches the
+  established s56.16 exposure-layer convention (~10 rounds/minute), so the minutes→rounds conversion is
+  not a new invented value. Fires through the standard NPC attack path (Konak Jiji is a normal Sakkaku
+  combatant), so no encounter-level change is needed. All values GDD-given (Stunned, Water minutes).
+  Static-validated only (timed_conditions field, the recovery-guard sites, advance_round increment-then-sweep
+  ordering, SpiritCreatureData.water, `.keys()`-copy erase-safety, konak_jiji's paralysis_venom tag confirmed).
+  DEFERRED: Konak Jiji deceptive_weight (auto-hit-when-picked-up + TN-40 pin — needs a grab/pin model)
+  and lure; possession/shapeshift/invisibility/mob_frenzy/rally. Static-only — driver-verify in Godot.
+- **s56.16 creature ability set — close-out + blocker audit (2026-06-16, owner-directed).**
+  Audited every special-ability tag across the four statted realms (Gaki-do / Toshigoku / Sakkaku /
+  Chikushudo) against `SpiritAbilitySystem` + the encounter/orchestrator. Most tags are flavour/role
+  descriptors (real_threat, elite, boss, pack, formation, tactical, swift, flying, territorial,
+  negotiator, …) needing no combat code. **WIRED & applied (13 mechanics):** the incoming-damage
+  filter (incorporeal / partial_invuln / superior_invuln / Pekkle-half / no_explode / water_vulnerable),
+  armor-bypass (spirit_strike / ignores_armor / gaze_attack), life_drain self-heal (O-Toyo),
+  swarm+bone_rattle Willpower-TN exposure stacking, wail (Haraigaki), hunger_pull (Fukuregaki),
+  engulf+swarm grab/crush, fire_trail+everything_burns (Kagaki, via FireSystem), immobile turn-skip,
+  paralysis_venom (Konak Jiji), Usai-gaki kind-gated Reduction (`reduction_for_kind`, wired
+  2026-06-16 — see below). **ENCODED but not consumed (documented, not wired):** `is_immune`
+  (redundant — `incoming_damage` already composes it); `deals_unhealable_spiritual_damage`
+  (Mokumokuren gaze — Wounds untreatable by Medicine; blocked on per-wound source tracking, which the
+  wound model lacks); `has_regeneration` (Gashadokuro recovers 10 Wounds/round — NOT trivially
+  wirable: the GDD's "pushing past a Wound threshold collapses a section, stopping regen 3 rounds"
+  needs threshold-cross detection + a suppression timer; a plain per-round heal would make it
+  unkillable = unfaithful); `reforms_on_death` (Ancient General Undying — reforms once 200 rounds
+  later at the heart at full Wounds; needs a respawn-at-heart timer + once-flag). **HARD-BLOCKED (not
+  encoded — each needs a subsystem the core lacks):** possession + shapeshifter/retains_identity
+  (Bakeneko disguise — needs a control/illusion layer), lure/lure_child (Konak Jiji/Mujina social
+  trap — needs an NPC-lure mechanic), deceptive_weight (Konak Jiji auto-hit-on-pickup + TN-40
+  Athletics pin — needs a pickup/pin model), mob_frenzy/rally + Supreme-Commander aura (+1k0 to
+  nearby Musha — group-buff AI), time_thief (action-economy theft), duel_offer (Ancient General
+  Duelist's Challenge — in-combat formal duel + others cease-fire), concealment/invisibility (Mujina),
+  adapts/Tactical-Mastery (Ancient General's per-character escalating +1k0/+2k0 after 3/6 rounds —
+  boss-specific accumulation). **Verdict: the s56.16 creature ability set is complete-for-now** — every
+  ability with a clean path through the existing combat/exposure/fire/grab/timed-condition layers is
+  wired (tranches 6–16); the remainder are blocked on five named subsystems (per-wound source tracking,
+  regen-suppression timer, respawn timer, illusion/possession/disguise, group-buff AI) and a couple of
+  boss-bespoke escalation mechanics — none blocked on an unknown GDD value. The 5 encoded-but-dead funcs
+  are kept as forward-wiring (their blockers are infra, not design). DEFERRED follow-up candidates, in
+  rough order of cheapness: Gashadokuro regeneration (needs the suppression timer), then the boss reforms /
+  Tactical-Mastery, then the illusion/possession/group-AI cluster.
+- **s56.16 Usai-gaki kind-gated Reduction wired (2026-06-16, owner-directed).** Routed a spirit
+  TARGET's Reduction through `SpiritAbilitySystem.reduction_for_kind()` in `_apply_hit` (one shared
+  `w_kind` local with the existing incoming-damage filter, so the material-detection limitation —
+  default mundane until a WeaponData material field exists — lives in ONE place). Closes the encoded-
+  but-dead `reduction_for_kind`. **Zero behavior change today** (all weapons are mundane, so the swarm
+  keeps its Reduction 10 — `reduction_for_kind(swarm, mundane) == creature.reduction == armor_reduction`,
+  the value `total_defender_reduction` already returned via the puppet); the gain is closing a **latent
+  double-Reduction-vs-magic bug** — `total_defender_reduction` would keep the +10 against jade/crystal/
+  magic once material detection lands, whereas the GDD (s54.10: "Reduction 10 against normal weapons")
+  drops it to 0, which `reduction_for_kind(swarm, non-mundane) == 0` now enforces. Guarded by
+  `reduction > 0` so the attack-bypasses-armor path (Shozai/spirit_strike/gaze, already zeroed) is
+  untouched. For a non-swarm spirit it equals the creature's Reduction stat (drops the currently-zero
+  kata/pierce terms — documented as "a spirit's Reduction is its creature stat, not armor mechanics").
+  Static-validated only (W_MUNDANE const + reduction_for_kind signature confirmed; no Godot runtime here).
+- **s56.16 creature abilities — final wiring tranche (5 abilities, owner-directed "do all", 2026-06-16,
+  static-only).** Wired every remaining creature ability with a clean combat-layer path; the rest are
+  genuinely blocked on named subsystems or are pure flavour (see below). Five abilities:
+  (1) **Gashadokuro Regeneration** (s54.10): +10 Wounds at the start of each round, suppressed 3 rounds
+  when a Wound threshold is crossed. Per-round heal added to `advance_round` beside Ride-the-Water-Dragon;
+  `_apply_hit` sets `Participant.spirit_regen_suppressed_until = round+3` when a hit's `levels_crossed > 0`.
+  (`SpiritAbilitySystem.regeneration_amount`/`REGEN_SUPPRESS_ROUNDS`.) (2) **Ancient General Undying /
+  reforms_once** (s54.10): a slain General reforms ONCE, 200 rounds later, at the heart at full Wounds;
+  a second death stays down. Handled in `SpiritualEncounter._process_undying_reform` (the encounter owns
+  the heart tile): schedules via `MapCombatState.reform_pending`, respawns a fresh puppet through
+  `add_enemy`, dedups per creature id via `EncounterState._reformed_ids`. (3) **Mokumokuren Gaze
+  unhealable spiritual damage** (s54.10): new `L5RCharacterData.spiritual_wounds` (@export, default 0,
+  always ≤ wounds_taken); `_apply_hit` tags the gaze portion; `MedicineSystem.treat_wound` caps healing
+  to the physical portion (`wounds_taken − spiritual_wounds`); `WoundSystem.heal_wounds` (magic/natural)
+  clamps the spiritual portion down with total. (4) **Toshigoku group auras** (s54.10): Mob Aggression
+  (3+ mob_frenzy within 5 tiles → +1k0 Attack), Rally (Musha Soldier within 10 of a Commander → +1k0
+  Attack), Supreme Commander (any Musha within 20 of the Ancient General → +1k0 Attack AND +1k0 Damage).
+  (5) **Tactical Mastery / adapts** (s54.10): the General gains +1k0 vs a target after 3 rounds engaged,
+  +2k0 after 6 (tracked in `MapCombatState.tactical_engaged`). Auras + Tactical computed in the orchestrator
+  (`_set_spirit_attack_auras`, positional) and applied as +N rolled attack/damage dice via two new
+  additive, spirit-gated `Participant` fields (`spirit_attack_rolled_bonus`/`spirit_damage_rolled_bonus`)
+  read in `resolve_attack`/`resolve_damage` (inert 0 for everyone else; reset after each melee so they
+  never leak to an extra/off-hand/ranged strike). Infra added: `MapCombatState.combatants` (id →
+  L5RCharacterData, populated by setup_combat/add_enemy/add_companion) for ally lookup at attack time.
+  All values GDD-LOCKED (10/3 regen, 200 reform, 5/10/20 radii, 3/6 tactical, +1k0/+2k0). **STILL
+  BLOCKED (each needs a subsystem the core lacks; not invented):** Duelist's Challenge (duel_offer —
+  needs a PC turn-based accept/decline UI + ceasefire handshake); possession (Kitsune-tsuki in-combat
+  control transfer; Shozai-gaki/Buruburu are slow world-sim afflictions over days/weeks — need a
+  control/possession layer + cross-encounter affliction timer); shapeshifter/disguise/illusion/
+  invisibility (Bakeneko, Kitsune, Hengeyokai, Mujina — need an illusion/disguise/perception layer);
+  Konak Jiji deceptive_weight + lure (need a pickup/lure interaction model). **FLAVOUR-ONLY (no
+  mechanical ability in the stat block, no code):** Pekkle lure_child/time_thief (stat block lists only
+  Partial Invulnerability), spirit-animal field_commander/concealment, deceiver/vindictive/trickster.
+  Ranged spirit auras not hooked (only melee — Bow Ashigaru use Volley, a separate unwired ability).
+  Static-validated only (symbol resolution + GDD spec confirmed; no Godot runtime — driver-verify later,
+  consistent with the rest of the s56.16 combat layer).
+- **s54.10 Shapeshifter / illusion subsystem — invisibility & intangibility (owner-directed "do all",
+  2026-06-16, static-only).** First slice of the s54.10 Shapeshifter system: the combat-defining
+  illusion mechanic — an invisible (Mujina) or insubstantial (Ephemeral Form) creature cannot be
+  targeted by attacks. GDD: "can only be wounded if it chooses to be tangible or is caught by surprise."
+  The one GDD-silent value (the spot/reveal rule) is resolved as **reveal-on-act** (owner-chosen "do all";
+  picked because it needs NO invented TN — deterministic, faithful). **Wired:** (1) **Untargetability** —
+  `_is_targetable(state, cid)` computes hidden state from creature tags + reveal window: Mujina
+  `ghostly_form`/`invisibility` are at-will (persistent untargetable); `ephemeral_form` (Kitsune) is a
+  10-round activated window. `get_melee_targets`/`get_ranged_targets` exclude hidden creatures (so NPC
+  AND PC attackers never select them — `_npc_pick_target` draws from those lists), and
+  `execute_melee_attack`/`execute_ranged_attack` early-return `target_hidden`. (2) **Reveal-on-act**
+  (`_reveal_if_hidden`) — a hidden creature that attacks/shoots becomes targetable through its next turn
+  (`Participant.untargetable_revealed_until = round + 1`). Mujina have Attack:None ("do not actually
+  fight"), so they never reveal → permanently elusive (faithful to "extremely difficult to kill /
+  Immortal"; the spiritual encounter resolves by ritual progress, not by killing, so a lingering Mujina
+  doesn't block resolution). (3) **Ephemeral Form** — NPC auto-activates (`_npc_maybe_activate_ephemeral_form`,
+  Free Action, once per encounter) when an enemy is adjacent; sets a 10-round insubstantial window
+  (`Participant.ephemeral_form_expiry`/`ephemeral_form_used`). (4) **Protection of Yomi** (Major
+  Shapeshifter): Reduction 5, stacking with natural, added to a spirit target's reduction in `_apply_hit`.
+  New: `Participant.untargetable_revealed_until`/`ephemeral_form_expiry`/`ephemeral_form_used`;
+  SpiritAbilitySystem `is_at_will_hidden`/`has_ephemeral_form`/`protection_of_yomi_reduction` +
+  `EPHEMERAL_FORM_ROUNDS=10`/`PROTECTION_OF_YOMI_REDUCTION=5` (GDD-LOCKED). Kitsune given its two
+  combat-relevant GDD-listed abilities (`ephemeral_form`, `protection_of_yomi`); Mujina already carried
+  `ghostly_form`/`invisibility`. **STILL DEFERRED (need their own layers, not invented):** Mimic / A
+  Panther's Moves (disguise + Stealth — combat is faction-keyed, not identity/perception-keyed; Stealth
+  is the separate CombatController layer); Possession (Major Shapeshifter + Kitsune-tsuki/Shozai/Buruburu
+  — control-transfer layer + cross-encounter affliction timer); Mujina illusion spellcasting (Mists of
+  Illusion / Way of Deception — needs a tile-combat spell-cast consumer); lure (Konak Jiji / Mujina
+  social trap — pickup/lure interaction); wall-phasing movement for intangible creatures (movement
+  is_passable has no creature context); Bakeneko / Hengeyokai specific shapeshifter abilities (the GDD
+  enumerates only the Kitsune's set — choosing theirs would be invention). Piercing Howl (Fear 2),
+  Legendary Healing, Speed of a Predator, Strength of Jade, Protection of Tengoku are classifiable but
+  not on the encoded creatures' GDD-given sets (no consumer yet). Static-validated only (symbol
+  resolution + GDD spec confirmed; no Godot runtime — driver-verify later).
+- **s54.10/s54.2 Possession — combat attempt → cross-encounter affliction (owner-directed "do all",
+  2026-06-16, static-only).** Possession is seeded by a tile-combat attempt and resolved over the
+  world-sim days, mirroring the proven `death_touch_affliction` pattern. New
+  `L5RCharacterData.possession_affliction: Dictionary` (@export, persists; empty = none). **Combat
+  attempt** (`AsciiMapCombatOrchestrator._npc_maybe_possess`, wired into `execute_npc_turn` before the
+  atemi/attack block): a possessing spirit (Shozai-gaki / Buruburu / Kitsune-tsuki, by the `possession`
+  tag) adjacent to a valid non-spirit, un-possessed victim spends a Complex action to attempt it.
+  Kitsune-tsuki requires the victim Down/Out (`get_wound_level >= DOWN`) and rolls victim Willpower vs
+  TN 25 (possessed on failure); Shozai/Buruburu roll Contested Willpower (possessor vs victim). On
+  success it stamps `{kind, possessor_id, possessor_willpower}` on the victim. **World-sim**
+  (`DayOrchestrator._process_possession_afflictions`, run beside `_process_death_touch_afflictions`,
+  before `_process_lord_deaths` for same-tick succession; timing fields init on first processing so the
+  combat layer needs no ic_day): **Shozai** feeds 1k1 Wounds/day (lethal → `_apply_possession_kill`);
+  **Buruburu** runs Descent into Terror — nightly Willpower vs TN 20 (consecutive-fail counter),
+  death after 20 consecutive failures, weekly (7-day) Contested Willpower to shake off (clears);
+  **Kitsune-tsuki** controls for a 24h window then releases — the controlled victim gets **0 AP** via a
+  guard in `ActionPointSystem.reset_daily_ap` (mirrors the dead-char/PC 0-AP guards), so they are inert
+  for the day. `_apply_possession_kill` mirrors the maho/death-touch mysterious-death path (GREAT_DESTINY
+  cheats to DOWN; else lethal wounds + suspicious death_event with `killer_id` + Tier-2 LEGAL
+  mysterious-death topic, NEUTRAL subject_role). All values LOCKED in the stat blocks (TN 25, 1k1/day,
+  TN 20, 20 fails, weekly shake, 24h). SpiritAbilitySystem: `possession_kind`,
+  `possession_requires_incapacitated`, + the constants. **DEFERRED (need infra/consumers, not invented):**
+  the Major-Shapeshifter "controls his actions" full puppeteering (modelled here as 0-AP inert for
+  Kitsune-tsuki — faithful to "loss of agency," but the possessor does not drive the victim's specific
+  actions: that needs a faction/control-transfer layer + the PC turn-based UI); the cure spells
+  (Ward of Purity / Bonds of Ningen-do drive out Shozai — no tile-combat spell consumer); Buruburu's
+  "+5 TN escalating on all rolls after 3 consecutive nightmares" is **WIRED** (2026-06-16): once the
+  Descent-into-Terror consecutive-fail counter reaches 3, `SkillResolver._get_possession_terror_penalty`
+  applies a −5×(fails−2) roll penalty to all the victim's skill/contested rolls (the nightmare-resist
+  roll is exempt — it does not route through SkillResolver). Buruburu's invisible out-of-combat
+  attachment uses the in-combat attempt as its seed (it has no separate stealth-attach mechanic).
+  Static-validated only (symbol resolution + GDD spec confirmed; no Godot runtime — driver-verify later).
+
+### s22.3/s02.4 Fear mechanic — wired into tile combat (2026-06-16, static-only)
+Activates the `fear` stat that every creature (oni Fear 2-5, gaki/musha Fear 1-5,
+spirits) already carried but was dead in combat. **Rule (s22.3 LOCKED):** a Fear
+Rating forces nearby characters to roll Willpower vs **TN = 5 + Fear Rank × 5** or
+suffer **−1k0 to all rolls** while in range (Fear × 5 ft = Fear tiles). New
+`IndividualCombat.CONDITION_AFRAID` (−1 rolled die in `resolve_attack`, beside the
+Dazed −3k0). `AsciiMapCombatOrchestrator.apply_fear_checks(state, char_id, character,
+dice)` runs at the start of each actor's turn (wired into `execute_npc_turn` and
+`execute_companion_turn`; public for the PC turn path): finds the highest-Fear enemy
+creature whose range covers the actor, rolls Willpower vs 5+Fear×5, and adds/clears the
+AFRAID condition (resisting OR leaving every Fear source's range clears it — proximity-
+driven, re-checked each turn). **GDD CONFLICT (left unresolved, flagged for owner):**
+s02.4 states the TN as **10 + Fear × 5** while s22.3 (the LOCKED character-sheet Fear
+definition) says **5 + Fear × 5** — implemented per s22.3; owner should adjudicate.
+A Fear source is any enemy combatant's stat-block `fear` OR a character's own
+`fear_rating` (s22.3 Terrible Appearance etc.), so Fear projects from characters too,
+not just spirit creatures. **Fear resistance/immunity WIRED:** `L5RCharacterData`
+gains `immune_to_fear` (skips the check — s29.4 "Immune-to-Fear", forward-wired with no
+granting source yet) and the Kshatriya Warrior (Ivory Kingdoms, s29.14) resist bonuses
+set in `SkillResolver.apply_technique_flags` — Strength of Indra R1 (`fear_resist_willpower_bonus`
+= +1 Willpower Rank) and Courage of Shiva R5 (`fear_resist_rolled_bonus`/`_kept_bonus`
+= +1k1) — applied to the resist roll in `apply_fear_checks`. **GDD CONFLICT (left unresolved,
+flagged for owner):** s02.4 states the TN as **10 + Fear × 5** while s22.3 (the LOCKED
+character-sheet Fear definition) says **5 + Fear × 5** — implemented per s22.3; owner should
+adjudicate. LIMITATIONS: "all rolls" is applied to attack rolls (the in-combat roll;
+defense is a passive Armor TN, not a roll); the PC turn path must call `apply_fear_checks`
+itself (UI-deferred); Piercing Howl (Minor Shapeshifter Fear 2) remains unwired — no encoded
+creature carries it in its GDD-given set, so it has no consumer. Static-validated only (no
+Godot runtime).
+
+### s54.x Swift — wired into tile-combat movement (2026-06-16, static-only, PROVISIONAL)
+The GDD invokes "Swift N" as a named keyword (Mujina "Swift 6", Kitsune "Swift 3",
+Chikushudo "+1 over base", oni Swift 2-4) but never states its numeric effect. The
+project fixes 1 tile = 5 ft (MovementSystem), so Swift N = +N tiles to the move budget
+is the faithful reading of the keyword via the project's own constant (PROVISIONAL —
+flagged for owner confirmation; the +5 ft/Rank conversion is the L5R Swift definition
+the GDD's keyword references). New `SpiritCreatureData.swift` (@export, default 0);
+`IndividualCombat.get_creature_swift_bonus(character)` returns it for spirit puppets
+(0 otherwise), added beside the kata/kiho move bonuses in
+`AsciiMapCombatOrchestrator.free_move_budget` and the NPC SIMPLE-move budget. Set on the
+two encoded creatures whose stat blocks state a Swift value: Mujina 6, Kitsune 3. Other
+creatures keep swift 0 until their stat-block values are transcribed (the mechanism is
+live; population is incremental). Static-validated only (no Godot runtime).
+
+### s54.10 Mimic / disguise — wired into tile combat (2026-06-16, owner-approved, static-only)
+Owner decisions (2026-06-16): Mimic effect = **both layers** (untargetable in active
+combat AND blends in out of active fighting); creatures = **Kitsune + Bakeneko**. The GDD
+gives the duration (5 Rounds in battle) but not the combat effect; the owner's rule:
+a disguised creature reads as one of the enemy's own → untargetable, until it attacks.
+**Wired in the orchestrator** (the one combat system that processes spirit puppets, and
+which handles BOTH the real-time approach phase and turn-based combat in one MapCombatState):
+new `IndividualCombat.Participant.mimic_expiry`; `_is_targetable` treats a `mimic`-tagged
+creature inside its 5-round window as untargetable (so enemies — NPC via `_npc_pick_target`
+and PC via `get_*_targets` — cannot select it while it moves among them); `_reveal_if_hidden`
+**breaks** the disguise outright on attack (`mimic_expiry = -1`, unlike invisibility's
+1-turn flicker — you can't keep a disguise while striking); `_npc_maybe_mimic` (Complex
+action, `MIMIC_DISGUISE_ROUNDS = 5`) auto-activates when the shapeshifter is hurt
+(>= HURT), threatened, and not already disguised — a wounded trickster vanishes into
+another form to escape. `mimic` tag added to Kitsune (its GDD-listed set) and Bakeneko
+(owner-approved; the GDD doesn't enumerate Bakeneko's 3 picks). LIMITATION: the separate
+roguelike **CombatController stealth/alert layer** has no spirit-creature consumer (spirits
+fight via the orchestrator, not CombatController), so the "blends in" half is realised
+**within the orchestrator skirmish** (untargetable movement during approach + untargetable
+until it strikes) rather than as a second hook in CombatController — there is nothing for
+Mimic to gate there until spirit creatures flow through that layer. Re-castable (no
+once-per-encounter limit; GDD allows recasting). Static-validated only (no Godot runtime).
+
+### s54.10 Konak Jiji Lure + Deceptive Weight — wired into tile combat (2026-06-16, owner-approved, static-only)
+Owner decisions (2026-06-16): trigger = **adjacency + resist roll**; pin = **grapple state**
+(escape Athletics/Strength TN 40). The GDD gives the spring (auto-hit + 400 lb pin, TN 40
+to move, cooperative allowed) and the venom (already wired); the open piece was the
+tile-combat pickup trigger. **Wired:** the Konak Jiji starts disguised as a harmless
+abandoned baby — `lure`-tagged + `lure_sprung == false` makes it untargetable in
+`_is_targetable` (reuses the Mimic/invisibility targeting path). On its turn while
+disguised it does **nothing** unless a living non-spirit enemy is adjacent (has reached
+for the babe); then `_npc_maybe_spring_lure` runs a **Contested Willpower (victim) vs
+Awareness (creature)** roll — no invented TN, both stat-block values: success sees through
+it (`lure_sprung = true`, now revealed/targetable, fights normally with Claws 5k3); failure
+**springs the trap** — an automatic claw hit (no attack roll, `damage_rolled k damage_kept`),
+a pin via the existing grapple state (`CONDITION_GRAPPLED` + `grapple_partner_id`, creature
+in control, `deceptive_weight_pinned = true`), and the paralysis venom (timed Stunned for
+Water minutes). **Escape:** `attempt_deceptive_weight_escape` rolls Strength + Athletics vs
+`DECEPTIVE_WEIGHT_ESCAPE_TN = 40` (GDD-stated); on success the grapple/pin clears both
+sides. A pinned NPC victim auto-attempts it via a new branch in the grappled-turn handler
+(before the normal take-control); the PC path calls the public fn (UI-deferred). New
+`Participant.lure_sprung` / `deceptive_weight_pinned`. Konak Jiji already carried the
+`lure`/`deceptive_weight`/`paralysis_venom` tags. LIMITATIONS: cooperative escape is
+single-character (GDD allows cooperative — deferred); a pinned **companion** doesn't
+auto-escape (companion turn path doesn't call the escape; NPC victims and the PC do).
+Static-validated only (no Godot runtime).
+
+### s54.10 Ancient General Duelist's Challenge — wired into tile combat (2026-06-16, static-only)
+The boss's `duel_offer` ability: once per encounter the Ancient General challenges one
+enemy to formal combat, and "all other Musha in the area cease attacking for the
+duration." Wired as a battlefield ceasefire (no PC accept-prompt needed — the mechanical
+effect is the General's army standing down). New `MapCombatState.duel_challenger_id` /
+`duel_target_id` / `duel_offered`. In `execute_npc_turn`: `_clear_duel_if_over` lifts the
+duel when either duelist is dead/out/fled; `_npc_maybe_offer_duel` (free declaration at
+turn start) makes the General challenge the nearest living enemy, once per encounter;
+`_duel_ceasefire_blocks` makes every OTHER Toshigoku Musha on the challenger's faction
+**hold its attack** (returns a `duel_ceasefire_hold`) while the duel stands; and the
+challenger **focuses** the challenged target (best_target override when it is in reach).
+The challenged side fights freely (attacking the General is the implicit "accept"; the
+ceasefire is the General's side honoring the duel). LIMITATION: the formal PC
+accept/decline prompt is UI-deferred — the battlefield ceasefire + focus are the live,
+faithful mechanic. Static-validated only (no Godot runtime).
+
+### s54.10 creature ability set — final status (2026-06-16)
+With Duelist's Challenge wired, **every encoded creature ability that has BOTH a GDD-stated
+rule AND a creature that uses it is now implemented.** The two genuinely-remaining items
+have no GDD content to transcribe and cannot be built without inventing:
+- **Mujina illusion spells** (By the Light of the Moon, Mists of Illusion, Way of Deception,
+  Mask of Wind, Nature's Touch, Token of Memory): none are in the SpellSystem library and
+  none have a statted tile-combat effect, AND there is no creature spell-cast path in the
+  orchestrator. Building them needs the owner to define each spell's combat effect. (The
+  Mujina is already fully functional as the GDD describes it: an untargetable, non-fighting,
+  immortal trickster.)
+- **Major-Shapeshifter full puppeteering** (the "controls his actions until sunrise" clause):
+  NO encoded creature has Major-Shapeshifter Possession in its GDD-given ability set (the
+  Kitsune's set is Mimic / A Panther's Moves / Protection of Yomi / Ephemeral Form; Bakeneko
+  and Hengeyokai picks are unspecified), so assigning it would invent that creature's
+  abilities. The three GDD-designated possessors (Kitsune-tsuki / Shozai-gaki / Buruburu) are
+  already wired (control = 0-AP agency loss / 1k1-feed / Descent into Terror).
+Pure flavour (no stat-block mechanic, correctly no code): Pekkle lure_child/time_thief,
+spirit-animal field_commander/concealment, deceiver/vindictive/trickster, musha
+retains_identity. No-consumer (GDD rule exists but no encoded creature uses it): A Panther's
+Moves, Piercing Howl, Legendary Healing, Eyes of the Owl, Strength of Jade.
+
+### Systems Added 2026-06-17 (s54.5 Oni of the Shadowlands — bestiary data tranche, owner-approved)
+- **s54.5 oni roster transcribed.** `simulation/oni_bestiary.gd` (OniBestiary, pure class) —
+  all **35** oni stat blocks from s54.5 as `SpiritCreatureData` (faithful transcription, no
+  invented values): the 20 core oni (Akaru/Arugai/Byoki/Daku/Furu + spawn/Gagoze/Genso/Ianwa/
+  Kamu/Kommei/Manesuru/Morei/Muduro/Nairu/Nosloc/Pekkle/Quiet Death/Ryokaku/Shikage), the 4
+  Shokansuru's Brood (Hasaiki/Munemitsu/Sentei/Yojireju), 6 further oni (Sodatsu/Tasu/Utogu/
+  Uzaki/Wakeru/Wanizame), and 5 Oni Lord Spawn (Akuma/Kyoso/Shikibu/Tsuburu/Yuhmi). `catalog()`
+  (id → fresh instance), `oni_ids()`, `get_oni(id)`. New `Enums.SpiritRealm.JIGOKU` (the Realm
+  of Evil — keeps `SpiritCreatureData.realm` honest for oni; it is NOT a spiritual-insurgency
+  overlap realm, and `SpiritCombatant.catalog_for_realm(JIGOKU)` returns `{}` via the existing
+  `_:` wildcard, so the s56.16 spirit-encounter pipeline is unaffected). Reusing
+  `SpiritCreatureData` means oni are **combat-ready for free** via `SpiritCombatant.to_character_data()`
+  (realm-agnostic conversion) — the same adapter the spirit roster uses.
+  **Immediate combat win:** oni "Invulnerability" maps to the already-wired `partial_invuln`
+  tag (mundane weapons do nothing; only jade/crystal/magic hurt), and "Superior Invulnerability"
+  → `superior_invuln` + `flame_immune` — so every Invulnerable oni is correctly mundane-resistant
+  in tile combat the moment it is spawned. Fear/Swift ride the dedicated fields (Arugai Swift 2,
+  Furu 4, Nairu 3, Furu/Shikibu spawn 2). Multi-attack oni store their primary representative
+  attack (the single-attack limitation shared with the spirit roster; second attacks are a
+  combat-layer refinement, tagged `multi_attack`). DELIBERATELY-DESCRIPTIVE (unwired) tags for
+  oni-specific abilities so the combat layer never mis-applies them: Plague Bearer, Splatter,
+  Swallow Whole/Devour, Burning Blood, Fiery Impalement, Spawn-on-death, Endless Horde (split),
+  Corpse/Soul Absorption, Taint Affliction, Shapeshifting (soul-steal vs human-form), Shugenja's
+  Bane, Teleport, the various regens (per-round vs hourly vs flaming — distinct from the wired
+  Gashadokuro `regeneration` amount, so NOT blanket-tagged), and element-nuanced immunities
+  (Daku's normal-flame-only / Furu-spawn's fire-only get `fire_resist_mundane`/`flame_immune`
+  rather than the mundane-weapon `partial_invuln`). NOT wired this tranche; subsequent tranches
+  wire the oni-specific abilities the way the s56.16 creature abilities were done (the combat-
+  consumable subset first). NO spawn/encounter glue yet — the future Shadowlands / Kaiu-Wall-horde
+  consumer calls `OniBestiary.get_oni(id)` → `SpiritCombatant.to_character_data()`. Static-validated
+  only (no Godot runtime — parse-traced + GDD-checked; wound tracks incl. Out→Dead boundaries and
+  the single-threshold Wakeru verified against the stat blocks).
+
+### Known Code Issues (found and fixed 2026-06-17, spirit/oni damage path)
+- **Spirit/oni creatures never dealt their stat-block damage — used "unarmed". FIXED.**
+  `SpiritCombatant.to_character_data()` builds the creature's damage onto `c.weapons[0]`
+  (a WeaponData) but sets no `c.skills`; the orchestrator's NPC attack path picks the
+  weapon via `IndividualCombat.pick_best_weapon()` → `WEAPON_CATALOG` (returns "unarmed"
+  for a skill-less puppet), and `resolve_damage()` reads `get_weapon_profile(weapon_name)`
+  — so every spirit/oni dealt generic unarmed damage, and the WeaponData on `c.weapons[0]`
+  was dead. The to-HIT override (resolve_attack) already read `spirit_creature.attack_rolled`,
+  but there was no matching DAMAGE override. Added one in `resolve_damage`: when
+  `attacker.spirit_creature.damage_rolled > 0`, base damage = the creature's fixed
+  `damage_rolled k damage_kept` (Strength-add block guarded off — spirit damage is fixed
+  per s54), with the Supreme Commander aura still adding on top. Mirrors the to-hit override
+  exactly; additive, inert for real characters (spirit_creature == null). Now every spirit
+  AND oni deals its real stat-block damage. Static-only (no Godot runtime).
+
+### Systems Added 2026-06-17 (s54.5 multi-attack data + spirit damage fix)
+- **SpiritCreatureData multi-attack fields.** `attack2_name/attack2_rolled/attack2_kept/
+  damage2_rolled/damage2_kept` + `has_second_attack()`. Populated for all 13 multi-attack
+  oni (Akaru Bite, Arugai Tail, Genso Talons, Kamu Bite, Muduro Bite, Ryokaku Claws,
+  Shikage Tongue-Stinger, Hasaiki Bite, Munemitsu Gore, Sentei Bite, Utogu Bite, Uzaki
+  Claws, Yuhmi Mai Chong) via `OniBestiary._with2()`, plus Harionago/Pennaggolan (undead)
+  and Yamato no Orochi (additional).
+- **Multi-attack LIVE wiring — DONE + runtime-verified (2026-06-17).** A `multi_attack`
+  creature with a second attack now makes BOTH strikes in its Turn. `execute_npc_turn`
+  fires the second strike right after the primary (and any off-hand): it field-swaps the
+  creature's primary attack/damage to the attack2 values (so the to-hit AND damage spirit
+  overrides both read the secondary profile), calls `execute_melee_attack(..., bonus_attack=true)`,
+  then restores. `bonus_attack` (new optional param, default false → zero change for every
+  existing caller) makes the strike a free bonus that neither requires nor consumes an
+  action — like the off-hand attack — so it fires regardless of whether the AI spent a
+  Simple on a stance change (the action-economy interaction that made the naive
+  Simple-cost approach drop the second attack). Driver-verified in a headless skirmish:
+  Akaru (Claws + Bite) produces `[stance, attack, multi_attack]` and the target takes both
+  hits; the primary profile is restored after the swap (no permanent mutation of the shared
+  stat block); a single-attack creature (Byoki) gets exactly one strike (regression).
+
+### Systems Added 2026-06-17 (s54 bestiary transcription + unified spawn glue)
+- **s54.11 Undead, s54.12 Additional Creatures + Elemental Terrors, s54.6 Five Ancient
+  Races — transcribed.** Three new bestiaries reusing SpiritCreatureData (faithful, no
+  invented values): `undead_bestiary.gd` (16 — physical undead/gaki/slaughter spirit/named
+  villains), `additional_creatures_bestiary.gd` (37 — the 10 Greater+Lesser Elemental
+  Terrors of all five elements, Chikushudo spirits, Shadowlands jinmenju, Children of the
+  Last Wish, Yamato no Orochi, Nure-Onna, Hinotama, Wanyudo, Furaribi, legendary giants,
+  mundane animals), `ancient_races_bestiary.gd` (10 — Kenku/Ningyo/Kitsu/Tsuno/Zokujin).
+  New `Enums.SpiritRealm.NINGEN_DO` (Mortal Realm) for natural animals + mortal-world
+  spirits. Realm assignment: Elemental Terrors/oni/Tainted → JIGOKU, gaki → GAKI_DO,
+  slaughter spirits/Tsuno → TOSHIGOKU, Chikushudo bird/animal spirits → CHIKUSHUDO, Sakkaku
+  water spirits → SAKKAKU, mortal → NINGEN_DO. Tag mapping: "Invulnerability" (resists
+  mundane weapons) → wired `partial_invuln`; "Superior Invulnerability"/"Insubstantial"
+  (only magic/jade harm) → wired `superior_invuln`; gaki "Superior Invulnerability"
+  (illusion+mind immunity, NOT mundane) → descriptive `immune_illusion`/`immune_mind`.
+  "human-type Wound Ranks" → `wounds_dead = 0` so the PC Earth-derived track applies
+  (faithful for the human-type races, not a gap). Multi-attack creatures (Harionago,
+  Pennaggolan, Yamato no Orochi) carry attack2.
+- **Unified spawn-by-id glue (s54 / #2).** `SpiritCombatant.find_creature(id)` searches
+  EVERY bestiary (spirit realms + oni + undead + additional/terrors + ancient races) and
+  `spawn_by_id(id, instance_id)` builds the combat puppet — the realm-agnostic API the
+  future Shadowlands / Kaiu-Wall-horde / mission consumer uses to drop any transcribed s54
+  creature into the orchestrator without knowing which bestiary holds it. Pure, additive.
+- **Combat status (#1 ability wiring).** With the damage-path fix (above), the SHARED
+  ability layer already makes most oni/undead/terrors combat-functional NOW: real stat-block
+  damage, `partial_invuln`/`superior_invuln` (mundane-weapon resistance), Fear (apply_fear_checks),
+  Swift (move budget), `flame_immune`/`water_vulnerable` (fire/damage filter), engulf grab.
+  The oni/creature-UNIQUE abilities (Plague Bearer, Swallow Whole, Burning Blood, spawn-on-death,
+  Taint Affliction, the differing regen rates, Spell Mastery, the Elemental-Terror powers,
+  etc.) carry DESCRIPTIVE tags and are the next runtime-verifiable wiring tranche — done the
+  way the s56.16 creature abilities were (combat-consumable subset first).
+- **RUNTIME-VERIFIED (2026-06-17).** Godot 4.6.2-stable was installed in-session and a
+  headless driver run (in a minimal autoload-free copy of `simulation/`+`shared/`, since the
+  full project's Node/scene/scheduler autoloads stall a `--script` run): all four bestiaries
+  load (oni 35, undead 16, additional 37, ancient 10 = 98 creatures, zero duplicate ids); the
+  **damage-path fix is confirmed working** — an Arugai puppet averages 39.7 damage over 40
+  rolls (its 10k4 stat line), vs ~5 for the old "unarmed" fallback; multi-attack `attack2`
+  data is populated; `SpiritCombatant.spawn_by_id()` resolves across every bestiary and
+  returns null for unknown ids; `catalog_for_realm(JIGOKU)` is empty (s56.16 unaffected). All
+  9 touched files pass `--check-only`. This upgrades the session's work from static-only to
+  runtime-verified for the data + damage path; the deferred ability/multi-attack-turn wiring
+  is still the next tranche.
+
+### Systems Added 2026-06-17 (s54.5 creature ability wiring — regeneration, runtime-verified)
+- **Per-round regeneration with variable amounts — DONE + runtime-verified.** The regen
+  loop in `advance_round` already healed `SpiritAbilitySystem.regeneration_amount()`, but
+  oni used descriptive tags so they regenerated nothing. Added `SpiritCreatureData.regen_wounds`
+  (0 = none): `regeneration_amount()` returns it when > 0, else the Gashadokuro `regeneration`
+  tag's 10. Populated Arugai (10/round, "Nearly Immortal") and Hasaiki (5/round). New
+  `SpiritAbilitySystem.regen_suppressible()` (tag-only) so the threshold-cross 3-round
+  suppression stays Gashadokuro-specific while Arugai/Hasaiki regen UNCONDITIONALLY (faithful
+  to s54.5). Sentei's hourly regen is negligible per-round → left 0. Driver-verified: Arugai
+  50→40, Hasaiki 30→25 per `advance_round`, regen floors at 0, a non-regenerator (Byoki)
+  heals nothing. The remaining creature-unique abilities (Swallow Whole/Devour, Plague
+  Bearer, Burning Blood [needs per-creature 5k5/2k2 + save data], spawn-on-death) are the
+  next wiring candidates.
+
+### Systems Added 2026-06-17 (s54.5 Swallow Whole / Devour — runtime-verified)
+- **Swallow Whole / Devour wired (Muduro/Kamu/Tsuburu/Utogu).** On a wounding melee hit a
+  swallow creature wins a Contested Strength (creature vs victim) to engulf the victim:
+  `_apply_swallow_whole` (fired from execute_melee_attack beside Burning Blood) sets
+  `Participant.swallowed_by_id` + Grapple state (creature in control). Each Round the
+  swallowed victim takes the creature's `swallow_damage_rolled k _kept` (advance_round, +1
+  Taint if `swallow_taint`), released if the captor dies. Escape: `attempt_swallow_escape`
+  (Contested Strength vs the captor) — auto-attempted by a swallowed NPC in the grappled-turn
+  handler, public for the PC path. New SpiritCreatureData fields
+  `swallow_damage_rolled/_kept/swallow_taint`; populated Muduro (3k3 +Taint), Tsuburu (2k2
+  +Taint), Utogu (5k5), Kamu (7k5 bite; the GDD "swallowed → dies next Round" instant-death
+  is approximated by high per-round damage). **BUG caught by runtime test:** the initial
+  `swallowed_by_id >= 0` "is-swallowed" check was wrong — spirit-puppet captor ids are
+  NEGATIVE, so `>= 0` excluded them; switched to the `!= -1` sentinel everywhere. (The
+  pre-existing grapple_partner_id `>= 0` checks may share this latent issue for negative
+  captors — noted for a future pass; not touched here.)
+  RUNTIME-VERIFIED (Godot 4.6.2): Muduro swallows a low-Strength victim, per-round 3k3 + 1
+  Taint applied, a weak victim fails to escape 6/6, a strong victim escapes and the state
+  clears.
+
+### Systems Added 2026-06-17 (s54.5 Spawn-on-death — runtime-verified)
+- **Spawn-on-death wired (Tasu, Wakeru).** When a hit KILLS a `death_spawn_id` creature,
+  `_apply_hit` calls `_spawn_on_death`, which adds `death_spawn_count` copies of the spawn id
+  to the live combat via `add_enemy` at free tiles near the corpse, on the dying creature's
+  faction. New SpiritCreatureData `death_spawn_id`/`death_spawn_count`; new
+  `MapCombatState.spawn_counter` (unique negative spawn instance ids) + `Participant.death_spawn_done`
+  guard (fires once). Tasu → 2× `tasu_spawn` (Rings 1, ATN 15, 12 wounds); Wakeru → 2×
+  `wakeru_lesser` (physical traits −1, Wounds −5, ATN +5, attack/damage −1k1). Both spawn ids
+  are real catalogue entries (so `SpiritCombatant.spawn_by_id` resolves them; `OniBestiary.catalog()`
+  is now 37 = 35 oni + the 2 spawn-only blocks). `wakeru_lesser` has no further `death_spawn_id`,
+  so the split is ONE generation (Tasu's "2k2 spawn" and Wakeru's recursive halving are reduced
+  to a fixed count of 2 for skirmish playability — PROVISIONAL). RUNTIME-VERIFIED (Godot 4.6.2):
+  killing a near-dead Tasu adds 2 tasu_spawn (participants 2→4) on the enemy faction; Wakeru
+  splits into 2 wakeru_lesser; the lesser copy carries no death_spawn (no infinite split).
+
+### Systems Added 2026-06-17 (s54.5/s54.11 Disease — runtime-verified)
+- **Plague / disease wired (Byoki, Shikko-gaki, plague-zombie).** `simulation/disease_system.gd`
+  (DiseaseSystem, pure): contagious diseases that drain physical Traits over days/weeks,
+  seeded on a creature's hit and resolved in the world-sim (cross-encounter, like the
+  possession affliction). Three types: PLAGUE_BEARER (Byoki — daily Earth TN 15 or lose 1
+  Rank in ALL physical Traits; 3 consecutive saves cure), DISEASED_TOUCH (Shikko — weekly
+  Stamina TN 20, fail = −1 Stamina + −1 Strength, success recovers), PLAGUE_CARRIER
+  (plague-zombie — automatic weekly Stamina −1 until cured or Stamina 0 → dies). New
+  `L5RCharacterData.disease_affliction`. Combat contraction (`_apply_hit` → `_apply_disease_on_hit`):
+  a wounding hit on a mortal by a `plague_bearer`/`diseased_touch`/`plague_carrier` creature
+  rolls the per-type check (Byoki Contested Earth, Shikko Stamina-vs-wounds, zombie 1-in-5)
+  and seeds the disease (ic_day −1; the world-sim anchors the cadence clock on the first
+  `process_daily`). Daily world-sim processing: `DayOrchestrator._process_disease_afflictions`
+  (beside possession) drains per type; a lethal Plague-Carrier drain appends a death_event
+  for same-tick succession (plague-zombie reanimation deferred). RUNTIME-VERIFIED (Godot
+  4.6.2): low-Earth victim drains over days, high-Earth victim cures in 3 saves, Plague
+  Carrier kills via weekly Stamina drain to 0, Byoki infects a low-Earth victim on a
+  wounding hit (type = PLAGUE_BEARER). Medicine has no effect on Byoki plague (magic-only,
+  GDD); the cure() hook is for the magic/Medicine systems to call.
+
+### s54.5 creature-unique abilities — status (2026-06-17)
+All four owner-selected abilities are wired AND runtime-verified with headless drivers
+(Godot 4.6.2, installed via the SessionStart hook): **multi-attack** second strike,
+**Burning Blood** retaliation, **Swallow Whole / Devour**, **spawn-on-death / split**, and
+**Plague / disease** — plus the foundational **spirit/oni damage-path fix** and **variable
+regeneration**. Testing caught two real bugs that static review missed: the wrong
+damage-source (creatures dealt unarmed damage) and the `swallowed_by_id >= 0` sentinel
+failing for negative puppet ids. Remaining creature abilities (Taint Affliction, Spell
+Mastery, the Elemental-Terror powers, Kommei soul-steal, etc.) are the next candidates.
+
+### Systems Added 2026-06-17 (s54.5 Gagoze Taint Affliction — runtime-verified)
+- **Taint Affliction wired (Gagoze).** The Gagoze's burning gaze (s54.5): a Complex Action,
+  Contested Willpower (oni vs victim) — oni wins → the victim gains 1 full Rank of Shadowlands
+  Taint; once per individual ever. `_npc_maybe_taint_gaze` (creature-turn hook in
+  execute_npc_turn, before the atemi/attack block, gated on the `taint_affliction` tag + an
+  available Complex action) picks the nearest mortal (non-spirit) living enemy not yet gazed
+  (tracked per-gazer in `MapCombatState.taint_gaze_used`), spends the Complex action, rolls the
+  contest, and on a win does `victim.taint += 1.0`. The +1 Taint feeds the EXISTING consumers:
+  MutationSystem periodic-taint rolls (rank-up mutations/powers) and maho Channel-3 detection
+  (witch-hunter accusation). RUNTIME-VERIFIED (Godot 4.6.2): low-Willpower mortal gains 1 Taint
+  on a non-melee gaze, once-per-individual (no repeat on the same victim), a spirit/oni target
+  is skipped (Taint affects mortals only). LIMITATION: the victim-win 24h Fire/Earth Ring
+  penalty is not modelled (no cross-encounter Ring-debuff layer) — the averted Taint is the
+  meaningful outcome. Spell Mastery (Gagoze casting elemental spells) remains blocked — no
+  creature spell-cast consumer in the orchestrator.
+
+### Systems Added 2026-06-17 (s54.5 Wreathed in Flames + Retributive Taint — runtime-verified)
+- **Wreathed in Flames wired (Daku).** Striking the burning oni in melee automatically (no
+  save) burns the attacker by weapon size: unarmed/Small 3k2, Medium 2k1, Large/ranged 0
+  (s54.5, exact). `_apply_wreathed_in_flames` fires from execute_melee_attack on a landed
+  melee hit beside Burning Blood; reads the weapon's `size` from get_weapon_profile. Inert
+  unless the struck TARGET has the `wreathed_in_flames` tag. (Distinct from Burning Blood —
+  no Defense save, size-scaled; Daku carries wreathed_in_flames, not burning_blood, so no
+  conflict.) RUNTIME-VERIFIED: unarmed striker auto-burned, tetsubo (Large) striker takes 0.
+- **Retributive Taint wired (Pekkle).** A slain Pekkle bursts in a 10-ft (2-tile) radius:
+  every living mortal in the area rolls Earth TN 30 or gains 1–10 points of Taint (s54.5,
+  exact). `_apply_retributive_taint` fires from the _apply_hit death hook (beside
+  spawn-on-death, guarded once via death_spawn_done) when a `retributive_taint` creature
+  dies. The Taint feeds the MutationSystem periodic-taint + maho Channel-3 pipelines.
+  RUNTIME-VERIFIED: nearby Earth-1 mortal gains 7 Taint on the death burst, a mortal beyond
+  2 tiles is unaffected. (Daku flaming_regeneration / fire_resist_mundane and Furu
+  extreme_heat remain blocked/redundant — fire-element weapon detection, and Furu's
+  arrow-immunity is already covered by superior_invuln.)
+
+### Systems Added 2026-06-17 (s54.5 creature ranged attacks — runtime-verified)
+- **Creature ranged-attack path wired (Flaming Bark, Hurl Flaming Blood).** A reusable
+  thrown/spat attack layer for the whole bestiary. New SpiritCreatureData fields
+  `ranged_attack_name/_rolled/_kept`, `ranged_damage_rolled/_kept`, `ranged_range_tiles`,
+  `ranged_fire`. `execute_creature_ranged_attack` (Complex action): the creature's fixed
+  ranged to-hit (ranged_attack_rolled k _kept) vs the target's Armor TN (get_armor_tn,
+  ranged mode), dealing ranged_damage_rolled k _kept reduced by the target's armour; on a hit
+  `ranged_fire` sets the target on fire (FireSystem 1k1/round — the GDD "2k2 next Round" burn
+  approximated by the standard on-fire layer). Range-gated by ranged_range_tiles. NPC-turn
+  integration: in execute_npc_turn, after the move-toward block, a creature with a ranged
+  attack fires at a target that is in LOS + range but not in melee reach (before the melee
+  attack block). Populated Daku (Flaming Bark 6k3 / DR 3k2 / 30 ft / fire) and Furu (Hurl
+  Flaming Blood 10k9 / 4k4 / 30 ft / fire). RUNTIME-VERIFIED (Godot 4.6.2): Flaming Bark hits
+  a low-Reflexes mortal in range and ignites it; a target beyond range → out_of_range;
+  execute_npc_turn fires creature_ranged when the target is at range; Furu's profile loads.
+  LIMITATIONS: ranged is Complex (Hurl's GDD Simple-action economy not modelled); the AI
+  fires when at range rather than always closing to its (often stronger) melee primary —
+  a tuning choice, not a bug. Daku flaming_regeneration / fire_resist_mundane still blocked
+  (fire-element weapon detection).
+
+### Systems Added 2026-06-17 (s54.11/s54.12 undead + Elemental Terror abilities — runtime-verified)
+- **Burning Touch wired (Taki-bi no Oni etc.).** "Anyone who touches or is touched by" a
+  burning-touch creature is set on fire (1k1/round via the FireSystem on-fire layer until
+  extinguished). Both directions: a `burning_touch` creature's melee hit sets the TARGET on
+  fire (extended the _apply_hit fire_trail block), and a melee attacker who strikes a
+  burning_touch creature is set on fire (new retaliation beside Wreathed in Flames, using a_p).
+  Tag was present on Taki-bi / Moetechi / Wanyudo but unconsumed. RUNTIME-VERIFIED (Godot 4.6.2):
+  a katana-wielder striking Taki-bi catches fire; Taki-bi's Flaming Fist sets a mortal alight.
+- **Life Drain — confirmed already wired (no change).** The `life_drain` tag (Yosuchi no Oni
+  Lesser Elemental Terror of Air, and a forest spirit) is already consumed by
+  SpiritAbilitySystem.on_hit_self_heal, which `_apply_hit` calls for every spirit attacker —
+  so life-drain creatures already self-heal on a wounding hit. No wiring needed.
+- **Disease — confirmed already populated.** Shikko-gaki (`diseased_touch`) and the plague
+  zombie (`plague_carrier`) already carry the disease ability tags consumed by the
+  `_apply_disease_on_hit` contraction wired earlier this session — so the undead disease
+  carriers are live. No change.
+
+### Systems Added 2026-06-17 (s54.11 Ghul Throat Attack — runtime-verified)
+- **Throat Attack / follow-up-on-big-hit wired (Ghul).** A generic "big hit → free bonus
+  attack" layer: new SpiritCreatureData fields `followup_wound_threshold` +
+  `followup_rolled/_kept` + `followup_dmg_rolled/_kept`. In `_apply_hit`, a melee hit dealing
+  `followup_wound_threshold`+ Wounds triggers a free bonus attack (to-hit vs the target's
+  Armor TN, on hit applies the follow-up damage), applied directly (no recursion into
+  _apply_hit). Populated Ghul: 15+ Wound claw → free bite 5k3 / 4k1 (s54.11, exact).
+  RUNTIME-VERIFIED (Godot 4.6.2): over 30 attacks, all 19 of the 15+ Wound claw hits fired
+  the follow-up bite (extra damage beyond the claw), and sub-threshold hits did not.
+
+### Systems Added 2026-06-17 (s54.12 Jimen no Oni Trembling Earth — runtime-verified)
+- **Trembling Earth wired (Jimen no Oni).** A `trembling_earth` enemy within 50' (10 tiles)
+  imposes -1k0 to all rolls (no save) — modelled with the same AFRAID -1k0 condition as Fear,
+  but it is NOT a Fear effect (physical shaking) so it bypasses Immune-to-Fear.
+  `apply_fear_checks` rewritten to compute fear-afraid and tremor independently, then set/clear
+  the AFRAID condition once (afraid-roll-failed OR tremor-source-near). The exact Fear logic is
+  preserved. New const TREMBLING_EARTH_TILES = 10. RUNTIME-VERIFIED (Godot 4.6.2): a fear-immune
+  hero within 8 tiles of Jimen is AFRAID (proves it is the tremor, not Fear), clears beyond 16
+  tiles; Fear regression intact (near low-Willpower hero afraid, far clears, fear-immune
+  unaffected by Fear). LIMITATION: AFRAID covers attack rolls in combat (the GDD "all Skill
+  Rolls + Spell Casting" is the same -1k0); Fear and tremor do not stack (both = the single
+  -1k0 AFRAID).
+
+### Systems Added 2026-06-17 (s54.11/s54.12 poison / venom — runtime-verified)
+- **Poison stat-drain wired (Gakimushi stinger, komodo/jinmenju bite, aquatic stinger).** A
+  cross-encounter Trait drain (like disease/possession). New `L5RCharacterData.poison_affliction`
+  {trait, drained}. DiseaseSystem.apply_poison drains a Trait immediately on hit (Strength for
+  `poisonous_stinger`/`poison_stinger`, Stamina for `poison_stamina`/`poison_bite`), stacking
+  per hit; process_poison_daily restores all drained Ranks (the GDD sub-day/24h recovery
+  collapses to a next-tick full restore at daily granularity). Combat hook in `_apply_hit`:
+  stinger poisons have no save, `poison_bite` (komodo) allows a Stamina TN 20 save. Wired into
+  DayOrchestrator daily (beside disease). RUNTIME-VERIFIED (Godot 4.6.2): Gakimushi stinger
+  drains Strength 5→3 over 2 hits (drained=2, poisoned), the world-sim restores it fully (→5,
+  cleared); komodo resolves. LIMITATIONS: paralysis at Trait 0 is the drained state (no
+  separate paralyzed condition); the exact multi-day Komodo cadence and Gakimushi 1hr/dose
+  timing collapse to a single next-day restore.
+
+### Systems Added 2026-06-17 (s54.11/s54.12 AoE fire blasts — runtime-verified)
+- **AoE ranged attack wired (Cauldron Belch, Gout of Flame).** Extends the creature ranged
+  path with a blast radius. New SpiritCreatureData `ranged_aoe_radius` / `ranged_aoe_max_targets`
+  / `ranged_aoe_once` + Participant `ranged_aoe_used`. `execute_creature_aoe_attack` (Complex):
+  centred on the target tile, damages every enemy within ranged_aoe_radius (capped at
+  max_targets); ranged_attack_rolled 0 = auto-hit explosion (Gout), >0 = a single to-hit roll
+  vs the primary gates the blast (Cauldron); ranged_fire ignites each victim. NPC-turn branch
+  prefers AoE when available and not used. Populated Taki-bi Gout of Flame (auto-hit 5k4,
+  radius 2, at-will) and Kwaku-shin Gaki Cauldron Belch (6k3 / 4k4, radius 2, max 3 targets,
+  once per skirmish). `ignores_armor` confirmed already wired (Taki-bi bypasses armor via
+  attack_bypasses_armor). RUNTIME-VERIFIED (Godot 4.6.2): Gout strikes 2 clustered heroes
+  (far one outside radius spared, primary set on fire); Cauldron Belch fires once then blocks
+  (already_used). LIMITATION: "3 targets within 10' of each other" is modelled as 3 nearest
+  within the radius of the impact.
+
+### Systems Added 2026-06-17 (s54.12 Furaribi Soul Touch — runtime-verified)
+- **Soul Touch wired (Furaribi).** A character touched by a `soul_touch` creature cannot spend
+  Void Points (new Participant `void_locked`, set in `_apply_hit`, checked in execute_void_spend).
+  Armor bypass is free (Furaribi already carries `ignores_armor` → attack_bypasses_armor).
+  RUNTIME-VERIFIED (Godot 4.6.2): hero spends Void before the touch, locked out (reason
+  void_locked) after. LIMITATION: the GDD 24h cross-encounter duration + the "cannot make
+  Stamina rolls vs sickness/poison for 24h" clause are not modelled — only the in-combat
+  Void lockout (the combat-relevant effect).
+
+### Systems Added 2026-06-17 (s54.12 Stunning Jolt + Void Leech — runtime-verified)
+- **Stunning Jolt wired (Hinotama).** A touch forces a Stamina TN 20 roll — Dazed on success,
+  Stunned on failure (both roll-recoverable conditions). `_apply_hit` hook gated on the
+  `stunning_jolt` tag + a mortal target. RUNTIME-VERIFIED (Godot 4.6.2): a low-Stamina victim
+  is Dazed/Stunned by the touch.
+- **Void Leech wired (Kukanchi no Kansen).** A wounding hit drains 1 Void Point from the
+  victim and heals the creature 15 Wounds. `_apply_hit` hook gated on the `void_leech` tag.
+  RUNTIME-VERIFIED: hero VP 3→2, creature wounds 20→5. SIMPLIFICATION: the GDD "if a damage
+  die explodes" gate is reduced to any wounding hit (the exploding-die detail is internal to
+  the damage roll, not surfaced).
+
+### Systems Added 2026-06-17 (s54.12 Strength of the Dead + Sap the Void — runtime-verified)
+- **Strength of the Dead wired (Wanyudo).** A once-per-skirmish Complex-action scream: every
+  mortal enemy within 50' (10 tiles) rolls Contested Willpower vs the creature or is Stunned.
+  `_npc_maybe_scream` creature-turn hook (before the attack block) + Participant `scream_used`.
+  RUNTIME-VERIFIED (Godot 4.6.2): scream Stuns nearby low-Willpower mortals; the second scream
+  is blocked (once per skirmish).
+- **Sap the Void wired (Akeru no Oni).** On a Claw hit, an Opposed Void Roll (creature vs
+  target) saps 1 Void Point from the target, added to the Akeru's pool (capped at its Void
+  Ring). Required giving Void-using creatures a real Void Ring: new SpiritCreatureData
+  `void_rank` (0 for all but Akeru = 1, GDD default), wired through SpiritCombatant
+  (puppet void_ring + current_void_points = void_rank; 0 keeps every other spirit Void-less).
+  RUNTIME-VERIFIED: Akeru Claw saps hero VP 3→2; Akeru holds at its Void-Rank cap.
+  Void Strike (the stolen-Void beam needing full 7 VP) remains deferred — Akeru accumulating
+  beyond its starting Void Rank is not modelled.
+
+### Systems Added 2026-06-17 (s54.12 Breathe Flames + Burning Saliva — runtime-verified)
+- **Auto-hit breath weapons + Basan Breathe Flames.** Extended the creature ranged path:
+  `ranged_attack_rolled` 0 now means an auto-hit breath/blast (no to-hit roll) for the
+  single-target path too (the AoE path already had this). The ranged guards key on
+  `ranged_damage_rolled` (a ranged attack is defined by its damage); the single-target NPC
+  branch is gated to `ranged_aoe_radius == 0` so AoE creatures only use the AoE path. Basan
+  Breathe Flames populated: Complex, auto-hit one target within 15' (3 tiles), DR 4k3.
+  RUNTIME-VERIFIED (Godot 4.6.2): Breathe Flames auto-hits a Reflexes-8 target (17 wounds);
+  range-gated (5 tiles → out_of_range).
+- **Burning Saliva wired (Akuma no Oni spawn).** Added `burning_saliva` to the on-fire hook —
+  the spawn's tongue hits set the target on fire (the GDD 10-round / vinegar-wash specifics
+  collapse to the standard on-fire layer). RUNTIME-VERIFIED: Akuma spawn melee hit ignites.
+
+### Systems Added 2026-06-17 (s54.12 Feed Upon the Soul — runtime-verified)
+- **Feed Upon the Soul wired (Kyoso no Oni spawn).** Killing a foe instantly heals the
+  creature 5 × the slain enemy's Insight Rank (`_apply_hit` death hook, gated on the
+  `feed_upon_soul` tag + a mortal kill). RUNTIME-VERIFIED (Godot 4.6.2): a kill healed the
+  Kyoso spawn by 5 (= 5 × the rank-1 test victim's computed Insight Rank).
+
+### s54.5/s54.11/s54.12 creature ability layer — integration validation (2026-06-17)
+Ran a full integration smoke (Godot 4.6.2): all 22 representative creatures
+(ghul/daku/furu/taki-bi/kwaku/gagoze/pekkle/jimen/furaribi/wanyudo/akeru/basan/byoki/
+gakimushi/muduro/tasu/kyoso-spawn/hinotama/kukanchi/arugai/shikko/wakeru) take a real
+`execute_npc_turn` against a hero party with **zero crashes** (22 ok, 0 missing); melee +
+multi-attack fire. **Finding (not a bug):** the creature-turn Complex abilities (taint_gaze,
+scream, possession, AoE, ranged) defer past a turn-1 stance change — `_npc_pick_stance`
+spends a Simple to enter ATTACK on turn 1, and under the "1 Complex OR 2 Simple" economy a
+spent Simple blocks a Complex the same turn, so the signature gaze/scream fires from turn 2
+onward (verified: Gagoze turn 0 = [stance, attack], turn 1 = [taint_gaze] → victim +1.0
+Taint). This is faithful action economy; the GDD gives no NPC stance-vs-ability priority, so
+no change was made. Two test-harness pitfalls noted for future drivers: (1) always copy BOTH
+simulation/ AND shared/ into the headless test project (a stale shared/ silently breaks a
+bestiary catalog mid-build → null spawns → hangs); (2) do not re-call execute_npc_turn for
+the same actor without proper turn advancement.
+
+### Systems Added 2026-06-17 (s54.11/s54.12 constriction — runtime-verified, data-only)
+- **Constriction wired (Wyrm, Nure-Onna, Pennaggolan).** Constriction is mechanically
+  identical to the swallow grapple-crush (grab on a wounding hit via Contested Strength →
+  per-round crush damage in advance_round → Contested-Strength escape), so it reuses the
+  existing swallow layer with **data only** — `swallow_damage_rolled/_kept` populated per
+  GDD: Wyrm Constrict 5k5, Nure-Onna 4k2, Pennaggolan Entrail Constriction 3k1. No new code.
+  RUNTIME-VERIFIED (Godot 4.6.2): all three grab a low-Strength victim and crush per round
+  (wyrm 16→44, nure_onna 14→29, pennaggolan 12→21). The snake/serpent shapechange and the
+  Pennaggolan flying-head head-detach are not modelled (the combat-relevant grab/crush is).
+
+### Systems Added 2026-06-17 (s54.5 Web/Entangle + s56.20 snare fix — runtime-verified)
+- **Entangle made functional (cross-system).** `CONDITION_ENTANGLED` was SET by the snare trap
+  (s56.20) but never consumed — inert. Now `execute_move` rejects movement while entangled
+  (reason "entangled"), `attempt_entangle_escape` breaks free on a Strength TN 20 roll, and an
+  entangled NPC out of melee auto-attempts the escape in execute_npc_turn (instead of a futile
+  move). This fixes the previously-inert **snare trap** AND enables web attacks.
+- **Akaru no Oni Spinnerets (web) wired.** New SpiritCreatureData `ranged_entangle`: a ranged
+  attack that Entangles on a hit instead of dealing damage (the ranged guards/branches accept
+  damage-less entangle attacks). Akaru populated: Spinnerets 6k4 to-hit, no damage, Entangle
+  TN 20 (range 6 tiles PROVISIONAL — Spinnerets range unspecified in s54.5). RUNTIME-VERIFIED
+  (Godot 4.6.2): Akaru webs a target at range → Entangled → movement blocked → Strength-12
+  escape (TN 20) → movement restored. (Dokufu/Kumo ranged webs are forward-wired for when those
+  spiders are transcribed; demon_silk likewise.)
+
+### Systems Added 2026-06-17 (s54.5/s54.12 Charge attacks — owner-approved, runtime-verified)
+- **Charge subsystem (tranche 1).** A charge-capable creature, out of melee but within charge
+  range, **enters Full Attack stance (only if able that turn — the GDD gate) and closes +
+  strikes in one turn**. `execute_charge`: range = Water Ring × `charge_move_mult` ft (÷5 =
+  tiles); moves toward the target (free move) then attacks. `charge_simple` makes the attack a
+  Simple action (boar/elephant economy — stance-Simple + attack-Simple both fit a turn);
+  `charge_atk_bonus`/`charge_dmg_bonus` add +NkN; `charge_diving` ends the creature Prone after
+  the dive. Charge fires only when it closes a gap (already-adjacent → normal attack). Owner
+  decisions (2026-06-17): enter Full Attack only if able; charge when it reaches; propose-approve.
+- **Charge bonus plumbing.** execute_melee_attack gains `charge_atk_bonus`/`charge_dmg_bonus`
+  (+NkN, stacks on auras) + `as_simple` (Simple-economy attack). New Participant
+  `spirit_attack_kept_bonus`/`spirit_damage_kept_bonus` (the kept half of +NkN) read in
+  resolve_attack/resolve_damage and reset alongside the rolled aura bonuses.
+- **Trample (on-hit).** A melee hit by a `trample_prone` creature renders the target Prone;
+  `trample_daze_margin` (Utogu 10) adds Dazed when the attack beats Armor TN by that margin.
+  Wired in _apply_hit (reads attack_result.margin).
+- **Populated:** Utogu (charge ×10 + trample Prone/Daze-10), Nairu + Nue (diving +1k1
+  → self-Prone), Munemitsu (trample Prone), spirit boar (goring charge: Simple + +1k1 atk/dmg,
+  move ×10 PROVISIONAL — GDD silent on goring move distance). RUNTIME-VERIFIED (Godot 4.6.2):
+  Utogu closes 6→1 tiles + target Prone; boar enters Full Attack + Simple-attacks same turn;
+  Nairu dives + ends self-Prone; an adjacent target yields no charge (normal attack).
+  DEFERRED (tranche 2): Gore-stick (Munemitsu), Ox Furious-Charge rage, Rhino Furious-Charge
+  Knockdown-maneuver + Free Raise, Rhino's vs-Prone special trample (8k4/10k4), stag antler
+  charge (GDD value unconfirmed).
+
+### Known Code Issues (found and fixed 2026-06-17, charge tranche 1 catalog bug)
+- **AdditionalCreaturesBestiary.catalog() emptied at runtime — wrong dict key. FIXED.**
+  The charge tranche-1 commit attached the diving-charge fields to `c["night_heron"]`, but
+  the diving creature at that spot is the **Nue** (`c["nue"]`), and a separate `night_heron`
+  (eye_strike, not diving) is created LATER in the same function. So `c["night_heron"].charge_* = …`
+  ran before that key existed → "Invalid access to key 'night_heron'" → catalog() aborted and
+  returned an effectively EMPTY dict. Every additional-bestiary creature (rhinoceros, Taki-bi,
+  Furaribi, Kukanchi, Hinotama, Wyrm, Nure-Onna, Jimen, Yosuchi, etc.) then failed to spawn
+  (spawn_by_id → null). Parse-check/import did NOT catch it (runtime error, not parse). Changed
+  the key to `c["nue"]`. RUNTIME-VERIFIED: catalog rebuilt to 37; integration smoke green again
+  (22 ok, 0 missing). LESSON: a per-file `--check-only` parse does not exercise catalog runtime;
+  spawn/integration drivers are required to catch dict-key errors.
+
+### Systems Added 2026-06-17 (s54.5/s54.12 Charge tranche 2 — runtime-verified)
+- **Gore-stick (Munemitsu).** A melee hit sticks the victim (Entangled, reusing the entangle
+  layer); pulling free (Strength TN 20 via attempt_entangle_escape) deals the creature's
+  `gore_escape_rolled k _kept` extra damage (Munemitsu 3k2). New SpiritCreatureData
+  gore_escape_rolled/_kept + Participant gore_escape_rolled/_kept. RUNTIME-VERIFIED: stuck →
+  escape deals +3k2.
+- **Rhino Furious Charge (Knockdown).** A Full-Attack melee hit by a `charge_knockdown` creature
+  attempts a Knockdown (Contested Strength, quadruped, +5 = the Free Raise) → target Prone.
+  Wired in _apply_hit (covers charging AND adjacent); resolve_knockdown gains a bonus_to_attacker
+  param. RUNTIME-VERIFIED: rhino knocks the target Prone.
+- **Rhino vs-Prone Trample.** When the target is Prone, the rhino uses a special Simple attack
+  (8k4 / 10k4) via a temporary stat-profile swap (like the multi-attack second strike). New
+  vs_prone_atk/dmg_rolled/_kept fields + an execute_npc_turn branch. RUNTIME-VERIFIED: Prone
+  target → vs_prone_trample fires (10k4, +36 damage in the test).
+- **DEFERRED:** Ox Furious-Charge rage (no Ox creature is transcribed — no consumer), stag antler
+  charge (GDD value unconfirmed). These need new transcription, not wiring.
+
+### Systems Added 2026-06-17 (s2/s54.11/s54.12 Fatigue subsystem — owner-approved, runtime-verified)
+- **Fatigue applied + Full-Attack gate (the effect was already wired).** GDD locks Fatigued =
+  +5 TN to all rolls (+5 per extra day) + may not take Full Attack stance (s2 line 181). The
+  combat roll penalty (−5, escalating via `fatigue_days`) was ALREADY implemented in
+  `IndividualCombat.get_condition_roll_penalty` and consumed by resolve_attack — but nothing
+  APPLIED CONDITION_FATIGUED and the Full-Attack block was unenforced. Added: (1) **Full-Attack
+  block** in `execute_stance_change` (reason `fatigued_no_full_attack`) + the charge's direct
+  stance entry (a Fatigued creature cannot charge). (2) **Aura of Heat (Taki-bi)** — a
+  non-Fatigued character within 10' (2 tiles) of an `aura_of_heat` creature becomes Fatigued by
+  heatstroke (applied in apply_fear_checks at turn start; persists — heatstroke is not cleared
+  by stepping away). (3) **Abominable Stench (Nuppeppo)** — `_apply_abominable_stench` in
+  execute_melee_attack: when struck by an armed melee weapon, every living mortal within 20'
+  (4 tiles) rolls Stamina TN 20 or is Fatigued. RUNTIME-VERIFIED (Godot 4.6.2): Fatigued →
+  Full Attack blocked (allowed when rested); Aura of Heat fatigues within 2 tiles, not far;
+  striking the Nuppeppo fatigues a low-Stamina attacker. APPROXIMATIONS/LIMITATIONS:
+  "bladed/piercing" = any armed (non-unarmed) melee weapon (no weapon damage-type field);
+  Fatigue is combat-scoped (Participant condition — no cross-encounter Fatigue state, so the
+  out-of-combat "+5 TN to all Skill rolls" is not applied via SkillResolver); Aura of Heat's
+  "first Round" and Stench's "until you move 20 ft away" clearing are not modelled (Fatigue
+  persists for the skirmish).
+
+### Systems Added 2026-06-17 (s54.5 Shikage Demon Silk — runtime-verified, web reuse)
+- **Demon Silk wired (Shikage no Oni).** Two reuses of the entangle layer (data + a small
+  retaliation): the ranged web → `ranged_entangle` (7k4 to-hit, no damage, Entangle, range 20'
+  = 4 tiles, data-only); and the touch-retaliation — a melee attacker who strikes the
+  web-covered oni is instantly Entangled (beside the Burning Touch retaliation in
+  execute_melee_attack; escape TN simplified to the standard 20 vs the GDD's TN15-escalating).
+  RUNTIME-VERIFIED (Godot 4.6.2): Shikage webs a target at range → Entangled; a katana-strike
+  on Shikage entangles the attacker. DEFERRED: Shikage's Mind-Breaking Poison (Willpower drain)
+  and Paralyzing Poison (Reflexes drain) — per-round escalating Trait drains (Stamina TN20 each
+  Round until a save or the Trait hits 0 → mind-controlled / paralyzed), a poison-system
+  extension beyond the current immediate-drain-with-next-tick-restore model.
+
+### Systems Added 2026-06-18 (s54 sacred-material Reduction + s54.5 heart_kill, owner-approved)
+- **s54.5/s54.11/s54.12 Vulnerable-to-sacred-materials Reduction (owner ruling: vulnerable).**
+  Juggernaut-type creatures whose thick hide is LESS effective vs jade/crystal/obsidian
+  ("Reduction X (Y against jade/crystal/obsidian)") now take reduced Reduction from those
+  weapons. New `SpiritCreatureData.reduction_jade/_crystal/_obsidian` (-1 = base, 0 =
+  bypassed); `SpiritAbilitySystem.reduction_for_kind()` consults them (after the swarm
+  rule), wired into `_apply_hit` (already the single reduction-resolution site for spirit
+  targets). **Exact per-creature, per-material GDD values transcribed** for 15 creatures —
+  undead: harionago (j5), nuppeppo (j5/c5), pennaggolan (j10/c10), gakimushi (j5/c5),
+  kitsune_gohei (j8/c8), yogo_junzo (j5/c5); additional: kaze_no_oni (0/0/0), yobuko (c0),
+  jinmenju (j10/c5/o5), jimen_no_oni (c4/o4), toichi_no_kansen (c0/o0), wanyudo (c5/o5),
+  akeru_no_oni (0/0/0), mizu_no_oni (j10/c10); oni: ryokaku_no_oni (c4). The coarse
+  `reduction_vs_jade_crystal*` tags are left as descriptive (superseded by the data). Fire
+  resists (Wanyudo "20 vs magical fire") not wired — no magical-fire weapon path exists.
+  Runtime-verified 23/23 (mundane=base, sacred=exact reduced value, control creature
+  unaffected, vulnerable direction holds). All numbers GDD-exact — no invention.
+- **s54.5 Arugai heart_kill (the unkillable-boss fix).** See commit 9ff521c: regenerating
+  heart_kill oni can only be slain by locating (Investigation/Perception TN 30,
+  `execute_locate_heart`) and destroying its 10-Wound heart; body Wounds are held below
+  Dead while the heart is hidden. Runtime-verified 8/8.
+- **gaki_immortality — RESOLVED: already-handled (owner decision, no code).** GDD ("reform
+  in Gaki-do") gives no tile-combat reform delay/location (unlike the General's explicit
+  200-rounds-at-heart), so an explicit on-map reform would require invented numbers. Treated
+  as emergent: the Restoration Ritual is the encounter win condition (not killing) and the
+  s56.16 escalation spawner re-manifests gaki from the realm pool, so "cannot be permanently
+  destroyed by combat" already holds. The `gaki_immortality` tag remains descriptive; no
+  combat change.
+
+### Systems Added 2026-06-18 (s31–s37 tile-combat spellcasting — Phase 1, owner-approved "Full")
+- **Cast framework + the two blocked reaction consumers.** New
+  `AsciiMapCombatOrchestrator.execute_cast_spell()` — a Complex Action that validates
+  `SpellSystem.can_cast` (known / insight rank / slot / Ishiken), spends the slot, and
+  resolves the cast roll vs TN. Range is LOS-only for now (GDD spell ranges blocked on
+  map-distance data, same as ranged weapons). **Sodatsu's Bane (s54.5)** fully wired:
+  a spell cast AT a `shugenjas_bane` creature is absorbed (no effect, slot still spent)
+  and the oni instantly retaliates (`_sodatsu_bane_retaliate`) in one of the three GDD
+  modes — heal 3×ML if wounded, else bolt the caster (4k4 attack vs Armor TN, DR ML k2
+  [BANE_BOLT_DR_KEPT PROVISIONAL — GDD "DR equal to the Mastery Level" leaves kept dice
+  unstated], 50 ft = 10 tiles), else harden +3×ML Armor TN for 3 rounds (timed modifier,
+  stacks). **Creature Magic Resistance (s54.10/s54.12)**: new
+  `SpiritCreatureData.spell_tn_bonus` (+ `spell_tn_bonus_element`, -1 = all) added into
+  `SpellSystem.resolve_cast`'s TN, element-gated. Populated Mujina +6 and Yamato no Orochi
+  +6 (explicit GDD "+6"). The "N Ranks of Magic Resistance" creatures use +5 TN/Rank (owner
+  ruling 2026-06-18), element-gated: Jimen +15/Earth, Akeru +15/Void, Moetechi +15/Fire,
+  Toichi +5/Earth, kodama +10/all, Manesuru +10/all. DEFERRED: Hinotama (2 Ranks Earth+Void
+  — the single element field can't express dual-element, and it also has full Fire/Air/Water
+  immunity which isn't modelled) and Kaze no Oni (Spell-Filching is absorb/redirect, not +TN).
+  **jade/crystal-property spells** (third consumer): `SpellSystem.has_jade_or_crystal_property()`
+  + the Furaribi rule (s54.12) — a jade-property spell successfully cast at a `superior_invuln`
+  spirit does not harm it but repels it (removed from positions + added to fled_ids). Property
+  list seeded with jade_strike (certain); the full Jade/Crystal-property list is Phase 2.
+  Runtime-verified 18/18 across two passes (MR flat-+6 + N-Rank element-gating; Sodatsu absorb
+  + slot spent + all three modes + Armor TN raised; jade_strike repels Furaribi, not a
+  non-superior_invuln creature). LIMITATION: a generic successful cast has no offensive/buff EFFECT yet
+  — the library entries are `{element, mastery, sim_effect}` with no damage/range/AoE, so
+  per-spell combat effects are **Phase 2** (faithful transcription from s31–s37, the bulk
+  of the work). Phase 1 delivers the casting plumbing + the reactions that fire off the act
+  of casting (the original #1 unblock: Shugenja's Bane + magic_resistance).
+  Also fixed: a misplaced `c["mujina"].spell_tn_bonus` injection had landed in
+  `chikushudo_catalog()` (spirit_bestiary has one catalog per realm) instead of
+  `sakkaku_catalog()` — caught at runtime (mujina spawn crashed), relocated.
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 1: direct-damage Fire spells
+  (owner-authorized 2026-06-18).** First per-spell combat EFFECTS layer on top of the Phase 1
+  casting plumbing. New additive `SpellSystem.SPELL_COMBAT_EFFECTS` dict + `get_combat_effect()`
+  — a per-spell GDD-transcribed combat-effect schema (`kind/dr_rolled/dr_kept/range_tiles/
+  aoe_radius/aoe_hits/caster_exempt/is_magic`), kept separate from the `{e,m,s}` library so it
+  stays clean. Four unambiguous direct-damage Fire spells encoded (s35, exact GDD values, 5 ft =
+  1 tile): **Fury of Osano-Wo** (5k2 single, 300'→60-tile = LOS), **Beam of the Inferno** (10k10
+  single, 200'→40-tile), **Breath of the Fire Dragon** (DR = caster's Fire Ring, self-centered,
+  enemies-only — the 15'×5' cone modeled as a radius-3 blast, caster exempt), **Destructive Wave**
+  (7k7, 25'→radius-5, friend+foe, caster exempt). `AsciiMapCombatOrchestrator.execute_cast_spell`
+  gains a damage branch (after the Furaribi-retreat block, gated on success + a `"damage"` effect)
+  → `_apply_spell_combat_damage()`: resolves single-target (with a range check that fizzles an
+  out-of-range cast, slot already spent) or self-centered AoE (Chebyshev radius; enemies-only via
+  faction, or all; caster always exempt), rolls the DR per target (exploding; DR = Fire Ring when
+  `dr_*` is 0), and applies it through `WoundSystem.apply_damage(…, 0)` (elemental fire bypasses
+  armor). Spirit targets route through `SpiritAbilitySystem.incoming_damage(creature, W_FIRE,
+  is_magic=true)` — a new backward-compatible `is_magic` param so a fire SPELL reads as **magic**
+  for the invuln tags (incorporeal/superior_invuln/partial_invuln let it through) AND as **fire**
+  for `flame_immune` (Kagaki/Taki-bi take 0 and HEAL) and `water_vulnerable`. Returns a per-target
+  `{id, damage|healed, dead}` report (on `res["spell_damage"]` + combat log). Also fixed: the AoE
+  faction comparison used `int(...)` but `FACTION_*` are Strings (caught at runtime). Runtime-verified
+  6/6 (beam single, fury single, AoE-all hits both ally+enemy, caster exempt = 0 wounds, breath
+  enemies-only spares the ally, flame_immune spirit heals from the fire spell). DEFERRED (next
+  tranches): the buff/aura Fire spells (Fires of Purity wreath, Katana of Fire, weapon enhancers —
+  need persistent buff state + a melee retaliation hook), terrain-ignition (Fiery Wrath → FireSystem),
+  instant-kill edge cases (Death of Flame's reciprocal self-damage), multi-round channels (Breath's
+  4-round Simple-action repeat), weather damage bonuses (Fury's storm 6k2/6k3), targeting
+  restrictions (Dragon's Talon Insight ≤2), and the other four elements + Universal (Air/Earth/Water/
+  Void direct-damage + utility). The schema generalizes to those; this tranche proves the pipeline.
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 2: other-element direct damage
+  (owner-authorized 2026-06-18).** Extends the tranche-1 schema across the remaining four rings
+  (exact GDD values). New schema fields: `dr_rolled_bonus` (added after the ring substitution —
+  Slayer's Knives DR = Air Ring +2k0) and `requires_taint` (0 damage to a target with Taint Rank
+  < 1 — Jade Strike). `_apply_spell_combat_damage` rewritten element-aware: DR=0 now uses the
+  spell's **element** Ring (not always Fire); the spirit-damage filter kind is derived from the
+  element (Fire→W_FIRE so flame_immune heals, Water→W_WATER so water_vulnerable doubles, else
+  W_MAGIC), always `is_magic=true`; AoE centers on the **target tile** when ranged (targeted blast
+  — Howl of Isora) and on the caster when self-centered (cones/bursts). Seven spells encoded:
+  **Air** — Tempest of Air (1k1, 75' cone), Howl of Isora (3k2, 40'-diameter targeted burst, all),
+  Slayer's Knives (Air+2 k Air, 30' corridor); **Earth** — Jade Strike (3k3, single, taint-gated,
+  also the jade-property repel from Phase 1); **Water** — Strike of the Tsunami (3k3, 25' cone);
+  **Void** (Ishiken-only) — Touch the Emptiness (1k1, single), Void Strike (Void-Ring DR, single).
+  Cones/diameters modeled as Chebyshev radii (length÷5 = tiles) — over-applies behind the caster
+  (no facing, same compromise as the kiho cone layer). Runtime-verified 7/7 (jade_strike damages
+  tainted / 0 vs non-tainted; void_strike Ishiken + Void-Ring DR; slayers_knives Air+2 DR;
+  howl_of_isora centers on the aim point + hits all near it, spares the distant caster;
+  strike_of_the_tsunami enemies-only). DEFERRED (riders/edge cases, later tranches): Knockdown
+  (Tempest/Slayer's/Tsunami), Fatigue (Howl), Daze (Touch the Emptiness), weather bonuses,
+  earthquake/pit structure-and-terrain spells, multi-round transforms (Tomb of Jade), and the
+  buff/weapon/condition spell families.
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 3: damage-spell condition riders
+  (owner-authorized 2026-06-18).** Adds the GDD condition riders to the wired damage spells via a
+  new optional `rider` sub-dict on `SPELL_COMBAT_EFFECTS` ({condition, save, save_tn,
+  duration_rounds}) + `_apply_spell_rider` in the orchestrator (applied per surviving damaged
+  target after damage). Four save types: `none` (auto), `earth_flat` / `stamina_flat` (Ring/Trait
+  roll vs TN), `earth_contested_air` (target Earth vs caster Air, ties to the target). Five riders
+  wired to existing consumed conditions: **Prone** — Tempest of Air (Contested Earth vs Air),
+  Slayer's Knives (Earth TN 20), Strike of the Tsunami (Earth TN 15); **Dazed** — Touch the
+  Emptiness (no save); **Fatigued** — Howl of Isora (Earth TN 30). New `CONDITION_DEAFENED`
+  constant added (forward-wired) but Fury of Osano-Wo's Deafen is **deferred**: it is a bystander
+  AoE within 10' of the *target* (not a rider on the damaged target, who usually dies to 5k2
+  first) and Deafened has no combat effect yet — needs a sub-AoE + a hearing mechanic. The timed-
+  rider path (`duration_rounds`>0) remains forward-wired (no rider currently uses it). All values
+  GDD-exact. Runtime-verified 5/5 (Dazed auto; Prone on weak-Earth via contested + flat saves;
+  strong-Earth target resists Slayer's Knives = rider "resisted"; Fatigued on Howl; Fury now
+  riderless). DEFERRED unchanged: Fury Deafen bystander-AoE, weather bonuses, earthquake/pit
+  terrain spells, multi-round transforms, buff/weapon/condition spell families.
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 4: in-combat healing (s36 Water,
+  owner-authorized 2026-06-18).** Adds a `"heal"` kind to `SPELL_COMBAT_EFFECTS` + a `heal` branch
+  in `execute_cast_spell` → `_apply_spell_heal`. Heals a living ally (or self) within reach via
+  `WoundSystem.heal_wounds`; an Out-but-alive ally can be restored, the dead cannot. Three library
+  healers (all Touch/single-target, GDD-exact): **Path to Inner Peace** (heal = cast roll margin
+  over TN), **Regrow the Wound** (Water Ring + effective School Rank, one Round), **Peace of the
+  Kami** (full heal — all Wounds). `heal` field selects the amount; `range_tiles 1` = Touch
+  (caster adjacent, self always allowed). Gates: same-faction only (cannot heal an enemy →
+  `not_an_ally`), Touch range (`out_of_range`), `target_dead`. Runtime-verified 6/6 (margin heal,
+  Water+Rank heal, full heal → 0 wounds, enemy rejected, out-of-range rejected, self-heal).
+  **Correction:** Reversal of Fortunes — listed in the original menu as a healer — is actually a
+  re-roll BUFF (GDD s36: "may re-roll any one roll per round, 3 rounds"), so it is NOT in this
+  tranche; it belongs to the buff/weapon tranche. DEFERRED: rise_from_the_ashes (Void 6 Ishiken,
+  8-hour time-window regression — needs per-time injury/disease/poison/taint tracking; combat-
+  relevant slice would be a full heal but the undo-window semantics are not modeled); multi-round
+  maintained healing (Regrow applies one Round per cast); the AoE/per-round Water heals
+  (Heaven's Tears, Sanctuary of the Waves). Multi-target heal is not needed — all three wired
+  healers are single-target.
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 5: status/control + cleanse spells
+  (owner-authorized 2026-06-19).** Adds two new `SPELL_COMBAT_EFFECTS` kinds. **`status`** inflicts
+  a condition on each affected target (single or AoE), mapping to the existing consumed combat
+  conditions, with an optional save (the rider save-types, extracted into a shared
+  `_spell_save_resisted`); target-gathering extracted into a shared `_gather_spell_targets` used by
+  both damage and status. **`cleanse`** (`_apply_spell_cleanse`) frees allies of conditions and
+  heals them. Five spells (exact GDD): **Wind-Born Slumbers** (Air 2 → Fatigued; an active combat
+  target gets Fatigue, the "asleep" branch needs no combat condition), **Whispering Flames**
+  (Fire 3 → 10' AoE Dazed on all gazers, roll-recovered), **Eyes of the Phoenix** (Fire 4 → single
+  Blinded), **Wooden Prison** (Earth 3 → single Entangled, escape via the standard entangle layer),
+  **Typhoon's Surge** (Water 3 → up to Water Rank nearest living allies in range, free Fatigued+Dazed
+  + heal Water Rank each). All saves "none" per GDD (these apply automatically); the save path is
+  forward-wired. `duration_rounds` 0 = persistent/roll-recovered via apply_condition (all five; GDD
+  durations exceed a skirmish or are escape/roll-gated). Runtime-verified 7/7 (Fatigued; AoE Dazed
+  near-yes/far-no; Blinded; out-of-range fizzle; Entangled; Typhoon's cleanse+heal of two allies
+  20→14 / 15→9). DEFERRED: **Reversal of Fortunes** (Water 1 re-roll buff — needs a per-Participant
+  re-roll-grant state read by the roll sites) and **The Soul's Blade** (Fire 6 weapon enchant,
+  auto-Stun on hit — needs a weapon-enchant state in `_apply_hit`) → weapon/buff tranche; Eyes of
+  the Phoenix's allies' Fear-3 burst (one-shot AoE Fear, not a proximity source); Whispering Flames'
+  gaijin/nonhuman immunity + exact Willpower=Fire×10 recovery TN (uses the default Dazed recovery);
+  Wooden Prison's Contested-Strength-vs-4 escape (uses the standard TN-20 entangle escape) + its
+  terrain restrictions.
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 6: defensive/weapon buff spells
+  (owner-authorized 2026-06-19).** Adds a `buff` kind: persistent stat bonuses installed on the
+  target's Participant via the existing round-scoped `timed_modifiers` layer (auto-expires in
+  `advance_round`). `_apply_spell_buff` resolves each `{kind, value}` mod (value = int OR a GDD
+  formula `water_plus_rank`/`earth_plus_rank` via `_resolve_buff_value`); `target` "self" (range
+  ignored) or "ally" (Touch/range, living same-faction gate). `duration_rounds` = GDD rounds
+  (minutes × 10 via the ROUNDS_PER_MINUTE convention). Five new read sites wired in
+  `individual_combat.gd` — `reduction` (`total_defender_reduction`), `armor_tn` (already read by
+  `get_armor_tn`), `spell_attack_rolled`/`_kept` (`resolve_attack`, ungated — distinct from the
+  Kenjutsu/Iaijutsu-gated World-Is-Empty `attack_rolled`), `spell_damage_rolled`/`_kept`
+  (`resolve_damage`), `initiative_rolled` (added to the rolled-dice count in `roll_initiative`, NOT
+  a flat score add — Warning Flame is +1k0). Five spells (exact GDD): **Armor of Earth** (Earth 1
+  → Reduction = Earth + School Rank), **Cloak of the Miya** (Water 2 → Armor TN += Water + School
+  Rank), **Biting Steel** (Fire 1 → DR +1k1), **Burning Kiss of Steel** (Fire 1 → melee attack
+  +1k1; the mounted/larger +2k2 deferred), **Warning Flame** (Fire 1 → +1k0 Initiative; the
+  immune-surprise + Reactions-Stage +3 deferred). Runtime-verified 6/6 (Reduction +12, Armor TN
+  +12, damage +1k1 r9→10 k2→3, attack +1k1 mean 49→56, ally Init +1k0 58→61, expiry via
+  `expire_timed_modifiers`). DEFERRED (each needs a distinct hook): **Reversal of Fortunes**
+  (Water 1 — a per-Participant re-roll-grant read by every roll site), **The Soul's Blade** (Fire 6
+  — a weapon-enchant Participant state in `_apply_hit` that auto-Stuns + overcomes Invulnerability),
+  Fires of Purity flame-shroud (a melee-attacker retaliation on a character, like the creature
+  Wreathed-in-Flames hook), Force of Will (+2 Wounds/Rank with expiry-damage — needs a wound-capacity
+  buff), the elemental weapon-conjuration spells (need an inventory weapon), and the Fear-resist
+  buffs (Strength of the Crab etc. — need a Fear-resist modifier in `apply_fear_checks`).
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 7: NPC cast pipeline
+  (owner-authorized 2026-06-19).** Closes the loop — before this, every spell combat effect
+  (damage/riders/heal/status/cleanse/buff) was only reachable by a direct `execute_cast_spell`
+  call; no NPC combatant ever cast. `_npc_maybe_cast_spell` is the NPC shugenja combat-cast hook
+  in `execute_npc_turn` (PC-present skirmishes only — NPCs use the orchestrator solely when a PC
+  is in the fight; PC casting is still the future turn-based UI). Structural AI, same class as
+  `_npc_pick_atemi` / `_npc_maybe_activate_kiho` (the GDD gives no NPC combat-spell policy).
+  Priority: (1) the best castable **damage/status** spell (highest ML) that **reaches** the
+  AI-chosen enemy (`_spell_reaches`: ranged single/aimed-AoE → distance ≤ range_tiles;
+  self-centered AoE → ≤ radius); (2) **heal** — self when wound level ≥ HURT, else an adjacent
+  wounded ally (heal spells are Touch); (3) **self-buff** if not already buffed. Placed BEFORE
+  the stance pick because casting is the turn's **Complex** action and a Simple spent on a stance
+  change forbids the Complex (1 Complex OR 2 Simple); a grappled caster is skipped (can't gesture),
+  prone casting is allowed. On a successful cast the turn ends. Runtime-verified 6/6 (casts beam at
+  the PC for 60; self-heal at wl 5 ≥ HURT 70→55; full-heal an adjacent ally 18→0; self-buffs Cloak
+  of the Miya; offense chosen over self-buff when both available; a non-caster bushi takes no
+  cast_spell action and falls through to melee). LIMITATION: a wounded support shugenja still
+  prefers offense when any enemy is reachable (heal is priority 2) — a deliberate aggressive
+  heuristic, tunable after a live run; AoE friendly-fire avoidance in target selection is not
+  modeled (the cast aims at the AI's single best_target; self-centered AoE "all" spells can catch
+  allies, faithful to the GDD but worth watching).
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 8: hooked buff spells
+  (owner-authorized 2026-06-19).** The three deferred buffs whose effect is a combat-hook read,
+  not a passive stat total. All cast via the `buff` kind (target self) installing a timed modifier;
+  the effect fires in `_apply_hit` / `execute_melee_attack`. (1) **The Soul's Blade** (Fire 6,
+  `weapon_stun`): every target the enchanted weapon hits is Stunned (`_apply_hit` applies
+  CONDITION_STUNNED on a hit) AND the weapon overcomes Invulnerability (the spirit-damage filter
+  reads the weapon as `W_MAGIC` when the enchant is active, so invuln tags let it through —
+  verified 0→18 damage vs a superior_invuln spirit). (2) **Fires of Purity** (Fire 1,
+  `flame_shroud`): a melee attacker striking the shrouded character takes 2k2, and the shrouded
+  character's own melee hits deal an extra 2k2 (`_apply_fires_of_purity`, both directions; ranged
+  bypasses via the melee gate; ally-targeting deferred — cast target is self). (3) **Reversal of
+  Fortunes** (Water 1, `reroll`): a buffed attacker may re-roll a missed attack once per round,
+  keeping the better result (`execute_melee_attack` re-rolls on a miss when
+  `get_timed_modifier_total(a_p,"reroll")>0` and `reversal_used_round != round`; new
+  `Participant.reversal_used_round`). Runtime-verified 4/4 (Stun on hit; overcome-invuln 0→18;
+  Fires of Purity cast installs + burns attacker for 10; Reversal raises hit rate 121→146/200).
+  LIMITATION: Reversal covers the **attack roll** only (the primary combat roll) — "may re-roll
+  ANY one roll per round" across damage/contested/Initiative rolls is forward-wired (each roll site
+  would need the same guarded re-roll); Fires of Purity's ally-target option is deferred (NPC
+  self-buff path only installs self-target buffs).
+- **s31–s37 tile-combat spellcasting — Phase 2 tranche 9: companion-shugenja cast
+  (owner-authorized 2026-06-19).** Closes the last spell-reachability gap — wires the same
+  `_npc_maybe_cast_spell` hook into `execute_companion_turn` so an allied shugenja companion on a
+  PC mission casts too (parity with the kiho companion hook). Placed after the companion kiho
+  block, before the melee engage; gated `cmd != RETREAT` (a retreating/broken companion does not
+  stop to cast), `ts.can_use_complex()`, non-empty spells_known, and not grappled. Same priority
+  (offense at an enemy → heal self/wounded ally → self-buff); companions are FACTION_PLAYER so
+  heals target the PC side. Runtime-verified 3/3 (companion casts beam at an enemy for 81; heals a
+  wounded PC ally 20→0; a non-caster bushi companion takes no cast_spell action). With this, every
+  spell with a clean combat effect is reachable by every NPC/companion combatant in a PC-present
+  skirmish; PC casting remains the future turn-based UI.
+
+### s40 Combat Maneuvers — audit + NPC Knockdown (2026-06-19)
+Audited the s40 maneuver set against the tile orchestrator. **All maneuver executors
+are wired**: Guard (0 Raises, free action), Knockdown (biped/quad, Contested Strength →
+Prone), Disarm (Contested Strength + the weapon-grapple free-raise track), Feint
+(margin → damage bonus), Increased Damage (+1k0/Raise), Extra Attack (5 Raises), and
+the full Grapple sub-action set. **Called Shot** has no dedicated handling and needs
+none — GDD s40 says it has "no universal mechanical effect" (GM-ruled sever), and its
+Raises are already consumed via the attack's `raises` param. **Disarm's 3-Raise
+requirement is not gated** (documented forward-wire; no consumer needs it yet).
+**Gap filled — NPC tactical Knockdown:** `_npc_execute_attack` previously only ever
+chose `increased_damage`/extra_attack, so NPCs never knocked a dangerous foe Prone.
+Added `_npc_should_knockdown` (structural AI, GDD-silent on NPC maneuver policy, same
+class as the other `_npc_*` heuristics): a melee attacker with skill ≥ 4 (so the 2-Raise
+TN bump is affordable) uses Knockdown against a STANDING target whose best melee skill
+(`_NPC_KNOCKDOWN_SKILLS`) is ≥ 3 — a competent fighter worth disrupting; a Prone or
+weak target falls through to `increased_damage`. Runtime-verified 5/5 (skilled vs
+competent → Knockdown chosen + lands to Prone; skilled vs weak → no Knockdown; skilled
+vs already-prone → no Knockdown; skill < 4 → no Knockdown). Disarm/Feint NPC use is a
+deliberate non-fill (Disarm 3 Raises rarely worth it; Feint ≈ increased_damage for AI).
+
+### s40 Combat Maneuvers — Disarm consequence + NPC Disarm/Guard (2026-06-19)
+Extends the maneuver tactics. **(A) Disarm 3-Raise gate.** The disarm block in
+`execute_melee_attack` now enforces GDD s40's 3-Raise cost (`DISARM_RAISES = 3`):
+the maneuver only resolves when `called_raises + banked_disarm_free_raises >= 3`
+(Earthen Fist / weapon-grapple free raises still reduce it); otherwise
+`disarm_insufficient_raises`. **(B) Disarm now has a real consequence.** New
+`Participant.disarmed` flag — a disarmed character's weapon is on the ground, so
+`execute_melee_attack` forces their attacks to `unarmed` (verified: mean damage 4.1
+vs 16.8 armed) until they recover it. `execute_recover_weapon` (a Simple action)
+picks it back up. **(C) NPC tactical maneuvers.** Three structural-AI hooks (GDD
+gives no NPC maneuver policy): `_npc_should_disarm` — a skill-5+ attacker strips a
+still-armed HIGH-threat foe (best melee skill ≥ 4; skips unarmed fighters), taking
+priority over Knockdown; a disarmed NPC recovers its weapon on its turn (Simple, so
+no Complex attack that turn — the Disarm's tempo cost); `_npc_maybe_guard` — a
+bodyguard reflex that Guards (free action, +10 ally Armor TN / −5 own) a wounded
+(HURT+) adjacent ally who has an adjacent enemy, then still takes its stance/attack.
+Runtime-verified 11/11 (gate insufficient/sufficient; forced-unarmed; recover clears;
+NPC disarms armed-high-threat but not unarmed; NPC recovers; NPC guards wounded-
+threatened but not healthy ally). Feint NPC use still deliberately skipped
+(≈ increased_damage for AI).
+
+### s40 Guard cost — GDD compliance (2026-06-19)
+`execute_guard` consumed a **free** action; GDD s40 (LOCKED) says "Guard (0 Raises) —
+**Simple Action**." LOCKED wins, so Guard now consumes a Simple (with the standard
+`can_use_simple` + down-restriction guards). Consequence: a guarding bodyguard forgoes
+its own attack that turn (1 Complex OR 2 Simple — a Simple spent on Guard blocks the
+Complex attack), which is the intended GDD tradeoff. `_npc_maybe_guard` was moved
+before the stance pick and now **returns** on a successful guard (the NPC commits its
+turn to protecting the ally). Runtime-verified 4/4 (Guard consumes a Simple → no
+Complex attack; NPC bodyguard guards a wounded threatened ally and forgoes its attack;
+no guard for a healthy ally).
+
+### s40 Combat Maneuvers — NPC Grapple initiation (2026-06-19)
+The grappled-state loop (hit / take_control / escape) already ran on later turns, but no
+NPC ever *initiated* a Grapple. `_npc_should_grapple` (structural AI, GDD-silent on NPC
+policy): a dedicated grappler — Jiujutsu ≥ 4 AND Jiujutsu ≥ its best weapon skill
+(`_NPC_WEAPON_SKILLS`, so a katana-5/jiujutsu-4 samurai keeps the sword) — seizes an
+adjacent enemy (Complex Action via `execute_grapple_initiate`) instead of striking; the
+existing grapple loop takes over next turn. Gated to non-spirit attackers (spirits have
+their own engulf/swallow grabs) and skipped while already grappled. Runtime-verified 5/5
+(pure grappler initiates; sword-primary samurai attacks instead; Jiujutsu < 4 no grapple;
+polearm-primary excluded). Feint NPC use remains a deliberate non-fill (margin/2 ≈
+increased_damage's +1k0 for AI, not worth the extra Raise).
+
+### s57.46/s40 Companion PROTECT → Guard (2026-06-19)
+Companions already inherit the attack maneuvers (Disarm/Knockdown) via `_npc_execute_attack`,
+but a PROTECT-commanded yojimbo never used the s40 **Guard** maneuver on its charge. Added
+to `execute_companion_turn`: a companion on the PROTECT command, adjacent (≤1 tile) to its
+`command_target_id` charge that is threatened by an adjacent enemy, interposes —
+`execute_guard` raises the charge's Armor TN +10 (−5 to its own). Guard is a Simple Action,
+so the yojimbo forgoes its attack to ward the charge (the canonical bodyguard tradeoff);
+fires before the engage-adjacent-enemy block. Runtime-verified 3/3 (guards a threatened
+adjacent charge and forgoes attack; no guard for an unthreatened charge; repositions
+instead of guarding when too far from the charge).
+
+### s40 Grapple sub-actions — Break + Pass completed (2026-06-19)
+GDD s40 specifies four grapple sub-actions (Hit, Throw, Break, Pass); `execute_grapple_action`
+only had Hit/Throw/take_control. Added the two missing: **Break** (Simple Action — the actor
+removes itself from the grapple; `IndividualCombat.grapple_break` frees BOTH participants since
+a grapple is a two-person bind, neither left Prone unlike Throw) and **Pass** (Free Action —
+do nothing, maintain the grapple and retain control). NPC use: a grappled non-controller who
+is NOT a dedicated grappler (`_npc_should_grapple` false — a weapon-fighter who got grabbed)
+now **breaks free** to return to its weapon next turn, instead of endlessly contesting control;
+a dedicated grappler still contests. Runtime-verified 5/5 (break frees both, partner not prone;
+pass = free action retaining grapple+control; NPC swordsman breaks free; NPC grappler contests).
+
+### s40/s27.9 Sumai Tournaments + Badger Great Games (2026-06-19)
+`IndividualCombat.resolve_sumai_bout` was built but had **zero callers** — sumai wrestling
+was unreachable. Added `resolve_sumai_match` (repeated bouts until one wins by 5+, GDD s40
+"SUMAI TOURNAMENTS"; safety cap decides persistent near-ties by the last roll) and
+`resolve_sumai_tournament` (single-elimination bracket; odd entrant gets a bye; returns
+`{champion_id, participant_count, rounds}`). No size bonus applied in pairing (the s45 Large
+advantage is a forward-wire; the bout still contests Strength + Jiujutsu). Wired the **annual
+Badger Great Games** (s27.9): `DayOrchestrator._process_badger_great_games` fires once per IC
+year on the year boundary (the GDD fixes the "once per year" cadence, not the day), gathers
+living non-PC wrestlers (Jiujutsu ≥ 1) physically present in the Badger province, runs the
+bracket, and gives the champion a **named reputation** (TIER_4 PERSONAL topic, subject =
+champion, added to active_topics + the champion's topic_pool). Runtime-verified 9/9 (8-entrant
+3-round bracket; strongest wins 20/20; <2 entrants no-op; odd-entrant bye; Great Games excludes
+PCs and out-of-province characters; TIER_4 champion topic created and pooled; no-Badger no-op).
+LIMITATION (no GDD value, deferred): s27.9 says the champion "gains Glory" but specifies no
+number — the Glory award is NOT applied (the named-reputation topic is the deliverable);
+"disposition shifts between factions present" likewise deferred (needs an event-attendance
+model + values). DEFERRED elsewhere: the Imperial Championship resolver (`resolve_championship`)
+is also still unwired (annual/vacancy trigger + winner Glory unspecified).
+
+### s11.5 Topaz Championship wired + resolve_championship latent bug fixed (2026-06-19)
+`FestivalSystem.resolve_championship` was built but had **zero production callers** (tests only).
+Wired the annual **Topaz Championship** (s11.5 LOCKED): `DayOrchestrator._process_topaz_championship`
+fires once per IC year (year boundary, alongside the Great Games). Eligible entrants are that
+year's new graduates — Insight Rank 1 living non-PC samurai (the "graduated this year" proxy; no
+gempukku-year marker exists); each clan sends up to 3 of its finest by Topaz-stage competence
+(Athletics + best(Kenjutsu/Iaijutsu) + best(Etiquette/Lore: History)). Resolved via
+`resolve_championship`; the winner is **declared Topaz Champion for one year** — `role_position`
+set to RoleRegistry.TOPAZ_CHAMPION, the prior holder simply loses the title (s11.5) — and gains a
+named reputation (TIER_4 PERSONAL topic, pooled). **Latent bug fixed:** `resolve_championship`'s
+`stage["skill"] == "elemental_ring"` crashed ("Invalid operands Array and String") whenever a
+stage skill was an Array (Topaz `["Kenjutsu","Iaijutsu"]`, Amethyst/Topaz Lore options) — GUT
+never caught it (non-functional headless); this wiring is the first real execution. Guarded with
+`is String`. Runtime-verified 10/10 (eligible Rank-1 winner; title transfer; prior holder loses it;
+TIER_4 topic pooled; ≤3/clan cap; <2/no-Rank-1 no-op; Jade elemental_ring no longer crashes).
+LIMITATIONS (deferred): the title's Status/Glory change (s46 lists Status 4, RoleRegistry 5.0 — a
+GDD/code conflict, not resolved); the offer/refusal model. The displaced Topaz Champion is now appointed an Emerald Magistrate (s11.5/s02.1 "Topaz Magistrates"; deterministic per "most frequently").
+
+### s11.5 Vacancy-triggered Jeweled Championships wired (2026-06-19)
+`DayOrchestrator._process_jeweled_championships` (seasonal) fills an empty Jeweled Champion
+seat (Emerald/Jade/Amethyst/Ruby/Turquoise). When no living character holds the title, the
+Emperor holds a championship: each Great Clan nominates its finest eligible candidate (school
+gated by `CHAMPIONSHIP_SCHOOL_PREFERENCE` — Emerald/Ruby Bushi, Jade Shugenja, Turquoise
+Artisan); Amethyst is the s11.5 exception, nominated by the Imperial families (Seppun/Otomo/
+Miya). Resolved via `resolve_championship`; the winner takes the title (`role_position`) and
+gets a TIER_3 POLITICAL named-reputation topic. Now an Emerald/etc. Champion who dies is
+actually replaced (previously the seat stayed empty forever). Runtime-verified 7/7 (vacant
+Emerald filled with 7 Great-Clan nominees + title set; filled seat not re-contested; Jade
+skipped when no shugenja; Amethyst from Imperial families only, great-clan excluded).
+DEFERRED (no values / model): the 1–3 season Emperor-call gap (fires the season the vacancy
+is seen), the full weighted clan-nomination eval (a competence proxy picks each nominee), the
+extraordinary-championship path (Tier 2), and the Emerald-Magistrate appointment.
+
+### s57.24 displayed-bonsai visitor effect wired (2026-06-19)
+`GardenSystem.apply_bonsai_visitor` was built but never called — displayed bonsai gave no
+visitor effect (gardens do). `DayOrchestrator._process_bonsai_visitor_effects` (daily, beside
+the garden pass) gives co-located living characters a disposition bonus toward the bonsai's
+owner (by quality tier), duplicate-guarded per visitor per bonsai and expiring after
+VISITOR_BONUS_DURATION_DAYS. Bonsai guard entries carry `kind:"bonsai"` so they never collide
+with garden ids in `active_garden_bonuses`. Owner excluded, dead/undisplayed bonsai skipped.
+Runtime-verified 6/6 (tier-3 bonus; far/owner excluded; duplicate guard; garden#7 doesn't block
+bonsai#7; undisplayed no-op). Glory ticks not applied (apply_bonsai_visitor returns 0 — bonsai
+have no visitor-count field, unlike gardens).
+
+### s12.2b war/peace collective-disposition ripple wired (2026-06-19)
+`CollectiveDisposition.apply_clan_war_declared` / `apply_clan_peace_treaty` were built but never
+called — declaring war or making peace never shifted the two clans' collective baseline (the
+single most significant inter-clan event did nothing to collective standing). `_apply_war_collective_disposition`
+(advance_day, after war declaration + termination) applies the Event-Ripple deltas: war declared
+−10, negotiated/surrender peace +5 (existing s12.2b constants). Annihilation is excluded (no
+treaty — the loser is gone); already-active re-declarations apply nothing; peace clans resolved
+from the war_id via active_wars. Runtime-verified 4/4.
+
+### s12.2b duel-death family ripple wired (2026-06-19)
+`CollectiveDisposition.apply_family_duel_death` was dead. `_process_duel_death_writebacks` now
+shifts the victim's and killer's family collective baseline (−5, existing s12.2b constant) on a
+duel fatality (same-family duels skipped). Intra-clan rice sharing now warms the giver's and recipient's family baseline (+2, same-clan
+different-family, in `_process_supply_sharing`). Harvest raids now sour the raiding lord's family against the raided province's family (−3,
+in `_apply_harvest_destruction`) — replacing the removed-as-invented `destroyed_harvest`
+per-character modifier with the LOCKED family-baseline ripple. Traced assassinations now sour the commissioner's family against the victim's family (−10, in
+the vengeance pipeline). **All s12.2b collective Event-Ripple functions are now wired** (clan:
+war/peace; family: duel-death, rice-sharing, lord-raid, betrayal). Runtime-verified 10/10.
+
+### s55.22b Otomo Seiyaku detection wired (2026-06-19)
+`OtomoSeiyakuSystem.apply_detection` was dead — the §6.1 detection/counterplay against Otomo
+alliance-suppression never fired. `DayOrchestrator._process_seiyaku_detection` (seasonal, before
+the seiyaku review) lets a co-located non-Otomo character detect each active suppression directive
+via a contested Courtier/Awareness roll; on success `apply_detection` halves the operative's
+effectiveness for the season (consumed by estimate_seasonal_effect) and a Tier-4 "Otomo
+Manipulation Detected — A/B Targeted" topic seeds to the detector. effectiveness_halved is reset
+each season (the per-court-session window). Values GDD-exact (halved effectiveness). Runtime-verified
+5/5 (strong detector halves + topic + learns; Otomo courtier excluded; runs vs strong operative).
+LIMITATION: the diffuse "+5 sympathy toward the targeted clans from all who learn" is deferred
+(no per-clan sympathy field).
+
+### s12.9 Intimidation Compliance Tracker wired (2026-06-19)
+The "complying under duress" relationship (s12.9 Compliance Tracker, LOCKED) was entirely
+unwired — the five compliance helpers (resolve_pushback, can_compliance_end, etc.) had no
+callers and there was no persistent state. Built end-to-end:
+- **State:** `WorldState.active_intimidations: Array[Dictionary]` (intimidator_id, target_id,
+  leverage_secret_id, established_ic_day), persisted via WorldStateSaver state.json; threaded
+  through advance_one_day → advance_day.
+- **Creation** (`_process_intimidation_compliance`, post-wave): a successful INTIMIDATE with
+  `compliance_active` creates/refreshes an entry (re-intimidation resets the clock).
+- **Maintenance** (same pass): the four GDD end-conditions — intimidator (or target) dead;
+  intimidator's disposition toward target reaches Friend range (`can_compliance_end`); the
+  blackmail leverage secret is exposed; or the target pushes back (Willpower vs TN 15 +
+  intimidator Intimidation rank, `resolve_pushback`, rolled each later tick). A freshly
+  established entry has a one-tick grace (no pushback the day it lands).
+- **Effect** (`_apply_compliance_filter`, NPC engine Phase 4): a compliant character cannot
+  select a HOSTILE action against an intimidator they are complying with (per-character
+  `compliance_intimidators` injected into world_states, read into ContextSnapshot, cleared
+  by the stale-key pass; sleeper-override path exempt). Non-hostile actions and hostile
+  actions vs other targets are unaffected.
+Values are GDD-exact (pushback TN 15 + Intimidation rank; Friend threshold 31). Runtime-verified
+9/9 (creation + grace; hostile-vs-intimidator blocked while other/friendly allowed; all four
+end-conditions; low-WP persists vs strong intimidator 20/20; high-WP breaks free; injection).
+The s12.9 line-35 court +10-TN effect is now ALSO wired (see below). Deferred: the "on
+compliance end, immediately make the suppressed Public Declaration" nuance.
+
+### s15.4a court session-TN reductions consumed + s12.9 court compliance penalty (2026-06-19)
+The court session-TN reduction mechanic (s15.4a, LOCKED) was inert: successful Negotiate/Impress
+(−5) and Listen/Reflect (−10) correctly ACCUMULATED a per-target reduction pool in the court
+session_state (success-gated), but `_execute_contested_court_action` never CONSUMED it, so
+repeated court persuasion never got easier. Wired the consumption: a Negotiate's defender roll is
+lowered by the Negotiate/Impress pool + the Listen/Reflect pool; a Persuade's by the Listen/Reflect
+pool (floored at 0). Same site now applies the s12.9 court compliance penalty: a character complying
+under duress faces +10 (`COMPLIANCE_COURT_TN_PENALTY`) on any court action toward the intimidator
+they comply with (`ctx.compliance_intimidators`) — covering non-hostile court opposition the
+Phase-4 hostile filter doesn't. Runtime-verified 3/3 (accumulated reduction lifts Negotiate
+success 44→79/80; compliance +10 drops it 44→18/80; Persuade eased only by the persuade pool).
+
+### s31-37 spell combat coverage — full-library pass (2026-06-20, owner-directed "do all 247")
+Owner directives: model ALL 247 library spells; on-hold-system spells = forward-ready stubs;
+GDD-missing numbers = ask per decision. Cross-cutting modeling decisions locked (owner): Ring-up
+buffs use FULL wound-capacity + expiry death; environment conditionals read mission weather/biome
+when present (else off); "-XkX to a roll" gets a REAL roll-dice penalty layer (not a TN approximation).
+Triage: 247 total, 65 had combat effects, 129 fully unwired (Air 48/Earth 32/Fire 18/Water 31),
+~53 already carry a non-combat sim_effect (the world-sim router in day_orchestrator consumes
+RITUAL_HONOR/COMMUNE/HEAL/DETECT/PURIFY/REMOVE_TAINT/SPIRIT_BIND/WEATHER/WARD/INFORMATION_GATHER).
+Plan: combat-fittable spells → SPELL_COMBAT_EFFECTS; non-combat → correct sim_effect tag (+forward
+stub where the layer is on-hold).
+- **Earth wave A** — new **debuff cast kind** (`_apply_spell_debuff`: enemy-target, range-gated,
+  optional contested gate, immune_trait_change block) + **fear_resist** read (Courage of the Seven
+  Thunders, in apply_fear_checks) + **knockdown_resist** read (resolve_knockdown gains
+  def_rolled_bonus/def_kept_bonus). Wired: courage_of_the_seven_thunders (+5k0 Fear resist;
+  minor-clan +3k0 / group / Taint clause deferred), the_mountains_feet (+3k0 knockdown resist),
+  strike_as_stone (+2 unarmed DR, unarmed-scope approximated), earths_stagnation (debuff −2k0
+  Agility + −1 Rank movement), earth_becomes_sky (boulder damage DR=Earth Ring; multi-target −1k1
+  simplified). Runtime-verified 8/8.
+
+- **Earth wave B** — **damage-absorption shield** (`Participant.absorb_pool`; soaks post-Reduction
+  Wounds in `_apply_hit` until exhausted; set via a special `absorb_pool` buff mod) and
+  **debuff immunity** (`immune_trait_change` buff, already gated in the debuff path). Wired:
+  power_of_the_earth_dragon (absorbs 100 Wounds then ends), wholeness_of_the_world (immune to
+  Trait/Ring-altering effects). Runtime-verified 3/3. DEFERRED pending an owner decision (see
+  Pending): the Earth ring-up/ring-down spells (essence_of_earth, the_wolfs_mercy, strike_at_the_roots)
+  that change WOUND CAPACITY — `get_ring_value` is the central world-sim ring function, so a combat
+  ring-delta there risks leaking altered rings into the simulation. armor_of_the_emperor (per-die
+  reduction), times_deadly_hand (equipment debuff), the_kamis_will (anti-spell roll penalty),
+  sharing_the_strength_of_many / earths_touch (group/trait) also deferred to later sub-waves.
+
+### s31-37 spell combat coverage — extension batches 1–13 (2026-06-20)
+Added combat effects for 4 more library spells (the library has 287 spells; only ~28 had combat
+effects). All values transcribed exactly from s34/s35: **tail_of_the_fire_dragon** (Fire 2,
+single damage DR=Fire Ring, 30'), **ravenous_swarms** (Fire 3, 5k3 bolt, 30' — the fire-spell-
+disruption rider deferred), **the_dragons_talon** (Fire 5, 8k6 AoE, up to 10 targets, 100',
+only foes of Insight Rank ≤ 2), **grasp_of_earth** (Earth 2, Entangled, 50'). **Batch 6** adds `dart_of_void` (Void 4, Ishiken-only, DR = Void Ring, ignores Invuln/Reduction via
+the magic path, 100') and `earthen_wave` (Earth 3, self-line AoE Knockdown → Prone, Contested
+Strength vs Earth) via a new `strength_contested_earth` save type. 47 spells now have combat
+effects. **Batch 7** adds `shining_light` (Fire 3, armor ward: a struck melee attacker takes 2k2
+and is Blinded) via a new `_apply_shining_light` defender-retaliation hook in `_apply_hit` (beside
+fires_of_purity), reusing the `shining_light` timed modifier. 48 spells now have combat effects.
+**Batch 8** adds a **persistent spell-zone subsystem** (`MapCombatState.spell_zones` +
+`_apply_spell_zone` + per-round `_process_spell_zones` in `advance_round`; new `damage_zone`
+kind with optional `impact_*` on-cast damage): `wall_of_fire` (Fire 4, 6k6/round), `castle_of_fire`
+(Fire 5, enemies-only 6k6 field), `enticing_the_dance_of_flame` (Fire 2, 3k2 impact + 2k1/round),
+plus `follow_the_flame` (Fire 5, 6k5 stream, direct damage; persistent burn deferred). Zones honor
+the element ring, the spirit damage filter, `enemies`/`all` faction gating, and auto-expire.
+`fiery_wrath` (terrain ignition) and `maw_of_the_earth` (save-negates pit + entrap) deferred —
+distinct mechanics. 52 spells now have combat effects.
+**Batch 9** adds an **area-ward subsystem** (new `ward` kind, stored in `spell_zones`):
+`earths_protection` (Earth 3 — +10 TN to hostile Air/Fire/Water cast within 10' + −1k1 to their
+DR vs creatures inside) and `ward_of_thunder` (Fire 4 — +20 TN to hostile Fire within 15').
+`resolve_cast` gained an `extra_tn` param; `_ward_cast_penalty` (element-gated, owner-exempt) feeds
+it from `execute_cast_spell`, and `_ward_dr_reduction` cuts hostile warded-element spell DR inside.
+`agasha's_shield` deferred (its −Nk0 roll/DR penalties don't map to the TN/reduction model without
+inventing). 54 spells now have combat effects.
+**Batch 10** adds a **summoned elemental kami subsystem** (new `summon` kind): `rise_air`,
+`rise_earth`, `rise_fire`, `rise_water` (s33-36) each call `_build_kami_creature` (a
+SpiritCreatureData with all Physical Traits = the caster's element Ring, Jiujutsu attack = half
+Ring, human wound track from Earth = Ring, `partial_invuln` = Invulnerable to mundane weapons; the
+Fire kami tags `burning_touch`) → `_apply_spell_summon` registers it as an autonomous combatant on
+the caster's side (player caster → `add_companion`, runs via execute_companion_turn; enemy caster →
+`add_enemy`, runs via execute_npc_turn). Kami DR = Ring (kept 2, PROVISIONAL — GDD leaves kept dice
+unstated). 58 spells now have combat effects.
+**Batch 11** adds `be_the_mountain` (Earth 2, ally Reduction 5×rank capped 20), `never_alone`
+(Fire 1, +Fire to attack rolls; conditional expiry deferred), `defense_of_the_firestorm` (Fire 4,
++20 Armor TN; wooden-weapon burn deferred), and `soldiers_of_clay` (Earth 6 — 10 stone warriors
+via a generalized summon: `_apply_spell_summon` now takes `count` + `summon_kind`, with
+`_build_clay_soldier` (traits = Earth Ring, Kenjutsu-4 jade sword, Reduction 2×Earth, standard
+wound track — not Invulnerable)). New buff-value formulas `fire_ring` + `be_the_mountain_reduction`.
+`relentless_heat` deferred (attempt-trigger needs a pre-roll hook). 62 spells now have combat
+effects. **Batch 12** adds a `save_negates` flag to the damage path (a successful save avoids ALL
+damage + rider) + two save types (`agility_flat`, `reflexes_contested_earth`), unlocking
+`murmur_of_earth` (Earth 3, Agility TN 20 or 1k1 + Prone) and `maw_of_the_earth` (Earth 4, Reflexes
+vs Earth or fall in: 3k2 + Entangled). Also `the_fires_that_cleanse` (Fire 1, DR=Fire Ring AoE,
+caster exempt), `light_of_the_sun` (Fire 5, 2k2/round zone), `blessing_of_the_sun` (Fire 4,
+negate wound penalty). 67 spells now have combat effects.
+**Batch 13** adds `oath_of_the_heavens` (Fire 3, +2k0 attack; 2-target link + shared conditions
+deferred), `balance_of_elements` (Void 4 Ishiken, heal 3k3 via a new `dice` heal mode; disadvantage
+negation deferred), and `relentless_heat` (Fire 2 — a melee attacker striking the warded wearer is
+Fatigued on the attempt (hit OR miss) and a Full-Attack attacker drops to Attack, via a new
+attempt-trigger hook in execute_melee_attack). 70 spells now have combat effects (from 28 at session
+start). Remaining unwired spells need niche mechanics (armor-ignore buff, duel-scoped dispel,
+disadvantage-count debuffs, passage-trigger Symbols, ranged-suppression zones, channeled transforms)
+or are non-combat utility. Two new
+`_gather_spell_targets` fields support Dragon's Talon: `target_max_insight` (skip stronger foes)
+and `aoe_max_targets` (cap struck count). Runtime-verified 5/5 (damage lands; grasp entangles;
+Dragon's Talon hits Insight-1/2 foes and spares an Insight-5 foe). The remaining ~255 library
+spells without combat effects are mostly utility, conjured-weapon, or need mechanics the schema
+lacks (weapon replacement, terrain pits with save-negates-damage, conditional-expiry buffs).
+
+"### Pending Redesign
+- **Ring-changing combat spells (essence_of_earth, the_wolfs_mercy, strike_at_the_roots, and
+  Water ring-down spells) — participant-scoped wound threading (owner-chosen 2026-06-20).**
+  Owner chose participant-scoped storage for combat ring-deltas (clean, no world-sim leak).
+  SCOPE DISCOVERY: making it *consistent* requires threading an optional participant through the
+  wound/death chain (get_ring_value/get_earth_ring/get_wound_threshold_per_level/
+  get_total_wound_capacity/get_wound_level/get_wound_penalty/is_dead) AND passing it at every
+  in-combat read — **132 is_dead calls + 27 wound reads in the orchestrator, +29 in
+  individual_combat (~190 sites)**. Partial threading is UNSAFE: a character alive only via an
+  Earth ring-up (wounds between base and buffed capacity) reads alive at the participant-aware
+  damage site but DEAD at the 132 base-capacity iteration guards; ring-down kills symmetrically
+  fail to register at those guards. So the foundation is a bounded but large mechanical refactor
+  (optional `p=null` param on the 7 functions — world-sim callers unaffected — then thread `p`
+  into the orchestrator's combat reads via a participant-resolving helper). Deferred to a
+  dedicated refactor wave; the 3+ ring spells stay unwired until then. Everything else in the
+  s31-37 library that needs no wound surgery proceeds normally.
+
+### ASCII Map System — Live-Reachability Status (2026-06-20)
+**The ASCII map / tile-combat layer is extensively built and partly verified, but is NOT
+reachable in a live game session.** Full file-by-file breakdown in `ASCII_MAP_GAP_REPORT.md`
+(repo root). Summary:
+- **No production entry point.** The only caller that starts a mission is `scripts/ui/combat_demo.gd`
+  (a manual demo scene). The world sim never launches a mission — the trigger is **PC world-map
+  travel, which is ON HOLD per owner (2026-06-06)**. `mission_flow.gd` (world→mission glue) is
+  written but unverified and unwired.
+- **Best-verified:** combat math core (`individual_combat`, s40 maneuvers/grapple, NPC AI,
+  companions) and the map generators (connectivity-swept under Godot).
+- **Unverified-at-runtime:** `combat_controller` and most of the mission pipeline are GUT-test-only
+  (GUT is non-functional headless). The s56.16 spiritual encounter loop is static-only.
+- **Coverage gaps:** many s31–37 spells have no combat effect yet; several creature abilities
+  deferred; **no human turn-based command UI** (a player can move/door/look/disarm only — not
+  attack/cast/maneuver). Relocation (s56.13), in-mission kansen, falling damage are wired but have
+  no trigger (all wait on live entry).
+- **Single unlock:** lifting the PC-travel HOLD → wire `world arrival → MissionEntryController →
+  MissionLauncher → CombatScreen`, then build the player command loop and runtime-verify the
+  static-only layers.
 
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
@@ -4455,11 +6294,19 @@ tests in `tests/test_individual_combat.gd`.
   Perception trait. Environmental modifiers: forest −2, darkness −3, fog/mist −3, rain −2,
   storm −4, snow −2. Lookout position bonus: +3 radius on WALL_STONE or elevated tile.
   Stacks with environmental modifiers (minimum 1 tile). `simulation/ascii_map_generator.gd`
-  (AsciiMapGenerator, 1318 lines): deterministic procedural generation for all 25 ZoneSubtype
-  values (MARKET_STREET, TEMPLE_GROUNDS, SHRINE_CLEARING, FOREST_PATH, ROAD,
-  RESIDENTIAL_QUARTER, FARMLAND, RIVER_CROSSING, OHIROMA, ENKAI_HALL, AUDIENCE_CHAMBER,
-  CHASHITSU, GARDENS, TRAINING_GROUNDS, ARMORY, FORGE, DUNGEON, DOJO, STABLE, GRANARY,
-  HARBOR, WALL_TOWER, BARRACKS, GATEHOUSE, WILDERNESS). Each generator places walls, floors,
+  (AsciiMapGenerator, ~2155 lines): deterministic procedural generation for all ZoneSubtype
+  values — the enum and the generator's dispatch are 1:1 (every subtype has a generator).
+  As of the s2.3.23 Otosan Uchi landmark pass the set is **35**: 11 castle-interior
+  (OHIROMA, ENKAI_HALL, AUDIENCE_CHAMBER, CHASHITSU, GUEST_WING, LORD_QUARTERS,
+  WAR_COUNCIL_ROOM, DOJO, OUTER_COURTYARD, TSUBONIWA, CASTLE_SHRINE), 7 urban-district
+  (MARKET_STREET, RESIDENTIAL_QUARTER, TEMPLE_GROUNDS, PLEASURE_QUARTER, DOCKS_WATERFRONT,
+  POOR_QUARTER, GOVERNMENT_QUARTER), 6 wilderness (ROAD, FOREST_PATH, MOUNTAIN_PASS,
+  RIVER_CROSSING, FARMLAND, SHRINE_CLEARING), 1 wall (WALL_TOWER), 1 dwelling
+  (PEASANT_DWELLING), and 9 s2.3.23 named-landmark subtypes (UNDERGROUND_LAKE, THRONE_ROOM,
+  LABYRINTH, ONI_WARAI, RUINED_STRUCTURE, BARRACKS, LIBRARY, TOMB, TREASURY_VAULT). The
+  earlier "25 (… GARDENS/ARMORY/FORGE/GATEHOUSE/WILDERNESS)" list in this entry was a
+  pre-reorganization artifact — those names are not in the committed enum. Each generator
+  places walls, floors,
   features, and zone exits using a fixed seed (settlement_name + zone_name + zone_type string).
   Same inputs always produce the same layout; only physical deltas (destroyed walls, new
   construction) are persisted between sessions. Zone graph wired into world bootstrap and
@@ -4939,6 +6786,165 @@ tests in `tests/test_individual_combat.gd`.
   (champion seats get DOJO + WAR_COUNCIL Lesser Zones). Removed the 8 tests asserting the buggy
   behavior. Runtime-verified: champion → AT_OWN_HOLDINGS (SET_TAX_RATE + TRAIN both present);
   monk at temple → AT_TEMPLE (PERFORM_RITUAL present).
+
+### Systems Added 2026-06-15 (s2.3.23 Otosan Uchi named-landmark zone generators)
+Nine bespoke `AsciiMapGenerator` ZoneSubtype generators so the Imperial Capital's
+named landmarks render as their own spaces instead of falling back to a generic
+district map. New `Enums.ZoneSubtype` values (29–37) + a generator + a
+`ZoneFlagMatrix` entry for each: **UNDERGROUND_LAKE** (subterranean cavern + water
+body, 1 exit), **THRONE_ROOM** (the Chrysanthemum Throne hall — raised dais,
+flanking braziers/banners, petitioner floor), **LABYRINTH** (the Emperor's
+Labyrinth — subterranean tunnel maze, 2 exits), **ONI_WARAI** (the Oni's Smile —
+earthquake crevice / descending chasm), **RUINED_STRUCTURE** (collapsed/haunted
+building, rubble overlay; mirrors the s56 ruined template), **BARRACKS** (soldier
+kaisha — futon bays, arms racks, mess + stove), **LIBRARY** (Takeo Library — book
+stacks in aisles + reading desks), **TOMB** (funerary chamber — memorial altar +
+burial coffers), **TREASURY_VAULT** (Imperial Treasury — locked coffers in guarded
+vault bays). Wired in `simulation/otosan_uchi_zone_builder.gd` (the district
+landmark table maps each named landmark to its subtype via `{"n": …, "s": _ZS.…}`):
+Abandoned waterway houses + Tenari's ruins → RUINED_STRUCTURE; Underground Lake →
+UNDERGROUND_LAKE; Kinjiren Tombs + Seppun Hill → TOMB; Takeo Library → LIBRARY;
+Imperial Guard kaisha + Lion Embassy + Seppun Guard → BARRACKS; Imperial Treasury →
+TREASURY_VAULT; Oni Warai → ONI_WARAI; Imperial Palace Throne Room → THRONE_ROOM.
+Each generator places walls/floors/features/exits from the standard FNV-1a seed
+(deterministic). **Render-verified 2026-06-15 (Godot 4.6.1 headless driver — the
+project's parse-check/driver path; GUT is non-functional headless and off-policy):**
+all 9 maps rendered and an 8-directional flood-fill from each declared exit reached
+100% of passable tiles — UNREACHABLE=0 for every generator (LIBRARY 657/657, TOMB
+803/803, TREASURY_VAULT 794/794, BARRACKS 815/815, RUINED_STRUCTURE 883/883,
+ONI_WARAI 235/235, LABYRINTH 451/451 across both exits, UNDERGROUND_LAKE 73/73,
+THRONE_ROOM 823/823). No stranded interior tiles; every exit is reachable from the
+interior and vice-versa. Commits 98334e4 / 0a777fa / 72c4bd2. No tests per the
+no-test-code policy. (These three commits shipped without CLAUDE.md changelog
+entries; this entry backfills them and records the render-verify.)
+
+### Map-generation layer — full flood-fill connectivity verification (2026-06-15)
+Ran the actual generators under Godot 4.6.1 (headless `-s` drivers — parse/driver
+path; GUT is non-functional headless and off-policy) with an 8-directional
+flood-fill matching MovementSystem (the game's diagonal movement). **No new bugs
+found across the entire map layer.**
+- **All 35 `AsciiMapGenerator` ZoneSubtypes connected.** The 9 s2.3.23 landmarks:
+  UNREACHABLE=0 (exit-reachability). The 26 base subtypes across 43 seeds (3 named
+  + 40 numbered): every passable tile reachable from the exit(s) except ROAD's
+  ~15 roadside-grass tiles, which are the documented by-design inaccessible scenery
+  inside the dense tree shoulders (same pattern as FOREST_PATH).
+- **MOUNTAIN_PASS flag RESOLVED — not a gameplay bug.** The 2026-06-14 audit
+  flagged a "seed-specific stranded-tile/exit quirk," but across 43 seeds it is
+  UNREACHABLE=0 under 8-directional movement. The prior flag was a 4-connectivity
+  artifact in the older largest-connected-component metric; the game uses
+  8-directional movement (AsciiMapView numpad/WASD diagonals), so MOUNTAIN_PASS is
+  fully navigable. No code change.
+- **All 10 s56 mission templates connected.** Per the changelog's own invariant
+  (every objective_slot + ground-level entry must lie in the largest connected
+  component; population slots may sit on walls for elevated/cover units): all 10
+  pass across 3 seeds with closed doors/gates treated as traversable (bump-to-open).
+  CAVE's entrance fix confirmed holding. RAVINE_CAMP's LCC is ~69.5% of passable
+  tiles — by design: the gameplay area (objectives + mouth entry) is fully
+  connected, and the stranded ~30% is the cliff-top rim reachable only by s40
+  elevation descent (its `is_rim` entry vectors), exactly as documented.
+No production code touched — verification only. Drivers were temporary and removed.
+
+### Otosan Uchi zone GRAPH — wiring verification (2026-06-15)
+Audited the inter-zone graph built by `OtosanUchiZoneBuilder.build()` (the layer
+above per-zone tile connectivity) at runtime under Godot 4.6.1. **CLEAN — no bugs.**
+Built the capital (1 GreaterZone, **16 districts**, **122 landmark Lesser Zones**,
+139 unique zone_ids, zero duplicates) and verified:
+- **District chain:** 16/16 districts reachable via `exits` from district 0; every
+  consecutive pair is bidirectional (N forward / S back). Linear chain by design —
+  access-tier gating (Toshisoto→Ekohikei→Forbidden) is enforced by the petition
+  flag system, not the graph.
+- **Landmark links:** 122/122 clean — each Lesser Zone's `parent_zone_id` resolves
+  to a real district, its `"up"` exit targets that parent, and the district's
+  `child_zone_ids` contains it (reciprocal containment). Descent is containment-based
+  (`parent_zone_id`/`child_zone_ids`), so the landmark's single one-way `"up"` exit
+  is correct — not a missing reciprocal exit.
+- **No dangling exit targets** across GreaterZone / NavigationZone / LesserZone.
+- **ZoneRegistry indexing:** `get_nav_zones_for_settlement`=16,
+  `get_all_lesser_zones_for_settlement`=122, `get_lesser_zones_for_nav` joins 16/16
+  via `parent_zone_id`.
+- **Governor join:** 15/15 governor districts flagged (Forbidden City correctly has
+  none), and every district `zone_id` equals the deterministic `district_zone_id(sid, i)`
+  the world-population generator joins Governors on — so the roster↔zone link is sound.
+No production code touched — verification only. Driver was temporary and removed.
+
+### SettlementZoneBuilder zone GRAPH — wiring verification (2026-06-16)
+Audited the zone graph built by `SettlementZoneBuilder.build()` (the non-capital
+settlement layer) at runtime under Godot 4.6.1 across a 17-case matrix covering
+every builder branch. **CLEAN — no bugs (17/17).** Cases: villages (headman,
+no-nav-tier; +coastal), towns (with/without castle nav), cities + major cities
+(provincial/family/champion rank; +coastal), all military types (family castle,
+castle, keep, wall tower, fortification), all religious types (temple +coastal,
+shinden, monastery). Each verified for:
+- **ID uniqueness** within the settlement (castle `_lz_castle_N` vs fill `_lz_N`
+  vs `_gz` / `_nav_castle` patterns never collide; cross-settlement safe via sid).
+- **No dangling exit targets** across GreaterZone / NavigationZone / LesserZone.
+- **Containment reciprocity** both directions: every `child_zone_ids` entry
+  resolves and points back via `parent_zone_id`, and every nav/lz `parent_zone_id`
+  resolves to a container that lists it as a child.
+- **Within-tier exit connectivity:** castle Lesser Zones (hub-and-spoke from
+  OHIROMA) all reachable; fill Lesser Zones (sequential N/E/S/W chain) all
+  reachable. Headman villages/towns (nav tier skipped) wire their 2 interior LZs
+  hub-and-spoke directly under the GreaterZone — verified connected.
+- **ZoneRegistry indexing:** `get_zone` and `get_all_lesser_zones_for_settlement`
+  resolve correctly for every case.
+OBSERVATION (not a bug): SettlementZoneBuilder Lesser Zones carry NO `"up"` exit
+to their parent, unlike OtosanUchiZoneBuilder's landmarks. Vertical movement is
+containment-based (`parent_zone_id`) — which BOTH builders rely on for gz→child
+descent (a GreaterZone never has "down" exits to its children in either builder),
+so the Otosan Uchi `"up"` exit is the redundant one, not the required mechanism.
+The graph is fully navigable; the asymmetry only matters to the future
+zone-transition UI (it must offer containment ascent, not a directional exit).
+No production code touched — verification only. Driver was temporary and removed.
+
+### Live world Governor↔zone join + world-wide zone-graph sweep (2026-06-16)
+Ran the REAL `WorldBootstrap.bootstrap_world()` under Godot 4.6.1 (3816 chars,
+151 settlements / GreaterZones, 72 NavigationZones, 1028 LesserZones = 1251 zones,
+~4.6s) and audited the cross-system Governor↔zone join plus the full live graph.
+**CLEAN — no bugs.**
+- **Governor↔zone join (s2.3.23):** all 15/15 Otosan Uchi governor districts have
+  `zone_lord_id` → a living `GOVERNOR_OTOSAN_UCHI` whose `governed_zone_id` points
+  back (bidirectional), with `lord_id == Emperor`. 15 governor characters, all
+  back-linked. The 1 non-governor Otosan district (Forbidden City) correctly stays
+  unlinked (`zone_lord_id == -1`). Confirms both halves of the join — population
+  pass (`world_population_generator` sets `governed_zone_id` from the deterministic
+  `district_zone_id`) and bootstrap back-fill (`_link_otosan_uchi_governors` sets
+  `zone_lord_id`) — agree at runtime.
+- **World-wide structural sweep** over all 1251 live zones: 0 duplicate zone_ids,
+  0 dangling exit targets, 0 containment-reciprocity breaks. Confirms the
+  representative-matrix SettlementZoneBuilder audit holds against the actual
+  generated world (every real settlement), and the Otosan Uchi handcrafted graph
+  is sound in situ.
+No production code touched — verification only. Driver was temporary and removed.
+
+### ZoneFlagMatrix coverage + schema audit (2026-06-16)
+Runtime audit of `ZoneFlagMatrix.ZONE_FLAGS` (the per-ZoneSubtype action-gating
+table, s57.36) under Godot 4.6.1. **CLEAN.** All 35 `ZoneSubtype` enum members
+have an explicit `ZONE_FLAGS` entry — nothing silently falls to the `ALL_FALSE`
+default via `get_flags`. Every entry's key set matches `ALL_FALSE` exactly (all
+8 flags present — no missing key reading `false` as an unintended gate, no typo'd
+key that is never read), and there are no non-enum keys. The 9 s2.3.23 landmark
+subtypes and PEASANT_DWELLING all have entries (all-false where appropriate —
+a tomb/treasury/peasant-home grants no noble-art/tea/garden affordances).
+With this, the zone system is verified at every layer: builders (structure),
+tile connectivity (35 subtypes + 10 mission templates), zone graphs (capital +
+all settlement types), live-world Governor↔zone join (1251 zones), and the
+action-gating matrix. No production code touched — verification only. Driver removed.
+
+### WorldStateSaver save/load round-trip — live world (2026-06-16)
+Round-tripped the REAL bootstrapped world through `WorldStateSaver` under Godot
+4.6.1 (fresh `WorldStateData` instances + a temp `BASE_DIR`, so the real `user://`
+save and the scheduler autoload were untouched). **CLEAN — no data loss.**
+- **All 10 major collections round-trip with exact counts:** characters 3814,
+  provinces 143, settlements 151, clans 22, greater_zones 151, navigation_zones
+  72, lesser_zones 1028, military_companies 643, bloodspeaker_cells 31,
+  insurgencies 7. Confirms the documented "typed-array `.assign` on load" bug
+  class stays fixed for the live world.
+- **Field fidelity spot-checks:** the Governor↔zone link survives (`zone_lord_id`
+  + the character's `governed_zone_id` back-link + role both round-trip); the
+  int-keyed `provinces` dict is preserved (lookup by `int` key 120 succeeded — no
+  JSON int-key corruption); settlement and province scalar fields intact.
+So the verified zone graph + Governor join also persist correctly across
+save/load. No production code touched — verification only. Driver removed.
 
 ### Known Code Issues (found and fixed 2026-06-14, ASCII map seed-generation connectivity audit)
 Connectivity audit of all 25 `AsciiMapGenerator` ZoneSubtype generators (s4.4)

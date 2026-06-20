@@ -268,6 +268,24 @@ enum ZoneSubtype {
 	WALL_TOWER,
 	# Dwelling interiors (s4.4 lived-in spaces)
 	PEASANT_DWELLING,
+	# Subterranean (s2.3.23 Otosan Uchi named landmark)
+	UNDERGROUND_LAKE,
+	# Imperial throne room (s2.3.23 / s57.36 — the Chrysanthemum Throne hall)
+	THRONE_ROOM,
+	# Subterranean tunnel maze (s2.3.23 — the Emperor's Labyrinth)
+	LABYRINTH,
+	# Earthquake crevice / descending chasm (s2.3.23 — the Oni Warai)
+	ONI_WARAI,
+	# Collapsed / haunted building (s2.3.23 ruins; mirrors the s56 ruined template)
+	RUINED_STRUCTURE,
+	# Soldier housing (s2.3.23 barracks / kaisha — bunks, arms racks, mess)
+	BARRACKS,
+	# Scholarly reading hall (s2.3.23 — book stacks + reading desks)
+	LIBRARY,
+	# Funerary chamber / burial ground (s2.3.23 — memorial altar, coffers)
+	TOMB,
+	# Guarded strongroom (s2.3.23 — locked coffers in vault bays)
+	TREASURY_VAULT,
 }
 
 # Three-tier zone hierarchy — Greater Zone is the top container.
@@ -298,6 +316,17 @@ enum NavigationZoneType {
 	ROAD_SEGMENT,       # stretch of road between settlements; contains roadside encounters
 	FOREST_TRAIL,       # path through wilderness with branching clearings
 	MOUNTAIN_APPROACH,  # route through mountain terrain with pass and cave entrances
+}
+
+# Concentric access tiers of Otosan Uchi, the Imperial Capital (s2.3.23).
+# Each tier is a gate check against a character flag:
+#   TOSHISOTO       — open to all; no flag required.
+#   EKOHIKEI        — requires ekohikei_access flag (Sentaku Tribunal grant).
+#   FORBIDDEN_CITY  — requires forbidden_city_access flag (Emperor/Champion/Tribunal grant).
+enum AccessLayer {
+	TOSHISOTO,
+	EKOHIKEI,
+	FORBIDDEN_CITY,
 }
 
 enum LordRank {
@@ -708,6 +737,8 @@ enum SpiritRealm {
 	SAKKAKU,
 	MEIDO,
 	YUME_DO,
+	JIGOKU,  # the Realm of Evil — origin of oni (s54.5); not a spiritual-insurgency overlap realm
+	NINGEN_DO,  # the Mortal Realm — natural animals and mortal-world creatures (s54.12 / s54.1)
 }
 
 

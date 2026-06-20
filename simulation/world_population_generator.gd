@@ -497,6 +497,7 @@ static func _generate_wall_characters(
 	southern.operational_superior_id = -1
 	if towers_by_number.has(3):
 		southern.physical_location = str(towers_by_number[3].settlement_id)
+	WorldGenerator.equip_jade_weapons(southern)  # Kaiu Wall garrison carries jade (owner 2026-06-18)
 	chars.append(southern)
 
 	var northern: L5RCharacterData = _generate_positioned_character(
@@ -505,6 +506,7 @@ static func _generate_wall_characters(
 	northern.operational_superior_id = -1
 	if towers_by_number.has(10):
 		northern.physical_location = str(towers_by_number[10].settlement_id)
+	WorldGenerator.equip_jade_weapons(northern)  # Kaiu Wall garrison carries jade (owner 2026-06-18)
 	chars.append(northern)
 
 	# Tower Commanders (Taisa) + per-tower Kaiu Engineer and Kuni Shugenja.
@@ -520,6 +522,7 @@ static func _generate_wall_characters(
 		)
 		taisa.operational_superior_id = shireikan_id
 		taisa.physical_location = loc
+		WorldGenerator.equip_jade_weapons(taisa)  # Kaiu Wall garrison carries jade (owner 2026-06-18)
 		chars.append(taisa)
 
 		chars.append(_make_wall_staff(
@@ -882,6 +885,74 @@ static func _count_by_rank(characters: Array, clan: String) -> Dictionary:
 	return counts
 
 
+# -- Otosan Uchi Governance (s2.3.23) ------------------------------------------
+# Creates the standing governance roster of the Imperial Capital: the 5-member
+# Sentaku Tribunal and one Governor per governed district (15; the Forbidden
+# City has no Governor). All hold lord_id = Emperor. Governors additionally
+# point operational_superior_id at the Tribunal Chair and carry governed_zone_id
+# for the district they rule (bidirectionally linked to the zone's zone_lord_id
+# by the bootstrap once the zone graph is built).
+
+static func _generate_otosan_uchi_governance(
+	next_id: Array,
+	dice: DiceEngine,
+	emperor_id: int,
+	otosan_sid: int,
+) -> Array:
+	var chars: Array = []
+	var loc: String = str(otosan_sid)
+
+	# Sentaku Tribunal — 5 votes, Otomo-dominated: Chair (senior Otomo) +
+	# 2 Otomo members + 1 Seppun + 1 Miya (s2.3.23 Tribunal Structure).
+	var tribunal_specs: Array = [
+		[PositionType.SENTAKU_TRIBUNAL_CHAIR, "Otomo"],
+		[PositionType.SENTAKU_TRIBUNAL_MEMBER, "Otomo"],
+		[PositionType.SENTAKU_TRIBUNAL_MEMBER, "Otomo"],
+		[PositionType.SENTAKU_TRIBUNAL_MEMBER, "Seppun"],
+		[PositionType.SENTAKU_TRIBUNAL_MEMBER, "Miya"],
+	]
+	var chair_id: int = -1
+	for spec: Array in tribunal_specs:
+		var t: L5RCharacterData = _generate_positioned_character(
+			next_id, spec[0], "Imperial", spec[1], dice, emperor_id,
+		)
+		t.physical_location = loc
+		# Tribunal members are Imperial-family courtiers (Otomo/Seppun/Miya) — they
+		# hold standing access to both inner tiers (s2.3.23 Imperial-family grant).
+		t.ekohikei_access = true
+		t.forbidden_city_access = true
+		chars.append(t)
+		if spec[0] == PositionType.SENTAKU_TRIBUNAL_CHAIR:
+			chair_id = t.character_id
+
+	# 15 Governors — one per governed district, drawn from each district's first
+	# clan preference (Juramashi and the Forbidden City have none; Juramashi's
+	# rotating posting falls to an Imperial appointee).
+	for i: int in range(OtosanUchiZoneBuilder.DISTRICTS.size()):
+		var d: Dictionary = OtosanUchiZoneBuilder.DISTRICTS[i]
+		if not d.get("governor", false):
+			continue
+		var pref: Array = d.get("pref", [])
+		var gov_clan: String = pref[0] if not pref.is_empty() else "Imperial"
+		var gov_family: String = _pick_family(gov_clan, dice)
+		var g: L5RCharacterData = _generate_positioned_character(
+			next_id, PositionType.GOVERNOR_OTOSAN_UCHI, gov_clan, gov_family,
+			dice, emperor_id,
+		)
+		g.status = OtosanUchiZoneBuilder.governor_status_for_layer(d["layer"])
+		g.operational_superior_id = chair_id
+		g.governed_zone_id = OtosanUchiZoneBuilder.district_zone_id(otosan_sid, i)
+		g.physical_location = loc
+		# Initial roster is appointed at world start (IC day 0); tenure accrues from
+		# there for the Sentaku Governor performance review (s2.3.23 time-in-office).
+		g.appointed_ic_day = 0
+		if d["layer"] == Enums.AccessLayer.EKOHIKEI:
+			g.ekohikei_access = true
+		chars.append(g)
+
+	return chars
+
+
 # -- Main Entry Point ----------------------------------------------------------
 
 static func generate_world_population(
@@ -984,6 +1055,26 @@ static func generate_world_population(
 		next_id, dice, settlements, crab_champion_id, crab_rik_id,
 	)
 	all_characters.append_array(wall_chars)
+
+	# Otosan Uchi governance roster (s2.3.23) — Sentaku Tribunal + Governors.
+	# Also relocates the Emperor to his capital so the rest of the Imperial
+	# machinery (Miya's Blessing reads emperor_settlement PU) resolves correctly.
+	var otosan_sid: int = -1
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+			otosan_sid = s.settlement_id
+			break
+	if otosan_sid >= 0:
+		for c: L5RCharacterData in all_characters:
+			if c.character_id == emperor_id:
+				c.physical_location = str(otosan_sid)
+				c.ekohikei_access = true
+				c.forbidden_city_access = true
+				break
+		var gov_chars: Array = _generate_otosan_uchi_governance(
+			next_id, dice, emperor_id, otosan_sid,
+		)
+		all_characters.append_array(gov_chars)
 
 	for clan: String in GREAT_CLANS:
 		var existing_counts: Dictionary = _count_by_rank(all_characters, clan)

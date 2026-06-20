@@ -73,6 +73,11 @@ static func get_wound_threshold_per_level(character: L5RCharacterData) -> int:
 
 
 static func get_wound_level(character: L5RCharacterData) -> Enums.WoundLevel:
+	# s56.16 spirit creatures use their explicit stat-block wound track (wounds_dead
+	# + per-level wound_thresholds), not the PC Earth×2 formula. Inert for real chars.
+	if character.spirit_creature != null and character.spirit_creature.wounds_dead > 0:
+		return _spirit_wound_level(character)
+
 	var threshold: int = get_wound_threshold_per_level(character)
 	if threshold <= 0:
 		return Enums.WoundLevel.DEAD
@@ -114,8 +119,37 @@ static func get_wound_penalty(character: L5RCharacterData) -> int:
 
 
 static func get_total_wound_capacity(character: L5RCharacterData) -> int:
+	# s56.16 spirit creatures: death at their explicit wounds_dead.
+	if character.spirit_creature != null and character.spirit_creature.wounds_dead > 0:
+		return character.spirit_creature.wounds_dead
 	# 8 wound levels before Dead (Healthy through Out), each Earth*2
 	return get_wound_threshold_per_level(character) * 8
+
+
+## s56.16 spirit wound level: DEAD at wounds_dead; otherwise the level index =
+## how many cumulative wound_thresholds the wounds have exceeded (falls back to a
+## proportional split across the 8 living levels if the creature has no thresholds).
+static func _spirit_wound_level(character: L5RCharacterData) -> Enums.WoundLevel:
+	var cr: SpiritCreatureData = character.spirit_creature
+	var w: int = character.wounds_taken
+	if w >= cr.wounds_dead:
+		return Enums.WoundLevel.DEAD
+	if w <= 0:
+		return Enums.WoundLevel.HEALTHY
+	var levels: Array = [
+		Enums.WoundLevel.HEALTHY, Enums.WoundLevel.NICKED, Enums.WoundLevel.GRAZED,
+		Enums.WoundLevel.HURT, Enums.WoundLevel.INJURED, Enums.WoundLevel.CRIPPLED,
+		Enums.WoundLevel.DOWN, Enums.WoundLevel.OUT,
+	]
+	var idx: int = 0
+	if cr.wound_thresholds.is_empty():
+		idx = int(float(w) / float(cr.wounds_dead) * float(levels.size()))
+	else:
+		for th in cr.wound_thresholds:
+			if w > int(th):
+				idx += 1
+	idx = clampi(idx, 0, levels.size() - 1)
+	return levels[idx]
 
 
 static func is_dead(character: L5RCharacterData) -> bool:

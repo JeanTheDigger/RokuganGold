@@ -48,6 +48,12 @@ extends Resource
 @export var meeting_settlement_id: int = -1
 @export var meeting_deadline_ic_day: int = -1
 
+# Otosan Uchi Governor solicitation (s2.3.23 Candidate Solicitation Fallback): the
+# Sentaku name / zone_id of the vacant district the sender is soliciting a Governor
+# recommendation for; "" for ordinary letters. On delivery, the recipient Clan
+# Champion recommends a vassal (added to the sender's met_characters pool).
+@export var governor_solicitation_zone_id: String = ""
+
 # Blockade state
 @export var blocked_by_blockade: bool = false
 

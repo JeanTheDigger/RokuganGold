@@ -869,7 +869,9 @@ func try_move_player(dx: int, dy: int) -> Dictionary:
 	# Walking makes QUIET noise.
 	_emit_noise(player.x, player.y, AsciiMapEnvironment.NoiseLevel.QUIET)
 	_check_body_discovery()
-	return {"moved": true, "x": tx, "y": ty}
+	var move_res: Dictionary = {"moved": true, "x": tx, "y": ty}
+	_apply_trap_entry(move_res)
+	return move_res
 
 
 ## Attempt a stealthy player move. Returns result including whether stealth was maintained.
@@ -931,13 +933,98 @@ func try_stealth_move(dx: int, dy: int) -> Dictionary:
 	_emit_noise(player.x, player.y, noise_level)
 	_check_body_discovery()
 
-	return {
+	var stealth_res: Dictionary = {
 		"moved": true,
 		"x": tx, "y": ty,
 		"stealth_maintained": roll_result["success"],
 		"stealth_roll": roll_result["total"],
 		"stealth_tn": ground_tn,
 	}
+	_apply_trap_entry(stealth_res)
+	return stealth_res
+
+
+# =============================================================================
+# -- Traps (s56.20) -----------------------------------------------------------
+# All paths no-op when the map carries no traps, so trap-free missions (every
+# existing template instance until placement is enabled) are unaffected.
+# =============================================================================
+
+## Springs a trap on the tile the player just entered (if any), then runs passive
+## detection for the turn. Merges results into the given move-result dict:
+##   "trap"           → TrapSystem.trigger() result, if one sprang
+##   "traps_detected" → Array of newly-DETECTED trap dicts this turn
+func _apply_trap_entry(result: Dictionary) -> void:
+	if _map.traps.is_empty():
+		return
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return
+	var trap: Dictionary = TrapSystem.trap_at(_map, player.x, player.y)
+	if not trap.is_empty():
+		var trig: Dictionary = TrapSystem.trigger(
+			_map, player.character, player.participant, trap, _dice)
+		result["trap"] = trig
+		_trap_alert(player, trap.get("type", -1))
+	var detected: Array = detect_traps()
+	if not detected.is_empty():
+		result["traps_detected"] = detected
+
+
+## Emits the appropriate alert noise when a loud / alarm trap springs. Pit and
+## Deadfall are LOUD; the Alarm/tripwire is map-wide VERY_LOUD; Dart and Snare
+## are silent (no emit).
+func _trap_alert(player: EntityState, trap_type: int) -> void:
+	if not TrapSystem.alerts_on_spring(trap_type):
+		return
+	var lvl: int = AsciiMapEnvironment.NoiseLevel.VERY_LOUD \
+		if trap_type == TrapSystem.TrapType.ALARM \
+		else AsciiMapEnvironment.NoiseLevel.LOUD
+	_emit_noise(player.x, player.y, lvl)
+
+
+## Passive per-turn detection (s56.20): flips HIDDEN traps within DETECT_RANGE
+## tiles AND in the player's FOV to DETECTED, via Perception + Hunting vs detect_tn.
+## Returns the traps newly detected this call. Idempotent (only HIDDEN traps roll).
+func detect_traps() -> Array:
+	var out: Array = []
+	if _map.traps.is_empty():
+		return out
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return out
+	var radius: int = _fov_radius(player.character.perception, player.x, player.y)
+	for t: Dictionary in _map.traps:
+		if t.get("state", TrapSystem.TrapState.HIDDEN) != TrapSystem.TrapState.HIDDEN:
+			continue
+		var tx: int = t.get("x", -1)
+		var ty: int = t.get("y", -1)
+		if maxi(absi(tx - player.x), absi(ty - player.y)) > TrapSystem.DETECT_RANGE:
+			continue
+		if not FovSystem.is_visible(player.x, player.y, tx, ty, radius, _map):
+			continue
+		if TrapSystem.attempt_detect(player.character, t, _dice):
+			out.append(t)
+	return out
+
+
+## Player action: disarm a DETECTED trap on an adjacent tile (delta within 1 in
+## each axis; same tile permitted when standing on a detected trap). Better of
+## Hunting:Traps or Sleight of Hand vs disarm_tn; a bad fumble springs it.
+func try_disarm_trap(dx: int, dy: int) -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"success": false, "reason": "player_dead"}
+	if absi(dx) > 1 or absi(dy) > 1:
+		return {"success": false, "reason": "not_adjacent"}
+	var trap: Dictionary = TrapSystem.trap_at(_map, player.x + dx, player.y + dy)
+	if trap.is_empty() or trap.get("state", TrapSystem.TrapState.HIDDEN) != TrapSystem.TrapState.DETECTED:
+		return {"success": false, "reason": "no_detected_trap"}
+	var r: Dictionary = TrapSystem.attempt_disarm(
+		_map, player.character, trap, _dice, player.participant)
+	if r.get("sprung", false):
+		_trap_alert(player, trap.get("type", -1))
+	return r
 
 
 ## Execute a stealth kill on an adjacent target (s56.6.3 LOCKED).

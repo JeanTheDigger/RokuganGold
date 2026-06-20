@@ -34,6 +34,9 @@ static func build_context(
 	ctx.school = character.school
 	ctx.school_type = character.school_type
 	ctx.is_lord = world_state.get("is_lord", false)
+	# Otosan Uchi Governor — conditional district lord (s2.3.23). Gates the
+	# Governor ActionID blocklist in generate_options().
+	ctx.is_otosan_governor = bool(world_state.get("is_otosan_governor", false))
 	ctx.is_hostage = character.captive_status != ""
 	# Kolat agent context (s54.7d Phase-3 ActionID unlock).
 	ctx.kolat_sect = character.kolat_sect
@@ -72,6 +75,7 @@ static func build_context(
 	ctx.known_npc_locations = world_state.get("known_npc_locations", {})
 	ctx.court_session_state = world_state.get("court_session_state", {})
 	ctx.court_settlement_id = world_state.get("court_settlement_id", -1)
+	ctx.compliance_intimidators = world_state.get("compliance_intimidators", [])
 
 	# Stats
 	ctx.skill_ranks = character.skills.duplicate()
@@ -492,6 +496,10 @@ static func generate_options(
 			continue
 		if _is_lord_only_blocked(action_id, ctx):
 			continue
+		# Otosan Uchi Governors are conditional district lords — daimyo/military
+		# actions are removed from their pool (s2.3.23 Zone-Level Lord Authority).
+		if _is_governor_blocked(action_id, ctx):
+			continue
 		if ctx.is_ceasefire_day and _is_ceasefire_blocked(action_id):
 			continue
 		if ctx.is_labor_halt_day and _is_labor_halt_blocked(action_id):
@@ -540,6 +548,23 @@ static func apply_personality_filter(
 			continue
 		filtered.append(option)
 
+	return filtered
+
+
+# -- s12.9 Compliance Filter --------------------------------------------------
+# A character "complying under duress" cannot select a hostile action against the
+# intimidator they are complying with (the suppression ends only when compliance ends).
+static func _apply_compliance_filter(
+	options: Array,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	if ctx.compliance_intimidators.is_empty():
+		return options
+	var filtered: Array = []
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id in HOSTILE_ACTIONS and option.target_npc_id in ctx.compliance_intimidators:
+			continue
+		filtered.append(option)
 	return filtered
 
 
@@ -841,6 +866,27 @@ static func _apply_taint_examination_precondition_filter(
 	if world_state.get("has_taint_corroboration_target", false):
 		return options
 	return _remove_action(options, "EXAMINE_FOR_TAINT")
+
+
+# -- Phase 4c: PETITION_ACCESS Precondition Filter (s2.3.23) ------------------
+# Surfaces PETITION_ACCESS only when the orchestrator has injected a non-empty
+# petition_eligible_type for this character (at Otosan Uchi, lacking the relevant
+# access flag, and not currently in resubmission cooldown).
+static func _apply_petition_precondition_filter(
+	options: Array,
+	world_state: Dictionary,
+) -> Array:
+	var has_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "PETITION_ACCESS":
+			has_action = true
+			break
+	if not has_action:
+		return options
+	var ko: Dictionary = world_state.get("known_objectives", {})
+	if String(ko.get("petition_eligible_type", "")) != "":
+		return options
+	return _remove_action(options, "PETITION_ACCESS")
 
 
 # -- Phase 5: Score All Options ------------------------------------------------
@@ -1174,9 +1220,11 @@ static func run(
 	options = _apply_tattoo_precondition_filter(options, character, ctx, chars_by_id, world_state)
 	options = _apply_terminate_contract_precondition_filter(options, world_state)
 	options = _apply_taint_examination_precondition_filter(options, world_state)
+	options = _apply_petition_precondition_filter(options, world_state)
 	options = _apply_origami_precondition_filter(options, character, ctx)
 	options = _apply_garden_precondition_filter(options, character, ctx)
 	options = _apply_arrived_travel_filter(options, need, ctx)
+	options = _apply_compliance_filter(options, ctx)
 
 	# Phase 5
 	score_all(options, need, ctx, scoring_tables,
@@ -1477,7 +1525,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"SCOUT_ENEMY",
 				"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
 				"FOUND_TEMPLE", "FOUND_MONASTERY", "COMMISSION_SHIP",
-				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION", "DISSOLVE_MARRIAGE",
+				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION", "DISMISS_FROM_POSITION", "DISSOLVE_MARRIAGE",
 				"PURIFY_TAINTED_GROUND",
 				"DISPATCH_COURTIER",
 				"DECLARE_WAR", "NEGOTIATE_SURRENDER",
@@ -1535,7 +1583,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"PERFORM_FOR", "DISCLOSE",
 				"PROVOKE_EMOTION", "PLAY_GAME", "DISCERN_NEED",
 				"ASK_FOR_INTRODUCTION", "OBSERVE_COURT_ATTENDEES",
-				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION", "DISSOLVE_MARRIAGE",
+				"ARRANGE_MARRIAGE", "APPOINT_TO_POSITION", "DISMISS_FROM_POSITION", "DISSOLVE_MARRIAGE",
 				"COMPLY_WITH_EDICT", "DEFY_EDICT",
 				"RESTORE_COUNCIL_COMPACT",
 				"TRAIN", "MEDITATE", "CONDUCT_TEA_CEREMONY",
@@ -1560,6 +1608,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"DECLARE_WALL_EMERGENCY",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
+				"PETITION_ACCESS",
 				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
 				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
 				"APPROVE_CLAN_INDUCTION",
@@ -1593,6 +1642,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"INVESTIGATE_PROVINCE",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
+				"PETITION_ACCESS",
 				"COMPOSE_THEATER_PIECE", "LEARN_THEATER_PIECE",
 				"PERFORM_THEATER_PIECE", "DEDICATE_PIECE",
 				"PETITION_RONIN",
@@ -1696,6 +1746,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"PUBLIC_PERFORMANCE": 1,
 		"DELIVER_GIFT": 1,
 		"OFFER_FAVOR": 1,
+		"PETITION_ACCESS": 1,
 		"PERFORM_FOR": 1,
 		"DISCLOSE": 1,
 		"ASK_FOR_INTRODUCTION": 1,
@@ -1743,6 +1794,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"COMPLY_WITH_EDICT": 1,
 		"DEFY_EDICT": 1,
 		"APPOINT_TO_POSITION": 1,
+		"DISMISS_FROM_POSITION": 1,
 		"ACCEPT_RONIN_PETITION": 1,
 		"PETITION_RONIN": 1,
 		"HIRE_RONIN": 1,
@@ -2753,7 +2805,7 @@ const COMMANDER_RANK_ACTIONS: Dictionary = {
 }
 
 const LORD_ONLY_ACTIONS: Array[String] = [
-	"APPOINT_TO_POSITION", "DECLARE_WAR", "FOUND_VILLAGE",
+	"APPOINT_TO_POSITION", "DISMISS_FROM_POSITION", "DECLARE_WAR", "FOUND_VILLAGE",
 	"BUILD_FORTIFICATION", "BUILD_SHRINE", "FOUND_TEMPLE",
 	"FOUND_MONASTERY", "COMMISSION_SHIP", "ARRANGE_MARRIAGE", "DISSOLVE_MARRIAGE",
 	# Reclassified from AP to Civilian Order per s57.34.4 — lord-only
@@ -2779,6 +2831,36 @@ static func _is_lord_only_blocked(
 	if action_id in LORD_ONLY_ACTIONS:
 		return not ctx.is_lord
 	return false
+
+
+# Otosan Uchi Governor blocklist (s2.3.23 Zone-Level Lord Authority, verbatim).
+# A Governor is a conditional district lord — zone-level authority grants lord-tier
+# ActionIDs within their district, but these daimyo/Imperial-scale and military
+# actions are explicitly forbidden: they "simply do not appear in their Phase 5
+# scoring pool." Governors cannot raise armies, conduct sieges, found settlements,
+# arrange marriages, or wage economic warfare.
+const GOVERNOR_BLOCKED_ACTIONS: Array[String] = [
+	# Category 7 — military
+	"ORDER_LEVY", "ORDER_DEPLOY", "ORDER_BATTLE", "ORDER_RETREAT", "ORDER_FORTIFY",
+	"DRILL_TROOPS", "FORCE_MARCH", "BLOCKADE_TRADE_ROUTE", "EVALUATE_CLAN_STRENGTH",
+	"DEMAND_TRIBUTE", "REQUEST_ALLIED_AID", "CONDUCT_RAID", "RAID_HARVEST",
+	"EVALUATE_WAR_READINESS",
+	# Category 8 — siege
+	"MAINTAIN_SIEGE", "CONDUCT_STORM_ASSAULT", "NEGOTIATE_SURRENDER", "CONDUCT_SORTIE",
+	# Imperial-scale construction
+	"FOUND_VILLAGE", "BUILD_FORTIFICATION", "COMMISSION_SHIP",
+	# Family Daimyo+ religious construction
+	"FOUND_TEMPLE", "FOUND_MONASTERY",
+	# Above their station
+	"ARRANGE_MARRIAGE", "IMPOSE_EMBARGO",
+]
+
+
+static func _is_governor_blocked(
+	action_id: String,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> bool:
+	return ctx.is_otosan_governor and action_id in GOVERNOR_BLOCKED_ACTIONS
 
 
 static func _is_military_blocked(
@@ -3114,6 +3196,15 @@ static func _populate_action_metadata(
 				courtier_best = gscore
 				courtier_target = cid
 		option.target_npc_id = courtier_target
+	elif option.action_id == "PETITION_ACCESS":
+		# s2.3.23: petition type + (for Forbidden City) requested visit duration,
+		# injected by the orchestrator into known_objectives.
+		option.metadata = {
+			"petition_type": ctx.known_objectives.get(
+				"petition_eligible_type", SentakuTribunalSystem.PETITION_EKOHIKEI),
+			"petition_duration": int(ctx.known_objectives.get(
+				"petition_duration", SentakuTribunalSystem.FORBIDDEN_MAX_DURATION_DAYS)),
+		}
 	elif option.action_id == "NEGOTIATE_SURRENDER":
 		option.metadata = _build_negotiate_surrender_metadata(need, ctx)
 	elif option.action_id == "RAID_HARVEST":
@@ -3141,6 +3232,7 @@ static func _populate_action_metadata(
 		option.metadata = {
 			"target_npc_id": need.target_npc_id,
 			"position": need.target_intent,
+			"governed_zone_id": need.target_zone_id,
 		}
 	elif option.action_id == "PERFORM_RITUAL":
 		if need.need_type == "GATHER_INTELLIGENCE" and character != null and SpellSystem.is_shugenja(character):

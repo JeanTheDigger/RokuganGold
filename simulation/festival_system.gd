@@ -238,7 +238,7 @@ static func resolve_championship(
 			var skill_rank: int
 			var trait_val: int
 
-			if stage["skill"] == "elemental_ring":
+			if stage["skill"] is String and stage["skill"] == "elemental_ring":
 				# Jade stage 3: each candidate demonstrates with their highest ring.
 				# Ring = min(trait1, trait2) per GDD s4.5.2.
 				var tr: Dictionary = candidate.get("traits", {})
