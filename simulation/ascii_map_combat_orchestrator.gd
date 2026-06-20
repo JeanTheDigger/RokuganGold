@@ -1986,6 +1986,12 @@ static func execute_cast_spell(
 			"type": "spell_summon", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "summon": res["summon"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "banish_spirit":
+		res["banished"] = _apply_spell_banish_spirit(state, caster_id, caster, target_id, target, dice_engine)
+		state.combat_log.append({
+			"type": "spell_banish", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "banished": res["banished"],
+		})
 	state.combat_log.append({
 		"type": "spell_cast", "round": state.combat.round_number,
 		"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
@@ -2585,6 +2591,28 @@ static func _build_clay_soldier(earth_ring: int) -> SpiritCreatureData:
 	cr.reduction = earth_ring * 2
 	cr.wounds_dead = 0
 	return cr
+
+
+## Banish a non-native spirit (s37 Draw Closed the Veil): a spirit creature is sent to its home
+## realm (removed from the encounter). An embodied spirit (a physical body in Ningen-do, i.e. any
+## spirit_creature fighting on the tile map) resists with a Contested Willpower vs the caster's Void.
+## Reuses the Furaribi/jade-property repel pattern (erase position + fled_ids). Inert vs non-spirits.
+static func _apply_spell_banish_spirit(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, dice_engine: DiceEngine,
+) -> Dictionary:
+	if target == null or target.spirit_creature == null:
+		return {"reason": "not_a_spirit"}
+	var cv: int = SpellSystem.get_ring_value(caster, Enums.Ring.VOID)
+	var tw: int = maxi(1, target.willpower)
+	var caster_roll: int = dice_engine.roll_and_keep(cv, cv, true).total
+	var target_roll: int = dice_engine.roll_and_keep(tw, tw, true).total
+	if target_roll >= caster_roll:
+		return {"reason": "resisted", "id": target_id}
+	state.positions.erase(target_id)
+	if target_id not in state.fled_ids:
+		state.fled_ids.append(target_id)
+	return {"id": target_id, "banished": true}
 
 
 ## Build a shiryo ancestor spirit (s33 Defender From Beyond, Kitsu only): the GDD "typical shiryo"

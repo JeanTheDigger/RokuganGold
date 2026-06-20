@@ -5910,6 +5910,39 @@ need a "treated-as-Down / can't-act" turn-gate — this engine's CONDITION_STUNN
 defense (Armor TN 5), it does NOT block a combatant's turn (no action-gate in execute_npc_turn). A
 faithful bind/incapacitation (and faithful atemi/spell Stun) needs that gate as a dedicated change.
 
+### s37 Void spell combat coverage — batch 1 (2026-06-20, runtime-verified 7/7)
+Of Void's 19-spell gap (most are VP-manipulation or utility/divination), the two clean combat wins:
+**Banish the Void** (Void 3) — a Void `ward` (+10 TN to Void spells in the area, GDD-explicit; the
+VP-cost-doubling and Shadow-Rank effects are not modeled; ward owner exempt); **Draw Closed the Veil**
+(Void 4) — a new `banish_spirit` effect that sends a non-native spirit to its home realm (removed from
+the encounter via the existing repel pattern: erase position + add to fled_ids), with a Contested
+Void vs Willpower gate for embodied spirits; inert vs non-spirits. Runtime-verified: ward penalizes an
+enemy Void cast +10 (not the owner, not a Fire cast); banish removes a low-Willpower spirit, no-op vs a
+non-spirit. DEFERRED (Void, next tranches): the VP-manipulation set (drawing_the_void / fill_the_emptiness
+/ void_release / kharmic_intent / altering_the_course — need VP-grant/steal/pool hooks); severed_from_
+the_stream (timed Void-spend lock — the Furaribi `void_locked` flag has no expiry); essence_of_void
+(hold-inert — the can't-act turn-gate blocker); unmake_the_world / consumed_by_five_fires (contested
+instant-kill — new effect); unbound_essence (ring-reorder — Pending Redesign); divide_the_soul
+(clone combatant); the_voids_caress / moment_of_clarity (disadvantage/skill — out-of-combat or
+ring-adjacent); false_whispers / reach_through_the_void / the_empty_voice / ring_of_the_void
+(utility — no consumer).
+
+### Spell coverage session summary (2026-06-20)
+This session wired **26 combat spells across all 5 elements** + **1 world-sim spell** (Legacy of
+Kaze-no-Kami spirit-bird letters) + **1 pre-existing bug fix** (earths_stagnation move sign), all
+runtime-verified via headless drivers (full project import 0 parse errors throughout). Combat-effect
+total rose ~76 → ~102. New reusable infra built: the `attacker_penalty`/`attacker_roll_penalty` defender
+hook, `ranged_armor_tn`, `insubstantial` (untargetable + can't act/cast), character `invisible`
+(single + AoE via `_apply_spell_buff_aoe`), `initiative_score` buff mod, `willpower_flat` /
+`strength_contested_water` saves, `_build_shiryo` summon, and the `banish_spirit` effect. Two notable
+findings: (1) **CONDITION_STUNNED does not block a combatant's turn** in this engine (only flat-foots
+defense), so all "treated-as-Down / helpless / bind" spells (Earth minor/major/prison_of_earth, Water
+suitengus_embrace, Fire everburning_rage, Void essence_of_void) are blocked on a dedicated "can't-act"
+turn-gate that would also make existing atemi/spell Stuns faithful; (2) the earths_stagnation sign bug.
+Remaining per-element work is documented in each element's DEFERRED note above (FireSystem ignite/
+extinguish, the ring-changing wound-threading refactor (Pending Redesign), the illusion/disguise/
+perception/decoy infra, VP-manipulation hooks, and the out-of-combat utility set per the per-spell ASK).
+
 "### Pending Redesign
 - **Ring-changing combat spells (essence_of_earth, the_wolfs_mercy, strike_at_the_roots, and
   Water ring-down spells) — participant-scoped wound threading (owner-chosen 2026-06-20).**

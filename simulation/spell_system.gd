@@ -273,6 +273,10 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Void Strike: Range 50', single, DR = caster's Void Ring
 	"void_strike": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
 		"range_tiles": 10, "aoe_radius": 0},
+	# Void coverage extension (2026-06-20): Void ward + spirit banishment.
+	"banish_the_void": {"kind": "ward", "aoe_radius": 4, "duration_rounds": 5,
+		"ward_elements": [4], "cast_tn_penalty": 10},  # Void 3: +10 TN to Void spells in the area (VP-cost-doubling + Shadow effects not modeled; ward owner exempt)
+	"draw_closed_the_veil": {"kind": "banish_spirit"},  # Void 4: banish a non-native spirit to its home realm (Contested Void vs Willpower for embodied spirits)
 	# --- Heal spells (s36 Water) ---
 	# kind "heal": restores Wounds to an ally (or self) within reach. heal field:
 	#   "margin"          = Wounds equal to the cast roll's margin over TN (Path to Inner Peace)
