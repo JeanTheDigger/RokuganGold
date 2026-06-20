@@ -321,6 +321,9 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"haze_of_battle": {"kind": "debuff", "target": "enemy", "range_tiles": 2, "duration_rounds": 5,
 		"contested": "willpower_contested_caster_fire",
 		"mods": [{"kind": "stance_locked", "value": 1}]},  # Fire 3: forced into Full Attack Stance, cannot switch (Contested Willpower; caster adds Fire Ring); out-of-combat Brash+Contrary not modeled
+	# Coverage clean-wins batch 6 (2026-06-20): purify zone (heal pure / harm tainted).
+	"heavens_tears": {"kind": "purify_zone", "aoe_radius": 6, "duration_rounds": 2,
+		"dr_rolled": 1, "dr_kept": 1},  # Water 2: holy rain centered on caster (30' radius, 2 Rounds) — pure souls (no Taint, Honor 4.0+) healed Water Ring/round; Taint/Shadow corruption suffer 1k1/round; "outdoors only" flavour not gated
 	"severed_from_the_stream": {"kind": "debuff", "target": "enemy", "range_tiles": 5, "duration_rounds": 9999,
 		"mods": [{"kind": "void_locked", "value": 1}]},  # Void 2: target cannot spend Void Points (the per-spend Contested-Void roll is simplified to a full lock via execute_void_spend; 5 rounds ≈ skirmish)
 	# --- Heal spells (s36 Water) ---

@@ -2026,6 +2026,12 @@ static func execute_cast_spell(
 			"type": "spell_extinguish", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "extinguished": res["extinguished"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "purify_zone":
+		res["purify_zone"] = _apply_spell_purify_zone(state, caster_id, caster, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_purify_zone", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "zone": res["purify_zone"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "gain_void":
 		var gained: int = SpellSystem.get_effective_school_rank(caster, Enums.Ring.VOID) + 1
 		caster.current_void_points += gained  # over-cap allowed (s37 Drawing the Void)
@@ -2539,6 +2545,30 @@ static func _apply_spell_zone(
 		"impact_hits": impact_hits}
 
 
+## Install a purify zone (s36 Heaven's Tears): a holy-rain field, centered on the caster, that each
+## Round heals the pure of soul (no Taint, Honor 4.0+) by the caster's Water Ring and damages the
+## Tainted/Shadow-corrupted (1k1). Affects ALL combatants in the area by soul state (not faction).
+## heal_amount is fixed at the caster's Water Ring at cast time; the per-round work runs in
+## _process_spell_zones. ("Outdoors only" is flavour — not gated.)
+static func _apply_spell_purify_zone(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData, eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var radius: int = int(eff.get("aoe_radius", 6))
+	var dur: int = int(eff.get("duration_rounds", 2))
+	var heal_amount: int = SpellSystem.get_ring_value(caster, Enums.Ring.WATER)
+	var zone: Dictionary = {
+		"center": center, "radius": radius, "kind": "purify",
+		"heal_amount": heal_amount,
+		"dr_rolled": int(eff.get("dr_rolled", 1)), "dr_kept": int(eff.get("dr_kept", 1)),
+		"expiry_round": state.combat.round_number + dur,
+		"spell_id": spell_id, "caster_id": caster_id,
+	}
+	state.spell_zones.append(zone)
+	return {"center": center, "radius": radius, "heal_amount": heal_amount,
+		"expiry_round": zone["expiry_round"]}
+
+
 ## Per-round spell-zone processing (called from advance_round). Every living combatant standing in
 ## a damage zone takes the zone's per-round DR (element ring when dr_* is 0; spirit damage filter
 ## honored). Expired zones are dropped. The zone owner's faction is exempt when hits == "enemies".
@@ -2547,6 +2577,27 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 	for zone in state.spell_zones:
 		if int(zone.get("expiry_round", -1)) >= 0 \
 				and state.combat.round_number >= int(zone["expiry_round"]):
+			continue
+		# s36 Heaven's Tears: a purify field — heal the pure of soul, harm the Tainted, by soul
+		# state (all factions). Pure = no Taint AND Honor 4.0+; Tainted/corrupted = Taint Rank 1+.
+		if String(zone.get("kind", "damage_zone")) == "purify":
+			var pcenter: Vector2i = zone["center"]
+			var pradius: int = int(zone.get("radius", 6))
+			var pheal: int = int(zone.get("heal_amount", 0))
+			var pdr: int = int(zone.get("dr_rolled", 1))
+			var pdk: int = int(zone.get("dr_kept", 1))
+			for cid in state.positions.keys():
+				var ppos: Vector2i = state.positions[cid]
+				if maxi(absi(pcenter.x - ppos.x), absi(pcenter.y - ppos.y)) > pradius:
+					continue
+				var pch = state.combatants.get(cid, null)
+				if pch == null or CharacterStats.is_dead(pch):
+					continue
+				if pch.taint >= 1.0:
+					WoundSystem.apply_damage(pch, dice_engine.roll_and_keep(pdr, pdk, true).total, 0)
+				elif pch.honor >= 4.0:
+					WoundSystem.heal_wounds(pch, pheal)
+			surviving.append(zone)
 			continue
 		var dr_rolled: int = int(zone.get("dr_rolled", 0))
 		var dr_kept: int = int(zone.get("dr_kept", 0))

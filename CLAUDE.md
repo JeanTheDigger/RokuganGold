@@ -6028,16 +6028,29 @@ Attack; blocks a switch to Defense (stance unchanged); permits Full Attack itsel
 short-circuits; a Willpower-9 target resisted a weak caster 10/10; out-of-range fizzles. Fire 10 this
 session.
 
+### Spell coverage — clean-wins batch 6 (Heaven's Tears purify zone, 2026-06-20, runtime-verified 8/8)
+**Heaven's Tears** (Water 2) — a holy-rain field, the first soul-state zone. New `purify_zone` effect
+(`_apply_spell_purify_zone` + a `purify` branch in the existing per-round `_process_spell_zones` tick):
+each Round it heals the **pure of soul** (no Taint AND Honor 4.0+) by the caster's Water Ring and
+damages the **Tainted/Shadow-corrupted** (Taint Rank 1+) by 1k1; neutral souls (honor < 4.0, no taint)
+are untouched. Affects **all** combatants in the 30' (6-tile) radius by soul state, not faction — the
+caster heals if pure, an enemy heals if pure, a tainted ally burns. Centered on the caster, 2 Rounds.
+heal_amount is fixed at the caster's Water Ring at cast; the zone auto-expires via the round tick.
+"Outdoors only" is flavour (not gated; no Shadow-corruption field beyond Taint). Runtime-verified:
+heal = Water 5; pure caster 10→5 and pure ally 8→3 healed; the tainted enemy took 1k1; a neutral
+(honor 2) and a pure-but-out-of-radius combatant were untouched; the zone persisted one round then
+expired after its duration. Water 13 this session.
+
 ### Spell coverage session summary (2026-06-20, running)
-This session has wired **~47 combat spells across all 5 elements** (initial all-element pass + clean-wins
+This session has wired **~48 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
-forced-stance batch 5) + **1 world-sim spell** (Legacy of Kaze-no-Kami spirit-bird letters) + **2
-pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty` was also the hook reused by
-Suitengu's Curse), all runtime-verified via headless drivers (full project import 0 parse errors
-throughout). Combat-effect total rose ~76 → ~123. New reusable infra built: the `stance_locked` forced-Full-
-Attack debuff + `willpower_contested_caster_fire` save (batch 5), the shared `instant_kill` effect +
-`earth_contested_void` save (batch 4), the `no_magic_heal` block + `free_move_tiles` buff (batch 3), the
-`incapacitated` turn-gate
+forced-stance batch 5 + purify-zone batch 6) + **1 world-sim spell** (Legacy of Kaze-no-Kami spirit-bird
+letters) + **2 pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty` was also the
+hook reused by Suitengu's Curse), all runtime-verified via headless drivers (full project import 0 parse
+errors throughout). Combat-effect total rose ~76 → ~124. New reusable infra built: the `purify_zone`
+soul-state zone (batch 6), the `stance_locked` forced-Full-Attack debuff + `willpower_contested_caster_fire`
+save (batch 5), the shared `instant_kill` effect + `earth_contested_void` save (batch 4), the
+`no_magic_heal` block + `free_move_tiles` buff (batch 3), the `incapacitated` turn-gate
 (CONDITION_INCAPACITATED) + `requires_shadowlands` status gate, the VP `gain_void`/`restore_void`/
 `steal_void` effects + timed `void_locked`, the FireSystem `ignite_zone`/`extinguish` effects, the
 `heal_on_damage`/`armor_bypass` hooks, the `attacker_penalty`/`attacker_roll_penalty` defender
