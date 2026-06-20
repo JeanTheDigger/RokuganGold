@@ -85,6 +85,16 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "armor_tn", "value": 20}]},  # Air 3: +20 Armor TN cocoon (deafens self — deferred)
 	"sapphire_strike": {"kind": "damage", "dr_rolled": 4, "dr_kept": 4, "requires_taint": true,
 		"range_tiles": 10, "aoe_radius": 0},  # Earth 4: 4k4 vs jade/crystal-vulnerable only, 50'
+	# Coverage extension batch 4 (2026-06-20): conjured elemental weapons (5 min = 50 rounds).
+	# Wielder uses effective School Rank for the weapon skill; per-spell Honor/Free-Raise extras deferred.
+	"katana_of_fire": {"kind": "conjure_weapon", "dr_rolled": 2, "dr_kept": 2,
+		"skill": "Kenjutsu", "duration_rounds": 50},  # Fire 1: DR 2k2 fire blade
+	"tetsubo_of_earth": {"kind": "conjure_weapon", "dr_rolled": 2, "dr_kept": 2,
+		"skill": "Heavy Weapons", "duration_rounds": 50},  # Earth 1: DR 2k2 stone tetsubo
+	"yari_of_air": {"kind": "conjure_weapon", "dr_rolled": 1, "dr_kept": 1,
+		"skill": "Spears", "duration_rounds": 50},  # Air 1: DR 1k1 air spear
+	"bo_of_water": {"kind": "conjure_weapon", "dr_rolled": 1, "dr_kept": 2,
+		"skill": "Staves", "duration_rounds": 50},  # Water 1: DR 1k2 water staff
 	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
 	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
 	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.

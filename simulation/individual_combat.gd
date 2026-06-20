@@ -189,6 +189,12 @@ class Participant:
 	var spirit_attack_kept_bonus: int = 0  # s54.5 Charge: +N kept attack dice (the kept half of a +NkN charge bonus)
 	var spirit_damage_kept_bonus: int = 0  # s54.5 Charge: +N kept damage dice
 	var void_dragon_ring: int = -1  # Touch the Void Dragon (s38): boosted Ring (Enums.Ring), -1 = inactive
+	# s35/s34/s33/s36 conjured elemental weapons (Katana of Fire, Tetsubo of Earth, Yari of Air,
+	# Bo of Water). {} = none; {rolled,kept,skill,trait,school_rank} = a created weapon the wielder
+	# uses with their effective School Rank in place of the weapon skill. Read in resolve_attack/
+	# resolve_damage; expired in advance_round at conjured_weapon_expiry.
+	var conjured_weapon: Dictionary = {}
+	var conjured_weapon_expiry: int = -1
 	var dual_wielding: bool = false            # true when holding an off-hand weapon
 	var off_hand_weapon: String = ""           # name of off-hand weapon ("" = none)
 	var earth_trade_amount: int = 0            # Armor TN traded for damage (earth_trade_armor_for_damage)
@@ -1072,8 +1078,15 @@ static func resolve_attack(
 	adv_context: Dictionary = {},
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
+	# Conjured elemental weapon (s33-s36): override the wielded profile. The created weapon's
+	# skill may be replaced by the caster's effective School Rank ("uses School Rank in place of
+	# [skill]"); take the better of the two. Inert for everyone else (conjured_weapon == {}).
+	if attacker_p != null and not attacker_p.conjured_weapon.is_empty():
+		weapon = attacker_p.conjured_weapon
 	var skill_name: String = weapon.get("skill", "Kenjutsu")
 	var skill_rank: int = attacker.skills.get(skill_name, 0)
+	if attacker_p != null and not attacker_p.conjured_weapon.is_empty():
+		skill_rank = maxi(skill_rank, int(attacker_p.conjured_weapon.get("school_rank", 0)))
 	var wound_penalty: int = CharacterStats.get_wound_penalty(attacker)
 
 	# Attack roll: Trait + Skill rolled, keep Trait (s4.5 "Agility for attacks").
@@ -1249,6 +1262,9 @@ static func resolve_damage(
 	bonus_kept: int = 0,
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
+	# Conjured elemental weapon (s33-s36): fixed DR, no Strength bonus. Inert otherwise.
+	if attacker_p != null and not attacker_p.conjured_weapon.is_empty():
+		weapon = attacker_p.conjured_weapon
 	var rolled: int = weapon.get("rolled", 2)
 	var kept: int = weapon.get("kept", 1) + bonus_kept
 

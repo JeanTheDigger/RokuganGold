@@ -5696,7 +5696,7 @@ they comply with (`ctx.compliance_intimidators`) — covering non-hostile court 
 Phase-4 hostile filter doesn't. Runtime-verified 3/3 (accumulated reduction lifts Negotiate
 success 44→79/80; compliance +10 drops it 44→18/80; Persuade eased only by the persuade pool).
 
-### s31-37 spell combat coverage — extension batches 1–3 (2026-06-20)
+### s31-37 spell combat coverage — extension batches 1–4 (2026-06-20)
 Added combat effects for 4 more library spells (the library has 287 spells; only ~28 had combat
 effects). All values transcribed exactly from s34/s35: **tail_of_the_fire_dragon** (Fire 2,
 single damage DR=Fire Ring, 30'), **ravenous_swarms** (Fire 3, 5k3 bolt, 30' — the fire-spell-

@@ -1912,6 +1912,13 @@ static func execute_cast_spell(
 			"type": "spell_buff", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "buff": res["spell_buff"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "conjure_weapon":
+		res["conjured"] = _apply_spell_conjure_weapon(
+			state, caster_id, caster, target_id, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_conjure_weapon", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "conjured": res["conjured"],
+		})
 	state.combat_log.append({
 		"type": "spell_cast", "round": state.combat.round_number,
 		"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
@@ -2172,6 +2179,43 @@ static func _resolve_buff_value(caster: L5RCharacterData, value) -> int:
 			_:
 				return 0
 	return int(value)
+
+
+## Install a conjured elemental weapon (s33 Yari of Air / s34 Tetsubo of Earth / s35 Katana of
+## Fire / s36 Bo of Water) on the caster (or a same-faction ally within range). The created weapon
+## has the spell's fixed DR and may be wielded with the caster's effective School Rank in place of
+## the weapon skill (resolve_attack takes the better). Returns {wielder_id, weapon}. Per-spell
+## extras (Katana's Honor-to-damage, Tetsubo/Bo Knockdown Free Raise, Yari Feint/IncDmg Free
+## Raise) are deferred. duration_rounds from the effect (5 minutes = 50 rounds).
+static func _apply_spell_conjure_weapon(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	# Beneficiary: a same-faction living participant target (ally grant), else the caster.
+	var wielder_id: int = caster_id
+	if target_id != caster_id and state.combat.participants.has(target_id):
+		var cf: String = state.factions.get(caster_id, FACTION_PLAYER)
+		var tch = state.combatants.get(target_id, null)
+		if String(state.factions.get(target_id, "")) == cf and tch != null \
+				and not CharacterStats.is_dead(tch):
+			wielder_id = target_id
+	var element: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("e", Enums.Ring.FIRE)
+	var school_rank: int = SpellSystem.get_effective_school_rank(caster, element)
+	var weapon: Dictionary = {
+		"rolled": int(eff.get("dr_rolled", 2)),
+		"kept": int(eff.get("dr_kept", 2)),
+		"skill": String(eff.get("skill", "Kenjutsu")),
+		"trait": "agility",
+		"strength_adds": false,
+		"melee": true,
+		"school_rank": school_rank,
+	}
+	var p: IndividualCombat.Participant = state.combat.participants.get(wielder_id)
+	if p == null:
+		return {}
+	p.conjured_weapon = weapon
+	p.conjured_weapon_expiry = state.combat.round_number + int(eff.get("duration_rounds", 50))
+	return {"wielder_id": wielder_id, "weapon": weapon}
 
 
 # Resolves a damage-spell's condition rider (s31–s37). Returns the applied condition string,
@@ -3803,6 +3847,10 @@ static func advance_round(
 		IndividualCombat.expire_timed_modifiers(_tp, state.combat.round_number)
 		IndividualCombat.expire_active_kiho(_tp, state.combat.round_number)
 		IndividualCombat.expire_timed_conditions(_tp, state.combat.round_number)
+		# Conjured elemental weapon (s33-s36) dissipates when its duration ends.
+		if _tp.conjured_weapon_expiry >= 0 and _tp.conjured_weapon_expiry <= state.combat.round_number:
+			_tp.conjured_weapon = {}
+			_tp.conjured_weapon_expiry = -1
 		# Banish All Shadows suppression ends — restore the Disadvantage's effects.
 		if _tp.suppressed_disadvantage_expiry >= 0 and _tp.suppressed_disadvantage_expiry <= state.combat.round_number:
 			var _sc: L5RCharacterData = chars_by_id.get(_tp.character_id, null)
