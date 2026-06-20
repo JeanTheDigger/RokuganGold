@@ -189,6 +189,15 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"range_tiles": 0, "aoe_radius": 5, "aoe_hits": "all", "caster_exempt": true},
 	"beam_of_the_inferno": {"kind": "damage", "dr_rolled": 10, "dr_kept": 10,
 		"range_tiles": 40, "aoe_radius": 0},
+	# Fire coverage extension (2026-06-20): sunlight/blade attack buffs + two Fire wards.
+	"the_breath_of_battle": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 5,
+		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_attack_kept", "value": 1}, {"kind": "spell_damage_rolled", "value": 1}]},  # Fire 3: +1k1 Agility(attack) + 1k0 damage (sunlight-only requirement not modeled)
+	"hungry_blade": {"kind": "buff", "target": "ally", "range_tiles": 10, "duration_rounds": 5,
+		"mods": [{"kind": "spell_attack_rolled", "value": 1}]},  # Fire 3: +1k0 attack (explode-on-8 damage mechanic deferred)
+	"globe_of_the_everlasting_sun": {"kind": "ward", "aoe_radius": 99, "duration_rounds": 9999,
+		"ward_elements": [2], "cast_tn_penalty": 15},  # Fire 6: +15 TN to Fire spells in the area (1-mile = whole skirmish; building fire-immunity not modeled)
+	"agashas_shield": {"kind": "ward", "aoe_radius": 6, "duration_rounds": 6,
+		"ward_elements": [2], "dr_reduction_rolled": 3},  # Fire 3: hostile Fire-spell DR -3k0 inside (the -4k0 cast-roll dice penalty does not map to the flat-TN ward; not modeled)
 	# --- Air (s33) ---
 	# Tempest of Air: Personal, 75' cone, 1k1 + Knockdown (Contested Earth vs caster Air)
 	"tempest_of_air": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1,

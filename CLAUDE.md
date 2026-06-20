@@ -5889,6 +5889,27 @@ trait buff — ring-adjacent), ever_changing_waves/the_mirrors_smile (shapeshift
 (stored-spell trigger), hands_of_the_tides (position-swap), whirlpool/yukis_touch/within_the_waves/
 opening_the_veil (water-terrain / portal — no consumer), and the divination/travel/sustain utility set.
 
+### s35 Fire spell combat coverage — batch 1 (2026-06-20, runtime-verified 7/7)
+Of Fire's 18-spell gap (Fire was already the most-wired element), the zero-new-code batch reusing the
+buff / ward infra: **The Breath of Battle** (Fire 3) — +1k1 Agility(attack) + 1k0 damage buff
+(sunlight-only requirement not modeled); **Hungry Blade** (Fire 3) — +1k0 attack buff (the explode-on-8
+damage mechanic deferred — needs an explosion-threshold hook); **Globe of the Everlasting Sun** (Fire 6)
+— a Fire `ward` (+15 TN to hostile Fire spells in the area, GDD-explicit; 1-mile = whole skirmish);
+**Agasha's Shield** (Fire 3) — a Fire `ward` reducing hostile Fire-spell DR by 3k0 inside (the GDD's
+−4k0 cast-roll *dice* penalty does not map to the flat-TN ward layer and is not modeled). Runtime-verified:
+attack/damage buff mods set; globe penalizes an enemy Fire cast +15 but not the owner's; agasha's DR
+reduction = 3. DEFERRED (Fire, next tranches): everburning_rage (treated-as-Down — the can't-act
+turn-gate blocker); consumed_by_five_fires (instant-kill + reciprocal self-damage — new effect);
+fiery_wrath / extinguish (FireSystem ignite / clear burning tiles — clean FireSystem integration, a
+good next batch); haze_of_battle (forced-stance lock); death_of_flame / mental_quickness (trait
+reduce/boost — ring-adjacent); disrupt_the_aura (block-magical-healing hook); essence_of_fire
+(duel-scoped ward); curse_of_the_burning_hand (curse flame-shroud on an enemy); hurried_steps/
+the_elements_fury (extra-cast action economy); wings_of_fire/wings_of_the_phoenix (flight).
+NOTE on incapacitation: everburning_rage (Fire), suitengus_embrace (Water), and the Earth bindings all
+need a "treated-as-Down / can't-act" turn-gate — this engine's CONDITION_STUNNED only flat-foots
+defense (Armor TN 5), it does NOT block a combatant's turn (no action-gate in execute_npc_turn). A
+faithful bind/incapacitation (and faithful atemi/spell Stun) needs that gate as a dedicated change.
+
 "### Pending Redesign
 - **Ring-changing combat spells (essence_of_earth, the_wolfs_mercy, strike_at_the_roots, and
   Water ring-down spells) — participant-scoped wound threading (owner-chosen 2026-06-20).**
