@@ -451,7 +451,8 @@ static func get_ranged_targets(state: MapCombatState, attacker_id: int) -> Array
 		if not _is_targetable(state, cid):
 			continue
 		var tp: Vector2i = state.positions[cid]
-		if _chebyshev(pos, tp) > MELEE_RANGE_TILES and _has_los(state.map, pos, tp):
+		if _chebyshev(pos, tp) > MELEE_RANGE_TILES and _has_los(state.map, pos, tp) \
+				and not _ray_blocked_by_fog(state, pos, tp):
 			targets.append(cid)
 	return targets
 
@@ -1331,6 +1332,9 @@ static func execute_ranged_attack(
 		return {"success": false, "reason": "position_unknown"}
 	if not _has_los(state.map, apos, tpos):
 		return {"success": false, "reason": "no_line_of_sight"}
+	# s33 Summon Fog: a fog cloud crossing the line of fire blocks the shot beyond 5 ft.
+	if _ray_blocked_by_fog(state, apos, tpos):
+		return {"success": false, "reason": "fog_blocks_los"}
 
 	# Weapon must be ranged.
 	var wp: Dictionary = IndividualCombat.get_weapon_profile(weapon_name)
@@ -2115,6 +2119,12 @@ static func execute_cast_spell(
 			"type": "spell_modifier_zone", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "zone": res["modifier_zone"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "fog_zone":
+		res["fog_zone"] = _apply_spell_fog_zone(state, caster_id, target_id, target, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_fog_zone", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "zone": res["fog_zone"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "gain_void":
 		var gained: int = SpellSystem.get_effective_school_rank(caster, Enums.Ring.VOID) + 1
 		caster.current_void_points += gained  # over-cap allowed (s37 Drawing the Void)
@@ -2720,6 +2730,68 @@ static func _zone_modifier_total(state: MapCombatState, char_id: int, mod_key: S
 	return total
 
 
+## Install a fog zone (s33 Summon Fog): a thick obscuring cloud (visibility reduced to 5 ft) that
+## blocks line of sight for ranged attacks crossing it beyond one tile. Centered on a designated
+## target tile (range_tiles) or the caster. 1-minute ≈ skirmish.
+static func _apply_spell_fog_zone(
+	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData,
+	eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	if int(eff.get("range_tiles", 0)) > 0 and target != null and state.positions.has(target_id):
+		center = state.positions[target_id]
+	var radius: int = int(eff.get("aoe_radius", 10))
+	var dur: int = int(eff.get("duration_rounds", 9999))
+	var zone: Dictionary = {
+		"center": center, "radius": radius, "kind": "fog",
+		"expiry_round": state.combat.round_number + dur,
+		"spell_id": spell_id, "caster_id": caster_id,
+	}
+	state.spell_zones.append(zone)
+	return {"center": center, "radius": radius, "expiry_round": zone["expiry_round"]}
+
+
+## True when the straight line from a to b passes through any fog zone (s33 Summon Fog) — blocking
+## sight/shots beyond 5 ft. Adjacent tiles (≤1) are always visible. Traces the same Bresenham line
+## as _has_los; a traced tile within a fog disc blocks the view (including either endpoint in fog).
+static func _ray_blocked_by_fog(state: MapCombatState, a: Vector2i, b: Vector2i) -> bool:
+	if state.spell_zones.is_empty():
+		return false
+	if maxi(absi(a.x - b.x), absi(a.y - b.y)) <= 1:
+		return false  # 5 ft visibility — adjacent is always seen
+	var has_fog: bool = false
+	for zone in state.spell_zones:
+		if String(zone.get("kind", "")) == "fog":
+			has_fog = true
+			break
+	if not has_fog:
+		return false
+	var cx: int = a.x
+	var cy: int = a.y
+	var dx: int = absi(b.x - a.x)
+	var dy: int = absi(b.y - a.y)
+	var sx: int = 1 if a.x < b.x else -1
+	var sy: int = 1 if a.y < b.y else -1
+	var err: int = dx - dy
+	while true:
+		for zone in state.spell_zones:
+			if String(zone.get("kind", "")) != "fog":
+				continue
+			var c: Vector2i = zone["center"]
+			if maxi(absi(c.x - cx), absi(c.y - cy)) <= int(zone.get("radius", 10)):
+				return true
+		if cx == b.x and cy == b.y:
+			break
+		var e2: int = 2 * err
+		if e2 > -dy:
+			err -= dy
+			cx += sx
+		if e2 < dx:
+			err += dx
+			cy += sy
+	return false
+
+
 ## Per-round spell-zone processing (called from advance_round). Every living combatant standing in
 ## a damage zone takes the zone's per-round DR (element ring when dr_* is 0; spirit damage filter
 ## honored). Expired zones are dropped. The zone owner's faction is exempt when hits == "enemies".
@@ -2731,7 +2803,8 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 			continue
 		# s33 modifier zones (Blessed Wind of Lady Sun / Summoning the Gale) have no per-round effect
 		# — their modifiers are read at roll time by _zone_modifier_total. Keep them until they expire.
-		if String(zone.get("kind", "damage_zone")) == "modifier":
+		# s33 fog zones (Summon Fog) likewise have no per-round effect — they block LOS at shot time.
+		if String(zone.get("kind", "damage_zone")) in ["modifier", "fog"]:
 			surviving.append(zone)
 			continue
 		# s36 Heaven's Tears: a purify field — heal the pure of soul, harm the Tainted, by soul

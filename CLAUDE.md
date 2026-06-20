@@ -6141,11 +6141,28 @@ re-pass, driver19 3/3 stable). Water 19 / Fire 13 this session. NOTE: the genuin
 wound-capacity threading refactor (Pending Redesign) — they change wound capacity, which a roll-bonus
 hook cannot represent.
 
+### Spell coverage — fog batch 12 (2026-06-20, runtime-verified 10/10)
+**Summon Fog** (Air 3) — a thick obscuring cloud (visibility reduced to 5 ft) that blocks line of sight
+for ranged attacks crossing it. New `fog_zone` kind in `state.spell_zones` (survives the per-round tick
+with no per-round effect, like modifier zones) + a `_ray_blocked_by_fog(state, a, b)` helper that traces
+the same Bresenham line as `_has_los` and returns true if any traced tile lies within a fog disc
+(adjacent tiles ≤1 are always visible = the 5 ft). Wired into the two ranged LOS gates:
+`get_ranged_targets` (so an NPC never picks a fogged target) and `execute_ranged_attack` (returns
+`fog_blocks_los`). Centered on a designated target tile within 100' (range 20 tiles), 50' radius (10
+tiles), 1-minute ≈ skirmish. `_has_los`'s signature is unchanged (it's stateless) — the fog check is a
+separate call at the ranged gates, so melee/FOV/spell-LOS are unaffected. Runtime-verified: a clear
+shot becomes blocked once fog is laid on the line, the foe drops from `get_ranged_targets`, a shot
+through fog returns `fog_blocks_los`, an adjacent (1-tile) ray inside the fog is still seen, a far ray
+crossing the same fog is blocked, the zone survives advance_round, and a shot well clear of the fog is
+not falsely blocked. No regression (ranged/zone drivers re-pass). LIMITATIONS: the fog blocks ranged
+LOS only (melee is adjacent; FOV/exploration sight is the separate CombatController layer, not wired);
+the damp-materials / extinguish-small-flames flavour is not modeled. Air 14 this session.
+
 ### Spell coverage session summary (2026-06-20, running)
-This session has wired **~60 combat spells across all 5 elements** (initial all-element pass + clean-wins
+This session has wired **~61 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
 forced-stance batch 5 + purify-zone batch 6 + guided-auto-hit batch 7 + AoE-mobility batch 8 +
-action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11) + **1 world-sim spell** (Legacy of Kaze-no-Kami
+action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11 + fog batch 12) + **1 world-sim spell** (Legacy of Kaze-no-Kami
 spirit-bird letters) + **2 pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty`
 was also the hook reused by Suitengu's Curse), all runtime-verified via headless drivers (full project
 import 0 parse errors throughout). Combat-effect total rose ~76 → ~133. New reusable infra built: the
