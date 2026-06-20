@@ -2176,6 +2176,8 @@ static func _resolve_buff_value(caster: L5RCharacterData, value) -> int:
 			"earth_plus_rank":
 				return SpellSystem.get_ring_value(caster, Enums.Ring.EARTH) \
 					+ SpellSystem.get_effective_school_rank(caster, Enums.Ring.EARTH)
+			"earth_ring":
+				return SpellSystem.get_ring_value(caster, Enums.Ring.EARTH)
 			_:
 				return 0
 	return int(value)

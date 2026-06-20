@@ -1088,6 +1088,10 @@ static func resolve_attack(
 	if attacker_p != null and not attacker_p.conjured_weapon.is_empty():
 		skill_rank = maxi(skill_rank, int(attacker_p.conjured_weapon.get("school_rank", 0)))
 	var wound_penalty: int = CharacterStats.get_wound_penalty(attacker)
+	# s36 Near to Ice / s34 Force of Will: Wound Penalties are negated for the duration (rides the
+	# timed-modifier layer, auto-expires). Inert when the buff is absent.
+	if attacker_p != null and get_timed_modifier_total(attacker_p, "negate_wound_penalty") > 0:
+		wound_penalty = 0
 
 	# Attack roll: Trait + Skill rolled, keep Trait (s4.5 "Agility for attacks").
 	var trait_name: String = weapon.get("trait", "agility")

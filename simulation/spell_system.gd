@@ -95,6 +95,14 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"skill": "Spears", "duration_rounds": 50},  # Air 1: DR 1k1 air spear
 	"bo_of_water": {"kind": "conjure_weapon", "dr_rolled": 1, "dr_kept": 2,
 		"skill": "Staves", "duration_rounds": 50},  # Water 1: DR 1k2 water staff
+	# Coverage extension batch 5 (2026-06-20): wound-ward + fortify buffs.
+	"the_kamis_strength": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 5,
+		"mods": [{"kind": "reduction", "value": 20},
+			{"kind": "spell_damage_rolled", "value": "earth_ring"}]},  # Earth 5: Reduction 20 + Strength boost (no-Simple-Move deferred)
+	"near_to_ice": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
+		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Water 3: Wound Penalties negated
+	"force_of_will": {"kind": "buff", "target": "ally", "range_tiles": 10, "duration_rounds": 2,
+		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Earth 2: penalties negated (death-immunity deferred)
 	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
 	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
 	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.
