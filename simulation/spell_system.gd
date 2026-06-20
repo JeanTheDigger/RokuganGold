@@ -109,6 +109,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"earthen_wave": {"kind": "status", "condition": "prone", "save": "strength_contested_earth",
 		"range_tiles": 0, "aoe_radius": 5, "aoe_hits": "enemies", "caster_exempt": true,
 		"duration_rounds": 0},  # Earth 3: shockwave Knockdown in a line, Contested Strength vs Earth
+	"shining_light": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 10,
+		"mods": [{"kind": "shining_light", "value": 1}]},  # Fire 3: armor flares — melee attacker takes 2k2 + Blinded
 	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
 	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
 	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.

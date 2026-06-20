@@ -938,6 +938,9 @@ static func execute_melee_attack(
 		# Fires of Purity (s35 Fire): flame shroud. A shrouded DEFENDER burns its melee
 		# attacker (2k2); a shrouded ATTACKER's melee hit burns the target for an extra 2k2.
 		_apply_fires_of_purity(attacker, a_p, target, t_p, weapon_name, dice_engine)
+		# Shining Light (s35 Fire): a warded DEFENDER's armor flares when struck in melee —
+		# the attacker takes 2k2 and is Blinded. No effect on ranged attacks.
+		_apply_shining_light(attacker, a_p, t_p, weapon_name, dice_engine)
 
 		# Abominable Stench (s54.11 Nuppeppo): struck by an armed melee weapon → every living
 		# mortal within 20' (4 tiles) rolls Stamina TN 20 or is Fatigued.
@@ -3217,6 +3220,30 @@ static func _apply_fires_of_purity(
 			and not CharacterStats.is_dead(target):
 		WoundSystem.apply_damage(target,
 			dice_engine.roll_and_keep(FIRES_OF_PURITY_ROLLED, FIRES_OF_PURITY_KEPT, true).total, 0)
+
+
+## Shining Light (s35 Fire 3): an armor ward. When the wearer (struck DEFENDER, t_p) is hit in
+## melee, the attacker takes 2k2 and is Blinded (the "until Reactions Stage" window maps to the
+## standard roll-recovered Blinded). Ranged attacks bypass it. Inert unless t_p is warded.
+const SHINING_LIGHT_ROLLED: int = 2
+const SHINING_LIGHT_KEPT: int = 2
+static func _apply_shining_light(
+	attacker: L5RCharacterData,
+	a_p: IndividualCombat.Participant,
+	t_p: IndividualCombat.Participant,
+	weapon_name: String,
+	dice_engine: DiceEngine,
+) -> void:
+	if not IndividualCombat.get_weapon_profile(weapon_name).get("melee", true):
+		return
+	if t_p == null or IndividualCombat.get_timed_modifier_total(t_p, "shining_light") <= 0:
+		return
+	if CharacterStats.is_dead(attacker):
+		return
+	WoundSystem.apply_damage(attacker,
+		dice_engine.roll_and_keep(SHINING_LIGHT_ROLLED, SHINING_LIGHT_KEPT, true).total, 0)
+	if a_p != null:
+		IndividualCombat.apply_condition(a_p, IndividualCombat.CONDITION_BLINDED)
 
 
 ## Burning Blood (s54.5 Furu / Furu spawn): when a MELEE attacker wounds a burning-blood
