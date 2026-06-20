@@ -2201,11 +2201,18 @@ static func _apply_spell_status(
 	var dur: int = eff.get("duration_rounds", 0)
 	var save: String = eff.get("save", "none")
 	var tn: int = eff.get("save_tn", 0)
+	# s34 Earth bindings only affect Tainted creatures or Shadowlands/spirit creatures (others
+	# are immune — the manacles find no purchase). Gated by `requires_shadowlands` on the effect.
+	var require_shadow: bool = eff.get("requires_shadowlands", false)
 	for t in _gather_spell_targets(state, caster_id, target_id, target, eff):
 		var p: IndividualCombat.Participant = state.combat.participants.get(int(t["id"]), null)
 		if p == null:
 			continue
-		if save != "none" and _spell_save_resisted(state, caster, t["char"], save, tn, dice_engine):
+		var tch: L5RCharacterData = t["char"]
+		if require_shadow and tch.taint < 1.0 and tch.spirit_creature == null:
+			out.append({"id": t["id"], "status": "immune"})
+			continue
+		if save != "none" and _spell_save_resisted(state, caster, tch, save, tn, dice_engine):
 			out.append({"id": t["id"], "status": "resisted"})
 			continue
 		if dur > 0:
@@ -2854,6 +2861,24 @@ static func _spell_save_resisted(
 			var me: int = SpellSystem.get_ring_value(caster, Enums.Ring.EARTH)
 			return dice_engine.roll_and_keep(tr, tr, true).total \
 				>= dice_engine.roll_and_keep(me, me, true).total
+		"earth_contested":
+			# s34 Major Binding: target Earth vs caster Earth; the target resists if it wins.
+			var bte: int = SpellSystem.get_ring_value(ch, Enums.Ring.EARTH)
+			var bce: int = SpellSystem.get_ring_value(caster, Enums.Ring.EARTH)
+			return dice_engine.roll_and_keep(bte, bte, true).total \
+				>= dice_engine.roll_and_keep(bce, bce, true).total
+		"void_contested":
+			# s37 Essence of Void: target Void vs caster Void; the target resists if it wins.
+			var tv: int = SpellSystem.get_ring_value(ch, Enums.Ring.VOID)
+			var cv: int = SpellSystem.get_ring_value(caster, Enums.Ring.VOID)
+			return dice_engine.roll_and_keep(maxi(1, tv), maxi(1, tv), true).total \
+				>= dice_engine.roll_and_keep(maxi(1, cv), maxi(1, cv), true).total
+		"willpower_contested":
+			# s34 Prison of Earth: target Willpower vs caster Willpower; the target resists if it wins.
+			var tw2: int = maxi(1, ch.willpower)
+			var cw2: int = maxi(1, caster.willpower)
+			return dice_engine.roll_and_keep(tw2, tw2, true).total \
+				>= dice_engine.roll_and_keep(cw2, cw2, true).total
 		_:
 			return false  # "none" — auto-apply
 	return false
@@ -4753,6 +4778,12 @@ static func execute_npc_turn(
 
 	begin_turn(state, npc_id)
 
+	# Held / bound / treated-as-Down (s34/s35/s36/s37 incapacitation spells): the combatant
+	# may take no Actions on its Turn. Skip it entirely (the timed condition auto-expires in
+	# advance_round). Passive effects (fire/zone damage, others' attacks) still apply to it.
+	if IndividualCombat.CONDITION_INCAPACITATED in p.conditions:
+		return {"actions": [], "reason": "incapacitated"}
+
 	# -- Fear (s22.3/s02.4): resist nearby Fear sources or fight afraid (-1k0). --
 	apply_fear_checks(state, npc_id, npc, dice_engine)
 
@@ -5678,6 +5709,10 @@ static func execute_companion_turn(
 		return {"actions": [], "reason": "not_in_combat"}
 
 	begin_turn(state, cid)
+	# Held / bound / treated-as-Down (incapacitation spells): the companion takes no Actions.
+	var ip: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+	if ip != null and IndividualCombat.CONDITION_INCAPACITATED in ip.conditions:
+		return {"actions": [], "reason": "incapacitated"}
 	# Fear (s22.3/s02.4): a companion near an enemy Fear source resists or fights afraid.
 	apply_fear_checks(state, cid, character, dice_engine)
 	var cmd: int = CompanionSystem.decide_action(companion)

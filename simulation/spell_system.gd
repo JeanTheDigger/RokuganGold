@@ -201,6 +201,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Fire coverage extension batch 2 (2026-06-20): FireSystem ignite / extinguish.
 	"fiery_wrath": {"kind": "ignite_zone", "range_tiles": 20, "aoe_radius": 5},  # Fire 3: ignite all flammable tiles in a 50'×50' area (FireSystem; magical-fire / flesh-spared nuances not modeled)
 	"extinguish": {"kind": "extinguish", "aoe_radius": 20},  # Fire 1: snuff non-magical fire in 100' radius — clears burning tiles + on_fire from creatures (magical/non-magical not distinguished)
+	"everburning_rage": {"kind": "status", "condition": "incapacitated", "save": "none",
+		"range_tiles": 5, "aoe_radius": 0, "duration_rounds": 1},  # Fire 5: target treated as Down (no actual Wounds) for 1 Round
 	# --- Air (s33) ---
 	# Tempest of Air: Personal, 75' cone, 1k1 + Knockdown (Contested Earth vs caster Air)
 	"tempest_of_air": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1,
@@ -250,6 +252,15 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "insubstantial", "value": 1}]},  # Earth 2: dive into the earth — untargetable but cannot attack/cast (move-through-earth / 100yd earth-sight deferred)
 	"shelter_of_the_earth": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 9999,
 		"mods": [{"kind": "insubstantial", "value": 1}]},  # Earth 3: concealed as a natural object — untargetable but cannot act (modeled like Essence of Air's go-to-ground)
+	# Earth bindings (2026-06-20): incapacitate a Tainted/Shadowlands creature (the CONDITION_INCAPACITATED
+	# turn-gate skips its Turn + flat-foots it). The Tainted/spirit gate stands in for the GDD's
+	# per-spell Earth-rank / realm restrictions; GDD hours/permanent ≈ skirmish-length (9999).
+	"minor_binding": {"kind": "status", "condition": "incapacitated", "requires_shadowlands": true,
+		"range_tiles": 12, "aoe_radius": 0, "duration_rounds": 9999},  # Earth 1: imprison a minor Tainted Shadowlands creature
+	"major_binding": {"kind": "status", "condition": "incapacitated", "requires_shadowlands": true,
+		"save": "earth_contested", "range_tiles": 20, "aoe_radius": 0, "duration_rounds": 9999},  # Earth 5: Contested Earth → jade manacles hold any Shadowlands/Tainted creature
+	"prison_of_earth": {"kind": "status", "condition": "incapacitated", "requires_shadowlands": true,
+		"save": "willpower_contested", "range_tiles": 6, "aoe_radius": 0, "duration_rounds": 9999},  # Earth 6: Contested Willpower → imprison a Jigoku/Gaki/Toshigoku or non-human Tainted creature (the gem-imprison object nuance not modeled)
 	# --- Water (s36) ---
 	# Strike of the Tsunami: Range 25' cone, 3k3 + Knockdown (Earth TN 15)
 	"strike_of_the_tsunami": {"kind": "damage", "dr_rolled": 3, "dr_kept": 3,
@@ -274,6 +285,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "heal_on_damage", "value": 1}]},  # Water 4: a buffed target regains 1k1 Wounds whenever damaged
 	"strike_of_the_flowing_waters": {"kind": "buff", "target": "ally", "range_tiles": 2, "duration_rounds": 1,
 		"mods": [{"kind": "armor_bypass", "value": 1}]},  # Water 4: ignore the target's worn-armor Armor TN (+5 vs non-humans); the spell-ML3-effect bypass not modeled; does NOT negate Reduction or Defense/Full-Defense TN
+	"suitengus_embrace": {"kind": "status", "condition": "incapacitated", "save": "none",
+		"range_tiles": 5, "aoe_radius": 0, "duration_rounds": 3},  # Water 5: lungs fill with seawater — treated as Down (the per-round Stamina recovery + death-on-2-consecutive-fails deferred; 3-round hold PROVISIONAL)
 	# --- Void (s37, Ishiken-only) ---
 	# Touch the Emptiness: Range 30', single, 1k1 + Dazed (no save)
 	"touch_the_emptiness": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1,
@@ -286,6 +299,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"banish_the_void": {"kind": "ward", "aoe_radius": 4, "duration_rounds": 5,
 		"ward_elements": [4], "cast_tn_penalty": 10},  # Void 3: +10 TN to Void spells in the area (VP-cost-doubling + Shadow effects not modeled; ward owner exempt)
 	"draw_closed_the_veil": {"kind": "banish_spirit"},  # Void 4: banish a non-native spirit to its home realm (Contested Void vs Willpower for embodied spirits)
+	"essence_of_void": {"kind": "status", "condition": "incapacitated", "save": "void_contested",
+		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 9999},  # Void 4: Contested Void → held immobile, unable to act (Concentration = skirmish; the per-round break roll is the deferred nuance)
 	# --- Heal spells (s36 Water) ---
 	# kind "heal": restores Wounds to an ally (or self) within reach. heal field:
 	#   "margin"          = Wounds equal to the cast roll's margin over TN (Path to Inner Peace)

@@ -5945,6 +5945,25 @@ non-human creatures) before resolve_attack; does NOT negate Reduction or Defense
 "spell ML3- effects" bypass is not modeled. Runtime-verified: faced armor TN dropped 40→25 (the
 target's 15 bonus). Fire now 6 / Water now 9 combat spells this session.
 
+### Spell coverage — incapacitation turn-gate + 6 bind/hold spells (2026-06-20, runtime-verified 6/6)
+Built the "can't-act" turn-gate the earlier finding named as the blocker for every "treated-as-Down /
+held immobile / bound" spell. New `IndividualCombat.CONDITION_INCAPACITATED` (a TIMED condition):
+the turn loop (`execute_npc_turn` + `execute_companion_turn`) skips an incapacitated combatant's Turn
+entirely, and `get_armor_tn` flat-foots it (Armor TN 5). Applied as a timed condition so it runs its
+full duration (not shed by a recovery roll) and auto-expires in advance_round; passive effects (fire/
+zone damage, others' attacks) still apply. **Scoping choice:** a DEDICATED condition, NOT a retrofit
+of `CONDITION_STUNNED` — existing atemi/spell Stuns keep their current flat-foot-only behavior (no
+balance change), while the explicit bind/hold spells get faithful incapacitation. Six spells wired as
+`status` → incapacitated: **Everburning Rage** (Fire 5, 1 Round, no save), **Suitengu's Embrace**
+(Water 5, 3-round hold PROVISIONAL — the per-round Stamina recovery + death-on-2-fails deferred),
+**Essence of Void** (Void 4, Contested Void, Concentration = skirmish; per-round break deferred),
+**Minor / Major / Prison of Earth** bindings (Earth 1/5/6 — gated by a new `requires_shadowlands`
+flag: only Tainted creatures or spirit_creatures are affected, others immune; Major adds a Contested
+Earth save, Prison a Contested Willpower save; hours/permanent ≈ skirmish 9999). Three new contested
+save types (`earth_contested`, `void_contested`, `willpower_contested`). Runtime-verified: incapacitated
+enemy skips its turn + flat-foots to Armor TN 15; minor_binding immune vs a non-Tainted target,
+incapacitates a Tainted one. Earth 7 / Water 10 / Fire 7 / Void 3 combat spells this session.
+
 ### Spell coverage session summary (2026-06-20)
 This session wired **26 combat spells across all 5 elements** + **1 world-sim spell** (Legacy of
 Kaze-no-Kami spirit-bird letters) + **1 pre-existing bug fix** (earths_stagnation move sign), all

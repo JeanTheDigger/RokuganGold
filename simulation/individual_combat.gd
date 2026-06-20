@@ -115,6 +115,11 @@ const CONDITION_PRONE:     String = "prone"
 const CONDITION_STUNNED:   String = "stunned"
 const CONDITION_AFRAID:     String = "afraid"   # s22.3/s02.4 Fear: -1k0 to all rolls while in range
 const CONDITION_DEAFENED:   String = "deafened" # s35 Fury of Osano-Wo rider; combat effect deferred (no verbal/hearing mechanic)
+# Held/bound/treated-as-Down: the combatant may take no actions on its Turn (the turn loop skips it)
+# and is flat-footed (Armor TN 5). Used by the s34/s36/s35/s37 incapacitation spells (Earth bindings,
+# Water Suitengu's Embrace, Fire Everburning Rage, Void Essence of Void). Applied as a TIMED condition
+# so it runs its full duration (not shed by a recovery roll) and auto-expires in advance_round.
+const CONDITION_INCAPACITATED: String = "incapacitated"
 
 # GDD s40 describes striking after first blood as dishonorable and conceding
 # a death duel as shameful, but specifies no numeric honor/glory values.
@@ -1012,6 +1017,8 @@ static func get_armor_tn(
 		cond_mod -= 10
 	if CONDITION_STUNNED in participant.conditions:
 		return 5 + character.armor_tn_bonus  # Stunned: Armor TN = 5 + armor bonuses
+	if CONDITION_INCAPACITATED in participant.conditions:
+		return 5 + character.armor_tn_bonus  # Held/bound/treated-as-Down: flat-footed
 	if CONDITION_BLINDED in participant.conditions:
 		# Blinded base = Reflexes + 5 (armor still adds)
 		return character.reflexes + 5 + character.armor_tn_bonus
