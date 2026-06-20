@@ -1942,7 +1942,7 @@ static func execute_cast_spell(
 			"caster_id": caster_id, "spell_id": spell_id, "status": res["spell_status"],
 		})
 	elif res.get("success", false) and eff.get("kind", "") == "cleanse":
-		res["spell_cleanse"] = _apply_spell_cleanse(state, caster_id, caster, eff)
+		res["spell_cleanse"] = _apply_spell_cleanse(state, caster_id, caster, eff, target_id)
 		state.combat_log.append({
 			"type": "spell_cleanse", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "cleanse": res["spell_cleanse"],
@@ -1991,6 +1991,18 @@ static func execute_cast_spell(
 		state.combat_log.append({
 			"type": "spell_banish", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "banished": res["banished"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "ignite_zone":
+		res["ignited"] = _apply_spell_ignite_zone(state, caster_id, target_id, eff)
+		state.combat_log.append({
+			"type": "spell_ignite", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "ignited": res["ignited"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "extinguish":
+		res["extinguished"] = _apply_spell_extinguish(state, caster_id, eff)
+		state.combat_log.append({
+			"type": "spell_extinguish", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "extinguished": res["extinguished"],
 		})
 	state.combat_log.append({
 		"type": "spell_cast", "round": state.combat.round_number,
@@ -2190,14 +2202,21 @@ static func _apply_spell_status(
 	return out
 
 
-## Apply a cleanse spell (s36 Typhoon's Surge): free up to Water Rank living allies within range
-## of the caster from Fatigued + Dazed and heal each Water Rank Wounds. Nearest allies first.
+## Apply a cleanse spell (s36 Typhoon's Surge / Rejuvenating Vapors): free up to `cleanse_cap`
+## living allies within range from a set of conditions and heal each `cleanse_heal` Wounds, nearest
+## first. Defaults (Typhoon's Surge): cap = Water Rank, conditions = Fatigued + Dazed, heal = Water
+## Rank. Rejuvenating Vapors overrides (cap 1, Fatigued only, heal 0).
 static func _apply_spell_cleanse(
 	state: MapCombatState, caster_id: int, caster: L5RCharacterData, eff: Dictionary,
+	target_id: int = -1,
 ) -> Array:
 	var out: Array = []
 	var rng: int = eff.get("range_tiles", 10)
-	var cap: int = SpellSystem.get_ring_value(caster, Enums.Ring.WATER)
+	var water_rank: int = SpellSystem.get_ring_value(caster, Enums.Ring.WATER)
+	var cap: int = int(eff.get("cleanse_cap", water_rank))
+	var heal_amt: int = int(eff.get("cleanse_heal", water_rank))
+	var conditions: Array = eff.get("cleanse_conditions",
+		[IndividualCombat.CONDITION_FATIGUED, IndividualCombat.CONDITION_DAZED])
 	var cf: String = String(state.factions.get(caster_id, ""))
 	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
 	var cands: Array = []
@@ -2211,16 +2230,21 @@ static func _apply_spell_cleanse(
 		var d: int = maxi(absi(center.x - pos.x), absi(center.y - pos.y))
 		if d > rng:
 			continue
+		# The explicitly-targeted ally (single-target Touch cleanse like Rejuvenating Vapors)
+		# is cleansed first within the cap, ahead of the merely-nearest.
+		if cid == target_id:
+			d = -1
 		cands.append({"id": cid, "char": ch, "d": d})
 	cands.sort_custom(func(a, b): return a["d"] < b["d"])
 	for i in mini(cap, cands.size()):
 		var c: Dictionary = cands[i]
 		var p: IndividualCombat.Participant = state.combat.participants.get(int(c["id"]), null)
 		if p != null:
-			IndividualCombat.remove_condition(p, IndividualCombat.CONDITION_FATIGUED)
-			IndividualCombat.remove_condition(p, IndividualCombat.CONDITION_DAZED)
-		WoundSystem.heal_wounds(c["char"], cap)
-		out.append({"id": c["id"], "cleansed": true, "healed": cap})
+			for cond in conditions:
+				IndividualCombat.remove_condition(p, String(cond))
+		if heal_amt > 0:
+			WoundSystem.heal_wounds(c["char"], heal_amt)
+		out.append({"id": c["id"], "cleansed": true, "healed": heal_amt})
 	return out
 
 
@@ -2613,6 +2637,56 @@ static func _apply_spell_banish_spirit(
 	if target_id not in state.fled_ids:
 		state.fled_ids.append(target_id)
 	return {"id": target_id, "banished": true}
+
+
+## Ignite every flammable tile in an area (s35 Fiery Wrath) via FireSystem. Centered on the target
+## tile (ranged) or the caster. The per-round burn + spread is handled by advance_round's FireSystem
+## tick. Returns the count of newly-lit tiles. (The "flesh spared / no spread to adjoining structures"
+## GDD nuances are not modeled — the tile layer has no flesh, and FireSystem spread is weather-gated.)
+static func _apply_spell_ignite_zone(
+	state: MapCombatState, caster_id: int, target_id: int, eff: Dictionary,
+) -> Dictionary:
+	if state.map == null:
+		return {"count": 0}
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	if int(eff.get("range_tiles", 0)) > 0 and state.positions.has(target_id):
+		center = state.positions[target_id]
+	var radius: int = int(eff.get("aoe_radius", 1))
+	var count: int = 0
+	for dy in range(-radius, radius + 1):
+		for dx in range(-radius, radius + 1):
+			if FireSystem.ignite(state.map, center.x + dx, center.y + dy):
+				count += 1
+	return {"center": center, "radius": radius, "count": count}
+
+
+## Snuff non-magical fire in an area (s35 Extinguish): clear burning tiles (→ FLOOR_ASH) within the
+## radius of the caster and clear the on_fire flag from any creature in range. Returns the counts.
+## (The magical/non-magical distinction is not tracked by FireSystem, so all fire in range is cleared.)
+static func _apply_spell_extinguish(
+	state: MapCombatState, caster_id: int, eff: Dictionary,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var radius: int = int(eff.get("aoe_radius", 20))
+	var tiles_cleared: int = 0
+	if state.map != null:
+		for idx in state.map.burning_tiles.keys():
+			var tx: int = int(idx) % state.map.width
+			var ty: int = int(idx) / state.map.width
+			if maxi(absi(center.x - tx), absi(center.y - ty)) <= radius:
+				state.map.set_delta(tx, ty, Enums.TileType.FLOOR_ASH)
+				state.map.burning_tiles.erase(idx)
+				tiles_cleared += 1
+	var creatures_doused: int = 0
+	for cid in state.positions.keys():
+		var pos: Vector2i = state.positions[cid]
+		if maxi(absi(center.x - pos.x), absi(center.y - pos.y)) > radius:
+			continue
+		var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+		if p != null and p.on_fire:
+			p.on_fire = false
+			creatures_doused += 1
+	return {"tiles_cleared": tiles_cleared, "creatures_doused": creatures_doused}
 
 
 ## Build a shiryo ancestor spirit (s33 Defender From Beyond, Kitsu only): the GDD "typical shiryo"
@@ -6621,6 +6695,13 @@ static func _apply_hit(
 	if t_p != null and IndividualCombat.get_timed_modifier_total(a_p, "weapon_stun") > 0 \
 			and not CharacterStats.is_dead(target):
 		IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_STUNNED)
+
+	# Heart of the Water Dragon (s36): a buffed target instantly regains 1k1 Wounds whenever it
+	# suffers damage during the duration. Fires only when actual Wounds landed and it survived.
+	if t_p != null and not CharacterStats.is_dead(target) \
+			and IndividualCombat.get_timed_modifier_total(t_p, "heal_on_damage") > 0 \
+			and int(wd_result.get("final_damage", 0)) > 0:
+		WoundSystem.heal_wounds(target, dice_engine.roll_and_keep(1, 1, true).total)
 
 	# Arugai "Nearly Immortal" / heart_kill (s54.5): the oni's wounds heal almost instantly,
 	# so body damage can never slay it — only destroying its heart can. While the heart is

@@ -5927,6 +5927,20 @@ instant-kill — new effect); unbound_essence (ring-reorder — Pending Redesign
 ring-adjacent); false_whispers / reach_through_the_void / the_empty_voice / ring_of_the_void
 (utility — no consumer).
 
+### Spell coverage — clean-wins batch 2 (FireSystem + heal-on-damage, 2026-06-20, runtime-verified 7/7)
+Continuing wire-and-go after the full element pass: **Fiery Wrath** (Fire 3) — new `ignite_zone` effect
+that ignites every flammable tile in a 50'×50' area via `FireSystem.ignite` (the per-round burn/spread
+is handled by advance_round's existing FireSystem tick; flesh-spared / no-spread nuances not modeled);
+**Extinguish** (Fire 1) — new `extinguish` effect that snuffs burning tiles (→ FLOOR_ASH) and clears the
+`on_fire` flag from creatures within 100' (magical/non-magical not distinguished); **Rejuvenating Vapors**
+(Water 2) — the cleanse handler is now parameterized (`cleanse_cap` / `cleanse_conditions` / `cleanse_heal`)
+and takes a `target_id` so a single-target Touch cleanse prioritizes the named ally; Rejuvenating Vapors
+removes Fatigue only with no heal (Typhoon's Surge keeps its Fatigue+Dazed+heal defaults); **Heart of the
+Water Dragon** (Water 4) — a `heal_on_damage` buff: a new hook in `_apply_hit` (mirroring weapon_stun)
+heals the buffed target 1k1 whenever it takes actual damage and survives. Runtime-verified: fiery_wrath
+lit 25 CROPS tiles; extinguish cleared them + doused an on-fire creature; rejuvenating removed Fatigue
+without healing; heal_on_damage modifier set. Fire now 6 / Water now 8 combat spells this session.
+
 ### Spell coverage session summary (2026-06-20)
 This session wired **26 combat spells across all 5 elements** + **1 world-sim spell** (Legacy of
 Kaze-no-Kami spirit-bird letters) + **1 pre-existing bug fix** (earths_stagnation move sign), all

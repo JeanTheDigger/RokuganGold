@@ -198,6 +198,9 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"ward_elements": [2], "cast_tn_penalty": 15},  # Fire 6: +15 TN to Fire spells in the area (1-mile = whole skirmish; building fire-immunity not modeled)
 	"agashas_shield": {"kind": "ward", "aoe_radius": 6, "duration_rounds": 6,
 		"ward_elements": [2], "dr_reduction_rolled": 3},  # Fire 3: hostile Fire-spell DR -3k0 inside (the -4k0 cast-roll dice penalty does not map to the flat-TN ward; not modeled)
+	# Fire coverage extension batch 2 (2026-06-20): FireSystem ignite / extinguish.
+	"fiery_wrath": {"kind": "ignite_zone", "range_tiles": 20, "aoe_radius": 5},  # Fire 3: ignite all flammable tiles in a 50'×50' area (FireSystem; magical-fire / flesh-spared nuances not modeled)
+	"extinguish": {"kind": "extinguish", "aoe_radius": 20},  # Fire 1: snuff non-magical fire in 100' radius — clears burning tiles + on_fire from creatures (magical/non-magical not distinguished)
 	# --- Air (s33) ---
 	# Tempest of Air: Personal, 75' cone, 1k1 + Knockdown (Contested Earth vs caster Air)
 	"tempest_of_air": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1,
@@ -265,6 +268,10 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "move_water_penalty", "value": 2}]},  # Water 2: Water +2 for movement distance (positive = increase)
 	"clarity_of_purpose": {"kind": "buff", "target": "ally", "aoe_radius": 2, "duration_rounds": 2,
 		"mods": [{"kind": "initiative_score", "value": 5}]},  # Water 1: all allies within 10' +5 Initiative Score
+	"rejuvenating_vapors": {"kind": "cleanse", "range_tiles": 1, "cleanse_cap": 1,
+		"cleanse_conditions": ["fatigued"], "cleanse_heal": 0},  # Water 2: removes Fatigue from a touched ally (Void-slot restore is out-of-combat)
+	"heart_of_the_water_dragon": {"kind": "buff", "target": "ally", "aoe_radius": 5, "duration_rounds": 5,
+		"mods": [{"kind": "heal_on_damage", "value": 1}]},  # Water 4: a buffed target regains 1k1 Wounds whenever damaged
 	# --- Void (s37, Ishiken-only) ---
 	# Touch the Emptiness: Range 30', single, 1k1 + Dazed (no save)
 	"touch_the_emptiness": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1,
