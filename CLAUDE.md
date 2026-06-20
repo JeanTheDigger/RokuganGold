@@ -5696,6 +5696,18 @@ they comply with (`ctx.compliance_intimidators`) — covering non-hostile court 
 Phase-4 hostile filter doesn't. Runtime-verified 3/3 (accumulated reduction lifts Negotiate
 success 44→79/80; compliance +10 drops it 44→18/80; Persuade eased only by the persuade pool).
 
+### s31-37 spell combat coverage — extension batch 1 (2026-06-20)
+Added combat effects for 4 more library spells (the library has 287 spells; only ~28 had combat
+effects). All values transcribed exactly from s34/s35: **tail_of_the_fire_dragon** (Fire 2,
+single damage DR=Fire Ring, 30'), **ravenous_swarms** (Fire 3, 5k3 bolt, 30' — the fire-spell-
+disruption rider deferred), **the_dragons_talon** (Fire 5, 8k6 AoE, up to 10 targets, 100',
+only foes of Insight Rank ≤ 2), **grasp_of_earth** (Earth 2, Entangled, 50'). Two new
+`_gather_spell_targets` fields support Dragon's Talon: `target_max_insight` (skip stronger foes)
+and `aoe_max_targets` (cap struck count). Runtime-verified 5/5 (damage lands; grasp entangles;
+Dragon's Talon hits Insight-1/2 foes and spares an Insight-5 foe). The remaining ~255 library
+spells without combat effects are mostly utility, conjured-weapon, or need mechanics the schema
+lacks (weapon replacement, terrain pits with save-negates-damage, conditional-expiry buffs).
+
 ### Pending Redesign
 (None currently pending.)
 

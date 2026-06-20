@@ -60,6 +60,16 @@ static func has_jade_or_crystal_property(spell_id: String) -> bool:
 ## weather damage bonuses are deferred to later tranches.
 const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# --- Fire (s35) ---
+	# Coverage extension (2026-06-20): tendril/swarm/dragon-talon damage + Earth grasp.
+	"tail_of_the_fire_dragon": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
+		"range_tiles": 6, "aoe_radius": 0},  # Fire 2: DR = caster Fire Ring, 30'
+	"ravenous_swarms": {"kind": "damage", "dr_rolled": 5, "dr_kept": 3,
+		"range_tiles": 6, "aoe_radius": 0},  # Fire 3: 5k3 bolt, 30' (fire-disrupt rider deferred)
+	"the_dragons_talon": {"kind": "damage", "dr_rolled": 8, "dr_kept": 6,
+		"range_tiles": 20, "aoe_radius": 20, "aoe_hits": "enemies", "caster_exempt": true,
+		"target_max_insight": 2, "aoe_max_targets": 10},  # Fire 5: 8k6, up to 10 weak foes, 100'
+	"grasp_of_earth": {"kind": "status", "condition": "entangled", "save": "none",
+		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 0},  # Earth 2: stony grip, 50'
 	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
 	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
 	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.

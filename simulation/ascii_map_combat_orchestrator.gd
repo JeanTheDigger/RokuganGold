@@ -2050,7 +2050,13 @@ static func _gather_spell_targets(
 		var ch = state.combatants.get(cid, null)
 		if ch == null or CharacterStats.is_dead(ch):
 			continue
+		# s35 The Dragon's Talon: the Fire kami only strike weak foes (Insight Rank ≤ N).
+		if eff.has("target_max_insight") and ch.insight_rank > int(eff["target_max_insight"]):
+			continue
 		targets.append({"id": cid, "char": ch})
+	# Optional cap on the number of struck targets (e.g. "up to 10 target creatures").
+	if eff.has("aoe_max_targets") and targets.size() > int(eff["aoe_max_targets"]):
+		targets.resize(int(eff["aoe_max_targets"]))
 	return targets
 
 
