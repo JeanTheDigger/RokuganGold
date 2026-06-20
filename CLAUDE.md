@@ -5699,6 +5699,26 @@ success 44→79/80; compliance +10 drops it 44→18/80; Persuade eased only by t
 ### Pending Redesign
 (None currently pending.)
 
+### ASCII Map System — Live-Reachability Status (2026-06-20)
+**The ASCII map / tile-combat layer is extensively built and partly verified, but is NOT
+reachable in a live game session.** Full file-by-file breakdown in `ASCII_MAP_GAP_REPORT.md`
+(repo root). Summary:
+- **No production entry point.** The only caller that starts a mission is `scripts/ui/combat_demo.gd`
+  (a manual demo scene). The world sim never launches a mission — the trigger is **PC world-map
+  travel, which is ON HOLD per owner (2026-06-06)**. `mission_flow.gd` (world→mission glue) is
+  written but unverified and unwired.
+- **Best-verified:** combat math core (`individual_combat`, s40 maneuvers/grapple, NPC AI,
+  companions) and the map generators (connectivity-swept under Godot).
+- **Unverified-at-runtime:** `combat_controller` and most of the mission pipeline are GUT-test-only
+  (GUT is non-functional headless). The s56.16 spiritual encounter loop is static-only.
+- **Coverage gaps:** many s31–37 spells have no combat effect yet; several creature abilities
+  deferred; **no human turn-based command UI** (a player can move/door/look/disarm only — not
+  attack/cast/maneuver). Relocation (s56.13), in-mission kansen, falling damage are wired but have
+  no trigger (all wait on live entry).
+- **Single unlock:** lifting the PC-travel HOLD → wire `world arrival → MissionEntryController →
+  MissionLauncher → CombatScreen`, then build the player command loop and runtime-verify the
+  static-only layers.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
