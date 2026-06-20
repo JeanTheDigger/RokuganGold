@@ -70,6 +70,16 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"target_max_insight": 2, "aoe_max_targets": 10},  # Fire 5: 8k6, up to 10 weak foes, 100'
 	"grasp_of_earth": {"kind": "status", "condition": "entangled", "save": "none",
 		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 0},  # Earth 2: stony grip, 50'
+	# Coverage extension batch 2 (2026-06-20).
+	"envious_flames": {"kind": "damage", "dr_rolled": 2, "dr_kept": 2,
+		"range_tiles": 6, "aoe_radius": 0},  # Fire 1: 2k2 unerring lance, 30' (cast-disrupt rider deferred)
+	"the_fires_from_within": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
+		"range_tiles": 20, "aoe_radius": 0},  # Fire 2: the classic fireball, DR = Fire Ring, 100'
+	"the_fist_of_osano_wo": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
+		"range_tiles": 10, "aoe_radius": 4, "aoe_hits": "all", "caster_exempt": true},  # Fire 3: DR=Fire Ring, 20' radius
+	"earthquake": {"kind": "damage", "dr_rolled": 2, "dr_kept": 1,
+		"range_tiles": 0, "aoe_radius": 99, "aoe_hits": "all", "caster_exempt": true,
+		"rider": {"condition": "prone", "save": "none"}},  # Earth 5: 2k1 + Prone, caster exempt
 	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
 	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
 	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.
