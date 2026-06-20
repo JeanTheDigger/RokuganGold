@@ -2570,6 +2570,9 @@ static func _resolve_buff_value(caster: L5RCharacterData, value) -> int:
 			"neg_fire_ring":
 				# s35 Death of Flame: −Fire Ring to the target's Agility (its attack-roll slice).
 				return -SpellSystem.get_ring_value(caster, Enums.Ring.FIRE)
+			"earth_school_rank":
+				# s34 Armor of the Emperor: per-die reduction = the caster's (Earth) School Rank.
+				return SpellSystem.get_effective_school_rank(caster, Enums.Ring.EARTH)
 			"be_the_mountain_reduction":
 				return mini(20, 5 * SpellSystem.get_effective_school_rank(caster, Enums.Ring.EARTH))
 			_:
@@ -7154,6 +7157,20 @@ static func _apply_hit(
 		reduction += SpiritAbilitySystem.protection_of_yomi_reduction(target.spirit_creature)
 		var filt: Dictionary = SpiritAbilitySystem.incoming_damage(target.spirit_creature, w_kind)
 		raw = 0 if filt["heals"] else int(round(float(raw) * float(filt["multiplier"])))
+	# Armor of the Emperor (s34 Earth 4): each individual kept damage die against the warded
+	# target has its total reduced by the caster's School Rank, floored at 0 — so the amount
+	# removed is Σ min(die, N) over the kept damage dice. Stacks with armor Reduction. Covers
+	# the central melee+ranged path (atemi/charge/spirit-filtered damage not threaded).
+	if t_p != null and raw > 0:
+		var pdr: int = IndividualCombat.get_timed_modifier_total(t_p, "per_die_reduction")
+		if pdr > 0:
+			var dres = dmg.get("dice_result", {})
+			var dice_obj = dres.get("dice", null) if dres is Dictionary else null
+			if dice_obj != null:
+				var removed: int = 0
+				for die_v in dice_obj.kept_dice:
+					removed += mini(int(die_v), pdr)
+				raw = maxi(0, raw - removed)
 	# Power of the Earth Dragon (s34): an absorption ward soaks incoming Wounds (post-Reduction)
 	# until its pool (100 base) is exhausted, then ends.
 	if t_p != null and t_p.absorb_pool > 0 and raw > 0:

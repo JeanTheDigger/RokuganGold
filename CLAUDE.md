@@ -6158,11 +6158,27 @@ not falsely blocked. No regression (ranged/zone drivers re-pass). LIMITATIONS: t
 LOS only (melee is adjacent; FOV/exploration sight is the separate CombatController layer, not wired);
 the damp-materials / extinguish-small-flames flavour is not modeled. Air 14 this session.
 
+### Spell coverage — per-die reduction batch 13 (2026-06-20, runtime-verified 5/5)
+**Armor of the Emperor** (Earth 4, self ward) — "each individual damage die has its total reduced by the
+caster's School Rank; cannot reduce a die below 0." Wired via a new `per_die_reduction` buff mod read at
+the **central** damage point `_apply_hit` (which both `execute_melee_attack` and `execute_ranged_attack`
+route through): after `resolve_damage`, the removed amount = `Σ min(die, N)` over the kept damage dice
+(`dmg["dice_result"]["dice"].kept_dice` — `DiceResult.kept_dice` is exposed), subtracted from `raw`
+(floored at 0), stacking with armor Reduction. New value formula `earth_school_rank` (effective Earth
+school rank). 5 Rounds, self. Gated on the new mod (== 0 for everyone else), so it is a **no-op unless
+the ward is active** — the central damage path is unchanged for all other combat (broad regression
+re-passes). Runtime-verified: per_die_reduction set = school rank 5; a warded defender takes avg 11.4
+melee damage vs an unwarded control's 22.6 (≈ −11, the faithful 2-kept-dice × rank-5 mitigation incl.
+explosion handling); the floor keeps damage ≥ 0. LIMITATION: covers the central melee+ranged path only —
+atemi/charge/spirit-filtered/spell damage are not threaded (documented partial, safe because a missing
+site just means the ward doesn't apply there, unlike the unsafe ring refactor). Earth combat spells now
+include their signature defensive ward.
+
 ### Spell coverage session summary (2026-06-20, running)
-This session has wired **~61 combat spells across all 5 elements** (initial all-element pass + clean-wins
+This session has wired **~62 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
 forced-stance batch 5 + purify-zone batch 6 + guided-auto-hit batch 7 + AoE-mobility batch 8 +
-action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11 + fog batch 12) + **1 world-sim spell** (Legacy of Kaze-no-Kami
+action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11 + fog batch 12 + per-die-reduction batch 13) + **1 world-sim spell** (Legacy of Kaze-no-Kami
 spirit-bird letters) + **2 pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty`
 was also the hook reused by Suitengu's Curse), all runtime-verified via headless drivers (full project
 import 0 parse errors throughout). Combat-effect total rose ~76 → ~133. New reusable infra built: the
