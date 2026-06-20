@@ -2029,6 +2029,13 @@ static func execute_cast_spell(
 		res["void_restored"] = _apply_spell_restore_void(state, caster_id, target_id, target)
 	elif res.get("success", false) and eff.get("kind", "") == "steal_void":
 		res["void_stolen"] = _apply_spell_steal_void(state, caster_id, caster, target_id, target, dice_engine)
+	elif res.get("success", false) and eff.get("kind", "") == "instant_kill":
+		res["instant_kill"] = _apply_spell_instant_kill(
+			state, caster_id, caster, target_id, target, eff, dice_engine)
+		state.combat_log.append({
+			"type": "spell_instant_kill", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "result": res["instant_kill"],
+		})
 	state.combat_log.append({
 		"type": "spell_cast", "round": state.combat.round_number,
 		"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
@@ -2766,6 +2773,49 @@ static func _apply_spell_steal_void(
 	return {"id": target_id, "stolen": 1}
 
 
+## Instant-kill spell (s35 Consumed by Five Fires / s37 Unmake the World): reduce the target to
+## Dead outright. `contested` (e.g. earth_contested_void) gates the kill behind a roll the caster must
+## win. `fire_immune_blocks` aborts vs a Fire-resistant creature. `reciprocal` makes the caster suffer
+## the same Wounds it inflicted, unmitigated (the suicidal Consumed-by-Five-Fires cost). Wounds
+## inflicted = the count needed to bring the (possibly already wounded) target to its Dead threshold.
+static func _apply_spell_instant_kill(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary, dice_engine: DiceEngine,
+) -> Dictionary:
+	if target == null or CharacterStats.is_dead(target):
+		return {"reason": "no_target"}
+	var rng: int = int(eff.get("range_tiles", 10))
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		var cp: Vector2i = state.positions[caster_id]
+		var tp: Vector2i = state.positions[target_id]
+		if maxi(absi(cp.x - tp.x), absi(cp.y - tp.y)) > rng:
+			return {"reason": "out_of_range"}
+	# "Cannot target creatures resistant to Fire" (Consumed by Five Fires).
+	if eff.get("fire_immune_blocks", false) and target.spirit_creature != null \
+			and (target.spirit_creature.has_tag("flame_immune") \
+				or target.spirit_creature.has_tag("fire_resist_mundane")):
+		return {"reason": "fire_resistant", "id": target_id}
+	# Contested gate: the caster must WIN (the target resists by winning the named contest).
+	var contested: String = String(eff.get("contested", ""))
+	if contested != "" and _spell_save_resisted(state, caster, target, contested, 0, dice_engine):
+		return {"reason": "resisted", "id": target_id}
+	# Dead threshold: spirit = wounds_dead; mortal = 8×per-level + 1 (capacity is the Out boundary).
+	var dead_thresh: int
+	if target.spirit_creature != null and target.spirit_creature.wounds_dead > 0:
+		dead_thresh = target.spirit_creature.wounds_dead
+	else:
+		dead_thresh = CharacterStats.get_total_wound_capacity(target) + 1
+	var inflicted: int = maxi(0, dead_thresh - target.wounds_taken)
+	target.wounds_taken = dead_thresh
+	var out: Dictionary = {"id": target_id, "killed": CharacterStats.is_dead(target), "inflicted": inflicted}
+	# Reciprocal self-damage (Consumed by Five Fires): the caster takes the same Wounds, unmitigated.
+	if eff.get("reciprocal", false) and inflicted > 0:
+		WoundSystem.apply_damage(caster, inflicted, 0)
+		out["caster_wounds"] = inflicted
+		out["caster_dead"] = CharacterStats.is_dead(caster)
+	return out
+
+
 ## Build a shiryo ancestor spirit (s33 Defender From Beyond, Kitsu only): the GDD "typical shiryo"
 ## has the Spirit trait, all Rings at 3, and Rank 4 in relevant Skills. Attacks as Ring 3 + Skill 4
 ## (keep Ring); katana-equivalent damage; standard human wound track from Earth 3. Not Invulnerable.
@@ -2923,6 +2973,13 @@ static func _spell_save_resisted(
 			var bce: int = SpellSystem.get_ring_value(caster, Enums.Ring.EARTH)
 			return dice_engine.roll_and_keep(bte, bte, true).total \
 				>= dice_engine.roll_and_keep(bce, bce, true).total
+		"earth_contested_void":
+			# s37 Unmake the World: caster Void vs target Earth; the caster must WIN, so the target
+			# resists when its Earth roll ties or beats the caster's Void roll.
+			var ute: int = SpellSystem.get_ring_value(ch, Enums.Ring.EARTH)
+			var ucv: int = SpellSystem.get_ring_value(caster, Enums.Ring.VOID)
+			return dice_engine.roll_and_keep(maxi(1, ute), maxi(1, ute), true).total \
+				>= dice_engine.roll_and_keep(maxi(1, ucv), maxi(1, ucv), true).total
 		"void_contested":
 			# s37 Essence of Void: target Void vs caster Void; the target resists if it wins.
 			var tv: int = SpellSystem.get_ring_value(ch, Enums.Ring.VOID)

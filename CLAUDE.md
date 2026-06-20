@@ -5995,13 +5995,32 @@ immunity is "Fatigue from lack of rest," which has no skirmish trigger (combat F
 environmental), so a combat `fatigue_immune` would over-broaden it; it is out-of-combat utility (ASK
 territory). Fire 8 / Water 12 combat spells this session.
 
+### Spell coverage — clean-wins batch 4 (instant-kill spells, 2026-06-20, runtime-verified 9/9)
+The two iconic outright-kill spells, via a shared new `instant_kill` effect (`_apply_spell_instant_kill`).
+**Consumed by Five Fires** (Fire 5) — reduces the target to Dead AND the caster "immediately suffers
+the same number of Wounds as were inflicted on the target" unmitigated (the suicidal cost, GDD-exact):
+`reciprocal: true`. Wounds inflicted = the count needed to bring the (possibly already-wounded) target
+to its Dead threshold, so a healthy target's death (cap+1) is often lethal to the caster while a
+near-dead target costs little. `fire_immune_blocks: true` aborts vs a Fire-resistant creature
+(flame_immune/fire_resist_mundane). **Unmake the World** (Void 6) — a Contested Void(caster) vs
+Earth(target) kill (new `earth_contested_void` save: the caster must WIN; the target resists on a tie),
+no reciprocal; the non-magical-object auto-kill + nemuranai ramifications are not modeled (objects
+aren't combat entities). Dead threshold computed correctly per the wound model (spirit = `wounds_dead`;
+mortal = `get_total_wound_capacity + 1`, since capacity is the Out boundary). **NPC-AI note:** neither is
+in the `_npc_maybe_cast_spell` damage/status picker — both are deliberate PC spells (Consumed by Five
+Fires is "used only in the most desperate need"; an NPC would not auto-cast a suicide nuke). Runtime-
+verified: five_fires kills a healthy target for cap+1 reciprocal → caster also dies; near-dead target →
+reciprocal 1; fire-resistant immune; out-of-range fizzles; unmake_the_world kills on a won contest with
+zero caster wounds, and an Earth-9 target resisted a Void-1 caster 10/10. Fire 9 / Void 8 this session.
+
 ### Spell coverage session summary (2026-06-20, running)
-This session has wired **~44 combat spells across all 5 elements** (initial all-element pass + clean-wins
-batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3) + **1 world-sim spell**
-(Legacy of Kaze-no-Kami spirit-bird letters) + **2 pre-existing bug fixes** (earths_stagnation move sign;
-its `move_water_penalty` was also the hook reused by Suitengu's Curse), all runtime-verified via headless
-drivers (full project import 0 parse errors throughout). Combat-effect total rose ~76 → ~120. New reusable
-infra built: the `no_magic_heal` block + `free_move_tiles` buff (batch 3), the `incapacitated` turn-gate
+This session has wired **~46 combat spells across all 5 elements** (initial all-element pass + clean-wins
+batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4)
++ **1 world-sim spell** (Legacy of Kaze-no-Kami spirit-bird letters) + **2 pre-existing bug fixes**
+(earths_stagnation move sign; its `move_water_penalty` was also the hook reused by Suitengu's Curse), all
+runtime-verified via headless drivers (full project import 0 parse errors throughout). Combat-effect total
+rose ~76 → ~122. New reusable infra built: the shared `instant_kill` effect + `earth_contested_void` save
+(batch 4), the `no_magic_heal` block + `free_move_tiles` buff (batch 3), the `incapacitated` turn-gate
 (CONDITION_INCAPACITATED) + `requires_shadowlands` status gate, the VP `gain_void`/`restore_void`/
 `steal_void` effects + timed `void_locked`, the FireSystem `ignite_zone`/`extinguish` effects, the
 `heal_on_damage`/`armor_bypass` hooks, the `attacker_penalty`/`attacker_roll_penalty` defender

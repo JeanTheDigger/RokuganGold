@@ -312,6 +312,11 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"drawing_the_void": {"kind": "gain_void"},  # Void 1: caster gains School Rank +1 Void Points (over-cap allowed; the per-round over-cap decay is deferred)
 	"fill_the_emptiness": {"kind": "restore_void", "target": "ally", "range_tiles": 1},  # Void 4: restore a touched ally's Void Points to maximum
 	"void_release": {"kind": "steal_void", "range_tiles": 5},  # Void 3: Contested Void → steal 1 Void Point from the target (margin/5 extra deferred)
+	# Coverage clean-wins batch 4 (2026-06-20): the two instant-kill spells.
+	"consumed_by_five_fires": {"kind": "instant_kill", "range_tiles": 20, "reciprocal": true,
+		"fire_immune_blocks": true},  # Fire 5: instantly reduce target to Dead; caster suffers the same Wounds unmitigated (often lethal); cannot target Fire-resistant creatures
+	"unmake_the_world": {"kind": "instant_kill", "range_tiles": 10,
+		"contested": "earth_contested_void"},  # Void 6: Contested Void vs Earth → target ceases to exist (no reciprocal; the non-magical-object auto-kill + nemuranai ramifications not modeled)
 	"severed_from_the_stream": {"kind": "debuff", "target": "enemy", "range_tiles": 5, "duration_rounds": 9999,
 		"mods": [{"kind": "void_locked", "value": 1}]},  # Void 2: target cannot spend Void Points (the per-spend Contested-Void roll is simplified to a full lock via execute_void_spend; 5 rounds ≈ skirmish)
 	# --- Heal spells (s36 Water) ---
