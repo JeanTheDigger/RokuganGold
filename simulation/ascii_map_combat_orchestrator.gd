@@ -869,10 +869,12 @@ static func execute_melee_attack(
 		if a_p.stance == Enums.Stance.FULL_ATTACK:
 			a_p.stance = Enums.Stance.ATTACK
 
+	# s33 Castle of Air: a defender's attacker_penalty buff imposes a -Xk0 attack-roll penalty.
+	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty")
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
 		false, spend_void, false, maneuver,
-		{"opponent_clan": target.clan}
+		{"opponent_clan": target.clan}, atk_pen
 	)
 
 	# Reversal of Fortunes (s36): a buffed attacker may re-roll a missed attack once per
@@ -884,7 +886,7 @@ static func execute_melee_attack(
 		a_p.reversal_used_round = state.combat.round_number
 		var rr: Dictionary = IndividualCombat.resolve_attack(
 			attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
-			false, spend_void, false, maneuver, {"opponent_clan": target.clan})
+			false, spend_void, false, maneuver, {"opponent_clan": target.clan}, atk_pen)
 		# Keep the better result (a hit wins; otherwise the higher roll).
 		if rr.get("hit", false) or int(rr.get("roll", 0)) > int(result.get("roll", 0)):
 			result = rr
@@ -1300,11 +1302,15 @@ static func execute_ranged_attack(
 	var is_being_guarded: bool = _is_being_guarded(state, target_id)
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, false, is_being_guarded, weapon_name)
 	armor_tn += _cover_bonus(state, tpos, apos)
+	# s33 Blessed Wind: +Armor TN vs non-magical ranged attacks only (ranged path).
+	armor_tn += IndividualCombat.get_timed_modifier_total(t_p, "ranged_armor_tn")
 
+	# s33 Castle of Air: a defender's attacker_penalty buff imposes a -Xk0 attack-roll penalty.
+	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty")
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
 		in_melee, spend_void, false, "",
-		{"opponent_clan": target.clan}
+		{"opponent_clan": target.clan}, atk_pen
 	)
 
 	var log_entry: Dictionary = {

@@ -5813,10 +5813,18 @@ within radius; each ally's invisibility ends when THAT ally acts); **Essence of 
 insubstantial — a new `insubstantial` buff mod makes the caster untargetable AND blocks their own
 melee/ranged attacks and spell-casting via guards in execute_melee/ranged_attack + execute_cast_spell;
 Water-halved / pass-through-objects downsides deferred). 8 Air spells wired total.
+**Air batch 3 (castle_of_air + reusable attack hooks, runtime-verified):** **Castle of Air**
+(Air 4) — a self `attacker_penalty` buff (−5k0 to attackers; the per-round Perception-vs-Air
+contest is simplified to always-on; 10 rounds, GDD-explicit). Added two reusable defender-side
+combat hooks: a `attacker_roll_penalty` param on `IndividualCombat.resolve_attack` (rolled-dice
+reduction, threaded from execute_melee/ranged_attack via the defender's `attacker_penalty` timed
+modifier) and a `ranged_armor_tn` add in the ranged path (forward-wiring for the Concentration
+anti-ranged spells). Verified: −5k0 cut hits 549→114/600; buff sets −5; execute_melee_attack reads
+it without error. 9 Air spells wired total.
 DEFERRED (Air, next tranches): facing_your_devils (ring-changing — Pending Redesign);
-castle_of_air/blessed_wind/summoning_the_gale/blessed_wind_of_lady_sun (incoming-attack /
-ranged-suppression — `resolve_attack` takes only target_armor_tn, so an attacker-roll penalty
-needs caller-side hooks in execute_melee/ranged_attack — grouped as an "attack-resolution" batch);
+blessed_wind/blessed_wind_of_lady_sun/summoning_the_gale (anti-ranged — need the Concentration→rounds
+convention + a zone-attacker-penalty hook for the area ones; the per-defender `ranged_armor_tn`
+hook is ready);
 arrows_flight (ranged auto-hit hook); draw_back_the_shadow (dispel infra — pairs with the illusion
 spells); netsuke_of_wind (no GDD DR — ASK); wrath_of_kaze_no_kami (minute-scale AoE — per-round
 scaling, ASK); the_false_legion/way_of_deception (illusory-decoy combatant layer); mask_of_wind/

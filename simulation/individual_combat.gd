@@ -1077,6 +1077,7 @@ static func resolve_attack(
 	target_is_mounted: bool = false,
 	maneuver: String = "",
 	adv_context: Dictionary = {},
+	attacker_roll_penalty: int = 0,
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	# Conjured elemental weapon (s33-s36): override the wielded profile. The created weapon's
@@ -1189,6 +1190,9 @@ static func resolve_attack(
 	# Fear (s22.3/s02.4): a frightened combatant suffers -1k0 to all rolls while in range.
 	if CONDITION_AFRAID in attacker_p.conditions:
 		rolled = maxi(0, rolled - 1)
+	# s33 Castle of Air: a defender-imposed -Xk0 penalty on attacks against the warded caster.
+	if attacker_roll_penalty != 0:
+		rolled = maxi(0, rolled + attacker_roll_penalty)
 	if CONDITION_BLINDED in attacker_p.conditions:
 		if weapon.get("melee", true):
 			rolled = maxi(0, rolled - 1)

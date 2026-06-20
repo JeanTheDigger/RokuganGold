@@ -219,6 +219,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "invisible", "value": 1}]},  # Air 5: every chosen ally within 10' invisible; acting against another reveals that ally (reveal-on-attack)
 	"essence_of_air": {"kind": "buff", "target": "self", "duration_rounds": 5,
 		"mods": [{"kind": "insubstantial", "value": 1}]},  # Air 3: insubstantial — untargetable but cannot attack or cast (Water-halved + pass-through-objects deferred)
+	"castle_of_air": {"kind": "buff", "target": "self", "duration_rounds": 10,
+		"mods": [{"kind": "attacker_penalty", "value": -5}]},  # Air 4: attackers suffer -5k0 (per-round Perception-vs-Air contest simplified to always-on; does not affect spells)
 	# --- Earth (s34) ---
 	# Jade Strike: Range 100', single, DR 3k3 ONLY vs Taint Rank 1+ (also a jade-property spell)
 	"jade_strike": {"kind": "damage", "dr_rolled": 3, "dr_kept": 3,
