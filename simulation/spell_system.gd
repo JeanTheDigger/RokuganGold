@@ -327,6 +327,11 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Coverage clean-wins batch 7 (2026-06-20): guided-arrow auto-hit.
 	"arrows_flight": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 3,
 		"mods": [{"kind": "ranged_auto_hit", "value": 1}]},  # Air 1: the next bow shot (Kyujutsu) auto-hits within 3 Rounds, ignoring Raises (one-shot; +1 arrow per Raise not modeled; passive kata damage still applies)
+	# Coverage clean-wins batch 8 (2026-06-20): AoE-ally mobility buffs (reuse batch-3 free-move + the move hook).
+	"ebb_and_flow_of_battle": {"kind": "buff", "target": "ally", "aoe_radius": 10, "duration_rounds": 5,
+		"mods": [{"kind": "free_move_tiles", "value": 1}]},  # Water 4: chosen allies within 50' make a Free Move of Water Ring ×10' (= +Water tiles; was a Simple Action)
+	"master_of_the_rolling_river": {"kind": "buff", "target": "ally", "aoe_radius": 20, "duration_rounds": 5,
+		"mods": [{"kind": "move_water_penalty", "value": 1}]},  # Water 4: a unit (≤25 allies) within 100' moves as Water 1 Rank higher (the +1 Strength Rank + Mass Battle general bonus are deferred — trait-change)
 	"severed_from_the_stream": {"kind": "debuff", "target": "enemy", "range_tiles": 5, "duration_rounds": 9999,
 		"mods": [{"kind": "void_locked", "value": 1}]},  # Void 2: target cannot spend Void Points (the per-spend Contested-Void roll is simplified to a full lock via execute_void_spend; 5 rounds ≈ skirmish)
 	# --- Heal spells (s36 Water) ---

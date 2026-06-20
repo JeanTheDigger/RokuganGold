@@ -6054,14 +6054,27 @@ multi-charge isn't modeled (one shot); passive kata damage still applies to the 
 at Armor TN 50 lands the guided shot (forced hit + auto_hit flag); the modifier is consumed after one
 shot; an unbuffed shot carries no auto_hit. Air 11 this session.
 
+### Spell coverage — clean-wins batch 8 (AoE-ally mobility buffs, 2026-06-20, runtime-verified 7/7)
+Two battle-mobility buffs, both reusing existing hooks via the AoE-ally buff path (`_apply_spell_buff_aoe`,
+which applies the mods to every living same-faction combatant — caster included — within the radius).
+**Ebb & Flow of Battle** (Water 4) — chosen allies within 50' (10 tiles) make a Free Move of Water Ring
+×10' (the batch-3 `free_move_tiles` flag, AoE), i.e. +Water tiles to the free-move budget (the GDD's
+"normally a Simple Action" mobility, now free). **Master of the Rolling River** (Water 4) — a unit (≤25
+allies) within 100' (20 tiles) moves as Water 1 Rank higher (`move_water_penalty: +1`, the same hook as
+Wave-Borne Speed); the +1 Strength Rank and the Mass Battle general's-Battle-roll bonus are deferred
+(trait-change / no mass-battle consumer). Both 5 Rounds. Runtime-verified: ebb&flow gives an in-range
+ally +5 free-move (5→10) and buffs the caster too, while an out-of-radius ally and an enemy are
+unaffected; rolling_river raises an ally's effective move Water 5→6 (free-move budget tracks it) with
+the enemy unaffected. Water 15 this session.
+
 ### Spell coverage session summary (2026-06-20, running)
-This session has wired **~49 combat spells across all 5 elements** (initial all-element pass + clean-wins
+This session has wired **~51 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
-forced-stance batch 5 + purify-zone batch 6 + guided-auto-hit batch 7) + **1 world-sim spell** (Legacy of
-Kaze-no-Kami spirit-bird letters) + **2 pre-existing bug fixes** (earths_stagnation move sign; its
-`move_water_penalty` was also the hook reused by Suitengu's Curse), all runtime-verified via headless
-drivers (full project import 0 parse errors throughout). Combat-effect total rose ~76 → ~125. New reusable
-infra built: the one-shot `ranged_auto_hit` buff (batch 7), the `purify_zone`
+forced-stance batch 5 + purify-zone batch 6 + guided-auto-hit batch 7 + AoE-mobility batch 8) + **1
+world-sim spell** (Legacy of Kaze-no-Kami spirit-bird letters) + **2 pre-existing bug fixes**
+(earths_stagnation move sign; its `move_water_penalty` was also the hook reused by Suitengu's Curse), all
+runtime-verified via headless drivers (full project import 0 parse errors throughout). Combat-effect total
+rose ~76 → ~127. New reusable infra built: the one-shot `ranged_auto_hit` buff (batch 7), the `purify_zone`
 soul-state zone (batch 6), the `stance_locked` forced-Full-Attack debuff + `willpower_contested_caster_fire`
 save (batch 5), the shared `instant_kill` effect + `earth_contested_void` save (batch 4), the
 `no_magic_heal` block + `free_move_tiles` buff (batch 3), the `incapacitated` turn-gate
