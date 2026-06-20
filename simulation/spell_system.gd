@@ -212,6 +212,13 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"gift_of_wind": {"kind": "buff", "target": "self", "duration_rounds": 50,
 		"mods": [{"kind": "invisible", "value": 1}]},  # Air 4: invisible to non-magical vision; attacking ends it
 	"defender_from_beyond": {"kind": "summon", "summon_kind": "shiryo", "count": 1},  # Air 5 (Kitsu): summon a shiryo ancestor (all Rings 3, Rank 4 skills)
+	# Air coverage extension batch 2 (2026-06-20): wound-penalty negation, AoE invisibility, insubstantial.
+	"to_seek_the_truth": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 50,
+		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Air 1: negates temporary penalties (combat slice = Wound Rank penalties; Technique/social negation out-of-combat)
+	"legion_of_the_moon": {"kind": "buff", "target": "ally", "aoe_radius": 2, "duration_rounds": 50,
+		"mods": [{"kind": "invisible", "value": 1}]},  # Air 5: every chosen ally within 10' invisible; acting against another reveals that ally (reveal-on-attack)
+	"essence_of_air": {"kind": "buff", "target": "self", "duration_rounds": 5,
+		"mods": [{"kind": "insubstantial", "value": 1}]},  # Air 3: insubstantial — untargetable but cannot attack or cast (Water-halved + pass-through-objects deferred)
 	# --- Earth (s34) ---
 	# Jade Strike: Range 100', single, DR 3k3 ONLY vs Taint Rank 1+ (also a jade-property spell)
 	"jade_strike": {"kind": "damage", "dr_rolled": 3, "dr_kept": 3,

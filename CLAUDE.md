@@ -5806,13 +5806,24 @@ tranche wired (5 spells, all GDD-exact values, reusing existing machinery):
 Runtime-verified 10/10 (headless driver in /tmp minimal project: fear-resist mods, all_rolls -5,
 low-WP afraid / high-WP resists, invisibility untargetable + cleared-on-attack + enemy still
 targetable, shiryo summoned on the caster's side). Full project import: 0 parse errors.
-DEFERRED (Air, documented for the next tranches): essence_of_air (insubstantial — needs a
-can't-act downside to be faithful), legion_of_the_moon (AoE-ally invisibility — needs an AoE-buff
-path), facing_your_devils (ring-changing — Pending Redesign), castle_of_air/blessed_wind/
-summoning_the_gale/blessed_wind_of_lady_sun (incoming-attack / ranged-suppression wards — new
-hook), arrows_flight (ranged auto-hit hook), draw_back_the_shadow (dispel infra), wrath_of_kaze_
-no_kami (minute-scale AoE — per-round scaling decision), and the large illusion/disguise/
-perception/mind-reading/telekinesis/communication utility set (no combat consumer).
+**Air batch 2 (3 more, runtime-verified 9/9):** **To Seek the Truth** (Air 1, negate_wound_penalty
+buff — the combat slice; Technique/social negation out-of-combat); **Legion of the Moon** (Air 5,
+AoE-ally invisibility — new `_apply_spell_buff_aoe` path buffs every living same-faction combatant
+within radius; each ally's invisibility ends when THAT ally acts); **Essence of Air** (Air 3,
+insubstantial — a new `insubstantial` buff mod makes the caster untargetable AND blocks their own
+melee/ranged attacks and spell-casting via guards in execute_melee/ranged_attack + execute_cast_spell;
+Water-halved / pass-through-objects downsides deferred). 8 Air spells wired total.
+DEFERRED (Air, next tranches): facing_your_devils (ring-changing — Pending Redesign);
+castle_of_air/blessed_wind/summoning_the_gale/blessed_wind_of_lady_sun (incoming-attack /
+ranged-suppression — `resolve_attack` takes only target_armor_tn, so an attacker-roll penalty
+needs caller-side hooks in execute_melee/ranged_attack — grouped as an "attack-resolution" batch);
+arrows_flight (ranged auto-hit hook); draw_back_the_shadow (dispel infra — pairs with the illusion
+spells); netsuke_of_wind (no GDD DR — ASK); wrath_of_kaze_no_kami (minute-scale AoE — per-round
+scaling, ASK); the_false_legion/way_of_deception (illusory-decoy combatant layer); mask_of_wind/
+hidden_visage (disguise layer); summon_fog/the_eye_shall_not_see/heart_betrays_eyes (FoV/perception
+layer); the_world_is_truth (Kolat, blocked); and the large messaging/social/stealth-tracking utility
+set (legacy_of_kaze_no_kami, voice_of_the_wind, echoes_on_the_breeze, etc. — per-spell ASK whether
+to give a world-sim consumer).
 
 "### Pending Redesign
 - **Ring-changing combat spells (essence_of_earth, the_wolfs_mercy, strike_at_the_roots, and

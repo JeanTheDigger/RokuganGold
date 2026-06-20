@@ -776,6 +776,10 @@ static func execute_melee_attack(
 	var ts: TurnState = state.turn_states.get(attacker_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}
+	# s33 Essence of Air: an insubstantial caster cannot interact with physical objects (no attack).
+	var a_p_ins: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
+	if a_p_ins != null and IndividualCombat.get_timed_modifier_total(a_p_ins, "insubstantial") > 0:
+		return {"success": false, "reason": "insubstantial"}
 
 	var wl: int = CharacterStats.get_wound_level(attacker)
 	if ts.is_down_restricted(wl):
@@ -1256,6 +1260,10 @@ static func execute_ranged_attack(
 	# s54.10: an invisible/intangible target cannot be shot (Mujina / Ephemeral Form).
 	if not _is_targetable(state, target_id):
 		return {"success": false, "reason": "target_hidden"}
+	# s33 Essence of Air: an insubstantial caster cannot interact with physical objects (no attack).
+	var a_p_ins: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
+	if a_p_ins != null and IndividualCombat.get_timed_modifier_total(a_p_ins, "insubstantial") > 0:
+		return {"success": false, "reason": "insubstantial"}
 
 	if not ts.can_use_complex():
 		return {"success": false, "reason": "no_complex_actions_remaining"}
@@ -1865,6 +1873,10 @@ static func execute_cast_spell(
 		return {"success": false, "reason": "cannot_cast"}
 	if not ts.can_use_complex():
 		return {"success": false, "reason": "no_complex_action"}
+	# s33 Essence of Air: no other spells may be cast while insubstantial.
+	var caster_p_ins: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+	if caster_p_ins != null and IndividualCombat.get_timed_modifier_total(caster_p_ins, "insubstantial") > 0:
+		return {"success": false, "reason": "insubstantial"}
 	ts.consume_complex()
 	var ml: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("m", 1)
 	# Sodatsu's Bane (s54.5): a spell cast AT a shugenjas_bane creature is absorbed — it has
@@ -2208,6 +2220,10 @@ static func _apply_spell_buff(
 	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
 	target_id: int, target: L5RCharacterData, eff: Dictionary,
 ) -> Dictionary:
+	# AoE-ally buff (s33 Legion of the Moon): apply the mods to every living same-faction
+	# combatant (incl. the caster) within aoe_radius of the caster.
+	if int(eff.get("aoe_radius", 0)) > 0 and String(eff.get("target", "self")) == "ally":
+		return _apply_spell_buff_aoe(state, caster_id, caster, eff)
 	var to_self: bool = eff.get("target", "self") == "self"
 	var bid: int = caster_id if to_self else target_id
 	var bch: L5RCharacterData = caster if to_self else target
@@ -2244,6 +2260,42 @@ static func _apply_spell_buff(
 			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff")
 		applied.append({"kind": mkind, "value": val})
 	return {"id": bid, "applied": applied, "expires_round": expiry}
+
+
+## Apply a buff to every living same-faction combatant (incl. the caster) within aoe_radius of the
+## caster (s33 Legion of the Moon). Same mod resolution as the single-target path. Returns the list
+## of buffed ids.
+static func _apply_spell_buff_aoe(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData, eff: Dictionary,
+) -> Dictionary:
+	var radius: int = int(eff.get("aoe_radius", 0))
+	var cf: String = String(state.factions.get(caster_id, ""))
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var expiry: int = state.combat.round_number + int(eff.get("duration_rounds", 5))
+	var buffed: Array = []
+	for cid in state.positions.keys():
+		if String(state.factions.get(cid, "")) != cf:
+			continue
+		var ch = state.combatants.get(cid, null)
+		if ch == null or CharacterStats.is_dead(ch):
+			continue
+		var pos: Vector2i = state.positions[cid]
+		if maxi(absi(center.x - pos.x), absi(center.y - pos.y)) > radius:
+			continue
+		var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+		if p == null:
+			continue
+		for mod in eff.get("mods", []):
+			var mkind: String = String(mod.get("kind", ""))
+			var val: int = _resolve_buff_value(caster, mod.get("value", 0))
+			if mkind == "absorb_pool":
+				p.absorb_pool = maxi(p.absorb_pool, val)
+			elif mkind == "invisible":
+				IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_invisible")
+			else:
+				IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff")
+		buffed.append(cid)
+	return {"buffed": buffed, "expires_round": expiry}
 
 
 ## Apply a debuff spell to an ENEMY target (s31-37 enemy hexes). Mirrors _apply_spell_buff but
@@ -5784,6 +5836,9 @@ static func _is_targetable(state: MapCombatState, cid: int) -> bool:
 	# invisible buff holds. Attacking clears the buff (_reveal_if_hidden), so it ends on offense.
 	if IndividualCombat.get_timed_modifier_total(p, "invisible") > 0 \
 			and p.untargetable_revealed_until < rnd:
+		return false
+	# Insubstantial (s33 Essence of Air): untargetable while incorporeal (cannot attack/cast either).
+	if IndividualCombat.get_timed_modifier_total(p, "insubstantial") > 0:
 		return false
 	if c.spirit_creature == null:
 		return true
