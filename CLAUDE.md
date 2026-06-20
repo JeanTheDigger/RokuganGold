@@ -5964,6 +5964,17 @@ save types (`earth_contested`, `void_contested`, `willpower_contested`). Runtime
 enemy skips its turn + flat-foots to Armor TN 15; minor_binding immune vs a non-Tainted target,
 incapacitates a Tainted one. Earth 7 / Water 10 / Fire 7 / Void 3 combat spells this session.
 
+### Spell coverage — Void VP-manipulation (2026-06-20, runtime-verified 7/7)
+Four Void Point spells via VoidSystem + the existing `void_locked` flag: **Drawing the Void** (Void 1,
+`gain_void` — caster gains School Rank +1 VP, over-cap allowed; per-round over-cap decay deferred),
+**Fill the Emptiness** (Void 4, `restore_void` — a touched ally's VP to maximum), **Void Release**
+(Void 3, `steal_void` — Contested Void → steal 1 VP, caster gains it; margin/5 extra deferred; inert
+vs a 0-VP target), **Severed from the Stream** (Void 2, debuff → a timed `void_locked` modifier now
+also honored by `execute_void_spend`, so the target cannot spend Void Points; the per-spend
+Contested-Void roll is simplified to a full lock, 5 rounds ≈ skirmish). Runtime-verified: restore to
+max, steal moves a point caster↔enemy, no-op vs 0-VP, lock blocks execute_void_spend. Void now 7
+combat spells this session.
+
 ### Spell coverage session summary (2026-06-20)
 This session wired **26 combat spells across all 5 elements** + **1 world-sim spell** (Legacy of
 Kaze-no-Kami spirit-bird letters) + **1 pre-existing bug fix** (earths_stagnation move sign), all

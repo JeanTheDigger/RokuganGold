@@ -2018,6 +2018,14 @@ static func execute_cast_spell(
 			"type": "spell_extinguish", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "extinguished": res["extinguished"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "gain_void":
+		var gained: int = SpellSystem.get_effective_school_rank(caster, Enums.Ring.VOID) + 1
+		caster.current_void_points += gained  # over-cap allowed (s37 Drawing the Void)
+		res["void_gained"] = gained
+	elif res.get("success", false) and eff.get("kind", "") == "restore_void":
+		res["void_restored"] = _apply_spell_restore_void(state, caster_id, target_id, target)
+	elif res.get("success", false) and eff.get("kind", "") == "steal_void":
+		res["void_stolen"] = _apply_spell_steal_void(state, caster_id, caster, target_id, target, dice_engine)
 	state.combat_log.append({
 		"type": "spell_cast", "round": state.combat.round_number,
 		"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
@@ -2710,6 +2718,40 @@ static func _apply_spell_extinguish(
 	return {"tiles_cleared": tiles_cleared, "creatures_doused": creatures_doused}
 
 
+## Restore a living ally's Void Points to maximum (s37 Fill the Emptiness). Touch / same-faction.
+static func _apply_spell_restore_void(
+	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData,
+) -> Dictionary:
+	var ally: L5RCharacterData = target if target != null else state.combatants.get(caster_id, null)
+	var aid: int = target_id if target != null else caster_id
+	if ally == null or CharacterStats.is_dead(ally):
+		return {"reason": "target_invalid"}
+	if String(state.factions.get(aid, "")) != String(state.factions.get(caster_id, "")):
+		return {"reason": "not_an_ally"}
+	var before: int = ally.current_void_points
+	VoidSystem.restore_full(ally)
+	return {"id": aid, "restored": ally.current_void_points - before}
+
+
+## Steal one Void Point from the target on a won Contested Void roll (s37 Void Release). The caster
+## gains the point (over-cap allowed). Inert vs a target with no Void Points.
+static func _apply_spell_steal_void(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, dice_engine: DiceEngine,
+) -> Dictionary:
+	if target == null or CharacterStats.is_dead(target):
+		return {"reason": "no_target"}
+	if target.current_void_points <= 0:
+		return {"reason": "no_void_to_steal"}
+	var cv: int = maxi(1, SpellSystem.get_ring_value(caster, Enums.Ring.VOID))
+	var tv: int = maxi(1, SpellSystem.get_ring_value(target, Enums.Ring.VOID))
+	if dice_engine.roll_and_keep(cv, cv, true).total <= dice_engine.roll_and_keep(tv, tv, true).total:
+		return {"reason": "resisted", "id": target_id}
+	target.current_void_points -= 1
+	caster.current_void_points += 1
+	return {"id": target_id, "stolen": 1}
+
+
 ## Build a shiryo ancestor spirit (s33 Defender From Beyond, Kitsu only): the GDD "typical shiryo"
 ## has the Spirit trait, all Rings at 3, and Rank 4 in relevant Skills. Attacks as Ring 3 + Skill 4
 ## (keep Ring); katana-equivalent damage; standard human wound track from Earth 3. Not Invulnerable.
@@ -2942,7 +2984,8 @@ static func execute_void_spend(
 		return {"success": false, "reason": "void_already_spent_this_round"}
 
 	# s54.12 Furaribi Soul Touch: a touched character cannot spend Void Points.
-	if p.void_locked:
+	# Furaribi Soul Touch (permanent flag) OR s37 Severed from the Stream (timed Void-lock debuff).
+	if p.void_locked or IndividualCombat.get_timed_modifier_total(p, "void_locked") > 0:
 		return {"success": false, "reason": "void_locked"}
 
 	# Spend VP for +1k1 on next roll (GDD s40). Must check success BEFORE
