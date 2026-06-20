@@ -5696,7 +5696,7 @@ they comply with (`ctx.compliance_intimidators`) — covering non-hostile court 
 Phase-4 hostile filter doesn't. Runtime-verified 3/3 (accumulated reduction lifts Negotiate
 success 44→79/80; compliance +10 drops it 44→18/80; Persuade eased only by the persuade pool).
 
-### s31-37 spell combat coverage — extension batches 1–12 (2026-06-20)
+### s31-37 spell combat coverage — extension batches 1–13 (2026-06-20)
 Added combat effects for 4 more library spells (the library has 287 spells; only ~28 had combat
 effects). All values transcribed exactly from s34/s35: **tail_of_the_fire_dragon** (Fire 2,
 single damage DR=Fire Ring, 30'), **ravenous_swarms** (Fire 3, 5k3 bolt, 30' — the fire-spell-
@@ -5742,7 +5742,15 @@ damage + rider) + two save types (`agility_flat`, `reflexes_contested_earth`), u
 `murmur_of_earth` (Earth 3, Agility TN 20 or 1k1 + Prone) and `maw_of_the_earth` (Earth 4, Reflexes
 vs Earth or fall in: 3k2 + Entangled). Also `the_fires_that_cleanse` (Fire 1, DR=Fire Ring AoE,
 caster exempt), `light_of_the_sun` (Fire 5, 2k2/round zone), `blessing_of_the_sun` (Fire 4,
-negate wound penalty). 67 spells now have combat effects (from 28 at session start). Two new
+negate wound penalty). 67 spells now have combat effects.
+**Batch 13** adds `oath_of_the_heavens` (Fire 3, +2k0 attack; 2-target link + shared conditions
+deferred), `balance_of_elements` (Void 4 Ishiken, heal 3k3 via a new `dice` heal mode; disadvantage
+negation deferred), and `relentless_heat` (Fire 2 — a melee attacker striking the warded wearer is
+Fatigued on the attempt (hit OR miss) and a Full-Attack attacker drops to Attack, via a new
+attempt-trigger hook in execute_melee_attack). 70 spells now have combat effects (from 28 at session
+start). Remaining unwired spells need niche mechanics (armor-ignore buff, duel-scoped dispel,
+disadvantage-count debuffs, passage-trigger Symbols, ranged-suppression zones, channeled transforms)
+or are non-combat utility. Two new
 `_gather_spell_targets` fields support Dragon's Talon: `target_max_insight` (skip stronger foes)
 and `aoe_max_targets` (cap struck count). Runtime-verified 5/5 (damage lands; grasp entangles;
 Dragon's Talon hits Insight-1/2 foes and spares an Insight-5 foe). The remaining ~255 library

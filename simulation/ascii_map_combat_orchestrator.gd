@@ -857,6 +857,14 @@ static func execute_melee_attack(
 	# it is targetable through its next turn.
 	_reveal_if_hidden(state, attacker_id, a_p)
 
+	# Relentless Heat (s35 Fire): any opponent who attempts to strike the warded wearer (hit or
+	# miss) is Fatigued until their next Turn, and a Full Attack attacker drops to Attack Stance.
+	if IndividualCombat.get_timed_modifier_total(t_p, "relentless_heat") > 0:
+		IndividualCombat.apply_timed_condition(a_p, IndividualCombat.CONDITION_FATIGUED,
+			state.combat.round_number + 1)
+		if a_p.stance == Enums.Stance.FULL_ATTACK:
+			a_p.stance = Enums.Stance.ATTACK
+
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
 		false, spend_void, false, maneuver,
@@ -1900,7 +1908,7 @@ static func execute_cast_spell(
 		})
 	elif res.get("success", false) and eff.get("kind", "") == "heal":
 		res["spell_heal"] = _apply_spell_heal(
-			state, caster_id, caster, target_id, target, eff, res)
+			state, caster_id, caster, target_id, target, eff, res, dice_engine)
 		state.combat_log.append({
 			"type": "spell_heal", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "heal": res["spell_heal"],
@@ -1963,6 +1971,7 @@ static func execute_cast_spell(
 static func _apply_spell_heal(
 	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
 	target_id: int, target: L5RCharacterData, eff: Dictionary, res: Dictionary,
+	dice_engine: DiceEngine = null,
 ) -> Dictionary:
 	# Default to self when no target was named.
 	var heal_target: L5RCharacterData = target if target != null else caster
@@ -1988,6 +1997,11 @@ static func _apply_spell_heal(
 				+ SpellSystem.get_effective_school_rank(caster, Enums.Ring.WATER)
 		"full":
 			amount = heal_target.wounds_taken
+		"dice":
+			# s37 Balance of Elements: heal a fixed dice amount (e.g. 3k3).
+			if dice_engine != null:
+				amount = dice_engine.roll_and_keep(
+					int(eff.get("heal_rolled", 3)), int(eff.get("heal_kept", 3)), true).total
 	if amount <= 0:
 		return {"id": heal_id, "healed": 0}
 	WoundSystem.heal_wounds(heal_target, amount)
