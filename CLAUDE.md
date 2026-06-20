@@ -6239,11 +6239,25 @@ repel is deferred (movement gate). Runtime-verified: armor_tn +Air-Ring (5); att
 2 Social/Spiritual disadvantages, 0 vs a clean foe. No regression (debuff path unchanged for caster-only
 values). Air 16 / Water 20 this session.
 
+### Spell coverage — Void skill-grant batch 18 (2026-06-20, runtime-verified 3/3)
+**Moment of Clarity** (Void 3, Ishiken) — "select any one Skill; gain temporary Ranks equal to Void Ring;
+if the caster already has Ranks, the temporary level REPLACES the existing one (not cumulative)." Wired as
+a self `spell_attack_rolled` buff via a new `void_replace_weapon_skill` value formula: a skill rank is a
+rolled attack die, so for a weapon skill the net attack gain is `max(0, Void Ring − best current weapon
+skill)` (over `_NPC_WEAPON_SKILLS`) — big for a low-skill caster, nil for an already-skilled one (the
+replace-not-add semantics). 2 Rounds, self. Runtime-verified: no weapon skill + Void 5 → +5; Kenjutsu 2 +
+Void 5 → +3 (replaces); Kenjutsu 6 + Void 3 → +0 (no downgrade). No regression (additive formula). This is
+the **last spell with a clean combat-slice** — every remaining gap is out-of-combat utility/divination/
+messaging, flight (no elevation on flat maps), the ring-changing wound refactor (Pending Redesign), a
+substantial subsystem (illusory-decoy / clone / VP-pool-share / range-gated-perception), absent infra
+(water-terrain maps, tile-combat maho), or a near-inert curse (Curse of the Burning Hand's ally-touch).
+Void 9 this session.
+
 ### Spell coverage session summary (2026-06-20, running)
-This session has wired **~68 combat spells across all 5 elements** (initial all-element pass + clean-wins
+This session has wired **~69 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
 forced-stance batch 5 + purify-zone batch 6 + guided-auto-hit batch 7 + AoE-mobility batch 8 +
-action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11 + fog batch 12 + per-die-reduction batch 13 + illusion-dispel batch 14 + conjured-terrain batch 15 + anti-spell-ward batch 16 + Armor-TN/attack batch 17) + **1 world-sim spell** (Legacy of Kaze-no-Kami
+action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11 + fog batch 12 + per-die-reduction batch 13 + illusion-dispel batch 14 + conjured-terrain batch 15 + anti-spell-ward batch 16 + Armor-TN/attack batch 17 + Void-skill-grant batch 18) — **144 combat effects total (76 COMBAT_ONLY gaps remain, Universal element fully covered)** + **1 world-sim spell** (Legacy of Kaze-no-Kami
 spirit-bird letters) + **2 pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty`
 was also the hook reused by Suitengu's Curse), all runtime-verified via headless drivers (full project
 import 0 parse errors throughout). Combat-effect total rose ~76 → ~133. New reusable infra built: the

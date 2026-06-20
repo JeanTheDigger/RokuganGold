@@ -2604,6 +2604,14 @@ static func _resolve_buff_value(caster: L5RCharacterData, value) -> int:
 			"air_ring":
 				# s33 Air Kami's Blessing: +Air Ring to Armor TN (the combat slice).
 				return SpellSystem.get_ring_value(caster, Enums.Ring.AIR)
+			"void_replace_weapon_skill":
+				# s37 Moment of Clarity: temporary Skill Ranks = Void Ring, REPLACING the existing
+				# rank (not cumulative). For a weapon skill the net attack-roll gain (a skill rank is
+				# a rolled attack die) is max(0, Void Ring − the caster's best current weapon skill).
+				var best_ws: int = 0
+				for sk in _NPC_WEAPON_SKILLS:
+					best_ws = maxi(best_ws, int(caster.skills.get(sk, 0)))
+				return maxi(0, SpellSystem.get_ring_value(caster, Enums.Ring.VOID) - best_ws)
 			"fire_ring":
 				return SpellSystem.get_ring_value(caster, Enums.Ring.FIRE)
 			"water_half":

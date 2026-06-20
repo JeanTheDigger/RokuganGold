@@ -372,6 +372,9 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "spell_attack_rolled", "value": 1}]},  # Air 4: +1 Rank in all Skills -> +1 rolled attack die (the combat slice; the broad +1-all-skills out-of-combat utility is not modeled). 1-minute ~ 10 Rounds.
 	"judgment_of_yomi": {"kind": "debuff", "target": "enemy", "range_tiles": 10, "duration_rounds": 9999,
 		"mods": [{"kind": "spell_attack_rolled", "value": "neg_target_social_spiritual_disadv"}]},  # Water 2: the target takes -1k0 to physical Skill checks (attack rolls) per Social/Spiritual Disadvantage they possess (inert if they have none). Concentration ~ skirmish. (The "Honor TN 20 or cannot move closer" repel is deferred — movement gate.)
+	# Coverage clean-wins batch 18 (2026-06-20): Void skill-grant self-buff (the last combat-slice spell).
+	"moment_of_clarity": {"kind": "buff", "target": "self", "duration_rounds": 2,
+		"mods": [{"kind": "spell_attack_rolled", "value": "void_replace_weapon_skill"}]},  # Void 3: temporary Skill Ranks = Void Ring, REPLACING the existing rank (not cumulative). For a weapon skill the net attack-roll gain is max(0, Void Ring - best current weapon skill) — big for a low-skill caster, nil for an already-skilled one. (Models the combat weapon-skill case; the "any skill" generality is out-of-combat.)
 	"severed_from_the_stream": {"kind": "debuff", "target": "enemy", "range_tiles": 5, "duration_rounds": 9999,
 		"mods": [{"kind": "void_locked", "value": 1}]},  # Void 2: target cannot spend Void Points (the per-spend Contested-Void roll is simplified to a full lock via execute_void_spend; 5 rounds ≈ skirmish)
 	# --- Heal spells (s36 Water) ---
