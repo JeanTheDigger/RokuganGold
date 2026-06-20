@@ -272,6 +272,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"cleanse_conditions": ["fatigued"], "cleanse_heal": 0},  # Water 2: removes Fatigue from a touched ally (Void-slot restore is out-of-combat)
 	"heart_of_the_water_dragon": {"kind": "buff", "target": "ally", "aoe_radius": 5, "duration_rounds": 5,
 		"mods": [{"kind": "heal_on_damage", "value": 1}]},  # Water 4: a buffed target regains 1k1 Wounds whenever damaged
+	"strike_of_the_flowing_waters": {"kind": "buff", "target": "ally", "range_tiles": 2, "duration_rounds": 1,
+		"mods": [{"kind": "armor_bypass", "value": 1}]},  # Water 4: ignore the target's worn-armor Armor TN (+5 vs non-humans); the spell-ML3-effect bypass not modeled; does NOT negate Reduction or Defense/Full-Defense TN
 	# --- Void (s37, Ishiken-only) ---
 	# Touch the Emptiness: Range 30', single, 1k1 + Dazed (no save)
 	"touch_the_emptiness": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1,

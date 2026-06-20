@@ -869,6 +869,13 @@ static func execute_melee_attack(
 		if a_p.stance == Enums.Stance.FULL_ATTACK:
 			a_p.stance = Enums.Stance.ATTACK
 
+	# s36 Strike of the Flowing Waters: a buffed attacker ignores the target's worn-armor Armor TN
+	# (and an extra -5 vs non-human creatures). Does NOT negate Reduction or Defense-stance bonuses.
+	if IndividualCombat.get_timed_modifier_total(a_p, "armor_bypass") > 0:
+		armor_tn -= target.armor_tn_bonus
+		if target.spirit_creature != null:
+			armor_tn -= 5
+		armor_tn = maxi(5, armor_tn)
 	# s33 Castle of Air: a defender's attacker_penalty buff imposes a -Xk0 attack-roll penalty.
 	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty")
 	var result: Dictionary = IndividualCombat.resolve_attack(
@@ -1304,6 +1311,13 @@ static func execute_ranged_attack(
 	armor_tn += _cover_bonus(state, tpos, apos)
 	# s33 Blessed Wind: +Armor TN vs non-magical ranged attacks only (ranged path).
 	armor_tn += IndividualCombat.get_timed_modifier_total(t_p, "ranged_armor_tn")
+	# s36 Strike of the Flowing Waters: a buffed attacker ignores the target's worn-armor Armor TN
+	# (and an extra -5 vs non-human creatures). Does NOT negate Reduction or Defense-stance bonuses.
+	if IndividualCombat.get_timed_modifier_total(a_p, "armor_bypass") > 0:
+		armor_tn -= target.armor_tn_bonus
+		if target.spirit_creature != null:
+			armor_tn -= 5
+		armor_tn = maxi(5, armor_tn)
 
 	# s33 Castle of Air: a defender's attacker_penalty buff imposes a -Xk0 attack-roll penalty.
 	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty")

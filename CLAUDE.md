@@ -5939,7 +5939,11 @@ removes Fatigue only with no heal (Typhoon's Surge keeps its Fatigue+Dazed+heal 
 Water Dragon** (Water 4) — a `heal_on_damage` buff: a new hook in `_apply_hit` (mirroring weapon_stun)
 heals the buffed target 1k1 whenever it takes actual damage and survives. Runtime-verified: fiery_wrath
 lit 25 CROPS tiles; extinguish cleared them + doused an on-fire creature; rejuvenating removed Fatigue
-without healing; heal_on_damage modifier set. Fire now 6 / Water now 8 combat spells this session.
+without healing; heal_on_damage modifier set. **Strike of the Flowing Waters** (Water 4) — an `armor_bypass` attacker
+buff: a new hook in execute_melee/ranged_attack drops the target's worn-armor Armor TN (and −5 vs
+non-human creatures) before resolve_attack; does NOT negate Reduction or Defense-stance TN, and the
+"spell ML3- effects" bypass is not modeled. Runtime-verified: faced armor TN dropped 40→25 (the
+target's 15 bonus). Fire now 6 / Water now 9 combat spells this session.
 
 ### Spell coverage session summary (2026-06-20)
 This session wired **26 combat spells across all 5 elements** + **1 world-sim spell** (Legacy of
