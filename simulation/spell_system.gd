@@ -360,6 +360,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "per_die_reduction", "value": "earth_school_rank"}]},  # Earth 4: each kept damage die against the caster is reduced by the caster's School Rank, floored at 0 (central melee+ranged path; atemi/charge/spell damage not threaded)
 	# Coverage clean-wins batch 14 (2026-06-20): illusion dispel (anti-invisibility / clears fog).
 	"draw_back_the_shadow": {"kind": "dispel", "range_tiles": 20, "aoe_radius": 6},  # Air 5: within a 30' radius, dispel illusions — clears combatants' invisibility (Gift of Wind / Legion of the Moon) and removes Summon Fog clouds. Auto for the ML<=4 illusions wired; the ML5-6 contest + the broader non-illusion contested dispel are deferred (no creator/mastery on the timed-modifier layer).
+	# Coverage clean-wins batch 15 (2026-06-20): conjured terrain (a barrier that blocks move + LOS).
+	"wall_of_earth": {"kind": "wall", "pattern": "line", "range_tiles": 20, "wall_length": 6, "duration_rounds": 9999},  # Earth 4: a straight WALL_STONE barrier centered on a target tile, perpendicular to the approach — blocks movement (enemies path around) and LOS through it; restored on expiry. (Groves of Stone's closed ring deferred — needs a clamber-over action to avoid an invulnerability stalemate.)
 	"severed_from_the_stream": {"kind": "debuff", "target": "enemy", "range_tiles": 5, "duration_rounds": 9999,
 		"mods": [{"kind": "void_locked", "value": 1}]},  # Void 2: target cannot spend Void Points (the per-spend Contested-Void roll is simplified to a full lock via execute_void_spend; 5 rounds ≈ skirmish)
 	# --- Heal spells (s36 Water) ---

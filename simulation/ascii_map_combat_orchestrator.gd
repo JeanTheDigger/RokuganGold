@@ -2131,6 +2131,12 @@ static func execute_cast_spell(
 			"type": "spell_dispel", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "result": res["dispel"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "wall":
+		res["wall"] = _apply_spell_wall(state, caster_id, target_id, target, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_wall", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "result": res["wall"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "gain_void":
 		var gained: int = SpellSystem.get_effective_school_rank(caster, Enums.Ring.VOID) + 1
 		caster.current_void_points += gained  # over-cap allowed (s37 Drawing the Void)
@@ -2798,6 +2804,57 @@ static func _apply_spell_dispel(
 	return {"center": center, "radius": radius, "revealed": revealed, "fog_cleared": fog_cleared}
 
 
+## Conjure a wall barrier (s34 Wall of Earth): a straight line of WALL_STONE tiles centered on a
+## target tile, oriented perpendicular to the caster→target approach (so it blocks that approach and
+## the LOS along it; enemies path around it via A*). Only passable, unoccupied tiles are walled; the
+## originals are saved on a "conjured_terrain" zone and restored on expiry. Movement (is_passable) and
+## LOS (blocking walls) honor the new tiles automatically. set_delta is the dynamic-tile channel
+## (get_tile reads deltas first); restoring via set_delta(original) returns the tile to its prior look.
+static func _apply_spell_wall(
+	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData,
+	eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var a: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var tgt: Vector2i = a
+	if int(eff.get("range_tiles", 0)) > 0 and target != null and state.positions.has(target_id):
+		tgt = state.positions[target_id]
+	var d: Vector2i = tgt - a
+	# Place the barrier at the midpoint between caster and target (a "wall between me and my enemy"),
+	# oriented perpendicular to the approach so it separates the two and breaks LOS along the line.
+	var b: Vector2i = Vector2i(int((a.x + tgt.x) / 2), int((a.y + tgt.y) / 2))
+	var perp: Vector2i = Vector2i(0, 1) if absi(d.x) >= absi(d.y) else Vector2i(1, 0)
+	var half: int = int(eff.get("wall_length", 6)) / 2
+	var occupied: Dictionary = {}
+	for p in state.positions.values():
+		occupied[p] = true
+	var saved: Array = []
+	for k in range(-half, half + 1):
+		var t: Vector2i = Vector2i(b.x + perp.x * k, b.y + perp.y * k)
+		if t.x < 0 or t.x >= state.map.width or t.y < 0 or t.y >= state.map.height:
+			continue
+		if occupied.has(t):
+			continue  # never wall a combatant's tile
+		if not MovementSystem.is_passable(state.map.get_tile(t.x, t.y)):
+			continue  # already blocked — nothing to conjure
+		saved.append({"pos": t, "original": state.map.get_tile(t.x, t.y)})
+		state.map.set_delta(t.x, t.y, Enums.TileType.WALL_STONE)
+	var dur: int = int(eff.get("duration_rounds", 9999))
+	var zone: Dictionary = {
+		"kind": "conjured_terrain", "tiles": saved,
+		"expiry_round": state.combat.round_number + dur,
+		"spell_id": spell_id, "caster_id": caster_id,
+	}
+	state.spell_zones.append(zone)
+	return {"tiles_placed": saved.size(), "expiry_round": zone["expiry_round"]}
+
+
+## Restore the original tiles of a conjured-terrain zone (s34 Wall of Earth) when it expires.
+static func _restore_conjured_terrain(state: MapCombatState, zone: Dictionary) -> void:
+	for entry in zone.get("tiles", []):
+		var pos: Vector2i = entry["pos"]
+		state.map.set_delta(pos.x, pos.y, int(entry["original"]))
+
+
 ## True when the straight line from a to b passes through any fog zone (s33 Summon Fog) — blocking
 ## sight/shots beyond 5 ft. Adjacent tiles (≤1) are always visible. Traces the same Bresenham line
 ## as _has_los; a traced tile within a fog disc blocks the view (including either endpoint in fog).
@@ -2847,11 +2904,15 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 	for zone in state.spell_zones:
 		if int(zone.get("expiry_round", -1)) >= 0 \
 				and state.combat.round_number >= int(zone["expiry_round"]):
+			# s34 Wall of Earth: restore the original tiles when the conjured barrier crumbles.
+			if String(zone.get("kind", "")) == "conjured_terrain":
+				_restore_conjured_terrain(state, zone)
 			continue
 		# s33 modifier zones (Blessed Wind of Lady Sun / Summoning the Gale) have no per-round effect
 		# — their modifiers are read at roll time by _zone_modifier_total. Keep them until they expire.
 		# s33 fog zones (Summon Fog) likewise have no per-round effect — they block LOS at shot time.
-		if String(zone.get("kind", "damage_zone")) in ["modifier", "fog"]:
+		# s34 conjured terrain (Wall of Earth) is inert per-round — the walled tiles do the work.
+		if String(zone.get("kind", "damage_zone")) in ["modifier", "fog", "conjured_terrain"]:
 			surviving.append(zone)
 			continue
 		# s36 Heaven's Tears: a purify field — heal the pure of soul, harm the Tainted, by soul

@@ -6191,11 +6191,27 @@ deferred — the timed-modifier layer stores no creator/mastery to contest again
 across ~15 spell installers), so this auto-dispels the wired illusions (Summon Fog ML3, Gift of Wind ML4;
 Legion of the Moon ML5 would auto-clear rather than contest). Air 15 this session.
 
+### Spell coverage — conjured terrain batch 15 (2026-06-20, runtime-verified 12/12)
+**Wall of Earth** (Earth 4) — a thick stone barrier. The first **conjured-terrain** mechanic: a straight
+line of WALL_STONE tiles placed at the **midpoint** between caster and target ("a wall between me and my
+enemy"), oriented perpendicular to the approach. `_apply_spell_wall` walls only passable, unoccupied tiles
+(never buries a combatant), saves each original tile, and stores them on a `conjured_terrain` spell zone;
+`_restore_conjured_terrain` puts the originals back when the zone expires. Movement (the conjured walls are
+impassable, so A* pathfinds around them) and LOS (walls block the ray) honor the new tiles **automatically**
+— no new movement/LOS code. Uses `set_delta` (the dynamic-tile channel `get_tile` reads first); restoring
+via `set_delta(original)` returns the tile to its prior look in all cases. Runtime-verified: a 7-tile
+vertical wall forms at the midpoint of a horizontal approach, the walled tiles become impassable WALL_STONE,
+straight-line LOS through it is blocked, off-wall tiles stay passable, a combatant's tile is never walled,
+and the tiles are restored to floor when the zone expires (zone dropped). No regression. LIMITATION:
+**Groves of Stone** (Earth 3, a closed 15' ring around the caster) is **deferred** — without a "clamber
+over" action (GDD: Complex Action + Athletics roll) a closed ring would be an invulnerability stalemate;
+the conjured-terrain mechanic is ready for it once a clamber action exists. Earth 4 this continuation.
+
 ### Spell coverage session summary (2026-06-20, running)
-This session has wired **~63 combat spells across all 5 elements** (initial all-element pass + clean-wins
+This session has wired **~64 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
 forced-stance batch 5 + purify-zone batch 6 + guided-auto-hit batch 7 + AoE-mobility batch 8 +
-action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11 + fog batch 12 + per-die-reduction batch 13 + illusion-dispel batch 14) + **1 world-sim spell** (Legacy of Kaze-no-Kami
+action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11 + fog batch 12 + per-die-reduction batch 13 + illusion-dispel batch 14 + conjured-terrain batch 15) + **1 world-sim spell** (Legacy of Kaze-no-Kami
 spirit-bird letters) + **2 pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty`
 was also the hook reused by Suitengu's Curse), all runtime-verified via headless drivers (full project
 import 0 parse errors throughout). Combat-effect total rose ~76 → ~133. New reusable infra built: the
