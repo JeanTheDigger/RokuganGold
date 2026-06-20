@@ -5787,8 +5787,22 @@ Dragon's Talon hits Insight-1/2 foes and spares an Insight-5 foe). The remaining
 spells without combat effects are mostly utility, conjured-weapon, or need mechanics the schema
 lacks (weapon replacement, terrain pits with save-negates-damage, conditional-expiry buffs).
 
-### Pending Redesign
-(None currently pending.)
+"### Pending Redesign
+- **Ring-changing combat spells (essence_of_earth, the_wolfs_mercy, strike_at_the_roots, and
+  Water ring-down spells) — participant-scoped wound threading (owner-chosen 2026-06-20).**
+  Owner chose participant-scoped storage for combat ring-deltas (clean, no world-sim leak).
+  SCOPE DISCOVERY: making it *consistent* requires threading an optional participant through the
+  wound/death chain (get_ring_value/get_earth_ring/get_wound_threshold_per_level/
+  get_total_wound_capacity/get_wound_level/get_wound_penalty/is_dead) AND passing it at every
+  in-combat read — **132 is_dead calls + 27 wound reads in the orchestrator, +29 in
+  individual_combat (~190 sites)**. Partial threading is UNSAFE: a character alive only via an
+  Earth ring-up (wounds between base and buffed capacity) reads alive at the participant-aware
+  damage site but DEAD at the 132 base-capacity iteration guards; ring-down kills symmetrically
+  fail to register at those guards. So the foundation is a bounded but large mechanical refactor
+  (optional `p=null` param on the 7 functions — world-sim callers unaffected — then thread `p`
+  into the orchestrator's combat reads via a participant-resolving helper). Deferred to a
+  dedicated refactor wave; the 3+ ring spells stay unwired until then. Everything else in the
+  s31-37 library that needs no wound surgery proceeds normally.
 
 ### ASCII Map System — Live-Reachability Status (2026-06-20)
 **The ASCII map / tile-combat layer is extensively built and partly verified, but is NOT
