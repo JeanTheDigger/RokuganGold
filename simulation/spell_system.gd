@@ -151,6 +151,11 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "spell_attack_rolled", "value": -2}, {"kind": "move_water_penalty", "value": 1}]},  # Earth 1: -2k0 Agility + -1 Rank movement
 	"earth_becomes_sky": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0, "range_tiles": 20,
 		"aoe_radius": 0},  # Earth 2: hurled boulders, DR = Earth Ring (multi-target -1k1 simplified to single)
+	# === EARTH WAVE B (2026-06-20): absorption shield + debuff immunity ===
+	"power_of_the_earth_dragon": {"kind": "buff", "target": "ally", "range_tiles": 10,
+		"duration_rounds": 100, "mods": [{"kind": "absorb_pool", "value": 100}]},  # Earth 6: absorbs 100 Wounds then ends
+	"wholeness_of_the_world": {"kind": "buff", "target": "ally", "range_tiles": 4, "duration_rounds": 100,
+		"mods": [{"kind": "immune_trait_change", "value": 1}]},  # Earth 2: immune to Trait/Ring-altering effects
 	# Coverage extension batch 12 (2026-06-20): save-negates AoE + sun zone/buff.
 	"murmur_of_earth": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1, "range_tiles": 0,
 		"aoe_radius": 20, "aoe_hits": "all", "caster_exempt": true,

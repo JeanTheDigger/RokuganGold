@@ -227,6 +227,7 @@ class Participant:
 	# On fire (s54.10 Everything Burns / s56.6.6): set by a fire creature's melee
 	# hit; takes 1k1 at the start of each round until a Simple Action extinguishes it.
 	var on_fire: bool = false
+	var absorb_pool: int = 0  # s34 Power of the Earth Dragon: remaining Wounds the ward absorbs (0 = none)
 
 
 class CombatState:

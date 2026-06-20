@@ -5715,6 +5715,17 @@ stub where the layer is on-hold).
   Agility + −1 Rank movement), earth_becomes_sky (boulder damage DR=Earth Ring; multi-target −1k1
   simplified). Runtime-verified 8/8.
 
+- **Earth wave B** — **damage-absorption shield** (`Participant.absorb_pool`; soaks post-Reduction
+  Wounds in `_apply_hit` until exhausted; set via a special `absorb_pool` buff mod) and
+  **debuff immunity** (`immune_trait_change` buff, already gated in the debuff path). Wired:
+  power_of_the_earth_dragon (absorbs 100 Wounds then ends), wholeness_of_the_world (immune to
+  Trait/Ring-altering effects). Runtime-verified 3/3. DEFERRED pending an owner decision (see
+  Pending): the Earth ring-up/ring-down spells (essence_of_earth, the_wolfs_mercy, strike_at_the_roots)
+  that change WOUND CAPACITY — `get_ring_value` is the central world-sim ring function, so a combat
+  ring-delta there risks leaking altered rings into the simulation. armor_of_the_emperor (per-die
+  reduction), times_deadly_hand (equipment debuff), the_kamis_will (anti-spell roll penalty),
+  sharing_the_strength_of_many / earths_touch (group/trait) also deferred to later sub-waves.
+
 ### s31-37 spell combat coverage — extension batches 1–13 (2026-06-20)
 Added combat effects for 4 more library spells (the library has 287 spells; only ~28 had combat
 effects). All values transcribed exactly from s34/s35: **tail_of_the_fire_dragon** (Fire 2,

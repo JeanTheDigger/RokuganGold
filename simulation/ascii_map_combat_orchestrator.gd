@@ -2231,9 +2231,14 @@ static func _apply_spell_buff(
 	var expiry: int = state.combat.round_number + int(eff.get("duration_rounds", 5))
 	var applied: Array = []
 	for mod in eff.get("mods", []):
+		var mkind: String = String(mod.get("kind", ""))
 		var val: int = _resolve_buff_value(caster, mod.get("value", 0))
-		IndividualCombat.add_timed_modifier(p, mod.get("kind", ""), val, expiry, "spell_buff")
-		applied.append({"kind": mod.get("kind", ""), "value": val})
+		if mkind == "absorb_pool":
+			# s34 Power of the Earth Dragon: a depleting damage-absorption pool (participant field).
+			p.absorb_pool = maxi(p.absorb_pool, val)
+		else:
+			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff")
+		applied.append({"kind": mkind, "value": val})
 	return {"id": bid, "applied": applied, "expires_round": expiry}
 
 
@@ -6456,6 +6461,13 @@ static func _apply_hit(
 		reduction += SpiritAbilitySystem.protection_of_yomi_reduction(target.spirit_creature)
 		var filt: Dictionary = SpiritAbilitySystem.incoming_damage(target.spirit_creature, w_kind)
 		raw = 0 if filt["heals"] else int(round(float(raw) * float(filt["multiplier"])))
+	# Power of the Earth Dragon (s34): an absorption ward soaks incoming Wounds (post-Reduction)
+	# until its pool (100 base) is exhausted, then ends.
+	if t_p != null and t_p.absorb_pool > 0 and raw > 0:
+		var net: int = maxi(0, raw - reduction)
+		var soaked: int = mini(net, t_p.absorb_pool)
+		t_p.absorb_pool -= soaked
+		raw = maxi(0, raw - soaked)
 	var wd_result: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
 
 	# The Soul's Blade (s35 Fire 6): every target hit by the enchanted weapon is Stunned.
