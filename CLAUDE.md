@@ -6013,14 +6013,31 @@ verified: five_fires kills a healthy target for cap+1 reciprocal → caster also
 reciprocal 1; fire-resistant immune; out-of-range fizzles; unmake_the_world kills on a won contest with
 zero caster wounds, and an Earth-9 target resisted a Void-1 caster 10/10. Fire 9 / Void 8 this session.
 
+### Spell coverage — clean-wins batch 5 (Haze of Battle forced-stance lock, 2026-06-20, runtime-verified 9/9)
+**Haze of Battle** (Fire 3, debuff) — fills the target with unfocused fury: it is forced into Full
+Attack Stance and "cannot switch from it for the duration." New `stance_locked` mechanic: a special-case
+in `_apply_spell_debuff` sets `p.stance = FULL_ATTACK` on cast and installs the `stance_locked` timed
+modifier; `execute_stance_change` blocks any switch away from Full Attack while locked (reason
+`stance_locked`, no action consumed); `_npc_pick_stance` short-circuits so a locked NPC never wastes a
+Simple attempting a change. Resisted via a new `willpower_contested_caster_fire` save — target Willpower
+vs the caster's Willpower roll + a flat Fire Ring bonus ("caster adds Fire Ring to their roll"). 10' = 2
+tiles, 5 rounds (in-combat duration); the out-of-combat Brash+Contrary Disadvantages are not modeled.
+The effect is a real debuff — Full Attack carries the worst Armor TN, so forcing it makes the target
+easier to hit while it can't turtle. Runtime-verified: lands on a weak-Willpower target and forces Full
+Attack; blocks a switch to Defense (stance unchanged); permits Full Attack itself; the NPC picker
+short-circuits; a Willpower-9 target resisted a weak caster 10/10; out-of-range fizzles. Fire 10 this
+session.
+
 ### Spell coverage session summary (2026-06-20, running)
-This session has wired **~46 combat spells across all 5 elements** (initial all-element pass + clean-wins
-batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4)
-+ **1 world-sim spell** (Legacy of Kaze-no-Kami spirit-bird letters) + **2 pre-existing bug fixes**
-(earths_stagnation move sign; its `move_water_penalty` was also the hook reused by Suitengu's Curse), all
-runtime-verified via headless drivers (full project import 0 parse errors throughout). Combat-effect total
-rose ~76 → ~122. New reusable infra built: the shared `instant_kill` effect + `earth_contested_void` save
-(batch 4), the `no_magic_heal` block + `free_move_tiles` buff (batch 3), the `incapacitated` turn-gate
+This session has wired **~47 combat spells across all 5 elements** (initial all-element pass + clean-wins
+batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
+forced-stance batch 5) + **1 world-sim spell** (Legacy of Kaze-no-Kami spirit-bird letters) + **2
+pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty` was also the hook reused by
+Suitengu's Curse), all runtime-verified via headless drivers (full project import 0 parse errors
+throughout). Combat-effect total rose ~76 → ~123. New reusable infra built: the `stance_locked` forced-Full-
+Attack debuff + `willpower_contested_caster_fire` save (batch 5), the shared `instant_kill` effect +
+`earth_contested_void` save (batch 4), the `no_magic_heal` block + `free_move_tiles` buff (batch 3), the
+`incapacitated` turn-gate
 (CONDITION_INCAPACITATED) + `requires_shadowlands` status gate, the VP `gain_void`/`restore_void`/
 `steal_void` effects + timed `void_locked`, the FireSystem `ignite_zone`/`extinguish` effects, the
 `heal_on_damage`/`armor_bypass` hooks, the `attacker_penalty`/`attacker_roll_penalty` defender

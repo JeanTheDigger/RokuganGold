@@ -484,6 +484,11 @@ static func execute_stance_change(
 	if new_stance == Enums.Stance.FULL_ATTACK and IndividualCombat.CONDITION_FATIGUED in p.conditions:
 		return {"success": false, "reason": "fatigued_no_full_attack"}
 
+	# s35 Haze of Battle: a stance-locked target cannot switch away from Full Attack.
+	if new_stance != Enums.Stance.FULL_ATTACK \
+			and IndividualCombat.get_timed_modifier_total(p, "stance_locked") > 0:
+		return {"success": false, "reason": "stance_locked"}
+
 	p.stance = new_stance as Enums.Stance
 
 	# Full Defense stance: roll Defense now for full_defense_bonus (GDD s40).
@@ -2423,9 +2428,15 @@ static func _apply_spell_debuff(
 	var expiry: int = state.combat.round_number + int(eff.get("duration_rounds", 5))
 	var applied: Array = []
 	for mod in eff.get("mods", []):
+		var mkind: String = String(mod.get("kind", ""))
 		var val: int = _resolve_buff_value(caster, mod.get("value", 0))
-		IndividualCombat.add_timed_modifier(p, String(mod.get("kind", "")), val, expiry, "spell_debuff")
-		applied.append({"kind": mod.get("kind", ""), "value": val})
+		# s35 Haze of Battle: the target is forced into Full Attack Stance immediately and the
+		# `stance_locked` timed modifier prevents switching away (execute_stance_change blocks it,
+		# _npc_pick_stance short-circuits) until it expires.
+		if mkind == "stance_locked":
+			p.stance = Enums.Stance.FULL_ATTACK
+		IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_debuff")
+		applied.append({"kind": mkind, "value": val})
 	return {"id": target_id, "applied": applied, "expires_round": expiry}
 
 
@@ -2992,6 +3003,14 @@ static func _spell_save_resisted(
 			var cw2: int = maxi(1, caster.willpower)
 			return dice_engine.roll_and_keep(tw2, tw2, true).total \
 				>= dice_engine.roll_and_keep(cw2, cw2, true).total
+		"willpower_contested_caster_fire":
+			# s35 Haze of Battle: target Willpower vs caster Willpower + Fire Ring (flat bonus to the
+			# caster's roll per "caster adds Fire Ring to their roll"); the target resists if it wins.
+			var hw: int = maxi(1, ch.willpower)
+			var hcw: int = maxi(1, caster.willpower)
+			var hcf: int = SpellSystem.get_ring_value(caster, Enums.Ring.FIRE)
+			return dice_engine.roll_and_keep(hw, hw, true).total \
+				>= dice_engine.roll_and_keep(hcw, hcw, true).total + hcf
 		_:
 			return false  # "none" — auto-apply
 	return false
@@ -5323,6 +5342,10 @@ static func _npc_pick_stance(
 
 	var p: IndividualCombat.Participant = state.combat.participants.get(npc_id, null)
 	if p == null:
+		return {"changed": false}
+
+	# s35 Haze of Battle: locked into Full Attack — do not waste a Simple attempting a change.
+	if IndividualCombat.get_timed_modifier_total(p, "stance_locked") > 0:
 		return {"changed": false}
 
 	var wl: int = CharacterStats.get_wound_level(npc)

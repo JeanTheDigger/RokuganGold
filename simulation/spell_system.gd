@@ -317,6 +317,10 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"fire_immune_blocks": true},  # Fire 5: instantly reduce target to Dead; caster suffers the same Wounds unmitigated (often lethal); cannot target Fire-resistant creatures
 	"unmake_the_world": {"kind": "instant_kill", "range_tiles": 10,
 		"contested": "earth_contested_void"},  # Void 6: Contested Void vs Earth → target ceases to exist (no reciprocal; the non-magical-object auto-kill + nemuranai ramifications not modeled)
+	# Coverage clean-wins batch 5 (2026-06-20): forced-stance lock.
+	"haze_of_battle": {"kind": "debuff", "target": "enemy", "range_tiles": 2, "duration_rounds": 5,
+		"contested": "willpower_contested_caster_fire",
+		"mods": [{"kind": "stance_locked", "value": 1}]},  # Fire 3: forced into Full Attack Stance, cannot switch (Contested Willpower; caster adds Fire Ring); out-of-combat Brash+Contrary not modeled
 	"severed_from_the_stream": {"kind": "debuff", "target": "enemy", "range_tiles": 5, "duration_rounds": 9999,
 		"mods": [{"kind": "void_locked", "value": 1}]},  # Void 2: target cannot spend Void Points (the per-spend Contested-Void roll is simplified to a full lock via execute_void_spend; 5 rounds ≈ skirmish)
 	# --- Heal spells (s36 Water) ---
