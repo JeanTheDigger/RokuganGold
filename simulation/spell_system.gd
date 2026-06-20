@@ -111,6 +111,16 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"duration_rounds": 0},  # Earth 3: shockwave Knockdown in a line, Contested Strength vs Earth
 	"shining_light": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 10,
 		"mods": [{"kind": "shining_light", "value": 1}]},  # Fire 3: armor flares — melee attacker takes 2k2 + Blinded
+	# Coverage extension batch 8 (2026-06-20): persistent damage zones (per-round standing damage).
+	"wall_of_fire": {"kind": "damage_zone", "dr_rolled": 6, "dr_kept": 6, "aoe_radius": 1,
+		"range_tiles": 20, "aoe_hits": "all", "duration_rounds": 50},  # Fire 4: 6k6/round, 100'
+	"castle_of_fire": {"kind": "damage_zone", "dr_rolled": 6, "dr_kept": 6, "aoe_radius": 6,
+		"range_tiles": 0, "aoe_hits": "enemies", "duration_rounds": 10},  # Fire 5: fiery castle, enemies burn
+	"enticing_the_dance_of_flame": {"kind": "damage_zone", "dr_rolled": 2, "dr_kept": 1,
+		"impact_rolled": 3, "impact_kept": 2, "aoe_radius": 4, "range_tiles": 10,
+		"aoe_hits": "all", "duration_rounds": 2},  # Fire 2: 3k2 impact + 2k1/round, 20' radius
+	"follow_the_flame": {"kind": "damage", "dr_rolled": 6, "dr_kept": 5,
+		"range_tiles": 60, "aoe_radius": 0},  # Fire 5: 6k5 stream of fire, 300' (persistent burn deferred)
 	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
 	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
 	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.

@@ -163,6 +163,12 @@ class MapCombatState:
 	var mirrors_count: int = 0
 	## s54.5 Gagoze Taint Affliction: per-gazer set of victim ids already gazed (once each).
 	var taint_gaze_used: Dictionary = {}
+	## s35/s34 persistent spell zones (Wall of Fire, Enticing the Dance of Flame, Maw of the Earth,
+	## the elemental Symbols). Each: {center:Vector2i, radius:int, kind, dr_rolled, dr_kept, element,
+	## faction (owner), hits ("all"/"enemies"), expiry_round (-1 = permanent), spell_id, plus
+	## per-kind fields (entry_condition, save, save_tn, tn_penalty for wards)}. Processed each round
+	## in advance_round; wards are read at cast time in resolve_cast.
+	var spell_zones: Array = []
 
 
 # =============================================================================
@@ -1922,6 +1928,13 @@ static func execute_cast_spell(
 			"type": "spell_conjure_weapon", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "conjured": res["conjured"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "damage_zone":
+		res["zone"] = _apply_spell_zone(
+			state, caster_id, caster, target_id, target, eff, spell_id, dice_engine)
+		state.combat_log.append({
+			"type": "spell_zone", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "zone": res["zone"],
+		})
 	state.combat_log.append({
 		"type": "spell_cast", "round": state.combat.round_number,
 		"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
@@ -2221,6 +2234,91 @@ static func _apply_spell_conjure_weapon(
 	p.conjured_weapon = weapon
 	p.conjured_weapon_expiry = state.combat.round_number + int(eff.get("duration_rounds", 50))
 	return {"wielder_id": wielder_id, "weapon": weapon}
+
+
+## Register a persistent spell zone (s35 Wall of Fire / Enticing the Dance of Flame / Fiery Wrath,
+## s34 Maw of the Earth). Centered on the target tile (ranged) or the caster. Optional immediate
+## impact damage (impact_rolled/impact_kept) is applied on cast via _apply_spell_combat_damage-style
+## per-target rolls; the standing per-round damage (dr_rolled/dr_kept) is applied in advance_round.
+## "entry_save" (e.g. reflexes_flat with save_tn) lets a creature already in the area avoid the first
+## tick. Returns {center, radius, expiry_round, impact_hits}.
+static func _apply_spell_zone(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary, spell_id: String,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var rng: int = int(eff.get("range_tiles", 0))
+	if rng > 0 and state.positions.has(target_id):
+		center = state.positions[target_id]
+	var radius: int = int(eff.get("aoe_radius", 1))
+	var element: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("e", Enums.Ring.FIRE)
+	var dur: int = int(eff.get("duration_rounds", 5))
+	var zone: Dictionary = {
+		"center": center, "radius": radius, "kind": "damage_zone",
+		"dr_rolled": int(eff.get("dr_rolled", 0)), "dr_kept": int(eff.get("dr_kept", 0)),
+		"element": element, "faction": String(state.factions.get(caster_id, FACTION_PLAYER)),
+		"hits": String(eff.get("aoe_hits", "all")),
+		"expiry_round": state.combat.round_number + dur,
+		"spell_id": spell_id, "caster_id": caster_id,
+	}
+	state.spell_zones.append(zone)
+	# Optional immediate impact damage (Enticing the Dance: 3k2 on the round it takes effect).
+	var impact_hits: Array = []
+	if int(eff.get("impact_rolled", 0)) > 0:
+		var imp_eff: Dictionary = {
+			"dr_rolled": int(eff["impact_rolled"]), "dr_kept": int(eff.get("impact_kept", 2)),
+			"range_tiles": rng, "aoe_radius": radius, "aoe_hits": zone["hits"],
+			"caster_exempt": true,
+		}
+		impact_hits = _apply_spell_combat_damage(
+			state, caster_id, caster, target_id, target, imp_eff, spell_id, dice_engine)
+	return {"center": center, "radius": radius, "expiry_round": zone["expiry_round"],
+		"impact_hits": impact_hits}
+
+
+## Per-round spell-zone processing (called from advance_round). Every living combatant standing in
+## a damage zone takes the zone's per-round DR (element ring when dr_* is 0; spirit damage filter
+## honored). Expired zones are dropped. The zone owner's faction is exempt when hits == "enemies".
+static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine) -> void:
+	var surviving: Array = []
+	for zone in state.spell_zones:
+		if int(zone.get("expiry_round", -1)) >= 0 \
+				and state.combat.round_number >= int(zone["expiry_round"]):
+			continue
+		var dr_rolled: int = int(zone.get("dr_rolled", 0))
+		var dr_kept: int = int(zone.get("dr_kept", 0))
+		if dr_rolled > 0:
+			var element: int = int(zone.get("element", Enums.Ring.FIRE))
+			var dkind: String = SpiritAbilitySystem.W_MAGIC
+			if element == Enums.Ring.FIRE:
+				dkind = SpiritAbilitySystem.W_FIRE
+			elif element == Enums.Ring.WATER:
+				dkind = SpiritAbilitySystem.W_WATER
+			var center: Vector2i = zone["center"]
+			var radius: int = int(zone.get("radius", 1))
+			var zfac: String = String(zone.get("faction", ""))
+			var enemies_only: bool = String(zone.get("hits", "all")) == "enemies"
+			for cid in state.positions.keys():
+				if enemies_only and String(state.factions.get(cid, "")) == zfac:
+					continue
+				var pos: Vector2i = state.positions[cid]
+				if maxi(absi(center.x - pos.x), absi(center.y - pos.y)) > radius:
+					continue
+				var ch = state.combatants.get(cid, null)
+				if ch == null or CharacterStats.is_dead(ch):
+					continue
+				var dmg: int = dice_engine.roll_and_keep(dr_rolled, dr_kept, true).total
+				if ch.spirit_creature != null:
+					var filt: Dictionary = SpiritAbilitySystem.incoming_damage(
+						ch.spirit_creature, dkind, true)
+					if filt.get("heals", false):
+						WoundSystem.heal_wounds(ch, dmg)
+						continue
+					dmg = int(round(dmg * filt.get("multiplier", 1.0)))
+				WoundSystem.apply_damage(ch, dmg, 0)
+		surviving.append(zone)
+	state.spell_zones = surviving
 
 
 # Resolves a damage-spell's condition rider (s31–s37). Returns the applied condition string,
@@ -3987,6 +4085,10 @@ static func advance_round(
 	# End-of-round fire spread/extinguish (s56.6.6) — no-op when nothing is burning.
 	if not state.map.burning_tiles.is_empty():
 		FireSystem.process_round_end(state.map, state.weather, dice_engine)
+
+	# Persistent spell zones (Wall of Fire, Enticing the Dance of Flame, etc.) — no-op when empty.
+	if not state.spell_zones.is_empty():
+		_process_spell_zones(state, dice_engine)
 
 	# Re-roll initiative for all active participants (L5R 4e: initiative re-rolled each round).
 	# CENTER stance carry-forward: void bonus from last round applies to this roll.

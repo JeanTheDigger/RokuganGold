@@ -5696,7 +5696,7 @@ they comply with (`ctx.compliance_intimidators`) — covering non-hostile court 
 Phase-4 hostile filter doesn't. Runtime-verified 3/3 (accumulated reduction lifts Negotiate
 success 44→79/80; compliance +10 drops it 44→18/80; Persuade eased only by the persuade pool).
 
-### s31-37 spell combat coverage — extension batches 1–7 (2026-06-20)
+### s31-37 spell combat coverage — extension batches 1–8 (2026-06-20)
 Added combat effects for 4 more library spells (the library has 287 spells; only ~28 had combat
 effects). All values transcribed exactly from s34/s35: **tail_of_the_fire_dragon** (Fire 2,
 single damage DR=Fire Ring, 30'), **ravenous_swarms** (Fire 3, 5k3 bolt, 30' — the fire-spell-
@@ -5706,8 +5706,15 @@ the magic path, 100') and `earthen_wave` (Earth 3, self-line AoE Knockdown → P
 Strength vs Earth) via a new `strength_contested_earth` save type. 47 spells now have combat
 effects. **Batch 7** adds `shining_light` (Fire 3, armor ward: a struck melee attacker takes 2k2
 and is Blinded) via a new `_apply_shining_light` defender-retaliation hook in `_apply_hit` (beside
-fires_of_purity), reusing the `shining_light` timed modifier. 48 spells now have combat effects
-(from 28 at session start). Two new
+fires_of_purity), reusing the `shining_light` timed modifier. 48 spells now have combat effects.
+**Batch 8** adds a **persistent spell-zone subsystem** (`MapCombatState.spell_zones` +
+`_apply_spell_zone` + per-round `_process_spell_zones` in `advance_round`; new `damage_zone`
+kind with optional `impact_*` on-cast damage): `wall_of_fire` (Fire 4, 6k6/round), `castle_of_fire`
+(Fire 5, enemies-only 6k6 field), `enticing_the_dance_of_flame` (Fire 2, 3k2 impact + 2k1/round),
+plus `follow_the_flame` (Fire 5, 6k5 stream, direct damage; persistent burn deferred). Zones honor
+the element ring, the spirit damage filter, `enemies`/`all` faction gating, and auto-expire.
+`fiery_wrath` (terrain ignition) and `maw_of_the_earth` (save-negates pit + entrap) deferred —
+distinct mechanics. 52 spells now have combat effects (from 28 at session start). Two new
 `_gather_spell_targets` fields support Dragon's Talon: `target_max_insight` (skip stronger foes)
 and `aoe_max_targets` (cap struck count). Runtime-verified 5/5 (damage lands; grasp entangles;
 Dragon's Talon hits Insight-1/2 foes and spares an Insight-5 foe). The remaining ~255 library
