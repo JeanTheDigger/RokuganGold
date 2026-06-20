@@ -277,6 +277,13 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "insubstantial", "value": 1}]},  # Water 3: transformed to water — untargetable + cannot act (Fire-still-harms downside not modeled)
 	"wave_borne_speed": {"kind": "buff", "target": "self", "duration_rounds": 2,
 		"mods": [{"kind": "move_water_penalty", "value": 2}]},  # Water 2: Water +2 for movement distance (positive = increase)
+	# Coverage clean-wins batch 3 (2026-06-20): magical-healing block + move-debuff + free-move buff.
+	"disrupt_the_aura": {"kind": "debuff", "target": "enemy", "range_tiles": 10, "duration_rounds": 9999,
+		"mods": [{"kind": "no_magic_heal", "value": 1}]},  # Fire 2: target cannot be healed by magical means (spells/items/Techniques fail); mundane Medicine still works (out-of-combat). 24h ≈ skirmish.
+	"suitengus_curse": {"kind": "debuff", "target": "enemy", "range_tiles": 4, "duration_rounds": 10,
+		"mods": [{"kind": "move_water_penalty", "value": -1}]},  # Water 1: move as though Water 1 Rank lower (the Reflexes -1 trait change deferred)
+	"the_rushing_wave": {"kind": "buff", "target": "ally", "range_tiles": 2, "duration_rounds": 1,
+		"mods": [{"kind": "free_move_tiles", "value": 1}]},  # Water 1: Free Move up to Water Ring ×10' (= +Water tiles to the free-move budget, read from the mover's own Water at move time)
 	"clarity_of_purpose": {"kind": "buff", "target": "ally", "aoe_radius": 2, "duration_rounds": 2,
 		"mods": [{"kind": "initiative_score", "value": 5}]},  # Water 1: all allies within 10' +5 Initiative Score
 	"rejuvenating_vapors": {"kind": "cleanse", "range_tiles": 1, "cleanse_cap": 1,

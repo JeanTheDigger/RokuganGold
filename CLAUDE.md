@@ -5975,21 +5975,47 @@ Contested-Void roll is simplified to a full lock, 5 rounds ≈ skirmish). Runtim
 max, steal moves a point caster↔enemy, no-op vs 0-VP, lock blocks execute_void_spend. Void now 7
 combat spells this session.
 
-### Spell coverage session summary (2026-06-20)
-This session wired **26 combat spells across all 5 elements** + **1 world-sim spell** (Legacy of
-Kaze-no-Kami spirit-bird letters) + **1 pre-existing bug fix** (earths_stagnation move sign), all
-runtime-verified via headless drivers (full project import 0 parse errors throughout). Combat-effect
-total rose ~76 → ~102. New reusable infra built: the `attacker_penalty`/`attacker_roll_penalty` defender
+### Spell coverage — clean-wins batch 3 (no-magic-heal + move/free-move, 2026-06-20, runtime-verified 9/9)
+Three more clean wins, one new reusable hook. **Disrupt the Aura** (Fire 2, debuff) — a new
+`no_magic_heal` modifier: while active, the target "cannot be healed by magical means — spells,
+items, or Techniques that attempt to restore Wounds automatically fail" (s35). Guarded at the three
+spell-heal sites: `_apply_spell_heal` (returns `no_magic_heal: true`, heals 0), `_apply_spell_cleanse`
+(the **Wound-restore portion** blocks but **condition cleansing still works** — removing Fatigue/Dazed
+is not "restoring Wounds"), and the `heart_of_the_water_dragon` heal_on_damage hook in `_apply_hit`
+(suppressed). Mundane Medicine (out-of-combat MedicineSystem) is untouched, faithful to the GDD. 24h
+≈ skirmish (9999). **Suitengu's Curse** (Water 1, debuff) — `move_water_penalty: -1` (move as though
+Water 1 Rank lower; the Reflexes −1 trait change deferred), reusing the existing `_effective_water_ring`
+move hook (10 Rounds, GDD-explicit). **The Rushing Wave** (Water 1, buff) — a new `free_move_tiles`
+flag read in `free_move_budget`: a Free Move of up to Water Ring ×10' (instead of ×5'), i.e. +Water
+tiles, computed from the **mover's own** effective Water at move time (not fixed at cast). Runtime-
+verified: no_magic_heal blocks spell-heal (wounds unchanged) AND heal_on_damage (delta==damage, vs a
+control ally that regenerated), cleanse still removes Fatigue but heals 0; suitengus 5→4 move budget;
+rushing_wave 5→10 free-move (Water 5). **`stones_endurance` deliberately NOT wired** — its combat
+immunity is "Fatigue from lack of rest," which has no skirmish trigger (combat Fatigue is magical/
+environmental), so a combat `fatigue_immune` would over-broaden it; it is out-of-combat utility (ASK
+territory). Fire 8 / Water 12 combat spells this session.
+
+### Spell coverage session summary (2026-06-20, running)
+This session has wired **~44 combat spells across all 5 elements** (initial all-element pass + clean-wins
+batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3) + **1 world-sim spell**
+(Legacy of Kaze-no-Kami spirit-bird letters) + **2 pre-existing bug fixes** (earths_stagnation move sign;
+its `move_water_penalty` was also the hook reused by Suitengu's Curse), all runtime-verified via headless
+drivers (full project import 0 parse errors throughout). Combat-effect total rose ~76 → ~120. New reusable
+infra built: the `no_magic_heal` block + `free_move_tiles` buff (batch 3), the `incapacitated` turn-gate
+(CONDITION_INCAPACITATED) + `requires_shadowlands` status gate, the VP `gain_void`/`restore_void`/
+`steal_void` effects + timed `void_locked`, the FireSystem `ignite_zone`/`extinguish` effects, the
+`heal_on_damage`/`armor_bypass` hooks, the `attacker_penalty`/`attacker_roll_penalty` defender
 hook, `ranged_armor_tn`, `insubstantial` (untargetable + can't act/cast), character `invisible`
 (single + AoE via `_apply_spell_buff_aoe`), `initiative_score` buff mod, `willpower_flat` /
 `strength_contested_water` saves, `_build_shiryo` summon, and the `banish_spirit` effect. Two notable
-findings: (1) **CONDITION_STUNNED does not block a combatant's turn** in this engine (only flat-foots
-defense), so all "treated-as-Down / helpless / bind" spells (Earth minor/major/prison_of_earth, Water
-suitengus_embrace, Fire everburning_rage, Void essence_of_void) are blocked on a dedicated "can't-act"
-turn-gate that would also make existing atemi/spell Stuns faithful; (2) the earths_stagnation sign bug.
-Remaining per-element work is documented in each element's DEFERRED note above (FireSystem ignite/
-extinguish, the ring-changing wound-threading refactor (Pending Redesign), the illusion/disguise/
-perception/decoy infra, VP-manipulation hooks, and the out-of-combat utility set per the per-spell ASK).
+findings, both since RESOLVED this session: (1) **CONDITION_STUNNED does not block a combatant's turn**
+in this engine (only flat-foots defense) — so the "treated-as-Down / helpless / bind" spells (Earth
+minor/major/prison_of_earth, Water suitengus_embrace, Fire everburning_rage, Void essence_of_void) got a
+**dedicated** `CONDITION_INCAPACITATED` turn-gate (existing atemi/spell Stuns left unchanged); (2) the
+earths_stagnation sign bug (fixed; its `move_water_penalty` hook is reused by Suitengu's Curse). Remaining
+per-element work is documented in each element's DEFERRED note above: the ring-changing wound-threading
+refactor (Pending Redesign), the illusion/disguise/perception/decoy infra, and the out-of-combat utility
+set per the per-spell ASK. (FireSystem ignite/extinguish and the VP-manipulation hooks are now DONE.)
 
 "### Pending Redesign
 - **Ring-changing combat spells (essence_of_earth, the_wolfs_mercy, strike_at_the_roots, and

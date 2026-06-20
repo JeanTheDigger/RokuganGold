@@ -257,7 +257,10 @@ static func free_move_budget(state: MapCombatState, char_id: int, character: L5R
 	var base: int = MovementSystem.budget(water, MovementSystem.MoveAction.FREE)
 	if p == null:
 		return base
-	return base + IndividualCombat.get_kata_free_move_bonus(character, p) + IndividualCombat.get_kiho_move_bonus(character, p) + IndividualCombat.get_creature_swift_bonus(character)
+	# s36 The Rushing Wave: Free Move up to Water Ring ×10' (= +Water tiles to the free-move
+	# budget, read from the mover's own effective Water at move time, not fixed at cast time).
+	var rush: int = water if IndividualCombat.get_timed_modifier_total(p, "free_move_tiles") > 0 else 0
+	return base + IndividualCombat.get_kata_free_move_bonus(character, p) + IndividualCombat.get_kiho_move_bonus(character, p) + IndividualCombat.get_creature_swift_bonus(character) + rush
 
 
 ## Water Ring for Move-distance purposes, reduced by any timed move penalty
@@ -2049,6 +2052,11 @@ static func _apply_spell_heal(
 		return {"reason": "not_an_ally"}
 	if CharacterStats.is_dead(heal_target):
 		return {"reason": "target_dead"}
+	# s35 Disrupt the Aura: a target under no_magic_heal cannot be restored by magical means
+	# (spells/items/Techniques auto-fail; mundane Medicine still works, out-of-combat).
+	var heal_p: IndividualCombat.Participant = state.combat.participants.get(heal_id, null)
+	if heal_p != null and IndividualCombat.get_timed_modifier_total(heal_p, "no_magic_heal") > 0:
+		return {"id": heal_id, "healed": 0, "no_magic_heal": true}
 	# Touch range: caster adjacent to the ally (self exempt).
 	var rng: int = eff.get("range_tiles", 1)
 	if heal_id != caster_id and state.positions.has(caster_id) and state.positions.has(heal_id):
@@ -2271,9 +2279,15 @@ static func _apply_spell_cleanse(
 		if p != null:
 			for cond in conditions:
 				IndividualCombat.remove_condition(p, String(cond))
-		if heal_amt > 0:
+		# Disrupt the Aura (s35): the Wound-restore portion auto-fails, but condition cleansing
+		# (Fatigue/Dazed) still works — it is not "restoring Wounds."
+		var blocked: bool = p != null and IndividualCombat.get_timed_modifier_total(p, "no_magic_heal") > 0
+		var did_heal: int = heal_amt
+		if heal_amt > 0 and not blocked:
 			WoundSystem.heal_wounds(c["char"], heal_amt)
-		out.append({"id": c["id"], "cleansed": true, "healed": heal_amt})
+		elif blocked:
+			did_heal = 0
+		out.append({"id": c["id"], "cleansed": true, "healed": did_heal})
 	return out
 
 
@@ -6792,6 +6806,7 @@ static func _apply_hit(
 	# suffers damage during the duration. Fires only when actual Wounds landed and it survived.
 	if t_p != null and not CharacterStats.is_dead(target) \
 			and IndividualCombat.get_timed_modifier_total(t_p, "heal_on_damage") > 0 \
+			and IndividualCombat.get_timed_modifier_total(t_p, "no_magic_heal") <= 0 \
 			and int(wd_result.get("final_damage", 0)) > 0:
 		WoundSystem.heal_wounds(target, dice_engine.roll_and_keep(1, 1, true).total)
 
