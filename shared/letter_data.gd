@@ -57,6 +57,10 @@ extends Resource
 # Blockade state
 @export var blocked_by_blockade: bool = false
 
+# s33 Legacy of Kaze-no-Kami: true when the sender's spirit-bird message spell delivered
+# this letter instantly (transit 0). Trace/debug only.
+@export var delivered_by_spirit_bird: bool = false
+
 # Teaching offer flags (populated by §57.22.12 proactive teaching trigger)
 @export var learn_piece_id: int = -1
 @export var teacher_initiated: bool = false

@@ -221,6 +221,10 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "insubstantial", "value": 1}]},  # Air 3: insubstantial — untargetable but cannot attack or cast (Water-halved + pass-through-objects deferred)
 	"castle_of_air": {"kind": "buff", "target": "self", "duration_rounds": 10,
 		"mods": [{"kind": "attacker_penalty", "value": -5}]},  # Air 4: attackers suffer -5k0 (per-round Perception-vs-Air contest simplified to always-on; does not affect spells)
+	# Concentration = skirmish-length (duration_rounds 9999) per owner convention (2026-06-20):
+	# matches the "while active" kiho/kata precedent — no invented finite round count.
+	"blessed_wind": {"kind": "buff", "target": "self", "duration_rounds": 9999,
+		"mods": [{"kind": "ranged_armor_tn", "value": 15}]},  # Air 1: +15 Armor TN vs non-magical ranged while concentrating ("non-magical ranged only" gate not modeled — applies to all ranged)
 	# --- Earth (s34) ---
 	# Jade Strike: Range 100', single, DR 3k3 ONLY vs Taint Rank 1+ (also a jade-property spell)
 	"jade_strike": {"kind": "damage", "dr_rolled": 3, "dr_kept": 3,
@@ -305,7 +309,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"by_the_light_of_the_moon":   {"e": 0, "m": 1, "s": 0},
 	"cloak_of_night":             {"e": 0, "m": 1, "s": 0},
 	"gathering_swirl":            {"e": 0, "m": 1, "s": 0},
-	"legacy_of_kaze_no_kami":     {"e": 0, "m": 1, "s": 0},
+	"legacy_of_kaze_no_kami":     {"e": 0, "m": 1, "s": 0},   # spirit-bird message — sender delivers letters instantly (LetterSystem.write_letter)
 	"natures_touch":              {"e": 0, "m": 1, "s": 3},
 	"tempest_of_air":             {"e": 0, "m": 1, "s": 0},
 	"token_of_memory":            {"e": 0, "m": 1, "s": 0},   # memory illusion; perception bonus — COMBAT_ONLY

@@ -5821,10 +5821,21 @@ reduction, threaded from execute_melee/ranged_attack via the defender's `attacke
 modifier) and a `ranged_armor_tn` add in the ranged path (forward-wiring for the Concentration
 anti-ranged spells). Verified: −5k0 cut hits 549→114/600; buff sets −5; execute_melee_attack reads
 it without error. 9 Air spells wired total.
+**Air batch 4 (blessed_wind + spirit-bird messaging):** owner decisions (2026-06-20) —
+**Concentration = persist for the skirmish** (modeled as `duration_rounds: 9999`, matching the
+"while active" kiho/kata precedent; no invented finite count) and **wire the long-range messaging
+spells**. **Blessed Wind** (Air 1): self `ranged_armor_tn` +15 buff (Concentration=skirmish; the
+"non-magical ranged only" gate is not modeled — applies to all ranged). **Legacy of Kaze-no-Kami**
+(Air 1, world-sim): `LetterSystem.write_letter` now delivers instantly (transit 0,
+`LetterData.delivered_by_spirit_bird`) when the sender knows the spell — automatic on any letter
+they send, no new NPC trigger. Range cap (School×10 mi) not enforced (no miles data, A16); slot cost
+abstracted. Runtime-verified (spirit-bird arrives same tick vs 2 days over 5 provinces). 10 Air
+combat spells wired this session + 1 world-sim. **echoes_on_the_breeze** (live two-way voice link)
+does NOT map to the async letter pipeline — documented no-op (a real-time cross-distance conversation
+mechanic would be a separate effort).
 DEFERRED (Air, next tranches): facing_your_devils (ring-changing — Pending Redesign);
-blessed_wind/blessed_wind_of_lady_sun/summoning_the_gale (anti-ranged — need the Concentration→rounds
-convention + a zone-attacker-penalty hook for the area ones; the per-defender `ranged_armor_tn`
-hook is ready);
+blessed_wind_of_lady_sun/summoning_the_gale (area anti-ranged — need a zone-attacker-penalty hook;
+the per-defender `ranged_armor_tn` hook is ready);
 arrows_flight (ranged auto-hit hook); draw_back_the_shadow (dispel infra — pairs with the illusion
 spells); netsuke_of_wind (no GDD DR — ASK); wrath_of_kaze_no_kami (minute-scale AoE — per-round
 scaling, ASK); the_false_legion/way_of_deception (illusory-decoy combatant layer); mask_of_wind/
