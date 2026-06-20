@@ -2261,6 +2261,12 @@ static func _spell_save_resisted(
 			# Contested: the target must beat the caster's Air roll to avoid the effect.
 			return dice_engine.roll_and_keep(te, te, true).total \
 				>= dice_engine.roll_and_keep(ca, ca, true).total
+		"strength_contested_earth":
+			# s34 Earthen Wave: target rolls Raw Strength vs the caster's Earth to avoid Knockdown.
+			var ts: int = maxi(1, ch.strength)
+			var ce: int = SpellSystem.get_ring_value(caster, Enums.Ring.EARTH)
+			return dice_engine.roll_and_keep(ts, ts, true).total \
+				>= dice_engine.roll_and_keep(ce, ce, true).total
 		_:
 			return false  # "none" — auto-apply
 	return false

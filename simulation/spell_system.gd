@@ -103,6 +103,12 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Water 3: Wound Penalties negated
 	"force_of_will": {"kind": "buff", "target": "ally", "range_tiles": 10, "duration_rounds": 2,
 		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Earth 2: penalties negated (death-immunity deferred)
+	# Coverage extension batch 6 (2026-06-20).
+	"dart_of_void": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
+		"range_tiles": 20, "aoe_radius": 0},  # Void 4: DR = Void Ring, ignores Invuln/Reduction (magic path), 100'
+	"earthen_wave": {"kind": "status", "condition": "prone", "save": "strength_contested_earth",
+		"range_tiles": 0, "aoe_radius": 5, "aoe_hits": "enemies", "caster_exempt": true,
+		"duration_rounds": 0},  # Earth 3: shockwave Knockdown in a line, Contested Strength vs Earth
 	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
 	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
 	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.
