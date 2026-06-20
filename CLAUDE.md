@@ -5696,7 +5696,7 @@ they comply with (`ctx.compliance_intimidators`) — covering non-hostile court 
 Phase-4 hostile filter doesn't. Runtime-verified 3/3 (accumulated reduction lifts Negotiate
 success 44→79/80; compliance +10 drops it 44→18/80; Persuade eased only by the persuade pool).
 
-### s31-37 spell combat coverage — extension batches 1–8 (2026-06-20)
+### s31-37 spell combat coverage — extension batches 1–9 (2026-06-20)
 Added combat effects for 4 more library spells (the library has 287 spells; only ~28 had combat
 effects). All values transcribed exactly from s34/s35: **tail_of_the_fire_dragon** (Fire 2,
 single damage DR=Fire Ring, 30'), **ravenous_swarms** (Fire 3, 5k3 bolt, 30' — the fire-spell-
@@ -5714,7 +5714,14 @@ kind with optional `impact_*` on-cast damage): `wall_of_fire` (Fire 4, 6k6/round
 plus `follow_the_flame` (Fire 5, 6k5 stream, direct damage; persistent burn deferred). Zones honor
 the element ring, the spirit damage filter, `enemies`/`all` faction gating, and auto-expire.
 `fiery_wrath` (terrain ignition) and `maw_of_the_earth` (save-negates pit + entrap) deferred —
-distinct mechanics. 52 spells now have combat effects (from 28 at session start). Two new
+distinct mechanics. 52 spells now have combat effects.
+**Batch 9** adds an **area-ward subsystem** (new `ward` kind, stored in `spell_zones`):
+`earths_protection` (Earth 3 — +10 TN to hostile Air/Fire/Water cast within 10' + −1k1 to their
+DR vs creatures inside) and `ward_of_thunder` (Fire 4 — +20 TN to hostile Fire within 15').
+`resolve_cast` gained an `extra_tn` param; `_ward_cast_penalty` (element-gated, owner-exempt) feeds
+it from `execute_cast_spell`, and `_ward_dr_reduction` cuts hostile warded-element spell DR inside.
+`agasha's_shield` deferred (its −Nk0 roll/DR penalties don't map to the TN/reduction model without
+inventing). 54 spells now have combat effects (from 28 at session start). Two new
 `_gather_spell_targets` fields support Dragon's Talon: `target_max_insight` (skip stronger foes)
 and `aoe_max_targets` (cap struck count). Runtime-verified 5/5 (damage lands; grasp entangles;
 Dragon's Talon hits Insight-1/2 foes and spares an Insight-5 foe). The remaining ~255 library

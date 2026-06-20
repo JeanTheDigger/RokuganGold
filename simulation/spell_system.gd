@@ -121,6 +121,12 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"aoe_hits": "all", "duration_rounds": 2},  # Fire 2: 3k2 impact + 2k1/round, 20' radius
 	"follow_the_flame": {"kind": "damage", "dr_rolled": 6, "dr_kept": 5,
 		"range_tiles": 60, "aoe_radius": 0},  # Fire 5: 6k5 stream of fire, 300' (persistent burn deferred)
+	# Coverage extension batch 9 (2026-06-20): area wards (enemy-cast TN penalty + spell DR reduction).
+	"earths_protection": {"kind": "ward", "aoe_radius": 2, "duration_rounds": 10,
+		"ward_elements": [0, 2, 3], "cast_tn_penalty": 10,
+		"dr_reduction_rolled": 1, "dr_reduction_kept": 1},  # Earth 3: +10 TN & -1k1 vs Air/Fire/Water in 10'
+	"ward_of_thunder": {"kind": "ward", "aoe_radius": 3, "duration_rounds": 50,
+		"ward_elements": [2], "cast_tn_penalty": 20},  # Fire 4: +20 TN to hostile Fire within 15'
 	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
 	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
 	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.
@@ -684,7 +690,7 @@ static func can_cast(character: L5RCharacterData, spell_id: String) -> bool:
 ## Returns: {success, total, tn, margin, spell_id, sim_effect, cast_ring, raises, imbalance_overflow}
 static func resolve_cast(character: L5RCharacterData, spell_id: String,
 		dice: DiceEngine, raises: int = 0,
-		target: L5RCharacterData = null, ic_day: int = -1) -> Dictionary:
+		target: L5RCharacterData = null, ic_day: int = -1, extra_tn: int = 0) -> Dictionary:
 	if not SPELL_LIBRARY.has(spell_id):
 		return {"success": false, "error": "unknown_spell"}
 	var spell: Dictionary = SPELL_LIBRARY[spell_id]
@@ -697,7 +703,9 @@ static func resolve_cast(character: L5RCharacterData, spell_id: String,
 	var wrath_bonus: int = AdvantageSystem.get_wrath_of_kami_bonus(target, cast_ring) if target != null else 0
 	# MAGIC_RESISTANCE (s45): target's advantage adds +3 TN per rank to spells targeting them.
 	var magic_resist_tn: int = AdvantageSystem.get_magic_resistance_tn(target) if target != null else 0
-	var tn: int = get_casting_tn(ml) + (raises * 5) - (wrath_bonus * 5) + magic_resist_tn
+	# extra_tn: environmental ward penalty (s34 Earth's Protection / s35 Ward of Thunder), applied
+	# by the orchestrator when a hostile spell is cast inside an enemy ward of the matching element.
+	var tn: int = get_casting_tn(ml) + (raises * 5) - (wrath_bonus * 5) + magic_resist_tn + extra_tn
 	# Creature Magic Resistance (s54.10/s54.12): +TN to spells cast at a spirit/oni, element-gated.
 	if target != null and target.spirit_creature != null \
 			and target.spirit_creature.spell_tn_bonus > 0 \

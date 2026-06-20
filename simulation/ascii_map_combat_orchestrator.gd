@@ -1870,7 +1870,10 @@ static func execute_cast_spell(
 		})
 		return {"success": false, "absorbed": true, "spell_id": spell_id,
 			"mastery": ml, "retaliation": retal}
-	var res: Dictionary = SpellSystem.resolve_cast(caster, spell_id, dice_engine, 0, target)
+	# Area ward (s34 Earth's Protection / s35 Ward of Thunder): a hostile spell of a warded element
+	# cast while the caster stands inside an enemy ward takes a Spell Casting TN penalty.
+	var ward_tn: int = _ward_cast_penalty(state, caster_id, spell_id)
+	var res: Dictionary = SpellSystem.resolve_cast(caster, spell_id, dice_engine, 0, target, -1, ward_tn)
 	res["spell_id"] = spell_id
 	# Furaribi rule (s54.12): a jade/crystal-property spell does not harm a superior_invuln
 	# spirit but repels it — it retreats from the area (leaves the encounter).
@@ -1934,6 +1937,12 @@ static func execute_cast_spell(
 		state.combat_log.append({
 			"type": "spell_zone", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "zone": res["zone"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "ward":
+		res["ward"] = _apply_spell_ward(state, caster_id, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_ward", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "ward": res["ward"],
 		})
 	state.combat_log.append({
 		"type": "spell_cast", "round": state.combat.round_number,
@@ -2011,7 +2020,16 @@ static func _apply_spell_combat_damage(
 		if needs_taint and MutationSystem.get_taint_rank(ch.taint) < 1:
 			hits.append({"id": t["id"], "damage": 0, "immune_no_taint": true})
 			continue
-		var dmg: int = dice_engine.roll_and_keep(rolled, kept, true).total
+		# Area ward damage reduction (s34 Earth's Protection): a warded-element spell striking a
+		# creature inside an enemy ward loses dice (min 1k1).
+		var er: int = rolled
+		var ek: int = kept
+		var wred: Array = _ward_dr_reduction(state, caster_id, element,
+			state.positions.get(int(t["id"]), Vector2i(-9999, -9999)))
+		if wred[0] > 0 or wred[1] > 0:
+			er = maxi(1, rolled - int(wred[0]))
+			ek = maxi(1, kept - int(wred[1]))
+		var dmg: int = dice_engine.roll_and_keep(er, ek, true).total
 		if ch.spirit_creature != null:
 			var filt: Dictionary = SpiritAbilitySystem.incoming_damage(
 				ch.spirit_creature, kind, true)  # spells always read as magic for invuln tags
@@ -2319,6 +2337,67 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 				WoundSystem.apply_damage(ch, dmg, 0)
 		surviving.append(zone)
 	state.spell_zones = surviving
+
+
+## Register an area ward (s34 Earth's Protection / s35 Ward of Thunder) centered on the caster.
+## Stored in spell_zones with kind "ward". ward_elements = the Ring(s) it suppresses; cast_tn =
+## TN penalty to a hostile in-area cast of those elements; dr_rolled/dr_kept = damage reduction to
+## warded-element spells striking creatures inside. Returns {center, radius, expiry_round}.
+static func _apply_spell_ward(
+	state: MapCombatState, caster_id: int, eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var dur: int = int(eff.get("duration_rounds", 10))
+	var ward: Dictionary = {
+		"kind": "ward", "center": center, "radius": int(eff.get("aoe_radius", 2)),
+		"ward_elements": eff.get("ward_elements", []),
+		"cast_tn": int(eff.get("cast_tn_penalty", 0)),
+		"dr_rolled": int(eff.get("dr_reduction_rolled", 0)),
+		"dr_kept": int(eff.get("dr_reduction_kept", 0)),
+		"caster_id": caster_id, "expiry_round": state.combat.round_number + dur, "spell_id": spell_id,
+	}
+	state.spell_zones.append(ward)
+	return {"center": center, "radius": ward["radius"], "expiry_round": ward["expiry_round"]}
+
+
+## Ward TN penalty for a spell about to be cast: sum the cast_tn of every active ward NOT owned by
+## the caster whose area contains the caster and whose ward_elements include the spell's element.
+static func _ward_cast_penalty(state: MapCombatState, caster_id: int, spell_id: String) -> int:
+	if state.spell_zones.is_empty():
+		return 0
+	var element: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("e", -1)
+	if element < 0:
+		return 0
+	var cpos: Vector2i = state.positions.get(caster_id, Vector2i(-9999, -9999))
+	var pen: int = 0
+	for z in state.spell_zones:
+		if String(z.get("kind", "")) != "ward" or int(z.get("caster_id", -1)) == caster_id:
+			continue
+		if not (element in z.get("ward_elements", [])):
+			continue
+		var c: Vector2i = z["center"]
+		if maxi(absi(c.x - cpos.x), absi(c.y - cpos.y)) <= int(z.get("radius", 0)):
+			pen += int(z.get("cast_tn", 0))
+	return pen
+
+
+## Damage reduction (rolled/kept) applied to a warded-element spell striking a creature standing
+## inside a ward not owned by the spell's caster. Returns [d_rolled, d_kept] to subtract (min 1k1).
+static func _ward_dr_reduction(
+	state: MapCombatState, caster_id: int, element: int, target_pos: Vector2i,
+) -> Array:
+	var dr: int = 0
+	var dk: int = 0
+	for z in state.spell_zones:
+		if String(z.get("kind", "")) != "ward" or int(z.get("caster_id", -1)) == caster_id:
+			continue
+		if not (element in z.get("ward_elements", [])):
+			continue
+		var c: Vector2i = z["center"]
+		if maxi(absi(c.x - target_pos.x), absi(c.y - target_pos.y)) <= int(z.get("radius", 0)):
+			dr += int(z.get("dr_rolled", 0))
+			dk += int(z.get("dr_kept", 0))
+	return [dr, dk]
 
 
 # Resolves a damage-spell's condition rider (s31–s37). Returns the applied condition string,
