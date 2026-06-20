@@ -1327,13 +1327,23 @@ static func execute_ranged_attack(
 			armor_tn -= 5
 		armor_tn = maxi(5, armor_tn)
 
+	# s33 Arrow's Flight: a guided bow shot unerringly strikes (Kyujutsu only) and "cannot benefit
+	# from Raises or Techniques" — so this shot uses 0 Raises and its hit is forced. One-shot: the
+	# modifier is cleared after firing. (Passive kata damage still applies — a minor limitation.)
+	var auto_hit: bool = String(wp.get("skill", "")) == "Kyujutsu" \
+		and IndividualCombat.get_timed_modifier_total(a_p, "ranged_auto_hit") > 0
+	var shot_raises: int = 0 if auto_hit else raises
 	# s33 Castle of Air: a defender's attacker_penalty buff imposes a -Xk0 attack-roll penalty.
 	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty")
 	var result: Dictionary = IndividualCombat.resolve_attack(
-		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
+		attacker, a_p, weapon_name, armor_tn, shot_raises, dice_engine,
 		in_melee, spend_void, false, "",
 		{"opponent_clan": target.clan}, atk_pen
 	)
+	if auto_hit:
+		result["hit"] = true
+		result["auto_hit"] = true
+		IndividualCombat.clear_timed_modifiers_by_source(a_p, "spell_arrows_flight")
 
 	var log_entry: Dictionary = {
 		"type": "ranged_attack",
@@ -1341,7 +1351,7 @@ static func execute_ranged_attack(
 		"attacker_id": attacker_id,
 		"target_id": target_id,
 		"weapon": weapon_name,
-		"raises": raises,
+		"raises": shot_raises,
 		"hit": result.get("hit", false),
 		"roll": result.get("roll", 0),
 		"target_tn": armor_tn,
@@ -1349,7 +1359,7 @@ static func execute_ranged_attack(
 	}
 
 	if result.get("hit", false):
-		var dmg_result: Dictionary = _apply_hit(state, attacker, a_p, target, weapon_name, raises, "", result, dice_engine)
+		var dmg_result: Dictionary = _apply_hit(state, attacker, a_p, target, weapon_name, shot_raises, "", result, dice_engine)
 		log_entry["damage"] = dmg_result.get("damage", 0)
 		log_entry["wounds_inflicted"] = dmg_result.get("wounds", 0)
 		result["damage"] = dmg_result.get("damage", 0)
@@ -2357,6 +2367,10 @@ static func _apply_spell_buff(
 			# s36 Clarity of Purpose: a persistent Initiative-score delta (no timed expiry; the
 			# 2-round GDD duration is approximated as skirmish-length, matching Song of the World).
 			p.initiative_modifier += val
+		elif mkind == "ranged_auto_hit":
+			# s33 Arrow's Flight: a one-shot guided arrow. Dedicated source so execute_ranged_attack
+			# can clear just this modifier after the next bow shot (the duration is the firing window).
+			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_arrows_flight")
 		else:
 			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff")
 		applied.append({"kind": mkind, "value": val})

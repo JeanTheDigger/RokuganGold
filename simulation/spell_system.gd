@@ -324,6 +324,9 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Coverage clean-wins batch 6 (2026-06-20): purify zone (heal pure / harm tainted).
 	"heavens_tears": {"kind": "purify_zone", "aoe_radius": 6, "duration_rounds": 2,
 		"dr_rolled": 1, "dr_kept": 1},  # Water 2: holy rain centered on caster (30' radius, 2 Rounds) — pure souls (no Taint, Honor 4.0+) healed Water Ring/round; Taint/Shadow corruption suffer 1k1/round; "outdoors only" flavour not gated
+	# Coverage clean-wins batch 7 (2026-06-20): guided-arrow auto-hit.
+	"arrows_flight": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 3,
+		"mods": [{"kind": "ranged_auto_hit", "value": 1}]},  # Air 1: the next bow shot (Kyujutsu) auto-hits within 3 Rounds, ignoring Raises (one-shot; +1 arrow per Raise not modeled; passive kata damage still applies)
 	"severed_from_the_stream": {"kind": "debuff", "target": "enemy", "range_tiles": 5, "duration_rounds": 9999,
 		"mods": [{"kind": "void_locked", "value": 1}]},  # Void 2: target cannot spend Void Points (the per-spend Contested-Void roll is simplified to a full lock via execute_void_spend; 5 rounds ≈ skirmish)
 	# --- Heal spells (s36 Water) ---

@@ -6041,13 +6041,27 @@ heal = Water 5; pure caster 10→5 and pure ally 8→3 healed; the tainted enemy
 (honor 2) and a pure-but-out-of-radius combatant were untouched; the zone persisted one round then
 expired after its duration. Water 13 this session.
 
+### Spell coverage — clean-wins batch 7 (Arrow's Flight guided auto-hit, 2026-06-20, runtime-verified 5/5)
+**Arrow's Flight** (Air 1, buff) — entreats Air kami to guide a bow shot so it "unerringly strikes."
+New one-shot `ranged_auto_hit` buff: `_apply_spell_buff` installs it under a **dedicated source**
+(`spell_arrows_flight`) so `execute_ranged_attack` can clear just this modifier after the next shot
+without dropping the caster's other spell buffs. On a Kyujutsu bow shot while active, the to-hit is
+forced (`result.hit = true`, `auto_hit` flag) and the shot uses 0 Raises ("cannot benefit from Raises
+or Techniques"), then the modifier is cleared — so exactly one arrow auto-hits within the 3-Round
+window. Gated to Kyujutsu weapons (the only ranged weapon, `yumi`). LIMITATIONS: the +1-arrow-per-Raise
+multi-charge isn't modeled (one shot); passive kata damage still applies to the guided shot (the
+"no Techniques" clause is not selectively disabled). Runtime-verified: a weak archer that hit 0/12
+at Armor TN 50 lands the guided shot (forced hit + auto_hit flag); the modifier is consumed after one
+shot; an unbuffed shot carries no auto_hit. Air 11 this session.
+
 ### Spell coverage session summary (2026-06-20, running)
-This session has wired **~48 combat spells across all 5 elements** (initial all-element pass + clean-wins
+This session has wired **~49 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
-forced-stance batch 5 + purify-zone batch 6) + **1 world-sim spell** (Legacy of Kaze-no-Kami spirit-bird
-letters) + **2 pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty` was also the
-hook reused by Suitengu's Curse), all runtime-verified via headless drivers (full project import 0 parse
-errors throughout). Combat-effect total rose ~76 → ~124. New reusable infra built: the `purify_zone`
+forced-stance batch 5 + purify-zone batch 6 + guided-auto-hit batch 7) + **1 world-sim spell** (Legacy of
+Kaze-no-Kami spirit-bird letters) + **2 pre-existing bug fixes** (earths_stagnation move sign; its
+`move_water_penalty` was also the hook reused by Suitengu's Curse), all runtime-verified via headless
+drivers (full project import 0 parse errors throughout). Combat-effect total rose ~76 → ~125. New reusable
+infra built: the one-shot `ranged_auto_hit` buff (batch 7), the `purify_zone`
 soul-state zone (batch 6), the `stance_locked` forced-Full-Attack debuff + `willpower_contested_caster_fire`
 save (batch 5), the shared `instant_kill` effect + `earth_contested_void` save (batch 4), the
 `no_magic_heal` block + `free_move_tiles` buff (batch 3), the `incapacitated` turn-gate
