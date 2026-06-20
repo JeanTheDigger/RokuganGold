@@ -229,6 +229,15 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Jade Strike: Range 100', single, DR 3k3 ONLY vs Taint Rank 1+ (also a jade-property spell)
 	"jade_strike": {"kind": "damage", "dr_rolled": 3, "dr_kept": 3,
 		"range_tiles": 20, "aoe_radius": 0, "requires_taint": true},
+	# Earth coverage extension (2026-06-20): equipment debuff, group buff, two go-to-ground hides.
+	"times_deadly_hand": {"kind": "debuff", "target": "enemy", "range_tiles": 1, "duration_rounds": 9999,
+		"mods": [{"kind": "spell_damage_rolled", "value": -2}, {"kind": "spell_damage_kept", "value": -1}]},  # Earth 3: weaken one object — wired as the target's weapon (-2k1 DR); the armor-object variant (-5 Armor TN / -3 Reduction) is the unmodeled alternative
+	"sharing_the_strength_of_many": {"kind": "buff", "target": "ally", "aoe_radius": 4, "duration_rounds": 5,
+		"mods": [{"kind": "all_rolls", "value": "earth_ring"}]},  # Earth 3: +lowest-Earth to all rolls (approx as caster's Earth Ring; 6-target cap not enforced; combat slice = attack rolls)
+	"embrace_of_kenro_ji_jin": {"kind": "buff", "target": "self", "duration_rounds": 9999,
+		"mods": [{"kind": "insubstantial", "value": 1}]},  # Earth 2: dive into the earth — untargetable but cannot attack/cast (move-through-earth / 100yd earth-sight deferred)
+	"shelter_of_the_earth": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 9999,
+		"mods": [{"kind": "insubstantial", "value": 1}]},  # Earth 3: concealed as a natural object — untargetable but cannot act (modeled like Essence of Air's go-to-ground)
 	# --- Water (s36) ---
 	# Strike of the Tsunami: Range 25' cone, 3k3 + Knockdown (Earth TN 15)
 	"strike_of_the_tsunami": {"kind": "damage", "dr_rolled": 3, "dr_kept": 3,

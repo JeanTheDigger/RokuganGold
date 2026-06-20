@@ -5844,6 +5844,27 @@ layer); the_world_is_truth (Kolat, blocked); and the large messaging/social/stea
 set (legacy_of_kaze_no_kami, voice_of_the_wind, echoes_on_the_breeze, etc. — per-spell ASK whether
 to give a world-sim consumer).
 
+### s34 Earth spell combat coverage — batch 1 (2026-06-20, runtime-verified 7/7)
+Of Earth's 25-spell COMBAT_ONLY gap, the zero-new-infra batch (reusing the debuff / AoE-buff /
+insubstantial paths): **Time's Deadly Hand** (Earth 3) — a `debuff` weakening the target's weapon
+(spell_damage −2k1, the GDD's "weapon loses 2k1 DR"; the armor-object variant −5 Armor TN / −3
+Reduction is the unmodeled single-object alternative; Permanent = skirmish); **Sharing the Strength
+of Many** (Earth 3) — an AoE-ally `all_rolls` +Earth buff (the "+lowest-Earth to all rolls" with the
+lowest-Earth approximated as the caster's Earth Ring, 6-target cap not enforced; combat slice =
+attack rolls); **Embrace of Kenro-Ji-Jin** (Earth 2, dive into the earth) and **Shelter of the Earth**
+(Earth 3, concealed as a natural object) — both reuse the `insubstantial` buff (untargetable + cannot
+attack/cast). Runtime-verified: damage debuff −2k1, group all_rolls +4 on allies only, both hides
+untargetable.
+DEFERRED (Earth, next tranches): **ring-changing** essence_of_earth / the_wolfs_mercy /
+strike_at_the_roots / earths_touch (Pending Redesign — wound threading); armor_of_the_emperor
+(per-die damage reduction — new hook); the_kamis_will (spell-defense TN buff — needs the
+execute_cast_spell extra_tn target-read hook, next batch); minor_binding/major_binding/prison_of_earth
+(Shadowlands-bind status — needs a Tainted/Shadowlands gate, next batch); groves_of_stone/wall_of_earth
+(terrain-creation hook); the_earth_flows/drawing_on_the_mountain (mass-battle / structure scale — no
+tile consumer); grounding_energy/strength_of_the_crow (anti-maho TN — no maho-cast path in tile
+combat); jurojins_balm/jurojins_curse/stones_endurance (poison/Fatigue — needs hooks); soul_of_stone
+(social resist — out-of-combat); hands_of_clay/taming_the_beast (climb / animal-pacify — utility).
+
 "### Pending Redesign
 - **Ring-changing combat spells (essence_of_earth, the_wolfs_mercy, strike_at_the_roots, and
   Water ring-down spells) — participant-scoped wound threading (owner-chosen 2026-06-20).**
