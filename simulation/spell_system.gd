@@ -80,6 +80,11 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"earthquake": {"kind": "damage", "dr_rolled": 2, "dr_kept": 1,
 		"range_tiles": 0, "aoe_radius": 99, "aoe_hits": "all", "caster_exempt": true,
 		"rider": {"condition": "prone", "save": "none"}},  # Earth 5: 2k1 + Prone, caster exempt
+	# Coverage extension batch 3 (2026-06-20).
+	"striking_the_storm": {"kind": "buff", "target": "self", "duration_rounds": 3,
+		"mods": [{"kind": "armor_tn", "value": 20}]},  # Air 3: +20 Armor TN cocoon (deafens self — deferred)
+	"sapphire_strike": {"kind": "damage", "dr_rolled": 4, "dr_kept": 4, "requires_taint": true,
+		"range_tiles": 10, "aoe_radius": 0},  # Earth 4: 4k4 vs jade/crystal-vulnerable only, 50'
 	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
 	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
 	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.
