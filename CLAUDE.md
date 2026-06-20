@@ -5865,6 +5865,30 @@ tile consumer); grounding_energy/strength_of_the_crow (anti-maho TN — no maho-
 combat); jurojins_balm/jurojins_curse/stones_endurance (poison/Fatigue — needs hooks); soul_of_stone
 (social resist — out-of-combat); hands_of_clay/taming_the_beast (climb / animal-pacify — utility).
 
+### s36 Water spell combat coverage — batch 1 (2026-06-20, runtime-verified) + earths_stagnation bug fix
+**BUG FIX (pre-existing):** `earths_stagnation` stored `move_water_penalty: 1` (positive), but
+`_effective_water_ring` computes `water + move_water_penalty`, so a positive value *increased* the
+enemy's movement (the comment said "−1 Rank movement"). Speed of the Mountains correctly stores it
+negative. Changed to `-1`. Runtime-verified: a Water-5 foe's free-move budget now drops 5→4 (was
+wrongly rising to 6). Six Water spells wired (reusing existing infra, GDD-exact):
+**The Swell of the Storm** (Water 1) — `status` Prone via a new `strength_contested_water` save
+(target Raw Strength vs caster Water); **Surging Soul** (Water 2) — +1k1 Attack buff (no-Center /
+must-Move downsides not enforced); **Sanctuary of the Waves** (Water 3) and **The Inner Ocean**
+(Water 3) — both reuse `insubstantial` (untargetable + cannot act; water-body requirement / Fire-
+vulnerability not modeled); **Wave-Borne Speed** (Water 2) — `move_water_penalty` +2 (positive =
+faster movement); **Clarity of Purpose** (Water 1) — AoE-ally `initiative_score` +5 via a new buff
+mod that adjusts the persistent `Participant.initiative_modifier` (the 2-round duration is
+approximated as skirmish-length, matching Song of the World). Runtime-verified 12/12 (knockdown on
+low-Str / resisted on high-Str; +1k1 attack; untargetable; +2 / −1 move budgets; +5 init on allies
+only). DEFERRED (Water, next tranches): heart_of_the_water_dragon (heal-on-damage hook),
+strike_of_the_flowing_waters (armor-bypass attacker hook), suitengus_embrace (treated-as-Down —
+needs the can't-act turn-gate, same blocker as the Earth bindings), heavens_tears (conditional
+heal/damage zone), judgment_of_yomi (disadvantage-count debuff), rejuvenating_vapors (Fatigue-only
+cleanse — needs cleanse params), chi_reversal/ebbing_strength/strength_of_the_tsunami (trait-swap /
+trait buff — ring-adjacent), ever_changing_waves/the_mirrors_smile (shapeshift/disguise), silent_waters
+(stored-spell trigger), hands_of_the_tides (position-swap), whirlpool/yukis_touch/within_the_waves/
+opening_the_veil (water-terrain / portal — no consumer), and the divination/travel/sustain utility set.
+
 "### Pending Redesign
 - **Ring-changing combat spells (essence_of_earth, the_wolfs_mercy, strike_at_the_roots, and
   Water ring-down spells) — participant-scoped wound threading (owner-chosen 2026-06-20).**

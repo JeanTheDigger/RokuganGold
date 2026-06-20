@@ -2262,6 +2262,10 @@ static func _apply_spell_buff(
 			# s33 Gift of Wind / Legion of the Moon: a dedicated source so attacking can clear
 			# just this modifier (_reveal_if_hidden) without dropping other spell buffs.
 			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_invisible")
+		elif mkind == "initiative_score":
+			# s36 Clarity of Purpose: a persistent Initiative-score delta (no timed expiry; the
+			# 2-round GDD duration is approximated as skirmish-length, matching Song of the World).
+			p.initiative_modifier += val
 		else:
 			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff")
 		applied.append({"kind": mkind, "value": val})
@@ -2298,6 +2302,8 @@ static func _apply_spell_buff_aoe(
 				p.absorb_pool = maxi(p.absorb_pool, val)
 			elif mkind == "invisible":
 				IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_invisible")
+			elif mkind == "initiative_score":
+				p.initiative_modifier += val  # s36 Clarity of Purpose (persistent delta)
 			else:
 				IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff")
 		buffed.append(cid)
@@ -2716,6 +2722,12 @@ static func _spell_save_resisted(
 			var ce: int = SpellSystem.get_ring_value(caster, Enums.Ring.EARTH)
 			return dice_engine.roll_and_keep(ts, ts, true).total \
 				>= dice_engine.roll_and_keep(ce, ce, true).total
+		"strength_contested_water":
+			# s36 The Swell of the Storm: target rolls Raw Strength vs the caster's Water to avoid Knockdown.
+			var tsw: int = maxi(1, ch.strength)
+			var cw: int = SpellSystem.get_ring_value(caster, Enums.Ring.WATER)
+			return dice_engine.roll_and_keep(tsw, tsw, true).total \
+				>= dice_engine.roll_and_keep(cw, cw, true).total
 		"agility_flat":
 			# s34 Murmur of Earth: Agility roll vs a flat TN.
 			var ag: int = maxi(1, ch.agility)

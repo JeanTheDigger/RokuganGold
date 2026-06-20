@@ -148,7 +148,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"strike_as_stone": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 30,
 		"mods": [{"kind": "spell_damage_rolled", "value": 2}]},  # Earth 3: unarmed DR +2k0 (unarmed-only scope approximated)
 	"earths_stagnation": {"kind": "debuff", "target": "enemy", "range_tiles": 10, "duration_rounds": 6,
-		"mods": [{"kind": "spell_attack_rolled", "value": -2}, {"kind": "move_water_penalty", "value": 1}]},  # Earth 1: -2k0 Agility + -1 Rank movement
+		"mods": [{"kind": "spell_attack_rolled", "value": -2}, {"kind": "move_water_penalty", "value": -1}]},  # Earth 1: -2k0 Agility + -1 Rank movement (move_water_penalty is ADDED to Water in _effective_water_ring, so a reduction is negative — was +1, a sign bug that increased the enemy's movement)
 	"earth_becomes_sky": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0, "range_tiles": 20,
 		"aoe_radius": 0},  # Earth 2: hurled boulders, DR = Earth Ring (multi-target -1k1 simplified to single)
 	# === EARTH WAVE B (2026-06-20): absorption shield + debuff immunity ===
@@ -243,6 +243,19 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"strike_of_the_tsunami": {"kind": "damage", "dr_rolled": 3, "dr_kept": 3,
 		"range_tiles": 0, "aoe_radius": 5, "aoe_hits": "enemies", "caster_exempt": true,
 		"rider": {"condition": "prone", "save": "earth_flat", "save_tn": 15}},
+	# Water coverage extension (2026-06-20): knockdown, attack buff, two go-to-ground hides, move + init buffs.
+	"the_swell_of_the_storm": {"kind": "status", "condition": "prone", "save": "strength_contested_water",
+		"range_tiles": 5, "aoe_radius": 0, "duration_rounds": 0},  # Water 1: Contested Strength vs Water → Knockdown
+	"surging_soul": {"kind": "buff", "target": "ally", "range_tiles": 2, "duration_rounds": 3,
+		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_attack_kept", "value": 1}]},  # Water 2: +1k1 Attack rolls (no-Center / must-Move downsides not enforced)
+	"sanctuary_of_the_waves": {"kind": "buff", "target": "ally", "range_tiles": 10, "duration_rounds": 10,
+		"mods": [{"kind": "insubstantial", "value": 1}]},  # Water 3: submerged + fully protected but cut off — untargetable + cannot act (water-body requirement not enforced)
+	"the_inner_ocean": {"kind": "buff", "target": "ally", "range_tiles": 10, "duration_rounds": 50,
+		"mods": [{"kind": "insubstantial", "value": 1}]},  # Water 3: transformed to water — untargetable + cannot act (Fire-still-harms downside not modeled)
+	"wave_borne_speed": {"kind": "buff", "target": "self", "duration_rounds": 2,
+		"mods": [{"kind": "move_water_penalty", "value": 2}]},  # Water 2: Water +2 for movement distance (positive = increase)
+	"clarity_of_purpose": {"kind": "buff", "target": "ally", "aoe_radius": 2, "duration_rounds": 2,
+		"mods": [{"kind": "initiative_score", "value": 5}]},  # Water 1: all allies within 10' +5 Initiative Score
 	# --- Void (s37, Ishiken-only) ---
 	# Touch the Emptiness: Range 30', single, 1k1 + Dazed (no save)
 	"touch_the_emptiness": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1,
