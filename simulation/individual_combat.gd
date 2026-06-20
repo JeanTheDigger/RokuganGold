@@ -1402,6 +1402,8 @@ static func resolve_knockdown(
 	is_quadruped: bool,
 	dice_engine: DiceEngine,
 	bonus_to_attacker: int = 0,  # s54.12 Rhino Furious Charge: +5 = the Free Raise
+	def_rolled_bonus: int = 0,  # s34 The Mountain's Feet: +Nk0 knockdown resist (extra rolled dice)
+	def_kept_bonus: int = 0,
 ) -> Dictionary:
 	# Advantage/disadvantage modifiers (s45) + wound penalties
 	var att_wound: int = CharacterStats.get_wound_penalty(attacker)
@@ -1411,9 +1413,9 @@ static func resolve_knockdown(
 	var att_tn_kd: int = AdvantageSystem.get_tn_modifier(attacker, {"is_combat": true, "is_contested": true})
 	var def_tn_kd: int = AdvantageSystem.get_tn_modifier(defender, {"is_combat": true, "is_contested": true})
 	var att_rolled_kd: int = maxi(attacker.strength + att_adv_kd["rolled"], 1)
-	var def_rolled_kd: int = maxi(defender.strength + def_adv_kd["rolled"], 1)
+	var def_rolled_kd: int = maxi(defender.strength + def_adv_kd["rolled"] + def_rolled_bonus, 1)
 	var att_kept_kd: int = maxi(attacker.strength + att_adv_kd["kept"], 1)
-	var def_kept_kd: int = maxi(defender.strength + def_adv_kd["kept"], 1)
+	var def_kept_kd: int = maxi(defender.strength + def_adv_kd["kept"] + def_kept_bonus, 1)
 	var att_r: DiceResult = dice_engine.roll_and_keep(att_rolled_kd, att_kept_kd, false)
 	var def_r: DiceResult = dice_engine.roll_and_keep(def_rolled_kd, def_kept_kd, false)
 	var att_total_kd: int = att_r.total + (att_adv_kd["free_raises"] * 5) - att_tn_kd + att_wound + bonus_to_attacker

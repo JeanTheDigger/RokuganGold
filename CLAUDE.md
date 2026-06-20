@@ -5696,6 +5696,25 @@ they comply with (`ctx.compliance_intimidators`) — covering non-hostile court 
 Phase-4 hostile filter doesn't. Runtime-verified 3/3 (accumulated reduction lifts Negotiate
 success 44→79/80; compliance +10 drops it 44→18/80; Persuade eased only by the persuade pool).
 
+### s31-37 spell combat coverage — full-library pass (2026-06-20, owner-directed "do all 247")
+Owner directives: model ALL 247 library spells; on-hold-system spells = forward-ready stubs;
+GDD-missing numbers = ask per decision. Cross-cutting modeling decisions locked (owner): Ring-up
+buffs use FULL wound-capacity + expiry death; environment conditionals read mission weather/biome
+when present (else off); "-XkX to a roll" gets a REAL roll-dice penalty layer (not a TN approximation).
+Triage: 247 total, 65 had combat effects, 129 fully unwired (Air 48/Earth 32/Fire 18/Water 31),
+~53 already carry a non-combat sim_effect (the world-sim router in day_orchestrator consumes
+RITUAL_HONOR/COMMUNE/HEAL/DETECT/PURIFY/REMOVE_TAINT/SPIRIT_BIND/WEATHER/WARD/INFORMATION_GATHER).
+Plan: combat-fittable spells → SPELL_COMBAT_EFFECTS; non-combat → correct sim_effect tag (+forward
+stub where the layer is on-hold).
+- **Earth wave A** — new **debuff cast kind** (`_apply_spell_debuff`: enemy-target, range-gated,
+  optional contested gate, immune_trait_change block) + **fear_resist** read (Courage of the Seven
+  Thunders, in apply_fear_checks) + **knockdown_resist** read (resolve_knockdown gains
+  def_rolled_bonus/def_kept_bonus). Wired: courage_of_the_seven_thunders (+5k0 Fear resist;
+  minor-clan +3k0 / group / Taint clause deferred), the_mountains_feet (+3k0 knockdown resist),
+  strike_as_stone (+2 unarmed DR, unarmed-scope approximated), earths_stagnation (debuff −2k0
+  Agility + −1 Rank movement), earth_becomes_sky (boulder damage DR=Earth Ring; multi-target −1k1
+  simplified). Runtime-verified 8/8.
+
 ### s31-37 spell combat coverage — extension batches 1–13 (2026-06-20)
 Added combat effects for 4 more library spells (the library has 287 spells; only ~28 had combat
 effects). All values transcribed exactly from s34/s35: **tail_of_the_fire_dragon** (Fire 2,

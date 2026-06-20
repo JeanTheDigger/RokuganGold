@@ -140,6 +140,17 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "spell_attack_rolled", "value": "fire_ring"}]},  # Fire 1: +Fire to rolls (conditional expiry deferred)
 	"defense_of_the_firestorm": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
 		"mods": [{"kind": "armor_tn", "value": 20}]},  # Fire 4: +20 Armor TN flame aura (wooden-weapon burn deferred)
+	# === EARTH WAVE A (2026-06-20): debuff path + fear/knockdown resist ===
+	"courage_of_the_seven_thunders": {"kind": "buff", "target": "ally", "range_tiles": 6,
+		"duration_rounds": 100, "mods": [{"kind": "fear_resist_rolled", "value": 5}]},  # Earth 1: +5k0 Fear resist (minor-clan +3k0 + group + Taint clause deferred)
+	"the_mountains_feet": {"kind": "buff", "target": "ally", "range_tiles": 4, "duration_rounds": 50,
+		"mods": [{"kind": "knockdown_resist_rolled", "value": 3}]},  # Earth 2: +3k0 resist Knockdown
+	"strike_as_stone": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 30,
+		"mods": [{"kind": "spell_damage_rolled", "value": 2}]},  # Earth 3: unarmed DR +2k0 (unarmed-only scope approximated)
+	"earths_stagnation": {"kind": "debuff", "target": "enemy", "range_tiles": 10, "duration_rounds": 6,
+		"mods": [{"kind": "spell_attack_rolled", "value": -2}, {"kind": "move_water_penalty", "value": 1}]},  # Earth 1: -2k0 Agility + -1 Rank movement
+	"earth_becomes_sky": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0, "range_tiles": 20,
+		"aoe_radius": 0},  # Earth 2: hurled boulders, DR = Earth Ring (multi-target -1k1 simplified to single)
 	# Coverage extension batch 12 (2026-06-20): save-negates AoE + sun zone/buff.
 	"murmur_of_earth": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1, "range_tiles": 0,
 		"aoe_radius": 20, "aoe_hits": "all", "caster_exempt": true,

@@ -991,8 +991,11 @@ static func execute_melee_attack(
 
 		# Knockdown maneuver: contested Strength if hit.
 		if maneuver in ["knockdown_biped", "knockdown_quad"]:
+			# s34 The Mountain's Feet: defender's knockdown_resist buff adds extra rolled/kept dice.
+			var kdr_r: int = IndividualCombat.get_timed_modifier_total(t_p, "knockdown_resist_rolled")
+			var kdr_k: int = IndividualCombat.get_timed_modifier_total(t_p, "knockdown_resist_kept")
 			var kd: Dictionary = IndividualCombat.resolve_knockdown(
-				attacker, target, maneuver == "knockdown_quad", dice_engine
+				attacker, target, maneuver == "knockdown_quad", dice_engine, 0, kdr_r, kdr_k
 			)
 			# Root the Mountain (s38 Earth): forcing the caster to move requires the
 			# attacker to also win a Contested Earth Roll, or the knockdown is negated.
@@ -1932,6 +1935,13 @@ static func execute_cast_spell(
 			"type": "spell_buff", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "buff": res["spell_buff"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "debuff":
+		res["spell_debuff"] = _apply_spell_debuff(
+			state, caster_id, caster, target_id, target, eff, dice_engine)
+		state.combat_log.append({
+			"type": "spell_debuff", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "debuff": res["spell_debuff"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "conjure_weapon":
 		res["conjured"] = _apply_spell_conjure_weapon(
 			state, caster_id, caster, target_id, eff, spell_id)
@@ -2225,6 +2235,45 @@ static func _apply_spell_buff(
 		IndividualCombat.add_timed_modifier(p, mod.get("kind", ""), val, expiry, "spell_buff")
 		applied.append({"kind": mod.get("kind", ""), "value": val})
 	return {"id": bid, "applied": applied, "expires_round": expiry}
+
+
+## Apply a debuff spell to an ENEMY target (s31-37 enemy hexes). Mirrors _apply_spell_buff but
+## targets an opposing-faction creature, honors range, and supports an optional contested-roll gate
+## (eff "contested" = a save-type the target must LOSE to be afflicted; e.g. earth_contested for
+## strike_at_the_roots). Mods carry their (often negative) timed-modifier values. immune_trait_change
+## (s34 Wholeness of the World) blocks the debuff entirely.
+static func _apply_spell_debuff(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary, dice_engine: DiceEngine,
+) -> Dictionary:
+	if target == null or CharacterStats.is_dead(target):
+		return {"reason": "no_target"}
+	if String(state.factions.get(target_id, "")) == String(state.factions.get(caster_id, "")):
+		return {"reason": "not_an_enemy"}
+	var rng: int = int(eff.get("range_tiles", 1))
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		var cp: Vector2i = state.positions[caster_id]
+		var tp: Vector2i = state.positions[target_id]
+		if maxi(absi(cp.x - tp.x), absi(cp.y - tp.y)) > rng:
+			return {"reason": "out_of_range"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if p == null:
+		return {"reason": "not_in_combat"}
+	# Wholeness of the World (s34): immune to any Trait/Ring-altering effect.
+	if IndividualCombat.get_timed_modifier_total(p, "immune_trait_change") > 0:
+		return {"reason": "immune_trait_change"}
+	# Optional contested gate: the target resists by winning the named save.
+	var contested: String = String(eff.get("contested", ""))
+	if contested != "" and _spell_save_resisted(
+			state, caster, target, contested, int(eff.get("save_tn", 0)), dice_engine):
+		return {"reason": "resisted", "id": target_id}
+	var expiry: int = state.combat.round_number + int(eff.get("duration_rounds", 5))
+	var applied: Array = []
+	for mod in eff.get("mods", []):
+		var val: int = _resolve_buff_value(caster, mod.get("value", 0))
+		IndividualCombat.add_timed_modifier(p, String(mod.get("kind", "")), val, expiry, "spell_debuff")
+		applied.append({"kind": mod.get("kind", ""), "value": val})
+	return {"id": target_id, "applied": applied, "expires_round": expiry}
 
 
 # Resolve a buff mod value: a raw int, or a GDD formula keyed off the caster's rings/school rank.
@@ -5775,8 +5824,12 @@ static func apply_fear_checks(
 			# Resist: Willpower (+ Kshatriya Strength of Indra rank bonus) keep Willpower,
 			# plus Courage of Shiva's +1k1, vs TN 5 + Fear × 5 (s22.3 LOCKED).
 			var wp: int = maxi(1, character.willpower + character.fear_resist_willpower_bonus)
+			# s34 Courage of the Seven Thunders: a fear_resist buff adds +Nk0 (rolled/kept) to the roll.
+			var fr_roll: int = IndividualCombat.get_timed_modifier_total(p, "fear_resist_rolled")
+			var fr_kept: int = IndividualCombat.get_timed_modifier_total(p, "fear_resist_kept")
 			var resist: int = dice.roll_and_keep(
-				wp + character.fear_resist_rolled_bonus, wp + character.fear_resist_kept_bonus, true).total
+				wp + character.fear_resist_rolled_bonus + fr_roll,
+				wp + character.fear_resist_kept_bonus + fr_kept, true).total
 			if resist < 5 + max_fear * 5:
 				afraid = true
 	# Single set/clear: AFRAID if the Fear roll failed this turn OR a tremor source is near.
