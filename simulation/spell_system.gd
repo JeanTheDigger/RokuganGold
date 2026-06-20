@@ -127,6 +127,11 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"dr_reduction_rolled": 1, "dr_reduction_kept": 1},  # Earth 3: +10 TN & -1k1 vs Air/Fire/Water in 10'
 	"ward_of_thunder": {"kind": "ward", "aoe_radius": 3, "duration_rounds": 50,
 		"ward_elements": [2], "cast_tn_penalty": 20},  # Fire 4: +20 TN to hostile Fire within 15'
+	# Coverage extension batch 10 (2026-06-20): summoned elemental kami (autonomous ally combatant).
+	"rise_air": {"kind": "summon"},    # Air 5: kami, all Physical Traits = Air Ring, Invulnerable
+	"rise_earth": {"kind": "summon"},  # Earth 5: kami, all Physical Traits = Earth Ring, Invulnerable
+	"rise_fire": {"kind": "summon"},   # Fire 5: kami, Fire Ring traits + sets struck targets on fire
+	"rise_water": {"kind": "summon"},  # Water 5: kami, all Physical Traits = Water Ring, Invulnerable
 	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
 	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
 	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.

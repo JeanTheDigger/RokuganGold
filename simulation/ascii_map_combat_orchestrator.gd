@@ -1944,6 +1944,12 @@ static func execute_cast_spell(
 			"type": "spell_ward", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "ward": res["ward"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "summon":
+		res["summon"] = _apply_spell_summon(state, caster_id, caster, eff, spell_id, dice_engine)
+		state.combat_log.append({
+			"type": "spell_summon", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "summon": res["summon"],
+		})
 	state.combat_log.append({
 		"type": "spell_cast", "round": state.combat.round_number,
 		"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
@@ -2337,6 +2343,68 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 				WoundSystem.apply_damage(ch, dmg, 0)
 		surviving.append(zone)
 	state.spell_zones = surviving
+
+
+## Build an elemental kami stat block (s33-36 Rise, Air/Earth/Fire/Water). All Physical Traits =
+## the caster's element Ring; Jiujutsu attack = half Ring (rolled = Ring + Ring/2, keep Ring);
+## Wounds as a human with Earth = Ring (wounds_dead 0 → standard track); Invulnerable to mundane
+## weapons (partial_invuln). Damage uses DR = Ring (kept 2 — the GDD "DR equal to the Ring" leaves
+## the kept dice unstated; PROVISIONAL). A Fire kami also sets struck targets on fire.
+static func _build_kami_creature(element: int, ring: int) -> SpiritCreatureData:
+	var cr := SpiritCreatureData.new()
+	cr.id = "elemental_kami"
+	cr.display_name = "Elemental Kami"
+	cr.realm = Enums.SpiritRealm.NINGEN_DO
+	cr.air = ring
+	cr.earth = ring
+	cr.fire = ring
+	cr.water = ring
+	cr.attack_name = "Kami Strike"
+	cr.attack_rolled = ring + int(ring / 2.0)
+	cr.attack_kept = ring
+	cr.damage_rolled = ring
+	cr.damage_kept = 2
+	cr.armor_tn = ring * 5 + 5
+	cr.reduction = 0
+	cr.wounds_dead = 0  # standard human wound track from Earth = ring
+	var t: Array[String] = ["partial_invuln"]  # Invulnerable: only magic/jade harm it
+	if element == Enums.Ring.FIRE:
+		t.append("burning_touch")  # struck targets catch fire (+1k1/round via the fire layer)
+	cr.tags = t
+	return cr
+
+
+## Summon an elemental kami (s33-36 Rise, X) as an autonomous combatant on the caster's side. A
+## player-faction caster registers it as a companion (auto-acts via execute_companion_turn); an
+## enemy-faction caster adds it via add_enemy (auto-acts via execute_npc_turn). Spawns on a free
+## tile near the caster. Returns {kami_id, faction} or {} if no tile is free.
+static func _apply_spell_summon(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	eff: Dictionary, spell_id: String, dice_engine: DiceEngine,
+) -> Dictionary:
+	var element: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("e", Enums.Ring.AIR)
+	var ring: int = SpellSystem.get_ring_value(caster, element)
+	var tile: Vector2i = _free_tile_near(state, state.positions.get(caster_id, Vector2i.ZERO))
+	if tile.x < 0:
+		return {}
+	state.spawn_counter += 1
+	var kid: int = -200000 - state.spawn_counter  # unique negative id for summons
+	var puppet: L5RCharacterData = SpiritCombatant.to_character_data(
+		_build_kami_creature(element, ring), kid)
+	var faction: String = String(state.factions.get(caster_id, FACTION_PLAYER))
+	if faction == FACTION_ENEMY:
+		add_enemy(state, puppet, tile.x, tile.y, dice_engine)
+	else:
+		var comp := CompanionData.new()
+		comp.companion_id = kid
+		comp.type = CompanionData.CompanionType.NAMED_ALLY
+		comp.display_name = "Elemental Kami"
+		comp.character_id = kid
+		comp.command = CompanionData.Command.FOLLOW
+		comp.command_target_id = caster_id
+		comp.yu_rank = 10  # never breaks morale
+		add_companion(state, comp, puppet, tile.x, tile.y, dice_engine)
+	return {"kami_id": kid, "faction": faction, "element": element, "ring": ring}
 
 
 ## Register an area ward (s34 Earth's Protection / s35 Ward of Thunder) centered on the caster.
