@@ -2218,6 +2218,10 @@ static func _resolve_buff_value(caster: L5RCharacterData, value) -> int:
 					+ SpellSystem.get_effective_school_rank(caster, Enums.Ring.EARTH)
 			"earth_ring":
 				return SpellSystem.get_ring_value(caster, Enums.Ring.EARTH)
+			"fire_ring":
+				return SpellSystem.get_ring_value(caster, Enums.Ring.FIRE)
+			"be_the_mountain_reduction":
+				return mini(20, 5 * SpellSystem.get_effective_school_rank(caster, Enums.Ring.EARTH))
 			_:
 				return 0
 	return int(value)
@@ -2384,27 +2388,57 @@ static func _apply_spell_summon(
 ) -> Dictionary:
 	var element: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("e", Enums.Ring.AIR)
 	var ring: int = SpellSystem.get_ring_value(caster, element)
-	var tile: Vector2i = _free_tile_near(state, state.positions.get(caster_id, Vector2i.ZERO))
-	if tile.x < 0:
-		return {}
-	state.spawn_counter += 1
-	var kid: int = -200000 - state.spawn_counter  # unique negative id for summons
-	var puppet: L5RCharacterData = SpiritCombatant.to_character_data(
-		_build_kami_creature(element, ring), kid)
+	var summon_kind: String = String(eff.get("summon_kind", "kami"))
+	var count: int = int(eff.get("count", 1))
 	var faction: String = String(state.factions.get(caster_id, FACTION_PLAYER))
-	if faction == FACTION_ENEMY:
-		add_enemy(state, puppet, tile.x, tile.y, dice_engine)
-	else:
-		var comp := CompanionData.new()
-		comp.companion_id = kid
-		comp.type = CompanionData.CompanionType.NAMED_ALLY
-		comp.display_name = "Elemental Kami"
-		comp.character_id = kid
-		comp.command = CompanionData.Command.FOLLOW
-		comp.command_target_id = caster_id
-		comp.yu_rank = 10  # never breaks morale
-		add_companion(state, comp, puppet, tile.x, tile.y, dice_engine)
-	return {"kami_id": kid, "faction": faction, "element": element, "ring": ring}
+	var ids: Array = []
+	for _i in range(count):
+		var tile: Vector2i = _free_tile_near(state, state.positions.get(caster_id, Vector2i.ZERO))
+		if tile.x < 0:
+			break
+		state.spawn_counter += 1
+		var sid: int = -200000 - state.spawn_counter  # unique negative id for summons
+		var creature: SpiritCreatureData = (_build_clay_soldier(ring)
+			if summon_kind == "clay_soldier" else _build_kami_creature(element, ring))
+		var puppet: L5RCharacterData = SpiritCombatant.to_character_data(creature, sid)
+		if faction == FACTION_ENEMY:
+			add_enemy(state, puppet, tile.x, tile.y, dice_engine)
+		else:
+			var comp := CompanionData.new()
+			comp.companion_id = sid
+			comp.type = CompanionData.CompanionType.NAMED_ALLY
+			comp.display_name = puppet.character_name
+			comp.character_id = sid
+			comp.command = CompanionData.Command.FOLLOW
+			comp.command_target_id = caster_id
+			comp.yu_rank = 10  # never breaks morale
+			add_companion(state, comp, puppet, tile.x, tile.y, dice_engine)
+		ids.append(sid)
+	return {"summon_ids": ids, "faction": faction, "element": element, "ring": ring,
+		"kami_id": (ids[0] if not ids.is_empty() else 0)}
+
+
+## Build a clay soldier (s34 Soldiers of Clay): Traits/Rings = caster's Earth Ring, attacks with a
+## jade stone sword as Kenjutsu 4, Reduction = 2× Earth, standard human wound track (NOT
+## Invulnerable — collapses when destroyed).
+static func _build_clay_soldier(earth_ring: int) -> SpiritCreatureData:
+	var cr := SpiritCreatureData.new()
+	cr.id = "clay_soldier"
+	cr.display_name = "Clay Soldier"
+	cr.realm = Enums.SpiritRealm.NINGEN_DO
+	cr.air = earth_ring
+	cr.earth = earth_ring
+	cr.fire = earth_ring
+	cr.water = earth_ring
+	cr.attack_name = "Stone Sword"
+	cr.attack_rolled = earth_ring + 4   # Agility(=Earth Ring) + Kenjutsu 4, keep Agility
+	cr.attack_kept = earth_ring
+	cr.damage_rolled = 3                 # stone sword (katana-equivalent, jade), fixed
+	cr.damage_kept = 2
+	cr.armor_tn = earth_ring * 5 + 5
+	cr.reduction = earth_ring * 2
+	cr.wounds_dead = 0
+	return cr
 
 
 ## Register an area ward (s34 Earth's Protection / s35 Ward of Thunder) centered on the caster.

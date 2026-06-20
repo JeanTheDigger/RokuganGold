@@ -132,6 +132,14 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"rise_earth": {"kind": "summon"},  # Earth 5: kami, all Physical Traits = Earth Ring, Invulnerable
 	"rise_fire": {"kind": "summon"},   # Fire 5: kami, Fire Ring traits + sets struck targets on fire
 	"rise_water": {"kind": "summon"},  # Water 5: kami, all Physical Traits = Water Ring, Invulnerable
+	# Coverage extension batch 11 (2026-06-20).
+	"soldiers_of_clay": {"kind": "summon", "summon_kind": "clay_soldier", "count": 10},  # Earth 6: 10 stone warriors
+	"be_the_mountain": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 4,
+		"mods": [{"kind": "reduction", "value": "be_the_mountain_reduction"}]},  # Earth 2: Reduction 5×rank (max 20)
+	"never_alone": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
+		"mods": [{"kind": "spell_attack_rolled", "value": "fire_ring"}]},  # Fire 1: +Fire to rolls (conditional expiry deferred)
+	"defense_of_the_firestorm": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
+		"mods": [{"kind": "armor_tn", "value": 20}]},  # Fire 4: +20 Armor TN flame aura (wooden-weapon burn deferred)
 	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
 	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
 	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.

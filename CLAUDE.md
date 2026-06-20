@@ -5696,7 +5696,7 @@ they comply with (`ctx.compliance_intimidators`) — covering non-hostile court 
 Phase-4 hostile filter doesn't. Runtime-verified 3/3 (accumulated reduction lifts Negotiate
 success 44→79/80; compliance +10 drops it 44→18/80; Persuade eased only by the persuade pool).
 
-### s31-37 spell combat coverage — extension batches 1–10 (2026-06-20)
+### s31-37 spell combat coverage — extension batches 1–11 (2026-06-20)
 Added combat effects for 4 more library spells (the library has 287 spells; only ~28 had combat
 effects). All values transcribed exactly from s34/s35: **tail_of_the_fire_dragon** (Fire 2,
 single damage DR=Fire Ring, 30'), **ravenous_swarms** (Fire 3, 5k3 bolt, 30' — the fire-spell-
@@ -5729,7 +5729,15 @@ Ring, human wound track from Earth = Ring, `partial_invuln` = Invulnerable to mu
 Fire kami tags `burning_touch`) → `_apply_spell_summon` registers it as an autonomous combatant on
 the caster's side (player caster → `add_companion`, runs via execute_companion_turn; enemy caster →
 `add_enemy`, runs via execute_npc_turn). Kami DR = Ring (kept 2, PROVISIONAL — GDD leaves kept dice
-unstated). 58 spells now have combat effects (from 28 at session start). Two new
+unstated). 58 spells now have combat effects.
+**Batch 11** adds `be_the_mountain` (Earth 2, ally Reduction 5×rank capped 20), `never_alone`
+(Fire 1, +Fire to attack rolls; conditional expiry deferred), `defense_of_the_firestorm` (Fire 4,
++20 Armor TN; wooden-weapon burn deferred), and `soldiers_of_clay` (Earth 6 — 10 stone warriors
+via a generalized summon: `_apply_spell_summon` now takes `count` + `summon_kind`, with
+`_build_clay_soldier` (traits = Earth Ring, Kenjutsu-4 jade sword, Reduction 2×Earth, standard
+wound track — not Invulnerable)). New buff-value formulas `fire_ring` + `be_the_mountain_reduction`.
+`relentless_heat` deferred (attempt-trigger needs a pre-roll hook). 62 spells now have combat
+effects (from 28 at session start). Two new
 `_gather_spell_targets` fields support Dragon's Talon: `target_max_insight` (skip stronger foes)
 and `aoe_max_targets` (cap struck count). Runtime-verified 5/5 (damage lands; grasp entangles;
 Dragon's Talon hits Insight-1/2 foes and spares an Insight-5 foe). The remaining ~255 library
