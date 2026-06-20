@@ -6207,11 +6207,27 @@ and the tiles are restored to floor when the zone expires (zone dropped). No reg
 over" action (GDD: Complex Action + Athletics roll) a closed ring would be an invulnerability stalemate;
 the conjured-terrain mechanic is ready for it once a clamber action exists. Earth 4 this continuation.
 
+### Spell coverage — anti-spell ward batch 16 (2026-06-20, runtime-verified 5/5)
+**The Kami's Will** (Earth 5) — "all spells (friendly or hostile, not maho) targeting the warded
+character suffer −XkX to the Spell Casting Roll, X = caster's Earth Ring." Wired as a per-target
+casting-roll penalty (distinct from the area wards, which add TN): `resolve_cast` gains an optional
+`roll_penalty` param that cuts the cast roll's rolled AND kept dice by X (floored at 1k1) — a faithful
+−XkX. The buff installs a `kamis_will` timed modifier (value = the warder's Earth Ring) on a target;
+`execute_cast_spell` reads it from the SPELL'S TARGET (`get_timed_modifier_total(tgt_p, "kamis_will")`)
+and passes it as `roll_penalty`, so any spell aimed AT the warded character is penalized regardless of
+caster (friend or foe, faithful). Runtime-verified: the modifier = Earth Ring 6; a Fire-8 caster's
+casting-roll total drops 63→21 with −6k6; a real-TN spell (Beam of the Inferno, TN 30) goes from 50/50
+to 5/50 success warded, and through the orchestrator 30/30 → 3/30 — the ward turns near-certain casts
+into near-certain failures; the 1k1 floor keeps a weak caster's roll positive. No regression
+(`resolve_cast`'s new param is defaulted, backward-compatible). LIMITATION: the +Willpower and −Social-
+roll halves are out-of-combat (deferred). Situational value (only vs enemy spellcasters, uncommon in
+tile combat) but a faithful completion of the anti-spell ward family. Earth 5 this continuation.
+
 ### Spell coverage session summary (2026-06-20, running)
-This session has wired **~64 combat spells across all 5 elements** (initial all-element pass + clean-wins
+This session has wired **~65 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
 forced-stance batch 5 + purify-zone batch 6 + guided-auto-hit batch 7 + AoE-mobility batch 8 +
-action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11 + fog batch 12 + per-die-reduction batch 13 + illusion-dispel batch 14 + conjured-terrain batch 15) + **1 world-sim spell** (Legacy of Kaze-no-Kami
+action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11 + fog batch 12 + per-die-reduction batch 13 + illusion-dispel batch 14 + conjured-terrain batch 15 + anti-spell-ward batch 16) + **1 world-sim spell** (Legacy of Kaze-no-Kami
 spirit-bird letters) + **2 pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty`
 was also the hook reused by Suitengu's Curse), all runtime-verified via headless drivers (full project
 import 0 parse errors throughout). Combat-effect total rose ~76 → ~133. New reusable infra built: the

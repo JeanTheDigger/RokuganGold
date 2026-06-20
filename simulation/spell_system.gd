@@ -362,6 +362,9 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"draw_back_the_shadow": {"kind": "dispel", "range_tiles": 20, "aoe_radius": 6},  # Air 5: within a 30' radius, dispel illusions — clears combatants' invisibility (Gift of Wind / Legion of the Moon) and removes Summon Fog clouds. Auto for the ML<=4 illusions wired; the ML5-6 contest + the broader non-illusion contested dispel are deferred (no creator/mastery on the timed-modifier layer).
 	# Coverage clean-wins batch 15 (2026-06-20): conjured terrain (a barrier that blocks move + LOS).
 	"wall_of_earth": {"kind": "wall", "pattern": "line", "range_tiles": 20, "wall_length": 6, "duration_rounds": 9999},  # Earth 4: a straight WALL_STONE barrier centered on a target tile, perpendicular to the approach — blocks movement (enemies path around) and LOS through it; restored on expiry. (Groves of Stone's closed ring deferred — needs a clamber-over action to avoid an invulnerability stalemate.)
+	# Coverage clean-wins batch 16 (2026-06-20): anti-spell ward (per-target casting-roll penalty).
+	"the_kamis_will": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 10,
+		"mods": [{"kind": "kamis_will", "value": "earth_ring"}]},  # Earth 5: a warded character — all spells (friend or foe) cast AT them suffer -(Earth Ring)k(Earth Ring) to the casting roll. (The +Willpower and -Social-roll halves are out-of-combat, deferred.)
 	"severed_from_the_stream": {"kind": "debuff", "target": "enemy", "range_tiles": 5, "duration_rounds": 9999,
 		"mods": [{"kind": "void_locked", "value": 1}]},  # Void 2: target cannot spend Void Points (the per-spend Contested-Void roll is simplified to a full lock via execute_void_spend; 5 rounds ≈ skirmish)
 	# --- Heal spells (s36 Water) ---
@@ -886,7 +889,8 @@ static func can_cast(character: L5RCharacterData, spell_id: String) -> bool:
 ## Returns: {success, total, tn, margin, spell_id, sim_effect, cast_ring, raises, imbalance_overflow}
 static func resolve_cast(character: L5RCharacterData, spell_id: String,
 		dice: DiceEngine, raises: int = 0,
-		target: L5RCharacterData = null, ic_day: int = -1, extra_tn: int = 0) -> Dictionary:
+		target: L5RCharacterData = null, ic_day: int = -1, extra_tn: int = 0,
+		roll_penalty: int = 0) -> Dictionary:
 	if not SPELL_LIBRARY.has(spell_id):
 		return {"success": false, "error": "unknown_spell"}
 	var spell: Dictionary = SPELL_LIBRARY[spell_id]
@@ -912,8 +916,10 @@ static func resolve_cast(character: L5RCharacterData, spell_id: String,
 	# Every SpellSystem spell is non-maho, so the check is unconditional.
 	if MutationSystem.has_power(character, Enums.ShadowlandsPowerType.MASTER_OF_BLOOD):
 		tn += 10
-	var roll_dice: int = ring_val + eff_rank
-	var keep_dice: int = ring_val
+	# roll_penalty: −XkX to the casting roll (s34 The Kami's Will — a target's anti-spell ward),
+	# applied by the orchestrator when a spell is cast AT a warded character. Floors at 1k1.
+	var roll_dice: int = maxi(1, ring_val + eff_rank - roll_penalty)
+	var keep_dice: int = maxi(1, ring_val - roll_penalty)
 	var wound_pen: int = CharacterStats.get_wound_penalty(character)
 	# Slot consumed on attempt regardless of outcome
 	consume_slot(character, cast_ring)

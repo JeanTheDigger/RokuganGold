@@ -2005,7 +2005,14 @@ static func execute_cast_spell(
 	# Area ward (s34 Earth's Protection / s35 Ward of Thunder): a hostile spell of a warded element
 	# cast while the caster stands inside an enemy ward takes a Spell Casting TN penalty.
 	var ward_tn: int = _ward_cast_penalty(state, caster_id, spell_id)
-	var res: Dictionary = SpellSystem.resolve_cast(caster, spell_id, dice_engine, 0, target, -1, ward_tn)
+	# s34 The Kami's Will: a spell cast AT a warded character has its casting roll cut by −XkX
+	# (X = the warder's Earth Ring, stored as the "kamis_will" timed modifier on the target).
+	var kw_penalty: int = 0
+	if target != null:
+		var tgt_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+		if tgt_p != null:
+			kw_penalty = IndividualCombat.get_timed_modifier_total(tgt_p, "kamis_will")
+	var res: Dictionary = SpellSystem.resolve_cast(caster, spell_id, dice_engine, 0, target, -1, ward_tn, kw_penalty)
 	res["spell_id"] = spell_id
 	# Furaribi rule (s54.12): a jade/crystal-property spell does not harm a superior_invuln
 	# spirit but repels it — it retreats from the area (leaves the encounter).
