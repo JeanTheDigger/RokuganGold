@@ -2125,6 +2125,12 @@ static func execute_cast_spell(
 			"type": "spell_fog_zone", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "zone": res["fog_zone"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "dispel":
+		res["dispel"] = _apply_spell_dispel(state, caster_id, target_id, target, eff)
+		state.combat_log.append({
+			"type": "spell_dispel", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "result": res["dispel"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "gain_void":
 		var gained: int = SpellSystem.get_effective_school_rank(caster, Enums.Ring.VOID) + 1
 		caster.current_void_points += gained  # over-cap allowed (s37 Drawing the Void)
@@ -2752,6 +2758,44 @@ static func _apply_spell_fog_zone(
 	}
 	state.spell_zones.append(zone)
 	return {"center": center, "radius": radius, "expiry_round": zone["expiry_round"]}
+
+
+## Dispel (s33 Draw Back the Shadow): within the area, dispel illusions — clear every combatant's
+## invisibility (spell_invisible) and remove obscuring fog zones. Auto for the ML≤4 illusions wired
+## here (Gift of Wind / Legion of the Moon / Summon Fog); the ML5-6 Contested Air roll and the
+## broader "ongoing non-illusion magical effects" contested dispel are deferred (the timed-modifier
+## layer stores no creator/mastery to contest against). Indiscriminate within the area (friend + foe).
+static func _apply_spell_dispel(
+	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData, eff: Dictionary,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	if int(eff.get("range_tiles", 0)) > 0 and target != null and state.positions.has(target_id):
+		center = state.positions[target_id]
+	var radius: int = int(eff.get("aoe_radius", 6))
+	var revealed: Array = []
+	# Clear invisibility from every combatant standing in the area.
+	for cid: int in state.positions.keys():
+		var pos: Vector2i = state.positions[cid]
+		if maxi(absi(pos.x - center.x), absi(pos.y - center.y)) > radius:
+			continue
+		var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+		if p == null:
+			continue
+		if IndividualCombat.get_timed_modifier_total(p, "invisible") > 0:
+			IndividualCombat.clear_timed_modifiers_by_source(p, "spell_invisible")
+			revealed.append(cid)
+	# Remove obscuring fog zones whose center lies within the dispel area.
+	var fog_cleared: int = 0
+	var surviving: Array = []
+	for zone in state.spell_zones:
+		if String(zone.get("kind", "")) == "fog":
+			var c: Vector2i = zone.get("center", Vector2i.ZERO)
+			if maxi(absi(c.x - center.x), absi(c.y - center.y)) <= radius:
+				fog_cleared += 1
+				continue
+		surviving.append(zone)
+	state.spell_zones = surviving
+	return {"center": center, "radius": radius, "revealed": revealed, "fog_cleared": fog_cleared}
 
 
 ## True when the straight line from a to b passes through any fog zone (s33 Summon Fog) — blocking

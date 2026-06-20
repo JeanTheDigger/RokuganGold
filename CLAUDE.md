@@ -6174,11 +6174,28 @@ atemi/charge/spirit-filtered/spell damage are not threaded (documented partial, 
 site just means the ward doesn't apply there, unlike the unsafe ring refactor). Earth combat spells now
 include their signature defensive ward.
 
+### Spell coverage — illusion dispel batch 14 (2026-06-20, runtime-verified 9/9)
+**Draw Back the Shadow** (Air 5) — "within a 30' radius, all illusions from ML≤4 spells are dispelled;
+ML5-6 need a Contested Air roll; ongoing non-illusion magical effects may also be dispelled (contested)."
+New `dispel` effect kind + `_apply_spell_dispel`: within the area (centered on a target tile, 30' radius),
+it clears every combatant's **invisibility** (`spell_invisible` timed modifiers — Gift of Wind / Legion
+of the Moon) and removes **Summon Fog** clouds (fog zones whose center lies in the area). Indiscriminate
+within the area (friend + foe, as a dispel is). Clearing invisibility auto-reveals (the `_is_targetable`
+gate reads the `invisible` modifier). Possible because my illusion effects are **source-tagged**
+(`spell_invisible`) and zones carry `kind`/`center`. Runtime-verified: an invisible enemy in the area is
+revealed (becomes targetable, listed in `revealed`) and the fog cloud is removed; an invisible enemy +
+fog OUTSIDE the area survive; a non-illusion buff (an armor_tn buff) is untouched (this is an illusion
+dispel, not a general dispel). No regression. LIMITATIONS (faithful for the dominant ML≤4 illusion case):
+the ML5-6 Contested Air roll and the broader "ongoing non-illusion magical effects" contested dispel are
+deferred — the timed-modifier layer stores no creator/mastery to contest against (a data-model change
+across ~15 spell installers), so this auto-dispels the wired illusions (Summon Fog ML3, Gift of Wind ML4;
+Legion of the Moon ML5 would auto-clear rather than contest). Air 15 this session.
+
 ### Spell coverage session summary (2026-06-20, running)
-This session has wired **~62 combat spells across all 5 elements** (initial all-element pass + clean-wins
+This session has wired **~63 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
 forced-stance batch 5 + purify-zone batch 6 + guided-auto-hit batch 7 + AoE-mobility batch 8 +
-action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11 + fog batch 12 + per-die-reduction batch 13) + **1 world-sim spell** (Legacy of Kaze-no-Kami
+action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11 + fog batch 12 + per-die-reduction batch 13 + illusion-dispel batch 14) + **1 world-sim spell** (Legacy of Kaze-no-Kami
 spirit-bird letters) + **2 pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty`
 was also the hook reused by Suitengu's Curse), all runtime-verified via headless drivers (full project
 import 0 parse errors throughout). Combat-effect total rose ~76 → ~133. New reusable infra built: the
