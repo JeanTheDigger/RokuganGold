@@ -332,6 +332,16 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "free_move_tiles", "value": 1}]},  # Water 4: chosen allies within 50' make a Free Move of Water Ring ×10' (= +Water tiles; was a Simple Action)
 	"master_of_the_rolling_river": {"kind": "buff", "target": "ally", "aoe_radius": 20, "duration_rounds": 5,
 		"mods": [{"kind": "move_water_penalty", "value": 1}]},  # Water 4: a unit (≤25 allies) within 100' moves as Water 1 Rank higher (the +1 Strength Rank + Mass Battle general bonus are deferred — trait-change)
+	# Coverage clean-wins batch 9 (2026-06-20): action-economy (one-shot bonus-action pools on TurnState).
+	# Reactions-Stage timing modeled as "an extra action on the recipient's next turn" (persists until used).
+	"spirit_of_the_water": {"kind": "buff", "target": "ally", "range_tiles": 4, "duration_rounds": 1,
+		"mods": [{"kind": "granted_simple", "value": 1}]},  # Water 1: +1 NON-attack Simple Action (a Move is the canonical use); checked only in execute_move so it can't be an attack
+	"stand_against_the_waves": {"kind": "buff", "target": "ally", "range_tiles": 2, "duration_rounds": 1,
+		"mods": [{"kind": "granted_attacks", "value": 1}]},  # Water 2: +1 attack action (Complex-fallback); checked only in the attack functions, not casting — so it cannot grant a second spell
+	"hurried_steps": {"kind": "buff", "target": "self", "duration_rounds": 2,
+		"mods": [{"kind": "cast_as_simple", "value": 1}]},  # Fire 2: the next Fire ML<=3 cast costs a Simple instead of a Complex (the -4-Rounds casting-time reduction collapses to "Simple-cost" for ML<=3; ML4+ partial reduction not modeled)
+	"the_elements_fury": {"kind": "buff", "target": "self", "duration_rounds": 1,
+		"mods": [{"kind": "free_casts", "value": "fire_ring"}]},  # Fire 6: cast Fire-Ring Fire ML<=4 spells, each as a Free Action (slots + rolls still required)
 	"severed_from_the_stream": {"kind": "debuff", "target": "enemy", "range_tiles": 5, "duration_rounds": 9999,
 		"mods": [{"kind": "void_locked", "value": 1}]},  # Void 2: target cannot spend Void Points (the per-spend Contested-Void roll is simplified to a full lock via execute_void_spend; 5 rounds ≈ skirmish)
 	# --- Heal spells (s36 Water) ---

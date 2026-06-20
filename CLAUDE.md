@@ -6067,14 +6067,43 @@ ally +5 free-move (5→10) and buffs the caster too, while an out-of-radius ally
 unaffected; rolling_river raises an ally's effective move Water 5→6 (free-move budget tracks it) with
 the enemy unaffected. Water 15 this session.
 
+### Spell coverage — action-economy batch 9 (2026-06-20, runtime-verified 18/18, owner-approved)
+The "extra action" spells, via a small new **bonus-action-pool** layer on `TurnState` (four one-shot int
+counters: `granted_attacks`, `granted_simple`, `cast_as_simple`, `free_casts`). Owner-approved direction;
+the Reactions-Stage timing is modeled as "an extra action on the recipient's NEXT turn" — the pools
+**persist until used** (they are NOT cleared by the per-turn `begin_turn` reset, only zeroed at TurnState
+creation). Grants are installed by `_apply_spell_buff` special-cases (set the target's TurnState field via
+`Object.set`, no timed modifier). Consumption is a "use the pool when the normal budget is spent" branch
+added to each relevant action path:
+- **Stand Against the Waves** (Water 2) → `granted_attacks`: an extra ATTACK action, consumed in
+  `execute_melee_attack`/`execute_ranged_attack` when the Complex is spent. Checked ONLY in the attack
+  functions, so it cannot grant a second spell-cast (GDD-faithful).
+- **Spirit of the Water** (Water 1) → `granted_simple`: an extra NON-attack Simple, consumed in
+  `execute_move` (a Move is the canonical use) — not reachable by the attack path.
+- **Hurried Steps** (Fire 2) → `cast_as_simple`: the next Fire ML≤3 cast costs a Simple instead of a
+  Complex (the −4-Rounds casting-time reduction collapses to "Simple-cost" for ML≤3; the ML4+ partial
+  reduction and the 2-Round window are not modeled).
+- **The Element's Fury** (Fire 6) → `free_casts = Fire Ring`: Fire ML≤4 casts are Free Actions (slots +
+  rolls still required), consumed in `execute_cast_spell`.
+Runtime-verified 18/18: all four grants set the pools; a granted extra attack lands then the 3rd attack
+fails; a granted Simple Move lands when the budget is spent then the next fails; a Fire-ML1 cast under
+Hurried Steps consumes a Simple (not the Complex) while a Water cast ignores it; a Fire-ML4 cast under
+The Element's Fury consumes no action while a Fire-ML6 cast still costs a Complex. **No regression** — all
+7 prior batch drivers re-pass (the touch to the 4 core action functions is additive). LIMITATIONS: the
+attack/non-attack constraints are honored by WHICH function checks WHICH pool (not a per-action tag); the
+GDD durations (2-Round / "this Round") aren't enforced (pools persist until used); no NPC-AI policy uses
+these (PC-deliberate / future turn UI). Water 17 / Fire 12 this session.
+
 ### Spell coverage session summary (2026-06-20, running)
-This session has wired **~51 combat spells across all 5 elements** (initial all-element pass + clean-wins
+This session has wired **~55 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
-forced-stance batch 5 + purify-zone batch 6 + guided-auto-hit batch 7 + AoE-mobility batch 8) + **1
-world-sim spell** (Legacy of Kaze-no-Kami spirit-bird letters) + **2 pre-existing bug fixes**
-(earths_stagnation move sign; its `move_water_penalty` was also the hook reused by Suitengu's Curse), all
-runtime-verified via headless drivers (full project import 0 parse errors throughout). Combat-effect total
-rose ~76 → ~127. New reusable infra built: the one-shot `ranged_auto_hit` buff (batch 7), the `purify_zone`
+forced-stance batch 5 + purify-zone batch 6 + guided-auto-hit batch 7 + AoE-mobility batch 8 +
+action-economy batch 9) + **1 world-sim spell** (Legacy of Kaze-no-Kami spirit-bird letters) + **2
+pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty` was also the hook reused by
+Suitengu's Curse), all runtime-verified via headless drivers (full project import 0 parse errors
+throughout). Combat-effect total rose ~76 → ~131. New reusable infra built: the `TurnState` bonus-action
+pools (batch 9 — granted attack/simple, cast-as-simple, free-casts), the one-shot `ranged_auto_hit` buff
+(batch 7), the `purify_zone`
 soul-state zone (batch 6), the `stance_locked` forced-Full-Attack debuff + `willpower_contested_caster_fire`
 save (batch 5), the shared `instant_kill` effect + `earth_contested_void` save (batch 4), the
 `no_magic_heal` block + `free_move_tiles` buff (batch 3), the `incapacitated` turn-gate

@@ -70,6 +70,16 @@ class TurnState:
 	var free_actions_used: int = 0
 	## Stance was changed this turn (costs a Simple action per GDD s40).
 	var stance_changed: bool = false
+	## s36/s35 action-economy spells — one-shot bonus pools beyond the normal budget.
+	## granted_attacks: extra ATTACK actions (Stand Against the Waves). granted_simple: extra
+	## NON-attack Simple actions, e.g. a Move (Spirit of the Water). cast_as_simple: the next
+	## Fire ML<=3 cast costs a Simple, not a Complex (Hurried Steps). free_casts: Fire ML<=4 casts
+	## are Free Actions (The Element's Fury). These persist until used (the Reactions-Stage timing
+	## maps to "an extra action on the recipient's next turn") and are NOT cleared by the turn reset.
+	var granted_attacks: int = 0
+	var granted_simple: int = 0
+	var cast_as_simple: int = 0
+	var free_casts: int = 0
 
 	func can_use_complex() -> bool:
 		return not complex_used and simple_used == 0
@@ -543,13 +553,19 @@ static func execute_move(
 			"simple":  effective_type = "complex"
 			"complex": return {"success": false, "reason": "crippled_cannot_complex_move"}
 
+	# s36 Spirit of the Water: a granted_simple pool lets one extra NON-attack Simple action (a
+	# Move is the canonical use) proceed when the normal budget is spent.
+	var using_granted_move: bool = false
 	match effective_type:
 		"free":
 			if not ts.can_use_free_move():
 				return {"success": false, "reason": "free_move_already_used"}
 		"simple":
 			if not ts.can_use_simple():
-				return {"success": false, "reason": "no_simple_actions_remaining"}
+				if ts.granted_simple > 0:
+					using_granted_move = true
+				else:
+					return {"success": false, "reason": "no_simple_actions_remaining"}
 		"complex":
 			if not ts.can_use_complex():
 				return {"success": false, "reason": "no_complex_actions_remaining"}
@@ -581,7 +597,11 @@ static func execute_move(
 
 	match effective_type:
 		"free":    ts.consume_free_move()
-		"simple":  ts.consume_simple()
+		"simple":
+			if using_granted_move:
+				ts.granted_simple -= 1
+			else:
+				ts.consume_simple()
 		"complex": ts.consume_complex()
 
 	state.combat_log.append({
@@ -813,12 +833,21 @@ static func execute_melee_attack(
 	var dance_simple: bool = as_simple or ((weapon_name == "" or weapon_name == "unarmed") and "Dance of the Flames" in a_p.active_kiho)
 	# bonus_attack (GDD s54.5 multi-attack second strike, like an off-hand attack): a free
 	# extra attack that neither requires nor consumes an action.
+	# s36 Stand Against the Waves: a granted_attacks pool lets an attack proceed when the normal
+	# action budget is spent (consumes one granted attack instead).
+	var using_granted_attack: bool = false
 	if not bonus_attack:
 		if dance_simple:
 			if not ts.can_use_simple():
-				return {"success": false, "reason": "no_simple_actions_remaining"}
+				if ts.granted_attacks > 0:
+					using_granted_attack = true
+				else:
+					return {"success": false, "reason": "no_simple_actions_remaining"}
 		elif not ts.can_use_complex():
-			return {"success": false, "reason": "no_complex_actions_remaining"}
+			if ts.granted_attacks > 0:
+				using_granted_attack = true
+			else:
+				return {"success": false, "reason": "no_complex_actions_remaining"}
 
 	# Defense/Full Defense stances prohibit attacking entirely (s40) — this is an
 	# action-legality check, independent of position, so it precedes the range check.
@@ -1068,7 +1097,9 @@ static func execute_melee_attack(
 	a_p.spirit_damage_kept_bonus = 0
 
 	if not bonus_attack:
-		if dance_simple:
+		if using_granted_attack:
+			ts.granted_attacks -= 1
+		elif dance_simple:
 			ts.consume_simple()
 		else:
 			ts.consume_complex()
@@ -1282,8 +1313,14 @@ static func execute_ranged_attack(
 	if a_p_ins != null and IndividualCombat.get_timed_modifier_total(a_p_ins, "insubstantial") > 0:
 		return {"success": false, "reason": "insubstantial"}
 
+	# s36 Stand Against the Waves: a granted_attacks pool lets a ranged attack proceed when the
+	# normal Complex is spent (consumes one granted attack instead).
+	var using_granted_ranged: bool = false
 	if not ts.can_use_complex():
-		return {"success": false, "reason": "no_complex_actions_remaining"}
+		if ts.granted_attacks > 0:
+			using_granted_ranged = true
+		else:
+			return {"success": false, "reason": "no_complex_actions_remaining"}
 
 	# LOS check.
 	var apos: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
@@ -1367,7 +1404,10 @@ static func execute_ranged_attack(
 		result["target_dead"] = dmg_result.get("dead", false)
 		result["target_wound_level"] = CharacterStats.get_wound_level(target)
 
-	ts.consume_complex()
+	if using_granted_ranged:
+		ts.granted_attacks -= 1
+	else:
+		ts.consume_complex()
 	state.combat_log.append(log_entry)
 	_check_and_mark_over(state, target_id, target)
 	return result
@@ -1909,14 +1949,33 @@ static func execute_cast_spell(
 		return {"success": false, "reason": "not_in_combat"}
 	if not SpellSystem.can_cast(caster, spell_id):
 		return {"success": false, "reason": "cannot_cast"}
-	if not ts.can_use_complex():
+	# s35 cast-economy: Hurried Steps lets the next Fire ML<=3 cast be a Simple Action; The Element's
+	# Fury lets Fire ML<=4 casts be Free Actions (slots/rolls still required). Decided before the
+	# action check so a discounted cast doesn't demand the full Complex.
+	var sp_elem: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("e", -1)
+	var sp_ml: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("m", 1)
+	var use_free_cast: bool = ts.free_casts > 0 and sp_elem == Enums.Ring.FIRE and sp_ml <= 4
+	var use_simple_cast: bool = (not use_free_cast) and ts.cast_as_simple > 0 \
+		and sp_elem == Enums.Ring.FIRE and sp_ml <= 3
+	if use_free_cast:
+		pass  # Free Action — no budget required
+	elif use_simple_cast:
+		if not ts.can_use_simple():
+			return {"success": false, "reason": "no_simple_action"}
+	elif not ts.can_use_complex():
 		return {"success": false, "reason": "no_complex_action"}
 	# s33 Essence of Air: no other spells may be cast while insubstantial.
 	var caster_p_ins: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
 	if caster_p_ins != null and IndividualCombat.get_timed_modifier_total(caster_p_ins, "insubstantial") > 0:
 		return {"success": false, "reason": "insubstantial"}
-	ts.consume_complex()
-	var ml: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("m", 1)
+	if use_free_cast:
+		ts.free_casts -= 1
+	elif use_simple_cast:
+		ts.cast_as_simple -= 1
+		ts.consume_simple()
+	else:
+		ts.consume_complex()
+	var ml: int = sp_ml
 	# Sodatsu's Bane (s54.5): a spell cast AT a shugenjas_bane creature is absorbed — it has
 	# no effect, the caster's slot is still spent, and the oni instantly retaliates.
 	if target != null and target.spirit_creature != null \
@@ -2371,6 +2430,12 @@ static func _apply_spell_buff(
 			# s33 Arrow's Flight: a one-shot guided arrow. Dedicated source so execute_ranged_attack
 			# can clear just this modifier after the next bow shot (the duration is the firing window).
 			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_arrows_flight")
+		elif mkind in ["granted_attacks", "granted_simple", "cast_as_simple", "free_casts"]:
+			# s36/s35 action-economy spells: grant one-shot bonus-action pools on the target's
+			# TurnState (consumed by the attack/move/cast paths), not timed modifiers.
+			var gts: TurnState = state.turn_states.get(bid, null)
+			if gts != null:
+				gts.set(mkind, int(gts.get(mkind)) + val)
 		else:
 			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff")
 		applied.append({"kind": mkind, "value": val})
