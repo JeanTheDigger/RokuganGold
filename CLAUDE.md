@@ -4676,6 +4676,47 @@ until it strikes) rather than as a second hook in CombatController — there is 
 Mimic to gate there until spirit creatures flow through that layer. Re-castable (no
 once-per-encounter limit; GDD allows recasting). Static-validated only (no Godot runtime).
 
+### s33/s36 illusion DISGUISE layer — CombatController stealth approach (2026-06-21, owner-authorized, runtime-verified)
+First piece of the owner-authorized "illusion/perception layer." A full read of all 16
+"illusion" spells found that **almost none are turn-based-combat effects** — they are
+stealth-approach (the roguelike `CombatController`, not the turn-based orchestrator) or
+out-of-combat (memory/conversation/detection/world-sim). So the faithful home for the
+**disguise** spells is `CombatController`: a disguised PC passes enemy guards in the
+infiltration phase. Wired (PC carries the disguise on its `EntityState`):
+`apply_disguise(spell_id)` (the future stealth-command UI / spell-cast action calls it)
+freezes the see-through contest pool — Spellcraft rank + Air ring — plus the spell's GDD
+**Mastery Level** as the resist bonus; `clear_disguise()`; `is_disguised()`. The hook is in
+`_npc_turn`: right after `_npc_can_see_player`, a `_disguise_suppresses(es)` guard flips
+`player_seen` to false for a fooled guard, so it never escalates UNAWARE→SUSPICIOUS→ALERT.
+**See-through (owner ruling 2026-06-21): Contested Investigation/Perception (guard) vs
+Spellcraft/Air (caster)** — the GDD's own illusion-detection shape (seeking_the_way,
+garbled_tongue) — with the owner's "harder disguise adds a bonus" realized via the spell's
+GDD Mastery Level (hidden_visage Air 2 → +2, mask_of_wind Air 3 → +3, the_mirrors_smile
+Water 4 → +4; **no flat magnitude invented**). The contest is rolled **once per guard and
+cached** (`disguise_seethrough` entity_id→penetrated/fooled); ties favor the disguise; only
+UNAWARE/SUSPICIOUS guards can be fooled (an ALERT guard already in combat ignores it). The
+disguise **breaks on any overt hostile act** — `clear_disguise()` is called at all three PC
+hostile paths: `execute_player_attack`, `execute_stealth_kill`, and the inline
+`try_move_player` bump-to-attack (the last was the wiring gap caught in the validation pass).
+A normal open move keeps the disguise (it only drops `_player_stealth`, the separate sneak
+flag — walking openly *as a friendly* is the whole point; `_disguise_suppresses` then gates
+FoV spotting). PCs may be shugenja per s60.2, so the caster path is reachable.
+RUNTIME-VERIFIED (Godot 4.6.2, headless driver, 21/21): ML resist bonus = 2/3/4; see-through
+monotonicity (weak guard cracks a good disguise 2/400, strong guard cracks a weak one
+368/400, biased toward the disguise); per-guard cache sticky + stable; ALERT guard ignores
+it; the strongest disguise fools a weak suspicious guard 50/50; clear_disguise breaks +
+is idempotent; apply rejects non-disguise spells and the no-player case. LIMITATIONS /
+DEFERRED: this is the **disguise** subset (hidden_visage, mask_of_wind, the_mirrors_smile)
+only — the other illusion spells (heart_betrays_eyes perception-mask, quiescence_of_air
+silence→Stealth, by_the_light_of_the_moon reveal, seeking_the_way false-trail) are the next
+CombatController tranches; ever_changing_waves (real creature shapeshift) and mists_of_illusion
+(stationary visual decoy) are the orchestrator turn-based pair. A clean stealth kill with no
+witnesses still drops the disguise (the "no-witness persistence" nuance is deferred). Same
+live-reachability caveat as the whole ASCII combat stack (PC-travel HOLD) — verified by
+headless driver, not a live session. The disguise spells also gain no entry in
+`SpellSystem.SPELL_COMBAT_EFFECTS` (their effect lives in CombatController, not the
+orchestrator damage/status schema).
+
 ### s54.10 Konak Jiji Lure + Deceptive Weight — wired into tile combat (2026-06-16, owner-approved, static-only)
 Owner decisions (2026-06-16): trigger = **adjacency + resist roll**; pin = **grapple state**
 (escape Athletics/Strength TN 40). The GDD gives the spring (auto-hit + 400 lb pin, TN 40
