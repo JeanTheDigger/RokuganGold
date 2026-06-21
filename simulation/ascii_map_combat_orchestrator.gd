@@ -2614,6 +2614,17 @@ static func _apply_spell_buff(
 	if p == null:
 		return {"reason": "not_in_combat"}
 	var expiry: int = state.combat.round_number + int(eff.get("duration_rounds", 5))
+	# s37 The Void's Caress: negate one Mental/Spiritual Disadvantage on the target (≤ max_points) for
+	# the duration — reuses the s38 Banish All Shadows suppression field (one slot, read by the combat-roll
+	# disadvantage loops via AdvantageSystem._is_suppressed). Cleared at expiry in advance_round.
+	if eff.has("suppress_disadvantage"):
+		var hd: DisadvantageData = AdvantageSystem.get_highest_mental_or_spiritual_disadvantage(
+			bch, int(eff.get("suppress_max_points", 5)))
+		if hd != null:
+			bch.suppressed_disadvantage_type = int(hd.disadvantage_type)
+			p.suppressed_disadvantage_expiry = expiry
+			return {"id": bid, "suppressed_disadvantage": int(hd.disadvantage_type), "expires_round": expiry}
+		return {"id": bid, "no_suppressable_disadvantage": true}
 	var applied: Array = []
 	for mod in eff.get("mods", []):
 		var mkind: String = String(mod.get("kind", ""))

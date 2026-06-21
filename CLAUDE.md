@@ -6381,8 +6381,12 @@ set per the per-spell ASK. (FireSystem ignite/extinguish and the VP-manipulation
 
 "### Spell-combat layers — completion verified (2026-06-21)
 Programmatic audit (brace-matched extraction of `SpellSystem.SPELL_COMBAT_EFFECTS` vs the COMBAT_ONLY
-library) confirms the s31–37 shugenja layer at **154 wired combat effects / 66 unwired COMBAT_ONLY
-gaps**, and the s43 maho-in-combat layer at **15 effects + the Bleeding cure** (10 tranches; tranche 10
+library) confirms the s31–37 shugenja layer at **155 wired combat effects / 65 unwired COMBAT_ONLY
+gaps** (2026-06-21: a full read of all 66 gaps found exactly one more cleanly-wirable spell — **The
+Void's Caress** [Void 1, Ishiken]: negate one Mental/Spiritual Disadvantage ≤5 pts on a touched ally,
+reusing the s38 Banish All Shadows suppression slot via a new `suppress_disadvantage` buff branch +
+`AdvantageSystem.get_highest_mental_or_spiritual_disadvantage`; runtime-verified 5/5. The other 64 are
+genuinely blocked — see below), and the s43 maho-in-combat layer at **15 effects + the Bleeding cure** (10 tranches; tranche 10
 added No Pure Breaths' +10-TN lung-ravage and Disrupt the Limb's +15-TN arm debuff — the headline
 effects are GDD-exact, only their sub-parts [NPB damage rolled-count; Disrupt leg/Lame] stay blocked). The 66
 s31–37 gaps were spot-checked against the session's new mechanisms (DoT, persistent-fear,

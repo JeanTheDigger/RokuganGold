@@ -398,6 +398,25 @@ static func get_highest_non_spiritual_social_disadvantage(character: L5RCharacte
 	return best
 
 
+# s37 The Void's Caress: negate one Mental OR Spiritual Disadvantage the target possesses, up to
+# `max_points` in value (5 per the GDD). Returns the highest-point qualifying Disadvantage, or null.
+static func get_highest_mental_or_spiritual_disadvantage(
+		character: L5RCharacterData, max_points: int = 5) -> DisadvantageData:
+	var best: DisadvantageData = null
+	var best_pts: int = -1
+	for dis: DisadvantageData in character.disadvantages:
+		var cat: String = get_disadvantage_category(dis.disadvantage_type)
+		if not ("Mental" in cat or "Spiritual" in cat):
+			continue
+		var pts: int = get_disadvantage_points(dis)
+		if pts > max_points:
+			continue
+		if pts > best_pts:
+			best_pts = pts
+			best = dis
+	return best
+
+
 
 # ---------------------------------------------------------------------------
 # Skill-roll bonus aggregator

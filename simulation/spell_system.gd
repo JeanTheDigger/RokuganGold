@@ -306,6 +306,10 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Void Strike: Range 50', single, DR = caster's Void Ring
 	"void_strike": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
 		"range_tiles": 10, "aoe_radius": 0},
+	# The Void's Caress (Void 1, Ishiken): negate one Mental/Spiritual Disadvantage on a touched ally
+	# (≤5 points) for 1 minute (~10 rounds). Reuses the Banish All Shadows suppression slot.
+	"the_voids_caress": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 10,
+		"suppress_disadvantage": "mental_spiritual", "suppress_max_points": 5},
 	# Void coverage extension (2026-06-20): Void ward + spirit banishment.
 	"banish_the_void": {"kind": "ward", "aoe_radius": 4, "duration_rounds": 5,
 		"ward_elements": [4], "cast_tn_penalty": 10},  # Void 3: +10 TN to Void spells in the area (VP-cost-doubling + Shadow effects not modeled; ward owner exempt)
