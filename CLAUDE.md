@@ -8226,9 +8226,19 @@ template generators it depends on. Faithful summary of the fixes that landed:
   healthy target); the NPC picker includes bleed but skips it on a healthy target; recasts stack.
   Verified: +1 Wound/round persists; a healthy target is refused upfront; an all-rings-1 maho-user
   (only Bleeding supportable) casts it on an injured PC and skips a healthy one. **5 maho combat effects
-  total** (Pain, Curse of Weakness, Strength of Darkness, Burning Blood, Bleeding). DEFERRED tranche 4+:
-  Tomb of Earth (maintained per-round contested immobilize), the bandage/Medicine cure for Bleeding,
-  Burning Blood's secondary Fatigued, the other ~23 combat maho spells.
+  total** (Pain, Curse of Weakness, Strength of Darkness, Burning Blood, Bleeding).
+- **s43 maho IN TILE COMBAT — tranche 4 (2026-06-21, runtime-verified 6/6).** Three more, all reusing the
+  existing status/damage paths (data-only — no orchestrator changes, zero regression): **Blood and
+  Darkness** (Air 1 → AoE blinded, 6-tile radius, caster excepted via the AoE gather), **Chains of
+  Jigoku** (Earth 4 → incapacitated immobilize for the skirmish; real manacles, NOT Shadowlands-gated),
+  **Touch of Death** (Earth 5 → 7k7 melee Wounds; the +10-year aging is the world-sim slice already wired
+  in the seasonal maho cast, not modeled in the skirmish). Verified: Blood and Darkness blinds both PCs
+  but not the caster; Chains incapacitates; Touch of Death deals 7k7 (24 in the test); the NPC picks
+  Touch of Death as its highest-ML offense. **8 maho combat effects total** (the 5 above + these 3).
+  DEFERRED: the **fear spells** (Inspire Fear, Mists of Fear) — "afraid" is managed by the proximity-based
+  `apply_fear_checks` (which set/clears CONDITION_AFRAID each turn), so a spell-applied afraid would be
+  wiped on the target's next turn; they need a separate spell-afraid mechanism. Also Tomb of Earth
+  (maintained per-round contest), Blood Armor (damage-redirect), the Bleeding bandage cure, ~20 more.
 - **s43 Grand-Map spell sweep COMPLETE (2026-06-11).** Audited all 46 maho spells
   for world-scale-wirable effects (persistent NPC/province state, no s40 combat or
   condition layer). **6 are wired** (Spreading the Darkness, Stealing the Soul,

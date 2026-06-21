@@ -103,6 +103,17 @@ const MAHO_COMBAT_EFFECTS: Dictionary = {
 	# victim's Turn (ticked in advance_round), indefinitely until bandaged (a future out-of-combat Medicine
 	# action) or healed. Requires the target already injured (1+ Wound). Stacks if recast.
 	"bleeding": {"kind": "bleed", "range_tiles": 10, "wounds_per_round": 1},
+	# Blood and Darkness (Air 1): 30' radius blindness (6 tiles), caster excepted — the AoE gather always
+	# excludes the caster. Blinded for 10 rounds.
+	"blood_and_darkness": {"kind": "status", "condition": "blinded", "range_tiles": 0, "aoe_radius": 6,
+		"aoe_hits": "all", "duration_rounds": 10},
+	# Chains of Jigoku (Earth 4): iron manacles immobilize the target — incapacitated for the skirmish
+	# (10 minutes ≈ skirmish). Real manacles, so NOT Shadowlands-gated (unlike the s34 elemental bindings).
+	"chains_of_jigoku": {"kind": "status", "condition": "incapacitated", "range_tiles": 10,
+		"duration_rounds": 9999},
+	# Touch of Death (Earth 5): the combat slice is 7k7 Wounds (melee touch). The +10-year aging is the
+	# world-sim slice (already wired in the seasonal maho cast), not modeled in the skirmish.
+	"touch_of_death": {"kind": "damage", "range_tiles": 1, "dr_rolled": 7, "dr_kept": 7},
 }
 
 
