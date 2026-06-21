@@ -99,6 +99,10 @@ const MAHO_COMBAT_EFFECTS: Dictionary = {
 	# is deferred — the rider applies one condition; the damage + Prone is the core combat effect.)
 	"burning_blood": {"kind": "damage", "range_tiles": 10, "dr_target_ring": _F,
 		"rider": {"condition": "prone", "save": "willpower_flat", "save_tn": 20}},
+	# Bleeding (Fire 1): a malignant kansen reopens an existing wound — 1 Wound/Round at the start of the
+	# victim's Turn (ticked in advance_round), indefinitely until bandaged (a future out-of-combat Medicine
+	# action) or healed. Requires the target already injured (1+ Wound). Stacks if recast.
+	"bleeding": {"kind": "bleed", "range_tiles": 10, "wounds_per_round": 1},
 }
 
 

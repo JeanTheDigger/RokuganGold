@@ -8212,6 +8212,23 @@ template generators it depends on. Faithful summary of the fixes that landed:
   damage/clone drivers re-pass. DEFERRED (tranche 2+): damage maho (Burning Blood — DR = TARGET's Fire
   Ring, structural), Bleeding (per-round DoT), Tomb of Earth (maintained per-round contest), the other ~25
   combat maho spells, and roster-spawned MAHO_TSUKAI `cult_affiliation` flagging (the hook is ready).
+- **s43 maho IN TILE COMBAT — tranches 2-3 (2026-06-21).** Extend the maho-cast pipeline with damage +
+  DoT. **Tranche 2 — Burning Blood** (Fire 4, runtime-verified 8/8): the first damage maho. DR equals
+  the TARGET's Fire Ring (per-target, not the caster's) — a new `dr_target_ring` option in the damage
+  loop (gated per-key → zero impact on every other damage spell) — then a Willpower TN 20 save or fall
+  Prone. A "damage" branch added to execute_cast_maho + "damage" to the NPC offense kinds. Verified: a
+  Fire-5 target averages 30.6 damage vs a Fire-2 target's 12.2 (the blood boils hotter the more Fire they
+  have, faithful to the GDD); Prone rider fires; the NPC picks Burning Blood as its highest-ML offense.
+  **Tranche 3 — Bleeding** (Fire 1, runtime-verified 7/7): the iconic DoT. A new "bleed" effect kind —
+  `_apply_maho_bleed` installs a "bleed" timed modifier (requires the target already injured, 1+ Wound),
+  and a per-round bleed tick in `advance_round` applies the Wounds (gated on the modifier → zero
+  regression). The injured-target precondition is checked BEFORE paying blood (no wasted blood on a
+  healthy target); the NPC picker includes bleed but skips it on a healthy target; recasts stack.
+  Verified: +1 Wound/round persists; a healthy target is refused upfront; an all-rings-1 maho-user
+  (only Bleeding supportable) casts it on an injured PC and skips a healthy one. **5 maho combat effects
+  total** (Pain, Curse of Weakness, Strength of Darkness, Burning Blood, Bleeding). DEFERRED tranche 4+:
+  Tomb of Earth (maintained per-round contested immobilize), the bandage/Medicine cure for Bleeding,
+  Burning Blood's secondary Fatigued, the other ~23 combat maho spells.
 - **s43 Grand-Map spell sweep COMPLETE (2026-06-11).** Audited all 46 maho spells
   for world-scale-wirable effects (persistent NPC/province state, no s40 combat or
   condition layer). **6 are wired** (Spreading the Darkness, Stealing the Soul,

@@ -2265,6 +2265,10 @@ static func execute_cast_maho(
 	var ts = state.turn_states.get(caster_id, null)
 	if ts == null or not ts.can_use_complex():
 		return {"success": false, "reason": "no_complex_action"}
+	# Effect-specific precondition checked BEFORE paying blood: Bleeding reopens an existing wound, so a
+	# maho-user does not waste its blood casting it on an uninjured target.
+	if String(eff.get("kind", "")) == "bleed" and (target == null or target.wounds_taken < 1):
+		return {"success": false, "reason": "target_not_injured"}
 	# Pattern B: pay the self-blood cost (2×ML Wounds, bypasses armor) + Taint before the effect.
 	var ml: int = int(spell.get("mastery_level", 1))
 	var blood: int = MahoSystem.total_blood_cost(ml, 0)
@@ -2289,6 +2293,8 @@ static func execute_cast_maho(
 		"damage":
 			res["spell_damage"] = _apply_spell_combat_damage(
 				state, caster_id, caster, target_id, target, eff, spell_id, dice_engine)
+		"bleed":
+			res["spell_bleed"] = _apply_maho_bleed(state, caster_id, target_id, target, eff)
 	state.combat_log.append({"type": "cast_maho", "round": state.combat.round_number,
 		"caster_id": caster_id, "spell_id": spell_id, "result": res})
 	return res
@@ -5299,6 +5305,13 @@ static func advance_round(
 			var _rwd_c: L5RCharacterData = chars_by_id.get(_tp.character_id, null)
 			if _rwd_c != null and not CharacterStats.is_dead(_rwd_c):
 				WoundSystem.heal_wounds(_rwd_c, CharacterStats.get_ring_value(_rwd_c, Enums.Ring.WATER))
+		# s43 Bleeding: a maho kansen makes an injured wound bleed — N Wounds/Round at the start of the
+		# victim's Turn, indefinitely until bandaged (a future out-of-combat Medicine action) or healed.
+		var _bleed_amt: int = IndividualCombat.get_timed_modifier_total(_tp, "bleed")
+		if _bleed_amt > 0:
+			var _bl_c: L5RCharacterData = chars_by_id.get(_tp.character_id, state.combatants.get(_tp.character_id, null))
+			if _bl_c != null and not CharacterStats.is_dead(_bl_c):
+				WoundSystem.apply_damage(_bl_c, _bleed_amt, 0)
 		# Gashadokuro Regeneration (s54.10): recover 10 Wounds at the start of each round,
 		# UNLESS a Wound threshold was crossed within the last 3 rounds (a section
 		# collapsed — _apply_hit set spirit_regen_suppressed_until).
@@ -5534,6 +5547,30 @@ static func _npc_maybe_cast_spell(
 	return {}
 
 
+## s43 Bleeding: apply a per-round bleed (N Wounds/Round, ticked in advance_round) to an already-injured
+## target. Requires the target to have at least 1 Wound (the kansen reopens an existing injury). Stacks
+## if recast. The "bandage with Medicine to stop it" cure is a future out-of-combat action.
+static func _apply_maho_bleed(
+	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData, eff: Dictionary,
+) -> Dictionary:
+	if target == null or CharacterStats.is_dead(target):
+		return {"reason": "no_target"}
+	if target.wounds_taken < 1:
+		return {"reason": "target_not_injured"}
+	var rng: int = int(eff.get("range_tiles", 10))
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		var cp: Vector2i = state.positions[caster_id]
+		var tp: Vector2i = state.positions[target_id]
+		if maxi(absi(cp.x - tp.x), absi(cp.y - tp.y)) > rng:
+			return {"reason": "out_of_range"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if p == null:
+		return {"reason": "not_in_combat"}
+	var wpr: int = int(eff.get("wounds_per_round", 1))
+	IndividualCombat.add_timed_modifier(p, "bleed", wpr, state.combat.round_number + 9999, "maho_bleed")
+	return {"id": target_id, "bleed_per_round": wpr}
+
+
 ## s43 maho-user enemy cast (Bloodspeaker/cult, s56.14). Mirrors _npc_maybe_cast_spell but for maho:
 ## gated on cult_affiliation (a maho-user), no cast roll, Ring-supported spell selection. (1) highest-ML
 ## status/debuff maho that reaches the chosen enemy; else (2) a self-buff if not already buffed. Returns
@@ -5555,10 +5592,15 @@ static func _npc_maybe_cast_maho(
 		for sid in MahoSpellLibrary.MAHO_COMBAT_EFFECTS:
 			var eff: Dictionary = MahoSpellLibrary.MAHO_COMBAT_EFFECTS[sid]
 			var k: String = String(eff.get("kind", ""))
-			if k != "status" and k != "debuff" and k != "damage":
+			if k != "status" and k != "debuff" and k != "damage" and k != "bleed":
 				continue
 			if not MahoSpellLibrary.supports_spell_ring(npc, sid):
 				continue
+			# Bleeding only works on an already-injured target — skip it on a healthy one.
+			if k == "bleed":
+				var tc0: L5RCharacterData = chars_by_id.get(best_target, state.combatants.get(best_target, null))
+				if tc0 == null or tc0.wounds_taken < 1:
+					continue
 			if not _spell_reaches(state, npc_id, best_target, eff):
 				continue
 			var ml: int = int(MahoSpellLibrary.get_spell(sid).get("mastery_level", 1))
