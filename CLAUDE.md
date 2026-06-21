@@ -8300,6 +8300,22 @@ template generators it depends on. Faithful summary of the fixes that landed:
   blocked: No Pure Breaths (ambiguous DR — the rolled-dice count is unstated, can't invent), Disrupt the
   Limb (needs a per-limb system), the Bleeding bandage cure (needs a combat Medicine action + an unstated
   TN), and the out-of-combat/social/world-sim maho.
+- **s43 maho IN TILE COMBAT — tranche 9: Bleeding bandage cure (2026-06-21, runtime-verified 7/7).**
+  Closes the Bleeding loop (tranche 3) — and the "Bleeding cure" deferral was wrong: the TN is NOT
+  unstated. GDD: a bleeding injury "continues until bandaged with a successful Medicine (Wounds) roll" —
+  a Complex Action making a Medicine (Wound Treatment) / Intelligence roll vs the **GDD-specified Medicine
+  TN** (`MedicineSystem.BASE_TN = 15`, s57.31 — reused, not invented). New
+  `execute_stop_bleeding(state, healer_id, healer, target_id, target, dice)`: self-bandage (healer ==
+  target, range 0) or an adjacent ally bandaging the bleeder (range 1); on success clears the target's
+  `maho_bleed` timed modifier (`clear_timed_modifiers_by_source`). NPC + companion self-bandage hooks in
+  `execute_npc_turn` / `execute_companion_turn` (gated on `Medicine >= 1` + an active bleed + an available
+  Complex → zero regression; the bleeder forgoes its attack to stop the steady drain). The PC path is the
+  future turn-based UI (the action is ready). General mechanism — serves any future bleed source, not just
+  the maho spell. Runtime-verified 7/7 (Godot 4.6.2): bleed applied → self-bandage (Medicine 6 vs TN 15)
+  stops it + consumes the Complex; non-bleeding target rejected; adjacent ally medic cures a bleeding PC;
+  out-of-range ally rejected; a bleeding NPC with Medicine self-bandages on its turn. maho-t1/t6/t7/t8
+  drivers re-pass. **13 maho combat effects + the Bleeding cure.** Remaining genuinely-blocked maho: No
+  Pure Breaths (ambiguous DR), Disrupt the Limb (per-limb system), out-of-combat/social/world-sim maho.
 - **s43 Grand-Map spell sweep COMPLETE (2026-06-11).** Audited all 46 maho spells
   for world-scale-wirable effects (persistent NPC/province state, no s40 combat or
   condition layer). **6 are wired** (Spreading the Darkness, Stealing the Soul,

@@ -1963,6 +1963,45 @@ static func execute_locate_heart(
 	return {"success": found, "heart_located": found, "roll": rc.get("total", 0)}
 
 
+## s43 Bleeding cure: bandage a bleeding wound shut. The GDD says a bleeding injury "continues
+## until bandaged with a successful Medicine (Wounds) roll" — a Complex Action making a Medicine
+## (Wound Treatment) / Intelligence roll vs the standard Medicine TN (15, MedicineSystem.BASE_TN —
+## reused, not invented). On success the target's bleed (the "maho_bleed" timed modifier) is cleared.
+## Self-bandage (healer == target, range 0) or an ally bandaging the bleeder (adjacent, range 1).
+static func execute_stop_bleeding(
+	state: MapCombatState, healer_id: int, healer: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, dice_engine: DiceEngine,
+) -> Dictionary:
+	if healer == null or CharacterStats.is_dead(healer):
+		return {"success": false, "reason": "healer_invalid"}
+	if target == null or CharacterStats.is_dead(target):
+		return {"success": false, "reason": "target_invalid"}
+	var ts: TurnState = state.turn_states.get(healer_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_action"}
+	# An ally bandaging the bleeder must be adjacent; self-bandage needs no range check.
+	if healer_id != target_id and state.positions.has(healer_id) and state.positions.has(target_id):
+		var hp: Vector2i = state.positions[healer_id]
+		var tp: Vector2i = state.positions[target_id]
+		if maxi(absi(hp.x - tp.x), absi(hp.y - tp.y)) > 1:
+			return {"success": false, "reason": "out_of_range"}
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if t_p == null or IndividualCombat.get_timed_modifier_total(t_p, "bleed") <= 0:
+		return {"success": false, "reason": "target_not_bleeding"}
+	ts.consume_complex()
+	var rc: Dictionary = SkillResolver.resolve_skill_check(
+		healer, dice_engine, "Medicine", MedicineSystem.BASE_TN, 0, "Wound Treatment",
+		Enums.Trait.INTELLIGENCE)
+	var ok: bool = rc.get("success", false)
+	if ok:
+		IndividualCombat.clear_timed_modifiers_by_source(t_p, "maho_bleed")
+	state.combat_log.append({
+		"type": "stop_bleeding", "round": state.combat.round_number,
+		"healer_id": healer_id, "target_id": target_id, "success": ok,
+	})
+	return {"success": ok, "bleeding_stopped": ok, "roll": rc.get("total", 0)}
+
+
 ## Tile-combat spellcasting (s31–s37 via SpellSystem). A Complex Action: validates the
 ## caster can cast (known / rank / slot / Ishiken), spends the slot, and resolves the cast
 ## roll vs TN (incl. creature Magic Resistance, s54). Range is LOS-only for now (GDD spell
@@ -5831,6 +5870,15 @@ static func execute_npc_turn(
 	# -- Fear (s22.3/s02.4): resist nearby Fear sources or fight afraid (-1k0). --
 	apply_fear_checks(state, npc_id, npc, dice_engine)
 
+	# -- Bleeding: a bleeding NPC with Medicine bandages the wound shut (s43 Bleeding cure) before
+	# anything offensive — it is a steady per-round drain. Self-bandage (Complex Action); forgoes the
+	# turn's attack. Gated on an active bleed + Medicine >= 1 + an available Complex.
+	if ts.can_use_complex() and int(npc.skills.get("Medicine", 0)) >= 1 \
+			and IndividualCombat.get_timed_modifier_total(p, "bleed") > 0:
+		var bw: Dictionary = execute_stop_bleeding(state, npc_id, npc, npc_id, npc, dice_engine)
+		actions_taken.append({"action": "stop_bleeding", "result": bw})
+		return {"actions": actions_taken}
+
 	# -- Duelist's Challenge (s54.10): lift a finished duel, let the General issue one
 	# (free), and make ceasefire-bound Musha hold their attacks while a duel stands.
 	_clear_duel_if_over(state, chars_by_id)
@@ -6778,6 +6826,15 @@ static func execute_companion_turn(
 	apply_fear_checks(state, cid, character, dice_engine)
 	var cmd: int = CompanionSystem.decide_action(companion)
 	var actions: Array = []
+
+	# -- Bleeding: a bleeding companion with Medicine bandages the wound shut (s43 Bleeding cure) —
+	# self-bandage (Complex Action), before its kiho/attack. Skipped while retreating/broken.
+	if cmd != CompanionData.Command.RETREAT and ts.can_use_complex() \
+			and int(character.skills.get("Medicine", 0)) >= 1 and ip != null \
+			and IndividualCombat.get_timed_modifier_total(ip, "bleed") > 0:
+		var cbw: Dictionary = execute_stop_bleeding(state, cid, character, cid, character, dice_engine)
+		actions.append({"action": "stop_bleeding", "result": cbw})
+		return {"actions": actions}
 
 	# -- Monk companion: buff up with a kiho at the start of the fight (s38/s38a).
 	# Free action (Void Point), so it does not consume the move/attack budget; a
