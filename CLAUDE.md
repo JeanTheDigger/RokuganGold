@@ -6302,6 +6302,18 @@ reveal-on-attack). Self buff, Concentration ~ skirmish (the 20' range limit appr
 untargetability). Runtime-verified 4/4: caster drops from the foe's melee-target list after the cast,
 returns after attacking (reveal-on-attention). Hidden Visage / Mask of Wind (disguise — no effect in
 faction-keyed combat) and Cloak of Night (an object, not a combatant) stay unwired. 151 combat effects.
+**The False Legion** (Air 6) added (2026-06-21): up to Air Ring ×10 illusory figures fill the area;
+allies hide among them, so each attack against an in-area ally has the derived 50% chance to strike a
+figure (no effect). Modeled as an **AoE-ally `decoy_absorb`** — reuses the Way-of-Deception attack-path
+absorb AND the `_apply_spell_buff_aoe` path (zero new logic): the else-branch applies `decoy_absorb` as a
+generic timed modifier to every same-faction living combatant within the radius (caster included).
+Runtime-verified 5/5: caster + in-area ally get the decoy, an out-of-area ally does not (radius gate),
+~50-55% of attacks on a protected ally absorbed. Per-target absorption kept at the derived 50% (the
+spell's modeled value is AREA coverage, not a higher per-target rate, which would invent a number);
+radius 6 = 30' PROVISIONAL (a protective cluster within the GDD's 100' figure spread). The decoy/illusion
+combat cluster (Way of Deception, The Eye Shall Not See, The False Legion) is now exhausted; the remaining
+illusion gaps are disguise (no faction-combat effect), the true clone (Divide the Soul, a second-body
+subsystem), and out-of-combat utility. 152 combat effects.
 
 ### Spell coverage session summary (2026-06-20, running)
 This session has wired **~69 combat spells across all 5 elements** (initial all-element pass + clean-wins

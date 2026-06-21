@@ -233,6 +233,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "invisible", "value": 1}]},  # Air 5: every chosen ally within 10' invisible; acting against another reveals that ally (reveal-on-attack)
 	"the_eye_shall_not_see": {"kind": "buff", "target": "self", "duration_rounds": 9999,
 		"mods": [{"kind": "invisible", "value": 1}]},  # Air 3: "not invisible" but those nearby do not see the target until a loud/attention-drawing action — modeled as the untargetable + reveal-on-attack (attention-drawing) hook. Concentration ~ skirmish. (The 20' range limit is approximated as full untargetability — combat is usually within 20'.)
+	"the_false_legion": {"kind": "buff", "target": "ally", "aoe_radius": 6, "duration_rounds": 9999,
+		"mods": [{"kind": "decoy_absorb", "value": 1}]},  # Air 6: up to Air Ring x10 illusory figures fill the area; allies hide among them, so each attack against an ally within the area has the derived 50% chance (real vs identical figure) to strike a figure and accomplish nothing. AoE-ally decoy (reuses the Way-of-Deception absorb + the AoE-ally buff path). Concentration ~ skirmish. (Per-target absorption kept at the derived 50% — the spell's modeled value is AREA coverage, not a higher per-target rate, which would invent a number. radius 6 = 30' PROVISIONAL, a protective cluster within the GDD's 100' figure spread.)
 	"essence_of_air": {"kind": "buff", "target": "self", "duration_rounds": 5,
 		"mods": [{"kind": "insubstantial", "value": 1}]},  # Air 3: insubstantial — untargetable but cannot attack or cast (Water-halved + pass-through-objects deferred)
 	"castle_of_air": {"kind": "buff", "target": "self", "duration_rounds": 10,
