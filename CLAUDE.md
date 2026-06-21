@@ -6296,6 +6296,12 @@ absorbed (~51%, the derived 50%); 0 absorbed without the buff. The 50% is DERIVE
 targets" (not invented); the Raise-added extra duplicates that further dilute the odds, and The False
 Legion's mass-illusion army (a Battle/intimidation tool with low tile-combat value), are not modeled.
 150 combat effects total; 70 COMBAT_ONLY gaps remain.
+**The Eye Shall Not See** (Air 3) added (2026-06-21): "not invisible" but those nearby do not see the
+target until a loud/attention-drawing action — reuses the existing `invisible` hook (untargetable +
+reveal-on-attack). Self buff, Concentration ~ skirmish (the 20' range limit approximated as full
+untargetability). Runtime-verified 4/4: caster drops from the foe's melee-target list after the cast,
+returns after attacking (reveal-on-attention). Hidden Visage / Mask of Wind (disguise — no effect in
+faction-keyed combat) and Cloak of Night (an object, not a combatant) stay unwired. 151 combat effects.
 
 ### Spell coverage session summary (2026-06-20, running)
 This session has wired **~69 combat spells across all 5 elements** (initial all-element pass + clean-wins

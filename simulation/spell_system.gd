@@ -231,6 +231,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Air 1: negates temporary penalties (combat slice = Wound Rank penalties; Technique/social negation out-of-combat)
 	"legion_of_the_moon": {"kind": "buff", "target": "ally", "aoe_radius": 2, "duration_rounds": 50,
 		"mods": [{"kind": "invisible", "value": 1}]},  # Air 5: every chosen ally within 10' invisible; acting against another reveals that ally (reveal-on-attack)
+	"the_eye_shall_not_see": {"kind": "buff", "target": "self", "duration_rounds": 9999,
+		"mods": [{"kind": "invisible", "value": 1}]},  # Air 3: "not invisible" but those nearby do not see the target until a loud/attention-drawing action — modeled as the untargetable + reveal-on-attack (attention-drawing) hook. Concentration ~ skirmish. (The 20' range limit is approximated as full untargetability — combat is usually within 20'.)
 	"essence_of_air": {"kind": "buff", "target": "self", "duration_rounds": 5,
 		"mods": [{"kind": "insubstantial", "value": 1}]},  # Air 3: insubstantial — untargetable but cannot attack or cast (Water-halved + pass-through-objects deferred)
 	"castle_of_air": {"kind": "buff", "target": "self", "duration_rounds": 10,
