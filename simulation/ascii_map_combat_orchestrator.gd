@@ -2269,6 +2269,15 @@ static func _apply_spell_heal(
 		var tp: Vector2i = state.positions[heal_id]
 		if maxi(absi(cp.x - tp.x), absi(cp.y - tp.y)) > rng:
 			return {"reason": "out_of_range"}
+	# s43 No Pure Breaths: the +10-TN lung-ravage "cannot end naturally even if damage is healed; any
+	# magical healing... restores the lungs and ends the TN penalty." A heal spell that reaches the target
+	# (past the ally/alive/range/no_magic_heal gates) IS magical healing, so it clears the debuff
+	# regardless of how many wounds it heals — even a 0-wound heal restores the lungs.
+	var npb_cured: bool = false
+	if heal_p != null:
+		var npb_before: int = IndividualCombat.get_timed_modifier_total(heal_p, "all_rolls")
+		IndividualCombat.clear_timed_modifiers_by_source(heal_p, "no_pure_breaths")
+		npb_cured = IndividualCombat.get_timed_modifier_total(heal_p, "all_rolls") != npb_before
 	var amount: int = 0
 	match eff.get("heal", ""):
 		"margin":
@@ -2284,9 +2293,9 @@ static func _apply_spell_heal(
 				amount = dice_engine.roll_and_keep(
 					int(eff.get("heal_rolled", 3)), int(eff.get("heal_kept", 3)), true).total
 	if amount <= 0:
-		return {"id": heal_id, "healed": 0}
+		return {"id": heal_id, "healed": 0, "no_pure_breaths_cured": npb_cured}
 	WoundSystem.heal_wounds(heal_target, amount)
-	return {"id": heal_id, "healed": amount}
+	return {"id": heal_id, "healed": amount, "no_pure_breaths_cured": npb_cured}
 
 
 ## s43 maho cast in tile combat: a maho-user enemy (Bloodspeaker/cult, s56.14) casts a maho spell.
@@ -2705,6 +2714,9 @@ static func _apply_spell_debuff(
 			state, caster, target, contested, int(eff.get("save_tn", 0)), dice_engine):
 		return {"reason": "resisted", "id": target_id}
 	var expiry: int = state.combat.round_number + int(eff.get("duration_rounds", 5))
+	# Optional per-effect modifier source (default shared "spell_debuff"). A distinct source lets a
+	# specific debuff be cleared selectively — e.g. No Pure Breaths' "magical healing ends it" cure.
+	var dbsrc: String = String(eff.get("source", "spell_debuff"))
 	var applied: Array = []
 	for mod in eff.get("mods", []):
 		var mkind: String = String(mod.get("kind", ""))
@@ -2726,7 +2738,7 @@ static func _apply_spell_debuff(
 		# _npc_pick_stance short-circuits) until it expires.
 		if mkind == "stance_locked":
 			p.stance = Enums.Stance.FULL_ATTACK
-		IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_debuff")
+		IndividualCombat.add_timed_modifier(p, mkind, val, expiry, dbsrc)
 		applied.append({"kind": mkind, "value": val})
 	return {"id": target_id, "applied": applied, "expires_round": expiry}
 

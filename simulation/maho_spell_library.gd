@@ -134,6 +134,20 @@ const MAHO_COMBAT_EFFECTS: Dictionary = {
 	# capacity — applied (via the s34 ring-change, -1 Earth) only when Stamina is the Earth-determining
 	# trait (stamina <= willpower); otherwise no combat effect (faithful). Possibly lethal if wounded.
 	"drain_the_soul": {"kind": "drain_soul", "range_tiles": 10},
+	# Disrupt the Limb (Water 1): "+15 TN to physical action rolls using that limb" for 10 rounds. The
+	# combat slice is the ARM case (the attack-disabling choice the NPC takes) — modeled as all_rolls -15
+	# (the +15 TN; in tile combat the dominant physical action roll IS the attack). 50' = 10 tiles. The
+	# leg/Lame variant (movement-halving) is deferred — no movement-halving model exists.
+	"disrupt_the_limb": {"kind": "debuff", "range_tiles": 10, "duration_rounds": 10,
+		"mods": [{"kind": "all_rolls", "value": -15}]},
+	# No Pure Breaths (Air 4): the lungs are ravaged into "a continuous +10 TN to all actions" that
+	# "cannot end naturally even if damage is healed; any magical healing... ends the TN penalty." Modeled
+	# as a persistent all_rolls -10 (the +10 TN) under a distinct source so a spell heal clears it (the
+	# cure hook in _apply_spell_heal). 100' = 20 tiles. The instant lung damage ("DR equal to the victim's
+	# Air Ring in KEPT dice" — the rolled-dice count is unstated) is deferred; the lasting debuff is the
+	# spell's signature effect.
+	"no_pure_breaths": {"kind": "debuff", "range_tiles": 20, "duration_rounds": 9999,
+		"source": "no_pure_breaths", "mods": [{"kind": "all_rolls", "value": -10}]},
 }
 
 

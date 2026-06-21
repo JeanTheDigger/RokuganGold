@@ -6382,7 +6382,9 @@ set per the per-spell ASK. (FireSystem ignite/extinguish and the VP-manipulation
 "### Spell-combat layers — completion verified (2026-06-21)
 Programmatic audit (brace-matched extraction of `SpellSystem.SPELL_COMBAT_EFFECTS` vs the COMBAT_ONLY
 library) confirms the s31–37 shugenja layer at **154 wired combat effects / 66 unwired COMBAT_ONLY
-gaps**, and the s43 maho-in-combat layer at **13 effects + the Bleeding cure** (9 tranches). The 66
+gaps**, and the s43 maho-in-combat layer at **15 effects + the Bleeding cure** (10 tranches; tranche 10
+added No Pure Breaths' +10-TN lung-ravage and Disrupt the Limb's +15-TN arm debuff — the headline
+effects are GDD-exact, only their sub-parts [NPB damage rolled-count; Disrupt leg/Lame] stay blocked). The 66
 s31–37 gaps were spot-checked against the session's new mechanisms (DoT, persistent-fear,
 ring-reduction, damage-redirect, capacity, modifier-zone) and confirmed genuinely blocked, NOT merely
 un-attempted: they are **illusion/disguise/perception** (mists_of_illusion, hidden_visage, mask_of_wind,
@@ -6393,9 +6395,10 @@ kharmic_intent, altering_the_course, …), **ambiguous per-minute scaling** (Wra
 1k1/minute, per-round rate unstated), **near-inert in faction combat** (Curse of the Burning Hand —
 harms only the cursed target's OWN allies who touch it), **healing-Earth-only** (Jurojin's Curse —
 Earth-3 for healing/poison-resist, not wound capacity), or **out-of-combat utility** (hands_of_clay
-climb, taming_the_beast, soul_of_stone social, stones_endurance fatigue, …). The 2 remaining maho
-combat gaps are likewise blocked: No Pure Breaths (DR rolled-dice count unstated) and Disrupt the Limb
-(needs a per-limb model). Both spell-combat avenues are complete for faithful, unambiguous, no-invention
+climb, taming_the_beast, soul_of_stone social, stones_endurance fatigue, …). The maho headline effects
+are now all wired (tranche 10); the only remaining maho sub-parts are blocked: No Pure Breaths' instant
+damage (DR rolled-dice count unstated) and Disrupt the Limb's leg/Lame variant (no movement-halving
+model). Both spell-combat avenues are complete for faithful, unambiguous, no-invention
 work — further coverage needs an owner value/system decision (the "do not invent" hard constraint), or
 a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or the spells have no combat
 effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
@@ -8322,6 +8325,27 @@ template generators it depends on. Faithful summary of the fixes that landed:
   blocked: No Pure Breaths (ambiguous DR — the rolled-dice count is unstated, can't invent), Disrupt the
   Limb (needs a per-limb system), the Bleeding bandage cure (needs a combat Medicine action + an unstated
   TN), and the out-of-combat/social/world-sim maho.
+- **s43 maho IN TILE COMBAT — tranche 10: No Pure Breaths + Disrupt the Limb (2026-06-21,
+  runtime-verified 6/6).** The two maho previously marked "blocked" — but re-reading the precise GDD text,
+  their HEADLINE effects are GDD-EXACT, not unstated; only their sub-parts are ambiguous/missing-system.
+  Both reuse the existing `debuff` kind (all_rolls). **Disrupt the Limb** (Water 1): "+15 TN to physical
+  action rolls using that limb" for 10 rounds → `all_rolls -15` (the arm case — the attack-disabling
+  choice the NPC takes; in tile combat the dominant physical-action roll IS the attack). 50' = 10 tiles.
+  The leg/Lame variant (movement-halving) is deferred — no movement-halving model. **No Pure Breaths**
+  (Air 4): the lungs are ravaged into "a continuous +10 TN to all actions" that "cannot end naturally even
+  if damage is healed; any magical healing... ends the TN penalty" → a PERSISTENT `all_rolls -10` under a
+  distinct timed-modifier source (`no_pure_breaths`) so a spell heal clears it. New: `_apply_spell_debuff`
+  gains an optional per-effect `source` (default "spell_debuff" → backward-compatible); `_apply_spell_heal`
+  clears the `no_pure_breaths` source after the ally/alive/range/no_magic_heal gates but BEFORE the
+  wound-amount check (so ANY magical heal that reaches the target restores the lungs, even a 0-wound heal —
+  but a `no_magic_heal`/Disrupt-the-Aura target is NOT cured, since the heal fails the gate first). The
+  instant lung damage ("DR equal to the victim's Air Ring in KEPT dice" — the rolled-dice count is unstated)
+  is deferred; the lasting debuff is the spell's signature. NPC auto-casts both (debuff is already a maho
+  offense kind). Runtime-verified 6/6 (Godot 4.6.2): Disrupt -15; NPB -10 persists past 50 rounds; a spell
+  heal cures NPB (and an ordinary Curse-of-Weakness debuff is NOT cleared — source-scoped); maho-tsukai
+  auto-casts a debuff maho. maho-t1/t6/t7/t8/t9 drivers re-pass. **15 maho combat effects + the Bleeding
+  cure.** Both maho gaps now reduced to their genuinely-blocked sub-parts (NPB damage rolled-count; Disrupt
+  leg/Lame) — the headline +10/+15 TN effects are live.
 - **s43 maho IN TILE COMBAT — tranche 9: Bleeding bandage cure (2026-06-21, runtime-verified 7/7).**
   Closes the Bleeding loop (tranche 3) — and the "Bleeding cure" deferral was wrong: the TN is NOT
   unstated. GDD: a bleeding injury "continues until bandaged with a successful Medicine (Wounds) roll" —
