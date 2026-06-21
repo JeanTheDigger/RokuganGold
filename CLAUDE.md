@@ -6379,7 +6379,29 @@ per-element work is documented in each element's DEFERRED note above: the ring-c
 refactor (Pending Redesign), the illusion/disguise/perception/decoy infra, and the out-of-combat utility
 set per the per-spell ASK. (FireSystem ignite/extinguish and the VP-manipulation hooks are now DONE.)
 
-"### Pending Redesign — RESOLVED (2026-06-20, ring-change wave)
+"### Spell-combat layers — completion verified (2026-06-21)
+Programmatic audit (brace-matched extraction of `SpellSystem.SPELL_COMBAT_EFFECTS` vs the COMBAT_ONLY
+library) confirms the s31–37 shugenja layer at **154 wired combat effects / 66 unwired COMBAT_ONLY
+gaps**, and the s43 maho-in-combat layer at **13 effects + the Bleeding cure** (9 tranches). The 66
+s31–37 gaps were spot-checked against the session's new mechanisms (DoT, persistent-fear,
+ring-reduction, damage-redirect, capacity, modifier-zone) and confirmed genuinely blocked, NOT merely
+un-attempted: they are **illusion/disguise/perception** (mists_of_illusion, hidden_visage, mask_of_wind,
+the_mirrors_smile, cloud_the_mind, …), **messaging/divination/social** (voice_of_the_wind, tenjins_ear,
+elemental_cipher, the_empty_voice, …), **flight/elevation** (wings_of_fire, flight_of_doves,
+wind_of_the_moon, …), **trait-swap / VP / ring-reorder** (facing_your_devils, unbound_essence,
+kharmic_intent, altering_the_course, …), **ambiguous per-minute scaling** (Wrath of Kaze-no-Kami —
+1k1/minute, per-round rate unstated), **near-inert in faction combat** (Curse of the Burning Hand —
+harms only the cursed target's OWN allies who touch it), **healing-Earth-only** (Jurojin's Curse —
+Earth-3 for healing/poison-resist, not wound capacity), or **out-of-combat utility** (hands_of_clay
+climb, taming_the_beast, soul_of_stone social, stones_endurance fatigue, …). The 2 remaining maho
+combat gaps are likewise blocked: No Pure Breaths (DR rolled-dice count unstated) and Disrupt the Limb
+(needs a per-limb model). Both spell-combat avenues are complete for faithful, unambiguous, no-invention
+work — further coverage needs an owner value/system decision (the "do not invent" hard constraint), or
+a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or the spells have no combat
+effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
+(see "ASCII Map System — Live-Reachability Status").
+
+### Pending Redesign — RESOLVED (2026-06-20, ring-change wave)
 - **Ring-changing combat spells — participant-scoped wound deltas, DONE.** The owner's goal was
   combat-scoped Ring deltas with **no world-sim leak**. The scope-discovery counted ~252 in-combat
   is_dead/wound reads (143 is_dead + 27 get_wound_level + 30 apply_damage + 12 heal_wounds in the
