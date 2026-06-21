@@ -2295,6 +2295,9 @@ static func execute_cast_maho(
 				state, caster_id, caster, target_id, target, eff, spell_id, dice_engine)
 		"bleed":
 			res["spell_bleed"] = _apply_maho_bleed(state, caster_id, target_id, target, eff)
+		"fear":
+			res["spell_fear"] = _apply_maho_fear(
+				state, caster_id, caster, target_id, target, eff, dice_engine)
 	state.combat_log.append({"type": "cast_maho", "round": state.combat.round_number,
 		"caster_id": caster_id, "spell_id": spell_id, "result": res})
 	return res
@@ -5571,6 +5574,36 @@ static func _apply_maho_bleed(
 	return {"id": target_id, "bleed_per_round": wpr}
 
 
+## s43 Inspire Fear / Mists of Fear: a maho-induced fear — the target is Afraid (−1k0 to all rolls) for
+## the duration, persisting independently of proximity via the `spell_afraid` timed modifier (which
+## apply_fear_checks reads to keep AFRAID active). Optional Willpower save (Mists of Fear). Sets AFRAID
+## immediately so it bites before the target's next fear check.
+static func _apply_maho_fear(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary, dice_engine: DiceEngine,
+) -> Dictionary:
+	if target == null or CharacterStats.is_dead(target):
+		return {"reason": "no_target"}
+	var rng: int = int(eff.get("range_tiles", 10))
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		var cp: Vector2i = state.positions[caster_id]
+		var tp: Vector2i = state.positions[target_id]
+		if maxi(absi(cp.x - tp.x), absi(cp.y - tp.y)) > rng:
+			return {"reason": "out_of_range"}
+	var save: String = String(eff.get("save", "none"))
+	if save != "none" and _spell_save_resisted(
+			state, caster, target, save, int(eff.get("save_tn", 0)), dice_engine):
+		return {"id": target_id, "fear": "resisted"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if p == null:
+		return {"reason": "not_in_combat"}
+	var dur: int = int(eff.get("duration_rounds", 9999))
+	IndividualCombat.add_timed_modifier(p, "spell_afraid", 1, state.combat.round_number + dur, "maho_fear")
+	if IndividualCombat.CONDITION_AFRAID not in p.conditions:
+		p.conditions.append(IndividualCombat.CONDITION_AFRAID)
+	return {"id": target_id, "afraid": true}
+
+
 ## s43 maho-user enemy cast (Bloodspeaker/cult, s56.14). Mirrors _npc_maybe_cast_spell but for maho:
 ## gated on cult_affiliation (a maho-user), no cast roll, Ring-supported spell selection. (1) highest-ML
 ## status/debuff maho that reaches the chosen enemy; else (2) a self-buff if not already buffed. Returns
@@ -5592,7 +5625,7 @@ static func _npc_maybe_cast_maho(
 		for sid in MahoSpellLibrary.MAHO_COMBAT_EFFECTS:
 			var eff: Dictionary = MahoSpellLibrary.MAHO_COMBAT_EFFECTS[sid]
 			var k: String = String(eff.get("kind", ""))
-			if k != "status" and k != "debuff" and k != "damage" and k != "bleed":
+			if k != "status" and k != "debuff" and k != "damage" and k != "bleed" and k != "fear":
 				continue
 			if not MahoSpellLibrary.supports_spell_ring(npc, sid):
 				continue
@@ -6993,8 +7026,12 @@ static func apply_fear_checks(
 				wp + character.fear_resist_kept_bonus + fr_kept, true).total
 			if resist < 5 + max_fear * 5:
 				afraid = true
-	# Single set/clear: AFRAID if the Fear roll failed this turn OR a tremor source is near.
-	if afraid or tremor:
+	# s43 Inspire Fear / Mists of Fear: a maho-induced fear persists independently of proximity for its
+	# duration via the `spell_afraid` timed modifier — keep AFRAID while it is active.
+	var spell_afraid: bool = IndividualCombat.get_timed_modifier_total(p, "spell_afraid") > 0
+	# Single set/clear: AFRAID if the Fear roll failed this turn OR a tremor source is near OR a maho fear
+	# spell is active.
+	if afraid or tremor or spell_afraid:
 		if IndividualCombat.CONDITION_AFRAID not in p.conditions:
 			p.conditions.append(IndividualCombat.CONDITION_AFRAID)
 	else:

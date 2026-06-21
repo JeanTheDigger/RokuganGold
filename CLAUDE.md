@@ -8239,6 +8239,20 @@ template generators it depends on. Faithful summary of the fixes that landed:
   `apply_fear_checks` (which set/clears CONDITION_AFRAID each turn), so a spell-applied afraid would be
   wiped on the target's next turn; they need a separate spell-afraid mechanism. Also Tomb of Earth
   (maintained per-round contest), Blood Armor (damage-redirect), the Bleeding bandage cure, ~20 more.
+- **s43 maho IN TILE COMBAT — tranche 5: fear maho (2026-06-21, runtime-verified 7/7).** Wires the two
+  fear maho via a new reusable `spell_afraid` mechanism that resolves the `apply_fear_checks` conflict.
+  A new `"fear"` effect kind: `_apply_maho_fear` (optional Willpower save) installs a `spell_afraid`
+  timed modifier on the target AND sets AFRAID immediately; `apply_fear_checks` now keeps AFRAID active
+  while `spell_afraid` is set (a third OR-term beside proximity-fear and tremor), so a maho-induced fear
+  persists for its DURATION independently of proximity — without breaking the normal proximity set/clear.
+  Two spells: **Inspire Fear** (Air 1 → Afraid −1k0 for the skirmish, no save — a curse), **Mists of
+  Fear** (Air 3 → Afraid, Willpower TN 30 save = Fear 5's 5+5×5). Runtime-verified 7/7 (Godot 4.6.2):
+  inspire_fear makes the PC afraid + the fear PERSISTS through `apply_fear_checks` (the headline); the
+  control (no fear source) still clears normally → zero regression; mists_of_fear afflicts a low-WP PC
+  and a high-WP PC resists a majority (the save discriminates); maho-t1/t2/t4 drivers re-pass. The
+  `apply_fear_checks` change is gated on the `spell_afraid` modifier (false in normal combat → unchanged).
+  **10 maho combat effects total** (the 8 prior + Inspire Fear + Mists of Fear). DEFERRED: Tomb of Earth
+  (maintained per-round contest), Blood Armor (damage-redirect), the Bleeding bandage cure, ~18 more.
 - **s43 Grand-Map spell sweep COMPLETE (2026-06-11).** Audited all 46 maho spells
   for world-scale-wirable effects (persistent NPC/province state, no s40 combat or
   condition layer). **6 are wired** (Spreading the Darkness, Stealing the Soul,

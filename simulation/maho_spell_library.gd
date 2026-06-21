@@ -114,6 +114,13 @@ const MAHO_COMBAT_EFFECTS: Dictionary = {
 	# Touch of Death (Earth 5): the combat slice is 7k7 Wounds (melee touch). The +10-year aging is the
 	# world-sim slice (already wired in the seasonal maho cast), not modeled in the skirmish.
 	"touch_of_death": {"kind": "damage", "range_tiles": 1, "dr_rolled": 7, "dr_kept": 7},
+	# Inspire Fear (Air 1): a 3-Point Phobia — the target is Afraid (−1k0 to all rolls) for the skirmish,
+	# persisting via the spell_afraid modifier. No save (a curse, not an illusion to see through).
+	"inspire_fear": {"kind": "fear", "range_tiles": 10, "duration_rounds": 9999},
+	# Mists of Fear (Air 3): an illusion of the target's worst fear (Fear 5) — Afraid, resisted by a
+	# Willpower TN 30 save (Fear 5 = 5 + 5×5, s22.3).
+	"mists_of_fear": {"kind": "fear", "save": "willpower_flat", "save_tn": 30, "range_tiles": 12,
+		"duration_rounds": 9999},
 }
 
 
