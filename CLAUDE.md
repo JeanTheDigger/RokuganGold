@@ -4717,6 +4717,42 @@ headless driver, not a live session. The disguise spells also gain no entry in
 `SpellSystem.SPELL_COMBAT_EFFECTS` (their effect lives in CombatController, not the
 orchestrator damage/status schema).
 
+### s33 illusion/perception layer — tranche 2: heart_betrays_eyes, quiescence_of_air, by_the_light_of_the_moon (2026-06-21, owner-authorized, runtime-verified)
+Three more CombatController stealth-layer spells, all values GDD-given.
+- **heart_betrays_eyes** (Air 2): `apply_heart_betrays(target_id)` places a one-shot,
+  expiring charge on one guard within 50' (10 tiles) — for 3 Rounds, that guard's NEXT
+  sighting of the PC is fooled unless they pass Investigation vs the caster's **Air × 5**
+  (the GDD's explicit TN). `_heart_betrays_suppresses` (a second `_npc_turn` guard after
+  the disguise check) consumes the charge on the guard's first spotting whether they pass
+  or fail, and flips `player_seen` false on a fail. Stored on the GUARD's EntityState
+  (`heart_betrays_until_round` / `heart_betrays_air`). A disguise-fooled guard preserves
+  its charge (no "unusual thing" was seen). Runtime: weak guard fooled 297/300, an
+  Investigation-6 guard sees through 300/300 (the GDD save discriminates).
+- **quiescence_of_air** (Air 2): `apply_silence_zone(cx, cy)` creates a stationary silence
+  sphere (30' diameter = 3-tile radius, 10 Rounds; default-centered on the caster, explicit
+  center = the GDD 2-Raise relocation). Two effects: (a) **noise-block** — a 2-line guard in
+  `_emit_noise` skips any listener separated from the source by a silence boundary
+  (`_silence_blocks` = one endpoint inside an active sphere XOR the other; "no sound passes
+  in either direction"); (b) **+2 Stealth Free Raises** in `try_stealth_move` while the PC is
+  inside the bubble (`_in_silence`). Zones expire lazily (`_round > expiry_round`).
+- **by_the_light_of_the_moon** (Air 1): `cast_moonlight_reveal()` flips every HIDDEN trap
+  within 20' (4 tiles) of the PC to DETECTED via TrapSystem (returns count + positions;
+  already-DETECTED not re-counted).
+RUNTIME-VERIFIED (Godot 4.6.2 headless, 24/24): range gate + one-shot consume + 3-round
+lapse + Air×5 distribution; trap reveal radius + no double-reveal; silence radius/boundary-
+block/inside-pass/expiry/centering. DEFERRED/LIMITATIONS: **seeking_the_way** (Air 4) is a
+1/2-mile, 3-hour OVERLAND false trail with no within-zone consumer (guards pursue by
+last-known position + noise, not by tracking footprints), so it is a world-map escape tool,
+not a stealth-layer effect — not force-fit. by_the_light reveals traps but not secret doors/
+compartments (no generic hidden-exit data model). The Stealth +2 FR applies whenever the PC
+is inside the bubble (a faithful approximation of the GDD "vs characters on the other side"
+— the stealth roll is a general ground-surface roll, not vs a named listener). Same
+PC-travel-HOLD live-reachability caveat as the whole ASCII combat stack — driver-verified,
+not a live session. These spells live in CombatController, not `SpellSystem.SPELL_COMBAT_EFFECTS`
+(orchestrator schema). With the disguise tranche, the cleanly-stealth-layer illusion spells
+are now wired; the remaining illusion gaps are out-of-combat (cloud_the_mind, garbled_tongue,
+the_world_is_truth) or the orchestrator turn-based pair (mists_of_illusion, ever_changing_waves).
+
 ### s54.10 Konak Jiji Lure + Deceptive Weight — wired into tile combat (2026-06-16, owner-approved, static-only)
 Owner decisions (2026-06-16): trigger = **adjacency + resist roll**; pin = **grapple state**
 (escape Athletics/Strength TN 40). The GDD gives the spring (auto-hit + 400 lb pin, TN 40

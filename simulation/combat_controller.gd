@@ -51,6 +51,23 @@ const DISGUISE_SPELLS: Array[String] = ["hidden_visage", "mask_of_wind", "the_mi
 
 
 # =============================================================================
+# -- More illusion / perception spells (s33, owner-authorized 2026-06-21) ------
+# -- heart_betrays_eyes: target one guard; their next sighting of the PC is
+# --   fooled unless they pass Investigation vs the caster's Air x5 (GDD TN).
+# -- quiescence_of_air: a stationary silence sphere — no sound crosses it in
+# --   either direction, and a character inside gains 2 Stealth Free Raises.
+# -- by_the_light_of_the_moon: reveals HIDDEN traps in the area.
+# -- All values are GDD-given (no invented magnitude).
+# =============================================================================
+const HEART_BETRAYS_RANGE_TILES: int = 10       # GDD 50' / 5
+const HEART_BETRAYS_ROUNDS: int = 3             # GDD Duration: three rounds
+const QUIESCENCE_RADIUS_TILES: int = 3          # GDD 30' diameter -> 3-tile radius
+const QUIESCENCE_ROUNDS: int = 10               # GDD Duration: 10 Rounds
+const QUIESCENCE_STEALTH_FREE_RAISES: int = 2   # GDD: 2 Free Raises on Stealth
+const MOONLIGHT_REVEAL_RADIUS_TILES: int = 4    # GDD 20' radius / 5
+
+
+# =============================================================================
 # -- LOCKED morale thresholds (s54.8) -----------------------------------------
 # =============================================================================
 
@@ -158,6 +175,10 @@ class EntityState:
 	## Per-guard see-through outcome: entity_id -> true (penetrated) / false
 	## (fooled). Absence = not yet evaluated. Reset on each fresh disguise.
 	var disguise_seethrough:  Dictionary = {}
+	## -- heart_betrays_eyes (s33): a one-shot, expiring "next sighting fooled"
+	## charge placed ON this guard. Expiry round (-1 = none) + frozen caster Air.
+	var heart_betrays_until_round: int = -1
+	var heart_betrays_air:        int = 0
 
 
 # =============================================================================
@@ -178,6 +199,9 @@ var _round:        int = 0
 var _player_id:    int = -1
 ## True when the player has activated stealth this round.
 var _player_stealth: bool = false
+
+## Active quiescence_of_air silence spheres: {cx, cy, radius, expiry_round}.
+var _silence_zones: Array[Dictionary] = []
 
 ## Running count of all enemies that have died (for morale checks).
 var _enemy_deaths_total: int = 0
@@ -946,10 +970,12 @@ func try_stealth_move(dx: int, dy: int) -> Dictionary:
 		player.character, "Stealth", {"is_stealth": true}
 	)
 	var stealth_adv_tn: int = AdvantageSystem.get_tn_modifier(player.character, {"is_stealth": true})
+	# quiescence_of_air: +2 Stealth Free Raises while inside a silence sphere.
+	var silence_fr: int = QUIESCENCE_STEALTH_FREE_RAISES if _in_silence(player.x, player.y) else 0
 	var roll_result: Dictionary = _dice.roll_check(
 		player.character.agility + stealth_rank + stealth_mut["rolled"] + stealth_adv["rolled"],
 		player.character.agility + stealth_mut["kept"] + stealth_adv["kept"],
-		ground_tn, 0, wound_pen - stealth_adv_tn + (stealth_adv["free_raises"] * 5), stealth_rank > 0
+		ground_tn, 0, wound_pen - stealth_adv_tn + (stealth_adv["free_raises"] * 5) + (silence_fr * 5), stealth_rank > 0
 	)
 
 	player.x = tx
@@ -1364,6 +1390,9 @@ func _npc_turn(es: EntityState) -> Array:
 	# not register them as an intruder this turn (s33/s36).
 	if player_seen and _disguise_suppresses(es):
 		player_seen = false
+	# heart_betrays_eyes: a charged guard's next sighting is fooled (s33).
+	if player_seen and _heart_betrays_suppresses(es):
+		player_seen = false
 	var just_became_suspicious: bool = false
 	if player_seen and es.alert_state != AsciiMapEnvironment.AlertState.FLEEING:
 		if es.alert_state == AsciiMapEnvironment.AlertState.UNAWARE:
@@ -1677,6 +1706,10 @@ func _emit_noise(sx: int, sy: int, noise_level: int) -> void:
 
 		var es_pos: Vector2i = Vector2i(es.x, es.y)
 
+		# quiescence_of_air: no sound crosses a silence boundary (either way).
+		if _silence_blocks(sx, sy, es.x, es.y):
+			continue
+
 		# Very Loud = automatic (TN 0).
 		var detected: bool = false
 		if noise_level == AsciiMapEnvironment.NoiseLevel.VERY_LOUD:
@@ -1854,6 +1887,103 @@ func _roll_disguise_seethrough(guard: EntityState, player: EntityState) -> bool:
 	var caster_roll: DiceResult = _dice.roll_and_keep(c_air + c_spell, maxi(1, c_air), true, false)
 	var caster_total: int = caster_roll.total + player.disguise_resist_bonus
 	return guard_roll.total > caster_total
+
+
+# =============================================================================
+# -- heart_betrays_eyes (s33): fool one guard's next sighting ------------------
+# =============================================================================
+
+## Place a heart_betrays_eyes charge on a guard within 50' (10 tiles). The guard's
+## NEXT sighting of the player is fooled unless they pass Investigation vs the
+## caster's Air x5 (GDD TN). Lapses after 3 rounds if unused.
+func apply_heart_betrays(target_id: int) -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"ok": false, "reason": "no_living_player"}
+	var target: EntityState = _entities.get(target_id)
+	if target == null or _is_entity_dead(target):
+		return {"ok": false, "reason": "invalid_target"}
+	if target.faction == FACTION_PLAYER:
+		return {"ok": false, "reason": "not_an_enemy"}
+	var dist: int = maxi(absi(target.x - player.x), absi(target.y - player.y))
+	if dist > HEART_BETRAYS_RANGE_TILES:
+		return {"ok": false, "reason": "out_of_range"}
+	target.heart_betrays_air = SpellSystem.get_ring_value(player.character, Enums.Ring.AIR)
+	target.heart_betrays_until_round = _round + HEART_BETRAYS_ROUNDS
+	return {"ok": true, "target_id": target_id, "expiry_round": target.heart_betrays_until_round}
+
+## True if guard `es` is fooled this turn by an active heart_betrays charge. The
+## charge is one-shot — consumed on the guard's first spotting attempt whether or
+## not it succeeds. Investigation vs caster Air x5; failure = fooled.
+func _heart_betrays_suppresses(es: EntityState) -> bool:
+	if es.heart_betrays_until_round < 0 or _round > es.heart_betrays_until_round:
+		return false
+	# Consume the one-shot charge.
+	var air_tn: int = es.heart_betrays_air * 5
+	es.heart_betrays_until_round = -1
+	var inv: Dictionary = _dice.roll_check(
+		es.character.perception + SkillResolver.get_skill_rank(es.character, "Investigation"),
+		es.character.perception, air_tn, 0, 0,
+		SkillResolver.get_skill_rank(es.character, "Investigation") > 0
+	)
+	return not bool(inv.get("success", false))
+
+
+# =============================================================================
+# -- by_the_light_of_the_moon (s33): reveal hidden traps ----------------------
+# =============================================================================
+
+## Reveal all HIDDEN traps within 20' (4 tiles) of the player — flips them to
+## DETECTED. Returns {revealed: int, positions: Array[Vector2i]}.
+func cast_moonlight_reveal() -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"revealed": 0, "positions": []}
+	var revealed: Array[Vector2i] = []
+	for t: Dictionary in _map.traps:
+		if t.get("state", TrapSystem.TrapState.HIDDEN) != TrapSystem.TrapState.HIDDEN:
+			continue
+		var tx: int = t.get("x", -1)
+		var ty: int = t.get("y", -1)
+		if maxi(absi(tx - player.x), absi(ty - player.y)) <= MOONLIGHT_REVEAL_RADIUS_TILES:
+			t["state"] = TrapSystem.TrapState.DETECTED
+			revealed.append(Vector2i(tx, ty))
+	return {"revealed": revealed.size(), "positions": revealed}
+
+
+# =============================================================================
+# -- quiescence_of_air (s33): stationary silence sphere -----------------------
+# =============================================================================
+
+## Create a silence sphere (30' diameter, 10 Rounds). Default-centered on the
+## player; pass cx/cy >= 0 to center elsewhere (the GDD 2-Raise relocation).
+func apply_silence_zone(cx: int = -1, cy: int = -1) -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"ok": false, "reason": "no_living_player"}
+	var zx: int = cx if cx >= 0 else player.x
+	var zy: int = cy if cy >= 0 else player.y
+	var zone: Dictionary = {
+		"cx": zx, "cy": zy,
+		"radius": QUIESCENCE_RADIUS_TILES,
+		"expiry_round": _round + QUIESCENCE_ROUNDS,
+	}
+	_silence_zones.append(zone)
+	return {"ok": true, "cx": zx, "cy": zy, "expiry_round": zone["expiry_round"]}
+
+## True if (x, y) lies inside any still-active silence sphere.
+func _in_silence(x: int, y: int) -> bool:
+	for z: Dictionary in _silence_zones:
+		if _round > int(z["expiry_round"]):
+			continue
+		if maxi(absi(x - int(z["cx"])), absi(y - int(z["cy"]))) <= int(z["radius"]):
+			return true
+	return false
+
+## True if a silence boundary separates the two tiles — sound passes neither way
+## (one endpoint inside an active sphere, the other outside).
+func _silence_blocks(sx: int, sy: int, ex: int, ey: int) -> bool:
+	return _in_silence(sx, sy) != _in_silence(ex, ey)
 
 
 # =============================================================================
