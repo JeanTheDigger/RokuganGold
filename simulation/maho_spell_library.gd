@@ -73,7 +73,34 @@ const MAHO_LIBRARY: Dictionary = {
 }
 
 
-## Returns the spell entry (with "spell_id" added) for the given id, or {} if unknown.
+## s43 maho COMBAT effects — the tile-combat slice of maho spells, encoded in the same effect schema
+## the AsciiMapCombatOrchestrator uses for s31–37 spells (kind: status/debuff/buff/damage). A maho-user
+## enemy in a PC-present skirmish (Bloodspeaker/cult encounter, s56.14) casts these via
+## AsciiMapCombatOrchestrator.execute_cast_maho (no cast roll — maho has none — paying a self-blood
+## cost + Taint). Tranche 1: the three that reuse the existing effect functions with zero changes.
+## (Damage maho [Burning Blood: DR = TARGET's Fire Ring] needs per-target DR; Bleeding needs a per-round
+## DoT tick; Tomb of Earth needs a maintained per-round contest — all deferred to follow-up tranches.)
+const MAHO_COMBAT_EFFECTS: Dictionary = {
+	# Pain (Earth 2): "falls Prone and cannot act on their next Turn" — incapacitated 1 round (skips the
+	# turn + flat-foots defense, subsuming Prone). The Willpower TN 20 "cry out" Honor/Glory rider is a
+	# world-sim consequence, not modeled in the skirmish.
+	"pain": {"kind": "status", "condition": "incapacitated", "range_tiles": 6, "duration_rounds": 1},
+	# Curse of Weakness (Water 2): +10 TN to all rolls (≈ all_rolls −10, the project's TN↔roll-total
+	# convention) and −10 Armor TN, for 10 rounds.
+	"curse_of_weakness": {"kind": "debuff", "range_tiles": 10, "duration_rounds": 10,
+		"mods": [{"kind": "all_rolls", "value": -10}, {"kind": "armor_tn", "value": -10}]},
+	# Strength of Darkness (Fire 5): +1 Rank to Earth + the three physical Traits (the combat slice =
+	# +1k1 attack via Agility, +1 rolled damage die via Strength), 10 rounds. (The +1 Earth wound-capacity
+	# boost and "see through impairments" are not modeled — the attack/damage buff captures the combat value.)
+	"strength_of_darkness": {"kind": "buff", "target": "self", "duration_rounds": 10,
+		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_damage_rolled", "value": 1}]},
+}
+
+
+## Returns the tile-combat effect schema for a maho spell_id, or {} if the spell has no wired combat effect.
+static func get_combat_effect(spell_id: String) -> Dictionary:
+	return MAHO_COMBAT_EFFECTS.get(spell_id, {})
+
 static func get_spell(spell_id: String) -> Dictionary:
 	if not MAHO_LIBRARY.has(spell_id):
 		return {}

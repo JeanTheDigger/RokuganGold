@@ -2243,6 +2243,54 @@ static func _apply_spell_heal(
 	return {"id": heal_id, "healed": amount}
 
 
+## s43 maho cast in tile combat: a maho-user enemy (Bloodspeaker/cult, s56.14) casts a maho spell.
+## Maho has NO casting roll (it fires automatically when blood is spilled) — so this auto-succeeds,
+## paying the s43 blood cost (2×ML self-Wounds, bypassing armor — the maho-tsukai cuts itself) and
+## gaining Taint (Pattern B, pre-applied) up front, then routes the spell's combat effect through the
+## same _apply_spell_* functions the s31–37 casts use. World-sim consequences (PTL, CrimeRecord,
+## province) belong to the world-sim cast (MahoSystem.resolve_cast), not the skirmish — in a
+## PC-present encounter the maho-tsukai is already a known hostile. Returns the effect result dict.
+static func execute_cast_maho(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	spell_id: String, target_id: int, target: L5RCharacterData, dice_engine: DiceEngine,
+) -> Dictionary:
+	if caster == null or CharacterStats.is_dead(caster):
+		return {"success": false, "reason": "caster_dead"}
+	var spell: Dictionary = MahoSpellLibrary.get_spell(spell_id)
+	if spell.is_empty():
+		return {"success": false, "reason": "unknown_maho_spell"}
+	var eff: Dictionary = MahoSpellLibrary.get_combat_effect(spell_id)
+	if eff.is_empty():
+		return {"success": false, "reason": "no_combat_effect"}
+	var ts = state.turn_states.get(caster_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_action"}
+	# Pattern B: pay the self-blood cost (2×ML Wounds, bypasses armor) + Taint before the effect.
+	var ml: int = int(spell.get("mastery_level", 1))
+	var blood: int = MahoSystem.total_blood_cost(ml, 0)
+	# A rational maho-user does not cut itself to death (the self-blood would Out/kill it). Refuse —
+	# the caller falls through to a non-suicidal action. (Sacrificing a captive is the world-sim path.)
+	if caster.wounds_taken + blood > CharacterStats.get_total_wound_capacity(caster):
+		return {"success": false, "reason": "blood_cost_lethal"}
+	WoundSystem.apply_damage(caster, blood, 0)
+	caster.taint += float(MahoSystem.taint_gain(ml))
+	ts.consume_complex()
+	var res: Dictionary = {"success": true, "maho": true, "spell_id": spell_id, "ml": ml,
+		"blood_cost": blood}
+	match String(eff.get("kind", "")):
+		"status":
+			res["spell_status"] = _apply_spell_status(
+				state, caster_id, caster, target_id, target, eff, dice_engine)
+		"debuff":
+			res["spell_debuff"] = _apply_spell_debuff(
+				state, caster_id, caster, target_id, target, eff, dice_engine)
+		"buff":
+			res["spell_buff"] = _apply_spell_buff(state, caster_id, caster, target_id, target, eff)
+	state.combat_log.append({"type": "cast_maho", "round": state.combat.round_number,
+		"caster_id": caster_id, "spell_id": spell_id, "result": res})
+	return res
+
+
 ## Apply a damage-type spell's combat effect (Phase 2). Single-target or self-centered AoE.
 ## One damage roll per affected target; spirit targets routed through the incoming-damage
 ## filter as fire+magic (flame_immune blocks/heals; invuln tags let magic through). Returns
@@ -5478,6 +5526,58 @@ static func _npc_maybe_cast_spell(
 	return {}
 
 
+## s43 maho-user enemy cast (Bloodspeaker/cult, s56.14). Mirrors _npc_maybe_cast_spell but for maho:
+## gated on cult_affiliation (a maho-user), no cast roll, Ring-supported spell selection. (1) highest-ML
+## status/debuff maho that reaches the chosen enemy; else (2) a self-buff if not already buffed. Returns
+## the execute_cast_maho result (with `success`), or {} if nothing was cast. The blood-cost-lethal guard
+## inside execute_cast_maho keeps a near-dead maho-user from cutting itself to death.
+static func _npc_maybe_cast_maho(
+	state: MapCombatState, npc_id: int, npc: L5RCharacterData,
+	best_target: int, chars_by_id: Dictionary, dice_engine: DiceEngine,
+) -> Dictionary:
+	if npc == null or not npc.cult_affiliation:
+		return {}
+	var ts = state.turn_states.get(npc_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	# (1) Offense: the highest-ML status/debuff maho the caster's Ring supports, reaching the target.
+	if best_target >= 0:
+		var best_off: String = ""
+		var best_ml: int = -1
+		for sid in MahoSpellLibrary.MAHO_COMBAT_EFFECTS:
+			var eff: Dictionary = MahoSpellLibrary.MAHO_COMBAT_EFFECTS[sid]
+			var k: String = String(eff.get("kind", ""))
+			if k != "status" and k != "debuff":
+				continue
+			if not MahoSpellLibrary.supports_spell_ring(npc, sid):
+				continue
+			if not _spell_reaches(state, npc_id, best_target, eff):
+				continue
+			var ml: int = int(MahoSpellLibrary.get_spell(sid).get("mastery_level", 1))
+			if ml > best_ml:
+				best_ml = ml
+				best_off = sid
+		if best_off != "":
+			var tc: L5RCharacterData = chars_by_id.get(best_target, state.combatants.get(best_target, null))
+			var r: Dictionary = execute_cast_maho(state, npc_id, npc, best_off, best_target, tc, dice_engine)
+			if r.get("success", false):
+				return r
+	# (2) Self-buff if not already buffed.
+	for sid in MahoSpellLibrary.MAHO_COMBAT_EFFECTS:
+		var eff2: Dictionary = MahoSpellLibrary.MAHO_COMBAT_EFFECTS[sid]
+		if String(eff2.get("kind", "")) != "buff" or String(eff2.get("target", "self")) != "self":
+			continue
+		if not MahoSpellLibrary.supports_spell_ring(npc, sid):
+			continue
+		var bp: IndividualCombat.Participant = state.combat.participants.get(npc_id, null)
+		if bp != null and IndividualCombat.get_timed_modifier_total(bp, "spell_attack_rolled") > 0:
+			continue  # already buffed
+		var br: Dictionary = execute_cast_maho(state, npc_id, npc, sid, npc_id, npc, dice_engine)
+		if br.get("success", false):
+			return br
+	return {}
+
+
 static func execute_npc_turn(
 	state: MapCombatState,
 	npc_id: int,
@@ -5530,6 +5630,19 @@ static func execute_npc_turn(
 	# Structural AI — runs BEFORE the stance pick because casting is the turn's Complex
 	# action: a Simple spent on a stance change would forbid the Complex (1 Complex OR
 	# 2 Simple). A grappled caster can't gesture; prone casting is allowed (no stand needed).
+	# -- Maho-user cast (s43 maho in tile combat) ---------------------------
+	# A cult/Bloodspeaker maho-user (cult_affiliation) casts a maho combat spell — no roll, paying
+	# self-blood. Runs before the shugenja-spell block; maho-users carry no shugenja spells_known so
+	# the two never conflict. Grappled can't gesture; prone is allowed.
+	if npc.cult_affiliation and ts.can_use_complex() \
+			and not IndividualCombat.has_condition(p, IndividualCombat.CONDITION_GRAPPLED):
+		var maho_best: int = _npc_pick_target(
+			state, npc_id, get_melee_targets(state, npc_id) + get_ranged_targets(state, npc_id), chars_by_id)
+		var maho_r: Dictionary = _npc_maybe_cast_maho(state, npc_id, npc, maho_best, chars_by_id, dice_engine)
+		if maho_r.get("success", false):
+			actions_taken.append({"action": "cast_maho", "result": maho_r})
+			return {"actions": actions_taken}
+
 	if not npc.spells_known.is_empty() and ts.can_use_complex() \
 			and not IndividualCombat.has_condition(p, IndividualCombat.CONDITION_GRAPPLED):
 		var cast_best: int = _npc_pick_target(

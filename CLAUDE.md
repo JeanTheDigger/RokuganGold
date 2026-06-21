@@ -8190,6 +8190,28 @@ template generators it depends on. Faithful summary of the fixes that landed:
   COVERAGE NOTE: the pure lowest-ML fallback (`pick_cast_spell`) was not exercised
   — a freshly-corrupted caster with taint < 2 and no other tainted member would hit
   it; here the caster's own Rank-3 taint correctly diverted to the shed path.
+- **s43 maho IN TILE COMBAT — tranche 1 (2026-06-21, runtime-verified 12/12).**
+  The s43 maho combat spells were long marked "blocked on s40" — and **s40 now exists** (the ASCII
+  combat layer the s31–37 spells were wired into), newly unblocking them. First tranche delivers the
+  **maho-cast pipeline** + 3 spells reusing the existing `_apply_spell_*` effect machinery (zero changes).
+  **Cast path:** `AsciiMapCombatOrchestrator.execute_cast_maho(...)` — maho has NO casting roll (it fires
+  when blood is spilled), so it auto-succeeds, paying the s43 self-blood cost (2×ML Wounds bypassing armor)
+  + Taint (Pattern B, pre-applied), then routes the combat effect through `_apply_spell_status` /
+  `_apply_spell_debuff` / `_apply_spell_buff`. A **blood-cost-lethal guard** refuses a cast that would
+  Out/kill the caster (sacrificing a captive is the world-sim path). World-sim consequences
+  (PTL/CrimeRecord/province) stay with `MahoSystem.resolve_cast`, not the skirmish. **Effects table:**
+  `MahoSpellLibrary.MAHO_COMBAT_EFFECTS` (same schema as `SPELL_COMBAT_EFFECTS`) + `get_combat_effect()`.
+  Three spells: **Pain** (Earth 2 → incapacitated 1 round = "Prone + loses next Turn"), **Curse of
+  Weakness** (Water 2 → all_rolls −10 + armor_tn −10, 10 rounds), **Strength of Darkness** (Fire 5 → self
+  buff +1 attack / +1 damage die, the "+1 physical Traits" combat slice). **NPC hook:**
+  `_npc_maybe_cast_maho` (gated on `cult_affiliation`, mirrors `_npc_maybe_cast_spell`; Ring-supported via
+  `supports_spell_ring`) wired into `execute_npc_turn` before the shugenja block — gated on
+  `cult_affiliation` → zero regression for normal NPCs. Runtime-verified 12/12 (Godot 4.6.2): Pain
+  incapacitates + blood 4 + Taint +1; Curse all_rolls/armor_tn −10; Strength of Darkness self-buff +1/+1;
+  near-dead maho refuses (blood_cost_lethal); a cult enemy casts maho autonomously (`cast_maho`);
+  damage/clone drivers re-pass. DEFERRED (tranche 2+): damage maho (Burning Blood — DR = TARGET's Fire
+  Ring, structural), Bleeding (per-round DoT), Tomb of Earth (maintained per-round contest), the other ~25
+  combat maho spells, and roster-spawned MAHO_TSUKAI `cult_affiliation` flagging (the hook is ready).
 - **s43 Grand-Map spell sweep COMPLETE (2026-06-11).** Audited all 46 maho spells
   for world-scale-wirable effects (persistent NPC/province state, no s40 combat or
   condition layer). **6 are wired** (Spreading the Darkness, Stealing the Soul,
