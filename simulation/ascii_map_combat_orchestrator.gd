@@ -2286,6 +2286,9 @@ static func execute_cast_maho(
 				state, caster_id, caster, target_id, target, eff, dice_engine)
 		"buff":
 			res["spell_buff"] = _apply_spell_buff(state, caster_id, caster, target_id, target, eff)
+		"damage":
+			res["spell_damage"] = _apply_spell_combat_damage(
+				state, caster_id, caster, target_id, target, eff, spell_id, dice_engine)
 	state.combat_log.append({"type": "cast_maho", "round": state.combat.round_number,
 		"caster_id": caster_id, "spell_id": spell_id, "result": res})
 	return res
@@ -2334,6 +2337,11 @@ static func _apply_spell_combat_damage(
 		# creature inside an enemy ward loses dice (min 1k1).
 		var er: int = rolled
 		var ek: int = kept
+		# s43 Burning Blood: DR equals the TARGET's Fire Ring (per-target, not the caster's).
+		if eff.has("dr_target_ring"):
+			var t_ring: int = SpellSystem.get_ring_value(ch, int(eff["dr_target_ring"]))
+			er = maxi(1, t_ring)
+			ek = maxi(1, t_ring)
 		var wred: Array = _ward_dr_reduction(state, caster_id, element,
 			state.positions.get(int(t["id"]), Vector2i(-9999, -9999)))
 		if wred[0] > 0 or wred[1] > 0:
@@ -5547,7 +5555,7 @@ static func _npc_maybe_cast_maho(
 		for sid in MahoSpellLibrary.MAHO_COMBAT_EFFECTS:
 			var eff: Dictionary = MahoSpellLibrary.MAHO_COMBAT_EFFECTS[sid]
 			var k: String = String(eff.get("kind", ""))
-			if k != "status" and k != "debuff":
+			if k != "status" and k != "debuff" and k != "damage":
 				continue
 			if not MahoSpellLibrary.supports_spell_ring(npc, sid):
 				continue

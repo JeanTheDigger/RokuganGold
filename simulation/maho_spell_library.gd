@@ -94,6 +94,11 @@ const MAHO_COMBAT_EFFECTS: Dictionary = {
 	# boost and "see through impairments" are not modeled — the attack/damage buff captures the combat value.)
 	"strength_of_darkness": {"kind": "buff", "target": "self", "duration_rounds": 10,
 		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_damage_rolled", "value": 1}]},
+	# Burning Blood (Fire 4): boil the blood — DR equal to the TARGET's Fire Ring (per-target, via the
+	# damage path's dr_target_ring), then a Willpower TN 20 save or fall Prone. (The secondary "Fatigued"
+	# is deferred — the rider applies one condition; the damage + Prone is the core combat effect.)
+	"burning_blood": {"kind": "damage", "range_tiles": 10, "dr_target_ring": _F,
+		"rider": {"condition": "prone", "save": "willpower_flat", "save_tn": 20}},
 }
 
 
