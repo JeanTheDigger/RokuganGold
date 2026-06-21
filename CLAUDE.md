@@ -6251,7 +6251,20 @@ the **last spell with a clean combat-slice** — every remaining gap is out-of-c
 messaging, flight (no elevation on flat maps), the ring-changing wound refactor (Pending Redesign), a
 substantial subsystem (illusory-decoy / clone / VP-pool-share / range-gated-perception), absent infra
 (water-terrain maps, tile-combat maho), or a near-inert curse (Curse of the Burning Hand's ally-touch).
-Void 9 this session.
+Void 9 this session. (Superseded by the ring-change wave below — the wound refactor IS now done.)
+
+### Spell coverage — ring-change wave (2026-06-20, runtime-verified 18/18 + world-sim 8/8)
+Resolved the former **Pending Redesign** (Earth-ring wound refactor — owner-directed). In-combat Ring
+deltas now thread through the wound/death chain via a Participant-authoritative store + a synced,
+non-serialized character read-bridge (`combat_ring_deltas`) that `CharacterStats.get_ring_value` falls
+back to — so the entire chain (capacity/level/penalty/is_dead, + WoundSystem) sees the delta with ZERO
+call-site threading, and the bridge is cleared at setup / combat-end / expiry for no world-sim leak. The
+7 wound funcs + WoundSystem gained an optional `ring_deltas` param (default {} -> backward-compatible).
+Wired: **Essence of Earth** (Earth 4, self +1 Earth, death-on-expiry), **The Wolf's Mercy** (Earth 3,
+enemy -1 / -2 if Tainted, death-on-apply), **Strike at the Roots** (Earth 5, Contested Earth -> enemy
+Earth->1, death-on-apply). See the "Pending Redesign — RESOLVED" entry for the full design + verification.
+147 combat effects total now; 73 COMBAT_ONLY gaps remain (all out-of-combat utility / flight / trait-swap
+/ clone / water-terrain / anti-maho / PC-ASCII tools).
 
 ### Spell coverage session summary (2026-06-20, running)
 This session has wired **~69 combat spells across all 5 elements** (initial all-element pass + clean-wins
@@ -6282,22 +6295,41 @@ per-element work is documented in each element's DEFERRED note above: the ring-c
 refactor (Pending Redesign), the illusion/disguise/perception/decoy infra, and the out-of-combat utility
 set per the per-spell ASK. (FireSystem ignite/extinguish and the VP-manipulation hooks are now DONE.)
 
-"### Pending Redesign
-- **Ring-changing combat spells (essence_of_earth, the_wolfs_mercy, strike_at_the_roots, and
-  Water ring-down spells) — participant-scoped wound threading (owner-chosen 2026-06-20).**
-  Owner chose participant-scoped storage for combat ring-deltas (clean, no world-sim leak).
-  SCOPE DISCOVERY: making it *consistent* requires threading an optional participant through the
-  wound/death chain (get_ring_value/get_earth_ring/get_wound_threshold_per_level/
-  get_total_wound_capacity/get_wound_level/get_wound_penalty/is_dead) AND passing it at every
-  in-combat read — **132 is_dead calls + 27 wound reads in the orchestrator, +29 in
-  individual_combat (~190 sites)**. Partial threading is UNSAFE: a character alive only via an
-  Earth ring-up (wounds between base and buffed capacity) reads alive at the participant-aware
-  damage site but DEAD at the 132 base-capacity iteration guards; ring-down kills symmetrically
-  fail to register at those guards. So the foundation is a bounded but large mechanical refactor
-  (optional `p=null` param on the 7 functions — world-sim callers unaffected — then thread `p`
-  into the orchestrator's combat reads via a participant-resolving helper). Deferred to a
-  dedicated refactor wave; the 3+ ring spells stay unwired until then. Everything else in the
-  s31-37 library that needs no wound surgery proceeds normally.
+"### Pending Redesign — RESOLVED (2026-06-20, ring-change wave)
+- **Ring-changing combat spells — participant-scoped wound deltas, DONE.** The owner's goal was
+  combat-scoped Ring deltas with **no world-sim leak**. The scope-discovery counted ~252 in-combat
+  is_dead/wound reads (143 is_dead + 27 get_wound_level + 30 apply_damage + 12 heal_wounds in the
+  orchestrator; +39 in individual_combat), and threading a participant through every one is both
+  impractical by hand AND impossible to completeness-verify headless — i.e. it would itself risk the
+  "partial threading is UNSAFE" failure it was meant to avoid. **Implemented instead (honors the
+  no-leak goal, avoids the 252-site threading):** the AUTHORITATIVE store is the combat
+  **Participant** (`Participant.ring_deltas` {Ring:int} + `ring_delta_expiry`), synced to a
+  **runtime-only, non-@export read-bridge** field on the character (`L5RCharacterData.combat_ring_deltas`)
+  via `IndividualCombat.sync_ring_deltas()`. `CharacterStats.get_ring_value` falls back to that
+  bridge (when no explicit `ring_deltas` arg is passed), so the WHOLE wound/death chain
+  (get_earth_ring → get_wound_threshold_per_level → get_wound_level/get_total_wound_capacity/
+  get_wound_penalty → is_dead, plus WoundSystem.apply_damage/heal_wounds) sees the delta **with zero
+  call-site threading**. The 7 CharacterStats funcs + WoundSystem gained an optional `ring_deltas`
+  param (default {} → identical to before; backward-compatible foundation) for belt-and-suspenders
+  explicit passing where a participant is handy. **No-leak guarantees** (the bridge is never
+  serialized and is empty outside combat): cleared per-combatant at `setup_combat`, cleared for all
+  combatants when `advance_round` sees combat over, and removed on a ring-delta's duration expiry
+  (`_expire_ring_deltas`, which also re-checks death — Essence of Earth "Wounds return to normal,
+  possibly fatal"). NOTE: this uses a synced character read-bridge rather than literally threading
+  the Participant through 252 sites; the data still LIVES on the Participant (participant-scoped, the
+  owner's choice) — the bridge is just a cleared-rigorously mirror so the static wound chain can read
+  it. If the owner specifically wants the literal 252-site threading instead, it can replace the
+  bridge later. **Wired spells:** Essence of Earth (Earth 4, self +1 Earth, death-on-expiry),
+  The Wolf's Mercy (Earth 3, enemy −1 Earth / −2 if Tainted, immediate death-on-apply if wounded),
+  Strike at the Roots (Earth 5, Contested Earth → enemy Earth set to 1, death-on-apply). Ring-down
+  effective ring floored at 1 (GDD "minimum 1"; avoids an Earth-0 threshold-instant-kill). DEFERRED
+  (trait-swap, not a clean Ring delta): Ebbing Strength / Chi Reversal (Physical/Mental trait
+  transfer/flip), facing_your_devils (random trait reorder). Runtime-verified 18/18 + world-sim
+  sanity 8/8: the boosted char reads consistently alive across is_dead/get_wound_level/
+  get_total_wound_capacity with NO param (bridge auto-applies); Wolf's Mercy/Strike kill wounded
+  enemies via reduced capacity; bridge clears at combat end (is_dead reverts to base); fresh
+  world-sim characters read base (empty bridge). All other s31-37 spells were wired without wound
+  surgery.
 
 ### ASCII Map System — Live-Reachability Status (2026-06-20)
 **The ASCII map / tile-combat layer is extensively built and partly verified, but is NOT

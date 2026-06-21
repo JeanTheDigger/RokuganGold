@@ -3,14 +3,14 @@ class_name WoundSystem
 ## derived values. All damage application goes through here.
 
 
-static func apply_damage(character: L5RCharacterData, raw_damage: int, reduction: int = -1) -> Dictionary:
+static func apply_damage(character: L5RCharacterData, raw_damage: int, reduction: int = -1, ring_deltas: Dictionary = {}) -> Dictionary:
 	if reduction < 0:
 		reduction = character.armor_reduction
 	var final_damage: int = maxi(0, raw_damage - reduction)
 
-	var old_level: Enums.WoundLevel = CharacterStats.get_wound_level(character)
+	var old_level: Enums.WoundLevel = CharacterStats.get_wound_level(character, ring_deltas)
 	character.wounds_taken += final_damage
-	var new_level: Enums.WoundLevel = CharacterStats.get_wound_level(character)
+	var new_level: Enums.WoundLevel = CharacterStats.get_wound_level(character, ring_deltas)
 
 	return {
 		"raw_damage": raw_damage,
@@ -18,13 +18,13 @@ static func apply_damage(character: L5RCharacterData, raw_damage: int, reduction
 		"final_damage": final_damage,
 		"old_wound_level": old_level,
 		"new_wound_level": new_level,
-		"is_dead": CharacterStats.is_dead(character),
+		"is_dead": CharacterStats.is_dead(character, ring_deltas),
 		"levels_crossed": new_level - old_level,
 	}
 
 
-static func heal_wounds(character: L5RCharacterData, amount: int) -> Dictionary:
-	if CharacterStats.is_dead(character):
+static func heal_wounds(character: L5RCharacterData, amount: int, ring_deltas: Dictionary = {}) -> Dictionary:
+	if CharacterStats.is_dead(character, ring_deltas):
 		return {
 			"healed": 0,
 			"wound_level": Enums.WoundLevel.DEAD,
@@ -42,7 +42,7 @@ static func heal_wounds(character: L5RCharacterData, amount: int) -> Dictionary:
 
 	return {
 		"healed": actual_healed,
-		"wound_level": CharacterStats.get_wound_level(character),
+		"wound_level": CharacterStats.get_wound_level(character, ring_deltas),
 	}
 
 

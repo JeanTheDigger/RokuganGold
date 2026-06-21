@@ -375,6 +375,11 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Coverage clean-wins batch 18 (2026-06-20): Void skill-grant self-buff (the last combat-slice spell).
 	"moment_of_clarity": {"kind": "buff", "target": "self", "duration_rounds": 2,
 		"mods": [{"kind": "spell_attack_rolled", "value": "void_replace_weapon_skill"}]},  # Void 3: temporary Skill Ranks = Void Ring, REPLACING the existing rank (not cumulative). For a weapon skill the net attack-roll gain is max(0, Void Ring - best current weapon skill) — big for a low-skill caster, nil for an already-skilled one. (Models the combat weapon-skill case; the "any skill" generality is out-of-combat.)
+	# Ring-change wave (2026-06-20): in-combat Ring deltas threaded through the wound/death chain
+	# (Participant-scoped store + synced character read-bridge — the former Pending Redesign).
+	"essence_of_earth": {"kind": "ring_change", "target": "self", "ring": Enums.Ring.EARTH, "delta": 1, "duration_rounds": 100},  # Earth 4: target's Earth Ring +1 Rank (Wounds increased correspondingly); on expiry Wounds return to normal — possibly fatal. 10 min ~ 100 Rounds (persists a normal skirmish, cleared at combat end).
+	"the_wolfs_mercy": {"kind": "ring_change", "target": "enemy", "ring": Enums.Ring.EARTH, "delta": -1, "taint_delta": -2, "range_tiles": 10, "duration_rounds": 10},  # Earth 3: target's Earth Ring -1 Rank (-2 if Tainted, min 1) — reduced Wound capacity can immediately kill an already-wounded target. (The accompanying -1 Strength is not modeled.)
+	"strike_at_the_roots": {"kind": "ring_change", "target": "enemy", "ring": Enums.Ring.EARTH, "set_to": 1, "contested": "earth_contested", "range_tiles": 10, "duration_rounds": 3},  # Earth 5: Contested Earth -> the target's Earth Ring is reduced to 1 for the duration; may immediately kill if already wounded.
 	"severed_from_the_stream": {"kind": "debuff", "target": "enemy", "range_tiles": 5, "duration_rounds": 9999,
 		"mods": [{"kind": "void_locked", "value": 1}]},  # Void 2: target cannot spend Void Points (the per-spend Contested-Void roll is simplified to a full lock via execute_void_spend; 5 rounds ≈ skirmish)
 	# --- Heal spells (s36 Water) ---

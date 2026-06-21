@@ -118,6 +118,13 @@ var spell_void_bonus_used: int = 0
 # wrapper for a SpiritCreatureData (the live ASCII spiritual encounter). null for
 # all real characters. Lets the combat ability/override layer read the creature.
 @export var spirit_creature: SpiritCreatureData = null
+# Combat-scoped Ring deltas read-bridge ({Enums.Ring: int}) for in-combat ring-changing spells
+# (s34 Essence of Earth ring-up, Water ring-downs). The AUTHORITATIVE store is the combat
+# Participant (participant-scoped); this is a synced, runtime-only mirror so the static
+# CharacterStats wound/death chain can see the boost without threading every call site. NOT
+# @export -> never serialized, and rigorously cleared at combat setup/teardown/expiry, so it
+# never leaks into the persistent character or the world-sim. Empty outside combat.
+var combat_ring_deltas: Dictionary = {}
 @export var koku: float = 0.0
 @export var months_without_stipend: int = 0
 

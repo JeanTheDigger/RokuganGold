@@ -233,6 +233,33 @@ class Participant:
 	# hit; takes 1k1 at the start of each round until a Simple Action extinguishes it.
 	var on_fire: bool = false
 	var absorb_pool: int = 0  # s34 Power of the Earth Dragon: remaining Wounds the ward absorbs (0 = none)
+	# Combat-scoped Ring deltas from in-combat spells (s34 Essence of Earth ring-up, Water
+	# ring-downs): {Enums.Ring: int}. The AUTHORITATIVE participant-scoped store; synced to the
+	# character's combat_ring_deltas read-bridge so the CharacterStats wound/death chain sees the
+	# boost. Lives only on the Participant (destroyed at combat end) -> never leaks persistently.
+	var ring_deltas: Dictionary = {}
+	var ring_delta_expiry: Dictionary = {}  # {Enums.Ring: expiry_round} for the ring deltas above
+
+
+## Combat-scoped Ring deltas for a Participant (empty if none). Null-safe.
+static func ring_deltas_of(p) -> Dictionary:
+	if p == null:
+		return {}
+	return p.ring_deltas
+
+
+## Sync the participant's authoritative ring_deltas onto the character's read-bridge so the static
+## CharacterStats wound/death chain sees the boost. Call after any ring-delta change. A zero/absent
+## delta is removed so the bridge is empty when no ring change is active (the no-leak invariant).
+static func sync_ring_deltas(p: Participant, character: L5RCharacterData) -> void:
+	if character == null:
+		return
+	var bridge: Dictionary = {}
+	if p != null:
+		for ring in p.ring_deltas:
+			if int(p.ring_deltas[ring]) != 0:
+				bridge[ring] = int(p.ring_deltas[ring])
+	character.combat_ring_deltas = bridge
 
 
 class CombatState:

@@ -205,6 +205,7 @@ static func setup_combat(
 		var c: L5RCharacterData = entry["char"]
 		if CharacterStats.is_dead(c):
 			continue
+		c.combat_ring_deltas = {}  # no-leak guarantee: every combat starts with the ring bridge clear
 		chars_for_combat.append(c)
 		mcs.combatants[c.character_id] = c
 		mcs.positions[c.character_id] = Vector2i(entry.get("x", 0), entry.get("y", 0))
@@ -2144,6 +2145,12 @@ static func execute_cast_spell(
 			"type": "spell_wall", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "result": res["wall"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "ring_change":
+		res["ring_change"] = _apply_spell_ring_change(state, caster_id, caster, target_id, target, eff, dice_engine)
+		state.combat_log.append({
+			"type": "spell_ring_change", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "result": res["ring_change"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "gain_void":
 		var gained: int = SpellSystem.get_effective_school_rank(caster, Enums.Ring.VOID) + 1
 		caster.current_void_points += gained  # over-cap allowed (s37 Drawing the Void)
@@ -2573,6 +2580,80 @@ static func _apply_spell_debuff(
 		IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_debuff")
 		applied.append({"kind": mkind, "value": val})
 	return {"id": target_id, "applied": applied, "expires_round": expiry}
+
+
+# s34 ring-changing spells (Essence of Earth ring-up, Water ring-downs). Applies a combat-scoped
+# Ring delta to the target's authoritative Participant store + the synced read-bridge, so the whole
+# CharacterStats wound/death chain (capacity, level, penalty, is_dead) sees the change consistently —
+# without threading every call site. duration_rounds caps it; on expiry the delta is removed and a
+# ring-UP that ended re-evaluates death (wounds return to normal — possibly fatal).
+static func _apply_spell_ring_change(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary, dice_engine: DiceEngine,
+) -> Dictionary:
+	# target "self" -> the caster; any other ("ally"/"enemy") -> the spell target, range-gated.
+	var who: L5RCharacterData = caster
+	var who_id: int = caster_id
+	if String(eff.get("target", "self")) != "self" and target != null:
+		who = target
+		who_id = target_id
+		var rng: int = int(eff.get("range_tiles", 1))
+		if state.positions.has(caster_id) and state.positions.has(target_id):
+			var cp: Vector2i = state.positions[caster_id]
+			var tp: Vector2i = state.positions[target_id]
+			if maxi(absi(cp.x - tp.x), absi(cp.y - tp.y)) > rng:
+				return {"reason": "out_of_range"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(who_id, null)
+	if p == null or who == null:
+		return {"reason": "not_in_combat"}
+	# Optional contested gate (Strike at the Roots: caster must win a Contested Earth roll).
+	var contested: String = String(eff.get("contested", ""))
+	if contested != "" and _spell_save_resisted(state, caster, who, contested, int(eff.get("save_tn", 0)), dice_engine):
+		return {"reason": "resisted", "id": who_id}
+	var ring: int = int(eff.get("ring", Enums.Ring.EARTH))
+	var base_ring: int = CharacterStats.get_ring_value(who, ring)  # current effective (incl. prior deltas removed below)
+	# Determine the delta: an absolute "set_to" (Strike at the Roots -> 1), a Taint-aggravated
+	# delta (Wolf's Mercy -> -2 vs a Tainted target), or a flat delta.
+	var delta: int = int(eff.get("delta", 0))
+	if eff.has("set_to"):
+		delta = int(eff["set_to"]) - base_ring
+	elif eff.has("taint_delta") and who.taint >= 1.0:
+		delta = int(eff["taint_delta"])
+	# Floor a ring-down so the effective ring never drops below 1 (GDD "minimum 1" / "reduced to 1";
+	# also avoids an Earth-0 threshold-instant-death — the lethality is reduced CAPACITY vs wounds).
+	if delta < 0:
+		delta = maxi(delta, 1 - base_ring)
+	var expiry: int = state.combat.round_number + int(eff.get("duration_rounds", 10))
+	p.ring_deltas[ring] = int(p.ring_deltas.get(ring, 0)) + delta
+	p.ring_delta_expiry[ring] = expiry
+	IndividualCombat.sync_ring_deltas(p, who)
+	# A ring-down on an already-wounded target may immediately kill (reduced capacity < wounds).
+	var died: bool = delta < 0 and CharacterStats.is_dead(who)
+	return {"id": who_id, "ring": ring, "delta": delta, "expires_round": expiry,
+		"new_capacity": CharacterStats.get_total_wound_capacity(who), "died_on_apply": died}
+
+
+# Expire combat ring deltas (s34) whose duration has elapsed: remove the delta, re-sync the bridge,
+# and — for a ring-UP that ended — re-check death (wounds return to normal, possibly fatal).
+static func _expire_ring_deltas(state: MapCombatState, p: IndividualCombat.Participant, chars_by_id: Dictionary) -> void:
+	if p.ring_delta_expiry.is_empty():
+		return
+	var ch = state.combatants.get(p.character_id, chars_by_id.get(p.character_id, null))
+	if ch == null:
+		return
+	var changed: bool = false
+	for ring in p.ring_delta_expiry.keys():
+		if state.combat.round_number >= int(p.ring_delta_expiry[ring]):
+			p.ring_deltas.erase(ring)
+			p.ring_delta_expiry.erase(ring)
+			changed = true
+	if changed:
+		IndividualCombat.sync_ring_deltas(p, ch)
+		# The boost is gone: if wounds now exceed base capacity, the character dies (Essence of
+		# Earth: "Wounds return to normal — possibly resulting in death"). is_dead now reads base.
+		if CharacterStats.is_dead(ch):
+			state.combat_log.append({"type": "ring_delta_expiry_death",
+				"round": state.combat.round_number, "id": p.character_id})
 
 
 # s36 Judgment of Yomi: count a character's Social + Spiritual Disadvantages (s45 category catalog).
@@ -5025,6 +5106,12 @@ static func advance_round(
 
 	# Check if combat is over.
 	if IndividualCombat.check_combat_over(state.combat, chars_by_id):
+		# No-leak guard: clear every combatant's ring-delta bridge when combat ends, so a
+		# lingering s34 ring boost never bleeds into the world-sim after the encounter.
+		for _cid in state.combatants:
+			var _cc = state.combatants[_cid]
+			if _cc != null:
+				_cc.combat_ring_deltas = {}
 		state.combat_log.append({
 			"type": "combat_over",
 			"round": state.combat.round_number,
@@ -5057,6 +5144,7 @@ static func advance_round(
 		IndividualCombat.expire_timed_modifiers(_tp, state.combat.round_number)
 		IndividualCombat.expire_active_kiho(_tp, state.combat.round_number)
 		IndividualCombat.expire_timed_conditions(_tp, state.combat.round_number)
+		_expire_ring_deltas(state, _tp, chars_by_id)  # s34 ring spells — wounds return to normal on expiry
 		# Conjured elemental weapon (s33-s36) dissipates when its duration ends.
 		if _tp.conjured_weapon_expiry >= 0 and _tp.conjured_weapon_expiry <= state.combat.round_number:
 			_tp.conjured_weapon = {}
