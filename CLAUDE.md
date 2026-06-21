@@ -8269,6 +8269,23 @@ template generators it depends on. Faithful summary of the fixes that landed:
   debuff, ambiguous DR), Disrupt the Limb (limb-specific), Drain the Soul (trait reduction), the Bleeding
   bandage cure, and the remaining out-of-combat/social maho. The clean-reuse maho combat set is now
   comprehensive; the remainder need bespoke mechanics.
+- **s43 maho IN TILE COMBAT — tranche 7: Blood Armor (damage-redirect, 2026-06-21, runtime-verified 7/7).**
+  A defensive maho. Blood Armor (Earth 5): the caster bonds the nearest living ally as a sacrifice
+  (`MapCombatState.blood_armor_links` wearer→victim, via `_nearest_ally_id`) and from then on channels
+  **75% of its incoming damage into that victim** (direct, bypassing the victim's armor — it is blood
+  magic), keeping only 25% (which its own Reduction still mitigates). New `"blood_armor"` effect kind +
+  the redirect hook in `_apply_hit` (gated on `blood_armor_links.has(target.character_id)` → zero
+  regression); the bond breaks when the victim dies. Self-cast; the upfront precondition refuses it when
+  no ally is present (no wasted blood, like Bleeding's injured-target gate). NPC self-casts it
+  (`_npc_maybe_cast_maho` step 2a — before the generic self-buff) when Earth-supportable, a sacrifice is
+  present, and not already armored. Runtime-verified 7/7 (Godot 4.6.2): cast bonds the minion; over
+  repeated PC strikes the minion bears the larger share while the wearer keeps ~25%; the bond breaks when
+  the victim dies (subsequent hits land fully on the wearer); a lone maho-user is refused upfront
+  (no_sacrifice, no blood paid); the NPC self-casts blood_armor with a minion present and out-of-range
+  PC. maho-t1/t2/t4/t6 drivers re-pass. **12 maho combat effects total** (status, debuff, buff, damage
+  [caster + per-target ring], DoT, fear, AoE, incapacitate [timed + maintained-contest], damage-redirect).
+  DEFERRED: No Pure Breaths (damage + persistent debuff, ambiguous DR), Disrupt the Limb (limb-specific),
+  Drain the Soul (trait reduction), the Bleeding bandage cure, remaining out-of-combat/social maho.
 - **s43 Grand-Map spell sweep COMPLETE (2026-06-11).** Audited all 46 maho spells
   for world-scale-wirable effects (persistent NPC/province state, no s40 combat or
   condition layer). **6 are wired** (Spreading the Darkness, Stealing the Soul,

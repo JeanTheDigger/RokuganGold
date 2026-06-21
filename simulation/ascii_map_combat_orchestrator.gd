@@ -174,6 +174,9 @@ class MapCombatState:
 	## re-contests (Earth+Insight vs Air+Insight); winning keeps the target immobilized + 2k2, losing
 	## frees them (link removed).
 	var tomb_links: Dictionary = {}
+	## s43 Blood Armor: wearer_id -> victim_id. The wearer channels 75% of its incoming damage into the
+	## bonded victim (read in _apply_hit). The bond breaks when the victim dies.
+	var blood_armor_links: Dictionary = {}
 	## s54.5 Manesuru Dark Mirror: target ids fully studied, target ids already mirrored, count spawned.
 	var mirror_studied: Dictionary = {}
 	var mirror_spawned: Dictionary = {}
@@ -2269,10 +2272,13 @@ static func execute_cast_maho(
 	var ts = state.turn_states.get(caster_id, null)
 	if ts == null or not ts.can_use_complex():
 		return {"success": false, "reason": "no_complex_action"}
-	# Effect-specific precondition checked BEFORE paying blood: Bleeding reopens an existing wound, so a
-	# maho-user does not waste its blood casting it on an uninjured target.
-	if String(eff.get("kind", "")) == "bleed" and (target == null or target.wounds_taken < 1):
+	# Effect-specific preconditions checked BEFORE paying blood (don't waste blood on an invalid cast):
+	# Bleeding reopens an existing wound; Blood Armor needs a living ally to sacrifice.
+	var _eff_kind: String = String(eff.get("kind", ""))
+	if _eff_kind == "bleed" and (target == null or target.wounds_taken < 1):
 		return {"success": false, "reason": "target_not_injured"}
+	if _eff_kind == "blood_armor" and _nearest_ally_id(state, caster_id) < 0:
+		return {"success": false, "reason": "no_sacrifice"}
 	# Pattern B: pay the self-blood cost (2×ML Wounds, bypasses armor) + Taint before the effect.
 	var ml: int = int(spell.get("mastery_level", 1))
 	var blood: int = MahoSystem.total_blood_cost(ml, 0)
@@ -2305,6 +2311,8 @@ static func execute_cast_maho(
 		"tomb":
 			res["spell_tomb"] = _apply_maho_tomb(
 				state, caster_id, target_id, target, eff, dice_engine)
+		"blood_armor":
+			res["spell_blood_armor"] = _apply_maho_blood_armor(state, caster_id)
 	state.combat_log.append({"type": "cast_maho", "round": state.combat.round_number,
 		"caster_id": caster_id, "spell_id": spell_id, "result": res})
 	return res
@@ -5607,6 +5615,38 @@ static func _apply_maho_bleed(
 	return {"id": target_id, "bleed_per_round": wpr}
 
 
+## Nearest living same-faction ally (excluding self), or -1 if none. Used for Blood Armor's sacrifice.
+static func _nearest_ally_id(state: MapCombatState, who_id: int) -> int:
+	var cf: String = String(state.factions.get(who_id, ""))
+	var cpos: Vector2i = state.positions.get(who_id, Vector2i.ZERO)
+	var best: int = -1
+	var bestd: int = 1 << 30
+	for oid in state.positions.keys():
+		if int(oid) == who_id:
+			continue
+		if String(state.factions.get(oid, "")) != cf:
+			continue
+		var oc: L5RCharacterData = state.combatants.get(oid, null)
+		if oc == null or CharacterStats.is_dead(oc):
+			continue
+		var op: Vector2i = state.positions[oid]
+		var d: int = maxi(absi(op.x - cpos.x), absi(op.y - cpos.y))
+		if d < bestd:
+			bestd = d
+			best = int(oid)
+	return best
+
+
+## s43 Blood Armor (Earth 5): the wearer bonds the nearest living ally as a sacrifice — from then on the
+## wearer channels 75% of its incoming damage into that victim (handled in _apply_hit), keeping only 25%.
+static func _apply_maho_blood_armor(state: MapCombatState, caster_id: int) -> Dictionary:
+	var victim_id: int = _nearest_ally_id(state, caster_id)
+	if victim_id < 0:
+		return {"reason": "no_sacrifice"}
+	state.blood_armor_links[caster_id] = victim_id
+	return {"id": caster_id, "victim_id": victim_id}
+
+
 ## s43 Tomb of Earth (Earth 4): entomb the target — immobilize (incapacitated) + an initial 2k2, and
 ## establish a maintained per-round contest (processed in advance_round). Cannot affect a target with 1+
 ## full Rank of Taint (the earth will not hold the corrupt). The petrify-on-kill flavour is not modeled.
@@ -5707,7 +5747,15 @@ static func _npc_maybe_cast_maho(
 			var r: Dictionary = execute_cast_maho(state, npc_id, npc, best_off, best_target, tc, dice_engine)
 			if r.get("success", false):
 				return r
-	# (2) Self-buff if not already buffed.
+	# (2a) Blood Armor: a self-protective cast — bond an ally to soak 75% of incoming damage. Cast when
+	# supportable, a sacrifice is present (the upfront precondition gates it), and not already armored.
+	if MahoSpellLibrary.MAHO_COMBAT_EFFECTS.has("blood_armor") \
+			and MahoSpellLibrary.supports_spell_ring(npc, "blood_armor") \
+			and not state.blood_armor_links.has(npc_id):
+		var ba: Dictionary = execute_cast_maho(state, npc_id, npc, "blood_armor", npc_id, npc, dice_engine)
+		if ba.get("success", false):
+			return ba
+	# (2b) Self-buff if not already buffed.
 	for sid in MahoSpellLibrary.MAHO_COMBAT_EFFECTS:
 		var eff2: Dictionary = MahoSpellLibrary.MAHO_COMBAT_EFFECTS[sid]
 		if String(eff2.get("kind", "")) != "buff" or String(eff2.get("target", "self")) != "self":
@@ -7745,6 +7793,19 @@ static func _apply_hit(
 		var soaked: int = mini(net, t_p.absorb_pool)
 		t_p.absorb_pool -= soaked
 		raw = maxi(0, raw - soaked)
+	# s43 Blood Armor (Earth 5): a blood-armored wearer channels 75% of incoming damage into its bonded
+	# victim (direct, bypassing the victim's armor — it is blood magic), keeping only 25% for itself
+	# (which its own Reduction still mitigates). The bond breaks if the victim is gone.
+	if raw > 0 and state.blood_armor_links.has(target.character_id):
+		var _ba_vid: int = int(state.blood_armor_links[target.character_id])
+		var _ba_victim: L5RCharacterData = state.combatants.get(_ba_vid, null)
+		if _ba_victim != null and not CharacterStats.is_dead(_ba_victim) and _ba_vid != target.character_id:
+			var _ba_redirect: int = int(raw * 0.75)
+			if _ba_redirect > 0:
+				WoundSystem.apply_damage(_ba_victim, _ba_redirect, 0)
+				raw = raw - _ba_redirect
+		else:
+			state.blood_armor_links.erase(target.character_id)
 	var wd_result: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
 
 	# The Soul's Blade (s35 Fire 6): every target hit by the enchanted weapon is Stunned.

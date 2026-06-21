@@ -126,6 +126,10 @@ const MAHO_COMBAT_EFFECTS: Dictionary = {
 	# caster keeps the target immobilized + 2k2 each round until the target wins and breaks free, or
 	# either party dies. Cannot affect a target with 1+ full Rank of Taint.
 	"tomb_of_earth": {"kind": "tomb", "range_tiles": 10},
+	# Blood Armor (Earth 5): the caster bonds the nearest ally as a sacrifice and channels 75% of its
+	# incoming damage into that victim (handled in _apply_hit), keeping only 25%. Self-cast; needs a
+	# living ally present (the upfront precondition gates it). The bond breaks when the victim dies.
+	"blood_armor": {"kind": "blood_armor"},
 }
 
 
