@@ -2313,6 +2313,9 @@ static func execute_cast_maho(
 				state, caster_id, target_id, target, eff, dice_engine)
 		"blood_armor":
 			res["spell_blood_armor"] = _apply_maho_blood_armor(state, caster_id)
+		"drain_soul":
+			res["spell_drain_soul"] = _apply_maho_drain_soul(
+				state, caster_id, caster, target_id, target, eff, dice_engine)
 	state.combat_log.append({"type": "cast_maho", "round": state.combat.round_number,
 		"caster_id": caster_id, "spell_id": spell_id, "result": res})
 	return res
@@ -5615,6 +5618,30 @@ static func _apply_maho_bleed(
 	return {"id": target_id, "bleed_per_round": wpr}
 
 
+## s43 Drain the Soul (Earth 2): reduce the target's Stamina by 1. The COMBAT-relevant effect is the
+## lowered wound capacity, which only manifests when Stamina is the Earth-determining trait
+## (stamina <= willpower) — reducing a higher Stamina does not change Earth, so no combat effect (faithful,
+## not invented). When it applies, routes through the s34 ring-change mechanism (-1 Earth, floored at 1,
+## capacity drop, possibly lethal on an already-wounded target).
+static func _apply_maho_drain_soul(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary, dice_engine: DiceEngine,
+) -> Dictionary:
+	if target == null or CharacterStats.is_dead(target):
+		return {"reason": "no_target"}
+	var rng: int = int(eff.get("range_tiles", 10))
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		var cp: Vector2i = state.positions[caster_id]
+		var tp: Vector2i = state.positions[target_id]
+		if maxi(absi(cp.x - tp.x), absi(cp.y - tp.y)) > rng:
+			return {"reason": "out_of_range"}
+	if target.stamina > target.willpower:
+		return {"id": target_id, "no_capacity_change": true}
+	var rc_eff: Dictionary = {"target": "enemy", "ring": Enums.Ring.EARTH, "delta": -1,
+		"range_tiles": rng, "duration_rounds": int(eff.get("duration_rounds", 9999))}
+	return _apply_spell_ring_change(state, caster_id, caster, target_id, target, rc_eff, dice_engine)
+
+
 ## Nearest living same-faction ally (excluding self), or -1 if none. Used for Blood Armor's sacrifice.
 static func _nearest_ally_id(state: MapCombatState, who_id: int) -> int:
 	var cf: String = String(state.factions.get(who_id, ""))
@@ -5727,7 +5754,7 @@ static func _npc_maybe_cast_maho(
 			var eff: Dictionary = MahoSpellLibrary.MAHO_COMBAT_EFFECTS[sid]
 			var k: String = String(eff.get("kind", ""))
 			if k != "status" and k != "debuff" and k != "damage" and k != "bleed" and k != "fear" \
-					and k != "tomb":
+					and k != "tomb" and k != "drain_soul":
 				continue
 			if not MahoSpellLibrary.supports_spell_ring(npc, sid):
 				continue

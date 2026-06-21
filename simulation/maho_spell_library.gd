@@ -130,6 +130,10 @@ const MAHO_COMBAT_EFFECTS: Dictionary = {
 	# incoming damage into that victim (handled in _apply_hit), keeping only 25%. Self-cast; needs a
 	# living ally present (the upfront precondition gates it). The bond breaks when the victim dies.
 	"blood_armor": {"kind": "blood_armor"},
+	# Drain the Soul (Earth 2): reduce the target's Stamina by 1. The combat effect is the lowered wound
+	# capacity — applied (via the s34 ring-change, -1 Earth) only when Stamina is the Earth-determining
+	# trait (stamina <= willpower); otherwise no combat effect (faithful). Possibly lethal if wounded.
+	"drain_the_soul": {"kind": "drain_soul", "range_tiles": 10},
 }
 
 

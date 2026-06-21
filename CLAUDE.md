@@ -8286,6 +8286,20 @@ template generators it depends on. Faithful summary of the fixes that landed:
   [caster + per-target ring], DoT, fear, AoE, incapacitate [timed + maintained-contest], damage-redirect).
   DEFERRED: No Pure Breaths (damage + persistent debuff, ambiguous DR), Disrupt the Limb (limb-specific),
   Drain the Soul (trait reduction), the Bleeding bandage cure, remaining out-of-combat/social maho.
+- **s43 maho IN TILE COMBAT — tranche 8: Drain the Soul (2026-06-21, runtime-verified 4/4).** A faithful
+  capacity-reduction maho via the existing s34 ring-change mechanism. Drain the Soul (Earth 2): reduce
+  the target's Stamina by 1 — the combat-relevant effect is the lowered wound capacity, which manifests
+  (via −1 Earth, floored at 1) **only when Stamina is the Earth-determining trait** (`stamina <= willpower`);
+  reducing a higher Stamina does not change Earth, so no combat effect (faithful, NOT invented). New
+  `"drain_soul"` effect kind → `_apply_maho_drain_soul` (Stamina-floor gate, then routes to
+  `_apply_spell_ring_change`); added to the NPC offense kinds. Runtime-verified 4/4 (Godot 4.6.2):
+  sta3/wil5 → capacity 48→32 (Earth −1); sta5/wil3 → unchanged (Willpower floor, no effect); a wounded
+  Earth-2 target dies on apply when the lowered capacity drops below its wounds. Reuses the tested
+  ring-change → zero new mechanism; maho-t1/t6/t7 drivers re-pass. **13 maho combat effects total.** The
+  clean-reuse, faithful, unambiguous maho combat set is now complete — the remainder are genuinely
+  blocked: No Pure Breaths (ambiguous DR — the rolled-dice count is unstated, can't invent), Disrupt the
+  Limb (needs a per-limb system), the Bleeding bandage cure (needs a combat Medicine action + an unstated
+  TN), and the out-of-combat/social/world-sim maho.
 - **s43 Grand-Map spell sweep COMPLETE (2026-06-11).** Audited all 46 maho spells
   for world-scale-wirable effects (persistent NPC/province state, no s40 combat or
   condition layer). **6 are wired** (Spreading the Darkness, Stealing the Soul,
