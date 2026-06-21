@@ -385,6 +385,9 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "spell_attack_rolled", "value": "chi_reversal_agility"}]},  # Water 5: flip the target's Fire-pair Traits (Agility<->Intelligence) -> the Agility drop lowers attack rolls (combat slice; the Int change + other pair options are out-of-combat). Inert if the swap wouldn't lower Agility.
 	"ebbing_strength": {"kind": "buff", "target": "ally", "range_tiles": 4, "duration_rounds": 3,
 		"mods": [{"kind": "spell_damage_rolled", "value": "water_school_rank"}]},  # Water 1: transfer up to (Water School Rank) Strength caster->target -> the ally gains +damage (the benefit slice; the caster's Strength loss is not modeled, near-inert for a non-melee caster).
+	# Illusory decoy (2026-06-21): Way of Deception — a perfect mirrored duplicate of the caster.
+	"way_of_deception": {"kind": "buff", "target": "self", "duration_rounds": 9999,
+		"mods": [{"kind": "decoy_absorb", "value": 1}]},  # Air 1: an illusory duplicate mirrors the caster perfectly; an enemy can't tell which is real, so each attack against the caster has a derived 50% chance (1 real + 1 identical duplicate) to strike the fake (no effect). Concentration ~ skirmish. (Base 1 duplicate; the Raise-added duplicates that further dilute the odds are not modeled.)
 	"severed_from_the_stream": {"kind": "debuff", "target": "enemy", "range_tiles": 5, "duration_rounds": 9999,
 		"mods": [{"kind": "void_locked", "value": 1}]},  # Void 2: target cannot spend Void Points (the per-spend Contested-Void roll is simplified to a full lock via execute_void_spend; 5 rounds ≈ skirmish)
 	# --- Heal spells (s36 Water) ---

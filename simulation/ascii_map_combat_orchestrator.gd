@@ -869,6 +869,13 @@ static func execute_melee_attack(
 	if _chebyshev(apos, tpos) > melee_range:
 		return {"success": false, "reason": "out_of_melee_range"}
 
+	# Way of Deception (s33 Air): the defender's illusory duplicate mirrors them perfectly — the
+	# enemy can't tell which is real, so an attack has a derived 50% chance (1 real + 1 identical
+	# duplicate) to strike the fake and accomplish nothing. The attacker's action is still spent.
+	if IndividualCombat.get_timed_modifier_total(t_p, "decoy_absorb") > 0 and dice_engine.randf() < 0.5:
+		return {"success": true, "hit": false, "hit_decoy": true,
+			"attacker_id": attacker_id, "target_id": target_id}
+
 	# Way of the Willow (s38 Air): the defender may spend a Void Point to interrupt the
 	# declared attack with an immediate unarmed counterattack (once per Round). If the
 	# counter kills the attacker, the original attack is aborted.
@@ -1354,6 +1361,12 @@ static func execute_ranged_attack(
 
 	# s54.10: a hidden attacker (Mujina / Ephemeral Form) reveals itself when it shoots.
 	_reveal_if_hidden(state, attacker_id, a_p)
+
+	# Way of Deception (s33 Air): a derived 50% chance the shot strikes the defender's illusory
+	# duplicate (no effect); the attacker's action is still spent.
+	if IndividualCombat.get_timed_modifier_total(t_p, "decoy_absorb") > 0 and dice_engine.randf() < 0.5:
+		return {"success": true, "hit": false, "hit_decoy": true,
+			"attacker_id": attacker_id, "target_id": target_id}
 
 	# -10 penalty if attacker is within melee range of any enemy (GDD s40).
 	var in_melee: bool = is_in_melee_range_of_enemy(state, attacker_id)

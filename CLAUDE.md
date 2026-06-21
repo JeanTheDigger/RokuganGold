@@ -6283,6 +6283,20 @@ roll-model) is now wired; the remainder need new subsystems (illusory-decoy / cl
 range-gated perception), absent infra (water-terrain maps / flight / tile-maho), or have no combat
 effect at all (divination / messaging / social / item-imbue / PC-ASCII tools).
 
+### Spell coverage — illusory decoy batch 20 (2026-06-21, runtime-verified 4/4)
+First illusion-decoy combat spell, on a low-risk attack-path absorption (no new decoy-entity subsystem).
+**Way of Deception** (Air 1) → a self `buff` (`decoy_absorb`): the caster's perfect illusory duplicate
+mirrors them, so an enemy can't tell which is real — each melee/ranged attack against the caster has a
+**mathematically-derived 50%** chance (1 real + 1 identical duplicate) to strike the fake and accomplish
+nothing (the attacker's action is still spent). Checked in `execute_melee_attack`/`execute_ranged_attack`
+right after the range/LOS gate (after the action is consumed), returning `hit_decoy` on the fake half —
+the same guarded-early-branch shape as the fog/hidden checks, gated on `decoy_absorb > 0` (never set in
+normal combat → zero regression). Concentration ~ skirmish. Runtime-verified: 152/294 executed attacks
+absorbed (~51%, the derived 50%); 0 absorbed without the buff. The 50% is DERIVED from "1 of 2 identical
+targets" (not invented); the Raise-added extra duplicates that further dilute the odds, and The False
+Legion's mass-illusion army (a Battle/intimidation tool with low tile-combat value), are not modeled.
+150 combat effects total; 70 COMBAT_ONLY gaps remain.
+
 ### Spell coverage session summary (2026-06-20, running)
 This session has wired **~69 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
