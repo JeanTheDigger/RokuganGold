@@ -121,6 +121,11 @@ const MAHO_COMBAT_EFFECTS: Dictionary = {
 	# Willpower TN 30 save (Fear 5 = 5 + 5×5, s22.3).
 	"mists_of_fear": {"kind": "fear", "save": "willpower_flat", "save_tn": 30, "range_tiles": 12,
 		"duration_rounds": 9999},
+	# Tomb of Earth (Earth 4): the ground swallows the target — immobilize + 2k2, then a maintained
+	# per-round contest (caster Earth+Insight vs target Air+Insight, processed in advance_round): the
+	# caster keeps the target immobilized + 2k2 each round until the target wins and breaks free, or
+	# either party dies. Cannot affect a target with 1+ full Rank of Taint.
+	"tomb_of_earth": {"kind": "tomb", "range_tiles": 10},
 }
 
 

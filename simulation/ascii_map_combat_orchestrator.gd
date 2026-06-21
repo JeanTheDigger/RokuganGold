@@ -170,6 +170,10 @@ class MapCombatState:
 	## s37 Divide the Soul: bidirectional caster<->clone link (id -> partner id). If either
 	## manifestation dies, both die.
 	var divide_soul_pairs: Dictionary = {}
+	## s43 Tomb of Earth: maintained per-round contest. target_id -> caster_id. Each Round the caster
+	## re-contests (Earth+Insight vs Air+Insight); winning keeps the target immobilized + 2k2, losing
+	## frees them (link removed).
+	var tomb_links: Dictionary = {}
 	## s54.5 Manesuru Dark Mirror: target ids fully studied, target ids already mirrored, count spawned.
 	var mirror_studied: Dictionary = {}
 	var mirror_spawned: Dictionary = {}
@@ -2298,6 +2302,9 @@ static func execute_cast_maho(
 		"fear":
 			res["spell_fear"] = _apply_maho_fear(
 				state, caster_id, caster, target_id, target, eff, dice_engine)
+		"tomb":
+			res["spell_tomb"] = _apply_maho_tomb(
+				state, caster_id, target_id, target, eff, dice_engine)
 	state.combat_log.append({"type": "cast_maho", "round": state.combat.round_number,
 		"caster_id": caster_id, "spell_id": spell_id, "result": res})
 	return res
@@ -5393,6 +5400,32 @@ static func advance_round(
 	if not state.map.burning_tiles.is_empty():
 		FireSystem.process_round_end(state.map, state.weather, dice_engine)
 
+	# s43 Tomb of Earth: maintained per-round contest. Each Round the caster re-contests (Earth+Insight
+	# vs the target's Air+Insight); winning keeps the target immobilized and deals 2k2, losing frees them.
+	# The tomb collapses if either party dies. No-op when no tombs are active.
+	for tid in state.tomb_links.keys():
+		var _tomb_cid: int = int(state.tomb_links[tid])
+		var _tomb_t: L5RCharacterData = chars_by_id.get(tid, state.combatants.get(tid, null))
+		var _tomb_c: L5RCharacterData = chars_by_id.get(_tomb_cid, state.combatants.get(_tomb_cid, null))
+		var _tomb_tp: IndividualCombat.Participant = state.combat.participants.get(tid, null)
+		if _tomb_t == null or _tomb_c == null or _tomb_tp == null \
+				or CharacterStats.is_dead(_tomb_t) or CharacterStats.is_dead(_tomb_c):
+			if _tomb_tp != null:
+				_tomb_tp.conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
+			state.tomb_links.erase(tid)
+			continue
+		var _ce: int = maxi(1, CharacterStats.get_ring_value(_tomb_c, Enums.Ring.EARTH))
+		var _ta: int = maxi(1, CharacterStats.get_ring_value(_tomb_t, Enums.Ring.AIR))
+		var _croll: int = dice_engine.roll_and_keep(_ce, _ce, true).total + _tomb_c.insight_rank
+		var _troll: int = dice_engine.roll_and_keep(_ta, _ta, true).total + _tomb_t.insight_rank
+		if _croll >= _troll:
+			if IndividualCombat.CONDITION_INCAPACITATED not in _tomb_tp.conditions:
+				_tomb_tp.conditions.append(IndividualCombat.CONDITION_INCAPACITATED)
+			WoundSystem.apply_damage(_tomb_t, dice_engine.roll_and_keep(2, 2, true).total, 0)
+		else:
+			_tomb_tp.conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
+			state.tomb_links.erase(tid)
+
 	# Persistent spell zones (Wall of Fire, Enticing the Dance of Flame, etc.) — no-op when empty.
 	if not state.spell_zones.is_empty():
 		_process_spell_zones(state, dice_engine)
@@ -5574,6 +5607,34 @@ static func _apply_maho_bleed(
 	return {"id": target_id, "bleed_per_round": wpr}
 
 
+## s43 Tomb of Earth (Earth 4): entomb the target — immobilize (incapacitated) + an initial 2k2, and
+## establish a maintained per-round contest (processed in advance_round). Cannot affect a target with 1+
+## full Rank of Taint (the earth will not hold the corrupt). The petrify-on-kill flavour is not modeled.
+static func _apply_maho_tomb(
+	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData,
+	eff: Dictionary, dice_engine: DiceEngine,
+) -> Dictionary:
+	if target == null or CharacterStats.is_dead(target):
+		return {"reason": "no_target"}
+	if MutationSystem.get_taint_rank(target.taint) >= 1:
+		return {"reason": "taint_immune"}
+	var rng: int = int(eff.get("range_tiles", 10))
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		var cp: Vector2i = state.positions[caster_id]
+		var tp2: Vector2i = state.positions[target_id]
+		if maxi(absi(cp.x - tp2.x), absi(cp.y - tp2.y)) > rng:
+			return {"reason": "out_of_range"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if p == null:
+		return {"reason": "not_in_combat"}
+	if IndividualCombat.CONDITION_INCAPACITATED not in p.conditions:
+		p.conditions.append(IndividualCombat.CONDITION_INCAPACITATED)
+	var dmg: int = dice_engine.roll_and_keep(2, 2, true).total
+	WoundSystem.apply_damage(target, dmg, 0)
+	state.tomb_links[target_id] = caster_id
+	return {"id": target_id, "immobilized": true, "damage": dmg}
+
+
 ## s43 Inspire Fear / Mists of Fear: a maho-induced fear — the target is Afraid (−1k0 to all rolls) for
 ## the duration, persisting independently of proximity via the `spell_afraid` timed modifier (which
 ## apply_fear_checks reads to keep AFRAID active). Optional Willpower save (Mists of Fear). Sets AFRAID
@@ -5625,7 +5686,8 @@ static func _npc_maybe_cast_maho(
 		for sid in MahoSpellLibrary.MAHO_COMBAT_EFFECTS:
 			var eff: Dictionary = MahoSpellLibrary.MAHO_COMBAT_EFFECTS[sid]
 			var k: String = String(eff.get("kind", ""))
-			if k != "status" and k != "debuff" and k != "damage" and k != "bleed" and k != "fear":
+			if k != "status" and k != "debuff" and k != "damage" and k != "bleed" and k != "fear" \
+					and k != "tomb":
 				continue
 			if not MahoSpellLibrary.supports_spell_ring(npc, sid):
 				continue

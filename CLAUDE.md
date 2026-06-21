@@ -8253,6 +8253,22 @@ template generators it depends on. Faithful summary of the fixes that landed:
   `apply_fear_checks` change is gated on the `spell_afraid` modifier (false in normal combat → unchanged).
   **10 maho combat effects total** (the 8 prior + Inspire Fear + Mists of Fear). DEFERRED: Tomb of Earth
   (maintained per-round contest), Blood Armor (damage-redirect), the Bleeding bandage cure, ~18 more.
+- **s43 maho IN TILE COMBAT — tranche 6: Tomb of Earth (2026-06-21, runtime-verified 8/8).** The last
+  distinct maho mechanism — a maintained per-round contested immobilize. New `"tomb"` effect kind +
+  `MapCombatState.tomb_links` (target_id → caster_id): `_apply_maho_tomb` immobilizes the target
+  (incapacitated) + deals an initial 2k2 + establishes the link (Taint-immune — a target with 1+ full
+  Rank of Taint cannot be entombed); a new per-round pass in `advance_round` re-contests each Round
+  (caster Earth+Insight vs target Air+Insight) — the caster keeps the target immobilized + 2k2 each round
+  until the target wins and breaks free, or either party dies (the tomb collapses). Gated on `tomb_links`
+  (empty in normal combat → zero regression). Runtime-verified 8/8 (Godot 4.6.2): cast immobilizes +
+  initial 2k2 + link; a strong-Earth caster maintains the tomb (target stays immobilized, 2k2/round); a
+  strong-Air target eventually breaks free; a Tainted target is immune; clone/maho-t1/t2/t4 drivers
+  re-pass. **11 maho combat effects total** (the maho-in-combat layer now covers status, debuff, buff,
+  damage [caster-ring + per-target-ring], DoT, fear [persistent], AoE, incapacitate [timed +
+  maintained-contest]). DEFERRED: Blood Armor (damage-redirect), No Pure Breaths (damage + persistent
+  debuff, ambiguous DR), Disrupt the Limb (limb-specific), Drain the Soul (trait reduction), the Bleeding
+  bandage cure, and the remaining out-of-combat/social maho. The clean-reuse maho combat set is now
+  comprehensive; the remainder need bespoke mechanics.
 - **s43 Grand-Map spell sweep COMPLETE (2026-06-11).** Audited all 46 maho spells
   for world-scale-wirable effects (persistent NPC/province state, no s40 combat or
   condition layer). **6 are wired** (Spreading the Darkness, Stealing the Soul,
