@@ -2570,6 +2570,11 @@ static func _apply_spell_debuff(
 			# s36 Judgment of Yomi: −1k0 to physical Skill checks (attack rolls) per Social or
 			# Spiritual Disadvantage the TARGET possesses (computed from the target, not the caster).
 			val = -_count_social_spiritual_disadvantages(target)
+		elif raw_val is String and raw_val == "chi_reversal_agility":
+			# s36 Chi Reversal: the caster flips the target's Fire-pair Traits (Agility<->Intelligence).
+			# The combat slice is the Agility change to attack rolls; clamped <= 0 (the caster only
+			# casts when the swap lowers the target's Agility — never accidentally buffs an enemy).
+			val = mini(0, target.intelligence - target.agility)
 		else:
 			val = _resolve_buff_value(caster, raw_val)
 		# s35 Haze of Battle: the target is forced into Full Attack Stance immediately and the
@@ -2685,6 +2690,9 @@ static func _resolve_buff_value(caster: L5RCharacterData, value) -> int:
 			"air_ring":
 				# s33 Air Kami's Blessing: +Air Ring to Armor TN (the combat slice).
 				return SpellSystem.get_ring_value(caster, Enums.Ring.AIR)
+			"water_school_rank":
+				# s36 Ebbing Strength: the caster transfers up to (Water School Rank) Strength.
+				return SpellSystem.get_effective_school_rank(caster, Enums.Ring.WATER)
 			"void_replace_weapon_skill":
 				# s37 Moment of Clarity: temporary Skill Ranks = Void Ring, REPLACING the existing
 				# rank (not cumulative). For a weapon skill the net attack-roll gain (a skill rank is

@@ -6266,6 +6266,23 @@ Earth->1, death-on-apply). See the "Pending Redesign — RESOLVED" entry for the
 147 combat effects total now; 73 COMBAT_ONLY gaps remain (all out-of-combat utility / flight / trait-swap
 / clone / water-terrain / anti-maho / PC-ASCII tools).
 
+### Spell coverage — trait-swap roll models batch 19 (2026-06-21, runtime-verified 4/4)
+The two trait-swap spells modeled as combat-roll-slice deltas (no trait bridge needed — a trait change's
+combat effect IS its roll change, the batch-11 pattern). **Chi Reversal** (Water 5) → a target-aware
+`debuff`: the caster flips the target's Fire-pair Traits (Agility<->Intelligence); the Agility drop
+lowers the target's attack rolls by `min(0, target Int − target Agility)` (clamped <= 0 — the caster
+only casts when the swap debuffs, never accidentally buffs an enemy; inert vs a high-Int target). The Int
+change + the other three pair options are out-of-combat. **Ebbing Strength** (Water 1) → an ally `buff`:
+the caster transfers up to (Water School Rank) Strength to the target, modeled as the ally's
+`spell_damage_rolled` += Water school rank (the benefit slice; the caster's Strength loss is not modeled,
+near-inert for a non-melee caster). Runtime-verified 4/4: Chi Reversal −3 attack vs a high-Agility(5)/
+low-Int(2) foe, inert (0) vs a high-Int foe; Ebbing Strength +5 ally damage. No regression (additive
+formula + debuff branch). 149 combat effects total; 71 COMBAT_ONLY gaps remain — every spell with a
+combat slice expressible through the existing hooks (damage/status/heal/zone/ward/buff/debuff/ring-change/
+roll-model) is now wired; the remainder need new subsystems (illusory-decoy / clone / VP-pool-share /
+range-gated perception), absent infra (water-terrain maps / flight / tile-maho), or have no combat
+effect at all (divination / messaging / social / item-imbue / PC-ASCII tools).
+
 ### Spell coverage session summary (2026-06-20, running)
 This session has wired **~69 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
