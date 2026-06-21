@@ -4753,6 +4753,45 @@ not a live session. These spells live in CombatController, not `SpellSystem.SPEL
 are now wired; the remaining illusion gaps are out-of-combat (cloud_the_mind, garbled_tongue,
 the_world_is_truth) or the orchestrator turn-based pair (mists_of_illusion, ever_changing_waves).
 
+### s33/s36 illusion — tranche 3: the turn-based pair (mists_of_illusion + ever_changing_waves) (2026-06-21, owner-authorized, runtime-verified)
+The two combat-relevant illusion spells in the orchestrator turn-based layer (not the
+CombatController stealth layer). All values GDD-given.
+- **Ever-Changing Waves** (Water 5, s36) — transform into a natural creature, keeping Mental
+  Traits and the HIGHER of own/creature Physical Traits. Wired as a self `buff` (no new kind)
+  whose combat slice = the Physical-trait maxes as roll deltas, computed caster-relative in
+  `_resolve_buff_value`: `transform_strength` → `spell_damage_rolled += max(0, formStr − ownStr)`
+  (Strength drives damage dice), `transform_agility` → `spell_attack_rolled += max(0, formAgi −
+  ownAgi)`, `transform_armor_tn` → `armor_tn += max(0, formRef − ownRef) × 5`. Form = the s54.1
+  **bear** (`TRANSFORM_FORM_BEAR` str 7/agi 4/ref 3 — the real transcribed stat, not invented;
+  the GDD allows "any natural creature", bear is the iconic strong-bodied default). 1 hour ≈
+  skirmish (9999). Routes through the verified `buff` dispatch (the NPC self-buff path picks it
+  up for a Water-5 shugenja; PC cast = future UI). LIMITATIONS: only the Physical-trait combat
+  slice is modeled — the creature's natural weapon is represented by the Strength→damage delta
+  (the powerful body, no separate weapon-profile swap to avoid double-counting); the
+  wound-capacity boost (Stamina→Earth) and natural sensory/special abilities are deferred (need
+  the ring-change layer / a creature-ability consumer).
+- **Mists of Illusion** (Air 2, s33) — a stationary visual-only phantom. Dedicated tile-placement
+  executor `execute_cast_mists(state, caster, tx, ty)` (a tile placement, not a target-effect):
+  Complex Action, cast roll vs the spell TN, slot consumed; places a phantom at a passable,
+  unoccupied tile within 20' (4 tiles). `MapCombatState.illusion_phantoms` stores them. The NPC
+  **lure** fires only in `execute_npc_turn`'s no-target branch (`best_target < 0`): a visible
+  phantom (LOS + within the NPC's free-move reach via `_nearest_visible_phantom`) draws the NPC —
+  it drifts to the illusion and strikes it (visual-only → revealed/dispelled the instant it is
+  struck), wasting the turn. Faithful: a stationary visual decoy fools an enemy only when it
+  cannot compare it to the real thing (the PC has broken line of sight). An NPC with a real
+  target ignores the phantom. The NPC cast picker never auto-casts mists (a PC tactical tool;
+  PC cast = future UI). Phantoms are skirmish-length (no expiry timer — the minute→skirmish
+  convention; few casts per fight; struck phantoms dispel). No UI token yet (the PC can't see
+  their own illusion — UI-deferred, same PC-travel HOLD as the whole ASCII stack).
+RUNTIME-VERIFIED (Godot 4.6.2 headless, 19/19): transform deltas (weak str2→+5 damage/+2 attack/
++5 Armor TN, strong caster→0 no-downgrade), the buff installs the 3 timed modifiers + Armor TN
+rises 15→20; mists cast gates (out-of-range/wall/occupied + success adds a phantom + consumes
+Complex); the NPC lure strikes + dispels a phantom when it has no real target, and ignores it
+when a real target is present. With this, every illusion spell with a clean combat effect is
+wired (CombatController disguise/heart-betrays/quiescence/moon + the orchestrator pair); the
+illusion residue is out-of-combat (cloud_the_mind, garbled_tongue, the_world_is_truth) or the
+overland seeking_the_way false trail.
+
 ### s54.10 Konak Jiji Lure + Deceptive Weight — wired into tile combat (2026-06-16, owner-approved, static-only)
 Owner decisions (2026-06-16): trigger = **adjacency + resist roll**; pin = **grapple state**
 (escape Athletics/Strength TN 40). The GDD gives the spring (auto-hit + 400 lb pin, TN 40

@@ -189,6 +189,8 @@ class MapCombatState:
 	## per-kind fields (entry_condition, save, save_tn, tn_penalty for wards)}. Processed each round
 	## in advance_round; wards are read at cast time in resolve_cast.
 	var spell_zones: Array = []
+	## s33 Mists of Illusion: stationary visual-only phantoms — {x, y, caster_id}.
+	var illusion_phantoms: Array = []
 
 
 # =============================================================================
@@ -2585,6 +2587,65 @@ static func _apply_spell_cleanse(
 ## via the round-scoped timed-modifier layer (auto-expires in advance_round). target "self" buffs
 ## the caster (range ignored); "ally" buffs a living same-faction target within Touch/range.
 ## Each mod is {kind, value} where value is an int or a formula string resolved against the caster.
+# =============================================================================
+# -- Mists of Illusion (s33 Air 2): stationary visual-only phantom -------------
+# =============================================================================
+
+## Place a visual-only phantom at a passable, unoccupied tile within 20' (4 tiles)
+## of the caster. A Complex Action; cast roll vs the spell TN; slot consumed. The
+## phantom draws a lured enemy's strike when that enemy has no real target
+## (execute_npc_turn's no-target branch), wasting the enemy's turn and dispelling
+## the phantom (visual-only -> revealed the instant it is struck).
+static func execute_cast_mists(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	tx: int, ty: int, dice_engine: DiceEngine,
+) -> Dictionary:
+	if caster == null or CharacterStats.is_dead(caster):
+		return {"success": false, "reason": "caster_dead"}
+	if not state.positions.has(caster_id):
+		return {"success": false, "reason": "not_in_combat"}
+	if not SpellSystem.can_cast(caster, "mists_of_illusion"):
+		return {"success": false, "reason": "cannot_cast"}
+	var ts: TurnState = state.turn_states.get(caster_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_action"}
+	if tx < 0 or ty < 0 or tx >= state.map.width or ty >= state.map.height:
+		return {"success": false, "reason": "out_of_bounds"}
+	var cp: Vector2i = state.positions[caster_id]
+	if maxi(absi(tx - cp.x), absi(ty - cp.y)) > 4:
+		return {"success": false, "reason": "out_of_range"}
+	if not MovementSystem.is_passable(state.map.get_tile(tx, ty)):
+		return {"success": false, "reason": "impassable_tile"}
+	for pid in state.positions:
+		var pp: Vector2i = state.positions[pid]
+		if pp.x == tx and pp.y == ty:
+			return {"success": false, "reason": "tile_occupied"}
+	ts.consume_complex()
+	var res: Dictionary = SpellSystem.resolve_cast(caster, "mists_of_illusion", dice_engine)
+	if not res.get("success", false):
+		return {"success": false, "reason": "cast_failed", "roll": res}
+	state.illusion_phantoms.append({"x": tx, "y": ty, "caster_id": caster_id})
+	state.combat_log.append({"type": "mists_of_illusion", "round": state.combat.round_number,
+		"caster_id": caster_id, "x": tx, "y": ty})
+	return {"success": true, "x": tx, "y": ty}
+
+## Nearest visible phantom to an NPC within `reach` tiles (path-distance proxy via
+## Chebyshev + LOS), or {} if none. Used by the no-target lure.
+static func _nearest_visible_phantom(state: MapCombatState, npc_id: int, reach: int) -> Dictionary:
+	if state.illusion_phantoms.is_empty() or not state.positions.has(npc_id):
+		return {}
+	var np: Vector2i = state.positions[npc_id]
+	var best: Dictionary = {}
+	var best_d: int = reach + 1
+	for ph in state.illusion_phantoms:
+		var pp: Vector2i = Vector2i(int(ph["x"]), int(ph["y"]))
+		var d: int = maxi(absi(pp.x - np.x), absi(pp.y - np.y))
+		if d <= reach and d < best_d and _has_los(state.map, np, pp):
+			best = ph
+			best_d = d
+	return best
+
+
 static func _apply_spell_buff(
 	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
 	target_id: int, target: L5RCharacterData, eff: Dictionary,
@@ -2843,6 +2904,12 @@ static func _count_social_spiritual_disadvantages(c: L5RCharacterData) -> int:
 
 
 # Resolve a buff mod value: a raw int, or a GDD formula keyed off the caster's rings/school rank.
+# s36 Ever-Changing Waves natural-creature form: the s54.1 base bear (transcribed in
+# SpiritBestiary.chikushudo_catalog "spirit_bear"). The GDD allows "any natural creature";
+# the iconic strong-bodied combat form is the default. Real s54.1 stats — not invented.
+const TRANSFORM_FORM_BEAR: Dictionary = {"strength": 7, "agility": 4, "reflexes": 3}
+
+
 static func _resolve_buff_value(caster: L5RCharacterData, value) -> int:
 	if value is String:
 		match value:
@@ -2854,6 +2921,17 @@ static func _resolve_buff_value(caster: L5RCharacterData, value) -> int:
 					+ SpellSystem.get_effective_school_rank(caster, Enums.Ring.EARTH)
 			"earth_ring":
 				return SpellSystem.get_ring_value(caster, Enums.Ring.EARTH)
+			"transform_strength":
+				# s36 Ever-Changing Waves: transform into a natural creature, keeping the higher of
+				# own/creature Physical Traits. Strength drives damage dice; the net rolled-damage gain
+				# is max(0, formStrength - ownStrength). Form = the s54.1 bear (str 7, agi 4, ref 3).
+				return maxi(0, TRANSFORM_FORM_BEAR["strength"] - caster.strength)
+			"transform_agility":
+				# s36 Ever-Changing Waves: Agility drives attack dice -> max(0, formAgi - ownAgi).
+				return maxi(0, TRANSFORM_FORM_BEAR["agility"] - caster.agility)
+			"transform_armor_tn":
+				# s36 Ever-Changing Waves: Reflexes drives Armor TN (x5) -> max(0, formRef - ownRef) x5.
+				return maxi(0, TRANSFORM_FORM_BEAR["reflexes"] - caster.reflexes) * 5
 			"air_ring":
 				# s33 Air Kami's Blessing: +Air Ring to Armor TN (the combat slice).
 				return SpellSystem.get_ring_value(caster, Enums.Ring.AIR)
@@ -6043,7 +6121,25 @@ static func execute_npc_turn(
 		best_target = state.duel_target_id
 
 	if best_target < 0:
-		# No visible target — do nothing (or wait).
+		# Mists of Illusion (s33): with no real target in sight, a visible phantom within
+		# reach lures the NPC — it drifts to the illusion and strikes it (visual-only, so it
+		# is revealed the instant it is struck), wasting the turn. This is the spell's faithful
+		# use: a stationary visual decoy fools an enemy only when it cannot compare it to the
+		# real thing (the PC has broken line of sight).
+		var lure_reach: int = free_move_budget(state, npc_id, npc)
+		var phantom: Dictionary = _nearest_visible_phantom(state, npc_id, lure_reach + 1)
+		if not phantom.is_empty():
+			var pt: Vector2i = Vector2i(int(phantom["x"]), int(phantom["y"]))
+			var npd: Vector2i = state.positions[npc_id]
+			if maxi(absi(pt.x - npd.x), absi(pt.y - npd.y)) > 1:
+				execute_move(state, npc_id, pt, lure_reach, npc, dice_engine, "free")
+				npd = state.positions[npc_id]
+			if maxi(absi(pt.x - npd.x), absi(pt.y - npd.y)) <= 1:
+				var ts_l: TurnState = state.turn_states.get(npc_id, null)
+				if ts_l != null and ts_l.can_use_complex():
+					ts_l.consume_complex()
+				state.illusion_phantoms.erase(phantom)
+				actions_taken.append({"type": "attack_illusion", "x": pt.x, "y": pt.y, "dispelled": true})
 		return {"actions": actions_taken}
 
 	var weapon_name: String = IndividualCombat.pick_best_weapon(npc)

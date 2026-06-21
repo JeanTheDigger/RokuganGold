@@ -436,6 +436,19 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "reduction", "value": "earth_plus_rank"}]},  # Earth 1: Reduction = Earth + School Rank
 	"cloak_of_the_miya": {"kind": "buff", "target": "self", "duration_rounds": 5,
 		"mods": [{"kind": "armor_tn", "value": "water_plus_rank"}]},  # Water 2: Armor TN += Water + School Rank
+	# s36 Ever-Changing Waves (Water 5): transform into a natural creature — keep Mental Traits,
+	# take the higher of own/creature Physical Traits + the creature's natural body. The combat
+	# slice = the Physical-trait maxes as roll deltas (Strength->damage, Agility->attack,
+	# Reflexes->Armor TN), computed caster-relative vs the s54.1 bear form. 1 hour ~ skirmish.
+	"ever_changing_waves": {"kind": "buff", "target": "self", "duration_rounds": 9999,
+		"mods": [
+			{"kind": "spell_damage_rolled", "value": "transform_strength"},
+			{"kind": "spell_attack_rolled", "value": "transform_agility"},
+			{"kind": "armor_tn", "value": "transform_armor_tn"},
+		]},
+	# s33 Mists of Illusion (Air 2): a stationary visual-only phantom (placed via the dedicated
+	# execute_cast_mists path, not this dispatch — a tile placement, not a target-effect).
+	"mists_of_illusion": {"kind": "mists", "range_tiles": 4},
 	"biting_steel": {"kind": "buff", "target": "self", "duration_rounds": 10,
 		"mods": [{"kind": "spell_damage_rolled", "value": 1}, {"kind": "spell_damage_kept", "value": 1}]},  # Fire 1: DR +1k1
 	"burning_kiss_of_steel": {"kind": "buff", "target": "self", "duration_rounds": 50,
