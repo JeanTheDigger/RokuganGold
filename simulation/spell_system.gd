@@ -389,6 +389,9 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "spell_attack_rolled", "value": "chi_reversal_agility"}]},  # Water 5: flip the target's Fire-pair Traits (Agility<->Intelligence) -> the Agility drop lowers attack rolls (combat slice; the Int change + other pair options are out-of-combat). Inert if the swap wouldn't lower Agility.
 	"ebbing_strength": {"kind": "buff", "target": "ally", "range_tiles": 4, "duration_rounds": 3,
 		"mods": [{"kind": "spell_damage_rolled", "value": "water_school_rank"}]},  # Water 1: transfer up to (Water School Rank) Strength caster->target -> the ally gains +damage (the benefit slice; the caster's Strength loss is not modeled, near-inert for a non-melee caster).
+	# Anti-Taint buff (2026-06-21): Strength of the Crow.
+	"strength_of_the_crow": {"kind": "buff", "target": "self", "duration_rounds": 9999,
+		"mods": [{"kind": "taint_resist", "value": 5}]},  # Earth 3: +5k5 to rolls resisting NEW Taint. Read at the in-combat Taint-inflict sites (Gagoze gaze contested Willpower; Pekkle Retributive Taint burst Earth roll). Self-buff (the NPC self-buff path; the GDD "target individual" touch-ally variant is a manual PC option). The s56.16-exposure corrupted-Shozai check (a separate system) is not covered.
 	# Clone (2026-06-21): Divide the Soul — a second body that acts independently.
 	"divide_the_soul": {"kind": "clone"},  # Void 5: the caster exists in two places; the second manifestation acts independently on the caster's side (effectively two turns/Round). If either dies, both die (shared-death wired). Combined-wounds-on-expiry + the clone's own casting are not modeled (the clone is a melee body; spells_known cleared to prevent recursive cloning).
 	# Illusory decoy (2026-06-21): Way of Deception — a perfect mirrored duplicate of the caster.

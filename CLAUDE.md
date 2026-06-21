@@ -6335,6 +6335,21 @@ routed through `_apply_hit` (a zone/instant-kill) won't cascade. 153 combat effe
 gaps remain (out-of-combat utility / mass-battle / flight / water-terrain / anti-maho / disguise /
 VP-pool-share / PC-ASCII tools — none expressible without a further new subsystem or absent infra).
 
+### Spell coverage — anti-Taint buff (2026-06-21, runtime-verified)
+**Strength of the Crow** (Earth 3) — +5k5 to rolls resisting NEW Taint. Wired as a self `buff` with a new
+`taint_resist` mod, READ at the two in-combat Taint-inflict sites: the Gagoze gaze (the victim's contested
+Willpower roll) and the Pekkle Retributive Taint burst (each mortal's Earth save vs TN 30) — both add
+`+taint_resist k taint_resist` to the resisting roll. Verified: the cast applies `taint_resist=5` to the
+caster (clean isolated driver: `applied:[{taint_resist,5}]`, on-caster total 5); a buffed victim takes
+Taint at the gaze strictly less than unbuffed. The buff's practical value concentrates at the Pekkle
+TN-30 save (the Gagoze gaze rarely succeeds against any resisting victim — a separate Gagoze-puppet
+willpower concern). LIMITATIONS: self-buff only (the NPC self-buff path; the GDD "target individual"
+touch-ally variant is a manual PC option); the s56.16-exposure corrupted-Shozai Taint check (a separate
+SpiritualExposureSystem, not the main orchestrator) is not covered. 154 combat effects total; 66
+COMBAT_ONLY gaps remain — the residue is VP-economy (Kharmic Intent / Altering the Course, scattered
+VP-spend integration), disguise (no faction-combat effect), social-resist (out of combat), mass-battle /
+flight / water-terrain / anti-maho (no tile consumer / absent infra), and out-of-combat utility.
+
 ### Spell coverage session summary (2026-06-20, running)
 This session has wired **~69 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +

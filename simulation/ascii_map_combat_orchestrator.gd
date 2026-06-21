@@ -7092,7 +7092,10 @@ static func _npc_maybe_taint_gaze(
 	used[victim_id] = true
 	state.taint_gaze_used[gazer_id] = used
 	var ow: int = dice.roll_and_keep(maxi(1, gazer.willpower), maxi(1, gazer.willpower), true).total
-	var vw: int = dice.roll_and_keep(maxi(1, victim.willpower), maxi(1, victim.willpower), true).total
+	# s37 Strength of the Crow: +taint_resist k taint_resist to the victim's roll to resist new Taint.
+	var v_gp = state.combat.participants.get(victim_id, null)
+	var v_tr: int = IndividualCombat.get_timed_modifier_total(v_gp, "taint_resist") if v_gp != null else 0
+	var vw: int = dice.roll_and_keep(maxi(1, victim.willpower + v_tr), maxi(1, victim.willpower + v_tr), true).total
 	if ow > vw:
 		victim.taint = minf(100.0, victim.taint + 1.0)
 		return {"success": true, "victim": victim_id, "tainted": true}
@@ -7846,7 +7849,10 @@ static func _apply_retributive_taint(state: MapCombatState, dead_creature: L5RCh
 		if c == null or CharacterStats.is_dead(c) or c.spirit_creature != null:
 			continue
 		var earth: int = mini(c.stamina, c.willpower)
-		if dice.roll_and_keep(maxi(1, earth), maxi(1, earth), true).total < 30:
+		# s37 Strength of the Crow: +taint_resist k taint_resist to resist new Taint.
+		var c_pp = state.combat.participants.get(cid, null)
+		var c_tr: int = IndividualCombat.get_timed_modifier_total(c_pp, "taint_resist") if c_pp != null else 0
+		if dice.roll_and_keep(maxi(1, earth + c_tr), maxi(1, earth + c_tr), true).total < 30:
 			c.taint = minf(100.0, c.taint + float(dice.roll_die(10)))
 			tainted += 1
 	return tainted
