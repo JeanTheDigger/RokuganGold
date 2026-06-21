@@ -167,6 +167,9 @@ class MapCombatState:
 	var duel_offered: bool = false
 	## s54.5 spawn-on-death: monotonic counter for unique negative spawn instance ids.
 	var spawn_counter: int = 0
+	## s37 Divide the Soul: bidirectional caster<->clone link (id -> partner id). If either
+	## manifestation dies, both die.
+	var divide_soul_pairs: Dictionary = {}
 	## s54.5 Manesuru Dark Mirror: target ids fully studied, target ids already mirrored, count spawned.
 	var mirror_studied: Dictionary = {}
 	var mirror_spawned: Dictionary = {}
@@ -2110,6 +2113,12 @@ static func execute_cast_spell(
 			"type": "spell_summon", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "summon": res["summon"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "clone":
+		res["clone"] = _apply_spell_clone(state, caster_id, caster, dice_engine)
+		state.combat_log.append({
+			"type": "spell_clone", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "clone": res["clone"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "banish_spirit":
 		res["banished"] = _apply_spell_banish_spirit(state, caster_id, caster, target_id, target, dice_engine)
 		state.combat_log.append({
@@ -3182,6 +3191,46 @@ static func _apply_spell_summon(
 		ids.append(sid)
 	return {"summon_ids": ids, "faction": faction, "element": element, "ring": ring,
 		"kami_id": (ids[0] if not ids.is_empty() else 0)}
+
+
+## s37 Divide the Soul: the caster manifests a second body that acts independently on the caster's
+## side. The clone is a deep copy of the caster (combat stats, weapons) with fresh Wounds, placed near
+## the caster and driven by the companion AI — so the caster effectively acts twice per Round. Shared
+## death (if either dies, both die) is wired via state.divide_soul_pairs + _apply_divide_soul_shared_death
+## (the operative faithful rule). The clone's spells_known is cleared to prevent recursive self-cloning;
+## the GDD "either may cast, only one per Round" nuance and "Wounds combined when the spell ends" (the
+## 1-minute duration outlasts a typical skirmish) are not modeled.
+static func _apply_spell_clone(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData, dice_engine: DiceEngine,
+) -> Dictionary:
+	var tile: Vector2i = _free_tile_near(state, state.positions.get(caster_id, Vector2i.ZERO))
+	if tile.x < 0:
+		return {"clone_id": 0, "placed": false}
+	state.spawn_counter += 1
+	var sid: int = -300000 - state.spawn_counter  # unique negative id for clones
+	var clone: L5RCharacterData = caster.duplicate(true)
+	clone.character_id = sid
+	clone.wounds_taken = 0          # a fresh body (Wounds are separate during the spell)
+	clone.spells_known = []         # prevent recursive self-cloning
+	clone.is_pc = false             # driven by the companion AI, not a player
+	clone.character_name = caster.character_name + " (manifestation)"
+	var faction: String = String(state.factions.get(caster_id, FACTION_PLAYER))
+	if faction == FACTION_ENEMY:
+		add_enemy(state, clone, tile.x, tile.y, dice_engine)
+	else:
+		var comp := CompanionData.new()
+		comp.companion_id = sid
+		comp.type = CompanionData.CompanionType.NAMED_ALLY
+		comp.display_name = clone.character_name
+		comp.character_id = sid
+		comp.command = CompanionData.Command.FOLLOW
+		comp.command_target_id = caster_id
+		comp.yu_rank = 10  # never breaks morale
+		add_companion(state, comp, clone, tile.x, tile.y, dice_engine)
+	# Bidirectional shared-death link.
+	state.divide_soul_pairs[caster_id] = sid
+	state.divide_soul_pairs[sid] = caster_id
+	return {"clone_id": sid, "placed": true, "faction": faction}
 
 
 ## Build a clay soldier (s34 Soldiers of Clay): Traits/Rings = caster's Earth Ring, attacks with a
@@ -7640,11 +7689,28 @@ static func _apply_hit(
 		t_p.death_spawn_done = true
 		_apply_retributive_taint(state, target, dice_engine)
 
+	# Divide the Soul (s37 Void): if either manifestation dies, both die.
+	if CharacterStats.is_dead(target) and state.divide_soul_pairs.has(target.character_id):
+		_apply_divide_soul_shared_death(state, target.character_id)
+
 	return {
 		"damage": wd_result.get("final_damage", raw),
 		"wounds": wd_result.get("final_damage", raw),
 		"dead": CharacterStats.is_dead(target),
 	}
+
+
+## s37 Divide the Soul shared death: when one manifestation (caster or clone) dies, the partner
+## dies too. Sets the partner's Wounds lethal and breaks the link (idempotent — the partner's own
+## death does not re-fire because the link is erased before the partner is killed).
+static func _apply_divide_soul_shared_death(state: MapCombatState, dead_id: int) -> void:
+	var partner_id: int = int(state.divide_soul_pairs.get(dead_id, 0))
+	# Break the bidirectional link first so killing the partner does not recurse.
+	state.divide_soul_pairs.erase(dead_id)
+	state.divide_soul_pairs.erase(partner_id)
+	var partner = state.combatants.get(partner_id, null)
+	if partner != null and not CharacterStats.is_dead(partner):
+		partner.wounds_taken = maxi(partner.wounds_taken, CharacterStats.get_total_wound_capacity(partner) + 1)
 
 
 ## Disease contraction (s54.5/s54.11): a wounding hit by a disease creature may infect a

@@ -6315,6 +6315,26 @@ combat cluster (Way of Deception, The Eye Shall Not See, The False Legion) is no
 illusion gaps are disguise (no faction-combat effect), the true clone (Divide the Soul, a second-body
 subsystem), and out-of-combat utility. 152 combat effects.
 
+### Spell coverage — clone subsystem batch 22 (2026-06-21, runtime-verified 14/14)
+**Divide the Soul** (Void 5, Ishiken) — the caster manifests a SECOND body that acts independently on the
+caster's side (effectively two turns/Round). The first genuine clone subsystem (not a decoy): a new
+`clone` effect kind + `_apply_spell_clone` deep-copies the caster into a fresh-Wounds body, places it
+near the caster via `_free_tile_near`, and adds it as a NAMED_ALLY companion (so the proven companion AI
+drives it). **Shared death** (the operative faithful rule — "if either manifestation dies, both die") is
+wired via a new bidirectional `MapCombatState.divide_soul_pairs` link + `_apply_divide_soul_shared_death`,
+fired from `_apply_hit` after a lethal hit on either body (the link is erased before killing the partner
+so it can't recurse). The clone's `spells_known` is cleared to prevent recursive self-cloning, and
+`is_pc=false` routes it through the NPC/companion turn loop. Gated on `divide_soul_pairs.has(...)` (empty
+in normal combat → zero regression). Runtime-verified 14/14 (real floor map): clone placed + in
+combatants/turn_order on the caster's faction, copies the caster's skills, fresh Wounds, spells cleared,
+pair linked both ways; shared death fires BOTH directions (the helper kills the partner; a real attack
+through `_apply_hit` killing the caster kills the clone). LIMITATIONS: "Wounds combined when the spell
+ends" is not modeled (the 1-minute duration outlasts a typical skirmish); the clone cannot cast (melee
+body only — the GDD "either may cast, one per Round" nuance is dropped to avoid recursion); a death NOT
+routed through `_apply_hit` (a zone/instant-kill) won't cascade. 153 combat effects total; 67 COMBAT_ONLY
+gaps remain (out-of-combat utility / mass-battle / flight / water-terrain / anti-maho / disguise /
+VP-pool-share / PC-ASCII tools — none expressible without a further new subsystem or absent infra).
+
 ### Spell coverage session summary (2026-06-20, running)
 This session has wired **~69 combat spells across all 5 elements** (initial all-element pass + clean-wins
 batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
