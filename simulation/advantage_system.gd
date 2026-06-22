@@ -298,7 +298,12 @@ static func get_disadvantage_points(dis: DisadvantageData) -> int:
 ## True when this Disadvantage's combat effects are transiently suppressed (s38
 ## Banish All Shadows). Read at the top of the combat-roll disadvantage loops.
 static func _is_suppressed(character: L5RCharacterData, dis_type: Enums.Disadvantage) -> bool:
-	return character.suppressed_disadvantage_type == int(dis_type)
+	if character.suppressed_disadvantage_type == int(dis_type):
+		return true
+	# Touch of Air's Grace (s33): negates the Disturbing Countenance Disadvantage while active.
+	if character.touch_of_airs_grace_active and dis_type == Enums.Disadvantage.DISTURBING_COUNTENANCE:
+		return true
+	return false
 
 
 ## Count of Spiritual Advantages / Disadvantages (s38 Sense the Balance).
@@ -964,8 +969,14 @@ static func get_target_detection_tn_bonus(target: L5RCharacterData) -> int:
 # ---------------------------------------------------------------------------
 
 static func get_target_temptation_bonus(target: L5RCharacterData, attacker_gender_matches: bool) -> int:
-	if attacker_gender_matches and has_advantage(target, Enums.Advantage.DANGEROUS_BEAUTY):
+	if not attacker_gender_matches:
+		return 0
+	if has_advantage(target, Enums.Advantage.DANGEROUS_BEAUTY):
 		return 1  # +1k0 rolled
+	# Touch of Air's Grace (s33) grants the Dangerous Beauty effect when the target lacks
+	# Disturbing Countenance (per "if the target lacks it, grant the Advantage instead").
+	if target.touch_of_airs_grace_active and not has_disadvantage(target, Enums.Disadvantage.DISTURBING_COUNTENANCE):
+		return 1
 	return 0
 
 

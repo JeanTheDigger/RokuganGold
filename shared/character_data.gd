@@ -84,6 +84,12 @@ var spell_void_bonus_used: int = 0
 # intimidation call chains that lack ic_day; cleared by a daily orchestrator pass (1-hour RAW
 # duration ~ the IC day). True = active.
 @export var soul_of_stone_active: bool = false
+# s33 Touch of Air's Grace (Air 3, Illusion): the Air kami enhance the target's beauty. While
+# active: negates the Disturbing Countenance Disadvantage (via AdvantageSystem._is_suppressed),
+# and — if the target lacks Disturbing Countenance — grants the Dangerous Beauty Advantage
+# effect. (Benten's Curse/Blessing half is inert: those traits are not modelled.) Boolean,
+# cleared by the daily orchestrator pass (1-hour RAW duration ~ the IC day). True = active.
+@export var touch_of_airs_grace_active: bool = false
 
 # -- Spells (shugenja only) ----------------------------------------------------
 

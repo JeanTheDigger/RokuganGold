@@ -557,6 +557,25 @@ static func activate_soul_of_stone(
 	return res
 
 
+## s33 Touch of Air's Grace (Air 3, Illusion) — Touch, 1 target. On a successful cast the
+## target's beauty is enhanced for the IC day: negates Disturbing Countenance (its +5 social
+## TN penalty), or — if the target lacks it — grants the Dangerous Beauty effect. Self-cast when
+## target is null. The Benten's Curse/Blessing half is inert (those traits are not modelled).
+static func activate_touch_of_airs_grace(
+	caster: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	target: L5RCharacterData = null
+) -> Dictionary:
+	if not can_cast(caster, "touch_of_airs_grace"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	var beneficiary: L5RCharacterData = target if target != null else caster
+	var res: Dictionary = resolve_cast(caster, "touch_of_airs_grace", dice, 0, beneficiary, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		beneficiary.touch_of_airs_grace_active = true
+		res["target_id"] = beneficiary.character_id
+	return res
+
+
 ## s33 Cloud the Mind (Air 5) — blasphemous memory tampering (owner-simplified design: no
 ## day-granular timestamps). On a successful Contested Air (caster) vs Earth (target) roll the
 ## target's known topics are wiped COMPLETELY; the caster may implant chosen topics — real

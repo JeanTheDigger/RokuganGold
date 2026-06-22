@@ -163,7 +163,7 @@ static func advance_day(
 	_populate_military_data(military_data, companies)
 
 	_clear_stale_context_flags(world_states)
-	_clear_soul_of_stone_buffs(characters)
+	_clear_daily_spell_buffs(characters)
 	_inject_kolat_objective_flags(world_states, objectives_map)
 	_expire_province_weather(provinces, ic_day)
 
@@ -5944,14 +5944,17 @@ static func _process_flee_logistics(
 # (CommuneSystem.commune_reveal), which performs the reveal — e.g. Air detects a covert
 # s33 Cloud the Mind tampering crime and exposes it to the communer.
 
-# -- Soul of Stone daily clear (s34) -------------------------------------------
-# The Earth 1 buff lasts ~the IC day it was cast (1-hour RAW duration at this
-# granularity). Cleared at the start of each day, before actions run, so a buff
-# cast during the day survives that day's resolution and lapses the next morning.
-static func _clear_soul_of_stone_buffs(characters: Array) -> void:
+# -- Daily spell-buff clear (s33/s34) ------------------------------------------
+# Boolean spell buffs that last ~the IC day they were cast (sub-day RAW durations
+# at this granularity): Soul of Stone (s34), Touch of Air's Grace (s33). Cleared at
+# the start of each day, before actions run, so a buff cast during the day survives
+# that day's resolution and lapses the next morning.
+static func _clear_daily_spell_buffs(characters: Array) -> void:
 	for c: L5RCharacterData in characters:
 		if c.soul_of_stone_active:
 			c.soul_of_stone_active = false
+		if c.touch_of_airs_grace_active:
+			c.touch_of_airs_grace_active = false
 
 
 static func _process_commune_writebacks(
