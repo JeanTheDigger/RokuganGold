@@ -62,6 +62,11 @@ var spell_void_bonus_used: int = 0
 # Just-in-time per-tick activation (SkillResolver); an entry == current ic_day
 # means the buff is active for that tick. Stale entries are ignored/overwritten.
 @export var active_kiho_buffs: Dictionary = {}
+# s37 Altering the Course (Void 2, ishiken): the IC day this spell is active for.
+# When == the current ic_day, the caster may spend MULTIPLE Void Points on a single
+# SkillResolver roll (+NkN) instead of the normal one-per-roll cap. -1 = inactive.
+# (1-minute RAW duration modelled per-tick, matching the kiho-buff convention.)
+@export var altering_course_ic_day: int = -1
 
 # -- Spells (shugenja only) ----------------------------------------------------
 

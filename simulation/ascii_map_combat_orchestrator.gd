@@ -3968,6 +3968,7 @@ static func execute_void_spend(
 	state: MapCombatState,
 	char_id: int,
 	character: L5RCharacterData,
+	count: int = 1,
 ) -> Dictionary:
 	if CharacterStats.is_dead(character):
 		return {"success": false, "reason": "character_is_dead"}
@@ -3978,7 +3979,10 @@ static func execute_void_spend(
 	if p == null:
 		return {"success": false, "reason": "participant_missing"}
 
-	if p.void_spent_this_round:
+	# s37 Altering the Course: while active, the once-per-round cap is lifted and several Void
+	# Points may be spent on one roll (+NkN). Otherwise the normal one-per-round rule applies.
+	var multi: bool = IndividualCombat.get_timed_modifier_total(p, "multi_void_spend") > 0
+	if p.void_spent_this_round and not multi:
 		return {"success": false, "reason": "void_already_spent_this_round"}
 
 	# s54.12 Furaribi Soul Touch: a touched character cannot spend Void Points.
@@ -3986,23 +3990,25 @@ static func execute_void_spend(
 	if p.void_locked or IndividualCombat.get_timed_modifier_total(p, "void_locked") > 0:
 		return {"success": false, "reason": "void_locked"}
 
-	# Spend VP for +1k1 on next roll (GDD s40). Must check success BEFORE
-	# marking the once-per-round slot consumed.
-	var result: Dictionary = VoidSystem.spend_for_roll(character)
+	# Spend VP for +1k1 each on the next roll (GDD s40; +NkN under Altering the Course). Must
+	# check success BEFORE marking the once-per-round slot consumed.
+	var n: int = maxi(1, count) if multi else 1
+	var result: Dictionary = VoidSystem.spend_n_for_roll(character, n)
 	if not result.get("success", false):
 		return {"success": false, "reason": "no_void_points"}
 
 	p.void_spent_this_round = true
-	p.void_roll_pending_rolled = result.get("rolled_bonus", 1)
-	p.void_roll_pending_kept = result.get("kept_bonus", 1)
+	p.void_roll_pending_rolled += int(result.get("rolled_bonus", 1))
+	p.void_roll_pending_kept += int(result.get("kept_bonus", 1))
 	ts.consume_free()
 
 	state.combat_log.append({
 		"type": "void_spend",
 		"round": state.combat.round_number,
 		"char_id": char_id,
+		"vp_spent": int(result.get("spent", 1)),
 	})
-	return {"success": true}
+	return {"success": true, "vp_spent": int(result.get("spent", 1))}
 
 
 ## Activate a kiho on a combatant during the skirmish, paying its GDD s38 cost.

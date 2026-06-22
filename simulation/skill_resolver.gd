@@ -307,6 +307,27 @@ static func _activate_kiho_buff(character: L5RCharacterData, kiho_name: String, 
 	return true
 
 
+# Void Point spend on a Skill/Trait roll (core L5R rule; the UI's "spend a Void Point" action).
+# Opt-in via context["spend_void"] = true and context["void_points"] = N (default 1) — so existing
+# callers that don't request it never drain VP. Normally capped at 1 VP per roll; while s37
+# Altering the Course is active this tick (altering_course_ic_day == ic_day) the caster may spend
+# up to N (bounded by the pool) for +NkN. NOT valid for damage rolls (this path is skill checks).
+static func _get_void_spend_bonus(
+	character: L5RCharacterData, context: Dictionary, ic_day: int
+) -> Dictionary:
+	if not context.get("spend_void", false):
+		return {"rolled": 0, "kept": 0}
+	var requested: int = maxi(1, int(context.get("void_points", 1)))
+	var cap: int = 1
+	if ic_day >= 0 and character.altering_course_ic_day == ic_day:
+		cap = character.current_void_points  # Altering the Course: multiple VP on one roll
+	var n: int = mini(requested, cap)
+	if n < 1:
+		return {"rolled": 0, "kept": 0}
+	var r: Dictionary = VoidSystem.spend_n_for_roll(character, n)
+	return {"rolled": int(r["rolled_bonus"]), "kept": int(r["kept_bonus"])}
+
+
 # -- Doji R3: The Perfect Gift (s29.15.4) — one-shot disposition modifier ------
 
 const PERFECT_GIFT_TN: int = 20
@@ -523,17 +544,20 @@ static func resolve_skill_check(
 	# s38 out-of-combat kiho buffs (Mind's Fire / Steal the Air Dragon)
 	var kiho_mod: Dictionary = _get_kiho_buff_bonus(character, skill_name, trait_used, ic_day)
 
+	# Void Point spend on this roll (opt-in via context; s37 Altering the Course allows +NkN)
+	var void_mod: Dictionary = _get_void_spend_bonus(character, context, ic_day)
+
 	# Build the pool: (trait + skill + bonus_rolled) k (trait + bonus_kept)
 	var rolled: int = (
 		trait_value + skill_rank + bonus_rolled + ashes_bonus
 		+ adv_skill.get("rolled", 0) + mutation_mod.get("rolled", 0)
 		+ imbalance_mod.get("rolled", 0) + inheritance_mod.get("rolled", 0)
-		+ kiho_mod.get("rolled", 0)
+		+ kiho_mod.get("rolled", 0) + void_mod.get("rolled", 0)
 	)
 	var kept: int = (
 		trait_value + bonus_kept + adv_skill.get("kept", 0) + mutation_mod.get("kept", 0)
 		+ imbalance_mod.get("kept", 0) + inheritance_mod.get("kept", 0)
-		+ kiho_mod.get("kept", 0)
+		+ kiho_mod.get("kept", 0) + void_mod.get("kept", 0)
 	)
 	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
 		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn \

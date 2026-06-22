@@ -441,6 +441,11 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "reduction", "value": "earth_plus_rank"}]},  # Earth 1: Reduction = Earth + School Rank
 	"cloak_of_the_miya": {"kind": "buff", "target": "self", "duration_rounds": 5,
 		"mods": [{"kind": "armor_tn", "value": "water_plus_rank"}]},  # Water 2: Armor TN += Water + School Rank
+	# s37 Altering the Course (Void 2 ishiken): a self buff installing the `multi_void_spend`
+	# flag; while active, execute_void_spend lifts the once-per-round cap and may spend several
+	# Void Points on one roll (+NkN). 1 minute = 10 rounds. Damage rolls excluded (RAW).
+	"altering_the_course": {"kind": "buff", "target": "self", "duration_rounds": 10,
+		"mods": [{"kind": "multi_void_spend", "value": 1}]},
 	# s36 Ever-Changing Waves (Water 5): transform into a natural creature — keep Mental Traits,
 	# take the higher of own/creature Physical Traits + the creature's natural body. The combat
 	# slice = the Physical-trait maxes as roll deltas (Strength->damage, Agility->attack,
@@ -471,6 +476,25 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 
 static func get_combat_effect(spell_id: String) -> Dictionary:
 	return SPELL_COMBAT_EFFECTS.get(spell_id, {})
+
+
+## s37 Altering the Course — the persistent-world / UI "activate" action (the combat layer uses
+## the SPELL_COMBAT_EFFECTS buff instead). Ishiken-only; rolls the cast vs TN and consumes a Void
+## slot (via resolve_cast). On success the caster's `altering_course_ic_day` is set to the current
+## tick, so for the rest of that IC-day window a SkillResolver roll may spend multiple Void Points
+## (+NkN) via context["spend_void"]/["void_points"] instead of the normal one-per-roll cap.
+## Returns the resolve_cast result dict plus {activated: bool, active_ic_day: int}.
+static func activate_altering_the_course(
+	character: L5RCharacterData, dice: DiceEngine, ic_day: int
+) -> Dictionary:
+	if not can_cast(character, "altering_the_course"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	var res: Dictionary = resolve_cast(character, "altering_the_course", dice, 0, null, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		character.altering_course_ic_day = ic_day
+		res["active_ic_day"] = ic_day
+	return res
 
 
 const SPELL_LIBRARY: Dictionary = {

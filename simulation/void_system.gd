@@ -90,6 +90,24 @@ static func spend_for_roll(character: L5RCharacterData) -> Dictionary:
 	return {"success": true, "rolled_bonus": bonus["rolled"], "kept_bonus": bonus["kept"]}
 
 
+# Spend up to `n` Void Points on a single roll, accumulating +1k1 (or +2k2) each.
+# Normally only 1 is allowed per roll; n > 1 is the s37 Altering the Course effect.
+# Stops early when the pool runs out. Returns {success, rolled_bonus, kept_bonus, spent}.
+# NOT valid for Damage Rolls (RAW). Caller enforces the once-per-round combat slot.
+static func spend_n_for_roll(character: L5RCharacterData, n: int) -> Dictionary:
+	var rolled: int = 0
+	var kept: int = 0
+	var spent: int = 0
+	while spent < n:
+		var r: Dictionary = spend_for_roll(character)
+		if not r["success"]:
+			break
+		rolled += int(r["rolled_bonus"])
+		kept += int(r["kept_bonus"])
+		spent += 1
+	return {"success": spent > 0, "rolled_bonus": rolled, "kept_bonus": kept, "spent": spent}
+
+
 # -- Wound reduction -----------------------------------------------------------
 
 # Spend to reduce Wounds from one damage source by 10 (declared after damage total).
