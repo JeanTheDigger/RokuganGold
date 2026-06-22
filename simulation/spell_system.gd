@@ -427,6 +427,11 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# --- Cleanse (s36) ---
 	# kind "cleanse": free up to Water Rank living allies in range from Fatigued+Dazed + heal Water Rank.
 	"typhoons_surge": {"kind": "cleanse", "range_tiles": 10},  # Water 3
+	# --- Reposition (s36) ---
+	# kind "reposition" (s36 Hands of the Tides): swap the grid positions of up to Water Ring
+	# willing allies, 100' (20-tile) radius centered on caster, instantaneous. Faithful effect =
+	# swap a willing pair; NPC use = rescue a wounded ally from melee (see _reposition_best_pair).
+	"hands_of_the_tides": {"kind": "reposition", "range_tiles": 20},  # Water 5
 	# --- Buffs (s34/s35/s36) — persistent stat bonuses via the round-scoped timed-modifier layer ---
 	# kind "buff": target "self" (range ignored) or "ally" (Touch/range). Each mod {kind, value};
 	# value = int OR a formula ("water_plus_rank"/"earth_plus_rank"). duration_rounds = GDD rounds

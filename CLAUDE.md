@@ -6524,6 +6524,57 @@ a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or t
 effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
 (see "ASCII Map System — Live-Reachability Status").
 
+### Spell coverage — gap sweep + Hands of the Tides position-swap (2026-06-22, runtime-verified 8/8)
+Swept all COMBAT_ONLY-and-unwired s31–37 library spells (~63 by an `s:0`-vs-`SPELL_COMBAT_EFFECTS`
+diff) for any newly wirable with this session's machinery (transform / decoy / persistent-fear /
+ring-reduction / capacity / modifier-zone). Honest finding, confirming the prior 2026-06-21 audit:
+the residue is genuinely deferred. **Six** (hidden_visage, mask_of_wind, the_mirrors_smile,
+heart_betrays_eyes, quiescence_of_air, by_the_light_of_the_moon) are already wired in
+**CombatController** (the stealth layer), not the orchestrator schema. The rest are blocked, by
+category: **out-of-combat utility/social/divination/messaging** (voice_of_the_wind, soul_of_stone,
+drink_of_your_essence, wolfs_proposal, touch_of_airs_grace, tenjins_ear, elemental_cipher,
+flight_of_doves, the_kamis_whisper, gathering_swirl, token_of_memory, cloak_of_night, false_whispers,
+reach_through_the_void, wind_of_the_moon, ring_of_the_void, …); **flight, no elevation model**
+(wings_of_fire, wings_of_the_phoenix, call_upon_the_wind); **mass-battle / structure / water-terrain,
+no tile consumer** (false_realm, the_earth_flows, drawing_on_the_mountain, whirlpool, yukis_touch,
+within_the_waves, opening_the_veil); **ring/trait REORDER** (facing_your_devils, unbound_essence —
+the `combat_ring_deltas` bridge sets RING deltas, but a highest↔lowest TRAIT swap needs trait-level
+combat state the engine reads at roll time, which doesn't exist; only the wound-capacity slice would
+flow, not attack/damage); **+trait-not-Ring** (earths_touch — "does not increase the Ring", so no
+combat effect); **VP-economy** (altering_the_course, kharmic_intent); **anti-maho ward INERT**
+(grounding_energy raises maho cast TN, but the project's maho is roll-less — no TN to raise, so it
+binds nothing); **ambiguous DR** (netsuke_of_wind conjures a weapon with no GDD profile); **closed
+conjured ring** (groves_of_stone — no clamber-over action → invulnerability stalemate, documented
+deferred); **healing-Earth-only** (jurojins_balm/jurojins_curse — for healing/poison-resist, not
+wound capacity); **near-inert in faction combat** (curse_of_the_burning_hand, 1-minute cast, harms
+the target's own allies); **duel-scoped** (essence_of_fire iaijutsu ward); and **blocked**
+(the_world_is_truth Kolat sleeper, piercing_the_heavens Phoenix-narrative, cloud_the_mind needs
+day-granular memory timestamps + no cast trigger, garbled_tongue needs a deliberate-conversation-ward
+model). **Exactly one was cleanly + faithfully + unambiguously wirable:** **Hands of the Tides**
+(Water 5, s36) — swap the grid positions of up to Water Ring willing allies, 100' (20-tile) radius.
+New `reposition` effect kind (`SpellSystem.SPELL_COMBAT_EFFECTS`) + dispatch branch +
+`AsciiMapCombatOrchestrator._apply_spell_reposition` (swaps `state.positions[a] <-> [b]`). The EFFECT
+(swap a willing pair) is GDD-faithful; the GDD gives **no NPC USE policy**, so the heuristic
+(`_reposition_best_pair`, structural AI like every other `_npc_*`) does the one clearly-beneficial
+thing and nothing else: **RESCUE A WOUNDED ALLY FROM MELEE** — swap the most melee-pressured HURT+
+ally (the caster itself qualifies → a shugenja fleeing melee) with the least-exposed ally
+(`_adjacent_enemy_count` over the grid), **never** teleporting the casting shugenja INTO melee for
+someone else, and only when the swap **strictly** reduces the rescued unit's adjacent-enemy exposure
+(so it never fires for no benefit). Capped at Water Ring willing targets (a 2-of-N swap is a valid
+GDD "combination"). NPC support hook in `_npc_maybe_cast_spell` (after heal, before self-buff),
+gated on a non-empty rescue pair. Runtime-verified 8/8 (Godot 4.6.2, headless driver): WaterRing=5 +
+can_cast; best_pair=[rescue,dest] picks the safe ally (NOT the caster) + the swap executes
+(positions actually exchanged); wounded-not-in-melee → no swap; healthy-in-melee → no swap (rescues
+wounded only); Water Ring 1 → guarded (need ≥2 targets); NPC autonomously casts it; and when the
+caster IS the wounded-in-melee unit it rescues itself to the rear. **156 combat effects total; the
+remaining COMBAT_ONLY gaps are all documented above as deferred/blocked** — the s31–37 spell-combat
+layer is complete for faithful, unambiguous, no-invention work. (Same PC-travel HOLD live-reachability
+caveat as the whole ASCII stack — driver-verified, not a live session.) A debugging note for future
+headless drivers: assigning an untyped `Array` literal (`c.spells_known = ["x"]`) to a typed
+`Array[String]` field on an **untyped** local silently fails at runtime (the documented typed-array
+`.assign()` gotcha) — type the local (`var c: L5RCharacterData = …`) or use `.assign()`; production
+code was never at fault, only the test harness.
+
 ### Pending Redesign — RESOLVED (2026-06-20, ring-change wave)
 - **Ring-changing combat spells — participant-scoped wound deltas, DONE.** The owner's goal was
   combat-scoped Ring deltas with **no world-sim leak**. The scope-discovery counted ~252 in-combat

@@ -2236,6 +2236,12 @@ static func execute_cast_spell(
 			"type": "spell_instant_kill", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "result": res["instant_kill"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "reposition":
+		res["reposition"] = _apply_spell_reposition(state, caster_id, caster, eff)
+		state.combat_log.append({
+			"type": "spell_reposition", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "result": res["reposition"],
+		})
 	state.combat_log.append({
 		"type": "spell_cast", "round": state.combat.round_number,
 		"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
@@ -3626,6 +3632,101 @@ static func _apply_spell_instant_kill(
 		out["caster_wounds"] = inflicted
 		out["caster_dead"] = CharacterStats.is_dead(caster)
 	return out
+
+
+## Count living enemy combatants melee-adjacent (Chebyshev 1) to a tile, relative to my_faction.
+static func _adjacent_enemy_count(state: MapCombatState, pos: Vector2i, my_faction: String) -> int:
+	var n: int = 0
+	for cid in state.positions.keys():
+		if String(state.factions.get(cid, "")) == my_faction:
+			continue
+		var ch = state.combatants.get(cid, null)
+		if ch == null or CharacterStats.is_dead(ch):
+			continue
+		var ep: Vector2i = state.positions[cid]
+		if maxi(absi(pos.x - ep.x), absi(pos.y - ep.y)) == 1:
+			n += 1
+	return n
+
+
+## s36 Hands of the Tides — NPC use heuristic. The GDD effect (swap willing targets' grid positions)
+## is faithful + unambiguous; the GDD gives no NPC USE policy, so this picks the one clearly-beneficial
+## case and nothing else: RESCUE A WOUNDED ALLY FROM MELEE. Returns [rescue, destination] where the
+## rescue ally is a HURT+ same-faction unit (the caster itself qualifies — a shugenja fleeing melee)
+## with the most adjacent enemies, and the destination is the LEAST-exposed ally to take its place —
+## excluding the caster as a destination unless the caster IS the one being rescued (the spell must
+## never teleport the casting shugenja INTO melee to save someone else). Fires only when the swap
+## strictly reduces the rescued unit's adjacent-enemy exposure. Capped at Water Ring willing targets
+## (a 2-of-N swap is a valid GDD "combination"). Returns [] when no such beneficial rescue exists.
+static func _reposition_best_pair(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData, radius: int,
+) -> Array:
+	var cf: String = String(state.factions.get(caster_id, ""))
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var max_targets: int = SpellSystem.get_ring_value(caster, Enums.Ring.WATER)
+	if max_targets < 2:
+		return []
+	# Gather candidate willing allies within range, capped at the willing-target count.
+	var cands: Array = []  # {id, exp, wounded}
+	for aid in state.positions.keys():
+		if String(state.factions.get(aid, "")) != cf:
+			continue
+		var ach = state.combatants.get(aid, null)
+		if ach == null or CharacterStats.is_dead(ach):
+			continue
+		var apos: Vector2i = state.positions[aid]
+		if maxi(absi(center.x - apos.x), absi(center.y - apos.y)) > radius:
+			continue
+		cands.append({
+			"id": int(aid),
+			"exp": _adjacent_enemy_count(state, apos, cf),
+			"wounded": CharacterStats.get_wound_level(ach) >= Enums.WoundLevel.HURT,
+		})
+		if cands.size() >= max_targets:
+			break
+	if cands.size() < 2:
+		return []
+	# Rescue target = the most melee-pressured WOUNDED ally (caster eligible). No wounded-in-melee
+	# ally → the spell has no clearly-beneficial NPC use, so don't cast it.
+	var rescue: Dictionary = {}
+	for c in cands:
+		if not c["wounded"] or int(c["exp"]) <= 0:
+			continue
+		if rescue.is_empty() or int(c["exp"]) > int(rescue["exp"]):
+			rescue = c
+	if rescue.is_empty():
+		return []
+	# Destination = least-exposed ally to swap in; never the casting shugenja (unless the shugenja
+	# is itself the one being rescued).
+	var dest: Dictionary = {}
+	for c in cands:
+		if int(c["id"]) == int(rescue["id"]):
+			continue
+		if int(c["id"]) == caster_id and int(rescue["id"]) != caster_id:
+			continue
+		if dest.is_empty() or int(c["exp"]) < int(dest["exp"]):
+			dest = c
+	if dest.is_empty():
+		return []
+	if int(rescue["exp"]) <= int(dest["exp"]):
+		return []  # no strictly-beneficial swap
+	return [int(rescue["id"]), int(dest["id"])]
+
+
+## Apply s36 Hands of the Tides: swap the grid positions of the rescue/destination ally pair.
+static func _apply_spell_reposition(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData, eff: Dictionary,
+) -> Dictionary:
+	var radius: int = int(eff.get("range_tiles", 20))
+	var pair: Array = _reposition_best_pair(state, caster_id, caster, radius)
+	if pair.is_empty():
+		return {"swapped": []}
+	var a: int = pair[0]
+	var b: int = pair[1]
+	var pa: Vector2i = state.positions[a]
+	state.positions[a] = state.positions[b]
+	state.positions[b] = pa
+	return {"swapped": [a, b]}
 
 
 ## Build a shiryo ancestor spirit (s33 Defender From Beyond, Kitsu only): the GDD "typical shiryo"
@@ -5719,6 +5820,20 @@ static func _npc_maybe_cast_spell(
 			hr["cast"] = hr.get("success", false)
 			hr["spell_id"] = sid
 			return hr
+	# (2b) Support reposition (s36 Hands of the Tides): pull a melee-pressured ally to a safer ally's
+	# tile. Only fires when a strictly-beneficial swap exists (no pointless casts). Structural AI —
+	# GDD specifies no NPC use policy for the spell, only its mechanic.
+	for sid in npc.spells_known:
+		if SpellSystem.get_combat_effect(sid).get("kind", "") != "reposition":
+			continue
+		if not SpellSystem.can_cast(npc, sid):
+			continue
+		if _reposition_best_pair(state, npc_id, npc, int(SpellSystem.get_combat_effect(sid).get("range_tiles", 20))).is_empty():
+			continue
+		var rr: Dictionary = execute_cast_spell(state, npc_id, npc, sid, npc_id, npc, dice_engine)
+		rr["cast"] = rr.get("success", false)
+		rr["spell_id"] = sid
+		return rr
 	# (3) Self-buff if not already buffed.
 	if not IndividualCombat.has_timed_modifier_source(p, "spell_buff"):
 		for sid in npc.spells_known:
