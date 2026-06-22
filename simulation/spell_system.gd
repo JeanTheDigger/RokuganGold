@@ -595,6 +595,26 @@ static func activate_wolfs_proposal(
 	return res
 
 
+## s34 Jurojin's Balm (Earth 1) — Touch, 1 target. On a successful cast the beneficiary may
+## re-roll a failed Stamina save to resist any poison or toxin with +2k0 for the day (the
+## "jurojins_balm" day buff, read by DiseaseSystem.resolve_poison_resist_roll). Self-cast when
+## target is null. The "cures drunkenness / prevents intoxication" half is inert (no intoxication
+## system). 1-hour RAW duration ~ the OOC day.
+static func activate_jurojins_balm(
+	caster: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	target: L5RCharacterData = null
+) -> Dictionary:
+	if not can_cast(caster, "jurojins_balm"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	var beneficiary: L5RCharacterData = target if target != null else caster
+	var res: Dictionary = resolve_cast(caster, "jurojins_balm", dice, 0, beneficiary, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		beneficiary.set_day_buff("jurojins_balm")
+		res["target_id"] = beneficiary.character_id
+	return res
+
+
 ## s33 Cloud the Mind (Air 5) — blasphemous memory tampering (owner-simplified design: no
 ## day-granular timestamps). On a successful Contested Air (caster) vs Earth (target) roll the
 ## target's known topics are wiped COMPLETELY; the caster may implant chosen topics — real

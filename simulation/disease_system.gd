@@ -120,6 +120,20 @@ static func is_poisoned(victim: L5RCharacterData) -> bool:
 	return not victim.poison_affliction.is_empty()
 
 
+## Centralized poison/toxin resist save. Rolls the victim's Stamina vs `tn`; returns whether the
+## save SUCCEEDS. Jurojin's Balm (s34 Earth 1): while the "jurojins_balm" day buff is active, a
+## FAILED poison save is re-rolled with +2k0 (Stamina + 2 rolled) — if the re-roll also fails the
+## poison has full effect. Disease saves (Shikko's diseased touch) do NOT route here — Jurojin's
+## Balm drives out poisons/toxins, not disease (which has its own Medicine cure path).
+static func resolve_poison_resist_roll(victim: L5RCharacterData, tn: int, dice: DiceEngine) -> bool:
+	var sta: int = maxi(1, victim.stamina)
+	if dice.roll_and_keep(sta, sta, true).total >= tn:
+		return true
+	if not victim.has_day_buff("jurojins_balm"):
+		return false
+	return dice.roll_and_keep(sta + 2, sta, true).total >= tn
+
+
 ## Banks `n` drained Ranks of `trait_name` into poison_affliction for the world-sim restore.
 static func _bank_poison(victim: L5RCharacterData, trait_name: String, n: int) -> void:
 	if n <= 0:
@@ -170,8 +184,7 @@ static func escalating_tick(victim: L5RCharacterData, state: Dictionary, dice: D
 		_bank_escalating_drain(victim, state)
 		return {"ended": true, "incapacitated": true, "trait": trait_name}
 	var tn: int = ESCALATING_POISON_TN + (doses - 1) * ESCALATING_DOSE_TN
-	var roll: int = dice.roll_and_keep(maxi(1, victim.stamina), maxi(1, victim.stamina), true).total
-	if roll >= tn:
+	if resolve_poison_resist_roll(victim, tn, dice):
 		_bank_escalating_drain(victim, state)  # fought it off — drained Ranks recover in the world-sim
 		return {"ended": true, "trait": trait_name}
 	_drain(victim, [trait_name], 1)

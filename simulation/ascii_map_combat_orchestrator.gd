@@ -8366,7 +8366,7 @@ static func _apply_hit(
 		elif pc.has_tag("poison_stamina"):
 			DiseaseSystem.apply_poison(target, "stamina")
 		elif pc.has_tag("poison_bite"):
-			if dice_engine.roll_and_keep(maxi(1, target.stamina), maxi(1, target.stamina), true).total < 20:
+			if not DiseaseSystem.resolve_poison_resist_roll(target, 20, dice_engine):
 				DiseaseSystem.apply_poison(target, "stamina")
 		# Escalating poison (s54.5 Shikage): −1 Rank now + a per-Round Stamina TN 20 (+5/dose)
 		# drain until the victim saves or the Trait hits 0 (Willpower 0 → mind-controlled,
