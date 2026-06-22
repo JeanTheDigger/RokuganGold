@@ -630,14 +630,46 @@ static func resolve_conceal_item(
 # ==============================================================================
 
 const SEARCH_PERSON_GLORY_COST: float = -0.3
+const CLOAK_OF_NIGHT_ML: int = 1
 
 static func resolve_search_person(
 	searcher: L5RCharacterData,
-	_target: L5RCharacterData,
+	target: L5RCharacterData,
 	concealment_tn: int,
 	dice_engine: DiceEngine,
 	has_magistrate_authority: bool = false,
+	current_ic_day: int = -1,
+	searcher_detection_ml: int = 0,
 ) -> Dictionary:
+	# s33 Cloak of Night: a magically invisible object cannot be found by a normal (vision)
+	# Investigation search; only magical detection works — a higher-Mastery detection spell
+	# auto-succeeds, an equal-Mastery (Air 1) detection is a Contested Air roll vs the caster's
+	# stored cast total. searcher_detection_ml = the ML of the searcher's detection spell (0 = none).
+	if target != null and current_ic_day >= 0 and target.cloak_of_night_ic_day == current_ic_day:
+		var found: bool
+		var detail: String
+		if searcher_detection_ml <= 0:
+			found = false
+			detail = "magically_invisible"
+		elif searcher_detection_ml > CLOAK_OF_NIGHT_ML:
+			found = true
+			detail = "magic_auto_detected"
+		else:
+			var air: int = CharacterStats.get_ring_value(searcher, Enums.Ring.AIR)
+			var contest: Dictionary = dice_engine.roll_check(
+				air, air, target.cloak_of_night_strength, 0, 0, true, false
+			)
+			found = contest.get("success", false)
+			detail = "magic_contested"
+		var gc: float = 0.0
+		if not has_magistrate_authority and not found:
+			gc = SEARCH_PERSON_GLORY_COST
+			HonorGlorySystem.apply_glory_change(searcher, gc)
+		return {
+			"success": found, "roll_total": 0, "concealment_tn": concealment_tn,
+			"glory_cost": gc, "cloak_of_night": true, "cloak_detail": detail,
+		}
+
 	var result: Dictionary = SkillResolver.resolve_skill_check(
 		searcher, dice_engine, "Investigation", concealment_tn,
 	)

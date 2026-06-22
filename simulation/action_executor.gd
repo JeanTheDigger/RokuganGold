@@ -1265,7 +1265,9 @@ static func _try_execute_covert(
 				return {}
 			var concealment_tn: int = action.metadata.get("concealment_tn", 15)
 			var has_authority: bool = action.metadata.get("magistrate_authority", false)
-			var r: Dictionary = SecretSystem.resolve_search_person(character, target, concealment_tn, dice_engine, has_authority)
+			# ctx.ic_day lets resolve_search_person honor s33 Cloak of Night (magically invisible
+			# object); detection_ml 0 = a normal vision search (no magical-search action exists yet).
+			var r: Dictionary = SecretSystem.resolve_search_person(character, target, concealment_tn, dice_engine, has_authority, ctx.ic_day)
 			return _build_covert_result(action, ctx, "Investigation", r)
 
 		"FORGE_IMPERSONATION_LETTER":

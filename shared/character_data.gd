@@ -67,6 +67,12 @@ var spell_void_bonus_used: int = 0
 # SkillResolver roll (+NkN) instead of the normal one-per-roll cap. -1 = inactive.
 # (1-minute RAW duration modelled per-tick, matching the kiho-buff convention.)
 @export var altering_course_ic_day: int = -1
+# s33 Cloak of Night (Air 1): a carried/concealed object is magically invisible to vision.
+# Active when cloak_of_night_ic_day == the current ic_day (1-hour RAW duration ~ per-tick).
+# cloak_of_night_strength = the cast roll total, used as the TN for an equal-ML (Air 1)
+# magical-detection contest in resolve_search_person. -1/0 = no cloak.
+@export var cloak_of_night_ic_day: int = -1
+@export var cloak_of_night_strength: int = 0
 
 # -- Spells (shugenja only) ----------------------------------------------------
 

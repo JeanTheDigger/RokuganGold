@@ -174,7 +174,7 @@ static func advance_day(
 		travel_arrivals, characters_by_id, world_states, active_topics, current_season,
 	)
 	var auto_conceal_results: Array = _process_auto_conceal_on_arrival(
-		travel_arrivals, characters_by_id, dice_engine,
+		travel_arrivals, characters_by_id, dice_engine, ic_day,
 	)
 	_process_duped_foolish_on_arrival(
 		travel_arrivals, characters_by_id, objectives_map, settlements,
@@ -11646,6 +11646,7 @@ static func _process_auto_conceal_on_arrival(
 	arrivals: Array,
 	characters_by_id: Dictionary,
 	dice_engine: DiceEngine,
+	ic_day: int = -1,
 ) -> Array:
 	var results: Array = []
 	for arrival: Dictionary in arrivals:
@@ -11656,6 +11657,12 @@ static func _process_auto_conceal_on_arrival(
 		var contraband_items: Array = InventorySystem.get_contraband_on_person(character)
 		if contraband_items.is_empty():
 			continue
+		# s33 Cloak of Night: a shugenja smuggler who knows the spell magically hides their
+		# contraband — a normal vision search (resolve_search_person) then auto-fails.
+		if ic_day >= 0 and SpellSystem.can_cast(character, "cloak_of_night"):
+			var cloak: Dictionary = SpellSystem.activate_cloak_of_night(character, dice_engine, ic_day)
+			if cloak.get("activated", false):
+				results.append({"character_id": char_id, "cloak_of_night": true})
 		for item: Dictionary in contraband_items:
 			if item.get("concealed", false):
 				continue

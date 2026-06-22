@@ -497,6 +497,27 @@ static func activate_altering_the_course(
 	return res
 
 
+## s33 Cloak of Night (Air 1) — the cast action (UI or NPC trigger). Cast on an object held by
+## `carrier` (default the caster). On a successful cast the carrier's object is magically invisible
+## to vision for this IC-day window: a normal Investigation search (SecretSystem.resolve_search_person)
+## auto-fails; only magical detection finds it (higher-ML auto, equal-ML Air 1 contested vs the stored
+## cast total). Returns the resolve_cast result + {activated, carrier_id}.
+static func activate_cloak_of_night(
+	caster: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	carrier: L5RCharacterData = null
+) -> Dictionary:
+	if not can_cast(caster, "cloak_of_night"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	var holder: L5RCharacterData = carrier if carrier != null else caster
+	var res: Dictionary = resolve_cast(caster, "cloak_of_night", dice, 0, null, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		holder.cloak_of_night_ic_day = ic_day
+		holder.cloak_of_night_strength = int(res.get("total", 0))
+		res["carrier_id"] = holder.character_id
+	return res
+
+
 const SPELL_LIBRARY: Dictionary = {
 	# === UNIVERSAL (s32) — available to all shugenja ===
 	"sense":     {"e": -1, "m": 1, "s": 3,  "u": true},
