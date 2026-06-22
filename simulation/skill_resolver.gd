@@ -365,7 +365,7 @@ const SOUL_OF_STONE_INFLUENCE_PENALTY: int = -1
 static func _get_soul_of_stone_bonus(
 	character: L5RCharacterData, skill_name: String, trait_used: Enums.Trait, context: Dictionary
 ) -> int:
-	if not character.soul_of_stone_active:
+	if not character.has_day_buff("soul_of_stone"):
 		return 0
 	if context.get("is_manipulation_resist", false):
 		return SOUL_OF_STONE_RESIST_BONUS  # +3k0 to resist manipulation

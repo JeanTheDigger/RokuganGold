@@ -5944,17 +5944,16 @@ static func _process_flee_logistics(
 # (CommuneSystem.commune_reveal), which performs the reveal — e.g. Air detects a covert
 # s33 Cloud the Mind tampering crime and exposes it to the communer.
 
-# -- Daily spell-buff clear (s33/s34) ------------------------------------------
-# Boolean spell buffs that last ~the IC day they were cast (sub-day RAW durations
-# at this granularity): Soul of Stone (s34), Touch of Air's Grace (s33). Cleared at
-# the start of each day, before actions run, so a buff cast during the day survives
-# that day's resolution and lapses the next morning.
+# -- Daily spell-buff clear (the standard OOC-day buff model) ------------------
+# Day-long spell buffs (sub-IC-day RAW durations modelled as "the rest of the OOC
+# day they were cast") live in L5RCharacterData.active_day_buffs and are cleared
+# wholesale here at the start of each day, before actions run — so a buff cast during
+# the day survives that day's resolution and lapses the next morning. Adding a new
+# such buff needs NO edit here: set_day_buff on cast, has_day_buff at the read site.
 static func _clear_daily_spell_buffs(characters: Array) -> void:
 	for c: L5RCharacterData in characters:
-		if c.soul_of_stone_active:
-			c.soul_of_stone_active = false
-		if c.touch_of_airs_grace_active:
-			c.touch_of_airs_grace_active = false
+		if not c.active_day_buffs.is_empty():
+			c.clear_day_buffs()
 
 
 static func _process_commune_writebacks(
@@ -11808,7 +11807,7 @@ static func _process_compulsion_on_arrival(
 		var wil: int = character.willpower
 		var compulsion_wound: int = CharacterStats.get_wound_penalty(character)
 		# Soul of Stone (s34): +3k0 to resist a Compulsion's pull.
-		var soul_resist: int = SkillResolver.SOUL_OF_STONE_RESIST_BONUS if character.soul_of_stone_active else 0
+		var soul_resist: int = SkillResolver.SOUL_OF_STONE_RESIST_BONUS if character.has_day_buff("soul_of_stone") else 0
 		var roll: DiceResult = dice_engine.roll_and_keep(wil + soul_resist, wil, false, false)
 		if (roll.total + compulsion_wound) < tn:
 			var comp_dis: DisadvantageData = AdvantageSystem.get_disadvantage(

@@ -301,7 +301,7 @@ static func _is_suppressed(character: L5RCharacterData, dis_type: Enums.Disadvan
 	if character.suppressed_disadvantage_type == int(dis_type):
 		return true
 	# Touch of Air's Grace (s33): negates the Disturbing Countenance Disadvantage while active.
-	if character.touch_of_airs_grace_active and dis_type == Enums.Disadvantage.DISTURBING_COUNTENANCE:
+	if character.has_day_buff("touch_of_airs_grace") and dis_type == Enums.Disadvantage.DISTURBING_COUNTENANCE:
 		return true
 	return false
 
@@ -975,7 +975,7 @@ static func get_target_temptation_bonus(target: L5RCharacterData, attacker_gende
 		return 1  # +1k0 rolled
 	# Touch of Air's Grace (s33) grants the Dangerous Beauty effect when the target lacks
 	# Disturbing Countenance (per "if the target lacks it, grant the Advantage instead").
-	if target.touch_of_airs_grace_active and not has_disadvantage(target, Enums.Disadvantage.DISTURBING_COUNTENANCE):
+	if target.has_day_buff("touch_of_airs_grace") and not has_disadvantage(target, Enums.Disadvantage.DISTURBING_COUNTENANCE):
 		return 1
 	return 0
 
@@ -1341,14 +1341,16 @@ static func has_weather_immunity(character: L5RCharacterData) -> bool:
 # ---------------------------------------------------------------------------
 
 static func get_perceived_honor(character: L5RCharacterData, ic_day: int = -1) -> float:
+	# Wolf's Proposal (s33): +3 perceived Honor Rank while active (stacks with the advantage).
+	var spell_bonus: float = 3.0 if character.has_day_buff("wolfs_proposal") else 0.0
 	# Air ML3-4 overflow: Perceived Honor advantage fails for 7 IC days (s45 line 537).
 	if ic_day >= 0 and character.perceived_honor_blocked_until >= 0 \
 			and ic_day < character.perceived_honor_blocked_until:
-		return character.honor
+		return character.honor + spell_bonus
 	var adv: AdvantageData = get_advantage(character, Enums.Advantage.PERCEIVED_HONOR)
 	if adv == null:
-		return character.honor
-	return character.honor + float(adv.rank)
+		return character.honor + spell_bonus
+	return character.honor + float(adv.rank) + spell_bonus
 
 
 # ---------------------------------------------------------------------------

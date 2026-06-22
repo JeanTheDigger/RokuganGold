@@ -77,19 +77,22 @@ var spell_void_bonus_used: int = 0
 # (10-minute RAW duration ~ per-tick). Read by SkillResolver: +1k0 to spoken Social
 # Skill Rolls and +1k1 on a voice Perform Roll (the granted Voice Advantage). -1 = none.
 @export var voice_of_the_wind_ic_day: int = -1
-# s34 Soul of Stone (Earth 1, Defense): the soul is fortified like stone. +3k0 to RESIST
-# coercive social manipulation (court Negotiate/Charm/Persuade, Intimidation, Temptation,
-# Compulsions); -1k0 to the buffed character's own Awareness social-influence rolls. Boolean
-# (not an ic_day marker) because the resist read-sites sit deep in seduction/bribery/
-# intimidation call chains that lack ic_day; cleared by a daily orchestrator pass (1-hour RAW
-# duration ~ the IC day). True = active.
-@export var soul_of_stone_active: bool = false
-# s33 Touch of Air's Grace (Air 3, Illusion): the Air kami enhance the target's beauty. While
-# active: negates the Disturbing Countenance Disadvantage (via AdvantageSystem._is_suppressed),
-# and — if the target lacks Disturbing Countenance — grants the Dangerous Beauty Advantage
-# effect. (Benten's Curse/Blessing half is inert: those traits are not modelled.) Boolean,
-# cleared by the daily orchestrator pass (1-hour RAW duration ~ the IC day). True = active.
-@export var touch_of_airs_grace_active: bool = false
+# Day-long spell buffs (the standard model for any spell whose RAW duration is below the IC-day
+# tick — 10 minutes, 1 hour, etc.): a set of active buff IDs that last the rest of the OOC day
+# they were cast and are cleared wholesale by the daily orchestrator pass (clear_day_buffs). To
+# add one: set_day_buff("<id>") on cast, has_day_buff("<id>") at the read site — no new field or
+# clear-line needed. Current IDs: "soul_of_stone" (s34), "touch_of_airs_grace" (s33),
+# "wolfs_proposal" (s33).
+@export var active_day_buffs: Dictionary = {}
+
+func set_day_buff(buff_id: String) -> void:
+	active_day_buffs[buff_id] = true
+
+func has_day_buff(buff_id: String) -> bool:
+	return active_day_buffs.has(buff_id)
+
+func clear_day_buffs() -> void:
+	active_day_buffs.clear()
 
 # -- Spells (shugenja only) ----------------------------------------------------
 

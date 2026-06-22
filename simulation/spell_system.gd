@@ -539,9 +539,9 @@ static func activate_voice_of_the_wind(
 
 ## s34 Soul of Stone (Earth 1, Defense) — Touch, 1 target. On a successful cast the target's
 ## soul is fortified like stone: +3k0 to resist coercive social manipulation, -1k0 to its own
-## Awareness social-influence rolls. Boolean buff (soul_of_stone_active), cleared by the daily
-## orchestrator pass (1-hour RAW duration ~ the IC day). Self-cast when target is null. The
-## resist works wherever a manipulation roll resolves — court on the ASCII map or a UI exchange.
+## Awareness social-influence rolls. Day buff ("soul_of_stone"), cleared by the daily orchestrator
+## pass (1-hour RAW duration ~ the OOC day). Self-cast when target is null. The resist works
+## wherever a manipulation roll resolves — court on the ASCII map or a UI exchange.
 static func activate_soul_of_stone(
 	caster: L5RCharacterData, dice: DiceEngine, ic_day: int,
 	target: L5RCharacterData = null
@@ -552,7 +552,7 @@ static func activate_soul_of_stone(
 	var res: Dictionary = resolve_cast(caster, "soul_of_stone", dice, 0, beneficiary, ic_day)
 	res["activated"] = res.get("success", false)
 	if res.get("success", false):
-		beneficiary.soul_of_stone_active = true
+		beneficiary.set_day_buff("soul_of_stone")
 		res["target_id"] = beneficiary.character_id
 	return res
 
@@ -571,7 +571,26 @@ static func activate_touch_of_airs_grace(
 	var res: Dictionary = resolve_cast(caster, "touch_of_airs_grace", dice, 0, beneficiary, ic_day)
 	res["activated"] = res.get("success", false)
 	if res.get("success", false):
-		beneficiary.touch_of_airs_grace_active = true
+		beneficiary.set_day_buff("touch_of_airs_grace")
+		res["target_id"] = beneficiary.character_id
+	return res
+
+
+## s33 Wolf's Proposal (Air 2, Illusion) — Personal/Self (the 2-Raise variant may target an ally
+## via `target`). On a successful cast the beneficiary appears more honorable: their Honor Rank
+## reads 3 higher for any roll that discerns it (AdvantageSystem.get_perceived_honor). Day buff
+## ("wolfs_proposal"), cleared by the daily orchestrator pass (10-minute RAW duration ~ the OOC day).
+static func activate_wolfs_proposal(
+	caster: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	target: L5RCharacterData = null
+) -> Dictionary:
+	if not can_cast(caster, "wolfs_proposal"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	var beneficiary: L5RCharacterData = target if target != null else caster
+	var res: Dictionary = resolve_cast(caster, "wolfs_proposal", dice, 0, beneficiary, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		beneficiary.set_day_buff("wolfs_proposal")
 		res["target_id"] = beneficiary.character_id
 	return res
 

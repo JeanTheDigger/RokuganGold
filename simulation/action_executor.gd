@@ -4206,7 +4206,7 @@ static func _execute_contested_court_action(
 	var contested_mut_a: Dictionary = MutationSystem.get_skill_modifiers(character, a_skill)
 	# Soul of Stone (s34): -1k0 to the buffed attacker's Awareness social-influence roll.
 	var soul_atk: int = SkillResolver.SOUL_OF_STONE_INFLUENCE_PENALTY \
-		if (character.soul_of_stone_active and a_trait_name == "Awareness") else 0
+		if (character.has_day_buff("soul_of_stone") and a_trait_name == "Awareness") else 0
 	var attacker_roll: int = dice_engine.roll_check(
 		maxi(1, a_trait_val + a_skill_rank + contested_mut_a["rolled"] + soul_atk),
 		maxi(1, a_trait_val + contested_mut_a["kept"]),
@@ -4223,7 +4223,7 @@ static func _execute_contested_court_action(
 		var contested_mut_d: Dictionary = MutationSystem.get_skill_modifiers(target, d_skill)
 		# Soul of Stone (s34): +3k0 when the defender resists a coercive manipulation action.
 		var soul_def: int = SkillResolver.SOUL_OF_STONE_RESIST_BONUS \
-			if (target.soul_of_stone_active and action_id in _SOUL_OF_STONE_MANIPULATION_ACTIONS) else 0
+			if (target.has_day_buff("soul_of_stone") and action_id in _SOUL_OF_STONE_MANIPULATION_ACTIONS) else 0
 		defender_roll = dice_engine.roll_check(
 			maxi(1, d_trait_val + d_skill_rank + contested_mut_d["rolled"] + soul_def),
 			maxi(1, d_trait_val + contested_mut_d["kept"]),
