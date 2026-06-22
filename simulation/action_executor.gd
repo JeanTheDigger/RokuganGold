@@ -1324,6 +1324,18 @@ static func _try_execute_covert(
 			var r: Dictionary = _resolve_kill_witness(character, target, dice_engine)
 			return _build_covert_result(action, ctx, "Stealth", r)
 
+		"CLOUD_THE_MIND":
+			# s33 Cloud the Mind — the magical witness-silencer. resolve_cloud_the_mind does the
+			# Contested Air vs Earth roll, the complete topic-memory wipe, and the blasphemous
+			# Honor loss; the writeback (_process_witness_tampering_writebacks) creates the
+			# DISHONORABLE_CONDUCT CrimeRecord + the covert detectable-dishonor topic.
+			if target == null:
+				return {}
+			var r: Dictionary = SpellSystem.resolve_cloud_the_mind(character, target, dice_engine)
+			r["witness_id"] = target.character_id
+			r["effect"] = "memory_wiped" if r.get("success", false) else "wipe_resisted"
+			return _build_covert_result(action, ctx, "Spellcraft", r)
+
 	return {}
 
 

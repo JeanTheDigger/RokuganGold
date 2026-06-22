@@ -10,6 +10,7 @@
         "INTIMIDATE_WITNESS",
         "KILL_WITNESS",
         "FABRICATE_SECRET",
+        "CLOUD_THE_MIND",
         "FORGE_IMPERSONATION_LETTER",
         "FORGE_ORDER"
       ],
@@ -109,6 +110,7 @@
         "SEARCH_PERSON",
         "CONCEAL_ITEM",
         "FABRICATE_SECRET",
+        "CLOUD_THE_MIND",
         "FORGE_IMPERSONATION_LETTER",
         "FORGE_ORDER",
         "EXPOSE_SECRET_PRIVATELY",
@@ -167,6 +169,7 @@
       "always_blocked": [
         "GOSSIP",
         "FABRICATE_SECRET",
+        "CLOUD_THE_MIND",
         "FORGE_IMPERSONATION_LETTER",
         "FORGE_ORDER",
         "BRIBE_FOR_INFO",
@@ -243,6 +246,7 @@
         "CONDUCT_CONDITIONING",
         "CAST_WORLD_IS_TRUTH",
         "FABRICATE_SECRET",
+        "CLOUD_THE_MIND",
         "FORGE_IMPERSONATION_LETTER",
         "FORGE_ORDER",
         "EXPOSE_SECRET_PRIVATELY",

@@ -485,6 +485,10 @@ static func generate_options(
 			"BRIBE_FOR_INFO", "BRIBE_WITNESS", "INTIMIDATE_WITNESS",
 			"KILL_WITNESS", "FLEE_JURISDICTION",
 		]
+		# s33 Cloud the Mind — the magical witness-silencer; only a shugenja who knows it.
+		if character != null and SpellSystem.is_shugenja(character) \
+				and "cloud_the_mind" in character.spells_known:
+			available_actions.append("CLOUD_THE_MIND")
 	elif need.source == "extortion_opportunity":
 		# Corrupt-magistrate extortion reactive menu (s11.3.13). EXTORT_ACCUSED is
 		# in no context list; a magistrate who declines falls through to DO_NOTHING.
@@ -3378,7 +3382,7 @@ static func _populate_action_metadata(
 		option.target_npc_id = need.target_npc_id
 	elif option.action_id == "FLEE_JURISDICTION" and need.source == "bribery_eval":
 		option.metadata = {"flee_from_magistrate_id": need.target_npc_id}
-	elif option.action_id in ["BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS"] and need.source == "bribery_eval":
+	elif option.action_id in ["BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS", "CLOUD_THE_MIND"] and need.source == "bribery_eval":
 		if need.target_npc_id_secondary >= 0:
 			option.target_npc_id = need.target_npc_id_secondary
 			option.metadata = {"witness_id": need.target_npc_id_secondary}

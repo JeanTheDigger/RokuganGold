@@ -5954,7 +5954,7 @@ static func _process_witness_tampering_writebacks(
 			continue
 		var r: Dictionary = result as Dictionary
 		var action_id: String = r.get("action_id", "")
-		if action_id not in ["BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS"]:
+		if action_id not in ["BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS", "CLOUD_THE_MIND"]:
 			continue
 
 		var criminal_id: int = r.get("character_id", -1)
@@ -6026,6 +6026,33 @@ static func _process_witness_tampering_writebacks(
 							_apply_criminal_recall(
 								criminal_2, murder_record, kill_witnesses, dice_engine, world_states,
 							)
+				elif action_id == "CLOUD_THE_MIND":
+					# s33 Cloud the Mind: the witness's entire topic-memory was already wiped in
+					# the executor (they forget the crime). Record the blasphemous mind-tampering
+					# as a DISHONORABLE_CONDUCT crime + a COVERT topic that is NOT seeded to
+					# anyone — only Commune detection (RAW) reveals it.
+					var cloud_concealment: int = effects.get("caster_total", 0)
+					var caster_c: L5RCharacterData = characters_by_id.get(criminal_id)
+					var cloud_location: String = caster_c.physical_location if caster_c != null else record.location
+					var tamper_record: CrimeRecord = CrimeSystem.create_crime_record(
+						next_case_id[0],
+						Enums.CrimeType.DISHONORABLE_CONDUCT,
+						criminal_id,
+						cloud_location,
+						ic_day,
+						witness_id,
+						cloud_concealment,
+						[],
+					)
+					next_case_id[0] += 1
+					crime_records.append(tamper_record)
+					if caster_c != null:
+						var tamper_topic: TopicData = _create_crime_topic(
+							tamper_record, caster_c, ic_day, next_topic_id,
+						)
+						if tamper_topic != null:
+							tamper_topic.variant = "cloud_the_mind"
+							active_topics.append(tamper_topic)
 			else:
 				var evidence_add: int = effects.get("evidence_on_fail", 10)
 				record.evidence_total += evidence_add

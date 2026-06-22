@@ -522,13 +522,12 @@ static func activate_cloak_of_night(
 ## day-granular timestamps). On a successful Contested Air (caster) vs Earth (target) roll the
 ## target's known topics are wiped COMPLETELY; the caster may implant chosen topics — real
 ## existing IDs and/or pre-fabricated ones the caller created (passed in implant_topic_ids).
-## The Air slot is consumed on the attempt. Cost on a successful cast: a blasphemous Table 2.3
-## Honor loss + a DISHONORABLE_CONDUCT CrimeRecord (the detectable dishonor — the caller stores it).
-## Returns {success, contested, caster_total, target_total, wiped_count, implanted, honor_delta,
-## crime_record}.
+## The Air slot is consumed on the attempt; the blasphemous Table 2.3 Honor loss is applied here.
+## The detectable-dishonor CrimeRecord + the covert topic are created by the caller's writeback
+## (which holds next_case_id / active_topics), matching the KILL_WITNESS pattern.
+## Returns {success, contested, caster_total, target_total, wiped_count, implanted, honor_delta}.
 static func resolve_cloud_the_mind(
 	caster: L5RCharacterData, target: L5RCharacterData, dice: DiceEngine,
-	next_case_id: int, ic_day: int, location: String,
 	implant_topic_ids: Array = [],
 ) -> Dictionary:
 	if not can_cast(caster, "cloud_the_mind"):
@@ -551,14 +550,9 @@ static func resolve_cloud_the_mind(
 	var honor_rank: int = HonorGlorySystem.get_honor_rank(caster)
 	var honor_delta: float = CrimeSystem.get_blasphemous_at_act_honor_loss(honor_rank)
 	HonorGlorySystem.apply_honor_change(caster, honor_delta)
-	var rec: CrimeRecord = CrimeSystem.create_crime_record(
-		next_case_id, Enums.CrimeType.DISHONORABLE_CONDUCT, caster.character_id,
-		location, ic_day, target.character_id, c_roll.total,
-	)
 	return {"success": true, "contested": true,
 		"caster_total": c_roll.total, "target_total": t_roll.total,
-		"wiped_count": wiped, "implanted": implanted,
-		"honor_delta": honor_delta, "crime_record": rec}
+		"wiped_count": wiped, "implanted": implanted, "honor_delta": honor_delta}
 
 
 const SPELL_LIBRARY: Dictionary = {

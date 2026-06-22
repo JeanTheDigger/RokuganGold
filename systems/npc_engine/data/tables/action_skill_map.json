@@ -382,6 +382,10 @@
     "primary": "Stealth",
     "secondary": "Agility"
   },
+  "CLOUD_THE_MIND": {
+    "primary": "Spellcraft",
+    "secondary": "Meditation"
+  },
   "LAUNDER_KOKU": {
     "primary": "Commerce (Appraisal)",
     "secondary": "Sincerity (Deceit)"
