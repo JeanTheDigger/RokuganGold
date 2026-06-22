@@ -6663,6 +6663,13 @@ permanent sleeper at 100% (s54.7c: Willpower×3 sessions). Complements the just-
   applies −3.0 once, resets progress; a post-completion cast hits `already_sleeper`; the candidate picker
   excludes lordless/sleeper/Kolat/out-of-location; the claim rule blocks a second master (progress
   unchanged); the command helper builds the phrase + ELIMINATE command.
+- **End-to-end loop verified** (the core fix — loop termination): a Dream Master (target 2) drove the
+  REAL `scan` → `should_clear` → `_build_kolat_metadata` → executor → `register_sleeper` cycle and
+  conditioned exactly 2 of 3 lord-bound candidates (weakest first, wp 1 then 2), registered both
+  (`sleeper_10`/`sleeper_11`), baked the betrayal commands (ELIMINATE each captive's own lord), then
+  HALTED on day 9 when `scan` returned `{}` at target — the third candidate (wp 3) was never touched,
+  honor clamped to 0.0 after 2×−3.0. The non-termination bug is fixed through the full pipeline, not
+  just the executor in isolation.
 
 ### Pending Redesign — RESOLVED (2026-06-20, ring-change wave)
 - **Ring-changing combat spells — participant-scoped wound deltas, DONE.** The owner's goal was
