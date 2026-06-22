@@ -705,13 +705,18 @@ static func resolve_contested_check(
 	var kiho_a: Dictionary = _get_kiho_buff_bonus(char_a, skill_a, trait_a, ic_day)
 	var kiho_b: Dictionary = _get_kiho_buff_bonus(char_b, skill_b, trait_b, ic_day)
 
+	# Void Point spend on this roll, per side (opt-in via context[_a/_b].spend_void; either
+	# participant of a contested roll may spend, and s37 Altering the Course allows +NkN).
+	var void_a: Dictionary = _get_void_spend_bonus(char_a, context_a, ic_day)
+	var void_b: Dictionary = _get_void_spend_bonus(char_b, context_b, ic_day)
+
 	var roll_a: DiceResult = dice_engine.roll_and_keep(
-		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0) + kiho_a.get("rolled", 0),
-		tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0) + kiho_a.get("kept", 0), sr_a > 0, emph_a
+		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0) + kiho_a.get("rolled", 0) + void_a.get("rolled", 0),
+		tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0) + kiho_a.get("kept", 0) + void_a.get("kept", 0), sr_a > 0, emph_a
 	)
 	var roll_b: DiceResult = dice_engine.roll_and_keep(
-		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0),
-		tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0) + kiho_b.get("kept", 0), sr_b > 0, emph_b
+		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0) + void_b.get("rolled", 0),
+		tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0) + kiho_b.get("kept", 0) + void_b.get("kept", 0), sr_b > 0, emph_b
 	)
 
 	var total_a: int = roll_a.total + flat_bonus_a + wp_a + (tfr_a * FREE_RAISE_VALUE) \
