@@ -328,6 +328,32 @@ static func _get_void_spend_bonus(
 	return {"rolled": int(r["rolled_bonus"]), "kept": int(r["kept_bonus"])}
 
 
+# -- Voice of the Wind (s33 Air 1) — spoken social buff -----------------------
+# A target under Voice of the Wind gains, for the IC day it was cast (the GDD's
+# 10-minute / one-encounter window at this granularity): +1k0 to spoken Social
+# Skill Rolls (Courtier/Etiquette/Sincerity/Intimidation/Temptation/Acting), and
+# the Voice Advantage (+1k1 on a Perform Roll using voice, via context
+# "is_voice_perform"). The two effects never overlap (Perform is not a Social
+# Skill), so there is no double-count. Stacks additively with From the Ashes.
+static func _get_voice_of_the_wind_bonus(
+	character: L5RCharacterData, skill_name: String, context: Dictionary, ic_day: int
+) -> Dictionary:
+	if ic_day < 0 or character.voice_of_the_wind_ic_day != ic_day:
+		return {"rolled": 0, "kept": 0}
+	var rolled: int = 0
+	var kept: int = 0
+	var base_skill: String = skill_name
+	var colon_pos: int = skill_name.find(":")
+	if colon_pos >= 0:
+		base_skill = skill_name.substr(0, colon_pos).strip_edges()
+	if base_skill in SOCIAL_SKILLS:
+		rolled += 1  # +1k0 to Social Skill Rolls that involve speech
+	if context.get("is_voice_perform", false):
+		rolled += 1  # granted Voice Advantage: +1k1 on a voice Perform Roll
+		kept += 1
+	return {"rolled": rolled, "kept": kept}
+
+
 # -- Doji R3: The Perfect Gift (s29.15.4) — one-shot disposition modifier ------
 
 const PERFECT_GIFT_TN: int = 20
@@ -547,17 +573,20 @@ static func resolve_skill_check(
 	# Void Point spend on this roll (opt-in via context; s37 Altering the Course allows +NkN)
 	var void_mod: Dictionary = _get_void_spend_bonus(character, context, ic_day)
 
+	# s33 Voice of the Wind: spoken-social buff (+1k0 social-speech, +1k1 voice Perform)
+	var voice_mod: Dictionary = _get_voice_of_the_wind_bonus(character, skill_name, context, ic_day)
+
 	# Build the pool: (trait + skill + bonus_rolled) k (trait + bonus_kept)
 	var rolled: int = (
 		trait_value + skill_rank + bonus_rolled + ashes_bonus
 		+ adv_skill.get("rolled", 0) + mutation_mod.get("rolled", 0)
 		+ imbalance_mod.get("rolled", 0) + inheritance_mod.get("rolled", 0)
-		+ kiho_mod.get("rolled", 0) + void_mod.get("rolled", 0)
+		+ kiho_mod.get("rolled", 0) + void_mod.get("rolled", 0) + voice_mod.get("rolled", 0)
 	)
 	var kept: int = (
 		trait_value + bonus_kept + adv_skill.get("kept", 0) + mutation_mod.get("kept", 0)
 		+ imbalance_mod.get("kept", 0) + inheritance_mod.get("kept", 0)
-		+ kiho_mod.get("kept", 0) + void_mod.get("kept", 0)
+		+ kiho_mod.get("kept", 0) + void_mod.get("kept", 0) + voice_mod.get("kept", 0)
 	)
 	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
 		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn \
@@ -710,13 +739,17 @@ static func resolve_contested_check(
 	var void_a: Dictionary = _get_void_spend_bonus(char_a, context_a, ic_day)
 	var void_b: Dictionary = _get_void_spend_bonus(char_b, context_b, ic_day)
 
+	# s33 Voice of the Wind: spoken-social buff, per side (court CHARM/NEGOTIATE/PERSUADE).
+	var voice_a: Dictionary = _get_voice_of_the_wind_bonus(char_a, skill_a, context_a, ic_day)
+	var voice_b: Dictionary = _get_voice_of_the_wind_bonus(char_b, skill_b, context_b, ic_day)
+
 	var roll_a: DiceResult = dice_engine.roll_and_keep(
-		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0) + kiho_a.get("rolled", 0) + void_a.get("rolled", 0),
-		tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0) + kiho_a.get("kept", 0) + void_a.get("kept", 0), sr_a > 0, emph_a
+		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0) + kiho_a.get("rolled", 0) + void_a.get("rolled", 0) + voice_a.get("rolled", 0),
+		tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0) + kiho_a.get("kept", 0) + void_a.get("kept", 0) + voice_a.get("kept", 0), sr_a > 0, emph_a
 	)
 	var roll_b: DiceResult = dice_engine.roll_and_keep(
-		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0) + void_b.get("rolled", 0),
-		tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0) + kiho_b.get("kept", 0) + void_b.get("kept", 0), sr_b > 0, emph_b
+		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0) + void_b.get("rolled", 0) + voice_b.get("rolled", 0),
+		tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0) + kiho_b.get("kept", 0) + void_b.get("kept", 0) + voice_b.get("kept", 0), sr_b > 0, emph_b
 	)
 
 	var total_a: int = roll_a.total + flat_bonus_a + wp_a + (tfr_a * FREE_RAISE_VALUE) \

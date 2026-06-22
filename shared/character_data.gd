@@ -73,6 +73,10 @@ var spell_void_bonus_used: int = 0
 # magical-detection contest in resolve_search_person. -1/0 = no cloak.
 @export var cloak_of_night_ic_day: int = -1
 @export var cloak_of_night_strength: int = 0
+# s33 Voice of the Wind (Air 1): spoken-social buff. Active when == the current ic_day
+# (10-minute RAW duration ~ per-tick). Read by SkillResolver: +1k0 to spoken Social
+# Skill Rolls and +1k1 on a voice Perform Roll (the granted Voice Advantage). -1 = none.
+@export var voice_of_the_wind_ic_day: int = -1
 
 # -- Spells (shugenja only) ----------------------------------------------------
 

@@ -518,6 +518,25 @@ static func activate_cloak_of_night(
 	return res
 
 
+## s33 Voice of the Wind (Air 1) — Touch, 1 target. On a successful cast the target gains the
+## spoken-social buff for the IC day (SkillResolver reads voice_of_the_wind_ic_day: +1k0 to
+## spoken Social Skill Rolls, +1k1 on a voice Perform Roll). Self-cast when target is null.
+## Usable wherever a social roll fires — court on the ASCII map or a UI conversation alike.
+static func activate_voice_of_the_wind(
+	caster: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	target: L5RCharacterData = null
+) -> Dictionary:
+	if not can_cast(caster, "voice_of_the_wind"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	var beneficiary: L5RCharacterData = target if target != null else caster
+	var res: Dictionary = resolve_cast(caster, "voice_of_the_wind", dice, 0, beneficiary, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		beneficiary.voice_of_the_wind_ic_day = ic_day
+		res["target_id"] = beneficiary.character_id
+	return res
+
+
 ## s33 Cloud the Mind (Air 5) — blasphemous memory tampering (owner-simplified design: no
 ## day-granular timestamps). On a successful Contested Air (caster) vs Earth (target) roll the
 ## target's known topics are wiped COMPLETELY; the caster may implant chosen topics — real
