@@ -6045,6 +6045,7 @@ static func _process_witness_tampering_writebacks(
 						[],
 					)
 					next_case_id[0] += 1
+					tamper_record.source_action = "CLOUD_THE_MIND"  # so Air-Commune detection can find it
 					crime_records.append(tamper_record)
 					if caster_c != null:
 						var tamper_topic: TopicData = _create_crime_topic(
