@@ -151,6 +151,8 @@ static func _pick_conditioning_candidate(master: L5RCharacterData, chars_by_id: 
 			continue
 		if c.character_id == master.character_id or c.kolat_sect != Enums.KolatSect.NONE:
 			continue
+		if c.lord_id < 0 or KolatSystem.is_sleeper(c):
+			continue  # lord-bound (the betrayal command is meaningful) + not already a sleeper
 		if c.physical_location != master.physical_location:
 			continue
 		if _is_sleeper_of(master, c.character_id):

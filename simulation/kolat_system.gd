@@ -138,7 +138,29 @@ static func complete_conditioning(
 	target.conditioning_stability = STABILITY_FULL
 	target.active_sleeper_command = {}
 	target.sleeper_contact_overdue = 0
+	target.conditioning_progress = 0.0       # in-progress accumulation consumed
+	target.conditioning_master_id = -1
 	HonorGlorySystem.apply_honor_change(dream_master, CONDITIONING_HONOR_COST)
+
+
+## s54.7c Accumulate one CONDUCT_CONDITIONING session toward installing a permanent psychological
+## sleeper. The target is claimed by `master` (a second master's sessions do not add to it); a
+## progressed session adds progress_per_session. Returns true once cumulative progress reaches
+## STABILITY_FULL (the caller then installs via complete_conditioning). No-op (false) on an
+## already-installed sleeper or a target claimed by a different master.
+static func record_conditioning_session(
+	target: L5RCharacterData, master: L5RCharacterData, progressed: bool,
+) -> bool:
+	if is_sleeper(target):
+		return false
+	if target.conditioning_master_id >= 0 and target.conditioning_master_id != master.character_id:
+		return false
+	target.conditioning_master_id = master.character_id
+	if progressed:
+		target.conditioning_progress += progress_per_session(target)
+	# Epsilon guards float-accumulation underflow (N × (100/N) can sum to 99.9999…); far smaller
+	# than any single session's increment (min ≈ 3.33 at Willpower 10), so never completes early.
+	return target.conditioning_progress >= STABILITY_FULL - 0.01
 
 
 ## s33 The World is Truth — resolve the Contested Insight/Air cast (caster vs target). Caster rolls

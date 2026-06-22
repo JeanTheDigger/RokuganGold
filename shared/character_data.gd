@@ -339,6 +339,12 @@ var taint_benefits_suppressed: bool = false
 ## 1-month duration, +1 month per 3 Raises). -1 = no expiry (a permanent psychological sleeper,
 ## or not a sleeper). Cleared with the rest of the sleeper fields when it lapses while dormant.
 @export var sleeper_expiry_ic_day: int = -1
+## s54.7c CONDUCT_CONDITIONING in-progress accumulation: cumulative session progress (0–100) toward
+## installing a permanent psychological sleeper. 0 when not being conditioned or already a sleeper.
+@export var conditioning_progress: float = 0.0
+## The master currently conditioning this target (-1 = none). A second master's sessions do not
+## add to another master's in-progress conditioning.
+@export var conditioning_master_id: int = -1
 
 # -- Kolat koku fields (Section 54.7h; Coin/Master use, stored hidden) ---------
 ## Laundered, untraceable working reserve (Master Coin).

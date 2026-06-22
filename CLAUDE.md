@@ -6629,6 +6629,41 @@ memory-rewrite uses (forget events / believe they're someone else) are not model
 persists via SaveManager (@export); no WorldStateSaver change. Same world-sim-only scope as the rest of
 the Kolat system (NPCs never use the ASCII map; this is a world-sim ActionID, not a tile-combat cast).
 
+### s54.7c Conditioning completion — multi-session psychological sleeper install now accumulates (2026-06-22, runtime-verified 7/7)
+The psychological `CONDUCT_CONDITIONING` path resolved one session per cast but NEVER installed the
+sleeper — `complete_conditioning` had no caller (completion was "deferred") and `dream_sleeper_registry`
+was never written, so `_sleeper_count` was permanently 0 and a Dream Master conditioned the same target
+forever (the loop never terminated). Now cumulative progress accumulates across casts and installs the
+permanent sleeper at 100% (s54.7c: Willpower×3 sessions). Complements the just-wired World is Truth
+(the magical one-shot install); together the two sleeper-creation paths are both live.
+- **Data:** `L5RCharacterData.conditioning_progress` (0–100 in-progress; 0 when not conditioning or
+  already a sleeper) + `conditioning_master_id` (the claiming master; −1 = none).
+- **`KolatSystem.record_conditioning_session(target, master, progressed)`** — claims the target for the
+  master (a second master's sessions do NOT add to another's in-progress conditioning), adds
+  `progress_per_session` on a progressed session, returns true at `STABILITY_FULL` (epsilon-guarded
+  against float-accumulation underflow: N × (100/N) can sum to 99.9999…; the 0.01 epsilon is far below
+  any single session's increment so it never completes early). `complete_conditioning` now also resets
+  the in-progress fields.
+- **`KolatExecutor._conduct_conditioning`** rewritten: dead/already-sleeper guards → resolve session →
+  accumulate → at 100% install via `complete_conditioning` (sleeper fields + −3.0 Honor, once) and
+  register in `dream_sleeper_registry` via `KolatNetwork.register_sleeper` — so `_sleeper_count` advances,
+  `_is_sleeper_of` returns true, the opportunity scanner's `should_clear` releases the slot, and the
+  Master stops at its `world_start_sleepers` target. Below 100% returns the running progress.
+- **Shared betrayal command:** `NPCDecisionEngine._build_sleeper_command(target)` (≤5-word phrase +
+  ELIMINATE-their-lord command) now feeds BOTH `CONDUCT_CONDITIONING` and `CAST_WORLD_IS_TRUTH` metadata
+  (the latter refactored onto it via `meta.merge`).
+- **Candidate constraint:** `_pick_conditioning_candidate` now skips lordless targets (the betrayal
+  command needs a lord) and already-sleeper targets (cross-path de-dup with The World is Truth, which
+  also skips sleepers). The World is Truth sleepers are NOT registered in `dream_sleeper_registry`
+  (they're temporary/expiring and may be cast by non-Dream shugenja Masters — the registry is the
+  Dream permanent-sleeper count); the `is_sleeper` candidate skip prevents re-conditioning them.
+- **Runtime-verified 7/7** (Godot 4.6.2, headless): accumulation reaches ready at EXACTLY
+  sessions_required (Willpower 2 → 6, no off-by-one); `complete_conditioning` resets progress + installs
+  + applies honor; the executor loop completes in 6 casts, registers the sleeper (npc_id correct),
+  applies −3.0 once, resets progress; a post-completion cast hits `already_sleeper`; the candidate picker
+  excludes lordless/sleeper/Kolat/out-of-location; the claim rule blocks a second master (progress
+  unchanged); the command helper builds the phrase + ELIMINATE command.
+
 ### Pending Redesign — RESOLVED (2026-06-20, ring-change wave)
 - **Ring-changing combat spells — participant-scoped wound deltas, DONE.** The owner's goal was
   combat-scoped Ring deltas with **no world-sim leak**. The scope-discovery counted ~252 in-combat

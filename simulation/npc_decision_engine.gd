@@ -3800,20 +3800,33 @@ static func _build_kolat_metadata(
 			pass
 		"SPONSOR_INSURGENCY":
 			meta["strength"] = maxi(1, int(need.threshold))
+		"CONDUCT_CONDITIONING":
+			# s54.7c: bake the betrayal sleeper command for the multi-session psychological install
+			# (the opportunity scanner already picked a lord-bound co-located candidate as `tgt`).
+			if tgt != null and tgt.lord_id >= 0:
+				meta.merge(_build_sleeper_command(tgt))
 		"CAST_WORLD_IS_TRUTH":
 			# s33: pick a co-located held (captive/incapacitated) non-Kolat target the caster can
-			# rewrite, and bake a betrayal sleeper command — turn the captive against their own lord
-			# on activation (the archetypal "create a sleeper agent" use; ELIMINATE is the canonical
-			# command the override loop + completion check support). Phrase ≤5 words.
+			# rewrite, and bake the same betrayal sleeper command — turn the captive against their
+			# own lord on activation (the archetypal "create a sleeper agent" use).
 			if master != null:
 				var wt: L5RCharacterData = _pick_world_is_truth_target(master, chars_by_id)
 				if wt != null:
 					meta["target"] = wt
 					meta["target_npc_id"] = wt.character_id
-					meta["trigger_phrase"] = "kolat sleeper %d" % wt.character_id
-					meta["command"] = {"need_type": "ELIMINATE_CHARACTER", "target_npc_id": wt.lord_id}
+					meta.merge(_build_sleeper_command(wt))
 					meta["raises"] = 0
 	return meta
+
+
+## s54.7/s33 The betrayal sleeper install: a ≤5-word trigger phrase + the engine-readable command
+## to ELIMINATE the (lord-bound) target's own lord on activation — the canonical "sleeper agent"
+## use, and the only command type the override loop + `_sleeper_command_complete` support.
+static func _build_sleeper_command(target: L5RCharacterData) -> Dictionary:
+	return {
+		"trigger_phrase": "kolat sleeper %d" % target.character_id,
+		"command": {"need_type": "ELIMINATE_CHARACTER", "target_npc_id": target.lord_id},
+	}
 
 
 ## s33 The World is Truth target: a co-located, held (captive OR incapacitated), non-Kolat, non-PC,

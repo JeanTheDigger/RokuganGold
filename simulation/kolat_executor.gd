@@ -134,14 +134,29 @@ static func _contribute_to_reserve(actor: L5RCharacterData, metadata: Dictionary
 
 static func _conduct_conditioning(actor: L5RCharacterData, metadata: Dictionary, dice: DiceEngine) -> Dictionary:
 	var target: L5RCharacterData = metadata.get("target", null)
-	if target == null:
+	if target == null or CharacterStats.is_dead(target):
 		return {"ok": false, "reason": "no_target"}
-	# Resolve one session. Cumulative progress + the completion handler (install
-	# fields, −3.0 Honor) are driven by the CONDITION_SLEEPER decomposition (deferred).
+	if KolatSystem.is_sleeper(target):
+		return {"ok": false, "reason": "already_sleeper"}
+	# Resolve one session and accumulate toward installation (s54.7c: Willpower×3 sessions).
 	var session: Dictionary = KolatSystem.resolve_conditioning_session(actor, target, dice)
-	return {"ok": true, "progressed": session.get("progressed", false),
-		"progress_per_session": KolatSystem.progress_per_session(target),
-		"sessions_required": KolatSystem.sessions_required(target)}
+	var progressed: bool = session.get("progressed", false)
+	var ready: bool = KolatSystem.record_conditioning_session(target, actor, progressed)
+	if not ready:
+		return {"ok": true, "progressed": progressed, "progress": target.conditioning_progress,
+			"sessions_required": KolatSystem.sessions_required(target)}
+	# 100% — install the permanent sleeper with the metadata-built phrase + command.
+	var phrase: String = String(metadata.get("trigger_phrase", ""))
+	var command: Dictionary = metadata.get("command", {})
+	if not KolatSystem.is_valid_command_phrase(phrase) or command.is_empty():
+		# Hold the accumulated progress (don't lose it) until a command is available.
+		return {"ok": true, "progressed": progressed, "progress": target.conditioning_progress,
+			"reason": "no_command"}
+	KolatSystem.complete_conditioning(target, actor, phrase, command)  # install + -3.0 Honor + reset progress
+	var ic_day: int = int(metadata.get("ic_day", -1))
+	KolatNetwork.register_sleeper(actor, "sleeper_%d" % target.character_id, target.character_id,
+		phrase, String(command.get("need_type", "")), ic_day, false)
+	return {"ok": true, "completed": true, "progressed": true, "target_id": target.character_id}
 
 
 ## CAST_WORLD_IS_TRUTH (s33): the magical single-cast sleeper install. Validates the held-target gate
