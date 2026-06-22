@@ -1901,6 +1901,9 @@ static func execute_recover_weapon(
 		return {"success": false, "reason": "participant_missing"}
 	if not p.disarmed:
 		return {"success": false, "reason": "not_disarmed"}
+	if p.weapon_swept:
+		# Gathering Swirl (s33) carried the weapon beyond the owner's feet — nothing to pick up.
+		return {"success": false, "reason": "weapon_swept_away"}
 	var wl: int = CharacterStats.get_wound_level(character)
 	if ts.is_down_restricted(wl):
 		return {"success": false, "reason": "down_only_free_actions"}
@@ -2634,6 +2637,69 @@ static func execute_cast_mists(
 	state.combat_log.append({"type": "mists_of_illusion", "round": state.combat.round_number,
 		"caster_id": caster_id, "x": tx, "y": ty})
 	return {"success": true, "x": tx, "y": ty}
+
+
+## s33 Gathering Swirl (Air 1) — Complex Action. The Air kami gather a NAMED un-wielded item
+## within 20' (4 tiles) and deposit it at a chosen location. The only un-wielded-AND-unattended
+## item the combat model tracks is a disarmed character's dropped weapon, so `target_char_id`
+## names that owner (the GDD requires naming the specific item; "cannot snatch from another
+## person's grasp or person" → the weapon must already be on the ground = the owner is disarmed).
+## On a successful cast the weapon is swept beyond the owner's feet (weapon_swept) so they can no
+## longer recover it. `dest` records where it was deposited (caster / ally / tile), which must lie
+## within the area; the relocation itself is the effect — no recipient is auto-armed (mid-combat
+## weapon transfer/proficiency is not modelled).
+static func execute_gathering_swirl(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_char_id: int, dest: Dictionary, dice_engine: DiceEngine,
+) -> Dictionary:
+	if caster == null or CharacterStats.is_dead(caster):
+		return {"success": false, "reason": "caster_dead"}
+	if not state.positions.has(caster_id):
+		return {"success": false, "reason": "not_in_combat"}
+	if not SpellSystem.can_cast(caster, "gathering_swirl"):
+		return {"success": false, "reason": "cannot_cast"}
+	var ts: TurnState = state.turn_states.get(caster_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_action"}
+	# The named item: a specific disarmed character's dropped weapon, within the 20' area.
+	if not state.positions.has(target_char_id):
+		return {"success": false, "reason": "target_not_in_combat"}
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_char_id, null)
+	if t_p == null:
+		return {"success": false, "reason": "target_missing"}
+	if not t_p.disarmed:
+		# Wielded/sheathed weapons are "in their grasp or on their person" — cannot be snatched.
+		return {"success": false, "reason": "no_unwielded_item"}
+	if t_p.weapon_swept:
+		return {"success": false, "reason": "already_swept"}
+	var cp: Vector2i = state.positions[caster_id]
+	var tp: Vector2i = state.positions[target_char_id]
+	if maxi(absi(tp.x - cp.x), absi(tp.y - cp.y)) > 4:
+		return {"success": false, "reason": "out_of_range"}
+	# Validate the deposit destination lies within the 20' area (Chebyshev <= 4 from caster).
+	var dest_kind: String = String(dest.get("kind", "caster"))
+	var dest_pos: Vector2i = cp
+	if dest_kind == "ally":
+		var ally_id: int = int(dest.get("char_id", -1))
+		if not state.positions.has(ally_id):
+			return {"success": false, "reason": "dest_ally_not_in_combat"}
+		dest_pos = state.positions[ally_id]
+	elif dest_kind == "tile":
+		dest_pos = Vector2i(int(dest.get("tile_x", -1)), int(dest.get("tile_y", -1)))
+		if dest_pos.x < 0 or dest_pos.y < 0 or dest_pos.x >= state.map.width or dest_pos.y >= state.map.height:
+			return {"success": false, "reason": "dest_out_of_bounds"}
+	if maxi(absi(dest_pos.x - cp.x), absi(dest_pos.y - cp.y)) > 4:
+		return {"success": false, "reason": "dest_out_of_area"}
+	ts.consume_complex()
+	var res: Dictionary = SpellSystem.resolve_cast(caster, "gathering_swirl", dice_engine)
+	if not res.get("success", false):
+		return {"success": false, "reason": "cast_failed", "roll": res}
+	t_p.weapon_swept = true
+	state.combat_log.append({"type": "gathering_swirl", "round": state.combat.round_number,
+		"caster_id": caster_id, "swept_from": target_char_id,
+		"dest_kind": dest_kind, "dest_x": dest_pos.x, "dest_y": dest_pos.y})
+	return {"success": true, "swept_from": target_char_id, "dest_kind": dest_kind,
+		"dest_x": dest_pos.x, "dest_y": dest_pos.y}
 
 ## Nearest visible phantom to an NPC within `reach` tiles (path-distance proxy via
 ## Chebyshev + LOS), or {} if none. Used by the no-target lure.
@@ -6219,7 +6285,8 @@ static func execute_npc_turn(
 
 	# -- Recover a disarmed weapon (s40): pick it back up (Simple) rather than fight
 	# unarmed. Spends the Simple, so no Complex attack this turn — the Disarm's tempo cost.
-	if p.disarmed and not ts.is_down_restricted(wl) and ts.can_use_simple():
+	# A weapon swept away by Gathering Swirl (s33) can't be recovered, so don't try.
+	if p.disarmed and not p.weapon_swept and not ts.is_down_restricted(wl) and ts.can_use_simple():
 		var rw: Dictionary = execute_recover_weapon(state, npc_id, npc)
 		if rw.get("success", false):
 			actions_taken.append({"action": "recover_weapon", "result": rw})

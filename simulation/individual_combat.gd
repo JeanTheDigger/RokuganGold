@@ -226,6 +226,10 @@ class Participant:
 	# Disarm maneuver (s40): the character's weapon is on the ground — they fight unarmed
 	# until they spend an action to recover it. Cleared by execute_recover_weapon.
 	var disarmed: bool = false
+	# Gathering Swirl (s33 Air 1): the dropped weapon was telekinetically swept beyond the
+	# owner's feet, so it can no longer be recovered (execute_recover_weapon fails). The owner
+	# stays unarmed for the skirmish. Set only on an already-disarmed (un-wielded) weapon.
+	var weapon_swept: bool = false
 	# Victory of the River (s30a): the single opponent currently held under the
 	# Armor-TN debuff ("One opponent at a time"); -1 = none.
 	var votr_target_id: int = -1
