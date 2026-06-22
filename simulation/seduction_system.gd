@@ -61,17 +61,25 @@ static func resolve_seduction(
 	if tempt_rank == 0:
 		return {"success": false, "reason": "no_temptation_skill"}
 
-	var etiquette_rank: int = target.skills.get("Etiquette", 0)
 	# STUDENT_OF_SHOURIDO (s45): effective Honor rank is 5 minimum for social defense.
 	var honor_rank: int = AdvantageSystem.get_shourido_honor_bonus(target, int(target.honor))
-	var defense_tn: int = BASE_TN + etiquette_rank + target.willpower + honor_rank
 
-	var needed: int = defense_tn + (raises_called * 5)
-	var result: Dictionary = SkillResolver.resolve_skill_check(
-		seducer, dice_engine, "Temptation", needed,
+	# Contested Temptation roll (s12.8c / s34): the seducer rolls Temptation; the target ROLLS
+	# their resistance (Etiquette/Willpower + Honor) rather than presenting a static TN, so
+	# Soul of Stone's +3k0 manipulation resist attaches via the is_manipulation_resist context.
+	# Called raises raise the bar the seducer must clear. BASE_TN (0) folds into the seducer roll.
+	var seducer_result: Dictionary = SkillResolver.resolve_skill_check(
+		seducer, dice_engine, "Temptation", BASE_TN,
 	)
-	var success: bool = result.get("success", false)
-	var margin: int = result.get("margin", 0)
+	var target_result: Dictionary = SkillResolver.resolve_skill_check(
+		target, dice_engine, "Etiquette", 0,
+		0, "", Enums.Trait.WILLPOWER, 0, 0, honor_rank, -1, {"is_manipulation_resist": true},
+	)
+	var seducer_total: int = seducer_result.get("total", 0)
+	var target_total: int = target_result.get("total", 0)
+	var bar: int = target_total + (raises_called * 5)
+	var success: bool = seducer_total >= bar
+	var margin: int = seducer_total - target_total
 
 	HonorGlorySystem.apply_honor_change(seducer, CrimeSystem.get_low_skill_honor_cost(seducer, "Temptation"))
 	HonorGlorySystem.apply_infamy_change(seducer, INFAMY_GAIN)
@@ -79,8 +87,8 @@ static func resolve_seduction(
 	if not success:
 		return {
 			"success": false,
-			"roll_total": result.get("total", 0),
-			"tn": needed,
+			"roll_total": seducer_total,
+			"tn": bar,
 			"margin": margin,
 			"honor_cost": HONOR_COST,
 		}
@@ -89,8 +97,8 @@ static func resolve_seduction(
 
 	return {
 		"success": true,
-		"roll_total": result.get("total", 0),
-		"tn": needed,
+		"roll_total": seducer_total,
+		"tn": bar,
 		"margin": margin,
 		"honor_cost": HONOR_COST,
 		"variant": variant,

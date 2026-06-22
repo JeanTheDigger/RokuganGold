@@ -537,6 +537,26 @@ static func activate_voice_of_the_wind(
 	return res
 
 
+## s34 Soul of Stone (Earth 1, Defense) — Touch, 1 target. On a successful cast the target's
+## soul is fortified like stone: +3k0 to resist coercive social manipulation, -1k0 to its own
+## Awareness social-influence rolls. Boolean buff (soul_of_stone_active), cleared by the daily
+## orchestrator pass (1-hour RAW duration ~ the IC day). Self-cast when target is null. The
+## resist works wherever a manipulation roll resolves — court on the ASCII map or a UI exchange.
+static func activate_soul_of_stone(
+	caster: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	target: L5RCharacterData = null
+) -> Dictionary:
+	if not can_cast(caster, "soul_of_stone"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	var beneficiary: L5RCharacterData = target if target != null else caster
+	var res: Dictionary = resolve_cast(caster, "soul_of_stone", dice, 0, beneficiary, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		beneficiary.soul_of_stone_active = true
+		res["target_id"] = beneficiary.character_id
+	return res
+
+
 ## s33 Cloud the Mind (Air 5) — blasphemous memory tampering (owner-simplified design: no
 ## day-granular timestamps). On a successful Contested Air (caster) vs Earth (target) roll the
 ## target's known topics are wiped COMPLETELY; the caster may implant chosen topics — real

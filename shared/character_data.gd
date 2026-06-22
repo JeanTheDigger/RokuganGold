@@ -77,6 +77,13 @@ var spell_void_bonus_used: int = 0
 # (10-minute RAW duration ~ per-tick). Read by SkillResolver: +1k0 to spoken Social
 # Skill Rolls and +1k1 on a voice Perform Roll (the granted Voice Advantage). -1 = none.
 @export var voice_of_the_wind_ic_day: int = -1
+# s34 Soul of Stone (Earth 1, Defense): the soul is fortified like stone. +3k0 to RESIST
+# coercive social manipulation (court Negotiate/Charm/Persuade, Intimidation, Temptation,
+# Compulsions); -1k0 to the buffed character's own Awareness social-influence rolls. Boolean
+# (not an ic_day marker) because the resist read-sites sit deep in seduction/bribery/
+# intimidation call chains that lack ic_day; cleared by a daily orchestrator pass (1-hour RAW
+# duration ~ the IC day). True = active.
+@export var soul_of_stone_active: bool = false
 
 # -- Spells (shugenja only) ----------------------------------------------------
 

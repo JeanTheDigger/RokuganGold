@@ -101,9 +101,11 @@ static func attempt_bribe(
 	)
 	var briber_total: int = briber_result.get("total", 0)
 
+	# The magistrate's Etiquette/Willpower roll RESISTS a Temptation manipulation — Soul of
+	# Stone (s34) grants +3k0 here via the is_manipulation_resist context.
 	var magistrate_result: Dictionary = SkillResolver.resolve_skill_check(
 		magistrate, dice_engine, "Etiquette", 0,
-		0, "", Enums.Trait.WILLPOWER, 0, 0, honor_bonus,
+		0, "", Enums.Trait.WILLPOWER, 0, 0, honor_bonus, -1, {"is_manipulation_resist": true},
 	)
 	var magistrate_total: int = magistrate_result.get("total", 0)
 

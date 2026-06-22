@@ -163,6 +163,7 @@ static func advance_day(
 	_populate_military_data(military_data, companies)
 
 	_clear_stale_context_flags(world_states)
+	_clear_soul_of_stone_buffs(characters)
 	_inject_kolat_objective_flags(world_states, objectives_map)
 	_expire_province_weather(provinces, ic_day)
 
@@ -5942,6 +5943,16 @@ static func _process_flee_logistics(
 # For each successful targeted COMMUNE_KAMI cast, dispatch to the chosen element's domain
 # (CommuneSystem.commune_reveal), which performs the reveal — e.g. Air detects a covert
 # s33 Cloud the Mind tampering crime and exposes it to the communer.
+
+# -- Soul of Stone daily clear (s34) -------------------------------------------
+# The Earth 1 buff lasts ~the IC day it was cast (1-hour RAW duration at this
+# granularity). Cleared at the start of each day, before actions run, so a buff
+# cast during the day survives that day's resolution and lapses the next morning.
+static func _clear_soul_of_stone_buffs(characters: Array) -> void:
+	for c: L5RCharacterData in characters:
+		if c.soul_of_stone_active:
+			c.soul_of_stone_active = false
+
 
 static func _process_commune_writebacks(
 	results: Array, characters_by_id: Dictionary,
@@ -11793,7 +11804,9 @@ static func _process_compulsion_on_arrival(
 		var tn: int = trigger.get("tn", 15)
 		var wil: int = character.willpower
 		var compulsion_wound: int = CharacterStats.get_wound_penalty(character)
-		var roll: DiceResult = dice_engine.roll_and_keep(wil, wil, false, false)
+		# Soul of Stone (s34): +3k0 to resist a Compulsion's pull.
+		var soul_resist: int = SkillResolver.SOUL_OF_STONE_RESIST_BONUS if character.soul_of_stone_active else 0
+		var roll: DiceResult = dice_engine.roll_and_keep(wil + soul_resist, wil, false, false)
 		if (roll.total + compulsion_wound) < tn:
 			var comp_dis: DisadvantageData = AdvantageSystem.get_disadvantage(
 				character, Enums.Disadvantage.COMPULSION

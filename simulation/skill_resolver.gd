@@ -354,6 +354,32 @@ static func _get_voice_of_the_wind_bonus(
 	return {"rolled": rolled, "kept": kept}
 
 
+# -- Soul of Stone (s34 Earth 1, Defense) — manipulation resist / influence penalty --
+# +3k0 when RESISTING coercive social manipulation (the caller marks the roll with
+# context "is_manipulation_resist"); -1k0 to the buffed character's own Awareness-based
+# social-influence rolls (Courtier/Etiquette/Sincerity/Temptation/Intimidation/Acting).
+# The two are exclusive: a resist roll gets +3 (never the -1). Both are GDD-exact (s34).
+const SOUL_OF_STONE_RESIST_BONUS: int = 3
+const SOUL_OF_STONE_INFLUENCE_PENALTY: int = -1
+
+static func _get_soul_of_stone_bonus(
+	character: L5RCharacterData, skill_name: String, trait_used: Enums.Trait, context: Dictionary
+) -> int:
+	if not character.soul_of_stone_active:
+		return 0
+	if context.get("is_manipulation_resist", false):
+		return SOUL_OF_STONE_RESIST_BONUS  # +3k0 to resist manipulation
+	# Downside: -1k0 to Awareness-based Skill Rolls made to influence others.
+	if trait_used == Enums.Trait.AWARENESS:
+		var base_skill: String = skill_name
+		var colon_pos: int = skill_name.find(":")
+		if colon_pos >= 0:
+			base_skill = skill_name.substr(0, colon_pos).strip_edges()
+		if base_skill in SOCIAL_SKILLS:
+			return SOUL_OF_STONE_INFLUENCE_PENALTY
+	return 0
+
+
 # -- Doji R3: The Perfect Gift (s29.15.4) — one-shot disposition modifier ------
 
 const PERFECT_GIFT_TN: int = 20
@@ -576,12 +602,16 @@ static func resolve_skill_check(
 	# s33 Voice of the Wind: spoken-social buff (+1k0 social-speech, +1k1 voice Perform)
 	var voice_mod: Dictionary = _get_voice_of_the_wind_bonus(character, skill_name, context, ic_day)
 
+	# s34 Soul of Stone: +3k0 resisting manipulation / -1k0 Awareness social influence
+	var soul_mod: int = _get_soul_of_stone_bonus(character, skill_name, trait_used, context)
+
 	# Build the pool: (trait + skill + bonus_rolled) k (trait + bonus_kept)
 	var rolled: int = (
 		trait_value + skill_rank + bonus_rolled + ashes_bonus
 		+ adv_skill.get("rolled", 0) + mutation_mod.get("rolled", 0)
 		+ imbalance_mod.get("rolled", 0) + inheritance_mod.get("rolled", 0)
 		+ kiho_mod.get("rolled", 0) + void_mod.get("rolled", 0) + voice_mod.get("rolled", 0)
+		+ soul_mod
 	)
 	var kept: int = (
 		trait_value + bonus_kept + adv_skill.get("kept", 0) + mutation_mod.get("kept", 0)
@@ -743,12 +773,16 @@ static func resolve_contested_check(
 	var voice_a: Dictionary = _get_voice_of_the_wind_bonus(char_a, skill_a, context_a, ic_day)
 	var voice_b: Dictionary = _get_voice_of_the_wind_bonus(char_b, skill_b, context_b, ic_day)
 
+	# s34 Soul of Stone, per side: +3k0 resisting manipulation / -1k0 Awareness social influence.
+	var soul_a: int = _get_soul_of_stone_bonus(char_a, skill_a, trait_a, context_a)
+	var soul_b: int = _get_soul_of_stone_bonus(char_b, skill_b, trait_b, context_b)
+
 	var roll_a: DiceResult = dice_engine.roll_and_keep(
-		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0) + kiho_a.get("rolled", 0) + void_a.get("rolled", 0) + voice_a.get("rolled", 0),
+		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0) + kiho_a.get("rolled", 0) + void_a.get("rolled", 0) + voice_a.get("rolled", 0) + soul_a,
 		tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0) + kiho_a.get("kept", 0) + void_a.get("kept", 0) + voice_a.get("kept", 0), sr_a > 0, emph_a
 	)
 	var roll_b: DiceResult = dice_engine.roll_and_keep(
-		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0) + void_b.get("rolled", 0) + voice_b.get("rolled", 0),
+		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0) + void_b.get("rolled", 0) + voice_b.get("rolled", 0) + soul_b,
 		tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0) + kiho_b.get("kept", 0) + void_b.get("kept", 0) + voice_b.get("kept", 0), sr_b > 0, emph_b
 	)
 
