@@ -518,6 +518,49 @@ static func activate_cloak_of_night(
 	return res
 
 
+## s33 Cloud the Mind (Air 5) — blasphemous memory tampering (owner-simplified design: no
+## day-granular timestamps). On a successful Contested Air (caster) vs Earth (target) roll the
+## target's known topics are wiped COMPLETELY; the caster may implant chosen topics — real
+## existing IDs and/or pre-fabricated ones the caller created (passed in implant_topic_ids).
+## The Air slot is consumed on the attempt. Cost on a successful cast: a blasphemous Table 2.3
+## Honor loss + a DISHONORABLE_CONDUCT CrimeRecord (the detectable dishonor — the caller stores it).
+## Returns {success, contested, caster_total, target_total, wiped_count, implanted, honor_delta,
+## crime_record}.
+static func resolve_cloud_the_mind(
+	caster: L5RCharacterData, target: L5RCharacterData, dice: DiceEngine,
+	next_case_id: int, ic_day: int, location: String,
+	implant_topic_ids: Array = [],
+) -> Dictionary:
+	if not can_cast(caster, "cloud_the_mind"):
+		return {"success": false, "reason": "cannot_cast"}
+	consume_slot(caster, Enums.Ring.AIR)  # Air spell slot used on the attempt
+	var c_air: int = get_ring_value(caster, Enums.Ring.AIR)
+	var t_earth: int = get_ring_value(target, Enums.Ring.EARTH)
+	var c_roll: DiceResult = dice.roll_and_keep(c_air, c_air, true, false)
+	var t_roll: DiceResult = dice.roll_and_keep(t_earth, t_earth, true, false)
+	if c_roll.total <= t_roll.total:  # ties go to the target (RAW: resistance)
+		return {"success": false, "contested": true,
+			"caster_total": c_roll.total, "target_total": t_roll.total}
+	var wiped: int = target.topic_pool.size()
+	target.topic_pool.clear()
+	var implanted: int = 0
+	for tid: int in implant_topic_ids:
+		if tid not in target.topic_pool:
+			target.topic_pool.append(tid)
+			implanted += 1
+	var honor_rank: int = HonorGlorySystem.get_honor_rank(caster)
+	var honor_delta: float = CrimeSystem.get_blasphemous_at_act_honor_loss(honor_rank)
+	HonorGlorySystem.apply_honor_change(caster, honor_delta)
+	var rec: CrimeRecord = CrimeSystem.create_crime_record(
+		next_case_id, Enums.CrimeType.DISHONORABLE_CONDUCT, caster.character_id,
+		location, ic_day, target.character_id, c_roll.total,
+	)
+	return {"success": true, "contested": true,
+		"caster_total": c_roll.total, "target_total": t_roll.total,
+		"wiped_count": wiped, "implanted": implanted,
+		"honor_delta": honor_delta, "crime_record": rec}
+
+
 const SPELL_LIBRARY: Dictionary = {
 	# === UNIVERSAL (s32) — available to all shugenja ===
 	"sense":     {"e": -1, "m": 1, "s": 3,  "u": true},
