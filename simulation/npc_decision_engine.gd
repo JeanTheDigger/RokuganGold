@@ -902,6 +902,27 @@ static func _apply_world_is_truth_precondition_filter(
 	return options
 
 
+# -- Phase 4c: COMMUNE_KAMI Precondition Filter (s32) -------------------------
+# COMMUNE_KAMI is castable only by a shugenja who knows the Commune spell.
+# Every shugenja school starts with "commune" (universal ML1), so this is a
+# cheap shugenja gate; it removes the action for bushi/courtiers/monks who
+# scored it through a shared NeedType (INVESTIGATE_THREAT / UPHOLD_LAW).
+static func _apply_commune_precondition_filter(
+	options: Array,
+	character: L5RCharacterData,
+) -> Array:
+	var has_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "COMMUNE_KAMI":
+			has_action = true
+			break
+	if not has_action:
+		return options
+	if character != null and SpellSystem.is_shugenja(character) and "commune" in character.spells_known:
+		return options
+	return _remove_action(options, "COMMUNE_KAMI")
+
+
 # -- Phase 4c: PETITION_ACCESS Precondition Filter (s2.3.23) ------------------
 # Surfaces PETITION_ACCESS only when the orchestrator has injected a non-empty
 # petition_eligible_type for this character (at Otosan Uchi, lacking the relevant
@@ -1258,6 +1279,7 @@ static func run(
 	options = _apply_origami_precondition_filter(options, character, ctx)
 	options = _apply_garden_precondition_filter(options, character, ctx)
 	options = _apply_world_is_truth_precondition_filter(options, character, chars_by_id)
+	options = _apply_commune_precondition_filter(options, character)
 	options = _apply_arrived_travel_filter(options, need, ctx)
 	options = _apply_compliance_filter(options, ctx)
 
@@ -1571,7 +1593,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"MENTOR",
 				"TREAT_WOUND",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
-				"EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT",
+				"EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT", "COMMUNE_KAMI",
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
@@ -1629,7 +1651,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"FORGE_IMPERSONATION_LETTER", "FORGE_ORDER",
 				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
-				"EXAMINE_LETTER", "EXAMINE_FOR_TAINT",
+				"EXAMINE_LETTER", "EXAMINE_FOR_TAINT", "COMMUNE_KAMI",
 				"TREAT_WOUND",
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
@@ -1673,7 +1695,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
-				"EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT",
+				"EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT", "COMMUNE_KAMI",
 				"INVESTIGATE_PROVINCE",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
@@ -1807,6 +1829,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"EVALUATE_WAR_READINESS": 1,
 		"BRIBE_FOR_INFO": 1,
 		"EAVESDROP": 1,
+		"COMMUNE_KAMI": 1,
 		"INTERCEPT_LETTER": 1,
 		"SEARCH_QUARTERS": 1,
 		"BEGIN_TRAVEL": 1,
@@ -3418,6 +3441,12 @@ static func _populate_action_metadata(
 			"taint_target_id": ctx.known_objectives.get("taint_corroboration_target_id", -1),
 			"taint_topic_id": ctx.known_objectives.get("taint_corroboration_topic_id", -1),
 		}
+	elif option.action_id == "COMMUNE_KAMI":
+		# s32 Commune the Air kami about a suspected mind-tampering victim (the investigation's
+		# subject). Element defaults to AIR — the wired Cloud the Mind detection domain.
+		if need.target_npc_id >= 0:
+			option.target_npc_id = need.target_npc_id
+		option.metadata = {"commune_element": Enums.Ring.AIR}
 	elif option.action_id == "SEARCH_PERSON":
 		var is_magistrate: bool = ctx.known_objectives.get("standing_need_type", "") == "UPHOLD_LAW"
 		option.metadata = {

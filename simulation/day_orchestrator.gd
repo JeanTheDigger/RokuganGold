@@ -458,6 +458,11 @@ static func advance_day(
 		death_events,
 	)
 
+	_process_commune_writebacks(
+		day_result.get("results", []),
+		characters_by_id, crime_records, active_topics,
+	)
+
 	_process_witness_report_letter_writebacks(
 		day_result.get("results", []),
 		characters_by_id, active_topics, pending_letters,
@@ -5931,6 +5936,30 @@ static func _process_flee_logistics(
 			})
 			world_states[vkey] = vacancies
 			fugitive.role_position = ""
+
+
+# -- Commune Writebacks (s32) --------------------------------------------------
+# For each successful targeted COMMUNE_KAMI cast, dispatch to the chosen element's domain
+# (CommuneSystem.commune_reveal), which performs the reveal — e.g. Air detects a covert
+# s33 Cloud the Mind tampering crime and exposes it to the communer.
+
+static func _process_commune_writebacks(
+	results: Array, characters_by_id: Dictionary,
+	crime_records: Array, active_topics: Array,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result
+		if r.get("action_id", "") != "COMMUNE_KAMI" or not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var communer: L5RCharacterData = characters_by_id.get(r.get("character_id", -1))
+		var target: L5RCharacterData = characters_by_id.get(effects.get("commune_target_id", -1))
+		if communer == null or target == null:
+			continue
+		var element: int = int(effects.get("commune_element", Enums.Ring.AIR))
+		CommuneSystem.commune_reveal(communer, target, element, crime_records, active_topics)
 
 
 # -- Witness Tampering Writebacks (s11.3.13c) ----------------------------------

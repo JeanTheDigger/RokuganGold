@@ -1237,6 +1237,18 @@ static func _try_execute_covert(
 			var r: Dictionary = SecretSystem.resolve_eavesdrop(character, target, dice_engine)
 			return _build_covert_result(action, ctx, "Stealth", r)
 
+		"COMMUNE_KAMI":
+			# s32 Commune — standardized per-element divination targeted at a person. The cast
+			# (resolve_commune) rolls the chosen element's Ring vs TN 10; the per-element reveal
+			# runs in _process_commune_writebacks (which holds crime_records / active_topics).
+			if target == null:
+				return {}
+			var commune_el: int = int(action.metadata.get("commune_element", Enums.Ring.AIR))
+			var r: Dictionary = CommuneSystem.resolve_commune(character, dice_engine, commune_el)
+			r["commune_target_id"] = target.character_id
+			r["commune_element"] = commune_el
+			return _build_covert_result(action, ctx, "Spellcraft", r)
+
 		"INTERCEPT_LETTER":
 			var same_loc: bool = target != null and target.physical_location == character.physical_location
 			var r: Dictionary = SecretSystem.resolve_intercept_letter(character, dice_engine, same_loc)

@@ -270,6 +270,10 @@
     "primary": "Stealth",
     "secondary": "Investigation"
   },
+  "COMMUNE_KAMI": {
+    "primary": "Spellcraft",
+    "secondary": "Meditation"
+  },
   "ESTABLISH_DEAD_DROP": {
     "primary": "Investigation (Notice)",
     "secondary": "Stealth (Sneaking)"
