@@ -162,6 +162,10 @@
     "primary": "Commerce",
     "secondary": "Investigation"
   },
+  "CAST_WORLD_IS_TRUTH": {
+    "primary": "Spellcraft",
+    "secondary": "Meditation"
+  },
   "CONDUCT_CONDITIONING": {
     "primary": "Temptation",
     "secondary": "Intimidation (Control)"

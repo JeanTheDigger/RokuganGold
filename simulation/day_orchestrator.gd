@@ -1182,6 +1182,12 @@ static func advance_day(
 		if _pv != null and not CharacterStats.is_dead(_pv) and not _pv.poison_affliction.is_empty():
 			DiseaseSystem.process_poison_daily(_pv)
 
+	# s33 The World is Truth: a DORMANT magically-installed sleeper reverts when its 1-month
+	# window lapses (the rewritten memories fade). Active/permanent sleepers are untouched.
+	for _sl: L5RCharacterData in characters:
+		if _sl != null and not CharacterStats.is_dead(_sl) and _sl.sleeper_expiry_ic_day >= 0:
+			KolatSystem.process_sleeper_expiry(_sl, ic_day)
+
 	var orphan_results: Array = _process_lord_deaths(
 		death_events, characters, objectives_map, successor_map,
 		active_successions, next_succession_id, characters_by_id, ic_day,

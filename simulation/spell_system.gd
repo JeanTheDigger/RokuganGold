@@ -554,7 +554,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"the_false_legion":           {"e": 0, "m": 6, "s": 0},
 	"piercing_the_heavens":       {"e": 0, "m": 6, "s": 0},
 	"wind_of_the_moon":           {"e": 0, "m": 6, "s": 0},
-	"the_world_is_truth":         {"e": 0, "m": 6, "s": 0},   # Kolat memory rewrite; blocked on s54.7 — COMBAT_ONLY
+	"the_world_is_truth":         {"e": 0, "m": 6, "s": 0},   # Kolat sleeper install — wired as the CAST_WORLD_IS_TRUTH world-sim ActionID (s54.7/s33), NOT a tile-combat effect (so s:0 is correct)
 	"wrath_of_kaze_no_kami":      {"e": 0, "m": 6, "s": 0},
 
 	# === EARTH (s34) ===

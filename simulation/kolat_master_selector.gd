@@ -370,6 +370,12 @@ static func _apply_special_rules(npc: L5RCharacterData, sect: int, dice: DiceEng
 		npc.special_data["world_start_sleepers"] = int(flags["world_start_sleepers"])
 	if flags.has("preplaced_contacts"):
 		npc.special_data["preplaced_contacts"] = int(flags["preplaced_contacts"])
+	# s33 The World is Truth is a secret Kolat spell — grant it to shugenja Masters (the network
+	# heads trusted with the conspiracy's secrets), giving the conspiracy a caster. Actually casting
+	# it stays gated on Air School Rank >= 6 + an Air slot (SpellSystem.can_cast).
+	if npc.school_type == Enums.SchoolType.SHUGENJA \
+			and KolatSystem.WORLD_IS_TRUTH_ID not in npc.spells_known:
+		npc.spells_known.append(KolatSystem.WORLD_IS_TRUTH_ID)
 
 
 ## Special-rule flags for the world generator to act on after selection

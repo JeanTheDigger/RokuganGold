@@ -6548,7 +6548,8 @@ conjured ring** (groves_of_stone — no clamber-over action → invulnerability 
 deferred); **healing-Earth-only** (jurojins_balm/jurojins_curse — for healing/poison-resist, not
 wound capacity); **near-inert in faction combat** (curse_of_the_burning_hand, 1-minute cast, harms
 the target's own allies); **duel-scoped** (essence_of_fire iaijutsu ward); and **blocked**
-(the_world_is_truth Kolat sleeper, piercing_the_heavens Phoenix-narrative, cloud_the_mind needs
+(the_world_is_truth Kolat sleeper [SINCE WIRED — see the 2026-06-22 Kolat entry below],
+piercing_the_heavens Phoenix-narrative, cloud_the_mind needs
 day-granular memory timestamps + no cast trigger, garbled_tongue needs a deliberate-conversation-ward
 model). **Exactly one was cleanly + faithfully + unambiguously wirable:** **Hands of the Tides**
 (Water 5, s36) — swap the grid positions of up to Water Ring willing allies, 100' (20-tile) radius.
@@ -6574,6 +6575,59 @@ headless drivers: assigning an untyped `Array` literal (`c.spells_known = ["x"]`
 `Array[String]` field on an **untyped** local silently fails at runtime (the documented typed-array
 `.assign()` gotcha) — type the local (`var c: L5RCharacterData = …`) or use `.assign()`; production
 code was never at fault, only the test harness.
+
+### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
+Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
+with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`
+(the actual sleeper *install*) had **no live caller** (multi-session `CONDUCT_CONDITIONING` only
+resolves one session; completion was "deferred"), so this is the **first working sleeper-install
+path** — it lights up `activate_sleeper` and the s54.7e override loop. GDD: Touch, 8-hour head-hold,
+Contested Insight/Air vs the target, rewrites memories ("create a sleeper agent"), **Duration 1 month**
+(+1 month per 3 Raises). Owner decisions: **1-month expiry** (not the permanent psychological sleeper),
+**captive-OR-incapacitated** target gate, **new ActionID** (Kolat pipeline). All numbers GDD-traceable
+(month = `TimeSystem.IC_DAYS_PER_MONTH` = 30, GDD-exact; honor = the existing `CONDITIONING_HONOR_COST`
+−3.0, same act; the roll's unstated resist Trait = Willpower per the mental-resist convention).
+- **Data:** new `L5RCharacterData.sleeper_expiry_ic_day` (@export, −1 = no expiry / permanent /
+  not-a-sleeper). `degrade_sleeper_seasonal` now skips magical sleepers (expiry ≥ 0 → they expire on
+  their own clock, not −5/season psychological decay).
+- **KolatSystem:** `resolve_world_is_truth_cast` (caster Insight Rank + Air Ring keep Air vs target
+  Willpower + Air Ring keep Air), `install_world_is_truth_sleeper` (the four sleeper fields + expiry =
+  `ic_day + 30 × (1 + raises/3)`; honor applied by the caller), `process_sleeper_expiry` (a DORMANT
+  magical sleeper whose month lapsed reverts — all fields clear; **active** [mid-mission] and
+  **permanent** [−1] sleepers are skipped). Constants `WORLD_IS_TRUTH_ID` / `_MASTERY` (6).
+- **Executor** (`KolatExecutor._cast_world_is_truth`, dispatch arm + `_KOLAT_ACTION_IDS`): gate order
+  no_target → self → already_sleeper → held (captive_status≠"" OR wound ≥ DOWN) → co-located →
+  `SpellSystem.can_cast` (knows the secret Air-6 spell + an Air slot) → valid phrase+command → roll.
+  On success: consume the Air slot, install (expiry from `metadata.ic_day`, already passed by
+  ActionExecutor), apply −3.0 Honor. A roll FAILURE still consumes the slot (the 8 hours were spent);
+  a GATE failure consumes nothing (the cast never started).
+- **NPC pipeline:** added to `KOLAT_ACTION_POOL` (Phase-3 Kolat unlock) + `objective_alignment`
+  CONDITION_SLEEPER (CAST_WORLD_IS_TRUTH 100, equal to CONDUCT_CONDITIONING — competence/Spellcraft
+  breaks the tie) + `action_skill_map` (Spellcraft/Meditation) + `personality_filter` (blocked by
+  JIN/REI/GI/MAKOTO, same honorable/honest virtues as CONDUCT_CONDITIONING). `_build_kolat_metadata`
+  CAST_WORLD_IS_TRUTH arm + `_pick_world_is_truth_target` (a co-located held, non-Kolat, non-PC,
+  lord-bound, not-already-sleeper target — highest Status; bakes a **betrayal** sleeper command:
+  ELIMINATE the captive's own lord on activation, the archetypal "sleeper agent" use and the only
+  command type the override loop + `_sleeper_command_complete` support). AP cost 1 (default, like
+  CONDUCT_CONDITIONING).
+- **Reachability:** the secret spell is granted to **shugenja Masters** (`KolatMasterSelector._apply_special_rules`)
+  — the network heads, giving the conspiracy a caster; casting stays gated on Air School Rank ≥ 6 + a
+  slot. Daily expiry pass wired in `advance_day` (beside the possession/disease afflictions).
+- **Runtime-verified 7/7** (Godot 4.6.2, headless): the contested roll discriminates (strong 200/200,
+  weak 16/200); install expiry math (130 / 160) + fields/command; expiry pass clears at the month,
+  skips active + permanent; magical sleepers skip seasonal decay; the executor installs + applies
+  honor + all 4 gates fire; the target-picker selects the captive and excludes Kolat/no-lord/PC/healthy;
+  shugenja Masters get the spell, bushi don't.
+LIMITATIONS: scoring is target-agnostic (100 = CONDUCT_CONDITIONING), so a strong-Spellcraft shugenja
+Master with a CONDITION_SLEEPER objective but NO co-located captive could select CAST_WORLD_IS_TRUTH
+and have it cleanly no-op (no_target, 1 AP wasted) — a Phase-4c precondition filter (knows-spell + has
+a held target) is the clean follow-up; the executor's hard gates make it always SAFE, never wrong. An
+already-activated magical sleeper that's mid-mission when its month lapses is NOT reverted (the command
+runs to completion — matches the active-skip in `degrade_sleeper_seasonal`). The spell's non-sleeper
+memory-rewrite uses (forget events / believe they're someone else) are not modeled — only the
+"create a sleeper agent" use, which is the GDD's stated primary application. `sleeper_expiry_ic_day`
+persists via SaveManager (@export); no WorldStateSaver change. Same world-sim-only scope as the rest of
+the Kolat system (NPCs never use the ASCII map; this is a world-sim ActionID, not a tile-combat cast).
 
 ### Pending Redesign — RESOLVED (2026-06-20, ring-change wave)
 - **Ring-changing combat spells — participant-scoped wound deltas, DONE.** The owner's goal was

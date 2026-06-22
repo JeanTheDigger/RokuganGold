@@ -335,6 +335,10 @@ var taint_benefits_suppressed: bool = false
 @export var active_sleeper_command: Dictionary = {}
 ## IC days since last MAINTAIN_SLEEPER_CONTACT (-1 = not a sleeper).
 @export var sleeper_contact_overdue: int = -1
+## s33 The World is Truth: a magically-installed sleeper expires on this IC day (the spell's
+## 1-month duration, +1 month per 3 Raises). -1 = no expiry (a permanent psychological sleeper,
+## or not a sleeper). Cleared with the rest of the sleeper fields when it lapses while dormant.
+@export var sleeper_expiry_ic_day: int = -1
 
 # -- Kolat koku fields (Section 54.7h; Coin/Master use, stored hidden) ---------
 ## Laundered, untraceable working reserve (Master Coin).

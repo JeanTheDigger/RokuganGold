@@ -8,7 +8,8 @@ class_name NPCDecisionEngine
 const KOLAT_ACTION_POOL: Array[String] = [
 	"TRANSMIT_VIA_TEAR", "OBSERVE_VIA_EYE", "SUBMIT_KOLAT_REPORT", "RUN_COURIER_ROUTE",
 	"DISTRIBUTE_INTELLIGENCE", "ESTABLISH_DEAD_DROP", "UNDERREPORT_KOKU", "LAUNDER_KOKU",
-	"TRANSFER_KOLAT_FUNDS", "ANONYMOUS_TIP", "CONDUCT_CONDITIONING", "MAINTAIN_SLEEPER_CONTACT",
+	"TRANSFER_KOLAT_FUNDS", "ANONYMOUS_TIP", "CONDUCT_CONDITIONING", "CAST_WORLD_IS_TRUTH",
+	"MAINTAIN_SLEEPER_CONTACT",
 	"ACTIVATE_SLEEPER", "SECURE_ONI_EYE", "APPROACH_FOR_RECRUITMENT", "ROUTE_VIA_DEAD_DROP",
 	"CHECK_DEAD_DROP", "ROTATE_DEAD_DROP", "ARRANGE_PROXY_DUEL", "CHECK_CONFIRMATION_DROP",
 	"ROUTE_ANONYMOUS_INTELLIGENCE", "SPONSOR_INSURGENCY", "BRIBE_GARRISON_COMMANDER",
@@ -3799,7 +3800,45 @@ static func _build_kolat_metadata(
 			pass
 		"SPONSOR_INSURGENCY":
 			meta["strength"] = maxi(1, int(need.threshold))
+		"CAST_WORLD_IS_TRUTH":
+			# s33: pick a co-located held (captive/incapacitated) non-Kolat target the caster can
+			# rewrite, and bake a betrayal sleeper command — turn the captive against their own lord
+			# on activation (the archetypal "create a sleeper agent" use; ELIMINATE is the canonical
+			# command the override loop + completion check support). Phrase ≤5 words.
+			if master != null:
+				var wt: L5RCharacterData = _pick_world_is_truth_target(master, chars_by_id)
+				if wt != null:
+					meta["target"] = wt
+					meta["target_npc_id"] = wt.character_id
+					meta["trigger_phrase"] = "kolat sleeper %d" % wt.character_id
+					meta["command"] = {"need_type": "ELIMINATE_CHARACTER", "target_npc_id": wt.lord_id}
+					meta["raises"] = 0
 	return meta
+
+
+## s33 The World is Truth target: a co-located, held (captive OR incapacitated), non-Kolat, non-PC,
+## lord-bound, not-already-a-sleeper character the master can rewrite into a betrayal sleeper. The
+## lord_id gate makes the baked ELIMINATE command meaningful (turn the captive against their own
+## lord). Highest Status preferred (the most valuable sleeper). Returns the character or null.
+static func _pick_world_is_truth_target(master: L5RCharacterData, chars_by_id: Dictionary) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for cid: Variant in chars_by_id:
+		var c: L5RCharacterData = chars_by_id[cid]
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.character_id == master.character_id or c.is_pc:
+			continue
+		if c.kolat_sect != Enums.KolatSect.NONE or KolatSystem.is_sleeper(c) or c.lord_id < 0:
+			continue
+		if c.physical_location.is_empty() or c.physical_location != master.physical_location:
+			continue
+		var held: bool = not String(c.captive_status).is_empty() \
+			or CharacterStats.get_wound_level(c) >= Enums.WoundLevel.DOWN
+		if not held:
+			continue
+		if best == null or c.status > best.status:
+			best = c
+	return best
 
 
 ## Highest leverage_value archived topic in the Master's cloud_archive (s54.7c).
