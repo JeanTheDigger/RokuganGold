@@ -6618,10 +6618,9 @@ Contested Insight/Air vs the target, rewrites memories ("create a sleeper agent"
   skips active + permanent; magical sleepers skip seasonal decay; the executor installs + applies
   honor + all 4 gates fire; the target-picker selects the captive and excludes Kolat/no-lord/PC/healthy;
   shugenja Masters get the spell, bushi don't.
-LIMITATIONS: scoring is target-agnostic (100 = CONDUCT_CONDITIONING), so a strong-Spellcraft shugenja
-Master with a CONDITION_SLEEPER objective but NO co-located captive could select CAST_WORLD_IS_TRUTH
-and have it cleanly no-op (no_target, 1 AP wasted) — a Phase-4c precondition filter (knows-spell + has
-a held target) is the clean follow-up; the executor's hard gates make it always SAFE, never wrong. An
+LIMITATIONS: ~~scoring is target-agnostic (100 = CONDUCT_CONDITIONING), so a strong-Spellcraft Master
+with a CONDITION_SLEEPER need but NO co-located captive could select CAST_WORLD_IS_TRUTH and no-op
+(1 AP wasted)~~ — RESOLVED 2026-06-22 by a Phase-4c precondition filter (see below). An
 already-activated magical sleeper that's mid-mission when its month lapses is NOT reverted (the command
 runs to completion — matches the active-skip in `degrade_sleeper_seasonal`). The spell's non-sleeper
 memory-rewrite uses (forget events / believe they're someone else) are not modeled — only the
@@ -6670,6 +6669,30 @@ permanent sleeper at 100% (s54.7c: Willpower×3 sessions). Complements the just-
   HALTED on day 9 when `scan` returned `{}` at target — the third candidate (wp 3) was never touched,
   honor clamped to 0.0 after 2×−3.0. The non-termination bug is fixed through the full pipeline, not
   just the executor in isolation.
+
+### s54.7/s33 CAST_WORLD_IS_TRUTH no-op precondition filter (2026-06-22, runtime-verified 8/8)
+Closes the one documented limitation of the magical sleeper-install path. CAST_WORLD_IS_TRUTH shares
+the CONDITION_SLEEPER NeedType with CONDUCT_CONDITIONING (both score 100; competence/Spellcraft breaks
+the tie), but the magical install needs gates the multi-session psychological conditioning does NOT: a
+co-located HELD (captive/incapacitated) target the caster can rewrite, plus the secret Air-6 spell + an
+Air slot. So a strong-Spellcraft Master with a CONDITION_SLEEPER need but no held captive could select
+CAST_WORLD_IS_TRUTH and cleanly no-op (no_target/cannot_cast), wasting the 1 AP the NPC engine already
+spent before execution. New `NPCDecisionEngine._apply_world_is_truth_precondition_filter(options,
+character, chars_by_id)` (Phase 4c, beside the tattoo/taint/garden filters; same `_remove_action`
+pattern) removes CAST_WORLD_IS_TRUTH unless BOTH gates pass — `SpellSystem.can_cast(character,
+KolatSystem.WORLD_IS_TRUTH_ID)` (mirrors the executor's cast gate) AND `_pick_world_is_truth_target(...)
+!= null` (the existing picker enforces every target gate: co-located, held, lord-bound, non-Kolat,
+non-PC, not-already-sleeper). When removed, CONDUCT_CONDITIONING (the always-valid path — conditioning
+works on any co-located candidate, no captivity required) wins the need, so the Master uses the right
+tool: the instant magical install when a captive is present, the multi-session grind otherwise. Early
+return for the ~all NPCs without CAST_WORLD_IS_TRUTH in options (it's in the KOLAT_ACTION_POOL, only
+unlocked for Kolat masters/agents) — the chars_by_id scan runs only when the action actually survived
+to Phase 4c. Same `run()`-path-only scoping as every other precondition filter (the executor's hard
+gates already make the action SAFE/no-op on the civilian-order path, which all the precondition filters
+skip). Runtime-verified 8/8 (Godot 4.6.2, headless): kept when can-cast + held co-located target;
+removed for not-held / cannot-cast / elsewhere / already-sleeper / lordless; untouched no-op when the
+action is absent; kept with two held targets. Verification only beyond the filter — no behavior change
+to the executor or the sleeper-install pipeline.
 
 ### Pending Redesign — RESOLVED (2026-06-20, ring-change wave)
 - **Ring-changing combat spells — participant-scoped wound deltas, DONE.** The owner's goal was

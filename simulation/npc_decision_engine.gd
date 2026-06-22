@@ -869,6 +869,35 @@ static func _apply_taint_examination_precondition_filter(
 	return _remove_action(options, "EXAMINE_FOR_TAINT")
 
 
+# -- Phase 4c: CAST_WORLD_IS_TRUTH Precondition Filter (s54.7/s33) ------------
+# CAST_WORLD_IS_TRUTH shares the CONDITION_SLEEPER NeedType with CONDUCT_CONDITIONING
+# (both score 100; competence/Spellcraft breaks the tie). But the magical install needs a
+# co-located HELD (captive/incapacitated) target the caster can actually rewrite, plus the
+# secret Air-6 spell + an Air slot — gates the multi-session psychological conditioning does
+# NOT require. Without this filter a strong-Spellcraft Master with a CONDITION_SLEEPER need but
+# no held captive could select it and cleanly no-op (no_target/cannot_cast), wasting 1 AP.
+# Remove it unless BOTH gates would pass; CONDUCT_CONDITIONING then wins the need.
+static func _apply_world_is_truth_precondition_filter(
+	options: Array,
+	character: L5RCharacterData,
+	chars_by_id: Dictionary,
+) -> Array:
+	var has_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "CAST_WORLD_IS_TRUTH":
+			has_action = true
+			break
+	if not has_action:
+		return options
+	# Cast eligibility: knows the secret Air-6 Kolat spell + has an Air slot (mirrors the executor).
+	if not SpellSystem.can_cast(character, KolatSystem.WORLD_IS_TRUTH_ID):
+		return _remove_action(options, "CAST_WORLD_IS_TRUTH")
+	# A valid co-located held sleeper target must exist (the picker enforces every target gate).
+	if _pick_world_is_truth_target(character, chars_by_id) == null:
+		return _remove_action(options, "CAST_WORLD_IS_TRUTH")
+	return options
+
+
 # -- Phase 4c: PETITION_ACCESS Precondition Filter (s2.3.23) ------------------
 # Surfaces PETITION_ACCESS only when the orchestrator has injected a non-empty
 # petition_eligible_type for this character (at Otosan Uchi, lacking the relevant
@@ -1224,6 +1253,7 @@ static func run(
 	options = _apply_petition_precondition_filter(options, world_state)
 	options = _apply_origami_precondition_filter(options, character, ctx)
 	options = _apply_garden_precondition_filter(options, character, ctx)
+	options = _apply_world_is_truth_precondition_filter(options, character, chars_by_id)
 	options = _apply_arrived_travel_filter(options, need, ctx)
 	options = _apply_compliance_filter(options, ctx)
 
