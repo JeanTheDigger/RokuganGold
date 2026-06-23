@@ -6791,14 +6791,42 @@ attack bonus to Pass 2 (their values are already locked below).
   reaches the same column — proving elevation is the blocker), knockback-off-ledge lands lower +
   deals NkN + logs `fall`, flat knockback deals no fall damage, knockback into an upward cliff
   stops at the face.
-- **DEFERRED — Pass 2 (values already locked):** attacker ≥1 level above target → **+1k0** to
-  the attack (melee + ranged); a target ≥1 level below behind a higher lip → reuse the existing
-  **+5 Armor TN** cover; **height-aware LOS** (a blocking tile occludes the sightline only when
-  its top — elevation + ~2 for walls/trees — reaches the interpolated view-ray height, so a
-  hilltop archer sees over a low wall a ground archer cannot). Also unwired: a deliberate
-  climb-up action (cliffs are currently impassable, not climbable), generators stamping
-  elevation (hilltop/ravine/ship still use their binary zone tags — Pass 1 leaves every map flat),
-  and the renderer's elevation indicator (s4.4 "roofing/elevation indicators" glyph).
+- **DEFERRED — Pass 2 (values already locked):** height combat (built next, see below). Also
+  unwired: a deliberate climb-up action (cliffs are currently impassable, not climbable),
+  generators stamping elevation (hilltop/ravine/ship still use their binary zone tags — every
+  map stays flat), and the renderer's elevation indicator (s4.4 "roofing/elevation indicators").
+
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 2: height combat, owner-authorized + runtime-verified)
+The combat half — all three values locked by the owner 2026-06-23. Every hook is a no-op on a
+flat map (no elevation grid), so all existing content is unchanged (verified by flat-map controls).
+- **High-ground attack +1k0 (LOCKED).** `HIGH_GROUND_THRESHOLD = 1`, `HIGH_GROUND_ATTACK_ROLLED = 1`.
+  `_high_ground_attack_bonus(state, apos, tpos)` returns +1 when the attacker stands ≥1 level above
+  the target. Fed through the existing `attacker_roll_penalty` channel of `resolve_attack`
+  (`rolled = max(0, rolled + attacker_roll_penalty)`), so +1 = one extra rolled die = +1k0. Wired
+  into both `execute_melee_attack` and `execute_ranged_attack` `atk_pen` (carries into the s36
+  Reversal-of-Fortunes reroll automatically; applies to spirit attackers too).
+- **Cover from height +5 (LOCKED).** `_cover_bonus` gains an elevation branch: a defender whose
+  attacker is above them AND whose tile toward the attacker is a higher lip (`lip_elev > target_elev`)
+  reuses `COVER_ARMOR_TN_BONUS` (+5 Armor TN). Does NOT stack with furniture cover (same +5).
+- **Height-aware LOS (LOCKED).** `_has_los` rewritten: flat maps take a fast path identical to the
+  prior `blocks_los`-between check (zero regression). On an elevated map, the sightline's eye-level
+  height is interpolated end-to-end (`LOS_EYE_HEIGHT = 1`) and a tile occludes only when its top
+  (elevation, + `LOS_OBSTACLE_HEIGHT = 2` for walls/trees, raw elevation for open ground — a ridge
+  still blocks) reaches the ray height. A hilltop archer sees over a mid-field low wall; a wall at
+  the target's feet still blocks; a tall open-ground ridge blocks. New `_bresenham_points` helper.
+  Scope: the orchestrator's combat LOS (`get_ranged_targets` / `execute_ranged_attack` / spell
+  targeting — the 3 `_has_los` callers). FovSystem's shadowcasting fog-of-war RADIUS stays flat
+  (height-aware FOV is a deferred refinement; `FovSystem.has_los` point-to-point has no callers).
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy):** 16/16, 0 fails, 0
+  project-wide parse errors. High ground (4): +1k0 only when ≥1 above, none below/level, none flat.
+  Cover (4): below+lip→+5, no-lip→0, lip-but-attacker-not-above→0, flat→0. LOS (6): flat open/wall
+  preserved, ground archer blocked by a mid-field wall, hilltop sees OVER it, wall-at-feet still
+  blocks, open-ground ridge blocks. Integration through the real engine (2): high-ground attack
+  roll ≥ flat on every one of 300 seeds, total 8132 vs 7671 (the +1k0 measurably raises the roll).
+- **All four Z-axis mechanics (movement, fall, ranged/attack, LOS/cover) are now wired.** Remaining
+  Z work is content/UI, not mechanics: a climb-up action (cliffs are impassable, not yet climbable),
+  generators stamping the elevation grid (so verticality appears in live missions — currently every
+  map is flat), height-aware FOV radius, and the renderer's elevation glyph.
 
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)

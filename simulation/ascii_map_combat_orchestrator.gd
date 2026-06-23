@@ -35,8 +35,24 @@ const RANGED_IN_MELEE_PENALTY: int = -10
 
 # Cover: a defender sheltering behind a cover-granting furnishing (s4.4) gains
 # +5 Armor TN against attacks coming from the covered side. Reuses the s40 cover
-# convention (the ruined-structure +5 cover value).
+# convention (the ruined-structure +5 cover value). A defender tucked below a
+# higher lip (s4.4 Z-axis) reuses the same +5 bonus.
 const COVER_ARMOR_TN_BONUS: int = 5
+
+## High-ground combat (s4.4 Z-axis; locked by owner 2026-06-23). An attacker at
+## least HIGH_GROUND_THRESHOLD levels above the target adds HIGH_GROUND_ATTACK_ROLLED
+## rolled die (+1k0) to the attack (melee and ranged).
+const HIGH_GROUND_THRESHOLD: int = 1
+const HIGH_GROUND_ATTACK_ROLLED: int = 1
+
+## Height-aware line of sight (s4.4 Z-axis). A tile occludes the sightline only when
+## its top reaches the interpolated view-ray height between the two endpoints.
+## LOS_EYE_HEIGHT lifts both endpoints to standing eye level; an LOS-blocking tile
+## (wall/tree) rises LOS_OBSTACLE_HEIGHT (~10 ft) above its own elevation, while open
+## ground occludes only by its raw elevation (a ridge can still block). On a flat map
+## the formula reduces to the prior behavior exactly (walls block, open ground does not).
+const LOS_EYE_HEIGHT: int = 1
+const LOS_OBSTACLE_HEIGHT: int = 2
 ## s40 "Weapon Grapples": a weapon-grappler who loses control of the grapple
 ## hands their opponent 2 Free Raises toward a Disarm Maneuver against them.
 const WEAPON_GRAPPLE_LOSE_CONTROL_DISARM_RAISES: int = 2
@@ -942,8 +958,10 @@ static func execute_melee_attack(
 		armor_tn = maxi(5, armor_tn)
 	# s33 Castle of Air: a defender's attacker_penalty buff imposes a -Xk0 attack-roll penalty.
 	# s33 Blessed Wind of Lady Sun: a modifier zone penalizes hostile actions made from inside it.
+	# s4.4 Z-axis: an attacker on high ground adds +1k0 (a positive value adds rolled dice).
 	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty") \
-		+ _zone_modifier_total(state, attacker_id, "attack_roll_penalty")
+		+ _zone_modifier_total(state, attacker_id, "attack_roll_penalty") \
+		+ _high_ground_attack_bonus(state, apos, tpos)
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
 		false, spend_void, false, maneuver,
@@ -1415,7 +1433,8 @@ static func execute_ranged_attack(
 	# bubble; the -3 KEPT half is not modeled) penalize a shot fired from within a modifier zone.
 	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty") \
 		+ _zone_modifier_total(state, attacker_id, "attack_roll_penalty") \
-		+ _zone_modifier_total(state, attacker_id, "ranged_attack_penalty")
+		+ _zone_modifier_total(state, attacker_id, "ranged_attack_penalty") \
+		+ _high_ground_attack_bonus(state, apos, tpos)
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, shot_raises, dice_engine,
 		in_melee, spend_void, false, "",
@@ -8723,28 +8742,76 @@ static func _cover_bonus(state: MapCombatState, tpos: Vector2i, apos: Vector2i) 
 		return 0
 	if AsciiMapData.grants_cover(state.map.get_tile(cx, cy)):
 		return COVER_ARMOR_TN_BONUS
+	# Elevation cover (s4.4 Z-axis): a defender below the attacker, tucked at the
+	# base of a rise (the tile toward the attacker is a higher lip), is shielded.
+	# Same +5 — cover does not stack with furniture cover.
+	if state.map.has_elevation():
+		var t_elev: int = state.map.elevation_at(tpos.x, tpos.y)
+		if state.map.elevation_at(apos.x, apos.y) > t_elev \
+				and state.map.elevation_at(cx, cy) > t_elev:
+			return COVER_ARMOR_TN_BONUS
 	return 0
 
 
-## Bresenham line-of-sight check.
-## Returns true if no LOS-blocking tile lies between a and b (exclusive of endpoints).
+## High-ground attack bonus (s4.4 Z-axis): +HIGH_GROUND_ATTACK_ROLLED rolled die
+## (+1k0) when the attacker stands at least HIGH_GROUND_THRESHOLD levels above the
+## target. 0 on a flat map. Returned as a positive attacker_roll_penalty — which
+## adds rolled dice (resolve_attack: rolled = max(0, rolled + attacker_roll_penalty)).
+static func _high_ground_attack_bonus(state: MapCombatState, apos: Vector2i, tpos: Vector2i) -> int:
+	if state.map == null or not state.map.has_elevation():
+		return 0
+	var d: int = state.map.elevation_at(apos.x, apos.y) - state.map.elevation_at(tpos.x, tpos.y)
+	return HIGH_GROUND_ATTACK_ROLLED if d >= HIGH_GROUND_THRESHOLD else 0
+
+
+## Bresenham line-of-sight check, elevation-aware (s4.4 Z-axis).
+## Returns true if no tile occludes the sightline between a and b (endpoints excluded).
+## Flat map (no elevation grid): any LOS-blocking tile strictly between blocks — exactly
+## the prior behavior. Elevated map: a tile occludes only when its top reaches the
+## interpolated view-ray height, so a viewer on high ground sees over low obstacles.
 static func _has_los(map: AsciiMapData, a: Vector2i, b: Vector2i) -> bool:
+	var pts: Array = _bresenham_points(a, b)
+	var n: int = pts.size()
+	if n <= 2:
+		return true
+
+	if not map.has_elevation():
+		for i in range(1, n - 1):
+			if AsciiMapData.blocks_los(map.get_tile(pts[i].x, pts[i].y)):
+				return false
+		return true
+
+	# Height-aware: interpolate eye-level height along the ray; a tile blocks when its
+	# top (elevation, +LOS_OBSTACLE_HEIGHT for walls/trees) reaches that height.
+	var a_eye: float = float(map.elevation_at(a.x, a.y) + LOS_EYE_HEIGHT)
+	var b_eye: float = float(map.elevation_at(b.x, b.y) + LOS_EYE_HEIGHT)
+	for i in range(1, n - 1):
+		var p: Vector2i = pts[i]
+		var t: float = float(i) / float(n - 1)
+		var line_h: float = a_eye + (b_eye - a_eye) * t
+		var top: float = float(map.elevation_at(p.x, p.y))
+		if AsciiMapData.blocks_los(map.get_tile(p.x, p.y)):
+			top += float(LOS_OBSTACLE_HEIGHT)
+		if top >= line_h:
+			return false
+	return true
+
+
+## Bresenham point list from a to b inclusive (a is pts[0], b is pts[n-1]).
+static func _bresenham_points(a: Vector2i, b: Vector2i) -> Array:
+	var pts: Array = []
 	var x0: int = a.x
 	var y0: int = a.y
-	var x1: int = b.x
-	var y1: int = b.y
-
-	var dx: int = abs(x1 - x0)
-	var dy: int = abs(y1 - y0)
-	var sx: int = 1 if x0 < x1 else -1
-	var sy: int = 1 if y0 < y1 else -1
+	var dx: int = abs(b.x - x0)
+	var dy: int = abs(b.y - y0)
+	var sx: int = 1 if x0 < b.x else -1
+	var sy: int = 1 if y0 < b.y else -1
 	var err: int = dx - dy
-
 	var cx: int = x0
 	var cy: int = y0
-
 	while true:
-		if cx == x1 and cy == y1:
+		pts.append(Vector2i(cx, cy))
+		if cx == b.x and cy == b.y:
 			break
 		var e2: int = 2 * err
 		if e2 > -dy:
@@ -8753,13 +8820,7 @@ static func _has_los(map: AsciiMapData, a: Vector2i, b: Vector2i) -> bool:
 		if e2 < dx:
 			err += dx
 			cy += sy
-		# Check intermediate tiles (not start or end).
-		if cx == x1 and cy == y1:
-			break
-		if AsciiMapData.blocks_los(map.get_tile(cx, cy)):
-			return false
-
-	return true
+	return pts
 
 
 ## True if the two factions are enemies.
