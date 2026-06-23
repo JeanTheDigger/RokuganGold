@@ -82,7 +82,8 @@ var spell_void_bonus_used: int = 0
 # they were cast and are cleared wholesale by the daily orchestrator pass (clear_day_buffs). To
 # add one: set_day_buff("<id>") on cast, has_day_buff("<id>") at the read site — no new field or
 # clear-line needed. Current IDs: "soul_of_stone" (s34), "touch_of_airs_grace" (s33),
-# "wolfs_proposal" (s33).
+# "wolfs_proposal" (s33), "jurojins_balm"/"jurojins_curse" (s34), "earths_touch_stamina"/
+# "earths_touch_willpower" (s34).
 @export var active_day_buffs: Dictionary = {}
 
 func set_day_buff(buff_id: String) -> void:

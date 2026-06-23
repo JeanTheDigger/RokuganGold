@@ -697,6 +697,33 @@ static func activate_power_of_the_ocean(
 	return res
 
 
+## s34 Earth's Touch (Earth 1, Defense) — Touch, 1 target, Duration 1 hour (~ the OOC day, per the
+## day-buff convention). Strengthens ONE of the target's Earth Traits (caster's choice — Stamina OR
+## Willpower) by +1 for the day WITHOUT raising the Earth Ring. Stored as a trait-tagged day buff
+## ("earths_touch_stamina" / "earths_touch_willpower"); SkillResolver adds +1 to that trait at roll
+## resolution ONLY (so the Earth Ring = min(Stamina, Willpower) off the stored fields stays untouched,
+## per the GDD), and DiseaseSystem adds +1 to Stamina-keyed poison/disease resist rolls when Stamina
+## is the choice. Self-cast when target is null. trait_choice must be STAMINA or WILLPOWER.
+static func activate_earths_touch(
+	caster: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	target: L5RCharacterData = null, trait_choice: Enums.Trait = Enums.Trait.STAMINA
+) -> Dictionary:
+	if not can_cast(caster, "earths_touch"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	if trait_choice != Enums.Trait.STAMINA and trait_choice != Enums.Trait.WILLPOWER:
+		return {"success": false, "activated": false, "reason": "invalid_trait"}
+	var beneficiary: L5RCharacterData = target if target != null else caster
+	var res: Dictionary = resolve_cast(caster, "earths_touch", dice, 0, beneficiary, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		var buff_id: String = "earths_touch_stamina" if trait_choice == Enums.Trait.STAMINA \
+			else "earths_touch_willpower"
+		beneficiary.set_day_buff(buff_id)
+		res["target_id"] = beneficiary.character_id
+		res["trait"] = trait_choice
+	return res
+
+
 ## s33 Cloud the Mind (Air 5) — blasphemous memory tampering (owner-simplified design: no
 ## day-granular timestamps). On a successful Contested Air (caster) vs Earth (target) roll the
 ## target's known topics are wiped COMPLETELY; the caster may implant chosen topics — real

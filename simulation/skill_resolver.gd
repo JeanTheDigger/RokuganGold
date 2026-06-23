@@ -396,6 +396,18 @@ static func _mental_quickness_trait_bonus(character: L5RCharacterData, trait_use
 	return 0
 
 
+# s34 Earth's Touch (Earth 1): +1 to ONE Earth Trait (caster's choice — Stamina or Willpower) for the
+# day, via the trait-tagged day buff ("earths_touch_stamina" / "earths_touch_willpower"). Applied at
+# roll resolution only (never the stored field), so the Earth Ring (= min(Stamina, Willpower)) is NOT
+# increased per the GDD. Adds to both rolled and kept (effectively +1k1) on rolls using that trait.
+static func _earths_touch_trait_bonus(character: L5RCharacterData, trait_used: Enums.Trait) -> int:
+	if trait_used == Enums.Trait.STAMINA and character.has_day_buff("earths_touch_stamina"):
+		return 1
+	if trait_used == Enums.Trait.WILLPOWER and character.has_day_buff("earths_touch_willpower"):
+		return 1
+	return 0
+
+
 # -- Doji R3: The Perfect Gift (s29.15.4) — one-shot disposition modifier ------
 
 const PERFECT_GIFT_TN: int = 20
@@ -561,6 +573,7 @@ static func resolve_skill_check(
 	var adv_trait: int = AdvantageSystem.get_trait_modifier(character, trait_used, context)
 	trait_value += adv_trait
 	trait_value += _mental_quickness_trait_bonus(character, trait_used)  # s35: +3 Int from imbued item
+	trait_value += _earths_touch_trait_bonus(character, trait_used)  # s34: +1 chosen Earth Trait
 	if wound_penalty < 0:
 		wound_penalty = mini(0, wound_penalty + adv_wound)
 
@@ -768,6 +781,8 @@ static func resolve_contested_check(
 	tv_b += AdvantageSystem.get_trait_modifier(char_b, trait_b, context_b)
 	tv_a += _mental_quickness_trait_bonus(char_a, trait_a)  # s35: +3 Int from imbued item
 	tv_b += _mental_quickness_trait_bonus(char_b, trait_b)
+	tv_a += _earths_touch_trait_bonus(char_a, trait_a)  # s34: +1 chosen Earth Trait
+	tv_b += _earths_touch_trait_bonus(char_b, trait_b)
 	if wp_a < 0:
 		wp_a = mini(0, wp_a + adv_wound_a)
 	if wp_b < 0:

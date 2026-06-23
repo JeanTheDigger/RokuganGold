@@ -70,7 +70,7 @@ static func process_daily(victim: L5RCharacterData, ic_day: int, dice: DiceEngin
 			if ic_day - int(a.get("last_tick", ic_day)) < WEEK:
 				return {"type": t}
 			a["last_tick"] = ic_day
-			var sta_d: int = cursed_resist_pool(victim, maxi(1, victim.stamina))
+			var sta_d: int = cursed_resist_pool(victim, maxi(1, victim.stamina + _earths_touch_stamina_bonus(victim)))
 			var roll2: int = dice.roll_and_keep(sta_d, sta_d, true).total
 			if roll2 >= DISEASED_TOUCH_TN:
 				cure(victim)
@@ -127,7 +127,7 @@ static func is_poisoned(victim: L5RCharacterData) -> bool:
 ## poison has full effect. Disease saves (Shikko's diseased touch) do NOT route here — Jurojin's
 ## Balm drives out poisons/toxins, not disease (which has its own Medicine cure path).
 static func resolve_poison_resist_roll(victim: L5RCharacterData, tn: int, dice: DiceEngine) -> bool:
-	var sta: int = cursed_resist_pool(victim, maxi(1, victim.stamina))
+	var sta: int = cursed_resist_pool(victim, maxi(1, victim.stamina + _earths_touch_stamina_bonus(victim)))
 	if dice.roll_and_keep(sta, sta, true).total >= tn:
 		return true
 	if not victim.has_day_buff("jurojins_balm"):
@@ -143,6 +143,13 @@ static func cursed_resist_pool(victim: L5RCharacterData, base: int) -> int:
 	if victim.has_day_buff("jurojins_curse"):
 		return maxi(1, base - JUROJINS_CURSE_PENALTY)
 	return base
+
+
+## s34 Earth's Touch (Earth 1): when the caster boosted Stamina ("earths_touch_stamina" day buff),
+## Stamina-keyed poison/disease resist rolls read Stamina +1. NOT applied to the PLAGUE_BEARER save
+## (an Earth-RING roll — Earth's Touch does not raise the Ring).
+static func _earths_touch_stamina_bonus(victim: L5RCharacterData) -> int:
+	return 1 if victim.has_day_buff("earths_touch_stamina") else 0
 
 
 ## Banks `n` drained Ranks of `trait_name` into poison_affliction for the world-sim restore.
