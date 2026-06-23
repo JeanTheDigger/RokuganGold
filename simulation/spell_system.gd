@@ -553,6 +553,53 @@ static func activate_garbled_tongue(
 	return res
 
 
+## s33 Whispering Wind (Air 2, Divination) — 20', 1 target individual, instantaneous. Air kami judge
+## whether the target's last statement was true or false — by SINCERITY, not objective fact (a target
+## who believes their words is judged truthful, so unknowingly-spread false_info reads as "true"). The
+## sim's only tracked DELIBERATE lie is a fabricated secret (SecretData.fabricated, authored by
+## fabricator_id), so the verdict is "lie" when the target is the author of a live fabrication, else
+## "true". Concrete counter: for each fabricated secret the caster ALREADY knows that this target
+## authored, the secret_id is flagged detected-false on the caster (added to detected_false_secret_ids
+## AND recorded as a secret_detected_false knowledge entry) — the caster then drops it from their own
+## EXPOSE/blackmail pool (known_secrets injection filters it). Callable cast (future cast UI / a
+## deliberate caster), not NPC-auto-fired.
+static func activate_whispering_wind(
+	caster: L5RCharacterData, target: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	active_secrets: Array = [], current_season: int = -1
+) -> Dictionary:
+	if not can_cast(caster, "whispering_wind"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	if target == null:
+		return {"success": false, "activated": false, "reason": "no_target"}
+	var res: Dictionary = resolve_cast(caster, "whispering_wind", dice, 0, target, ic_day)
+	res["activated"] = res.get("success", false)
+	if not res.get("success", false):
+		return res
+	# The target's "last statement" is a deliberate lie iff they authored a live fabrication.
+	var authored: Array = []
+	for s: SecretData in active_secrets:
+		if s.fabricated and s.fabricator_id == target.character_id:
+			authored.append(s)
+	res["verdict"] = "lie" if not authored.is_empty() else "true"
+	# Concrete counter + record: flag the target's lies the caster already knows.
+	var detected: Array = []
+	for s: SecretData in authored:
+		if caster.character_id in s.known_by_ids and s.secret_id not in caster.detected_false_secret_ids:
+			caster.detected_false_secret_ids.append(s.secret_id)
+			var entry := KnowledgeEntry.new()
+			entry.source = Enums.KnowledgeSource.DIRECT_OBSERVATION
+			entry.entry_type = "secret_detected_false"
+			entry.data = {
+				"secret_id": s.secret_id, "subject_id": s.subject_id,
+				"fabricator_id": target.character_id,
+			}
+			entry.season_acquired = current_season
+			caster.knowledge_pool.append(entry)
+			detected.append(s.secret_id)
+	res["detected_secret_ids"] = detected
+	return res
+
+
 ## s33 Voice of the Wind (Air 1) — Touch, 1 target. On a successful cast the target gains the
 ## spoken-social buff for the IC day (SkillResolver reads voice_of_the_wind_ic_day: +1k0 to
 ## spoken Social Skill Rolls, +1k1 on a voice Perform Roll). Self-cast when target is null.

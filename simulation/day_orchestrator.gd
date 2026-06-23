@@ -16236,7 +16236,10 @@ static func _inject_urgency_data(
 
 		var char_secrets: Array = []
 		for s: SecretData in active_secrets:
-			if c.character_id in s.known_by_ids and not s.exposed_publicly:
+			# s33 Whispering Wind: a secret the holder has personally verified is a fabrication is
+			# dropped from their EXPOSE/blackmail pool (they will not wield a lie they exposed).
+			if c.character_id in s.known_by_ids and not s.exposed_publicly \
+					and s.secret_id not in c.detected_false_secret_ids:
 				char_secrets.append({
 					"_secret_ref": s,
 					"secret_id": s.secret_id,

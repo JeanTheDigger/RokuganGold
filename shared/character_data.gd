@@ -80,6 +80,11 @@ var spell_void_bonus_used: int = 0
 # eavesdropping shugenja must beat (read in DayOrchestrator._process_eavesdrop_writebacks). -1/0 = none.
 @export var garbled_tongue_ic_day: int = -1
 @export var garbled_tongue_strength: int = 0
+# s33 Whispering Wind (Air 2): secrets this character has personally verified are fabrications (a
+# successful Whispering Wind cast on the fabrication's author). Durable detection state (NOT subject
+# to knowledge-confidence decay): a flagged secret_id is excluded from this character's known_secrets
+# injection, so they never wield a lie they have exposed for EXPOSE_SECRET / blackmail.
+@export var detected_false_secret_ids: Array = []
 # s33 Voice of the Wind (Air 1): spoken-social buff. Active when == the current ic_day
 # (10-minute RAW duration ~ per-tick). Read by SkillResolver: +1k0 to spoken Social
 # Skill Rolls and +1k1 on a voice Perform Roll (the granted Voice Advantage). -1 = none.
