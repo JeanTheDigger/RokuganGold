@@ -6965,6 +6965,26 @@ Owner-locked 2026-06-23: +3 radius on raised ground (reusing the LOCKED lookout 
 - **DEFERRED:** the bottomless-pit/void death hazard (Oni Warai) and the renderer's elevation glyph
   remain; all four Z mechanics + FOV are now height-aware.
 
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 8: renderer elevation glyph, owner-authorized + runtime-verified)
+Players can now SEE height on the ASCII map. s4.4 ("roofing/elevation indicators") reserves the symbol
+for the tile type and the background for water/taint/spirit, so the compliant, low-visual-weight cue is
+**foreground brightness** — raised ground reads brighter.
+- **`AsciiMapGenerator.elevation_shade(color, level)`** (pure): brightens a tile's foreground colour by
+  its elevation level (`ELEVATION_SHADE_STEP = 0.2` value scale per level, clamped to ≤1.0, alpha
+  preserved). Level 0 is a no-op. So a layer-1 tile is ×1.2, a layer-2 crest ×1.4 — a subtle "light
+  hits the high ground" cue that keeps the symbol (tile type) and the base context colour intact.
+- **Wired into `AsciiMapView`** at both foreground draw sites — the visible tile and the remembered
+  (out-of-FOV) tile — gated on `_map.has_elevation()`, so flat maps (every current non-Z map) render
+  exactly as before. The remembered path shades before the existing dim, so an elevated remembered tile
+  keeps its relative height cue.
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy):** 5/5 on the pure helper —
+  level 0 unchanged, level 1 brighter (×1.2), level 2 brighter still, a bright colour clamps to ≤1.0,
+  alpha preserved. 0 project-wide parse errors. (The `AsciiMapView` draw wiring is static-verified — a
+  scene Node, not headlessly runnable; the helper is the testable core.)
+- **DEFERRED:** the bottomless-pit/void death hazard (Oni Warai) is the only remaining Z-axis item — the
+  data + movement + fall + ranged/attack + LOS/cover + FOV + climb/wall-scale + 5 generators + the
+  render cue are all done.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

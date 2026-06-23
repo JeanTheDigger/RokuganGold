@@ -191,6 +191,22 @@ static func get_glyph(
 	return "?"
 
 
+# Elevation shade (s4.4 Z-axis "roofing/elevation indicators"; owner-approved
+# 2026-06-23). Brightens a tile's foreground colour by its elevation level so
+# raised ground reads as higher — without a new symbol (symbol = tile type) or a
+# background tint (reserved for water/taint/spirit). Low visual weight, per the
+# s4.4 rendering principles. Level 0 = base (a no-op); each level scales colour
+# value by +ELEVATION_SHADE_STEP, clamped to valid range.
+const ELEVATION_SHADE_STEP: float = 0.2
+
+static func elevation_shade(color: Color, level: int) -> Color:
+	if level <= 0:
+		return color
+	var f: float = 1.0 + float(level) * ELEVATION_SHADE_STEP
+	return Color(
+		minf(color.r * f, 1.0), minf(color.g * f, 1.0), minf(color.b * f, 1.0), color.a)
+
+
 # Returns the foreground colour for a given tile type.
 static func get_fg_color(tile: int) -> Color:
 	match tile:
