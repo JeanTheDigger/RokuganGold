@@ -38,7 +38,23 @@ static func generate(_seed_str: String, ship_type: int, boarding_mode: int) -> S
 	_build_enemy_ship(map, planks)
 	_place_entrance(map, boarding_mode)
 	_place_objective(map, boarding_mode)
+	_stamp_elevation(map)
 	return map
+
+# -- Elevation (s4.4 Z-axis — raised quarterdecks) ----------------------------
+
+## Raises both quarterdecks to layer 1 (the rest of the ship stays at layer 0).
+## Deck → quarterdeck is a single +1 ramp (walkable), so a defender holding the
+## quarterdeck gains the high-ground attack bonus over boarders on the open deck.
+## A 2-of-3-layer map.
+static func _stamp_elevation(map: ShipBoardingMapData) -> void:
+	map.init_elevation(0)
+	for y in ShipBoardingMapData.PLAYER_DECK_ROWS:
+		for x in ShipBoardingMapData.PLAYER_QUARTERDECK_COLS:
+			map.set_elevation(x, y, 1)
+	for y in ShipBoardingMapData.ENEMY_DECK_ROWS:
+		for x in ShipBoardingMapData.ENEMY_QUARTERDECK_COLS:
+			map.set_elevation(x, y, 1)
 
 # -- Ship builders ------------------------------------------------------------
 

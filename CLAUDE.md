@@ -6828,6 +6828,37 @@ flat map (no elevation grid), so all existing content is unchanged (verified by 
   generators stamping the elevation grid (so verticality appears in live missions — currently every
   map is flat), height-aware FOV radius, and the renderer's elevation glyph.
 
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 3: generators stamp elevation, owner-authorized + runtime-verified)
+The first templates actually fill the elevation grid, so verticality appears in live missions
+(previously the machinery had no data — every map was flat). Owner constraint (2026-06-23): a map
+has **at most 3 layers (elevation 0/1/2), ramp-or-cliff by adjacency** — adjacent tiers (0↔1, 1↔2)
+are walkable ramps, a direct 0↔2 edge is an impassable cliff / 2-level fall; caves & interiors stay
+all-0 (flat, the default). Scope this pass: the three templates that already carry height tags.
+- **Hilltop (`_stamp_elevation`, slope case).** A Y-banded ramp: the approach (bottom rows) = layer 0,
+  the upper slope = layer 1, the crest line + hilltop camp = layer 2. Adjacent bands differ by 1 (a
+  walkable ramp, never a cliff), so the hill is climbable from every direction and connectivity is
+  unchanged — the camp simply sits on high ground (defenders gain the +1k0 and see over the slope's
+  rocks). Uses all 3 layers.
+- **Ravine (`_stamp_elevation`, cliff case).** The rim strips (outside both rock walls) = layer 2;
+  the ravine floor + walls = layer 0. Rim and floor are already separated by the impassable
+  WALL_STONE walls, so movement connectivity is unchanged — the elevation gives the rim its
+  high-ground LOS advantage (a rim watcher sees down over the low wall-tops; a floor fighter looking
+  up is blocked). Descent points remain the way down (a deliberate climb action, deferred). 2 of 3
+  layers (no mid tier).
+- **Ship boarding (`_stamp_elevation`, single-step case).** Both quarterdecks = layer 1, the rest of
+  the ship = layer 0. Deck → quarterdeck is a single +1 ramp (walkable), so a defender holding the
+  quarterdeck gains +1k0 over boarders on the open deck. 2 of 3 layers.
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy):** 30/30, 0 fails, 0
+  project-wide parse errors. Per template × 3 sizes/types: elevation grid present, max layer ≤ 2
+  (cap respected), and a **cliff-aware** 8-dir flood-fill confirms every objective slot is still
+  reachable from the entry (hilltop from entry0, ravine floor from the mouth, ship enemy-deck across
+  the planks) — proving ramps preserve connectivity and the wall-separated rim doesn't strand the
+  floor. Layout spot-checks: hilltop bottom=0/crest=2/hilltop=2 with a continuous worn-path ramp and
+  a real layer-1 mid-slope band; ravine rim=2/floor=0; ship quarterdeck=1/open-deck=0.
+- **DEFERRED:** the other vertical templates (Makeshift Stockade wall-walk, Castle Siege walls/keep,
+  s2.3.23 landmarks like Underground Lake / Oni Warai chasm), a climb-up action to scale cliffs,
+  height-aware FOV radius, and the renderer's elevation glyph.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

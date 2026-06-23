@@ -117,7 +117,30 @@ static func generate(
 	# Step 12 — objective markers.
 	_place_objective_slots(map, objectives)
 
+	# Step 13 — elevation: high rim over a low floor (s4.4 Z-axis; 2 of 3 layers).
+	_stamp_elevation(map)
+
 	return map
+
+
+# ---------------------------------------------------------------------------
+# Elevation (s4.4 Z-axis — high rim / low floor)
+# ---------------------------------------------------------------------------
+
+## Stamps the rim strips (both sides, outside the rock walls) at layer 2 and the
+## ravine floor + walls at layer 0. Rim and floor are already separated by the
+## impassable WALL_STONE walls, so movement connectivity is unchanged — the
+## elevation gives the rim its high-ground advantage: a rim watcher sees down over
+## the low wall-tops into the ravine, while a fighter on the floor looking up is
+## blocked (the high-ground LOS asymmetry). Descent points remain the way down
+## (a deliberate climb action, deferred). A 2-of-3-layer map (no mid layer).
+static func _stamp_elevation(map: RavineCampMapData) -> void:
+	map.init_elevation(0)
+	for y: int in range(map.height):
+		for x: int in range(map.width):
+			# Rim = the grass strips outside both rock walls (x < wall_lx or x > wall_rx).
+			if x < map.wall_lx or x > map.wall_rx:
+				map.set_elevation(x, y, 2)
 
 
 # ---------------------------------------------------------------------------
