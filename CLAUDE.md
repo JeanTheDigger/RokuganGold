@@ -7094,6 +7094,30 @@ anything; the four inner-tower doors connect the two levels.
   generator file). WALL_TOWER appears in live play (the 12 Kaiu Wall towers + castle walls), so
   tower defenders now get high-ground/see-over there.
 
+### s4.4 ASCII map Z-axis — EFFORT CLOSED (2026-06-23, consolidated checkpoint)
+The within-map elevation effort is complete. **Every Z mechanic, every stamping generator, and the
+render surface are wired and runtime-verified** (Godot 4.6.2, headless drivers in a minimal
+autoload-free copy). Render-path audit (verification only, no code change): the `AsciiMapView`
+foreground hook is correctly gated on `has_elevation()` and shades both the visible (lines 758-760)
+and remembered (740-742, before the dim) tiles by the tile's actual level, and the lookout-radius
+hook (699) keys on raised ground; the pure render chain (generator -> `has_elevation` -> `elevation_at`
+-> `elevation_shade` -> `get_fg_color`) was driver-verified to produce the intended monotonic
+brightness gradient (WALL_TOWER parapet 0.600 > garrison 0.550; THRONE_ROOM 0.55<0.60<0.70; flat map
+inert). No glue chokes on the grid: it lives only inside transiently-generated `AsciiMapData` (never
+persisted -- `WorldStateSaver` has 0 refs; never stored in `ZoneRegistry` -- 0 refs); its only
+consumers are the six wired Z-axis systems (`ascii_map_view`, `ascii_map_combat_orchestrator`,
+`combat_controller`, `fov_system`, `movement_system`, generator). **Final consolidated checkpoint --
+10 driver suites, 0 fails:** data/cliff core (20), reachability + knockback-fall (9),
+high-ground +1k0 / cover +5 / height-LOS (16), lethal pit/void (7), climb + wall-scale + ravine
+descent (11), NPC/companion auto-climb (4), height-aware FOV (7), ceremonial dais (3 zones),
+WALL_TOWER parapet (3 seeds), render-path brightness (3). The complete inventory: elevation data
+layer, movement/cliff, falls, knockback-off-ledge, lethal pit hazard, ranged/attack high-ground,
+LOS/cover, height-aware FOV, climb/wall-scale + auto-climb AI, 7 stamping generators (hilltop,
+ravine, ship, stockade, castle siege, 3 ceremonial daises, WALL_TOWER parapet), and the
+foreground-brightness render cue. **The only un-wired Z caller is the player-facing turn-based
+climb/move UI, on the project-wide PC-travel HOLD** (same as the whole live ASCII stack). Remaining
+Z work is pure content placement (more templates stamping elevation) -- no missing mechanics.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
