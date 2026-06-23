@@ -6859,6 +6859,36 @@ all-0 (flat, the default). Scope this pass: the three templates that already car
   s2.3.23 landmarks like Underground Lake / Oni Warai chasm), a climb-up action to scale cliffs,
   height-aware FOV radius, and the renderer's elevation glyph.
 
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 4: stockade + castle siege stamp elevation, owner-authorized + runtime-verified)
+Two more vertical templates fill the elevation grid, again capped at 3 layers, ramp-by-adjacency.
+- **Makeshift Stockade (`_stamp_elevation`).** The watchtower platform footprint → layer 1; the rest
+  (courtyard, perimeter) stays at layer 0. The platform is +1 over the courtyard (a walkable ramp, no
+  cliff), so a sentry on it gains the high-ground attack bonus and sees over the perimeter. Only
+  Medium/Large stockades have a platform — a Small stockade has none and stays flat (the default).
+- **Castle Siege (`_stamp_elevation`).** All wall-walkways and the tenshu (keep) interior → layer 1;
+  baileys, courtyard and approach stay at layer 0. Stamped from the generator's own `wall_walkways`
+  rects + `tenshu_*` bounds (only passable tiles raised). The safe universal rule (everything elevated
+  → layer 1) means every step is ±1 — no cliffs in any of the three layouts (Fortification / Castle
+  Town / City), so connectivity is provably unchanged — but wall and keep defenders gain the +1k0 and
+  see over the bailey. A 2-of-3-layer treatment.
+- **Landmarks — examined, intentionally left flat (reported to owner).** UNDERGROUND_LAKE is a flat
+  cavern (shore/causeway/island all at lake level; the deep water is impassable, not a standable low
+  layer) → 1 layer, matching the "caves are flat" rule. ONI_WARAI's verticality is a **bottomless VOID
+  chasm** (impassable) flanked by flat ledges — an instant-death pit, a *different* mechanic than the
+  graduated NkN fall system, so it gets no graduated elevation; a "knocked-into-the-void = death"
+  pit-hazard is flagged as a separate owner decision rather than invented.
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy):** 18/18, 0 fails, 0
+  project-wide parse errors. Stockade: small→flat, medium/large platform=1 + courtyard=0, platform and
+  all objectives reachable from the entry (cliff-aware). Siege (all 3 sizes): elevation present, cap
+  ≤2, tenshu=1, wall-walkway=1, and a **regression-free** check — the cliff-aware flood-fill reaches
+  the EXACT same set as a flat flood-fill for every objective (the elevation, using only layers 0/1,
+  can never create a cliff, so it changes reachability by nothing). NOTE: the CITY siege layout has
+  4 objectives placed on impassable wall tiles (unreachable flat too) — a **pre-existing**
+  CastleSiegeGenerator quirk, unrelated to the Z-axis and out of scope here.
+- **DEFERRED:** the remaining Z work is a climb-up action to scale cliffs (and use the ravine descent
+  points), a bottomless-pit/void death hazard (Oni Warai), height-aware FOV radius, and the renderer's
+  elevation glyph.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

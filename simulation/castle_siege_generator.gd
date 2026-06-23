@@ -42,7 +42,27 @@ static func generate(seed_str: String, size_cat: int, assault_mode: int) -> Cast
 			rng = _build_city(map, w, h, rng)
 
 	_place_player_start(map, assault_mode, w, h)
+	_stamp_elevation(map)
 	return map
+
+# -- Elevation (s4.4 Z-axis — raised wall-walks and keep) ----------------------
+
+## Raises the wall-walkways and the tenshu (keep) interior to layer 1; the baileys,
+## approach and courtyard stay at layer 0. Every elevated tile is +1 over the
+## layer-0 ground beside it, so each is crossed as a walkable ramp (no cliffs) and
+## connectivity is unchanged — but a defender on a wall-walk or in the keep gains
+## the high-ground attack bonus and sees over the bailey. A 2-of-3-layer map.
+static func _stamp_elevation(map: CastleSiegeMapData) -> void:
+	map.init_elevation(0)
+	for ww in map.wall_walkways:
+		for y in range(ww["ly"], ww["ry"] + 1):
+			for x in range(ww["lx"], ww["rx"] + 1):
+				if AsciiMapData.is_passable(map.get_tile(x, y)):
+					map.set_elevation(x, y, 1)
+	for y in range(map.tenshu_ly, map.tenshu_ry + 1):
+		for x in range(map.tenshu_lx, map.tenshu_rx + 1):
+			if AsciiMapData.is_passable(map.get_tile(x, y)):
+				map.set_elevation(x, y, 1)
 
 # -- FORTIFICATION (20×25, 2 layers) ------------------------------------------
 # Layout (Y=0 is north/back, Y=24 is south/approach):
