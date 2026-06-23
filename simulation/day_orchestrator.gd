@@ -5954,6 +5954,11 @@ static func _clear_daily_spell_buffs(characters: Array) -> void:
 	for c: L5RCharacterData in characters:
 		if not c.active_day_buffs.is_empty():
 			c.clear_day_buffs()
+		# Item-borne day buffs (Mental Quickness, s35): the imbue lives on the item dict and
+		# follows ownership, so it is swept from whichever inventory currently holds it.
+		for item: Variant in c.items:
+			if item is Dictionary and (item as Dictionary).get("mental_quickness_imbued", false):
+				(item as Dictionary).erase("mental_quickness_imbued")
 
 
 static func _process_commune_writebacks(

@@ -615,6 +615,26 @@ static func activate_jurojins_balm(
 	return res
 
 
+## s35 Mental Quickness (Fire 2) — Touch, 1 ITEM (not a person). On a successful cast the item is
+## imbued ("mental_quickness_imbued" flag on the item dict) for the day, so whoever's inventory
+## currently holds it has Intelligence +3 on Int-based rolls (SkillResolver). The buff follows the
+## item: give it away and the new owner benefits. `item` is the target item Dictionary (a live
+## reference in some character's `items` array); the spell MUST target an item.
+static func activate_mental_quickness(
+	caster: L5RCharacterData, item: Dictionary, dice: DiceEngine, ic_day: int
+) -> Dictionary:
+	if not can_cast(caster, "mental_quickness"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	if item.is_empty():
+		return {"success": false, "activated": false, "reason": "no_item_target"}
+	var res: Dictionary = resolve_cast(caster, "mental_quickness", dice, 0, null, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		item["mental_quickness_imbued"] = true
+		res["item_id"] = item.get("item_id", -1)
+	return res
+
+
 ## s33 Cloud the Mind (Air 5) — blasphemous memory tampering (owner-simplified design: no
 ## day-granular timestamps). On a successful Contested Air (caster) vs Earth (target) roll the
 ## target's known topics are wiped COMPLETELY; the caster may implant chosen topics — real

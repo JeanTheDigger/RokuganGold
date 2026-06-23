@@ -380,6 +380,22 @@ static func _get_soul_of_stone_bonus(
 	return 0
 
 
+# -- Mental Quickness (s35 Fire 2) — Intelligence +3 from an imbued item ------
+# The spell imbues an ITEM, and "anyone who carries that item has Intelligence +3". The buff
+# therefore lives on the item (a "mental_quickness_imbued" flag on the item dict) and follows
+# ownership: whoever's `items` array currently holds the imbued item gets the bonus. Only affects
+# Intelligence-based rolls (the trait adds to both rolled and kept, so this is effectively +3k3).
+const MENTAL_QUICKNESS_INT_BONUS: int = 3
+
+static func _mental_quickness_trait_bonus(character: L5RCharacterData, trait_used: Enums.Trait) -> int:
+	if trait_used != Enums.Trait.INTELLIGENCE:
+		return 0
+	for item: Variant in character.items:
+		if item is Dictionary and (item as Dictionary).get("mental_quickness_imbued", false):
+			return MENTAL_QUICKNESS_INT_BONUS
+	return 0
+
+
 # -- Doji R3: The Perfect Gift (s29.15.4) — one-shot disposition modifier ------
 
 const PERFECT_GIFT_TN: int = 20
@@ -544,6 +560,7 @@ static func resolve_skill_check(
 	var adv_wound: int = AdvantageSystem.get_wound_tn_modifier(character)
 	var adv_trait: int = AdvantageSystem.get_trait_modifier(character, trait_used, context)
 	trait_value += adv_trait
+	trait_value += _mental_quickness_trait_bonus(character, trait_used)  # s35: +3 Int from imbued item
 	if wound_penalty < 0:
 		wound_penalty = mini(0, wound_penalty + adv_wound)
 
@@ -749,6 +766,8 @@ static func resolve_contested_check(
 	var adv_wound_b: int = AdvantageSystem.get_wound_tn_modifier(char_b)
 	tv_a += AdvantageSystem.get_trait_modifier(char_a, trait_a, context_a)
 	tv_b += AdvantageSystem.get_trait_modifier(char_b, trait_b, context_b)
+	tv_a += _mental_quickness_trait_bonus(char_a, trait_a)  # s35: +3 Int from imbued item
+	tv_b += _mental_quickness_trait_bonus(char_b, trait_b)
 	if wp_a < 0:
 		wp_a = mini(0, wp_a + adv_wound_a)
 	if wp_b < 0:
