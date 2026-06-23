@@ -401,7 +401,9 @@ static func _mental_quickness_trait_bonus(character: L5RCharacterData, trait_use
 # roll resolution only (never the stored field), so the Earth Ring (= min(Stamina, Willpower)) is NOT
 # increased per the GDD. Adds to both rolled and kept (effectively +1k1) on rolls using that trait.
 static func _earths_touch_trait_bonus(character: L5RCharacterData, trait_used: Enums.Trait) -> int:
-	if trait_used == Enums.Trait.STAMINA and character.has_day_buff("earths_touch_stamina"):
+	# s34 Stone's Endurance shares this Stamina boost (non-stacking — +1 from this family, not +2).
+	if trait_used == Enums.Trait.STAMINA and (character.has_day_buff("earths_touch_stamina") \
+			or character.has_day_buff("stones_endurance")):
 		return 1
 	if trait_used == Enums.Trait.WILLPOWER and character.has_day_buff("earths_touch_willpower"):
 		return 1

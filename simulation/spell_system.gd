@@ -860,6 +860,30 @@ static func activate_earths_touch(
 	return res
 
 
+## s34 Stone's Endurance (Earth 1, Travel) — Self or Touch, 1 target creature, 6 hours. The target is
+## considered to have Stamina 1 Rank higher for rolls/effects specifically keying on Stamina (poison
+## resistance, drowning duration, etc.) and is immune to Fatigue from lack of rest. The +1-Stamina half
+## is LIVE: a per-tick day buff read by SkillResolver on any Stamina-keyed roll — the SAME hook as
+## Earth's Touch's Stamina option, and non-stacking with it (the Stamina boost caps at +1 from this
+## family, since the GDD gives no stacking rule). The Fatigue-immunity and the expiry-Fatigue downside
+## are forward-wiring: the world-sim has no "Fatigue from lack of rest" state to grant immunity to or
+## to apply on expiry, and the 6h/24h durations collapse to the per-IC-day buff convention (cleared by
+## the daily orchestrator pass). Self-cast when target is null.
+static func activate_stones_endurance(
+	caster: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	target: L5RCharacterData = null
+) -> Dictionary:
+	if not can_cast(caster, "stones_endurance"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	var beneficiary: L5RCharacterData = target if target != null else caster
+	var res: Dictionary = resolve_cast(caster, "stones_endurance", dice, 0, beneficiary, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		beneficiary.set_day_buff("stones_endurance")
+		res["target_id"] = beneficiary.character_id
+	return res
+
+
 ## s33 Cloud the Mind (Air 5) — blasphemous memory tampering (owner-simplified design: no
 ## day-granular timestamps). On a successful Contested Air (caster) vs Earth (target) roll the
 ## target's known topics are wiped COMPLETELY; the caster may implant chosen topics — real
