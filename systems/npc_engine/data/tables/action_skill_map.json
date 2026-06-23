@@ -162,6 +162,10 @@
     "primary": "Commerce",
     "secondary": "Investigation"
   },
+  "CAST_WORLD_IS_TRUTH": {
+    "primary": "Spellcraft",
+    "secondary": "Meditation"
+  },
   "CONDUCT_CONDITIONING": {
     "primary": "Temptation",
     "secondary": "Intimidation (Control)"
@@ -265,6 +269,10 @@
   "EAVESDROP": {
     "primary": "Stealth",
     "secondary": "Investigation"
+  },
+  "COMMUNE_KAMI": {
+    "primary": "Spellcraft",
+    "secondary": "Meditation"
   },
   "ESTABLISH_DEAD_DROP": {
     "primary": "Investigation (Notice)",
@@ -377,6 +385,10 @@
   "KILL_WITNESS": {
     "primary": "Stealth",
     "secondary": "Agility"
+  },
+  "CLOUD_THE_MIND": {
+    "primary": "Spellcraft",
+    "secondary": "Meditation"
   },
   "LAUNDER_KOKU": {
     "primary": "Commerce (Appraisal)",

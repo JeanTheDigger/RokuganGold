@@ -310,6 +310,13 @@ static func get_at_act_honor_loss(crime_type: Enums.CrimeType, honor_rank: int) 
 	return points / 10.0
 
 
+## Table 2.3 "blasphemous" at-act Honor loss (rank-scaled), exposed for blasphemous acts that are
+## not the MAHO crime type — e.g. s33 Cloud the Mind, which RAW explicitly calls "blasphemous".
+static func get_blasphemous_at_act_honor_loss(honor_rank: int) -> float:
+	var bracket: int = _get_rank_bracket(honor_rank)
+	return HONOR_TABLE_BREACH_BLASPHEMOUS[bracket] / 10.0
+
+
 # -- At-Act Phase (fires immediately on commission) ----------------------------
 
 static func apply_at_act_consequences(character: L5RCharacterData, crime_type: Enums.CrimeType) -> Dictionary:

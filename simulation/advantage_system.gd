@@ -298,7 +298,12 @@ static func get_disadvantage_points(dis: DisadvantageData) -> int:
 ## True when this Disadvantage's combat effects are transiently suppressed (s38
 ## Banish All Shadows). Read at the top of the combat-roll disadvantage loops.
 static func _is_suppressed(character: L5RCharacterData, dis_type: Enums.Disadvantage) -> bool:
-	return character.suppressed_disadvantage_type == int(dis_type)
+	if character.suppressed_disadvantage_type == int(dis_type):
+		return true
+	# Touch of Air's Grace (s33): negates the Disturbing Countenance Disadvantage while active.
+	if character.has_day_buff("touch_of_airs_grace") and dis_type == Enums.Disadvantage.DISTURBING_COUNTENANCE:
+		return true
+	return false
 
 
 ## Count of Spiritual Advantages / Disadvantages (s38 Sense the Balance).
@@ -392,6 +397,25 @@ static func get_highest_non_spiritual_social_disadvantage(character: L5RCharacte
 		if "Spiritual" in cat or "Social" in cat:
 			continue
 		var pts: int = get_disadvantage_points(dis)
+		if pts > best_pts:
+			best_pts = pts
+			best = dis
+	return best
+
+
+# s37 The Void's Caress: negate one Mental OR Spiritual Disadvantage the target possesses, up to
+# `max_points` in value (5 per the GDD). Returns the highest-point qualifying Disadvantage, or null.
+static func get_highest_mental_or_spiritual_disadvantage(
+		character: L5RCharacterData, max_points: int = 5) -> DisadvantageData:
+	var best: DisadvantageData = null
+	var best_pts: int = -1
+	for dis: DisadvantageData in character.disadvantages:
+		var cat: String = get_disadvantage_category(dis.disadvantage_type)
+		if not ("Mental" in cat or "Spiritual" in cat):
+			continue
+		var pts: int = get_disadvantage_points(dis)
+		if pts > max_points:
+			continue
 		if pts > best_pts:
 			best_pts = pts
 			best = dis
@@ -945,8 +969,14 @@ static func get_target_detection_tn_bonus(target: L5RCharacterData) -> int:
 # ---------------------------------------------------------------------------
 
 static func get_target_temptation_bonus(target: L5RCharacterData, attacker_gender_matches: bool) -> int:
-	if attacker_gender_matches and has_advantage(target, Enums.Advantage.DANGEROUS_BEAUTY):
+	if not attacker_gender_matches:
+		return 0
+	if has_advantage(target, Enums.Advantage.DANGEROUS_BEAUTY):
 		return 1  # +1k0 rolled
+	# Touch of Air's Grace (s33) grants the Dangerous Beauty effect when the target lacks
+	# Disturbing Countenance (per "if the target lacks it, grant the Advantage instead").
+	if target.has_day_buff("touch_of_airs_grace") and not has_disadvantage(target, Enums.Disadvantage.DISTURBING_COUNTENANCE):
+		return 1
 	return 0
 
 
@@ -1311,14 +1341,16 @@ static func has_weather_immunity(character: L5RCharacterData) -> bool:
 # ---------------------------------------------------------------------------
 
 static func get_perceived_honor(character: L5RCharacterData, ic_day: int = -1) -> float:
+	# Wolf's Proposal (s33): +3 perceived Honor Rank while active (stacks with the advantage).
+	var spell_bonus: float = 3.0 if character.has_day_buff("wolfs_proposal") else 0.0
 	# Air ML3-4 overflow: Perceived Honor advantage fails for 7 IC days (s45 line 537).
 	if ic_day >= 0 and character.perceived_honor_blocked_until >= 0 \
 			and ic_day < character.perceived_honor_blocked_until:
-		return character.honor
+		return character.honor + spell_bonus
 	var adv: AdvantageData = get_advantage(character, Enums.Advantage.PERCEIVED_HONOR)
 	if adv == null:
-		return character.honor
-	return character.honor + float(adv.rank)
+		return character.honor + spell_bonus
+	return character.honor + float(adv.rank) + spell_bonus
 
 
 # ---------------------------------------------------------------------------

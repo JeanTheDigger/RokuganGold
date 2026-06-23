@@ -73,7 +73,8 @@ const SELF_ACTIONS: Array[String] = [
 const _KOLAT_ACTION_IDS: Array[String] = [
 	"TRANSMIT_VIA_TEAR", "OBSERVE_VIA_EYE", "SUBMIT_KOLAT_REPORT", "RUN_COURIER_ROUTE",
 	"DISTRIBUTE_INTELLIGENCE", "ESTABLISH_DEAD_DROP", "UNDERREPORT_KOKU", "LAUNDER_KOKU",
-	"TRANSFER_KOLAT_FUNDS", "ANONYMOUS_TIP", "CONDUCT_CONDITIONING", "MAINTAIN_SLEEPER_CONTACT",
+	"TRANSFER_KOLAT_FUNDS", "ANONYMOUS_TIP", "CONDUCT_CONDITIONING", "CAST_WORLD_IS_TRUTH",
+	"MAINTAIN_SLEEPER_CONTACT",
 	"ACTIVATE_SLEEPER", "SECURE_ONI_EYE", "APPROACH_FOR_RECRUITMENT", "ROUTE_VIA_DEAD_DROP",
 	"CHECK_DEAD_DROP", "ROTATE_DEAD_DROP", "ARRANGE_PROXY_DUEL", "CHECK_CONFIRMATION_DROP",
 	"ROUTE_ANONYMOUS_INTELLIGENCE", "SPONSOR_INSURGENCY", "BRIBE_GARRISON_COMMANDER",
@@ -825,8 +826,11 @@ static func _execute_intimidation(
 	var attacker_result: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, "Intimidation", 0
 	)
+	# The target's Etiquette roll RESISTS intimidation (emotional manipulation) — Soul of
+	# Stone (s34) grants +3k0 here via the is_manipulation_resist context.
 	var defender_result: Dictionary = SkillResolver.resolve_skill_check(
-		target, dice_engine, "Etiquette", 0
+		target, dice_engine, "Etiquette", 0,
+		0, "", Enums.Trait.NONE, 0, 0, 0, -1, {"is_manipulation_resist": true},
 	)
 	var attacker_roll: int = attacker_result.get("total", 0)
 	var defender_roll: int = defender_result.get("total", 0)
@@ -1236,6 +1240,18 @@ static func _try_execute_covert(
 			var r: Dictionary = SecretSystem.resolve_eavesdrop(character, target, dice_engine)
 			return _build_covert_result(action, ctx, "Stealth", r)
 
+		"COMMUNE_KAMI":
+			# s32 Commune — standardized per-element divination targeted at a person. The cast
+			# (resolve_commune) rolls the chosen element's Ring vs TN 10; the per-element reveal
+			# runs in _process_commune_writebacks (which holds crime_records / active_topics).
+			if target == null:
+				return {}
+			var commune_el: int = int(action.metadata.get("commune_element", Enums.Ring.AIR))
+			var r: Dictionary = CommuneSystem.resolve_commune(character, dice_engine, commune_el)
+			r["commune_target_id"] = target.character_id
+			r["commune_element"] = commune_el
+			return _build_covert_result(action, ctx, "Spellcraft", r)
+
 		"INTERCEPT_LETTER":
 			var same_loc: bool = target != null and target.physical_location == character.physical_location
 			var r: Dictionary = SecretSystem.resolve_intercept_letter(character, dice_engine, same_loc)
@@ -1264,7 +1280,9 @@ static func _try_execute_covert(
 				return {}
 			var concealment_tn: int = action.metadata.get("concealment_tn", 15)
 			var has_authority: bool = action.metadata.get("magistrate_authority", false)
-			var r: Dictionary = SecretSystem.resolve_search_person(character, target, concealment_tn, dice_engine, has_authority)
+			# ctx.ic_day lets resolve_search_person honor s33 Cloak of Night (magically invisible
+			# object); detection_ml 0 = a normal vision search (no magical-search action exists yet).
+			var r: Dictionary = SecretSystem.resolve_search_person(character, target, concealment_tn, dice_engine, has_authority, ctx.ic_day)
 			return _build_covert_result(action, ctx, "Investigation", r)
 
 		"FORGE_IMPERSONATION_LETTER":
@@ -1320,6 +1338,18 @@ static func _try_execute_covert(
 				return {}
 			var r: Dictionary = _resolve_kill_witness(character, target, dice_engine)
 			return _build_covert_result(action, ctx, "Stealth", r)
+
+		"CLOUD_THE_MIND":
+			# s33 Cloud the Mind — the magical witness-silencer. resolve_cloud_the_mind does the
+			# Contested Air vs Earth roll, the complete topic-memory wipe, and the blasphemous
+			# Honor loss; the writeback (_process_witness_tampering_writebacks) creates the
+			# DISHONORABLE_CONDUCT CrimeRecord + the covert detectable-dishonor topic.
+			if target == null:
+				return {}
+			var r: Dictionary = SpellSystem.resolve_cloud_the_mind(character, target, dice_engine)
+			r["witness_id"] = target.character_id
+			r["effect"] = "memory_wiped" if r.get("success", false) else "wipe_resisted"
+			return _build_covert_result(action, ctx, "Spellcraft", r)
 
 	return {}
 
@@ -1423,6 +1453,7 @@ static func _resolve_intimidate_witness(
 		"Intimidation", "Etiquette",
 		"", "", Enums.Trait.NONE, Enums.Trait.WILLPOWER,
 		0, 0, 0, honor_bonus,
+		-1, {}, {"is_manipulation_resist": true},  # witness RESISTS — Soul of Stone +3k0 (s34)
 	)
 	var attack_total: int = contested.get("total_a", 0)
 	var defense_total: int = contested.get("total_b", 0)
@@ -3107,6 +3138,7 @@ static func _execute_extort_accused(
 		"Intimidation", "Etiquette",
 		"", "", Enums.Trait.NONE, Enums.Trait.WILLPOWER,
 		0, 0, 0, honor_bonus,
+		-1, {}, {"is_manipulation_resist": true},  # suspect RESISTS — Soul of Stone +3k0 (s34)
 	)
 	var total: int = contested.get("total_a", 0)
 	var tn: int = contested.get("total_b", 0)
@@ -4172,8 +4204,11 @@ static func _execute_contested_court_action(
 	var wc_bonus: int = _get_winter_court_skill_bonus(character, a_skill, ctx)
 	var contested_wound_a: int = CharacterStats.get_wound_penalty(character)
 	var contested_mut_a: Dictionary = MutationSystem.get_skill_modifiers(character, a_skill)
+	# Soul of Stone (s34): -1k0 to the buffed attacker's Awareness social-influence roll.
+	var soul_atk: int = SkillResolver.SOUL_OF_STONE_INFLUENCE_PENALTY \
+		if (character.has_day_buff("soul_of_stone") and a_trait_name == "Awareness") else 0
 	var attacker_roll: int = dice_engine.roll_check(
-		maxi(1, a_trait_val + a_skill_rank + contested_mut_a["rolled"]),
+		maxi(1, a_trait_val + a_skill_rank + contested_mut_a["rolled"] + soul_atk),
 		maxi(1, a_trait_val + contested_mut_a["kept"]),
 		0, 0, contested_wound_a, a_skill_rank > 0
 	).get("total", 0) + wc_bonus
@@ -4186,8 +4221,11 @@ static func _execute_contested_court_action(
 		var d_trait_val: int = _get_trait_value_by_name(target, d_trait_name)
 		var contested_wound_d: int = CharacterStats.get_wound_penalty(target)
 		var contested_mut_d: Dictionary = MutationSystem.get_skill_modifiers(target, d_skill)
+		# Soul of Stone (s34): +3k0 when the defender resists a coercive manipulation action.
+		var soul_def: int = SkillResolver.SOUL_OF_STONE_RESIST_BONUS \
+			if (target.has_day_buff("soul_of_stone") and action_id in _SOUL_OF_STONE_MANIPULATION_ACTIONS) else 0
 		defender_roll = dice_engine.roll_check(
-			maxi(1, d_trait_val + d_skill_rank + contested_mut_d["rolled"]),
+			maxi(1, d_trait_val + d_skill_rank + contested_mut_d["rolled"] + soul_def),
 			maxi(1, d_trait_val + contested_mut_d["kept"]),
 			0, 0, contested_wound_d, d_skill_rank > 0
 		).get("total", 0)
@@ -4305,6 +4343,11 @@ static func _execute_contested_court_action(
 		"effects": effects,
 	}
 
+
+# Soul of Stone (s34) resists coercive court manipulation. Negotiate (Courtier Manipulation),
+# Charm and Persuade are the coercive social attacks; Impress/Listen-Reflect/Offer-Favor/Disclose
+# are not attacks on the target, so they grant no resist (owner: "all coercive social attacks").
+const _SOUL_OF_STONE_MANIPULATION_ACTIONS: Array = ["NEGOTIATE", "CHARM", "PERSUADE"]
 
 const _CONTESTED_ATTACKER_SKILL: Dictionary = {
 	"NEGOTIATE": "Courtier",

@@ -73,7 +73,88 @@ const MAHO_LIBRARY: Dictionary = {
 }
 
 
-## Returns the spell entry (with "spell_id" added) for the given id, or {} if unknown.
+## s43 maho COMBAT effects — the tile-combat slice of maho spells, encoded in the same effect schema
+## the AsciiMapCombatOrchestrator uses for s31–37 spells (kind: status/debuff/buff/damage). A maho-user
+## enemy in a PC-present skirmish (Bloodspeaker/cult encounter, s56.14) casts these via
+## AsciiMapCombatOrchestrator.execute_cast_maho (no cast roll — maho has none — paying a self-blood
+## cost + Taint). Tranche 1: the three that reuse the existing effect functions with zero changes.
+## (Damage maho [Burning Blood: DR = TARGET's Fire Ring] needs per-target DR; Bleeding needs a per-round
+## DoT tick; Tomb of Earth needs a maintained per-round contest — all deferred to follow-up tranches.)
+const MAHO_COMBAT_EFFECTS: Dictionary = {
+	# Pain (Earth 2): "falls Prone and cannot act on their next Turn" — incapacitated 1 round (skips the
+	# turn + flat-foots defense, subsuming Prone). The Willpower TN 20 "cry out" Honor/Glory rider is a
+	# world-sim consequence, not modeled in the skirmish.
+	"pain": {"kind": "status", "condition": "incapacitated", "range_tiles": 6, "duration_rounds": 1},
+	# Curse of Weakness (Water 2): +10 TN to all rolls (≈ all_rolls −10, the project's TN↔roll-total
+	# convention) and −10 Armor TN, for 10 rounds.
+	"curse_of_weakness": {"kind": "debuff", "range_tiles": 10, "duration_rounds": 10,
+		"mods": [{"kind": "all_rolls", "value": -10}, {"kind": "armor_tn", "value": -10}]},
+	# Strength of Darkness (Fire 5): +1 Rank to Earth + the three physical Traits (the combat slice =
+	# +1k1 attack via Agility, +1 rolled damage die via Strength), 10 rounds. (The +1 Earth wound-capacity
+	# boost and "see through impairments" are not modeled — the attack/damage buff captures the combat value.)
+	"strength_of_darkness": {"kind": "buff", "target": "self", "duration_rounds": 10,
+		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_damage_rolled", "value": 1}]},
+	# Burning Blood (Fire 4): boil the blood — DR equal to the TARGET's Fire Ring (per-target, via the
+	# damage path's dr_target_ring), then a Willpower TN 20 save or fall Prone. (The secondary "Fatigued"
+	# is deferred — the rider applies one condition; the damage + Prone is the core combat effect.)
+	"burning_blood": {"kind": "damage", "range_tiles": 10, "dr_target_ring": _F,
+		"rider": {"condition": "prone", "save": "willpower_flat", "save_tn": 20}},
+	# Bleeding (Fire 1): a malignant kansen reopens an existing wound — 1 Wound/Round at the start of the
+	# victim's Turn (ticked in advance_round), indefinitely until bandaged (a future out-of-combat Medicine
+	# action) or healed. Requires the target already injured (1+ Wound). Stacks if recast.
+	"bleeding": {"kind": "bleed", "range_tiles": 10, "wounds_per_round": 1},
+	# Blood and Darkness (Air 1): 30' radius blindness (6 tiles), caster excepted — the AoE gather always
+	# excludes the caster. Blinded for 10 rounds.
+	"blood_and_darkness": {"kind": "status", "condition": "blinded", "range_tiles": 0, "aoe_radius": 6,
+		"aoe_hits": "all", "duration_rounds": 10},
+	# Chains of Jigoku (Earth 4): iron manacles immobilize the target — incapacitated for the skirmish
+	# (10 minutes ≈ skirmish). Real manacles, so NOT Shadowlands-gated (unlike the s34 elemental bindings).
+	"chains_of_jigoku": {"kind": "status", "condition": "incapacitated", "range_tiles": 10,
+		"duration_rounds": 9999},
+	# Touch of Death (Earth 5): the combat slice is 7k7 Wounds (melee touch). The +10-year aging is the
+	# world-sim slice (already wired in the seasonal maho cast), not modeled in the skirmish.
+	"touch_of_death": {"kind": "damage", "range_tiles": 1, "dr_rolled": 7, "dr_kept": 7},
+	# Inspire Fear (Air 1): a 3-Point Phobia — the target is Afraid (−1k0 to all rolls) for the skirmish,
+	# persisting via the spell_afraid modifier. No save (a curse, not an illusion to see through).
+	"inspire_fear": {"kind": "fear", "range_tiles": 10, "duration_rounds": 9999},
+	# Mists of Fear (Air 3): an illusion of the target's worst fear (Fear 5) — Afraid, resisted by a
+	# Willpower TN 30 save (Fear 5 = 5 + 5×5, s22.3).
+	"mists_of_fear": {"kind": "fear", "save": "willpower_flat", "save_tn": 30, "range_tiles": 12,
+		"duration_rounds": 9999},
+	# Tomb of Earth (Earth 4): the ground swallows the target — immobilize + 2k2, then a maintained
+	# per-round contest (caster Earth+Insight vs target Air+Insight, processed in advance_round): the
+	# caster keeps the target immobilized + 2k2 each round until the target wins and breaks free, or
+	# either party dies. Cannot affect a target with 1+ full Rank of Taint.
+	"tomb_of_earth": {"kind": "tomb", "range_tiles": 10},
+	# Blood Armor (Earth 5): the caster bonds the nearest ally as a sacrifice and channels 75% of its
+	# incoming damage into that victim (handled in _apply_hit), keeping only 25%. Self-cast; needs a
+	# living ally present (the upfront precondition gates it). The bond breaks when the victim dies.
+	"blood_armor": {"kind": "blood_armor"},
+	# Drain the Soul (Earth 2): reduce the target's Stamina by 1. The combat effect is the lowered wound
+	# capacity — applied (via the s34 ring-change, -1 Earth) only when Stamina is the Earth-determining
+	# trait (stamina <= willpower); otherwise no combat effect (faithful). Possibly lethal if wounded.
+	"drain_the_soul": {"kind": "drain_soul", "range_tiles": 10},
+	# Disrupt the Limb (Water 1): "+15 TN to physical action rolls using that limb" for 10 rounds. The
+	# combat slice is the ARM case (the attack-disabling choice the NPC takes) — modeled as all_rolls -15
+	# (the +15 TN; in tile combat the dominant physical action roll IS the attack). 50' = 10 tiles. The
+	# leg/Lame variant (movement-halving) is deferred — no movement-halving model exists.
+	"disrupt_the_limb": {"kind": "debuff", "range_tiles": 10, "duration_rounds": 10,
+		"mods": [{"kind": "all_rolls", "value": -15}]},
+	# No Pure Breaths (Air 4): the lungs are ravaged into "a continuous +10 TN to all actions" that
+	# "cannot end naturally even if damage is healed; any magical healing... ends the TN penalty." Modeled
+	# as a persistent all_rolls -10 (the +10 TN) under a distinct source so a spell heal clears it (the
+	# cure hook in _apply_spell_heal). 100' = 20 tiles. The instant lung damage ("DR equal to the victim's
+	# Air Ring in KEPT dice" — the rolled-dice count is unstated) is deferred; the lasting debuff is the
+	# spell's signature effect.
+	"no_pure_breaths": {"kind": "debuff", "range_tiles": 20, "duration_rounds": 9999,
+		"source": "no_pure_breaths", "mods": [{"kind": "all_rolls", "value": -10}]},
+}
+
+
+## Returns the tile-combat effect schema for a maho spell_id, or {} if the spell has no wired combat effect.
+static func get_combat_effect(spell_id: String) -> Dictionary:
+	return MAHO_COMBAT_EFFECTS.get(spell_id, {})
+
 static func get_spell(spell_id: String) -> Dictionary:
 	if not MAHO_LIBRARY.has(spell_id):
 		return {}

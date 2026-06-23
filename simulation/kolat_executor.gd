@@ -43,6 +43,8 @@ static func execute(
 			r = _contribute_to_reserve(actor, metadata)
 		"CONDUCT_CONDITIONING":
 			r = _conduct_conditioning(actor, metadata, dice)
+		"CAST_WORLD_IS_TRUTH":
+			r = _cast_world_is_truth(actor, metadata, dice)
 		"MAINTAIN_SLEEPER_CONTACT":
 			r = _maintain_sleeper(actor, metadata, dice)
 		"ACTIVATE_SLEEPER":
@@ -132,14 +134,72 @@ static func _contribute_to_reserve(actor: L5RCharacterData, metadata: Dictionary
 
 static func _conduct_conditioning(actor: L5RCharacterData, metadata: Dictionary, dice: DiceEngine) -> Dictionary:
 	var target: L5RCharacterData = metadata.get("target", null)
-	if target == null:
+	if target == null or CharacterStats.is_dead(target):
 		return {"ok": false, "reason": "no_target"}
-	# Resolve one session. Cumulative progress + the completion handler (install
-	# fields, −3.0 Honor) are driven by the CONDITION_SLEEPER decomposition (deferred).
+	if KolatSystem.is_sleeper(target):
+		return {"ok": false, "reason": "already_sleeper"}
+	# Resolve one session and accumulate toward installation (s54.7c: Willpower×3 sessions).
 	var session: Dictionary = KolatSystem.resolve_conditioning_session(actor, target, dice)
-	return {"ok": true, "progressed": session.get("progressed", false),
-		"progress_per_session": KolatSystem.progress_per_session(target),
-		"sessions_required": KolatSystem.sessions_required(target)}
+	var progressed: bool = session.get("progressed", false)
+	var ready: bool = KolatSystem.record_conditioning_session(target, actor, progressed)
+	if not ready:
+		return {"ok": true, "progressed": progressed, "progress": target.conditioning_progress,
+			"sessions_required": KolatSystem.sessions_required(target)}
+	# 100% — install the permanent sleeper with the metadata-built phrase + command.
+	var phrase: String = String(metadata.get("trigger_phrase", ""))
+	var command: Dictionary = metadata.get("command", {})
+	if not KolatSystem.is_valid_command_phrase(phrase) or command.is_empty():
+		# Hold the accumulated progress (don't lose it) until a command is available.
+		return {"ok": true, "progressed": progressed, "progress": target.conditioning_progress,
+			"reason": "no_command"}
+	KolatSystem.complete_conditioning(target, actor, phrase, command)  # install + -3.0 Honor + reset progress
+	var ic_day: int = int(metadata.get("ic_day", -1))
+	KolatNetwork.register_sleeper(actor, "sleeper_%d" % target.character_id, target.character_id,
+		phrase, String(command.get("need_type", "")), ic_day, false)
+	return {"ok": true, "completed": true, "progressed": true, "target_id": target.character_id}
+
+
+## CAST_WORLD_IS_TRUTH (s33): the magical single-cast sleeper install. Validates the held-target gate
+## (co-located + captive OR incapacitated, not already a sleeper, not the caster), the caster's cast
+## eligibility (knows the Air-6 Kolat spell + an Air slot), then resolves the Contested Insight/Air
+## roll. On success: consume the slot, install the 1-month sleeper (expiry from metadata.ic_day),
+## apply the conditioning Honor cost. metadata carries `trigger_phrase` (<=5 words) + `command`
+## (the engine-readable sleeper command) built by the decomposition.
+static func _cast_world_is_truth(actor: L5RCharacterData, metadata: Dictionary, dice: DiceEngine) -> Dictionary:
+	var target: L5RCharacterData = metadata.get("target", null)
+	if target == null or CharacterStats.is_dead(target):
+		return {"ok": false, "reason": "no_target"}
+	if target.character_id == actor.character_id:
+		return {"ok": false, "reason": "self_target"}
+	if KolatSystem.is_sleeper(target):
+		return {"ok": false, "reason": "already_sleeper"}
+	# Held-target gate (owner ruling: captive OR incapacitated), checkable from the target object.
+	var captive: bool = not String(target.captive_status).is_empty()
+	var incapacitated: bool = CharacterStats.get_wound_level(target) >= Enums.WoundLevel.DOWN
+	if not (captive or incapacitated):
+		return {"ok": false, "reason": "target_not_held"}
+	# 8-hour head-hold requires co-location.
+	if actor.physical_location.is_empty() or actor.physical_location != target.physical_location:
+		return {"ok": false, "reason": "not_co_located"}
+	# Cast eligibility: knows the secret Air-6 Kolat spell + has an Air slot.
+	if not SpellSystem.can_cast(actor, KolatSystem.WORLD_IS_TRUTH_ID):
+		return {"ok": false, "reason": "cannot_cast"}
+	var trigger_phrase: String = String(metadata.get("trigger_phrase", ""))
+	var command: Dictionary = metadata.get("command", {})
+	if not KolatSystem.is_valid_command_phrase(trigger_phrase) or command.is_empty():
+		return {"ok": false, "reason": "no_command"}
+	# Resolve the Contested Insight/Air cast.
+	var roll: Dictionary = KolatSystem.resolve_world_is_truth_cast(actor, target, dice)
+	SpellSystem.consume_slot(actor, SpellSystem.get_best_cast_ring(actor, KolatSystem.WORLD_IS_TRUTH_ID))
+	if not roll.get("success", false):
+		return {"ok": true, "world_is_truth_success": false, "target_id": target.character_id,
+			"caster_total": roll.get("caster_total", 0), "target_total": roll.get("target_total", 0)}
+	var raises: int = int(metadata.get("raises", 0))
+	var ic_day: int = int(metadata.get("ic_day", -1))
+	KolatSystem.install_world_is_truth_sleeper(target, trigger_phrase, command, raises, ic_day)
+	HonorGlorySystem.apply_honor_change(actor, KolatSystem.CONDITIONING_HONOR_COST)
+	return {"ok": true, "world_is_truth_success": true, "target_id": target.character_id,
+		"installed": true, "expiry_ic_day": target.sleeper_expiry_ic_day}
 
 
 static func _maintain_sleeper(actor: L5RCharacterData, metadata: Dictionary, dice: DiceEngine) -> Dictionary:

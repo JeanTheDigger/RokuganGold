@@ -8,7 +8,8 @@ class_name NPCDecisionEngine
 const KOLAT_ACTION_POOL: Array[String] = [
 	"TRANSMIT_VIA_TEAR", "OBSERVE_VIA_EYE", "SUBMIT_KOLAT_REPORT", "RUN_COURIER_ROUTE",
 	"DISTRIBUTE_INTELLIGENCE", "ESTABLISH_DEAD_DROP", "UNDERREPORT_KOKU", "LAUNDER_KOKU",
-	"TRANSFER_KOLAT_FUNDS", "ANONYMOUS_TIP", "CONDUCT_CONDITIONING", "MAINTAIN_SLEEPER_CONTACT",
+	"TRANSFER_KOLAT_FUNDS", "ANONYMOUS_TIP", "CONDUCT_CONDITIONING", "CAST_WORLD_IS_TRUTH",
+	"MAINTAIN_SLEEPER_CONTACT",
 	"ACTIVATE_SLEEPER", "SECURE_ONI_EYE", "APPROACH_FOR_RECRUITMENT", "ROUTE_VIA_DEAD_DROP",
 	"CHECK_DEAD_DROP", "ROTATE_DEAD_DROP", "ARRANGE_PROXY_DUEL", "CHECK_CONFIRMATION_DROP",
 	"ROUTE_ANONYMOUS_INTELLIGENCE", "SPONSOR_INSURGENCY", "BRIBE_GARRISON_COMMANDER",
@@ -484,6 +485,10 @@ static func generate_options(
 			"BRIBE_FOR_INFO", "BRIBE_WITNESS", "INTIMIDATE_WITNESS",
 			"KILL_WITNESS", "FLEE_JURISDICTION",
 		]
+		# s33 Cloud the Mind — the magical witness-silencer; only a shugenja who knows it.
+		if character != null and SpellSystem.is_shugenja(character) \
+				and "cloud_the_mind" in character.spells_known:
+			available_actions.append("CLOUD_THE_MIND")
 	elif need.source == "extortion_opportunity":
 		# Corrupt-magistrate extortion reactive menu (s11.3.13). EXTORT_ACCUSED is
 		# in no context list; a magistrate who declines falls through to DO_NOTHING.
@@ -868,6 +873,56 @@ static func _apply_taint_examination_precondition_filter(
 	return _remove_action(options, "EXAMINE_FOR_TAINT")
 
 
+# -- Phase 4c: CAST_WORLD_IS_TRUTH Precondition Filter (s54.7/s33) ------------
+# CAST_WORLD_IS_TRUTH shares the CONDITION_SLEEPER NeedType with CONDUCT_CONDITIONING
+# (both score 100; competence/Spellcraft breaks the tie). But the magical install needs a
+# co-located HELD (captive/incapacitated) target the caster can actually rewrite, plus the
+# secret Air-6 spell + an Air slot — gates the multi-session psychological conditioning does
+# NOT require. Without this filter a strong-Spellcraft Master with a CONDITION_SLEEPER need but
+# no held captive could select it and cleanly no-op (no_target/cannot_cast), wasting 1 AP.
+# Remove it unless BOTH gates would pass; CONDUCT_CONDITIONING then wins the need.
+static func _apply_world_is_truth_precondition_filter(
+	options: Array,
+	character: L5RCharacterData,
+	chars_by_id: Dictionary,
+) -> Array:
+	var has_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "CAST_WORLD_IS_TRUTH":
+			has_action = true
+			break
+	if not has_action:
+		return options
+	# Cast eligibility: knows the secret Air-6 Kolat spell + has an Air slot (mirrors the executor).
+	if not SpellSystem.can_cast(character, KolatSystem.WORLD_IS_TRUTH_ID):
+		return _remove_action(options, "CAST_WORLD_IS_TRUTH")
+	# A valid co-located held sleeper target must exist (the picker enforces every target gate).
+	if _pick_world_is_truth_target(character, chars_by_id) == null:
+		return _remove_action(options, "CAST_WORLD_IS_TRUTH")
+	return options
+
+
+# -- Phase 4c: COMMUNE_KAMI Precondition Filter (s32) -------------------------
+# COMMUNE_KAMI is castable only by a shugenja who knows the Commune spell.
+# Every shugenja school starts with "commune" (universal ML1), so this is a
+# cheap shugenja gate; it removes the action for bushi/courtiers/monks who
+# scored it through a shared NeedType (INVESTIGATE_THREAT / UPHOLD_LAW).
+static func _apply_commune_precondition_filter(
+	options: Array,
+	character: L5RCharacterData,
+) -> Array:
+	var has_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "COMMUNE_KAMI":
+			has_action = true
+			break
+	if not has_action:
+		return options
+	if character != null and SpellSystem.is_shugenja(character) and "commune" in character.spells_known:
+		return options
+	return _remove_action(options, "COMMUNE_KAMI")
+
+
 # -- Phase 4c: PETITION_ACCESS Precondition Filter (s2.3.23) ------------------
 # Surfaces PETITION_ACCESS only when the orchestrator has injected a non-empty
 # petition_eligible_type for this character (at Otosan Uchi, lacking the relevant
@@ -1223,6 +1278,8 @@ static func run(
 	options = _apply_petition_precondition_filter(options, world_state)
 	options = _apply_origami_precondition_filter(options, character, ctx)
 	options = _apply_garden_precondition_filter(options, character, ctx)
+	options = _apply_world_is_truth_precondition_filter(options, character, chars_by_id)
+	options = _apply_commune_precondition_filter(options, character)
 	options = _apply_arrived_travel_filter(options, need, ctx)
 	options = _apply_compliance_filter(options, ctx)
 
@@ -1536,7 +1593,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"MENTOR",
 				"TREAT_WOUND",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
-				"EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT",
+				"EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT", "COMMUNE_KAMI",
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
@@ -1594,7 +1651,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"FORGE_IMPERSONATION_LETTER", "FORGE_ORDER",
 				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
-				"EXAMINE_LETTER", "EXAMINE_FOR_TAINT",
+				"EXAMINE_LETTER", "EXAMINE_FOR_TAINT", "COMMUNE_KAMI",
 				"TREAT_WOUND",
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "REQUEST_HUNT_INVITATION", "CANCEL_HUNT",
@@ -1638,7 +1695,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"SEDUCE", "SEDUCE_FOR_INFO", "SEDUCE_FOR_ACCESS",
 				"SEDUCE_FOR_LEVERAGE", "SEDUCE_TO_COMPROMISE",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
-				"EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT",
+				"EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT", "COMMUNE_KAMI",
 				"INVESTIGATE_PROVINCE",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
@@ -1772,6 +1829,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"EVALUATE_WAR_READINESS": 1,
 		"BRIBE_FOR_INFO": 1,
 		"EAVESDROP": 1,
+		"COMMUNE_KAMI": 1,
 		"INTERCEPT_LETTER": 1,
 		"SEARCH_QUARTERS": 1,
 		"BEGIN_TRAVEL": 1,
@@ -3347,7 +3405,7 @@ static func _populate_action_metadata(
 		option.target_npc_id = need.target_npc_id
 	elif option.action_id == "FLEE_JURISDICTION" and need.source == "bribery_eval":
 		option.metadata = {"flee_from_magistrate_id": need.target_npc_id}
-	elif option.action_id in ["BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS"] and need.source == "bribery_eval":
+	elif option.action_id in ["BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS", "CLOUD_THE_MIND"] and need.source == "bribery_eval":
 		if need.target_npc_id_secondary >= 0:
 			option.target_npc_id = need.target_npc_id_secondary
 			option.metadata = {"witness_id": need.target_npc_id_secondary}
@@ -3383,6 +3441,12 @@ static func _populate_action_metadata(
 			"taint_target_id": ctx.known_objectives.get("taint_corroboration_target_id", -1),
 			"taint_topic_id": ctx.known_objectives.get("taint_corroboration_topic_id", -1),
 		}
+	elif option.action_id == "COMMUNE_KAMI":
+		# s32 Commune the Air kami about a suspected mind-tampering victim (the investigation's
+		# subject). Element defaults to AIR — the wired Cloud the Mind detection domain.
+		if need.target_npc_id >= 0:
+			option.target_npc_id = need.target_npc_id
+		option.metadata = {"commune_element": Enums.Ring.AIR}
 	elif option.action_id == "SEARCH_PERSON":
 		var is_magistrate: bool = ctx.known_objectives.get("standing_need_type", "") == "UPHOLD_LAW"
 		option.metadata = {
@@ -3799,7 +3863,58 @@ static func _build_kolat_metadata(
 			pass
 		"SPONSOR_INSURGENCY":
 			meta["strength"] = maxi(1, int(need.threshold))
+		"CONDUCT_CONDITIONING":
+			# s54.7c: bake the betrayal sleeper command for the multi-session psychological install
+			# (the opportunity scanner already picked a lord-bound co-located candidate as `tgt`).
+			if tgt != null and tgt.lord_id >= 0:
+				meta.merge(_build_sleeper_command(tgt))
+		"CAST_WORLD_IS_TRUTH":
+			# s33: pick a co-located held (captive/incapacitated) non-Kolat target the caster can
+			# rewrite, and bake the same betrayal sleeper command — turn the captive against their
+			# own lord on activation (the archetypal "create a sleeper agent" use).
+			if master != null:
+				var wt: L5RCharacterData = _pick_world_is_truth_target(master, chars_by_id)
+				if wt != null:
+					meta["target"] = wt
+					meta["target_npc_id"] = wt.character_id
+					meta.merge(_build_sleeper_command(wt))
+					meta["raises"] = 0
 	return meta
+
+
+## s54.7/s33 The betrayal sleeper install: a ≤5-word trigger phrase + the engine-readable command
+## to ELIMINATE the (lord-bound) target's own lord on activation — the canonical "sleeper agent"
+## use, and the only command type the override loop + `_sleeper_command_complete` support.
+static func _build_sleeper_command(target: L5RCharacterData) -> Dictionary:
+	return {
+		"trigger_phrase": "kolat sleeper %d" % target.character_id,
+		"command": {"need_type": "ELIMINATE_CHARACTER", "target_npc_id": target.lord_id},
+	}
+
+
+## s33 The World is Truth target: a co-located, held (captive OR incapacitated), non-Kolat, non-PC,
+## lord-bound, not-already-a-sleeper character the master can rewrite into a betrayal sleeper. The
+## lord_id gate makes the baked ELIMINATE command meaningful (turn the captive against their own
+## lord). Highest Status preferred (the most valuable sleeper). Returns the character or null.
+static func _pick_world_is_truth_target(master: L5RCharacterData, chars_by_id: Dictionary) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for cid: Variant in chars_by_id:
+		var c: L5RCharacterData = chars_by_id[cid]
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.character_id == master.character_id or c.is_pc:
+			continue
+		if c.kolat_sect != Enums.KolatSect.NONE or KolatSystem.is_sleeper(c) or c.lord_id < 0:
+			continue
+		if c.physical_location.is_empty() or c.physical_location != master.physical_location:
+			continue
+		var held: bool = not String(c.captive_status).is_empty() \
+			or CharacterStats.get_wound_level(c) >= Enums.WoundLevel.DOWN
+		if not held:
+			continue
+		if best == null or c.status > best.status:
+			best = c
+	return best
 
 
 ## Highest leverage_value archived topic in the Master's cloud_archive (s54.7c).

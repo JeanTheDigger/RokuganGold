@@ -14,6 +14,12 @@ const ACTIVATION_STABILITY_FLOOR: float = 50.0  # must be > this to activate
 const CONDITIONING_HONOR_COST: float = -3.0      # applied once on completion
 const SLEEPER_COMMAND_MAX_WORDS: int = 5
 
+# s33 The World is Truth (Air 6, Kolat): a magical single-cast sleeper install — an alternative to
+# the multi-session psychological CONDUCT_CONDITIONING path. GDD duration 1 month (+1 month per 3
+# Raises); the rewritten memories fade when the month lapses (vs the permanent psychological sleeper).
+const WORLD_IS_TRUTH_ID: String = "the_world_is_truth"
+const WORLD_IS_TRUTH_MASTERY: int = 6
+
 # Koku pipeline (s54.7c/h).
 const LAUNDER_PER_AP: int = 5
 const VAULT_MIN_RESERVE: int = 50
@@ -132,7 +138,77 @@ static func complete_conditioning(
 	target.conditioning_stability = STABILITY_FULL
 	target.active_sleeper_command = {}
 	target.sleeper_contact_overdue = 0
+	target.conditioning_progress = 0.0       # in-progress accumulation consumed
+	target.conditioning_master_id = -1
 	HonorGlorySystem.apply_honor_change(dream_master, CONDITIONING_HONOR_COST)
+
+
+## s54.7c Accumulate one CONDUCT_CONDITIONING session toward installing a permanent psychological
+## sleeper. The target is claimed by `master` (a second master's sessions do not add to it); a
+## progressed session adds progress_per_session. Returns true once cumulative progress reaches
+## STABILITY_FULL (the caller then installs via complete_conditioning). No-op (false) on an
+## already-installed sleeper or a target claimed by a different master.
+static func record_conditioning_session(
+	target: L5RCharacterData, master: L5RCharacterData, progressed: bool,
+) -> bool:
+	if is_sleeper(target):
+		return false
+	if target.conditioning_master_id >= 0 and target.conditioning_master_id != master.character_id:
+		return false
+	target.conditioning_master_id = master.character_id
+	if progressed:
+		target.conditioning_progress += progress_per_session(target)
+	# Epsilon guards float-accumulation underflow (N × (100/N) can sum to 99.9999…); far smaller
+	# than any single session's increment (min ≈ 3.33 at Willpower 10), so never completes early.
+	return target.conditioning_progress >= STABILITY_FULL - 0.01
+
+
+## s33 The World is Truth — resolve the Contested Insight/Air cast (caster vs target). Caster rolls
+## (Insight Rank + Air Ring, keep Air Ring); the target resists with (Willpower + Air Ring, keep Air
+## Ring) — the mental-domination resist convention (the GDD names "Contested Insight/Air vs the
+## target" without the target's resist Trait). Returns {success, caster_total, target_total}.
+static func resolve_world_is_truth_cast(
+	caster: L5RCharacterData, target: L5RCharacterData, dice: DiceEngine,
+) -> Dictionary:
+	var c_air: int = SpellSystem.get_ring_value(caster, Enums.Ring.AIR)
+	var t_air: int = SpellSystem.get_ring_value(target, Enums.Ring.AIR)
+	var c_roll: int = dice.roll_and_keep(maxi(1, caster.insight_rank + c_air), maxi(1, c_air)).total
+	var t_roll: int = dice.roll_and_keep(maxi(1, target.willpower + t_air), maxi(1, t_air)).total
+	return {"success": c_roll >= t_roll, "caster_total": c_roll, "target_total": t_roll}
+
+
+## s33 The World is Truth — install the magically-rewritten sleeper. Same hidden fields as
+## complete_conditioning, but with a 1-month expiry (+1 month per 3 Raises) instead of permanent
+## psychological stability. Honor is applied by the caller (the executor).
+static func install_world_is_truth_sleeper(
+	target: L5RCharacterData, trigger_phrase: String, command: Dictionary, raises: int, ic_day: int,
+) -> void:
+	target.trigger_phrase = trigger_phrase
+	target.sleeper_command = command
+	target.conditioning_stability = STABILITY_FULL
+	target.active_sleeper_command = {}
+	target.sleeper_contact_overdue = 0
+	var months: int = 1 + int(raises / 3)
+	target.sleeper_expiry_ic_day = ic_day + TimeSystem.IC_DAYS_PER_MONTH * months
+
+
+## s33 Daily expiry pass: a DORMANT magically-installed sleeper whose month has lapsed reverts —
+## the rewritten memories fade and all sleeper fields clear. Active sleepers (activated mid-window,
+## the command runs to completion) and permanent psychological sleepers (expiry -1) are untouched.
+## Returns true if it expired this tick.
+static func process_sleeper_expiry(sleeper: L5RCharacterData, ic_day: int) -> bool:
+	if sleeper.sleeper_expiry_ic_day < 0:
+		return false
+	if not sleeper.active_sleeper_command.is_empty():
+		return false
+	if ic_day < sleeper.sleeper_expiry_ic_day:
+		return false
+	sleeper.trigger_phrase = ""
+	sleeper.sleeper_command = {}
+	sleeper.conditioning_stability = -1.0
+	sleeper.sleeper_contact_overdue = -1
+	sleeper.sleeper_expiry_ic_day = -1
+	return true
 
 
 ## Seasonal degradation pass (s54.7e): stability −5, contact-overdue += season
@@ -143,6 +219,8 @@ static func degrade_sleeper_seasonal(sleeper: L5RCharacterData, season_days: int
 		return
 	if not sleeper.active_sleeper_command.is_empty():
 		return
+	if sleeper.sleeper_expiry_ic_day >= 0:
+		return  # s33 magical (World is Truth) sleepers expire on their own clock, not psychological decay
 	sleeper.conditioning_stability = maxf(0.0, sleeper.conditioning_stability - STABILITY_SEASONAL_DECAY)
 	sleeper.sleeper_contact_overdue += maxi(0, season_days)
 

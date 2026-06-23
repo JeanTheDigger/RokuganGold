@@ -307,6 +307,109 @@ static func _activate_kiho_buff(character: L5RCharacterData, kiho_name: String, 
 	return true
 
 
+# Void Point spend on a Skill/Trait roll (core L5R rule; the UI's "spend a Void Point" action).
+# Opt-in via context["spend_void"] = true and context["void_points"] = N (default 1) — so existing
+# callers that don't request it never drain VP. Normally capped at 1 VP per roll; while s37
+# Altering the Course is active this tick (altering_course_ic_day == ic_day) the caster may spend
+# up to N (bounded by the pool) for +NkN. NOT valid for damage rolls (this path is skill checks).
+static func _get_void_spend_bonus(
+	character: L5RCharacterData, context: Dictionary, ic_day: int
+) -> Dictionary:
+	if not context.get("spend_void", false):
+		return {"rolled": 0, "kept": 0}
+	var requested: int = maxi(1, int(context.get("void_points", 1)))
+	var cap: int = 1
+	if ic_day >= 0 and character.altering_course_ic_day == ic_day:
+		cap = character.current_void_points  # Altering the Course: multiple VP on one roll
+	var n: int = mini(requested, cap)
+	if n < 1:
+		return {"rolled": 0, "kept": 0}
+	var r: Dictionary = VoidSystem.spend_n_for_roll(character, n)
+	return {"rolled": int(r["rolled_bonus"]), "kept": int(r["kept_bonus"])}
+
+
+# -- Voice of the Wind (s33 Air 1) — spoken social buff -----------------------
+# A target under Voice of the Wind gains, for the IC day it was cast (the GDD's
+# 10-minute / one-encounter window at this granularity): +1k0 to spoken Social
+# Skill Rolls (Courtier/Etiquette/Sincerity/Intimidation/Temptation/Acting), and
+# the Voice Advantage (+1k1 on a Perform Roll using voice, via context
+# "is_voice_perform"). The two effects never overlap (Perform is not a Social
+# Skill), so there is no double-count. Stacks additively with From the Ashes.
+static func _get_voice_of_the_wind_bonus(
+	character: L5RCharacterData, skill_name: String, context: Dictionary, ic_day: int
+) -> Dictionary:
+	if ic_day < 0 or character.voice_of_the_wind_ic_day != ic_day:
+		return {"rolled": 0, "kept": 0}
+	var rolled: int = 0
+	var kept: int = 0
+	var base_skill: String = skill_name
+	var colon_pos: int = skill_name.find(":")
+	if colon_pos >= 0:
+		base_skill = skill_name.substr(0, colon_pos).strip_edges()
+	if base_skill in SOCIAL_SKILLS:
+		rolled += 1  # +1k0 to Social Skill Rolls that involve speech
+	if context.get("is_voice_perform", false):
+		rolled += 1  # granted Voice Advantage: +1k1 on a voice Perform Roll
+		kept += 1
+	return {"rolled": rolled, "kept": kept}
+
+
+# -- Soul of Stone (s34 Earth 1, Defense) — manipulation resist / influence penalty --
+# +3k0 when RESISTING coercive social manipulation (the caller marks the roll with
+# context "is_manipulation_resist"); -1k0 to the buffed character's own Awareness-based
+# social-influence rolls (Courtier/Etiquette/Sincerity/Temptation/Intimidation/Acting).
+# The two are exclusive: a resist roll gets +3 (never the -1). Both are GDD-exact (s34).
+const SOUL_OF_STONE_RESIST_BONUS: int = 3
+const SOUL_OF_STONE_INFLUENCE_PENALTY: int = -1
+
+static func _get_soul_of_stone_bonus(
+	character: L5RCharacterData, skill_name: String, trait_used: Enums.Trait, context: Dictionary
+) -> int:
+	if not character.has_day_buff("soul_of_stone"):
+		return 0
+	if context.get("is_manipulation_resist", false):
+		return SOUL_OF_STONE_RESIST_BONUS  # +3k0 to resist manipulation
+	# Downside: -1k0 to Awareness-based Skill Rolls made to influence others.
+	if trait_used == Enums.Trait.AWARENESS:
+		var base_skill: String = skill_name
+		var colon_pos: int = skill_name.find(":")
+		if colon_pos >= 0:
+			base_skill = skill_name.substr(0, colon_pos).strip_edges()
+		if base_skill in SOCIAL_SKILLS:
+			return SOUL_OF_STONE_INFLUENCE_PENALTY
+	return 0
+
+
+# -- Mental Quickness (s35 Fire 2) — Intelligence +3 from an imbued item ------
+# The spell imbues an ITEM, and "anyone who carries that item has Intelligence +3". The buff
+# therefore lives on the item (a "mental_quickness_imbued" flag on the item dict) and follows
+# ownership: whoever's `items` array currently holds the imbued item gets the bonus. Only affects
+# Intelligence-based rolls (the trait adds to both rolled and kept, so this is effectively +3k3).
+const MENTAL_QUICKNESS_INT_BONUS: int = 3
+
+static func _mental_quickness_trait_bonus(character: L5RCharacterData, trait_used: Enums.Trait) -> int:
+	if trait_used != Enums.Trait.INTELLIGENCE:
+		return 0
+	for item: Variant in character.items:
+		if item is Dictionary and (item as Dictionary).get("mental_quickness_imbued", false):
+			return MENTAL_QUICKNESS_INT_BONUS
+	return 0
+
+
+# s34 Earth's Touch (Earth 1): +1 to ONE Earth Trait (caster's choice — Stamina or Willpower) for the
+# day, via the trait-tagged day buff ("earths_touch_stamina" / "earths_touch_willpower"). Applied at
+# roll resolution only (never the stored field), so the Earth Ring (= min(Stamina, Willpower)) is NOT
+# increased per the GDD. Adds to both rolled and kept (effectively +1k1) on rolls using that trait.
+static func _earths_touch_trait_bonus(character: L5RCharacterData, trait_used: Enums.Trait) -> int:
+	# s34 Stone's Endurance shares this Stamina boost (non-stacking — +1 from this family, not +2).
+	if trait_used == Enums.Trait.STAMINA and (character.has_day_buff("earths_touch_stamina") \
+			or character.has_day_buff("stones_endurance")):
+		return 1
+	if trait_used == Enums.Trait.WILLPOWER and character.has_day_buff("earths_touch_willpower"):
+		return 1
+	return 0
+
+
 # -- Doji R3: The Perfect Gift (s29.15.4) — one-shot disposition modifier ------
 
 const PERFECT_GIFT_TN: int = 20
@@ -471,6 +574,8 @@ static func resolve_skill_check(
 	var adv_wound: int = AdvantageSystem.get_wound_tn_modifier(character)
 	var adv_trait: int = AdvantageSystem.get_trait_modifier(character, trait_used, context)
 	trait_value += adv_trait
+	trait_value += _mental_quickness_trait_bonus(character, trait_used)  # s35: +3 Int from imbued item
+	trait_value += _earths_touch_trait_bonus(character, trait_used)  # s34: +1 chosen Earth Trait
 	if wound_penalty < 0:
 		wound_penalty = mini(0, wound_penalty + adv_wound)
 
@@ -523,17 +628,27 @@ static func resolve_skill_check(
 	# s38 out-of-combat kiho buffs (Mind's Fire / Steal the Air Dragon)
 	var kiho_mod: Dictionary = _get_kiho_buff_bonus(character, skill_name, trait_used, ic_day)
 
+	# Void Point spend on this roll (opt-in via context; s37 Altering the Course allows +NkN)
+	var void_mod: Dictionary = _get_void_spend_bonus(character, context, ic_day)
+
+	# s33 Voice of the Wind: spoken-social buff (+1k0 social-speech, +1k1 voice Perform)
+	var voice_mod: Dictionary = _get_voice_of_the_wind_bonus(character, skill_name, context, ic_day)
+
+	# s34 Soul of Stone: +3k0 resisting manipulation / -1k0 Awareness social influence
+	var soul_mod: int = _get_soul_of_stone_bonus(character, skill_name, trait_used, context)
+
 	# Build the pool: (trait + skill + bonus_rolled) k (trait + bonus_kept)
 	var rolled: int = (
 		trait_value + skill_rank + bonus_rolled + ashes_bonus
 		+ adv_skill.get("rolled", 0) + mutation_mod.get("rolled", 0)
 		+ imbalance_mod.get("rolled", 0) + inheritance_mod.get("rolled", 0)
-		+ kiho_mod.get("rolled", 0)
+		+ kiho_mod.get("rolled", 0) + void_mod.get("rolled", 0) + voice_mod.get("rolled", 0)
+		+ soul_mod
 	)
 	var kept: int = (
 		trait_value + bonus_kept + adv_skill.get("kept", 0) + mutation_mod.get("kept", 0)
 		+ imbalance_mod.get("kept", 0) + inheritance_mod.get("kept", 0)
-		+ kiho_mod.get("kept", 0)
+		+ kiho_mod.get("kept", 0) + void_mod.get("kept", 0) + voice_mod.get("kept", 0)
 	)
 	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
 		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn \
@@ -666,6 +781,10 @@ static func resolve_contested_check(
 	var adv_wound_b: int = AdvantageSystem.get_wound_tn_modifier(char_b)
 	tv_a += AdvantageSystem.get_trait_modifier(char_a, trait_a, context_a)
 	tv_b += AdvantageSystem.get_trait_modifier(char_b, trait_b, context_b)
+	tv_a += _mental_quickness_trait_bonus(char_a, trait_a)  # s35: +3 Int from imbued item
+	tv_b += _mental_quickness_trait_bonus(char_b, trait_b)
+	tv_a += _earths_touch_trait_bonus(char_a, trait_a)  # s34: +1 chosen Earth Trait
+	tv_b += _earths_touch_trait_bonus(char_b, trait_b)
 	if wp_a < 0:
 		wp_a = mini(0, wp_a + adv_wound_a)
 	if wp_b < 0:
@@ -681,13 +800,26 @@ static func resolve_contested_check(
 	var kiho_a: Dictionary = _get_kiho_buff_bonus(char_a, skill_a, trait_a, ic_day)
 	var kiho_b: Dictionary = _get_kiho_buff_bonus(char_b, skill_b, trait_b, ic_day)
 
+	# Void Point spend on this roll, per side (opt-in via context[_a/_b].spend_void; either
+	# participant of a contested roll may spend, and s37 Altering the Course allows +NkN).
+	var void_a: Dictionary = _get_void_spend_bonus(char_a, context_a, ic_day)
+	var void_b: Dictionary = _get_void_spend_bonus(char_b, context_b, ic_day)
+
+	# s33 Voice of the Wind: spoken-social buff, per side (court CHARM/NEGOTIATE/PERSUADE).
+	var voice_a: Dictionary = _get_voice_of_the_wind_bonus(char_a, skill_a, context_a, ic_day)
+	var voice_b: Dictionary = _get_voice_of_the_wind_bonus(char_b, skill_b, context_b, ic_day)
+
+	# s34 Soul of Stone, per side: +3k0 resisting manipulation / -1k0 Awareness social influence.
+	var soul_a: int = _get_soul_of_stone_bonus(char_a, skill_a, trait_a, context_a)
+	var soul_b: int = _get_soul_of_stone_bonus(char_b, skill_b, trait_b, context_b)
+
 	var roll_a: DiceResult = dice_engine.roll_and_keep(
-		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0) + kiho_a.get("rolled", 0),
-		tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0) + kiho_a.get("kept", 0), sr_a > 0, emph_a
+		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0) + kiho_a.get("rolled", 0) + void_a.get("rolled", 0) + voice_a.get("rolled", 0) + soul_a,
+		tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0) + kiho_a.get("kept", 0) + void_a.get("kept", 0) + voice_a.get("kept", 0), sr_a > 0, emph_a
 	)
 	var roll_b: DiceResult = dice_engine.roll_and_keep(
-		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0),
-		tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0) + kiho_b.get("kept", 0), sr_b > 0, emph_b
+		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0) + void_b.get("rolled", 0) + voice_b.get("rolled", 0) + soul_b,
+		tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0) + kiho_b.get("kept", 0) + void_b.get("kept", 0) + voice_b.get("kept", 0), sr_b > 0, emph_b
 	)
 
 	var total_a: int = roll_a.total + flat_bonus_a + wp_a + (tfr_a * FREE_RAISE_VALUE) \

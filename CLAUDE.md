@@ -4676,6 +4676,122 @@ until it strikes) rather than as a second hook in CombatController — there is 
 Mimic to gate there until spirit creatures flow through that layer. Re-castable (no
 once-per-encounter limit; GDD allows recasting). Static-validated only (no Godot runtime).
 
+### s33/s36 illusion DISGUISE layer — CombatController stealth approach (2026-06-21, owner-authorized, runtime-verified)
+First piece of the owner-authorized "illusion/perception layer." A full read of all 16
+"illusion" spells found that **almost none are turn-based-combat effects** — they are
+stealth-approach (the roguelike `CombatController`, not the turn-based orchestrator) or
+out-of-combat (memory/conversation/detection/world-sim). So the faithful home for the
+**disguise** spells is `CombatController`: a disguised PC passes enemy guards in the
+infiltration phase. Wired (PC carries the disguise on its `EntityState`):
+`apply_disguise(spell_id)` (the future stealth-command UI / spell-cast action calls it)
+freezes the see-through contest pool — Spellcraft rank + Air ring — plus the spell's GDD
+**Mastery Level** as the resist bonus; `clear_disguise()`; `is_disguised()`. The hook is in
+`_npc_turn`: right after `_npc_can_see_player`, a `_disguise_suppresses(es)` guard flips
+`player_seen` to false for a fooled guard, so it never escalates UNAWARE→SUSPICIOUS→ALERT.
+**See-through (owner ruling 2026-06-21): Contested Investigation/Perception (guard) vs
+Spellcraft/Air (caster)** — the GDD's own illusion-detection shape (seeking_the_way,
+garbled_tongue) — with the owner's "harder disguise adds a bonus" realized via the spell's
+GDD Mastery Level (hidden_visage Air 2 → +2, mask_of_wind Air 3 → +3, the_mirrors_smile
+Water 4 → +4; **no flat magnitude invented**). The contest is rolled **once per guard and
+cached** (`disguise_seethrough` entity_id→penetrated/fooled); ties favor the disguise; only
+UNAWARE/SUSPICIOUS guards can be fooled (an ALERT guard already in combat ignores it). The
+disguise **breaks on any overt hostile act** — `clear_disguise()` is called at all three PC
+hostile paths: `execute_player_attack`, `execute_stealth_kill`, and the inline
+`try_move_player` bump-to-attack (the last was the wiring gap caught in the validation pass).
+A normal open move keeps the disguise (it only drops `_player_stealth`, the separate sneak
+flag — walking openly *as a friendly* is the whole point; `_disguise_suppresses` then gates
+FoV spotting). PCs may be shugenja per s60.2, so the caster path is reachable.
+RUNTIME-VERIFIED (Godot 4.6.2, headless driver, 21/21): ML resist bonus = 2/3/4; see-through
+monotonicity (weak guard cracks a good disguise 2/400, strong guard cracks a weak one
+368/400, biased toward the disguise); per-guard cache sticky + stable; ALERT guard ignores
+it; the strongest disguise fools a weak suspicious guard 50/50; clear_disguise breaks +
+is idempotent; apply rejects non-disguise spells and the no-player case. LIMITATIONS /
+DEFERRED: this is the **disguise** subset (hidden_visage, mask_of_wind, the_mirrors_smile)
+only — the other illusion spells (heart_betrays_eyes perception-mask, quiescence_of_air
+silence→Stealth, by_the_light_of_the_moon reveal, seeking_the_way false-trail) are the next
+CombatController tranches; ever_changing_waves (real creature shapeshift) and mists_of_illusion
+(stationary visual decoy) are the orchestrator turn-based pair. A clean stealth kill with no
+witnesses still drops the disguise (the "no-witness persistence" nuance is deferred). Same
+live-reachability caveat as the whole ASCII combat stack (PC-travel HOLD) — verified by
+headless driver, not a live session. The disguise spells also gain no entry in
+`SpellSystem.SPELL_COMBAT_EFFECTS` (their effect lives in CombatController, not the
+orchestrator damage/status schema).
+
+### s33 illusion/perception layer — tranche 2: heart_betrays_eyes, quiescence_of_air, by_the_light_of_the_moon (2026-06-21, owner-authorized, runtime-verified)
+Three more CombatController stealth-layer spells, all values GDD-given.
+- **heart_betrays_eyes** (Air 2): `apply_heart_betrays(target_id)` places a one-shot,
+  expiring charge on one guard within 50' (10 tiles) — for 3 Rounds, that guard's NEXT
+  sighting of the PC is fooled unless they pass Investigation vs the caster's **Air × 5**
+  (the GDD's explicit TN). `_heart_betrays_suppresses` (a second `_npc_turn` guard after
+  the disguise check) consumes the charge on the guard's first spotting whether they pass
+  or fail, and flips `player_seen` false on a fail. Stored on the GUARD's EntityState
+  (`heart_betrays_until_round` / `heart_betrays_air`). A disguise-fooled guard preserves
+  its charge (no "unusual thing" was seen). Runtime: weak guard fooled 297/300, an
+  Investigation-6 guard sees through 300/300 (the GDD save discriminates).
+- **quiescence_of_air** (Air 2): `apply_silence_zone(cx, cy)` creates a stationary silence
+  sphere (30' diameter = 3-tile radius, 10 Rounds; default-centered on the caster, explicit
+  center = the GDD 2-Raise relocation). Two effects: (a) **noise-block** — a 2-line guard in
+  `_emit_noise` skips any listener separated from the source by a silence boundary
+  (`_silence_blocks` = one endpoint inside an active sphere XOR the other; "no sound passes
+  in either direction"); (b) **+2 Stealth Free Raises** in `try_stealth_move` while the PC is
+  inside the bubble (`_in_silence`). Zones expire lazily (`_round > expiry_round`).
+- **by_the_light_of_the_moon** (Air 1): `cast_moonlight_reveal()` flips every HIDDEN trap
+  within 20' (4 tiles) of the PC to DETECTED via TrapSystem (returns count + positions;
+  already-DETECTED not re-counted).
+RUNTIME-VERIFIED (Godot 4.6.2 headless, 24/24): range gate + one-shot consume + 3-round
+lapse + Air×5 distribution; trap reveal radius + no double-reveal; silence radius/boundary-
+block/inside-pass/expiry/centering. DEFERRED/LIMITATIONS: **seeking_the_way** (Air 4) is a
+1/2-mile, 3-hour OVERLAND false trail with no within-zone consumer (guards pursue by
+last-known position + noise, not by tracking footprints), so it is a world-map escape tool,
+not a stealth-layer effect — not force-fit. by_the_light reveals traps but not secret doors/
+compartments (no generic hidden-exit data model). The Stealth +2 FR applies whenever the PC
+is inside the bubble (a faithful approximation of the GDD "vs characters on the other side"
+— the stealth roll is a general ground-surface roll, not vs a named listener). Same
+PC-travel-HOLD live-reachability caveat as the whole ASCII combat stack — driver-verified,
+not a live session. These spells live in CombatController, not `SpellSystem.SPELL_COMBAT_EFFECTS`
+(orchestrator schema). With the disguise tranche, the cleanly-stealth-layer illusion spells
+are now wired; the remaining illusion gaps are out-of-combat (cloud_the_mind, garbled_tongue,
+the_world_is_truth) or the orchestrator turn-based pair (mists_of_illusion, ever_changing_waves).
+
+### s33/s36 illusion — tranche 3: the turn-based pair (mists_of_illusion + ever_changing_waves) (2026-06-21, owner-authorized, runtime-verified)
+The two combat-relevant illusion spells in the orchestrator turn-based layer (not the
+CombatController stealth layer). All values GDD-given.
+- **Ever-Changing Waves** (Water 5, s36) — transform into a natural creature, keeping Mental
+  Traits and the HIGHER of own/creature Physical Traits. Wired as a self `buff` (no new kind)
+  whose combat slice = the Physical-trait maxes as roll deltas, computed caster-relative in
+  `_resolve_buff_value`: `transform_strength` → `spell_damage_rolled += max(0, formStr − ownStr)`
+  (Strength drives damage dice), `transform_agility` → `spell_attack_rolled += max(0, formAgi −
+  ownAgi)`, `transform_armor_tn` → `armor_tn += max(0, formRef − ownRef) × 5`. Form = the s54.1
+  **bear** (`TRANSFORM_FORM_BEAR` str 7/agi 4/ref 3 — the real transcribed stat, not invented;
+  the GDD allows "any natural creature", bear is the iconic strong-bodied default). 1 hour ≈
+  skirmish (9999). Routes through the verified `buff` dispatch (the NPC self-buff path picks it
+  up for a Water-5 shugenja; PC cast = future UI). LIMITATIONS: only the Physical-trait combat
+  slice is modeled — the creature's natural weapon is represented by the Strength→damage delta
+  (the powerful body, no separate weapon-profile swap to avoid double-counting); the
+  wound-capacity boost (Stamina→Earth) and natural sensory/special abilities are deferred (need
+  the ring-change layer / a creature-ability consumer).
+- **Mists of Illusion** (Air 2, s33) — a stationary visual-only phantom. Dedicated tile-placement
+  executor `execute_cast_mists(state, caster, tx, ty)` (a tile placement, not a target-effect):
+  Complex Action, cast roll vs the spell TN, slot consumed; places a phantom at a passable,
+  unoccupied tile within 20' (4 tiles). `MapCombatState.illusion_phantoms` stores them. The NPC
+  **lure** fires only in `execute_npc_turn`'s no-target branch (`best_target < 0`): a visible
+  phantom (LOS + within the NPC's free-move reach via `_nearest_visible_phantom`) draws the NPC —
+  it drifts to the illusion and strikes it (visual-only → revealed/dispelled the instant it is
+  struck), wasting the turn. Faithful: a stationary visual decoy fools an enemy only when it
+  cannot compare it to the real thing (the PC has broken line of sight). An NPC with a real
+  target ignores the phantom. The NPC cast picker never auto-casts mists (a PC tactical tool;
+  PC cast = future UI). Phantoms are skirmish-length (no expiry timer — the minute→skirmish
+  convention; few casts per fight; struck phantoms dispel). No UI token yet (the PC can't see
+  their own illusion — UI-deferred, same PC-travel HOLD as the whole ASCII stack).
+RUNTIME-VERIFIED (Godot 4.6.2 headless, 19/19): transform deltas (weak str2→+5 damage/+2 attack/
++5 Armor TN, strong caster→0 no-downgrade), the buff installs the 3 timed modifiers + Armor TN
+rises 15→20; mists cast gates (out-of-range/wall/occupied + success adds a phantom + consumes
+Complex); the NPC lure strikes + dispels a phantom when it has no real target, and ignores it
+when a real target is present. With this, every illusion spell with a clean combat effect is
+wired (CombatController disguise/heart-betrays/quiescence/moon + the orchestrator pair); the
+illusion residue is out-of-combat (cloud_the_mind, garbled_tongue, the_world_is_truth) or the
+overland seeking_the_way false trail.
+
 ### s54.10 Konak Jiji Lure + Deceptive Weight — wired into tile combat (2026-06-16, owner-approved, static-only)
 Owner decisions (2026-06-16): trigger = **adjacency + resist roll**; pin = **grapple state**
 (escape Athletics/Strength TN 40). The GDD gives the spring (auto-hit + 400 lb pin, TN 40
@@ -5787,22 +5903,832 @@ Dragon's Talon hits Insight-1/2 foes and spares an Insight-5 foe). The remaining
 spells without combat effects are mostly utility, conjured-weapon, or need mechanics the schema
 lacks (weapon replacement, terrain pits with save-negates-damage, conditional-expiry buffs).
 
-"### Pending Redesign
-- **Ring-changing combat spells (essence_of_earth, the_wolfs_mercy, strike_at_the_roots, and
-  Water ring-down spells) — participant-scoped wound threading (owner-chosen 2026-06-20).**
-  Owner chose participant-scoped storage for combat ring-deltas (clean, no world-sim leak).
-  SCOPE DISCOVERY: making it *consistent* requires threading an optional participant through the
-  wound/death chain (get_ring_value/get_earth_ring/get_wound_threshold_per_level/
-  get_total_wound_capacity/get_wound_level/get_wound_penalty/is_dead) AND passing it at every
-  in-combat read — **132 is_dead calls + 27 wound reads in the orchestrator, +29 in
-  individual_combat (~190 sites)**. Partial threading is UNSAFE: a character alive only via an
-  Earth ring-up (wounds between base and buffed capacity) reads alive at the participant-aware
-  damage site but DEAD at the 132 base-capacity iteration guards; ring-down kills symmetrically
-  fail to register at those guards. So the foundation is a bounded but large mechanical refactor
-  (optional `p=null` param on the 7 functions — world-sim callers unaffected — then thread `p`
-  into the orchestrator's combat reads via a participant-resolving helper). Deferred to a
-  dedicated refactor wave; the 3+ ring spells stay unwired until then. Everything else in the
-  s31-37 library that needs no wound surgery proceeds normally.
+### s33 Spell combat coverage — Air batch 1 (2026-06-20, "do all spells" session)
+Full audit of the spell gap: 287 library spells, 76 with combat effects; the COMBAT_ONLY
+(s=0) no-effect gap is 141 (Air 48 / Earth 25 / Fire 18 / Water 31 / Void 19). First Air
+tranche wired (5 spells, all GDD-exact values, reusing existing machinery):
+- **Soul of Kaze-no-Kami** (Air 3): buff `fear_resist_rolled/_kept` +2 (the +2k2-resist-Fear
+  half, read in `apply_fear_checks`); the Social-resist + -2k0-Awareness halves are out-of-combat.
+- **Your Heart's Enemy** (Air 3): `status` AFRAID on one target with a new `willpower_flat` save
+  at TN 25 (= 5 + Fear 4 × 5, s22.3). New save type mirrors `stamina_flat`.
+- **Whispers of the Forgotten** (Air 4): `debuff` `all_rolls` -5 (one wasted Raise = +5 effective
+  TN) for 50 rounds; the 3+-Disadvantage 2-Raise scaling + haunting-past immunity deferred.
+- **Gift of Wind** (Air 4): self **invisibility** via a new `invisible` buff mod — `_is_targetable`
+  now gates character invisibility (before the spirit-only path), and `_reveal_if_hidden` clears
+  the dedicated `spell_invisible` source on attack (GDD: attacking ends the spell). Reuses the
+  Mujina/mimic targeting machinery; excludes invisible characters from NPC/PC target lists.
+- **Defender From Beyond** (Air 5, Kitsu): `summon` a shiryo via new `_build_shiryo` (Spirit, all
+  Rings 3, attack Ring 3 + Skill 4, human wound track) — reuses the kami/clay-soldier summon path.
+Runtime-verified 10/10 (headless driver in /tmp minimal project: fear-resist mods, all_rolls -5,
+low-WP afraid / high-WP resists, invisibility untargetable + cleared-on-attack + enemy still
+targetable, shiryo summoned on the caster's side). Full project import: 0 parse errors.
+**Air batch 2 (3 more, runtime-verified 9/9):** **To Seek the Truth** (Air 1, negate_wound_penalty
+buff — the combat slice; Technique/social negation out-of-combat); **Legion of the Moon** (Air 5,
+AoE-ally invisibility — new `_apply_spell_buff_aoe` path buffs every living same-faction combatant
+within radius; each ally's invisibility ends when THAT ally acts); **Essence of Air** (Air 3,
+insubstantial — a new `insubstantial` buff mod makes the caster untargetable AND blocks their own
+melee/ranged attacks and spell-casting via guards in execute_melee/ranged_attack + execute_cast_spell;
+Water-halved / pass-through-objects downsides deferred). 8 Air spells wired total.
+**Air batch 3 (castle_of_air + reusable attack hooks, runtime-verified):** **Castle of Air**
+(Air 4) — a self `attacker_penalty` buff (−5k0 to attackers; the per-round Perception-vs-Air
+contest is simplified to always-on; 10 rounds, GDD-explicit). Added two reusable defender-side
+combat hooks: a `attacker_roll_penalty` param on `IndividualCombat.resolve_attack` (rolled-dice
+reduction, threaded from execute_melee/ranged_attack via the defender's `attacker_penalty` timed
+modifier) and a `ranged_armor_tn` add in the ranged path (forward-wiring for the Concentration
+anti-ranged spells). Verified: −5k0 cut hits 549→114/600; buff sets −5; execute_melee_attack reads
+it without error. 9 Air spells wired total.
+**Air batch 4 (blessed_wind + spirit-bird messaging):** owner decisions (2026-06-20) —
+**Concentration = persist for the skirmish** (modeled as `duration_rounds: 9999`, matching the
+"while active" kiho/kata precedent; no invented finite count) and **wire the long-range messaging
+spells**. **Blessed Wind** (Air 1): self `ranged_armor_tn` +15 buff (Concentration=skirmish; the
+"non-magical ranged only" gate is not modeled — applies to all ranged). **Legacy of Kaze-no-Kami**
+(Air 1, world-sim): `LetterSystem.write_letter` now delivers instantly (transit 0,
+`LetterData.delivered_by_spirit_bird`) when the sender knows the spell — automatic on any letter
+they send, no new NPC trigger. Range cap (School×10 mi) not enforced (no miles data, A16); slot cost
+abstracted. Runtime-verified (spirit-bird arrives same tick vs 2 days over 5 provinces). 10 Air
+combat spells wired this session + 1 world-sim. **echoes_on_the_breeze** (live two-way voice link)
+does NOT map to the async letter pipeline — documented no-op (a real-time cross-distance conversation
+mechanic would be a separate effort).
+DEFERRED (Air, next tranches): facing_your_devils (ring-changing — Pending Redesign);
+blessed_wind_of_lady_sun/summoning_the_gale (area anti-ranged — need a zone-attacker-penalty hook;
+the per-defender `ranged_armor_tn` hook is ready);
+arrows_flight (ranged auto-hit hook); draw_back_the_shadow (dispel infra — pairs with the illusion
+spells); netsuke_of_wind (no GDD DR — ASK); wrath_of_kaze_no_kami (minute-scale AoE — per-round
+scaling, ASK); the_false_legion/way_of_deception (illusory-decoy combatant layer); mask_of_wind/
+hidden_visage (disguise layer); summon_fog/the_eye_shall_not_see/heart_betrays_eyes (FoV/perception
+layer); the_world_is_truth (Kolat, blocked); and the large messaging/social/stealth-tracking utility
+set (legacy_of_kaze_no_kami, voice_of_the_wind, echoes_on_the_breeze, etc. — per-spell ASK whether
+to give a world-sim consumer).
+
+### s34 Earth spell combat coverage — batch 1 (2026-06-20, runtime-verified 7/7)
+Of Earth's 25-spell COMBAT_ONLY gap, the zero-new-infra batch (reusing the debuff / AoE-buff /
+insubstantial paths): **Time's Deadly Hand** (Earth 3) — a `debuff` weakening the target's weapon
+(spell_damage −2k1, the GDD's "weapon loses 2k1 DR"; the armor-object variant −5 Armor TN / −3
+Reduction is the unmodeled single-object alternative; Permanent = skirmish); **Sharing the Strength
+of Many** (Earth 3) — an AoE-ally `all_rolls` +Earth buff (the "+lowest-Earth to all rolls" with the
+lowest-Earth approximated as the caster's Earth Ring, 6-target cap not enforced; combat slice =
+attack rolls); **Embrace of Kenro-Ji-Jin** (Earth 2, dive into the earth) and **Shelter of the Earth**
+(Earth 3, concealed as a natural object) — both reuse the `insubstantial` buff (untargetable + cannot
+attack/cast). Runtime-verified: damage debuff −2k1, group all_rolls +4 on allies only, both hides
+untargetable.
+DEFERRED (Earth, next tranches): **ring-changing** essence_of_earth / the_wolfs_mercy /
+strike_at_the_roots / earths_touch (Pending Redesign — wound threading); armor_of_the_emperor
+(per-die damage reduction — new hook); the_kamis_will (spell-defense TN buff — needs the
+execute_cast_spell extra_tn target-read hook, next batch); minor_binding/major_binding/prison_of_earth
+(Shadowlands-bind status — needs a Tainted/Shadowlands gate, next batch); groves_of_stone/wall_of_earth
+(terrain-creation hook); the_earth_flows/drawing_on_the_mountain (mass-battle / structure scale — no
+tile consumer); grounding_energy/strength_of_the_crow (anti-maho TN — no maho-cast path in tile
+combat); jurojins_balm/jurojins_curse/stones_endurance (poison/Fatigue — needs hooks); soul_of_stone
+(social resist — out-of-combat); hands_of_clay/taming_the_beast (climb / animal-pacify — utility).
+
+### s36 Water spell combat coverage — batch 1 (2026-06-20, runtime-verified) + earths_stagnation bug fix
+**BUG FIX (pre-existing):** `earths_stagnation` stored `move_water_penalty: 1` (positive), but
+`_effective_water_ring` computes `water + move_water_penalty`, so a positive value *increased* the
+enemy's movement (the comment said "−1 Rank movement"). Speed of the Mountains correctly stores it
+negative. Changed to `-1`. Runtime-verified: a Water-5 foe's free-move budget now drops 5→4 (was
+wrongly rising to 6). Six Water spells wired (reusing existing infra, GDD-exact):
+**The Swell of the Storm** (Water 1) — `status` Prone via a new `strength_contested_water` save
+(target Raw Strength vs caster Water); **Surging Soul** (Water 2) — +1k1 Attack buff (no-Center /
+must-Move downsides not enforced); **Sanctuary of the Waves** (Water 3) and **The Inner Ocean**
+(Water 3) — both reuse `insubstantial` (untargetable + cannot act; water-body requirement / Fire-
+vulnerability not modeled); **Wave-Borne Speed** (Water 2) — `move_water_penalty` +2 (positive =
+faster movement); **Clarity of Purpose** (Water 1) — AoE-ally `initiative_score` +5 via a new buff
+mod that adjusts the persistent `Participant.initiative_modifier` (the 2-round duration is
+approximated as skirmish-length, matching Song of the World). Runtime-verified 12/12 (knockdown on
+low-Str / resisted on high-Str; +1k1 attack; untargetable; +2 / −1 move budgets; +5 init on allies
+only). DEFERRED (Water, next tranches): heart_of_the_water_dragon (heal-on-damage hook),
+strike_of_the_flowing_waters (armor-bypass attacker hook), suitengus_embrace (treated-as-Down —
+needs the can't-act turn-gate, same blocker as the Earth bindings), heavens_tears (conditional
+heal/damage zone), judgment_of_yomi (disadvantage-count debuff), rejuvenating_vapors (Fatigue-only
+cleanse — needs cleanse params), chi_reversal/ebbing_strength/strength_of_the_tsunami (trait-swap /
+trait buff — ring-adjacent), ever_changing_waves/the_mirrors_smile (shapeshift/disguise), silent_waters
+(stored-spell trigger), hands_of_the_tides (position-swap), whirlpool/yukis_touch/within_the_waves/
+opening_the_veil (water-terrain / portal — no consumer), and the divination/travel/sustain utility set.
+
+### s35 Fire spell combat coverage — batch 1 (2026-06-20, runtime-verified 7/7)
+Of Fire's 18-spell gap (Fire was already the most-wired element), the zero-new-code batch reusing the
+buff / ward infra: **The Breath of Battle** (Fire 3) — +1k1 Agility(attack) + 1k0 damage buff
+(sunlight-only requirement not modeled); **Hungry Blade** (Fire 3) — +1k0 attack buff (the explode-on-8
+damage mechanic deferred — needs an explosion-threshold hook); **Globe of the Everlasting Sun** (Fire 6)
+— a Fire `ward` (+15 TN to hostile Fire spells in the area, GDD-explicit; 1-mile = whole skirmish);
+**Agasha's Shield** (Fire 3) — a Fire `ward` reducing hostile Fire-spell DR by 3k0 inside (the GDD's
+−4k0 cast-roll *dice* penalty does not map to the flat-TN ward layer and is not modeled). Runtime-verified:
+attack/damage buff mods set; globe penalizes an enemy Fire cast +15 but not the owner's; agasha's DR
+reduction = 3. DEFERRED (Fire, next tranches): everburning_rage (treated-as-Down — the can't-act
+turn-gate blocker); consumed_by_five_fires (instant-kill + reciprocal self-damage — new effect);
+fiery_wrath / extinguish (FireSystem ignite / clear burning tiles — clean FireSystem integration, a
+good next batch); haze_of_battle (forced-stance lock); death_of_flame / mental_quickness (trait
+reduce/boost — ring-adjacent); disrupt_the_aura (block-magical-healing hook); essence_of_fire
+(duel-scoped ward); curse_of_the_burning_hand (curse flame-shroud on an enemy); hurried_steps/
+the_elements_fury (extra-cast action economy); wings_of_fire/wings_of_the_phoenix (flight).
+NOTE on incapacitation: everburning_rage (Fire), suitengus_embrace (Water), and the Earth bindings all
+need a "treated-as-Down / can't-act" turn-gate — this engine's CONDITION_STUNNED only flat-foots
+defense (Armor TN 5), it does NOT block a combatant's turn (no action-gate in execute_npc_turn). A
+faithful bind/incapacitation (and faithful atemi/spell Stun) needs that gate as a dedicated change.
+
+### s37 Void spell combat coverage — batch 1 (2026-06-20, runtime-verified 7/7)
+Of Void's 19-spell gap (most are VP-manipulation or utility/divination), the two clean combat wins:
+**Banish the Void** (Void 3) — a Void `ward` (+10 TN to Void spells in the area, GDD-explicit; the
+VP-cost-doubling and Shadow-Rank effects are not modeled; ward owner exempt); **Draw Closed the Veil**
+(Void 4) — a new `banish_spirit` effect that sends a non-native spirit to its home realm (removed from
+the encounter via the existing repel pattern: erase position + add to fled_ids), with a Contested
+Void vs Willpower gate for embodied spirits; inert vs non-spirits. Runtime-verified: ward penalizes an
+enemy Void cast +10 (not the owner, not a Fire cast); banish removes a low-Willpower spirit, no-op vs a
+non-spirit. DEFERRED (Void, next tranches): the VP-manipulation set (drawing_the_void / fill_the_emptiness
+/ void_release / kharmic_intent / altering_the_course — need VP-grant/steal/pool hooks); severed_from_
+the_stream (timed Void-spend lock — the Furaribi `void_locked` flag has no expiry); essence_of_void
+(hold-inert — the can't-act turn-gate blocker); unmake_the_world / consumed_by_five_fires (contested
+instant-kill — new effect); unbound_essence (ring-reorder — Pending Redesign); divide_the_soul
+(clone combatant); the_voids_caress / moment_of_clarity (disadvantage/skill — out-of-combat or
+ring-adjacent); false_whispers / reach_through_the_void / the_empty_voice / ring_of_the_void
+(utility — no consumer).
+
+### Spell coverage — clean-wins batch 2 (FireSystem + heal-on-damage, 2026-06-20, runtime-verified 7/7)
+Continuing wire-and-go after the full element pass: **Fiery Wrath** (Fire 3) — new `ignite_zone` effect
+that ignites every flammable tile in a 50'×50' area via `FireSystem.ignite` (the per-round burn/spread
+is handled by advance_round's existing FireSystem tick; flesh-spared / no-spread nuances not modeled);
+**Extinguish** (Fire 1) — new `extinguish` effect that snuffs burning tiles (→ FLOOR_ASH) and clears the
+`on_fire` flag from creatures within 100' (magical/non-magical not distinguished); **Rejuvenating Vapors**
+(Water 2) — the cleanse handler is now parameterized (`cleanse_cap` / `cleanse_conditions` / `cleanse_heal`)
+and takes a `target_id` so a single-target Touch cleanse prioritizes the named ally; Rejuvenating Vapors
+removes Fatigue only with no heal (Typhoon's Surge keeps its Fatigue+Dazed+heal defaults); **Heart of the
+Water Dragon** (Water 4) — a `heal_on_damage` buff: a new hook in `_apply_hit` (mirroring weapon_stun)
+heals the buffed target 1k1 whenever it takes actual damage and survives. Runtime-verified: fiery_wrath
+lit 25 CROPS tiles; extinguish cleared them + doused an on-fire creature; rejuvenating removed Fatigue
+without healing; heal_on_damage modifier set. **Strike of the Flowing Waters** (Water 4) — an `armor_bypass` attacker
+buff: a new hook in execute_melee/ranged_attack drops the target's worn-armor Armor TN (and −5 vs
+non-human creatures) before resolve_attack; does NOT negate Reduction or Defense-stance TN, and the
+"spell ML3- effects" bypass is not modeled. Runtime-verified: faced armor TN dropped 40→25 (the
+target's 15 bonus). Fire now 6 / Water now 9 combat spells this session.
+
+### Spell coverage — incapacitation turn-gate + 6 bind/hold spells (2026-06-20, runtime-verified 6/6)
+Built the "can't-act" turn-gate the earlier finding named as the blocker for every "treated-as-Down /
+held immobile / bound" spell. New `IndividualCombat.CONDITION_INCAPACITATED` (a TIMED condition):
+the turn loop (`execute_npc_turn` + `execute_companion_turn`) skips an incapacitated combatant's Turn
+entirely, and `get_armor_tn` flat-foots it (Armor TN 5). Applied as a timed condition so it runs its
+full duration (not shed by a recovery roll) and auto-expires in advance_round; passive effects (fire/
+zone damage, others' attacks) still apply. **Scoping choice:** a DEDICATED condition, NOT a retrofit
+of `CONDITION_STUNNED` — existing atemi/spell Stuns keep their current flat-foot-only behavior (no
+balance change), while the explicit bind/hold spells get faithful incapacitation. Six spells wired as
+`status` → incapacitated: **Everburning Rage** (Fire 5, 1 Round, no save), **Suitengu's Embrace**
+(Water 5, 3-round hold PROVISIONAL — the per-round Stamina recovery + death-on-2-fails deferred),
+**Essence of Void** (Void 4, Contested Void, Concentration = skirmish; per-round break deferred),
+**Minor / Major / Prison of Earth** bindings (Earth 1/5/6 — gated by a new `requires_shadowlands`
+flag: only Tainted creatures or spirit_creatures are affected, others immune; Major adds a Contested
+Earth save, Prison a Contested Willpower save; hours/permanent ≈ skirmish 9999). Three new contested
+save types (`earth_contested`, `void_contested`, `willpower_contested`). Runtime-verified: incapacitated
+enemy skips its turn + flat-foots to Armor TN 15; minor_binding immune vs a non-Tainted target,
+incapacitates a Tainted one. Earth 7 / Water 10 / Fire 7 / Void 3 combat spells this session.
+
+### Spell coverage — Void VP-manipulation (2026-06-20, runtime-verified 7/7)
+Four Void Point spells via VoidSystem + the existing `void_locked` flag: **Drawing the Void** (Void 1,
+`gain_void` — caster gains School Rank +1 VP, over-cap allowed; per-round over-cap decay deferred),
+**Fill the Emptiness** (Void 4, `restore_void` — a touched ally's VP to maximum), **Void Release**
+(Void 3, `steal_void` — Contested Void → steal 1 VP, caster gains it; margin/5 extra deferred; inert
+vs a 0-VP target), **Severed from the Stream** (Void 2, debuff → a timed `void_locked` modifier now
+also honored by `execute_void_spend`, so the target cannot spend Void Points; the per-spend
+Contested-Void roll is simplified to a full lock, 5 rounds ≈ skirmish). Runtime-verified: restore to
+max, steal moves a point caster↔enemy, no-op vs 0-VP, lock blocks execute_void_spend. Void now 7
+combat spells this session.
+
+### Spell coverage — clean-wins batch 3 (no-magic-heal + move/free-move, 2026-06-20, runtime-verified 9/9)
+Three more clean wins, one new reusable hook. **Disrupt the Aura** (Fire 2, debuff) — a new
+`no_magic_heal` modifier: while active, the target "cannot be healed by magical means — spells,
+items, or Techniques that attempt to restore Wounds automatically fail" (s35). Guarded at the three
+spell-heal sites: `_apply_spell_heal` (returns `no_magic_heal: true`, heals 0), `_apply_spell_cleanse`
+(the **Wound-restore portion** blocks but **condition cleansing still works** — removing Fatigue/Dazed
+is not "restoring Wounds"), and the `heart_of_the_water_dragon` heal_on_damage hook in `_apply_hit`
+(suppressed). Mundane Medicine (out-of-combat MedicineSystem) is untouched, faithful to the GDD. 24h
+≈ skirmish (9999). **Suitengu's Curse** (Water 1, debuff) — `move_water_penalty: -1` (move as though
+Water 1 Rank lower; the Reflexes −1 trait change deferred), reusing the existing `_effective_water_ring`
+move hook (10 Rounds, GDD-explicit). **The Rushing Wave** (Water 1, buff) — a new `free_move_tiles`
+flag read in `free_move_budget`: a Free Move of up to Water Ring ×10' (instead of ×5'), i.e. +Water
+tiles, computed from the **mover's own** effective Water at move time (not fixed at cast). Runtime-
+verified: no_magic_heal blocks spell-heal (wounds unchanged) AND heal_on_damage (delta==damage, vs a
+control ally that regenerated), cleanse still removes Fatigue but heals 0; suitengus 5→4 move budget;
+rushing_wave 5→10 free-move (Water 5). **`stones_endurance` deliberately NOT wired** — its combat
+immunity is "Fatigue from lack of rest," which has no skirmish trigger (combat Fatigue is magical/
+environmental), so a combat `fatigue_immune` would over-broaden it; it is out-of-combat utility (ASK
+territory). Fire 8 / Water 12 combat spells this session.
+
+### Spell coverage — clean-wins batch 4 (instant-kill spells, 2026-06-20, runtime-verified 9/9)
+The two iconic outright-kill spells, via a shared new `instant_kill` effect (`_apply_spell_instant_kill`).
+**Consumed by Five Fires** (Fire 5) — reduces the target to Dead AND the caster "immediately suffers
+the same number of Wounds as were inflicted on the target" unmitigated (the suicidal cost, GDD-exact):
+`reciprocal: true`. Wounds inflicted = the count needed to bring the (possibly already-wounded) target
+to its Dead threshold, so a healthy target's death (cap+1) is often lethal to the caster while a
+near-dead target costs little. `fire_immune_blocks: true` aborts vs a Fire-resistant creature
+(flame_immune/fire_resist_mundane). **Unmake the World** (Void 6) — a Contested Void(caster) vs
+Earth(target) kill (new `earth_contested_void` save: the caster must WIN; the target resists on a tie),
+no reciprocal; the non-magical-object auto-kill + nemuranai ramifications are not modeled (objects
+aren't combat entities). Dead threshold computed correctly per the wound model (spirit = `wounds_dead`;
+mortal = `get_total_wound_capacity + 1`, since capacity is the Out boundary). **NPC-AI note:** neither is
+in the `_npc_maybe_cast_spell` damage/status picker — both are deliberate PC spells (Consumed by Five
+Fires is "used only in the most desperate need"; an NPC would not auto-cast a suicide nuke). Runtime-
+verified: five_fires kills a healthy target for cap+1 reciprocal → caster also dies; near-dead target →
+reciprocal 1; fire-resistant immune; out-of-range fizzles; unmake_the_world kills on a won contest with
+zero caster wounds, and an Earth-9 target resisted a Void-1 caster 10/10. Fire 9 / Void 8 this session.
+
+### Spell coverage — clean-wins batch 5 (Haze of Battle forced-stance lock, 2026-06-20, runtime-verified 9/9)
+**Haze of Battle** (Fire 3, debuff) — fills the target with unfocused fury: it is forced into Full
+Attack Stance and "cannot switch from it for the duration." New `stance_locked` mechanic: a special-case
+in `_apply_spell_debuff` sets `p.stance = FULL_ATTACK` on cast and installs the `stance_locked` timed
+modifier; `execute_stance_change` blocks any switch away from Full Attack while locked (reason
+`stance_locked`, no action consumed); `_npc_pick_stance` short-circuits so a locked NPC never wastes a
+Simple attempting a change. Resisted via a new `willpower_contested_caster_fire` save — target Willpower
+vs the caster's Willpower roll + a flat Fire Ring bonus ("caster adds Fire Ring to their roll"). 10' = 2
+tiles, 5 rounds (in-combat duration); the out-of-combat Brash+Contrary Disadvantages are not modeled.
+The effect is a real debuff — Full Attack carries the worst Armor TN, so forcing it makes the target
+easier to hit while it can't turtle. Runtime-verified: lands on a weak-Willpower target and forces Full
+Attack; blocks a switch to Defense (stance unchanged); permits Full Attack itself; the NPC picker
+short-circuits; a Willpower-9 target resisted a weak caster 10/10; out-of-range fizzles. Fire 10 this
+session.
+
+### Spell coverage — clean-wins batch 6 (Heaven's Tears purify zone, 2026-06-20, runtime-verified 8/8)
+**Heaven's Tears** (Water 2) — a holy-rain field, the first soul-state zone. New `purify_zone` effect
+(`_apply_spell_purify_zone` + a `purify` branch in the existing per-round `_process_spell_zones` tick):
+each Round it heals the **pure of soul** (no Taint AND Honor 4.0+) by the caster's Water Ring and
+damages the **Tainted/Shadow-corrupted** (Taint Rank 1+) by 1k1; neutral souls (honor < 4.0, no taint)
+are untouched. Affects **all** combatants in the 30' (6-tile) radius by soul state, not faction — the
+caster heals if pure, an enemy heals if pure, a tainted ally burns. Centered on the caster, 2 Rounds.
+heal_amount is fixed at the caster's Water Ring at cast; the zone auto-expires via the round tick.
+"Outdoors only" is flavour (not gated; no Shadow-corruption field beyond Taint). Runtime-verified:
+heal = Water 5; pure caster 10→5 and pure ally 8→3 healed; the tainted enemy took 1k1; a neutral
+(honor 2) and a pure-but-out-of-radius combatant were untouched; the zone persisted one round then
+expired after its duration. Water 13 this session.
+
+### Spell coverage — clean-wins batch 7 (Arrow's Flight guided auto-hit, 2026-06-20, runtime-verified 5/5)
+**Arrow's Flight** (Air 1, buff) — entreats Air kami to guide a bow shot so it "unerringly strikes."
+New one-shot `ranged_auto_hit` buff: `_apply_spell_buff` installs it under a **dedicated source**
+(`spell_arrows_flight`) so `execute_ranged_attack` can clear just this modifier after the next shot
+without dropping the caster's other spell buffs. On a Kyujutsu bow shot while active, the to-hit is
+forced (`result.hit = true`, `auto_hit` flag) and the shot uses 0 Raises ("cannot benefit from Raises
+or Techniques"), then the modifier is cleared — so exactly one arrow auto-hits within the 3-Round
+window. Gated to Kyujutsu weapons (the only ranged weapon, `yumi`). LIMITATIONS: the +1-arrow-per-Raise
+multi-charge isn't modeled (one shot); passive kata damage still applies to the guided shot (the
+"no Techniques" clause is not selectively disabled). Runtime-verified: a weak archer that hit 0/12
+at Armor TN 50 lands the guided shot (forced hit + auto_hit flag); the modifier is consumed after one
+shot; an unbuffed shot carries no auto_hit. Air 11 this session.
+
+### Spell coverage — clean-wins batch 8 (AoE-ally mobility buffs, 2026-06-20, runtime-verified 7/7)
+Two battle-mobility buffs, both reusing existing hooks via the AoE-ally buff path (`_apply_spell_buff_aoe`,
+which applies the mods to every living same-faction combatant — caster included — within the radius).
+**Ebb & Flow of Battle** (Water 4) — chosen allies within 50' (10 tiles) make a Free Move of Water Ring
+×10' (the batch-3 `free_move_tiles` flag, AoE), i.e. +Water tiles to the free-move budget (the GDD's
+"normally a Simple Action" mobility, now free). **Master of the Rolling River** (Water 4) — a unit (≤25
+allies) within 100' (20 tiles) moves as Water 1 Rank higher (`move_water_penalty: +1`, the same hook as
+Wave-Borne Speed); the +1 Strength Rank and the Mass Battle general's-Battle-roll bonus are deferred
+(trait-change / no mass-battle consumer). Both 5 Rounds. Runtime-verified: ebb&flow gives an in-range
+ally +5 free-move (5→10) and buffs the caster too, while an out-of-radius ally and an enemy are
+unaffected; rolling_river raises an ally's effective move Water 5→6 (free-move budget tracks it) with
+the enemy unaffected. Water 15 this session.
+
+### Spell coverage — action-economy batch 9 (2026-06-20, runtime-verified 18/18, owner-approved)
+The "extra action" spells, via a small new **bonus-action-pool** layer on `TurnState` (four one-shot int
+counters: `granted_attacks`, `granted_simple`, `cast_as_simple`, `free_casts`). Owner-approved direction;
+the Reactions-Stage timing is modeled as "an extra action on the recipient's NEXT turn" — the pools
+**persist until used** (they are NOT cleared by the per-turn `begin_turn` reset, only zeroed at TurnState
+creation). Grants are installed by `_apply_spell_buff` special-cases (set the target's TurnState field via
+`Object.set`, no timed modifier). Consumption is a "use the pool when the normal budget is spent" branch
+added to each relevant action path:
+- **Stand Against the Waves** (Water 2) → `granted_attacks`: an extra ATTACK action, consumed in
+  `execute_melee_attack`/`execute_ranged_attack` when the Complex is spent. Checked ONLY in the attack
+  functions, so it cannot grant a second spell-cast (GDD-faithful).
+- **Spirit of the Water** (Water 1) → `granted_simple`: an extra NON-attack Simple, consumed in
+  `execute_move` (a Move is the canonical use) — not reachable by the attack path.
+- **Hurried Steps** (Fire 2) → `cast_as_simple`: the next Fire ML≤3 cast costs a Simple instead of a
+  Complex (the −4-Rounds casting-time reduction collapses to "Simple-cost" for ML≤3; the ML4+ partial
+  reduction and the 2-Round window are not modeled).
+- **The Element's Fury** (Fire 6) → `free_casts = Fire Ring`: Fire ML≤4 casts are Free Actions (slots +
+  rolls still required), consumed in `execute_cast_spell`.
+Runtime-verified 18/18: all four grants set the pools; a granted extra attack lands then the 3rd attack
+fails; a granted Simple Move lands when the budget is spent then the next fails; a Fire-ML1 cast under
+Hurried Steps consumes a Simple (not the Complex) while a Water cast ignores it; a Fire-ML4 cast under
+The Element's Fury consumes no action while a Fire-ML6 cast still costs a Complex. **No regression** — all
+7 prior batch drivers re-pass (the touch to the 4 core action functions is additive). LIMITATIONS: the
+attack/non-attack constraints are honored by WHICH function checks WHICH pool (not a per-action tag); the
+GDD durations (2-Round / "this Round") aren't enforced (pools persist until used); no NPC-AI policy uses
+these (PC-deliberate / future turn UI). Water 17 / Fire 12 this session.
+
+### Spell coverage — modifier-zone subsystem, batch 10 (2026-06-20, runtime-verified 14/14, owner-approved)
+A reusable **modifier zone** layer: an area whose roll modifiers apply to whoever currently STANDS in it,
+read at roll time (so movement in/out is honored — unlike a one-time timed modifier). New `modifier`
+zone kind in `state.spell_zones` (`mods` dict + radius + center + expiry; survives the per-round tick
+with no per-round effect), installed by `_apply_spell_modifier_zone` (centered on the caster
+[self_centered] or a designated target tile), and summed at roll sites by `_zone_modifier_total(state,
+char_id, mod_key)`. Wired into three to-hit sites: `execute_melee_attack` and `execute_ranged_attack`
+add `attack_roll_penalty`/`ranged_attack_penalty` (the shooter's position) to `atk_pen`, and
+`execute_ranged_attack` adds `ranged_armor_tn` (the target's position) to the Armor TN. Two spells:
+- **Blessed Wind of Lady Sun** (Air 2) → self-centered `attack_roll_penalty: -1` ("all hostile actions
+  suffer -1k0"; the +1k0 Void/Awareness and -2k0 Awareness-hostile halves are out-of-combat). 10 sq ft →
+  radius-1 bubble PROVISIONAL.
+- **Summoning the Gale** (Air 3) → target-centered anti-ranged bubble (30' radius / 50' range):
+  `ranged_armor_tn: +15` (shots INTO the bubble) + `ranged_attack_penalty: -3` (shots FROM it; the -3
+  KEPT half is not modeled — the rolled penalty + +15 Armor TN together suppress ranged in the bubble).
+Both Concentration ≈ skirmish (9999). Runtime-verified 14/14 (stable across 3 runs): the helper returns
+the correct modifier for in-radius / out-of-radius / caster-self / a character MOVED in then out, and the
+zone survives advance_round; the Gale's +15 Armor TN deterministically reaches the to-hit (logged
+target_tn 25→40); a crafted large penalty makes an in-zone melee attacker reliably miss (0/25 vs 22-24/25
+no-zone), proving the melee atk_pen plumbing reads the zone. **No regression** — all 7 prior batch drivers
+re-pass. (The actual -1k0 Blessed Wind value is too small to assert on hit-rate — at 7k4 it barely moves
+the kept roll — so it's verified by the helper + identical wiring to the deterministically-proven Gale
+path.) Air 13 this session.
+
+### Spell coverage — trait→combat-roll batch 11 (2026-06-20, runtime-verified 9/9)
+A small batch of trait-changing spells whose COMBAT effect maps **faithfully to existing buff hooks
+without the Earth-ring wound refactor** (the Pending Redesign stays for the genuine ring-changers). Key
+insight: Strength adds *exactly* to rolled damage dice in `resolve_damage` ("Strength → first number"),
+and Agility to attack-roll dice — so a `spell_damage_rolled` / `spell_attack_rolled` buff is the faithful
+combat slice of a Strength/Agility change (same pattern already used for Surging Soul / The Breath of
+Battle). Two new value formulas: `water_half` (floor(Water/2)), `neg_fire_ring` (−Fire). Three spells:
+- **Strength of the Tsunami** (Water 2, ally buff) → `spell_damage_rolled: floor(Water/2)` (Strength
+  +half Water Ring). Faithful for the damage slice; Strength-skill rolls + the "cap at 9" not modeled.
+- **Master of the Rolling River** (Water 4) → its previously-deferred **+1 Strength** half is now wired
+  (`spell_damage_rolled: 1`) alongside the batch-8 move buff, so the AoE unit buff is fully covered (only
+  the Mass Battle general bonus stays deferred).
+- **Death of Flame** (Fire 4, enemy debuff, new `fire_contested` save) → `spell_attack_rolled: −Fire`
+  (the −Agility attack-roll slice; the −Intelligence spell-suppression half is deferred; the per-Round
+  re-resist is simplified to one contested-Fire gate at cast).
+Runtime-verified: tsunami adds +2 rolled damage dice (katana 8→10) and sets the modifier to floor(Water/2);
+rolling_river gives an ally +1 effective move AND +1 rolled damage die (enemy unaffected); death_of_flame
+lands −8 on a weak-Fire foe and a Fire-9 target resists a weak caster 10/10. No regression (key drivers
+re-pass, driver19 3/3 stable). Water 19 / Fire 13 this session. NOTE: the genuine Earth-RING spells
+(essence_of_earth, the_wolfs_mercy, strike_at_the_roots, facing_your_devils) still need the
+wound-capacity threading refactor (Pending Redesign) — they change wound capacity, which a roll-bonus
+hook cannot represent.
+
+### Spell coverage — fog batch 12 (2026-06-20, runtime-verified 10/10)
+**Summon Fog** (Air 3) — a thick obscuring cloud (visibility reduced to 5 ft) that blocks line of sight
+for ranged attacks crossing it. New `fog_zone` kind in `state.spell_zones` (survives the per-round tick
+with no per-round effect, like modifier zones) + a `_ray_blocked_by_fog(state, a, b)` helper that traces
+the same Bresenham line as `_has_los` and returns true if any traced tile lies within a fog disc
+(adjacent tiles ≤1 are always visible = the 5 ft). Wired into the two ranged LOS gates:
+`get_ranged_targets` (so an NPC never picks a fogged target) and `execute_ranged_attack` (returns
+`fog_blocks_los`). Centered on a designated target tile within 100' (range 20 tiles), 50' radius (10
+tiles), 1-minute ≈ skirmish. `_has_los`'s signature is unchanged (it's stateless) — the fog check is a
+separate call at the ranged gates, so melee/FOV/spell-LOS are unaffected. Runtime-verified: a clear
+shot becomes blocked once fog is laid on the line, the foe drops from `get_ranged_targets`, a shot
+through fog returns `fog_blocks_los`, an adjacent (1-tile) ray inside the fog is still seen, a far ray
+crossing the same fog is blocked, the zone survives advance_round, and a shot well clear of the fog is
+not falsely blocked. No regression (ranged/zone drivers re-pass). LIMITATIONS: the fog blocks ranged
+LOS only (melee is adjacent; FOV/exploration sight is the separate CombatController layer, not wired);
+the damp-materials / extinguish-small-flames flavour is not modeled. Air 14 this session.
+
+### Spell coverage — per-die reduction batch 13 (2026-06-20, runtime-verified 5/5)
+**Armor of the Emperor** (Earth 4, self ward) — "each individual damage die has its total reduced by the
+caster's School Rank; cannot reduce a die below 0." Wired via a new `per_die_reduction` buff mod read at
+the **central** damage point `_apply_hit` (which both `execute_melee_attack` and `execute_ranged_attack`
+route through): after `resolve_damage`, the removed amount = `Σ min(die, N)` over the kept damage dice
+(`dmg["dice_result"]["dice"].kept_dice` — `DiceResult.kept_dice` is exposed), subtracted from `raw`
+(floored at 0), stacking with armor Reduction. New value formula `earth_school_rank` (effective Earth
+school rank). 5 Rounds, self. Gated on the new mod (== 0 for everyone else), so it is a **no-op unless
+the ward is active** — the central damage path is unchanged for all other combat (broad regression
+re-passes). Runtime-verified: per_die_reduction set = school rank 5; a warded defender takes avg 11.4
+melee damage vs an unwarded control's 22.6 (≈ −11, the faithful 2-kept-dice × rank-5 mitigation incl.
+explosion handling); the floor keeps damage ≥ 0. LIMITATION: covers the central melee+ranged path only —
+atemi/charge/spirit-filtered/spell damage are not threaded (documented partial, safe because a missing
+site just means the ward doesn't apply there, unlike the unsafe ring refactor). Earth combat spells now
+include their signature defensive ward.
+
+### Spell coverage — illusion dispel batch 14 (2026-06-20, runtime-verified 9/9)
+**Draw Back the Shadow** (Air 5) — "within a 30' radius, all illusions from ML≤4 spells are dispelled;
+ML5-6 need a Contested Air roll; ongoing non-illusion magical effects may also be dispelled (contested)."
+New `dispel` effect kind + `_apply_spell_dispel`: within the area (centered on a target tile, 30' radius),
+it clears every combatant's **invisibility** (`spell_invisible` timed modifiers — Gift of Wind / Legion
+of the Moon) and removes **Summon Fog** clouds (fog zones whose center lies in the area). Indiscriminate
+within the area (friend + foe, as a dispel is). Clearing invisibility auto-reveals (the `_is_targetable`
+gate reads the `invisible` modifier). Possible because my illusion effects are **source-tagged**
+(`spell_invisible`) and zones carry `kind`/`center`. Runtime-verified: an invisible enemy in the area is
+revealed (becomes targetable, listed in `revealed`) and the fog cloud is removed; an invisible enemy +
+fog OUTSIDE the area survive; a non-illusion buff (an armor_tn buff) is untouched (this is an illusion
+dispel, not a general dispel). No regression. LIMITATIONS (faithful for the dominant ML≤4 illusion case):
+the ML5-6 Contested Air roll and the broader "ongoing non-illusion magical effects" contested dispel are
+deferred — the timed-modifier layer stores no creator/mastery to contest against (a data-model change
+across ~15 spell installers), so this auto-dispels the wired illusions (Summon Fog ML3, Gift of Wind ML4;
+Legion of the Moon ML5 would auto-clear rather than contest). Air 15 this session.
+
+### Spell coverage — conjured terrain batch 15 (2026-06-20, runtime-verified 12/12)
+**Wall of Earth** (Earth 4) — a thick stone barrier. The first **conjured-terrain** mechanic: a straight
+line of WALL_STONE tiles placed at the **midpoint** between caster and target ("a wall between me and my
+enemy"), oriented perpendicular to the approach. `_apply_spell_wall` walls only passable, unoccupied tiles
+(never buries a combatant), saves each original tile, and stores them on a `conjured_terrain` spell zone;
+`_restore_conjured_terrain` puts the originals back when the zone expires. Movement (the conjured walls are
+impassable, so A* pathfinds around them) and LOS (walls block the ray) honor the new tiles **automatically**
+— no new movement/LOS code. Uses `set_delta` (the dynamic-tile channel `get_tile` reads first); restoring
+via `set_delta(original)` returns the tile to its prior look in all cases. Runtime-verified: a 7-tile
+vertical wall forms at the midpoint of a horizontal approach, the walled tiles become impassable WALL_STONE,
+straight-line LOS through it is blocked, off-wall tiles stay passable, a combatant's tile is never walled,
+and the tiles are restored to floor when the zone expires (zone dropped). No regression. LIMITATION:
+**Groves of Stone** (Earth 3, a closed 15' ring around the caster) is **deferred** — without a "clamber
+over" action (GDD: Complex Action + Athletics roll) a closed ring would be an invulnerability stalemate;
+the conjured-terrain mechanic is ready for it once a clamber action exists. Earth 4 this continuation.
+
+### Spell coverage — anti-spell ward batch 16 (2026-06-20, runtime-verified 5/5)
+**The Kami's Will** (Earth 5) — "all spells (friendly or hostile, not maho) targeting the warded
+character suffer −XkX to the Spell Casting Roll, X = caster's Earth Ring." Wired as a per-target
+casting-roll penalty (distinct from the area wards, which add TN): `resolve_cast` gains an optional
+`roll_penalty` param that cuts the cast roll's rolled AND kept dice by X (floored at 1k1) — a faithful
+−XkX. The buff installs a `kamis_will` timed modifier (value = the warder's Earth Ring) on a target;
+`execute_cast_spell` reads it from the SPELL'S TARGET (`get_timed_modifier_total(tgt_p, "kamis_will")`)
+and passes it as `roll_penalty`, so any spell aimed AT the warded character is penalized regardless of
+caster (friend or foe, faithful). Runtime-verified: the modifier = Earth Ring 6; a Fire-8 caster's
+casting-roll total drops 63→21 with −6k6; a real-TN spell (Beam of the Inferno, TN 30) goes from 50/50
+to 5/50 success warded, and through the orchestrator 30/30 → 3/30 — the ward turns near-certain casts
+into near-certain failures; the 1k1 floor keeps a weak caster's roll positive. No regression
+(`resolve_cast`'s new param is defaulted, backward-compatible). LIMITATION: the +Willpower and −Social-
+roll halves are out-of-combat (deferred). Situational value (only vs enemy spellcasters, uncommon in
+tile combat) but a faithful completion of the anti-spell ward family. Earth 5 this continuation.
+
+### Spell coverage — Armor TN buffs + attack buff/debuff batch 17 (2026-06-20, runtime-verified 8/8)
+Three more spells (striking_the_storm was already wired — Armor TN +20 — confirmed, not re-added):
+**Air Kami's Blessing** (Air 3) → self `armor_tn` += Air Ring (the combat slice; the +Air-Ring-to-
+Awareness-rolls half is out-of-combat; an 8-hour morning-meditation buff ~ persists the skirmish; new
+`air_ring` value formula). **Wisdom of the Kami** (Air 4) → self `spell_attack_rolled` +1 (the combat
+slice of "+1 Rank in all Skills" — a skill rank is a rolled attack die; the broad out-of-combat
++1-all-skills utility is not modeled; 1-minute ~ 10 Rounds). **Judgment of Yomi** (Water 2) → a
+**target-aware** `debuff`: the target takes −1k0 to physical Skill checks (attack rolls) per Social or
+Spiritual Disadvantage they possess, computed in `_apply_spell_debuff` via a new
+`_count_social_spiritual_disadvantages()` (reads the s45 `DISADVANTAGE_CATALOG` categories) when the mod
+value is `neg_target_social_spiritual_disadv` — inert (0) vs a target with no such disadvantages, which
+is faithful (the spell's bite scales with the target's flaws). The "Honor TN 20 or cannot move closer"
+repel is deferred (movement gate). Runtime-verified: armor_tn +Air-Ring (5); attack +1; −2 vs a foe with
+2 Social/Spiritual disadvantages, 0 vs a clean foe. No regression (debuff path unchanged for caster-only
+values). Air 16 / Water 20 this session.
+
+### Spell coverage — Void skill-grant batch 18 (2026-06-20, runtime-verified 3/3)
+**Moment of Clarity** (Void 3, Ishiken) — "select any one Skill; gain temporary Ranks equal to Void Ring;
+if the caster already has Ranks, the temporary level REPLACES the existing one (not cumulative)." Wired as
+a self `spell_attack_rolled` buff via a new `void_replace_weapon_skill` value formula: a skill rank is a
+rolled attack die, so for a weapon skill the net attack gain is `max(0, Void Ring − best current weapon
+skill)` (over `_NPC_WEAPON_SKILLS`) — big for a low-skill caster, nil for an already-skilled one (the
+replace-not-add semantics). 2 Rounds, self. Runtime-verified: no weapon skill + Void 5 → +5; Kenjutsu 2 +
+Void 5 → +3 (replaces); Kenjutsu 6 + Void 3 → +0 (no downgrade). No regression (additive formula). This is
+the **last spell with a clean combat-slice** — every remaining gap is out-of-combat utility/divination/
+messaging, flight (no elevation on flat maps), the ring-changing wound refactor (Pending Redesign), a
+substantial subsystem (illusory-decoy / clone / VP-pool-share / range-gated-perception), absent infra
+(water-terrain maps, tile-combat maho), or a near-inert curse (Curse of the Burning Hand's ally-touch).
+Void 9 this session. (Superseded by the ring-change wave below — the wound refactor IS now done.)
+
+### Spell coverage — ring-change wave (2026-06-20, runtime-verified 18/18 + world-sim 8/8)
+Resolved the former **Pending Redesign** (Earth-ring wound refactor — owner-directed). In-combat Ring
+deltas now thread through the wound/death chain via a Participant-authoritative store + a synced,
+non-serialized character read-bridge (`combat_ring_deltas`) that `CharacterStats.get_ring_value` falls
+back to — so the entire chain (capacity/level/penalty/is_dead, + WoundSystem) sees the delta with ZERO
+call-site threading, and the bridge is cleared at setup / combat-end / expiry for no world-sim leak. The
+7 wound funcs + WoundSystem gained an optional `ring_deltas` param (default {} -> backward-compatible).
+Wired: **Essence of Earth** (Earth 4, self +1 Earth, death-on-expiry), **The Wolf's Mercy** (Earth 3,
+enemy -1 / -2 if Tainted, death-on-apply), **Strike at the Roots** (Earth 5, Contested Earth -> enemy
+Earth->1, death-on-apply). See the "Pending Redesign — RESOLVED" entry for the full design + verification.
+147 combat effects total now; 73 COMBAT_ONLY gaps remain (all out-of-combat utility / flight / trait-swap
+/ clone / water-terrain / anti-maho / PC-ASCII tools).
+
+### Spell coverage — trait-swap roll models batch 19 (2026-06-21, runtime-verified 4/4)
+The two trait-swap spells modeled as combat-roll-slice deltas (no trait bridge needed — a trait change's
+combat effect IS its roll change, the batch-11 pattern). **Chi Reversal** (Water 5) → a target-aware
+`debuff`: the caster flips the target's Fire-pair Traits (Agility<->Intelligence); the Agility drop
+lowers the target's attack rolls by `min(0, target Int − target Agility)` (clamped <= 0 — the caster
+only casts when the swap debuffs, never accidentally buffs an enemy; inert vs a high-Int target). The Int
+change + the other three pair options are out-of-combat. **Ebbing Strength** (Water 1) → an ally `buff`:
+the caster transfers up to (Water School Rank) Strength to the target, modeled as the ally's
+`spell_damage_rolled` += Water school rank (the benefit slice; the caster's Strength loss is not modeled,
+near-inert for a non-melee caster). Runtime-verified 4/4: Chi Reversal −3 attack vs a high-Agility(5)/
+low-Int(2) foe, inert (0) vs a high-Int foe; Ebbing Strength +5 ally damage. No regression (additive
+formula + debuff branch). 149 combat effects total; 71 COMBAT_ONLY gaps remain — every spell with a
+combat slice expressible through the existing hooks (damage/status/heal/zone/ward/buff/debuff/ring-change/
+roll-model) is now wired; the remainder need new subsystems (illusory-decoy / clone / VP-pool-share /
+range-gated perception), absent infra (water-terrain maps / flight / tile-maho), or have no combat
+effect at all (divination / messaging / social / item-imbue / PC-ASCII tools).
+
+### Spell coverage — illusory decoy batch 20 (2026-06-21, runtime-verified 4/4)
+First illusion-decoy combat spell, on a low-risk attack-path absorption (no new decoy-entity subsystem).
+**Way of Deception** (Air 1) → a self `buff` (`decoy_absorb`): the caster's perfect illusory duplicate
+mirrors them, so an enemy can't tell which is real — each melee/ranged attack against the caster has a
+**mathematically-derived 50%** chance (1 real + 1 identical duplicate) to strike the fake and accomplish
+nothing (the attacker's action is still spent). Checked in `execute_melee_attack`/`execute_ranged_attack`
+right after the range/LOS gate (after the action is consumed), returning `hit_decoy` on the fake half —
+the same guarded-early-branch shape as the fog/hidden checks, gated on `decoy_absorb > 0` (never set in
+normal combat → zero regression). Concentration ~ skirmish. Runtime-verified: 152/294 executed attacks
+absorbed (~51%, the derived 50%); 0 absorbed without the buff. The 50% is DERIVED from "1 of 2 identical
+targets" (not invented); the Raise-added extra duplicates that further dilute the odds, and The False
+Legion's mass-illusion army (a Battle/intimidation tool with low tile-combat value), are not modeled.
+150 combat effects total; 70 COMBAT_ONLY gaps remain.
+**The Eye Shall Not See** (Air 3) added (2026-06-21): "not invisible" but those nearby do not see the
+target until a loud/attention-drawing action — reuses the existing `invisible` hook (untargetable +
+reveal-on-attack). Self buff, Concentration ~ skirmish (the 20' range limit approximated as full
+untargetability). Runtime-verified 4/4: caster drops from the foe's melee-target list after the cast,
+returns after attacking (reveal-on-attention). Hidden Visage / Mask of Wind (disguise — no effect in
+faction-keyed combat) and Cloak of Night (an object, not a combatant) stay unwired. 151 combat effects.
+**The False Legion** (Air 6) added (2026-06-21): up to Air Ring ×10 illusory figures fill the area;
+allies hide among them, so each attack against an in-area ally has the derived 50% chance to strike a
+figure (no effect). Modeled as an **AoE-ally `decoy_absorb`** — reuses the Way-of-Deception attack-path
+absorb AND the `_apply_spell_buff_aoe` path (zero new logic): the else-branch applies `decoy_absorb` as a
+generic timed modifier to every same-faction living combatant within the radius (caster included).
+Runtime-verified 5/5: caster + in-area ally get the decoy, an out-of-area ally does not (radius gate),
+~50-55% of attacks on a protected ally absorbed. Per-target absorption kept at the derived 50% (the
+spell's modeled value is AREA coverage, not a higher per-target rate, which would invent a number);
+radius 6 = 30' PROVISIONAL (a protective cluster within the GDD's 100' figure spread). The decoy/illusion
+combat cluster (Way of Deception, The Eye Shall Not See, The False Legion) is now exhausted; the remaining
+illusion gaps are disguise (no faction-combat effect), the true clone (Divide the Soul, a second-body
+subsystem), and out-of-combat utility. 152 combat effects.
+
+### Spell coverage — clone subsystem batch 22 (2026-06-21, runtime-verified 14/14)
+**Divide the Soul** (Void 5, Ishiken) — the caster manifests a SECOND body that acts independently on the
+caster's side (effectively two turns/Round). The first genuine clone subsystem (not a decoy): a new
+`clone` effect kind + `_apply_spell_clone` deep-copies the caster into a fresh-Wounds body, places it
+near the caster via `_free_tile_near`, and adds it as a NAMED_ALLY companion (so the proven companion AI
+drives it). **Shared death** (the operative faithful rule — "if either manifestation dies, both die") is
+wired via a new bidirectional `MapCombatState.divide_soul_pairs` link + `_apply_divide_soul_shared_death`,
+fired from `_apply_hit` after a lethal hit on either body (the link is erased before killing the partner
+so it can't recurse). The clone's `spells_known` is cleared to prevent recursive self-cloning, and
+`is_pc=false` routes it through the NPC/companion turn loop. Gated on `divide_soul_pairs.has(...)` (empty
+in normal combat → zero regression). Runtime-verified 14/14 (real floor map): clone placed + in
+combatants/turn_order on the caster's faction, copies the caster's skills, fresh Wounds, spells cleared,
+pair linked both ways; shared death fires BOTH directions (the helper kills the partner; a real attack
+through `_apply_hit` killing the caster kills the clone). LIMITATIONS: "Wounds combined when the spell
+ends" is not modeled (the 1-minute duration outlasts a typical skirmish); the clone cannot cast (melee
+body only — the GDD "either may cast, one per Round" nuance is dropped to avoid recursion); a death NOT
+routed through `_apply_hit` (a zone/instant-kill) won't cascade. 153 combat effects total; 67 COMBAT_ONLY
+gaps remain (out-of-combat utility / mass-battle / flight / water-terrain / anti-maho / disguise /
+VP-pool-share / PC-ASCII tools — none expressible without a further new subsystem or absent infra).
+
+### Spell coverage — anti-Taint buff (2026-06-21, runtime-verified)
+**Strength of the Crow** (Earth 3) — +5k5 to rolls resisting NEW Taint. Wired as a self `buff` with a new
+`taint_resist` mod, READ at the two in-combat Taint-inflict sites: the Gagoze gaze (the victim's contested
+Willpower roll) and the Pekkle Retributive Taint burst (each mortal's Earth save vs TN 30) — both add
+`+taint_resist k taint_resist` to the resisting roll. Verified: the cast applies `taint_resist=5` to the
+caster (clean isolated driver: `applied:[{taint_resist,5}]`, on-caster total 5); a buffed victim takes
+Taint at the gaze strictly less than unbuffed. The buff's practical value concentrates at the Pekkle
+TN-30 save (the Gagoze gaze rarely succeeds against any resisting victim — a separate Gagoze-puppet
+willpower concern). LIMITATIONS: self-buff only (the NPC self-buff path; the GDD "target individual"
+touch-ally variant is a manual PC option); the s56.16-exposure corrupted-Shozai Taint check (a separate
+SpiritualExposureSystem, not the main orchestrator) is not covered. 154 combat effects total; 66
+COMBAT_ONLY gaps remain — the residue is VP-economy (Kharmic Intent / Altering the Course, scattered
+VP-spend integration), disguise (no faction-combat effect), social-resist (out of combat), mass-battle /
+flight / water-terrain / anti-maho (no tile consumer / absent infra), and out-of-combat utility.
+
+### Spell coverage session summary (2026-06-20, running)
+This session has wired **~69 combat spells across all 5 elements** (initial all-element pass + clean-wins
+batch 2 + incapacitation/bind batch + Void VP-manipulation + clean-wins batch 3 + instant-kill batch 4 +
+forced-stance batch 5 + purify-zone batch 6 + guided-auto-hit batch 7 + AoE-mobility batch 8 +
+action-economy batch 9 + modifier-zone batch 10 + trait→roll batch 11 + fog batch 12 + per-die-reduction batch 13 + illusion-dispel batch 14 + conjured-terrain batch 15 + anti-spell-ward batch 16 + Armor-TN/attack batch 17 + Void-skill-grant batch 18) — **144 combat effects total (76 COMBAT_ONLY gaps remain, Universal element fully covered)** + **1 world-sim spell** (Legacy of Kaze-no-Kami
+spirit-bird letters) + **2 pre-existing bug fixes** (earths_stagnation move sign; its `move_water_penalty`
+was also the hook reused by Suitengu's Curse), all runtime-verified via headless drivers (full project
+import 0 parse errors throughout). Combat-effect total rose ~76 → ~133. New reusable infra built: the
+`modifier_zone` subsystem (batch 10 — roll modifiers by live zone membership), the `TurnState`
+bonus-action pools (batch 9 — granted attack/simple, cast-as-simple, free-casts), the one-shot
+`ranged_auto_hit` buff (batch 7), the `purify_zone`
+soul-state zone (batch 6), the `stance_locked` forced-Full-Attack debuff + `willpower_contested_caster_fire`
+save (batch 5), the shared `instant_kill` effect + `earth_contested_void` save (batch 4), the
+`no_magic_heal` block + `free_move_tiles` buff (batch 3), the `incapacitated` turn-gate
+(CONDITION_INCAPACITATED) + `requires_shadowlands` status gate, the VP `gain_void`/`restore_void`/
+`steal_void` effects + timed `void_locked`, the FireSystem `ignite_zone`/`extinguish` effects, the
+`heal_on_damage`/`armor_bypass` hooks, the `attacker_penalty`/`attacker_roll_penalty` defender
+hook, `ranged_armor_tn`, `insubstantial` (untargetable + can't act/cast), character `invisible`
+(single + AoE via `_apply_spell_buff_aoe`), `initiative_score` buff mod, `willpower_flat` /
+`strength_contested_water` saves, `_build_shiryo` summon, and the `banish_spirit` effect. Two notable
+findings, both since RESOLVED this session: (1) **CONDITION_STUNNED does not block a combatant's turn**
+in this engine (only flat-foots defense) — so the "treated-as-Down / helpless / bind" spells (Earth
+minor/major/prison_of_earth, Water suitengus_embrace, Fire everburning_rage, Void essence_of_void) got a
+**dedicated** `CONDITION_INCAPACITATED` turn-gate (existing atemi/spell Stuns left unchanged); (2) the
+earths_stagnation sign bug (fixed; its `move_water_penalty` hook is reused by Suitengu's Curse). Remaining
+per-element work is documented in each element's DEFERRED note above: the ring-changing wound-threading
+refactor (Pending Redesign), the illusion/disguise/perception/decoy infra, and the out-of-combat utility
+set per the per-spell ASK. (FireSystem ignite/extinguish and the VP-manipulation hooks are now DONE.)
+
+"### Spell-combat layers — completion verified (2026-06-21)
+Programmatic audit (brace-matched extraction of `SpellSystem.SPELL_COMBAT_EFFECTS` vs the COMBAT_ONLY
+library) confirms the s31–37 shugenja layer at **155 wired combat effects / 65 unwired COMBAT_ONLY
+gaps** (2026-06-21: a full read of all 66 gaps found exactly one more cleanly-wirable spell — **The
+Void's Caress** [Void 1, Ishiken]: negate one Mental/Spiritual Disadvantage ≤5 pts on a touched ally,
+reusing the s38 Banish All Shadows suppression slot via a new `suppress_disadvantage` buff branch +
+`AdvantageSystem.get_highest_mental_or_spiritual_disadvantage`; runtime-verified 5/5. The other 64 are
+genuinely blocked — see below), and the s43 maho-in-combat layer at **15 effects + the Bleeding cure** (10 tranches; tranche 10
+added No Pure Breaths' +10-TN lung-ravage and Disrupt the Limb's +15-TN arm debuff — the headline
+effects are GDD-exact, only their sub-parts [NPB damage rolled-count; Disrupt leg/Lame] stay blocked). The 66
+s31–37 gaps were spot-checked against the session's new mechanisms (DoT, persistent-fear,
+ring-reduction, damage-redirect, capacity, modifier-zone) and confirmed genuinely blocked, NOT merely
+un-attempted: they are **illusion/disguise/perception** (mists_of_illusion, hidden_visage, mask_of_wind,
+the_mirrors_smile, cloud_the_mind, …), **messaging/divination/social** (voice_of_the_wind, tenjins_ear,
+elemental_cipher, the_empty_voice, …), **flight/elevation** (wings_of_fire, flight_of_doves,
+wind_of_the_moon, …), **trait-swap / VP / ring-reorder** (facing_your_devils, unbound_essence,
+kharmic_intent, altering_the_course, …), **ambiguous per-minute scaling** (Wrath of Kaze-no-Kami —
+1k1/minute, per-round rate unstated), **near-inert in faction combat** (Curse of the Burning Hand —
+harms only the cursed target's OWN allies who touch it), **healing-Earth-only** (Jurojin's Curse —
+Earth-3 for healing/poison-resist, not wound capacity), or **out-of-combat utility** (hands_of_clay
+climb, taming_the_beast, soul_of_stone social, stones_endurance fatigue, …). The maho headline effects
+are now all wired (tranche 10); the only remaining maho sub-parts are blocked: No Pure Breaths' instant
+damage (DR rolled-dice count unstated) and Disrupt the Limb's leg/Lame variant (no movement-halving
+model). Both spell-combat avenues are complete for faithful, unambiguous, no-invention
+work — further coverage needs an owner value/system decision (the "do not invent" hard constraint), or
+a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or the spells have no combat
+effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
+(see "ASCII Map System — Live-Reachability Status").
+
+### Spell coverage — gap sweep + Hands of the Tides position-swap (2026-06-22, runtime-verified 8/8)
+Swept all COMBAT_ONLY-and-unwired s31–37 library spells (~63 by an `s:0`-vs-`SPELL_COMBAT_EFFECTS`
+diff) for any newly wirable with this session's machinery (transform / decoy / persistent-fear /
+ring-reduction / capacity / modifier-zone). Honest finding, confirming the prior 2026-06-21 audit:
+the residue is genuinely deferred. **Six** (hidden_visage, mask_of_wind, the_mirrors_smile,
+heart_betrays_eyes, quiescence_of_air, by_the_light_of_the_moon) are already wired in
+**CombatController** (the stealth layer), not the orchestrator schema. The rest are blocked, by
+category: **out-of-combat utility/social/divination/messaging** (voice_of_the_wind, soul_of_stone,
+drink_of_your_essence, wolfs_proposal, touch_of_airs_grace, tenjins_ear, elemental_cipher,
+flight_of_doves, the_kamis_whisper, gathering_swirl, token_of_memory, cloak_of_night, false_whispers,
+reach_through_the_void, wind_of_the_moon, ring_of_the_void, …); **flight, no elevation model**
+(wings_of_fire, wings_of_the_phoenix, call_upon_the_wind); **mass-battle / structure / water-terrain,
+no tile consumer** (false_realm, the_earth_flows, drawing_on_the_mountain, whirlpool, yukis_touch,
+within_the_waves, opening_the_veil); **ring/trait REORDER** (facing_your_devils, unbound_essence —
+the `combat_ring_deltas` bridge sets RING deltas, but a highest↔lowest TRAIT swap needs trait-level
+combat state the engine reads at roll time, which doesn't exist; only the wound-capacity slice would
+flow, not attack/damage); **+trait-not-Ring** (earths_touch — "does not increase the Ring", so no
+combat effect); **VP-economy** (altering_the_course, kharmic_intent); **anti-maho ward INERT**
+(grounding_energy raises maho cast TN, but the project's maho is roll-less — no TN to raise, so it
+binds nothing); **ambiguous DR** (netsuke_of_wind conjures a weapon with no GDD profile); **closed
+conjured ring** (groves_of_stone — no clamber-over action → invulnerability stalemate, documented
+deferred); **healing-Earth-only** (jurojins_balm/jurojins_curse — for healing/poison-resist, not
+wound capacity); **near-inert in faction combat** (curse_of_the_burning_hand, 1-minute cast, harms
+the target's own allies); **duel-scoped** (essence_of_fire iaijutsu ward); and **blocked**
+(the_world_is_truth Kolat sleeper [SINCE WIRED — see the 2026-06-22 Kolat entry below],
+piercing_the_heavens Phoenix-narrative, cloud_the_mind needs
+day-granular memory timestamps + no cast trigger, garbled_tongue needs a deliberate-conversation-ward
+model). **Exactly one was cleanly + faithfully + unambiguously wirable:** **Hands of the Tides**
+(Water 5, s36) — swap the grid positions of up to Water Ring willing allies, 100' (20-tile) radius.
+New `reposition` effect kind (`SpellSystem.SPELL_COMBAT_EFFECTS`) + dispatch branch +
+`AsciiMapCombatOrchestrator._apply_spell_reposition` (swaps `state.positions[a] <-> [b]`). The EFFECT
+(swap a willing pair) is GDD-faithful; the GDD gives **no NPC USE policy**, so the heuristic
+(`_reposition_best_pair`, structural AI like every other `_npc_*`) does the one clearly-beneficial
+thing and nothing else: **RESCUE A WOUNDED ALLY FROM MELEE** — swap the most melee-pressured HURT+
+ally (the caster itself qualifies → a shugenja fleeing melee) with the least-exposed ally
+(`_adjacent_enemy_count` over the grid), **never** teleporting the casting shugenja INTO melee for
+someone else, and only when the swap **strictly** reduces the rescued unit's adjacent-enemy exposure
+(so it never fires for no benefit). Capped at Water Ring willing targets (a 2-of-N swap is a valid
+GDD "combination"). NPC support hook in `_npc_maybe_cast_spell` (after heal, before self-buff),
+gated on a non-empty rescue pair. Runtime-verified 8/8 (Godot 4.6.2, headless driver): WaterRing=5 +
+can_cast; best_pair=[rescue,dest] picks the safe ally (NOT the caster) + the swap executes
+(positions actually exchanged); wounded-not-in-melee → no swap; healthy-in-melee → no swap (rescues
+wounded only); Water Ring 1 → guarded (need ≥2 targets); NPC autonomously casts it; and when the
+caster IS the wounded-in-melee unit it rescues itself to the rear. **156 combat effects total; the
+remaining COMBAT_ONLY gaps are all documented above as deferred/blocked** — the s31–37 spell-combat
+layer is complete for faithful, unambiguous, no-invention work. (Same PC-travel HOLD live-reachability
+caveat as the whole ASCII stack — driver-verified, not a live session.) A debugging note for future
+headless drivers: assigning an untyped `Array` literal (`c.spells_known = ["x"]`) to a typed
+`Array[String]` field on an **untyped** local silently fails at runtime (the documented typed-array
+`.assign()` gotcha) — type the local (`var c: L5RCharacterData = …`) or use `.assign()`; production
+code was never at fault, only the test harness.
+
+### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
+Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
+with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`
+(the actual sleeper *install*) had **no live caller** (multi-session `CONDUCT_CONDITIONING` only
+resolves one session; completion was "deferred"), so this is the **first working sleeper-install
+path** — it lights up `activate_sleeper` and the s54.7e override loop. GDD: Touch, 8-hour head-hold,
+Contested Insight/Air vs the target, rewrites memories ("create a sleeper agent"), **Duration 1 month**
+(+1 month per 3 Raises). Owner decisions: **1-month expiry** (not the permanent psychological sleeper),
+**captive-OR-incapacitated** target gate, **new ActionID** (Kolat pipeline). All numbers GDD-traceable
+(month = `TimeSystem.IC_DAYS_PER_MONTH` = 30, GDD-exact; honor = the existing `CONDITIONING_HONOR_COST`
+−3.0, same act; the roll's unstated resist Trait = Willpower per the mental-resist convention).
+- **Data:** new `L5RCharacterData.sleeper_expiry_ic_day` (@export, −1 = no expiry / permanent /
+  not-a-sleeper). `degrade_sleeper_seasonal` now skips magical sleepers (expiry ≥ 0 → they expire on
+  their own clock, not −5/season psychological decay).
+- **KolatSystem:** `resolve_world_is_truth_cast` (caster Insight Rank + Air Ring keep Air vs target
+  Willpower + Air Ring keep Air), `install_world_is_truth_sleeper` (the four sleeper fields + expiry =
+  `ic_day + 30 × (1 + raises/3)`; honor applied by the caller), `process_sleeper_expiry` (a DORMANT
+  magical sleeper whose month lapsed reverts — all fields clear; **active** [mid-mission] and
+  **permanent** [−1] sleepers are skipped). Constants `WORLD_IS_TRUTH_ID` / `_MASTERY` (6).
+- **Executor** (`KolatExecutor._cast_world_is_truth`, dispatch arm + `_KOLAT_ACTION_IDS`): gate order
+  no_target → self → already_sleeper → held (captive_status≠"" OR wound ≥ DOWN) → co-located →
+  `SpellSystem.can_cast` (knows the secret Air-6 spell + an Air slot) → valid phrase+command → roll.
+  On success: consume the Air slot, install (expiry from `metadata.ic_day`, already passed by
+  ActionExecutor), apply −3.0 Honor. A roll FAILURE still consumes the slot (the 8 hours were spent);
+  a GATE failure consumes nothing (the cast never started).
+- **NPC pipeline:** added to `KOLAT_ACTION_POOL` (Phase-3 Kolat unlock) + `objective_alignment`
+  CONDITION_SLEEPER (CAST_WORLD_IS_TRUTH 100, equal to CONDUCT_CONDITIONING — competence/Spellcraft
+  breaks the tie) + `action_skill_map` (Spellcraft/Meditation) + `personality_filter` (blocked by
+  JIN/REI/GI/MAKOTO, same honorable/honest virtues as CONDUCT_CONDITIONING). `_build_kolat_metadata`
+  CAST_WORLD_IS_TRUTH arm + `_pick_world_is_truth_target` (a co-located held, non-Kolat, non-PC,
+  lord-bound, not-already-sleeper target — highest Status; bakes a **betrayal** sleeper command:
+  ELIMINATE the captive's own lord on activation, the archetypal "sleeper agent" use and the only
+  command type the override loop + `_sleeper_command_complete` support). AP cost 1 (default, like
+  CONDUCT_CONDITIONING).
+- **Reachability:** the secret spell is granted to **shugenja Masters** (`KolatMasterSelector._apply_special_rules`)
+  — the network heads, giving the conspiracy a caster; casting stays gated on Air School Rank ≥ 6 + a
+  slot. Daily expiry pass wired in `advance_day` (beside the possession/disease afflictions).
+- **Runtime-verified 7/7** (Godot 4.6.2, headless): the contested roll discriminates (strong 200/200,
+  weak 16/200); install expiry math (130 / 160) + fields/command; expiry pass clears at the month,
+  skips active + permanent; magical sleepers skip seasonal decay; the executor installs + applies
+  honor + all 4 gates fire; the target-picker selects the captive and excludes Kolat/no-lord/PC/healthy;
+  shugenja Masters get the spell, bushi don't.
+LIMITATIONS: ~~scoring is target-agnostic (100 = CONDUCT_CONDITIONING), so a strong-Spellcraft Master
+with a CONDITION_SLEEPER need but NO co-located captive could select CAST_WORLD_IS_TRUTH and no-op
+(1 AP wasted)~~ — RESOLVED 2026-06-22 by a Phase-4c precondition filter (see below). An
+already-activated magical sleeper that's mid-mission when its month lapses is NOT reverted (the command
+runs to completion — matches the active-skip in `degrade_sleeper_seasonal`). The spell's non-sleeper
+memory-rewrite uses (forget events / believe they're someone else) are not modeled — only the
+"create a sleeper agent" use, which is the GDD's stated primary application. `sleeper_expiry_ic_day`
+persists via SaveManager (@export); no WorldStateSaver change. Same world-sim-only scope as the rest of
+the Kolat system (NPCs never use the ASCII map; this is a world-sim ActionID, not a tile-combat cast).
+
+### s54.7c Conditioning completion — multi-session psychological sleeper install now accumulates (2026-06-22, runtime-verified 7/7)
+The psychological `CONDUCT_CONDITIONING` path resolved one session per cast but NEVER installed the
+sleeper — `complete_conditioning` had no caller (completion was "deferred") and `dream_sleeper_registry`
+was never written, so `_sleeper_count` was permanently 0 and a Dream Master conditioned the same target
+forever (the loop never terminated). Now cumulative progress accumulates across casts and installs the
+permanent sleeper at 100% (s54.7c: Willpower×3 sessions). Complements the just-wired World is Truth
+(the magical one-shot install); together the two sleeper-creation paths are both live.
+- **Data:** `L5RCharacterData.conditioning_progress` (0–100 in-progress; 0 when not conditioning or
+  already a sleeper) + `conditioning_master_id` (the claiming master; −1 = none).
+- **`KolatSystem.record_conditioning_session(target, master, progressed)`** — claims the target for the
+  master (a second master's sessions do NOT add to another's in-progress conditioning), adds
+  `progress_per_session` on a progressed session, returns true at `STABILITY_FULL` (epsilon-guarded
+  against float-accumulation underflow: N × (100/N) can sum to 99.9999…; the 0.01 epsilon is far below
+  any single session's increment so it never completes early). `complete_conditioning` now also resets
+  the in-progress fields.
+- **`KolatExecutor._conduct_conditioning`** rewritten: dead/already-sleeper guards → resolve session →
+  accumulate → at 100% install via `complete_conditioning` (sleeper fields + −3.0 Honor, once) and
+  register in `dream_sleeper_registry` via `KolatNetwork.register_sleeper` — so `_sleeper_count` advances,
+  `_is_sleeper_of` returns true, the opportunity scanner's `should_clear` releases the slot, and the
+  Master stops at its `world_start_sleepers` target. Below 100% returns the running progress.
+- **Shared betrayal command:** `NPCDecisionEngine._build_sleeper_command(target)` (≤5-word phrase +
+  ELIMINATE-their-lord command) now feeds BOTH `CONDUCT_CONDITIONING` and `CAST_WORLD_IS_TRUTH` metadata
+  (the latter refactored onto it via `meta.merge`).
+- **Candidate constraint:** `_pick_conditioning_candidate` now skips lordless targets (the betrayal
+  command needs a lord) and already-sleeper targets (cross-path de-dup with The World is Truth, which
+  also skips sleepers). The World is Truth sleepers are NOT registered in `dream_sleeper_registry`
+  (they're temporary/expiring and may be cast by non-Dream shugenja Masters — the registry is the
+  Dream permanent-sleeper count); the `is_sleeper` candidate skip prevents re-conditioning them.
+- **Runtime-verified 7/7** (Godot 4.6.2, headless): accumulation reaches ready at EXACTLY
+  sessions_required (Willpower 2 → 6, no off-by-one); `complete_conditioning` resets progress + installs
+  + applies honor; the executor loop completes in 6 casts, registers the sleeper (npc_id correct),
+  applies −3.0 once, resets progress; a post-completion cast hits `already_sleeper`; the candidate picker
+  excludes lordless/sleeper/Kolat/out-of-location; the claim rule blocks a second master (progress
+  unchanged); the command helper builds the phrase + ELIMINATE command.
+- **End-to-end loop verified** (the core fix — loop termination): a Dream Master (target 2) drove the
+  REAL `scan` → `should_clear` → `_build_kolat_metadata` → executor → `register_sleeper` cycle and
+  conditioned exactly 2 of 3 lord-bound candidates (weakest first, wp 1 then 2), registered both
+  (`sleeper_10`/`sleeper_11`), baked the betrayal commands (ELIMINATE each captive's own lord), then
+  HALTED on day 9 when `scan` returned `{}` at target — the third candidate (wp 3) was never touched,
+  honor clamped to 0.0 after 2×−3.0. The non-termination bug is fixed through the full pipeline, not
+  just the executor in isolation.
+
+### s54.7/s33 CAST_WORLD_IS_TRUTH no-op precondition filter (2026-06-22, runtime-verified 8/8)
+Closes the one documented limitation of the magical sleeper-install path. CAST_WORLD_IS_TRUTH shares
+the CONDITION_SLEEPER NeedType with CONDUCT_CONDITIONING (both score 100; competence/Spellcraft breaks
+the tie), but the magical install needs gates the multi-session psychological conditioning does NOT: a
+co-located HELD (captive/incapacitated) target the caster can rewrite, plus the secret Air-6 spell + an
+Air slot. So a strong-Spellcraft Master with a CONDITION_SLEEPER need but no held captive could select
+CAST_WORLD_IS_TRUTH and cleanly no-op (no_target/cannot_cast), wasting the 1 AP the NPC engine already
+spent before execution. New `NPCDecisionEngine._apply_world_is_truth_precondition_filter(options,
+character, chars_by_id)` (Phase 4c, beside the tattoo/taint/garden filters; same `_remove_action`
+pattern) removes CAST_WORLD_IS_TRUTH unless BOTH gates pass — `SpellSystem.can_cast(character,
+KolatSystem.WORLD_IS_TRUTH_ID)` (mirrors the executor's cast gate) AND `_pick_world_is_truth_target(...)
+!= null` (the existing picker enforces every target gate: co-located, held, lord-bound, non-Kolat,
+non-PC, not-already-sleeper). When removed, CONDUCT_CONDITIONING (the always-valid path — conditioning
+works on any co-located candidate, no captivity required) wins the need, so the Master uses the right
+tool: the instant magical install when a captive is present, the multi-session grind otherwise. Early
+return for the ~all NPCs without CAST_WORLD_IS_TRUTH in options (it's in the KOLAT_ACTION_POOL, only
+unlocked for Kolat masters/agents) — the chars_by_id scan runs only when the action actually survived
+to Phase 4c. Same `run()`-path-only scoping as every other precondition filter (the executor's hard
+gates already make the action SAFE/no-op on the civilian-order path, which all the precondition filters
+skip). Runtime-verified 8/8 (Godot 4.6.2, headless): kept when can-cast + held co-located target;
+removed for not-held / cannot-cast / elsewhere / already-sleeper / lordless; untouched no-op when the
+action is absent; kept with two held targets. Verification only beyond the filter — no behavior change
+to the executor or the sleeper-install pipeline.
+
+### Pending Redesign — RESOLVED (2026-06-20, ring-change wave)
+- **Ring-changing combat spells — participant-scoped wound deltas, DONE.** The owner's goal was
+  combat-scoped Ring deltas with **no world-sim leak**. The scope-discovery counted ~252 in-combat
+  is_dead/wound reads (143 is_dead + 27 get_wound_level + 30 apply_damage + 12 heal_wounds in the
+  orchestrator; +39 in individual_combat), and threading a participant through every one is both
+  impractical by hand AND impossible to completeness-verify headless — i.e. it would itself risk the
+  "partial threading is UNSAFE" failure it was meant to avoid. **Implemented instead (honors the
+  no-leak goal, avoids the 252-site threading):** the AUTHORITATIVE store is the combat
+  **Participant** (`Participant.ring_deltas` {Ring:int} + `ring_delta_expiry`), synced to a
+  **runtime-only, non-@export read-bridge** field on the character (`L5RCharacterData.combat_ring_deltas`)
+  via `IndividualCombat.sync_ring_deltas()`. `CharacterStats.get_ring_value` falls back to that
+  bridge (when no explicit `ring_deltas` arg is passed), so the WHOLE wound/death chain
+  (get_earth_ring → get_wound_threshold_per_level → get_wound_level/get_total_wound_capacity/
+  get_wound_penalty → is_dead, plus WoundSystem.apply_damage/heal_wounds) sees the delta **with zero
+  call-site threading**. The 7 CharacterStats funcs + WoundSystem gained an optional `ring_deltas`
+  param (default {} → identical to before; backward-compatible foundation) for belt-and-suspenders
+  explicit passing where a participant is handy. **No-leak guarantees** (the bridge is never
+  serialized and is empty outside combat): cleared per-combatant at `setup_combat`, cleared for all
+  combatants when `advance_round` sees combat over, and removed on a ring-delta's duration expiry
+  (`_expire_ring_deltas`, which also re-checks death — Essence of Earth "Wounds return to normal,
+  possibly fatal"). NOTE: this uses a synced character read-bridge rather than literally threading
+  the Participant through 252 sites; the data still LIVES on the Participant (participant-scoped, the
+  owner's choice) — the bridge is just a cleared-rigorously mirror so the static wound chain can read
+  it. If the owner specifically wants the literal 252-site threading instead, it can replace the
+  bridge later. **Wired spells:** Essence of Earth (Earth 4, self +1 Earth, death-on-expiry),
+  The Wolf's Mercy (Earth 3, enemy −1 Earth / −2 if Tainted, immediate death-on-apply if wounded),
+  Strike at the Roots (Earth 5, Contested Earth → enemy Earth set to 1, death-on-apply). Ring-down
+  effective ring floored at 1 (GDD "minimum 1"; avoids an Earth-0 threshold-instant-kill). DEFERRED
+  (trait-swap, not a clean Ring delta): Ebbing Strength / Chi Reversal (Physical/Mental trait
+  transfer/flip), facing_your_devils (random trait reorder). Runtime-verified 18/18 + world-sim
+  sanity 8/8: the boosted char reads consistently alive across is_dead/get_wound_level/
+  get_total_wound_capacity with NO param (bridge auto-applies); Wolf's Mercy/Strike kill wounded
+  enemies via reduced capacity; bridge clears at combat end (is_dead reverts to base); fresh
+  world-sim characters read base (empty bridge). All other s31-37 spells were wired without wound
+  surgery.
 
 ### ASCII Map System — Live-Reachability Status (2026-06-20)
 **The ASCII map / tile-combat layer is extensively built and partly verified, but is NOT
@@ -7579,6 +8505,153 @@ template generators it depends on. Faithful summary of the fixes that landed:
   COVERAGE NOTE: the pure lowest-ML fallback (`pick_cast_spell`) was not exercised
   — a freshly-corrupted caster with taint < 2 and no other tainted member would hit
   it; here the caster's own Rank-3 taint correctly diverted to the shed path.
+- **s43 maho IN TILE COMBAT — tranche 1 (2026-06-21, runtime-verified 12/12).**
+  The s43 maho combat spells were long marked "blocked on s40" — and **s40 now exists** (the ASCII
+  combat layer the s31–37 spells were wired into), newly unblocking them. First tranche delivers the
+  **maho-cast pipeline** + 3 spells reusing the existing `_apply_spell_*` effect machinery (zero changes).
+  **Cast path:** `AsciiMapCombatOrchestrator.execute_cast_maho(...)` — maho has NO casting roll (it fires
+  when blood is spilled), so it auto-succeeds, paying the s43 self-blood cost (2×ML Wounds bypassing armor)
+  + Taint (Pattern B, pre-applied), then routes the combat effect through `_apply_spell_status` /
+  `_apply_spell_debuff` / `_apply_spell_buff`. A **blood-cost-lethal guard** refuses a cast that would
+  Out/kill the caster (sacrificing a captive is the world-sim path). World-sim consequences
+  (PTL/CrimeRecord/province) stay with `MahoSystem.resolve_cast`, not the skirmish. **Effects table:**
+  `MahoSpellLibrary.MAHO_COMBAT_EFFECTS` (same schema as `SPELL_COMBAT_EFFECTS`) + `get_combat_effect()`.
+  Three spells: **Pain** (Earth 2 → incapacitated 1 round = "Prone + loses next Turn"), **Curse of
+  Weakness** (Water 2 → all_rolls −10 + armor_tn −10, 10 rounds), **Strength of Darkness** (Fire 5 → self
+  buff +1 attack / +1 damage die, the "+1 physical Traits" combat slice). **NPC hook:**
+  `_npc_maybe_cast_maho` (gated on `cult_affiliation`, mirrors `_npc_maybe_cast_spell`; Ring-supported via
+  `supports_spell_ring`) wired into `execute_npc_turn` before the shugenja block — gated on
+  `cult_affiliation` → zero regression for normal NPCs. Runtime-verified 12/12 (Godot 4.6.2): Pain
+  incapacitates + blood 4 + Taint +1; Curse all_rolls/armor_tn −10; Strength of Darkness self-buff +1/+1;
+  near-dead maho refuses (blood_cost_lethal); a cult enemy casts maho autonomously (`cast_maho`);
+  damage/clone drivers re-pass. DEFERRED (tranche 2+): damage maho (Burning Blood — DR = TARGET's Fire
+  Ring, structural), Bleeding (per-round DoT), Tomb of Earth (maintained per-round contest), the other ~25
+  combat maho spells, and roster-spawned MAHO_TSUKAI `cult_affiliation` flagging (the hook is ready).
+- **s43 maho IN TILE COMBAT — tranches 2-3 (2026-06-21).** Extend the maho-cast pipeline with damage +
+  DoT. **Tranche 2 — Burning Blood** (Fire 4, runtime-verified 8/8): the first damage maho. DR equals
+  the TARGET's Fire Ring (per-target, not the caster's) — a new `dr_target_ring` option in the damage
+  loop (gated per-key → zero impact on every other damage spell) — then a Willpower TN 20 save or fall
+  Prone. A "damage" branch added to execute_cast_maho + "damage" to the NPC offense kinds. Verified: a
+  Fire-5 target averages 30.6 damage vs a Fire-2 target's 12.2 (the blood boils hotter the more Fire they
+  have, faithful to the GDD); Prone rider fires; the NPC picks Burning Blood as its highest-ML offense.
+  **Tranche 3 — Bleeding** (Fire 1, runtime-verified 7/7): the iconic DoT. A new "bleed" effect kind —
+  `_apply_maho_bleed` installs a "bleed" timed modifier (requires the target already injured, 1+ Wound),
+  and a per-round bleed tick in `advance_round` applies the Wounds (gated on the modifier → zero
+  regression). The injured-target precondition is checked BEFORE paying blood (no wasted blood on a
+  healthy target); the NPC picker includes bleed but skips it on a healthy target; recasts stack.
+  Verified: +1 Wound/round persists; a healthy target is refused upfront; an all-rings-1 maho-user
+  (only Bleeding supportable) casts it on an injured PC and skips a healthy one. **5 maho combat effects
+  total** (Pain, Curse of Weakness, Strength of Darkness, Burning Blood, Bleeding).
+- **s43 maho IN TILE COMBAT — tranche 4 (2026-06-21, runtime-verified 6/6).** Three more, all reusing the
+  existing status/damage paths (data-only — no orchestrator changes, zero regression): **Blood and
+  Darkness** (Air 1 → AoE blinded, 6-tile radius, caster excepted via the AoE gather), **Chains of
+  Jigoku** (Earth 4 → incapacitated immobilize for the skirmish; real manacles, NOT Shadowlands-gated),
+  **Touch of Death** (Earth 5 → 7k7 melee Wounds; the +10-year aging is the world-sim slice already wired
+  in the seasonal maho cast, not modeled in the skirmish). Verified: Blood and Darkness blinds both PCs
+  but not the caster; Chains incapacitates; Touch of Death deals 7k7 (24 in the test); the NPC picks
+  Touch of Death as its highest-ML offense. **8 maho combat effects total** (the 5 above + these 3).
+  DEFERRED: the **fear spells** (Inspire Fear, Mists of Fear) — "afraid" is managed by the proximity-based
+  `apply_fear_checks` (which set/clears CONDITION_AFRAID each turn), so a spell-applied afraid would be
+  wiped on the target's next turn; they need a separate spell-afraid mechanism. Also Tomb of Earth
+  (maintained per-round contest), Blood Armor (damage-redirect), the Bleeding bandage cure, ~20 more.
+- **s43 maho IN TILE COMBAT — tranche 5: fear maho (2026-06-21, runtime-verified 7/7).** Wires the two
+  fear maho via a new reusable `spell_afraid` mechanism that resolves the `apply_fear_checks` conflict.
+  A new `"fear"` effect kind: `_apply_maho_fear` (optional Willpower save) installs a `spell_afraid`
+  timed modifier on the target AND sets AFRAID immediately; `apply_fear_checks` now keeps AFRAID active
+  while `spell_afraid` is set (a third OR-term beside proximity-fear and tremor), so a maho-induced fear
+  persists for its DURATION independently of proximity — without breaking the normal proximity set/clear.
+  Two spells: **Inspire Fear** (Air 1 → Afraid −1k0 for the skirmish, no save — a curse), **Mists of
+  Fear** (Air 3 → Afraid, Willpower TN 30 save = Fear 5's 5+5×5). Runtime-verified 7/7 (Godot 4.6.2):
+  inspire_fear makes the PC afraid + the fear PERSISTS through `apply_fear_checks` (the headline); the
+  control (no fear source) still clears normally → zero regression; mists_of_fear afflicts a low-WP PC
+  and a high-WP PC resists a majority (the save discriminates); maho-t1/t2/t4 drivers re-pass. The
+  `apply_fear_checks` change is gated on the `spell_afraid` modifier (false in normal combat → unchanged).
+  **10 maho combat effects total** (the 8 prior + Inspire Fear + Mists of Fear). DEFERRED: Tomb of Earth
+  (maintained per-round contest), Blood Armor (damage-redirect), the Bleeding bandage cure, ~18 more.
+- **s43 maho IN TILE COMBAT — tranche 6: Tomb of Earth (2026-06-21, runtime-verified 8/8).** The last
+  distinct maho mechanism — a maintained per-round contested immobilize. New `"tomb"` effect kind +
+  `MapCombatState.tomb_links` (target_id → caster_id): `_apply_maho_tomb` immobilizes the target
+  (incapacitated) + deals an initial 2k2 + establishes the link (Taint-immune — a target with 1+ full
+  Rank of Taint cannot be entombed); a new per-round pass in `advance_round` re-contests each Round
+  (caster Earth+Insight vs target Air+Insight) — the caster keeps the target immobilized + 2k2 each round
+  until the target wins and breaks free, or either party dies (the tomb collapses). Gated on `tomb_links`
+  (empty in normal combat → zero regression). Runtime-verified 8/8 (Godot 4.6.2): cast immobilizes +
+  initial 2k2 + link; a strong-Earth caster maintains the tomb (target stays immobilized, 2k2/round); a
+  strong-Air target eventually breaks free; a Tainted target is immune; clone/maho-t1/t2/t4 drivers
+  re-pass. **11 maho combat effects total** (the maho-in-combat layer now covers status, debuff, buff,
+  damage [caster-ring + per-target-ring], DoT, fear [persistent], AoE, incapacitate [timed +
+  maintained-contest]). DEFERRED: Blood Armor (damage-redirect), No Pure Breaths (damage + persistent
+  debuff, ambiguous DR), Disrupt the Limb (limb-specific), Drain the Soul (trait reduction), the Bleeding
+  bandage cure, and the remaining out-of-combat/social maho. The clean-reuse maho combat set is now
+  comprehensive; the remainder need bespoke mechanics.
+- **s43 maho IN TILE COMBAT — tranche 7: Blood Armor (damage-redirect, 2026-06-21, runtime-verified 7/7).**
+  A defensive maho. Blood Armor (Earth 5): the caster bonds the nearest living ally as a sacrifice
+  (`MapCombatState.blood_armor_links` wearer→victim, via `_nearest_ally_id`) and from then on channels
+  **75% of its incoming damage into that victim** (direct, bypassing the victim's armor — it is blood
+  magic), keeping only 25% (which its own Reduction still mitigates). New `"blood_armor"` effect kind +
+  the redirect hook in `_apply_hit` (gated on `blood_armor_links.has(target.character_id)` → zero
+  regression); the bond breaks when the victim dies. Self-cast; the upfront precondition refuses it when
+  no ally is present (no wasted blood, like Bleeding's injured-target gate). NPC self-casts it
+  (`_npc_maybe_cast_maho` step 2a — before the generic self-buff) when Earth-supportable, a sacrifice is
+  present, and not already armored. Runtime-verified 7/7 (Godot 4.6.2): cast bonds the minion; over
+  repeated PC strikes the minion bears the larger share while the wearer keeps ~25%; the bond breaks when
+  the victim dies (subsequent hits land fully on the wearer); a lone maho-user is refused upfront
+  (no_sacrifice, no blood paid); the NPC self-casts blood_armor with a minion present and out-of-range
+  PC. maho-t1/t2/t4/t6 drivers re-pass. **12 maho combat effects total** (status, debuff, buff, damage
+  [caster + per-target ring], DoT, fear, AoE, incapacitate [timed + maintained-contest], damage-redirect).
+  DEFERRED: No Pure Breaths (damage + persistent debuff, ambiguous DR), Disrupt the Limb (limb-specific),
+  Drain the Soul (trait reduction), the Bleeding bandage cure, remaining out-of-combat/social maho.
+- **s43 maho IN TILE COMBAT — tranche 8: Drain the Soul (2026-06-21, runtime-verified 4/4).** A faithful
+  capacity-reduction maho via the existing s34 ring-change mechanism. Drain the Soul (Earth 2): reduce
+  the target's Stamina by 1 — the combat-relevant effect is the lowered wound capacity, which manifests
+  (via −1 Earth, floored at 1) **only when Stamina is the Earth-determining trait** (`stamina <= willpower`);
+  reducing a higher Stamina does not change Earth, so no combat effect (faithful, NOT invented). New
+  `"drain_soul"` effect kind → `_apply_maho_drain_soul` (Stamina-floor gate, then routes to
+  `_apply_spell_ring_change`); added to the NPC offense kinds. Runtime-verified 4/4 (Godot 4.6.2):
+  sta3/wil5 → capacity 48→32 (Earth −1); sta5/wil3 → unchanged (Willpower floor, no effect); a wounded
+  Earth-2 target dies on apply when the lowered capacity drops below its wounds. Reuses the tested
+  ring-change → zero new mechanism; maho-t1/t6/t7 drivers re-pass. **13 maho combat effects total.** The
+  clean-reuse, faithful, unambiguous maho combat set is now complete — the remainder are genuinely
+  blocked: No Pure Breaths (ambiguous DR — the rolled-dice count is unstated, can't invent), Disrupt the
+  Limb (needs a per-limb system), the Bleeding bandage cure (needs a combat Medicine action + an unstated
+  TN), and the out-of-combat/social/world-sim maho.
+- **s43 maho IN TILE COMBAT — tranche 10: No Pure Breaths + Disrupt the Limb (2026-06-21,
+  runtime-verified 6/6).** The two maho previously marked "blocked" — but re-reading the precise GDD text,
+  their HEADLINE effects are GDD-EXACT, not unstated; only their sub-parts are ambiguous/missing-system.
+  Both reuse the existing `debuff` kind (all_rolls). **Disrupt the Limb** (Water 1): "+15 TN to physical
+  action rolls using that limb" for 10 rounds → `all_rolls -15` (the arm case — the attack-disabling
+  choice the NPC takes; in tile combat the dominant physical-action roll IS the attack). 50' = 10 tiles.
+  The leg/Lame variant (movement-halving) is deferred — no movement-halving model. **No Pure Breaths**
+  (Air 4): the lungs are ravaged into "a continuous +10 TN to all actions" that "cannot end naturally even
+  if damage is healed; any magical healing... ends the TN penalty" → a PERSISTENT `all_rolls -10` under a
+  distinct timed-modifier source (`no_pure_breaths`) so a spell heal clears it. New: `_apply_spell_debuff`
+  gains an optional per-effect `source` (default "spell_debuff" → backward-compatible); `_apply_spell_heal`
+  clears the `no_pure_breaths` source after the ally/alive/range/no_magic_heal gates but BEFORE the
+  wound-amount check (so ANY magical heal that reaches the target restores the lungs, even a 0-wound heal —
+  but a `no_magic_heal`/Disrupt-the-Aura target is NOT cured, since the heal fails the gate first). The
+  instant lung damage ("DR equal to the victim's Air Ring in KEPT dice" — the rolled-dice count is unstated)
+  is deferred; the lasting debuff is the spell's signature. NPC auto-casts both (debuff is already a maho
+  offense kind). Runtime-verified 6/6 (Godot 4.6.2): Disrupt -15; NPB -10 persists past 50 rounds; a spell
+  heal cures NPB (and an ordinary Curse-of-Weakness debuff is NOT cleared — source-scoped); maho-tsukai
+  auto-casts a debuff maho. maho-t1/t6/t7/t8/t9 drivers re-pass. **15 maho combat effects + the Bleeding
+  cure.** Both maho gaps now reduced to their genuinely-blocked sub-parts (NPB damage rolled-count; Disrupt
+  leg/Lame) — the headline +10/+15 TN effects are live.
+- **s43 maho IN TILE COMBAT — tranche 9: Bleeding bandage cure (2026-06-21, runtime-verified 7/7).**
+  Closes the Bleeding loop (tranche 3) — and the "Bleeding cure" deferral was wrong: the TN is NOT
+  unstated. GDD: a bleeding injury "continues until bandaged with a successful Medicine (Wounds) roll" —
+  a Complex Action making a Medicine (Wound Treatment) / Intelligence roll vs the **GDD-specified Medicine
+  TN** (`MedicineSystem.BASE_TN = 15`, s57.31 — reused, not invented). New
+  `execute_stop_bleeding(state, healer_id, healer, target_id, target, dice)`: self-bandage (healer ==
+  target, range 0) or an adjacent ally bandaging the bleeder (range 1); on success clears the target's
+  `maho_bleed` timed modifier (`clear_timed_modifiers_by_source`). NPC + companion self-bandage hooks in
+  `execute_npc_turn` / `execute_companion_turn` (gated on `Medicine >= 1` + an active bleed + an available
+  Complex → zero regression; the bleeder forgoes its attack to stop the steady drain). The PC path is the
+  future turn-based UI (the action is ready). General mechanism — serves any future bleed source, not just
+  the maho spell. Runtime-verified 7/7 (Godot 4.6.2): bleed applied → self-bandage (Medicine 6 vs TN 15)
+  stops it + consumes the Complex; non-bleeding target rejected; adjacent ally medic cures a bleeding PC;
+  out-of-range ally rejected; a bleeding NPC with Medicine self-bandages on its turn. maho-t1/t6/t7/t8
+  drivers re-pass. **13 maho combat effects + the Bleeding cure.** Remaining genuinely-blocked maho: No
+  Pure Breaths (ambiguous DR), Disrupt the Limb (per-limb system), out-of-combat/social/world-sim maho.
 - **s43 Grand-Map spell sweep COMPLETE (2026-06-11).** Audited all 46 maho spells
   for world-scale-wirable effects (persistent NPC/province state, no s40 combat or
   condition layer). **6 are wired** (Spreading the Darkness, Stealing the Soul,

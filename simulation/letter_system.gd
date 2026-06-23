@@ -160,6 +160,13 @@ static func write_letter(
 		province_distance, mountain_provinces, warzone_provinces,
 		ocean_segments, has_miya_route
 	)
+	# s33 Legacy of Kaze-no-Kami: a sender who knows the spirit-bird message spell delivers
+	# near-instantly within range (the message arrives the same tick). The range cap (School
+	# ×10 miles) is not enforced — no miles/adjacency data (A16) — and the per-message spell-slot
+	# cost is abstracted; faithful for the common within-range correspondence case.
+	if sender != null and "legacy_of_kaze_no_kami" in sender.spells_known:
+		transit = 0
+		letter.delivered_by_spirit_bird = true
 	letter.ic_day_arrival = ic_day_sent + transit
 
 	# -- Calligraphy (Cipher) writer-side fields (A1, s57.30 LOCKED) -----------

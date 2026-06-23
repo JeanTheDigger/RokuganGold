@@ -123,6 +123,9 @@ static func advance_day(
 	_reset_all_ap(characters)
 	_reset_lost_love_daily_state(characters)
 	_reset_battle_healing_daily_state(characters)
+	# s36 Power of the Ocean: multi-day sustain + exhaustion aftermath. Must run AFTER _reset_all_ap
+	# so the aftermath 0-AP overrides the daily AP reset.
+	_process_power_of_the_ocean(characters, ic_day)
 
 	var _spm: Dictionary = {}
 	for _s: SettlementData in settlements:
@@ -163,6 +166,7 @@ static func advance_day(
 	_populate_military_data(military_data, companies)
 
 	_clear_stale_context_flags(world_states)
+	_clear_daily_spell_buffs(characters)
 	_inject_kolat_objective_flags(world_states, objectives_map)
 	_expire_province_weather(provinces, ic_day)
 
@@ -174,7 +178,7 @@ static func advance_day(
 		travel_arrivals, characters_by_id, world_states, active_topics, current_season,
 	)
 	var auto_conceal_results: Array = _process_auto_conceal_on_arrival(
-		travel_arrivals, characters_by_id, dice_engine,
+		travel_arrivals, characters_by_id, dice_engine, ic_day,
 	)
 	_process_duped_foolish_on_arrival(
 		travel_arrivals, characters_by_id, objectives_map, settlements,
@@ -456,6 +460,11 @@ static func advance_day(
 		active_topics, next_topic_id, ic_day, world_states,
 		active_secrets, next_secret_id, next_case_id, dice_engine,
 		death_events,
+	)
+
+	_process_commune_writebacks(
+		day_result.get("results", []),
+		characters_by_id, crime_records, active_topics,
 	)
 
 	_process_witness_report_letter_writebacks(
@@ -1182,6 +1191,12 @@ static func advance_day(
 		if _pv != null and not CharacterStats.is_dead(_pv) and not _pv.poison_affliction.is_empty():
 			DiseaseSystem.process_poison_daily(_pv)
 
+	# s33 The World is Truth: a DORMANT magically-installed sleeper reverts when its 1-month
+	# window lapses (the rewritten memories fade). Active/permanent sleepers are untouched.
+	for _sl: L5RCharacterData in characters:
+		if _sl != null and not CharacterStats.is_dead(_sl) and _sl.sleeper_expiry_ic_day >= 0:
+			KolatSystem.process_sleeper_expiry(_sl, ic_day)
+
 	var orphan_results: Array = _process_lord_deaths(
 		death_events, characters, objectives_map, successor_map,
 		active_successions, next_succession_id, characters_by_id, ic_day,
@@ -1224,7 +1239,7 @@ static func advance_day(
 	_process_eavesdrop_writebacks(
 		day_result.get("results", []),
 		conversation_results, characters_by_id, current_season,
-		active_topics, next_topic_id, ic_day,
+		active_topics, next_topic_id, ic_day, dice_engine,
 	)
 
 	_process_shadow_target_writebacks(
@@ -1993,16 +2008,16 @@ static func _process_ooc_day_tick(
 			settlement.okiya_tier,
 		)
 
-		# Void Point refresh per s57.32.2 — gated on rested_last_night and
-		# void_refresh_blocked_until (supernatural spell block, s57.32.8).
+		# Void Point refresh per s57.32.2 — gated on rest (rested_last_night, or Power of the Ocean
+		# active per s36) and void_refresh_blocked_until (supernatural spell block, s57.32.8).
 		var ooc_day: int = ic_day / TimeSystem.TICKS_PER_REAL_DAY
-		if c.rested_last_night \
+		if _counts_as_rested(c, ic_day) \
 				and (c.void_refresh_blocked_until == -1 or ooc_day >= c.void_refresh_blocked_until):
 			c.current_void_points = ceili(c.max_void_points * c.wind_down_void_modifier)
 
-		# Natural healing per s57.31.7a — gated on rested_last_night; blocked at Out.
+		# Natural healing per s57.31.7a — gated on rest (s36 Power of the Ocean counts); blocked at Out.
 		var wounds_healed: int = 0
-		if c.rested_last_night and CharacterStats.get_wound_level(c) != Enums.WoundLevel.OUT:
+		if _counts_as_rested(c, ic_day) and CharacterStats.get_wound_level(c) != Enums.WoundLevel.OUT:
 			var heal_amount: int = (c.stamina * 2) + CharacterStats.get_insight_rank(c)
 			wounds_healed = WoundSystem.heal_wounds(c, heal_amount)["healed"]
 
@@ -5927,6 +5942,99 @@ static func _process_flee_logistics(
 			fugitive.role_position = ""
 
 
+# -- Commune Writebacks (s32) --------------------------------------------------
+# For each successful targeted COMMUNE_KAMI cast, dispatch to the chosen element's domain
+# (CommuneSystem.commune_reveal), which performs the reveal — e.g. Air detects a covert
+# s33 Cloud the Mind tampering crime and exposes it to the communer.
+
+# -- Daily spell-buff clear (the standard OOC-day buff model) ------------------
+# Day-long spell buffs (sub-IC-day RAW durations modelled as "the rest of the OOC
+# day they were cast") live in L5RCharacterData.active_day_buffs and are cleared
+# wholesale here at the start of each day, before actions run — so a buff cast during
+# the day survives that day's resolution and lapses the next morning. Adding a new
+# such buff needs NO edit here: set_day_buff on cast, has_day_buff at the read site.
+## s36 Power of the Ocean (Water 5): the multi-day sustain ritual's daily tick. While active, the
+## target recovers Wounds (2 x caster Water Ring x 24h/day = a full daily heal). Void refresh +
+## natural healing are NOT applied here: the target counts as rested (_counts_as_rested) so the
+## wind-down recovery block delivers them on the normal rest schedule without sleeping; the
+## power_of_ocean_void_uses budget is the on-demand Simple-action replenish (tile combat). When the
+## active window ends, `until` clears and the target lapses into complete exhaustion (0 AP — no
+## actions) for half the duration. Runs after _reset_all_ap so the aftermath 0-AP overrides the AP
+## reset. Spell slots are not regenerated here: every living character's slots already reset each IC
+## day via ActionPointSystem.reset_daily_ap, so "regain spell slots at sunrise" is already default.
+static func _process_power_of_the_ocean(characters: Array, ic_day: int) -> void:
+	for c: L5RCharacterData in characters:
+		if c.power_of_ocean_until_ic_day < 0 and c.power_of_ocean_aftermath_until_ic_day < 0:
+			continue
+		if CharacterStats.is_dead(c):
+			c.power_of_ocean_until_ic_day = -1
+			c.power_of_ocean_aftermath_until_ic_day = -1
+			c.power_of_ocean_heal_per_day = 0
+			c.power_of_ocean_void_uses = 0
+			continue
+		if c.power_of_ocean_until_ic_day >= 0:
+			if ic_day <= c.power_of_ocean_until_ic_day:
+				# Active: the spell's own superhuman Wounds heal (stronger than natural healing).
+				# Void refresh + natural healing come from the rest path — the target counts as
+				# rested (_counts_as_rested, read in the wind-down recovery block) so it recovers
+				# without sleeping. The power_of_ocean_void_uses budget is reserved for the
+				# on-demand Simple-action replenish (execute_replenish_void_ocean in tile combat).
+				if c.power_of_ocean_heal_per_day > 0:
+					WoundSystem.heal_wounds(c, c.power_of_ocean_heal_per_day)
+				continue
+			# Active window ended — enter the exhaustion aftermath.
+			c.power_of_ocean_until_ic_day = -1
+		# Aftermath: complete exhaustion — no actions, no travel — for half the duration.
+		if c.power_of_ocean_aftermath_until_ic_day >= 0:
+			if ic_day <= c.power_of_ocean_aftermath_until_ic_day:
+				c.action_points_current = 0
+				c.action_points_max = 0
+			else:
+				# Fully expired — clear the remaining state.
+				c.power_of_ocean_aftermath_until_ic_day = -1
+				c.power_of_ocean_heal_per_day = 0
+				c.power_of_ocean_void_uses = 0
+
+
+## Whether a character counts as rested for the rest-gated recovery (Void refresh + natural healing,
+## s57.31/s57.32). True when the rested_last_night flag is set OR Power of the Ocean (s36) is active
+## — the spell's "requires no food, drink, or sleep" clause makes the target recover as if rested
+## without sleeping (and overrides the rest system's flip-to-false for combat/travel). Future
+## rest-gated systems should call this rather than reading rested_last_night directly.
+static func _counts_as_rested(c: L5RCharacterData, ic_day: int) -> bool:
+	return c.rested_last_night or c.power_of_ocean_until_ic_day >= ic_day
+
+
+static func _clear_daily_spell_buffs(characters: Array) -> void:
+	for c: L5RCharacterData in characters:
+		if not c.active_day_buffs.is_empty():
+			c.clear_day_buffs()
+		# Item-borne day buffs (Mental Quickness, s35): the imbue lives on the item dict and
+		# follows ownership, so it is swept from whichever inventory currently holds it.
+		for item: Variant in c.items:
+			if item is Dictionary and (item as Dictionary).get("mental_quickness_imbued", false):
+				(item as Dictionary).erase("mental_quickness_imbued")
+
+
+static func _process_commune_writebacks(
+	results: Array, characters_by_id: Dictionary,
+	crime_records: Array, active_topics: Array,
+) -> void:
+	for result: Variant in results:
+		if not result is Dictionary:
+			continue
+		var r: Dictionary = result
+		if r.get("action_id", "") != "COMMUNE_KAMI" or not r.get("success", false):
+			continue
+		var effects: Dictionary = r.get("effects", {})
+		var communer: L5RCharacterData = characters_by_id.get(r.get("character_id", -1))
+		var target: L5RCharacterData = characters_by_id.get(effects.get("commune_target_id", -1))
+		if communer == null or target == null:
+			continue
+		var element: int = int(effects.get("commune_element", Enums.Ring.AIR))
+		CommuneSystem.commune_reveal(communer, target, element, crime_records, active_topics)
+
+
 # -- Witness Tampering Writebacks (s11.3.13c) ----------------------------------
 
 static func _process_witness_tampering_writebacks(
@@ -5948,7 +6056,7 @@ static func _process_witness_tampering_writebacks(
 			continue
 		var r: Dictionary = result as Dictionary
 		var action_id: String = r.get("action_id", "")
-		if action_id not in ["BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS"]:
+		if action_id not in ["BRIBE_WITNESS", "INTIMIDATE_WITNESS", "KILL_WITNESS", "CLOUD_THE_MIND"]:
 			continue
 
 		var criminal_id: int = r.get("character_id", -1)
@@ -6020,6 +6128,34 @@ static func _process_witness_tampering_writebacks(
 							_apply_criminal_recall(
 								criminal_2, murder_record, kill_witnesses, dice_engine, world_states,
 							)
+				elif action_id == "CLOUD_THE_MIND":
+					# s33 Cloud the Mind: the witness's entire topic-memory was already wiped in
+					# the executor (they forget the crime). Record the blasphemous mind-tampering
+					# as a DISHONORABLE_CONDUCT crime + a COVERT topic that is NOT seeded to
+					# anyone — only Commune detection (RAW) reveals it.
+					var cloud_concealment: int = effects.get("caster_total", 0)
+					var caster_c: L5RCharacterData = characters_by_id.get(criminal_id)
+					var cloud_location: String = caster_c.physical_location if caster_c != null else record.location
+					var tamper_record: CrimeRecord = CrimeSystem.create_crime_record(
+						next_case_id[0],
+						Enums.CrimeType.DISHONORABLE_CONDUCT,
+						criminal_id,
+						cloud_location,
+						ic_day,
+						witness_id,
+						cloud_concealment,
+						[],
+					)
+					next_case_id[0] += 1
+					tamper_record.source_action = "CLOUD_THE_MIND"  # so Air-Commune detection can find it
+					crime_records.append(tamper_record)
+					if caster_c != null:
+						var tamper_topic: TopicData = _create_crime_topic(
+							tamper_record, caster_c, ic_day, next_topic_id,
+						)
+						if tamper_topic != null:
+							tamper_topic.variant = "cloud_the_mind"
+							active_topics.append(tamper_topic)
 			else:
 				var evidence_add: int = effects.get("evidence_on_fail", 10)
 				record.evidence_total += evidence_add
@@ -6296,6 +6432,18 @@ static func _process_expose_secret_writebacks(
 					break
 
 
+## s33 Garbled Tongue: returns the pierce TN (the caster's frozen School Rank/Air total) for a
+## conversation whose participants include a garbled person this tick, or -1 if neither is garbled.
+## When both are garbled, the higher (harder) TN applies.
+static func _garble_pierce_tn(a_char: L5RCharacterData, b_char: L5RCharacterData, ic_day: int) -> int:
+	var tn: int = -1
+	if a_char != null and a_char.garbled_tongue_ic_day == ic_day:
+		tn = a_char.garbled_tongue_strength
+	if b_char != null and b_char.garbled_tongue_ic_day == ic_day:
+		tn = maxi(tn, b_char.garbled_tongue_strength)
+	return tn
+
+
 static func _process_eavesdrop_writebacks(
 	results: Array,
 	conversation_results: Array,
@@ -6304,6 +6452,7 @@ static func _process_eavesdrop_writebacks(
 	active_topics: Array,
 	next_topic_id: Array,
 	ic_day: int,
+	dice_engine: DiceEngine,
 ) -> void:
 	for r: Variant in results:
 		if not r is Dictionary:
@@ -6347,6 +6496,15 @@ static func _process_eavesdrop_writebacks(
 				continue
 			if a_char.physical_location != location:
 				continue
+			# s33 Garbled Tongue: a garbled conversation is opaque to eavesdroppers — only a shugenja
+			# who WINS a Contested School Rank/Air roll against the caster (the frozen TN) can lift it.
+			var garble_tn: int = _garble_pierce_tn(a_char, b_char, ic_day)
+			if garble_tn >= 0:
+				if not SpellSystem.is_shugenja(eavesdropper):
+					continue
+				var e_air: int = SpellSystem.get_ring_value(eavesdropper, Enums.Ring.AIR)
+				if dice_engine.roll_and_keep(e_air + eavesdropper.insight_rank, e_air, true).total <= garble_tn:
+					continue
 			for key: String in ["topic_shared_by_a", "topic_shared_by_b"]:
 				if topics_learned.size() >= max_topics:
 					break
@@ -11640,6 +11798,7 @@ static func _process_auto_conceal_on_arrival(
 	arrivals: Array,
 	characters_by_id: Dictionary,
 	dice_engine: DiceEngine,
+	ic_day: int = -1,
 ) -> Array:
 	var results: Array = []
 	for arrival: Dictionary in arrivals:
@@ -11650,6 +11809,12 @@ static func _process_auto_conceal_on_arrival(
 		var contraband_items: Array = InventorySystem.get_contraband_on_person(character)
 		if contraband_items.is_empty():
 			continue
+		# s33 Cloak of Night: a shugenja smuggler who knows the spell magically hides their
+		# contraband — a normal vision search (resolve_search_person) then auto-fails.
+		if ic_day >= 0 and SpellSystem.can_cast(character, "cloak_of_night"):
+			var cloak: Dictionary = SpellSystem.activate_cloak_of_night(character, dice_engine, ic_day)
+			if cloak.get("activated", false):
+				results.append({"character_id": char_id, "cloak_of_night": true})
 		for item: Dictionary in contraband_items:
 			if item.get("concealed", false):
 				continue
@@ -11723,7 +11888,9 @@ static func _process_compulsion_on_arrival(
 		var tn: int = trigger.get("tn", 15)
 		var wil: int = character.willpower
 		var compulsion_wound: int = CharacterStats.get_wound_penalty(character)
-		var roll: DiceResult = dice_engine.roll_and_keep(wil, wil, false, false)
+		# Soul of Stone (s34): +3k0 to resist a Compulsion's pull.
+		var soul_resist: int = SkillResolver.SOUL_OF_STONE_RESIST_BONUS if character.has_day_buff("soul_of_stone") else 0
+		var roll: DiceResult = dice_engine.roll_and_keep(wil + soul_resist, wil, false, false)
 		if (roll.total + compulsion_wound) < tn:
 			var comp_dis: DisadvantageData = AdvantageSystem.get_disadvantage(
 				character, Enums.Disadvantage.COMPULSION
@@ -16069,7 +16236,10 @@ static func _inject_urgency_data(
 
 		var char_secrets: Array = []
 		for s: SecretData in active_secrets:
-			if c.character_id in s.known_by_ids and not s.exposed_publicly:
+			# s33 Whispering Wind: a secret the holder has personally verified is a fabrication is
+			# dropped from their EXPOSE/blackmail pool (they will not wield a lie they exposed).
+			if c.character_id in s.known_by_ids and not s.exposed_publicly \
+					and s.secret_id not in c.detected_false_secret_ids:
 				char_secrets.append({
 					"_secret_ref": s,
 					"secret_id": s.secret_id,

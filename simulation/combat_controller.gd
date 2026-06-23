@@ -37,6 +37,37 @@ const STEALTH_TN_NOISY: int = 20
 
 
 # =============================================================================
+# -- Disguise / perception-masking (s33/s36, owner-authorized 2026-06-21) ------
+# -- Illusion disguise spells let a shugenja PC pass enemy guards in the
+# -- stealth approach phase. See-through = Contested Investigation/Perception
+# -- (guard) vs Spellcraft/Air (caster) — the GDD's illusion-detection pattern
+# -- (seeking_the_way / garbled_tongue). The owner's "harder disguise adds a
+# -- bonus" ruling is realized via the spell's own GDD Mastery Level, so no
+# -- flat magnitude is invented. the_mirrors_smile (Water 4, a real flesh
+# -- change rather than an illusion) has the highest ML, so it is hardest to
+# -- see through.
+# =============================================================================
+const DISGUISE_SPELLS: Array[String] = ["hidden_visage", "mask_of_wind", "the_mirrors_smile"]
+
+
+# =============================================================================
+# -- More illusion / perception spells (s33, owner-authorized 2026-06-21) ------
+# -- heart_betrays_eyes: target one guard; their next sighting of the PC is
+# --   fooled unless they pass Investigation vs the caster's Air x5 (GDD TN).
+# -- quiescence_of_air: a stationary silence sphere — no sound crosses it in
+# --   either direction, and a character inside gains 2 Stealth Free Raises.
+# -- by_the_light_of_the_moon: reveals HIDDEN traps in the area.
+# -- All values are GDD-given (no invented magnitude).
+# =============================================================================
+const HEART_BETRAYS_RANGE_TILES: int = 10       # GDD 50' / 5
+const HEART_BETRAYS_ROUNDS: int = 3             # GDD Duration: three rounds
+const QUIESCENCE_RADIUS_TILES: int = 3          # GDD 30' diameter -> 3-tile radius
+const QUIESCENCE_ROUNDS: int = 10               # GDD Duration: 10 Rounds
+const QUIESCENCE_STEALTH_FREE_RAISES: int = 2   # GDD: 2 Free Raises on Stealth
+const MOONLIGHT_REVEAL_RADIUS_TILES: int = 4    # GDD 20' radius / 5
+
+
+# =============================================================================
 # -- LOCKED morale thresholds (s54.8) -----------------------------------------
 # =============================================================================
 
@@ -132,6 +163,23 @@ class EntityState:
 	## Movement budget consumed this round.
 	var move_budget_used:     int = 0
 
+	## -- Disguise / perception-masking (s33/s36 illusion spells) --------------
+	## Active disguise spell id ("" = none). Carried by the PLAYER entity only.
+	var disguise_spell_id:    String = ""
+	## Caster Spellcraft rank + Air ring, frozen at cast (the see-through pool).
+	var disguise_spellcraft:  int = 0
+	var disguise_air:         int = 0
+	## Spell Mastery Level — the owner-ruled "harder disguise adds a bonus",
+	## realized via the spell's own GDD value (no invented magnitude).
+	var disguise_resist_bonus: int = 0
+	## Per-guard see-through outcome: entity_id -> true (penetrated) / false
+	## (fooled). Absence = not yet evaluated. Reset on each fresh disguise.
+	var disguise_seethrough:  Dictionary = {}
+	## -- heart_betrays_eyes (s33): a one-shot, expiring "next sighting fooled"
+	## charge placed ON this guard. Expiry round (-1 = none) + frozen caster Air.
+	var heart_betrays_until_round: int = -1
+	var heart_betrays_air:        int = 0
+
 
 # =============================================================================
 # -- State fields --------------------------------------------------------------
@@ -151,6 +199,9 @@ var _round:        int = 0
 var _player_id:    int = -1
 ## True when the player has activated stealth this round.
 var _player_stealth: bool = false
+
+## Active quiescence_of_air silence spheres: {cx, cy, radius, expiry_round}.
+var _silence_zones: Array[Dictionary] = []
 
 ## Running count of all enemies that have died (for morale checks).
 var _enemy_deaths_total: int = 0
@@ -827,6 +878,8 @@ func try_move_player(dx: int, dy: int) -> Dictionary:
 	# enemy guarding the exit can be fought rather than the player slipping past).
 	var target_es: EntityState = _entity_at(tx, ty)
 	if target_es != null and target_es.faction == FACTION_ENEMY:
+		# Bump-to-attack is an overt hostile act — any active disguise is blown.
+		clear_disguise()
 		var weapon: String = IndividualCombat.pick_best_weapon(player.character)
 		var result: Dictionary = _resolve_melee_attack(player, target_es, weapon, 0)
 		_pending_noise_events.append_array(result.get("morale_events", []))
@@ -917,10 +970,12 @@ func try_stealth_move(dx: int, dy: int) -> Dictionary:
 		player.character, "Stealth", {"is_stealth": true}
 	)
 	var stealth_adv_tn: int = AdvantageSystem.get_tn_modifier(player.character, {"is_stealth": true})
+	# quiescence_of_air: +2 Stealth Free Raises while inside a silence sphere.
+	var silence_fr: int = QUIESCENCE_STEALTH_FREE_RAISES if _in_silence(player.x, player.y) else 0
 	var roll_result: Dictionary = _dice.roll_check(
 		player.character.agility + stealth_rank + stealth_mut["rolled"] + stealth_adv["rolled"],
 		player.character.agility + stealth_mut["kept"] + stealth_adv["kept"],
-		ground_tn, 0, wound_pen - stealth_adv_tn + (stealth_adv["free_raises"] * 5), stealth_rank > 0
+		ground_tn, 0, wound_pen - stealth_adv_tn + (stealth_adv["free_raises"] * 5) + (silence_fr * 5), stealth_rank > 0
 	)
 
 	player.x = tx
@@ -1046,6 +1101,9 @@ func execute_stealth_kill(target_id: int) -> Dictionary:
 	if target.faction != FACTION_ENEMY:
 		return {"success": false, "reason": "not_an_enemy"}
 
+	# Striking is an overt hostile act — any active disguise is blown.
+	clear_disguise()
+
 	# Stealth (Ambush)/Agility to approach.
 	var stealth_rank: int = player.character.skills.get("Stealth", 0)
 	var wound_pen: int = CharacterStats.get_wound_penalty(player.character)
@@ -1154,6 +1212,9 @@ func execute_player_attack(target_id: int, weapon_name: String = "", raises: int
 		return {"success": false, "reason": "invalid_target"}
 	if not _is_adjacent(player.x, player.y, target.x, target.y):
 		return {"success": false, "reason": "not_adjacent"}
+
+	# An open attack is overtly hostile — any active disguise is blown.
+	clear_disguise()
 
 	var weapon: String = weapon_name if weapon_name != "" \
 			else IndividualCombat.pick_best_weapon(player.character)
@@ -1325,6 +1386,13 @@ func _npc_turn(es: EntityState) -> Array:
 
 	# Detect player via FoV (all alert states).
 	var player_seen: bool = _npc_can_see_player(es)
+	# Illusion disguise: a fooled guard reads the player as a friendly and does
+	# not register them as an intruder this turn (s33/s36).
+	if player_seen and _disguise_suppresses(es):
+		player_seen = false
+	# heart_betrays_eyes: a charged guard's next sighting is fooled (s33).
+	if player_seen and _heart_betrays_suppresses(es):
+		player_seen = false
 	var just_became_suspicious: bool = false
 	if player_seen and es.alert_state != AsciiMapEnvironment.AlertState.FLEEING:
 		if es.alert_state == AsciiMapEnvironment.AlertState.UNAWARE:
@@ -1638,6 +1706,10 @@ func _emit_noise(sx: int, sy: int, noise_level: int) -> void:
 
 		var es_pos: Vector2i = Vector2i(es.x, es.y)
 
+		# quiescence_of_air: no sound crosses a silence boundary (either way).
+		if _silence_blocks(sx, sy, es.x, es.y):
+			continue
+
 		# Very Loud = automatic (TN 0).
 		var detected: bool = false
 		if noise_level == AsciiMapEnvironment.NoiseLevel.VERY_LOUD:
@@ -1751,6 +1823,167 @@ func _npc_can_see_player(es: EntityState) -> bool:
 	var perc: int = es.character.perception
 	var radius: int = _fov_radius(perc, es.x, es.y)
 	return FovSystem.is_visible(es.x, es.y, player.x, player.y, radius, _map)
+
+
+# =============================================================================
+# -- Disguise / perception-masking (s33/s36 illusion spells) ------------------
+# =============================================================================
+
+## Apply an illusion disguise spell to the player. The future stealth-command
+## UI (or spell-cast action) calls this; PCs may be shugenja per s60.2. Freezes
+## the see-through contest pool (Spellcraft + Air ring) and the spell's Mastery
+## Level resist bonus. A fresh disguise resets all per-guard see-through results.
+func apply_disguise(spell_id: String) -> Dictionary:
+	if not DISGUISE_SPELLS.has(spell_id):
+		return {"ok": false, "reason": "not_a_disguise_spell"}
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"ok": false, "reason": "no_living_player"}
+	var ml: int = int(SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("m", 0))
+	player.disguise_spell_id = spell_id
+	player.disguise_spellcraft = SkillResolver.get_skill_rank(player.character, "Spellcraft")
+	player.disguise_air = SpellSystem.get_ring_value(player.character, Enums.Ring.AIR)
+	player.disguise_resist_bonus = ml
+	player.disguise_seethrough = {}
+	return {"ok": true, "spell_id": spell_id, "resist_bonus": ml}
+
+## Drop the disguise (overt hostile act, or the spell ending). Idempotent.
+func clear_disguise() -> void:
+	var player: EntityState = get_player()
+	if player == null:
+		return
+	player.disguise_spell_id = ""
+	player.disguise_seethrough = {}
+
+func is_disguised() -> bool:
+	var player: EntityState = get_player()
+	return player != null and player.disguise_spell_id != ""
+
+## True if the player's active disguise prevents guard `es` from registering the
+## player as an intruder this turn. The contested see-through is rolled once per
+## guard and cached; only UNAWARE/SUSPICIOUS guards can be fooled (a guard already
+## ALERT and in combat ignores the disguise).
+func _disguise_suppresses(es: EntityState) -> bool:
+	var player: EntityState = get_player()
+	if player == null or player.disguise_spell_id == "":
+		return false
+	if es.alert_state >= AsciiMapEnvironment.AlertState.ALERT:
+		return false
+	if player.disguise_seethrough.has(es.entity_id):
+		return not bool(player.disguise_seethrough[es.entity_id])
+	var penetrated: bool = _roll_disguise_seethrough(es, player)
+	player.disguise_seethrough[es.entity_id] = penetrated
+	return not penetrated
+
+## Contested Investigation/Perception (guard) vs Spellcraft/Air + spell Mastery
+## Level (caster). The guard penetrates only on a strict win; ties favor the
+## disguise (the defender). Returns true if the disguise is seen through.
+func _roll_disguise_seethrough(guard: EntityState, player: EntityState) -> bool:
+	var g_perc: int = guard.character.perception
+	var g_inv: int = SkillResolver.get_skill_rank(guard.character, "Investigation")
+	var guard_roll: DiceResult = _dice.roll_and_keep(g_perc + g_inv, maxi(1, g_perc), true, false)
+	var c_air: int = player.disguise_air
+	var c_spell: int = player.disguise_spellcraft
+	var caster_roll: DiceResult = _dice.roll_and_keep(c_air + c_spell, maxi(1, c_air), true, false)
+	var caster_total: int = caster_roll.total + player.disguise_resist_bonus
+	return guard_roll.total > caster_total
+
+
+# =============================================================================
+# -- heart_betrays_eyes (s33): fool one guard's next sighting ------------------
+# =============================================================================
+
+## Place a heart_betrays_eyes charge on a guard within 50' (10 tiles). The guard's
+## NEXT sighting of the player is fooled unless they pass Investigation vs the
+## caster's Air x5 (GDD TN). Lapses after 3 rounds if unused.
+func apply_heart_betrays(target_id: int) -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"ok": false, "reason": "no_living_player"}
+	var target: EntityState = _entities.get(target_id)
+	if target == null or _is_entity_dead(target):
+		return {"ok": false, "reason": "invalid_target"}
+	if target.faction == FACTION_PLAYER:
+		return {"ok": false, "reason": "not_an_enemy"}
+	var dist: int = maxi(absi(target.x - player.x), absi(target.y - player.y))
+	if dist > HEART_BETRAYS_RANGE_TILES:
+		return {"ok": false, "reason": "out_of_range"}
+	target.heart_betrays_air = SpellSystem.get_ring_value(player.character, Enums.Ring.AIR)
+	target.heart_betrays_until_round = _round + HEART_BETRAYS_ROUNDS
+	return {"ok": true, "target_id": target_id, "expiry_round": target.heart_betrays_until_round}
+
+## True if guard `es` is fooled this turn by an active heart_betrays charge. The
+## charge is one-shot — consumed on the guard's first spotting attempt whether or
+## not it succeeds. Investigation vs caster Air x5; failure = fooled.
+func _heart_betrays_suppresses(es: EntityState) -> bool:
+	if es.heart_betrays_until_round < 0 or _round > es.heart_betrays_until_round:
+		return false
+	# Consume the one-shot charge.
+	var air_tn: int = es.heart_betrays_air * 5
+	es.heart_betrays_until_round = -1
+	var inv: Dictionary = _dice.roll_check(
+		es.character.perception + SkillResolver.get_skill_rank(es.character, "Investigation"),
+		es.character.perception, air_tn, 0, 0,
+		SkillResolver.get_skill_rank(es.character, "Investigation") > 0
+	)
+	return not bool(inv.get("success", false))
+
+
+# =============================================================================
+# -- by_the_light_of_the_moon (s33): reveal hidden traps ----------------------
+# =============================================================================
+
+## Reveal all HIDDEN traps within 20' (4 tiles) of the player — flips them to
+## DETECTED. Returns {revealed: int, positions: Array[Vector2i]}.
+func cast_moonlight_reveal() -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"revealed": 0, "positions": []}
+	var revealed: Array[Vector2i] = []
+	for t: Dictionary in _map.traps:
+		if t.get("state", TrapSystem.TrapState.HIDDEN) != TrapSystem.TrapState.HIDDEN:
+			continue
+		var tx: int = t.get("x", -1)
+		var ty: int = t.get("y", -1)
+		if maxi(absi(tx - player.x), absi(ty - player.y)) <= MOONLIGHT_REVEAL_RADIUS_TILES:
+			t["state"] = TrapSystem.TrapState.DETECTED
+			revealed.append(Vector2i(tx, ty))
+	return {"revealed": revealed.size(), "positions": revealed}
+
+
+# =============================================================================
+# -- quiescence_of_air (s33): stationary silence sphere -----------------------
+# =============================================================================
+
+## Create a silence sphere (30' diameter, 10 Rounds). Default-centered on the
+## player; pass cx/cy >= 0 to center elsewhere (the GDD 2-Raise relocation).
+func apply_silence_zone(cx: int = -1, cy: int = -1) -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"ok": false, "reason": "no_living_player"}
+	var zx: int = cx if cx >= 0 else player.x
+	var zy: int = cy if cy >= 0 else player.y
+	var zone: Dictionary = {
+		"cx": zx, "cy": zy,
+		"radius": QUIESCENCE_RADIUS_TILES,
+		"expiry_round": _round + QUIESCENCE_ROUNDS,
+	}
+	_silence_zones.append(zone)
+	return {"ok": true, "cx": zx, "cy": zy, "expiry_round": zone["expiry_round"]}
+
+## True if (x, y) lies inside any still-active silence sphere.
+func _in_silence(x: int, y: int) -> bool:
+	for z: Dictionary in _silence_zones:
+		if _round > int(z["expiry_round"]):
+			continue
+		if maxi(absi(x - int(z["cx"])), absi(y - int(z["cy"]))) <= int(z["radius"]):
+			return true
+	return false
+
+## True if a silence boundary separates the two tiles — sound passes neither way
+## (one endpoint inside an active sphere, the other outside).
+func _silence_blocks(sx: int, sy: int, ex: int, ey: int) -> bool:
+	return _in_silence(sx, sy) != _in_silence(ex, ey)
 
 
 # =============================================================================

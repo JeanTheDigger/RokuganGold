@@ -3,17 +3,27 @@ class_name CharacterStats
 ## No state — all methods take a character and return a value.
 
 
-static func get_ring_value(character: L5RCharacterData, ring: Enums.Ring) -> int:
+# ring_deltas (optional, combat-scoped): a {Enums.Ring: int} map of temporary Ring changes from
+# in-combat spells (s34 Essence of Earth ring-up, Water ring-down, etc.). Stored on the combat
+# Participant and threaded through the wound/death chain so a ring-changed combatant's wound
+# capacity / death are computed consistently with the boost. World-sim callers pass nothing
+# ({} -> zero delta), so persistent character rings are never altered (no world-sim leak).
+static func get_ring_value(character: L5RCharacterData, ring: Enums.Ring, ring_deltas: Dictionary = {}) -> int:
+	var base: int
 	if ring == Enums.Ring.VOID:
-		return character.void_ring
-	var traits: Array = Enums.RING_TRAITS[ring]
-	var t1: int = character.get_trait_value(traits[0])
-	var t2: int = character.get_trait_value(traits[1])
-	return mini(t1, t2)
+		base = character.void_ring
+	else:
+		var traits: Array = Enums.RING_TRAITS[ring]
+		base = mini(character.get_trait_value(traits[0]), character.get_trait_value(traits[1]))
+	# Combat ring delta: an explicit ring_deltas arg wins; otherwise fall back to the character's
+	# synced combat read-bridge (empty outside combat) so the whole wound/death chain sees the
+	# boost without threading every call site. Floor at 0.
+	var deltas: Dictionary = ring_deltas if not ring_deltas.is_empty() else character.combat_ring_deltas
+	return maxi(0, base + int(deltas.get(ring, 0)))
 
 
-static func get_earth_ring(character: L5RCharacterData) -> int:
-	return get_ring_value(character, Enums.Ring.EARTH)
+static func get_earth_ring(character: L5RCharacterData, ring_deltas: Dictionary = {}) -> int:
+	return get_ring_value(character, Enums.Ring.EARTH, ring_deltas)
 
 
 static func get_total_skill_ranks(character: L5RCharacterData) -> int:
@@ -68,17 +78,17 @@ static func get_initiative_kept(character: L5RCharacterData) -> int:
 
 # -- Wound System Queries ------------------------------------------------------
 
-static func get_wound_threshold_per_level(character: L5RCharacterData) -> int:
-	return get_earth_ring(character) * 2
+static func get_wound_threshold_per_level(character: L5RCharacterData, ring_deltas: Dictionary = {}) -> int:
+	return get_earth_ring(character, ring_deltas) * 2
 
 
-static func get_wound_level(character: L5RCharacterData) -> Enums.WoundLevel:
+static func get_wound_level(character: L5RCharacterData, ring_deltas: Dictionary = {}) -> Enums.WoundLevel:
 	# s56.16 spirit creatures use their explicit stat-block wound track (wounds_dead
 	# + per-level wound_thresholds), not the PC Earth×2 formula. Inert for real chars.
 	if character.spirit_creature != null and character.spirit_creature.wounds_dead > 0:
 		return _spirit_wound_level(character)
 
-	var threshold: int = get_wound_threshold_per_level(character)
+	var threshold: int = get_wound_threshold_per_level(character, ring_deltas)
 	if threshold <= 0:
 		return Enums.WoundLevel.DEAD
 
@@ -114,16 +124,16 @@ static func get_wound_level(character: L5RCharacterData) -> Enums.WoundLevel:
 	return level
 
 
-static func get_wound_penalty(character: L5RCharacterData) -> int:
-	return Enums.WOUND_PENALTIES[get_wound_level(character)]
+static func get_wound_penalty(character: L5RCharacterData, ring_deltas: Dictionary = {}) -> int:
+	return Enums.WOUND_PENALTIES[get_wound_level(character, ring_deltas)]
 
 
-static func get_total_wound_capacity(character: L5RCharacterData) -> int:
+static func get_total_wound_capacity(character: L5RCharacterData, ring_deltas: Dictionary = {}) -> int:
 	# s56.16 spirit creatures: death at their explicit wounds_dead.
 	if character.spirit_creature != null and character.spirit_creature.wounds_dead > 0:
 		return character.spirit_creature.wounds_dead
 	# 8 wound levels before Dead (Healthy through Out), each Earth*2
-	return get_wound_threshold_per_level(character) * 8
+	return get_wound_threshold_per_level(character, ring_deltas) * 8
 
 
 ## s56.16 spirit wound level: DEAD at wounds_dead; otherwise the level index =
@@ -152,8 +162,8 @@ static func _spirit_wound_level(character: L5RCharacterData) -> Enums.WoundLevel
 	return levels[idx]
 
 
-static func is_dead(character: L5RCharacterData) -> bool:
-	return get_wound_level(character) == Enums.WoundLevel.DEAD
+static func is_dead(character: L5RCharacterData, ring_deltas: Dictionary = {}) -> bool:
+	return get_wound_level(character, ring_deltas) == Enums.WoundLevel.DEAD
 
 
 # DARLING_OF_THE_COURT (s45): +1 effective Status at a specific court settlement.

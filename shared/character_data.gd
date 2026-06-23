@@ -62,6 +62,64 @@ var spell_void_bonus_used: int = 0
 # Just-in-time per-tick activation (SkillResolver); an entry == current ic_day
 # means the buff is active for that tick. Stale entries are ignored/overwritten.
 @export var active_kiho_buffs: Dictionary = {}
+# s37 Altering the Course (Void 2, ishiken): the IC day this spell is active for.
+# When == the current ic_day, the caster may spend MULTIPLE Void Points on a single
+# SkillResolver roll (+NkN) instead of the normal one-per-roll cap. -1 = inactive.
+# (1-minute RAW duration modelled per-tick, matching the kiho-buff convention.)
+@export var altering_course_ic_day: int = -1
+# s33 Cloak of Night (Air 1): a carried/concealed object is magically invisible to vision.
+# Active when cloak_of_night_ic_day == the current ic_day (1-hour RAW duration ~ per-tick).
+# cloak_of_night_strength = the cast roll total, used as the TN for an equal-ML (Air 1)
+# magical-detection contest in resolve_search_person. -1/0 = no cloak.
+@export var cloak_of_night_ic_day: int = -1
+@export var cloak_of_night_strength: int = 0
+# s33 Garbled Tongue (Air 3): the character is a participant in a magically-garbled conversation —
+# eavesdroppers hear false speech and cannot lift this conversation's topics unless a shugenja
+# pierces it. Active when garbled_tongue_ic_day == the current ic_day (5-min RAW duration ~ per-tick).
+# garbled_tongue_strength = the caster's frozen School Rank/Air contest total, the pierce TN an
+# eavesdropping shugenja must beat (read in DayOrchestrator._process_eavesdrop_writebacks). -1/0 = none.
+@export var garbled_tongue_ic_day: int = -1
+@export var garbled_tongue_strength: int = 0
+# s33 Whispering Wind (Air 2): secrets this character has personally verified are fabrications (a
+# successful Whispering Wind cast on the fabrication's author). Durable detection state (NOT subject
+# to knowledge-confidence decay): a flagged secret_id is excluded from this character's known_secrets
+# injection, so they never wield a lie they have exposed for EXPOSE_SECRET / blackmail.
+@export var detected_false_secret_ids: Array = []
+# s33 Voice of the Wind (Air 1): spoken-social buff. Active when == the current ic_day
+# (10-minute RAW duration ~ per-tick). Read by SkillResolver: +1k0 to spoken Social
+# Skill Rolls and +1k1 on a voice Perform Roll (the granted Voice Advantage). -1 = none.
+@export var voice_of_the_wind_ic_day: int = -1
+# Day-long spell buffs (the standard model for any spell whose RAW duration is below the IC-day
+# tick — 10 minutes, 1 hour, etc.): a set of active buff IDs that last the rest of the OOC day
+# they were cast and are cleared wholesale by the daily orchestrator pass (clear_day_buffs). To
+# add one: set_day_buff("<id>") on cast, has_day_buff("<id>") at the read site — no new field or
+# clear-line needed. Current IDs: "soul_of_stone" (s34), "touch_of_airs_grace" (s33),
+# "wolfs_proposal" (s33), "jurojins_balm"/"jurojins_curse" (s34), "earths_touch_stamina"/
+# "earths_touch_willpower" (s34).
+@export var active_day_buffs: Dictionary = {}
+
+func set_day_buff(buff_id: String) -> void:
+	active_day_buffs[buff_id] = true
+
+func has_day_buff(buff_id: String) -> bool:
+	return active_day_buffs.has(buff_id)
+
+func clear_day_buffs() -> void:
+	active_day_buffs.clear()
+
+# s36 Power of the Ocean (Water 5): a multi-DAY sustain ritual (unlike the sub-day buffs above, so
+# it gets dedicated expiry fields, not active_day_buffs). Managed by DayOrchestrator's daily pass
+# (_process_power_of_the_ocean). -1 = inactive. While active (ic_day <= power_of_ocean_until_ic_day)
+# the target recovers power_of_ocean_heal_per_day Wounds/day and counts as rested (Void refresh +
+# natural healing arrive via the normal rest path — DayOrchestrator._counts_as_rested). When the
+# active window ends `until` clears to -1 and the target is exhausted (0 AP — no actions) through
+# power_of_ocean_aftermath_until_ic_day (half the duration), after which all four fields clear.
+# power_of_ocean_void_uses is the on-demand "replenish Void as a Simple Action, School Rank times"
+# reserve, consumed by AsciiMapCombatOrchestrator.execute_replenish_void_ocean (tile combat).
+@export var power_of_ocean_until_ic_day: int = -1
+@export var power_of_ocean_aftermath_until_ic_day: int = -1
+@export var power_of_ocean_heal_per_day: int = 0
+@export var power_of_ocean_void_uses: int = 0
 
 # -- Spells (shugenja only) ----------------------------------------------------
 
@@ -118,6 +176,13 @@ var spell_void_bonus_used: int = 0
 # wrapper for a SpiritCreatureData (the live ASCII spiritual encounter). null for
 # all real characters. Lets the combat ability/override layer read the creature.
 @export var spirit_creature: SpiritCreatureData = null
+# Combat-scoped Ring deltas read-bridge ({Enums.Ring: int}) for in-combat ring-changing spells
+# (s34 Essence of Earth ring-up, Water ring-downs). The AUTHORITATIVE store is the combat
+# Participant (participant-scoped); this is a synced, runtime-only mirror so the static
+# CharacterStats wound/death chain can see the boost without threading every call site. NOT
+# @export -> never serialized, and rigorously cleared at combat setup/teardown/expiry, so it
+# never leaks into the persistent character or the world-sim. Empty outside combat.
+var combat_ring_deltas: Dictionary = {}
 @export var koku: float = 0.0
 @export var months_without_stipend: int = 0
 
@@ -328,6 +393,16 @@ var taint_benefits_suppressed: bool = false
 @export var active_sleeper_command: Dictionary = {}
 ## IC days since last MAINTAIN_SLEEPER_CONTACT (-1 = not a sleeper).
 @export var sleeper_contact_overdue: int = -1
+## s33 The World is Truth: a magically-installed sleeper expires on this IC day (the spell's
+## 1-month duration, +1 month per 3 Raises). -1 = no expiry (a permanent psychological sleeper,
+## or not a sleeper). Cleared with the rest of the sleeper fields when it lapses while dormant.
+@export var sleeper_expiry_ic_day: int = -1
+## s54.7c CONDUCT_CONDITIONING in-progress accumulation: cumulative session progress (0–100) toward
+## installing a permanent psychological sleeper. 0 when not being conditioned or already a sleeper.
+@export var conditioning_progress: float = 0.0
+## The master currently conditioning this target (-1 = none). A second master's sessions do not
+## add to another master's in-progress conditioning.
+@export var conditioning_master_id: int = -1
 
 # -- Kolat koku fields (Section 54.7h; Coin/Master use, stored hidden) ---------
 ## Laundered, untraceable working reserve (Master Coin).

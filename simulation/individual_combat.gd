@@ -115,6 +115,11 @@ const CONDITION_PRONE:     String = "prone"
 const CONDITION_STUNNED:   String = "stunned"
 const CONDITION_AFRAID:     String = "afraid"   # s22.3/s02.4 Fear: -1k0 to all rolls while in range
 const CONDITION_DEAFENED:   String = "deafened" # s35 Fury of Osano-Wo rider; combat effect deferred (no verbal/hearing mechanic)
+# Held/bound/treated-as-Down: the combatant may take no actions on its Turn (the turn loop skips it)
+# and is flat-footed (Armor TN 5). Used by the s34/s36/s35/s37 incapacitation spells (Earth bindings,
+# Water Suitengu's Embrace, Fire Everburning Rage, Void Essence of Void). Applied as a TIMED condition
+# so it runs its full duration (not shed by a recovery roll) and auto-expires in advance_round.
+const CONDITION_INCAPACITATED: String = "incapacitated"
 
 # GDD s40 describes striking after first blood as dishonorable and conceding
 # a death duel as shameful, but specifies no numeric honor/glory values.
@@ -221,6 +226,10 @@ class Participant:
 	# Disarm maneuver (s40): the character's weapon is on the ground — they fight unarmed
 	# until they spend an action to recover it. Cleared by execute_recover_weapon.
 	var disarmed: bool = false
+	# Gathering Swirl (s33 Air 1): the dropped weapon was telekinetically swept beyond the
+	# owner's feet, so it can no longer be recovered (execute_recover_weapon fails). The owner
+	# stays unarmed for the skirmish. Set only on an already-disarmed (un-wielded) weapon.
+	var weapon_swept: bool = false
 	# Victory of the River (s30a): the single opponent currently held under the
 	# Armor-TN debuff ("One opponent at a time"); -1 = none.
 	var votr_target_id: int = -1
@@ -228,6 +237,33 @@ class Participant:
 	# hit; takes 1k1 at the start of each round until a Simple Action extinguishes it.
 	var on_fire: bool = false
 	var absorb_pool: int = 0  # s34 Power of the Earth Dragon: remaining Wounds the ward absorbs (0 = none)
+	# Combat-scoped Ring deltas from in-combat spells (s34 Essence of Earth ring-up, Water
+	# ring-downs): {Enums.Ring: int}. The AUTHORITATIVE participant-scoped store; synced to the
+	# character's combat_ring_deltas read-bridge so the CharacterStats wound/death chain sees the
+	# boost. Lives only on the Participant (destroyed at combat end) -> never leaks persistently.
+	var ring_deltas: Dictionary = {}
+	var ring_delta_expiry: Dictionary = {}  # {Enums.Ring: expiry_round} for the ring deltas above
+
+
+## Combat-scoped Ring deltas for a Participant (empty if none). Null-safe.
+static func ring_deltas_of(p) -> Dictionary:
+	if p == null:
+		return {}
+	return p.ring_deltas
+
+
+## Sync the participant's authoritative ring_deltas onto the character's read-bridge so the static
+## CharacterStats wound/death chain sees the boost. Call after any ring-delta change. A zero/absent
+## delta is removed so the bridge is empty when no ring change is active (the no-leak invariant).
+static func sync_ring_deltas(p: Participant, character: L5RCharacterData) -> void:
+	if character == null:
+		return
+	var bridge: Dictionary = {}
+	if p != null:
+		for ring in p.ring_deltas:
+			if int(p.ring_deltas[ring]) != 0:
+				bridge[ring] = int(p.ring_deltas[ring])
+	character.combat_ring_deltas = bridge
 
 
 class CombatState:
@@ -1012,6 +1048,8 @@ static func get_armor_tn(
 		cond_mod -= 10
 	if CONDITION_STUNNED in participant.conditions:
 		return 5 + character.armor_tn_bonus  # Stunned: Armor TN = 5 + armor bonuses
+	if CONDITION_INCAPACITATED in participant.conditions:
+		return 5 + character.armor_tn_bonus  # Held/bound/treated-as-Down: flat-footed
 	if CONDITION_BLINDED in participant.conditions:
 		# Blinded base = Reflexes + 5 (armor still adds)
 		return character.reflexes + 5 + character.armor_tn_bonus
@@ -1077,6 +1115,7 @@ static func resolve_attack(
 	target_is_mounted: bool = false,
 	maneuver: String = "",
 	adv_context: Dictionary = {},
+	attacker_roll_penalty: int = 0,
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	# Conjured elemental weapon (s33-s36): override the wielded profile. The created weapon's
@@ -1189,6 +1228,9 @@ static func resolve_attack(
 	# Fear (s22.3/s02.4): a frightened combatant suffers -1k0 to all rolls while in range.
 	if CONDITION_AFRAID in attacker_p.conditions:
 		rolled = maxi(0, rolled - 1)
+	# s33 Castle of Air: a defender-imposed -Xk0 penalty on attacks against the warded caster.
+	if attacker_roll_penalty != 0:
+		rolled = maxi(0, rolled + attacker_roll_penalty)
 	if CONDITION_BLINDED in attacker_p.conditions:
 		if weapon.get("melee", true):
 			rolled = maxi(0, rolled - 1)
