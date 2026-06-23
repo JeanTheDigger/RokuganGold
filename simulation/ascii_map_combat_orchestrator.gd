@@ -54,10 +54,27 @@ const HIGH_GROUND_ATTACK_ROLLED: int = 1
 const LOS_EYE_HEIGHT: int = 1
 const LOS_OBSTACLE_HEIGHT: int = 2
 
-## Climb a cliff face (s4.4 Z-axis; owner-locked 2026-06-23). Strength + Athletics
-## vs CLIMB_TN scales (or descends) one cliff tier. A failed climb UP stays put; a
-## failed climb DOWN slips and falls the rest of the way (NkN fall damage).
-const CLIMB_TN: int = 15
+## Climb difficulty by surface material (s4.4 Z-axis; owner-locked 2026-06-23).
+## Strength + Athletics vs the material's TN — not all surfaces are equally hard:
+## timber/palisade gives handholds, sheer worked stone barely any. Used both for an
+## elevation cliff (keyed off the higher tile's terrain) and for scaling a wall
+## (keyed off the wall material).
+const CLIMB_TN_WOOD: int = 15
+const CLIMB_TN_EARTH: int = 20
+const CLIMB_TN_STONE: int = 25
+
+## Climb TN for a tile's material. Wood (timber/palisade) easiest, sheer stone
+## (rock ledge / masonry wall) hardest, everything natural (earth/grass/rubble)
+## in between.
+static func _climb_tn_for_tile(tile: int) -> int:
+	match tile:
+		Enums.TileType.FLOOR_WOOD, Enums.TileType.WALL_WOOD, \
+		Enums.TileType.DOOR_WOOD_CLOSED, Enums.TileType.DOOR_WOOD_OPEN:
+			return CLIMB_TN_WOOD
+		Enums.TileType.FLOOR_STONE, Enums.TileType.WALL_STONE:
+			return CLIMB_TN_STONE
+		_:
+			return CLIMB_TN_EARTH
 ## s40 "Weapon Grapples": a weapon-grappler who loses control of the grapple
 ## hands their opponent 2 Free Raises toward a Disarm Maneuver against them.
 const WEAPON_GRAPPLE_LOSE_CONTROL_DISARM_RAISES: int = 2
@@ -657,13 +674,17 @@ static func execute_move(
 	return {"success": true, "from": old_pos, "to": dest, "fell_prone": fell_prone}
 
 
-## Climb an adjacent cliff face — the only way to traverse an elevation step too
-## steep for normal movement (s4.4 Z-axis). Strength + Athletics vs CLIMB_TN to
-## scale one tier up, or descend one tier down. Costs a Complex action.
-##   up   : success relocates to the higher tile; failure stays put (action spent).
-##   down : success descends safely; failure slips and falls the rest (NkN damage).
-## Rejects a non-cliff step (use execute_move), an impassable/occupied/out-of-range
-## destination, or a down-restricted/entangled climber.
+## Climb to a destination that normal movement cannot reach (s4.4 Z-axis). Two
+## forms, auto-detected from the destination; both cost a Complex action and roll
+## Strength + Athletics vs the surface material's TN (wood 15 / earth 20 / stone 25):
+##   - ELEVATION CLIFF: an adjacent tile a cliff-step away. TN keyed off the higher
+##     tile's terrain. Up relocates on success / stays on failure; down always lands,
+##     and a failed roll slips and falls the rest (NkN damage).
+##   - WALL SCALE: a tile two steps away in a straight orthogonal line with a single
+##     WALL_STONE/WALL_WOOD between. TN keyed off the wall material. Success crosses
+##     to the far tile; failure stays put (no fall — you just fail to get over).
+## Rejects an impassable/occupied/out-of-range/garbled destination, a non-cliff
+## adjacent step (use execute_move), a too-thick wall, or a down-restricted/entangled climber.
 static func execute_climb(
 	state: MapCombatState,
 	char_id: int,
@@ -686,8 +707,6 @@ static func execute_climb(
 	var cur: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
 	if cur.x < 0:
 		return {"success": false, "reason": "position_unknown"}
-	if _chebyshev(cur, dest) != 1:
-		return {"success": false, "reason": "not_adjacent"}
 	if dest.x < 0 or dest.y < 0 or dest.x >= state.map.width or dest.y >= state.map.height:
 		return {"success": false, "reason": "out_of_bounds"}
 	if not MovementSystem.is_passable(state.map.get_tile(dest.x, dest.y)):
@@ -695,35 +714,68 @@ static func execute_climb(
 	for cid: int in state.positions:
 		if cid != char_id and state.positions[cid] == dest:
 			return {"success": false, "reason": "destination_occupied"}
-	if not MovementSystem.is_cliff_step(state.map, cur.x, cur.y, dest.x, dest.y):
-		return {"success": false, "reason": "not_a_cliff"}
 
-	var delta: int = MovementSystem.elevation_delta(state.map, cur.x, cur.y, dest.x, dest.y)
+	var ddx: int = dest.x - cur.x
+	var ddy: int = dest.y - cur.y
+	var is_wall_scale: bool = false
+	var tn: int = CLIMB_TN_EARTH
+	var delta: int = 0
+
+	if _chebyshev(cur, dest) == 1:
+		# Adjacent: an elevation cliff. TN = the higher tile's terrain.
+		if not MovementSystem.is_cliff_step(state.map, cur.x, cur.y, dest.x, dest.y):
+			return {"success": false, "reason": "not_a_cliff"}
+		delta = MovementSystem.elevation_delta(state.map, cur.x, cur.y, dest.x, dest.y)
+		var higher: Vector2i = dest if delta > 0 else cur
+		tn = _climb_tn_for_tile(state.map.get_tile(higher.x, higher.y))
+	elif (ddx == 0 and abs(ddy) == 2) or (ddy == 0 and abs(ddx) == 2):
+		# Two straight steps with a single wall between: scale over it. TN = wall material.
+		var midx: int = cur.x + signi(ddx)
+		var midy: int = cur.y + signi(ddy)
+		var wall_tile: int = state.map.get_tile(midx, midy)
+		if wall_tile != Enums.TileType.WALL_STONE and wall_tile != Enums.TileType.WALL_WOOD:
+			return {"success": false, "reason": "not_a_scalable_wall"}
+		is_wall_scale = true
+		tn = _climb_tn_for_tile(wall_tile)
+	else:
+		return {"success": false, "reason": "invalid_climb_target"}
+
 	ts.consume_complex()
 	var res: Dictionary = SkillResolver.resolve_skill_check(
-		character, dice_engine, "Athletics", CLIMB_TN, 0, "", Enums.Trait.STRENGTH)
+		character, dice_engine, "Athletics", tn, 0, "", Enums.Trait.STRENGTH)
 	var climbed: bool = res.get("success", false)
-	var direction: String = "up" if delta > 0 else "down"
 	var fell: bool = false
 	var fall_dmg: int = 0
-	if delta > 0:
+	var direction: String
+
+	if is_wall_scale:
+		# Scaling a wall: success crosses to the far tile; failure stays put.
+		direction = "over"
+		if climbed:
+			state.positions[char_id] = dest
+	elif delta > 0:
 		# Up: success relocates; failure stays put.
+		direction = "up"
 		if climbed:
 			state.positions[char_id] = dest
 	else:
 		# Down: always ends at the lower tile; a failed climb slips and falls.
+		direction = "down"
 		state.positions[char_id] = dest
 		if not climbed:
 			fell = true
 			fall_dmg = _apply_fall_damage(state, char_id, -delta, dice_engine)
+
 	if state.positions[char_id] != cur:
-		p.facing = Vector2i(signi(dest.x - cur.x), signi(dest.y - cur.y))
+		p.facing = Vector2i(signi(ddx), signi(ddy))
 	state.combat_log.append({
 		"type": "climb", "round": state.combat.round_number, "char_id": char_id,
 		"from": cur, "to": state.positions[char_id], "direction": direction,
+		"wall_scale": is_wall_scale, "tn": tn,
 		"climbed": climbed, "fell": fell, "fall_damage": fall_dmg,
 	})
 	return {"success": true, "climbed": climbed, "direction": direction,
+		"wall_scale": is_wall_scale, "tn": tn,
 		"from": cur, "to": state.positions[char_id], "fell": fell, "fall_damage": fall_dmg}
 
 

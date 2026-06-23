@@ -6917,6 +6917,30 @@ points become real climbable cliffs (s56.11.2 "climbable positions"). Owner-lock
 - **DEFERRED:** the bottomless-pit/void death hazard (Oni Warai), height-aware FOV radius, and the
   renderer's elevation glyph.
 
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 6: climb TN by material + wall-scaling, owner-authorized + runtime-verified)
+Refines Pass 5's flat climb TN — not all surfaces are equally hard to climb — and makes WALLS
+climbable. Owner-locked 2026-06-23: TN by material **wood 15 / earth 20 / stone 25**, and climbing
+scales walls too.
+- **Material-keyed climb TN.** The flat `CLIMB_TN = 15` is replaced by `_climb_tn_for_tile`:
+  FLOOR_WOOD/WALL_WOOD/wooden door → 15, FLOOR_STONE/WALL_STONE → 25, everything natural
+  (earth/grass/rubble/etc.) → 20. An **elevation cliff** keys the TN off the higher tile's terrain
+  (climbing up uses the destination, climbing down the start — the ledge you scale). The ravine
+  descent (a FLOOR_STONE rim notch) is now correctly a hard TN-25 stone climb.
+- **Wall-scaling (new).** `execute_climb` auto-detects a second form: a destination two straight
+  orthogonal steps away with a single WALL_STONE/WALL_WOOD between → scale *over* the wall to the far
+  tile, TN keyed off the wall material (stone 25 / wood 15). Success crosses; failure stays put (no
+  fall — you just fail to get over). So a besieger can scale a 1-thick castle wall onto the wall-walk,
+  and a raider can vault a stockade palisade; thick (≥2) ravine rock walls stay un-scalable (the
+  destination-impassable guard catches them — use the descent notches instead). The elevation-cliff
+  form (adjacent step) is unchanged otherwise: up relocates/stays, down always lands and a failed roll
+  slips and falls (NkN).
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy):** 10/10 + the Pass-5 climb
+  invariants & ravine descent re-pass. Elevation TN by material (wood 15 / earth 20 / stone 25, down
+  keys off the higher tile); wall-scale TN by wall material (wood 15 / stone 25), flagged
+  `wall_scale`/`over`, crosses-on-success / stays-on-failure / never falls over 40 trials; rejects a
+  2-step gap with no wall (`not_a_scalable_wall`) and a thick wall (`destination_impassable`).
+  0 project-wide parse errors.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
