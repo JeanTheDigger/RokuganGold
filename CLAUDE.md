@@ -7047,6 +7047,34 @@ pursue across vertical terrain.
 - **DEFERRED:** the player-facing climb command (PC turn-based UI) is still the only un-wired caller
   of `execute_climb`, on the same PC-travel HOLD as the rest of the live ASCII stack.
 
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — ceremonial dais elevation, owner-authorized + runtime-verified)
+First elevation content in the `AsciiMapGenerator` ZoneSubtype generators (the prior 5 stamping
+passes were all s56 mission templates). Audience halls in Rokugan seat the lord/judge on a raised
+dais; this stamps those daises onto the elevation grid so the seated figure literally holds the
+high ground (the +1k0 attack bonus and see-over LOS the Z-axis already provides) over the
+petitioner floor. A new flavour of the system (status/ceremonial gradient vs the battlefield
+terrain of the prior passes), but the same locked rule (≤3 layers, ramp-by-adjacency,
+connectivity-preserving). New `_raise_rect(map, x1,y1,x2,y2, level)` helper (mirrors `_fill_rect`,
+clamps in-bounds; caller calls `init_elevation` first).
+- **THRONE_ROOM** (Otosan Uchi Imperial Palace landmark) — the two-step Chrysanthemum dais maps to a
+  full 3-layer gradient: the tatami hall = 0, the wide lower step (rows 2–6) = 1, the raised throne
+  step (rows 2–4) = 2. The Emperor on the throne (layer 2) looks down over the lower step and the
+  assembled court.
+- **OHIROMA** (Great Hall, castle/city zone) — the lord's dais (rows 2–5) → layer 1 over the hall.
+- **GOVERNMENT_QUARTER** (magistrate's office) — the magistrate's bench (rows 3–4, behind the dais)
+  → layer 1 over the petitioner floor (the judge looks down on the accused).
+- AUDIENCE_CHAMBER examined and left flat — its "host seat" is an intimate tatami cushion, not a
+  raised platform (no genuine gradient). The ruined-structure **upper floor** (s56.12.3) was also
+  examined and left alone: a second story is *stacked floors* (Option B), explicitly out of scope
+  for the within-map gradient model.
+- Each dais step is +1 (a ramp), so a petitioner can ascend and the hall stays fully reachable.
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy): 3/3 (× 3 seeds each),
+  0 fails, 0 project-wide parse errors.** Per zone: the elevation grid is present and capped at the
+  expected layer (throne 2, ohiroma/govt 1); a **cliff-aware 8-dir flood-fill from the exits reaches
+  the exact same tile set as a flat fill** (0 tiles stranded — the ramps never create a cliff that
+  isolates anything); and the dais center tile is raised. Other ZoneSubtypes are untouched (no
+  `init_elevation` → flat, `has_elevation()` false, exactly as before).
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

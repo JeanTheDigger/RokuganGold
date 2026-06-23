@@ -1093,6 +1093,14 @@ static func _gen_throne_room(map: AsciiMapData, rng: RandomNumberGenerator) -> v
 	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
 	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
 
+	# Elevation (s4.4 Z-axis): the Chrysanthemum dais rises above the hall in two steps —
+	# the wide lower step (layer 1) and the raised throne step (layer 2) — so the Emperor
+	# looks down over the assembled court (high-ground + see-over). Each step is +1 (a ramp),
+	# so a petitioner can ascend and the hall floor stays fully reachable.
+	map.init_elevation(0)
+	_raise_rect(map, 3, 2, S - 4, 6, 1)   # lower dais step
+	_raise_rect(map, 6, 2, S - 7, 4, 2)   # raised throne step
+
 
 # OHIROMA (Great Hall): large formal hall with dais, tatami floor, wood-framed
 # columns, shoji dividers. The lord's primary audience and court space.
@@ -1146,6 +1154,12 @@ static func _gen_ohiroma(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
 	# Zone exit south.
 	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
 	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+	# Elevation (s4.4 Z-axis): the lord's dais (rows 2–5) sits one step (layer 1) above the
+	# tatami hall, so the seated lord holds the high ground over petitioners. +1 = a ramp,
+	# so the dais is climbable and the hall stays fully connected.
+	map.init_elevation(0)
+	_raise_rect(map, 4, 2, S - 5, 5, 1)
 
 
 # ENKAI_HALL (Banquet Hall): entertainment and feasting. Open tatami hall
@@ -1867,6 +1881,12 @@ static func _gen_government_quarter(map: AsciiMapData, rng: RandomNumberGenerato
 		{x = S - 1, y = MID, direction = "east", target_zone_id = ""},
 	]
 
+	# Elevation (s4.4 Z-axis): the magistrate's bench (rows 3–4, behind the dais) sits one
+	# step (layer 1) above the petitioner floor of the north office — the judge looks down on
+	# the accused. +1 = a ramp, so the office stays reachable.
+	map.init_elevation(0)
+	_raise_rect(map, 4, 3, S - 5, 4, 1)
+
 
 # MOUNTAIN_PASS: rocky terrain, narrow winding path between cliff faces,
 # steep elevation, weather exposure.
@@ -2112,6 +2132,19 @@ static func _fill_rect(
 	for y in range(y1, y2 + 1):
 		for x in range(x1, x2 + 1):
 			map.set_tile(x, y, tile)
+
+
+# Stamp an elevation level over a rectangle (s4.4 Z-axis). Clamps to the elevation
+# cap; only touches in-bounds tiles. Caller must have called map.init_elevation()
+# first. Used for ceremonial daises (the lord/judge sits a step above the floor).
+static func _raise_rect(
+	map: AsciiMapData,
+	x1: int, y1: int, x2: int, y2: int,
+	level: int,
+) -> void:
+	for y in range(maxi(0, y1), mini(map.height - 1, y2) + 1):
+		for x in range(maxi(0, x1), mini(map.width - 1, x2) + 1):
+			map.set_elevation(x, y, level)
 
 
 static func _draw_stone_border(
