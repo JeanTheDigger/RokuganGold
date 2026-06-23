@@ -7014,6 +7014,39 @@ through one helper, `_knockback_target`), so the hazard lives in that single hoo
   render cue, and the lethal pit hazard. Remaining Z work is content placement only (more templates stamping
   elevation) — no missing mechanics.
 
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — NPC/companion auto-climb AI, owner-authorized + runtime-verified)
+`execute_climb` (Pass 5/6) was a callable action with no AI caller — enemies and companions would
+sit stranded on the wrong side of a cliff or wall they could scale. This wires a structural-AI
+heuristic (the GDD gives no NPC climb policy; the climb/fall values are all owner-locked) so they
+pursue across vertical terrain.
+- **`_npc_maybe_climb_toward(state, mover_id, tpos, mover, dice)`** — considers the 8 adjacent
+  elevation-cliff steps and the 4 two-step wall-scales (over a single `WALL_STONE`/`WALL_WOOD`),
+  and climbs the candidate that **strictly** reduces Chebyshev distance to `tpos`. Mirrors
+  `execute_climb`'s own gates (passable, unoccupied, real cliff/scalable wall). Returns
+  `execute_climb`'s result, or `{}` when no distance-reducing climb exists. Works on flat maps too
+  (wall-scale only — `is_cliff_step` is false without an elevation grid).
+- **`_nearest_enemy_pos(state, who_id)`** — nearest living different-faction combatant by Chebyshev,
+  ignoring LOS (the pursuer can't see the enemy across the obstacle).
+- **NPC wiring (`execute_npc_turn`):** the climb decision runs **before the stance pick** — climb is
+  the turn's Complex action, and a stance change (a Simple) would forbid the Complex that turn
+  (1 Complex OR 2 Simple), so deciding it after would silently no-op for any NPC that re-stances
+  (e.g. a Kenjutsu-3 NPC dropping to CENTER). Gated on **`find_path` to the nearest enemy being
+  empty** (no normal walking route — genuinely walled/cliffed off) so the NPC never scales a wall
+  when it could just walk around; skipped while grappled/prone/down-restricted. On a successful
+  climb the turn ends (the strike comes next turn — scaling the obstacle IS the turn's action).
+- **Companion wiring (`execute_companion_turn`):** when `_companion_step_toward` its goal tile
+  returns no route, it scales a cliff/wall toward the goal with the same helper (Complex available
+  because companions don't re-stance).
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy): 4/4, 0 fails, 0
+  project-wide parse errors.** A real `execute_npc_turn`: an NPC at a cliff foot scales onto an
+  isolated plateau toward a target it cannot see (lands on layer 2, closer); an NPC below a solid
+  `WALL_STONE` line with no walk-around scales over it to the far tile; on open ground (a clear path
+  exists) the NPC just walks and never climbs; and a real `execute_companion_turn` — a `MOVE_TO`
+  companion below a walled-off goal scales the wall toward it. Prior Z-axis drivers (pit, FOV)
+  re-pass — no regression.
+- **DEFERRED:** the player-facing climb command (PC turn-based UI) is still the only un-wired caller
+  of `execute_climb`, on the same PC-travel HOLD as the rest of the live ASCII stack.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

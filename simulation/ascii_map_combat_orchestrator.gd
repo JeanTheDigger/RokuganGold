@@ -6494,6 +6494,22 @@ static func execute_npc_turn(
 			actions_taken.append({"action": "guard", "result": guard_r})
 			return {"actions": actions_taken}
 
+	# -- Auto-climb toward an enemy blocked by a cliff/wall (s4.4 Z-axis) ------
+	# Decided BEFORE the stance pick: climb is the turn's Complex action, and a stance change
+	# (a Simple) would forbid the Complex this turn (1 Complex OR 2 Simple). Only fires when
+	# there is NO normal walking route to the nearest enemy (find_path empty — genuinely walled
+	# or cliffed off) AND a cliff/wall scale strictly closes the gap, so the NPC never climbs
+	# when it could just walk around. Skipped while grappled/prone/down-restricted.
+	if ts.can_use_complex() and not ts.is_down_restricted(wl) \
+			and not IndividualCombat.has_condition(p, IndividualCombat.CONDITION_GRAPPLED) \
+			and not IndividualCombat.has_condition(p, IndividualCombat.CONDITION_PRONE):
+		var ne: Vector2i = _nearest_enemy_pos(state, npc_id)
+		if ne.x >= 0 and find_path(state, npc_id, ne).is_empty():
+			var eclimb: Dictionary = _npc_maybe_climb_toward(state, npc_id, ne, npc, dice_engine)
+			if eclimb.get("success", false):
+				actions_taken.append({"action": "climb", "result": eclimb})
+				return {"actions": actions_taken}
+
 	# -- Pick optimal stance -----------------------------------------------
 	var stance_result: Dictionary = _npc_pick_stance(state, npc_id, npc, chars_by_id, dice_engine)
 	if stance_result.get("changed", false):
@@ -7075,6 +7091,65 @@ static func _npc_move_toward(
 	return execute_move(state, npc_id, dest, budget, npc, dice_engine, action_type)
 
 
+## NPC auto-climb toward an otherwise-unreachable goal (s4.4 Z-axis). When normal
+## movement can't close on `tpos` because a cliff or wall blocks the direct approach,
+## scale it: considers the 8 adjacent elevation-cliff steps and the 4 two-step
+## wall-scales (over a single WALL_STONE/WALL_WOOD), and climbs the one that STRICTLY
+## reduces Chebyshev distance to the goal. Climb is the turn's Complex action, so the
+## caller ends the turn after a successful climb. Returns execute_climb's result, or {}
+## when no distance-reducing climb is available. Structural AI — the GDD gives no NPC
+## climb policy; the climb/fall values are all owner-locked.
+static func _npc_maybe_climb_toward(
+	state: MapCombatState, mover_id: int, tpos: Vector2i,
+	mover: L5RCharacterData, dice_engine: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(mover_id, null)
+	if ts == null or not ts.can_use_complex() or state.map == null:
+		return {}
+	var cur: Vector2i = state.positions.get(mover_id, Vector2i(-1, -1))
+	if cur.x < 0 or tpos.x < 0:
+		return {}
+	var cur_dist: int = maxi(absi(tpos.x - cur.x), absi(tpos.y - cur.y))
+	if cur_dist <= 1:
+		return {}  # already adjacent to the goal
+	var occupied: Dictionary = {}
+	for cid: int in state.positions:
+		if cid != mover_id:
+			occupied[state.positions[cid]] = true
+	# Candidates: 8 adjacent cliff tiles + 4 two-step wall-scale tiles.
+	var cands: Array[Vector2i] = []
+	for ax in [-1, 0, 1]:
+		for ay in [-1, 0, 1]:
+			if ax != 0 or ay != 0:
+				cands.append(Vector2i(cur.x + ax, cur.y + ay))
+	cands.append(Vector2i(cur.x + 2, cur.y)); cands.append(Vector2i(cur.x - 2, cur.y))
+	cands.append(Vector2i(cur.x, cur.y + 2)); cands.append(Vector2i(cur.x, cur.y - 2))
+	var best_dest: Vector2i = Vector2i(-1, -1)
+	var best_dist: int = cur_dist
+	for d: Vector2i in cands:
+		if d.x < 0 or d.y < 0 or d.x >= state.map.width or d.y >= state.map.height:
+			continue
+		if occupied.has(d) or not MovementSystem.is_passable(state.map.get_tile(d.x, d.y)):
+			continue
+		var ddx: int = d.x - cur.x
+		var ddy: int = d.y - cur.y
+		var climbable: bool = false
+		if maxi(absi(ddx), absi(ddy)) == 1:
+			climbable = MovementSystem.is_cliff_step(state.map, cur.x, cur.y, d.x, d.y)
+		elif (ddx == 0 and absi(ddy) == 2) or (ddy == 0 and absi(ddx) == 2):
+			var midt: int = state.map.get_tile(cur.x + signi(ddx), cur.y + signi(ddy))
+			climbable = (midt == Enums.TileType.WALL_STONE or midt == Enums.TileType.WALL_WOOD)
+		if not climbable:
+			continue
+		var nd: int = maxi(absi(tpos.x - d.x), absi(tpos.y - d.y))
+		if nd < best_dist:
+			best_dist = nd
+			best_dest = d
+	if best_dest.x < 0:
+		return {}
+	return execute_climb(state, mover_id, best_dest, mover, dice_engine)
+
+
 ## Execute NPC attack with smart raise selection (GDD s40 maneuvers).
 ## When use_extra_attack is true, declares 5 Raises for Extra Attack (GDD s40:
 ## "These Raises confer no other benefits"), precluding Increased Damage.
@@ -7118,6 +7193,29 @@ static func _npc_should_grapple(npc: L5RCharacterData) -> bool:
 	for sk: String in _NPC_WEAPON_SKILLS:
 		best_weapon = maxi(best_weapon, int(npc.skills.get(sk, 0)))
 	return jj >= best_weapon
+
+
+# Position of the nearest living enemy (different faction) to `who_id` by Chebyshev
+# distance, or (-1,-1) if none. Ignores LOS — used by the auto-climb pursuer to find an
+# enemy it cannot currently see across an obstacle (s4.4 Z-axis).
+static func _nearest_enemy_pos(state: MapCombatState, who_id: int) -> Vector2i:
+	var wpos: Vector2i = state.positions.get(who_id, Vector2i(-1, -1))
+	if wpos.x < 0:
+		return Vector2i(-1, -1)
+	var my_faction: String = String(state.factions.get(who_id, ""))
+	var best: Vector2i = Vector2i(-1, -1)
+	var best_d: int = 1 << 30
+	for eid in state.positions.keys():
+		if String(state.factions.get(eid, "")) == my_faction:
+			continue
+		var ech = state.combatants.get(eid, null)
+		if ech == null or CharacterStats.is_dead(ech):
+			continue
+		var d: int = maxi(absi(wpos.x - state.positions[eid].x), absi(wpos.y - state.positions[eid].y))
+		if d < best_d:
+			best_d = d
+			best = state.positions[eid]
+	return best
 
 
 # True if a living enemy of `faction` is adjacent (within 1 tile) to the character at `who_id`.
@@ -7491,6 +7589,12 @@ static func execute_companion_turn(
 		var mv2: Dictionary = _companion_step_toward(state, cid, goal_tile, character, dice_engine)
 		if mv2.get("success", false):
 			actions.append({"action": "move", "result": mv2})
+		elif ts.can_use_complex():
+			# Blocked by a cliff or wall — scale it toward the goal (s4.4 Z-axis). Climb is the
+			# turn's Complex action, so the companion commits its turn to getting over the obstacle.
+			var cclimb: Dictionary = _npc_maybe_climb_toward(state, cid, goal_tile, character, dice_engine)
+			if cclimb.get("success", false):
+				actions.append({"action": "climb", "result": cclimb})
 	return {"actions": actions, "command": cmd}
 
 
