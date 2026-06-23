@@ -67,6 +67,18 @@ extends Resource
 @export var overlap_max_depth: int = 0       # heart depth, for healing-from-heart
 @export var restoration_progress: float = 0.0  # 0..1 ritual healing, heart outward
 
+# -- Elevation / Z-axis (s4.4 "roofing/elevation indicators") -----------------
+# Per-tile elevation level. index = y*width+x. 0 = ground; each +1 = one step up,
+# ≈ 5 ft (1 level = 1 tile-height, matching MovementSystem's 1 tile = 5 ft). A
+# parallel grid like depth_grid / overlap_intensity — base tile_types are NOT
+# mutated. Empty (size != width*height) = a flat map (every level 0), so every
+# map without an explicit elevation pass is unaffected. Cliff/fall thresholds and
+# high-ground combat live in MovementSystem and the combat orchestrator; the
+# numeric model was locked by the owner 2026-06-23 (s4.4 line 121 defers elevation
+# to engine development — no LOCKED numbers exist).
+const MAX_ELEVATION: int = 15
+@export var elevation: PackedByteArray = []
+
 # -- Zone connections ---------------------------------------------------------
 
 # Each entry: {x:int, y:int, direction:String, target_zone_id:String}
@@ -326,6 +338,42 @@ func depth_at(x: int, y: int) -> int:
 
 func has_depth_grid() -> bool:
 	return depth_grid.size() == width * height
+
+
+# -- Elevation / Z-axis helpers (s4.4) ----------------------------------------
+
+# Elevation level at (x,y). 0 for out-of-bounds or a flat (no-elevation) map.
+func elevation_at(x: int, y: int) -> int:
+	if x < 0 or x >= width or y < 0 or y >= height:
+		return 0
+	if elevation.size() != width * height:
+		return 0
+	return elevation[y * width + x]
+
+
+# True when an elevation grid has been computed for this map.
+func has_elevation() -> bool:
+	return elevation.size() == width * height
+
+
+# Allocates a flat elevation grid (every tile at `level`). Generators that add
+# verticality call this before raising individual tiles via set_elevation.
+func init_elevation(level: int = 0) -> void:
+	var count: int = width * height
+	elevation.resize(count)
+	var v: int = clampi(level, 0, MAX_ELEVATION)
+	for i in range(count):
+		elevation[i] = v
+
+
+# Raises/sets the elevation of one tile. Lazily allocates a flat grid first so a
+# generator can stamp heights onto a map that had none. Clamped to [0, MAX_ELEVATION].
+func set_elevation(x: int, y: int, level: int) -> void:
+	if x < 0 or x >= width or y < 0 or y >= height:
+		return
+	if elevation.size() != width * height:
+		init_elevation()
+	elevation[y * width + x] = clampi(level, 0, MAX_ELEVATION)
 
 
 # True when a spiritual overlap has been applied to this map (s56.16.1b).

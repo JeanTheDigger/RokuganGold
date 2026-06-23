@@ -23,6 +23,34 @@ static func is_passable(tile: int) -> bool:
 	return terrain_cost(tile) > 0
 
 
+# ── Elevation / Z-axis (s4.4; numeric model locked by owner 2026-06-23) ───────
+# 1 elevation level = one tile-height ≈ 5 ft (matching 1 tile = 5 ft).
+## A single step rising by CLIFF_THRESHOLD or more levels is a vertical face:
+## normal movement cannot scale it — a deliberate climb action is required.
+const CLIFF_THRESHOLD: int = 2
+## A single step dropping by FALL_THRESHOLD or more levels is a fall. Casual
+## movement does not walk off such a ledge; a fall is produced by forced movement
+## (knockback), where the combat orchestrator applies the falling damage.
+const FALL_THRESHOLD: int = 2
+
+
+## Elevation change (to_elev − from_elev) for a step. Always 0 on a flat map
+## (one without a computed elevation grid), so flat maps are unaffected.
+static func elevation_delta(map: AsciiMapData, fx: int, fy: int, tx: int, ty: int) -> int:
+	if map == null or not map.has_elevation():
+		return 0
+	return map.elevation_at(tx, ty) - map.elevation_at(fx, fy)
+
+
+## True if a single step from (fx,fy) to (tx,ty) crosses an impassable elevation
+## face — too steep to climb up (rise ≥ CLIFF_THRESHOLD) or too far to step down
+## (drop ≥ FALL_THRESHOLD). Such steps are blocked for normal movement and
+## pathfinding; a ≥-drop becomes a fall only under forced movement.
+static func is_cliff_step(map: AsciiMapData, fx: int, fy: int, tx: int, ty: int) -> bool:
+	var d: int = elevation_delta(map, fx, fy, tx, ty)
+	return d >= CLIFF_THRESHOLD or d <= -FALL_THRESHOLD
+
+
 static func is_closed_door(tile: int) -> bool:
 	return tile == Enums.TileType.DOOR_SHOJI_CLOSED \
 		or tile == Enums.TileType.DOOR_WOOD_CLOSED \
@@ -64,21 +92,28 @@ static func budget(water_ring: int, action: MoveAction) -> int:
 
 ## Validate a single step from (from_x, from_y) to (to_x, to_y) on map.
 ## Returns a Dictionary:
-##   ok      bool  — move is physically valid
-##   cost    int   — budget tiles consumed (0 when ok==false)
-##   is_door bool  — target is a closed door (bump to open, player stays)
-##   is_exit bool  — target is a ZONE_EXIT tile (triggers zone transition)
+##   ok        bool  — move is physically valid
+##   cost      int   — budget tiles consumed (0 when ok==false)
+##   is_door   bool  — target is a closed door (bump to open, player stays)
+##   is_exit   bool  — target is a ZONE_EXIT tile (triggers zone transition)
+##   is_cliff  bool  — blocked by an elevation face (rise/drop too steep to walk)
+##   elev_delta int  — to_elev − from_elev (0 on flat maps)
 static func check_step(
 	map: AsciiMapData,
-	_from_x: int, _from_y: int,
+	from_x: int, from_y: int,
 	to_x: int, to_y: int,
 ) -> Dictionary:
 	if to_x < 0 or to_y < 0 or to_x >= map.width or to_y >= map.height:
-		return {ok = false, cost = 0, is_door = false, is_exit = false}
+		return {ok = false, cost = 0, is_door = false, is_exit = false, is_cliff = false, elev_delta = 0}
 	var tile: int = map.get_tile(to_x, to_y)
 	if is_closed_door(tile):
-		return {ok = false, cost = 0, is_door = true, is_exit = false}
+		return {ok = false, cost = 0, is_door = true, is_exit = false, is_cliff = false, elev_delta = 0}
+	var ed: int = elevation_delta(map, from_x, from_y, to_x, to_y)
+	# ZONE_EXIT tiles sit at the map edge; they are always steppable (never gated
+	# by an elevation face).
 	if tile == Enums.TileType.ZONE_EXIT:
-		return {ok = true, cost = 1, is_door = false, is_exit = true}
+		return {ok = true, cost = 1, is_door = false, is_exit = true, is_cliff = false, elev_delta = ed}
+	if is_cliff_step(map, from_x, from_y, to_x, to_y):
+		return {ok = false, cost = 0, is_door = false, is_exit = false, is_cliff = true, elev_delta = ed}
 	var cost: int = terrain_cost(tile)
-	return {ok = cost > 0, cost = cost, is_door = false, is_exit = false}
+	return {ok = cost > 0, cost = cost, is_door = false, is_exit = false, is_cliff = false, elev_delta = ed}

@@ -6750,6 +6750,56 @@ reachable in a live game session.** Full file-by-file breakdown in `ASCII_MAP_GA
   MissionLauncher → CombatScreen`, then build the player command loop and runtime-verify the
   static-only layers.
 
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 1: data + movement + fall, owner-authorized + runtime-verified)
+First cut of per-tile **elevation** on the ASCII map. s4.4 line 121 explicitly defers
+"roofing/elevation indicators" to engine development (design principles locked, NO numbers),
+so the numeric model was **locked by the owner 2026-06-23** (the falling-damage value is the
+real L5R 4e core rule, not invented). Owner-chosen scope: tile elevation/height (one grid,
+tiles at different heights) doing all four effects (movement, LOS/cover, ranged/attack, falling);
+Pass 1 builds **data + movement + fall**, deferring height-aware LOS/cover and the +1k0 high-ground
+attack bonus to Pass 2 (their values are already locked below).
+- **Data — `AsciiMapData.elevation: PackedByteArray`** (a parallel grid like `depth_grid`/
+  `overlap_intensity`; `y*width+x`; 0 = ground, each +1 = one ~5 ft step = 1 tile-height).
+  Empty (size != width*height) = a flat map → **every existing map is unaffected** (verified).
+  `const MAX_ELEVATION = 15`; helpers `elevation_at` / `has_elevation` / `init_elevation` /
+  `set_elevation` (lazy-allocates, clamps to [0, MAX]). Base `tile_types` are never mutated.
+- **Movement — cliff/fall model (LOCKED 2026-06-23).** `MovementSystem.CLIFF_THRESHOLD = 2`
+  (a single step rising ≥2 levels is a vertical face — normal movement cannot scale it, a
+  deliberate climb action is required), `FALL_THRESHOLD = 2` (a single step dropping ≥2 is a
+  fall). `elevation_delta(map,fx,fy,tx,ty)` (0 on flat maps) and `is_cliff_step(...)` (rise ≥
+  CLIFF or drop ≥ FALL). `check_step` is now elevation-aware (the formerly-unused `from_x/from_y`
+  are read): returns two new keys `is_cliff` and `elev_delta` (additive — every consumer reads
+  individual keys, none break). ZONE_EXIT tiles bypass the cliff gate (always steppable).
+  The orchestrator's `get_reachable_tiles` + `find_path` BFS skip cliff steps, so a character
+  never walks up a cliff or off a ledge (and `execute_move` inherits it via the reachability
+  gate). The CombatController stealth/flee layer inherits cliff-respect for free (no-op on flat
+  maps).
+- **Fall — falling damage (LOCKED 2026-06-23).** `_apply_fall_damage(state, char_id, levels,
+  dice)`: DR = `levels k levels` exploding = the L5R 4e core rule "1k1 Wounds per 5 ft fallen"
+  (1 level = 5 ft). Like other environmental hazards in this layer (FireSystem), a fall bypasses
+  armor Reduction (PROVISIONAL — owner may want Reduction to apply; flagged). `_knockback_target`
+  gained a trailing `dice_engine` param: a target shoved off a ledge (drop ≥ FALL) lands on the
+  lower tile and takes the fall damage (logs a `"fall"` combat event); a target shoved into an
+  upward cliff face (rise ≥ CLIFF) stops at the face (no pass-through, no fall). The single
+  caller (Hurricane Palm knockback) passes `dice_engine`; the param defaults null (graceful — no
+  fall damage when omitted).
+- **Runtime-verified (Godot 4.6.2, headless drivers in a minimal autoload-free copy — the full
+  project's Node autoloads stall a `-s` run):** 29/29 assertions, 0 fails, 0 project-wide parse
+  errors. Pure layer (20): elevation grid get/set/clamp/oob, `elevation_delta`/`is_cliff_step`
+  (rise+3/drop−3 cliff, ±1 walkable, flat-never-cliff), `check_step` cliff/flat fields. Orchestrator
+  layer (9): `get_reachable_tiles`/`find_path` exclude a cliff plateau (and a FLAT control map
+  reaches the same column — proving elevation is the blocker), knockback-off-ledge lands lower +
+  deals NkN + logs `fall`, flat knockback deals no fall damage, knockback into an upward cliff
+  stops at the face.
+- **DEFERRED — Pass 2 (values already locked):** attacker ≥1 level above target → **+1k0** to
+  the attack (melee + ranged); a target ≥1 level below behind a higher lip → reuse the existing
+  **+5 Armor TN** cover; **height-aware LOS** (a blocking tile occludes the sightline only when
+  its top — elevation + ~2 for walls/trees — reaches the interpolated view-ray height, so a
+  hilltop archer sees over a low wall a ground archer cannot). Also unwired: a deliberate
+  climb-up action (cliffs are currently impassable, not climbable), generators stamping
+  elevation (hilltop/ravine/ship still use their binary zone tags — Pass 1 leaves every map flat),
+  and the renderer's elevation indicator (s4.4 "roofing/elevation indicators" glyph).
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

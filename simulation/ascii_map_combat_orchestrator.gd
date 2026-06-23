@@ -348,6 +348,9 @@ static func get_reachable_tiles(
 				var step_cost: int = MovementSystem.terrain_cost(tile)
 				if step_cost == 0:
 					continue  # impassable
+				# Elevation face: cannot walk up a cliff or off a ledge (s4.4 Z-axis).
+				if MovementSystem.is_cliff_step(state.map, pos.x, pos.y, nx, ny):
+					continue
 
 				var new_cost: int = cost + step_cost
 				if new_cost > move_budget:
@@ -409,6 +412,9 @@ static func find_path(
 					continue
 				var tile: int = state.map.get_tile(nv.x, nv.y)
 				if MovementSystem.terrain_cost(tile) == 0:
+					continue
+				# Elevation face: pathing never routes up a cliff or off a ledge (s4.4 Z-axis).
+				if MovementSystem.is_cliff_step(state.map, pos.x, pos.y, nv.x, nv.y):
 					continue
 				visited[nv] = true
 				came_from[nv] = pos
@@ -4810,7 +4816,7 @@ static func execute_hurricane_palm(
 		if kb > 0 and _root_the_mountain_resists(target, t_p, attacker, dice_engine):
 			kb = 0
 			result["root_the_mountain_resisted"] = true
-		result["knockback_to"] = _knockback_target(state, target_id, apos, kb)
+		result["knockback_to"] = _knockback_target(state, target_id, apos, kb, dice_engine)
 		IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_PRONE)
 		result["wounds_inflicted"] = wd.get("final_damage", half)
 		result["knockback_tiles"] = kb
@@ -4841,7 +4847,7 @@ static func _root_the_mountain_resists(
 
 ## Push a target up to `tiles` tiles directly away from `from_pos`, stopping at a wall,
 ## an occupied tile, or the map edge. Updates and returns the new position. (s38 knockback.)
-static func _knockback_target(state: MapCombatState, target_id: int, from_pos: Vector2i, tiles: int) -> Vector2i:
+static func _knockback_target(state: MapCombatState, target_id: int, from_pos: Vector2i, tiles: int, dice_engine: DiceEngine = null) -> Vector2i:
 	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
 	if tiles <= 0 or tpos.x < 0:
 		return tpos
@@ -4854,15 +4860,51 @@ static func _knockback_target(state: MapCombatState, target_id: int, from_pos: V
 		if cid != target_id:
 			occupied[state.positions[cid]] = true
 	var cur: Vector2i = tpos
+	var fell_levels: int = 0
 	for _n in range(tiles):
 		var nxt: Vector2i = Vector2i(cur.x + dx, cur.y + dy)
 		if state.map == null or not MovementSystem.is_passable(state.map.get_tile(nxt.x, nxt.y)):
 			break
 		if occupied.has(nxt):
 			break
+		# Elevation face (s4.4 Z-axis): being shoved into an upward cliff stops the
+		# knockback (slammed into the face); being shoved off a downward ledge sends
+		# the target over the edge — they land on the lower tile and fall.
+		var ed: int = MovementSystem.elevation_delta(state.map, cur.x, cur.y, nxt.x, nxt.y)
+		if ed >= MovementSystem.CLIFF_THRESHOLD:
+			break
 		cur = nxt
+		if ed <= -MovementSystem.FALL_THRESHOLD:
+			fell_levels = -ed
+			break
 	state.positions[target_id] = cur
+	if fell_levels > 0 and dice_engine != null:
+		_apply_fall_damage(state, target_id, fell_levels, dice_engine)
 	return cur
+
+
+## Applies falling damage for a drop of `levels` elevation levels (1 level ≈ 5 ft).
+## DR = levels k levels exploding — the L5R 4e core rule "1k1 Wounds per 5 ft
+## fallen" (model locked by owner 2026-06-23). Like other environmental hazards in
+## this layer (FireSystem), a fall bypasses armor Reduction. Returns Wounds dealt.
+static func _apply_fall_damage(state: MapCombatState, char_id: int, levels: int, dice_engine: DiceEngine) -> int:
+	if levels <= 0 or dice_engine == null:
+		return 0
+	var ch: L5RCharacterData = state.combatants.get(char_id, null)
+	if ch == null or CharacterStats.is_dead(ch):
+		return 0
+	var n: int = clampi(levels, 1, 10)
+	var dmg: int = dice_engine.roll_and_keep(n, n, true).total
+	WoundSystem.apply_damage(ch, dmg, 0)
+	state.combat_log.append({
+		"type": "fall",
+		"round": state.combat.round_number,
+		"char_id": char_id,
+		"levels": levels,
+		"damage": dmg,
+		"dead": CharacterStats.is_dead(ch),
+	})
+	return dmg
 
 
 ## Way of the Willow (s38 Air): a defender may spend a Void Point to interrupt a declared
