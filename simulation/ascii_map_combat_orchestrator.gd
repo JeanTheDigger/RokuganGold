@@ -1919,6 +1919,44 @@ static func execute_recover_weapon(
 	return {"success": true}
 
 
+## s36 Power of the Ocean (Water 5): while the multi-day sustain buff is ACTIVE the target may, as a
+## Simple Action, replenish Void Points to full ("equivalent to a full night's rest"), School Rank
+## times across the duration (drawn from power_of_ocean_void_uses — the same budget the world-sim
+## daily restore uses). Gated on the active window only (power_of_ocean_until_ic_day clears the
+## moment the active period ends, so this is unavailable during the exhaustion aftermath).
+static func execute_replenish_void_ocean(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if character.power_of_ocean_until_ic_day < 0:
+		return {"success": false, "reason": "ocean_not_active"}
+	if character.power_of_ocean_void_uses <= 0:
+		return {"success": false, "reason": "no_ocean_void_uses_remaining"}
+	if character.current_void_points >= character.max_void_points:
+		return {"success": false, "reason": "void_already_full"}
+	var wl: int = CharacterStats.get_wound_level(character)
+	if ts.is_down_restricted(wl):
+		return {"success": false, "reason": "down_only_free_actions"}
+	if not ts.can_use_simple():
+		return {"success": false, "reason": "no_simple_actions_remaining"}
+	VoidSystem.restore_full(character)
+	character.power_of_ocean_void_uses -= 1
+	ts.consume_simple()
+	state.combat_log.append({
+		"type": "ocean_void_replenish",
+		"round": state.combat.round_number,
+		"char_id": char_id,
+		"uses_remaining": character.power_of_ocean_void_uses,
+	})
+	return {"success": true, "uses_remaining": character.power_of_ocean_void_uses}
+
+
 ## Arugai "Nearly Immortal" counter-play (s54.5): a Complex Action to tear open a
 ## regenerating heart_kill oni's chest and locate its tiny heart — Investigation
 ## (Perception) vs TN 30, requires melee adjacency. On success the heart is exposed

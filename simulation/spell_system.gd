@@ -654,6 +654,48 @@ static func activate_mental_quickness(
 	return res
 
 
+## s36 Power of the Ocean (Water 5, Defense) — Touch, 1 willing target, Duration: Days equal to
+## School Rank (+1 day per 3 Raises). A MULTI-DAY sustain ritual (not a sub-day day-buff — it gets
+## dedicated expiry fields on the target, swept by DayOrchestrator._process_power_of_the_ocean).
+## While active the target, regardless of rest: recovers 2 x caster Water Ring Wounds/hour (= /24h =
+## a full daily heal) and may replenish Void Points to full School-Rank times across the duration
+## ("a full night's rest" equivalent, drawn from power_of_ocean_void_uses; also usable as a
+## tile-combat Simple action via AsciiMapCombatOrchestrator.execute_replenish_void_ocean). After it
+## expires the target lapses into complete exhaustion (0 AP, no actions/travel) for exactly half the
+## duration. Self-cast when target is null (the caster is a willing target). INERT halves (documented,
+## no consumer to invent): "no food, drink, or sleep" (no individual hunger/fatigue upkeep — the
+## direct recovery captures the no-sleep intent) and "a shugenja regains expended spell slots at
+## sunrise regardless of rest" (already the daily default — every living character's slots reset each
+## IC day via ActionPointSystem.reset_daily_ap). Requires a real ic_day (>= 0) to set the windows.
+static func activate_power_of_the_ocean(
+	caster: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	target: L5RCharacterData = null, raises: int = 0
+) -> Dictionary:
+	if not can_cast(caster, "power_of_the_ocean"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	if ic_day < 0:
+		return {"success": false, "activated": false, "reason": "needs_ic_day"}
+	var beneficiary: L5RCharacterData = target if target != null else caster
+	var res: Dictionary = resolve_cast(caster, "power_of_the_ocean", dice, raises, beneficiary, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		# "School Rank" maps to effective Water school rank (the wired-spell convention). The Void
+		# replenish budget is School Rank; the duration is School Rank + 1 day per 3 Raises.
+		var school_rank: int = get_effective_school_rank(caster, Enums.Ring.WATER)
+		var duration: int = maxi(1, school_rank + int(raises / 3))
+		var half: int = int(duration / 2)
+		beneficiary.power_of_ocean_until_ic_day = ic_day + duration - 1
+		beneficiary.power_of_ocean_aftermath_until_ic_day = beneficiary.power_of_ocean_until_ic_day + half
+		beneficiary.power_of_ocean_heal_per_day = 2 * get_ring_value(caster, Enums.Ring.WATER) * 24
+		beneficiary.power_of_ocean_void_uses = school_rank
+		res["target_id"] = beneficiary.character_id
+		res["duration_days"] = duration
+		res["aftermath_days"] = half
+		res["heal_per_day"] = beneficiary.power_of_ocean_heal_per_day
+		res["void_uses"] = school_rank
+	return res
+
+
 ## s33 Cloud the Mind (Air 5) — blasphemous memory tampering (owner-simplified design: no
 ## day-granular timestamps). On a successful Contested Air (caster) vs Earth (target) roll the
 ## target's known topics are wiped COMPLETELY; the caster may implant chosen topics — real

@@ -123,6 +123,9 @@ static func advance_day(
 	_reset_all_ap(characters)
 	_reset_lost_love_daily_state(characters)
 	_reset_battle_healing_daily_state(characters)
+	# s36 Power of the Ocean: multi-day sustain + exhaustion aftermath. Must run AFTER _reset_all_ap
+	# so the aftermath 0-AP overrides the daily AP reset.
+	_process_power_of_the_ocean(characters, ic_day)
 
 	var _spm: Dictionary = {}
 	for _s: SettlementData in settlements:
@@ -5950,6 +5953,46 @@ static func _process_flee_logistics(
 # wholesale here at the start of each day, before actions run — so a buff cast during
 # the day survives that day's resolution and lapses the next morning. Adding a new
 # such buff needs NO edit here: set_day_buff on cast, has_day_buff at the read site.
+## s36 Power of the Ocean (Water 5): the multi-day sustain ritual's daily tick. While active, the
+## target recovers Wounds (2 x caster Water Ring x 24h/day = a full daily heal) and Void (to full,
+## up to School-Rank times across the duration) regardless of rest. When the active window ends,
+## `until` clears and the target lapses into complete exhaustion (0 AP — no actions or travel) for
+## half the duration. Runs after _reset_all_ap so the aftermath 0-AP overrides the AP reset. Spell
+## slots are NOT separately regenerated here: every living character's slots already reset each IC
+## day via ActionPointSystem.reset_daily_ap, so "regain spell slots at sunrise" is already default.
+static func _process_power_of_the_ocean(characters: Array, ic_day: int) -> void:
+	for c: L5RCharacterData in characters:
+		if c.power_of_ocean_until_ic_day < 0 and c.power_of_ocean_aftermath_until_ic_day < 0:
+			continue
+		if CharacterStats.is_dead(c):
+			c.power_of_ocean_until_ic_day = -1
+			c.power_of_ocean_aftermath_until_ic_day = -1
+			c.power_of_ocean_heal_per_day = 0
+			c.power_of_ocean_void_uses = 0
+			continue
+		if c.power_of_ocean_until_ic_day >= 0:
+			if ic_day <= c.power_of_ocean_until_ic_day:
+				# Active: recover Wounds and Void regardless of rest.
+				if c.power_of_ocean_heal_per_day > 0:
+					WoundSystem.heal_wounds(c, c.power_of_ocean_heal_per_day)
+				if c.power_of_ocean_void_uses > 0 and c.current_void_points < c.max_void_points:
+					VoidSystem.restore_full(c)
+					c.power_of_ocean_void_uses -= 1
+				continue
+			# Active window ended — enter the exhaustion aftermath.
+			c.power_of_ocean_until_ic_day = -1
+		# Aftermath: complete exhaustion — no actions, no travel — for half the duration.
+		if c.power_of_ocean_aftermath_until_ic_day >= 0:
+			if ic_day <= c.power_of_ocean_aftermath_until_ic_day:
+				c.action_points_current = 0
+				c.action_points_max = 0
+			else:
+				# Fully expired — clear the remaining state.
+				c.power_of_ocean_aftermath_until_ic_day = -1
+				c.power_of_ocean_heal_per_day = 0
+				c.power_of_ocean_void_uses = 0
+
+
 static func _clear_daily_spell_buffs(characters: Array) -> void:
 	for c: L5RCharacterData in characters:
 		if not c.active_day_buffs.is_empty():
