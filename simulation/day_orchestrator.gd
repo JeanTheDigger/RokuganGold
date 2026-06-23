@@ -1239,7 +1239,7 @@ static func advance_day(
 	_process_eavesdrop_writebacks(
 		day_result.get("results", []),
 		conversation_results, characters_by_id, current_season,
-		active_topics, next_topic_id, ic_day,
+		active_topics, next_topic_id, ic_day, dice_engine,
 	)
 
 	_process_shadow_target_writebacks(
@@ -6432,6 +6432,18 @@ static func _process_expose_secret_writebacks(
 					break
 
 
+## s33 Garbled Tongue: returns the pierce TN (the caster's frozen School Rank/Air total) for a
+## conversation whose participants include a garbled person this tick, or -1 if neither is garbled.
+## When both are garbled, the higher (harder) TN applies.
+static func _garble_pierce_tn(a_char: L5RCharacterData, b_char: L5RCharacterData, ic_day: int) -> int:
+	var tn: int = -1
+	if a_char != null and a_char.garbled_tongue_ic_day == ic_day:
+		tn = a_char.garbled_tongue_strength
+	if b_char != null and b_char.garbled_tongue_ic_day == ic_day:
+		tn = maxi(tn, b_char.garbled_tongue_strength)
+	return tn
+
+
 static func _process_eavesdrop_writebacks(
 	results: Array,
 	conversation_results: Array,
@@ -6440,6 +6452,7 @@ static func _process_eavesdrop_writebacks(
 	active_topics: Array,
 	next_topic_id: Array,
 	ic_day: int,
+	dice_engine: DiceEngine,
 ) -> void:
 	for r: Variant in results:
 		if not r is Dictionary:
@@ -6483,6 +6496,15 @@ static func _process_eavesdrop_writebacks(
 				continue
 			if a_char.physical_location != location:
 				continue
+			# s33 Garbled Tongue: a garbled conversation is opaque to eavesdroppers — only a shugenja
+			# who WINS a Contested School Rank/Air roll against the caster (the frozen TN) can lift it.
+			var garble_tn: int = _garble_pierce_tn(a_char, b_char, ic_day)
+			if garble_tn >= 0:
+				if not SpellSystem.is_shugenja(eavesdropper):
+					continue
+				var e_air: int = SpellSystem.get_ring_value(eavesdropper, Enums.Ring.AIR)
+				if dice_engine.roll_and_keep(e_air + eavesdropper.insight_rank, e_air, true).total <= garble_tn:
+					continue
 			for key: String in ["topic_shared_by_a", "topic_shared_by_b"]:
 				if topics_learned.size() >= max_topics:
 					break

@@ -73,6 +73,13 @@ var spell_void_bonus_used: int = 0
 # magical-detection contest in resolve_search_person. -1/0 = no cloak.
 @export var cloak_of_night_ic_day: int = -1
 @export var cloak_of_night_strength: int = 0
+# s33 Garbled Tongue (Air 3): the character is a participant in a magically-garbled conversation —
+# eavesdroppers hear false speech and cannot lift this conversation's topics unless a shugenja
+# pierces it. Active when garbled_tongue_ic_day == the current ic_day (5-min RAW duration ~ per-tick).
+# garbled_tongue_strength = the caster's frozen School Rank/Air contest total, the pierce TN an
+# eavesdropping shugenja must beat (read in DayOrchestrator._process_eavesdrop_writebacks). -1/0 = none.
+@export var garbled_tongue_ic_day: int = -1
+@export var garbled_tongue_strength: int = 0
 # s33 Voice of the Wind (Air 1): spoken-social buff. Active when == the current ic_day
 # (10-minute RAW duration ~ per-tick). Read by SkillResolver: +1k0 to spoken Social
 # Skill Rolls and +1k1 on a voice Perform Roll (the granted Voice Advantage). -1 = none.

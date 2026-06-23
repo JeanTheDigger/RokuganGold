@@ -518,6 +518,41 @@ static func activate_cloak_of_night(
 	return res
 
 
+## s33 Garbled Tongue (Air 3, Illusion) — 30', 2 conversing persons (one may be the caster). Air kami
+## lay a false second layer of speech over a conversation: everyone except the participants hears the
+## false version, so eavesdroppers cannot lift the conversation's topics. A shugenja may pierce it by
+## winning a Contested School Rank/Air roll against the caster. Stamps the per-tick garble (5-min RAW
+## ~ per-tick) on BOTH conversing persons — person_a and person_b (person_b defaults to the caster, so
+## the common "caster + ally" case passes only person_a; pass both to garble two OTHER people's chat).
+## The pierce TN is the caster's frozen School Rank/Air contest total. Requires person_a.
+static func activate_garbled_tongue(
+	caster: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	person_a: L5RCharacterData = null, person_b: L5RCharacterData = null
+) -> Dictionary:
+	if not can_cast(caster, "garbled_tongue"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	if person_a == null:
+		return {"success": false, "activated": false, "reason": "no_target"}
+	var p2: L5RCharacterData = person_b if person_b != null else caster
+	var res: Dictionary = resolve_cast(caster, "garbled_tongue", dice, 0, person_a, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		# Freeze the caster's School Rank/Air contest pool as the pierce TN.
+		var air: int = get_ring_value(caster, Enums.Ring.AIR)
+		var strength: int = dice.roll_and_keep(air + caster.insight_rank, air, true).total
+		var protected_ids: Array = []
+		for person: L5RCharacterData in [person_a, p2]:
+			if person == null:
+				continue
+			person.garbled_tongue_ic_day = ic_day
+			person.garbled_tongue_strength = strength
+			if person.character_id not in protected_ids:
+				protected_ids.append(person.character_id)
+		res["protected_ids"] = protected_ids
+		res["strength"] = strength
+	return res
+
+
 ## s33 Voice of the Wind (Air 1) — Touch, 1 target. On a successful cast the target gains the
 ## spoken-social buff for the IC day (SkillResolver reads voice_of_the_wind_ic_day: +1k0 to
 ## spoken Social Skill Rolls, +1k1 on a voice Perform Roll). Self-cast when target is null.
@@ -791,7 +826,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"elemental_cipher":           {"e": 0, "m": 2, "s": 0},   # encrypts writing (passive protection, no active gather) — COMBAT_ONLY
 	"flight_of_doves":            {"e": 0, "m": 2, "s": 0},   # entertainment illusion — COMBAT_ONLY
 	"freedom_of_the_air":         {"e": 0, "m": 2, "s": 14},  # Compels hostile spirits out for Air Ring hours — SPIRIT_BIND
-	"garbled_tongue":             {"e": 0, "m": 2, "s": 0},
+	"garbled_tongue":             {"e": 0, "m": 3, "s": 0},
 	"heart_betrays_eyes":         {"e": 0, "m": 2, "s": 0},   # target perceives unusual as normal; maintains illusion — COMBAT_ONLY
 	"hidden_visage":              {"e": 0, "m": 2, "s": 0},
 	"the_kamis_whisper":          {"e": 0, "m": 2, "s": 0},   # creates false sounds — COMBAT_ONLY
