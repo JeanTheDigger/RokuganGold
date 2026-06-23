@@ -54,8 +54,8 @@ static func process_daily(victim: L5RCharacterData, ic_day: int, dice: DiceEngin
 		Type.PLAGUE_BEARER:
 			# Daily Earth roll TN 15 or lose 1 Rank in ALL physical Traits; 3 consecutive
 			# successes cure it (Medicine has no effect — magic-only otherwise).
-			var earth: int = mini(victim.stamina, victim.willpower)
-			var roll: int = dice.roll_and_keep(maxi(1, earth), maxi(1, earth), true).total
+			var earth: int = cursed_resist_pool(victim, maxi(1, mini(victim.stamina, victim.willpower)))
+			var roll: int = dice.roll_and_keep(earth, earth, true).total
 			if roll >= PLAGUE_BEARER_TN:
 				a["cures"] = int(a.get("cures", 0)) + 1
 				if int(a["cures"]) >= CURE_CONSECUTIVE:
@@ -70,7 +70,8 @@ static func process_daily(victim: L5RCharacterData, ic_day: int, dice: DiceEngin
 			if ic_day - int(a.get("last_tick", ic_day)) < WEEK:
 				return {"type": t}
 			a["last_tick"] = ic_day
-			var roll2: int = dice.roll_and_keep(maxi(1, victim.stamina), maxi(1, victim.stamina), true).total
+			var sta_d: int = cursed_resist_pool(victim, maxi(1, victim.stamina))
+			var roll2: int = dice.roll_and_keep(sta_d, sta_d, true).total
 			if roll2 >= DISEASED_TOUCH_TN:
 				cure(victim)
 				return {"cured": true, "type": t}
@@ -126,12 +127,22 @@ static func is_poisoned(victim: L5RCharacterData) -> bool:
 ## poison has full effect. Disease saves (Shikko's diseased touch) do NOT route here — Jurojin's
 ## Balm drives out poisons/toxins, not disease (which has its own Medicine cure path).
 static func resolve_poison_resist_roll(victim: L5RCharacterData, tn: int, dice: DiceEngine) -> bool:
-	var sta: int = maxi(1, victim.stamina)
+	var sta: int = cursed_resist_pool(victim, maxi(1, victim.stamina))
 	if dice.roll_and_keep(sta, sta, true).total >= tn:
 		return true
 	if not victim.has_day_buff("jurojins_balm"):
 		return false
 	return dice.roll_and_keep(sta + 2, sta, true).total >= tn
+
+
+## Jurojin's Curse (s34 Earth 2): the target's Earth reads 3 Ranks lower (min 1) for resisting
+## disease or poison. Lowers the Stamina/Earth resist pool by 3 while the "jurojins_curse" day
+## buff is active — applied to every poison and disease save (poison helper + process_disease_daily).
+const JUROJINS_CURSE_PENALTY: int = 3
+static func cursed_resist_pool(victim: L5RCharacterData, base: int) -> int:
+	if victim.has_day_buff("jurojins_curse"):
+		return maxi(1, base - JUROJINS_CURSE_PENALTY)
+	return base
 
 
 ## Banks `n` drained Ranks of `trait_name` into poison_affliction for the world-sim restore.

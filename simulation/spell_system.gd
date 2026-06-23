@@ -615,6 +615,25 @@ static func activate_jurojins_balm(
 	return res
 
 
+## s34 Jurojin's Curse (Earth 2) — 30', one target creature. A DEBUFF: removes Jurojin's
+## protection so the target's Earth reads 3 Ranks lower (min 1) for resisting disease or poison
+## (the "jurojins_curse" day buff, consumed by DiseaseSystem's resist saves). The "healing
+## injuries" half is inert (healing is not Earth-derived in the sim). Requires an enemy target.
+static func activate_jurojins_curse(
+	caster: L5RCharacterData, target: L5RCharacterData, dice: DiceEngine, ic_day: int
+) -> Dictionary:
+	if not can_cast(caster, "jurojins_curse"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	if target == null:
+		return {"success": false, "activated": false, "reason": "no_target"}
+	var res: Dictionary = resolve_cast(caster, "jurojins_curse", dice, 0, target, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		target.set_day_buff("jurojins_curse")
+		res["target_id"] = target.character_id
+	return res
+
+
 ## s35 Mental Quickness (Fire 2) — Touch, 1 ITEM (not a person). On a successful cast the item is
 ## imbued ("mental_quickness_imbued" flag on the item dict) for the day, so whoever's inventory
 ## currently holds it has Intelligence +3 on Int-based rolls (SkillResolver). The buff follows the
