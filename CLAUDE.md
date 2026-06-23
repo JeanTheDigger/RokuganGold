@@ -7075,6 +7075,25 @@ clamps in-bounds; caller calls `init_elevation` first).
   isolates anything); and the dais center tile is raised. Other ZoneSubtypes are untouched (no
   `init_elevation` → flat, `has_elevation()` false, exactly as before).
 
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — WALL_TOWER battlement parapet, owner-authorized + runtime-verified)
+The defensive counterpart to the ceremonial-dais pass: the one settlement ZoneSubtype with a
+walkable battlement now puts its parapet on the high ground. A wall-tower's fighting platform —
+the stone ring between the outer wall and the inner tower — is stamped **layer 1**, while the inner
+garrison room sits at **layer 0**, so wall defenders hold the high-ground attack bonus and see over
+the parapet at anyone who breaches the interior (the Kaiu Wall / castle-defense intent of the prior
+mission-template passes). Same locked rule (≤3 layers, ramp-by-adjacency). Only **two layers (max
+delta 1)** — so the parapet→door→garrison transitions are always +1 ramps and can never strand
+anything; the four inner-tower doors connect the two levels.
+- `_gen_wall_tower` stamps it: `init_elevation(1)` (the whole tower top at battlement level) then
+  `_raise_rect(8,8,22,22, 0)` drops the inner tower (walls + garrison + central pillar) one step.
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy): 3/3 (× 3 seeds), 0 fails,
+  0 project-wide parse errors.** Per seed: max layer == 1; the parapet ring is raised (corners
+  layer 1) and the wood garrison floor is layer 0; a cliff-aware 8-dir flood-fill from the south
+  exit reaches the **same** set as a flat fill (0 stranded) AND reaches the garrison interior
+  (parapet → inner door → garrison). The dais driver re-passes (no regression in the shared
+  generator file). WALL_TOWER appears in live play (the 12 Kaiu Wall towers + castle walls), so
+  tower defenders now get high-ground/see-over there.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

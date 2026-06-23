@@ -1998,6 +1998,14 @@ static func _gen_wall_tower(map: AsciiMapData, rng: RandomNumberGenerator) -> vo
 	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
 	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
 
+	# Elevation (s4.4 Z-axis): the battlement walk — the stone ring between the outer wall and
+	# the inner tower — is the raised fighting platform (layer 1), so wall defenders hold the
+	# high ground and see over the parapet at anyone who breaches the inner garrison room
+	# (layer 0). The four inner-tower doors bridge the two as +1 ramps, so the interior stays
+	# reachable. Only two layers (max delta 1), so the ramps can never strand anything.
+	map.init_elevation(1)               # the whole tower top sits at battlement level
+	_raise_rect(map, 8, 8, 22, 22, 0)   # inner tower (walls + garrison + pillar) one step down
+
 
 # PEASANT_DWELLING (minka): a single-room commoner home in a small yard.
 # Earthen-entry (doma) at the door, raised plank living floor, a central irori
