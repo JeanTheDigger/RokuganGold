@@ -16,8 +16,19 @@ const ENV_HEAVY_RAIN: int = 2
 const ENV_NIGHT: int = 3
 const ENV_SUPERNATURAL: int = 4
 
-# Lookout expanded radius bonus (s56.10, LOCKED).
+# Lookout expanded radius bonus (s56.10, LOCKED). Also granted on raised ground
+# (elevation > 0) — high ground sees farther (s4.4 Z-axis; owner-locked 2026-06-23).
 const LOOKOUT_BONUS: int = 3
+
+# Height-aware FOV occlusion (s4.4 Z-axis). Mirrors the combat-LOS sight model:
+# the viewer's eye sits FOV_EYE_HEIGHT above their tile; an LOS-blocking tile
+# (wall/tree) rises FOV_OBSTACLE_HEIGHT above its elevation, open ground only its
+# raw elevation (a ridge can still block). An obstacle occludes only when its top
+# reaches the viewer's eye height — so a viewer on high ground sees over lower
+# obstacles. On a flat map (no elevation grid) this reduces to the binary
+# blocks_los model exactly (zero regression).
+const FOV_EYE_HEIGHT: int = 1
+const FOV_OBSTACLE_HEIGHT: int = 2
 
 # Octant transform multipliers for recursive shadowcasting.
 const _XX: PackedInt32Array = [ 1,  0,  0, -1, -1,  0,  0,  1]
@@ -44,8 +55,11 @@ static func compute_visible(
 ) -> Dictionary:
 	var visible: Dictionary = {}
 	visible[Vector2i(cx, cy)] = true
+	# Height-aware occlusion when the map carries elevation (s4.4 Z-axis).
+	var height_aware: bool = map.has_elevation()
+	var viewer_eye: int = (map.elevation_at(cx, cy) + FOV_EYE_HEIGHT) if height_aware else 0
 	for octant in range(8):
-		_cast_light(cx, cy, radius, 1, 1.0, 0.0, octant, map, visible)
+		_cast_light(cx, cy, radius, 1, 1.0, 0.0, octant, map, visible, height_aware, viewer_eye)
 	return visible
 
 
@@ -82,6 +96,7 @@ static func _cast_light(
 	cx: int, cy: int, radius: int,
 	row: int, start_slope: float, end_slope: float,
 	octant: int, map: AsciiMapData, visible: Dictionary,
+	height_aware: bool = false, viewer_eye: int = 0,
 ) -> void:
 	if start_slope < end_slope:
 		return
@@ -106,26 +121,36 @@ static func _cast_light(
 						and my >= 0 and my < map.height:
 					visible[Vector2i(mx, my)] = true
 			if blocked:
-				if _is_opaque(mx, my, map):
+				if _is_opaque(mx, my, map, height_aware, viewer_eye):
 					new_start = r_slope
 				else:
 					blocked = false
 					start_slope = new_start
-			elif _is_opaque(mx, my, map) and j < radius:
+			elif _is_opaque(mx, my, map, height_aware, viewer_eye) and j < radius:
 				blocked = true
 				_cast_light(
 					cx, cy, radius, j + 1, start_slope, l_slope,
-					octant, map, visible,
+					octant, map, visible, height_aware, viewer_eye,
 				)
 				new_start = r_slope
 		if blocked:
 			break
 
 
-static func _is_opaque(x: int, y: int, map: AsciiMapData) -> bool:
+static func _is_opaque(
+	x: int, y: int, map: AsciiMapData,
+	height_aware: bool = false, viewer_eye: int = 0,
+) -> bool:
 	if x < 0 or x >= map.width or y < 0 or y >= map.height:
 		return true
-	return AsciiMapData.blocks_los(map.get_tile(x, y))
+	var tile: int = map.get_tile(x, y)
+	if not height_aware:
+		return AsciiMapData.blocks_los(tile)
+	# Height-aware: a tile occludes only when its top reaches the viewer's eye.
+	var top: int = map.elevation_at(x, y)
+	if AsciiMapData.blocks_los(tile):
+		top += FOV_OBSTACLE_HEIGHT
+	return top >= viewer_eye
 
 
 # -- Bresenham line-of-sight (point-to-point) ---------------------------------

@@ -6941,6 +6941,30 @@ scales walls too.
   2-step gap with no wall (`not_a_scalable_wall`) and a thick wall (`destination_impassable`).
   0 project-wide parse errors.
 
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 7: height-aware FOV, owner-authorized + runtime-verified)
+The fog-of-war vision was the last flat-only LOS path (Pass 2 made combat targeting height-aware but
+left the FOV shadowcasting flat). Now high ground both **sees over** lower terrain and **sees farther**.
+Owner-locked 2026-06-23: +3 radius on raised ground (reusing the LOCKED lookout bonus).
+- **See over (occlusion).** `FovSystem` shadowcasting is now height-aware: `compute_visible` derives the
+  viewer's eye height (`elevation + FOV_EYE_HEIGHT=1`) and threads it through `_cast_light` → `_is_opaque`,
+  which treats a tile as opaque only when its top (`elevation`, +`FOV_OBSTACLE_HEIGHT=2` for walls/trees,
+  raw for open ground) reaches the viewer's eye. Mirrors Pass 2's combat-LOS model — a hilltop viewer
+  sees over a low wall a ground viewer is blocked by, a wall at/above eye level still blocks, and a flat
+  map (no elevation grid) falls back to the exact binary `blocks_los` model (zero regression). The
+  `_is_opaque`/`_cast_light` height params default off, so any other caller is unaffected.
+- **See farther (radius).** `_is_lookout_tile` (CombatController) and `_is_lookout_position`
+  (AsciiMapView) now also treat raised ground (`elevation > 0`) as a lookout position, so a viewer there
+  gets the existing +3 `LOOKOUT_BONUS` to vision radius — one decision, the same bonus as a wall-walk
+  lookout (no double-count). Flat maps untouched (`has_elevation()` false).
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy):** 7/7. Flat regression (wall
+  blocks behind it, wall itself visible); ground viewer (eye 1) blocked by a low wall (top 2); hilltop
+  viewer (eye 4) sees OVER the low wall to the tile behind AND still sees the wall; a wall on a layer-3
+  plateau (top 5 ≥ eye 4) still blocks; lookout radius = effective + 3. 0 project-wide parse errors.
+  (The `_is_lookout_position` view hook is static-verified — a scene Node, not headlessly runnable;
+  the `_is_lookout_tile` controller hook parses clean.)
+- **DEFERRED:** the bottomless-pit/void death hazard (Oni Warai) and the renderer's elevation glyph
+  remain; all four Z mechanics + FOV are now height-aware.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
