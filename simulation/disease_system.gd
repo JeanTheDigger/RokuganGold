@@ -145,11 +145,14 @@ static func cursed_resist_pool(victim: L5RCharacterData, base: int) -> int:
 	return base
 
 
-## s34 Earth's Touch (Earth 1): when the caster boosted Stamina ("earths_touch_stamina" day buff),
-## Stamina-keyed poison/disease resist rolls read Stamina +1. NOT applied to the PLAGUE_BEARER save
-## (an Earth-RING roll — Earth's Touch does not raise the Ring).
+## s34 Earth's Touch (Earth 1, Stamina option) AND Stone's Endurance (Earth 1) both make
+## Stamina-keyed poison/disease resist saves read Stamina +1 — for Stone's Endurance this is its
+## GDD-named signature use ("poison resistance, drowning duration"). Non-stacking (+1 from this
+## family, not +2). NOT applied to the PLAGUE_BEARER save (an Earth-RING roll — neither spell
+## raises the Ring) nor the escalating-poison tick (Earth's Touch never reached it either).
 static func _earths_touch_stamina_bonus(victim: L5RCharacterData) -> int:
-	return 1 if victim.has_day_buff("earths_touch_stamina") else 0
+	return 1 if (victim.has_day_buff("earths_touch_stamina") \
+		or victim.has_day_buff("stones_endurance")) else 0
 
 
 ## Banks `n` drained Ranks of `trait_name` into poison_affliction for the world-sim restore.
