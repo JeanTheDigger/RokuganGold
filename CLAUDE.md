@@ -6983,7 +6983,36 @@ for the tile type and the background for water/taint/spirit, so the compliant, l
   scene Node, not headlessly runnable; the helper is the testable core.)
 - **DEFERRED:** the bottomless-pit/void death hazard (Oni Warai) is the only remaining Z-axis item — the
   data + movement + fall + ranged/attack + LOS/cover + FOV + climb/wall-scale + 5 generators + the
-  render cue are all done.
+  render cue are all done. (Built in Pass 9 below.)
+
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 9: pit/void death hazard, owner-authorized + runtime-verified)
+The final Z-axis item — the Oni Warai bottomless chasm and deep water are LETHAL, not a graduated NkN
+fall. Walking off such an edge is already impossible (these tiles are impassable, so a mover stops); the
+only vector is **being shoved over the brink by knockback** (Hurricane Palm and every future push route
+through one helper, `_knockback_target`), so the hazard lives in that single hook. All values owner-locked
+2026-06-23.
+- **`_is_lethal_pit(tile)`** — true for `VOID` (bottomless chasm) and `WATER_DEEP` (drowning under armor),
+  both already impassable for ordinary movement.
+- **`_knockback_target`** now intercepts a shove toward a lethal pit (before the impassable-tile `break`):
+  the victim gets one **edge-catch save = Reflexes + Athletics vs `PIT_EDGE_CATCH_TN = 20`** (via
+  `SkillResolver.resolve_skill_check(..., trait_override = REFLEXES)`). Success → they stop on the last
+  safe tile (the brink); failure → `_apply_pit_death` carries them over to their death. Requires a
+  `dice_engine` and the character in `state.combatants` (graceful no-op otherwise — falls back to the
+  prior stop-at-edge behavior). A non-pit impassable tile (wall) still just stops the knockback with no
+  save, exactly as before.
+- **`_apply_pit_death(state, char_id, pit_pos)`** — unsurvivable: sets `wounds_taken = get_total_wound_capacity + 1`
+  (mirrors the world-sim instant-kill pattern) and logs `{"type":"pit_death", round, char_id, pit_x, pit_y,
+  dead:true}`. The body is left at the brink tile (the pit itself is impassable / unstandable).
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy): 7/7, 0 fails, 0 project-wide
+  parse errors.** Weak victim (Refl 1, Athl 0) shoved toward VOID **and** deep water → dies, body at the
+  brink, `pit_death` logged; strong victim (Refl 8 + Athl 5) → catches the edge, survives, no death;
+  shoved into a stone wall → stops, no save, no death (non-pit impassable unchanged); open ground →
+  slides the full distance, alive (flat knockback unchanged); statistical — weak victims fall 200/200,
+  strong victims survive 200/200 (the Reflexes+Athletics save discriminates).
+- **With this, ALL Z-axis mechanics are complete:** elevation data, movement/cliff, falls, knockback-off-ledge,
+  ranged/attack high-ground, LOS/cover, height-aware FOV, climb/wall-scale, 5 stamping generators, the
+  render cue, and the lethal pit hazard. Remaining Z work is content placement only (more templates stamping
+  elevation) — no missing mechanics.
 
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)

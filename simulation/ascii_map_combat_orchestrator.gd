@@ -75,6 +75,21 @@ static func _climb_tn_for_tile(tile: int) -> int:
 			return CLIMB_TN_STONE
 		_:
 			return CLIMB_TN_EARTH
+
+## Pit/void death hazard (s4.4 Z-axis, Oni Warai chasm; owner-locked 2026-06-23).
+## A bottomless void or deep water is lethal — NOT a graduated NkN fall. Being shoved
+## toward one by knockback triggers an edge-catch save (Reflexes + Athletics vs
+## PIT_EDGE_CATCH_TN): success stops the victim on the brink, failure sends them over
+## to their death. Walking off such an edge under one's own movement is already
+## prevented (these tiles are impassable, so the mover stops); the only vector is a
+## forced shove, which routes through _knockback_target.
+const PIT_EDGE_CATCH_TN: int = 20
+
+## Lethal pit tiles: a bottomless chasm (VOID) and deep open water (drowning under
+## armor). Both are already impassable for ordinary movement.
+static func _is_lethal_pit(tile: int) -> bool:
+	return tile == Enums.TileType.VOID or tile == Enums.TileType.WATER_DEEP
+
 ## s40 "Weapon Grapples": a weapon-grappler who loses control of the grapple
 ## hands their opponent 2 Free Raises toward a Disarm Maneuver against them.
 const WEAPON_GRAPPLE_LOSE_CONTROL_DISARM_RAISES: int = 2
@@ -5009,7 +5024,23 @@ static func _knockback_target(state: MapCombatState, target_id: int, from_pos: V
 	var fell_levels: int = 0
 	for _n in range(tiles):
 		var nxt: Vector2i = Vector2i(cur.x + dx, cur.y + dy)
-		if state.map == null or not MovementSystem.is_passable(state.map.get_tile(nxt.x, nxt.y)):
+		if state.map == null:
+			break
+		var nxt_tile: int = state.map.get_tile(nxt.x, nxt.y)
+		if not MovementSystem.is_passable(nxt_tile):
+			# Pit/void edge (s4.4 Z-axis, Oni Warai): a shove toward a bottomless void
+			# or deep water gets one chance to catch the brink (Reflexes + Athletics).
+			# Failure carries the victim over the edge to their death.
+			if _is_lethal_pit(nxt_tile) and dice_engine != null:
+				var pit_ch: L5RCharacterData = state.combatants.get(target_id, null)
+				if pit_ch != null and not CharacterStats.is_dead(pit_ch):
+					var save: Dictionary = SkillResolver.resolve_skill_check(
+						pit_ch, dice_engine, "Athletics", PIT_EDGE_CATCH_TN, 0, "",
+						Enums.Trait.REFLEXES)
+					if not save.get("success", false):
+						state.positions[target_id] = cur
+						_apply_pit_death(state, target_id, nxt)
+						return cur
 			break
 		if occupied.has(nxt):
 			break
@@ -5051,6 +5082,24 @@ static func _apply_fall_damage(state: MapCombatState, char_id: int, levels: int,
 		"dead": CharacterStats.is_dead(ch),
 	})
 	return dmg
+
+
+## Kills a character who was shoved over a lethal pit edge (bottomless void / drowning
+## in deep water) and failed the edge-catch save (s4.4 Z-axis, Oni Warai). Unlike a
+## graduated fall this is unsurvivable — wounds are set past the Dead threshold.
+static func _apply_pit_death(state: MapCombatState, char_id: int, pit_pos: Vector2i) -> void:
+	var ch: L5RCharacterData = state.combatants.get(char_id, null)
+	if ch == null or CharacterStats.is_dead(ch):
+		return
+	ch.wounds_taken = CharacterStats.get_total_wound_capacity(ch) + 1
+	state.combat_log.append({
+		"type": "pit_death",
+		"round": state.combat.round_number,
+		"char_id": char_id,
+		"pit_x": pit_pos.x,
+		"pit_y": pit_pos.y,
+		"dead": true,
+	})
 
 
 ## Way of the Willow (s38 Air): a defender may spend a Void Point to interrupt a declared
