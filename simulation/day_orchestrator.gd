@@ -2008,16 +2008,16 @@ static func _process_ooc_day_tick(
 			settlement.okiya_tier,
 		)
 
-		# Void Point refresh per s57.32.2 — gated on rested_last_night and
-		# void_refresh_blocked_until (supernatural spell block, s57.32.8).
+		# Void Point refresh per s57.32.2 — gated on rest (rested_last_night, or Power of the Ocean
+		# active per s36) and void_refresh_blocked_until (supernatural spell block, s57.32.8).
 		var ooc_day: int = ic_day / TimeSystem.TICKS_PER_REAL_DAY
-		if c.rested_last_night \
+		if _counts_as_rested(c, ic_day) \
 				and (c.void_refresh_blocked_until == -1 or ooc_day >= c.void_refresh_blocked_until):
 			c.current_void_points = ceili(c.max_void_points * c.wind_down_void_modifier)
 
-		# Natural healing per s57.31.7a — gated on rested_last_night; blocked at Out.
+		# Natural healing per s57.31.7a — gated on rest (s36 Power of the Ocean counts); blocked at Out.
 		var wounds_healed: int = 0
-		if c.rested_last_night and CharacterStats.get_wound_level(c) != Enums.WoundLevel.OUT:
+		if _counts_as_rested(c, ic_day) and CharacterStats.get_wound_level(c) != Enums.WoundLevel.OUT:
 			var heal_amount: int = (c.stamina * 2) + CharacterStats.get_insight_rank(c)
 			wounds_healed = WoundSystem.heal_wounds(c, heal_amount)["healed"]
 
@@ -5954,11 +5954,13 @@ static func _process_flee_logistics(
 # the day survives that day's resolution and lapses the next morning. Adding a new
 # such buff needs NO edit here: set_day_buff on cast, has_day_buff at the read site.
 ## s36 Power of the Ocean (Water 5): the multi-day sustain ritual's daily tick. While active, the
-## target recovers Wounds (2 x caster Water Ring x 24h/day = a full daily heal) and Void (to full,
-## up to School-Rank times across the duration) regardless of rest. When the active window ends,
-## `until` clears and the target lapses into complete exhaustion (0 AP — no actions or travel) for
-## half the duration. Runs after _reset_all_ap so the aftermath 0-AP overrides the AP reset. Spell
-## slots are NOT separately regenerated here: every living character's slots already reset each IC
+## target recovers Wounds (2 x caster Water Ring x 24h/day = a full daily heal). Void refresh +
+## natural healing are NOT applied here: the target counts as rested (_counts_as_rested) so the
+## wind-down recovery block delivers them on the normal rest schedule without sleeping; the
+## power_of_ocean_void_uses budget is the on-demand Simple-action replenish (tile combat). When the
+## active window ends, `until` clears and the target lapses into complete exhaustion (0 AP — no
+## actions) for half the duration. Runs after _reset_all_ap so the aftermath 0-AP overrides the AP
+## reset. Spell slots are not regenerated here: every living character's slots already reset each IC
 ## day via ActionPointSystem.reset_daily_ap, so "regain spell slots at sunrise" is already default.
 static func _process_power_of_the_ocean(characters: Array, ic_day: int) -> void:
 	for c: L5RCharacterData in characters:
@@ -5972,12 +5974,13 @@ static func _process_power_of_the_ocean(characters: Array, ic_day: int) -> void:
 			continue
 		if c.power_of_ocean_until_ic_day >= 0:
 			if ic_day <= c.power_of_ocean_until_ic_day:
-				# Active: recover Wounds and Void regardless of rest.
+				# Active: the spell's own superhuman Wounds heal (stronger than natural healing).
+				# Void refresh + natural healing come from the rest path — the target counts as
+				# rested (_counts_as_rested, read in the wind-down recovery block) so it recovers
+				# without sleeping. The power_of_ocean_void_uses budget is reserved for the
+				# on-demand Simple-action replenish (execute_replenish_void_ocean in tile combat).
 				if c.power_of_ocean_heal_per_day > 0:
 					WoundSystem.heal_wounds(c, c.power_of_ocean_heal_per_day)
-				if c.power_of_ocean_void_uses > 0 and c.current_void_points < c.max_void_points:
-					VoidSystem.restore_full(c)
-					c.power_of_ocean_void_uses -= 1
 				continue
 			# Active window ended — enter the exhaustion aftermath.
 			c.power_of_ocean_until_ic_day = -1
@@ -5991,6 +5994,15 @@ static func _process_power_of_the_ocean(characters: Array, ic_day: int) -> void:
 				c.power_of_ocean_aftermath_until_ic_day = -1
 				c.power_of_ocean_heal_per_day = 0
 				c.power_of_ocean_void_uses = 0
+
+
+## Whether a character counts as rested for the rest-gated recovery (Void refresh + natural healing,
+## s57.31/s57.32). True when the rested_last_night flag is set OR Power of the Ocean (s36) is active
+## — the spell's "requires no food, drink, or sleep" clause makes the target recover as if rested
+## without sleeping (and overrides the rest system's flip-to-false for combat/travel). Future
+## rest-gated systems should call this rather than reading rested_last_night directly.
+static func _counts_as_rested(c: L5RCharacterData, ic_day: int) -> bool:
+	return c.rested_last_night or c.power_of_ocean_until_ic_day >= ic_day
 
 
 static func _clear_daily_spell_buffs(characters: Array) -> void:

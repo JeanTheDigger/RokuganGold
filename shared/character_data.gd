@@ -97,10 +97,12 @@ func clear_day_buffs() -> void:
 # s36 Power of the Ocean (Water 5): a multi-DAY sustain ritual (unlike the sub-day buffs above, so
 # it gets dedicated expiry fields, not active_day_buffs). Managed by DayOrchestrator's daily pass
 # (_process_power_of_the_ocean). -1 = inactive. While active (ic_day <= power_of_ocean_until_ic_day)
-# the target recovers power_of_ocean_heal_per_day Wounds/day and may restore Void to full
-# (power_of_ocean_void_uses times across the duration) regardless of rest. When the active window
-# ends `until` clears to -1 and the target is exhausted (0 AP) through
+# the target recovers power_of_ocean_heal_per_day Wounds/day and counts as rested (Void refresh +
+# natural healing arrive via the normal rest path — DayOrchestrator._counts_as_rested). When the
+# active window ends `until` clears to -1 and the target is exhausted (0 AP — no actions) through
 # power_of_ocean_aftermath_until_ic_day (half the duration), after which all four fields clear.
+# power_of_ocean_void_uses is the on-demand "replenish Void as a Simple Action, School Rank times"
+# reserve, consumed by AsciiMapCombatOrchestrator.execute_replenish_void_ocean (tile combat).
 @export var power_of_ocean_until_ic_day: int = -1
 @export var power_of_ocean_aftermath_until_ic_day: int = -1
 @export var power_of_ocean_heal_per_day: int = 0
