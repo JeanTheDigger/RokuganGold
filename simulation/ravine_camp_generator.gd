@@ -138,8 +138,14 @@ static func _stamp_elevation(map: RavineCampMapData) -> void:
 	map.init_elevation(0)
 	for y: int in range(map.height):
 		for x: int in range(map.width):
-			# Rim = the grass strips outside both rock walls (x < wall_lx or x > wall_rx).
-			if x < map.wall_lx or x > map.wall_rx:
+			# The ravine floor stays at layer 0.
+			if x >= map.floor_lx and x <= map.floor_rx:
+				continue
+			# Rim strips (outside both rock walls) are layer 2, as is any carved
+			# descent notch (a passable tile in the wall columns) — the notch is part
+			# of the high rim shelf, ending in a climbable cliff down to the floor.
+			if x < map.wall_lx or x > map.wall_rx \
+					or AsciiMapData.is_passable(map.get_tile(x, y)):
 				map.set_elevation(x, y, 2)
 
 
@@ -314,14 +320,23 @@ static func _place_descent_points(
 		var y: int = margin + (i * (map.height - 2 * margin)) / count + \
 				rng.randi_range(-2, 2)
 		y = clampi(y, margin, map.height - margin - 1)
-		# Alternate left and right sides.
+		# Alternate left and right sides. Carve a passable FLOOR_STONE notch through
+		# the rock wall at this row so the high rim connects to the low floor by a
+		# single climbable cliff (the rim shelf stays layer 2, the floor layer 0 —
+		# a 2-level face a character descends via execute_climb; s56.11.2 "climbable
+		# positions"). The notch does NOT add a normal-walkable path (the elevation
+		# step blocks ordinary movement), so the floor stays its own component.
 		if i % 2 == 0:
 			var x: int = rng.randi_range(1, rim_w - 2)
 			map.set_tile(x, y, Enums.TileType.FLOOR_STONE)
+			for nx: int in range(map.wall_lx, map.floor_lx):
+				map.set_tile(nx, y, Enums.TileType.FLOOR_STONE)
 			map.descent_points.append({"x": x, "y": y, "side": "L"})
 		else:
 			var x: int = rng.randi_range(map.wall_rx + 2, map.width - 2)
 			map.set_tile(x, y, Enums.TileType.FLOOR_STONE)
+			for nx: int in range(map.floor_rx + 1, map.wall_rx + 1):
+				map.set_tile(nx, y, Enums.TileType.FLOOR_STONE)
 			map.descent_points.append({"x": x, "y": y, "side": "R"})
 
 

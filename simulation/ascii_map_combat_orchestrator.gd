@@ -53,6 +53,11 @@ const HIGH_GROUND_ATTACK_ROLLED: int = 1
 ## the formula reduces to the prior behavior exactly (walls block, open ground does not).
 const LOS_EYE_HEIGHT: int = 1
 const LOS_OBSTACLE_HEIGHT: int = 2
+
+## Climb a cliff face (s4.4 Z-axis; owner-locked 2026-06-23). Strength + Athletics
+## vs CLIMB_TN scales (or descends) one cliff tier. A failed climb UP stays put; a
+## failed climb DOWN slips and falls the rest of the way (NkN fall damage).
+const CLIMB_TN: int = 15
 ## s40 "Weapon Grapples": a weapon-grappler who loses control of the grapple
 ## hands their opponent 2 Free Raises toward a Disarm Maneuver against them.
 const WEAPON_GRAPPLE_LOSE_CONTROL_DISARM_RAISES: int = 2
@@ -650,6 +655,76 @@ static func execute_move(
 		"fell_prone": fell_prone,
 	})
 	return {"success": true, "from": old_pos, "to": dest, "fell_prone": fell_prone}
+
+
+## Climb an adjacent cliff face — the only way to traverse an elevation step too
+## steep for normal movement (s4.4 Z-axis). Strength + Athletics vs CLIMB_TN to
+## scale one tier up, or descend one tier down. Costs a Complex action.
+##   up   : success relocates to the higher tile; failure stays put (action spent).
+##   down : success descends safely; failure slips and falls the rest (NkN damage).
+## Rejects a non-cliff step (use execute_move), an impassable/occupied/out-of-range
+## destination, or a down-restricted/entangled climber.
+static func execute_climb(
+	state: MapCombatState,
+	char_id: int,
+	dest: Vector2i,
+	character: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if ts == null or p == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if IndividualCombat.CONDITION_ENTANGLED in p.conditions:
+		return {"success": false, "reason": "entangled"}
+	if ts.is_down_restricted(CharacterStats.get_wound_level(character)):
+		return {"success": false, "reason": "down_only_free_actions"}
+	if not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_actions_remaining"}
+	var cur: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cur.x < 0:
+		return {"success": false, "reason": "position_unknown"}
+	if _chebyshev(cur, dest) != 1:
+		return {"success": false, "reason": "not_adjacent"}
+	if dest.x < 0 or dest.y < 0 or dest.x >= state.map.width or dest.y >= state.map.height:
+		return {"success": false, "reason": "out_of_bounds"}
+	if not MovementSystem.is_passable(state.map.get_tile(dest.x, dest.y)):
+		return {"success": false, "reason": "destination_impassable"}
+	for cid: int in state.positions:
+		if cid != char_id and state.positions[cid] == dest:
+			return {"success": false, "reason": "destination_occupied"}
+	if not MovementSystem.is_cliff_step(state.map, cur.x, cur.y, dest.x, dest.y):
+		return {"success": false, "reason": "not_a_cliff"}
+
+	var delta: int = MovementSystem.elevation_delta(state.map, cur.x, cur.y, dest.x, dest.y)
+	ts.consume_complex()
+	var res: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Athletics", CLIMB_TN, 0, "", Enums.Trait.STRENGTH)
+	var climbed: bool = res.get("success", false)
+	var direction: String = "up" if delta > 0 else "down"
+	var fell: bool = false
+	var fall_dmg: int = 0
+	if delta > 0:
+		# Up: success relocates; failure stays put.
+		if climbed:
+			state.positions[char_id] = dest
+	else:
+		# Down: always ends at the lower tile; a failed climb slips and falls.
+		state.positions[char_id] = dest
+		if not climbed:
+			fell = true
+			fall_dmg = _apply_fall_damage(state, char_id, -delta, dice_engine)
+	if state.positions[char_id] != cur:
+		p.facing = Vector2i(signi(dest.x - cur.x), signi(dest.y - cur.y))
+	state.combat_log.append({
+		"type": "climb", "round": state.combat.round_number, "char_id": char_id,
+		"from": cur, "to": state.positions[char_id], "direction": direction,
+		"climbed": climbed, "fell": fell, "fall_damage": fall_dmg,
+	})
+	return {"success": true, "climbed": climbed, "direction": direction,
+		"from": cur, "to": state.positions[char_id], "fell": fell, "fall_damage": fall_dmg}
 
 
 ## Melee attack on target_id. Costs a Complex action.

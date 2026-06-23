@@ -6889,6 +6889,34 @@ Two more vertical templates fill the elevation grid, again capped at 3 layers, r
   points), a bottomless-pit/void death hazard (Oni Warai), height-aware FOV radius, and the renderer's
   elevation glyph.
 
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 5: climb action + ravine descent points, owner-authorized + runtime-verified)
+A deliberate CLIMB action turns the impassable cliffs into interactive terrain, and the ravine descent
+points become real climbable cliffs (s56.11.2 "climbable positions"). Owner-locked values 2026-06-23.
+- **`AsciiMapCombatOrchestrator.execute_climb`** — the only way to traverse an elevation face too steep
+  for normal movement. Costs a Complex action; rolls **Strength + Athletics vs CLIMB_TN = 15** (via
+  SkillResolver, so wound penalties etc. apply, forcing the Strength trait). Per cliff tier: climbing
+  **up** relocates on success and stays put on failure (action spent); climbing **down** always ends
+  at the lower tile, and a failed roll **slips and falls** the rest of the way (NkN fall damage via
+  `_apply_fall_damage`). Rejects a non-cliff step (`not_a_cliff` — use a Move), an impassable/occupied/
+  out-of-range destination, and a down-restricted or entangled climber.
+- **Ravine descent points wired as climbable cliffs.** `_place_descent_points` now carves a passable
+  FLOOR_STONE notch through the rock wall at each descent row, and `_stamp_elevation` keeps that notch
+  on the layer-2 rim shelf — so its inner end is a single 2-level cliff down to the layer-0 floor. The
+  notch is a **climb-only** bridge: the elevation step still blocks ordinary movement, so the floor
+  stays its own component (objectives reachable only via the floor) while a rim raider can climb down
+  into the ravine. Realizes the long-deferred "rim reachable only by elevation descent."
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy):** 11/11 + the ravine
+  connectivity re-check. Climb invariants over 60 trials (up: relocate-or-stay, never falls; down:
+  always lands, failure ⇒ fell + wounds rose), both success and failure observed up and down, plus the
+  `not_a_cliff` / `destination_impassable` rejections. Ravine (3 sizes): each has a descent point that
+  is a passable layer-2 notch forming a 2-level cliff to the layer-0 floor, a character actually climbs
+  down it into the ravine, and the floor objectives stay reachable from the mouth (the notch added no
+  walkable path). 0 project-wide parse errors.
+- **NPC/UI note:** `execute_climb` is a callable orchestrator action; NPC-AI auto-climb and the player
+  climb command are deferred with the rest of the turn-based UI (PC-travel HOLD).
+- **DEFERRED:** the bottomless-pit/void death hazard (Oni Warai), height-aware FOV radius, and the
+  renderer's elevation glyph.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
