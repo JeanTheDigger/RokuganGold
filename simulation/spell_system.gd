@@ -600,6 +600,60 @@ static func activate_whispering_wind(
 	return res
 
 
+## s37 Drink of Your Essence (Void 2, Ishiken-only) — 30', 1 target, instantaneous. Examines the
+## target's pattern within the Void: the caster learns the target's five Ring Ranks (not Traits),
+## current Wound penalty, and a one-word summation of present mood. Recorded as a single deduped
+## essence_reading KnowledgeEntry on the caster (re-reading the same target replaces the old reading).
+## Mood is derived from grounded state (the sim has no mood model): "hostile" when the target regards
+## the caster at Rival tier or worse, "confused" when their will is subverted (active sleeper command
+## or possession), else "composed". Callable cast (future cast UI / a deliberate caster), not auto-fired.
+static func activate_drink_of_your_essence(
+	caster: L5RCharacterData, target: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	current_season: int = -1
+) -> Dictionary:
+	if not can_cast(caster, "drink_of_your_essence"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	if target == null:
+		return {"success": false, "activated": false, "reason": "no_target"}
+	var res: Dictionary = resolve_cast(caster, "drink_of_your_essence", dice, 0, target, ic_day)
+	res["activated"] = res.get("success", false)
+	if not res.get("success", false):
+		return res
+	var ring_ranks: Dictionary = {
+		"air": get_ring_value(target, Enums.Ring.AIR),
+		"earth": get_ring_value(target, Enums.Ring.EARTH),
+		"fire": get_ring_value(target, Enums.Ring.FIRE),
+		"water": get_ring_value(target, Enums.Ring.WATER),
+		"void": get_ring_value(target, Enums.Ring.VOID),
+	}
+	var wound_penalty: int = CharacterStats.get_wound_penalty(target)
+	var mood: String = "composed"
+	if int(target.disposition_values.get(caster.character_id, 0)) <= -11:
+		mood = "hostile"
+	elif not target.active_sleeper_command.is_empty() or not target.possession_affliction.is_empty():
+		mood = "confused"
+	# Deduped record: replace any prior essence_reading of this target.
+	for i: int in range(caster.knowledge_pool.size() - 1, -1, -1):
+		var e: KnowledgeEntry = caster.knowledge_pool[i]
+		if e.entry_type == "essence_reading" and int(e.data.get("target_id", -1)) == target.character_id:
+			caster.knowledge_pool.remove_at(i)
+	var entry := KnowledgeEntry.new()
+	entry.source = Enums.KnowledgeSource.DIRECT_OBSERVATION
+	entry.entry_type = "essence_reading"
+	entry.data = {
+		"target_id": target.character_id,
+		"ring_ranks": ring_ranks,
+		"wound_penalty": wound_penalty,
+		"mood": mood,
+	}
+	entry.season_acquired = current_season
+	caster.knowledge_pool.append(entry)
+	res["ring_ranks"] = ring_ranks
+	res["wound_penalty"] = wound_penalty
+	res["mood"] = mood
+	return res
+
+
 ## s33 Voice of the Wind (Air 1) — Touch, 1 target. On a successful cast the target gains the
 ## spoken-social buff for the IC day (SkillResolver reads voice_of_the_wind_ic_day: +1k0 to
 ## spoken Social Skill Rolls, +1k1 on a voice Perform Roll). Self-cast when target is null.
