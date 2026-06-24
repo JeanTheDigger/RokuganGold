@@ -197,6 +197,14 @@ static func generate(
 	# ---- Objective markers --------------------------------------------------
 	_place_objective_slots(map, objectives)
 
+	# ---- Roof (s4.4 Option B): partially-collapsed roof --------------------
+	# Intact rooms keep their roof (a roof cap over the room footprint); collapsed
+	# sections stay open to the sky (no level-1 tile), so from above the ruin shows
+	# roofs over the standing rooms and open holes down into the rubble of the
+	# collapsed cells.
+	for rm: Dictionary in map.rooms:
+		AsciiMapGenerator._cap_with_roof(map, rm["lx"], rm["ly"], rm["rx"], rm["ry"])
+
 	return map
 
 

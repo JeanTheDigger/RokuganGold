@@ -429,6 +429,11 @@ static func _carve_shelter(
 	map.shelters.append({"id": sid, "lx": lx, "ly": ly, "rx": rx, "ry": ry,
 		"type": stype})
 
+	# Roof cap (s4.4 Option B): each shelter is a covered lean-to/tent — a roof over
+	# the dirt floor, presenting a roof from above. The watchtower platform (a fighting
+	# position, not a covered structure) stays open.
+	AsciiMapGenerator._cap_with_roof(map, lx, ly, rx, ry)
+
 
 # ---------------------------------------------------------------------------
 # Firepits (s56.7.4: FIRE tiles inside perimeter)

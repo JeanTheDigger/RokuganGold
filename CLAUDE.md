@@ -7355,6 +7355,27 @@ the keep footprint is ROOF on level 1, a bailey tile stays open air, level-0 rea
 terrain elevation grid is still present. NEXT s56 templates with buildings: ruined structure, urban
 hideout, makeshift stockade watchtower. Same PC-travel HOLD.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — remaining s56 mission templates)
+Finishes the s56 mission-template building sweep (owner-directed) with per-template judgment calls.
+- **Makeshift stockade** — each shelter (a covered lean-to/tent, recorded in `map.shelters`) gets a roof
+  cap via `_carve_shelter`; the watchtower platform (a fighting position) stays open.
+- **Forest approach camp** — each tent (soft-cover shelter in `map.shelters`) capped in `_carve_shelter`;
+  firepits + clearing stay open.
+- **Ruined structure** — **partially-collapsed roof**: intact `map.rooms` get roof caps; `collapsed_sections`
+  stay open to the sky (no level-1 tile → from above you peek down into the rubble). The ruin's existing
+  abstract `upper_floor_sections` overlay (s56.12.3, a population marker, NOT the level-stack) is untouched.
+- **Urban hideout** — left roofless: the generator produces ONLY the hidden UNDERGROUND level (basement
+  rooms/tunnels), a subterranean space like the cave/lake/tomb, which correctly has no rooftop.
+- **Cave / ravine-alcove (subterranean), hilltop / ravine (terrain), ship boarding (open decks)** — no
+  roofed buildings, correctly unchanged.
+- **Runtime-verified (Godot 4.6.2, headless: stockade 3/3 sizes, ruin 3/3 sizes, forest camp 3/3 seeds, 0
+  parse errors):** every shelter/tent footprint + intact ruin room is ROOF on level 1, collapsed ruin
+  sections are open air (VOID), and level-0 reads are unchanged everywhere. **The s56 mission-template
+  building sweep is complete** alongside the settlement-zone sweep — every standalone/covered building
+  across the ASCII generators now carries a roof (or, for the ruin, a partial one), single-storey caps or
+  the multi-storey manor, with subterranean/terrain/open-deck maps correctly left roofless. Same PC-travel
+  HOLD as the live ASCII stack.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
