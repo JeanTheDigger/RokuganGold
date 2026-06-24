@@ -7376,6 +7376,28 @@ Finishes the s56 mission-template building sweep (owner-directed) with per-templ
   the multi-storey manor, with subterranean/terrain/open-deck maps correctly left roofless. Same PC-travel
   HOLD as the live ASCII stack.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — ruined-structure surviving upper floor)
+Upgrades the ruin's surviving upper floor (s56.12.3) from an abstract population marker to a REAL navigable
+Option-B level (owner-directed "Ruined structure"). `_place_upper_floor` now stacks the host (leader) room via
+`AsciiMapGenerator._stack_building(map, lx,ly,rx,ry, 2, lx+1,ly+1, WALL_WOOD, FLOOR_WOOD, FLOOR_STONE)` — a
+walkable upper floor (level 1, walls on the outline + FLOOR_WOOD interior), a roof deck (level 2, FLOOR_STONE),
+and a 2-tile stairwell (STAIRS_UP foot on level 0, climbing ground→upper→roof and back). The `generate()` flat
+roof-cap loop now **skips** the stacked host room (via `stacked_room_id` from `upper_floor_sections[0]`) so the
+cap never overwrites the real upper floor; every other intact room still gets a flat cap, and `collapsed_sections`
+stay open to the sky (VOID on level 1). The UPPER_FLOOR_HOLDER population slot is tagged `"level": 1`.
+**Edge cases:** `_place_firepits` now guards against centring a FIRE on the stairwell foot (`AsciiMapData.is_stair`
+check) — a minimal host room can centre on the stair leg, and a fire there would sever the only climb route.
+The earlier interior guard (`uf_rx <= uf_lx or uf_ry <= uf_ly`) already requires interior ≥ 1 wide AND ≥ 1 tall
+(i.e. `rx-lx >= 3 AND ry-ly >= 3`), which is stricter than the stack gate (`rx-lx >= 3 AND ry-ly >= 2`), so a
+recorded `upper_floor_sections` entry ALWAYS corresponds to an actually-stacked room — no "uncapped-and-unstacked
+open hole" can occur. **Runtime-verified (Godot 4.6.2, headless, 7 upper-floor ruins across sizes/seeds, 0 fails;
+zstack10 regression — stockade + basic ruin partial-roof — 0 fails after updating its stale "every room capped"
+assertion to skip the stacked host room):** 3 levels when an upper floor exists; host interior is walkable
+FLOOR_WOOD/stairs at level 1 (never ROOF) and FLOOR_STONE roof deck at level 2; STAIRS_UP foot on level 0; a
+level-aware navigability BFS (8-dir within a level + stair transitions) reaches both level 1 AND level 2 from the
+ground; other intact rooms still ROOF-capped at level 1; collapsed sections still open (VOID); level-0 reads
+unchanged. Same PC-travel HOLD as the live ASCII stack.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
