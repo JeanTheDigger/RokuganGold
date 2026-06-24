@@ -607,6 +607,9 @@ static func _gen_residential_quarter(
 				map.set_tile(door_x, south_row, Enums.TileType.DOOR_WOOD_OPEN)
 			else:
 				map.set_tile(door_x, oy, Enums.TileType.DOOR_WOOD_OPEN)
+			# Roof cap (s4.4 Option B): each single-storey home presents a rooftop from
+			# above. The shrine plot (overwritten below) reuses this plot's roof.
+			_cap_with_roof(map, ox, oy, ox + plot_w - 1, oy + plot_h - 1)
 
 	# Small shrine in south-east corner (overwriting one house plot).
 	var sx: int = 1 + 2 * (plot_w + 1)
@@ -1831,6 +1834,8 @@ static func _gen_poor_quarter(map: AsciiMapData, rng: RandomNumberGenerator) -> 
 			else:
 				map.set_tile(ox + plot_w - 1, oy + plot_h / 2,
 					Enums.TileType.DOOR_WOOD_OPEN)
+			# Roof cap (s4.4 Option B): each shack presents a rooftop from above.
+			_cap_with_roof(map, ox, oy, ox + plot_w - 1, oy + plot_h - 1)
 
 	# Muddy patches in alleys.
 	for _i in range(15 + rng.randi() % 10):

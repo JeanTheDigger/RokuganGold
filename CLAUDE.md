@@ -7222,6 +7222,23 @@ stamps the first building (the simplest, single-storey case) to establish the pa
   terrain elevation vs building height — currently `resolve_display` keys on the viewer's own building
   level, perfect for multi-storey navigation). Same PC-travel HOLD as the live ASCII stack.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — single-storey housing rollout)
+Rolls the "every building gets a roof" convention out to the two multi-home settlement zones, exercising
+the `_cap_with_roof` no-clobber path at scale (many buildings per map).
+- **RESIDENTIAL_QUARTER** — the 3×3 grid of house plots (8 wood homes + the corner shrine, 9 total) each
+  capped with a roof in the plot loop; the shrine reuses its plot's roof.
+- **POOR_QUARTER** — the 4×4 grid of shacks (16) each capped in the loop.
+- **Runtime-verified (Godot 4.6.2, headless: 5/5, 0 parse errors).** Residential: all 9 plot footprints
+  ROOF on level 1 (729 roof tiles), alleys open air (VOID), home interiors still reachable from the exits.
+  Poor quarter: all 16 shacks roofed (576 tiles), alleys open, interiors reachable. Level-0 reads
+  unchanged (`get_tile_at(.,.,0) == get_tile`) — so every level-0 consumer is unaffected. The no-clobber
+  helper holds across 9 and 16 buildings on one map. Full regression: the Z + stacked-floor drivers green
+  (the single-level-generators check correctly no longer lists RESIDENTIAL_QUARTER). Stamped so far:
+  PEASANT_DWELLING, RESIDENTIAL_QUARTER, POOR_QUARTER (all single-storey caps). NEXT: MARKET_STREET shops
+  / DOCKS warehouses (single-storey caps), then the multi-storey buildings (manor, castle keep, towers,
+  gatehouses → floors + walkable roof + stairs via a `_stack_building` helper), then the s56 mission
+  templates (occupied village, castle siege, ruined structure, urban hideout). Same PC-travel HOLD.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
