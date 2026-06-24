@@ -7426,6 +7426,37 @@ template, and the WALL_TOWER** — every standalone/covered/multi-storey buildin
 or a real stacked keep/manor, with subterranean/terrain/open-deck/interior-room maps correctly left
 roofless. Same PC-travel HOLD as the live ASCII stack.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — CastleSiegeGenerator multi-storey keeps)
+Deepens the abstracted thin command-building tenshu in all three s56.17 castle-siege layouts into a real
+multi-storey keep (owner-directed "deeper multi-storey buildings"). Previously each keep had a ~1-row
+interior and got a single-storey flat roof cap; now each keep interior is deepened to a roomy 3-tall room
+and stacked into ground floor (level 0) + upper floor (level 1) + stone roof lookout (level 2) via
+`AsciiMapGenerator._stack_building`, joined by a real 2-tile stairwell in the NW interior corner (clear of
+the south-face keep gate). Per-layout geometry shift to make room (the keep grows southward, downstream
+bands push down by the same amount, gates stay aligned): **FORTIFICATION** keep `t_ry` 2→4, courtyard
+`court_ly` 3→5 (keep interior 12×3); **CASTLE_TOWN** keep `t_ry` 3→4, inner bailey `ib_ly` 4→5 (15×3);
+**CITY** keep `t_ry` 2→4, compound wall `cw_y` 3→5, compound `cc_ly` 4→6 (16×3) — the keep gate and
+compound gate stay aligned at x=14 for a straight passage. `generate()`'s single `_cap_with_roof` call is
+replaced by one `_stack_building` over the keep wall ring (`tenshu_lx-1 … tenshu_ry+1`), so all three
+layouts get the stacked keep. The keep ground floor sits at terrain elevation 1 (high ground via
+`_stamp_elevation`, which reads the now-deepened `tenshu_*` footprint); the stacked upper floor + roof rise
+above it — right, a tenshu towers over the curtain walls — and the keep gate is the +1 ramp keeping the
+ground floor reachable from the bailey. The wall-walks, baileys, courtyards and approach are open-air ground
+and correctly stay flat (no stacked tile, VOID at level 1). **Runtime-verified (Godot 4.6.2, headless,
+FORT/TOWN/CITY × 2 seeds, 0 fails):** 3 levels; keep interior level 1 = walkable FLOOR_STONE/stairs (never
+ROOF/VOID), level 2 = FLOOR_STONE roof deck; STAIRS_UP foot on level 0; a level-aware navigability BFS
+reaches both level 1 AND level 2 from the keep ground floor; the bailey/approach is open (VOID) at level 1;
+level-0 reads unchanged; the keep-gate↔bailey passage is intact in all three sizes (flood from the keep
+ground floor reaches the bailey below the south wall); FORT/TOWN additionally verify the full player-start →
+every objective + keep reachability end-to-end. The CITY's global player-start reachability is a documented
+**pre-existing** CastleSiegeGenerator quirk (the approach Y=31..39 is walled off from the outer gate by an
+unfilled WALL_STONE band at Y=28..30, `approach_y=h-9`/`ow_y=h-13`) — verified IDENTICAL in the un-deepened
+original (keep + all 5 objectives unreached before this change), a south-end issue untouched by the
+north-edge keep deepening and out of scope here. LIMITATION/DEFERRED: castle **gatehouses** are not modeled
+as separate buildings in this generator (the gates are flat 2-tile wall openings with metadata-only murder
+holes, s40-blocked) — adding gatehouse towers would be new structure geometry (a design addition), held
+pending owner direction. Same PC-travel HOLD as the live ASCII stack.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

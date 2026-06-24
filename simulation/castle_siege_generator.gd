@@ -43,12 +43,19 @@ static func generate(seed_str: String, size_cat: int, assault_mode: int) -> Cast
 
 	_place_player_start(map, assault_mode, w, h)
 	_stamp_elevation(map)
-	# Roof cap (s4.4 Option B): the tenshu (keep) presents a rooftop from above. It is
-	# abstracted here as a thin command building, so a single-storey cap over its wall
-	# footprint rather than a multi-storey treatment (which would need a roomier keep
-	# geometry). The wall-walks, baileys and approach stay open.
-	AsciiMapGenerator._cap_with_roof(map,
-		map.tenshu_lx - 1, map.tenshu_ly - 1, map.tenshu_rx + 1, map.tenshu_ry + 1)
+	# Stacked keep (s4.4 Option B): the tenshu is a real multi-storey keep — its interior
+	# is now deepened to a roomy 3-tall room in each layout, so it gets a ground floor
+	# (level 0), an upper floor (level 1), and a stone roof lookout (level 2), joined by a
+	# real 2-tile stairwell in the NW interior corner (clear of the south-face keep gate).
+	# The wall-walks, baileys and approach are open-air ground and correctly stay flat
+	# (no stacked tile). The keep ground floor sits at terrain elevation 1 (high ground via
+	# _stamp_elevation); the stacked upper floor + roof rise above it, which is right — a
+	# tenshu towers over the curtain walls. The keep gate (+1 ramp) keeps the ground floor
+	# reachable from the bailey.
+	AsciiMapGenerator._stack_building(map,
+		map.tenshu_lx - 1, map.tenshu_ly - 1, map.tenshu_rx + 1, map.tenshu_ry + 1,
+		2, map.tenshu_lx, map.tenshu_ly,
+		_WALL, _FLOOR, _FLOOR)
 	return map
 
 # -- Elevation (s4.4 Z-axis — raised wall-walks and keep) ----------------------
@@ -72,9 +79,8 @@ static func _stamp_elevation(map: CastleSiegeMapData) -> void:
 
 # -- FORTIFICATION (20×25, 2 layers) ------------------------------------------
 # Layout (Y=0 is north/back, Y=24 is south/approach):
-#   Y=0..1          : tenshu (command building)
-#   Y=2             : wall between tenshu and courtyard
-#   Y=3..19         : courtyard (FLOOR_STONE)
+#   Y=0..4          : tenshu (multi-storey keep; N/S walls, 3-tall ground interior Y=1..3)
+#   Y=5..19         : courtyard (FLOOR_STONE)
 #   Y=20            : wall walkway (FLOOR_STONE strip along inner wall face)
 #   Y=21            : outer wall ring (WALL_STONE), gate at center (X=9..10)
 #   Y=22..24        : approach zone (FLOOR_DIRT)
@@ -127,8 +133,9 @@ static func _build_fortification(map: CastleSiegeMapData, w: int, h: int, rng: i
 			"facing": "S", "wall_id": 0, "layer_idx": 0,
 		})
 
-	# Courtyard interior (FLOOR_STONE between walkway and tenshu)
-	var court_ly: int = 3
+	# Courtyard interior (FLOOR_STONE between walkway and tenshu). court_ly = t_ry + 1
+	# (the keep is deepened to a 3-tall interior, Y=0..4, so the courtyard starts at Y=5).
+	var court_ly: int = 5
 	var court_ry: int = walkway_y - 1  # Y=19
 	for y in range(court_ly, court_ry + 1):
 		for x in range(1, w - 1):
@@ -138,11 +145,12 @@ static func _build_fortification(map: CastleSiegeMapData, w: int, h: int, rng: i
 		"zone_type": CastleSiegeMapData.Zone.OUTER_BAILEY, "layer_idx": 0,
 	})
 
-	# Command building / tenshu (inner ring at north)
+	# Command building / tenshu (inner ring at north) — a real multi-storey keep with a
+	# roomy 3-tall ground interior (Y=1..3); stacked into ground/upper/roof in generate().
 	var t_lx: int = 3
 	var t_ly: int = 0
 	var t_rx: int = w - 4
-	var t_ry: int = 2
+	var t_ry: int = 4
 	_fill_wall_ring(map, t_lx, t_ly, t_rx, t_ry)
 	for y in range(t_ly + 1, t_ry):
 		for x in range(t_lx + 1, t_rx):
@@ -217,9 +225,8 @@ static func _place_defender_slots_fortification(
 
 # -- CASTLE TOWN (25×30, 3 layers) --------------------------------------------
 # Layout (Y=0 north/back, Y=29 south/approach):
-#   Y=0..2          : tenshu
-#   Y=3             : inner wall
-#   Y=4..13         : inner bailey
+#   Y=0..4          : tenshu (multi-storey keep; 3-tall ground interior Y=1..3)
+#   Y=5..13         : inner bailey
 #   Y=14            : inner walkway
 #   Y=15            : inner wall (second ring)
 #   Y=16..24        : outer bailey
@@ -312,8 +319,8 @@ static func _build_castle_town(map: CastleSiegeMapData, w: int, h: int, rng: int
 			"facing": "S", "wall_id": 1, "layer_idx": 1,
 		})
 
-	# Inner bailey
-	var ib_ly: int = 4
+	# Inner bailey. ib_ly = t_ry + 1 (the keep is deepened to a 3-tall interior, Y=0..4).
+	var ib_ly: int = 5
 	var ib_ry: int = iw_walk_y - 1  # Y=13
 	for y in range(ib_ly, ib_ry + 1):
 		for x in range(1, w - 1):
@@ -323,11 +330,11 @@ static func _build_castle_town(map: CastleSiegeMapData, w: int, h: int, rng: int
 		"zone_type": CastleSiegeMapData.Zone.INNER_BAILEY, "layer_idx": 1,
 	})
 
-	# Tenshu (layer 2)
+	# Tenshu (layer 2) — multi-storey keep, roomy 3-tall ground interior (Y=1..3).
 	var t_lx: int = 4
 	var t_ly: int = 0
 	var t_rx: int = w - 5
-	var t_ry: int = 3
+	var t_ry: int = 4
 	_fill_wall_ring(map, t_lx, t_ly, t_rx, t_ry)
 	for y in range(t_ly + 1, t_ry):
 		for x in range(t_lx + 1, t_rx):
@@ -532,8 +539,9 @@ static func _build_city(map: CastleSiegeMapData, w: int, h: int, rng: int) -> in
 			"facing": "S", "wall_id": 1, "layer_idx": 1,
 		})
 
-	# Castle compound / inner bailey
-	var cc_ly: int = 4
+	# Castle compound / inner bailey. cc_ly = cw_y + 1 (the keep is deepened to a 3-tall
+	# interior Y=0..4, the compound wall sits at Y=5, so the compound starts at Y=6).
+	var cc_ly: int = 6
 	var cc_ry: int = iw_walk_y - 1  # Y=12
 	for y in range(cc_ly, cc_ry + 1):
 		for x in range(1, w - 1):
@@ -544,7 +552,7 @@ static func _build_city(map: CastleSiegeMapData, w: int, h: int, rng: int) -> in
 	})
 
 	# Tenshu (layer 2 — castle compound wall separates it)
-	var cw_y: int = 3  # Castle compound wall (layer 2)
+	var cw_y: int = 5  # Castle compound wall (layer 2), just below the deepened keep (Y=0..4)
 	for x in range(w):
 		map.set_tile(x, cw_y, _WALL)
 	map.walls.append({
@@ -557,11 +565,11 @@ static func _build_city(map: CastleSiegeMapData, w: int, h: int, rng: int) -> in
 		"id": 4, "x": cw_gate_x, "y": cw_y, "layer_idx": 2, "wall_id": 2,
 	})
 
-	# Tenshu interior (layer 3)
+	# Tenshu interior (layer 3) — multi-storey keep, roomy 3-tall ground interior (Y=1..3).
 	var t_lx: int = 6
 	var t_ly: int = 0
 	var t_rx: int = w - 7
-	var t_ry: int = 2
+	var t_ry: int = 4
 	_fill_wall_ring(map, t_lx, t_ly, t_rx, t_ry)
 	for y in range(t_ly + 1, t_ry):
 		for x in range(t_lx + 1, t_rx):
