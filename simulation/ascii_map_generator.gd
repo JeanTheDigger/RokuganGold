@@ -330,6 +330,8 @@ static func _gen_market_street(map: AsciiMapData, rng: RandomNumberGenerator) ->
 		# Shop door facing south (toward road).
 		var door_x: int = sx + (shop_w / 2)
 		map.set_tile(door_x, 11, Enums.TileType.DOOR_WOOD_OPEN)
+		# Roof cap (s4.4 Option B): each enclosed shop is a single-storey building.
+		_cap_with_roof(map, sx, 1, ex, 11)
 
 	# South building block: rows 19–29, mirrored.
 	for i in range(shop_count):
@@ -339,6 +341,8 @@ static func _gen_market_street(map: AsciiMapData, rng: RandomNumberGenerator) ->
 		_fill_rect(map, sx + 1, 20, ex - 1, 28, Enums.TileType.FLOOR_TATAMI)
 		var door_x: int = sx + (shop_w / 2)
 		map.set_tile(door_x, 19, Enums.TileType.DOOR_WOOD_OPEN)
+		# Roof cap (s4.4 Option B): each enclosed shop is a single-storey building.
+		_cap_with_roof(map, sx, 19, ex, 29)
 
 	# Road strip (rows 12–18) is plain stone floor — overwrite any walls.
 	_fill_rect(map, 1, 12, S - 2, 18, Enums.TileType.FLOOR_STONE)
@@ -1781,6 +1785,8 @@ static func _gen_docks_waterfront(map: AsciiMapData, rng: RandomNumberGenerator)
 		_draw_wood_box(map, ox, 1, ox + wh_w - 2, 7)
 		_fill_rect(map, ox + 1, 2, ox + wh_w - 3, 6, Enums.TileType.FLOOR_WOOD)
 		map.set_tile(ox + wh_w / 2, 7, Enums.TileType.DOOR_WOOD_OPEN)
+		# Roof cap (s4.4 Option B): each warehouse is a single-storey building.
+		_cap_with_roof(map, ox, 1, ox + wh_w - 2, 7)
 
 	# Stone quay along waterfront.
 	_fill_rect(map, 0, 12, S - 1, 14, Enums.TileType.FLOOR_STONE)

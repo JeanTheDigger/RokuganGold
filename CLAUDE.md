@@ -7239,6 +7239,23 @@ the `_cap_with_roof` no-clobber path at scale (many buildings per map).
   gatehouses → floors + walkable roof + stairs via a `_stack_building` helper), then the s56 mission
   templates (occupied village, castle siege, ruined structure, urban hideout). Same PC-travel HOLD.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — market + docks roof rollout)
+Continues the single-storey roof rollout to the two zones that mix enclosed buildings with open-air
+structures — capping only the buildings, leaving the open spaces uncovered.
+- **MARKET_STREET** — the enclosed shops (the north + south wood-box blocks, 3–4 shops each) are capped;
+  the open road band and the vendor stalls (open-air counters) get no roof.
+- **DOCKS_WATERFRONT** — the warehouses along the north edge are capped; the stone quay, piers, and water
+  stay open.
+- **Runtime-verified (Godot 4.6.2, headless: 5/5, 0 parse errors).** Market: shop blocks ROOF on level 1
+  (528 tiles), the road centre is open air (VOID), road + both shop blocks reachable from the exits.
+  Docks: warehouses roofed (168 tiles), the quay is open air, warehouse interior + quay reachable. Level-0
+  reads unchanged for both. A docks-connectivity debug confirmed **0/462 unreached passable land tiles**
+  (the one initial test miss was a bad coord landing on a FURNITURE_CRATE, not a layout regression — the
+  generator was always fully connected). Stamped so far (single-storey caps): PEASANT_DWELLING,
+  RESIDENTIAL_QUARTER, POOR_QUARTER, MARKET_STREET, DOCKS_WATERFRONT. NEXT: the multi-storey buildings
+  (manor LORD_QUARTERS, castle keep, WALL_TOWER, gatehouses → floors + walkable roof + stairs via a new
+  `_stack_building` helper), then the s56 mission templates. Same PC-travel HOLD.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
