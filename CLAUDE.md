@@ -7297,6 +7297,21 @@ FLOOR_STONE)`.
   more multi-storey (castle keep, WALL_TOWER tower, gatehouses), the interior castle zones (decide
   per-zone standalone-vs-room), then the s56 mission templates. Same PC-travel HOLD.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — govt + pleasure quarter roof caps)
+Two more standalone-building districts get single-storey roof caps; the open plaza/street stay uncovered.
+- **GOVERNMENT_QUARTER** — the three enclosed stone buildings (magistrate office, record hall, central
+  guard post) capped; the plaza between them stays open.
+- **PLEASURE_QUARTER** — the six houses (3 geisha west + 3 sake east) capped in their loops; the central
+  street stays open.
+- **Runtime-verified (Godot 4.6.2, headless: 5/5, 0 parse errors).** Govt: 3 buildings ROOF on level 1
+  (525 tiles), plaza open air (VOID), all 3 interiors reachable. Pleasure: houses roofed (594 tiles),
+  street open, geisha + sake interiors reachable. Level-0 reads unchanged. (The one initial test miss was
+  a reachability coord landing on a FURNITURE_TABLE — the roof correctly caps over furniture; not a
+  layout bug.) Stamped: 7 single-storey (peasant/residential/poor/market/docks/govt/pleasure) + 1
+  multi-storey (manor). NEXT: the interior castle zones are intentionally single-level (their verticality
+  is the inter-zone graph, not within-map); remaining building work is the multi-storey castle keep /
+  WALL_TOWER tower / gatehouses + the s56 mission templates. Same PC-travel HOLD.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

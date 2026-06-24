@@ -1747,6 +1747,8 @@ static func _gen_pleasure_quarter(map: AsciiMapData, rng: RandomNumberGenerator)
 			map.set_tile(9, oy + 2, Enums.TileType.FURNITURE_SCREEN)
 			map.set_tile(3, oy + 6, Enums.TileType.FURNITURE_BRAZIER)
 			map.set_tile(MID - 4, oy + bh / 2, Enums.TileType.DOOR_SHOJI_OPEN)
+			# Roof cap (s4.4 Option B): each geisha house is a single-storey building.
+			_cap_with_roof(map, 1, oy, MID - 4, oy + bh)
 
 	# East block: 3 buildings (sake houses).
 	for i in range(3):
@@ -1762,6 +1764,8 @@ static func _gen_pleasure_quarter(map: AsciiMapData, rng: RandomNumberGenerator)
 			map.set_tile(27, oy + 2, Enums.TileType.FURNITURE_SCREEN)
 			map.set_tile(21, oy + 6, Enums.TileType.FURNITURE_BRAZIER)
 			map.set_tile(MID + 4, oy + bh / 2, Enums.TileType.DOOR_SHOJI_OPEN)
+			# Roof cap (s4.4 Option B): each sake house is a single-storey building.
+			_cap_with_roof(map, MID + 4, oy, S - 2, oy + bh)
 
 	# Zone exits north and south on main street.
 	map.set_tile(MID, 0, Enums.TileType.ZONE_EXIT)
@@ -1918,6 +1922,12 @@ static func _gen_government_quarter(map: AsciiMapData, rng: RandomNumberGenerato
 		{x = 0, y = MID, direction = "west", target_zone_id = ""},
 		{x = S - 1, y = MID, direction = "east", target_zone_id = ""},
 	]
+
+	# Roof caps (s4.4 Option B): the three enclosed administrative buildings (office,
+	# record hall, guard post) present rooftops from above; the plaza stays open.
+	_cap_with_roof(map, 3, 2, S - 4, 11)
+	_cap_with_roof(map, 3, 19, S - 4, S - 3)
+	_cap_with_roof(map, 13, 13, 17, 17)
 
 	# Elevation (s4.4 Z-axis): the magistrate's bench (rows 3–4, behind the dais) sits one
 	# step (layer 1) above the petitioner floor of the north office — the judge looks down on
