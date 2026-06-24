@@ -7312,6 +7312,24 @@ Two more standalone-building districts get single-storey roof caps; the open pla
   is the inter-zone graph, not within-map); remaining building work is the multi-storey castle keep /
   WALL_TOWER tower / gatehouses + the s56 mission templates. Same PC-travel HOLD.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — temple + shrine roof caps)
+The temple/shrine buildings get single-storey roof caps; the grounds (courtyard, torii, garden, forest
+clearing) stay open. Completes the standalone-building settlement zones.
+- **TEMPLE_GROUNDS** — the main worship hall (8,3–22,13) capped; courtyard, torii, garden open.
+- **SHRINE_CLEARING** — the shrine building (12,10–18,16) capped; forest clearing + torii open.
+- **CASTLE_SHRINE** — the timber shrine (10,3–20,10) capped; garden + approach open.
+- **Runtime-verified (Godot 4.6.2, headless: 3/3, 0 parse errors).** Each: the building footprint is ROOF
+  on level 1, an outside-grounds tile is open air (VOID), the interior is reachable from the exit, and
+  level-0 reads unchanged. **Settlement-zone building sweep complete** — 10 single-storey caps
+  (peasant/residential/poor/market/docks/govt/pleasure/temple/shrine/castle-shrine) + 1 multi-storey
+  (manor). The interior castle ROOMS (OHIROMA, ENKAI_HALL, AUDIENCE_CHAMBER, CHASHITSU, GUEST_WING,
+  WAR_COUNCIL_ROOM, DOJO) intentionally stay single-level — a castle's verticality is the inter-zone
+  graph, not within one room's map; the open-air zones (FARMLAND, ROAD, FOREST_PATH, MOUNTAIN_PASS,
+  RIVER_CROSSING, OUTER_COURTYARD, TSUBONIWA) correctly have no roofs. REMAINING: the multi-storey
+  WALL_TOWER tower (needs care composing with its battlement elevation), the castle keep + towers +
+  gatehouses in the s56 CastleSiegeGenerator, and buildings in the other s56 mission templates (occupied
+  village, ruined structure, urban hideout, makeshift stockade). Same PC-travel HOLD.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

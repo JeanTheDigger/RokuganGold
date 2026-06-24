@@ -413,6 +413,8 @@ static func _gen_temple_grounds(map: AsciiMapData, rng: RandomNumberGenerator) -
 	# Komainu guardian statues flanking the courtyard approach.
 	map.set_tile(11, 18, Enums.TileType.FURNITURE_STATUE)
 	map.set_tile(19, 18, Enums.TileType.FURNITURE_STATUE)
+	# Roof cap (s4.4 Option B): the temple hall presents a rooftop from above.
+	_cap_with_roof(map, 8, 3, 22, 13)
 
 	# Torii gate at south entrance (rows 27–28, columns 13–17).
 	map.set_tile(13, 28, Enums.TileType.WALL_WOOD)
@@ -476,6 +478,8 @@ static func _gen_shrine_clearing(map: AsciiMapData, rng: RandomNumberGenerator) 
 	map.set_tile(MID, 14, Enums.TileType.FURNITURE_PRAYER_MAT)
 	map.set_tile(13, 19, Enums.TileType.FURNITURE_STATUE)
 	map.set_tile(17, 19, Enums.TileType.FURNITURE_STATUE)
+	# Roof cap (s4.4 Option B): the shrine building presents a rooftop from above.
+	_cap_with_roof(map, 12, 10, 18, 16)
 
 	# Torii gate at south of clearing.
 	map.set_tile(13, 22, Enums.TileType.WALL_WOOD)
@@ -1695,6 +1699,8 @@ static func _gen_castle_shrine(map: AsciiMapData, rng: RandomNumberGenerator) ->
 	map.set_tile(17, 11, Enums.TileType.FURNITURE_INCENSE)
 	map.set_tile(14, 8, Enums.TileType.FURNITURE_PRAYER_MAT)
 	map.set_tile(16, 8, Enums.TileType.FURNITURE_PRAYER_MAT)
+	# Roof cap (s4.4 Option B): the shrine building presents a rooftop from above.
+	_cap_with_roof(map, 10, 3, 20, 10)
 	map.set_tile(12, 14, Enums.TileType.FURNITURE_STATUE)
 	map.set_tile(18, 14, Enums.TileType.FURNITURE_STATUE)
 
