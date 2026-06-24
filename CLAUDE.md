@@ -7256,6 +7256,30 @@ structures — capping only the buildings, leaving the open spaces uncovered.
   (manor LORD_QUARTERS, castle keep, WALL_TOWER, gatehouses → floors + walkable roof + stairs via a new
   `_stack_building` helper), then the s56 mission templates. Same PC-travel HOLD.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — _stack_building multi-storey helper)
+The reusable core for multi-storey buildings (manor, keep, tower, gatehouse), verified in isolation
+before applying it to real generators.
+- **`AsciiMapData.ensure_levels(count)`** — grows the level stack NON-destructively (appends VOID grids
+  only as needed), unlike `init_levels` which clears. `set_tile_at`'s lazy-grow now uses it, so writing
+  an upper-level tile never clobbers other stacked buildings on the same map. `_cap_with_roof` also
+  switched to it.
+- **`AsciiMapGenerator._stack_building(map, x1,y1,x2,y2, floors, sx,sy, wall,floor,roof)`** — leaves the
+  ground floor (level 0) as drawn; raises the footprint's wall outline around a walkable interior on each
+  upper floor 1..floors-1; caps with a WALKABLE roof deck (roof_tile inside a parapet) at level `floors`.
+  A 2-tile stairwell connects every level: the up-leg (sx,sy) is STAIRS_UP on 0..floors-1 (you arrive on
+  the roof deck), the down-leg (sx+1,sy) is STAIRS_DOWN on 1..floors — so a climber goes ground → upper →
+  roof and back.
+- **Runtime-verified (Godot 4.6.2, headless: 7/7, 0 parse errors).** A synthetic 3-storey stone keep
+  (ground + 2 upper floors + roof): stacked to 4 levels; upper floors have walls on the outline + plank
+  interior; the roof is a stone deck inside a parapet with the stairwell's down-leg + up-leg landing;
+  the stairwell columns are correct per level; a **level-aware navigability BFS** (8-dir moves within a
+  level + stair transitions, mirroring movement + `execute_climb_stairs`) reaches **all 4 floors** from
+  the ground stairwell and every floor's far interior corner; and `ensure_levels` is non-destructive (a
+  hut roof cap added to the same map coexists with the keep's floors). Regression: the single-storey-cap
+  drivers (peasant/residential/poor/market/docks) re-pass with the `ensure_levels`-backed `set_tile_at`.
+  NEXT: apply `_stack_building` to a real building (LORD_QUARTERS manor, then the castle keep / towers /
+  gatehouses), then the s56 mission templates. Same PC-travel HOLD.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

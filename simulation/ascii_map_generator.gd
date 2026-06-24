@@ -2201,11 +2201,45 @@ static func _cap_with_roof(
 	map: AsciiMapData,
 	x1: int, y1: int, x2: int, y2: int,
 ) -> void:
-	if map.get_level_count() < 2:
-		map.init_levels(2)
+	map.ensure_levels(2)
 	for y in range(maxi(0, y1), mini(map.height - 1, y2) + 1):
 		for x in range(maxi(0, x1), mini(map.width - 1, x2) + 1):
 			map.set_tile_at(x, y, 1, Enums.TileType.ROOF)
+
+
+# Stacks a MULTI-STOREY building on an existing footprint (s4.4 Option B). The
+# ground floor (level 0) is left as the generator drew it (interior + door). Each
+# upper floor 1..floors-1 rises with the footprint's wall outline (wall_tile) around
+# a walkable interior (floor_tile); the top level `floors` is a WALKABLE roof deck
+# (roof_tile inside a wall_tile parapet). A 2-tile stairwell connects every level:
+# the up-leg (sx,sy) is STAIRS_UP on levels 0..floors-1 (you arrive on the roof deck
+# at the top); the down-leg (sx+1,sy) is STAIRS_DOWN on levels 1..floors. So a
+# climber goes ground -> 1 -> … -> roof and back. sx,sy and sx+1,sy MUST be interior
+# tiles (x1 < sx, sx+1 < x2, y1 < sy < y2). floors >= 2 (the roof sits at level
+# `floors`). Uses ensure_levels so it never clobbers other stacked buildings.
+static func _stack_building(
+	map: AsciiMapData,
+	x1: int, y1: int, x2: int, y2: int,
+	floors: int,
+	sx: int, sy: int,
+	wall_tile: int = Enums.TileType.WALL_WOOD,
+	floor_tile: int = Enums.TileType.FLOOR_WOOD,
+	roof_tile: int = Enums.TileType.FLOOR_STONE,
+) -> void:
+	var top: int = maxi(2, floors)
+	map.ensure_levels(top + 1)
+	# Upper interior floors (1..top-1) + the roof deck (top).
+	for lvl in range(1, top + 1):
+		var surface: int = roof_tile if lvl == top else floor_tile
+		for y in range(y1, y2 + 1):
+			for x in range(x1, x2 + 1):
+				var edge: bool = (x == x1 or x == x2 or y == y1 or y == y2)
+				map.set_tile_at(x, y, lvl, wall_tile if edge else surface)
+	# Stairwell: up-leg STAIRS_UP on 0..top-1, down-leg STAIRS_DOWN on 1..top.
+	for lvl in range(0, top):
+		map.set_tile_at(sx, sy, lvl, Enums.TileType.STAIRS_UP)
+	for lvl in range(1, top + 1):
+		map.set_tile_at(sx + 1, sy, lvl, Enums.TileType.STAIRS_DOWN)
 
 
 static func _draw_stone_border(

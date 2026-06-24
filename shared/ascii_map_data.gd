@@ -407,7 +407,8 @@ func get_level_count() -> int:
 
 # Allocates `count` stacked levels. Level 0 stays in tile_types; levels 1..count-1
 # get a fresh grid filled with `fill` (VOID = open air — no structure rises there).
-# count clamped to [1, MAX_LEVELS].
+# count clamped to [1, MAX_LEVELS]. NOTE: this CLEARS any existing upper levels —
+# use ensure_levels() to grow non-destructively on a multi-building map.
 func init_levels(count: int, fill: int = Enums.TileType.VOID) -> void:
 	level_count = clampi(count, 1, MAX_LEVELS)
 	upper_levels.clear()
@@ -418,6 +419,23 @@ func init_levels(count: int, fill: int = Enums.TileType.VOID) -> void:
 		for i in range(tiles):
 			grid[i] = fill
 		upper_levels.append(grid)
+
+
+# Grows the level stack up to `count` WITHOUT clearing existing levels (appends
+# fresh VOID grids only as needed). Safe to call repeatedly while stacking several
+# buildings of different heights on one map. No-op if already tall enough.
+func ensure_levels(count: int, fill: int = Enums.TileType.VOID) -> void:
+	var target: int = clampi(count, 1, MAX_LEVELS)
+	if target <= level_count:
+		return
+	var tiles: int = width * height
+	while upper_levels.size() < target - 1:
+		var grid: PackedByteArray = PackedByteArray()
+		grid.resize(tiles)
+		for i in range(tiles):
+			grid[i] = fill
+		upper_levels.append(grid)
+	level_count = target
 
 
 # Tile at (x,y) on a specific level. Level 0 routes through get_tile (honors
@@ -448,7 +466,7 @@ func set_tile_at(x: int, y: int, level: int, tile: int) -> void:
 	if x < 0 or x >= width or y < 0 or y >= height:
 		return
 	if level >= level_count:
-		init_levels(level + 1)
+		ensure_levels(level + 1)  # grow non-destructively (never clobber existing levels)
 	var grid: PackedByteArray = upper_levels[level - 1]
 	grid[y * width + x] = tile
 	upper_levels[level - 1] = grid
