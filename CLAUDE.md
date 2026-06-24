@@ -7457,6 +7457,26 @@ as separate buildings in this generator (the gates are flat 2-tile wall openings
 holes, s40-blocked) — adding gatehouse towers would be new structure geometry (a design addition), held
 pending owner direction. Same PC-travel HOLD as the live ASCII stack.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — castle gatehouse towers)
+Completes the owner-directed "deeper multi-storey buildings (keep + gatehouses)" for s56.17. The castle
+gates were bare 2-tile wall openings with metadata-only murder holes (no building); now each principal
+(outer-wall) gate gets a real **gate tower** — the standard castle gatehouse form. `_stack_gatehouse(map,
+gx, wy)` builds a 4×3 footprint straddling the wall at the gate (wall-walk row `wy-1` .. approach row
+`wy+1`): a 2-tile **guard chamber** on stacked level 1 directly over the gate passage (the murder-hole
+position, s56.17.2), a roof on level 2, joined by a 2-tile stairwell whose up-leg sits on the wall-walk
+corner `(gx-1, wy-1)` and down-leg over the gate `(gx, wy-1)`. **The chokepoint is preserved by design:**
+`_stack_building` changes level 0 only at the stairwell foot, so the 2 gate-passage tiles are never touched
+— the attacker still storms straight through the gate. `generate()` loops `map.gates` and gatehouses every
+outer-wall gate (`wall_id == 0`): 1 for FORTIFICATION/CASTLE_TOWN, 3 for CITY. Inner/compound gates keep
+their flat openings (the outer gate is the principal gatehouse). New `CastleSiegeMapData.gatehouses` metadata
+array (`{gate_x, gate_y}` per tower). **Runtime-verified (Godot 4.6.2, headless, FORT/TOWN/CITY × 2 seeds,
+0 fails):** each outer gate's passage stays passable at level 0; a FLOOR guard chamber sits at level 1 over
+the gate; a roof at level 2; the chamber is reachable from the gatehouse stairwell; and the FORT/TOWN
+end-to-end player-start → keep flood still passes (proving the gate passage through the tower is intact).
+Composes with the deepened multi-storey keep (same generate() pass). With this, both the castle keep AND the
+gatehouses are real multi-storey structures — the "deeper multi-storey buildings" directive is complete.
+Same PC-travel HOLD as the live ASCII stack.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

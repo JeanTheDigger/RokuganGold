@@ -56,7 +56,28 @@ static func generate(seed_str: String, size_cat: int, assault_mode: int) -> Cast
 		map.tenshu_lx - 1, map.tenshu_ly - 1, map.tenshu_rx + 1, map.tenshu_ry + 1,
 		2, map.tenshu_lx, map.tenshu_ly,
 		_WALL, _FLOOR, _FLOOR)
+	# Gatehouses (s4.4 Option B): each principal (outer-wall) gate gets a gate tower — a
+	# guard chamber on level 1 directly over the 2-tile passage (the murder-hole position),
+	# a roof on level 2, and a stairwell up from the wall-walk. Only the stairwell foot
+	# changes at level 0, so the gate passage (the chokepoint) stays open. Inner/compound
+	# gates keep their flat openings — the outer gate is the principal gatehouse.
+	for g in map.gates:
+		if g.get("wall_id", -1) == 0:
+			_stack_gatehouse(map, g["x"], g["y"])
 	return map
+
+## Builds a gate tower over one gate. The gate is 2 tiles wide at (gx, wy)/(gx+1, wy)
+## with the wall-walk one row inside at wy-1. The tower is a 4×3 footprint straddling
+## the wall (walkway row wy-1 .. approach row wy+1): level 1 is a 2-tile guard chamber
+## directly above the passage, level 2 a roof, joined by a 2-tile stairwell whose up-leg
+## sits on the wall-walk corner (gx-1, wy-1) and down-leg over the gate (gx, wy-1). Only
+## that up-leg tile changes at level 0, so the ground passage is never blocked.
+static func _stack_gatehouse(map: CastleSiegeMapData, gx: int, wy: int) -> void:
+	AsciiMapGenerator._stack_building(map,
+		gx - 1, wy - 1, gx + 2, wy + 1,
+		2, gx - 1, wy - 1,
+		_WALL, _FLOOR, _FLOOR)
+	map.gatehouses.append({"gate_x": gx, "gate_y": wy})
 
 # -- Elevation (s4.4 Z-axis — raised wall-walks and keep) ----------------------
 
