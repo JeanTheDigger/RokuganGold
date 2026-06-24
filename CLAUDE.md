@@ -7398,6 +7398,34 @@ level-aware navigability BFS (8-dir within a level + stair transitions) reaches 
 ground; other intact rooms still ROOF-capped at level 1; collapsed sections still open (VOID); level-0 reads
 unchanged. Same PC-travel HOLD as the live ASCII stack.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — WALL_TOWER multi-storey keep)
+The last building that wasn't yet vertically coherent. A Kaiu Wall tower's inner keep had no roof or
+upper floor in the stacked sense (from above it showed the open garrison), and its central 5×5 block
+was mislabeled "stairwell" but was actually solid impassable WALL_STONE. `_gen_wall_tower` now stacks
+the inner tower footprint (8,8–22,22) via `_stack_building(map, 8,8,22,22, 2, 11,11, WALL_STONE,
+FLOOR_WOOD, FLOOR_STONE)` — a real multi-storey keep: ground garrison (level 0), upper floor (level 1,
+WALL_STONE outline + FLOOR_WOOD interior), and a stone roof lookout (level 2, FLOOR_STONE deck), joined
+by a real 2-tile stairwell in the NW garrison quadrant (11,11)/(12,11) — clear of the central core
+(x≥13), the four cardinal doors, and all furniture. The central 5×5 stone block is kept as the keep's
+structural core (comment corrected from "pillar / stairwell" to "structural newel / ground-level store").
+The outer crenellated battlement ring is an open-air fighting walk and correctly gets NO stacked tile
+(VOID at level 1), so from above the tower shows a stone roof over the keep and the open parapet around
+it. **Composes with the pre-existing terrain-elevation parapet** (the battlement walk is heightfield
+elevation 1, the inner keep elevation 0; the two Z axes — terrain `elevation` byte-grid vs stacked
+`upper_levels` — are independent arrays and don't collide). The keep roof (level 2) rises above the wall
+walk, which is physically right (a Kaiu tower is taller than the wall). **Runtime-verified (Godot 4.6.2,
+headless, 3 seeds, 0 fails):** 3 levels; inner-keep level 1 = walkable FLOOR_WOOD/stairs (never ROOF/VOID),
+level 2 = FLOOR_STONE roof deck; STAIRS_UP foot on level 0; a level-aware navigability BFS reaches both
+level 1 AND level 2 from the ground; the outer battlement ring is open (VOID) at level 1; level-0 reads
+unchanged; and a cliff-aware level-0 flood from the south exit (honoring the terrain elevation +1 door
+ramps) reaches the garrison interior — connectivity intact. The 35-zone sweep shows WALL_TOWER clean
+(levels=3, no leaks/glyph/reach issues); the only two sweep flags are the documented pre-existing benign
+isolated-scenery tiles (SHRINE_CLEARING grass-in-trees, UNDERGROUND_LAKE rubble-on-islet) in untouched
+generators. **The stacked-floors building sweep is now complete across every settlement zone, s56 mission
+template, and the WALL_TOWER** — every standalone/covered/multi-storey building carries a roof (flat cap)
+or a real stacked keep/manor, with subterranean/terrain/open-deck/interior-room maps correctly left
+roofless. Same PC-travel HOLD as the live ASCII stack.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

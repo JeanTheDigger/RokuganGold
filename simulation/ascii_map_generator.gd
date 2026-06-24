@@ -2027,7 +2027,8 @@ static func _gen_wall_tower(map: AsciiMapData, rng: RandomNumberGenerator) -> vo
 	# Interior: wood floor (garrison quarters).
 	_fill_rect(map, 9, 9, 21, 21, Enums.TileType.FLOOR_WOOD)
 
-	# Central pillar / stairwell (stone).
+	# Central stone core (structural newel / ground-level store — the keep's solid spine;
+	# the real stairwell is the stacked 2-tile flight added at the foot of this function).
 	_fill_rect(map, 13, 13, 17, 17, Enums.TileType.WALL_STONE)
 
 	# Doors on all four faces of inner tower.
@@ -2059,6 +2060,15 @@ static func _gen_wall_tower(map: AsciiMapData, rng: RandomNumberGenerator) -> vo
 	# reachable. Only two layers (max delta 1), so the ramps can never strand anything.
 	map.init_elevation(1)               # the whole tower top sits at battlement level
 	_raise_rect(map, 8, 8, 22, 22, 0)   # inner tower (walls + garrison + pillar) one step down
+
+	# Stacked floors (s4.4 Option B): the inner tower is a real multi-storey keep — it rises
+	# ABOVE the wall walk, so it gets a ground garrison (level 0), an upper floor (level 1),
+	# and a stone roof lookout (level 2), joined by a real 2-tile stairwell in the NW garrison
+	# quadrant (clear of the central core, the four doors, and the furniture). The outer
+	# battlement ring is an open-air crenellated walk and correctly gets NO stacked tile, so
+	# from above the tower shows a stone roof over the keep and the open parapet around it.
+	_stack_building(map, 8, 8, 22, 22, 2, 11, 11,
+		Enums.TileType.WALL_STONE, Enums.TileType.FLOOR_WOOD, Enums.TileType.FLOOR_STONE)
 
 
 # PEASANT_DWELLING (minka): a single-room commoner home in a small yard.
