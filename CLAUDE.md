@@ -7477,6 +7477,46 @@ Composes with the deepened multi-storey keep (same generate() pass). With this, 
 gatehouses are real multi-storey structures — the "deeper multi-storey buildings" directive is complete.
 Same PC-travel HOLD as the live ASCII stack.
 
+### s4.4 stacked floors / Option B — EFFORT CLOSED (2026-06-24, consolidated checkpoint)
+The true-stacked-floors building effort (owner-chosen Option B: a tile holds ground floor + upper
+floor(s) + roof as separately-walkable levels joined by stairs, the s4.4-deferred model) is complete.
+Every standalone/covered/multi-storey building across the ASCII generators now has coherent Z layers:
+a roof cap (single-storey) or a real stacked keep/manor/tower (multi-storey with a navigable upper
+floor + roof deck + stairwell); subterranean / open-terrain / open-deck / interior-room maps are
+correctly left roofless. **Inventory:**
+- **Foundation (T0–T5):** the level stack (`AsciiMapData.upper_levels` + `level_count`,
+  `get/set_tile_at`, `ensure_levels`, `resolve_display`, `is_stair`, STAIRS_UP/DOWN + ROOF tiles),
+  level-aware combatant position + `execute_climb_stairs`, the `_cap_with_roof` / `_stack_building`
+  helpers, and the `peek_dim` render. All additive — level 0 stays byte-identical to `tile_types`,
+  so every pre-existing single-level map is unchanged.
+- **Settlement zones (single-storey caps):** peasant dwelling, residential + poor quarters, market,
+  docks, government + pleasure quarters, temple + shrine + castle-shrine. **Multi-storey:** the
+  LORD_QUARTERS manor (ground + upper + roof) and the WALL_TOWER inner keep.
+- **s56 mission templates:** occupied village (building caps), makeshift stockade + forest camp
+  (shelter/tent caps), ruined structure (intact-room caps + collapsed-open + a REAL navigable
+  surviving upper floor), and the CastleSiegeGenerator (deepened multi-storey tenshu keeps in all 3
+  sizes + gatehouse towers over the principal outer gates).
+- **Roofless (correct):** cave, ravine, hilltop, ship boarding (terrain/open-deck), urban hideout
+  (subterranean), and the castle-interior Lesser-Zone rooms (verticality = the inter-zone graph).
+**Consolidated closeout — runtime-verified (Godot 4.6.2, headless, one pass, 0 total fails):**
+PART A — all 35 AsciiMapGenerator ZoneSubtypes × 2 seeds (70 checks): determinism, valid glyphs,
+level-0 invariant (no upper-level leak), exit connectivity (cliff-aware, with the documented
+ROAD/FOREST_PATH/MOUNTAIN_PASS roadside-scenery + SHRINE_CLEARING/UNDERGROUND_LAKE benign-scenery
+exceptions), plus manor + wall-tower stairwell navigability (a level-aware BFS reaches every level).
+PART B — castle siege ×3 sizes (keep 3-level + navigable, gatehouse passage open / chamber+roof /
+reachable, FORT/TOWN end-to-end player→keep flood), ruined structure ×30 (caps + collapsed-open +
+upper-floor stack/navigability), stockade ×3, village ×3 (39 checks). The one known caveat is the
+**pre-existing** CITY castle-siege approach disconnect (a south-end WALL_STONE band at Y=28-30,
+verified identical in the un-deepened original) — unrelated to the Z-axis, out of scope. Composes
+with the terrain-elevation heightfield (the separate s4.4 Z-axis "EFFORT CLOSED 2026-06-23" pass):
+the two Z systems use independent arrays (`elevation` byte-grid vs `upper_levels`) and don't collide.
+**Remaining (deferred):** the cross-elevation roof render (couple `resolve_display` to the viewer's
+terrain elevation vs building height so a hilltop/wall-walk viewer sees lower rooftops — currently it
+keys on the viewer's own building level, perfect for navigation), and the player-facing turn-based
+climb/move UI. Both ride the project-wide **PC-travel HOLD** (the whole live ASCII stack is built +
+headless-verified, not yet live-reachable). No missing Z mechanics remain — further work is content
+placement or the deferred render/UI.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
