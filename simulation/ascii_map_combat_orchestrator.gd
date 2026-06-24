@@ -183,6 +183,9 @@ class MapCombatState:
 	var combatants: Dictionary = {}
 	## Character tile positions. Key: int (character_id), Value: Vector2i.
 	var positions: Dictionary = {}
+	## Stacked-floor level per combatant (s4.4 Option B). Key: int (character_id),
+	## Value: int level. ABSENT = level 0, so single-level skirmishes never touch this.
+	var combatant_levels: Dictionary = {}
 	## Character factions. Key: int (character_id), Value: String (FACTION_*).
 	var factions: Dictionary = {}
 	## Per-character turn budgets. Key: int (character_id), Value: TurnState.
@@ -792,6 +795,64 @@ static func execute_climb(
 	return {"success": true, "climbed": climbed, "direction": direction,
 		"wall_scale": is_wall_scale, "tn": tn,
 		"from": cur, "to": state.positions[char_id], "fell": fell, "fall_damage": fall_dmg}
+
+
+## The stacked-floor level a combatant currently stands on (s4.4 Option B).
+## ABSENT from the dict = level 0 (single-level skirmishes never populate it).
+static func get_combatant_level(state: MapCombatState, char_id: int) -> int:
+	return int(state.combatant_levels.get(char_id, 0))
+
+
+## Climb a staircase/ladder to the floor it connects to (s4.4 Option B). A Simple
+## Move action (you walk up built stairs — no Athletics roll, unlike a cliff). The
+## combatant must stand on a STAIRS tile on their current level; they relocate to the
+## same (x,y) on the destination level, where the landing tile must be passable and
+## unoccupied by a combatant on THAT level.
+static func execute_climb_stairs(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if ts == null or p == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if IndividualCombat.CONDITION_ENTANGLED in p.conditions:
+		return {"success": false, "reason": "entangled"}
+	if ts.is_down_restricted(CharacterStats.get_wound_level(character)):
+		return {"success": false, "reason": "down_only_free_actions"}
+	if not ts.can_use_simple():
+		return {"success": false, "reason": "no_simple_actions_remaining"}
+	var pos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if pos.x < 0:
+		return {"success": false, "reason": "position_unknown"}
+	var cur_level: int = get_combatant_level(state, char_id)
+	var here: int = state.map.get_tile_at(pos.x, pos.y, cur_level)
+	if not AsciiMapData.is_stair(here):
+		return {"success": false, "reason": "not_on_stairs"}
+	var dest_level: int = state.map.stair_destination_level(pos.x, pos.y, cur_level)
+	if dest_level < 0:
+		return {"success": false, "reason": "no_destination_level"}
+	var landing: int = state.map.get_tile_at(pos.x, pos.y, dest_level)
+	if not MovementSystem.is_passable(landing):
+		return {"success": false, "reason": "landing_blocked"}
+	# Level-aware occupancy: someone already standing at this (x,y) on the dest level.
+	for cid: int in state.positions:
+		if cid != char_id and state.positions[cid] == pos \
+				and get_combatant_level(state, cid) == dest_level:
+			return {"success": false, "reason": "landing_occupied"}
+
+	ts.consume_simple()
+	state.combatant_levels[char_id] = dest_level
+	var direction: String = "up" if dest_level > cur_level else "down"
+	state.combat_log.append({
+		"type": "climb_stairs", "round": state.combat.round_number, "char_id": char_id,
+		"at": pos, "from_level": cur_level, "to_level": dest_level, "direction": direction,
+	})
+	return {"success": true, "direction": direction, "at": pos,
+		"from_level": cur_level, "to_level": dest_level}
 
 
 ## Melee attack on target_id. Costs a Complex action.

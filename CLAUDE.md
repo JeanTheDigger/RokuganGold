@@ -7148,6 +7148,32 @@ the data model, fully additive (every existing map stays single-level → zero b
   (generators emit ground floor + upper floor(s) + roof per building). Same PC-travel HOLD as the whole
   live ASCII stack — built + headless-verified, not live-reachable yet.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — T1+T3: level-aware position + stair transition)
+The second stacked-floors tranche — combatants now carry a floor level and can walk between floors,
+paired so the tranche delivers a verifiable behavior (a combatant climbs a staircase to another floor)
+rather than a hollow field. Fully additive: single-level skirmishes never populate the level dict.
+- **T1 — combatant level.** `MapCombatState.combatant_levels: Dictionary` (id → int level; ABSENT =
+  level 0). `AsciiMapCombatOrchestrator.get_combatant_level(state, id)` reads it (default 0). `setup_combat`
+  / `add_*` don't touch it, so every existing single-level skirmish leaves it empty → zero change.
+- **T3 — stair transition.** `execute_climb_stairs(state, char_id, character)` — a Simple Move action
+  (you walk up built stairs, no Athletics roll, unlike the cliff/wall `execute_climb`). Gates: dead /
+  not-in-combat / entangled / down-restricted / no Simple left; must stand on a STAIRS tile on the
+  current level (`not_on_stairs`); `stair_destination_level` resolves the floor it connects to
+  (STAIRS_UP → +1, STAIRS_DOWN → −1, out-of-range → `no_destination_level`); the landing tile at the
+  same (x,y) on the destination level must be passable (`landing_blocked`) and unoccupied by a combatant
+  **on that level** (level-aware occupancy → `landing_occupied`). On success it consumes the Simple and
+  sets the combatant's level (the x,y is unchanged — you go up/down in place).
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy): 7/7, 0 fails, 0 project-wide
+  parse errors.** On a synthetic 2-storey house (ground + upper floor + walkable roof, stairwell at
+  (3,3)): climb up ground→1st floor→roof, climb back down, off-stairs rejected, the Simple budget caps
+  climbs per turn, a combatant already on the destination level blocks the landing, and a single-level
+  skirmish keeps `combatant_levels` empty / level 0 / climb inert. The three orchestrator Z drivers
+  (pit, climb, auto-climb) re-pass — no regression. DEFERRED (next tranches): T2 level-aware render
+  (draw the current level; open-air upper tiles peek at the level below), T4 per-level FOV + combat
+  (sight/melee resolve within a level; same-(x,y)-different-level gating for `execute_move` occupancy
+  and targeting), the exploration-layer (`CombatController`/`AsciiMapView`) player level + cross-level
+  pathfinding/auto-climb-AI, and T5 template stacking. Same PC-travel HOLD as the live ASCII stack.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
