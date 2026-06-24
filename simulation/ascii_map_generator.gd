@@ -209,6 +209,20 @@ static func elevation_shade(color: Color, level: int) -> Color:
 		minf(color.r * f, 1.0), minf(color.g * f, 1.0), minf(color.b * f, 1.0), color.a)
 
 
+# Peek-down dim (s4.4 Option B render). When a viewer on an upper floor looks past
+# the building (open air) at the level(s) below, the peeked tile darkens by how many
+# levels down it sits — so a balcony/roof edge reads as "below me", distinct from the
+# floor you stand on. depth 0 = your own level (no-op). Each level down multiplies
+# colour value by (1 - PEEK_DIM_STEP): depth 1 ≈ 0.65, depth 2 ≈ 0.42.
+const PEEK_DIM_STEP: float = 0.35
+
+static func peek_dim(color: Color, depth: int) -> Color:
+	if depth <= 0:
+		return color
+	var f: float = pow(1.0 - PEEK_DIM_STEP, float(depth))
+	return Color(color.r * f, color.g * f, color.b * f, color.a)
+
+
 # Returns the foreground colour for a given tile type.
 static func get_fg_color(tile: int) -> Color:
 	match tile:

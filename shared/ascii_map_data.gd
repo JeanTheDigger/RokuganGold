@@ -470,6 +470,26 @@ func stair_destination_level(x: int, y: int, level: int) -> int:
 	return dest
 
 
+# The tile to DISPLAY at (x,y) for a viewer standing on `viewer_level`, plus how
+# many levels below the viewer it was found (s4.4 Option B render). On the viewer's
+# own level a non-open-air tile shows directly (depth 0). Where the viewer's level
+# is open air (VOID — no structure rises there), the view falls through to the first
+# solid tile below (a balcony/roof edge peeking at the ground), depth = how far down;
+# the renderer dims by depth. Level 0 always shows its own tile (the ground is solid).
+# Returns {"tile": int, "depth": int}. For a single-level map / viewer_level 0 this is
+# always {tile: get_tile(x,y), depth: 0}, so existing render is unchanged.
+func resolve_display(x: int, y: int, viewer_level: int) -> Dictionary:
+	var vl: int = clampi(viewer_level, 0, get_level_count() - 1)
+	var t: int = get_tile_at(x, y, vl)
+	if vl == 0 or t != Enums.TileType.VOID:
+		return {"tile": t, "depth": 0}
+	for lvl in range(vl - 1, -1, -1):
+		var below: int = get_tile_at(x, y, lvl)
+		if lvl == 0 or below != Enums.TileType.VOID:
+			return {"tile": below, "depth": vl - lvl}
+	return {"tile": t, "depth": 0}
+
+
 # True when a spiritual overlap has been applied to this map (s56.16.1b).
 func has_overlap() -> bool:
 	return spiritual_event_type >= 0 and overlap_intensity.size() == width * height

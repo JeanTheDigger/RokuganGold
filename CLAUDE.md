@@ -7174,6 +7174,25 @@ rather than a hollow field. Fully additive: single-level skirmishes never popula
   and targeting), the exploration-layer (`CombatController`/`AsciiMapView`) player level + cross-level
   pathfinding/auto-climb-AI, and T5 template stacking. Same PC-travel HOLD as the live ASCII stack.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — T2: level-aware render core)
+The render-resolution layer: what to DRAW at each (x,y) for a viewer standing on a given floor.
+Pure logic (the scene-Node draw call consumes it), so it's headless-verifiable.
+- **`AsciiMapData.resolve_display(x, y, viewer_level) -> {tile, depth}`.** On the viewer's own level a
+  non-open-air tile shows directly (depth 0). Where the viewer's level is open air (VOID — no structure
+  rises there, e.g. a balcony/roof edge past the building), the view falls through to the first solid
+  tile below, `depth` = how far down. Level 0 always shows its own tile (the ground is solid). For a
+  single-level map or `viewer_level` 0 this is always `{get_tile(x,y), 0}`, so existing render is
+  unchanged.
+- **`AsciiMapGenerator.peek_dim(color, depth)`.** Darkens a peeked tile by depth so "below me" reads
+  distinct from the floor you stand on (depth 0 = no-op; each level down ×`1-PEEK_DIM_STEP` = 0.65,
+  0.42, …). Composes with the existing `elevation_shade`/remembered-dim render hooks.
+- **Runtime-verified (Godot 4.6.2, headless: 6/6, 0 parse errors).** On a 2-storey house: viewer 0 →
+  own ground; viewer 1 inside the footprint → own floor/wall (depth 0); viewer 1/2 over open air →
+  peek to ground at depth 1/2; peek_dim depth-0 unchanged + deeper dimmer; a flat generated map →
+  `resolve_display(.,.,0) == get_tile`, depth 0 (no regression). DEFERRED: the `AsciiMapView` Node
+  wiring (route the draw through `resolve_display(mx,my,_player_level)` + `peek_dim`) is held until the
+  exploration-layer **player level** exists to feed it (next tranche), to avoid a half-wired Node.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
