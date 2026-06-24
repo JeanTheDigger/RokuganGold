@@ -188,6 +188,8 @@ static func get_glyph(
 		Enums.TileType.FURNITURE_SHELF:        return "▤"
 		Enums.TileType.FURNITURE_STOVE:        return "◫"
 		Enums.TileType.FURNITURE_BENCH:        return "╨"
+		Enums.TileType.STAIRS_UP:              return "<"
+		Enums.TileType.STAIRS_DOWN:            return ">"
 	return "?"
 
 
@@ -269,6 +271,8 @@ static func get_fg_color(tile: int) -> Color:
 		Enums.TileType.FURNITURE_SHELF:        return Color(0.5, 0.35, 0.2)
 		Enums.TileType.FURNITURE_STOVE:        return Color(0.45, 0.4, 0.4)
 		Enums.TileType.FURNITURE_BENCH:        return Color(0.55, 0.4, 0.25)
+		Enums.TileType.STAIRS_UP, \
+		Enums.TileType.STAIRS_DOWN:            return Color(0.85, 0.8, 0.6)
 	return Color.WHITE
 
 

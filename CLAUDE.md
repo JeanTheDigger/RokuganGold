@@ -7118,6 +7118,36 @@ foreground-brightness render cue. **The only un-wired Z caller is the player-fac
 climb/move UI, on the project-wide PC-travel HOLD** (same as the whole live ASCII stack). Remaining
 Z work is pure content placement (more templates stamping elevation) -- no missing mechanics.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — T0: data model, owner-authorized)
+The owner chose **true stacked floors** (the GDD-s4.4-deferred Option B) for building verticality —
+a tile can hold a ground floor, an upper floor, and a roof, each its own walkable surface connected
+by stairs ("house floor → 2nd-floor walls → roof"). This is a foundational, multi-tranche engine
+change (data model → level-aware position → per-level render/FOV/combat → template stacking); T0 is
+the data model, fully additive (every existing map stays single-level → zero behavior change).
+- **Two TileTypes** (Enums): `STAIRS_UP` (59, `<`) / `STAIRS_DOWN` (60, `>`) — vertical transitions,
+  passable + non-LOS-blocking by default (not in either blocking list), with generator glyph/colour.
+- **`AsciiMapData` level stack:** `level_count: int = 1` + `upper_levels: Array` (one `PackedByteArray`
+  per level > 0; `upper_levels[L-1]` = level L). **Level 0 stays in `tile_types`**, so all existing
+  maps and every existing accessor (`get_tile`/`set_tile`) are untouched. A `VOID` tile on an upper
+  level = open air (no structure rises there). The terrain `elevation` heightfield applies to level 0
+  only; upper floors are flat platforms. `MAX_LEVELS = 4`.
+- **Accessors:** `has_levels()` (count > 1), `get_level_count()`, `init_levels(count, fill=VOID)`
+  (allocates count-1 upper grids), `get_tile_at(x,y,level)` (level 0 → `get_tile`, honoring deltas +
+  OOB; upper → its grid, in-bounds-no-grid → VOID, x/y OOB → WALL_STONE), `set_tile_at(x,y,level,t)`
+  (lazily grows the stack to fit `level`), `is_stair(t)`, `stair_destination_level(x,y,level)`
+  (STAIRS_UP → level+1, STAIRS_DOWN → level-1, out-of-range → -1).
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy): 6/6, 0 fails, 0 project-wide
+  parse errors.** Default map single-level (lvl0 == get_tile, upper == VOID); init_levels(3) allocates
+  2 VOID grids; per-level set/get round-trip with level-0 delta still honored; stairs route up/down and
+  return -1 past the top; set_tile_at lazily grows the stack; **8 existing generators (market, wall
+  tower, throne room, peasant dwelling, ōhiroma, lord quarters, residential, courtyard) all stay
+  single-level** — zero regression. AsciiMapData isn't persisted (WorldStateSaver/ZoneRegistry hold 0
+  refs), so the new @export fields ride no save path. DEFERRED (next tranches): T1 level-aware
+  position (player/combatant "current level"), T2 render the current level (open-air peeks at the
+  level below), T3 stair transitions + auto-climb, T4 per-level FOV + combat, T5 template stacking
+  (generators emit ground floor + upper floor(s) + roof per building). Same PC-travel HOLD as the whole
+  live ASCII stack — built + headless-verified, not live-reachable yet.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

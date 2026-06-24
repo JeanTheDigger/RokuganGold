@@ -79,6 +79,21 @@ extends Resource
 const MAX_ELEVATION: int = 15
 @export var elevation: PackedByteArray = []
 
+# -- Stacked floors (s4.4 Option B) -------------------------------------------
+# True multi-level buildings: a tile can hold a ground floor, an upper floor, and
+# a roof, each its own walkable surface, connected by STAIRS tiles. Level 0 lives
+# in `tile_types` (so every existing single-level map and all existing accessors
+# are unchanged); levels 1.. live in `upper_levels` (one PackedByteArray per level
+# above ground, `upper_levels[L-1]` = level L). A VOID tile on an upper level means
+# "open air" — no structure rises here, you are looking down at the level below.
+# The terrain `elevation` heightfield applies to level 0 only; upper floors are
+# flat platforms (a second storey is one level up, not a ground gradient).
+# Default: level_count = 1, upper_levels = [] → a flat single-level map, the state
+# of every map that has not had a stacking pass, so nothing changes for them.
+const MAX_LEVELS: int = 4
+@export var level_count: int = 1
+@export var upper_levels: Array = []   # Array[PackedByteArray], one per level > 0
+
 # -- Zone connections ---------------------------------------------------------
 
 # Each entry: {x:int, y:int, direction:String, target_zone_id:String}
@@ -374,6 +389,85 @@ func set_elevation(x: int, y: int, level: int) -> void:
 	if elevation.size() != width * height:
 		init_elevation()
 	elevation[y * width + x] = clampi(level, 0, MAX_ELEVATION)
+
+
+# -- Stacked-floor accessors (s4.4 Option B) ----------------------------------
+
+# True when this map has stacked floors above the ground level.
+func has_levels() -> bool:
+	return level_count > 1
+
+
+# Total number of stacked levels (ground + upper floors). Always >= 1.
+func get_level_count() -> int:
+	return maxi(1, level_count)
+
+
+# Allocates `count` stacked levels. Level 0 stays in tile_types; levels 1..count-1
+# get a fresh grid filled with `fill` (VOID = open air — no structure rises there).
+# count clamped to [1, MAX_LEVELS].
+func init_levels(count: int, fill: int = Enums.TileType.VOID) -> void:
+	level_count = clampi(count, 1, MAX_LEVELS)
+	upper_levels.clear()
+	var tiles: int = width * height
+	for _l in range(level_count - 1):
+		var grid: PackedByteArray = PackedByteArray()
+		grid.resize(tiles)
+		for i in range(tiles):
+			grid[i] = fill
+		upper_levels.append(grid)
+
+
+# Tile at (x,y) on a specific level. Level 0 routes through get_tile (honors
+# deltas + OOB). Upper levels read their own grid; a valid in-bounds tile on a
+# level with no grid returns VOID (open air); x/y OOB returns WALL_STONE (matches
+# get_tile's solid-edge convention).
+func get_tile_at(x: int, y: int, level: int) -> int:
+	if level <= 0:
+		return get_tile(x, y)
+	if x < 0 or x >= width or y < 0 or y >= height:
+		return Enums.TileType.WALL_STONE
+	var idx: int = level - 1
+	if idx < 0 or idx >= upper_levels.size():
+		return Enums.TileType.VOID
+	var grid: PackedByteArray = upper_levels[idx]
+	if grid.size() != width * height:
+		return Enums.TileType.VOID
+	return grid[y * width + x]
+
+
+# Sets the tile at (x,y) on a specific level. Level 0 routes through set_tile.
+# Lazily allocates the level stack up to `level` (filled VOID) so a generator can
+# stamp an upper floor onto a map that had none.
+func set_tile_at(x: int, y: int, level: int, tile: int) -> void:
+	if level <= 0:
+		set_tile(x, y, tile)
+		return
+	if x < 0 or x >= width or y < 0 or y >= height:
+		return
+	if level >= level_count:
+		init_levels(level + 1)
+	var grid: PackedByteArray = upper_levels[level - 1]
+	grid[y * width + x] = tile
+	upper_levels[level - 1] = grid
+
+
+static func is_stair(tile: int) -> bool:
+	return tile == Enums.TileType.STAIRS_UP or tile == Enums.TileType.STAIRS_DOWN
+
+
+# The level a stair at (x,y,level) leads to, or -1 if the tile is not a stair or
+# the destination level is out of range. STAIRS_UP -> level+1, STAIRS_DOWN -> level-1.
+func stair_destination_level(x: int, y: int, level: int) -> int:
+	var t: int = get_tile_at(x, y, level)
+	var dest: int = -1
+	if t == Enums.TileType.STAIRS_UP:
+		dest = level + 1
+	elif t == Enums.TileType.STAIRS_DOWN:
+		dest = level - 1
+	if dest < 0 or dest >= get_level_count():
+		return -1
+	return dest
 
 
 # True when a spiritual overlap has been applied to this map (s56.16.1b).
