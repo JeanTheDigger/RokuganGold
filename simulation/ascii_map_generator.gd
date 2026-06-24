@@ -1417,6 +1417,13 @@ static func _gen_lord_quarters(map: AsciiMapData, rng: RandomNumberGenerator) ->
 	map.set_tile(0, MID, Enums.TileType.ZONE_EXIT)
 	map.exits = [{x = 0, y = MID, direction = "west", target_zone_id = ""}]
 
+	# Stacked floors (s4.4 Option B): the manor is a two-storey residence — ground
+	# floor (the rooms above) + an upper private floor + a walkable tiled roof, joined
+	# by a corridor stairwell at (3,MID)/(4,MID). The upper floor is one open private
+	# storey (room subdivision is a ground-floor detail).
+	_stack_building(map, 0, 0, S - 1, S - 1, 2, 3, MID,
+		Enums.TileType.WALL_WOOD, Enums.TileType.FLOOR_TATAMI, Enums.TileType.FLOOR_STONE)
+
 
 # WAR_COUNCIL_ROOM (Military Planning): functional room with wood floor,
 # central table (stone tiles), no art, no performances.

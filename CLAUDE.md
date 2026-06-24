@@ -7280,6 +7280,23 @@ before applying it to real generators.
   NEXT: apply `_stack_building` to a real building (LORD_QUARTERS manor, then the castle keep / towers /
   gatehouses), then the s56 mission templates. Same PC-travel HOLD.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — LORD_QUARTERS first multi-storey building)
+The first real application of `_stack_building` — the manor (LORD_QUARTERS) is now a two-storey
+residence: ground floor (the existing rooms) + an upper private floor + a walkable tiled roof, joined by
+a corridor stairwell at (3,MID)/(4,MID). The upper floor is one open private storey (room subdivision is
+a ground-floor detail); the roof is a walkable stone deck. The whole-map footprint means the manor
+presents a full rooftop from above. `_stack_building(map, 0,0,S-1,S-1, 2, 3,MID, WALL_WOOD, FLOOR_TATAMI,
+FLOOR_STONE)`.
+- **Runtime-verified (Godot 4.6.2, headless: 6/6, 0 parse errors).** 3 levels (ground/upper/roof); the
+  upper floor has the outer wall + tatami interior + the stairwell; the roof is a walkable stone deck
+  with the down-leg; the ground floor's only change is the stairwell foot at (3,MID) (furnishings intact);
+  a **level-aware navigability BFS from the west entrance** reaches the ground floor, the stairwell foot,
+  and climbs to the upper floor AND roof (all 3 levels + far interior corners). Regression: all
+  stacked-floor drivers (data model, stair transition, single-storey caps, multi-storey helper) re-pass.
+  Stamped so far: 5 single-storey (peasant/residential/poor/market/docks) + 1 multi-storey (manor). NEXT:
+  more multi-storey (castle keep, WALL_TOWER tower, gatehouses), the interior castle zones (decide
+  per-zone standalone-vs-room), then the s56 mission templates. Same PC-travel HOLD.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
