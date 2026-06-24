@@ -43,6 +43,12 @@ static func generate(seed_str: String, size_cat: int, assault_mode: int) -> Cast
 
 	_place_player_start(map, assault_mode, w, h)
 	_stamp_elevation(map)
+	# Roof cap (s4.4 Option B): the tenshu (keep) presents a rooftop from above. It is
+	# abstracted here as a thin command building, so a single-storey cap over its wall
+	# footprint rather than a multi-storey treatment (which would need a roomier keep
+	# geometry). The wall-walks, baileys and approach stay open.
+	AsciiMapGenerator._cap_with_roof(map,
+		map.tenshu_lx - 1, map.tenshu_ly - 1, map.tenshu_rx + 1, map.tenshu_ry + 1)
 	return map
 
 # -- Elevation (s4.4 Z-axis — raised wall-walks and keep) ----------------------

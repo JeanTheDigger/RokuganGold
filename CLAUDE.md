@@ -7339,8 +7339,21 @@ river stay open. ensure_levels keeps it safe across the 3-7 buildings per map.
 **Runtime-verified (Godot 4.6.2, headless: 3/3 across village sizes, 0 parse errors):** every building's
 footprint is ROOF on level 1, and level-0 reads are unchanged (`get_tile_at(.,.,0) == get_tile`), so
 MissionPopulator/FOV/movement (all level-0) are unaffected. NEXT s56 templates: castle siege
-(keep/towers/gatehouses — multi-storey), ruined structure, urban hideout, makeshift stockade watchtower.
+(keep/towers/gatehouses), ruined structure, urban hideout, makeshift stockade watchtower.
 Same PC-travel HOLD.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — castle siege keep roof cap)
+`CastleSiegeGenerator.generate` now caps the tenshu (keep) footprint (the wall ring around
+`map.tenshu_*`) with a roof via `AsciiMapGenerator._cap_with_roof`, after `_stamp_elevation`. The keep is
+abstracted here as a thin command building (its interior is ~one row), so a single-storey roof cap rather
+than a multi-storey treatment (which would need a roomier keep geometry — out of scope for a roof pass).
+The wall-walks, baileys and approach stay open. **Composes with the existing terrain elevation**: the keep
+sits at terrain elevation 1 (raised mound, from `_stamp_elevation`) AND now carries a building-level roof
+above it — the two Z axes (terrain heightfield vs building levels) are independent and both hold.
+**Runtime-verified (Godot 4.6.2, headless: 3/3 across Fortification/Castle-Town/City, 0 parse errors):**
+the keep footprint is ROOF on level 1, a bailey tile stays open air, level-0 reads unchanged, and the
+terrain elevation grid is still present. NEXT s56 templates with buildings: ruined structure, urban
+hideout, makeshift stockade watchtower. Same PC-travel HOLD.
 
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
