@@ -276,6 +276,10 @@ static func _carve_building(
 		"side":   side,
 	})
 
+	# Roof cap (s4.4 Option B): each village building presents a rooftop from above;
+	# the road, crops, and river stay open. ensure_levels makes this safe per building.
+	AsciiMapGenerator._cap_with_roof(map, lx, ly, rx, ry)
+
 
 # ---------------------------------------------------------------------------
 # River + bridge (s56.4.4)

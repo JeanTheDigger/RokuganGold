@@ -7330,6 +7330,18 @@ clearing) stay open. Completes the standalone-building settlement zones.
   gatehouses in the s56 CastleSiegeGenerator, and buildings in the other s56 mission templates (occupied
   village, ruined structure, urban hideout, makeshift stockade). Same PC-travel HOLD.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — occupied village mission template)
+First s56 mission template stamped (the `_cap_with_roof`/`_stack_building` helpers are static on
+AsciiMapGenerator and work on any AsciiMapData, so the template generators call them cross-file).
+`OccupiedVillageTemplateGenerator._carve_building` now caps each building's footprint (`lx,ly,rx,ry`,
+recorded in `map.buildings`) with a roof via `AsciiMapGenerator._cap_with_roof`; the road, crops, and
+river stay open. ensure_levels keeps it safe across the 3-7 buildings per map.
+**Runtime-verified (Godot 4.6.2, headless: 3/3 across village sizes, 0 parse errors):** every building's
+footprint is ROOF on level 1, and level-0 reads are unchanged (`get_tile_at(.,.,0) == get_tile`), so
+MissionPopulator/FOV/movement (all level-0) are unaffected. NEXT s56 templates: castle siege
+(keep/towers/gatehouses — multi-storey), ruined structure, urban hideout, makeshift stockade watchtower.
+Same PC-travel HOLD.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2
