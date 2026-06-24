@@ -190,6 +190,7 @@ static func get_glyph(
 		Enums.TileType.FURNITURE_BENCH:        return "╨"
 		Enums.TileType.STAIRS_UP:              return "<"
 		Enums.TileType.STAIRS_DOWN:            return ">"
+		Enums.TileType.ROOF:                   return "⌂"
 	return "?"
 
 
@@ -287,6 +288,7 @@ static func get_fg_color(tile: int) -> Color:
 		Enums.TileType.FURNITURE_BENCH:        return Color(0.55, 0.4, 0.25)
 		Enums.TileType.STAIRS_UP, \
 		Enums.TileType.STAIRS_DOWN:            return Color(0.85, 0.8, 0.6)
+		Enums.TileType.ROOF:                   return Color(0.42, 0.38, 0.4)
 	return Color.WHITE
 
 
@@ -2068,6 +2070,10 @@ static func _gen_peasant_dwelling(map: AsciiMapData, rng: RandomNumberGenerator)
 	map.set_tile(MID, 17, Enums.TileType.FURNITURE_TABLE)
 	map.set_tile(rx - 1, by - 2, Enums.TileType.FURNITURE_STOVE)
 
+	# Roof (s4.4 Option B): a single-storey hut gets a non-walkable roof cap over its
+	# footprint one level up — the cutaway interior at ground, a rooftop from above.
+	_cap_with_roof(map, lx, ty, rx, by)
+
 
 # Default fallback: flat grass with stone perimeter (zone type not yet designed).
 static func _gen_default(map: AsciiMapData, _rng: RandomNumberGenerator) -> void:
@@ -2171,6 +2177,24 @@ static func _raise_rect(
 	for y in range(maxi(0, y1), mini(map.height - 1, y2) + 1):
 		for x in range(maxi(0, x1), mini(map.width - 1, x2) + 1):
 			map.set_elevation(x, y, level)
+
+
+# Caps a single-storey building footprint with a non-walkable roof one level up
+# (s4.4 Option B, "every building gets a roof"). Level 0 stays the cutaway interior;
+# level 1 = ROOF over the footprint (open air elsewhere), so the building presents a
+# rooftop when viewed from above. Ensures the 2-level stack exists WITHOUT clearing
+# any previously-capped building on the same map (init_levels only when count < 2;
+# set_tile_at on an existing level never re-inits). Safe to call once per hut on a
+# multi-building map.
+static func _cap_with_roof(
+	map: AsciiMapData,
+	x1: int, y1: int, x2: int, y2: int,
+) -> void:
+	if map.get_level_count() < 2:
+		map.init_levels(2)
+	for y in range(maxi(0, y1), mini(map.height - 1, y2) + 1):
+		for x in range(maxi(0, x1), mini(map.width - 1, x2) + 1):
+			map.set_tile_at(x, y, 1, Enums.TileType.ROOF)
 
 
 static func _draw_stone_border(

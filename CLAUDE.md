@@ -7193,6 +7193,35 @@ Pure logic (the scene-Node draw call consumes it), so it's headless-verifiable.
   wiring (route the draw through `resolve_display(mx,my,_player_level)` + `peek_dim`) is held until the
   exploration-layer **player level** exists to feed it (next tranche), to avoid a half-wired Node.
 
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — T5 prep + first stamped building)
+**Owner convention (2026-06-24): "every building gets an explicit roof level"** — a building shows a
+rooftop when viewed from above, the cutaway interior at ground. Single-storey = interior + non-walkable
+roof cap; multi-storey = floors + walkable roof. This tranche adds the roof tile + reusable helper and
+stamps the first building (the simplest, single-storey case) to establish the pattern.
+- **`ROOF` TileType (61, `⌂`)** — a sloped tile/thatch roof cap: impassable + blocks LOS (the "from
+  above" face of a building). Added to MovementSystem `terrain_cost`, `AsciiMapData.is_passable` +
+  `blocks_los`, and the generator glyph/colour tables.
+- **`AsciiMapGenerator._cap_with_roof(map, x1,y1,x2,y2)`** — caps a footprint with ROOF one level up.
+  Ensures the 2-level stack WITHOUT clobbering a previously-capped building on the same map
+  (`init_levels` only when count < 2; `set_tile_at` on an existing level never re-inits) — safe to call
+  once per hut on a multi-building map.
+- **PEASANT_DWELLING stamped** — `_cap_with_roof` over the hut footprint (7,7–23,21): level 0 stays the
+  cutaway interior (unchanged `tile_types` → every level-0 consumer — render, movement, FOV,
+  connectivity, MissionPopulator — is unaffected), level 1 = ROOF over the footprint / open air over the
+  yard. The hut now presents a rooftop from above and its interior from the ground.
+- **Runtime-verified (Godot 4.6.2, headless: 6/6, 0 parse errors).** The dwelling has 2 levels; level 1
+  is ROOF over the footprint + VOID over the yard; the ground floor is intact and still fully reachable
+  from the south exit (8-dir flood-fill); `resolve_display` from level 1 shows the roof over the
+  footprint and peeks to the ground (FLOOR_DIRT, depth 1) over the yard; ROOF is impassable + blocks
+  LOS; and two roof caps on one map coexist (the helper's no-clobber safety). Full regression: all 11 Z +
+  stacked-floor drivers green (the single-level-generators check correctly no longer lists
+  PEASANT_DWELLING). DEFERRED: roll the convention out template by template (residential, poor quarter,
+  market stalls → single-storey caps; manor/keep/tower/gatehouse → multi-storey floors + walkable roof +
+  stairs), deciding per-template standalone-building vs interior-room; plus the cross-elevation
+  "see rooftops from a hilltop" render refinement (couple the displayed building level to the viewer's
+  terrain elevation vs building height — currently `resolve_display` keys on the viewer's own building
+  level, perfect for multi-storey navigation). Same PC-travel HOLD as the live ASCII stack.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

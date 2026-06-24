@@ -879,6 +879,7 @@ enum TileType {
 	FURNITURE_BENCH        = 58,  # ╨  bench / stool — passable
 	STAIRS_UP              = 59,  # <  staircase/ladder up to the level above — passable
 	STAIRS_DOWN            = 60,  # >  staircase/ladder down to the level below — passable
+	ROOF                   = 61,  # ⌂  sloped tile/thatch roof cap — blocks move + LOS (the "from above" face)
 }
 
 # -- s45 Advantages ------------------------------------------------------------

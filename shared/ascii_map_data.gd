@@ -177,7 +177,8 @@ static func is_passable(tile: int) -> bool:
 		Enums.TileType.FURNITURE_WELL, \
 		Enums.TileType.FURNITURE_DUMMY, \
 		Enums.TileType.FURNITURE_SHELF, \
-		Enums.TileType.FURNITURE_STOVE:
+		Enums.TileType.FURNITURE_STOVE, \
+		Enums.TileType.ROOF:
 			return false
 		_:
 			return true
@@ -201,7 +202,8 @@ static func blocks_los(tile: int) -> bool:
 		Enums.TileType.FURNITURE_SCREEN, \
 		Enums.TileType.FURNITURE_STATUE, \
 		Enums.TileType.FURNITURE_NET, \
-		Enums.TileType.FURNITURE_SHELF:
+		Enums.TileType.FURNITURE_SHELF, \
+		Enums.TileType.ROOF:
 			return true
 		_:
 			return false
