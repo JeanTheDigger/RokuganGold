@@ -826,6 +826,11 @@ static func activate_mental_quickness(
 	if res.get("success", false):
 		item["mental_quickness_imbued"] = true
 		res["item_id"] = item.get("item_id", -1)
+		# s35 (owner 2026-06-25): the carrier gets +3 Intelligence on their NEXT Int-trait roll this
+		# IC day (the "10 minutes" = one roll). Set on the caster (who fires it for themselves);
+		# consumed by SkillResolver. Requires ic_day >= 0 (the world-sim / AP-action tick).
+		if ic_day >= 0:
+			caster.mental_quickness_ic_day = ic_day
 	return res
 
 
@@ -1132,7 +1137,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"enticing_the_dance_of_flame":   {"e": 2, "m": 2, "s": 0},
 	"the_fires_from_within":         {"e": 2, "m": 2, "s": 0},
 	"hurried_steps":                 {"e": 2, "m": 2, "s": 0},   # 2-round casting speed reduction — COMBAT_ONLY
-	"mental_quickness":              {"e": 2, "m": 2, "s": 0},
+	"mental_quickness":              {"e": 2, "m": 2, "s": 0},   # +3 Int (one-shot) on next Int roll — wired (SkillResolver, set by activate_mental_quickness)
 	"purity_of_shinsei":             {"e": 2, "m": 2, "s": 15},
 	"relentless_heat":               {"e": 2, "m": 2, "s": 0},
 	"tail_of_the_fire_dragon":       {"e": 2, "m": 2, "s": 0},

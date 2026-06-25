@@ -6725,6 +6725,31 @@ is dispelled while a kata modifier survives; an out-of-range target is not warde
 cast at the warded duelist rolls lower than at an unwarded one (60.4 vs 65.8).
 **162 combat effects + the CombatController stealth-spell set.**
 
+### Spell coverage — Mental Quickness (one-shot +3 Int) (2026-06-25, owner-collaborative, runtime-verified 7/7)
+**Mental Quickness (Fire 2, s35)** — imbues an item granting +3 Intelligence to its carrier. Previously
+deferred ("marginal combat footprint — +3 Int only touches the Fire Ring"). Owner Q&A (2026-06-25)
+reshaped it: NOT the Fire-Ring slice, but a **one-shot +3 Intelligence on the carrier's NEXT
+Intelligence-trait roll** (an "AP usage roll / the next roll" = the "10 minutes"), fired from the cast.
+This is a **SkillResolver-level buff, not a combat-orchestrator effect** (so it does NOT increment the
+combat-effects count). New field `L5RCharacterData.mental_quickness_ic_day` (-1 = inactive);
+`SpellSystem.activate_mental_quickness` sets it to the cast tick on success (the caster fires it for
+themselves — the GDD "anyone who carries the item" is collapsed to the firer, owner's reframing; the
+`mental_quickness_imbued` item flag is retained for backward compat). New
+`SkillResolver._get_mental_quickness_bonus(character, trait_used, ic_day)`: when the marker == the
+current ic_day AND the roll's trait is INTELLIGENCE, returns **+3k3** (a trait point = +1 rolled AND
++1 kept, so +3 Int = +3k3) and **consumes** the marker (-> -1, one-shot); wired into the rolled/kept
+assembly beside the kiho-buff hook. ic_day-gated like the other SkillResolver day-buffs (kiho /
+Altering the Course / Voice of the Wind), so it lapses with the tick if no Int roll is made. Covers Int
+skill rolls (Lore/Spellcraft/Medicine/Calligraphy/Commerce/Engineering/… and Int trait-overrides like
+IMPRESS); a non-Int roll neither applies nor consumes it. **Not modeled (documented):** spell CASTING
+(`resolve_cast` rolls the element ring, not Intelligence — the owner's model is Int rolls, not casting);
+combat rolls that pass ic_day=-1 won't apply it (consistent with the "AP usage roll" intent); the
+separate item-carrier-ally case (collapsed to the firer). The cast is reachable via
+`activate_mental_quickness` (the future PC spell UI / an NPC hook); no current NPC pipeline auto-casts
+it. Runtime-verified 7/7 (Godot 4.6.2, headless): cast sets the marker; the next Lore (Int) roll gets
++3k3 (mean 48.0 vs 26.3) and consumes it; a non-Int Kenjutsu roll neither applies nor consumes it while
+a later Int roll still does; an ic_day mismatch is inert.
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

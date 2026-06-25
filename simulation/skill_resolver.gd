@@ -297,6 +297,21 @@ static func _get_kiho_buff_bonus(
 	return {"rolled": rolled, "kept": kept}
 
 
+## s35 Mental Quickness (Fire 2): +3 Intelligence on the NEXT Intelligence-trait roll this IC day
+## (owner 2026-06-25 — the "10 minutes" maps to one roll). A trait point = +1 rolled AND +1 kept, so
+## +3 Int = +3k3. ONE-SHOT: consumed (mental_quickness_ic_day -> -1) the moment it applies. ic_day-gated
+## (like the kiho buffs) so it lapses with the tick if no Int roll is made. Inert for non-Int rolls.
+static func _get_mental_quickness_bonus(
+	character: L5RCharacterData, trait_used: Enums.Trait, ic_day: int
+) -> Dictionary:
+	if ic_day < 0 or character.mental_quickness_ic_day != ic_day:
+		return {"rolled": 0, "kept": 0}
+	if trait_used != Enums.Trait.INTELLIGENCE:
+		return {"rolled": 0, "kept": 0}
+	character.mental_quickness_ic_day = -1  # consumed by this roll
+	return {"rolled": 3, "kept": 3}
+
+
 static func _activate_kiho_buff(character: L5RCharacterData, kiho_name: String, ic_day: int) -> bool:
 	if character.active_kiho_buffs.get(kiho_name, -1) == ic_day:
 		return true  # already active this tick
@@ -628,6 +643,9 @@ static func resolve_skill_check(
 	# s38 out-of-combat kiho buffs (Mind's Fire / Steal the Air Dragon)
 	var kiho_mod: Dictionary = _get_kiho_buff_bonus(character, skill_name, trait_used, ic_day)
 
+	# s35 Mental Quickness: one-shot +3k3 on the next Intelligence-trait roll this tick
+	var mq_mod: Dictionary = _get_mental_quickness_bonus(character, trait_used, ic_day)
+
 	# Void Point spend on this roll (opt-in via context; s37 Altering the Course allows +NkN)
 	var void_mod: Dictionary = _get_void_spend_bonus(character, context, ic_day)
 
@@ -643,12 +661,13 @@ static func resolve_skill_check(
 		+ adv_skill.get("rolled", 0) + mutation_mod.get("rolled", 0)
 		+ imbalance_mod.get("rolled", 0) + inheritance_mod.get("rolled", 0)
 		+ kiho_mod.get("rolled", 0) + void_mod.get("rolled", 0) + voice_mod.get("rolled", 0)
-		+ soul_mod
+		+ mq_mod.get("rolled", 0) + soul_mod
 	)
 	var kept: int = (
 		trait_value + bonus_kept + adv_skill.get("kept", 0) + mutation_mod.get("kept", 0)
 		+ imbalance_mod.get("kept", 0) + inheritance_mod.get("kept", 0)
 		+ kiho_mod.get("kept", 0) + void_mod.get("kept", 0) + voice_mod.get("kept", 0)
+		+ mq_mod.get("kept", 0)
 	)
 	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
 		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn \

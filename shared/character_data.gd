@@ -67,6 +67,10 @@ var spell_void_bonus_used: int = 0
 # SkillResolver roll (+NkN) instead of the normal one-per-roll cap. -1 = inactive.
 # (1-minute RAW duration modelled per-tick, matching the kiho-buff convention.)
 @export var altering_course_ic_day: int = -1
+# s35 Mental Quickness (Fire 2): +3 Intelligence on the NEXT Intelligence-trait skill roll this IC
+# day (one-shot; the "10 minutes" maps to one roll, owner 2026-06-25). Set on cast, consumed by the
+# next Int roll. -1 = inactive.
+@export var mental_quickness_ic_day: int = -1
 # s33 Cloak of Night (Air 1): a carried/concealed object is magically invisible to vision.
 # Active when cloak_of_night_ic_day == the current ic_day (1-hour RAW duration ~ per-tick).
 # cloak_of_night_strength = the cast roll total, used as the TN for an equal-ML (Air 1)
