@@ -6576,6 +6576,47 @@ headless drivers: assigning an untyped `Array` literal (`c.spells_known = ["x"]`
 `.assign()` gotcha) — type the local (`var c: L5RCharacterData = …`) or use `.assign()`; production
 code was never at fault, only the test harness.
 
+### Spell coverage — Wrath of Kaze-no-Kami (hurricane) + The Kami's Whisper (2026-06-25, owner-collaborative, runtime-verified 15/15)
+Two previously-deferred spells wired via per-spell owner Q&A (the new collaborative workflow): the
+owner makes each spell's design calls before any code.
+- **Wrath of Kaze-no-Kami (Hurricane, Air 6 [CR], s33)** — the marquee whole-map storm, previously
+  blocked only on the per-minute→per-Round damage conversion. New **`hurricane` effect kind** in
+  `SpellSystem.SPELL_COMBAT_EFFECTS` + dispatch branch in `execute_cast_spell` →
+  `AsciiMapCombatOrchestrator._apply_hurricane_zone` (installs a `spell_zones` entry) +
+  a per-round branch in `_process_spell_zones`. The calm **eye (20' = 4 tiles) follows the caster**
+  (re-read from `state.positions[caster_id]` each tick). **Owner decisions (2026-06-25):**
+  (1) cadence = **1 minute = ROUNDS_PER_MINUTE (10) Rounds** — every 10 Rounds the storm ticks
+  (literal per-minute rate, the project's established convention; near-cosmetic in a short skirmish
+  by design, devastating in a long one); (2) the GDD "cast into the winds to their death" clause =
+  **the 5k5 debris strike + knockback, NOT instant death** — on a **1-in-10** roll a victim takes
+  **5k5** (else **1k1**) and, if they survive, is **flung outward from the eye** (`_knockback_target`,
+  away from the caster — so it composes with fall/pit hazards; a corpse is not flung); (3) **hits
+  everyone outside the eye, all factions** — the caster's own party must shelter in the eye or take
+  damage too. Concentration (max 1 hour = 600 Rounds); **ends if the caster dies** (the storm
+  collapses — Concentration). Spirit targets route through the `W_MAGIC` damage filter. **NPC AI never
+  auto-casts it** (the offense picker only takes `damage`/`status` kinds, so this friendly-fire
+  whole-map AoE stays a PC-deliberate spell, like the instant-kill spells). Only invented value:
+  `fling_tiles = 3` (PROVISIONAL — GDD gives no knockback distance for "cast into the winds"); every
+  other number is GDD-given or owner-decided. Not modeled (documented limitations, no invention): the
+  loose-object toss (no object physics), the "sturdy shelter" exemption (no shelter tiles in
+  skirmishes), and the once-per-month-per-area cast restriction (no per-area cast tracking — irrelevant
+  in combat). Runtime-verified 12/12 (Godot 4.6.2, headless): cast installs the zone (eye 4, next tick
+  at start+10); no damage Rounds 1–10; at the minute boundary the far enemy AND far ally take storm
+  damage while the caster + an inside-eye ally are unharmed; the storm ends when the caster dies (zone
+  dropped, no further damage). Fling verified 3/3 (forcing 1-in-1 majors): a tough victim takes ~36
+  (5k5) and is flung from the eye to the map edge; a fragile victim that the 5k5 kills is NOT flung
+  (corpses aren't knocked back).
+- **The Kami's Whisper (Air 2 [CR], s33)** — a false-sound stealth distraction, wired in
+  **CombatController** (the stealth/exploration layer, like the other illusion/perception spells), not
+  the orchestrator schema. `CombatController.cast_kamis_whisper(tx, ty)` emits a MODERATE noise (GDD
+  "no louder than a normal speaking voice") at a chosen tile within 50' (10 tiles) of the player via
+  the existing `_emit_noise` — guards near the point hear it, become SUSPICIOUS, and investigate
+  TOWARD the false sound (away from the PC), exactly as a real noise. No invented values (MODERATE =
+  normal voice; QUIET = whisper, LOUD = shout); reuses the whole noise/alert system. The future
+  stealth-command UI calls it (PCs may be shugenja, s60.2). Bounds + range gated.
+**158 combat effects + the CombatController stealth-spell set.** Same PC-travel HOLD live-reachability
+caveat as the whole ASCII stack — driver-verified, not a live session.
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

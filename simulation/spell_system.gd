@@ -134,6 +134,14 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"aoe_hits": "all", "duration_rounds": 2},  # Fire 2: 3k2 impact + 2k1/round, 20' radius
 	"follow_the_flame": {"kind": "damage", "dr_rolled": 6, "dr_kept": 5,
 		"range_tiles": 60, "aoe_radius": 0},  # Fire 5: 6k5 stream of fire, 300' (persistent burn deferred)
+	# Air 6 [CR] Wrath of Kaze-no-Kami (Hurricane): whole-map storm, eye (20'=4 tiles) follows the
+	# caster. Per minute (= ROUNDS_PER_MINUTE Rounds, owner 2026-06-25) everyone OUTSIDE the eye —
+	# all factions — takes 1k1 Wounds, or on a 1-in-10 a 5k5 debris strike that also flings them
+	# (knockback, not death — owner choice). Concentration (max 1 hour = 600 rounds); ends if the
+	# caster dies. fling_tiles PROVISIONAL (GDD gives no knockback distance for "cast into the winds").
+	"wrath_of_kaze_no_kami": {"kind": "hurricane", "eye_radius": 4,
+		"minor_rolled": 1, "minor_kept": 1, "major_rolled": 5, "major_kept": 5,
+		"major_chance_in": 10, "fling_tiles": 3, "duration_rounds": 600},
 	# Coverage extension batch 9 (2026-06-20): area wards (enemy-cast TN penalty + spell DR reduction).
 	"earths_protection": {"kind": "ward", "aoe_radius": 2, "duration_rounds": 10,
 		"ward_elements": [0, 2, 3], "cast_tn_penalty": 10,
@@ -967,7 +975,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"garbled_tongue":             {"e": 0, "m": 3, "s": 0},
 	"heart_betrays_eyes":         {"e": 0, "m": 2, "s": 0},   # target perceives unusual as normal; maintains illusion — COMBAT_ONLY
 	"hidden_visage":              {"e": 0, "m": 2, "s": 0},
-	"the_kamis_whisper":          {"e": 0, "m": 2, "s": 0},   # creates false sounds — COMBAT_ONLY
+	"the_kamis_whisper":          {"e": 0, "m": 2, "s": 0},   # false-sound distraction — wired in CombatController.cast_kamis_whisper
 	"mists_of_illusion":          {"e": 0, "m": 2, "s": 0},
 	"quiescence_of_air":          {"e": 0, "m": 2, "s": 0},
 	"request_to_hato_no_kami":    {"e": 0, "m": 2, "s": 0},   # concentration bird command — COMBAT_ONLY
@@ -1016,7 +1024,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"piercing_the_heavens":       {"e": 0, "m": 6, "s": 0},
 	"wind_of_the_moon":           {"e": 0, "m": 6, "s": 0},
 	"the_world_is_truth":         {"e": 0, "m": 6, "s": 0},   # Kolat sleeper install — wired as the CAST_WORLD_IS_TRUTH world-sim ActionID (s54.7/s33), NOT a tile-combat effect (so s:0 is correct)
-	"wrath_of_kaze_no_kami":      {"e": 0, "m": 6, "s": 0},
+	"wrath_of_kaze_no_kami":      {"e": 0, "m": 6, "s": 0},   # hurricane storm zone — wired (SPELL_COMBAT_EFFECTS "hurricane")
 
 	# === EARTH (s34) ===
 	# ML1

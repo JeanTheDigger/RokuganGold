@@ -65,6 +65,7 @@ const QUIESCENCE_RADIUS_TILES: int = 3          # GDD 30' diameter -> 3-tile rad
 const QUIESCENCE_ROUNDS: int = 10               # GDD Duration: 10 Rounds
 const QUIESCENCE_STEALTH_FREE_RAISES: int = 2   # GDD: 2 Free Raises on Stealth
 const MOONLIGHT_REVEAL_RADIUS_TILES: int = 4    # GDD 20' radius / 5
+const KAMIS_WHISPER_RANGE_TILES: int = 10       # GDD 50' / 5
 
 
 # =============================================================================
@@ -1952,6 +1953,31 @@ func cast_moonlight_reveal() -> Dictionary:
 			t["state"] = TrapSystem.TrapState.DETECTED
 			revealed.append(Vector2i(tx, ty))
 	return {"revealed": revealed.size(), "positions": revealed}
+
+
+# =============================================================================
+# -- the_kamis_whisper (s33): false-sound distraction -------------------------
+# =============================================================================
+
+## Create a false sound (Air 2, Illusion) at a chosen tile within 50' (10 tiles)
+## of the player — a normal speaking voice or natural sound. Guards near the
+## point hear it and investigate TOWARD it (away from the player), exactly as a
+## real noise: UNAWARE -> SUSPICIOUS, and they path to (tx, ty). A classic
+## stealth distraction. "No louder than a normal speaking voice" maps to the
+## MODERATE noise level (QUIET = whisper, LOUD = shout). The future stealth-
+## command UI / spell-cast action calls this; PCs may be shugenja (s60.2).
+func cast_kamis_whisper(tx: int, ty: int) -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"ok": false, "reason": "no_living_player"}
+	if tx < 0 or ty < 0 or tx >= _map.width or ty >= _map.height:
+		return {"ok": false, "reason": "out_of_bounds"}
+	var dist: int = maxi(absi(tx - player.x), absi(ty - player.y))
+	if dist > KAMIS_WHISPER_RANGE_TILES:
+		return {"ok": false, "reason": "out_of_range"}
+	# A false sound, not the player's own — guards investigate the point, not the PC.
+	_emit_noise(tx, ty, AsciiMapEnvironment.NoiseLevel.MODERATE)
+	return {"ok": true, "x": tx, "y": ty}
 
 
 # =============================================================================

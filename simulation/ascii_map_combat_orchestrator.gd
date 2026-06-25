@@ -2534,6 +2534,12 @@ static func execute_cast_spell(
 			"type": "spell_zone", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "zone": res["zone"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "hurricane":
+		res["hurricane"] = _apply_hurricane_zone(state, caster_id, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_hurricane", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "hurricane": res["hurricane"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "ward":
 		res["ward"] = _apply_spell_ward(state, caster_id, eff, spell_id)
 		state.combat_log.append({
@@ -3497,6 +3503,31 @@ static func _apply_spell_zone(
 		"impact_hits": impact_hits}
 
 
+## Install a hurricane zone (s33 Wrath of Kaze-no-Kami, Air 6): a whole-map storm whose calm eye
+## (20' = eye_radius tiles) follows the caster. Each minute (ROUNDS_PER_MINUTE Rounds) everyone
+## OUTSIDE the eye — all factions — takes 1k1 Wounds, or on a 1-in-major_chance_in roll a 5k5
+## debris strike that also flings them (knockback, not death). Concentration (max 1 hour); the
+## storm ends if the caster dies. Per-round resolution lives in _process_spell_zones.
+static func _apply_hurricane_zone(
+	state: MapCombatState, caster_id: int, eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var dur: int = int(eff.get("duration_rounds", 600))
+	var zone: Dictionary = {
+		"kind": "hurricane", "caster_id": caster_id,
+		"eye_radius": int(eff.get("eye_radius", 4)),
+		"minor_rolled": int(eff.get("minor_rolled", 1)), "minor_kept": int(eff.get("minor_kept", 1)),
+		"major_rolled": int(eff.get("major_rolled", 5)), "major_kept": int(eff.get("major_kept", 5)),
+		"major_chance_in": maxi(1, int(eff.get("major_chance_in", 10))),
+		"fling_tiles": int(eff.get("fling_tiles", 3)),
+		"expiry_round": state.combat.round_number + dur,
+		"next_tick_round": state.combat.round_number + IndividualCombat.ROUNDS_PER_MINUTE,
+		"spell_id": spell_id,
+	}
+	state.spell_zones.append(zone)
+	return {"eye_radius": zone["eye_radius"], "expiry_round": zone["expiry_round"],
+		"next_tick_round": zone["next_tick_round"]}
+
+
 ## Install a purify zone (s36 Heaven's Tears): a holy-rain field, centered on the caster, that each
 ## Round heals the pure of soul (no Taint, Honor 4.0+) by the caster's Water Ring and damages the
 ## Tainted/Shadow-corrupted (1k1). Affects ALL combatants in the area by soul state (not faction).
@@ -3740,6 +3771,54 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 		# s33 fog zones (Summon Fog) likewise have no per-round effect — they block LOS at shot time.
 		# s34 conjured terrain (Wall of Earth) is inert per-round — the walled tiles do the work.
 		if String(zone.get("kind", "damage_zone")) in ["modifier", "fog", "conjured_terrain"]:
+			surviving.append(zone)
+			continue
+		# s33 Wrath of Kaze-no-Kami (hurricane): whole-map storm, calm eye follows the caster.
+		if String(zone.get("kind", "damage_zone")) == "hurricane":
+			var hcaster: int = int(zone.get("caster_id", -1))
+			var hcch = state.combatants.get(hcaster, null)
+			# Concentration ends if the caster is gone or dead — the storm collapses.
+			if not state.positions.has(hcaster) or hcch == null or CharacterStats.is_dead(hcch):
+				continue
+			# Per-minute cadence (owner 2026-06-25: 1 minute = ROUNDS_PER_MINUTE Rounds).
+			if state.combat.round_number < int(zone.get("next_tick_round", 0)):
+				surviving.append(zone)
+				continue
+			var eye: Vector2i = state.positions[hcaster]
+			var eyer: int = int(zone.get("eye_radius", 4))
+			var majchance: int = maxi(1, int(zone.get("major_chance_in", 10)))
+			var fling: int = int(zone.get("fling_tiles", 3))
+			# .keys() is a copy — safe while _knockback_target mutates positions.
+			for cid in state.positions.keys():
+				if cid == hcaster:
+					continue
+				var hpos: Vector2i = state.positions[cid]
+				# Inside the eye = sheltered.
+				if maxi(absi(eye.x - hpos.x), absi(eye.y - hpos.y)) <= eyer:
+					continue
+				var hch = state.combatants.get(cid, null)
+				if hch == null or CharacterStats.is_dead(hch):
+					continue
+				var major: bool = dice_engine.roll_die(majchance) == 1
+				var hdmg: int
+				if major:
+					hdmg = dice_engine.roll_and_keep(
+						int(zone.get("major_rolled", 5)), int(zone.get("major_kept", 5)), true).total
+				else:
+					hdmg = dice_engine.roll_and_keep(
+						int(zone.get("minor_rolled", 1)), int(zone.get("minor_kept", 1)), true).total
+				if hch.spirit_creature != null:
+					var hfilt: Dictionary = SpiritAbilitySystem.incoming_damage(
+						hch.spirit_creature, SpiritAbilitySystem.W_MAGIC, true)
+					if hfilt.get("heals", false):
+						WoundSystem.heal_wounds(hch, hdmg)
+						continue
+					hdmg = int(round(hdmg * hfilt.get("multiplier", 1.0)))
+				WoundSystem.apply_damage(hch, hdmg, 0)
+				# A debris strike flings the victim outward from the eye (knockback, not death).
+				if major and not CharacterStats.is_dead(hch):
+					_knockback_target(state, cid, eye, fling, dice_engine)
+			zone["next_tick_round"] = state.combat.round_number + IndividualCombat.ROUNDS_PER_MINUTE
 			surviving.append(zone)
 			continue
 		# s36 Heaven's Tears: a purify field — heal the pure of soul, harm the Tainted, by soul
