@@ -7517,6 +7517,21 @@ climb/move UI. Both ride the project-wide **PC-travel HOLD** (the whole live ASC
 headless-verified, not yet live-reachable). No missing Z mechanics remain — further work is content
 placement or the deferred render/UI.
 
+### Known Code Issues (found and fixed 2026-06-24, CastleSiegeGenerator CITY approach)
+- **CITY castle-siege approach sealed from the castle — attacker could not reach the gates. FIXED.**
+  In `_build_city` the approach band was filled only from `approach_y` (Y=31) down, but the outer wall
+  sits at `ow_y = approach_y - 4` (Y=27), leaving the rows Y=28..30 between them unfilled — so they kept
+  the `init_tiles` WALL_STONE default. The header comment called Y=28..30 the "outer district buffer"
+  (an exposed killing field), but nothing ever filled it, so it was an impassable wall band that sealed
+  the storming force out of the castle: a cliff-aware flood from the ATTACKER player start reached only
+  270 tiles with the keep and all 5 objectives UNREACHABLE. This was a long-standing pre-existing quirk
+  (documented out-of-scope during the Z-axis keep work, verified identical in the un-deepened original).
+  Fixed by filling the approach from `approach_y - 3` (= `ow_y + 1`, Y=28) so the buffer/killing field is
+  open FLOOR_DIRT; the outer wall at Y=27 is drawn after and untouched. Runtime-verified (Godot 4.6.2,
+  ATTACKER + DEFENDER × 3 seeds): the flood now reaches 979 tiles, the keep is reachable, and 0 of 5
+  objectives are unreachable. The full Z-coherence suite (165 maps) re-passes at 0 fails — the south-edge
+  dirt fill touches only level 0 and does not affect the multi-storey keep/gatehouse stacks.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

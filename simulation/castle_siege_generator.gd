@@ -468,8 +468,11 @@ static func _place_defender_slots_castle_town(
 static func _build_city(map: CastleSiegeMapData, w: int, h: int, rng: int) -> int:
 	var approach_y: int = h - 9  # Y=31
 
-	# Approach (FLOOR_DIRT)
-	for y in range(approach_y, h):
+	# Approach (FLOOR_DIRT). Fill from approach_y-3 = ow_y+1 so the exposed buffer /
+	# killing field between the outer wall and the approach proper (Y=28..30) is open
+	# ground, not the unfilled WALL_STONE that previously sealed the storming force out
+	# of the castle. The outer wall at Y=27 (approach_y-4) is drawn after and untouched.
+	for y in range(approach_y - 3, h):
 		for x in range(w):
 			map.set_tile(x, y, _DIRT)
 	map.baileys.append({
