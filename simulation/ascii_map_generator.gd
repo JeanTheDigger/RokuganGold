@@ -188,7 +188,40 @@ static func get_glyph(
 		Enums.TileType.FURNITURE_SHELF:        return "▤"
 		Enums.TileType.FURNITURE_STOVE:        return "◫"
 		Enums.TileType.FURNITURE_BENCH:        return "╨"
+		Enums.TileType.STAIRS_UP:              return "<"
+		Enums.TileType.STAIRS_DOWN:            return ">"
+		Enums.TileType.ROOF:                   return "⌂"
 	return "?"
+
+
+# Elevation shade (s4.4 Z-axis "roofing/elevation indicators"; owner-approved
+# 2026-06-23). Brightens a tile's foreground colour by its elevation level so
+# raised ground reads as higher — without a new symbol (symbol = tile type) or a
+# background tint (reserved for water/taint/spirit). Low visual weight, per the
+# s4.4 rendering principles. Level 0 = base (a no-op); each level scales colour
+# value by +ELEVATION_SHADE_STEP, clamped to valid range.
+const ELEVATION_SHADE_STEP: float = 0.2
+
+static func elevation_shade(color: Color, level: int) -> Color:
+	if level <= 0:
+		return color
+	var f: float = 1.0 + float(level) * ELEVATION_SHADE_STEP
+	return Color(
+		minf(color.r * f, 1.0), minf(color.g * f, 1.0), minf(color.b * f, 1.0), color.a)
+
+
+# Peek-down dim (s4.4 Option B render). When a viewer on an upper floor looks past
+# the building (open air) at the level(s) below, the peeked tile darkens by how many
+# levels down it sits — so a balcony/roof edge reads as "below me", distinct from the
+# floor you stand on. depth 0 = your own level (no-op). Each level down multiplies
+# colour value by (1 - PEEK_DIM_STEP): depth 1 ≈ 0.65, depth 2 ≈ 0.42.
+const PEEK_DIM_STEP: float = 0.35
+
+static func peek_dim(color: Color, depth: int) -> Color:
+	if depth <= 0:
+		return color
+	var f: float = pow(1.0 - PEEK_DIM_STEP, float(depth))
+	return Color(color.r * f, color.g * f, color.b * f, color.a)
 
 
 # Returns the foreground colour for a given tile type.
@@ -253,6 +286,9 @@ static func get_fg_color(tile: int) -> Color:
 		Enums.TileType.FURNITURE_SHELF:        return Color(0.5, 0.35, 0.2)
 		Enums.TileType.FURNITURE_STOVE:        return Color(0.45, 0.4, 0.4)
 		Enums.TileType.FURNITURE_BENCH:        return Color(0.55, 0.4, 0.25)
+		Enums.TileType.STAIRS_UP, \
+		Enums.TileType.STAIRS_DOWN:            return Color(0.85, 0.8, 0.6)
+		Enums.TileType.ROOF:                   return Color(0.42, 0.38, 0.4)
 	return Color.WHITE
 
 
@@ -294,6 +330,8 @@ static func _gen_market_street(map: AsciiMapData, rng: RandomNumberGenerator) ->
 		# Shop door facing south (toward road).
 		var door_x: int = sx + (shop_w / 2)
 		map.set_tile(door_x, 11, Enums.TileType.DOOR_WOOD_OPEN)
+		# Roof cap (s4.4 Option B): each enclosed shop is a single-storey building.
+		_cap_with_roof(map, sx, 1, ex, 11)
 
 	# South building block: rows 19–29, mirrored.
 	for i in range(shop_count):
@@ -303,6 +341,8 @@ static func _gen_market_street(map: AsciiMapData, rng: RandomNumberGenerator) ->
 		_fill_rect(map, sx + 1, 20, ex - 1, 28, Enums.TileType.FLOOR_TATAMI)
 		var door_x: int = sx + (shop_w / 2)
 		map.set_tile(door_x, 19, Enums.TileType.DOOR_WOOD_OPEN)
+		# Roof cap (s4.4 Option B): each enclosed shop is a single-storey building.
+		_cap_with_roof(map, sx, 19, ex, 29)
 
 	# Road strip (rows 12–18) is plain stone floor — overwrite any walls.
 	_fill_rect(map, 1, 12, S - 2, 18, Enums.TileType.FLOOR_STONE)
@@ -373,6 +413,8 @@ static func _gen_temple_grounds(map: AsciiMapData, rng: RandomNumberGenerator) -
 	# Komainu guardian statues flanking the courtyard approach.
 	map.set_tile(11, 18, Enums.TileType.FURNITURE_STATUE)
 	map.set_tile(19, 18, Enums.TileType.FURNITURE_STATUE)
+	# Roof cap (s4.4 Option B): the temple hall presents a rooftop from above.
+	_cap_with_roof(map, 8, 3, 22, 13)
 
 	# Torii gate at south entrance (rows 27–28, columns 13–17).
 	map.set_tile(13, 28, Enums.TileType.WALL_WOOD)
@@ -436,6 +478,8 @@ static func _gen_shrine_clearing(map: AsciiMapData, rng: RandomNumberGenerator) 
 	map.set_tile(MID, 14, Enums.TileType.FURNITURE_PRAYER_MAT)
 	map.set_tile(13, 19, Enums.TileType.FURNITURE_STATUE)
 	map.set_tile(17, 19, Enums.TileType.FURNITURE_STATUE)
+	# Roof cap (s4.4 Option B): the shrine building presents a rooftop from above.
+	_cap_with_roof(map, 12, 10, 18, 16)
 
 	# Torii gate at south of clearing.
 	map.set_tile(13, 22, Enums.TileType.WALL_WOOD)
@@ -571,6 +615,9 @@ static func _gen_residential_quarter(
 				map.set_tile(door_x, south_row, Enums.TileType.DOOR_WOOD_OPEN)
 			else:
 				map.set_tile(door_x, oy, Enums.TileType.DOOR_WOOD_OPEN)
+			# Roof cap (s4.4 Option B): each single-storey home presents a rooftop from
+			# above. The shrine plot (overwritten below) reuses this plot's roof.
+			_cap_with_roof(map, ox, oy, ox + plot_w - 1, oy + plot_h - 1)
 
 	# Small shrine in south-east corner (overwriting one house plot).
 	var sx: int = 1 + 2 * (plot_w + 1)
@@ -1077,6 +1124,14 @@ static func _gen_throne_room(map: AsciiMapData, rng: RandomNumberGenerator) -> v
 	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
 	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
 
+	# Elevation (s4.4 Z-axis): the Chrysanthemum dais rises above the hall in two steps —
+	# the wide lower step (layer 1) and the raised throne step (layer 2) — so the Emperor
+	# looks down over the assembled court (high-ground + see-over). Each step is +1 (a ramp),
+	# so a petitioner can ascend and the hall floor stays fully reachable.
+	map.init_elevation(0)
+	_raise_rect(map, 3, 2, S - 4, 6, 1)   # lower dais step
+	_raise_rect(map, 6, 2, S - 7, 4, 2)   # raised throne step
+
 
 # OHIROMA (Great Hall): large formal hall with dais, tatami floor, wood-framed
 # columns, shoji dividers. The lord's primary audience and court space.
@@ -1130,6 +1185,12 @@ static func _gen_ohiroma(map: AsciiMapData, rng: RandomNumberGenerator) -> void:
 	# Zone exit south.
 	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
 	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+	# Elevation (s4.4 Z-axis): the lord's dais (rows 2–5) sits one step (layer 1) above the
+	# tatami hall, so the seated lord holds the high ground over petitioners. +1 = a ramp,
+	# so the dais is climbable and the hall stays fully connected.
+	map.init_elevation(0)
+	_raise_rect(map, 4, 2, S - 5, 5, 1)
 
 
 # ENKAI_HALL (Banquet Hall): entertainment and feasting. Open tatami hall
@@ -1359,6 +1420,13 @@ static func _gen_lord_quarters(map: AsciiMapData, rng: RandomNumberGenerator) ->
 	map.set_tile(0, MID, Enums.TileType.DOOR_WOOD_OPEN)
 	map.set_tile(0, MID, Enums.TileType.ZONE_EXIT)
 	map.exits = [{x = 0, y = MID, direction = "west", target_zone_id = ""}]
+
+	# Stacked floors (s4.4 Option B): the manor is a two-storey residence — ground
+	# floor (the rooms above) + an upper private floor + a walkable tiled roof, joined
+	# by a corridor stairwell at (3,MID)/(4,MID). The upper floor is one open private
+	# storey (room subdivision is a ground-floor detail).
+	_stack_building(map, 0, 0, S - 1, S - 1, 2, 3, MID,
+		Enums.TileType.WALL_WOOD, Enums.TileType.FLOOR_TATAMI, Enums.TileType.FLOOR_STONE)
 
 
 # WAR_COUNCIL_ROOM (Military Planning): functional room with wood floor,
@@ -1631,6 +1699,8 @@ static func _gen_castle_shrine(map: AsciiMapData, rng: RandomNumberGenerator) ->
 	map.set_tile(17, 11, Enums.TileType.FURNITURE_INCENSE)
 	map.set_tile(14, 8, Enums.TileType.FURNITURE_PRAYER_MAT)
 	map.set_tile(16, 8, Enums.TileType.FURNITURE_PRAYER_MAT)
+	# Roof cap (s4.4 Option B): the shrine building presents a rooftop from above.
+	_cap_with_roof(map, 10, 3, 20, 10)
 	map.set_tile(12, 14, Enums.TileType.FURNITURE_STATUE)
 	map.set_tile(18, 14, Enums.TileType.FURNITURE_STATUE)
 
@@ -1683,6 +1753,8 @@ static func _gen_pleasure_quarter(map: AsciiMapData, rng: RandomNumberGenerator)
 			map.set_tile(9, oy + 2, Enums.TileType.FURNITURE_SCREEN)
 			map.set_tile(3, oy + 6, Enums.TileType.FURNITURE_BRAZIER)
 			map.set_tile(MID - 4, oy + bh / 2, Enums.TileType.DOOR_SHOJI_OPEN)
+			# Roof cap (s4.4 Option B): each geisha house is a single-storey building.
+			_cap_with_roof(map, 1, oy, MID - 4, oy + bh)
 
 	# East block: 3 buildings (sake houses).
 	for i in range(3):
@@ -1698,6 +1770,8 @@ static func _gen_pleasure_quarter(map: AsciiMapData, rng: RandomNumberGenerator)
 			map.set_tile(27, oy + 2, Enums.TileType.FURNITURE_SCREEN)
 			map.set_tile(21, oy + 6, Enums.TileType.FURNITURE_BRAZIER)
 			map.set_tile(MID + 4, oy + bh / 2, Enums.TileType.DOOR_SHOJI_OPEN)
+			# Roof cap (s4.4 Option B): each sake house is a single-storey building.
+			_cap_with_roof(map, MID + 4, oy, S - 2, oy + bh)
 
 	# Zone exits north and south on main street.
 	map.set_tile(MID, 0, Enums.TileType.ZONE_EXIT)
@@ -1728,6 +1802,8 @@ static func _gen_docks_waterfront(map: AsciiMapData, rng: RandomNumberGenerator)
 		_draw_wood_box(map, ox, 1, ox + wh_w - 2, 7)
 		_fill_rect(map, ox + 1, 2, ox + wh_w - 3, 6, Enums.TileType.FLOOR_WOOD)
 		map.set_tile(ox + wh_w / 2, 7, Enums.TileType.DOOR_WOOD_OPEN)
+		# Roof cap (s4.4 Option B): each warehouse is a single-storey building.
+		_cap_with_roof(map, ox, 1, ox + wh_w - 2, 7)
 
 	# Stone quay along waterfront.
 	_fill_rect(map, 0, 12, S - 1, 14, Enums.TileType.FLOOR_STONE)
@@ -1781,6 +1857,8 @@ static func _gen_poor_quarter(map: AsciiMapData, rng: RandomNumberGenerator) -> 
 			else:
 				map.set_tile(ox + plot_w - 1, oy + plot_h / 2,
 					Enums.TileType.DOOR_WOOD_OPEN)
+			# Roof cap (s4.4 Option B): each shack presents a rooftop from above.
+			_cap_with_roof(map, ox, oy, ox + plot_w - 1, oy + plot_h - 1)
 
 	# Muddy patches in alleys.
 	for _i in range(15 + rng.randi() % 10):
@@ -1850,6 +1928,18 @@ static func _gen_government_quarter(map: AsciiMapData, rng: RandomNumberGenerato
 		{x = 0, y = MID, direction = "west", target_zone_id = ""},
 		{x = S - 1, y = MID, direction = "east", target_zone_id = ""},
 	]
+
+	# Roof caps (s4.4 Option B): the three enclosed administrative buildings (office,
+	# record hall, guard post) present rooftops from above; the plaza stays open.
+	_cap_with_roof(map, 3, 2, S - 4, 11)
+	_cap_with_roof(map, 3, 19, S - 4, S - 3)
+	_cap_with_roof(map, 13, 13, 17, 17)
+
+	# Elevation (s4.4 Z-axis): the magistrate's bench (rows 3–4, behind the dais) sits one
+	# step (layer 1) above the petitioner floor of the north office — the judge looks down on
+	# the accused. +1 = a ramp, so the office stays reachable.
+	map.init_elevation(0)
+	_raise_rect(map, 4, 3, S - 5, 4, 1)
 
 
 # MOUNTAIN_PASS: rocky terrain, narrow winding path between cliff faces,
@@ -1937,7 +2027,8 @@ static func _gen_wall_tower(map: AsciiMapData, rng: RandomNumberGenerator) -> vo
 	# Interior: wood floor (garrison quarters).
 	_fill_rect(map, 9, 9, 21, 21, Enums.TileType.FLOOR_WOOD)
 
-	# Central pillar / stairwell (stone).
+	# Central stone core (structural newel / ground-level store — the keep's solid spine;
+	# the real stairwell is the stacked 2-tile flight added at the foot of this function).
 	_fill_rect(map, 13, 13, 17, 17, Enums.TileType.WALL_STONE)
 
 	# Doors on all four faces of inner tower.
@@ -1961,6 +2052,23 @@ static func _gen_wall_tower(map: AsciiMapData, rng: RandomNumberGenerator) -> vo
 	# Exit south (connects to wall walkway).
 	map.set_tile(MID, S - 1, Enums.TileType.ZONE_EXIT)
 	map.exits = [{x = MID, y = S - 1, direction = "south", target_zone_id = ""}]
+
+	# Elevation (s4.4 Z-axis): the battlement walk — the stone ring between the outer wall and
+	# the inner tower — is the raised fighting platform (layer 1), so wall defenders hold the
+	# high ground and see over the parapet at anyone who breaches the inner garrison room
+	# (layer 0). The four inner-tower doors bridge the two as +1 ramps, so the interior stays
+	# reachable. Only two layers (max delta 1), so the ramps can never strand anything.
+	map.init_elevation(1)               # the whole tower top sits at battlement level
+	_raise_rect(map, 8, 8, 22, 22, 0)   # inner tower (walls + garrison + pillar) one step down
+
+	# Stacked floors (s4.4 Option B): the inner tower is a real multi-storey keep — it rises
+	# ABOVE the wall walk, so it gets a ground garrison (level 0), an upper floor (level 1),
+	# and a stone roof lookout (level 2), joined by a real 2-tile stairwell in the NW garrison
+	# quadrant (clear of the central core, the four doors, and the furniture). The outer
+	# battlement ring is an open-air crenellated walk and correctly gets NO stacked tile, so
+	# from above the tower shows a stone roof over the keep and the open parapet around it.
+	_stack_building(map, 8, 8, 22, 22, 2, 11, 11,
+		Enums.TileType.WALL_STONE, Enums.TileType.FLOOR_WOOD, Enums.TileType.FLOOR_STONE)
 
 
 # PEASANT_DWELLING (minka): a single-room commoner home in a small yard.
@@ -2005,6 +2113,10 @@ static func _gen_peasant_dwelling(map: AsciiMapData, rng: RandomNumberGenerator)
 	map.set_tile(lx + 1, by - 2, Enums.TileType.FURNITURE_JAR)
 	map.set_tile(MID, 17, Enums.TileType.FURNITURE_TABLE)
 	map.set_tile(rx - 1, by - 2, Enums.TileType.FURNITURE_STOVE)
+
+	# Roof (s4.4 Option B): a single-storey hut gets a non-walkable roof cap over its
+	# footprint one level up — the cutaway interior at ground, a rooftop from above.
+	_cap_with_roof(map, lx, ty, rx, by)
 
 
 # Default fallback: flat grass with stone perimeter (zone type not yet designed).
@@ -2096,6 +2208,71 @@ static func _fill_rect(
 	for y in range(y1, y2 + 1):
 		for x in range(x1, x2 + 1):
 			map.set_tile(x, y, tile)
+
+
+# Stamp an elevation level over a rectangle (s4.4 Z-axis). Clamps to the elevation
+# cap; only touches in-bounds tiles. Caller must have called map.init_elevation()
+# first. Used for ceremonial daises (the lord/judge sits a step above the floor).
+static func _raise_rect(
+	map: AsciiMapData,
+	x1: int, y1: int, x2: int, y2: int,
+	level: int,
+) -> void:
+	for y in range(maxi(0, y1), mini(map.height - 1, y2) + 1):
+		for x in range(maxi(0, x1), mini(map.width - 1, x2) + 1):
+			map.set_elevation(x, y, level)
+
+
+# Caps a single-storey building footprint with a non-walkable roof one level up
+# (s4.4 Option B, "every building gets a roof"). Level 0 stays the cutaway interior;
+# level 1 = ROOF over the footprint (open air elsewhere), so the building presents a
+# rooftop when viewed from above. Ensures the 2-level stack exists WITHOUT clearing
+# any previously-capped building on the same map (init_levels only when count < 2;
+# set_tile_at on an existing level never re-inits). Safe to call once per hut on a
+# multi-building map.
+static func _cap_with_roof(
+	map: AsciiMapData,
+	x1: int, y1: int, x2: int, y2: int,
+) -> void:
+	map.ensure_levels(2)
+	for y in range(maxi(0, y1), mini(map.height - 1, y2) + 1):
+		for x in range(maxi(0, x1), mini(map.width - 1, x2) + 1):
+			map.set_tile_at(x, y, 1, Enums.TileType.ROOF)
+
+
+# Stacks a MULTI-STOREY building on an existing footprint (s4.4 Option B). The
+# ground floor (level 0) is left as the generator drew it (interior + door). Each
+# upper floor 1..floors-1 rises with the footprint's wall outline (wall_tile) around
+# a walkable interior (floor_tile); the top level `floors` is a WALKABLE roof deck
+# (roof_tile inside a wall_tile parapet). A 2-tile stairwell connects every level:
+# the up-leg (sx,sy) is STAIRS_UP on levels 0..floors-1 (you arrive on the roof deck
+# at the top); the down-leg (sx+1,sy) is STAIRS_DOWN on levels 1..floors. So a
+# climber goes ground -> 1 -> … -> roof and back. sx,sy and sx+1,sy MUST be interior
+# tiles (x1 < sx, sx+1 < x2, y1 < sy < y2). floors >= 2 (the roof sits at level
+# `floors`). Uses ensure_levels so it never clobbers other stacked buildings.
+static func _stack_building(
+	map: AsciiMapData,
+	x1: int, y1: int, x2: int, y2: int,
+	floors: int,
+	sx: int, sy: int,
+	wall_tile: int = Enums.TileType.WALL_WOOD,
+	floor_tile: int = Enums.TileType.FLOOR_WOOD,
+	roof_tile: int = Enums.TileType.FLOOR_STONE,
+) -> void:
+	var top: int = maxi(2, floors)
+	map.ensure_levels(top + 1)
+	# Upper interior floors (1..top-1) + the roof deck (top).
+	for lvl in range(1, top + 1):
+		var surface: int = roof_tile if lvl == top else floor_tile
+		for y in range(y1, y2 + 1):
+			for x in range(x1, x2 + 1):
+				var edge: bool = (x == x1 or x == x2 or y == y1 or y == y2)
+				map.set_tile_at(x, y, lvl, wall_tile if edge else surface)
+	# Stairwell: up-leg STAIRS_UP on 0..top-1, down-leg STAIRS_DOWN on 1..top.
+	for lvl in range(0, top):
+		map.set_tile_at(sx, sy, lvl, Enums.TileType.STAIRS_UP)
+	for lvl in range(1, top + 1):
+		map.set_tile_at(sx + 1, sy, lvl, Enums.TileType.STAIRS_DOWN)
 
 
 static func _draw_stone_border(

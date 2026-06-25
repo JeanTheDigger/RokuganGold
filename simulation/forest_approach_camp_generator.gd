@@ -389,6 +389,10 @@ static func _carve_shelter(
 		"type": stype,
 	})
 
+	# Roof cap (s4.4 Option B): each tent is a covered shelter — a roof over the dirt
+	# floor, presenting a roof from above. Firepits and the clearing stay open.
+	AsciiMapGenerator._cap_with_roof(map, lx, ly, rx, ry)
+
 
 # ---------------------------------------------------------------------------
 # Entry vectors (s56.5.2)

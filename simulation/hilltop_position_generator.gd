@@ -124,7 +124,35 @@ static func generate(
 	# Step 10 — objective markers (s56.8.5).
 	_place_objective_slots(map, objectives, rng)
 
+	# Step 11 — elevation: a walkable slope (s4.4 Z-axis; max 3 layers).
+	_stamp_elevation(map)
+
 	return map
+
+
+# ---------------------------------------------------------------------------
+# Elevation (s4.4 Z-axis — 3 layers, ramp by adjacency)
+# ---------------------------------------------------------------------------
+
+## Stamps a Y-banded elevation ramp: the approach (bottom) is layer 0, the
+## mid-slope is layer 1, and the crest line + hilltop camp are layer 2. Adjacent
+## bands differ by 1 (a walkable ramp, never a cliff), so the hill is climbable
+## from every direction and connectivity is unchanged — the camp simply sits on
+## high ground (defenders there gain the high-ground attack bonus and see over
+## the slope's rocks).
+static func _stamp_elevation(map: HilltopPositionMapData) -> void:
+	map.init_elevation(0)
+	var crest_y: int = map.crest_y
+	var mid: int = crest_y + (map.height - 1 - crest_y) / 2
+	for y: int in range(map.height):
+		var layer: int = 0
+		if y <= crest_y:
+			layer = 2          # crest line + hilltop camp (high ground)
+		elif y <= mid:
+			layer = 1          # upper slope
+		if layer > 0:
+			for x: int in range(map.width):
+				map.set_elevation(x, y, layer)
 
 
 # ---------------------------------------------------------------------------

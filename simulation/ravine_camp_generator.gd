@@ -117,7 +117,36 @@ static func generate(
 	# Step 12 — objective markers.
 	_place_objective_slots(map, objectives)
 
+	# Step 13 — elevation: high rim over a low floor (s4.4 Z-axis; 2 of 3 layers).
+	_stamp_elevation(map)
+
 	return map
+
+
+# ---------------------------------------------------------------------------
+# Elevation (s4.4 Z-axis — high rim / low floor)
+# ---------------------------------------------------------------------------
+
+## Stamps the rim strips (both sides, outside the rock walls) at layer 2 and the
+## ravine floor + walls at layer 0. Rim and floor are already separated by the
+## impassable WALL_STONE walls, so movement connectivity is unchanged — the
+## elevation gives the rim its high-ground advantage: a rim watcher sees down over
+## the low wall-tops into the ravine, while a fighter on the floor looking up is
+## blocked (the high-ground LOS asymmetry). Descent points remain the way down
+## (a deliberate climb action, deferred). A 2-of-3-layer map (no mid layer).
+static func _stamp_elevation(map: RavineCampMapData) -> void:
+	map.init_elevation(0)
+	for y: int in range(map.height):
+		for x: int in range(map.width):
+			# The ravine floor stays at layer 0.
+			if x >= map.floor_lx and x <= map.floor_rx:
+				continue
+			# Rim strips (outside both rock walls) are layer 2, as is any carved
+			# descent notch (a passable tile in the wall columns) — the notch is part
+			# of the high rim shelf, ending in a climbable cliff down to the floor.
+			if x < map.wall_lx or x > map.wall_rx \
+					or AsciiMapData.is_passable(map.get_tile(x, y)):
+				map.set_elevation(x, y, 2)
 
 
 # ---------------------------------------------------------------------------
@@ -291,14 +320,23 @@ static func _place_descent_points(
 		var y: int = margin + (i * (map.height - 2 * margin)) / count + \
 				rng.randi_range(-2, 2)
 		y = clampi(y, margin, map.height - margin - 1)
-		# Alternate left and right sides.
+		# Alternate left and right sides. Carve a passable FLOOR_STONE notch through
+		# the rock wall at this row so the high rim connects to the low floor by a
+		# single climbable cliff (the rim shelf stays layer 2, the floor layer 0 —
+		# a 2-level face a character descends via execute_climb; s56.11.2 "climbable
+		# positions"). The notch does NOT add a normal-walkable path (the elevation
+		# step blocks ordinary movement), so the floor stays its own component.
 		if i % 2 == 0:
 			var x: int = rng.randi_range(1, rim_w - 2)
 			map.set_tile(x, y, Enums.TileType.FLOOR_STONE)
+			for nx: int in range(map.wall_lx, map.floor_lx):
+				map.set_tile(nx, y, Enums.TileType.FLOOR_STONE)
 			map.descent_points.append({"x": x, "y": y, "side": "L"})
 		else:
 			var x: int = rng.randi_range(map.wall_rx + 2, map.width - 2)
 			map.set_tile(x, y, Enums.TileType.FLOOR_STONE)
+			for nx: int in range(map.floor_rx + 1, map.wall_rx + 1):
+				map.set_tile(nx, y, Enums.TileType.FLOOR_STONE)
 			map.descent_points.append({"x": x, "y": y, "side": "R"})
 
 

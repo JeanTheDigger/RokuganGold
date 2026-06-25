@@ -197,6 +197,21 @@ static func generate(
 	# ---- Objective markers --------------------------------------------------
 	_place_objective_slots(map, objectives)
 
+	# ---- Roof (s4.4 Option B): partially-collapsed roof --------------------
+	# Intact rooms keep their roof (a roof cap over the room footprint); collapsed
+	# sections stay open to the sky (no level-1 tile), so from above the ruin shows
+	# roofs over the standing rooms and open holes down into the rubble of the
+	# collapsed cells. The room with the surviving upper floor was already stacked
+	# (real level-1 floor + level-2 roof) in _place_upper_floor — skip it here so the
+	# flat cap does not overwrite its walkable upper floor.
+	var stacked_room_id: int = -1
+	if map.has_upper_floor and not map.upper_floor_sections.is_empty():
+		stacked_room_id = map.upper_floor_sections[0].get("room_id", -1)
+	for rm: Dictionary in map.rooms:
+		if rm["id"] == stacked_room_id:
+			continue
+		AsciiMapGenerator._cap_with_roof(map, rm["lx"], rm["ly"], rm["rx"], rm["ry"])
+
 	return map
 
 
@@ -523,10 +538,18 @@ static func _place_upper_floor(
 		"room_id": host_rm["id"],
 	})
 
-	# Stairwell: narrow FLOOR_STONE column on one side of the room.
-	var stair_x: int = lx + 1
-	var stair_y: int = ry + 1  # one tile south of room's bottom wall
-	map.stairwells.append({"x": stair_x, "y": stair_y, "room_id": host_rm["id"]})
+	# Surviving upper floor as a REAL navigable level (s4.4 Option B): the host room
+	# gets a walkable upper floor (level 1) inside its wall outline, a roof deck
+	# (level 2), and a 2-tile stairwell — the ruin's surviving second storey is now
+	# climbable instead of an abstract marker. Other intact rooms get a flat roof cap
+	# in generate(); this room is stacked instead (skipped there by host id). Needs an
+	# interior at least 2 tiles wide for the stairwell up/down legs.
+	if rx_ - lx >= 3 and ry - ly >= 2:
+		AsciiMapGenerator._stack_building(map, lx, ly, rx_, ry, 2, lx + 1, ly + 1,
+			Enums.TileType.WALL_WOOD, Enums.TileType.FLOOR_WOOD, Enums.TileType.FLOOR_STONE)
+
+	# Stairwell record (the real STAIRS_UP foot _stack_building placed on level 0).
+	map.stairwells.append({"x": lx + 1, "y": ly + 1, "room_id": host_rm["id"]})
 
 
 static func _mark_unstable_sections(
@@ -552,6 +575,11 @@ static func _place_firepits(map: RuinedStructureMapData) -> void:
 	for rm in map.rooms:
 		var fx: int = (rm["lx"] + rm["rx"]) / 2
 		var fy: int = (rm["ly"] + rm["ry"]) / 2
+		# Never overwrite the surviving upper floor's stairwell foot (a minimal
+		# host room can centre on the stair leg) — a fire there would sever the
+		# only climb route to the second storey.
+		if AsciiMapData.is_stair(map.get_tile(fx, fy)):
+			continue
 		map.set_tile(fx, fy, Enums.TileType.FIRE)
 		map.firepits.append({"id": fid, "x": fx, "y": fy})
 		fid += 1
@@ -634,6 +662,7 @@ static func _place_population_slots(
 			"role":    RuinedStructureMapData.PopRole.UPPER_FLOOR_HOLDER,
 			"zone":    RuinedStructureMapData.Zone.UPPER_FLOOR,
 			"room_id": ufs.get("room_id", -1),
+			"level":   1,
 		})
 
 	# Leader Group: in the most defensible intact room (s56.12.4: 20–25% of roster).

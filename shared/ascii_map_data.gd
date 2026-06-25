@@ -67,6 +67,33 @@ extends Resource
 @export var overlap_max_depth: int = 0       # heart depth, for healing-from-heart
 @export var restoration_progress: float = 0.0  # 0..1 ritual healing, heart outward
 
+# -- Elevation / Z-axis (s4.4 "roofing/elevation indicators") -----------------
+# Per-tile elevation level. index = y*width+x. 0 = ground; each +1 = one step up,
+# ≈ 5 ft (1 level = 1 tile-height, matching MovementSystem's 1 tile = 5 ft). A
+# parallel grid like depth_grid / overlap_intensity — base tile_types are NOT
+# mutated. Empty (size != width*height) = a flat map (every level 0), so every
+# map without an explicit elevation pass is unaffected. Cliff/fall thresholds and
+# high-ground combat live in MovementSystem and the combat orchestrator; the
+# numeric model was locked by the owner 2026-06-23 (s4.4 line 121 defers elevation
+# to engine development — no LOCKED numbers exist).
+const MAX_ELEVATION: int = 15
+@export var elevation: PackedByteArray = []
+
+# -- Stacked floors (s4.4 Option B) -------------------------------------------
+# True multi-level buildings: a tile can hold a ground floor, an upper floor, and
+# a roof, each its own walkable surface, connected by STAIRS tiles. Level 0 lives
+# in `tile_types` (so every existing single-level map and all existing accessors
+# are unchanged); levels 1.. live in `upper_levels` (one PackedByteArray per level
+# above ground, `upper_levels[L-1]` = level L). A VOID tile on an upper level means
+# "open air" — no structure rises here, you are looking down at the level below.
+# The terrain `elevation` heightfield applies to level 0 only; upper floors are
+# flat platforms (a second storey is one level up, not a ground gradient).
+# Default: level_count = 1, upper_levels = [] → a flat single-level map, the state
+# of every map that has not had a stacking pass, so nothing changes for them.
+const MAX_LEVELS: int = 4
+@export var level_count: int = 1
+@export var upper_levels: Array = []   # Array[PackedByteArray], one per level > 0
+
 # -- Zone connections ---------------------------------------------------------
 
 # Each entry: {x:int, y:int, direction:String, target_zone_id:String}
@@ -150,7 +177,8 @@ static func is_passable(tile: int) -> bool:
 		Enums.TileType.FURNITURE_WELL, \
 		Enums.TileType.FURNITURE_DUMMY, \
 		Enums.TileType.FURNITURE_SHELF, \
-		Enums.TileType.FURNITURE_STOVE:
+		Enums.TileType.FURNITURE_STOVE, \
+		Enums.TileType.ROOF:
 			return false
 		_:
 			return true
@@ -174,7 +202,8 @@ static func blocks_los(tile: int) -> bool:
 		Enums.TileType.FURNITURE_SCREEN, \
 		Enums.TileType.FURNITURE_STATUE, \
 		Enums.TileType.FURNITURE_NET, \
-		Enums.TileType.FURNITURE_SHELF:
+		Enums.TileType.FURNITURE_SHELF, \
+		Enums.TileType.ROOF:
 			return true
 		_:
 			return false
@@ -326,6 +355,159 @@ func depth_at(x: int, y: int) -> int:
 
 func has_depth_grid() -> bool:
 	return depth_grid.size() == width * height
+
+
+# -- Elevation / Z-axis helpers (s4.4) ----------------------------------------
+
+# Elevation level at (x,y). 0 for out-of-bounds or a flat (no-elevation) map.
+func elevation_at(x: int, y: int) -> int:
+	if x < 0 or x >= width or y < 0 or y >= height:
+		return 0
+	if elevation.size() != width * height:
+		return 0
+	return elevation[y * width + x]
+
+
+# True when an elevation grid has been computed for this map.
+func has_elevation() -> bool:
+	return elevation.size() == width * height
+
+
+# Allocates a flat elevation grid (every tile at `level`). Generators that add
+# verticality call this before raising individual tiles via set_elevation.
+func init_elevation(level: int = 0) -> void:
+	var count: int = width * height
+	elevation.resize(count)
+	var v: int = clampi(level, 0, MAX_ELEVATION)
+	for i in range(count):
+		elevation[i] = v
+
+
+# Raises/sets the elevation of one tile. Lazily allocates a flat grid first so a
+# generator can stamp heights onto a map that had none. Clamped to [0, MAX_ELEVATION].
+func set_elevation(x: int, y: int, level: int) -> void:
+	if x < 0 or x >= width or y < 0 or y >= height:
+		return
+	if elevation.size() != width * height:
+		init_elevation()
+	elevation[y * width + x] = clampi(level, 0, MAX_ELEVATION)
+
+
+# -- Stacked-floor accessors (s4.4 Option B) ----------------------------------
+
+# True when this map has stacked floors above the ground level.
+func has_levels() -> bool:
+	return level_count > 1
+
+
+# Total number of stacked levels (ground + upper floors). Always >= 1.
+func get_level_count() -> int:
+	return maxi(1, level_count)
+
+
+# Allocates `count` stacked levels. Level 0 stays in tile_types; levels 1..count-1
+# get a fresh grid filled with `fill` (VOID = open air — no structure rises there).
+# count clamped to [1, MAX_LEVELS]. NOTE: this CLEARS any existing upper levels —
+# use ensure_levels() to grow non-destructively on a multi-building map.
+func init_levels(count: int, fill: int = Enums.TileType.VOID) -> void:
+	level_count = clampi(count, 1, MAX_LEVELS)
+	upper_levels.clear()
+	var tiles: int = width * height
+	for _l in range(level_count - 1):
+		var grid: PackedByteArray = PackedByteArray()
+		grid.resize(tiles)
+		for i in range(tiles):
+			grid[i] = fill
+		upper_levels.append(grid)
+
+
+# Grows the level stack up to `count` WITHOUT clearing existing levels (appends
+# fresh VOID grids only as needed). Safe to call repeatedly while stacking several
+# buildings of different heights on one map. No-op if already tall enough.
+func ensure_levels(count: int, fill: int = Enums.TileType.VOID) -> void:
+	var target: int = clampi(count, 1, MAX_LEVELS)
+	if target <= level_count:
+		return
+	var tiles: int = width * height
+	while upper_levels.size() < target - 1:
+		var grid: PackedByteArray = PackedByteArray()
+		grid.resize(tiles)
+		for i in range(tiles):
+			grid[i] = fill
+		upper_levels.append(grid)
+	level_count = target
+
+
+# Tile at (x,y) on a specific level. Level 0 routes through get_tile (honors
+# deltas + OOB). Upper levels read their own grid; a valid in-bounds tile on a
+# level with no grid returns VOID (open air); x/y OOB returns WALL_STONE (matches
+# get_tile's solid-edge convention).
+func get_tile_at(x: int, y: int, level: int) -> int:
+	if level <= 0:
+		return get_tile(x, y)
+	if x < 0 or x >= width or y < 0 or y >= height:
+		return Enums.TileType.WALL_STONE
+	var idx: int = level - 1
+	if idx < 0 or idx >= upper_levels.size():
+		return Enums.TileType.VOID
+	var grid: PackedByteArray = upper_levels[idx]
+	if grid.size() != width * height:
+		return Enums.TileType.VOID
+	return grid[y * width + x]
+
+
+# Sets the tile at (x,y) on a specific level. Level 0 routes through set_tile.
+# Lazily allocates the level stack up to `level` (filled VOID) so a generator can
+# stamp an upper floor onto a map that had none.
+func set_tile_at(x: int, y: int, level: int, tile: int) -> void:
+	if level <= 0:
+		set_tile(x, y, tile)
+		return
+	if x < 0 or x >= width or y < 0 or y >= height:
+		return
+	if level >= level_count:
+		ensure_levels(level + 1)  # grow non-destructively (never clobber existing levels)
+	var grid: PackedByteArray = upper_levels[level - 1]
+	grid[y * width + x] = tile
+	upper_levels[level - 1] = grid
+
+
+static func is_stair(tile: int) -> bool:
+	return tile == Enums.TileType.STAIRS_UP or tile == Enums.TileType.STAIRS_DOWN
+
+
+# The level a stair at (x,y,level) leads to, or -1 if the tile is not a stair or
+# the destination level is out of range. STAIRS_UP -> level+1, STAIRS_DOWN -> level-1.
+func stair_destination_level(x: int, y: int, level: int) -> int:
+	var t: int = get_tile_at(x, y, level)
+	var dest: int = -1
+	if t == Enums.TileType.STAIRS_UP:
+		dest = level + 1
+	elif t == Enums.TileType.STAIRS_DOWN:
+		dest = level - 1
+	if dest < 0 or dest >= get_level_count():
+		return -1
+	return dest
+
+
+# The tile to DISPLAY at (x,y) for a viewer standing on `viewer_level`, plus how
+# many levels below the viewer it was found (s4.4 Option B render). On the viewer's
+# own level a non-open-air tile shows directly (depth 0). Where the viewer's level
+# is open air (VOID — no structure rises there), the view falls through to the first
+# solid tile below (a balcony/roof edge peeking at the ground), depth = how far down;
+# the renderer dims by depth. Level 0 always shows its own tile (the ground is solid).
+# Returns {"tile": int, "depth": int}. For a single-level map / viewer_level 0 this is
+# always {tile: get_tile(x,y), depth: 0}, so existing render is unchanged.
+func resolve_display(x: int, y: int, viewer_level: int) -> Dictionary:
+	var vl: int = clampi(viewer_level, 0, get_level_count() - 1)
+	var t: int = get_tile_at(x, y, vl)
+	if vl == 0 or t != Enums.TileType.VOID:
+		return {"tile": t, "depth": 0}
+	for lvl in range(vl - 1, -1, -1):
+		var below: int = get_tile_at(x, y, lvl)
+		if lvl == 0 or below != Enums.TileType.VOID:
+			return {"tile": below, "depth": vl - lvl}
+	return {"tile": t, "depth": 0}
 
 
 # True when a spiritual overlap has been applied to this map (s56.16.1b).

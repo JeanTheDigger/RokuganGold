@@ -35,8 +35,61 @@ const RANGED_IN_MELEE_PENALTY: int = -10
 
 # Cover: a defender sheltering behind a cover-granting furnishing (s4.4) gains
 # +5 Armor TN against attacks coming from the covered side. Reuses the s40 cover
-# convention (the ruined-structure +5 cover value).
+# convention (the ruined-structure +5 cover value). A defender tucked below a
+# higher lip (s4.4 Z-axis) reuses the same +5 bonus.
 const COVER_ARMOR_TN_BONUS: int = 5
+
+## High-ground combat (s4.4 Z-axis; locked by owner 2026-06-23). An attacker at
+## least HIGH_GROUND_THRESHOLD levels above the target adds HIGH_GROUND_ATTACK_ROLLED
+## rolled die (+1k0) to the attack (melee and ranged).
+const HIGH_GROUND_THRESHOLD: int = 1
+const HIGH_GROUND_ATTACK_ROLLED: int = 1
+
+## Height-aware line of sight (s4.4 Z-axis). A tile occludes the sightline only when
+## its top reaches the interpolated view-ray height between the two endpoints.
+## LOS_EYE_HEIGHT lifts both endpoints to standing eye level; an LOS-blocking tile
+## (wall/tree) rises LOS_OBSTACLE_HEIGHT (~10 ft) above its own elevation, while open
+## ground occludes only by its raw elevation (a ridge can still block). On a flat map
+## the formula reduces to the prior behavior exactly (walls block, open ground does not).
+const LOS_EYE_HEIGHT: int = 1
+const LOS_OBSTACLE_HEIGHT: int = 2
+
+## Climb difficulty by surface material (s4.4 Z-axis; owner-locked 2026-06-23).
+## Strength + Athletics vs the material's TN — not all surfaces are equally hard:
+## timber/palisade gives handholds, sheer worked stone barely any. Used both for an
+## elevation cliff (keyed off the higher tile's terrain) and for scaling a wall
+## (keyed off the wall material).
+const CLIMB_TN_WOOD: int = 15
+const CLIMB_TN_EARTH: int = 20
+const CLIMB_TN_STONE: int = 25
+
+## Climb TN for a tile's material. Wood (timber/palisade) easiest, sheer stone
+## (rock ledge / masonry wall) hardest, everything natural (earth/grass/rubble)
+## in between.
+static func _climb_tn_for_tile(tile: int) -> int:
+	match tile:
+		Enums.TileType.FLOOR_WOOD, Enums.TileType.WALL_WOOD, \
+		Enums.TileType.DOOR_WOOD_CLOSED, Enums.TileType.DOOR_WOOD_OPEN:
+			return CLIMB_TN_WOOD
+		Enums.TileType.FLOOR_STONE, Enums.TileType.WALL_STONE:
+			return CLIMB_TN_STONE
+		_:
+			return CLIMB_TN_EARTH
+
+## Pit/void death hazard (s4.4 Z-axis, Oni Warai chasm; owner-locked 2026-06-23).
+## A bottomless void or deep water is lethal — NOT a graduated NkN fall. Being shoved
+## toward one by knockback triggers an edge-catch save (Reflexes + Athletics vs
+## PIT_EDGE_CATCH_TN): success stops the victim on the brink, failure sends them over
+## to their death. Walking off such an edge under one's own movement is already
+## prevented (these tiles are impassable, so the mover stops); the only vector is a
+## forced shove, which routes through _knockback_target.
+const PIT_EDGE_CATCH_TN: int = 20
+
+## Lethal pit tiles: a bottomless chasm (VOID) and deep open water (drowning under
+## armor). Both are already impassable for ordinary movement.
+static func _is_lethal_pit(tile: int) -> bool:
+	return tile == Enums.TileType.VOID or tile == Enums.TileType.WATER_DEEP
+
 ## s40 "Weapon Grapples": a weapon-grappler who loses control of the grapple
 ## hands their opponent 2 Free Raises toward a Disarm Maneuver against them.
 const WEAPON_GRAPPLE_LOSE_CONTROL_DISARM_RAISES: int = 2
@@ -130,6 +183,9 @@ class MapCombatState:
 	var combatants: Dictionary = {}
 	## Character tile positions. Key: int (character_id), Value: Vector2i.
 	var positions: Dictionary = {}
+	## Stacked-floor level per combatant (s4.4 Option B). Key: int (character_id),
+	## Value: int level. ABSENT = level 0, so single-level skirmishes never touch this.
+	var combatant_levels: Dictionary = {}
 	## Character factions. Key: int (character_id), Value: String (FACTION_*).
 	var factions: Dictionary = {}
 	## Per-character turn budgets. Key: int (character_id), Value: TurnState.
@@ -277,6 +333,11 @@ static func setup_combat(
 static func free_move_budget(state: MapCombatState, char_id: int, character: L5RCharacterData) -> int:
 	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
 	var water: int = _effective_water_ring(p, character)
+	# Flight speed (per spell) replaces the normal ground budget; terrestrial kata/kiho/
+	# swift move bonuses do not apply while airborne.
+	var fc: int = _flight_code(state, char_id)
+	if fc > 0:
+		return _flight_free_budget(water, fc)
 	var base: int = MovementSystem.budget(water, MovementSystem.MoveAction.FREE)
 	if p == null:
 		return base
@@ -299,6 +360,95 @@ static func _effective_water_ring(p: IndividualCombat.Participant, character: L5
 ## Enemy tiles are treated as impassable (block movement through). Ally tiles
 ## are passable (you can move through an ally's tile).
 ## Returns Dictionary: Vector2i → cost (int).
+## True while the combatant is flying (a "flight" timed modifier from a flight spell —
+## Call Upon the Wind / Wings of Fire / Wings of the Phoenix). A flyer occupies open
+## spaces (open air/void, water) and ignores elevation cliffs and fall/pit hazards.
+static func _is_flying(state: MapCombatState, char_id: int) -> bool:
+	return _flight_code(state, char_id) > 0
+
+
+# Flight speed codes (the "flight" timed-modifier value; 1 tile = 5 ft):
+const FLIGHT_CALL_UPON_WIND: int = 1   # ≤10'/Round (2 tiles), Free Move only
+const FLIGHT_WINGS_OF_FIRE: int = 2    # Water 1 speed; arms occupied (no weapon attacks)
+const FLIGHT_WINGS_PHOENIX: int = 3    # Water×10' Free / Water×20' Simple
+
+## The active flight speed code (0 = not flying). Reads the MAX "flight" modifier value
+## so a recast (the stronger flight) wins rather than summing into a bogus code.
+static func _flight_code(state: MapCombatState, char_id: int) -> int:
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p == null:
+		return 0
+	var code: int = 0
+	for m: Dictionary in p.timed_modifiers:
+		if m.get("kind", "") == "flight":
+			code = maxi(code, int(m.get("value", 0)))
+	return code
+
+## Per-turn flight movement budget (tiles) for a FREE move, by speed code. Flight speed
+## replaces the normal Water-Ring/ground budget (kata/kiho/swift bonuses are terrestrial).
+static func _flight_free_budget(water: int, code: int) -> int:
+	match code:
+		FLIGHT_CALL_UPON_WIND: return 2                 # ≤10'/Round
+		FLIGHT_WINGS_OF_FIRE:  return MovementSystem.budget(1, MovementSystem.MoveAction.FREE)   # Water 1
+		FLIGHT_WINGS_PHOENIX:  return clampi(water, 1, 10) * 2  # Water×10'
+		_: return 0
+
+## Per-turn flight movement budget (tiles) for a SIMPLE move, by speed code. Call Upon the
+## Wind is Free-Move-only → 0 (no fast flight).
+static func _flight_simple_budget(water: int, code: int) -> int:
+	match code:
+		FLIGHT_CALL_UPON_WIND: return 0                 # Free Move only
+		FLIGHT_WINGS_OF_FIRE:  return MovementSystem.budget(1, MovementSystem.MoveAction.SIMPLE)  # Water 1
+		FLIGHT_WINGS_PHOENIX:  return clampi(water, 1, 10) * 4  # Water×20'
+		_: return 0
+
+## Wings of Fire (Fire 2) occupies the caster's arms controlling the wings — they cannot
+## make weapon/unarmed attacks while it is active (GDD s35). Spellcasting is unaffected
+## (a flying shugenja still casts). The other flight spells do not restrict the arms.
+static func _arms_occupied(state: MapCombatState, char_id: int) -> bool:
+	return _flight_code(state, char_id) == FLIGHT_WINGS_OF_FIRE
+
+## Per-turn movement budget for a SIMPLE move (flight-aware), mirroring free_move_budget
+## for the Simple action. Used by the move-decision sites.
+static func simple_move_budget(state: MapCombatState, char_id: int, character: L5RCharacterData) -> int:
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	var water: int = _effective_water_ring(p, character)
+	var fc: int = _flight_code(state, char_id)
+	if fc > 0:
+		return _flight_simple_budget(water, fc)
+	var base: int = MovementSystem.budget(water, MovementSystem.MoveAction.SIMPLE)
+	return base + IndividualCombat.get_kiho_move_bonus(character, p) + IndividualCombat.get_creature_swift_bonus(character)
+
+
+## When flight ends, the kami set the caster down gently (GDD: Call Upon the Wind
+## "drifts harmlessly to the ground"; Wings spells "borne safely to earth"). If the
+## (former) flyer is over an open/impassable tile, relocate to the nearest passable,
+## unoccupied tile.
+static func _flight_safe_landing(state: MapCombatState, char_id: int) -> void:
+	var pos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if pos.x < 0 or state.map == null:
+		return
+	if MovementSystem.is_passable(state.map.get_tile(pos.x, pos.y)):
+		return  # already on solid ground
+	var occupied: Dictionary = {}
+	for cid: int in state.positions:
+		if cid != char_id:
+			occupied[state.positions[cid]] = true
+	for r in range(1, maxi(state.map.width, state.map.height)):
+		for dx in range(-r, r + 1):
+			for dy in range(-r, r + 1):
+				if maxi(absi(dx), absi(dy)) != r:
+					continue
+				var t := Vector2i(pos.x + dx, pos.y + dy)
+				if t.x < 0 or t.y < 0 or t.x >= state.map.width or t.y >= state.map.height:
+					continue
+				if occupied.has(t):
+					continue
+				if MovementSystem.is_passable(state.map.get_tile(t.x, t.y)):
+					state.positions[char_id] = t
+					return
+
+
 static func get_reachable_tiles(
 	state: MapCombatState,
 	mover_id: int,
@@ -309,6 +459,7 @@ static func get_reachable_tiles(
 		return {}
 
 	var mover_faction: String = state.factions.get(mover_id, FACTION_NEUTRAL)
+	var flying: bool = _is_flying(state, mover_id)
 	# Build set of enemy positions to block movement through.
 	var enemy_tiles: Dictionary = {}
 	for cid: int in state.positions.keys():
@@ -346,8 +497,19 @@ static func get_reachable_tiles(
 
 				var tile: int = state.map.get_tile(nx, ny)
 				var step_cost: int = MovementSystem.terrain_cost(tile)
-				if step_cost == 0:
-					continue  # impassable
+				if flying:
+					# A flyer occupies open spaces (air/void, water) — only a solid
+					# obstruction (wall/tree/door/furniture/roof) blocks. Uniform cost,
+					# and elevation cliffs/ledges are ignored (it flies over them).
+					if MovementSystem.is_solid_obstruction(tile):
+						continue
+					step_cost = 1
+				else:
+					if step_cost == 0:
+						continue  # impassable
+					# Elevation face: cannot walk up a cliff or off a ledge (s4.4 Z-axis).
+					if MovementSystem.is_cliff_step(state.map, pos.x, pos.y, nx, ny):
+						continue
 
 				var new_cost: int = cost + step_cost
 				if new_cost > move_budget:
@@ -375,6 +537,7 @@ static func find_path(
 		return []
 
 	var mover_faction: String = state.factions.get(mover_id, FACTION_NEUTRAL)
+	var flying: bool = _is_flying(state, mover_id)
 	var enemy_tiles: Dictionary = {}
 	for cid: int in state.positions.keys():
 		if cid == mover_id:
@@ -408,8 +571,17 @@ static func find_path(
 				if enemy_tiles.has(nv) and nv != goal:
 					continue
 				var tile: int = state.map.get_tile(nv.x, nv.y)
-				if MovementSystem.terrain_cost(tile) == 0:
-					continue
+				if flying:
+					# A flyer routes over open spaces (air/void, water) and ignores
+					# cliffs; only a solid obstruction blocks it.
+					if MovementSystem.is_solid_obstruction(tile):
+						continue
+				else:
+					if MovementSystem.terrain_cost(tile) == 0:
+						continue
+					# Elevation face: pathing never routes up a cliff or off a ledge (s4.4 Z-axis).
+					if MovementSystem.is_cliff_step(state.map, pos.x, pos.y, nv.x, nv.y):
+						continue
 				visited[nv] = true
 				came_from[nv] = pos
 				queue.append(nv)
@@ -630,6 +802,169 @@ static func execute_move(
 	return {"success": true, "from": old_pos, "to": dest, "fell_prone": fell_prone}
 
 
+## Climb to a destination that normal movement cannot reach (s4.4 Z-axis). Two
+## forms, auto-detected from the destination; both cost a Complex action and roll
+## Strength + Athletics vs the surface material's TN (wood 15 / earth 20 / stone 25):
+##   - ELEVATION CLIFF: an adjacent tile a cliff-step away. TN keyed off the higher
+##     tile's terrain. Up relocates on success / stays on failure; down always lands,
+##     and a failed roll slips and falls the rest (NkN damage).
+##   - WALL SCALE: a tile two steps away in a straight orthogonal line with a single
+##     WALL_STONE/WALL_WOOD between. TN keyed off the wall material. Success crosses
+##     to the far tile; failure stays put (no fall — you just fail to get over).
+## Rejects an impassable/occupied/out-of-range/garbled destination, a non-cliff
+## adjacent step (use execute_move), a too-thick wall, or a down-restricted/entangled climber.
+static func execute_climb(
+	state: MapCombatState,
+	char_id: int,
+	dest: Vector2i,
+	character: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if ts == null or p == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if IndividualCombat.CONDITION_ENTANGLED in p.conditions:
+		return {"success": false, "reason": "entangled"}
+	if ts.is_down_restricted(CharacterStats.get_wound_level(character)):
+		return {"success": false, "reason": "down_only_free_actions"}
+	if not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_actions_remaining"}
+	var cur: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cur.x < 0:
+		return {"success": false, "reason": "position_unknown"}
+	if dest.x < 0 or dest.y < 0 or dest.x >= state.map.width or dest.y >= state.map.height:
+		return {"success": false, "reason": "out_of_bounds"}
+	if not MovementSystem.is_passable(state.map.get_tile(dest.x, dest.y)):
+		return {"success": false, "reason": "destination_impassable"}
+	for cid: int in state.positions:
+		if cid != char_id and state.positions[cid] == dest:
+			return {"success": false, "reason": "destination_occupied"}
+
+	var ddx: int = dest.x - cur.x
+	var ddy: int = dest.y - cur.y
+	var is_wall_scale: bool = false
+	var tn: int = CLIMB_TN_EARTH
+	var delta: int = 0
+
+	if _chebyshev(cur, dest) == 1:
+		# Adjacent: an elevation cliff. TN = the higher tile's terrain.
+		if not MovementSystem.is_cliff_step(state.map, cur.x, cur.y, dest.x, dest.y):
+			return {"success": false, "reason": "not_a_cliff"}
+		delta = MovementSystem.elevation_delta(state.map, cur.x, cur.y, dest.x, dest.y)
+		var higher: Vector2i = dest if delta > 0 else cur
+		tn = _climb_tn_for_tile(state.map.get_tile(higher.x, higher.y))
+	elif (ddx == 0 and abs(ddy) == 2) or (ddy == 0 and abs(ddx) == 2):
+		# Two straight steps with a single wall between: scale over it. TN = wall material.
+		var midx: int = cur.x + signi(ddx)
+		var midy: int = cur.y + signi(ddy)
+		var wall_tile: int = state.map.get_tile(midx, midy)
+		if wall_tile != Enums.TileType.WALL_STONE and wall_tile != Enums.TileType.WALL_WOOD:
+			return {"success": false, "reason": "not_a_scalable_wall"}
+		is_wall_scale = true
+		tn = _climb_tn_for_tile(wall_tile)
+	else:
+		return {"success": false, "reason": "invalid_climb_target"}
+
+	ts.consume_complex()
+	var res: Dictionary = SkillResolver.resolve_skill_check(
+		character, dice_engine, "Athletics", tn, 0, "", Enums.Trait.STRENGTH)
+	var climbed: bool = res.get("success", false)
+	var fell: bool = false
+	var fall_dmg: int = 0
+	var direction: String
+
+	if is_wall_scale:
+		# Scaling a wall: success crosses to the far tile; failure stays put.
+		direction = "over"
+		if climbed:
+			state.positions[char_id] = dest
+	elif delta > 0:
+		# Up: success relocates; failure stays put.
+		direction = "up"
+		if climbed:
+			state.positions[char_id] = dest
+	else:
+		# Down: always ends at the lower tile; a failed climb slips and falls.
+		direction = "down"
+		state.positions[char_id] = dest
+		if not climbed:
+			fell = true
+			fall_dmg = _apply_fall_damage(state, char_id, -delta, dice_engine)
+
+	if state.positions[char_id] != cur:
+		p.facing = Vector2i(signi(ddx), signi(ddy))
+	state.combat_log.append({
+		"type": "climb", "round": state.combat.round_number, "char_id": char_id,
+		"from": cur, "to": state.positions[char_id], "direction": direction,
+		"wall_scale": is_wall_scale, "tn": tn,
+		"climbed": climbed, "fell": fell, "fall_damage": fall_dmg,
+	})
+	return {"success": true, "climbed": climbed, "direction": direction,
+		"wall_scale": is_wall_scale, "tn": tn,
+		"from": cur, "to": state.positions[char_id], "fell": fell, "fall_damage": fall_dmg}
+
+
+## The stacked-floor level a combatant currently stands on (s4.4 Option B).
+## ABSENT from the dict = level 0 (single-level skirmishes never populate it).
+static func get_combatant_level(state: MapCombatState, char_id: int) -> int:
+	return int(state.combatant_levels.get(char_id, 0))
+
+
+## Climb a staircase/ladder to the floor it connects to (s4.4 Option B). A Simple
+## Move action (you walk up built stairs — no Athletics roll, unlike a cliff). The
+## combatant must stand on a STAIRS tile on their current level; they relocate to the
+## same (x,y) on the destination level, where the landing tile must be passable and
+## unoccupied by a combatant on THAT level.
+static func execute_climb_stairs(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if ts == null or p == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if IndividualCombat.CONDITION_ENTANGLED in p.conditions:
+		return {"success": false, "reason": "entangled"}
+	if ts.is_down_restricted(CharacterStats.get_wound_level(character)):
+		return {"success": false, "reason": "down_only_free_actions"}
+	if not ts.can_use_simple():
+		return {"success": false, "reason": "no_simple_actions_remaining"}
+	var pos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if pos.x < 0:
+		return {"success": false, "reason": "position_unknown"}
+	var cur_level: int = get_combatant_level(state, char_id)
+	var here: int = state.map.get_tile_at(pos.x, pos.y, cur_level)
+	if not AsciiMapData.is_stair(here):
+		return {"success": false, "reason": "not_on_stairs"}
+	var dest_level: int = state.map.stair_destination_level(pos.x, pos.y, cur_level)
+	if dest_level < 0:
+		return {"success": false, "reason": "no_destination_level"}
+	var landing: int = state.map.get_tile_at(pos.x, pos.y, dest_level)
+	if not MovementSystem.is_passable(landing):
+		return {"success": false, "reason": "landing_blocked"}
+	# Level-aware occupancy: someone already standing at this (x,y) on the dest level.
+	for cid: int in state.positions:
+		if cid != char_id and state.positions[cid] == pos \
+				and get_combatant_level(state, cid) == dest_level:
+			return {"success": false, "reason": "landing_occupied"}
+
+	ts.consume_simple()
+	state.combatant_levels[char_id] = dest_level
+	var direction: String = "up" if dest_level > cur_level else "down"
+	state.combat_log.append({
+		"type": "climb_stairs", "round": state.combat.round_number, "char_id": char_id,
+		"at": pos, "from_level": cur_level, "to_level": dest_level, "direction": direction,
+	})
+	return {"success": true, "direction": direction, "at": pos,
+		"from_level": cur_level, "to_level": dest_level}
+
+
 ## Melee attack on target_id. Costs a Complex action.
 ## maneuver: "" / "increased_damage" / "disarm" / "feint" /
 ##           "knockdown_biped" / "knockdown_quad" /
@@ -822,6 +1157,9 @@ static func execute_melee_attack(
 	var a_p_ins: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
 	if a_p_ins != null and IndividualCombat.get_timed_modifier_total(a_p_ins, "insubstantial") > 0:
 		return {"success": false, "reason": "insubstantial"}
+	# s35 Wings of Fire: the caster's arms control the wings — no weapon/unarmed attacks.
+	if _arms_occupied(state, attacker_id):
+		return {"success": false, "reason": "arms_occupied"}
 
 	var wl: int = CharacterStats.get_wound_level(attacker)
 	if ts.is_down_restricted(wl):
@@ -936,8 +1274,10 @@ static func execute_melee_attack(
 		armor_tn = maxi(5, armor_tn)
 	# s33 Castle of Air: a defender's attacker_penalty buff imposes a -Xk0 attack-roll penalty.
 	# s33 Blessed Wind of Lady Sun: a modifier zone penalizes hostile actions made from inside it.
+	# s4.4 Z-axis: an attacker on high ground adds +1k0 (a positive value adds rolled dice).
 	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty") \
-		+ _zone_modifier_total(state, attacker_id, "attack_roll_penalty")
+		+ _zone_modifier_total(state, attacker_id, "attack_roll_penalty") \
+		+ _high_ground_attack_bonus(state, apos, tpos)
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
 		false, spend_void, false, maneuver,
@@ -1335,6 +1675,9 @@ static func execute_ranged_attack(
 	var a_p_ins: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
 	if a_p_ins != null and IndividualCombat.get_timed_modifier_total(a_p_ins, "insubstantial") > 0:
 		return {"success": false, "reason": "insubstantial"}
+	# s35 Wings of Fire: the caster's arms control the wings — no weapon/unarmed attacks.
+	if _arms_occupied(state, attacker_id):
+		return {"success": false, "reason": "arms_occupied"}
 
 	# s36 Stand Against the Waves: a granted_attacks pool lets a ranged attack proceed when the
 	# normal Complex is spent (consumes one granted attack instead).
@@ -1409,7 +1752,8 @@ static func execute_ranged_attack(
 	# bubble; the -3 KEPT half is not modeled) penalize a shot fired from within a modifier zone.
 	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty") \
 		+ _zone_modifier_total(state, attacker_id, "attack_roll_penalty") \
-		+ _zone_modifier_total(state, attacker_id, "ranged_attack_penalty")
+		+ _zone_modifier_total(state, attacker_id, "ranged_attack_penalty") \
+		+ _high_ground_attack_bonus(state, apos, tpos)
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, shot_raises, dice_engine,
 		in_melee, spend_void, false, "",
@@ -4810,7 +5154,7 @@ static func execute_hurricane_palm(
 		if kb > 0 and _root_the_mountain_resists(target, t_p, attacker, dice_engine):
 			kb = 0
 			result["root_the_mountain_resisted"] = true
-		result["knockback_to"] = _knockback_target(state, target_id, apos, kb)
+		result["knockback_to"] = _knockback_target(state, target_id, apos, kb, dice_engine)
 		IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_PRONE)
 		result["wounds_inflicted"] = wd.get("final_damage", half)
 		result["knockback_tiles"] = kb
@@ -4841,7 +5185,7 @@ static func _root_the_mountain_resists(
 
 ## Push a target up to `tiles` tiles directly away from `from_pos`, stopping at a wall,
 ## an occupied tile, or the map edge. Updates and returns the new position. (s38 knockback.)
-static func _knockback_target(state: MapCombatState, target_id: int, from_pos: Vector2i, tiles: int) -> Vector2i:
+static func _knockback_target(state: MapCombatState, target_id: int, from_pos: Vector2i, tiles: int, dice_engine: DiceEngine = null) -> Vector2i:
 	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
 	if tiles <= 0 or tpos.x < 0:
 		return tpos
@@ -4849,20 +5193,98 @@ static func _knockback_target(state: MapCombatState, target_id: int, from_pos: V
 	var dy: int = signi(tpos.y - from_pos.y)
 	if dx == 0 and dy == 0:
 		return tpos
+	var flying: bool = _is_flying(state, target_id)
 	var occupied: Dictionary = {}
 	for cid: int in state.positions:
 		if cid != target_id:
 			occupied[state.positions[cid]] = true
 	var cur: Vector2i = tpos
+	var fell_levels: int = 0
 	for _n in range(tiles):
 		var nxt: Vector2i = Vector2i(cur.x + dx, cur.y + dy)
-		if state.map == null or not MovementSystem.is_passable(state.map.get_tile(nxt.x, nxt.y)):
+		if state.map == null:
+			break
+		var nxt_tile: int = state.map.get_tile(nxt.x, nxt.y)
+		# A flyer is shoved over open air / water / pits, hovering — only a solid
+		# obstruction stops it, and it never falls or plunges into a pit.
+		if flying and not MovementSystem.is_solid_obstruction(nxt_tile):
+			if occupied.has(nxt):
+				break
+			cur = nxt
+			continue
+		if not MovementSystem.is_passable(nxt_tile):
+			# Pit/void edge (s4.4 Z-axis, Oni Warai): a shove toward a bottomless void
+			# or deep water gets one chance to catch the brink (Reflexes + Athletics).
+			# Failure carries the victim over the edge to their death.
+			if _is_lethal_pit(nxt_tile) and dice_engine != null:
+				var pit_ch: L5RCharacterData = state.combatants.get(target_id, null)
+				if pit_ch != null and not CharacterStats.is_dead(pit_ch):
+					var save: Dictionary = SkillResolver.resolve_skill_check(
+						pit_ch, dice_engine, "Athletics", PIT_EDGE_CATCH_TN, 0, "",
+						Enums.Trait.REFLEXES)
+					if not save.get("success", false):
+						state.positions[target_id] = cur
+						_apply_pit_death(state, target_id, nxt)
+						return cur
 			break
 		if occupied.has(nxt):
 			break
+		# Elevation face (s4.4 Z-axis): being shoved into an upward cliff stops the
+		# knockback (slammed into the face); being shoved off a downward ledge sends
+		# the target over the edge — they land on the lower tile and fall.
+		var ed: int = MovementSystem.elevation_delta(state.map, cur.x, cur.y, nxt.x, nxt.y)
+		if ed >= MovementSystem.CLIFF_THRESHOLD:
+			break
 		cur = nxt
+		if ed <= -MovementSystem.FALL_THRESHOLD:
+			fell_levels = -ed
+			break
 	state.positions[target_id] = cur
+	if fell_levels > 0 and dice_engine != null:
+		_apply_fall_damage(state, target_id, fell_levels, dice_engine)
 	return cur
+
+
+## Applies falling damage for a drop of `levels` elevation levels (1 level ≈ 5 ft).
+## DR = levels k levels exploding — the L5R 4e core rule "1k1 Wounds per 5 ft
+## fallen" (model locked by owner 2026-06-23). Like other environmental hazards in
+## this layer (FireSystem), a fall bypasses armor Reduction. Returns Wounds dealt.
+static func _apply_fall_damage(state: MapCombatState, char_id: int, levels: int, dice_engine: DiceEngine) -> int:
+	if levels <= 0 or dice_engine == null:
+		return 0
+	var ch: L5RCharacterData = state.combatants.get(char_id, null)
+	if ch == null or CharacterStats.is_dead(ch):
+		return 0
+	var n: int = clampi(levels, 1, 10)
+	var dmg: int = dice_engine.roll_and_keep(n, n, true).total
+	WoundSystem.apply_damage(ch, dmg, 0)
+	state.combat_log.append({
+		"type": "fall",
+		"round": state.combat.round_number,
+		"char_id": char_id,
+		"levels": levels,
+		"damage": dmg,
+		"dead": CharacterStats.is_dead(ch),
+	})
+	return dmg
+
+
+## Kills a character who was shoved over a lethal pit edge (bottomless void / drowning
+## in deep water) and failed the edge-catch save (s4.4 Z-axis, Oni Warai). Unlike a
+## graduated fall this is unsurvivable — wounds are set past the Dead threshold.
+static func _apply_pit_death(state: MapCombatState, char_id: int, pit_pos: Vector2i) -> void:
+	var ch: L5RCharacterData = state.combatants.get(char_id, null)
+	if ch == null or CharacterStats.is_dead(ch):
+		return
+	ch.wounds_taken = CharacterStats.get_total_wound_capacity(ch) + 1
+	state.combat_log.append({
+		"type": "pit_death",
+		"round": state.combat.round_number,
+		"char_id": char_id,
+		"pit_x": pit_pos.x,
+		"pit_y": pit_pos.y,
+		"dead": true,
+	})
 
 
 ## Way of the Willow (s38 Air): a defender may spend a Void Point to interrupt a declared
@@ -5645,7 +6067,11 @@ static func advance_round(
 	# The World Is Empty deducts 1 VP as its modifier ends (before removal).
 	for _tp: IndividualCombat.Participant in state.combat.participants.values():
 		_process_world_is_empty_expiry(state, _tp, chars_by_id)
+		var _was_flying: bool = IndividualCombat.get_timed_modifier_total(_tp, "flight") > 0
 		IndividualCombat.expire_timed_modifiers(_tp, state.combat.round_number)
+		# Flight ended this round → set the (former) flyer down gently (GDD safe landing).
+		if _was_flying and IndividualCombat.get_timed_modifier_total(_tp, "flight") <= 0:
+			_flight_safe_landing(state, _tp.character_id)
 		IndividualCombat.expire_active_kiho(_tp, state.combat.round_number)
 		IndividualCombat.expire_timed_conditions(_tp, state.combat.round_number)
 		_expire_ring_deltas(state, _tp, chars_by_id)  # s34 ring spells — wounds return to normal on expiry
@@ -6257,6 +6683,22 @@ static func execute_npc_turn(
 			actions_taken.append({"action": "guard", "result": guard_r})
 			return {"actions": actions_taken}
 
+	# -- Auto-climb toward an enemy blocked by a cliff/wall (s4.4 Z-axis) ------
+	# Decided BEFORE the stance pick: climb is the turn's Complex action, and a stance change
+	# (a Simple) would forbid the Complex this turn (1 Complex OR 2 Simple). Only fires when
+	# there is NO normal walking route to the nearest enemy (find_path empty — genuinely walled
+	# or cliffed off) AND a cliff/wall scale strictly closes the gap, so the NPC never climbs
+	# when it could just walk around. Skipped while grappled/prone/down-restricted.
+	if ts.can_use_complex() and not ts.is_down_restricted(wl) \
+			and not IndividualCombat.has_condition(p, IndividualCombat.CONDITION_GRAPPLED) \
+			and not IndividualCombat.has_condition(p, IndividualCombat.CONDITION_PRONE):
+		var ne: Vector2i = _nearest_enemy_pos(state, npc_id)
+		if ne.x >= 0 and find_path(state, npc_id, ne).is_empty():
+			var eclimb: Dictionary = _npc_maybe_climb_toward(state, npc_id, ne, npc, dice_engine)
+			if eclimb.get("success", false):
+				actions_taken.append({"action": "climb", "result": eclimb})
+				return {"actions": actions_taken}
+
 	# -- Pick optimal stance -----------------------------------------------
 	var stance_result: Dictionary = _npc_pick_stance(state, npc_id, npc, chars_by_id, dice_engine)
 	if stance_result.get("changed", false):
@@ -6406,7 +6848,7 @@ static func execute_npc_turn(
 				target_in_melee = (best_target in melee_targets)
 
 		if not target_in_melee and ts.can_use_simple() and not ts.is_down_restricted(wl):
-			var simple_budget: int = MovementSystem.budget(_effective_water_ring(state.combat.participants.get(npc_id, null), npc), MovementSystem.MoveAction.SIMPLE) + IndividualCombat.get_kiho_move_bonus(npc, state.combat.participants.get(npc_id, null)) + IndividualCombat.get_creature_swift_bonus(npc)
+			var simple_budget: int = simple_move_budget(state, npc_id, npc)
 			var move_r: Dictionary = _npc_move_toward(state, npc_id, best_target, npc, simple_budget, "simple", dice_engine)
 			if move_r.get("success", false):
 				actions_taken.append({"action": "simple_move", "result": move_r})
@@ -6838,6 +7280,65 @@ static func _npc_move_toward(
 	return execute_move(state, npc_id, dest, budget, npc, dice_engine, action_type)
 
 
+## NPC auto-climb toward an otherwise-unreachable goal (s4.4 Z-axis). When normal
+## movement can't close on `tpos` because a cliff or wall blocks the direct approach,
+## scale it: considers the 8 adjacent elevation-cliff steps and the 4 two-step
+## wall-scales (over a single WALL_STONE/WALL_WOOD), and climbs the one that STRICTLY
+## reduces Chebyshev distance to the goal. Climb is the turn's Complex action, so the
+## caller ends the turn after a successful climb. Returns execute_climb's result, or {}
+## when no distance-reducing climb is available. Structural AI — the GDD gives no NPC
+## climb policy; the climb/fall values are all owner-locked.
+static func _npc_maybe_climb_toward(
+	state: MapCombatState, mover_id: int, tpos: Vector2i,
+	mover: L5RCharacterData, dice_engine: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(mover_id, null)
+	if ts == null or not ts.can_use_complex() or state.map == null:
+		return {}
+	var cur: Vector2i = state.positions.get(mover_id, Vector2i(-1, -1))
+	if cur.x < 0 or tpos.x < 0:
+		return {}
+	var cur_dist: int = maxi(absi(tpos.x - cur.x), absi(tpos.y - cur.y))
+	if cur_dist <= 1:
+		return {}  # already adjacent to the goal
+	var occupied: Dictionary = {}
+	for cid: int in state.positions:
+		if cid != mover_id:
+			occupied[state.positions[cid]] = true
+	# Candidates: 8 adjacent cliff tiles + 4 two-step wall-scale tiles.
+	var cands: Array[Vector2i] = []
+	for ax in [-1, 0, 1]:
+		for ay in [-1, 0, 1]:
+			if ax != 0 or ay != 0:
+				cands.append(Vector2i(cur.x + ax, cur.y + ay))
+	cands.append(Vector2i(cur.x + 2, cur.y)); cands.append(Vector2i(cur.x - 2, cur.y))
+	cands.append(Vector2i(cur.x, cur.y + 2)); cands.append(Vector2i(cur.x, cur.y - 2))
+	var best_dest: Vector2i = Vector2i(-1, -1)
+	var best_dist: int = cur_dist
+	for d: Vector2i in cands:
+		if d.x < 0 or d.y < 0 or d.x >= state.map.width or d.y >= state.map.height:
+			continue
+		if occupied.has(d) or not MovementSystem.is_passable(state.map.get_tile(d.x, d.y)):
+			continue
+		var ddx: int = d.x - cur.x
+		var ddy: int = d.y - cur.y
+		var climbable: bool = false
+		if maxi(absi(ddx), absi(ddy)) == 1:
+			climbable = MovementSystem.is_cliff_step(state.map, cur.x, cur.y, d.x, d.y)
+		elif (ddx == 0 and absi(ddy) == 2) or (ddy == 0 and absi(ddx) == 2):
+			var midt: int = state.map.get_tile(cur.x + signi(ddx), cur.y + signi(ddy))
+			climbable = (midt == Enums.TileType.WALL_STONE or midt == Enums.TileType.WALL_WOOD)
+		if not climbable:
+			continue
+		var nd: int = maxi(absi(tpos.x - d.x), absi(tpos.y - d.y))
+		if nd < best_dist:
+			best_dist = nd
+			best_dest = d
+	if best_dest.x < 0:
+		return {}
+	return execute_climb(state, mover_id, best_dest, mover, dice_engine)
+
+
 ## Execute NPC attack with smart raise selection (GDD s40 maneuvers).
 ## When use_extra_attack is true, declares 5 Raises for Extra Attack (GDD s40:
 ## "These Raises confer no other benefits"), precluding Increased Damage.
@@ -6881,6 +7382,29 @@ static func _npc_should_grapple(npc: L5RCharacterData) -> bool:
 	for sk: String in _NPC_WEAPON_SKILLS:
 		best_weapon = maxi(best_weapon, int(npc.skills.get(sk, 0)))
 	return jj >= best_weapon
+
+
+# Position of the nearest living enemy (different faction) to `who_id` by Chebyshev
+# distance, or (-1,-1) if none. Ignores LOS — used by the auto-climb pursuer to find an
+# enemy it cannot currently see across an obstacle (s4.4 Z-axis).
+static func _nearest_enemy_pos(state: MapCombatState, who_id: int) -> Vector2i:
+	var wpos: Vector2i = state.positions.get(who_id, Vector2i(-1, -1))
+	if wpos.x < 0:
+		return Vector2i(-1, -1)
+	var my_faction: String = String(state.factions.get(who_id, ""))
+	var best: Vector2i = Vector2i(-1, -1)
+	var best_d: int = 1 << 30
+	for eid in state.positions.keys():
+		if String(state.factions.get(eid, "")) == my_faction:
+			continue
+		var ech = state.combatants.get(eid, null)
+		if ech == null or CharacterStats.is_dead(ech):
+			continue
+		var d: int = maxi(absi(wpos.x - state.positions[eid].x), absi(wpos.y - state.positions[eid].y))
+		if d < best_d:
+			best_d = d
+			best = state.positions[eid]
+	return best
 
 
 # True if a living enemy of `faction` is adjacent (within 1 tile) to the character at `who_id`.
@@ -7254,6 +7778,12 @@ static func execute_companion_turn(
 		var mv2: Dictionary = _companion_step_toward(state, cid, goal_tile, character, dice_engine)
 		if mv2.get("success", false):
 			actions.append({"action": "move", "result": mv2})
+		elif ts.can_use_complex():
+			# Blocked by a cliff or wall — scale it toward the goal (s4.4 Z-axis). Climb is the
+			# turn's Complex action, so the companion commits its turn to getting over the obstacle.
+			var cclimb: Dictionary = _npc_maybe_climb_toward(state, cid, goal_tile, character, dice_engine)
+			if cclimb.get("success", false):
+				actions.append({"action": "climb", "result": cclimb})
 	return {"actions": actions, "command": cmd}
 
 
@@ -8681,28 +9211,76 @@ static func _cover_bonus(state: MapCombatState, tpos: Vector2i, apos: Vector2i) 
 		return 0
 	if AsciiMapData.grants_cover(state.map.get_tile(cx, cy)):
 		return COVER_ARMOR_TN_BONUS
+	# Elevation cover (s4.4 Z-axis): a defender below the attacker, tucked at the
+	# base of a rise (the tile toward the attacker is a higher lip), is shielded.
+	# Same +5 — cover does not stack with furniture cover.
+	if state.map.has_elevation():
+		var t_elev: int = state.map.elevation_at(tpos.x, tpos.y)
+		if state.map.elevation_at(apos.x, apos.y) > t_elev \
+				and state.map.elevation_at(cx, cy) > t_elev:
+			return COVER_ARMOR_TN_BONUS
 	return 0
 
 
-## Bresenham line-of-sight check.
-## Returns true if no LOS-blocking tile lies between a and b (exclusive of endpoints).
+## High-ground attack bonus (s4.4 Z-axis): +HIGH_GROUND_ATTACK_ROLLED rolled die
+## (+1k0) when the attacker stands at least HIGH_GROUND_THRESHOLD levels above the
+## target. 0 on a flat map. Returned as a positive attacker_roll_penalty — which
+## adds rolled dice (resolve_attack: rolled = max(0, rolled + attacker_roll_penalty)).
+static func _high_ground_attack_bonus(state: MapCombatState, apos: Vector2i, tpos: Vector2i) -> int:
+	if state.map == null or not state.map.has_elevation():
+		return 0
+	var d: int = state.map.elevation_at(apos.x, apos.y) - state.map.elevation_at(tpos.x, tpos.y)
+	return HIGH_GROUND_ATTACK_ROLLED if d >= HIGH_GROUND_THRESHOLD else 0
+
+
+## Bresenham line-of-sight check, elevation-aware (s4.4 Z-axis).
+## Returns true if no tile occludes the sightline between a and b (endpoints excluded).
+## Flat map (no elevation grid): any LOS-blocking tile strictly between blocks — exactly
+## the prior behavior. Elevated map: a tile occludes only when its top reaches the
+## interpolated view-ray height, so a viewer on high ground sees over low obstacles.
 static func _has_los(map: AsciiMapData, a: Vector2i, b: Vector2i) -> bool:
+	var pts: Array = _bresenham_points(a, b)
+	var n: int = pts.size()
+	if n <= 2:
+		return true
+
+	if not map.has_elevation():
+		for i in range(1, n - 1):
+			if AsciiMapData.blocks_los(map.get_tile(pts[i].x, pts[i].y)):
+				return false
+		return true
+
+	# Height-aware: interpolate eye-level height along the ray; a tile blocks when its
+	# top (elevation, +LOS_OBSTACLE_HEIGHT for walls/trees) reaches that height.
+	var a_eye: float = float(map.elevation_at(a.x, a.y) + LOS_EYE_HEIGHT)
+	var b_eye: float = float(map.elevation_at(b.x, b.y) + LOS_EYE_HEIGHT)
+	for i in range(1, n - 1):
+		var p: Vector2i = pts[i]
+		var t: float = float(i) / float(n - 1)
+		var line_h: float = a_eye + (b_eye - a_eye) * t
+		var top: float = float(map.elevation_at(p.x, p.y))
+		if AsciiMapData.blocks_los(map.get_tile(p.x, p.y)):
+			top += float(LOS_OBSTACLE_HEIGHT)
+		if top >= line_h:
+			return false
+	return true
+
+
+## Bresenham point list from a to b inclusive (a is pts[0], b is pts[n-1]).
+static func _bresenham_points(a: Vector2i, b: Vector2i) -> Array:
+	var pts: Array = []
 	var x0: int = a.x
 	var y0: int = a.y
-	var x1: int = b.x
-	var y1: int = b.y
-
-	var dx: int = abs(x1 - x0)
-	var dy: int = abs(y1 - y0)
-	var sx: int = 1 if x0 < x1 else -1
-	var sy: int = 1 if y0 < y1 else -1
+	var dx: int = abs(b.x - x0)
+	var dy: int = abs(b.y - y0)
+	var sx: int = 1 if x0 < b.x else -1
+	var sy: int = 1 if y0 < b.y else -1
 	var err: int = dx - dy
-
 	var cx: int = x0
 	var cy: int = y0
-
 	while true:
-		if cx == x1 and cy == y1:
+		pts.append(Vector2i(cx, cy))
+		if cx == b.x and cy == b.y:
 			break
 		var e2: int = 2 * err
 		if e2 > -dy:
@@ -8711,13 +9289,7 @@ static func _has_los(map: AsciiMapData, a: Vector2i, b: Vector2i) -> bool:
 		if e2 < dx:
 			err += dx
 			cy += sy
-		# Check intermediate tiles (not start or end).
-		if cx == x1 and cy == y1:
-			break
-		if AsciiMapData.blocks_los(map.get_tile(cx, cy)):
-			return false
-
-	return true
+	return pts
 
 
 ## True if the two factions are enemies.

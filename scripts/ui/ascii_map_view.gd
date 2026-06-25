@@ -695,6 +695,9 @@ func _recompute_fov() -> void:
 func _is_lookout_position() -> bool:
 	if _map == null:
 		return false
+	# Raised ground is a lookout position (s4.4 Z-axis): high ground sees farther.
+	if _map.has_elevation() and _map.elevation_at(_player_x, _player_y) > 0:
+		return true
 	var wws: Variant = _map.get("wall_walkways")
 	if wws is Array:
 		for ww: Dictionary in (wws as Array):
@@ -735,6 +738,8 @@ func _draw() -> void:
 					var rem_glyph: String = AsciiMapGenerator.get_glyph(rem_tile, mx, my, _map)
 					if not rem_glyph.is_empty() and rem_glyph != " ":
 						var rem_fg: Color = AsciiMapGenerator.get_fg_color(rem_tile)
+						if _map.has_elevation():
+							rem_fg = AsciiMapGenerator.elevation_shade(rem_fg, _map.elevation_at(mx, my))
 						var dfg: Color = Color(rem_fg.r * DIM_FACTOR, rem_fg.g * DIM_FACTOR,
 							rem_fg.b * DIM_FACTOR, 1.0)
 						draw_string(font, Vector2(cell_pos.x + 2,
@@ -751,6 +756,8 @@ func _draw() -> void:
 			if glyph.is_empty() or glyph == " ":
 				continue
 			var fg: Color = AsciiMapGenerator.get_fg_color(tile)
+			if _map.has_elevation():
+				fg = AsciiMapGenerator.elevation_shade(fg, _map.elevation_at(mx, my))
 			var text_y: float = cell_pos.y + font.get_ascent(font_size)
 			draw_string(font, Vector2(cell_pos.x + 2, text_y), glyph,
 				HORIZONTAL_ALIGNMENT_LEFT, CELL_SIZE, font_size, fg)

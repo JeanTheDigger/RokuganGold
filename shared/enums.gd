@@ -877,6 +877,9 @@ enum TileType {
 	FURNITURE_SHELF        = 56,  # ▤  shelf / cupboard / mizuya — blocks move + LOS, cover
 	FURNITURE_STOVE        = 57,  # ◫  kamado cooking stove — blocks move
 	FURNITURE_BENCH        = 58,  # ╨  bench / stool — passable
+	STAIRS_UP              = 59,  # <  staircase/ladder up to the level above — passable
+	STAIRS_DOWN            = 60,  # >  staircase/ladder down to the level below — passable
+	ROOF                   = 61,  # ⌂  sloped tile/thatch roof cap — blocks move + LOS (the "from above" face)
 }
 
 # -- s45 Advantages ------------------------------------------------------------

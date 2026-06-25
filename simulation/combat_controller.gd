@@ -826,6 +826,9 @@ func _fov_radius(perception: int, x: int, y: int) -> int:
 
 
 func _is_lookout_tile(x: int, y: int) -> bool:
+	# Raised ground is a lookout position (s4.4 Z-axis): high ground sees farther.
+	if _map.has_elevation() and _map.elevation_at(x, y) > 0:
+		return true
 	var wws: Variant = _map.get("wall_walkways")
 	if wws is Array:
 		for ww: Dictionary in (wws as Array):

@@ -95,6 +95,11 @@ const LAYER_COUNT: Array[int] = [2, 3, 4]
 # Defenders here deal 3k2/round with no attack roll (s56.17.2; blocked on s40).
 @export var murder_holes: Array = []
 
+# Gatehouses: multi-storey gate towers over the principal (outer-wall) gates.
+# Each dict: { gate_x, gate_y }. The guard chamber (stacked level 1) sits directly
+# above the gate passage (the murder-hole position); roof on level 2 (s4.4 Option B).
+@export var gatehouses: Array = []
+
 # Arrow slits: tiles in outer face of walls for outward ranged fire.
 # Each dict: { id, x, y, facing ("N"/"S"/"E"/"W"), wall_id, layer_idx }
 # Provide +15 Armor TN from return fire (s56.17.2; blocked on s40).

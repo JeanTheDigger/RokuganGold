@@ -6750,6 +6750,827 @@ reachable in a live game session.** Full file-by-file breakdown in `ASCII_MAP_GA
   MissionLauncher → CombatScreen`, then build the player command loop and runtime-verify the
   static-only layers.
 
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 1: data + movement + fall, owner-authorized + runtime-verified)
+First cut of per-tile **elevation** on the ASCII map. s4.4 line 121 explicitly defers
+"roofing/elevation indicators" to engine development (design principles locked, NO numbers),
+so the numeric model was **locked by the owner 2026-06-23** (the falling-damage value is the
+real L5R 4e core rule, not invented). Owner-chosen scope: tile elevation/height (one grid,
+tiles at different heights) doing all four effects (movement, LOS/cover, ranged/attack, falling);
+Pass 1 builds **data + movement + fall**, deferring height-aware LOS/cover and the +1k0 high-ground
+attack bonus to Pass 2 (their values are already locked below).
+- **Data — `AsciiMapData.elevation: PackedByteArray`** (a parallel grid like `depth_grid`/
+  `overlap_intensity`; `y*width+x`; 0 = ground, each +1 = one ~5 ft step = 1 tile-height).
+  Empty (size != width*height) = a flat map → **every existing map is unaffected** (verified).
+  `const MAX_ELEVATION = 15`; helpers `elevation_at` / `has_elevation` / `init_elevation` /
+  `set_elevation` (lazy-allocates, clamps to [0, MAX]). Base `tile_types` are never mutated.
+- **Movement — cliff/fall model (LOCKED 2026-06-23).** `MovementSystem.CLIFF_THRESHOLD = 2`
+  (a single step rising ≥2 levels is a vertical face — normal movement cannot scale it, a
+  deliberate climb action is required), `FALL_THRESHOLD = 2` (a single step dropping ≥2 is a
+  fall). `elevation_delta(map,fx,fy,tx,ty)` (0 on flat maps) and `is_cliff_step(...)` (rise ≥
+  CLIFF or drop ≥ FALL). `check_step` is now elevation-aware (the formerly-unused `from_x/from_y`
+  are read): returns two new keys `is_cliff` and `elev_delta` (additive — every consumer reads
+  individual keys, none break). ZONE_EXIT tiles bypass the cliff gate (always steppable).
+  The orchestrator's `get_reachable_tiles` + `find_path` BFS skip cliff steps, so a character
+  never walks up a cliff or off a ledge (and `execute_move` inherits it via the reachability
+  gate). The CombatController stealth/flee layer inherits cliff-respect for free (no-op on flat
+  maps).
+- **Fall — falling damage (LOCKED 2026-06-23).** `_apply_fall_damage(state, char_id, levels,
+  dice)`: DR = `levels k levels` exploding = the L5R 4e core rule "1k1 Wounds per 5 ft fallen"
+  (1 level = 5 ft). Like other environmental hazards in this layer (FireSystem), a fall bypasses
+  armor Reduction (PROVISIONAL — owner may want Reduction to apply; flagged). `_knockback_target`
+  gained a trailing `dice_engine` param: a target shoved off a ledge (drop ≥ FALL) lands on the
+  lower tile and takes the fall damage (logs a `"fall"` combat event); a target shoved into an
+  upward cliff face (rise ≥ CLIFF) stops at the face (no pass-through, no fall). The single
+  caller (Hurricane Palm knockback) passes `dice_engine`; the param defaults null (graceful — no
+  fall damage when omitted).
+- **Runtime-verified (Godot 4.6.2, headless drivers in a minimal autoload-free copy — the full
+  project's Node autoloads stall a `-s` run):** 29/29 assertions, 0 fails, 0 project-wide parse
+  errors. Pure layer (20): elevation grid get/set/clamp/oob, `elevation_delta`/`is_cliff_step`
+  (rise+3/drop−3 cliff, ±1 walkable, flat-never-cliff), `check_step` cliff/flat fields. Orchestrator
+  layer (9): `get_reachable_tiles`/`find_path` exclude a cliff plateau (and a FLAT control map
+  reaches the same column — proving elevation is the blocker), knockback-off-ledge lands lower +
+  deals NkN + logs `fall`, flat knockback deals no fall damage, knockback into an upward cliff
+  stops at the face.
+- **DEFERRED — Pass 2 (values already locked):** height combat (built next, see below). Also
+  unwired: a deliberate climb-up action (cliffs are currently impassable, not climbable),
+  generators stamping elevation (hilltop/ravine/ship still use their binary zone tags — every
+  map stays flat), and the renderer's elevation indicator (s4.4 "roofing/elevation indicators").
+
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 2: height combat, owner-authorized + runtime-verified)
+The combat half — all three values locked by the owner 2026-06-23. Every hook is a no-op on a
+flat map (no elevation grid), so all existing content is unchanged (verified by flat-map controls).
+- **High-ground attack +1k0 (LOCKED).** `HIGH_GROUND_THRESHOLD = 1`, `HIGH_GROUND_ATTACK_ROLLED = 1`.
+  `_high_ground_attack_bonus(state, apos, tpos)` returns +1 when the attacker stands ≥1 level above
+  the target. Fed through the existing `attacker_roll_penalty` channel of `resolve_attack`
+  (`rolled = max(0, rolled + attacker_roll_penalty)`), so +1 = one extra rolled die = +1k0. Wired
+  into both `execute_melee_attack` and `execute_ranged_attack` `atk_pen` (carries into the s36
+  Reversal-of-Fortunes reroll automatically; applies to spirit attackers too).
+- **Cover from height +5 (LOCKED).** `_cover_bonus` gains an elevation branch: a defender whose
+  attacker is above them AND whose tile toward the attacker is a higher lip (`lip_elev > target_elev`)
+  reuses `COVER_ARMOR_TN_BONUS` (+5 Armor TN). Does NOT stack with furniture cover (same +5).
+- **Height-aware LOS (LOCKED).** `_has_los` rewritten: flat maps take a fast path identical to the
+  prior `blocks_los`-between check (zero regression). On an elevated map, the sightline's eye-level
+  height is interpolated end-to-end (`LOS_EYE_HEIGHT = 1`) and a tile occludes only when its top
+  (elevation, + `LOS_OBSTACLE_HEIGHT = 2` for walls/trees, raw elevation for open ground — a ridge
+  still blocks) reaches the ray height. A hilltop archer sees over a mid-field low wall; a wall at
+  the target's feet still blocks; a tall open-ground ridge blocks. New `_bresenham_points` helper.
+  Scope: the orchestrator's combat LOS (`get_ranged_targets` / `execute_ranged_attack` / spell
+  targeting — the 3 `_has_los` callers). FovSystem's shadowcasting fog-of-war RADIUS stays flat
+  (height-aware FOV is a deferred refinement; `FovSystem.has_los` point-to-point has no callers).
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy):** 16/16, 0 fails, 0
+  project-wide parse errors. High ground (4): +1k0 only when ≥1 above, none below/level, none flat.
+  Cover (4): below+lip→+5, no-lip→0, lip-but-attacker-not-above→0, flat→0. LOS (6): flat open/wall
+  preserved, ground archer blocked by a mid-field wall, hilltop sees OVER it, wall-at-feet still
+  blocks, open-ground ridge blocks. Integration through the real engine (2): high-ground attack
+  roll ≥ flat on every one of 300 seeds, total 8132 vs 7671 (the +1k0 measurably raises the roll).
+- **All four Z-axis mechanics (movement, fall, ranged/attack, LOS/cover) are now wired.** Remaining
+  Z work is content/UI, not mechanics: a climb-up action (cliffs are impassable, not yet climbable),
+  generators stamping the elevation grid (so verticality appears in live missions — currently every
+  map is flat), height-aware FOV radius, and the renderer's elevation glyph.
+
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 3: generators stamp elevation, owner-authorized + runtime-verified)
+The first templates actually fill the elevation grid, so verticality appears in live missions
+(previously the machinery had no data — every map was flat). Owner constraint (2026-06-23): a map
+has **at most 3 layers (elevation 0/1/2), ramp-or-cliff by adjacency** — adjacent tiers (0↔1, 1↔2)
+are walkable ramps, a direct 0↔2 edge is an impassable cliff / 2-level fall; caves & interiors stay
+all-0 (flat, the default). Scope this pass: the three templates that already carry height tags.
+- **Hilltop (`_stamp_elevation`, slope case).** A Y-banded ramp: the approach (bottom rows) = layer 0,
+  the upper slope = layer 1, the crest line + hilltop camp = layer 2. Adjacent bands differ by 1 (a
+  walkable ramp, never a cliff), so the hill is climbable from every direction and connectivity is
+  unchanged — the camp simply sits on high ground (defenders gain the +1k0 and see over the slope's
+  rocks). Uses all 3 layers.
+- **Ravine (`_stamp_elevation`, cliff case).** The rim strips (outside both rock walls) = layer 2;
+  the ravine floor + walls = layer 0. Rim and floor are already separated by the impassable
+  WALL_STONE walls, so movement connectivity is unchanged — the elevation gives the rim its
+  high-ground LOS advantage (a rim watcher sees down over the low wall-tops; a floor fighter looking
+  up is blocked). Descent points remain the way down (a deliberate climb action, deferred). 2 of 3
+  layers (no mid tier).
+- **Ship boarding (`_stamp_elevation`, single-step case).** Both quarterdecks = layer 1, the rest of
+  the ship = layer 0. Deck → quarterdeck is a single +1 ramp (walkable), so a defender holding the
+  quarterdeck gains +1k0 over boarders on the open deck. 2 of 3 layers.
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy):** 30/30, 0 fails, 0
+  project-wide parse errors. Per template × 3 sizes/types: elevation grid present, max layer ≤ 2
+  (cap respected), and a **cliff-aware** 8-dir flood-fill confirms every objective slot is still
+  reachable from the entry (hilltop from entry0, ravine floor from the mouth, ship enemy-deck across
+  the planks) — proving ramps preserve connectivity and the wall-separated rim doesn't strand the
+  floor. Layout spot-checks: hilltop bottom=0/crest=2/hilltop=2 with a continuous worn-path ramp and
+  a real layer-1 mid-slope band; ravine rim=2/floor=0; ship quarterdeck=1/open-deck=0.
+- **DEFERRED:** the other vertical templates (Makeshift Stockade wall-walk, Castle Siege walls/keep,
+  s2.3.23 landmarks like Underground Lake / Oni Warai chasm), a climb-up action to scale cliffs,
+  height-aware FOV radius, and the renderer's elevation glyph.
+
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 4: stockade + castle siege stamp elevation, owner-authorized + runtime-verified)
+Two more vertical templates fill the elevation grid, again capped at 3 layers, ramp-by-adjacency.
+- **Makeshift Stockade (`_stamp_elevation`).** The watchtower platform footprint → layer 1; the rest
+  (courtyard, perimeter) stays at layer 0. The platform is +1 over the courtyard (a walkable ramp, no
+  cliff), so a sentry on it gains the high-ground attack bonus and sees over the perimeter. Only
+  Medium/Large stockades have a platform — a Small stockade has none and stays flat (the default).
+- **Castle Siege (`_stamp_elevation`).** All wall-walkways and the tenshu (keep) interior → layer 1;
+  baileys, courtyard and approach stay at layer 0. Stamped from the generator's own `wall_walkways`
+  rects + `tenshu_*` bounds (only passable tiles raised). The safe universal rule (everything elevated
+  → layer 1) means every step is ±1 — no cliffs in any of the three layouts (Fortification / Castle
+  Town / City), so connectivity is provably unchanged — but wall and keep defenders gain the +1k0 and
+  see over the bailey. A 2-of-3-layer treatment.
+- **Landmarks — examined, intentionally left flat (reported to owner).** UNDERGROUND_LAKE is a flat
+  cavern (shore/causeway/island all at lake level; the deep water is impassable, not a standable low
+  layer) → 1 layer, matching the "caves are flat" rule. ONI_WARAI's verticality is a **bottomless VOID
+  chasm** (impassable) flanked by flat ledges — an instant-death pit, a *different* mechanic than the
+  graduated NkN fall system, so it gets no graduated elevation; a "knocked-into-the-void = death"
+  pit-hazard is flagged as a separate owner decision rather than invented.
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy):** 18/18, 0 fails, 0
+  project-wide parse errors. Stockade: small→flat, medium/large platform=1 + courtyard=0, platform and
+  all objectives reachable from the entry (cliff-aware). Siege (all 3 sizes): elevation present, cap
+  ≤2, tenshu=1, wall-walkway=1, and a **regression-free** check — the cliff-aware flood-fill reaches
+  the EXACT same set as a flat flood-fill for every objective (the elevation, using only layers 0/1,
+  can never create a cliff, so it changes reachability by nothing). NOTE: the CITY siege layout has
+  4 objectives placed on impassable wall tiles (unreachable flat too) — a **pre-existing**
+  CastleSiegeGenerator quirk, unrelated to the Z-axis and out of scope here.
+- **DEFERRED:** the remaining Z work is a climb-up action to scale cliffs (and use the ravine descent
+  points), a bottomless-pit/void death hazard (Oni Warai), height-aware FOV radius, and the renderer's
+  elevation glyph.
+
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 5: climb action + ravine descent points, owner-authorized + runtime-verified)
+A deliberate CLIMB action turns the impassable cliffs into interactive terrain, and the ravine descent
+points become real climbable cliffs (s56.11.2 "climbable positions"). Owner-locked values 2026-06-23.
+- **`AsciiMapCombatOrchestrator.execute_climb`** — the only way to traverse an elevation face too steep
+  for normal movement. Costs a Complex action; rolls **Strength + Athletics vs CLIMB_TN = 15** (via
+  SkillResolver, so wound penalties etc. apply, forcing the Strength trait). Per cliff tier: climbing
+  **up** relocates on success and stays put on failure (action spent); climbing **down** always ends
+  at the lower tile, and a failed roll **slips and falls** the rest of the way (NkN fall damage via
+  `_apply_fall_damage`). Rejects a non-cliff step (`not_a_cliff` — use a Move), an impassable/occupied/
+  out-of-range destination, and a down-restricted or entangled climber.
+- **Ravine descent points wired as climbable cliffs.** `_place_descent_points` now carves a passable
+  FLOOR_STONE notch through the rock wall at each descent row, and `_stamp_elevation` keeps that notch
+  on the layer-2 rim shelf — so its inner end is a single 2-level cliff down to the layer-0 floor. The
+  notch is a **climb-only** bridge: the elevation step still blocks ordinary movement, so the floor
+  stays its own component (objectives reachable only via the floor) while a rim raider can climb down
+  into the ravine. Realizes the long-deferred "rim reachable only by elevation descent."
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy):** 11/11 + the ravine
+  connectivity re-check. Climb invariants over 60 trials (up: relocate-or-stay, never falls; down:
+  always lands, failure ⇒ fell + wounds rose), both success and failure observed up and down, plus the
+  `not_a_cliff` / `destination_impassable` rejections. Ravine (3 sizes): each has a descent point that
+  is a passable layer-2 notch forming a 2-level cliff to the layer-0 floor, a character actually climbs
+  down it into the ravine, and the floor objectives stay reachable from the mouth (the notch added no
+  walkable path). 0 project-wide parse errors.
+- **NPC/UI note:** `execute_climb` is a callable orchestrator action; NPC-AI auto-climb and the player
+  climb command are deferred with the rest of the turn-based UI (PC-travel HOLD).
+- **DEFERRED:** the bottomless-pit/void death hazard (Oni Warai), height-aware FOV radius, and the
+  renderer's elevation glyph.
+
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 6: climb TN by material + wall-scaling, owner-authorized + runtime-verified)
+Refines Pass 5's flat climb TN — not all surfaces are equally hard to climb — and makes WALLS
+climbable. Owner-locked 2026-06-23: TN by material **wood 15 / earth 20 / stone 25**, and climbing
+scales walls too.
+- **Material-keyed climb TN.** The flat `CLIMB_TN = 15` is replaced by `_climb_tn_for_tile`:
+  FLOOR_WOOD/WALL_WOOD/wooden door → 15, FLOOR_STONE/WALL_STONE → 25, everything natural
+  (earth/grass/rubble/etc.) → 20. An **elevation cliff** keys the TN off the higher tile's terrain
+  (climbing up uses the destination, climbing down the start — the ledge you scale). The ravine
+  descent (a FLOOR_STONE rim notch) is now correctly a hard TN-25 stone climb.
+- **Wall-scaling (new).** `execute_climb` auto-detects a second form: a destination two straight
+  orthogonal steps away with a single WALL_STONE/WALL_WOOD between → scale *over* the wall to the far
+  tile, TN keyed off the wall material (stone 25 / wood 15). Success crosses; failure stays put (no
+  fall — you just fail to get over). So a besieger can scale a 1-thick castle wall onto the wall-walk,
+  and a raider can vault a stockade palisade; thick (≥2) ravine rock walls stay un-scalable (the
+  destination-impassable guard catches them — use the descent notches instead). The elevation-cliff
+  form (adjacent step) is unchanged otherwise: up relocates/stays, down always lands and a failed roll
+  slips and falls (NkN).
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy):** 10/10 + the Pass-5 climb
+  invariants & ravine descent re-pass. Elevation TN by material (wood 15 / earth 20 / stone 25, down
+  keys off the higher tile); wall-scale TN by wall material (wood 15 / stone 25), flagged
+  `wall_scale`/`over`, crosses-on-success / stays-on-failure / never falls over 40 trials; rejects a
+  2-step gap with no wall (`not_a_scalable_wall`) and a thick wall (`destination_impassable`).
+  0 project-wide parse errors.
+
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 7: height-aware FOV, owner-authorized + runtime-verified)
+The fog-of-war vision was the last flat-only LOS path (Pass 2 made combat targeting height-aware but
+left the FOV shadowcasting flat). Now high ground both **sees over** lower terrain and **sees farther**.
+Owner-locked 2026-06-23: +3 radius on raised ground (reusing the LOCKED lookout bonus).
+- **See over (occlusion).** `FovSystem` shadowcasting is now height-aware: `compute_visible` derives the
+  viewer's eye height (`elevation + FOV_EYE_HEIGHT=1`) and threads it through `_cast_light` → `_is_opaque`,
+  which treats a tile as opaque only when its top (`elevation`, +`FOV_OBSTACLE_HEIGHT=2` for walls/trees,
+  raw for open ground) reaches the viewer's eye. Mirrors Pass 2's combat-LOS model — a hilltop viewer
+  sees over a low wall a ground viewer is blocked by, a wall at/above eye level still blocks, and a flat
+  map (no elevation grid) falls back to the exact binary `blocks_los` model (zero regression). The
+  `_is_opaque`/`_cast_light` height params default off, so any other caller is unaffected.
+- **See farther (radius).** `_is_lookout_tile` (CombatController) and `_is_lookout_position`
+  (AsciiMapView) now also treat raised ground (`elevation > 0`) as a lookout position, so a viewer there
+  gets the existing +3 `LOOKOUT_BONUS` to vision radius — one decision, the same bonus as a wall-walk
+  lookout (no double-count). Flat maps untouched (`has_elevation()` false).
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy):** 7/7. Flat regression (wall
+  blocks behind it, wall itself visible); ground viewer (eye 1) blocked by a low wall (top 2); hilltop
+  viewer (eye 4) sees OVER the low wall to the tile behind AND still sees the wall; a wall on a layer-3
+  plateau (top 5 ≥ eye 4) still blocks; lookout radius = effective + 3. 0 project-wide parse errors.
+  (The `_is_lookout_position` view hook is static-verified — a scene Node, not headlessly runnable;
+  the `_is_lookout_tile` controller hook parses clean.)
+- **DEFERRED:** the bottomless-pit/void death hazard (Oni Warai) and the renderer's elevation glyph
+  remain; all four Z mechanics + FOV are now height-aware.
+
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 8: renderer elevation glyph, owner-authorized + runtime-verified)
+Players can now SEE height on the ASCII map. s4.4 ("roofing/elevation indicators") reserves the symbol
+for the tile type and the background for water/taint/spirit, so the compliant, low-visual-weight cue is
+**foreground brightness** — raised ground reads brighter.
+- **`AsciiMapGenerator.elevation_shade(color, level)`** (pure): brightens a tile's foreground colour by
+  its elevation level (`ELEVATION_SHADE_STEP = 0.2` value scale per level, clamped to ≤1.0, alpha
+  preserved). Level 0 is a no-op. So a layer-1 tile is ×1.2, a layer-2 crest ×1.4 — a subtle "light
+  hits the high ground" cue that keeps the symbol (tile type) and the base context colour intact.
+- **Wired into `AsciiMapView`** at both foreground draw sites — the visible tile and the remembered
+  (out-of-FOV) tile — gated on `_map.has_elevation()`, so flat maps (every current non-Z map) render
+  exactly as before. The remembered path shades before the existing dim, so an elevated remembered tile
+  keeps its relative height cue.
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy):** 5/5 on the pure helper —
+  level 0 unchanged, level 1 brighter (×1.2), level 2 brighter still, a bright colour clamps to ≤1.0,
+  alpha preserved. 0 project-wide parse errors. (The `AsciiMapView` draw wiring is static-verified — a
+  scene Node, not headlessly runnable; the helper is the testable core.)
+- **DEFERRED:** the bottomless-pit/void death hazard (Oni Warai) is the only remaining Z-axis item — the
+  data + movement + fall + ranged/attack + LOS/cover + FOV + climb/wall-scale + 5 generators + the
+  render cue are all done. (Built in Pass 9 below.)
+
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — Pass 9: pit/void death hazard, owner-authorized + runtime-verified)
+The final Z-axis item — the Oni Warai bottomless chasm and deep water are LETHAL, not a graduated NkN
+fall. Walking off such an edge is already impossible (these tiles are impassable, so a mover stops); the
+only vector is **being shoved over the brink by knockback** (Hurricane Palm and every future push route
+through one helper, `_knockback_target`), so the hazard lives in that single hook. All values owner-locked
+2026-06-23.
+- **`_is_lethal_pit(tile)`** — true for `VOID` (bottomless chasm) and `WATER_DEEP` (drowning under armor),
+  both already impassable for ordinary movement.
+- **`_knockback_target`** now intercepts a shove toward a lethal pit (before the impassable-tile `break`):
+  the victim gets one **edge-catch save = Reflexes + Athletics vs `PIT_EDGE_CATCH_TN = 20`** (via
+  `SkillResolver.resolve_skill_check(..., trait_override = REFLEXES)`). Success → they stop on the last
+  safe tile (the brink); failure → `_apply_pit_death` carries them over to their death. Requires a
+  `dice_engine` and the character in `state.combatants` (graceful no-op otherwise — falls back to the
+  prior stop-at-edge behavior). A non-pit impassable tile (wall) still just stops the knockback with no
+  save, exactly as before.
+- **`_apply_pit_death(state, char_id, pit_pos)`** — unsurvivable: sets `wounds_taken = get_total_wound_capacity + 1`
+  (mirrors the world-sim instant-kill pattern) and logs `{"type":"pit_death", round, char_id, pit_x, pit_y,
+  dead:true}`. The body is left at the brink tile (the pit itself is impassable / unstandable).
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy): 7/7, 0 fails, 0 project-wide
+  parse errors.** Weak victim (Refl 1, Athl 0) shoved toward VOID **and** deep water → dies, body at the
+  brink, `pit_death` logged; strong victim (Refl 8 + Athl 5) → catches the edge, survives, no death;
+  shoved into a stone wall → stops, no save, no death (non-pit impassable unchanged); open ground →
+  slides the full distance, alive (flat knockback unchanged); statistical — weak victims fall 200/200,
+  strong victims survive 200/200 (the Reflexes+Athletics save discriminates).
+- **With this, ALL Z-axis mechanics are complete:** elevation data, movement/cliff, falls, knockback-off-ledge,
+  ranged/attack high-ground, LOS/cover, height-aware FOV, climb/wall-scale, 5 stamping generators, the
+  render cue, and the lethal pit hazard. Remaining Z work is content placement only (more templates stamping
+  elevation) — no missing mechanics.
+
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — NPC/companion auto-climb AI, owner-authorized + runtime-verified)
+`execute_climb` (Pass 5/6) was a callable action with no AI caller — enemies and companions would
+sit stranded on the wrong side of a cliff or wall they could scale. This wires a structural-AI
+heuristic (the GDD gives no NPC climb policy; the climb/fall values are all owner-locked) so they
+pursue across vertical terrain.
+- **`_npc_maybe_climb_toward(state, mover_id, tpos, mover, dice)`** — considers the 8 adjacent
+  elevation-cliff steps and the 4 two-step wall-scales (over a single `WALL_STONE`/`WALL_WOOD`),
+  and climbs the candidate that **strictly** reduces Chebyshev distance to `tpos`. Mirrors
+  `execute_climb`'s own gates (passable, unoccupied, real cliff/scalable wall). Returns
+  `execute_climb`'s result, or `{}` when no distance-reducing climb exists. Works on flat maps too
+  (wall-scale only — `is_cliff_step` is false without an elevation grid).
+- **`_nearest_enemy_pos(state, who_id)`** — nearest living different-faction combatant by Chebyshev,
+  ignoring LOS (the pursuer can't see the enemy across the obstacle).
+- **NPC wiring (`execute_npc_turn`):** the climb decision runs **before the stance pick** — climb is
+  the turn's Complex action, and a stance change (a Simple) would forbid the Complex that turn
+  (1 Complex OR 2 Simple), so deciding it after would silently no-op for any NPC that re-stances
+  (e.g. a Kenjutsu-3 NPC dropping to CENTER). Gated on **`find_path` to the nearest enemy being
+  empty** (no normal walking route — genuinely walled/cliffed off) so the NPC never scales a wall
+  when it could just walk around; skipped while grappled/prone/down-restricted. On a successful
+  climb the turn ends (the strike comes next turn — scaling the obstacle IS the turn's action).
+- **Companion wiring (`execute_companion_turn`):** when `_companion_step_toward` its goal tile
+  returns no route, it scales a cliff/wall toward the goal with the same helper (Complex available
+  because companions don't re-stance).
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy): 4/4, 0 fails, 0
+  project-wide parse errors.** A real `execute_npc_turn`: an NPC at a cliff foot scales onto an
+  isolated plateau toward a target it cannot see (lands on layer 2, closer); an NPC below a solid
+  `WALL_STONE` line with no walk-around scales over it to the far tile; on open ground (a clear path
+  exists) the NPC just walks and never climbs; and a real `execute_companion_turn` — a `MOVE_TO`
+  companion below a walled-off goal scales the wall toward it. Prior Z-axis drivers (pit, FOV)
+  re-pass — no regression.
+- **DEFERRED:** the player-facing climb command (PC turn-based UI) is still the only un-wired caller
+  of `execute_climb`, on the same PC-travel HOLD as the rest of the live ASCII stack.
+
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — ceremonial dais elevation, owner-authorized + runtime-verified)
+First elevation content in the `AsciiMapGenerator` ZoneSubtype generators (the prior 5 stamping
+passes were all s56 mission templates). Audience halls in Rokugan seat the lord/judge on a raised
+dais; this stamps those daises onto the elevation grid so the seated figure literally holds the
+high ground (the +1k0 attack bonus and see-over LOS the Z-axis already provides) over the
+petitioner floor. A new flavour of the system (status/ceremonial gradient vs the battlefield
+terrain of the prior passes), but the same locked rule (≤3 layers, ramp-by-adjacency,
+connectivity-preserving). New `_raise_rect(map, x1,y1,x2,y2, level)` helper (mirrors `_fill_rect`,
+clamps in-bounds; caller calls `init_elevation` first).
+- **THRONE_ROOM** (Otosan Uchi Imperial Palace landmark) — the two-step Chrysanthemum dais maps to a
+  full 3-layer gradient: the tatami hall = 0, the wide lower step (rows 2–6) = 1, the raised throne
+  step (rows 2–4) = 2. The Emperor on the throne (layer 2) looks down over the lower step and the
+  assembled court.
+- **OHIROMA** (Great Hall, castle/city zone) — the lord's dais (rows 2–5) → layer 1 over the hall.
+- **GOVERNMENT_QUARTER** (magistrate's office) — the magistrate's bench (rows 3–4, behind the dais)
+  → layer 1 over the petitioner floor (the judge looks down on the accused).
+- AUDIENCE_CHAMBER examined and left flat — its "host seat" is an intimate tatami cushion, not a
+  raised platform (no genuine gradient). The ruined-structure **upper floor** (s56.12.3) was also
+  examined and left alone: a second story is *stacked floors* (Option B), explicitly out of scope
+  for the within-map gradient model.
+- Each dais step is +1 (a ramp), so a petitioner can ascend and the hall stays fully reachable.
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy): 3/3 (× 3 seeds each),
+  0 fails, 0 project-wide parse errors.** Per zone: the elevation grid is present and capped at the
+  expected layer (throne 2, ohiroma/govt 1); a **cliff-aware 8-dir flood-fill from the exits reaches
+  the exact same tile set as a flat fill** (0 tiles stranded — the ramps never create a cliff that
+  isolates anything); and the dais center tile is raised. Other ZoneSubtypes are untouched (no
+  `init_elevation` → flat, `has_elevation()` false, exactly as before).
+
+### Systems Added 2026-06-23 (s4.4 ASCII map Z-axis — WALL_TOWER battlement parapet, owner-authorized + runtime-verified)
+The defensive counterpart to the ceremonial-dais pass: the one settlement ZoneSubtype with a
+walkable battlement now puts its parapet on the high ground. A wall-tower's fighting platform —
+the stone ring between the outer wall and the inner tower — is stamped **layer 1**, while the inner
+garrison room sits at **layer 0**, so wall defenders hold the high-ground attack bonus and see over
+the parapet at anyone who breaches the interior (the Kaiu Wall / castle-defense intent of the prior
+mission-template passes). Same locked rule (≤3 layers, ramp-by-adjacency). Only **two layers (max
+delta 1)** — so the parapet→door→garrison transitions are always +1 ramps and can never strand
+anything; the four inner-tower doors connect the two levels.
+- `_gen_wall_tower` stamps it: `init_elevation(1)` (the whole tower top at battlement level) then
+  `_raise_rect(8,8,22,22, 0)` drops the inner tower (walls + garrison + central pillar) one step.
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy): 3/3 (× 3 seeds), 0 fails,
+  0 project-wide parse errors.** Per seed: max layer == 1; the parapet ring is raised (corners
+  layer 1) and the wood garrison floor is layer 0; a cliff-aware 8-dir flood-fill from the south
+  exit reaches the **same** set as a flat fill (0 stranded) AND reaches the garrison interior
+  (parapet → inner door → garrison). The dais driver re-passes (no regression in the shared
+  generator file). WALL_TOWER appears in live play (the 12 Kaiu Wall towers + castle walls), so
+  tower defenders now get high-ground/see-over there.
+
+### s4.4 ASCII map Z-axis — EFFORT CLOSED (2026-06-23, consolidated checkpoint)
+The within-map elevation effort is complete. **Every Z mechanic, every stamping generator, and the
+render surface are wired and runtime-verified** (Godot 4.6.2, headless drivers in a minimal
+autoload-free copy). Render-path audit (verification only, no code change): the `AsciiMapView`
+foreground hook is correctly gated on `has_elevation()` and shades both the visible (lines 758-760)
+and remembered (740-742, before the dim) tiles by the tile's actual level, and the lookout-radius
+hook (699) keys on raised ground; the pure render chain (generator -> `has_elevation` -> `elevation_at`
+-> `elevation_shade` -> `get_fg_color`) was driver-verified to produce the intended monotonic
+brightness gradient (WALL_TOWER parapet 0.600 > garrison 0.550; THRONE_ROOM 0.55<0.60<0.70; flat map
+inert). No glue chokes on the grid: it lives only inside transiently-generated `AsciiMapData` (never
+persisted -- `WorldStateSaver` has 0 refs; never stored in `ZoneRegistry` -- 0 refs); its only
+consumers are the six wired Z-axis systems (`ascii_map_view`, `ascii_map_combat_orchestrator`,
+`combat_controller`, `fov_system`, `movement_system`, generator). **Final consolidated checkpoint --
+10 driver suites, 0 fails:** data/cliff core (20), reachability + knockback-fall (9),
+high-ground +1k0 / cover +5 / height-LOS (16), lethal pit/void (7), climb + wall-scale + ravine
+descent (11), NPC/companion auto-climb (4), height-aware FOV (7), ceremonial dais (3 zones),
+WALL_TOWER parapet (3 seeds), render-path brightness (3). The complete inventory: elevation data
+layer, movement/cliff, falls, knockback-off-ledge, lethal pit hazard, ranged/attack high-ground,
+LOS/cover, height-aware FOV, climb/wall-scale + auto-climb AI, 7 stamping generators (hilltop,
+ravine, ship, stockade, castle siege, 3 ceremonial daises, WALL_TOWER parapet), and the
+foreground-brightness render cue. **The only un-wired Z caller is the player-facing turn-based
+climb/move UI, on the project-wide PC-travel HOLD** (same as the whole live ASCII stack). Remaining
+Z work is pure content placement (more templates stamping elevation) -- no missing mechanics.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — T0: data model, owner-authorized)
+The owner chose **true stacked floors** (the GDD-s4.4-deferred Option B) for building verticality —
+a tile can hold a ground floor, an upper floor, and a roof, each its own walkable surface connected
+by stairs ("house floor → 2nd-floor walls → roof"). This is a foundational, multi-tranche engine
+change (data model → level-aware position → per-level render/FOV/combat → template stacking); T0 is
+the data model, fully additive (every existing map stays single-level → zero behavior change).
+- **Two TileTypes** (Enums): `STAIRS_UP` (59, `<`) / `STAIRS_DOWN` (60, `>`) — vertical transitions,
+  passable + non-LOS-blocking by default (not in either blocking list), with generator glyph/colour.
+- **`AsciiMapData` level stack:** `level_count: int = 1` + `upper_levels: Array` (one `PackedByteArray`
+  per level > 0; `upper_levels[L-1]` = level L). **Level 0 stays in `tile_types`**, so all existing
+  maps and every existing accessor (`get_tile`/`set_tile`) are untouched. A `VOID` tile on an upper
+  level = open air (no structure rises there). The terrain `elevation` heightfield applies to level 0
+  only; upper floors are flat platforms. `MAX_LEVELS = 4`.
+- **Accessors:** `has_levels()` (count > 1), `get_level_count()`, `init_levels(count, fill=VOID)`
+  (allocates count-1 upper grids), `get_tile_at(x,y,level)` (level 0 → `get_tile`, honoring deltas +
+  OOB; upper → its grid, in-bounds-no-grid → VOID, x/y OOB → WALL_STONE), `set_tile_at(x,y,level,t)`
+  (lazily grows the stack to fit `level`), `is_stair(t)`, `stair_destination_level(x,y,level)`
+  (STAIRS_UP → level+1, STAIRS_DOWN → level-1, out-of-range → -1).
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy): 6/6, 0 fails, 0 project-wide
+  parse errors.** Default map single-level (lvl0 == get_tile, upper == VOID); init_levels(3) allocates
+  2 VOID grids; per-level set/get round-trip with level-0 delta still honored; stairs route up/down and
+  return -1 past the top; set_tile_at lazily grows the stack; **8 existing generators (market, wall
+  tower, throne room, peasant dwelling, ōhiroma, lord quarters, residential, courtyard) all stay
+  single-level** — zero regression. AsciiMapData isn't persisted (WorldStateSaver/ZoneRegistry hold 0
+  refs), so the new @export fields ride no save path. DEFERRED (next tranches): T1 level-aware
+  position (player/combatant "current level"), T2 render the current level (open-air peeks at the
+  level below), T3 stair transitions + auto-climb, T4 per-level FOV + combat, T5 template stacking
+  (generators emit ground floor + upper floor(s) + roof per building). Same PC-travel HOLD as the whole
+  live ASCII stack — built + headless-verified, not live-reachable yet.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — T1+T3: level-aware position + stair transition)
+The second stacked-floors tranche — combatants now carry a floor level and can walk between floors,
+paired so the tranche delivers a verifiable behavior (a combatant climbs a staircase to another floor)
+rather than a hollow field. Fully additive: single-level skirmishes never populate the level dict.
+- **T1 — combatant level.** `MapCombatState.combatant_levels: Dictionary` (id → int level; ABSENT =
+  level 0). `AsciiMapCombatOrchestrator.get_combatant_level(state, id)` reads it (default 0). `setup_combat`
+  / `add_*` don't touch it, so every existing single-level skirmish leaves it empty → zero change.
+- **T3 — stair transition.** `execute_climb_stairs(state, char_id, character)` — a Simple Move action
+  (you walk up built stairs, no Athletics roll, unlike the cliff/wall `execute_climb`). Gates: dead /
+  not-in-combat / entangled / down-restricted / no Simple left; must stand on a STAIRS tile on the
+  current level (`not_on_stairs`); `stair_destination_level` resolves the floor it connects to
+  (STAIRS_UP → +1, STAIRS_DOWN → −1, out-of-range → `no_destination_level`); the landing tile at the
+  same (x,y) on the destination level must be passable (`landing_blocked`) and unoccupied by a combatant
+  **on that level** (level-aware occupancy → `landing_occupied`). On success it consumes the Simple and
+  sets the combatant's level (the x,y is unchanged — you go up/down in place).
+- **Runtime-verified (Godot 4.6.2, headless, minimal autoload-free copy): 7/7, 0 fails, 0 project-wide
+  parse errors.** On a synthetic 2-storey house (ground + upper floor + walkable roof, stairwell at
+  (3,3)): climb up ground→1st floor→roof, climb back down, off-stairs rejected, the Simple budget caps
+  climbs per turn, a combatant already on the destination level blocks the landing, and a single-level
+  skirmish keeps `combatant_levels` empty / level 0 / climb inert. The three orchestrator Z drivers
+  (pit, climb, auto-climb) re-pass — no regression. DEFERRED (next tranches): T2 level-aware render
+  (draw the current level; open-air upper tiles peek at the level below), T4 per-level FOV + combat
+  (sight/melee resolve within a level; same-(x,y)-different-level gating for `execute_move` occupancy
+  and targeting), the exploration-layer (`CombatController`/`AsciiMapView`) player level + cross-level
+  pathfinding/auto-climb-AI, and T5 template stacking. Same PC-travel HOLD as the live ASCII stack.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — T2: level-aware render core)
+The render-resolution layer: what to DRAW at each (x,y) for a viewer standing on a given floor.
+Pure logic (the scene-Node draw call consumes it), so it's headless-verifiable.
+- **`AsciiMapData.resolve_display(x, y, viewer_level) -> {tile, depth}`.** On the viewer's own level a
+  non-open-air tile shows directly (depth 0). Where the viewer's level is open air (VOID — no structure
+  rises there, e.g. a balcony/roof edge past the building), the view falls through to the first solid
+  tile below, `depth` = how far down. Level 0 always shows its own tile (the ground is solid). For a
+  single-level map or `viewer_level` 0 this is always `{get_tile(x,y), 0}`, so existing render is
+  unchanged.
+- **`AsciiMapGenerator.peek_dim(color, depth)`.** Darkens a peeked tile by depth so "below me" reads
+  distinct from the floor you stand on (depth 0 = no-op; each level down ×`1-PEEK_DIM_STEP` = 0.65,
+  0.42, …). Composes with the existing `elevation_shade`/remembered-dim render hooks.
+- **Runtime-verified (Godot 4.6.2, headless: 6/6, 0 parse errors).** On a 2-storey house: viewer 0 →
+  own ground; viewer 1 inside the footprint → own floor/wall (depth 0); viewer 1/2 over open air →
+  peek to ground at depth 1/2; peek_dim depth-0 unchanged + deeper dimmer; a flat generated map →
+  `resolve_display(.,.,0) == get_tile`, depth 0 (no regression). DEFERRED: the `AsciiMapView` Node
+  wiring (route the draw through `resolve_display(mx,my,_player_level)` + `peek_dim`) is held until the
+  exploration-layer **player level** exists to feed it (next tranche), to avoid a half-wired Node.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — T5 prep + first stamped building)
+**Owner convention (2026-06-24): "every building gets an explicit roof level"** — a building shows a
+rooftop when viewed from above, the cutaway interior at ground. Single-storey = interior + non-walkable
+roof cap; multi-storey = floors + walkable roof. This tranche adds the roof tile + reusable helper and
+stamps the first building (the simplest, single-storey case) to establish the pattern.
+- **`ROOF` TileType (61, `⌂`)** — a sloped tile/thatch roof cap: impassable + blocks LOS (the "from
+  above" face of a building). Added to MovementSystem `terrain_cost`, `AsciiMapData.is_passable` +
+  `blocks_los`, and the generator glyph/colour tables.
+- **`AsciiMapGenerator._cap_with_roof(map, x1,y1,x2,y2)`** — caps a footprint with ROOF one level up.
+  Ensures the 2-level stack WITHOUT clobbering a previously-capped building on the same map
+  (`init_levels` only when count < 2; `set_tile_at` on an existing level never re-inits) — safe to call
+  once per hut on a multi-building map.
+- **PEASANT_DWELLING stamped** — `_cap_with_roof` over the hut footprint (7,7–23,21): level 0 stays the
+  cutaway interior (unchanged `tile_types` → every level-0 consumer — render, movement, FOV,
+  connectivity, MissionPopulator — is unaffected), level 1 = ROOF over the footprint / open air over the
+  yard. The hut now presents a rooftop from above and its interior from the ground.
+- **Runtime-verified (Godot 4.6.2, headless: 6/6, 0 parse errors).** The dwelling has 2 levels; level 1
+  is ROOF over the footprint + VOID over the yard; the ground floor is intact and still fully reachable
+  from the south exit (8-dir flood-fill); `resolve_display` from level 1 shows the roof over the
+  footprint and peeks to the ground (FLOOR_DIRT, depth 1) over the yard; ROOF is impassable + blocks
+  LOS; and two roof caps on one map coexist (the helper's no-clobber safety). Full regression: all 11 Z +
+  stacked-floor drivers green (the single-level-generators check correctly no longer lists
+  PEASANT_DWELLING). DEFERRED: roll the convention out template by template (residential, poor quarter,
+  market stalls → single-storey caps; manor/keep/tower/gatehouse → multi-storey floors + walkable roof +
+  stairs), deciding per-template standalone-building vs interior-room; plus the cross-elevation
+  "see rooftops from a hilltop" render refinement (couple the displayed building level to the viewer's
+  terrain elevation vs building height — currently `resolve_display` keys on the viewer's own building
+  level, perfect for multi-storey navigation). Same PC-travel HOLD as the live ASCII stack.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — single-storey housing rollout)
+Rolls the "every building gets a roof" convention out to the two multi-home settlement zones, exercising
+the `_cap_with_roof` no-clobber path at scale (many buildings per map).
+- **RESIDENTIAL_QUARTER** — the 3×3 grid of house plots (8 wood homes + the corner shrine, 9 total) each
+  capped with a roof in the plot loop; the shrine reuses its plot's roof.
+- **POOR_QUARTER** — the 4×4 grid of shacks (16) each capped in the loop.
+- **Runtime-verified (Godot 4.6.2, headless: 5/5, 0 parse errors).** Residential: all 9 plot footprints
+  ROOF on level 1 (729 roof tiles), alleys open air (VOID), home interiors still reachable from the exits.
+  Poor quarter: all 16 shacks roofed (576 tiles), alleys open, interiors reachable. Level-0 reads
+  unchanged (`get_tile_at(.,.,0) == get_tile`) — so every level-0 consumer is unaffected. The no-clobber
+  helper holds across 9 and 16 buildings on one map. Full regression: the Z + stacked-floor drivers green
+  (the single-level-generators check correctly no longer lists RESIDENTIAL_QUARTER). Stamped so far:
+  PEASANT_DWELLING, RESIDENTIAL_QUARTER, POOR_QUARTER (all single-storey caps). NEXT: MARKET_STREET shops
+  / DOCKS warehouses (single-storey caps), then the multi-storey buildings (manor, castle keep, towers,
+  gatehouses → floors + walkable roof + stairs via a `_stack_building` helper), then the s56 mission
+  templates (occupied village, castle siege, ruined structure, urban hideout). Same PC-travel HOLD.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — market + docks roof rollout)
+Continues the single-storey roof rollout to the two zones that mix enclosed buildings with open-air
+structures — capping only the buildings, leaving the open spaces uncovered.
+- **MARKET_STREET** — the enclosed shops (the north + south wood-box blocks, 3–4 shops each) are capped;
+  the open road band and the vendor stalls (open-air counters) get no roof.
+- **DOCKS_WATERFRONT** — the warehouses along the north edge are capped; the stone quay, piers, and water
+  stay open.
+- **Runtime-verified (Godot 4.6.2, headless: 5/5, 0 parse errors).** Market: shop blocks ROOF on level 1
+  (528 tiles), the road centre is open air (VOID), road + both shop blocks reachable from the exits.
+  Docks: warehouses roofed (168 tiles), the quay is open air, warehouse interior + quay reachable. Level-0
+  reads unchanged for both. A docks-connectivity debug confirmed **0/462 unreached passable land tiles**
+  (the one initial test miss was a bad coord landing on a FURNITURE_CRATE, not a layout regression — the
+  generator was always fully connected). Stamped so far (single-storey caps): PEASANT_DWELLING,
+  RESIDENTIAL_QUARTER, POOR_QUARTER, MARKET_STREET, DOCKS_WATERFRONT. NEXT: the multi-storey buildings
+  (manor LORD_QUARTERS, castle keep, WALL_TOWER, gatehouses → floors + walkable roof + stairs via a new
+  `_stack_building` helper), then the s56 mission templates. Same PC-travel HOLD.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — _stack_building multi-storey helper)
+The reusable core for multi-storey buildings (manor, keep, tower, gatehouse), verified in isolation
+before applying it to real generators.
+- **`AsciiMapData.ensure_levels(count)`** — grows the level stack NON-destructively (appends VOID grids
+  only as needed), unlike `init_levels` which clears. `set_tile_at`'s lazy-grow now uses it, so writing
+  an upper-level tile never clobbers other stacked buildings on the same map. `_cap_with_roof` also
+  switched to it.
+- **`AsciiMapGenerator._stack_building(map, x1,y1,x2,y2, floors, sx,sy, wall,floor,roof)`** — leaves the
+  ground floor (level 0) as drawn; raises the footprint's wall outline around a walkable interior on each
+  upper floor 1..floors-1; caps with a WALKABLE roof deck (roof_tile inside a parapet) at level `floors`.
+  A 2-tile stairwell connects every level: the up-leg (sx,sy) is STAIRS_UP on 0..floors-1 (you arrive on
+  the roof deck), the down-leg (sx+1,sy) is STAIRS_DOWN on 1..floors — so a climber goes ground → upper →
+  roof and back.
+- **Runtime-verified (Godot 4.6.2, headless: 7/7, 0 parse errors).** A synthetic 3-storey stone keep
+  (ground + 2 upper floors + roof): stacked to 4 levels; upper floors have walls on the outline + plank
+  interior; the roof is a stone deck inside a parapet with the stairwell's down-leg + up-leg landing;
+  the stairwell columns are correct per level; a **level-aware navigability BFS** (8-dir moves within a
+  level + stair transitions, mirroring movement + `execute_climb_stairs`) reaches **all 4 floors** from
+  the ground stairwell and every floor's far interior corner; and `ensure_levels` is non-destructive (a
+  hut roof cap added to the same map coexists with the keep's floors). Regression: the single-storey-cap
+  drivers (peasant/residential/poor/market/docks) re-pass with the `ensure_levels`-backed `set_tile_at`.
+  NEXT: apply `_stack_building` to a real building (LORD_QUARTERS manor, then the castle keep / towers /
+  gatehouses), then the s56 mission templates. Same PC-travel HOLD.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — LORD_QUARTERS first multi-storey building)
+The first real application of `_stack_building` — the manor (LORD_QUARTERS) is now a two-storey
+residence: ground floor (the existing rooms) + an upper private floor + a walkable tiled roof, joined by
+a corridor stairwell at (3,MID)/(4,MID). The upper floor is one open private storey (room subdivision is
+a ground-floor detail); the roof is a walkable stone deck. The whole-map footprint means the manor
+presents a full rooftop from above. `_stack_building(map, 0,0,S-1,S-1, 2, 3,MID, WALL_WOOD, FLOOR_TATAMI,
+FLOOR_STONE)`.
+- **Runtime-verified (Godot 4.6.2, headless: 6/6, 0 parse errors).** 3 levels (ground/upper/roof); the
+  upper floor has the outer wall + tatami interior + the stairwell; the roof is a walkable stone deck
+  with the down-leg; the ground floor's only change is the stairwell foot at (3,MID) (furnishings intact);
+  a **level-aware navigability BFS from the west entrance** reaches the ground floor, the stairwell foot,
+  and climbs to the upper floor AND roof (all 3 levels + far interior corners). Regression: all
+  stacked-floor drivers (data model, stair transition, single-storey caps, multi-storey helper) re-pass.
+  Stamped so far: 5 single-storey (peasant/residential/poor/market/docks) + 1 multi-storey (manor). NEXT:
+  more multi-storey (castle keep, WALL_TOWER tower, gatehouses), the interior castle zones (decide
+  per-zone standalone-vs-room), then the s56 mission templates. Same PC-travel HOLD.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — govt + pleasure quarter roof caps)
+Two more standalone-building districts get single-storey roof caps; the open plaza/street stay uncovered.
+- **GOVERNMENT_QUARTER** — the three enclosed stone buildings (magistrate office, record hall, central
+  guard post) capped; the plaza between them stays open.
+- **PLEASURE_QUARTER** — the six houses (3 geisha west + 3 sake east) capped in their loops; the central
+  street stays open.
+- **Runtime-verified (Godot 4.6.2, headless: 5/5, 0 parse errors).** Govt: 3 buildings ROOF on level 1
+  (525 tiles), plaza open air (VOID), all 3 interiors reachable. Pleasure: houses roofed (594 tiles),
+  street open, geisha + sake interiors reachable. Level-0 reads unchanged. (The one initial test miss was
+  a reachability coord landing on a FURNITURE_TABLE — the roof correctly caps over furniture; not a
+  layout bug.) Stamped: 7 single-storey (peasant/residential/poor/market/docks/govt/pleasure) + 1
+  multi-storey (manor). NEXT: the interior castle zones are intentionally single-level (their verticality
+  is the inter-zone graph, not within-map); remaining building work is the multi-storey castle keep /
+  WALL_TOWER tower / gatehouses + the s56 mission templates. Same PC-travel HOLD.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — temple + shrine roof caps)
+The temple/shrine buildings get single-storey roof caps; the grounds (courtyard, torii, garden, forest
+clearing) stay open. Completes the standalone-building settlement zones.
+- **TEMPLE_GROUNDS** — the main worship hall (8,3–22,13) capped; courtyard, torii, garden open.
+- **SHRINE_CLEARING** — the shrine building (12,10–18,16) capped; forest clearing + torii open.
+- **CASTLE_SHRINE** — the timber shrine (10,3–20,10) capped; garden + approach open.
+- **Runtime-verified (Godot 4.6.2, headless: 3/3, 0 parse errors).** Each: the building footprint is ROOF
+  on level 1, an outside-grounds tile is open air (VOID), the interior is reachable from the exit, and
+  level-0 reads unchanged. **Settlement-zone building sweep complete** — 10 single-storey caps
+  (peasant/residential/poor/market/docks/govt/pleasure/temple/shrine/castle-shrine) + 1 multi-storey
+  (manor). The interior castle ROOMS (OHIROMA, ENKAI_HALL, AUDIENCE_CHAMBER, CHASHITSU, GUEST_WING,
+  WAR_COUNCIL_ROOM, DOJO) intentionally stay single-level — a castle's verticality is the inter-zone
+  graph, not within one room's map; the open-air zones (FARMLAND, ROAD, FOREST_PATH, MOUNTAIN_PASS,
+  RIVER_CROSSING, OUTER_COURTYARD, TSUBONIWA) correctly have no roofs. REMAINING: the multi-storey
+  WALL_TOWER tower (needs care composing with its battlement elevation), the castle keep + towers +
+  gatehouses in the s56 CastleSiegeGenerator, and buildings in the other s56 mission templates (occupied
+  village, ruined structure, urban hideout, makeshift stockade). Same PC-travel HOLD.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — occupied village mission template)
+First s56 mission template stamped (the `_cap_with_roof`/`_stack_building` helpers are static on
+AsciiMapGenerator and work on any AsciiMapData, so the template generators call them cross-file).
+`OccupiedVillageTemplateGenerator._carve_building` now caps each building's footprint (`lx,ly,rx,ry`,
+recorded in `map.buildings`) with a roof via `AsciiMapGenerator._cap_with_roof`; the road, crops, and
+river stay open. ensure_levels keeps it safe across the 3-7 buildings per map.
+**Runtime-verified (Godot 4.6.2, headless: 3/3 across village sizes, 0 parse errors):** every building's
+footprint is ROOF on level 1, and level-0 reads are unchanged (`get_tile_at(.,.,0) == get_tile`), so
+MissionPopulator/FOV/movement (all level-0) are unaffected. NEXT s56 templates: castle siege
+(keep/towers/gatehouses), ruined structure, urban hideout, makeshift stockade watchtower.
+Same PC-travel HOLD.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — castle siege keep roof cap)
+`CastleSiegeGenerator.generate` now caps the tenshu (keep) footprint (the wall ring around
+`map.tenshu_*`) with a roof via `AsciiMapGenerator._cap_with_roof`, after `_stamp_elevation`. The keep is
+abstracted here as a thin command building (its interior is ~one row), so a single-storey roof cap rather
+than a multi-storey treatment (which would need a roomier keep geometry — out of scope for a roof pass).
+The wall-walks, baileys and approach stay open. **Composes with the existing terrain elevation**: the keep
+sits at terrain elevation 1 (raised mound, from `_stamp_elevation`) AND now carries a building-level roof
+above it — the two Z axes (terrain heightfield vs building levels) are independent and both hold.
+**Runtime-verified (Godot 4.6.2, headless: 3/3 across Fortification/Castle-Town/City, 0 parse errors):**
+the keep footprint is ROOF on level 1, a bailey tile stays open air, level-0 reads unchanged, and the
+terrain elevation grid is still present. NEXT s56 templates with buildings: ruined structure, urban
+hideout, makeshift stockade watchtower. Same PC-travel HOLD.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — remaining s56 mission templates)
+Finishes the s56 mission-template building sweep (owner-directed) with per-template judgment calls.
+- **Makeshift stockade** — each shelter (a covered lean-to/tent, recorded in `map.shelters`) gets a roof
+  cap via `_carve_shelter`; the watchtower platform (a fighting position) stays open.
+- **Forest approach camp** — each tent (soft-cover shelter in `map.shelters`) capped in `_carve_shelter`;
+  firepits + clearing stay open.
+- **Ruined structure** — **partially-collapsed roof**: intact `map.rooms` get roof caps; `collapsed_sections`
+  stay open to the sky (no level-1 tile → from above you peek down into the rubble). The ruin's existing
+  abstract `upper_floor_sections` overlay (s56.12.3, a population marker, NOT the level-stack) is untouched.
+- **Urban hideout** — left roofless: the generator produces ONLY the hidden UNDERGROUND level (basement
+  rooms/tunnels), a subterranean space like the cave/lake/tomb, which correctly has no rooftop.
+- **Cave / ravine-alcove (subterranean), hilltop / ravine (terrain), ship boarding (open decks)** — no
+  roofed buildings, correctly unchanged.
+- **Runtime-verified (Godot 4.6.2, headless: stockade 3/3 sizes, ruin 3/3 sizes, forest camp 3/3 seeds, 0
+  parse errors):** every shelter/tent footprint + intact ruin room is ROOF on level 1, collapsed ruin
+  sections are open air (VOID), and level-0 reads are unchanged everywhere. **The s56 mission-template
+  building sweep is complete** alongside the settlement-zone sweep — every standalone/covered building
+  across the ASCII generators now carries a roof (or, for the ruin, a partial one), single-storey caps or
+  the multi-storey manor, with subterranean/terrain/open-deck maps correctly left roofless. Same PC-travel
+  HOLD as the live ASCII stack.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — ruined-structure surviving upper floor)
+Upgrades the ruin's surviving upper floor (s56.12.3) from an abstract population marker to a REAL navigable
+Option-B level (owner-directed "Ruined structure"). `_place_upper_floor` now stacks the host (leader) room via
+`AsciiMapGenerator._stack_building(map, lx,ly,rx,ry, 2, lx+1,ly+1, WALL_WOOD, FLOOR_WOOD, FLOOR_STONE)` — a
+walkable upper floor (level 1, walls on the outline + FLOOR_WOOD interior), a roof deck (level 2, FLOOR_STONE),
+and a 2-tile stairwell (STAIRS_UP foot on level 0, climbing ground→upper→roof and back). The `generate()` flat
+roof-cap loop now **skips** the stacked host room (via `stacked_room_id` from `upper_floor_sections[0]`) so the
+cap never overwrites the real upper floor; every other intact room still gets a flat cap, and `collapsed_sections`
+stay open to the sky (VOID on level 1). The UPPER_FLOOR_HOLDER population slot is tagged `"level": 1`.
+**Edge cases:** `_place_firepits` now guards against centring a FIRE on the stairwell foot (`AsciiMapData.is_stair`
+check) — a minimal host room can centre on the stair leg, and a fire there would sever the only climb route.
+The earlier interior guard (`uf_rx <= uf_lx or uf_ry <= uf_ly`) already requires interior ≥ 1 wide AND ≥ 1 tall
+(i.e. `rx-lx >= 3 AND ry-ly >= 3`), which is stricter than the stack gate (`rx-lx >= 3 AND ry-ly >= 2`), so a
+recorded `upper_floor_sections` entry ALWAYS corresponds to an actually-stacked room — no "uncapped-and-unstacked
+open hole" can occur. **Runtime-verified (Godot 4.6.2, headless, 7 upper-floor ruins across sizes/seeds, 0 fails;
+zstack10 regression — stockade + basic ruin partial-roof — 0 fails after updating its stale "every room capped"
+assertion to skip the stacked host room):** 3 levels when an upper floor exists; host interior is walkable
+FLOOR_WOOD/stairs at level 1 (never ROOF) and FLOOR_STONE roof deck at level 2; STAIRS_UP foot on level 0; a
+level-aware navigability BFS (8-dir within a level + stair transitions) reaches both level 1 AND level 2 from the
+ground; other intact rooms still ROOF-capped at level 1; collapsed sections still open (VOID); level-0 reads
+unchanged. Same PC-travel HOLD as the live ASCII stack.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — WALL_TOWER multi-storey keep)
+The last building that wasn't yet vertically coherent. A Kaiu Wall tower's inner keep had no roof or
+upper floor in the stacked sense (from above it showed the open garrison), and its central 5×5 block
+was mislabeled "stairwell" but was actually solid impassable WALL_STONE. `_gen_wall_tower` now stacks
+the inner tower footprint (8,8–22,22) via `_stack_building(map, 8,8,22,22, 2, 11,11, WALL_STONE,
+FLOOR_WOOD, FLOOR_STONE)` — a real multi-storey keep: ground garrison (level 0), upper floor (level 1,
+WALL_STONE outline + FLOOR_WOOD interior), and a stone roof lookout (level 2, FLOOR_STONE deck), joined
+by a real 2-tile stairwell in the NW garrison quadrant (11,11)/(12,11) — clear of the central core
+(x≥13), the four cardinal doors, and all furniture. The central 5×5 stone block is kept as the keep's
+structural core (comment corrected from "pillar / stairwell" to "structural newel / ground-level store").
+The outer crenellated battlement ring is an open-air fighting walk and correctly gets NO stacked tile
+(VOID at level 1), so from above the tower shows a stone roof over the keep and the open parapet around
+it. **Composes with the pre-existing terrain-elevation parapet** (the battlement walk is heightfield
+elevation 1, the inner keep elevation 0; the two Z axes — terrain `elevation` byte-grid vs stacked
+`upper_levels` — are independent arrays and don't collide). The keep roof (level 2) rises above the wall
+walk, which is physically right (a Kaiu tower is taller than the wall). **Runtime-verified (Godot 4.6.2,
+headless, 3 seeds, 0 fails):** 3 levels; inner-keep level 1 = walkable FLOOR_WOOD/stairs (never ROOF/VOID),
+level 2 = FLOOR_STONE roof deck; STAIRS_UP foot on level 0; a level-aware navigability BFS reaches both
+level 1 AND level 2 from the ground; the outer battlement ring is open (VOID) at level 1; level-0 reads
+unchanged; and a cliff-aware level-0 flood from the south exit (honoring the terrain elevation +1 door
+ramps) reaches the garrison interior — connectivity intact. The 35-zone sweep shows WALL_TOWER clean
+(levels=3, no leaks/glyph/reach issues); the only two sweep flags are the documented pre-existing benign
+isolated-scenery tiles (SHRINE_CLEARING grass-in-trees, UNDERGROUND_LAKE rubble-on-islet) in untouched
+generators. **The stacked-floors building sweep is now complete across every settlement zone, s56 mission
+template, and the WALL_TOWER** — every standalone/covered/multi-storey building carries a roof (flat cap)
+or a real stacked keep/manor, with subterranean/terrain/open-deck/interior-room maps correctly left
+roofless. Same PC-travel HOLD as the live ASCII stack.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — CastleSiegeGenerator multi-storey keeps)
+Deepens the abstracted thin command-building tenshu in all three s56.17 castle-siege layouts into a real
+multi-storey keep (owner-directed "deeper multi-storey buildings"). Previously each keep had a ~1-row
+interior and got a single-storey flat roof cap; now each keep interior is deepened to a roomy 3-tall room
+and stacked into ground floor (level 0) + upper floor (level 1) + stone roof lookout (level 2) via
+`AsciiMapGenerator._stack_building`, joined by a real 2-tile stairwell in the NW interior corner (clear of
+the south-face keep gate). Per-layout geometry shift to make room (the keep grows southward, downstream
+bands push down by the same amount, gates stay aligned): **FORTIFICATION** keep `t_ry` 2→4, courtyard
+`court_ly` 3→5 (keep interior 12×3); **CASTLE_TOWN** keep `t_ry` 3→4, inner bailey `ib_ly` 4→5 (15×3);
+**CITY** keep `t_ry` 2→4, compound wall `cw_y` 3→5, compound `cc_ly` 4→6 (16×3) — the keep gate and
+compound gate stay aligned at x=14 for a straight passage. `generate()`'s single `_cap_with_roof` call is
+replaced by one `_stack_building` over the keep wall ring (`tenshu_lx-1 … tenshu_ry+1`), so all three
+layouts get the stacked keep. The keep ground floor sits at terrain elevation 1 (high ground via
+`_stamp_elevation`, which reads the now-deepened `tenshu_*` footprint); the stacked upper floor + roof rise
+above it — right, a tenshu towers over the curtain walls — and the keep gate is the +1 ramp keeping the
+ground floor reachable from the bailey. The wall-walks, baileys, courtyards and approach are open-air ground
+and correctly stay flat (no stacked tile, VOID at level 1). **Runtime-verified (Godot 4.6.2, headless,
+FORT/TOWN/CITY × 2 seeds, 0 fails):** 3 levels; keep interior level 1 = walkable FLOOR_STONE/stairs (never
+ROOF/VOID), level 2 = FLOOR_STONE roof deck; STAIRS_UP foot on level 0; a level-aware navigability BFS
+reaches both level 1 AND level 2 from the keep ground floor; the bailey/approach is open (VOID) at level 1;
+level-0 reads unchanged; the keep-gate↔bailey passage is intact in all three sizes (flood from the keep
+ground floor reaches the bailey below the south wall); FORT/TOWN additionally verify the full player-start →
+every objective + keep reachability end-to-end. The CITY's global player-start reachability is a documented
+**pre-existing** CastleSiegeGenerator quirk (the approach Y=31..39 is walled off from the outer gate by an
+unfilled WALL_STONE band at Y=28..30, `approach_y=h-9`/`ow_y=h-13`) — verified IDENTICAL in the un-deepened
+original (keep + all 5 objectives unreached before this change), a south-end issue untouched by the
+north-edge keep deepening and out of scope here. LIMITATION/DEFERRED: castle **gatehouses** are not modeled
+as separate buildings in this generator (the gates are flat 2-tile wall openings with metadata-only murder
+holes, s40-blocked) — adding gatehouse towers would be new structure geometry (a design addition), held
+pending owner direction. Same PC-travel HOLD as the live ASCII stack.
+
+### Systems Added 2026-06-24 (s4.4 stacked floors / Option B — castle gatehouse towers)
+Completes the owner-directed "deeper multi-storey buildings (keep + gatehouses)" for s56.17. The castle
+gates were bare 2-tile wall openings with metadata-only murder holes (no building); now each principal
+(outer-wall) gate gets a real **gate tower** — the standard castle gatehouse form. `_stack_gatehouse(map,
+gx, wy)` builds a 4×3 footprint straddling the wall at the gate (wall-walk row `wy-1` .. approach row
+`wy+1`): a 2-tile **guard chamber** on stacked level 1 directly over the gate passage (the murder-hole
+position, s56.17.2), a roof on level 2, joined by a 2-tile stairwell whose up-leg sits on the wall-walk
+corner `(gx-1, wy-1)` and down-leg over the gate `(gx, wy-1)`. **The chokepoint is preserved by design:**
+`_stack_building` changes level 0 only at the stairwell foot, so the 2 gate-passage tiles are never touched
+— the attacker still storms straight through the gate. `generate()` loops `map.gates` and gatehouses every
+outer-wall gate (`wall_id == 0`): 1 for FORTIFICATION/CASTLE_TOWN, 3 for CITY. Inner/compound gates keep
+their flat openings (the outer gate is the principal gatehouse). New `CastleSiegeMapData.gatehouses` metadata
+array (`{gate_x, gate_y}` per tower). **Runtime-verified (Godot 4.6.2, headless, FORT/TOWN/CITY × 2 seeds,
+0 fails):** each outer gate's passage stays passable at level 0; a FLOOR guard chamber sits at level 1 over
+the gate; a roof at level 2; the chamber is reachable from the gatehouse stairwell; and the FORT/TOWN
+end-to-end player-start → keep flood still passes (proving the gate passage through the tower is intact).
+Composes with the deepened multi-storey keep (same generate() pass). With this, both the castle keep AND the
+gatehouses are real multi-storey structures — the "deeper multi-storey buildings" directive is complete.
+Same PC-travel HOLD as the live ASCII stack.
+
+### s4.4 stacked floors / Option B — EFFORT CLOSED (2026-06-24, consolidated checkpoint)
+The true-stacked-floors building effort (owner-chosen Option B: a tile holds ground floor + upper
+floor(s) + roof as separately-walkable levels joined by stairs, the s4.4-deferred model) is complete.
+Every standalone/covered/multi-storey building across the ASCII generators now has coherent Z layers:
+a roof cap (single-storey) or a real stacked keep/manor/tower (multi-storey with a navigable upper
+floor + roof deck + stairwell); subterranean / open-terrain / open-deck / interior-room maps are
+correctly left roofless. **Inventory:**
+- **Foundation (T0–T5):** the level stack (`AsciiMapData.upper_levels` + `level_count`,
+  `get/set_tile_at`, `ensure_levels`, `resolve_display`, `is_stair`, STAIRS_UP/DOWN + ROOF tiles),
+  level-aware combatant position + `execute_climb_stairs`, the `_cap_with_roof` / `_stack_building`
+  helpers, and the `peek_dim` render. All additive — level 0 stays byte-identical to `tile_types`,
+  so every pre-existing single-level map is unchanged.
+- **Settlement zones (single-storey caps):** peasant dwelling, residential + poor quarters, market,
+  docks, government + pleasure quarters, temple + shrine + castle-shrine. **Multi-storey:** the
+  LORD_QUARTERS manor (ground + upper + roof) and the WALL_TOWER inner keep.
+- **s56 mission templates:** occupied village (building caps), makeshift stockade + forest camp
+  (shelter/tent caps), ruined structure (intact-room caps + collapsed-open + a REAL navigable
+  surviving upper floor), and the CastleSiegeGenerator (deepened multi-storey tenshu keeps in all 3
+  sizes + gatehouse towers over the principal outer gates).
+- **Roofless (correct):** cave, ravine, hilltop, ship boarding (terrain/open-deck), urban hideout
+  (subterranean), and the castle-interior Lesser-Zone rooms (verticality = the inter-zone graph).
+**Consolidated closeout — runtime-verified (Godot 4.6.2, headless, one pass, 0 total fails):**
+PART A — all 35 AsciiMapGenerator ZoneSubtypes × 2 seeds (70 checks): determinism, valid glyphs,
+level-0 invariant (no upper-level leak), exit connectivity (cliff-aware, with the documented
+ROAD/FOREST_PATH/MOUNTAIN_PASS roadside-scenery + SHRINE_CLEARING/UNDERGROUND_LAKE benign-scenery
+exceptions), plus manor + wall-tower stairwell navigability (a level-aware BFS reaches every level).
+PART B — castle siege ×3 sizes (keep 3-level + navigable, gatehouse passage open / chamber+roof /
+reachable, FORT/TOWN end-to-end player→keep flood), ruined structure ×30 (caps + collapsed-open +
+upper-floor stack/navigability), stockade ×3, village ×3 (39 checks). The one known caveat is the
+**pre-existing** CITY castle-siege approach disconnect (a south-end WALL_STONE band at Y=28-30,
+verified identical in the un-deepened original) — unrelated to the Z-axis, out of scope. Composes
+with the terrain-elevation heightfield (the separate s4.4 Z-axis "EFFORT CLOSED 2026-06-23" pass):
+the two Z systems use independent arrays (`elevation` byte-grid vs `upper_levels`) and don't collide.
+**Remaining (deferred):** the cross-elevation roof render (couple `resolve_display` to the viewer's
+terrain elevation vs building height so a hilltop/wall-walk viewer sees lower rooftops — currently it
+keys on the viewer's own building level, perfect for navigation), and the player-facing turn-based
+climb/move UI. Both ride the project-wide **PC-travel HOLD** (the whole live ASCII stack is built +
+headless-verified, not yet live-reachable). No missing Z mechanics remain — further work is content
+placement or the deferred render/UI.
+
+### Known Code Issues (found and fixed 2026-06-24, CastleSiegeGenerator CITY approach)
+- **CITY castle-siege approach sealed from the castle — attacker could not reach the gates. FIXED.**
+  In `_build_city` the approach band was filled only from `approach_y` (Y=31) down, but the outer wall
+  sits at `ow_y = approach_y - 4` (Y=27), leaving the rows Y=28..30 between them unfilled — so they kept
+  the `init_tiles` WALL_STONE default. The header comment called Y=28..30 the "outer district buffer"
+  (an exposed killing field), but nothing ever filled it, so it was an impassable wall band that sealed
+  the storming force out of the castle: a cliff-aware flood from the ATTACKER player start reached only
+  270 tiles with the keep and all 5 objectives UNREACHABLE. This was a long-standing pre-existing quirk
+  (documented out-of-scope during the Z-axis keep work, verified identical in the un-deepened original).
+  Fixed by filling the approach from `approach_y - 3` (= `ow_y + 1`, Y=28) so the buffer/killing field is
+  open FLOOR_DIRT; the outer wall at Y=27 is drawn after and untouched. Runtime-verified (Godot 4.6.2,
+  ATTACKER + DEFENDER × 3 seeds): the flood now reaches 979 tiles, the keep is reachable, and 0 of 5
+  objectives are unreachable. The full Z-coherence suite (165 maps) re-passes at 0 fails — the south-edge
+  dirt fill touches only level 0 and does not affect the multi-storey keep/gatehouse stacks.
+
+### Systems Added 2026-06-24 (s4.4/s33/s35 Flight in tile combat — owner-defined, runtime-verified)
+Owner-defined semantics (2026-06-24): **"flight = occupy an empty space."** A flying combatant may move
+onto/occupy any tile that is NOT a *solid* obstruction — i.e. open air/VOID, water, and pits — and ignores
+elevation cliffs and fall/pit hazards; solid walls/trees/closed-doors/furniture/roofs still block (you
+can't fly through them). The impassable set splits via two new `MovementSystem` helpers:
+`is_solid_obstruction(tile)` (walls/trees/bamboo/closed doors+gates/furniture/roof) and
+`is_flyable(tile)` = `not is_solid_obstruction` (everything else, incl. VOID + WATER_DEEP).
+**Flight state** is a `flight` timed modifier on the combat Participant (auto-expires in `advance_round`,
+like other buffs — no new field). `AsciiMapCombatOrchestrator._is_flying(state, id)` reads it. Wired into:
+`get_reachable_tiles` + `find_path` (a flyer routes over flyable tiles at uniform cost and skips cliff
+steps; `execute_move` inherits this via its reachability gate), and `_knockback_target` (a flyer shoved
+over open air/water/pits hovers and is carried along — never falls, never triggers pit death; only a solid
+obstruction stops it). On flight ending over an open tile, `_flight_safe_landing` relocates the former
+flyer to the nearest passable tile (GDD: Call Upon the Wind "drifts harmlessly to the ground"; Wings
+spells "borne safely to earth") — hooked into the `advance_round` timed-modifier expiry. **Granting:** the
+three GDD flight spells are wired as self-`buff`s with a `flight` mod in `SpellSystem.SPELL_COMBAT_EFFECTS`
+— **Call Upon the Wind** (Air 2 `[CR]`, 10 rounds = 1 min), **Wings of Fire** (Fire 2, 100 rounds = 10 min),
+**Wings of the Phoenix** (Fire 5 `[CR]`, 10 Rounds). They flow through the existing `_apply_spell_buff`
+path (NPC/companion/PC cast). All non-flying movement is byte-identical (every change is gated on
+`_is_flying`, false without the modifier).
+**Per-spell SPEED (added 2026-06-24):** the `flight` modifier value is a speed code (1/2/3) read by the
+orchestrator; `free_move_budget` and the new `simple_move_budget` return flight-specific budgets that
+REPLACE the normal Water-Ring/ground budget (terrestrial kata/kiho/swift bonuses don't apply airborne).
+Call Upon the Wind → Free 2 tiles (≤10'/Round), Simple 0 (Free Move only); Wings of Fire → Free 1 /
+Simple 2 (Water 1 speed); Wings of the Phoenix → Free Water×2 / Simple Water×4 (Water×10'/×20'). The one
+inline NPC Simple-budget site now uses `simple_move_budget`. **Wings of Fire ARM RESTRICTION (added
+2026-06-24):** `_arms_occupied` (flight code == 2) gates `execute_melee_attack` + `execute_ranged_attack`
+(`reason: "arms_occupied"`) — the caster's arms control the wings, so no weapon/unarmed attacks; spell
+casting is unaffected (a flying shugenja still casts), and the other two flight spells do not restrict the
+arms. LIMITATIONS: Wings of Fire's "Water 4 if gliding from height" alt-speed and its "ignites flammable
+objects touched" downside are not modeled; flight is not yet wired into the `CombatController` real-time
+exploration layer (turn-based orchestrator only); naturally-flying creatures (stat-block `flying` tag) are
+not auto-granted the movement benefit (spell-flight only) — an easy follow-up.
+**Runtime-verified (Godot 4.6.2, headless, 30/30):** ground unit can't cross VOID/deep-water, flyer can;
+flyer crosses a chasm via find_path; flyer can't cross a stone wall; flyer shoved into a pit hovers + lives
+while a ground unit dies (control); safe-landing off VOID (direct + via advance_round expiry); all three
+spells are flight buffs; per-spell free/simple budgets (2/0, 1/2, 6/12 at Water 3); Wings of Fire blocks a
+melee attack while Call Upon Wind / Phoenix do not.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

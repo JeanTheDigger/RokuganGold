@@ -128,7 +128,31 @@ static func generate(
 	# Step 14 — objective markers (s56.7.5).
 	_place_objective_slots(map, objectives)
 
+	# Step 15 — elevation: the watchtower platform is raised (s4.4 Z-axis).
+	_stamp_elevation(map)
+
 	return map
+
+
+# ---------------------------------------------------------------------------
+# Elevation (s4.4 Z-axis — raised watchtower platform)
+# ---------------------------------------------------------------------------
+
+## Raises the watchtower platform footprint to layer 1; the rest of the stockade
+## stays at layer 0. The platform is +1 over the surrounding courtyard, so it is
+## reached as a walkable ramp (no cliff) and a sentry posted on it gains the
+## high-ground attack bonus and sees over the perimeter. Only Medium/Large
+## stockades have a platform — a Small stockade has no platform and stays flat.
+static func _stamp_elevation(map: MakeshiftStockadeMapData) -> void:
+	if not map.has_platform:
+		return
+	map.init_elevation(0)
+	var cx: int = map.platform_x
+	var py: int = map.platform_y
+	for y: int in range(py - _PLATFORM_HALF, py + _PLATFORM_HALF + 1):
+		for x: int in range(cx - _PLATFORM_HALF, cx + _PLATFORM_HALF + 1):
+			if map.get_tile(x, y) == Enums.TileType.FLOOR_STONE:
+				map.set_elevation(x, y, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -404,6 +428,11 @@ static func _carve_shelter(
 
 	map.shelters.append({"id": sid, "lx": lx, "ly": ly, "rx": rx, "ry": ry,
 		"type": stype})
+
+	# Roof cap (s4.4 Option B): each shelter is a covered lean-to/tent — a roof over
+	# the dirt floor, presenting a roof from above. The watchtower platform (a fighting
+	# position, not a covered structure) stays open.
+	AsciiMapGenerator._cap_with_roof(map, lx, ly, rx, ry)
 
 
 # ---------------------------------------------------------------------------
