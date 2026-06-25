@@ -7551,16 +7551,25 @@ three GDD flight spells are wired as self-`buff`s with a `flight` mod in `SpellS
 — **Call Upon the Wind** (Air 2 `[CR]`, 10 rounds = 1 min), **Wings of Fire** (Fire 2, 100 rounds = 10 min),
 **Wings of the Phoenix** (Fire 5 `[CR]`, 10 Rounds). They flow through the existing `_apply_spell_buff`
 path (NPC/companion/PC cast). All non-flying movement is byte-identical (every change is gated on
-`_is_flying`, false without the modifier). LIMITATIONS (owner scope = the spatial ability only): per-spell
-SPEED differences (Call Upon the Wind ≤10'/Round Free-only, Wings of Fire Water 1, Wings of the Phoenix
-Water×10'/×20') are NOT modeled — the move budget stays the normal Water-Ring action budget; Wings of Fire's
-"arms occupied / ignites flammables" downside is not modeled; flight is not yet wired into the
-`CombatController` real-time exploration layer (turn-based orchestrator only); naturally-flying creatures
-(stat-block `flying` tag) are not auto-granted the movement benefit (spell-flight only) — an easy follow-up.
-**Runtime-verified (Godot 4.6.2, headless, 19/19):** ground unit can't cross VOID/deep-water, flyer can;
+`_is_flying`, false without the modifier).
+**Per-spell SPEED (added 2026-06-24):** the `flight` modifier value is a speed code (1/2/3) read by the
+orchestrator; `free_move_budget` and the new `simple_move_budget` return flight-specific budgets that
+REPLACE the normal Water-Ring/ground budget (terrestrial kata/kiho/swift bonuses don't apply airborne).
+Call Upon the Wind → Free 2 tiles (≤10'/Round), Simple 0 (Free Move only); Wings of Fire → Free 1 /
+Simple 2 (Water 1 speed); Wings of the Phoenix → Free Water×2 / Simple Water×4 (Water×10'/×20'). The one
+inline NPC Simple-budget site now uses `simple_move_budget`. **Wings of Fire ARM RESTRICTION (added
+2026-06-24):** `_arms_occupied` (flight code == 2) gates `execute_melee_attack` + `execute_ranged_attack`
+(`reason: "arms_occupied"`) — the caster's arms control the wings, so no weapon/unarmed attacks; spell
+casting is unaffected (a flying shugenja still casts), and the other two flight spells do not restrict the
+arms. LIMITATIONS: Wings of Fire's "Water 4 if gliding from height" alt-speed and its "ignites flammable
+objects touched" downside are not modeled; flight is not yet wired into the `CombatController` real-time
+exploration layer (turn-based orchestrator only); naturally-flying creatures (stat-block `flying` tag) are
+not auto-granted the movement benefit (spell-flight only) — an easy follow-up.
+**Runtime-verified (Godot 4.6.2, headless, 30/30):** ground unit can't cross VOID/deep-water, flyer can;
 flyer crosses a chasm via find_path; flyer can't cross a stone wall; flyer shoved into a pit hovers + lives
 while a ground unit dies (control); safe-landing off VOID (direct + via advance_round expiry); all three
-spells are flight buffs and applying one sets the caster flying.
+spells are flight buffs; per-spell free/simple budgets (2/0, 1/2, 6/12 at Water 3); Wings of Fire blocks a
+melee attack while Call Upon Wind / Phoenix do not.
 
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)

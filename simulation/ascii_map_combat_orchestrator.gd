@@ -333,6 +333,11 @@ static func setup_combat(
 static func free_move_budget(state: MapCombatState, char_id: int, character: L5RCharacterData) -> int:
 	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
 	var water: int = _effective_water_ring(p, character)
+	# Flight speed (per spell) replaces the normal ground budget; terrestrial kata/kiho/
+	# swift move bonuses do not apply while airborne.
+	var fc: int = _flight_code(state, char_id)
+	if fc > 0:
+		return _flight_free_budget(water, fc)
 	var base: int = MovementSystem.budget(water, MovementSystem.MoveAction.FREE)
 	if p == null:
 		return base
@@ -359,10 +364,60 @@ static func _effective_water_ring(p: IndividualCombat.Participant, character: L5
 ## Call Upon the Wind / Wings of Fire / Wings of the Phoenix). A flyer occupies open
 ## spaces (open air/void, water) and ignores elevation cliffs and fall/pit hazards.
 static func _is_flying(state: MapCombatState, char_id: int) -> bool:
+	return _flight_code(state, char_id) > 0
+
+
+# Flight speed codes (the "flight" timed-modifier value; 1 tile = 5 ft):
+const FLIGHT_CALL_UPON_WIND: int = 1   # ≤10'/Round (2 tiles), Free Move only
+const FLIGHT_WINGS_OF_FIRE: int = 2    # Water 1 speed; arms occupied (no weapon attacks)
+const FLIGHT_WINGS_PHOENIX: int = 3    # Water×10' Free / Water×20' Simple
+
+## The active flight speed code (0 = not flying). Reads the MAX "flight" modifier value
+## so a recast (the stronger flight) wins rather than summing into a bogus code.
+static func _flight_code(state: MapCombatState, char_id: int) -> int:
 	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
 	if p == null:
-		return false
-	return IndividualCombat.get_timed_modifier_total(p, "flight") > 0
+		return 0
+	var code: int = 0
+	for m: Dictionary in p.timed_modifiers:
+		if m.get("kind", "") == "flight":
+			code = maxi(code, int(m.get("value", 0)))
+	return code
+
+## Per-turn flight movement budget (tiles) for a FREE move, by speed code. Flight speed
+## replaces the normal Water-Ring/ground budget (kata/kiho/swift bonuses are terrestrial).
+static func _flight_free_budget(water: int, code: int) -> int:
+	match code:
+		FLIGHT_CALL_UPON_WIND: return 2                 # ≤10'/Round
+		FLIGHT_WINGS_OF_FIRE:  return MovementSystem.budget(1, MovementSystem.MoveAction.FREE)   # Water 1
+		FLIGHT_WINGS_PHOENIX:  return clampi(water, 1, 10) * 2  # Water×10'
+		_: return 0
+
+## Per-turn flight movement budget (tiles) for a SIMPLE move, by speed code. Call Upon the
+## Wind is Free-Move-only → 0 (no fast flight).
+static func _flight_simple_budget(water: int, code: int) -> int:
+	match code:
+		FLIGHT_CALL_UPON_WIND: return 0                 # Free Move only
+		FLIGHT_WINGS_OF_FIRE:  return MovementSystem.budget(1, MovementSystem.MoveAction.SIMPLE)  # Water 1
+		FLIGHT_WINGS_PHOENIX:  return clampi(water, 1, 10) * 4  # Water×20'
+		_: return 0
+
+## Wings of Fire (Fire 2) occupies the caster's arms controlling the wings — they cannot
+## make weapon/unarmed attacks while it is active (GDD s35). Spellcasting is unaffected
+## (a flying shugenja still casts). The other flight spells do not restrict the arms.
+static func _arms_occupied(state: MapCombatState, char_id: int) -> bool:
+	return _flight_code(state, char_id) == FLIGHT_WINGS_OF_FIRE
+
+## Per-turn movement budget for a SIMPLE move (flight-aware), mirroring free_move_budget
+## for the Simple action. Used by the move-decision sites.
+static func simple_move_budget(state: MapCombatState, char_id: int, character: L5RCharacterData) -> int:
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	var water: int = _effective_water_ring(p, character)
+	var fc: int = _flight_code(state, char_id)
+	if fc > 0:
+		return _flight_simple_budget(water, fc)
+	var base: int = MovementSystem.budget(water, MovementSystem.MoveAction.SIMPLE)
+	return base + IndividualCombat.get_kiho_move_bonus(character, p) + IndividualCombat.get_creature_swift_bonus(character)
 
 
 ## When flight ends, the kami set the caster down gently (GDD: Call Upon the Wind
@@ -1102,6 +1157,9 @@ static func execute_melee_attack(
 	var a_p_ins: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
 	if a_p_ins != null and IndividualCombat.get_timed_modifier_total(a_p_ins, "insubstantial") > 0:
 		return {"success": false, "reason": "insubstantial"}
+	# s35 Wings of Fire: the caster's arms control the wings — no weapon/unarmed attacks.
+	if _arms_occupied(state, attacker_id):
+		return {"success": false, "reason": "arms_occupied"}
 
 	var wl: int = CharacterStats.get_wound_level(attacker)
 	if ts.is_down_restricted(wl):
@@ -1617,6 +1675,9 @@ static func execute_ranged_attack(
 	var a_p_ins: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
 	if a_p_ins != null and IndividualCombat.get_timed_modifier_total(a_p_ins, "insubstantial") > 0:
 		return {"success": false, "reason": "insubstantial"}
+	# s35 Wings of Fire: the caster's arms control the wings — no weapon/unarmed attacks.
+	if _arms_occupied(state, attacker_id):
+		return {"success": false, "reason": "arms_occupied"}
 
 	# s36 Stand Against the Waves: a granted_attacks pool lets a ranged attack proceed when the
 	# normal Complex is spent (consumes one granted attack instead).
@@ -6787,7 +6848,7 @@ static func execute_npc_turn(
 				target_in_melee = (best_target in melee_targets)
 
 		if not target_in_melee and ts.can_use_simple() and not ts.is_down_restricted(wl):
-			var simple_budget: int = MovementSystem.budget(_effective_water_ring(state.combat.participants.get(npc_id, null), npc), MovementSystem.MoveAction.SIMPLE) + IndividualCombat.get_kiho_move_bonus(npc, state.combat.participants.get(npc_id, null)) + IndividualCombat.get_creature_swift_bonus(npc)
+			var simple_budget: int = simple_move_budget(state, npc_id, npc)
 			var move_r: Dictionary = _npc_move_toward(state, npc_id, best_target, npc, simple_budget, "simple", dice_engine)
 			if move_r.get("success", false):
 				actions_taken.append({"action": "simple_move", "result": move_r})
