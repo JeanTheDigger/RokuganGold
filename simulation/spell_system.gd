@@ -151,6 +151,11 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# flammable tile underfoot ignites. Never burns the target's attackers. Infinite -> skirmish (owner
 	# 2026-06-25). Per-round effect in advance_round; PC-deliberate (not in the NPC offense picker).
 	"curse_of_the_burning_hand": {"kind": "curse_burning_hand", "range_tiles": 2, "duration_rounds": 9999},
+	# Fire 4 Essence of Fire: the Asahina anti-tampering ward, modeled as a general anti-spell ward
+	# (owner 2026-06-25) on the caster + the chosen target (10' = 2 tiles). Each warded duelist has its
+	# ongoing spell effects ended and any spell cast AT it suffers −3k0. Skirmish-long. 4-Raise
+	# Technique-suppression variant deferred.
+	"essence_of_fire": {"kind": "essence_of_fire", "range_tiles": 2, "rolled_penalty": 3, "duration_rounds": 9999},
 	# Air 4 Netsuke of Wind: conjure a fully-functional weapon the shugenja chooses from the catalog
 	# (owner 2026-06-25) — it gets that weapon's REAL profile (DR + Strength + skill + trait), unlike the
 	# fixed-DR elemental conjures. Defaults to the caster's best melee weapon. 1 hour -> skirmish.
@@ -1149,7 +1154,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"blessing_of_the_sun":           {"e": 2, "m": 4, "s": 15},
 	"death_of_flame":                {"e": 2, "m": 4, "s": 0},
 	"defense_of_the_firestorm":      {"e": 2, "m": 4, "s": 0},
-	"essence_of_fire":               {"e": 2, "m": 4, "s": 0},
+	"essence_of_fire":               {"e": 2, "m": 4, "s": 0},   # anti-spell duel ward — wired (SPELL_COMBAT_EFFECTS "essence_of_fire")
 	"eyes_of_the_phoenix":           {"e": 2, "m": 4, "s": 0},   # blind/fear burst — COMBAT_ONLY
 	"the_mending_forge":             {"e": 2, "m": 4, "s": 7},
 	"symbol_of_fire":                {"e": 2, "m": 4, "s": 10},
@@ -1426,7 +1431,7 @@ static func can_cast(character: L5RCharacterData, spell_id: String) -> bool:
 static func resolve_cast(character: L5RCharacterData, spell_id: String,
 		dice: DiceEngine, raises: int = 0,
 		target: L5RCharacterData = null, ic_day: int = -1, extra_tn: int = 0,
-		roll_penalty: int = 0) -> Dictionary:
+		roll_penalty: int = 0, rolled_only_penalty: int = 0) -> Dictionary:
 	if not SPELL_LIBRARY.has(spell_id):
 		return {"success": false, "error": "unknown_spell"}
 	var spell: Dictionary = SPELL_LIBRARY[spell_id]
@@ -1454,7 +1459,9 @@ static func resolve_cast(character: L5RCharacterData, spell_id: String,
 		tn += 10
 	# roll_penalty: −XkX to the casting roll (s34 The Kami's Will — a target's anti-spell ward),
 	# applied by the orchestrator when a spell is cast AT a warded character. Floors at 1k1.
-	var roll_dice: int = maxi(1, ring_val + eff_rank - roll_penalty)
+	# roll_penalty: −XkX (rolled AND kept), s34 The Kami's Will. rolled_only_penalty: −Nk0 (rolled
+	# only), s35 Essence of Fire (a spell cast at a warded duelist loses N rolled dice, same kept).
+	var roll_dice: int = maxi(1, ring_val + eff_rank - roll_penalty - rolled_only_penalty)
 	var keep_dice: int = maxi(1, ring_val - roll_penalty)
 	var wound_pen: int = CharacterStats.get_wound_penalty(character)
 	# Slot consumed on attempt regardless of outcome

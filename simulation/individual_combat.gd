@@ -527,6 +527,23 @@ static func clear_timed_modifiers_by_source(p: Participant, source: String) -> v
 	p.timed_modifiers = kept
 
 
+## s35 Essence of Fire: "ends all ongoing spell effects." Removes timed modifiers whose source is
+## spell-installed (prefix "spell_": spell_buff / spell_invisible / spell_debuff / spell_arrows_flight).
+## Kata/kiho/creature modifiers (non-"spell_" sources) are NOT spell effects and are left untouched.
+## LIMITATION: spell-applied CONDITIONS (incapacitate/entangle/afraid/blinded) carry no source tag,
+## so they cannot be selectively dispelled and are not cleared here.
+static func clear_spell_timed_modifiers(p: Participant) -> int:
+	var kept: Array = []
+	var removed: int = 0
+	for m: Dictionary in p.timed_modifiers:
+		if String(m.get("source", "")).begins_with("spell_"):
+			removed += 1
+		else:
+			kept.append(m)
+	p.timed_modifiers = kept
+	return removed
+
+
 ## Remove round-based timed modifiers whose window has closed. Called once per
 ## participant at the start of each new round (after round_number is incremented).
 ## Turn-based ("turn_end") modifiers are untouched here.

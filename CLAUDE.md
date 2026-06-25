@@ -6700,6 +6700,31 @@ weapon; the conjured katana's mean damage (22.6) reflects 3k2 + Strength (vs the
 conjures); the weapon disappears at duration end.
 **161 combat effects + the CombatController stealth-spell set.**
 
+### Spell coverage — Essence of Fire (anti-tampering duel ward) (2026-06-25, owner-collaborative, runtime-verified 10/10)
+**Essence of Fire (Fire 4, Wards, s35)** — the Asahina anti-tampering ward for iaijutsu duels.
+Previously deferred ("duel-scoped" — our duel resolver casts no spells mid-duel, so a strictly
+duel-scoped ward would be inert). Owner Q&A (2026-06-25): **model it as a general anti-spell ward
+(skirmish-long) on two duelists** (the "iaijutsu duel" becomes lore framing — the only scoping that
+gives the −3k0 a consumer). New **`essence_of_fire` effect kind** + `execute_cast_spell` dispatch →
+`_apply_essence_of_fire`. **Targets:** the caster + the chosen target (two duelists, owner choice),
+both within 10' (2 tiles). Each warded duelist: (1) **dispel** — `IndividualCombat.clear_spell_timed_modifiers`
+ends ongoing spell effects (clears timed modifiers whose source is spell-installed, prefix `spell_`:
+spell_buff/spell_invisible/spell_debuff/spell_arrows_flight); kata/kiho/creature modifiers are left
+untouched. (2) **−3k0 anti-spell ward** — an `essence_of_fire` timed modifier (value 3); any spell
+cast AT a warded duelist loses **3 rolled dice** on the casting roll (mirrors the s34 Kami's Will hook,
+but rolled-only: `resolve_cast` gained a trailing `rolled_only_penalty` param applied to `roll_dice`
+only, distinct from `roll_penalty`'s −XkX; the orchestrator reads the target's `essence_of_fire`
+modifier and passes it). Duration = the skirmish. **Deferred (documented, no invention):** the 4-Raise
+Technique-suppression variant (Raises not tracked at cast + kata-suppression infra), and spell-applied
+CONDITIONS (incapacitate/entangle/afraid/blinded carry no source tag, so they can't be selectively
+dispelled). **NPC AI never auto-casts it** (dedicated kind, not in the offense/buff picker) — a
+situational PC tool (only bites vs enemy spellcasters, like the Kami's Will). Runtime-verified 10/10
+(Godot 4.6.2, headless): cast wards both caster + target (−3 each); a spell_buff modifier on the target
+is dispelled while a kata modifier survives; an out-of-range target is not warded (only the caster);
+`resolve_cast`'s rolled-only penalty lowers the casting roll (53.7→46.6); and end-to-end a damage spell
+cast at the warded duelist rolls lower than at an unwarded one (60.4 vs 65.8).
+**162 combat effects + the CombatController stealth-spell set.**
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

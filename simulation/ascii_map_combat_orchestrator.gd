@@ -2459,11 +2459,15 @@ static func execute_cast_spell(
 	# s34 The Kami's Will: a spell cast AT a warded character has its casting roll cut by −XkX
 	# (X = the warder's Earth Ring, stored as the "kamis_will" timed modifier on the target).
 	var kw_penalty: int = 0
+	# s35 Essence of Fire: a spell cast AT a warded duelist takes −Nk0 (rolled only; N = 3), stored
+	# as the "essence_of_fire" timed modifier on the target.
+	var eof_penalty: int = 0
 	if target != null:
 		var tgt_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
 		if tgt_p != null:
 			kw_penalty = IndividualCombat.get_timed_modifier_total(tgt_p, "kamis_will")
-	var res: Dictionary = SpellSystem.resolve_cast(caster, spell_id, dice_engine, 0, target, -1, ward_tn, kw_penalty)
+			eof_penalty = IndividualCombat.get_timed_modifier_total(tgt_p, "essence_of_fire")
+	var res: Dictionary = SpellSystem.resolve_cast(caster, spell_id, dice_engine, 0, target, -1, ward_tn, kw_penalty, eof_penalty)
 	res["spell_id"] = spell_id
 	# Furaribi rule (s54.12): a jade/crystal-property spell does not harm a superior_invuln
 	# spirit but repels it — it retreats from the area (leaves the encounter).
@@ -2553,6 +2557,12 @@ static func execute_cast_spell(
 		state.combat_log.append({
 			"type": "spell_curse_burning_hand", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "curse": res["curse"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "essence_of_fire":
+		res["ward"] = _apply_essence_of_fire(state, caster_id, target_id, eff)
+		state.combat_log.append({
+			"type": "spell_essence_of_fire", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "ward": res["ward"],
 		})
 	elif res.get("success", false) and eff.get("kind", "") == "ward":
 		res["ward"] = _apply_spell_ward(state, caster_id, eff, spell_id)
@@ -3565,6 +3575,39 @@ static func _apply_hurricane_zone(
 	state.spell_zones.append(zone)
 	return {"eye_radius": zone["eye_radius"], "expiry_round": zone["expiry_round"],
 		"next_tick_round": zone["next_tick_round"]}
+
+
+## s35 Essence of Fire (Fire 4): the Asahina anti-tampering ward, modeled as a general anti-spell ward
+## (owner 2026-06-25) on TWO duelists — the caster and the chosen target (10' = 2 tiles). Each warded
+## character (1) has its ongoing spell effects ended (spell-sourced timed modifiers cleared) and
+## (2) gains the "essence_of_fire" timed modifier so any spell cast AT it suffers −3k0 to the casting
+## roll (read in execute_cast_spell). Duration = the skirmish. The 4-Raise Technique-suppression variant
+## is deferred (Raises not tracked + kata-suppression infra). Spell-applied CONDITIONS aren't dispelled
+## (no source tag). Inert when target == caster except warding the caster alone.
+static func _apply_essence_of_fire(
+	state: MapCombatState, caster_id: int, target_id: int, eff: Dictionary,
+) -> Dictionary:
+	var penalty: int = int(eff.get("rolled_penalty", 3))
+	var dur: int = int(eff.get("duration_rounds", 9999))
+	var cpos: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var warded: Array = []
+	var dispelled: int = 0
+	# Ward the caster + the chosen target (two duelists). target_id within range 10' (2 tiles).
+	var ids: Array = [caster_id]
+	if target_id != caster_id and state.combat.participants.has(target_id):
+		var tpos: Vector2i = state.positions.get(target_id, Vector2i(-9999, -9999))
+		if maxi(absi(cpos.x - tpos.x), absi(cpos.y - tpos.y)) <= int(eff.get("range_tiles", 2)):
+			ids.append(target_id)
+	for wid in ids:
+		var wp: IndividualCombat.Participant = state.combat.participants.get(wid, null)
+		var wch = state.combatants.get(wid, null)
+		if wp == null or wch == null or CharacterStats.is_dead(wch):
+			continue
+		dispelled += IndividualCombat.clear_spell_timed_modifiers(wp)  # end ongoing spell effects
+		IndividualCombat.add_timed_modifier(
+			wp, "essence_of_fire", penalty, state.combat.round_number + dur, "essence_of_fire")
+		warded.append(wid)
+	return {"warded": warded, "penalty": penalty, "spell_effects_ended": dispelled}
 
 
 ## s36 Yuki's Touch (Water 2): flash-freeze a body of water out to range_tiles (100' = 20 tiles) from
