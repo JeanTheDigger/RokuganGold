@@ -142,6 +142,10 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"wrath_of_kaze_no_kami": {"kind": "hurricane", "eye_radius": 4,
 		"minor_rolled": 1, "minor_kept": 1, "major_rolled": 5, "major_kept": 5,
 		"major_chance_in": 10, "fling_tiles": 3, "duration_rounds": 600},
+	# Water 2 Yuki's Touch: flash-freeze a body of water to 100' (20 tiles) — tiles become solid
+	# walkable ice; everyone standing in the water (all factions) is trapped (Entangled), breaking
+	# free via Strength vs the caster's Water roll. Deep-water victims drown (owner 2026-06-25).
+	"yukis_touch": {"kind": "freeze_water", "range_tiles": 20, "duration_rounds": 9999},
 	# Coverage extension batch 9 (2026-06-20): area wards (enemy-cast TN penalty + spell DR reduction).
 	"earths_protection": {"kind": "ward", "aoe_radius": 2, "duration_rounds": 10,
 		"ward_elements": [0, 2, 3], "cast_tn_penalty": 10,
@@ -1187,7 +1191,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"the_ties_that_bind":            {"e": 3, "m": 2, "s": 17},
 	"wave_borne_speed":              {"e": 3, "m": 2, "s": 0},   # 2-round Water Ring movement boost — COMBAT_ONLY
 	"wisdom_and_clarity":            {"e": 3, "m": 2, "s": 0},   # reading speed buff — COMBAT_ONLY
-	"yukis_touch":                   {"e": 3, "m": 2, "s": 0},
+	"yukis_touch":                   {"e": 3, "m": 2, "s": 0},   # freeze-water trap — wired (SPELL_COMBAT_EFFECTS "freeze_water")
 	# ML3
 	"endless_deluge":                {"e": 3, "m": 3, "s": 16},
 	"near_to_ice":                   {"e": 3, "m": 3, "s": 0},

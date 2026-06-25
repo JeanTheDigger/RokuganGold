@@ -6617,6 +6617,35 @@ owner makes each spell's design calls before any code.
 **158 combat effects + the CombatController stealth-spell set.** Same PC-travel HOLD live-reachability
 caveat as the whole ASCII stack — driver-verified, not a live session.
 
+### Spell coverage — Yuki's Touch (freeze-water trap) (2026-06-25, owner-collaborative, runtime-verified 14/14)
+**Yuki's Touch (Water 2, s36)** — flash-freeze a body of water out to 100' (20 tiles) from the caster.
+Previously deferred (water-terrain spell, "no tile consumer"); wired via per-spell owner Q&A. New
+**`freeze_water` effect kind** in `SpellSystem.SPELL_COMBAT_EFFECTS` + `execute_cast_spell` dispatch →
+`AsciiMapCombatOrchestrator._apply_freeze_water`. **Owner decisions (2026-06-25):** (1) the water tiles
+in range (WATER_SHALLOW/DEEP/RAPID/PADDY) actually turn to **solid walkable ice** (FLOOR_SNOW — no
+FLOOR_ICE tile exists; white walkable surface), saved/restored via the existing `conjured_terrain`
+zone ("ice melts normally" → persists the skirmish, duration 9999); freezing WATER_SHALLOW (cost 2,
+difficult) to ice (cost 1) is a faithful movement change, and the frozen river is now crossable.
+(2) **deep-water victims drown** — a combatant whose frozen tile was WATER_DEEP is submerged → dies via
+`_apply_pit_death` (the engine's existing deep-water-drowning model; effectively unreachable since deep
+water is impassable, documented for completeness). (3) **everyone in the water (all factions)** is
+trapped — the caster's own allies in it get caught too. **Trapped mechanic (faithful default, the 4th
+Q&A didn't register):** trapped = **Entangled** (the ice locks their legs — they can still fight, only
+movement is blocked via `execute_move`'s entangle gate), breaking free via **Strength vs the caster's
+stored Water roll** — new `Participant.freeze_break_tn` (the caster's Water roll total, rolled once at
+cast) overloads `attempt_entangle_escape` (it uses `freeze_break_tn` when set, the default TN 20
+otherwise; cleared on escape). A trapped NPC auto-attempts the break via the existing entangle-escape
+hook. **NPC AI never auto-casts it** (`freeze_water` isn't a `damage`/`status` offense kind) — a
+situational PC tool that only bites on maps with water + combatants standing in it (like Caress of Fu
+Leng needing jade). No invented values (radius 20 = GDD 100'/5; break = caster's Water roll;
+drowning = engine model). Not modeled: the GDD "treat as Drowning" ongoing-suffocation nuance collapses
+to the engine's deep-water = death. Runtime-verified 14/14 (Godot 4.6.2, headless): cast freezes 30
+river tiles + break_tn from the caster's Water roll; shallow-water tiles become walkable ice; enemy AND
+ally in the water both Entangled (friendly fire), dry enemy untouched, break_tn stored; trapped victim
+can't move (`execute_move` "entangled"); a strong victim breaks free via Strength vs the stored roll,
+condition + break_tn cleared; a victim on a WATER_DEEP tile drowns (dead, in the `drowned` list).
+**159 combat effects + the CombatController stealth-spell set.**
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

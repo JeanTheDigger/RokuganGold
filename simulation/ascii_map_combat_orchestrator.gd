@@ -2540,6 +2540,12 @@ static func execute_cast_spell(
 			"type": "spell_hurricane", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "hurricane": res["hurricane"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "freeze_water":
+		res["freeze"] = _apply_freeze_water(state, caster_id, caster, eff, spell_id, dice_engine)
+		state.combat_log.append({
+			"type": "spell_freeze_water", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "freeze": res["freeze"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "ward":
 		res["ward"] = _apply_spell_ward(state, caster_id, eff, spell_id)
 		state.combat_log.append({
@@ -3526,6 +3532,66 @@ static func _apply_hurricane_zone(
 	state.spell_zones.append(zone)
 	return {"eye_radius": zone["eye_radius"], "expiry_round": zone["expiry_round"],
 		"next_tick_round": zone["next_tick_round"]}
+
+
+## s36 Yuki's Touch (Water 2): flash-freeze a body of water out to range_tiles (100' = 20 tiles) from
+## the caster. Water tiles become solid walkable ice (FLOOR_SNOW), saved/restored via a conjured_terrain
+## zone ("ice melts normally" -> persists the skirmish). Anyone standing in the water — ALL factions
+## (owner 2026-06-25) — is trapped (Entangled) and breaks free via Strength vs the caster's stored Water
+## roll. A victim caught on a WATER_DEEP tile is submerged -> drowns (the engine's deep-water-drowning
+## model = _apply_pit_death; owner 2026-06-25). The drowning case is effectively unreachable (deep water
+## is impassable; only a flyer/bubble could be on it), documented for completeness.
+static func _apply_freeze_water(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	eff: Dictionary, spell_id: String, dice_engine: DiceEngine,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var radius: int = int(eff.get("range_tiles", 20))
+	var water: int = SpellSystem.get_ring_value(caster, Enums.Ring.WATER)
+	# "Contested Strength vs caster's Water roll" — roll it once at cast; victims contest this stored TN.
+	var break_tn: int = dice_engine.roll_and_keep(maxi(1, water), maxi(1, water), true).total
+	var water_tiles: Array = [Enums.TileType.WATER_SHALLOW, Enums.TileType.WATER_DEEP,
+		Enums.TileType.WATER_RAPID, Enums.TileType.WATER_PADDY]
+	var saved: Array = []
+	var frozen: Dictionary = {}  # Vector2i -> original tile (for victim lookup)
+	for y in range(maxi(0, center.y - radius), mini(state.map.height, center.y + radius + 1)):
+		for x in range(maxi(0, center.x - radius), mini(state.map.width, center.x + radius + 1)):
+			if maxi(absi(center.x - x), absi(center.y - y)) > radius:
+				continue
+			var t: int = state.map.get_tile(x, y)
+			if t in water_tiles:
+				var pos: Vector2i = Vector2i(x, y)
+				saved.append({"pos": pos, "original": t})
+				frozen[pos] = t
+				state.map.set_delta(x, y, Enums.TileType.FLOOR_SNOW)  # solid walkable ice
+	if not saved.is_empty():
+		state.spell_zones.append({
+			"kind": "conjured_terrain", "tiles": saved,
+			"expiry_round": state.combat.round_number + int(eff.get("duration_rounds", 9999)),
+			"spell_id": spell_id, "caster_id": caster_id,
+		})
+	var trapped: Array = []
+	var drowned: Array = []
+	for cid in state.positions.keys():
+		var cpos: Vector2i = state.positions[cid]
+		if not frozen.has(cpos):
+			continue
+		var ch = state.combatants.get(cid, null)
+		if ch == null or CharacterStats.is_dead(ch):
+			continue
+		if int(frozen[cpos]) == Enums.TileType.WATER_DEEP:
+			# Submerged when the water froze: drowns (engine deep-water = drowning death).
+			_apply_pit_death(state, cid, cpos)
+			drowned.append(cid)
+			continue
+		var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+		if p == null:
+			continue
+		IndividualCombat.apply_condition(p, IndividualCombat.CONDITION_ENTANGLED)
+		p.freeze_break_tn = break_tn
+		trapped.append(cid)
+	return {"break_tn": break_tn, "tiles_frozen": saved.size(),
+		"trapped": trapped, "drowned": drowned}
 
 
 ## Install a purify zone (s36 Heaven's Tears): a holy-rain field, centered on the caster, that each
@@ -5817,8 +5883,12 @@ static func attempt_entangle_escape(state: MapCombatState, char_id: int, charact
 	if p == null or IndividualCombat.CONDITION_ENTANGLED not in p.conditions:
 		return {"success": false, "reason": "not_entangled"}
 	var roll: int = dice.roll_and_keep(maxi(1, character.strength), maxi(1, character.strength), true).total
-	if roll >= 20:
+	# s36 Yuki's Touch: breaking free of the ice is Contested Strength vs the caster's stored Water
+	# roll; web/snare/gore use the default TN 20.
+	var esc_tn: int = p.freeze_break_tn if p.freeze_break_tn > 0 else 20
+	if roll >= esc_tn:
 		p.conditions.erase(IndividualCombat.CONDITION_ENTANGLED)
+		p.freeze_break_tn = 0
 		# Gore (s54.5): pulling free of the tusks deals the gore-escape damage.
 		var gore_dmg: int = 0
 		if p.gore_escape_rolled > 0:

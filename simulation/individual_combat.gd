@@ -189,6 +189,7 @@ class Participant:
 	var scream_used: bool = false  # s54.12 Wanyudo Strength of the Dead: once-per-skirmish scream
 	var gore_escape_rolled: int = 0  # s54.5 Gore: extra damage dealt when pulling free of the tusks (0 = not gored)
 	var gore_escape_kept: int = 0
+	var freeze_break_tn: int = 0  # s36 Yuki's Touch: Strength TN to break free of the ice (0 = use the default entangle TN 20)
 	var spirit_attack_rolled_bonus: int = 0  # s54.10 Toshigoku auras/Tactical Mastery: +N rolled attack dice (orchestrator sets per-attack, spirit-only)
 	var spirit_damage_rolled_bonus: int = 0  # s54.10 Supreme Commander: +N rolled damage dice (spirit-only)
 	var spirit_attack_kept_bonus: int = 0  # s54.5 Charge: +N kept attack dice (the kept half of a +NkN charge bonus)
