@@ -1101,7 +1101,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"tomb_of_jade":                  {"e": 1, "m": 4, "s": 2},
 	"wall_of_earth":                 {"e": 1, "m": 4, "s": 0},
 	# ML5
-	"drawing_on_the_mountain":       {"e": 1, "m": 5, "s": 0},  # Structure wound/reduction buff — not healing
+	"drawing_on_the_mountain":       {"e": 1, "m": 5, "s": 0},  # siege wall-hardening — wired (day_orchestrator storm-assault defense bonus)
 	"earthquake":                    {"e": 1, "m": 5, "s": 0},
 	"grounding_energy":              {"e": 1, "m": 5, "s": 0},   # Anti-maho TN boost 3 rounds — combat only
 	"major_binding":                 {"e": 1, "m": 5, "s": 0},

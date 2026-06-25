@@ -29,6 +29,11 @@ const EVENT_INTERVAL_MID: int = 7
 const EVENT_INTERVAL_LATE: int = 5
 
 const STORM_URBAN_DEFENSE_BONUS: int = 3
+# s34 Drawing on the Mountain (Earth 5): the GDD "doubles the structure's Wounds and Reduction" maps
+# onto our abstracted siege defense (owner 2026-06-25) — a defending shugenja hardens the wall, adding
+# a storm-assault defense bonus. Set to FORTIFICATION_DEFENSE_BONUS = doubling the fortification's own
+# defensive contribution (PROVISIONAL — the Wounds/Reduction → flat-bonus mapping is owner-defined).
+const DRAWING_ON_MOUNTAIN_DEFENSE_BONUS: int = FORTIFICATION_DEFENSE_BONUS
 
 
 # -- Siege Event Definitions -----------------------------------------------------
@@ -319,10 +324,16 @@ static func apply_event_tick_change(
 
 # -- Storm Assault ---------------------------------------------------------------
 
-static func get_storm_defense_bonus(has_fortification: bool = true) -> int:
+static func get_storm_defense_bonus(
+	has_fortification: bool = true, drawing_on_the_mountain: bool = false,
+) -> int:
+	var total: int = STORM_URBAN_DEFENSE_BONUS
 	if has_fortification:
-		return STORM_URBAN_DEFENSE_BONUS + FORTIFICATION_DEFENSE_BONUS
-	return STORM_URBAN_DEFENSE_BONUS
+		total += FORTIFICATION_DEFENSE_BONUS
+	# s34 Drawing on the Mountain: a defending shugenja's wall-hardening (owner 2026-06-25).
+	if drawing_on_the_mountain:
+		total += DRAWING_ON_MOUNTAIN_DEFENSE_BONUS
+	return total
 
 
 static func compute_garrison_effective_defense(

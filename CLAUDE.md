@@ -6750,6 +6750,31 @@ it. Runtime-verified 7/7 (Godot 4.6.2, headless): cast sets the marker; the next
 +3k3 (mean 48.0 vs 26.3) and consumes it; a non-Int Kenjutsu roll neither applies nor consumes it while
 a later Int roll still does; an ic_day mismatch is inert.
 
+### Spell coverage — Drawing on the Mountain (siege wall-hardening) (2026-06-25, owner-collaborative, runtime-verified 7/7)
+**Drawing on the Mountain (Earth 5, Battle/Defense, s34)** — a shugenja hardens a fortification,
+"doubling the structure's Wounds and Reduction under Siege rules." Previously deferred ("structure
+scale — no tile consumer"). Our engine has **no structure-with-Wounds/Reduction entity** (the
+world-sim Siege System abstracts to defense bonuses + starvation/morale/attrition; the Kaiu Wall uses
+SI; tile-combat walls are HP-less impassable tiles). Owner Q&A (2026-06-25): **map it onto the siege
+storm-assault defense bonus.** New `SiegeSystem.DRAWING_ON_MOUNTAIN_DEFENSE_BONUS = FORTIFICATION_DEFENSE_BONUS`
+(= 5; the GDD "double the structure's Reduction" maps to doubling the fortification's own defensive
+contribution — owner-defined, PROVISIONAL, since Wounds/Reduction → a flat bonus is an abstraction
+mapping). `SiegeSystem.get_storm_defense_bonus` gains an optional `drawing_on_the_mountain` flag
+(backward-compatible) that adds the bonus. **Cast trigger:** wired into the day_orchestrator storm-assault
+resolution — `_cast_drawing_on_the_mountain(settlement_id, characters_by_id, dice)` finds a living
+defending shugenja co-located at the besieged settlement who KNOWS the spell, casts it (spends an Earth
+slot, rolls vs the Earth-5 TN 30), and on success the assault's `fort_bonus` includes the +5. A
+**reactive** cast at the moment of assault (the 1-day GDD duration → this assault). **Not modeled
+(documented):** the expiry-collapse rule ("extra Wounds lost on expiry → collapse if 0") — N/A in a
+defense-bonus mapping (no structure-HP tracked); the Wounds-doubling half (no structure HP). **Rarely
+fires** — no world-gen shugenja knows this Earth-5 spell by default (like Caress of Fu Leng needing
+jade), but the wiring is correct when a defender does know it. Applies to army-vs-settlement **sieges**
+(the storm-assault defense consumer), NOT the Kaiu Wall horde assaults (separate SI system).
+Runtime-verified 7/7 (Godot 4.6.2, headless): the bonus = FORTIFICATION_DEFENSE_BONUS (storm defense
+8→13); `get_storm_defense_bonus` backward-compatible; a defending shugenja who knows it casts
+successfully (wall hardened); a shugenja who doesn't know it / is elsewhere / is dead → no cast.
+(World-sim siege spell, not a combat-orchestrator effect — combat-effects tally stays at 162.)
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

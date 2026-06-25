@@ -2835,7 +2835,12 @@ static func _process_storm_assault_results(
 			def_dicts, "defender", characters_by_id,
 		)
 
-		var fort_bonus: int = SiegeSystem.get_storm_defense_bonus()
+		# s34 Drawing on the Mountain (Earth 5): a defending shugenja who knows the spell hardens the
+		# wall against the incoming storm, adding a defense bonus (doubles the fortification's defensive
+		# contribution). Reactive cast at the moment of assault — the 1-day duration → this assault.
+		var dotm: bool = _cast_drawing_on_the_mountain(
+			siege_settlement_id, characters_by_id, dice_engine)
+		var fort_bonus: int = SiegeSystem.get_storm_defense_bonus(true, dotm)
 		var battle_result: Dictionary = resolve_and_reconcile_battle(
 			atk_states, def_states, Enums.BattleTerrainType.URBAN,
 			dice_engine, settlements, false, fort_bonus,
@@ -2874,6 +2879,27 @@ static func _find_siege_by_settlement(
 		if siege.get("settlement_id", -1) == settlement_id:
 			return siege
 	return {}
+
+
+## s34 Drawing on the Mountain (Earth 5): a living defending shugenja co-located at the besieged
+## settlement who KNOWS the spell hardens the wall against an incoming storm assault. Casts it (spends
+## a slot, rolls vs the Earth-5 TN); returns true on the first successful cast. Rarely fires (no
+## world-gen shugenja knows this Earth-5 spell by default) — but the wiring is correct when one does.
+static func _cast_drawing_on_the_mountain(
+	settlement_id: int, characters_by_id: Dictionary, dice: DiceEngine,
+) -> bool:
+	var loc: String = str(settlement_id)
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.physical_location != loc:
+			continue
+		if not SpellSystem.can_cast(c, "drawing_on_the_mountain"):
+			continue
+		if SpellSystem.resolve_cast(c, "drawing_on_the_mountain", dice).get("success", false):
+			return true
+	return false
 
 
 static func _process_drill_effects(
