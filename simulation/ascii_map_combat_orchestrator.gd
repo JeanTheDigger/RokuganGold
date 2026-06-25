@@ -2546,6 +2546,13 @@ static func execute_cast_spell(
 			"type": "spell_freeze_water", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "freeze": res["freeze"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "curse_burning_hand":
+		res["curse"] = _apply_curse_burning_hand(
+			state, caster_id, caster, target_id, target, eff, dice_engine)
+		state.combat_log.append({
+			"type": "spell_curse_burning_hand", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "curse": res["curse"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "ward":
 		res["ward"] = _apply_spell_ward(state, caster_id, eff, spell_id)
 		state.combat_log.append({
@@ -3592,6 +3599,34 @@ static func _apply_freeze_water(
 		trapped.append(cid)
 	return {"break_tn": break_tn, "tiles_frozen": saved.size(),
 		"trapped": trapped, "drowned": drowned}
+
+
+## s35 Curse of the Burning Hand (Fire 6): bind a hostile Fire kami to an enemy on a WON Contested Fire
+## Roll (the caster must win — the target resists if it wins). The cursed target is then wreathed in
+## flame: each round (in advance_round) its OWN allies (same faction) standing adjacent take 3k3, and the
+## flammable tile underfoot ignites. The fire recedes from hostile use, so it never burns the target's
+## attackers. Range 10' (2 tiles). Duration Infinite -> persists the skirmish (no in-combat cure).
+static func _apply_curse_burning_hand(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary, dice_engine: DiceEngine,
+) -> Dictionary:
+	if target == null or CharacterStats.is_dead(target):
+		return {"ok": false, "reason": "no_target"}
+	var cpos: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-9999, -9999))
+	var rng: int = int(eff.get("range_tiles", 2))
+	if maxi(absi(cpos.x - tpos.x), absi(cpos.y - tpos.y)) > rng:
+		return {"ok": false, "reason": "out_of_range"}
+	# Contested Fire Roll — the caster must win; _spell_save_resisted true = target resisted.
+	if _spell_save_resisted(state, caster, target, "fire_contested", 0, dice_engine):
+		return {"ok": false, "reason": "resisted"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if p == null:
+		return {"ok": false, "reason": "no_participant"}
+	var dur: int = int(eff.get("duration_rounds", 9999))
+	IndividualCombat.add_timed_modifier(
+		p, "curse_burning_hand", 1, state.combat.round_number + dur, "curse_burning_hand")
+	return {"ok": true, "target_id": target_id}
 
 
 ## Install a purify zone (s36 Heaven's Tears): a holy-rain field, centered on the caster, that each
@@ -6332,6 +6367,37 @@ static func advance_round(
 				WoundSystem.apply_damage(_fc, _fire_damage_for(_fc, dice_engine), 0)
 			if _tp.on_fire and not CharacterStats.is_dead(_fc):
 				WoundSystem.apply_damage(_fc, _fire_damage_for(_fc, dice_engine), 0)
+
+		# s35 Curse of the Burning Hand: a cursed target is wreathed in flame that burns its OWN
+		# allies (same faction) standing adjacent (3k3 each round) and ignites the flammable tile
+		# underfoot. The fire recedes from hostile use, so it never burns the target's attackers.
+		if _fc != null and not CharacterStats.is_dead(_fc) \
+				and IndividualCombat.get_timed_modifier_total(_tp, "curse_burning_hand") > 0:
+			var _curpos: Vector2i = state.positions.get(_tp.character_id, Vector2i(-9999, -9999))
+			var _curfac: String = String(state.factions.get(_tp.character_id, ""))
+			for _ocid in state.positions.keys():
+				if _ocid == _tp.character_id:
+					continue
+				if String(state.factions.get(_ocid, "")) != _curfac:
+					continue  # only the cursed target's OWN side burns
+				var _opos: Vector2i = state.positions[_ocid]
+				if maxi(absi(_curpos.x - _opos.x), absi(_curpos.y - _opos.y)) > 1:
+					continue
+				var _och: L5RCharacterData = chars_by_id.get(_ocid, state.combatants.get(_ocid, null))
+				if _och == null or CharacterStats.is_dead(_och):
+					continue
+				# 3k3 fire (GDD), armour does not reduce (elemental). Spirit W_FIRE filter applies.
+				var _cdmg: int = dice_engine.roll_and_keep(3, 3, true).total
+				if _och.spirit_creature != null:
+					var _cf: Dictionary = SpiritAbilitySystem.incoming_damage(
+						_och.spirit_creature, SpiritAbilitySystem.W_FIRE, true)
+					if _cf.get("heals", false):
+						WoundSystem.heal_wounds(_och, _cdmg)
+						continue
+					_cdmg = int(round(_cdmg * _cf.get("multiplier", 1.0)))
+				WoundSystem.apply_damage(_och, _cdmg, 0)
+			# Arsonist: ignite the flammable tile underfoot (FireSystem spreads it).
+			FireSystem.ignite(state.map, _curpos.x, _curpos.y)
 
 	# End-of-round fire spread/extinguish (s56.6.6) — no-op when nothing is burning.
 	if not state.map.burning_tiles.is_empty():

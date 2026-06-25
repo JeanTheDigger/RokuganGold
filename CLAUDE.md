@@ -6646,6 +6646,34 @@ can't move (`execute_move` "entangled"); a strong victim breaks free via Strengt
 condition + break_tn cleared; a victim on a WATER_DEEP tile drowns (dead, in the `drowned` list).
 **159 combat effects + the CombatController stealth-spell set.**
 
+### Spell coverage — Curse of the Burning Hand (2026-06-25, owner-collaborative, runtime-verified 12/12)
+**Curse of the Burning Hand (Fire 6, s35)** — bind a hostile Fire kami to an enemy so it becomes a
+hazard to its OWN side. Previously deferred ("near-inert in faction combat" — allies don't attack
+allies). Wired via per-spell owner Q&A. New **`curse_burning_hand` effect kind** in
+`SpellSystem.SPELL_COMBAT_EFFECTS` + `execute_cast_spell` dispatch → `_apply_curse_burning_hand` +
+a per-round pass in `advance_round`. **Cast:** Contested Fire Roll (the caster must WIN — reuses the
+`fire_contested` save, target resists on a win/tie), range 10' (2 tiles). On a win, installs a
+`curse_burning_hand` timed modifier on the target (Infinite → skirmish, 9999). **Owner decisions
+(2026-06-25):** (1) **adjacent same-faction allies, each round** — "friends/allies who touch the
+cursed target take 3k3" reads as the jostling of a melee press: every Round, each combatant of the
+**cursed target's own faction** standing adjacent (Chebyshev ≤ 1) takes **3k3** fire (armour-ignoring,
+W_FIRE spirit filter). Never the cursed target's attackers (other faction → the "fire recedes from
+hostile use" clause), and never the target itself. (2) **arsonist** — each Round the cursed target
+**ignites the flammable tile underfoot** via `FireSystem.ignite` (which then spreads), turning it into
+a roving fire hazard on flammable maps. **NPC AI never auto-casts it** (dedicated kind, not in the
+`damage`/`status` offense picker) — a PC-deliberate spell (the curse only bites if the enemy clusters;
+an NPC could in principle curse a PC to burn the PC's adjacent companions, but the indirect/situational
+nature makes excluding it the safe default, like hurricane/freeze). All values GDD-given (3k3, range
+10') or owner-decided. Not modeled (documented limitations, no invention): "innocents" (no
+non-combatants in skirmishes — only same-faction allies), the "1 full minute to cast" cast time (no
+multi-round cast model for any spell), and "may be ended by spells that remove magical effects" (the
+project's dispel only handles illusions — the curse persists). Runtime-verified 12/12 (Godot 4.6.2,
+headless): cast lands on a won Fire contest + installs the modifier; an adjacent same-faction ally
+takes ~3k3 each round while a far ally and a cursed target's PLAYER attacker (other faction) and the
+target itself are all unharmed; out-of-range rejected; the contest gates both ways (21 resisted / 19
+landed at even Fire); the cursed target ignites a CROPS tile underfoot.
+**160 combat effects + the CombatController stealth-spell set.**
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

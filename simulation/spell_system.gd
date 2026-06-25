@@ -146,6 +146,11 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# walkable ice; everyone standing in the water (all factions) is trapped (Entangled), breaking
 	# free via Strength vs the caster's Water roll. Deep-water victims drown (owner 2026-06-25).
 	"yukis_touch": {"kind": "freeze_water", "range_tiles": 20, "duration_rounds": 9999},
+	# Fire 6 Curse of the Burning Hand: a Contested-Fire curse on an enemy at 10' (2 tiles). The cursed
+	# target is wreathed in flame — each round its OWN allies (same faction) adjacent take 3k3 and the
+	# flammable tile underfoot ignites. Never burns the target's attackers. Infinite -> skirmish (owner
+	# 2026-06-25). Per-round effect in advance_round; PC-deliberate (not in the NPC offense picker).
+	"curse_of_the_burning_hand": {"kind": "curse_burning_hand", "range_tiles": 2, "duration_rounds": 9999},
 	# Coverage extension batch 9 (2026-06-20): area wards (enemy-cast TN penalty + spell DR reduction).
 	"earths_protection": {"kind": "ward", "aoe_radius": 2, "duration_rounds": 10,
 		"ward_elements": [0, 2, 3], "cast_tn_penalty": 10,
@@ -1157,7 +1162,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"wings_of_the_phoenix":          {"e": 2, "m": 5, "s": 0},   # 10-round combat flight — COMBAT_ONLY
 	# ML6
 	"beam_of_the_inferno":           {"e": 2, "m": 6, "s": 0},
-	"curse_of_the_burning_hand":     {"e": 2, "m": 6, "s": 0},
+	"curse_of_the_burning_hand":     {"e": 2, "m": 6, "s": 0},   # curse: burns the target's own allies — wired (SPELL_COMBAT_EFFECTS "curse_burning_hand")
 	"globe_of_the_everlasting_sun":  {"e": 2, "m": 6, "s": 0},
 	"rise_fire":                     {"e": 2, "m": 6, "s": 0},
 	"the_elements_fury":             {"e": 2, "m": 6, "s": 0},
