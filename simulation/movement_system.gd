@@ -23,6 +23,34 @@ static func is_passable(tile: int) -> bool:
 	return terrain_cost(tile) > 0
 
 
+# ── Flight (s4.4; owner-defined 2026-06-24: "flight = occupy an empty space") ──
+## The impassable set splits in two: SOLID obstructions (walls, trees, bamboo,
+## closed doors/gates, furniture, roofs) a flyer cannot pass through, and OPEN
+## spaces (open air / VOID, deep water) a flyer hovers over. A flying combatant may
+## occupy any tile that is NOT a solid obstruction.
+static func is_solid_obstruction(tile: int) -> bool:
+	match tile:
+		Enums.TileType.WALL_STONE, Enums.TileType.WALL_WOOD, Enums.TileType.WALL_PAPER, \
+		Enums.TileType.TREE_EVERGREEN, Enums.TileType.TREE_DECIDUOUS, Enums.TileType.TREE_CHERRY, \
+		Enums.TileType.TREE_DEAD, Enums.TileType.BAMBOO, Enums.TileType.DOOR_SHOJI_CLOSED, \
+		Enums.TileType.DOOR_WOOD_CLOSED, Enums.TileType.GATE_CLOSED, Enums.TileType.FURNITURE_HEARTH, \
+		Enums.TileType.FURNITURE_CHEST, Enums.TileType.FURNITURE_TABLE, Enums.TileType.FURNITURE_JAR, \
+		Enums.TileType.FURNITURE_BRAZIER, Enums.TileType.FURNITURE_DAIS, Enums.TileType.FURNITURE_WEAPON_STAND, \
+		Enums.TileType.FURNITURE_ALTAR, Enums.TileType.FURNITURE_OFFERING_BOX, Enums.TileType.FURNITURE_INCENSE, \
+		Enums.TileType.FURNITURE_STATUE, Enums.TileType.FURNITURE_STALL, Enums.TileType.FURNITURE_CRATE, \
+		Enums.TileType.FURNITURE_WELL, Enums.TileType.FURNITURE_DUMMY, Enums.TileType.FURNITURE_SHELF, \
+		Enums.TileType.FURNITURE_STOVE, Enums.TileType.ROOF:
+			return true
+		_:
+			return false
+
+
+## A flying combatant may enter this tile: open ground, difficult terrain, open air
+## (VOID), and water — everything except a solid obstruction it cannot fly through.
+static func is_flyable(tile: int) -> bool:
+	return not is_solid_obstruction(tile)
+
+
 # ── Elevation / Z-axis (s4.4; numeric model locked by owner 2026-06-23) ───────
 # 1 elevation level = one tile-height ≈ 5 ft (matching 1 tile = 5 ft).
 ## A single step rising by CLIFF_THRESHOLD or more levels is a vertical face:

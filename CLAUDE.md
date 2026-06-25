@@ -7532,6 +7532,36 @@ placement or the deferred render/UI.
   objectives are unreachable. The full Z-coherence suite (165 maps) re-passes at 0 fails — the south-edge
   dirt fill touches only level 0 and does not affect the multi-storey keep/gatehouse stacks.
 
+### Systems Added 2026-06-24 (s4.4/s33/s35 Flight in tile combat — owner-defined, runtime-verified)
+Owner-defined semantics (2026-06-24): **"flight = occupy an empty space."** A flying combatant may move
+onto/occupy any tile that is NOT a *solid* obstruction — i.e. open air/VOID, water, and pits — and ignores
+elevation cliffs and fall/pit hazards; solid walls/trees/closed-doors/furniture/roofs still block (you
+can't fly through them). The impassable set splits via two new `MovementSystem` helpers:
+`is_solid_obstruction(tile)` (walls/trees/bamboo/closed doors+gates/furniture/roof) and
+`is_flyable(tile)` = `not is_solid_obstruction` (everything else, incl. VOID + WATER_DEEP).
+**Flight state** is a `flight` timed modifier on the combat Participant (auto-expires in `advance_round`,
+like other buffs — no new field). `AsciiMapCombatOrchestrator._is_flying(state, id)` reads it. Wired into:
+`get_reachable_tiles` + `find_path` (a flyer routes over flyable tiles at uniform cost and skips cliff
+steps; `execute_move` inherits this via its reachability gate), and `_knockback_target` (a flyer shoved
+over open air/water/pits hovers and is carried along — never falls, never triggers pit death; only a solid
+obstruction stops it). On flight ending over an open tile, `_flight_safe_landing` relocates the former
+flyer to the nearest passable tile (GDD: Call Upon the Wind "drifts harmlessly to the ground"; Wings
+spells "borne safely to earth") — hooked into the `advance_round` timed-modifier expiry. **Granting:** the
+three GDD flight spells are wired as self-`buff`s with a `flight` mod in `SpellSystem.SPELL_COMBAT_EFFECTS`
+— **Call Upon the Wind** (Air 2 `[CR]`, 10 rounds = 1 min), **Wings of Fire** (Fire 2, 100 rounds = 10 min),
+**Wings of the Phoenix** (Fire 5 `[CR]`, 10 Rounds). They flow through the existing `_apply_spell_buff`
+path (NPC/companion/PC cast). All non-flying movement is byte-identical (every change is gated on
+`_is_flying`, false without the modifier). LIMITATIONS (owner scope = the spatial ability only): per-spell
+SPEED differences (Call Upon the Wind ≤10'/Round Free-only, Wings of Fire Water 1, Wings of the Phoenix
+Water×10'/×20') are NOT modeled — the move budget stays the normal Water-Ring action budget; Wings of Fire's
+"arms occupied / ignites flammables" downside is not modeled; flight is not yet wired into the
+`CombatController` real-time exploration layer (turn-based orchestrator only); naturally-flying creatures
+(stat-block `flying` tag) are not auto-granted the movement benefit (spell-flight only) — an easy follow-up.
+**Runtime-verified (Godot 4.6.2, headless, 19/19):** ground unit can't cross VOID/deep-water, flyer can;
+flyer crosses a chasm via find_path; flyer can't cross a stone wall; flyer shoved into a pit hovers + lives
+while a ground unit dies (control); safe-landing off VOID (direct + via advance_round expiry); all three
+spells are flight buffs and applying one sets the caster flying.
+
 ### Tuning Review Needed After First Live Run
 - **School-less ring progression rate.** School-less characters (born ronin, unschooled)
   advance skills before rings (s52 Part 3 school-less path). A character with many rank-1–2

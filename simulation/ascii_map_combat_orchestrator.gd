@@ -355,6 +355,45 @@ static func _effective_water_ring(p: IndividualCombat.Participant, character: L5
 ## Enemy tiles are treated as impassable (block movement through). Ally tiles
 ## are passable (you can move through an ally's tile).
 ## Returns Dictionary: Vector2i → cost (int).
+## True while the combatant is flying (a "flight" timed modifier from a flight spell —
+## Call Upon the Wind / Wings of Fire / Wings of the Phoenix). A flyer occupies open
+## spaces (open air/void, water) and ignores elevation cliffs and fall/pit hazards.
+static func _is_flying(state: MapCombatState, char_id: int) -> bool:
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p == null:
+		return false
+	return IndividualCombat.get_timed_modifier_total(p, "flight") > 0
+
+
+## When flight ends, the kami set the caster down gently (GDD: Call Upon the Wind
+## "drifts harmlessly to the ground"; Wings spells "borne safely to earth"). If the
+## (former) flyer is over an open/impassable tile, relocate to the nearest passable,
+## unoccupied tile.
+static func _flight_safe_landing(state: MapCombatState, char_id: int) -> void:
+	var pos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if pos.x < 0 or state.map == null:
+		return
+	if MovementSystem.is_passable(state.map.get_tile(pos.x, pos.y)):
+		return  # already on solid ground
+	var occupied: Dictionary = {}
+	for cid: int in state.positions:
+		if cid != char_id:
+			occupied[state.positions[cid]] = true
+	for r in range(1, maxi(state.map.width, state.map.height)):
+		for dx in range(-r, r + 1):
+			for dy in range(-r, r + 1):
+				if maxi(absi(dx), absi(dy)) != r:
+					continue
+				var t := Vector2i(pos.x + dx, pos.y + dy)
+				if t.x < 0 or t.y < 0 or t.x >= state.map.width or t.y >= state.map.height:
+					continue
+				if occupied.has(t):
+					continue
+				if MovementSystem.is_passable(state.map.get_tile(t.x, t.y)):
+					state.positions[char_id] = t
+					return
+
+
 static func get_reachable_tiles(
 	state: MapCombatState,
 	mover_id: int,
@@ -365,6 +404,7 @@ static func get_reachable_tiles(
 		return {}
 
 	var mover_faction: String = state.factions.get(mover_id, FACTION_NEUTRAL)
+	var flying: bool = _is_flying(state, mover_id)
 	# Build set of enemy positions to block movement through.
 	var enemy_tiles: Dictionary = {}
 	for cid: int in state.positions.keys():
@@ -402,11 +442,19 @@ static func get_reachable_tiles(
 
 				var tile: int = state.map.get_tile(nx, ny)
 				var step_cost: int = MovementSystem.terrain_cost(tile)
-				if step_cost == 0:
-					continue  # impassable
-				# Elevation face: cannot walk up a cliff or off a ledge (s4.4 Z-axis).
-				if MovementSystem.is_cliff_step(state.map, pos.x, pos.y, nx, ny):
-					continue
+				if flying:
+					# A flyer occupies open spaces (air/void, water) — only a solid
+					# obstruction (wall/tree/door/furniture/roof) blocks. Uniform cost,
+					# and elevation cliffs/ledges are ignored (it flies over them).
+					if MovementSystem.is_solid_obstruction(tile):
+						continue
+					step_cost = 1
+				else:
+					if step_cost == 0:
+						continue  # impassable
+					# Elevation face: cannot walk up a cliff or off a ledge (s4.4 Z-axis).
+					if MovementSystem.is_cliff_step(state.map, pos.x, pos.y, nx, ny):
+						continue
 
 				var new_cost: int = cost + step_cost
 				if new_cost > move_budget:
@@ -434,6 +482,7 @@ static func find_path(
 		return []
 
 	var mover_faction: String = state.factions.get(mover_id, FACTION_NEUTRAL)
+	var flying: bool = _is_flying(state, mover_id)
 	var enemy_tiles: Dictionary = {}
 	for cid: int in state.positions.keys():
 		if cid == mover_id:
@@ -467,11 +516,17 @@ static func find_path(
 				if enemy_tiles.has(nv) and nv != goal:
 					continue
 				var tile: int = state.map.get_tile(nv.x, nv.y)
-				if MovementSystem.terrain_cost(tile) == 0:
-					continue
-				# Elevation face: pathing never routes up a cliff or off a ledge (s4.4 Z-axis).
-				if MovementSystem.is_cliff_step(state.map, pos.x, pos.y, nv.x, nv.y):
-					continue
+				if flying:
+					# A flyer routes over open spaces (air/void, water) and ignores
+					# cliffs; only a solid obstruction blocks it.
+					if MovementSystem.is_solid_obstruction(tile):
+						continue
+				else:
+					if MovementSystem.terrain_cost(tile) == 0:
+						continue
+					# Elevation face: pathing never routes up a cliff or off a ledge (s4.4 Z-axis).
+					if MovementSystem.is_cliff_step(state.map, pos.x, pos.y, nv.x, nv.y):
+						continue
 				visited[nv] = true
 				came_from[nv] = pos
 				queue.append(nv)
@@ -5077,6 +5132,7 @@ static func _knockback_target(state: MapCombatState, target_id: int, from_pos: V
 	var dy: int = signi(tpos.y - from_pos.y)
 	if dx == 0 and dy == 0:
 		return tpos
+	var flying: bool = _is_flying(state, target_id)
 	var occupied: Dictionary = {}
 	for cid: int in state.positions:
 		if cid != target_id:
@@ -5088,6 +5144,13 @@ static func _knockback_target(state: MapCombatState, target_id: int, from_pos: V
 		if state.map == null:
 			break
 		var nxt_tile: int = state.map.get_tile(nxt.x, nxt.y)
+		# A flyer is shoved over open air / water / pits, hovering — only a solid
+		# obstruction stops it, and it never falls or plunges into a pit.
+		if flying and not MovementSystem.is_solid_obstruction(nxt_tile):
+			if occupied.has(nxt):
+				break
+			cur = nxt
+			continue
 		if not MovementSystem.is_passable(nxt_tile):
 			# Pit/void edge (s4.4 Z-axis, Oni Warai): a shove toward a bottomless void
 			# or deep water gets one chance to catch the brink (Reflexes + Athletics).
@@ -5943,7 +6006,11 @@ static func advance_round(
 	# The World Is Empty deducts 1 VP as its modifier ends (before removal).
 	for _tp: IndividualCombat.Participant in state.combat.participants.values():
 		_process_world_is_empty_expiry(state, _tp, chars_by_id)
+		var _was_flying: bool = IndividualCombat.get_timed_modifier_total(_tp, "flight") > 0
 		IndividualCombat.expire_timed_modifiers(_tp, state.combat.round_number)
+		# Flight ended this round → set the (former) flyer down gently (GDD safe landing).
+		if _was_flying and IndividualCombat.get_timed_modifier_total(_tp, "flight") <= 0:
+			_flight_safe_landing(state, _tp.character_id)
 		IndividualCombat.expire_active_kiho(_tp, state.combat.round_number)
 		IndividualCombat.expire_timed_conditions(_tp, state.combat.round_number)
 		_expire_ring_deltas(state, _tp, chars_by_id)  # s34 ring spells — wounds return to normal on expiry

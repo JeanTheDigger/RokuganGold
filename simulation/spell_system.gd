@@ -83,6 +83,18 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Coverage extension batch 3 (2026-06-20).
 	"striking_the_storm": {"kind": "buff", "target": "self", "duration_rounds": 3,
 		"mods": [{"kind": "armor_tn", "value": 20}]},  # Air 3: +20 Armor TN cocoon (deafens self — deferred)
+	# Flight (s4.4, owner-defined 2026-06-24: "flight = occupy an empty space"). A "flight"
+	# timed modifier lets the caster move over/occupy open spaces (air/void, water) and ignore
+	# elevation cliffs and fall/pit hazards. Per-spell SPEED (Call Upon the Wind ≤10'/Round,
+	# Wings of Fire Water 1, Wings of the Phoenix Water×10'/×20') is NOT modeled — only the
+	# spatial ability. Durations: Air 2 = 1 min (10 rounds), Fire 2 = 10 min (100 rounds),
+	# Fire 5 = 10 Rounds (GDD-explicit).
+	"call_upon_the_wind": {"kind": "buff", "target": "self", "duration_rounds": 10,
+		"mods": [{"kind": "flight", "value": 1}]},          # Air 2 [CR]: limited flight
+	"wings_of_fire": {"kind": "buff", "target": "self", "duration_rounds": 100,
+		"mods": [{"kind": "flight", "value": 1}]},          # Fire 2: slow flight (arms occupied — deferred)
+	"wings_of_the_phoenix": {"kind": "buff", "target": "self", "duration_rounds": 10,
+		"mods": [{"kind": "flight", "value": 1}]},          # Fire 5 [CR]: full flight
 	"sapphire_strike": {"kind": "damage", "dr_rolled": 4, "dr_kept": 4, "requires_taint": true,
 		"range_tiles": 10, "aoe_radius": 0},  # Earth 4: 4k4 vs jade/crystal-vulnerable only, 50'
 	# Coverage extension batch 4 (2026-06-20): conjured elemental weapons (5 min = 50 rounds).
