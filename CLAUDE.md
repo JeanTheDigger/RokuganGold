@@ -6674,6 +6674,32 @@ target itself are all unharmed; out-of-range rejected; the contest gates both wa
 landed at even Fire); the cursed target ignites a CROPS tile underfoot.
 **160 combat effects + the CombatController stealth-spell set.**
 
+### Spell coverage — Netsuke of Wind (conjure functional weapon) (2026-06-25, owner-collaborative, runtime-verified 11/11)
+**Netsuke of Wind (Air 4, s33)** — Air kami coalesce into a solid, fully-functional (illusory) weapon
+held in hand, arming an otherwise weaponless shugenja. Previously deferred ("ambiguous DR — conjures a
+weapon with no GDD profile"). Resolved by owner Q&A (2026-06-25): **the shugenja chooses the weapon
+type from the catalog and it gets that weapon's REAL stats** (full profile, including Strength) — the
+faithful read of "functions fully... including dealing damage as a weapon," and no invented numbers
+(the DR comes from `IndividualCombat.WEAPON_CATALOG`). Reuses the existing `conjure_weapon` effect kind
+via a new `real_weapon: true` flag: `_apply_spell_conjure_weapon` gains a `weapon_choice` param (and
+`execute_cast_spell` a trailing `spell_choice: String = ""` — backward-compatible, all 7-arg callers
+unaffected). When `real_weapon`, it builds the conjured weapon from the chosen catalog entry's real
+`rolled/kept/skill/trait/strength_adds` (e.g. katana 3k2 + Strength, Kenjutsu) instead of the fixed-DR
+strength_adds-false elemental conjures (Katana of Fire etc.). The choice defaults to the caster's
+**best-skill melee weapon** (`pick_best_weapon`; katana if that yields a non-melee/unarmed pick) for an
+NPC/no-choice cast; an invalid choice falls back the same way. The to-hit uses the caster's real skill
+in that weapon (e.g. Kenjutsu) and the conjured weapon's `strength_adds: true` is honored by
+`resolve_damage`, so it deals full real damage. 1 hour → 600 rounds (skirmish), then disappears
+(`conjured_weapon_expiry`). Range Touch → self or a touched same-faction ally (existing ally-grant).
+Restricted to melee weapons (a conjured bow would need conjured ammo, not in the GDD); the 20-lb weight
+limit is flavour (no weight data — not gated). **NPC AI never auto-casts it** (conjure_weapon isn't in
+the offense/buff picker) — a PC tool, like the existing conjures. Runtime-verified 11/11 (Godot 4.6.2,
+headless): an explicit katana choice yields the real 3k2 + Strength Kenjutsu profile; no-choice defaults
+to the best-skill weapon (naginata for a Polearms-5 caster); an invalid choice falls back to a real
+weapon; the conjured katana's mean damage (22.6) reflects 3k2 + Strength (vs the strength-less elemental
+conjures); the weapon disappears at duration end.
+**161 combat effects + the CombatController stealth-spell set.**
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

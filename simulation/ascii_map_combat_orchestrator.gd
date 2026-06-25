@@ -2403,6 +2403,7 @@ static func execute_cast_spell(
 	target_id: int,
 	target: L5RCharacterData,
 	dice_engine: DiceEngine,
+	spell_choice: String = "",  # s33 Netsuke of Wind: the weapon the shugenja chooses to conjure
 ) -> Dictionary:
 	if CharacterStats.is_dead(caster):
 		return {"success": false, "reason": "caster_dead"}
@@ -2522,7 +2523,7 @@ static func execute_cast_spell(
 		})
 	elif res.get("success", false) and eff.get("kind", "") == "conjure_weapon":
 		res["conjured"] = _apply_spell_conjure_weapon(
-			state, caster_id, caster, target_id, eff, spell_id)
+			state, caster_id, caster, target_id, eff, spell_id, spell_choice)
 		state.combat_log.append({
 			"type": "spell_conjure_weapon", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "conjured": res["conjured"],
@@ -3446,7 +3447,7 @@ static func _resolve_buff_value(caster: L5RCharacterData, value) -> int:
 ## Raise) are deferred. duration_rounds from the effect (5 minutes = 50 rounds).
 static func _apply_spell_conjure_weapon(
 	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
-	target_id: int, eff: Dictionary, spell_id: String,
+	target_id: int, eff: Dictionary, spell_id: String, weapon_choice: String = "",
 ) -> Dictionary:
 	# Beneficiary: a same-faction living participant target (ally grant), else the caster.
 	var wielder_id: int = caster_id
@@ -3458,15 +3459,40 @@ static func _apply_spell_conjure_weapon(
 			wielder_id = target_id
 	var element: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("e", Enums.Ring.FIRE)
 	var school_rank: int = SpellSystem.get_effective_school_rank(caster, element)
-	var weapon: Dictionary = {
-		"rolled": int(eff.get("dr_rolled", 2)),
-		"kept": int(eff.get("dr_kept", 2)),
-		"skill": String(eff.get("skill", "Kenjutsu")),
-		"trait": "agility",
-		"strength_adds": false,
-		"melee": true,
-		"school_rank": school_rank,
-	}
+	var weapon: Dictionary
+	if bool(eff.get("real_weapon", false)):
+		# s33 Netsuke of Wind: conjure a fully-functional weapon the shugenja chooses from the catalog
+		# (owner 2026-06-25) — it gets that weapon's REAL profile (DR, Strength, skill, trait). The
+		# choice defaults to the caster's best-skill melee weapon (katana if that yields a non-melee /
+		# unarmed pick). The 20-lb limit is flavour (no weight data — not gated).
+		var wname: String = weapon_choice.to_lower()
+		if not IndividualCombat.WEAPON_CATALOG.has(wname) \
+				or not bool(IndividualCombat.WEAPON_CATALOG[wname].get("melee", true)):
+			wname = IndividualCombat.pick_best_weapon(caster)
+			if not bool(IndividualCombat.get_weapon_profile(wname).get("melee", true)) or wname == "unarmed":
+				wname = "katana"
+		var prof: Dictionary = IndividualCombat.get_weapon_profile(wname)
+		weapon = {
+			"rolled": int(prof.get("rolled", 3)),
+			"kept": int(prof.get("kept", 2)),
+			"skill": String(prof.get("skill", "Kenjutsu")),
+			"trait": String(prof.get("trait", "agility")),
+			"strength_adds": bool(prof.get("strength_adds", true)),
+			"melee": true,
+			"size": String(prof.get("size", "Medium")),
+			"school_rank": school_rank,
+			"conjured_name": wname,
+		}
+	else:
+		weapon = {
+			"rolled": int(eff.get("dr_rolled", 2)),
+			"kept": int(eff.get("dr_kept", 2)),
+			"skill": String(eff.get("skill", "Kenjutsu")),
+			"trait": "agility",
+			"strength_adds": false,
+			"melee": true,
+			"school_rank": school_rank,
+		}
 	var p: IndividualCombat.Participant = state.combat.participants.get(wielder_id)
 	if p == null:
 		return {}

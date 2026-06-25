@@ -151,6 +151,10 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# flammable tile underfoot ignites. Never burns the target's attackers. Infinite -> skirmish (owner
 	# 2026-06-25). Per-round effect in advance_round; PC-deliberate (not in the NPC offense picker).
 	"curse_of_the_burning_hand": {"kind": "curse_burning_hand", "range_tiles": 2, "duration_rounds": 9999},
+	# Air 4 Netsuke of Wind: conjure a fully-functional weapon the shugenja chooses from the catalog
+	# (owner 2026-06-25) — it gets that weapon's REAL profile (DR + Strength + skill + trait), unlike the
+	# fixed-DR elemental conjures. Defaults to the caster's best melee weapon. 1 hour -> skirmish.
+	"netsuke_of_wind": {"kind": "conjure_weapon", "real_weapon": true, "duration_rounds": 600},
 	# Coverage extension batch 9 (2026-06-20): area wards (enemy-cast TN penalty + spell DR reduction).
 	"earths_protection": {"kind": "ward", "aoe_radius": 2, "duration_rounds": 10,
 		"ward_elements": [0, 2, 3], "cast_tn_penalty": 10,
@@ -1013,7 +1017,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"howl_of_isora":              {"e": 0, "m": 4, "s": 0},  # one-time damage blast — COMBAT_ONLY
 	"know_the_mind":              {"e": 0, "m": 4, "s": 17},
 	"look_into_the_soul":         {"e": 0, "m": 4, "s": 17},  # Divination: reveals target's 2 lowest Rings — INFORMATION_GATHER
-	"netsuke_of_wind":            {"e": 0, "m": 4, "s": 0},
+	"netsuke_of_wind":            {"e": 0, "m": 4, "s": 0},   # conjure a real-profile weapon — wired (SPELL_COMBAT_EFFECTS "conjure_weapon" real_weapon)
 	"seeking_the_way":            {"e": 0, "m": 4, "s": 0},   # hides caster's tracks — COMBAT_ONLY
 	"symbol_of_air":              {"e": 0, "m": 4, "s": 10},
 	"tenjins_ear":                {"e": 0, "m": 4, "s": 0},   # language comprehension buff — COMBAT_ONLY
