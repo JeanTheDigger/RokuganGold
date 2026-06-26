@@ -264,6 +264,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "all_rolls", "value": -5}]},  # Air 4: must call 1 Raise (=+5 TN) on all rolls (disadvantage-count 2-Raise scaling + haunting-past immunity deferred)
 	"gift_of_wind": {"kind": "buff", "target": "self", "duration_rounds": 50,
 		"mods": [{"kind": "invisible", "value": 1}]},  # Air 4: invisible to non-magical vision; attacking ends it
+	"request_to_hato_no_kami": {"kind": "debuff", "target": "enemy", "range_tiles": 30, "duration_rounds": 1,
+		"mods": [{"kind": "all_rolls", "value": -1}]},  # Air 2: a summoned bird distracts one enemy (-1k0 for a Round); GM-judgment "distract an enemy" use
 	"defender_from_beyond": {"kind": "summon", "summon_kind": "shiryo", "count": 1},  # Air 5 (Kitsu): summon a shiryo ancestor (all Rings 3, Rank 4 skills)
 	# Air coverage extension batch 2 (2026-06-20): wound-penalty negation, AoE invisibility, insubstantial.
 	"to_seek_the_truth": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 50,
@@ -1001,7 +1003,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"the_kamis_whisper":          {"e": 0, "m": 2, "s": 0},   # false-sound distraction — wired in CombatController.cast_kamis_whisper
 	"mists_of_illusion":          {"e": 0, "m": 2, "s": 0},
 	"quiescence_of_air":          {"e": 0, "m": 2, "s": 0},
-	"request_to_hato_no_kami":    {"e": 0, "m": 2, "s": 0},   # concentration bird command — COMBAT_ONLY
+	"request_to_hato_no_kami":    {"e": 0, "m": 2, "s": 0},   # WIRED (combat): summoned bird distracts one enemy, -1k0 for a Round
 	"secrets_on_the_wind":        {"e": 0, "m": 2, "s": 17},
 	"whispering_wind":            {"e": 0, "m": 2, "s": 17},
 	"wind_born_slumbers":         {"e": 0, "m": 2, "s": 0},

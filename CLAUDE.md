@@ -6845,6 +6845,20 @@ Wind is triggered at court actions (its broad social buff then covers later soci
 read hook). **163 combat effects + the CombatController stealth-spell set + the letter/world-sim/performance
 spells (legacy_of_kaze_no_kami, elemental_cipher, flight_of_doves, voice_of_the_wind).**
 
+### Spell coverage — Request to Hato-no-Kami (bird distraction) (2026-06-26, owner-directed)
+**Request to Hato-no-Kami (Air 2, Travel, s33)** — summons a random bird within 150' for a simple task
+(carry a message / distract an enemy); GDD defers the effect to GM judgment. Owner direction: keep it
+simple — wire the **distract-an-enemy** use as a small combat debuff (the message-carry use has no clean
+consumer: it's a short-range 1-hour bird, not an inter-province courier, and Legacy of Kaze-no-Kami already
+does instant spirit-bird mail). Added a single `SPELL_COMBAT_EFFECTS` entry: `{kind: debuff, target: enemy,
+range_tiles: 30, duration_rounds: 1, mods: [{all_rolls, -1}]}` — the summoned bird distracts one enemy in
+range for **-1k0 to all rolls for one Round**. Reuses the fully-tested `_apply_spell_debuff` + `all_rolls`
+timed-modifier path (read by `resolve_attack`), structurally identical to the runtime-verified
+`whispers_of_the_forgotten`/`earths_stagnation`; `debuff` is an NPC offense kind, so a shugenja casts it
+deliberately on its turn via `_npc_maybe_cast_spell`. Parse-check clean; verified by structural equivalence
+to an already-runtime-verified debuff (the combat orchestrator can't run under headless `-s` here — the
+known autoload-stall). 164 combat effects.
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`
