@@ -6928,6 +6928,27 @@ the PC spell UI); **Earths Touch** (no sim effect, "does not increase the Ring")
 (Water 4) / **Altering the Course** (Void) — combat/VP survival buffs needing `_npc_maybe_cast_spell`
 integration + a Godot-runtime driver.
 
+### Spell coverage — remaining-unwired triage (2026-06-26)
+Triaged the 16 genuinely-unwired spells (no combat effect, no apply fn, no other consumer).
+**Implementable (clean vehicle, queued):** Sympathetic Energies (Water 1, DONE — buff transfer); **The
+Path Not Taken** (Water 4 — daily slot transfer between Rings, PC-callable, headless-verifiable);
+**Groves of Stone** (Earth 3 — conjured stone-ring barrier; the conjured-terrain [Wall of Earth] + Z-axis
+climb-over [execute_climb] mechanics now exist, so the old "no clamber action → stalemate" blocker is
+gone — combat tranche, needs a Godot-runtime driver); **Facing Your Devils** (Air 5 — trait-swap →
+Ring-change debuff via the combat_ring_deltas bridge — combat tranche); **Taming the Beast** (Earth 2 —
+pacify a hostile animal, Contested Earth — combat, needs animal targets); **The Earth Flows** (Earth 4 —
+Mass Battle commander +3k2 / individual +1k1 — world-sim mass-battle consumer); **Hands of Clay** (Earth 2
+— wall/ceiling climb — marginal, Z-axis climb already exists).
+**Deferred — no consumer / blocked subsystem:** Wisdom & Clarity (Water 2 — reading speed/recall, no
+mechanic; explicitly does NOT aid ciphers); Tenjin's Ear (Air 4 — universal language comprehension, no
+language-barrier mechanic); Piercing the Heavens (Air 6 — narrative Fortune blessing, no mechanic);
+Wind of the Moon (Air 6 — telepathy; surface-thought reads are already covered by PROBE/READ_CHARACTER);
+Grounding Energy (Earth 5 — anti-maho cast-TN ward, INERT because the project's maho is roll-less, no TN
+to raise); Silent Waters (Water 3 — stored-spell delayed trigger, no vehicle); Within the Waves (Water 4 —
+underwater air-bubble exploration, no underwater mechanic); Whirlpool (Water 5 — open-water hazard, naval
+blocked s11.9); Opening the Veil (Water 6 — Spirit-Realm portal, no realm-travel mechanic); False Realm
+(Air 4 — illusory terrain with "no substance", so it blocks neither movement nor LOS — no real consumer).
+
 ### Spell coverage — Sympathetic Energies (spell-effect transfer) (2026-06-26, PC-callable)
 **Sympathetic Energies (Water 1, s36)** — transfer one existing spell effect from the caster to a willing
 target (3-Raise variant: between two other willing targets). A meta-utility; in the world-sim a persistent
@@ -6940,6 +6961,18 @@ Runtime-verified 4/4 (Godot 4.6.2, headless): moves a buff caster→ally; fails 
 effect; rejects a hostile (unwilling) target (buff retained); a non-shugenja cannot cast. LIMITATION: the
 3-Raise "between two OTHER willing targets" variant is not modeled (caster-to-target only); ic_day-marker
 spell effects (e.g. Voice of the Wind) aren't transferable (only day-buff effects). 164 combat effects.
+
+### Spell coverage — The Path Not Taken (daily slot transfer) (2026-06-26, PC-callable, runtime-verified 4/4)
+**The Path Not Taken (Water 4, s36)** — select one Ring to weaken and one to strengthen, then transfer any
+number of UNUSED daily spell slots from the weakened to the strengthened Ring for the day. New transient
+`L5RCharacterData.spell_slot_adjustment` (Ring → ± slots) added into `SpellSystem.get_daily_slots`
+(`maxi(0, ring_value + adjustment)`) and reset with the other slot counters in
+`ActionPointSystem.reset_daily_ap`. `activate_the_path_not_taken(caster, weak_ring, strong_ring, count,
+dice, ic_day)` casts (consumes a Water slot), then moves `min(count, weak-ring unused)` slots
+(weak −N / strong +N). PC-callable (the cast UI picks the Rings + count); no NPC vehicle (a slot-economy
+utility with no decision trigger). Runtime-verified 4/4 (Godot 4.6.2, headless): Earth→Fire transfer
+(Fire daily 2→4, Earth 3→1); capped at the weak Ring's unused slots; same-Ring/count<1 rejected; the daily
+reset reverts the transfer. 164 combat effects.
 
 ### Spell coverage — Whispering Wind (truth divination) (2026-06-26, deliberate-cast)
 **Whispering Wind (Air 2, Divination, s33)** — Air kami judge whether the target's last statement was a

@@ -725,6 +725,38 @@ static func activate_sympathetic_energies(
 	return res
 
 
+## s36 The Path Not Taken (Water 4) — Personal. Select one Ring to weaken and one to strengthen,
+## then transfer `count` UNUSED daily spell slots from the weakened Ring to the strengthened one for
+## the rest of the IC day (the strengthened Ring can cast `count` more spells of its element). Applied
+## via the per-Ring spell_slot_adjustment, reset with the slot counters each day. PC-callable (the cast
+## UI picks the Rings + count); no NPC vehicle (a slot-economy utility with no decision trigger).
+static func activate_the_path_not_taken(
+	caster: L5RCharacterData, weak_ring: int, strong_ring: int, count: int,
+	dice: DiceEngine, ic_day: int
+) -> Dictionary:
+	if not can_cast(caster, "the_path_not_taken"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	if weak_ring == strong_ring or count < 1:
+		return {"success": false, "activated": false, "reason": "invalid_transfer"}
+	# Cast first (consumes a Water slot), then move from the weakened Ring's remaining unused slots.
+	var res: Dictionary = resolve_cast(caster, "the_path_not_taken", dice, 0, null, ic_day)
+	res["activated"] = res.get("success", false)
+	if not res.get("success", false):
+		return res
+	var unused: int = get_daily_slots(caster, weak_ring) - get_slots_used(caster, weak_ring)
+	var moved: int = clampi(count, 0, maxi(0, unused))
+	if moved <= 0:
+		res["transferred"] = 0
+		res["reason"] = "no_unused_slots"
+		return res
+	caster.spell_slot_adjustment[weak_ring] = int(caster.spell_slot_adjustment.get(weak_ring, 0)) - moved
+	caster.spell_slot_adjustment[strong_ring] = int(caster.spell_slot_adjustment.get(strong_ring, 0)) + moved
+	res["transferred"] = moved
+	res["weak_ring"] = weak_ring
+	res["strong_ring"] = strong_ring
+	return res
+
+
 ## s33 Voice of the Wind (Air 1) — Touch, 1 target. On a successful cast the target gains the
 ## spoken-social buff for the IC day (SkillResolver reads voice_of_the_wind_ic_day: +1k0 to
 ## spoken Social Skill Rolls, +1k1 on a voice Perform Roll). Self-cast when target is null.
@@ -1266,7 +1298,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"strike_of_the_flowing_waters":  {"e": 3, "m": 4, "s": 0},
 	"symbol_of_water":               {"e": 3, "m": 4, "s": 10},
 	"the_emperors_road":             {"e": 3, "m": 4, "s": 11},
-	"the_path_not_taken":            {"e": 3, "m": 4, "s": 0},   # transfers a spell slot to ally — COMBAT_ONLY
+	"the_path_not_taken":            {"e": 3, "m": 4, "s": 0},   # WIRED (PC-callable): transfer unused daily spell slots between Rings for the day   # transfers a spell slot to ally — COMBAT_ONLY
 	"within_the_waves":              {"e": 3, "m": 4, "s": 0},
 	# ML5
 	"chi_reversal":                  {"e": 3, "m": 5, "s": 0},
@@ -1402,7 +1434,8 @@ static func get_best_cast_ring(character: L5RCharacterData, spell_id: String) ->
 
 ## Returns the daily spell slot count for the given element ring value.
 static func get_daily_slots(character: L5RCharacterData, ring: int) -> int:
-	return get_ring_value(character, ring)
+	# s36 The Path Not Taken: a daily Ring-slot transfer adjusts the allotment (floored at 0).
+	return maxi(0, get_ring_value(character, ring) + int(character.spell_slot_adjustment.get(ring, 0)))
 
 
 ## Returns how many elemental slots have been consumed today for a ring.

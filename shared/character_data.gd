@@ -44,6 +44,9 @@ extends Resource
 ## Not @export: these must not persist across save/load.
 var spell_slots_used: Dictionary = {}
 var spell_void_bonus_used: int = 0
+## s36 The Path Not Taken: per-Ring daily-slot delta (ring -> +/- slots). Added to the Ring's daily
+## allotment by SpellSystem.get_daily_slots; reset each IC day with the slot counters above.
+var spell_slot_adjustment: Dictionary = {}
 
 # -- Skills --------------------------------------------------------------------
 # Dict of { skill_name: String -> rank: int }. Only skills at rank >= 1 present.
