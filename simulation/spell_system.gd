@@ -985,7 +985,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"tempest_of_air":             {"e": 0, "m": 1, "s": 0},
 	"token_of_memory":            {"e": 0, "m": 1, "s": 0},   # visual fake object on the map — wired (execute_token_of_memory)
 	"to_seek_the_truth":          {"e": 0, "m": 1, "s": 0},   # clears temporary mental/social penalties — COMBAT_ONLY
-	"voice_of_the_wind":          {"e": 0, "m": 1, "s": 0},   # social skill bonus for caster — COMBAT_ONLY
+	"voice_of_the_wind":          {"e": 0, "m": 1, "s": 0},   # WIRED (court actions): a shugenja deliberately casts it opening a court action; +1k0 to spoken Social rolls that tick
 	"way_of_deception":           {"e": 0, "m": 1, "s": 0},
 	"yari_of_air":                {"e": 0, "m": 1, "s": 0},
 	# ML2

@@ -719,10 +719,11 @@ static func _execute_public_performance(
 		garden_fr = ctx.known_objectives.get("ikebana_garden_fr", 0)
 		garden_id = ctx.known_objectives.get("ikebana_garden_id", -1)
 
-	# s33 Flight of Doves: the performer or a willing co-located ally shugenja casts the spell,
-	# granting the performer Free Raises equal to the caster's Air Ring (consumes a spell slot).
+	# s33 Flight of Doves: the performing shugenja deliberately casts the spell as the opening
+	# of this performance they chose to give, granting themselves Free Raises equal to their
+	# Air Ring (consumes a spell slot). Cast only because they chose to perform — never an ally.
 	var fod: Dictionary = PerformativeArtsSystem.get_flight_of_doves_free_raises(
-		character, witness_ids, characters_by_id, dice_engine,
+		character, dice_engine,
 	)
 	var flight_fr: int = fod.get("free_raises", 0)
 
@@ -4216,8 +4217,20 @@ static func _execute_contested_court_action(
 	# Soul of Stone (s34): -1k0 to the buffed attacker's Awareness social-influence roll.
 	var soul_atk: int = SkillResolver.SOUL_OF_STONE_INFLUENCE_PENALTY \
 		if (character.has_day_buff("soul_of_stone") and a_trait_name == "Awareness") else 0
+	# s33 Voice of the Wind: a shugenja who knows the spell deliberately casts it as the
+	# opening of this court action they chose to make, bolstering their speech. Cast once per
+	# IC day (the marker prevents re-cast); the SkillResolver read hook covers their other
+	# social rolls this tick, and we add the +1k0 inline here (this path rolls directly).
+	if character.voice_of_the_wind_ic_day != ctx.ic_day \
+			and "voice_of_the_wind" in character.spells_known \
+			and SpellSystem.can_cast(character, "voice_of_the_wind"):
+		SpellSystem.activate_voice_of_the_wind(character, dice_engine, ctx.ic_day)
+	var voice_atk: int = 0
+	if character.voice_of_the_wind_ic_day == ctx.ic_day \
+			and a_skill.split(":")[0].strip_edges() in SkillResolver.SOCIAL_SKILLS:
+		voice_atk = 1  # +1k0 to spoken Social Skill Rolls
 	var attacker_roll: int = dice_engine.roll_check(
-		maxi(1, a_trait_val + a_skill_rank + contested_mut_a["rolled"] + soul_atk),
+		maxi(1, a_trait_val + a_skill_rank + contested_mut_a["rolled"] + soul_atk + voice_atk),
 		maxi(1, a_trait_val + contested_mut_a["kept"]),
 		0, 0, contested_wound_a, a_skill_rank > 0
 	).get("total", 0) + wc_bonus

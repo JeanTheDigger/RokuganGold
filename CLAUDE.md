@@ -6815,27 +6815,35 @@ real read); a ciphered letter blocks a non-shugenja; a strong shugenja cracks an
 shugenja fails a strong cipher; a failed interception reads nothing. **163 combat effects + the
 CombatController stealth-spell set + the letter/world-sim spells (legacy_of_kaze_no_kami, elemental_cipher).**
 
-### Spell coverage — Flight of Doves (performance enhancement) (2026-06-26, owner-collaborative, runtime-verified 5/5)
-**Flight of Doves (Air 2, Illusion, s33)** — Air kami illustrate a storyteller's tale (a designated
-individual within 25', 10 min) with a compelling visual+auditory illusion drawn from their mind; a Shiba
-Illusionist entertainment spell. Wired into the **performance system** (s12.4), not the ASCII orchestrator
-(non-combat). Owner decisions (2026-06-26): boost = **Free Raises equal to the CASTER's Air Ring**; scope =
-**can target another performer**. `PerformativeArtsSystem.get_flight_of_doves_free_raises(performer,
-co_located_ids, characters_by_id, dice)` picks the best available caster — the performer themselves first
-(self-cast), then any willing co-located ally (knows the spell, can cast it, non-negative disposition toward
-the performer) — casts it (consuming a spell slot per s31), and returns the caster's Air Ring as Free Raises
-on the performance roll. Wired into `_execute_public_performance` exactly like the garden-synergy free-raise
-path (`garden_fr + flight_fr` into `resolve_public_performance`); the result effects carry
-`flight_of_doves_fr` + `flight_of_doves_caster_id` for trace. Auto-applied (no new ActionID), mirroring the
-garden synergy and `legacy_of_kaze_no_kami` auto-cast patterns; the slot cost rate-limits it, and Flight of
-Doves is learn-gated (Imperial/Shiba), so few NPCs ever lend the boost. Applies to PUBLIC_PERFORMANCE (the
-audience-storytelling case; THEATER/Acting is the canonical art form). LIMITATIONS: PERFORM_FOR (private
-1-on-1) has no free_raises hook in `resolve_perform_for`, so it is not boosted (deferred); the cast fires at
-performance time rather than as a separate declared action. Runtime-verified 5/5 (Godot 4.6.2, headless):
-self-cast grants Air-ring FR + consumes a slot; a willing ally (higher Air) casts when the performer can't;
-a hostile ally (negative disposition) lends nothing; no-caster yields no boost; the performer self-casts
-before deferring to an ally. **163 combat effects + the CombatController stealth-spell set + the
-letter/world-sim/performance spells (legacy_of_kaze_no_kami, elemental_cipher, flight_of_doves).**
+### Spell coverage — Flight of Doves + Voice of the Wind (deliberate-cast social buffs) (2026-06-26, owner-collaborative, runtime-verified)
+Owner course-correction (2026-06-26): **"Auto-cast isn't a thing"** — a spell must be cast as a DELIBERATE
+sub-step of an action the casting NPC chose, never as a hidden side-effect of an unrelated event. Both
+spells follow that rule (and Flight of Doves was reworked off its initial auto-cast version).
+- **Flight of Doves (Air 2, Illusion, s33)** — Air kami illustrate the performer's tale, making it more
+  vivid. The **performing shugenja deliberately casts it as the opening of a PUBLIC_PERFORMANCE they chose
+  to give**, gaining Free Raises equal to **their Air Ring** (owner-set magnitude) on the performance roll;
+  the cast consumes a spell slot (s31). `PerformativeArtsSystem.get_flight_of_doves_free_raises(performer,
+  dice)` is **self-cast only** (the earlier ally-casts-for-you branch was removed — that was the auto-cast
+  the owner rejected: cast only because the shugenja themselves chose to perform). Wired into
+  `_execute_public_performance` like the garden-synergy free-raise path (`garden_fr + flight_fr` into
+  `resolve_public_performance`); effects carry `flight_of_doves_fr` + `flight_of_doves_caster_id`. Applies
+  to PUBLIC_PERFORMANCE (THEATER/Acting is the canonical art form); PERFORM_FOR has no free_raises hook
+  (deferred). Runtime-verified 2/2: self-cast grants Air-ring FR; a non-shugenja performer gets nothing.
+- **Voice of the Wind (Air 1, s33)** — Air kami lend the target's voice timbre/resonance: +1k0 to spoken
+  Social Skill Rolls (+1k1 on a voice Perform roll) for the IC day. The **read pipeline already existed**
+  (`SkillResolver._get_voice_of_the_wind_bonus`, the `voice_of_the_wind_ic_day` marker, the
+  `SpellSystem.activate_voice_of_the_wind` apply) but had **no caller**. Wired the deliberate-cast trigger
+  per the owner's model: in `_execute_contested_court_action`, a shugenja who knows the spell and can cast
+  it **casts it as the opening of a court action they chose** (NEGOTIATE/PERSUADE/CHARM/IMPRESS/…), once per
+  IC day (the marker prevents re-cast). The court path rolls inline (not via SkillResolver), so the +1k0 is
+  added inline to the attacker roll for a spoken social attacker skill; the SkillResolver read hook then
+  covers the shugenja's other social rolls that tick. Magnitude is GDD-fixed (+1k0); skill set = existing
+  `SOCIAL_SKILLS`. Runtime-verified 4/4: activate sets the marker; Courtier gains +1k0 (33.9→35.6 mean);
+  Kenjutsu (non-social) is unaffected; the marker is ic-day gated (day 5 buff is inert on day 6).
+LIMITATION: conversations (bulk-resolved) have no per-character deliberate-cast point, so Voice of the
+Wind is triggered at court actions (its broad social buff then covers later social rolls that tick via the
+read hook). **163 combat effects + the CombatController stealth-spell set + the letter/world-sim/performance
+spells (legacy_of_kaze_no_kami, elemental_cipher, flight_of_doves, voice_of_the_wind).**
 
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell

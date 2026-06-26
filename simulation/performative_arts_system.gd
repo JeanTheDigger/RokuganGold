@@ -175,43 +175,24 @@ static func get_fatigue_multiplier(performance_count: int) -> float:
 			return FATIGUE_ZERO
 
 
-# s33 Flight of Doves (Air 2, Illusion): Air kami illustrate a storyteller's tale with a
-# compelling illusion, making the performance more vivid. The performer themselves, or a
-# willing co-located ally shugenja, may cast it — the performer gains Free Raises equal to
-# the CASTER's Air Ring on the performance roll (owner-set magnitude). Mirrors the garden
-# synergy free-raise pattern; the cast consumes a spell slot (rate-limiting the boost).
-# Returns {free_raises, caster_id} (caster_id -1 = no boost).
+# s33 Flight of Doves (Air 2, Illusion): Air kami illustrate the performer's tale with a
+# compelling illusion, making it more vivid. The performer DELIBERATELY casts it as the
+# opening of a PUBLIC_PERFORMANCE they chose to give — gaining Free Raises equal to their
+# Air Ring on the performance roll (owner-set magnitude). Not an auto-cast: it fires only
+# because the shugenja chose to perform. The cast consumes a spell slot.
+# Returns {free_raises, caster_id} (caster_id -1 = not cast).
 static func get_flight_of_doves_free_raises(
 	performer: L5RCharacterData,
-	co_located_ids: Array,
-	characters_by_id: Dictionary,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	# Candidate casters: the performer first (self-cast), then willing co-located allies.
-	var candidates: Array = [performer]
-	for cid: Variant in co_located_ids:
-		var ally: L5RCharacterData = characters_by_id.get(cid)
-		if ally == null or ally.character_id == performer.character_id:
-			continue
-		if CharacterStats.is_dead(ally):
-			continue
-		# An ally only lends their kami to a performer they don't dislike.
-		if ally.disposition_values.get(performer.character_id, 0) < 0:
-			continue
-		candidates.append(ally)
-
-	for caster: L5RCharacterData in candidates:
-		if not ("flight_of_doves" in caster.spells_known):
-			continue
-		if not SpellSystem.can_cast(caster, "flight_of_doves"):
-			continue
-		var cast: Dictionary = SpellSystem.resolve_cast(caster, "flight_of_doves", dice_engine)
-		if cast.get("success", false):
-			var air_fr: int = SpellSystem.get_ring_value(caster, Enums.Ring.AIR)
-			return {"free_raises": air_fr, "caster_id": caster.character_id}
-		# Cast failed (slot still spent per s31); no boost from this caster, stop.
+	if not ("flight_of_doves" in performer.spells_known):
 		return {"free_raises": 0, "caster_id": -1}
-
+	if not SpellSystem.can_cast(performer, "flight_of_doves"):
+		return {"free_raises": 0, "caster_id": -1}
+	var cast: Dictionary = SpellSystem.resolve_cast(performer, "flight_of_doves", dice_engine)
+	if cast.get("success", false):
+		var air_fr: int = SpellSystem.get_ring_value(performer, Enums.Ring.AIR)
+		return {"free_raises": air_fr, "caster_id": performer.character_id}
 	return {"free_raises": 0, "caster_id": -1}
 
 
