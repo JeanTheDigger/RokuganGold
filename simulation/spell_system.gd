@@ -1136,7 +1136,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"hands_of_clay":                 {"e": 1, "m": 2, "s": 0},
 	"jurojins_curse":                {"e": 1, "m": 2, "s": 0},
 	"rites_of_preservation":         {"e": 1, "m": 2, "s": 12},
-	"taming_the_beast":              {"e": 1, "m": 2, "s": 0},
+	"taming_the_beast":              {"e": 1, "m": 2, "s": 0},   # WIRED (combat): pacify a natural creature (Contested Earth -> FACTION_NEUTRAL)
 	"the_mountains_feet":            {"e": 1, "m": 2, "s": 0},   # 1h knockdown resistance stance — COMBAT_ONLY
 	"wholeness_of_the_world":        {"e": 1, "m": 2, "s": 0},  # Ring/Trait resistance — buff, not healing
 	"whispers_of_the_land":          {"e": 1, "m": 2, "s": 17},

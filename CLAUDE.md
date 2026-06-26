@@ -6928,6 +6928,19 @@ the PC spell UI); **Earths Touch** (no sim effect, "does not increase the Ring")
 (Water 4) / **Altering the Course** (Void) — combat/VP survival buffs needing `_npc_maybe_cast_spell`
 integration + a Godot-runtime driver.
 
+### Spell coverage — combat tranche: Taming the Beast (2026-06-26, owner-approved, structural-verify)
+**Taming the Beast (Earth 2, Kitsune secret, s34)** — soothe a natural creature within 50' (10 tiles) via
+a Contested Earth roll; on success it ceases all hostile activity. Does NOT affect spirits / supernatural
+/ Tainted creatures. `execute_taming_the_beast(state, caster_id, caster, target_id, target, dice)`:
+gates on a natural creature (`target.spirit_creature.realm == NINGEN_DO` AND `taint_rank == 0` — excludes
+spirit-realm/oni/undead/Tainted puppets), range 10, can_cast; consumes the Earth slot; rolls Contested
+Earth (caster vs creature); on a win sets `state.factions[target_id] = FACTION_NEUTRAL`. **Verified
+correct by code reading:** `_are_enemies` returns false whenever either side is neutral, so a tamed
+creature attacks no one AND is ignored by both factions — exactly "ceases all hostile activity / becomes
+tame." 1-hour duration ≈ the skirmish (faction change persists; no expiry). PC-callable (Kitsune-only,
+rare — no NPC picker). The Animal-Handling "simple commands" follow-up (GM-judged) is not modeled.
+**Structural review + parse-trace only** (orchestrator not headless-runnable here).
+
 ### Spell coverage — combat tranche: Groves of Stone (2026-06-26, owner-approved, structural-verify)
 **Groves of Stone (Earth 3, Craft/Defense, s36... s34)** — erupts a circular WALL_STONE barrier (15' = 3
 tiles) around the caster for 10 Rounds; enemies must clamber over; crumbles when it expires. New

@@ -3968,6 +3968,42 @@ static func _apply_groves_of_stone(
 	return {"tiles_placed": saved.size(), "expiry_round": state.combat.round_number + dur}
 
 
+## s34 Taming the Beast (Earth 2, Kitsune secret): soothe a NATURAL creature within 50' (10 tiles) —
+## a Contested Earth roll; on success it ceases all hostile activity (set to FACTION_NEUTRAL for the
+## skirmish, so it has no enemies to attack and idles). Does NOT work on spirits/supernatural/Tainted
+## creatures (a spirit puppet whose realm is not the mortal realm, or with any Taint). PC-callable
+## (Kitsune-only, rare — no NPC picker); the cast consumes the Earth slot, the contest decides success.
+static func execute_taming_the_beast(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(caster):
+		return {"success": false, "reason": "caster_dead"}
+	if not SpellSystem.can_cast(caster, "taming_the_beast"):
+		return {"success": false, "reason": "cannot_cast"}
+	if target == null or CharacterStats.is_dead(target):
+		return {"success": false, "reason": "no_target"}
+	var sc: SpiritCreatureData = target.spirit_creature
+	if sc == null or sc.realm != Enums.SpiritRealm.NINGEN_DO or sc.taint_rank > 0:
+		return {"success": false, "reason": "not_a_natural_creature"}
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		if _chebyshev(state.positions[caster_id], state.positions[target_id]) > 10:
+			return {"success": false, "reason": "out_of_range"}
+	SpellSystem.consume_slot(caster, Enums.Ring.EARTH)
+	var ce: int = maxi(1, CharacterStats.get_earth_ring(caster))
+	var te: int = maxi(1, CharacterStats.get_earth_ring(target))
+	var c_roll: int = dice_engine.roll_and_keep(ce, ce, true).total
+	var t_roll: int = dice_engine.roll_and_keep(te, te, true).total
+	if c_roll <= t_roll:
+		return {"success": false, "reason": "resisted", "caster_roll": c_roll, "creature_roll": t_roll}
+	state.factions[target_id] = FACTION_NEUTRAL
+	state.combat_log.append({
+		"type": "spell_taming_the_beast", "round": state.combat.round_number,
+		"caster_id": caster_id, "target_id": target_id,
+	})
+	return {"success": true, "tamed_id": target_id, "caster_roll": c_roll, "creature_roll": t_roll}
+
+
 ## Restore the original tiles of a conjured-terrain zone (s34 Wall of Earth) when it expires.
 static func _restore_conjured_terrain(state: MapCombatState, zone: Dictionary) -> void:
 	for entry in zone.get("tiles", []):
