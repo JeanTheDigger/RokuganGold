@@ -6887,6 +6887,18 @@ garble is per-tick (stale on the next day); a non-shugenja cannot cast. LIMITATI
 is the court action (conversations are bulk-resolved, with no per-conversation chosen-action point), so the
 per-tick marker is what connects the cast to the eavesdrop consumer. 164 combat effects.
 
+### Spell coverage — Touch of Air's Grace (attractiveness buff) (2026-06-26, deliberate-cast)
+**Touch of Air's Grace (Air 3, Illusion, s33)** — enhances the target's attractiveness for 1 hour:
+negates Disturbing Countenance / Benten's Curse, or grants Dangerous Beauty / Benten's Blessing. Same
+missing-caller pattern: the **consumer already existed** (`AdvantageSystem._is_suppressed` negates
+Disturbing Countenance, and line 978 grants the Dangerous Beauty effect, both reading the
+`touch_of_airs_grace` day buff) and `SpellSystem.activate_touch_of_airs_grace` sets the buff, but nothing
+cast it. Wired the deliberate-cast trigger in `_execute_contested_court_action` (a shugenja casts it as the
+opening of a chosen court action; once/day, day-buff marker, cleared daily). Runtime-verified 3/3 (Godot
+4.6.2, headless): cast negates Disturbing Countenance; the daily clear reverts it; a non-shugenja cannot
+cast. 164 combat effects. (Voice of the Wind, Wolf's Proposal, Garbled Tongue, and Touch of Air's Grace
+now all deliberate-cast at the court-action opening — the established social-prep-spell vehicle.)
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

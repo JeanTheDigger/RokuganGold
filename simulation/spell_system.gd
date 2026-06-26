@@ -1018,7 +1018,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"striking_the_storm":         {"e": 0, "m": 3, "s": 0},
 	"summoning_the_gale":         {"e": 0, "m": 3, "s": 0},  # concentration area wind block — COMBAT_ONLY
 	"summon_fog":                 {"e": 0, "m": 3, "s": 0},  # concentration fog ("while maintained") — COMBAT_ONLY
-	"touch_of_airs_grace":        {"e": 0, "m": 3, "s": 0},
+	"touch_of_airs_grace":        {"e": 0, "m": 3, "s": 0},   # WIRED (court actions): shugenja makes self attractive opening a court action (negate Disturbing Countenance / grant Dangerous Beauty)
 	"your_hearts_enemy":          {"e": 0, "m": 3, "s": 0},   # manifests Fear 4 illusion attack — COMBAT_ONLY
 	# ML4
 	"call_the_spirit":            {"e": 0, "m": 4, "s": 5},

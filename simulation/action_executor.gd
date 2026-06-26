@@ -4240,6 +4240,13 @@ static func _execute_contested_court_action(
 			and "garbled_tongue" in character.spells_known \
 			and SpellSystem.can_cast(character, "garbled_tongue"):
 		SpellSystem.activate_garbled_tongue(character, dice_engine, ctx.ic_day, character, target)
+	# s33 Touch of Air's Grace: a shugenja makes themselves more attractive opening this chosen court
+	# action (AdvantageSystem reads the day buff to negate Disturbing Countenance / grant Dangerous
+	# Beauty, aiding attractiveness-based social influence). Cast once per day (the day buff is marker).
+	if not character.has_day_buff("touch_of_airs_grace") \
+			and "touch_of_airs_grace" in character.spells_known \
+			and SpellSystem.can_cast(character, "touch_of_airs_grace"):
+		SpellSystem.activate_touch_of_airs_grace(character, dice_engine, ctx.ic_day)
 	var voice_atk: int = 0
 	if character.voice_of_the_wind_ic_day == ctx.ic_day \
 			and a_skill.split(":")[0].strip_edges() in SkillResolver.SOCIAL_SKILLS:
