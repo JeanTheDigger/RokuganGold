@@ -6913,7 +6913,12 @@ authorized but **blocked on game-design values the GDD does not specify and that
 these stay deferred (not force-wired to a court-action opener — Soul of Stone's −1k0 own-influence downside
 would self-sabotage a court attacker). NOTE: **Drink of Your Essence** (Void 2) and **Mental Quickness**
 (Fire 2) are correctly PC-deferred (their docstrings say "callable cast, not auto-fired" — awaiting the PC
-spell UI); **Earths Touch** (Earth) has no sim effect ("does not increase the Ring").
+spell UI); **Earths Touch** (Earth) has no sim effect ("does not increase the Ring"). **Power of the Ocean**
+(Water 4 — superhuman Wounds/healing + on-demand Void replenish; daily expiry/heal pass + a tile-combat
+`execute_replenish_void_ocean` exist, but `activate_power_of_the_ocean` is uncalled) and **Altering the
+Course** (Void — a per-tick reroll buff read by SkillResolver, `activate_altering_the_course` uncalled) are
+combat/VP survival buffs with bespoke mechanics and no clear deliberate-cast vehicle; deferred to a
+combat-cast tranche (needs `_npc_maybe_cast_spell` integration + a Godot-runtime driver to verify).
 
 ### Spell coverage — Whispering Wind (truth divination) (2026-06-26, deliberate-cast)
 **Whispering Wind (Air 2, Divination, s33)** — Air kami judge whether the target's last statement was a
