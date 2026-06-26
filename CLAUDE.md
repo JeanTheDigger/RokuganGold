@@ -6815,6 +6815,28 @@ real read); a ciphered letter blocks a non-shugenja; a strong shugenja cracks an
 shugenja fails a strong cipher; a failed interception reads nothing. **163 combat effects + the
 CombatController stealth-spell set + the letter/world-sim spells (legacy_of_kaze_no_kami, elemental_cipher).**
 
+### Spell coverage — Flight of Doves (performance enhancement) (2026-06-26, owner-collaborative, runtime-verified 5/5)
+**Flight of Doves (Air 2, Illusion, s33)** — Air kami illustrate a storyteller's tale (a designated
+individual within 25', 10 min) with a compelling visual+auditory illusion drawn from their mind; a Shiba
+Illusionist entertainment spell. Wired into the **performance system** (s12.4), not the ASCII orchestrator
+(non-combat). Owner decisions (2026-06-26): boost = **Free Raises equal to the CASTER's Air Ring**; scope =
+**can target another performer**. `PerformativeArtsSystem.get_flight_of_doves_free_raises(performer,
+co_located_ids, characters_by_id, dice)` picks the best available caster — the performer themselves first
+(self-cast), then any willing co-located ally (knows the spell, can cast it, non-negative disposition toward
+the performer) — casts it (consuming a spell slot per s31), and returns the caster's Air Ring as Free Raises
+on the performance roll. Wired into `_execute_public_performance` exactly like the garden-synergy free-raise
+path (`garden_fr + flight_fr` into `resolve_public_performance`); the result effects carry
+`flight_of_doves_fr` + `flight_of_doves_caster_id` for trace. Auto-applied (no new ActionID), mirroring the
+garden synergy and `legacy_of_kaze_no_kami` auto-cast patterns; the slot cost rate-limits it, and Flight of
+Doves is learn-gated (Imperial/Shiba), so few NPCs ever lend the boost. Applies to PUBLIC_PERFORMANCE (the
+audience-storytelling case; THEATER/Acting is the canonical art form). LIMITATIONS: PERFORM_FOR (private
+1-on-1) has no free_raises hook in `resolve_perform_for`, so it is not boosted (deferred); the cast fires at
+performance time rather than as a separate declared action. Runtime-verified 5/5 (Godot 4.6.2, headless):
+self-cast grants Air-ring FR + consumes a slot; a willing ally (higher Air) casts when the performer can't;
+a hostile ally (negative disposition) lends nothing; no-caster yields no boost; the performer self-casts
+before deferring to an ally. **163 combat effects + the CombatController stealth-spell set + the
+letter/world-sim/performance spells (legacy_of_kaze_no_kami, elemental_cipher, flight_of_doves).**
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

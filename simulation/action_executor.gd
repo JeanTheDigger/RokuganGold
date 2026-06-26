@@ -719,8 +719,15 @@ static func _execute_public_performance(
 		garden_fr = ctx.known_objectives.get("ikebana_garden_fr", 0)
 		garden_id = ctx.known_objectives.get("ikebana_garden_id", -1)
 
+	# s33 Flight of Doves: the performer or a willing co-located ally shugenja casts the spell,
+	# granting the performer Free Raises equal to the caster's Air Ring (consumes a spell slot).
+	var fod: Dictionary = PerformativeArtsSystem.get_flight_of_doves_free_raises(
+		character, witness_ids, characters_by_id, dice_engine,
+	)
+	var flight_fr: int = fod.get("free_raises", 0)
+
 	var perf_result: Dictionary = PerformativeArtsSystem.resolve_public_performance(
-		character, art_form, witness_ids, dice_engine, fatigue_count, garden_fr,
+		character, art_form, witness_ids, dice_engine, fatigue_count, garden_fr + flight_fr,
 	)
 
 	PerformativeArtsSystem.apply_performance_effects(character, perf_result, characters_by_id)
@@ -750,6 +757,8 @@ static func _execute_public_performance(
 			"raises": perf_result.get("raises", 0),
 			"performance_applied": true,
 			"garden_id": garden_id,
+			"flight_of_doves_fr": flight_fr,
+			"flight_of_doves_caster_id": fod.get("caster_id", -1),
 			"fulfills_request_id": action.metadata.get("fulfills_request_id", -1),
 			"requesting_lord_id": action.metadata.get("requesting_lord_id", -1),
 			"venue_mode": action.metadata.get("venue_mode", "public"),
