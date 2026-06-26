@@ -6872,6 +6872,21 @@ Runtime-verified 3/3 (Godot 4.6.2, headless): cast raises perceived honor 4.0→
 reverts it; a non-shugenja cannot cast. 164 combat effects (Wolf's Proposal is a world-sim social buff,
 not a combat effect).
 
+### Spell coverage — Garbled Tongue (eavesdrop-proof conversation) (2026-06-26, deliberate-cast)
+**Garbled Tongue (Air 3, Illusion, s33)** — a false second speech-layer heard by everyone except the
+real conversants; a shugenja eavesdropper may pierce it on a Contested School-Rank/Air roll vs the
+caster's frozen casting total. Same missing-caller pattern: the **consumer already existed**
+(`_process_eavesdrop_writebacks` reads the per-tick `garbled_tongue_ic_day`/`garbled_tongue_strength`
+markers via `_garble_pierce_tn` — a garbled conversation is opaque to eavesdroppers unless a shugenja
+pierces it) and `SpellSystem.activate_garbled_tongue` sets the markers, but nothing cast it. Wired the
+deliberate-cast trigger: in `_execute_contested_court_action`, a shugenja who knows it casts it as the
+opening of a chosen court action, garbling the actor + target (once/day, per-tick marker). The marker then
+protects the shugenja's conversations that tick (the eavesdrop consumer reads daily-conversation pairs).
+Runtime-verified 3/3 (Godot 4.6.2, headless): cast garbles both participants (pierce TN −1→53); the
+garble is per-tick (stale on the next day); a non-shugenja cannot cast. LIMITATION: the deliberate vehicle
+is the court action (conversations are bulk-resolved, with no per-conversation chosen-action point), so the
+per-tick marker is what connects the cast to the eavesdrop consumer. 164 combat effects.
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

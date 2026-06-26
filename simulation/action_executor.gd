@@ -4232,6 +4232,14 @@ static func _execute_contested_court_action(
 			and "wolfs_proposal" in character.spells_known \
 			and SpellSystem.can_cast(character, "wolfs_proposal"):
 		SpellSystem.activate_wolfs_proposal(character, dice_engine, ctx.ic_day)
+	# s33 Garbled Tongue: a shugenja shrouds this private court exchange (actor + target) in a false
+	# speech-layer, opaque to eavesdroppers (the eavesdrop writeback reads the per-tick garble markers
+	# and only a shugenja eavesdropper can pierce it). Cast once per day as the opening of this chosen
+	# court action; the per-tick marker then protects the shugenja's conversations that tick.
+	if target != null and character.garbled_tongue_ic_day != ctx.ic_day \
+			and "garbled_tongue" in character.spells_known \
+			and SpellSystem.can_cast(character, "garbled_tongue"):
+		SpellSystem.activate_garbled_tongue(character, dice_engine, ctx.ic_day, character, target)
 	var voice_atk: int = 0
 	if character.voice_of_the_wind_ic_day == ctx.ic_day \
 			and a_skill.split(":")[0].strip_edges() in SkillResolver.SOCIAL_SKILLS:

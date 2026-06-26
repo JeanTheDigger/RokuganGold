@@ -997,7 +997,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"elemental_cipher":           {"e": 0, "m": 2, "s": 0},   # WIRED (letter system): a known sender auto-enciphers their letters; an interceptor learns nothing unless a shugenja cracks Spellcraft/Int vs the cast total
 	"flight_of_doves":            {"e": 0, "m": 2, "s": 0},   # WIRED (performance): performer/ally caster grants the storyteller Air-ring Free Raises on PUBLIC_PERFORMANCE
 	"freedom_of_the_air":         {"e": 0, "m": 2, "s": 14},  # Compels hostile spirits out for Air Ring hours — SPIRIT_BIND
-	"garbled_tongue":             {"e": 0, "m": 3, "s": 0},
+	"garbled_tongue":             {"e": 0, "m": 3, "s": 0},   # WIRED (court actions): shugenja garbles a court exchange; the tick's conversations are opaque to eavesdroppers
 	"heart_betrays_eyes":         {"e": 0, "m": 2, "s": 0},   # target perceives unusual as normal; maintains illusion — COMBAT_ONLY
 	"hidden_visage":              {"e": 0, "m": 2, "s": 0},
 	"the_kamis_whisper":          {"e": 0, "m": 2, "s": 0},   # false-sound distraction — wired in CombatController.cast_kamis_whisper
