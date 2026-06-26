@@ -6789,6 +6789,32 @@ Contested-Perception forgery detection and "disappears if moved." Runtime-verifi
 headless): places the chosen gem at the tile; rejects an item not in the list; rejects an out-of-range
 tile; the object disappears when its illusion lapses. (ASCII-map flavor placement, not a combat effect.)
 
+### Spell coverage — Elemental Cipher + real letter interception (2026-06-26, owner-collaborative, runtime-verified 7/7)
+**Elemental Cipher (Air 2, Imperial-families, s33)** — makes a written page unintelligible to all but
+the author and the named recipient; another shugenja may read it on a Spellcraft/Intelligence roll vs
+the original casting-roll total. Previously deferred ("no clean consumer" — our letter interception was
+abstract). Owner chose (2026-06-26): **wire a real interception read** so the cipher has something to
+block. Two parts: (1) the **letter-interception read** — `DayOrchestrator._process_intercept_letter_writebacks`
+(wired beside the EAVESDROP/SHADOW_TARGET covert writebacks) makes a SUCCESSFUL `INTERCEPT_LETTER` action
+actually read an undelivered letter to/from the intercepted target and transfer its topic to the
+interceptor's `topic_pool` + an INTELLIGENCE `intercepted_letter` KnowledgeEntry (previously
+`resolve_intercept_letter` was a Stealth+Forgery success/fail that gained NO content — so interception
+learned nothing). (2) the **cipher resist** — `LetterData` gains `elemental_cipher` + `cipher_cast_total`;
+a sender who knows the spell and can spare a slot auto-enciphers their letters at write time (mirrors the
+`legacy_of_kaze_no_kami` auto-apply; the letter's recipient is the "named recipient"; the casting roll's
+`total` is stored). On interception, a ciphered letter yields NOTHING unless the interceptor is a shugenja
+(`Spellcraft >= 1`) who cracks it with a Spellcraft/Intelligence roll vs `cipher_cast_total` (GDD-exact:
+"Other shugenja may read the text by rolling Spellcraft/Intelligence against the original Spell Casting
+Roll total"). Non-shugenja learn nothing from a ciphered letter; the named recipient always reads it
+freely via `deliver_letter` (the cipher never applies to the intended reader). Imperial-families-only is
+the learn gate (spells_known). The "1 month" duration is moot for an in-transit letter (it's read or
+delivered well within a month). New `_process_intercept_letter_writebacks` is called with `pending_letters`
+in `advance_day`. Runtime-verified 7/7 (Godot 4.6.2, headless): sender enciphers (cast_total 37); a
+plain sender does not; a non-ciphered intercepted letter transfers its topic to the interceptor (the new
+real read); a ciphered letter blocks a non-shugenja; a strong shugenja cracks an easy cipher; a weak
+shugenja fails a strong cipher; a failed interception reads nothing. **163 combat effects + the
+CombatController stealth-spell set + the letter/world-sim spells (legacy_of_kaze_no_kami, elemental_cipher).**
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

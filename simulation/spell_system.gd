@@ -992,7 +992,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"bentens_touch":              {"e": 0, "m": 2, "s": 15},
 	"blessed_wind_of_lady_sun":   {"e": 0, "m": 2, "s": 0},  # concentration area aura — COMBAT_ONLY
 	"call_upon_the_wind":         {"e": 0, "m": 2, "s": 0},
-	"elemental_cipher":           {"e": 0, "m": 2, "s": 0},   # encrypts writing (passive protection, no active gather) — COMBAT_ONLY
+	"elemental_cipher":           {"e": 0, "m": 2, "s": 0},   # WIRED (letter system): a known sender auto-enciphers their letters; an interceptor learns nothing unless a shugenja cracks Spellcraft/Int vs the cast total
 	"flight_of_doves":            {"e": 0, "m": 2, "s": 0},   # entertainment illusion — COMBAT_ONLY
 	"freedom_of_the_air":         {"e": 0, "m": 2, "s": 14},  # Compels hostile spirits out for Air Ring hours — SPIRIT_BIND
 	"garbled_tongue":             {"e": 0, "m": 3, "s": 0},

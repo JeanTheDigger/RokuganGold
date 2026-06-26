@@ -1248,6 +1248,11 @@ static func advance_day(
 		crime_records,
 	)
 
+	_process_intercept_letter_writebacks(
+		day_result.get("results", []),
+		pending_letters, characters_by_id, current_season, dice_engine,
+	)
+
 	_wire_discussion_counts(conversation_results, active_topics)
 	_compute_positions_from_conversations(
 		conversation_results, active_topics, characters_by_id
@@ -6640,6 +6645,73 @@ static func _process_shadow_target_writebacks(
 				"target_id": target_id,
 				"contacts_observed": observed_contacts,
 				"actions_observed": observed_actions,
+			},
+			current_season,
+		))
+
+
+static func _process_intercept_letter_writebacks(
+	results: Array,
+	pending_letters: Array,
+	characters_by_id: Dictionary,
+	current_season: int,
+	dice_engine: DiceEngine,
+) -> void:
+	# A successful INTERCEPT_LETTER now actually READS a letter in transit involving the
+	# target — the interceptor learns its topic. s33 Elemental Cipher resists: a ciphered
+	# letter yields nothing unless the interceptor is a shugenja (Spellcraft >= 1) who cracks
+	# it with a Spellcraft/Intelligence roll vs cipher_cast_total (the original casting total).
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "INTERCEPT_LETTER":
+			continue
+		if not d.get("success", false):
+			continue
+		var interceptor_id: int = d.get("character_id", -1)
+		var target_id: int = d.get("target_npc_id", -1)
+		var interceptor: L5RCharacterData = characters_by_id.get(interceptor_id)
+		if interceptor == null or CharacterStats.is_dead(interceptor):
+			continue
+
+		# Find an undelivered letter with a real topic to/from the intercepted person.
+		var intercepted: LetterData = null
+		for lv: Variant in pending_letters:
+			if not lv is LetterData:
+				continue
+			var letter: LetterData = lv as LetterData
+			if letter.delivered or letter.topic < 0:
+				continue
+			if letter.sender_id == target_id or letter.recipient_id == target_id:
+				intercepted = letter
+				break
+		if intercepted == null:
+			continue
+
+		# Elemental Cipher gate: only a shugenja interceptor may attempt to crack it.
+		if intercepted.elemental_cipher:
+			var spellcraft_rank: int = SkillResolver.get_skill_rank(interceptor, "Spellcraft")
+			if spellcraft_rank < 1:
+				continue  # non-shugenja learns nothing from a ciphered letter
+			var crack: Dictionary = SkillResolver.resolve_skill_check(
+				interceptor, dice_engine, "Spellcraft", intercepted.cipher_cast_total,
+				0, "", Enums.Trait.INTELLIGENCE
+			)
+			if not crack.get("success", false):
+				continue  # cipher holds
+
+		# Read succeeds: the interceptor learns the letter's topic.
+		if intercepted.topic not in interceptor.topic_pool:
+			interceptor.topic_pool.append(intercepted.topic)
+		InformationSystem.add_knowledge(interceptor, InformationSystem.make_entry(
+			Enums.KnowledgeSource.INTELLIGENCE,
+			"intercepted_letter",
+			{
+				"topic": intercepted.topic,
+				"letter_id": intercepted.letter_id,
+				"sender_id": intercepted.sender_id,
+				"recipient_id": intercepted.recipient_id,
 			},
 			current_season,
 		))

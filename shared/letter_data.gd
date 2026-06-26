@@ -61,6 +61,13 @@ extends Resource
 # this letter instantly (transit 0). Trace/debug only.
 @export var delivered_by_spirit_bird: bool = false
 
+# s33 Elemental Cipher (Air 2, Imperial-families): true when the sender enciphered this
+# letter so it is unintelligible to anyone but the author and the named recipient. An
+# interceptor learns nothing from a ciphered letter unless they are a shugenja who cracks
+# it (Spellcraft/Intelligence vs cipher_cast_total, the original casting-roll total).
+@export var elemental_cipher: bool = false
+@export var cipher_cast_total: int = 0
+
 # Teaching offer flags (populated by §57.22.12 proactive teaching trigger)
 @export var learn_piece_id: int = -1
 @export var teacher_initiated: bool = false
