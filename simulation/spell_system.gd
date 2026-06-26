@@ -481,6 +481,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# armor_tn, reduction, spell_attack_rolled/_kept, spell_damage_rolled/_kept, initiative_rolled.
 	"armor_of_earth": {"kind": "buff", "target": "self", "duration_rounds": 10,
 		"mods": [{"kind": "reduction", "value": "earth_plus_rank"}]},  # Earth 1: Reduction = Earth + School Rank
+	"hands_of_clay": {"kind": "buff", "target": "self", "duration_rounds": 100,
+		"mods": [{"kind": "hands_of_clay", "value": 1}]},  # Earth 2: merge with stone — execute_climb auto-succeeds (cliffs/walls), no fall on a down-climb
 	"cloak_of_the_miya": {"kind": "buff", "target": "self", "duration_rounds": 5,
 		"mods": [{"kind": "armor_tn", "value": "water_plus_rank"}]},  # Water 2: Armor TN += Water + School Rank
 	# s37 Altering the Course (Void 2 ishiken): a self buff installing the `multi_void_spend`
@@ -1133,7 +1135,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"embrace_of_kenro_ji_jin":       {"e": 1, "m": 2, "s": 0},
 	"force_of_will":                 {"e": 1, "m": 2, "s": 0},
 	"grasp_of_earth":                {"e": 1, "m": 2, "s": 0},
-	"hands_of_clay":                 {"e": 1, "m": 2, "s": 0},
+	"hands_of_clay":                 {"e": 1, "m": 2, "s": 0},   # WIRED (combat buff): climbs auto-succeed (execute_climb)
 	"jurojins_curse":                {"e": 1, "m": 2, "s": 0},
 	"rites_of_preservation":         {"e": 1, "m": 2, "s": 12},
 	"taming_the_beast":              {"e": 1, "m": 2, "s": 0},   # WIRED (combat): pacify a natural creature (Contested Earth -> FACTION_NEUTRAL)

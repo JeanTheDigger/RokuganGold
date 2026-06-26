@@ -872,7 +872,10 @@ static func execute_climb(
 		return {"success": false, "reason": "invalid_climb_target"}
 
 	ts.consume_complex()
-	var res: Dictionary = SkillResolver.resolve_skill_check(
+	# s34 Hands of Clay: Earth spirits merge the caster's hands/feet with stone — climbs auto-succeed
+	# (and a down-climb lands safely, no slip/fall) while the buff is active.
+	var hands_of_clay: bool = IndividualCombat.get_timed_modifier_total(p, "hands_of_clay") > 0
+	var res: Dictionary = {"success": true} if hands_of_clay else SkillResolver.resolve_skill_check(
 		character, dice_engine, "Athletics", tn, 0, "", Enums.Trait.STRENGTH)
 	var climbed: bool = res.get("success", false)
 	var fell: bool = false

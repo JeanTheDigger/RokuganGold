@@ -6928,6 +6928,18 @@ the PC spell UI); **Earths Touch** (no sim effect, "does not increase the Ring")
 (Water 4) / **Altering the Course** (Void) — combat/VP survival buffs needing `_npc_maybe_cast_spell`
 integration + a Godot-runtime driver.
 
+### Spell coverage — combat tranche: Hands of Clay (2026-06-26, owner-approved, structural-verify)
+**Hands of Clay (Earth 2, s34)** — Earth spirits merge the caster's hands/feet with stone, letting them
+climb sheer surfaces (and hang from ceilings). The clean combat slice: a self-`buff` (`hands_of_clay`
+timed modifier, 100 rounds) read in `execute_climb` — while active, the caster's climbs (elevation cliffs
+up/down, wall-scales) **auto-succeed** (and a down-climb lands safely, no slip/fall). Reuses the verified
+`_apply_spell_buff` install path; the only new code is the auto-success conditional in `execute_climb`.
+LIMITATIONS: the broader "half-speed wall-walk / ceiling-hang / move along surfaces" mobility isn't
+modeled (only the climb-action auto-success); and because it's a `buff` kind, the NPC self-buff picker
+*could* occasionally cast it pointlessly (harmless minor slot-waste — rare learn-gated spell, fires only
+when not already buffed and no offense/heal is available). **Structural review + parse-trace only**
+(orchestrator not headless-runnable here).
+
 ### Spell coverage — combat tranche: Taming the Beast (2026-06-26, owner-approved, structural-verify)
 **Taming the Beast (Earth 2, Kitsune secret, s34)** — soothe a natural creature within 50' (10 tiles) via
 a Contested Earth roll; on success it ceases all hostile activity. Does NOT affect spirits / supernatural
