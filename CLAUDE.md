@@ -6899,6 +6899,22 @@ opening of a chosen court action; once/day, day-buff marker, cleared daily). Run
 cast. 164 combat effects. (Voice of the Wind, Wolf's Proposal, Garbled Tongue, and Touch of Air's Grace
 now all deliberate-cast at the court-action opening — the established social-prep-spell vehicle.)
 
+### Spell coverage — defensive wards (Soul of Stone / Jurojin's Balm-Curse / Stones Endurance) — AUTHORIZED, blocked on trigger spec (2026-06-26)
+Owner chose (2026-06-26) the **Dedicated CAST_WARD action** approach for the remaining pre-built defensive
+buffs (their read+apply pipelines exist; only the deliberate-cast caller is missing, and unlike the social
+spells they have NO chosen action to ride on — they are defensive/reactive). The wards: **Soul of Stone**
+(Earth 1 — +3k0 resist manipulation / −1k0 own influence; read hooks in `SkillResolver._get_soul_of_stone_bonus`
++ `_execute_contested_court_action`; `SpellSystem.activate_soul_of_stone` sets the buff), **Jurojin's Balm**
+(Earth 1) / **Jurojin's Curse** (Earth 2 — disease/poison resist buff/debuff, consumed by DiseaseSystem
+saves), **Stones Endurance** (Earth — fatigue resist). A dedicated `CAST_PROTECTIVE_WARD` NPC ActionID is
+authorized but **blocked on game-design values the GDD does not specify and that cannot be invented**:
+(1) the NeedType / threat-trigger that makes a shugenja *decide* to ward (what threat, how detected), and
+(2) the objective_alignment score. The owner indicated they would set the score. Until those are provided,
+these stay deferred (not force-wired to a court-action opener — Soul of Stone's −1k0 own-influence downside
+would self-sabotage a court attacker). NOTE: **Drink of Your Essence** (Void 2) and **Mental Quickness**
+(Fire 2) are correctly PC-deferred (their docstrings say "callable cast, not auto-fired" — awaiting the PC
+spell UI); **Earths Touch** (Earth) has no sim effect ("does not increase the Ring").
+
 ### Spell coverage — Whispering Wind (truth divination) (2026-06-26, deliberate-cast)
 **Whispering Wind (Air 2, Divination, s33)** — Air kami judge whether the target's last statement was a
 lie. The **apply already existed** (`SpellSystem.activate_whispering_wind`: verdict lie/true by whether
