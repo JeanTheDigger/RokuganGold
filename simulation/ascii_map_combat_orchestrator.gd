@@ -2642,6 +2642,12 @@ static func execute_cast_spell(
 			"type": "spell_stone_ring", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "result": res["stone_ring"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "trait_swap":
+		res["trait_swap"] = _apply_facing_your_devils(state, caster_id, target_id, target, eff)
+		state.combat_log.append({
+			"type": "spell_trait_swap", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "result": res["trait_swap"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "ring_change":
 		res["ring_change"] = _apply_spell_ring_change(state, caster_id, caster, target_id, target, eff, dice_engine)
 		state.combat_log.append({
@@ -3405,6 +3411,71 @@ static func _apply_spell_ring_change(
 	var died: bool = delta < 0 and CharacterStats.is_dead(who)
 	return {"id": who_id, "ring": ring, "delta": delta, "expires_round": expiry,
 		"new_capacity": CharacterStats.get_total_wound_capacity(who), "died_on_apply": died}
+
+
+## s33 Facing Your Devils (Air 5): misalign the target's Elements by swapping their highest and lowest
+## Traits for 10 Rounds. The combat-relevant consequence (the GDD's emphasized effect) is the resulting
+## RING changes — applied via the combat ring-delta bridge (like Strike at the Roots), so a dropping
+## Earth Ring cuts Wound capacity (potentially fatal). LIMITATION: only the Ring-derived effects (wound
+## capacity, ring-based rolls) are modeled — the per-Trait attack/damage roll changes are not (the engine
+## has no trait-level combat-delta layer). Ties resolve deterministically (first max / first min).
+static func _apply_facing_your_devils(
+	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData, eff: Dictionary,
+) -> Dictionary:
+	if target == null:
+		return {"reason": "no_target"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if p == null:
+		return {"reason": "not_in_combat"}
+	var rng: int = int(eff.get("range_tiles", 6))
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		if _chebyshev(state.positions[caster_id], state.positions[target_id]) > rng:
+			return {"reason": "out_of_range"}
+	var traits: Dictionary = {
+		"reflexes": target.reflexes, "awareness": target.awareness,
+		"agility": target.agility, "intelligence": target.intelligence,
+		"strength": target.strength, "perception": target.perception,
+		"stamina": target.stamina, "willpower": target.willpower,
+	}
+	var max_key: String = ""
+	var min_key: String = ""
+	var max_v: int = -2147483648
+	var min_v: int = 2147483647
+	for k: String in traits:
+		var v: int = int(traits[k])
+		if v > max_v:
+			max_v = v
+			max_key = k
+		if v < min_v:
+			min_v = v
+			min_key = k
+	if max_key == min_key:
+		return {"reason": "no_imbalance"}  # all Traits equal — nothing to swap
+	var swapped: Dictionary = traits.duplicate()
+	swapped[max_key] = min_v
+	swapped[min_key] = max_v
+	var pairs: Dictionary = {
+		Enums.Ring.AIR: ["reflexes", "awareness"],
+		Enums.Ring.EARTH: ["stamina", "willpower"],
+		Enums.Ring.FIRE: ["agility", "intelligence"],
+		Enums.Ring.WATER: ["strength", "perception"],
+	}
+	var expiry: int = state.combat.round_number + int(eff.get("duration_rounds", 10))
+	var applied: Array = []
+	for ring: int in pairs:
+		var pr: Array = pairs[ring]
+		var base: int = mini(int(traits[pr[0]]), int(traits[pr[1]]))
+		var swp: int = mini(int(swapped[pr[0]]), int(swapped[pr[1]]))
+		var delta: int = swp - base
+		if delta < 0:
+			delta = maxi(delta, 1 - base)  # floor the effective ring at 1
+		if delta != 0:
+			p.ring_deltas[ring] = int(p.ring_deltas.get(ring, 0)) + delta
+			p.ring_delta_expiry[ring] = expiry
+			applied.append({"ring": ring, "delta": delta})
+	IndividualCombat.sync_ring_deltas(p, target)
+	return {"id": target_id, "swapped": [max_key, min_key], "ring_deltas": applied,
+		"expires_round": expiry, "died_on_apply": CharacterStats.is_dead(target)}
 
 
 # Expire combat ring deltas (s34) whose duration has elapsed: remove the delta, re-sync the bridge,

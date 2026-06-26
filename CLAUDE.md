@@ -6928,6 +6928,20 @@ the PC spell UI); **Earths Touch** (no sim effect, "does not increase the Ring")
 (Water 4) / **Altering the Course** (Void) — combat/VP survival buffs needing `_npc_maybe_cast_spell`
 integration + a Godot-runtime driver.
 
+### Spell coverage — combat tranche: Facing Your Devils (2026-06-26, owner-approved, structural-verify)
+**Facing Your Devils (Air 5, s33)** — misalign the target's Elements by swapping their highest and lowest
+Traits for 10 Rounds; the GDD-emphasized consequence is a possible Ring-Rank drop (e.g. Earth → reduced
+Wound capacity, potentially fatal). New `trait_swap` effect kind + `execute_cast_spell` dispatch →
+`_apply_facing_your_devils`: finds the highest/lowest of the 8 Traits (ties deterministic), swaps them,
+computes each Ring's delta (`min(swapped pair) − min(base pair)`), floors a ring-down at effective 1, and
+applies the deltas via the **combat ring-delta bridge** (`p.ring_deltas` + expiry + `sync_ring_deltas`) —
+the same mechanism as the runtime-verified strike_at_the_roots / essence_of_earth, so wound-capacity
+changes (and the on-apply / on-expiry death re-checks) flow automatically. PC-callable (the NPC *spell*
+offense picker only takes `damage`/`status`, so every ring-change debuff is already PC-only — consistent).
+LIMITATION: only the **Ring-derived** effects (wound capacity, ring-based rolls) are modeled — the
+per-Trait attack/damage roll changes are not (no trait-level combat-delta layer). **Structural review +
+parse-trace only** (orchestrator not headless-runnable here).
+
 ### Spell coverage — combat tranche: Hands of Clay (2026-06-26, owner-approved, structural-verify)
 **Hands of Clay (Earth 2, s34)** — Earth spirits merge the caster's hands/feet with stone, letting them
 climb sheer surfaces (and hang from ceilings). The clean combat slice: a self-`buff` (`hands_of_clay`

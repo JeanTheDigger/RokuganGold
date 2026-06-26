@@ -430,6 +430,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"essence_of_earth": {"kind": "ring_change", "target": "self", "ring": Enums.Ring.EARTH, "delta": 1, "duration_rounds": 100},  # Earth 4: target's Earth Ring +1 Rank (Wounds increased correspondingly); on expiry Wounds return to normal — possibly fatal. 10 min ~ 100 Rounds (persists a normal skirmish, cleared at combat end).
 	"the_wolfs_mercy": {"kind": "ring_change", "target": "enemy", "ring": Enums.Ring.EARTH, "delta": -1, "taint_delta": -2, "range_tiles": 10, "duration_rounds": 10},  # Earth 3: target's Earth Ring -1 Rank (-2 if Tainted, min 1) — reduced Wound capacity can immediately kill an already-wounded target. (The accompanying -1 Strength is not modeled.)
 	"strike_at_the_roots": {"kind": "ring_change", "target": "enemy", "ring": Enums.Ring.EARTH, "set_to": 1, "contested": "earth_contested", "range_tiles": 10, "duration_rounds": 3},  # Earth 5: Contested Earth -> the target's Earth Ring is reduced to 1 for the duration; may immediately kill if already wounded.
+	"facing_your_devils": {"kind": "trait_swap", "target": "enemy", "range_tiles": 6, "duration_rounds": 10},  # Air 5: swap the target's highest/lowest Traits for 10 Rounds -> the resulting RING deltas (esp. a dropping Earth = reduced Wound capacity, possibly fatal). Per-Trait roll changes not modeled.
 	# Trait-swap roll models (2026-06-21): the combat-roll slice of trait changes (no trait bridge needed).
 	"chi_reversal": {"kind": "debuff", "target": "enemy", "range_tiles": 4, "duration_rounds": 9999,
 		"mods": [{"kind": "spell_attack_rolled", "value": "chi_reversal_agility"}]},  # Water 5: flip the target's Fire-pair Traits (Agility<->Intelligence) -> the Agility drop lowers attack rolls (combat slice; the Int change + other pair options are out-of-combat). Inert if the swap wouldn't lower Agility.
@@ -1105,7 +1106,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"defender_from_beyond":       {"e": 0, "m": 5, "s": 0},
 	"draw_back_the_shadow":       {"e": 0, "m": 5, "s": 0},   # Dispels illusions ML4 and below — combat duration
 	"echoes_on_the_breeze":       {"e": 0, "m": 5, "s": 17},
-	"facing_your_devils":         {"e": 0, "m": 5, "s": 0},
+	"facing_your_devils":         {"e": 0, "m": 5, "s": 0},   # WIRED (combat): trait-swap -> ring-change debuff (Earth drop = wound reduction)
 	"legion_of_the_moon":         {"e": 0, "m": 5, "s": 0},
 	"slayers_knives":             {"e": 0, "m": 5, "s": 0},
 	# ML6
