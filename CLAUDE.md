@@ -6899,26 +6899,34 @@ opening of a chosen court action; once/day, day-buff marker, cleared daily). Run
 cast. 164 combat effects. (Voice of the Wind, Wolf's Proposal, Garbled Tongue, and Touch of Air's Grace
 now all deliberate-cast at the court-action opening — the established social-prep-spell vehicle.)
 
-### Spell coverage — defensive wards (Soul of Stone / Jurojin's Balm-Curse / Stones Endurance) — AUTHORIZED, blocked on trigger spec (2026-06-26)
-Owner chose (2026-06-26) the **Dedicated CAST_WARD action** approach for the remaining pre-built defensive
-buffs (their read+apply pipelines exist; only the deliberate-cast caller is missing, and unlike the social
-spells they have NO chosen action to ride on — they are defensive/reactive). The wards: **Soul of Stone**
-(Earth 1 — +3k0 resist manipulation / −1k0 own influence; read hooks in `SkillResolver._get_soul_of_stone_bonus`
-+ `_execute_contested_court_action`; `SpellSystem.activate_soul_of_stone` sets the buff), **Jurojin's Balm**
-(Earth 1) / **Jurojin's Curse** (Earth 2 — disease/poison resist buff/debuff, consumed by DiseaseSystem
-saves), **Stones Endurance** (Earth — fatigue resist). A dedicated `CAST_PROTECTIVE_WARD` NPC ActionID is
-authorized but **blocked on game-design values the GDD does not specify and that cannot be invented**:
-(1) the NeedType / threat-trigger that makes a shugenja *decide* to ward (what threat, how detected), and
-(2) the objective_alignment score. The owner indicated they would set the score. Until those are provided,
-these stay deferred (not force-wired to a court-action opener — Soul of Stone's −1k0 own-influence downside
-would self-sabotage a court attacker). NOTE: **Drink of Your Essence** (Void 2) and **Mental Quickness**
-(Fire 2) are correctly PC-deferred (their docstrings say "callable cast, not auto-fired" — awaiting the PC
-spell UI); **Earths Touch** (Earth) has no sim effect ("does not increase the Ring"). **Power of the Ocean**
-(Water 4 — superhuman Wounds/healing + on-demand Void replenish; daily expiry/heal pass + a tile-combat
-`execute_replenish_void_ocean` exist, but `activate_power_of_the_ocean` is uncalled) and **Altering the
-Course** (Void — a per-tick reroll buff read by SkillResolver, `activate_altering_the_course` uncalled) are
-combat/VP survival buffs with bespoke mechanics and no clear deliberate-cast vehicle; deferred to a
-combat-cast tranche (needs `_npc_maybe_cast_spell` integration + a Godot-runtime driver to verify).
+### Spell coverage — CAST_PROTECTIVE_WARD: defensive self-wards (Soul of Stone / Jurojin's Balm / Stone's Endurance) (2026-06-26, owner-approved, runtime-verified 6/6)
+Owner chose (2026-06-26) the **Dedicated CAST_WARD action** approach for the pre-built defensive buffs
+(their read+apply pipelines already existed; only the deliberate-cast caller was missing, and unlike the
+social spells they have NO chosen action to ride on — they are defensive). I designed + built the action;
+the choices below are mine (owner-overridable). New NPC ActionID **`CAST_PROTECTIVE_WARD`** (1 AP,
+shugenja): `ActionExecutor._execute_cast_protective_ward` casts every **self-ward** the caster knows and
+can afford — **Soul of Stone** (Earth 1, +3k0 resist court manipulation / −1k0 own influence), **Jurojin's
+Balm** (Earth 1, disease/poison-save resist), **Stone's Endurance** (Earth, fatigue resist) — reusing the
+existing `SpellSystem.activate_*` functions (each consumes a slot, stamps its `*` day buff, Pattern B).
+**Jurojin's Curse is excluded** (it is an OFFENSIVE enemy debuff, a separate vehicle, still deferred).
+**Trigger (my call, owner-overridable):** the Phase-4c `_apply_protective_ward_precondition_filter` surfaces
+the action only when `_has_existential_threat(ctx)` (clan at war / starvation province / besieged
+settlement — the existing helper, zero invention) AND the shugenja knows a ward they can cast and have not
+already raised today; otherwise it is removed (no wasteful no-op). **Scoring (my call):** opportunistic
+under the threat NeedTypes DEFEND_PROVINCE / INVESTIGATE_THREAT / MANAGE_TAINT at **70 (PROVISIONAL**,
+calibrated below a direct threat response ~85–100 so warding is a secondary choice on a spare AP); the
+Phase-4b allowlist then only surfaces it under those needs. Context lists: AT_OWN_HOLDINGS, AT_COURT,
+VISITING, ON_CAMPAIGN. action_skill_map: Spellcraft. The executor casts ALL known self-wards at once
+(batten fully down). Runtime-verified 6/6 (Godot 4.6.2, headless): executor casts all 3 known wards
+(day buffs set) / only the known ward; the filter keeps the action when threatened + castable + unwarded,
+and removes it with no threat / already-warded / no-ward-known. OWNER KNOBS to retune: the trigger
+(existential vs personal-menace), the score (70), and whether Soul of Stone's −1k0-own-influence downside
+should exclude it for a shugenja who intends to be a court aggressor that day.
+DEFERRED (separate vehicles): **Jurojin's Curse** (offensive poison/maho-prep debuff); **Drink of Your
+Essence** (Void 2) / **Mental Quickness** (Fire 2) — PC-deferred ("callable cast, not auto-fired", awaiting
+the PC spell UI); **Earths Touch** (no sim effect, "does not increase the Ring"); **Power of the Ocean**
+(Water 4) / **Altering the Course** (Void) — combat/VP survival buffs needing `_npc_maybe_cast_spell`
+integration + a Godot-runtime driver.
 
 ### Spell coverage — Whispering Wind (truth divination) (2026-06-26, deliberate-cast)
 **Whispering Wind (Air 2, Divination, s33)** — Air kami judge whether the target's last statement was a

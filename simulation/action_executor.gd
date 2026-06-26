@@ -233,6 +233,9 @@ static func execute(
 	if action_id == "PLAY_GAME":
 		return _execute_play_game(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "CAST_PROTECTIVE_WARD":
+		return _execute_cast_protective_ward(action, character, ctx, dice_engine)
+
 	if action_id == "DISCERN_NEED":
 		return _execute_discern_need(action, character, ctx, dice_engine, characters_by_id)
 
@@ -1388,6 +1391,48 @@ static func _build_covert_result(
 		"margin": system_result.get("margin", 0),
 		"effects": effects,
 		"metadata": action.metadata,
+	}
+
+
+# s33/s34 Dedicated CAST_WARD (owner-approved 2026-06-26): the deliberate self-warding action.
+# A shugenja casts every self-ward they know and can afford (each consumes a slot, stamps its day
+# buff via the existing activate_* — Pattern B). Soul of Stone (resist court manipulation),
+# Jurojin's Balm (disease/poison resist), Stone's Endurance (fatigue resist). Jurojin's Curse is
+# NOT here (it is an offensive enemy debuff, a separate vehicle). Self-target only.
+const _PROTECTIVE_WARD_SPELLS: Array[String] = ["soul_of_stone", "jurojins_balm", "stones_endurance"]
+
+static func _execute_cast_protective_ward(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var cast_wards: Array = []
+	for ward: String in _PROTECTIVE_WARD_SPELLS:
+		if not (ward in character.spells_known):
+			continue
+		if not SpellSystem.can_cast(character, ward):
+			continue
+		var res: Dictionary = {}
+		match ward:
+			"soul_of_stone":
+				res = SpellSystem.activate_soul_of_stone(character, dice_engine, ctx.ic_day)
+			"jurojins_balm":
+				res = SpellSystem.activate_jurojins_balm(character, dice_engine, ctx.ic_day)
+			"stones_endurance":
+				res = SpellSystem.activate_stones_endurance(character, dice_engine, ctx.ic_day)
+		if res.get("success", false):
+			cast_wards.append(ward)
+	return {
+		"success": not cast_wards.is_empty(),
+		"action_id": "CAST_PROTECTIVE_WARD",
+		"character_id": ctx.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Spellcraft",
+		"effects": {"wards_cast": cast_wards},
 	}
 
 

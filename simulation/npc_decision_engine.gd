@@ -704,6 +704,38 @@ static func _apply_origami_precondition_filter(
 	return options
 
 
+# -- Phase 4c: Protective Ward Precondition Filter (s33/s34, owner-approved 2026-06-26) -------
+# Surfaces CAST_PROTECTIVE_WARD only when a real threat looms (existential: clan at war /
+# starvation / besieged settlement — the owner's chosen trigger) AND the shugenja knows a self-ward
+# they can cast and have not already raised today. Otherwise it would be a wasteful no-op.
+
+const _PROTECTIVE_WARD_SPELLS: Array[String] = ["soul_of_stone", "jurojins_balm", "stones_endurance"]
+
+static func _apply_protective_ward_precondition_filter(
+	options: Array,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	var present: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "CAST_PROTECTIVE_WARD":
+			present = true
+			break
+	if not present:
+		return options
+	var should_keep: bool = false
+	if _has_existential_threat(ctx):
+		for ward: String in _PROTECTIVE_WARD_SPELLS:
+			if ward in character.spells_known \
+					and SpellSystem.can_cast(character, ward) \
+					and not character.has_day_buff(ward):
+				should_keep = true
+				break
+	if not should_keep:
+		return _remove_action(options, "CAST_PROTECTIVE_WARD")
+	return options
+
+
 # -- Phase 4c: Garden / Bonsai Precondition Filter (s57.23a) ------------------
 # Removes garden and bonsai actions when required state is absent.
 
@@ -1279,6 +1311,7 @@ static func run(
 	options = _apply_origami_precondition_filter(options, character, ctx)
 	options = _apply_garden_precondition_filter(options, character, ctx)
 	options = _apply_world_is_truth_precondition_filter(options, character, chars_by_id)
+	options = _apply_protective_ward_precondition_filter(options, character, ctx)
 	options = _apply_commune_precondition_filter(options, character)
 	options = _apply_arrived_travel_filter(options, need, ctx)
 	options = _apply_compliance_filter(options, ctx)
@@ -1594,6 +1627,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"TREAT_WOUND",
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
 				"EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT", "COMMUNE_KAMI",
+				"CAST_PROTECTIVE_WARD",
 				"REQUEST_PERFORMANCE",
 				"ANNOUNCE_HUNT", "CANCEL_HUNT",
 				"TRAIN_ANIMAL",
@@ -1633,6 +1667,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 		Enums.ContextFlag.AT_COURT:
 			return [
 				"BEGIN_TRAVEL",
+				"CAST_PROTECTIVE_WARD",
 				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
 				"PROBE", "READ_CHARACTER", "LISTEN_REFLECT", "IMPRESS",
 				"PUBLIC_DEBATE", "PUBLIC_INSULT", "PUBLIC_DECLARATION",
@@ -1678,6 +1713,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 		Enums.ContextFlag.VISITING:
 			return [
 				"BEGIN_TRAVEL",
+				"CAST_PROTECTIVE_WARD",
 				"CHARM", "INTIMIDATE", "GOSSIP", "PERSUADE", "NEGOTIATE",
 				"PROBE", "READ_CHARACTER", "LISTEN_REFLECT",
 				"DELIVER_GIFT", "OFFER_FAVOR", "DISCERN_NEED",
@@ -1723,6 +1759,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 		Enums.ContextFlag.ON_CAMPAIGN:
 			return [
 				"BEGIN_TRAVEL",
+				"CAST_PROTECTIVE_WARD",
 				"ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST",
 				"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
 				"SCOUT_ENEMY",
@@ -1786,6 +1823,7 @@ static func _get_ap_cost(action_id: String) -> int:
 	var costs: Dictionary = {
 		"DO_NOTHING": 0,
 		"REST": 1,
+		"CAST_PROTECTIVE_WARD": 1,
 		"TRAIN": 1,
 		"WRITE_LETTER": 1,
 		"CHARM": 1,

@@ -705,5 +705,9 @@
   "WRITE_LETTER": {
     "primary": "Calligraphy",
     "secondary": "Courtier"
+  },
+  "CAST_PROTECTIVE_WARD": {
+    "primary": "Spellcraft",
+    "secondary": null
   }
 }

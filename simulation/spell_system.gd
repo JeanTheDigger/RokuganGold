@@ -1059,10 +1059,10 @@ const SPELL_LIBRARY: Dictionary = {
 	"earths_touch":                  {"e": 1, "m": 1, "s": 0},  # Trait boost 1h — buff, not healing
 	"elemental_ward":                {"e": 1, "m": 1, "s": 10},
 	"jade_strike":                   {"e": 1, "m": 1, "s": 0},
-	"jurojins_balm":                 {"e": 1, "m": 1, "s": 0},  # Poison resist 1h — buff, not healing
+	"jurojins_balm":                 {"e": 1, "m": 1, "s": 0},  # WIRED (CAST_PROTECTIVE_WARD): disease/poison resist buff
 	"minor_binding":                 {"e": 1, "m": 1, "s": 0},
-	"soul_of_stone":                 {"e": 1, "m": 1, "s": 0},
-	"stones_endurance":              {"e": 1, "m": 1, "s": 0},
+	"soul_of_stone":                 {"e": 1, "m": 1, "s": 0},   # WIRED (CAST_PROTECTIVE_WARD): resist court manipulation buff
+	"stones_endurance":              {"e": 1, "m": 1, "s": 0},   # WIRED (CAST_PROTECTIVE_WARD): fatigue resist buff
 	"tetsubo_of_earth":              {"e": 1, "m": 1, "s": 0},
 	# ML2
 	"be_the_mountain":               {"e": 1, "m": 2, "s": 0},
