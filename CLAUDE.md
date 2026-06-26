@@ -6985,15 +6985,17 @@ combat stack.
 
 ### Spell coverage — remaining-unwired triage (2026-06-26)
 Triaged the 16 genuinely-unwired spells (no combat effect, no apply fn, no other consumer).
-**Implementable (clean vehicle, queued):** Sympathetic Energies (Water 1, DONE — buff transfer); **The
-Path Not Taken** (Water 4 — daily slot transfer between Rings, PC-callable, headless-verifiable);
-**Groves of Stone** (Earth 3 — conjured stone-ring barrier; the conjured-terrain [Wall of Earth] + Z-axis
-climb-over [execute_climb] mechanics now exist, so the old "no clamber action → stalemate" blocker is
-gone — combat tranche, needs a Godot-runtime driver); **Facing Your Devils** (Air 5 — trait-swap →
-Ring-change debuff via the combat_ring_deltas bridge — combat tranche); **Taming the Beast** (Earth 2 —
-pacify a hostile animal, Contested Earth — combat, needs animal targets); **The Earth Flows** (Earth 4 —
-Mass Battle commander +3k2 / individual +1k1 — world-sim mass-battle consumer); **Hands of Clay** (Earth 2
-— wall/ceiling climb — marginal, Z-axis climb already exists).
+**Implemented this session (7):** Sympathetic Energies (Water 1 — buff transfer); The Path Not Taken
+(Water 4 — daily slot transfer); **Groves of Stone** (Earth 3 — conjured stone-ring barrier, climbable);
+**Taming the Beast** (Earth 2 — pacify a natural creature → FACTION_NEUTRAL); **Hands of Clay** (Earth 2 —
+climb auto-success buff); **Facing Your Devils** (Air 5 — trait-swap → Ring-change debuff). The five combat
+ones are structural-verify only (orchestrator not headless-runnable here).
+**Deferred — The Earth Flows** (Earth 4 — Mass Battle commander +3k2 / individual +1k1): our mass-battle
+system is abstract company-attrition (`ArmyCombatSystem.resolve_battle` round loop), NOT the tabletop
+commander-roll / Mass-Battle-Table model the spell buffs, so faithfully translating +3k2/+1k1 would need
+an invented flat-advantage conversion (forbidden); AND there is no deliberate-cast vehicle (applying it
+just because a knowing shugenja is in the army is the rejected auto-cast — the battle pipeline has no
+pre-battle shugenja-cast step). Blocked on both a value mapping (owner decision) and a battle-cast action.
 **Deferred — no consumer / blocked subsystem:** Wisdom & Clarity (Water 2 — reading speed/recall, no
 mechanic; explicitly does NOT aid ciphers); Tenjin's Ear (Air 4 — universal language comprehension, no
 language-barrier mechanic); Piercing the Heavens (Air 6 — narrative Fortune blessing, no mechanic);
