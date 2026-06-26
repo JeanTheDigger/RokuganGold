@@ -695,6 +695,36 @@ static func activate_drink_of_your_essence(
 	return res
 
 
+## s36 Sympathetic Energies (Water 1) — Range 25', transfer one existing spell effect from the
+## caster to a willing target. A "spell effect" in the world-sim is a day buff (the standard model
+## for any sub-IC-day spell); this moves one named day buff off the caster and onto the willing
+## target (cleared from the caster, set on the target). PC-callable (the future cast UI picks the
+## effect + a willing target); no NPC vehicle — it is a meta-utility with no decision trigger.
+## The 3-Raise "between two other willing targets" variant is not modeled (caster-to-target only).
+static func activate_sympathetic_energies(
+	caster: L5RCharacterData, target: L5RCharacterData, buff_id: String,
+	dice: DiceEngine, ic_day: int
+) -> Dictionary:
+	if not can_cast(caster, "sympathetic_energies"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	if target == null or CharacterStats.is_dead(target):
+		return {"success": false, "activated": false, "reason": "no_target"}
+	if not caster.has_day_buff(buff_id):
+		return {"success": false, "activated": false, "reason": "caster_lacks_effect"}
+	# Willing target: the caster themselves, or anyone not hostile toward the caster.
+	if target.character_id != caster.character_id \
+			and target.disposition_values.get(caster.character_id, 0) < 0:
+		return {"success": false, "activated": false, "reason": "target_unwilling"}
+	var res: Dictionary = resolve_cast(caster, "sympathetic_energies", dice, 0, target, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		caster.clear_day_buff(buff_id)
+		target.set_day_buff(buff_id)
+		res["transferred_buff"] = buff_id
+		res["target_id"] = target.character_id
+	return res
+
+
 ## s33 Voice of the Wind (Air 1) — Touch, 1 target. On a successful cast the target gains the
 ## spoken-social buff for the IC day (SkillResolver reads voice_of_the_wind_ic_day: +1k0 to
 ## spoken Social Skill Rolls, +1k1 on a voice Perform Roll). Self-cast when target is null.
@@ -1196,7 +1226,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"speed_of_the_waterfall":        {"e": 3, "m": 1, "s": 11},
 	"spirit_of_the_water":           {"e": 3, "m": 1, "s": 3},
 	"suitengus_curse":               {"e": 3, "m": 1, "s": 0},
-	"sympathetic_energies":          {"e": 3, "m": 1, "s": 0},  # Transfers a spell effect — not healing
+	"sympathetic_energies":          {"e": 3, "m": 1, "s": 0},   # WIRED (PC-callable): transfer a day-buff spell effect to a willing target  # Transfers a spell effect — not healing
 	"the_rushing_wave":              {"e": 3, "m": 1, "s": 0},
 	"the_swell_of_the_storm":        {"e": 3, "m": 1, "s": 0},  # one-time knockdown — COMBAT_ONLY
 	# ML2

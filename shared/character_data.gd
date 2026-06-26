@@ -111,6 +111,9 @@ func has_day_buff(buff_id: String) -> bool:
 func clear_day_buffs() -> void:
 	active_day_buffs.clear()
 
+func clear_day_buff(buff_id: String) -> void:
+	active_day_buffs.erase(buff_id)
+
 # s36 Power of the Ocean (Water 5): a multi-DAY sustain ritual (unlike the sub-day buffs above, so
 # it gets dedicated expiry fields, not active_day_buffs). Managed by DayOrchestrator's daily pass
 # (_process_power_of_the_ocean). -1 = inactive. While active (ic_day <= power_of_ocean_until_ic_day)

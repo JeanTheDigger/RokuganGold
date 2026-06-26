@@ -6928,6 +6928,19 @@ the PC spell UI); **Earths Touch** (no sim effect, "does not increase the Ring")
 (Water 4) / **Altering the Course** (Void) — combat/VP survival buffs needing `_npc_maybe_cast_spell`
 integration + a Godot-runtime driver.
 
+### Spell coverage — Sympathetic Energies (spell-effect transfer) (2026-06-26, PC-callable)
+**Sympathetic Energies (Water 1, s36)** — transfer one existing spell effect from the caster to a willing
+target (3-Raise variant: between two other willing targets). A meta-utility; in the world-sim a persistent
+"spell effect" is a **day buff**, so `SpellSystem.activate_sympathetic_energies(caster, target, buff_id,
+dice, ic_day)` moves one named day buff off the caster (`clear_day_buff`, a new single-buff erase on
+L5RCharacterData) and onto a willing target (`set_day_buff`). Willing = the caster, or a target not hostile
+toward the caster (disposition ≥ 0). PC-callable (the future cast UI picks the effect + willing target);
+no NPC vehicle (a meta-utility with no decision trigger — like Mental Quickness / Drink of Essence).
+Runtime-verified 4/4 (Godot 4.6.2, headless): moves a buff caster→ally; fails when the caster lacks the
+effect; rejects a hostile (unwilling) target (buff retained); a non-shugenja cannot cast. LIMITATION: the
+3-Raise "between two OTHER willing targets" variant is not modeled (caster-to-target only); ic_day-marker
+spell effects (e.g. Voice of the Wind) aren't transferable (only day-buff effects). 164 combat effects.
+
 ### Spell coverage — Whispering Wind (truth divination) (2026-06-26, deliberate-cast)
 **Whispering Wind (Air 2, Divination, s33)** — Air kami judge whether the target's last statement was a
 lie. The **apply already existed** (`SpellSystem.activate_whispering_wind`: verdict lie/true by whether
