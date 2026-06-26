@@ -247,6 +247,9 @@ class MapCombatState:
 	var spell_zones: Array = []
 	## s33 Mists of Illusion: stationary visual-only phantoms — {x, y, caster_id}.
 	var illusion_phantoms: Array = []
+	## s33 Token of Memory: stationary visual-only fake objects placed on the map (flavor; no
+	## substance — cannot bear weight or inflict damage). Each: {item, x, y, caster_id, expiry_round}.
+	var illusory_objects: Array = []
 
 
 # =============================================================================
@@ -3017,6 +3020,51 @@ static func _apply_spell_cleanse(
 ## phantom draws a lured enemy's strike when that enemy has no real target
 ## (execute_npc_turn's no-target branch), wasting the enemy's turn and dispelling
 ## the phantom (visual-only -> revealed the instant it is struck).
+## s33 Token of Memory (Air 1): the small (<=1 ft^3) objects a shugenja can conjure as a flawless
+## visual illusion. The character picks one from this list (owner 2026-06-25). Flavor — the object has
+## no substance (cannot be picked up, bear weight, or inflict damage); it just appears on the map.
+const TOKEN_OF_MEMORY_ITEMS: Array[String] = [
+	"coin", "scroll", "letter", "seal", "gem", "jade", "key", "fan", "netsuke", "tea_bowl", "ofuda", "tanto",
+]
+
+## s33 Token of Memory (Air 1) — Complex Action. Conjure a chosen visual-only fake object on a tile
+## within 10' (2 tiles). The character selects the item from TOKEN_OF_MEMORY_ITEMS. Pure flavor: it has
+## no substance and no mechanical effect; it persists for 1 hour (skirmish) then disappears. The future
+## ASCII view renders state.illusory_objects (a glyph per object).
+static func execute_token_of_memory(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	item_name: String, tx: int, ty: int, dice_engine: DiceEngine,
+) -> Dictionary:
+	if caster == null or CharacterStats.is_dead(caster):
+		return {"success": false, "reason": "caster_dead"}
+	if not state.positions.has(caster_id):
+		return {"success": false, "reason": "not_in_combat"}
+	if not SpellSystem.can_cast(caster, "token_of_memory"):
+		return {"success": false, "reason": "cannot_cast"}
+	var ts: TurnState = state.turn_states.get(caster_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_action"}
+	var item: String = item_name.to_lower()
+	if item not in TOKEN_OF_MEMORY_ITEMS:
+		return {"success": false, "reason": "invalid_item"}
+	if tx < 0 or ty < 0 or tx >= state.map.width or ty >= state.map.height:
+		return {"success": false, "reason": "out_of_bounds"}
+	var cp: Vector2i = state.positions[caster_id]
+	if maxi(absi(tx - cp.x), absi(ty - cp.y)) > 2:  # GDD 10' / 5
+		return {"success": false, "reason": "out_of_range"}
+	ts.consume_complex()
+	var res: Dictionary = SpellSystem.resolve_cast(caster, "token_of_memory", dice_engine)
+	if not res.get("success", false):
+		return {"success": false, "reason": "cast_failed", "roll": res}
+	state.illusory_objects.append({
+		"item": item, "x": tx, "y": ty, "caster_id": caster_id,
+		"expiry_round": state.combat.round_number + 600,  # 1 hour ≈ skirmish
+	})
+	state.combat_log.append({"type": "token_of_memory", "round": state.combat.round_number,
+		"caster_id": caster_id, "item": item, "x": tx, "y": ty})
+	return {"success": true, "item": item, "x": tx, "y": ty}
+
+
 static func execute_cast_mists(
 	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
 	tx: int, ty: int, dice_engine: DiceEngine,
@@ -6501,6 +6549,14 @@ static func advance_round(
 	# Persistent spell zones (Wall of Fire, Enticing the Dance of Flame, etc.) — no-op when empty.
 	if not state.spell_zones.is_empty():
 		_process_spell_zones(state, dice_engine)
+
+	# s33 Token of Memory: drop visual-only fake objects whose 1-hour illusion has lapsed.
+	if not state.illusory_objects.is_empty():
+		var surviving_objs: Array = []
+		for obj in state.illusory_objects:
+			if state.combat.round_number < int(obj.get("expiry_round", 0)):
+				surviving_objs.append(obj)
+		state.illusory_objects = surviving_objs
 
 	# Re-roll initiative for all active participants (L5R 4e: initiative re-rolled each round).
 	# CENTER stance carry-forward: void bonus from last round applies to this roll.

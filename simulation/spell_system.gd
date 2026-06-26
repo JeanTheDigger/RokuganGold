@@ -983,7 +983,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"legacy_of_kaze_no_kami":     {"e": 0, "m": 1, "s": 0},   # spirit-bird message — sender delivers letters instantly (LetterSystem.write_letter)
 	"natures_touch":              {"e": 0, "m": 1, "s": 3},
 	"tempest_of_air":             {"e": 0, "m": 1, "s": 0},
-	"token_of_memory":            {"e": 0, "m": 1, "s": 0},   # memory illusion; perception bonus — COMBAT_ONLY
+	"token_of_memory":            {"e": 0, "m": 1, "s": 0},   # visual fake object on the map — wired (execute_token_of_memory)
 	"to_seek_the_truth":          {"e": 0, "m": 1, "s": 0},   # clears temporary mental/social penalties — COMBAT_ONLY
 	"voice_of_the_wind":          {"e": 0, "m": 1, "s": 0},   # social skill bonus for caster — COMBAT_ONLY
 	"way_of_deception":           {"e": 0, "m": 1, "s": 0},

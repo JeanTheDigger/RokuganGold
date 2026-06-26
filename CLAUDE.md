@@ -6775,6 +6775,20 @@ Runtime-verified 7/7 (Godot 4.6.2, headless): the bonus = FORTIFICATION_DEFENSE_
 successfully (wall hardened); a shugenja who doesn't know it / is elsewhere / is dead → no cast.
 (World-sim siege spell, not a combat-orchestrator effect — combat-effects tally stays at 162.)
 
+### Spell coverage — Token of Memory (visual fake object) (2026-06-25, owner-collaborative, runtime-verified 7/7)
+**Token of Memory (Air 1, s33)** — a flawless visual illusion of one small (≤1 ft³) object. Owner
+(2026-06-25): "mostly flavor, but flavor matters — the character selects the object from a list and it
+appears on the ASCII map." New `MapCombatState.illusory_objects` (`{item, x, y, caster_id, expiry_round}`)
++ `execute_token_of_memory(state, caster_id, caster, item_name, tx, ty, dice)` — a Complex Action placing
+a chosen object on a tile within 10' (2 tiles); the item is picked from `TOKEN_OF_MEMORY_ITEMS` (coin /
+scroll / letter / seal / gem / jade / key / fan / netsuke / tea_bowl / ofuda / tanto). Pure flavor — no
+substance (can't be picked up, bear weight, or inflict damage); persists 1 hour (600 rounds ≈ skirmish)
+then disappears (swept in `advance_round`). Mirrors the `illusion_phantoms` (Mists of Illusion) pattern.
+The ASCII view renders `illusory_objects` (a glyph per object — view layer). Not modeled (flavor): the
+Contested-Perception forgery detection and "disappears if moved." Runtime-verified 7/7 (Godot 4.6.2,
+headless): places the chosen gem at the tile; rejects an item not in the list; rejects an out-of-range
+tile; the object disappears when its illusion lapses. (ASCII-map flavor placement, not a combat effect.)
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`
