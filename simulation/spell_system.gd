@@ -410,7 +410,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Coverage clean-wins batch 14 (2026-06-20): illusion dispel (anti-invisibility / clears fog).
 	"draw_back_the_shadow": {"kind": "dispel", "range_tiles": 20, "aoe_radius": 6},  # Air 5: within a 30' radius, dispel illusions — clears combatants' invisibility (Gift of Wind / Legion of the Moon) and removes Summon Fog clouds. Auto for the ML<=4 illusions wired; the ML5-6 contest + the broader non-illusion contested dispel are deferred (no creator/mastery on the timed-modifier layer).
 	# Coverage clean-wins batch 15 (2026-06-20): conjured terrain (a barrier that blocks move + LOS).
-	"wall_of_earth": {"kind": "wall", "pattern": "line", "range_tiles": 20, "wall_length": 6, "duration_rounds": 9999},  # Earth 4: a straight WALL_STONE barrier centered on a target tile, perpendicular to the approach — blocks movement (enemies path around) and LOS through it; restored on expiry. (Groves of Stone's closed ring deferred — needs a clamber-over action to avoid an invulnerability stalemate.)
+	"wall_of_earth": {"kind": "wall", "pattern": "line", "range_tiles": 20, "wall_length": 6, "duration_rounds": 9999},  # Earth 4: a straight WALL_STONE barrier centered on a target tile, perpendicular to the approach — blocks movement (enemies path around) and LOS through it; restored on expiry.
+	"groves_of_stone": {"kind": "stone_ring", "radius_tiles": 3, "duration_rounds": 10},  # Earth 3: a closed WALL_STONE ring (15') around the caster; enemies clamber over via execute_climb; crumbles (restored) on expiry. The clamber-over action now exists, so the old stalemate blocker is gone.
 	# Coverage clean-wins batch 16 (2026-06-20): anti-spell ward (per-target casting-roll penalty).
 	"the_kamis_will": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 10,
 		"mods": [{"kind": "kamis_will", "value": "earth_ring"}]},  # Earth 5: a warded character — all spells (friend or foe) cast AT them suffer -(Earth Ring)k(Earth Ring) to the casting roll. (The +Willpower and -Social-roll halves are out-of-combat, deferred.)
@@ -1144,7 +1145,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"earth_kamis_blessing":          {"e": 1, "m": 3, "s": 15},
 	"earths_protection":             {"e": 1, "m": 3, "s": 0},
 	"earthen_wave":                  {"e": 1, "m": 3, "s": 0},
-	"groves_of_stone":               {"e": 1, "m": 3, "s": 0},
+	"groves_of_stone":               {"e": 1, "m": 3, "s": 0},   # WIRED (combat): WALL_STONE ring around caster, climbable, crumbles on expiry
 	"murmur_of_earth":               {"e": 1, "m": 3, "s": 0},   # earthquake/terrain damage — COMBAT_ONLY
 	"purge_the_taint":               {"e": 1, "m": 3, "s": 8},
 	"sharing_the_strength_of_many":  {"e": 1, "m": 3, "s": 0},

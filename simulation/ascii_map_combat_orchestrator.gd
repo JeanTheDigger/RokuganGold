@@ -2633,6 +2633,12 @@ static func execute_cast_spell(
 			"type": "spell_wall", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "result": res["wall"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "stone_ring":
+		res["stone_ring"] = _apply_groves_of_stone(state, caster_id, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_stone_ring", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "result": res["stone_ring"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "ring_change":
 		res["ring_change"] = _apply_spell_ring_change(state, caster_id, caster, target_id, target, eff, dice_engine)
 		state.combat_log.append({
@@ -3922,6 +3928,44 @@ static func _apply_spell_wall(
 	}
 	state.spell_zones.append(zone)
 	return {"tiles_placed": saved.size(), "expiry_round": zone["expiry_round"]}
+
+
+## s34 Groves of Stone (Earth 3, Craft/Defense): erupts a circular WALL_STONE barrier (15' radius =
+## 3 tiles) centered on the caster. Reuses the conjured_terrain zone (auto-restored on expiry —
+## "crumbles to loose earth"). Enemies must clamber over via execute_climb (the existing Z-axis
+## wall-scale). LIMITATIONS: the GDD climb TN = caster's Earth ×5 is approximated by execute_climb's
+## generic stone TN (25); the "500 Wounds, needs a siege engine to break" is moot in tile combat
+## (no wall-HP) — the ring is simply impassable, which is faithful (you clamber over, not through).
+static func _apply_groves_of_stone(
+	state: MapCombatState, caster_id: int, eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var c: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var r: int = int(eff.get("radius_tiles", 3))
+	var occupied: Dictionary = {}
+	for p in state.positions.values():
+		occupied[p] = true
+	var saved: Array = []
+	# Square-ring perimeter at Chebyshev distance r (a grid "circle" enclosing the caster).
+	for dx in range(-r, r + 1):
+		for dy in range(-r, r + 1):
+			if maxi(absi(dx), absi(dy)) != r:
+				continue  # perimeter only
+			var t: Vector2i = Vector2i(c.x + dx, c.y + dy)
+			if t.x < 0 or t.x >= state.map.width or t.y < 0 or t.y >= state.map.height:
+				continue
+			if occupied.has(t):
+				continue  # never wall a combatant's tile
+			if not MovementSystem.is_passable(state.map.get_tile(t.x, t.y)):
+				continue  # already blocked
+			saved.append({"pos": t, "original": state.map.get_tile(t.x, t.y)})
+			state.map.set_delta(t.x, t.y, Enums.TileType.WALL_STONE)
+	var dur: int = int(eff.get("duration_rounds", 10))
+	state.spell_zones.append({
+		"kind": "conjured_terrain", "tiles": saved,
+		"expiry_round": state.combat.round_number + dur,
+		"spell_id": spell_id, "caster_id": caster_id,
+	})
+	return {"tiles_placed": saved.size(), "expiry_round": state.combat.round_number + dur}
 
 
 ## Restore the original tiles of a conjured-terrain zone (s34 Wall of Earth) when it expires.

@@ -6928,6 +6928,22 @@ the PC spell UI); **Earths Touch** (no sim effect, "does not increase the Ring")
 (Water 4) / **Altering the Course** (Void) — combat/VP survival buffs needing `_npc_maybe_cast_spell`
 integration + a Godot-runtime driver.
 
+### Spell coverage — combat tranche: Groves of Stone (2026-06-26, owner-approved, structural-verify)
+**Groves of Stone (Earth 3, Craft/Defense, s36... s34)** — erupts a circular WALL_STONE barrier (15' = 3
+tiles) around the caster for 10 Rounds; enemies must clamber over; crumbles when it expires. New
+`stone_ring` effect kind + `execute_cast_spell` dispatch → `_apply_groves_of_stone`: places WALL_STONE on
+the Chebyshev-radius-3 perimeter (skipping occupied/already-impassable tiles), saves the originals on a
+`conjured_terrain` zone (so `advance_round` auto-restores them on expiry — the "crumbles to earth" rule),
+and the existing Z-axis `execute_climb` handles the clamber-over. Mirrors the runtime-verified
+`wall_of_earth` conjured-terrain pattern. The old "deferred — needs a clamber action to avoid an
+invulnerability stalemate" blocker is gone (execute_climb now exists). LIMITATIONS: the GDD climb TN =
+caster's Earth ×5 is approximated by execute_climb's generic stone TN (25); the "500 Wounds / siege engine
+to break" is moot in tile combat (no wall-HP) — the ring is simply impassable, which is faithful (clamber
+over, not through). PC-tactical (not in the NPC offense picker, like wall_of_earth). **Verified by
+structural review + parse-trace only** — the combat orchestrator can't run under headless `-s` here (the
+known autoload stall); needs a Godot-runtime driver to confirm at runtime, same caveat as the whole ASCII
+combat stack.
+
 ### Spell coverage — remaining-unwired triage (2026-06-26)
 Triaged the 16 genuinely-unwired spells (no combat effect, no apply fn, no other consumer).
 **Implementable (clean vehicle, queued):** Sympathetic Energies (Water 1, DONE — buff transfer); **The
