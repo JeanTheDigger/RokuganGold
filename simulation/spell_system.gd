@@ -1005,7 +1005,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"quiescence_of_air":          {"e": 0, "m": 2, "s": 0},
 	"request_to_hato_no_kami":    {"e": 0, "m": 2, "s": 0},   # WIRED (combat): summoned bird distracts one enemy, -1k0 for a Round
 	"secrets_on_the_wind":        {"e": 0, "m": 2, "s": 17},
-	"whispering_wind":            {"e": 0, "m": 2, "s": 17},
+	"whispering_wind":            {"e": 0, "m": 2, "s": 17},   # WIRED (PROBE writeback): a shugenja who PROBEs a target divines if their last statement was a lie, flags known fabrications
 	"wind_born_slumbers":         {"e": 0, "m": 2, "s": 0},
 	"wolfs_proposal":             {"e": 0, "m": 2, "s": 0},   # WIRED (court actions): shugenja casts it opening a court action; +3 perceived Honor Rank that day
 	# ML3

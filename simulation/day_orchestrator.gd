@@ -1253,6 +1253,11 @@ static func advance_day(
 		pending_letters, characters_by_id, current_season, dice_engine,
 	)
 
+	_process_whispering_wind_writebacks(
+		day_result.get("results", []),
+		characters_by_id, active_secrets, current_season, ic_day, dice_engine,
+	)
+
 	_wire_discussion_counts(conversation_results, active_topics)
 	_compute_positions_from_conversations(
 		conversation_results, active_topics, characters_by_id
@@ -6715,6 +6720,41 @@ static func _process_intercept_letter_writebacks(
 			},
 			current_season,
 		))
+
+
+static func _process_whispering_wind_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	active_secrets: Array,
+	current_season: int,
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> void:
+	# s33 Whispering Wind: a shugenja who PROBEs a target (a deliberate social read) augments it with
+	# the Air-kami truth divination — judging whether the target's last statement was a lie (a live
+	# fabrication they authored) and flagging fabricated secrets the caster already knows. Rides on
+	# the chosen PROBE action (not auto-cast); consumes a spell slot.
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "PROBE":
+			continue
+		if not d.get("success", false):
+			continue
+		var caster: L5RCharacterData = characters_by_id.get(d.get("character_id", -1))
+		var target: L5RCharacterData = characters_by_id.get(d.get("target_npc_id", -1))
+		if caster == null or target == null:
+			continue
+		if CharacterStats.is_dead(caster) or CharacterStats.is_dead(target):
+			continue
+		if not ("whispering_wind" in caster.spells_known):
+			continue
+		if not SpellSystem.can_cast(caster, "whispering_wind"):
+			continue
+		SpellSystem.activate_whispering_wind(
+			caster, target, dice_engine, ic_day, active_secrets, current_season
+		)
 
 
 static func _process_introduction_writebacks(

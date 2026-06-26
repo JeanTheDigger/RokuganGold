@@ -6899,6 +6899,18 @@ opening of a chosen court action; once/day, day-buff marker, cleared daily). Run
 cast. 164 combat effects. (Voice of the Wind, Wolf's Proposal, Garbled Tongue, and Touch of Air's Grace
 now all deliberate-cast at the court-action opening — the established social-prep-spell vehicle.)
 
+### Spell coverage — Whispering Wind (truth divination) (2026-06-26, deliberate-cast)
+**Whispering Wind (Air 2, Divination, s33)** — Air kami judge whether the target's last statement was a
+lie. The **apply already existed** (`SpellSystem.activate_whispering_wind`: verdict lie/true by whether
+the target authored a live fabrication, and it flags fabricated secrets the caster already knows + records
+a `secret_detected_false` KnowledgeEntry) but had **no caller**. Wired as a DayOrchestrator writeback
+(`_process_whispering_wind_writebacks`, beside the intercept-letter writeback where `active_secrets` is in
+scope — the executor signature doesn't carry secrets): a shugenja who **successfully PROBEs** a target
+(a deliberately-chosen social read) augments it with the divination, consuming a spell slot. Rides on the
+chosen PROBE action (not auto-cast). Runtime-verified 3/3 (Godot 4.6.2, headless): a shugenja PROBE flags
+the target's known fabrication; a non-shugenja PROBE divines nothing; a failed PROBE divines nothing.
+164 combat effects.
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`
