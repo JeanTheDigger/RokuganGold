@@ -6859,6 +6859,19 @@ deliberately on its turn via `_npc_maybe_cast_spell`. Parse-check clean; verifie
 to an already-runtime-verified debuff (the combat orchestrator can't run under headless `-s` here — the
 known autoload-stall). 164 combat effects.
 
+### Spell coverage — Wolf's Proposal (perceived-honor buff) (2026-06-26, deliberate-cast)
+**Wolf's Proposal (Air 2, Illusion, s33)** — a subtle suggestion aura: the caster's Honor Rank reads
+**3 Ranks higher** for any Lore: Bushido roll that assesses it, for 10 minutes. Like Voice of the Wind,
+the **read pipeline already existed** (`AdvantageSystem.get_perceived_honor` adds +3 when the
+`wolfs_proposal` day buff is active — consumed at the social/court roll sites; `SpellSystem.activate_wolfs_proposal`
+sets the buff) but had **no caller**. Wired the deliberate-cast trigger per the owner's no-auto-cast rule:
+in `_execute_contested_court_action`, a shugenja who knows it casts it as the opening of a court action
+they chose (once per day; the day buff is the marker, cleared by the daily `clear_day_buffs` pass). No
+inline change needed — `get_perceived_honor` reads the buff automatically wherever honor is assessed.
+Runtime-verified 3/3 (Godot 4.6.2, headless): cast raises perceived honor 4.0→7.0; the daily buff-clear
+reverts it; a non-shugenja cannot cast. 164 combat effects (Wolf's Proposal is a world-sim social buff,
+not a combat effect).
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

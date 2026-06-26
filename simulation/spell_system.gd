@@ -1007,7 +1007,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"secrets_on_the_wind":        {"e": 0, "m": 2, "s": 17},
 	"whispering_wind":            {"e": 0, "m": 2, "s": 17},
 	"wind_born_slumbers":         {"e": 0, "m": 2, "s": 0},
-	"wolfs_proposal":             {"e": 0, "m": 2, "s": 0},
+	"wolfs_proposal":             {"e": 0, "m": 2, "s": 0},   # WIRED (court actions): shugenja casts it opening a court action; +3 perceived Honor Rank that day
 	# ML3
 	"air_kamis_blessing":         {"e": 0, "m": 3, "s": 15},
 	"essence_of_air":             {"e": 0, "m": 3, "s": 0},

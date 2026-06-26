@@ -4225,6 +4225,13 @@ static func _execute_contested_court_action(
 			and "voice_of_the_wind" in character.spells_known \
 			and SpellSystem.can_cast(character, "voice_of_the_wind"):
 		SpellSystem.activate_voice_of_the_wind(character, dice_engine, ctx.ic_day)
+	# s33 Wolf's Proposal: a shugenja who knows it deliberately casts it opening this court action
+	# they chose, appearing 3 Honor Ranks more honorable for the day (AdvantageSystem.get_perceived_honor
+	# reads the day buff wherever honor is assessed). Cast once per day (the day buff is the marker).
+	if not character.has_day_buff("wolfs_proposal") \
+			and "wolfs_proposal" in character.spells_known \
+			and SpellSystem.can_cast(character, "wolfs_proposal"):
+		SpellSystem.activate_wolfs_proposal(character, dice_engine, ctx.ic_day)
 	var voice_atk: int = 0
 	if character.voice_of_the_wind_ic_day == ctx.ic_day \
 			and a_skill.split(":")[0].strip_edges() in SkillResolver.SOCIAL_SKILLS:
