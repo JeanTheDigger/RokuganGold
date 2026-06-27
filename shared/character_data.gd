@@ -206,6 +206,11 @@ var combat_ring_deltas: Dictionary = {}
 # returns false even at the Out rank). Runtime-only (NOT @export), set/cleared by the spell + cleared
 # at combat setup; false outside combat so the world-sim is unaffected. Same no-leak model as above.
 var combat_death_immune: bool = false
+# s37 Balance of Elements: while true, ALL of the character's Disadvantages have their combat-roll
+# effects negated for the spell's duration (AdvantageSystem._is_suppressed returns true for every
+# Disadvantage). Runtime-only (NOT @export), set by the spell + cleared at combat setup/end and at
+# expiry; false outside combat so the world-sim is unaffected. Same no-leak model as above.
+var combat_suppress_all_disadvantages: bool = false
 # s33-37 per-Trait combat layer: a combat-scoped Trait delta (Enums.Trait -> int), applied by
 # get_trait_value below. A Trait change therefore flows to every combat roll using it AND to the
 # derived Ring (get_ring_value reads get_trait_value). Runtime-only (NOT @export), cleared at combat

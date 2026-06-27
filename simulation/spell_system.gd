@@ -216,7 +216,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"oath_of_the_heavens": {"kind": "oath_link", "target": "ally", "range_tiles": 1,
 		"duration_rounds": 5, "attack_rolled": 2},  # Fire 3: links caster+target, both +2k0 Fire rolls, share Fatigued/Dazed/Stunned, ends if either Down (GDD s35 l199)
 	"balance_of_elements": {"kind": "heal", "heal": "dice", "heal_rolled": 3, "heal_kept": 3,
-		"range_tiles": 1},  # Void 4 (Ishiken): heal 3k3 (disadvantage negation deferred)
+		"range_tiles": 1, "negate_all_disadvantages": true, "duration_rounds": 5},  # Void 4 (Ishiken): heal 3k3 AND negate ALL the target's Disadvantages (combat-roll slice) for 5 Rounds (GDD s37 l155). The ML<=3-spell-effect negation half is deferred (per-modifier mastery tracking across the timed_modifier/trait_delta/ring_delta stores does not exist).
 	"relentless_heat": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 10,
 		"mods": [{"kind": "relentless_heat", "value": 1}]},  # Fire 2: melee attacker Fatigued on attempt + Full Attack->Attack
 	# Fury's weather damage scaling is WIRED (weather_dr below: STORM->6k2, TYPHOON/BLIZZARD->6k3).

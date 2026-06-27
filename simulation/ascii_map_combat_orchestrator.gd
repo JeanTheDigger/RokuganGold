@@ -316,6 +316,7 @@ static func setup_combat(
 		c.combat_ring_deltas = {}  # no-leak guarantee: every combat starts with the ring bridge clear
 		c.combat_trait_deltas = {}  # per-Trait combat layer: clear the trait bridge at combat start
 		c.combat_death_immune = false  # s35 Force of Will: clear the death-immunity flag at combat start
+		c.combat_suppress_all_disadvantages = false  # s37 Balance of Elements: clear the negate-all flag
 		chars_for_combat.append(c)
 		mcs.combatants[c.character_id] = c
 		mcs.positions[c.character_id] = Vector2i(entry.get("x", 0), entry.get("y", 0))
@@ -2986,6 +2987,14 @@ static func _apply_spell_heal(
 		state.suitengu_drown.erase(heal_id)
 		if heal_p != null:
 			heal_p.conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
+	# s37 Balance of Elements: negate ALL the target's Disadvantages (combat-roll slice) for the
+	# duration (applied even on a 0-wound heal). The ML<=3-spell-effect negation half is deferred —
+	# blocked on per-modifier mastery tracking across the timed_modifier/trait_delta/ring_delta stores.
+	var negated_all: bool = false
+	if eff.get("negate_all_disadvantages", false) and heal_p != null and heal_target != null:
+		heal_target.combat_suppress_all_disadvantages = true
+		heal_p.suppress_all_disadvantages_expiry = state.combat.round_number + int(eff.get("duration_rounds", 5))
+		negated_all = true
 	var amount: int = 0
 	match eff.get("heal", ""):
 		"margin":
@@ -3001,9 +3010,9 @@ static func _apply_spell_heal(
 				amount = dice_engine.roll_and_keep(
 					int(eff.get("heal_rolled", 3)), int(eff.get("heal_kept", 3)), true).total
 	if amount <= 0:
-		return {"id": heal_id, "healed": 0, "no_pure_breaths_cured": npb_cured}
+		return {"id": heal_id, "healed": 0, "no_pure_breaths_cured": npb_cured, "negated_all_disadvantages": negated_all}
 	WoundSystem.heal_wounds(heal_target, amount)
-	return {"id": heal_id, "healed": amount, "no_pure_breaths_cured": npb_cured}
+	return {"id": heal_id, "healed": amount, "no_pure_breaths_cured": npb_cured, "negated_all_disadvantages": negated_all}
 
 
 ## s43 maho cast in tile combat: a maho-user enemy (Bloodspeaker/cult, s56.14) casts a maho spell.
@@ -7467,6 +7476,7 @@ static func advance_round(
 			if _cc != null:
 				_cc.combat_ring_deltas = {}
 				_cc.combat_trait_deltas = {}
+				_cc.combat_suppress_all_disadvantages = false
 		state.combat_log.append({
 			"type": "combat_over",
 			"round": state.combat.round_number,
@@ -7515,6 +7525,12 @@ static func advance_round(
 			if _sc != null:
 				_sc.suppressed_disadvantage_type = -1
 			_tp.suppressed_disadvantage_expiry = -1
+		# s37 Balance of Elements: negate-ALL-Disadvantages ends — restore every Disadvantage's effects.
+		if _tp.suppress_all_disadvantages_expiry >= 0 and _tp.suppress_all_disadvantages_expiry <= state.combat.round_number:
+			var _sac: L5RCharacterData = chars_by_id.get(_tp.character_id, state.combatants.get(_tp.character_id, null))
+			if _sac != null:
+				_sac.combat_suppress_all_disadvantages = false
+			_tp.suppress_all_disadvantages_expiry = -1
 		# Rest, My Brother suppression ends — restore the Taint benefits.
 		if _tp.taint_benefits_suppressed_expiry >= 0 and _tp.taint_benefits_suppressed_expiry <= state.combat.round_number:
 			var _tc: L5RCharacterData = chars_by_id.get(_tp.character_id, null)

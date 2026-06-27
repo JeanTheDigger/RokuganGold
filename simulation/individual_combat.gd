@@ -159,6 +159,7 @@ class Participant:
 	var active_kiho: Array = []                 # currently-active kiho names (GDD s38; see KihoSystem)
 	var active_kiho_expiry: Dictionary = {}     # kiho_name → expiry round (for round-duration buffs)
 	var suppressed_disadvantage_expiry: int = -1  # round when Banish All Shadows suppression ends (s38)
+	var suppress_all_disadvantages_expiry: int = -1  # round when Balance of Elements negate-all ends (s37)
 	var taint_benefits_suppressed_expiry: int = -1  # round when Rest, My Brother Taint suppression ends (s38)
 	var shadowed_mountain_used: bool = false  # Shadowed Mountain fired this activation (s38)
 	var attacked_by_ids: Array = []  # who attacked me since my last Turn (Bishamon's Grasp, s38)
