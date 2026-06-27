@@ -1370,7 +1370,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"near_to_ice":                   {"e": 3, "m": 3, "s": 0},
 	"regrow_the_wound":              {"e": 3, "m": 3, "s": 1},
 	"sanctuary_of_the_waves":        {"e": 3, "m": 3, "s": 0},
-	"silent_waters":                 {"e": 3, "m": 3, "s": 0},
+	"silent_waters":                 {"e": 3, "m": 3, "s": 0},   # WIRED (execute_silent_waters): hold a 2nd ML<=3 combat spell, auto-fires when the caster is next struck
 	"strike_of_the_tsunami":         {"e": 3, "m": 3, "s": 0},
 	"the_inner_ocean":               {"e": 3, "m": 3, "s": 15},
 	"typhoons_surge":                {"e": 3, "m": 3, "s": 0},

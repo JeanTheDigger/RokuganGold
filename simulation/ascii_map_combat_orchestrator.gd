@@ -3837,6 +3837,41 @@ static func _apply_whirlpool(
 	return {"ok": true, "center": center, "radius": radius}
 
 
+## s36 Silent Waters (Water 3): on a successful cast, set a SECOND spell (ML <= 3 the caster can cast,
+## with a wired combat effect) to be held until a physical trigger fires it. Modeled with the
+## "when_struck" trigger (the GDD "drawing a blade / falling in battle" condition): the held spell
+## auto-fires the next time the caster is struck (see _apply_hit). Only one Silent Waters may be held
+## at a time — a new casting replaces the prior stored spell. The Silent Waters slot is consumed at
+## store time; the held spell's slot + roll resolve at trigger (the "cast on trigger" model — the
+## outcome is identical to the GDD pre-cast-and-release, two slots total across the operation).
+static func execute_silent_waters(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	stored_spell_id: String, dice_engine: DiceEngine,
+) -> Dictionary:
+	if not SpellSystem.can_cast(caster, "silent_waters"):
+		return {"ok": false, "reason": "cannot_cast"}
+	if not (stored_spell_id in caster.spells_known):
+		return {"ok": false, "reason": "stored_spell_unknown"}
+	if int(SpellSystem.SPELL_LIBRARY.get(stored_spell_id, {}).get("m", 99)) > 3:
+		return {"ok": false, "reason": "stored_spell_too_high"}
+	if not SpellSystem.SPELL_COMBAT_EFFECTS.has(stored_spell_id):
+		return {"ok": false, "reason": "stored_spell_no_combat_effect"}
+	if not SpellSystem.can_cast(caster, stored_spell_id):
+		return {"ok": false, "reason": "stored_spell_unavailable"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+	if p == null:
+		return {"ok": false, "reason": "not_in_combat"}
+	var res: Dictionary = SpellSystem.resolve_cast(caster, "silent_waters", dice_engine)
+	if not res.get("success", false):
+		return {"ok": false, "reason": "cast_failed"}
+	p.stored_spell = {"spell_id": stored_spell_id, "trigger": "when_struck"}
+	state.combat_log.append({
+		"type": "silent_waters_stored", "round": state.combat.round_number,
+		"caster_id": caster_id, "stored_spell": stored_spell_id,
+	})
+	return {"ok": true, "stored_spell": stored_spell_id, "trigger": "when_struck"}
+
+
 ## s35 Curse of the Burning Hand (Fire 6): bind a hostile Fire kami to an enemy on a WON Contested Fire
 ## Roll (the caster must win — the target resists if it wins). The cursed target is then wreathed in
 ## flame: each round (in advance_round) its OWN allies (same faction) standing adjacent take 3k3, and the
@@ -9349,6 +9384,18 @@ static func _apply_hit(
 			and IndividualCombat.get_timed_modifier_total(t_p, "no_magic_heal") <= 0 \
 			and int(wd_result.get("final_damage", 0)) > 0:
 		WoundSystem.heal_wounds(target, dice_engine.roll_and_keep(1, 1, true).total)
+
+	# s36 Silent Waters: a pre-set spell held on the struck defender releases when they are hit
+	# ("falling in battle"/"drawing a blade" -> "when_struck"). Cleared BEFORE firing (no recursion);
+	# the held combat spell fires from the struck caster at their attacker (a self-buff self-applies).
+	if t_p != null and not CharacterStats.is_dead(target) \
+			and String(t_p.stored_spell.get("trigger", "")) == "when_struck":
+		var held: Dictionary = t_p.stored_spell
+		t_p.stored_spell = {}
+		var held_id: String = String(held.get("spell_id", ""))
+		if not held_id.is_empty() and SpellSystem.can_cast(target, held_id):
+			execute_cast_spell(state, target.character_id, target, held_id,
+				attacker.character_id, attacker, dice_engine)
 
 	# Arugai "Nearly Immortal" / heart_kill (s54.5): the oni's wounds heal almost instantly,
 	# so body damage can never slay it — only destroying its heart can. While the heart is

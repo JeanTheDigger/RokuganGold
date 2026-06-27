@@ -238,6 +238,9 @@ class Participant:
 	# hit; takes 1k1 at the start of each round until a Simple Action extinguishes it.
 	var on_fire: bool = false
 	var absorb_pool: int = 0  # s34 Power of the Earth Dragon: remaining Wounds the ward absorbs (0 = none)
+	# s36 Silent Waters: a pre-cast ML<=3 spell held until a physical trigger fires it. {} = none.
+	# {spell_id, trigger} — trigger "when_struck" releases it the next time this participant is hit.
+	var stored_spell: Dictionary = {}
 	# Combat-scoped Ring deltas from in-combat spells (s34 Essence of Earth ring-up, Water
 	# ring-downs): {Enums.Ring: int}. The AUTHORITATIVE participant-scoped store; synced to the
 	# character's combat_ring_deltas read-bridge so the CharacterStats wound/death chain sees the

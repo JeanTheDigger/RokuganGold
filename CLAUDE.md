@@ -7102,6 +7102,23 @@ purify zone pattern; the within_the_waves guard mirrors the established `get_tim
 the combat orchestrator can't run under headless `-s` (autoload stall), same caveat as the whole ASCII stack.
 166 combat effects.
 
+### Spell coverage — Silent Waters (stored-spell trigger) (2026-06-27, owner-directed, static-only)
+**Silent Waters (Water 3, s36)** — on a successful cast, immediately cast a SECOND spell (ML≤3) that is
+held inert until a physical trigger (a spoken word, drawing a blade, falling in battle) releases it.
+Previously deferred ("stored-spell delayed trigger, no vehicle"). Built as a real combat mechanic. New
+`IndividualCombat.Participant.stored_spell` (`{spell_id, trigger}`, default `{}` → zero regression).
+`AsciiMapCombatOrchestrator.execute_silent_waters(state, caster_id, caster, stored_spell_id, dice)`:
+validates the stored spell is known, ML≤3, has a wired combat effect, and is castable; consumes the Silent
+Waters slot; stores `{spell_id, trigger: "when_struck"}` on the caster's Participant (one at a time — a new
+cast replaces it). A trigger hook in `_apply_hit` (after the wound lands, defender survives) releases the
+held spell the next time the caster is struck: it clears `stored_spell` BEFORE firing (no recursion) and
+fires it via `execute_cast_spell` from the struck caster at their attacker (a self-buff self-applies). The
+GDD's "drawing a blade / falling in battle" condition maps to `when_struck` (the cleanest tile-combat
+trigger). Modeled as "cast on trigger" (the held spell's slot+roll resolve at trigger rather than at store
+— identical outcome, two slots total). PC-tactical (a set-up tool; no NPC picker). Parse-clean; structural-
+verified (reuses the established Participant-field + execute_cast_spell paths; the orchestrator can't run
+under headless `-s`). 166 combat effects (Silent Waters is a trigger mechanic, not a new effect).
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`
