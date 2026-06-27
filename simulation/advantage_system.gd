@@ -298,6 +298,9 @@ static func get_disadvantage_points(dis: DisadvantageData) -> int:
 ## True when this Disadvantage's combat effects are transiently suppressed (s38
 ## Banish All Shadows). Read at the top of the combat-roll disadvantage loops.
 static func _is_suppressed(character: L5RCharacterData, dis_type: Enums.Disadvantage) -> bool:
+	# s37 Balance of Elements negates ALL Disadvantages for the duration.
+	if character.all_disadvantages_suppressed:
+		return true
 	if character.suppressed_disadvantage_type == int(dis_type):
 		return true
 	# Touch of Air's Grace (s33): negates the Disturbing Countenance Disadvantage while active.

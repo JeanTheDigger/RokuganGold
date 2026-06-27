@@ -2583,6 +2583,18 @@ static func _complete_cast(
 			"type": "spell_heal", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "heal": res["spell_heal"],
 		})
+		# s37 Balance of Elements: besides the 3k3 heal, negate ALL the target's Disadvantages for the
+		# duration. (Negating ML<=3 spell effects is deferred — the timed-modifier layer stores no
+		# source Mastery Level.) The healed target is the named ally, else the caster.
+		if eff.get("suppress_all_disadvantages", false):
+			var bt_id: int = target_id if target != null else caster_id
+			var bt_ch: L5RCharacterData = target if target != null else caster
+			var bt_p: IndividualCombat.Participant = state.combat.participants.get(bt_id, null)
+			if bt_ch != null and bt_p != null and not CharacterStats.is_dead(bt_ch):
+				bt_ch.all_disadvantages_suppressed = true
+				bt_p.all_disadvantages_suppressed_expiry = \
+					state.combat.round_number + int(eff.get("suppress_rounds", 5))
+				res["disadvantages_negated"] = true
 	elif res.get("success", false) and eff.get("kind", "") == "status":
 		res["spell_status"] = _apply_spell_status(
 			state, caster_id, caster, target_id, target, eff, dice_engine)
@@ -7124,6 +7136,12 @@ static func advance_round(
 			if _sc != null:
 				_sc.suppressed_disadvantage_type = -1
 			_tp.suppressed_disadvantage_expiry = -1
+		# s37 Balance of Elements all-Disadvantage suppression ends — restore every Disadvantage.
+		if _tp.all_disadvantages_suppressed_expiry >= 0 and _tp.all_disadvantages_suppressed_expiry <= state.combat.round_number:
+			var _ac: L5RCharacterData = chars_by_id.get(_tp.character_id, state.combatants.get(_tp.character_id, null))
+			if _ac != null:
+				_ac.all_disadvantages_suppressed = false
+			_tp.all_disadvantages_suppressed_expiry = -1
 		# Rest, My Brother suppression ends — restore the Taint benefits.
 		if _tp.taint_benefits_suppressed_expiry >= 0 and _tp.taint_benefits_suppressed_expiry <= state.combat.round_number:
 			var _tc: L5RCharacterData = chars_by_id.get(_tp.character_id, null)

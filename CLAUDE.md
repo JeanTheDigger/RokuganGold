@@ -6549,6 +6549,21 @@ target (the moving fire-stream) is not modeled — only the single-target hit + 
 normally" early cure is a future action (like the bleed bandage). The `fire_dot` primitive is reusable for any
 future catch-fire effect with a custom per-round amount.
 
+### Spell coverage — deferred sub-part: Balance of Elements disadvantage negation (2026-06-27, runtime-verified 8/8)
+**Balance of Elements** (Void 4 Ishiken, s37 l155) GDD: heals 3k3 (wired) AND **negates ALL the target's
+Disadvantages for the duration** (5 Rounds in combat); negated ML≤3 spell effects are also undone. The
+disadvantage negation was deferred. The existing `suppress_disadvantage` primitive only suppresses ONE, so
+added an all-suppress: a non-exported `L5RCharacterData.all_disadvantages_suppressed` flag (mirrors the single
+`suppressed_disadvantage_type`), checked first in `AdvantageSystem._is_suppressed` (the single gate all three
+combat-roll disadvantage loops use → every Disadvantage is skipped while set); a `Participant.all_disadvantages_suppressed_expiry`
+cleared in `advance_round` (beside the Banish All Shadows expiry); and a `suppress_all_disadvantages`/`suppress_rounds`
+flag on the heal entry → `_complete_cast`'s heal branch sets the target's flag + expiry after the 3k3 heal.
+**The "negate ML≤3 spell effects" half stays deferred** — the timed-modifier layer stores no source Mastery
+Level (the same blocker as Draw Back the Shadow's ML5-6 contest). Runtime-verified 8/8 (Godot 4.6.2, headless):
+the flag negates a BAD_EYESIGHT perception penalty (and restores it when cleared); a full cast on an ally
+negates all its Disadvantages + heals it; the suppression expires after 5 Rounds and the Disadvantage returns.
+The all-suppress primitive is reusable for any future "ignore all Disadvantages" effect.
+
 ### Spell coverage — deferred sub-part: Courage of the Seven Thunders group/clan/Taint (2026-06-27, runtime-verified 7/7)
 **Courage of the Seven Thunders** (Earth 1 Battle, s34 l15) GDD: up to the caster's School Rank targets (may
 include the caster) within 30' gain **+5k0 to resist any Fear**; **samurai not of the original Seven Great

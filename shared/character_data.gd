@@ -348,6 +348,10 @@ var combat_ring_deltas: Dictionary = {}
 ## Disadvantage in its combat-roll readers while set. Cleared by the orchestrator's
 ## advance_round at expiry. Not exported — combat-transient state.
 var suppressed_disadvantage_type: int = -1
+## Transient combat suppression of ALL Disadvantages (s37 Balance of Elements). When true,
+## AdvantageSystem skips every Disadvantage in its combat-roll readers. Cleared by the
+## orchestrator's advance_round at expiry. Not exported — combat-transient state.
+var all_disadvantages_suppressed: bool = false
 ## Transient combat suppression of Shadowlands Taint benefits (s38 Rest, My Brother).
 ## When true, MutationSystem skips the positive Taint Power/mutation bonuses (not the
 ## penalties). Cleared by the orchestrator's advance_round at expiry. Not exported.
