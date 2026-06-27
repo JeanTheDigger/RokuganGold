@@ -3654,6 +3654,12 @@ static func _apply_spell_ring_change(
 	p.ring_deltas[ring] = int(p.ring_deltas.get(ring, 0)) + delta
 	p.ring_delta_expiry[ring] = expiry
 	IndividualCombat.sync_ring_deltas(p, who)
+	# Optional accompanying -1 Strength (Wolf's Mercy): Strength adds directly to rolled damage dice,
+	# so a Strength Rank change is exactly that many rolled damage dice — installed as a timed modifier
+	# matching the ring-change duration (the established Strength->damage-die slice).
+	if eff.has("extra_damage_rolled"):
+		IndividualCombat.add_timed_modifier(p, "spell_damage_rolled",
+			int(eff["extra_damage_rolled"]), expiry, "spell_debuff")
 	# A ring-down on an already-wounded target may immediately kill (reduced capacity < wounds).
 	var died: bool = delta < 0 and CharacterStats.is_dead(who)
 	return {"id": who_id, "ring": ring, "delta": delta, "expires_round": expiry,

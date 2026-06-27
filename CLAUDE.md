@@ -6749,6 +6749,17 @@ costing a slot; non-caster interrupt no-op. LIMITATION: the speed-raise count is
 turn-based UI. Same PC-travel HOLD live-reachability caveat as the whole ASCII stack — driver-verified,
 not a live session.
 
+### Spell coverage — deferred sub-part: The Wolf's Mercy Strength−1 (2026-06-27, runtime-verified 5/5)
+**The Wolf's Mercy** (Earth 3, s34 l223) GDD: "Target's Earth Ring is lowered by 1 Rank … Strength Rank is
+also lowered by 1." Only the Earth-Ring drop (reduced Wound capacity, via the ring-delta bridge) was wired;
+the −1 Strength was deferred. Added an optional `extra_damage_rolled` field to the `ring_change` handler:
+−1 Strength is exactly −1 rolled damage die (Strength adds directly to rolled damage dice, the established
+slice — Strength of the Tsunami / Master of the Rolling River), installed as a `spell_damage_rolled` timed
+modifier matching the ring-change duration. Runtime-verified 5/5 (Godot 4.6.2, headless, 400-roll means):
+the cast lowers the target's Wound capacity 64→48 (Earth −1) AND its own katana damage 22.0→20.3 (Strength
+−1 = −1 rolled die); both restore after the 10-round duration; the `spell_damage_rolled` modifier reads −1.
+Generic — any future ring_change spell with an accompanying Strength shift reuses the field.
+
 ### Spell coverage — deferred sub-part: Suitengu's Curse Reflexes−1 (2026-06-27, runtime-verified 5/5)
 **Suitengu's Curse** (Water 1, s36 l63) GDD: "The target's Reflexes Rank is lowered by 1 and they move as
 though their Water is 1 Rank lower." Only the movement half (`move_water_penalty −1`) was wired; the
