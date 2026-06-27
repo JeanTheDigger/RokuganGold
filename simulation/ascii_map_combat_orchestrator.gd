@@ -10188,6 +10188,11 @@ static func _apply_hit(
 
 	# Reduction: base armor + kata/active-kiho Reduction − attacker piercing (s30a/s38).
 	var t_p: IndividualCombat.Participant = state.combat.participants.get(target.character_id, null)
+	# s35 Defense of the Firestorm: a wooden weapon burns to ash before reaching the warded wearer,
+	# dealing no damage (the +20 Armor TN is applied separately; steel/iron/unarmed strikes pass).
+	if t_p != null and IndividualCombat.is_wooden_weapon(weapon_name) \
+			and IndividualCombat.get_timed_modifier_total(t_p, "firestorm_ward") > 0:
+		return {"damage": 0, "wounds": 0, "dead": false, "weapon_burned": true}
 	var reduction: int = target.armor_reduction
 	if t_p != null:
 		reduction = IndividualCombat.total_defender_reduction(target, t_p, attacker, a_p, weapon_name)

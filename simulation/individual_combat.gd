@@ -13,17 +13,19 @@ class_name IndividualCombat
 const WEAPON_CATALOG: Dictionary = {
 	# trait: "agility" is standard for melee (s4.5 "Agility for attacks").
 	# Iaijutsu duels use Reflexes — handled directly in resolve_duel_strike(), not via this table.
+	# is_wooden: physical construction (s35 Defense of the Firestorm burns wooden weapons). bo /
+	# naginata (long wooden shaft) / yumi (wooden arrows) are wood; blades, iron clubs, fan = not.
 	"katana":     {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",      "size": "Medium", "melee": true,  "trait": "agility"},
 	"wakizashi":  {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",      "size": "Small",  "melee": true,  "trait": "agility"},
 	"tanto":      {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives",         "size": "Small",  "melee": true,  "trait": "agility"},
-	"bo":         {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Bo",             "size": "Large",  "melee": true,  "trait": "agility"},
+	"bo":         {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Bo",             "size": "Large",  "melee": true,  "trait": "agility", "is_wooden": true},
 	# can_grapple: s40 "Weapon Grapples" — chain weapons and certain polearms may
 	# initiate Grapples using the weapon skill. The naginata is the catalog's
 	# grapple-capable polearm; chain weapons (e.g. kusarigama) get can_grapple
 	# when added to the catalog with their own DR.
-	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms",       "size": "Large",  "melee": true,  "trait": "agility", "can_grapple": true},
+	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms",       "size": "Large",  "melee": true,  "trait": "agility", "can_grapple": true, "is_wooden": true},
 	"tetsubo":    {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Heavy Weapons",  "size": "Large",  "melee": true,  "trait": "agility"},
-	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",       "size": "Large",  "melee": false, "trait": "reflexes"},
+	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",       "size": "Large",  "melee": false, "trait": "reflexes", "is_wooden": true},
 	"unarmed":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu",       "size": "Small",  "melee": true,  "trait": "agility"},
 	# Off-hand weapons for the s40 dual-wield combinations (DR from s39 Equipment).
 	# kama: Mantis paired small weapons (s29.9 "Waves Rush to Shore" uses Knives).
@@ -1117,6 +1119,11 @@ static func roll_full_defense_bonus(
 
 static func get_weapon_profile(weapon_name: String) -> Dictionary:
 	return WEAPON_CATALOG.get(weapon_name.to_lower(), DEFAULT_WEAPON)
+
+
+## True if the named weapon is wood-bodied (s35 Defense of the Firestorm). Reads the catalog.
+static func is_wooden_weapon(weapon_name: String) -> bool:
+	return get_weapon_profile(weapon_name).get("is_wooden", false)
 
 
 ## True if the named weapon may initiate a Grapple (s40 "Weapon Grapples").

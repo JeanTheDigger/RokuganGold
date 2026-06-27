@@ -181,7 +181,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"never_alone": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5, "conditional_expiry": "never_alone",
 		"mods": [{"kind": "spell_attack_rolled", "value": "fire_ring"}]},  # Fire 1: +Fire to (attack) rolls; ends early when the target suffers Wounds OR misses an attack (GDD s35 l75; "fails a Skill roll" out-of-combat)
 	"defense_of_the_firestorm": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
-		"mods": [{"kind": "armor_tn", "value": 20}]},  # Fire 4: +20 Armor TN flame aura (wooden-weapon burn deferred)
+		"mods": [{"kind": "armor_tn", "value": 20}, {"kind": "firestorm_ward", "value": 1}]},  # Fire 4: +20 Armor TN flame aura; wooden weapons (incl. arrows, many polearms) burn before reaching the wearer, dealing no damage (GDD s35 l243)
 	# === EARTH WAVE A (2026-06-20): debuff path + fear/knockdown resist ===
 	"courage_of_the_seven_thunders": {"kind": "courage", "aoe_radius": 6, "duration_rounds": 100},  # Earth 1: up to (Earth School Rank) allies in 30' gain Fear resist — Seven Great Clans +5k0, others +3k0, Taint 1+ excluded (GDD s34 l15; the multi-shugenja combined ritual is world-sim)
 	"the_mountains_feet": {"kind": "buff", "target": "ally", "range_tiles": 4, "duration_rounds": 50,

@@ -17,3 +17,7 @@ extends Resource
 ## "fire"/"water" map to the SpiritAbilitySystem.W_* weapon kinds. Most weapons are
 ## mundane — only enchanted/blessed/elemental weapons set this.
 @export var material: String = ""
+## Physical construction material (orthogonal to the supernatural `material` above): true for
+## wood-bodied weapons (staves, polearm shafts, arrows). s35 Defense of the Firestorm burns
+## wooden weapons before they reach the warded wearer. Steel blades / iron clubs / unarmed = false.
+@export var is_wooden: bool = false
