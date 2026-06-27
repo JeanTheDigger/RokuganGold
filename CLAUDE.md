@@ -6749,6 +6749,20 @@ costing a slot; non-caster interrupt no-op. LIMITATION: the speed-raise count is
 turn-based UI. Same PC-travel HOLD live-reachability caveat as the whole ASCII stack — driver-verified,
 not a live session.
 
+### Spell coverage — deferred sub-part: Never Alone conditional expiry (2026-06-27, runtime-verified 9/9)
+**Never Alone** (Fire 1, s35 l75) GDD: +Fire Ring to attack/Skill/Trait rolls, "lasts until the spell
+expires, the target fails an attack or Skill roll, or the target suffers Wounds from any source — whichever
+comes first." Only the flat 5-round +Fire-to-attack buff was wired; the early-expiry triggers were deferred.
+Added a `source` field to the `buff` handler's generic mod install (default "spell_buff") so Never Alone's
+modifier carries a distinct `never_alone` source, then two clears: on a **missed attack** by the bearer
+(`execute_melee_attack`/`execute_ranged_attack`, after reroll resolution, no-op if absent) and on the bearer
+**taking Wounds and surviving** (`_apply_hit`, before the final return). Both via
+`clear_timed_modifiers_by_source(p, "never_alone")`. Runtime-verified 9/9 (Godot 4.6.2, headless): the cast
+grants +5 (Fire Ring); the buff PERSISTS after a successful hit; it CLEARS on a missed attack; and it CLEARS
+when the bearer takes Wounds. drv15 (buff) + drv9 (melee) re-pass — no regression. LIMITATION: the "fails a
+Skill roll" trigger is the attack-roll miss in combat (general out-of-combat skill rolls have no combat
+consumer); the "+Fire to Skill/Trait rolls" non-attack slice is the standard out-of-combat-buff limitation.
+
 ### Spell coverage — deferred sub-part: The Kami's Strength no-Simple-Move cost (2026-06-27, runtime-verified 6/6)
 **The Kami's Strength** (Earth 5 Battle, s34 l323) GDD: the target gains Reduction 20 + Strength/Trait boost,
 "In return, the target cannot take Simple Move Actions (Free Move Actions are still permitted)." The

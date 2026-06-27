@@ -179,8 +179,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"soldiers_of_clay": {"kind": "summon", "summon_kind": "clay_soldier", "count": 10},  # Earth 6: 10 stone warriors
 	"be_the_mountain": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 4,
 		"mods": [{"kind": "reduction", "value": "be_the_mountain_reduction"}]},  # Earth 2: Reduction 5×rank (max 20)
-	"never_alone": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
-		"mods": [{"kind": "spell_attack_rolled", "value": "fire_ring"}]},  # Fire 1: +Fire to rolls (conditional expiry deferred)
+	"never_alone": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5, "source": "never_alone",
+		"mods": [{"kind": "spell_attack_rolled", "value": "fire_ring"}]},  # Fire 1: +Fire to attack rolls; ends early on a missed attack OR on taking Wounds (whichever first)
 	"defense_of_the_firestorm": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
 		"mods": [{"kind": "armor_tn", "value": 20}, {"kind": "defense_of_firestorm", "value": 1}]},  # Fire 4: +20 Armor TN + wooden weapons (arrows, polearms) burn before reaching the wearer (GDD s35 l243)
 	# === EARTH WAVE A (2026-06-20): debuff path + fear/knockdown resist ===

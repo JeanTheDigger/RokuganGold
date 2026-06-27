@@ -1329,6 +1329,10 @@ static func execute_melee_attack(
 			result = soh["result"]
 			soh_rerolled = true
 
+	# s35 Never Alone: the blessing ends the instant its bearer fails an attack roll (no-op if absent).
+	if not result.get("hit", false):
+		IndividualCombat.clear_timed_modifiers_by_source(a_p, "never_alone")
+
 	var log_entry: Dictionary = {
 		"type": "melee_attack",
 		"round": state.combat.round_number,
@@ -1789,6 +1793,10 @@ static func execute_ranged_attack(
 		result["hit"] = true
 		result["auto_hit"] = true
 		IndividualCombat.clear_timed_modifiers_by_source(a_p, "spell_arrows_flight")
+
+	# s35 Never Alone: the blessing ends the instant its bearer fails an attack roll (no-op if absent).
+	if not result.get("hit", false):
+		IndividualCombat.clear_timed_modifiers_by_source(a_p, "never_alone")
 
 	var log_entry: Dictionary = {
 		"type": "ranged_attack",
@@ -3485,6 +3493,9 @@ static func _apply_spell_buff(
 			p.suppressed_disadvantage_expiry = expiry
 			return {"id": bid, "suppressed_disadvantage": int(hd.disadvantage_type), "expires_round": expiry}
 		return {"id": bid, "no_suppressable_disadvantage": true}
+	# Optional per-buff modifier source (default "spell_buff"). A distinct source lets a buff be cleared
+	# selectively — e.g. Never Alone's "ends on a failed roll or on taking Wounds".
+	var bsrc: String = String(eff.get("source", "spell_buff"))
 	var applied: Array = []
 	for mod in eff.get("mods", []):
 		var mkind: String = String(mod.get("kind", ""))
@@ -3511,7 +3522,7 @@ static func _apply_spell_buff(
 			if gts != null:
 				gts.set(mkind, int(gts.get(mkind)) + val)
 		else:
-			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff")
+			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, bsrc)
 		applied.append({"kind": mkind, "value": val})
 	# Optional caster-side cost (s36 Ebbing Strength): the caster reduces one of their own Physical
 	# Traits to grant it to the target. Installs the matching penalty on the caster's Participant
@@ -10319,6 +10330,10 @@ static func _apply_hit(
 	# Divide the Soul (s37 Void): if either manifestation dies, both die.
 	if CharacterStats.is_dead(target) and state.divide_soul_pairs.has(target.character_id):
 		_apply_divide_soul_shared_death(state, target.character_id)
+
+	# s35 Never Alone: the ancestors' blessing ends the instant its bearer suffers Wounds from any source.
+	if t_p != null and int(wd_result.get("final_damage", raw)) > 0 and not CharacterStats.is_dead(target):
+		IndividualCombat.clear_timed_modifiers_by_source(t_p, "never_alone")
 
 	return {
 		"damage": wd_result.get("final_damage", raw),
