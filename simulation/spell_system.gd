@@ -63,6 +63,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Coverage extension (2026-06-20): tendril/swarm/dragon-talon damage + Earth grasp.
 	"tail_of_the_fire_dragon": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
 		"range_tiles": 6, "aoe_radius": 0},  # Fire 2: DR = caster Fire Ring, 30'
+	# Ravenous Swarms (Fire 3): 5k3 bolt, then encircles the target 5 Rounds — a Fire cast during that window is struck for 3k3 + auto-fails (fire-disrupt rider WIRED)
 	"ravenous_swarms": {"kind": "damage", "dr_rolled": 5, "dr_kept": 3,
 		"range_tiles": 6, "aoe_radius": 0},  # Fire 3: 5k3 bolt, 30' (fire-disrupt rider deferred)
 	"the_dragons_talon": {"kind": "damage", "dr_rolled": 8, "dr_kept": 6,

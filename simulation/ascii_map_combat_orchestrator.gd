@@ -2478,6 +2478,20 @@ static func execute_cast_spell(
 		if tgt_p != null:
 			kw_penalty = IndividualCombat.get_timed_modifier_total(tgt_p, "kamis_will")
 			eof_penalty = IndividualCombat.get_timed_modifier_total(tgt_p, "essence_of_fire")
+	# s35 Ravenous Swarms: a caster encircled by the swarm who casts ANY Fire spell is struck — the Fire
+	# kami deal 3k3 extra Wounds and the cast automatically fails (the slot is still lost). The action is
+	# already consumed above; the slot is consumed here to mirror an attempted cast.
+	if sp_elem == Enums.Ring.FIRE and caster_p_ins != null \
+			and IndividualCombat.get_timed_modifier_total(caster_p_ins, "ravenous_swarms") > 0:
+		SpellSystem.consume_slot(caster, SpellSystem.get_best_cast_ring(caster, spell_id))
+		var rs_dmg: int = dice_engine.roll_and_keep(3, 3, true).total
+		WoundSystem.apply_damage(caster, rs_dmg, 0)
+		state.combat_log.append({
+			"type": "ravenous_swarms_disrupt", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "damage": rs_dmg,
+		})
+		return {"success": false, "ravenous_swarms_disrupted": true, "spell_id": spell_id,
+			"damage": rs_dmg}
 	var res: Dictionary = SpellSystem.resolve_cast(caster, spell_id, dice_engine, 0, target, -1, ward_tn, kw_penalty, eof_penalty)
 	res["spell_id"] = spell_id
 	# Furaribi rule (s54.12): a jade/crystal-property spell does not harm a superior_invuln
@@ -2503,6 +2517,13 @@ static func execute_cast_spell(
 			"type": "spell_damage", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "hits": res["spell_damage"],
 		})
+		# s35 Ravenous Swarms: after the 5k3 bolt, the swarm encircles the target for 5 Rounds —
+		# install the "ravenous_swarms" modifier; a Fire cast during that window is disrupted (above).
+		if spell_id == "ravenous_swarms" and target != null and not CharacterStats.is_dead(target):
+			var rs_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+			if rs_p != null:
+				IndividualCombat.add_timed_modifier(
+					rs_p, "ravenous_swarms", 1, state.combat.round_number + 5, "ravenous_swarms")
 	elif res.get("success", false) and eff.get("kind", "") == "heal":
 		res["spell_heal"] = _apply_spell_heal(
 			state, caster_id, caster, target_id, target, eff, res, dice_engine)
