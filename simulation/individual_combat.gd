@@ -1137,6 +1137,7 @@ static func resolve_attack(
 	maneuver: String = "",
 	adv_context: Dictionary = {},
 	attacker_roll_penalty: int = 0,
+	target_is_large: bool = false,
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	# Conjured elemental weapon (s33-s36): override the wielded profile. The created weapon's
@@ -1242,6 +1243,12 @@ static func resolve_attack(
 	# Mounted / Higher Ground: +1k0 against unmounted or lower characters (s40)
 	if CONDITION_MOUNTED in attacker_p.conditions and not target_is_mounted:
 		rolled += 1
+
+	# s35 Burning Kiss of Steel: the fire-engulfed weapon gives a further +1k1 (on top of the spell's
+	# base +1k1, read above) when the opponent is mounted or larger than human size.
+	if get_timed_modifier_total(attacker_p, "burning_kiss") > 0 and (target_is_mounted or target_is_large):
+		rolled += 1
+		kept += 1
 
 	# Conditional modifiers: -3k0 Dazed, -1k1 or -3k3 Blinded, Prone restrictions
 	if CONDITION_DAZED in attacker_p.conditions:

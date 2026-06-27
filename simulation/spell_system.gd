@@ -520,7 +520,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"biting_steel": {"kind": "buff", "target": "self", "duration_rounds": 10,
 		"mods": [{"kind": "spell_damage_rolled", "value": 1}, {"kind": "spell_damage_kept", "value": 1}]},  # Fire 1: DR +1k1
 	"burning_kiss_of_steel": {"kind": "buff", "target": "self", "duration_rounds": 50,
-		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_attack_kept", "value": 1}]},  # Fire 1: melee attack +1k1 (mounted/larger +2k2 deferred)
+		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_attack_kept", "value": 1},
+			{"kind": "burning_kiss", "value": 1}]},  # Fire 1: melee +1k1, +2k2 vs mounted/larger-than-human (GDD s35 l15)
 	"warning_flame": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 10,
 		"mods": [{"kind": "initiative_rolled", "value": 1}]},  # Fire 1: +1k0 Initiative (immune-surprise + Reactions +3 deferred)
 	# Hooked buffs (effect read in _apply_hit / execute_melee_attack, not a stat total):

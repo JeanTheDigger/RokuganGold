@@ -6524,6 +6524,21 @@ a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or t
 effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
 (see "ASCII Map System — Live-Reachability Status").
 
+### Spell coverage — deferred sub-part: Burning Kiss of Steel mounted/larger +2k2 (2026-06-27, runtime-verified 5/5)
+**Burning Kiss of Steel** (Fire 1 Battle, s35 l15) GDD: the fire-engulfed weapon gives +1k1 melee, **+2k2
+against mounted opponents or opponents larger than human size**. The +1k1 was wired; the +2k2 was deferred
+(I had wrongly claimed "no mount system"). The engine DOES model mounts: `CONDITION_MOUNTED` is a real
+condition `resolve_attack` reads (the s40 mounted +1k0), plus `Enums.Advantage.LARGE` for size. Wired both
+halves: `resolve_attack` gains a `target_is_large: bool = false` param and, when the attacker carries a
+`burning_kiss` marker modifier AND the target is mounted (`CONDITION_MOUNTED`) or large
+(`AdvantageSystem.has_advantage(target, LARGE)`), adds a further +1k1 (→ +2k2 total). The orchestrator's main
+melee `resolve_attack` call now computes and passes the real `target_is_mounted` (from the defender's
+condition) and `target_is_large` — **also fixing a latent bug**: that call hardcoded `target_is_mounted:
+false`, so the existing s40 mounted +1k0 never accounted for a mounted *defender*. The library entry adds a
+`{kind: burning_kiss}` marker mod. Runtime-verified 5/5 (Godot 4.6.2, headless): a Burning-Kiss wielder's
+roll mean jumps base 27.0 → 33.7 vs mounted / 34.1 vs large (the +1k1 extra); no buff → no change vs mounted;
+the LARGE advantage is detected; the full `execute_melee_attack` path resolves vs a LARGE defender.
+
 ### Spell coverage — deferred sub-part: Hungry Blade explode-on-8 (2026-06-27, runtime-verified 3/3)
 **Hungry Blade** (Fire 3 Craft, s35 l193) GDD: the enhanced weapon gives +1k0 attack AND **all damage dice
 explode on a result of 8 or better** (each die explodes once on an 8 or 9; 10s explode repeatedly as normal).

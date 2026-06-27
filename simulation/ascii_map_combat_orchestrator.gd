@@ -1292,10 +1292,13 @@ static func execute_melee_attack(
 	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty") \
 		+ _zone_modifier_total(state, attacker_id, "attack_roll_penalty") \
 		+ _high_ground_attack_bonus(state, apos, tpos)
+	# Defender mount/size for the mounted +1k0 (s40) and Burning Kiss of Steel +2k2 (s35).
+	var tgt_mounted: bool = t_p != null and IndividualCombat.CONDITION_MOUNTED in t_p.conditions
+	var tgt_large: bool = AdvantageSystem.has_advantage(target, Enums.Advantage.LARGE)
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
-		false, spend_void, false, maneuver,
-		{"opponent_clan": target.clan}, atk_pen
+		false, spend_void, tgt_mounted, maneuver,
+		{"opponent_clan": target.clan}, atk_pen, tgt_large
 	)
 
 	# Reversal of Fortunes (s36): a buffed attacker may re-roll a missed attack once per
