@@ -6749,6 +6749,14 @@ costing a slot; non-caster interrupt no-op. LIMITATION: the speed-raise count is
 turn-based UI. Same PC-travel HOLD live-reachability caveat as the whole ASCII stack — driver-verified,
 not a live session.
 
+### Spell coverage — stale-comment fix: Ravenous Swarms fire-disrupt already wired (2026-06-27, runtime-verified 5/5)
+**Ravenous Swarms** (Fire 3, s35 l205) — the library comment said "fire-disrupt rider deferred," but the
+mechanic was already FULLY wired: the 5k3 bolt installs a 5-round `ravenous_swarms` modifier on the target
+(`_complete_cast`), and `execute_cast_spell` already disrupts a Fire cast by an encircled caster — auto-fail,
+the slot is still spent, and 3k3 backlash Wounds. No code change beyond correcting the stale comment.
+Runtime-verified 5/5 (Godot 4.6.2, headless): casting Ravenous Swarms encircles the foe; the foe's
+subsequent Fire cast is disrupted (fails), takes 3k3 backlash (21→51), and the Fire slot is still consumed.
+
 ### Spell coverage — deferred sub-part: Breath of the Fire Dragon 4-round repeat (2026-06-27, runtime-verified 6/6)
 **Breath of the Fire Dragon** (Fire 3, s35 l169) GDD: for 4 Rounds, "Once per Round as a Simple Action, the
 caster may breathe a bolt of flames. DR equal to the caster's Fire Ring, striking every target in front of

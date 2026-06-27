@@ -65,7 +65,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"range_tiles": 6, "aoe_radius": 0},  # Fire 2: DR = caster Fire Ring, 30'
 	# Ravenous Swarms (Fire 3): 5k3 bolt, then encircles the target 5 Rounds — a Fire cast during that window is struck for 3k3 + auto-fails (fire-disrupt rider WIRED)
 	"ravenous_swarms": {"kind": "damage", "dr_rolled": 5, "dr_kept": 3,
-		"range_tiles": 6, "aoe_radius": 0},  # Fire 3: 5k3 bolt, 30' (fire-disrupt rider deferred)
+		"range_tiles": 6, "aoe_radius": 0},  # Fire 3: 5k3 bolt, 30'; the swarm encircles the target 5 Rounds — a Fire cast in that window auto-fails (loses the slot) + 3k3 (execute_cast_spell)
 	"the_dragons_talon": {"kind": "damage", "dr_rolled": 8, "dr_kept": 6,
 		"range_tiles": 20, "aoe_radius": 20, "aoe_hits": "enemies", "caster_exempt": true,
 		"target_max_insight": 2, "aoe_max_targets": 10},  # Fire 5: 8k6, up to 10 weak foes, 100'
