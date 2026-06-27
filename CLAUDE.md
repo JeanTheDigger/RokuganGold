@@ -7187,6 +7187,33 @@ contest discriminates); an ALERT guard is not misdirected; a non-knower cannot c
 live-reachability caveat as the whole CombatController stealth layer. 166 combat effects (Seeking the Way is
 a stealth-layer effect, not a combat-orchestrator effect).
 
+### Spell coverage — FINAL STATUS: 3 spells blocked on missing subsystems (2026-06-27)
+After the 2026-06-26/27 push (Hands of the Tides, Wrath of Kaze-no-Kami, Yuki's Touch, Curse of the Burning
+Hand, Netsuke of Wind, Essence of Fire, Mental Quickness, Drawing on the Mountain, Token of Memory, Elemental
+Cipher, Flight of Doves, Voice of the Wind, Request to Hato-no-Kami, Wolf's Proposal, Garbled Tongue, Touch of
+Air's Grace, the CAST_PROTECTIVE_WARD wards, Facing Your Devils, Hands of Clay, Taming the Beast, Groves of
+Stone, Sympathetic Energies, The Path Not Taken, Whispering Wind, **Wind of the Moon, Wisdom & Clarity, Within
+the Waves, Whirlpool, Silent Waters, Grounding Energy, False Realm, The Earth Flows, Seeking the Way**), a
+programmatic audit (library `s:0` ∧ no SPELL_COMBAT_EFFECTS ∧ no activate_/execute_/resolve_/cast_ reference ∧
+not CombatController-wired) leaves **exactly 3 genuinely-unwired spells**, each blocked on a subsystem the sim
+does not have — wiring any effect would violate the "do not invent mechanics" hard constraint, so each needs an
+owner design decision (a new subsystem + its values) to proceed:
+- **Tenjin's Ear (Air 4, Unicorn)** — makes all human speech intelligible regardless of language. **Blocked: no
+  language-barrier subsystem exists.** Conversations, letters, and court all assume mutual comprehension; gaijin
+  are flavour with no "cannot understand" gate. Unblock = build a language-barrier model (which conversation /
+  letter / eavesdrop would respect) — a subsystem, not a spell wiring.
+- **Piercing the Heavens (Air 6, Phoenix)** — within a Fortune's shrine, manifest a mote of the Fortune's essence
+  for brief communion; "the Fortune may offer aid available nowhere else." **Blocked: the boon is GM-discretion
+  with NO GDD-specified mechanical payload.** Wiring any effect (a buff, honor/glory, a wish) would invent the
+  Fortune's gift. Unblock = the owner defines the communion's concrete mechanical output.
+- **Opening the Veil (Water 6, Kitsu/Isawa)** — open a temporary portal into a Spirit Realm (Meido/Chikushudo by
+  default; Yomi/Sakkaku/Toshigoku/Yume-do/Gaki-do with Raises). **Blocked: no realm-travel mechanic.** The s56.16
+  spirit-encounter system has realms but no "open a portal and pass through to a realm" action/destination.
+  Unblock = build a realm-travel subsystem (a portal destination + what passing through does).
+**Every other spell in the 287-entry library is wired** (a combat effect, an activate_/execute_ function, a
+world-sim sim_effect router, or a CombatController stealth-layer hook) — or is one of these 3, each with a
+precise, non-inventable blocker. Do not re-audit without one of the three subsystems above.
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`
