@@ -6749,6 +6749,22 @@ costing a slot; non-caster interrupt no-op. LIMITATION: the speed-raise count is
 turn-based UI. Same PC-travel HOLD live-reachability caveat as the whole ASCII stack — driver-verified,
 not a live session.
 
+### Spell coverage — deferred sub-part: Suitengu's Embrace drowning loop (2026-06-27, runtime-verified 7/7)
+**Suitengu's Embrace** (Water 5 Thunder, s36 l347) GDD: the target's lungs fill with seawater — "Treated as
+Down… Each Round the target must make a Stamina Roll (TN 15). Three total successes: … fully recovered. Two
+consecutive failures: the target falls unconscious and will die." Only the flat 3-round incapacitate was
+wired; the per-round drowning contest was deferred. New `MapCombatState.suitengus_drowning` (victim_id →
+{successes, consec_fails}), registered by `_apply_spell_status` when the entry carries `drowning: true`, and
+driven each round in `advance_round` (beside the Tomb of Earth contest): the victim rolls Stamina TN 15 — on
+a success, +1 success (resets the consecutive-fail count) and at 3 total successes recovers (the
+incapacitate condition + its timed entry are cleared); on a failure, +1 consecutive fail and at 2 in a row
+drowns (dies, logged `drowned`). The status' `duration_rounds` is now a 99-round backstop (the drowning loop
+owns release). Runtime-verified 7/7 (Godot 4.6.2, headless): the cast incapacitates + registers the victim;
+a high-Stamina victim recovers (incapacitate cleared, alive); a Stamina-1 victim drowns and is removed from
+the map. drv15 + drv23 re-pass — no regression. LIMITATION: the GDD Medicine/Intelligence TN 50 counter is a
+separate action, not in the per-round loop (a drowning victim dies on 2 consecutive fails with no in-combat
+intervention wired).
+
 ### Spell coverage — deferred sub-part: Strength of the Tsunami 9-cap (2026-06-27, runtime-verified 4/4)
 **Strength of the Tsunami** (Water 2, s36 l131) GDD: "Strength Rank increased by half the caster's Water
 Ring (rounded down). Cannot raise Strength above 9." The +half-Water damage slice was wired but uncapped;

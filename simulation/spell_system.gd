@@ -343,8 +343,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "heal_on_damage", "value": 1}]},  # Water 4: a buffed target regains 1k1 Wounds whenever damaged
 	"strike_of_the_flowing_waters": {"kind": "buff", "target": "ally", "range_tiles": 2, "duration_rounds": 1,
 		"mods": [{"kind": "armor_bypass", "value": 1}]},  # Water 4: ignore the target's worn-armor Armor TN (+5 vs non-humans); the spell-ML3-effect bypass not modeled; does NOT negate Reduction or Defense/Full-Defense TN
-	"suitengus_embrace": {"kind": "status", "condition": "incapacitated", "save": "none",
-		"range_tiles": 5, "aoe_radius": 0, "duration_rounds": 3},  # Water 5: lungs fill with seawater — treated as Down (the per-round Stamina recovery + death-on-2-consecutive-fails deferred; 3-round hold PROVISIONAL)
+	"suitengus_embrace": {"kind": "status", "condition": "incapacitated", "save": "none", "drowning": true,
+		"range_tiles": 5, "aoe_radius": 0, "duration_rounds": 99},  # Water 5: lungs fill with seawater — treated as Down; each Round a Stamina TN 15 roll: 3 successes -> recover, 2 consecutive fails -> drown (advance_round)
 	# --- Void (s37, Ishiken-only) ---
 	# Touch the Emptiness: Range 30', single, 1k1 + Dazed (no save)
 	"touch_the_emptiness": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1,

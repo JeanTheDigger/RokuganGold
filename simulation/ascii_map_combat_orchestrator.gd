@@ -233,6 +233,10 @@ class MapCombatState:
 	## s35 Oath of the Heavens: Array of {a, b, expiry} — two Fire-linked persons who share
 	## Fatigued/Dazed/Stunned; the link dissolves when either goes Down/Out/Dead or at expiry.
 	var oath_links: Array = []
+	## s36 Suitengu's Embrace: victim_id -> {successes, consec_fails}. Each Round the drowning victim
+	## rolls Stamina TN 15: 3 total successes -> recovers (incapacitate cleared); 2 consecutive
+	## failures -> drowns (dies). Driven in advance_round.
+	var suitengus_drowning: Dictionary = {}
 	## s43 Blood Armor: wearer_id -> victim_id. The wearer channels 75% of its incoming damage into the
 	## bonded victim (read in _apply_hit). The bond breaks when the victim dies.
 	var blood_armor_links: Dictionary = {}
@@ -3221,6 +3225,10 @@ static func _apply_spell_status(
 			IndividualCombat.apply_timed_condition(p, cond, state.combat.round_number + dur)
 		else:
 			IndividualCombat.apply_condition(p, cond)
+		# s36 Suitengu's Embrace: register the drowning victim for the per-round Stamina contest
+		# (advance_round drives recovery/death; the timed-condition expiry is just a backstop).
+		if eff.get("drowning", false):
+			state.suitengus_drowning[int(t["id"])] = {"successes": 0, "consec_fails": 0}
 		out.append({"id": t["id"], "status": cond})
 	return out
 
@@ -7385,6 +7393,34 @@ static func advance_round(
 		else:
 			_tomb_tp.conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
 			state.tomb_links.erase(tid)
+
+	# s36 Suitengu's Embrace: each Round the drowning victim rolls Stamina TN 15. Three total successes
+	# -> recovers (the incapacitate is cleared). Two CONSECUTIVE failures -> drowns (dies). No-op when
+	# nobody is drowning. (The GDD Medicine/Intelligence TN 50 counter is a separate action, not here.)
+	for _dr_id in state.suitengus_drowning.keys():
+		var _dr_st: Dictionary = state.suitengus_drowning[_dr_id]
+		var _dr_ch: L5RCharacterData = chars_by_id.get(_dr_id, state.combatants.get(_dr_id, null))
+		var _dr_p: IndividualCombat.Participant = state.combat.participants.get(_dr_id, null)
+		if _dr_ch == null or _dr_p == null or CharacterStats.is_dead(_dr_ch):
+			state.suitengus_drowning.erase(_dr_id)
+			continue
+		var _dr_sta: int = maxi(1, _dr_ch.stamina)
+		var _dr_roll: int = dice_engine.roll_and_keep(_dr_sta, _dr_sta, true).total
+		if _dr_roll >= 15:
+			_dr_st["successes"] = int(_dr_st["successes"]) + 1
+			_dr_st["consec_fails"] = 0
+			if int(_dr_st["successes"]) >= 3:
+				_dr_p.conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
+				_dr_p.timed_conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
+				state.suitengus_drowning.erase(_dr_id)
+		else:
+			_dr_st["consec_fails"] = int(_dr_st["consec_fails"]) + 1
+			if int(_dr_st["consec_fails"]) >= 2:
+				_dr_ch.wounds_taken = CharacterStats.get_total_wound_capacity(_dr_ch) + 1
+				state.combat_log.append({
+					"type": "drowned", "round": state.combat.round_number, "victim_id": _dr_id,
+				})
+				state.suitengus_drowning.erase(_dr_id)
 
 	# Persistent spell zones (Wall of Fire, Enticing the Dance of Flame, etc.) — no-op when empty.
 	if not state.spell_zones.is_empty():
