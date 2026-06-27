@@ -220,11 +220,13 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"range_tiles": 1},  # Void 4 (Ishiken): heal 3k3 (disadvantage negation deferred)
 	"relentless_heat": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 10,
 		"mods": [{"kind": "relentless_heat", "value": 1}]},  # Fire 2: melee attacker Fatigued on attempt + Full Attack->Attack
+	# Fury's weather damage scaling is WIRED (weather_dr below: STORM->6k2, TYPHOON/BLIZZARD->6k3).
 	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
 	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
 	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.
 	"fury_of_osano_wo": {"kind": "damage", "dr_rolled": 5, "dr_kept": 2,
-		"range_tiles": 60, "aoe_radius": 0},
+		"range_tiles": 60, "aoe_radius": 0,
+		"weather_dr": {"storm_rolled": 1, "severe_rolled": 1, "severe_kept": 1}},  # Fire 1: 5k2 lightning; STORM->6k2, TYPHOON/BLIZZARD->6k3 (GDD s35 l57)
 	"breath_of_the_fire_dragon": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
 		"range_tiles": 0, "aoe_radius": 3, "aoe_hits": "enemies", "caster_exempt": true},
 	"destructive_wave": {"kind": "damage", "dr_rolled": 7, "dr_kept": 7,

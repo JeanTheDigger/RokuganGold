@@ -6524,6 +6524,20 @@ a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or t
 effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
 (see "ASCII Map System — Live-Reachability Status").
 
+### Spell coverage — deferred rider: Fury of Osano-Wo weather damage scaling (2026-06-27, runtime-verified 4/4)
+**Fury of Osano-Wo** (Fire 1 Thunder, s35 l57) GDD: 5k2 lightning base, **6k2 during a moderate
+thunderstorm, 6k3 during a disastrous storm/hurricane** — the weather bonus was deferred ("weather damage
+bonuses are deferred to later tranches"). `MapCombatState.weather` already exists. Added a reusable
+`weather_dr` schema to `SPELL_COMBAT_EFFECTS` ({storm_rolled, storm_kept, severe_rolled, severe_kept}) read
+in `_apply_spell_combat_damage` after the base DR resolves: `WeatherState.STORM` (moderate thunderstorm)
+adds the storm tier; `TYPHOON`/`BLIZZARD` (disastrous storm/hurricane) add the severe tier; CLEAR/WIND/RAIN/
+MIST/SNOW are unchanged (RAIN is plain rain, not a thunderstorm). Fury's entry: storm `+1 rolled` (5k2→6k2),
+severe `+1 rolled +1 kept` (5k2→6k3) — all GDD-exact. Runtime-verified 4/4 (Godot 4.6.2, headless, 120
+samples/tier): monotonic means CLEAR 18.9 ≈ RAIN 19.2 < STORM 19.9 < TYPHOON 26.4 ≈ BLIZZARD 26.8 — RAIN
+gives no bonus, STORM adds the rolled die, the kept die (severe) is the big jump. The `weather_dr` primitive
+is now available for any other weather-scaling combat spell. Fury's Deafen-bystander rider remains deferred
+(needs a hearing/Deafened combat mechanic — genuinely blocked, not invented).
+
 ### Spell coverage — deferred riders: multi-condition rider + Murmur of Earth Dazed (2026-06-27, runtime-verified 6/6)
 Resumes the deferred-sub-parts walkthrough. **Murmur of Earth** (Earth 3, s34 l181) GDD: a failed Agility
 TN 20 save → knocked **Prone, 1k1 damage, AND Dazed for 1 Round**; only Prone+damage were wired (Dazed

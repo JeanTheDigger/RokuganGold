@@ -2991,6 +2991,17 @@ static func _apply_spell_combat_damage(
 	var kept: int = eff.get("dr_kept", 0)
 	if kept <= 0:
 		kept = ering
+	# Weather damage bonus (s35 Fury of Osano-Wo): a Thunder spell hits harder in a storm. STORM
+	# (moderate thunderstorm) and TYPHOON/BLIZZARD (disastrous storm/hurricane) tiers add dice.
+	var weather_dr: Dictionary = eff.get("weather_dr", {})
+	if not weather_dr.is_empty():
+		if state.weather == AsciiMapEnvironment.WeatherState.STORM:
+			rolled += int(weather_dr.get("storm_rolled", 0))
+			kept += int(weather_dr.get("storm_kept", 0))
+		elif state.weather == AsciiMapEnvironment.WeatherState.TYPHOON \
+				or state.weather == AsciiMapEnvironment.WeatherState.BLIZZARD:
+			rolled += int(weather_dr.get("severe_rolled", 0))
+			kept += int(weather_dr.get("severe_kept", 0))
 	var kind: String = SpiritAbilitySystem.W_MAGIC
 	if element == Enums.Ring.FIRE:
 		kind = SpiritAbilitySystem.W_FIRE
