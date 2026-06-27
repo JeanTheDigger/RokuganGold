@@ -230,6 +230,9 @@ class MapCombatState:
 	## re-contests (Earth+Insight vs Air+Insight); winning keeps the target immobilized + 2k2, losing
 	## frees them (link removed).
 	var tomb_links: Dictionary = {}
+	## s35 Oath of the Heavens: Array of {a, b, expiry} — two Fire-linked persons who share
+	## Fatigued/Dazed/Stunned; the link dissolves when either goes Down/Out/Dead or at expiry.
+	var oath_links: Array = []
 	## s43 Blood Armor: wearer_id -> victim_id. The wearer channels 75% of its incoming damage into the
 	## bonded victim (read in _apply_hit). The bond breaks when the victim dies.
 	var blood_armor_links: Dictionary = {}
@@ -2587,6 +2590,12 @@ static func _complete_cast(
 		state.combat_log.append({
 			"type": "spell_buff", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "buff": res["spell_buff"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "oath_link":
+		res["oath_link"] = _apply_oath_link(state, caster_id, target_id, target, eff)
+		state.combat_log.append({
+			"type": "spell_oath_link", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "link": res["oath_link"],
 		})
 	elif res.get("success", false) and eff.get("kind", "") == "debuff":
 		res["spell_debuff"] = _apply_spell_debuff(
@@ -6997,6 +7006,10 @@ static func advance_round(
 	chars_by_id: Dictionary,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	# s35 Oath of the Heavens: mirror shared Conditions (Fatigued/Dazed/Stunned) between linked pairs
+	# BEFORE the recovery phase, so a condition gained last round is shared, then both partners roll to
+	# recover. Also dissolves links when a partner is Down/Out/Dead or the duration lapses.
+	_process_oath_links(state)
 	# Advance reaction phase for all living participants (handles dazed/stunned recovery).
 	IndividualCombat.advance_round_reactions(state.combat, chars_by_id, dice_engine)
 
@@ -7567,6 +7580,64 @@ static func _apply_fear_burst(
 			p.conditions.append(IndividualCombat.CONDITION_AFRAID)
 		afraid_ids.append(oid)
 	return {"afraid": afraid_ids, "resisted": resisted_ids}
+
+
+## s35 Oath of the Heavens: link the caster and the touched target. Both gain +Nk0 to Fire-Trait rolls
+## (the +2k0 attack slice — Agility-driven; Int/Fire-Ring-roll slices are the standard out-of-combat
+## buff limitation), and from now on share Fatigued/Dazed/Stunned (synced each round in _process_oath_links)
+## for the duration, until either is reduced to Down/Out/Dead. Returns {a, b} or {reason}.
+static func _apply_oath_link(
+	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData, eff: Dictionary,
+) -> Dictionary:
+	if target == null or target_id == caster_id or CharacterStats.is_dead(target):
+		return {"reason": "no_partner"}
+	var cp: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+	var tp: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if cp == null or tp == null:
+		return {"reason": "not_in_combat"}
+	var bonus: int = int(eff.get("attack_rolled", 2))
+	var dur: int = int(eff.get("duration_rounds", 5))
+	var expiry: int = state.combat.round_number + dur
+	IndividualCombat.add_timed_modifier(cp, "spell_attack_rolled", bonus, expiry, "oath_of_the_heavens")
+	IndividualCombat.add_timed_modifier(tp, "spell_attack_rolled", bonus, expiry, "oath_of_the_heavens")
+	state.oath_links.append({"a": caster_id, "b": target_id, "expiry": expiry})
+	return {"a": caster_id, "b": target_id}
+
+
+## s35 Oath of the Heavens per-round pass: mirror Fatigued/Dazed/Stunned between each linked pair, and
+## dissolve a link (clearing its +2k0 buff) when either partner is Down/Out/Dead or the duration lapses.
+static func _process_oath_links(state: MapCombatState) -> void:
+	if state.oath_links.is_empty():
+		return
+	var mirror: Array = [IndividualCombat.CONDITION_FATIGUED,
+		IndividualCombat.CONDITION_DAZED, IndividualCombat.CONDITION_STUNNED]
+	var surviving: Array = []
+	for link: Dictionary in state.oath_links:
+		var aid: int = int(link["a"])
+		var bid: int = int(link["b"])
+		var ap: IndividualCombat.Participant = state.combat.participants.get(aid, null)
+		var bp: IndividualCombat.Participant = state.combat.participants.get(bid, null)
+		var ach: L5RCharacterData = state.combatants.get(aid, null)
+		var bch: L5RCharacterData = state.combatants.get(bid, null)
+		# Dissolve: either partner gone, or reduced to Down/Out/Dead, or expired.
+		var ended: bool = ap == null or bp == null or ach == null or bch == null \
+			or CharacterStats.get_wound_level(ach) >= Enums.WoundLevel.DOWN \
+			or CharacterStats.get_wound_level(bch) >= Enums.WoundLevel.DOWN \
+			or state.combat.round_number >= int(link.get("expiry", 0))
+		if ended:
+			if ap != null:
+				IndividualCombat.clear_timed_modifiers_by_source(ap, "oath_of_the_heavens")
+			if bp != null:
+				IndividualCombat.clear_timed_modifiers_by_source(bp, "oath_of_the_heavens")
+			continue
+		# Mirror the shared Conditions in both directions.
+		for cond: String in mirror:
+			if cond in ap.conditions and cond not in bp.conditions:
+				bp.conditions.append(cond)
+			elif cond in bp.conditions and cond not in ap.conditions:
+				ap.conditions.append(cond)
+		surviving.append(link)
+	state.oath_links = surviving
 
 
 ## s43 maho-user enemy cast (Bloodspeaker/cult, s56.14). Mirrors _npc_maybe_cast_spell but for maho:

@@ -6524,6 +6524,22 @@ a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or t
 effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
 (see "ASCII Map System — Live-Reachability Status").
 
+### Spell coverage — deferred sub-part: Oath of the Heavens 2-target link (2026-06-27, runtime-verified 12/12)
+**Oath of the Heavens** (Fire 3, s35 l199) GDD: links two persons — both gain **+2k0 to Fire-Ring/Fire-Trait
+rolls** AND from then on **share Fatigued/Dazed/Stunned** (if either gains one, the other immediately does);
+the spell ends if either is reduced to **Down/Out/Dead**. Only the +2k0 single-target buff was wired (2-target
+link + shared conditions deferred). New dedicated `oath_link` effect kind: `_apply_oath_link` applies the +2k0
+attack slice (the Agility-driven combat slice; the Int/Fire-Ring-roll halves are the standard out-of-combat
+buff limitation) to **both** the caster and the touched target and registers a `MapCombatState.oath_links`
+entry. `_process_oath_links` (run at the **top** of `advance_round`, before the Dazed/Stunned recovery phase,
+so a condition gained last round is shared then both partners roll to recover — faithful to "immediately
+shares") mirrors the three conditions in both directions and dissolves the link (clearing its +2k0 buff)
+when either partner is Down+ or at the 5-round expiry. PC-deliberate (not in the NPC offense/self-buff
+pickers — it's a 2-target support link, like other support spells). Runtime-verified 12/12 (Godot 4.6.2,
+headless): both get +2k0; Dazed/Stunned/Fatigued each mirror bidirectionally; the link dissolves and both
+buffs clear when a partner reaches Down; self-target rejected. Reusable shared-condition-link primitive
+(mirrors the existing `tomb_links` pattern).
+
 ### Spell coverage — deferred sub-part: Eyes of the Phoenix ally Fear-3 burst (2026-06-27, runtime-verified 7/7)
 **Eyes of the Phoenix** (Fire 4 Illusion, s35 l255) GDD: the target is Blinded (wired) AND, on cast, **all
 allies of the target suffer a Fear 3 effect** (undead/immune exempt) — the ally Fear-burst was deferred. New

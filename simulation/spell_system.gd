@@ -214,8 +214,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"blessing_of_the_sun": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 3,
 		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Fire 4: ignore Fatigue/Wound penalties (Fire-roll scope + cost deferred)
 	# Coverage extension batch 13 (2026-06-20).
-	"oath_of_the_heavens": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
-		"mods": [{"kind": "spell_attack_rolled", "value": 2}]},  # Fire 3: +2k0 Fire rolls (2-target link + shared conditions deferred)
+	"oath_of_the_heavens": {"kind": "oath_link", "target": "ally", "range_tiles": 1,
+		"duration_rounds": 5, "attack_rolled": 2},  # Fire 3: links caster+target, both +2k0 Fire rolls, share Fatigued/Dazed/Stunned, ends if either Down (GDD s35 l199)
 	"balance_of_elements": {"kind": "heal", "heal": "dice", "heal_rolled": 3, "heal_kept": 3,
 		"range_tiles": 1},  # Void 4 (Ishiken): heal 3k3 (disadvantage negation deferred)
 	"relentless_heat": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 10,
