@@ -282,6 +282,12 @@ class MapCombatState:
 	## A spell needs ML Complex Actions; the caster maintains it each round (continue_cast) until it
 	## completes, and is interrupted (Willpower TN 5+damage) if damaged mid-cast.
 	var casting_in_progress: Dictionary = {}
+	## s31-37 spell-effect tracking: the Mastery Level + caster id of the spell currently being
+	## dispatched in _complete_cast. Read by the effect handlers so installed timed modifiers / Trait /
+	## Ring deltas carry their installing-spell ML (for the ML-gated dispel/negate effects: Draw Back
+	## the Shadow, Balance of Elements, Strike of the Flowing Waters). -1 = none in flight.
+	var casting_ml: int = -1
+	var casting_creator: int = -1
 	## s33 Mists of Illusion: stationary visual-only phantoms — {x, y, caster_id}.
 	var illusion_phantoms: Array = []
 	## s33 Token of Memory: stationary visual-only fake objects placed on the map (flavor; no
@@ -1316,6 +1322,9 @@ static func execute_melee_attack(
 	# (and an extra -5 vs non-human creatures). Does NOT negate Reduction or Defense-stance bonuses.
 	if IndividualCombat.get_timed_modifier_total(a_p, "armor_bypass") > 0:
 		armor_tn -= target.armor_tn_bonus
+		# Also ignore Armor-TN bonuses from ML<=3 spell effects (e.g. Cloak of the Miya). Only positive
+		# bonuses are bypassed (GDD "Armor TN bonuses"); never raise the faced TN.
+		armor_tn -= maxi(0, IndividualCombat.get_timed_modifier_total_ml_at_most(t_p, "armor_tn", 3))
 		if target.spirit_creature != null:
 			armor_tn -= 5
 		armor_tn = maxi(5, armor_tn)
@@ -1795,6 +1804,9 @@ static func execute_ranged_attack(
 	# (and an extra -5 vs non-human creatures). Does NOT negate Reduction or Defense-stance bonuses.
 	if IndividualCombat.get_timed_modifier_total(a_p, "armor_bypass") > 0:
 		armor_tn -= target.armor_tn_bonus
+		# Also ignore Armor-TN bonuses from ML<=3 spell effects (e.g. Cloak of the Miya). Only positive
+		# bonuses are bypassed (GDD "Armor TN bonuses"); never raise the faced TN.
+		armor_tn -= maxi(0, IndividualCombat.get_timed_modifier_total_ml_at_most(t_p, "armor_tn", 3))
 		if target.spirit_creature != null:
 			armor_tn -= 5
 		armor_tn = maxi(5, armor_tn)
@@ -2600,6 +2612,11 @@ static func _complete_cast(
 			"type": "spirit_repelled", "round": state.combat.round_number,
 			"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id,
 		})
+	# s31-37 ML tracking: stamp the spell currently being dispatched so the effect handlers can tag
+	# installed modifiers / deltas with their Mastery Level + caster (for the ML-gated dispel/negate
+	# effects). Valid for the synchronous duration of this _complete_cast.
+	state.casting_ml = int(SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("m", -1))
+	state.casting_creator = caster_id
 	# Phase 2 — per-spell direct-damage effects (s31–s37, currently Fire tranche).
 	var eff: Dictionary = SpellSystem.get_combat_effect(spell_id)
 	if res.get("success", false) and eff.get("kind", "") == "damage" \
@@ -2808,7 +2825,7 @@ static func _complete_cast(
 			"caster_id": caster_id, "spell_id": spell_id, "zone": res["fog_zone"],
 		})
 	elif res.get("success", false) and eff.get("kind", "") == "dispel":
-		res["dispel"] = _apply_spell_dispel(state, caster_id, target_id, target, eff)
+		res["dispel"] = _apply_spell_dispel(state, caster_id, target_id, target, eff, dice_engine)
 		state.combat_log.append({
 			"type": "spell_dispel", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "result": res["dispel"],
@@ -2988,13 +3005,19 @@ static func _apply_spell_heal(
 		if heal_p != null:
 			heal_p.conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
 	# s37 Balance of Elements: negate ALL the target's Disadvantages (combat-roll slice) for the
-	# duration (applied even on a 0-wound heal). The ML<=3-spell-effect negation half is deferred —
-	# blocked on per-modifier mastery tracking across the timed_modifier/trait_delta/ring_delta stores.
+	# duration (applied even on a 0-wound heal).
 	var negated_all: bool = false
 	if eff.get("negate_all_disadvantages", false) and heal_p != null and heal_target != null:
 		heal_target.combat_suppress_all_disadvantages = true
 		heal_p.suppress_all_disadvantages_expiry = state.combat.round_number + int(eff.get("duration_rounds", 5))
 		negated_all = true
+	# s37 Balance of Elements: also negate Mastery-Level-<=3 spell effects on the target — TN penalties /
+	# Armor TN reduction (negative spell timed modifiers) and Trait/Ring reductions (negative ML<=3
+	# trait/ring deltas). Positive buffs and ML4+/untracked effects are left intact.
+	var negated_low_ml: int = 0
+	if eff.get("negate_low_ml_spell_effects", false) and heal_p != null and heal_target != null:
+		negated_low_ml = IndividualCombat.clear_spell_modifiers_ml_at_most(heal_p, 3, true)
+		negated_low_ml += _clear_negative_deltas_ml_at_most(heal_p, heal_target, 3)
 	var amount: int = 0
 	match eff.get("heal", ""):
 		"margin":
@@ -3010,9 +3033,37 @@ static func _apply_spell_heal(
 				amount = dice_engine.roll_and_keep(
 					int(eff.get("heal_rolled", 3)), int(eff.get("heal_kept", 3)), true).total
 	if amount <= 0:
-		return {"id": heal_id, "healed": 0, "no_pure_breaths_cured": npb_cured, "negated_all_disadvantages": negated_all}
+		return {"id": heal_id, "healed": 0, "no_pure_breaths_cured": npb_cured, "negated_all_disadvantages": negated_all, "negated_low_ml_effects": negated_low_ml}
 	WoundSystem.heal_wounds(heal_target, amount)
-	return {"id": heal_id, "healed": amount, "no_pure_breaths_cured": npb_cured, "negated_all_disadvantages": negated_all}
+	return {"id": heal_id, "healed": amount, "no_pure_breaths_cured": npb_cured, "negated_all_disadvantages": negated_all, "negated_low_ml_effects": negated_low_ml}
+
+
+## Remove negative (reduction) combat-scoped Trait/Ring deltas whose installing-spell Mastery Level is
+## <= max_ml from a participant, then re-sync the read-bridges. Used by Balance of Elements to negate
+## ML<=3 Trait/Ring reductions (e.g. Suitengu's Curse Reflexes-1, The Wolf's Mercy Earth/Strength-1).
+## Positive deltas (buffs) and ML4+/untracked deltas are kept. Returns the count removed.
+static func _clear_negative_deltas_ml_at_most(
+	p: IndividualCombat.Participant, who: L5RCharacterData, max_ml: int,
+) -> int:
+	var removed: int = 0
+	for t in p.trait_delta_expiry.keys():
+		var tml: int = int(p.trait_delta_ml.get(t, -1))
+		if tml >= 0 and tml <= max_ml and int(p.trait_deltas.get(t, 0)) < 0:
+			p.trait_deltas.erase(t)
+			p.trait_delta_expiry.erase(t)
+			p.trait_delta_ml.erase(t)
+			removed += 1
+	for r in p.ring_delta_expiry.keys():
+		var rml: int = int(p.ring_delta_ml.get(r, -1))
+		if rml >= 0 and rml <= max_ml and int(p.ring_deltas.get(r, 0)) < 0:
+			p.ring_deltas.erase(r)
+			p.ring_delta_expiry.erase(r)
+			p.ring_delta_ml.erase(r)
+			removed += 1
+	if removed > 0:
+		IndividualCombat.sync_trait_deltas(p, who)
+		IndividualCombat.sync_ring_deltas(p, who)
+	return removed
 
 
 ## s43 maho cast in tile combat: a maho-user enemy (Bloodspeaker/cult, s56.14) casts a maho spell.
@@ -3646,7 +3697,7 @@ static func _apply_spell_buff(
 		elif mkind == "invisible":
 			# s33 Gift of Wind / Legion of the Moon: a dedicated source so attacking can clear
 			# just this modifier (_reveal_if_hidden) without dropping other spell buffs.
-			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_invisible")
+			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_invisible", "round", state.casting_ml, state.casting_creator)
 		elif mkind == "initiative_score":
 			# s36 Clarity of Purpose: a persistent Initiative-score delta (no timed expiry; the
 			# 2-round GDD duration is approximated as skirmish-length, matching Song of the World).
@@ -3662,7 +3713,7 @@ static func _apply_spell_buff(
 			if gts != null:
 				gts.set(mkind, int(gts.get(mkind)) + val)
 		else:
-			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, default_source)
+			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, default_source, "round", state.casting_ml, state.casting_creator)
 		applied.append({"kind": mkind, "value": val})
 	# s33 Striking the Storm: the swirling-air cocoon deafens the buffed character for the duration.
 	if eff.get("self_deafen", false):
@@ -3746,11 +3797,11 @@ static func _apply_spell_buff_aoe(
 			if mkind == "absorb_pool":
 				p.absorb_pool = maxi(p.absorb_pool, val)
 			elif mkind == "invisible":
-				IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_invisible")
+				IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_invisible", "round", state.casting_ml, state.casting_creator)
 			elif mkind == "initiative_score":
 				p.initiative_modifier += val  # s36 Clarity of Purpose (persistent delta)
 			else:
-				IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff")
+				IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff", "round", state.casting_ml, state.casting_creator)
 		buffed.append(cid)
 	return {"buffed": buffed, "expires_round": expiry}
 
@@ -3814,7 +3865,7 @@ static func _apply_spell_debuff(
 		# _npc_pick_stance short-circuits) until it expires.
 		if mkind == "stance_locked":
 			p.stance = Enums.Stance.FULL_ATTACK
-		IndividualCombat.add_timed_modifier(p, mkind, val, expiry, dbsrc)
+		IndividualCombat.add_timed_modifier(p, mkind, val, expiry, dbsrc, "round", state.casting_ml, state.casting_creator)
 		applied.append({"kind": mkind, "value": val})
 	# Optional accompanying Trait change via the per-Trait layer (s36 Suitengu's Curse: Reflexes -1
 	# alongside the move penalty). Flows to Armor TN / initiative / attack and the derived Ring.
@@ -3870,6 +3921,7 @@ static func _apply_spell_ring_change(
 	var expiry: int = state.combat.round_number + int(eff.get("duration_rounds", 10))
 	p.ring_deltas[ring] = int(p.ring_deltas.get(ring, 0)) + delta
 	p.ring_delta_expiry[ring] = expiry
+	p.ring_delta_ml[ring] = state.casting_ml  # s31-37 ML tracking (Balance of Elements ML<=3 negation)
 	IndividualCombat.sync_ring_deltas(p, who)
 	# s34 The Wolf's Mercy: an accompanying Trait change (Strength -1) via the per-Trait layer.
 	var dur_tc: int = int(eff.get("duration_rounds", 10))
@@ -4019,6 +4071,7 @@ static func _expire_ring_deltas(state: MapCombatState, p: IndividualCombat.Parti
 		if state.combat.round_number >= int(p.ring_delta_expiry[ring]):
 			p.ring_deltas.erase(ring)
 			p.ring_delta_expiry.erase(ring)
+			p.ring_delta_ml.erase(ring)
 			changed = true
 	if changed:
 		IndividualCombat.sync_ring_deltas(p, ch)
@@ -4098,6 +4151,8 @@ static func _apply_trait_delta(
 	var expiry: int = state.combat.round_number + duration
 	p.trait_deltas[p_trait] = int(p.trait_deltas.get(p_trait, 0)) + delta
 	p.trait_delta_expiry[p_trait] = expiry
+	# s31-37 ML tracking: stamp the installing-spell ML (for Balance of Elements ML<=3 negation).
+	p.trait_delta_ml[p_trait] = state.casting_ml
 	IndividualCombat.sync_trait_deltas(p, who)
 	return delta < 0 and CharacterStats.is_dead(who)
 
@@ -4163,6 +4218,7 @@ static func _expire_trait_deltas(state: MapCombatState, p: IndividualCombat.Part
 		if state.combat.round_number >= int(p.trait_delta_expiry[t]):
 			p.trait_deltas.erase(t)
 			p.trait_delta_expiry.erase(t)
+			p.trait_delta_ml.erase(t)
 			changed = true
 	if changed:
 		IndividualCombat.sync_trait_deltas(p, ch)
@@ -4744,13 +4800,18 @@ static func _apply_spell_fog_zone(
 ## layer stores no creator/mastery to contest against). Indiscriminate within the area (friend + foe).
 static func _apply_spell_dispel(
 	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData, eff: Dictionary,
+	dice_engine: DiceEngine = null,
 ) -> Dictionary:
 	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
 	if int(eff.get("range_tiles", 0)) > 0 and target != null and state.positions.has(target_id):
 		center = state.positions[target_id]
 	var radius: int = int(eff.get("aoe_radius", 6))
+	var dcaster: L5RCharacterData = state.combatants.get(caster_id, null)
 	var revealed: Array = []
-	# Clear invisibility from every combatant standing in the area.
+	var contested: Array = []  # ML5-6 illusions where the Contested Air roll failed (not dispelled)
+	# Clear invisibility from every combatant standing in the area. Illusions from spells of Mastery
+	# Level 4 or lower (and untracked illusions) are dispelled automatically; ML5-6 illusions require a
+	# Contested Air Roll between the caster and the illusion's creator (GDD s33 l365).
 	for cid: int in state.positions.keys():
 		var pos: Vector2i = state.positions[cid]
 		if maxi(absi(pos.x - center.x), absi(pos.y - center.y)) > radius:
@@ -4759,8 +4820,23 @@ static func _apply_spell_dispel(
 		if p == null:
 			continue
 		if IndividualCombat.get_timed_modifier_total(p, "invisible") > 0:
-			IndividualCombat.clear_timed_modifiers_by_source(p, "spell_invisible")
-			revealed.append(cid)
+			var info: Dictionary = IndividualCombat.get_timed_modifier_ml_and_creator(p, "spell_invisible")
+			var iml: int = int(info.get("ml", -1))
+			var do_clear: bool = true
+			if iml >= 5 and dice_engine != null and dcaster != null:
+				var creator_ch: L5RCharacterData = state.combatants.get(int(info.get("creator", -1)), null)
+				if creator_ch != null and not CharacterStats.is_dead(creator_ch):
+					# Contested Air: the dispelling caster must match or beat the creator.
+					var ca: int = SpellSystem.get_ring_value(dcaster, Enums.Ring.AIR)
+					var cc: int = SpellSystem.get_ring_value(creator_ch, Enums.Ring.AIR)
+					var croll: int = dice_engine.roll_and_keep(maxi(1, ca), maxi(1, ca), true).total
+					var crroll: int = dice_engine.roll_and_keep(maxi(1, cc), maxi(1, cc), true).total
+					do_clear = croll >= crroll
+			if do_clear:
+				IndividualCombat.clear_timed_modifiers_by_source(p, "spell_invisible")
+				revealed.append(cid)
+			else:
+				contested.append(cid)
 	# Remove obscuring fog zones whose center lies within the dispel area.
 	var fog_cleared: int = 0
 	var surviving: Array = []
@@ -4772,7 +4848,7 @@ static func _apply_spell_dispel(
 				continue
 		surviving.append(zone)
 	state.spell_zones = surviving
-	return {"center": center, "radius": radius, "revealed": revealed, "fog_cleared": fog_cleared}
+	return {"center": center, "radius": radius, "revealed": revealed, "fog_cleared": fog_cleared, "contest_failed": contested}
 
 
 ## Conjure a wall barrier (s34 Wall of Earth): a straight line of WALL_STONE tiles centered on a

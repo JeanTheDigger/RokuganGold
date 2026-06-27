@@ -216,7 +216,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"oath_of_the_heavens": {"kind": "oath_link", "target": "ally", "range_tiles": 1,
 		"duration_rounds": 5, "attack_rolled": 2},  # Fire 3: links caster+target, both +2k0 Fire rolls, share Fatigued/Dazed/Stunned, ends if either Down (GDD s35 l199)
 	"balance_of_elements": {"kind": "heal", "heal": "dice", "heal_rolled": 3, "heal_kept": 3,
-		"range_tiles": 1, "negate_all_disadvantages": true, "duration_rounds": 5},  # Void 4 (Ishiken): heal 3k3 AND negate ALL the target's Disadvantages (combat-roll slice) for 5 Rounds (GDD s37 l155). The ML<=3-spell-effect negation half is deferred (per-modifier mastery tracking across the timed_modifier/trait_delta/ring_delta stores does not exist).
+		"range_tiles": 1, "negate_all_disadvantages": true, "negate_low_ml_spell_effects": true, "duration_rounds": 5},  # Void 4 (Ishiken): heal 3k3, negate ALL the target's Disadvantages (combat-roll slice) for 5 Rounds, AND negate ML<=3 spell effects (TN penalties / Armor TN reduction / Trait/Ring reduction) on the target (GDD s37 l155). ML4+/untracked effects and the target's own buffs are kept.
 	"relentless_heat": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 10,
 		"mods": [{"kind": "relentless_heat", "value": 1}]},  # Fire 2: melee attacker Fatigued on attempt + Full Attack->Attack
 	# Fury's weather damage scaling is WIRED (weather_dr below: STORM->6k2, TYPHOON/BLIZZARD->6k3).
@@ -420,7 +420,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"armor_of_the_emperor": {"kind": "buff", "target": "self", "duration_rounds": 5,
 		"mods": [{"kind": "per_die_reduction", "value": "earth_school_rank"}]},  # Earth 4: each kept damage die against the caster is reduced by the caster's School Rank, floored at 0 (central melee+ranged path; atemi/charge/spell damage not threaded)
 	# Coverage clean-wins batch 14 (2026-06-20): illusion dispel (anti-invisibility / clears fog).
-	"draw_back_the_shadow": {"kind": "dispel", "range_tiles": 20, "aoe_radius": 6},  # Air 5: within a 30' radius, dispel illusions — clears combatants' invisibility (Gift of Wind / Legion of the Moon) and removes Summon Fog clouds. Auto for the ML<=4 illusions wired; the ML5-6 contest + the broader non-illusion contested dispel are deferred (no creator/mastery on the timed-modifier layer).
+	"draw_back_the_shadow": {"kind": "dispel", "range_tiles": 20, "aoe_radius": 6},  # Air 5: within a 30' radius, dispel illusions — ML<=4 illusions (Gift of Wind, The Eye Shall Not See, Summon Fog) auto-dispel; ML5-6 illusions (Legion of the Moon) require a Contested Air Roll vs the creator (GDD s33 l365). The broader "ongoing non-illusion magical effects" contested dispel is deferred (it needs each effect's source element/Ring, not just its ML+creator).
 	# Coverage clean-wins batch 15 (2026-06-20): conjured terrain (a barrier that blocks move + LOS).
 	"wall_of_earth": {"kind": "wall", "pattern": "line", "range_tiles": 20, "wall_length": 6, "duration_rounds": 9999},  # Earth 4: a straight WALL_STONE barrier centered on a target tile, perpendicular to the approach — blocks movement (enemies path around) and LOS through it; restored on expiry.
 	"groves_of_stone": {"kind": "stone_ring", "radius_tiles": 3, "duration_rounds": 10},  # Earth 3: a closed WALL_STONE ring (15') around the caster; enemies clamber over via execute_climb; crumbles (restored) on expiry. The clamber-over action now exists, so the old stalemate blocker is gone.

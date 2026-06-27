@@ -254,11 +254,13 @@ class Participant:
 	# boost. Lives only on the Participant (destroyed at combat end) -> never leaks persistently.
 	var ring_deltas: Dictionary = {}
 	var ring_delta_expiry: Dictionary = {}  # {Enums.Ring: expiry_round} for the ring deltas above
+	var ring_delta_ml: Dictionary = {}      # {Enums.Ring: mastery_level} of the installing spell (-1 = untracked)
 	# Combat-scoped Trait deltas (s33-37 trait-swap/drop spells): {Enums.Trait: int}. AUTHORITATIVE
 	# participant store, synced to the character's combat_trait_deltas read-bridge. Lives only on the
 	# Participant -> never leaks. A Trait change flows to its rolls AND the derived Ring.
 	var trait_deltas: Dictionary = {}
 	var trait_delta_expiry: Dictionary = {}  # {Enums.Trait: expiry_round}
+	var trait_delta_ml: Dictionary = {}      # {Enums.Trait: mastery_level} of the installing spell (-1 = untracked)
 
 
 ## Combat-scoped Ring deltas for a Participant (empty if none). Null-safe.
@@ -529,8 +531,42 @@ static func _get_kata_wound_penalty_reduction(character: L5RCharacterData) -> in
 ## expiry_kind: "round" (removed once round_number reaches expires_round) or
 ## "turn_end" (removed at the end of the holder's own next turn — for "next Turn"
 ## effects like Strength of the Spider; expires_round is unused for those).
-static func add_timed_modifier(p: Participant, kind: String, value: int, expires_round: int, source: String, expiry_kind: String = "round") -> void:
-	p.timed_modifiers.append({"kind": kind, "value": value, "expires_round": expires_round, "source": source, "expiry_kind": expiry_kind})
+## ml / creator (s31-37 spell-effect tracking, optional, default -1): the Mastery Level of the spell
+## that installed this modifier and the caster's id. Used by the ML-gated dispel/negate effects
+## (Draw Back the Shadow ML5-6 contest, Balance of Elements / Strike of the Flowing Waters ML<=3
+## negation). -1 = untracked (kata/kiho/creature modifiers and pre-existing callers).
+static func add_timed_modifier(p: Participant, kind: String, value: int, expires_round: int, source: String, expiry_kind: String = "round", ml: int = -1, creator: int = -1) -> void:
+	p.timed_modifiers.append({"kind": kind, "value": value, "expires_round": expires_round, "source": source, "expiry_kind": expiry_kind, "ml": ml, "creator": creator})
+
+
+## Total of all timed modifiers of `kind` whose installing-spell Mastery Level is <= max_ml. Used by
+## Strike of the Flowing Waters (ignore Armor-TN bonuses from ML<=3 spell effects). Untracked
+## modifiers (ml < 0) are excluded — they are not ML-gated spell effects.
+static func get_timed_modifier_total_ml_at_most(p: Participant, kind: String, max_ml: int) -> int:
+	var total: int = 0
+	for m: Dictionary in p.timed_modifiers:
+		var mml: int = int(m.get("ml", -1))
+		if m.get("kind", "") == kind and mml >= 0 and mml <= max_ml:
+			total += int(m.get("value", 0))
+	return total
+
+
+## Remove spell-installed timed modifiers (source prefix "spell_") whose Mastery Level is <= max_ml.
+## negative_only: only remove penalties/reductions (value < 0) — used by Balance of Elements (negate
+## ML<=3 TN penalties / Armor TN reduction, but leave the target's own positive buffs). Returns count.
+static func clear_spell_modifiers_ml_at_most(p: Participant, max_ml: int, negative_only: bool = false) -> int:
+	var kept: Array = []
+	var removed: int = 0
+	for m: Dictionary in p.timed_modifiers:
+		var mml: int = int(m.get("ml", -1))
+		var is_spell: bool = String(m.get("source", "")).begins_with("spell_")
+		var sign_ok: bool = (not negative_only) or int(m.get("value", 0)) < 0
+		if is_spell and sign_ok and mml >= 0 and mml <= max_ml:
+			removed += 1
+		else:
+			kept.append(m)
+	p.timed_modifiers = kept
+	return removed
 
 
 static func get_timed_modifier_total(p: Participant, kind: String) -> int:
@@ -539,6 +575,21 @@ static func get_timed_modifier_total(p: Participant, kind: String) -> int:
 		if m.get("kind", "") == kind:
 			total += int(m.get("value", 0))
 	return total
+
+
+## The highest installing-spell Mastery Level (and that modifier's creator id) among the timed
+## modifiers matching `source`. Returns {ml, creator} with ml = -1 if none are ML-tracked. Used by
+## Draw Back the Shadow (ML5-6 illusions need a Contested roll vs the creator; ML<=4 auto-dispel).
+static func get_timed_modifier_ml_and_creator(p: Participant, source: String) -> Dictionary:
+	var best_ml: int = -1
+	var creator: int = -1
+	for m: Dictionary in p.timed_modifiers:
+		if String(m.get("source", "")) == source:
+			var mml: int = int(m.get("ml", -1))
+			if mml > best_ml:
+				best_ml = mml
+				creator = int(m.get("creator", -1))
+	return {"ml": best_ml, "creator": creator}
 
 
 static func has_timed_modifier_source(p: Participant, source: String) -> bool:
