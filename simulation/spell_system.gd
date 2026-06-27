@@ -345,7 +345,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"strike_of_the_flowing_waters": {"kind": "buff", "target": "ally", "range_tiles": 2, "duration_rounds": 1,
 		"mods": [{"kind": "armor_bypass", "value": 1}]},  # Water 4: ignore the target's worn-armor Armor TN (+5 vs non-humans); the spell-ML3-effect bypass not modeled; does NOT negate Reduction or Defense/Full-Defense TN
 	"suitengus_embrace": {"kind": "status", "condition": "incapacitated", "save": "none",
-		"range_tiles": 5, "aoe_radius": 0, "duration_rounds": 3},  # Water 5: lungs fill with seawater — treated as Down (the per-round Stamina recovery + death-on-2-consecutive-fails deferred; 3-round hold PROVISIONAL)
+		"range_tiles": 5, "aoe_radius": 0, "duration_rounds": 9999},  # Water 5: lungs fill with seawater — treated as Down; held until the per-round drown tracker resolves (3 Stamina TN 15 successes recover, 2 consecutive fails drown; magical heal saves) (GDD s36 l347)
 	# --- Void (s37, Ishiken-only) ---
 	# Touch the Emptiness: Range 30', single, 1k1 + Dazed (no save)
 	"touch_the_emptiness": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1,
@@ -364,11 +364,11 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"draw_closed_the_veil": {"kind": "banish_spirit"},  # Void 4: banish a non-native spirit to its home realm (Contested Void vs Willpower for embodied spirits)
 	"opening_the_veil": {"kind": "veil_portal", "range_tiles": 2, "radius": 3, "duration_rounds": 6},  # Water 6: open a Spirit-Realm portal at a tile within 10' — each round draws the nearest displaced spirit home (PROVISIONAL: party realm-travel not modeled)
 	"essence_of_void": {"kind": "status", "condition": "incapacitated", "save": "void_contested",
-		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 9999},  # Void 4: Contested Void → held immobile, unable to act (Concentration = skirmish; the per-round break roll is the deferred nuance)
+		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 9999},  # Void 4: Contested Void → held immobile; on the 2nd+ Round the target may break free with a Contested Void Roll (GDD s37 l173)
 	# Void VP manipulation (2026-06-20): gain / restore / steal / lock Void Points.
-	"drawing_the_void": {"kind": "gain_void"},  # Void 1: caster gains School Rank +1 Void Points (over-cap allowed; the per-round over-cap decay is deferred)
+	"drawing_the_void": {"kind": "gain_void"},  # Void 1: caster gains School Rank +1 Void Points (over-cap allowed; over-max loses 1/Round if the caster does not spend one) (GDD s37 l17)
 	"fill_the_emptiness": {"kind": "restore_void", "target": "ally", "range_tiles": 1},  # Void 4: restore a touched ally's Void Points to maximum
-	"void_release": {"kind": "steal_void", "range_tiles": 5},  # Void 3: Contested Void → steal 1 Void Point from the target (margin/5 extra deferred)
+	"void_release": {"kind": "steal_void", "range_tiles": 5},  # Void 3: Contested Void → steal 1 Void Point + 1 more per 5-point margin (GDD s37 l147)
 	"kharmic_intent": {"kind": "pool_void", "range_tiles": 4},  # Void 3: pool VP with a willing ally, redistribute (fill ally to max, caster keeps remainder up to max)
 	"the_empty_voice": {"kind": "buff", "target": "self", "duration_rounds": 50,
 		"mods": [{"kind": "empty_voice", "value": 1}]},  # Void 2: silent casting (forward-wired empty_voice modifier; dormant until casting is speech/noise-gated)

@@ -236,6 +236,15 @@ class MapCombatState:
 	## s43 Blood Armor: wearer_id -> victim_id. The wearer channels 75% of its incoming damage into the
 	## bonded victim (read in _apply_hit). The bond breaks when the victim dies.
 	var blood_armor_links: Dictionary = {}
+	## s37 Essence of Void: target_id -> caster_id. Each Round (2nd+) the target makes a Contested Void
+	## Roll to break free (GDD s37 l173). The hold dissolves on a target win or if either party dies.
+	var essence_void_links: Dictionary = {}
+	## s36 Suitengu's Embrace: target_id -> {successes, fails}. Each Round the drowning target rolls
+	## Stamina TN 15; 3 total successes recovers, 2 consecutive failures kills (GDD s36 l347).
+	var suitengu_drown: Dictionary = {}
+	## s37 Drawing the Void: caster_id -> last over-max VP snapshot. While over max, the caster loses
+	## 1 VP each Round they did not spend one (GDD s37 l17). Cleared once at/under max.
+	var drawing_void_watch: Dictionary = {}
 	## s54.5 Manesuru Dark Mirror: target ids fully studied, target ids already mirrored, count spawned.
 	var mirror_studied: Dictionary = {}
 	var mirror_spawned: Dictionary = {}
@@ -2582,6 +2591,14 @@ static func _complete_cast(
 		if spell_id == "eyes_of_the_phoenix" and target != null:
 			res["fear_burst"] = _apply_fear_burst(
 				state, String(state.factions.get(target_id, FACTION_NEUTRAL)), 3, target_id, dice_engine)
+		# s37 Essence of Void: when the hold lands, register a per-round break contest (advance_round).
+		# s36 Suitengu's Embrace: register the per-round drowning Stamina/death tracker.
+		elif (spell_id == "essence_of_void" or spell_id == "suitengus_embrace") \
+				and _status_landed(res["spell_status"], target_id):
+			if spell_id == "essence_of_void":
+				state.essence_void_links[target_id] = caster_id
+			else:
+				state.suitengu_drown[target_id] = {"successes": 0, "fails": 0}
 	elif res.get("success", false) and eff.get("kind", "") == "cleanse":
 		res["spell_cleanse"] = _apply_spell_cleanse(state, caster_id, caster, eff, target_id)
 		state.combat_log.append({
@@ -2758,6 +2775,9 @@ static func _complete_cast(
 		var gained: int = SpellSystem.get_effective_school_rank(caster, Enums.Ring.VOID) + 1
 		caster.current_void_points += gained  # over-cap allowed (s37 Drawing the Void)
 		res["void_gained"] = gained
+		# If now over max, watch for per-round over-cap decay (lose 1/Round unspent, GDD s37 l17).
+		if caster.current_void_points > maxi(1, caster.void_ring):
+			state.drawing_void_watch[caster_id] = caster.current_void_points
 	elif res.get("success", false) and eff.get("kind", "") == "restore_void":
 		res["void_restored"] = _apply_spell_restore_void(state, caster_id, target_id, target)
 	elif res.get("success", false) and eff.get("kind", "") == "steal_void":
@@ -2889,6 +2909,12 @@ static func _apply_spell_heal(
 		var npb_before: int = IndividualCombat.get_timed_modifier_total(heal_p, "all_rolls")
 		IndividualCombat.clear_timed_modifiers_by_source(heal_p, "no_pure_breaths")
 		npb_cured = IndividualCombat.get_timed_modifier_total(heal_p, "all_rolls") != npb_before
+	# s36 Suitengu's Embrace: magical healing reaching a drowning target is the GDD "magical
+	# intervention" that saves them — clears the drown tracker and frees them from unconsciousness.
+	if state.suitengu_drown.has(heal_id):
+		state.suitengu_drown.erase(heal_id)
+		if heal_p != null:
+			heal_p.conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
 	var amount: int = 0
 	match eff.get("heal", ""):
 		"margin":
@@ -3138,6 +3164,15 @@ static func _apply_secondary_aoe(
 static func _is_deafened(state: MapCombatState, cid: int) -> bool:
 	var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
 	return p != null and p.conditions.has(IndividualCombat.CONDITION_DEAFENED)
+
+
+## True if a _apply_spell_status result actually applied a condition to target_id (not resisted/immune).
+static func _status_landed(status_out: Array, target_id: int) -> bool:
+	for e in status_out:
+		if int(e.get("id", -1)) == target_id:
+			var s: String = String(e.get("status", ""))
+			return s != "resisted" and s != "immune" and s != ""
+	return false
 
 
 # Shared target gatherer for damage/status spells. Single-target (aoe_radius 0) or AoE
@@ -5065,11 +5100,17 @@ static func _apply_spell_steal_void(
 		return {"reason": "no_void_to_steal"}
 	var cv: int = maxi(1, SpellSystem.get_ring_value(caster, Enums.Ring.VOID))
 	var tv: int = maxi(1, SpellSystem.get_ring_value(target, Enums.Ring.VOID))
-	if dice_engine.roll_and_keep(cv, cv, true).total <= dice_engine.roll_and_keep(tv, tv, true).total:
+	var croll: int = dice_engine.roll_and_keep(cv, cv, true).total
+	var troll: int = dice_engine.roll_and_keep(tv, tv, true).total
+	if croll <= troll:
 		return {"reason": "resisted", "id": target_id}
-	target.current_void_points -= 1
-	caster.current_void_points += 1
-	return {"id": target_id, "stolen": 1}
+	# s37 Void Release: 1 Void Point, plus 1 more per full 5-point margin over the target's roll.
+	# Capped at the target's available Void Points. Caster's temporary VP may exceed its max (GDD:
+	# expires within 1 hour — over a skirmish, no in-combat decay).
+	var amount: int = mini(target.current_void_points, 1 + int((croll - troll) / 5))
+	target.current_void_points -= amount
+	caster.current_void_points += amount
+	return {"id": target_id, "stolen": amount}
 
 
 ## Instant-kill spell (s35 Consumed by Five Fires / s37 Unmake the World): reduce the target to
@@ -7307,6 +7348,75 @@ static func advance_round(
 		else:
 			_tomb_tp.conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
 			state.tomb_links.erase(tid)
+
+	# s37 Essence of Void: on the 2nd+ Round the held target may break free with a Contested Void Roll
+	# (target Void vs caster Void; ties go to the target). Frees on a target win; collapses if either
+	# dies. No-op when no holds are active.
+	for _ev_tid in state.essence_void_links.keys():
+		var _ev_cid: int = int(state.essence_void_links[_ev_tid])
+		var _ev_t: L5RCharacterData = chars_by_id.get(_ev_tid, state.combatants.get(_ev_tid, null))
+		var _ev_c: L5RCharacterData = chars_by_id.get(_ev_cid, state.combatants.get(_ev_cid, null))
+		var _ev_tp: IndividualCombat.Participant = state.combat.participants.get(_ev_tid, null)
+		if _ev_t == null or _ev_c == null or _ev_tp == null \
+				or CharacterStats.is_dead(_ev_t) or CharacterStats.is_dead(_ev_c):
+			if _ev_tp != null:
+				_ev_tp.conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
+			state.essence_void_links.erase(_ev_tid)
+			continue
+		var _evv_t: int = maxi(1, SpellSystem.get_ring_value(_ev_t, Enums.Ring.VOID))
+		var _evv_c: int = maxi(1, SpellSystem.get_ring_value(_ev_c, Enums.Ring.VOID))
+		if dice_engine.roll_and_keep(_evv_t, _evv_t, true).total \
+				> dice_engine.roll_and_keep(_evv_c, _evv_c, true).total:
+			_ev_tp.conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
+			state.essence_void_links.erase(_ev_tid)
+
+	# s36 Suitengu's Embrace: each Round the drowning target rolls Stamina TN 15. 3 total successes
+	# recovers; 2 consecutive failures renders them unconscious to drown (dies in 1 minute without
+	# magical/medical intervention — a heal cast on them clears the tracker). No-op when none drowning.
+	for _sd_tid in state.suitengu_drown.keys():
+		var _sd_t: L5RCharacterData = chars_by_id.get(_sd_tid, state.combatants.get(_sd_tid, null))
+		var _sd_tp: IndividualCombat.Participant = state.combat.participants.get(_sd_tid, null)
+		var _sd: Dictionary = state.suitengu_drown[_sd_tid]
+		if _sd_t == null or _sd_tp == null or CharacterStats.is_dead(_sd_t):
+			state.suitengu_drown.erase(_sd_tid)
+			continue
+		var _dying_at: int = int(_sd.get("dying_at", -1))
+		if _dying_at >= 0:  # already unconscious, counting down to drowning death
+			if state.combat.round_number >= _dying_at:
+				WoundSystem.apply_damage(_sd_t, CharacterStats.get_total_wound_capacity(_sd_t) + 1, 0)
+				state.suitengu_drown.erase(_sd_tid)
+			continue
+		var _sta: int = maxi(1, _sd_t.stamina)
+		if dice_engine.roll_and_keep(_sta, _sta, true).total >= 15:
+			_sd["successes"] = int(_sd["successes"]) + 1
+			_sd["fails"] = 0
+			if int(_sd["successes"]) >= 3:
+				_sd_tp.conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
+				state.suitengu_drown.erase(_sd_tid)
+		else:
+			_sd["fails"] = int(_sd["fails"]) + 1
+			if int(_sd["fails"]) >= 2:
+				_sd["dying_at"] = state.combat.round_number + IndividualCombat.ROUNDS_PER_MINUTE
+
+	# s37 Drawing the Void: while over the Void maximum, the caster loses 1 VP each Round they did not
+	# spend one (current didn't drop since last check). Cleared once at/under max. No-op when none over.
+	for _dv_cid in state.drawing_void_watch.keys():
+		var _dv_c: L5RCharacterData = chars_by_id.get(_dv_cid, state.combatants.get(_dv_cid, null))
+		if _dv_c == null or CharacterStats.is_dead(_dv_c):
+			state.drawing_void_watch.erase(_dv_cid)
+			continue
+		var _dv_max: int = maxi(1, _dv_c.void_ring)
+		var _dv_snap: int = int(state.drawing_void_watch[_dv_cid])
+		if _dv_c.current_void_points <= _dv_max:
+			state.drawing_void_watch.erase(_dv_cid)
+		elif _dv_c.current_void_points >= _dv_snap:  # did not spend a VP since last check → decay 1
+			_dv_c.current_void_points -= 1
+			if _dv_c.current_void_points <= _dv_max:
+				state.drawing_void_watch.erase(_dv_cid)
+			else:
+				state.drawing_void_watch[_dv_cid] = _dv_c.current_void_points
+		else:  # spent at least one this round → no decay; refresh the snapshot
+			state.drawing_void_watch[_dv_cid] = _dv_c.current_void_points
 
 	# Persistent spell zones (Wall of Fire, Enticing the Dance of Flame, etc.) — no-op when empty.
 	if not state.spell_zones.is_empty():
