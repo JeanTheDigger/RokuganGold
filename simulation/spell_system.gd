@@ -901,6 +901,26 @@ static func activate_wolfs_proposal(
 	return res
 
 
+## s36 Wisdom & Clarity (Water 2) — Personal/Self (2-Raise variant may target another), 1 hour ~ the
+## IC day. Reading speed doubles + perfect recall of everything read. The faithful sim slice is sharper
+## Lore (research/recall): SkillResolver reads the "wisdom_and_clarity" day buff and adds +1k0 to Lore
+## skill rolls that tick. Does NOT aid comprehension (ciphers/languages stay indecipherable — cipher
+## cracking never routes through Lore). Day buff, cleared by the daily orchestrator pass.
+static func activate_wisdom_and_clarity(
+	caster: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	target: L5RCharacterData = null
+) -> Dictionary:
+	if not can_cast(caster, "wisdom_and_clarity"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	var beneficiary: L5RCharacterData = target if target != null else caster
+	var res: Dictionary = resolve_cast(caster, "wisdom_and_clarity", dice, 0, beneficiary, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		beneficiary.set_day_buff("wisdom_and_clarity")
+		res["target_id"] = beneficiary.character_id
+	return res
+
+
 ## s34 Jurojin's Balm (Earth 1) — Touch, 1 target. On a successful cast the beneficiary may
 ## re-roll a failed Stamina save to resist any poison or toxin with +2k0 for the day (the
 ## "jurojins_balm" day buff, read by DiseaseSystem.resolve_poison_resist_roll). Self-cast when
@@ -1340,7 +1360,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"surging_soul":                  {"e": 3, "m": 2, "s": 0},
 	"the_ties_that_bind":            {"e": 3, "m": 2, "s": 17},
 	"wave_borne_speed":              {"e": 3, "m": 2, "s": 0},   # 2-round Water Ring movement boost — COMBAT_ONLY
-	"wisdom_and_clarity":            {"e": 3, "m": 2, "s": 0},   # reading speed buff — COMBAT_ONLY
+	"wisdom_and_clarity":            {"e": 3, "m": 2, "s": 0},   # WIRED (court actions): shugenja casts it opening a court action; +1k0 Lore recall that day
 	"yukis_touch":                   {"e": 3, "m": 2, "s": 0},   # freeze-water trap — wired (SPELL_COMBAT_EFFECTS "freeze_water")
 	# ML3
 	"endless_deluge":                {"e": 3, "m": 3, "s": 16},

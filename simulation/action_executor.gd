@@ -4292,10 +4292,20 @@ static func _execute_contested_court_action(
 			and "touch_of_airs_grace" in character.spells_known \
 			and SpellSystem.can_cast(character, "touch_of_airs_grace"):
 		SpellSystem.activate_touch_of_airs_grace(character, dice_engine, ctx.ic_day)
+	# s36 Wisdom & Clarity: a shugenja casts it opening this chosen court action, gaining perfect
+	# recall for the day (+1k0 to Lore rolls — the SkillResolver hook covers other Lore rolls this
+	# tick; the +1k0 is added inline below for a Lore-based court action, e.g. IMPRESS).
+	if not character.has_day_buff("wisdom_and_clarity") \
+			and "wisdom_and_clarity" in character.spells_known \
+			and SpellSystem.can_cast(character, "wisdom_and_clarity"):
+		SpellSystem.activate_wisdom_and_clarity(character, dice_engine, ctx.ic_day)
 	var voice_atk: int = 0
 	if character.voice_of_the_wind_ic_day == ctx.ic_day \
 			and a_skill.split(":")[0].strip_edges() in SkillResolver.SOCIAL_SKILLS:
 		voice_atk = 1  # +1k0 to spoken Social Skill Rolls
+	if character.has_day_buff("wisdom_and_clarity") \
+			and a_skill.split(":")[0].strip_edges() == "Lore":
+		voice_atk += 1  # +1k0 to a Lore-based court action (recall)
 	var attacker_roll: int = dice_engine.roll_check(
 		maxi(1, a_trait_val + a_skill_rank + contested_mut_a["rolled"] + soul_atk + voice_atk),
 		maxi(1, a_trait_val + contested_mut_a["kept"]),

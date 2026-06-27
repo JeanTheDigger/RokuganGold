@@ -7065,6 +7065,22 @@ PROBE (not auto-cast). Fires independently of Whispering Wind (both on a PROBE).
 disposition_toward entries recorded; re-cast dedups the objective entry; non-knower cannot cast. 164 combat
 effects (Wind of the Moon is a world-sim telepathy read, not a combat effect).
 
+### Spell coverage — Wisdom & Clarity (perfect recall) (2026-06-27, deliberate-cast)
+**Wisdom & Clarity (Water 2, s36)** — reading speed doubles + perfect recall of everything read (1 hour ~
+the IC day); does NOT enhance comprehension (ciphers/unknown languages stay indecipherable). Previously
+deferred ("reading speed/recall, no mechanic"). Wired faithfully as the sharper-Lore (research/recall)
+buff: new `SpellSystem.activate_wisdom_and_clarity` sets a `wisdom_and_clarity` day buff (cleared by the
+daily orchestrator pass); `SkillResolver._get_wisdom_and_clarity_bonus` adds **+1k0 to any Lore-based Skill
+Roll** while active (read in both `resolve_skill_check` and `resolve_contested_check`, beside the Soul of
+Stone / Voice of the Wind hooks). Does NOT touch cipher-cracking (which routes through Calligraphy/Spellcraft,
+never Lore — GDD-faithful). Deliberate-cast trigger in `_execute_contested_court_action` (a shugenja casts
+it opening a chosen court action, once/day; the inline court path adds the +1k0 for a Lore-based action like
+IMPRESS, and the SkillResolver hook covers the shugenja's other Lore rolls that tick). PROVISIONAL magnitude
++1k0 (parallel to Voice of the Wind) — flagged for owner override. Runtime-verified 5/5 (Godot 4.6.2,
+headless): can_cast gate; activate sets the buff; Lore roll mean rises (14353 vs 13354 over 400 rolls);
+Courtier (non-Lore) unaffected; non-knower cannot cast. 164 combat effects (Wisdom & Clarity is a world-sim
+recall buff, not a combat effect).
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`
