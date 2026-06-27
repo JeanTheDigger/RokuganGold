@@ -6749,6 +6749,16 @@ costing a slot; non-caster interrupt no-op. LIMITATION: the speed-raise count is
 turn-based UI. Same PC-travel HOLD live-reachability caveat as the whole ASCII stack — driver-verified,
 not a live session.
 
+### Spell coverage — deferred sub-part: The Kami's Strength no-Simple-Move cost (2026-06-27, runtime-verified 6/6)
+**The Kami's Strength** (Earth 5 Battle, s34 l323) GDD: the target gains Reduction 20 + Strength/Trait boost,
+"In return, the target cannot take Simple Move Actions (Free Move Actions are still permitted)." The
+Reduction + Strength boost were wired; the movement cost was deferred. Added a `no_simple_move` mod to the
+buff (installed as a timed modifier via the generic `else` branch) and a guard in `simple_move_budget` that
+returns 0 while it is set — `free_move_budget` is untouched, so the Free Move still works. Runtime-verified
+6/6 (Godot 4.6.2, headless): the cast grants Reduction 20 + sets the flag; the rooted target's Simple-Move
+budget drops 6→0 while its Free-Move budget (3) is unchanged; the Simple Move restores after the 5-round
+duration. Generic — any future "rooted" effect reuses `no_simple_move`.
+
 ### Spell coverage — deferred sub-part: Ebbing Strength caster cost (2026-06-27, runtime-verified 6/6)
 **Ebbing Strength** (Water 1, s36 l21) GDD: "Reduces one of the caster's own Physical Traits by up to School
 Rank; the target gains the same Physical Trait increased by the same amount." Only the ally's gain

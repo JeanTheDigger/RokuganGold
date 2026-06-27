@@ -112,7 +112,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Coverage extension batch 5 (2026-06-20): wound-ward + fortify buffs.
 	"the_kamis_strength": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 5,
 		"mods": [{"kind": "reduction", "value": 20},
-			{"kind": "spell_damage_rolled", "value": "earth_ring"}]},  # Earth 5: Reduction 20 + Strength boost (no-Simple-Move deferred)
+			{"kind": "spell_damage_rolled", "value": "earth_ring"},
+			{"kind": "no_simple_move", "value": 1}]},  # Earth 5: Reduction 20 + Strength/Trait boost; in return the target cannot take Simple Move Actions (Free Move still allowed)
 	"near_to_ice": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
 		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Water 3: Wound Penalties negated
 	"force_of_will": {"kind": "buff", "target": "ally", "range_tiles": 10, "duration_rounds": 2,

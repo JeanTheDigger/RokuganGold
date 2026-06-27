@@ -422,6 +422,9 @@ static func _arms_occupied(state: MapCombatState, char_id: int) -> bool:
 ## for the Simple action. Used by the move-decision sites.
 static func simple_move_budget(state: MapCombatState, char_id: int, character: L5RCharacterData) -> int:
 	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	# s34 The Kami's Strength: the rooted target cannot take Simple Move Actions (Free Move still allowed).
+	if p != null and IndividualCombat.get_timed_modifier_total(p, "no_simple_move") > 0:
+		return 0
 	var water: int = _effective_water_ring(p, character)
 	var fc: int = _flight_code(state, char_id)
 	if fc > 0:
