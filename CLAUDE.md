@@ -7412,6 +7412,41 @@ populating a foreign-speaker roster activates it). **With this, EVERY spell in t
 stealth-layer hook). The former 3-spell blocked set (Piercing the Heavens, Opening the Veil, Tenjin's Ear) is
 now wired via faithful PROVISIONAL calls flagged for owner override. No genuinely-unwired spell remains.
 
+### Spell coverage — inert-tail audit + Group ① knowledge divinations (2026-06-28, owner-directed, runtime-verified)
+A fresh code-grounded audit (not the changelog) of all 287 `SPELL_LIBRARY` entries found that the prior
+"EVERY spell is wired" claim was over-optimistic: ~25 spells were **cataloged with a `sim_effect` tag but had
+no handler** — their effect type has no router arm, no dedicated function, no combat effect, no UI consumer
+(they did nothing if cast). Buckets: TRANSMUTE_MATERIAL (transmute, elemental_crucible, reforge,
+the_mending_forge, the_raging_forge, flow_through_the_void), TRAVEL_AID (speed_of_the_waterfall,
+walking_upon_the_waves, steed_of_the_ebbing_tides, the_emperors_road, open_the_waves), SUMMON/COMMAND_KAMI
+(summon, command, call_the_spirit), PRESERVATION (rites_of_preservation), and INFORMATION_GATHER-outside-
+Group-A/B (secrets_on_the_wind, master_clouds_eyes, funeral_rites, reflections_of_pan_ku, the_ties_that_bind,
+visions_of_the_future, waters_sweet_clarity, whispers_of_the_land, witness_the_untold, echoes_on_the_breeze).
+Owner calls (2026-06-27): ① wire the 3 knowledge divinations; ② **travel spells stay DEFERRED** (explicit);
+③ forge spells get a minimal item-condition model; ④ oracle/summon bespoke-where-feasible, document the rest.
+- **Group ① — DONE + runtime-verified.** New `SpellSystem.INFORMATION_GATHER_GROUP_C`
+  (secrets_on_the_wind, master_clouds_eyes, whispers_of_the_land), included in
+  `get_best_npc_information_spell`, plus a Group C arm in `DayOrchestrator._process_ritual_spell_writebacks`.
+  **secrets_on_the_wind** (Air 2): remote overhear → transfers the topics circulating among living,
+  non-traveling characters present at the target's settlement into the caster's topic_pool + an
+  `overheard_topics` INTELLIGENCE KnowledgeEntry. **master_clouds_eyes** (Air 3): requires CO-LOCATION (LOS);
+  produces `location_intelligence` (spotted_characters, `is_audio_enabled: false`). **whispers_of_the_land**
+  (Earth 2): produces `location_intelligence` of who is at the target's location (current snapshot; the GDD
+  3-day track history is not modeled — no arrival log). All GDD-faithful, no invented values. Runtime-verified
+  in a minimal autoload-free copy: selection driver 9/9 (membership, C-only select, prefer-higher-ML-B,
+  empty case, s-tag); router driver 5/5 (secrets topic transfer + knowledge entry; master_clouds_eyes
+  co-location gate skip + co-located audio-off intel; whispers spotted-characters intel).
+- **Bug fixed (pre-existing, found by the Group ① driver): `sc.is_traveling` property access in the
+  INFORMATION_GATHER arm.** The existing Group B `spotted` loop (and my new Group C loops) used
+  `sc.is_traveling` — but `is_traveling` is NOT a property on L5RCharacterData; it is `TravelSystem.is_traveling(c)`.
+  A property access on the missing member raises "Invalid access" at runtime whenever the loop iterates a
+  present character, so the **existing Group B remote-scry location_intelligence was latently broken** (its
+  prior "runtime verification" never hit a populated loop). Fixed all 3 sites to `TravelSystem.is_traveling(sc)`.
+- **Travel spells (②) remain deferred** by explicit owner decision (the sim tracks travel only in whole-province
+  days; the GDD effects are sub-day movement rates → no faithful wiring without an invented travel-time value).
+- Forge spells (③) and oracle/summon (④) are the next tranches (owner Q&A pending on the item-damage source
+  and per-spell bespoke effects).
+
 ### Spell coverage — 6 Ishiken/Void/utility spells (2026-06-27, owner-directed, mixed verification)
 A regex gap (`"i": true` Ishiken entries) had hidden 6 spells from earlier audits. All now wired:
 - **Kharmic Intent (Void 3)** — pool VP with a willing ally. New `pool_void` effect: `_apply_kharmic_intent`

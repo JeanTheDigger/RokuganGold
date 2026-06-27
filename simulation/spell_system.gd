@@ -1853,8 +1853,23 @@ const INFORMATION_GATHER_GROUP_B: Array[String] = [
 	"the_final_bond",        # Water ML5: locate one person (immediate family or close friend)
 ]
 
+## Group C: newly wired divinations (owner-authorized 2026-06-27). All produce
+## persistent INTELLIGENCE knowledge faithfully (no invented values).
+## secrets_on_the_wind (Air 2): remote-overhear a prepared area → learn topics
+##   circulating among characters present at the target's settlement.
+## master_clouds_eyes (Air 3): view through a co-located creature's eyes (LOS,
+##   sight-only) → location_intelligence of who is present, no audio.
+## whispers_of_the_land (Earth 2): Earth spirits reveal recent tracks →
+##   location_intelligence of who is at the target's location (current snapshot;
+##   the GDD 3-day track history is not modeled — no arrival log).
+const INFORMATION_GATHER_GROUP_C: Array[String] = [
+	"secrets_on_the_wind",   # Air ML2: remote overhear → topic transfer
+	"master_clouds_eyes",    # Air ML3: see through a co-located creature's eyes
+	"whispers_of_the_land",  # Earth ML2: reveal who is at the target's location
+]
+
 ## Returns the best INFORMATION_GATHER spell usable by the NPC decision pipeline
-## (Group A or Group B only — other INFORMATION_GATHER spells produce no persistent
+## (Group A, B, or C — other INFORMATION_GATHER spells produce no persistent
 ## knowledge in the simulation and are excluded from NPC selection).
 ## Prefers Group B (higher max ML: dominion ML4 > look_into_soul ML4 tie-break).
 ## If no processable spell is known, returns "".
@@ -1865,7 +1880,8 @@ static func get_best_npc_information_spell(character: L5RCharacterData) -> Strin
 		if not SPELL_LIBRARY.has(spell_id):
 			continue
 		if not (spell_id in INFORMATION_GATHER_GROUP_A or \
-				spell_id in INFORMATION_GATHER_GROUP_B):
+				spell_id in INFORMATION_GATHER_GROUP_B or \
+				spell_id in INFORMATION_GATHER_GROUP_C):
 			continue
 		var ml: int = SPELL_LIBRARY[spell_id].get("m", 0)
 		if ml > best_ml:
