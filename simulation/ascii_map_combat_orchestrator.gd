@@ -2466,6 +2466,18 @@ static func execute_cast_spell(
 	# action check so a discounted cast doesn't demand the full Complex.
 	var sp_elem: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("e", -1)
 	var sp_ml: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("m", 1)
+	# s35 Ravenous Swarms: if the encircled target casts any Fire spell, the Fire kami instantly
+	# strike — the Spell Casting Roll auto-fails (the slot is still lost) and the caster takes 3k3
+	# extra Wounds (GDD s35 l205).
+	var rs_caster_p: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+	if sp_elem == Enums.Ring.FIRE and rs_caster_p != null \
+			and IndividualCombat.get_timed_modifier_total(rs_caster_p, "ravenous_swarms") > 0:
+		SpellSystem.consume_slot(caster, SpellSystem.get_best_cast_ring(caster, spell_id))
+		var rs_dmg: int = dice_engine.roll_and_keep(3, 3, true).total
+		WoundSystem.apply_damage(caster, rs_dmg, 0)
+		state.combat_log.append({"type": "ravenous_swarms_disrupt", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "damage": rs_dmg})
+		return {"success": false, "reason": "ravenous_swarms_disrupt", "spell_id": spell_id, "damage": rs_dmg}
 	var use_free_cast: bool = ts.free_casts > 0 and sp_elem == Enums.Ring.FIRE and sp_ml <= 4
 	var use_simple_cast: bool = (not use_free_cast) and ts.cast_as_simple > 0 \
 		and sp_elem == Enums.Ring.FIRE and sp_ml <= 3
