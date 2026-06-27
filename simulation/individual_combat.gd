@@ -114,7 +114,7 @@ const CONDITION_MOUNTED:   String = "mounted"
 const CONDITION_PRONE:     String = "prone"
 const CONDITION_STUNNED:   String = "stunned"
 const CONDITION_AFRAID:     String = "afraid"   # s22.3/s02.4 Fear: -1k0 to all rolls while in range
-const CONDITION_DEAFENED:   String = "deafened" # s35 Fury of Osano-Wo rider; combat effect deferred (no verbal/hearing mechanic)
+const CONDITION_DEAFENED:   String = "deafened" # s35 Fury of Osano-Wo bystander rider / s33 Striking the Storm self-deafen. Effect: immune to hearing-based effects (Thunder's Word, Wanyudo scream, Haraigaki wail) — gated in the orchestrator.
 # Held/bound/treated-as-Down: the combatant may take no actions on its Turn (the turn loop skips it)
 # and is flat-footed (Armor TN 5). Used by the s34/s36/s35/s37 incapacitation spells (Earth bindings,
 # Water Suitengu's Embrace, Fire Everburning Rage, Void Essence of Void). Applied as a TIMED condition

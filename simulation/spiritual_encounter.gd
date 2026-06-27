@@ -236,6 +236,10 @@ static func creature_turn(es: EncounterState, cid: int, dice: DiceEngine) -> Dic
 			var ppos: Vector2i = es.mcs.positions.get(pid, Vector2i(9999, 9999))
 			if maxi(absi(ppos.x - cpos.x), absi(ppos.y - cpos.y)) > radius:
 				continue
+			# The Wail is a sound — a Deafened PC cannot hear it.
+			var wp: IndividualCombat.Participant = es.mcs.combat.participants.get(pid, null)
+			if wp != null and wp.conditions.has(IndividualCombat.CONDITION_DEAFENED):
+				continue
 			var roll: int = dice.roll_and_keep(pc.willpower, pc.willpower, true).total
 			if roll < int(wail["tn"]) and es.exposure.has(pid):
 				SpiritualExposureSystem.apply_willpower_loss(es.exposure[pid], int(wail["wp_loss"]))

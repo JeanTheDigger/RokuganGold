@@ -3079,7 +3079,65 @@ static func _apply_spell_combat_damage(
 		if not rider.is_empty() and not dead:
 			h["rider"] = _apply_spell_rider(state, caster, ch, int(t["id"]), rider, dice_engine)
 		hits.append(h)
+	# Secondary bystander AoE (s35 Fury of Osano-Wo): everyone within `radius` of the TARGET tile
+	# makes a save or takes a condition — distinct from `rider` (damaged target only). The primary
+	# target is included (the lightning strike point).
+	var secondary: Dictionary = eff.get("secondary_aoe", {})
+	if not secondary.is_empty():
+		var sec: Array = _apply_secondary_aoe(state, caster_id, caster, target_id, secondary, dice_engine)
+		if not sec.is_empty():
+			hits.append({"secondary_aoe": sec})
 	return hits
+
+
+## Secondary bystander AoE on a damage spell (s35 Fury of Osano-Wo): after the primary damage
+## resolves, every combatant within `radius` (Chebyshev) of the TARGET tile makes a save (or
+## auto-applies a condition on "none"). Honors hits "all"/"enemies" relative to the caster's
+## faction. Timed (duration_rounds > 0) or persistent. Returns per-target {id, condition|resisted}.
+static func _apply_secondary_aoe(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, spec: Dictionary, dice_engine: DiceEngine,
+) -> Array:
+	var out: Array = []
+	if not state.positions.has(target_id):
+		return out
+	var center: Vector2i = state.positions[target_id]
+	var radius: int = int(spec.get("radius", 2))
+	var hits_all: bool = String(spec.get("hits", "all")) == "all"
+	var cf: String = String(state.factions.get(caster_id, FACTION_PLAYER))
+	var cond: String = String(spec.get("condition", ""))
+	var dur: int = int(spec.get("duration_rounds", 0))
+	var save: String = String(spec.get("save", "none"))
+	var tn: int = int(spec.get("save_tn", 0))
+	for cid in state.positions.keys():
+		var pos: Vector2i = state.positions[cid]
+		if maxi(absi(center.x - pos.x), absi(center.y - pos.y)) > radius:
+			continue
+		if not hits_all and String(state.factions.get(cid, "")) == cf:
+			continue
+		var ch = state.combatants.get(cid, null)
+		if ch == null or CharacterStats.is_dead(ch):
+			continue
+		var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+		if p == null:
+			continue
+		if save != "none" and _spell_save_resisted(state, caster, ch, save, tn, dice_engine):
+			out.append({"id": cid, "resisted": true})
+			continue
+		if not cond.is_empty():
+			if dur > 0:
+				IndividualCombat.apply_timed_condition(p, cond, state.combat.round_number + dur)
+			else:
+				IndividualCombat.apply_condition(p, cond)
+		out.append({"id": cid, "condition": cond})
+	return out
+
+
+## A combatant who cannot hear (Deafened) is immune to hearing-based effects — Thunder's Word,
+## the Wanyudo scream, the Haraigaki wail (each "heard" by its targets per its GDD/stat text).
+static func _is_deafened(state: MapCombatState, cid: int) -> bool:
+	var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+	return p != null and p.conditions.has(IndividualCombat.CONDITION_DEAFENED)
 
 
 # Shared target gatherer for damage/status spells. Single-target (aoe_radius 0) or AoE
@@ -3471,6 +3529,9 @@ static func _apply_spell_buff(
 		else:
 			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff")
 		applied.append({"kind": mkind, "value": val})
+	# s33 Striking the Storm: the swirling-air cocoon deafens the buffed character for the duration.
+	if eff.get("self_deafen", false):
+		IndividualCombat.apply_timed_condition(p, IndividualCombat.CONDITION_DEAFENED, expiry)
 	return {"id": bid, "applied": applied, "expires_round": expiry}
 
 
@@ -6070,6 +6131,8 @@ static func execute_thunders_word(
 		var tc: L5RCharacterData = chars_by_id.get(cid, null)
 		if tc == null or CharacterStats.is_dead(tc):
 			continue
+		if _is_deafened(state, cid):
+			continue  # Thunder's Word is "heard" — a Deafened being is immune.
 		var ta: int = maxi(1, CharacterStats.get_ring_value(tc, Enums.Ring.AIR))
 		if dice_engine.roll_and_keep(ta, ta, true).total < caster_roll:
 			IndividualCombat.apply_condition(state.combat.participants[cid], IndividualCombat.CONDITION_DAZED)
@@ -9340,6 +9403,8 @@ static func _npc_maybe_scream(
 		var v: L5RCharacterData = state.combatants.get(oid, null)
 		if v == null or CharacterStats.is_dead(v) or v.spirit_creature != null:
 			continue
+		if _is_deafened(state, oid):
+			continue  # Strength of the Dead is a scream — a Deafened victim cannot hear it.
 		if _chebyshev(cpos, state.positions[oid]) <= 10:
 			in_range.append(oid)
 	if in_range.is_empty():
