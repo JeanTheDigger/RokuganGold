@@ -163,6 +163,10 @@ static func _spirit_wound_level(character: L5RCharacterData) -> Enums.WoundLevel
 
 
 static func is_dead(character: L5RCharacterData, ring_deltas: Dictionary = {}) -> bool:
+	# s35 Force of Will: immune to "the effect of being dead" while the buff holds (runtime flag,
+	# false outside combat). The character fights on past the Out rank until the spell expires.
+	if character.combat_death_immune:
+		return false
 	return get_wound_level(character, ring_deltas) == Enums.WoundLevel.DEAD
 
 

@@ -115,8 +115,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 			{"kind": "spell_damage_rolled", "value": "earth_ring"}]},  # Earth 5: Reduction 20 + Strength boost (no-Simple-Move deferred)
 	"near_to_ice": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
 		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Water 3: Wound Penalties negated
-	"force_of_will": {"kind": "buff", "target": "ally", "range_tiles": 10, "duration_rounds": 2,
-		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Earth 2: penalties negated (death-immunity deferred)
+	"force_of_will": {"kind": "buff", "target": "ally", "range_tiles": 10, "duration_rounds": 2, "death_immune": true,
+		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Earth 2: immune to all Wound Rank penalties AND the effect of being dead; on expiry full Wound effects apply (GDD s34 l95)
 	# Coverage extension batch 6 (2026-06-20).
 	"dart_of_void": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
 		"range_tiles": 20, "aoe_radius": 0},  # Void 4: DR = Void Ring, ignores Invuln/Reduction (magic path), 100'
@@ -178,13 +178,12 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"soldiers_of_clay": {"kind": "summon", "summon_kind": "clay_soldier", "count": 10},  # Earth 6: 10 stone warriors
 	"be_the_mountain": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 4,
 		"mods": [{"kind": "reduction", "value": "be_the_mountain_reduction"}]},  # Earth 2: Reduction 5×rank (max 20)
-	"never_alone": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
-		"mods": [{"kind": "spell_attack_rolled", "value": "fire_ring"}]},  # Fire 1: +Fire to rolls (conditional expiry deferred)
+	"never_alone": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5, "conditional_expiry": "never_alone",
+		"mods": [{"kind": "spell_attack_rolled", "value": "fire_ring"}]},  # Fire 1: +Fire to (attack) rolls; ends early when the target suffers Wounds OR misses an attack (GDD s35 l75; "fails a Skill roll" out-of-combat)
 	"defense_of_the_firestorm": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
 		"mods": [{"kind": "armor_tn", "value": 20}]},  # Fire 4: +20 Armor TN flame aura (wooden-weapon burn deferred)
 	# === EARTH WAVE A (2026-06-20): debuff path + fear/knockdown resist ===
-	"courage_of_the_seven_thunders": {"kind": "buff", "target": "ally", "range_tiles": 6,
-		"duration_rounds": 100, "mods": [{"kind": "fear_resist_rolled", "value": 5}]},  # Earth 1: +5k0 Fear resist (minor-clan +3k0 + group + Taint clause deferred)
+	"courage_of_the_seven_thunders": {"kind": "courage", "aoe_radius": 6, "duration_rounds": 100},  # Earth 1: up to (Earth School Rank) allies in 30' gain Fear resist — Seven Great Clans +5k0, others +3k0, Taint 1+ excluded (GDD s34 l15; the multi-shugenja combined ritual is world-sim)
 	"the_mountains_feet": {"kind": "buff", "target": "ally", "range_tiles": 4, "duration_rounds": 50,
 		"mods": [{"kind": "knockdown_resist_rolled", "value": 3}]},  # Earth 2: +3k0 resist Knockdown
 	"strike_as_stone": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 30,
@@ -210,7 +209,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"the_fires_that_cleanse": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0, "range_tiles": 0,
 		"aoe_radius": 6, "aoe_hits": "all", "caster_half": true},  # Fire 1: DR=Fire Ring to ALL in 30' incl. caster, who takes half (rounded up) (GDD s35 l51)
 	"light_of_the_sun": {"kind": "damage_zone", "dr_rolled": 2, "dr_kept": 2, "range_tiles": 20,
-		"aoe_radius": 6, "aoe_hits": "all", "duration_rounds": 10},  # Fire 5: 2k2/round in 30' (honor/taint bonus deferred)
+		"aoe_radius": 6, "aoe_hits": "all", "duration_rounds": 10, "holy_punish": true},  # Fire 5: 2k2/round in 30'; humans +2k1/round per Honor Rank below 4, +2k2 if Taint 1+, Honor 0 → Blinded for Fire Ring Rounds (GDD s35 l323)
 	"blessing_of_the_sun": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 3,
 		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Fire 4: ignore Fatigue/Wound penalties (Fire-roll scope + cost deferred)
 	# Coverage extension batch 13 (2026-06-20).
@@ -268,7 +267,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"your_hearts_enemy": {"kind": "status", "condition": "afraid", "save": "willpower_flat", "save_tn": 25,
 		"range_tiles": 5, "aoe_radius": 0, "duration_rounds": 5},  # Air 3: Fear 4 illusion (TN 5+4×5=25 per s22.3)
 	"whispers_of_the_forgotten": {"kind": "debuff", "target": "enemy", "range_tiles": 10, "duration_rounds": 50,
-		"mods": [{"kind": "all_rolls", "value": -5}]},  # Air 4: must call 1 Raise (=+5 TN) on all rolls (disadvantage-count 2-Raise scaling + haunting-past immunity deferred)
+		"mods": [{"kind": "all_rolls", "value": "whispers_penalty"}]},  # Air 4: 1 wasted Raise (-5) on all rolls, -10 if 3+ Mental/Social Disadvantage points (GDD s33 l339; "no haunting past" immunity is GM discretion)
 	"gift_of_wind": {"kind": "buff", "target": "self", "duration_rounds": 50,
 		"mods": [{"kind": "invisible", "value": 1}]},  # Air 4: invisible to non-magical vision; attacking ends it
 	"request_to_hato_no_kami": {"kind": "debuff", "target": "enemy", "range_tiles": 30, "duration_rounds": 1,
@@ -407,11 +406,11 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"blessed_wind_of_lady_sun": {"kind": "modifier_zone", "self_centered": true, "aoe_radius": 1,
 		"duration_rounds": 9999, "mods": {"attack_roll_penalty": -1}},  # Air 2: hostile actions in the area suffer -1k0 (combat slice; the +1k0 Void/Awareness + the -2k0 Awareness-hostile are out-of-combat). 10 sq ft -> radius-1 bubble PROVISIONAL. Concentration = skirmish.
 	"summoning_the_gale": {"kind": "modifier_zone", "range_tiles": 10, "aoe_radius": 6,
-		"duration_rounds": 9999, "mods": {"ranged_armor_tn": 15, "ranged_attack_penalty": -3}},  # Air 3: anti-ranged bubble around a target (30' radius / 50' range) — +15 Armor TN vs ranged (shots in) and -3k0 to ranged attack rolls (shots out; the -3 KEPT half not modeled). Concentration = skirmish.
+		"duration_rounds": 9999, "mods": {"ranged_armor_tn": 15, "ranged_attack_penalty": -3, "ranged_attack_penalty_kept": -3}},  # Air 3: anti-ranged bubble around a target (30' radius / 50' range) — +15 Armor TN vs ranged (shots in) and -3k3 to ranged attack rolls (shots out). Concentration = skirmish (GDD s33 l241).
 	# Coverage clean-wins batch 11 (2026-06-20): trait→combat-roll buffs/debuffs via EXISTING hooks
 	# (Strength → rolled damage dice, Agility → attack-roll dice). NOT the Earth-ring wound refactor.
 	"strength_of_the_tsunami": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 3,
-		"mods": [{"kind": "spell_damage_rolled", "value": "water_half"}]},  # Water 2: Strength +half Water Ring → +that many rolled damage dice (faithful for the damage slice; Strength-skill rolls + the "cap at 9" not modeled)
+		"mods": [{"kind": "spell_damage_rolled", "value": "tsunami_strength"}]},  # Water 2: Strength +half Water Ring → +that many rolled damage dice, capped so Strength Rank ≤ 9 (GDD s36 l131; Strength-skill rolls out-of-combat)
 	"death_of_flame": {"kind": "debuff", "target": "enemy", "range_tiles": 20, "duration_rounds": 5,
 		"contested": "fire_contested", "mods": [{"kind": "spell_attack_rolled", "value": "neg_fire_ring"}]},  # Fire 4: -Fire Ring Agility (its attack-roll slice; the -Fire Intelligence / spell-suppression half is deferred). Per-Round re-resist simplified to one contested-Fire gate at cast.
 	# Coverage clean-wins batch 12 (2026-06-20): LOS-blocking fog (anti-ranged area denial).

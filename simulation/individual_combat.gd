@@ -1138,6 +1138,7 @@ static func resolve_attack(
 	adv_context: Dictionary = {},
 	attacker_roll_penalty: int = 0,
 	target_is_large: bool = false,
+	attacker_kept_penalty: int = 0,
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	# Conjured elemental weapon (s33-s36): override the wielded profile. The created weapon's
@@ -1259,6 +1260,9 @@ static func resolve_attack(
 	# s33 Castle of Air: a defender-imposed -Xk0 penalty on attacks against the warded caster.
 	if attacker_roll_penalty != 0:
 		rolled = maxi(0, rolled + attacker_roll_penalty)
+	# s33 Summoning the Gale: the -k3 kept half of a ranged-from-the-bubble penalty (-3k3).
+	if attacker_kept_penalty != 0:
+		kept = maxi(1, kept + attacker_kept_penalty)
 	if CONDITION_BLINDED in attacker_p.conditions:
 		if weapon.get("melee", true):
 			rolled = maxi(0, rolled - 1)

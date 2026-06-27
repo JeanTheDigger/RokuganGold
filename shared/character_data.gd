@@ -202,6 +202,10 @@ func clear_day_buff(buff_id: String) -> void:
 # @export -> never serialized, and rigorously cleared at combat setup/teardown/expiry, so it
 # never leaks into the persistent character or the world-sim. Empty outside combat.
 var combat_ring_deltas: Dictionary = {}
+# s35 Force of Will: while true, the character is immune to "the effect of being dead" (is_dead
+# returns false even at the Out rank). Runtime-only (NOT @export), set/cleared by the spell + cleared
+# at combat setup; false outside combat so the world-sim is unaffected. Same no-leak model as above.
+var combat_death_immune: bool = false
 @export var koku: float = 0.0
 @export var months_without_stipend: int = 0
 

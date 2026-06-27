@@ -99,6 +99,12 @@ const FACTION_PLAYER: String = "player"
 const FACTION_ENEMY: String = "enemy"
 const FACTION_NEUTRAL: String = "neutral"
 
+## The original Seven Great Clans (s34 Courage of the Seven Thunders: members get +5k0 Fear
+## resistance; all other samurai get +3k0). Mantis/minor/Imperial/ronin are not among the seven.
+const SEVEN_GREAT_CLANS: Array[String] = [
+	"Crab", "Crane", "Dragon", "Lion", "Phoenix", "Scorpion", "Unicorn",
+]
+
 ## Stand-up from Prone costs a Simple action (GDD s40: "Simple action").
 const STANDUP_ACTION_TYPE: String = "simple"
 
@@ -245,6 +251,9 @@ class MapCombatState:
 	## s37 Drawing the Void: caster_id -> last over-max VP snapshot. While over max, the caster loses
 	## 1 VP each Round they did not spend one (GDD s37 l17). Cleared once at/under max.
 	var drawing_void_watch: Dictionary = {}
+	## s35 Force of Will: char_id -> expiry_round. While active, character.combat_death_immune is true
+	## (immune to the effect of being dead); on expiry the flag clears and full Wound effects apply.
+	var force_of_will: Dictionary = {}
 	## s54.5 Manesuru Dark Mirror: target ids fully studied, target ids already mirrored, count spawned.
 	var mirror_studied: Dictionary = {}
 	var mirror_spawned: Dictionary = {}
@@ -293,6 +302,7 @@ static func setup_combat(
 		if CharacterStats.is_dead(c):
 			continue
 		c.combat_ring_deltas = {}  # no-leak guarantee: every combat starts with the ring bridge clear
+		c.combat_death_immune = false  # s35 Force of Will: clear the death-immunity flag at combat start
 		chars_for_combat.append(c)
 		mcs.combatants[c.character_id] = c
 		mcs.positions[c.character_id] = Vector2i(entry.get("x", 0), entry.get("y", 0))
@@ -1352,6 +1362,10 @@ static func execute_melee_attack(
 	if reversal_rerolled:
 		log_entry["reversal_reroll"] = true
 
+	# s35 Never Alone: the courage buff ends when the holder fails (misses) an attack roll.
+	if not result.get("hit", false):
+		IndividualCombat.clear_timed_modifiers_by_source(a_p, "spell_never_alone")
+
 	if result.get("hit", false):
 		var dmg_result: Dictionary = _apply_hit(state, attacker, a_p, target, weapon_name, raises, maneuver, result, dice_engine)
 		log_entry["damage"] = dmg_result.get("damage", 0)
@@ -1778,16 +1792,17 @@ static func execute_ranged_attack(
 		and IndividualCombat.get_timed_modifier_total(a_p, "ranged_auto_hit") > 0
 	var shot_raises: int = 0 if auto_hit else raises
 	# s33 Castle of Air: a defender's attacker_penalty buff imposes a -Xk0 attack-roll penalty.
-	# s33 Blessed Wind of Lady Sun (hostile -1k0) + Summoning the Gale (ranged -3k0 from inside the
-	# bubble; the -3 KEPT half is not modeled) penalize a shot fired from within a modifier zone.
+	# s33 Blessed Wind of Lady Sun (hostile -1k0) + Summoning the Gale (ranged -3k3 from inside the
+	# bubble) penalize a shot fired from within a modifier zone.
 	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty") \
 		+ _zone_modifier_total(state, attacker_id, "attack_roll_penalty") \
 		+ _zone_modifier_total(state, attacker_id, "ranged_attack_penalty") \
 		+ _high_ground_attack_bonus(state, apos, tpos)
+	var atk_kept_pen: int = _zone_modifier_total(state, attacker_id, "ranged_attack_penalty_kept")
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, shot_raises, dice_engine,
 		in_melee, spend_void, false, "",
-		{"opponent_clan": target.clan}, atk_pen
+		{"opponent_clan": target.clan}, atk_pen, false, atk_kept_pen
 	)
 	if auto_hit:
 		result["hit"] = true
@@ -1806,6 +1821,10 @@ static func execute_ranged_attack(
 		"target_tn": armor_tn,
 		"in_melee_penalty": in_melee,
 	}
+
+	# s35 Never Alone: the courage buff ends when the holder fails (misses) an attack roll.
+	if not result.get("hit", false):
+		IndividualCombat.clear_timed_modifiers_by_source(a_p, "spell_never_alone")
 
 	if result.get("hit", false):
 		var dmg_result: Dictionary = _apply_hit(state, attacker, a_p, target, weapon_name, shot_raises, "", result, dice_engine)
@@ -2607,6 +2626,12 @@ static func _complete_cast(
 		})
 	elif res.get("success", false) and eff.get("kind", "") == "buff":
 		res["spell_buff"] = _apply_spell_buff(state, caster_id, caster, target_id, target, eff)
+		state.combat_log.append({
+			"type": "spell_buff", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "buff": res["spell_buff"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "courage":
+		res["spell_buff"] = _apply_courage_of_seven_thunders(state, caster_id, caster, eff)
 		state.combat_log.append({
 			"type": "spell_buff", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "buff": res["spell_buff"],
@@ -3536,10 +3561,21 @@ static func _apply_spell_buff(
 			p.suppressed_disadvantage_expiry = expiry
 			return {"id": bid, "suppressed_disadvantage": int(hd.disadvantage_type), "expires_round": expiry}
 		return {"id": bid, "no_suppressable_disadvantage": true}
+	# s35 Never Alone: a dedicated source so the buff can be cleared early when the target takes
+	# Wounds or misses an attack (its conditional expiry), without dropping other spell buffs.
+	var default_source: String = "spell_buff"
+	if String(eff.get("conditional_expiry", "")) == "never_alone":
+		default_source = "spell_never_alone"
 	var applied: Array = []
 	for mod in eff.get("mods", []):
 		var mkind: String = String(mod.get("kind", ""))
 		var val: int = _resolve_buff_value(caster, mod.get("value", 0))
+		# s36 Strength of the Tsunami: +half Water Ring Strength, capped so the target's Strength
+		# Rank cannot exceed 9 (target-aware; +1 Strength = +1 rolled damage die).
+		var _raw_v = mod.get("value", 0)
+		if _raw_v is String and _raw_v == "tsunami_strength":
+			val = maxi(0, mini(int(SpellSystem.get_ring_value(caster, Enums.Ring.WATER) / 2),
+				9 - bch.strength))
 		if mkind == "absorb_pool":
 			# s34 Power of the Earth Dragon: a depleting damage-absorption pool (participant field).
 			p.absorb_pool = maxi(p.absorb_pool, val)
@@ -3562,12 +3598,59 @@ static func _apply_spell_buff(
 			if gts != null:
 				gts.set(mkind, int(gts.get(mkind)) + val)
 		else:
-			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff")
+			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, default_source)
 		applied.append({"kind": mkind, "value": val})
 	# s33 Striking the Storm: the swirling-air cocoon deafens the buffed character for the duration.
 	if eff.get("self_deafen", false):
 		IndividualCombat.apply_timed_condition(p, IndividualCombat.CONDITION_DEAFENED, expiry)
+	# s35 Force of Will: immune to the effect of being dead until the spell expires (advance_round
+	# clears the flag and full Wound effects apply then). Mods already negate Wound penalties.
+	if eff.get("death_immune", false):
+		bch.combat_death_immune = true
+		state.force_of_will[bid] = expiry
 	return {"id": bid, "applied": applied, "expires_round": expiry}
+
+
+## s34 Courage of the Seven Thunders: up to (caster's Earth School Rank) same-faction allies within
+## range gain Fear resistance — +5k0 for the original Seven Great Clans, +3k0 for all other samurai
+## (GDD s34 l15). Anyone with 1+ full Rank of Taint cannot benefit (and this does not reveal it; the
+## Tainted are skipped without consuming a target slot). The caster may be among the targets.
+static func _apply_courage_of_seven_thunders(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData, eff: Dictionary,
+) -> Dictionary:
+	var radius: int = int(eff.get("aoe_radius", 6))
+	var dur: int = int(eff.get("duration_rounds", 100))
+	var cap: int = maxi(1, SpellSystem.get_effective_school_rank(caster, Enums.Ring.EARTH))
+	var cf: String = String(state.factions.get(caster_id, ""))
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var expiry: int = state.combat.round_number + dur
+	# Candidates: same-faction living allies in range, caster first then nearest.
+	var cands: Array = []
+	for cid in state.positions.keys():
+		if String(state.factions.get(cid, "")) != cf:
+			continue
+		var ch = state.combatants.get(cid, null)
+		if ch == null or CharacterStats.is_dead(ch):
+			continue
+		var d: int = maxi(absi(center.x - state.positions[cid].x), absi(center.y - state.positions[cid].y))
+		if d > radius:
+			continue
+		cands.append({"id": cid, "char": ch, "d": (0 if cid == caster_id else d + 1)})
+	cands.sort_custom(func(a, b): return a["d"] < b["d"])
+	var buffed: Array = []
+	for entry in cands:
+		if buffed.size() >= cap:
+			break
+		var ch: L5RCharacterData = entry["char"]
+		if MutationSystem.get_taint_rank(ch.taint) >= 1:
+			continue  # Tainted samurai cannot benefit (and it does not reveal their Taint)
+		var p: IndividualCombat.Participant = state.combat.participants.get(int(entry["id"]), null)
+		if p == null:
+			continue
+		var amt: int = 5 if ch.clan in SEVEN_GREAT_CLANS else 3
+		IndividualCombat.add_timed_modifier(p, "fear_resist_rolled", amt, expiry, "spell_buff")
+		buffed.append({"id": entry["id"], "value": amt})
+	return {"buffed": buffed, "expires_round": expiry}
 
 
 ## Apply a buff to every living same-faction combatant (incl. the caster) within aoe_radius of the
@@ -3656,6 +3739,10 @@ static func _apply_spell_debuff(
 			# The combat slice is the Agility change to attack rolls; clamped <= 0 (the caster only
 			# casts when the swap lowers the target's Agility — never accidentally buffs an enemy).
 			val = mini(0, target.intelligence - target.agility)
+		elif raw_val is String and raw_val == "whispers_penalty":
+			# s33 Whispers of the Forgotten: 1 wasted Raise (-5 TN) on all rolls, or 2 Raises (-10)
+			# if the target has 3+ points of Mental/Social Disadvantages (GDD s33 l339).
+			val = -10 if _mental_social_disadvantage_points(target) >= 3 else -5
 		else:
 			val = _resolve_buff_value(caster, raw_val)
 		# s35 Haze of Battle: the target is forced into Full Attack Stance immediately and the
@@ -3888,6 +3975,21 @@ static func _count_social_spiritual_disadvantages(c: L5RCharacterData) -> int:
 	return n
 
 
+## Total point value of a character's Mental + Social Disadvantages (s33 Whispers of the Forgotten:
+## 3+ such points doubles the wasted-Raise penalty).
+static func _mental_social_disadvantage_points(c: L5RCharacterData) -> int:
+	if c == null:
+		return 0
+	var pts: int = 0
+	for dd in c.disadvantages:
+		if dd == null:
+			continue
+		var cat: String = AdvantageSystem.get_disadvantage_category(dd.disadvantage_type)
+		if cat == "Mental" or cat == "Social":
+			pts += AdvantageSystem.get_disadvantage_points(dd)
+	return pts
+
+
 # Resolve a buff mod value: a raw int, or a GDD formula keyed off the caster's rings/school rank.
 # s36 Ever-Changing Waves natural-creature form: the s54.1 base bear (transcribed in
 # SpiritBestiary.chikushudo_catalog "spirit_bear"). The GDD allows "any natural creature";
@@ -4038,6 +4140,11 @@ static func _apply_spell_zone(
 		"expiry_round": state.combat.round_number + dur,
 		"spell_id": spell_id, "caster_id": caster_id,
 	}
+	# s35 Light of the Sun: holy punishment — humans take extra damage by low Honor / Taint, and
+	# Honor-0 humans are Blinded for the caster's Fire Ring in Rounds.
+	if eff.get("holy_punish", false):
+		zone["holy_punish"] = true
+		zone["caster_fire"] = maxi(1, SpellSystem.get_ring_value(caster, Enums.Ring.FIRE))
 	state.spell_zones.append(zone)
 	# Optional immediate impact damage (Enticing the Dance: 3k2 on the round it takes effect).
 	var impact_hits: Array = []
@@ -4854,6 +4961,21 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 				if ch == null or CharacterStats.is_dead(ch):
 					continue
 				var dmg: int = dice_engine.roll_and_keep(dr_rolled, dr_kept, true).total
+				# s35 Light of the Sun: human targets suffer extra heat for low Honor / Taint, and
+				# Honor-Rank-0 humans are Blinded for the caster's Fire Ring in Rounds. (Spirit
+				# creatures have no Honor and are skipped for the holy bonuses.)
+				if zone.get("holy_punish", false) and ch.spirit_creature == null:
+					var honor_rank: int = int(ch.honor)
+					var below: int = maxi(0, 4 - honor_rank)
+					for _i in range(below):
+						dmg += dice_engine.roll_and_keep(2, 1, true).total  # +2k1 per Honor Rank below 4
+					if MutationSystem.get_taint_rank(ch.taint) >= 1:
+						dmg += dice_engine.roll_and_keep(2, 2, true).total  # +2k2 if Tainted
+					if honor_rank == 0:
+						var bp: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+						if bp != null:
+							IndividualCombat.apply_timed_condition(bp, IndividualCombat.CONDITION_BLINDED,
+								state.combat.round_number + int(zone.get("caster_fire", 1)))
 				if ch.spirit_creature != null:
 					var filt: Dictionary = SpiritAbilitySystem.incoming_damage(
 						ch.spirit_creature, dkind, true)
@@ -7417,6 +7539,15 @@ static func advance_round(
 				state.drawing_void_watch[_dv_cid] = _dv_c.current_void_points
 		else:  # spent at least one this round → no decay; refresh the snapshot
 			state.drawing_void_watch[_dv_cid] = _dv_c.current_void_points
+
+	# s35 Force of Will: when the spell expires, clear the death-immunity flag — full Wound effects
+	# apply immediately (is_dead then reflects the real wounds, so a target over Out drops dead).
+	for _fw_cid in state.force_of_will.keys():
+		if state.combat.round_number >= int(state.force_of_will[_fw_cid]):
+			var _fw_c: L5RCharacterData = chars_by_id.get(_fw_cid, state.combatants.get(_fw_cid, null))
+			if _fw_c != null:
+				_fw_c.combat_death_immune = false
+			state.force_of_will.erase(_fw_cid)
 
 	# Persistent spell zones (Wall of Fire, Enticing the Dance of Flame, etc.) — no-op when empty.
 	if not state.spell_zones.is_empty():
@@ -10097,6 +10228,10 @@ static func _apply_hit(
 			state.casting_in_progress.erase(target.character_id)
 		else:
 			_interrupt_cast(state, target.character_id, target, int(wd_result.get("final_damage", 0)), dice_engine)
+
+	# s35 Never Alone: the courage buff ends the moment the target suffers Wounds from any source.
+	if t_p != null and int(wd_result.get("final_damage", 0)) > 0 and not CharacterStats.is_dead(target):
+		IndividualCombat.clear_timed_modifiers_by_source(t_p, "spell_never_alone")
 
 	# The Soul's Blade (s35 Fire 6): every target hit by the enchanted weapon is Stunned.
 	if t_p != null and IndividualCombat.get_timed_modifier_total(a_p, "weapon_stun") > 0 \
