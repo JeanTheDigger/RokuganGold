@@ -9815,6 +9815,17 @@ static func _apply_hit(
 	attack_result: Dictionary,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	# s35 Defense of the Firestorm: a wooden weapon (bo, polearm, arrow) burns instantly before
+	# reaching a warded target, dealing no damage. Steel weapons and unarmed strikes are unaffected.
+	var t_p_fire: IndividualCombat.Participant = state.combat.participants.get(target.character_id, null)
+	if t_p_fire != null and IndividualCombat.get_timed_modifier_total(t_p_fire, "defense_of_firestorm") > 0 \
+			and IndividualCombat.get_weapon_material(weapon_name) == "wood":
+		state.combat_log.append({
+			"type": "weapon_burned", "round": state.combat.round_number,
+			"attacker_id": attacker.character_id, "target_id": target.character_id, "weapon": weapon_name,
+		})
+		return {"damage": 0, "wounds": 0, "dead": false, "weapon_burned": true}
+
 	var feint_bonus: int = 0
 	var raises_for_damage: int = 0
 

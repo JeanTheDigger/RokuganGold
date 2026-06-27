@@ -13,24 +13,32 @@ class_name IndividualCombat
 const WEAPON_CATALOG: Dictionary = {
 	# trait: "agility" is standard for melee (s4.5 "Agility for attacks").
 	# Iaijutsu duels use Reflexes — handled directly in resolve_duel_strike(), not via this table.
-	"katana":     {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",      "size": "Medium", "melee": true,  "trait": "agility"},
-	"wakizashi":  {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",      "size": "Small",  "melee": true,  "trait": "agility"},
-	"tanto":      {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives",         "size": "Small",  "melee": true,  "trait": "agility"},
-	"bo":         {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Bo",             "size": "Large",  "melee": true,  "trait": "agility"},
+	# material: "wood" weapons (bo, polearms, bows/arrows) burn vs s35 Defense of the Firestorm;
+	# "steel" otherwise. The s54 spirit damage filter reads it via WeaponData.material.
+	"katana":     {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",      "size": "Medium", "melee": true,  "trait": "agility", "material": "steel"},
+	"wakizashi":  {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",      "size": "Small",  "melee": true,  "trait": "agility", "material": "steel"},
+	"tanto":      {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives",         "size": "Small",  "melee": true,  "trait": "agility", "material": "steel"},
+	"bo":         {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Bo",             "size": "Large",  "melee": true,  "trait": "agility", "material": "wood"},
 	# can_grapple: s40 "Weapon Grapples" — chain weapons and certain polearms may
 	# initiate Grapples using the weapon skill. The naginata is the catalog's
 	# grapple-capable polearm; chain weapons (e.g. kusarigama) get can_grapple
 	# when added to the catalog with their own DR.
-	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms",       "size": "Large",  "melee": true,  "trait": "agility", "can_grapple": true},
-	"tetsubo":    {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Heavy Weapons",  "size": "Large",  "melee": true,  "trait": "agility"},
-	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",       "size": "Large",  "melee": false, "trait": "reflexes"},
-	"unarmed":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu",       "size": "Small",  "melee": true,  "trait": "agility"},
+	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms",       "size": "Large",  "melee": true,  "trait": "agility", "can_grapple": true, "material": "wood"},
+	"tetsubo":    {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Heavy Weapons",  "size": "Large",  "melee": true,  "trait": "agility", "material": "steel"},
+	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",       "size": "Large",  "melee": false, "trait": "reflexes", "material": "wood"},
+	"unarmed":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu",       "size": "Small",  "melee": true,  "trait": "agility", "material": ""},
 	# Off-hand weapons for the s40 dual-wield combinations (DR from s39 Equipment).
 	# kama: Mantis paired small weapons (s29.9 "Waves Rush to Shore" uses Knives).
 	# war_fan (tessen): Lion katana-and-war-fan (s29.4 "The Commander's Fan").
-	"kama":       {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Knives",         "size": "Small",  "melee": true,  "trait": "agility"},
-	"war_fan":    {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "War Fan",        "size": "Small",  "melee": true,  "trait": "agility"},
+	"kama":       {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Knives",         "size": "Small",  "melee": true,  "trait": "agility", "material": "steel"},
+	"war_fan":    {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "War Fan",        "size": "Small",  "melee": true,  "trait": "agility", "material": "steel"},
 }
+
+
+## Weapon material ("wood" / "steel" / "" for unarmed) for the s35 Defense of the Firestorm
+## wooden-weapon burn. Falls back to "steel" (a conjured/unknown weapon does not burn).
+static func get_weapon_material(weapon_name: String) -> String:
+	return get_weapon_profile(weapon_name).get("material", "steel")
 
 const DEFAULT_WEAPON: Dictionary = {
 	"rolled": 2, "kept": 1, "strength_adds": true, "skill": "Kenjutsu", "size": "Medium", "melee": true, "trait": "agility",

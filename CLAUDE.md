@@ -6524,6 +6524,21 @@ a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or t
 effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
 (see "ASCII Map System — Live-Reachability Status").
 
+### Spell coverage — deferred sub-part: Defense of the Firestorm wooden-weapon burn (2026-06-27, runtime-verified 13/13)
+**Defense of the Firestorm** (Fire 4 Defense, s35 l243) GDD: +20 Armor TN (wired) AND **all wooden weapons
+(including arrows and many polearms) burn instantly before reaching the target, dealing no damage**. The
+wooden-weapon burn was deferred ("no WeaponData material field"). The `WeaponData.material` field DID exist
+(s54 spirit filter), just not on the `WEAPON_CATALOG` Dictionary profiles tile combat uses — so I added a
+`"material"` key to all 10 catalog weapons (faithful classification: **wood** = bo, naginata, yumi/arrows;
+**steel** = katana/wakizashi/tanto/tetsubo[iron]/kama/war_fan; "" = unarmed) + `IndividualCombat.get_weapon_material()`
+(defaults "steel" for conjured/unknown). The library entry adds a `{kind: defense_of_firestorm}` marker mod;
+a hook at the top of `_apply_hit` (the shared melee+ranged damage step) returns 0 damage with `weapon_burned:
+true` when the struck target carries the marker and the weapon material is "wood". Runtime-verified 13/13
+(Godot 4.6.2, headless): material classification (bo/naginata/yumi wood, katana/tetsubo steel, unknown→steel);
+bo/naginata/arrows deal 0 vs a warded target while katana/tetsubo still hurt; wooden weapons deal normal
+damage when the target is unwarded. The material field + `get_weapon_material` are reusable for any future
+material-gated effect.
+
 ### Spell coverage — deferred sub-part: Burning Kiss of Steel mounted/larger +2k2 (2026-06-27, runtime-verified 5/5)
 **Burning Kiss of Steel** (Fire 1 Battle, s35 l15) GDD: the fire-engulfed weapon gives +1k1 melee, **+2k2
 against mounted opponents or opponents larger than human size**. The +1k1 was wired; the +2k2 was deferred

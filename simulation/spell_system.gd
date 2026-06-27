@@ -181,7 +181,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"never_alone": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
 		"mods": [{"kind": "spell_attack_rolled", "value": "fire_ring"}]},  # Fire 1: +Fire to rolls (conditional expiry deferred)
 	"defense_of_the_firestorm": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
-		"mods": [{"kind": "armor_tn", "value": 20}]},  # Fire 4: +20 Armor TN flame aura (wooden-weapon burn deferred)
+		"mods": [{"kind": "armor_tn", "value": 20}, {"kind": "defense_of_firestorm", "value": 1}]},  # Fire 4: +20 Armor TN + wooden weapons (arrows, polearms) burn before reaching the wearer (GDD s35 l243)
 	# === EARTH WAVE A (2026-06-20): debuff path + fear/knockdown resist ===
 	"courage_of_the_seven_thunders": {"kind": "buff", "target": "ally", "range_tiles": 6,
 		"duration_rounds": 100, "mods": [{"kind": "fear_resist_rolled", "value": 5}]},  # Earth 1: +5k0 Fear resist (minor-clan +3k0 + group + Taint clause deferred)
