@@ -7119,6 +7119,21 @@ trigger). Modeled as "cast on trigger" (the held spell's slot+roll resolve at tr
 verified (reuses the established Participant-field + execute_cast_spell paths; the orchestrator can't run
 under headless `-s`). 166 combat effects (Silent Waters is a trigger mechanic, not a new effect).
 
+### Spell coverage — Grounding Energy (anti-maho ward) (2026-06-27, owner-directed PROVISIONAL, static-only)
+**Grounding Energy (Earth 5, Defense/Wards, s34)** — Earth spirits fortify the caster + allies within 20'
+against maho; the GDD raises the maho Spell Casting TN by 10×Earth. Previously deferred as "INERT — maho is
+roll-less, no TN to raise" (tile-combat maho fires when blood is spilled, auto-succeeds). **PROVISIONAL
+reinterpretation (flagged for owner override):** with no roll to bump, the faithful analog of "+huge TN
+against maho" is AREA IMMUNITY — a maho combat spell simply cannot LAND on a warded ally (the maho-user
+still pays blood/Taint, but the Earth kami turn the effect aside). New `grounding_energy` zone kind:
+`_apply_grounding_energy` installs a 3-round zone (radius 4 = 20', centered on the caster, tagged with the
+caster's faction); `_grounding_blocks_maho(state, target_id)` returns true when the target stands inside a
+grounding zone owned by their own faction; `execute_cast_maho` checks it after paying blood (before the
+effect match) and turns the maho aside (`warded_by_grounding_energy`, no effect applied). The zone is inert
+per-round (kept in `_process_spell_zones` like a ward) and auto-expires. PC-tactical (cast when expecting
+maho; no NPC picker). Parse-clean; structural-verified (mirrors the ward / zone patterns; the orchestrator
+can't run under headless `-s`). 166 combat effects (Grounding Energy is a ward, not an offensive effect).
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

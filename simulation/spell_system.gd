@@ -167,6 +167,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"dr_reduction_rolled": 1, "dr_reduction_kept": 1},  # Earth 3: +10 TN & -1k1 vs Air/Fire/Water in 10'
 	"ward_of_thunder": {"kind": "ward", "aoe_radius": 3, "duration_rounds": 50,
 		"ward_elements": [2], "cast_tn_penalty": 20},  # Fire 4: +20 TN to hostile Fire within 15'
+	"grounding_energy": {"kind": "grounding_energy", "aoe_radius": 4, "duration_rounds": 3},  # Earth 5: anti-maho ward — maho combat spells cannot land on warded allies within 20' (3 rounds)
 	# Coverage extension batch 10 (2026-06-20): summoned elemental kami (autonomous ally combatant).
 	"rise_air": {"kind": "summon"},    # Air 5: kami, all Physical Traits = Air Ring, Invulnerable
 	"rise_earth": {"kind": "summon"},  # Earth 5: kami, all Physical Traits = Earth Ring, Invulnerable
@@ -1257,7 +1258,7 @@ const SPELL_LIBRARY: Dictionary = {
 	# ML5
 	"drawing_on_the_mountain":       {"e": 1, "m": 5, "s": 0},  # siege wall-hardening — wired (day_orchestrator storm-assault defense bonus)
 	"earthquake":                    {"e": 1, "m": 5, "s": 0},
-	"grounding_energy":              {"e": 1, "m": 5, "s": 0},   # Anti-maho TN boost 3 rounds — combat only
+	"grounding_energy":              {"e": 1, "m": 5, "s": 0},   # WIRED (grounding_energy zone): anti-maho ward — maho combat spells cannot land on warded allies (TN-bump reinterpreted as area immunity; maho is roll-less)
 	"major_binding":                 {"e": 1, "m": 5, "s": 0},
 	"strike_at_the_roots":           {"e": 1, "m": 5, "s": 0},
 	"the_kamis_strength":            {"e": 1, "m": 5, "s": 0},

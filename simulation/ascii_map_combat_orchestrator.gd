@@ -2563,6 +2563,12 @@ static func execute_cast_spell(
 			"type": "spell_whirlpool", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "whirlpool": res["whirlpool"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "grounding_energy":
+		res["grounding"] = _apply_grounding_energy(state, caster_id, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_grounding_energy", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "grounding": res["grounding"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "curse_burning_hand":
 		res["curse"] = _apply_curse_burning_hand(
 			state, caster_id, caster, target_id, target, eff, dice_engine)
@@ -2786,6 +2792,13 @@ static func execute_cast_maho(
 	ts.consume_complex()
 	var res: Dictionary = {"success": true, "maho": true, "spell_id": spell_id, "ml": ml,
 		"blood_cost": blood}
+	# s34 Grounding Energy: the Earth kami turn maho aside from a warded ally. The maho-user already
+	# paid blood/Taint (they cast), but the effect cannot land on the protected target.
+	if target != null and _grounding_blocks_maho(state, target_id):
+		res["warded_by_grounding_energy"] = true
+		state.combat_log.append({"type": "maho_warded", "round": state.combat.round_number,
+			"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id})
+		return res
 	match String(eff.get("kind", "")):
 		"status":
 			res["spell_status"] = _apply_spell_status(
@@ -3837,6 +3850,45 @@ static func _apply_whirlpool(
 	return {"ok": true, "center": center, "radius": radius}
 
 
+## s34 Grounding Energy (Earth 5, Defense/Wards): Earth spirits fortify the caster + allies within 20'
+## against maho. The GDD effect raises the maho Spell Casting TN by 10×Earth — but tile-combat maho has
+## NO casting roll (it fires when blood is spilled, auto-succeeds), so a TN increase is literally inert.
+## The faithful analog of "+huge TN against maho" with no roll to bump is IMMUNITY: a maho combat spell
+## simply cannot LAND on a warded ally (the maho-user still pays blood/Taint — they cast, but the Earth
+## kami turn it aside). PROVISIONAL reinterpretation (TN-bump -> area maho-immunity) — flagged for owner
+## override. Installs a short (3-round) zone centered on the caster; the block is checked in execute_cast_maho.
+static func _apply_grounding_energy(
+	state: MapCombatState, caster_id: int, eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var radius: int = int(eff.get("aoe_radius", 4))
+	state.spell_zones.append({
+		"kind": "grounding_energy", "center": center, "radius": radius,
+		"faction": String(state.factions.get(caster_id, "")),
+		"expiry_round": state.combat.round_number + int(eff.get("duration_rounds", 3)),
+		"spell_id": spell_id, "caster_id": caster_id,
+	})
+	return {"center": center, "radius": radius}
+
+
+## True if a maho combat spell aimed at target_id is turned aside by an active Grounding Energy ward
+## (the target stands inside a grounding zone owned by their own faction).
+static func _grounding_blocks_maho(state: MapCombatState, target_id: int) -> bool:
+	if target_id < 0 or not state.positions.has(target_id):
+		return false
+	var tpos: Vector2i = state.positions[target_id]
+	var tfac: String = String(state.factions.get(target_id, ""))
+	for z in state.spell_zones:
+		if String(z.get("kind", "")) != "grounding_energy":
+			continue
+		if String(z.get("faction", "")) != tfac:
+			continue
+		var c: Vector2i = z["center"]
+		if maxi(absi(c.x - tpos.x), absi(c.y - tpos.y)) <= int(z.get("radius", 0)):
+			return true
+	return false
+
+
 ## s36 Silent Waters (Water 3): on a successful cast, set a SECOND spell (ML <= 3 the caster can cast,
 ## with a wired combat effect) to be held until a physical trigger fires it. Modeled with the
 ## "when_struck" trigger (the GDD "drawing a blade / falling in battle" condition): the held spell
@@ -4216,7 +4268,7 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 		# — their modifiers are read at roll time by _zone_modifier_total. Keep them until they expire.
 		# s33 fog zones (Summon Fog) likewise have no per-round effect — they block LOS at shot time.
 		# s34 conjured terrain (Wall of Earth) is inert per-round — the walled tiles do the work.
-		if String(zone.get("kind", "damage_zone")) in ["modifier", "fog", "conjured_terrain"]:
+		if String(zone.get("kind", "damage_zone")) in ["modifier", "fog", "conjured_terrain", "grounding_energy"]:
 			surviving.append(zone)
 			continue
 		# s33 Wrath of Kaze-no-Kami (hurricane): whole-map storm, calm eye follows the caster.
