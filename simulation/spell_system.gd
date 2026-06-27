@@ -73,7 +73,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 0},  # Earth 2: stony grip, 50'
 	# Coverage extension batch 2 (2026-06-20).
 	"envious_flames": {"kind": "damage", "dr_rolled": 2, "dr_kept": 2,
-		"range_tiles": 6, "aoe_radius": 0},  # Fire 1: 2k2 unerring lance, 30' — the struck target's NEXT cast must beat Willpower TN 20+damage or be lost (cast-disrupt rider WIRED; atomic casting adapts to a next-cast Concentration threat)
+		"range_tiles": 6, "aoe_radius": 0},  # Fire 1: 2k2 unerring lance, 30' — a struck mid-cast target must beat Willpower TN 20+damage (vs the normal 5+damage) or lose the spell (s31 multi-round interrupt, bonus_tn=15)
 	"the_fires_from_within": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
 		"range_tiles": 20, "aoe_radius": 0},  # Fire 2: the classic fireball, DR = Fire Ring, 100'
 	"the_fist_of_osano_wo": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,

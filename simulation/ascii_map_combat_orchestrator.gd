@@ -245,6 +245,10 @@ class MapCombatState:
 	## per-kind fields (entry_condition, save, save_tn, tn_penalty for wards)}. Processed each round
 	## in advance_round; wards are read at cast time in resolve_cast.
 	var spell_zones: Array = []
+	## s31 multi-round casting: caster_id -> {spell_id, target_id, spell_choice, rounds_remaining, res}.
+	## A spell needs ML Complex Actions; the caster maintains it each round (continue_cast) until it
+	## completes, and is interrupted (Willpower TN 5+damage) if damaged mid-cast.
+	var casting_in_progress: Dictionary = {}
 	## s33 Mists of Illusion: stationary visual-only phantoms — {x, y, caster_id}.
 	var illusion_phantoms: Array = []
 	## s33 Token of Memory: stationary visual-only fake objects placed on the map (flavor; no
@@ -2492,25 +2496,37 @@ static func execute_cast_spell(
 		})
 		return {"success": false, "ravenous_swarms_disrupted": true, "spell_id": spell_id,
 			"damage": rs_dmg}
-	# s35 Envious Flames: a shugenja struck by the lance must, on their NEXT cast, win a Concentration
-	# Willpower roll (TN 20 + the damage dealt) or lose the spell. (Atomic casting has no literal
-	# mid-cast interrupt, so the burns disrupt the target's next cast instead — the faithful turn-based
-	# reading.) The marker stores the damage; it clears whether the roll passes or fails.
-	if caster_p_ins != null:
-		var ef_dmg: int = IndividualCombat.get_timed_modifier_total(caster_p_ins, "envious_flames_disrupt")
-		if ef_dmg > 0:
-			IndividualCombat.clear_timed_modifiers_by_source(caster_p_ins, "envious_flames_disrupt")
-			var conc: int = dice_engine.roll_and_keep(
-				maxi(1, caster.willpower), maxi(1, caster.willpower), true).total
-			if conc < 20 + ef_dmg:
-				SpellSystem.consume_slot(caster, SpellSystem.get_best_cast_ring(caster, spell_id))
-				state.combat_log.append({
-					"type": "envious_flames_disrupt", "round": state.combat.round_number,
-					"caster_id": caster_id, "spell_id": spell_id, "tn": 20 + ef_dmg, "roll": conc,
-				})
-				return {"success": false, "envious_flames_disrupted": true, "spell_id": spell_id}
+	# Snapshot the slot state so a successful multi-round cast can refund it (the slot is spent only
+	# at completion or on a failed roll — an interrupt must not cost it, s31).
+	var _cast_slots_snapshot: Dictionary = caster.spell_slots_used.duplicate()
+	var _cast_void_snapshot: int = caster.spell_void_bonus_used
 	var res: Dictionary = SpellSystem.resolve_cast(caster, spell_id, dice_engine, 0, target, -1, ward_tn, kw_penalty, eof_penalty)
 	res["spell_id"] = spell_id
+	# Casting time (s31): a spell needs ML Complex Actions; ML1 (or speed-raised to 1) completes now,
+	# else the cast is multi-round — refund the slot (an interrupt must not cost it) and defer the
+	# effect to continue_cast. A failed roll resolves immediately (slot lost).
+	var cast_rounds: int = _effective_cast_rounds(caster, spell_id, res)
+	if res.get("success", false) and cast_rounds > 1:
+		caster.spell_slots_used = _cast_slots_snapshot
+		caster.spell_void_bonus_used = _cast_void_snapshot
+		state.casting_in_progress[caster_id] = {
+			"spell_id": spell_id, "target_id": target_id, "spell_choice": spell_choice,
+			"rounds_remaining": cast_rounds - 1, "res": res,
+		}
+		state.combat_log.append({"type": "casting_started", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "rounds_remaining": cast_rounds - 1})
+		return {"success": true, "casting_started": true, "spell_id": spell_id,
+			"rounds_remaining": cast_rounds - 1}
+	return _complete_cast(state, caster_id, caster, spell_id, target_id, target, res, dice_engine, spell_choice)
+
+## Apply a completed spell's effect (the post-roll dispatch). Called immediately for a 1-round (ML1
+## or speed-raised) cast, or by continue_cast when a multi-round cast finishes. `res` is the round-1
+## Spell Casting Roll result. Returns the result dict.
+static func _complete_cast(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData, spell_id: String,
+	target_id: int, target: L5RCharacterData, res: Dictionary,
+	dice_engine: DiceEngine, spell_choice: String = "",
+) -> Dictionary:
 	# Furaribi rule (s54.12): a jade/crystal-property spell does not harm a superior_invuln
 	# spirit but repels it — it retreats from the area (leaves the encounter).
 	if res.get("success", false) and SpellSystem.has_jade_or_crystal_property(spell_id) \
@@ -2541,20 +2557,6 @@ static func execute_cast_spell(
 			if rs_p != null:
 				IndividualCombat.add_timed_modifier(
 					rs_p, "ravenous_swarms", 1, state.combat.round_number + 5, "ravenous_swarms")
-		# s35 Envious Flames: store the painful burn as a Concentration threat — the target's next cast
-		# must beat Willpower TN 20 + (damage dealt) or be lost (the disrupt check above).
-		if spell_id == "envious_flames" and target != null and not CharacterStats.is_dead(target):
-			var ef_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
-			if ef_p != null:
-				var ef_d: int = 0
-				for h in res["spell_damage"]:
-					if int(h.get("id", -1)) == target_id:
-						ef_d = int(h.get("damage", 0))
-						break
-				if ef_d > 0:
-					IndividualCombat.add_timed_modifier(
-						ef_p, "envious_flames_disrupt", ef_d,
-						state.combat.round_number + 2, "envious_flames_disrupt")
 	elif res.get("success", false) and eff.get("kind", "") == "heal":
 		res["spell_heal"] = _apply_spell_heal(
 			state, caster_id, caster, target_id, target, eff, res, dice_engine)
@@ -2768,6 +2770,72 @@ static func execute_cast_spell(
 	return res
 
 
+## Effective casting rounds for a spell = its Mastery Level minus speed-Raises (s31: each Raise made
+## for that purpose cuts the casting time by 1 Complex Action, minimum 1). NPC policy (owner-approved):
+## a caster takes as many speed-Raises as their roll turned out to support — `floor(margin / 5)`, since
+## each Raise adds 5 to the TN and the roll still cleared it. Capped at ML-1 (min 1 round). A failed
+## roll returns 1 (resolves immediately). PROVISIONAL AI heuristic (the player picks Raises in the UI).
+static func _effective_cast_rounds(caster: L5RCharacterData, spell_id: String, res: Dictionary) -> int:
+	var ml: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("m", 1)
+	if ml <= 1 or not res.get("success", false):
+		return 1
+	var speed_raises: int = mini(ml - 1, maxi(0, int(res.get("margin", 0)) / 5))
+	return maxi(1, ml - speed_raises)
+
+
+## s31 continue a multi-round cast: the caster spends a Complex Action to maintain the spell. When the
+## last round completes, the slot is consumed and the effect fires (_complete_cast). Returns
+## {continuing: true, rounds_remaining} while maintaining, or the completion result when it finishes.
+static func continue_cast(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData, dice_engine: DiceEngine,
+) -> Dictionary:
+	if not state.casting_in_progress.has(caster_id):
+		return {"success": false, "reason": "not_casting"}
+	var ts: TurnState = state.turn_states.get(caster_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_action"}
+	if CharacterStats.is_dead(caster):
+		state.casting_in_progress.erase(caster_id)
+		return {"success": false, "reason": "caster_dead"}
+	ts.consume_complex()
+	var cip: Dictionary = state.casting_in_progress[caster_id]
+	cip["rounds_remaining"] = int(cip["rounds_remaining"]) - 1
+	if int(cip["rounds_remaining"]) > 0:
+		state.combat_log.append({"type": "casting_continued", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": cip["spell_id"],
+			"rounds_remaining": cip["rounds_remaining"]})
+		return {"success": true, "continuing": true, "rounds_remaining": cip["rounds_remaining"]}
+	# Final round — consume the slot now (deferred from initiation) and fire the effect.
+	state.casting_in_progress.erase(caster_id)
+	var spell_id: String = String(cip["spell_id"])
+	SpellSystem.consume_slot(caster, SpellSystem.get_best_cast_ring(caster, spell_id))
+	var target_id: int = int(cip["target_id"])
+	var target: L5RCharacterData = state.combatants.get(target_id, null)
+	return _complete_cast(state, caster_id, caster, spell_id, target_id, target,
+		cip["res"], dice_engine, String(cip.get("spell_choice", "")))
+
+
+## s31 interrupt a mid-cast caster who suffers `damage` Wounds: a Willpower Roll vs TN (5 + damage),
+## or `bonus_tn` higher for spells that worsen the Concentration TN (s35 Envious Flames: 20 + damage,
+## passed as bonus_tn = 15). On failure the cast is aborted (no effect, slot already refunded). Returns
+## true if the cast was interrupted. No-op if the target is not casting.
+static func _interrupt_cast(
+	state: MapCombatState, victim_id: int, victim: L5RCharacterData, damage: int,
+	dice_engine: DiceEngine, bonus_tn: int = 0,
+) -> bool:
+	if not state.casting_in_progress.has(victim_id) or victim == null or damage <= 0:
+		return false
+	var tn: int = 5 + damage + bonus_tn
+	var roll: int = dice_engine.roll_and_keep(maxi(1, victim.willpower), maxi(1, victim.willpower), true).total
+	if roll >= tn:
+		return false
+	var cip: Dictionary = state.casting_in_progress[victim_id]
+	state.casting_in_progress.erase(victim_id)
+	state.combat_log.append({"type": "cast_interrupted", "round": state.combat.round_number,
+		"caster_id": victim_id, "spell_id": cip.get("spell_id", ""), "tn": tn, "roll": roll})
+	return true
+
+
 ## Apply a heal-type spell's combat effect (s36 Water). Heals a living ally (or self) within
 ## reach (Touch = adjacent, or self). Returns {id, healed} or {reason} when it cannot apply.
 static func _apply_spell_heal(
@@ -2966,6 +3034,14 @@ static func _apply_spell_combat_damage(
 			dmg = int(round(dmg * filt.get("multiplier", 1.0)))
 		WoundSystem.apply_damage(ch, dmg, 0)
 		var dead: bool = CharacterStats.is_dead(ch)
+		# s31 Concentration: a mid-cast caster damaged by a spell is interrupted (Willpower TN 5+damage).
+		# s35 Envious Flames worsens the Concentration TN to 20+damage (bonus_tn = 15).
+		if dmg > 0:
+			if dead:
+				state.casting_in_progress.erase(int(t["id"]))
+			else:
+				var bonus_tn: int = 15 if spell_id == "envious_flames" else 0
+				_interrupt_cast(state, int(t["id"]), ch, dmg, dice_engine, bonus_tn)
 		var h: Dictionary = {"id": t["id"], "damage": dmg, "dead": dead}
 		# Rider condition (Knockdown/Daze/Fatigue/Deafen) — only on a surviving damaged target.
 		var rider: Dictionary = eff.get("rider", {})
@@ -7529,6 +7605,14 @@ static func execute_npc_turn(
 	# -- Fear (s22.3/s02.4): resist nearby Fear sources or fight afraid (-1k0). --
 	apply_fear_checks(state, npc_id, npc, dice_engine)
 
+	# -- Multi-round cast in progress (s31): a caster mid-cast commits their Turn to maintaining the
+	# spell (a Complex Action each round) until it completes — owner decision B. Runs before any
+	# offensive logic so the caster never abandons a started cast.
+	if state.casting_in_progress.has(npc_id):
+		var cc: Dictionary = continue_cast(state, npc_id, npc, dice_engine)
+		actions_taken.append({"action": "continue_cast", "result": cc})
+		return {"actions": actions_taken}
+
 	# -- Bleeding: a bleeding NPC with Medicine bandages the wound shut (s43 Bleeding cure) before
 	# anything offensive — it is a steady per-round drain. Self-bandage (Complex Action); forgoes the
 	# turn's attack. Gated on an active bleed + Medicine >= 1 + an available Complex.
@@ -8600,6 +8684,11 @@ static func execute_companion_turn(
 		return {"actions": [], "reason": "incapacitated"}
 	# Fear (s22.3/s02.4): a companion near an enemy Fear source resists or fights afraid.
 	apply_fear_checks(state, cid, character, dice_engine)
+	# Multi-round cast in progress (s31): a casting companion commits its Turn to maintaining the
+	# spell until it completes (a Complex Action each round) — before any other behavior.
+	if state.casting_in_progress.has(cid):
+		var ccc: Dictionary = continue_cast(state, cid, character, dice_engine)
+		return {"actions": [{"action": "continue_cast", "result": ccc}], "command": CompanionSystem.decide_action(companion)}
 	var cmd: int = CompanionSystem.decide_action(companion)
 	var actions: Array = []
 
@@ -9673,6 +9762,14 @@ static func _apply_hit(
 		else:
 			state.blood_armor_links.erase(target.character_id)
 	var wd_result: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
+
+	# s31 Concentration: a mid-cast caster struck for damage must pass Willpower (TN 5 + damage) or the
+	# spell is interrupted (aborted, no slot lost). A slain caster's cast simply lapses.
+	if int(wd_result.get("final_damage", 0)) > 0:
+		if CharacterStats.is_dead(target):
+			state.casting_in_progress.erase(target.character_id)
+		else:
+			_interrupt_cast(state, target.character_id, target, int(wd_result.get("final_damage", 0)), dice_engine)
 
 	# The Soul's Blade (s35 Fire 6): every target hit by the enchanted weapon is Stunned.
 	if t_p != null and IndividualCombat.get_timed_modifier_total(a_p, "weapon_stun") > 0 \

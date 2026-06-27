@@ -6524,6 +6524,37 @@ a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or t
 effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
 (see "ASCII Map System — Live-Reachability Status").
 
+### s31 Multi-round interruptible spell casting in tile combat (2026-06-27, owner-directed, runtime-verified 16/16)
+Owner pasted the L5R 4e Spell Casting rules and directed: **"this is how spells ought to be casted in the
+ASCII map"** — replacing the prior atomic (single-round) cast with the faithful multi-round, interruptible
+model. Owner decisions: **A** NPCs speed-raise when they expect to succeed; **B** casters commit to the
+multi-round cast; **C** build the full flow. **Mechanism** (`AsciiMapCombatOrchestrator`): new
+`MapCombatState.casting_in_progress` (caster_id → {spell_id, target_id, spell_choice, rounds_remaining,
+res}). `execute_cast_spell` now snapshots the slot counters, rolls the Spell Casting Roll once
+(`resolve_cast`), and computes `_effective_cast_rounds` = `ml − speed_raises` (speed_raises =
+`min(ml−1, margin/5)` — the PROVISIONAL AI heuristic for "Raises reduce casting time by 1 each, min 1
+round", owner decision A). A 1-round cast (ML1 or speed-raised to 1, or a **failed** roll — failed casts
+resolve immediately and **keep the slot spent**, per the GDD) fires the effect now via the extracted
+`_complete_cast`. A multi-round cast **refunds the slot** (restores the snapshot — the slot is spent only at
+completion or on a failed roll, never on an interrupt), stores the round-1 `res`, and returns
+`casting_started`. `continue_cast` (one **Complex Action** per round, owner decision B) decrements
+`rounds_remaining`; on the final round it consumes the slot and dispatches the stored `res` through
+`_complete_cast` (the Concentration Roll is **not** re-rolled — it happens once at the start, each later
+round is just maintenance). **Interruption** (`_interrupt_cast`): a mid-cast caster struck for damage rolls
+**Willpower vs TN 5 + damage** (the general GDD rule) or the cast is aborted — **no effect, no slot lost**.
+Wired at both damage sites (`_apply_hit` weapon/melee, `_apply_spell_combat_damage` spell), with a slain
+caster's cast simply lapsing (`casting_in_progress` erased). **Envious Flames** (s35) is now its literal
+self: a struck mid-cast target faces **TN 20 + damage** (`bonus_tn = 15` over the base 5+damage) — replacing
+the earlier "next-cast marker" adaptation, which is removed. **NPC + companion turn hooks**: a caster with
+`casting_in_progress` commits its Turn to `continue_cast` (returns early, before any offensive logic) —
+owner decision B. Runtime-verified 16/16 (Godot 4.6.2, headless): rounds computation (no-raise / 1-raise /
+capped-at-ml−1 / failed-roll); full state machine (slot deferred mid-cast → continuing → completes → slot
+consumed → effect fires); Complex-Action gate (blocked cast preserved); damage interrupt aborts without
+costing a slot; non-caster interrupt no-op. LIMITATION: the speed-raise count is an AI heuristic
+(margin/5 — PROVISIONAL, flagged for owner override); a PC's deliberate Raise declaration is the future
+turn-based UI. Same PC-travel HOLD live-reachability caveat as the whole ASCII stack — driver-verified,
+not a live session.
+
 ### Spell coverage — gap sweep + Hands of the Tides position-swap (2026-06-22, runtime-verified 8/8)
 Swept all COMBAT_ONLY-and-unwired s31–37 library spells (~63 by an `s:0`-vs-`SPELL_COMBAT_EFFECTS`
 diff) for any newly wirable with this session's machinery (transform / decoy / persistent-fear /
