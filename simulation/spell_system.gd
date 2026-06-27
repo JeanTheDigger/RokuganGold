@@ -362,8 +362,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"ward_elements": [4], "cast_tn_penalty": 10},  # Void 3: +10 TN to Void spells in the area (VP-cost-doubling + Shadow effects not modeled; ward owner exempt)
 	"draw_closed_the_veil": {"kind": "banish_spirit"},  # Void 4: banish a non-native spirit to its home realm (Contested Void vs Willpower for embodied spirits)
 	"opening_the_veil": {"kind": "veil_portal", "range_tiles": 2, "radius": 3, "duration_rounds": 6},  # Water 6: open a Spirit-Realm portal at a tile within 10' — each round draws the nearest displaced spirit home (PROVISIONAL: party realm-travel not modeled)
-	"essence_of_void": {"kind": "status", "condition": "incapacitated", "save": "void_contested",
-		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 9999},  # Void 4: Contested Void → held immobile, unable to act (Concentration = skirmish; the per-round break roll is the deferred nuance)
+	"essence_of_void": {"kind": "status", "condition": "incapacitated", "save": "void_contested", "escape_save": "void_contested",
+		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 9999},  # Void 4: Contested Void → held immobile; each Round (2+) the target may re-roll a Contested Void to break free (advance_round). Concentration = skirmish.
 	# Void VP manipulation (2026-06-20): gain / restore / steal / lock Void Points.
 	"drawing_the_void": {"kind": "gain_void"},  # Void 1: caster gains School Rank +1 Void Points (over-cap allowed; over-cap decays -1/Round when no VP spent, s37)
 	"fill_the_emptiness": {"kind": "restore_void", "target": "ally", "range_tiles": 1},  # Void 4: restore a touched ally's Void Points to maximum

@@ -6749,6 +6749,19 @@ costing a slot; non-caster interrupt no-op. LIMITATION: the speed-raise count is
 turn-based UI. Same PC-travel HOLD live-reachability caveat as the whole ASCII stack — driver-verified,
 not a live session.
 
+### Spell coverage — deferred sub-part: Essence of Void per-round break (2026-06-27, runtime-verified 5/5)
+**Essence of Void** (Void 4, s37 l173) GDD: held immobile by a Contested Void Roll; "On the second and
+subsequent Rounds, the target may make another Contested Roll during the Reactions Stage to break free."
+The hold was wired; the per-round break was deferred. Added a reusable `MapCombatState.escape_links`
+(target_id → {caster_id, save}) registered by `_apply_spell_status` when an entry carries `escape_save`, and
+a per-round pass in `advance_round` (beside the drowning loop): each round the held target re-rolls the named
+contest (`void_contested` = target Void vs caster Void) and breaks free on a win (clears the incapacitate +
+removes the link); the link also breaks if either party dies (concentration lost). Runtime-verified 5/5
+(Godot 4.6.2, headless): the cast holds + registers the link; a weak target (Void 1) stays held vs a strong
+caster (Void 6); a strong target (Void 6) breaks free of a weak caster; and the hold releases when the
+caster dies. drv25 + drv15 re-pass — no regression. Generic — any other incapacitate with a per-round break
+reuses `escape_save`.
+
 ### Spell coverage — deferred sub-part: Suitengu's Embrace drowning loop (2026-06-27, runtime-verified 7/7)
 **Suitengu's Embrace** (Water 5 Thunder, s36 l347) GDD: the target's lungs fill with seawater — "Treated as
 Down… Each Round the target must make a Stamina Roll (TN 15). Three total successes: … fully recovered. Two

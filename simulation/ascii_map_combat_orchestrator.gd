@@ -237,6 +237,10 @@ class MapCombatState:
 	## rolls Stamina TN 15: 3 total successes -> recovers (incapacitate cleared); 2 consecutive
 	## failures -> drowns (dies). Driven in advance_round.
 	var suitengus_drowning: Dictionary = {}
+	## s37 Essence of Void (and any incapacitate with a per-Round break roll): target_id ->
+	## {caster_id, save}. Each Round the held target may re-roll the named contest to break free;
+	## winning clears the incapacitate and removes the link. Driven in advance_round.
+	var escape_links: Dictionary = {}
 	## s43 Blood Armor: wearer_id -> victim_id. The wearer channels 75% of its incoming damage into the
 	## bonded victim (read in _apply_hit). The bond breaks when the victim dies.
 	var blood_armor_links: Dictionary = {}
@@ -3229,6 +3233,9 @@ static func _apply_spell_status(
 		# (advance_round drives recovery/death; the timed-condition expiry is just a backstop).
 		if eff.get("drowning", false):
 			state.suitengus_drowning[int(t["id"])] = {"successes": 0, "consec_fails": 0}
+		# s37 Essence of Void: register a held target that may re-roll a contest each Round to break free.
+		if eff.has("escape_save"):
+			state.escape_links[int(t["id"])] = {"caster_id": caster_id, "save": String(eff["escape_save"])}
 		out.append({"id": t["id"], "status": cond})
 	return out
 
@@ -7421,6 +7428,25 @@ static func advance_round(
 					"type": "drowned", "round": state.combat.round_number, "victim_id": _dr_id,
 				})
 				state.suitengus_drowning.erase(_dr_id)
+
+	# s37 Essence of Void (and kin): each Round the held target may re-roll the named contest to break
+	# free; on a win the incapacitate is cleared and the link removed. Also frees on either party's death.
+	for _esc_id in state.escape_links.keys():
+		var _esc: Dictionary = state.escape_links[_esc_id]
+		var _esc_t: L5RCharacterData = chars_by_id.get(_esc_id, state.combatants.get(_esc_id, null))
+		var _esc_c: L5RCharacterData = chars_by_id.get(int(_esc["caster_id"]), state.combatants.get(int(_esc["caster_id"]), null))
+		var _esc_tp: IndividualCombat.Participant = state.combat.participants.get(_esc_id, null)
+		if _esc_t == null or _esc_c == null or _esc_tp == null \
+				or CharacterStats.is_dead(_esc_t) or CharacterStats.is_dead(_esc_c):
+			if _esc_tp != null:
+				_esc_tp.conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
+				_esc_tp.timed_conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
+			state.escape_links.erase(_esc_id)
+			continue
+		if _spell_save_resisted(state, _esc_c, _esc_t, String(_esc["save"]), 0, dice_engine):
+			_esc_tp.conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
+			_esc_tp.timed_conditions.erase(IndividualCombat.CONDITION_INCAPACITATED)
+			state.escape_links.erase(_esc_id)
 
 	# Persistent spell zones (Wall of Fire, Enticing the Dance of Flame, etc.) — no-op when empty.
 	if not state.spell_zones.is_empty():
