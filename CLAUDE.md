@@ -7134,6 +7134,22 @@ per-round (kept in `_process_spell_zones` like a ward) and auto-expires. PC-tact
 maho; no NPC picker). Parse-clean; structural-verified (mirrors the ward / zone patterns; the orchestrator
 can't run under headless `-s`). 166 combat effects (Grounding Energy is a ward, not an offensive effect).
 
+### Spell coverage — False Realm (illusory terrain) (2026-06-27, owner-directed, static-only)
+**False Realm (Air 4, Battle/Illusion, s33)** — completely alters the appearance of terrain in a 100' radius
+to anything the caster chooses; all senses are convincingly affected, but the illusions have no substance
+and cannot be touched. Previously deferred ("illusory terrain with no substance → blocks neither movement
+nor LOS, no real consumer"). The faithful combat slice is a faction-aware VISION SCREEN: the false terrain
+looks solid to those deceived, so an ENEMY cannot see/shoot through it, while the caster's own faction knows
+it is an illusion and shoots through freely; movement is unaffected (no substance), satisfying the GDD.
+New `false_realm` zone kind: `_apply_false_realm` installs a zone (radius 6 = ~100', tagged with the caster's
+faction); `_ray_blocked_by_false_realm(state, shooter_id, a, b)` mirrors the Summon Fog ray-block but only
+when the shooter is NOT of the caster's faction. Hooked into `get_ranged_targets` (enemies never select a
+target screened by the illusion) and `execute_ranged_attack` (`false_realm_blocks_los`). Inert per-round
+(kept in `_process_spell_zones`), auto-expires. PC-tactical (an illusion screen; no NPC picker). Parse-clean;
+structural-verified (reuses the fog ray-block + zone patterns; the orchestrator can't run under headless
+`-s`). 166 combat effects. LIMITATION: only the ranged-vision screen is modeled (the broader "convince an
+NPC the terrain is impassable / a hazard" deception would need faction-aware pathfinding — deferred).
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

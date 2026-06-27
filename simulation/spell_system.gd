@@ -406,6 +406,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"contested": "fire_contested", "mods": [{"kind": "spell_attack_rolled", "value": "neg_fire_ring"}]},  # Fire 4: -Fire Ring Agility (its attack-roll slice; the -Fire Intelligence / spell-suppression half is deferred). Per-Round re-resist simplified to one contested-Fire gate at cast.
 	# Coverage clean-wins batch 12 (2026-06-20): LOS-blocking fog (anti-ranged area denial).
 	"summon_fog": {"kind": "fog_zone", "range_tiles": 20, "aoe_radius": 10, "duration_rounds": 9999},  # Air 3: 50' radius obscuring fog (visibility -> 5 ft) — blocks LOS for ranged attacks crossing it beyond 1 tile; centered on a target tile within 100'. 1-minute ~ skirmish. (Damp/extinguish-small-flames flavour not modeled.)
+	"false_realm": {"kind": "false_realm", "radius": 6, "duration_rounds": 9999},  # Air 4: illusory terrain (100' radius) — screens enemy ranged LOS (caster's faction sees through; no substance, movement unaffected)
 	# Coverage clean-wins batch 13 (2026-06-20): per-die damage reduction (self defensive ward).
 	"armor_of_the_emperor": {"kind": "buff", "target": "self", "duration_rounds": 5,
 		"mods": [{"kind": "per_die_reduction", "value": "earth_school_rank"}]},  # Earth 4: each kept damage die against the caster is reduced by the caster's School Rank, floored at 0 (central melee+ranged path; atemi/charge/spell damage not threaded)
@@ -1176,7 +1177,7 @@ const SPELL_LIBRARY: Dictionary = {
 	# ML4
 	"call_the_spirit":            {"e": 0, "m": 4, "s": 5},
 	"castle_of_air":              {"e": 0, "m": 4, "s": 0},
-	"false_realm":                {"e": 0, "m": 4, "s": 0},
+	"false_realm":                {"e": 0, "m": 4, "s": 0},   # WIRED (false_realm zone): illusory terrain screens enemy ranged LOS (caster's faction sees through; no substance, movement unaffected)
 	"funeral_rites":              {"e": 0, "m": 4, "s": 17},  # speaks with departed spirit for information — INFORMATION_GATHER
 	"gift_of_wind":               {"e": 0, "m": 4, "s": 0},
 	"howl_of_isora":              {"e": 0, "m": 4, "s": 0},  # one-time damage blast — COMBAT_ONLY

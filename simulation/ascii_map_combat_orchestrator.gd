@@ -640,7 +640,8 @@ static func get_ranged_targets(state: MapCombatState, attacker_id: int) -> Array
 			continue
 		var tp: Vector2i = state.positions[cid]
 		if _chebyshev(pos, tp) > MELEE_RANGE_TILES and _has_los(state.map, pos, tp) \
-				and not _ray_blocked_by_fog(state, pos, tp):
+				and not _ray_blocked_by_fog(state, pos, tp) \
+				and not _ray_blocked_by_false_realm(state, attacker_id, pos, tp):
 			targets.append(cid)
 	return targets
 
@@ -1704,6 +1705,10 @@ static func execute_ranged_attack(
 	# s33 Summon Fog: a fog cloud crossing the line of fire blocks the shot beyond 5 ft.
 	if _ray_blocked_by_fog(state, apos, tpos):
 		return {"success": false, "reason": "fog_blocks_los"}
+	# s33 False Realm: illusory terrain screens the shot from a deceived enemy (the caster's faction
+	# sees through the illusion and is unaffected).
+	if _ray_blocked_by_false_realm(state, attacker_id, apos, tpos):
+		return {"success": false, "reason": "false_realm_blocks_los"}
 
 	# Weapon must be ranged.
 	var wp: Dictionary = IndividualCombat.get_weapon_profile(weapon_name)
@@ -2568,6 +2573,12 @@ static func execute_cast_spell(
 		state.combat_log.append({
 			"type": "spell_grounding_energy", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "grounding": res["grounding"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "false_realm":
+		res["false_realm"] = _apply_false_realm(state, caster_id, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_false_realm", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "false_realm": res["false_realm"],
 		})
 	elif res.get("success", false) and eff.get("kind", "") == "curse_burning_hand":
 		res["curse"] = _apply_curse_burning_hand(
@@ -4214,6 +4225,69 @@ static func _restore_conjured_terrain(state: MapCombatState, zone: Dictionary) -
 ## True when the straight line from a to b passes through any fog zone (s33 Summon Fog) — blocking
 ## sight/shots beyond 5 ft. Adjacent tiles (≤1) are always visible. Traces the same Bresenham line
 ## as _has_los; a traced tile within a fog disc blocks the view (including either endpoint in fog).
+## s33 False Realm (Air 4, Illusion): illusory terrain that convincingly alters all senses but has no
+## substance. In tile combat the faithful slice is a vision SCREEN against the deceived: a shooter NOT of
+## the caster's faction cannot see/shoot through a false_realm disc (the terrain looks solid to them), but
+## the caster's own faction knows it is an illusion and shoots through freely. Movement is unaffected (no
+## substance). Mirrors the fog ray-block, but faction-aware (the shooter's faction is checked).
+static func _ray_blocked_by_false_realm(
+	state: MapCombatState, shooter_id: int, a: Vector2i, b: Vector2i
+) -> bool:
+	if state.spell_zones.is_empty():
+		return false
+	if maxi(absi(a.x - b.x), absi(a.y - b.y)) <= 1:
+		return false
+	var sf: String = String(state.factions.get(shooter_id, FACTION_NEUTRAL))
+	# Only zones the shooter does NOT own can deceive them.
+	var any: bool = false
+	for zone in state.spell_zones:
+		if String(zone.get("kind", "")) == "false_realm" and String(zone.get("faction", "")) != sf:
+			any = true
+			break
+	if not any:
+		return false
+	var cx: int = a.x
+	var cy: int = a.y
+	var dx: int = absi(b.x - a.x)
+	var dy: int = absi(b.y - a.y)
+	var sx: int = 1 if a.x < b.x else -1
+	var sy: int = 1 if a.y < b.y else -1
+	var err: int = dx - dy
+	while true:
+		for zone in state.spell_zones:
+			if String(zone.get("kind", "")) != "false_realm" or String(zone.get("faction", "")) == sf:
+				continue
+			var c: Vector2i = zone["center"]
+			if maxi(absi(c.x - cx), absi(c.y - cy)) <= int(zone.get("radius", 10)):
+				return true
+		if cx == b.x and cy == b.y:
+			break
+		var e2: int = 2 * err
+		if e2 > -dy:
+			err -= dy
+			cx += sx
+		if e2 < dx:
+			err += dx
+			cy += sy
+	return false
+
+
+## Install a False Realm illusory-terrain zone (s33), centered on the caster, tagged with the caster's
+## faction (their side sees through it). Inert per-round; screens enemy ranged LOS until it expires.
+static func _apply_false_realm(
+	state: MapCombatState, caster_id: int, eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var radius: int = int(eff.get("radius", 6))
+	state.spell_zones.append({
+		"kind": "false_realm", "center": center, "radius": radius,
+		"faction": String(state.factions.get(caster_id, "")),
+		"expiry_round": state.combat.round_number + int(eff.get("duration_rounds", 9999)),
+		"spell_id": spell_id, "caster_id": caster_id,
+	})
+	return {"center": center, "radius": radius}
+
+
 static func _ray_blocked_by_fog(state: MapCombatState, a: Vector2i, b: Vector2i) -> bool:
 	if state.spell_zones.is_empty():
 		return false
@@ -4268,7 +4342,7 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 		# — their modifiers are read at roll time by _zone_modifier_total. Keep them until they expire.
 		# s33 fog zones (Summon Fog) likewise have no per-round effect — they block LOS at shot time.
 		# s34 conjured terrain (Wall of Earth) is inert per-round — the walled tiles do the work.
-		if String(zone.get("kind", "damage_zone")) in ["modifier", "fog", "conjured_terrain", "grounding_energy"]:
+		if String(zone.get("kind", "damage_zone")) in ["modifier", "fog", "conjured_terrain", "grounding_energy", "false_realm"]:
 			surviving.append(zone)
 			continue
 		# s33 Wrath of Kaze-no-Kami (hurricane): whole-map storm, calm eye follows the caster.
