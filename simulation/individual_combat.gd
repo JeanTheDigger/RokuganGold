@@ -249,6 +249,11 @@ class Participant:
 	# boost. Lives only on the Participant (destroyed at combat end) -> never leaks persistently.
 	var ring_deltas: Dictionary = {}
 	var ring_delta_expiry: Dictionary = {}  # {Enums.Ring: expiry_round} for the ring deltas above
+	# Combat-scoped Trait deltas (s33-37 trait-swap/drop spells): {Enums.Trait: int}. AUTHORITATIVE
+	# participant store, synced to the character's combat_trait_deltas read-bridge. Lives only on the
+	# Participant -> never leaks. A Trait change flows to its rolls AND the derived Ring.
+	var trait_deltas: Dictionary = {}
+	var trait_delta_expiry: Dictionary = {}  # {Enums.Trait: expiry_round}
 
 
 ## Combat-scoped Ring deltas for a Participant (empty if none). Null-safe.
@@ -270,6 +275,20 @@ static func sync_ring_deltas(p: Participant, character: L5RCharacterData) -> voi
 			if int(p.ring_deltas[ring]) != 0:
 				bridge[ring] = int(p.ring_deltas[ring])
 	character.combat_ring_deltas = bridge
+
+
+## Sync the participant's authoritative trait_deltas onto the character's combat_trait_deltas
+## read-bridge (so get_trait_value, and hence every roll + the derived Ring, sees the change).
+## A zero/absent delta is dropped so the bridge is empty when no trait change is active.
+static func sync_trait_deltas(p: Participant, character: L5RCharacterData) -> void:
+	if character == null:
+		return
+	var bridge: Dictionary = {}
+	if p != null:
+		for t in p.trait_deltas:
+			if int(p.trait_deltas[t]) != 0:
+				bridge[t] = int(p.trait_deltas[t])
+	character.combat_trait_deltas = bridge
 
 
 class CombatState:
@@ -983,7 +1002,7 @@ static func roll_initiative(
 			maxi(void_rank + adv_init["kept"], 1))
 		score = result.total + wound_penalty
 	else:
-		var reflexes: int = character.reflexes
+		var reflexes: int = character.get_trait_value(Enums.Trait.REFLEXES)  # per-Trait combat layer
 		var insight_rank: int = CharacterStats.get_insight_rank(character)
 		# Touch the Void Dragon (s38): +1 Rank to Reflexes (Air) = +1k1 Initiative.
 		var vd_init: int = vd_ring_bonus(participant, Enums.Ring.AIR)
@@ -1075,7 +1094,7 @@ static func get_armor_tn(
 		return 5 + character.armor_tn_bonus  # Held/bound/treated-as-Down: flat-footed
 	if CONDITION_BLINDED in participant.conditions:
 		# Blinded base = Reflexes + 5 (armor still adds)
-		return character.reflexes + 5 + character.armor_tn_bonus
+		return character.get_trait_value(Enums.Trait.REFLEXES) + 5 + character.armor_tn_bonus  # per-Trait combat layer
 
 	# Kata armor TN bonuses (s30a) and dual-wield bonus (+InsightRank, s40)
 	var kata_bonus: int = _get_kata_armor_tn_bonus(character, participant, weapon_name)
@@ -1104,7 +1123,7 @@ static func roll_full_defense_bonus(
 	var adv_def_tn: int = AdvantageSystem.get_tn_modifier(character, adv_def_ctx)
 	# Full Defense: Defense/Reflexes — roll (Reflexes + Defense Rank), keep Reflexes (s40)
 	var result: DiceResult = dice_engine.roll_and_keep(
-		maxi(character.reflexes + def_rank + mutation_def["rolled"] + adv_def["rolled"], 1),
+		maxi(character.get_trait_value(Enums.Trait.REFLEXES) + def_rank + mutation_def["rolled"] + adv_def["rolled"], 1),
 		maxi(character.reflexes + mutation_def["kept"] + adv_def["kept"], 1)
 	)
 	# Free raises add +5 to effective total; TN penalties reduce it (CONSUMED Perfection = -5)
@@ -1165,7 +1184,7 @@ static func resolve_attack(
 
 	# Attack roll: Trait + Skill rolled, keep Trait (s4.5 "Agility for attacks").
 	var trait_name: String = weapon.get("trait", "agility")
-	var trait_value: int = attacker.reflexes if trait_name == "reflexes" else attacker.agility
+	var trait_value: int = attacker.get_trait_value(Enums.Trait.REFLEXES) if trait_name == "reflexes" else attacker.get_trait_value(Enums.Trait.AGILITY)  # per-Trait combat layer
 	var rolled: int = trait_value + skill_rank
 	var kept: int = trait_value
 
@@ -1188,8 +1207,8 @@ static func resolve_attack(
 		rolled = air_ring + skill_rank
 		kept = air_ring
 	elif kata_atk["use_strength"]:
-		rolled = attacker.strength + skill_rank
-		kept = attacker.strength
+		rolled = attacker.get_trait_value(Enums.Trait.STRENGTH) + skill_rank
+		kept = attacker.get_trait_value(Enums.Trait.STRENGTH)  # per-Trait combat layer
 
 	# Touch the Void Dragon (s38): +1 Rank (=+1k1) when the attack trait's Ring is boosted.
 	# Effective trait ring: Air (air-ring kata / reflexes weapon), Water (strength kata),
@@ -1393,7 +1412,7 @@ static func resolve_damage(
 		if kata_dmg["use_agility"]:
 			rolled += attacker.agility
 		else:
-			rolled += attacker.strength
+			rolled += attacker.get_trait_value(Enums.Trait.STRENGTH)
 		# Touch the Void Dragon (s38): +1 rolled damage die when the damage trait's Ring is
 		# boosted (Fire for the agility kata, else Water for Strength).
 		rolled += vd_ring_bonus(attacker_p, Enums.Ring.FIRE if kata_dmg["use_agility"] else Enums.Ring.WATER)
@@ -1458,9 +1477,9 @@ static func resolve_disarm(
 	var att_tn_dis: int = AdvantageSystem.get_tn_modifier(attacker, {"is_combat": true, "is_contested": true})
 	var def_tn_dis: int = AdvantageSystem.get_tn_modifier(defender, {"is_combat": true, "is_contested": true})
 	var att_r_dis: DiceResult = dice_engine.roll_and_keep(
-		maxi(attacker.strength + att_adv_dis["rolled"], 1), maxi(attacker.strength + att_adv_dis["kept"], 1), false)
+		maxi(attacker.get_trait_value(Enums.Trait.STRENGTH) + att_adv_dis["rolled"], 1), maxi(attacker.get_trait_value(Enums.Trait.STRENGTH) + att_adv_dis["kept"], 1), false)
 	var def_r_dis: DiceResult = dice_engine.roll_and_keep(
-		maxi(defender.strength + def_adv_dis["rolled"], 1), maxi(defender.strength + def_adv_dis["kept"], 1), false)
+		maxi(defender.get_trait_value(Enums.Trait.STRENGTH) + def_adv_dis["rolled"], 1), maxi(defender.get_trait_value(Enums.Trait.STRENGTH) + def_adv_dis["kept"], 1), false)
 	var att_total_dis: int = att_r_dis.total + att_adv_dis["free_raises"] * 5 - att_tn_dis + att_wound
 	var def_total_dis: int = def_r_dis.total + def_adv_dis["free_raises"] * 5 - def_tn_dis + def_wound
 
@@ -1497,10 +1516,10 @@ static func resolve_knockdown(
 	var def_adv_kd: Dictionary = AdvantageSystem.get_skill_bonus(defender, "", {"is_combat": true, "is_contested": true})
 	var att_tn_kd: int = AdvantageSystem.get_tn_modifier(attacker, {"is_combat": true, "is_contested": true})
 	var def_tn_kd: int = AdvantageSystem.get_tn_modifier(defender, {"is_combat": true, "is_contested": true})
-	var att_rolled_kd: int = maxi(attacker.strength + att_adv_kd["rolled"], 1)
-	var def_rolled_kd: int = maxi(defender.strength + def_adv_kd["rolled"] + def_rolled_bonus, 1)
-	var att_kept_kd: int = maxi(attacker.strength + att_adv_kd["kept"], 1)
-	var def_kept_kd: int = maxi(defender.strength + def_adv_kd["kept"] + def_kept_bonus, 1)
+	var att_rolled_kd: int = maxi(attacker.get_trait_value(Enums.Trait.STRENGTH) + att_adv_kd["rolled"], 1)
+	var def_rolled_kd: int = maxi(defender.get_trait_value(Enums.Trait.STRENGTH) + def_adv_kd["rolled"] + def_rolled_bonus, 1)
+	var att_kept_kd: int = maxi(attacker.get_trait_value(Enums.Trait.STRENGTH) + att_adv_kd["kept"], 1)
+	var def_kept_kd: int = maxi(defender.get_trait_value(Enums.Trait.STRENGTH) + def_adv_kd["kept"] + def_kept_bonus, 1)
 	var att_r: DiceResult = dice_engine.roll_and_keep(att_rolled_kd, att_kept_kd, false)
 	var def_r: DiceResult = dice_engine.roll_and_keep(def_rolled_kd, def_kept_kd, false)
 	var att_total_kd: int = att_r.total + (att_adv_kd["free_raises"] * 5) - att_tn_kd + att_wound + bonus_to_attacker

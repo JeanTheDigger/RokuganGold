@@ -206,6 +206,11 @@ var combat_ring_deltas: Dictionary = {}
 # returns false even at the Out rank). Runtime-only (NOT @export), set/cleared by the spell + cleared
 # at combat setup; false outside combat so the world-sim is unaffected. Same no-leak model as above.
 var combat_death_immune: bool = false
+# s33-37 per-Trait combat layer: a combat-scoped Trait delta (Enums.Trait -> int), applied by
+# get_trait_value below. A Trait change therefore flows to every combat roll using it AND to the
+# derived Ring (get_ring_value reads get_trait_value). Runtime-only (NOT @export), cleared at combat
+# setup/expiry; empty outside combat so the world-sim is unaffected. Same no-leak model as above.
+var combat_trait_deltas: Dictionary = {}
 @export var koku: float = 0.0
 @export var months_without_stipend: int = 0
 
@@ -555,17 +560,20 @@ var taint_benefits_suppressed: bool = false
 # -- Trait Access Helpers (used by CharacterStats) -----------------------------
 
 func get_trait_value(p_trait: Enums.Trait) -> int:
+	var base: int
 	match p_trait:
-		Enums.Trait.STAMINA: return stamina
-		Enums.Trait.WILLPOWER: return willpower
-		Enums.Trait.STRENGTH: return strength
-		Enums.Trait.PERCEPTION: return perception
-		Enums.Trait.AGILITY: return agility
-		Enums.Trait.INTELLIGENCE: return intelligence
-		Enums.Trait.REFLEXES: return reflexes
-		Enums.Trait.AWARENESS: return awareness
-		Enums.Trait.VOID: return void_ring
+		Enums.Trait.STAMINA: base = stamina
+		Enums.Trait.WILLPOWER: base = willpower
+		Enums.Trait.STRENGTH: base = strength
+		Enums.Trait.PERCEPTION: base = perception
+		Enums.Trait.AGILITY: base = agility
+		Enums.Trait.INTELLIGENCE: base = intelligence
+		Enums.Trait.REFLEXES: base = reflexes
+		Enums.Trait.AWARENESS: base = awareness
+		Enums.Trait.VOID: return void_ring  # Void is handled by the ring-delta bridge, not trait deltas
 		_: return 0
+	# s33-37 per-Trait combat layer: add the combat-scoped delta (empty outside combat), floored at 1.
+	return maxi(1, base + int(combat_trait_deltas.get(p_trait, 0)))
 
 
 func set_trait_value(p_trait: Enums.Trait, value: int) -> void:

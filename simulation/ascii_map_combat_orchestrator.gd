@@ -306,6 +306,7 @@ static func setup_combat(
 		if CharacterStats.is_dead(c):
 			continue
 		c.combat_ring_deltas = {}  # no-leak guarantee: every combat starts with the ring bridge clear
+		c.combat_trait_deltas = {}  # per-Trait combat layer: clear the trait bridge at combat start
 		c.combat_death_immune = false  # s35 Force of Will: clear the death-immunity flag at combat start
 		chars_for_combat.append(c)
 		mcs.combatants[c.character_id] = c
@@ -2665,9 +2666,21 @@ static func _complete_cast(
 			"type": "spell_debuff", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "debuff": res["spell_debuff"],
 		})
-		# s35 Death of Flame: when the debuff lands, register the per-round Contested-Fire escape.
-		if spell_id == "death_of_flame" and not res["spell_debuff"].has("reason"):
-			state.death_of_flame[target_id] = caster_id
+	elif res.get("success", false) and eff.get("kind", "") == "trait_change":
+		# Capture the target's ORIGINAL Fire Ring before the debuff lowers it (Death of Flame's
+		# escape roll uses the unmodified Fire Ring, GDD s35 l237).
+		var _tc_orig_fire: int = SpellSystem.get_ring_value(target, Enums.Ring.FIRE) if target != null else 1
+		res["trait_change"] = _apply_spell_trait_change(
+			state, caster_id, caster, target_id, target, eff, dice_engine)
+		state.combat_log.append({
+			"type": "spell_trait_change", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "result": res["trait_change"],
+		})
+		# s35 Death of Flame: when it lands, register the per-round Contested-Fire escape with the
+		# affected Traits (so the escape can restore them) and the original Fire Ring.
+		if eff.get("register_escape", false) and not res["trait_change"].has("reason"):
+			state.death_of_flame[target_id] = {"caster": caster_id,
+				"traits": res["trait_change"].get("traits", []), "orig_fire": maxi(1, _tc_orig_fire)}
 	elif res.get("success", false) and eff.get("kind", "") == "conjure_weapon":
 		res["conjured"] = _apply_spell_conjure_weapon(
 			state, caster_id, caster, target_id, eff, spell_id, spell_choice)
@@ -3930,31 +3943,21 @@ static func _apply_facing_your_devils(
 			min_key = k
 	if max_key == min_key:
 		return {"reason": "no_imbalance"}  # all Traits equal — nothing to swap
-	var swapped: Dictionary = traits.duplicate()
-	swapped[max_key] = min_v
-	swapped[min_key] = max_v
-	var pairs: Dictionary = {
-		Enums.Ring.AIR: ["reflexes", "awareness"],
-		Enums.Ring.EARTH: ["stamina", "willpower"],
-		Enums.Ring.FIRE: ["agility", "intelligence"],
-		Enums.Ring.WATER: ["strength", "perception"],
+	# Apply the swap as real Trait deltas via the per-Trait combat layer: the highest Trait drops to
+	# the lowest value, the lowest rises to the highest. Every roll using those Traits updates, and
+	# the derived Rings (Wound capacity, ring rolls) follow automatically via get_trait_value.
+	var trait_enums: Dictionary = {
+		"reflexes": Enums.Trait.REFLEXES, "awareness": Enums.Trait.AWARENESS,
+		"agility": Enums.Trait.AGILITY, "intelligence": Enums.Trait.INTELLIGENCE,
+		"strength": Enums.Trait.STRENGTH, "perception": Enums.Trait.PERCEPTION,
+		"stamina": Enums.Trait.STAMINA, "willpower": Enums.Trait.WILLPOWER,
 	}
-	var expiry: int = state.combat.round_number + int(eff.get("duration_rounds", 10))
-	var applied: Array = []
-	for ring: int in pairs:
-		var pr: Array = pairs[ring]
-		var base: int = mini(int(traits[pr[0]]), int(traits[pr[1]]))
-		var swp: int = mini(int(swapped[pr[0]]), int(swapped[pr[1]]))
-		var delta: int = swp - base
-		if delta < 0:
-			delta = maxi(delta, 1 - base)  # floor the effective ring at 1
-		if delta != 0:
-			p.ring_deltas[ring] = int(p.ring_deltas.get(ring, 0)) + delta
-			p.ring_delta_expiry[ring] = expiry
-			applied.append({"ring": ring, "delta": delta})
-	IndividualCombat.sync_ring_deltas(p, target)
-	return {"id": target_id, "swapped": [max_key, min_key], "ring_deltas": applied,
-		"expires_round": expiry, "died_on_apply": CharacterStats.is_dead(target)}
+	var dur: int = int(eff.get("duration_rounds", 10))
+	var died: bool = _apply_trait_delta(state, target_id, target, p, trait_enums[max_key], min_v - max_v, dur)
+	_apply_trait_delta(state, target_id, target, p, trait_enums[min_key], max_v - min_v, dur)
+	return {"id": target_id, "swapped": [max_key, min_key],
+		"expires_round": state.combat.round_number + dur,
+		"died_on_apply": died or CharacterStats.is_dead(target)}
 
 
 # Expire combat ring deltas (s34) whose duration has elapsed: remove the delta, re-sync the bridge,
@@ -3977,6 +3980,101 @@ static func _expire_ring_deltas(state: MapCombatState, p: IndividualCombat.Parti
 		# Earth: "Wounds return to normal — possibly resulting in death"). is_dead now reads base.
 		if CharacterStats.is_dead(ch):
 			state.combat_log.append({"type": "ring_delta_expiry_death",
+				"round": state.combat.round_number, "id": p.character_id})
+
+
+## Apply a Trait-changing enemy spell via the per-Trait layer (s35 Death of Flame: lower Agility +
+## Intelligence by the caster's Fire Ring; s36 Chi Reversal: swap the Fire-pair Traits). `ops` lists
+## {trait, value} (value int or "neg_fire_ring") and/or {swap: [traitA, traitB]}. Honors range + an
+## optional contested gate. Returns {id, expires_round, traits, died} or {reason}.
+static func _apply_spell_trait_change(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary, dice_engine: DiceEngine,
+) -> Dictionary:
+	if target == null or CharacterStats.is_dead(target):
+		return {"reason": "no_target"}
+	if String(state.factions.get(target_id, "")) == String(state.factions.get(caster_id, "")):
+		return {"reason": "not_an_enemy"}
+	var rng: int = int(eff.get("range_tiles", 1))
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		if _chebyshev(state.positions[caster_id], state.positions[target_id]) > rng:
+			return {"reason": "out_of_range"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if p == null:
+		return {"reason": "not_in_combat"}
+	var contested: String = String(eff.get("contested", ""))
+	if contested != "" and _spell_save_resisted(state, caster, target, contested, int(eff.get("save_tn", 0)), dice_engine):
+		return {"reason": "resisted", "id": target_id}
+	var dur: int = int(eff.get("duration_rounds", 5))
+	var fire: int = SpellSystem.get_ring_value(caster, Enums.Ring.FIRE)
+	var trait_enums: Dictionary = {
+		"reflexes": Enums.Trait.REFLEXES, "awareness": Enums.Trait.AWARENESS,
+		"agility": Enums.Trait.AGILITY, "intelligence": Enums.Trait.INTELLIGENCE,
+		"strength": Enums.Trait.STRENGTH, "perception": Enums.Trait.PERCEPTION,
+		"stamina": Enums.Trait.STAMINA, "willpower": Enums.Trait.WILLPOWER,
+	}
+	var affected: Array = []
+	var died: bool = false
+	for op in eff.get("ops", []):
+		if op.has("swap"):
+			var ta: int = trait_enums[op["swap"][0]]
+			var tb: int = trait_enums[op["swap"][1]]
+			var va: int = target.get_trait_value(ta)
+			var vb: int = target.get_trait_value(tb)
+			died = _apply_trait_delta(state, target_id, target, p, ta, vb - va, dur) or died
+			died = _apply_trait_delta(state, target_id, target, p, tb, va - vb, dur) or died
+			affected.append(ta); affected.append(tb)
+		else:
+			var te: int = trait_enums[String(op.get("trait", "agility"))]
+			var raw = op.get("value", 0)
+			var val: int = -fire if (raw is String and raw == "neg_fire_ring") else int(raw)
+			died = _apply_trait_delta(state, target_id, target, p, te, val, dur) or died
+			affected.append(te)
+	return {"id": target_id, "traits": affected, "expires_round": state.combat.round_number + dur,
+		"died": died}
+
+
+## Apply a combat-scoped Trait delta to a participant for `duration` Rounds. A Trait change flows to
+## every roll using it (attack/damage/initiative/armor, routed through get_trait_value) AND to the
+## derived Ring (get_ring_value reads get_trait_value), so e.g. lowering Stamina can lower Earth and
+## reduce Wound capacity. Lowering a Trait may immediately kill an already-wounded target. Floors the
+## effective Trait at 1. Returns whether the change killed the target.
+static func _apply_trait_delta(
+	state: MapCombatState, who_id: int, who: L5RCharacterData, p: IndividualCombat.Participant,
+	p_trait: int, delta: int, duration: int,
+) -> bool:
+	if p == null or who == null:
+		return false
+	# Floor a trait-down so the effective Trait never drops below 1.
+	if delta < 0:
+		var base_t: int = who.get_trait_value(p_trait) - int(p.trait_deltas.get(p_trait, 0))
+		delta = maxi(delta, 1 - base_t)
+	var expiry: int = state.combat.round_number + duration
+	p.trait_deltas[p_trait] = int(p.trait_deltas.get(p_trait, 0)) + delta
+	p.trait_delta_expiry[p_trait] = expiry
+	IndividualCombat.sync_trait_deltas(p, who)
+	return delta < 0 and CharacterStats.is_dead(who)
+
+
+## Expire combat-scoped Trait deltas (mirrors _expire_ring_deltas). On expiry, re-checks death since
+## a restored Stamina/Earth could leave wounds above the now-lower capacity — no, restoring a Trait
+## raises capacity; the death case is when a BUFF (Trait-up) lapses. Re-checks death to be safe.
+static func _expire_trait_deltas(state: MapCombatState, p: IndividualCombat.Participant, chars_by_id: Dictionary) -> void:
+	if p.trait_delta_expiry.is_empty():
+		return
+	var ch = state.combatants.get(p.character_id, chars_by_id.get(p.character_id, null))
+	if ch == null:
+		return
+	var changed: bool = false
+	for t in p.trait_delta_expiry.keys():
+		if state.combat.round_number >= int(p.trait_delta_expiry[t]):
+			p.trait_deltas.erase(t)
+			p.trait_delta_expiry.erase(t)
+			changed = true
+	if changed:
+		IndividualCombat.sync_trait_deltas(p, ch)
+		if CharacterStats.is_dead(ch):
+			state.combat_log.append({"type": "trait_delta_expiry_death",
 				"round": state.combat.round_number, "id": p.character_id})
 
 
@@ -7277,12 +7375,13 @@ static func advance_round(
 
 	# Check if combat is over.
 	if IndividualCombat.check_combat_over(state.combat, chars_by_id):
-		# No-leak guard: clear every combatant's ring-delta bridge when combat ends, so a
-		# lingering s34 ring boost never bleeds into the world-sim after the encounter.
+		# No-leak guard: clear every combatant's ring/trait-delta bridges when combat ends, so a
+		# lingering s33-37 boost never bleeds into the world-sim after the encounter.
 		for _cid in state.combatants:
 			var _cc = state.combatants[_cid]
 			if _cc != null:
 				_cc.combat_ring_deltas = {}
+				_cc.combat_trait_deltas = {}
 		state.combat_log.append({
 			"type": "combat_over",
 			"round": state.combat.round_number,
@@ -7320,6 +7419,7 @@ static func advance_round(
 		IndividualCombat.expire_active_kiho(_tp, state.combat.round_number)
 		IndividualCombat.expire_timed_conditions(_tp, state.combat.round_number)
 		_expire_ring_deltas(state, _tp, chars_by_id)  # s34 ring spells — wounds return to normal on expiry
+		_expire_trait_deltas(state, _tp, chars_by_id)  # s33-37 trait spells — traits/rings restored on expiry
 		# Conjured elemental weapon (s33-s36) dissipates when its duration ends.
 		if _tp.conjured_weapon_expiry >= 0 and _tp.conjured_weapon_expiry <= state.combat.round_number:
 			_tp.conjured_weapon = {}
@@ -7569,23 +7669,35 @@ static func advance_round(
 			state.force_of_will.erase(_fw_cid)
 
 	# s35 Death of Flame: on the 2nd+ Round the suppressed target rolls a Contested Fire Roll (its
-	# original Fire Ring) vs the caster to end the spell. The link drops on a target win, when the
-	# debuff's timed modifier expires (5 Rounds), or if either party dies.
+	# ORIGINAL Fire Ring) vs the caster to end the spell. The link drops on a target win, when the
+	# trait debuff expires (5 Rounds), or if either party dies.
 	for _df_tid in state.death_of_flame.keys():
-		var _df_cid: int = int(state.death_of_flame[_df_tid])
+		var _df_link: Dictionary = state.death_of_flame[_df_tid]
+		var _df_cid: int = int(_df_link.get("caster", -1))
+		var _df_traits: Array = _df_link.get("traits", [])
 		var _df_t: L5RCharacterData = chars_by_id.get(_df_tid, state.combatants.get(_df_tid, null))
 		var _df_c: L5RCharacterData = chars_by_id.get(_df_cid, state.combatants.get(_df_cid, null))
 		var _df_tp: IndividualCombat.Participant = state.combat.participants.get(_df_tid, null)
+		# Still active while any affected Trait delta remains on the target.
+		var _df_active: bool = false
+		if _df_tp != null:
+			for _t in _df_traits:
+				if _df_tp.trait_delta_expiry.has(_t):
+					_df_active = true
+					break
 		if _df_t == null or _df_c == null or _df_tp == null \
-				or CharacterStats.is_dead(_df_t) or CharacterStats.is_dead(_df_c) \
-				or not IndividualCombat.has_timed_modifier_source(_df_tp, "death_of_flame"):
+				or CharacterStats.is_dead(_df_t) or CharacterStats.is_dead(_df_c) or not _df_active:
 			state.death_of_flame.erase(_df_tid)
 			continue
-		var _dft: int = maxi(1, SpellSystem.get_ring_value(_df_t, Enums.Ring.FIRE))
+		var _dft: int = maxi(1, int(_df_link.get("orig_fire", 1)))  # the original, unmodified Fire Ring
 		var _dfc: int = maxi(1, SpellSystem.get_ring_value(_df_c, Enums.Ring.FIRE))
 		if dice_engine.roll_and_keep(_dft, _dft, true).total \
 				> dice_engine.roll_and_keep(_dfc, _dfc, true).total:
-			IndividualCombat.clear_timed_modifiers_by_source(_df_tp, "death_of_flame")
+			# Escaped: restore the affected Traits and drop the link.
+			for _t in _df_traits:
+				_df_tp.trait_deltas.erase(_t)
+				_df_tp.trait_delta_expiry.erase(_t)
+			IndividualCombat.sync_trait_deltas(_df_tp, _df_t)
 			state.death_of_flame.erase(_df_tid)
 
 	# Persistent spell zones (Wall of Fire, Enticing the Dance of Flame, etc.) — no-op when empty.

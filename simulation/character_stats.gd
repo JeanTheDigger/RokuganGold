@@ -65,7 +65,7 @@ static func get_insight_rank(character: L5RCharacterData) -> int:
 
 
 static func get_armor_tn(character: L5RCharacterData) -> int:
-	return (character.reflexes * 5) + 5 + character.armor_tn_bonus
+	return (character.get_trait_value(Enums.Trait.REFLEXES) * 5) + 5 + character.armor_tn_bonus  # per-Trait combat layer
 
 
 static func get_initiative_rolled(character: L5RCharacterData) -> int:

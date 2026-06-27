@@ -411,8 +411,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# (Strength → rolled damage dice, Agility → attack-roll dice). NOT the Earth-ring wound refactor.
 	"strength_of_the_tsunami": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 3,
 		"mods": [{"kind": "spell_damage_rolled", "value": "tsunami_strength"}]},  # Water 2: Strength +half Water Ring → +that many rolled damage dice, capped so Strength Rank ≤ 9 (GDD s36 l131; Strength-skill rolls out-of-combat)
-	"death_of_flame": {"kind": "debuff", "target": "enemy", "range_tiles": 20, "duration_rounds": 5, "source": "death_of_flame",
-		"contested": "fire_contested", "mods": [{"kind": "spell_attack_rolled", "value": "neg_fire_ring"}]},  # Fire 4: -Fire Ring Agility; on the 2nd+ Round the target rolls Contested Fire (original Fire Ring) to escape (GDD s35 l237; the Intelligence half awaits the per-Trait layer)
+	"death_of_flame": {"kind": "trait_change", "target": "enemy", "range_tiles": 20, "duration_rounds": 5, "register_escape": true,
+		"contested": "fire_contested", "ops": [{"trait": "agility", "value": "neg_fire_ring"}, {"trait": "intelligence", "value": "neg_fire_ring"}]},  # Fire 4: lower Agility AND Intelligence by the caster's Fire Ring (per-Trait layer → attack rolls + derived Rings); the target rolls Contested Fire (original Fire Ring) each Round to escape (GDD s35 l237)
 	# Coverage clean-wins batch 12 (2026-06-20): LOS-blocking fog (anti-ranged area denial).
 	"summon_fog": {"kind": "fog_zone", "range_tiles": 20, "aoe_radius": 10, "duration_rounds": 9999},  # Air 3: 50' radius obscuring fog (visibility -> 5 ft) — blocks LOS for ranged attacks crossing it beyond 1 tile; centered on a target tile within 100'. 1-minute ~ skirmish. (Damp/extinguish-small-flames flavour not modeled.)
 	"false_realm": {"kind": "false_realm", "radius": 6, "duration_rounds": 9999},  # Air 4: illusory terrain (100' radius) — screens enemy ranged LOS (caster's faction sees through; no substance, movement unaffected)
@@ -444,8 +444,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"strike_at_the_roots": {"kind": "ring_change", "target": "enemy", "ring": Enums.Ring.EARTH, "set_to": 1, "contested": "earth_contested", "range_tiles": 10, "duration_rounds": 3},  # Earth 5: Contested Earth -> the target's Earth Ring is reduced to 1 for the duration; may immediately kill if already wounded.
 	"facing_your_devils": {"kind": "trait_swap", "target": "enemy", "range_tiles": 6, "duration_rounds": 10},  # Air 5: swap the target's highest/lowest Traits for 10 Rounds -> the resulting RING deltas (esp. a dropping Earth = reduced Wound capacity, possibly fatal). Per-Trait roll changes not modeled.
 	# Trait-swap roll models (2026-06-21): the combat-roll slice of trait changes (no trait bridge needed).
-	"chi_reversal": {"kind": "debuff", "target": "enemy", "range_tiles": 4, "duration_rounds": 9999,
-		"mods": [{"kind": "spell_attack_rolled", "value": "chi_reversal_agility"}]},  # Water 5: flip the target's Fire-pair Traits (Agility<->Intelligence) -> the Agility drop lowers attack rolls (combat slice; the Int change + other pair options are out-of-combat). Inert if the swap wouldn't lower Agility.
+	"chi_reversal": {"kind": "trait_change", "target": "enemy", "range_tiles": 4, "duration_rounds": 9999,
+		"ops": [{"swap": ["agility", "intelligence"]}]},  # Water 5: flip the Fire-pair Traits (Agility<->Intelligence) via the per-Trait layer — the full swap now affects attack rolls AND the derived Fire Ring (GDD s36 l311; default Fire pair, 1 hour ≈ skirmish)
 	"ebbing_strength": {"kind": "buff", "target": "ally", "range_tiles": 4, "duration_rounds": 3,
 		"mods": [{"kind": "spell_damage_rolled", "value": "water_school_rank"}]},  # Water 1: transfer up to (Water School Rank) Strength caster->target -> the ally gains +damage (the benefit slice; the caster's Strength loss is not modeled, near-inert for a non-melee caster).
 	# Anti-Taint buff (2026-06-21): Strength of the Crow.
