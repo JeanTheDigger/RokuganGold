@@ -288,6 +288,7 @@ class MapCombatState:
 	## the Shadow, Balance of Elements, Strike of the Flowing Waters). -1 = none in flight.
 	var casting_ml: int = -1
 	var casting_creator: int = -1
+	var casting_element: int = -1  # the dispatching spell's element (Enums.Ring; -1 = Universal/untracked)
 	## s33 Mists of Illusion: stationary visual-only phantoms — {x, y, caster_id}.
 	var illusion_phantoms: Array = []
 	## s33 Token of Memory: stationary visual-only fake objects placed on the map (flavor; no
@@ -2622,6 +2623,7 @@ static func _complete_cast(
 	# effects). Valid for the synchronous duration of this _complete_cast.
 	state.casting_ml = int(SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("m", -1))
 	state.casting_creator = caster_id
+	state.casting_element = int(SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("e", -1))
 	# Phase 2 — per-spell direct-damage effects (s31–s37, currently Fire tranche).
 	var eff: Dictionary = SpellSystem.get_combat_effect(spell_id)
 	if res.get("success", false) and eff.get("kind", "") == "damage" \
@@ -3708,7 +3710,7 @@ static func _apply_spell_buff(
 		elif mkind == "invisible":
 			# s33 Gift of Wind / Legion of the Moon: a dedicated source so attacking can clear
 			# just this modifier (_reveal_if_hidden) without dropping other spell buffs.
-			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_invisible", "round", state.casting_ml, state.casting_creator)
+			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_invisible", "round", state.casting_ml, state.casting_creator, state.casting_element)
 		elif mkind == "initiative_score":
 			# s36 Clarity of Purpose: a persistent Initiative-score delta (no timed expiry; the
 			# 2-round GDD duration is approximated as skirmish-length, matching Song of the World).
@@ -3724,7 +3726,7 @@ static func _apply_spell_buff(
 			if gts != null:
 				gts.set(mkind, int(gts.get(mkind)) + val)
 		else:
-			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, default_source, "round", state.casting_ml, state.casting_creator)
+			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, default_source, "round", state.casting_ml, state.casting_creator, state.casting_element)
 		applied.append({"kind": mkind, "value": val})
 	# s33 Striking the Storm: the swirling-air cocoon deafens the buffed character for the duration.
 	if eff.get("self_deafen", false):
@@ -3808,11 +3810,11 @@ static func _apply_spell_buff_aoe(
 			if mkind == "absorb_pool":
 				p.absorb_pool = maxi(p.absorb_pool, val)
 			elif mkind == "invisible":
-				IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_invisible", "round", state.casting_ml, state.casting_creator)
+				IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_invisible", "round", state.casting_ml, state.casting_creator, state.casting_element)
 			elif mkind == "initiative_score":
 				p.initiative_modifier += val  # s36 Clarity of Purpose (persistent delta)
 			else:
-				IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff", "round", state.casting_ml, state.casting_creator)
+				IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff", "round", state.casting_ml, state.casting_creator, state.casting_element)
 		buffed.append(cid)
 	return {"buffed": buffed, "expires_round": expiry}
 
@@ -3876,7 +3878,7 @@ static func _apply_spell_debuff(
 		# _npc_pick_stance short-circuits) until it expires.
 		if mkind == "stance_locked":
 			p.stance = Enums.Stance.FULL_ATTACK
-		IndividualCombat.add_timed_modifier(p, mkind, val, expiry, dbsrc, "round", state.casting_ml, state.casting_creator)
+		IndividualCombat.add_timed_modifier(p, mkind, val, expiry, dbsrc, "round", state.casting_ml, state.casting_creator, state.casting_element)
 		applied.append({"kind": mkind, "value": val})
 	# Optional accompanying Trait change via the per-Trait layer (s36 Suitengu's Curse: Reflexes -1
 	# alongside the move penalty). Flows to Armor TN / initiative / attack and the derived Ring.
@@ -4206,7 +4208,7 @@ static func _apply_sharing_strength(
 		var p: IndividualCombat.Participant = state.combat.participants.get(int(entry["id"]), null)
 		if p == null:
 			continue
-		IndividualCombat.add_timed_modifier(p, "all_rolls", lowest_earth, expiry, "spell_buff", "round", state.casting_ml, state.casting_creator)
+		IndividualCombat.add_timed_modifier(p, "all_rolls", lowest_earth, expiry, "spell_buff", "round", state.casting_ml, state.casting_creator, state.casting_element)
 		ids.append(int(entry["id"]))
 	return {"buffed": ids, "bonus": lowest_earth, "expires_round": expiry}
 
@@ -4848,10 +4850,10 @@ static func _apply_spell_fog_zone(
 
 
 ## Dispel (s33 Draw Back the Shadow): within the area, dispel illusions — clear every combatant's
-## invisibility (spell_invisible) and remove obscuring fog zones. Auto for the ML≤4 illusions wired
-## here (Gift of Wind / Legion of the Moon / Summon Fog); the ML5-6 Contested Air roll and the
-## broader "ongoing non-illusion magical effects" contested dispel are deferred (the timed-modifier
-## layer stores no creator/mastery to contest against). Indiscriminate within the area (friend + foe).
+## invisibility (spell_invisible) and remove obscuring fog zones. ML≤4 illusions auto-dispel; ML5-6
+## illusions need a Contested Air Roll vs the creator. Per owner scope (A), ongoing NON-illusion spell
+## buff/debuff effects are ALSO dispelled, each via a Contested Air vs the effect's creator's
+## element-Ring. Indiscriminate within the area (friend + foe).
 static func _apply_spell_dispel(
 	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData, eff: Dictionary,
 	dice_engine: DiceEngine = null,
@@ -4902,7 +4904,45 @@ static func _apply_spell_dispel(
 				continue
 		surviving.append(zone)
 	state.spell_zones = surviving
-	return {"center": center, "radius": radius, "revealed": revealed, "fog_cleared": fog_cleared, "contest_failed": contested}
+	# s33 Draw Back the Shadow — "Ongoing non-illusion magical effects may also be dispelled but require
+	# a Contested Ring Roll (caster's Air vs creator's appropriate Ring)." Owner-approved scope (A):
+	# indiscriminate — every ongoing spell buff/debuff timed modifier on everyone in the area, each
+	# contested against its installing-spell element-Ring of its creator. Illusion modifiers (spell_invisible,
+	# decoy) are handled above. Untracked effects (no element/creator — Universal spells, kata/kiho) are
+	# left intact (no Ring to contest). Trait/Ring-delta reductions are covered by Balance of Elements.
+	var dispelled: Array = []  # [{id, kind}] non-illusion effects removed by a winning contest
+	if dcaster != null and dice_engine != null:
+		for cid2: int in state.positions.keys():
+			var pos2: Vector2i = state.positions[cid2]
+			if maxi(absi(pos2.x - center.x), absi(pos2.y - center.y)) > radius:
+				continue
+			var p2: IndividualCombat.Participant = state.combat.participants.get(cid2, null)
+			if p2 == null:
+				continue
+			var kept2: Array = []
+			for m: Dictionary in p2.timed_modifiers:
+				var src: String = String(m.get("source", ""))
+				var ekind: String = String(m.get("kind", ""))
+				var elem: int = int(m.get("element", -1))
+				var emk: int = int(m.get("creator", -1))
+				# Only ongoing spell buff/debuff effects with a known element + creator; skip illusion kinds.
+				if (src == "spell_buff" or src == "spell_debuff") and elem >= 0 and emk >= 0 \
+						and ekind != "invisible" and ekind != "decoy_absorb":
+					var ecreator: L5RCharacterData = state.combatants.get(emk, null)
+					var caster_air: int = SpellSystem.get_ring_value(dcaster, Enums.Ring.AIR)
+					var croll2: int = dice_engine.roll_and_keep(maxi(1, caster_air), maxi(1, caster_air), true).total
+					var crroll2: int = 0
+					if ecreator != null:
+						var cring: int = SpellSystem.get_ring_value(ecreator, elem)
+						crroll2 = dice_engine.roll_and_keep(maxi(1, cring), maxi(1, cring), true).total
+					# Creator absent (left the field) -> no resistance, the effect is dispelled.
+					if croll2 >= crroll2:
+						dispelled.append({"id": cid2, "kind": ekind})
+						continue  # drop this modifier
+				kept2.append(m)
+			p2.timed_modifiers = kept2
+	return {"center": center, "radius": radius, "revealed": revealed, "fog_cleared": fog_cleared,
+		"contest_failed": contested, "dispelled": dispelled}
 
 
 ## Conjure a wall barrier (s34 Wall of Earth): a straight line of WALL_STONE tiles centered on a

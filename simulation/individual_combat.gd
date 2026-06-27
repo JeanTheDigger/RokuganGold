@@ -531,12 +531,13 @@ static func _get_kata_wound_penalty_reduction(character: L5RCharacterData) -> in
 ## expiry_kind: "round" (removed once round_number reaches expires_round) or
 ## "turn_end" (removed at the end of the holder's own next turn — for "next Turn"
 ## effects like Strength of the Spider; expires_round is unused for those).
-## ml / creator (s31-37 spell-effect tracking, optional, default -1): the Mastery Level of the spell
-## that installed this modifier and the caster's id. Used by the ML-gated dispel/negate effects
-## (Draw Back the Shadow ML5-6 contest, Balance of Elements / Strike of the Flowing Waters ML<=3
-## negation). -1 = untracked (kata/kiho/creature modifiers and pre-existing callers).
-static func add_timed_modifier(p: Participant, kind: String, value: int, expires_round: int, source: String, expiry_kind: String = "round", ml: int = -1, creator: int = -1) -> void:
-	p.timed_modifiers.append({"kind": kind, "value": value, "expires_round": expires_round, "source": source, "expiry_kind": expiry_kind, "ml": ml, "creator": creator})
+## ml / creator / element (s31-37 spell-effect tracking, optional, default -1): the Mastery Level of
+## the spell that installed this modifier, the caster's id, and the spell's element (Enums.Ring; -1 =
+## Universal/untracked). Used by the ML-gated dispel/negate effects (Draw Back the Shadow ML5-6 contest
+## + non-illusion Contested-Ring dispel vs the creator's element-Ring, Balance of Elements / Strike of
+## the Flowing Waters ML<=3 negation). -1 = untracked (kata/kiho/creature modifiers and pre-existing callers).
+static func add_timed_modifier(p: Participant, kind: String, value: int, expires_round: int, source: String, expiry_kind: String = "round", ml: int = -1, creator: int = -1, element: int = -1) -> void:
+	p.timed_modifiers.append({"kind": kind, "value": value, "expires_round": expires_round, "source": source, "expiry_kind": expiry_kind, "ml": ml, "creator": creator, "element": element})
 
 
 ## Total of all timed modifiers of `kind` whose installing-spell Mastery Level is <= max_ml. Used by
