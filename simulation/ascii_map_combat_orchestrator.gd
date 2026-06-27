@@ -2563,6 +2563,19 @@ static func _complete_cast(
 			if rs_p != null:
 				IndividualCombat.add_timed_modifier(
 					rs_p, "ravenous_swarms", 1, state.combat.round_number + 5, "ravenous_swarms")
+		# s35 Follow the Flame: the struck target catches fire, taking a fraction of the hit (rounded
+		# down) every subsequent Round for the duration (a fire_dot timed modifier read in advance_round).
+		if eff.has("fire_dot_fraction") and target != null and not CharacterStats.is_dead(target):
+			var ft_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+			var hit_dmg: int = 0
+			for h in res["spell_damage"]:
+				if int(h.get("id", -1)) == target_id:
+					hit_dmg = int(h.get("damage", 0))
+					break
+			var burn: int = int(floor(hit_dmg * float(eff["fire_dot_fraction"])))
+			if ft_p != null and burn > 0:
+				IndividualCombat.add_timed_modifier(ft_p, "fire_dot", burn,
+					state.combat.round_number + int(eff.get("fire_dot_rounds", 5)), "follow_the_flame")
 	elif res.get("success", false) and eff.get("kind", "") == "heal":
 		res["spell_heal"] = _apply_spell_heal(
 			state, caster_id, caster, target_id, target, eff, res, dice_engine)
@@ -7136,6 +7149,13 @@ static func advance_round(
 			var _bl_c: L5RCharacterData = chars_by_id.get(_tp.character_id, state.combatants.get(_tp.character_id, null))
 			if _bl_c != null and not CharacterStats.is_dead(_bl_c):
 				WoundSystem.apply_damage(_bl_c, _bleed_amt, 0)
+		# s35 Follow the Flame: a burning target takes its fire_dot Wounds each Round until the spell's
+		# duration expires (the modifier auto-expires) or it is doused (a future action). Bypasses armor.
+		var _fire_dot: int = IndividualCombat.get_timed_modifier_total(_tp, "fire_dot")
+		if _fire_dot > 0:
+			var _fd_c: L5RCharacterData = chars_by_id.get(_tp.character_id, state.combatants.get(_tp.character_id, null))
+			if _fd_c != null and not CharacterStats.is_dead(_fd_c):
+				WoundSystem.apply_damage(_fd_c, _fire_dot, 0)
 		# Gashadokuro Regeneration (s54.10): recover 10 Wounds at the start of each round,
 		# UNLESS a Wound threshold was crossed within the last 3 rounds (a section
 		# collapsed — _apply_hit set spirit_regen_suppressed_until).

@@ -6535,6 +6535,20 @@ Blinded at Honor 0), and any Taint-Rank-1+ target takes an extra 2k2. (Lying-Dar
 no mechanic.) Runtime-verified 4/4 (Godot 4.6.2, headless): honorable target 11.5 dmg/round (base 2k2);
 dishonorable Honor-1 target 34.3 (+3×2k1); Tainted target 23.9 (+2k2); an Honor-0 human is Blinded by the field.
 
+### Spell coverage — deferred sub-part: Follow the Flame persistent burn (2026-06-27, runtime-verified 5/5)
+**Follow the Flame** (Fire 5, s35 l317) GDD: a 6k5 fire stream (wired) where, on arrival, **the target catches
+fire, taking half that many Wounds (rounded down) every subsequent Round until doused or the spell's duration
+(5 Rounds) expires**. The persistent burn was deferred. Added a generic per-round fire-DoT (mirrors the maho
+`bleed` pattern): a `fire_dot_fraction`/`fire_dot_rounds` field on the damage entry → after the hit,
+`_complete_cast` installs a `fire_dot` timed modifier = `floor(damage × fraction)` on the target, and a new
+per-round pass in `advance_round` (beside the maho bleed handler) applies it each Round (armor-bypassing) until
+the modifier auto-expires. Runtime-verified 5/5 (Godot 4.6.2, headless): initial 6k5 hit (37), `fire_dot`
+installed = 18 (half rounded down), the target loses 18 the next Round and keeps burning, and the burn stops
+after the 5-round duration. LIMITATIONS (documented): the per-Round re-designation of a new line-of-sight
+target (the moving fire-stream) is not modeled — only the single-target hit + persistent burn; the "doused
+normally" early cure is a future action (like the bleed bandage). The `fire_dot` primitive is reusable for any
+future catch-fire effect with a custom per-round amount.
+
 ### Spell coverage — deferred sub-part: Courage of the Seven Thunders group/clan/Taint (2026-06-27, runtime-verified 7/7)
 **Courage of the Seven Thunders** (Earth 1 Battle, s34 l15) GDD: up to the caster's School Rank targets (may
 include the caster) within 30' gain **+5k0 to resist any Fear**; **samurai not of the original Seven Great
