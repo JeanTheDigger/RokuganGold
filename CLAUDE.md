@@ -6749,6 +6749,19 @@ costing a slot; non-caster interrupt no-op. LIMITATION: the speed-raise count is
 turn-based UI. Same PC-travel HOLD live-reachability caveat as the whole ASCII stack — driver-verified,
 not a live session.
 
+### Spell coverage — deferred sub-part: Ebbing Strength caster cost (2026-06-27, runtime-verified 6/6)
+**Ebbing Strength** (Water 1, s36 l21) GDD: "Reduces one of the caster's own Physical Traits by up to School
+Rank; the target gains the same Physical Trait increased by the same amount." Only the ally's gain
+(+Water-school-rank rolled damage = +Strength) was wired; the caster's matching LOSS was deferred. Added an
+optional `caster_mods` array to the `buff` handler — installs the matching penalty on the CASTER's
+Participant (skipped when the caster is the buffed target); Ebbing Strength's caster_mods carries
+`spell_damage_rolled: neg_water_school_rank` (a new `_resolve_buff_value` key), so the caster loses the same
+Strength they granted (−rolled damage dice) for the duration. Runtime-verified 6/6 (Godot 4.6.2, headless,
+400-roll means): the ally gains +4 rolled dice (damage 20.9→26.8) while the caster loses −4 (damage
+21.5→15.1); both lift after the 3-round duration; the modifiers read +4 / −4. Generic — any future
+self-cost buff reuses `caster_mods`. LIMITATION: the GDD "if the caster's Trait is reduced to 0 they fall
+unconscious + duration→1" edge case is not modeled (the rolled-damage penalty just floors damage at 0).
+
 ### Spell coverage — deferred sub-part: Summoning the Gale −3k3 kept half (2026-06-27, runtime-verified 3/3)
 **Summoning the Gale** (Air 3, s33 l241) GDD: everyone in the bubble "suffers −3k3 to all ranged attack
 rolls." Only the −3 rolled half was wired (`ranged_attack_penalty`); the −3 kept half was deferred. Added an

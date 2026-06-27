@@ -3510,6 +3510,17 @@ static func _apply_spell_buff(
 		else:
 			IndividualCombat.add_timed_modifier(p, mkind, val, expiry, "spell_buff")
 		applied.append({"kind": mkind, "value": val})
+	# Optional caster-side cost (s36 Ebbing Strength): the caster reduces one of their own Physical
+	# Traits to grant it to the target. Installs the matching penalty on the caster's Participant
+	# (a Strength drop = that many fewer rolled damage dice). Skipped when the caster IS the buffed target.
+	var caster_mods: Array = eff.get("caster_mods", [])
+	if not caster_mods.is_empty() and bid != caster_id:
+		var cp_part: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+		if cp_part != null:
+			for cmod in caster_mods:
+				IndividualCombat.add_timed_modifier(
+					cp_part, String(cmod.get("kind", "")),
+					_resolve_buff_value(caster, cmod.get("value", 0)), expiry, "spell_buff")
 	return {"id": bid, "applied": applied, "expires_round": expiry}
 
 
@@ -3872,6 +3883,10 @@ static func _resolve_buff_value(caster: L5RCharacterData, value) -> int:
 			"water_school_rank":
 				# s36 Ebbing Strength: the caster transfers up to (Water School Rank) Strength.
 				return SpellSystem.get_effective_school_rank(caster, Enums.Ring.WATER)
+			"neg_water_school_rank":
+				# s36 Ebbing Strength caster cost: the caster loses the transferred Strength
+				# (−that many rolled damage dice on the caster's own attacks).
+				return -SpellSystem.get_effective_school_rank(caster, Enums.Ring.WATER)
 			"void_replace_weapon_skill":
 				# s37 Moment of Clarity: temporary Skill Ranks = Void Ring, REPLACING the existing
 				# rank (not cumulative). For a weapon skill the net attack-roll gain (a skill rank is

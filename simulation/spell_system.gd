@@ -446,7 +446,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"chi_reversal": {"kind": "debuff", "target": "enemy", "range_tiles": 4, "duration_rounds": 9999,
 		"mods": [{"kind": "spell_attack_rolled", "value": "chi_reversal_agility"}]},  # Water 5: flip the target's Fire-pair Traits (Agility<->Intelligence) -> the Agility drop lowers attack rolls (combat slice; the Int change + other pair options are out-of-combat). Inert if the swap wouldn't lower Agility.
 	"ebbing_strength": {"kind": "buff", "target": "ally", "range_tiles": 4, "duration_rounds": 3,
-		"mods": [{"kind": "spell_damage_rolled", "value": "water_school_rank"}]},  # Water 1: transfer up to (Water School Rank) Strength caster->target -> the ally gains +damage (the benefit slice; the caster's Strength loss is not modeled, near-inert for a non-melee caster).
+		"mods": [{"kind": "spell_damage_rolled", "value": "water_school_rank"}],
+		"caster_mods": [{"kind": "spell_damage_rolled", "value": "neg_water_school_rank"}]},  # Water 1: transfer (Water School Rank) Strength caster->target — ally +damage, caster loses the same (-rolled damage dice) for the duration.
 	# Anti-Taint buff (2026-06-21): Strength of the Crow.
 	"strength_of_the_crow": {"kind": "buff", "target": "self", "duration_rounds": 9999,
 		"mods": [{"kind": "taint_resist", "value": 5}]},  # Earth 3: +5k5 to rolls resisting NEW Taint. Read at the in-combat Taint-inflict sites (Gagoze gaze contested Willpower; Pekkle Retributive Taint burst Earth roll). Self-buff (the NPC self-buff path; the GDD "target individual" touch-ally variant is a manual PC option). The s56.16-exposure corrupted-Shozai check (a separate system) is not covered.
