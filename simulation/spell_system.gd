@@ -208,7 +208,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"save": "reflexes_contested_earth", "save_negates": true,
 		"rider": {"condition": "entangled", "save": "none"}},  # Earth 4: Reflexes vs Earth or fall in (3k2 + trapped)
 	"the_fires_that_cleanse": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0, "range_tiles": 0,
-		"aoe_radius": 6, "aoe_hits": "all", "caster_exempt": true},  # Fire 1: DR=Fire Ring to all in 30' (caster-half deferred)
+		"aoe_radius": 6, "aoe_hits": "all", "caster_half": true},  # Fire 1: DR=Fire Ring to ALL in 30' incl. caster, who takes half (rounded up) (GDD s35 l51)
 	"light_of_the_sun": {"kind": "damage_zone", "dr_rolled": 2, "dr_kept": 2, "range_tiles": 20,
 		"aoe_radius": 6, "aoe_hits": "all", "duration_rounds": 10},  # Fire 5: 2k2/round in 30' (honor/taint bonus deferred)
 	"blessing_of_the_sun": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 3,

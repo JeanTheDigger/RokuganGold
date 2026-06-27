@@ -3057,6 +3057,9 @@ static func _apply_spell_combat_damage(
 				hits.append({"id": t["id"], "healed": dmg})
 				continue
 			dmg = int(round(dmg * filt.get("multiplier", 1.0)))
+		# s35 The Fires That Cleanse: the caster (marked "half") takes half damage, rounded up.
+		if t.get("half", false):
+			dmg = int(ceil(dmg / 2.0))
 		WoundSystem.apply_damage(ch, dmg, 0)
 		var dead: bool = CharacterStats.is_dead(ch)
 		# s31 Concentration: a mid-cast caster damaged by a spell is interrupted (Willpower TN 5+damage).
@@ -3125,6 +3128,12 @@ static func _gather_spell_targets(
 	# Optional cap on the number of struck targets (e.g. "up to 10 target creatures").
 	if eff.has("aoe_max_targets") and targets.size() > int(eff["aoe_max_targets"]):
 		targets.resize(int(eff["aoe_max_targets"]))
+	# s35 The Fires That Cleanse: the caster is also caught in the 30' blast but takes only half damage
+	# (rounded up). Appended last (after the cap) with a "half" marker the damage loop honors.
+	if eff.get("caster_half", false):
+		var cch = state.combatants.get(caster_id, null)
+		if cch != null and not CharacterStats.is_dead(cch):
+			targets.append({"id": caster_id, "char": cch, "half": true})
 	return targets
 
 

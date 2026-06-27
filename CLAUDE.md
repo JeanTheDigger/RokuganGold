@@ -6524,6 +6524,16 @@ a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or t
 effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
 (see "ASCII Map System — Live-Reachability Status").
 
+### Spell coverage — deferred sub-part: The Fires That Cleanse caster-half (2026-06-27, runtime-verified 5/5)
+**The Fires That Cleanse** (Fire 1, s35 l51) GDD: everyone in the 30' radius — **including the caster** —
+takes Fire-Ring DR, but the caster takes only **half (rounded up)** as the kami make some effort to avoid
+them. It was wired `caster_exempt` (caster took nothing — the caster-half was deferred). Added a reusable
+`caster_half` flag: `_gather_spell_targets` appends the caster (after the AoE cap) with a `half` marker, and
+`_apply_spell_combat_damage` halves that target's rolled damage (`ceil(dmg/2)`). Entry changed
+`caster_exempt`→`caster_half`. Runtime-verified 5/5 (Godot 4.6.2, headless): the caster is now in the blast
+(marked half) alongside all others (aoe_hits all); over 60 samples the caster's mean (15.5) is ~half a
+full victim's (29.5). The `caster_half` primitive is reusable for any other "caster caught for half" AoE.
+
 ### Spell coverage — deferred sub-part: Fires of Purity ally-target (2026-06-27, runtime-verified 5/5)
 **Fires of Purity** (Fire 1 Defense, s35 l45) GDD: Range 25', 1 target — a flame shroud cast on **self OR an
 ally** (a melee attacker takes 2k2; the shrouded one's strikes deal +2k2; ranged bypasses). It was wired
