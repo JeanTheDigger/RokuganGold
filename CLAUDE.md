@@ -6749,6 +6749,16 @@ costing a slot; non-caster interrupt no-op. LIMITATION: the speed-raise count is
 turn-based UI. Same PC-travel HOLD live-reachability caveat as the whole ASCII stack — driver-verified,
 not a live session.
 
+### Spell coverage — deferred sub-part: Strength of the Tsunami 9-cap (2026-06-27, runtime-verified 4/4)
+**Strength of the Tsunami** (Water 2, s36 l131) GDD: "Strength Rank increased by half the caster's Water
+Ring (rounded down). Cannot raise Strength above 9." The +half-Water damage slice was wired but uncapped;
+the 9-ceiling was deferred. Added a target-aware `water_half_strength_capped` value, computed in the buff
+handler (which has the buffed char `bch`): the rolled-damage bonus = `max(0, min(half_water, 9 −
+target.strength))`, so a strong target (oni / big creature) is no longer over-buffed past Strength 9.
+Runtime-verified 4/4 (Godot 4.6.2, headless): a Strength-3 ally gets +3 (full half-Water-6), a Strength-8
+ally gets +1 (capped, not +3), a Strength-9 ally gets +0, and Water 4 gives +2. drv21 (buff else-branch)
+re-passes — no regression. The Strength-Skill-roll slice remains the standard out-of-combat-buff limitation.
+
 ### Spell coverage — deferred sub-part: Never Alone conditional expiry (2026-06-27, runtime-verified 9/9)
 **Never Alone** (Fire 1, s35 l75) GDD: +Fire Ring to attack/Skill/Trait rolls, "lasts until the spell
 expires, the target fails an attack or Skill roll, or the target suffers Wounds from any source — whichever

@@ -410,7 +410,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Coverage clean-wins batch 11 (2026-06-20): trait→combat-roll buffs/debuffs via EXISTING hooks
 	# (Strength → rolled damage dice, Agility → attack-roll dice). NOT the Earth-ring wound refactor.
 	"strength_of_the_tsunami": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 3,
-		"mods": [{"kind": "spell_damage_rolled", "value": "water_half"}]},  # Water 2: Strength +half Water Ring → +that many rolled damage dice (faithful for the damage slice; Strength-skill rolls + the "cap at 9" not modeled)
+		"mods": [{"kind": "spell_damage_rolled", "value": "water_half_strength_capped"}]},  # Water 2: Strength +half Water Ring → +rolled damage dice, capped so the target's Strength never exceeds 9 (Strength-skill rolls slice out of combat)
 	"death_of_flame": {"kind": "debuff", "target": "enemy", "range_tiles": 20, "duration_rounds": 5,
 		"contested": "fire_contested", "mods": [{"kind": "spell_attack_rolled", "value": "neg_fire_ring"}]},  # Fire 4: -Fire Ring Agility (its attack-roll slice; the -Fire Intelligence / spell-suppression half is deferred). Per-Round re-resist simplified to one contested-Fire gate at cast.
 	# Coverage clean-wins batch 12 (2026-06-20): LOS-blocking fog (anti-ranged area denial).

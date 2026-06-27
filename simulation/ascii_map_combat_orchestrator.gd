@@ -3499,7 +3499,16 @@ static func _apply_spell_buff(
 	var applied: Array = []
 	for mod in eff.get("mods", []):
 		var mkind: String = String(mod.get("kind", ""))
-		var val: int = _resolve_buff_value(caster, mod.get("value", 0))
+		var raw_bval = mod.get("value", 0)
+		var val: int
+		if raw_bval is String and raw_bval == "water_half_strength_capped":
+			# s36 Strength of the Tsunami: +half the caster's Water Ring to the target's Strength,
+			# but "cannot raise Strength above 9" — so the rolled-damage bonus is capped at the
+			# target's headroom to 9. Target-dependent, computed here (the buffed char is bch).
+			var half_w: int = int(SpellSystem.get_ring_value(caster, Enums.Ring.WATER) / 2)
+			val = maxi(0, mini(half_w, 9 - bch.strength))
+		else:
+			val = _resolve_buff_value(caster, raw_bval)
 		if mkind == "absorb_pool":
 			# s34 Power of the Earth Dragon: a depleting damage-absorption pool (participant field).
 			p.absorb_pool = maxi(p.absorb_pool, val)
