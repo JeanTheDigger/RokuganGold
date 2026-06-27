@@ -5203,13 +5203,23 @@ static func _apply_spell_rider(
 	if _spell_save_resisted(state, caster, ch, rider.get("save", "none"),
 			rider.get("save_tn", 0), dice_engine):
 		return "resisted"
-	var cond: String = rider.get("condition", "")
+	# A rider may apply one condition ("condition") or several on the same failed save
+	# ("conditions" array — e.g. s34 Murmur of Earth: Prone + Dazed). Each honors duration_rounds.
 	var dur: int = rider.get("duration_rounds", 0)
-	if dur > 0:
-		IndividualCombat.apply_timed_condition(p, cond, state.combat.round_number + dur)
-	else:
-		IndividualCombat.apply_condition(p, cond)
-	return cond
+	var applied: Array = []
+	for c in rider.get("conditions", []):
+		applied.append(String(c))
+	var single: String = rider.get("condition", "")
+	if not single.is_empty() and single not in applied:
+		applied.append(single)
+	for cond: String in applied:
+		if cond.is_empty():
+			continue
+		if dur > 0:
+			IndividualCombat.apply_timed_condition(p, cond, state.combat.round_number + dur)
+		else:
+			IndividualCombat.apply_condition(p, cond)
+	return ",".join(applied)
 
 
 # Resolves a spell save (rider or status). Returns true if the target resists. Save types:

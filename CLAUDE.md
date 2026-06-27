@@ -6524,6 +6524,19 @@ a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or t
 effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
 (see "ASCII Map System — Live-Reachability Status").
 
+### Spell coverage — deferred riders: multi-condition rider + Murmur of Earth Dazed (2026-06-27, runtime-verified 6/6)
+Resumes the deferred-sub-parts walkthrough. **Murmur of Earth** (Earth 3, s34 l181) GDD: a failed Agility
+TN 20 save → knocked **Prone, 1k1 damage, AND Dazed for 1 Round**; only Prone+damage were wired (Dazed
+deferred). Added reusable **multi-condition rider support** to `_apply_spell_rider`: a rider may carry a
+`conditions` array (applied together on the same failed save) in addition to the legacy single `condition`
+(dedup-merged; each honors `duration_rounds`; returns a comma-joined name list). Murmur of Earth's rider is
+now `{conditions: ["prone", "dazed"], save: "none"}`. Both conditions go through the standard apply path
+(Prone persists until stand-up; Dazed is roll-recovered each round, the engine's Dazed model). Backward
+compatible — every existing single-`condition` rider is unchanged. Runtime-verified 6/6 (Godot 4.6.2,
+headless): the rider applies both Prone and Dazed and returns "prone,dazed"; a single-`condition` rider still
+applies only Prone; and every failed-save Murmur target is Prone+Dazed end-to-end through the damage path
+(4/4). The multi-rider primitive is now available for any other GDD spell that stacks conditions on one save.
+
 ### s31 Multi-round interruptible spell casting in tile combat (2026-06-27, owner-directed, runtime-verified 16/16)
 Owner pasted the L5R 4e Spell Casting rules and directed: **"this is how spells ought to be casted in the
 ASCII map"** — replacing the prior atomic (single-round) cast with the faithful multi-round, interruptible

@@ -202,7 +202,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"murmur_of_earth": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1, "range_tiles": 0,
 		"aoe_radius": 20, "aoe_hits": "all", "caster_exempt": true,
 		"save": "agility_flat", "save_tn": 20, "save_negates": true,
-		"rider": {"condition": "prone", "save": "none"}},  # Earth 3: Agility TN 20 or 1k1 + Prone (Dazed deferred)
+		"rider": {"conditions": ["prone", "dazed"], "save": "none"}},  # Earth 3: Agility TN 20 or 1k1 + Prone + Dazed (GDD s34 l181)
 	"maw_of_the_earth": {"kind": "damage", "dr_rolled": 3, "dr_kept": 2, "range_tiles": 8,
 		"aoe_radius": 2, "aoe_hits": "all", "caster_exempt": true,
 		"save": "reflexes_contested_earth", "save_negates": true,
