@@ -357,6 +357,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"banish_the_void": {"kind": "ward", "aoe_radius": 4, "duration_rounds": 5,
 		"ward_elements": [4], "cast_tn_penalty": 10},  # Void 3: +10 TN to Void spells in the area (VP-cost-doubling + Shadow effects not modeled; ward owner exempt)
 	"draw_closed_the_veil": {"kind": "banish_spirit"},  # Void 4: banish a non-native spirit to its home realm (Contested Void vs Willpower for embodied spirits)
+	"opening_the_veil": {"kind": "veil_portal", "range_tiles": 2, "radius": 3, "duration_rounds": 6},  # Water 6: open a Spirit-Realm portal at a tile within 10' — each round draws the nearest displaced spirit home (PROVISIONAL: party realm-travel not modeled)
 	"essence_of_void": {"kind": "status", "condition": "incapacitated", "save": "void_contested",
 		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 9999},  # Void 4: Contested Void → held immobile, unable to act (Concentration = skirmish; the per-round break roll is the deferred nuance)
 	# Void VP manipulation (2026-06-20): gain / restore / steal / lock Void Points.
@@ -1403,7 +1404,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"whirlpool":                     {"e": 3, "m": 5, "s": 0},   # WIRED (whirlpool zone): open-water vortex — swimmers in area drown on a failed Athletics(Swimming)/Strength TN 30 each Round
 	# ML6
 	"breath_of_mist":                {"e": 3, "m": 6, "s": 16},
-	"opening_the_veil":              {"e": 3, "m": 6, "s": 0},
+	"opening_the_veil":              {"e": 3, "m": 6, "s": 0},   # WIRED (veil_portal zone): Spirit-Realm portal — each round draws the nearest displaced (non-Ningen-do) spirit home (banish). Party realm-travel not modeled (PROVISIONAL)
 	"peace_of_the_kami":             {"e": 3, "m": 6, "s": 15},
 	"rise_water":                    {"e": 3, "m": 6, "s": 0},
 	"waters_sweet_clarity":          {"e": 3, "m": 6, "s": 17},

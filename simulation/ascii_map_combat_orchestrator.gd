@@ -2580,6 +2580,12 @@ static func execute_cast_spell(
 			"type": "spell_false_realm", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "false_realm": res["false_realm"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "veil_portal":
+		res["veil_portal"] = _apply_opening_the_veil(state, caster_id, target_id, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_veil_portal", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "veil_portal": res["veil_portal"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "curse_burning_hand":
 		res["curse"] = _apply_curse_burning_hand(
 			state, caster_id, caster, target_id, target, eff, dice_engine)
@@ -3861,6 +3867,24 @@ static func _apply_whirlpool(
 	return {"ok": true, "center": center, "radius": radius}
 
 
+## s36 Opening the Veil (Water 6, Kitsu/Isawa): open a temporary portal into the Spirit Realms. Installs
+## a persistent veil_portal zone at a target tile within 10' (the per-round draw-home runs in
+## _process_spell_zones). PROVISIONAL: party realm-travel is not modeled (no realm-destination system) —
+## the faithful tile-combat consumer is the portal drawing displaced spirits home; flagged for owner override.
+static func _apply_opening_the_veil(
+	state: MapCombatState, caster_id: int, target_id: int, eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	if int(eff.get("range_tiles", 0)) > 0 and state.positions.has(target_id):
+		center = state.positions[target_id]
+	state.spell_zones.append({
+		"kind": "veil_portal", "center": center, "radius": int(eff.get("radius", 3)),
+		"expiry_round": state.combat.round_number + int(eff.get("duration_rounds", 6)),
+		"spell_id": spell_id, "caster_id": caster_id,
+	})
+	return {"center": center, "radius": int(eff.get("radius", 3))}
+
+
 ## s34 Grounding Energy (Earth 5, Defense/Wards): Earth spirits fortify the caster + allies within 20'
 ## against maho. The GDD effect raises the maho Spell Casting TN by 10×Earth — but tile-combat maho has
 ## NO casting roll (it fires when blood is spilled, auto-succeeds), so a TN increase is literally inert.
@@ -4412,6 +4436,35 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 					WoundSystem.apply_damage(pch, dice_engine.roll_and_keep(pdr, pdk, true).total, 0)
 				elif pch.honor >= 4.0:
 					WoundSystem.heal_wounds(pch, pheal)
+			surviving.append(zone)
+			continue
+		# s36 Opening the Veil (Water 6): a portal into the Spirit Realms. Each Round the nearest
+		# displaced (non-native, realm != Ningen-do) spirit creature within the portal radius is drawn
+		# back through the veil to its home realm (banished — no contest; the door opens to where it
+		# belongs). PROVISIONAL: realm-TRAVEL for the party is not modeled (no realm-destination system);
+		# the faithful tile-combat consumer is the portal acting on the spirits present (flagged).
+		if String(zone.get("kind", "damage_zone")) == "veil_portal":
+			var vcenter: Vector2i = zone["center"]
+			var vradius: int = int(zone.get("radius", 3))
+			var best_id: int = -1
+			var best_d: int = 99999
+			for cid in state.positions.keys():
+				var vch = state.combatants.get(cid, null)
+				if vch == null or CharacterStats.is_dead(vch) or vch.spirit_creature == null:
+					continue
+				if vch.spirit_creature.realm == Enums.SpiritRealm.NINGEN_DO:
+					continue  # a native/natural animal is not a displaced spirit
+				var vp: Vector2i = state.positions[cid]
+				var vd: int = maxi(absi(vcenter.x - vp.x), absi(vcenter.y - vp.y))
+				if vd <= vradius and vd < best_d:
+					best_d = vd
+					best_id = cid
+			if best_id >= 0:
+				state.positions.erase(best_id)
+				if best_id not in state.fled_ids:
+					state.fled_ids.append(best_id)
+				state.combat_log.append({"type": "veil_portal_banish",
+					"round": state.combat.round_number, "spirit_id": best_id})
 			surviving.append(zone)
 			continue
 		# s36 Whirlpool (Water 5): a raging vortex on open water. Each Round every character standing

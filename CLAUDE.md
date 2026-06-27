@@ -7233,6 +7233,22 @@ gate (no Fortune-dedication field on settlements — any temple/shrine qualifies
 (reuses the PERFORM_WORSHIP RITUAL_HONOR pipeline + the standard TopicData-creation pattern used at ~24 sites).
 Reduces the genuinely-blocked set to 2 (Tenjin's Ear, Opening the Veil).
 
+### Spell coverage — Opening the Veil (Spirit-Realm portal) (2026-06-27, owner-directed PROVISIONAL, static-only)
+**Opening the Veil (Water 6, Kitsu/Isawa, s36)** — open a temporary portal into a Spirit Realm. Previously
+deferred ("no realm-travel mechanic"). Owner directive ("don't conclude while spells remain") → wired with a
+**PROVISIONAL** tile-combat consumer (flagged for owner override): the sim has no realm-destination/party-travel
+system, but a portal into the Spirit Realms is a doorway displaced spirits are drawn back through. New
+`veil_portal` zone kind: `_apply_opening_the_veil` installs a 6-round zone at a target tile within 10' (range 2);
+a per-round pass in `_process_spell_zones` finds the nearest **displaced** (non-Ningen-do) spirit creature within
+the radius and draws it home (banished — `state.positions.erase` + `fled_ids`, the verified banish pattern; no
+contest — the door opens to where it belongs). A native/natural animal (realm NINGEN_DO) is not pulled. Distinct
+from Draw Closed the Veil (Void 4, a single Contested-Void banish): this is a persistent portal acting once per
+round on the nearest displaced spirit. NOT modeled (no realm-destination system): party realm-TRAVEL (entering a
+realm) — the faithful tile-combat slice is the portal acting on the spirits present. PC-tactical (Kitsu/Isawa-only
+via spells_known; no NPC picker — situational, needs spirit creatures). Parse-clean; structural-verified (mirrors
+the whirlpool/grounding zone + banish patterns; the orchestrator can't run under headless `-s`). Reduces the
+genuinely-blocked set to 1 (Tenjin's Ear — no language-barrier subsystem exists).
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`
