@@ -2492,6 +2492,23 @@ static func execute_cast_spell(
 		})
 		return {"success": false, "ravenous_swarms_disrupted": true, "spell_id": spell_id,
 			"damage": rs_dmg}
+	# s35 Envious Flames: a shugenja struck by the lance must, on their NEXT cast, win a Concentration
+	# Willpower roll (TN 20 + the damage dealt) or lose the spell. (Atomic casting has no literal
+	# mid-cast interrupt, so the burns disrupt the target's next cast instead — the faithful turn-based
+	# reading.) The marker stores the damage; it clears whether the roll passes or fails.
+	if caster_p_ins != null:
+		var ef_dmg: int = IndividualCombat.get_timed_modifier_total(caster_p_ins, "envious_flames_disrupt")
+		if ef_dmg > 0:
+			IndividualCombat.clear_timed_modifiers_by_source(caster_p_ins, "envious_flames_disrupt")
+			var conc: int = dice_engine.roll_and_keep(
+				maxi(1, caster.willpower), maxi(1, caster.willpower), true).total
+			if conc < 20 + ef_dmg:
+				SpellSystem.consume_slot(caster, SpellSystem.get_best_cast_ring(caster, spell_id))
+				state.combat_log.append({
+					"type": "envious_flames_disrupt", "round": state.combat.round_number,
+					"caster_id": caster_id, "spell_id": spell_id, "tn": 20 + ef_dmg, "roll": conc,
+				})
+				return {"success": false, "envious_flames_disrupted": true, "spell_id": spell_id}
 	var res: Dictionary = SpellSystem.resolve_cast(caster, spell_id, dice_engine, 0, target, -1, ward_tn, kw_penalty, eof_penalty)
 	res["spell_id"] = spell_id
 	# Furaribi rule (s54.12): a jade/crystal-property spell does not harm a superior_invuln
@@ -2524,6 +2541,20 @@ static func execute_cast_spell(
 			if rs_p != null:
 				IndividualCombat.add_timed_modifier(
 					rs_p, "ravenous_swarms", 1, state.combat.round_number + 5, "ravenous_swarms")
+		# s35 Envious Flames: store the painful burn as a Concentration threat — the target's next cast
+		# must beat Willpower TN 20 + (damage dealt) or be lost (the disrupt check above).
+		if spell_id == "envious_flames" and target != null and not CharacterStats.is_dead(target):
+			var ef_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+			if ef_p != null:
+				var ef_d: int = 0
+				for h in res["spell_damage"]:
+					if int(h.get("id", -1)) == target_id:
+						ef_d = int(h.get("damage", 0))
+						break
+				if ef_d > 0:
+					IndividualCombat.add_timed_modifier(
+						ef_p, "envious_flames_disrupt", ef_d,
+						state.combat.round_number + 2, "envious_flames_disrupt")
 	elif res.get("success", false) and eff.get("kind", "") == "heal":
 		res["spell_heal"] = _apply_spell_heal(
 			state, caster_id, caster, target_id, target, eff, res, dice_engine)
