@@ -2600,6 +2600,12 @@ static func _complete_cast(
 			"type": "spell_oath_link", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "link": res["oath_link"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "courage":
+		res["courage"] = _apply_courage_buff(state, caster_id, caster, eff)
+		state.combat_log.append({
+			"type": "spell_courage", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "buffed": res["courage"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "debuff":
 		res["spell_debuff"] = _apply_spell_debuff(
 			state, caster_id, caster, target_id, target, eff, dice_engine)
@@ -7676,6 +7682,48 @@ static func _process_oath_links(state: MapCombatState) -> void:
 				ap.conditions.append(cond)
 		surviving.append(link)
 	state.oath_links = surviving
+
+
+## The original Seven Great Clans (s34 Courage of the Seven Thunders: samurai not of these get +3k0
+## instead of +5k0 to resist Fear).
+const COURAGE_GREAT_CLANS: Array[String] = [
+	"Crab", "Crane", "Dragon", "Lion", "Phoenix", "Scorpion", "Unicorn",
+]
+
+
+## s34 Courage of the Seven Thunders: infuse up to the caster's School Rank allies within 30' (incl. the
+## caster) with +5k0 to resist any Fear (magical or natural) — +3k0 for samurai not of the original Seven
+## Great Clans. Anyone with 1+ full Rank of Taint cannot benefit (not revealed). Returns {buffed: [ids]}.
+static func _apply_courage_buff(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData, eff: Dictionary,
+) -> Dictionary:
+	var cf: String = String(state.factions.get(caster_id, ""))
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var radius: int = int(eff.get("range_tiles", 6))
+	var expiry: int = state.combat.round_number + int(eff.get("duration_rounds", 100))
+	var cap: int = maxi(1, CharacterStats.get_insight_rank(caster))  # "up to caster's School Rank targets"
+	var buffed: Array = []
+	for cid in state.positions.keys():
+		if buffed.size() >= cap:
+			break
+		if String(state.factions.get(cid, "")) != cf:
+			continue
+		var ch: L5RCharacterData = state.combatants.get(cid, null)
+		if ch == null or CharacterStats.is_dead(ch):
+			continue
+		var pos: Vector2i = state.positions[cid]
+		if maxi(absi(center.x - pos.x), absi(center.y - pos.y)) > radius:
+			continue
+		# A Tainted samurai gains nothing (and this does not reveal their nature).
+		if MutationSystem.get_taint_rank(ch.taint) >= 1:
+			continue
+		var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+		if p == null:
+			continue
+		var val: int = 5 if ch.clan in COURAGE_GREAT_CLANS else 3
+		IndividualCombat.add_timed_modifier(p, "fear_resist_rolled", val, expiry, "spell_buff")
+		buffed.append({"id": cid, "bonus": val})
+	return {"buffed": buffed}
 
 
 ## s43 maho-user enemy cast (Bloodspeaker/cult, s56.14). Mirrors _npc_maybe_cast_spell but for maho:

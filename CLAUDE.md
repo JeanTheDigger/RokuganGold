@@ -6535,6 +6535,20 @@ Blinded at Honor 0), and any Taint-Rank-1+ target takes an extra 2k2. (Lying-Dar
 no mechanic.) Runtime-verified 4/4 (Godot 4.6.2, headless): honorable target 11.5 dmg/round (base 2k2);
 dishonorable Honor-1 target 34.3 (+3×2k1); Tainted target 23.9 (+2k2); an Honor-0 human is Blinded by the field.
 
+### Spell coverage — deferred sub-part: Courage of the Seven Thunders group/clan/Taint (2026-06-27, runtime-verified 7/7)
+**Courage of the Seven Thunders** (Earth 1 Battle, s34 l15) GDD: up to the caster's School Rank targets (may
+include the caster) within 30' gain **+5k0 to resist any Fear**; **samurai not of the original Seven Great
+Clans get +3k0 instead**; **anyone with 1+ full Rank of Taint cannot benefit** (and it does not reveal their
+nature). It was wired as a single-target +5k0 buff (group/clan/Taint deferred). New dedicated `courage` effect
+kind: `_apply_courage_buff` iterates living same-faction combatants within range up to `get_insight_rank(caster)`
+(School Rank), installs a `fear_resist_rolled` modifier of **5** if the ally's clan is in `COURAGE_GREAT_CLANS`
+(Crab/Crane/Dragon/Lion/Phoenix/Scorpion/Unicorn) else **3**, and skips any `MutationSystem.get_taint_rank ≥ 1`
+target. PC-deliberate (a support AoE, not in the NPC self-buff picker — same as Oath of the Heavens). The +5k0
+half (read by `apply_fear_checks`) was already verified by the engine's Fear resist path. Runtime-verified 7/7
+(Godot 4.6.2, headless): a Crane (great-clan) ally gets +5k0, a Mantis (minor-clan) ally +3k0, a Taint-2 ally
+is excluded, the caster self-includes at +5k0, and enemies / out-of-range allies are untouched; the target
+count respects the caster's computed School Rank.
+
 ### Spell coverage — deferred sub-part: Warning Flame Reactions-Stage +3 Initiative (2026-06-27, runtime-verified 3/3)
 **Warning Flame** (Fire 1 Battle, s35 l93) GDD: the target is **immune to being surprised**, gains **+1k0 to
 Initiative rolls** (wired), and **may add +3 to their Initiative total during the Reactions Stage of each
