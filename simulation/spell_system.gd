@@ -331,7 +331,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"disrupt_the_aura": {"kind": "debuff", "target": "enemy", "range_tiles": 10, "duration_rounds": 9999,
 		"mods": [{"kind": "no_magic_heal", "value": 1}]},  # Fire 2: target cannot be healed by magical means (spells/items/Techniques fail); mundane Medicine still works (out-of-combat). 24h ≈ skirmish.
 	"suitengus_curse": {"kind": "debuff", "target": "enemy", "range_tiles": 4, "duration_rounds": 10,
-		"mods": [{"kind": "move_water_penalty", "value": -1}]},  # Water 1: move as though Water 1 Rank lower (the Reflexes -1 trait change deferred)
+		"mods": [{"kind": "move_water_penalty", "value": -1}, {"kind": "armor_tn", "value": -5}]},  # Water 1: move as Water 1 lower + Reflexes -1 (combat slice = -5 Armor TN; init slice left)
 	"the_rushing_wave": {"kind": "buff", "target": "ally", "range_tiles": 2, "duration_rounds": 1,
 		"mods": [{"kind": "free_move_tiles", "value": 1}]},  # Water 1: Free Move up to Water Ring ×10' (= +Water tiles to the free-move budget, read from the mover's own Water at move time)
 	"clarity_of_purpose": {"kind": "buff", "target": "ally", "aoe_radius": 2, "duration_rounds": 2,

@@ -6749,6 +6749,17 @@ costing a slot; non-caster interrupt no-op. LIMITATION: the speed-raise count is
 turn-based UI. Same PC-travel HOLD live-reachability caveat as the whole ASCII stack — driver-verified,
 not a live session.
 
+### Spell coverage — deferred sub-part: Suitengu's Curse Reflexes−1 (2026-06-27, runtime-verified 5/5)
+**Suitengu's Curse** (Water 1, s36 l63) GDD: "The target's Reflexes Rank is lowered by 1 and they move as
+though their Water is 1 Rank lower." Only the movement half (`move_water_penalty −1`) was wired; the
+Reflexes −1 was deferred. Added `{kind: armor_tn, value: −5}` to the debuff's mods — the clean combat slice
+of −1 Reflexes is exactly −5 Armor TN (Armor TN = Reflexes×5+5, the GDD formula; same treatment Curse of
+Weakness uses for "weaker defense"), installed as a timed modifier read by `get_armor_tn`. Runtime-verified
+5/5 (Godot 4.6.2, headless): the cast lowers the target's Armor TN 25→20 AND its free-move budget 3→2, both
+restore after the 10-round duration, the `armor_tn` timed modifier reads −5. LIMITATION: the initiative
+slice of −1 Reflexes is left (initiative is a per-round Reflexes roll, not a flat add — a flat magnitude
+would be invented; the move + Armor-TN slices are the GDD-exact, dominant combat effects).
+
 ### Spell coverage — deferred sub-part: Drawing the Void over-cap decay (2026-06-27, runtime-verified 8/8)
 **Drawing the Void** (Void 1, Ishiken, s37 l17) GDD: gain School Rank +1 Void Points; "If this exceeds the
 normal maximum, one extra Void Point is lost each Round the caster does not spend one." The flat over-cap
