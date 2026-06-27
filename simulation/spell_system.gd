@@ -523,7 +523,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_attack_kept", "value": 1},
 			{"kind": "burning_kiss", "value": 1}]},  # Fire 1: melee +1k1, +2k2 vs mounted/larger-than-human (GDD s35 l15)
 	"warning_flame": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 10,
-		"mods": [{"kind": "initiative_rolled", "value": 1}]},  # Fire 1: +1k0 Initiative (immune-surprise + Reactions +3 deferred)
+		"mods": [{"kind": "initiative_rolled", "value": 1}, {"kind": "initiative_score", "value": 3}]},  # Fire 1: +1k0 Initiative + the +3 Reactions-Stage bonus as a flat Initiative-score delta (immune-to-surprise has no turn-based model) (GDD s35 l93)
 	# Hooked buffs (effect read in _apply_hit / execute_melee_attack, not a stat total):
 	"the_souls_blade": {"kind": "buff", "target": "self", "duration_rounds": 5,
 		"mods": [{"kind": "weapon_stun", "value": 1}]},  # Fire 6: weapon auto-Stuns + overcomes Invulnerability

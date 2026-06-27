@@ -6524,6 +6524,20 @@ a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or t
 effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
 (see "ASCII Map System — Live-Reachability Status").
 
+### Spell coverage — deferred sub-part: Warning Flame Reactions-Stage +3 Initiative (2026-06-27, runtime-verified 3/3)
+**Warning Flame** (Fire 1 Battle, s35 l93) GDD: the target is **immune to being surprised**, gains **+1k0 to
+Initiative rolls** (wired), and **may add +3 to their Initiative total during the Reactions Stage of each
+Round**. The +3 Reactions bonus and immune-to-surprise were deferred. The turn-based orchestrator re-rolls
+initiative each round and reads a persistent `participant.initiative_modifier` (Clarity of Purpose / Song of
+the World), so the +3 maps cleanly to a flat `initiative_score` buff mod (`_apply_spell_buff` →
+`initiative_modifier += 3`) — the +3 is GDD-exact; the "during the Reactions Stage" timing has no separate
+sub-phase in the engine, so it applies per round (matching the existing `initiative_score` skirmish-length
+approximation). **Immune-to-surprise stays deferred** — the turn-based orchestrator has no surprise-round
+model (the only "surprise" references are Ephemeral Form spirit flavour), and the CombatController stealth
+layer's surprise (an UNAWARE stealth-kill) is a different pre-combat phase where this combat buff isn't
+active. Runtime-verified 3/3 (Godot 4.6.2, headless): both modifiers install (+1k0 + flat +3); the buffed
+character's mean Initiative rises 21.6 → 27.3 vs an identical unbuffed one.
+
 ### Spell coverage — deferred sub-part: Defense of the Firestorm wooden-weapon burn (2026-06-27, runtime-verified 13/13)
 **Defense of the Firestorm** (Fire 4 Defense, s35 l243) GDD: +20 Armor TN (wired) AND **all wooden weapons
 (including arrows and many polearms) burn instantly before reaching the target, dealing no damage**. The
