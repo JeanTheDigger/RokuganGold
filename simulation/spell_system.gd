@@ -364,7 +364,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"essence_of_void": {"kind": "status", "condition": "incapacitated", "save": "void_contested",
 		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 9999},  # Void 4: Contested Void → held immobile, unable to act (Concentration = skirmish; the per-round break roll is the deferred nuance)
 	# Void VP manipulation (2026-06-20): gain / restore / steal / lock Void Points.
-	"drawing_the_void": {"kind": "gain_void"},  # Void 1: caster gains School Rank +1 Void Points (over-cap allowed; the per-round over-cap decay is deferred)
+	"drawing_the_void": {"kind": "gain_void"},  # Void 1: caster gains School Rank +1 Void Points (over-cap allowed; over-cap decays -1/Round when no VP spent, s37)
 	"fill_the_emptiness": {"kind": "restore_void", "target": "ally", "range_tiles": 1},  # Void 4: restore a touched ally's Void Points to maximum
 	"void_release": {"kind": "steal_void", "range_tiles": 5},  # Void 3: Contested Void → steal 1 VP + 1 per 5-pt margin (capped at target's VP; over-cap caster gain allowed, 1hr expiry not modeled)
 	"kharmic_intent": {"kind": "pool_void", "range_tiles": 4},  # Void 3: pool VP with a willing ally, redistribute (fill ally to max, caster keeps remainder up to max)

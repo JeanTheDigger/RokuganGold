@@ -157,6 +157,7 @@ class Participant:
 	var center_stance_bonus_used: bool = false
 	var fatigue_days: int = 0        # consecutive days without rest
 	var void_spent_this_round: bool = false  # once-per-Round Void spend restriction (RAW)
+	var drawing_void_active: bool = false    # s37 Drawing the Void: over-cap VP decays -1/Round when none spent
 	var void_armor_tn_bonus: int = 0         # from Void spend_for_armor_tn (RAW)
 	var void_roll_pending_rolled: int = 0    # pending +N rolled dice from pre-declared Void spend (GDD s40)
 	var void_roll_pending_kept: int = 0      # pending +N kept dice from pre-declared Void spend (GDD s40)

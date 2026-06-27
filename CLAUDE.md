@@ -6749,6 +6749,20 @@ costing a slot; non-caster interrupt no-op. LIMITATION: the speed-raise count is
 turn-based UI. Same PC-travel HOLD live-reachability caveat as the whole ASCII stack — driver-verified,
 not a live session.
 
+### Spell coverage — deferred sub-part: Drawing the Void over-cap decay (2026-06-27, runtime-verified 8/8)
+**Drawing the Void** (Void 1, Ishiken, s37 l17) GDD: gain School Rank +1 Void Points; "If this exceeds the
+normal maximum, one extra Void Point is lost each Round the caster does not spend one." The flat over-cap
+grant was wired; the per-round decay was deferred. New `Participant.drawing_void_active` flag: set on cast
+when `current_void_points > max_void_points`; a decay pass at the top of `advance_round` (reading
+`void_spent_this_round` for the round that just ended, before it is reset) loses 1 over-cap point on any
+round the caster spent no VP, and **deactivates** once the pool is back at/under the normal max (never decays
+below it). A round in which the caster DID spend a VP skips the decay. Scoped to Drawing the Void via the
+flag (it does NOT touch Void Release's separate over-cap, whose GDD decay is 1-hour, not per-round —
+unmodeled). Runtime-verified 8/8 (Godot 4.6.2, headless): cast grants eff-rank+1 over the max (3→9), flags
+active; a no-spend round loses exactly 1 (9→8); a spent-VP round holds (8 stays 8); successive no-spend
+rounds drain 8→3 then stop + deactivate; never drops below the normal max. drv15 (balance_of_elements,
+heavy advance_round) re-passes — no regression.
+
 ### Spell coverage — deferred sub-part: Void Release margin-scaled steal (2026-06-27, runtime-verified 5/5)
 **Void Release** (Void 3, Ishiken, s37 l369) GDD: on a won Contested Void Roll the target loses one Void
 Point and the caster gains one, AND **one additional point is exchanged per 5-point margin** by which the

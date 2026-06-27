@@ -2789,6 +2789,12 @@ static func _complete_cast(
 		var gained: int = SpellSystem.get_effective_school_rank(caster, Enums.Ring.VOID) + 1
 		caster.current_void_points += gained  # over-cap allowed (s37 Drawing the Void)
 		res["void_gained"] = gained
+		# s37 Drawing the Void: if over the normal max, flag the per-round over-cap decay.
+		var dv_max: int = maxi(1, caster.max_void_points)
+		if caster.current_void_points > dv_max and state != null:
+			var dv_p: IndividualCombat.Participant = state.combat.participants.get(caster_id)
+			if dv_p != null:
+				dv_p.drawing_void_active = true
 	elif res.get("success", false) and eff.get("kind", "") == "restore_void":
 		res["void_restored"] = _apply_spell_restore_void(state, caster_id, target_id, target)
 	elif res.get("success", false) and eff.get("kind", "") == "steal_void":
@@ -7101,6 +7107,25 @@ static func advance_round(
 			"winner_id": state.combat.winner_id,
 		})
 		return {"type": "combat_over", "winner_id": state.combat.winner_id, "is_over": true}
+
+	# s37 Drawing the Void: while the caster is over their normal max Void Points, one over-cap point is
+	# lost each Round in which they did not spend a Void Point. Read void_spent_this_round for the round
+	# that just ended (it is reset below). Deactivates once back at/under the normal max.
+	for _dv_id: int in state.combat.participants.keys():
+		var _dv_p: IndividualCombat.Participant = state.combat.participants[_dv_id]
+		if not _dv_p.drawing_void_active:
+			continue
+		var _dv_c = chars_by_id.get(_dv_id)
+		if _dv_c == null:
+			_dv_p.drawing_void_active = false
+			continue
+		var _dv_cap: int = maxi(1, _dv_c.max_void_points)
+		if _dv_c.current_void_points <= _dv_cap:
+			_dv_p.drawing_void_active = false
+		elif not _dv_p.void_spent_this_round:
+			_dv_c.current_void_points -= 1
+			if _dv_c.current_void_points <= _dv_cap:
+				_dv_p.drawing_void_active = false
 
 	# Reset per-round participant flags before the new round begins.
 	for _p: IndividualCombat.Participant in state.combat.participants.values():
