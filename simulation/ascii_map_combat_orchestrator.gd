@@ -2557,6 +2557,12 @@ static func execute_cast_spell(
 			"type": "spell_freeze_water", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "freeze": res["freeze"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "whirlpool":
+		res["whirlpool"] = _apply_whirlpool(state, caster_id, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_whirlpool", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "whirlpool": res["whirlpool"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "curse_burning_hand":
 		res["curse"] = _apply_curse_burning_hand(
 			state, caster_id, caster, target_id, target, eff, dice_engine)
@@ -3798,6 +3804,39 @@ static func _apply_freeze_water(
 		"trapped": trapped, "drowned": drowned}
 
 
+## s36 Whirlpool (Water 5, Thunder): excite the Water kami into a rage, creating a massive whirlpool on
+## a large body of open water. Installs a persistent hazard zone (the per-round suck-under runs in
+## _process_spell_zones). Requires open water near the cast point — fails if no water tile lies within
+## the radius (the kami have nothing to churn). Centered on the caster. TN 30 (GDD-exact), radius from
+## the spell range_tiles. Within the Waves negates it; characters on dry land are unaffected.
+static func _apply_whirlpool(
+	state: MapCombatState, caster_id: int, eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var radius: int = int(eff.get("radius", 6))
+	var water_tiles: Array = [Enums.TileType.WATER_SHALLOW, Enums.TileType.WATER_DEEP,
+		Enums.TileType.WATER_RAPID, Enums.TileType.WATER_PADDY]
+	var has_water: bool = false
+	for y in range(maxi(0, center.y - radius), mini(state.map.height, center.y + radius + 1)):
+		for x in range(maxi(0, center.x - radius), mini(state.map.width, center.x + radius + 1)):
+			if maxi(absi(center.x - x), absi(center.y - y)) > radius:
+				continue
+			if int(state.map.get_tile(x, y)) in water_tiles:
+				has_water = true
+				break
+		if has_water:
+			break
+	if not has_water:
+		return {"ok": false, "reason": "no_open_water"}
+	state.spell_zones.append({
+		"kind": "whirlpool", "center": center, "radius": radius,
+		"tn": int(eff.get("tn", 30)),
+		"expiry_round": state.combat.round_number + int(eff.get("duration_rounds", 9999)),
+		"spell_id": spell_id, "caster_id": caster_id,
+	})
+	return {"ok": true, "center": center, "radius": radius}
+
+
 ## s35 Curse of the Burning Hand (Fire 6): bind a hostile Fire kami to an enemy on a WON Contested Fire
 ## Roll (the caster must win — the target resists if it wins). The cursed target is then wreathed in
 ## flame: each round (in advance_round) its OWN allies (same faction) standing adjacent take 3k3, and the
@@ -4212,6 +4251,33 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 					WoundSystem.apply_damage(pch, dice_engine.roll_and_keep(pdr, pdk, true).total, 0)
 				elif pch.honor >= 4.0:
 					WoundSystem.heal_wounds(pch, pheal)
+			surviving.append(zone)
+			continue
+		# s36 Whirlpool (Water 5): a raging vortex on open water. Each Round every character standing
+		# on a water tile within the radius rolls Athletics (Swimming)/Strength vs TN 30 or is sucked
+		# under and drowns. Characters on dry land are unaffected. Within the Waves negates it.
+		if String(zone.get("kind", "damage_zone")) == "whirlpool":
+			var wcenter: Vector2i = zone["center"]
+			var wradius: int = int(zone.get("radius", 6))
+			var wtn: int = int(zone.get("tn", 30))
+			var water_tiles: Array = [Enums.TileType.WATER_SHALLOW, Enums.TileType.WATER_DEEP,
+				Enums.TileType.WATER_RAPID, Enums.TileType.WATER_PADDY]
+			for cid in state.positions.keys():
+				var wpos: Vector2i = state.positions[cid]
+				if maxi(absi(wcenter.x - wpos.x), absi(wcenter.y - wpos.y)) > wradius:
+					continue
+				if int(state.map.get_tile(wpos.x, wpos.y)) not in water_tiles:
+					continue  # only swimmers (those in the water) are at risk
+				var wch = state.combatants.get(cid, null)
+				if wch == null or CharacterStats.is_dead(wch):
+					continue
+				var wpp: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+				if wpp != null and IndividualCombat.get_timed_modifier_total(wpp, "within_the_waves") > 0:
+					continue  # the air bubble holds them safe from the vortex
+				var swim: Dictionary = SkillResolver.resolve_skill_check(
+					wch, dice_engine, "Athletics", wtn, 0, "Swimming", Enums.Trait.STRENGTH)
+				if not swim.get("success", false):
+					_apply_pit_death(state, cid, wpos)
 			surviving.append(zone)
 			continue
 		var dr_rolled: int = int(zone.get("dr_rolled", 0))
@@ -5727,6 +5793,16 @@ static func _apply_pit_death(state: MapCombatState, char_id: int, pit_pos: Vecto
 	var ch: L5RCharacterData = state.combatants.get(char_id, null)
 	if ch == null or CharacterStats.is_dead(ch):
 		return
+	# s36 Within the Waves: an air-bubble sphere protects the caster from drowning. A WATER_DEEP
+	# submersion (drowning) is negated; a VOID fall is NOT (the bubble holds no one over a chasm).
+	if int(state.map.get_tile(pit_pos.x, pit_pos.y)) == Enums.TileType.WATER_DEEP:
+		var wp: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+		if wp != null and IndividualCombat.get_timed_modifier_total(wp, "within_the_waves") > 0:
+			state.combat_log.append({
+				"type": "within_the_waves_survives_drowning",
+				"round": state.combat.round_number, "char_id": char_id,
+			})
+			return
 	ch.wounds_taken = CharacterStats.get_total_wound_capacity(ch) + 1
 	state.combat_log.append({
 		"type": "pit_death",

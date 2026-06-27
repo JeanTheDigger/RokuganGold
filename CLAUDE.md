@@ -7081,6 +7081,27 @@ headless): can_cast gate; activate sets the buff; Lore roll mean rises (14353 vs
 Courtier (non-Lore) unaffected; non-knower cannot cast. 164 combat effects (Wisdom & Clarity is a world-sim
 recall buff, not a combat effect).
 
+### Spell coverage — Within the Waves + Whirlpool (water spells) (2026-06-27, owner-directed, static-only)
+Two paired Water spells, previously deferred ("no underwater mechanic" / "open-water hazard, naval blocked").
+The tile-combat engine DOES model water-drowning (deep-water + Yuki's Touch route through `_apply_pit_death`),
+so both wire faithfully against it.
+- **Within the Waves (Water 4, s36)** — an air-bubble sphere lets the caster move/breathe beneath the
+  surface. New `within_the_waves` self `buff` (SPELL_COMBAT_EFFECTS, 100-round duration ~ the skirmish)
+  installing a `within_the_waves` timed modifier. A guard in `_apply_pit_death` negates a **WATER_DEEP
+  drowning death** (and Yuki's Touch / Whirlpool suffocation) when the victim holds the modifier — a VOID
+  fall is NOT negated (the bubble holds no one over a chasm). Reachable via the NPC self-buff path / PC cast.
+- **Whirlpool (Water 5, Thunder, s36)** — excite the Water kami into a vortex on open water. New `whirlpool`
+  zone kind: `_apply_whirlpool` installs a persistent hazard zone (centered on the caster, radius 6 = ~200',
+  TN 30 GDD-exact), failing the cast if no water tile lies in the radius (`no_open_water` — the kami have
+  nothing to churn). A per-round pass in `_process_spell_zones` makes every character **standing on a water
+  tile** within the radius roll Athletics (Swimming)/Strength vs TN 30 or be sucked under and drown (via
+  `_apply_pit_death`); characters on dry land are unaffected; Within the Waves negates it. PC-tactical (not
+  in the NPC offense picker — situational, needs open water, like Yuki's Touch / Wall of Earth).
+Both parse-clean; verified by structural review + parse-trace (the whirlpool zone mirrors the freeze_water /
+purify zone pattern; the within_the_waves guard mirrors the established `get_timed_modifier_total` reads) —
+the combat orchestrator can't run under headless `-s` (autoload stall), same caveat as the whole ASCII stack.
+166 combat effects.
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

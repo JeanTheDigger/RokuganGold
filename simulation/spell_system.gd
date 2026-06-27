@@ -146,6 +146,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# walkable ice; everyone standing in the water (all factions) is trapped (Entangled), breaking
 	# free via Strength vs the caster's Water roll. Deep-water victims drown (owner 2026-06-25).
 	"yukis_touch": {"kind": "freeze_water", "range_tiles": 20, "duration_rounds": 9999},
+	"whirlpool": {"kind": "whirlpool", "radius": 6, "tn": 30, "duration_rounds": 9999},  # Water 5: open-water vortex — swimmers in the area roll Athletics(Swimming)/Strength TN 30 each Round or drown
 	# Fire 6 Curse of the Burning Hand: a Contested-Fire curse on an enemy at 10' (2 tiles). The cursed
 	# target is wreathed in flame — each round its OWN allies (same faction) adjacent take 3k3 and the
 	# flammable tile underfoot ignites. Never burns the target's attackers. Infinite -> skirmish (owner
@@ -484,6 +485,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "reduction", "value": "earth_plus_rank"}]},  # Earth 1: Reduction = Earth + School Rank
 	"hands_of_clay": {"kind": "buff", "target": "self", "duration_rounds": 100,
 		"mods": [{"kind": "hands_of_clay", "value": 1}]},  # Earth 2: merge with stone — execute_climb auto-succeeds (cliffs/walls), no fall on a down-climb
+	"within_the_waves": {"kind": "buff", "target": "self", "duration_rounds": 100,
+		"mods": [{"kind": "within_the_waves", "value": 1}]},  # Water 4: air-bubble sphere — the caster cannot drown on deep water (immune to WATER_DEEP / Yuki's Touch / Whirlpool suffocation)
 	"cloak_of_the_miya": {"kind": "buff", "target": "self", "duration_rounds": 5,
 		"mods": [{"kind": "armor_tn", "value": "water_plus_rank"}]},  # Water 2: Armor TN += Water + School Rank
 	# s37 Altering the Course (Void 2 ishiken): a self buff installing the `multi_void_spend`
@@ -1386,7 +1389,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"symbol_of_water":               {"e": 3, "m": 4, "s": 10},
 	"the_emperors_road":             {"e": 3, "m": 4, "s": 11},
 	"the_path_not_taken":            {"e": 3, "m": 4, "s": 0},   # WIRED (PC-callable): transfer unused daily spell slots between Rings for the day   # transfers a spell slot to ally — COMBAT_ONLY
-	"within_the_waves":              {"e": 3, "m": 4, "s": 0},
+	"within_the_waves":              {"e": 3, "m": 4, "s": 0},   # WIRED (self buff): air-bubble — immune to WATER_DEEP / Yuki's Touch / Whirlpool drowning
 	# ML5
 	"chi_reversal":                  {"e": 3, "m": 5, "s": 0},
 	"ever_changing_waves":           {"e": 3, "m": 5, "s": 0},
@@ -1395,7 +1398,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"open_the_waves":                {"e": 3, "m": 5, "s": 11},
 	"power_of_the_ocean":            {"e": 3, "m": 5, "s": 0},
 	"suitengus_embrace":             {"e": 3, "m": 5, "s": 0},
-	"whirlpool":                     {"e": 3, "m": 5, "s": 0},
+	"whirlpool":                     {"e": 3, "m": 5, "s": 0},   # WIRED (whirlpool zone): open-water vortex — swimmers in area drown on a failed Athletics(Swimming)/Strength TN 30 each Round
 	# ML6
 	"breath_of_mist":                {"e": 3, "m": 6, "s": 16},
 	"opening_the_veil":              {"e": 3, "m": 6, "s": 0},
