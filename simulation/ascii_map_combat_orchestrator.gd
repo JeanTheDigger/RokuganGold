@@ -2822,6 +2822,12 @@ static func _complete_cast(
 			"type": "spell_trait_swap", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "result": res["trait_swap"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "trait_transfer":
+		res["trait_transfer"] = _apply_ebbing_strength(state, caster_id, caster, target_id, target, eff)
+		state.combat_log.append({
+			"type": "spell_trait_transfer", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "result": res["trait_transfer"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "ring_change":
 		res["ring_change"] = _apply_spell_ring_change(state, caster_id, caster, target_id, target, eff, dice_engine)
 		state.combat_log.append({
@@ -3832,6 +3838,13 @@ static func _apply_spell_ring_change(
 	p.ring_deltas[ring] = int(p.ring_deltas.get(ring, 0)) + delta
 	p.ring_delta_expiry[ring] = expiry
 	IndividualCombat.sync_ring_deltas(p, who)
+	# s34 The Wolf's Mercy: an accompanying Trait change (Strength -1) via the per-Trait layer.
+	var dur_tc: int = int(eff.get("duration_rounds", 10))
+	var _tc_enums: Dictionary = {"strength": Enums.Trait.STRENGTH, "agility": Enums.Trait.AGILITY,
+		"reflexes": Enums.Trait.REFLEXES, "stamina": Enums.Trait.STAMINA, "willpower": Enums.Trait.WILLPOWER,
+		"perception": Enums.Trait.PERCEPTION, "intelligence": Enums.Trait.INTELLIGENCE, "awareness": Enums.Trait.AWARENESS}
+	for tc in eff.get("also_trait", []):
+		_apply_trait_delta(state, who_id, who, p, _tc_enums[String(tc.get("trait", "strength"))], int(tc.get("value", 0)), dur_tc)
 	# A ring-down on an already-wounded target may immediately kill (reduced capacity < wounds).
 	var died: bool = delta < 0 and CharacterStats.is_dead(who)
 	return {"id": who_id, "ring": ring, "delta": delta, "expires_round": expiry,
@@ -4054,6 +4067,53 @@ static func _apply_trait_delta(
 	p.trait_delta_expiry[p_trait] = expiry
 	IndividualCombat.sync_trait_deltas(p, who)
 	return delta < 0 and CharacterStats.is_dead(who)
+
+
+## s36 Ebbing Strength (Water 1): transfer one of the caster's own Physical Traits to the target. The
+## caster loses up to (Water School Rank) ranks of the trait; the target gains the same amount. GDD cap:
+## no Trait may be enhanced above double its normal (base) rank, so the transferred amount is clamped to
+## the target's headroom AND the caster's available trait (effective Trait floors at 1 via _apply_trait_delta,
+## which is why the caster-falls-unconscious-at-0 nuance is moot here). Trait = the spell's "trait"
+## (Strength is the combat default; PC choice of which Physical Trait is deferred to the cast UI).
+static func _apply_ebbing_strength(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary,
+) -> Dictionary:
+	if target == null or CharacterStats.is_dead(target):
+		return {"reason": "no_target"}
+	if caster == null or CharacterStats.is_dead(caster):
+		return {"reason": "no_caster"}
+	if String(state.factions.get(target_id, "")) != String(state.factions.get(caster_id, "")):
+		return {"reason": "not_an_ally"}
+	var rng: int = int(eff.get("range_tiles", 1))
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		if _chebyshev(state.positions[caster_id], state.positions[target_id]) > rng:
+			return {"reason": "out_of_range"}
+	var cp: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+	var tp: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if cp == null or tp == null:
+		return {"reason": "not_in_combat"}
+	var tc_enums: Dictionary = {"strength": Enums.Trait.STRENGTH, "agility": Enums.Trait.AGILITY,
+		"stamina": Enums.Trait.STAMINA, "reflexes": Enums.Trait.REFLEXES}
+	var te: int = tc_enums.get(String(eff.get("trait", "strength")), Enums.Trait.STRENGTH)
+	var requested: int = int(eff.get("amount", 1))
+	if String(eff.get("amount", "")) == "water_school_rank":
+		requested = SpellSystem.get_effective_school_rank(caster, Enums.Ring.WATER)
+	if requested <= 0:
+		return {"reason": "no_school_rank"}
+	# Caster can give down to an effective Trait of 1.
+	var caster_give_room: int = caster.get_trait_value(te) - 1
+	# Target headroom: no Trait above double its base (un-modified) value.
+	var target_base: int = target.get_trait_value(te) - int(tp.trait_deltas.get(te, 0))
+	var target_room: int = (target_base * 2) - target.get_trait_value(te)
+	var amount: int = mini(requested, mini(caster_give_room, target_room))
+	if amount <= 0:
+		return {"reason": "no_transfer_room", "id": target_id}
+	var dur: int = int(eff.get("duration_rounds", 3))
+	_apply_trait_delta(state, caster_id, caster, cp, te, -amount, dur)
+	_apply_trait_delta(state, target_id, target, tp, te, amount, dur)
+	return {"id": target_id, "trait": te, "amount": amount,
+		"expires_round": state.combat.round_number + dur}
 
 
 ## Expire combat-scoped Trait deltas (mirrors _expire_ring_deltas). On expiry, re-checks death since
