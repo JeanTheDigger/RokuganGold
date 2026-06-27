@@ -2856,9 +2856,12 @@ static func _process_storm_assault_results(
 		var dotm: bool = _cast_drawing_on_the_mountain(
 			siege_settlement_id, characters_by_id, dice_engine)
 		var fort_bonus: int = SiegeSystem.get_storm_defense_bonus(true, dotm)
+		# s34 The Earth Flows: a Battle shugenja on either side re-shapes the ground (attack bonus).
+		var ef_atk: int = _cast_the_earth_flows(atk_dicts, characters_by_id, dice_engine)
+		var ef_def: int = _cast_the_earth_flows(def_dicts, characters_by_id, dice_engine)
 		var battle_result: Dictionary = resolve_and_reconcile_battle(
 			atk_states, def_states, Enums.BattleTerrainType.URBAN,
-			dice_engine, settlements, false, fort_bonus,
+			dice_engine, settlements, false, fort_bonus, {}, ef_atk, ef_def,
 		)
 
 		var captor_lord_id: int = atk_dicts[0].get("lord_id", -1) if not atk_dicts.is_empty() else -1
@@ -2900,6 +2903,28 @@ static func _find_siege_by_settlement(
 ## settlement who KNOWS the spell hardens the wall against an incoming storm assault. Casts it (spends
 ## a slot, rolls vs the Earth-5 TN); returns true on the first successful cast. Rarely fires (no
 ## world-gen shugenja knows this Earth-5 spell by default) — but the wiring is correct when one does.
+## s34 The Earth Flows (Earth 4, Battle): a Kitsu Battle shugenja attached to an army (a company
+## commander who knows the spell) re-arranges the battlefield favorably before the battle. Deliberate
+## cast in battle support (same pattern as Drawing on the Mountain at a siege — owner-blessed). Scans the
+## side's company commander_ids for the first living shugenja who can cast it; on success consumes the
+## Earth slot and returns the side's flat attack bonus (PROVISIONAL EARTH_FLOWS_ATTACK_BONUS), else 0.
+static func _cast_the_earth_flows(
+	side_company_dicts: Array, characters_by_id: Dictionary, dice: DiceEngine,
+) -> int:
+	for cd: Variant in side_company_dicts:
+		if not cd is Dictionary:
+			continue
+		var cmd_id: int = int((cd as Dictionary).get("commander_id", -1))
+		var c: L5RCharacterData = characters_by_id.get(cmd_id, null)
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if not SpellSystem.can_cast(c, "the_earth_flows"):
+			continue
+		if SpellSystem.resolve_cast(c, "the_earth_flows", dice).get("success", false):
+			return ArmyCombatSystem.EARTH_FLOWS_ATTACK_BONUS
+	return 0
+
+
 static func _cast_drawing_on_the_mountain(
 	settlement_id: int, characters_by_id: Dictionary, dice: DiceEngine,
 ) -> bool:
@@ -14548,10 +14573,13 @@ static func _resolve_army_battles(
 		var fort_bonus: int = _get_fortification_bonus(
 			battle_province_id, defender_clan, settlements, provinces,
 		)
+		# s34 The Earth Flows: a Battle shugenja on either side re-shapes the ground (attack bonus).
+		var ef_atk: int = _cast_the_earth_flows(atk_company_dicts, characters_by_id, dice_engine)
+		var ef_def: int = _cast_the_earth_flows(def_company_dicts, characters_by_id, dice_engine)
 
 		var battle_result: Dictionary = resolve_and_reconcile_battle(
 			atk_states, def_states, battle_terrain,
-			dice_engine, settlements, false, fort_bonus, worship_maluses,
+			dice_engine, settlements, false, fort_bonus, worship_maluses, ef_atk, ef_def,
 		)
 
 		var field_victor: String = battle_result.get("victor", "draw")
@@ -17344,12 +17372,14 @@ static func resolve_and_reconcile_battle(
 	is_amphibious: bool = false,
 	fortification_bonus: int = 0,
 	worship_maluses: Dictionary = {},
+	earth_flows_attacker: int = 0,
+	earth_flows_defender: int = 0,
 ) -> Dictionary:
 	_inject_worship_battle_maluses(attacker_states, worship_maluses)
 	_inject_worship_battle_maluses(defender_states, worship_maluses)
 	var battle_result: Dictionary = ArmyCombatSystem.resolve_battle(
 		attacker_states, defender_states, terrain, dice_engine,
-		is_amphibious, fortification_bonus,
+		is_amphibious, fortification_bonus, earth_flows_attacker, earth_flows_defender,
 	)
 
 	var pu_data: Dictionary = ArmyCombatSystem.extract_pu_reconciliation_data(

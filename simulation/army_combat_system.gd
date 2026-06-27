@@ -112,6 +112,12 @@ const UNIT_STATS: Dictionary = {
 }
 
 const GARRISON_HOME_DEFENSE_BONUS: int = 2
+# s34 The Earth Flows (Earth 4, Battle): a Kitsu Battle shugenja re-arranges the battlefield favorably.
+# The GDD grants +1k1 to individual Mass Battle Table rolls for the caster's side; the abstract
+# company-attrition model has no roll-and-keep, so this maps to a flat attack bonus on every company of
+# the casting side. PROVISIONAL magnitude (matches the conditional_attack_bonus tier +2) — flagged for
+# owner override. The "+3k2 commander's Mass Battle roll" and the dual-cast earthquake are not modeled.
+const EARTH_FLOWS_ATTACK_BONUS: int = 2
 
 const ASHIGARU_SPEARMEN_VS_CAVALRY_BONUS: int = 3
 
@@ -705,9 +711,11 @@ static func resolve_battle(
 	dice_engine: DiceEngine,
 	is_amphibious: bool = false,
 	fortification_bonus: int = 0,
+	earth_flows_attacker: int = 0,
+	earth_flows_defender: int = 0,
 ) -> Dictionary:
-	_apply_setup_modifiers(attacker_states, terrain, false, is_amphibious, fortification_bonus)
-	_apply_setup_modifiers(defender_states, terrain, true, is_amphibious, fortification_bonus)
+	_apply_setup_modifiers(attacker_states, terrain, false, is_amphibious, fortification_bonus, earth_flows_attacker)
+	_apply_setup_modifiers(defender_states, terrain, true, is_amphibious, fortification_bonus, earth_flows_defender)
 
 	var round_log: Array = []
 	var round_num: int = 0
@@ -753,6 +761,7 @@ static func _apply_setup_modifiers(
 	is_defender: bool,
 	is_amphibious: bool,
 	fortification_bonus: int,
+	earth_flows_bonus: int = 0,
 ) -> void:
 	for bc: Dictionary in states:
 		if _has_no_terrain_penalties(bc["unit_type"]):
@@ -772,6 +781,9 @@ static func _apply_setup_modifiers(
 			bc["terrain_defense_mod"] += fortification_bonus
 		if bc["unit_type"] == Enums.CompanyUnitType.GARRISON and is_defender and fortification_bonus > 0:
 			bc["terrain_defense_mod"] += GARRISON_HOME_DEFENSE_BONUS
+		# s34 The Earth Flows: a flat attack bonus to every company on the casting side.
+		if earth_flows_bonus > 0:
+			bc["terrain_attack_mod"] = int(bc.get("terrain_attack_mod", 0)) + earth_flows_bonus
 		if _is_flanking_cavalry(bc["unit_type"]):
 			bc["terrain_flanking_disabled"] = bc.get("terrain_flanking_disabled", false)
 

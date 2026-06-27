@@ -7150,6 +7150,25 @@ structural-verified (reuses the fog ray-block + zone patterns; the orchestrator 
 `-s`). 166 combat effects. LIMITATION: only the ranged-vision screen is modeled (the broader "convince an
 NPC the terrain is impassable / a hazard" deception would need faction-aware pathfinding — deferred).
 
+### Spell coverage — The Earth Flows (mass-battle) (2026-06-27, owner-directed PROVISIONAL, runtime-verified)
+**The Earth Flows (Earth 4, Battle, s34)** — a Kitsu Battle shugenja re-arranges the battlefield favorably:
+GDD grants +3k2 to the commander's Mass Battle roll and +1k1 to individual Mass Battle Table rolls for the
+caster's side. Previously deferred ("mass-battle is abstract company-attrition, no commander-roll to buff,
+AND no deliberate-cast vehicle"). Wired with the **Drawing on the Mountain pattern** (owner-blessed for the
+siege): the abstract `ArmyCombatSystem.resolve_battle` has no roll-and-keep, so the +1k1 individual buff maps
+to a **flat attack bonus on every company of the casting side** (`EARTH_FLOWS_ATTACK_BONUS = 2` PROVISIONAL,
+matching the conditional_attack_bonus tier — flagged for owner override). `resolve_battle` /
+`_apply_setup_modifiers` gain `earth_flows_attacker`/`earth_flows_defender` params (default 0 → zero
+regression) that add to each company's `terrain_attack_mod`. Deliberate-cast vehicle:
+`DayOrchestrator._cast_the_earth_flows(side_company_dicts, characters_by_id, dice)` scans the side's company
+commander_ids for the first living shugenja who can cast it, casts it (consumes the Earth slot), and returns
+the bonus; wired into BOTH battle callers (storm-assault + field battle), per side. The +3k2 commander roll
+and the dual-cast earthquake are not modeled (no commander Battle-roll / no earthquake in the abstract
+system). Runtime-verified 3/3 (Godot 4.6.2, headless): the EF bonus raises the effective attack (8→10), the
+constant is 2, zero-bonus is a no-op (regression-safe). The `_cast_the_earth_flows` vehicle is structural-
+verified (mirrors the runtime-verified `_cast_drawing_on_the_mountain`). 166 combat effects (world-sim
+mass-battle buff, not a combat-orchestrator effect).
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

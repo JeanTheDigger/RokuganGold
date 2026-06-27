@@ -1253,7 +1253,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"maw_of_the_earth":              {"e": 1, "m": 4, "s": 0},
 	"sapphire_strike":               {"e": 1, "m": 4, "s": 0},
 	"symbol_of_earth":               {"e": 1, "m": 4, "s": 10},
-	"the_earth_flows":               {"e": 1, "m": 4, "s": 0},
+	"the_earth_flows":               {"e": 1, "m": 4, "s": 0},   # WIRED (mass battle): a Battle shugenja (company commander) on a side casts it pre-battle for a flat attack bonus (EARTH_FLOWS_ATTACK_BONUS, PROVISIONAL)
 	"tomb_of_jade":                  {"e": 1, "m": 4, "s": 2},
 	"wall_of_earth":                 {"e": 1, "m": 4, "s": 0},
 	# ML5
