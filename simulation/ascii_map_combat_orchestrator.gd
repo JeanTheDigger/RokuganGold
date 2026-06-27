@@ -5055,11 +5055,17 @@ static func _apply_spell_steal_void(
 		return {"reason": "no_void_to_steal"}
 	var cv: int = maxi(1, SpellSystem.get_ring_value(caster, Enums.Ring.VOID))
 	var tv: int = maxi(1, SpellSystem.get_ring_value(target, Enums.Ring.VOID))
-	if dice_engine.roll_and_keep(cv, cv, true).total <= dice_engine.roll_and_keep(tv, tv, true).total:
+	var croll: int = dice_engine.roll_and_keep(cv, cv, true).total
+	var troll: int = dice_engine.roll_and_keep(tv, tv, true).total
+	if croll <= troll:
 		return {"reason": "resisted", "id": target_id}
-	target.current_void_points -= 1
-	caster.current_void_points += 1
-	return {"id": target_id, "stolen": 1}
+	# s37 Void Release: steal 1 Void Point + 1 more per 5-point margin (capped at what the target has).
+	# The caster's gained points may exceed their normal maximum (temporary; the 1-hour expiry of unused
+	# over-cap points is not modeled — no VP-expiry tracking).
+	var steal: int = mini(1 + int((croll - troll) / 5.0), target.current_void_points)
+	target.current_void_points -= steal
+	caster.current_void_points += steal
+	return {"id": target_id, "stolen": steal, "margin": croll - troll}
 
 
 ## Instant-kill spell (s35 Consumed by Five Fires / s37 Unmake the World): reduce the target to

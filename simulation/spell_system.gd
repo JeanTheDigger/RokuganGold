@@ -366,7 +366,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Void VP manipulation (2026-06-20): gain / restore / steal / lock Void Points.
 	"drawing_the_void": {"kind": "gain_void"},  # Void 1: caster gains School Rank +1 Void Points (over-cap allowed; the per-round over-cap decay is deferred)
 	"fill_the_emptiness": {"kind": "restore_void", "target": "ally", "range_tiles": 1},  # Void 4: restore a touched ally's Void Points to maximum
-	"void_release": {"kind": "steal_void", "range_tiles": 5},  # Void 3: Contested Void → steal 1 Void Point from the target (margin/5 extra deferred)
+	"void_release": {"kind": "steal_void", "range_tiles": 5},  # Void 3: Contested Void → steal 1 VP + 1 per 5-pt margin (capped at target's VP; over-cap caster gain allowed, 1hr expiry not modeled)
 	"kharmic_intent": {"kind": "pool_void", "range_tiles": 4},  # Void 3: pool VP with a willing ally, redistribute (fill ally to max, caster keeps remainder up to max)
 	"the_empty_voice": {"kind": "buff", "target": "self", "duration_rounds": 50,
 		"mods": [{"kind": "empty_voice", "value": 1}]},  # Void 2: silent casting (forward-wired empty_voice modifier; dormant until casting is speech/noise-gated)

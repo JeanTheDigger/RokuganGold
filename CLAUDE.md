@@ -6749,6 +6749,20 @@ costing a slot; non-caster interrupt no-op. LIMITATION: the speed-raise count is
 turn-based UI. Same PC-travel HOLD live-reachability caveat as the whole ASCII stack — driver-verified,
 not a live session.
 
+### Spell coverage — deferred sub-part: Void Release margin-scaled steal (2026-06-27, runtime-verified 5/5)
+**Void Release** (Void 3, Ishiken, s37 l369) GDD: on a won Contested Void Roll the target loses one Void
+Point and the caster gains one, AND **one additional point is exchanged per 5-point margin** by which the
+caster's roll exceeds the target's; the caster's temporary points may exceed their normal maximum. Only the
+flat 1-point steal was wired; the margin scaling + over-cap were deferred. `_apply_spell_steal_void` now
+captures both contested totals and computes `steal = min(1 + (croll − troll)/5, target VP)` — so a wide gap
+transfers several points (capped at what the target actually has, GDD-faithful), and the caster's pool may
+rise past its normal max (the over-cap is allowed; the GDD "1-hour expiry of unused over-cap points" is NOT
+modeled — there is no VP-expiry timer, documented). Runtime-verified 5/5 (Godot 4.6.2, headless, 80 trials/
+case): a strong caster (Void 6) vs a weak target with 10 VP steals 3–10 (margin-scaled) and the caster's
+gained VP exceeds its Void-Ring max (over-cap observed); a target with only 1 VP yields exactly 1 (cap at
+available); a weak caster (Void 1) vs a strong target (Void 6) is resisted (no points move). Reuses the
+existing `steal_void` dispatch — no schema change.
+
 ### Spell coverage — gap sweep + Hands of the Tides position-swap (2026-06-22, runtime-verified 8/8)
 Swept all COMBAT_ONLY-and-unwired s31–37 library spells (~63 by an `s:0`-vs-`SPELL_COMBAT_EFFECTS`
 diff) for any newly wirable with this session's machinery (transform / decoy / persistent-fear /
