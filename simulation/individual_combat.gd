@@ -239,6 +239,10 @@ class Participant:
 	# On fire (s54.10 Everything Burns / s56.6.6): set by a fire creature's melee
 	# hit; takes 1k1 at the start of each round until a Simple Action extinguishes it.
 	var on_fire: bool = false
+	# s35 Follow the Flame: while on fire from this spell, take a FIXED amount (half the impact Wounds,
+	# rounded down) each Round instead of the generic 1k1, until doused or the spell duration expires.
+	var spell_burn_wounds: int = 0   # 0 = use the generic 1k1 on-fire burn
+	var spell_burn_expiry: int = 0   # Round at which the spell-fed fire goes out
 	var absorb_pool: int = 0  # s34 Power of the Earth Dragon: remaining Wounds the ward absorbs (0 = none)
 	# s36 Silent Waters: a pre-cast ML<=3 spell held until a physical trigger fires it. {} = none.
 	# {spell_id, trigger} — trigger "when_struck" releases it the next time this participant is hit.

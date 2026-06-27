@@ -3167,6 +3167,15 @@ static func _apply_spell_combat_damage(
 		var rider: Dictionary = eff.get("rider", {})
 		if not rider.is_empty() and not dead:
 			h["rider"] = _apply_spell_rider(state, caster, ch, int(t["id"]), rider, dice_engine)
+		# s35 Follow the Flame: the struck target catches fire, taking half the impact Wounds each
+		# subsequent Round for the spell duration.
+		if eff.get("burn_half", false) and not dead and dmg > 0:
+			var burn_p: IndividualCombat.Participant = state.combat.participants.get(int(t["id"]), null)
+			if burn_p != null:
+				burn_p.spell_burn_wounds = int(dmg / 2)
+				burn_p.spell_burn_expiry = state.combat.round_number + int(eff.get("burn_duration", 5))
+				burn_p.on_fire = true
+				h["burn_half"] = burn_p.spell_burn_wounds
 		hits.append(h)
 	# Secondary bystander AoE (s35 Fury of Osano-Wo): everyone within `radius` of the TARGET tile
 	# makes a save or takes a condition — distinct from `rider` (damaged target only). The primary
@@ -5368,6 +5377,7 @@ static func _apply_spell_extinguish(
 		var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
 		if p != null and p.on_fire:
 			p.on_fire = false
+			p.spell_burn_wounds = 0  # doused: a spell-fed fire (Follow the Flame) also goes out
 			creatures_doused += 1
 	return {"tiles_cleared": tiles_cleared, "creatures_doused": creatures_doused}
 
@@ -7587,7 +7597,19 @@ static func advance_round(
 			if FireSystem.is_burning(state.map, _fpos.x, _fpos.y):
 				WoundSystem.apply_damage(_fc, _fire_damage_for(_fc, dice_engine), 0)
 			if _tp.on_fire and not CharacterStats.is_dead(_fc):
-				WoundSystem.apply_damage(_fc, _fire_damage_for(_fc, dice_engine), 0)
+				# s35 Follow the Flame: a spell-fed fire deals a FIXED amount (half the impact) each
+				# Round; on duration expiry the fire goes out. Otherwise the generic 1k1 on-fire burn.
+				var _burn: int = 0
+				if _tp.spell_burn_wounds > 0:
+					if state.combat.round_number < _tp.spell_burn_expiry:
+						_burn = _tp.spell_burn_wounds
+					else:
+						_tp.spell_burn_wounds = 0
+						_tp.on_fire = false
+				if _burn <= 0 and _tp.on_fire:
+					_burn = _fire_damage_for(_fc, dice_engine)
+				if _burn > 0:
+					WoundSystem.apply_damage(_fc, _burn, 0)
 
 		# s35 Curse of the Burning Hand: a cursed target is wreathed in flame that burns its OWN
 		# allies (same faction) standing adjacent (3k3 each round) and ignites the flammable tile

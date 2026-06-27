@@ -134,7 +134,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"impact_rolled": 3, "impact_kept": 2, "aoe_radius": 4, "range_tiles": 10,
 		"aoe_hits": "all", "duration_rounds": 2},  # Fire 2: 3k2 impact + 2k1/round, 20' radius
 	"follow_the_flame": {"kind": "damage", "dr_rolled": 6, "dr_kept": 5,
-		"range_tiles": 60, "aoe_radius": 0},  # Fire 5: 6k5 stream of fire, 300' (persistent burn deferred)
+		"range_tiles": 60, "aoe_radius": 0, "burn_half": true, "burn_duration": 5},  # Fire 5: 6k5 stream of fire, 300'; the struck target catches fire, taking half the impact Wounds (floor) each Round for the 5-Round duration until doused (GDD s35 l317). Per-Round re-targeting to a different LoS target is a PC cast-UI nuance (deferred).
 	# Air 6 [CR] Wrath of Kaze-no-Kami (Hurricane): whole-map storm, eye (20'=4 tiles) follows the
 	# caster. Per minute (= ROUNDS_PER_MINUTE Rounds, owner 2026-06-25) everyone OUTSIDE the eye —
 	# all factions — takes 1k1 Wounds, or on a 1-in-10 a 5k5 debris strike that also flings them
