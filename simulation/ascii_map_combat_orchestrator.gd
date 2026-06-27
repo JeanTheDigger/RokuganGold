@@ -2571,6 +2571,11 @@ static func _complete_cast(
 			"type": "spell_status", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "status": res["spell_status"],
 		})
+		# s35 Eyes of the Phoenix: Blinds the target AND, on cast, every ally of the target suffers a
+		# Fear 3 effect (undead/immune are exempt). One-shot burst on the target's whole faction.
+		if spell_id == "eyes_of_the_phoenix" and target != null:
+			res["fear_burst"] = _apply_fear_burst(
+				state, String(state.factions.get(target_id, FACTION_NEUTRAL)), 3, target_id, dice_engine)
 	elif res.get("success", false) and eff.get("kind", "") == "cleanse":
 		res["spell_cleanse"] = _apply_spell_cleanse(state, caster_id, caster, eff, target_id)
 		state.combat_log.append({
@@ -7525,6 +7530,43 @@ static func _apply_maho_fear(
 	if IndividualCombat.CONDITION_AFRAID not in p.conditions:
 		p.conditions.append(IndividualCombat.CONDITION_AFRAID)
 	return {"id": target_id, "afraid": true}
+
+
+## One-shot Fear-N burst on every living member of `faction` (excluding `exclude_id`) — s35 Eyes of
+## the Phoenix (the target's allies suffer Fear 3). Each rolls Willpower (+ Kshatriya/buff fear-resist
+## bonuses) vs TN 5 + N×5 (s22.3); a failure sets a persistent spell_afraid + AFRAID (skipped for
+## immune_to_fear). Returns {afraid: [ids], resisted: [ids]}.
+static func _apply_fear_burst(
+	state: MapCombatState, faction: String, fear_rank: int, exclude_id: int, dice: DiceEngine,
+) -> Dictionary:
+	var afraid_ids: Array = []
+	var resisted_ids: Array = []
+	var tn: int = 5 + fear_rank * 5
+	for oid: int in state.combat.participants.keys():
+		if oid == exclude_id:
+			continue
+		if String(state.factions.get(oid, FACTION_NEUTRAL)) != faction:
+			continue
+		var ch: L5RCharacterData = state.combatants.get(oid, null)
+		if ch == null or CharacterStats.is_dead(ch) or ch.immune_to_fear:
+			continue
+		var p: IndividualCombat.Participant = state.combat.participants.get(oid, null)
+		if p == null:
+			continue
+		var wp: int = maxi(1, ch.willpower + ch.fear_resist_willpower_bonus)
+		var fr_roll: int = IndividualCombat.get_timed_modifier_total(p, "fear_resist_rolled")
+		var fr_kept: int = IndividualCombat.get_timed_modifier_total(p, "fear_resist_kept")
+		var resist: int = dice.roll_and_keep(
+			wp + ch.fear_resist_rolled_bonus + fr_roll,
+			wp + ch.fear_resist_kept_bonus + fr_kept, true).total
+		if resist >= tn:
+			resisted_ids.append(oid)
+			continue
+		IndividualCombat.add_timed_modifier(p, "spell_afraid", 1, state.combat.round_number + 9999, "fear_burst")
+		if IndividualCombat.CONDITION_AFRAID not in p.conditions:
+			p.conditions.append(IndividualCombat.CONDITION_AFRAID)
+		afraid_ids.append(oid)
+	return {"afraid": afraid_ids, "resisted": resisted_ids}
 
 
 ## s43 maho-user enemy cast (Bloodspeaker/cult, s56.14). Mirrors _npc_maybe_cast_spell but for maho:

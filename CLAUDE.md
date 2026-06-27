@@ -6524,6 +6524,21 @@ a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or t
 effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
 (see "ASCII Map System — Live-Reachability Status").
 
+### Spell coverage — deferred sub-part: Eyes of the Phoenix ally Fear-3 burst (2026-06-27, runtime-verified 7/7)
+**Eyes of the Phoenix** (Fire 4 Illusion, s35 l255) GDD: the target is Blinded (wired) AND, on cast, **all
+allies of the target suffer a Fear 3 effect** (undead/immune exempt) — the ally Fear-burst was deferred. New
+reusable `_apply_fear_burst(state, faction, fear_rank, exclude_id, dice)` helper: every living member of the
+given faction (minus the excluded target) rolls Willpower (+ Kshatriya `fear_resist_willpower_bonus`,
+`fear_resist_rolled/kept_bonus`, and `fear_resist_*` buff modifiers) vs **TN 5 + N×5** (s22.3 LOCKED); a
+failure installs a persistent `spell_afraid` timed modifier + AFRAID (the same proximity-independent
+mechanism as the maho fear spells, read by `apply_fear_checks`); `immune_to_fear` characters are exempt.
+Wired in `_complete_cast` after the status (Blinded) applies, scoped to the **target's** faction (so the
+caster's own side is untouched). Returns `{afraid: [ids], resisted: [ids]}`. Runtime-verified 7/7 (Godot
+4.6.2, headless): target Blinded; a low-Willpower enemy ally fails Fear 3 → AFRAID + persistent spell_afraid;
+an `immune_to_fear` enemy ally is exempt; a player-faction ally is unaffected (only the *target's* allies);
+the target is not in its own burst. The `_apply_fear_burst` primitive is reusable for any other allies-suffer-
+Fear spell or creature ability.
+
 ### Spell coverage — deferred rider: Fury of Osano-Wo weather damage scaling (2026-06-27, runtime-verified 4/4)
 **Fury of Osano-Wo** (Fire 1 Thunder, s35 l57) GDD: 5k2 lightning base, **6k2 during a moderate
 thunderstorm, 6k3 during a disastrous storm/hurricane** — the weather bonus was deferred ("weather damage

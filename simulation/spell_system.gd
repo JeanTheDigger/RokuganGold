@@ -475,7 +475,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"whispering_flames": {"kind": "status", "condition": "dazed", "save": "none",
 		"range_tiles": 10, "aoe_radius": 2, "aoe_hits": "all", "duration_rounds": 0},  # Fire 3: 10' Daze (all gazers; roll-recovered; immunity not modeled)
 	"eyes_of_the_phoenix": {"kind": "status", "condition": "blinded", "save": "none",
-		"range_tiles": 5, "aoe_radius": 0, "duration_rounds": 0},  # Fire 4: Blind (allies' Fear-3 burst deferred)
+		"range_tiles": 5, "aoe_radius": 0, "duration_rounds": 0},  # Fire 4: Blind target + all target's allies suffer Fear 3 on cast (GDD s35 l255, fear-burst WIRED in _complete_cast)
 	"wooden_prison": {"kind": "status", "condition": "entangled", "save": "none",
 		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 0},  # Earth 3: Entangle (escape via standard entangle layer)
 	# --- Cleanse (s36) ---
