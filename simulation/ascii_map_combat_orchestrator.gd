@@ -735,6 +735,11 @@ static func execute_stance_change(
 			and IndividualCombat.get_timed_modifier_total(p, "stance_locked") > 0:
 		return {"success": false, "reason": "stance_locked"}
 
+	# s36 Surging Soul: the buffed character cannot enter (or benefit from) the Center Stance.
+	if new_stance == Enums.Stance.CENTER \
+			and IndividualCombat.get_timed_modifier_total(p, "block_center") > 0:
+		return {"success": false, "reason": "surging_soul_no_center"}
+
 	p.stance = new_stance as Enums.Stance
 
 	# Full Defense stance: roll Defense now for full_defense_bonus (GDD s40).
@@ -2848,6 +2853,12 @@ static func _complete_cast(
 			"type": "spell_trait_swap", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "result": res["trait_swap"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "share_strength":
+		res["share_strength"] = _apply_sharing_strength(state, caster_id, caster, eff)
+		state.combat_log.append({
+			"type": "spell_share_strength", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "result": res["share_strength"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "trait_transfer":
 		res["trait_transfer"] = _apply_ebbing_strength(state, caster_id, caster, target_id, target, eff)
 		state.combat_log.append({
@@ -4155,6 +4166,49 @@ static func _apply_trait_delta(
 	p.trait_delta_ml[p_trait] = state.casting_ml
 	IndividualCombat.sync_trait_deltas(p, who)
 	return delta < 0 and CharacterStats.is_dead(who)
+
+
+## s34 Sharing the Strength of Many (Earth 3): up to max_targets nearest same-faction living combatants
+## (the caster always included) within aoe_radius gain +(the LOWEST Earth Ring among the chosen set) to
+## all rolls for the duration. Combat slice = attack rolls (the established "all rolls" approximation);
+## does not apply to Spell Casting. The bonus value is computed from the actual target set's minimum.
+static func _apply_sharing_strength(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData, eff: Dictionary,
+) -> Dictionary:
+	var radius: int = int(eff.get("aoe_radius", 4))
+	var cap: int = int(eff.get("max_targets", 6))
+	var dur: int = int(eff.get("duration_rounds", 5))
+	var cf: String = String(state.factions.get(caster_id, ""))
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	# Candidates: same-faction living combatants in range; the caster is always included (distance 0).
+	var cands: Array = []
+	for cid in state.positions.keys():
+		if String(state.factions.get(cid, "")) != cf:
+			continue
+		var ch = state.combatants.get(cid, null)
+		if ch == null or CharacterStats.is_dead(ch):
+			continue
+		var d: int = maxi(absi(center.x - state.positions[cid].x), absi(center.y - state.positions[cid].y))
+		if d > radius:
+			continue
+		cands.append({"id": cid, "char": ch, "d": (0 if cid == caster_id else d + 1)})
+	cands.sort_custom(func(a, b): return a["d"] < b["d"])
+	var chosen: Array = cands.slice(0, maxi(1, cap))
+	# Lowest Earth Ring among the chosen set is the bonus everyone receives.
+	var lowest_earth: int = 9999
+	for entry in chosen:
+		lowest_earth = mini(lowest_earth, SpellSystem.get_ring_value(entry["char"], Enums.Ring.EARTH))
+	if lowest_earth >= 9999:
+		lowest_earth = 0
+	var expiry: int = state.combat.round_number + dur
+	var ids: Array = []
+	for entry in chosen:
+		var p: IndividualCombat.Participant = state.combat.participants.get(int(entry["id"]), null)
+		if p == null:
+			continue
+		IndividualCombat.add_timed_modifier(p, "all_rolls", lowest_earth, expiry, "spell_buff", "round", state.casting_ml, state.casting_creator)
+		ids.append(int(entry["id"]))
+	return {"buffed": ids, "bonus": lowest_earth, "expires_round": expiry}
 
 
 ## s36 Ebbing Strength (Water 1): transfer one of the caster's own Physical Traits to the target. The
