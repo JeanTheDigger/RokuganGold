@@ -7214,6 +7214,25 @@ owner design decision (a new subsystem + its values) to proceed:
 world-sim sim_effect router, or a CombatController stealth-layer hook) — or is one of these 3, each with a
 precise, non-inventable blocker. Do not re-audit without one of the three subsystems above.
 
+### Spell coverage — Piercing the Heavens (Fortune communion) (2026-06-27, owner-directed PROVISIONAL, static-only)
+**Piercing the Heavens (Air 6, Phoenix-only, s33)** — within a Fortune's shrine, manifest a mote of the
+Fortune's essence for brief communion; "the Fortune may offer aid available nowhere else" (GM-discretion, no
+GDD-specified payload). Previously deferred. Owner directive ("don't conclude while spells remain") → wired as
+a world-sim worship spell with a **PROVISIONAL** boon (flagged for owner override; no invented numbers — reuses
+existing worship honor + topic mechanics). Library `s` changed 0 → RITUAL_HONOR (15), so a Phoenix shugenja's
+PERFORM_WORSHIP routes it through the existing ritual-honor pipeline (honor via the executor's honor_change).
+Metadata preference (`npc_decision_engine`): a Phoenix shugenja at a shrine (`shrine_eligible` already gates
+PERFORM_WORSHIP) who knows the secret communion and hasn't communed in ≥30 IC days prefers it as the
+`ritual_spell_id`. Writeback (`_process_ritual_spell_writebacks`): on a successful cast, at most once per month
+(guarded by new `L5RCharacterData.piercing_heavens_ic_day`, @export, default -1), it stamps the marker and
+creates a rare **TIER_2 SUPERNATURAL "Communion with the Fortunes"** topic about the caster (subject_role
+BENEFICIARY) — the visible mark of the communion, conferring standing. The GDD's open-ended "aid available
+nowhere else" is modeled as the worship-devotion honor + the prestige of having communed (PROVISIONAL — flagged
+for owner to define a concrete boon). NOT modeled (no invented data): the "shrine devoted to a SPECIFIC Fortune"
+gate (no Fortune-dedication field on settlements — any temple/shrine qualifies). Parse-clean; structural-verified
+(reuses the PERFORM_WORSHIP RITUAL_HONOR pipeline + the standard TopicData-creation pattern used at ~24 sites).
+Reduces the genuinely-blocked set to 2 (Tenjin's Ear, Opening the Veil).
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

@@ -28797,6 +28797,29 @@ static func _process_ritual_spell_writebacks(
 		)
 		var success: bool = cast_result.get("success", false)
 		var margin: int = cast_result.get("margin", 0)
+		# s33 Piercing the Heavens (Air 6, Phoenix): the supreme Fortune communion. Honor rides the
+		# worship RITUAL_HONOR path (the executor's honor_change); the distinguishing mark of the
+		# communion is a rare, prestigious TIER_2 SUPERNATURAL topic about the caster, stamped at most
+		# once per month. The GDD's "aid available nowhere else" is GM-discretion with no specified
+		# mechanic — modeled here as the worship-devotion honor + the standing of having communed
+		# (PROVISIONAL, flagged for owner override; no invented boon).
+		if ritual_spell_id == "piercing_the_heavens" and success \
+				and (character.piercing_heavens_ic_day < 0
+					or ic_day - character.piercing_heavens_ic_day >= TimeSystem.IC_DAYS_PER_MONTH):
+			character.piercing_heavens_ic_day = ic_day
+			var pt := TopicData.new()
+			pt.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			pt.title = "Communion with the Fortunes"
+			pt.tier = TopicData.Tier.TIER_2
+			pt.category = TopicData.Category.SUPERNATURAL
+			pt.subject_character_id = char_id
+			pt.subject_role = "BENEFICIARY"
+			pt.ic_day_created = ic_day
+			pt.momentum = TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_2)
+			active_topics.append(pt)
+			if char_id >= 0 and char_id not in character.topic_pool:
+				character.topic_pool.append(pt.topic_id)
 		match sim_effect:
 			SpellSystem.SpellSimEffect.HEAL_WOUNDS:
 				# s36 regrow_the_wound / s37 rise_from_the_ashes.

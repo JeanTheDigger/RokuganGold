@@ -3352,7 +3352,16 @@ static func _populate_action_metadata(
 	elif option.action_id == "PERFORM_WORSHIP":
 		var worship_spell: String = ""
 		if character != null and SpellSystem.is_shugenja(character):
-			worship_spell = SpellSystem.get_best_ritual_spell(character)
+			# s33 Piercing the Heavens: a Phoenix shugenja who knows the secret communion prefers it
+			# at a shrine, at most once per month (the supreme act of devotion). The shrine_eligible
+			# precondition already gates PERFORM_WORSHIP to a temple/shrine.
+			if character.clan == "Phoenix" and "piercing_the_heavens" in character.spells_known \
+					and SpellSystem.can_cast(character, "piercing_the_heavens") \
+					and (character.piercing_heavens_ic_day < 0
+						or ctx.ic_day - character.piercing_heavens_ic_day >= TimeSystem.IC_DAYS_PER_MONTH):
+				worship_spell = "piercing_the_heavens"
+			if worship_spell.is_empty():
+				worship_spell = SpellSystem.get_best_ritual_spell(character)
 			if worship_spell.is_empty() and "commune" in character.spells_known:
 				worship_spell = "commune"
 		option.metadata = {

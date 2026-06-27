@@ -1200,7 +1200,7 @@ const SPELL_LIBRARY: Dictionary = {
 	# ML6
 	"rise_air":                   {"e": 0, "m": 6, "s": 0},
 	"the_false_legion":           {"e": 0, "m": 6, "s": 0},
-	"piercing_the_heavens":       {"e": 0, "m": 6, "s": 0},
+	"piercing_the_heavens":       {"e": 0, "m": 6, "s": 15},  # WIRED (PERFORM_WORSHIP, Phoenix-only): supreme Fortune communion at a shrine — RITUAL_HONOR + a once/month TIER_2 SUPERNATURAL communion topic (the "aid nowhere else" is modeled as worship-devotion honor + the prestige of communion; GM-discretion boon flagged PROVISIONAL)
 	"wind_of_the_moon":           {"e": 0, "m": 6, "s": 0},   # WIRED (PROBE augment): deception-proof telepathic read of true objective+disposition + implants +5 disposition (believed self-generated)
 	"the_world_is_truth":         {"e": 0, "m": 6, "s": 0},   # Kolat sleeper install — wired as the CAST_WORLD_IS_TRUTH world-sim ActionID (s54.7/s33), NOT a tile-combat effect (so s:0 is correct)
 	"wrath_of_kaze_no_kami":      {"e": 0, "m": 6, "s": 0},   # hurricane storm zone — wired (SPELL_COMBAT_EFFECTS "hurricane")

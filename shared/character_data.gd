@@ -96,6 +96,9 @@ var spell_slot_adjustment: Dictionary = {}
 # (10-minute RAW duration ~ per-tick). Read by SkillResolver: +1k0 to spoken Social
 # Skill Rolls and +1k1 on a voice Perform Roll (the granted Voice Advantage). -1 = none.
 @export var voice_of_the_wind_ic_day: int = -1
+# s33 Piercing the Heavens (Air 6, Phoenix): IC day of the caster's last Fortune communion. The
+# spell may be cast at most once per month — this is the monthly guard. -1 = never communed.
+@export var piercing_heavens_ic_day: int = -1
 # Day-long spell buffs (the standard model for any spell whose RAW duration is below the IC-day
 # tick — 10 minutes, 1 hour, etc.): a set of active buff IDs that last the rest of the OOC day
 # they were cast and are cleared wholesale by the daily orchestrator pass (clear_day_buffs). To
