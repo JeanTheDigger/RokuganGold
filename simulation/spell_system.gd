@@ -1153,7 +1153,7 @@ const SPELL_LIBRARY: Dictionary = {
 	# ML1
 	"arrows_flight":              {"e": 0, "m": 1, "s": 0},
 	"blessed_wind":               {"e": 0, "m": 1, "s": 0},  # concentration ranged defense — COMBAT_ONLY
-	"by_the_light_of_the_moon":   {"e": 0, "m": 1, "s": 0},
+	"by_the_light_of_the_moon":   {"e": 0, "m": 1, "s": 0},   # WIRED (CombatController cast_moonlight_reveal): reveals HIDDEN traps in the area
 	"cloak_of_night":             {"e": 0, "m": 1, "s": 0},
 	"gathering_swirl":            {"e": 0, "m": 1, "s": 0},
 	"legacy_of_kaze_no_kami":     {"e": 0, "m": 1, "s": 0},   # spirit-bird message — sender delivers letters instantly (LetterSystem.write_letter)
@@ -1172,11 +1172,11 @@ const SPELL_LIBRARY: Dictionary = {
 	"flight_of_doves":            {"e": 0, "m": 2, "s": 0},   # WIRED (performance): performer/ally caster grants the storyteller Air-ring Free Raises on PUBLIC_PERFORMANCE
 	"freedom_of_the_air":         {"e": 0, "m": 2, "s": 14},  # Compels hostile spirits out for Air Ring hours — SPIRIT_BIND
 	"garbled_tongue":             {"e": 0, "m": 3, "s": 0},   # WIRED (court actions): shugenja garbles a court exchange; the tick's conversations are opaque to eavesdroppers
-	"heart_betrays_eyes":         {"e": 0, "m": 2, "s": 0},   # target perceives unusual as normal; maintains illusion — COMBAT_ONLY
+	"heart_betrays_eyes":         {"e": 0, "m": 2, "s": 0},   # WIRED (CombatController apply_heart_betrays): one guard's next sighting of the PC is fooled
 	"hidden_visage":              {"e": 0, "m": 2, "s": 0},
 	"the_kamis_whisper":          {"e": 0, "m": 2, "s": 0},   # false-sound distraction — wired in CombatController.cast_kamis_whisper
 	"mists_of_illusion":          {"e": 0, "m": 2, "s": 0},
-	"quiescence_of_air":          {"e": 0, "m": 2, "s": 0},
+	"quiescence_of_air":          {"e": 0, "m": 2, "s": 0},   # WIRED (CombatController apply_silence_zone): stationary silence sphere — no sound crosses it
 	"request_to_hato_no_kami":    {"e": 0, "m": 2, "s": 0},   # WIRED (combat): summoned bird distracts one enemy, -1k0 for a Round
 	"secrets_on_the_wind":        {"e": 0, "m": 2, "s": 17},
 	"whispering_wind":            {"e": 0, "m": 2, "s": 17},   # WIRED (PROBE writeback): a shugenja who PROBEs a target divines if their last statement was a lie, flags known fabrications
