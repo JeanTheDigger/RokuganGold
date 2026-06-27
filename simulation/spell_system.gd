@@ -699,6 +699,69 @@ static func activate_drink_of_your_essence(
 	return res
 
 
+## s33 Wind of the Moon (Air 6) — 50', 1 target, 1 minute. Advanced telepathy: the caster reads the
+## target's surface thoughts AND transmits their own thoughts into the target's mind; the target is
+## unaware of the contact and believes the implanted thoughts are their own. Requires the target's
+## name + a Contested Air Roll (telepathy reads the TRUE thought, so the read is deception-proof —
+## unlike a PROBE, no false_info can deceive it). Two halves:
+##   READ — records the target's true standing objective (priority_objective) AND their true
+##          disposition toward the caster (disposition_toward) as deduped intelligence on the caster.
+##          Guaranteed accurate (the kami read the mind, not the mouth).
+##   TRANSMIT — implants one thought: the target's disposition toward the caster warms by
+##          WIND_OF_MOON_IMPLANT (the target believes the warmth is their own feeling, so NO
+##          manipulation/honor cost fires — it is undetectable suggestion, not overt persuasion).
+## Failure on the Contested Air Roll breaks contact (no read, no implant). PROVISIONAL: the +5
+## implant magnitude (matches a full successful CHARM, s15.4a) — flagged for owner override.
+## Callable via a deliberate PROBE augment (not auto-cast); consumes a spell slot.
+const WIND_OF_MOON_IMPLANT: int = 5
+
+static func activate_wind_of_the_moon(
+	caster: L5RCharacterData, target: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	target_objective: Dictionary = {}, current_season: int = -1
+) -> Dictionary:
+	if not can_cast(caster, "wind_of_the_moon"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	if target == null:
+		return {"success": false, "activated": false, "reason": "no_target"}
+	var res: Dictionary = resolve_cast(caster, "wind_of_the_moon", dice, 0, target, ic_day)
+	res["activated"] = res.get("success", false)
+	if not res.get("success", false):
+		return res
+	# Contested Air Roll — telepathy is resisted by the target's will (Air). Failure breaks contact.
+	var caster_air: int = get_ring_value(caster, Enums.Ring.AIR)
+	var target_air: int = get_ring_value(target, Enums.Ring.AIR)
+	var attack: DiceResult = dice.roll_and_keep(caster_air, caster_air, true)
+	var defend: DiceResult = dice.roll_and_keep(target_air, target_air, true)
+	if attack.total <= defend.total:
+		res["contact"] = false
+		return res
+	res["contact"] = true
+	# READ (deception-proof): record the target's true standing objective + true disposition.
+	var need_type: String = String(target_objective.get("need_type", ""))
+	if not need_type.is_empty():
+		var obj_entry := KnowledgeEntry.new()
+		obj_entry.source = Enums.KnowledgeSource.DIRECT_OBSERVATION
+		obj_entry.entry_type = "priority_objective"
+		obj_entry.data = {"target_character_id": target.character_id, "need_type": need_type}
+		obj_entry.season_acquired = current_season
+		InformationSystem.update_intelligence_knowledge(caster, obj_entry)
+	var disp_entry := KnowledgeEntry.new()
+	disp_entry.source = Enums.KnowledgeSource.DIRECT_OBSERVATION
+	disp_entry.entry_type = "disposition_toward"
+	disp_entry.data = {
+		"target_character_id": target.character_id,
+		"toward_id": caster.character_id,
+		"disposition": int(target.disposition_values.get(caster.character_id, 0)),
+	}
+	disp_entry.season_acquired = current_season
+	InformationSystem.update_intelligence_knowledge(caster, disp_entry)
+	# TRANSMIT: implant a thought — the target's regard for the caster warms (believed self-generated).
+	var cur: int = int(target.disposition_values.get(caster.character_id, 0))
+	target.disposition_values[caster.character_id] = clampi(cur + WIND_OF_MOON_IMPLANT, -100, 100)
+	res["implanted_disposition"] = WIND_OF_MOON_IMPLANT
+	return res
+
+
 ## s36 Sympathetic Energies (Water 1) — Range 25', transfer one existing spell effect from the
 ## caster to a willing target. A "spell effect" in the world-sim is a day buff (the standard model
 ## for any sub-IC-day spell); this moves one named day buff off the caster and onto the willing
@@ -1113,7 +1176,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"rise_air":                   {"e": 0, "m": 6, "s": 0},
 	"the_false_legion":           {"e": 0, "m": 6, "s": 0},
 	"piercing_the_heavens":       {"e": 0, "m": 6, "s": 0},
-	"wind_of_the_moon":           {"e": 0, "m": 6, "s": 0},
+	"wind_of_the_moon":           {"e": 0, "m": 6, "s": 0},   # WIRED (PROBE augment): deception-proof telepathic read of true objective+disposition + implants +5 disposition (believed self-generated)
 	"the_world_is_truth":         {"e": 0, "m": 6, "s": 0},   # Kolat sleeper install — wired as the CAST_WORLD_IS_TRUTH world-sim ActionID (s54.7/s33), NOT a tile-combat effect (so s:0 is correct)
 	"wrath_of_kaze_no_kami":      {"e": 0, "m": 6, "s": 0},   # hurricane storm zone — wired (SPELL_COMBAT_EFFECTS "hurricane")
 

@@ -7043,6 +7043,28 @@ chosen PROBE action (not auto-cast). Runtime-verified 3/3 (Godot 4.6.2, headless
 the target's known fabrication; a non-shugenja PROBE divines nothing; a failed PROBE divines nothing.
 164 combat effects.
 
+### Spell coverage — Wind of the Moon (telepathy) (2026-06-27, deliberate-cast)
+**Wind of the Moon (Air 6, s33)** — advanced telepathy: read the target's surface thoughts AND transmit
+the caster's own thoughts into the target's mind (the target is unaware and believes the implanted thoughts
+are their own). Previously deferred ("telepathy; surface-thought reads already covered by PROBE"). Owner
+directive ("don't conclude while spells remain undone") → wired faithfully as the deception-proof,
+mind-implanting upgrade of PROBE. New `SpellSystem.activate_wind_of_the_moon(caster, target, dice, ic_day,
+target_objective, current_season)`: a **Contested Air Roll** (caster vs target — telepathy is resisted by
+will; failure breaks contact, no read/no implant). On contact, two halves: **READ** records the target's
+TRUE standing objective (`priority_objective`) AND TRUE disposition toward the caster (`disposition_toward`)
+as deduped intelligence on the caster (guaranteed accurate — the kami read the mind, not the mouth, so no
+`false_info` can deceive it, unlike a normal PROBE); **TRANSMIT** implants one thought — the target's
+disposition toward the caster warms by `WIND_OF_MOON_IMPLANT` (+5, the target believes the warmth is their
+own feeling, so NO manipulation/honor cost fires — undetectable suggestion, not overt persuasion).
+PROVISIONAL: the +5 magnitude (matches a full successful CHARM, s15.4a) — flagged for owner override.
+Wired as a DayOrchestrator writeback (`_process_wind_of_the_moon_writebacks`, beside the whispering-wind
+writeback; `objectives_map` is the advance_day param for the target's standing objective): a shugenja who
+**successfully PROBEs** a target augments it with the telepathy (consumes a spell slot). Rides on the chosen
+PROBE (not auto-cast). Fires independently of Whispering Wind (both on a PROBE). Runtime-verified 8/8 (Godot
+4.6.2, headless): can_cast gate; high-vs-low-Air contact succeeds; +5 implant; priority_objective +
+disposition_toward entries recorded; re-cast dedups the objective entry; non-knower cannot cast. 164 combat
+effects (Wind of the Moon is a world-sim telepathy read, not a combat effect).
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

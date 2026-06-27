@@ -1258,6 +1258,11 @@ static func advance_day(
 		characters_by_id, active_secrets, current_season, ic_day, dice_engine,
 	)
 
+	_process_wind_of_the_moon_writebacks(
+		day_result.get("results", []),
+		characters_by_id, objectives_map, current_season, ic_day, dice_engine,
+	)
+
 	_wire_discussion_counts(conversation_results, active_topics)
 	_compute_positions_from_conversations(
 		conversation_results, active_topics, characters_by_id
@@ -6754,6 +6759,45 @@ static func _process_whispering_wind_writebacks(
 			continue
 		SpellSystem.activate_whispering_wind(
 			caster, target, dice_engine, ic_day, active_secrets, current_season
+		)
+
+
+static func _process_wind_of_the_moon_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	current_season: int,
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> void:
+	# s33 Wind of the Moon (Air 6): a shugenja who PROBEs a target (a deliberate social read) augments
+	# it with advanced telepathy — a deception-proof read of the target's TRUE standing objective and
+	# disposition, plus an undetectable implanted +5 disposition shift. Rides on the chosen PROBE
+	# action (not auto-cast); consumes a spell slot. Resisted by a Contested Air Roll (failure breaks
+	# contact). Distinct from Whispering Wind (Air 2 lie-detection): both fire on a PROBE, independently.
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "PROBE":
+			continue
+		if not d.get("success", false):
+			continue
+		var caster: L5RCharacterData = characters_by_id.get(d.get("character_id", -1))
+		var target: L5RCharacterData = characters_by_id.get(d.get("target_npc_id", -1))
+		if caster == null or target == null:
+			continue
+		if CharacterStats.is_dead(caster) or CharacterStats.is_dead(target):
+			continue
+		if not ("wind_of_the_moon" in caster.spells_known):
+			continue
+		if not SpellSystem.can_cast(caster, "wind_of_the_moon"):
+			continue
+		var target_objective: Dictionary = objectives_map.get(target.character_id, {}).get("primary", {})
+		if target_objective.is_empty():
+			target_objective = objectives_map.get(target.character_id, {}).get("standing", {})
+		SpellSystem.activate_wind_of_the_moon(
+			caster, target, dice_engine, ic_day, target_objective, current_season
 		)
 
 
