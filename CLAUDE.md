@@ -6749,6 +6749,17 @@ costing a slot; non-caster interrupt no-op. LIMITATION: the speed-raise count is
 turn-based UI. Same PC-travel HOLD live-reachability caveat as the whole ASCII stack — driver-verified,
 not a live session.
 
+### Spell coverage — deferred sub-part: Summoning the Gale −3k3 kept half (2026-06-27, runtime-verified 3/3)
+**Summoning the Gale** (Air 3, s33 l241) GDD: everyone in the bubble "suffers −3k3 to all ranged attack
+rolls." Only the −3 rolled half was wired (`ranged_attack_penalty`); the −3 kept half was deferred. Added an
+optional `attacker_kept_penalty` param to `IndividualCombat.resolve_attack` (applied to kept, floored at 1,
+mirroring the existing `attacker_roll_penalty`), threaded from a new `ranged_attack_kept_penalty` zone
+modifier in the ranged path; the gale's modifier-zone now carries `ranged_attack_kept_penalty: −3`. The new
+param is trailing/defaulted (0) — every other `resolve_attack` caller is unaffected. Runtime-verified 3/3
+(Godot 4.6.2, headless): a direct −3k3 resolve_attack drops ranged hits 550→18/600; an archer standing in
+the bubble reads the −3 kept zone modifier while a target outside reads 0. drv9 (resolve_attack/mounted)
+re-passes 5/5 — no regression.
+
 ### Spell coverage — deferred sub-part: The Wolf's Mercy Strength−1 (2026-06-27, runtime-verified 5/5)
 **The Wolf's Mercy** (Earth 3, s34 l223) GDD: "Target's Earth Ring is lowered by 1 Rank … Strength Rank is
 also lowered by 1." Only the Earth-Ring drop (reduced Wound capacity, via the ring-delta bridge) was wired;

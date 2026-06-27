@@ -1775,10 +1775,12 @@ static func execute_ranged_attack(
 		+ _zone_modifier_total(state, attacker_id, "attack_roll_penalty") \
 		+ _zone_modifier_total(state, attacker_id, "ranged_attack_penalty") \
 		+ _high_ground_attack_bonus(state, apos, tpos)
+	# s33 Summoning the Gale: shots fired from inside the bubble also lose kept dice (the -3k3 -> -k half).
+	var atk_kept_pen: int = _zone_modifier_total(state, attacker_id, "ranged_attack_kept_penalty")
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, shot_raises, dice_engine,
 		in_melee, spend_void, false, "",
-		{"opponent_clan": target.clan}, atk_pen
+		{"opponent_clan": target.clan}, atk_pen, false, atk_kept_pen
 	)
 	if auto_hit:
 		result["hit"] = true

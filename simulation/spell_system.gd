@@ -405,7 +405,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"blessed_wind_of_lady_sun": {"kind": "modifier_zone", "self_centered": true, "aoe_radius": 1,
 		"duration_rounds": 9999, "mods": {"attack_roll_penalty": -1}},  # Air 2: hostile actions in the area suffer -1k0 (combat slice; the +1k0 Void/Awareness + the -2k0 Awareness-hostile are out-of-combat). 10 sq ft -> radius-1 bubble PROVISIONAL. Concentration = skirmish.
 	"summoning_the_gale": {"kind": "modifier_zone", "range_tiles": 10, "aoe_radius": 6,
-		"duration_rounds": 9999, "mods": {"ranged_armor_tn": 15, "ranged_attack_penalty": -3}},  # Air 3: anti-ranged bubble around a target (30' radius / 50' range) — +15 Armor TN vs ranged (shots in) and -3k0 to ranged attack rolls (shots out; the -3 KEPT half not modeled). Concentration = skirmish.
+		"duration_rounds": 9999, "mods": {"ranged_armor_tn": 15, "ranged_attack_penalty": -3, "ranged_attack_kept_penalty": -3}},  # Air 3: anti-ranged bubble around a target (30' radius / 50' range) — +15 Armor TN vs ranged (shots in) and -3k3 to ranged attack rolls (shots out). Concentration = skirmish.
 	# Coverage clean-wins batch 11 (2026-06-20): trait→combat-roll buffs/debuffs via EXISTING hooks
 	# (Strength → rolled damage dice, Agility → attack-roll dice). NOT the Earth-ring wound refactor.
 	"strength_of_the_tsunami": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 3,
