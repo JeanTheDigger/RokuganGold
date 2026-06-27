@@ -237,7 +237,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"the_breath_of_battle": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 5,
 		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_attack_kept", "value": 1}, {"kind": "spell_damage_rolled", "value": 1}]},  # Fire 3: +1k1 Agility(attack) + 1k0 damage (sunlight-only requirement not modeled)
 	"hungry_blade": {"kind": "buff", "target": "ally", "range_tiles": 10, "duration_rounds": 5,
-		"mods": [{"kind": "spell_attack_rolled", "value": 1}]},  # Fire 3: +1k0 attack (explode-on-8 damage mechanic deferred)
+		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "hungry_blade", "value": 1}]},  # Fire 3: +1k0 attack + all damage dice explode on 8/9 (GDD s35 l193)
 	"globe_of_the_everlasting_sun": {"kind": "ward", "aoe_radius": 99, "duration_rounds": 9999,
 		"ward_elements": [2], "cast_tn_penalty": 15},  # Fire 6: +15 TN to Fire spells in the area (1-mile = whole skirmish; building fire-immunity not modeled)
 	"agashas_shield": {"kind": "ward", "aoe_radius": 6, "duration_rounds": 6,

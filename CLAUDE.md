@@ -6524,6 +6524,22 @@ a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or t
 effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
 (see "ASCII Map System — Live-Reachability Status").
 
+### Spell coverage — deferred sub-part: Hungry Blade explode-on-8 (2026-06-27, runtime-verified 3/3)
+**Hungry Blade** (Fire 3 Craft, s35 l193) GDD: the enhanced weapon gives +1k0 attack AND **all damage dice
+explode on a result of 8 or better** (each die explodes once on an 8 or 9; 10s explode repeatedly as normal).
+The +1k0 was wired; the explode-on-8 was deferred ("needs a dice-engine 8/9-once mode + weapon-damage hook").
+Built it: `DiceEngine.roll_and_keep` and `roll_damage` gain an `explode_8: bool = false` param (backward-
+compatible — every existing call uses the default) — when set, a die whose **initial** face is 8 or 9 gets
+one bonus die (the bonus die follows the normal 10-chain), while 10s explode repeatedly as before.
+`IndividualCombat.resolve_damage` passes `explode_8 = true` when the attacker's Participant carries a
+`hungry_blade` timed modifier; the library entry adds a `{kind: hungry_blade}` buff mod (installed via the
+generic `_apply_spell_buff` else-branch as a readable timed modifier). The buff is `target: "ally"` (the
+shugenja enchants a wielder's weapon within 50'). Runtime-verified 3/3 (Godot 4.6.2, headless): explode_8
+raises the 3k2 roll mean (15.2→18.8) and 4k2 damage mean (17.3→22.0); a katana attacker with the Hungry
+Blade buff deals more (20.1→26.6) than without — and the unchanged normal 3k2 mean (15.2) confirms the
+default path is intact. The `explode_8` dice mode is reusable for any future weapon enchant with the
+explode-on-8 mechanic.
+
 ### Spell coverage — deferred sub-part: The Fires That Cleanse caster-half (2026-06-27, runtime-verified 5/5)
 **The Fires That Cleanse** (Fire 1, s35 l51) GDD: everyone in the 30' radius — **including the caster** —
 takes Fire-Ring DR, but the caster takes only **half (rounded up)** as the kami make some effort to avoid

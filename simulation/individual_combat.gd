@@ -1396,8 +1396,11 @@ static func resolve_damage(
 		rolled += get_timed_modifier_total(attacker_p, "spell_damage_rolled")
 		kept += get_timed_modifier_total(attacker_p, "spell_damage_kept")
 
+	# s35 Hungry Blade: while the buff is active, all the wielder's damage dice also explode on an 8 or 9
+	# (once each). Inert (false) for everyone else.
+	var explode_8: bool = attacker_p != null and get_timed_modifier_total(attacker_p, "hungry_blade") > 0
 	# roll_damage handles the dice pool; we pass strength already absorbed above
-	var result: Dictionary = dice_engine.roll_damage(rolled, kept)
+	var result: Dictionary = dice_engine.roll_damage(rolled, kept, 0, 0, explode_8)
 	var total: int = result["raw"] + feint_bonus + kata_dmg["flat_bonus"]
 
 	return {
