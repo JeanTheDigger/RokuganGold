@@ -3355,11 +3355,17 @@ static func _populate_action_metadata(
 			# s33 Piercing the Heavens: a Phoenix shugenja who knows the secret communion prefers it
 			# at a shrine, at most once per month (the supreme act of devotion). The shrine_eligible
 			# precondition already gates PERFORM_WORSHIP to a temple/shrine.
-			if character.clan == "Phoenix" and "piercing_the_heavens" in character.spells_known \
-					and SpellSystem.can_cast(character, "piercing_the_heavens") \
-					and (character.piercing_heavens_ic_day < 0
-						or ctx.ic_day - character.piercing_heavens_ic_day >= TimeSystem.IC_DAYS_PER_MONTH):
+			var communion_ok: bool = character.piercing_heavens_ic_day < 0 \
+				or ctx.ic_day - character.piercing_heavens_ic_day >= TimeSystem.IC_DAYS_PER_MONTH
+			if communion_ok and character.clan == "Phoenix" \
+					and "piercing_the_heavens" in character.spells_known \
+					and SpellSystem.can_cast(character, "piercing_the_heavens"):
 				worship_spell = "piercing_the_heavens"
+			# s37 Ring of the Void: an Ishiken who knows the Void Dragon communion prefers it (same
+			# monthly communion guard). can_cast enforces the Ishiken gate for Void spells.
+			elif communion_ok and "ring_of_the_void" in character.spells_known \
+					and SpellSystem.can_cast(character, "ring_of_the_void"):
+				worship_spell = "ring_of_the_void"
 			if worship_spell.is_empty():
 				worship_spell = SpellSystem.get_best_ritual_spell(character)
 			if worship_spell.is_empty() and "commune" in character.spells_known:

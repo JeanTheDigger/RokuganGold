@@ -2691,6 +2691,10 @@ static func execute_cast_spell(
 		res["void_restored"] = _apply_spell_restore_void(state, caster_id, target_id, target)
 	elif res.get("success", false) and eff.get("kind", "") == "steal_void":
 		res["void_stolen"] = _apply_spell_steal_void(state, caster_id, caster, target_id, target, dice_engine)
+	elif res.get("success", false) and eff.get("kind", "") == "pool_void":
+		res["pool_void"] = _apply_kharmic_intent(state, caster_id, caster, target_id, target, eff)
+	elif res.get("success", false) and eff.get("kind", "") == "ring_reorder":
+		res["ring_reorder"] = _apply_unbound_essence(state, caster_id, target_id, target, eff, dice_engine)
 	elif res.get("success", false) and eff.get("kind", "") == "instant_kill":
 		res["instant_kill"] = _apply_spell_instant_kill(
 			state, caster_id, caster, target_id, target, eff, dice_engine)
@@ -3455,6 +3459,73 @@ static func _apply_spell_ring_change(
 ## Earth Ring cuts Wound capacity (potentially fatal). LIMITATION: only the Ring-derived effects (wound
 ## capacity, ring-based rolls) are modeled — the per-Trait attack/damage roll changes are not (the engine
 ## has no trait-level combat-delta layer). Ties resolve deterministically (first max / first min).
+## s37 Unbound Essence (Void 5): tamper with the target's pattern, RANDOMLY reordering their 5 Rings (and
+## the paired Traits). Wired via the combat ring-delta bridge (like Facing Your Devils): a random
+## permutation of the target's current Ring values is applied as per-Ring deltas, so the wound-capacity
+## (Earth) and Ring-based combat effects flow. PROVISIONAL: only the Ring-derived slice is modeled — the
+## per-Trait attack/damage roll changes need trait-level combat state the engine lacks (flagged).
+static func _apply_unbound_essence(
+	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData,
+	eff: Dictionary, dice_engine: DiceEngine,
+) -> Dictionary:
+	if target == null:
+		return {"reason": "no_target"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if p == null:
+		return {"reason": "not_in_combat"}
+	var rng: int = int(eff.get("range_tiles", 5))
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		if _chebyshev(state.positions[caster_id], state.positions[target_id]) > rng:
+			return {"reason": "out_of_range"}
+	var rings: Array = [Enums.Ring.AIR, Enums.Ring.EARTH, Enums.Ring.FIRE, Enums.Ring.WATER, Enums.Ring.VOID]
+	var vals: Array = []
+	for r: int in rings:
+		vals.append(SpellSystem.get_ring_value(target, r))
+	# Fisher-Yates shuffle of the values via the dice engine (no Math.random in scripts).
+	for i in range(vals.size() - 1, 0, -1):
+		var j: int = dice_engine.roll_die(i + 1) - 1
+		var tmp = vals[i]; vals[i] = vals[j]; vals[j] = tmp
+	var expiry: int = state.combat.round_number + int(eff.get("duration_rounds", 9999))
+	var applied: Array = []
+	for idx in range(rings.size()):
+		var ring: int = rings[idx]
+		var base: int = SpellSystem.get_ring_value(target, ring)
+		var newv: int = maxi(1, int(vals[idx]))  # floor the effective ring at 1
+		var delta: int = newv - base
+		if delta != 0:
+			p.ring_deltas[ring] = int(p.ring_deltas.get(ring, 0)) + delta
+			p.ring_delta_expiry[ring] = expiry
+			applied.append({"ring": ring, "delta": delta})
+	IndividualCombat.sync_ring_deltas(p, target)
+	return {"id": target_id, "ring_deltas": applied, "expires_round": expiry,
+		"died_on_apply": CharacterStats.is_dead(target)}
+
+
+## s37 Kharmic Intent (Void 3): pool all remaining Void Points of the caster + a willing ally, then
+## redistribute (up to each one's max). Faithful single-shot model: fill the ALLY to their max first
+## (the spell's purpose — share VP where needed), the caster keeps the remainder (capped at their max;
+## over-cap pooled VP is lost at redistribution, per "divided up to each one's normal maximum").
+static func _apply_kharmic_intent(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary,
+) -> Dictionary:
+	if target == null or CharacterStats.is_dead(target):
+		return {"reason": "no_target"}
+	if String(state.factions.get(target_id, "")) != String(state.factions.get(caster_id, "")):
+		return {"reason": "not_an_ally"}
+	var rng: int = int(eff.get("range_tiles", 4))
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		if _chebyshev(state.positions[caster_id], state.positions[target_id]) > rng:
+			return {"reason": "out_of_range"}
+	var pool: int = caster.current_void_points + target.current_void_points
+	var ally_max: int = SpellSystem.get_ring_value(target, Enums.Ring.VOID)
+	var caster_max: int = SpellSystem.get_ring_value(caster, Enums.Ring.VOID)
+	target.current_void_points = mini(ally_max, pool)
+	caster.current_void_points = mini(caster_max, maxi(0, pool - target.current_void_points))
+	return {"id": target_id, "ally_void": target.current_void_points,
+		"caster_void": caster.current_void_points}
+
+
 static func _apply_facing_your_devils(
 	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData, eff: Dictionary,
 ) -> Dictionary:

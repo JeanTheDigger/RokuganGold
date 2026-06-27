@@ -2040,6 +2040,55 @@ func cast_kamis_whisper(tx: int, ty: int) -> Dictionary:
 	return {"ok": true, "x": tx, "y": ty}
 
 
+## s37 False Whispers (Void 2): the target unknowingly repeats the caster's next sentence in their own
+## voice. The faithful stealth-layer consumer: a chosen target guard "speaks" at their own position,
+## emitting a MODERATE noise that draws OTHER guards toward them (a distraction). Range 30' (6 tiles).
+## PCs may be shugenja (s60.2). The future stealth-command UI / a deliberate caster calls this.
+func cast_false_whispers(target_id: int) -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"ok": false, "reason": "no_living_player"}
+	if not SpellSystem.can_cast(player.character, "false_whispers"):
+		return {"ok": false, "reason": "cannot_cast"}
+	var target: EntityState = _entities.get(target_id)
+	if target == null or _is_entity_dead(target):
+		return {"ok": false, "reason": "invalid_target"}
+	if maxi(absi(target.x - player.x), absi(target.y - player.y)) > 6:
+		return {"ok": false, "reason": "out_of_range"}
+	if not SpellSystem.resolve_cast(player.character, "false_whispers", _dice).get("success", false):
+		return {"ok": false, "reason": "cast_failed"}
+	# The target speaks at their own tile — a real sound from a real person, drawing other guards there.
+	_emit_noise(target.x, target.y, AsciiMapEnvironment.NoiseLevel.MODERATE)
+	return {"ok": true, "target_id": target_id, "x": target.x, "y": target.y}
+
+
+## s37 Reach Through the Void (Void 2): touch a small object through the Void and move it telekinetically.
+## The faithful stealth-layer consumer: silently open or close a door tile at range (50' = 10 tiles) —
+## manipulating the latch without approaching (no noise, unlike a bump-open). PCs may be shugenja (s60.2).
+func cast_reach_through_the_void(tx: int, ty: int) -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"ok": false, "reason": "no_living_player"}
+	if not SpellSystem.can_cast(player.character, "reach_through_the_void"):
+		return {"ok": false, "reason": "cannot_cast"}
+	if tx < 0 or ty < 0 or tx >= _map.width or ty >= _map.height:
+		return {"ok": false, "reason": "out_of_bounds"}
+	if maxi(absi(tx - player.x), absi(ty - player.y)) > 10:
+		return {"ok": false, "reason": "out_of_range"}
+	var tile: int = _map.get_tile(tx, ty)
+	var new_tile: int = -1
+	if MovementSystem.is_closed_door(tile):
+		new_tile = MovementSystem.open_door(tile)
+	elif tile in [Enums.TileType.DOOR_SHOJI_OPEN, Enums.TileType.DOOR_WOOD_OPEN, Enums.TileType.GATE_OPEN]:
+		new_tile = MovementSystem.close_door(tile)
+	else:
+		return {"ok": false, "reason": "no_movable_object"}  # only doors are modeled small objects
+	if not SpellSystem.resolve_cast(player.character, "reach_through_the_void", _dice).get("success", false):
+		return {"ok": false, "reason": "cast_failed"}
+	_map.set_tile(tx, ty, new_tile)  # silent — telekinesis makes no noise
+	return {"ok": true, "x": tx, "y": ty, "new_tile": new_tile}
+
+
 # =============================================================================
 # -- quiescence_of_air (s33): stationary silence sphere -----------------------
 # =============================================================================

@@ -364,6 +364,10 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"drawing_the_void": {"kind": "gain_void"},  # Void 1: caster gains School Rank +1 Void Points (over-cap allowed; the per-round over-cap decay is deferred)
 	"fill_the_emptiness": {"kind": "restore_void", "target": "ally", "range_tiles": 1},  # Void 4: restore a touched ally's Void Points to maximum
 	"void_release": {"kind": "steal_void", "range_tiles": 5},  # Void 3: Contested Void → steal 1 Void Point from the target (margin/5 extra deferred)
+	"kharmic_intent": {"kind": "pool_void", "range_tiles": 4},  # Void 3: pool VP with a willing ally, redistribute (fill ally to max, caster keeps remainder up to max)
+	"the_empty_voice": {"kind": "buff", "target": "self", "duration_rounds": 50,
+		"mods": [{"kind": "empty_voice", "value": 1}]},  # Void 2: silent casting (forward-wired empty_voice modifier; dormant until casting is speech/noise-gated)
+	"unbound_essence": {"kind": "ring_reorder", "range_tiles": 5, "duration_rounds": 9999},  # Void 5: randomly reorder the target's 5 Rings (via the combat ring-delta bridge; trait-roll slice deferred)
 	# Coverage clean-wins batch 4 (2026-06-20): the two instant-kill spells.
 	"consumed_by_five_fires": {"kind": "instant_kill", "range_tiles": 20, "reciprocal": true,
 		"fire_immune_blocks": true},  # Fire 5: instantly reduce target to Dead; caster suffers the same Wounds unmitigated (often lethal); cannot target Fire-resistant creatures
@@ -1440,14 +1444,14 @@ const SPELL_LIBRARY: Dictionary = {
 	"commune_with_the_void":         {"e": 4, "m": 2, "s": 4,  "i": true},
 	"drink_of_your_essence":         {"e": 4, "m": 2, "s": 0,  "i": true},
 	"strengthen_the_void":           {"e": 4, "m": 2, "s": 15, "i": true},
-	"the_empty_voice":               {"e": 4, "m": 2, "s": 0,  "i": true},  # allows silent casting — COMBAT_ONLY
-	"false_whispers":                {"e": 4, "m": 2, "s": 0,  "i": true},  # makes target repeat one sentence verbatim — COMBAT_ONLY
-	"reach_through_the_void":        {"e": 4, "m": 2, "s": 0,  "i": true},  # telekinesis — COMBAT_ONLY
+	"the_empty_voice":               {"e": 4, "m": 2, "s": 0,  "i": true},  # WIRED (self buff): silent casting — empty_voice timed modifier (forward-wired; dormant until casting is speech/noise-gated)
+	"false_whispers":                {"e": 4, "m": 2, "s": 0,  "i": true},  # WIRED (CombatController): the target "speaks" at their tile, drawing other guards there (distraction)
+	"reach_through_the_void":        {"e": 4, "m": 2, "s": 0,  "i": true},  # WIRED (CombatController): silently open/close a door at range (telekinesis, no noise)
 	"severed_from_the_stream":       {"e": 4, "m": 2, "s": 0,  "i": true},
 	# ML3
 	"banish_the_void":               {"e": 4, "m": 3, "s": 0,  "i": true},  # Thickens Void veil 5 rounds — combat only
 	"echoes_in_the_void":            {"e": 4, "m": 3, "s": 17, "i": true},
-	"kharmic_intent":                {"e": 4, "m": 3, "s": 0,  "i": true},  # shares Void Points with ally — COMBAT_ONLY
+	"kharmic_intent":                {"e": 4, "m": 3, "s": 0,  "i": true},  # WIRED (pool_void): pool VP with a willing ally + redistribute
 	"moment_of_clarity":             {"e": 4, "m": 3, "s": 0,  "i": true},
 	"read_the_essence":              {"e": 4, "m": 3, "s": 3,  "i": true},
 	"void_release":                  {"e": 4, "m": 3, "s": 0,  "i": true},  # Transfers Void Points — not a dispel, combat aid
@@ -1461,9 +1465,9 @@ const SPELL_LIBRARY: Dictionary = {
 	# ML5
 	"divide_the_soul":               {"e": 4, "m": 5, "s": 0,  "i": true},
 	"reforge":                       {"e": 4, "m": 5, "s": 7,  "i": true},
-	"unbound_essence":               {"e": 4, "m": 5, "s": 0,  "i": true},  # Randomly reorders Rings 1h — no trackable sim state
+	"unbound_essence":               {"e": 4, "m": 5, "s": 0,  "i": true},  # WIRED (ring_reorder): random Ring permutation via the combat ring-delta bridge (trait-roll slice deferred)
 	# ML6
-	"ring_of_the_void":              {"e": 4, "m": 6, "s": 0,  "i": true},
+	"ring_of_the_void":              {"e": 4, "m": 6, "s": 15, "i": true},  # WIRED (PERFORM_WORSHIP, Ishiken): communion with the Void Dragon — RITUAL_HONOR + a once/month TIER_2 SUPERNATURAL communion topic (boon GM-discretion, PROVISIONAL like Piercing the Heavens)
 	"rise_from_the_ashes":           {"e": 4, "m": 6, "s": 1,  "i": true},
 	"unmake_the_world":              {"e": 4, "m": 6, "s": 0,  "i": true},
 }

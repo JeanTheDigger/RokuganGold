@@ -28814,14 +28814,14 @@ static func _process_ritual_spell_writebacks(
 		# once per month. The GDD's "aid available nowhere else" is GM-discretion with no specified
 		# mechanic — modeled here as the worship-devotion honor + the standing of having communed
 		# (PROVISIONAL, flagged for owner override; no invented boon).
-		if ritual_spell_id == "piercing_the_heavens" and success \
+		if (ritual_spell_id == "piercing_the_heavens" or ritual_spell_id == "ring_of_the_void") and success \
 				and (character.piercing_heavens_ic_day < 0
 					or ic_day - character.piercing_heavens_ic_day >= TimeSystem.IC_DAYS_PER_MONTH):
 			character.piercing_heavens_ic_day = ic_day
 			var pt := TopicData.new()
 			pt.topic_id = next_topic_id[0]
 			next_topic_id[0] += 1
-			pt.title = "Communion with the Fortunes"
+			pt.title = "Communion with the Void Dragon" if ritual_spell_id == "ring_of_the_void" else "Communion with the Fortunes"
 			pt.tier = TopicData.Tier.TIER_2
 			pt.category = TopicData.Category.SUPERNATURAL
 			pt.subject_character_id = char_id

@@ -7270,6 +7270,33 @@ populating a foreign-speaker roster activates it). **With this, EVERY spell in t
 stealth-layer hook). The former 3-spell blocked set (Piercing the Heavens, Opening the Veil, Tenjin's Ear) is
 now wired via faithful PROVISIONAL calls flagged for owner override. No genuinely-unwired spell remains.
 
+### Spell coverage — 6 Ishiken/Void/utility spells (2026-06-27, owner-directed, mixed verification)
+A regex gap (`"i": true` Ishiken entries) had hidden 6 spells from earlier audits. All now wired:
+- **Kharmic Intent (Void 3)** — pool VP with a willing ally. New `pool_void` effect: `_apply_kharmic_intent`
+  combines both pools and fills the ally to max first (share VP where needed), caster keeps the remainder up
+  to their max (over-cap lost at redistribution, per GDD "divided up to each one's normal maximum"). Range 4.
+- **Unbound Essence (Void 5)** — randomly reorder the target's 5 Rings. New `ring_reorder` effect:
+  `_apply_unbound_essence` Fisher-Yates-shuffles the target's Ring values (via the dice engine) and applies
+  the deltas through the combat ring-delta bridge (like Facing Your Devils) — the wound-capacity (Earth) +
+  Ring-based effects flow; PROVISIONAL: the per-Trait roll slice needs trait-level combat state the engine
+  lacks (flagged). Ring floored at 1.
+- **Ring of the Void (Void 6, Ishiken)** — commune with the Void Dragon (GM-discretion boon, no GDD payload).
+  Wired like Piercing the Heavens: library `s` → RITUAL_HONOR; an Ishiken at a shrine who knows it prefers it
+  for PERFORM_WORSHIP (shared monthly communion guard); the writeback creates a TIER_2 SUPERNATURAL "Communion
+  with the Void Dragon" topic. PROVISIONAL (the boon is modeled as worship-devotion honor + communion standing).
+- **Reach Through the Void (Void 2)** — telekinesis of small objects. CombatController `cast_reach_through_the_void`
+  silently opens/closes a door tile at range (50' = 10 tiles) — the one concrete small-object the sim models
+  (no noise, unlike a bump-open). Runtime-verified.
+- **False Whispers (Void 2)** — the target unknowingly repeats the caster's sentence. CombatController
+  `cast_false_whispers`: the target guard "speaks" at their own tile, emitting a MODERATE noise that draws
+  OTHER guards there (a distraction — mirrors Kami's Whisper). Range 30' (6 tiles). Runtime-verified.
+- **The Empty Voice (Void 2)** — silent casting of ML1-2 other-element spells. Wired as a self `buff`
+  (`empty_voice` timed modifier). Forward-wired/dormant: casting is not speech/noise-gated anywhere in the
+  engine yet, so there is no active consumer — the buff is complete and activates when one exists (no invented
+  mechanic). Kharmic Intent / Unbound Essence / Ring of the Void are structural-verified (mirror the VP /
+  ring-delta / Piercing-communion patterns; the orchestrator can't run under headless `-s`); Reach Through the
+  Void + False Whispers are runtime-verified in CombatController. **All 282 library spells are now wired.**
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`
