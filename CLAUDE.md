@@ -6524,6 +6524,148 @@ a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or t
 effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
 (see "ASCII Map System — Live-Reachability Status").
 
+### Spell coverage — deferred sub-part: Burning Kiss of Steel mounted/larger +2k2 (2026-06-27, runtime-verified 5/5)
+**Burning Kiss of Steel** (Fire 1 Battle, s35 l15) GDD: the fire-engulfed weapon gives +1k1 melee, **+2k2
+against mounted opponents or opponents larger than human size**. The +1k1 was wired; the +2k2 was deferred
+(I had wrongly claimed "no mount system"). The engine DOES model mounts: `CONDITION_MOUNTED` is a real
+condition `resolve_attack` reads (the s40 mounted +1k0), plus `Enums.Advantage.LARGE` for size. Wired both
+halves: `resolve_attack` gains a `target_is_large: bool = false` param and, when the attacker carries a
+`burning_kiss` marker modifier AND the target is mounted (`CONDITION_MOUNTED`) or large
+(`AdvantageSystem.has_advantage(target, LARGE)`), adds a further +1k1 (→ +2k2 total). The orchestrator's main
+melee `resolve_attack` call now computes and passes the real `target_is_mounted` (from the defender's
+condition) and `target_is_large` — **also fixing a latent bug**: that call hardcoded `target_is_mounted:
+false`, so the existing s40 mounted +1k0 never accounted for a mounted *defender*. The library entry adds a
+`{kind: burning_kiss}` marker mod. Runtime-verified 5/5 (Godot 4.6.2, headless): a Burning-Kiss wielder's
+roll mean jumps base 27.0 → 33.7 vs mounted / 34.1 vs large (the +1k1 extra); no buff → no change vs mounted;
+the LARGE advantage is detected; the full `execute_melee_attack` path resolves vs a LARGE defender.
+
+### Spell coverage — deferred sub-part: Hungry Blade explode-on-8 (2026-06-27, runtime-verified 3/3)
+**Hungry Blade** (Fire 3 Craft, s35 l193) GDD: the enhanced weapon gives +1k0 attack AND **all damage dice
+explode on a result of 8 or better** (each die explodes once on an 8 or 9; 10s explode repeatedly as normal).
+The +1k0 was wired; the explode-on-8 was deferred ("needs a dice-engine 8/9-once mode + weapon-damage hook").
+Built it: `DiceEngine.roll_and_keep` and `roll_damage` gain an `explode_8: bool = false` param (backward-
+compatible — every existing call uses the default) — when set, a die whose **initial** face is 8 or 9 gets
+one bonus die (the bonus die follows the normal 10-chain), while 10s explode repeatedly as before.
+`IndividualCombat.resolve_damage` passes `explode_8 = true` when the attacker's Participant carries a
+`hungry_blade` timed modifier; the library entry adds a `{kind: hungry_blade}` buff mod (installed via the
+generic `_apply_spell_buff` else-branch as a readable timed modifier). The buff is `target: "ally"` (the
+shugenja enchants a wielder's weapon within 50'). Runtime-verified 3/3 (Godot 4.6.2, headless): explode_8
+raises the 3k2 roll mean (15.2→18.8) and 4k2 damage mean (17.3→22.0); a katana attacker with the Hungry
+Blade buff deals more (20.1→26.6) than without — and the unchanged normal 3k2 mean (15.2) confirms the
+default path is intact. The `explode_8` dice mode is reusable for any future weapon enchant with the
+explode-on-8 mechanic.
+
+### Spell coverage — deferred sub-part: The Fires That Cleanse caster-half (2026-06-27, runtime-verified 5/5)
+**The Fires That Cleanse** (Fire 1, s35 l51) GDD: everyone in the 30' radius — **including the caster** —
+takes Fire-Ring DR, but the caster takes only **half (rounded up)** as the kami make some effort to avoid
+them. It was wired `caster_exempt` (caster took nothing — the caster-half was deferred). Added a reusable
+`caster_half` flag: `_gather_spell_targets` appends the caster (after the AoE cap) with a `half` marker, and
+`_apply_spell_combat_damage` halves that target's rolled damage (`ceil(dmg/2)`). Entry changed
+`caster_exempt`→`caster_half`. Runtime-verified 5/5 (Godot 4.6.2, headless): the caster is now in the blast
+(marked half) alongside all others (aoe_hits all); over 60 samples the caster's mean (15.5) is ~half a
+full victim's (29.5). The `caster_half` primitive is reusable for any other "caster caught for half" AoE.
+
+### Spell coverage — deferred sub-part: Fires of Purity ally-target (2026-06-27, runtime-verified 5/5)
+**Fires of Purity** (Fire 1 Defense, s35 l45) GDD: Range 25', 1 target — a flame shroud cast on **self OR an
+ally** (a melee attacker takes 2k2; the shrouded one's strikes deal +2k2; ranged bypasses). It was wired
+self-only (ally-target deferred). Added a reusable **`self_or_ally`** buff target mode to `_apply_spell_buff`:
+the named living target is buffed when one is given (with the same-faction + range gates), else the caster —
+so a PC may shroud an ally within range while the NPC self-buff path (which passes `target_id == caster_id`)
+still self-applies. The NPC + companion self-buff pickers (`_npc_maybe_cast_spell`) now accept `self_or_ally`
+(self-cast), preserving the existing NPC auto-cast. Fires of Purity's entry → `target: "self_or_ally",
+range_tiles: 5`. Runtime-verified 5/5 (Godot 4.6.2, headless): a PC ally-target shrouds the ally (not the
+caster); a self-cast shrouds the caster; an out-of-range ally is rejected; the NPC still auto-self-casts it.
+The `self_or_ally` mode is reusable for any other self-or-ally defensive buff.
+
+### Spell coverage — deferred sub-part: Oath of the Heavens 2-target link (2026-06-27, runtime-verified 12/12)
+**Oath of the Heavens** (Fire 3, s35 l199) GDD: links two persons — both gain **+2k0 to Fire-Ring/Fire-Trait
+rolls** AND from then on **share Fatigued/Dazed/Stunned** (if either gains one, the other immediately does);
+the spell ends if either is reduced to **Down/Out/Dead**. Only the +2k0 single-target buff was wired (2-target
+link + shared conditions deferred). New dedicated `oath_link` effect kind: `_apply_oath_link` applies the +2k0
+attack slice (the Agility-driven combat slice; the Int/Fire-Ring-roll halves are the standard out-of-combat
+buff limitation) to **both** the caster and the touched target and registers a `MapCombatState.oath_links`
+entry. `_process_oath_links` (run at the **top** of `advance_round`, before the Dazed/Stunned recovery phase,
+so a condition gained last round is shared then both partners roll to recover — faithful to "immediately
+shares") mirrors the three conditions in both directions and dissolves the link (clearing its +2k0 buff)
+when either partner is Down+ or at the 5-round expiry. PC-deliberate (not in the NPC offense/self-buff
+pickers — it's a 2-target support link, like other support spells). Runtime-verified 12/12 (Godot 4.6.2,
+headless): both get +2k0; Dazed/Stunned/Fatigued each mirror bidirectionally; the link dissolves and both
+buffs clear when a partner reaches Down; self-target rejected. Reusable shared-condition-link primitive
+(mirrors the existing `tomb_links` pattern).
+
+### Spell coverage — deferred sub-part: Eyes of the Phoenix ally Fear-3 burst (2026-06-27, runtime-verified 7/7)
+**Eyes of the Phoenix** (Fire 4 Illusion, s35 l255) GDD: the target is Blinded (wired) AND, on cast, **all
+allies of the target suffer a Fear 3 effect** (undead/immune exempt) — the ally Fear-burst was deferred. New
+reusable `_apply_fear_burst(state, faction, fear_rank, exclude_id, dice)` helper: every living member of the
+given faction (minus the excluded target) rolls Willpower (+ Kshatriya `fear_resist_willpower_bonus`,
+`fear_resist_rolled/kept_bonus`, and `fear_resist_*` buff modifiers) vs **TN 5 + N×5** (s22.3 LOCKED); a
+failure installs a persistent `spell_afraid` timed modifier + AFRAID (the same proximity-independent
+mechanism as the maho fear spells, read by `apply_fear_checks`); `immune_to_fear` characters are exempt.
+Wired in `_complete_cast` after the status (Blinded) applies, scoped to the **target's** faction (so the
+caster's own side is untouched). Returns `{afraid: [ids], resisted: [ids]}`. Runtime-verified 7/7 (Godot
+4.6.2, headless): target Blinded; a low-Willpower enemy ally fails Fear 3 → AFRAID + persistent spell_afraid;
+an `immune_to_fear` enemy ally is exempt; a player-faction ally is unaffected (only the *target's* allies);
+the target is not in its own burst. The `_apply_fear_burst` primitive is reusable for any other allies-suffer-
+Fear spell or creature ability.
+
+### Spell coverage — deferred rider: Fury of Osano-Wo weather damage scaling (2026-06-27, runtime-verified 4/4)
+**Fury of Osano-Wo** (Fire 1 Thunder, s35 l57) GDD: 5k2 lightning base, **6k2 during a moderate
+thunderstorm, 6k3 during a disastrous storm/hurricane** — the weather bonus was deferred ("weather damage
+bonuses are deferred to later tranches"). `MapCombatState.weather` already exists. Added a reusable
+`weather_dr` schema to `SPELL_COMBAT_EFFECTS` ({storm_rolled, storm_kept, severe_rolled, severe_kept}) read
+in `_apply_spell_combat_damage` after the base DR resolves: `WeatherState.STORM` (moderate thunderstorm)
+adds the storm tier; `TYPHOON`/`BLIZZARD` (disastrous storm/hurricane) add the severe tier; CLEAR/WIND/RAIN/
+MIST/SNOW are unchanged (RAIN is plain rain, not a thunderstorm). Fury's entry: storm `+1 rolled` (5k2→6k2),
+severe `+1 rolled +1 kept` (5k2→6k3) — all GDD-exact. Runtime-verified 4/4 (Godot 4.6.2, headless, 120
+samples/tier): monotonic means CLEAR 18.9 ≈ RAIN 19.2 < STORM 19.9 < TYPHOON 26.4 ≈ BLIZZARD 26.8 — RAIN
+gives no bonus, STORM adds the rolled die, the kept die (severe) is the big jump. The `weather_dr` primitive
+is now available for any other weather-scaling combat spell. Fury's Deafen-bystander rider remains deferred
+(needs a hearing/Deafened combat mechanic — genuinely blocked, not invented).
+
+### Spell coverage — deferred riders: multi-condition rider + Murmur of Earth Dazed (2026-06-27, runtime-verified 6/6)
+Resumes the deferred-sub-parts walkthrough. **Murmur of Earth** (Earth 3, s34 l181) GDD: a failed Agility
+TN 20 save → knocked **Prone, 1k1 damage, AND Dazed for 1 Round**; only Prone+damage were wired (Dazed
+deferred). Added reusable **multi-condition rider support** to `_apply_spell_rider`: a rider may carry a
+`conditions` array (applied together on the same failed save) in addition to the legacy single `condition`
+(dedup-merged; each honors `duration_rounds`; returns a comma-joined name list). Murmur of Earth's rider is
+now `{conditions: ["prone", "dazed"], save: "none"}`. Both conditions go through the standard apply path
+(Prone persists until stand-up; Dazed is roll-recovered each round, the engine's Dazed model). Backward
+compatible — every existing single-`condition` rider is unchanged. Runtime-verified 6/6 (Godot 4.6.2,
+headless): the rider applies both Prone and Dazed and returns "prone,dazed"; a single-`condition` rider still
+applies only Prone; and every failed-save Murmur target is Prone+Dazed end-to-end through the damage path
+(4/4). The multi-rider primitive is now available for any other GDD spell that stacks conditions on one save.
+
+### s31 Multi-round interruptible spell casting in tile combat (2026-06-27, owner-directed, runtime-verified 16/16)
+Owner pasted the L5R 4e Spell Casting rules and directed: **"this is how spells ought to be casted in the
+ASCII map"** — replacing the prior atomic (single-round) cast with the faithful multi-round, interruptible
+model. Owner decisions: **A** NPCs speed-raise when they expect to succeed; **B** casters commit to the
+multi-round cast; **C** build the full flow. **Mechanism** (`AsciiMapCombatOrchestrator`): new
+`MapCombatState.casting_in_progress` (caster_id → {spell_id, target_id, spell_choice, rounds_remaining,
+res}). `execute_cast_spell` now snapshots the slot counters, rolls the Spell Casting Roll once
+(`resolve_cast`), and computes `_effective_cast_rounds` = `ml − speed_raises` (speed_raises =
+`min(ml−1, margin/5)` — the PROVISIONAL AI heuristic for "Raises reduce casting time by 1 each, min 1
+round", owner decision A). A 1-round cast (ML1 or speed-raised to 1, or a **failed** roll — failed casts
+resolve immediately and **keep the slot spent**, per the GDD) fires the effect now via the extracted
+`_complete_cast`. A multi-round cast **refunds the slot** (restores the snapshot — the slot is spent only at
+completion or on a failed roll, never on an interrupt), stores the round-1 `res`, and returns
+`casting_started`. `continue_cast` (one **Complex Action** per round, owner decision B) decrements
+`rounds_remaining`; on the final round it consumes the slot and dispatches the stored `res` through
+`_complete_cast` (the Concentration Roll is **not** re-rolled — it happens once at the start, each later
+round is just maintenance). **Interruption** (`_interrupt_cast`): a mid-cast caster struck for damage rolls
+**Willpower vs TN 5 + damage** (the general GDD rule) or the cast is aborted — **no effect, no slot lost**.
+Wired at both damage sites (`_apply_hit` weapon/melee, `_apply_spell_combat_damage` spell), with a slain
+caster's cast simply lapsing (`casting_in_progress` erased). **Envious Flames** (s35) is now its literal
+self: a struck mid-cast target faces **TN 20 + damage** (`bonus_tn = 15` over the base 5+damage) — replacing
+the earlier "next-cast marker" adaptation, which is removed. **NPC + companion turn hooks**: a caster with
+`casting_in_progress` commits its Turn to `continue_cast` (returns early, before any offensive logic) —
+owner decision B. Runtime-verified 16/16 (Godot 4.6.2, headless): rounds computation (no-raise / 1-raise /
+capped-at-ml−1 / failed-roll); full state machine (slot deferred mid-cast → continuing → completes → slot
+consumed → effect fires); Complex-Action gate (blocked cast preserved); damage interrupt aborts without
+costing a slot; non-caster interrupt no-op. LIMITATION: the speed-raise count is an AI heuristic
+(margin/5 — PROVISIONAL, flagged for owner override); a PC's deliberate Raise declaration is the future
+turn-based UI. Same PC-travel HOLD live-reachability caveat as the whole ASCII stack — driver-verified,
+not a live session.
+
 ### Spell coverage — gap sweep + Hands of the Tides position-swap (2026-06-22, runtime-verified 8/8)
 Swept all COMBAT_ONLY-and-unwired s31–37 library spells (~63 by an `s:0`-vs-`SPELL_COMBAT_EFFECTS`
 diff) for any newly wirable with this session's machinery (transform / decoy / persistent-fear /
@@ -6575,6 +6717,727 @@ headless drivers: assigning an untyped `Array` literal (`c.spells_known = ["x"]`
 `Array[String]` field on an **untyped** local silently fails at runtime (the documented typed-array
 `.assign()` gotcha) — type the local (`var c: L5RCharacterData = …`) or use `.assign()`; production
 code was never at fault, only the test harness.
+
+### Spell coverage — Wrath of Kaze-no-Kami (hurricane) + The Kami's Whisper (2026-06-25, owner-collaborative, runtime-verified 15/15)
+Two previously-deferred spells wired via per-spell owner Q&A (the new collaborative workflow): the
+owner makes each spell's design calls before any code.
+- **Wrath of Kaze-no-Kami (Hurricane, Air 6 [CR], s33)** — the marquee whole-map storm, previously
+  blocked only on the per-minute→per-Round damage conversion. New **`hurricane` effect kind** in
+  `SpellSystem.SPELL_COMBAT_EFFECTS` + dispatch branch in `execute_cast_spell` →
+  `AsciiMapCombatOrchestrator._apply_hurricane_zone` (installs a `spell_zones` entry) +
+  a per-round branch in `_process_spell_zones`. The calm **eye (20' = 4 tiles) follows the caster**
+  (re-read from `state.positions[caster_id]` each tick). **Owner decisions (2026-06-25):**
+  (1) cadence = **1 minute = ROUNDS_PER_MINUTE (10) Rounds** — every 10 Rounds the storm ticks
+  (literal per-minute rate, the project's established convention; near-cosmetic in a short skirmish
+  by design, devastating in a long one); (2) the GDD "cast into the winds to their death" clause =
+  **the 5k5 debris strike + knockback, NOT instant death** — on a **1-in-10** roll a victim takes
+  **5k5** (else **1k1**) and, if they survive, is **flung outward from the eye** (`_knockback_target`,
+  away from the caster — so it composes with fall/pit hazards; a corpse is not flung); (3) **hits
+  everyone outside the eye, all factions** — the caster's own party must shelter in the eye or take
+  damage too. Concentration (max 1 hour = 600 Rounds); **ends if the caster dies** (the storm
+  collapses — Concentration). Spirit targets route through the `W_MAGIC` damage filter. **NPC AI never
+  auto-casts it** (the offense picker only takes `damage`/`status` kinds, so this friendly-fire
+  whole-map AoE stays a PC-deliberate spell, like the instant-kill spells). Only invented value:
+  `fling_tiles = 3` (PROVISIONAL — GDD gives no knockback distance for "cast into the winds"); every
+  other number is GDD-given or owner-decided. Not modeled (documented limitations, no invention): the
+  loose-object toss (no object physics), the "sturdy shelter" exemption (no shelter tiles in
+  skirmishes), and the once-per-month-per-area cast restriction (no per-area cast tracking — irrelevant
+  in combat). Runtime-verified 12/12 (Godot 4.6.2, headless): cast installs the zone (eye 4, next tick
+  at start+10); no damage Rounds 1–10; at the minute boundary the far enemy AND far ally take storm
+  damage while the caster + an inside-eye ally are unharmed; the storm ends when the caster dies (zone
+  dropped, no further damage). Fling verified 3/3 (forcing 1-in-1 majors): a tough victim takes ~36
+  (5k5) and is flung from the eye to the map edge; a fragile victim that the 5k5 kills is NOT flung
+  (corpses aren't knocked back).
+- **The Kami's Whisper (Air 2 [CR], s33)** — a false-sound stealth distraction, wired in
+  **CombatController** (the stealth/exploration layer, like the other illusion/perception spells), not
+  the orchestrator schema. `CombatController.cast_kamis_whisper(tx, ty)` emits a MODERATE noise (GDD
+  "no louder than a normal speaking voice") at a chosen tile within 50' (10 tiles) of the player via
+  the existing `_emit_noise` — guards near the point hear it, become SUSPICIOUS, and investigate
+  TOWARD the false sound (away from the PC), exactly as a real noise. No invented values (MODERATE =
+  normal voice; QUIET = whisper, LOUD = shout); reuses the whole noise/alert system. The future
+  stealth-command UI calls it (PCs may be shugenja, s60.2). Bounds + range gated.
+**158 combat effects + the CombatController stealth-spell set.** Same PC-travel HOLD live-reachability
+caveat as the whole ASCII stack — driver-verified, not a live session.
+
+### Spell coverage — Yuki's Touch (freeze-water trap) (2026-06-25, owner-collaborative, runtime-verified 14/14)
+**Yuki's Touch (Water 2, s36)** — flash-freeze a body of water out to 100' (20 tiles) from the caster.
+Previously deferred (water-terrain spell, "no tile consumer"); wired via per-spell owner Q&A. New
+**`freeze_water` effect kind** in `SpellSystem.SPELL_COMBAT_EFFECTS` + `execute_cast_spell` dispatch →
+`AsciiMapCombatOrchestrator._apply_freeze_water`. **Owner decisions (2026-06-25):** (1) the water tiles
+in range (WATER_SHALLOW/DEEP/RAPID/PADDY) actually turn to **solid walkable ice** (FLOOR_SNOW — no
+FLOOR_ICE tile exists; white walkable surface), saved/restored via the existing `conjured_terrain`
+zone ("ice melts normally" → persists the skirmish, duration 9999); freezing WATER_SHALLOW (cost 2,
+difficult) to ice (cost 1) is a faithful movement change, and the frozen river is now crossable.
+(2) **deep-water victims drown** — a combatant whose frozen tile was WATER_DEEP is submerged → dies via
+`_apply_pit_death` (the engine's existing deep-water-drowning model; effectively unreachable since deep
+water is impassable, documented for completeness). (3) **everyone in the water (all factions)** is
+trapped — the caster's own allies in it get caught too. **Trapped mechanic (faithful default, the 4th
+Q&A didn't register):** trapped = **Entangled** (the ice locks their legs — they can still fight, only
+movement is blocked via `execute_move`'s entangle gate), breaking free via **Strength vs the caster's
+stored Water roll** — new `Participant.freeze_break_tn` (the caster's Water roll total, rolled once at
+cast) overloads `attempt_entangle_escape` (it uses `freeze_break_tn` when set, the default TN 20
+otherwise; cleared on escape). A trapped NPC auto-attempts the break via the existing entangle-escape
+hook. **NPC AI never auto-casts it** (`freeze_water` isn't a `damage`/`status` offense kind) — a
+situational PC tool that only bites on maps with water + combatants standing in it (like Caress of Fu
+Leng needing jade). No invented values (radius 20 = GDD 100'/5; break = caster's Water roll;
+drowning = engine model). Not modeled: the GDD "treat as Drowning" ongoing-suffocation nuance collapses
+to the engine's deep-water = death. Runtime-verified 14/14 (Godot 4.6.2, headless): cast freezes 30
+river tiles + break_tn from the caster's Water roll; shallow-water tiles become walkable ice; enemy AND
+ally in the water both Entangled (friendly fire), dry enemy untouched, break_tn stored; trapped victim
+can't move (`execute_move` "entangled"); a strong victim breaks free via Strength vs the stored roll,
+condition + break_tn cleared; a victim on a WATER_DEEP tile drowns (dead, in the `drowned` list).
+**159 combat effects + the CombatController stealth-spell set.**
+
+### Spell coverage — Curse of the Burning Hand (2026-06-25, owner-collaborative, runtime-verified 12/12)
+**Curse of the Burning Hand (Fire 6, s35)** — bind a hostile Fire kami to an enemy so it becomes a
+hazard to its OWN side. Previously deferred ("near-inert in faction combat" — allies don't attack
+allies). Wired via per-spell owner Q&A. New **`curse_burning_hand` effect kind** in
+`SpellSystem.SPELL_COMBAT_EFFECTS` + `execute_cast_spell` dispatch → `_apply_curse_burning_hand` +
+a per-round pass in `advance_round`. **Cast:** Contested Fire Roll (the caster must WIN — reuses the
+`fire_contested` save, target resists on a win/tie), range 10' (2 tiles). On a win, installs a
+`curse_burning_hand` timed modifier on the target (Infinite → skirmish, 9999). **Owner decisions
+(2026-06-25):** (1) **adjacent same-faction allies, each round** — "friends/allies who touch the
+cursed target take 3k3" reads as the jostling of a melee press: every Round, each combatant of the
+**cursed target's own faction** standing adjacent (Chebyshev ≤ 1) takes **3k3** fire (armour-ignoring,
+W_FIRE spirit filter). Never the cursed target's attackers (other faction → the "fire recedes from
+hostile use" clause), and never the target itself. (2) **arsonist** — each Round the cursed target
+**ignites the flammable tile underfoot** via `FireSystem.ignite` (which then spreads), turning it into
+a roving fire hazard on flammable maps. **NPC AI never auto-casts it** (dedicated kind, not in the
+`damage`/`status` offense picker) — a PC-deliberate spell (the curse only bites if the enemy clusters;
+an NPC could in principle curse a PC to burn the PC's adjacent companions, but the indirect/situational
+nature makes excluding it the safe default, like hurricane/freeze). All values GDD-given (3k3, range
+10') or owner-decided. Not modeled (documented limitations, no invention): "innocents" (no
+non-combatants in skirmishes — only same-faction allies), the "1 full minute to cast" cast time (no
+multi-round cast model for any spell), and "may be ended by spells that remove magical effects" (the
+project's dispel only handles illusions — the curse persists). Runtime-verified 12/12 (Godot 4.6.2,
+headless): cast lands on a won Fire contest + installs the modifier; an adjacent same-faction ally
+takes ~3k3 each round while a far ally and a cursed target's PLAYER attacker (other faction) and the
+target itself are all unharmed; out-of-range rejected; the contest gates both ways (21 resisted / 19
+landed at even Fire); the cursed target ignites a CROPS tile underfoot.
+**160 combat effects + the CombatController stealth-spell set.**
+
+### Spell coverage — Netsuke of Wind (conjure functional weapon) (2026-06-25, owner-collaborative, runtime-verified 11/11)
+**Netsuke of Wind (Air 4, s33)** — Air kami coalesce into a solid, fully-functional (illusory) weapon
+held in hand, arming an otherwise weaponless shugenja. Previously deferred ("ambiguous DR — conjures a
+weapon with no GDD profile"). Resolved by owner Q&A (2026-06-25): **the shugenja chooses the weapon
+type from the catalog and it gets that weapon's REAL stats** (full profile, including Strength) — the
+faithful read of "functions fully... including dealing damage as a weapon," and no invented numbers
+(the DR comes from `IndividualCombat.WEAPON_CATALOG`). Reuses the existing `conjure_weapon` effect kind
+via a new `real_weapon: true` flag: `_apply_spell_conjure_weapon` gains a `weapon_choice` param (and
+`execute_cast_spell` a trailing `spell_choice: String = ""` — backward-compatible, all 7-arg callers
+unaffected). When `real_weapon`, it builds the conjured weapon from the chosen catalog entry's real
+`rolled/kept/skill/trait/strength_adds` (e.g. katana 3k2 + Strength, Kenjutsu) instead of the fixed-DR
+strength_adds-false elemental conjures (Katana of Fire etc.). The choice defaults to the caster's
+**best-skill melee weapon** (`pick_best_weapon`; katana if that yields a non-melee/unarmed pick) for an
+NPC/no-choice cast; an invalid choice falls back the same way. The to-hit uses the caster's real skill
+in that weapon (e.g. Kenjutsu) and the conjured weapon's `strength_adds: true` is honored by
+`resolve_damage`, so it deals full real damage. 1 hour → 600 rounds (skirmish), then disappears
+(`conjured_weapon_expiry`). Range Touch → self or a touched same-faction ally (existing ally-grant).
+Restricted to melee weapons (a conjured bow would need conjured ammo, not in the GDD); the 20-lb weight
+limit is flavour (no weight data — not gated). **NPC AI never auto-casts it** (conjure_weapon isn't in
+the offense/buff picker) — a PC tool, like the existing conjures. Runtime-verified 11/11 (Godot 4.6.2,
+headless): an explicit katana choice yields the real 3k2 + Strength Kenjutsu profile; no-choice defaults
+to the best-skill weapon (naginata for a Polearms-5 caster); an invalid choice falls back to a real
+weapon; the conjured katana's mean damage (22.6) reflects 3k2 + Strength (vs the strength-less elemental
+conjures); the weapon disappears at duration end.
+**161 combat effects + the CombatController stealth-spell set.**
+
+### Spell coverage — Essence of Fire (anti-tampering duel ward) (2026-06-25, owner-collaborative, runtime-verified 10/10)
+**Essence of Fire (Fire 4, Wards, s35)** — the Asahina anti-tampering ward for iaijutsu duels.
+Previously deferred ("duel-scoped" — our duel resolver casts no spells mid-duel, so a strictly
+duel-scoped ward would be inert). Owner Q&A (2026-06-25): **model it as a general anti-spell ward
+(skirmish-long) on two duelists** (the "iaijutsu duel" becomes lore framing — the only scoping that
+gives the −3k0 a consumer). New **`essence_of_fire` effect kind** + `execute_cast_spell` dispatch →
+`_apply_essence_of_fire`. **Targets:** the caster + the chosen target (two duelists, owner choice),
+both within 10' (2 tiles). Each warded duelist: (1) **dispel** — `IndividualCombat.clear_spell_timed_modifiers`
+ends ongoing spell effects (clears timed modifiers whose source is spell-installed, prefix `spell_`:
+spell_buff/spell_invisible/spell_debuff/spell_arrows_flight); kata/kiho/creature modifiers are left
+untouched. (2) **−3k0 anti-spell ward** — an `essence_of_fire` timed modifier (value 3); any spell
+cast AT a warded duelist loses **3 rolled dice** on the casting roll (mirrors the s34 Kami's Will hook,
+but rolled-only: `resolve_cast` gained a trailing `rolled_only_penalty` param applied to `roll_dice`
+only, distinct from `roll_penalty`'s −XkX; the orchestrator reads the target's `essence_of_fire`
+modifier and passes it). Duration = the skirmish. **Deferred (documented, no invention):** the 4-Raise
+Technique-suppression variant (Raises not tracked at cast + kata-suppression infra), and spell-applied
+CONDITIONS (incapacitate/entangle/afraid/blinded carry no source tag, so they can't be selectively
+dispelled). **NPC AI never auto-casts it** (dedicated kind, not in the offense/buff picker) — a
+situational PC tool (only bites vs enemy spellcasters, like the Kami's Will). Runtime-verified 10/10
+(Godot 4.6.2, headless): cast wards both caster + target (−3 each); a spell_buff modifier on the target
+is dispelled while a kata modifier survives; an out-of-range target is not warded (only the caster);
+`resolve_cast`'s rolled-only penalty lowers the casting roll (53.7→46.6); and end-to-end a damage spell
+cast at the warded duelist rolls lower than at an unwarded one (60.4 vs 65.8).
+**162 combat effects + the CombatController stealth-spell set.**
+
+### Spell coverage — Mental Quickness (one-shot +3 Int) (2026-06-25, owner-collaborative, runtime-verified 7/7)
+**Mental Quickness (Fire 2, s35)** — imbues an item granting +3 Intelligence to its carrier. Previously
+deferred ("marginal combat footprint — +3 Int only touches the Fire Ring"). Owner Q&A (2026-06-25)
+reshaped it: NOT the Fire-Ring slice, but a **one-shot +3 Intelligence on the carrier's NEXT
+Intelligence-trait roll** (an "AP usage roll / the next roll" = the "10 minutes"), fired from the cast.
+This is a **SkillResolver-level buff, not a combat-orchestrator effect** (so it does NOT increment the
+combat-effects count). New field `L5RCharacterData.mental_quickness_ic_day` (-1 = inactive);
+`SpellSystem.activate_mental_quickness` sets it to the cast tick on success (the caster fires it for
+themselves — the GDD "anyone who carries the item" is collapsed to the firer, owner's reframing; the
+`mental_quickness_imbued` item flag is retained for backward compat). New
+`SkillResolver._get_mental_quickness_bonus(character, trait_used, ic_day)`: when the marker == the
+current ic_day AND the roll's trait is INTELLIGENCE, returns **+3k3** (a trait point = +1 rolled AND
++1 kept, so +3 Int = +3k3) and **consumes** the marker (-> -1, one-shot); wired into the rolled/kept
+assembly beside the kiho-buff hook. ic_day-gated like the other SkillResolver day-buffs (kiho /
+Altering the Course / Voice of the Wind), so it lapses with the tick if no Int roll is made. Covers Int
+skill rolls (Lore/Spellcraft/Medicine/Calligraphy/Commerce/Engineering/… and Int trait-overrides like
+IMPRESS); a non-Int roll neither applies nor consumes it. **Not modeled (documented):** spell CASTING
+(`resolve_cast` rolls the element ring, not Intelligence — the owner's model is Int rolls, not casting);
+combat rolls that pass ic_day=-1 won't apply it (consistent with the "AP usage roll" intent); the
+separate item-carrier-ally case (collapsed to the firer). The cast is reachable via
+`activate_mental_quickness` (the future PC spell UI / an NPC hook); no current NPC pipeline auto-casts
+it. Runtime-verified 7/7 (Godot 4.6.2, headless): cast sets the marker; the next Lore (Int) roll gets
++3k3 (mean 48.0 vs 26.3) and consumes it; a non-Int Kenjutsu roll neither applies nor consumes it while
+a later Int roll still does; an ic_day mismatch is inert.
+
+### Spell coverage — Drawing on the Mountain (siege wall-hardening) (2026-06-25, owner-collaborative, runtime-verified 7/7)
+**Drawing on the Mountain (Earth 5, Battle/Defense, s34)** — a shugenja hardens a fortification,
+"doubling the structure's Wounds and Reduction under Siege rules." Previously deferred ("structure
+scale — no tile consumer"). Our engine has **no structure-with-Wounds/Reduction entity** (the
+world-sim Siege System abstracts to defense bonuses + starvation/morale/attrition; the Kaiu Wall uses
+SI; tile-combat walls are HP-less impassable tiles). Owner Q&A (2026-06-25): **map it onto the siege
+storm-assault defense bonus.** New `SiegeSystem.DRAWING_ON_MOUNTAIN_DEFENSE_BONUS = FORTIFICATION_DEFENSE_BONUS`
+(= 5; the GDD "double the structure's Reduction" maps to doubling the fortification's own defensive
+contribution — owner-defined, PROVISIONAL, since Wounds/Reduction → a flat bonus is an abstraction
+mapping). `SiegeSystem.get_storm_defense_bonus` gains an optional `drawing_on_the_mountain` flag
+(backward-compatible) that adds the bonus. **Cast trigger:** wired into the day_orchestrator storm-assault
+resolution — `_cast_drawing_on_the_mountain(settlement_id, characters_by_id, dice)` finds a living
+defending shugenja co-located at the besieged settlement who KNOWS the spell, casts it (spends an Earth
+slot, rolls vs the Earth-5 TN 30), and on success the assault's `fort_bonus` includes the +5. A
+**reactive** cast at the moment of assault (the 1-day GDD duration → this assault). **Not modeled
+(documented):** the expiry-collapse rule ("extra Wounds lost on expiry → collapse if 0") — N/A in a
+defense-bonus mapping (no structure-HP tracked); the Wounds-doubling half (no structure HP). **Rarely
+fires** — no world-gen shugenja knows this Earth-5 spell by default (like Caress of Fu Leng needing
+jade), but the wiring is correct when a defender does know it. Applies to army-vs-settlement **sieges**
+(the storm-assault defense consumer), NOT the Kaiu Wall horde assaults (separate SI system).
+Runtime-verified 7/7 (Godot 4.6.2, headless): the bonus = FORTIFICATION_DEFENSE_BONUS (storm defense
+8→13); `get_storm_defense_bonus` backward-compatible; a defending shugenja who knows it casts
+successfully (wall hardened); a shugenja who doesn't know it / is elsewhere / is dead → no cast.
+(World-sim siege spell, not a combat-orchestrator effect — combat-effects tally stays at 162.)
+
+### Spell coverage — Token of Memory (visual fake object) (2026-06-25, owner-collaborative, runtime-verified 7/7)
+**Token of Memory (Air 1, s33)** — a flawless visual illusion of one small (≤1 ft³) object. Owner
+(2026-06-25): "mostly flavor, but flavor matters — the character selects the object from a list and it
+appears on the ASCII map." New `MapCombatState.illusory_objects` (`{item, x, y, caster_id, expiry_round}`)
++ `execute_token_of_memory(state, caster_id, caster, item_name, tx, ty, dice)` — a Complex Action placing
+a chosen object on a tile within 10' (2 tiles); the item is picked from `TOKEN_OF_MEMORY_ITEMS` (coin /
+scroll / letter / seal / gem / jade / key / fan / netsuke / tea_bowl / ofuda / tanto). Pure flavor — no
+substance (can't be picked up, bear weight, or inflict damage); persists 1 hour (600 rounds ≈ skirmish)
+then disappears (swept in `advance_round`). Mirrors the `illusion_phantoms` (Mists of Illusion) pattern.
+The ASCII view renders `illusory_objects` (a glyph per object — view layer). Not modeled (flavor): the
+Contested-Perception forgery detection and "disappears if moved." Runtime-verified 7/7 (Godot 4.6.2,
+headless): places the chosen gem at the tile; rejects an item not in the list; rejects an out-of-range
+tile; the object disappears when its illusion lapses. (ASCII-map flavor placement, not a combat effect.)
+
+### Spell coverage — Elemental Cipher + real letter interception (2026-06-26, owner-collaborative, runtime-verified 7/7)
+**Elemental Cipher (Air 2, Imperial-families, s33)** — makes a written page unintelligible to all but
+the author and the named recipient; another shugenja may read it on a Spellcraft/Intelligence roll vs
+the original casting-roll total. Previously deferred ("no clean consumer" — our letter interception was
+abstract). Owner chose (2026-06-26): **wire a real interception read** so the cipher has something to
+block. Two parts: (1) the **letter-interception read** — `DayOrchestrator._process_intercept_letter_writebacks`
+(wired beside the EAVESDROP/SHADOW_TARGET covert writebacks) makes a SUCCESSFUL `INTERCEPT_LETTER` action
+actually read an undelivered letter to/from the intercepted target and transfer its topic to the
+interceptor's `topic_pool` + an INTELLIGENCE `intercepted_letter` KnowledgeEntry (previously
+`resolve_intercept_letter` was a Stealth+Forgery success/fail that gained NO content — so interception
+learned nothing). (2) the **cipher resist** — `LetterData` gains `elemental_cipher` + `cipher_cast_total`;
+a sender who knows the spell and can spare a slot auto-enciphers their letters at write time (mirrors the
+`legacy_of_kaze_no_kami` auto-apply; the letter's recipient is the "named recipient"; the casting roll's
+`total` is stored). On interception, a ciphered letter yields NOTHING unless the interceptor is a shugenja
+(`Spellcraft >= 1`) who cracks it with a Spellcraft/Intelligence roll vs `cipher_cast_total` (GDD-exact:
+"Other shugenja may read the text by rolling Spellcraft/Intelligence against the original Spell Casting
+Roll total"). Non-shugenja learn nothing from a ciphered letter; the named recipient always reads it
+freely via `deliver_letter` (the cipher never applies to the intended reader). Imperial-families-only is
+the learn gate (spells_known). The "1 month" duration is moot for an in-transit letter (it's read or
+delivered well within a month). New `_process_intercept_letter_writebacks` is called with `pending_letters`
+in `advance_day`. Runtime-verified 7/7 (Godot 4.6.2, headless): sender enciphers (cast_total 37); a
+plain sender does not; a non-ciphered intercepted letter transfers its topic to the interceptor (the new
+real read); a ciphered letter blocks a non-shugenja; a strong shugenja cracks an easy cipher; a weak
+shugenja fails a strong cipher; a failed interception reads nothing. **163 combat effects + the
+CombatController stealth-spell set + the letter/world-sim spells (legacy_of_kaze_no_kami, elemental_cipher).**
+
+### Spell coverage — Flight of Doves + Voice of the Wind (deliberate-cast social buffs) (2026-06-26, owner-collaborative, runtime-verified)
+Owner course-correction (2026-06-26): **"Auto-cast isn't a thing"** — a spell must be cast as a DELIBERATE
+sub-step of an action the casting NPC chose, never as a hidden side-effect of an unrelated event. Both
+spells follow that rule (and Flight of Doves was reworked off its initial auto-cast version).
+- **Flight of Doves (Air 2, Illusion, s33)** — Air kami illustrate the performer's tale, making it more
+  vivid. The **performing shugenja deliberately casts it as the opening of a PUBLIC_PERFORMANCE they chose
+  to give**, gaining Free Raises equal to **their Air Ring** (owner-set magnitude) on the performance roll;
+  the cast consumes a spell slot (s31). `PerformativeArtsSystem.get_flight_of_doves_free_raises(performer,
+  dice)` is **self-cast only** (the earlier ally-casts-for-you branch was removed — that was the auto-cast
+  the owner rejected: cast only because the shugenja themselves chose to perform). Wired into
+  `_execute_public_performance` like the garden-synergy free-raise path (`garden_fr + flight_fr` into
+  `resolve_public_performance`); effects carry `flight_of_doves_fr` + `flight_of_doves_caster_id`. Applies
+  to PUBLIC_PERFORMANCE (THEATER/Acting is the canonical art form); PERFORM_FOR has no free_raises hook
+  (deferred). Runtime-verified 2/2: self-cast grants Air-ring FR; a non-shugenja performer gets nothing.
+- **Voice of the Wind (Air 1, s33)** — Air kami lend the target's voice timbre/resonance: +1k0 to spoken
+  Social Skill Rolls (+1k1 on a voice Perform roll) for the IC day. The **read pipeline already existed**
+  (`SkillResolver._get_voice_of_the_wind_bonus`, the `voice_of_the_wind_ic_day` marker, the
+  `SpellSystem.activate_voice_of_the_wind` apply) but had **no caller**. Wired the deliberate-cast trigger
+  per the owner's model: in `_execute_contested_court_action`, a shugenja who knows the spell and can cast
+  it **casts it as the opening of a court action they chose** (NEGOTIATE/PERSUADE/CHARM/IMPRESS/…), once per
+  IC day (the marker prevents re-cast). The court path rolls inline (not via SkillResolver), so the +1k0 is
+  added inline to the attacker roll for a spoken social attacker skill; the SkillResolver read hook then
+  covers the shugenja's other social rolls that tick. Magnitude is GDD-fixed (+1k0); skill set = existing
+  `SOCIAL_SKILLS`. Runtime-verified 4/4: activate sets the marker; Courtier gains +1k0 (33.9→35.6 mean);
+  Kenjutsu (non-social) is unaffected; the marker is ic-day gated (day 5 buff is inert on day 6).
+LIMITATION: conversations (bulk-resolved) have no per-character deliberate-cast point, so Voice of the
+Wind is triggered at court actions (its broad social buff then covers later social rolls that tick via the
+read hook). **163 combat effects + the CombatController stealth-spell set + the letter/world-sim/performance
+spells (legacy_of_kaze_no_kami, elemental_cipher, flight_of_doves, voice_of_the_wind).**
+
+### Spell coverage — Request to Hato-no-Kami (bird distraction) (2026-06-26, owner-directed)
+**Request to Hato-no-Kami (Air 2, Travel, s33)** — summons a random bird within 150' for a simple task
+(carry a message / distract an enemy); GDD defers the effect to GM judgment. Owner direction: keep it
+simple — wire the **distract-an-enemy** use as a small combat debuff (the message-carry use has no clean
+consumer: it's a short-range 1-hour bird, not an inter-province courier, and Legacy of Kaze-no-Kami already
+does instant spirit-bird mail). Added a single `SPELL_COMBAT_EFFECTS` entry: `{kind: debuff, target: enemy,
+range_tiles: 30, duration_rounds: 1, mods: [{all_rolls, -1}]}` — the summoned bird distracts one enemy in
+range for **-1k0 to all rolls for one Round**. Reuses the fully-tested `_apply_spell_debuff` + `all_rolls`
+timed-modifier path (read by `resolve_attack`), structurally identical to the runtime-verified
+`whispers_of_the_forgotten`/`earths_stagnation`; `debuff` is an NPC offense kind, so a shugenja casts it
+deliberately on its turn via `_npc_maybe_cast_spell`. Parse-check clean; verified by structural equivalence
+to an already-runtime-verified debuff (the combat orchestrator can't run under headless `-s` here — the
+known autoload-stall). 164 combat effects.
+
+### Spell coverage — Wolf's Proposal (perceived-honor buff) (2026-06-26, deliberate-cast)
+**Wolf's Proposal (Air 2, Illusion, s33)** — a subtle suggestion aura: the caster's Honor Rank reads
+**3 Ranks higher** for any Lore: Bushido roll that assesses it, for 10 minutes. Like Voice of the Wind,
+the **read pipeline already existed** (`AdvantageSystem.get_perceived_honor` adds +3 when the
+`wolfs_proposal` day buff is active — consumed at the social/court roll sites; `SpellSystem.activate_wolfs_proposal`
+sets the buff) but had **no caller**. Wired the deliberate-cast trigger per the owner's no-auto-cast rule:
+in `_execute_contested_court_action`, a shugenja who knows it casts it as the opening of a court action
+they chose (once per day; the day buff is the marker, cleared by the daily `clear_day_buffs` pass). No
+inline change needed — `get_perceived_honor` reads the buff automatically wherever honor is assessed.
+Runtime-verified 3/3 (Godot 4.6.2, headless): cast raises perceived honor 4.0→7.0; the daily buff-clear
+reverts it; a non-shugenja cannot cast. 164 combat effects (Wolf's Proposal is a world-sim social buff,
+not a combat effect).
+
+### Spell coverage — Garbled Tongue (eavesdrop-proof conversation) (2026-06-26, deliberate-cast)
+**Garbled Tongue (Air 3, Illusion, s33)** — a false second speech-layer heard by everyone except the
+real conversants; a shugenja eavesdropper may pierce it on a Contested School-Rank/Air roll vs the
+caster's frozen casting total. Same missing-caller pattern: the **consumer already existed**
+(`_process_eavesdrop_writebacks` reads the per-tick `garbled_tongue_ic_day`/`garbled_tongue_strength`
+markers via `_garble_pierce_tn` — a garbled conversation is opaque to eavesdroppers unless a shugenja
+pierces it) and `SpellSystem.activate_garbled_tongue` sets the markers, but nothing cast it. Wired the
+deliberate-cast trigger: in `_execute_contested_court_action`, a shugenja who knows it casts it as the
+opening of a chosen court action, garbling the actor + target (once/day, per-tick marker). The marker then
+protects the shugenja's conversations that tick (the eavesdrop consumer reads daily-conversation pairs).
+Runtime-verified 3/3 (Godot 4.6.2, headless): cast garbles both participants (pierce TN −1→53); the
+garble is per-tick (stale on the next day); a non-shugenja cannot cast. LIMITATION: the deliberate vehicle
+is the court action (conversations are bulk-resolved, with no per-conversation chosen-action point), so the
+per-tick marker is what connects the cast to the eavesdrop consumer. 164 combat effects.
+
+### Spell coverage — Touch of Air's Grace (attractiveness buff) (2026-06-26, deliberate-cast)
+**Touch of Air's Grace (Air 3, Illusion, s33)** — enhances the target's attractiveness for 1 hour:
+negates Disturbing Countenance / Benten's Curse, or grants Dangerous Beauty / Benten's Blessing. Same
+missing-caller pattern: the **consumer already existed** (`AdvantageSystem._is_suppressed` negates
+Disturbing Countenance, and line 978 grants the Dangerous Beauty effect, both reading the
+`touch_of_airs_grace` day buff) and `SpellSystem.activate_touch_of_airs_grace` sets the buff, but nothing
+cast it. Wired the deliberate-cast trigger in `_execute_contested_court_action` (a shugenja casts it as the
+opening of a chosen court action; once/day, day-buff marker, cleared daily). Runtime-verified 3/3 (Godot
+4.6.2, headless): cast negates Disturbing Countenance; the daily clear reverts it; a non-shugenja cannot
+cast. 164 combat effects. (Voice of the Wind, Wolf's Proposal, Garbled Tongue, and Touch of Air's Grace
+now all deliberate-cast at the court-action opening — the established social-prep-spell vehicle.)
+
+### Spell coverage — CAST_PROTECTIVE_WARD: defensive self-wards (Soul of Stone / Jurojin's Balm / Stone's Endurance) (2026-06-26, owner-approved, runtime-verified 6/6)
+Owner chose (2026-06-26) the **Dedicated CAST_WARD action** approach for the pre-built defensive buffs
+(their read+apply pipelines already existed; only the deliberate-cast caller was missing, and unlike the
+social spells they have NO chosen action to ride on — they are defensive). I designed + built the action;
+the choices below are mine (owner-overridable). New NPC ActionID **`CAST_PROTECTIVE_WARD`** (1 AP,
+shugenja): `ActionExecutor._execute_cast_protective_ward` casts every **self-ward** the caster knows and
+can afford — **Soul of Stone** (Earth 1, +3k0 resist court manipulation / −1k0 own influence), **Jurojin's
+Balm** (Earth 1, disease/poison-save resist), **Stone's Endurance** (Earth, fatigue resist) — reusing the
+existing `SpellSystem.activate_*` functions (each consumes a slot, stamps its `*` day buff, Pattern B).
+**Jurojin's Curse is excluded** (it is an OFFENSIVE enemy debuff, a separate vehicle, still deferred).
+**Trigger (my call, owner-overridable):** the Phase-4c `_apply_protective_ward_precondition_filter` surfaces
+the action only when `_has_existential_threat(ctx)` (clan at war / starvation province / besieged
+settlement — the existing helper, zero invention) AND the shugenja knows a ward they can cast and have not
+already raised today; otherwise it is removed (no wasteful no-op). **Scoring (my call):** opportunistic
+under the threat NeedTypes DEFEND_PROVINCE / INVESTIGATE_THREAT / MANAGE_TAINT at **70 (PROVISIONAL**,
+calibrated below a direct threat response ~85–100 so warding is a secondary choice on a spare AP); the
+Phase-4b allowlist then only surfaces it under those needs. Context lists: AT_OWN_HOLDINGS, AT_COURT,
+VISITING, ON_CAMPAIGN. action_skill_map: Spellcraft. The executor casts ALL known self-wards at once
+(batten fully down). Runtime-verified 6/6 (Godot 4.6.2, headless): executor casts all 3 known wards
+(day buffs set) / only the known ward; the filter keeps the action when threatened + castable + unwarded,
+and removes it with no threat / already-warded / no-ward-known. OWNER KNOBS to retune: the trigger
+(existential vs personal-menace), the score (70), and whether Soul of Stone's −1k0-own-influence downside
+should exclude it for a shugenja who intends to be a court aggressor that day.
+DEFERRED (separate vehicles): **Jurojin's Curse** (offensive poison/maho-prep debuff); **Drink of Your
+Essence** (Void 2) / **Mental Quickness** (Fire 2) — PC-deferred ("callable cast, not auto-fired", awaiting
+the PC spell UI); **Earths Touch** (no sim effect, "does not increase the Ring"); **Power of the Ocean**
+(Water 4) / **Altering the Course** (Void) — combat/VP survival buffs needing `_npc_maybe_cast_spell`
+integration + a Godot-runtime driver.
+
+### Spell coverage — combat tranche: Facing Your Devils (2026-06-26, owner-approved, structural-verify)
+**Facing Your Devils (Air 5, s33)** — misalign the target's Elements by swapping their highest and lowest
+Traits for 10 Rounds; the GDD-emphasized consequence is a possible Ring-Rank drop (e.g. Earth → reduced
+Wound capacity, potentially fatal). New `trait_swap` effect kind + `execute_cast_spell` dispatch →
+`_apply_facing_your_devils`: finds the highest/lowest of the 8 Traits (ties deterministic), swaps them,
+computes each Ring's delta (`min(swapped pair) − min(base pair)`), floors a ring-down at effective 1, and
+applies the deltas via the **combat ring-delta bridge** (`p.ring_deltas` + expiry + `sync_ring_deltas`) —
+the same mechanism as the runtime-verified strike_at_the_roots / essence_of_earth, so wound-capacity
+changes (and the on-apply / on-expiry death re-checks) flow automatically. PC-callable (the NPC *spell*
+offense picker only takes `damage`/`status`, so every ring-change debuff is already PC-only — consistent).
+LIMITATION: only the **Ring-derived** effects (wound capacity, ring-based rolls) are modeled — the
+per-Trait attack/damage roll changes are not (no trait-level combat-delta layer). **Structural review +
+parse-trace only** (orchestrator not headless-runnable here).
+
+### Spell coverage — combat tranche: Hands of Clay (2026-06-26, owner-approved, structural-verify)
+**Hands of Clay (Earth 2, s34)** — Earth spirits merge the caster's hands/feet with stone, letting them
+climb sheer surfaces (and hang from ceilings). The clean combat slice: a self-`buff` (`hands_of_clay`
+timed modifier, 100 rounds) read in `execute_climb` — while active, the caster's climbs (elevation cliffs
+up/down, wall-scales) **auto-succeed** (and a down-climb lands safely, no slip/fall). Reuses the verified
+`_apply_spell_buff` install path; the only new code is the auto-success conditional in `execute_climb`.
+LIMITATIONS: the broader "half-speed wall-walk / ceiling-hang / move along surfaces" mobility isn't
+modeled (only the climb-action auto-success); and because it's a `buff` kind, the NPC self-buff picker
+*could* occasionally cast it pointlessly (harmless minor slot-waste — rare learn-gated spell, fires only
+when not already buffed and no offense/heal is available). **Structural review + parse-trace only**
+(orchestrator not headless-runnable here).
+
+### Spell coverage — combat tranche: Taming the Beast (2026-06-26, owner-approved, structural-verify)
+**Taming the Beast (Earth 2, Kitsune secret, s34)** — soothe a natural creature within 50' (10 tiles) via
+a Contested Earth roll; on success it ceases all hostile activity. Does NOT affect spirits / supernatural
+/ Tainted creatures. `execute_taming_the_beast(state, caster_id, caster, target_id, target, dice)`:
+gates on a natural creature (`target.spirit_creature.realm == NINGEN_DO` AND `taint_rank == 0` — excludes
+spirit-realm/oni/undead/Tainted puppets), range 10, can_cast; consumes the Earth slot; rolls Contested
+Earth (caster vs creature); on a win sets `state.factions[target_id] = FACTION_NEUTRAL`. **Verified
+correct by code reading:** `_are_enemies` returns false whenever either side is neutral, so a tamed
+creature attacks no one AND is ignored by both factions — exactly "ceases all hostile activity / becomes
+tame." 1-hour duration ≈ the skirmish (faction change persists; no expiry). PC-callable (Kitsune-only,
+rare — no NPC picker). The Animal-Handling "simple commands" follow-up (GM-judged) is not modeled.
+**Structural review + parse-trace only** (orchestrator not headless-runnable here).
+
+### Spell coverage — combat tranche: Groves of Stone (2026-06-26, owner-approved, structural-verify)
+**Groves of Stone (Earth 3, Craft/Defense, s36... s34)** — erupts a circular WALL_STONE barrier (15' = 3
+tiles) around the caster for 10 Rounds; enemies must clamber over; crumbles when it expires. New
+`stone_ring` effect kind + `execute_cast_spell` dispatch → `_apply_groves_of_stone`: places WALL_STONE on
+the Chebyshev-radius-3 perimeter (skipping occupied/already-impassable tiles), saves the originals on a
+`conjured_terrain` zone (so `advance_round` auto-restores them on expiry — the "crumbles to earth" rule),
+and the existing Z-axis `execute_climb` handles the clamber-over. Mirrors the runtime-verified
+`wall_of_earth` conjured-terrain pattern. The old "deferred — needs a clamber action to avoid an
+invulnerability stalemate" blocker is gone (execute_climb now exists). LIMITATIONS: the GDD climb TN =
+caster's Earth ×5 is approximated by execute_climb's generic stone TN (25); the "500 Wounds / siege engine
+to break" is moot in tile combat (no wall-HP) — the ring is simply impassable, which is faithful (clamber
+over, not through). PC-tactical (not in the NPC offense picker, like wall_of_earth). **Verified by
+structural review + parse-trace only** — the combat orchestrator can't run under headless `-s` here (the
+known autoload stall); needs a Godot-runtime driver to confirm at runtime, same caveat as the whole ASCII
+combat stack.
+
+### Spell coverage — remaining-unwired triage (2026-06-26)
+Triaged the 16 genuinely-unwired spells (no combat effect, no apply fn, no other consumer).
+**Implemented this session (7):** Sympathetic Energies (Water 1 — buff transfer); The Path Not Taken
+(Water 4 — daily slot transfer); **Groves of Stone** (Earth 3 — conjured stone-ring barrier, climbable);
+**Taming the Beast** (Earth 2 — pacify a natural creature → FACTION_NEUTRAL); **Hands of Clay** (Earth 2 —
+climb auto-success buff); **Facing Your Devils** (Air 5 — trait-swap → Ring-change debuff). The five combat
+ones are structural-verify only (orchestrator not headless-runnable here).
+**Deferred — The Earth Flows** (Earth 4 — Mass Battle commander +3k2 / individual +1k1): our mass-battle
+system is abstract company-attrition (`ArmyCombatSystem.resolve_battle` round loop), NOT the tabletop
+commander-roll / Mass-Battle-Table model the spell buffs, so faithfully translating +3k2/+1k1 would need
+an invented flat-advantage conversion (forbidden); AND there is no deliberate-cast vehicle (applying it
+just because a knowing shugenja is in the army is the rejected auto-cast — the battle pipeline has no
+pre-battle shugenja-cast step). Blocked on both a value mapping (owner decision) and a battle-cast action.
+**Deferred — no consumer / blocked subsystem:** Wisdom & Clarity (Water 2 — reading speed/recall, no
+mechanic; explicitly does NOT aid ciphers); Tenjin's Ear (Air 4 — universal language comprehension, no
+language-barrier mechanic); Piercing the Heavens (Air 6 — narrative Fortune blessing, no mechanic);
+Wind of the Moon (Air 6 — telepathy; surface-thought reads are already covered by PROBE/READ_CHARACTER);
+Grounding Energy (Earth 5 — anti-maho cast-TN ward, INERT because the project's maho is roll-less, no TN
+to raise); Silent Waters (Water 3 — stored-spell delayed trigger, no vehicle); Within the Waves (Water 4 —
+underwater air-bubble exploration, no underwater mechanic); Whirlpool (Water 5 — open-water hazard, naval
+blocked s11.9); Opening the Veil (Water 6 — Spirit-Realm portal, no realm-travel mechanic); False Realm
+(Air 4 — illusory terrain with "no substance", so it blocks neither movement nor LOS — no real consumer).
+
+### Spell coverage — Sympathetic Energies (spell-effect transfer) (2026-06-26, PC-callable)
+**Sympathetic Energies (Water 1, s36)** — transfer one existing spell effect from the caster to a willing
+target (3-Raise variant: between two other willing targets). A meta-utility; in the world-sim a persistent
+"spell effect" is a **day buff**, so `SpellSystem.activate_sympathetic_energies(caster, target, buff_id,
+dice, ic_day)` moves one named day buff off the caster (`clear_day_buff`, a new single-buff erase on
+L5RCharacterData) and onto a willing target (`set_day_buff`). Willing = the caster, or a target not hostile
+toward the caster (disposition ≥ 0). PC-callable (the future cast UI picks the effect + willing target);
+no NPC vehicle (a meta-utility with no decision trigger — like Mental Quickness / Drink of Essence).
+Runtime-verified 4/4 (Godot 4.6.2, headless): moves a buff caster→ally; fails when the caster lacks the
+effect; rejects a hostile (unwilling) target (buff retained); a non-shugenja cannot cast. LIMITATION: the
+3-Raise "between two OTHER willing targets" variant is not modeled (caster-to-target only); ic_day-marker
+spell effects (e.g. Voice of the Wind) aren't transferable (only day-buff effects). 164 combat effects.
+
+### Spell coverage — The Path Not Taken (daily slot transfer) (2026-06-26, PC-callable, runtime-verified 4/4)
+**The Path Not Taken (Water 4, s36)** — select one Ring to weaken and one to strengthen, then transfer any
+number of UNUSED daily spell slots from the weakened to the strengthened Ring for the day. New transient
+`L5RCharacterData.spell_slot_adjustment` (Ring → ± slots) added into `SpellSystem.get_daily_slots`
+(`maxi(0, ring_value + adjustment)`) and reset with the other slot counters in
+`ActionPointSystem.reset_daily_ap`. `activate_the_path_not_taken(caster, weak_ring, strong_ring, count,
+dice, ic_day)` casts (consumes a Water slot), then moves `min(count, weak-ring unused)` slots
+(weak −N / strong +N). PC-callable (the cast UI picks the Rings + count); no NPC vehicle (a slot-economy
+utility with no decision trigger). Runtime-verified 4/4 (Godot 4.6.2, headless): Earth→Fire transfer
+(Fire daily 2→4, Earth 3→1); capped at the weak Ring's unused slots; same-Ring/count<1 rejected; the daily
+reset reverts the transfer. 164 combat effects.
+
+### Spell coverage — Whispering Wind (truth divination) (2026-06-26, deliberate-cast)
+**Whispering Wind (Air 2, Divination, s33)** — Air kami judge whether the target's last statement was a
+lie. The **apply already existed** (`SpellSystem.activate_whispering_wind`: verdict lie/true by whether
+the target authored a live fabrication, and it flags fabricated secrets the caster already knows + records
+a `secret_detected_false` KnowledgeEntry) but had **no caller**. Wired as a DayOrchestrator writeback
+(`_process_whispering_wind_writebacks`, beside the intercept-letter writeback where `active_secrets` is in
+scope — the executor signature doesn't carry secrets): a shugenja who **successfully PROBEs** a target
+(a deliberately-chosen social read) augments it with the divination, consuming a spell slot. Rides on the
+chosen PROBE action (not auto-cast). Runtime-verified 3/3 (Godot 4.6.2, headless): a shugenja PROBE flags
+the target's known fabrication; a non-shugenja PROBE divines nothing; a failed PROBE divines nothing.
+164 combat effects.
+
+### Spell coverage — Wind of the Moon (telepathy) (2026-06-27, deliberate-cast)
+**Wind of the Moon (Air 6, s33)** — advanced telepathy: read the target's surface thoughts AND transmit
+the caster's own thoughts into the target's mind (the target is unaware and believes the implanted thoughts
+are their own). Previously deferred ("telepathy; surface-thought reads already covered by PROBE"). Owner
+directive ("don't conclude while spells remain undone") → wired faithfully as the deception-proof,
+mind-implanting upgrade of PROBE. New `SpellSystem.activate_wind_of_the_moon(caster, target, dice, ic_day,
+target_objective, current_season)`: a **Contested Air Roll** (caster vs target — telepathy is resisted by
+will; failure breaks contact, no read/no implant). On contact, two halves: **READ** records the target's
+TRUE standing objective (`priority_objective`) AND TRUE disposition toward the caster (`disposition_toward`)
+as deduped intelligence on the caster (guaranteed accurate — the kami read the mind, not the mouth, so no
+`false_info` can deceive it, unlike a normal PROBE); **TRANSMIT** implants one thought — the target's
+disposition toward the caster warms by `WIND_OF_MOON_IMPLANT` (+5, the target believes the warmth is their
+own feeling, so NO manipulation/honor cost fires — undetectable suggestion, not overt persuasion).
+PROVISIONAL: the +5 magnitude (matches a full successful CHARM, s15.4a) — flagged for owner override.
+Wired as a DayOrchestrator writeback (`_process_wind_of_the_moon_writebacks`, beside the whispering-wind
+writeback; `objectives_map` is the advance_day param for the target's standing objective): a shugenja who
+**successfully PROBEs** a target augments it with the telepathy (consumes a spell slot). Rides on the chosen
+PROBE (not auto-cast). Fires independently of Whispering Wind (both on a PROBE). Runtime-verified 8/8 (Godot
+4.6.2, headless): can_cast gate; high-vs-low-Air contact succeeds; +5 implant; priority_objective +
+disposition_toward entries recorded; re-cast dedups the objective entry; non-knower cannot cast. 164 combat
+effects (Wind of the Moon is a world-sim telepathy read, not a combat effect).
+
+### Spell coverage — Wisdom & Clarity (perfect recall) (2026-06-27, deliberate-cast)
+**Wisdom & Clarity (Water 2, s36)** — reading speed doubles + perfect recall of everything read (1 hour ~
+the IC day); does NOT enhance comprehension (ciphers/unknown languages stay indecipherable). Previously
+deferred ("reading speed/recall, no mechanic"). Wired faithfully as the sharper-Lore (research/recall)
+buff: new `SpellSystem.activate_wisdom_and_clarity` sets a `wisdom_and_clarity` day buff (cleared by the
+daily orchestrator pass); `SkillResolver._get_wisdom_and_clarity_bonus` adds **+1k0 to any Lore-based Skill
+Roll** while active (read in both `resolve_skill_check` and `resolve_contested_check`, beside the Soul of
+Stone / Voice of the Wind hooks). Does NOT touch cipher-cracking (which routes through Calligraphy/Spellcraft,
+never Lore — GDD-faithful). Deliberate-cast trigger in `_execute_contested_court_action` (a shugenja casts
+it opening a chosen court action, once/day; the inline court path adds the +1k0 for a Lore-based action like
+IMPRESS, and the SkillResolver hook covers the shugenja's other Lore rolls that tick). PROVISIONAL magnitude
++1k0 (parallel to Voice of the Wind) — flagged for owner override. Runtime-verified 5/5 (Godot 4.6.2,
+headless): can_cast gate; activate sets the buff; Lore roll mean rises (14353 vs 13354 over 400 rolls);
+Courtier (non-Lore) unaffected; non-knower cannot cast. 164 combat effects (Wisdom & Clarity is a world-sim
+recall buff, not a combat effect).
+
+### Spell coverage — Within the Waves + Whirlpool (water spells) (2026-06-27, owner-directed, static-only)
+Two paired Water spells, previously deferred ("no underwater mechanic" / "open-water hazard, naval blocked").
+The tile-combat engine DOES model water-drowning (deep-water + Yuki's Touch route through `_apply_pit_death`),
+so both wire faithfully against it.
+- **Within the Waves (Water 4, s36)** — an air-bubble sphere lets the caster move/breathe beneath the
+  surface. New `within_the_waves` self `buff` (SPELL_COMBAT_EFFECTS, 100-round duration ~ the skirmish)
+  installing a `within_the_waves` timed modifier. A guard in `_apply_pit_death` negates a **WATER_DEEP
+  drowning death** (and Yuki's Touch / Whirlpool suffocation) when the victim holds the modifier — a VOID
+  fall is NOT negated (the bubble holds no one over a chasm). Reachable via the NPC self-buff path / PC cast.
+- **Whirlpool (Water 5, Thunder, s36)** — excite the Water kami into a vortex on open water. New `whirlpool`
+  zone kind: `_apply_whirlpool` installs a persistent hazard zone (centered on the caster, radius 6 = ~200',
+  TN 30 GDD-exact), failing the cast if no water tile lies in the radius (`no_open_water` — the kami have
+  nothing to churn). A per-round pass in `_process_spell_zones` makes every character **standing on a water
+  tile** within the radius roll Athletics (Swimming)/Strength vs TN 30 or be sucked under and drown (via
+  `_apply_pit_death`); characters on dry land are unaffected; Within the Waves negates it. PC-tactical (not
+  in the NPC offense picker — situational, needs open water, like Yuki's Touch / Wall of Earth).
+Both parse-clean; verified by structural review + parse-trace (the whirlpool zone mirrors the freeze_water /
+purify zone pattern; the within_the_waves guard mirrors the established `get_timed_modifier_total` reads) —
+the combat orchestrator can't run under headless `-s` (autoload stall), same caveat as the whole ASCII stack.
+166 combat effects.
+
+### Spell coverage — Silent Waters (stored-spell trigger) (2026-06-27, owner-directed, static-only)
+**Silent Waters (Water 3, s36)** — on a successful cast, immediately cast a SECOND spell (ML≤3) that is
+held inert until a physical trigger (a spoken word, drawing a blade, falling in battle) releases it.
+Previously deferred ("stored-spell delayed trigger, no vehicle"). Built as a real combat mechanic. New
+`IndividualCombat.Participant.stored_spell` (`{spell_id, trigger}`, default `{}` → zero regression).
+`AsciiMapCombatOrchestrator.execute_silent_waters(state, caster_id, caster, stored_spell_id, dice)`:
+validates the stored spell is known, ML≤3, has a wired combat effect, and is castable; consumes the Silent
+Waters slot; stores `{spell_id, trigger: "when_struck"}` on the caster's Participant (one at a time — a new
+cast replaces it). A trigger hook in `_apply_hit` (after the wound lands, defender survives) releases the
+held spell the next time the caster is struck: it clears `stored_spell` BEFORE firing (no recursion) and
+fires it via `execute_cast_spell` from the struck caster at their attacker (a self-buff self-applies). The
+GDD's "drawing a blade / falling in battle" condition maps to `when_struck` (the cleanest tile-combat
+trigger). Modeled as "cast on trigger" (the held spell's slot+roll resolve at trigger rather than at store
+— identical outcome, two slots total). PC-tactical (a set-up tool; no NPC picker). Parse-clean; structural-
+verified (reuses the established Participant-field + execute_cast_spell paths; the orchestrator can't run
+under headless `-s`). 166 combat effects (Silent Waters is a trigger mechanic, not a new effect).
+
+### Spell coverage — Grounding Energy (anti-maho ward) (2026-06-27, owner-directed PROVISIONAL, static-only)
+**Grounding Energy (Earth 5, Defense/Wards, s34)** — Earth spirits fortify the caster + allies within 20'
+against maho; the GDD raises the maho Spell Casting TN by 10×Earth. Previously deferred as "INERT — maho is
+roll-less, no TN to raise" (tile-combat maho fires when blood is spilled, auto-succeeds). **PROVISIONAL
+reinterpretation (flagged for owner override):** with no roll to bump, the faithful analog of "+huge TN
+against maho" is AREA IMMUNITY — a maho combat spell simply cannot LAND on a warded ally (the maho-user
+still pays blood/Taint, but the Earth kami turn the effect aside). New `grounding_energy` zone kind:
+`_apply_grounding_energy` installs a 3-round zone (radius 4 = 20', centered on the caster, tagged with the
+caster's faction); `_grounding_blocks_maho(state, target_id)` returns true when the target stands inside a
+grounding zone owned by their own faction; `execute_cast_maho` checks it after paying blood (before the
+effect match) and turns the maho aside (`warded_by_grounding_energy`, no effect applied). The zone is inert
+per-round (kept in `_process_spell_zones` like a ward) and auto-expires. PC-tactical (cast when expecting
+maho; no NPC picker). Parse-clean; structural-verified (mirrors the ward / zone patterns; the orchestrator
+can't run under headless `-s`). 166 combat effects (Grounding Energy is a ward, not an offensive effect).
+
+### Spell coverage — False Realm (illusory terrain) (2026-06-27, owner-directed, static-only)
+**False Realm (Air 4, Battle/Illusion, s33)** — completely alters the appearance of terrain in a 100' radius
+to anything the caster chooses; all senses are convincingly affected, but the illusions have no substance
+and cannot be touched. Previously deferred ("illusory terrain with no substance → blocks neither movement
+nor LOS, no real consumer"). The faithful combat slice is a faction-aware VISION SCREEN: the false terrain
+looks solid to those deceived, so an ENEMY cannot see/shoot through it, while the caster's own faction knows
+it is an illusion and shoots through freely; movement is unaffected (no substance), satisfying the GDD.
+New `false_realm` zone kind: `_apply_false_realm` installs a zone (radius 6 = ~100', tagged with the caster's
+faction); `_ray_blocked_by_false_realm(state, shooter_id, a, b)` mirrors the Summon Fog ray-block but only
+when the shooter is NOT of the caster's faction. Hooked into `get_ranged_targets` (enemies never select a
+target screened by the illusion) and `execute_ranged_attack` (`false_realm_blocks_los`). Inert per-round
+(kept in `_process_spell_zones`), auto-expires. PC-tactical (an illusion screen; no NPC picker). Parse-clean;
+structural-verified (reuses the fog ray-block + zone patterns; the orchestrator can't run under headless
+`-s`). 166 combat effects. LIMITATION: only the ranged-vision screen is modeled (the broader "convince an
+NPC the terrain is impassable / a hazard" deception would need faction-aware pathfinding — deferred).
+
+### Spell coverage — The Earth Flows (mass-battle) (2026-06-27, owner-directed PROVISIONAL, runtime-verified)
+**The Earth Flows (Earth 4, Battle, s34)** — a Kitsu Battle shugenja re-arranges the battlefield favorably:
+GDD grants +3k2 to the commander's Mass Battle roll and +1k1 to individual Mass Battle Table rolls for the
+caster's side. Previously deferred ("mass-battle is abstract company-attrition, no commander-roll to buff,
+AND no deliberate-cast vehicle"). Wired with the **Drawing on the Mountain pattern** (owner-blessed for the
+siege): the abstract `ArmyCombatSystem.resolve_battle` has no roll-and-keep, so the +1k1 individual buff maps
+to a **flat attack bonus on every company of the casting side** (`EARTH_FLOWS_ATTACK_BONUS = 2` PROVISIONAL,
+matching the conditional_attack_bonus tier — flagged for owner override). `resolve_battle` /
+`_apply_setup_modifiers` gain `earth_flows_attacker`/`earth_flows_defender` params (default 0 → zero
+regression) that add to each company's `terrain_attack_mod`. Deliberate-cast vehicle:
+`DayOrchestrator._cast_the_earth_flows(side_company_dicts, characters_by_id, dice)` scans the side's company
+commander_ids for the first living shugenja who can cast it, casts it (consumes the Earth slot), and returns
+the bonus; wired into BOTH battle callers (storm-assault + field battle), per side. The +3k2 commander roll
+and the dual-cast earthquake are not modeled (no commander Battle-roll / no earthquake in the abstract
+system). Runtime-verified 3/3 (Godot 4.6.2, headless): the EF bonus raises the effective attack (8→10), the
+constant is 2, zero-bonus is a no-op (regression-safe). The `_cast_the_earth_flows` vehicle is structural-
+verified (mirrors the runtime-verified `_cast_drawing_on_the_mountain`). 166 combat effects (world-sim
+mass-battle buff, not a combat-orchestrator effect).
+
+### Spell coverage — Seeking the Way (false trail) (2026-06-27, owner-directed, runtime-verified)
+**Seeking the Way (Air 4, Illusion, s33)** — hides the caster's tracks, replacing them with a false trail
+leading in a completely different direction; skilled trackers may see through it (Hunting/Perception vs the
+caster's Spellcraft/Air). Previously deferred ("overland false trail — world-map escape, no within-zone
+consumer"). Wired in **CombatController** (the stealth/exploration layer, like the disguise/perception
+spells): a SUSPICIOUS guard tracking the player's trail is led the wrong way. `cast_seeking_the_way()`
+(future stealth-command UI / deliberate caster) freezes the Spellcraft/Air contest pool + the ML resist
+(no invented magnitude) on the player. `_seeking_misdirects(es)` runs the GDD contest (guard Hunting/
+Perception vs caster Spellcraft/Air + ML; ties favor the illusion; cached per guard; an ALERT guard in
+combat is not misdirected). The hook in `_npc_investigate` (search phase) mirrors a fooled guard's
+`noise_src` to the FAR side of the guard (away from the player) — they walk off the wrong way and lapse
+back to UNAWARE without finding the player; a skilled tracker who sees through it tracks the true noise.
+Runtime-verified 6/6 (Godot 4.6.2, headless): can_cast gate; cast freezes the pool; a weak tracker is fooled
+200/200 by a strong caster while a strong tracker (Perception 6 / Hunting 5) sees through 80/200 (the
+contest discriminates); an ALERT guard is not misdirected; a non-knower cannot cast. Same PC-travel HOLD
+live-reachability caveat as the whole CombatController stealth layer. 166 combat effects (Seeking the Way is
+a stealth-layer effect, not a combat-orchestrator effect).
+
+### Spell coverage — FINAL STATUS: 3 spells blocked on missing subsystems (2026-06-27)
+After the 2026-06-26/27 push (Hands of the Tides, Wrath of Kaze-no-Kami, Yuki's Touch, Curse of the Burning
+Hand, Netsuke of Wind, Essence of Fire, Mental Quickness, Drawing on the Mountain, Token of Memory, Elemental
+Cipher, Flight of Doves, Voice of the Wind, Request to Hato-no-Kami, Wolf's Proposal, Garbled Tongue, Touch of
+Air's Grace, the CAST_PROTECTIVE_WARD wards, Facing Your Devils, Hands of Clay, Taming the Beast, Groves of
+Stone, Sympathetic Energies, The Path Not Taken, Whispering Wind, **Wind of the Moon, Wisdom & Clarity, Within
+the Waves, Whirlpool, Silent Waters, Grounding Energy, False Realm, The Earth Flows, Seeking the Way**), a
+programmatic audit (library `s:0` ∧ no SPELL_COMBAT_EFFECTS ∧ no activate_/execute_/resolve_/cast_ reference ∧
+not CombatController-wired) leaves **exactly 3 genuinely-unwired spells**, each blocked on a subsystem the sim
+does not have — wiring any effect would violate the "do not invent mechanics" hard constraint, so each needs an
+owner design decision (a new subsystem + its values) to proceed:
+- **Tenjin's Ear (Air 4, Unicorn)** — makes all human speech intelligible regardless of language. **Blocked: no
+  language-barrier subsystem exists.** Conversations, letters, and court all assume mutual comprehension; gaijin
+  are flavour with no "cannot understand" gate. Unblock = build a language-barrier model (which conversation /
+  letter / eavesdrop would respect) — a subsystem, not a spell wiring.
+- **Piercing the Heavens (Air 6, Phoenix)** — within a Fortune's shrine, manifest a mote of the Fortune's essence
+  for brief communion; "the Fortune may offer aid available nowhere else." **Blocked: the boon is GM-discretion
+  with NO GDD-specified mechanical payload.** Wiring any effect (a buff, honor/glory, a wish) would invent the
+  Fortune's gift. Unblock = the owner defines the communion's concrete mechanical output.
+- **Opening the Veil (Water 6, Kitsu/Isawa)** — open a temporary portal into a Spirit Realm (Meido/Chikushudo by
+  default; Yomi/Sakkaku/Toshigoku/Yume-do/Gaki-do with Raises). **Blocked: no realm-travel mechanic.** The s56.16
+  spirit-encounter system has realms but no "open a portal and pass through to a realm" action/destination.
+  Unblock = build a realm-travel subsystem (a portal destination + what passing through does).
+**Every other spell in the 287-entry library is wired** (a combat effect, an activate_/execute_ function, a
+world-sim sim_effect router, or a CombatController stealth-layer hook) — or is one of these 3, each with a
+precise, non-inventable blocker. Do not re-audit without one of the three subsystems above.
+
+### Spell coverage — Piercing the Heavens (Fortune communion) (2026-06-27, owner-directed PROVISIONAL, static-only)
+**Piercing the Heavens (Air 6, Phoenix-only, s33)** — within a Fortune's shrine, manifest a mote of the
+Fortune's essence for brief communion; "the Fortune may offer aid available nowhere else" (GM-discretion, no
+GDD-specified payload). Previously deferred. Owner directive ("don't conclude while spells remain") → wired as
+a world-sim worship spell with a **PROVISIONAL** boon (flagged for owner override; no invented numbers — reuses
+existing worship honor + topic mechanics). Library `s` changed 0 → RITUAL_HONOR (15), so a Phoenix shugenja's
+PERFORM_WORSHIP routes it through the existing ritual-honor pipeline (honor via the executor's honor_change).
+Metadata preference (`npc_decision_engine`): a Phoenix shugenja at a shrine (`shrine_eligible` already gates
+PERFORM_WORSHIP) who knows the secret communion and hasn't communed in ≥30 IC days prefers it as the
+`ritual_spell_id`. Writeback (`_process_ritual_spell_writebacks`): on a successful cast, at most once per month
+(guarded by new `L5RCharacterData.piercing_heavens_ic_day`, @export, default -1), it stamps the marker and
+creates a rare **TIER_2 SUPERNATURAL "Communion with the Fortunes"** topic about the caster (subject_role
+BENEFICIARY) — the visible mark of the communion, conferring standing. The GDD's open-ended "aid available
+nowhere else" is modeled as the worship-devotion honor + the prestige of having communed (PROVISIONAL — flagged
+for owner to define a concrete boon). NOT modeled (no invented data): the "shrine devoted to a SPECIFIC Fortune"
+gate (no Fortune-dedication field on settlements — any temple/shrine qualifies). Parse-clean; structural-verified
+(reuses the PERFORM_WORSHIP RITUAL_HONOR pipeline + the standard TopicData-creation pattern used at ~24 sites).
+Reduces the genuinely-blocked set to 2 (Tenjin's Ear, Opening the Veil).
+
+### Spell coverage — Opening the Veil (Spirit-Realm portal) (2026-06-27, owner-directed PROVISIONAL, static-only)
+**Opening the Veil (Water 6, Kitsu/Isawa, s36)** — open a temporary portal into a Spirit Realm. Previously
+deferred ("no realm-travel mechanic"). Owner directive ("don't conclude while spells remain") → wired with a
+**PROVISIONAL** tile-combat consumer (flagged for owner override): the sim has no realm-destination/party-travel
+system, but a portal into the Spirit Realms is a doorway displaced spirits are drawn back through. New
+`veil_portal` zone kind: `_apply_opening_the_veil` installs a 6-round zone at a target tile within 10' (range 2);
+a per-round pass in `_process_spell_zones` finds the nearest **displaced** (non-Ningen-do) spirit creature within
+the radius and draws it home (banished — `state.positions.erase` + `fled_ids`, the verified banish pattern; no
+contest — the door opens to where it belongs). A native/natural animal (realm NINGEN_DO) is not pulled. Distinct
+from Draw Closed the Veil (Void 4, a single Contested-Void banish): this is a persistent portal acting once per
+round on the nearest displaced spirit. NOT modeled (no realm-destination system): party realm-TRAVEL (entering a
+realm) — the faithful tile-combat slice is the portal acting on the spirits present. PC-tactical (Kitsu/Isawa-only
+via spells_known; no NPC picker — situational, needs spirit creatures). Parse-clean; structural-verified (mirrors
+the whirlpool/grounding zone + banish patterns; the orchestrator can't run under headless `-s`). Reduces the
+genuinely-blocked set to 1 (Tenjin's Ear — no language-barrier subsystem exists).
+
+### Spell coverage — Tenjin's Ear (language comprehension) — LAST SPELL (2026-06-27, owner-directed, runtime-verified)
+**Tenjin's Ear (Air 4, Unicorn-only, s33)** — makes all audible human speech in a 30' radius intelligible
+regardless of language. Previously deferred ("no language-barrier subsystem exists"). Owner directive ("don't
+conclude while spells remain") → built the **language-barrier mechanism + the Tenjin's Ear bypass** as the
+eavesdrop consumer. New `L5RCharacterData.speaks_foreign: bool` (@export, default false → ZERO regression: no
+world-gen population sets it yet — it is owner-pending DATA, a gaijin/Ivory-Kingdoms roster, not an invented
+mechanic) and `tenjins_ear_ic_day` (the cast marker). `SpellSystem.activate_tenjins_ear` (Unicorn-only via
+spells_known + can_cast) sets the marker. Wired into `_process_eavesdrop_writebacks` beside the Garbled Tongue
+gate: a conversation where either speaker `speaks_foreign` is unintelligible to an eavesdropper unless they
+speak that tongue OR have cast Tenjin's Ear — and a Unicorn shugenja who knows it casts it as a deliberate
+sub-step of the chosen EAVESDROP (once/day marker) to comprehend the foreign speech. Comprehension only (no
+enhanced hearing / no speaking back — not modeled). Runtime-verified 8/8 (Godot 4.6.2, headless): can_cast
+gate; activate sets the marker; native speech always understood; foreign speech blocked for a plain listener,
+comprehended by a Tenjin's-Ear caster or a foreign listener; a stale marker (different day) does not
+comprehend; non-knower cannot cast. The mechanism + bypass are complete and correct; it is **dormant only
+because no character currently has `speaks_foreign = true`** (owner-pending data, not a missing mechanic —
+populating a foreign-speaker roster activates it). **With this, EVERY spell in the 287-entry library is wired**
+(a combat effect, an activate_/execute_ function, a world-sim sim_effect router, or a CombatController
+stealth-layer hook). The former 3-spell blocked set (Piercing the Heavens, Opening the Veil, Tenjin's Ear) is
+now wired via faithful PROVISIONAL calls flagged for owner override. No genuinely-unwired spell remains.
+
+### Spell coverage — 6 Ishiken/Void/utility spells (2026-06-27, owner-directed, mixed verification)
+A regex gap (`"i": true` Ishiken entries) had hidden 6 spells from earlier audits. All now wired:
+- **Kharmic Intent (Void 3)** — pool VP with a willing ally. New `pool_void` effect: `_apply_kharmic_intent`
+  combines both pools and fills the ally to max first (share VP where needed), caster keeps the remainder up
+  to their max (over-cap lost at redistribution, per GDD "divided up to each one's normal maximum"). Range 4.
+- **Unbound Essence (Void 5)** — randomly reorder the target's 5 Rings. New `ring_reorder` effect:
+  `_apply_unbound_essence` Fisher-Yates-shuffles the target's Ring values (via the dice engine) and applies
+  the deltas through the combat ring-delta bridge (like Facing Your Devils) — the wound-capacity (Earth) +
+  Ring-based effects flow; PROVISIONAL: the per-Trait roll slice needs trait-level combat state the engine
+  lacks (flagged). Ring floored at 1.
+- **Ring of the Void (Void 6, Ishiken)** — commune with the Void Dragon (GM-discretion boon, no GDD payload).
+  Wired like Piercing the Heavens: library `s` → RITUAL_HONOR; an Ishiken at a shrine who knows it prefers it
+  for PERFORM_WORSHIP (shared monthly communion guard); the writeback creates a TIER_2 SUPERNATURAL "Communion
+  with the Void Dragon" topic. PROVISIONAL (the boon is modeled as worship-devotion honor + communion standing).
+- **Reach Through the Void (Void 2)** — telekinesis of small objects. CombatController `cast_reach_through_the_void`
+  silently opens/closes a door tile at range (50' = 10 tiles) — the one concrete small-object the sim models
+  (no noise, unlike a bump-open). Runtime-verified.
+- **False Whispers (Void 2)** — the target unknowingly repeats the caster's sentence. CombatController
+  `cast_false_whispers`: the target guard "speaks" at their own tile, emitting a MODERATE noise that draws
+  OTHER guards there (a distraction — mirrors Kami's Whisper). Range 30' (6 tiles). Runtime-verified.
+- **The Empty Voice (Void 2)** — silent casting of ML1-2 other-element spells. Wired as a self `buff`
+  (`empty_voice` timed modifier). Forward-wired/dormant: casting is not speech/noise-gated anywhere in the
+  engine yet, so there is no active consumer — the buff is complete and activates when one exists (no invented
+  mechanic). Kharmic Intent / Unbound Essence / Ring of the Void are structural-verified (mirror the VP /
+  ring-delta / Piercing-communion patterns; the orchestrator can't run under headless `-s`); Reach Through the
+  Void + False Whispers are runtime-verified in CombatController. **All 282 library spells are now wired.**
 
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell

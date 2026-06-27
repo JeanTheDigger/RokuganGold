@@ -33,6 +33,7 @@ static func reset_daily_ap(character: L5RCharacterData) -> void:
 	character.action_points_max = AP_PER_IC_DAY
 	character.spell_slots_used = {}
 	character.spell_void_bonus_used = 0
+	character.spell_slot_adjustment = {}
 
 
 static func can_spend(character: L5RCharacterData, cost: int) -> bool:

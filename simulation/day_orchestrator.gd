@@ -1248,6 +1248,21 @@ static func advance_day(
 		crime_records,
 	)
 
+	_process_intercept_letter_writebacks(
+		day_result.get("results", []),
+		pending_letters, characters_by_id, current_season, dice_engine,
+	)
+
+	_process_whispering_wind_writebacks(
+		day_result.get("results", []),
+		characters_by_id, active_secrets, current_season, ic_day, dice_engine,
+	)
+
+	_process_wind_of_the_moon_writebacks(
+		day_result.get("results", []),
+		characters_by_id, objectives_map, current_season, ic_day, dice_engine,
+	)
+
 	_wire_discussion_counts(conversation_results, active_topics)
 	_compute_positions_from_conversations(
 		conversation_results, active_topics, characters_by_id
@@ -2835,10 +2850,18 @@ static func _process_storm_assault_results(
 			def_dicts, "defender", characters_by_id,
 		)
 
-		var fort_bonus: int = SiegeSystem.get_storm_defense_bonus()
+		# s34 Drawing on the Mountain (Earth 5): a defending shugenja who knows the spell hardens the
+		# wall against the incoming storm, adding a defense bonus (doubles the fortification's defensive
+		# contribution). Reactive cast at the moment of assault — the 1-day duration → this assault.
+		var dotm: bool = _cast_drawing_on_the_mountain(
+			siege_settlement_id, characters_by_id, dice_engine)
+		var fort_bonus: int = SiegeSystem.get_storm_defense_bonus(true, dotm)
+		# s34 The Earth Flows: a Battle shugenja on either side re-shapes the ground (attack bonus).
+		var ef_atk: int = _cast_the_earth_flows(atk_dicts, characters_by_id, dice_engine)
+		var ef_def: int = _cast_the_earth_flows(def_dicts, characters_by_id, dice_engine)
 		var battle_result: Dictionary = resolve_and_reconcile_battle(
 			atk_states, def_states, Enums.BattleTerrainType.URBAN,
-			dice_engine, settlements, false, fort_bonus,
+			dice_engine, settlements, false, fort_bonus, {}, ef_atk, ef_def,
 		)
 
 		var captor_lord_id: int = atk_dicts[0].get("lord_id", -1) if not atk_dicts.is_empty() else -1
@@ -2874,6 +2897,49 @@ static func _find_siege_by_settlement(
 		if siege.get("settlement_id", -1) == settlement_id:
 			return siege
 	return {}
+
+
+## s34 Drawing on the Mountain (Earth 5): a living defending shugenja co-located at the besieged
+## settlement who KNOWS the spell hardens the wall against an incoming storm assault. Casts it (spends
+## a slot, rolls vs the Earth-5 TN); returns true on the first successful cast. Rarely fires (no
+## world-gen shugenja knows this Earth-5 spell by default) — but the wiring is correct when one does.
+## s34 The Earth Flows (Earth 4, Battle): a Kitsu Battle shugenja attached to an army (a company
+## commander who knows the spell) re-arranges the battlefield favorably before the battle. Deliberate
+## cast in battle support (same pattern as Drawing on the Mountain at a siege — owner-blessed). Scans the
+## side's company commander_ids for the first living shugenja who can cast it; on success consumes the
+## Earth slot and returns the side's flat attack bonus (PROVISIONAL EARTH_FLOWS_ATTACK_BONUS), else 0.
+static func _cast_the_earth_flows(
+	side_company_dicts: Array, characters_by_id: Dictionary, dice: DiceEngine,
+) -> int:
+	for cd: Variant in side_company_dicts:
+		if not cd is Dictionary:
+			continue
+		var cmd_id: int = int((cd as Dictionary).get("commander_id", -1))
+		var c: L5RCharacterData = characters_by_id.get(cmd_id, null)
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if not SpellSystem.can_cast(c, "the_earth_flows"):
+			continue
+		if SpellSystem.resolve_cast(c, "the_earth_flows", dice).get("success", false):
+			return ArmyCombatSystem.EARTH_FLOWS_ATTACK_BONUS
+	return 0
+
+
+static func _cast_drawing_on_the_mountain(
+	settlement_id: int, characters_by_id: Dictionary, dice: DiceEngine,
+) -> bool:
+	var loc: String = str(settlement_id)
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.physical_location != loc:
+			continue
+		if not SpellSystem.can_cast(c, "drawing_on_the_mountain"):
+			continue
+		if SpellSystem.resolve_cast(c, "drawing_on_the_mountain", dice).get("success", false):
+			return true
+	return false
 
 
 static func _process_drill_effects(
@@ -6496,6 +6562,17 @@ static func _process_eavesdrop_writebacks(
 				continue
 			if a_char.physical_location != location:
 				continue
+			# s33 Tenjin's Ear: a foreign-language conversation is unintelligible to the eavesdropper
+			# UNLESS they speak that tongue or have made it intelligible. A Unicorn shugenja who knows
+			# Tenjin's Ear casts it (a deliberate sub-step of this chosen EAVESDROP) to comprehend; once
+			# per day (the marker prevents re-cast). (Dormant until a speaks_foreign population exists.)
+			if (a_char.speaks_foreign or b_char.speaks_foreign) and not eavesdropper.speaks_foreign:
+				if eavesdropper.tenjins_ear_ic_day != ic_day \
+						and "tenjins_ear" in eavesdropper.spells_known \
+						and SpellSystem.can_cast(eavesdropper, "tenjins_ear"):
+					SpellSystem.activate_tenjins_ear(eavesdropper, dice_engine, ic_day)
+				if eavesdropper.tenjins_ear_ic_day != ic_day:
+					continue  # cannot understand the foreign speech — learn nothing from it
 			# s33 Garbled Tongue: a garbled conversation is opaque to eavesdroppers — only a shugenja
 			# who WINS a Contested School Rank/Air roll against the caster (the frozen TN) can lift it.
 			var garble_tn: int = _garble_pierce_tn(a_char, b_char, ic_day)
@@ -6617,6 +6694,147 @@ static func _process_shadow_target_writebacks(
 			},
 			current_season,
 		))
+
+
+static func _process_intercept_letter_writebacks(
+	results: Array,
+	pending_letters: Array,
+	characters_by_id: Dictionary,
+	current_season: int,
+	dice_engine: DiceEngine,
+) -> void:
+	# A successful INTERCEPT_LETTER now actually READS a letter in transit involving the
+	# target — the interceptor learns its topic. s33 Elemental Cipher resists: a ciphered
+	# letter yields nothing unless the interceptor is a shugenja (Spellcraft >= 1) who cracks
+	# it with a Spellcraft/Intelligence roll vs cipher_cast_total (the original casting total).
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "INTERCEPT_LETTER":
+			continue
+		if not d.get("success", false):
+			continue
+		var interceptor_id: int = d.get("character_id", -1)
+		var target_id: int = d.get("target_npc_id", -1)
+		var interceptor: L5RCharacterData = characters_by_id.get(interceptor_id)
+		if interceptor == null or CharacterStats.is_dead(interceptor):
+			continue
+
+		# Find an undelivered letter with a real topic to/from the intercepted person.
+		var intercepted: LetterData = null
+		for lv: Variant in pending_letters:
+			if not lv is LetterData:
+				continue
+			var letter: LetterData = lv as LetterData
+			if letter.delivered or letter.topic < 0:
+				continue
+			if letter.sender_id == target_id or letter.recipient_id == target_id:
+				intercepted = letter
+				break
+		if intercepted == null:
+			continue
+
+		# Elemental Cipher gate: only a shugenja interceptor may attempt to crack it.
+		if intercepted.elemental_cipher:
+			var spellcraft_rank: int = SkillResolver.get_skill_rank(interceptor, "Spellcraft")
+			if spellcraft_rank < 1:
+				continue  # non-shugenja learns nothing from a ciphered letter
+			var crack: Dictionary = SkillResolver.resolve_skill_check(
+				interceptor, dice_engine, "Spellcraft", intercepted.cipher_cast_total,
+				0, "", Enums.Trait.INTELLIGENCE
+			)
+			if not crack.get("success", false):
+				continue  # cipher holds
+
+		# Read succeeds: the interceptor learns the letter's topic.
+		if intercepted.topic not in interceptor.topic_pool:
+			interceptor.topic_pool.append(intercepted.topic)
+		InformationSystem.add_knowledge(interceptor, InformationSystem.make_entry(
+			Enums.KnowledgeSource.INTELLIGENCE,
+			"intercepted_letter",
+			{
+				"topic": intercepted.topic,
+				"letter_id": intercepted.letter_id,
+				"sender_id": intercepted.sender_id,
+				"recipient_id": intercepted.recipient_id,
+			},
+			current_season,
+		))
+
+
+static func _process_whispering_wind_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	active_secrets: Array,
+	current_season: int,
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> void:
+	# s33 Whispering Wind: a shugenja who PROBEs a target (a deliberate social read) augments it with
+	# the Air-kami truth divination — judging whether the target's last statement was a lie (a live
+	# fabrication they authored) and flagging fabricated secrets the caster already knows. Rides on
+	# the chosen PROBE action (not auto-cast); consumes a spell slot.
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "PROBE":
+			continue
+		if not d.get("success", false):
+			continue
+		var caster: L5RCharacterData = characters_by_id.get(d.get("character_id", -1))
+		var target: L5RCharacterData = characters_by_id.get(d.get("target_npc_id", -1))
+		if caster == null or target == null:
+			continue
+		if CharacterStats.is_dead(caster) or CharacterStats.is_dead(target):
+			continue
+		if not ("whispering_wind" in caster.spells_known):
+			continue
+		if not SpellSystem.can_cast(caster, "whispering_wind"):
+			continue
+		SpellSystem.activate_whispering_wind(
+			caster, target, dice_engine, ic_day, active_secrets, current_season
+		)
+
+
+static func _process_wind_of_the_moon_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+	current_season: int,
+	ic_day: int,
+	dice_engine: DiceEngine,
+) -> void:
+	# s33 Wind of the Moon (Air 6): a shugenja who PROBEs a target (a deliberate social read) augments
+	# it with advanced telepathy — a deception-proof read of the target's TRUE standing objective and
+	# disposition, plus an undetectable implanted +5 disposition shift. Rides on the chosen PROBE
+	# action (not auto-cast); consumes a spell slot. Resisted by a Contested Air Roll (failure breaks
+	# contact). Distinct from Whispering Wind (Air 2 lie-detection): both fire on a PROBE, independently.
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("action_id", "") != "PROBE":
+			continue
+		if not d.get("success", false):
+			continue
+		var caster: L5RCharacterData = characters_by_id.get(d.get("character_id", -1))
+		var target: L5RCharacterData = characters_by_id.get(d.get("target_npc_id", -1))
+		if caster == null or target == null:
+			continue
+		if CharacterStats.is_dead(caster) or CharacterStats.is_dead(target):
+			continue
+		if not ("wind_of_the_moon" in caster.spells_known):
+			continue
+		if not SpellSystem.can_cast(caster, "wind_of_the_moon"):
+			continue
+		var target_objective: Dictionary = objectives_map.get(target.character_id, {}).get("primary", {})
+		if target_objective.is_empty():
+			target_objective = objectives_map.get(target.character_id, {}).get("standing", {})
+		SpellSystem.activate_wind_of_the_moon(
+			caster, target, dice_engine, ic_day, target_objective, current_season
+		)
 
 
 static func _process_introduction_writebacks(
@@ -14366,10 +14584,13 @@ static func _resolve_army_battles(
 		var fort_bonus: int = _get_fortification_bonus(
 			battle_province_id, defender_clan, settlements, provinces,
 		)
+		# s34 The Earth Flows: a Battle shugenja on either side re-shapes the ground (attack bonus).
+		var ef_atk: int = _cast_the_earth_flows(atk_company_dicts, characters_by_id, dice_engine)
+		var ef_def: int = _cast_the_earth_flows(def_company_dicts, characters_by_id, dice_engine)
 
 		var battle_result: Dictionary = resolve_and_reconcile_battle(
 			atk_states, def_states, battle_terrain,
-			dice_engine, settlements, false, fort_bonus, worship_maluses,
+			dice_engine, settlements, false, fort_bonus, worship_maluses, ef_atk, ef_def,
 		)
 
 		var field_victor: String = battle_result.get("victor", "draw")
@@ -17162,12 +17383,14 @@ static func resolve_and_reconcile_battle(
 	is_amphibious: bool = false,
 	fortification_bonus: int = 0,
 	worship_maluses: Dictionary = {},
+	earth_flows_attacker: int = 0,
+	earth_flows_defender: int = 0,
 ) -> Dictionary:
 	_inject_worship_battle_maluses(attacker_states, worship_maluses)
 	_inject_worship_battle_maluses(defender_states, worship_maluses)
 	var battle_result: Dictionary = ArmyCombatSystem.resolve_battle(
 		attacker_states, defender_states, terrain, dice_engine,
-		is_amphibious, fortification_bonus,
+		is_amphibious, fortification_bonus, earth_flows_attacker, earth_flows_defender,
 	)
 
 	var pu_data: Dictionary = ArmyCombatSystem.extract_pu_reconciliation_data(
@@ -28585,6 +28808,29 @@ static func _process_ritual_spell_writebacks(
 		)
 		var success: bool = cast_result.get("success", false)
 		var margin: int = cast_result.get("margin", 0)
+		# s33 Piercing the Heavens (Air 6, Phoenix): the supreme Fortune communion. Honor rides the
+		# worship RITUAL_HONOR path (the executor's honor_change); the distinguishing mark of the
+		# communion is a rare, prestigious TIER_2 SUPERNATURAL topic about the caster, stamped at most
+		# once per month. The GDD's "aid available nowhere else" is GM-discretion with no specified
+		# mechanic — modeled here as the worship-devotion honor + the standing of having communed
+		# (PROVISIONAL, flagged for owner override; no invented boon).
+		if (ritual_spell_id == "piercing_the_heavens" or ritual_spell_id == "ring_of_the_void") and success \
+				and (character.piercing_heavens_ic_day < 0
+					or ic_day - character.piercing_heavens_ic_day >= TimeSystem.IC_DAYS_PER_MONTH):
+			character.piercing_heavens_ic_day = ic_day
+			var pt := TopicData.new()
+			pt.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			pt.title = "Communion with the Void Dragon" if ritual_spell_id == "ring_of_the_void" else "Communion with the Fortunes"
+			pt.tier = TopicData.Tier.TIER_2
+			pt.category = TopicData.Category.SUPERNATURAL
+			pt.subject_character_id = char_id
+			pt.subject_role = "BENEFICIARY"
+			pt.ic_day_created = ic_day
+			pt.momentum = TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_2)
+			active_topics.append(pt)
+			if char_id >= 0 and char_id not in character.topic_pool:
+				character.topic_pool.append(pt.topic_id)
 		match sim_effect:
 			SpellSystem.SpellSimEffect.HEAL_WOUNDS:
 				# s36 regrow_the_wound / s37 rise_from_the_ashes.

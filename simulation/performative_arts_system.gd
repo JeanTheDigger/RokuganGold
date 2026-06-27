@@ -175,6 +175,27 @@ static func get_fatigue_multiplier(performance_count: int) -> float:
 			return FATIGUE_ZERO
 
 
+# s33 Flight of Doves (Air 2, Illusion): Air kami illustrate the performer's tale with a
+# compelling illusion, making it more vivid. The performer DELIBERATELY casts it as the
+# opening of a PUBLIC_PERFORMANCE they chose to give — gaining Free Raises equal to their
+# Air Ring on the performance roll (owner-set magnitude). Not an auto-cast: it fires only
+# because the shugenja chose to perform. The cast consumes a spell slot.
+# Returns {free_raises, caster_id} (caster_id -1 = not cast).
+static func get_flight_of_doves_free_raises(
+	performer: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	if not ("flight_of_doves" in performer.spells_known):
+		return {"free_raises": 0, "caster_id": -1}
+	if not SpellSystem.can_cast(performer, "flight_of_doves"):
+		return {"free_raises": 0, "caster_id": -1}
+	var cast: Dictionary = SpellSystem.resolve_cast(performer, "flight_of_doves", dice_engine)
+	if cast.get("success", false):
+		var air_fr: int = SpellSystem.get_ring_value(performer, Enums.Ring.AIR)
+		return {"free_raises": air_fr, "caster_id": performer.character_id}
+	return {"free_raises": 0, "caster_id": -1}
+
+
 static func get_best_art_form(performer: L5RCharacterData) -> ArtForm:
 	var best_form: ArtForm = ArtForm.POETRY
 	var best_rank: int = -1

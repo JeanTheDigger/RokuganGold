@@ -44,6 +44,9 @@ extends Resource
 ## Not @export: these must not persist across save/load.
 var spell_slots_used: Dictionary = {}
 var spell_void_bonus_used: int = 0
+## s36 The Path Not Taken: per-Ring daily-slot delta (ring -> +/- slots). Added to the Ring's daily
+## allotment by SpellSystem.get_daily_slots; reset each IC day with the slot counters above.
+var spell_slot_adjustment: Dictionary = {}
 
 # -- Skills --------------------------------------------------------------------
 # Dict of { skill_name: String -> rank: int }. Only skills at rank >= 1 present.
@@ -67,6 +70,10 @@ var spell_void_bonus_used: int = 0
 # SkillResolver roll (+NkN) instead of the normal one-per-roll cap. -1 = inactive.
 # (1-minute RAW duration modelled per-tick, matching the kiho-buff convention.)
 @export var altering_course_ic_day: int = -1
+# s35 Mental Quickness (Fire 2): +3 Intelligence on the NEXT Intelligence-trait skill roll this IC
+# day (one-shot; the "10 minutes" maps to one roll, owner 2026-06-25). Set on cast, consumed by the
+# next Int roll. -1 = inactive.
+@export var mental_quickness_ic_day: int = -1
 # s33 Cloak of Night (Air 1): a carried/concealed object is magically invisible to vision.
 # Active when cloak_of_night_ic_day == the current ic_day (1-hour RAW duration ~ per-tick).
 # cloak_of_night_strength = the cast roll total, used as the TN for an equal-ML (Air 1)
@@ -89,6 +96,15 @@ var spell_void_bonus_used: int = 0
 # (10-minute RAW duration ~ per-tick). Read by SkillResolver: +1k0 to spoken Social
 # Skill Rolls and +1k1 on a voice Perform Roll (the granted Voice Advantage). -1 = none.
 @export var voice_of_the_wind_ic_day: int = -1
+# s33 Piercing the Heavens (Air 6, Phoenix): IC day of the caster's last Fortune communion. The
+# spell may be cast at most once per month — this is the monthly guard. -1 = never communed.
+@export var piercing_heavens_ic_day: int = -1
+# Language barrier (s33 Tenjin's Ear consumer). true = this character speaks a foreign tongue
+# (gaijin / Ivory Kingdoms / etc.) not mutually intelligible with Rokugani. Default false (no
+# regression): no world-gen population sets it yet — it is owner-pending DATA, not a mechanic.
+@export var speaks_foreign: bool = false
+# s33 Tenjin's Ear (Air 4, Unicorn): IC day the caster last made foreign speech intelligible. -1 = none.
+@export var tenjins_ear_ic_day: int = -1
 # Day-long spell buffs (the standard model for any spell whose RAW duration is below the IC-day
 # tick — 10 minutes, 1 hour, etc.): a set of active buff IDs that last the rest of the OOC day
 # they were cast and are cleared wholesale by the daily orchestrator pass (clear_day_buffs). To
@@ -106,6 +122,9 @@ func has_day_buff(buff_id: String) -> bool:
 
 func clear_day_buffs() -> void:
 	active_day_buffs.clear()
+
+func clear_day_buff(buff_id: String) -> void:
+	active_day_buffs.erase(buff_id)
 
 # s36 Power of the Ocean (Water 5): a multi-DAY sustain ritual (unlike the sub-day buffs above, so
 # it gets dedicated expiry fields, not active_day_buffs). Managed by DayOrchestrator's daily pass

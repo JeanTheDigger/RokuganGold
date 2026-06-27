@@ -27,7 +27,7 @@ func randf() -> float:
 
 # -- Core Roll & Keep ----------------------------------------------------------
 
-func roll_and_keep(rolled: int, kept: int, explodes: bool = true, emphasis: bool = false) -> DiceResult:
+func roll_and_keep(rolled: int, kept: int, explodes: bool = true, emphasis: bool = false, explode_8: bool = false) -> DiceResult:
 	if rolled <= 0 or kept <= 0:
 		return DiceResult.new([], [], 0)
 
@@ -54,12 +54,24 @@ func roll_and_keep(rolled: int, kept: int, explodes: bool = true, emphasis: bool
 		if emphasis and face == 1:
 			face = _roll_d10()
 
+		var initial_face: int = face
 		var die_total: int = face
 		if explodes:
 			while face == 10:
 				face = _roll_d10()
 				die_total += face
 				explosion_count += 1
+		# s35 Hungry Blade: a damage die whose INITIAL result was 8 or 9 explodes once more (the
+		# bonus die follows the normal 10-chain). 10s already explode above; an 8/9 explodes once.
+		if explode_8 and (initial_face == 8 or initial_face == 9):
+			var bonus: int = _roll_d10()
+			die_total += bonus
+			explosion_count += 1
+			if explodes:
+				while bonus == 10:
+					bonus = _roll_d10()
+					die_total += bonus
+					explosion_count += 1
 		all_dice.append(die_total)
 
 	all_dice.sort()
@@ -142,8 +154,8 @@ func roll_initiative(reflexes: int, insight_rank: int) -> DiceResult:
 
 # -- Damage Roll ---------------------------------------------------------------
 
-func roll_damage(rolled: int, kept: int, strength_bonus: int = 0, reduction: int = 0) -> Dictionary:
-	var result: DiceResult = roll_and_keep(rolled + strength_bonus, kept)
+func roll_damage(rolled: int, kept: int, strength_bonus: int = 0, reduction: int = 0, explode_8: bool = false) -> Dictionary:
+	var result: DiceResult = roll_and_keep(rolled + strength_bonus, kept, true, false, explode_8)
 	var raw_damage: int = result.total
 	var final_damage: int = maxi(0, raw_damage - reduction)
 

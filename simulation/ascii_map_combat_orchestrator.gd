@@ -230,6 +230,9 @@ class MapCombatState:
 	## re-contests (Earth+Insight vs Air+Insight); winning keeps the target immobilized + 2k2, losing
 	## frees them (link removed).
 	var tomb_links: Dictionary = {}
+	## s35 Oath of the Heavens: Array of {a, b, expiry} — two Fire-linked persons who share
+	## Fatigued/Dazed/Stunned; the link dissolves when either goes Down/Out/Dead or at expiry.
+	var oath_links: Array = []
 	## s43 Blood Armor: wearer_id -> victim_id. The wearer channels 75% of its incoming damage into the
 	## bonded victim (read in _apply_hit). The bond breaks when the victim dies.
 	var blood_armor_links: Dictionary = {}
@@ -245,8 +248,15 @@ class MapCombatState:
 	## per-kind fields (entry_condition, save, save_tn, tn_penalty for wards)}. Processed each round
 	## in advance_round; wards are read at cast time in resolve_cast.
 	var spell_zones: Array = []
+	## s31 multi-round casting: caster_id -> {spell_id, target_id, spell_choice, rounds_remaining, res}.
+	## A spell needs ML Complex Actions; the caster maintains it each round (continue_cast) until it
+	## completes, and is interrupted (Willpower TN 5+damage) if damaged mid-cast.
+	var casting_in_progress: Dictionary = {}
 	## s33 Mists of Illusion: stationary visual-only phantoms — {x, y, caster_id}.
 	var illusion_phantoms: Array = []
+	## s33 Token of Memory: stationary visual-only fake objects placed on the map (flavor; no
+	## substance — cannot bear weight or inflict damage). Each: {item, x, y, caster_id, expiry_round}.
+	var illusory_objects: Array = []
 
 
 # =============================================================================
@@ -637,7 +647,8 @@ static func get_ranged_targets(state: MapCombatState, attacker_id: int) -> Array
 			continue
 		var tp: Vector2i = state.positions[cid]
 		if _chebyshev(pos, tp) > MELEE_RANGE_TILES and _has_los(state.map, pos, tp) \
-				and not _ray_blocked_by_fog(state, pos, tp):
+				and not _ray_blocked_by_fog(state, pos, tp) \
+				and not _ray_blocked_by_false_realm(state, attacker_id, pos, tp):
 			targets.append(cid)
 	return targets
 
@@ -869,7 +880,10 @@ static func execute_climb(
 		return {"success": false, "reason": "invalid_climb_target"}
 
 	ts.consume_complex()
-	var res: Dictionary = SkillResolver.resolve_skill_check(
+	# s34 Hands of Clay: Earth spirits merge the caster's hands/feet with stone — climbs auto-succeed
+	# (and a down-climb lands safely, no slip/fall) while the buff is active.
+	var hands_of_clay: bool = IndividualCombat.get_timed_modifier_total(p, "hands_of_clay") > 0
+	var res: Dictionary = {"success": true} if hands_of_clay else SkillResolver.resolve_skill_check(
 		character, dice_engine, "Athletics", tn, 0, "", Enums.Trait.STRENGTH)
 	var climbed: bool = res.get("success", false)
 	var fell: bool = false
@@ -1278,10 +1292,13 @@ static func execute_melee_attack(
 	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty") \
 		+ _zone_modifier_total(state, attacker_id, "attack_roll_penalty") \
 		+ _high_ground_attack_bonus(state, apos, tpos)
+	# Defender mount/size for the mounted +1k0 (s40) and Burning Kiss of Steel +2k2 (s35).
+	var tgt_mounted: bool = t_p != null and IndividualCombat.CONDITION_MOUNTED in t_p.conditions
+	var tgt_large: bool = AdvantageSystem.has_advantage(target, Enums.Advantage.LARGE)
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
-		false, spend_void, false, maneuver,
-		{"opponent_clan": target.clan}, atk_pen
+		false, spend_void, tgt_mounted, maneuver,
+		{"opponent_clan": target.clan}, atk_pen, tgt_large
 	)
 
 	# Reversal of Fortunes (s36): a buffed attacker may re-roll a missed attack once per
@@ -1698,6 +1715,10 @@ static func execute_ranged_attack(
 	# s33 Summon Fog: a fog cloud crossing the line of fire blocks the shot beyond 5 ft.
 	if _ray_blocked_by_fog(state, apos, tpos):
 		return {"success": false, "reason": "fog_blocks_los"}
+	# s33 False Realm: illusory terrain screens the shot from a deceived enemy (the caster's faction
+	# sees through the illusion and is unaffected).
+	if _ray_blocked_by_false_realm(state, attacker_id, apos, tpos):
+		return {"success": false, "reason": "false_realm_blocks_los"}
 
 	# Weapon must be ranged.
 	var wp: Dictionary = IndividualCombat.get_weapon_profile(weapon_name)
@@ -2403,6 +2424,7 @@ static func execute_cast_spell(
 	target_id: int,
 	target: L5RCharacterData,
 	dice_engine: DiceEngine,
+	spell_choice: String = "",  # s33 Netsuke of Wind: the weapon the shugenja chooses to conjure
 ) -> Dictionary:
 	if CharacterStats.is_dead(caster):
 		return {"success": false, "reason": "caster_dead"}
@@ -2458,12 +2480,59 @@ static func execute_cast_spell(
 	# s34 The Kami's Will: a spell cast AT a warded character has its casting roll cut by −XkX
 	# (X = the warder's Earth Ring, stored as the "kamis_will" timed modifier on the target).
 	var kw_penalty: int = 0
+	# s35 Essence of Fire: a spell cast AT a warded duelist takes −Nk0 (rolled only; N = 3), stored
+	# as the "essence_of_fire" timed modifier on the target.
+	var eof_penalty: int = 0
 	if target != null:
 		var tgt_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
 		if tgt_p != null:
 			kw_penalty = IndividualCombat.get_timed_modifier_total(tgt_p, "kamis_will")
-	var res: Dictionary = SpellSystem.resolve_cast(caster, spell_id, dice_engine, 0, target, -1, ward_tn, kw_penalty)
+			eof_penalty = IndividualCombat.get_timed_modifier_total(tgt_p, "essence_of_fire")
+	# s35 Ravenous Swarms: a caster encircled by the swarm who casts ANY Fire spell is struck — the Fire
+	# kami deal 3k3 extra Wounds and the cast automatically fails (the slot is still lost). The action is
+	# already consumed above; the slot is consumed here to mirror an attempted cast.
+	if sp_elem == Enums.Ring.FIRE and caster_p_ins != null \
+			and IndividualCombat.get_timed_modifier_total(caster_p_ins, "ravenous_swarms") > 0:
+		SpellSystem.consume_slot(caster, SpellSystem.get_best_cast_ring(caster, spell_id))
+		var rs_dmg: int = dice_engine.roll_and_keep(3, 3, true).total
+		WoundSystem.apply_damage(caster, rs_dmg, 0)
+		state.combat_log.append({
+			"type": "ravenous_swarms_disrupt", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "damage": rs_dmg,
+		})
+		return {"success": false, "ravenous_swarms_disrupted": true, "spell_id": spell_id,
+			"damage": rs_dmg}
+	# Snapshot the slot state so a successful multi-round cast can refund it (the slot is spent only
+	# at completion or on a failed roll — an interrupt must not cost it, s31).
+	var _cast_slots_snapshot: Dictionary = caster.spell_slots_used.duplicate()
+	var _cast_void_snapshot: int = caster.spell_void_bonus_used
+	var res: Dictionary = SpellSystem.resolve_cast(caster, spell_id, dice_engine, 0, target, -1, ward_tn, kw_penalty, eof_penalty)
 	res["spell_id"] = spell_id
+	# Casting time (s31): a spell needs ML Complex Actions; ML1 (or speed-raised to 1) completes now,
+	# else the cast is multi-round — refund the slot (an interrupt must not cost it) and defer the
+	# effect to continue_cast. A failed roll resolves immediately (slot lost).
+	var cast_rounds: int = _effective_cast_rounds(caster, spell_id, res)
+	if res.get("success", false) and cast_rounds > 1:
+		caster.spell_slots_used = _cast_slots_snapshot
+		caster.spell_void_bonus_used = _cast_void_snapshot
+		state.casting_in_progress[caster_id] = {
+			"spell_id": spell_id, "target_id": target_id, "spell_choice": spell_choice,
+			"rounds_remaining": cast_rounds - 1, "res": res,
+		}
+		state.combat_log.append({"type": "casting_started", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "rounds_remaining": cast_rounds - 1})
+		return {"success": true, "casting_started": true, "spell_id": spell_id,
+			"rounds_remaining": cast_rounds - 1}
+	return _complete_cast(state, caster_id, caster, spell_id, target_id, target, res, dice_engine, spell_choice)
+
+## Apply a completed spell's effect (the post-roll dispatch). Called immediately for a 1-round (ML1
+## or speed-raised) cast, or by continue_cast when a multi-round cast finishes. `res` is the round-1
+## Spell Casting Roll result. Returns the result dict.
+static func _complete_cast(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData, spell_id: String,
+	target_id: int, target: L5RCharacterData, res: Dictionary,
+	dice_engine: DiceEngine, spell_choice: String = "",
+) -> Dictionary:
 	# Furaribi rule (s54.12): a jade/crystal-property spell does not harm a superior_invuln
 	# spirit but repels it — it retreats from the area (leaves the encounter).
 	if res.get("success", false) and SpellSystem.has_jade_or_crystal_property(spell_id) \
@@ -2487,6 +2556,13 @@ static func execute_cast_spell(
 			"type": "spell_damage", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "hits": res["spell_damage"],
 		})
+		# s35 Ravenous Swarms: after the 5k3 bolt, the swarm encircles the target for 5 Rounds —
+		# install the "ravenous_swarms" modifier; a Fire cast during that window is disrupted (above).
+		if spell_id == "ravenous_swarms" and target != null and not CharacterStats.is_dead(target):
+			var rs_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+			if rs_p != null:
+				IndividualCombat.add_timed_modifier(
+					rs_p, "ravenous_swarms", 1, state.combat.round_number + 5, "ravenous_swarms")
 	elif res.get("success", false) and eff.get("kind", "") == "heal":
 		res["spell_heal"] = _apply_spell_heal(
 			state, caster_id, caster, target_id, target, eff, res, dice_engine)
@@ -2501,6 +2577,11 @@ static func execute_cast_spell(
 			"type": "spell_status", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "status": res["spell_status"],
 		})
+		# s35 Eyes of the Phoenix: Blinds the target AND, on cast, every ally of the target suffers a
+		# Fear 3 effect (undead/immune are exempt). One-shot burst on the target's whole faction.
+		if spell_id == "eyes_of_the_phoenix" and target != null:
+			res["fear_burst"] = _apply_fear_burst(
+				state, String(state.factions.get(target_id, FACTION_NEUTRAL)), 3, target_id, dice_engine)
 	elif res.get("success", false) and eff.get("kind", "") == "cleanse":
 		res["spell_cleanse"] = _apply_spell_cleanse(state, caster_id, caster, eff, target_id)
 		state.combat_log.append({
@@ -2513,6 +2594,12 @@ static func execute_cast_spell(
 			"type": "spell_buff", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "buff": res["spell_buff"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "oath_link":
+		res["oath_link"] = _apply_oath_link(state, caster_id, target_id, target, eff)
+		state.combat_log.append({
+			"type": "spell_oath_link", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "link": res["oath_link"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "debuff":
 		res["spell_debuff"] = _apply_spell_debuff(
 			state, caster_id, caster, target_id, target, eff, dice_engine)
@@ -2522,7 +2609,7 @@ static func execute_cast_spell(
 		})
 	elif res.get("success", false) and eff.get("kind", "") == "conjure_weapon":
 		res["conjured"] = _apply_spell_conjure_weapon(
-			state, caster_id, caster, target_id, eff, spell_id)
+			state, caster_id, caster, target_id, eff, spell_id, spell_choice)
 		state.combat_log.append({
 			"type": "spell_conjure_weapon", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "conjured": res["conjured"],
@@ -2533,6 +2620,55 @@ static func execute_cast_spell(
 		state.combat_log.append({
 			"type": "spell_zone", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "zone": res["zone"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "hurricane":
+		res["hurricane"] = _apply_hurricane_zone(state, caster_id, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_hurricane", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "hurricane": res["hurricane"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "freeze_water":
+		res["freeze"] = _apply_freeze_water(state, caster_id, caster, eff, spell_id, dice_engine)
+		state.combat_log.append({
+			"type": "spell_freeze_water", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "freeze": res["freeze"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "whirlpool":
+		res["whirlpool"] = _apply_whirlpool(state, caster_id, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_whirlpool", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "whirlpool": res["whirlpool"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "grounding_energy":
+		res["grounding"] = _apply_grounding_energy(state, caster_id, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_grounding_energy", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "grounding": res["grounding"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "false_realm":
+		res["false_realm"] = _apply_false_realm(state, caster_id, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_false_realm", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "false_realm": res["false_realm"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "veil_portal":
+		res["veil_portal"] = _apply_opening_the_veil(state, caster_id, target_id, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_veil_portal", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "veil_portal": res["veil_portal"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "curse_burning_hand":
+		res["curse"] = _apply_curse_burning_hand(
+			state, caster_id, caster, target_id, target, eff, dice_engine)
+		state.combat_log.append({
+			"type": "spell_curse_burning_hand", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "curse": res["curse"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "essence_of_fire":
+		res["ward"] = _apply_essence_of_fire(state, caster_id, target_id, eff)
+		state.combat_log.append({
+			"type": "spell_essence_of_fire", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "ward": res["ward"],
 		})
 	elif res.get("success", false) and eff.get("kind", "") == "ward":
 		res["ward"] = _apply_spell_ward(state, caster_id, eff, spell_id)
@@ -2600,6 +2736,18 @@ static func execute_cast_spell(
 			"type": "spell_wall", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "result": res["wall"],
 		})
+	elif res.get("success", false) and eff.get("kind", "") == "stone_ring":
+		res["stone_ring"] = _apply_groves_of_stone(state, caster_id, eff, spell_id)
+		state.combat_log.append({
+			"type": "spell_stone_ring", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "result": res["stone_ring"],
+		})
+	elif res.get("success", false) and eff.get("kind", "") == "trait_swap":
+		res["trait_swap"] = _apply_facing_your_devils(state, caster_id, target_id, target, eff)
+		state.combat_log.append({
+			"type": "spell_trait_swap", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": spell_id, "result": res["trait_swap"],
+		})
 	elif res.get("success", false) and eff.get("kind", "") == "ring_change":
 		res["ring_change"] = _apply_spell_ring_change(state, caster_id, caster, target_id, target, eff, dice_engine)
 		state.combat_log.append({
@@ -2614,6 +2762,10 @@ static func execute_cast_spell(
 		res["void_restored"] = _apply_spell_restore_void(state, caster_id, target_id, target)
 	elif res.get("success", false) and eff.get("kind", "") == "steal_void":
 		res["void_stolen"] = _apply_spell_steal_void(state, caster_id, caster, target_id, target, dice_engine)
+	elif res.get("success", false) and eff.get("kind", "") == "pool_void":
+		res["pool_void"] = _apply_kharmic_intent(state, caster_id, caster, target_id, target, eff)
+	elif res.get("success", false) and eff.get("kind", "") == "ring_reorder":
+		res["ring_reorder"] = _apply_unbound_essence(state, caster_id, target_id, target, eff, dice_engine)
 	elif res.get("success", false) and eff.get("kind", "") == "instant_kill":
 		res["instant_kill"] = _apply_spell_instant_kill(
 			state, caster_id, caster, target_id, target, eff, dice_engine)
@@ -2633,6 +2785,72 @@ static func execute_cast_spell(
 		"success": res.get("success", false),
 	})
 	return res
+
+
+## Effective casting rounds for a spell = its Mastery Level minus speed-Raises (s31: each Raise made
+## for that purpose cuts the casting time by 1 Complex Action, minimum 1). NPC policy (owner-approved):
+## a caster takes as many speed-Raises as their roll turned out to support — `floor(margin / 5)`, since
+## each Raise adds 5 to the TN and the roll still cleared it. Capped at ML-1 (min 1 round). A failed
+## roll returns 1 (resolves immediately). PROVISIONAL AI heuristic (the player picks Raises in the UI).
+static func _effective_cast_rounds(caster: L5RCharacterData, spell_id: String, res: Dictionary) -> int:
+	var ml: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("m", 1)
+	if ml <= 1 or not res.get("success", false):
+		return 1
+	var speed_raises: int = mini(ml - 1, maxi(0, int(res.get("margin", 0)) / 5))
+	return maxi(1, ml - speed_raises)
+
+
+## s31 continue a multi-round cast: the caster spends a Complex Action to maintain the spell. When the
+## last round completes, the slot is consumed and the effect fires (_complete_cast). Returns
+## {continuing: true, rounds_remaining} while maintaining, or the completion result when it finishes.
+static func continue_cast(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData, dice_engine: DiceEngine,
+) -> Dictionary:
+	if not state.casting_in_progress.has(caster_id):
+		return {"success": false, "reason": "not_casting"}
+	var ts: TurnState = state.turn_states.get(caster_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_action"}
+	if CharacterStats.is_dead(caster):
+		state.casting_in_progress.erase(caster_id)
+		return {"success": false, "reason": "caster_dead"}
+	ts.consume_complex()
+	var cip: Dictionary = state.casting_in_progress[caster_id]
+	cip["rounds_remaining"] = int(cip["rounds_remaining"]) - 1
+	if int(cip["rounds_remaining"]) > 0:
+		state.combat_log.append({"type": "casting_continued", "round": state.combat.round_number,
+			"caster_id": caster_id, "spell_id": cip["spell_id"],
+			"rounds_remaining": cip["rounds_remaining"]})
+		return {"success": true, "continuing": true, "rounds_remaining": cip["rounds_remaining"]}
+	# Final round — consume the slot now (deferred from initiation) and fire the effect.
+	state.casting_in_progress.erase(caster_id)
+	var spell_id: String = String(cip["spell_id"])
+	SpellSystem.consume_slot(caster, SpellSystem.get_best_cast_ring(caster, spell_id))
+	var target_id: int = int(cip["target_id"])
+	var target: L5RCharacterData = state.combatants.get(target_id, null)
+	return _complete_cast(state, caster_id, caster, spell_id, target_id, target,
+		cip["res"], dice_engine, String(cip.get("spell_choice", "")))
+
+
+## s31 interrupt a mid-cast caster who suffers `damage` Wounds: a Willpower Roll vs TN (5 + damage),
+## or `bonus_tn` higher for spells that worsen the Concentration TN (s35 Envious Flames: 20 + damage,
+## passed as bonus_tn = 15). On failure the cast is aborted (no effect, slot already refunded). Returns
+## true if the cast was interrupted. No-op if the target is not casting.
+static func _interrupt_cast(
+	state: MapCombatState, victim_id: int, victim: L5RCharacterData, damage: int,
+	dice_engine: DiceEngine, bonus_tn: int = 0,
+) -> bool:
+	if not state.casting_in_progress.has(victim_id) or victim == null or damage <= 0:
+		return false
+	var tn: int = 5 + damage + bonus_tn
+	var roll: int = dice_engine.roll_and_keep(maxi(1, victim.willpower), maxi(1, victim.willpower), true).total
+	if roll >= tn:
+		return false
+	var cip: Dictionary = state.casting_in_progress[victim_id]
+	state.casting_in_progress.erase(victim_id)
+	state.combat_log.append({"type": "cast_interrupted", "round": state.combat.round_number,
+		"caster_id": victim_id, "spell_id": cip.get("spell_id", ""), "tn": tn, "roll": roll})
+	return true
 
 
 ## Apply a heal-type spell's combat effect (s36 Water). Heals a living ally (or self) within
@@ -2732,6 +2950,13 @@ static func execute_cast_maho(
 	ts.consume_complex()
 	var res: Dictionary = {"success": true, "maho": true, "spell_id": spell_id, "ml": ml,
 		"blood_cost": blood}
+	# s34 Grounding Energy: the Earth kami turn maho aside from a warded ally. The maho-user already
+	# paid blood/Taint (they cast), but the effect cannot land on the protected target.
+	if target != null and _grounding_blocks_maho(state, target_id):
+		res["warded_by_grounding_energy"] = true
+		state.combat_log.append({"type": "maho_warded", "round": state.combat.round_number,
+			"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id})
+		return res
 	match String(eff.get("kind", "")):
 		"status":
 			res["spell_status"] = _apply_spell_status(
@@ -2783,6 +3008,17 @@ static func _apply_spell_combat_damage(
 	var kept: int = eff.get("dr_kept", 0)
 	if kept <= 0:
 		kept = ering
+	# Weather damage bonus (s35 Fury of Osano-Wo): a Thunder spell hits harder in a storm. STORM
+	# (moderate thunderstorm) and TYPHOON/BLIZZARD (disastrous storm/hurricane) tiers add dice.
+	var weather_dr: Dictionary = eff.get("weather_dr", {})
+	if not weather_dr.is_empty():
+		if state.weather == AsciiMapEnvironment.WeatherState.STORM:
+			rolled += int(weather_dr.get("storm_rolled", 0))
+			kept += int(weather_dr.get("storm_kept", 0))
+		elif state.weather == AsciiMapEnvironment.WeatherState.TYPHOON \
+				or state.weather == AsciiMapEnvironment.WeatherState.BLIZZARD:
+			rolled += int(weather_dr.get("severe_rolled", 0))
+			kept += int(weather_dr.get("severe_kept", 0))
 	var kind: String = SpiritAbilitySystem.W_MAGIC
 	if element == Enums.Ring.FIRE:
 		kind = SpiritAbilitySystem.W_FIRE
@@ -2824,8 +3060,19 @@ static func _apply_spell_combat_damage(
 				hits.append({"id": t["id"], "healed": dmg})
 				continue
 			dmg = int(round(dmg * filt.get("multiplier", 1.0)))
+		# s35 The Fires That Cleanse: the caster (marked "half") takes half damage, rounded up.
+		if t.get("half", false):
+			dmg = int(ceil(dmg / 2.0))
 		WoundSystem.apply_damage(ch, dmg, 0)
 		var dead: bool = CharacterStats.is_dead(ch)
+		# s31 Concentration: a mid-cast caster damaged by a spell is interrupted (Willpower TN 5+damage).
+		# s35 Envious Flames worsens the Concentration TN to 20+damage (bonus_tn = 15).
+		if dmg > 0:
+			if dead:
+				state.casting_in_progress.erase(int(t["id"]))
+			else:
+				var bonus_tn: int = 15 if spell_id == "envious_flames" else 0
+				_interrupt_cast(state, int(t["id"]), ch, dmg, dice_engine, bonus_tn)
 		var h: Dictionary = {"id": t["id"], "damage": dmg, "dead": dead}
 		# Rider condition (Knockdown/Daze/Fatigue/Deafen) — only on a surviving damaged target.
 		var rider: Dictionary = eff.get("rider", {})
@@ -2884,6 +3131,12 @@ static func _gather_spell_targets(
 	# Optional cap on the number of struck targets (e.g. "up to 10 target creatures").
 	if eff.has("aoe_max_targets") and targets.size() > int(eff["aoe_max_targets"]):
 		targets.resize(int(eff["aoe_max_targets"]))
+	# s35 The Fires That Cleanse: the caster is also caught in the 30' blast but takes only half damage
+	# (rounded up). Appended last (after the cap) with a "half" marker the damage loop honors.
+	if eff.get("caster_half", false):
+		var cch = state.combatants.get(caster_id, null)
+		if cch != null and not CharacterStats.is_dead(cch):
+			targets.append({"id": caster_id, "char": cch, "half": true})
 	return targets
 
 
@@ -2987,6 +3240,51 @@ static func _apply_spell_cleanse(
 ## phantom draws a lured enemy's strike when that enemy has no real target
 ## (execute_npc_turn's no-target branch), wasting the enemy's turn and dispelling
 ## the phantom (visual-only -> revealed the instant it is struck).
+## s33 Token of Memory (Air 1): the small (<=1 ft^3) objects a shugenja can conjure as a flawless
+## visual illusion. The character picks one from this list (owner 2026-06-25). Flavor — the object has
+## no substance (cannot be picked up, bear weight, or inflict damage); it just appears on the map.
+const TOKEN_OF_MEMORY_ITEMS: Array[String] = [
+	"coin", "scroll", "letter", "seal", "gem", "jade", "key", "fan", "netsuke", "tea_bowl", "ofuda", "tanto",
+]
+
+## s33 Token of Memory (Air 1) — Complex Action. Conjure a chosen visual-only fake object on a tile
+## within 10' (2 tiles). The character selects the item from TOKEN_OF_MEMORY_ITEMS. Pure flavor: it has
+## no substance and no mechanical effect; it persists for 1 hour (skirmish) then disappears. The future
+## ASCII view renders state.illusory_objects (a glyph per object).
+static func execute_token_of_memory(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	item_name: String, tx: int, ty: int, dice_engine: DiceEngine,
+) -> Dictionary:
+	if caster == null or CharacterStats.is_dead(caster):
+		return {"success": false, "reason": "caster_dead"}
+	if not state.positions.has(caster_id):
+		return {"success": false, "reason": "not_in_combat"}
+	if not SpellSystem.can_cast(caster, "token_of_memory"):
+		return {"success": false, "reason": "cannot_cast"}
+	var ts: TurnState = state.turn_states.get(caster_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_action"}
+	var item: String = item_name.to_lower()
+	if item not in TOKEN_OF_MEMORY_ITEMS:
+		return {"success": false, "reason": "invalid_item"}
+	if tx < 0 or ty < 0 or tx >= state.map.width or ty >= state.map.height:
+		return {"success": false, "reason": "out_of_bounds"}
+	var cp: Vector2i = state.positions[caster_id]
+	if maxi(absi(tx - cp.x), absi(ty - cp.y)) > 2:  # GDD 10' / 5
+		return {"success": false, "reason": "out_of_range"}
+	ts.consume_complex()
+	var res: Dictionary = SpellSystem.resolve_cast(caster, "token_of_memory", dice_engine)
+	if not res.get("success", false):
+		return {"success": false, "reason": "cast_failed", "roll": res}
+	state.illusory_objects.append({
+		"item": item, "x": tx, "y": ty, "caster_id": caster_id,
+		"expiry_round": state.combat.round_number + 600,  # 1 hour ≈ skirmish
+	})
+	state.combat_log.append({"type": "token_of_memory", "round": state.combat.round_number,
+		"caster_id": caster_id, "item": item, "x": tx, "y": ty})
+	return {"success": true, "item": item, "x": tx, "y": ty}
+
+
 static func execute_cast_mists(
 	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
 	tx: int, ty: int, dice_engine: DiceEngine,
@@ -3108,7 +3406,12 @@ static func _apply_spell_buff(
 	# combatant (incl. the caster) within aoe_radius of the caster.
 	if int(eff.get("aoe_radius", 0)) > 0 and String(eff.get("target", "self")) == "ally":
 		return _apply_spell_buff_aoe(state, caster_id, caster, eff)
-	var to_self: bool = eff.get("target", "self") == "self"
+	# "self": always the caster. "ally": the named target. "self_or_ally" (s35 Fires of Purity, Range 25'):
+	# the named living target when one is given, else the caster — so a PC may shroud an ally while the
+	# NPC self-buff path (target_id == caster_id) self-applies.
+	var tgt_mode: String = String(eff.get("target", "self"))
+	var to_self: bool = tgt_mode == "self" \
+		or (tgt_mode == "self_or_ally" and (target == null or target_id == caster_id))
 	var bid: int = caster_id if to_self else target_id
 	var bch: L5RCharacterData = caster if to_self else target
 	if bch == null:
@@ -3320,6 +3623,138 @@ static func _apply_spell_ring_change(
 		"new_capacity": CharacterStats.get_total_wound_capacity(who), "died_on_apply": died}
 
 
+## s33 Facing Your Devils (Air 5): misalign the target's Elements by swapping their highest and lowest
+## Traits for 10 Rounds. The combat-relevant consequence (the GDD's emphasized effect) is the resulting
+## RING changes — applied via the combat ring-delta bridge (like Strike at the Roots), so a dropping
+## Earth Ring cuts Wound capacity (potentially fatal). LIMITATION: only the Ring-derived effects (wound
+## capacity, ring-based rolls) are modeled — the per-Trait attack/damage roll changes are not (the engine
+## has no trait-level combat-delta layer). Ties resolve deterministically (first max / first min).
+## s37 Unbound Essence (Void 5): tamper with the target's pattern, RANDOMLY reordering their 5 Rings (and
+## the paired Traits). Wired via the combat ring-delta bridge (like Facing Your Devils): a random
+## permutation of the target's current Ring values is applied as per-Ring deltas, so the wound-capacity
+## (Earth) and Ring-based combat effects flow. PROVISIONAL: only the Ring-derived slice is modeled — the
+## per-Trait attack/damage roll changes need trait-level combat state the engine lacks (flagged).
+static func _apply_unbound_essence(
+	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData,
+	eff: Dictionary, dice_engine: DiceEngine,
+) -> Dictionary:
+	if target == null:
+		return {"reason": "no_target"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if p == null:
+		return {"reason": "not_in_combat"}
+	var rng: int = int(eff.get("range_tiles", 5))
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		if _chebyshev(state.positions[caster_id], state.positions[target_id]) > rng:
+			return {"reason": "out_of_range"}
+	var rings: Array = [Enums.Ring.AIR, Enums.Ring.EARTH, Enums.Ring.FIRE, Enums.Ring.WATER, Enums.Ring.VOID]
+	var vals: Array = []
+	for r: int in rings:
+		vals.append(SpellSystem.get_ring_value(target, r))
+	# Fisher-Yates shuffle of the values via the dice engine (no Math.random in scripts).
+	for i in range(vals.size() - 1, 0, -1):
+		var j: int = dice_engine.roll_die(i + 1) - 1
+		var tmp = vals[i]; vals[i] = vals[j]; vals[j] = tmp
+	var expiry: int = state.combat.round_number + int(eff.get("duration_rounds", 9999))
+	var applied: Array = []
+	for idx in range(rings.size()):
+		var ring: int = rings[idx]
+		var base: int = SpellSystem.get_ring_value(target, ring)
+		var newv: int = maxi(1, int(vals[idx]))  # floor the effective ring at 1
+		var delta: int = newv - base
+		if delta != 0:
+			p.ring_deltas[ring] = int(p.ring_deltas.get(ring, 0)) + delta
+			p.ring_delta_expiry[ring] = expiry
+			applied.append({"ring": ring, "delta": delta})
+	IndividualCombat.sync_ring_deltas(p, target)
+	return {"id": target_id, "ring_deltas": applied, "expires_round": expiry,
+		"died_on_apply": CharacterStats.is_dead(target)}
+
+
+## s37 Kharmic Intent (Void 3): pool all remaining Void Points of the caster + a willing ally, then
+## redistribute (up to each one's max). Faithful single-shot model: fill the ALLY to their max first
+## (the spell's purpose — share VP where needed), the caster keeps the remainder (capped at their max;
+## over-cap pooled VP is lost at redistribution, per "divided up to each one's normal maximum").
+static func _apply_kharmic_intent(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary,
+) -> Dictionary:
+	if target == null or CharacterStats.is_dead(target):
+		return {"reason": "no_target"}
+	if String(state.factions.get(target_id, "")) != String(state.factions.get(caster_id, "")):
+		return {"reason": "not_an_ally"}
+	var rng: int = int(eff.get("range_tiles", 4))
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		if _chebyshev(state.positions[caster_id], state.positions[target_id]) > rng:
+			return {"reason": "out_of_range"}
+	var pool: int = caster.current_void_points + target.current_void_points
+	var ally_max: int = SpellSystem.get_ring_value(target, Enums.Ring.VOID)
+	var caster_max: int = SpellSystem.get_ring_value(caster, Enums.Ring.VOID)
+	target.current_void_points = mini(ally_max, pool)
+	caster.current_void_points = mini(caster_max, maxi(0, pool - target.current_void_points))
+	return {"id": target_id, "ally_void": target.current_void_points,
+		"caster_void": caster.current_void_points}
+
+
+static func _apply_facing_your_devils(
+	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData, eff: Dictionary,
+) -> Dictionary:
+	if target == null:
+		return {"reason": "no_target"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if p == null:
+		return {"reason": "not_in_combat"}
+	var rng: int = int(eff.get("range_tiles", 6))
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		if _chebyshev(state.positions[caster_id], state.positions[target_id]) > rng:
+			return {"reason": "out_of_range"}
+	var traits: Dictionary = {
+		"reflexes": target.reflexes, "awareness": target.awareness,
+		"agility": target.agility, "intelligence": target.intelligence,
+		"strength": target.strength, "perception": target.perception,
+		"stamina": target.stamina, "willpower": target.willpower,
+	}
+	var max_key: String = ""
+	var min_key: String = ""
+	var max_v: int = -2147483648
+	var min_v: int = 2147483647
+	for k: String in traits:
+		var v: int = int(traits[k])
+		if v > max_v:
+			max_v = v
+			max_key = k
+		if v < min_v:
+			min_v = v
+			min_key = k
+	if max_key == min_key:
+		return {"reason": "no_imbalance"}  # all Traits equal — nothing to swap
+	var swapped: Dictionary = traits.duplicate()
+	swapped[max_key] = min_v
+	swapped[min_key] = max_v
+	var pairs: Dictionary = {
+		Enums.Ring.AIR: ["reflexes", "awareness"],
+		Enums.Ring.EARTH: ["stamina", "willpower"],
+		Enums.Ring.FIRE: ["agility", "intelligence"],
+		Enums.Ring.WATER: ["strength", "perception"],
+	}
+	var expiry: int = state.combat.round_number + int(eff.get("duration_rounds", 10))
+	var applied: Array = []
+	for ring: int in pairs:
+		var pr: Array = pairs[ring]
+		var base: int = mini(int(traits[pr[0]]), int(traits[pr[1]]))
+		var swp: int = mini(int(swapped[pr[0]]), int(swapped[pr[1]]))
+		var delta: int = swp - base
+		if delta < 0:
+			delta = maxi(delta, 1 - base)  # floor the effective ring at 1
+		if delta != 0:
+			p.ring_deltas[ring] = int(p.ring_deltas.get(ring, 0)) + delta
+			p.ring_delta_expiry[ring] = expiry
+			applied.append({"ring": ring, "delta": delta})
+	IndividualCombat.sync_ring_deltas(p, target)
+	return {"id": target_id, "swapped": [max_key, min_key], "ring_deltas": applied,
+		"expires_round": expiry, "died_on_apply": CharacterStats.is_dead(target)}
+
+
 # Expire combat ring deltas (s34) whose duration has elapsed: remove the delta, re-sync the bridge,
 # and — for a ring-UP that ended — re-check death (wounds return to normal, possibly fatal).
 static func _expire_ring_deltas(state: MapCombatState, p: IndividualCombat.Participant, chars_by_id: Dictionary) -> void:
@@ -3427,7 +3862,7 @@ static func _resolve_buff_value(caster: L5RCharacterData, value) -> int:
 ## Raise) are deferred. duration_rounds from the effect (5 minutes = 50 rounds).
 static func _apply_spell_conjure_weapon(
 	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
-	target_id: int, eff: Dictionary, spell_id: String,
+	target_id: int, eff: Dictionary, spell_id: String, weapon_choice: String = "",
 ) -> Dictionary:
 	# Beneficiary: a same-faction living participant target (ally grant), else the caster.
 	var wielder_id: int = caster_id
@@ -3439,15 +3874,40 @@ static func _apply_spell_conjure_weapon(
 			wielder_id = target_id
 	var element: int = SpellSystem.SPELL_LIBRARY.get(spell_id, {}).get("e", Enums.Ring.FIRE)
 	var school_rank: int = SpellSystem.get_effective_school_rank(caster, element)
-	var weapon: Dictionary = {
-		"rolled": int(eff.get("dr_rolled", 2)),
-		"kept": int(eff.get("dr_kept", 2)),
-		"skill": String(eff.get("skill", "Kenjutsu")),
-		"trait": "agility",
-		"strength_adds": false,
-		"melee": true,
-		"school_rank": school_rank,
-	}
+	var weapon: Dictionary
+	if bool(eff.get("real_weapon", false)):
+		# s33 Netsuke of Wind: conjure a fully-functional weapon the shugenja chooses from the catalog
+		# (owner 2026-06-25) — it gets that weapon's REAL profile (DR, Strength, skill, trait). The
+		# choice defaults to the caster's best-skill melee weapon (katana if that yields a non-melee /
+		# unarmed pick). The 20-lb limit is flavour (no weight data — not gated).
+		var wname: String = weapon_choice.to_lower()
+		if not IndividualCombat.WEAPON_CATALOG.has(wname) \
+				or not bool(IndividualCombat.WEAPON_CATALOG[wname].get("melee", true)):
+			wname = IndividualCombat.pick_best_weapon(caster)
+			if not bool(IndividualCombat.get_weapon_profile(wname).get("melee", true)) or wname == "unarmed":
+				wname = "katana"
+		var prof: Dictionary = IndividualCombat.get_weapon_profile(wname)
+		weapon = {
+			"rolled": int(prof.get("rolled", 3)),
+			"kept": int(prof.get("kept", 2)),
+			"skill": String(prof.get("skill", "Kenjutsu")),
+			"trait": String(prof.get("trait", "agility")),
+			"strength_adds": bool(prof.get("strength_adds", true)),
+			"melee": true,
+			"size": String(prof.get("size", "Medium")),
+			"school_rank": school_rank,
+			"conjured_name": wname,
+		}
+	else:
+		weapon = {
+			"rolled": int(eff.get("dr_rolled", 2)),
+			"kept": int(eff.get("dr_kept", 2)),
+			"skill": String(eff.get("skill", "Kenjutsu")),
+			"trait": "agility",
+			"strength_adds": false,
+			"melee": true,
+			"school_rank": school_rank,
+		}
 	var p: IndividualCombat.Participant = state.combat.participants.get(wielder_id)
 	if p == null:
 		return {}
@@ -3495,6 +3955,277 @@ static func _apply_spell_zone(
 			state, caster_id, caster, target_id, target, imp_eff, spell_id, dice_engine)
 	return {"center": center, "radius": radius, "expiry_round": zone["expiry_round"],
 		"impact_hits": impact_hits}
+
+
+## Install a hurricane zone (s33 Wrath of Kaze-no-Kami, Air 6): a whole-map storm whose calm eye
+## (20' = eye_radius tiles) follows the caster. Each minute (ROUNDS_PER_MINUTE Rounds) everyone
+## OUTSIDE the eye — all factions — takes 1k1 Wounds, or on a 1-in-major_chance_in roll a 5k5
+## debris strike that also flings them (knockback, not death). Concentration (max 1 hour); the
+## storm ends if the caster dies. Per-round resolution lives in _process_spell_zones.
+static func _apply_hurricane_zone(
+	state: MapCombatState, caster_id: int, eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var dur: int = int(eff.get("duration_rounds", 600))
+	var zone: Dictionary = {
+		"kind": "hurricane", "caster_id": caster_id,
+		"eye_radius": int(eff.get("eye_radius", 4)),
+		"minor_rolled": int(eff.get("minor_rolled", 1)), "minor_kept": int(eff.get("minor_kept", 1)),
+		"major_rolled": int(eff.get("major_rolled", 5)), "major_kept": int(eff.get("major_kept", 5)),
+		"major_chance_in": maxi(1, int(eff.get("major_chance_in", 10))),
+		"fling_tiles": int(eff.get("fling_tiles", 3)),
+		"expiry_round": state.combat.round_number + dur,
+		"next_tick_round": state.combat.round_number + IndividualCombat.ROUNDS_PER_MINUTE,
+		"spell_id": spell_id,
+	}
+	state.spell_zones.append(zone)
+	return {"eye_radius": zone["eye_radius"], "expiry_round": zone["expiry_round"],
+		"next_tick_round": zone["next_tick_round"]}
+
+
+## s35 Essence of Fire (Fire 4): the Asahina anti-tampering ward, modeled as a general anti-spell ward
+## (owner 2026-06-25) on TWO duelists — the caster and the chosen target (10' = 2 tiles). Each warded
+## character (1) has its ongoing spell effects ended (spell-sourced timed modifiers cleared) and
+## (2) gains the "essence_of_fire" timed modifier so any spell cast AT it suffers −3k0 to the casting
+## roll (read in execute_cast_spell). Duration = the skirmish. The 4-Raise Technique-suppression variant
+## is deferred (Raises not tracked + kata-suppression infra). Spell-applied CONDITIONS aren't dispelled
+## (no source tag). Inert when target == caster except warding the caster alone.
+static func _apply_essence_of_fire(
+	state: MapCombatState, caster_id: int, target_id: int, eff: Dictionary,
+) -> Dictionary:
+	var penalty: int = int(eff.get("rolled_penalty", 3))
+	var dur: int = int(eff.get("duration_rounds", 9999))
+	var cpos: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var warded: Array = []
+	var dispelled: int = 0
+	# Ward the caster + the chosen target (two duelists). target_id within range 10' (2 tiles).
+	var ids: Array = [caster_id]
+	if target_id != caster_id and state.combat.participants.has(target_id):
+		var tpos: Vector2i = state.positions.get(target_id, Vector2i(-9999, -9999))
+		if maxi(absi(cpos.x - tpos.x), absi(cpos.y - tpos.y)) <= int(eff.get("range_tiles", 2)):
+			ids.append(target_id)
+	for wid in ids:
+		var wp: IndividualCombat.Participant = state.combat.participants.get(wid, null)
+		var wch = state.combatants.get(wid, null)
+		if wp == null or wch == null or CharacterStats.is_dead(wch):
+			continue
+		dispelled += IndividualCombat.clear_spell_timed_modifiers(wp)  # end ongoing spell effects
+		IndividualCombat.add_timed_modifier(
+			wp, "essence_of_fire", penalty, state.combat.round_number + dur, "essence_of_fire")
+		warded.append(wid)
+	return {"warded": warded, "penalty": penalty, "spell_effects_ended": dispelled}
+
+
+## s36 Yuki's Touch (Water 2): flash-freeze a body of water out to range_tiles (100' = 20 tiles) from
+## the caster. Water tiles become solid walkable ice (FLOOR_SNOW), saved/restored via a conjured_terrain
+## zone ("ice melts normally" -> persists the skirmish). Anyone standing in the water — ALL factions
+## (owner 2026-06-25) — is trapped (Entangled) and breaks free via Strength vs the caster's stored Water
+## roll. A victim caught on a WATER_DEEP tile is submerged -> drowns (the engine's deep-water-drowning
+## model = _apply_pit_death; owner 2026-06-25). The drowning case is effectively unreachable (deep water
+## is impassable; only a flyer/bubble could be on it), documented for completeness.
+static func _apply_freeze_water(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	eff: Dictionary, spell_id: String, dice_engine: DiceEngine,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var radius: int = int(eff.get("range_tiles", 20))
+	var water: int = SpellSystem.get_ring_value(caster, Enums.Ring.WATER)
+	# "Contested Strength vs caster's Water roll" — roll it once at cast; victims contest this stored TN.
+	var break_tn: int = dice_engine.roll_and_keep(maxi(1, water), maxi(1, water), true).total
+	var water_tiles: Array = [Enums.TileType.WATER_SHALLOW, Enums.TileType.WATER_DEEP,
+		Enums.TileType.WATER_RAPID, Enums.TileType.WATER_PADDY]
+	var saved: Array = []
+	var frozen: Dictionary = {}  # Vector2i -> original tile (for victim lookup)
+	for y in range(maxi(0, center.y - radius), mini(state.map.height, center.y + radius + 1)):
+		for x in range(maxi(0, center.x - radius), mini(state.map.width, center.x + radius + 1)):
+			if maxi(absi(center.x - x), absi(center.y - y)) > radius:
+				continue
+			var t: int = state.map.get_tile(x, y)
+			if t in water_tiles:
+				var pos: Vector2i = Vector2i(x, y)
+				saved.append({"pos": pos, "original": t})
+				frozen[pos] = t
+				state.map.set_delta(x, y, Enums.TileType.FLOOR_SNOW)  # solid walkable ice
+	if not saved.is_empty():
+		state.spell_zones.append({
+			"kind": "conjured_terrain", "tiles": saved,
+			"expiry_round": state.combat.round_number + int(eff.get("duration_rounds", 9999)),
+			"spell_id": spell_id, "caster_id": caster_id,
+		})
+	var trapped: Array = []
+	var drowned: Array = []
+	for cid in state.positions.keys():
+		var cpos: Vector2i = state.positions[cid]
+		if not frozen.has(cpos):
+			continue
+		var ch = state.combatants.get(cid, null)
+		if ch == null or CharacterStats.is_dead(ch):
+			continue
+		if int(frozen[cpos]) == Enums.TileType.WATER_DEEP:
+			# Submerged when the water froze: drowns (engine deep-water = drowning death).
+			_apply_pit_death(state, cid, cpos)
+			drowned.append(cid)
+			continue
+		var p: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+		if p == null:
+			continue
+		IndividualCombat.apply_condition(p, IndividualCombat.CONDITION_ENTANGLED)
+		p.freeze_break_tn = break_tn
+		trapped.append(cid)
+	return {"break_tn": break_tn, "tiles_frozen": saved.size(),
+		"trapped": trapped, "drowned": drowned}
+
+
+## s36 Whirlpool (Water 5, Thunder): excite the Water kami into a rage, creating a massive whirlpool on
+## a large body of open water. Installs a persistent hazard zone (the per-round suck-under runs in
+## _process_spell_zones). Requires open water near the cast point — fails if no water tile lies within
+## the radius (the kami have nothing to churn). Centered on the caster. TN 30 (GDD-exact), radius from
+## the spell range_tiles. Within the Waves negates it; characters on dry land are unaffected.
+static func _apply_whirlpool(
+	state: MapCombatState, caster_id: int, eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var radius: int = int(eff.get("radius", 6))
+	var water_tiles: Array = [Enums.TileType.WATER_SHALLOW, Enums.TileType.WATER_DEEP,
+		Enums.TileType.WATER_RAPID, Enums.TileType.WATER_PADDY]
+	var has_water: bool = false
+	for y in range(maxi(0, center.y - radius), mini(state.map.height, center.y + radius + 1)):
+		for x in range(maxi(0, center.x - radius), mini(state.map.width, center.x + radius + 1)):
+			if maxi(absi(center.x - x), absi(center.y - y)) > radius:
+				continue
+			if int(state.map.get_tile(x, y)) in water_tiles:
+				has_water = true
+				break
+		if has_water:
+			break
+	if not has_water:
+		return {"ok": false, "reason": "no_open_water"}
+	state.spell_zones.append({
+		"kind": "whirlpool", "center": center, "radius": radius,
+		"tn": int(eff.get("tn", 30)),
+		"expiry_round": state.combat.round_number + int(eff.get("duration_rounds", 9999)),
+		"spell_id": spell_id, "caster_id": caster_id,
+	})
+	return {"ok": true, "center": center, "radius": radius}
+
+
+## s36 Opening the Veil (Water 6, Kitsu/Isawa): open a temporary portal into the Spirit Realms. Installs
+## a persistent veil_portal zone at a target tile within 10' (the per-round draw-home runs in
+## _process_spell_zones). PROVISIONAL: party realm-travel is not modeled (no realm-destination system) —
+## the faithful tile-combat consumer is the portal drawing displaced spirits home; flagged for owner override.
+static func _apply_opening_the_veil(
+	state: MapCombatState, caster_id: int, target_id: int, eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	if int(eff.get("range_tiles", 0)) > 0 and state.positions.has(target_id):
+		center = state.positions[target_id]
+	state.spell_zones.append({
+		"kind": "veil_portal", "center": center, "radius": int(eff.get("radius", 3)),
+		"expiry_round": state.combat.round_number + int(eff.get("duration_rounds", 6)),
+		"spell_id": spell_id, "caster_id": caster_id,
+	})
+	return {"center": center, "radius": int(eff.get("radius", 3))}
+
+
+## s34 Grounding Energy (Earth 5, Defense/Wards): Earth spirits fortify the caster + allies within 20'
+## against maho. The GDD effect raises the maho Spell Casting TN by 10×Earth — but tile-combat maho has
+## NO casting roll (it fires when blood is spilled, auto-succeeds), so a TN increase is literally inert.
+## The faithful analog of "+huge TN against maho" with no roll to bump is IMMUNITY: a maho combat spell
+## simply cannot LAND on a warded ally (the maho-user still pays blood/Taint — they cast, but the Earth
+## kami turn it aside). PROVISIONAL reinterpretation (TN-bump -> area maho-immunity) — flagged for owner
+## override. Installs a short (3-round) zone centered on the caster; the block is checked in execute_cast_maho.
+static func _apply_grounding_energy(
+	state: MapCombatState, caster_id: int, eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var radius: int = int(eff.get("aoe_radius", 4))
+	state.spell_zones.append({
+		"kind": "grounding_energy", "center": center, "radius": radius,
+		"faction": String(state.factions.get(caster_id, "")),
+		"expiry_round": state.combat.round_number + int(eff.get("duration_rounds", 3)),
+		"spell_id": spell_id, "caster_id": caster_id,
+	})
+	return {"center": center, "radius": radius}
+
+
+## True if a maho combat spell aimed at target_id is turned aside by an active Grounding Energy ward
+## (the target stands inside a grounding zone owned by their own faction).
+static func _grounding_blocks_maho(state: MapCombatState, target_id: int) -> bool:
+	if target_id < 0 or not state.positions.has(target_id):
+		return false
+	var tpos: Vector2i = state.positions[target_id]
+	var tfac: String = String(state.factions.get(target_id, ""))
+	for z in state.spell_zones:
+		if String(z.get("kind", "")) != "grounding_energy":
+			continue
+		if String(z.get("faction", "")) != tfac:
+			continue
+		var c: Vector2i = z["center"]
+		if maxi(absi(c.x - tpos.x), absi(c.y - tpos.y)) <= int(z.get("radius", 0)):
+			return true
+	return false
+
+
+## s36 Silent Waters (Water 3): on a successful cast, set a SECOND spell (ML <= 3 the caster can cast,
+## with a wired combat effect) to be held until a physical trigger fires it. Modeled with the
+## "when_struck" trigger (the GDD "drawing a blade / falling in battle" condition): the held spell
+## auto-fires the next time the caster is struck (see _apply_hit). Only one Silent Waters may be held
+## at a time — a new casting replaces the prior stored spell. The Silent Waters slot is consumed at
+## store time; the held spell's slot + roll resolve at trigger (the "cast on trigger" model — the
+## outcome is identical to the GDD pre-cast-and-release, two slots total across the operation).
+static func execute_silent_waters(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	stored_spell_id: String, dice_engine: DiceEngine,
+) -> Dictionary:
+	if not SpellSystem.can_cast(caster, "silent_waters"):
+		return {"ok": false, "reason": "cannot_cast"}
+	if not (stored_spell_id in caster.spells_known):
+		return {"ok": false, "reason": "stored_spell_unknown"}
+	if int(SpellSystem.SPELL_LIBRARY.get(stored_spell_id, {}).get("m", 99)) > 3:
+		return {"ok": false, "reason": "stored_spell_too_high"}
+	if not SpellSystem.SPELL_COMBAT_EFFECTS.has(stored_spell_id):
+		return {"ok": false, "reason": "stored_spell_no_combat_effect"}
+	if not SpellSystem.can_cast(caster, stored_spell_id):
+		return {"ok": false, "reason": "stored_spell_unavailable"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+	if p == null:
+		return {"ok": false, "reason": "not_in_combat"}
+	var res: Dictionary = SpellSystem.resolve_cast(caster, "silent_waters", dice_engine)
+	if not res.get("success", false):
+		return {"ok": false, "reason": "cast_failed"}
+	p.stored_spell = {"spell_id": stored_spell_id, "trigger": "when_struck"}
+	state.combat_log.append({
+		"type": "silent_waters_stored", "round": state.combat.round_number,
+		"caster_id": caster_id, "stored_spell": stored_spell_id,
+	})
+	return {"ok": true, "stored_spell": stored_spell_id, "trigger": "when_struck"}
+
+
+## s35 Curse of the Burning Hand (Fire 6): bind a hostile Fire kami to an enemy on a WON Contested Fire
+## Roll (the caster must win — the target resists if it wins). The cursed target is then wreathed in
+## flame: each round (in advance_round) its OWN allies (same faction) standing adjacent take 3k3, and the
+## flammable tile underfoot ignites. The fire recedes from hostile use, so it never burns the target's
+## attackers. Range 10' (2 tiles). Duration Infinite -> persists the skirmish (no in-combat cure).
+static func _apply_curse_burning_hand(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, eff: Dictionary, dice_engine: DiceEngine,
+) -> Dictionary:
+	if target == null or CharacterStats.is_dead(target):
+		return {"ok": false, "reason": "no_target"}
+	var cpos: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-9999, -9999))
+	var rng: int = int(eff.get("range_tiles", 2))
+	if maxi(absi(cpos.x - tpos.x), absi(cpos.y - tpos.y)) > rng:
+		return {"ok": false, "reason": "out_of_range"}
+	# Contested Fire Roll — the caster must win; _spell_save_resisted true = target resisted.
+	if _spell_save_resisted(state, caster, target, "fire_contested", 0, dice_engine):
+		return {"ok": false, "reason": "resisted"}
+	var p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if p == null:
+		return {"ok": false, "reason": "no_participant"}
+	var dur: int = int(eff.get("duration_rounds", 9999))
+	IndividualCombat.add_timed_modifier(
+		p, "curse_burning_hand", 1, state.combat.round_number + dur, "curse_burning_hand")
+	return {"ok": true, "target_id": target_id}
 
 
 ## Install a purify zone (s36 Heaven's Tears): a holy-rain field, centered on the caster, that each
@@ -3675,6 +4406,80 @@ static func _apply_spell_wall(
 	return {"tiles_placed": saved.size(), "expiry_round": zone["expiry_round"]}
 
 
+## s34 Groves of Stone (Earth 3, Craft/Defense): erupts a circular WALL_STONE barrier (15' radius =
+## 3 tiles) centered on the caster. Reuses the conjured_terrain zone (auto-restored on expiry —
+## "crumbles to loose earth"). Enemies must clamber over via execute_climb (the existing Z-axis
+## wall-scale). LIMITATIONS: the GDD climb TN = caster's Earth ×5 is approximated by execute_climb's
+## generic stone TN (25); the "500 Wounds, needs a siege engine to break" is moot in tile combat
+## (no wall-HP) — the ring is simply impassable, which is faithful (you clamber over, not through).
+static func _apply_groves_of_stone(
+	state: MapCombatState, caster_id: int, eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var c: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var r: int = int(eff.get("radius_tiles", 3))
+	var occupied: Dictionary = {}
+	for p in state.positions.values():
+		occupied[p] = true
+	var saved: Array = []
+	# Square-ring perimeter at Chebyshev distance r (a grid "circle" enclosing the caster).
+	for dx in range(-r, r + 1):
+		for dy in range(-r, r + 1):
+			if maxi(absi(dx), absi(dy)) != r:
+				continue  # perimeter only
+			var t: Vector2i = Vector2i(c.x + dx, c.y + dy)
+			if t.x < 0 or t.x >= state.map.width or t.y < 0 or t.y >= state.map.height:
+				continue
+			if occupied.has(t):
+				continue  # never wall a combatant's tile
+			if not MovementSystem.is_passable(state.map.get_tile(t.x, t.y)):
+				continue  # already blocked
+			saved.append({"pos": t, "original": state.map.get_tile(t.x, t.y)})
+			state.map.set_delta(t.x, t.y, Enums.TileType.WALL_STONE)
+	var dur: int = int(eff.get("duration_rounds", 10))
+	state.spell_zones.append({
+		"kind": "conjured_terrain", "tiles": saved,
+		"expiry_round": state.combat.round_number + dur,
+		"spell_id": spell_id, "caster_id": caster_id,
+	})
+	return {"tiles_placed": saved.size(), "expiry_round": state.combat.round_number + dur}
+
+
+## s34 Taming the Beast (Earth 2, Kitsune secret): soothe a NATURAL creature within 50' (10 tiles) —
+## a Contested Earth roll; on success it ceases all hostile activity (set to FACTION_NEUTRAL for the
+## skirmish, so it has no enemies to attack and idles). Does NOT work on spirits/supernatural/Tainted
+## creatures (a spirit puppet whose realm is not the mortal realm, or with any Taint). PC-callable
+## (Kitsune-only, rare — no NPC picker); the cast consumes the Earth slot, the contest decides success.
+static func execute_taming_the_beast(
+	state: MapCombatState, caster_id: int, caster: L5RCharacterData,
+	target_id: int, target: L5RCharacterData, dice_engine: DiceEngine,
+) -> Dictionary:
+	if CharacterStats.is_dead(caster):
+		return {"success": false, "reason": "caster_dead"}
+	if not SpellSystem.can_cast(caster, "taming_the_beast"):
+		return {"success": false, "reason": "cannot_cast"}
+	if target == null or CharacterStats.is_dead(target):
+		return {"success": false, "reason": "no_target"}
+	var sc: SpiritCreatureData = target.spirit_creature
+	if sc == null or sc.realm != Enums.SpiritRealm.NINGEN_DO or sc.taint_rank > 0:
+		return {"success": false, "reason": "not_a_natural_creature"}
+	if state.positions.has(caster_id) and state.positions.has(target_id):
+		if _chebyshev(state.positions[caster_id], state.positions[target_id]) > 10:
+			return {"success": false, "reason": "out_of_range"}
+	SpellSystem.consume_slot(caster, Enums.Ring.EARTH)
+	var ce: int = maxi(1, CharacterStats.get_earth_ring(caster))
+	var te: int = maxi(1, CharacterStats.get_earth_ring(target))
+	var c_roll: int = dice_engine.roll_and_keep(ce, ce, true).total
+	var t_roll: int = dice_engine.roll_and_keep(te, te, true).total
+	if c_roll <= t_roll:
+		return {"success": false, "reason": "resisted", "caster_roll": c_roll, "creature_roll": t_roll}
+	state.factions[target_id] = FACTION_NEUTRAL
+	state.combat_log.append({
+		"type": "spell_taming_the_beast", "round": state.combat.round_number,
+		"caster_id": caster_id, "target_id": target_id,
+	})
+	return {"success": true, "tamed_id": target_id, "caster_roll": c_roll, "creature_roll": t_roll}
+
+
 ## Restore the original tiles of a conjured-terrain zone (s34 Wall of Earth) when it expires.
 static func _restore_conjured_terrain(state: MapCombatState, zone: Dictionary) -> void:
 	for entry in zone.get("tiles", []):
@@ -3685,6 +4490,69 @@ static func _restore_conjured_terrain(state: MapCombatState, zone: Dictionary) -
 ## True when the straight line from a to b passes through any fog zone (s33 Summon Fog) — blocking
 ## sight/shots beyond 5 ft. Adjacent tiles (≤1) are always visible. Traces the same Bresenham line
 ## as _has_los; a traced tile within a fog disc blocks the view (including either endpoint in fog).
+## s33 False Realm (Air 4, Illusion): illusory terrain that convincingly alters all senses but has no
+## substance. In tile combat the faithful slice is a vision SCREEN against the deceived: a shooter NOT of
+## the caster's faction cannot see/shoot through a false_realm disc (the terrain looks solid to them), but
+## the caster's own faction knows it is an illusion and shoots through freely. Movement is unaffected (no
+## substance). Mirrors the fog ray-block, but faction-aware (the shooter's faction is checked).
+static func _ray_blocked_by_false_realm(
+	state: MapCombatState, shooter_id: int, a: Vector2i, b: Vector2i
+) -> bool:
+	if state.spell_zones.is_empty():
+		return false
+	if maxi(absi(a.x - b.x), absi(a.y - b.y)) <= 1:
+		return false
+	var sf: String = String(state.factions.get(shooter_id, FACTION_NEUTRAL))
+	# Only zones the shooter does NOT own can deceive them.
+	var any: bool = false
+	for zone in state.spell_zones:
+		if String(zone.get("kind", "")) == "false_realm" and String(zone.get("faction", "")) != sf:
+			any = true
+			break
+	if not any:
+		return false
+	var cx: int = a.x
+	var cy: int = a.y
+	var dx: int = absi(b.x - a.x)
+	var dy: int = absi(b.y - a.y)
+	var sx: int = 1 if a.x < b.x else -1
+	var sy: int = 1 if a.y < b.y else -1
+	var err: int = dx - dy
+	while true:
+		for zone in state.spell_zones:
+			if String(zone.get("kind", "")) != "false_realm" or String(zone.get("faction", "")) == sf:
+				continue
+			var c: Vector2i = zone["center"]
+			if maxi(absi(c.x - cx), absi(c.y - cy)) <= int(zone.get("radius", 10)):
+				return true
+		if cx == b.x and cy == b.y:
+			break
+		var e2: int = 2 * err
+		if e2 > -dy:
+			err -= dy
+			cx += sx
+		if e2 < dx:
+			err += dx
+			cy += sy
+	return false
+
+
+## Install a False Realm illusory-terrain zone (s33), centered on the caster, tagged with the caster's
+## faction (their side sees through it). Inert per-round; screens enemy ranged LOS until it expires.
+static func _apply_false_realm(
+	state: MapCombatState, caster_id: int, eff: Dictionary, spell_id: String,
+) -> Dictionary:
+	var center: Vector2i = state.positions.get(caster_id, Vector2i.ZERO)
+	var radius: int = int(eff.get("radius", 6))
+	state.spell_zones.append({
+		"kind": "false_realm", "center": center, "radius": radius,
+		"faction": String(state.factions.get(caster_id, "")),
+		"expiry_round": state.combat.round_number + int(eff.get("duration_rounds", 9999)),
+		"spell_id": spell_id, "caster_id": caster_id,
+	})
+	return {"center": center, "radius": radius}
+
+
 static func _ray_blocked_by_fog(state: MapCombatState, a: Vector2i, b: Vector2i) -> bool:
 	if state.spell_zones.is_empty():
 		return false
@@ -3739,7 +4607,55 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 		# — their modifiers are read at roll time by _zone_modifier_total. Keep them until they expire.
 		# s33 fog zones (Summon Fog) likewise have no per-round effect — they block LOS at shot time.
 		# s34 conjured terrain (Wall of Earth) is inert per-round — the walled tiles do the work.
-		if String(zone.get("kind", "damage_zone")) in ["modifier", "fog", "conjured_terrain"]:
+		if String(zone.get("kind", "damage_zone")) in ["modifier", "fog", "conjured_terrain", "grounding_energy", "false_realm"]:
+			surviving.append(zone)
+			continue
+		# s33 Wrath of Kaze-no-Kami (hurricane): whole-map storm, calm eye follows the caster.
+		if String(zone.get("kind", "damage_zone")) == "hurricane":
+			var hcaster: int = int(zone.get("caster_id", -1))
+			var hcch = state.combatants.get(hcaster, null)
+			# Concentration ends if the caster is gone or dead — the storm collapses.
+			if not state.positions.has(hcaster) or hcch == null or CharacterStats.is_dead(hcch):
+				continue
+			# Per-minute cadence (owner 2026-06-25: 1 minute = ROUNDS_PER_MINUTE Rounds).
+			if state.combat.round_number < int(zone.get("next_tick_round", 0)):
+				surviving.append(zone)
+				continue
+			var eye: Vector2i = state.positions[hcaster]
+			var eyer: int = int(zone.get("eye_radius", 4))
+			var majchance: int = maxi(1, int(zone.get("major_chance_in", 10)))
+			var fling: int = int(zone.get("fling_tiles", 3))
+			# .keys() is a copy — safe while _knockback_target mutates positions.
+			for cid in state.positions.keys():
+				if cid == hcaster:
+					continue
+				var hpos: Vector2i = state.positions[cid]
+				# Inside the eye = sheltered.
+				if maxi(absi(eye.x - hpos.x), absi(eye.y - hpos.y)) <= eyer:
+					continue
+				var hch = state.combatants.get(cid, null)
+				if hch == null or CharacterStats.is_dead(hch):
+					continue
+				var major: bool = dice_engine.roll_die(majchance) == 1
+				var hdmg: int
+				if major:
+					hdmg = dice_engine.roll_and_keep(
+						int(zone.get("major_rolled", 5)), int(zone.get("major_kept", 5)), true).total
+				else:
+					hdmg = dice_engine.roll_and_keep(
+						int(zone.get("minor_rolled", 1)), int(zone.get("minor_kept", 1)), true).total
+				if hch.spirit_creature != null:
+					var hfilt: Dictionary = SpiritAbilitySystem.incoming_damage(
+						hch.spirit_creature, SpiritAbilitySystem.W_MAGIC, true)
+					if hfilt.get("heals", false):
+						WoundSystem.heal_wounds(hch, hdmg)
+						continue
+					hdmg = int(round(hdmg * hfilt.get("multiplier", 1.0)))
+				WoundSystem.apply_damage(hch, hdmg, 0)
+				# A debris strike flings the victim outward from the eye (knockback, not death).
+				if major and not CharacterStats.is_dead(hch):
+					_knockback_target(state, cid, eye, fling, dice_engine)
+			zone["next_tick_round"] = state.combat.round_number + IndividualCombat.ROUNDS_PER_MINUTE
 			surviving.append(zone)
 			continue
 		# s36 Heaven's Tears: a purify field — heal the pure of soul, harm the Tainted, by soul
@@ -3761,6 +4677,62 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 					WoundSystem.apply_damage(pch, dice_engine.roll_and_keep(pdr, pdk, true).total, 0)
 				elif pch.honor >= 4.0:
 					WoundSystem.heal_wounds(pch, pheal)
+			surviving.append(zone)
+			continue
+		# s36 Opening the Veil (Water 6): a portal into the Spirit Realms. Each Round the nearest
+		# displaced (non-native, realm != Ningen-do) spirit creature within the portal radius is drawn
+		# back through the veil to its home realm (banished — no contest; the door opens to where it
+		# belongs). PROVISIONAL: realm-TRAVEL for the party is not modeled (no realm-destination system);
+		# the faithful tile-combat consumer is the portal acting on the spirits present (flagged).
+		if String(zone.get("kind", "damage_zone")) == "veil_portal":
+			var vcenter: Vector2i = zone["center"]
+			var vradius: int = int(zone.get("radius", 3))
+			var best_id: int = -1
+			var best_d: int = 99999
+			for cid in state.positions.keys():
+				var vch = state.combatants.get(cid, null)
+				if vch == null or CharacterStats.is_dead(vch) or vch.spirit_creature == null:
+					continue
+				if vch.spirit_creature.realm == Enums.SpiritRealm.NINGEN_DO:
+					continue  # a native/natural animal is not a displaced spirit
+				var vp: Vector2i = state.positions[cid]
+				var vd: int = maxi(absi(vcenter.x - vp.x), absi(vcenter.y - vp.y))
+				if vd <= vradius and vd < best_d:
+					best_d = vd
+					best_id = cid
+			if best_id >= 0:
+				state.positions.erase(best_id)
+				if best_id not in state.fled_ids:
+					state.fled_ids.append(best_id)
+				state.combat_log.append({"type": "veil_portal_banish",
+					"round": state.combat.round_number, "spirit_id": best_id})
+			surviving.append(zone)
+			continue
+		# s36 Whirlpool (Water 5): a raging vortex on open water. Each Round every character standing
+		# on a water tile within the radius rolls Athletics (Swimming)/Strength vs TN 30 or is sucked
+		# under and drowns. Characters on dry land are unaffected. Within the Waves negates it.
+		if String(zone.get("kind", "damage_zone")) == "whirlpool":
+			var wcenter: Vector2i = zone["center"]
+			var wradius: int = int(zone.get("radius", 6))
+			var wtn: int = int(zone.get("tn", 30))
+			var water_tiles: Array = [Enums.TileType.WATER_SHALLOW, Enums.TileType.WATER_DEEP,
+				Enums.TileType.WATER_RAPID, Enums.TileType.WATER_PADDY]
+			for cid in state.positions.keys():
+				var wpos: Vector2i = state.positions[cid]
+				if maxi(absi(wcenter.x - wpos.x), absi(wcenter.y - wpos.y)) > wradius:
+					continue
+				if int(state.map.get_tile(wpos.x, wpos.y)) not in water_tiles:
+					continue  # only swimmers (those in the water) are at risk
+				var wch = state.combatants.get(cid, null)
+				if wch == null or CharacterStats.is_dead(wch):
+					continue
+				var wpp: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+				if wpp != null and IndividualCombat.get_timed_modifier_total(wpp, "within_the_waves") > 0:
+					continue  # the air bubble holds them safe from the vortex
+				var swim: Dictionary = SkillResolver.resolve_skill_check(
+					wch, dice_engine, "Athletics", wtn, 0, "Swimming", Enums.Trait.STRENGTH)
+				if not swim.get("success", false):
+					_apply_pit_death(state, cid, wpos)
 			surviving.append(zone)
 			continue
 		var dr_rolled: int = int(zone.get("dr_rolled", 0))
@@ -4273,13 +5245,23 @@ static func _apply_spell_rider(
 	if _spell_save_resisted(state, caster, ch, rider.get("save", "none"),
 			rider.get("save_tn", 0), dice_engine):
 		return "resisted"
-	var cond: String = rider.get("condition", "")
+	# A rider may apply one condition ("condition") or several on the same failed save
+	# ("conditions" array — e.g. s34 Murmur of Earth: Prone + Dazed). Each honors duration_rounds.
 	var dur: int = rider.get("duration_rounds", 0)
-	if dur > 0:
-		IndividualCombat.apply_timed_condition(p, cond, state.combat.round_number + dur)
-	else:
-		IndividualCombat.apply_condition(p, cond)
-	return cond
+	var applied: Array = []
+	for c in rider.get("conditions", []):
+		applied.append(String(c))
+	var single: String = rider.get("condition", "")
+	if not single.is_empty() and single not in applied:
+		applied.append(single)
+	for cond: String in applied:
+		if cond.is_empty():
+			continue
+		if dur > 0:
+			IndividualCombat.apply_timed_condition(p, cond, state.combat.round_number + dur)
+		else:
+			IndividualCombat.apply_condition(p, cond)
+	return ",".join(applied)
 
 
 # Resolves a spell save (rider or status). Returns true if the target resists. Save types:
@@ -5276,6 +6258,16 @@ static func _apply_pit_death(state: MapCombatState, char_id: int, pit_pos: Vecto
 	var ch: L5RCharacterData = state.combatants.get(char_id, null)
 	if ch == null or CharacterStats.is_dead(ch):
 		return
+	# s36 Within the Waves: an air-bubble sphere protects the caster from drowning. A WATER_DEEP
+	# submersion (drowning) is negated; a VOID fall is NOT (the bubble holds no one over a chasm).
+	if int(state.map.get_tile(pit_pos.x, pit_pos.y)) == Enums.TileType.WATER_DEEP:
+		var wp: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+		if wp != null and IndividualCombat.get_timed_modifier_total(wp, "within_the_waves") > 0:
+			state.combat_log.append({
+				"type": "within_the_waves_survives_drowning",
+				"round": state.combat.round_number, "char_id": char_id,
+			})
+			return
 	ch.wounds_taken = CharacterStats.get_total_wound_capacity(ch) + 1
 	state.combat_log.append({
 		"type": "pit_death",
@@ -5738,8 +6730,12 @@ static func attempt_entangle_escape(state: MapCombatState, char_id: int, charact
 	if p == null or IndividualCombat.CONDITION_ENTANGLED not in p.conditions:
 		return {"success": false, "reason": "not_entangled"}
 	var roll: int = dice.roll_and_keep(maxi(1, character.strength), maxi(1, character.strength), true).total
-	if roll >= 20:
+	# s36 Yuki's Touch: breaking free of the ice is Contested Strength vs the caster's stored Water
+	# roll; web/snare/gore use the default TN 20.
+	var esc_tn: int = p.freeze_break_tn if p.freeze_break_tn > 0 else 20
+	if roll >= esc_tn:
 		p.conditions.erase(IndividualCombat.CONDITION_ENTANGLED)
+		p.freeze_break_tn = 0
 		# Gore (s54.5): pulling free of the tusks deals the gore-escape damage.
 		var gore_dmg: int = 0
 		if p.gore_escape_rolled > 0:
@@ -6027,6 +7023,10 @@ static func advance_round(
 	chars_by_id: Dictionary,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
+	# s35 Oath of the Heavens: mirror shared Conditions (Fatigued/Dazed/Stunned) between linked pairs
+	# BEFORE the recovery phase, so a condition gained last round is shared, then both partners roll to
+	# recover. Also dissolves links when a partner is Down/Out/Dead or the duration lapses.
+	_process_oath_links(state)
 	# Advance reaction phase for all living participants (handles dazed/stunned recovery).
 	IndividualCombat.advance_round_reactions(state.combat, chars_by_id, dice_engine)
 
@@ -6184,6 +7184,37 @@ static func advance_round(
 			if _tp.on_fire and not CharacterStats.is_dead(_fc):
 				WoundSystem.apply_damage(_fc, _fire_damage_for(_fc, dice_engine), 0)
 
+		# s35 Curse of the Burning Hand: a cursed target is wreathed in flame that burns its OWN
+		# allies (same faction) standing adjacent (3k3 each round) and ignites the flammable tile
+		# underfoot. The fire recedes from hostile use, so it never burns the target's attackers.
+		if _fc != null and not CharacterStats.is_dead(_fc) \
+				and IndividualCombat.get_timed_modifier_total(_tp, "curse_burning_hand") > 0:
+			var _curpos: Vector2i = state.positions.get(_tp.character_id, Vector2i(-9999, -9999))
+			var _curfac: String = String(state.factions.get(_tp.character_id, ""))
+			for _ocid in state.positions.keys():
+				if _ocid == _tp.character_id:
+					continue
+				if String(state.factions.get(_ocid, "")) != _curfac:
+					continue  # only the cursed target's OWN side burns
+				var _opos: Vector2i = state.positions[_ocid]
+				if maxi(absi(_curpos.x - _opos.x), absi(_curpos.y - _opos.y)) > 1:
+					continue
+				var _och: L5RCharacterData = chars_by_id.get(_ocid, state.combatants.get(_ocid, null))
+				if _och == null or CharacterStats.is_dead(_och):
+					continue
+				# 3k3 fire (GDD), armour does not reduce (elemental). Spirit W_FIRE filter applies.
+				var _cdmg: int = dice_engine.roll_and_keep(3, 3, true).total
+				if _och.spirit_creature != null:
+					var _cf: Dictionary = SpiritAbilitySystem.incoming_damage(
+						_och.spirit_creature, SpiritAbilitySystem.W_FIRE, true)
+					if _cf.get("heals", false):
+						WoundSystem.heal_wounds(_och, _cdmg)
+						continue
+					_cdmg = int(round(_cdmg * _cf.get("multiplier", 1.0)))
+				WoundSystem.apply_damage(_och, _cdmg, 0)
+			# Arsonist: ignite the flammable tile underfoot (FireSystem spreads it).
+			FireSystem.ignite(state.map, _curpos.x, _curpos.y)
+
 	# End-of-round fire spread/extinguish (s56.6.6) — no-op when nothing is burning.
 	if not state.map.burning_tiles.is_empty():
 		FireSystem.process_round_end(state.map, state.weather, dice_engine)
@@ -6217,6 +7248,14 @@ static func advance_round(
 	# Persistent spell zones (Wall of Fire, Enticing the Dance of Flame, etc.) — no-op when empty.
 	if not state.spell_zones.is_empty():
 		_process_spell_zones(state, dice_engine)
+
+	# s33 Token of Memory: drop visual-only fake objects whose 1-hour illusion has lapsed.
+	if not state.illusory_objects.is_empty():
+		var surviving_objs: Array = []
+		for obj in state.illusory_objects:
+			if state.combat.round_number < int(obj.get("expiry_round", 0)):
+				surviving_objs.append(obj)
+		state.illusory_objects = surviving_objs
 
 	# Re-roll initiative for all active participants (L5R 4e: initiative re-rolled each round).
 	# CENTER stance carry-forward: void bonus from last round applies to this roll.
@@ -6374,7 +7413,8 @@ static func _npc_maybe_cast_spell(
 	if not IndividualCombat.has_timed_modifier_source(p, "spell_buff"):
 		for sid in npc.spells_known:
 			var eff2: Dictionary = SpellSystem.get_combat_effect(sid)
-			if eff2.get("kind", "") != "buff" or eff2.get("target", "self") != "self":
+			var tmode: String = String(eff2.get("target", "self"))
+			if eff2.get("kind", "") != "buff" or (tmode != "self" and tmode != "self_or_ally"):
 				continue
 			if not SpellSystem.can_cast(npc, sid):
 				continue
@@ -6523,6 +7563,101 @@ static func _apply_maho_fear(
 	return {"id": target_id, "afraid": true}
 
 
+## One-shot Fear-N burst on every living member of `faction` (excluding `exclude_id`) — s35 Eyes of
+## the Phoenix (the target's allies suffer Fear 3). Each rolls Willpower (+ Kshatriya/buff fear-resist
+## bonuses) vs TN 5 + N×5 (s22.3); a failure sets a persistent spell_afraid + AFRAID (skipped for
+## immune_to_fear). Returns {afraid: [ids], resisted: [ids]}.
+static func _apply_fear_burst(
+	state: MapCombatState, faction: String, fear_rank: int, exclude_id: int, dice: DiceEngine,
+) -> Dictionary:
+	var afraid_ids: Array = []
+	var resisted_ids: Array = []
+	var tn: int = 5 + fear_rank * 5
+	for oid: int in state.combat.participants.keys():
+		if oid == exclude_id:
+			continue
+		if String(state.factions.get(oid, FACTION_NEUTRAL)) != faction:
+			continue
+		var ch: L5RCharacterData = state.combatants.get(oid, null)
+		if ch == null or CharacterStats.is_dead(ch) or ch.immune_to_fear:
+			continue
+		var p: IndividualCombat.Participant = state.combat.participants.get(oid, null)
+		if p == null:
+			continue
+		var wp: int = maxi(1, ch.willpower + ch.fear_resist_willpower_bonus)
+		var fr_roll: int = IndividualCombat.get_timed_modifier_total(p, "fear_resist_rolled")
+		var fr_kept: int = IndividualCombat.get_timed_modifier_total(p, "fear_resist_kept")
+		var resist: int = dice.roll_and_keep(
+			wp + ch.fear_resist_rolled_bonus + fr_roll,
+			wp + ch.fear_resist_kept_bonus + fr_kept, true).total
+		if resist >= tn:
+			resisted_ids.append(oid)
+			continue
+		IndividualCombat.add_timed_modifier(p, "spell_afraid", 1, state.combat.round_number + 9999, "fear_burst")
+		if IndividualCombat.CONDITION_AFRAID not in p.conditions:
+			p.conditions.append(IndividualCombat.CONDITION_AFRAID)
+		afraid_ids.append(oid)
+	return {"afraid": afraid_ids, "resisted": resisted_ids}
+
+
+## s35 Oath of the Heavens: link the caster and the touched target. Both gain +Nk0 to Fire-Trait rolls
+## (the +2k0 attack slice — Agility-driven; Int/Fire-Ring-roll slices are the standard out-of-combat
+## buff limitation), and from now on share Fatigued/Dazed/Stunned (synced each round in _process_oath_links)
+## for the duration, until either is reduced to Down/Out/Dead. Returns {a, b} or {reason}.
+static func _apply_oath_link(
+	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData, eff: Dictionary,
+) -> Dictionary:
+	if target == null or target_id == caster_id or CharacterStats.is_dead(target):
+		return {"reason": "no_partner"}
+	var cp: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+	var tp: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	if cp == null or tp == null:
+		return {"reason": "not_in_combat"}
+	var bonus: int = int(eff.get("attack_rolled", 2))
+	var dur: int = int(eff.get("duration_rounds", 5))
+	var expiry: int = state.combat.round_number + dur
+	IndividualCombat.add_timed_modifier(cp, "spell_attack_rolled", bonus, expiry, "oath_of_the_heavens")
+	IndividualCombat.add_timed_modifier(tp, "spell_attack_rolled", bonus, expiry, "oath_of_the_heavens")
+	state.oath_links.append({"a": caster_id, "b": target_id, "expiry": expiry})
+	return {"a": caster_id, "b": target_id}
+
+
+## s35 Oath of the Heavens per-round pass: mirror Fatigued/Dazed/Stunned between each linked pair, and
+## dissolve a link (clearing its +2k0 buff) when either partner is Down/Out/Dead or the duration lapses.
+static func _process_oath_links(state: MapCombatState) -> void:
+	if state.oath_links.is_empty():
+		return
+	var mirror: Array = [IndividualCombat.CONDITION_FATIGUED,
+		IndividualCombat.CONDITION_DAZED, IndividualCombat.CONDITION_STUNNED]
+	var surviving: Array = []
+	for link: Dictionary in state.oath_links:
+		var aid: int = int(link["a"])
+		var bid: int = int(link["b"])
+		var ap: IndividualCombat.Participant = state.combat.participants.get(aid, null)
+		var bp: IndividualCombat.Participant = state.combat.participants.get(bid, null)
+		var ach: L5RCharacterData = state.combatants.get(aid, null)
+		var bch: L5RCharacterData = state.combatants.get(bid, null)
+		# Dissolve: either partner gone, or reduced to Down/Out/Dead, or expired.
+		var ended: bool = ap == null or bp == null or ach == null or bch == null \
+			or CharacterStats.get_wound_level(ach) >= Enums.WoundLevel.DOWN \
+			or CharacterStats.get_wound_level(bch) >= Enums.WoundLevel.DOWN \
+			or state.combat.round_number >= int(link.get("expiry", 0))
+		if ended:
+			if ap != null:
+				IndividualCombat.clear_timed_modifiers_by_source(ap, "oath_of_the_heavens")
+			if bp != null:
+				IndividualCombat.clear_timed_modifiers_by_source(bp, "oath_of_the_heavens")
+			continue
+		# Mirror the shared Conditions in both directions.
+		for cond: String in mirror:
+			if cond in ap.conditions and cond not in bp.conditions:
+				bp.conditions.append(cond)
+			elif cond in bp.conditions and cond not in ap.conditions:
+				ap.conditions.append(cond)
+		surviving.append(link)
+	state.oath_links = surviving
+
+
 ## s43 maho-user enemy cast (Bloodspeaker/cult, s56.14). Mirrors _npc_maybe_cast_spell but for maho:
 ## gated on cult_affiliation (a maho-user), no cast roll, Ring-supported spell selection. (1) highest-ML
 ## status/debuff maho that reaches the chosen enemy; else (2) a self-buff if not already buffed. Returns
@@ -6621,6 +7756,14 @@ static func execute_npc_turn(
 
 	# -- Fear (s22.3/s02.4): resist nearby Fear sources or fight afraid (-1k0). --
 	apply_fear_checks(state, npc_id, npc, dice_engine)
+
+	# -- Multi-round cast in progress (s31): a caster mid-cast commits their Turn to maintaining the
+	# spell (a Complex Action each round) until it completes — owner decision B. Runs before any
+	# offensive logic so the caster never abandons a started cast.
+	if state.casting_in_progress.has(npc_id):
+		var cc: Dictionary = continue_cast(state, npc_id, npc, dice_engine)
+		actions_taken.append({"action": "continue_cast", "result": cc})
+		return {"actions": actions_taken}
 
 	# -- Bleeding: a bleeding NPC with Medicine bandages the wound shut (s43 Bleeding cure) before
 	# anything offensive — it is a steady per-round drain. Self-bandage (Complex Action); forgoes the
@@ -7693,6 +8836,11 @@ static func execute_companion_turn(
 		return {"actions": [], "reason": "incapacitated"}
 	# Fear (s22.3/s02.4): a companion near an enemy Fear source resists or fights afraid.
 	apply_fear_checks(state, cid, character, dice_engine)
+	# Multi-round cast in progress (s31): a casting companion commits its Turn to maintaining the
+	# spell until it completes (a Complex Action each round) — before any other behavior.
+	if state.casting_in_progress.has(cid):
+		var ccc: Dictionary = continue_cast(state, cid, character, dice_engine)
+		return {"actions": [{"action": "continue_cast", "result": ccc}], "command": CompanionSystem.decide_action(companion)}
 	var cmd: int = CompanionSystem.decide_action(companion)
 	var actions: Array = []
 
@@ -8767,6 +9915,14 @@ static func _apply_hit(
 			state.blood_armor_links.erase(target.character_id)
 	var wd_result: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
 
+	# s31 Concentration: a mid-cast caster struck for damage must pass Willpower (TN 5 + damage) or the
+	# spell is interrupted (aborted, no slot lost). A slain caster's cast simply lapses.
+	if int(wd_result.get("final_damage", 0)) > 0:
+		if CharacterStats.is_dead(target):
+			state.casting_in_progress.erase(target.character_id)
+		else:
+			_interrupt_cast(state, target.character_id, target, int(wd_result.get("final_damage", 0)), dice_engine)
+
 	# The Soul's Blade (s35 Fire 6): every target hit by the enchanted weapon is Stunned.
 	if t_p != null and IndividualCombat.get_timed_modifier_total(a_p, "weapon_stun") > 0 \
 			and not CharacterStats.is_dead(target):
@@ -8779,6 +9935,18 @@ static func _apply_hit(
 			and IndividualCombat.get_timed_modifier_total(t_p, "no_magic_heal") <= 0 \
 			and int(wd_result.get("final_damage", 0)) > 0:
 		WoundSystem.heal_wounds(target, dice_engine.roll_and_keep(1, 1, true).total)
+
+	# s36 Silent Waters: a pre-set spell held on the struck defender releases when they are hit
+	# ("falling in battle"/"drawing a blade" -> "when_struck"). Cleared BEFORE firing (no recursion);
+	# the held combat spell fires from the struck caster at their attacker (a self-buff self-applies).
+	if t_p != null and not CharacterStats.is_dead(target) \
+			and String(t_p.stored_spell.get("trigger", "")) == "when_struck":
+		var held: Dictionary = t_p.stored_spell
+		t_p.stored_spell = {}
+		var held_id: String = String(held.get("spell_id", ""))
+		if not held_id.is_empty() and SpellSystem.can_cast(target, held_id):
+			execute_cast_spell(state, target.character_id, target, held_id,
+				attacker.character_id, attacker, dice_engine)
 
 	# Arugai "Nearly Immortal" / heart_kill (s54.5): the oni's wounds heal almost instantly,
 	# so body damage can never slay it — only destroying its heart can. While the heart is

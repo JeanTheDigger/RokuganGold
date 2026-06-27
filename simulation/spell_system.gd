@@ -63,6 +63,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Coverage extension (2026-06-20): tendril/swarm/dragon-talon damage + Earth grasp.
 	"tail_of_the_fire_dragon": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
 		"range_tiles": 6, "aoe_radius": 0},  # Fire 2: DR = caster Fire Ring, 30'
+	# Ravenous Swarms (Fire 3): 5k3 bolt, then encircles the target 5 Rounds — a Fire cast during that window is struck for 3k3 + auto-fails (fire-disrupt rider WIRED)
 	"ravenous_swarms": {"kind": "damage", "dr_rolled": 5, "dr_kept": 3,
 		"range_tiles": 6, "aoe_radius": 0},  # Fire 3: 5k3 bolt, 30' (fire-disrupt rider deferred)
 	"the_dragons_talon": {"kind": "damage", "dr_rolled": 8, "dr_kept": 6,
@@ -72,7 +73,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 0},  # Earth 2: stony grip, 50'
 	# Coverage extension batch 2 (2026-06-20).
 	"envious_flames": {"kind": "damage", "dr_rolled": 2, "dr_kept": 2,
-		"range_tiles": 6, "aoe_radius": 0},  # Fire 1: 2k2 unerring lance, 30' (cast-disrupt rider deferred)
+		"range_tiles": 6, "aoe_radius": 0},  # Fire 1: 2k2 unerring lance, 30' — a struck mid-cast target must beat Willpower TN 20+damage (vs the normal 5+damage) or lose the spell (s31 multi-round interrupt, bonus_tn=15)
 	"the_fires_from_within": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
 		"range_tiles": 20, "aoe_radius": 0},  # Fire 2: the classic fireball, DR = Fire Ring, 100'
 	"the_fist_of_osano_wo": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
@@ -134,12 +135,40 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"aoe_hits": "all", "duration_rounds": 2},  # Fire 2: 3k2 impact + 2k1/round, 20' radius
 	"follow_the_flame": {"kind": "damage", "dr_rolled": 6, "dr_kept": 5,
 		"range_tiles": 60, "aoe_radius": 0},  # Fire 5: 6k5 stream of fire, 300' (persistent burn deferred)
+	# Air 6 [CR] Wrath of Kaze-no-Kami (Hurricane): whole-map storm, eye (20'=4 tiles) follows the
+	# caster. Per minute (= ROUNDS_PER_MINUTE Rounds, owner 2026-06-25) everyone OUTSIDE the eye —
+	# all factions — takes 1k1 Wounds, or on a 1-in-10 a 5k5 debris strike that also flings them
+	# (knockback, not death — owner choice). Concentration (max 1 hour = 600 rounds); ends if the
+	# caster dies. fling_tiles PROVISIONAL (GDD gives no knockback distance for "cast into the winds").
+	"wrath_of_kaze_no_kami": {"kind": "hurricane", "eye_radius": 4,
+		"minor_rolled": 1, "minor_kept": 1, "major_rolled": 5, "major_kept": 5,
+		"major_chance_in": 10, "fling_tiles": 3, "duration_rounds": 600},
+	# Water 2 Yuki's Touch: flash-freeze a body of water to 100' (20 tiles) — tiles become solid
+	# walkable ice; everyone standing in the water (all factions) is trapped (Entangled), breaking
+	# free via Strength vs the caster's Water roll. Deep-water victims drown (owner 2026-06-25).
+	"yukis_touch": {"kind": "freeze_water", "range_tiles": 20, "duration_rounds": 9999},
+	"whirlpool": {"kind": "whirlpool", "radius": 6, "tn": 30, "duration_rounds": 9999},  # Water 5: open-water vortex — swimmers in the area roll Athletics(Swimming)/Strength TN 30 each Round or drown
+	# Fire 6 Curse of the Burning Hand: a Contested-Fire curse on an enemy at 10' (2 tiles). The cursed
+	# target is wreathed in flame — each round its OWN allies (same faction) adjacent take 3k3 and the
+	# flammable tile underfoot ignites. Never burns the target's attackers. Infinite -> skirmish (owner
+	# 2026-06-25). Per-round effect in advance_round; PC-deliberate (not in the NPC offense picker).
+	"curse_of_the_burning_hand": {"kind": "curse_burning_hand", "range_tiles": 2, "duration_rounds": 9999},
+	# Fire 4 Essence of Fire: the Asahina anti-tampering ward, modeled as a general anti-spell ward
+	# (owner 2026-06-25) on the caster + the chosen target (10' = 2 tiles). Each warded duelist has its
+	# ongoing spell effects ended and any spell cast AT it suffers −3k0. Skirmish-long. 4-Raise
+	# Technique-suppression variant deferred.
+	"essence_of_fire": {"kind": "essence_of_fire", "range_tiles": 2, "rolled_penalty": 3, "duration_rounds": 9999},
+	# Air 4 Netsuke of Wind: conjure a fully-functional weapon the shugenja chooses from the catalog
+	# (owner 2026-06-25) — it gets that weapon's REAL profile (DR + Strength + skill + trait), unlike the
+	# fixed-DR elemental conjures. Defaults to the caster's best melee weapon. 1 hour -> skirmish.
+	"netsuke_of_wind": {"kind": "conjure_weapon", "real_weapon": true, "duration_rounds": 600},
 	# Coverage extension batch 9 (2026-06-20): area wards (enemy-cast TN penalty + spell DR reduction).
 	"earths_protection": {"kind": "ward", "aoe_radius": 2, "duration_rounds": 10,
 		"ward_elements": [0, 2, 3], "cast_tn_penalty": 10,
 		"dr_reduction_rolled": 1, "dr_reduction_kept": 1},  # Earth 3: +10 TN & -1k1 vs Air/Fire/Water in 10'
 	"ward_of_thunder": {"kind": "ward", "aoe_radius": 3, "duration_rounds": 50,
 		"ward_elements": [2], "cast_tn_penalty": 20},  # Fire 4: +20 TN to hostile Fire within 15'
+	"grounding_energy": {"kind": "grounding_energy", "aoe_radius": 4, "duration_rounds": 3},  # Earth 5: anti-maho ward — maho combat spells cannot land on warded allies within 20' (3 rounds)
 	# Coverage extension batch 10 (2026-06-20): summoned elemental kami (autonomous ally combatant).
 	"rise_air": {"kind": "summon"},    # Air 5: kami, all Physical Traits = Air Ring, Invulnerable
 	"rise_earth": {"kind": "summon"},  # Earth 5: kami, all Physical Traits = Earth Ring, Invulnerable
@@ -173,29 +202,31 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"murmur_of_earth": {"kind": "damage", "dr_rolled": 1, "dr_kept": 1, "range_tiles": 0,
 		"aoe_radius": 20, "aoe_hits": "all", "caster_exempt": true,
 		"save": "agility_flat", "save_tn": 20, "save_negates": true,
-		"rider": {"condition": "prone", "save": "none"}},  # Earth 3: Agility TN 20 or 1k1 + Prone (Dazed deferred)
+		"rider": {"conditions": ["prone", "dazed"], "save": "none"}},  # Earth 3: Agility TN 20 or 1k1 + Prone + Dazed (GDD s34 l181)
 	"maw_of_the_earth": {"kind": "damage", "dr_rolled": 3, "dr_kept": 2, "range_tiles": 8,
 		"aoe_radius": 2, "aoe_hits": "all", "caster_exempt": true,
 		"save": "reflexes_contested_earth", "save_negates": true,
 		"rider": {"condition": "entangled", "save": "none"}},  # Earth 4: Reflexes vs Earth or fall in (3k2 + trapped)
 	"the_fires_that_cleanse": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0, "range_tiles": 0,
-		"aoe_radius": 6, "aoe_hits": "all", "caster_exempt": true},  # Fire 1: DR=Fire Ring to all in 30' (caster-half deferred)
+		"aoe_radius": 6, "aoe_hits": "all", "caster_half": true},  # Fire 1: DR=Fire Ring to ALL in 30' incl. caster, who takes half (rounded up) (GDD s35 l51)
 	"light_of_the_sun": {"kind": "damage_zone", "dr_rolled": 2, "dr_kept": 2, "range_tiles": 20,
 		"aoe_radius": 6, "aoe_hits": "all", "duration_rounds": 10},  # Fire 5: 2k2/round in 30' (honor/taint bonus deferred)
 	"blessing_of_the_sun": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 3,
 		"mods": [{"kind": "negate_wound_penalty", "value": 1}]},  # Fire 4: ignore Fatigue/Wound penalties (Fire-roll scope + cost deferred)
 	# Coverage extension batch 13 (2026-06-20).
-	"oath_of_the_heavens": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 5,
-		"mods": [{"kind": "spell_attack_rolled", "value": 2}]},  # Fire 3: +2k0 Fire rolls (2-target link + shared conditions deferred)
+	"oath_of_the_heavens": {"kind": "oath_link", "target": "ally", "range_tiles": 1,
+		"duration_rounds": 5, "attack_rolled": 2},  # Fire 3: links caster+target, both +2k0 Fire rolls, share Fatigued/Dazed/Stunned, ends if either Down (GDD s35 l199)
 	"balance_of_elements": {"kind": "heal", "heal": "dice", "heal_rolled": 3, "heal_kept": 3,
 		"range_tiles": 1},  # Void 4 (Ishiken): heal 3k3 (disadvantage negation deferred)
 	"relentless_heat": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 10,
 		"mods": [{"kind": "relentless_heat", "value": 1}]},  # Fire 2: melee attacker Fatigued on attempt + Full Attack->Attack
+	# Fury's weather damage scaling is WIRED (weather_dr below: STORM->6k2, TYPHOON/BLIZZARD->6k3).
 	# Fury's Deafen rider (Stamina TN 15, 2 Rounds) is a bystander AoE within 10' of the TARGET,
 	# not a rider on the damaged target — deferred (needs a sub-AoE + a hearing mechanic; Deafened
 	# has no combat effect yet). CONDITION_DEAFENED + the timed rider path remain forward-wired.
 	"fury_of_osano_wo": {"kind": "damage", "dr_rolled": 5, "dr_kept": 2,
-		"range_tiles": 60, "aoe_radius": 0},
+		"range_tiles": 60, "aoe_radius": 0,
+		"weather_dr": {"storm_rolled": 1, "severe_rolled": 1, "severe_kept": 1}},  # Fire 1: 5k2 lightning; STORM->6k2, TYPHOON/BLIZZARD->6k3 (GDD s35 l57)
 	"breath_of_the_fire_dragon": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
 		"range_tiles": 0, "aoe_radius": 3, "aoe_hits": "enemies", "caster_exempt": true},
 	"destructive_wave": {"kind": "damage", "dr_rolled": 7, "dr_kept": 7,
@@ -206,7 +237,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"the_breath_of_battle": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 5,
 		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_attack_kept", "value": 1}, {"kind": "spell_damage_rolled", "value": 1}]},  # Fire 3: +1k1 Agility(attack) + 1k0 damage (sunlight-only requirement not modeled)
 	"hungry_blade": {"kind": "buff", "target": "ally", "range_tiles": 10, "duration_rounds": 5,
-		"mods": [{"kind": "spell_attack_rolled", "value": 1}]},  # Fire 3: +1k0 attack (explode-on-8 damage mechanic deferred)
+		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "hungry_blade", "value": 1}]},  # Fire 3: +1k0 attack + all damage dice explode on 8/9 (GDD s35 l193)
 	"globe_of_the_everlasting_sun": {"kind": "ward", "aoe_radius": 99, "duration_rounds": 9999,
 		"ward_elements": [2], "cast_tn_penalty": 15},  # Fire 6: +15 TN to Fire spells in the area (1-mile = whole skirmish; building fire-immunity not modeled)
 	"agashas_shield": {"kind": "ward", "aoe_radius": 6, "duration_rounds": 6,
@@ -238,6 +269,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "all_rolls", "value": -5}]},  # Air 4: must call 1 Raise (=+5 TN) on all rolls (disadvantage-count 2-Raise scaling + haunting-past immunity deferred)
 	"gift_of_wind": {"kind": "buff", "target": "self", "duration_rounds": 50,
 		"mods": [{"kind": "invisible", "value": 1}]},  # Air 4: invisible to non-magical vision; attacking ends it
+	"request_to_hato_no_kami": {"kind": "debuff", "target": "enemy", "range_tiles": 30, "duration_rounds": 1,
+		"mods": [{"kind": "all_rolls", "value": -1}]},  # Air 2: a summoned bird distracts one enemy (-1k0 for a Round); GM-judgment "distract an enemy" use
 	"defender_from_beyond": {"kind": "summon", "summon_kind": "shiryo", "count": 1},  # Air 5 (Kitsu): summon a shiryo ancestor (all Rings 3, Rank 4 skills)
 	# Air coverage extension batch 2 (2026-06-20): wound-penalty negation, AoE invisibility, insubstantial.
 	"to_seek_the_truth": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 50,
@@ -327,12 +360,17 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"banish_the_void": {"kind": "ward", "aoe_radius": 4, "duration_rounds": 5,
 		"ward_elements": [4], "cast_tn_penalty": 10},  # Void 3: +10 TN to Void spells in the area (VP-cost-doubling + Shadow effects not modeled; ward owner exempt)
 	"draw_closed_the_veil": {"kind": "banish_spirit"},  # Void 4: banish a non-native spirit to its home realm (Contested Void vs Willpower for embodied spirits)
+	"opening_the_veil": {"kind": "veil_portal", "range_tiles": 2, "radius": 3, "duration_rounds": 6},  # Water 6: open a Spirit-Realm portal at a tile within 10' — each round draws the nearest displaced spirit home (PROVISIONAL: party realm-travel not modeled)
 	"essence_of_void": {"kind": "status", "condition": "incapacitated", "save": "void_contested",
 		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 9999},  # Void 4: Contested Void → held immobile, unable to act (Concentration = skirmish; the per-round break roll is the deferred nuance)
 	# Void VP manipulation (2026-06-20): gain / restore / steal / lock Void Points.
 	"drawing_the_void": {"kind": "gain_void"},  # Void 1: caster gains School Rank +1 Void Points (over-cap allowed; the per-round over-cap decay is deferred)
 	"fill_the_emptiness": {"kind": "restore_void", "target": "ally", "range_tiles": 1},  # Void 4: restore a touched ally's Void Points to maximum
 	"void_release": {"kind": "steal_void", "range_tiles": 5},  # Void 3: Contested Void → steal 1 Void Point from the target (margin/5 extra deferred)
+	"kharmic_intent": {"kind": "pool_void", "range_tiles": 4},  # Void 3: pool VP with a willing ally, redistribute (fill ally to max, caster keeps remainder up to max)
+	"the_empty_voice": {"kind": "buff", "target": "self", "duration_rounds": 50,
+		"mods": [{"kind": "empty_voice", "value": 1}]},  # Void 2: silent casting (forward-wired empty_voice modifier; dormant until casting is speech/noise-gated)
+	"unbound_essence": {"kind": "ring_reorder", "range_tiles": 5, "duration_rounds": 9999},  # Void 5: randomly reorder the target's 5 Rings (via the combat ring-delta bridge; trait-roll slice deferred)
 	# Coverage clean-wins batch 4 (2026-06-20): the two instant-kill spells.
 	"consumed_by_five_fires": {"kind": "instant_kill", "range_tiles": 20, "reciprocal": true,
 		"fire_immune_blocks": true},  # Fire 5: instantly reduce target to Dead; caster suffers the same Wounds unmitigated (often lethal); cannot target Fire-resistant creatures
@@ -376,13 +414,15 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"contested": "fire_contested", "mods": [{"kind": "spell_attack_rolled", "value": "neg_fire_ring"}]},  # Fire 4: -Fire Ring Agility (its attack-roll slice; the -Fire Intelligence / spell-suppression half is deferred). Per-Round re-resist simplified to one contested-Fire gate at cast.
 	# Coverage clean-wins batch 12 (2026-06-20): LOS-blocking fog (anti-ranged area denial).
 	"summon_fog": {"kind": "fog_zone", "range_tiles": 20, "aoe_radius": 10, "duration_rounds": 9999},  # Air 3: 50' radius obscuring fog (visibility -> 5 ft) — blocks LOS for ranged attacks crossing it beyond 1 tile; centered on a target tile within 100'. 1-minute ~ skirmish. (Damp/extinguish-small-flames flavour not modeled.)
+	"false_realm": {"kind": "false_realm", "radius": 6, "duration_rounds": 9999},  # Air 4: illusory terrain (100' radius) — screens enemy ranged LOS (caster's faction sees through; no substance, movement unaffected)
 	# Coverage clean-wins batch 13 (2026-06-20): per-die damage reduction (self defensive ward).
 	"armor_of_the_emperor": {"kind": "buff", "target": "self", "duration_rounds": 5,
 		"mods": [{"kind": "per_die_reduction", "value": "earth_school_rank"}]},  # Earth 4: each kept damage die against the caster is reduced by the caster's School Rank, floored at 0 (central melee+ranged path; atemi/charge/spell damage not threaded)
 	# Coverage clean-wins batch 14 (2026-06-20): illusion dispel (anti-invisibility / clears fog).
 	"draw_back_the_shadow": {"kind": "dispel", "range_tiles": 20, "aoe_radius": 6},  # Air 5: within a 30' radius, dispel illusions — clears combatants' invisibility (Gift of Wind / Legion of the Moon) and removes Summon Fog clouds. Auto for the ML<=4 illusions wired; the ML5-6 contest + the broader non-illusion contested dispel are deferred (no creator/mastery on the timed-modifier layer).
 	# Coverage clean-wins batch 15 (2026-06-20): conjured terrain (a barrier that blocks move + LOS).
-	"wall_of_earth": {"kind": "wall", "pattern": "line", "range_tiles": 20, "wall_length": 6, "duration_rounds": 9999},  # Earth 4: a straight WALL_STONE barrier centered on a target tile, perpendicular to the approach — blocks movement (enemies path around) and LOS through it; restored on expiry. (Groves of Stone's closed ring deferred — needs a clamber-over action to avoid an invulnerability stalemate.)
+	"wall_of_earth": {"kind": "wall", "pattern": "line", "range_tiles": 20, "wall_length": 6, "duration_rounds": 9999},  # Earth 4: a straight WALL_STONE barrier centered on a target tile, perpendicular to the approach — blocks movement (enemies path around) and LOS through it; restored on expiry.
+	"groves_of_stone": {"kind": "stone_ring", "radius_tiles": 3, "duration_rounds": 10},  # Earth 3: a closed WALL_STONE ring (15') around the caster; enemies clamber over via execute_climb; crumbles (restored) on expiry. The clamber-over action now exists, so the old stalemate blocker is gone.
 	# Coverage clean-wins batch 16 (2026-06-20): anti-spell ward (per-target casting-roll penalty).
 	"the_kamis_will": {"kind": "buff", "target": "ally", "range_tiles": 6, "duration_rounds": 10,
 		"mods": [{"kind": "kamis_will", "value": "earth_ring"}]},  # Earth 5: a warded character — all spells (friend or foe) cast AT them suffer -(Earth Ring)k(Earth Ring) to the casting roll. (The +Willpower and -Social-roll halves are out-of-combat, deferred.)
@@ -401,6 +441,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"essence_of_earth": {"kind": "ring_change", "target": "self", "ring": Enums.Ring.EARTH, "delta": 1, "duration_rounds": 100},  # Earth 4: target's Earth Ring +1 Rank (Wounds increased correspondingly); on expiry Wounds return to normal — possibly fatal. 10 min ~ 100 Rounds (persists a normal skirmish, cleared at combat end).
 	"the_wolfs_mercy": {"kind": "ring_change", "target": "enemy", "ring": Enums.Ring.EARTH, "delta": -1, "taint_delta": -2, "range_tiles": 10, "duration_rounds": 10},  # Earth 3: target's Earth Ring -1 Rank (-2 if Tainted, min 1) — reduced Wound capacity can immediately kill an already-wounded target. (The accompanying -1 Strength is not modeled.)
 	"strike_at_the_roots": {"kind": "ring_change", "target": "enemy", "ring": Enums.Ring.EARTH, "set_to": 1, "contested": "earth_contested", "range_tiles": 10, "duration_rounds": 3},  # Earth 5: Contested Earth -> the target's Earth Ring is reduced to 1 for the duration; may immediately kill if already wounded.
+	"facing_your_devils": {"kind": "trait_swap", "target": "enemy", "range_tiles": 6, "duration_rounds": 10},  # Air 5: swap the target's highest/lowest Traits for 10 Rounds -> the resulting RING deltas (esp. a dropping Earth = reduced Wound capacity, possibly fatal). Per-Trait roll changes not modeled.
 	# Trait-swap roll models (2026-06-21): the combat-roll slice of trait changes (no trait bridge needed).
 	"chi_reversal": {"kind": "debuff", "target": "enemy", "range_tiles": 4, "duration_rounds": 9999,
 		"mods": [{"kind": "spell_attack_rolled", "value": "chi_reversal_agility"}]},  # Water 5: flip the target's Fire-pair Traits (Agility<->Intelligence) -> the Agility drop lowers attack rolls (combat slice; the Int change + other pair options are out-of-combat). Inert if the swap wouldn't lower Agility.
@@ -434,7 +475,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"whispering_flames": {"kind": "status", "condition": "dazed", "save": "none",
 		"range_tiles": 10, "aoe_radius": 2, "aoe_hits": "all", "duration_rounds": 0},  # Fire 3: 10' Daze (all gazers; roll-recovered; immunity not modeled)
 	"eyes_of_the_phoenix": {"kind": "status", "condition": "blinded", "save": "none",
-		"range_tiles": 5, "aoe_radius": 0, "duration_rounds": 0},  # Fire 4: Blind (allies' Fear-3 burst deferred)
+		"range_tiles": 5, "aoe_radius": 0, "duration_rounds": 0},  # Fire 4: Blind target + all target's allies suffer Fear 3 on cast (GDD s35 l255, fear-burst WIRED in _complete_cast)
 	"wooden_prison": {"kind": "status", "condition": "entangled", "save": "none",
 		"range_tiles": 10, "aoe_radius": 0, "duration_rounds": 0},  # Earth 3: Entangle (escape via standard entangle layer)
 	# --- Cleanse (s36) ---
@@ -452,6 +493,10 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# armor_tn, reduction, spell_attack_rolled/_kept, spell_damage_rolled/_kept, initiative_rolled.
 	"armor_of_earth": {"kind": "buff", "target": "self", "duration_rounds": 10,
 		"mods": [{"kind": "reduction", "value": "earth_plus_rank"}]},  # Earth 1: Reduction = Earth + School Rank
+	"hands_of_clay": {"kind": "buff", "target": "self", "duration_rounds": 100,
+		"mods": [{"kind": "hands_of_clay", "value": 1}]},  # Earth 2: merge with stone — execute_climb auto-succeeds (cliffs/walls), no fall on a down-climb
+	"within_the_waves": {"kind": "buff", "target": "self", "duration_rounds": 100,
+		"mods": [{"kind": "within_the_waves", "value": 1}]},  # Water 4: air-bubble sphere — the caster cannot drown on deep water (immune to WATER_DEEP / Yuki's Touch / Whirlpool suffocation)
 	"cloak_of_the_miya": {"kind": "buff", "target": "self", "duration_rounds": 5,
 		"mods": [{"kind": "armor_tn", "value": "water_plus_rank"}]},  # Water 2: Armor TN += Water + School Rank
 	# s37 Altering the Course (Void 2 ishiken): a self buff installing the `multi_void_spend`
@@ -475,14 +520,15 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"biting_steel": {"kind": "buff", "target": "self", "duration_rounds": 10,
 		"mods": [{"kind": "spell_damage_rolled", "value": 1}, {"kind": "spell_damage_kept", "value": 1}]},  # Fire 1: DR +1k1
 	"burning_kiss_of_steel": {"kind": "buff", "target": "self", "duration_rounds": 50,
-		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_attack_kept", "value": 1}]},  # Fire 1: melee attack +1k1 (mounted/larger +2k2 deferred)
+		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_attack_kept", "value": 1},
+			{"kind": "burning_kiss", "value": 1}]},  # Fire 1: melee +1k1, +2k2 vs mounted/larger-than-human (GDD s35 l15)
 	"warning_flame": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 10,
 		"mods": [{"kind": "initiative_rolled", "value": 1}]},  # Fire 1: +1k0 Initiative (immune-surprise + Reactions +3 deferred)
 	# Hooked buffs (effect read in _apply_hit / execute_melee_attack, not a stat total):
 	"the_souls_blade": {"kind": "buff", "target": "self", "duration_rounds": 5,
 		"mods": [{"kind": "weapon_stun", "value": 1}]},  # Fire 6: weapon auto-Stuns + overcomes Invulnerability
-	"fires_of_purity": {"kind": "buff", "target": "self", "duration_rounds": 10,
-		"mods": [{"kind": "flame_shroud", "value": 1}]},  # Fire 1: melee attacker takes 2k2; the shrouded one's strikes deal +2k2 (ranged bypasses; ally-target deferred)
+	"fires_of_purity": {"kind": "buff", "target": "self_or_ally", "range_tiles": 5, "duration_rounds": 10,
+		"mods": [{"kind": "flame_shroud", "value": 1}]},  # Fire 1: shroud self or an ally within 25'; melee attacker takes 2k2, the shrouded one's strikes deal +2k2 (ranged bypasses) (GDD s35 l45)
 	"reversal_of_fortunes": {"kind": "buff", "target": "self", "duration_rounds": 3,
 		"mods": [{"kind": "reroll", "value": 1}]},  # Water 1: re-roll one missed attack/round (broader re-rolls forward-wired)
 }
@@ -667,6 +713,131 @@ static func activate_drink_of_your_essence(
 	return res
 
 
+## s33 Wind of the Moon (Air 6) — 50', 1 target, 1 minute. Advanced telepathy: the caster reads the
+## target's surface thoughts AND transmits their own thoughts into the target's mind; the target is
+## unaware of the contact and believes the implanted thoughts are their own. Requires the target's
+## name + a Contested Air Roll (telepathy reads the TRUE thought, so the read is deception-proof —
+## unlike a PROBE, no false_info can deceive it). Two halves:
+##   READ — records the target's true standing objective (priority_objective) AND their true
+##          disposition toward the caster (disposition_toward) as deduped intelligence on the caster.
+##          Guaranteed accurate (the kami read the mind, not the mouth).
+##   TRANSMIT — implants one thought: the target's disposition toward the caster warms by
+##          WIND_OF_MOON_IMPLANT (the target believes the warmth is their own feeling, so NO
+##          manipulation/honor cost fires — it is undetectable suggestion, not overt persuasion).
+## Failure on the Contested Air Roll breaks contact (no read, no implant). PROVISIONAL: the +5
+## implant magnitude (matches a full successful CHARM, s15.4a) — flagged for owner override.
+## Callable via a deliberate PROBE augment (not auto-cast); consumes a spell slot.
+const WIND_OF_MOON_IMPLANT: int = 5
+
+static func activate_wind_of_the_moon(
+	caster: L5RCharacterData, target: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	target_objective: Dictionary = {}, current_season: int = -1
+) -> Dictionary:
+	if not can_cast(caster, "wind_of_the_moon"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	if target == null:
+		return {"success": false, "activated": false, "reason": "no_target"}
+	var res: Dictionary = resolve_cast(caster, "wind_of_the_moon", dice, 0, target, ic_day)
+	res["activated"] = res.get("success", false)
+	if not res.get("success", false):
+		return res
+	# Contested Air Roll — telepathy is resisted by the target's will (Air). Failure breaks contact.
+	var caster_air: int = get_ring_value(caster, Enums.Ring.AIR)
+	var target_air: int = get_ring_value(target, Enums.Ring.AIR)
+	var attack: DiceResult = dice.roll_and_keep(caster_air, caster_air, true)
+	var defend: DiceResult = dice.roll_and_keep(target_air, target_air, true)
+	if attack.total <= defend.total:
+		res["contact"] = false
+		return res
+	res["contact"] = true
+	# READ (deception-proof): record the target's true standing objective + true disposition.
+	var need_type: String = String(target_objective.get("need_type", ""))
+	if not need_type.is_empty():
+		var obj_entry := KnowledgeEntry.new()
+		obj_entry.source = Enums.KnowledgeSource.DIRECT_OBSERVATION
+		obj_entry.entry_type = "priority_objective"
+		obj_entry.data = {"target_character_id": target.character_id, "need_type": need_type}
+		obj_entry.season_acquired = current_season
+		InformationSystem.update_intelligence_knowledge(caster, obj_entry)
+	var disp_entry := KnowledgeEntry.new()
+	disp_entry.source = Enums.KnowledgeSource.DIRECT_OBSERVATION
+	disp_entry.entry_type = "disposition_toward"
+	disp_entry.data = {
+		"target_character_id": target.character_id,
+		"toward_id": caster.character_id,
+		"disposition": int(target.disposition_values.get(caster.character_id, 0)),
+	}
+	disp_entry.season_acquired = current_season
+	InformationSystem.update_intelligence_knowledge(caster, disp_entry)
+	# TRANSMIT: implant a thought — the target's regard for the caster warms (believed self-generated).
+	var cur: int = int(target.disposition_values.get(caster.character_id, 0))
+	target.disposition_values[caster.character_id] = clampi(cur + WIND_OF_MOON_IMPLANT, -100, 100)
+	res["implanted_disposition"] = WIND_OF_MOON_IMPLANT
+	return res
+
+
+## s36 Sympathetic Energies (Water 1) — Range 25', transfer one existing spell effect from the
+## caster to a willing target. A "spell effect" in the world-sim is a day buff (the standard model
+## for any sub-IC-day spell); this moves one named day buff off the caster and onto the willing
+## target (cleared from the caster, set on the target). PC-callable (the future cast UI picks the
+## effect + a willing target); no NPC vehicle — it is a meta-utility with no decision trigger.
+## The 3-Raise "between two other willing targets" variant is not modeled (caster-to-target only).
+static func activate_sympathetic_energies(
+	caster: L5RCharacterData, target: L5RCharacterData, buff_id: String,
+	dice: DiceEngine, ic_day: int
+) -> Dictionary:
+	if not can_cast(caster, "sympathetic_energies"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	if target == null or CharacterStats.is_dead(target):
+		return {"success": false, "activated": false, "reason": "no_target"}
+	if not caster.has_day_buff(buff_id):
+		return {"success": false, "activated": false, "reason": "caster_lacks_effect"}
+	# Willing target: the caster themselves, or anyone not hostile toward the caster.
+	if target.character_id != caster.character_id \
+			and target.disposition_values.get(caster.character_id, 0) < 0:
+		return {"success": false, "activated": false, "reason": "target_unwilling"}
+	var res: Dictionary = resolve_cast(caster, "sympathetic_energies", dice, 0, target, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		caster.clear_day_buff(buff_id)
+		target.set_day_buff(buff_id)
+		res["transferred_buff"] = buff_id
+		res["target_id"] = target.character_id
+	return res
+
+
+## s36 The Path Not Taken (Water 4) — Personal. Select one Ring to weaken and one to strengthen,
+## then transfer `count` UNUSED daily spell slots from the weakened Ring to the strengthened one for
+## the rest of the IC day (the strengthened Ring can cast `count` more spells of its element). Applied
+## via the per-Ring spell_slot_adjustment, reset with the slot counters each day. PC-callable (the cast
+## UI picks the Rings + count); no NPC vehicle (a slot-economy utility with no decision trigger).
+static func activate_the_path_not_taken(
+	caster: L5RCharacterData, weak_ring: int, strong_ring: int, count: int,
+	dice: DiceEngine, ic_day: int
+) -> Dictionary:
+	if not can_cast(caster, "the_path_not_taken"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	if weak_ring == strong_ring or count < 1:
+		return {"success": false, "activated": false, "reason": "invalid_transfer"}
+	# Cast first (consumes a Water slot), then move from the weakened Ring's remaining unused slots.
+	var res: Dictionary = resolve_cast(caster, "the_path_not_taken", dice, 0, null, ic_day)
+	res["activated"] = res.get("success", false)
+	if not res.get("success", false):
+		return res
+	var unused: int = get_daily_slots(caster, weak_ring) - get_slots_used(caster, weak_ring)
+	var moved: int = clampi(count, 0, maxi(0, unused))
+	if moved <= 0:
+		res["transferred"] = 0
+		res["reason"] = "no_unused_slots"
+		return res
+	caster.spell_slot_adjustment[weak_ring] = int(caster.spell_slot_adjustment.get(weak_ring, 0)) - moved
+	caster.spell_slot_adjustment[strong_ring] = int(caster.spell_slot_adjustment.get(strong_ring, 0)) + moved
+	res["transferred"] = moved
+	res["weak_ring"] = weak_ring
+	res["strong_ring"] = strong_ring
+	return res
+
+
 ## s33 Voice of the Wind (Air 1) — Touch, 1 target. On a successful cast the target gains the
 ## spoken-social buff for the IC day (SkillResolver reads voice_of_the_wind_ic_day: +1k0 to
 ## spoken Social Skill Rolls, +1k1 on a voice Perform Roll). Self-cast when target is null.
@@ -744,6 +915,41 @@ static func activate_wolfs_proposal(
 	return res
 
 
+## s33 Tenjin's Ear (Air 4, Unicorn-only) — 30' radius, makes all audible human speech intelligible
+## regardless of language for the IC day (the within-tick window). The consumer is the eavesdrop pipeline:
+## a foreign-language conversation is opaque UNLESS the listener speaks that tongue OR has cast Tenjin's
+## Ear (tenjins_ear_ic_day == ic_day). Does NOT grant enhanced hearing or the capacity to speak in return
+## (not modeled — comprehension only). Cast as a deliberate sub-step of a chosen EAVESDROP. Consumes a slot.
+static func activate_tenjins_ear(caster: L5RCharacterData, dice: DiceEngine, ic_day: int) -> Dictionary:
+	if not can_cast(caster, "tenjins_ear"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	var res: Dictionary = resolve_cast(caster, "tenjins_ear", dice, 0, null, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		caster.tenjins_ear_ic_day = ic_day
+	return res
+
+
+## s36 Wisdom & Clarity (Water 2) — Personal/Self (2-Raise variant may target another), 1 hour ~ the
+## IC day. Reading speed doubles + perfect recall of everything read. The faithful sim slice is sharper
+## Lore (research/recall): SkillResolver reads the "wisdom_and_clarity" day buff and adds +1k0 to Lore
+## skill rolls that tick. Does NOT aid comprehension (ciphers/languages stay indecipherable — cipher
+## cracking never routes through Lore). Day buff, cleared by the daily orchestrator pass.
+static func activate_wisdom_and_clarity(
+	caster: L5RCharacterData, dice: DiceEngine, ic_day: int,
+	target: L5RCharacterData = null
+) -> Dictionary:
+	if not can_cast(caster, "wisdom_and_clarity"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	var beneficiary: L5RCharacterData = target if target != null else caster
+	var res: Dictionary = resolve_cast(caster, "wisdom_and_clarity", dice, 0, beneficiary, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		beneficiary.set_day_buff("wisdom_and_clarity")
+		res["target_id"] = beneficiary.character_id
+	return res
+
+
 ## s34 Jurojin's Balm (Earth 1) — Touch, 1 target. On a successful cast the beneficiary may
 ## re-roll a failed Stamina save to resist any poison or toxin with +2k0 for the day (the
 ## "jurojins_balm" day buff, read by DiseaseSystem.resolve_poison_resist_roll). Self-cast when
@@ -800,6 +1006,11 @@ static func activate_mental_quickness(
 	if res.get("success", false):
 		item["mental_quickness_imbued"] = true
 		res["item_id"] = item.get("item_id", -1)
+		# s35 (owner 2026-06-25): the carrier gets +3 Intelligence on their NEXT Int-trait roll this
+		# IC day (the "10 minutes" = one roll). Set on the caster (who fires it for themselves);
+		# consumed by SkillResolver. Requires ic_day >= 0 (the world-sim / AP-action tick).
+		if ic_day >= 0:
+			caster.mental_quickness_ic_day = ic_day
 	return res
 
 
@@ -946,35 +1157,35 @@ const SPELL_LIBRARY: Dictionary = {
 	# ML1
 	"arrows_flight":              {"e": 0, "m": 1, "s": 0},
 	"blessed_wind":               {"e": 0, "m": 1, "s": 0},  # concentration ranged defense — COMBAT_ONLY
-	"by_the_light_of_the_moon":   {"e": 0, "m": 1, "s": 0},
+	"by_the_light_of_the_moon":   {"e": 0, "m": 1, "s": 0},   # WIRED (CombatController cast_moonlight_reveal): reveals HIDDEN traps in the area
 	"cloak_of_night":             {"e": 0, "m": 1, "s": 0},
 	"gathering_swirl":            {"e": 0, "m": 1, "s": 0},
 	"legacy_of_kaze_no_kami":     {"e": 0, "m": 1, "s": 0},   # spirit-bird message — sender delivers letters instantly (LetterSystem.write_letter)
 	"natures_touch":              {"e": 0, "m": 1, "s": 3},
 	"tempest_of_air":             {"e": 0, "m": 1, "s": 0},
-	"token_of_memory":            {"e": 0, "m": 1, "s": 0},   # memory illusion; perception bonus — COMBAT_ONLY
+	"token_of_memory":            {"e": 0, "m": 1, "s": 0},   # visual fake object on the map — wired (execute_token_of_memory)
 	"to_seek_the_truth":          {"e": 0, "m": 1, "s": 0},   # clears temporary mental/social penalties — COMBAT_ONLY
-	"voice_of_the_wind":          {"e": 0, "m": 1, "s": 0},   # social skill bonus for caster — COMBAT_ONLY
+	"voice_of_the_wind":          {"e": 0, "m": 1, "s": 0},   # WIRED (court actions): a shugenja deliberately casts it opening a court action; +1k0 to spoken Social rolls that tick
 	"way_of_deception":           {"e": 0, "m": 1, "s": 0},
 	"yari_of_air":                {"e": 0, "m": 1, "s": 0},
 	# ML2
 	"bentens_touch":              {"e": 0, "m": 2, "s": 15},
 	"blessed_wind_of_lady_sun":   {"e": 0, "m": 2, "s": 0},  # concentration area aura — COMBAT_ONLY
 	"call_upon_the_wind":         {"e": 0, "m": 2, "s": 0},
-	"elemental_cipher":           {"e": 0, "m": 2, "s": 0},   # encrypts writing (passive protection, no active gather) — COMBAT_ONLY
-	"flight_of_doves":            {"e": 0, "m": 2, "s": 0},   # entertainment illusion — COMBAT_ONLY
+	"elemental_cipher":           {"e": 0, "m": 2, "s": 0},   # WIRED (letter system): a known sender auto-enciphers their letters; an interceptor learns nothing unless a shugenja cracks Spellcraft/Int vs the cast total
+	"flight_of_doves":            {"e": 0, "m": 2, "s": 0},   # WIRED (performance): performer/ally caster grants the storyteller Air-ring Free Raises on PUBLIC_PERFORMANCE
 	"freedom_of_the_air":         {"e": 0, "m": 2, "s": 14},  # Compels hostile spirits out for Air Ring hours — SPIRIT_BIND
-	"garbled_tongue":             {"e": 0, "m": 3, "s": 0},
-	"heart_betrays_eyes":         {"e": 0, "m": 2, "s": 0},   # target perceives unusual as normal; maintains illusion — COMBAT_ONLY
+	"garbled_tongue":             {"e": 0, "m": 3, "s": 0},   # WIRED (court actions): shugenja garbles a court exchange; the tick's conversations are opaque to eavesdroppers
+	"heart_betrays_eyes":         {"e": 0, "m": 2, "s": 0},   # WIRED (CombatController apply_heart_betrays): one guard's next sighting of the PC is fooled
 	"hidden_visage":              {"e": 0, "m": 2, "s": 0},
-	"the_kamis_whisper":          {"e": 0, "m": 2, "s": 0},   # creates false sounds — COMBAT_ONLY
+	"the_kamis_whisper":          {"e": 0, "m": 2, "s": 0},   # false-sound distraction — wired in CombatController.cast_kamis_whisper
 	"mists_of_illusion":          {"e": 0, "m": 2, "s": 0},
-	"quiescence_of_air":          {"e": 0, "m": 2, "s": 0},
-	"request_to_hato_no_kami":    {"e": 0, "m": 2, "s": 0},   # concentration bird command — COMBAT_ONLY
+	"quiescence_of_air":          {"e": 0, "m": 2, "s": 0},   # WIRED (CombatController apply_silence_zone): stationary silence sphere — no sound crosses it
+	"request_to_hato_no_kami":    {"e": 0, "m": 2, "s": 0},   # WIRED (combat): summoned bird distracts one enemy, -1k0 for a Round
 	"secrets_on_the_wind":        {"e": 0, "m": 2, "s": 17},
-	"whispering_wind":            {"e": 0, "m": 2, "s": 17},
+	"whispering_wind":            {"e": 0, "m": 2, "s": 17},   # WIRED (PROBE writeback): a shugenja who PROBEs a target divines if their last statement was a lie, flags known fabrications
 	"wind_born_slumbers":         {"e": 0, "m": 2, "s": 0},
-	"wolfs_proposal":             {"e": 0, "m": 2, "s": 0},
+	"wolfs_proposal":             {"e": 0, "m": 2, "s": 0},   # WIRED (court actions): shugenja casts it opening a court action; +3 perceived Honor Rank that day
 	# ML3
 	"air_kamis_blessing":         {"e": 0, "m": 3, "s": 15},
 	"essence_of_air":             {"e": 0, "m": 3, "s": 0},
@@ -985,21 +1196,21 @@ const SPELL_LIBRARY: Dictionary = {
 	"striking_the_storm":         {"e": 0, "m": 3, "s": 0},
 	"summoning_the_gale":         {"e": 0, "m": 3, "s": 0},  # concentration area wind block — COMBAT_ONLY
 	"summon_fog":                 {"e": 0, "m": 3, "s": 0},  # concentration fog ("while maintained") — COMBAT_ONLY
-	"touch_of_airs_grace":        {"e": 0, "m": 3, "s": 0},
+	"touch_of_airs_grace":        {"e": 0, "m": 3, "s": 0},   # WIRED (court actions): shugenja makes self attractive opening a court action (negate Disturbing Countenance / grant Dangerous Beauty)
 	"your_hearts_enemy":          {"e": 0, "m": 3, "s": 0},   # manifests Fear 4 illusion attack — COMBAT_ONLY
 	# ML4
 	"call_the_spirit":            {"e": 0, "m": 4, "s": 5},
 	"castle_of_air":              {"e": 0, "m": 4, "s": 0},
-	"false_realm":                {"e": 0, "m": 4, "s": 0},
+	"false_realm":                {"e": 0, "m": 4, "s": 0},   # WIRED (false_realm zone): illusory terrain screens enemy ranged LOS (caster's faction sees through; no substance, movement unaffected)
 	"funeral_rites":              {"e": 0, "m": 4, "s": 17},  # speaks with departed spirit for information — INFORMATION_GATHER
 	"gift_of_wind":               {"e": 0, "m": 4, "s": 0},
 	"howl_of_isora":              {"e": 0, "m": 4, "s": 0},  # one-time damage blast — COMBAT_ONLY
 	"know_the_mind":              {"e": 0, "m": 4, "s": 17},
 	"look_into_the_soul":         {"e": 0, "m": 4, "s": 17},  # Divination: reveals target's 2 lowest Rings — INFORMATION_GATHER
-	"netsuke_of_wind":            {"e": 0, "m": 4, "s": 0},
-	"seeking_the_way":            {"e": 0, "m": 4, "s": 0},   # hides caster's tracks — COMBAT_ONLY
+	"netsuke_of_wind":            {"e": 0, "m": 4, "s": 0},   # conjure a real-profile weapon — wired (SPELL_COMBAT_EFFECTS "conjure_weapon" real_weapon)
+	"seeking_the_way":            {"e": 0, "m": 4, "s": 0},   # WIRED (CombatController): false trail misdirects a fooled tracker away from the player (Hunting/Perception vs Spellcraft/Air to see through)
 	"symbol_of_air":              {"e": 0, "m": 4, "s": 10},
-	"tenjins_ear":                {"e": 0, "m": 4, "s": 0},   # language comprehension buff — COMBAT_ONLY
+	"tenjins_ear":                {"e": 0, "m": 4, "s": 0},   # WIRED (eavesdrop): comprehend foreign speech — a Unicorn shugenja casts it to eavesdrop on a foreign-language conversation (dormant until a speaks_foreign population exists — owner data)
 	"whispers_of_the_forgotten":  {"e": 0, "m": 4, "s": 0},   # psychic fear/disorientation — COMBAT_ONLY
 	"wisdom_of_the_kami":         {"e": 0, "m": 4, "s": 0},   # temporary skill rating bonus — COMBAT_ONLY
 	# ML5
@@ -1007,16 +1218,16 @@ const SPELL_LIBRARY: Dictionary = {
 	"defender_from_beyond":       {"e": 0, "m": 5, "s": 0},
 	"draw_back_the_shadow":       {"e": 0, "m": 5, "s": 0},   # Dispels illusions ML4 and below — combat duration
 	"echoes_on_the_breeze":       {"e": 0, "m": 5, "s": 17},
-	"facing_your_devils":         {"e": 0, "m": 5, "s": 0},
+	"facing_your_devils":         {"e": 0, "m": 5, "s": 0},   # WIRED (combat): trait-swap -> ring-change debuff (Earth drop = wound reduction)
 	"legion_of_the_moon":         {"e": 0, "m": 5, "s": 0},
 	"slayers_knives":             {"e": 0, "m": 5, "s": 0},
 	# ML6
 	"rise_air":                   {"e": 0, "m": 6, "s": 0},
 	"the_false_legion":           {"e": 0, "m": 6, "s": 0},
-	"piercing_the_heavens":       {"e": 0, "m": 6, "s": 0},
-	"wind_of_the_moon":           {"e": 0, "m": 6, "s": 0},
+	"piercing_the_heavens":       {"e": 0, "m": 6, "s": 15},  # WIRED (PERFORM_WORSHIP, Phoenix-only): supreme Fortune communion at a shrine — RITUAL_HONOR + a once/month TIER_2 SUPERNATURAL communion topic (the "aid nowhere else" is modeled as worship-devotion honor + the prestige of communion; GM-discretion boon flagged PROVISIONAL)
+	"wind_of_the_moon":           {"e": 0, "m": 6, "s": 0},   # WIRED (PROBE augment): deception-proof telepathic read of true objective+disposition + implants +5 disposition (believed self-generated)
 	"the_world_is_truth":         {"e": 0, "m": 6, "s": 0},   # Kolat sleeper install — wired as the CAST_WORLD_IS_TRUTH world-sim ActionID (s54.7/s33), NOT a tile-combat effect (so s:0 is correct)
-	"wrath_of_kaze_no_kami":      {"e": 0, "m": 6, "s": 0},
+	"wrath_of_kaze_no_kami":      {"e": 0, "m": 6, "s": 0},   # hurricane storm zone — wired (SPELL_COMBAT_EFFECTS "hurricane")
 
 	# === EARTH (s34) ===
 	# ML1
@@ -1026,10 +1237,10 @@ const SPELL_LIBRARY: Dictionary = {
 	"earths_touch":                  {"e": 1, "m": 1, "s": 0},  # Trait boost 1h — buff, not healing
 	"elemental_ward":                {"e": 1, "m": 1, "s": 10},
 	"jade_strike":                   {"e": 1, "m": 1, "s": 0},
-	"jurojins_balm":                 {"e": 1, "m": 1, "s": 0},  # Poison resist 1h — buff, not healing
+	"jurojins_balm":                 {"e": 1, "m": 1, "s": 0},  # WIRED (CAST_PROTECTIVE_WARD): disease/poison resist buff
 	"minor_binding":                 {"e": 1, "m": 1, "s": 0},
-	"soul_of_stone":                 {"e": 1, "m": 1, "s": 0},
-	"stones_endurance":              {"e": 1, "m": 1, "s": 0},
+	"soul_of_stone":                 {"e": 1, "m": 1, "s": 0},   # WIRED (CAST_PROTECTIVE_WARD): resist court manipulation buff
+	"stones_endurance":              {"e": 1, "m": 1, "s": 0},   # WIRED (CAST_PROTECTIVE_WARD): fatigue resist buff
 	"tetsubo_of_earth":              {"e": 1, "m": 1, "s": 0},
 	# ML2
 	"be_the_mountain":               {"e": 1, "m": 2, "s": 0},
@@ -1037,10 +1248,10 @@ const SPELL_LIBRARY: Dictionary = {
 	"embrace_of_kenro_ji_jin":       {"e": 1, "m": 2, "s": 0},
 	"force_of_will":                 {"e": 1, "m": 2, "s": 0},
 	"grasp_of_earth":                {"e": 1, "m": 2, "s": 0},
-	"hands_of_clay":                 {"e": 1, "m": 2, "s": 0},
+	"hands_of_clay":                 {"e": 1, "m": 2, "s": 0},   # WIRED (combat buff): climbs auto-succeed (execute_climb)
 	"jurojins_curse":                {"e": 1, "m": 2, "s": 0},
 	"rites_of_preservation":         {"e": 1, "m": 2, "s": 12},
-	"taming_the_beast":              {"e": 1, "m": 2, "s": 0},
+	"taming_the_beast":              {"e": 1, "m": 2, "s": 0},   # WIRED (combat): pacify a natural creature (Contested Earth -> FACTION_NEUTRAL)
 	"the_mountains_feet":            {"e": 1, "m": 2, "s": 0},   # 1h knockdown resistance stance — COMBAT_ONLY
 	"wholeness_of_the_world":        {"e": 1, "m": 2, "s": 0},  # Ring/Trait resistance — buff, not healing
 	"whispers_of_the_land":          {"e": 1, "m": 2, "s": 17},
@@ -1049,7 +1260,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"earth_kamis_blessing":          {"e": 1, "m": 3, "s": 15},
 	"earths_protection":             {"e": 1, "m": 3, "s": 0},
 	"earthen_wave":                  {"e": 1, "m": 3, "s": 0},
-	"groves_of_stone":               {"e": 1, "m": 3, "s": 0},
+	"groves_of_stone":               {"e": 1, "m": 3, "s": 0},   # WIRED (combat): WALL_STONE ring around caster, climbable, crumbles on expiry
 	"murmur_of_earth":               {"e": 1, "m": 3, "s": 0},   # earthquake/terrain damage — COMBAT_ONLY
 	"purge_the_taint":               {"e": 1, "m": 3, "s": 8},
 	"sharing_the_strength_of_many":  {"e": 1, "m": 3, "s": 0},
@@ -1066,13 +1277,13 @@ const SPELL_LIBRARY: Dictionary = {
 	"maw_of_the_earth":              {"e": 1, "m": 4, "s": 0},
 	"sapphire_strike":               {"e": 1, "m": 4, "s": 0},
 	"symbol_of_earth":               {"e": 1, "m": 4, "s": 10},
-	"the_earth_flows":               {"e": 1, "m": 4, "s": 0},
+	"the_earth_flows":               {"e": 1, "m": 4, "s": 0},   # WIRED (mass battle): a Battle shugenja (company commander) on a side casts it pre-battle for a flat attack bonus (EARTH_FLOWS_ATTACK_BONUS, PROVISIONAL)
 	"tomb_of_jade":                  {"e": 1, "m": 4, "s": 2},
 	"wall_of_earth":                 {"e": 1, "m": 4, "s": 0},
 	# ML5
-	"drawing_on_the_mountain":       {"e": 1, "m": 5, "s": 0},  # Structure wound/reduction buff — not healing
+	"drawing_on_the_mountain":       {"e": 1, "m": 5, "s": 0},  # siege wall-hardening — wired (day_orchestrator storm-assault defense bonus)
 	"earthquake":                    {"e": 1, "m": 5, "s": 0},
-	"grounding_energy":              {"e": 1, "m": 5, "s": 0},   # Anti-maho TN boost 3 rounds — combat only
+	"grounding_energy":              {"e": 1, "m": 5, "s": 0},   # WIRED (grounding_energy zone): anti-maho ward — maho combat spells cannot land on warded allies (TN-bump reinterpreted as area immunity; maho is roll-less)
 	"major_binding":                 {"e": 1, "m": 5, "s": 0},
 	"strike_at_the_roots":           {"e": 1, "m": 5, "s": 0},
 	"the_kamis_strength":            {"e": 1, "m": 5, "s": 0},
@@ -1106,7 +1317,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"enticing_the_dance_of_flame":   {"e": 2, "m": 2, "s": 0},
 	"the_fires_from_within":         {"e": 2, "m": 2, "s": 0},
 	"hurried_steps":                 {"e": 2, "m": 2, "s": 0},   # 2-round casting speed reduction — COMBAT_ONLY
-	"mental_quickness":              {"e": 2, "m": 2, "s": 0},
+	"mental_quickness":              {"e": 2, "m": 2, "s": 0},   # +3 Int (one-shot) on next Int roll — wired (SkillResolver, set by activate_mental_quickness)
 	"purity_of_shinsei":             {"e": 2, "m": 2, "s": 15},
 	"relentless_heat":               {"e": 2, "m": 2, "s": 0},
 	"tail_of_the_fire_dragon":       {"e": 2, "m": 2, "s": 0},
@@ -1128,7 +1339,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"blessing_of_the_sun":           {"e": 2, "m": 4, "s": 15},
 	"death_of_flame":                {"e": 2, "m": 4, "s": 0},
 	"defense_of_the_firestorm":      {"e": 2, "m": 4, "s": 0},
-	"essence_of_fire":               {"e": 2, "m": 4, "s": 0},
+	"essence_of_fire":               {"e": 2, "m": 4, "s": 0},   # anti-spell duel ward — wired (SPELL_COMBAT_EFFECTS "essence_of_fire")
 	"eyes_of_the_phoenix":           {"e": 2, "m": 4, "s": 0},   # blind/fear burst — COMBAT_ONLY
 	"the_mending_forge":             {"e": 2, "m": 4, "s": 7},
 	"symbol_of_fire":                {"e": 2, "m": 4, "s": 10},
@@ -1145,7 +1356,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"wings_of_the_phoenix":          {"e": 2, "m": 5, "s": 0},   # 10-round combat flight — COMBAT_ONLY
 	# ML6
 	"beam_of_the_inferno":           {"e": 2, "m": 6, "s": 0},
-	"curse_of_the_burning_hand":     {"e": 2, "m": 6, "s": 0},
+	"curse_of_the_burning_hand":     {"e": 2, "m": 6, "s": 0},   # curse: burns the target's own allies — wired (SPELL_COMBAT_EFFECTS "curse_burning_hand")
 	"globe_of_the_everlasting_sun":  {"e": 2, "m": 6, "s": 0},
 	"rise_fire":                     {"e": 2, "m": 6, "s": 0},
 	"the_elements_fury":             {"e": 2, "m": 6, "s": 0},
@@ -1163,7 +1374,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"speed_of_the_waterfall":        {"e": 3, "m": 1, "s": 11},
 	"spirit_of_the_water":           {"e": 3, "m": 1, "s": 3},
 	"suitengus_curse":               {"e": 3, "m": 1, "s": 0},
-	"sympathetic_energies":          {"e": 3, "m": 1, "s": 0},  # Transfers a spell effect — not healing
+	"sympathetic_energies":          {"e": 3, "m": 1, "s": 0},   # WIRED (PC-callable): transfer a day-buff spell effect to a willing target  # Transfers a spell effect — not healing
 	"the_rushing_wave":              {"e": 3, "m": 1, "s": 0},
 	"the_swell_of_the_storm":        {"e": 3, "m": 1, "s": 0},  # one-time knockdown — COMBAT_ONLY
 	# ML2
@@ -1178,14 +1389,14 @@ const SPELL_LIBRARY: Dictionary = {
 	"surging_soul":                  {"e": 3, "m": 2, "s": 0},
 	"the_ties_that_bind":            {"e": 3, "m": 2, "s": 17},
 	"wave_borne_speed":              {"e": 3, "m": 2, "s": 0},   # 2-round Water Ring movement boost — COMBAT_ONLY
-	"wisdom_and_clarity":            {"e": 3, "m": 2, "s": 0},   # reading speed buff — COMBAT_ONLY
-	"yukis_touch":                   {"e": 3, "m": 2, "s": 0},
+	"wisdom_and_clarity":            {"e": 3, "m": 2, "s": 0},   # WIRED (court actions): shugenja casts it opening a court action; +1k0 Lore recall that day
+	"yukis_touch":                   {"e": 3, "m": 2, "s": 0},   # freeze-water trap — wired (SPELL_COMBAT_EFFECTS "freeze_water")
 	# ML3
 	"endless_deluge":                {"e": 3, "m": 3, "s": 16},
 	"near_to_ice":                   {"e": 3, "m": 3, "s": 0},
 	"regrow_the_wound":              {"e": 3, "m": 3, "s": 1},
 	"sanctuary_of_the_waves":        {"e": 3, "m": 3, "s": 0},
-	"silent_waters":                 {"e": 3, "m": 3, "s": 0},
+	"silent_waters":                 {"e": 3, "m": 3, "s": 0},   # WIRED (execute_silent_waters): hold a 2nd ML<=3 combat spell, auto-fires when the caster is next struck
 	"strike_of_the_tsunami":         {"e": 3, "m": 3, "s": 0},
 	"the_inner_ocean":               {"e": 3, "m": 3, "s": 15},
 	"typhoons_surge":                {"e": 3, "m": 3, "s": 0},
@@ -1203,8 +1414,8 @@ const SPELL_LIBRARY: Dictionary = {
 	"strike_of_the_flowing_waters":  {"e": 3, "m": 4, "s": 0},
 	"symbol_of_water":               {"e": 3, "m": 4, "s": 10},
 	"the_emperors_road":             {"e": 3, "m": 4, "s": 11},
-	"the_path_not_taken":            {"e": 3, "m": 4, "s": 0},   # transfers a spell slot to ally — COMBAT_ONLY
-	"within_the_waves":              {"e": 3, "m": 4, "s": 0},
+	"the_path_not_taken":            {"e": 3, "m": 4, "s": 0},   # WIRED (PC-callable): transfer unused daily spell slots between Rings for the day   # transfers a spell slot to ally — COMBAT_ONLY
+	"within_the_waves":              {"e": 3, "m": 4, "s": 0},   # WIRED (self buff): air-bubble — immune to WATER_DEEP / Yuki's Touch / Whirlpool drowning
 	# ML5
 	"chi_reversal":                  {"e": 3, "m": 5, "s": 0},
 	"ever_changing_waves":           {"e": 3, "m": 5, "s": 0},
@@ -1213,10 +1424,10 @@ const SPELL_LIBRARY: Dictionary = {
 	"open_the_waves":                {"e": 3, "m": 5, "s": 11},
 	"power_of_the_ocean":            {"e": 3, "m": 5, "s": 0},
 	"suitengus_embrace":             {"e": 3, "m": 5, "s": 0},
-	"whirlpool":                     {"e": 3, "m": 5, "s": 0},
+	"whirlpool":                     {"e": 3, "m": 5, "s": 0},   # WIRED (whirlpool zone): open-water vortex — swimmers in area drown on a failed Athletics(Swimming)/Strength TN 30 each Round
 	# ML6
 	"breath_of_mist":                {"e": 3, "m": 6, "s": 16},
-	"opening_the_veil":              {"e": 3, "m": 6, "s": 0},
+	"opening_the_veil":              {"e": 3, "m": 6, "s": 0},   # WIRED (veil_portal zone): Spirit-Realm portal — each round draws the nearest displaced (non-Ningen-do) spirit home (banish). Party realm-travel not modeled (PROVISIONAL)
 	"peace_of_the_kami":             {"e": 3, "m": 6, "s": 15},
 	"rise_water":                    {"e": 3, "m": 6, "s": 0},
 	"waters_sweet_clarity":          {"e": 3, "m": 6, "s": 17},
@@ -1237,14 +1448,14 @@ const SPELL_LIBRARY: Dictionary = {
 	"commune_with_the_void":         {"e": 4, "m": 2, "s": 4,  "i": true},
 	"drink_of_your_essence":         {"e": 4, "m": 2, "s": 0,  "i": true},
 	"strengthen_the_void":           {"e": 4, "m": 2, "s": 15, "i": true},
-	"the_empty_voice":               {"e": 4, "m": 2, "s": 0,  "i": true},  # allows silent casting — COMBAT_ONLY
-	"false_whispers":                {"e": 4, "m": 2, "s": 0,  "i": true},  # makes target repeat one sentence verbatim — COMBAT_ONLY
-	"reach_through_the_void":        {"e": 4, "m": 2, "s": 0,  "i": true},  # telekinesis — COMBAT_ONLY
+	"the_empty_voice":               {"e": 4, "m": 2, "s": 0,  "i": true},  # WIRED (self buff): silent casting — empty_voice timed modifier (forward-wired; dormant until casting is speech/noise-gated)
+	"false_whispers":                {"e": 4, "m": 2, "s": 0,  "i": true},  # WIRED (CombatController): the target "speaks" at their tile, drawing other guards there (distraction)
+	"reach_through_the_void":        {"e": 4, "m": 2, "s": 0,  "i": true},  # WIRED (CombatController): silently open/close a door at range (telekinesis, no noise)
 	"severed_from_the_stream":       {"e": 4, "m": 2, "s": 0,  "i": true},
 	# ML3
 	"banish_the_void":               {"e": 4, "m": 3, "s": 0,  "i": true},  # Thickens Void veil 5 rounds — combat only
 	"echoes_in_the_void":            {"e": 4, "m": 3, "s": 17, "i": true},
-	"kharmic_intent":                {"e": 4, "m": 3, "s": 0,  "i": true},  # shares Void Points with ally — COMBAT_ONLY
+	"kharmic_intent":                {"e": 4, "m": 3, "s": 0,  "i": true},  # WIRED (pool_void): pool VP with a willing ally + redistribute
 	"moment_of_clarity":             {"e": 4, "m": 3, "s": 0,  "i": true},
 	"read_the_essence":              {"e": 4, "m": 3, "s": 3,  "i": true},
 	"void_release":                  {"e": 4, "m": 3, "s": 0,  "i": true},  # Transfers Void Points — not a dispel, combat aid
@@ -1258,9 +1469,9 @@ const SPELL_LIBRARY: Dictionary = {
 	# ML5
 	"divide_the_soul":               {"e": 4, "m": 5, "s": 0,  "i": true},
 	"reforge":                       {"e": 4, "m": 5, "s": 7,  "i": true},
-	"unbound_essence":               {"e": 4, "m": 5, "s": 0,  "i": true},  # Randomly reorders Rings 1h — no trackable sim state
+	"unbound_essence":               {"e": 4, "m": 5, "s": 0,  "i": true},  # WIRED (ring_reorder): random Ring permutation via the combat ring-delta bridge (trait-roll slice deferred)
 	# ML6
-	"ring_of_the_void":              {"e": 4, "m": 6, "s": 0,  "i": true},
+	"ring_of_the_void":              {"e": 4, "m": 6, "s": 15, "i": true},  # WIRED (PERFORM_WORSHIP, Ishiken): communion with the Void Dragon — RITUAL_HONOR + a once/month TIER_2 SUPERNATURAL communion topic (boon GM-discretion, PROVISIONAL like Piercing the Heavens)
 	"rise_from_the_ashes":           {"e": 4, "m": 6, "s": 1,  "i": true},
 	"unmake_the_world":              {"e": 4, "m": 6, "s": 0,  "i": true},
 }
@@ -1339,7 +1550,8 @@ static func get_best_cast_ring(character: L5RCharacterData, spell_id: String) ->
 
 ## Returns the daily spell slot count for the given element ring value.
 static func get_daily_slots(character: L5RCharacterData, ring: int) -> int:
-	return get_ring_value(character, ring)
+	# s36 The Path Not Taken: a daily Ring-slot transfer adjusts the allotment (floored at 0).
+	return maxi(0, get_ring_value(character, ring) + int(character.spell_slot_adjustment.get(ring, 0)))
 
 
 ## Returns how many elemental slots have been consumed today for a ring.
@@ -1405,7 +1617,7 @@ static func can_cast(character: L5RCharacterData, spell_id: String) -> bool:
 static func resolve_cast(character: L5RCharacterData, spell_id: String,
 		dice: DiceEngine, raises: int = 0,
 		target: L5RCharacterData = null, ic_day: int = -1, extra_tn: int = 0,
-		roll_penalty: int = 0) -> Dictionary:
+		roll_penalty: int = 0, rolled_only_penalty: int = 0) -> Dictionary:
 	if not SPELL_LIBRARY.has(spell_id):
 		return {"success": false, "error": "unknown_spell"}
 	var spell: Dictionary = SPELL_LIBRARY[spell_id]
@@ -1433,7 +1645,9 @@ static func resolve_cast(character: L5RCharacterData, spell_id: String,
 		tn += 10
 	# roll_penalty: −XkX to the casting roll (s34 The Kami's Will — a target's anti-spell ward),
 	# applied by the orchestrator when a spell is cast AT a warded character. Floors at 1k1.
-	var roll_dice: int = maxi(1, ring_val + eff_rank - roll_penalty)
+	# roll_penalty: −XkX (rolled AND kept), s34 The Kami's Will. rolled_only_penalty: −Nk0 (rolled
+	# only), s35 Essence of Fire (a spell cast at a warded duelist loses N rolled dice, same kept).
+	var roll_dice: int = maxi(1, ring_val + eff_rank - roll_penalty - rolled_only_penalty)
 	var keep_dice: int = maxi(1, ring_val - roll_penalty)
 	var wound_pen: int = CharacterStats.get_wound_penalty(character)
 	# Slot consumed on attempt regardless of outcome

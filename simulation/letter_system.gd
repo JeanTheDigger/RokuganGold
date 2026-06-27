@@ -169,6 +169,17 @@ static func write_letter(
 		letter.delivered_by_spirit_bird = true
 	letter.ic_day_arrival = ic_day_sent + transit
 
+	# s33 Elemental Cipher (Air 2, Imperial-families): a sender who knows the spell and can
+	# spare a slot enciphers the letter at write time (the recipient is the named recipient).
+	# It becomes unintelligible to any interceptor; only a shugenja interceptor can crack it,
+	# rolling Spellcraft/Intelligence vs cipher_cast_total (the casting-roll total).
+	if sender != null and "elemental_cipher" in sender.spells_known \
+			and SpellSystem.can_cast(sender, "elemental_cipher"):
+		var cipher_cast: Dictionary = SpellSystem.resolve_cast(sender, "elemental_cipher", dice_engine)
+		if cipher_cast.get("success", false):
+			letter.elemental_cipher = true
+			letter.cipher_cast_total = cipher_cast.get("total", 0)
+
 	# -- Calligraphy (Cipher) writer-side fields (A1, s57.30 LOCKED) -----------
 	var concealment_result: Dictionary = SkillResolver.resolve_skill_check(
 		sender, dice_engine, "Sincerity", 0, 0, "", Enums.Trait.AWARENESS

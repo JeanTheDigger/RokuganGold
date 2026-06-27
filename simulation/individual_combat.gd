@@ -189,6 +189,7 @@ class Participant:
 	var scream_used: bool = false  # s54.12 Wanyudo Strength of the Dead: once-per-skirmish scream
 	var gore_escape_rolled: int = 0  # s54.5 Gore: extra damage dealt when pulling free of the tusks (0 = not gored)
 	var gore_escape_kept: int = 0
+	var freeze_break_tn: int = 0  # s36 Yuki's Touch: Strength TN to break free of the ice (0 = use the default entangle TN 20)
 	var spirit_attack_rolled_bonus: int = 0  # s54.10 Toshigoku auras/Tactical Mastery: +N rolled attack dice (orchestrator sets per-attack, spirit-only)
 	var spirit_damage_rolled_bonus: int = 0  # s54.10 Supreme Commander: +N rolled damage dice (spirit-only)
 	var spirit_attack_kept_bonus: int = 0  # s54.5 Charge: +N kept attack dice (the kept half of a +NkN charge bonus)
@@ -237,6 +238,9 @@ class Participant:
 	# hit; takes 1k1 at the start of each round until a Simple Action extinguishes it.
 	var on_fire: bool = false
 	var absorb_pool: int = 0  # s34 Power of the Earth Dragon: remaining Wounds the ward absorbs (0 = none)
+	# s36 Silent Waters: a pre-cast ML<=3 spell held until a physical trigger fires it. {} = none.
+	# {spell_id, trigger} — trigger "when_struck" releases it the next time this participant is hit.
+	var stored_spell: Dictionary = {}
 	# Combat-scoped Ring deltas from in-combat spells (s34 Essence of Earth ring-up, Water
 	# ring-downs): {Enums.Ring: int}. The AUTHORITATIVE participant-scoped store; synced to the
 	# character's combat_ring_deltas read-bridge so the CharacterStats wound/death chain sees the
@@ -524,6 +528,23 @@ static func clear_timed_modifiers_by_source(p: Participant, source: String) -> v
 		if m.get("source", "") != source:
 			kept.append(m)
 	p.timed_modifiers = kept
+
+
+## s35 Essence of Fire: "ends all ongoing spell effects." Removes timed modifiers whose source is
+## spell-installed (prefix "spell_": spell_buff / spell_invisible / spell_debuff / spell_arrows_flight).
+## Kata/kiho/creature modifiers (non-"spell_" sources) are NOT spell effects and are left untouched.
+## LIMITATION: spell-applied CONDITIONS (incapacitate/entangle/afraid/blinded) carry no source tag,
+## so they cannot be selectively dispelled and are not cleared here.
+static func clear_spell_timed_modifiers(p: Participant) -> int:
+	var kept: Array = []
+	var removed: int = 0
+	for m: Dictionary in p.timed_modifiers:
+		if String(m.get("source", "")).begins_with("spell_"):
+			removed += 1
+		else:
+			kept.append(m)
+	p.timed_modifiers = kept
+	return removed
 
 
 ## Remove round-based timed modifiers whose window has closed. Called once per
@@ -1116,6 +1137,7 @@ static func resolve_attack(
 	maneuver: String = "",
 	adv_context: Dictionary = {},
 	attacker_roll_penalty: int = 0,
+	target_is_large: bool = false,
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	# Conjured elemental weapon (s33-s36): override the wielded profile. The created weapon's
@@ -1221,6 +1243,12 @@ static func resolve_attack(
 	# Mounted / Higher Ground: +1k0 against unmounted or lower characters (s40)
 	if CONDITION_MOUNTED in attacker_p.conditions and not target_is_mounted:
 		rolled += 1
+
+	# s35 Burning Kiss of Steel: the fire-engulfed weapon gives a further +1k1 (on top of the spell's
+	# base +1k1, read above) when the opponent is mounted or larger than human size.
+	if get_timed_modifier_total(attacker_p, "burning_kiss") > 0 and (target_is_mounted or target_is_large):
+		rolled += 1
+		kept += 1
 
 	# Conditional modifiers: -3k0 Dazed, -1k1 or -3k3 Blinded, Prone restrictions
 	if CONDITION_DAZED in attacker_p.conditions:
@@ -1375,8 +1403,11 @@ static func resolve_damage(
 		rolled += get_timed_modifier_total(attacker_p, "spell_damage_rolled")
 		kept += get_timed_modifier_total(attacker_p, "spell_damage_kept")
 
+	# s35 Hungry Blade: while the buff is active, all the wielder's damage dice also explode on an 8 or 9
+	# (once each). Inert (false) for everyone else.
+	var explode_8: bool = attacker_p != null and get_timed_modifier_total(attacker_p, "hungry_blade") > 0
 	# roll_damage handles the dice pool; we pass strength already absorbed above
-	var result: Dictionary = dice_engine.roll_damage(rolled, kept)
+	var result: Dictionary = dice_engine.roll_damage(rolled, kept, 0, 0, explode_8)
 	var total: int = result["raw"] + feint_bonus + kata_dmg["flat_bonus"]
 
 	return {

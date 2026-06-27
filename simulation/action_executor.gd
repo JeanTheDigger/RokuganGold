@@ -233,6 +233,9 @@ static func execute(
 	if action_id == "PLAY_GAME":
 		return _execute_play_game(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "CAST_PROTECTIVE_WARD":
+		return _execute_cast_protective_ward(action, character, ctx, dice_engine)
+
 	if action_id == "DISCERN_NEED":
 		return _execute_discern_need(action, character, ctx, dice_engine, characters_by_id)
 
@@ -719,8 +722,16 @@ static func _execute_public_performance(
 		garden_fr = ctx.known_objectives.get("ikebana_garden_fr", 0)
 		garden_id = ctx.known_objectives.get("ikebana_garden_id", -1)
 
+	# s33 Flight of Doves: the performing shugenja deliberately casts the spell as the opening
+	# of this performance they chose to give, granting themselves Free Raises equal to their
+	# Air Ring (consumes a spell slot). Cast only because they chose to perform — never an ally.
+	var fod: Dictionary = PerformativeArtsSystem.get_flight_of_doves_free_raises(
+		character, dice_engine,
+	)
+	var flight_fr: int = fod.get("free_raises", 0)
+
 	var perf_result: Dictionary = PerformativeArtsSystem.resolve_public_performance(
-		character, art_form, witness_ids, dice_engine, fatigue_count, garden_fr,
+		character, art_form, witness_ids, dice_engine, fatigue_count, garden_fr + flight_fr,
 	)
 
 	PerformativeArtsSystem.apply_performance_effects(character, perf_result, characters_by_id)
@@ -750,6 +761,8 @@ static func _execute_public_performance(
 			"raises": perf_result.get("raises", 0),
 			"performance_applied": true,
 			"garden_id": garden_id,
+			"flight_of_doves_fr": flight_fr,
+			"flight_of_doves_caster_id": fod.get("caster_id", -1),
 			"fulfills_request_id": action.metadata.get("fulfills_request_id", -1),
 			"requesting_lord_id": action.metadata.get("requesting_lord_id", -1),
 			"venue_mode": action.metadata.get("venue_mode", "public"),
@@ -1378,6 +1391,48 @@ static func _build_covert_result(
 		"margin": system_result.get("margin", 0),
 		"effects": effects,
 		"metadata": action.metadata,
+	}
+
+
+# s33/s34 Dedicated CAST_WARD (owner-approved 2026-06-26): the deliberate self-warding action.
+# A shugenja casts every self-ward they know and can afford (each consumes a slot, stamps its day
+# buff via the existing activate_* — Pattern B). Soul of Stone (resist court manipulation),
+# Jurojin's Balm (disease/poison resist), Stone's Endurance (fatigue resist). Jurojin's Curse is
+# NOT here (it is an offensive enemy debuff, a separate vehicle). Self-target only.
+const _PROTECTIVE_WARD_SPELLS: Array[String] = ["soul_of_stone", "jurojins_balm", "stones_endurance"]
+
+static func _execute_cast_protective_ward(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var cast_wards: Array = []
+	for ward: String in _PROTECTIVE_WARD_SPELLS:
+		if not (ward in character.spells_known):
+			continue
+		if not SpellSystem.can_cast(character, ward):
+			continue
+		var res: Dictionary = {}
+		match ward:
+			"soul_of_stone":
+				res = SpellSystem.activate_soul_of_stone(character, dice_engine, ctx.ic_day)
+			"jurojins_balm":
+				res = SpellSystem.activate_jurojins_balm(character, dice_engine, ctx.ic_day)
+			"stones_endurance":
+				res = SpellSystem.activate_stones_endurance(character, dice_engine, ctx.ic_day)
+		if res.get("success", false):
+			cast_wards.append(ward)
+	return {
+		"success": not cast_wards.is_empty(),
+		"action_id": "CAST_PROTECTIVE_WARD",
+		"character_id": ctx.character_id,
+		"target_npc_id": -1,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Spellcraft",
+		"effects": {"wards_cast": cast_wards},
 	}
 
 
@@ -4207,8 +4262,52 @@ static func _execute_contested_court_action(
 	# Soul of Stone (s34): -1k0 to the buffed attacker's Awareness social-influence roll.
 	var soul_atk: int = SkillResolver.SOUL_OF_STONE_INFLUENCE_PENALTY \
 		if (character.has_day_buff("soul_of_stone") and a_trait_name == "Awareness") else 0
+	# s33 Voice of the Wind: a shugenja who knows the spell deliberately casts it as the
+	# opening of this court action they chose to make, bolstering their speech. Cast once per
+	# IC day (the marker prevents re-cast); the SkillResolver read hook covers their other
+	# social rolls this tick, and we add the +1k0 inline here (this path rolls directly).
+	if character.voice_of_the_wind_ic_day != ctx.ic_day \
+			and "voice_of_the_wind" in character.spells_known \
+			and SpellSystem.can_cast(character, "voice_of_the_wind"):
+		SpellSystem.activate_voice_of_the_wind(character, dice_engine, ctx.ic_day)
+	# s33 Wolf's Proposal: a shugenja who knows it deliberately casts it opening this court action
+	# they chose, appearing 3 Honor Ranks more honorable for the day (AdvantageSystem.get_perceived_honor
+	# reads the day buff wherever honor is assessed). Cast once per day (the day buff is the marker).
+	if not character.has_day_buff("wolfs_proposal") \
+			and "wolfs_proposal" in character.spells_known \
+			and SpellSystem.can_cast(character, "wolfs_proposal"):
+		SpellSystem.activate_wolfs_proposal(character, dice_engine, ctx.ic_day)
+	# s33 Garbled Tongue: a shugenja shrouds this private court exchange (actor + target) in a false
+	# speech-layer, opaque to eavesdroppers (the eavesdrop writeback reads the per-tick garble markers
+	# and only a shugenja eavesdropper can pierce it). Cast once per day as the opening of this chosen
+	# court action; the per-tick marker then protects the shugenja's conversations that tick.
+	if target != null and character.garbled_tongue_ic_day != ctx.ic_day \
+			and "garbled_tongue" in character.spells_known \
+			and SpellSystem.can_cast(character, "garbled_tongue"):
+		SpellSystem.activate_garbled_tongue(character, dice_engine, ctx.ic_day, character, target)
+	# s33 Touch of Air's Grace: a shugenja makes themselves more attractive opening this chosen court
+	# action (AdvantageSystem reads the day buff to negate Disturbing Countenance / grant Dangerous
+	# Beauty, aiding attractiveness-based social influence). Cast once per day (the day buff is marker).
+	if not character.has_day_buff("touch_of_airs_grace") \
+			and "touch_of_airs_grace" in character.spells_known \
+			and SpellSystem.can_cast(character, "touch_of_airs_grace"):
+		SpellSystem.activate_touch_of_airs_grace(character, dice_engine, ctx.ic_day)
+	# s36 Wisdom & Clarity: a shugenja casts it opening this chosen court action, gaining perfect
+	# recall for the day (+1k0 to Lore rolls — the SkillResolver hook covers other Lore rolls this
+	# tick; the +1k0 is added inline below for a Lore-based court action, e.g. IMPRESS).
+	if not character.has_day_buff("wisdom_and_clarity") \
+			and "wisdom_and_clarity" in character.spells_known \
+			and SpellSystem.can_cast(character, "wisdom_and_clarity"):
+		SpellSystem.activate_wisdom_and_clarity(character, dice_engine, ctx.ic_day)
+	var voice_atk: int = 0
+	if character.voice_of_the_wind_ic_day == ctx.ic_day \
+			and a_skill.split(":")[0].strip_edges() in SkillResolver.SOCIAL_SKILLS:
+		voice_atk = 1  # +1k0 to spoken Social Skill Rolls
+	if character.has_day_buff("wisdom_and_clarity") \
+			and a_skill.split(":")[0].strip_edges() == "Lore":
+		voice_atk += 1  # +1k0 to a Lore-based court action (recall)
 	var attacker_roll: int = dice_engine.roll_check(
-		maxi(1, a_trait_val + a_skill_rank + contested_mut_a["rolled"] + soul_atk),
+		maxi(1, a_trait_val + a_skill_rank + contested_mut_a["rolled"] + soul_atk + voice_atk),
 		maxi(1, a_trait_val + contested_mut_a["kept"]),
 		0, 0, contested_wound_a, a_skill_rank > 0
 	).get("total", 0) + wc_bonus

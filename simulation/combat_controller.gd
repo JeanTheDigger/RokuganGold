@@ -65,6 +65,7 @@ const QUIESCENCE_RADIUS_TILES: int = 3          # GDD 30' diameter -> 3-tile rad
 const QUIESCENCE_ROUNDS: int = 10               # GDD Duration: 10 Rounds
 const QUIESCENCE_STEALTH_FREE_RAISES: int = 2   # GDD: 2 Free Raises on Stealth
 const MOONLIGHT_REVEAL_RADIUS_TILES: int = 4    # GDD 20' radius / 5
+const KAMIS_WHISPER_RANGE_TILES: int = 10       # GDD 50' / 5
 
 
 # =============================================================================
@@ -175,6 +176,15 @@ class EntityState:
 	## Per-guard see-through outcome: entity_id -> true (penetrated) / false
 	## (fooled). Absence = not yet evaluated. Reset on each fresh disguise.
 	var disguise_seethrough:  Dictionary = {}
+	## -- seeking_the_way (s33 Air 4): a false trail hides the caster's tracks.
+	## Carried by the PLAYER entity. Frozen Spellcraft/Air + ML resist (no invented
+	## magnitude). Per-guard misdirect outcome cache: entity_id -> true (fooled) /
+	## false (skilled tracker saw through). Reset on each fresh cast.
+	var seeking_the_way_active: bool = false
+	var seeking_spellcraft:     int = 0
+	var seeking_air:            int = 0
+	var seeking_resist_bonus:   int = 0
+	var seeking_seethrough:     Dictionary = {}
 	## -- heart_betrays_eyes (s33): a one-shot, expiring "next sighting fooled"
 	## charge placed ON this guard. Expiry round (-1 = none) + frozen caster Air.
 	var heart_betrays_until_round: int = -1
@@ -1471,6 +1481,16 @@ func _npc_investigate(es: EntityState) -> Dictionary:
 	# Return phase (prl <= 0): move toward patrol post. Never both in one turn.
 	if es.phase_rounds_left > 0:
 		if es.noise_src_x >= 0 and es.noise_src_y >= 0:
+			# s33 Seeking the Way: a fooled tracker is led the wrong way by the false trail — the
+			# search point is mirrored to the far side of the guard (away from the player). Once per
+			# guard (cached); a skilled tracker who sees through it tracks the true noise normally.
+			if _seeking_misdirects(es):
+				var pl: EntityState = get_player()
+				if pl != null:
+					var dx: int = es.x - pl.x
+					var dy: int = es.y - pl.y
+					es.noise_src_x = clampi(es.x + dx, 0, _map.width - 1)
+					es.noise_src_y = clampi(es.y + dy, 0, _map.height - 1)
 			moved = _npc_move_toward(es, es.noise_src_x, es.noise_src_y, _investigation_move_budget(es))
 	else:
 		moved = _npc_move_toward(es, es.patrol_x, es.patrol_y, _investigation_move_budget(es))
@@ -1878,6 +1898,47 @@ func _disguise_suppresses(es: EntityState) -> bool:
 	player.disguise_seethrough[es.entity_id] = penetrated
 	return not penetrated
 
+## s33 Seeking the Way (Air 4, Illusion): hide the caster's tracks, replacing them with a false trail
+## leading in a completely different direction. The future stealth-command UI / a deliberate caster calls
+## this. Freezes the Spellcraft/Air contest pool + the ML resist (no invented magnitude); a fooled guard
+## that searches the caster's trail is sent the wrong way (see _npc_investigate). Skilled trackers may
+## see through it (Hunting/Perception vs Spellcraft/Air). PCs may be shugenja (s60.2).
+func cast_seeking_the_way() -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"ok": false, "reason": "no_living_player"}
+	if not SpellSystem.can_cast(player.character, "seeking_the_way"):
+		return {"ok": false, "reason": "cannot_cast"}
+	if not SpellSystem.resolve_cast(player.character, "seeking_the_way", _dice).get("success", false):
+		return {"ok": false, "reason": "cast_failed"}
+	player.seeking_the_way_active = true
+	player.seeking_spellcraft = SkillResolver.get_skill_rank(player.character, "Spellcraft")
+	player.seeking_air = SpellSystem.get_ring_value(player.character, Enums.Ring.AIR)
+	player.seeking_resist_bonus = int(SpellSystem.SPELL_LIBRARY.get("seeking_the_way", {}).get("m", 4))
+	player.seeking_seethrough = {}
+	return {"ok": true}
+
+## True if the false trail fools guard `es` (Contested Hunting/Perception vs the caster's Spellcraft/Air +
+## ML; ties favor the illusion). Rolled once per guard and cached. A guard already ALERT (fighting, not
+## tracking) is not misdirected.
+func _seeking_misdirects(es: EntityState) -> bool:
+	var player: EntityState = get_player()
+	if player == null or not player.seeking_the_way_active:
+		return false
+	if es.alert_state >= AsciiMapEnvironment.AlertState.ALERT:
+		return false
+	if player.seeking_seethrough.has(es.entity_id):
+		return bool(player.seeking_seethrough[es.entity_id])
+	var g_perc: int = es.character.perception
+	var g_hunt: int = SkillResolver.get_skill_rank(es.character, "Hunting")
+	var guard_roll: DiceResult = _dice.roll_and_keep(g_perc + g_hunt, maxi(1, g_perc), true, false)
+	var caster_roll: DiceResult = _dice.roll_and_keep(
+		player.seeking_air + player.seeking_spellcraft, maxi(1, player.seeking_air), true, false)
+	var fooled: bool = guard_roll.total <= caster_roll.total + player.seeking_resist_bonus
+	player.seeking_seethrough[es.entity_id] = fooled
+	return fooled
+
+
 ## Contested Investigation/Perception (guard) vs Spellcraft/Air + spell Mastery
 ## Level (caster). The guard penetrates only on a strict win; ties favor the
 ## disguise (the defender). Returns true if the disguise is seen through.
@@ -1952,6 +2013,80 @@ func cast_moonlight_reveal() -> Dictionary:
 			t["state"] = TrapSystem.TrapState.DETECTED
 			revealed.append(Vector2i(tx, ty))
 	return {"revealed": revealed.size(), "positions": revealed}
+
+
+# =============================================================================
+# -- the_kamis_whisper (s33): false-sound distraction -------------------------
+# =============================================================================
+
+## Create a false sound (Air 2, Illusion) at a chosen tile within 50' (10 tiles)
+## of the player — a normal speaking voice or natural sound. Guards near the
+## point hear it and investigate TOWARD it (away from the player), exactly as a
+## real noise: UNAWARE -> SUSPICIOUS, and they path to (tx, ty). A classic
+## stealth distraction. "No louder than a normal speaking voice" maps to the
+## MODERATE noise level (QUIET = whisper, LOUD = shout). The future stealth-
+## command UI / spell-cast action calls this; PCs may be shugenja (s60.2).
+func cast_kamis_whisper(tx: int, ty: int) -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"ok": false, "reason": "no_living_player"}
+	if tx < 0 or ty < 0 or tx >= _map.width or ty >= _map.height:
+		return {"ok": false, "reason": "out_of_bounds"}
+	var dist: int = maxi(absi(tx - player.x), absi(ty - player.y))
+	if dist > KAMIS_WHISPER_RANGE_TILES:
+		return {"ok": false, "reason": "out_of_range"}
+	# A false sound, not the player's own — guards investigate the point, not the PC.
+	_emit_noise(tx, ty, AsciiMapEnvironment.NoiseLevel.MODERATE)
+	return {"ok": true, "x": tx, "y": ty}
+
+
+## s37 False Whispers (Void 2): the target unknowingly repeats the caster's next sentence in their own
+## voice. The faithful stealth-layer consumer: a chosen target guard "speaks" at their own position,
+## emitting a MODERATE noise that draws OTHER guards toward them (a distraction). Range 30' (6 tiles).
+## PCs may be shugenja (s60.2). The future stealth-command UI / a deliberate caster calls this.
+func cast_false_whispers(target_id: int) -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"ok": false, "reason": "no_living_player"}
+	if not SpellSystem.can_cast(player.character, "false_whispers"):
+		return {"ok": false, "reason": "cannot_cast"}
+	var target: EntityState = _entities.get(target_id)
+	if target == null or _is_entity_dead(target):
+		return {"ok": false, "reason": "invalid_target"}
+	if maxi(absi(target.x - player.x), absi(target.y - player.y)) > 6:
+		return {"ok": false, "reason": "out_of_range"}
+	if not SpellSystem.resolve_cast(player.character, "false_whispers", _dice).get("success", false):
+		return {"ok": false, "reason": "cast_failed"}
+	# The target speaks at their own tile — a real sound from a real person, drawing other guards there.
+	_emit_noise(target.x, target.y, AsciiMapEnvironment.NoiseLevel.MODERATE)
+	return {"ok": true, "target_id": target_id, "x": target.x, "y": target.y}
+
+
+## s37 Reach Through the Void (Void 2): touch a small object through the Void and move it telekinetically.
+## The faithful stealth-layer consumer: silently open or close a door tile at range (50' = 10 tiles) —
+## manipulating the latch without approaching (no noise, unlike a bump-open). PCs may be shugenja (s60.2).
+func cast_reach_through_the_void(tx: int, ty: int) -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"ok": false, "reason": "no_living_player"}
+	if not SpellSystem.can_cast(player.character, "reach_through_the_void"):
+		return {"ok": false, "reason": "cannot_cast"}
+	if tx < 0 or ty < 0 or tx >= _map.width or ty >= _map.height:
+		return {"ok": false, "reason": "out_of_bounds"}
+	if maxi(absi(tx - player.x), absi(ty - player.y)) > 10:
+		return {"ok": false, "reason": "out_of_range"}
+	var tile: int = _map.get_tile(tx, ty)
+	var new_tile: int = -1
+	if MovementSystem.is_closed_door(tile):
+		new_tile = MovementSystem.open_door(tile)
+	elif tile in [Enums.TileType.DOOR_SHOJI_OPEN, Enums.TileType.DOOR_WOOD_OPEN, Enums.TileType.GATE_OPEN]:
+		new_tile = MovementSystem.close_door(tile)
+	else:
+		return {"ok": false, "reason": "no_movable_object"}  # only doors are modeled small objects
+	if not SpellSystem.resolve_cast(player.character, "reach_through_the_void", _dice).get("success", false):
+		return {"ok": false, "reason": "cast_failed"}
+	_map.set_tile(tx, ty, new_tile)  # silent — telekinesis makes no noise
+	return {"ok": true, "x": tx, "y": ty, "new_tile": new_tile}
 
 
 # =============================================================================

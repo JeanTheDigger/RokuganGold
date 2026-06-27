@@ -297,6 +297,21 @@ static func _get_kiho_buff_bonus(
 	return {"rolled": rolled, "kept": kept}
 
 
+## s35 Mental Quickness (Fire 2): +3 Intelligence on the NEXT Intelligence-trait roll this IC day
+## (owner 2026-06-25 — the "10 minutes" maps to one roll). A trait point = +1 rolled AND +1 kept, so
+## +3 Int = +3k3. ONE-SHOT: consumed (mental_quickness_ic_day -> -1) the moment it applies. ic_day-gated
+## (like the kiho buffs) so it lapses with the tick if no Int roll is made. Inert for non-Int rolls.
+static func _get_mental_quickness_bonus(
+	character: L5RCharacterData, trait_used: Enums.Trait, ic_day: int
+) -> Dictionary:
+	if ic_day < 0 or character.mental_quickness_ic_day != ic_day:
+		return {"rolled": 0, "kept": 0}
+	if trait_used != Enums.Trait.INTELLIGENCE:
+		return {"rolled": 0, "kept": 0}
+	character.mental_quickness_ic_day = -1  # consumed by this roll
+	return {"rolled": 3, "kept": 3}
+
+
 static func _activate_kiho_buff(character: L5RCharacterData, kiho_name: String, ic_day: int) -> bool:
 	if character.active_kiho_buffs.get(kiho_name, -1) == ic_day:
 		return true  # already active this tick
@@ -377,6 +392,27 @@ static func _get_soul_of_stone_bonus(
 			base_skill = skill_name.substr(0, colon_pos).strip_edges()
 		if base_skill in SOCIAL_SKILLS:
 			return SOUL_OF_STONE_INFLUENCE_PENALTY
+	return 0
+
+
+# -- Wisdom & Clarity (s36 Water 2) — perfect recall of read material ---------
+# The caster's reading speed doubles and they have perfect recall of everything read
+# (1 hour ~ the IC day). The faithful sim slice of "perfect recall" is sharper Lore
+# (research/recall): +1k0 to any Lore-based Skill Roll while the day buff is active.
+# Does NOT aid comprehension (ciphers/unknown languages) — handled elsewhere (cipher
+# cracking routes through Calligraphy/Spellcraft, never Lore). PROVISIONAL magnitude
+# +1k0 (recall sharpens a Lore check, parallel to Voice of the Wind's +1k0).
+static func _get_wisdom_and_clarity_bonus(
+	character: L5RCharacterData, skill_name: String
+) -> int:
+	if not character.has_day_buff("wisdom_and_clarity"):
+		return 0
+	var base_skill: String = skill_name
+	var colon_pos: int = skill_name.find(":")
+	if colon_pos >= 0:
+		base_skill = skill_name.substr(0, colon_pos).strip_edges()
+	if base_skill == "Lore":
+		return 1  # +1k0 to Lore recall while under the spell
 	return 0
 
 
@@ -628,6 +664,9 @@ static func resolve_skill_check(
 	# s38 out-of-combat kiho buffs (Mind's Fire / Steal the Air Dragon)
 	var kiho_mod: Dictionary = _get_kiho_buff_bonus(character, skill_name, trait_used, ic_day)
 
+	# s35 Mental Quickness: one-shot +3k3 on the next Intelligence-trait roll this tick
+	var mq_mod: Dictionary = _get_mental_quickness_bonus(character, trait_used, ic_day)
+
 	# Void Point spend on this roll (opt-in via context; s37 Altering the Course allows +NkN)
 	var void_mod: Dictionary = _get_void_spend_bonus(character, context, ic_day)
 
@@ -637,18 +676,22 @@ static func resolve_skill_check(
 	# s34 Soul of Stone: +3k0 resisting manipulation / -1k0 Awareness social influence
 	var soul_mod: int = _get_soul_of_stone_bonus(character, skill_name, trait_used, context)
 
+	# s36 Wisdom & Clarity: +1k0 to Lore recall while the day buff is active
+	var wisdom_mod: int = _get_wisdom_and_clarity_bonus(character, skill_name)
+
 	# Build the pool: (trait + skill + bonus_rolled) k (trait + bonus_kept)
 	var rolled: int = (
 		trait_value + skill_rank + bonus_rolled + ashes_bonus
 		+ adv_skill.get("rolled", 0) + mutation_mod.get("rolled", 0)
 		+ imbalance_mod.get("rolled", 0) + inheritance_mod.get("rolled", 0)
 		+ kiho_mod.get("rolled", 0) + void_mod.get("rolled", 0) + voice_mod.get("rolled", 0)
-		+ soul_mod
+		+ mq_mod.get("rolled", 0) + soul_mod + wisdom_mod
 	)
 	var kept: int = (
 		trait_value + bonus_kept + adv_skill.get("kept", 0) + mutation_mod.get("kept", 0)
 		+ imbalance_mod.get("kept", 0) + inheritance_mod.get("kept", 0)
 		+ kiho_mod.get("kept", 0) + void_mod.get("kept", 0) + voice_mod.get("kept", 0)
+		+ mq_mod.get("kept", 0)
 	)
 	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
 		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn \
@@ -813,12 +856,16 @@ static func resolve_contested_check(
 	var soul_a: int = _get_soul_of_stone_bonus(char_a, skill_a, trait_a, context_a)
 	var soul_b: int = _get_soul_of_stone_bonus(char_b, skill_b, trait_b, context_b)
 
+	# s36 Wisdom & Clarity, per side: +1k0 to Lore recall.
+	var wisdom_a: int = _get_wisdom_and_clarity_bonus(char_a, skill_a)
+	var wisdom_b: int = _get_wisdom_and_clarity_bonus(char_b, skill_b)
+
 	var roll_a: DiceResult = dice_engine.roll_and_keep(
-		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0) + kiho_a.get("rolled", 0) + void_a.get("rolled", 0) + voice_a.get("rolled", 0) + soul_a,
+		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0) + kiho_a.get("rolled", 0) + void_a.get("rolled", 0) + voice_a.get("rolled", 0) + soul_a + wisdom_a,
 		tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0) + kiho_a.get("kept", 0) + void_a.get("kept", 0) + voice_a.get("kept", 0), sr_a > 0, emph_a
 	)
 	var roll_b: DiceResult = dice_engine.roll_and_keep(
-		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0) + void_b.get("rolled", 0) + voice_b.get("rolled", 0) + soul_b,
+		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0) + void_b.get("rolled", 0) + voice_b.get("rolled", 0) + soul_b + wisdom_b,
 		tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0) + kiho_b.get("kept", 0) + void_b.get("kept", 0) + voice_b.get("kept", 0), sr_b > 0, emph_b
 	)
 
