@@ -135,19 +135,21 @@ const MAHO_COMBAT_EFFECTS: Dictionary = {
 	# trait (stamina <= willpower); otherwise no combat effect (faithful). Possibly lethal if wounded.
 	"drain_the_soul": {"kind": "drain_soul", "range_tiles": 10},
 	# Disrupt the Limb (Water 1): "+15 TN to physical action rolls using that limb" for 10 rounds. The
-	# combat slice is the ARM case (the attack-disabling choice the NPC takes) — modeled as all_rolls -15
-	# (the +15 TN; in tile combat the dominant physical action roll IS the attack). 50' = 10 tiles. The
-	# leg/Lame variant (movement-halving) is deferred — no movement-halving model exists.
+	# Both limb variants are wired (owner choice: leg/Lame when the target is not adjacent to the caster,
+	# else arm). ARM = +15 TN to physical actions using that limb -> all_rolls -15 (the dominant tile-combat
+	# physical roll is the attack). LEG = the s45 Lame Disadvantage = "Water Ring considered 1 for Move
+	# Actions" -> a `lame` move modifier (read by _effective_water_ring). 50' = 10 tiles. The leg-Agility
+	# +10 TN half of Lame has no clean tile-combat consumer (movement uses the budget, not a roll).
 	"disrupt_the_limb": {"kind": "debuff", "range_tiles": 10, "duration_rounds": 10,
-		"mods": [{"kind": "all_rolls", "value": -15}]},
-	# No Pure Breaths (Air 4): the lungs are ravaged into "a continuous +10 TN to all actions" that
-	# "cannot end naturally even if damage is healed; any magical healing... ends the TN penalty." Modeled
-	# as a persistent all_rolls -10 (the +10 TN) under a distinct source so a spell heal clears it (the
-	# cure hook in _apply_spell_heal). 100' = 20 tiles. The instant lung damage ("DR equal to the victim's
-	# Air Ring in KEPT dice" — the rolled-dice count is unstated) is deferred; the lasting debuff is the
-	# spell's signature effect.
+		"arm_mods": [{"kind": "all_rolls", "value": -15}], "leg_mods": [{"kind": "lame", "value": 1}]},
+	# No Pure Breaths (Air 4): instant lung eruption + a lasting debuff. INSTANT DAMAGE: DR = the victim's
+	# Air Ring in kept dice -> (victim Air)k(victim Air) exploding (owner: the established "DR equal to
+	# [Ring]" = Ring-k-Ring convention), bypassing armour (internal Taint eruption). LASTING: the ravaged
+	# lungs give "a continuous +10 TN to all actions" -> persistent all_rolls -10 under a distinct source so
+	# a spell/Kiho/supernatural heal clears it (the cure hook in _apply_spell_heal). 100' = 20 tiles.
 	"no_pure_breaths": {"kind": "debuff", "range_tiles": 20, "duration_rounds": 9999,
-		"source": "no_pure_breaths", "mods": [{"kind": "all_rolls", "value": -10}]},
+		"source": "no_pure_breaths", "mods": [{"kind": "all_rolls", "value": -10}],
+		"instant_damage_target_ring": _A},
 }
 
 

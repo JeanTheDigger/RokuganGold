@@ -403,6 +403,10 @@ static func _effective_water_ring(p: IndividualCombat.Participant, character: L5
 	var water: int = CharacterStats.get_ring_value(character, Enums.Ring.WATER)
 	if p == null:
 		return water
+	# s43 Disrupt the Limb (leg / Lame): "Water Ring considered 1 for Move Actions" while the lame
+	# modifier holds (s45 Lame). Overrides the normal computation for movement.
+	if IndividualCombat.get_timed_modifier_total(p, "lame") > 0:
+		return 1
 	return maxi(0, water + IndividualCombat.get_timed_modifier_total(p, "move_water_penalty"))
 
 
@@ -3127,13 +3131,33 @@ static func execute_cast_maho(
 		state.combat_log.append({"type": "maho_warded", "round": state.combat.round_number,
 			"caster_id": caster_id, "target_id": target_id, "spell_id": spell_id})
 		return res
+	# Maho casts go through this path (not _complete_cast), so stamp the spell tracking here too, so any
+	# installed timed modifiers carry their ML/creator/element (for the ML-gated dispel/negate effects).
+	state.casting_ml = ml
+	state.casting_creator = caster_id
+	state.casting_element = int(spell.get("ring", -1))
 	match String(eff.get("kind", "")):
 		"status":
 			res["spell_status"] = _apply_spell_status(
 				state, caster_id, caster, target_id, target, eff, dice_engine)
 		"debuff":
+			# s43 Disrupt the Limb: the maho-tsukai cripples the ARM (attack) of an adjacent target, else
+			# the LEG (Lame movement cripple) of a target not in melee reach (owner choice).
+			var deff: Dictionary = eff
+			if eff.has("arm_mods") or eff.has("leg_mods"):
+				var adjacent: bool = false
+				if state.positions.has(caster_id) and state.positions.has(target_id):
+					adjacent = _chebyshev(state.positions[caster_id], state.positions[target_id]) <= MELEE_RANGE_TILES
+				deff = eff.duplicate()
+				deff["mods"] = eff.get("arm_mods", []) if adjacent else eff.get("leg_mods", [])
+				res["limb"] = "arm" if adjacent else "leg"
 			res["spell_debuff"] = _apply_spell_debuff(
-				state, caster_id, caster, target_id, target, eff, dice_engine)
+				state, caster_id, caster, target_id, target, deff, dice_engine)
+			# s43 No Pure Breaths: the instant lung eruption (DR = the victim's Air Ring k Air Ring,
+			# armour-bypassing) on top of the lasting +10-TN debuff.
+			if eff.has("instant_damage_target_ring") and target != null and not CharacterStats.is_dead(target):
+				res["instant_damage"] = _apply_maho_instant_damage(
+					state, target_id, target, int(eff["instant_damage_target_ring"]), dice_engine)
 		"buff":
 			res["spell_buff"] = _apply_spell_buff(state, caster_id, caster, target_id, target, eff)
 		"damage":
@@ -8166,6 +8190,25 @@ static func _npc_maybe_cast_spell(
 ## s43 Bleeding: apply a per-round bleed (N Wounds/Round, ticked in advance_round) to an already-injured
 ## target. Requires the target to have at least 1 Wound (the kansen reopens an existing injury). Stacks
 ## if recast. The "bandage with Medicine to stop it" cure is a future out-of-combat action.
+## s43 No Pure Breaths instant damage: the kansen erupt inside the lungs for DR = (victim's `ring` Ring)
+## rolled and kept, exploding (owner: the "DR equal to [Ring]" = Ring-k-Ring convention). Internal Taint
+## eruption — armour does not reduce it. Spirit creatures route through the magic damage filter.
+static func _apply_maho_instant_damage(
+	state: MapCombatState, target_id: int, target: L5RCharacterData, ring: int, dice_engine: DiceEngine,
+) -> Dictionary:
+	var rk: int = maxi(1, SpellSystem.get_ring_value(target, ring))
+	var dmg: int = dice_engine.roll_and_keep(rk, rk, true).total
+	if target.spirit_creature != null:
+		var filt: Dictionary = SpiritAbilitySystem.incoming_damage(
+			target.spirit_creature, SpiritAbilitySystem.W_MAGIC, true)
+		if filt.get("heals", false):
+			WoundSystem.heal_wounds(target, dmg)
+			return {"id": target_id, "healed": dmg}
+		dmg = int(round(dmg * filt.get("multiplier", 1.0)))
+	WoundSystem.apply_damage(target, dmg, 0)  # armour-bypassing internal eruption
+	return {"id": target_id, "damage": dmg, "dead": CharacterStats.is_dead(target)}
+
+
 static func _apply_maho_bleed(
 	state: MapCombatState, caster_id: int, target_id: int, target: L5RCharacterData, eff: Dictionary,
 ) -> Dictionary:
