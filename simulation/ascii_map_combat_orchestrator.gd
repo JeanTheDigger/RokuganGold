@@ -105,6 +105,14 @@ const SEVEN_GREAT_CLANS: Array[String] = [
 	"Crab", "Crane", "Dragon", "Lion", "Phoenix", "Scorpion", "Unicorn",
 ]
 
+## Trait-name (lowercase) -> Enums.Trait, for spell entries that name an accompanying Trait change.
+const _TRAIT_NAME_TO_ENUM: Dictionary = {
+	"reflexes": Enums.Trait.REFLEXES, "awareness": Enums.Trait.AWARENESS,
+	"agility": Enums.Trait.AGILITY, "intelligence": Enums.Trait.INTELLIGENCE,
+	"strength": Enums.Trait.STRENGTH, "perception": Enums.Trait.PERCEPTION,
+	"stamina": Enums.Trait.STAMINA, "willpower": Enums.Trait.WILLPOWER,
+}
+
 ## Stand-up from Prone costs a Simple action (GDD s40: "Simple action").
 const STANDUP_ACTION_TYPE: String = "simple"
 
@@ -3799,6 +3807,13 @@ static func _apply_spell_debuff(
 			p.stance = Enums.Stance.FULL_ATTACK
 		IndividualCombat.add_timed_modifier(p, mkind, val, expiry, dbsrc)
 		applied.append({"kind": mkind, "value": val})
+	# Optional accompanying Trait change via the per-Trait layer (s36 Suitengu's Curse: Reflexes -1
+	# alongside the move penalty). Flows to Armor TN / initiative / attack and the derived Ring.
+	var dur_tc: int = int(eff.get("duration_rounds", 5))
+	for tc in eff.get("also_trait", []):
+		_apply_trait_delta(state, target_id, target, p,
+			_TRAIT_NAME_TO_ENUM.get(String(tc.get("trait", "strength")), Enums.Trait.STRENGTH),
+			int(tc.get("value", 0)), dur_tc)
 	return {"id": target_id, "applied": applied, "expires_round": expiry}
 
 

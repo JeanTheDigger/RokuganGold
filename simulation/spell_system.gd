@@ -332,7 +332,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"disrupt_the_aura": {"kind": "debuff", "target": "enemy", "range_tiles": 10, "duration_rounds": 9999,
 		"mods": [{"kind": "no_magic_heal", "value": 1}]},  # Fire 2: target cannot be healed by magical means (spells/items/Techniques fail); mundane Medicine still works (out-of-combat). 24h ≈ skirmish.
 	"suitengus_curse": {"kind": "debuff", "target": "enemy", "range_tiles": 4, "duration_rounds": 10,
-		"mods": [{"kind": "move_water_penalty", "value": -1}]},  # Water 1: move as though Water 1 Rank lower (the Reflexes -1 trait change deferred)
+		"mods": [{"kind": "move_water_penalty", "value": -1}], "also_trait": [{"trait": "reflexes", "value": -1}]},  # Water 1: Reflexes -1 (per-Trait layer: lower Armor TN/initiative/attack + derived Air Ring) AND move as though Water 1 Rank lower (GDD s36 l63).
 	"the_rushing_wave": {"kind": "buff", "target": "ally", "range_tiles": 2, "duration_rounds": 1,
 		"mods": [{"kind": "free_move_tiles", "value": 1}]},  # Water 1: Free Move up to Water Ring ×10' (= +Water tiles to the free-move budget, read from the mover's own Water at move time)
 	"clarity_of_purpose": {"kind": "buff", "target": "ally", "aoe_radius": 2, "duration_rounds": 2,
@@ -442,7 +442,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"essence_of_earth": {"kind": "ring_change", "target": "self", "ring": Enums.Ring.EARTH, "delta": 1, "duration_rounds": 100},  # Earth 4: target's Earth Ring +1 Rank (Wounds increased correspondingly); on expiry Wounds return to normal — possibly fatal. 10 min ~ 100 Rounds (persists a normal skirmish, cleared at combat end).
 	"the_wolfs_mercy": {"kind": "ring_change", "target": "enemy", "ring": Enums.Ring.EARTH, "delta": -1, "taint_delta": -2, "range_tiles": 10, "duration_rounds": 10, "also_trait": [{"trait": "strength", "value": -1}]},  # Earth 3: target's Earth Ring -1 Rank (-2 if Tainted, min 1) AND Strength -1 (per-Trait layer); reduced Wound capacity can immediately kill an already-wounded target (GDD s34 l223)
 	"strike_at_the_roots": {"kind": "ring_change", "target": "enemy", "ring": Enums.Ring.EARTH, "set_to": 1, "contested": "earth_contested", "range_tiles": 10, "duration_rounds": 3},  # Earth 5: Contested Earth -> the target's Earth Ring is reduced to 1 for the duration; may immediately kill if already wounded.
-	"facing_your_devils": {"kind": "trait_swap", "target": "enemy", "range_tiles": 6, "duration_rounds": 10},  # Air 5: swap the target's highest/lowest Traits for 10 Rounds -> the resulting RING deltas (esp. a dropping Earth = reduced Wound capacity, possibly fatal). Per-Trait roll changes not modeled.
+	"facing_your_devils": {"kind": "trait_swap", "target": "enemy", "range_tiles": 6, "duration_rounds": 10},  # Air 5: swap the target's highest/lowest Traits for 10 Rounds via the per-Trait layer -> both the per-Trait roll changes (attack/armor/initiative) AND the resulting RING deltas (esp. a dropping Earth = reduced Wound capacity, possibly fatal).
 	# Trait-swap roll models (2026-06-21): the combat-roll slice of trait changes (no trait bridge needed).
 	"chi_reversal": {"kind": "trait_change", "target": "enemy", "range_tiles": 4, "duration_rounds": 9999,
 		"ops": [{"swap": ["agility", "intelligence"]}]},  # Water 5: flip the Fire-pair Traits (Agility<->Intelligence) via the per-Trait layer — the full swap now affects attack rolls AND the derived Fire Ring (GDD s36 l311; default Fire pair, 1 hour ≈ skirmish)
