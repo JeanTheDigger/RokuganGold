@@ -411,8 +411,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# (Strength → rolled damage dice, Agility → attack-roll dice). NOT the Earth-ring wound refactor.
 	"strength_of_the_tsunami": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 3,
 		"mods": [{"kind": "spell_damage_rolled", "value": "tsunami_strength"}]},  # Water 2: Strength +half Water Ring → +that many rolled damage dice, capped so Strength Rank ≤ 9 (GDD s36 l131; Strength-skill rolls out-of-combat)
-	"death_of_flame": {"kind": "debuff", "target": "enemy", "range_tiles": 20, "duration_rounds": 5,
-		"contested": "fire_contested", "mods": [{"kind": "spell_attack_rolled", "value": "neg_fire_ring"}]},  # Fire 4: -Fire Ring Agility (its attack-roll slice; the -Fire Intelligence / spell-suppression half is deferred). Per-Round re-resist simplified to one contested-Fire gate at cast.
+	"death_of_flame": {"kind": "debuff", "target": "enemy", "range_tiles": 20, "duration_rounds": 5, "source": "death_of_flame",
+		"contested": "fire_contested", "mods": [{"kind": "spell_attack_rolled", "value": "neg_fire_ring"}]},  # Fire 4: -Fire Ring Agility; on the 2nd+ Round the target rolls Contested Fire (original Fire Ring) to escape (GDD s35 l237; the Intelligence half awaits the per-Trait layer)
 	# Coverage clean-wins batch 12 (2026-06-20): LOS-blocking fog (anti-ranged area denial).
 	"summon_fog": {"kind": "fog_zone", "range_tiles": 20, "aoe_radius": 10, "duration_rounds": 9999},  # Air 3: 50' radius obscuring fog (visibility -> 5 ft) — blocks LOS for ranged attacks crossing it beyond 1 tile; centered on a target tile within 100'. 1-minute ~ skirmish. (Damp/extinguish-small-flames flavour not modeled.)
 	"false_realm": {"kind": "false_realm", "radius": 6, "duration_rounds": 9999},  # Air 4: illusory terrain (100' radius) — screens enemy ranged LOS (caster's faction sees through; no substance, movement unaffected)
@@ -524,7 +524,7 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 		"mods": [{"kind": "spell_attack_rolled", "value": 1}, {"kind": "spell_attack_kept", "value": 1},
 			{"kind": "burning_kiss", "value": 1}]},  # Fire 1: melee +1k1, +2k2 vs mounted/larger-than-human (GDD s35 l15)
 	"warning_flame": {"kind": "buff", "target": "ally", "range_tiles": 1, "duration_rounds": 10,
-		"mods": [{"kind": "initiative_rolled", "value": 1}]},  # Fire 1: +1k0 Initiative (immune-surprise + Reactions +3 deferred)
+		"mods": [{"kind": "initiative_rolled", "value": 1}, {"kind": "initiative_score", "value": 3}]},  # Fire 1: +1k0 Initiative AND +3 to Initiative total (the Reactions-Stage bonus, modeled as a flat init delta) (GDD s35 l93; immune-to-surprise skipped — no surprise round in tile combat)
 	# Hooked buffs (effect read in _apply_hit / execute_melee_attack, not a stat total):
 	"the_souls_blade": {"kind": "buff", "target": "self", "duration_rounds": 5,
 		"mods": [{"kind": "weapon_stun", "value": 1}]},  # Fire 6: weapon auto-Stuns + overcomes Invulnerability

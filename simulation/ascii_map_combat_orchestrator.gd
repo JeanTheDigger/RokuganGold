@@ -254,6 +254,10 @@ class MapCombatState:
 	## s35 Force of Will: char_id -> expiry_round. While active, character.combat_death_immune is true
 	## (immune to the effect of being dead); on expiry the flag clears and full Wound effects apply.
 	var force_of_will: Dictionary = {}
+	## s35 Death of Flame: target_id -> caster_id. On the 2nd+ Round the target rolls Contested Fire
+	## (its original Fire Ring) vs the caster; on a target win the debuff ends. Cleared when the
+	## "death_of_flame" timed modifier expires (5 Rounds) or either party dies.
+	var death_of_flame: Dictionary = {}
 	## s54.5 Manesuru Dark Mirror: target ids fully studied, target ids already mirrored, count spawned.
 	var mirror_studied: Dictionary = {}
 	var mirror_spawned: Dictionary = {}
@@ -2661,6 +2665,9 @@ static func _complete_cast(
 			"type": "spell_debuff", "round": state.combat.round_number,
 			"caster_id": caster_id, "spell_id": spell_id, "debuff": res["spell_debuff"],
 		})
+		# s35 Death of Flame: when the debuff lands, register the per-round Contested-Fire escape.
+		if spell_id == "death_of_flame" and not res["spell_debuff"].has("reason"):
+			state.death_of_flame[target_id] = caster_id
 	elif res.get("success", false) and eff.get("kind", "") == "conjure_weapon":
 		res["conjured"] = _apply_spell_conjure_weapon(
 			state, caster_id, caster, target_id, eff, spell_id, spell_choice)
@@ -7560,6 +7567,26 @@ static func advance_round(
 			if _fw_c != null:
 				_fw_c.combat_death_immune = false
 			state.force_of_will.erase(_fw_cid)
+
+	# s35 Death of Flame: on the 2nd+ Round the suppressed target rolls a Contested Fire Roll (its
+	# original Fire Ring) vs the caster to end the spell. The link drops on a target win, when the
+	# debuff's timed modifier expires (5 Rounds), or if either party dies.
+	for _df_tid in state.death_of_flame.keys():
+		var _df_cid: int = int(state.death_of_flame[_df_tid])
+		var _df_t: L5RCharacterData = chars_by_id.get(_df_tid, state.combatants.get(_df_tid, null))
+		var _df_c: L5RCharacterData = chars_by_id.get(_df_cid, state.combatants.get(_df_cid, null))
+		var _df_tp: IndividualCombat.Participant = state.combat.participants.get(_df_tid, null)
+		if _df_t == null or _df_c == null or _df_tp == null \
+				or CharacterStats.is_dead(_df_t) or CharacterStats.is_dead(_df_c) \
+				or not IndividualCombat.has_timed_modifier_source(_df_tp, "death_of_flame"):
+			state.death_of_flame.erase(_df_tid)
+			continue
+		var _dft: int = maxi(1, SpellSystem.get_ring_value(_df_t, Enums.Ring.FIRE))
+		var _dfc: int = maxi(1, SpellSystem.get_ring_value(_df_c, Enums.Ring.FIRE))
+		if dice_engine.roll_and_keep(_dft, _dft, true).total \
+				> dice_engine.roll_and_keep(_dfc, _dfc, true).total:
+			IndividualCombat.clear_timed_modifiers_by_source(_df_tp, "death_of_flame")
+			state.death_of_flame.erase(_df_tid)
 
 	# Persistent spell zones (Wall of Fire, Enticing the Dance of Flame, etc.) — no-op when empty.
 	if not state.spell_zones.is_empty():
